@@ -1,0 +1,3640 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>微档集 Pro - 微信小程序设计稿</title>
+  <style>
+    :root {
+      --bg: #eef2f4;
+      --surface: #fcfdfd;
+      --surface-2: #f4f7f8;
+      --text: #111827;
+      --muted: #66727f;
+      --line: #d7dee5;
+      --ink: #121a24;
+      --gold: #b88a44;
+      --gold-soft: #fff4dc;
+      --teal: #536b82;
+      --teal-soft: #eef3f7;
+      --rose: #b84762;
+      --rose-soft: #fae9ee;
+      --amber: #a8731c;
+      --amber-soft: #fff0cf;
+      --blue: #315f9d;
+      --blue-soft: #e8effa;
+      --slot-noon: #1677ff;
+      --slot-noon-soft: #eaf2ff;
+      --slot-evening: #d83f73;
+      --slot-evening-soft: #fff0f6;
+      --slot-welcome: #d98200;
+      --slot-welcome-soft: #fff4d6;
+      --slot-party: #6d4aff;
+      --slot-party-soft: #f1edff;
+      --slot-forest: #2f855a;
+      --slot-forest-soft: #eaf8ef;
+      --slot-sky: #0f8ea8;
+      --slot-sky-soft: #e7f8fb;
+      --slot-coral: #e2553d;
+      --slot-coral-soft: #fff0ec;
+      --slot-slate: #5f6f82;
+      --slot-slate-soft: #eef2f6;
+      --green: #b88a44;
+      --shadow: 0 22px 60px rgba(17, 24, 39, 0.18);
+      --shadow-card: 0 10px 28px rgba(17, 24, 39, 0.07);
+      --shadow-soft: 0 3px 12px rgba(17, 24, 39, 0.05);
+      --radius: 8px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background:
+        linear-gradient(180deg, #e8edf0 0%, #f7f9f9 42%, #eef2f4 100%);
+      color: var(--text);
+      letter-spacing: 0;
+    }
+
+    img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .page {
+      max-width: 1520px;
+      margin: 0 auto;
+      padding: 32px 24px 56px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 28px;
+    }
+
+    .title-block {
+      max-width: 780px;
+    }
+
+    .eyebrow {
+      color: var(--gold);
+      font-weight: 700;
+      font-size: 13px;
+      margin-bottom: 10px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 34px;
+      line-height: 1.18;
+      font-weight: 900;
+      color: var(--ink);
+    }
+
+    .subtitle {
+      margin: 12px 0 0;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.7;
+    }
+
+    .legend {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(120px, 1fr));
+      gap: 10px;
+      min-width: 310px;
+    }
+
+    .legend-item {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 12px;
+      min-height: 64px;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .legend-label {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .legend-value {
+      font-size: 17px;
+      font-weight: 800;
+    }
+
+    .screen-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap: 26px;
+      align-items: start;
+    }
+
+    .screen-card {
+      display: grid;
+      gap: 12px;
+    }
+
+    .screen-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .screen-title {
+      font-weight: 800;
+      font-size: 16px;
+      color: var(--ink);
+    }
+
+    .screen-note {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .phone {
+      width: min(100%, 390px);
+      height: 844px;
+      margin: 0 auto;
+      background: linear-gradient(145deg, #0c1118, #202935);
+      border-radius: 34px;
+      padding: 12px;
+      box-shadow: var(--shadow);
+      border: 1px solid rgba(255,255,255,0.18);
+      overflow: hidden;
+    }
+
+    .phone-inner {
+      height: 100%;
+      overflow: hidden;
+      background: #f6f8f9;
+      border-radius: 26px;
+      position: relative;
+      border: 1px solid rgba(255,255,255,0.5);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .phone-inner::-webkit-scrollbar,
+    .content::-webkit-scrollbar {
+      width: 0;
+      height: 0;
+    }
+
+    .status {
+      height: 34px;
+      flex: 0 0 34px;
+      padding: 10px 18px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--text);
+      font-weight: 700;
+      background: rgba(252,253,253,0.94);
+    }
+
+    .status-icons {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: currentColor;
+      opacity: .72;
+    }
+
+    .nav {
+      height: 48px;
+      flex: 0 0 48px;
+      display: grid;
+      grid-template-columns: 88px minmax(0, 1fr) 88px;
+      align-items: center;
+      gap: 8px;
+      padding: 0 12px 0 18px;
+      background: rgba(252,253,253,0.96);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .nav-title {
+      font-weight: 800;
+      font-size: 16px;
+      color: var(--ink);
+      text-align: center;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .nav-action {
+      width: 34px;
+      height: 34px;
+      border: 1px solid var(--line);
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      background: var(--surface);
+      box-shadow: var(--shadow-soft);
+      justify-self: start;
+      font-size: 22px;
+      line-height: 1;
+      font-weight: 800;
+    }
+
+    .nav-action.home {
+      font-size: 17px;
+    }
+
+    .nav-spacer {
+      width: 88px;
+      height: 34px;
+      flex: 0 0 88px;
+    }
+
+    .wx-capsule {
+      width: 88px;
+      height: 32px;
+      display: grid;
+      grid-template-columns: 1fr 1px 34px;
+      align-items: center;
+      justify-self: end;
+      border: 1px solid rgba(17, 24, 39, 0.18);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.82);
+      box-shadow: 0 5px 16px rgba(17, 24, 39, 0.08);
+      color: var(--ink);
+    }
+
+    .capsule-more {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+    }
+
+    .capsule-more i {
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: currentColor;
+      opacity: .72;
+    }
+
+    .capsule-divider {
+      height: 18px;
+      background: rgba(17, 24, 39, 0.16);
+    }
+
+    .capsule-ring {
+      width: 15px;
+      height: 15px;
+      justify-self: center;
+      border: 2px solid currentColor;
+      border-radius: 50%;
+      opacity: .78;
+    }
+
+    .content {
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+      align-content: start;
+      flex: 1 1 auto;
+      min-height: 0;
+      min-width: 0;
+      overflow-x: hidden;
+      overflow-y: auto;
+    }
+
+    .content > * {
+      max-width: 100%;
+      min-width: 0;
+    }
+
+    .hero-photo {
+      height: 190px;
+      flex: 0 0 auto;
+      position: relative;
+      overflow: hidden;
+      background: #dce3e8;
+    }
+
+    .hero-photo.small {
+      height: 148px;
+      border-radius: var(--radius);
+    }
+
+    .hero-photo .shade {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(0,0,0,0.05), rgba(10,14,20,0.66));
+    }
+
+    .hero-copy {
+      position: absolute;
+      left: 16px;
+      right: 16px;
+      bottom: 16px;
+      color: #fff;
+    }
+
+    .hero-copy h2 {
+      margin: 0 0 6px;
+      font-size: 22px;
+      line-height: 1.2;
+      font-weight: 900;
+    }
+
+    .hero-copy p {
+      margin: 0;
+      font-size: 12px;
+      line-height: 1.5;
+      opacity: .9;
+    }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 14px;
+      box-shadow: var(--shadow-soft);
+      max-width: 100%;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .login-screen .hero-photo {
+      height: 330px;
+      min-height: 300px;
+      flex: 0 0 auto;
+      transition: height .62s cubic-bezier(.22, .61, .36, 1), background-position .62s cubic-bezier(.22, .61, .36, 1);
+      will-change: height, background-position;
+      background-position: center 45%;
+    }
+
+    .login-screen .hero-photo.asset-1 {
+      background-image: url("https://images.unsplash.com/photo-1511285560929-80b456fea0bc?auto=format&fit=crop&w=900&q=82");
+      background-position: center 42%;
+    }
+
+    .login-screen[data-login-tab="phone"] .hero-photo,
+    .login-screen[data-login-tab="password"] .hero-photo {
+      background-position: center 50%;
+    }
+
+    .login-screen .content {
+      flex: 0 0 auto;
+      padding: 10px 14px 14px;
+      gap: 10px;
+    }
+
+    .login-screen .panel {
+      padding: 12px;
+    }
+
+    .login-screen .avatar {
+      width: 48px;
+      height: 48px;
+    }
+
+    .login-screen .input,
+    .login-screen .button {
+      min-height: 42px;
+      height: 42px;
+    }
+
+    .login-screen .form-row {
+      gap: 5px;
+    }
+
+    .panel.tight {
+      padding: 10px;
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .row > * {
+      min-width: 0;
+    }
+
+    .stack {
+      display: grid;
+      gap: 8px;
+    }
+
+    .avatar {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      overflow: hidden;
+      background: var(--line);
+      flex: 0 0 auto;
+      border: 2px solid #fff;
+      box-shadow: 0 0 0 1px rgba(17,24,39,.05), 0 8px 20px rgba(17,24,39,.12);
+    }
+
+    .avatar.large {
+      width: 76px;
+      height: 76px;
+    }
+
+    .name {
+      font-weight: 800;
+      font-size: 17px;
+      margin: 0;
+      color: var(--ink);
+    }
+
+    .desc {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+      margin: 0;
+    }
+
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .pill {
+      min-height: 25px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      border-radius: 999px;
+      padding: 0 9px;
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--text);
+      background: var(--surface-2);
+      border: 1px solid var(--line);
+      white-space: nowrap;
+    }
+
+    .pill.teal {
+      color: var(--teal);
+      background: var(--teal-soft);
+      border-color: #cbd6df;
+    }
+
+    .pill.rose {
+      color: var(--rose);
+      background: var(--rose-soft);
+      border-color: #f7c7d3;
+    }
+
+    .pill.amber {
+      color: var(--amber);
+      background: var(--amber-soft);
+      border-color: #f2d48d;
+    }
+
+    .pill.blue {
+      color: var(--blue);
+      background: var(--blue-soft);
+      border-color: #bdd5ff;
+    }
+
+    .pill .swatch {
+      width: 10px;
+      height: 10px;
+      border-width: 1px;
+      box-shadow: none;
+    }
+
+    .button {
+      height: 44px;
+      border: 0;
+      border-radius: var(--radius);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 0 14px;
+      font-size: 13px;
+      line-height: 1;
+      font-weight: 800;
+      background: linear-gradient(180deg, #263445, #111827);
+      color: #fff;
+      white-space: nowrap;
+      box-shadow: 0 10px 22px rgba(17, 24, 39, 0.2);
+      box-sizing: border-box;
+    }
+
+    .button.secondary {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .button.rose {
+      background: linear-gradient(180deg, #c45772, #a63f58);
+      box-shadow: 0 8px 18px rgba(184, 71, 98, 0.2);
+    }
+
+    .button.premium {
+      color: #fff7e8;
+      background: linear-gradient(180deg, #2c2418, #121827);
+      border: 1px solid rgba(184, 138, 68, 0.58);
+      box-shadow: 0 10px 24px rgba(184, 138, 68, 0.18), inset 0 1px 0 rgba(255,255,255,0.14);
+    }
+
+    .button.full {
+      width: 100%;
+    }
+
+    .button-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      align-items: stretch;
+    }
+
+    .button-row .button {
+      width: 100%;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .metric {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 10px 8px;
+      min-height: 70px;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .metric b {
+      display: block;
+      font-size: 20px;
+      margin-bottom: 4px;
+    }
+
+    .metric span {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    .balance-band {
+      min-height: 112px;
+      display: grid;
+      gap: 10px;
+      padding: 14px;
+      border-radius: var(--radius);
+      background:
+        linear-gradient(135deg, #111827 0%, #202a36 66%, #2a2419 100%);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.18);
+      box-shadow: 0 14px 34px rgba(17,24,39,.18);
+    }
+
+    .balance-band .desc {
+      color: rgba(255,255,255,.72);
+    }
+
+    .balance-value {
+      font-size: 34px;
+      line-height: 1;
+      font-weight: 900;
+      color: #fff;
+    }
+
+    .price-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+
+    .price-card {
+      min-height: 94px;
+      display: grid;
+      align-content: space-between;
+      gap: 8px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .price-card.active {
+      border-color: rgba(184,138,68,.55);
+      background: linear-gradient(180deg, #fffaf0, #ffffff);
+      box-shadow: 0 10px 28px rgba(184,138,68,.16);
+    }
+
+    .price-card b {
+      font-size: 20px;
+    }
+
+    .ledger-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .ledger-row:last-child {
+      border-bottom: 0;
+    }
+
+    .points-plus {
+      color: var(--green);
+      font-weight: 900;
+    }
+
+    .points-minus {
+      color: var(--rose);
+      font-weight: 900;
+    }
+
+    .cost-board {
+      display: grid;
+      gap: 0;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .cost-group {
+      display: grid;
+      grid-template-columns: 58px 1fr;
+      gap: 0;
+      align-items: stretch;
+      padding: 0;
+      border: 0;
+      border-bottom: 1px solid var(--line);
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    .cost-group:last-child {
+      border-bottom: 0;
+    }
+
+    .cost-mark {
+      width: auto;
+      min-height: 100%;
+      border-radius: 0;
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      background: #f8fafb;
+      border-right: 1px solid var(--line);
+      font-weight: 900;
+      font-size: 12px;
+    }
+
+    .cost-mark.rose {
+      color: var(--muted);
+      background: #f8fafb;
+    }
+
+    .cost-mark.amber {
+      color: var(--muted);
+      background: #f8fafb;
+    }
+
+    .cost-lines {
+      display: grid;
+      gap: 0;
+    }
+
+    .cost-line {
+      display: grid;
+      grid-template-columns: 1fr 88px;
+      gap: 10px;
+      align-items: center;
+      min-height: 42px;
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .cost-line:last-child {
+      border-bottom: 0;
+    }
+
+    .cost-line b {
+      font-size: 13px;
+      color: var(--ink);
+    }
+
+    .cost-chip {
+      min-width: 54px;
+      min-height: 25px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      padding: 0 8px;
+      color: var(--ink);
+      background: var(--gold-soft);
+      border: 1px solid rgba(184,138,68,.34);
+      font-size: 12px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .cost-note {
+      padding: 9px 10px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      color: var(--muted);
+      background: #f8fafb;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .tabbar {
+      position: relative;
+      left: auto;
+      right: auto;
+      bottom: auto;
+      height: 62px;
+      flex: 0 0 62px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      background: rgba(252,253,253,0.96);
+      border-top: 1px solid var(--line);
+      box-shadow: 0 -8px 24px rgba(17,24,39,.05);
+    }
+
+    .tab {
+      display: grid;
+      place-items: center;
+      align-content: center;
+      gap: 4px;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .tab.active {
+      color: var(--teal);
+    }
+
+    .icon-box {
+      width: 22px;
+      height: 22px;
+      border-radius: 7px;
+      display: grid;
+      place-items: center;
+      background: currentColor;
+      color: #fff;
+      font-size: 11px;
+    }
+
+    .calendar {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      column-gap: 3px;
+      row-gap: 4px;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      padding: 10px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .day,
+    .weekday {
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+      min-width: 0;
+      text-align: center;
+    }
+
+    .weekday {
+      color: var(--ink);
+      min-height: 18px;
+      font-size: 12px;
+    }
+
+    .day {
+      min-height: 50px;
+      align-content: space-between;
+      gap: 2px;
+      padding: 4px 2px 3px;
+      color: var(--ink);
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fff;
+      overflow: hidden;
+    }
+
+    .day.has-slots {
+      place-items: center;
+      align-content: space-between;
+    }
+
+    .day-number {
+      line-height: 1;
+      font-size: 15px;
+      font-weight: 900;
+    }
+
+    .day-lunar,
+    .day-note {
+      max-width: 100%;
+      overflow: hidden;
+      color: var(--muted);
+      font-size: 9px;
+      line-height: 1.2;
+      font-weight: 800;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .day-note {
+      color: var(--blue);
+    }
+
+    .day.muted .day-number,
+    .day.muted .day-lunar,
+    .day.muted .day-note {
+      color: #bec6cf;
+    }
+
+    .day.selected .date-stack {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      align-content: center;
+      gap: 1px;
+      background: var(--blue);
+      color: #fff;
+      box-shadow: 0 10px 24px rgba(49, 95, 157, 0.24);
+    }
+
+    .day.selected .day-number,
+    .day.selected .day-lunar {
+      color: #fff;
+    }
+
+    .day-colors {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 3px;
+      align-items: center;
+      min-width: 0;
+      min-height: 6px;
+    }
+
+    .day-color {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--teal);
+      flex: 0 0 auto;
+      box-shadow: 0 0 0 1px rgba(255,255,255,.88);
+    }
+
+    .day.free {
+      color: var(--green);
+      background: #fbf5ea;
+      border-color: #e6d4b7;
+    }
+
+    .day.booked {
+      color: var(--rose);
+      background: var(--rose-soft);
+      border-color: #f4b9ca;
+    }
+
+    .day.pending {
+      color: var(--amber);
+      background: var(--amber-soft);
+      border-color: #ecc66f;
+    }
+
+    .swatch {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      flex: 0 0 auto;
+      border: 2px solid #fff;
+      box-shadow: 0 0 0 1px rgba(17,24,39,.18);
+    }
+
+    .swatch-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .swatch-option {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 30px;
+      padding: 0 8px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .color-legend {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .color-legend .swatch-option {
+      border-radius: 7px;
+      justify-content: flex-start;
+      min-width: 0;
+      min-height: 36px;
+      padding: 5px 8px;
+      font-size: 10px;
+      line-height: 1.2;
+    }
+
+    .schedule-maintenance-content {
+      padding: 12px;
+      gap: 10px;
+    }
+
+    .schedule-maintenance-content .panel {
+      padding: 12px;
+    }
+
+    .schedule-maintenance-content .panel.tight {
+      padding: 10px;
+    }
+
+    .schedule-color-card {
+      min-height: 126px;
+      overflow: visible;
+      align-content: start;
+      gap: 10px;
+    }
+
+    .schedule-calendar {
+      height: 356px;
+      grid-template-rows: 20px repeat(5, minmax(56px, 1fr));
+      align-items: stretch;
+    }
+
+    .schedule-section-head {
+      align-items: start;
+    }
+
+    .schedule-section-head .name {
+      line-height: 1.25;
+    }
+
+    .schedule-maintenance-content .pill-row {
+      gap: 5px;
+    }
+
+    .schedule-maintenance-content .pill {
+      min-height: 23px;
+      padding: 0 7px;
+      font-size: 10px;
+    }
+
+    .slot-editor {
+      display: grid;
+      gap: 9px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, #ffffff, #f8fafb);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .color-picker-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .color-choice {
+      min-height: 38px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .color-choice.active {
+      border-color: rgba(184, 138, 68, 0.62);
+      background: #fffaf0;
+      box-shadow: 0 8px 18px rgba(184, 138, 68, 0.14);
+    }
+
+    .color-choice .swatch {
+      width: 22px;
+      height: 22px;
+    }
+
+    .media-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+
+    .media-tile {
+      min-height: 118px;
+      border-radius: var(--radius);
+      overflow: hidden;
+      position: relative;
+      background: var(--line);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .media-tile.tall {
+      min-height: 160px;
+    }
+
+    .media-label {
+      position: absolute;
+      left: 8px;
+      bottom: 8px;
+      right: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 800;
+      text-shadow: 0 1px 8px rgba(0,0,0,.35);
+    }
+
+    .play {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: rgba(255,255,255,.9);
+      color: var(--text);
+      flex: 0 0 auto;
+      font-size: 11px;
+      box-shadow: 0 4px 14px rgba(0,0,0,.18);
+    }
+
+    .form-row {
+      display: grid;
+      gap: 6px;
+    }
+
+    .label {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .input {
+      min-height: 44px;
+      border: 1px solid var(--line);
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      color: var(--text);
+      font-size: 13px;
+      line-height: 1.4;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.7);
+    }
+
+    .input.split {
+      justify-content: space-between;
+      color: var(--text);
+    }
+
+    .textarea {
+      min-height: 86px;
+      align-items: flex-start;
+      color: var(--muted);
+    }
+
+    .number-badge {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      min-width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: var(--teal);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 900;
+      box-shadow: 0 6px 16px rgba(83,107,130,.24);
+    }
+
+    .component-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .component-row {
+      min-height: 46px;
+      display: grid;
+      grid-template-columns: 34px 1fr auto;
+      align-items: center;
+      gap: 10px;
+      padding: 8px;
+      border: 1px solid var(--line);
+      background: var(--surface);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .handle {
+      width: 30px;
+      height: 30px;
+      border-radius: 7px;
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      background: var(--surface-2);
+      border: 1px solid var(--line);
+      font-weight: 900;
+    }
+
+    .qr {
+      width: 96px;
+      height: 96px;
+      background:
+        linear-gradient(90deg, #17202a 10px, transparent 10px) 0 0 / 24px 24px,
+        linear-gradient(#17202a 10px, transparent 10px) 0 0 / 24px 24px,
+        #fff;
+      border: 8px solid #fff;
+      outline: 1px solid var(--line);
+      border-radius: 6px;
+      flex: 0 0 auto;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .contact-card {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 76px;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .contact-copy {
+      min-width: 0;
+      display: grid;
+      gap: 4px;
+    }
+
+    .contact-card .qr {
+      width: 76px;
+      height: 76px;
+      border-width: 6px;
+      justify-self: end;
+    }
+
+    .library-card .qr {
+      width: 58px;
+      height: 58px;
+      border-width: 5px;
+      justify-self: start;
+    }
+
+    .maintenance-overlay {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 82px;
+      bottom: 0;
+      z-index: 20;
+      display: grid;
+      place-items: center;
+      padding: 28px;
+      background:
+        linear-gradient(180deg, rgba(236, 240, 242, 0.28), rgba(82, 91, 101, 0.42)),
+        rgba(80, 88, 97, 0.32);
+      backdrop-filter: blur(18px) saturate(1.02);
+      -webkit-backdrop-filter: blur(18px) saturate(1.02);
+    }
+
+    .maintenance-message {
+      position: relative;
+      width: min(100%, 280px);
+      min-height: 48px;
+      display: grid;
+      place-items: center;
+      align-content: center;
+      gap: 0;
+      padding: 0 20px;
+      border: 0;
+      background: transparent;
+      color: #fff;
+      text-align: center;
+      box-shadow: none;
+    }
+
+    .maintenance-message::before {
+      content: none;
+    }
+
+    .maintenance-message::after {
+      content: none;
+    }
+
+    .maintenance-message b {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      gap: 6px;
+      font-size: 18px;
+      line-height: 1.4;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.9);
+      text-shadow: 0 2px 18px rgba(0, 0, 0, 0.32);
+    }
+
+    .maintenance-message b span:last-child {
+      font-size: 15px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.78);
+    }
+
+    .advanced-portfolio-content .hero-photo.small {
+      height: 132px;
+    }
+
+    .advanced-portfolio-content .media-grid {
+      gap: 7px;
+    }
+
+    .advanced-portfolio-content .media-tile {
+      min-height: 104px;
+    }
+
+    .schedule-query {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .date-box {
+      min-height: 46px;
+      border: 1px solid var(--line);
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 8px 10px;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .date-box b {
+      display: block;
+      font-size: 15px;
+      margin-bottom: 3px;
+    }
+
+    .date-box span {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .visitor-fit {
+      padding: 12px;
+      gap: 10px;
+    }
+
+    .visitor-fit .panel {
+      padding: 12px;
+    }
+
+    .visitor-fit .form-row {
+      gap: 5px;
+    }
+
+    .visitor-fit .input {
+      min-height: 40px;
+      padding: 8px 10px;
+    }
+
+    .visitor-fit .query-result {
+      gap: 7px;
+      padding: 8px;
+    }
+
+    .visitor-fit .slot-line {
+      min-height: 40px;
+      padding: 7px 8px;
+    }
+
+    .team-showcase-content .hero-photo.small {
+      height: 118px;
+    }
+
+    .team-showcase-content .media-grid {
+      gap: 7px;
+    }
+
+    .team-showcase-content .media-tile {
+      min-height: 86px;
+    }
+
+    .team-showcase-content .pill-row {
+      gap: 5px;
+    }
+
+    .team-showcase-content .pill {
+      min-height: 23px;
+      padding: 0 7px;
+      font-size: 10px;
+    }
+
+    .member-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .member-row {
+      display: grid;
+      grid-template-columns: 42px 1fr auto;
+      align-items: center;
+      gap: 10px;
+      min-height: 58px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 8px;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .mini-avatar {
+      width: 42px;
+      height: 42px;
+      overflow: hidden;
+      border-radius: 50%;
+      background: var(--line);
+    }
+
+    .trend {
+      height: 96px;
+      position: relative;
+      margin-top: 8px;
+      border-radius: 7px;
+      background:
+        linear-gradient(180deg, rgba(49,95,157,.08), rgba(49,95,157,0)),
+        repeating-linear-gradient(180deg, transparent 0, transparent 23px, rgba(215,222,229,.7) 24px);
+      overflow: hidden;
+    }
+
+    .trend svg {
+      position: absolute;
+      left: 8px;
+      right: 8px;
+      top: 10px;
+      width: calc(100% - 16px);
+      height: 62px;
+      overflow: visible;
+    }
+
+    .trend-area {
+      fill: rgba(49,95,157,.12);
+    }
+
+    .trend-line {
+      fill: none;
+      stroke: var(--blue);
+      stroke-width: 4;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .trend-dot {
+      fill: #fff;
+      stroke: var(--blue);
+      stroke-width: 3;
+    }
+
+    .trend-dot.hot {
+      fill: var(--blue);
+      stroke: #fff;
+    }
+
+    .trend-labels {
+      position: absolute;
+      left: 8px;
+      right: 8px;
+      bottom: 8px;
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 800;
+      text-align: center;
+    }
+
+    .visit-row {
+      display: grid;
+      grid-template-columns: 38px 1fr auto;
+      gap: 9px;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .visit-row:last-child {
+      border-bottom: 0;
+    }
+
+    .visitor-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      color: var(--blue);
+      background: var(--blue-soft);
+      font-weight: 900;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .search {
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 12px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 13px;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .segmented {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 4px;
+      padding: 4px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .segment {
+      appearance: none;
+      -webkit-appearance: none;
+      min-height: 34px;
+      display: grid;
+      place-items: center;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 800;
+      cursor: default;
+    }
+
+    .segment.active {
+      background: var(--ink);
+      color: #fff;
+    }
+
+    .login-tabs {
+      display: flex;
+      align-items: stretch;
+      gap: 0;
+      padding: 0;
+      border: 0;
+      border-bottom: 1px solid var(--line);
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+      height: 26px;
+      min-height: 26px;
+    }
+
+    .login-tabs .segment {
+      position: relative;
+      flex: 1 1 0;
+      min-width: 0;
+      height: 26px;
+      min-height: 26px;
+      padding: 0 2px;
+      border-radius: 0;
+      font-size: 11px;
+      line-height: 1;
+      text-align: center;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+    }
+
+    .login-tabs .segment.active {
+      background: transparent;
+      color: var(--ink);
+    }
+
+    .login-tabs .segment.active::after {
+      content: "";
+      position: absolute;
+      left: 16px;
+      right: 16px;
+      bottom: -1px;
+      height: 2px;
+      border-radius: 999px 999px 0 0;
+      background: var(--blue);
+    }
+
+    .login-panel {
+      display: none;
+      gap: 8px;
+    }
+
+    .login-panel.active {
+      display: grid;
+    }
+
+    .work-row,
+    .portfolio-row {
+      display: grid;
+      grid-template-columns: 74px 1fr auto;
+      gap: 10px;
+      align-items: center;
+      min-height: 86px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .thumb {
+      width: 74px;
+      height: 64px;
+      border-radius: 7px;
+      overflow: hidden;
+      background: var(--line);
+      position: relative;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .thumb.square {
+      height: 74px;
+    }
+
+    .upload-box {
+      min-height: 142px;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      border: 1px dashed #aab8c4;
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, #ffffff, #f7faf9);
+      color: var(--muted);
+      padding: 16px;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .upload-icon {
+      width: 42px;
+      height: 42px;
+      display: grid;
+      place-items: center;
+      margin: 0 auto 8px;
+      border-radius: 50%;
+      color: var(--teal);
+      background: var(--teal-soft);
+      font-weight: 900;
+      font-size: 22px;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .field-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .slot-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+
+    .slot-card {
+      min-height: 78px;
+      display: grid;
+      align-content: space-between;
+      gap: 7px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .slot-card.active {
+      border-color: rgba(83,107,130,.36);
+      background: linear-gradient(180deg, #f2f6f9, #ffffff);
+    }
+
+    .slot-card.booked {
+      border-color: rgba(184,71,98,.32);
+      background: linear-gradient(180deg, #fff1f5, #ffffff);
+    }
+
+    .slot-card.pending {
+      border-color: rgba(168,115,28,.32);
+      background: linear-gradient(180deg, #fff7e6, #ffffff);
+    }
+
+    .day-schedule-list {
+      display: grid;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .day-panel {
+      display: grid;
+      gap: 8px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow-soft);
+      min-width: 0;
+      max-width: 100%;
+      overflow: hidden;
+    }
+
+    .slot-line {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      min-height: 44px;
+      padding: 8px;
+      border-radius: 7px;
+      background: #f8fafb;
+      border: 1px solid var(--line);
+    }
+
+    .slot-line > * {
+      min-width: 0;
+    }
+
+    .slot-line .row {
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .slot-line b,
+    .slot-line .desc {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .query-result {
+      display: grid;
+      gap: 8px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .slot-time {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .template-preview {
+      min-height: 164px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      display: grid;
+      grid-template-rows: 64px auto;
+    }
+
+    .template-top {
+      position: relative;
+      background: var(--line);
+    }
+
+    .template-body {
+      padding: 10px;
+      display: grid;
+      gap: 7px;
+    }
+
+    .template-line {
+      height: 9px;
+      border-radius: 999px;
+      background: var(--line);
+    }
+
+    .template-line.short {
+      width: 56%;
+    }
+
+    .mini-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+    }
+
+    .mini-block {
+      height: 34px;
+      border-radius: 6px;
+      background: var(--surface-2);
+      border: 1px solid var(--line);
+    }
+
+    .component-showcase {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+
+    .library-card {
+      min-height: 116px;
+      display: grid;
+      align-content: space-between;
+      gap: 8px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+
+    .library-icon {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 7px;
+      background: var(--blue-soft);
+      color: var(--blue);
+      font-weight: 900;
+    }
+
+    .rule-list {
+      display: grid;
+      gap: 7px;
+    }
+
+    .rule-item {
+      display: grid;
+      grid-template-columns: 24px 1fr;
+      gap: 8px;
+      align-items: start;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .check {
+      width: 22px;
+      height: 22px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      color: var(--teal);
+      background: var(--teal-soft);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .bottom-safe {
+      height: 62px;
+    }
+
+    .asset-1 { background-image: url("https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=900&q=80"); background-size: cover; background-position: center; }
+    .asset-2 { background-image: url("https://images.unsplash.com/photo-1520854221256-17451cc331bf?auto=format&fit=crop&w=900&q=80"); background-size: cover; background-position: center; }
+    .asset-3 { background-image: url("https://images.unsplash.com/photo-1606800052052-a08af7148866?auto=format&fit=crop&w=900&q=80"); background-size: cover; background-position: center; }
+    .asset-4 { background-image: url("https://images.unsplash.com/photo-1529634597503-139d3726fed5?auto=format&fit=crop&w=900&q=80"); background-size: cover; background-position: center; }
+    .asset-5 { background-image: url("https://images.unsplash.com/photo-1511285560929-80b456fea0bc?auto=format&fit=crop&w=900&q=80"); background-size: cover; background-position: center; }
+    .asset-6 { background-image: url("https://images.unsplash.com/photo-1519225421980-715cb0215aed?auto=format&fit=crop&w=900&q=80"); background-size: cover; background-position: center; }
+    .asset-7 { background-image: url("https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=900&q=80"); background-size: cover; background-position: center; }
+    .asset-8 { background-image: url("https://images.unsplash.com/photo-1496747611176-843222e1e57c?auto=format&fit=crop&w=900&q=80"); background-size: cover; background-position: center; }
+
+    @media (max-width: 820px) {
+      .page {
+        padding: 22px 14px 40px;
+      }
+
+      .topbar {
+        display: grid;
+      }
+
+      h1 {
+        font-size: 28px;
+      }
+
+      .legend {
+        min-width: 0;
+      }
+
+      .screen-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .phone {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="topbar">
+      <div class="title-block">
+        <div class="eyebrow">微信小程序 SaaS 详细设计稿 / v1.1</div>
+        <h1>微档集 Pro</h1>
+        <p class="subtitle">为婚庆司仪、化妆师、模特及团队设计的作品集与档期管理小程序。新版补充积分充值、作品维护、作品集维护、自定义时间段档期、团队成员管理和高级组件库展示，便于客户理解完整维护和盈利流程。</p>
+      </div>
+      <div class="legend">
+        <div class="legend-item">
+          <div class="legend-label">核心角色</div>
+          <div class="legend-value">访客 / 维护者</div>
+        </div>
+        <div class="legend-item">
+          <div class="legend-label">作品集类型</div>
+          <div class="legend-value">标准 / 高级</div>
+        </div>
+        <div class="legend-item">
+          <div class="legend-label">关键转化</div>
+          <div class="legend-value">自定义档</div>
+        </div>
+        <div class="legend-item">
+          <div class="legend-label">跟进依据</div>
+          <div class="legend-value">访问记录</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="screen-grid">
+      <article class="screen-card login-screen" data-login-tab="register">
+        <div class="screen-meta">
+          <div class="screen-title">01 首次登录即注册</div>
+          <div class="screen-note">手机号 + 推荐码</div>
+        </div>
+        <div class="phone">
+          <div class="phone-inner">
+            <div class="status"><span>09:41</span><div class="status-icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
+            <div class="nav">
+              <div class="nav-spacer"></div>
+              <div class="nav-title">微档集 Pro</div>
+              <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
+            </div>
+            <div class="hero-photo asset-1">
+              <div class="shade"></div>
+              <div class="hero-copy">
+                <h2>把作品和档期，装进一张可分享名片</h2>
+              </div>
+            </div>
+            <div class="content">
+              <div class="panel">
+                <div class="row">
+                  <div class="stack">
+                    <p class="name">欢迎使用微档集 Pro</p>
+                    <p class="desc">适合司仪、化妆、模特和婚庆团队的作品展示工具。</p>
+                  </div>
+                  <div class="avatar"><div class="asset-7" style="width:100%;height:100%"></div></div>
+                </div>
+              </div>
+              <div class="panel stack">
+                <div class="segmented login-tabs">
+                  <button class="segment active" type="button" data-login-tab="register">注册</button>
+                  <button class="segment" type="button" data-login-tab="wechat">微信授权</button>
+                  <button class="segment" type="button" data-login-tab="phone">手机登录</button>
+                  <button class="segment" type="button" data-login-tab="password">账号密码</button>
+                </div>
+                <div class="login-panel active" data-login-panel="register">
+                  <div class="form-row">
+                    <div class="label">推荐码</div>
+                    <div class="input split"><span>填写他人的个人唯一码</span><span class="desc">选填</span></div>
+                  </div>
+                  <button class="button full">微信授权获取手机号并注册</button>
+                </div>
+                <div class="login-panel" data-login-panel="wechat">
+                  <button class="button full">微信授权登录</button>
+                </div>
+                <div class="login-panel" data-login-panel="phone">
+                  <div class="form-row">
+                    <div class="label">手机号码</div>
+                    <div class="input">请输入手机号码</div>
+                  </div>
+                  <div class="form-row">
+                    <div class="label">验证码</div>
+                    <div class="input split"><span>请输入短信验证码</span><span class="pill blue">获取</span></div>
+                  </div>
+                  <button class="button full">手机验证码登录</button>
+                </div>
+                <div class="login-panel" data-login-panel="password">
+                  <div class="form-row">
+                    <div class="label">手机号码</div>
+                    <div class="input">请输入手机号码</div>
+                  </div>
+                  <div class="form-row">
+                    <div class="label">密码</div>
+                    <div class="input">请输入登录密码</div>
+                  </div>
+                  <button class="button full">账号密码登录</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen-card">
+        <div class="screen-meta">
+          <div class="screen-title">02 我的</div>
+          <div class="screen-note">积分、访客、团队入口</div>
+        </div>
+        <div class="phone">
+          <div class="phone-inner">
+            <div class="status"><span>09:41</span><div class="status-icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
+            <div class="nav">
+              <div class="nav-spacer"></div>
+              <div class="nav-title">我的</div>
+              <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
+            </div>
+            <div class="content">
+              <div class="panel">
+                <div class="row">
+                  <div class="row" style="justify-content:flex-start">
+                    <div class="avatar"><div class="asset-4" style="width:100%;height:100%"></div></div>
+                    <div>
+                      <p class="name">林安 · 婚礼司仪</p>
+                      <p class="desc">上海 / 高端婚礼 / 双语主持</p>
+                    </div>
+                  </div>
+                  <span class="pill teal">MC-8392</span>
+                </div>
+              </div>
+              <div class="balance-band">
+                <div class="row">
+                  <div>
+                    <p class="desc">当前积分余额</p>
+                    <div class="balance-value">286</div>
+                  </div>
+                  <button class="button" style="background:#fff;color:#17202a">充值</button>
+                </div>
+                <div class="row">
+                  <span class="desc">今日已消耗 14 积分</span>
+                  <span class="pill amber">低于 50 提醒</span>
+                </div>
+              </div>
+              <div class="metric-grid">
+                <div class="metric"><b>36</b><span>作品素材</span></div>
+                <div class="metric"><b>4</b><span>已发布作品集</span></div>
+                <div class="metric"><b>128</b><span>近 7 日访问</span></div>
+              </div>
+              <div class="button-row">
+                <button class="button">新建作品集</button>
+                <button class="button secondary">维护档期</button>
+              </div>
+              <div class="panel stack">
+                <div class="row">
+                  <div>
+                    <p class="name">今日待办</p>
+                    <p class="desc">2 个客户查询了 2026-06-28 档期</p>
+                  </div>
+                  <span class="pill rose">需跟进</span>
+                </div>
+                <div class="row">
+                  <span class="desc">团队「星曜司仪团」新增成员申请</span>
+                  <span class="pill blue">查看</span>
+                </div>
+              </div>
+              <div class="panel stack">
+                <div class="row"><span class="name">跟进与团队</span><span class="desc">管理</span></div>
+                <div class="component-list">
+                  <div class="component-row"><div class="handle">访</div><div><b>访问记录</b><p class="desc">访客来源、访问次数、跟进状态</p></div><span>›</span></div>
+                  <div class="component-row"><div class="handle">团</div><div><b>团队管理</b><p class="desc">成员、团队唯一码、团队作品集</p></div><span>›</span></div>
+                </div>
+              </div>
+            </div>
+            <div class="tabbar">
+              <div class="tab active"><span class="icon-box">我</span><span>我的</span></div>
+              <div class="tab"><span class="icon-box">作</span><span>作品</span></div>
+              <div class="tab"><span class="icon-box">集</span><span>作品集</span></div>
+              <div class="tab"><span class="icon-box">档</span><span>档期</span></div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen-card">
+        <div class="screen-meta">
+          <div class="screen-title">03 我的积分</div>
+          <div class="screen-note">余额、消耗、充值入口</div>
+        </div>
+        <div class="phone">
+          <div class="phone-inner">
+            <div class="status"><span>09:41</span><div class="status-icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
+            <div class="nav">
+              <div class="nav-action">‹</div>
+              <div class="nav-title">我的积分</div>
+              <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
+            </div>
+            <div class="content">
+              <div class="balance-band">
+                <div class="row">
+                  <div>
+                    <p class="desc">当前可用积分</p>
+                    <div class="balance-value">286</div>
+                  </div>
+                  <button class="button" style="background:#fff;color:#17202a">去充值</button>
+                </div>
+                <div class="row">
+                  <span class="desc">累计充值 820 积分</span>
+                  <span class="desc">累计消耗 534 积分</span>
+                </div>
+              </div>
+              <div class="metric-grid">
+                <div class="metric"><b>14</b><span>今日消耗</span></div>
+                <div class="metric"><b>42</b><span>访客消耗</span></div>
+                <div class="metric"><b>8</b><span>维护消耗</span></div>
+              </div>
+              <div class="panel stack">
+                <div class="row">
+                  <p class="name">积分流水</p>
+                  <span class="pill blue">查看积分规则</span>
+                </div>
+                <div class="ledger-row">
+                  <div><b>访客访问个人高级作品集</b><p class="desc">今天 14:28 · 林安婚礼司仪</p></div>
+                  <span class="points-minus">-1</span>
+                </div>
+                <div class="ledger-row">
+                  <div><b>维护高级作品集</b><p class="desc">今天 11:06 · AI 组件生成</p></div>
+                  <span class="points-minus">-10</span>
+                </div>
+                <div class="ledger-row">
+                  <div><b>充值到账</b><p class="desc">昨天 20:12 · 50 元档</p></div>
+                  <span class="points-plus">+520</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen-card">
+        <div class="screen-meta">
+          <div class="screen-title">03B 积分规则</div>
+          <div class="screen-note">完整消耗说明</div>
+        </div>
+        <div class="phone">
+          <div class="phone-inner">
+            <div class="status"><span>09:41</span><div class="status-icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
+            <div class="nav">
+              <div class="nav-action">‹</div>
+              <div class="nav-title">积分规则</div>
+              <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
+            </div>
+            <div class="content">
+              <div class="panel">
+                <div class="row">
+                  <div>
+                    <p class="name">积分消耗</p>
+                  </div>
+                  <span class="pill blue">完整规则</span>
+                </div>
+              </div>
+              <div class="cost-board">
+                <div class="cost-group">
+                  <div class="cost-mark">维护</div>
+                  <div class="cost-lines">
+                    <div class="cost-line"><div><b>上传作品</b><p class="desc">图片 / 视频素材</p></div><span class="cost-chip">1 分</span></div>
+                    <div class="cost-line"><div><b>新建团队</b><p class="desc">创建团队并生成唯一码</p></div><span class="cost-chip">1000 分</span></div>
+                    <div class="cost-line"><div><b>标准作品集</b><p class="desc">保存一次</p></div><span class="cost-chip">1 分</span></div>
+                    <div class="cost-line"><div><b>高级作品集</b><p class="desc">AI 生成或保存</p></div><span class="cost-chip">10 分</span></div>
+                  </div>
+                </div>
+                <div class="cost-group">
+                  <div class="cost-mark rose">访客</div>
+                  <div class="cost-lines">
+                    <div class="cost-line"><div><b>访问个人作品集</b><p class="desc">标准 / 高级均计</p></div><span class="cost-chip">1 分</span></div>
+                    <div class="cost-line"><div><b>视频查看</b><p class="desc">每次播放</p></div><span class="cost-chip">1 分</span></div>
+                    <div class="cost-line"><div><b>图片查看</b><p class="desc">累计 10 次浏览</p></div><span class="cost-chip">1 分</span></div>
+                  </div>
+                </div>
+              </div>
+              <div class="panel stack">
+                <div class="row">
+                  <p class="name">扣费归属</p>
+                  <span class="pill">账户</span>
+                </div>
+                <div class="rule-list">
+                  <div class="rule-item"><span class="check">1</span><span>团队无积分账户，团队作品集访问无消耗。</span></div>
+                  <div class="rule-item"><span class="check">2</span><span>从团队跳转到个人作品集后，扣个人作品集所属维护者积分。</span></div>
+                  <div class="rule-item"><span class="check">3</span><span>个人余额不足时，访客端内容区遮罩提示“UNDER MAINTENANCE / 维护中”。</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen-card">
+        <div class="screen-meta">
+          <div class="screen-title">04 充值积分</div>
+          <div class="screen-note">充值档位与到账积分</div>
+        </div>
+        <div class="phone">
+          <div class="phone-inner">
+            <div class="status"><span>09:41</span><div class="status-icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
+            <div class="nav">
+              <div class="nav-action">‹</div>
+              <div class="nav-title">充值积分</div>
+              <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
+            </div>
+            <div class="content">
+              <div class="panel">
+                <div class="row">
+                  <div>
+                    <p class="name">当前余额</p>
+                    <p class="desc">余额低于 50 时建议及时充值</p>
+                  </div>
+                  <span class="pill teal">286 积分</span>
+                </div>
+              </div>
+              <div class="price-grid">
+                <div class="price-card">
+                  <div><b>1 元</b><p class="desc">到账 10 积分</p></div>
+                  <span class="pill">基础</span>
+                </div>
+                <div class="price-card">
+                  <div><b>10 元</b><p class="desc">到账 100 积分</p></div>
+                  <span class="pill">常用</span>
+                </div>
+                <div class="price-card active">
+                  <div><b>50 元</b><p class="desc">到账 520 积分</p></div>
+                  <span class="pill teal">多送 20</span>
+                </div>
+                <div class="price-card">
+                  <div><b>100 元</b><p class="desc">到账 1100 积分</p></div>
+                  <span class="pill rose">多送 100</span>
+                </div>
+              </div>
+              <div class="panel stack">
+                <div class="row">
+                  <p class="name">本次充值</p>
+                  <span class="pill teal">已选择 50 元</span>
+                </div>
+                <div class="component-row"><div class="handle">¥</div><div><b>支付金额</b><p class="desc">微信支付</p></div><span>50 元</span></div>
+                <div class="component-row"><div class="handle">分</div><div><b>到账积分</b><p class="desc">支付成功后实时到账</p></div><span>520</span></div>
+              </div>
+              <button class="button full">微信支付并充值</button>
+              <div class="panel tight">
+                <div class="row">
+                  <span class="desc">充值后不可提现，仅用于小程序内功能消耗。</span>
+                  <span class="pill">规则</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen-card">
+        <div class="screen-meta">
+          <div class="screen-title">05 档期</div>
+          <div class="screen-note">月历色彩 + 每天档期</div>
+        </div>
+        <div class="phone">
+          <div class="phone-inner">
+            <div class="status"><span>09:41</span><div class="status-icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
+            <div class="nav">
+              <div class="nav-spacer"></div>
+              <div class="nav-title">档期</div>
+              <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
+            </div>
+            <div class="content schedule-maintenance-content">
+              <div class="panel tight stack schedule-color-card">
+                <div class="row schedule-section-head">
+                  <p class="name">档位颜色</p>
+                  <span class="desc">维护后同步到月历</span>
+                </div>
+                <div class="color-legend">
+                  <span class="swatch-option"><span class="swatch" style="background:var(--slot-noon)"></span>中午 10:00-13:00</span>
+                  <span class="swatch-option"><span class="swatch" style="background:var(--slot-evening)"></span>晚间 17:00-20:00</span>
+                  <span class="swatch-option"><span class="swatch" style="background:var(--slot-welcome)"></span>迎亲 07:30-09:30</span>
+                  <span class="swatch-option"><span class="swatch" style="background:var(--slot-party)"></span>派对 20:30-22:30</span>
+                </div>
+              </div>
+              <div class="calendar schedule-calendar">
+                <div class="weekday">日</div><div class="weekday">一</div><div class="weekday">二</div><div class="weekday">三</div><div class="weekday">四</div><div class="weekday">五</div><div class="weekday">六</div>
+                <div class="day muted"><span class="day-number">31</span><span class="day-lunar">十五</span></div>
+                <div class="day has-slots"><span class="day-number">1</span><span class="day-lunar">十六</span><div class="day-colors"><span class="day-color" style="background:var(--slot-noon)"></span></div></div>
+                <div class="day has-slots"><span class="day-number">2</span><span class="day-lunar">十七</span><div class="day-colors"><span class="day-color" style="background:var(--slot-evening)"></span></div></div>
+                <div class="day"><span class="day-number">3</span><span class="day-lunar">十八</span></div>
+                <div class="day has-slots"><span class="day-number">4</span><span class="day-lunar">十九</span><div class="day-colors"><span class="day-color" style="background:var(--slot-noon)"></span><span class="day-color" style="background:var(--slot-evening)"></span></div></div>
+                <div class="day has-slots"><span class="day-number">5</span><span class="day-lunar">二十</span><div class="day-colors"><span class="day-color" style="background:var(--slot-welcome)"></span></div></div>
+                <div class="day has-slots"><span class="day-number">6</span><span class="day-lunar">廿一</span><div class="day-colors"><span class="day-color" style="background:var(--slot-welcome)"></span><span class="day-color" style="background:var(--slot-evening)"></span></div></div>
+                <div class="day has-slots"><span class="day-number">7</span><span class="day-lunar">廿二</span><div class="day-colors"><span class="day-color" style="background:var(--slot-evening)"></span></div></div>
+                <div class="day"><span class="day-number">8</span><span class="day-lunar">廿三</span></div>
+                <div class="day"><span class="day-number">9</span><span class="day-lunar">廿四</span></div>
+                <div class="day has-slots"><span class="day-number">10</span><span class="day-lunar">廿五</span><div class="day-colors"><span class="day-color" style="background:var(--slot-noon)"></span></div></div>
+                <div class="day"><span class="day-number">11</span><span class="day-lunar">廿六</span></div>
+                <div class="day has-slots"><span class="day-number">12</span><span class="day-lunar">廿七</span><div class="day-colors"><span class="day-color" style="background:var(--slot-noon)"></span><span class="day-color" style="background:var(--slot-party)"></span></div></div>
+                <div class="day"><span class="day-number">13</span><span class="day-lunar">廿八</span></div>
+                <div class="day has-slots"><span class="day-number">14</span><span class="day-lunar">廿九</span><div class="day-colors"><span class="day-color" style="background:var(--slot-evening)"></span></div></div>
+                <div class="day"><span class="day-number">15</span><span class="day-lunar">五月</span></div>
+                <div class="day"><span class="day-number">16</span><span class="day-lunar">初二</span></div>
+                <div class="day"><span class="day-number">17</span><span class="day-lunar">初三</span></div>
+                <div class="day has-slots"><span class="day-number">18</span><span class="day-lunar">初四</span><div class="day-colors"><span class="day-color" style="background:var(--slot-welcome)"></span></div></div>
+                <div class="day"><span class="day-number">19</span><span class="day-note">端午节</span></div>
+                <div class="day has-slots"><span class="day-number">20</span><span class="day-lunar">初六</span><div class="day-colors"><span class="day-color" style="background:var(--slot-noon)"></span><span class="day-color" style="background:var(--slot-evening)"></span></div></div>
+                <div class="day"><span class="day-number">21</span><span class="day-lunar">初七</span></div>
+                <div class="day"><span class="day-number">22</span><span class="day-lunar">初八</span></div>
+                <div class="day has-slots"><span class="day-number">23</span><span class="day-lunar">初九</span><div class="day-colors"><span class="day-color" style="background:var(--slot-welcome)"></span></div></div>
+                <div class="day has-slots selected"><div class="date-stack"><span class="day-number">24</span><span class="day-lunar">初十</span></div><div class="day-colors"><span class="day-color" style="background:var(--slot-noon)"></span><span class="day-color" style="background:var(--slot-evening)"></span><span class="day-color" style="background:var(--slot-welcome)"></span></div></div>
+                <div class="day has-slots"><span class="day-number">25</span><span class="day-lunar">十一</span><div class="day-colors"><span class="day-color" style="background:var(--slot-noon)"></span><span class="day-color" style="background:var(--slot-evening)"></span><span class="day-color" style="background:var(--slot-party)"></span></div></div>
+                <div class="day"><span class="day-number">26</span><span class="day-lunar">十二</span></div>
+                <div class="day has-slots"><span class="day-number">27</span><span class="day-lunar">十三</span><div class="day-colors"><span class="day-color" style="background:var(--slot-noon)"></span></div></div>
+                <div class="day has-slots"><span class="day-number">28</span><span class="day-lunar">十四</span><div class="day-colors"><span class="day-color" style="background:var(--slot-noon)"></span><span class="day-color" style="background:var(--slot-evening)"></span><span class="day-color" style="background:var(--slot-welcome)"></span></div></div>
+                <div class="day"><span class="day-number">29</span><span class="day-lunar">十五</span></div>
+                <div class="day has-slots"><span class="day-number">30</span><span class="day-lunar">十六</span><div class="day-colors"><span class="day-color" style="background:var(--slot-party)"></span></div></div>
+                <div class="day muted"><span class="day-number">1</span><span class="day-lunar">十七</span></div>
+                <div class="day muted"><span class="day-number">2</span><span class="day-lunar">十八</span></div>
+                <div class="day muted"><span class="day-number">3</span><span class="day-lunar">十九</span></div>
+                <div class="day muted"><span class="day-number">4</span><span class="day-lunar">二十</span></div>
+              </div>
+              <div class="day-schedule-list">
+                <div class="day-panel">
+                  <div class="row">
+                    <div>
+                      <b>6 月 24 日 · 周三</b>
+                      <p class="desc">3 个档位，2 个可约</p>
+                    </div>
+                    <span class="pill teal">可约</span>
+                  </div>
+                  <div class="slot-line">
+                    <div class="row" style="justify-content:flex-start"><span class="swatch" style="background:var(--slot-noon)"></span><div><b>中午档</b><p class="desc">10:00-13:00 · 默认档</p></div></div>
+                    <span class="pill teal">空闲</span>
+                  </div>
+                  <div class="slot-line">
+                    <div class="row" style="justify-content:flex-start"><span class="swatch" style="background:var(--slot-evening)"></span><div><b>晚间档</b><p class="desc">17:00-20:00 · 默认档</p></div></div>
+                    <span class="pill rose">已约</span>
+                  </div>
+                  <div class="slot-line">
+                    <div class="row" style="justify-content:flex-start"><span class="swatch" style="background:var(--slot-welcome)"></span><div><b>迎亲档</b><p class="desc">07:30-09:30 · 自定义档</p></div></div>
+                    <span class="pill amber">待定</span>
+                  </div>
+                </div>
+                <div class="day-panel">
+                  <div class="row">
+                    <div>
+                      <b>6 月 25 日 · 周四</b>
+                      <p class="desc">2 个默认档位，1 个自定义档</p>
+                    </div>
+                    <span class="pill amber">部分待定</span>
+                  </div>
+                  <div class="slot-line">
+                    <div class="row" style="justify-content:flex-start"><span class="swatch" style="background:var(--slot-noon)"></span><div><b>中午档</b><p class="desc">10:00-13:00 · 默认档</p></div></div>
+                    <span class="pill rose">已约</span>
+                  </div>
+                  <div class="slot-line">
+                    <div class="row" style="justify-content:flex-start"><span class="swatch" style="background:var(--slot-evening)"></span><div><b>晚间档</b><p class="desc">17:00-20:00 · 默认档</p></div></div>
+                    <span class="pill teal">空闲</span>
+                  </div>
+                  <div class="slot-line">
+                    <div class="row" style="justify-content:flex-start"><span class="swatch" style="background:var(--slot-party)"></span><div><b>After Party</b><p class="desc">20:30-22:30 · 自定义档</p></div></div>
+                    <span class="pill teal">空闲</span>
+                  </div>
+                </div>
+                <div class="day-panel">
+                  <div class="row">
+                    <div>
+                      <b>6 月 26 日 · 周五</b>
+                      <p class="desc">未添加档位，访客查询显示暂未开放</p>
+                    </div>
+                    <span class="pill">休息</span>
+                  </div>
+                  <button class="button secondary full">＋ 添加当天档位</button>
+                </div>
+              </div>
+            </div>
+            <div class="tabbar">
+              <div class="tab"><span class="icon-box">我</span><span>我的</span></div>
+              <div class="tab"><span class="icon-box">作</span><span>作品</span></div>
+              <div class="tab"><span class="icon-box">集</span><span>作品集</span></div>
+              <div class="tab active"><span class="icon-box">档</span><span>档期</span></div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen-card">
+        <div class="screen-meta">
+          <div class="screen-title">05B 自定义档位维护页</div>
+          <div class="screen-note">新增 / 编辑当天档位</div>
+        </div>
+        <div class="phone">
+          <div class="phone-inner">
+            <div class="status"><span>09:41</span><div class="status-icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
+            <div class="nav">
+              <div class="nav-action">‹</div>
+              <div class="nav-title">维护档位</div>
+              <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
+            </div>
+            <div class="content">
+              <div class="panel">
+                <div class="row">
+                  <div>
+                    <p class="name">6 月 24 日 · 周三</p>
+                    <p class="desc">为当天新增或编辑具体档位，保存后同步到月历颜色。</p>
+                  </div>
+                  <span class="pill teal">3 档</span>
+                </div>
+              </div>
+              <div class="panel stack">
+                <div class="row">
+                  <p class="name">自定义档位</p>
+                  <span class="pill amber">编辑中</span>
+                </div>
+                <div class="slot-editor">
+                  <div class="field-grid">
+                    <div class="form-row">
+                      <div class="label">档位名称</div>
+                      <div class="input">迎亲档</div>
+                    </div>
+                    <div class="form-row">
+                      <div class="label">档位状态</div>
+                      <div class="input">待定</div>
+                    </div>
+                  </div>
+                  <div class="field-grid">
+                    <div class="form-row">
+                      <div class="label">开始时间</div>
+                      <div class="input">07:30</div>
+                    </div>
+                    <div class="form-row">
+                      <div class="label">结束时间</div>
+                      <div class="input">09:30</div>
+                    </div>
+                  </div>
+                  <div class="form-row">
+                    <div class="label">档位颜色</div>
+                    <div class="color-picker-grid">
+                      <span class="color-choice"><span class="swatch" style="background:var(--slot-noon)"></span></span>
+                      <span class="color-choice"><span class="swatch" style="background:var(--slot-evening)"></span></span>
+                      <span class="color-choice active"><span class="swatch" style="background:var(--slot-welcome)"></span></span>
+                      <span class="color-choice"><span class="swatch" style="background:var(--slot-party)"></span></span>
+                      <span class="color-choice"><span class="swatch" style="background:var(--slot-forest)"></span></span>
+                      <span class="color-choice"><span class="swatch" style="background:var(--slot-sky)"></span></span>
+                      <span class="color-choice"><span class="swatch" style="background:var(--slot-coral)"></span></span>
+                      <span class="color-choice"><span class="swatch" style="background:var(--slot-slate)"></span></span>
+                    </div>
+                  </div>
+                  <div class="cost-note">保存后，6 月 24 日月历格子会追加迎亲档的金色标记。</div>
+                </div>
+              </div>
+              <div class="panel stack">
+                <div class="row">
+                  <p class="name">快捷操作</p>
+                  <span class="desc">可复用常用档位</span>
+                </div>
+                <div class="button-row">
+                  <button class="button secondary">复制昨日档位</button>
+                  <button class="button secondary">保存为模板</button>
+                </div>
+              </div>
+              <div class="button-row">
+                <button class="button secondary">取消</button>
+                <button class="button">保存档位</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen-card">
+        <div class="screen-meta">
+          <div class="screen-title">06 作品</div>
+          <div class="screen-note">筛选、排序、引用状态</div>
+        </div>
+        <div class="phone">
+          <div class="phone-inner">
+            <div class="status"><span>09:41</span><div class="status-icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
+            <div class="nav">
+              <div class="nav-spacer"></div>
+              <div class="nav-title">作品</div>
+              <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
+            </div>
+            <div class="content">
+              <div class="search">⌕ 搜索作品标题、标签、服务类型</div>
+              <div class="panel tight">
+                <div class="row">
+                  <div class="pill-row">
+                    <span class="pill teal">全部 36</span>
+                    <span class="pill">图片 28</span>
+                    <span class="pill">视频 8</span>
+                  </div>
+                  <span class="desc">最近更新</span>
+                </div>
+              </div>
+              <div class="panel stack">
+                <div class="row">
+                  <p class="name">素材库</p>
+                  <span class="pill blue">批量管理</span>
+                </div>
+                <div class="work-row">
+                  <div class="thumb asset-1"><span class="number-badge">1</span></div>
+                  <div>
+                    <b>草坪婚礼主持</b>
+                    <p class="desc">图片 · 高端婚礼 / 户外仪式</p>
+                    <div class="pill-row" style="margin-top:6px"><span class="pill teal">已上架</span><span class="pill">引用 3 次</span></div>
+                  </div>
+                  <span>›</span>
+                </div>
+                <div class="work-row">
+                  <div class="thumb asset-5"><span class="play" style="position:absolute;right:6px;bottom:6px">▶</span></div>
+                  <div>
+                    <b>迎宾区现场短片</b>
+                    <p class="desc">视频 · 00:42 / 晚宴互动</p>
+                    <div class="pill-row" style="margin-top:6px"><span class="pill teal">已上架</span><span class="pill">引用 1 次</span></div>
+                  </div>
+                  <span>›</span>
+                </div>
+                <div class="work-row">
+                  <div class="thumb asset-3"></div>
+                  <div>
+                    <b>中式婚礼仪式</b>
+                    <p class="desc">图片 · 中式 / 父母敬茶</p>
+                    <div class="pill-row" style="margin-top:6px"><span class="pill amber">草稿</span><span class="pill">未引用</span></div>
+                  </div>
+                  <span>›</span>
+                </div>
+              </div>
+              <div class="panel stack">
+                <div class="row">
+                  <div>
+                    <p class="name">批量动作</p>
+                    <p class="desc">选择多个作品后可统一加入作品集或调整排序</p>
+                  </div>
+                  <span class="pill amber">0 已选</span>
+                </div>
+                <div class="button-row">
+                  <button class="button secondary">加入作品集</button>
+                  <button class="button secondary">调整排序</button>
+                </div>
+              </div>
+            </div>
+            <div class="tabbar">
+              <div class="tab"><span class="icon-box">我</span><span>我的</span></div>
+              <div class="tab active"><span class="icon-box">作</span><span>作品</span></div>
+              <div class="tab"><span class="icon-box">集</span><span>作品集</span></div>
+              <div class="tab"><span class="icon-box">档</span><span>档期</span></div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen-card">
+        <div class="screen-meta">
+          <div class="screen-title">07 作品维护页</div>
+          <div class="screen-note">上传、封面、标签、上下架</div>
+        </div>
+        <div class="phone">
+          <div class="phone-inner">
+            <div class="status"><span>09:41</span><div class="status-icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
+            <div class="nav">
+              <div class="nav-action">‹</div>
+              <div class="nav-title">编辑作品</div>
+              <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
+            </div>
+            <div class="content">
+              <div class="upload-box">
+                <div>
+                  <div class="upload-icon">＋</div>
+                  <b>上传图片或视频</b>
+                  <p class="desc" style="margin-top:6px">图片用于轮播、列表、封面；保存成功消耗 1 积分。</p>
+                </div>
+              </div>
+              <div class="panel stack">
+                <div class="form-row">
+                  <div class="label">作品标题</div>
+                  <div class="input split"><span>草坪婚礼主持</span><span class="desc">24/30</span></div>
+                </div>
+                <div class="field-grid">
+                  <div class="form-row">
+                    <div class="label">作品类型</div>
+                    <div class="input">图片</div>
+                  </div>
+                  <div class="form-row">
+                    <div class="label">上架状态</div>
+                    <div class="input">已上架</div>
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="label">服务标签</div>
+                  <div class="pill-row">
+                    <span class="pill teal">高端婚礼</span>
+                    <span class="pill blue">户外仪式</span>
+                    <span class="pill">双语主持</span>
+                    <span class="pill">＋ 添加</span>
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="label">作品说明</div>
+                  <div class="input textarea">适合用于个人作品集首页轮播，展示户外婚礼主持风格与现场氛围。</div>
+                </div>
+              </div>
+              <div class="panel stack">
+                <div class="row">
+                  <div>
+                    <p class="name">引用情况</p>
+                    <p class="desc">删除或下架前需要处理已引用作品集</p>
+                  </div>
+                  <span class="pill amber">3 处</span>
+                </div>
+                <div class="component-row"><div class="handle">个</div><div><b>林安婚礼司仪</b><p class="desc">标准个人作品集 · 轮播图</p></div><span>›</span></div>
+                <div class="component-row"><div class="handle">团</div><div><b>星曜司仪团</b><p class="desc">高级团队作品集 · 首屏</p></div><span>›</span></div>
+              </div>
+              <button class="button full">保存作品并消耗 1 积分</button>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen-card">
+        <div class="screen-meta">
+          <div class="screen-title">08 作品集</div>
+          <div class="screen-note">个人 / 团队 / 发布状态</div>
+        </div>
+        <div class="phone">
+          <div class="phone-inner">
+            <div class="status"><span>09:41</span><div class="status-icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
+            <div class="nav">
+              <div class="nav-spacer"></div>
+              <div class="nav-title">作品集</div>
+              <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
+            </div>
+            <div class="content">
+              <div class="segmented">
+                <div class="segment active">个人</div>
+                <div class="segment">团队</div>
+                <div class="segment">草稿</div>
+              </div>
+              <div class="panel stack">
+                <div class="row">
+                  <p class="name">我的作品集</p>
+                  <span class="pill teal">4 已发布</span>
+                </div>
+                <div class="portfolio-row">
+                  <div class="thumb square asset-2"></div>
+                  <div>
+                    <b>林安婚礼司仪</b>
+                    <p class="desc">标准个人作品集 · 最近更新 06-16</p>
+                    <div class="pill-row" style="margin-top:6px"><span class="pill teal">已发布</span><span class="pill">访问 428</span></div>
+                  </div>
+                  <span>›</span>
+                </div>
+                <div class="portfolio-row">
+                  <div class="thumb square asset-1"></div>
+                  <div>
+                    <b>高端晚宴主持精选</b>
+                    <p class="desc">高级个人作品集 · AI 组件页</p>
+                    <div class="pill-row" style="margin-top:6px"><span class="pill teal">已发布</span><span class="pill">访问 312</span></div>
+                  </div>
+                  <span>›</span>
+                </div>
+                <div class="portfolio-row">
+                  <div class="thumb square asset-6"></div>
+                  <div>
+                    <b>星曜司仪团</b>
+                    <p class="desc">标准团队作品集 · 12 位成员</p>
+                    <div class="pill-row" style="margin-top:6px"><span class="pill blue">团队</span><span class="pill">访问 216</span></div>
+                  </div>
+                  <span>›</span>
+                </div>
+              </div>
+              <div class="button-row">
+                <button class="button">新建标准作品集</button>
+                <button class="button premium">新建高级作品集</button>
+              </div>
+              <div class="panel tight">
+                <div class="row">
+                  <span class="desc">分享后访客访问会自动进入访问记录</span>
+                  <span class="pill">分享</span>
+                </div>
+              </div>
+            </div>
+            <div class="tabbar">
+              <div class="tab"><span class="icon-box">我</span><span>我的</span></div>
+              <div class="tab"><span class="icon-box">作</span><span>作品</span></div>
+              <div class="tab active"><span class="icon-box">集</span><span>作品集</span></div>
+              <div class="tab"><span class="icon-box">档</span><span>档期</span></div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen-card">
+        <div class="screen-meta">
+          <div class="screen-title">09 标准作品集维护页</div>
+          <div class="screen-note">封面、头像、固定组件</div>
+        </div>
+        <div class="phone">
+          <div class="phone-inner">
+            <div class="status"><span>09:41</span><div class="status-icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
+            <div class="nav">
+              <div class="nav-action">‹</div>
+              <div class="nav-title">标准个人作品集</div>
+              <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
+            </div>
+            <div class="content">
+              <div class="panel stack">
+                <div class="row">
+                  <div>
+                    <p class="name">分享信息</p>
+                    <p class="desc">用于微信小程序分享卡片和访客首屏识别</p>
+                  </div>
+                  <span class="pill teal">已配置</span>
+                </div>
+                <div class="field-grid">
+                  <div class="form-row">
+                    <div class="label">分享封面</div>
+                    <div class="thumb square asset-2" style="width:100%;height:92px"></div>
+                  </div>
+                  <div class="form-row">
+                    <div class="label">分享头像</div>
+                    <div class="thumb square asset-4" style="width:100%;height:92px;border-radius:50%"></div>
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="label">作品集标题</div>
+                  <div class="input">林安婚礼司仪</div>
+                </div>
+              </div>
+              <div class="panel stack">
+                <div class="row">
+                  <p class="name">固定模板组件</p>
+                  <span class="desc">按顺序展示</span>
+                </div>
+                <div class="component-row"><div class="handle">1</div><div><b>轮播图</b><p class="desc">选择 3 张个人作品图片</p></div><span>›</span></div>
+                <div class="component-row"><div class="handle">2</div><div><b>个人档期查询</b><p class="desc">读取当天自定义档位和时间</p></div><span>›</span></div>
+                <div class="component-row"><div class="handle">3</div><div><b>双列作品列表</b><p class="desc">8 个图片或视频作品</p></div><span>›</span></div>
+                <div class="component-row"><div class="handle">4</div><div><b>微信二维码</b><p class="desc">使用个人联系二维码</p></div><span>›</span></div>
+              </div>
+              <div class="panel stack">
+                <div class="row">
+                  <p class="name">发布前检查</p>
+                  <span class="pill amber">1 项待处理</span>
+                </div>
+                <div class="rule-list">
+                  <div class="rule-item"><span class="check">✓</span><span>分享封面、头像、标题已填写。</span></div>
+                  <div class="rule-item"><span class="check">✓</span><span>档期查询组件已开启并关联个人档期。</span></div>
+                  <div class="rule-item"><span class="check">!</span><span>微信二维码建议上传高清图，避免访客长按识别失败。</span></div>
+                </div>
+              </div>
+              <div class="button-row">
+                <button class="button secondary">保存草稿</button>
+                <button class="button secondary">预览</button>
+                <button class="button">发布</button>
+              </div>
+              <div class="cost-note">保存或发布成功消耗 1 积分；预览页查看、播放、查询不扣积分。</div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen-card">
+        <div class="screen-meta">
+          <div class="screen-title">09B 标准作品集预览页</div>
+          <div class="screen-note">返回维护页 / 预览不扣分</div>
+        </div>
+        <div class="phone">
+          <div class="phone-inner">
+            <div class="status"><span>09:41</span><div class="status-icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
+            <div class="nav">
+              <div class="nav-action">‹</div>
+              <div class="nav-title">林安婚礼司仪</div>
+              <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
+            </div>
+            <div class="hero-photo asset-2">
+              <div class="shade"></div>
+              <div class="hero-copy">
+                <h2>林安婚礼司仪</h2>
+                <p>沉稳、温暖、节奏清晰的高端婚礼主持</p>
+              </div>
+            </div>
+            <div class="content">
+              <div class="panel">
+                <div class="row">
+                  <div class="row" style="justify-content:flex-start">
+                    <div class="avatar large"><div class="asset-4" style="width:100%;height:100%"></div></div>
+                    <div>
+                      <p class="name">林安</p>
+                      <p class="desc">上海 · 婚礼司仪 · 双语主持</p>
+                      <div class="pill-row" style="margin-top:7px">
+                        <span class="pill teal">高端婚礼</span>
+                        <span class="pill rose">晚宴控场</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="panel stack">
+                <div class="row">
+                  <p class="name">查询档期</p>
+                  <span class="pill teal">个人</span>
+                </div>
+                <div class="schedule-query">
+                  <div class="date-box"><b>2026-06-28</b><span>周日 / 选择具体时间段</span></div>
+                  <button class="button">查询</button>
+                </div>
+                <div class="pill-row">
+                  <span class="pill"><span class="swatch" style="background:var(--slot-noon)"></span>中午档 10:00-13:00 可约</span>
+                  <span class="pill"><span class="swatch" style="background:var(--slot-evening)"></span>晚间档 17:00-20:00 已约</span>
+                  <span class="pill"><span class="swatch" style="background:var(--slot-welcome)"></span>迎亲档 07:30-09:30 待定</span>
+                </div>
+              </div>
+              <div class="media-grid">
+                <div class="media-tile asset-1"><div class="media-label"><span>户外仪式</span></div></div>
+                <div class="media-tile asset-3"><div class="media-label"><span>中式婚礼</span></div></div>
+                <div class="media-tile asset-5"><div class="media-label"><span>现场剪影</span><span class="play">▶</span></div></div>
+                <div class="media-tile asset-6"><div class="media-label"><span>晚宴互动</span></div></div>
+              </div>
+              <div class="panel contact-card">
+                <div class="contact-copy">
+                  <p class="name">扫码联系</p>
+                  <p class="desc">长按识别微信二维码，沟通报价与档期。</p>
+                </div>
+                <div class="qr"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen-card">
+        <div class="screen-meta">
+          <div class="screen-title">10 高级作品集维护页</div>
+          <div class="screen-note">AI 组件生成</div>
+        </div>
+        <div class="phone">
+          <div class="phone-inner">
+            <div class="status"><span>09:41</span><div class="status-icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
+            <div class="nav">
+              <div class="nav-action">‹</div>
+              <div class="nav-title">高级个人作品集</div>
+              <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
+            </div>
+            <div class="content">
+              <div class="panel stack">
+                <div class="row">
+                  <div>
+                    <p class="name">选择作品并标记序号</p>
+                    <p class="desc">AI 会根据序号和描述生成页面组件</p>
+                  </div>
+                  <span class="pill teal">8 项</span>
+                </div>
+                <div class="media-grid">
+                  <div class="media-tile asset-1"><span class="number-badge">1</span></div>
+                  <div class="media-tile asset-2"><span class="number-badge">2</span></div>
+                  <div class="media-tile asset-3"><span class="number-badge">3</span></div>
+                  <div class="media-tile asset-6"><span class="number-badge">4</span></div>
+                </div>
+              </div>
+              <div class="panel stack">
+                <div class="form-row">
+                  <div class="label">自然语言描述</div>
+                  <div class="input textarea">1号、2号、3号作品使用轮播图组件放最上面，下面放头像，再下面把5号、6号、7号、8号作品放列表，再下面放档期查询组件，最下面放微信二维码。</div>
+                </div>
+                <div class="cost-note">本次 AI 生成预计消耗 10 积分，生成失败不扣除。</div>
+                <button class="button premium full">AI 生成页面</button>
+              </div>
+              <div class="panel stack">
+                <div class="row">
+                  <p class="name">生成结果</p>
+                  <span class="pill blue">可拖拽调整</span>
+                </div>
+                <div class="component-list">
+                  <div class="component-row"><div class="handle">1</div><div><b>轮播图</b><p class="desc">使用 1、2、3 号作品</p></div><span>☰</span></div>
+                  <div class="component-row"><div class="handle">2</div><div><b>头像与简介</b><p class="desc">个人头像、标签、城市</p></div><span>☰</span></div>
+                  <div class="component-row"><div class="handle">3</div><div><b>双列作品列表</b><p class="desc">使用 5、6、7、8 号作品</p></div><span>☰</span></div>
+                  <div class="component-row"><div class="handle">4</div><div><b>档期查询</b><p class="desc">个人档期</p></div><span>☰</span></div>
+                  <div class="component-row"><div class="handle">5</div><div><b>微信二维码</b><p class="desc">使用个人联系二维码</p></div><span>☰</span></div>
+                </div>
+              </div>
+              <div class="button-row">
+                <button class="button secondary">保存草稿</button>
+                <button class="button secondary">预览</button>
+                <button class="button premium">发布</button>
+              </div>
+              <div class="cost-note">AI 生成或保存成功消耗 10 积分；预览页任何查看不扣积分。</div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen-card">
+        <div class="screen-meta">
+          <div class="screen-title">10B 高级作品集预览页</div>
+          <div class="screen-note">返回维护页 / 预览不扣分</div>
+        </div>
+        <div class="phone">
+          <div class="phone-inner">
+            <div class="status"><span>09:41</span><div class="status-icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
+            <div class="nav">
+              <div class="nav-action">‹</div>
+              <div class="nav-title">高端晚宴主持精选</div>
+              <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
+            </div>
+            <div class="content visitor-fit advanced-portfolio-content">
+              <div class="hero-photo small asset-1">
+                <div class="shade"></div>
+                <div class="hero-copy">
+                  <h2>高端晚宴主持精选</h2>
+                  <p>AI 组件页 · 晚宴控场 / 双语主持 / 户外仪式</p>
+                </div>
+              </div>
+              <div class="panel">
+                <div class="row">
+                  <div class="row" style="justify-content:flex-start">
+                    <div class="avatar"><div class="asset-4" style="width:100%;height:100%"></div></div>
+                    <div>
+                      <p class="name">林安</p>
+                      <p class="desc">上海 · 12 年婚礼主持经验</p>
+                    </div>
+                  </div>
+                  <span class="pill rose">高级</span>
+                </div>
+              </div>
+              <div class="media-grid">
+                <div class="media-tile tall asset-1"><div class="media-label"><span>草坪仪式</span></div></div>
+                <div class="media-tile asset-2"><div class="media-label"><span>晚宴开场</span></div></div>
+                <div class="media-tile asset-5"><div class="media-label"><span>互动短片</span><span class="play">▶</span></div></div>
+              </div>
+              <div class="panel stack">
+                <div class="row">
+                  <p class="name">档期查询</p>
+                  <span class="pill teal">个人</span>
+                </div>
+                <div class="schedule-query">
+                  <div class="date-box"><b>2026-10-03</b><span>国庆档 / 选择具体时间段</span></div>
+                  <button class="button">查询</button>
+                </div>
+              </div>
+              <div class="panel contact-card">
+                <div class="contact-copy">
+                  <p class="name">二维码联系</p>
+                  <p class="desc">长按识别微信二维码，确认档期与报价。</p>
+                </div>
+                <div class="qr"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen-card">
+        <div class="screen-meta">
+          <div class="screen-title">11 高级组件库展示</div>
+          <div class="screen-note">自然语言可调用的组件</div>
+        </div>
+        <div class="phone">
+          <div class="phone-inner">
+            <div class="status"><span>09:41</span><div class="status-icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
+            <div class="nav">
+              <div class="nav-action">‹</div>
+              <div class="nav-title">高级组件库</div>
+              <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
+            </div>
+            <div class="content">
+              <div class="panel stack">
+                <div class="row">
+                  <div>
+                    <p class="name">客户可理解的搭建方式</p>
+                    <p class="desc">选择素材序号，再用自然语言描述组件顺序。</p>
+                  </div>
+                  <span class="pill rose">AI</span>
+                </div>
+                <div class="input textarea">把 1、2、3 放轮播图；下面放团队介绍；再放成员作品集列表；最后放团队档期和微信二维码。</div>
+              </div>
+              <div class="component-showcase">
+                <div class="library-card">
+                  <div class="library-icon">轮</div>
+                  <div>
+                    <b>轮播图组件</b>
+                    <p class="desc">适合首屏展示 3-5 张图片</p>
+                  </div>
+                  <div class="template-preview" style="min-height:76px;grid-template-rows:1fr"><div class="template-top asset-1"></div></div>
+                </div>
+                <div class="library-card">
+                  <div class="library-icon" style="background:var(--teal-soft);color:var(--teal)">人</div>
+                  <div>
+                    <b>头像介绍组件</b>
+                    <p class="desc">姓名、职业、城市、标签</p>
+                  </div>
+                  <div class="row" style="justify-content:flex-start"><div class="mini-avatar"><div class="asset-4" style="width:100%;height:100%"></div></div><span class="pill teal">标签</span></div>
+                </div>
+                <div class="library-card">
+                  <div class="library-icon" style="background:var(--amber-soft);color:var(--amber)">列</div>
+                  <div>
+                    <b>双列作品列表</b>
+                    <p class="desc">图片、视频、成员作品集</p>
+                  </div>
+                  <div class="mini-grid"><div class="mini-block"></div><div class="mini-block"></div><div class="mini-block"></div></div>
+                </div>
+                <div class="library-card">
+                  <div class="library-icon" style="background:var(--rose-soft);color:var(--rose)">档</div>
+                  <div>
+                    <b>档期查询组件</b>
+                    <p class="desc">个人或团队，支持自定义档位</p>
+                  </div>
+                  <div class="pill-row"><span class="pill"><span class="swatch" style="background:var(--slot-noon)"></span>中午档</span><span class="pill"><span class="swatch" style="background:var(--slot-evening)"></span>晚间档</span><span class="pill"><span class="swatch" style="background:var(--slot-welcome)"></span>自定义</span></div>
+                </div>
+                <div class="library-card">
+                  <div class="library-icon" style="background:var(--blue-soft);color:var(--blue)">码</div>
+                  <div>
+                    <b>二维码联系组件</b>
+                    <p class="desc">个人微信或团队客服二维码</p>
+                  </div>
+                  <div class="qr"></div>
+                </div>
+              </div>
+              <div class="panel stack">
+                <div class="row">
+                  <p class="name">组件配置面板</p>
+                  <span class="pill blue">白名单</span>
+                </div>
+                <div class="component-row"><div class="handle">图</div><div><b>大图展示</b><p class="desc">单张作品强化视觉记忆</p></div><span>＋</span></div>
+                <div class="component-row"><div class="handle">文</div><div><b>文案段落</b><p class="desc">服务理念、报价说明、团队介绍</p></div><span>＋</span></div>
+                <div class="component-row"><div class="handle">码</div><div><b>微信二维码</b><p class="desc">个人二维码或团队客服二维码</p></div><span>＋</span></div>
+              </div>
+              <div class="panel tight">
+                <div class="row">
+                  <span class="desc">AI 只生成组件结构，不生成可执行代码</span>
+                  <span class="pill teal">安全</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen-card">
+        <div class="screen-meta">
+          <div class="screen-title">12 访客个人作品集</div>
+          <div class="screen-note">标准模板浏览页</div>
+        </div>
+        <div class="phone">
+          <div class="phone-inner">
+            <div class="status"><span>09:41</span><div class="status-icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
+            <div class="nav">
+              <div class="nav-action home">⌂</div>
+              <div class="nav-title">林安婚礼司仪</div>
+              <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
+            </div>
+            <div class="hero-photo asset-2">
+              <div class="shade"></div>
+              <div class="hero-copy">
+                <h2>林安婚礼司仪</h2>
+                <p>沉稳、温暖、节奏清晰的高端婚礼主持</p>
+              </div>
+            </div>
+            <div class="content">
+              <div class="panel">
+                <div class="row">
+                  <div class="row" style="justify-content:flex-start">
+                    <div class="avatar large"><div class="asset-4" style="width:100%;height:100%"></div></div>
+                    <div>
+                      <p class="name">林安</p>
+                      <p class="desc">上海 · 婚礼司仪 · 双语主持</p>
+                      <div class="pill-row" style="margin-top:7px">
+                        <span class="pill teal">高端婚礼</span>
+                        <span class="pill rose">晚宴控场</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="panel stack">
+                <div class="row">
+                  <p class="name">查询档期</p>
+                  <span class="pill teal">个人</span>
+                </div>
+                <div class="schedule-query">
+                  <div class="date-box"><b>2026-06-28</b><span>周日 / 选择具体时间段</span></div>
+                  <button class="button">查询</button>
+                </div>
+                <div class="pill-row">
+                  <span class="pill"><span class="swatch" style="background:var(--slot-noon)"></span>中午档 10:00-13:00 可约</span>
+                  <span class="pill"><span class="swatch" style="background:var(--slot-evening)"></span>晚间档 17:00-20:00 已约</span>
+                  <span class="pill"><span class="swatch" style="background:var(--slot-welcome)"></span>迎亲档 07:30-09:30 待定</span>
+                </div>
+              </div>
+              <div class="media-grid">
+                <div class="media-tile asset-1"><div class="media-label"><span>户外仪式</span></div></div>
+                <div class="media-tile asset-3"><div class="media-label"><span>中式婚礼</span></div></div>
+                <div class="media-tile asset-5"><div class="media-label"><span>现场剪影</span><span class="play">▶</span></div></div>
+                <div class="media-tile asset-6"><div class="media-label"><span>晚宴互动</span></div></div>
+              </div>
+              <div class="panel contact-card">
+                <div class="contact-copy">
+                  <p class="name">扫码联系</p>
+                  <p class="desc">长按识别微信二维码，沟通报价与档期。</p>
+                </div>
+                <div class="qr"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen-card">
+        <div class="screen-meta">
+          <div class="screen-title">12B 访客高级作品集</div>
+          <div class="screen-note">高级模板浏览页</div>
+        </div>
+        <div class="phone">
+          <div class="phone-inner">
+            <div class="status"><span>09:41</span><div class="status-icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
+            <div class="nav">
+              <div class="nav-action home">⌂</div>
+              <div class="nav-title">高端晚宴主持精选</div>
+              <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
+            </div>
+            <div class="content visitor-fit advanced-portfolio-content">
+              <div class="hero-photo small asset-1">
+                <div class="shade"></div>
+                <div class="hero-copy">
+                  <h2>高端晚宴主持精选</h2>
+                  <p>AI 组件页 · 晚宴控场 / 双语主持 / 户外仪式</p>
+                </div>
+              </div>
+              <div class="panel">
+                <div class="row">
+                  <div class="row" style="justify-content:flex-start">
+                    <div class="avatar"><div class="asset-4" style="width:100%;height:100%"></div></div>
+                    <div>
+                      <p class="name">林安</p>
+                      <p class="desc">上海 · 12 年婚礼主持经验</p>
+                    </div>
+                  </div>
+                  <span class="pill rose">高级</span>
+                </div>
+              </div>
+              <div class="media-grid">
+                <div class="media-tile tall asset-1"><div class="media-label"><span>草坪仪式</span></div></div>
+                <div class="media-tile asset-2"><div class="media-label"><span>晚宴开场</span></div></div>
+                <div class="media-tile asset-5"><div class="media-label"><span>互动短片</span><span class="play">▶</span></div></div>
+              </div>
+              <div class="panel stack">
+                <div class="row">
+                  <p class="name">档期查询</p>
+                  <span class="pill teal">个人</span>
+                </div>
+                <div class="schedule-query">
+                  <div class="date-box"><b>2026-10-03</b><span>国庆档 / 选择具体时间段</span></div>
+                  <button class="button">查询</button>
+                </div>
+              </div>
+              <div class="panel contact-card">
+                <div class="contact-copy">
+                  <p class="name">二维码联系</p>
+                  <p class="desc">长按识别微信二维码，确认档期与报价。</p>
+                </div>
+                <div class="qr"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen-card">
+        <div class="screen-meta">
+          <div class="screen-title">12C Under Maintenance</div>
+          <div class="screen-note">余额不足访客遮罩</div>
+        </div>
+        <div class="phone">
+          <div class="phone-inner">
+            <div class="status"><span>09:41</span><div class="status-icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
+            <div class="nav">
+              <div class="nav-action home">⌂</div>
+              <div class="nav-title">林安婚礼司仪</div>
+              <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
+            </div>
+            <div class="hero-photo asset-2">
+              <div class="shade"></div>
+              <div class="hero-copy">
+                <h2>林安婚礼司仪</h2>
+                <p>沉稳、温暖、节奏清晰的高端婚礼主持</p>
+              </div>
+            </div>
+            <div class="content">
+              <div class="panel">
+                <div class="row">
+                  <div class="row" style="justify-content:flex-start">
+                    <div class="avatar large"><div class="asset-4" style="width:100%;height:100%"></div></div>
+                    <div>
+                      <p class="name">林安</p>
+                      <p class="desc">上海 · 婚礼司仪 · 双语主持</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="panel stack">
+                <div class="row">
+                  <p class="name">查询档期</p>
+                  <span class="pill teal">个人</span>
+                </div>
+                <div class="schedule-query">
+                  <div class="date-box"><b>2026-06-28</b><span>周日 / 选择具体时间段</span></div>
+                  <button class="button">查询</button>
+                </div>
+              </div>
+              <div class="media-grid">
+                <div class="media-tile asset-1"><div class="media-label"><span>户外仪式</span></div></div>
+                <div class="media-tile asset-3"><div class="media-label"><span>中式婚礼</span></div></div>
+                <div class="media-tile asset-5"><div class="media-label"><span>现场剪影</span><span class="play">▶</span></div></div>
+                <div class="media-tile asset-6"><div class="media-label"><span>晚宴互动</span></div></div>
+              </div>
+              <div class="panel contact-card">
+                <div class="contact-copy">
+                  <p class="name">扫码联系</p>
+                  <p class="desc">长按识别微信二维码，沟通报价与档期。</p>
+                </div>
+                <div class="qr"></div>
+              </div>
+            </div>
+            <div class="maintenance-overlay">
+              <div class="maintenance-message">
+                <b><span>UNDER MAINTENANCE</span><span>维护中</span></b>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen-card">
+        <div class="screen-meta">
+          <div class="screen-title">13 访客档期查询页</div>
+          <div class="screen-note">选择日期后查看当天档位</div>
+        </div>
+        <div class="phone">
+          <div class="phone-inner">
+            <div class="status"><span>09:41</span><div class="status-icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
+            <div class="nav">
+              <div class="nav-action">‹</div>
+              <div class="nav-title">查询档期</div>
+              <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
+            </div>
+            <div class="content visitor-fit">
+              <div class="panel">
+                <div class="row">
+                  <div class="row" style="justify-content:flex-start">
+                    <div class="avatar"><div class="asset-4" style="width:100%;height:100%"></div></div>
+                    <div>
+                      <p class="name">林安婚礼司仪</p>
+                      <p class="desc">个人档期 · 自定义档位查询</p>
+                    </div>
+                  </div>
+                  <span class="pill teal">可咨询</span>
+                </div>
+              </div>
+              <div class="panel stack">
+                <div class="form-row">
+                  <div class="label">选择日期</div>
+                  <div class="input split"><span>2026-06-28 周日</span><span>›</span></div>
+                </div>
+                <div class="form-row">
+                  <div class="label">查询范围</div>
+                  <div class="segmented">
+                    <div class="segment active">全部档位</div>
+                    <div class="segment">仅可约</div>
+                    <div class="segment">含待定</div>
+                  </div>
+                </div>
+                <button class="button full">查询当天档期</button>
+              </div>
+              <div class="panel stack">
+                <div class="row">
+                  <div>
+                    <p class="name">6 月 28 日档期</p>
+                    <p class="desc">维护者当天开放 3 个档位，时间以页面展示为准。</p>
+                  </div>
+                  <span class="pill teal">2 可约</span>
+                </div>
+                <div class="query-result">
+                  <div class="slot-line">
+                    <div class="row" style="justify-content:flex-start"><span class="swatch" style="background:var(--slot-noon)"></span><div><b>中午档</b><p class="desc">10:00-13:00 · 可预约</p></div></div>
+                    <span class="pill teal">空闲</span>
+                  </div>
+                  <div class="slot-line">
+                    <div class="row" style="justify-content:flex-start"><span class="swatch" style="background:var(--slot-welcome)"></span><div><b>迎亲档</b><p class="desc">07:30-09:30 · 建议先沟通</p></div></div>
+                    <span class="pill amber">待定</span>
+                  </div>
+                  <div class="slot-line">
+                    <div class="row" style="justify-content:flex-start"><span class="swatch" style="background:var(--slot-evening)"></span><div><b>晚间档</b><p class="desc">17:00-20:00 · 已被预约</p></div></div>
+                    <span class="pill rose">已约</span>
+                  </div>
+                </div>
+              </div>
+              <div class="panel contact-card">
+                <div class="contact-copy">
+                  <p class="name">联系确认</p>
+                  <p class="desc">档期结果仅供参考，最终以双方沟通为准。</p>
+                </div>
+                <div class="qr"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen-card">
+        <div class="screen-meta">
+          <div class="screen-title">14 团队展示与成员</div>
+          <div class="screen-note">团队作品集入口</div>
+        </div>
+        <div class="phone">
+          <div class="phone-inner">
+            <div class="status"><span>09:41</span><div class="status-icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
+            <div class="nav">
+              <div class="nav-action">‹</div>
+              <div class="nav-title">星曜司仪团</div>
+              <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
+            </div>
+            <div class="content visitor-fit team-showcase-content">
+              <div class="hero-photo small asset-6">
+                <div class="shade"></div>
+                <div class="hero-copy">
+                  <h2>星曜司仪团</h2>
+                  <p>12 位成员 / 上海杭州双城服务 / 团队唯一码 TM-2048</p>
+                </div>
+              </div>
+              <div class="panel stack">
+                <div class="row">
+                  <p class="name">团队档期查询</p>
+                  <span class="pill blue">全员聚合</span>
+                </div>
+                <div class="schedule-query">
+                  <div class="date-box"><b>2026-10-03</b><span>国庆档 / 晚间档 17:00-20:00</span></div>
+                  <button class="button">查询</button>
+                </div>
+                <div class="pill-row">
+                  <span class="pill"><span class="swatch" style="background:var(--slot-noon)"></span>中午 5 人可约</span>
+                  <span class="pill"><span class="swatch" style="background:var(--slot-evening)"></span>晚间 6 人已约</span>
+                  <span class="pill"><span class="swatch" style="background:var(--slot-welcome)"></span>迎亲 2 人待定</span>
+                </div>
+              </div>
+              <div class="panel stack">
+                <div class="row">
+                  <p class="name">成员个人作品集</p>
+                  <span class="desc">每行两个</span>
+                </div>
+                <div class="media-grid">
+                  <div class="media-tile asset-4"><div class="media-label"><span>林安 · 司仪</span></div></div>
+                  <div class="media-tile asset-7"><div class="media-label"><span>乔伊 · 化妆</span></div></div>
+                  <div class="media-tile asset-8"><div class="media-label"><span>陈予 · 模特</span></div></div>
+                  <div class="media-tile asset-2"><div class="media-label"><span>周承 · 摄影</span></div></div>
+                </div>
+              </div>
+              <div class="panel contact-card">
+                <div class="contact-copy">
+                  <p class="name">团队联系</p>
+                  <p class="desc">统一客服微信，便于婚庆公司集中沟通。</p>
+                </div>
+                <div class="qr"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen-card">
+        <div class="screen-meta">
+          <div class="screen-title">15 团队成员列表页</div>
+          <div class="screen-note">搜索、状态、添加成员</div>
+        </div>
+        <div class="phone">
+          <div class="phone-inner">
+            <div class="status"><span>09:41</span><div class="status-icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
+            <div class="nav">
+              <div class="nav-action">‹</div>
+              <div class="nav-title">团队成员</div>
+              <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
+            </div>
+            <div class="content">
+              <div class="panel">
+                <div class="row">
+                  <div>
+                    <p class="name">星曜司仪团</p>
+                    <p class="desc">团队唯一码 TM-2048 · 12 位成员</p>
+                  </div>
+                  <span class="pill blue">管理员</span>
+                </div>
+              </div>
+              <div class="search">⌕ 输入姓名、职业或个人唯一码</div>
+              <div class="segmented">
+                <div class="segment active">全部</div>
+                <div class="segment">待确认</div>
+                <div class="segment">已加入</div>
+              </div>
+              <div class="panel stack">
+                <div class="member-row">
+                  <div class="mini-avatar"><div class="asset-4" style="width:100%;height:100%"></div></div>
+                  <div>
+                    <b>林安</b>
+                    <p class="desc">司仪 · MC-8392 · 管理员</p>
+                  </div>
+                  <span class="pill teal">已加入</span>
+                </div>
+                <div class="member-row">
+                  <div class="mini-avatar"><div class="asset-7" style="width:100%;height:100%"></div></div>
+                  <div>
+                    <b>乔伊</b>
+                    <p class="desc">化妆师 · MU-1186 · 可展示</p>
+                  </div>
+                  <span class="pill teal">已加入</span>
+                </div>
+                <div class="member-row">
+                  <div class="mini-avatar"><div class="asset-8" style="width:100%;height:100%"></div></div>
+                  <div>
+                    <b>陈予</b>
+                    <p class="desc">模特 · MD-7305 · 待本人确认</p>
+                  </div>
+                  <span class="pill amber">待确认</span>
+                </div>
+                <div class="member-row">
+                  <div class="mini-avatar"><div class="asset-2" style="width:100%;height:100%"></div></div>
+                  <div>
+                    <b>周承</b>
+                    <p class="desc">摄影 · PH-6021 · 仅团队可见</p>
+                  </div>
+                  <span class="pill">隐藏</span>
+                </div>
+              </div>
+              <button class="button full">通过个人唯一码添加成员</button>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen-card">
+        <div class="screen-meta">
+          <div class="screen-title">16 团队成员维护页</div>
+          <div class="screen-note">唯一码添加与权限设置</div>
+        </div>
+        <div class="phone">
+          <div class="phone-inner">
+            <div class="status"><span>09:41</span><div class="status-icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
+            <div class="nav">
+              <div class="nav-action">‹</div>
+              <div class="nav-title">添加成员</div>
+              <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
+            </div>
+            <div class="content">
+              <div class="panel stack">
+                <div class="form-row">
+                  <div class="label">个人唯一码</div>
+                  <div class="input split"><span>MU-1186</span><span class="pill teal">已匹配</span></div>
+                </div>
+                <div class="member-row">
+                  <div class="mini-avatar"><div class="asset-7" style="width:100%;height:100%"></div></div>
+                  <div>
+                    <b>乔伊</b>
+                    <p class="desc">上海 · 婚庆化妆 · 18 个作品</p>
+                  </div>
+                  <span class="pill teal">可添加</span>
+                </div>
+              </div>
+              <div class="panel stack">
+                <div class="field-grid">
+                  <div class="form-row">
+                    <div class="label">团队角色</div>
+                    <div class="input">普通成员</div>
+                  </div>
+                  <div class="form-row">
+                    <div class="label">职业身份</div>
+                    <div class="input">化妆师</div>
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="label">展示权限</div>
+                  <div class="segmented">
+                    <div class="segment active">公开</div>
+                    <div class="segment">团队可见</div>
+                    <div class="segment">隐藏</div>
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="label">可被团队作品集引用</div>
+                  <div class="pill-row">
+                    <span class="pill teal">个人作品集</span>
+                    <span class="pill teal">头像资料</span>
+                    <span class="pill">个人作品素材</span>
+                  </div>
+                </div>
+              </div>
+              <div class="panel stack">
+                <div class="row">
+                  <p class="name">加入确认</p>
+                  <span class="pill amber">需本人确认</span>
+                </div>
+                <p class="desc">发送邀请后，成员将在小程序内收到加入团队确认。确认前可作为待确认成员展示在管理端，不进入访客端作品集。</p>
+              </div>
+              <div class="button-row">
+                <button class="button secondary">取消</button>
+                <button class="button">发送邀请</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen-card">
+        <div class="screen-meta">
+          <div class="screen-title">17 访问记录</div>
+          <div class="screen-note">客资跟进视图</div>
+        </div>
+        <div class="phone">
+          <div class="phone-inner">
+            <div class="status"><span>09:41</span><div class="status-icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
+            <div class="nav">
+              <div class="nav-action">‹</div>
+              <div class="nav-title">访问记录</div>
+              <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
+            </div>
+            <div class="content">
+              <div class="metric-grid">
+                <div class="metric"><b>428</b><span>累计访问次数</span></div>
+                <div class="metric"><b>36</b><span>今日访问</span></div>
+                <div class="metric"><b>19</b><span>查询档期</span></div>
+              </div>
+              <div class="panel">
+                <div class="row">
+                  <p class="name">近 7 日访问趋势</p>
+                  <span class="pill teal">上升 24%</span>
+                </div>
+                <div class="trend">
+                  <svg viewBox="0 0 300 72" aria-hidden="true">
+                    <polygon class="trend-area" points="0,58 50,46 100,50 150,30 200,38 250,12 300,24 300,72 0,72"></polygon>
+                    <polyline class="trend-line" points="0,58 50,46 100,50 150,30 200,38 250,12 300,24"></polyline>
+                    <circle class="trend-dot" cx="0" cy="58" r="5"></circle>
+                    <circle class="trend-dot" cx="50" cy="46" r="5"></circle>
+                    <circle class="trend-dot" cx="100" cy="50" r="5"></circle>
+                    <circle class="trend-dot" cx="150" cy="30" r="5"></circle>
+                    <circle class="trend-dot" cx="200" cy="38" r="5"></circle>
+                    <circle class="trend-dot hot" cx="250" cy="12" r="6"></circle>
+                    <circle class="trend-dot" cx="300" cy="24" r="5"></circle>
+                  </svg>
+                  <div class="trend-labels"><span>周一</span><span>周二</span><span>周三</span><span>周四</span><span>周五</span><span>周六</span><span>周日</span></div>
+                </div>
+              </div>
+              <div class="panel stack">
+                <div class="row">
+                  <p class="name">访问明细</p>
+                  <span class="desc">来源与行为摘要</span>
+                </div>
+                <div class="visit-row">
+                  <div class="visitor-icon">A</div>
+                  <div>
+                    <b>微信访客 8A21</b>
+                    <p class="desc">来自个人作品集「林安婚礼司仪」分享 · 第 4 次访问 · 查看作品 6 次 · 查询 10-03 档期 · 点击二维码 1 次</p>
+                  </div>
+                  <span class="pill rose">未跟进</span>
+                </div>
+                <div class="visit-row">
+                  <div class="visitor-icon" style="color:var(--teal);background:var(--teal-soft)">B</div>
+                  <div>
+                    <b>微信访客 C19F</b>
+                    <p class="desc">来自团队作品集「星曜司仪团」跳转 · 第 2 次访问 · 查看作品 3 次 · 播放视频 2 次 · 未点二维码</p>
+                  </div>
+                  <span class="pill teal">已联系</span>
+                </div>
+                <div class="visit-row">
+                  <div class="visitor-icon" style="color:var(--amber);background:var(--amber-soft)">C</div>
+                  <div>
+                    <b>微信访客 73D0</b>
+                    <p class="desc">来自二维码扫码 · 第 5 次访问 · 查看作品 9 次 · 查询 06-28 档期 · 长按二维码 1 次</p>
+                  </div>
+                  <span class="pill blue">已成交</span>
+                </div>
+                <div class="visit-row">
+                  <div class="visitor-icon" style="color:var(--rose);background:var(--rose-soft)">D</div>
+                  <div>
+                    <b>微信访客 91F2</b>
+                    <p class="desc">来自个人作品集「高端晚宴主持精选」分享 · 第 1 次访问 · 查看作品 0 次 · 未查询档期 · 未点二维码</p>
+                  </div>
+                  <span class="pill">无效</span>
+                </div>
+              </div>
+              <button class="button full">批量标记跟进状态</button>
+            </div>
+          </div>
+        </div>
+      </article>
+    </section>
+  </main>
+  <script>
+    document.querySelectorAll('.login-tabs').forEach((tabs) => {
+      const card = tabs.closest('.panel');
+      const screen = tabs.closest('.login-screen');
+      const phoneInner = screen?.querySelector('.phone-inner');
+      const status = screen?.querySelector('.status');
+      const nav = screen?.querySelector('.nav');
+      const hero = screen?.querySelector('.hero-photo');
+      const content = screen?.querySelector('.content');
+      const buttons = Array.from(tabs.querySelectorAll('[data-login-tab]'));
+      const panels = Array.from(card.querySelectorAll('[data-login-panel]'));
+      const minHeroHeight = 300;
+
+      const setHeroHeight = (animate = true) => {
+        if (!phoneInner || !status || !hero || !content) return;
+        const navHeight = nav?.offsetHeight ?? 0;
+        const availableHeight = phoneInner.clientHeight - status.offsetHeight - navHeight - content.scrollHeight;
+        const nextHeight = Math.max(minHeroHeight, Math.round(availableHeight));
+
+        if (!animate) {
+          hero.style.transition = 'none';
+          hero.style.height = `${nextHeight}px`;
+          hero.offsetHeight;
+          hero.style.transition = '';
+          return;
+        }
+
+        hero.style.height = `${nextHeight}px`;
+      };
+
+      setHeroHeight(false);
+
+      buttons.forEach((button) => {
+        button.addEventListener('click', () => {
+          const target = button.dataset.loginTab;
+          if (button.classList.contains('active')) return;
+          if (hero) hero.style.height = `${Math.round(hero.getBoundingClientRect().height)}px`;
+          if (screen) screen.dataset.loginTab = target;
+          buttons.forEach((item) => item.classList.toggle('active', item === button));
+          panels.forEach((panel) => panel.classList.toggle('active', panel.dataset.loginPanel === target));
+          requestAnimationFrame(() => setHeroHeight(true));
+        });
+      });
+
+      window.addEventListener('resize', () => setHeroHeight(false));
+    });
+  </script>
+</body>
+</html>
