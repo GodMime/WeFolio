@@ -567,6 +567,28 @@
       width: 100%;
     }
 
+    .mini-action {
+      min-height: 28px;
+      border: 1px solid #cbd6df;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 10px;
+      background: var(--teal-soft);
+      color: var(--teal);
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .mini-action.warn {
+      border-color: #f7c7d3;
+      background: var(--rose-soft);
+      color: var(--rose);
+    }
+
     .button-row {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -808,15 +830,93 @@
       color: var(--teal);
     }
 
-    .icon-box {
+    .tab-icon {
       width: 22px;
       height: 22px;
-      border-radius: 7px;
-      display: grid;
-      place-items: center;
+      position: relative;
+      color: currentColor;
+      display: block;
+    }
+
+    .tab-icon::before,
+    .tab-icon::after {
+      content: "";
+      position: absolute;
+      box-sizing: border-box;
+    }
+
+    .tab-icon-user::before {
+      width: 8px;
+      height: 8px;
+      left: 7px;
+      top: 3px;
+      border: 2px solid currentColor;
+      border-radius: 50%;
+    }
+
+    .tab-icon-user::after {
+      width: 16px;
+      height: 8px;
+      left: 3px;
+      bottom: 3px;
+      border: 2px solid currentColor;
+      border-radius: 10px 10px 4px 4px;
+      border-bottom-width: 1.5px;
+    }
+
+    .tab-icon-work::before {
+      inset: 3px;
+      border: 2px solid currentColor;
+      border-radius: 5px;
+    }
+
+    .tab-icon-work::after {
+      width: 9px;
+      height: 7px;
+      left: 7px;
+      bottom: 6px;
+      border-left: 2px solid currentColor;
+      border-bottom: 2px solid currentColor;
+      transform: rotate(-45deg);
+      transform-origin: center;
+    }
+
+    .tab-icon-portfolio::before {
+      width: 14px;
+      height: 14px;
+      left: 5px;
+      top: 4px;
+      border: 2px solid currentColor;
+      border-radius: 4px;
+      background: rgba(252,253,253,0.96);
+      z-index: 2;
+    }
+
+    .tab-icon-portfolio::after {
+      width: 14px;
+      height: 14px;
+      left: 2px;
+      top: 7px;
+      border: 2px solid currentColor;
+      border-radius: 4px;
+      z-index: 1;
+    }
+
+    .tab-icon-schedule::before {
+      inset: 3px;
+      border: 2px solid currentColor;
+      border-radius: 5px;
+      background:
+        linear-gradient(currentColor, currentColor) 3px 5px / calc(100% - 6px) 2px no-repeat;
+    }
+
+    .tab-icon-schedule::after {
+      width: 3px;
+      height: 3px;
+      left: 9px;
+      top: 12px;
+      border-radius: 50%;
       background: currentColor;
-      color: #fff;
-      font-size: 11px;
     }
 
     .calendar {
@@ -833,6 +933,84 @@
       border-radius: var(--radius);
       background: var(--surface);
       box-shadow: var(--shadow-soft);
+    }
+
+    .calendar-group {
+      display: grid;
+      grid-template-rows: 44px 356px;
+      gap: 0;
+      height: 400px;
+      min-width: 0;
+      border-radius: var(--radius);
+      overflow: visible;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .calendar-toolbar {
+      min-height: 44px;
+      display: grid;
+      grid-template-columns: 32px minmax(0, 1fr) auto 32px;
+      gap: 6px;
+      align-items: center;
+      padding: 6px 8px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .calendar-group .calendar-toolbar {
+      border-bottom-left-radius: 0;
+      border-bottom-right-radius: 0;
+      box-shadow: none;
+    }
+
+    .calendar-group .calendar {
+      border-top: 0;
+      border-top-left-radius: 0;
+      border-top-right-radius: 0;
+      box-shadow: none;
+    }
+
+    .month-title {
+      display: grid;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .month-title b {
+      color: var(--ink);
+      font-size: 16px;
+      line-height: 1.1;
+      font-weight: 900;
+    }
+
+    .month-title span {
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 1.2;
+      font-weight: 800;
+    }
+
+    .month-control {
+      height: 32px;
+      min-width: 32px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface-2);
+      color: var(--teal);
+      font-size: 13px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .month-control.wide {
+      padding: 0 10px;
+      color: var(--ink);
+      font-size: 11px;
     }
 
     .day,
@@ -1014,6 +1192,42 @@
       overflow: visible;
       align-content: start;
       gap: 10px;
+    }
+
+    .definition-list-panel {
+      min-height: 310px;
+      overflow: visible;
+    }
+
+    .definition-sheet-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 30;
+      display: flex;
+      align-items: flex-end;
+      padding: 0;
+      background: rgba(17, 24, 39, 0.28);
+    }
+
+    .definition-sheet {
+      width: 100%;
+      max-height: 650px;
+      overflow-y: auto;
+      display: grid;
+      gap: 10px;
+      padding: 10px 14px 14px;
+      border-radius: 12px 12px 0 0;
+      border: 1px solid var(--line);
+      background: var(--surface);
+      box-shadow: 0 -16px 36px rgba(17, 24, 39, 0.2);
+    }
+
+    .sheet-grabber {
+      width: 38px;
+      height: 4px;
+      border-radius: 999px;
+      background: #c3ccd5;
+      justify-self: center;
     }
 
     .schedule-calendar {
@@ -1526,6 +1740,10 @@
       border: 1px solid var(--line);
       border-radius: var(--radius);
       box-shadow: var(--shadow-soft);
+    }
+
+    .segmented.two {
+      grid-template-columns: repeat(2, 1fr);
     }
 
     .segment {
@@ -2046,23 +2264,6 @@
                 <div class="metric"><b>4</b><span>已发布作品集</span></div>
                 <div class="metric"><b>128</b><span>近 7 日访问</span></div>
               </div>
-              <div class="button-row">
-                <button class="button">新建作品集</button>
-                <button class="button secondary">维护档期</button>
-              </div>
-              <div class="panel stack">
-                <div class="row">
-                  <div>
-                    <p class="name">今日待办</p>
-                    <p class="desc">2 个客户查询了 2026-06-28 档期</p>
-                  </div>
-                  <span class="pill rose">需跟进</span>
-                </div>
-                <div class="row">
-                  <span class="desc">团队「星曜司仪团」新增成员申请</span>
-                  <span class="pill blue">查看</span>
-                </div>
-              </div>
               <div class="panel stack">
                 <div class="row"><span class="name">跟进与团队</span><span class="desc">管理</span></div>
                 <div class="component-list">
@@ -2072,10 +2273,10 @@
               </div>
             </div>
             <div class="tabbar">
-              <div class="tab active"><span class="icon-box">我</span><span>我的</span></div>
-              <div class="tab"><span class="icon-box">作</span><span>作品</span></div>
-              <div class="tab"><span class="icon-box">集</span><span>作品集</span></div>
-              <div class="tab"><span class="icon-box">档</span><span>档期</span></div>
+              <div class="tab active"><span class="tab-icon tab-icon-user" aria-hidden="true"></span><span>我的</span></div>
+              <div class="tab"><span class="tab-icon tab-icon-work" aria-hidden="true"></span><span>作品</span></div>
+              <div class="tab"><span class="tab-icon tab-icon-portfolio" aria-hidden="true"></span><span>作品集</span></div>
+              <div class="tab"><span class="tab-icon tab-icon-schedule" aria-hidden="true"></span><span>档期</span></div>
             </div>
           </div>
         </div>
@@ -2257,7 +2458,7 @@
       <article class="screen-card">
         <div class="screen-meta">
           <div class="screen-title">05 档期</div>
-          <div class="screen-note">月历色彩 + 每天档期</div>
+          <div class="screen-note">档位定义 / 档期维护</div>
         </div>
         <div class="phone">
           <div class="phone-inner">
@@ -2268,116 +2469,101 @@
               <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
             </div>
             <div class="content schedule-maintenance-content">
+              <div class="segmented two">
+                <div class="segment">档位定义</div>
+                <div class="segment active">档期维护</div>
+              </div>
               <div class="panel tight stack schedule-color-card">
                 <div class="row schedule-section-head">
-                  <p class="name">档位颜色</p>
-                  <span class="desc">维护后同步到月历</span>
+                  <p class="name">已启用档位定义</p>
+                  <span class="desc">名称 / 时间 / 颜色</span>
                 </div>
                 <div class="color-legend">
-                  <span class="swatch-option"><span class="swatch" style="background:var(--slot-noon)"></span>中午 10:00-13:00</span>
-                  <span class="swatch-option"><span class="swatch" style="background:var(--slot-evening)"></span>晚间 17:00-20:00</span>
-                  <span class="swatch-option"><span class="swatch" style="background:var(--slot-welcome)"></span>迎亲 07:30-09:30</span>
-                  <span class="swatch-option"><span class="swatch" style="background:var(--slot-party)"></span>派对 20:30-22:30</span>
+                  <span class="swatch-option"><span class="swatch" style="background:var(--slot-noon)"></span>中午档 10:00-13:00</span>
+                  <span class="swatch-option"><span class="swatch" style="background:var(--slot-evening)"></span>晚间档 17:00-20:00</span>
+                  <span class="swatch-option"><span class="swatch" style="background:var(--slot-welcome)"></span>迎亲档 07:30-09:30</span>
+                  <span class="swatch-option"><span class="swatch" style="background:var(--slot-party)"></span>派对档 20:30-22:30</span>
                 </div>
               </div>
-              <div class="calendar schedule-calendar">
-                <div class="weekday">日</div><div class="weekday">一</div><div class="weekday">二</div><div class="weekday">三</div><div class="weekday">四</div><div class="weekday">五</div><div class="weekday">六</div>
-                <div class="day muted"><span class="day-number">31</span><span class="day-lunar">十五</span></div>
-                <div class="day has-slots"><span class="day-number">1</span><span class="day-lunar">十六</span><div class="day-colors"><span class="day-color" style="background:var(--slot-noon)"></span></div></div>
-                <div class="day has-slots"><span class="day-number">2</span><span class="day-lunar">十七</span><div class="day-colors"><span class="day-color" style="background:var(--slot-evening)"></span></div></div>
-                <div class="day"><span class="day-number">3</span><span class="day-lunar">十八</span></div>
-                <div class="day has-slots"><span class="day-number">4</span><span class="day-lunar">十九</span><div class="day-colors"><span class="day-color" style="background:var(--slot-noon)"></span><span class="day-color" style="background:var(--slot-evening)"></span></div></div>
-                <div class="day has-slots"><span class="day-number">5</span><span class="day-lunar">二十</span><div class="day-colors"><span class="day-color" style="background:var(--slot-welcome)"></span></div></div>
-                <div class="day has-slots"><span class="day-number">6</span><span class="day-lunar">廿一</span><div class="day-colors"><span class="day-color" style="background:var(--slot-welcome)"></span><span class="day-color" style="background:var(--slot-evening)"></span></div></div>
-                <div class="day has-slots"><span class="day-number">7</span><span class="day-lunar">廿二</span><div class="day-colors"><span class="day-color" style="background:var(--slot-evening)"></span></div></div>
-                <div class="day"><span class="day-number">8</span><span class="day-lunar">廿三</span></div>
-                <div class="day"><span class="day-number">9</span><span class="day-lunar">廿四</span></div>
-                <div class="day has-slots"><span class="day-number">10</span><span class="day-lunar">廿五</span><div class="day-colors"><span class="day-color" style="background:var(--slot-noon)"></span></div></div>
-                <div class="day"><span class="day-number">11</span><span class="day-lunar">廿六</span></div>
-                <div class="day has-slots"><span class="day-number">12</span><span class="day-lunar">廿七</span><div class="day-colors"><span class="day-color" style="background:var(--slot-noon)"></span><span class="day-color" style="background:var(--slot-party)"></span></div></div>
-                <div class="day"><span class="day-number">13</span><span class="day-lunar">廿八</span></div>
-                <div class="day has-slots"><span class="day-number">14</span><span class="day-lunar">廿九</span><div class="day-colors"><span class="day-color" style="background:var(--slot-evening)"></span></div></div>
-                <div class="day"><span class="day-number">15</span><span class="day-lunar">五月</span></div>
-                <div class="day"><span class="day-number">16</span><span class="day-lunar">初二</span></div>
-                <div class="day"><span class="day-number">17</span><span class="day-lunar">初三</span></div>
-                <div class="day has-slots"><span class="day-number">18</span><span class="day-lunar">初四</span><div class="day-colors"><span class="day-color" style="background:var(--slot-welcome)"></span></div></div>
-                <div class="day"><span class="day-number">19</span><span class="day-note">端午节</span></div>
-                <div class="day has-slots"><span class="day-number">20</span><span class="day-lunar">初六</span><div class="day-colors"><span class="day-color" style="background:var(--slot-noon)"></span><span class="day-color" style="background:var(--slot-evening)"></span></div></div>
-                <div class="day"><span class="day-number">21</span><span class="day-lunar">初七</span></div>
-                <div class="day"><span class="day-number">22</span><span class="day-lunar">初八</span></div>
-                <div class="day has-slots"><span class="day-number">23</span><span class="day-lunar">初九</span><div class="day-colors"><span class="day-color" style="background:var(--slot-welcome)"></span></div></div>
-                <div class="day has-slots selected"><div class="date-stack"><span class="day-number">24</span><span class="day-lunar">初十</span></div><div class="day-colors"><span class="day-color" style="background:var(--slot-noon)"></span><span class="day-color" style="background:var(--slot-evening)"></span><span class="day-color" style="background:var(--slot-welcome)"></span></div></div>
-                <div class="day has-slots"><span class="day-number">25</span><span class="day-lunar">十一</span><div class="day-colors"><span class="day-color" style="background:var(--slot-noon)"></span><span class="day-color" style="background:var(--slot-evening)"></span><span class="day-color" style="background:var(--slot-party)"></span></div></div>
-                <div class="day"><span class="day-number">26</span><span class="day-lunar">十二</span></div>
-                <div class="day has-slots"><span class="day-number">27</span><span class="day-lunar">十三</span><div class="day-colors"><span class="day-color" style="background:var(--slot-noon)"></span></div></div>
-                <div class="day has-slots"><span class="day-number">28</span><span class="day-lunar">十四</span><div class="day-colors"><span class="day-color" style="background:var(--slot-noon)"></span><span class="day-color" style="background:var(--slot-evening)"></span><span class="day-color" style="background:var(--slot-welcome)"></span></div></div>
-                <div class="day"><span class="day-number">29</span><span class="day-lunar">十五</span></div>
-                <div class="day has-slots"><span class="day-number">30</span><span class="day-lunar">十六</span><div class="day-colors"><span class="day-color" style="background:var(--slot-party)"></span></div></div>
-                <div class="day muted"><span class="day-number">1</span><span class="day-lunar">十七</span></div>
-                <div class="day muted"><span class="day-number">2</span><span class="day-lunar">十八</span></div>
-                <div class="day muted"><span class="day-number">3</span><span class="day-lunar">十九</span></div>
-                <div class="day muted"><span class="day-number">4</span><span class="day-lunar">二十</span></div>
+              <div class="calendar-group">
+                <div class="calendar-toolbar">
+                  <button class="month-control" type="button">‹</button>
+                  <div class="month-title">
+                    <b>2026 年 6 月</b>
+                    <span>当前查看月份</span>
+                  </div>
+                  <button class="month-control wide" type="button">切换年月</button>
+                  <button class="month-control" type="button">›</button>
+                </div>
+                <div class="calendar schedule-calendar">
+                  <div class="weekday">日</div><div class="weekday">一</div><div class="weekday">二</div><div class="weekday">三</div><div class="weekday">四</div><div class="weekday">五</div><div class="weekday">六</div>
+                  <div class="day muted"><span class="day-number">31</span><span class="day-lunar">十五</span></div>
+                  <div class="day has-slots"><span class="day-number">1</span><span class="day-lunar">十六</span><div class="day-colors"><span class="day-color" style="background:var(--slot-noon)"></span></div></div>
+                  <div class="day has-slots"><span class="day-number">2</span><span class="day-lunar">十七</span><div class="day-colors"><span class="day-color" style="background:var(--slot-evening)"></span></div></div>
+                  <div class="day"><span class="day-number">3</span><span class="day-lunar">十八</span></div>
+                  <div class="day has-slots"><span class="day-number">4</span><span class="day-lunar">十九</span><div class="day-colors"><span class="day-color" style="background:var(--slot-noon)"></span><span class="day-color" style="background:var(--slot-evening)"></span></div></div>
+                  <div class="day has-slots"><span class="day-number">5</span><span class="day-lunar">二十</span><div class="day-colors"><span class="day-color" style="background:var(--slot-welcome)"></span></div></div>
+                  <div class="day has-slots"><span class="day-number">6</span><span class="day-lunar">廿一</span><div class="day-colors"><span class="day-color" style="background:var(--slot-welcome)"></span><span class="day-color" style="background:var(--slot-evening)"></span></div></div>
+                  <div class="day has-slots"><span class="day-number">7</span><span class="day-lunar">廿二</span><div class="day-colors"><span class="day-color" style="background:var(--slot-evening)"></span></div></div>
+                  <div class="day"><span class="day-number">8</span><span class="day-lunar">廿三</span></div>
+                  <div class="day"><span class="day-number">9</span><span class="day-lunar">廿四</span></div>
+                  <div class="day has-slots"><span class="day-number">10</span><span class="day-lunar">廿五</span><div class="day-colors"><span class="day-color" style="background:var(--slot-noon)"></span></div></div>
+                  <div class="day"><span class="day-number">11</span><span class="day-lunar">廿六</span></div>
+                  <div class="day has-slots"><span class="day-number">12</span><span class="day-lunar">廿七</span><div class="day-colors"><span class="day-color" style="background:var(--slot-noon)"></span><span class="day-color" style="background:var(--slot-party)"></span></div></div>
+                  <div class="day"><span class="day-number">13</span><span class="day-lunar">廿八</span></div>
+                  <div class="day has-slots"><span class="day-number">14</span><span class="day-lunar">廿九</span><div class="day-colors"><span class="day-color" style="background:var(--slot-evening)"></span></div></div>
+                  <div class="day"><span class="day-number">15</span><span class="day-lunar">五月</span></div>
+                  <div class="day"><span class="day-number">16</span><span class="day-lunar">初二</span></div>
+                  <div class="day"><span class="day-number">17</span><span class="day-lunar">初三</span></div>
+                  <div class="day has-slots"><span class="day-number">18</span><span class="day-lunar">初四</span><div class="day-colors"><span class="day-color" style="background:var(--slot-welcome)"></span></div></div>
+                  <div class="day"><span class="day-number">19</span><span class="day-note">端午节</span></div>
+                  <div class="day has-slots"><span class="day-number">20</span><span class="day-lunar">初六</span><div class="day-colors"><span class="day-color" style="background:var(--slot-noon)"></span><span class="day-color" style="background:var(--slot-evening)"></span></div></div>
+                  <div class="day"><span class="day-number">21</span><span class="day-lunar">初七</span></div>
+                  <div class="day"><span class="day-number">22</span><span class="day-lunar">初八</span></div>
+                  <div class="day has-slots"><span class="day-number">23</span><span class="day-lunar">初九</span><div class="day-colors"><span class="day-color" style="background:var(--slot-welcome)"></span></div></div>
+                  <div class="day has-slots selected"><div class="date-stack"><span class="day-number">24</span><span class="day-lunar">初十</span></div><div class="day-colors"><span class="day-color" style="background:var(--slot-noon)"></span><span class="day-color" style="background:var(--slot-evening)"></span><span class="day-color" style="background:var(--slot-welcome)"></span></div></div>
+                  <div class="day has-slots"><span class="day-number">25</span><span class="day-lunar">十一</span><div class="day-colors"><span class="day-color" style="background:var(--slot-noon)"></span><span class="day-color" style="background:var(--slot-evening)"></span><span class="day-color" style="background:var(--slot-party)"></span></div></div>
+                  <div class="day"><span class="day-number">26</span><span class="day-lunar">十二</span></div>
+                  <div class="day has-slots"><span class="day-number">27</span><span class="day-lunar">十三</span><div class="day-colors"><span class="day-color" style="background:var(--slot-noon)"></span></div></div>
+                  <div class="day has-slots"><span class="day-number">28</span><span class="day-lunar">十四</span><div class="day-colors"><span class="day-color" style="background:var(--slot-noon)"></span><span class="day-color" style="background:var(--slot-evening)"></span><span class="day-color" style="background:var(--slot-welcome)"></span></div></div>
+                  <div class="day"><span class="day-number">29</span><span class="day-lunar">十五</span></div>
+                  <div class="day has-slots"><span class="day-number">30</span><span class="day-lunar">十六</span><div class="day-colors"><span class="day-color" style="background:var(--slot-party)"></span></div></div>
+                  <div class="day muted"><span class="day-number">1</span><span class="day-lunar">十七</span></div>
+                  <div class="day muted"><span class="day-number">2</span><span class="day-lunar">十八</span></div>
+                  <div class="day muted"><span class="day-number">3</span><span class="day-lunar">十九</span></div>
+                  <div class="day muted"><span class="day-number">4</span><span class="day-lunar">二十</span></div>
+                </div>
               </div>
               <div class="day-schedule-list">
                 <div class="day-panel">
                   <div class="row">
                     <div>
                       <b>6 月 24 日 · 周三</b>
-                      <p class="desc">3 个档位，2 个可约</p>
+                      <p class="desc">3 条档期，2 个可约</p>
                     </div>
                     <span class="pill teal">可约</span>
                   </div>
                   <div class="slot-line">
-                    <div class="row" style="justify-content:flex-start"><span class="swatch" style="background:var(--slot-noon)"></span><div><b>中午档</b><p class="desc">10:00-13:00 · 默认档</p></div></div>
-                    <span class="pill teal">空闲</span>
-                  </div>
-                  <div class="slot-line">
-                    <div class="row" style="justify-content:flex-start"><span class="swatch" style="background:var(--slot-evening)"></span><div><b>晚间档</b><p class="desc">17:00-20:00 · 默认档</p></div></div>
-                    <span class="pill rose">已约</span>
-                  </div>
-                  <div class="slot-line">
-                    <div class="row" style="justify-content:flex-start"><span class="swatch" style="background:var(--slot-welcome)"></span><div><b>迎亲档</b><p class="desc">07:30-09:30 · 自定义档</p></div></div>
+                    <div class="row" style="justify-content:flex-start"><span class="swatch" style="background:var(--slot-welcome)"></span><div><b>迎亲档</b><p class="desc">07:30-09:30 · 陈女士 待回电</p></div></div>
                     <span class="pill amber">待定</span>
                   </div>
-                </div>
-                <div class="day-panel">
-                  <div class="row">
-                    <div>
-                      <b>6 月 25 日 · 周四</b>
-                      <p class="desc">2 个默认档位，1 个自定义档</p>
-                    </div>
-                    <span class="pill amber">部分待定</span>
+                  <div class="slot-line">
+                    <div class="row" style="justify-content:flex-start"><span class="swatch" style="background:var(--slot-noon)"></span><div><b>中午档</b><p class="desc">10:00-13:00 · 空闲无联系人</p></div></div>
+                    <span class="pill teal">空闲</span>
                   </div>
                   <div class="slot-line">
-                    <div class="row" style="justify-content:flex-start"><span class="swatch" style="background:var(--slot-noon)"></span><div><b>中午档</b><p class="desc">10:00-13:00 · 默认档</p></div></div>
+                    <div class="row" style="justify-content:flex-start"><span class="swatch" style="background:var(--slot-evening)"></span><div><b>晚间档</b><p class="desc">17:00-20:00 · 林先生 139****0824</p></div></div>
                     <span class="pill rose">已约</span>
                   </div>
-                  <div class="slot-line">
-                    <div class="row" style="justify-content:flex-start"><span class="swatch" style="background:var(--slot-evening)"></span><div><b>晚间档</b><p class="desc">17:00-20:00 · 默认档</p></div></div>
-                    <span class="pill teal">空闲</span>
-                  </div>
-                  <div class="slot-line">
-                    <div class="row" style="justify-content:flex-start"><span class="swatch" style="background:var(--slot-party)"></span><div><b>After Party</b><p class="desc">20:30-22:30 · 自定义档</p></div></div>
-                    <span class="pill teal">空闲</span>
-                  </div>
-                </div>
-                <div class="day-panel">
-                  <div class="row">
-                    <div>
-                      <b>6 月 26 日 · 周五</b>
-                      <p class="desc">未添加档位，访客查询显示暂未开放</p>
-                    </div>
-                    <span class="pill">休息</span>
-                  </div>
-                  <button class="button secondary full">＋ 添加当天档位</button>
+                  <button class="button secondary full">＋ 维护当天档期</button>
                 </div>
               </div>
             </div>
             <div class="tabbar">
-              <div class="tab"><span class="icon-box">我</span><span>我的</span></div>
-              <div class="tab"><span class="icon-box">作</span><span>作品</span></div>
-              <div class="tab"><span class="icon-box">集</span><span>作品集</span></div>
-              <div class="tab active"><span class="icon-box">档</span><span>档期</span></div>
+              <div class="tab"><span class="tab-icon tab-icon-user" aria-hidden="true"></span><span>我的</span></div>
+              <div class="tab"><span class="tab-icon tab-icon-work" aria-hidden="true"></span><span>作品</span></div>
+              <div class="tab"><span class="tab-icon tab-icon-portfolio" aria-hidden="true"></span><span>作品集</span></div>
+              <div class="tab active"><span class="tab-icon tab-icon-schedule" aria-hidden="true"></span><span>档期</span></div>
             </div>
           </div>
         </div>
@@ -2385,31 +2571,128 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">05B 自定义档位维护页</div>
-          <div class="screen-note">新增 / 编辑当天档位</div>
+          <div class="screen-title">05B 档位定义页</div>
+          <div class="screen-note">名称 / 时间段 / 颜色</div>
         </div>
         <div class="phone">
           <div class="phone-inner">
             <div class="status"><span>09:41</span><div class="status-icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
             <div class="nav">
-              <div class="nav-action">‹</div>
-              <div class="nav-title">维护档位</div>
+              <div class="nav-spacer"></div>
+              <div class="nav-title">档期</div>
               <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
             </div>
-            <div class="content">
+            <div class="content schedule-maintenance-content">
+              <div class="segmented two">
+                <div class="segment active">档位定义</div>
+                <div class="segment">档期维护</div>
+              </div>
               <div class="panel">
                 <div class="row">
                   <div>
-                    <p class="name">6 月 24 日 · 周三</p>
-                    <p class="desc">为当天新增或编辑具体档位，保存后同步到月历颜色。</p>
+                    <p class="name">可复用档位</p>
+                    <p class="desc">先定义档位名称、时间段和颜色，再用于每日档期维护。</p>
                   </div>
-                  <span class="pill teal">3 档</span>
+                  <span class="pill teal">4 个定义</span>
                 </div>
               </div>
-              <div class="panel stack">
+              <div class="panel stack definition-list-panel">
                 <div class="row">
-                  <p class="name">自定义档位</p>
-                  <span class="pill amber">编辑中</span>
+                  <p class="name">所有定义</p>
+                  <span class="desc">启用 / 停用可切换</span>
+                </div>
+                <div class="slot-line">
+                  <div class="row" style="justify-content:flex-start"><span class="swatch" style="background:var(--slot-noon)"></span><div><b>中午档</b><p class="desc">10:00-13:00 · 默认启用</p></div></div>
+                  <button class="mini-action warn" type="button">停用</button>
+                </div>
+                <div class="slot-line">
+                  <div class="row" style="justify-content:flex-start"><span class="swatch" style="background:var(--slot-evening)"></span><div><b>晚间档</b><p class="desc">17:00-20:00 · 默认启用</p></div></div>
+                  <button class="mini-action warn" type="button">停用</button>
+                </div>
+                <div class="slot-line">
+                  <div class="row" style="justify-content:flex-start"><span class="swatch" style="background:var(--slot-welcome)"></span><div><b>迎亲档</b><p class="desc">07:30-09:30 · 自定义</p></div></div>
+                  <button class="mini-action warn" type="button">停用</button>
+                </div>
+                <div class="slot-line">
+                  <div class="row" style="justify-content:flex-start"><span class="swatch" style="background:var(--slot-party)"></span><div><b>After Party</b><p class="desc">20:30-22:30 · 已停用</p></div></div>
+                  <button class="mini-action" type="button">启用</button>
+                </div>
+                <button class="button secondary full">＋ 新增定义</button>
+              </div>
+            </div>
+            <div class="tabbar">
+              <div class="tab"><span class="tab-icon tab-icon-user" aria-hidden="true"></span><span>我的</span></div>
+              <div class="tab"><span class="tab-icon tab-icon-work" aria-hidden="true"></span><span>作品</span></div>
+              <div class="tab"><span class="tab-icon tab-icon-portfolio" aria-hidden="true"></span><span>作品集</span></div>
+              <div class="tab active"><span class="tab-icon tab-icon-schedule" aria-hidden="true"></span><span>档期</span></div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen-card">
+        <div class="screen-meta">
+          <div class="screen-title">05B-1 编辑档位定义弹层</div>
+          <div class="screen-note">定义行触发</div>
+        </div>
+        <div class="phone">
+          <div class="phone-inner">
+            <div class="status"><span>09:41</span><div class="status-icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
+            <div class="nav">
+              <div class="nav-spacer"></div>
+              <div class="nav-title">档期</div>
+              <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
+            </div>
+            <div class="content schedule-maintenance-content">
+              <div class="segmented two">
+                <div class="segment active">档位定义</div>
+                <div class="segment">档期维护</div>
+              </div>
+              <div class="panel">
+                <div class="row">
+                  <div>
+                    <p class="name">可复用档位</p>
+                    <p class="desc">先定义档位名称、时间段和颜色，再用于每日档期维护。</p>
+                  </div>
+                  <span class="pill teal">4 个定义</span>
+                </div>
+              </div>
+              <div class="panel stack definition-list-panel">
+                <div class="row">
+                  <p class="name">所有定义</p>
+                  <span class="desc">启用 / 停用可切换</span>
+                </div>
+                <div class="slot-line">
+                  <div class="row" style="justify-content:flex-start"><span class="swatch" style="background:var(--slot-noon)"></span><div><b>中午档</b><p class="desc">10:00-13:00 · 默认启用</p></div></div>
+                  <button class="mini-action warn" type="button">停用</button>
+                </div>
+                <div class="slot-line">
+                  <div class="row" style="justify-content:flex-start"><span class="swatch" style="background:var(--slot-evening)"></span><div><b>晚间档</b><p class="desc">17:00-20:00 · 默认启用</p></div></div>
+                  <button class="mini-action warn" type="button">停用</button>
+                </div>
+                <div class="slot-line">
+                  <div class="row" style="justify-content:flex-start"><span class="swatch" style="background:var(--slot-welcome)"></span><div><b>迎亲档</b><p class="desc">07:30-09:30 · 自定义</p></div></div>
+                  <button class="mini-action warn" type="button">停用</button>
+                </div>
+                <div class="slot-line">
+                  <div class="row" style="justify-content:flex-start"><span class="swatch" style="background:var(--slot-party)"></span><div><b>After Party</b><p class="desc">20:30-22:30 · 已停用</p></div></div>
+                  <button class="mini-action" type="button">启用</button>
+                </div>
+                <button class="button secondary full">＋ 新增定义</button>
+              </div>
+            </div>
+            <div class="tabbar">
+              <div class="tab"><span class="tab-icon tab-icon-user" aria-hidden="true"></span><span>我的</span></div>
+              <div class="tab"><span class="tab-icon tab-icon-work" aria-hidden="true"></span><span>作品</span></div>
+              <div class="tab"><span class="tab-icon tab-icon-portfolio" aria-hidden="true"></span><span>作品集</span></div>
+              <div class="tab active"><span class="tab-icon tab-icon-schedule" aria-hidden="true"></span><span>档期</span></div>
+            </div>
+            <div class="definition-sheet-overlay">
+              <div class="definition-sheet">
+                <div class="sheet-grabber"></div>
+                <div class="row">
+                  <p class="name">编辑档位定义</p>
+                  <span class="pill amber">迎亲档</span>
                 </div>
                 <div class="slot-editor">
                   <div class="field-grid">
@@ -2418,8 +2701,8 @@
                       <div class="input">迎亲档</div>
                     </div>
                     <div class="form-row">
-                      <div class="label">档位状态</div>
-                      <div class="input">待定</div>
+                      <div class="label">启用状态</div>
+                      <div class="input">启用</div>
                     </div>
                   </div>
                   <div class="field-grid">
@@ -2445,22 +2728,207 @@
                       <span class="color-choice"><span class="swatch" style="background:var(--slot-slate)"></span></span>
                     </div>
                   </div>
-                  <div class="cost-note">保存后，6 月 24 日月历格子会追加迎亲档的金色标记。</div>
+                  <div class="cost-note">保存后，未来未锁定档期会同步使用新的名称、时间和颜色；历史档期保留快照。</div>
+                </div>
+                <div class="button-row">
+                  <button class="button secondary">取消</button>
+                  <button class="button">保存定义</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen-card">
+        <div class="screen-meta">
+          <div class="screen-title">05B-2 新增档位定义弹层</div>
+          <div class="screen-note">新增按钮触发</div>
+        </div>
+        <div class="phone">
+          <div class="phone-inner">
+            <div class="status"><span>09:41</span><div class="status-icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
+            <div class="nav">
+              <div class="nav-spacer"></div>
+              <div class="nav-title">档期</div>
+              <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
+            </div>
+            <div class="content schedule-maintenance-content">
+              <div class="segmented two">
+                <div class="segment active">档位定义</div>
+                <div class="segment">档期维护</div>
+              </div>
+              <div class="panel">
+                <div class="row">
+                  <div>
+                    <p class="name">可复用档位</p>
+                    <p class="desc">先定义档位名称、时间段和颜色，再用于每日档期维护。</p>
+                  </div>
+                  <span class="pill teal">4 个定义</span>
+                </div>
+              </div>
+              <div class="panel stack definition-list-panel">
+                <div class="row">
+                  <p class="name">所有定义</p>
+                  <span class="desc">启用 / 停用可切换</span>
+                </div>
+                <div class="slot-line">
+                  <div class="row" style="justify-content:flex-start"><span class="swatch" style="background:var(--slot-noon)"></span><div><b>中午档</b><p class="desc">10:00-13:00 · 默认启用</p></div></div>
+                  <button class="mini-action warn" type="button">停用</button>
+                </div>
+                <div class="slot-line">
+                  <div class="row" style="justify-content:flex-start"><span class="swatch" style="background:var(--slot-evening)"></span><div><b>晚间档</b><p class="desc">17:00-20:00 · 默认启用</p></div></div>
+                  <button class="mini-action warn" type="button">停用</button>
+                </div>
+                <div class="slot-line">
+                  <div class="row" style="justify-content:flex-start"><span class="swatch" style="background:var(--slot-welcome)"></span><div><b>迎亲档</b><p class="desc">07:30-09:30 · 自定义</p></div></div>
+                  <button class="mini-action warn" type="button">停用</button>
+                </div>
+                <div class="slot-line">
+                  <div class="row" style="justify-content:flex-start"><span class="swatch" style="background:var(--slot-party)"></span><div><b>After Party</b><p class="desc">20:30-22:30 · 已停用</p></div></div>
+                  <button class="mini-action" type="button">启用</button>
+                </div>
+                <button class="button secondary full">＋ 新增定义</button>
+              </div>
+            </div>
+            <div class="tabbar">
+              <div class="tab"><span class="tab-icon tab-icon-user" aria-hidden="true"></span><span>我的</span></div>
+              <div class="tab"><span class="tab-icon tab-icon-work" aria-hidden="true"></span><span>作品</span></div>
+              <div class="tab"><span class="tab-icon tab-icon-portfolio" aria-hidden="true"></span><span>作品集</span></div>
+              <div class="tab active"><span class="tab-icon tab-icon-schedule" aria-hidden="true"></span><span>档期</span></div>
+            </div>
+            <div class="definition-sheet-overlay">
+              <div class="definition-sheet">
+                <div class="sheet-grabber"></div>
+                <div class="row">
+                  <p class="name">新增档位定义</p>
+                  <span class="pill teal">启用</span>
+                </div>
+                <div class="slot-editor">
+                  <div class="field-grid">
+                    <div class="form-row">
+                      <div class="label">档位名称</div>
+                      <div class="input">早妆档</div>
+                    </div>
+                    <div class="form-row">
+                      <div class="label">启用状态</div>
+                      <div class="input">启用</div>
+                    </div>
+                  </div>
+                  <div class="field-grid">
+                    <div class="form-row">
+                      <div class="label">开始时间</div>
+                      <div class="input">06:30</div>
+                    </div>
+                    <div class="form-row">
+                      <div class="label">结束时间</div>
+                      <div class="input">08:30</div>
+                    </div>
+                  </div>
+                  <div class="form-row">
+                    <div class="label">档位颜色</div>
+                    <div class="color-picker-grid">
+                      <span class="color-choice"><span class="swatch" style="background:var(--slot-noon)"></span></span>
+                      <span class="color-choice"><span class="swatch" style="background:var(--slot-evening)"></span></span>
+                      <span class="color-choice"><span class="swatch" style="background:var(--slot-welcome)"></span></span>
+                      <span class="color-choice"><span class="swatch" style="background:var(--slot-party)"></span></span>
+                      <span class="color-choice active"><span class="swatch" style="background:var(--slot-forest)"></span></span>
+                      <span class="color-choice"><span class="swatch" style="background:var(--slot-sky)"></span></span>
+                      <span class="color-choice"><span class="swatch" style="background:var(--slot-coral)"></span></span>
+                      <span class="color-choice"><span class="swatch" style="background:var(--slot-slate)"></span></span>
+                    </div>
+                  </div>
+                  <div class="cost-note">新增后进入所有定义列表；未选择到具体日期前，不会自动生成任何档期。</div>
+                </div>
+                <div class="button-row">
+                  <button class="button secondary">取消</button>
+                  <button class="button">保存定义</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen-card">
+        <div class="screen-meta">
+          <div class="screen-title">05C 档期维护页</div>
+          <div class="screen-note">指定日期 + 选择档位 + 记录信息</div>
+        </div>
+        <div class="phone">
+          <div class="phone-inner">
+            <div class="status"><span>09:41</span><div class="status-icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
+            <div class="nav">
+              <div class="nav-action">‹</div>
+              <div class="nav-title">维护档期</div>
+              <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
+            </div>
+            <div class="content">
+              <div class="panel">
+                <div class="row">
+                  <div>
+                    <p class="name">6 月 24 日 · 周三</p>
+                    <p class="desc">从已定义档位中选择当天档期，并记录电话、备注、人名等信息。</p>
+                  </div>
+                  <span class="pill teal">3 条</span>
                 </div>
               </div>
               <div class="panel stack">
                 <div class="row">
-                  <p class="name">快捷操作</p>
-                  <span class="desc">可复用常用档位</span>
+                  <p class="name">选择档位定义</p>
+                  <span class="desc">不在这里修改时间颜色</span>
+                </div>
+                <div class="slot-grid">
+                  <div class="slot-card active">
+                    <div class="row"><b>中午档</b><span class="swatch" style="background:var(--slot-noon)"></span></div>
+                    <span class="slot-time">10:00-13:00</span>
+                  </div>
+                  <div class="slot-card pending">
+                    <div class="row"><b>迎亲档</b><span class="swatch" style="background:var(--slot-welcome)"></span></div>
+                    <span class="slot-time">07:30-09:30</span>
+                  </div>
+                </div>
+              </div>
+              <div class="panel stack">
+                <div class="row">
+                  <p class="name">本条档期信息</p>
+                  <span class="pill amber">待定</span>
+                </div>
+                <div class="slot-editor">
+                  <div class="field-grid">
+                    <div class="form-row">
+                      <div class="label">档位状态</div>
+                      <div class="input">待定</div>
+                    </div>
+                    <div class="form-row">
+                      <div class="label">联系人姓名</div>
+                      <div class="input">陈女士</div>
+                    </div>
+                  </div>
+                  <div class="form-row">
+                    <div class="label">联系电话</div>
+                    <div class="input">138 0000 2026</div>
+                  </div>
+                  <div class="form-row">
+                    <div class="label">内部备注</div>
+                    <div class="input textarea">客户想确认迎亲开场流程，今晚 20:00 后回电。访客端不展示备注和电话。</div>
+                  </div>
+                  <div class="cost-note">访客端仅展示日期、档位名称、时间段和可约状态。</div>
+                </div>
+              </div>
+              <div class="panel stack">
+                <div class="row">
+                  <p class="name">批量维护</p>
+                  <span class="desc">连续日期复用同一档位定义</span>
                 </div>
                 <div class="button-row">
-                  <button class="button secondary">复制昨日档位</button>
-                  <button class="button secondary">保存为模板</button>
+                  <button class="button secondary">复制昨日档期</button>
+                  <button class="button secondary">批量设置日期</button>
                 </div>
               </div>
               <div class="button-row">
-                <button class="button secondary">取消</button>
-                <button class="button">保存档位</button>
+                <button class="button secondary">删除本条</button>
+                <button class="button">保存档期</button>
               </div>
             </div>
           </div>
@@ -2540,10 +3008,10 @@
               </div>
             </div>
             <div class="tabbar">
-              <div class="tab"><span class="icon-box">我</span><span>我的</span></div>
-              <div class="tab active"><span class="icon-box">作</span><span>作品</span></div>
-              <div class="tab"><span class="icon-box">集</span><span>作品集</span></div>
-              <div class="tab"><span class="icon-box">档</span><span>档期</span></div>
+              <div class="tab"><span class="tab-icon tab-icon-user" aria-hidden="true"></span><span>我的</span></div>
+              <div class="tab active"><span class="tab-icon tab-icon-work" aria-hidden="true"></span><span>作品</span></div>
+              <div class="tab"><span class="tab-icon tab-icon-portfolio" aria-hidden="true"></span><span>作品集</span></div>
+              <div class="tab"><span class="tab-icon tab-icon-schedule" aria-hidden="true"></span><span>档期</span></div>
             </div>
           </div>
         </div>
@@ -2680,10 +3148,10 @@
               </div>
             </div>
             <div class="tabbar">
-              <div class="tab"><span class="icon-box">我</span><span>我的</span></div>
-              <div class="tab"><span class="icon-box">作</span><span>作品</span></div>
-              <div class="tab active"><span class="icon-box">集</span><span>作品集</span></div>
-              <div class="tab"><span class="icon-box">档</span><span>档期</span></div>
+              <div class="tab"><span class="tab-icon tab-icon-user" aria-hidden="true"></span><span>我的</span></div>
+              <div class="tab"><span class="tab-icon tab-icon-work" aria-hidden="true"></span><span>作品</span></div>
+              <div class="tab active"><span class="tab-icon tab-icon-portfolio" aria-hidden="true"></span><span>作品集</span></div>
+              <div class="tab"><span class="tab-icon tab-icon-schedule" aria-hidden="true"></span><span>档期</span></div>
             </div>
           </div>
         </div>
@@ -2732,7 +3200,7 @@
                   <span class="desc">按顺序展示</span>
                 </div>
                 <div class="component-row"><div class="handle">1</div><div><b>轮播图</b><p class="desc">选择 3 张个人作品图片</p></div><span>›</span></div>
-                <div class="component-row"><div class="handle">2</div><div><b>个人档期查询</b><p class="desc">读取当天自定义档位和时间</p></div><span>›</span></div>
+                <div class="component-row"><div class="handle">2</div><div><b>个人档期查询</b><p class="desc">读取当天已维护档期</p></div><span>›</span></div>
                 <div class="component-row"><div class="handle">3</div><div><b>双列作品列表</b><p class="desc">8 个图片或视频作品</p></div><span>›</span></div>
                 <div class="component-row"><div class="handle">4</div><div><b>微信二维码</b><p class="desc">使用个人联系二维码</p></div><span>›</span></div>
               </div>
@@ -3001,9 +3469,9 @@
                   <div class="library-icon" style="background:var(--rose-soft);color:var(--rose)">档</div>
                   <div>
                     <b>档期查询组件</b>
-                    <p class="desc">个人或团队，支持自定义档位</p>
+                    <p class="desc">个人或团队，支持已定义档位</p>
                   </div>
-                  <div class="pill-row"><span class="pill"><span class="swatch" style="background:var(--slot-noon)"></span>中午档</span><span class="pill"><span class="swatch" style="background:var(--slot-evening)"></span>晚间档</span><span class="pill"><span class="swatch" style="background:var(--slot-welcome)"></span>自定义</span></div>
+                  <div class="pill-row"><span class="pill"><span class="swatch" style="background:var(--slot-noon)"></span>中午档</span><span class="pill"><span class="swatch" style="background:var(--slot-evening)"></span>晚间档</span><span class="pill"><span class="swatch" style="background:var(--slot-welcome)"></span>迎亲档</span></div>
                 </div>
                 <div class="library-card">
                   <div class="library-icon" style="background:var(--blue-soft);color:var(--blue)">码</div>
@@ -3248,7 +3716,7 @@
                     <div class="avatar"><div class="asset-4" style="width:100%;height:100%"></div></div>
                     <div>
                       <p class="name">林安婚礼司仪</p>
-                      <p class="desc">个人档期 · 自定义档位查询</p>
+                      <p class="desc">个人档期 · 已定义档位查询</p>
                     </div>
                   </div>
                   <span class="pill teal">可咨询</span>
