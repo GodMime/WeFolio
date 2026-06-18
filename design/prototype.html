@@ -817,17 +817,33 @@
     }
 
     .tab {
+      position: relative;
       display: grid;
       place-items: center;
       align-content: center;
       gap: 4px;
+      padding-top: 8px;
       color: var(--muted);
       font-size: 10px;
       font-weight: 700;
     }
 
     .tab.active {
-      color: var(--teal);
+      color: var(--gold);
+      font-weight: 800;
+    }
+
+    .tab.active::before {
+      content: "";
+      position: absolute;
+      top: 6px;
+      left: 50%;
+      width: 22px;
+      height: 3px;
+      border-radius: 999px;
+      background: var(--gold);
+      box-shadow: 0 2px 8px rgba(184, 138, 68, .26);
+      transform: translateX(-50%);
     }
 
     .tab-icon {
@@ -1262,6 +1278,57 @@
       border-radius: var(--radius);
       background: linear-gradient(180deg, #ffffff, #f8fafb);
       box-shadow: var(--shadow-soft);
+    }
+
+    .schedule-entry-content {
+      padding: 12px;
+      gap: 10px;
+    }
+
+    .schedule-entry-content .panel {
+      padding: 12px;
+    }
+
+    .schedule-entry-content .slot-grid {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 0 10px 2px 0;
+      scroll-snap-type: x mandatory;
+      scrollbar-width: none;
+    }
+
+    .schedule-entry-content .slot-grid::-webkit-scrollbar {
+      display: none;
+    }
+
+    .schedule-entry-content .slot-card {
+      flex: 0 0 47%;
+      min-height: 70px;
+      padding: 9px;
+      scroll-snap-align: start;
+    }
+
+    .schedule-entry-content .slot-editor {
+      gap: 7px;
+      padding: 9px;
+    }
+
+    .schedule-entry-content .input {
+      min-height: 40px;
+      padding: 8px 10px;
+    }
+
+    .schedule-entry-content .textarea {
+      min-height: 64px;
+    }
+
+    .schedule-entry-content .cost-note {
+      padding: 8px 9px;
+    }
+
+    .schedule-entry-content .button {
+      height: 42px;
     }
 
     .color-picker-grid {
@@ -2475,7 +2542,7 @@
               </div>
               <div class="panel tight stack schedule-color-card">
                 <div class="row schedule-section-head">
-                  <p class="name">已启用档位定义</p>
+                  <p class="name">档位定义</p>
                   <span class="desc">名称 / 时间 / 颜色</span>
                 </div>
                 <div class="color-legend">
@@ -2587,15 +2654,6 @@
                 <div class="segment active">档位定义</div>
                 <div class="segment">档期维护</div>
               </div>
-              <div class="panel">
-                <div class="row">
-                  <div>
-                    <p class="name">可复用档位</p>
-                    <p class="desc">先定义档位名称、时间段和颜色，再用于每日档期维护。</p>
-                  </div>
-                  <span class="pill teal">4 个定义</span>
-                </div>
-              </div>
               <div class="panel stack definition-list-panel">
                 <div class="row">
                   <p class="name">所有定义</p>
@@ -2647,15 +2705,6 @@
               <div class="segmented two">
                 <div class="segment active">档位定义</div>
                 <div class="segment">档期维护</div>
-              </div>
-              <div class="panel">
-                <div class="row">
-                  <div>
-                    <p class="name">可复用档位</p>
-                    <p class="desc">先定义档位名称、时间段和颜色，再用于每日档期维护。</p>
-                  </div>
-                  <span class="pill teal">4 个定义</span>
-                </div>
               </div>
               <div class="panel stack definition-list-panel">
                 <div class="row">
@@ -2758,15 +2807,6 @@
                 <div class="segment active">档位定义</div>
                 <div class="segment">档期维护</div>
               </div>
-              <div class="panel">
-                <div class="row">
-                  <div>
-                    <p class="name">可复用档位</p>
-                    <p class="desc">先定义档位名称、时间段和颜色，再用于每日档期维护。</p>
-                  </div>
-                  <span class="pill teal">4 个定义</span>
-                </div>
-              </div>
               <div class="panel stack definition-list-panel">
                 <div class="row">
                   <p class="name">所有定义</p>
@@ -2863,7 +2903,7 @@
               <div class="nav-title">维护档期</div>
               <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
             </div>
-            <div class="content">
+            <div class="content schedule-entry-content">
               <div class="panel">
                 <div class="row">
                   <div>
@@ -2886,6 +2926,14 @@
                   <div class="slot-card pending">
                     <div class="row"><b>迎亲档</b><span class="swatch" style="background:var(--slot-welcome)"></span></div>
                     <span class="slot-time">07:30-09:30</span>
+                  </div>
+                  <div class="slot-card booked">
+                    <div class="row"><b>晚间档</b><span class="swatch" style="background:var(--slot-evening)"></span></div>
+                    <span class="slot-time">17:00-20:00</span>
+                  </div>
+                  <div class="slot-card">
+                    <div class="row"><b>派对档</b><span class="swatch" style="background:var(--slot-party)"></span></div>
+                    <span class="slot-time">20:30-22:30</span>
                   </div>
                 </div>
               </div>
@@ -2916,16 +2964,6 @@
                   <div class="cost-note">访客端仅展示日期、档位名称、时间段和可约状态。</div>
                 </div>
               </div>
-              <div class="panel stack">
-                <div class="row">
-                  <p class="name">批量维护</p>
-                  <span class="desc">连续日期复用同一档位定义</span>
-                </div>
-                <div class="button-row">
-                  <button class="button secondary">复制昨日档期</button>
-                  <button class="button secondary">批量设置日期</button>
-                </div>
-              </div>
               <div class="button-row">
                 <button class="button secondary">删除本条</button>
                 <button class="button">保存档期</button>
@@ -2938,7 +2976,7 @@
       <article class="screen-card">
         <div class="screen-meta">
           <div class="screen-title">06 作品</div>
-          <div class="screen-note">筛选、排序、引用状态</div>
+          <div class="screen-note">筛选、排序、引用情况</div>
         </div>
         <div class="phone">
           <div class="phone-inner">
@@ -2949,15 +2987,15 @@
               <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
             </div>
             <div class="content">
-              <div class="search">⌕ 搜索作品标题、标签、服务类型</div>
+              <div class="search">⌕ 搜索作品标题、标签</div>
               <div class="panel tight">
                 <div class="row">
                   <div class="pill-row">
                     <span class="pill teal">全部 36</span>
-                    <span class="pill">图片 28</span>
-                    <span class="pill">视频 8</span>
+                    <span class="pill">高端婚礼 12</span>
+                    <span class="pill">户外仪式 8</span>
+                    <span class="pill">晚宴互动 6</span>
                   </div>
-                  <span class="desc">最近更新</span>
                 </div>
               </div>
               <div class="panel stack">
@@ -2970,7 +3008,7 @@
                   <div>
                     <b>草坪婚礼主持</b>
                     <p class="desc">图片 · 高端婚礼 / 户外仪式</p>
-                    <div class="pill-row" style="margin-top:6px"><span class="pill teal">已上架</span><span class="pill">引用 3 次</span></div>
+                    <div class="pill-row" style="margin-top:6px"><span class="pill">引用 3 次</span></div>
                   </div>
                   <span>›</span>
                 </div>
@@ -2979,7 +3017,7 @@
                   <div>
                     <b>迎宾区现场短片</b>
                     <p class="desc">视频 · 00:42 / 晚宴互动</p>
-                    <div class="pill-row" style="margin-top:6px"><span class="pill teal">已上架</span><span class="pill">引用 1 次</span></div>
+                    <div class="pill-row" style="margin-top:6px"><span class="pill">引用 1 次</span></div>
                   </div>
                   <span>›</span>
                 </div>
@@ -2988,7 +3026,7 @@
                   <div>
                     <b>中式婚礼仪式</b>
                     <p class="desc">图片 · 中式 / 父母敬茶</p>
-                    <div class="pill-row" style="margin-top:6px"><span class="pill amber">草稿</span><span class="pill">未引用</span></div>
+                    <div class="pill-row" style="margin-top:6px"><span class="pill">未引用</span></div>
                   </div>
                   <span>›</span>
                 </div>
@@ -3020,7 +3058,7 @@
       <article class="screen-card">
         <div class="screen-meta">
           <div class="screen-title">07 作品维护页</div>
-          <div class="screen-note">上传、封面、标签、上下架</div>
+          <div class="screen-note">上传、封面、标签</div>
         </div>
         <div class="phone">
           <div class="phone-inner">
@@ -3043,18 +3081,8 @@
                   <div class="label">作品标题</div>
                   <div class="input split"><span>草坪婚礼主持</span><span class="desc">24/30</span></div>
                 </div>
-                <div class="field-grid">
-                  <div class="form-row">
-                    <div class="label">作品类型</div>
-                    <div class="input">图片</div>
-                  </div>
-                  <div class="form-row">
-                    <div class="label">上架状态</div>
-                    <div class="input">已上架</div>
-                  </div>
-                </div>
                 <div class="form-row">
-                  <div class="label">服务标签</div>
+                  <div class="label">标签</div>
                   <div class="pill-row">
                     <span class="pill teal">高端婚礼</span>
                     <span class="pill blue">户外仪式</span>
@@ -3071,14 +3099,14 @@
                 <div class="row">
                   <div>
                     <p class="name">引用情况</p>
-                    <p class="desc">删除或下架前需要处理已引用作品集</p>
+                    <p class="desc">删除或替换前需要处理已引用作品集</p>
                   </div>
                   <span class="pill amber">3 处</span>
                 </div>
                 <div class="component-row"><div class="handle">个</div><div><b>林安婚礼司仪</b><p class="desc">标准个人作品集 · 轮播图</p></div><span>›</span></div>
                 <div class="component-row"><div class="handle">团</div><div><b>星曜司仪团</b><p class="desc">高级团队作品集 · 首屏</p></div><span>›</span></div>
               </div>
-              <button class="button full">保存作品并消耗 1 积分</button>
+              <button class="button full">保存作品</button>
             </div>
           </div>
         </div>
