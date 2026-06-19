@@ -320,11 +320,67 @@
       min-width: 0;
       overflow-x: hidden;
       overflow-y: auto;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
     }
 
     .content > * {
       max-width: 100%;
       min-width: 0;
+    }
+
+    .content.preview-scroll {
+      padding: 0;
+      gap: 0;
+    }
+
+    .advanced-maintenance-content {
+      padding-bottom: 28px;
+    }
+
+    .advanced-maintenance-content .panel {
+      overflow: visible;
+    }
+
+    .advanced-maintenance-content .media-grid {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+      scroll-snap-type: x proximity;
+    }
+
+    .advanced-maintenance-content .media-grid::-webkit-scrollbar {
+      width: 0;
+      height: 0;
+    }
+
+    .advanced-maintenance-content .media-tile {
+      width: 132px;
+      height: 98px;
+      min-height: 98px;
+      flex: 0 0 132px;
+      scroll-snap-align: start;
+    }
+
+    .advanced-maintenance-content .textarea {
+      display: block;
+      min-height: 116px;
+      white-space: normal;
+    }
+
+    .advanced-maintenance-content .component-row {
+      min-height: 56px;
+    }
+
+    .advanced-maintenance-content .button-row {
+      margin-top: 2px;
+    }
+
+    .preview-scroll-body {
+      display: grid;
+      gap: 12px;
+      padding: 14px;
     }
 
     .hero-photo {
@@ -335,6 +391,28 @@
       background: #dce3e8;
     }
 
+    .hero-carousel {
+      background: #111827;
+    }
+
+    .carousel-slide {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      background-size: cover;
+      background-position: center;
+      transform: scale(1.02);
+      animation: carouselFade 12s infinite;
+    }
+
+    .carousel-slide:nth-child(2) {
+      animation-delay: 4s;
+    }
+
+    .carousel-slide:nth-child(3) {
+      animation-delay: 8s;
+    }
+
     .hero-photo.small {
       height: 148px;
       border-radius: var(--radius);
@@ -343,11 +421,13 @@
     .hero-photo .shade {
       position: absolute;
       inset: 0;
+      z-index: 1;
       background: linear-gradient(180deg, rgba(0,0,0,0.05), rgba(10,14,20,0.66));
     }
 
     .hero-copy {
       position: absolute;
+      z-index: 2;
       left: 16px;
       right: 16px;
       bottom: 16px;
@@ -366,6 +446,63 @@
       font-size: 12px;
       line-height: 1.5;
       opacity: .9;
+    }
+
+    .carousel-dots {
+      position: absolute;
+      z-index: 3;
+      left: 16px;
+      right: 16px;
+      bottom: 10px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 5px;
+    }
+
+    .carousel-dots span {
+      width: 5px;
+      height: 5px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.62);
+      animation: carouselDot 12s infinite;
+    }
+
+    .carousel-dots span:nth-child(2) {
+      animation-delay: 4s;
+    }
+
+    .carousel-dots span:nth-child(3) {
+      animation-delay: 8s;
+    }
+
+    @keyframes carouselFade {
+      0%,
+      26% {
+        opacity: 1;
+        transform: scale(1.02);
+      }
+
+      33%,
+      100% {
+        opacity: 0;
+        transform: scale(1.06);
+      }
+    }
+
+    @keyframes carouselDot {
+      0%,
+      26% {
+        width: 16px;
+        background: #fff;
+        opacity: .96;
+      }
+
+      33%,
+      100% {
+        width: 5px;
+        background: rgba(255,255,255,.62);
+        opacity: .72;
+      }
     }
 
     .panel {
@@ -587,6 +724,12 @@
       border-color: #f7c7d3;
       background: var(--rose-soft);
       color: var(--rose);
+    }
+
+    .mini-action.publish {
+      border-color: #f2d48d;
+      background: var(--gold-soft);
+      color: var(--amber);
     }
 
     .button-row {
@@ -1588,7 +1731,84 @@
     }
 
     .advanced-portfolio-content .hero-photo.small {
-      height: 132px;
+      height: 168px;
+      border: 1px solid rgba(198, 155, 88, 0.42);
+      box-shadow: 0 18px 34px rgba(0, 0, 0, 0.28);
+    }
+
+    .advanced-shell {
+      background: #14110e;
+      border-color: rgba(206, 162, 94, 0.28);
+    }
+
+    .advanced-shell .status,
+    .advanced-shell .nav {
+      color: #f2e6d3;
+      background: #16120f;
+      border-bottom-color: rgba(206, 162, 94, 0.28);
+    }
+
+    .advanced-shell .nav-title {
+      color: #f4eadb;
+    }
+
+    .advanced-shell .nav-action {
+      color: #d6bd92;
+      background: rgba(255, 247, 229, 0.06);
+      border-color: rgba(206, 162, 94, 0.34);
+      box-shadow: none;
+    }
+
+    .advanced-shell .wx-capsule {
+      color: #e3cda5;
+      background: rgba(255, 247, 229, 0.07);
+      border-color: rgba(206, 162, 94, 0.3);
+      box-shadow: none;
+    }
+
+    .advanced-shell .capsule-divider {
+      background: rgba(206, 162, 94, 0.28);
+    }
+
+    .advanced-portfolio-content {
+      background:
+        linear-gradient(180deg, #17120f 0%, #221913 48%, #11100f 100%);
+      color: #f4eadb;
+    }
+
+    .advanced-portfolio-content .shade {
+      background: linear-gradient(180deg, rgba(0,0,0,0.06), rgba(10, 8, 7, 0.78));
+    }
+
+    .advanced-portfolio-content .panel {
+      color: #f4eadb;
+      background:
+        linear-gradient(180deg, rgba(49, 37, 27, 0.94), rgba(24, 19, 16, 0.96));
+      border-color: rgba(206, 162, 94, 0.32);
+      box-shadow: 0 14px 28px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255,255,255,0.06);
+    }
+
+    .advanced-portfolio-content .name,
+    .advanced-portfolio-content .date-box b {
+      color: #f6ead6;
+    }
+
+    .advanced-portfolio-content .desc,
+    .advanced-portfolio-content .date-box span {
+      color: rgba(244, 234, 219, 0.68);
+    }
+
+    .advanced-portfolio-content .pill {
+      color: #ead4ac;
+      background: rgba(206, 162, 94, 0.14);
+      border-color: rgba(206, 162, 94, 0.34);
+    }
+
+    .advanced-portfolio-content .pill.rose,
+    .advanced-portfolio-content .pill.teal {
+      color: #f0c987;
+      background: rgba(206, 162, 94, 0.16);
+      border-color: rgba(206, 162, 94, 0.42);
     }
 
     .advanced-portfolio-content .media-grid {
@@ -1597,6 +1817,49 @@
 
     .advanced-portfolio-content .media-tile {
       min-height: 104px;
+      border: 1px solid rgba(206, 162, 94, 0.28);
+      box-shadow: 0 14px 24px rgba(0, 0, 0, 0.24);
+    }
+
+    .advanced-portfolio-content .media-tile::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      background: linear-gradient(180deg, rgba(18, 13, 9, 0.05), rgba(16, 11, 8, 0.42));
+      pointer-events: none;
+    }
+
+    .advanced-portfolio-content .media-label {
+      z-index: 1;
+      color: #f6ead6;
+      text-shadow: 0 2px 10px rgba(0,0,0,0.44);
+    }
+
+    .advanced-portfolio-content .play {
+      color: #17110c;
+      background: rgba(229, 194, 127, 0.92);
+    }
+
+    .advanced-portfolio-content .date-box {
+      background: rgba(16, 13, 11, 0.72);
+      border-color: rgba(206, 162, 94, 0.32);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+    }
+
+    .advanced-portfolio-content .button {
+      color: #17110c;
+      background: linear-gradient(180deg, #e5c27f, #a87938);
+      box-shadow: 0 12px 24px rgba(168, 121, 56, 0.22);
+    }
+
+    .advanced-portfolio-content .contact-card .qr {
+      background:
+        linear-gradient(90deg, #e9d8b8 10px, transparent 10px) 0 0 / 24px 24px,
+        linear-gradient(#e9d8b8 10px, transparent 10px) 0 0 / 24px 24px,
+        #17110c;
+      border-color: #21180f;
+      outline-color: rgba(206, 162, 94, 0.38);
     }
 
     .schedule-query {
@@ -1813,6 +2076,15 @@
       grid-template-columns: repeat(2, 1fr);
     }
 
+    .segmented.portfolio-segmented {
+      width: 100%;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .portfolio-segmented .segment {
+      cursor: pointer;
+    }
+
     .segment {
       appearance: none;
       -webkit-appearance: none;
@@ -1903,6 +2175,10 @@
       box-shadow: var(--shadow-soft);
     }
 
+    .portfolio-row[hidden] {
+      display: none;
+    }
+
     .thumb {
       width: 74px;
       height: 64px;
@@ -1915,6 +2191,64 @@
 
     .thumb.square {
       height: 74px;
+    }
+
+    .selected-work-row {
+      grid-template-columns: 56px 1fr auto;
+      min-height: 66px;
+    }
+
+    .selected-work-list {
+      max-height: 264px;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding-right: 2px;
+    }
+
+    .selected-work-list::-webkit-scrollbar {
+      width: 0;
+      height: 0;
+    }
+
+    .selected-work-thumb {
+      width: 56px;
+      height: 46px;
+      border-radius: 7px;
+      overflow: hidden;
+      position: relative;
+      background: var(--line);
+      box-shadow: var(--shadow-soft);
+      border: 1px solid rgba(17, 24, 39, 0.06);
+    }
+
+    .selected-work-thumb.video::after {
+      content: "▶";
+      position: absolute;
+      right: 5px;
+      bottom: 5px;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: rgba(255, 255, 255, 0.92);
+      color: var(--ink);
+      font-size: 10px;
+      font-weight: 900;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+    }
+
+    .selected-work-more {
+      width: 56px;
+      height: 46px;
+      border-radius: 7px;
+      display: grid;
+      place-items: center;
+      background: var(--surface-2);
+      color: var(--muted);
+      border: 1px solid var(--line);
+      font-weight: 900;
+      box-shadow: var(--shadow-soft);
     }
 
     .upload-box {
@@ -2117,6 +2451,107 @@
       font-weight: 900;
     }
 
+    .component-intro-content {
+      gap: 10px;
+      padding-bottom: 26px;
+    }
+
+    .component-intro-content .panel {
+      overflow: visible;
+    }
+
+    .component-intro-content .textarea {
+      min-height: 70px;
+      display: block;
+      padding: 10px 12px;
+    }
+
+    .component-intro-content .component-showcase {
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+
+    .component-intro-content .library-card {
+      min-height: 0;
+      grid-template-columns: 34px minmax(0, 1fr) 64px;
+      align-items: center;
+      align-content: center;
+      gap: 9px;
+      padding: 9px;
+    }
+
+    .component-intro-content .library-card > div:nth-child(2) {
+      min-width: 0;
+    }
+
+    .component-intro-content .library-card .desc {
+      font-size: 11px;
+      line-height: 1.45;
+    }
+
+    .component-intro-content .template-preview {
+      width: 64px;
+      min-height: 48px;
+      height: 48px;
+      grid-template-rows: 1fr;
+      justify-self: end;
+    }
+
+    .component-intro-content .mini-avatar {
+      width: 30px;
+      height: 30px;
+    }
+
+    .component-intro-content .library-card .row {
+      gap: 5px;
+      justify-self: end;
+    }
+
+    .component-intro-content .library-card .pill {
+      min-height: 21px;
+      padding: 0 7px;
+      font-size: 10px;
+    }
+
+    .component-intro-content .mini-grid {
+      width: 64px;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 4px;
+      justify-self: end;
+    }
+
+    .component-intro-content .mini-block {
+      height: 20px;
+      border-radius: 5px;
+    }
+
+    .component-intro-content .library-card .pill-row {
+      width: 72px;
+      display: grid;
+      gap: 4px;
+      justify-self: end;
+    }
+
+    .component-intro-content .library-card .pill-row .pill {
+      justify-content: flex-start;
+      min-height: 19px;
+      padding: 0 5px;
+      font-size: 9px;
+      white-space: nowrap;
+    }
+
+    .component-intro-content .library-card .qr {
+      width: 44px;
+      height: 44px;
+      border-width: 4px;
+      justify-self: end;
+    }
+
+    .component-intro-content .component-row {
+      min-height: 54px;
+      align-items: start;
+    }
+
     .rule-list {
       display: grid;
       gap: 7px;
@@ -2190,7 +2625,7 @@
       <div class="title-block">
         <div class="eyebrow">微信小程序 SaaS 详细设计稿 / v1.1</div>
         <h1>微档集 Pro</h1>
-        <p class="subtitle">为婚庆司仪、化妆师、模特及团队设计的作品集与档期管理小程序。新版补充积分充值、作品维护、作品集维护、自定义时间段档期、团队成员管理和高级组件库展示，便于客户理解完整维护和盈利流程。</p>
+        <p class="subtitle">为婚庆司仪、化妆师、模特及团队设计的作品集与档期管理小程序。新版补充积分充值、作品维护、作品集维护、自定义时间段档期、团队成员管理和组件库简介，便于客户理解完整维护和盈利流程。</p>
       </div>
       <div class="legend">
         <div class="legend-item">
@@ -3057,8 +3492,64 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">07 作品维护页</div>
-          <div class="screen-note">上传、封面、标签</div>
+          <div class="screen-title">07 批量添加作品</div>
+          <div class="screen-note">最多 9 个 / 统一标签</div>
+        </div>
+        <div class="phone">
+          <div class="phone-inner">
+            <div class="status"><span>09:41</span><div class="status-icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
+            <div class="nav">
+              <div class="nav-action">‹</div>
+              <div class="nav-title">添加作品</div>
+              <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
+            </div>
+            <div class="content">
+              <div class="upload-box">
+                <div>
+                  <div class="upload-icon">＋</div>
+                  <b>选择图片或视频</b>
+                  <p class="desc" style="margin-top:6px">一次最多勾选 9 个，标题默认使用文件名。</p>
+                </div>
+              </div>
+              <div class="panel stack">
+                <div class="row">
+                  <p class="name">已选作品</p>
+                  <span class="pill teal">9 / 9</span>
+                </div>
+                <div class="component-list selected-work-list">
+                  <div class="component-row selected-work-row"><div class="selected-work-thumb asset-1"></div><div><b>outdoor_wedding_01.jpg</b><p class="desc">默认标题 · 图片</p></div><span>›</span></div>
+                  <div class="component-row selected-work-row"><div class="selected-work-thumb asset-5 video"></div><div><b>welcome_clip_01.mp4</b><p class="desc">默认标题 · 视频 00:42</p></div><span>›</span></div>
+                  <div class="component-row selected-work-row"><div class="selected-work-thumb asset-3"></div><div><b>ring_closeup_03.jpg</b><p class="desc">默认标题 · 图片</p></div><span>›</span></div>
+                  <div class="component-row selected-work-row"><div class="selected-work-thumb asset-6"></div><div><b>banquet_table_04.jpg</b><p class="desc">默认标题 · 图片</p></div><span>›</span></div>
+                  <div class="component-row selected-work-row"><div class="selected-work-thumb asset-7"></div><div><b>makeup_detail_05.jpg</b><p class="desc">默认标题 · 图片</p></div><span>›</span></div>
+                  <div class="component-row selected-work-row"><div class="selected-work-thumb asset-2 video"></div><div><b>ceremony_vows_06.mp4</b><p class="desc">默认标题 · 视频 01:18</p></div><span>›</span></div>
+                  <div class="component-row selected-work-row"><div class="selected-work-thumb asset-8"></div><div><b>bridal_portrait_07.jpg</b><p class="desc">默认标题 · 图片</p></div><span>›</span></div>
+                  <div class="component-row selected-work-row"><div class="selected-work-thumb asset-4"></div><div><b>host_profile_08.jpg</b><p class="desc">默认标题 · 图片</p></div><span>›</span></div>
+                  <div class="component-row selected-work-row"><div class="selected-work-thumb asset-6 video"></div><div><b>first_dance_09.mp4</b><p class="desc">默认标题 · 视频 00:36</p></div><span>›</span></div>
+                </div>
+              </div>
+              <div class="panel stack">
+                <div class="form-row">
+                  <div class="label">统一标签（可选）</div>
+                  <div class="pill-row">
+                    <span class="pill teal">高端婚礼</span>
+                    <span class="pill blue">户外仪式</span>
+                    <span class="pill">双语主持</span>
+                    <span class="pill">＋ 添加</span>
+                  </div>
+                </div>
+                <div class="cost-note">选中的标签会同时应用到本次 9 个作品；作品说明可保存后补充。</div>
+              </div>
+              <button class="button full">保存作品</button>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen-card">
+        <div class="screen-meta">
+          <div class="screen-title">07B 作品编辑页</div>
+          <div class="screen-note">单个作品 / 标题标签说明</div>
         </div>
         <div class="phone">
           <div class="phone-inner">
@@ -3069,11 +3560,15 @@
               <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
             </div>
             <div class="content">
-              <div class="upload-box">
-                <div>
-                  <div class="upload-icon">＋</div>
-                  <b>上传图片或视频</b>
-                  <p class="desc" style="margin-top:6px">图片用于轮播、列表、封面；保存成功消耗 1 积分。</p>
+              <div class="panel">
+                <div class="row">
+                  <div class="row" style="justify-content:flex-start">
+                    <div class="thumb asset-1"></div>
+                    <div>
+                      <p class="name">outdoor_wedding_01.jpg</p>
+                      <p class="desc">图片 · 上传于 06-18</p>
+                    </div>
+                  </div>
                 </div>
               </div>
               <div class="panel stack">
@@ -3126,53 +3621,64 @@
               <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
             </div>
             <div class="content">
-              <div class="segmented">
-                <div class="segment active">个人</div>
-                <div class="segment">团队</div>
-                <div class="segment">草稿</div>
+              <div class="segmented portfolio-segmented" data-portfolio-tabs>
+                <button class="segment active" type="button" data-portfolio-filter="personal" aria-pressed="true">个人</button>
+                <button class="segment" type="button" data-portfolio-filter="team" aria-pressed="false">团队</button>
               </div>
-              <div class="panel stack">
+              <div class="panel stack" data-portfolio-list>
                 <div class="row">
-                  <p class="name">我的作品集</p>
-                  <span class="pill teal">4 已发布</span>
+                  <p class="name" data-portfolio-title>个人作品集</p>
+                  <div class="pill-row" data-portfolio-summary><span class="pill teal">2 已发布</span><span class="pill amber">1 草稿</span></div>
                 </div>
-                <div class="portfolio-row">
+                <div class="portfolio-row" data-portfolio-type="personal">
                   <div class="thumb square asset-2"></div>
                   <div>
                     <b>林安婚礼司仪</b>
                     <p class="desc">标准个人作品集 · 最近更新 06-16</p>
                     <div class="pill-row" style="margin-top:6px"><span class="pill teal">已发布</span><span class="pill">访问 428</span></div>
                   </div>
-                  <span>›</span>
+                  <div class="pill-row"><button class="mini-action" type="button">分享</button><span>›</span></div>
                 </div>
-                <div class="portfolio-row">
+                <div class="portfolio-row" data-portfolio-type="personal">
                   <div class="thumb square asset-1"></div>
                   <div>
                     <b>高端晚宴主持精选</b>
                     <p class="desc">高级个人作品集 · AI 组件页</p>
                     <div class="pill-row" style="margin-top:6px"><span class="pill teal">已发布</span><span class="pill">访问 312</span></div>
                   </div>
-                  <span>›</span>
+                  <div class="pill-row"><button class="mini-action" type="button">分享</button><span>›</span></div>
                 </div>
-                <div class="portfolio-row">
+                <div class="portfolio-row" data-portfolio-type="personal">
+                  <div class="thumb square asset-6"></div>
+                  <div>
+                    <b>户外仪式作品集</b>
+                    <p class="desc">标准个人作品集 · 待发布</p>
+                    <div class="pill-row" style="margin-top:6px"><span class="pill amber">草稿</span><span class="pill">轮播 3 图</span></div>
+                  </div>
+                  <div class="pill-row"><button class="mini-action publish" type="button">发布</button><span>›</span></div>
+                </div>
+                <div class="portfolio-row" data-portfolio-type="team" hidden>
                   <div class="thumb square asset-6"></div>
                   <div>
                     <b>星曜司仪团</b>
                     <p class="desc">标准团队作品集 · 12 位成员</p>
-                    <div class="pill-row" style="margin-top:6px"><span class="pill blue">团队</span><span class="pill">访问 216</span></div>
+                    <div class="pill-row" style="margin-top:6px"><span class="pill teal">已发布</span><span class="pill">访问 216</span></div>
                   </div>
-                  <span>›</span>
+                  <div class="pill-row"><button class="mini-action" type="button">分享</button><span>›</span></div>
+                </div>
+                <div class="portfolio-row" data-portfolio-type="team" hidden>
+                  <div class="thumb square asset-4"></div>
+                  <div>
+                    <b>星河主持团队</b>
+                    <p class="desc">高级团队作品集 · 待发布</p>
+                    <div class="pill-row" style="margin-top:6px"><span class="pill amber">草稿</span><span class="pill blue">成员 8</span></div>
+                  </div>
+                  <div class="pill-row"><button class="mini-action publish" type="button">发布</button><span>›</span></div>
                 </div>
               </div>
               <div class="button-row">
-                <button class="button">新建标准作品集</button>
-                <button class="button premium">新建高级作品集</button>
-              </div>
-              <div class="panel tight">
-                <div class="row">
-                  <span class="desc">分享后访客访问会自动进入访问记录</span>
-                  <span class="pill">分享</span>
-                </div>
+                <button class="button" data-portfolio-standard-action>新建标准个人作品集</button>
+                <button class="button premium" data-portfolio-advanced-action>新建高级个人作品集</button>
               </div>
             </div>
             <div class="tabbar">
@@ -3232,23 +3738,11 @@
                 <div class="component-row"><div class="handle">3</div><div><b>双列作品列表</b><p class="desc">8 个图片或视频作品</p></div><span>›</span></div>
                 <div class="component-row"><div class="handle">4</div><div><b>微信二维码</b><p class="desc">使用个人联系二维码</p></div><span>›</span></div>
               </div>
-              <div class="panel stack">
-                <div class="row">
-                  <p class="name">发布前检查</p>
-                  <span class="pill amber">1 项待处理</span>
-                </div>
-                <div class="rule-list">
-                  <div class="rule-item"><span class="check">✓</span><span>分享封面、头像、标题已填写。</span></div>
-                  <div class="rule-item"><span class="check">✓</span><span>档期查询组件已开启并关联个人档期。</span></div>
-                  <div class="rule-item"><span class="check">!</span><span>微信二维码建议上传高清图，避免访客长按识别失败。</span></div>
-                </div>
-              </div>
               <div class="button-row">
                 <button class="button secondary">保存草稿</button>
                 <button class="button secondary">预览</button>
                 <button class="button">发布</button>
               </div>
-              <div class="cost-note">保存或发布成功消耗 1 积分；预览页查看、播放、查询不扣积分。</div>
             </div>
           </div>
         </div>
@@ -3267,15 +3761,20 @@
               <div class="nav-title">林安婚礼司仪</div>
               <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
             </div>
-            <div class="hero-photo asset-2">
-              <div class="shade"></div>
-              <div class="hero-copy">
-                <h2>林安婚礼司仪</h2>
-                <p>沉稳、温暖、节奏清晰的高端婚礼主持</p>
+            <div class="content preview-scroll">
+              <div class="hero-photo hero-carousel">
+                <div class="carousel-slide asset-2"></div>
+                <div class="carousel-slide asset-1"></div>
+                <div class="carousel-slide asset-3"></div>
+                <div class="shade"></div>
+                <div class="hero-copy">
+                  <h2>林安婚礼司仪</h2>
+                  <p>沉稳、温暖、节奏清晰的高端婚礼主持</p>
+                </div>
+                <div class="carousel-dots"><span></span><span></span><span></span></div>
               </div>
-            </div>
-            <div class="content">
-              <div class="panel">
+              <div class="preview-scroll-body">
+                <div class="panel">
                 <div class="row">
                   <div class="row" style="justify-content:flex-start">
                     <div class="avatar large"><div class="asset-4" style="width:100%;height:100%"></div></div>
@@ -3290,7 +3789,7 @@
                   </div>
                 </div>
               </div>
-              <div class="panel stack">
+                <div class="panel stack">
                 <div class="row">
                   <p class="name">查询档期</p>
                   <span class="pill teal">个人</span>
@@ -3305,18 +3804,19 @@
                   <span class="pill"><span class="swatch" style="background:var(--slot-welcome)"></span>迎亲档 07:30-09:30 待定</span>
                 </div>
               </div>
-              <div class="media-grid">
-                <div class="media-tile asset-1"><div class="media-label"><span>户外仪式</span></div></div>
-                <div class="media-tile asset-3"><div class="media-label"><span>中式婚礼</span></div></div>
-                <div class="media-tile asset-5"><div class="media-label"><span>现场剪影</span><span class="play">▶</span></div></div>
-                <div class="media-tile asset-6"><div class="media-label"><span>晚宴互动</span></div></div>
-              </div>
-              <div class="panel contact-card">
-                <div class="contact-copy">
-                  <p class="name">扫码联系</p>
-                  <p class="desc">长按识别微信二维码，沟通报价与档期。</p>
+                <div class="media-grid">
+                  <div class="media-tile asset-1"><div class="media-label"><span>户外仪式</span></div></div>
+                  <div class="media-tile asset-3"><div class="media-label"><span>中式婚礼</span></div></div>
+                  <div class="media-tile asset-5"><div class="media-label"><span>现场剪影</span><span class="play">▶</span></div></div>
+                  <div class="media-tile asset-6"><div class="media-label"><span>晚宴互动</span></div></div>
                 </div>
-                <div class="qr"></div>
+                <div class="panel contact-card">
+                  <div class="contact-copy">
+                    <p class="name">扫码联系</p>
+                    <p class="desc">长按识别微信二维码，沟通报价与档期。</p>
+                  </div>
+                  <div class="qr"></div>
+                </div>
               </div>
             </div>
           </div>
@@ -3336,7 +3836,7 @@
               <div class="nav-title">高级个人作品集</div>
               <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
             </div>
-            <div class="content">
+            <div class="content advanced-maintenance-content">
               <div class="panel stack">
                 <div class="row">
                   <div>
@@ -3350,12 +3850,16 @@
                   <div class="media-tile asset-2"><span class="number-badge">2</span></div>
                   <div class="media-tile asset-3"><span class="number-badge">3</span></div>
                   <div class="media-tile asset-6"><span class="number-badge">4</span></div>
+                  <div class="media-tile asset-5"><span class="number-badge">5</span></div>
+                  <div class="media-tile asset-4"><span class="number-badge">6</span></div>
+                  <div class="media-tile asset-7"><span class="number-badge">7</span></div>
+                  <div class="media-tile asset-8"><span class="number-badge">8</span></div>
                 </div>
               </div>
               <div class="panel stack">
                 <div class="form-row">
                   <div class="label">自然语言描述</div>
-                  <div class="input textarea">1号、2号、3号作品使用轮播图组件放最上面，下面放头像，再下面把5号、6号、7号、8号作品放列表，再下面放档期查询组件，最下面放微信二维码。</div>
+                  <div class="input textarea">1号、2号、3号作品使用轮播图组件放最上面，下面放头像，再下面把5号、6号、7号、8号作品放列表，再下面放档期查询组件，最下面放微信二维码。不要白底背景，要高级感。</div>
                 </div>
                 <div class="cost-note">本次 AI 生成预计消耗 10 积分，生成失败不扣除。</div>
                 <button class="button premium full">AI 生成页面</button>
@@ -3390,7 +3894,7 @@
           <div class="screen-note">返回维护页 / 预览不扣分</div>
         </div>
         <div class="phone">
-          <div class="phone-inner">
+          <div class="phone-inner advanced-shell">
             <div class="status"><span>09:41</span><div class="status-icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
             <div class="nav">
               <div class="nav-action">‹</div>
@@ -3398,12 +3902,16 @@
               <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
             </div>
             <div class="content visitor-fit advanced-portfolio-content">
-              <div class="hero-photo small asset-1">
+              <div class="hero-photo small hero-carousel">
+                <div class="carousel-slide asset-1"></div>
+                <div class="carousel-slide asset-2"></div>
+                <div class="carousel-slide asset-5"></div>
                 <div class="shade"></div>
                 <div class="hero-copy">
                   <h2>高端晚宴主持精选</h2>
                   <p>AI 组件页 · 晚宴控场 / 双语主持 / 户外仪式</p>
                 </div>
+                <div class="carousel-dots"><span></span><span></span><span></span></div>
               </div>
               <div class="panel">
                 <div class="row">
@@ -3446,83 +3954,83 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">11 高级组件库展示</div>
-          <div class="screen-note">自然语言可调用的组件</div>
+          <div class="screen-title">11 组件库简介</div>
+          <div class="screen-note">给维护者看的页面模块说明</div>
         </div>
         <div class="phone">
           <div class="phone-inner">
             <div class="status"><span>09:41</span><div class="status-icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
             <div class="nav">
               <div class="nav-action">‹</div>
-              <div class="nav-title">高级组件库</div>
+              <div class="nav-title">组件库简介</div>
               <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
             </div>
-            <div class="content">
+            <div class="content component-intro-content">
               <div class="panel stack">
                 <div class="row">
                   <div>
-                    <p class="name">客户可理解的搭建方式</p>
-                    <p class="desc">选择素材序号，再用自然语言描述组件顺序。</p>
+                    <p class="name">像搭积木一样搭作品集</p>
+                    <p class="desc">不需要懂前端开发，只要说清楚想先展示什么、客户接着看什么。</p>
                   </div>
-                  <span class="pill rose">AI</span>
+                  <span class="pill rose">维护者视角</span>
                 </div>
-                <div class="input textarea">把 1、2、3 放轮播图；下面放团队介绍；再放成员作品集列表；最后放团队档期和微信二维码。</div>
+                <div class="input textarea">例如：顶部先放几张最能代表风格的照片，接着介绍团队，再展示成员作品集，最后放档期查询和微信二维码。</div>
               </div>
               <div class="component-showcase">
                 <div class="library-card">
                   <div class="library-icon">轮</div>
                   <div>
-                    <b>轮播图组件</b>
-                    <p class="desc">适合首屏展示 3-5 张图片</p>
+                    <b>轮播图</b>
+                    <p class="desc">放在页面最上方，自动轮播几张代表作品，让客户第一眼看到你的风格。</p>
                   </div>
-                  <div class="template-preview" style="min-height:76px;grid-template-rows:1fr"><div class="template-top asset-1"></div></div>
+                  <div class="template-preview"><div class="template-top asset-1"></div></div>
                 </div>
                 <div class="library-card">
                   <div class="library-icon" style="background:var(--teal-soft);color:var(--teal)">人</div>
                   <div>
-                    <b>头像介绍组件</b>
-                    <p class="desc">姓名、职业、城市、标签</p>
+                    <b>头像与简介</b>
+                    <p class="desc">告诉客户你是谁、在哪服务、擅长什么，比如司仪、化妆、双语主持。</p>
                   </div>
                   <div class="row" style="justify-content:flex-start"><div class="mini-avatar"><div class="asset-4" style="width:100%;height:100%"></div></div><span class="pill teal">标签</span></div>
                 </div>
                 <div class="library-card">
                   <div class="library-icon" style="background:var(--amber-soft);color:var(--amber)">列</div>
                   <div>
-                    <b>双列作品列表</b>
-                    <p class="desc">图片、视频、成员作品集</p>
+                    <b>作品列表</b>
+                    <p class="desc">集中展示图片、视频或成员作品集，适合让客户继续翻看案例。</p>
                   </div>
                   <div class="mini-grid"><div class="mini-block"></div><div class="mini-block"></div><div class="mini-block"></div></div>
                 </div>
                 <div class="library-card">
                   <div class="library-icon" style="background:var(--rose-soft);color:var(--rose)">档</div>
                   <div>
-                    <b>档期查询组件</b>
-                    <p class="desc">个人或团队，支持已定义档位</p>
+                    <b>档期查询</b>
+                    <p class="desc">客户选日期后能看到可约、待定或已约档位，减少反复问档期。</p>
                   </div>
                   <div class="pill-row"><span class="pill"><span class="swatch" style="background:var(--slot-noon)"></span>中午档</span><span class="pill"><span class="swatch" style="background:var(--slot-evening)"></span>晚间档</span><span class="pill"><span class="swatch" style="background:var(--slot-welcome)"></span>迎亲档</span></div>
                 </div>
                 <div class="library-card">
                   <div class="library-icon" style="background:var(--blue-soft);color:var(--blue)">码</div>
                   <div>
-                    <b>二维码联系组件</b>
-                    <p class="desc">个人微信或团队客服二维码</p>
+                    <b>扫码联系</b>
+                    <p class="desc">放个人微信或团队客服二维码，方便客户看完作品后直接咨询。</p>
                   </div>
                   <div class="qr"></div>
                 </div>
               </div>
               <div class="panel stack">
                 <div class="row">
-                  <p class="name">组件配置面板</p>
-                  <span class="pill blue">白名单</span>
+                  <p class="name">还可以补充这些模块</p>
+                  <span class="pill blue">按需选择</span>
                 </div>
-                <div class="component-row"><div class="handle">图</div><div><b>大图展示</b><p class="desc">单张作品强化视觉记忆</p></div><span>＋</span></div>
-                <div class="component-row"><div class="handle">文</div><div><b>文案段落</b><p class="desc">服务理念、报价说明、团队介绍</p></div><span>＋</span></div>
-                <div class="component-row"><div class="handle">码</div><div><b>微信二维码</b><p class="desc">个人二维码或团队客服二维码</p></div><span>＋</span></div>
+                <div class="component-row"><div class="handle">图</div><div><b>大图展示</b><p class="desc">单张照片放大展示，适合强调封面级作品。</p></div><span>＋</span></div>
+                <div class="component-row"><div class="handle">文</div><div><b>文字说明</b><p class="desc">写服务理念、报价说明、团队介绍或注意事项。</p></div><span>＋</span></div>
+                <div class="component-row"><div class="handle">标</div><div><b>分段标题</b><p class="desc">把页面分成“代表作品”“服务流程”“联系我们”等段落。</p></div><span>＋</span></div>
               </div>
               <div class="panel tight">
                 <div class="row">
-                  <span class="desc">AI 只生成组件结构，不生成可执行代码</span>
-                  <span class="pill teal">安全</span>
+                  <span class="desc">系统只会用这些页面模块搭建作品集，不需要维护者理解代码。</span>
+                  <span class="pill teal">易维护</span>
                 </div>
               </div>
             </div>
@@ -3543,15 +4051,20 @@
               <div class="nav-title">林安婚礼司仪</div>
               <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
             </div>
-            <div class="hero-photo asset-2">
-              <div class="shade"></div>
-              <div class="hero-copy">
-                <h2>林安婚礼司仪</h2>
-                <p>沉稳、温暖、节奏清晰的高端婚礼主持</p>
+            <div class="content preview-scroll">
+              <div class="hero-photo hero-carousel">
+                <div class="carousel-slide asset-2"></div>
+                <div class="carousel-slide asset-1"></div>
+                <div class="carousel-slide asset-3"></div>
+                <div class="shade"></div>
+                <div class="hero-copy">
+                  <h2>林安婚礼司仪</h2>
+                  <p>沉稳、温暖、节奏清晰的高端婚礼主持</p>
+                </div>
+                <div class="carousel-dots"><span></span><span></span><span></span></div>
               </div>
-            </div>
-            <div class="content">
-              <div class="panel">
+              <div class="preview-scroll-body">
+                <div class="panel">
                 <div class="row">
                   <div class="row" style="justify-content:flex-start">
                     <div class="avatar large"><div class="asset-4" style="width:100%;height:100%"></div></div>
@@ -3566,7 +4079,7 @@
                   </div>
                 </div>
               </div>
-              <div class="panel stack">
+                <div class="panel stack">
                 <div class="row">
                   <p class="name">查询档期</p>
                   <span class="pill teal">个人</span>
@@ -3581,18 +4094,19 @@
                   <span class="pill"><span class="swatch" style="background:var(--slot-welcome)"></span>迎亲档 07:30-09:30 待定</span>
                 </div>
               </div>
-              <div class="media-grid">
-                <div class="media-tile asset-1"><div class="media-label"><span>户外仪式</span></div></div>
-                <div class="media-tile asset-3"><div class="media-label"><span>中式婚礼</span></div></div>
-                <div class="media-tile asset-5"><div class="media-label"><span>现场剪影</span><span class="play">▶</span></div></div>
-                <div class="media-tile asset-6"><div class="media-label"><span>晚宴互动</span></div></div>
-              </div>
-              <div class="panel contact-card">
-                <div class="contact-copy">
-                  <p class="name">扫码联系</p>
-                  <p class="desc">长按识别微信二维码，沟通报价与档期。</p>
+                <div class="media-grid">
+                  <div class="media-tile asset-1"><div class="media-label"><span>户外仪式</span></div></div>
+                  <div class="media-tile asset-3"><div class="media-label"><span>中式婚礼</span></div></div>
+                  <div class="media-tile asset-5"><div class="media-label"><span>现场剪影</span><span class="play">▶</span></div></div>
+                  <div class="media-tile asset-6"><div class="media-label"><span>晚宴互动</span></div></div>
                 </div>
-                <div class="qr"></div>
+                <div class="panel contact-card">
+                  <div class="contact-copy">
+                    <p class="name">扫码联系</p>
+                    <p class="desc">长按识别微信二维码，沟通报价与档期。</p>
+                  </div>
+                  <div class="qr"></div>
+                </div>
               </div>
             </div>
           </div>
@@ -3605,7 +4119,7 @@
           <div class="screen-note">高级模板浏览页</div>
         </div>
         <div class="phone">
-          <div class="phone-inner">
+          <div class="phone-inner advanced-shell">
             <div class="status"><span>09:41</span><div class="status-icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
             <div class="nav">
               <div class="nav-action home">⌂</div>
@@ -3613,12 +4127,16 @@
               <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
             </div>
             <div class="content visitor-fit advanced-portfolio-content">
-              <div class="hero-photo small asset-1">
+              <div class="hero-photo small hero-carousel">
+                <div class="carousel-slide asset-1"></div>
+                <div class="carousel-slide asset-2"></div>
+                <div class="carousel-slide asset-5"></div>
                 <div class="shade"></div>
                 <div class="hero-copy">
                   <h2>高端晚宴主持精选</h2>
                   <p>AI 组件页 · 晚宴控场 / 双语主持 / 户外仪式</p>
                 </div>
+                <div class="carousel-dots"><span></span><span></span><span></span></div>
               </div>
               <div class="panel">
                 <div class="row">
@@ -3672,12 +4190,16 @@
               <div class="nav-title">林安婚礼司仪</div>
               <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
             </div>
-            <div class="hero-photo asset-2">
+            <div class="hero-photo hero-carousel">
+              <div class="carousel-slide asset-2"></div>
+              <div class="carousel-slide asset-1"></div>
+              <div class="carousel-slide asset-3"></div>
               <div class="shade"></div>
               <div class="hero-copy">
                 <h2>林安婚礼司仪</h2>
                 <p>沉稳、温暖、节奏清晰的高端婚礼主持</p>
               </div>
+              <div class="carousel-dots"><span></span><span></span><span></span></div>
             </div>
             <div class="content">
               <div class="panel">
@@ -3814,12 +4336,16 @@
               <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
             </div>
             <div class="content visitor-fit team-showcase-content">
-              <div class="hero-photo small asset-6">
+              <div class="hero-photo small hero-carousel">
+                <div class="carousel-slide asset-6"></div>
+                <div class="carousel-slide asset-5"></div>
+                <div class="carousel-slide asset-2"></div>
                 <div class="shade"></div>
                 <div class="hero-copy">
                   <h2>星曜司仪团</h2>
                   <p>12 位成员 / 上海杭州双城服务 / 团队唯一码 TM-2048</p>
                 </div>
+                <div class="carousel-dots"><span></span><span></span><span></span></div>
               </div>
               <div class="panel stack">
                 <div class="row">
@@ -4130,6 +4656,54 @@
       });
 
       window.addEventListener('resize', () => setHeroHeight(false));
+    });
+
+    document.querySelectorAll('[data-portfolio-tabs]').forEach((tabs) => {
+      const content = tabs.closest('.content');
+      if (!content) return;
+
+      const buttons = Array.from(tabs.querySelectorAll('[data-portfolio-filter]'));
+      const rows = Array.from(content.querySelectorAll('[data-portfolio-type]'));
+      const title = content.querySelector('[data-portfolio-title]');
+      const summary = content.querySelector('[data-portfolio-summary]');
+      const standardAction = content.querySelector('[data-portfolio-standard-action]');
+      const advancedAction = content.querySelector('[data-portfolio-advanced-action]');
+      const filterText = {
+        personal: {
+          title: '个人作品集',
+          summary: '<span class="pill teal">2 已发布</span><span class="pill amber">1 草稿</span>',
+          standard: '新建标准个人作品集',
+          advanced: '新建高级个人作品集'
+        },
+        team: {
+          title: '团队作品集',
+          summary: '<span class="pill teal">1 已发布</span><span class="pill amber">1 草稿</span>',
+          standard: '新建标准团队作品集',
+          advanced: '新建高级团队作品集'
+        }
+      };
+
+      const setFilter = (target) => {
+        const copy = filterText[target];
+        if (!copy) return;
+
+        buttons.forEach((button) => {
+          const active = button.dataset.portfolioFilter === target;
+          button.classList.toggle('active', active);
+          button.setAttribute('aria-pressed', String(active));
+        });
+        rows.forEach((row) => {
+          row.hidden = row.dataset.portfolioType !== target;
+        });
+        if (title) title.textContent = copy.title;
+        if (summary) summary.innerHTML = copy.summary;
+        if (standardAction) standardAction.textContent = copy.standard;
+        if (advancedAction) advancedAction.textContent = copy.advanced;
+      };
+
+      buttons.forEach((button) => {
+        button.addEventListener('click', () => setFilter(button.dataset.portfolioFilter));
+      });
     });
   </script>
 </body>
