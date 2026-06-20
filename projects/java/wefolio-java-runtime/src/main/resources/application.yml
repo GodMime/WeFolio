@@ -1,0 +1,24 @@
+spring:
+  application:
+    name: wefolio-java-runtime
+
+  datasource:
+    url: jdbc:mysql://sh-cdb-3x9o4a7c.sql.tencentcdb.com:28528/wefolio_dev?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
+    username: dev
+    password: 1qaz@WSXdcy
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    map-underscore-to-camel-case: true
+  mapper-locations: classpath:mapper/**/*.xml
+  type-aliases-package: com.jxc.wefolio.entity
+
+server:
+  port: 8080
