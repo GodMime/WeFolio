@@ -70,11 +70,13 @@
     </dependencies>
 
     <build>
+        <finalName>wefolio-java-runtime</finalName>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
+                    <mainClass>com.jxc.wefolio.WefolioJavaRuntimeApplication</mainClass>
                     <excludes>
                         <exclude>
                             <groupId>org.projectlombok</groupId>
@@ -115,6 +117,35 @@
                                     <artifactId>lombok</artifactId>
                                 </path>
                             </annotationProcessorPaths>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.1.0</version>
+                <executions>
+                    <execution>
+                        <id>generate-version</id>
+                        <phase>generate-resources</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <mkdir dir="${project.build.outputDirectory}" />
+                                <exec executable="sh" outputproperty="git.revision" failifexecutionfails="false">
+                                    <arg value="-c" />
+                                    <arg value="git -C ${project.basedir} rev-parse --short HEAD 2>/dev/null || echo 'unknown'" />
+                                </exec>
+                                <exec executable="sh" outputproperty="build.time" failifexecutionfails="false">
+                                    <arg value="-c" />
+                                    <arg value="date '+%Y-%m-%d %H:%M:%S'" />
+                                </exec>
+                                <echo file="${project.build.outputDirectory}/version.properties">build.version=${git.revision}
+build.time=${build.time}</echo>
+                            </target>
                         </configuration>
                     </execution>
                 </executions>
