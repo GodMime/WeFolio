@@ -2623,9 +2623,9 @@
   <main class="page">
     <section class="topbar">
       <div class="title-block">
-        <div class="eyebrow">微信小程序 SaaS 详细设计稿 / v1.1</div>
+        <div class="eyebrow">微信小程序 SaaS 详细设计稿 / v1.2</div>
         <h1>微档集 Pro</h1>
-        <p class="subtitle">为婚庆司仪、化妆师、模特及团队设计的作品集与档期管理小程序。新版补充积分充值、作品维护、作品集维护、自定义时间段档期、团队成员管理和组件库简介，便于客户理解完整维护和盈利流程。</p>
+        <p class="subtitle">为婚庆司仪、化妆师、模特及团队设计的作品集与档期管理小程序。新版补充团队拥有者、管理者、普通成员三级角色权限，并完善积分充值、作品维护、作品集维护、自定义时间段档期和成员管理流程。</p>
       </div>
       <div class="legend">
         <div class="legend-item">
@@ -2674,7 +2674,7 @@
                     <p class="name">欢迎使用微档集 Pro</p>
                     <p class="desc">适合司仪、化妆、模特和婚庆团队的作品展示工具。</p>
                   </div>
-                  <div class="avatar"><img src="https://dcy-oss-public.oss-cn-beijing.aliyuncs.com/weFolio/b0535c57-e46b-4549-9424-0cd0971a8e72.png" alt=""></div>
+                  <div class="avatar"><img src="https://dcy-oss-public.oss-cn-beijing.aliyuncs.com/weFolio/52d3f392-2eda-4308-a958-170947024123.png" alt=""></div>
                 </div>
               </div>
               <div class="panel stack">
@@ -2770,7 +2770,7 @@
                 <div class="row"><span class="name">跟进与团队</span><span class="desc">管理</span></div>
                 <div class="component-list">
                   <div class="component-row"><div class="handle">访</div><div><b>访问记录</b><p class="desc">访客来源、访问次数、跟进状态</p></div><span>›</span></div>
-                  <div class="component-row"><div class="handle">团</div><div><b>团队管理</b><p class="desc">成员、团队唯一码、团队作品集</p></div><span>›</span></div>
+                  <div class="component-row"><div class="handle">团</div><div><b>我的团队</b><p class="desc">按拥有者、管理者、普通成员显示可用功能</p></div><span>›</span></div>
                 </div>
               </div>
             </div>
@@ -3043,7 +3043,7 @@
       <article class="screen-card">
         <div class="screen-meta">
           <div class="screen-title">07 团队成员列表页</div>
-          <div class="screen-note">搜索、状态、添加成员</div>
+          <div class="screen-note">三种角色可查看 / 仅拥有者可维护</div>
         </div>
         <div class="phone">
           <div class="phone-inner">
@@ -3060,7 +3060,7 @@
                     <p class="name">星曜司仪团</p>
                     <p class="desc">团队唯一码 TM-2048 · 12 位成员</p>
                   </div>
-                  <span class="pill blue">管理员</span>
+                  <span class="pill blue">所有角色可查看</span>
                 </div>
               </div>
               <div class="search">⌕ 输入姓名、职业或个人唯一码</div>
@@ -3074,7 +3074,7 @@
                   <div class="mini-avatar"><div class="asset-4" style="width:100%;height:100%"></div></div>
                   <div>
                     <b>林安</b>
-                    <p class="desc">司仪 · MC-8392 · 管理员</p>
+                    <p class="desc">司仪 · MC-8392 · 拥有者</p>
                   </div>
                   <span class="pill teal">已加入</span>
                 </div>
@@ -3082,7 +3082,7 @@
                   <div class="mini-avatar"><div class="asset-7" style="width:100%;height:100%"></div></div>
                   <div>
                     <b>乔伊</b>
-                    <p class="desc">化妆师 · MU-1186 · 可展示</p>
+                    <p class="desc">化妆师 · MU-1186 · 管理者</p>
                   </div>
                   <span class="pill teal">已加入</span>
                 </div>
@@ -3090,7 +3090,7 @@
                   <div class="mini-avatar"><div class="asset-8" style="width:100%;height:100%"></div></div>
                   <div>
                     <b>陈予</b>
-                    <p class="desc">模特 · MD-7305 · 待本人确认</p>
+                    <p class="desc">模特 · MD-7305 · 普通成员</p>
                   </div>
                   <span class="pill amber">待确认</span>
                 </div>
@@ -3098,12 +3098,18 @@
                   <div class="mini-avatar"><div class="asset-2" style="width:100%;height:100%"></div></div>
                   <div>
                     <b>周承</b>
-                    <p class="desc">摄影 · PH-6021 · 仅团队可见</p>
+                    <p class="desc">摄影 · PH-6021 · 普通成员 · 仅团队可见</p>
                   </div>
                   <span class="pill">隐藏</span>
                 </div>
               </div>
               <button class="button full">通过个人唯一码添加成员</button>
+              <div class="panel tight">
+                <div class="row">
+                  <span class="desc">拥有者、管理者、普通成员均可查看列表；只有拥有者可以添加、移除成员及调整角色。</span>
+                  <span class="pill blue">唯一拥有者</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -3112,7 +3118,7 @@
       <article class="screen-card">
         <div class="screen-meta">
           <div class="screen-title">08 团队成员维护页</div>
-          <div class="screen-note">唯一码添加与权限设置</div>
+          <div class="screen-note">拥有者设置角色与展示权限</div>
         </div>
         <div class="phone">
           <div class="phone-inner">
@@ -3138,15 +3144,16 @@
                 </div>
               </div>
               <div class="panel stack">
-                <div class="field-grid">
-                  <div class="form-row">
-                    <div class="label">团队角色</div>
-                    <div class="input">普通成员</div>
+                <div class="form-row">
+                  <div class="label">团队角色</div>
+                  <div class="segmented two">
+                    <div class="segment">管理者</div>
+                    <div class="segment active">普通成员</div>
                   </div>
-                  <div class="form-row">
-                    <div class="label">职业身份</div>
-                    <div class="input">化妆师</div>
-                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="label">职业身份</div>
+                  <div class="input">化妆师</div>
                 </div>
                 <div class="form-row">
                   <div class="label">展示权限</div>
@@ -3163,6 +3170,17 @@
                     <span class="pill teal">头像资料</span>
                     <span class="pill">个人作品素材</span>
                   </div>
+                </div>
+              </div>
+              <div class="panel stack">
+                <div class="row">
+                  <p class="name">角色权限</p>
+                  <span class="pill blue">按角色固定</span>
+                </div>
+                <div class="rule-list">
+                  <div class="rule-item"><span class="check">拥</span><span><b>拥有者</b>：成员维护、作品集管理、预览、分享</span></div>
+                  <div class="rule-item"><span class="check">管</span><span><b>管理者</b>：作品集管理、预览、分享</span></div>
+                  <div class="rule-item"><span class="check">普</span><span><b>普通成员</b>：仅预览、分享</span></div>
                 </div>
               </div>
               <div class="panel stack">
@@ -3383,7 +3401,7 @@
       <article class="screen-card">
         <div class="screen-meta">
           <div class="screen-title">12 作品集</div>
-          <div class="screen-note">个人 / 团队 / 发布状态</div>
+          <div class="screen-note">团队作品集按角色显示操作</div>
         </div>
         <div class="phone">
           <div class="phone-inner">
@@ -3435,18 +3453,30 @@
                   <div>
                     <b>星曜司仪团</b>
                     <p class="desc">标准团队作品集 · 12 位成员</p>
-                    <div class="pill-row" style="margin-top:6px"><span class="pill teal">已发布</span><span class="pill">访问 216</span></div>
+                    <div class="pill-row" style="margin-top:6px"><span class="pill teal">已发布</span><span class="pill blue">拥有者</span></div>
+                    <div class="pill-row" style="margin-top:6px"><button class="mini-action" type="button">管理</button><button class="mini-action" type="button">预览</button><button class="mini-action" type="button">分享</button></div>
                   </div>
-                  <div class="pill-row"><button class="mini-action" type="button">分享</button><span>›</span></div>
+                  <span>›</span>
                 </div>
                 <div class="portfolio-row" data-portfolio-type="team" hidden>
                   <div class="thumb square asset-4"></div>
                   <div>
                     <b>星河主持团队</b>
                     <p class="desc">高级团队作品集 · 待发布</p>
-                    <div class="pill-row" style="margin-top:6px"><span class="pill amber">草稿</span><span class="pill blue">成员 8</span></div>
+                    <div class="pill-row" style="margin-top:6px"><span class="pill amber">草稿</span><span class="pill blue">管理者</span></div>
+                    <div class="pill-row" style="margin-top:6px"><button class="mini-action" type="button">管理</button><button class="mini-action" type="button">预览</button></div>
                   </div>
-                  <div class="pill-row"><button class="mini-action publish" type="button">发布</button><span>›</span></div>
+                  <span>›</span>
+                </div>
+                <div class="portfolio-row" data-portfolio-type="team" hidden>
+                  <div class="thumb square asset-5"></div>
+                  <div>
+                    <b>光影婚礼团队</b>
+                    <p class="desc">标准团队作品集 · 6 位成员</p>
+                    <div class="pill-row" style="margin-top:6px"><span class="pill teal">已发布</span><span class="pill">普通成员</span></div>
+                    <div class="pill-row" style="margin-top:6px"><button class="mini-action" type="button">预览</button><button class="mini-action" type="button">分享</button></div>
+                  </div>
+                  <span>›</span>
                 </div>
               </div>
               <div class="button-row">
@@ -4677,7 +4707,7 @@
         },
         team: {
           title: '团队作品集',
-          summary: '<span class="pill teal">1 已发布</span><span class="pill amber">1 草稿</span>',
+          summary: '<span class="pill teal">2 已发布</span><span class="pill amber">1 草稿</span>',
           standard: '新建标准团队作品集',
           advanced: '新建高级团队作品集'
         }
