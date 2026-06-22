@@ -1,5 +1,7 @@
 package com.jxc.wefolio.config;
 
+import java.util.concurrent.Executors;
+
 import com.qcloud.cos.COSClient;
 import com.qcloud.cos.ClientConfig;
 import com.qcloud.cos.auth.BasicCOSCredentials;
@@ -11,7 +13,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-import java.util.concurrent.Executors;
 
 @Configuration
 @RequiredArgsConstructor
