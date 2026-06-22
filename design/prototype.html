@@ -1559,6 +1559,89 @@
       font-weight: 800;
     }
 
+    .label-with-help {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .role-field {
+      position: relative;
+    }
+
+    .role-help-trigger {
+      width: 20px;
+      height: 20px;
+      display: inline-grid;
+      place-items: center;
+      padding: 0;
+      border: 1px solid #bdd5ff;
+      border-radius: 50%;
+      background: var(--blue-soft);
+      color: var(--blue);
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 900;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .role-help-trigger[aria-expanded="true"] {
+      color: #fff;
+      background: var(--blue);
+    }
+
+    .role-help-popover {
+      position: absolute;
+      z-index: 40;
+      top: 28px;
+      right: 0;
+      width: min(272px, 100%);
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+      border: 1px solid #bdd5ff;
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 16px 34px rgba(17, 24, 39, 0.2);
+    }
+
+    .role-help-popover[hidden] {
+      display: none;
+    }
+
+    .role-help-popover::before {
+      content: "";
+      position: absolute;
+      top: -6px;
+      left: 58px;
+      width: 10px;
+      height: 10px;
+      border-top: 1px solid #bdd5ff;
+      border-left: 1px solid #bdd5ff;
+      background: #fff;
+      transform: rotate(45deg);
+    }
+
+    .role-help-title {
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .role-help-row {
+      display: grid;
+      grid-template-columns: 58px 1fr;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.5;
+    }
+
+    .role-help-row b {
+      color: var(--text);
+    }
+
     .input {
       min-height: 44px;
       border: 1px solid var(--line);
@@ -1662,6 +1745,125 @@
       height: 76px;
       border-width: 6px;
       justify-self: end;
+    }
+
+    .lead-form {
+      display: grid;
+      gap: 10px;
+    }
+
+    .lead-form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .lead-field {
+      display: grid;
+      gap: 5px;
+      min-width: 0;
+    }
+
+    .lead-field.full {
+      grid-column: 1 / -1;
+    }
+
+    .lead-input,
+    .lead-textarea {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 12px;
+      outline: none;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.7);
+    }
+
+    .lead-input {
+      height: 40px;
+      padding: 0 10px;
+    }
+
+    .lead-textarea {
+      min-height: 64px;
+      padding: 9px 10px;
+      line-height: 1.5;
+      resize: none;
+    }
+
+    .lead-input:focus,
+    .lead-textarea:focus {
+      border-color: #9cbce8;
+      box-shadow: 0 0 0 3px rgba(49, 95, 157, 0.1);
+    }
+
+    .lead-input:disabled,
+    .lead-textarea:disabled {
+      opacity: .72;
+    }
+
+    .lead-consent {
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 1.5;
+    }
+
+    .lead-error {
+      padding: 7px 9px;
+      border: 1px solid #f7c7d3;
+      border-radius: 7px;
+      background: var(--rose-soft);
+      color: var(--rose);
+      font-size: 11px;
+      line-height: 1.45;
+    }
+
+    .lead-error[hidden],
+    .lead-success[hidden] {
+      display: none;
+    }
+
+    .lead-success {
+      min-height: 132px;
+      display: grid;
+      place-items: center;
+      align-content: center;
+      gap: 7px;
+      text-align: center;
+    }
+
+    .lead-success-mark {
+      width: 36px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--teal-soft);
+      color: var(--teal);
+      font-size: 20px;
+      font-weight: 900;
+    }
+
+    .lead-mini-preview {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+      min-width: 76px;
+    }
+
+    .lead-mini-preview span {
+      height: 12px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: var(--surface-2);
+    }
+
+    .lead-mini-preview span:last-child {
+      grid-column: 1 / -1;
+      height: 20px;
     }
 
     .library-card .qr {
@@ -1771,6 +1973,15 @@
     }
 
     .advanced-portfolio-content {
+      flex: 1 1 0;
+      min-height: 0;
+      grid-auto-rows: max-content;
+      overflow-x: hidden;
+      overflow-y: auto;
+      overscroll-behavior-y: contain;
+      -webkit-overflow-scrolling: touch;
+      touch-action: pan-y;
+      padding-bottom: 24px;
       background:
         linear-gradient(180deg, #17120f 0%, #221913 48%, #11100f 100%);
       color: #f4eadb;
@@ -1860,6 +2071,35 @@
         #17110c;
       border-color: #21180f;
       outline-color: rgba(206, 162, 94, 0.38);
+    }
+
+    .advanced-portfolio-content .lead-input,
+    .advanced-portfolio-content .lead-textarea {
+      color: #f6ead6;
+      background: rgba(16, 13, 11, 0.72);
+      border-color: rgba(206, 162, 94, 0.32);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+    }
+
+    .advanced-portfolio-content .lead-input::placeholder,
+    .advanced-portfolio-content .lead-textarea::placeholder {
+      color: rgba(244, 234, 219, 0.45);
+    }
+
+    .advanced-portfolio-content .lead-field .label,
+    .advanced-portfolio-content .lead-consent {
+      color: rgba(244, 234, 219, 0.68);
+    }
+
+    .advanced-portfolio-content .lead-error {
+      color: #f4b6c4;
+      background: rgba(184, 71, 98, 0.14);
+      border-color: rgba(244, 182, 196, 0.32);
+    }
+
+    .advanced-portfolio-content .lead-success-mark {
+      color: #17110c;
+      background: #e5c27f;
     }
 
     .schedule-query {
@@ -2623,7 +2863,7 @@
   <main class="page">
     <section class="topbar">
       <div class="title-block">
-        <div class="eyebrow">微信小程序 SaaS 详细设计稿 / v1.2</div>
+        <div class="eyebrow">微信小程序 SaaS 详细设计稿 / v1.3</div>
         <h1>微档集 Pro</h1>
         <p class="subtitle">为婚庆司仪、化妆师、模特及团队设计的作品集与档期管理小程序。新版补充团队拥有者、管理者、普通成员三级角色权限，并完善积分充值、作品维护、作品集维护、自定义时间段档期和成员管理流程。</p>
       </div>
@@ -3098,9 +3338,9 @@
                   <div class="mini-avatar"><div class="asset-2" style="width:100%;height:100%"></div></div>
                   <div>
                     <b>周承</b>
-                    <p class="desc">摄影 · PH-6021 · 普通成员 · 仅团队可见</p>
+                    <p class="desc">摄影 · PH-6021 · 普通成员</p>
                   </div>
-                  <span class="pill">隐藏</span>
+                  <span class="pill teal">已加入</span>
                 </div>
               </div>
               <button class="button full">通过个人唯一码添加成员</button>
@@ -3118,7 +3358,7 @@
       <article class="screen-card">
         <div class="screen-meta">
           <div class="screen-title">08 团队成员维护页</div>
-          <div class="screen-note">拥有者设置角色与展示权限</div>
+          <div class="screen-note">拥有者设置角色与引用权限</div>
         </div>
         <div class="phone">
           <div class="phone-inner">
@@ -3144,24 +3384,25 @@
                 </div>
               </div>
               <div class="panel stack">
-                <div class="form-row">
-                  <div class="label">团队角色</div>
+                <div class="form-row role-field">
+                  <div class="label-with-help">
+                    <div class="label">团队角色</div>
+                    <button class="role-help-trigger" type="button" data-role-help-trigger aria-expanded="false" aria-controls="team-role-help" aria-label="查看团队角色权限">?</button>
+                  </div>
                   <div class="segmented two">
                     <div class="segment">管理者</div>
                     <div class="segment active">普通成员</div>
+                  </div>
+                  <div class="role-help-popover" id="team-role-help" data-role-help-popover hidden>
+                    <div class="role-help-title">角色权限</div>
+                    <div class="role-help-row"><b>拥有者</b><span>成员维护、作品集管理、预览、分享</span></div>
+                    <div class="role-help-row"><b>管理者</b><span>作品集管理、预览、分享</span></div>
+                    <div class="role-help-row"><b>普通成员</b><span>仅预览、分享</span></div>
                   </div>
                 </div>
                 <div class="form-row">
                   <div class="label">职业身份</div>
                   <div class="input">化妆师</div>
-                </div>
-                <div class="form-row">
-                  <div class="label">展示权限</div>
-                  <div class="segmented">
-                    <div class="segment active">公开</div>
-                    <div class="segment">团队可见</div>
-                    <div class="segment">隐藏</div>
-                  </div>
                 </div>
                 <div class="form-row">
                   <div class="label">可被团队作品集引用</div>
@@ -3170,17 +3411,6 @@
                     <span class="pill teal">头像资料</span>
                     <span class="pill">个人作品素材</span>
                   </div>
-                </div>
-              </div>
-              <div class="panel stack">
-                <div class="row">
-                  <p class="name">角色权限</p>
-                  <span class="pill blue">按角色固定</span>
-                </div>
-                <div class="rule-list">
-                  <div class="rule-item"><span class="check">拥</span><span><b>拥有者</b>：成员维护、作品集管理、预览、分享</span></div>
-                  <div class="rule-item"><span class="check">管</span><span><b>管理者</b>：作品集管理、预览、分享</span></div>
-                  <div class="rule-item"><span class="check">普</span><span><b>普通成员</b>：仅预览、分享</span></div>
                 </div>
               </div>
               <div class="panel stack">
@@ -3648,7 +3878,7 @@
                   </div>
                   <span class="pill rose">维护者视角</span>
                 </div>
-                <div class="input textarea">例如：顶部先放几张最能代表风格的照片，接着介绍团队，再展示成员作品集，最后放档期查询和微信二维码。</div>
+                <div class="input textarea">例如：顶部先放几张最能代表风格的照片，接着介绍团队，再展示成员作品集，然后放档期查询和预留联系信息，最后放微信二维码。</div>
               </div>
               <div class="component-showcase">
                 <div class="library-card">
@@ -3690,6 +3920,14 @@
                     <p class="desc">放个人微信或团队客服二维码，方便客户看完作品后直接咨询。</p>
                   </div>
                   <div class="qr"></div>
+                </div>
+                <div class="library-card">
+                  <div class="library-icon" style="background:var(--teal-soft);color:var(--teal)">留</div>
+                  <div>
+                    <b>预留联系信息</b>
+                    <p class="desc">让客户主动提交联系人、手机、微信、意向档期和具体需求，便于后续跟进。</p>
+                  </div>
+                  <div class="lead-mini-preview"><span></span><span></span><span></span></div>
                 </div>
               </div>
               <div class="panel stack">
@@ -3748,7 +3986,7 @@
               <div class="panel stack">
                 <div class="form-row">
                   <div class="label">自然语言描述</div>
-                  <div class="input textarea">1号、2号、3号作品使用轮播图组件放最上面，下面放头像，再下面把5号、6号、7号、8号作品放列表，再下面放档期查询组件，最下面放微信二维码。不要白底背景，要高级感。</div>
+                  <div class="input textarea">1号、2号、3号作品使用轮播图组件放最上面，下面放头像，再下面把5号、6号、7号、8号作品放列表，再下面放档期查询组件和预留联系信息，最下面放微信二维码。不要白底背景，要高级感。</div>
                 </div>
                 <div class="cost-note">本次 AI 生成预计消耗 10 积分，生成失败不扣除。</div>
                 <button class="button premium full">AI 生成页面</button>
@@ -3763,7 +4001,8 @@
                   <div class="component-row"><div class="handle">2</div><div><b>头像与简介</b><p class="desc">个人头像、标签、城市</p></div><span>☰</span></div>
                   <div class="component-row"><div class="handle">3</div><div><b>双列作品列表</b><p class="desc">使用 5、6、7、8 号作品</p></div><span>☰</span></div>
                   <div class="component-row"><div class="handle">4</div><div><b>档期查询</b><p class="desc">个人档期</p></div><span>☰</span></div>
-                  <div class="component-row"><div class="handle">5</div><div><b>微信二维码</b><p class="desc">使用个人联系二维码</p></div><span>☰</span></div>
+                  <div class="component-row"><div class="handle">5</div><div><b>预留联系信息</b><p class="desc">联系人、手机、微信、档期、需求</p></div><span>☰</span></div>
+                  <div class="component-row"><div class="handle">6</div><div><b>微信二维码</b><p class="desc">使用个人联系二维码</p></div><span>☰</span></div>
                 </div>
               </div>
               <div class="button-row">
@@ -3829,6 +4068,24 @@
                   <button class="button">查询</button>
                 </div>
               </div>
+              <form class="panel lead-form" data-lead-preview>
+                <div class="row">
+                  <div>
+                    <p class="name">预留联系信息</p>
+                    <p class="desc">访客可主动留下联系方式和需求</p>
+                  </div>
+                  <span class="pill">预览模式</span>
+                </div>
+                <div class="lead-form-grid">
+                  <label class="lead-field"><span class="label">联系人</span><input class="lead-input" value="陈女士" disabled></label>
+                  <label class="lead-field"><span class="label">手机</span><input class="lead-input" value="138****2026" disabled></label>
+                  <label class="lead-field"><span class="label">微信</span><input class="lead-input" value="chen2026" disabled></label>
+                  <label class="lead-field"><span class="label">意向档期</span><input class="lead-input" value="2026-10-03 晚间" disabled></label>
+                  <label class="lead-field full"><span class="label">需求</span><textarea class="lead-textarea" disabled>想咨询晚宴主持流程、报价和双语主持安排。</textarea></label>
+                </div>
+                <p class="lead-consent">预览页不会提交或保存访客信息。</p>
+                <button class="button full" type="button" disabled>预览模式 · 不会提交</button>
+              </form>
               <div class="panel contact-card">
                 <div class="contact-copy">
                   <p class="name">二维码联系</p>
@@ -3968,6 +4225,32 @@
                   <button class="button">查询</button>
                 </div>
               </div>
+              <form class="panel lead-form" data-lead-form novalidate>
+                <div class="row">
+                  <div>
+                    <p class="name">预留联系信息</p>
+                    <p class="desc">留下联系方式，方便维护者主动联系您</p>
+                  </div>
+                  <span class="pill teal">主动预留</span>
+                </div>
+                <div class="stack" data-lead-fields>
+                  <div class="lead-form-grid">
+                    <label class="lead-field"><span class="label">联系人</span><input class="lead-input" name="contactName" placeholder="怎么称呼您"></label>
+                    <label class="lead-field"><span class="label">手机</span><input class="lead-input" name="phone" type="tel" inputmode="tel" placeholder="手机号码"></label>
+                    <label class="lead-field"><span class="label">微信</span><input class="lead-input" name="wechat" placeholder="微信号"></label>
+                    <label class="lead-field"><span class="label">意向档期</span><input class="lead-input" name="desiredSchedule" placeholder="日期 / 档位"></label>
+                    <label class="lead-field full"><span class="label">需求</span><textarea class="lead-textarea" name="needs" placeholder="请简要描述服务需求"></textarea></label>
+                  </div>
+                  <div class="lead-error" data-lead-error role="alert" hidden>请填写联系人，并至少填写手机或微信。</div>
+                  <p class="lead-consent">提交即表示同意将以上信息提供给作品集维护者，仅用于本次咨询联系。</p>
+                  <button class="button full" type="submit">提交联系信息</button>
+                </div>
+                <div class="lead-success" data-lead-success hidden>
+                  <div class="lead-success-mark">✓</div>
+                  <p class="name">提交成功</p>
+                  <p class="desc">维护者收到后会尽快与您联系。</p>
+                </div>
+              </form>
               <div class="panel contact-card">
                 <div class="contact-copy">
                   <p class="name">二维码联系</p>
@@ -4733,6 +5016,61 @@
 
       buttons.forEach((button) => {
         button.addEventListener('click', () => setFilter(button.dataset.portfolioFilter));
+      });
+    });
+
+    document.querySelectorAll('[data-role-help-trigger]').forEach((trigger) => {
+      const popoverId = trigger.getAttribute('aria-controls');
+      const popover = popoverId ? document.getElementById(popoverId) : null;
+      if (!popover) return;
+
+      const closePopover = () => {
+        popover.hidden = true;
+        trigger.setAttribute('aria-expanded', 'false');
+      };
+
+      trigger.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const shouldOpen = popover.hidden;
+        if (shouldOpen) {
+          popover.hidden = false;
+          trigger.setAttribute('aria-expanded', 'true');
+        } else {
+          closePopover();
+        }
+      });
+
+      popover.addEventListener('click', (event) => event.stopPropagation());
+      document.addEventListener('click', closePopover);
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') closePopover();
+      });
+    });
+
+    document.querySelectorAll('[data-lead-form]').forEach((form) => {
+      const fields = form.querySelector('[data-lead-fields]');
+      const success = form.querySelector('[data-lead-success]');
+      const error = form.querySelector('[data-lead-error]');
+
+      const clearError = () => {
+        if (error) error.hidden = true;
+      };
+
+      form.addEventListener('input', clearError);
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const contactName = form.elements.contactName?.value.trim() ?? '';
+        const phone = form.elements.phone?.value.trim() ?? '';
+        const wechat = form.elements.wechat?.value.trim() ?? '';
+
+        if (!contactName || (!phone && !wechat)) {
+          if (error) error.hidden = false;
+          return;
+        }
+
+        clearError();
+        if (fields) fields.hidden = true;
+        if (success) success.hidden = false;
       });
     });
   </script>
