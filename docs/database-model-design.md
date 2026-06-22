@@ -1,6 +1,6 @@
 # WeFolio 数据库模型设计
 
-> 文档版本：v1.2<br>
+> 文档版本：v1.3<br>
 > 编写日期：2026-06-22<br>
 > 数据库：MySQL 8.0<br>
 > 需求依据：[PRD.md](./PRD.md)、[prototype.html](../design/prototype.html)、[线上设计稿](http://marry.dingchenyong.top/prototype.html)
@@ -12,7 +12,7 @@
 - 微信、手机验证码、账号密码登录与推荐关系；
 - 用户资料、作品、标签、档位定义与档期；
 - 团队、三级角色、邀请状态与内容引用权限；
-- 标准/高级、个人/团队作品集，保存即生效、历史快照与 AI 生成；
+- 标准/高级、个人/团队作品集，草稿/已发布状态、已发布后保存即生效、历史快照与 AI 生成；
 - 作品集分享、访客访问汇总、行为事件与联系线索；
 - 可配置积分规则、个人积分账户、积分流水与微信充值订单。
 
@@ -35,7 +35,8 @@
 | 金额 | 以分为单位的整数，例如 `amount_fen` |
 | 积分 | 整数，不使用浮点数 |
 | JSON | 仅用于页面 Schema、快照和可扩展事件元数据，不承载高频关联查询 |
-| 逻辑删除 | 用户、作品、团队、作品集等主数据使用 `deleted_at`；流水和行为事件不允许业务侧删除 |
+| 逻辑删除 | 全部表统一使用 `deleted` TINYINT UNSIGNED NOT NULL DEFAULT 0（0=未删除 1=已删除），配合 MyBatis Plus @TableLogic 自动过滤 |
+| 乐观锁 | 全部表统一使用 `version` INT UNSIGNED NOT NULL DEFAULT 0，配合 MyBatis Plus @Version 自动更新时 +1 |
 
 状态、类型、角色、来源、渠道和业务场景等枚举编码遵循以下规则：
 
@@ -76,7 +77,7 @@
 | 档期 | `wf_schedule` | 具体日期和档位的预约状态 |
 | 团队 | `wf_team` | 团队主数据与当前拥有者 |
 | 团队 | `wf_team_member` | 成员角色、邀请状态和引用权限 |
-| 作品集 | `wf_portfolio` | 作品集当前生效配置 |
+| 作品集 | `wf_portfolio` | 作品集当前配置及草稿/已发布状态 |
 | 作品集 | `wf_portfolio_history` | 每次保存形成的只读历史快照 |
 | 作品集 | `wf_portfolio_reference` | 当前配置中的作品、成员作品集等引用 |
 | 作品集 | `wf_ai_generation_task` | 高级作品集 AI 生成任务 |
@@ -137,7 +138,7 @@ erDiagram
 | 入团状态 | `PENDING_CONFIRMATION` 待确认，`JOINED` 已加入，`REJECTED` 已拒绝，`REMOVED` 已移除 |
 | 作品集归属 | `USER` 用户，`TEAM` 团队 |
 | 作品集模板 | `STANDARD` 标准，`ADVANCED` 高级 |
-| 作品集状态 | `ACTIVE` 生效，`DISABLED` 停用 |
+| 作品集状态 | `DRAFT` 草稿，`PUBLISHED` 已发布 |
 | 保存来源 | `MANUAL` 手工配置，`AI_GENERATED` AI 生成，`RESTORED_FROM_HISTORY` 历史恢复 |
 | AI 任务状态 | `PENDING` 待执行，`RUNNING` 执行中，`SUCCEEDED` 成功，`FAILED` 失败，`TIMED_OUT` 超时 |
 | 访问来源 | `WECHAT_SHARE_CARD` 分享卡片，`QR_CODE` 二维码，`TEAM_PORTFOLIO` 团队作品集跳转，`PERSONAL_PORTFOLIO` 个人作品集跳转，`UNKNOWN` 未知 |
@@ -169,7 +170,7 @@ erDiagram
 | `version` | INT UNSIGNED | 否 | `0` | 乐观锁版本 |
 | `created_at` | DATETIME(3) | 否 | CURRENT_TIMESTAMP(3) | 创建时间 |
 | `updated_at` | DATETIME(3) | 否 | 自动更新 | 更新时间 |
-| `deleted_at` | DATETIME(3) | 是 | NULL | 逻辑删除时间 |
+| `deleted` | TINYINT UNSIGNED | 否 | `0` | 逻辑删除：0未删除 1已删除 |
 
 索引：唯一索引 `uk_user_unique_code(unique_code)`；工作台查询索引 `idx_user_status_created(status, created_at)`。
 
@@ -227,9 +228,9 @@ erDiagram
 | `status` | VARCHAR(32) | 否 | `'ACTIVE'` | `ACTIVE` 正常，`PROCESSING` 处理中，`PROCESSING_FAILED` 处理失败 |
 | `created_at` | DATETIME(3) | 否 | CURRENT_TIMESTAMP(3) | 创建时间 |
 | `updated_at` | DATETIME(3) | 否 | 自动更新 | 更新时间 |
-| `deleted_at` | DATETIME(3) | 是 | NULL | 逻辑删除时间 |
+| `deleted` | TINYINT UNSIGNED | 否 | `0` | 逻辑删除：0未删除 1已删除 |
 
-索引：`idx_work_user_list(user_id, deleted_at, sort_order, id)` 支持作品列表；`idx_work_user_title(user_id, title)` 支持标题筛选；`idx_work_user_media(user_id, media_type, deleted_at)` 支持素材类型选择。
+索引：`idx_work_user_list(user_id, deleted, sort_order, id)` 支持作品列表；`idx_work_user_title(user_id, title)` 支持标题筛选；`idx_work_user_media(user_id, media_type, deleted_at)` 支持素材类型选择。
 
 ### 6.5 `wf_tag` 作品标签表
 
@@ -312,7 +313,7 @@ erDiagram
 | `version` | INT UNSIGNED | 否 | `0` | 乐观锁版本 |
 | `created_at` | DATETIME(3) | 否 | CURRENT_TIMESTAMP(3) | 创建时间 |
 | `updated_at` | DATETIME(3) | 否 | 自动更新 | 更新时间 |
-| `deleted_at` | DATETIME(3) | 是 | NULL | 逻辑删除时间 |
+| `deleted` | TINYINT UNSIGNED | 否 | `0` | 逻辑删除：0未删除 1已删除 |
 
 索引：`uk_team_unique_code(unique_code)`；`idx_team_owner_status(owner_user_id, status)` 支持我的团队查询。
 
@@ -357,7 +358,8 @@ erDiagram
 | `intro` | VARCHAR(500) | 是 | NULL | 作品集简介 |
 | `share_cover_url` | VARCHAR(512) | 是 | NULL | 分享封面 |
 | `share_avatar_url` | VARCHAR(512) | 是 | NULL | 分享头像 |
-| `status` | VARCHAR(32) | 否 | `'ACTIVE'` | `ACTIVE` 生效，`DISABLED` 停用 |
+| `status` | VARCHAR(32) | 否 | `'DRAFT'` | `DRAFT` 草稿，`PUBLISHED` 已发布 |
+| `published_at` | DATETIME(3) | 是 | NULL | 首次发布时间；草稿为空 |
 | `schema_version` | VARCHAR(20) | 否 | `'1.0'` | 当前组件 Schema 版本 |
 | `schema_json` | JSON | 否 | - | 当前生效的页面配置，访客直接读取 |
 | `ai_prompt` | TEXT | 是 | NULL | 当前高级作品集自然语言描述 |
@@ -370,9 +372,9 @@ erDiagram
 | `lock_version` | INT UNSIGNED | 否 | `0` | 乐观锁版本 |
 | `created_at` | DATETIME(3) | 否 | CURRENT_TIMESTAMP(3) | 创建时间 |
 | `updated_at` | DATETIME(3) | 否 | 自动更新 | 更新时间 |
-| `deleted_at` | DATETIME(3) | 是 | NULL | 逻辑删除时间 |
+| `deleted` | TINYINT UNSIGNED | 否 | `0` | 逻辑删除：0未删除 1已删除 |
 
-索引：`uk_portfolio_share_code(share_code)`；`idx_portfolio_owner_list(owner_type, owner_id, deleted_at, status, updated_at)` 支持个人/团队作品集列表；`idx_portfolio_status_saved(status, last_saved_at)` 支持生效作品集统计。
+索引：`uk_portfolio_share_code(share_code)`；`idx_portfolio_owner_list(owner_type, owner_id, deleted, status, updated_at)` 支持个人/团队作品集列表；`idx_portfolio_status_saved(status, last_saved_at)` 支持生效作品集统计。
 
 ### 6.12 `wf_portfolio_history` 作品集历史保存表
 
@@ -674,18 +676,21 @@ erDiagram
 4. 团队作品集选择素材时同时校验成员已加入、相应 `allow_*` 权限为 1。
 5. 成员移除或撤回授权后，通过引用反查索引将当前作品集中的受影响引用标记为无效并立即停止跳转；历史保存表中的快照保持不变。
 
-### 7.3 作品集保存与历史
+### 7.3 作品集保存、发布与历史
 
-1. 本期不实现草稿、发布、归档版本控制，也不维护版本指针；`wf_portfolio` 保存当前唯一生效配置。
-2. 每次保存先校验分享信息、组件白名单和引用权限，再锁定作品集并将 `current_revision` 加 1。
-3. 同一事务中更新作品集当前配置、重建当前引用，并向 `wf_portfolio_history` 追加一条完整保存快照；事务提交后访客立即读取新配置。
-4. 历史记录只用于查看、审计或人工恢复，不参与访客路由。恢复历史时视为一次新的保存，产生新的修订号，不移动任何历史指针。
-5. 高级作品集 AI 生成成功只保存任务结果；维护者点击保存后才写入当前配置，并把 `applied_revision` 更新为本次修订号。
-6. `schema_json` 是访客渲染来源，`wf_portfolio_reference` 是反向查询、引用计数和失效控制来源，二者必须在同一事务中更新。
+1. 作品集状态仅包含 `DRAFT` 和 `PUBLISHED`。本期不实现草稿版本、发布版本或归档版本，也不维护版本指针。
+2. 新建作品集默认为 `DRAFT`；草稿可以反复保存和预览，但不能被访客访问或分享。
+3. 每次保存先校验组件白名单和引用权限，再锁定作品集并将 `current_revision` 加 1。
+4. 同一事务中更新作品集当前配置、重建当前引用，并向 `wf_portfolio_history` 追加一条完整保存快照。
+5. 首次发布需校验分享信息和引用有效性，将状态改为 `PUBLISHED` 并写入 `published_at`；发布状态变化同样形成历史快照。
+6. 作品集发布后不再建立独立发布版本；后续保存直接更新当前配置，事务提交后访客立即读取新内容。
+7. 历史记录只用于查看、审计或人工恢复，不参与访客路由。恢复历史时视为一次新的保存，产生新的修订号，不移动任何历史指针。
+8. 高级作品集 AI 生成成功只保存任务结果；维护者点击保存后才写入当前配置，并把 `applied_revision` 更新为本次修订号。
+9. `schema_json` 是访客渲染来源，`wf_portfolio_reference` 是反向查询、引用计数和失效控制来源，二者必须在同一事务中更新。
 
 ### 7.4 访问记录与线索
 
-1. 维护者预览不创建访问记录、访问事件、线索或积分流水；保存后的当前作品集配置立即对真实访客生效。
+1. 维护者预览不创建访问记录、访问事件、线索或积分流水；只有 `PUBLISHED` 作品集可被真实访客访问，已发布作品集保存后立即生效。
 2. 真实访客打开页面时按 `(visitor_key, portfolio_id)` 原子新增或更新汇总记录，并写入 `open` 事件。
 3. 行为事件先按 `idempotency_key` 去重，再更新汇总计数；异步消费必须可重复执行但不可重复计数。
 4. 线索提交事务同时创建线索与 `CONTACT_LEAD_SUBMITTED` 事件；个人线索 `owner_type = 'USER'`，团队线索 `owner_type = 'TEAM'`。
@@ -775,7 +780,7 @@ CREATE TABLE `wf_user` (
   `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
   `updated_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
     ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',
-  `deleted_at` DATETIME(3) NULL COMMENT '逻辑删除时间',
+  `deleted` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '逻辑删除：0未删除 1已删除',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_user_unique_code` (`unique_code`),
   KEY `idx_user_status_created` (`status`, `created_at`),
@@ -849,11 +854,11 @@ CREATE TABLE `wf_work` (
   `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
   `updated_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
     ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',
-  `deleted_at` DATETIME(3) NULL COMMENT '逻辑删除时间',
+  `deleted` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '逻辑删除：0未删除 1已删除',
   PRIMARY KEY (`id`),
-  KEY `idx_work_user_list` (`user_id`, `deleted_at`, `sort_order`, `id`),
+  KEY `idx_work_user_list` (`user_id`, `deleted`, `sort_order`, `id`),
   KEY `idx_work_user_title` (`user_id`, `title`),
-  KEY `idx_work_user_media` (`user_id`, `media_type`, `deleted_at`),
+  KEY `idx_work_user_media` (`user_id`, `media_type`, `deleted`),
   CONSTRAINT `chk_work_media_type` CHECK (`media_type` IN ('IMAGE', 'VIDEO')),
   CONSTRAINT `chk_work_status` CHECK (
     `status` IN ('ACTIVE', 'PROCESSING', 'PROCESSING_FAILED')
@@ -958,7 +963,7 @@ CREATE TABLE `wf_team` (
   `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
   `updated_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
     ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',
-  `deleted_at` DATETIME(3) NULL COMMENT '逻辑删除时间',
+  `deleted` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '逻辑删除：0未删除 1已删除',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_team_unique_code` (`unique_code`),
   KEY `idx_team_owner_status` (`owner_user_id`, `status`),
@@ -1022,7 +1027,8 @@ CREATE TABLE `wf_portfolio` (
   `share_cover_url` VARCHAR(512) NULL COMMENT '分享封面',
   `share_avatar_url` VARCHAR(512) NULL COMMENT '分享头像',
   `status` VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin
-    NOT NULL DEFAULT 'ACTIVE' COMMENT 'ACTIVE生效 DISABLED停用',
+    NOT NULL DEFAULT 'DRAFT' COMMENT 'DRAFT草稿 PUBLISHED已发布',
+  `published_at` DATETIME(3) NULL COMMENT '首次发布时间',
   `schema_version` VARCHAR(20) NOT NULL DEFAULT '1.0' COMMENT '当前Schema版本',
   `schema_json` JSON NOT NULL COMMENT '当前生效页面配置',
   `ai_prompt` TEXT NULL COMMENT '当前AI自然语言描述',
@@ -1037,22 +1043,22 @@ CREATE TABLE `wf_portfolio` (
   `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
   `updated_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
     ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',
-  `deleted_at` DATETIME(3) NULL COMMENT '逻辑删除时间',
+  `deleted` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '逻辑删除：0未删除 1已删除',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_portfolio_share_code` (`share_code`),
   KEY `idx_portfolio_owner_list`
-    (`owner_type`, `owner_id`, `deleted_at`, `status`, `updated_at`),
+    (`owner_type`, `owner_id`, `deleted`, `status`, `updated_at`),
   KEY `idx_portfolio_status_saved` (`status`, `last_saved_at`),
   CONSTRAINT `chk_portfolio_owner_type` CHECK (`owner_type` IN ('USER', 'TEAM')),
   CONSTRAINT `chk_portfolio_template_type` CHECK (
     `template_type` IN ('STANDARD', 'ADVANCED')
   ),
-  CONSTRAINT `chk_portfolio_status` CHECK (`status` IN ('ACTIVE', 'DISABLED')),
+  CONSTRAINT `chk_portfolio_status` CHECK (`status` IN ('DRAFT', 'PUBLISHED')),
   CONSTRAINT `chk_portfolio_source` CHECK (
     `source_type` IN ('MANUAL', 'AI_GENERATED', 'RESTORED_FROM_HISTORY')
   )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  ROW_FORMAT=DYNAMIC COMMENT='作品集当前生效配置';
+  ROW_FORMAT=DYNAMIC COMMENT='作品集当前配置与发布状态';
 
 CREATE TABLE `wf_portfolio_history` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键',
