@@ -67,7 +67,7 @@ bash deploy.sh    # Maven 构建 + SCP 上传 + systemctl 重启
 微信小程序 (Skyline/glass-easel)
         │
         ▼
-Spring Boot REST API (:8080)
+Spring Boot REST API (:8090)
         │
      ┌──┴──┐
      ▼     ▼

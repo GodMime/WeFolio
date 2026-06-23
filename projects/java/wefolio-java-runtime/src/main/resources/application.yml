@@ -26,7 +26,7 @@ mybatis-plus:
   type-aliases-package: com.jxc.wefolio.entity
 
 server:
-  port: 8080
+  port: 8090
 
 # --- COS Configuration ---
 cos:

@@ -37,7 +37,7 @@ Spring Boot 3.5.3 单体应用，Java 21，Maven 构建。
 
 **启动入口**：`com.jxc.wefolio.WefolioJavaRuntimeApplication`，标准 `@SpringBootApplication`。
 
-**配置**: `application.yml` 中通过环境变量注入数据库连接信息，服务端口 8080。MyBatis-Plus 开启了 SQL 日志和自动驼峰映射。
+**配置**: `application.yml` 中通过环境变量注入数据库连接信息，服务端口 8090。MyBatis-Plus 开启了 SQL 日志和自动驼峰映射。
 
 ## 包约定
 
