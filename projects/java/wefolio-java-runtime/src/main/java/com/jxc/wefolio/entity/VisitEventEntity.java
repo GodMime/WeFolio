@@ -8,7 +8,7 @@ import lombok.Data;
 
 
 /**
- * wf_visit_event — 访问行为事件表 — 每次具体行为的明细记录
+ * wf_visit_event — 访问行为事件表 — 每次具体行为的明细记录，已补充 owner_type/owner_id 冗余字段支持直接按归属查询
  */
 @Data
 @TableName("wf_visit_event")
@@ -31,6 +31,12 @@ public class VisitEventEntity extends BaseEntity {
 
     /** 相关作品 ID */
     private Long workId;
+
+    /** 事件归属类型：USER 用户 / TEAM 团队 */
+    private String ownerType;
+
+    /** 事件归属用户 ID 或团队 ID */
+    private Long ownerId;
 
     /** 查询档期日期 */
     private LocalDate queriedDate;

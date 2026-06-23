@@ -1,7 +1,7 @@
 # WeFolio 数据库模型设计
 
-> 文档版本：v1.3<br>
-> 编写日期：2026-06-22<br>
+> 文档版本：v1.4<br>
+> 编写日期：2026-06-23<br>
 > 数据库：MySQL 8.0<br>
 > 需求依据：[PRD.md](./PRD.md)、[prototype.html](../design/prototype.html)、[线上设计稿](http://marry.dingchenyong.top/prototype.html)
 
@@ -172,7 +172,7 @@ erDiagram
 | `updated_at` | DATETIME(3) | 否 | 自动更新 | 更新时间 |
 | `deleted` | TINYINT UNSIGNED | 否 | `0` | 逻辑删除：0未删除 1已删除 |
 
-索引：唯一索引 `uk_user_unique_code(unique_code)`；工作台查询索引 `idx_user_status_created(status, created_at)`。
+索引：唯一索引 `uk_user_unique_code(unique_code, deleted)` 保证未删除记录唯一码不重复；工作台查询索引 `idx_user_status_created(status, created_at)`。
 
 ### 6.2 `wf_user_auth` 用户登录身份表
 
@@ -204,7 +204,7 @@ erDiagram
 | `bound_at` | DATETIME(3) | 否 | CURRENT_TIMESTAMP(3) | 绑定时间 |
 | `created_at` | DATETIME(3) | 否 | CURRENT_TIMESTAMP(3) | 创建时间 |
 
-索引：`uk_referral_referred_user(referred_user_id)` 保证一个用户只绑定一次；`idx_referral_referrer_time(referrer_user_id, bound_at)` 支持推广统计；检查约束禁止自我推荐。
+索引：`uk_referral_referred_user(referred_user_id, deleted)` 保证一个未删除用户只绑定一次；`idx_referral_referrer_time(referrer_user_id, bound_at)` 支持推广统计；检查约束禁止自我推荐。
 
 ### 6.4 `wf_work` 作品表
 
@@ -244,18 +244,19 @@ erDiagram
 | `created_at` | DATETIME(3) | 否 | CURRENT_TIMESTAMP(3) | 创建时间 |
 | `updated_at` | DATETIME(3) | 否 | 自动更新 | 更新时间 |
 
-索引：`uk_tag_user_name(user_id, name)` 保证用户内标签名唯一；`idx_tag_user_status(user_id, status, id)` 支持标签筛选项。
+索引：`uk_tag_user_name(user_id, name, deleted)` 保证用户内未删除标签名唯一；`idx_tag_user_status(user_id, status, id)` 支持标签筛选项。
 
 ### 6.6 `wf_work_tag` 作品标签关联表
 
 | 字段 | 类型 | 空 | 默认值 | 说明 |
 | --- | --- | --- | --- | --- |
 | `id` | BIGINT UNSIGNED | 否 | 自增 | 主键 |
+| `user_id` | BIGINT UNSIGNED | 否 | - | 所属用户 ID，冗余字段用于行级隔离查询，写入时从 `wf_work.user_id` 同步 |
 | `work_id` | BIGINT UNSIGNED | 否 | - | 作品 ID |
 | `tag_id` | BIGINT UNSIGNED | 否 | - | 标签 ID |
 | `created_at` | DATETIME(3) | 否 | CURRENT_TIMESTAMP(3) | 创建时间 |
 
-索引：`uk_work_tag(work_id, tag_id)` 防止重复打标；`idx_work_tag_tag(tag_id, work_id)` 支持按标签查作品和统计数量。
+索引：`uk_work_tag(work_id, tag_id, deleted)` 防止未删除重复打标；`idx_work_tag_tag(tag_id, work_id)` 支持按标签查作品和统计数量；`idx_work_tag_user(user_id, work_id)` 支持用户维度的直接隔离查询。
 
 ### 6.7 `wf_slot_definition` 档位定义表
 
@@ -315,7 +316,7 @@ erDiagram
 | `updated_at` | DATETIME(3) | 否 | 自动更新 | 更新时间 |
 | `deleted` | TINYINT UNSIGNED | 否 | `0` | 逻辑删除：0未删除 1已删除 |
 
-索引：`uk_team_unique_code(unique_code)`；`idx_team_owner_status(owner_user_id, status)` 支持我的团队查询。
+索引：`uk_team_unique_code(unique_code, deleted)` 保证未删除团队唯一码不重复；`idx_team_owner_status(owner_user_id, status)` 支持我的团队查询。
 
 ### 6.10 `wf_team_member` 团队成员表
 
@@ -374,7 +375,7 @@ erDiagram
 | `updated_at` | DATETIME(3) | 否 | 自动更新 | 更新时间 |
 | `deleted` | TINYINT UNSIGNED | 否 | `0` | 逻辑删除：0未删除 1已删除 |
 
-索引：`uk_portfolio_share_code(share_code)`；`idx_portfolio_owner_list(owner_type, owner_id, deleted, status, updated_at)` 支持个人/团队作品集列表；`idx_portfolio_status_saved(status, last_saved_at)` 支持生效作品集统计。
+索引：`uk_portfolio_share_code(share_code, deleted)` 保证未删除作品集分享码不重复；`idx_portfolio_owner_list(owner_type, owner_id, deleted, status, updated_at)` 支持个人/团队作品集列表；`idx_portfolio_status_saved(status, last_saved_at)` 支持生效作品集统计。
 
 ### 6.12 `wf_portfolio_history` 作品集历史保存表
 
@@ -443,11 +444,13 @@ erDiagram
 | `portfolio_id` | BIGINT UNSIGNED | 否 | - | 作品集 ID |
 | `portfolio_revision` | INT UNSIGNED | 否 | - | 分享时当前生效修订号 |
 | `shared_by_user_id` | BIGINT UNSIGNED | 否 | - | 发起分享的维护者或团队成员 |
+| `owner_type` | VARCHAR(16) | 否 | - | `USER` 用户，`TEAM` 团队，冗余字段用于直接按归属查询 |
+| `owner_id` | BIGINT UNSIGNED | 否 | - | 归属用户 ID 或团队 ID，写入时从 `wf_portfolio.owner_id` 同步 |
 | `share_channel` | VARCHAR(32) | 否 | - | `WECHAT_CARD`、`QR_CODE`、`COPIED_PATH` |
 | `share_scene` | VARCHAR(64) | 是 | NULL | 页面入口或业务场景编码，使用英文大写下划线 |
 | `created_at` | DATETIME(3) | 否 | CURRENT_TIMESTAMP(3) | 分享时间 |
 
-索引：`idx_share_portfolio_time(portfolio_id, created_at)` 支持作品集分享次数；`idx_share_user_time(shared_by_user_id, created_at)` 支持用户指标。
+索引：`idx_share_portfolio_time(portfolio_id, created_at)` 支持作品集分享次数；`idx_share_user_time(shared_by_user_id, created_at)` 支持用户指标；`idx_share_owner_time(owner_type, owner_id, created_at)` 支持按归属直接查询分享记录。
 
 ### 6.16 `wf_visit_record` 访问汇总表
 
@@ -492,6 +495,8 @@ erDiagram
 | `visitor_key` | CHAR(64) | 否 | - | 匿名访客摘要 |
 | `event_type` | VARCHAR(32) | 否 | - | `PORTFOLIO_OPENED`、`WORK_VIEWED`、`VIDEO_PLAYED`、`SCHEDULE_QUERIED`、`QR_CODE_INTERACTED`、`MEMBER_PORTFOLIO_OPENED`、`CONTACT_FORM_EXPOSED`、`CONTACT_LEAD_SUBMITTED` |
 | `work_id` | BIGINT UNSIGNED | 是 | NULL | 相关作品 ID |
+| `owner_type` | VARCHAR(16) | 否 | - | `USER` 用户，`TEAM` 团队，冗余字段用于直接按归属查询 |
+| `owner_id` | BIGINT UNSIGNED | 否 | - | 事件归属用户 ID 或团队 ID，写入时从 `wf_portfolio.owner_id` 同步 |
 | `queried_date` | DATE | 是 | NULL | 查询档期日期 |
 | `duration_seconds` | INT UNSIGNED | 是 | NULL | 本次停留或播放时长 |
 | `idempotency_key` | VARCHAR(64) | 否 | - | 客户端/服务端事件幂等键 |
@@ -499,7 +504,7 @@ erDiagram
 | `occurred_at` | DATETIME(3) | 否 | - | 业务发生时间 |
 | `created_at` | DATETIME(3) | 否 | CURRENT_TIMESTAMP(3) | 入库时间 |
 
-索引：`uk_visit_event_idempotency(idempotency_key)` 防止异步重试重复计数；`idx_event_visit_time(visit_record_id, occurred_at)` 支持访问详情；`idx_event_portfolio_type_time(portfolio_id, event_type, occurred_at)` 支持指标统计；`idx_event_work_time(work_id, occurred_at)` 支持作品查看统计。
+索引：`uk_visit_event_idempotency(idempotency_key)` 防止异步重试重复计数；`idx_event_visit_time(visit_record_id, occurred_at)` 支持访问详情；`idx_event_portfolio_type_time(portfolio_id, event_type, occurred_at)` 支持指标统计；`idx_event_work_time(work_id, occurred_at)` 支持作品查看统计；`idx_visit_event_owner(owner_type, owner_id, occurred_at)` 支持按归属直接查询事件。
 
 ### 6.18 `wf_contact_lead` 联系线索表
 
@@ -731,14 +736,16 @@ erDiagram
 | --- | --- |
 | 使用个人唯一码或团队唯一码搜索 | `uk_user_unique_code`、`uk_team_unique_code` |
 | 作品列表、媒体筛选和排序 | `idx_work_user_list`、`idx_work_user_media` |
-| 按标签筛选作品并统计数量 | `idx_work_tag_tag`、`uk_tag_user_name` |
+| 按标签筛选作品并统计数量 | `idx_work_tag_tag`、`uk_tag_user_name`、`idx_work_tag_user` |
+| 按用户维度查询打标记录 | `idx_work_tag_user` |
 | 用户月历和某日档期 | `idx_schedule_user_date_status` |
 | 团队档期聚合 | `idx_team_member_manage` 后批量命中 `idx_schedule_user_date_status` |
 | 个人或团队作品集列表 | `idx_portfolio_owner_list` |
 | 查询作品被哪些当前作品集引用 | `idx_reference_target` |
 | 作品集历史保存记录 | `uk_portfolio_history_revision` |
 | 维护者访问记录和跟进筛选 | `idx_visit_owner_time`、`idx_visit_owner_follow` |
-| 近 7 日访问/查档/播放指标 | `idx_event_portfolio_type_time` |
+| 近 7 日访问/查档/播放指标 | `idx_event_portfolio_type_time`、`idx_visit_event_owner` |
+| 按归属查询分享记录 | `idx_share_owner_time` |
 | 线索列表 | `idx_lead_owner_follow` |
 | 查询当前生效积分规则 | `idx_point_rule_scene` |
 | 阶梯积分计量 | `uk_point_meter_business` |
@@ -782,7 +789,7 @@ CREATE TABLE `wf_user` (
     ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',
   `deleted` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '逻辑删除：0未删除 1已删除',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_user_unique_code` (`unique_code`),
+  UNIQUE KEY `uk_user_unique_code` (`unique_code`, `deleted`),
   KEY `idx_user_status_created` (`status`, `created_at`),
   CONSTRAINT `chk_user_status` CHECK (`status` IN ('ACTIVE', 'DISABLED'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
@@ -826,7 +833,7 @@ CREATE TABLE `wf_referral_relation` (
   `bound_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '绑定时间',
   `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_referral_referred_user` (`referred_user_id`),
+  UNIQUE KEY `uk_referral_referred_user` (`referred_user_id`, `deleted`),
   KEY `idx_referral_referrer_time` (`referrer_user_id`, `bound_at`),
   CONSTRAINT `chk_referral_not_self` CHECK (`referrer_user_id` <> `referred_user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
@@ -877,7 +884,7 @@ CREATE TABLE `wf_tag` (
   `updated_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
     ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_tag_user_name` (`user_id`, `name`),
+  UNIQUE KEY `uk_tag_user_name` (`user_id`, `name`, `deleted`),
   KEY `idx_tag_user_status` (`user_id`, `status`, `id`),
   CONSTRAINT `chk_tag_status` CHECK (`status` IN ('ACTIVE', 'DISABLED'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
@@ -885,12 +892,14 @@ CREATE TABLE `wf_tag` (
 
 CREATE TABLE `wf_work_tag` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `user_id` BIGINT UNSIGNED NOT NULL COMMENT '所属用户ID',
   `work_id` BIGINT UNSIGNED NOT NULL COMMENT '作品ID',
   `tag_id` BIGINT UNSIGNED NOT NULL COMMENT '标签ID',
   `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_work_tag` (`work_id`, `tag_id`),
-  KEY `idx_work_tag_tag` (`tag_id`, `work_id`)
+  UNIQUE KEY `uk_work_tag` (`work_id`, `tag_id`, `deleted`),
+  KEY `idx_work_tag_tag` (`tag_id`, `work_id`),
+  KEY `idx_work_tag_user` (`user_id`, `work_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   ROW_FORMAT=DYNAMIC COMMENT='作品标签关联';
 
@@ -965,7 +974,7 @@ CREATE TABLE `wf_team` (
     ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',
   `deleted` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '逻辑删除：0未删除 1已删除',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_team_unique_code` (`unique_code`),
+  UNIQUE KEY `uk_team_unique_code` (`unique_code`, `deleted`),
   KEY `idx_team_owner_status` (`owner_user_id`, `status`),
   CONSTRAINT `chk_team_status` CHECK (`status` IN ('ACTIVE', 'DISSOLVED'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
@@ -1045,7 +1054,7 @@ CREATE TABLE `wf_portfolio` (
     ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',
   `deleted` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '逻辑删除：0未删除 1已删除',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_portfolio_share_code` (`share_code`),
+  UNIQUE KEY `uk_portfolio_share_code` (`share_code`, `deleted`),
   KEY `idx_portfolio_owner_list`
     (`owner_type`, `owner_id`, `deleted`, `status`, `updated_at`),
   KEY `idx_portfolio_status_saved` (`status`, `last_saved_at`),
@@ -1150,6 +1159,9 @@ CREATE TABLE `wf_portfolio_share_record` (
   `portfolio_id` BIGINT UNSIGNED NOT NULL COMMENT '作品集ID',
   `portfolio_revision` INT UNSIGNED NOT NULL COMMENT '分享时生效修订号',
   `shared_by_user_id` BIGINT UNSIGNED NOT NULL COMMENT '分享人用户ID',
+  `owner_type` VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin
+    NOT NULL COMMENT 'USER用户 TEAM团队',
+  `owner_id` BIGINT UNSIGNED NOT NULL COMMENT '归属用户或团队ID',
   `share_channel` VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin
     NOT NULL COMMENT 'WECHAT_CARD QR_CODE COPIED_PATH',
   `share_scene` VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NULL COMMENT '分享场景编码',
@@ -1157,9 +1169,11 @@ CREATE TABLE `wf_portfolio_share_record` (
   PRIMARY KEY (`id`),
   KEY `idx_share_portfolio_time` (`portfolio_id`, `created_at`),
   KEY `idx_share_user_time` (`shared_by_user_id`, `created_at`),
+  KEY `idx_share_owner_time` (`owner_type`, `owner_id`, `created_at`),
   CONSTRAINT `chk_share_channel` CHECK (
     `share_channel` IN ('WECHAT_CARD', 'QR_CODE', 'COPIED_PATH')
   ),
+  CONSTRAINT `chk_share_owner_type` CHECK (`owner_type` IN ('USER', 'TEAM')),
   CONSTRAINT `chk_share_scene_format` CHECK (
     `share_scene` IS NULL OR `share_scene` REGEXP '^[A-Z][A-Z0-9_]*$'
   )
@@ -1232,6 +1246,9 @@ CREATE TABLE `wf_visit_event` (
   `event_type` VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin
     NOT NULL COMMENT 'PORTFOLIO_OPENED WORK_VIEWED VIDEO_PLAYED SCHEDULE_QUERIED QR_CODE_INTERACTED MEMBER_PORTFOLIO_OPENED CONTACT_FORM_EXPOSED CONTACT_LEAD_SUBMITTED',
   `work_id` BIGINT UNSIGNED NULL COMMENT '相关作品ID',
+  `owner_type` VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin
+    NOT NULL COMMENT 'USER用户 TEAM团队',
+  `owner_id` BIGINT UNSIGNED NOT NULL COMMENT '事件归属用户或团队ID',
   `queried_date` DATE NULL COMMENT '查询档期日期',
   `duration_seconds` INT UNSIGNED NULL COMMENT '本次停留或播放秒数',
   `idempotency_key` VARCHAR(64) NOT NULL COMMENT '事件幂等键',
@@ -1243,13 +1260,15 @@ CREATE TABLE `wf_visit_event` (
   KEY `idx_event_visit_time` (`visit_record_id`, `occurred_at`),
   KEY `idx_event_portfolio_type_time` (`portfolio_id`, `event_type`, `occurred_at`),
   KEY `idx_event_work_time` (`work_id`, `occurred_at`),
+  KEY `idx_visit_event_owner` (`owner_type`, `owner_id`, `occurred_at`),
   CONSTRAINT `chk_visit_event_type` CHECK (
     `event_type` IN (
       'PORTFOLIO_OPENED', 'WORK_VIEWED', 'VIDEO_PLAYED', 'SCHEDULE_QUERIED',
       'QR_CODE_INTERACTED', 'MEMBER_PORTFOLIO_OPENED',
       'CONTACT_FORM_EXPOSED', 'CONTACT_LEAD_SUBMITTED'
     )
-  )
+  ),
+  CONSTRAINT `chk_visit_event_owner_type` CHECK (`owner_type` IN ('USER', 'TEAM'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   ROW_FORMAT=DYNAMIC COMMENT='访客行为事件';
 
