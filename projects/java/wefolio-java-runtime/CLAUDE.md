@@ -56,8 +56,9 @@ resources/
 ├── application.yml
 ├── logback-spring.xml
 └── db/migration/
-    ├── V1__init_database.sql          # Flyway 初始化标记
-    └── V2__create_all_tables.sql      # 全量 24 张表 DDL
+    ├── V1__init_database.sql              # Flyway 初始化标记
+    ├── V2__create_all_tables.sql          # 全量 24 张表 DDL
+    └── V3__add_user_isolation_fields.sql  # 用户隔离字段 + 唯一索引修正
 ```
 
 ## 数据库
@@ -134,11 +135,10 @@ resources/
 # 已开启 baseline-on-migrate
 
 # 当前 migration：
-V1__init_database.sql          # 初始化标记表
-V2__create_all_tables.sql      # 全量 24 张业务表
+V1__init_database.sql              # 初始化标记表
+V2__create_all_tables.sql          # 全量 24 张业务表
+V3__add_user_isolation_fields.sql  # wf_work_tag/wf_visit_event/wf_portfolio_share_record 追加用户隔离字段，6 个唯一索引补 deleted
 ```
-
-## Repo Context
 
 ## 编码规范
 
@@ -175,6 +175,4 @@ public class WfTagEntity extends BaseEntity {
 - ❌ 不允许出现英文注释（Javadoc/字段/方法注释统一使用中文）
 - ❌ 不允许出现无注释的类、字段、方法
 
-## Repo Context
-
-此模块是 WeFolio 多项目仓库的子目录 `projects/java/wefolio-java-runtime/`，对应 GitHub 仓库 `GodMime/WeFolio`。主分支 `main`，当前工作分支 `dev`。
+此模块是 WeFolio 多项目仓库的子目录 `projects/java/wefolio-java-runtime/`。仓库级架构、设计文档和编码规范见根目录 `CLAUDE.md`。
