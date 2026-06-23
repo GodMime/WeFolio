@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repo Overview
 
-WeFolio（微档集 Pro）— 面向婚庆/演艺从业者的 SaaS 微信小程序。帮助个人与团队维护作品、档期、作品集展示页，追踪客户访问记录。
+WeFolio（映期Folio）— 面向婚庆/演艺从业者的 SaaS 微信小程序。帮助个人与团队维护作品、档期、作品集展示页，追踪客户访问记录。
 
 GitHub: `GodMime/WeFolio`，主分支 `main`，工作分支 `dev`。
 
