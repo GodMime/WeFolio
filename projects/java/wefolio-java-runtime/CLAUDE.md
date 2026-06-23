@@ -140,6 +140,8 @@ V2__create_all_tables.sql          # 全量 24 张业务表
 V3__add_user_isolation_fields.sql  # wf_work_tag/wf_visit_event/wf_portfolio_share_record 追加用户隔离字段，6 个唯一索引补 deleted
 ```
 
+> **⚠️ Flyway 铁律**：已提交到 Git 的 migration 文件绝对不可修改。Flyway 通过 checksum 校验已执行的脚本，任何改动都会导致启动失败。所有数据库变更必须通过新增 V4、V5… 文件实现。
+
 ## 编码规范
 
 ### 注释

@@ -91,7 +91,7 @@ Spring Boot REST API (:8080)
 - 乐观锁：`version` INT，MyBatis-Plus `@Version` 自动 +1
 - 不使用外键，通过服务层事务 + 唯一索引 + 巡检保证一致性
 - 敏感字段（手机号、微信 openid）应用层信封加密，等值查询用 HMAC-SHA256 摘要
-- Flyway migration 命名：`V{version}__{description}.sql`，启动时自动执行
+- Flyway migration：已提交 Git 的脚本**绝对不可修改**（checksum 校验），所有变更必须追加新 V 版本文件
 
 ## Coding Standards
 
