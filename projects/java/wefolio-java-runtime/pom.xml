@@ -67,6 +67,12 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- H2 内存数据库，用于 test profile 的 Spring 上下文测试 -->
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>test</scope>
+        </dependency>
         <!-- Tencent Cloud COS -->
         <dependency>
             <groupId>com.qcloud</groupId>

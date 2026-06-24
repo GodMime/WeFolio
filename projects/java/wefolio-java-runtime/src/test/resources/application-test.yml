@@ -1,0 +1,40 @@
+spring:
+  datasource:
+    # H2 内存数据库，MySQL 兼容模式，进程内共享（DB_CLOSE_DELAY=-1）
+    url: jdbc:h2:mem:wefolio_test;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  flyway:
+    # Flyway migration 脚本包含 MySQL 特有语法（JSON类型/ascii_bin排序/ROW_FORMAT等），
+    # H2 即使在 MySQL 兼容模式下也无法完整执行，因此 test profile 禁用 Flyway。
+    enabled: false
+
+  sql:
+    init:
+      mode: never
+
+mybatis-plus:
+  configuration:
+    # 测试环境关闭 SQL 日志，保持输出干净
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
+    map-underscore-to-camel-case: true
+
+server:
+  port: 18090
+
+# --- COS 测试占位配置 ---
+# 上下文加载测试不调用 COS API，仅需占位值通过属性绑定
+cos:
+  secret-id: test-secret-id
+  secret-key: test-secret-key
+  region: ap-guangzhou
+  bucket-name: test-bucket
+  public-base-url: https://test.cos.example.com
+
+# --- 微信小程序测试占位配置 ---
+wechat:
+  miniapp:
+    app-id: wx-test-app-id
+    app-secret: test-app-secret
