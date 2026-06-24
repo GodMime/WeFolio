@@ -13,6 +13,7 @@ import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.UserAuthEntityMapper;
 import com.jxc.wefolio.mapper.UserEntityMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.Mac;
@@ -26,6 +27,7 @@ import java.util.UUID;
 /**
  * 小程序登录服务 — 提供一期微信授权登录的后端入口
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class MiniappAuthService {
@@ -56,6 +58,9 @@ public class MiniappAuthService {
 
     /** 微信小程序配置 */
     private final WechatMiniappProperties wechatMiniappProperties;
+
+    /** COS 对象存储服务 */
+    private final CosService cosService;
 
     /**
      * 解析 bearer token 中的用户 ID
@@ -182,6 +187,14 @@ public class MiniappAuthService {
         if (user.getId() == null) {
             throw new BusinessException("登录用户创建失败");
         }
+
+        // 初始化 COS 用户文件夹结构，失败不影响注册主流程
+        try {
+            cosService.initUserStorage(user.getUniqueCode());
+        } catch (Exception e) {
+            log.error("COS 文件夹初始化失败 uniqueCode={}", user.getUniqueCode(), e);
+        }
+
         return user;
     }
 

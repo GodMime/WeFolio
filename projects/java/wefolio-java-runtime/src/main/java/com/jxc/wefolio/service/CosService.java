@@ -11,10 +11,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.qcloud.cos.model.PutObjectRequest;
+
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.UUID;
 
 @Slf4j
@@ -25,10 +29,29 @@ public class CosService {
     private final TransferManager transferManager;
     private final CosProperties cosProperties;
 
+    /**
+     * 上传文件到 COS 根目录。生成的 key 格式为 {@code {UUID}.ext}。
+     *
+     * @param file 上传的文件
+     * @return COS 对象键
+     */
     public String upload(MultipartFile file) {
+        return upload(file, "");
+    }
+
+    /**
+     * 上传文件到 COS 指定文件夹。生成的 key 格式为 {@code {folderPrefix}/{UUID}.ext}。
+     * folderPrefix 为空时上传到根目录。
+     *
+     * @param file         上传的文件
+     * @param folderPrefix 文件夹路径前缀，如 "WFA3B1E7A2/work/image"
+     * @return COS 对象键（含前缀路径）
+     */
+    public String upload(MultipartFile file, String folderPrefix) {
         String originalFilename = file.getOriginalFilename();
         String extension = extractExtension(originalFilename);
-        String key = UUID.randomUUID().toString().replace("-", "") + extension;
+        String fileName = UUID.randomUUID().toString().replace("-", "") + extension;
+        String key = buildKey(folderPrefix, fileName);
 
         Path tempFile = null;
         try {
@@ -57,6 +80,69 @@ public class CosService {
                 }
             }
         }
+    }
+
+    /**
+     * 注册时初始化用户的 COS 文件夹结构。
+     * <pre>
+     * {uniqueCode}/
+     *   work/
+     *     image/     ← 图片类作品
+     *     video/     ← 视频类作品
+     *   protfolio/   ← 作品集额外素材
+     *   others/      ← 头像等其它素材
+     * </pre>
+     * 通过创建键名为路径的空对象来模拟文件夹。
+     *
+     * @param uniqueCode 用户唯一码，如 "WFA3B1E7A2"
+     */
+    public void initUserStorage(String uniqueCode) {
+        List<String> folders = List.of(
+                uniqueCode + "/",
+                uniqueCode + "/work/",
+                uniqueCode + "/work/image/",
+                uniqueCode + "/work/video/",
+                uniqueCode + "/protfolio/",
+                uniqueCode + "/others/"
+        );
+
+        for (String folder : folders) {
+            try {
+                byte[] emptyContent = new byte[0];
+                ObjectMetadata metadata = new ObjectMetadata();
+                metadata.setContentLength(0);
+                metadata.setContentType("application/x-directory");
+
+                PutObjectRequest request = new PutObjectRequest(
+                        cosProperties.getBucketName(),
+                        folder,
+                        new ByteArrayInputStream(emptyContent),
+                        metadata
+                );
+                transferManager.getCOSClient().putObject(request);
+                log.info("COS folder created: key={}", folder);
+            } catch (Exception e) {
+                log.error("COS folder creation failed: key={}", folder, e);
+                throw new RuntimeException("COS folder creation failed: " + folder, e);
+            }
+        }
+
+        log.info("COS user storage initialized: uniqueCode={}", uniqueCode);
+    }
+
+    /**
+     * 拼接文件夹路径与文件名
+     *
+     * @param folderPrefix 文件夹前缀，可为空
+     * @param fileName     文件名
+     * @return 完整 COS 键
+     */
+    private String buildKey(String folderPrefix, String fileName) {
+        if (folderPrefix == null || folderPrefix.isBlank()) {
+            return fileName;
+        }
+        String normalized = folderPrefix.replaceAll("/+$", "");
+        return normalized + "/" + fileName;
     }
 
     public InputStream download(String key) {

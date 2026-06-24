@@ -84,6 +84,31 @@ service/       业务服务
 - 远端日志中如果包含 `secret`、`access_token`、手机号、openid 等敏感值，排查结束后应考虑脱敏或降低日志级别。
 - 不要新增 `// TODO`。
 
+## COS 文件夹结构
+
+用户注册时在 COS 存储桶下按个人唯一码创建目录，路径固定不可变：
+
+```text
+{uniqueCode}/                  ← 例：WFA3B1E7A2
+├── work/
+│   ├── image/                 ← 图片类作品（.jpg/.png 等）
+│   └── video/                 ← 视频类作品（.mp4/.mov 等）
+├── protfolio/                 ← 作品集素材（封面/背景/布局快照）
+└── others/                    ← 头像、微信二维码、其它杂项
+```
+
+**上传路径约定：**
+- 图片作品 → `{uniqueCode}/work/image/{uuid}.{ext}`
+- 视频作品 → `{uniqueCode}/work/video/{uuid}.{ext}`
+- 头像 → `{uniqueCode}/others/{uuid}.{ext}`
+- 作品集素材 → `{uniqueCode}/protfolio/{uuid}.{ext}`
+
+**实现细节：**
+- 文件夹通过 0 字节空对象（Content-Type: application/x-directory）模拟
+- 注册时 `MiniappAuthService` → `CosService.initUserStorage(uniqueCode)` 一次性创建全部文件夹
+- 初始化失败静默忽略，不阻断注册
+- `CosService.upload(file, folderPrefix)` 用于上传到指定目录
+
 ## 数据库约定
 
 - 表前缀为 `wf_`。

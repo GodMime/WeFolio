@@ -1419,6 +1419,31 @@ AI 输出 schema 示例：
 
 ## 16. 对象存储与流量成本预估
 
+### 16.0 COS 文件夹路径规范
+
+用户注册时按个人唯一码在 COS 存储桶下创建固定目录结构，后续上传文件按类型归入对应路径：
+
+```text
+{uniqueCode}/                  ← 例：WFA3B1E7A2
+├── work/
+│   ├── image/                 ← 图片作品（.jpg/.png 等）
+│   └── video/                 ← 视频作品（.mp4/.mov 等）
+├── protfolio/                 ← 作品集额外素材（封面/背景等）
+└── others/                    ← 头像、微信二维码等其它素材
+```
+
+| 文件类型 | COS 路径 | 示例 |
+|---------|---------|------|
+| 图片作品 | `{uniqueCode}/work/image/{uuid}.{ext}` | `WFA3B1E7A2/work/image/a1b2c3d4.jpg` |
+| 视频作品 | `{uniqueCode}/work/video/{uuid}.{ext}` | `WFA3B1E7A2/work/video/e5f6g7h8.mp4` |
+| 头像 | `{uniqueCode}/others/{uuid}.{ext}` | `WFA3B1E7A2/others/avatar.jpg` |
+| 作品集素材 | `{uniqueCode}/protfolio/{uuid}.{ext}` | `WFA3B1E7A2/protfolio/cover.jpg` |
+
+**实现规范：**
+- 文件夹为 0 字节空对象（Content-Type: application/x-directory），注册时一次性创建
+- 初始化失败不影响注册，但会在服务端日志中记录错误
+- 文件夹为永久性结构，不随用户状态变更而删除
+
 ### 16.1 核心假设
 
 | 假设项 | 取值 | 说明 |

@@ -81,6 +81,24 @@ Spring Boot REST API (:8090)
 
 详情见 `projects/java/wefolio-java-runtime/CLAUDE.md`，包含完整的 24 张表清单、实体映射、枚举字典规范。
 
+## COS 文件夹结构
+
+用户注册时在 COS 存储桶下按个人唯一码创建目录，用于分类存储文件：
+
+```
+{unique_code}/                  ← 用户根目录（例：WFA3B1E7A2）
+├── work/
+│   ├── image/                  ← 图片类作品
+│   └── video/                  ← 视频类作品
+├── protfolio/                  ← 作品集额外素材（封面/背景等）
+└── others/                     ← 头像、微信二维码等其它素材
+```
+
+- 文件夹通过 0 字节空对象（Content-Type: application/x-directory）模拟
+- 初始化逻辑：`CosService.initUserStorage(uniqueCode)`，在 `MiniappAuthService.createWechatUser()` 中触发
+- 失败不影响注册主流程
+- 上传接口：`CosService.upload(MultipartFile, String folderPrefix)` 传入前缀路径
+
 ## Database Conventions
 
 - 表前缀 `wf_`，InnoDB，utf8mb4，ROW_FORMAT=DYNAMIC

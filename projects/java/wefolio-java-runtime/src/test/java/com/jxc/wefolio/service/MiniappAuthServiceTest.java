@@ -35,13 +35,17 @@ class MiniappAuthServiceTest {
     @Mock
     private WechatMiniappClient wechatMiniappClient;
 
+    @Mock
+    private CosService cosService;
+
     @Test
     void parsesDevelopmentBearerToken() {
         MiniappAuthService service = new MiniappAuthService(
                 userEntityMapper,
                 userAuthEntityMapper,
                 wechatMiniappClient,
-                properties()
+                properties(),
+                cosService
         );
 
         assertThat(service.resolveUserId("Bearer wf-dev-user-42")).isEqualTo(42L);
@@ -55,7 +59,8 @@ class MiniappAuthServiceTest {
                 userEntityMapper,
                 userAuthEntityMapper,
                 wechatMiniappClient,
-                properties()
+                properties(),
+                cosService
         );
         WechatLoginRequest request = new WechatLoginRequest();
         request.setCode(" ");
@@ -88,7 +93,8 @@ class MiniappAuthServiceTest {
                 userEntityMapper,
                 userAuthEntityMapper,
                 wechatMiniappClient,
-                properties()
+                properties(),
+                cosService
         );
         WechatLoginRequest request = new WechatLoginRequest();
         request.setCode("wx-code");
@@ -135,7 +141,8 @@ class MiniappAuthServiceTest {
                 userEntityMapper,
                 userAuthEntityMapper,
                 wechatMiniappClient,
-                properties()
+                properties(),
+                cosService
         );
         WechatLoginRequest request = new WechatLoginRequest();
         request.setCode("wx-code");
@@ -176,7 +183,8 @@ class MiniappAuthServiceTest {
                 userEntityMapper,
                 userAuthEntityMapper,
                 wechatMiniappClient,
-                properties()
+                properties(),
+                cosService
         );
         WechatLoginRequest request = new WechatLoginRequest();
         request.setCode("wx-code");
@@ -200,7 +208,8 @@ class MiniappAuthServiceTest {
                 userEntityMapper,
                 userAuthEntityMapper,
                 wechatMiniappClient,
-                properties()
+                properties(),
+                cosService
         );
         WechatLoginRequest request = new WechatLoginRequest();
         request.setCode("wx-code");
