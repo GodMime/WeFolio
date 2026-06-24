@@ -1,6 +1,5 @@
 package com.jxc.wefolio.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jxc.wefolio.dto.MineDashboardResponse;
 import com.jxc.wefolio.entity.PointAccountEntity;
 import com.jxc.wefolio.entity.PointTransactionEntity;
@@ -86,8 +85,7 @@ class MineDashboardServiceTest {
                 pointTransactionEntityMapper,
                 workEntityMapper,
                 portfolioEntityMapper,
-                visitRecordEntityMapper,
-                new ObjectMapper()
+                visitRecordEntityMapper
         );
 
         MineDashboardResponse response = service.getDashboard(7L);

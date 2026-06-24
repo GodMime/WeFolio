@@ -1,9 +1,9 @@
 package com.jxc.wefolio.service;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.alibaba.fastjson2.JSON;
 import com.jxc.wefolio.dto.MineDashboardResponse;
+import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.entity.PointAccountEntity;
 import com.jxc.wefolio.entity.PointTransactionEntity;
 import com.jxc.wefolio.entity.UserEntity;
@@ -51,9 +51,6 @@ public class MineDashboardService {
     /** 访问记录 Mapper */
     private final VisitRecordEntityMapper visitRecordEntityMapper;
 
-    /** JSON 解析器 */
-    private final ObjectMapper objectMapper;
-
     /**
      * 获取维护者“我的”首页数据
      *
@@ -62,12 +59,12 @@ public class MineDashboardService {
      */
     public MineDashboardResponse getDashboard(Long userId) {
         if (userId == null) {
-            throw new IllegalArgumentException("用户未登录");
+            throw new BusinessException("用户未登录");
         }
 
         UserEntity user = userEntityMapper.selectById(userId);
         if (user == null || !"ACTIVE".equals(user.getStatus())) {
-            throw new IllegalArgumentException("用户不存在或已停用");
+            throw new BusinessException("用户不存在或已停用");
         }
 
         MineDashboardResponse response = new MineDashboardResponse();
@@ -201,8 +198,7 @@ public class MineDashboardService {
             return Collections.emptyList();
         }
         try {
-            return objectMapper.readValue(profileTags, new TypeReference<>() {
-            });
+            return JSON.parseArray(profileTags, String.class);
         } catch (Exception e) {
             return Collections.emptyList();
         }

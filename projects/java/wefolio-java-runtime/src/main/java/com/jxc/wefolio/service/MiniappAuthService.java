@@ -9,6 +9,7 @@ import com.jxc.wefolio.dto.WechatPhoneNumberResponse;
 import com.jxc.wefolio.dto.WechatSessionResponse;
 import com.jxc.wefolio.entity.UserAuthEntity;
 import com.jxc.wefolio.entity.UserEntity;
+import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.UserAuthEntityMapper;
 import com.jxc.wefolio.mapper.UserEntityMapper;
 import lombok.RequiredArgsConstructor;
@@ -119,7 +120,7 @@ public class MiniappAuthService {
      */
     public WechatLoginResponse loginByWechat(WechatLoginRequest request) {
         if (request == null || request.getCode() == null || request.getCode().isBlank()) {
-            throw new IllegalArgumentException("微信登录凭证不能为空");
+            throw new BusinessException("微信登录凭证不能为空");
         }
 
         WechatSessionResponse session = wechatMiniappClient.exchangeCode(request.getCode());
@@ -141,7 +142,7 @@ public class MiniappAuthService {
         } else {
             user = userEntityMapper.selectById(auth.getUserId());
             if (user == null || !"ACTIVE".equals(user.getStatus())) {
-                throw new IllegalArgumentException("微信账号状态异常");
+                throw new BusinessException("微信账号状态异常");
             }
             updateLoginTime(user, auth);
         }
@@ -179,7 +180,7 @@ public class MiniappAuthService {
         user.setLastLoginAt(now);
         userEntityMapper.insert(user);
         if (user.getId() == null) {
-            throw new IllegalArgumentException("登录用户创建失败");
+            throw new BusinessException("登录用户创建失败");
         }
         return user;
     }
@@ -335,7 +336,7 @@ public class MiniappAuthService {
      */
     private String requirePhoneCode(WechatLoginRequest request) {
         if (request.getPhoneCode() == null || request.getPhoneCode().isBlank()) {
-            throw new IllegalArgumentException("请先完成手机号授权注册");
+            throw new BusinessException("请先完成手机号授权注册");
         }
         return request.getPhoneCode();
     }
@@ -375,7 +376,7 @@ public class MiniappAuthService {
      */
     private String digestIdentifier(String identifier) {
         if (identifier == null || identifier.isBlank()) {
-            throw new IllegalArgumentException("微信身份标识不能为空");
+            throw new BusinessException("微信身份标识不能为空");
         }
         try {
             Mac mac = Mac.getInstance(HMAC_SHA256);
@@ -385,7 +386,7 @@ public class MiniappAuthService {
             ));
             return HexFormat.of().formatHex(mac.doFinal(identifier.getBytes(StandardCharsets.UTF_8)));
         } catch (Exception e) {
-            throw new IllegalStateException("微信身份摘要生成失败", e);
+            throw new BusinessException("微信身份摘要生成失败", e);
         }
     }
 }

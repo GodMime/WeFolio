@@ -1,6 +1,6 @@
 package com.jxc.wefolio.dto;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.alibaba.fastjson2.annotation.JSONField;
 import lombok.Data;
 
 /**
@@ -13,7 +13,7 @@ public class WechatSessionResponse {
     private String openid;
 
     /** 会话密钥 */
-    @JsonProperty("session_key")
+    @JSONField(name = "session_key")
     private String sessionKey;
 
     /** 用户在开放平台下的唯一标识，未绑定开放平台时为空 */

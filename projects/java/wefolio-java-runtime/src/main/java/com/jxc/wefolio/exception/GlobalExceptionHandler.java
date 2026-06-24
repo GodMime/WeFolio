@@ -8,24 +8,45 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
+/**
+ * 全局异常处理器 — 统一封装接口错误响应，并记录原始异常堆栈
+ */
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    /**
+     * 处理上传文件超限异常
+     *
+     * @param e 上传文件超限异常
+     * @return 失败响应
+     */
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     @ResponseStatus(HttpStatus.OK)
     public Response<Void> handleMaxUploadSizeExceeded(MaxUploadSizeExceededException e) {
-        log.warn("Upload size exceeded: {}", e.getMessage());
+        log.error("Upload size exceeded: {}", e.getMessage(), e);
         return Response.fail("File size exceeds the maximum allowed limit");
     }
 
-    @ExceptionHandler(IllegalArgumentException.class)
+    /**
+     * 处理已知业务异常 — 消息可直接返回给客户端
+     *
+     * @param e 业务异常
+     * @return 失败响应
+     */
+    @ExceptionHandler(BusinessException.class)
     @ResponseStatus(HttpStatus.OK)
-    public Response<Void> handleIllegalArgument(IllegalArgumentException e) {
-        log.warn("Bad request: {}", e.getMessage());
+    public Response<Void> handleBusiness(BusinessException e) {
+        log.error("Business exception: {}", e.getMessage(), e);
         return Response.fail(e.getMessage());
     }
 
+    /**
+     * 处理未预期异常
+     *
+     * @param e 原始异常
+     * @return 失败响应
+     */
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.OK)
     public Response<Void> handleGeneral(Exception e) {

@@ -1,9 +1,10 @@
 package com.jxc.wefolio.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONException;
 import com.jxc.wefolio.common.cache.CacheService;
 import com.jxc.wefolio.config.WechatMiniappProperties;
+import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.dto.WechatAccessTokenResponse;
 import com.jxc.wefolio.dto.WechatSessionResponse;
 import com.jxc.wefolio.dto.WechatPhoneNumberResponse;
@@ -67,8 +68,7 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
             ))
             .build();
 
-    /** JSON 解析器 */
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    /** JSON 解析 — 使用 Fastjson2 统一 JSON 处理 */
 
     /**
      * 使用 wx.login code 换取微信会话
@@ -79,7 +79,7 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
     @Override
     public WechatSessionResponse exchangeCode(String code) {
         if (isBlank(properties.getAppId()) || isBlank(properties.getAppSecret())) {
-            throw new IllegalStateException("微信小程序配置缺失");
+            throw new BusinessException("微信小程序配置缺失");
         }
 
         String url = UriComponentsBuilder.fromUriString(CODE_SESSION_URL)
@@ -93,13 +93,13 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
         WechatSessionResponse response = getWechatResponse(url, WechatSessionResponse.class, "微信登录服务");
 
         if (response == null) {
-            throw new IllegalArgumentException("微信登录服务无响应");
+            throw new BusinessException("微信登录服务无响应");
         }
         if (response.getErrcode() != null && response.getErrcode() != 0) {
-            throw new IllegalArgumentException("微信登录失败：" + defaultString(response.getErrmsg(), "未知错误"));
+            throw new BusinessException("微信登录失败：" + defaultString(response.getErrmsg(), "未知错误"));
         }
         if (isBlank(response.getOpenid())) {
-            throw new IllegalArgumentException("微信登录未返回 openid");
+            throw new BusinessException("微信登录未返回 openid");
         }
         return response;
     }
@@ -113,7 +113,7 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
     @Override
     public WechatPhoneNumberResponse.PhoneInfo exchangePhoneCode(String code) {
         if (isBlank(code)) {
-            throw new IllegalArgumentException("手机号授权凭证不能为空");
+            throw new BusinessException("手机号授权凭证不能为空");
         }
         String url = UriComponentsBuilder.fromUriString(PHONE_NUMBER_URL)
                 .queryParam("access_token", accessToken())
@@ -128,13 +128,13 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
         );
 
         if (response == null) {
-            throw new IllegalArgumentException("微信手机号服务无响应");
+            throw new BusinessException("微信手机号服务无响应");
         }
         if (response.getErrcode() != null && response.getErrcode() != 0) {
-            throw new IllegalArgumentException("微信手机号获取失败：" + defaultString(response.getErrmsg(), "未知错误"));
+            throw new BusinessException("微信手机号获取失败：" + defaultString(response.getErrmsg(), "未知错误"));
         }
         if (response.getPhoneInfo() == null || isBlank(response.getPhoneInfo().getPhoneNumber())) {
-            throw new IllegalArgumentException("微信手机号服务未返回手机号");
+            throw new BusinessException("微信手机号服务未返回手机号");
         }
         return response.getPhoneInfo();
     }
@@ -148,7 +148,7 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
     @Override
     public String exchangePluginOpenpid(String code) {
         if (isBlank(code)) {
-            throw new IllegalArgumentException("微信插件登录凭证不能为空");
+            throw new BusinessException("微信插件登录凭证不能为空");
         }
         String url = UriComponentsBuilder.fromUriString(PLUGIN_OPENPID_URL)
                 .queryParam("access_token", accessToken())
@@ -163,13 +163,13 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
         );
 
         if (response == null) {
-            throw new IllegalArgumentException("微信 openpid 服务无响应");
+            throw new BusinessException("微信 openpid 服务无响应");
         }
         if (response.getErrcode() != null && response.getErrcode() != 0) {
-            throw new IllegalArgumentException("微信 openpid 获取失败：" + defaultString(response.getErrmsg(), "未知错误"));
+            throw new BusinessException("微信 openpid 获取失败：" + defaultString(response.getErrmsg(), "未知错误"));
         }
         if (isBlank(response.getOpenpid())) {
-            throw new IllegalArgumentException("微信 openpid 服务未返回 openpid");
+            throw new BusinessException("微信 openpid 服务未返回 openpid");
         }
         return response.getOpenpid();
     }
@@ -181,7 +181,7 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
      */
     private synchronized String accessToken() {
         if (isBlank(properties.getAppId()) || isBlank(properties.getAppSecret())) {
-            throw new IllegalStateException("微信小程序配置缺失");
+            throw new BusinessException("微信小程序配置缺失");
         }
         String cacheKey = accessTokenCacheKey();
         Optional<String> cachedAccessToken = cacheService.get(cacheKey, String.class);
@@ -199,13 +199,13 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
         WechatAccessTokenResponse response = getWechatResponse(url, WechatAccessTokenResponse.class, "微信 access_token 服务");
 
         if (response == null) {
-            throw new IllegalArgumentException("微信 access_token 服务无响应");
+            throw new BusinessException("微信 access_token 服务无响应");
         }
         if (response.getErrcode() != null && response.getErrcode() != 0) {
-            throw new IllegalArgumentException("微信 access_token 获取失败：" + defaultString(response.getErrmsg(), "未知错误"));
+            throw new BusinessException("微信 access_token 获取失败：" + defaultString(response.getErrmsg(), "未知错误"));
         }
         if (isBlank(response.getAccessToken())) {
-            throw new IllegalArgumentException("微信 access_token 服务未返回凭证");
+            throw new BusinessException("微信 access_token 服务未返回凭证");
         }
         cacheService.put(cacheKey, response.getAccessToken(), accessTokenCacheTtl(response));
         return response.getAccessToken();
@@ -297,7 +297,7 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
         if (response.getStatusCode().isError()) {
             // 错误时打印响应头，帮助定位网关/CDN/代理层面的问题
             log.warn("微信远端响应异常 headers={}", response.getHeaders());
-            throw new IllegalArgumentException(buildWechatHttpErrorMessage(response, serviceName, body));
+            throw new BusinessException(buildWechatHttpErrorMessage(response, serviceName, body));
         }
         return body;
     }
@@ -344,9 +344,9 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
      */
     private String serializeRequestBody(Map<String, String> requestBody) {
         try {
-            return objectMapper.writeValueAsString(requestBody);
-        } catch (JsonProcessingException e) {
-            throw new IllegalArgumentException("微信接口请求参数序列化失败", e);
+            return JSON.toJSONString(requestBody);
+        } catch (JSONException e) {
+            throw new BusinessException("微信接口请求参数序列化失败", e);
         }
     }
 
@@ -385,7 +385,7 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
             return "";
         }
         try {
-            Map<?, ?> error = objectMapper.readValue(body, Map.class);
+            Map<?, ?> error = JSON.parseObject(body, Map.class);
             Object errcode = error.get("errcode");
             Object errmsg = error.get("errmsg");
             if (errcode != null && errmsg != null) {
@@ -397,7 +397,7 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
             if (errcode != null) {
                 return "微信错误 " + errcode;
             }
-        } catch (JsonProcessingException e) {
+        } catch (JSONException e) {
             return body.length() > 200 ? body.substring(0, 200) : body;
         }
         return "";
@@ -416,11 +416,11 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
             return null;
         }
         try {
-            return objectMapper.readValue(body, responseType);
-        } catch (JsonProcessingException e) {
-            // 打印原始 body 和 Jackson 具体原因，方便定位字段不匹配问题
+            return JSON.parseObject(body, responseType);
+        } catch (JSONException e) {
+            // 打印原始 body 和 Fastjson 具体原因，方便定位字段不匹配问题
             log.error("微信接口响应解析失败 body={} targetType={}", body, responseType.getSimpleName(), e);
-            throw new IllegalArgumentException("微信接口响应解析失败：" + e.getOriginalMessage());
+            throw new BusinessException("微信接口响应解析失败：" + e.getMessage());
         }
     }
 

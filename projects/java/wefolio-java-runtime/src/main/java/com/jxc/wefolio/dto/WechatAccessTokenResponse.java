@@ -1,6 +1,6 @@
 package com.jxc.wefolio.dto;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.alibaba.fastjson2.annotation.JSONField;
 import lombok.Data;
 
 /**
@@ -10,11 +10,11 @@ import lombok.Data;
 public class WechatAccessTokenResponse {
 
     /** 接口调用凭证 */
-    @JsonProperty("access_token")
+    @JSONField(name = "access_token")
     private String accessToken;
 
     /** 凭证有效期，单位秒 */
-    @JsonProperty("expires_in")
+    @JSONField(name = "expires_in")
     private Long expiresIn;
 
     /** 微信错误码，成功时为空或 0 */

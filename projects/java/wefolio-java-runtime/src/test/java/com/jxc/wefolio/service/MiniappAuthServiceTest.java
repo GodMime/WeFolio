@@ -9,6 +9,7 @@ import com.jxc.wefolio.entity.UserAuthEntity;
 import com.jxc.wefolio.mapper.UserAuthEntityMapper;
 import com.jxc.wefolio.mapper.UserEntityMapper;
 import com.jxc.wefolio.config.WechatMiniappProperties;
+import com.jxc.wefolio.exception.BusinessException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -60,7 +61,7 @@ class MiniappAuthServiceTest {
         request.setCode(" ");
 
         assertThatThrownBy(() -> service.loginByWechat(request))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(BusinessException.class)
                 .hasMessage("微信登录凭证不能为空");
     }
 
@@ -205,7 +206,7 @@ class MiniappAuthServiceTest {
         request.setCode("wx-code");
 
         assertThatThrownBy(() -> service.loginByWechat(request))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(BusinessException.class)
                 .hasMessage("请先完成手机号授权注册");
     }
 
