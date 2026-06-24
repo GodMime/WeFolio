@@ -2,21 +2,30 @@ package com.jxc.wefolio.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jxc.wefolio.common.cache.CacheService;
 import com.jxc.wefolio.config.WechatMiniappProperties;
 import com.jxc.wefolio.dto.WechatAccessTokenResponse;
 import com.jxc.wefolio.dto.WechatSessionResponse;
 import com.jxc.wefolio.dto.WechatPhoneNumberResponse;
 import com.jxc.wefolio.dto.WechatPluginOpenpidResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.MediaType;
+import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Map;
+import java.util.Optional;
 
 /**
- * REST 微信小程序客户端 — 调用微信 jscode2session 接口
+ * REST 微信小程序客户端 — 统一封装微信小程序服务端接口调用、原始入参出参日志和响应解析
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class RestWechatMiniappClient implements WechatMiniappClient {
@@ -33,23 +42,23 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
     /** 微信插件 openpid 地址 */
     private static final String PLUGIN_OPENPID_URL = "https://api.weixin.qq.com/wxa/getpluginopenpid";
 
-    /** access_token 过期前刷新缓冲 */
-    private static final long ACCESS_TOKEN_REFRESH_BUFFER_MILLIS = 5L * 60L * 1000L;
+    /** 微信 access_token 缓存键前缀 */
+    private static final String ACCESS_TOKEN_CACHE_KEY_PREFIX = "wechat:miniapp:access-token:";
+
+    /** access_token 过期前刷新缓冲秒数 */
+    private static final long ACCESS_TOKEN_REFRESH_BUFFER_SECONDS = 5L * 60L;
 
     /** 微信小程序配置 */
     private final WechatMiniappProperties properties;
+
+    /** 缓存服务 */
+    private final CacheService cacheService;
 
     /** REST 客户端 */
     private final RestClient restClient = RestClient.create();
 
     /** JSON 解析器 */
     private final ObjectMapper objectMapper = new ObjectMapper();
-
-    /** 缓存的 access_token */
-    private volatile String cachedAccessToken;
-
-    /** 缓存 access_token 过期时间戳 */
-    private volatile long cachedAccessTokenExpiresAt;
 
     /**
      * 使用 wx.login code 换取微信会话
@@ -71,7 +80,7 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
                 .build()
                 .toUriString();
 
-        WechatSessionResponse response = getWechatResponse(url, WechatSessionResponse.class);
+        WechatSessionResponse response = getWechatResponse(url, WechatSessionResponse.class, "微信登录服务");
 
         if (response == null) {
             throw new IllegalArgumentException("微信登录服务无响应");
@@ -104,7 +113,8 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
         WechatPhoneNumberResponse response = postWechatResponse(
                 url,
                 Map.of("code", code),
-                WechatPhoneNumberResponse.class
+                WechatPhoneNumberResponse.class,
+                "微信手机号服务"
         );
 
         if (response == null) {
@@ -138,7 +148,8 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
         WechatPluginOpenpidResponse response = postWechatResponse(
                 url,
                 Map.of("code", code),
-                WechatPluginOpenpidResponse.class
+                WechatPluginOpenpidResponse.class,
+                "微信 openpid 服务"
         );
 
         if (response == null) {
@@ -159,12 +170,13 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
      * @return access_token
      */
     private synchronized String accessToken() {
-        long now = System.currentTimeMillis();
-        if (!isBlank(cachedAccessToken) && cachedAccessTokenExpiresAt > now) {
-            return cachedAccessToken;
-        }
         if (isBlank(properties.getAppId()) || isBlank(properties.getAppSecret())) {
             throw new IllegalStateException("微信小程序配置缺失");
+        }
+        String cacheKey = accessTokenCacheKey();
+        Optional<String> cachedAccessToken = cacheService.get(cacheKey, String.class);
+        if (cachedAccessToken.isPresent() && !isBlank(cachedAccessToken.get())) {
+            return cachedAccessToken.get();
         }
 
         String url = UriComponentsBuilder.fromUriString(ACCESS_TOKEN_URL)
@@ -174,7 +186,7 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
                 .build()
                 .toUriString();
 
-        WechatAccessTokenResponse response = getWechatResponse(url, WechatAccessTokenResponse.class);
+        WechatAccessTokenResponse response = getWechatResponse(url, WechatAccessTokenResponse.class, "微信 access_token 服务");
 
         if (response == null) {
             throw new IllegalArgumentException("微信 access_token 服务无响应");
@@ -185,11 +197,29 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
         if (isBlank(response.getAccessToken())) {
             throw new IllegalArgumentException("微信 access_token 服务未返回凭证");
         }
-        long expiresInMillis = Math.max(60L, response.getExpiresIn() == null ? 7200L : response.getExpiresIn()) * 1000L;
-        long refreshBufferMillis = Math.min(ACCESS_TOKEN_REFRESH_BUFFER_MILLIS, expiresInMillis / 2);
-        cachedAccessToken = response.getAccessToken();
-        cachedAccessTokenExpiresAt = now + expiresInMillis - refreshBufferMillis;
-        return cachedAccessToken;
+        cacheService.put(cacheKey, response.getAccessToken(), accessTokenCacheTtl(response));
+        return response.getAccessToken();
+    }
+
+    /**
+     * 构建微信 access_token 缓存键
+     *
+     * @return 缓存键
+     */
+    private String accessTokenCacheKey() {
+        return ACCESS_TOKEN_CACHE_KEY_PREFIX + properties.getAppId();
+    }
+
+    /**
+     * 计算微信 access_token 缓存有效期。为避免临界过期，缓存时间会短于微信返回的 expires_in。
+     *
+     * @param response 微信 access_token 响应
+     * @return 缓存有效期
+     */
+    private Duration accessTokenCacheTtl(WechatAccessTokenResponse response) {
+        long expiresInSeconds = Math.max(60L, response.getExpiresIn() == null ? 7200L : response.getExpiresIn());
+        long refreshBufferSeconds = Math.min(ACCESS_TOKEN_REFRESH_BUFFER_SECONDS, expiresInSeconds / 2);
+        return Duration.ofSeconds(expiresInSeconds - refreshBufferSeconds);
     }
 
     /**
@@ -198,14 +228,15 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
      *
      * @param url 请求地址
      * @param responseType 响应类型
+     * @param serviceName 服务名称
      * @return 响应对象
      * @param <T> 响应类型
      */
-    private <T> T getWechatResponse(String url, Class<T> responseType) {
+    private <T> T getWechatResponse(String url, Class<T> responseType, String serviceName) {
+        logWechatRequest(serviceName, "GET", url, "");
         String body = restClient.get()
                 .uri(url)
-                .retrieve()
-                .body(String.class);
+                .exchange((request, response) -> readWechatHttpBody(response, serviceName));
         return parseWechatResponse(body, responseType);
     }
 
@@ -216,16 +247,142 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
      * @param url 请求地址
      * @param requestBody 请求体
      * @param responseType 响应类型
+     * @param serviceName 服务名称
      * @return 响应对象
      * @param <T> 响应类型
      */
-    private <T> T postWechatResponse(String url, Map<String, String> requestBody, Class<T> responseType) {
+    private <T> T postWechatResponse(
+            String url,
+            Map<String, String> requestBody,
+            Class<T> responseType,
+            String serviceName
+    ) {
+        String requestBodyText = serializeRequestBody(requestBody);
+        logWechatRequest(serviceName, "POST", url, requestBodyText);
         String body = restClient.post()
                 .uri(url)
+                .contentType(MediaType.APPLICATION_JSON)
                 .body(requestBody)
-                .retrieve()
-                .body(String.class);
+                .exchange((request, response) -> readWechatHttpBody(response, serviceName));
         return parseWechatResponse(body, responseType);
+    }
+
+    /**
+     * 读取微信 HTTP 响应，并把 HTTP 失败状态转换为业务异常。
+     *
+     * @param response HTTP 响应
+     * @param serviceName 服务名称
+     * @return 响应体文本
+     * @throws IOException 响应体读取失败
+     */
+    private String readWechatHttpBody(ClientHttpResponse response, String serviceName) throws IOException {
+        String body = new String(response.getBody().readAllBytes(), StandardCharsets.UTF_8);
+        logWechatResponse(serviceName, response.getStatusCode().value(), body);
+        if (response.getStatusCode().isError()) {
+            throw new IllegalArgumentException(buildWechatHttpErrorMessage(response, serviceName, body));
+        }
+        return body;
+    }
+
+    /**
+     * 打印微信远端请求原始入参
+     *
+     * @param serviceName 服务名称
+     * @param method HTTP 方法
+     * @param url 请求地址
+     * @param requestBody 请求体文本
+     */
+    private void logWechatRequest(String serviceName, String method, String url, String requestBody) {
+        log.info(
+                "微信远端请求入参 serviceName={} method={} url={} requestBody={}",
+                serviceName,
+                method,
+                url,
+                requestBody
+        );
+    }
+
+    /**
+     * 打印微信远端响应原始出参
+     *
+     * @param serviceName 服务名称
+     * @param status HTTP 状态码
+     * @param responseBody 响应体文本
+     */
+    private void logWechatResponse(String serviceName, int status, String responseBody) {
+        log.info(
+                "微信远端响应出参 serviceName={} status={} responseBody={}",
+                serviceName,
+                status,
+                responseBody
+        );
+    }
+
+    /**
+     * 将微信请求体序列化为日志文本
+     *
+     * @param requestBody 请求体
+     * @return JSON 文本
+     */
+    private String serializeRequestBody(Map<String, String> requestBody) {
+        try {
+            return objectMapper.writeValueAsString(requestBody);
+        } catch (JsonProcessingException e) {
+            throw new IllegalArgumentException("微信接口请求参数序列化失败", e);
+        }
+    }
+
+    /**
+     * 构建微信 HTTP 错误信息
+     *
+     * @param response HTTP 响应
+     * @param serviceName 服务名称
+     * @param body 响应体文本
+     * @return 错误信息
+     * @throws IOException 状态文本读取失败
+     */
+    private String buildWechatHttpErrorMessage(
+            ClientHttpResponse response,
+            String serviceName,
+            String body
+    ) throws IOException {
+        String statusText = response.getStatusText();
+        String statusMessage = "HTTP " + response.getStatusCode().value()
+                + (isBlank(statusText) ? "" : " " + statusText);
+        String wechatErrorMessage = parseWechatErrorMessage(body);
+        if (isBlank(wechatErrorMessage)) {
+            return serviceName + "请求失败：" + statusMessage;
+        }
+        return serviceName + "请求失败：" + statusMessage + "，" + wechatErrorMessage;
+    }
+
+    /**
+     * 解析微信错误响应中的 errcode 和 errmsg
+     *
+     * @param body 响应体文本
+     * @return 微信错误信息
+     */
+    private String parseWechatErrorMessage(String body) {
+        if (isBlank(body)) {
+            return "";
+        }
+        try {
+            Map<?, ?> error = objectMapper.readValue(body, Map.class);
+            Object errcode = error.get("errcode");
+            Object errmsg = error.get("errmsg");
+            if (errcode != null && errmsg != null) {
+                return "微信错误 " + errcode + "：" + errmsg;
+            }
+            if (errmsg != null) {
+                return String.valueOf(errmsg);
+            }
+            if (errcode != null) {
+                return "微信错误 " + errcode;
+            }
+        } catch (JsonProcessingException e) {
+            return body.length() > 200 ? body.substring(0, 200) : body;
+        }
+        return "";
     }
 
     /**
