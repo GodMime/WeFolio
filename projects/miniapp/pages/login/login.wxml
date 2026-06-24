@@ -24,6 +24,7 @@
           <view class="login-tabs">
             <button class="login-tab {{activeTab === 'register' ? 'active' : ''}}" data-tab="register" bindtap="handleTabTap">注册</button>
             <button class="login-tab {{activeTab === 'wechat' ? 'active' : ''}}" data-tab="wechat" bindtap="handleTabTap">微信授权</button>
+            <view class="tab-indicator {{activeTab === 'register' ? 'register' : 'wechat'}}"></view>
           </view>
 
           <view class="auth-body {{activeTab === 'register' ? 'register-mode' : 'wechat-mode'}}">

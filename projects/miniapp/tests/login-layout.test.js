@@ -120,14 +120,26 @@ test('login tab content stays mounted for animated height transitions', () => {
 test('login tabs match design underline style', () => {
   const tabsRule = readRule('.login-tabs')
   const activeTabRule = readRule('.login-tab.active')
-  const activeUnderlineRule = readRule('.login-tab.active::after')
+  const indicatorRule = readRule('.tab-indicator')
+  const registerIndicatorRule = readRule('.tab-indicator.register')
+  const wechatIndicatorRule = readRule('.tab-indicator.wechat')
 
+  assert.match(
+    loginWxml,
+    /class="tab-indicator \{\{activeTab === 'register' \? 'register' : 'wechat'\}\}"/
+  )
   assert.match(tabsRule, /border-bottom:\s*1rpx\s+solid\s+#d7dee5/)
   assert.match(tabsRule, /background:\s*transparent/)
   assert.match(tabsRule, /padding:\s*0/)
+  assert.match(tabsRule, /position:\s*relative/)
   assert.match(activeTabRule, /background:\s*transparent/)
   assert.match(activeTabRule, /box-shadow:\s*none/)
-  assert.match(activeUnderlineRule, /background:\s*#315f9d/)
+  assert.match(indicatorRule, /position:\s*absolute/)
+  assert.match(indicatorRule, /height:\s*4rpx/)
+  assert.match(indicatorRule, /background:\s*#315f9d/)
+  assert.match(indicatorRule, /transition:\s*left/)
+  assert.match(registerIndicatorRule, /left:\s*25%/)
+  assert.match(wechatIndicatorRule, /left:\s*75%/)
 })
 
 test('login buttons match first-login design copy and shape', () => {

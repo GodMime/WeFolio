@@ -150,6 +150,7 @@
 }
 
 .login-tabs {
+  position: relative;
   display: flex;
   align-items: stretch;
   height: 52rpx;
@@ -192,15 +193,24 @@
   box-shadow: none;
 }
 
-.login-tab.active::after {
+.tab-indicator {
   position: absolute;
-  left: 32rpx;
-  right: 32rpx;
+  left: 25%;
   bottom: -1rpx;
+  width: 108rpx;
   height: 4rpx;
-  border-radius: 999rpx 999rpx 0 0;
+  margin-left: -54rpx;
+  border-radius: 999rpx;
   background: #315f9d;
-  content: "";
+  transition: left 0.28s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.tab-indicator.register {
+  left: 25%;
+}
+
+.tab-indicator.wechat {
+  left: 75%;
 }
 
 .login-form {
