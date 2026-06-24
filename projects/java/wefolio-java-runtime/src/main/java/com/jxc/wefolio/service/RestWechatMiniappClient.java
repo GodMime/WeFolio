@@ -12,11 +12,13 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.ClientHttpResponse;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.IOException;
+import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Map;
@@ -54,8 +56,16 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
     /** 缓存服务 */
     private final CacheService cacheService;
 
-    /** REST 客户端 */
-    private final RestClient restClient = RestClient.create();
+    /**
+     * REST 客户端 — 强制 HTTP/1.1。
+     * JDK HttpClient 默认通过 ALPN 协商 HTTP/2，但部分中间 CDN/网关对
+     * HTTP/2 POST 处理异常（直接返回 412 且 body 为空），curl 走 HTTP/1.1 则正常。
+     */
+    private final RestClient restClient = RestClient.builder()
+            .requestFactory(new JdkClientHttpRequestFactory(
+                    HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build()
+            ))
+            .build();
 
     /** JSON 解析器 */
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -279,6 +289,8 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
         String body = new String(response.getBody().readAllBytes(), StandardCharsets.UTF_8);
         logWechatResponse(serviceName, response.getStatusCode().value(), body);
         if (response.getStatusCode().isError()) {
+            // 错误时打印响应头，帮助定位网关/CDN/代理层面的问题
+            log.warn("微信远端响应异常 headers={}", response.getHeaders());
             throw new IllegalArgumentException(buildWechatHttpErrorMessage(response, serviceName, body));
         }
         return body;
