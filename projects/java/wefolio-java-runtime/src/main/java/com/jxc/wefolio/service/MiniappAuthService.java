@@ -14,15 +14,22 @@ import com.jxc.wefolio.mapper.UserAuthEntityMapper;
 import com.jxc.wefolio.mapper.UserEntityMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * 小程序登录服务 — 提供一期微信授权登录的后端入口
@@ -61,6 +68,11 @@ public class MiniappAuthService {
 
     /** COS 对象存储服务 */
     private final CosService cosService;
+
+    /** 自注入代理，用于 @Transactional 方法走 AOP。测试中直接赋值即可。 */
+    @Autowired
+    @Lazy
+    MiniappAuthService self;
 
     /**
      * 解析 bearer token 中的用户 ID
@@ -139,11 +151,14 @@ public class MiniappAuthService {
             String openpid = exchangePluginOpenpidIfPresent(request.getPluginLoginCode());
             user = findActiveUserByPhone(phoneInfo.getPhoneNumber());
             if (user == null) {
-                user = createWechatUser(request, phoneInfo, openpid);
+                String uniqueCode = generateUniqueCode();
+                // COS 文件夹初始化在前，失败直接抛异常，不污染数据库
+                cosService.initUserStorage(uniqueCode);
+                user = self.doCreateWechatUser(uniqueCode, request, phoneInfo, openpid, session, openidHash);
             } else {
                 updateWechatRegistrationProfile(user, request, phoneInfo, openpid);
+                createWechatAuth(user, session, openidHash);
             }
-            createWechatAuth(user, session, openidHash);
         } else {
             user = userEntityMapper.selectById(auth.getUserId());
             if (user == null || !"ACTIVE".equals(user.getStatus())) {
@@ -159,21 +174,29 @@ public class MiniappAuthService {
     }
 
     /**
-     * 创建微信登录用户
+     * 创建微信登录用户（事务保护）— COS 文件夹已在前置步骤初始化完成，
+     * 此处仅做数据库写入：insert wf_user + insert wf_user_auth 在同一事务内。
      *
-     * @param request 微信登录请求
-     * @param phoneInfo 微信手机号信息
-     * @param openpid 插件用户 openpid
+     * @param uniqueCode 已生成的个人唯一码
+     * @param request    微信登录请求
+     * @param phoneInfo  微信手机号信息
+     * @param openpid    插件用户 openpid
+     * @param session    微信会话
+     * @param openidHash openid 摘要
      * @return 用户实体
      */
-    private UserEntity createWechatUser(
+    @Transactional(rollbackFor = Exception.class)
+    public UserEntity doCreateWechatUser(
+            String uniqueCode,
             WechatLoginRequest request,
             WechatPhoneNumberResponse.PhoneInfo phoneInfo,
-            String openpid
+            String openpid,
+            WechatSessionResponse session,
+            String openidHash
     ) {
         LocalDateTime now = LocalDateTime.now();
         UserEntity user = new UserEntity();
-        user.setUniqueCode(generateUniqueCode());
+        user.setUniqueCode(uniqueCode);
         user.setNickname(defaultString(request.getNickname(), "微信用户"));
         user.setAvatarUrl(defaultString(request.getAvatarUrl(), ""));
         user.setPhoneNumber(phoneInfo.getPhoneNumber());
@@ -191,13 +214,8 @@ public class MiniappAuthService {
             throw new BusinessException("登录用户创建失败");
         }
 
-        // 初始化 COS 用户文件夹结构，失败直接报错
-        try {
-            cosService.initUserStorage(user.getUniqueCode());
-        } catch (Exception e) {
-            log.error("COS 文件夹初始化失败 uniqueCode={}", user.getUniqueCode(), e);
-            throw new BusinessException("用户初始化失败", e);
-        }
+        // 创建微信登录身份绑定，与用户 insert 在同一事务内
+        createWechatAuth(user, session, openidHash);
 
         return user;
     }
@@ -302,15 +320,30 @@ public class MiniappAuthService {
     }
 
     /**
-     * 生成个人唯一码
+     * 生成个人唯一码 — 一次生成 3 个候选码，批量查库取第一个未使用的
      *
      * @return 个人唯一码
      */
     private String generateUniqueCode() {
-        return "WF" + UUID.randomUUID().toString()
-                .replace("-", "")
-                .substring(0, 8)
-                .toUpperCase(Locale.ROOT);
+        List<String> candidates = Stream.generate(() -> "WF" + UUID.randomUUID().toString()
+                        .replace("-", "")
+                        .substring(0, 8)
+                        .toUpperCase(Locale.ROOT))
+                .limit(3)
+                .collect(Collectors.toList());
+        Set<String> used = userEntityMapper.selectList(
+                        Wrappers.<UserEntity>query()
+                                .select("unique_code")
+                                .in("unique_code", candidates))
+                .stream()
+                .map(UserEntity::getUniqueCode)
+                .collect(Collectors.toSet());
+        for (String code : candidates) {
+            if (!used.contains(code)) {
+                return code;
+            }
+        }
+        throw new BusinessException("唯一码生成失败，请重试");
     }
 
     /**

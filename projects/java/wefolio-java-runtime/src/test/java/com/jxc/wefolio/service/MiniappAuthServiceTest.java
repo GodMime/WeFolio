@@ -40,13 +40,7 @@ class MiniappAuthServiceTest {
 
     @Test
     void parsesDevelopmentBearerToken() {
-        MiniappAuthService service = new MiniappAuthService(
-                userEntityMapper,
-                userAuthEntityMapper,
-                wechatMiniappClient,
-                properties(),
-                cosService
-        );
+        MiniappAuthService service = buildService();
 
         assertThat(service.resolveUserId("Bearer wf-dev-user-42")).isEqualTo(42L);
         assertThat(service.resolveUserId("Bearer invalid")).isNull();
@@ -55,13 +49,7 @@ class MiniappAuthServiceTest {
 
     @Test
     void rejectsBlankWechatCode() {
-        MiniappAuthService service = new MiniappAuthService(
-                userEntityMapper,
-                userAuthEntityMapper,
-                wechatMiniappClient,
-                properties(),
-                cosService
-        );
+        MiniappAuthService service = buildService();
         WechatLoginRequest request = new WechatLoginRequest();
         request.setCode(" ");
 
@@ -83,19 +71,14 @@ class MiniappAuthServiceTest {
         when(wechatMiniappClient.exchangePhoneCode("phone-code")).thenReturn(phoneInfo);
         when(wechatMiniappClient.exchangePluginOpenpid("plugin-code")).thenReturn("openpid-abc");
         when(userAuthEntityMapper.selectOne(any())).thenReturn(null);
+        when(userEntityMapper.selectList(any())).thenReturn(java.util.Collections.emptyList());
         doAnswer(invocation -> {
             UserEntity user = invocation.getArgument(0);
             user.setId(11L);
             return 1;
         }).when(userEntityMapper).insert(any(UserEntity.class));
 
-        MiniappAuthService service = new MiniappAuthService(
-                userEntityMapper,
-                userAuthEntityMapper,
-                wechatMiniappClient,
-                properties(),
-                cosService
-        );
+        MiniappAuthService service = buildService();
         WechatLoginRequest request = new WechatLoginRequest();
         request.setCode("wx-code");
         request.setNickname("林安");
@@ -108,6 +91,7 @@ class MiniappAuthServiceTest {
         assertThat(response.getToken()).isEqualTo("wf-dev-user-11");
         assertThat(response.getUserId()).isEqualTo(11L);
         assertThat(response.getTokenType()).isEqualTo("Bearer");
+        verify(cosService).initUserStorage(any());
         verify(userEntityMapper).insert(org.mockito.ArgumentMatchers.<UserEntity>argThat(user ->
                 "林安".equals(user.getNickname())
                         && "https://example.com/avatar.jpg".equals(user.getAvatarUrl())
@@ -131,19 +115,14 @@ class MiniappAuthServiceTest {
         phoneInfo.setCountryCode("86");
         when(wechatMiniappClient.exchangePhoneCode("phone-code")).thenReturn(phoneInfo);
         when(userAuthEntityMapper.selectOne(any())).thenReturn(null);
+        when(userEntityMapper.selectList(any())).thenReturn(java.util.Collections.emptyList());
         doAnswer(invocation -> {
             UserEntity user = invocation.getArgument(0);
             user.setId(11L);
             return 1;
         }).when(userEntityMapper).insert(any(UserEntity.class));
 
-        MiniappAuthService service = new MiniappAuthService(
-                userEntityMapper,
-                userAuthEntityMapper,
-                wechatMiniappClient,
-                properties(),
-                cosService
-        );
+        MiniappAuthService service = buildService();
         WechatLoginRequest request = new WechatLoginRequest();
         request.setCode("wx-code");
         request.setNickname("林安");
@@ -154,6 +133,7 @@ class MiniappAuthServiceTest {
 
         assertThat(response.getToken()).isEqualTo("wf-dev-user-11");
         verify(wechatMiniappClient, never()).exchangePluginOpenpid(any());
+        verify(cosService).initUserStorage(any());
         verify(userEntityMapper).insert(org.mockito.ArgumentMatchers.<UserEntity>argThat(user ->
                 "林安".equals(user.getNickname())
                         && "https://example.com/avatar.jpg".equals(user.getAvatarUrl())
@@ -179,13 +159,7 @@ class MiniappAuthServiceTest {
         user.setStatus("ACTIVE");
         when(userEntityMapper.selectById(7L)).thenReturn(user);
 
-        MiniappAuthService service = new MiniappAuthService(
-                userEntityMapper,
-                userAuthEntityMapper,
-                wechatMiniappClient,
-                properties(),
-                cosService
-        );
+        MiniappAuthService service = buildService();
         WechatLoginRequest request = new WechatLoginRequest();
         request.setCode("wx-code");
 
@@ -204,6 +178,16 @@ class MiniappAuthServiceTest {
         when(wechatMiniappClient.exchangeCode("wx-code")).thenReturn(session);
         when(userAuthEntityMapper.selectOne(any())).thenReturn(null);
 
+        MiniappAuthService service = buildService();
+        WechatLoginRequest request = new WechatLoginRequest();
+        request.setCode("wx-code");
+
+        assertThatThrownBy(() -> service.loginByWechat(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("请先完成手机号授权注册");
+    }
+
+    private MiniappAuthService buildService() {
         MiniappAuthService service = new MiniappAuthService(
                 userEntityMapper,
                 userAuthEntityMapper,
@@ -211,12 +195,9 @@ class MiniappAuthServiceTest {
                 properties(),
                 cosService
         );
-        WechatLoginRequest request = new WechatLoginRequest();
-        request.setCode("wx-code");
-
-        assertThatThrownBy(() -> service.loginByWechat(request))
-                .isInstanceOf(BusinessException.class)
-                .hasMessage("请先完成手机号授权注册");
+        // 注入 self 代理，使 @Transactional 方法能通过自调用走 AOP
+        service.self = service;
+        return service;
     }
 
     private WechatMiniappProperties properties() {
