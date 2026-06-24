@@ -269,11 +269,17 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
     ) {
         String requestBodyText = serializeRequestBody(requestBody);
         logWechatRequest(serviceName, "POST", url, requestBodyText);
+        // 手动序列化为 String 传入 body()，避免 RestClient 消息转换器对 Map 的序列化
+        // 行为与 ObjectMapper 不一致（如字段排序、null 处理等），导致微信网关 412。
         String body = restClient.post()
                 .uri(url)
                 .contentType(MediaType.APPLICATION_JSON)
-                .body(requestBody)
-                .exchange((request, response) -> readWechatHttpBody(response, serviceName));
+                .body(requestBodyText)
+                .exchange((request, response) -> {
+                    // 打印实际发出的请求头，方便与 curl 比对差异
+                    log.info("微信远端请求头 headers={}", request.getHeaders());
+                    return readWechatHttpBody(response, serviceName);
+                });
         return parseWechatResponse(body, responseType);
     }
 
