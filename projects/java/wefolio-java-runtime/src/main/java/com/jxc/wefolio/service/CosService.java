@@ -131,6 +131,18 @@ public class CosService {
     }
 
     /**
+     * 检查用户的 COS 文件夹结构是否已初始化。
+     * 通过探测根文件夹（{@code {uniqueCode}/}）对象是否存在来判断。
+     *
+     * @param uniqueCode 用户唯一码
+     * @return 文件夹结构是否存在
+     */
+    public boolean isUserStorageInitialized(String uniqueCode) {
+        return transferManager.getCOSClient().doesObjectExist(
+                cosProperties.getBucketName(), uniqueCode + "/");
+    }
+
+    /**
      * 拼接文件夹路径与文件名
      *
      * @param folderPrefix 文件夹前缀，可为空

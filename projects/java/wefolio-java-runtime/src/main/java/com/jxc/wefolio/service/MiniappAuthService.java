@@ -150,6 +150,9 @@ public class MiniappAuthService {
                 throw new BusinessException("微信账号状态异常");
             }
             updateLoginTime(user, auth);
+
+            // 校验 COS 文件夹是否存在（处理老用户或意外删除场景），失败不影响登录
+            ensureUserStorage(user);
         }
 
         return buildLoginResponse(user.getId());
@@ -188,14 +191,32 @@ public class MiniappAuthService {
             throw new BusinessException("登录用户创建失败");
         }
 
-        // 初始化 COS 用户文件夹结构，失败不影响注册主流程
+        // 初始化 COS 用户文件夹结构，失败直接报错
         try {
             cosService.initUserStorage(user.getUniqueCode());
         } catch (Exception e) {
             log.error("COS 文件夹初始化失败 uniqueCode={}", user.getUniqueCode(), e);
+            throw new BusinessException("用户初始化失败", e);
         }
 
         return user;
+    }
+
+    /**
+     * 确保老用户的 COS 文件夹结构存在（处理上线前的存量用户或意外删除场景）。
+     * 登录时静默补建，失败仅记日志不阻断登录。
+     *
+     * @param user 用户实体
+     */
+    private void ensureUserStorage(UserEntity user) {
+        try {
+            if (!cosService.isUserStorageInitialized(user.getUniqueCode())) {
+                log.info("补建 COS 文件夹 uniqueCode={}", user.getUniqueCode());
+                cosService.initUserStorage(user.getUniqueCode());
+            }
+        } catch (Exception e) {
+            log.error("COS 文件夹补建失败 uniqueCode={}", user.getUniqueCode(), e);
+        }
     }
 
     /**
