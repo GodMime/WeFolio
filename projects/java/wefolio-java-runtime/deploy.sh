@@ -1,6 +1,11 @@
 #!/bin/bash
 set -eo pipefail
 
+# === 切换到脚本所在目录（确保从任意位置执行都能正确找到 pom.xml 和 target/），执行完回到原目录 ===
+ORIG_DIR="$(pwd)"
+trap 'cd "$ORIG_DIR"' EXIT
+cd "$(dirname "$0")"
+
 # === 配置 ===
 SERVER="root@49.235.146.161"
 REMOTE_DIR="/root/java"

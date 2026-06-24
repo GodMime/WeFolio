@@ -1,2 +1,5 @@
-// app.js
-App({})
+App({
+  globalData: {
+    apiBaseUrl: 'https://api.we-folio.dingchenyong.top'
+  }
+})

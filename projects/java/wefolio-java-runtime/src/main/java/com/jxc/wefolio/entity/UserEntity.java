@@ -37,6 +37,18 @@ public class UserEntity extends BaseEntity {
     /** 资料联系电话密文，不作为登录凭证 */
     private String contactPhoneCiphertext;
 
+    /** 微信手机号快速验证获得的手机号 */
+    private String phoneNumber;
+
+    /** 手机号国家或地区码 */
+    private String phoneCountryCode;
+
+    /** 手机号尾号，便于展示与排查 */
+    private String phoneLast4;
+
+    /** 微信插件用户唯一标识 openpid */
+    private String wechatOpenpid;
+
     /** 展示标签数组（JSON） */
     private String profileTags;
 

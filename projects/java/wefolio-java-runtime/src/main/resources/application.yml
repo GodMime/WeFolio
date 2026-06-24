@@ -34,3 +34,10 @@ cos:
   secret-key: ${COS_SECRET_KEY}
   region: ${COS_REGION:ap-guangzhou}
   bucket-name: ${COS_BUCKET_NAME}
+  public-base-url: ${COS_PUBLIC_BASE_URL:https://cos.we-folio.dingchenyong.top}
+
+# --- WeChat Mini Program Configuration ---
+wechat:
+  miniapp:
+    app-id: ${WECHAT_MINIAPP_APP_ID}
+    app-secret: ${WECHAT_MINIAPP_APP_SECRET}

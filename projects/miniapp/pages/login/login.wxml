@@ -1,0 +1,95 @@
+<view class="page-shell login-page">
+  <navigation-bar title="映期Folio" back="{{false}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+
+  <scroll-view class="login-scroll" scroll-y type="list">
+    <view class="login-layout">
+      <view class="login-hero {{activeTab === 'register' ? 'register-mode' : 'wechat-mode'}}">
+        <image class="hero-image" src="https://cos.we-folio.dingchenyong.top/backgroud.jpeg" mode="aspectFill"></image>
+        <view class="hero-shade"></view>
+        <view class="hero-copy">
+          <view class="hero-title">把作品和档期，装进一张可分享名片</view>
+        </view>
+      </view>
+
+      <view class="login-content">
+        <view class="panel welcome-panel">
+          <view class="welcome-copy">
+            <view class="welcome-title">欢迎使用映期Folio</view>
+            <view class="welcome-desc">适合司仪、化妆、模特和婚庆团队的作品展示工具。</view>
+          </view>
+          <image class="welcome-avatar" src="https://cos.we-folio.dingchenyong.top/logo.png" mode="aspectFill"></image>
+        </view>
+
+        <view class="panel auth-panel">
+          <view class="login-tabs">
+            <button class="login-tab {{activeTab === 'register' ? 'active' : ''}}" data-tab="register" bindtap="handleTabTap">注册</button>
+            <button class="login-tab {{activeTab === 'wechat' ? 'active' : ''}}" data-tab="wechat" bindtap="handleTabTap">微信授权</button>
+          </view>
+
+          <view class="auth-body {{activeTab === 'register' ? 'register-mode' : 'wechat-mode'}}">
+            <view class="login-form register-form {{activeTab === 'register' ? 'active' : 'inactive'}}">
+              <view class="form-row profile-row">
+                <view class="field-label">头像昵称</view>
+                <view class="profile-auth-row">
+                  <button class="avatar-picker {{avatarError ? 'invalid' : ''}}" open-type="chooseAvatar" bindchooseavatar="handleChooseAvatar">
+                    <image wx:if="{{avatarUrl}}" class="picked-avatar" src="{{avatarUrl}}" mode="aspectFill"></image>
+                    <text wx:else class="avatar-placeholder">头像</text>
+                  </button>
+                  <view class="nickname-auth-field {{nicknameError ? 'invalid' : ''}}">
+                    <text wx:if="{{nickname}}" class="nickname-auth-text">{{nickname}}</text>
+                    <text wx:else class="nickname-auth-placeholder">点击授权微信昵称</text>
+                    <input
+                      class="nickname-native-input"
+                      type="nickname"
+                      value="{{nickname}}"
+                      maxlength="24"
+                      bindinput="handleNicknameInput"
+                    />
+                  </view>
+                </view>
+                <view wx:if="{{profileErrorText}}" class="field-error">{{profileErrorText}}</view>
+              </view>
+              <view class="form-row">
+                <view class="field-label">推荐码</view>
+                <view class="input-shell">
+                  <input
+                    class="referral-input"
+                    value="{{referralCode}}"
+                    placeholder="填写他人的个人唯一码"
+                    placeholder-class="input-placeholder"
+                    maxlength="16"
+                    bindinput="handleReferralInput"
+                  />
+                  <text class="optional-text">选填</text>
+                </view>
+              </view>
+              <button
+                wx:if="{{avatarUrl && nickname}}"
+                class="primary-button"
+                loading="{{loading}}"
+                open-type="getPhoneNumber"
+                bindgetphonenumber="handleRegisterPhone"
+              >
+                {{loading ? '注册中' : '注册'}}
+              </button>
+              <button
+                wx:else
+                class="primary-button"
+                loading="{{loading}}"
+                bindtap="handleIncompleteRegisterTap"
+              >
+                {{loading ? '注册中' : '注册'}}
+              </button>
+            </view>
+
+            <view class="login-form wechat-form {{activeTab === 'wechat' ? 'active' : 'inactive'}}">
+              <button class="primary-button" loading="{{loading}}" bindtap="handleWechatLogin">
+                {{loading ? '登录中' : '微信授权登录'}}
+              </button>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </scroll-view>
+</view>

@@ -1,7 +1,99 @@
-<!--index.wxml-->
-<navigation-bar title="Weixin" back="{{false}}" color="black" background="#FFF"></navigation-bar>
-<scroll-view class="scrollarea" scroll-y type="list">
-  <view class="container">
-    Weixin
+<view class="page-shell mine-page">
+  <navigation-bar title="我的" back="{{false}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+
+  <scroll-view class="mine-scroll" scroll-y type="list">
+    <view class="mine-content">
+      <block wx:if="{{loading}}">
+        <view class="panel profile-panel skeleton-panel"></view>
+        <view class="balance-band skeleton-panel"></view>
+        <view class="metric-grid">
+          <view class="metric skeleton-panel"></view>
+          <view class="metric skeleton-panel"></view>
+          <view class="metric skeleton-panel"></view>
+        </view>
+      </block>
+
+      <block wx:elif="{{errorMessage}}">
+        <view class="empty-state">
+          <view class="empty-icon"></view>
+          <view class="empty-title">加载失败</view>
+          <view class="empty-desc">{{errorMessage}}</view>
+          <button class="primary-button compact" bindtap="handleRetry">重试</button>
+        </view>
+      </block>
+
+      <block wx:else>
+        <view class="panel profile-panel">
+          <view class="profile-main">
+            <view class="avatar">
+              <image wx:if="{{dashboard.profile.avatarUrl}}" class="avatar-image" src="{{dashboard.profile.avatarUrl}}" mode="aspectFill"></image>
+              <view wx:else class="avatar-fallback">WF</view>
+            </view>
+            <view class="profile-text">
+              <view class="profile-name">{{dashboard.profile.displayName}}</view>
+              <view class="profile-subtitle">{{dashboard.profile.subtitle}}</view>
+            </view>
+          </view>
+          <button class="code-pill" bindtap="handleCopyCode">{{dashboard.profile.uniqueCode}}</button>
+        </view>
+
+        <view class="balance-band">
+          <view class="balance-top">
+            <view>
+              <view class="balance-label">当前积分余额</view>
+              <view class="balance-value">{{dashboard.point.balanceText}}</view>
+            </view>
+            <button class="light-button" bindtap="handleRechargeTap">充值</button>
+          </view>
+          <view class="balance-bottom">
+            <text>{{dashboard.point.todayConsumedText}}</text>
+            <text wx:if="{{dashboard.point.warningText}}" class="warning-pill">{{dashboard.point.warningText}}</text>
+          </view>
+        </view>
+
+        <view class="metric-grid">
+          <view class="metric" wx:for="{{dashboard.metrics}}" wx:key="label">
+            <view class="metric-value">{{item.value}}</view>
+            <view class="metric-label">{{item.label}}</view>
+          </view>
+        </view>
+
+        <view class="panel action-panel">
+          <view class="panel-heading">
+            <view class="panel-title">跟进与团队</view>
+            <view class="panel-meta">管理</view>
+          </view>
+          <view class="entry-list">
+            <button
+              class="entry-row"
+              wx:for="{{entries}}"
+              wx:key="type"
+              data-type="{{item.type}}"
+              bindtap="handleEntryTap"
+            >
+              <view class="entry-icon {{item.icon}}-icon"></view>
+              <view class="entry-copy">
+                <view class="entry-title">{{item.title}}</view>
+                <view class="entry-desc">{{item.desc}}</view>
+              </view>
+              <view class="entry-arrow"></view>
+            </button>
+          </view>
+        </view>
+      </block>
+    </view>
+  </scroll-view>
+
+  <view class="tabbar">
+    <button
+      class="tab {{item.active ? 'active' : ''}}"
+      wx:for="{{tabs}}"
+      wx:key="key"
+      data-label="{{item.label}}"
+      bindtap="handleTabTap"
+    >
+      <view class="tab-icon {{item.icon}}-tab-icon"></view>
+      <view class="tab-label">{{item.label}}</view>
+    </button>
   </view>
-</scroll-view>
+</view>

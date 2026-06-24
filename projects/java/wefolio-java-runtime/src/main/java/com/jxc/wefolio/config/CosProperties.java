@@ -13,4 +13,5 @@ public class CosProperties {
     private String secretKey;
     private String region;
     private String bucketName;
+    private String publicBaseUrl;
 }

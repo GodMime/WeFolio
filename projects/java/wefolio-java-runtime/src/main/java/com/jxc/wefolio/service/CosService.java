@@ -81,6 +81,14 @@ public class CosService {
         }
     }
 
+    public String publicUrl(String key) {
+        String baseUrl = cosProperties.getPublicBaseUrl();
+        if (baseUrl == null || baseUrl.isBlank()) {
+            return key;
+        }
+        return baseUrl.replaceAll("/+$", "") + "/" + key.replaceAll("^/+", "");
+    }
+
     private String extractExtension(String filename) {
         if (filename != null && filename.contains(".")) {
             return filename.substring(filename.lastIndexOf("."));
