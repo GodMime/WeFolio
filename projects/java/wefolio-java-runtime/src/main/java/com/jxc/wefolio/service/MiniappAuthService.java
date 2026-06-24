@@ -117,6 +117,20 @@ public class MiniappAuthService {
     }
 
     /**
+     * 按用户 ID 获取个人唯一码
+     *
+     * @param userId 用户 ID
+     * @return 个人唯一码，用户不存在时抛异常
+     */
+    public String getUniqueCodeByUserId(Long userId) {
+        UserEntity user = userEntityMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException("用户不存在");
+        }
+        return user.getUniqueCode();
+    }
+
+    /**
      * 构建登录态响应
      *
      * @param userId 当前登录用户 ID

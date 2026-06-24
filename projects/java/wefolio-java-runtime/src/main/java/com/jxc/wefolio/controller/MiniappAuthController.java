@@ -46,14 +46,24 @@ public class MiniappAuthController {
     }
 
     /**
-     * 上传微信头像昵称填写能力返回的头像临时文件
+     * 上传微信头像昵称填写能力返回的头像临时文件，
+     * 存入当前用户的 others 目录（{@code {uniqueCode}/others/}）。
      *
-     * @param file 头像文件
+     * @param file          头像文件
+     * @param authorization Authorization 请求头
      * @return 上传后的公开地址
      */
     @PostMapping(value = "/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public Response<FileUploadResponse> uploadAvatar(@RequestParam("file") MultipartFile file) {
-        String key = cosService.upload(file);
+    public Response<FileUploadResponse> uploadAvatar(
+            @RequestParam("file") MultipartFile file,
+            @RequestHeader("Authorization") String authorization
+    ) {
+        Long userId = miniappAuthService.resolveAuthenticatedUserId(authorization);
+        if (userId == null) {
+            return Response.fail("请先登录");
+        }
+        String uniqueCode = miniappAuthService.getUniqueCodeByUserId(userId);
+        String key = cosService.upload(file, uniqueCode + "/others");
         FileUploadResponse response = new FileUploadResponse();
         response.setKey(key);
         response.setUrl(cosService.publicUrl(key));
