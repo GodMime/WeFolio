@@ -334,6 +334,34 @@
       gap: 0;
     }
 
+    .points-rules-content {
+      grid-auto-rows: max-content;
+      padding-bottom: 24px;
+    }
+
+    .visit-records-content {
+      grid-auto-rows: max-content;
+      padding-bottom: 24px;
+    }
+
+    .visit-detail-panel {
+      min-height: 0;
+    }
+
+    .visit-list {
+      min-height: 0;
+      max-height: 330px;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
+      padding-right: 2px;
+    }
+
+    .visit-list::-webkit-scrollbar {
+      width: 0;
+      height: 0;
+    }
+
     .advanced-maintenance-content {
       padding-bottom: 28px;
     }
@@ -3015,10 +3043,10 @@
               </div>
             </div>
             <div class="tabbar">
-              <div class="tab active"><span class="tab-icon tab-icon-user" aria-hidden="true"></span><span>我的</span></div>
+              <div class="tab"><span class="tab-icon tab-icon-schedule" aria-hidden="true"></span><span>档期</span></div>
               <div class="tab"><span class="tab-icon tab-icon-work" aria-hidden="true"></span><span>作品</span></div>
               <div class="tab"><span class="tab-icon tab-icon-portfolio" aria-hidden="true"></span><span>作品集</span></div>
-              <div class="tab"><span class="tab-icon tab-icon-schedule" aria-hidden="true"></span><span>档期</span></div>
+              <div class="tab active"><span class="tab-icon tab-icon-user" aria-hidden="true"></span><span>我的</span></div>
             </div>
           </div>
         </div>
@@ -3153,7 +3181,7 @@
               <div class="nav-title">积分规则</div>
               <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
             </div>
-            <div class="content">
+            <div class="content points-rules-content">
               <div class="panel">
                 <div class="row">
                   <div>
@@ -3211,7 +3239,7 @@
               <div class="nav-title">访问记录</div>
               <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
             </div>
-            <div class="content">
+            <div class="content visit-records-content">
               <div class="metric-grid">
                 <div class="metric"><b>428</b><span>累计访问次数</span></div>
                 <div class="metric"><b>36</b><span>今日访问</span></div>
@@ -3237,42 +3265,44 @@
                   <div class="trend-labels"><span>周一</span><span>周二</span><span>周三</span><span>周四</span><span>周五</span><span>周六</span><span>周日</span></div>
                 </div>
               </div>
-              <div class="panel stack">
+              <div class="panel stack visit-detail-panel">
                 <div class="row">
                   <p class="name">访问明细</p>
                   <span class="desc">来源与行为摘要</span>
                 </div>
-                <div class="visit-row">
-                  <div class="visitor-icon">A</div>
-                  <div>
-                    <b>微信访客 8A21</b>
-                    <p class="desc">来自个人作品集「林安婚礼司仪」分享 · 第 4 次访问 · 查看作品 6 次 · 查询 10-03 档期 · 点击二维码 1 次</p>
+                <div class="visit-list">
+                  <div class="visit-row">
+                    <div class="visitor-icon">A</div>
+                    <div>
+                      <b>微信访客 8A21</b>
+                      <p class="desc">来自个人作品集「林安婚礼司仪」分享 · 第 4 次访问 · 查看作品 6 次 · 查询 10-03 档期 · 点击二维码 1 次</p>
+                    </div>
+                    <span class="pill rose">未跟进</span>
                   </div>
-                  <span class="pill rose">未跟进</span>
-                </div>
-                <div class="visit-row">
-                  <div class="visitor-icon" style="color:var(--teal);background:var(--teal-soft)">B</div>
-                  <div>
-                    <b>微信访客 C19F</b>
-                    <p class="desc">来自团队作品集「星曜司仪团」跳转 · 第 2 次访问 · 查看作品 3 次 · 播放视频 2 次 · 未点二维码</p>
+                  <div class="visit-row">
+                    <div class="visitor-icon" style="color:var(--teal);background:var(--teal-soft)">B</div>
+                    <div>
+                      <b>微信访客 C19F</b>
+                      <p class="desc">来自团队作品集「星曜司仪团」跳转 · 第 2 次访问 · 查看作品 3 次 · 播放视频 2 次 · 未点二维码</p>
+                    </div>
+                    <span class="pill teal">已联系</span>
                   </div>
-                  <span class="pill teal">已联系</span>
-                </div>
-                <div class="visit-row">
-                  <div class="visitor-icon" style="color:var(--amber);background:var(--amber-soft)">C</div>
-                  <div>
-                    <b>微信访客 73D0</b>
-                    <p class="desc">来自二维码扫码 · 第 5 次访问 · 查看作品 9 次 · 查询 06-28 档期 · 长按二维码 1 次</p>
+                  <div class="visit-row">
+                    <div class="visitor-icon" style="color:var(--amber);background:var(--amber-soft)">C</div>
+                    <div>
+                      <b>微信访客 73D0</b>
+                      <p class="desc">来自二维码扫码 · 第 5 次访问 · 查看作品 9 次 · 查询 06-28 档期 · 长按二维码 1 次</p>
+                    </div>
+                    <span class="pill blue">已成交</span>
                   </div>
-                  <span class="pill blue">已成交</span>
-                </div>
-                <div class="visit-row">
-                  <div class="visitor-icon" style="color:var(--rose);background:var(--rose-soft)">D</div>
-                  <div>
-                    <b>微信访客 91F2</b>
-                    <p class="desc">来自个人作品集「高端晚宴主持精选」分享 · 第 1 次访问 · 查看作品 0 次 · 未查询档期 · 未点二维码</p>
+                  <div class="visit-row">
+                    <div class="visitor-icon" style="color:var(--rose);background:var(--rose-soft)">D</div>
+                    <div>
+                      <b>微信访客 91F2</b>
+                      <p class="desc">来自个人作品集「高端晚宴主持精选」分享 · 第 1 次访问 · 查看作品 0 次 · 未查询档期 · 未点二维码</p>
+                    </div>
+                    <span class="pill">无效</span>
                   </div>
-                  <span class="pill">无效</span>
                 </div>
               </div>
               <button class="button full">批量标记跟进状态</button>
@@ -3503,10 +3533,10 @@
               </div>
             </div>
             <div class="tabbar">
-              <div class="tab"><span class="tab-icon tab-icon-user" aria-hidden="true"></span><span>我的</span></div>
+              <div class="tab"><span class="tab-icon tab-icon-schedule" aria-hidden="true"></span><span>档期</span></div>
               <div class="tab active"><span class="tab-icon tab-icon-work" aria-hidden="true"></span><span>作品</span></div>
               <div class="tab"><span class="tab-icon tab-icon-portfolio" aria-hidden="true"></span><span>作品集</span></div>
-              <div class="tab"><span class="tab-icon tab-icon-schedule" aria-hidden="true"></span><span>档期</span></div>
+              <div class="tab"><span class="tab-icon tab-icon-user" aria-hidden="true"></span><span>我的</span></div>
             </div>
           </div>
         </div>
@@ -3716,10 +3746,10 @@
               </div>
             </div>
             <div class="tabbar">
-              <div class="tab"><span class="tab-icon tab-icon-user" aria-hidden="true"></span><span>我的</span></div>
+              <div class="tab"><span class="tab-icon tab-icon-schedule" aria-hidden="true"></span><span>档期</span></div>
               <div class="tab"><span class="tab-icon tab-icon-work" aria-hidden="true"></span><span>作品</span></div>
               <div class="tab active"><span class="tab-icon tab-icon-portfolio" aria-hidden="true"></span><span>作品集</span></div>
-              <div class="tab"><span class="tab-icon tab-icon-schedule" aria-hidden="true"></span><span>档期</span></div>
+              <div class="tab"><span class="tab-icon tab-icon-user" aria-hidden="true"></span><span>我的</span></div>
             </div>
           </div>
         </div>
@@ -4578,10 +4608,10 @@
               </div>
             </div>
             <div class="tabbar">
-              <div class="tab"><span class="tab-icon tab-icon-user" aria-hidden="true"></span><span>我的</span></div>
+              <div class="tab active"><span class="tab-icon tab-icon-schedule" aria-hidden="true"></span><span>档期</span></div>
               <div class="tab"><span class="tab-icon tab-icon-work" aria-hidden="true"></span><span>作品</span></div>
               <div class="tab"><span class="tab-icon tab-icon-portfolio" aria-hidden="true"></span><span>作品集</span></div>
-              <div class="tab active"><span class="tab-icon tab-icon-schedule" aria-hidden="true"></span><span>档期</span></div>
+              <div class="tab"><span class="tab-icon tab-icon-user" aria-hidden="true"></span><span>我的</span></div>
             </div>
           </div>
         </div>
@@ -4630,10 +4660,10 @@
               </div>
             </div>
             <div class="tabbar">
-              <div class="tab"><span class="tab-icon tab-icon-user" aria-hidden="true"></span><span>我的</span></div>
+              <div class="tab active"><span class="tab-icon tab-icon-schedule" aria-hidden="true"></span><span>档期</span></div>
               <div class="tab"><span class="tab-icon tab-icon-work" aria-hidden="true"></span><span>作品</span></div>
               <div class="tab"><span class="tab-icon tab-icon-portfolio" aria-hidden="true"></span><span>作品集</span></div>
-              <div class="tab active"><span class="tab-icon tab-icon-schedule" aria-hidden="true"></span><span>档期</span></div>
+              <div class="tab"><span class="tab-icon tab-icon-user" aria-hidden="true"></span><span>我的</span></div>
             </div>
           </div>
         </div>
@@ -4682,10 +4712,10 @@
               </div>
             </div>
             <div class="tabbar">
-              <div class="tab"><span class="tab-icon tab-icon-user" aria-hidden="true"></span><span>我的</span></div>
+              <div class="tab active"><span class="tab-icon tab-icon-schedule" aria-hidden="true"></span><span>档期</span></div>
               <div class="tab"><span class="tab-icon tab-icon-work" aria-hidden="true"></span><span>作品</span></div>
               <div class="tab"><span class="tab-icon tab-icon-portfolio" aria-hidden="true"></span><span>作品集</span></div>
-              <div class="tab active"><span class="tab-icon tab-icon-schedule" aria-hidden="true"></span><span>档期</span></div>
+              <div class="tab"><span class="tab-icon tab-icon-user" aria-hidden="true"></span><span>我的</span></div>
             </div>
             <div class="definition-sheet-overlay">
               <div class="definition-sheet">
@@ -4783,10 +4813,10 @@
               </div>
             </div>
             <div class="tabbar">
-              <div class="tab"><span class="tab-icon tab-icon-user" aria-hidden="true"></span><span>我的</span></div>
+              <div class="tab active"><span class="tab-icon tab-icon-schedule" aria-hidden="true"></span><span>档期</span></div>
               <div class="tab"><span class="tab-icon tab-icon-work" aria-hidden="true"></span><span>作品</span></div>
               <div class="tab"><span class="tab-icon tab-icon-portfolio" aria-hidden="true"></span><span>作品集</span></div>
-              <div class="tab active"><span class="tab-icon tab-icon-schedule" aria-hidden="true"></span><span>档期</span></div>
+              <div class="tab"><span class="tab-icon tab-icon-user" aria-hidden="true"></span><span>我的</span></div>
             </div>
             <div class="definition-sheet-overlay">
               <div class="definition-sheet">
