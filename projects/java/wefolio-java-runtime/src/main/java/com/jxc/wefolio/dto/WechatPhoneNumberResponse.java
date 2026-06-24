@@ -1,5 +1,6 @@
 package com.jxc.wefolio.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
@@ -7,6 +8,7 @@ import lombok.Data;
  * 微信手机号快速验证响应
  */
 @Data
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class WechatPhoneNumberResponse {
 
     /** 微信错误码，成功时为空或 0 */
@@ -23,6 +25,7 @@ public class WechatPhoneNumberResponse {
      * 用户手机号信息
      */
     @Data
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class PhoneInfo {
 
         /** 用户绑定手机号，国外手机号会带区号 */

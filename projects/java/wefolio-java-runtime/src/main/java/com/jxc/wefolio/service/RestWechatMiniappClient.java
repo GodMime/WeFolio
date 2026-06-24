@@ -418,7 +418,9 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
         try {
             return objectMapper.readValue(body, responseType);
         } catch (JsonProcessingException e) {
-            throw new IllegalArgumentException("微信接口响应解析失败", e);
+            // 打印原始 body 和 Jackson 具体原因，方便定位字段不匹配问题
+            log.error("微信接口响应解析失败 body={} targetType={}", body, responseType.getSimpleName(), e);
+            throw new IllegalArgumentException("微信接口响应解析失败：" + e.getOriginalMessage());
         }
     }
 
