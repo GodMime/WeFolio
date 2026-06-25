@@ -28,6 +28,9 @@ import org.springframework.web.multipart.MultipartFile;
 @RequestMapping("/api/auth")
 public class MiniappAuthController {
 
+    /** 头像文件最大大小：5MB */
+    private static final long MAX_AVATAR_SIZE_BYTES = 5L * 1024L * 1024L;
+
     /** 小程序登录服务 */
     private final MiniappAuthService miniappAuthService;
 
@@ -61,6 +64,12 @@ public class MiniappAuthController {
         Long userId = miniappAuthService.resolveAuthenticatedUserId(authorization);
         if (userId == null) {
             return Response.fail("请先登录");
+        }
+        if (file == null || file.isEmpty()) {
+            return Response.fail("头像文件不能为空");
+        }
+        if (file.getSize() > MAX_AVATAR_SIZE_BYTES) {
+            return Response.fail("头像文件不能超过 5MB");
         }
         String uniqueCode = miniappAuthService.getUniqueCodeByUserId(userId);
         String key = cosService.upload(file, uniqueCode + "/others");
