@@ -1,12 +1,15 @@
 package com.jxc.wefolio.service;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.jxc.wefolio.common.auth.AuthorizationHeaderUtils;
 import com.jxc.wefolio.config.WechatMiniappProperties;
 import com.jxc.wefolio.dto.AuthSessionResponse;
-import com.jxc.wefolio.dto.WechatLoginRequest;
-import com.jxc.wefolio.dto.WechatLoginResponse;
+import com.jxc.wefolio.dto.MaintainerWechatLoginRequest;
+import com.jxc.wefolio.dto.MaintainerWechatLoginResponse;
 import com.jxc.wefolio.dto.WechatPhoneNumberResponse;
 import com.jxc.wefolio.dto.WechatSessionResponse;
+import com.jxc.wefolio.dict.AuthTypeDict;
+import com.jxc.wefolio.dict.UserStatusDict;
 import com.jxc.wefolio.entity.UserAuthEntity;
 import com.jxc.wefolio.entity.UserEntity;
 import com.jxc.wefolio.exception.BusinessException;
@@ -14,10 +17,7 @@ import com.jxc.wefolio.mapper.UserAuthEntityMapper;
 import com.jxc.wefolio.mapper.UserEntityMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -32,7 +32,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * 小程序登录服务 — 提供一期微信授权登录的后端入口
+ * 小程序登录服务 — 提供维护者微信授权登录的后端入口。
  */
 @Slf4j
 @Service
@@ -49,7 +49,7 @@ public class MiniappAuthService {
     private static final long DEVELOPMENT_EXPIRES_IN_SECONDS = 30L * 24L * 60L * 60L;
 
     /** 微信小程序登录类型 */
-    private static final String WECHAT_AUTH_TYPE = "WECHAT_MINI_APP";
+    private static final String WECHAT_AUTH_TYPE = AuthTypeDict.WECHAT_MINI_APP.getCode();
 
     /** HMAC 算法 */
     private static final String HMAC_SHA256 = "HmacSHA256";
@@ -69,10 +69,8 @@ public class MiniappAuthService {
     /** COS 对象存储服务 */
     private final CosService cosService;
 
-    /** 自注入代理，用于 @Transactional 方法走 AOP。测试中直接赋值即可。 */
-    @Autowired
-    @Lazy
-    MiniappAuthService self;
+    /** 用户注册服务 */
+    private final UserRegistrationService userRegistrationService;
 
     /**
      * 解析 bearer token 中的用户 ID
@@ -81,12 +79,9 @@ public class MiniappAuthService {
      * @return 用户 ID，无法解析时返回空
      */
     public Long resolveUserId(String authorizationHeader) {
-        if (authorizationHeader == null || authorizationHeader.isBlank()) {
+        String value = AuthorizationHeaderUtils.normalizeBearerToken(authorizationHeader);
+        if (value.isBlank()) {
             return null;
-        }
-        String value = authorizationHeader.trim();
-        if (value.regionMatches(true, 0, TOKEN_TYPE + " ", 0, TOKEN_TYPE.length() + 1)) {
-            value = value.substring(TOKEN_TYPE.length() + 1).trim();
         }
         if (!value.startsWith(DEVELOPMENT_TOKEN_PREFIX)) {
             return null;
@@ -96,24 +91,6 @@ public class MiniappAuthService {
         } catch (NumberFormatException e) {
             return null;
         }
-    }
-
-    /**
-     * 解析并校验当前登录用户
-     *
-     * @param authorizationHeader Authorization 请求头
-     * @return 有效用户 ID，无效时为空
-     */
-    public Long resolveAuthenticatedUserId(String authorizationHeader) {
-        Long userId = resolveUserId(authorizationHeader);
-        if (userId == null) {
-            return null;
-        }
-        UserEntity user = userEntityMapper.selectById(userId);
-        if (user == null || !"ACTIVE".equals(user.getStatus())) {
-            return null;
-        }
-        return userId;
     }
 
     /**
@@ -144,12 +121,12 @@ public class MiniappAuthService {
     }
 
     /**
-     * 微信授权登录
+     * 维护者微信授权登录。
      *
-     * @param request 微信登录请求
-     * @return 登录响应
+     * @param request 维护者微信登录请求
+     * @return 维护者登录响应
      */
-    public WechatLoginResponse loginByWechat(WechatLoginRequest request) {
+    public MaintainerWechatLoginResponse loginMaintainerByWechat(MaintainerWechatLoginRequest request) {
         if (request == null || request.getCode() == null || request.getCode().isBlank()) {
             throw new BusinessException("微信登录凭证不能为空");
         }
@@ -168,14 +145,21 @@ public class MiniappAuthService {
                 String uniqueCode = generateUniqueCode();
                 // COS 文件夹初始化在前，失败直接抛异常，不污染数据库
                 cosService.initUserStorage(uniqueCode);
-                user = self.doCreateWechatUser(uniqueCode, request, phoneInfo, openpid, session, openidHash);
+                user = userRegistrationService.createWechatMaintainerUser(
+                        uniqueCode,
+                        request,
+                        phoneInfo,
+                        openpid,
+                        openidHash,
+                        digestIdentifierIfPresent(session.getUnionid())
+                );
             } else {
                 updateWechatRegistrationProfile(user, request, phoneInfo, openpid);
                 createWechatAuth(user, session, openidHash);
             }
         } else {
             user = userEntityMapper.selectById(auth.getUserId());
-            if (user == null || !"ACTIVE".equals(user.getStatus())) {
+            if (user == null || !UserStatusDict.ACTIVE.getCode().equals(user.getStatus())) {
                 throw new BusinessException("微信账号状态异常");
             }
             updateLoginTime(user, auth);
@@ -184,54 +168,7 @@ public class MiniappAuthService {
             ensureUserStorage(user);
         }
 
-        return buildLoginResponse(user.getId());
-    }
-
-    /**
-     * 创建微信登录用户（事务保护）— COS 文件夹已在前置步骤初始化完成，
-     * 此处仅做数据库写入：insert wf_user + insert wf_user_auth 在同一事务内。
-     *
-     * @param uniqueCode 已生成的个人唯一码
-     * @param request    微信登录请求
-     * @param phoneInfo  微信手机号信息
-     * @param openpid    插件用户 openpid
-     * @param session    微信会话
-     * @param openidHash openid 摘要
-     * @return 用户实体
-     */
-    @Transactional(rollbackFor = Exception.class)
-    public UserEntity doCreateWechatUser(
-            String uniqueCode,
-            WechatLoginRequest request,
-            WechatPhoneNumberResponse.PhoneInfo phoneInfo,
-            String openpid,
-            WechatSessionResponse session,
-            String openidHash
-    ) {
-        LocalDateTime now = LocalDateTime.now();
-        UserEntity user = new UserEntity();
-        user.setUniqueCode(uniqueCode);
-        user.setNickname(defaultString(request.getNickname(), "微信用户"));
-        user.setAvatarUrl(defaultString(request.getAvatarUrl(), ""));
-        user.setPhoneNumber(phoneInfo.getPhoneNumber());
-        user.setPhoneCountryCode(defaultString(phoneInfo.getCountryCode(), ""));
-        user.setPhoneLast4(last4(phoneInfo.getPhoneNumber()));
-        user.setPhoneBoundAt(now);
-        user.setWechatOpenpid(openpid);
-        user.setProfession("");
-        user.setCity("");
-        user.setStatus("ACTIVE");
-        user.setRegisteredAt(now);
-        user.setLastLoginAt(now);
-        userEntityMapper.insert(user);
-        if (user.getId() == null) {
-            throw new BusinessException("登录用户创建失败");
-        }
-
-        // 创建微信登录身份绑定，与用户 insert 在同一事务内
-        createWechatAuth(user, session, openidHash);
-
-        return user;
+        return buildMaintainerLoginResponse(user.getId());
     }
 
     /**
@@ -255,13 +192,13 @@ public class MiniappAuthService {
      * 更新微信注册资料
      *
      * @param user 用户实体
-     * @param request 微信登录请求
+     * @param request 维护者微信登录请求
      * @param phoneInfo 微信手机号信息
      * @param openpid 插件用户 openpid
      */
     private void updateWechatRegistrationProfile(
             UserEntity user,
-            WechatLoginRequest request,
+            MaintainerWechatLoginRequest request,
             WechatPhoneNumberResponse.PhoneInfo phoneInfo,
             String openpid
     ) {
@@ -295,11 +232,12 @@ public class MiniappAuthService {
         auth.setAuthType(WECHAT_AUTH_TYPE);
         auth.setIdentifierHash(openidHash);
         auth.setIdentifierCiphertext("WECHAT_OPENID_BOUND");
-        if (session.getUnionid() != null && !session.getUnionid().isBlank()) {
-            auth.setUnionIdentifierHash(digestIdentifier(session.getUnionid()));
+        String unionidHash = digestIdentifierIfPresent(session.getUnionid());
+        if (unionidHash != null) {
+            auth.setUnionIdentifierHash(unionidHash);
             auth.setUnionIdentifierCiphertext("WECHAT_UNIONID_BOUND");
         }
-        auth.setStatus("ACTIVE");
+        auth.setStatus(UserStatusDict.ACTIVE.getCode());
         auth.setLastAuthenticatedAt(now);
         userAuthEntityMapper.insert(auth);
     }
@@ -319,13 +257,13 @@ public class MiniappAuthService {
     }
 
     /**
-     * 构建登录响应
+     * 构建维护者登录响应。
      *
      * @param userId 当前登录用户 ID
-     * @return 登录响应
+     * @return 维护者登录响应
      */
-    private WechatLoginResponse buildLoginResponse(Long userId) {
-        WechatLoginResponse response = new WechatLoginResponse();
+    private MaintainerWechatLoginResponse buildMaintainerLoginResponse(Long userId) {
+        MaintainerWechatLoginResponse response = new MaintainerWechatLoginResponse();
         response.setTokenType(TOKEN_TYPE);
         response.setToken(DEVELOPMENT_TOKEN_PREFIX + userId);
         response.setUserId(userId);
@@ -386,7 +324,7 @@ public class MiniappAuthService {
                 Wrappers.lambdaQuery(UserAuthEntity.class)
                         .eq(UserAuthEntity::getAuthType, authType)
                         .eq(UserAuthEntity::getIdentifierHash, identifierHash)
-                        .eq(UserAuthEntity::getStatus, "ACTIVE")
+                        .eq(UserAuthEntity::getStatus, UserStatusDict.ACTIVE.getCode())
                         .last("LIMIT 1")
         );
     }
@@ -404,7 +342,7 @@ public class MiniappAuthService {
         return userEntityMapper.selectOne(
                 Wrappers.lambdaQuery(UserEntity.class)
                         .eq(UserEntity::getPhoneNumber, phoneNumber)
-                        .eq(UserEntity::getStatus, "ACTIVE")
+                        .eq(UserEntity::getStatus, UserStatusDict.ACTIVE.getCode())
                         .last("LIMIT 1")
         );
     }
@@ -412,10 +350,10 @@ public class MiniappAuthService {
     /**
      * 要求提供手机号授权凭证
      *
-     * @param request 微信登录请求
+     * @param request 维护者微信登录请求
      * @return 手机号授权凭证
      */
-    private String requirePhoneCode(WechatLoginRequest request) {
+    private String requirePhoneCode(MaintainerWechatLoginRequest request) {
         if (request.getPhoneCode() == null || request.getPhoneCode().isBlank()) {
             throw new BusinessException("请先完成手机号授权注册");
         }
@@ -469,5 +407,18 @@ public class MiniappAuthService {
         } catch (Exception e) {
             throw new BusinessException("微信身份摘要生成失败", e);
         }
+    }
+
+    /**
+     * 有值时计算微信身份摘要。
+     *
+     * @param identifier 微信 openid 或 unionid
+     * @return 十六进制 HMAC 摘要，入参为空时返回空
+     */
+    private String digestIdentifierIfPresent(String identifier) {
+        if (identifier == null || identifier.isBlank()) {
+            return null;
+        }
+        return digestIdentifier(identifier);
     }
 }

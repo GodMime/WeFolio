@@ -1,5 +1,7 @@
 package com.jxc.wefolio.service;
 
+import com.jxc.wefolio.common.auth.AuthContext;
+import com.jxc.wefolio.common.auth.AuthContextHolder;
 import com.jxc.wefolio.dto.MineDashboardResponse;
 import com.jxc.wefolio.entity.PointAccountEntity;
 import com.jxc.wefolio.entity.PointTransactionEntity;
@@ -11,6 +13,7 @@ import com.jxc.wefolio.mapper.PortfolioEntityMapper;
 import com.jxc.wefolio.mapper.UserEntityMapper;
 import com.jxc.wefolio.mapper.VisitRecordEntityMapper;
 import com.jxc.wefolio.mapper.WorkEntityMapper;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -44,8 +47,14 @@ class MineDashboardServiceTest {
     @Mock
     private VisitRecordEntityMapper visitRecordEntityMapper;
 
+    @AfterEach
+    void tearDown() {
+        AuthContextHolder.clear();
+    }
+
     @Test
     void dashboardContainsProfilePointsMetricsAndLowBalanceWarning() {
+        AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
         UserEntity user = new UserEntity();
         user.setId(7L);
         user.setUniqueCode("MC-8392");
@@ -88,7 +97,7 @@ class MineDashboardServiceTest {
                 visitRecordEntityMapper
         );
 
-        MineDashboardResponse response = service.getDashboard(7L);
+        MineDashboardResponse response = service.getDashboard();
 
         assertThat(response.getProfile().getUniqueCode()).isEqualTo("MC-8392");
         assertThat(response.getProfile().getDisplayName()).isEqualTo("林安 · 婚礼司仪");

@@ -1,11 +1,17 @@
 package com.jxc.wefolio.service;
 
+import com.baomidou.mybatisplus.core.conditions.Wrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.alibaba.fastjson2.JSON;
+import com.jxc.wefolio.common.auth.AuthContext;
+import com.jxc.wefolio.common.auth.AuthContextHolder;
 import com.jxc.wefolio.dto.MineProfileResponse;
 import com.jxc.wefolio.dto.MineProfileUpdateRequest;
 import com.jxc.wefolio.entity.UserEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.UserEntityMapper;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
@@ -20,14 +26,29 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * “我的”基础信息资料读取与更新逻辑测试。
+ */
 @ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 class MineProfileServiceTest {
 
     @Mock
     private UserEntityMapper userEntityMapper;
+
+    @BeforeEach
+    void setUp() {
+        AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
+    }
+
+    @AfterEach
+    void tearDown() {
+        AuthContextHolder.clear();
+    }
 
     @Test
     void profileContainsEditableBasicInformation() {
@@ -37,7 +58,7 @@ class MineProfileServiceTest {
 
         MineProfileService service = new MineProfileService(userEntityMapper);
 
-        MineProfileResponse response = service.getProfile(7L);
+        MineProfileResponse response = service.getProfile();
 
         assertThat(response.getUserId()).isEqualTo(7L);
         assertThat(response.getUniqueCode()).isEqualTo("WF8392");
@@ -62,21 +83,23 @@ class MineProfileServiceTest {
         request.setCity(" 上海、杭州、苏州 ");
         request.setIntro(" 10 年婚礼主持经验 ");
         request.setTags(List.of(" 高端婚礼 ", "双语主持"));
-        when(userEntityMapper.updateById(any(UserEntity.class))).thenReturn(1);
+        when(userEntityMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
 
         MineProfileService service = new MineProfileService(userEntityMapper);
-        service.updateProfile(7L, request);
+        service.updateProfile(request);
 
-        ArgumentCaptor<UserEntity> captor = ArgumentCaptor.forClass(UserEntity.class);
-        verify(userEntityMapper).updateById(captor.capture());
-        UserEntity saved = captor.getValue();
-        assertThat(saved.getNickname()).isEqualTo("林安");
-        assertThat(saved.getAvatarUrl()).isEqualTo("https://example.com/new-avatar.jpg");
-        assertThat(saved.getProfession()).isEqualTo("婚礼司仪");
-        assertThat(saved.getCity()).isEqualTo("上海、杭州、苏州");
-        assertThat(saved.getIntro()).isEqualTo("10 年婚礼主持经验");
-        assertThat(JSON.parseArray(saved.getProfileTags(), String.class))
+        ArgumentCaptor<Wrapper<UserEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
+        verify(userEntityMapper).update(isNull(), captor.capture());
+        String sqlSet = ((UpdateWrapper<UserEntity>) captor.getValue()).getSqlSet();
+        assertThat(sqlSet).contains("nickname", "avatar_url", "profession", "city", "intro", "profile_tags", "updated_at");
+        assertThat(user.getNickname()).isEqualTo("林安");
+        assertThat(user.getAvatarUrl()).isEqualTo("https://example.com/new-avatar.jpg");
+        assertThat(user.getProfession()).isEqualTo("婚礼司仪");
+        assertThat(user.getCity()).isEqualTo("上海、杭州、苏州");
+        assertThat(user.getIntro()).isEqualTo("10 年婚礼主持经验");
+        assertThat(JSON.parseArray(user.getProfileTags(), String.class))
                 .containsExactly("高端婚礼", "双语主持");
+        verify(userEntityMapper, never()).updateById(any(UserEntity.class));
     }
 
     @Test
@@ -84,24 +107,27 @@ class MineProfileServiceTest {
         UserEntity user = activeUser();
         user.setProfileTags("[\"高端婚礼\",\"双语主持\"]");
         when(userEntityMapper.selectById(7L)).thenReturn(user);
-        when(userEntityMapper.updateById(any(UserEntity.class))).thenReturn(1);
+        when(userEntityMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
 
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setNickname("新名字");
 
         MineProfileService service = new MineProfileService(userEntityMapper);
-        service.updateProfile(7L, request);
+        service.updateProfile(request);
 
-        ArgumentCaptor<UserEntity> captor = ArgumentCaptor.forClass(UserEntity.class);
-        verify(userEntityMapper).updateById(captor.capture());
-        UserEntity saved = captor.getValue();
-        assertThat(saved.getNickname()).isEqualTo("新名字");
-        assertThat(saved.getAvatarUrl()).isEqualTo("https://example.com/avatar.jpg");
-        assertThat(saved.getProfession()).isEqualTo("婚礼司仪");
-        assertThat(saved.getCity()).isEqualTo("上海、杭州、苏州");
-        assertThat(saved.getIntro()).isEqualTo("10 年婚礼主持经验");
-        assertThat(JSON.parseArray(saved.getProfileTags(), String.class))
+        ArgumentCaptor<Wrapper<UserEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
+        verify(userEntityMapper).update(isNull(), captor.capture());
+        String sqlSet = ((UpdateWrapper<UserEntity>) captor.getValue()).getSqlSet();
+        assertThat(sqlSet).contains("nickname", "updated_at");
+        assertThat(sqlSet).doesNotContain("avatar_url", "profession", "city", "intro", "profile_tags");
+        assertThat(user.getNickname()).isEqualTo("新名字");
+        assertThat(user.getAvatarUrl()).isEqualTo("https://example.com/avatar.jpg");
+        assertThat(user.getProfession()).isEqualTo("婚礼司仪");
+        assertThat(user.getCity()).isEqualTo("上海、杭州、苏州");
+        assertThat(user.getIntro()).isEqualTo("10 年婚礼主持经验");
+        assertThat(JSON.parseArray(user.getProfileTags(), String.class))
                 .containsExactly("高端婚礼", "双语主持");
+        verify(userEntityMapper, never()).updateById(any(UserEntity.class));
     }
 
     @Test
@@ -110,17 +136,17 @@ class MineProfileServiceTest {
         LocalDateTime oldUpdatedAt = LocalDateTime.of(2024, 1, 1, 10, 0);
         user.setUpdatedAt(oldUpdatedAt);
         when(userEntityMapper.selectById(7L)).thenReturn(user);
-        when(userEntityMapper.updateById(any(UserEntity.class))).thenReturn(1);
+        when(userEntityMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
 
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setNickname("林安");
 
         MineProfileService service = new MineProfileService(userEntityMapper);
-        service.updateProfile(7L, request);
+        service.updateProfile(request);
 
-        ArgumentCaptor<UserEntity> captor = ArgumentCaptor.forClass(UserEntity.class);
-        verify(userEntityMapper).updateById(captor.capture());
-        assertThat(captor.getValue().getUpdatedAt()).isAfter(oldUpdatedAt);
+        verify(userEntityMapper).update(isNull(), any(Wrapper.class));
+        assertThat(user.getUpdatedAt()).isAfter(oldUpdatedAt);
+        verify(userEntityMapper, never()).updateById(any(UserEntity.class));
     }
 
     @Test
@@ -130,7 +156,7 @@ class MineProfileServiceTest {
         when(userEntityMapper.selectById(7L)).thenReturn(user);
 
         MineProfileService service = new MineProfileService(userEntityMapper);
-        MineProfileResponse response = service.getProfile(7L);
+        MineProfileResponse response = service.getProfile();
 
         assertThat(response.getTags()).isEmpty();
         assertThat(output).contains("解析资料标签 JSON 失败");
@@ -145,7 +171,7 @@ class MineProfileServiceTest {
 
         MineProfileService service = new MineProfileService(userEntityMapper);
 
-        assertThatThrownBy(() -> service.updateProfile(7L, request))
+        assertThatThrownBy(() -> service.updateProfile(request))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("标签不能重复");
     }
@@ -154,11 +180,11 @@ class MineProfileServiceTest {
     void updateProfileRejectsTooManyTags() {
         when(userEntityMapper.selectById(7L)).thenReturn(activeUser());
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
-        request.setTags(List.of("一", "二", "三", "四", "五", "六", "七", "八", "九", "十", "十一"));
+        request.setTags(List.of("一", "二", "三", "四", "五", "六", "七", "八", "九", "十", "第十一个超长标签"));
 
         MineProfileService service = new MineProfileService(userEntityMapper);
 
-        assertThatThrownBy(() -> service.updateProfile(7L, request))
+        assertThatThrownBy(() -> service.updateProfile(request))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("标签最多保留 10 个");
     }

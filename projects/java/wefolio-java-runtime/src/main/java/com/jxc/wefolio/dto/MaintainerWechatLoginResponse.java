@@ -3,10 +3,10 @@ package com.jxc.wefolio.dto;
 import lombok.Data;
 
 /**
- * 微信小程序登录响应 — 返回小程序本地保存的访问令牌
+ * 维护者微信登录响应 — 返回小程序本地保存的维护者访问令牌。
  */
 @Data
-public class WechatLoginResponse {
+public class MaintainerWechatLoginResponse {
 
     /** 令牌类型 */
     private String tokenType;

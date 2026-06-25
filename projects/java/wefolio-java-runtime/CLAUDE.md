@@ -43,8 +43,10 @@ Spring Boot 3.5.3 单体应用，Java 21，Maven 构建。
 
 ```
 com.jxc.wefolio
-├── common/        # 通用响应封装 Response<T>
-├── config/        # 配置类（MyBatisPlus、COS、Properties）
+├── annotation/    # 四类访问控制注解（@LoginAccess / @SystemAccess / @MaintainerAccess / @VisitorAccess）
+├── common/        # 通用响应封装 Response<T>、认证上下文 AuthContextHolder
+│   └── auth/      # 认证上下文（AuthContext、AuthContextHolder）
+├── config/        # 配置类（MyBatisPlus、COS、Properties、AuthAspect 认证切面）
 ├── controller/    # 控制器
 ├── dict/          # 枚举字典类（XxxDict），含 code + displayName + fromCode()
 ├── entity/        # MyBatis-Plus 实体类（XxxEntity），全部继承 BaseEntity
@@ -173,8 +175,312 @@ public class WfTagEntity extends BaseEntity {
 
 ### 禁止事项
 
-- ❌ 不允许出现 `// TODO` 注释
+- ✅ 允许使用 `// TODO` 注释标记待完成事项
 - ❌ 不允许出现英文注释（Javadoc/字段/方法注释统一使用中文）
-- ❌ 不允许出现无注释的类、字段、方法
+- ❌ 不允许出现无注释的类、字段、方法（含测试类）
+- ❌ 不允许在业务逻辑中使用硬编码的状态/类型字符串（如 `"ACTIVE"`、`"DISABLED"`），必须使用对应枚举字典
+- ❌ 不允许在代码中使用完全限定类名（如 `com.jxc.wefolio.entity.WorkEntity`），必须 import 后使用短名
+
+### 状态字段与枚举字典
+
+**所有表示状态、类型、渠道等固定值域的字段，必须使用 `com.jxc.wefolio.dict` 包下的枚举字典类**，禁止在业务代码中硬编码 magic string。
+
+枚举字典类规范：
+
+```java
+/**
+ * 用户状态字典 — ACTIVE 正常 / DISABLED 停用
+ */
+public class UserStatusDict {
+
+    /** 正常 */
+    public static final DictValue ACTIVE = new DictValue("ACTIVE", "正常");
+
+    /** 停用 */
+    public static final DictValue DISABLED = new DictValue("DISABLED", "停用");
+
+    /** 从 code 反查，未匹配时返回空 */
+    public static Optional<DictValue> fromCode(String code) { ... }
+
+    /** 字典值 */
+    public record DictValue(String code, String displayName) {
+        public String getCode() { return code; }
+        public String getDisplayName() { return displayName; }
+    }
+}
+```
+
+**实体字段注释必须包含 `@see` 指向对应枚举字典**，方便 IDE 一键跳转：
+
+```java
+/**
+ * 账号状态。
+ *
+ * @see UserStatusDict
+ */
+private String status;
+
+/**
+ * 作品媒体类型。
+ *
+ * @see MediaTypeDict
+ */
+private String mediaType;
+```
+
+`@see` 也可与 `{@link}` 内联配合使用，增强可读性：
+
+```java
+/** 账号状态，取值见 {@link UserStatusDict} */
+private String status;
+```
+
+**业务代码中比较状态必须使用枚举常量**，禁止硬编码字符串：
+
+```java
+// ✅ 正确 — 使用枚举字典
+if (UserStatusDict.ACTIVE.getCode().equals(user.getStatus())) { ... }
+
+// ❌ 错误 — 硬编码字符串
+if ("ACTIVE".equals(user.getStatus())) { ... }
+```
+
+**MyBatis-Plus 查询条件中同样适用此规则**——LambdaQuery 的 `.eq()` 也是业务逻辑，不可豁免：
+
+```java
+// ✅ 正确 — LambdaQuery 中使用枚举字典
+.eq(UserEntity::getStatus, UserStatusDict.ACTIVE.getCode())
+.eq(WorkEntity::getStatus, WorkStatusDict.ACTIVE.getCode())
+
+// ❌ 错误 — 查询条件中硬编码字符串
+.eq(UserEntity::getStatus, "ACTIVE")
+.eq(WorkEntity::getStatus, "ACTIVE")
+```
+
+> **为什么**：如果某天 ACTIVE 的 code 改为 `"ENABLED"`，枚举常量只需改一处，而硬编码字符串需要全项目搜索替换，极易遗漏导致线上故障。
+
+### 注解与 AOP 切面
+
+#### 四类访问控制注解
+
+**所有 Controller 接口方法（或其所在类）必须显式标记以下四类注解之一**，不允许存在未标记的接口。启动时 `ControllerAnnotationValidator` 会扫描校验，未标记将阻止启动。
+
+| 注解 | 行为 | 适用场景 |
+|------|------|----------|
+| `@LoginAccess` | 跳过认证，直接放行 | 微信登录、登录态校验等 |
+| `@SystemAccess` | 跳过认证，直接放行 | 健康检查、版本号等 |
+| `@MaintainerAccess` | 要求有效 Authorization 令牌 | 所有维护者后台接口 |
+| `@VisitorAccess` | 当前跳过认证（后续实现独立访客认证） | 作品集展示页等访客接口 |
+
+```java
+/**
+ * 登录类接口标记 — 标注在登录相关接口上。
+ * 该类接口不要求 Authorization 请求头。
+ */
+@Documented
+@Target({ElementType.METHOD, ElementType.TYPE})
+@Retention(RetentionPolicy.RUNTIME)
+public @interface LoginAccess {
+}
+// @SystemAccess、@MaintainerAccess、@VisitorAccess 结构相同，仅语义不同
+```
+
+使用示例：
+
+```java
+// 整个 Controller 统一标记（如健康检查、维护者后台）
+@SystemAccess
+@RestController
+public class VersionController { ... }
+
+@MaintainerAccess
+@RestController
+public class MineController { ... }
+
+// 同一 Controller 内不同方法标记不同注解
+@LoginAccess
+@PostMapping("/maintainer/wechat-login")
+public Response<MaintainerWechatLoginResponse> maintainerWechatLogin(...) { ... }
+
+@MaintainerAccess
+@PostMapping("/avatar")
+public Response<FileUploadResponse> uploadAvatar(...) { ... }
+```
+
+> **类级 vs 方法级优先级**：方法级注解优先于类级注解。若类标记了 `@MaintainerAccess` 但某方法标记了 `@LoginAccess`，该方法按 `@LoginAccess` 处理。
+
+#### `AuthAspect` 认证切面
+
+位于 `com.jxc.wefolio.config.AuthAspect`，拦截 `com.jxc.wefolio.controller..*` 包下所有 Controller 方法，根据访问控制注解执行对应认证逻辑。
+
+**执行流程**：
+1. 检查方法/类是否有 `@LoginAccess` / `@SystemAccess` / `@VisitorAccess` → 有则直接放行
+2. 检查方法/类是否有 `@MaintainerAccess` → 进入维护者认证流程
+3. 从 `HttpServletRequest` 获取 `Authorization` 请求头
+4. 调用 `AuthTokenService.resolveAuthenticatedUserId()` 解析用户身份（带 10 分钟缓存）
+5. 认证通过 → 写入 `AuthContextHolder`（ThreadLocal），执行 Controller 方法
+6. `finally` 块中清理 `AuthContextHolder`
+
+**新增 Controller 须知**：
+- **所有接口必须显式标记**四类注解之一，启动时会自动校验
+- **不要在 Controller 包下放置非 Controller 的 `@Component`/`@Service` 类**，切面会拦截其方法调用
+
+#### `ControllerAnnotationValidator` 启动校验器
+
+位于 `com.jxc.wefolio.config.ControllerAnnotationValidator`，在 `ApplicationReadyEvent` 时扫描所有 `@RestController` Bean 的方法，确保每个 HTTP 映射方法（`@GetMapping` / `@PostMapping` 等）都标记了四类访问控制注解之一。未标记的方法会以 `IllegalStateException` 阻止启动，并在日志中列出具体方法名。
+
+#### `AuthContextHolder` 认证上下文
+
+基于 `ThreadLocal` 的当前请求认证信息持有器，Service 层通过它获取当前登录用户：
+
+```java
+// 必须已登录时使用（会抛出 BusinessException("用户未登录")）
+Long userId = AuthContextHolder.requireUserId();
+
+// 可选登录时使用
+Optional<Long> userId = AuthContextHolder.getUserId();
+```
+
+**线程安全约定**：
+- `AuthContextHolder.set()` 仅在 `AuthAspect` 切面中调用，业务代码只需读取
+- 单元测试中需在 `@BeforeEach` 设置上下文、`@AfterEach` 清理：
+
+```java
+@BeforeEach
+void setUp() {
+    AuthContextHolder.set(new AuthContext(7L, "test-token"));
+}
+
+@AfterEach
+void tearDown() {
+    AuthContextHolder.clear();
+}
+```
+
+#### `AuthTokenService` 令牌认证服务
+
+负责解析 `Authorization` 请求头并校验用户状态，带 10 分钟本地缓存。**service 层不应直接调用此服务**（认证统一由切面处理），仅在 `AuthAspect` 和特殊端点（如 `session()` 需同时支持登录/未登录）中使用。
+
+### `@Transactional` 自调用限制
+
+**Spring 的 `@Transactional` 依赖 AOP 代理**，同一个类内部的方法调用不会经过代理，导致 `@Transactional` 失效。这是 Spring 的经典陷阱。
+
+```java
+// ❌ 错误 — 自调用绕过代理，事务不生效
+public void publicMethod() {
+    this.transactionalMethod();  // 直接调用，无事务
+}
+
+@Transactional
+public void transactionalMethod() { ... }
+```
+
+**解决方案：将需要事务保护的方法提取到独立的 Service 中**，通过注入调用，确保经过 Spring 代理：
+
+```java
+// ✅ 正确 — 提取到独立 Service
+@Service
+@RequiredArgsConstructor
+public class UserRegistrationService {
+
+    private final UserEntityMapper userEntityMapper;
+
+    @Transactional(rollbackFor = Exception.class)
+    public UserEntity createWechatUser(...) {
+        // 此方法的事务由 Spring AOP 代理管理
+    }
+}
+
+// 调用方注入独立 Service
+@Service
+@RequiredArgsConstructor
+public class MiniappAuthService {
+
+    private final UserRegistrationService userRegistrationService;
+
+    public void loginMaintainerByWechat(...) {
+        // ✅ 通过注入的代理调用，事务生效
+        user = userRegistrationService.createWechatUser(...);
+    }
+}
+```
+
+> **为什么不用 `@Autowired @Lazy self` 自注入？** 自注入模式虽然能工作，但会让代码难以测试（测试中需要手动 `service.self = service`），且新人容易误用 `this.xxx()` 导致 bug。提取独立 Service 是最干净的解法。
+
+### 注释增强规范
+
+#### `@see` 与 `{@link}` 交叉引用
+
+**`@see` 标注在字段上**，指向对应的枚举字典类，IDE 可一键跳转：
+
+```java
+/**
+ * 账号状态。
+ *
+ * @see UserStatusDict
+ */
+private String status;
+
+/**
+ * 作品媒体类型。
+ *
+ * @see MediaTypeDict
+ */
+private String mediaType;
+
+/**
+ * 关联用户 ID。
+ *
+ * @see UserEntity
+ */
+private Long userId;
+```
+
+**`{@link}` 用于内联**，在注释文字中直接嵌入类引用：
+
+```java
+/** 账号状态，取值见 {@link UserStatusDict} */
+private String status;
+```
+
+**`@see` 用在类注释上**，标注关联的服务或工具类：
+
+```java
+/**
+ * 基础信息服务 — 负责维护者个人资料读取与保存。
+ *
+ * @see MineDashboardService 我的首页服务
+ * @see UserStatusDict       用户状态枚举
+ */
+@Service
+public class MineProfileService { ... }
+```
+
+#### 测试类注释
+
+测试类、Mock 字段、测试方法均需添加中文注释（与生产代码同等要求）：
+
+```java
+/**
+ * 基础信息服务单元测试 — 覆盖资料读取、保存、标签校验、JSON 异常处理。
+ */
+@ExtendWith(MockitoExtension.class)
+class MineProfileServiceTest {
+
+    /** 用户资料 Mapper 模拟 */
+    @Mock
+    private UserEntityMapper userEntityMapper;
+
+    /** 在每个测试前注入模拟的登录上下文 */
+    @BeforeEach
+    void setUp() { ... }
+
+    /**
+     * 获取基础信息页资料 — 返回所有可编辑字段及解析后的标签列表。
+     */
+    @Test
+    void profileContainsEditableBasicInformation() { ... }
+}
+```
 
 此模块是 WeFolio 多项目仓库的子目录 `projects/java/wefolio-java-runtime/`。仓库级架构、设计文档和编码规范见根目录 `CLAUDE.md`。

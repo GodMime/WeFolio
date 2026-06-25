@@ -3,10 +3,10 @@ package com.jxc.wefolio.dto;
 import lombok.Data;
 
 /**
- * 微信小程序登录请求 — 接收登录凭证、手机号授权凭证和用户填写资料
+ * 维护者微信登录请求 — 接收登录凭证、手机号授权凭证和用户填写资料。
  */
 @Data
-public class WechatLoginRequest {
+public class MaintainerWechatLoginRequest {
 
     /** wx.login 返回的临时登录凭证 */
     private String code;

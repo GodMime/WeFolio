@@ -1,7 +1,10 @@
 package com.jxc.wefolio.service;
 
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONException;
+import com.jxc.wefolio.common.auth.AuthContextHolder;
+import com.jxc.wefolio.dict.UserStatusDict;
 import com.jxc.wefolio.dto.MineProfileResponse;
 import com.jxc.wefolio.dto.MineProfileUpdateRequest;
 import com.jxc.wefolio.entity.UserEntity;
@@ -48,16 +51,40 @@ public class MineProfileService {
     /** 单个标签最大长度 */
     private static final int TAG_MAX_LENGTH = 10;
 
+    /** 用户表主键列 */
+    private static final String COL_ID = "id";
+
+    /** 昵称列 */
+    private static final String COL_NICKNAME = "nickname";
+
+    /** 头像列 */
+    private static final String COL_AVATAR_URL = "avatar_url";
+
+    /** 职业身份列 */
+    private static final String COL_PROFESSION = "profession";
+
+    /** 服务城市列 */
+    private static final String COL_CITY = "city";
+
+    /** 个人简介列 */
+    private static final String COL_INTRO = "intro";
+
+    /** 标签列 */
+    private static final String COL_PROFILE_TAGS = "profile_tags";
+
+    /** 更新时间列 */
+    private static final String COL_UPDATED_AT = "updated_at";
+
     /** 用户资料 Mapper */
     private final UserEntityMapper userEntityMapper;
 
     /**
      * 获取基础信息页资料
      *
-     * @param userId 当前登录用户 ID
      * @return 基础信息响应
      */
-    public MineProfileResponse getProfile(Long userId) {
+    public MineProfileResponse getProfile() {
+        Long userId = AuthContextHolder.requireUserId();
         UserEntity user = requireActiveUser(userId);
         return buildResponse(user);
     }
@@ -65,27 +92,39 @@ public class MineProfileService {
     /**
      * 保存基础信息页资料
      *
-     * @param userId 当前登录用户 ID
      * @param request 保存请求
      * @return 保存后的基础信息响应
      */
-    public MineProfileResponse updateProfile(Long userId, MineProfileUpdateRequest request) {
+    public MineProfileResponse updateProfile(MineProfileUpdateRequest request) {
         if (request == null) {
             throw new BusinessException("资料内容不能为空");
         }
 
+        Long userId = AuthContextHolder.requireUserId();
         UserEntity user = requireActiveUser(userId);
-        applyStringField(request.getNickname(), NICKNAME_MAX_LENGTH, "姓名 / 艺名", user::setNickname);
-        applyStringField(request.getAvatarUrl(), AVATAR_URL_MAX_LENGTH, "头像地址", user::setAvatarUrl);
-        applyStringField(request.getProfession(), PROFESSION_MAX_LENGTH, "职业身份", user::setProfession);
-        applyStringField(request.getCity(), CITY_MAX_LENGTH, "服务城市", user::setCity);
-        applyStringField(request.getIntro(), INTRO_MAX_LENGTH, "个人简介", user::setIntro);
-        if (request.getTags() != null) {
-            user.setProfileTags(JSON.toJSONString(normalizeTags(request.getTags())));
-        }
-        user.setUpdatedAt(LocalDateTime.now());
+        UpdateWrapper<UserEntity> updateWrapper = new UpdateWrapper<>();
+        updateWrapper.eq(COL_ID, userId);
 
-        int updated = userEntityMapper.updateById(user);
+        applyStringField(request.getNickname(), NICKNAME_MAX_LENGTH, "姓名 / 艺名",
+                user::setNickname, value -> updateWrapper.set(COL_NICKNAME, value));
+        applyStringField(request.getAvatarUrl(), AVATAR_URL_MAX_LENGTH, "头像地址",
+                user::setAvatarUrl, value -> updateWrapper.set(COL_AVATAR_URL, value));
+        applyStringField(request.getProfession(), PROFESSION_MAX_LENGTH, "职业身份",
+                user::setProfession, value -> updateWrapper.set(COL_PROFESSION, value));
+        applyStringField(request.getCity(), CITY_MAX_LENGTH, "服务城市",
+                user::setCity, value -> updateWrapper.set(COL_CITY, value));
+        applyStringField(request.getIntro(), INTRO_MAX_LENGTH, "个人简介",
+                user::setIntro, value -> updateWrapper.set(COL_INTRO, value));
+        if (request.getTags() != null) {
+            String profileTags = JSON.toJSONString(normalizeTags(request.getTags()));
+            user.setProfileTags(profileTags);
+            updateWrapper.set(COL_PROFILE_TAGS, profileTags);
+        }
+        LocalDateTime updatedAt = LocalDateTime.now();
+        user.setUpdatedAt(updatedAt);
+        updateWrapper.set(COL_UPDATED_AT, updatedAt);
+
+        int updated = userEntityMapper.update(null, updateWrapper);
         if (updated <= 0) {
             throw new BusinessException("资料保存失败，请重试");
         }
@@ -99,12 +138,21 @@ public class MineProfileService {
      * @param maxLength 最大长度
      * @param fieldName 字段名称
      * @param setter 实体字段赋值方法
+     * @param updateSetter 局部更新字段赋值方法
      */
-    private void applyStringField(String value, int maxLength, String fieldName, Consumer<String> setter) {
+    private void applyStringField(
+            String value,
+            int maxLength,
+            String fieldName,
+            Consumer<String> setter,
+            Consumer<String> updateSetter
+    ) {
         if (value == null) {
             return;
         }
-        setter.accept(trimAndCheckLength(value, maxLength, fieldName));
+        String normalized = trimAndCheckLength(value, maxLength, fieldName);
+        setter.accept(normalized);
+        updateSetter.accept(normalized);
     }
 
     /**
@@ -118,7 +166,7 @@ public class MineProfileService {
             throw new BusinessException("用户未登录");
         }
         UserEntity user = userEntityMapper.selectById(userId);
-        if (user == null || !"ACTIVE".equals(user.getStatus())) {
+        if (user == null || !UserStatusDict.ACTIVE.getCode().equals(user.getStatus())) {
             throw new BusinessException("用户不存在或已停用");
         }
         return user;
@@ -176,7 +224,10 @@ public class MineProfileService {
         List<String> normalized = new ArrayList<>();
         Set<String> seen = new LinkedHashSet<>();
         for (String tag : tags) {
-            String value = defaultString(tag).trim();
+            if (seen.size() >= TAG_MAX_COUNT) {
+                throw new BusinessException("标签最多保留 10 个");
+            }
+            String value = defaultString(tag).strip();
             if (value.isBlank()) {
                 throw new BusinessException("标签不能为空");
             }
@@ -187,9 +238,6 @@ public class MineProfileService {
                 throw new BusinessException("标签不能重复");
             }
             normalized.add(value);
-        }
-        if (normalized.size() > TAG_MAX_COUNT) {
-            throw new BusinessException("标签最多保留 10 个");
         }
         return normalized;
     }
@@ -203,7 +251,7 @@ public class MineProfileService {
      * @return 归一化后的字符串
      */
     private String trimAndCheckLength(String value, int maxLength, String fieldName) {
-        String trimmed = defaultString(value).trim();
+        String trimmed = defaultString(value).strip();
         if (trimmed.length() > maxLength) {
             throw new BusinessException(fieldName + "不能超过 " + maxLength + " 个字");
         }

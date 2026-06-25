@@ -2,12 +2,19 @@ package com.jxc.wefolio.service;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.alibaba.fastjson2.JSON;
+import com.jxc.wefolio.common.auth.AuthContextHolder;
+import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
+import com.jxc.wefolio.dict.PortfolioStatusDict;
+import com.jxc.wefolio.dict.UserStatusDict;
+import com.jxc.wefolio.dict.WorkStatusDict;
 import com.jxc.wefolio.dto.MineDashboardResponse;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.entity.PointAccountEntity;
 import com.jxc.wefolio.entity.PointTransactionEntity;
+import com.jxc.wefolio.entity.PortfolioEntity;
 import com.jxc.wefolio.entity.UserEntity;
 import com.jxc.wefolio.entity.VisitRecordEntity;
+import com.jxc.wefolio.entity.WorkEntity;
 import com.jxc.wefolio.mapper.PointAccountEntityMapper;
 import com.jxc.wefolio.mapper.PointTransactionEntityMapper;
 import com.jxc.wefolio.mapper.PortfolioEntityMapper;
@@ -54,16 +61,12 @@ public class MineDashboardService {
     /**
      * 获取维护者“我的”首页数据
      *
-     * @param userId 当前登录用户 ID
      * @return 我的首页聚合响应
      */
-    public MineDashboardResponse getDashboard(Long userId) {
-        if (userId == null) {
-            throw new BusinessException("用户未登录");
-        }
-
+    public MineDashboardResponse getDashboard() {
+        Long userId = AuthContextHolder.requireUserId();
         UserEntity user = userEntityMapper.selectById(userId);
-        if (user == null || !"ACTIVE".equals(user.getStatus())) {
+        if (user == null || !UserStatusDict.ACTIVE.getCode().equals(user.getStatus())) {
             throw new BusinessException("用户不存在或已停用");
         }
 
@@ -152,15 +155,15 @@ public class MineDashboardService {
     private MineDashboardResponse.Metrics buildMetrics(Long userId) {
         MineDashboardResponse.Metrics metrics = new MineDashboardResponse.Metrics();
         metrics.setWorkCount(workEntityMapper.selectCount(
-                Wrappers.lambdaQuery(com.jxc.wefolio.entity.WorkEntity.class)
-                        .eq(com.jxc.wefolio.entity.WorkEntity::getUserId, userId)
-                        .eq(com.jxc.wefolio.entity.WorkEntity::getStatus, "ACTIVE")
+                Wrappers.lambdaQuery(WorkEntity.class)
+                        .eq(WorkEntity::getUserId, userId)
+                        .eq(WorkEntity::getStatus, WorkStatusDict.ACTIVE.getCode())
         ));
         metrics.setPublishedPortfolioCount(portfolioEntityMapper.selectCount(
-                Wrappers.lambdaQuery(com.jxc.wefolio.entity.PortfolioEntity.class)
-                        .eq(com.jxc.wefolio.entity.PortfolioEntity::getOwnerType, "USER")
-                        .eq(com.jxc.wefolio.entity.PortfolioEntity::getOwnerId, userId)
-                        .eq(com.jxc.wefolio.entity.PortfolioEntity::getStatus, "ACTIVE")
+                Wrappers.lambdaQuery(PortfolioEntity.class)
+                        .eq(PortfolioEntity::getOwnerType, PortfolioOwnerTypeDict.USER.getCode())
+                        .eq(PortfolioEntity::getOwnerId, userId)
+                        .eq(PortfolioEntity::getStatus, PortfolioStatusDict.ACTIVE.getCode())
         ));
         metrics.setRecentVisitCount(sumRecentVisitCount(userId));
         return metrics;
@@ -176,7 +179,7 @@ public class MineDashboardService {
         LocalDateTime sevenDaysAgo = LocalDateTime.now().minusDays(7);
         List<VisitRecordEntity> records = visitRecordEntityMapper.selectList(
                 Wrappers.lambdaQuery(VisitRecordEntity.class)
-                        .eq(VisitRecordEntity::getOwnerType, "USER")
+                        .eq(VisitRecordEntity::getOwnerType, PortfolioOwnerTypeDict.USER.getCode())
                         .eq(VisitRecordEntity::getOwnerId, userId)
                         .ge(VisitRecordEntity::getLastVisitedAt, sevenDaysAgo)
         );

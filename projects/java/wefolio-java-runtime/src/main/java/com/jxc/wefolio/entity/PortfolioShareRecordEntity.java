@@ -1,13 +1,11 @@
 package com.jxc.wefolio.entity;
 
-import java.time.LocalDateTime;
-
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
 
 /**
- * wf_portfolio_share_record — 作品集分享记录表 — 记录每次分享行为，已补充 owner_type/owner_id 冗余字段支持直接按归属查询
+ * wf_portfolio_share_record — 作品集分享记录表 — 记录每次分享行为，BaseEntity.createdAt 表示分享时间。
  */
 @Data
 @TableName("wf_portfolio_share_record")
@@ -33,8 +31,5 @@ public class PortfolioShareRecordEntity extends BaseEntity {
 
     /** 页面入口或业务场景编码 */
     private String shareScene;
-
-    /** 分享时间 */
-    private LocalDateTime createdAt;
 
 }

@@ -1,7 +1,7 @@
 package com.jxc.wefolio.service;
 
-import com.jxc.wefolio.dto.WechatLoginRequest;
-import com.jxc.wefolio.dto.WechatLoginResponse;
+import com.jxc.wefolio.dto.MaintainerWechatLoginRequest;
+import com.jxc.wefolio.dto.MaintainerWechatLoginResponse;
 import com.jxc.wefolio.dto.WechatPhoneNumberResponse;
 import com.jxc.wefolio.dto.WechatSessionResponse;
 import com.jxc.wefolio.entity.UserEntity;
@@ -50,16 +50,16 @@ class MiniappAuthServiceTest {
     @Test
     void rejectsBlankWechatCode() {
         MiniappAuthService service = buildService();
-        WechatLoginRequest request = new WechatLoginRequest();
+        MaintainerWechatLoginRequest request = new MaintainerWechatLoginRequest();
         request.setCode(" ");
 
-        assertThatThrownBy(() -> service.loginByWechat(request))
+        assertThatThrownBy(() -> service.loginMaintainerByWechat(request))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("微信登录凭证不能为空");
     }
 
     @Test
-    void wechatLoginCreatesUserAuthAfterCodeSessionExchange() {
+    void maintainerWechatLoginCreatesUserAuthAfterCodeSessionExchange() {
         WechatSessionResponse session = new WechatSessionResponse();
         session.setOpenid("openid-123");
         session.setUnionid("union-456");
@@ -79,14 +79,14 @@ class MiniappAuthServiceTest {
         }).when(userEntityMapper).insert(any(UserEntity.class));
 
         MiniappAuthService service = buildService();
-        WechatLoginRequest request = new WechatLoginRequest();
+        MaintainerWechatLoginRequest request = new MaintainerWechatLoginRequest();
         request.setCode("wx-code");
         request.setNickname("林安");
         request.setAvatarUrl("https://example.com/avatar.jpg");
         request.setPhoneCode("phone-code");
         request.setPluginLoginCode("plugin-code");
 
-        WechatLoginResponse response = service.loginByWechat(request);
+        MaintainerWechatLoginResponse response = service.loginMaintainerByWechat(request);
 
         assertThat(response.getToken()).isEqualTo("wf-dev-user-11");
         assertThat(response.getUserId()).isEqualTo(11L);
@@ -123,13 +123,13 @@ class MiniappAuthServiceTest {
         }).when(userEntityMapper).insert(any(UserEntity.class));
 
         MiniappAuthService service = buildService();
-        WechatLoginRequest request = new WechatLoginRequest();
+        MaintainerWechatLoginRequest request = new MaintainerWechatLoginRequest();
         request.setCode("wx-code");
         request.setNickname("林安");
         request.setAvatarUrl("https://example.com/avatar.jpg");
         request.setPhoneCode("phone-code");
 
-        WechatLoginResponse response = service.loginByWechat(request);
+        MaintainerWechatLoginResponse response = service.loginMaintainerByWechat(request);
 
         assertThat(response.getToken()).isEqualTo("wf-dev-user-11");
         verify(wechatMiniappClient, never()).exchangePluginOpenpid(any());
@@ -160,10 +160,10 @@ class MiniappAuthServiceTest {
         when(userEntityMapper.selectById(7L)).thenReturn(user);
 
         MiniappAuthService service = buildService();
-        WechatLoginRequest request = new WechatLoginRequest();
+        MaintainerWechatLoginRequest request = new MaintainerWechatLoginRequest();
         request.setCode("wx-code");
 
-        WechatLoginResponse response = service.loginByWechat(request);
+        MaintainerWechatLoginResponse response = service.loginMaintainerByWechat(request);
 
         assertThat(response.getToken()).isEqualTo("wf-dev-user-7");
         verify(wechatMiniappClient, never()).exchangePhoneCode(any());
@@ -179,25 +179,23 @@ class MiniappAuthServiceTest {
         when(userAuthEntityMapper.selectOne(any())).thenReturn(null);
 
         MiniappAuthService service = buildService();
-        WechatLoginRequest request = new WechatLoginRequest();
+        MaintainerWechatLoginRequest request = new MaintainerWechatLoginRequest();
         request.setCode("wx-code");
 
-        assertThatThrownBy(() -> service.loginByWechat(request))
+        assertThatThrownBy(() -> service.loginMaintainerByWechat(request))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("请先完成手机号授权注册");
     }
 
     private MiniappAuthService buildService() {
-        MiniappAuthService service = new MiniappAuthService(
+        return new MiniappAuthService(
                 userEntityMapper,
                 userAuthEntityMapper,
                 wechatMiniappClient,
                 properties(),
-                cosService
+                cosService,
+                new UserRegistrationService(userEntityMapper, userAuthEntityMapper)
         );
-        // 注入 self 代理，使 @Transactional 方法能通过自调用走 AOP
-        service.self = service;
-        return service;
     }
 
     private WechatMiniappProperties properties() {
