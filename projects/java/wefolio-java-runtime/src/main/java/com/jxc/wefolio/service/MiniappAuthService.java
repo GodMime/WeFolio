@@ -204,6 +204,7 @@ public class MiniappAuthService {
      * @return COS 公开 URL，上传失败时返回原始 URL
      */
     private String uploadAvatarToCos(String avatarUrl, String uniqueCode) {
+        log.info("注册头像上传 COS 开始: uniqueCode={}, avatarUrl={}", uniqueCode, avatarUrl);
         if (avatarUrl == null || avatarUrl.isBlank()) {
             return avatarUrl;
         }
