@@ -13,6 +13,7 @@ import com.jxc.wefolio.service.AuthTokenService;
 import com.jxc.wefolio.service.CosService;
 import com.jxc.wefolio.service.MiniappAuthService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -28,6 +29,7 @@ import org.springframework.web.multipart.MultipartFile;
 /**
  * 小程序认证控制器 — 提供登录、登录态校验和维护者信息管理接口。
  */
+@Slf4j
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/auth")
@@ -97,10 +99,14 @@ public class MiniappAuthController {
             return Response.fail("头像文件不能超过 5MB");
         }
         String uniqueCode = miniappAuthService.getUniqueCodeByUserId(userId);
+        log.info("头像上传开始: userId={}, uniqueCode={}, originalFilename={}, size={}",
+                userId, uniqueCode, file.getOriginalFilename(), file.getSize());
         String key = cosService.upload(file, uniqueCode + "/others");
+        String url = cosService.publicUrl(key);
+        log.info("头像上传成功: userId={}, uniqueCode={}, key={}, url={}", userId, uniqueCode, key, url);
         FileUploadResponse response = new FileUploadResponse();
         response.setKey(key);
-        response.setUrl(cosService.publicUrl(key));
+        response.setUrl(url);
         return Response.success(response);
     }
 

@@ -149,8 +149,8 @@ public class MiniappAuthService {
                 String uniqueCode = generateUniqueCode();
                 // COS 文件夹初始化在前，失败直接抛异常，不污染数据库
                 cosService.initUserStorage(uniqueCode);
-                // 将微信头像上传到 COS，替换 request 中的原始微信 URL
-                request.setAvatarUrl(uploadAvatarToCos(request.getAvatarUrl(), uniqueCode));
+                // 注册前端头像为本地临时路径时无法由服务端读取，后续由已登录上传接口写回 COS 地址
+                request.setAvatarUrl(uploadAvatarToCos(request.getAvatarUrl(), uniqueCode, ""));
                 user = userRegistrationService.createWechatMaintainerUser(
                         uniqueCode,
                         request,
@@ -195,30 +195,37 @@ public class MiniappAuthService {
     }
 
     /**
-     * 将头像从远程 URL 上传到 COS 的 {@code {uniqueCode}/others/} 目录。
-     * 上传失败时返回原始 URL 作为降级处理，不影响注册主流程。
-     * 如果已经是 COS URL 则跳过上传。
+     * 将头像远程 URL 上传到 COS 的 {@code {uniqueCode}/others/} 目录。
+     * 非 http(s) 地址通常是小程序本地临时路径，服务端无法读取，直接回退。
      *
-     * @param avatarUrl  头像 URL（通常为微信返回的远程 URL）
+     * @param avatarUrl 头像地址
      * @param uniqueCode 用户唯一码
-     * @return COS 公开 URL，上传失败时返回原始 URL
+     * @param fallbackUrl 无法上传时使用的回退地址
+     * @return COS 公开 URL、原远程 URL 或回退地址
      */
-    private String uploadAvatarToCos(String avatarUrl, String uniqueCode) {
+    private String uploadAvatarToCos(String avatarUrl, String uniqueCode, String fallbackUrl) {
         log.info("注册头像上传 COS 开始: uniqueCode={}, avatarUrl={}", uniqueCode, avatarUrl);
         if (avatarUrl == null || avatarUrl.isBlank()) {
-            return avatarUrl;
+            return defaultString(fallbackUrl, "");
         }
+        String normalizedAvatarUrl = avatarUrl.trim();
         // 已经是 COS URL，跳过上传
         String publicBaseUrl = cosProperties.getPublicBaseUrl();
-        if (publicBaseUrl != null && !publicBaseUrl.isBlank() && avatarUrl.startsWith(publicBaseUrl)) {
-            return avatarUrl;
+        if (publicBaseUrl != null && !publicBaseUrl.isBlank() && normalizedAvatarUrl.startsWith(publicBaseUrl)) {
+            return normalizedAvatarUrl;
+        }
+        if (!isHttpUrl(normalizedAvatarUrl)) {
+            log.info("跳过非远程头像路径: uniqueCode={}, avatarUrl={}", uniqueCode, normalizedAvatarUrl);
+            return defaultString(fallbackUrl, "");
         }
         try {
-            String key = cosService.uploadFromUrl(avatarUrl, uniqueCode + "/others");
-            return cosService.publicUrl(key);
+            String key = cosService.uploadFromUrl(normalizedAvatarUrl, uniqueCode + "/others");
+            String cosUrl = cosService.publicUrl(key);
+            log.info("头像上传 COS 成功: uniqueCode={}, cosUrl={}", uniqueCode, cosUrl);
+            return cosUrl;
         } catch (Exception e) {
-            log.warn("头像上传 COS 失败，使用原始 URL: uniqueCode={}, url={}", uniqueCode, avatarUrl, e);
-            return avatarUrl;
+            log.warn("头像上传 COS 失败，使用原始 URL: uniqueCode={}, avatarUrl={}", uniqueCode, normalizedAvatarUrl, e);
+            return normalizedAvatarUrl;
         }
     }
 
@@ -238,10 +245,7 @@ public class MiniappAuthService {
     ) {
         LocalDateTime now = LocalDateTime.now();
         String nickname = defaultString(request.getNickname(), user.getNickname());
-        String avatarUrl = uploadAvatarToCos(
-                defaultString(request.getAvatarUrl(), user.getAvatarUrl()),
-                user.getUniqueCode()
-        );
+        String avatarUrl = uploadAvatarToCos(request.getAvatarUrl(), user.getUniqueCode(), user.getAvatarUrl());
         user.setNickname(nickname);
         user.setAvatarUrl(avatarUrl);
         user.setPhoneNumber(phoneInfo.getPhoneNumber());
@@ -347,6 +351,17 @@ public class MiniappAuthService {
             return fallback;
         }
         return value;
+    }
+
+    /**
+     * 判断是否为服务端可拉取的远程 HTTP 地址。
+     *
+     * @param value 待判断地址
+     * @return 是否为 http 或 https 地址
+     */
+    private boolean isHttpUrl(String value) {
+        String lowerValue = value.toLowerCase(Locale.ROOT);
+        return lowerValue.startsWith("http://") || lowerValue.startsWith("https://");
     }
 
     /**

@@ -1,4 +1,4 @@
-package com.jxc.wefolio.config;
+package com.jxc.wefolio.aspect;
 
 import com.jxc.wefolio.annotation.LoginAccess;
 import com.jxc.wefolio.annotation.MaintainerAccess;
@@ -52,13 +52,18 @@ public class AuthAspect {
     @Around("within(com.jxc.wefolio.controller..*)")
     public Object authenticate(ProceedingJoinPoint joinPoint) throws Throwable {
         Method method = resolveMethod(joinPoint);
+        HttpServletRequest request = currentRequest();
+        String requestInfo = request != null
+                ? request.getMethod() + " " + request.getRequestURI()
+                : "未知请求";
 
         if (isLoginAccess(method, joinPoint) || isSystemAccess(method, joinPoint) || isVisitorAccess(method, joinPoint)) {
+            log.info("放行请求: {}", requestInfo);
             return joinPoint.proceed();
         }
 
         if (isMaintainerAccess(method, joinPoint)) {
-            return authenticateMaintainer(joinPoint);
+            return authenticateMaintainer(joinPoint, request, requestInfo);
         }
 
         // 正常情况不会到达此处（启动时已验证所有接口均有标记），
@@ -69,22 +74,26 @@ public class AuthAspect {
     /**
      * 维护者认证 — 校验 Authorization 令牌并注入登录上下文。
      *
-     * @param joinPoint 切点
+     * @param joinPoint   切点
+     * @param request     HTTP 请求
+     * @param requestInfo 请求信息（方法 + URI），用于日志
      * @return 控制器执行结果
      * @throws Throwable 控制器执行异常
      */
-    private Object authenticateMaintainer(ProceedingJoinPoint joinPoint) throws Throwable {
-        HttpServletRequest request = currentRequest();
+    private Object authenticateMaintainer(ProceedingJoinPoint joinPoint, HttpServletRequest request, String requestInfo) throws Throwable {
         if (request == null) {
+            log.warn("维护者认证失败：无法获取 HTTP 请求");
             throw new AuthenticationRequiredException();
         }
 
         String authorization = request.getHeader("Authorization");
         Optional<Long> userId = authTokenService.resolveAuthenticatedUserId(authorization);
         if (userId.isEmpty()) {
+            log.warn("维护者认证失败：令牌无效或已过期, request={}", requestInfo);
             throw new AuthenticationRequiredException();
         }
 
+        log.info("维护者认证通过: userId={}, request={}", userId.get(), requestInfo);
         AuthContextHolder.set(new AuthContext(userId.get(), authorization));
         try {
             return joinPoint.proceed();

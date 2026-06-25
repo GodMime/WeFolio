@@ -10,6 +10,7 @@ import com.jxc.wefolio.service.MineDashboardService;
 import com.jxc.wefolio.service.MineProfileService;
 import com.jxc.wefolio.service.MineVisitService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 我的首页控制器 — 提供维护者工作台接口。
  */
+@Slf4j
 @MaintainerAccess
 @RestController
 @RequiredArgsConstructor
@@ -70,6 +72,9 @@ public class MineController {
      */
     @PutMapping("/api/mine/profile")
     public Response<MineProfileResponse> updateProfile(@RequestBody MineProfileUpdateRequest request) {
+        log.info("保存基础信息: nickname={}, avatarUrl={}, profession={}, city={}, intro={}, tags={}",
+                request.getNickname(), request.getAvatarUrl(), request.getProfession(),
+                request.getCity(), request.getIntro(), request.getTags());
         return Response.success(mineProfileService.updateProfile(request));
     }
 }

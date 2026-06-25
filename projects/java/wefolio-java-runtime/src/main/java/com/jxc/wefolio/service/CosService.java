@@ -1,6 +1,7 @@
 package com.jxc.wefolio.service;
 
 import com.jxc.wefolio.config.CosProperties;
+import com.qcloud.cos.model.CannedAccessControlList;
 import com.qcloud.cos.model.COSObject;
 import com.qcloud.cos.model.GetObjectRequest;
 import com.qcloud.cos.model.ObjectMetadata;
@@ -65,8 +66,11 @@ public class CosService {
             metadata.setContentType(file.getContentType());
             metadata.setContentLength(file.getSize());
 
-            Upload upload = transferManager.upload(
+            PutObjectRequest putObjectRequest = new PutObjectRequest(
                     cosProperties.getBucketName(), key, tempFile.toFile());
+            putObjectRequest.setMetadata(metadata);
+            putObjectRequest.setCannedAcl(CannedAccessControlList.PublicRead);
+            Upload upload = transferManager.upload(putObjectRequest);
             upload.waitForUploadResult();
 
             log.info("COS upload success: key={}, size={}, original={}", key, file.getSize(), originalFilename);
@@ -118,8 +122,11 @@ public class CosService {
             metadata.setContentType(contentType != null ? contentType : "image/jpeg");
             metadata.setContentLength(fileSize);
 
-            Upload upload = transferManager.upload(
+            PutObjectRequest putObjectRequest = new PutObjectRequest(
                     cosProperties.getBucketName(), key, tempFile.toFile());
+            putObjectRequest.setMetadata(metadata);
+            putObjectRequest.setCannedAcl(CannedAccessControlList.PublicRead);
+            Upload upload = transferManager.upload(putObjectRequest);
             upload.waitForUploadResult();
 
             log.info("COS upload from URL success: key={}, source={}, size={}", key, imageUrl, fileSize);
