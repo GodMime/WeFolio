@@ -1,4 +1,4 @@
-package com.jxc.wefolio.config;
+package com.jxc.wefolio.aspect;
 
 import com.jxc.wefolio.annotation.LoginAccess;
 import com.jxc.wefolio.annotation.MaintainerAccess;

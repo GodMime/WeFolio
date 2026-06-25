@@ -53,7 +53,7 @@ class CosServiceTest {
                 "file", "test.jpg", "image/jpeg", "hello".getBytes());
 
         Upload upload = mock(Upload.class);
-        when(transferManager.upload(anyString(), anyString(), any(java.io.File.class)))
+        when(transferManager.upload(any(com.qcloud.cos.model.PutObjectRequest.class)))
                 .thenReturn(upload);
 
         String key = cosService.upload(file);
@@ -72,7 +72,7 @@ class CosServiceTest {
                 "file", "README", "text/plain", "hello".getBytes());
 
         Upload upload = mock(Upload.class);
-        when(transferManager.upload(anyString(), anyString(), any(java.io.File.class)))
+        when(transferManager.upload(any(com.qcloud.cos.model.PutObjectRequest.class)))
                 .thenReturn(upload);
 
         String key = cosService.upload(file);
@@ -87,7 +87,7 @@ class CosServiceTest {
                 "file", null, "application/octet-stream", "data".getBytes());
 
         Upload upload = mock(Upload.class);
-        when(transferManager.upload(anyString(), anyString(), any(java.io.File.class)))
+        when(transferManager.upload(any(com.qcloud.cos.model.PutObjectRequest.class)))
                 .thenReturn(upload);
 
         String key = cosService.upload(file);
@@ -101,7 +101,7 @@ class CosServiceTest {
         MockMultipartFile file = new MockMultipartFile(
                 "file", "test.png", "image/png", "data".getBytes());
 
-        when(transferManager.upload(anyString(), anyString(), any(java.io.File.class)))
+        when(transferManager.upload(any(com.qcloud.cos.model.PutObjectRequest.class)))
                 .thenThrow(new RuntimeException("Network error"));
 
         assertThatThrownBy(() -> cosService.upload(file))
@@ -116,7 +116,7 @@ class CosServiceTest {
                 "file", "test.jpg", "image/jpeg", "data".getBytes());
 
         Upload upload = mock(Upload.class);
-        when(transferManager.upload(anyString(), anyString(), any(java.io.File.class)))
+        when(transferManager.upload(any(com.qcloud.cos.model.PutObjectRequest.class)))
                 .thenReturn(upload);
 
         String key1 = cosService.upload(file);
