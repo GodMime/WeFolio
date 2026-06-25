@@ -128,8 +128,7 @@ public class MineProfileService {
 
         applyStringField(request.getNickname(), NICKNAME_MAX_LENGTH, "姓名 / 艺名",
                 user::setNickname, value -> updateWrapper.set(COL_NICKNAME, value));
-        applyStringField(request.getAvatarUrl(), AVATAR_URL_MAX_LENGTH, "头像地址",
-                user::setAvatarUrl, value -> updateWrapper.set(COL_AVATAR_URL, value));
+        applyAvatarField(request.getAvatarUrl(), user, updateWrapper);
         applyStringField(request.getProfession(), PROFESSION_MAX_LENGTH, "职业身份",
                 user::setProfession, value -> updateWrapper.set(COL_PROFESSION, value));
         applyStringField(request.getCity(), CITY_MAX_LENGTH, "服务城市",
@@ -174,6 +173,56 @@ public class MineProfileService {
         String normalized = trimAndCheckLength(value, maxLength, fieldName);
         setter.accept(normalized);
         updateSetter.accept(normalized);
+    }
+
+    /**
+     * 处理头像字段更新，包含每月 10 次限制校验。
+     * 跨月时自动重置计数。
+     *
+     * @param avatarUrl     新头像地址，为空时不更新
+     * @param user          当前用户实体
+     * @param updateWrapper 局部更新包装器
+     */
+    private void applyAvatarField(String avatarUrl, UserEntity user, UpdateWrapper<UserEntity> updateWrapper) {
+        if (avatarUrl == null) {
+            return;
+        }
+        String normalized = trimAndCheckLength(avatarUrl, AVATAR_URL_MAX_LENGTH, "头像地址");
+
+        // 头像地址未变化，跳过计数
+        if (normalized.equals(user.getAvatarUrl())) {
+            return;
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        int newCount = computeMonthlyAvatarUpdateCount(user, now);
+        if (newCount > UserEntity.AVATAR_MONTHLY_MAX_COUNT) {
+            throw new BusinessException("当月头像更新次数已达上限（" + UserEntity.AVATAR_MONTHLY_MAX_COUNT + "次），请下月再试");
+        }
+
+        user.setAvatarUrl(normalized);
+        updateWrapper.set(COL_AVATAR_URL, normalized);
+        user.setLastAvatarUpdatedAt(now);
+        updateWrapper.set("last_avatar_updated_at", now);
+        user.setAvatarUpdateCount(newCount);
+        updateWrapper.set("avatar_update_count", newCount);
+    }
+
+    /**
+     * 计算当月头像更新次数，跨月自动重置。
+     *
+     * @param user 当前用户实体
+     * @param now  当前时间
+     * @return 本次更新后的计数值
+     */
+    private int computeMonthlyAvatarUpdateCount(UserEntity user, LocalDateTime now) {
+        LocalDateTime lastUpdate = user.getLastAvatarUpdatedAt();
+        int currentCount = user.getAvatarUpdateCount() != null ? user.getAvatarUpdateCount() : 0;
+
+        boolean newMonth = lastUpdate == null
+                || lastUpdate.getYear() != now.getYear()
+                || lastUpdate.getMonthValue() != now.getMonthValue();
+        return newMonth ? 1 : currentCount + 1;
     }
 
     /**

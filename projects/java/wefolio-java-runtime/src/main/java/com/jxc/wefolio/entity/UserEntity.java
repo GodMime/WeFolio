@@ -13,6 +13,9 @@ import lombok.Data;
 @TableName("wf_user")
 public class UserEntity extends BaseEntity {
 
+    /** 头像每月最大更新次数 */
+    public static final int AVATAR_MONTHLY_MAX_COUNT = 10;
+
     /** 个人唯一码，注册后不可重复 */
     private String uniqueCode;
 
@@ -63,6 +66,12 @@ public class UserEntity extends BaseEntity {
 
     /** 最近登录时间 */
     private LocalDateTime lastLoginAt;
+
+    /** 上次头像更新时间 */
+    private LocalDateTime lastAvatarUpdatedAt;
+
+    /** 当月头像变更次数（跨月自动重置） */
+    private Integer avatarUpdateCount;
 
     /** 逻辑删除时间 */
     private LocalDateTime deletedAt;

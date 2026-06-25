@@ -247,7 +247,24 @@ public class MiniappAuthService {
         String nickname = defaultString(request.getNickname(), user.getNickname());
         String avatarUrl = uploadAvatarToCos(request.getAvatarUrl(), user.getUniqueCode(), user.getAvatarUrl());
         user.setNickname(nickname);
+
+        // 头像地址变更时校验每月更新次数限制（跨月自动重置）
+        String currentAvatarUrl = defaultString(user.getAvatarUrl(), "");
+        if (!avatarUrl.equals(currentAvatarUrl)) {
+            int currentCount = user.getAvatarUpdateCount() != null ? user.getAvatarUpdateCount() : 0;
+            LocalDateTime lastUpdate = user.getLastAvatarUpdatedAt();
+            boolean newMonth = lastUpdate == null
+                    || lastUpdate.getYear() != now.getYear()
+                    || lastUpdate.getMonthValue() != now.getMonthValue();
+            int newCount = newMonth ? 1 : currentCount + 1;
+            if (newCount > UserEntity.AVATAR_MONTHLY_MAX_COUNT) {
+                throw new BusinessException("当月头像更新次数已达上限（" + UserEntity.AVATAR_MONTHLY_MAX_COUNT + "次），请下月再试");
+            }
+            user.setLastAvatarUpdatedAt(now);
+            user.setAvatarUpdateCount(newCount);
+        }
         user.setAvatarUrl(avatarUrl);
+
         user.setPhoneNumber(phoneInfo.getPhoneNumber());
         user.setPhoneCountryCode(defaultString(phoneInfo.getCountryCode(), ""));
         user.setPhoneLast4(last4(phoneInfo.getPhoneNumber()));
