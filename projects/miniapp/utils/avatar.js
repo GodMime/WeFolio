@@ -1,7 +1,7 @@
 const { DEFAULT_BASE_URL, TOKEN_STORAGE_KEY } = require('./request')
 
 const AVATAR_MAX_SIZE_BYTES = 5 * 1024 * 1024
-const AVATAR_COMPRESS_QUALITY = 80
+const AVATAR_COMPRESS_QUALITY = 95
 const AVATAR_COMPRESSED_SIZE = 512
 
 function getRuntimeWx(wxApi) {
