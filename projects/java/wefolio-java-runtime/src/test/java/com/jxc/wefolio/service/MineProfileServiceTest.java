@@ -3,6 +3,8 @@ package com.jxc.wefolio.service;
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONArray;
+import com.alibaba.fastjson2.JSONObject;
 import com.jxc.wefolio.common.auth.AuthContext;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
 import com.jxc.wefolio.dto.MineProfileResponse;
@@ -53,7 +55,9 @@ class MineProfileServiceTest {
     @Test
     void profileContainsEditableBasicInformation() {
         UserEntity user = activeUser();
-        user.setProfileTags("[\"高端婚礼\",\"双语主持\"]");
+        user.setProfileTags("""
+                [{"content":"高端婚礼","color":"#0f766e"},{"content":"双语主持","color":"#2d5f9a"}]
+                """);
         when(userEntityMapper.selectById(7L)).thenReturn(user);
 
         MineProfileService service = new MineProfileService(userEntityMapper);
@@ -68,7 +72,30 @@ class MineProfileServiceTest {
         assertThat(response.getProfession()).isEqualTo("婚礼司仪");
         assertThat(response.getCity()).isEqualTo("上海、杭州、苏州");
         assertThat(response.getIntro()).isEqualTo("10 年婚礼主持经验");
-        assertThat(response.getTags()).containsExactly("高端婚礼", "双语主持");
+        Object firstTag = response.getTags().get(0);
+        Object secondTag = response.getTags().get(1);
+        assertThat(firstTag)
+                .hasFieldOrPropertyWithValue("content", "高端婚礼")
+                .hasFieldOrPropertyWithValue("color", "#0f766e");
+        assertThat(secondTag)
+                .hasFieldOrPropertyWithValue("content", "双语主持")
+                .hasFieldOrPropertyWithValue("color", "#2d5f9a");
+    }
+
+    @Test
+    void profileReadsLegacyStringTagsWithDefaultColor() {
+        UserEntity user = activeUser();
+        user.setProfileTags("[\"高端婚礼\",\"双语主持\"]");
+        when(userEntityMapper.selectById(7L)).thenReturn(user);
+
+        MineProfileService service = new MineProfileService(userEntityMapper);
+
+        MineProfileResponse response = service.getProfile();
+
+        Object firstTag = response.getTags().get(0);
+        assertThat(firstTag)
+                .hasFieldOrPropertyWithValue("content", "高端婚礼")
+                .hasFieldOrPropertyWithValue("color", "#0f766e");
     }
 
     @Test
@@ -82,7 +109,10 @@ class MineProfileServiceTest {
         request.setProfession(" 婚礼司仪 ");
         request.setCity(" 上海、杭州、苏州 ");
         request.setIntro(" 10 年婚礼主持经验 ");
-        request.setTags(List.of(" 高端婚礼 ", "双语主持"));
+        request.setTags((List) List.of(
+                tag(" 高端婚礼 ", "#0F766E"),
+                tag("双语主持", "#2d5f9a")
+        ));
         when(userEntityMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
 
         MineProfileService service = new MineProfileService(userEntityMapper);
@@ -97,8 +127,12 @@ class MineProfileServiceTest {
         assertThat(user.getProfession()).isEqualTo("婚礼司仪");
         assertThat(user.getCity()).isEqualTo("上海、杭州、苏州");
         assertThat(user.getIntro()).isEqualTo("10 年婚礼主持经验");
-        assertThat(JSON.parseArray(user.getProfileTags(), String.class))
-                .containsExactly("高端婚礼", "双语主持");
+        JSONArray tags = JSON.parseArray(user.getProfileTags());
+        assertThat(tags).hasSize(2);
+        assertThat(tags.getJSONObject(0).getString("content")).isEqualTo("高端婚礼");
+        assertThat(tags.getJSONObject(0).getString("color")).isEqualTo("#0f766e");
+        assertThat(tags.getJSONObject(1).getString("content")).isEqualTo("双语主持");
+        assertThat(tags.getJSONObject(1).getString("color")).isEqualTo("#2d5f9a");
         verify(userEntityMapper, never()).updateById(any(UserEntity.class));
     }
 
@@ -167,7 +201,10 @@ class MineProfileServiceTest {
     void updateProfileRejectsDuplicateTags() {
         when(userEntityMapper.selectById(7L)).thenReturn(activeUser());
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
-        request.setTags(List.of("高端婚礼", " 高端婚礼 "));
+        request.setTags((List) List.of(
+                tag("高端婚礼", "#0f766e"),
+                tag(" 高端婚礼 ", "#2d5f9a")
+        ));
 
         MineProfileService service = new MineProfileService(userEntityMapper);
 
@@ -177,10 +214,51 @@ class MineProfileServiceTest {
     }
 
     @Test
+    void updateProfileRejectsUnknownTagColor() {
+        when(userEntityMapper.selectById(7L)).thenReturn(activeUser());
+        MineProfileUpdateRequest request = new MineProfileUpdateRequest();
+        request.setTags((List) List.of(tag("高端婚礼", "#123456")));
+
+        MineProfileService service = new MineProfileService(userEntityMapper);
+
+        assertThatThrownBy(() -> service.updateProfile(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("请选择有效的标签颜色");
+    }
+
+    @Test
+    void updateProfileAcceptsExpandedTagColor() {
+        UserEntity user = activeUser();
+        when(userEntityMapper.selectById(7L)).thenReturn(user);
+        when(userEntityMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
+        MineProfileUpdateRequest request = new MineProfileUpdateRequest();
+        request.setTags((List) List.of(tag("舞台灯光", "#36516e")));
+
+        MineProfileService service = new MineProfileService(userEntityMapper);
+        service.updateProfile(request);
+
+        JSONArray tags = JSON.parseArray(user.getProfileTags());
+        assertThat(tags.getJSONObject(0).getString("content")).isEqualTo("舞台灯光");
+        assertThat(tags.getJSONObject(0).getString("color")).isEqualTo("#36516e");
+    }
+
+    @Test
     void updateProfileRejectsTooManyTags() {
         when(userEntityMapper.selectById(7L)).thenReturn(activeUser());
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
-        request.setTags(List.of("一", "二", "三", "四", "五", "六", "七", "八", "九", "十", "第十一个超长标签"));
+        request.setTags((List) List.of(
+                tag("一", "#0f766e"),
+                tag("二", "#0f766e"),
+                tag("三", "#0f766e"),
+                tag("四", "#0f766e"),
+                tag("五", "#0f766e"),
+                tag("六", "#0f766e"),
+                tag("七", "#0f766e"),
+                tag("八", "#0f766e"),
+                tag("九", "#0f766e"),
+                tag("十", "#0f766e"),
+                tag("第十一个超长标签", "#0f766e")
+        ));
 
         MineProfileService service = new MineProfileService(userEntityMapper);
 
@@ -200,5 +278,12 @@ class MineProfileServiceTest {
         user.setIntro("10 年婚礼主持经验");
         user.setStatus("ACTIVE");
         return user;
+    }
+
+    private JSONObject tag(String content, String color) {
+        JSONObject tag = new JSONObject();
+        tag.put("content", content);
+        tag.put("color", color);
+        return tag;
     }
 }

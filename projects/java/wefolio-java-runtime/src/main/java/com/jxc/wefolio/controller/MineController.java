@@ -5,8 +5,10 @@ import com.jxc.wefolio.annotation.MaintainerAccess;
 import com.jxc.wefolio.dto.MineDashboardResponse;
 import com.jxc.wefolio.dto.MineProfileResponse;
 import com.jxc.wefolio.dto.MineProfileUpdateRequest;
+import com.jxc.wefolio.dto.MineVisitRecordsResponse;
 import com.jxc.wefolio.service.MineDashboardService;
 import com.jxc.wefolio.service.MineProfileService;
+import com.jxc.wefolio.service.MineVisitService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -27,6 +29,9 @@ public class MineController {
     /** 基础信息服务 */
     private final MineProfileService mineProfileService;
 
+    /** 访问记录服务 */
+    private final MineVisitService mineVisitService;
+
     /**
      * 获取我的首页数据。
      *
@@ -45,6 +50,16 @@ public class MineController {
     @GetMapping("/api/mine/profile")
     public Response<MineProfileResponse> profile() {
         return Response.success(mineProfileService.getProfile());
+    }
+
+    /**
+     * 获取访问记录页数据。
+     *
+     * @return 访问记录页响应
+     */
+    @GetMapping("/api/mine/visits")
+    public Response<MineVisitRecordsResponse> visits() {
+        return Response.success(mineVisitService.getVisitRecords());
     }
 
     /**

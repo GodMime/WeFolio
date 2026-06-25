@@ -62,7 +62,9 @@ class MineDashboardServiceTest {
         user.setAvatarUrl("https://example.com/avatar.jpg");
         user.setProfession("婚礼司仪");
         user.setCity("上海");
-        user.setProfileTags("[\"高端婚礼\",\"双语主持\"]");
+        user.setProfileTags("""
+                [{"content":"高端婚礼","color":"#0f766e"},{"content":"双语主持","color":"#2d5f9a"}]
+                """);
         user.setStatus("ACTIVE");
 
         PointAccountEntity account = new PointAccountEntity();

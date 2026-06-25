@@ -2,6 +2,8 @@ package com.jxc.wefolio.service;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONArray;
+import com.alibaba.fastjson2.JSONObject;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
 import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
 import com.jxc.wefolio.dict.PortfolioStatusDict;
@@ -26,9 +28,13 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * 我的首页服务 — 负责聚合工作台展示数据
@@ -201,10 +207,62 @@ public class MineDashboardService {
             return Collections.emptyList();
         }
         try {
-            return JSON.parseArray(profileTags, String.class);
+            JSONArray tags = JSON.parseArray(profileTags);
+            List<String> contents = new ArrayList<>();
+            Set<String> seen = new LinkedHashSet<>();
+            for (Object tag : tags) {
+                String content = extractTagContent(tag).strip();
+                if (!content.isBlank() && seen.add(content)) {
+                    contents.add(content);
+                }
+            }
+            return contents;
         } catch (Exception e) {
             return Collections.emptyList();
         }
+    }
+
+    /**
+     * 提取标签内容，兼容旧版字符串数组和新版对象数组。
+     *
+     * @param tag 原始标签项
+     * @return 标签内容
+     */
+    private String extractTagContent(Object tag) {
+        if (tag instanceof JSONObject jsonObject) {
+            return firstPresent(jsonObject.getString("content"), jsonObject.getString("text"), jsonObject.getString("name"));
+        }
+        if (tag instanceof Map<?, ?> map) {
+            return firstPresent(mapValue(map, "content"), mapValue(map, "text"), mapValue(map, "name"));
+        }
+        return defaultString(tag == null ? null : String.valueOf(tag));
+    }
+
+    /**
+     * 从 Map 中取字符串值。
+     *
+     * @param map 原始 Map
+     * @param key 字段名
+     * @return 字符串值
+     */
+    private String mapValue(Map<?, ?> map, String key) {
+        Object value = map.get(key);
+        return value == null ? "" : String.valueOf(value);
+    }
+
+    /**
+     * 返回第一个非空字符串。
+     *
+     * @param values 待选择字符串
+     * @return 非空字符串
+     */
+    private String firstPresent(String... values) {
+        for (String value : values) {
+            if (!defaultString(value).isBlank()) {
+                return value;
+            }
+        }
+        return "";
     }
 
     /**

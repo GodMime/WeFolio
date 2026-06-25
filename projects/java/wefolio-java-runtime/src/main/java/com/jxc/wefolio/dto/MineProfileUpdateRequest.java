@@ -25,6 +25,6 @@ public class MineProfileUpdateRequest {
     /** 个人简介 */
     private String intro;
 
-    /** 个人标签 */
-    private List<String> tags;
+    /** 个人标签；兼容旧字符串数组和新对象数组 */
+    private List<?> tags;
 }

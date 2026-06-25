@@ -2,10 +2,13 @@ package com.jxc.wefolio.service;
 
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONException;
+import com.alibaba.fastjson2.JSONObject;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
 import com.jxc.wefolio.dict.UserStatusDict;
 import com.jxc.wefolio.dto.MineProfileResponse;
+import com.jxc.wefolio.dto.MineProfileTagDTO;
 import com.jxc.wefolio.dto.MineProfileUpdateRequest;
 import com.jxc.wefolio.entity.UserEntity;
 import com.jxc.wefolio.exception.BusinessException;
@@ -19,6 +22,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 
@@ -50,6 +55,22 @@ public class MineProfileService {
 
     /** 单个标签最大长度 */
     private static final int TAG_MAX_LENGTH = 10;
+
+    /** 默认标签颜色 */
+    private static final String DEFAULT_TAG_COLOR = "#0f766e";
+
+    /** 可选标签色板 */
+    private static final Set<String> TAG_COLORS = Set.of(
+            "#0f766e",
+            "#2d5f9a",
+            "#8a4b09",
+            "#a9354f",
+            "#6d5bd0",
+            "#3f6f45",
+            "#36516e",
+            "#9a4a35",
+            "#4b5563"
+    );
 
     /** 用户表主键列 */
     private static final String COL_ID = "id";
@@ -198,13 +219,14 @@ public class MineProfileService {
      * @param profileTags 标签 JSON
      * @return 标签列表
      */
-    private List<String> parseTags(String profileTags) {
+    private List<MineProfileTagDTO> parseTags(String profileTags) {
         if (profileTags == null || profileTags.isBlank()) {
             return Collections.emptyList();
         }
         try {
-            return JSON.parseArray(profileTags, String.class);
-        } catch (JSONException e) {
+            JSONArray tags = JSON.parseArray(profileTags);
+            return normalizeTags(tags);
+        } catch (BusinessException | JSONException e) {
             log.warn("解析资料标签 JSON 失败 profileTags={}", profileTags, e);
             return Collections.emptyList();
         }
@@ -213,21 +235,21 @@ public class MineProfileService {
     /**
      * 归一化并校验标签
      *
-     * @param tags 原始标签列表
+     * @param tags 原始标签列表，兼容字符串或对象
      * @return 已去空格且保序的标签列表
      */
-    private List<String> normalizeTags(List<String> tags) {
+    private List<MineProfileTagDTO> normalizeTags(List<?> tags) {
         if (tags == null || tags.isEmpty()) {
             return Collections.emptyList();
         }
 
-        List<String> normalized = new ArrayList<>();
+        List<MineProfileTagDTO> normalized = new ArrayList<>();
         Set<String> seen = new LinkedHashSet<>();
-        for (String tag : tags) {
+        for (Object tag : tags) {
             if (seen.size() >= TAG_MAX_COUNT) {
                 throw new BusinessException("标签最多保留 10 个");
             }
-            String value = defaultString(tag).strip();
+            String value = extractTagContent(tag).strip();
             if (value.isBlank()) {
                 throw new BusinessException("标签不能为空");
             }
@@ -237,9 +259,84 @@ public class MineProfileService {
             if (!seen.add(value)) {
                 throw new BusinessException("标签不能重复");
             }
-            normalized.add(value);
+            MineProfileTagDTO normalizedTag = new MineProfileTagDTO();
+            normalizedTag.setContent(value);
+            normalizedTag.setColor(normalizeTagColor(tag));
+            normalized.add(normalizedTag);
         }
         return normalized;
+    }
+
+    /**
+     * 提取标签内容，兼容旧版字符串数组。
+     *
+     * @param tag 原始标签项
+     * @return 标签内容
+     */
+    private String extractTagContent(Object tag) {
+        if (tag instanceof MineProfileTagDTO profileTag) {
+            return defaultString(profileTag.getContent());
+        }
+        if (tag instanceof JSONObject jsonObject) {
+            return firstPresent(jsonObject.getString("content"), jsonObject.getString("text"), jsonObject.getString("name"));
+        }
+        if (tag instanceof Map<?, ?> map) {
+            return firstPresent(mapValue(map, "content"), mapValue(map, "text"), mapValue(map, "name"));
+        }
+        return defaultString(tag == null ? null : String.valueOf(tag));
+    }
+
+    /**
+     * 提取并校验标签颜色。
+     *
+     * @param tag 原始标签项
+     * @return 规范化后的标签颜色
+     */
+    private String normalizeTagColor(Object tag) {
+        String color = DEFAULT_TAG_COLOR;
+        if (tag instanceof MineProfileTagDTO profileTag) {
+            color = defaultString(profileTag.getColor());
+        } else if (tag instanceof JSONObject jsonObject) {
+            color = defaultString(jsonObject.getString("color"));
+        } else if (tag instanceof Map<?, ?> map) {
+            color = mapValue(map, "color");
+        }
+
+        String normalized = defaultString(color).strip().toLowerCase(Locale.ROOT);
+        if (normalized.isBlank()) {
+            return DEFAULT_TAG_COLOR;
+        }
+        if (!TAG_COLORS.contains(normalized)) {
+            throw new BusinessException("请选择有效的标签颜色");
+        }
+        return normalized;
+    }
+
+    /**
+     * 从 Map 中取字符串值。
+     *
+     * @param map 原始 Map
+     * @param key 字段名
+     * @return 字符串值
+     */
+    private String mapValue(Map<?, ?> map, String key) {
+        Object value = map.get(key);
+        return value == null ? "" : String.valueOf(value);
+    }
+
+    /**
+     * 返回第一个非空字符串。
+     *
+     * @param values 待选择字符串
+     * @return 非空字符串
+     */
+    private String firstPresent(String... values) {
+        for (String value : values) {
+            if (!defaultString(value).isBlank()) {
+                return value;
+            }
+        }
+        return "";
     }
 
     /**

@@ -35,5 +35,5 @@ public class MineProfileResponse {
     private String intro;
 
     /** 个人标签 */
-    private List<String> tags;
+    private List<MineProfileTagDTO> tags;
 }
