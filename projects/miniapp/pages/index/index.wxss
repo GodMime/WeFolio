@@ -133,8 +133,7 @@
 
 .balance-top,
 .balance-bottom,
-.panel-heading,
-.entry-row {
+.panel-heading {
   justify-content: space-between;
 }
 
@@ -247,27 +246,34 @@
 .entry-row {
   width: 100%;
   min-height: 118rpx;
+  justify-content: flex-start;
+  margin: 0;
   padding: 18rpx 0;
+  line-height: 1;
   text-align: left;
   border-top: 1rpx solid #edf1f5;
+  border-radius: 0;
+  background: transparent;
+  box-sizing: border-box;
 }
 
 .entry-row:first-child {
   border-top: 0;
 }
 
+.entry-row::after {
+  border: 0;
+}
+
 .entry-icon {
-  position: relative;
+  display: block;
   width: 58rpx;
   height: 58rpx;
   flex: none;
   margin-right: 18rpx;
   border-radius: 16rpx;
-  background: #eef6f4;
 }
 
-.visit-icon::before,
-.team-icon::before,
 .entry-arrow::before,
 .schedule-tab-icon::before,
 .schedule-tab-icon::after,
@@ -281,26 +287,6 @@
   position: absolute;
   content: "";
   box-sizing: border-box;
-}
-
-.visit-icon::before {
-  left: 16rpx;
-  top: 16rpx;
-  width: 26rpx;
-  height: 26rpx;
-  border: 5rpx solid #0f766e;
-  border-radius: 50%;
-}
-
-.team-icon::before {
-  left: 14rpx;
-  top: 15rpx;
-  width: 30rpx;
-  height: 22rpx;
-  border: 5rpx solid #0f766e;
-  border-top-left-radius: 18rpx;
-  border-top-right-radius: 18rpx;
-  border-bottom: 0;
 }
 
 .entry-copy {

@@ -64,20 +64,21 @@
             <view class="panel-meta">管理</view>
           </view>
           <view class="entry-list">
-            <button
+            <view
               class="entry-row"
               wx:for="{{entries}}"
               wx:key="type"
+              aria-role="button"
               data-type="{{item.type}}"
               bindtap="handleEntryTap"
             >
-              <view class="entry-icon {{item.icon}}-icon"></view>
+              <image class="entry-icon" src="{{item.iconUrl}}" mode="aspectFit" />
               <view class="entry-copy">
                 <view class="entry-title">{{item.title}}</view>
                 <view class="entry-desc">{{item.desc}}</view>
               </view>
               <view class="entry-arrow"></view>
-            </button>
+            </view>
           </view>
         </view>
       </block>

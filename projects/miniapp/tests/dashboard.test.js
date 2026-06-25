@@ -11,7 +11,10 @@ test('normalizes mine dashboard response for page rendering', () => {
       avatarUrl: 'https://example.com/avatar.jpg',
       city: '上海',
       profession: '婚礼司仪',
-      tags: ['高端婚礼', '双语主持']
+      tags: [
+        { content: '高端婚礼', color: '#0f766e' },
+        { content: '双语主持', color: '#2d5f9a' }
+      ]
     },
     point: {
       balance: 42,
@@ -27,6 +30,7 @@ test('normalizes mine dashboard response for page rendering', () => {
 
   assert.equal(dashboard.profile.uniqueCode, 'MC-8392')
   assert.equal(dashboard.profile.subtitle, '上海 / 高端婚礼 / 双语主持')
+  assert.deepEqual(dashboard.profile.tags, ['高端婚礼', '双语主持'])
   assert.equal(dashboard.point.balanceText, '42')
   assert.equal(dashboard.point.warningText, '低于 50 提醒')
   assert.deepEqual(dashboard.metrics, [

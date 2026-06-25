@@ -1,7 +1,11 @@
 const { DEFAULT_BASE_URL, TOKEN_STORAGE_KEY, request } = require('../../utils/request')
 const { clearToken, handleAuthRequired, hasLocalToken } = require('../../utils/session')
 const {
+  DEFAULT_TAG_COLOR,
+  TAG_COLOR_OPTIONS,
+  buildProfileFieldCounters,
   buildProfilePayload,
+  createProfileTag,
   normalizeProfile,
   validateProfileForm
 } = require('../../utils/profile')
@@ -88,8 +92,11 @@ Page({
     errorMessage: '',
     profile: emptyProfile(),
     form: emptyForm(),
+    fieldCounters: buildProfileFieldCounters(emptyForm()),
     cancelling: false,
     tagDialogVisible: false,
+    tagColorOptions: TAG_COLOR_OPTIONS,
+    selectedTagColor: DEFAULT_TAG_COLOR,
     newTag: '',
     tagErrorText: ''
   },
@@ -117,9 +124,11 @@ Page({
         url: '/api/mine/profile'
       })
       const profile = normalizeProfile(response)
+      const form = formFromProfile(profile)
       this.setData({
         profile,
-        form: formFromProfile(profile),
+        form,
+        fieldCounters: buildProfileFieldCounters(form),
         loading: false
       })
     } catch (error) {
@@ -149,8 +158,13 @@ Page({
     if (!field) {
       return
     }
+    const value = event.detail.value || ''
+    const form = Object.assign({}, this.data.form, {
+      [field]: value
+    })
     this.setData({
-      [`form.${field}`]: event.detail.value || ''
+      [`form.${field}`]: value,
+      fieldCounters: buildProfileFieldCounters(form)
     })
   },
 
@@ -174,6 +188,7 @@ Page({
     }
     this.setData({
       tagDialogVisible: true,
+      selectedTagColor: DEFAULT_TAG_COLOR,
       newTag: '',
       tagErrorText: ''
     })
@@ -182,6 +197,7 @@ Page({
   handleCloseTagDialog() {
     this.setData({
       tagDialogVisible: false,
+      selectedTagColor: DEFAULT_TAG_COLOR,
       newTag: '',
       tagErrorText: ''
     })
@@ -194,9 +210,17 @@ Page({
     })
   },
 
+  handleSelectTagColor(event) {
+    const color = event.currentTarget.dataset.color || DEFAULT_TAG_COLOR
+    this.setData({
+      selectedTagColor: color,
+      tagErrorText: ''
+    })
+  },
+
   handleAddTag() {
     const value = trimText(this.data.newTag)
-    const nextTags = this.data.form.tags.concat(value)
+    const nextTags = this.data.form.tags.concat(createProfileTag(value, this.data.selectedTagColor))
     const validation = validateProfileForm(Object.assign({}, this.data.form, {
       tags: nextTags
     }))
@@ -211,6 +235,7 @@ Page({
       'form.tags': nextTags,
       'profile.tagCountText': `${nextTags.length} / 10`,
       tagDialogVisible: false,
+      selectedTagColor: DEFAULT_TAG_COLOR,
       newTag: '',
       tagErrorText: ''
     })
@@ -257,9 +282,11 @@ Page({
         })
       })
       const profile = normalizeProfile(response)
+      const form = formFromProfile(profile)
       this.setData({
         profile,
-        form: formFromProfile(profile),
+        form,
+        fieldCounters: buildProfileFieldCounters(form),
         saving: false
       })
       wx.showToast({

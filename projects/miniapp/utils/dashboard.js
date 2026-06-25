@@ -14,7 +14,12 @@ function normalizeTags(tags) {
     return []
   }
   return tags
-    .map((item) => String(item || '').trim())
+    .map((item) => {
+      if (item && typeof item === 'object') {
+        return String(item.content || item.text || item.name || '').trim()
+      }
+      return String(item || '').trim()
+    })
     .filter(Boolean)
 }
 

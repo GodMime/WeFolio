@@ -12,13 +12,13 @@ Page({
         type: 'visits',
         title: '访问记录',
         desc: '访客来源、访问次数、跟进状态',
-        icon: 'visit'
+        iconUrl: 'https://cos.we-folio.dingchenyong.top/system/wefolio-visitor-record-icon.png'
       },
       {
         type: 'teams',
         title: '我的团队',
         desc: '按角色显示可用功能',
-        icon: 'team'
+        iconUrl: 'https://cos.we-folio.dingchenyong.top/system/wefolio-team-icon.png'
       }
     ],
     tabs: [
@@ -107,7 +107,14 @@ Page({
     })
   },
 
-  handleEntryTap() {
+  handleEntryTap(event) {
+    const type = event.currentTarget.dataset.type
+    if (type === 'visits') {
+      wx.navigateTo({
+        url: '/pages/visits/visits'
+      })
+      return
+    }
     wx.showToast({
       title: '一期后续页面接入中',
       icon: 'none'

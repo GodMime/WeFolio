@@ -11,6 +11,10 @@ const indexWxss = fs.readFileSync(
   path.join(__dirname, '../pages/index/index.wxss'),
   'utf8'
 )
+const indexJs = fs.readFileSync(
+  path.join(__dirname, '../pages/index/index.js'),
+  'utf8'
+)
 
 function readRule(selector) {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -46,4 +50,22 @@ test('mine recharge button stays pinned to the right of balance band', () => {
   assert.match(balanceCopyRule, /min-width:\s*0/)
   assert.match(buttonRule, /flex:\s*none/)
   assert.match(buttonRule, /margin-left:\s*auto/)
+})
+
+test('mine action entries use COS image logos and keep content left aligned', () => {
+  const entryRowRule = readRule('.entry-row')
+  const entryIconRule = readRule('.entry-icon')
+
+  assert.match(indexJs, /iconUrl:\s*'https:\/\/cos\.we-folio\.dingchenyong\.top\/system\/wefolio-visitor-record-icon\.png'/)
+  assert.match(indexJs, /iconUrl:\s*'https:\/\/cos\.we-folio\.dingchenyong\.top\/system\/wefolio-team-icon\.png'/)
+  assert.match(indexWxml, /<view\b[^>]*class="entry-row"[^>]*bindtap="handleEntryTap"[^>]*>/)
+  assert.doesNotMatch(indexWxml, /<button\b[^>]*class="entry-row"/)
+  assert.match(indexWxml, /<image[\s\S]*class="entry-icon"[\s\S]*src="\{\{item\.iconUrl\}\}"[\s\S]*mode="aspectFit"/)
+
+  assert.match(entryRowRule, /justify-content:\s*flex-start/)
+  assert.match(entryRowRule, /margin:\s*0/)
+  assert.match(entryIconRule, /display:\s*block/)
+  assert.match(entryIconRule, /width:\s*58rpx/)
+  assert.doesNotMatch(indexWxss, /\.visit-icon::before/)
+  assert.doesNotMatch(indexWxss, /\.team-icon::before/)
 })

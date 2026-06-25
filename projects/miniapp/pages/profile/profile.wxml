@@ -33,19 +33,31 @@
 
         <view class="panel profile-fields-panel">
           <view class="form-row">
-            <view class="label">姓名 / 艺名</view>
+            <view class="field-heading">
+              <view class="label">姓名 / 艺名</view>
+              <view class="field-limit">{{fieldCounters.nickname}}</view>
+            </view>
             <input class="input" value="{{form.nickname}}" data-field="nickname" bindinput="handleInput" maxlength="50" />
           </view>
           <view class="form-row">
-            <view class="label">职业身份</view>
+            <view class="field-heading">
+              <view class="label">职业身份</view>
+              <view class="field-limit">{{fieldCounters.profession}}</view>
+            </view>
             <input class="input" value="{{form.profession}}" data-field="profession" bindinput="handleInput" maxlength="50" />
           </view>
           <view class="form-row">
-            <view class="label">服务城市</view>
+            <view class="field-heading">
+              <view class="label">服务城市</view>
+              <view class="field-limit">{{fieldCounters.city}}</view>
+            </view>
             <input class="input" value="{{form.city}}" data-field="city" bindinput="handleInput" maxlength="50" />
           </view>
           <view class="form-row">
-            <view class="label">个人简介</view>
+            <view class="field-heading">
+              <view class="label">个人简介</view>
+              <view class="field-limit">{{fieldCounters.intro}}</view>
+            </view>
             <textarea class="input textarea" value="{{form.intro}}" data-field="intro" bindinput="handleInput" maxlength="500" auto-height />
           </view>
         </view>
@@ -56,22 +68,24 @@
             <view class="count-pill">{{profile.tagCountText}}</view>
           </view>
           <view class="pill-row">
-            <view class="tag-pill" wx:for="{{form.tags}}" wx:key="*this">
-              <text>{{item}}</text>
-              <button class="tag-remove" data-index="{{index}}" catchtap="handleRemoveTag">×</button>
+            <view class="tag-pill" wx:for="{{form.tags}}" wx:key="content" style="{{item.style}}">
+              <text>{{item.content}}</text>
+              <view class="tag-remove" style="{{item.removeStyle}}" data-index="{{index}}" catchtap="handleRemoveTag" aria-role="button" aria-label="删除标签{{item.content}}">
+                <text class="tag-remove-mark">×</text>
+              </view>
             </view>
-            <button class="tag-add-trigger" bindtap="handleOpenTagDialog">+ 添加标签</button>
+            <button class="tag-add-trigger wide-button" bindtap="handleOpenTagDialog">+ 添加标签</button>
           </view>
           <view class="tag-note">标签由维护者自定义，单个不超过 10 个字，最多保留 10 个。</view>
         </view>
 
-        <button class="primary-button full" loading="{{saving}}" bindtap="handleSave">保存修改</button>
+        <button class="primary-button full wide-button" loading="{{saving}}" bindtap="handleSave">保存修改</button>
 
         <view class="panel danger-panel">
           <view class="section-title">账号安全</view>
           <view class="danger-desc">退出仅清除本机登录态；注销会停用当前账号。</view>
-          <button class="secondary-button full" bindtap="handleLogout">退出登录</button>
-          <button class="danger-button full" loading="{{cancelling}}" bindtap="handleCancelAccount">注销账号</button>
+          <button class="secondary-button full wide-button" bindtap="handleLogout">退出登录</button>
+          <button class="danger-button full wide-button" loading="{{cancelling}}" bindtap="handleCancelAccount">注销账号</button>
         </view>
       </block>
     </view>
@@ -87,6 +101,24 @@
       <view class="form-row">
         <view class="label">标签文字</view>
         <input class="input" value="{{newTag}}" bindinput="handleNewTagInput" maxlength="10" placeholder="10 个字以内" />
+      </view>
+      <view class="form-row">
+        <view class="label">标签颜色</view>
+        <view class="color-grid">
+          <view
+            class="color-choice {{selectedTagColor === item.color ? 'active' : ''}}"
+            wx:for="{{tagColorOptions}}"
+            wx:key="color"
+            style="{{item.choiceStyle}}"
+            data-color="{{item.color}}"
+            bindtap="handleSelectTagColor"
+            aria-role="button"
+            aria-label="选择{{item.name}}标签颜色"
+          >
+            <view class="color-swatch" style="{{item.swatchStyle}}"></view>
+            <text class="color-name">{{item.name}}</text>
+          </view>
+        </view>
       </view>
       <view wx:if="{{tagErrorText}}" class="tag-error">{{tagErrorText}}</view>
       <view class="dialog-actions">
