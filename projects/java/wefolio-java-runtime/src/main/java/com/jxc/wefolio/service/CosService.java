@@ -16,8 +16,11 @@ import com.qcloud.cos.model.PutObjectRequest;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URL;
+import java.net.URLConnection;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.UUID;
 
@@ -71,6 +74,59 @@ public class CosService {
         } catch (Exception e) {
             log.error("COS upload failed: original={}", originalFilename, e);
             throw new RuntimeException("File upload failed: " + e.getMessage(), e);
+        } finally {
+            if (tempFile != null) {
+                try {
+                    Files.deleteIfExists(tempFile);
+                } catch (IOException e) {
+                    log.warn("Failed to delete temp file: {}", tempFile, e);
+                }
+            }
+        }
+    }
+
+    /**
+     * 从远程 URL 下载图片并上传到 COS 指定文件夹。
+     * 生成的 key 格式为 {@code {folderPrefix}/{UUID}.ext}。
+     *
+     * @param imageUrl     远程图片 URL
+     * @param folderPrefix 文件夹路径前缀，如 "WFA3B1E7A2/others"
+     * @return COS 对象键（含前缀路径）
+     */
+    public String uploadFromUrl(String imageUrl, String folderPrefix) {
+        Path tempFile = null;
+        try {
+            URL url = new URL(imageUrl);
+            URLConnection connection = url.openConnection();
+            connection.setConnectTimeout(10_000);
+            connection.setReadTimeout(30_000);
+
+            String contentType = connection.getContentType();
+            String extension = extractExtensionFromContentType(contentType);
+
+            // 将远程图片内容写入临时文件
+            tempFile = Files.createTempFile("cos-url-upload-", extension);
+            try (InputStream in = connection.getInputStream()) {
+                Files.copy(in, tempFile, StandardCopyOption.REPLACE_EXISTING);
+            }
+
+            long fileSize = Files.size(tempFile);
+            String fileName = UUID.randomUUID().toString().replace("-", "") + extension;
+            String key = buildKey(folderPrefix, fileName);
+
+            ObjectMetadata metadata = new ObjectMetadata();
+            metadata.setContentType(contentType != null ? contentType : "image/jpeg");
+            metadata.setContentLength(fileSize);
+
+            Upload upload = transferManager.upload(
+                    cosProperties.getBucketName(), key, tempFile.toFile());
+            upload.waitForUploadResult();
+
+            log.info("COS upload from URL success: key={}, source={}, size={}", key, imageUrl, fileSize);
+            return key;
+        } catch (Exception e) {
+            log.error("COS upload from URL failed: url={}", imageUrl, e);
+            throw new RuntimeException("Image upload from URL failed: " + e.getMessage(), e);
         } finally {
             if (tempFile != null) {
                 try {
@@ -192,5 +248,31 @@ public class CosService {
             return filename.substring(filename.lastIndexOf("."));
         }
         return "";
+    }
+
+    /**
+     * 根据 Content-Type 提取文件扩展名。
+     *
+     * @param contentType HTTP 响应的 Content-Type，可为空
+     * @return 文件扩展名（含点号），默认 ".jpg"
+     */
+    private String extractExtensionFromContentType(String contentType) {
+        if (contentType == null) {
+            return ".jpg";
+        }
+        String lower = contentType.toLowerCase();
+        if (lower.contains("png")) {
+            return ".png";
+        }
+        if (lower.contains("gif")) {
+            return ".gif";
+        }
+        if (lower.contains("webp")) {
+            return ".webp";
+        }
+        if (lower.contains("bmp")) {
+            return ".bmp";
+        }
+        return ".jpg";
     }
 }

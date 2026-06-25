@@ -9,6 +9,7 @@ import com.jxc.wefolio.entity.UserAuthEntity;
 import com.jxc.wefolio.mapper.UserAuthEntityMapper;
 import com.jxc.wefolio.mapper.UserEntityMapper;
 import com.jxc.wefolio.config.WechatMiniappProperties;
+import com.jxc.wefolio.config.CosProperties;
 import com.jxc.wefolio.exception.BusinessException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -37,6 +38,9 @@ class MiniappAuthServiceTest {
 
     @Mock
     private CosService cosService;
+
+    @Mock
+    private CosProperties cosProperties;
 
     @Test
     void parsesDevelopmentBearerToken() {
@@ -77,6 +81,8 @@ class MiniappAuthServiceTest {
             user.setId(11L);
             return 1;
         }).when(userEntityMapper).insert(any(UserEntity.class));
+        // 模拟头像上传 COS 失败，降级保留原始 URL
+        when(cosService.uploadFromUrl(any(), any())).thenThrow(new RuntimeException("mock"));
 
         MiniappAuthService service = buildService();
         MaintainerWechatLoginRequest request = new MaintainerWechatLoginRequest();
@@ -121,6 +127,8 @@ class MiniappAuthServiceTest {
             user.setId(11L);
             return 1;
         }).when(userEntityMapper).insert(any(UserEntity.class));
+        // 模拟头像上传 COS 失败，降级保留原始 URL
+        when(cosService.uploadFromUrl(any(), any())).thenThrow(new RuntimeException("mock"));
 
         MiniappAuthService service = buildService();
         MaintainerWechatLoginRequest request = new MaintainerWechatLoginRequest();
@@ -194,6 +202,7 @@ class MiniappAuthServiceTest {
                 wechatMiniappClient,
                 properties(),
                 cosService,
+                cosProperties,
                 new UserRegistrationService(userEntityMapper, userAuthEntityMapper)
         );
     }

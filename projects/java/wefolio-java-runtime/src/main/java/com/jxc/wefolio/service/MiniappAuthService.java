@@ -2,6 +2,7 @@ package com.jxc.wefolio.service;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.jxc.wefolio.common.auth.AuthorizationHeaderUtils;
+import com.jxc.wefolio.config.CosProperties;
 import com.jxc.wefolio.config.WechatMiniappProperties;
 import com.jxc.wefolio.dto.AuthSessionResponse;
 import com.jxc.wefolio.dto.MaintainerWechatLoginRequest;
@@ -68,6 +69,9 @@ public class MiniappAuthService {
 
     /** COS 对象存储服务 */
     private final CosService cosService;
+
+    /** COS 配置 */
+    private final CosProperties cosProperties;
 
     /** 用户注册服务 */
     private final UserRegistrationService userRegistrationService;
@@ -145,6 +149,8 @@ public class MiniappAuthService {
                 String uniqueCode = generateUniqueCode();
                 // COS 文件夹初始化在前，失败直接抛异常，不污染数据库
                 cosService.initUserStorage(uniqueCode);
+                // 将微信头像上传到 COS，替换 request 中的原始微信 URL
+                request.setAvatarUrl(uploadAvatarToCos(request.getAvatarUrl(), uniqueCode));
                 user = userRegistrationService.createWechatMaintainerUser(
                         uniqueCode,
                         request,
@@ -189,6 +195,33 @@ public class MiniappAuthService {
     }
 
     /**
+     * 将头像从远程 URL 上传到 COS 的 {@code {uniqueCode}/others/} 目录。
+     * 上传失败时返回原始 URL 作为降级处理，不影响注册主流程。
+     * 如果已经是 COS URL 则跳过上传。
+     *
+     * @param avatarUrl  头像 URL（通常为微信返回的远程 URL）
+     * @param uniqueCode 用户唯一码
+     * @return COS 公开 URL，上传失败时返回原始 URL
+     */
+    private String uploadAvatarToCos(String avatarUrl, String uniqueCode) {
+        if (avatarUrl == null || avatarUrl.isBlank()) {
+            return avatarUrl;
+        }
+        // 已经是 COS URL，跳过上传
+        String publicBaseUrl = cosProperties.getPublicBaseUrl();
+        if (publicBaseUrl != null && !publicBaseUrl.isBlank() && avatarUrl.startsWith(publicBaseUrl)) {
+            return avatarUrl;
+        }
+        try {
+            String key = cosService.uploadFromUrl(avatarUrl, uniqueCode + "/others");
+            return cosService.publicUrl(key);
+        } catch (Exception e) {
+            log.warn("头像上传 COS 失败，使用原始 URL: uniqueCode={}, url={}", uniqueCode, avatarUrl, e);
+            return avatarUrl;
+        }
+    }
+
+    /**
      * 更新微信注册资料
      *
      * @param user 用户实体
@@ -204,7 +237,10 @@ public class MiniappAuthService {
     ) {
         LocalDateTime now = LocalDateTime.now();
         String nickname = defaultString(request.getNickname(), user.getNickname());
-        String avatarUrl = defaultString(request.getAvatarUrl(), user.getAvatarUrl());
+        String avatarUrl = uploadAvatarToCos(
+                defaultString(request.getAvatarUrl(), user.getAvatarUrl()),
+                user.getUniqueCode()
+        );
         user.setNickname(nickname);
         user.setAvatarUrl(avatarUrl);
         user.setPhoneNumber(phoneInfo.getPhoneNumber());
