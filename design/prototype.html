@@ -2326,6 +2326,114 @@
       box-shadow: var(--shadow-soft);
     }
 
+    .team-card {
+      display: grid;
+      grid-template-columns: 58px 1fr auto;
+      align-items: center;
+      gap: 10px;
+      min-height: 96px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .team-card > *,
+    .team-identity > * {
+      min-width: 0;
+    }
+
+    .team-logo {
+      width: 58px;
+      height: 58px;
+      overflow: hidden;
+      border-radius: 14px;
+      background: var(--line);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .team-logo.large {
+      position: relative;
+      width: 76px;
+      height: 76px;
+      border-radius: 18px;
+      flex: 0 0 auto;
+    }
+
+    .team-logo-edit {
+      position: absolute;
+      inset: auto 6px 6px;
+      min-height: 22px;
+      display: grid;
+      place-items: center;
+      border-radius: 999px;
+      background: rgba(17, 24, 39, .78);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 900;
+    }
+
+    .team-card-actions {
+      display: grid;
+      justify-items: end;
+      gap: 7px;
+    }
+
+    .team-identity {
+      display: grid;
+      grid-template-columns: 76px 1fr;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .team-maintenance-content {
+      gap: 10px;
+      padding-bottom: 18px;
+      grid-template-rows: auto auto auto minmax(0, 1fr);
+      align-content: stretch;
+    }
+
+    .team-maintenance-content .panel {
+      padding: 12px;
+    }
+
+    .team-maintenance-content .team-identity {
+      grid-template-columns: 68px 1fr;
+      gap: 10px;
+    }
+
+    .team-maintenance-content .team-logo.large {
+      width: 68px;
+      height: 68px;
+      border-radius: 16px;
+    }
+
+    .team-maintenance-content .input {
+      min-height: 40px;
+      padding: 8px 10px;
+    }
+
+    .team-members-panel {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    .team-members-scroll {
+      min-height: 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding-right: 2px;
+      padding-bottom: 2px;
+    }
+
+    .team-members-scroll::-webkit-scrollbar {
+      width: 0;
+      height: 0;
+    }
+
     .mini-avatar {
       width: 42px;
       height: 42px;
@@ -3501,72 +3609,74 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">08 团队成员列表页</div>
-          <div class="screen-note">三种角色可查看 / 仅拥有者可维护</div>
+          <div class="screen-title">08 我的团队列表页</div>
+          <div class="screen-note">一人可加入多个团队 / 点击进入维护页</div>
         </div>
         <div class="phone">
           <div class="phone-inner">
             <div class="status"><span>09:41</span><div class="status-icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
             <div class="nav">
               <div class="nav-action">‹</div>
-              <div class="nav-title">团队成员</div>
+              <div class="nav-title">我的团队</div>
               <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
             </div>
             <div class="content">
               <div class="panel">
                 <div class="row">
                   <div>
-                    <p class="name">星曜司仪团</p>
-                    <p class="desc">团队唯一码 TM-2048 · 12 位成员</p>
+                    <p class="name">我的团队</p>
+                    <p class="desc">已加入 3 个团队，其中 1 个为拥有者。</p>
                   </div>
-                  <span class="pill blue">所有角色可查看</span>
+                  <span class="pill blue">团队身份</span>
                 </div>
-              </div>
-              <div class="search">⌕ 输入姓名、职业或个人唯一码</div>
-              <div class="segmented">
-                <div class="segment active">全部</div>
-                <div class="segment">待确认</div>
-                <div class="segment">已加入</div>
               </div>
               <div class="panel stack">
-                <div class="member-row">
-                  <div class="mini-avatar"><div class="asset-4" style="width:100%;height:100%"></div></div>
-                  <div>
-                    <b>林安</b>
-                    <p class="desc">司仪 · MC-8392 · 拥有者</p>
-                  </div>
-                  <span class="pill teal">已加入</span>
+                <div class="row">
+                  <p class="name">团队列表</p>
+                  <span class="desc">点击团队进入维护页</span>
                 </div>
-                <div class="member-row">
-                  <div class="mini-avatar"><div class="asset-7" style="width:100%;height:100%"></div></div>
+                <div class="team-card">
+                  <div class="team-logo"><div class="asset-6" style="width:100%;height:100%"></div></div>
                   <div>
-                    <b>乔伊</b>
-                    <p class="desc">化妆师 · MU-1186 · 管理者</p>
+                    <b>星曜司仪团</b>
+                    <p class="desc">TM-2048 · 12 位成员 · 最近更新 06-18</p>
+                    <div class="pill-row" style="margin-top:6px"><span class="pill blue">拥有者</span><span class="pill teal">可维护</span></div>
                   </div>
-                  <span class="pill teal">已加入</span>
+                  <div class="team-card-actions">
+                    <button class="mini-action" type="button">维护</button>
+                    <span class="desc">›</span>
+                  </div>
                 </div>
-                <div class="member-row">
-                  <div class="mini-avatar"><div class="asset-8" style="width:100%;height:100%"></div></div>
+                <div class="team-card">
+                  <div class="team-logo"><div class="asset-4" style="width:100%;height:100%"></div></div>
                   <div>
-                    <b>陈予</b>
-                    <p class="desc">模特 · MD-7305 · 普通成员</p>
+                    <b>星河主持团队</b>
+                    <p class="desc">TM-7316 · 8 位成员 · 管理高级作品集</p>
+                    <div class="pill-row" style="margin-top:6px"><span class="pill blue">管理者</span><span class="pill teal">可维护</span></div>
                   </div>
-                  <span class="pill amber">待确认</span>
+                  <div class="team-card-actions">
+                    <button class="mini-action" type="button">维护</button>
+                    <span class="desc">›</span>
+                  </div>
                 </div>
-                <div class="member-row">
-                  <div class="mini-avatar"><div class="asset-2" style="width:100%;height:100%"></div></div>
+                <div class="team-card">
+                  <div class="team-logo"><div class="asset-5" style="width:100%;height:100%"></div></div>
                   <div>
-                    <b>周承</b>
-                    <p class="desc">摄影 · PH-6021 · 普通成员</p>
+                    <b>光影婚礼团队</b>
+                    <p class="desc">TM-9021 · 6 位成员 · 标准团队作品集</p>
+                    <div class="pill-row" style="margin-top:6px"><span class="pill">普通成员</span><span class="pill">仅查看</span></div>
                   </div>
-                  <span class="pill teal">已加入</span>
+                  <div class="team-card-actions">
+                    <button class="mini-action" type="button">查看</button>
+                    <span class="desc">›</span>
+                  </div>
                 </div>
               </div>
-              <button class="button full">通过个人唯一码添加成员</button>
+              <button class="button full">创建团队</button>
               <div class="panel tight">
                 <div class="row">
-                  <span class="desc">拥有者、管理者、普通成员均可查看列表；只有拥有者可以添加、移除成员及调整角色。</span>
-                  <span class="pill blue">唯一拥有者</span>
+                  <span class="desc">创建团队会生成团队唯一码，后续可通过个人唯一码邀请成员加入。</span>
+                  <span class="pill amber">1000 分</span>
                 </div>
               </div>
             </div>
@@ -3576,7 +3686,90 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">09 团队成员维护页</div>
+          <div class="screen-title">09 团队维护页</div>
+          <div class="screen-note">修改 logo / 名称 / 左滑解绑成员</div>
+        </div>
+        <div class="phone">
+          <div class="phone-inner">
+            <div class="status"><span>09:41</span><div class="status-icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
+            <div class="nav">
+              <div class="nav-action">‹</div>
+              <div class="nav-title">团队维护</div>
+              <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
+            </div>
+            <div class="content team-maintenance-content">
+              <div class="panel stack">
+                <div class="team-identity">
+                  <div class="team-logo large">
+                    <div class="asset-6" style="width:100%;height:100%"></div>
+                    <span class="team-logo-edit">更换</span>
+                  </div>
+                  <div>
+                    <p class="name">星曜司仪团</p>
+                    <p class="desc">团队唯一码 TM-2048</p>
+                    <div class="pill-row" style="margin-top:6px"><span class="pill blue">12 位成员</span><span class="pill blue">拥有者</span></div>
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="label">团队名称</div>
+                  <div class="input">星曜司仪团</div>
+                </div>
+                <button class="button full">保存修改</button>
+              </div>
+              <div class="search">⌕ 输入姓名、职业或个人唯一码</div>
+              <div class="segmented">
+                <div class="segment active">全部</div>
+                <div class="segment">待确认</div>
+                <div class="segment">已加入</div>
+              </div>
+              <div class="panel stack team-members-panel">
+                <div class="row">
+                  <p class="name">团队成员</p>
+                  <button class="mini-action" type="button">添加成员</button>
+                </div>
+                <div class="member-list team-members-scroll">
+                  <div class="member-row">
+                    <div class="mini-avatar"><div class="asset-4" style="width:100%;height:100%"></div></div>
+                    <div>
+                      <b>林安</b>
+                      <p class="desc">司仪 · MC-8392 · 拥有者</p>
+                    </div>
+                    <span class="pill blue">拥有者</span>
+                  </div>
+                  <div class="member-row">
+                    <div class="mini-avatar"><div class="asset-7" style="width:100%;height:100%"></div></div>
+                    <div>
+                      <b>乔伊</b>
+                      <p class="desc">化妆师 · MU-1186 · 管理者</p>
+                    </div>
+                    <span class="pill teal">已加入</span>
+                  </div>
+                  <div class="member-row">
+                    <div class="mini-avatar"><div class="asset-2" style="width:100%;height:100%"></div></div>
+                    <div>
+                      <b>周承</b>
+                      <p class="desc">摄影 · PH-6021 · 普通成员</p>
+                    </div>
+                    <span class="pill teal">已加入</span>
+                  </div>
+                  <div class="member-row">
+                    <div class="mini-avatar"><div class="asset-8" style="width:100%;height:100%"></div></div>
+                    <div>
+                      <b>陈予</b>
+                      <p class="desc">模特 · MD-7305 · 普通成员</p>
+                    </div>
+                    <span class="pill amber">待确认</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen-card">
+        <div class="screen-meta">
+          <div class="screen-title">10 添加团队成员页</div>
           <div class="screen-note">拥有者设置角色与引用权限</div>
         </div>
         <div class="phone">
@@ -3650,7 +3843,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">10 作品</div>
+          <div class="screen-title">11 作品</div>
           <div class="screen-note">筛选、排序、引用情况</div>
         </div>
         <div class="phone">
@@ -3732,7 +3925,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">11 批量添加作品</div>
+          <div class="screen-title">12 批量添加作品</div>
           <div class="screen-note">最多 9 个 / 统一标签</div>
         </div>
         <div class="phone">
@@ -3788,7 +3981,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">12 作品编辑页</div>
+          <div class="screen-title">13 作品编辑页</div>
           <div class="screen-note">单个作品 / 标题标签说明</div>
         </div>
         <div class="phone">
@@ -3849,7 +4042,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">13 作品集</div>
+          <div class="screen-title">14 作品集</div>
           <div class="screen-note">团队作品集按角色显示操作</div>
         </div>
         <div class="phone">
@@ -3945,7 +4138,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">14 标准作品集维护页</div>
+          <div class="screen-title">15 标准作品集维护页</div>
           <div class="screen-note">封面、头像、固定组件</div>
         </div>
         <div class="phone">
@@ -4002,7 +4195,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">15 标准作品集预览页</div>
+          <div class="screen-title">16 标准作品集预览页</div>
           <div class="screen-note">返回维护页 / 预览不扣分</div>
         </div>
         <div class="phone">
@@ -4077,7 +4270,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">16 组件库简介</div>
+          <div class="screen-title">17 组件库简介</div>
           <div class="screen-note">给维护者看的页面模块说明</div>
         </div>
         <div class="phone">
@@ -4171,7 +4364,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">17 高级作品集维护页</div>
+          <div class="screen-title">18 高级作品集维护页</div>
           <div class="screen-note">AI 组件生成</div>
         </div>
         <div class="phone">
@@ -4237,7 +4430,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">18 高级作品集预览页</div>
+          <div class="screen-title">19 高级作品集预览页</div>
           <div class="screen-note">返回维护页 / 预览不扣分</div>
         </div>
         <div class="phone">
@@ -4319,7 +4512,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">19 访客个人作品集</div>
+          <div class="screen-title">20 访客个人作品集</div>
           <div class="screen-note">标准模板浏览页</div>
         </div>
         <div class="phone">
@@ -4394,7 +4587,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">20 访客高级作品集</div>
+          <div class="screen-title">21 访客高级作品集</div>
           <div class="screen-note">高级模板浏览页</div>
         </div>
         <div class="phone">
@@ -4484,7 +4677,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">21 团队展示与成员</div>
+          <div class="screen-title">22 团队展示与成员</div>
           <div class="screen-note">团队作品集入口</div>
         </div>
         <div class="phone">
@@ -4548,7 +4741,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">22 访客档期查询页</div>
+          <div class="screen-title">23 访客档期查询页</div>
           <div class="screen-note">选择日期后查看当天档位</div>
         </div>
         <div class="phone">
@@ -4624,7 +4817,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">23 Under Maintenance</div>
+          <div class="screen-title">24 Under Maintenance</div>
           <div class="screen-note">余额不足访客遮罩</div>
         </div>
         <div class="phone">
@@ -4693,7 +4886,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">24 档期</div>
+          <div class="screen-title">25 档期</div>
           <div class="screen-note">档位定义 / 档期维护</div>
         </div>
         <div class="phone">
@@ -4807,7 +5000,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">25 档位定义页</div>
+          <div class="screen-title">26 档位定义页</div>
           <div class="screen-note">名称 / 时间段 / 颜色</div>
         </div>
         <div class="phone">
@@ -4859,7 +5052,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">26 编辑档位定义弹层</div>
+          <div class="screen-title">27 编辑档位定义弹层</div>
           <div class="screen-note">定义行触发</div>
         </div>
         <div class="phone">
@@ -4960,7 +5153,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">27 新增档位定义弹层</div>
+          <div class="screen-title">28 新增档位定义弹层</div>
           <div class="screen-note">新增按钮触发</div>
         </div>
         <div class="phone">
@@ -5061,7 +5254,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">28 档期维护页</div>
+          <div class="screen-title">29 档期维护页</div>
           <div class="screen-note">指定日期 + 选择档位 + 记录信息</div>
         </div>
         <div class="phone">
