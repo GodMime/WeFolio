@@ -106,7 +106,7 @@ service/       业务服务
 **实现细节：**
 - 文件夹通过 0 字节空对象（Content-Type: application/x-directory）模拟
 - 注册时 `MiniappAuthService` → `CosService.initUserStorage(uniqueCode)` 一次性创建全部文件夹
-- 初始化失败静默忽略，不阻断注册
+- 初始化失败会阻断注册，`MiniappAuthService` 会抛出业务异常并终止注册流程
 - `CosService.upload(file, folderPrefix)` 用于上传到指定目录
 
 ## 数据库约定
@@ -156,4 +156,3 @@ node --test tests/*.test.js
 - 不要打印、复制或提交真实密钥，除非用户明确要求用于排查并确认风险。
 - 工作区可能已有用户未提交改动；不要回滚或覆盖与当前任务无关的改动。
 - 编辑文件时保持改动范围小，优先遵循现有结构和命名风格。
-

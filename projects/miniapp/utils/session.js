@@ -29,6 +29,22 @@ function hasLocalToken(wxApi) {
   return Boolean(getToken(wxApi))
 }
 
+function handleAuthRequired(message, wxApi) {
+  const runtimeWx = getRuntimeWx(wxApi)
+  clearToken(runtimeWx)
+  if (runtimeWx.showToast) {
+    runtimeWx.showToast({
+      title: message || '未登录，请重新登录',
+      icon: 'none'
+    })
+  }
+  if (runtimeWx.redirectTo) {
+    runtimeWx.redirectTo({
+      url: '/pages/login/login'
+    })
+  }
+}
+
 function ensureSession() {
   return request({
     url: '/api/auth/session',
@@ -36,9 +52,9 @@ function ensureSession() {
   })
 }
 
-function wechatLogin(payload) {
+function maintainerWechatLogin(payload) {
   return request({
-    url: '/api/auth/wechat-login',
+    url: '/api/auth/maintainer/wechat-login',
     method: 'POST',
     data: payload || {},
     requireAuth: false
@@ -51,6 +67,7 @@ module.exports = {
   setToken,
   clearToken,
   hasLocalToken,
+  handleAuthRequired,
   ensureSession,
-  wechatLogin
+  maintainerWechatLogin
 }

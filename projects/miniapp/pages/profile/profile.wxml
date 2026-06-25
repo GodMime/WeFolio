@@ -1,0 +1,98 @@
+<view class="page-shell profile-page">
+  <navigation-bar title="基础信息" back="{{true}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+
+  <scroll-view class="profile-scroll" scroll-y type="list">
+    <view class="profile-content">
+      <block wx:if="{{loading}}">
+        <view class="panel profile-avatar-card skeleton-panel"></view>
+        <view class="panel profile-fields-panel skeleton-panel"></view>
+        <view class="panel tag-editor-panel skeleton-panel"></view>
+      </block>
+
+      <block wx:elif="{{errorMessage}}">
+        <view class="empty-state">
+          <view class="empty-icon"></view>
+          <view class="empty-title">加载失败</view>
+          <view class="empty-desc">{{errorMessage}}</view>
+          <button class="primary-button compact" bindtap="handleRetry">重试</button>
+        </view>
+      </block>
+
+      <block wx:else>
+        <view class="panel profile-avatar-card">
+          <view class="avatar">
+            <image wx:if="{{form.avatarUrl}}" class="avatar-image" src="{{form.avatarUrl}}" mode="aspectFill"></image>
+            <view wx:else class="avatar-fallback">WF</view>
+          </view>
+          <view class="profile-summary">
+            <view class="profile-name">{{profile.displayName}}</view>
+            <view class="profile-code">{{profile.uniqueCode}}</view>
+          </view>
+          <button class="secondary-button avatar-button" open-type="chooseAvatar" bindchooseavatar="handleChooseAvatar">更换头像</button>
+        </view>
+
+        <view class="panel profile-fields-panel">
+          <view class="form-row">
+            <view class="label">姓名 / 艺名</view>
+            <input class="input" value="{{form.nickname}}" data-field="nickname" bindinput="handleInput" maxlength="50" />
+          </view>
+          <view class="form-row">
+            <view class="label">职业身份</view>
+            <input class="input" value="{{form.profession}}" data-field="profession" bindinput="handleInput" maxlength="50" />
+          </view>
+          <view class="form-row">
+            <view class="label">服务城市</view>
+            <input class="input" value="{{form.city}}" data-field="city" bindinput="handleInput" maxlength="50" />
+          </view>
+          <view class="form-row">
+            <view class="label">个人简介</view>
+            <textarea class="input textarea" value="{{form.intro}}" data-field="intro" bindinput="handleInput" maxlength="500" auto-height />
+          </view>
+        </view>
+
+        <view class="panel tag-editor-panel">
+          <view class="tag-heading">
+            <view class="section-title">个人标签</view>
+            <view class="count-pill">{{profile.tagCountText}}</view>
+          </view>
+          <view class="pill-row">
+            <view class="tag-pill" wx:for="{{form.tags}}" wx:key="*this">
+              <text>{{item}}</text>
+              <button class="tag-remove" data-index="{{index}}" catchtap="handleRemoveTag">×</button>
+            </view>
+            <button class="tag-add-trigger" bindtap="handleOpenTagDialog">+ 添加标签</button>
+          </view>
+          <view class="tag-note">标签由维护者自定义，单个不超过 10 个字，最多保留 10 个。</view>
+        </view>
+
+        <button class="primary-button full" loading="{{saving}}" bindtap="handleSave">保存修改</button>
+
+        <view class="panel danger-panel">
+          <view class="section-title">账号安全</view>
+          <view class="danger-desc">退出仅清除本机登录态；注销会停用当前账号。</view>
+          <button class="secondary-button full" bindtap="handleLogout">退出登录</button>
+          <button class="danger-button full" loading="{{cancelling}}" bindtap="handleCancelAccount">注销账号</button>
+        </view>
+      </block>
+    </view>
+  </scroll-view>
+
+  <view class="tag-dialog" wx:if="{{tagDialogVisible}}">
+    <view class="tag-dialog-backdrop" bindtap="handleCloseTagDialog"></view>
+    <view class="tag-dialog-panel">
+      <view class="tag-heading">
+        <view class="section-title">新增标签</view>
+        <view class="count-pill">{{profile.tagCountText}}</view>
+      </view>
+      <view class="form-row">
+        <view class="label">标签文字</view>
+        <input class="input" value="{{newTag}}" bindinput="handleNewTagInput" maxlength="10" placeholder="10 个字以内" />
+      </view>
+      <view wx:if="{{tagErrorText}}" class="tag-error">{{tagErrorText}}</view>
+      <view class="dialog-actions">
+        <button class="secondary-button dialog-button" bindtap="handleCloseTagDialog">取消</button>
+        <button class="primary-button dialog-button" bindtap="handleAddTag">添加</button>
+      </view>
+    </view>
+  </view>
+</view>

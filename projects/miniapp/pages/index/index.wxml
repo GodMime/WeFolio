@@ -23,7 +23,7 @@
       </block>
 
       <block wx:else>
-        <view class="panel profile-panel">
+        <view class="panel profile-panel" bindtap="handleProfileTap">
           <view class="profile-main">
             <view class="avatar">
               <image wx:if="{{dashboard.profile.avatarUrl}}" class="avatar-image" src="{{dashboard.profile.avatarUrl}}" mode="aspectFill"></image>
@@ -34,12 +34,12 @@
               <view class="profile-subtitle">{{dashboard.profile.subtitle}}</view>
             </view>
           </view>
-          <button class="code-pill" bindtap="handleCopyCode">{{dashboard.profile.uniqueCode}}</button>
+          <button class="code-pill" catchtap="handleCopyCode">{{dashboard.profile.uniqueCode}}</button>
         </view>
 
         <view class="balance-band">
           <view class="balance-top">
-            <view>
+            <view class="balance-copy">
               <view class="balance-label">当前积分余额</view>
               <view class="balance-value">{{dashboard.point.balanceText}}</view>
             </view>

@@ -822,6 +822,107 @@
       color: #fff;
     }
 
+    .profile-edit-content {
+      display: block;
+      padding: 12px 14px 18px;
+      overflow-y: auto;
+      scroll-padding-bottom: 18px;
+    }
+
+    .profile-edit-content > * + * {
+      margin-top: 10px;
+    }
+
+    .profile-avatar-card {
+      display: grid;
+      gap: 8px;
+      justify-items: center;
+      padding: 12px;
+      text-align: center;
+    }
+
+    .profile-avatar-card .avatar {
+      width: 74px;
+      height: 74px;
+    }
+
+    .profile-edit-content .form-row {
+      gap: 5px;
+    }
+
+    .profile-edit-content .input {
+      min-height: 40px;
+      padding: 8px 10px;
+    }
+
+    .profile-edit-content .textarea {
+      min-height: 62px;
+    }
+
+    .profile-edit-content .button {
+      height: 40px;
+    }
+
+    .tag-editor-panel {
+      gap: 7px;
+    }
+
+    .tag-editor-panel .pill-row {
+      gap: 5px;
+    }
+
+    .tag-editor-note {
+      font-size: 11px;
+      line-height: 1.45;
+    }
+
+    .tag-add-trigger {
+      font-family: inherit;
+      cursor: pointer;
+    }
+
+    .tag-dialog {
+      position: absolute;
+      inset: 0;
+      z-index: 50;
+      display: grid;
+      align-items: end;
+      padding: 14px;
+      background: rgba(17, 24, 39, 0.34);
+    }
+
+    .tag-dialog[hidden] {
+      display: none;
+    }
+
+    .tag-dialog-backdrop {
+      position: absolute;
+      inset: 0;
+      border: 0;
+      padding: 0;
+      background: transparent;
+    }
+
+    .tag-dialog-panel {
+      position: relative;
+      display: grid;
+      gap: 12px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: 0 18px 42px rgba(17, 24, 39, 0.22);
+    }
+
+    .tag-dialog-panel .button-row {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .danger-panel {
+      background: #fff7f8;
+      border-color: #f7c7d3;
+    }
+
     .price-grid {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
@@ -2891,7 +2992,7 @@
   <main class="page">
     <section class="topbar">
       <div class="title-block">
-        <div class="eyebrow">微信小程序 SaaS 详细设计稿 / v1.3</div>
+        <div class="eyebrow">微信小程序 SaaS 详细设计稿 / v1.8</div>
         <h1>映期Folio</h1>
         <p class="subtitle">为婚庆司仪、化妆师、模特及团队设计的作品集与档期管理小程序。新版补充团队拥有者、管理者、普通成员三级角色权限，并完善积分充值、作品维护、作品集维护、自定义时间段档期和成员管理流程。</p>
       </div>
@@ -3013,7 +3114,7 @@
                       <p class="desc">上海 / 高端婚礼 / 双语主持</p>
                     </div>
                   </div>
-                  <span class="pill teal">MC-8392</span>
+                  <div class="row" style="gap:8px;flex:0 0 auto"><span class="pill teal">MC-8392</span><span class="desc">›</span></div>
                 </div>
               </div>
               <div class="balance-band">
@@ -3054,7 +3155,94 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">03 我的积分</div>
+          <div class="screen-title">03 基础信息</div>
+          <div class="screen-note">头像、简介、服务城市与标签</div>
+        </div>
+        <div class="phone">
+          <div class="phone-inner">
+            <div class="status"><span>09:41</span><div class="status-icons"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
+            <div class="nav">
+              <div class="nav-action">‹</div>
+              <div class="nav-title">基础信息</div>
+              <div class="wx-capsule"><span class="capsule-more"><i></i><i></i><i></i></span><span class="capsule-divider"></span><span class="capsule-ring"></span></div>
+            </div>
+            <div class="content profile-edit-content">
+              <div class="panel profile-avatar-card">
+                <div class="avatar"><div class="asset-4" style="width:100%;height:100%"></div></div>
+                <div>
+                  <p class="name">林安 · 婚礼司仪</p>
+                  <p class="desc">MC-8392</p>
+                </div>
+                <button class="button secondary">更换头像</button>
+              </div>
+              <div class="panel stack profile-fields-panel">
+                <div class="form-row">
+                  <div class="label">姓名 / 艺名</div>
+                  <div class="input">林安</div>
+                </div>
+                <div class="form-row">
+                  <div class="label">职业身份</div>
+                  <div class="input">婚礼司仪</div>
+                </div>
+                <div class="form-row">
+                  <div class="label">服务城市</div>
+                  <div class="input">上海、杭州、苏州</div>
+                </div>
+                <div class="form-row">
+                  <div class="label">个人简介</div>
+                  <div class="input textarea">10 年婚礼主持经验，擅长高端婚礼、户外仪式和双语流程控场。</div>
+                </div>
+              </div>
+              <div class="panel stack tag-editor-panel">
+                <div class="row">
+                  <p class="name">个人标签</p>
+                  <span class="pill teal">6 / 10</span>
+                </div>
+                <div class="pill-row">
+                  <span class="pill teal">高端婚礼</span>
+                  <span class="pill teal">双语主持</span>
+                  <span class="pill teal">户外婚礼</span>
+                  <span class="pill teal">晚宴主持</span>
+                  <span class="pill teal">走心控场</span>
+                  <span class="pill teal">上海</span>
+                  <button class="pill tag-add-trigger" type="button" data-tag-dialog-open aria-expanded="false" aria-controls="profile-tag-dialog">+ 添加标签</button>
+                </div>
+                <p class="desc tag-editor-note">标签由维护者自定义，单个不超过 10 个字，最多保留 10 个。</p>
+              </div>
+              <button class="button full">保存修改</button>
+              <div class="panel stack danger-panel">
+                <div>
+                  <p class="name">登录状态</p>
+                  <p class="desc">退出后需重新登录，已发布作品集不受影响。</p>
+                </div>
+                <button class="button full rose">退出登录</button>
+              </div>
+            </div>
+            <div class="tag-dialog" id="profile-tag-dialog" data-tag-dialog hidden>
+              <button class="tag-dialog-backdrop" type="button" data-tag-dialog-close aria-label="关闭新增标签窗口"></button>
+              <div class="tag-dialog-panel" role="dialog" aria-modal="true" aria-labelledby="profile-tag-dialog-title">
+                <div class="row">
+                  <p class="name" id="profile-tag-dialog-title">新增标签</p>
+                  <span class="pill teal">6 / 10</span>
+                </div>
+                <div class="form-row">
+                  <div class="label">标签文字</div>
+                  <div class="input split"><span>10 个字以内</span><span class="desc">最多 10 个</span></div>
+                </div>
+                <p class="desc">标签保存后会展示在个人资料和可引用的作品集资料组件中。</p>
+                <div class="button-row">
+                  <button class="button secondary" type="button" data-tag-dialog-close>取消</button>
+                  <button class="button" type="button" data-tag-dialog-close>添加</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen-card">
+        <div class="screen-meta">
+          <div class="screen-title">04 我的积分</div>
           <div class="screen-note">余额、消耗、充值入口</div>
         </div>
         <div class="phone">
@@ -3109,7 +3297,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">04 充值积分</div>
+          <div class="screen-title">05 充值积分</div>
           <div class="screen-note">充值档位与到账积分</div>
         </div>
         <div class="phone">
@@ -3170,7 +3358,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">05 积分规则</div>
+          <div class="screen-title">06 积分规则</div>
           <div class="screen-note">完整消耗说明</div>
         </div>
         <div class="phone">
@@ -3228,7 +3416,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">06 访问记录</div>
+          <div class="screen-title">07 访问记录</div>
           <div class="screen-note">客资跟进视图</div>
         </div>
         <div class="phone">
@@ -3313,7 +3501,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">07 团队成员列表页</div>
+          <div class="screen-title">08 团队成员列表页</div>
           <div class="screen-note">三种角色可查看 / 仅拥有者可维护</div>
         </div>
         <div class="phone">
@@ -3388,7 +3576,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">08 团队成员维护页</div>
+          <div class="screen-title">09 团队成员维护页</div>
           <div class="screen-note">拥有者设置角色与引用权限</div>
         </div>
         <div class="phone">
@@ -3462,7 +3650,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">09 作品</div>
+          <div class="screen-title">10 作品</div>
           <div class="screen-note">筛选、排序、引用情况</div>
         </div>
         <div class="phone">
@@ -3544,7 +3732,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">10 批量添加作品</div>
+          <div class="screen-title">11 批量添加作品</div>
           <div class="screen-note">最多 9 个 / 统一标签</div>
         </div>
         <div class="phone">
@@ -3600,7 +3788,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">11 作品编辑页</div>
+          <div class="screen-title">12 作品编辑页</div>
           <div class="screen-note">单个作品 / 标题标签说明</div>
         </div>
         <div class="phone">
@@ -3661,7 +3849,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">12 作品集</div>
+          <div class="screen-title">13 作品集</div>
           <div class="screen-note">团队作品集按角色显示操作</div>
         </div>
         <div class="phone">
@@ -3757,7 +3945,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">13 标准作品集维护页</div>
+          <div class="screen-title">14 标准作品集维护页</div>
           <div class="screen-note">封面、头像、固定组件</div>
         </div>
         <div class="phone">
@@ -3814,7 +4002,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">14 标准作品集预览页</div>
+          <div class="screen-title">15 标准作品集预览页</div>
           <div class="screen-note">返回维护页 / 预览不扣分</div>
         </div>
         <div class="phone">
@@ -3889,7 +4077,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">15 组件库简介</div>
+          <div class="screen-title">16 组件库简介</div>
           <div class="screen-note">给维护者看的页面模块说明</div>
         </div>
         <div class="phone">
@@ -3983,7 +4171,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">16 高级作品集维护页</div>
+          <div class="screen-title">17 高级作品集维护页</div>
           <div class="screen-note">AI 组件生成</div>
         </div>
         <div class="phone">
@@ -4029,7 +4217,7 @@
                 </div>
                 <div class="component-list">
                   <div class="component-row"><div class="handle">1</div><div><b>轮播图</b><p class="desc">使用 1、2、3 号作品</p></div><span>☰</span></div>
-                  <div class="component-row"><div class="handle">2</div><div><b>头像与简介</b><p class="desc">个人头像、标签、城市</p></div><span>☰</span></div>
+                  <div class="component-row"><div class="handle">2</div><div><b>头像与简介</b><p class="desc">个人头像、标签、服务城市</p></div><span>☰</span></div>
                   <div class="component-row"><div class="handle">3</div><div><b>双列作品列表</b><p class="desc">使用 5、6、7、8 号作品</p></div><span>☰</span></div>
                   <div class="component-row"><div class="handle">4</div><div><b>档期查询</b><p class="desc">个人档期</p></div><span>☰</span></div>
                   <div class="component-row"><div class="handle">5</div><div><b>预留联系信息</b><p class="desc">联系人、手机、微信、档期、需求</p></div><span>☰</span></div>
@@ -4049,7 +4237,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">17 高级作品集预览页</div>
+          <div class="screen-title">18 高级作品集预览页</div>
           <div class="screen-note">返回维护页 / 预览不扣分</div>
         </div>
         <div class="phone">
@@ -4131,7 +4319,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">18 访客个人作品集</div>
+          <div class="screen-title">19 访客个人作品集</div>
           <div class="screen-note">标准模板浏览页</div>
         </div>
         <div class="phone">
@@ -4206,7 +4394,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">19 访客高级作品集</div>
+          <div class="screen-title">20 访客高级作品集</div>
           <div class="screen-note">高级模板浏览页</div>
         </div>
         <div class="phone">
@@ -4296,7 +4484,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">20 团队展示与成员</div>
+          <div class="screen-title">21 团队展示与成员</div>
           <div class="screen-note">团队作品集入口</div>
         </div>
         <div class="phone">
@@ -4360,7 +4548,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">21 访客档期查询页</div>
+          <div class="screen-title">22 访客档期查询页</div>
           <div class="screen-note">选择日期后查看当天档位</div>
         </div>
         <div class="phone">
@@ -4436,7 +4624,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">22 Under Maintenance</div>
+          <div class="screen-title">23 Under Maintenance</div>
           <div class="screen-note">余额不足访客遮罩</div>
         </div>
         <div class="phone">
@@ -4505,7 +4693,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">23 档期</div>
+          <div class="screen-title">24 档期</div>
           <div class="screen-note">档位定义 / 档期维护</div>
         </div>
         <div class="phone">
@@ -4619,7 +4807,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">24 档位定义页</div>
+          <div class="screen-title">25 档位定义页</div>
           <div class="screen-note">名称 / 时间段 / 颜色</div>
         </div>
         <div class="phone">
@@ -4671,7 +4859,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">25 编辑档位定义弹层</div>
+          <div class="screen-title">26 编辑档位定义弹层</div>
           <div class="screen-note">定义行触发</div>
         </div>
         <div class="phone">
@@ -4772,7 +4960,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">26 新增档位定义弹层</div>
+          <div class="screen-title">27 新增档位定义弹层</div>
           <div class="screen-note">新增按钮触发</div>
         </div>
         <div class="phone">
@@ -4873,7 +5061,7 @@
 
       <article class="screen-card">
         <div class="screen-meta">
-          <div class="screen-title">27 档期维护页</div>
+          <div class="screen-title">28 档期维护页</div>
           <div class="screen-note">指定日期 + 选择档位 + 记录信息</div>
         </div>
         <div class="phone">
@@ -5075,6 +5263,31 @@
       document.addEventListener('click', closePopover);
       document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') closePopover();
+      });
+    });
+
+    document.querySelectorAll('[data-tag-dialog-open]').forEach((trigger) => {
+      const dialogId = trigger.getAttribute('aria-controls');
+      const dialog = dialogId ? document.getElementById(dialogId) : null;
+      if (!dialog) return;
+
+      const closeButtons = Array.from(dialog.querySelectorAll('[data-tag-dialog-close]'));
+      const closeDialog = () => {
+        dialog.hidden = true;
+        trigger.setAttribute('aria-expanded', 'false');
+      };
+
+      trigger.addEventListener('click', () => {
+        dialog.hidden = false;
+        trigger.setAttribute('aria-expanded', 'true');
+      });
+
+      closeButtons.forEach((button) => {
+        button.addEventListener('click', closeDialog);
+      });
+
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && !dialog.hidden) closeDialog();
       });
     });
 

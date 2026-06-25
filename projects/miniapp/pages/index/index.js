@@ -1,5 +1,5 @@
 const { request } = require('../../utils/request')
-const { clearToken, hasLocalToken } = require('../../utils/session')
+const { handleAuthRequired, hasLocalToken } = require('../../utils/session')
 const { normalizeDashboard } = require('../../utils/dashboard')
 
 Page({
@@ -61,8 +61,7 @@ Page({
       })
     } catch (error) {
       if (error && error.authRequired) {
-        clearToken()
-        this.redirectToLogin()
+        handleAuthRequired(error.message)
         return
       }
       this.setData({
@@ -99,6 +98,12 @@ Page({
           icon: 'success'
         })
       }
+    })
+  },
+
+  handleProfileTap() {
+    wx.navigateTo({
+      url: '/pages/profile/profile'
     })
   },
 

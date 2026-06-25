@@ -84,7 +84,7 @@
             </view>
 
             <view class="login-form wechat-form {{activeTab === 'wechat' ? 'active' : 'inactive'}}">
-              <button class="primary-button" loading="{{loading}}" bindtap="handleWechatLogin">
+              <button class="primary-button" loading="{{loading}}" bindtap="handleMaintainerWechatLogin">
                 {{loading ? '登录中' : '微信授权登录'}}
               </button>
             </view>

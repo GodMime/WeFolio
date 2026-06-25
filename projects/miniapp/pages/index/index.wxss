@@ -138,6 +138,15 @@
   justify-content: space-between;
 }
 
+.balance-top {
+  width: 100%;
+}
+
+.balance-copy {
+  flex: 1;
+  min-width: 0;
+}
+
 .balance-label {
   color: rgba(255, 255, 255, 0.72);
   font-size: 24rpx;
@@ -152,13 +161,22 @@
 
 .light-button {
   min-width: 112rpx;
-  padding: 20rpx 28rpx;
+  height: 88rpx;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  margin-left: auto;
+  padding: 0 28rpx;
   color: #17202a;
   font-size: 26rpx;
-  font-weight: 700;
+  font-weight: 800;
   line-height: 1;
-  border-radius: 999rpx;
+  white-space: nowrap;
+  border-radius: 16rpx;
   background: #fff;
+  box-shadow: 0 20rpx 44rpx rgba(17, 24, 39, 0.2);
+  box-sizing: border-box;
 }
 
 .balance-bottom {
@@ -252,9 +270,14 @@
 .team-icon::before,
 .entry-arrow::before,
 .schedule-tab-icon::before,
+.schedule-tab-icon::after,
 .work-tab-icon::before,
+.work-tab-icon::after,
 .portfolio-tab-icon::before,
-.mine-tab-icon::before {
+.portfolio-tab-icon::after,
+.mine-tab-icon::before,
+.mine-tab-icon::after,
+.tab.active::before {
   position: absolute;
   content: "";
   box-sizing: border-box;
@@ -388,6 +411,7 @@
 }
 
 .tab {
+  position: relative;
   width: 25%;
   height: 96rpx;
   flex-direction: column;
@@ -396,7 +420,18 @@
 }
 
 .tab.active {
-  color: #0f766e;
+  color: #b88a44;
+}
+
+.tab.active::before {
+  top: 4rpx;
+  left: 50%;
+  width: 42rpx;
+  height: 6rpx;
+  border-radius: 999rpx;
+  background: #b88a44;
+  box-shadow: 0 4rpx 16rpx rgba(184, 138, 68, 0.26);
+  transform: translateX(-50%);
 }
 
 .tab-icon {
@@ -408,38 +443,82 @@
 
 .schedule-tab-icon::before {
   left: 6rpx;
-  top: 7rpx;
+  top: 6rpx;
   width: 30rpx;
-  height: 28rpx;
+  height: 30rpx;
   border: 4rpx solid currentColor;
-  border-radius: 8rpx;
+  border-radius: 10rpx;
+  background:
+    linear-gradient(currentColor, currentColor) 6rpx 10rpx / calc(100% - 12rpx) 4rpx no-repeat;
+}
+
+.schedule-tab-icon::after {
+  left: 18rpx;
+  top: 23rpx;
+  width: 6rpx;
+  height: 6rpx;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .work-tab-icon::before {
-  left: 5rpx;
-  top: 8rpx;
-  width: 32rpx;
-  height: 26rpx;
+  left: 6rpx;
+  top: 6rpx;
+  width: 30rpx;
+  height: 30rpx;
   border: 4rpx solid currentColor;
-  border-radius: 7rpx;
+  border-radius: 10rpx;
+}
+
+.work-tab-icon::after {
+  left: 13rpx;
+  bottom: 11rpx;
+  width: 18rpx;
+  height: 14rpx;
+  border-left: 4rpx solid currentColor;
+  border-bottom: 4rpx solid currentColor;
+  transform: rotate(-45deg);
+  transform-origin: center;
 }
 
 .portfolio-tab-icon::before {
-  left: 7rpx;
-  top: 6rpx;
+  left: 10rpx;
+  top: 8rpx;
   width: 28rpx;
-  height: 31rpx;
+  height: 28rpx;
   border: 4rpx solid currentColor;
-  border-radius: 6rpx;
+  border-radius: 8rpx;
+  background: rgba(255, 255, 255, 0.96);
+  z-index: 2;
+}
+
+.portfolio-tab-icon::after {
+  left: 4rpx;
+  top: 14rpx;
+  width: 28rpx;
+  height: 28rpx;
+  border: 4rpx solid currentColor;
+  border-radius: 8rpx;
+  z-index: 1;
 }
 
 .mine-tab-icon::before {
-  left: 8rpx;
-  top: 7rpx;
-  width: 26rpx;
-  height: 26rpx;
+  left: 13rpx;
+  top: 6rpx;
+  width: 16rpx;
+  height: 16rpx;
   border: 4rpx solid currentColor;
   border-radius: 50%;
+}
+
+.mine-tab-icon::after {
+  left: 6rpx;
+  bottom: 6rpx;
+  width: 30rpx;
+  height: 16rpx;
+  border: 4rpx solid currentColor;
+  border-bottom-width: 3rpx;
+  border-radius: 20rpx 20rpx 8rpx 8rpx;
 }
 
 .tab-label {

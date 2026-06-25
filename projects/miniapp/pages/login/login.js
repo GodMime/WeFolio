@@ -1,5 +1,5 @@
 const { DEFAULT_BASE_URL } = require('../../utils/request')
-const { setToken, wechatLogin } = require('../../utils/session')
+const { setToken, maintainerWechatLogin } = require('../../utils/session')
 
 function wxLogin() {
   return new Promise((resolve, reject) => {
@@ -195,7 +195,7 @@ Page({
     })
   },
 
-  handleWechatLogin() {
+  handleMaintainerWechatLogin() {
     this.authorizeByWechat({})
   },
 
@@ -211,7 +211,7 @@ Page({
       const code = await wxLogin()
       const pluginLoginCode = options.usePluginOpenpid ? await tryWxPluginLogin() : ''
       const avatarUrl = await uploadAvatar(this.data.avatarUrl)
-      const response = await wechatLogin({
+      const response = await maintainerWechatLogin({
         code,
         phoneCode: options.phoneCode || '',
         pluginLoginCode,
