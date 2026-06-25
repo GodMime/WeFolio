@@ -194,6 +194,49 @@ public class CosService {
     }
 
     /**
+     * 创建团队的 COS 文件夹结构。
+     * <pre>
+     * {uniqueCode}/
+     *   protfolio/   ← 团队作品集额外素材
+     *   others/      ← 团队图标、二维码等其它素材
+     * </pre>
+     * 团队目录不包含 work 目录，团队作品引用成员个人作品或团队作品集素材。
+     *
+     * @param uniqueCode 团队唯一码，如 "TM2048"
+     */
+    public void initTeamStorage(String uniqueCode) {
+        // COS 没有真实目录概念，仍按注册流程使用 0 字节对象模拟目录，方便控制台和后续上传定位。
+        List<String> folders = List.of(
+                uniqueCode + "/",
+                uniqueCode + "/others/",
+                uniqueCode + "/protfolio/"
+        );
+
+        for (String folder : folders) {
+            try {
+                byte[] emptyContent = new byte[0];
+                ObjectMetadata metadata = new ObjectMetadata();
+                metadata.setContentLength(0);
+                metadata.setContentType("application/x-directory");
+
+                PutObjectRequest request = new PutObjectRequest(
+                        cosProperties.getBucketName(),
+                        folder,
+                        new ByteArrayInputStream(emptyContent),
+                        metadata
+                );
+                transferManager.getCOSClient().putObject(request);
+                log.info("COS team folder created: key={}", folder);
+            } catch (Exception e) {
+                log.error("COS team folder creation failed: key={}", folder, e);
+                throw new RuntimeException("COS team folder creation failed: " + folder, e);
+            }
+        }
+
+        log.info("COS team storage initialized: uniqueCode={}", uniqueCode);
+    }
+
+    /**
      * 检查用户的 COS 文件夹结构是否已初始化。
      * 通过探测根文件夹（{@code {uniqueCode}/}）对象是否存在来判断。
      *

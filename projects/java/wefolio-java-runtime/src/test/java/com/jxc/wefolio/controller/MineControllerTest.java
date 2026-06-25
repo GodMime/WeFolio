@@ -39,7 +39,8 @@ class MineControllerTest {
         GetMapping getMapping = method.getAnnotation(GetMapping.class);
         MineVisitRecordsResponse serviceResponse = new MineVisitRecordsResponse();
         when(mineVisitService.getVisitRecords()).thenReturn(serviceResponse);
-        MineController controller = new MineController(mineDashboardService, mineProfileService, mineVisitService);
+        MineController controller = new MineController(
+                mineDashboardService, mineProfileService, mineVisitService);
 
         Response<MineVisitRecordsResponse> response = controller.visits();
 

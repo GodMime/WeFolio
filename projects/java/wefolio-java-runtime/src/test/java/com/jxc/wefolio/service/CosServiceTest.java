@@ -5,12 +5,14 @@ import com.qcloud.cos.COSClient;
 import com.qcloud.cos.model.COSObject;
 import com.qcloud.cos.model.GetObjectRequest;
 import com.qcloud.cos.model.ObjectMetadata;
+import com.qcloud.cos.model.PutObjectRequest;
 import com.qcloud.cos.transfer.TransferManager;
 import com.qcloud.cos.transfer.Upload;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
@@ -18,6 +20,7 @@ import org.springframework.mock.web.MockMultipartFile;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -123,6 +126,39 @@ class CosServiceTest {
         String key2 = cosService.upload(file);
 
         assertThat(key1).isNotEqualTo(key2);
+    }
+
+    // ── storage init ───────────────────────────────────────
+
+    @Test
+    void initTeamStorageShouldCreateTeamFolders() {
+        COSClient cosClient = mock(COSClient.class);
+        when(transferManager.getCOSClient()).thenReturn(cosClient);
+
+        cosService.initTeamStorage("TM2048");
+
+        ArgumentCaptor<PutObjectRequest> captor = ArgumentCaptor.forClass(PutObjectRequest.class);
+        verify(cosClient, times(3)).putObject(captor.capture());
+        List<String> keys = captor.getAllValues().stream()
+                .map(PutObjectRequest::getKey)
+                .toList();
+        assertThat(keys).containsExactly("TM2048/", "TM2048/others/", "TM2048/protfolio/");
+        assertThat(keys).noneMatch(key -> key.contains("/work/"));
+        assertThat(captor.getAllValues())
+                .allSatisfy(request -> assertThat(request.getMetadata().getContentType())
+                        .isEqualTo("application/x-directory"));
+    }
+
+    @Test
+    void initUserStorageShouldThrowWhenFolderCreationFails() {
+        COSClient cosClient = mock(COSClient.class);
+        when(transferManager.getCOSClient()).thenReturn(cosClient);
+        doThrow(new RuntimeException("AccessDenied")).when(cosClient).putObject(any(PutObjectRequest.class));
+
+        assertThatThrownBy(() -> cosService.initUserStorage("WFA3B1E7A2"))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("COS folder creation failed")
+                .hasRootCauseMessage("AccessDenied");
     }
 
     // ── download ────────────────────────────────────────────

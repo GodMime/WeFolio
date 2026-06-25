@@ -1,0 +1,104 @@
+<view class="page-shell teams-page">
+  <navigation-bar title="我的团队" back="{{true}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+
+  <scroll-view class="teams-scroll" scroll-y type="list">
+    <view class="teams-content">
+      <!-- 列表页统一分成加载、错误、内容三种状态，避免空数据时页面跳动。 -->
+      <block wx:if="{{loading}}">
+        <view class="panel summary-panel skeleton-panel"></view>
+        <view class="panel list-panel skeleton-panel"></view>
+      </block>
+
+      <block wx:elif="{{errorMessage}}">
+        <view class="empty-state">
+          <view class="empty-icon"></view>
+          <view class="empty-title">加载失败</view>
+          <view class="empty-desc">{{errorMessage}}</view>
+          <button class="primary-button compact" bindtap="handleRetry">重试</button>
+        </view>
+      </block>
+
+      <block wx:else>
+        <view class="panel summary-panel">
+          <view class="summary-copy">
+            <view class="section-title">我的团队</view>
+            <view class="summary-desc">{{teamData.summary.summaryText}}</view>
+          </view>
+          <view class="count-pill">{{teamData.summary.manageableText}}</view>
+        </view>
+
+        <view class="panel list-panel">
+          <view class="panel-heading">
+            <view class="section-title">团队列表</view>
+            <view class="panel-desc">点击团队进入维护页</view>
+          </view>
+
+          <view wx:if="{{teamData.teams.length}}" class="team-list">
+            <view
+              class="team-card"
+              wx:for="{{teamData.teams}}"
+              wx:key="teamId"
+              data-team-id="{{item.teamId}}"
+              bindtap="handleTeamTap"
+              aria-role="button"
+            >
+              <view class="team-logo">
+                <image wx:if="{{item.avatarUrl}}" class="team-logo-image" src="{{item.avatarUrl}}" mode="aspectFill"></image>
+                <view wx:else class="team-logo-fallback">TM</view>
+              </view>
+              <view class="team-copy">
+                <view class="team-name">{{item.name}}</view>
+                <view class="team-subtitle">{{item.subtitle}}</view>
+                <view class="pill-row">
+                  <view class="role-pill {{pill.tone}}" wx:for="{{item.pills}}" wx:for-item="pill" wx:key="text">{{pill.text}}</view>
+                </view>
+              </view>
+              <view class="team-actions">
+                <view class="mini-action">{{item.actionText}}</view>
+                <view class="entry-arrow"></view>
+              </view>
+            </view>
+          </view>
+
+          <view wx:else class="team-empty">
+            <view class="empty-title small">暂无团队</view>
+            <view class="empty-desc">创建团队后，可以在这里维护团队资料和成员。</view>
+          </view>
+        </view>
+
+        <button class="primary-button full" bindtap="handleCreateToggle">{{createFormVisible ? '收起创建团队' : '创建团队'}}</button>
+
+        <!-- 创建团队表单从按钮下方滑出；本地头像会在保存后通过上传接口补写。 -->
+        <view class="panel create-form-panel" wx:if="{{createFormVisible}}">
+          <view class="panel-heading">
+            <view class="section-title">创建团队</view>
+            <view class="panel-desc">生成团队唯一码</view>
+          </view>
+          <view class="avatar-field">
+            <view class="team-logo large">
+              <image wx:if="{{form.avatarUrl}}" class="team-logo-image" src="{{form.avatarUrl}}" mode="aspectFill"></image>
+              <view wx:else class="team-logo-fallback">TM</view>
+            </view>
+            <button class="secondary-button avatar-button" open-type="chooseAvatar" bindchooseavatar="handleChooseAvatar" disabled="{{saving}}">团队图标</button>
+          </view>
+          <view class="form-row">
+            <view class="field-heading">
+              <view class="label">团队名称</view>
+              <view class="field-limit">{{fieldCounters.name}}</view>
+            </view>
+            <input class="input" value="{{form.name}}" data-field="name" bindinput="handleInput" maxlength="100" placeholder="请输入团队名称" />
+          </view>
+          <view class="form-row">
+            <view class="field-heading">
+              <view class="label">团队简介</view>
+              <view class="field-limit">{{fieldCounters.intro}}</view>
+            </view>
+            <textarea class="input textarea" value="{{form.intro}}" data-field="intro" bindinput="handleInput" maxlength="1000" auto-height placeholder="介绍团队服务风格、城市或成员特色" />
+          </view>
+          <view class="create-note">创建团队会生成团队唯一码，后续可通过个人唯一码邀请成员加入。</view>
+          <button class="primary-button full" loading="{{saving}}" bindtap="handleCreateTeam">保存创建</button>
+        </view>
+      </block>
+    </view>
+  </scroll-view>
+</view>

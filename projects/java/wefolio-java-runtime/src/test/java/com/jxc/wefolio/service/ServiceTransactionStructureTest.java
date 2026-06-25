@@ -39,6 +39,31 @@ class ServiceTransactionStructureTest {
                 .contains("createWechatMaintainerUser(");
     }
 
+    @Test
+    void teamRegistrationServiceShouldOwnTransactionalTeamCreation() throws IOException {
+        Path sourcePath = MAIN_SOURCE_ROOT.resolve("com/jxc/wefolio/service/TeamRegistrationService.java");
+        assertThat(sourcePath).exists();
+
+        String source = Files.readString(sourcePath);
+        assertThat(source)
+                .contains("class TeamRegistrationService")
+                .contains("@Transactional(rollbackFor = Exception.class)")
+                .contains("createTeamWithOwner(");
+    }
+
+    @Test
+    void mineTeamServiceShouldInitializeCosBeforeTransactionalTeamCreation() throws IOException {
+        String source = readSource("com/jxc/wefolio/service/MineTeamService.java");
+        int initStorageIndex = source.indexOf("cosService.initTeamStorage(uniqueCode)");
+        int createTeamIndex = source.indexOf("teamRegistrationService.createTeamWithOwner(");
+
+        assertThat(initStorageIndex).isNotNegative();
+        assertThat(createTeamIndex).isNotNegative();
+        assertThat(initStorageIndex).isLessThan(createTeamIndex);
+        assertThat(source)
+                .doesNotContain("@Transactional(rollbackFor = Exception.class)\n    public MineTeamDetailResponse createTeam(");
+    }
+
     private String readSource(String relativePath) throws IOException {
         return Files.readString(MAIN_SOURCE_ROOT.resolve(relativePath));
     }

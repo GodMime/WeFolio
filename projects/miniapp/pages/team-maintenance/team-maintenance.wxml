@@ -1,0 +1,108 @@
+<view class="page-shell team-maintenance-page">
+  <navigation-bar title="团队维护" back="{{true}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+
+  <scroll-view class="maintenance-scroll" scroll-y type="list">
+    <view class="maintenance-content">
+      <!-- 详情页保持加载、错误、内容三态，缺少 teamId 或接口失败都进入错误态。 -->
+      <block wx:if="{{loading}}">
+        <view class="panel profile-panel skeleton-panel"></view>
+        <view class="panel members-panel skeleton-panel"></view>
+      </block>
+
+      <block wx:elif="{{errorMessage}}">
+        <view class="empty-state">
+          <view class="empty-icon"></view>
+          <view class="empty-title">加载失败</view>
+          <view class="empty-desc">{{errorMessage}}</view>
+          <button class="primary-button compact" bindtap="handleRetry">重试</button>
+        </view>
+      </block>
+
+      <block wx:else>
+        <view class="panel profile-panel">
+          <view class="team-identity">
+            <view class="team-logo large">
+              <image wx:if="{{form.avatarUrl}}" class="team-logo-image" src="{{form.avatarUrl}}" mode="aspectFill"></image>
+              <view wx:else class="team-logo-fallback">TM</view>
+            </view>
+            <view class="team-heading">
+              <view class="team-name">{{detail.team.name}}</view>
+              <view class="team-code">团队唯一码 {{detail.team.uniqueCode}}</view>
+              <view class="pill-row">
+                <view class="role-pill blue">{{detail.team.memberText}}</view>
+                <view class="role-pill blue">{{detail.team.roleText}}</view>
+              </view>
+            </view>
+            <button wx:if="{{detail.team.canMaintain}}" class="secondary-button avatar-button" open-type="chooseAvatar" bindchooseavatar="handleChooseAvatar" disabled="{{saving}}">更换</button>
+          </view>
+
+          <view class="form-row">
+            <view class="field-heading">
+              <view class="label">团队名称</view>
+              <view class="field-limit">{{fieldCounters.name}}</view>
+            </view>
+            <input class="input" value="{{form.name}}" data-field="name" bindinput="handleInput" maxlength="100" disabled="{{!detail.team.canMaintain}}" />
+          </view>
+          <view class="form-row">
+            <view class="field-heading">
+              <view class="label">团队简介</view>
+              <view class="field-limit">{{fieldCounters.intro}}</view>
+            </view>
+            <textarea class="input textarea" value="{{form.intro}}" data-field="intro" bindinput="handleInput" maxlength="1000" auto-height disabled="{{!detail.team.canMaintain}}" />
+          </view>
+          <button wx:if="{{detail.team.canMaintain}}" class="primary-button full" loading="{{saving}}" bindtap="handleSaveTeam">保存修改</button>
+        </view>
+
+        <!-- 搜索和状态筛选只在本地过滤 visibleMembers，不触发后端请求。 -->
+        <view class="search-row">
+          <input class="search-input" value="{{keyword}}" bindinput="handleSearchInput" placeholder="输入姓名、职业或个人唯一码" />
+        </view>
+
+        <view class="segmented">
+          <button
+            class="segment {{statusFilter === item.key ? 'active' : ''}}"
+            wx:for="{{statusFilters}}"
+            wx:key="key"
+            data-key="{{item.key}}"
+            bindtap="handleStatusFilterTap"
+          >
+            {{item.label}}
+          </button>
+        </view>
+
+        <view class="panel team-members-panel">
+          <view class="panel-heading">
+            <view class="section-title">团队成员</view>
+            <button class="mini-action" bindtap="handleAddMember">添加成员</button>
+          </view>
+          <view wx:if="{{visibleMembers.length}}" class="member-list">
+            <view class="member-row" wx:for="{{visibleMembers}}" wx:key="memberId">
+              <view class="member-avatar">
+                <image wx:if="{{item.avatarUrl}}" class="member-avatar-image" src="{{item.avatarUrl}}" mode="aspectFill"></image>
+                <view wx:else class="member-avatar-fallback">{{item.initial}}</view>
+              </view>
+              <view class="member-copy">
+                <view class="member-name">{{item.displayName}}</view>
+                <view class="member-summary">{{item.summaryText}}</view>
+              </view>
+              <!--
+                成员状态标签分两层：
+                1. joinStatusText/statusTone 是团队成员关系状态，后端已映射好颜色 token，始终展示。
+                2. userStatusText/userStatusTone 是账号状态，只有非 ACTIVE 时展示，例如“已停用”。
+                这样维护页能区分“成员已加入但账号停用”和“成员资料缺失”。
+              -->
+              <view class="member-status">
+                <view class="role-pill {{item.statusTone}}">{{item.joinStatusText}}</view>
+                <view wx:if="{{item.userStatusVisible}}" class="role-pill {{item.userStatusTone}}">{{item.userStatusText}}</view>
+              </view>
+            </view>
+          </view>
+          <view wx:else class="member-empty">
+            <view class="empty-title small">暂无匹配成员</view>
+            <view class="empty-desc">换个关键词或筛选状态试试。</view>
+          </view>
+        </view>
+      </block>
+    </view>
+  </scroll-view>
+</view>

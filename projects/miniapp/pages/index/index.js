@@ -115,6 +115,12 @@ Page({
       })
       return
     }
+    if (type === 'teams') {
+      wx.navigateTo({
+        url: '/pages/teams/teams'
+      })
+      return
+    }
     wx.showToast({
       title: '一期后续页面接入中',
       icon: 'none'
