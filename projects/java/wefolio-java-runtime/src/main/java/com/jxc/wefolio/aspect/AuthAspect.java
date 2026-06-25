@@ -20,6 +20,7 @@ import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
+import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.Method;
 import java.util.Optional;
 
@@ -43,6 +44,20 @@ public class AuthAspect {
     private final AuthTokenService authTokenService;
 
     /**
+     * 接口访问类型 — 方法级注解优先，方法未标记时继承类级注解。
+     */
+    private enum AccessType {
+        /** 登录类接口，直接放行 */
+        LOGIN,
+        /** 系统类接口，直接放行 */
+        SYSTEM,
+        /** 维护者类接口，需要登录令牌 */
+        MAINTAINER,
+        /** 访客类接口，当前直接放行 */
+        VISITOR
+    }
+
+    /**
      * 拦截控制器接口并根据访问控制注解执行认证。
      *
      * @param joinPoint 切点
@@ -56,19 +71,15 @@ public class AuthAspect {
         String requestInfo = request != null
                 ? request.getMethod() + " " + request.getRequestURI()
                 : "未知请求";
+        AccessType accessType = resolveAccessType(method, joinPoint)
+                .orElseThrow(() -> new AuthenticationRequiredException("接口未配置访问控制注解"));
 
-        if (isLoginAccess(method, joinPoint) || isSystemAccess(method, joinPoint) || isVisitorAccess(method, joinPoint)) {
-            log.info("放行请求: {}", requestInfo);
-            return joinPoint.proceed();
-        }
-
-        if (isMaintainerAccess(method, joinPoint)) {
+        if (accessType == AccessType.MAINTAINER) {
             return authenticateMaintainer(joinPoint, request, requestInfo);
         }
 
-        // 正常情况不会到达此处（启动时已验证所有接口均有标记），
-        // 保留此防御性分支以防运行时反射绕过
-        throw new AuthenticationRequiredException("接口未配置访问控制注解");
+        log.info("放行请求: {}", requestInfo);
+        return joinPoint.proceed();
     }
 
     /**
@@ -114,55 +125,41 @@ public class AuthAspect {
     }
 
     /**
-     * 判断是否标记了 {@link LoginAccess}。
+     * 解析接口访问类型：方法级注解优先，方法未标记时再读取类级注解。
      *
      * @param method    目标方法
      * @param joinPoint 切点
-     * @return 是否标记
+     * @return 接口访问类型
      */
-    private boolean isLoginAccess(Method method, ProceedingJoinPoint joinPoint) {
+    private Optional<AccessType> resolveAccessType(Method method, ProceedingJoinPoint joinPoint) {
+        Optional<AccessType> methodAccessType = resolveAccessType(method);
+        if (methodAccessType.isPresent()) {
+            return methodAccessType;
+        }
         Class<?> declaringType = ((MethodSignature) joinPoint.getSignature()).getDeclaringType();
-        return method.isAnnotationPresent(LoginAccess.class)
-                || declaringType.isAnnotationPresent(LoginAccess.class);
+        return resolveAccessType(declaringType);
     }
 
     /**
-     * 判断是否标记了 {@link SystemAccess}。
+     * 从类或方法上的访问控制注解解析接口访问类型。
      *
-     * @param method    目标方法
-     * @param joinPoint 切点
-     * @return 是否标记
+     * @param element 类或方法
+     * @return 接口访问类型
      */
-    private boolean isSystemAccess(Method method, ProceedingJoinPoint joinPoint) {
-        Class<?> declaringType = ((MethodSignature) joinPoint.getSignature()).getDeclaringType();
-        return method.isAnnotationPresent(SystemAccess.class)
-                || declaringType.isAnnotationPresent(SystemAccess.class);
-    }
-
-    /**
-     * 判断是否标记了 {@link MaintainerAccess}。
-     *
-     * @param method    目标方法
-     * @param joinPoint 切点
-     * @return 是否标记
-     */
-    private boolean isMaintainerAccess(Method method, ProceedingJoinPoint joinPoint) {
-        Class<?> declaringType = ((MethodSignature) joinPoint.getSignature()).getDeclaringType();
-        return method.isAnnotationPresent(MaintainerAccess.class)
-                || declaringType.isAnnotationPresent(MaintainerAccess.class);
-    }
-
-    /**
-     * 判断是否标记了 {@link VisitorAccess}。
-     *
-     * @param method    目标方法
-     * @param joinPoint 切点
-     * @return 是否标记
-     */
-    private boolean isVisitorAccess(Method method, ProceedingJoinPoint joinPoint) {
-        Class<?> declaringType = ((MethodSignature) joinPoint.getSignature()).getDeclaringType();
-        return method.isAnnotationPresent(VisitorAccess.class)
-                || declaringType.isAnnotationPresent(VisitorAccess.class);
+    private Optional<AccessType> resolveAccessType(AnnotatedElement element) {
+        if (element.isAnnotationPresent(LoginAccess.class)) {
+            return Optional.of(AccessType.LOGIN);
+        }
+        if (element.isAnnotationPresent(SystemAccess.class)) {
+            return Optional.of(AccessType.SYSTEM);
+        }
+        if (element.isAnnotationPresent(MaintainerAccess.class)) {
+            return Optional.of(AccessType.MAINTAINER);
+        }
+        if (element.isAnnotationPresent(VisitorAccess.class)) {
+            return Optional.of(AccessType.VISITOR);
+        }
+        return Optional.empty();
     }
 
     /**

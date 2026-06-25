@@ -120,6 +120,69 @@ class AuthAspectTest {
         verify(authTokenService, never()).resolveAuthenticatedUserId(null);
     }
 
+    @Test
+    void methodLevelMaintainerAccessOverridesLoginAccessClass() throws Throwable {
+        assertMethodLevelMaintainerAccessRequiresAuthentication(LoginAccessFixtureController.class);
+    }
+
+    @Test
+    void methodLevelMaintainerAccessOverridesSystemAccessClass() throws Throwable {
+        assertMethodLevelMaintainerAccessRequiresAuthentication(SystemAccessFixtureController.class);
+    }
+
+    @Test
+    void methodLevelMaintainerAccessOverridesVisitorAccessClass() throws Throwable {
+        assertMethodLevelMaintainerAccessRequiresAuthentication(VisitorAccessFixtureController.class);
+    }
+
+    @Test
+    void methodLevelLoginAccessOverridesMaintainerAccessClass() throws Throwable {
+        setRequest(null);
+        setJoinPointMethod(MaintainerAccessFixtureController.class, "loginEndpoint");
+        when(joinPoint.proceed()).thenReturn(Response.success("public"));
+        AuthAspect aspect = new AuthAspect(authTokenService);
+
+        Object result = aspect.authenticate(joinPoint);
+
+        assertThat(result).isInstanceOf(Response.class);
+        verify(authTokenService, never()).resolveAuthenticatedUserId(null);
+    }
+
+    @Test
+    void classLevelMaintainerAccessAppliesWhenMethodHasNoAccessAnnotation() throws Throwable {
+        setRequest("Bearer wf-dev-user-9");
+        setJoinPointMethod(MaintainerAccessFixtureController.class, "unannotatedEndpoint");
+        when(authTokenService.resolveAuthenticatedUserId("Bearer wf-dev-user-9")).thenReturn(Optional.of(9L));
+        doAnswer(invocation -> {
+            assertThat(AuthContextHolder.requireUserId()).isEqualTo(9L);
+            return Response.success("secured");
+        }).when(joinPoint).proceed();
+        AuthAspect aspect = new AuthAspect(authTokenService);
+
+        Object result = aspect.authenticate(joinPoint);
+
+        assertThat(result).isInstanceOf(Response.class);
+        assertThat(AuthContextHolder.getUserId()).isEmpty();
+        verify(authTokenService).resolveAuthenticatedUserId("Bearer wf-dev-user-9");
+    }
+
+    private void assertMethodLevelMaintainerAccessRequiresAuthentication(Class<?> controllerClass) throws Throwable {
+        setRequest("Bearer wf-dev-user-9");
+        setJoinPointMethod(controllerClass, "maintainerEndpoint");
+        when(authTokenService.resolveAuthenticatedUserId("Bearer wf-dev-user-9")).thenReturn(Optional.of(9L));
+        doAnswer(invocation -> {
+            assertThat(AuthContextHolder.requireUserId()).isEqualTo(9L);
+            return Response.success("secured");
+        }).when(joinPoint).proceed();
+        AuthAspect aspect = new AuthAspect(authTokenService);
+
+        Object result = aspect.authenticate(joinPoint);
+
+        assertThat(result).isInstanceOf(Response.class);
+        assertThat(AuthContextHolder.getUserId()).isEmpty();
+        verify(authTokenService).resolveAuthenticatedUserId("Bearer wf-dev-user-9");
+    }
+
     private void setRequest(String authorization) {
         MockHttpServletRequest request = new MockHttpServletRequest();
         if (authorization != null) {
@@ -129,10 +192,23 @@ class AuthAspectTest {
     }
 
     private void setJoinPointMethod(String methodName) throws NoSuchMethodException {
-        Method method = FixtureController.class.getDeclaredMethod(methodName);
+        setJoinPointMethod(FixtureController.class, methodName);
+    }
+
+    private void setJoinPointMethod(Class<?> controllerClass, String methodName) throws NoSuchMethodException {
+        Method method = controllerClass.getDeclaredMethod(methodName);
         when(joinPoint.getSignature()).thenReturn(methodSignature);
         when(methodSignature.getMethod()).thenReturn(method);
-        when(methodSignature.getDeclaringType()).thenReturn(FixtureController.class);
+        if (!isAccessAnnotated(method)) {
+            when(methodSignature.getDeclaringType()).thenReturn(controllerClass);
+        }
+    }
+
+    private boolean isAccessAnnotated(Method method) {
+        return method.isAnnotationPresent(LoginAccess.class)
+                || method.isAnnotationPresent(SystemAccess.class)
+                || method.isAnnotationPresent(MaintainerAccess.class)
+                || method.isAnnotationPresent(VisitorAccess.class);
     }
 
     /**
@@ -158,6 +234,58 @@ class AuthAspectTest {
         @VisitorAccess
         public Response<String> visitorEndpoint() {
             return Response.success("public portfolio");
+        }
+    }
+
+    /**
+     * 登录类访问测试夹具 — 用于验证方法级注解优先于类级注解。
+     */
+    @LoginAccess
+    private static class LoginAccessFixtureController {
+
+        @MaintainerAccess
+        public Response<String> maintainerEndpoint() {
+            return Response.success("secured");
+        }
+    }
+
+    /**
+     * 系统类访问测试夹具 — 用于验证方法级注解优先于类级注解。
+     */
+    @SystemAccess
+    private static class SystemAccessFixtureController {
+
+        @MaintainerAccess
+        public Response<String> maintainerEndpoint() {
+            return Response.success("secured");
+        }
+    }
+
+    /**
+     * 访客类访问测试夹具 — 用于验证方法级注解优先于类级注解。
+     */
+    @VisitorAccess
+    private static class VisitorAccessFixtureController {
+
+        @MaintainerAccess
+        public Response<String> maintainerEndpoint() {
+            return Response.success("secured");
+        }
+    }
+
+    /**
+     * 维护者类访问测试夹具 — 用于验证方法级放行注解覆盖类级认证注解。
+     */
+    @MaintainerAccess
+    private static class MaintainerAccessFixtureController {
+
+        public Response<String> unannotatedEndpoint() {
+            return Response.success("secured");
+        }
+
+        @LoginAccess
+        public Response<String> loginEndpoint() {
+            return Response.success("public");
         }
     }
 }
