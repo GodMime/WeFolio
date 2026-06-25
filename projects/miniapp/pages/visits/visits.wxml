@@ -35,13 +35,11 @@
             <view class="section-title">近 7 日访问趋势</view>
             <view class="trend-pill">{{visitData.trend.changeText}}</view>
           </view>
-          <view class="trend-bars">
-            <view class="trend-column" wx:for="{{visitData.trend.points}}" wx:key="label">
-              <view class="trend-track">
-                <view class="trend-fill" style="height: {{item.height}}%;"></view>
-              </view>
-              <view class="trend-label">{{item.label}}</view>
-            </view>
+          <view class="trend-chart">
+            <canvas id="trendLineCanvas" class="trend-line-canvas" type="2d"></canvas>
+          </view>
+          <view class="trend-label-row">
+            <view class="trend-label" wx:for="{{visitData.trend.points}}" wx:key="label">{{item.label}}</view>
           </view>
         </view>
 

@@ -6,7 +6,7 @@
   background-color: #f5f7fb;
   background-image:
     linear-gradient(180deg, rgba(245, 247, 251, 0.76) 0%, rgba(245, 247, 251, 0.94) 58%, #f5f7fb 100%),
-    url("https://cos.we-folio.dingchenyong.top/backgroud.jpeg");
+    url("https://cos.we-folio.dingchenyong.top/system/backgroud.jpeg");
   background-position: center top;
   background-repeat: no-repeat;
   background-size: cover;
@@ -267,11 +267,11 @@
 
 .entry-icon {
   display: block;
-  width: 58rpx;
-  height: 58rpx;
+  width: 92rpx;
+  height: 92rpx;
   flex: none;
-  margin-right: 18rpx;
-  border-radius: 16rpx;
+  margin-right: 22rpx;
+  border-radius: 22rpx;
 }
 
 .entry-arrow::before,

@@ -9,6 +9,7 @@ const indexWxml = fs.readFileSync(path.join(__dirname, '../pages/index/index.wxm
 const profileJsPath = path.join(__dirname, '../pages/profile/profile.js')
 const profileWxmlPath = path.join(__dirname, '../pages/profile/profile.wxml')
 const profileWxssPath = path.join(__dirname, '../pages/profile/profile.wxss')
+const avatarJsPath = path.join(__dirname, '../utils/avatar.js')
 
 function readProfileRule(selector) {
   const profileWxss = fs.readFileSync(profileWxssPath, 'utf8')
@@ -47,15 +48,28 @@ test('basic profile page files and controls match design draft', () => {
   assert.match(profileWxml, /bindtap="handleSelectTagColor"/)
 })
 
-test('basic profile page uses backend profile and avatar endpoints', () => {
+test('basic profile page uses backend profile and shared avatar endpoints', () => {
   const profileJs = fs.readFileSync(profileJsPath, 'utf8')
+  const avatarJs = fs.readFileSync(avatarJsPath, 'utf8')
 
   assert.match(profileJs, /url:\s*'\/api\/mine\/profile'/)
   assert.match(profileJs, /method:\s*'PUT'/)
-  assert.match(profileJs, /\/api\/auth\/avatar/)
+  assert.match(profileJs, /uploadAvatar/)
+  assert.match(avatarJs, /\/api\/auth\/avatar/)
+  assert.match(avatarJs, /TOKEN_STORAGE_KEY/)
   assert.match(profileJs, /url:\s*'\/api\/auth\/account\/cancel'/)
   assert.match(profileJs, /wx\.showModal/)
-  assert.match(profileJs, /TOKEN_STORAGE_KEY/)
+})
+
+test('basic profile avatar picker only previews and save uploads the selected image', () => {
+  const profileJs = fs.readFileSync(profileJsPath, 'utf8')
+
+  assert.match(profileJs, /handleChooseAvatar\(event\)/)
+  assert.match(profileJs, /'form\.avatarUrl': avatarUrl/)
+  assert.doesNotMatch(profileJs, /avatarUploading/)
+  assert.doesNotMatch(profileJs, /const uploadedAvatarUrl = await uploadAvatar\(avatarUrl\)/)
+  assert.match(profileJs, /const avatarUrl = await uploadAvatar\(payload\.avatarUrl\)/)
+  assert.match(profileJs, /data:\s*Object\.assign\(\{\}, payload, \{[\s\S]*avatarUrl/)
 })
 
 test('basic profile fields show character limit counters', () => {

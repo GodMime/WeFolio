@@ -20,7 +20,13 @@ const indexWxss = fs.readFileSync(
   'utf8'
 )
 
-const BACKGROUND_IMAGE_URL = 'https://cos.we-folio.dingchenyong.top/backgroud.jpeg'
+const STATIC_ASSET_ORIGIN = 'https://cos.we-folio.dingchenyong.top'
+const BACKGROUND_IMAGE_URL = `${STATIC_ASSET_ORIGIN}/system/backgroud.jpeg`
+const LOGO_IMAGE_URL = `${STATIC_ASSET_ORIGIN}/system/logo.png`
+const LEGACY_STATIC_ASSET_URLS = [
+  `${STATIC_ASSET_ORIGIN}/backgroud.jpeg`,
+  `${STATIC_ASSET_ORIGIN}/logo.png`
+]
 
 function readRule(selector) {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -40,7 +46,7 @@ test('login segmented tabs use flex columns for skyline compatibility', () => {
 test('login welcome icon uses product logo image', () => {
   const avatarRule = readRule('.welcome-avatar')
 
-  assert.match(loginWxml, /src="https:\/\/cos\.we-folio\.dingchenyong\.top\/logo\.png"/)
+  assert.ok(loginWxml.includes(`src="${LOGO_IMAGE_URL}"`))
   assert.match(loginWxml, /class="welcome-avatar"/)
   assert.match(loginWxml, /mode="aspectFill"/)
   assert.match(avatarRule, /overflow:\s*hidden/)
@@ -49,6 +55,19 @@ test('login welcome icon uses product logo image', () => {
 test('login hero uses configured background image', () => {
   assert.ok(loginWxml.includes(`src="${BACKGROUND_IMAGE_URL}"`))
   assert.match(loginWxml, /class="hero-image"/)
+})
+
+test('miniapp pages use system static asset urls', () => {
+  const staticAssetConsumers = [loginWxml, indexWxss]
+
+  assert.ok(staticAssetConsumers.some((content) => content.includes(BACKGROUND_IMAGE_URL)))
+  assert.ok(staticAssetConsumers.some((content) => content.includes(LOGO_IMAGE_URL)))
+
+  for (const content of staticAssetConsumers) {
+    for (const legacyUrl of LEGACY_STATIC_ASSET_URLS) {
+      assert.ok(!content.includes(legacyUrl), `legacy asset url remains: ${legacyUrl}`)
+    }
+  }
 })
 
 test('login layout keeps content at the bottom while hero resizes', () => {
@@ -219,6 +238,16 @@ test('register flow sends phone code and optional plugin openpid code to backend
   assert.match(loginJs, /pluginLoginCode/)
   assert.match(loginJs, /nickname/)
   assert.match(loginJs, /avatarUrl/)
+})
+
+test('register flow uploads avatar only after login token is stored', () => {
+  assert.match(loginJs, /avatarUrl:\s*''/)
+  assert.match(loginJs, /const preparedAvatarFilePath = options\.phoneCode/)
+  assert.match(loginJs, /await prepareAvatarFilePath\(this\.data\.avatarUrl\)/)
+  assert.match(
+    loginJs,
+    /setToken\(response\.token\)[\s\S]*const avatarUrl = await uploadAvatar\(preparedAvatarFilePath,[\s\S]*skipPrepare:\s*true[\s\S]*url:\s*'\/api\/mine\/profile'/
+  )
 })
 
 test('wechat authorization tab only shows the design CTA', () => {

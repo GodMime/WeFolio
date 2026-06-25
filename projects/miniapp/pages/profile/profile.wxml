@@ -28,7 +28,7 @@
             <view class="profile-name">{{profile.displayName}}</view>
             <view class="profile-code">{{profile.uniqueCode}}</view>
           </view>
-          <button class="secondary-button avatar-button" open-type="chooseAvatar" bindchooseavatar="handleChooseAvatar">更换头像</button>
+          <button class="secondary-button avatar-button" open-type="chooseAvatar" bindchooseavatar="handleChooseAvatar" disabled="{{saving}}">更换头像</button>
         </view>
 
         <view class="panel profile-fields-panel">

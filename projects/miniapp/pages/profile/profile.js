@@ -1,5 +1,6 @@
-const { DEFAULT_BASE_URL, TOKEN_STORAGE_KEY, request } = require('../../utils/request')
+const { request } = require('../../utils/request')
 const { clearToken, handleAuthRequired, hasLocalToken } = require('../../utils/session')
+const { uploadAvatar } = require('../../utils/avatar')
 const {
   DEFAULT_TAG_COLOR,
   TAG_COLOR_OPTIONS,
@@ -38,51 +39,6 @@ function formFromProfile(profile) {
 
 function trimText(value) {
   return (value || '').trim()
-}
-
-function isRemoteUrl(url) {
-  return /^https?:\/\//.test(url || '')
-}
-
-function uploadAvatar(filePath) {
-  if (!filePath || isRemoteUrl(filePath)) {
-    return Promise.resolve(filePath || '')
-  }
-
-  const token = wx.getStorageSync(TOKEN_STORAGE_KEY)
-  const header = token ? { Authorization: `Bearer ${token}` } : {}
-
-  return new Promise((resolve, reject) => {
-    wx.uploadFile({
-      url: `${DEFAULT_BASE_URL}/api/auth/avatar`,
-      filePath,
-      name: 'file',
-      header,
-      success(response) {
-        let body = {}
-        try {
-          body = JSON.parse(response.data || '{}')
-        } catch (error) {
-          reject(new Error('头像上传响应解析失败'))
-          return
-        }
-        if (response.statusCode === 401) {
-          const error = new Error(body.message || '未登录')
-          error.authRequired = true
-          reject(error)
-          return
-        }
-        if (response.statusCode < 200 || response.statusCode >= 300 || body.success === false) {
-          reject(new Error(body.message || '头像上传失败'))
-          return
-        }
-        resolve(body.data && body.data.url ? body.data.url : '')
-      },
-      fail(error) {
-        reject(new Error(error && error.errMsg ? error.errMsg : '头像上传失败'))
-      }
-    })
-  })
 }
 
 Page({

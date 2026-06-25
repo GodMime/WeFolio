@@ -123,7 +123,7 @@ Page({
 
   handleRechargeTap() {
     wx.showToast({
-      title: '一期支持后台手动加积分',
+      title: '体验版暂时只支持后台加积分',
       icon: 'none'
     })
   },

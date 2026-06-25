@@ -40,8 +40,15 @@ test('visit records page files match prototype structure and backend endpoint', 
   assert.match(visitsWxml, /近 7 日访问趋势/)
   assert.match(visitsWxml, /访问明细/)
   assert.match(visitsWxml, /class="\{\{item\.followToneClass\}\}"/)
+  assert.match(visitsWxml, /<canvas[^>]*id="trendLineCanvas"[^>]*class="trend-line-canvas"[^>]*type="2d"/)
+  assert.match(visitsJs, /drawTrendLineChart/)
+  assert.match(visitsJs, /createSelectorQuery\(\)\.in\(this\)/)
+  assert.match(visitsJs, /ctx\.lineTo/)
+  assert.match(visitsJs, /ctx\.arc/)
+  assert.match(visitsJs, /ctx\.fillText\(String\(point\.value\)/)
   assert.match(visitsWxss, /\.visit-list/)
-  assert.match(visitsWxss, /\.trend-bars/)
+  assert.match(visitsWxss, /\.trend-line-canvas/)
+  assert.doesNotMatch(visitsWxss, /\.trend-bars/)
 })
 
 test('visit records detail rows keep avatar, copy and follow status in one scan row', () => {
