@@ -1,0 +1,57 @@
+<view class="page-shell team-invitations-page">
+  <navigation-bar title="团队邀请" back="{{true}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+
+  <scroll-view class="invitation-scroll" scroll-y type="list">
+    <view class="invitation-content">
+      <block wx:if="{{loading}}">
+        <view class="panel skeleton-panel"></view>
+      </block>
+
+      <block wx:elif="{{errorMessage}}">
+        <view class="empty-state">
+          <view class="empty-icon"></view>
+          <view class="empty-title">加载失败</view>
+          <view class="empty-desc">{{errorMessage}}</view>
+          <button class="primary-button compact" bindtap="handleRetry">重试</button>
+        </view>
+      </block>
+
+      <block wx:else>
+        <view class="panel invitation-panel">
+          <view class="team-row">
+            <view class="team-logo">
+              <image wx:if="{{invitation.teamAvatarUrl}}" class="team-logo-image" src="{{invitation.teamAvatarUrl}}" mode="aspectFill"></image>
+              <view wx:else class="team-logo-fallback">TM</view>
+            </view>
+            <view class="team-copy">
+              <view class="team-name">{{invitation.titleText}}</view>
+              <view class="team-summary">{{invitation.summaryText}}</view>
+            </view>
+            <view class="role-pill {{invitation.statusTone}}">{{invitation.joinStatusText}}</view>
+          </view>
+
+          <view class="info-list">
+            <view class="info-row">
+              <view class="info-label">团队角色</view>
+              <view class="info-value">{{invitation.roleText}}</view>
+            </view>
+            <view class="info-row">
+              <view class="info-label">职业身份</view>
+              <view class="info-value">{{invitation.profession}}</view>
+            </view>
+            <view class="info-row">
+              <view class="info-label">引用权限</view>
+              <view class="info-value">{{invitation.permissionText}}</view>
+            </view>
+          </view>
+        </view>
+
+        <view wx:if="{{invitation.canRespond}}" class="invitation-actions">
+          <button class="secondary-button action-button" loading="{{saving}}" bindtap="handleReject">拒绝</button>
+          <button class="primary-button action-button" loading="{{saving}}" bindtap="handleAccept">接受</button>
+        </view>
+        <view wx:else class="processed-note">邀请已处理</view>
+      </block>
+    </view>
+  </scroll-view>
+</view>

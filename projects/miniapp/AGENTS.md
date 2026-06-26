@@ -4,12 +4,12 @@
 
 ## 模块定位
 
-`projects/miniapp/` 是 WeFolio（映期Folio）的微信小程序端，面向婚庆、演艺服务从业者，承接维护者登录、我的工作台、基础信息、访问记录、团队列表和团队维护等一期能力，并逐步补齐 PRD 中的作品、作品集、档期、联系线索和积分页面。
+`projects/miniapp/` 是 WeFolio（映期Folio）的微信小程序端，面向婚庆、演艺服务从业者，承接维护者登录、我的工作台、基础信息、访问记录、团队列表、团队维护、成员邀请、我的消息等一期能力，并逐步补齐 PRD 中的作品、作品集、档期、联系线索、积分充值和访客端页面。
 
 权威业务与设计来源：
 
-- 产品规则：`../../docs/PRD.md`
-- 视觉与交互：`../../design/prototype.html`
+- 产品规则：`../../docs/PRD.md`，当前 PRD 已覆盖到“我的消息”、团队邀请、积分与作品/作品集/档期闭环。
+- 视觉与交互：`../../design/prototype.html`，当前设计稿含登录、我的、积分、团队、作品、作品集、访客页、档期等 29 个页面。
 - 接口契约：`../java/wefolio-java-runtime/` 中的 Controller、DTO 和 Service
 
 当前小程序使用 Skyline 渲染引擎和 glass-easel 组件框架，配置见 `app.json`：
@@ -44,22 +44,26 @@ node --test tests/*.test.js
 
 ```text
 app.js                         全局小程序配置，当前含线上 API baseUrl
-app.json                       页面注册、Skyline/glass-easel 配置、自定义导航
+app.json                       页面注册、Skyline/glass-easel 配置、自定义导航、懒加载
 app.wxss                       全局 page、button、page-shell 基础样式
 components/navigation-bar/     自定义顶部导航栏
 pages/login/                   登录/注册页
 pages/index/                   “我的”工作台，当前作为主入口页
 pages/profile/                 基础信息维护页
 pages/visits/                  访问记录页
+pages/messages/                我的消息列表、筛选、单条/批量/全量已读
 pages/teams/                   我的团队列表与创建团队
 pages/team-maintenance/        团队资料和成员查看/维护页
+pages/team-member-add/         按个人唯一码查询候选人并发送团队邀请
+pages/team-invitations/        团队邀请详情、接受、拒绝
 utils/request.js               REST 请求封装、Response 解包、Bearer token 注入
 utils/session.js               登录态读写、401 处理和微信登录接口封装
 utils/avatar.js                个人头像压缩与上传
 utils/team-avatar.js           团队图标上传
 utils/dashboard.js             我的工作台数据归一化
+utils/messages.js              消息列表、未读徽标和已读 payload 归一化
 utils/profile.js               基础信息、标签色板和表单校验
-utils/teams.js                 团队列表/详情归一化和表单校验
+utils/teams.js                 团队列表/详情、成员邀请、邀请确认归一化和表单校验
 utils/visits.js                访问记录归一化
 tests/                         node:test 单元测试与静态布局测试
 ```
@@ -71,20 +75,22 @@ tests/                         node:test 单元测试与静态布局测试
 当前小程序已落地：
 
 - 登录页：注册、微信授权登录两个入口；注册依赖微信头像、昵称、手机号授权和可选推荐码。
-- 我的页：个人摘要、唯一码复制、积分余额、三项指标、访问记录入口、我的团队入口、底部四项导航占位。
+- 我的页：个人摘要、唯一码复制、积分余额、三项指标、访问记录入口、我的团队入口、我的消息未读入口、底部四项导航占位。
 - 基础信息页：头像、姓名/艺名、职业、服务城市、个人简介、标签色板、退出登录、注销账号。
 - 访问记录页：统计指标、近 7 日趋势 canvas、来源和行为摘要列表。
 - 团队列表页：团队摘要、团队列表、创建团队展开表单、团队图标上传后回写。
-- 团队维护页：团队资料编辑、成员搜索、加入状态筛选、成员状态标签。
+- 团队维护页：团队资料编辑、成员搜索、加入状态筛选、成员状态标签、拥有者添加成员入口。
+- 添加团队成员页：按个人唯一码查询候选人，选择管理者/普通成员，设置团队作品集引用权限并发送邀请。
+- 团队邀请页：从系统消息 actionUrl 进入，展示邀请详情、权限说明，支持接受或拒绝。
+- 我的消息页：全部/未读/团队/积分筛选，单条已读、选中未读批量已读、当前分类全量已读。
 
 仍是占位或未接入：
 
 - 底部导航中的“作品 / 作品集 / 档期”页面。
-- 充值按钮与完整积分页。
-- 团队添加成员流程。
+- 充值按钮、完整积分页、充值页和积分规则页；后端已有积分概览、流水、试算接口，小程序页面尚未接入。
 - PRD 中的作品管理、标准/高级作品集、访客端、档期维护、联系线索、微信支付等后续模块。
 
-实现未落地模块前，先对照 `../../docs/PRD.md` 的迭代规划和 `../../design/prototype.html` 的页面编号；若设计稿缺失，以 PRD 业务规则和通用状态要求为验收依据。
+实现未落地模块前，先对照 `../../docs/PRD.md` 的迭代规划和 `../../design/prototype.html` 的页面编号；若设计稿缺失，以 PRD 业务规则和通用状态要求为验收依据。涉及新接口时先查后端 Controller、DTO、Service 和 migration，不要在小程序端自行虚构字段或扣费规则。
 
 ## 前后端接口约定
 
@@ -120,9 +126,16 @@ tests/                         node:test 单元测试与静态布局测试
 | 访问记录 | `GET /api/mine/visits` | `MineController` |
 | 团队列表/创建 | `GET/POST /api/mine/teams` | `MineTeamController` |
 | 团队详情/保存 | `GET/PUT /api/mine/teams/{teamId}` | `MineTeamController` |
+| 团队成员候选查询 | `GET /api/mine/teams/{teamId}/member-candidate` | `MineTeamController` |
+| 邀请团队成员 | `POST /api/mine/teams/{teamId}/members` | `MineTeamController` |
+| 团队邀请详情/接受/拒绝 | `GET /api/mine/team-invitations/{memberId}`、`POST /api/mine/team-invitations/{memberId}/accept`、`POST /api/mine/team-invitations/{memberId}/reject` | `MineTeamController` |
 | 团队图标上传 | `POST /api/mine/teams/{teamId}/avatar` | `MineTeamController` |
+| 消息列表 | `GET /api/mine/messages` | `MineMessageController` |
+| 消息未读数 | `GET /api/mine/messages/unread-count` | `MineMessageController` |
+| 消息已读 | `PUT /api/mine/messages/read`、`PUT /api/mine/messages/read-all` | `MineMessageController` |
+| 积分概览/流水/试算 | `GET /api/mine/points`、`GET /api/mine/points/transactions`、`POST /api/mine/points/calculate` | `MinePointController` |
 
-新增接口时优先从后端 Controller 和 DTO 获取字段名，不要根据 PRD 自行猜字段。后端倾向下发展示文案和样式 token，例如 `roleText`、`memberCountText`、`statusTone`、`followTone`；小程序只做空值兼容和必要兜底。
+新增接口时优先从后端 Controller 和 DTO 获取字段名，不要根据 PRD 自行猜字段。后端倾向下发展示文案、动作路径和样式 token，例如 `roleText`、`memberCountText`、`statusTone`、`userStatusTone`、`followTone`、`actionUrl`；小程序只做空值兼容和必要兜底。
 
 ## 登录与会话
 
@@ -186,7 +199,7 @@ if (!hasLocalToken()) {
 
 页面逻辑优先沿用当前结构：
 
-1. `data` 中放安全默认值，例如 `normalizeDashboard({})`、`normalizeTeamList({})`。
+1. `data` 中放安全默认值，例如 `normalizeDashboard({})`、`normalizeTeamList({})`、`normalizeMessageList({})`。
 2. `onLoad` 或 `onShow` 调 `bootstrap()`。
 3. `bootstrap()` 先做 `hasLocalToken()`，再请求后端。
 4. 页面保持 `loading`、`errorMessage`、内容三态。
@@ -217,11 +230,22 @@ if (!hasLocalToken()) {
 
 - 团队名称必填，最大 100 字。
 - 团队简介最大 1000 字。
-- 当前角色以后端 `role` 和 `canMaintain` 为准；前端隐藏按钮只是体验优化，不能视作权限来源。
+- 当前角色以后端 `role`、`canMaintain` 和 `canManageMembers` 为准；前端隐藏按钮只是体验优化，不能视作权限来源。
 - `OWNER` 和 `MANAGER` 可维护团队资料，`MEMBER` 只查看。
+- 只有 `OWNER` 可查询成员候选人、发送邀请、维护成员权限；添加成员页不能提供拥有者角色选择。
+- 邀请成员只允许 `MANAGER` 或 `MEMBER`，团队内职业最大 50 字；引用权限默认与设计稿一致：个人作品集和头像资料开启，个人作品素材关闭。
 - 团队列表只展示后端返回的已加入团队；待确认等状态在维护页成员列表展示。
+- 团队邀请消息跳转到 `/pages/team-invitations/team-invitations?memberId=...`，邀请页只处理当前登录用户自己的邀请。
 - 成员列表搜索在本地按 `displayName`、`profession`、`uniqueCode` 过滤。
 - `statusTone`、`userStatusTone` 直接映射 `.role-pill.teal/.amber/.muted` 等样式 token。
+
+消息：
+
+- 消息均为系统消息，不做私聊、回复或会话能力。
+- 筛选项固定为全部、未读、团队、积分，对应 `utils/messages.js` 中的 `FILTER_QUERY`。
+- 单条/批量已读只提交未读消息 ID，payload 为 `{ messageIds: [...] }`。
+- 全量已读在全部筛选下提交空对象；团队或积分筛选下提交 `{ category: 'TEAM'|'POINT' }`。
+- 列表中的 `actionUrl` 由后端生成，团队邀请跳转到邀请处理页；小程序不在消息列表里直接接受或拒绝邀请。
 
 访问记录：
 
@@ -232,6 +256,9 @@ if (!hasLocalToken()) {
 
 积分与作品集：
 
+- “我的”页只展示工作台返回的积分摘要和低余额提醒；完整积分页接入前，充值按钮保持明确的体验版提示。
+- 积分概览、流水和试算接口已有后端实现，新增页面时优先对接 `MinePointController`，不要在前端自行计算扣费。
+- 创建团队会消耗积分并由后端校验余额、初始化团队 COS 目录，小程序只展示后端错误。
 - 团队没有积分账户，团队作品集访问不扣积分。
 - 个人作品集余额不足时，访客端只展示 “UNDER MAINTENANCE / 维护中”，不得暴露维护者余额。
 - 预览模式必须有明确标识并由后端排除访问统计和积分消耗，不能只依赖前端不发事件。
@@ -241,15 +268,16 @@ if (!hasLocalToken()) {
 
 以 `design/prototype.html` 为视觉基准，并尊重现有 WXSS：
 
-- 页面根节点使用 `.page-shell` 和页面级 class。
+- 页面根节点使用 `.page-shell` 和页面级 class，例如 `.messages-page`、`.team-invitations-page`。
 - 页面主体使用 `scroll-view`，当前列表型页面设置 `scroll-y type="list"`。
 - 自定义导航统一使用 `<navigation-bar>`，一级 tab 页面不展示返回按钮，二级页面展示返回。
 - 主色以深墨 `#17202a`、青绿 `#0f766e`、湖蓝 `#2d5f9a`、琥珀 `#8a4b09` 和浅背景 `#f5f7fb` 为主。
 - 组件样式沿用 `.panel`、`.metric-grid`、`.primary-button`、`.secondary-button`、`.role-pill`、`.skeleton-panel` 等命名。
 - 登录页 segmented tabs 当前用 flex 兼容 Skyline，不要改成 CSS grid。
+- 消息筛选、团队角色选择、权限开关等横向控件优先使用 flex，避免 Skyline 下 grid 兼容差异。
 - 需要动画展开的区域保持节点常驻，用 `max-height/opacity/transform/pointer-events` 切换，避免 `wx:if` 导致无法过渡。
 - 底部主导航固定为“档期 / 作品 / 作品集 / 我的”，图标 + 文字，当前仅“我的”可用。
-- 静态系统资源使用 `https://cos.we-folio.dingchenyong.top/system/...`，不要退回旧 OSS URL 或无 `/system/` 的 COS 路径。
+- 静态系统资源使用 `https://cos.we-folio.dingchenyong.top/system/...`，当前包括访客记录、团队、消息等图标；不要退回旧 OSS URL 或无 `/system/` 的 COS 路径。
 - 按钮和行项目要保证足够点击区域；用于删除、返回等图标触发器可使用 `view` 加 `aria-role="button"` 和清晰 `aria-label`。
 
 改 WXML/WXSS 时，优先运行相关 layout 测试，因为它们锁定了 Skyline 兼容、动画挂载、按钮宽度、静态资源和图标结构。
@@ -271,6 +299,7 @@ node --test tests/*.test.js
 - 登录页布局和注册流程：`tests/login-layout.test.js`
 - 我的页和底部图标：`tests/dashboard.test.js`、`tests/mine-layout.test.js`、`tests/tabbar-icons.test.js`
 - 基础信息：`tests/profile.test.js`、`tests/profile-layout.test.js`、`tests/avatar.test.js`
+- 消息中心：`tests/messages.test.js`、`tests/messages-layout.test.js`
 - 团队：`tests/teams.test.js`、`tests/team-layout.test.js`、`tests/team-avatar.test.js`
 - 访问记录：`tests/visits.test.js`、`tests/visits-layout.test.js`
 

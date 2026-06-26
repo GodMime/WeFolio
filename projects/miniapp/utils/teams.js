@@ -1,11 +1,26 @@
 const TEAM_NAME_MAX_LENGTH = 100
 const TEAM_INTRO_MAX_LENGTH = 1000
 const TEAM_UNIQUE_CODE_DISPLAY_LENGTH = 10
+const MEMBER_PROFESSION_MAX_LENGTH = 50
 
 const ROLE_TEXT = {
   OWNER: '拥有者',
   MANAGER: '管理者',
   MEMBER: '普通成员'
+}
+
+const ROLE_SUMMARY = {
+  MANAGER: '作品集管理、预览、分享',
+  MEMBER: '仅预览、分享'
+}
+
+const DEFAULT_MEMBER_INVITE_FORM = {
+  uniqueCode: '',
+  role: 'MEMBER',
+  profession: '',
+  allowPortfolio: true,
+  allowProfile: true,
+  allowWorks: false
 }
 
 // 后端历史数据或测试桩可能传字符串数字，这里统一转成安全数字。
@@ -17,6 +32,13 @@ function toNumber(value) {
 // 表单提交前统一去除首尾空格，保持小程序和后端校验口径一致。
 function trimText(value) {
   return String(value || '').trim()
+}
+
+function toBoolean(value, fallback = false) {
+  if (value === undefined || value === null) {
+    return fallback
+  }
+  return Boolean(value)
 }
 
 // 角色文案优先使用后端给出的 display 文案，缺失时再由小程序兜底。
@@ -117,6 +139,7 @@ function normalizeTeamInfo(raw = {}) {
     memberText: computedMemberText,
     memberCountText: computedMemberText,
     canMaintain: Boolean(raw.canMaintain),
+    canManageMembers: Boolean(raw.canManageMembers),
     codeText: `团队唯一码 ${uniqueCode}`
   }
 }
@@ -152,6 +175,9 @@ function normalizeMember(raw = {}) {
     userStatus,
     userStatusText,
     userStatusTone: raw.userStatusTone || 'muted',
+    allowPortfolio: toBoolean(raw.allowPortfolio),
+    allowProfile: toBoolean(raw.allowProfile),
+    allowWorks: toBoolean(raw.allowWorks),
     // ACTIVE 是正常账号状态，不需要额外标签；DISABLED/资料缺失/未知状态才额外展示。
     userStatusVisible: Boolean(userStatus && userStatus !== 'ACTIVE'),
     summaryText: `${profession} · ${uniqueCode} · ${computedRoleText}`
@@ -199,12 +225,135 @@ function buildTeamFieldCounters(form = {}) {
   }
 }
 
+// 候选人查询只需要个人唯一码，页面输入可包含空格，提交前统一修剪。
+function buildMemberCandidateQuery(uniqueCode) {
+  return {
+    uniqueCode: trimText(uniqueCode)
+  }
+}
+
+// 添加成员页候选人卡片归一化，既承接后端 canInvite，也兜底生成摘要。
+function normalizeTeamMemberCandidate(raw = {}) {
+  const profession = raw.profession || '成员'
+  const city = raw.city || ''
+  const nickname = raw.nickname || '微信用户'
+  const displayName = raw.displayName || (profession ? `${nickname} · ${profession}` : nickname)
+  return {
+    userId: raw.userId || null,
+    uniqueCode: raw.uniqueCode || '',
+    nickname,
+    initial: displayName.slice(0, 1),
+    displayName,
+    avatarUrl: raw.avatarUrl || '',
+    profession,
+    city,
+    userStatus: raw.userStatus || '',
+    memberId: raw.memberId || null,
+    existingJoinStatus: raw.existingJoinStatus || '',
+    existingJoinStatusText: raw.existingJoinStatusText || '',
+    canInvite: Boolean(raw.canInvite),
+    reason: raw.reason || (raw.canInvite ? '可添加' : '不可添加'),
+    statusTone: raw.canInvite ? 'teal' : 'muted',
+    summaryText: `${city || '未填写城市'} · ${profession}`
+  }
+}
+
+function normalizeMemberInviteForm(form = {}) {
+  return Object.assign({}, DEFAULT_MEMBER_INVITE_FORM, form, {
+    uniqueCode: trimText(form.uniqueCode),
+    profession: trimText(form.profession)
+  })
+}
+
+function validateMemberInviteForm(form = {}, candidate = {}) {
+  const normalized = normalizeMemberInviteForm(form)
+  if (!normalized.uniqueCode) {
+    return { valid: false, message: '请输入个人唯一码' }
+  }
+  if (!candidate || !candidate.canInvite) {
+    return { valid: false, message: candidate && candidate.reason ? candidate.reason : '请先匹配可添加成员' }
+  }
+  if (!ROLE_TEXT[normalized.role] || normalized.role === 'OWNER') {
+    return { valid: false, message: '请选择团队角色' }
+  }
+  if (normalized.profession.length > MEMBER_PROFESSION_MAX_LENGTH) {
+    return { valid: false, message: `职业身份不能超过 ${MEMBER_PROFESSION_MAX_LENGTH} 个字` }
+  }
+  return { valid: true, message: '' }
+}
+
+// 添加成员提交载荷：权限默认与原型一致，个人作品集和头像资料开启，个人作品素材关闭。
+function buildMemberInvitePayload(form = {}) {
+  const normalized = normalizeMemberInviteForm(form)
+  return {
+    uniqueCode: normalized.uniqueCode,
+    role: normalized.role === 'MANAGER' ? 'MANAGER' : 'MEMBER',
+    profession: normalized.profession,
+    allowPortfolio: toBoolean(normalized.allowPortfolio, true),
+    allowProfile: toBoolean(normalized.allowProfile, true),
+    allowWorks: toBoolean(normalized.allowWorks, false)
+  }
+}
+
+function permissionText(invitation = {}) {
+  const permissions = []
+  if (invitation.allowPortfolio) {
+    permissions.push('个人作品集')
+  }
+  if (invitation.allowProfile) {
+    permissions.push('头像资料')
+  }
+  if (invitation.allowWorks) {
+    permissions.push('个人作品素材')
+  }
+  return permissions.length ? permissions.join('、') : '未开放引用权限'
+}
+
+// 邀请处理页归一化，页面只消费文案和按钮状态。
+function normalizeTeamInvitation(raw = {}) {
+  const role = raw.role || 'MEMBER'
+  const roleDisplay = roleText(role, raw.roleText)
+  const allowPortfolio = toBoolean(raw.allowPortfolio)
+  const allowProfile = toBoolean(raw.allowProfile)
+  const allowWorks = toBoolean(raw.allowWorks)
+  const invitation = {
+    memberId: raw.memberId || raw.id || null,
+    teamId: raw.teamId || null,
+    teamUniqueCode: raw.teamUniqueCode || '',
+    teamName: raw.teamName || '团队邀请',
+    teamAvatarUrl: raw.teamAvatarUrl || '',
+    inviterUserId: raw.inviterUserId || null,
+    inviterName: raw.inviterName || '团队拥有者',
+    role,
+    roleText: roleDisplay,
+    roleSummary: ROLE_SUMMARY[role] || ROLE_SUMMARY.MEMBER,
+    profession: raw.profession || '成员',
+    allowPortfolio,
+    allowProfile,
+    allowWorks,
+    joinStatus: raw.joinStatus || 'PENDING_CONFIRMATION',
+    joinStatusText: raw.joinStatusText || '待确认',
+    statusTone: raw.statusTone || 'amber',
+    canRespond: Boolean(raw.canRespond)
+  }
+  invitation.titleText = invitation.teamName
+  invitation.summaryText = `${invitation.inviterName}邀请你以${roleDisplay}加入`
+  invitation.permissionText = permissionText(invitation)
+  return invitation
+}
+
 module.exports = {
+  DEFAULT_MEMBER_INVITE_FORM,
+  buildMemberCandidateQuery,
+  buildMemberInvitePayload,
   TEAM_INTRO_MAX_LENGTH,
   TEAM_NAME_MAX_LENGTH,
   buildTeamFieldCounters,
   buildTeamPayload,
+  normalizeTeamInvitation,
+  normalizeTeamMemberCandidate,
   normalizeTeamDetail,
   normalizeTeamList,
+  validateMemberInviteForm,
   validateTeamForm
 }

@@ -262,9 +262,15 @@ Page({
   },
 
   handleAddMember() {
-    wx.showToast({
-      title: '添加成员流程接入中',
-      icon: 'none'
+    if (!this.data.detail.team.canManageMembers) {
+      wx.showToast({
+        title: '仅拥有者可添加成员',
+        icon: 'none'
+      })
+      return
+    }
+    wx.navigateTo({
+      url: `/pages/team-member-add/team-member-add?teamId=${this.data.teamId}`
     })
   }
 })

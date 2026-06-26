@@ -1,0 +1,119 @@
+const { request } = require('../../utils/request')
+const { handleAuthRequired, hasLocalToken } = require('../../utils/session')
+const { normalizeTeamInvitation } = require('../../utils/teams')
+
+const LOGIN_PAGE_URL = '/pages/login/login'
+
+function emptyInvitation() {
+  return normalizeTeamInvitation({})
+}
+
+Page({
+  data: {
+    memberId: null,
+    loading: true,
+    saving: false,
+    errorMessage: '',
+    invitation: emptyInvitation()
+  },
+
+  onLoad(options = {}) {
+    const memberId = Number(options.memberId || options.id)
+    this.setData({
+      memberId: Number.isFinite(memberId) && memberId > 0 ? memberId : null
+    })
+    this.bootstrap()
+  },
+
+  bootstrap() {
+    if (!hasLocalToken()) {
+      wx.redirectTo({
+        url: LOGIN_PAGE_URL
+      })
+      return
+    }
+    if (!this.data.memberId) {
+      this.setData({
+        loading: false,
+        errorMessage: '缺少团队邀请 ID'
+      })
+      return
+    }
+    this.loadInvitation()
+  },
+
+  async loadInvitation() {
+    this.setData({
+      loading: true,
+      errorMessage: ''
+    })
+    try {
+      const response = await request({
+        url: `/api/mine/team-invitations/${this.data.memberId}`
+      })
+      this.setData({
+        invitation: normalizeTeamInvitation(response),
+        loading: false
+      })
+    } catch (error) {
+      if (error && error.authRequired) {
+        handleAuthRequired(error.message)
+        return
+      }
+      this.setData({
+        loading: false,
+        errorMessage: error && error.message ? error.message : '团队邀请加载失败'
+      })
+    }
+  },
+
+  handleRetry() {
+    this.bootstrap()
+  },
+
+  async handleAccept() {
+    await this.respondInvitation({
+      url: `/api/mine/team-invitations/${this.data.memberId}/accept`,
+      method: 'POST'
+    }, '已加入团队')
+  },
+
+  async handleReject() {
+    await this.respondInvitation({
+      url: `/api/mine/team-invitations/${this.data.memberId}/reject`,
+      method: 'POST'
+    }, '已拒绝邀请')
+  },
+
+  async respondInvitation(requestOptions, successTitle) {
+    if (this.data.saving || !this.data.invitation.canRespond) {
+      return
+    }
+    this.setData({
+      saving: true
+    })
+    try {
+      const response = await request(requestOptions)
+      this.setData({
+        invitation: normalizeTeamInvitation(response),
+        saving: false
+      })
+      wx.showToast({
+        title: successTitle,
+        icon: 'success'
+      })
+    } catch (error) {
+      if (error && error.authRequired) {
+        handleAuthRequired(error.message)
+        return
+      }
+      this.setData({
+        saving: false
+      })
+      wx.showToast({
+        title: error && error.message ? error.message : '处理失败',
+        icon: 'none'
+      })
+    }
+  }
+})

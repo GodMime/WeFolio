@@ -5,7 +5,10 @@ import com.jxc.wefolio.common.Response;
 import com.jxc.wefolio.dto.FileUploadResponse;
 import com.jxc.wefolio.dto.MineTeamCreateRequest;
 import com.jxc.wefolio.dto.MineTeamDetailResponse;
+import com.jxc.wefolio.dto.MineTeamInvitationResponse;
 import com.jxc.wefolio.dto.MineTeamListResponse;
+import com.jxc.wefolio.dto.MineTeamMemberCandidateResponse;
+import com.jxc.wefolio.dto.MineTeamMemberInviteRequest;
 import com.jxc.wefolio.dto.MineTeamUpdateRequest;
 import com.jxc.wefolio.service.MineTeamService;
 import lombok.RequiredArgsConstructor;
@@ -87,6 +90,71 @@ public class MineTeamController {
         log.info("保存团队资料: teamId={}, name={}, intro={}, avatarUrl={}",
                 teamId, request.getName(), request.getIntro(), request.getAvatarUrl());
         return Response.success(mineTeamService.updateTeam(teamId, request));
+    }
+
+    /**
+     * 查询团队成员候选人。
+     *
+     * @param teamId 团队 ID
+     * @param uniqueCode 个人唯一码
+     * @return 成员候选人
+     */
+    @GetMapping("/api/mine/teams/{teamId}/member-candidate")
+    public Response<MineTeamMemberCandidateResponse> memberCandidate(
+            @PathVariable Long teamId,
+            @RequestParam("uniqueCode") String uniqueCode
+    ) {
+        return Response.success(mineTeamService.getMemberCandidate(teamId, uniqueCode));
+    }
+
+    /**
+     * 邀请成员加入团队。
+     *
+     * @param teamId 团队 ID
+     * @param request 成员邀请请求
+     * @return 最新团队维护详情
+     */
+    @PostMapping("/api/mine/teams/{teamId}/members")
+    public Response<MineTeamDetailResponse> inviteMember(
+            @PathVariable Long teamId,
+            @RequestBody MineTeamMemberInviteRequest request
+    ) {
+        log.info("邀请团队成员: teamId={}, uniqueCode={}, role={}",
+                teamId, request.getUniqueCode(), request.getRole());
+        return Response.success(mineTeamService.inviteMember(teamId, request));
+    }
+
+    /**
+     * 获取团队邀请详情。
+     *
+     * @param memberId 团队成员关系 ID
+     * @return 团队邀请详情
+     */
+    @GetMapping("/api/mine/team-invitations/{memberId}")
+    public Response<MineTeamInvitationResponse> invitation(@PathVariable Long memberId) {
+        return Response.success(mineTeamService.getInvitation(memberId));
+    }
+
+    /**
+     * 接受团队邀请。
+     *
+     * @param memberId 团队成员关系 ID
+     * @return 团队邀请详情
+     */
+    @PostMapping("/api/mine/team-invitations/{memberId}/accept")
+    public Response<MineTeamInvitationResponse> acceptInvitation(@PathVariable Long memberId) {
+        return Response.success(mineTeamService.acceptInvitation(memberId));
+    }
+
+    /**
+     * 拒绝团队邀请。
+     *
+     * @param memberId 团队成员关系 ID
+     * @return 团队邀请详情
+     */
+    @PostMapping("/api/mine/team-invitations/{memberId}/reject")
+    public Response<MineTeamInvitationResponse> rejectInvitation(@PathVariable Long memberId) {
+        return Response.success(mineTeamService.rejectInvitation(memberId));
     }
 
     /**

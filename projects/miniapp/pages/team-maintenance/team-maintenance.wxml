@@ -76,7 +76,7 @@
         <view class="panel team-members-panel">
           <view class="panel-heading">
             <view class="section-title">团队成员</view>
-            <view class="add-member-button" bindtap="handleAddMember" aria-role="button" aria-label="添加团队成员">添加成员</view>
+            <view wx:if="{{detail.team.canManageMembers}}" class="add-member-button" bindtap="handleAddMember" aria-role="button" aria-label="添加团队成员">添加成员</view>
           </view>
           <view wx:if="{{visibleMembers.length}}" class="member-list">
             <view class="member-row" wx:for="{{visibleMembers}}" wx:key="memberId">

@@ -1,0 +1,100 @@
+<view class="page-shell member-add-page">
+  <navigation-bar title="添加成员" back="{{true}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+
+  <scroll-view class="member-add-scroll" scroll-y type="list">
+    <view class="member-add-content">
+      <view wx:if="{{errorMessage}}" class="error-banner">{{errorMessage}}</view>
+
+      <view class="panel stack-panel">
+        <view class="form-row">
+          <view class="label">个人唯一码</view>
+          <view class="lookup-row">
+            <input class="input lookup-input" value="{{uniqueCode}}" bindinput="handleUniqueCodeInput" maxlength="16" placeholder="输入成员个人唯一码" />
+            <button class="secondary-button lookup-button" loading="{{loading}}" bindtap="handleSearchCandidate">匹配</button>
+          </view>
+        </view>
+
+        <view wx:if="{{candidateVisible}}" class="candidate-card">
+          <view class="member-avatar">
+            <image wx:if="{{candidate.avatarUrl}}" class="member-avatar-image" src="{{candidate.avatarUrl}}" mode="aspectFill"></image>
+            <view wx:else class="member-avatar-fallback">{{candidate.initial}}</view>
+          </view>
+          <view class="candidate-copy">
+            <view class="candidate-name">{{candidate.displayName}}</view>
+            <view class="candidate-summary">{{candidate.summaryText}}</view>
+          </view>
+          <view class="role-pill {{candidate.statusTone}}">{{candidate.reason}}</view>
+        </view>
+      </view>
+
+      <view class="panel stack-panel">
+        <view class="form-row">
+          <view class="label">团队角色</view>
+          <view class="segmented two">
+            <button
+              class="segment {{form.role === item.key ? 'active' : ''}}"
+              wx:for="{{roleOptions}}"
+              wx:key="key"
+              data-role="{{item.key}}"
+              bindtap="handleRoleTap"
+            >
+              {{item.label}}
+            </button>
+          </view>
+        </view>
+
+        <view class="form-row">
+          <view class="label">职业身份</view>
+          <input class="input" value="{{form.profession}}" bindinput="handleProfessionInput" maxlength="50" placeholder="用于团队内展示" />
+        </view>
+
+        <view class="form-row">
+          <view class="label">可被团队作品集引用</view>
+          <view class="permission-list">
+            <view
+              class="permission-row {{form.allowPortfolio ? 'active' : ''}}"
+              data-field="allowPortfolio"
+              bindtap="handlePermissionTap"
+              aria-role="checkbox"
+              aria-checked="{{form.allowPortfolio}}"
+            >
+              <view class="permission-check"></view>
+              <view class="permission-label">个人作品集</view>
+            </view>
+            <view
+              class="permission-row {{form.allowProfile ? 'active' : ''}}"
+              data-field="allowProfile"
+              bindtap="handlePermissionTap"
+              aria-role="checkbox"
+              aria-checked="{{form.allowProfile}}"
+            >
+              <view class="permission-check"></view>
+              <view class="permission-label">头像资料</view>
+            </view>
+            <view
+              class="permission-row {{form.allowWorks ? 'active' : ''}}"
+              data-field="allowWorks"
+              bindtap="handlePermissionTap"
+              aria-role="checkbox"
+              aria-checked="{{form.allowWorks}}"
+            >
+              <view class="permission-check"></view>
+              <view class="permission-label">个人作品素材</view>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view class="panel confirm-panel">
+        <view class="row-title">加入确认</view>
+        <view class="role-pill amber">需本人确认</view>
+        <view class="confirm-desc">发送邀请后，成员会在小程序内收到加入确认。确认前仅在管理端展示。</view>
+      </view>
+
+      <view class="button-row">
+        <button class="secondary-button action-button" bindtap="handleCancel">取消</button>
+        <button class="primary-button action-button" loading="{{saving}}" bindtap="handleInviteMember">发送邀请</button>
+      </view>
+    </view>
+  </scroll-view>
+</view>

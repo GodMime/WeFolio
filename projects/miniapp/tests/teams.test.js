@@ -2,8 +2,12 @@ const assert = require('node:assert/strict')
 const test = require('node:test')
 
 const {
+  buildMemberCandidateQuery,
+  buildMemberInvitePayload,
   buildTeamFieldCounters,
   buildTeamPayload,
+  normalizeTeamInvitation,
+  normalizeTeamMemberCandidate,
   normalizeTeamDetail,
   normalizeTeamList,
   validateTeamForm
@@ -65,7 +69,8 @@ test('normalizes team detail response for maintenance page', () => {
       roleText: '拥有者',
       memberCount: 2,
       memberCountText: '2 位成员',
-      canMaintain: true
+      canMaintain: true,
+      canManageMembers: true
     },
     members: [
       {
@@ -77,7 +82,10 @@ test('normalizes team detail response for maintenance page', () => {
         profession: '婚礼司仪',
         roleText: '拥有者',
         joinStatusText: '已加入',
-        statusTone: 'teal'
+        statusTone: 'teal',
+        allowPortfolio: true,
+        allowProfile: true,
+        allowWorks: false
       },
       {
         memberId: 22,
@@ -98,7 +106,11 @@ test('normalizes team detail response for maintenance page', () => {
   assert.equal(detail.team.displayUniqueCode, 'TM2048')
   assert.equal(detail.team.memberText, '2 位成员')
   assert.equal(detail.team.canMaintain, true)
+  assert.equal(detail.team.canManageMembers, true)
   assert.equal(detail.members[0].summaryText, '婚礼司仪 · WF8392 · 拥有者')
+  assert.equal(detail.members[0].allowPortfolio, true)
+  assert.equal(detail.members[0].allowProfile, true)
+  assert.equal(detail.members[0].allowWorks, false)
   assert.equal(detail.members[1].summaryText, '成员 · MU1186 · 管理者')
   assert.equal(detail.members[1].statusTone, 'amber')
   assert.equal(detail.members[1].userStatusVisible, true)
@@ -151,4 +163,72 @@ test('builds team field counters', () => {
     name: '5 / 100',
     intro: '3 / 1000'
   })
+})
+
+test('normalizes member candidate and builds candidate query', () => {
+  const candidate = normalizeTeamMemberCandidate({
+    userId: 8,
+    uniqueCode: 'WF1186',
+    nickname: '乔伊',
+    displayName: '乔伊 · 化妆师',
+    avatarUrl: 'https://cos.example.com/u8.png',
+    profession: '化妆师',
+    city: '上海',
+    canInvite: true,
+    reason: '可添加'
+  })
+
+  assert.equal(candidate.userId, 8)
+  assert.equal(candidate.uniqueCode, 'WF1186')
+  assert.equal(candidate.displayName, '乔伊 · 化妆师')
+  assert.equal(candidate.summaryText, '上海 · 化妆师')
+  assert.equal(candidate.canInvite, true)
+  assert.equal(candidate.reason, '可添加')
+  assert.deepEqual(buildMemberCandidateQuery(' WF1186 '), {
+    uniqueCode: 'WF1186'
+  })
+})
+
+test('builds member invite payload with prototype default permissions', () => {
+  const payload = buildMemberInvitePayload({
+    uniqueCode: ' WF1186 ',
+    role: 'MEMBER',
+    profession: ' 化妆师 ',
+    allowPortfolio: undefined,
+    allowProfile: undefined,
+    allowWorks: undefined
+  })
+
+  assert.deepEqual(payload, {
+    uniqueCode: 'WF1186',
+    role: 'MEMBER',
+    profession: '化妆师',
+    allowPortfolio: true,
+    allowProfile: true,
+    allowWorks: false
+  })
+})
+
+test('normalizes team invitation for accept and reject page', () => {
+  const invitation = normalizeTeamInvitation({
+    memberId: 31,
+    teamId: 100,
+    teamName: '星曜司仪团',
+    inviterName: '林安 · 婚礼司仪',
+    roleText: '普通成员',
+    profession: '化妆师',
+    allowPortfolio: true,
+    allowProfile: true,
+    allowWorks: false,
+    joinStatus: 'PENDING_CONFIRMATION',
+    joinStatusText: '待确认',
+    statusTone: 'amber',
+    canRespond: true
+  })
+
+  assert.equal(invitation.memberId, 31)
+  assert.equal(invitation.titleText, '星曜司仪团')
+  assert.equal(invitation.summaryText, '林安 · 婚礼司仪邀请你以普通成员加入')
+  assert.equal(invitation.permissionText, '个人作品集、头像资料')
+  assert.equal(invitation.canRespond, true)
 })

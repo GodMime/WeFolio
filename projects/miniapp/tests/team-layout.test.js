@@ -23,6 +23,8 @@ test('app registers team pages and mine entry navigates to teams page', () => {
 
   assert.ok(appJson.pages.includes('pages/teams/teams'))
   assert.ok(appJson.pages.includes('pages/team-maintenance/team-maintenance'))
+  assert.ok(appJson.pages.includes('pages/team-member-add/team-member-add'))
+  assert.ok(appJson.pages.includes('pages/team-invitations/team-invitations'))
   assert.match(indexJs, /type === 'teams'[\s\S]*wx\.navigateTo\(\{[\s\S]*url:\s*'\/pages\/teams\/teams'/)
 })
 
@@ -157,13 +159,15 @@ test('team maintenance status filters use Skyline compatible flex columns', () =
 test('team maintenance add member action sits in panel heading as outline pill', () => {
   const pageWxml = readProjectFile('pages/team-maintenance/team-maintenance.wxml')
   const pageWxss = readProjectFile('pages/team-maintenance/team-maintenance.wxss')
+  const pageJs = readProjectFile('pages/team-maintenance/team-maintenance.js')
   const panelHeadingRule = readRule(pageWxss, '.panel-heading')
   const actionRule = readRule(pageWxss, '.add-member-button')
 
   assert.match(
     pageWxml,
-    /class="panel-heading"[\s\S]*class="section-title">团队成员<\/view>\s*<view class="add-member-button" bindtap="handleAddMember" aria-role="button" aria-label="添加团队成员">添加成员<\/view>/
+    /class="panel-heading"[\s\S]*class="section-title">团队成员<\/view>\s*<view wx:if="\{\{detail\.team\.canManageMembers\}\}" class="add-member-button" bindtap="handleAddMember" aria-role="button" aria-label="添加团队成员">添加成员<\/view>/
   )
+  assert.match(pageJs, /url:\s*`\/pages\/team-member-add\/team-member-add\?teamId=\$\{this\.data\.teamId\}`/)
   assert.doesNotMatch(pageWxml, /class="mini-action"/)
   assert.doesNotMatch(pageWxss, /\.mini-action/)
   assert.match(panelHeadingRule, /justify-content:\s*space-between/)
@@ -242,4 +246,44 @@ test('team maintenance page renders editable team profile and member controls', 
   assert.match(pageWxml, /bindtap="handleAddMember"/)
   assert.match(pageWxss, /\.team-members-panel/)
   assert.match(pageWxss, /\.member-row/)
+})
+
+test('team member add page provides candidate lookup role and permission controls', () => {
+  const pageJs = readProjectFile('pages/team-member-add/team-member-add.js')
+  const pageWxml = readProjectFile('pages/team-member-add/team-member-add.wxml')
+  const pageWxss = readProjectFile('pages/team-member-add/team-member-add.wxss')
+  const pageJson = readJson('pages/team-member-add/team-member-add.json')
+
+  assert.equal(pageJson.usingComponents['navigation-bar'], '/components/navigation-bar/navigation-bar')
+  assert.match(pageJs, /url:\s*`\/api\/mine\/teams\/\$\{this\.data\.teamId\}\/member-candidate`/)
+  assert.match(pageJs, /url:\s*`\/api\/mine\/teams\/\$\{this\.data\.teamId\}\/members`/)
+  assert.match(pageJs, /roleOptions:[\s\S]*MANAGER[\s\S]*MEMBER/)
+  assert.match(pageJs, /allowPortfolio:\s*true/)
+  assert.match(pageJs, /allowProfile:\s*true/)
+  assert.match(pageJs, /allowWorks:\s*false/)
+  assert.match(pageWxml, /navigation-bar title="添加成员" back="\{\{true\}\}"/)
+  assert.match(pageWxml, /个人唯一码/)
+  assert.match(pageWxml, /bindtap="handleSearchCandidate"/)
+  assert.match(pageWxml, /团队角色/)
+  assert.match(pageWxml, /可被团队作品集引用/)
+  assert.match(pageWxml, /bindtap="handleInviteMember"/)
+  assert.match(pageWxss, /\.member-add-page/)
+  assert.match(pageWxss, /\.permission-row/)
+})
+
+test('team invitations page supports accept and reject actions', () => {
+  const pageJs = readProjectFile('pages/team-invitations/team-invitations.js')
+  const pageWxml = readProjectFile('pages/team-invitations/team-invitations.wxml')
+  const pageWxss = readProjectFile('pages/team-invitations/team-invitations.wxss')
+  const pageJson = readJson('pages/team-invitations/team-invitations.json')
+
+  assert.equal(pageJson.usingComponents['navigation-bar'], '/components/navigation-bar/navigation-bar')
+  assert.match(pageJs, /url:\s*`\/api\/mine\/team-invitations\/\$\{this\.data\.memberId\}`/)
+  assert.match(pageJs, /url:\s*`\/api\/mine\/team-invitations\/\$\{this\.data\.memberId\}\/accept`/)
+  assert.match(pageJs, /url:\s*`\/api\/mine\/team-invitations\/\$\{this\.data\.memberId\}\/reject`/)
+  assert.match(pageWxml, /navigation-bar title="团队邀请" back="\{\{true\}\}"/)
+  assert.match(pageWxml, /bindtap="handleAccept"/)
+  assert.match(pageWxml, /bindtap="handleReject"/)
+  assert.match(pageWxss, /\.team-invitations-page/)
+  assert.match(pageWxss, /\.invitation-actions/)
 })

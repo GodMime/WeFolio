@@ -57,6 +57,9 @@ public class MineTeamDetailResponse {
 
         /** 当前用户是否可编辑团队资料 */
         private boolean canMaintain;
+
+        /** 当前用户是否可维护团队成员 */
+        private boolean canManageMembers;
     }
 
     /**
@@ -117,5 +120,14 @@ public class MineTeamDetailResponse {
 
         /** 团队成员关系状态色调，供小程序成员状态标签选择样式，如 teal、amber、muted */
         private String statusTone;
+
+        /** 是否允许团队引用个人作品集 */
+        private boolean allowPortfolio;
+
+        /** 是否允许团队引用头像资料 */
+        private boolean allowProfile;
+
+        /** 是否允许团队引用个人作品素材 */
+        private boolean allowWorks;
     }
 }

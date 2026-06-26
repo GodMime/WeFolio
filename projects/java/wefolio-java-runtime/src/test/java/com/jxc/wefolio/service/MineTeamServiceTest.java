@@ -6,18 +6,27 @@ import com.jxc.wefolio.common.UniqueCodeGenerator;
 import com.jxc.wefolio.common.auth.AuthContext;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
 import com.jxc.wefolio.dict.JoinStatusDict;
+import com.jxc.wefolio.dict.MessageActionTypeDict;
+import com.jxc.wefolio.dict.MessageCategoryDict;
+import com.jxc.wefolio.dict.MessageReadStatusDict;
+import com.jxc.wefolio.dict.MessageTypeDict;
 import com.jxc.wefolio.dict.PointSceneCodeDict;
 import com.jxc.wefolio.dict.TeamRoleDict;
 import com.jxc.wefolio.dict.TeamStatusDict;
 import com.jxc.wefolio.dict.UserStatusDict;
+import com.jxc.wefolio.dto.MineTeamInvitationResponse;
+import com.jxc.wefolio.dto.MineTeamMemberCandidateResponse;
+import com.jxc.wefolio.dto.MineTeamMemberInviteRequest;
 import com.jxc.wefolio.dto.MineTeamCreateRequest;
 import com.jxc.wefolio.dto.MineTeamDetailResponse;
 import com.jxc.wefolio.dto.MineTeamListResponse;
 import com.jxc.wefolio.dto.MineTeamUpdateRequest;
+import com.jxc.wefolio.entity.SystemMessageEntity;
 import com.jxc.wefolio.entity.TeamEntity;
 import com.jxc.wefolio.entity.TeamMemberEntity;
 import com.jxc.wefolio.entity.UserEntity;
 import com.jxc.wefolio.exception.BusinessException;
+import com.jxc.wefolio.mapper.SystemMessageEntityMapper;
 import com.jxc.wefolio.mapper.TeamEntityMapper;
 import com.jxc.wefolio.mapper.TeamMemberEntityMapper;
 import com.jxc.wefolio.mapper.UserEntityMapper;
@@ -29,7 +38,13 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.io.IOException;
+import java.lang.reflect.Method;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
@@ -64,6 +79,10 @@ class MineTeamServiceTest {
     @Mock
     private UserEntityMapper userEntityMapper;
 
+    /** 系统消息 Mapper 模拟 */
+    @Mock
+    private SystemMessageEntityMapper systemMessageEntityMapper;
+
     /** COS 服务模拟 */
     @Mock
     private CosService cosService;
@@ -88,6 +107,21 @@ class MineTeamServiceTest {
     @AfterEach
     void tearDown() {
         AuthContextHolder.clear();
+    }
+
+    /**
+     * 邀请成员需要事务包裹成员关系和站内消息两次写入。
+     *
+     * @throws NoSuchMethodException 方法不存在时抛出
+     */
+    @Test
+    void inviteMemberShouldRollbackMemberAndMessageWritesTogether() throws NoSuchMethodException {
+        Method method = MineTeamService.class.getMethod("inviteMember", Long.class, MineTeamMemberInviteRequest.class);
+
+        Transactional transactional = method.getAnnotation(Transactional.class);
+
+        assertThat(transactional).isNotNull();
+        assertThat(transactional.rollbackFor()).contains(Exception.class);
     }
 
     @Test
@@ -302,6 +336,22 @@ class MineTeamServiceTest {
         assertThat(response.getMembers()).hasSize(3);
     }
 
+    /**
+     * 团队维护详情只查询已加入成员，避免暴露已拒绝或已移除成员资料。
+     */
+    @Test
+    void getTeamDetailQueriesOnlyJoinedMembersForMaintenanceView() throws IOException {
+        String source = Files.readString(Path.of("src/main/java/com/jxc/wefolio/service/MineTeamService.java"));
+        int methodIndex = source.indexOf("private MineTeamDetailResponse buildDetailResponseWithMembers(");
+        int userMapIndex = source.indexOf("Map<Long, UserEntity> userMap", methodIndex);
+
+        String queryBlock = source.substring(methodIndex, userMapIndex);
+
+        assertThat(queryBlock)
+                .contains(".eq(TeamMemberEntity::getTeamId, team.getId())")
+                .contains(".eq(TeamMemberEntity::getJoinStatus, JoinStatusDict.JOINED.getCode())");
+    }
+
     @Test
     void updateTeamAllowsClearingOptionalIntroAndAvatar() {
         TeamEntity team = team(100L, "TM2048", "星曜司仪团", "https://cos.example.com/old.png");
@@ -320,6 +370,262 @@ class MineTeamServiceTest {
 
         assertThat(response.getTeam().getIntro()).isEmpty();
         assertThat(response.getTeam().getAvatarUrl()).isEmpty();
+    }
+
+    /**
+     * 候选人查询返回启用用户，并标记当前是否可邀请。
+     */
+    @Test
+    void memberCandidateReturnsActiveUserAndExistingPermissionState() {
+        TeamEntity team = team(100L, "TM2048", "星曜司仪团", "");
+        TeamMemberEntity owner = member(21L, 100L, 7L, TeamRoleDict.OWNER, JoinStatusDict.JOINED);
+        UserEntity candidate = user(8L, "WF1186", "乔伊", "化妆师", "https://cos.example.com/u8.png");
+        when(teamEntityMapper.selectById(100L)).thenReturn(team);
+        when(teamMemberEntityMapper.selectOne(any()))
+                .thenReturn(owner)
+                .thenReturn(null);
+        when(userEntityMapper.selectOne(any())).thenReturn(candidate);
+
+        MineTeamService service = service();
+
+        MineTeamMemberCandidateResponse response = service.getMemberCandidate(100L, " WF1186 ");
+
+        assertThat(response.getUserId()).isEqualTo(8L);
+        assertThat(response.getUniqueCode()).isEqualTo("WF1186");
+        assertThat(response.getDisplayName()).isEqualTo("乔伊 · 化妆师");
+        assertThat(response.isCanInvite()).isTrue();
+        assertThat(response.getReason()).isEqualTo("可添加");
+    }
+
+    /**
+     * 邀请新成员时创建待确认成员关系，默认仅开放个人作品集和头像资料。
+     */
+    @Test
+    void inviteMemberCreatesPendingMemberWithDefaultReferencePermissionsAndMessage() {
+        TeamEntity team = team(100L, "TM2048", "星曜司仪团", "");
+        TeamMemberEntity owner = member(21L, 100L, 7L, TeamRoleDict.OWNER, JoinStatusDict.JOINED);
+        UserEntity invitee = user(8L, "WF1186", "乔伊", "化妆师", "https://cos.example.com/u8.png");
+        MineTeamMemberInviteRequest request = new MineTeamMemberInviteRequest();
+        request.setUniqueCode(" WF1186 ");
+        request.setRole(TeamRoleDict.MEMBER.getCode());
+        request.setProfession(" 化妆师 ");
+        when(teamEntityMapper.selectById(100L)).thenReturn(team);
+        when(teamMemberEntityMapper.selectOne(any()))
+                .thenReturn(owner)
+                .thenReturn(null);
+        when(userEntityMapper.selectOne(any())).thenReturn(invitee);
+        when(teamMemberEntityMapper.insert(any(TeamMemberEntity.class))).thenAnswer(invocation -> {
+            TeamMemberEntity member = invocation.getArgument(0);
+            member.setId(31L);
+            return 1;
+        });
+        when(teamMemberEntityMapper.selectList(any())).thenReturn(List.of(owner));
+        when(userEntityMapper.selectBatchIds(any(Collection.class))).thenReturn(List.of(
+                user(7L, "WF8392", "林安", "婚礼司仪", "https://cos.example.com/u7.png")
+        ));
+
+        MineTeamService service = service();
+
+        MineTeamDetailResponse response = service.inviteMember(100L, request);
+
+        ArgumentCaptor<TeamMemberEntity> memberCaptor = ArgumentCaptor.forClass(TeamMemberEntity.class);
+        verify(teamMemberEntityMapper).insert(memberCaptor.capture());
+        TeamMemberEntity inserted = memberCaptor.getValue();
+        assertThat(inserted.getTeamId()).isEqualTo(100L);
+        assertThat(inserted.getUserId()).isEqualTo(8L);
+        assertThat(inserted.getRole()).isEqualTo(TeamRoleDict.MEMBER.getCode());
+        assertThat(inserted.getProfession()).isEqualTo("化妆师");
+        assertThat(inserted.getJoinStatus()).isEqualTo(JoinStatusDict.PENDING_CONFIRMATION.getCode());
+        assertThat(inserted.getAllowPortfolio()).isEqualTo(1);
+        assertThat(inserted.getAllowProfile()).isEqualTo(1);
+        assertThat(inserted.getAllowWorks()).isZero();
+        assertThat(inserted.getInvitedBy()).isEqualTo(7L);
+        ArgumentCaptor<SystemMessageEntity> messageCaptor = ArgumentCaptor.forClass(SystemMessageEntity.class);
+        verify(systemMessageEntityMapper).insert(messageCaptor.capture());
+        SystemMessageEntity message = messageCaptor.getValue();
+        assertThat(message.getUserId()).isEqualTo(8L);
+        assertThat(message.getMessageType()).isEqualTo(MessageTypeDict.TEAM_INVITATION.getCode());
+        assertThat(message.getCategory()).isEqualTo(MessageCategoryDict.TEAM.getCode());
+        assertThat(message.getReadStatus()).isEqualTo(MessageReadStatusDict.UNREAD.getCode());
+        assertThat(message.getActionType()).isEqualTo(MessageActionTypeDict.TEAM_INVITATION.getCode());
+        assertThat(message.getActionUrl()).isEqualTo("/pages/team-invitations/team-invitations?memberId=31");
+        assertThat(message.getIdempotencyKey()).isEqualTo("team_invitation:31");
+        assertThat(response.getTeam().getMemberCount()).isEqualTo(1);
+        assertThat(response.getMembers()).hasSize(1);
+    }
+
+    /**
+     * 并发邀请导致成员唯一键冲突时返回业务错误，而不是透出数据库异常。
+     */
+    @Test
+    void inviteMemberConvertsDuplicatePendingInsertToFriendlyError() {
+        TeamEntity team = team(100L, "TM2048", "星曜司仪团", "");
+        TeamMemberEntity owner = member(21L, 100L, 7L, TeamRoleDict.OWNER, JoinStatusDict.JOINED);
+        UserEntity invitee = user(8L, "WF1186", "乔伊", "化妆师", "https://cos.example.com/u8.png");
+        MineTeamMemberInviteRequest request = new MineTeamMemberInviteRequest();
+        request.setUniqueCode("WF1186");
+        request.setRole(TeamRoleDict.MEMBER.getCode());
+        when(teamEntityMapper.selectById(100L)).thenReturn(team);
+        when(teamMemberEntityMapper.selectOne(any()))
+                .thenReturn(owner)
+                .thenReturn(null);
+        when(userEntityMapper.selectOne(any())).thenReturn(invitee);
+        when(teamMemberEntityMapper.insert(any(TeamMemberEntity.class)))
+                .thenThrow(new DuplicateKeyException("uk_team_member"));
+
+        MineTeamService service = service();
+
+        assertThatThrownBy(() -> service.inviteMember(100L, request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("已有待确认邀请，请刷新后查看");
+        verify(systemMessageEntityMapper, never()).insert(any(SystemMessageEntity.class));
+    }
+
+    /**
+     * 成员关系 ID 未回填时不创建无法打开的邀请消息。
+     */
+    @Test
+    void inviteMemberFailsWhenPendingMembershipIdIsMissing() {
+        TeamEntity team = team(100L, "TM2048", "星曜司仪团", "");
+        TeamMemberEntity owner = member(21L, 100L, 7L, TeamRoleDict.OWNER, JoinStatusDict.JOINED);
+        UserEntity invitee = user(8L, "WF1186", "乔伊", "化妆师", "https://cos.example.com/u8.png");
+        MineTeamMemberInviteRequest request = new MineTeamMemberInviteRequest();
+        request.setUniqueCode("WF1186");
+        request.setRole(TeamRoleDict.MEMBER.getCode());
+        when(teamEntityMapper.selectById(100L)).thenReturn(team);
+        when(teamMemberEntityMapper.selectOne(any()))
+                .thenReturn(owner)
+                .thenReturn(null);
+        when(userEntityMapper.selectOne(any())).thenReturn(invitee);
+        when(teamMemberEntityMapper.insert(any(TeamMemberEntity.class))).thenReturn(1);
+
+        MineTeamService service = service();
+
+        assertThatThrownBy(() -> service.inviteMember(100L, request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("团队邀请保存失败，请重试");
+        verify(systemMessageEntityMapper, never()).insert(any(SystemMessageEntity.class));
+    }
+
+    /**
+     * 管理员不能添加成员，只有团队拥有者可维护成员。
+     */
+    @Test
+    void inviteMemberRejectsManagerBecauseOnlyOwnerCanManageMembers() {
+        TeamEntity team = team(100L, "TM2048", "星曜司仪团", "");
+        MineTeamMemberInviteRequest request = new MineTeamMemberInviteRequest();
+        request.setUniqueCode("WF1186");
+        request.setRole(TeamRoleDict.MEMBER.getCode());
+        when(teamEntityMapper.selectById(100L)).thenReturn(team);
+        when(teamMemberEntityMapper.selectOne(any()))
+                .thenReturn(member(22L, 100L, 7L, TeamRoleDict.MANAGER, JoinStatusDict.JOINED));
+
+        MineTeamService service = service();
+
+        assertThatThrownBy(() -> service.inviteMember(100L, request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("无团队成员维护权限");
+        verify(teamMemberEntityMapper, never()).insert(any(TeamMemberEntity.class));
+        verify(systemMessageEntityMapper, never()).insert(any(SystemMessageEntity.class));
+    }
+
+    /**
+     * 重新邀请已移除成员时按提交权限恢复为待确认，且更新条件锁定原状态。
+     */
+    @Test
+    void inviteMemberRestoresRemovedMemberAsPendingWithSubmittedPermissions() {
+        TeamEntity team = team(100L, "TM2048", "星曜司仪团", "");
+        TeamMemberEntity owner = member(21L, 100L, 7L, TeamRoleDict.OWNER, JoinStatusDict.JOINED);
+        TeamMemberEntity removed = member(31L, 100L, 8L, TeamRoleDict.MEMBER, JoinStatusDict.REMOVED);
+        UserEntity invitee = user(8L, "WF1186", "乔伊", "化妆师", "https://cos.example.com/u8.png");
+        MineTeamMemberInviteRequest request = new MineTeamMemberInviteRequest();
+        request.setUniqueCode("WF1186");
+        request.setRole(TeamRoleDict.MANAGER.getCode());
+        request.setProfession("");
+        request.setAllowPortfolio(false);
+        request.setAllowProfile(true);
+        request.setAllowWorks(true);
+        when(teamEntityMapper.selectById(100L)).thenReturn(team);
+        when(teamMemberEntityMapper.selectOne(any()))
+                .thenReturn(owner)
+                .thenReturn(removed);
+        when(userEntityMapper.selectOne(any())).thenReturn(invitee);
+        when(teamMemberEntityMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
+        when(teamMemberEntityMapper.selectList(any())).thenReturn(List.of(owner, removed));
+        when(userEntityMapper.selectBatchIds(any(Collection.class))).thenReturn(List.of(
+                user(7L, "WF8392", "林安", "婚礼司仪", "https://cos.example.com/u7.png"),
+                invitee
+        ));
+
+        MineTeamService service = service();
+
+        service.inviteMember(100L, request);
+
+        ArgumentCaptor<Wrapper<TeamMemberEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
+        verify(teamMemberEntityMapper).update(isNull(), captor.capture());
+        String sqlSet = ((UpdateWrapper<TeamMemberEntity>) captor.getValue()).getSqlSet();
+        String sqlSegment = captor.getValue().getSqlSegment();
+        assertThat(sqlSet).contains("join_status", "role", "allow_portfolio", "allow_profile", "allow_works");
+        assertThat(sqlSegment).contains("id", "join_status");
+        assertThat(removed.getJoinStatus()).isEqualTo(JoinStatusDict.PENDING_CONFIRMATION.getCode());
+        assertThat(removed.getRole()).isEqualTo(TeamRoleDict.MANAGER.getCode());
+        assertThat(removed.getAllowPortfolio()).isZero();
+        assertThat(removed.getAllowProfile()).isEqualTo(1);
+        assertThat(removed.getAllowWorks()).isEqualTo(1);
+    }
+
+    /**
+     * 接受邀请时仅当前用户的待确认成员关系可变更为已加入。
+     */
+    @Test
+    void acceptInvitationChangesCurrentUsersPendingMembershipToJoined() {
+        TeamEntity team = team(100L, "TM2048", "星曜司仪团", "");
+        TeamMemberEntity pending = pendingMember(31L, 100L, 7L);
+        pending.setInvitedBy(8L);
+        when(teamMemberEntityMapper.selectById(31L)).thenReturn(pending);
+        when(teamEntityMapper.selectById(100L)).thenReturn(team);
+        when(teamMemberEntityMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
+        when(userEntityMapper.selectBatchIds(any(Collection.class))).thenReturn(List.of(
+                user(7L, "WF8392", "林安", "婚礼司仪", "https://cos.example.com/u7.png"),
+                user(8L, "WF8888", "乔伊", "化妆师", "https://cos.example.com/u8.png")
+        ));
+
+        MineTeamService service = service();
+
+        MineTeamInvitationResponse response = service.acceptInvitation(31L);
+
+        assertThat(response.getJoinStatus()).isEqualTo(JoinStatusDict.JOINED.getCode());
+        assertThat(response.isCanRespond()).isFalse();
+        ArgumentCaptor<Wrapper<TeamMemberEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
+        verify(teamMemberEntityMapper).update(isNull(), captor.capture());
+        assertThat(((UpdateWrapper<TeamMemberEntity>) captor.getValue()).getSqlSet())
+                .contains("join_status", "responded_at", "joined_at", "updated_at");
+    }
+
+    /**
+     * 拒绝邀请时仅当前用户的待确认成员关系可变更为已拒绝。
+     */
+    @Test
+    void rejectInvitationChangesCurrentUsersPendingMembershipToRejected() {
+        TeamEntity team = team(100L, "TM2048", "星曜司仪团", "");
+        TeamMemberEntity pending = pendingMember(31L, 100L, 7L);
+        when(teamMemberEntityMapper.selectById(31L)).thenReturn(pending);
+        when(teamEntityMapper.selectById(100L)).thenReturn(team);
+        when(teamMemberEntityMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
+        when(userEntityMapper.selectBatchIds(any(Collection.class))).thenReturn(List.of(
+                user(7L, "WF8392", "林安", "婚礼司仪", "https://cos.example.com/u7.png")
+        ));
+
+        MineTeamService service = service();
+
+        MineTeamInvitationResponse response = service.rejectInvitation(31L);
+
+        assertThat(response.getJoinStatus()).isEqualTo(JoinStatusDict.REJECTED.getCode());
+        assertThat(response.isCanRespond()).isFalse();
+        ArgumentCaptor<Wrapper<TeamMemberEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
+        verify(teamMemberEntityMapper).update(isNull(), captor.capture());
+        assertThat(((UpdateWrapper<TeamMemberEntity>) captor.getValue()).getSqlSet())
+                .contains("join_status", "responded_at", "updated_at");
     }
 
     /**
@@ -371,6 +677,25 @@ class MineTeamServiceTest {
     }
 
     /**
+     * 构造待确认成员关系。
+     *
+     * @param id 成员关系 ID
+     * @param teamId 团队 ID
+     * @param userId 用户 ID
+     * @return 待确认成员关系
+     */
+    private TeamMemberEntity pendingMember(Long id, Long teamId, Long userId) {
+        TeamMemberEntity member = member(id, teamId, userId, TeamRoleDict.MEMBER, JoinStatusDict.PENDING_CONFIRMATION);
+        member.setJoinedAt(null);
+        member.setInvitedBy(7L);
+        member.setInvitedAt(LocalDateTime.of(2026, 6, 20, 9, 30));
+        member.setAllowPortfolio(1);
+        member.setAllowProfile(1);
+        member.setAllowWorks(0);
+        return member;
+    }
+
+    /**
      * 构造用户实体。
      *
      * @param id 用户 ID
@@ -401,6 +726,7 @@ class MineTeamServiceTest {
                 teamEntityMapper,
                 teamMemberEntityMapper,
                 userEntityMapper,
+                systemMessageEntityMapper,
                 cosService,
                 teamRegistrationService,
                 pointService,
