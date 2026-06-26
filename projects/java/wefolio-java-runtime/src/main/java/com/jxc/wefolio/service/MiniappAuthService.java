@@ -1,6 +1,7 @@
 package com.jxc.wefolio.service;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.jxc.wefolio.common.UniqueCodeGenerator;
 import com.jxc.wefolio.common.auth.AuthorizationHeaderUtils;
 import com.jxc.wefolio.config.CosProperties;
 import com.jxc.wefolio.config.WechatMiniappProperties;
@@ -25,12 +26,8 @@ import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.HexFormat;
-import java.util.List;
 import java.util.Locale;
-import java.util.Set;
-import java.util.UUID;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * 小程序登录服务 — 提供维护者微信授权登录的后端入口。
@@ -75,6 +72,9 @@ public class MiniappAuthService {
 
     /** 用户注册服务 */
     private final UserRegistrationService userRegistrationService;
+
+    /** 唯一码生成器 */
+    private final UniqueCodeGenerator uniqueCodeGenerator;
 
     /**
      * 解析 bearer token 中的用户 ID
@@ -330,30 +330,19 @@ public class MiniappAuthService {
     }
 
     /**
-     * 生成个人唯一码 — 一次生成 3 个候选码，批量查库取第一个未使用的
+     * 生成个人唯一码 — 委托统一生成器，前缀 WF。
      *
      * @return 个人唯一码
      */
     private String generateUniqueCode() {
-        List<String> candidates = Stream.generate(() -> "WF" + UUID.randomUUID().toString()
-                        .replace("-", "")
-                        .substring(0, 8)
-                        .toUpperCase(Locale.ROOT))
-                .limit(3)
-                .collect(Collectors.toList());
-        Set<String> used = userEntityMapper.selectList(
-                        Wrappers.<UserEntity>query()
-                                .select("unique_code")
-                                .in("unique_code", candidates))
-                .stream()
-                .map(UserEntity::getUniqueCode)
-                .collect(Collectors.toSet());
-        for (String code : candidates) {
-            if (!used.contains(code)) {
-                return code;
-            }
-        }
-        throw new BusinessException("唯一码生成失败，请重试");
+        return uniqueCodeGenerator.generate(UniqueCodeGenerator.USER_PREFIX, candidates ->
+                userEntityMapper.selectList(
+                                Wrappers.<UserEntity>query()
+                                        .select("unique_code")
+                                        .in("unique_code", candidates))
+                        .stream()
+                        .map(UserEntity::getUniqueCode)
+                        .collect(Collectors.toSet()));
     }
 
     /**

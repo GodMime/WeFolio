@@ -180,6 +180,7 @@ public class WfTagEntity extends BaseEntity {
 - ❌ 不允许出现无注释的类、字段、方法（含测试类）
 - ❌ 不允许在业务逻辑中使用硬编码的状态/类型字符串（如 `"ACTIVE"`、`"DISABLED"`），必须使用对应枚举字典
 - ❌ 不允许在代码中使用完全限定类名（如 `com.jxc.wefolio.entity.WorkEntity`），必须 import 后使用短名
+- ❌ 不允许在业务代码中硬编码具有固定语义的字符串字面量（如前缀 `"WF"`/`"TM"`、配置键、类型标识等），必须提取为 `public static final` 常量并引用
 
 ### 状态字段与枚举字典
 

@@ -2,6 +2,7 @@ package com.jxc.wefolio.service;
 
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.jxc.wefolio.common.UniqueCodeGenerator;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
 import com.jxc.wefolio.dict.JoinStatusDict;
 import com.jxc.wefolio.dict.PointSceneCodeDict;
@@ -25,7 +26,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -52,15 +52,6 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class MineTeamService {
 
-    /** 团队唯一码前缀 */
-    private static final String TEAM_CODE_PREFIX = "TM";
-
-    /** 团队唯一码随机字符 */
-    private static final String TEAM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-
-    /** 团队唯一码随机部分长度 */
-    private static final int TEAM_CODE_RANDOM_LENGTH = 8;
-
     /** 团队名称最大长度 */
     private static final int NAME_MAX_LENGTH = 100;
 
@@ -72,9 +63,6 @@ public class MineTeamService {
 
     /** 更新时间展示格式 */
     private static final DateTimeFormatter UPDATED_FORMATTER = DateTimeFormatter.ofPattern("MM-dd");
-
-    /** 随机数生成器 */
-    private static final SecureRandom RANDOM = new SecureRandom();
 
     /** 团队 Mapper */
     private final TeamEntityMapper teamEntityMapper;
@@ -93,6 +81,9 @@ public class MineTeamService {
 
     /** 积分服务 */
     private final PointService pointService;
+
+    /** 唯一码生成器 */
+    private final UniqueCodeGenerator uniqueCodeGenerator;
 
     /**
      * 获取当前用户加入的团队列表。
@@ -468,36 +459,19 @@ public class MineTeamService {
     }
 
     /**
-     * 生成未使用的团队唯一码。
+     * 生成团队唯一码 — 委托统一生成器，前缀 TM。
      *
      * @return 团队唯一码
      */
     private String generateUniqueTeamCode() {
-        // TM + 8 位随机码碰撞概率很低；仍然查库重试，保证落库前唯一。
-        for (int attempt = 0; attempt < 10; attempt += 1) {
-            String code = TEAM_CODE_PREFIX + randomCode();
-            Long count = teamEntityMapper.selectCount(
-                    Wrappers.lambdaQuery(TeamEntity.class)
-                            .eq(TeamEntity::getUniqueCode, code)
-            );
-            if (count == null || count == 0L) {
-                return code;
-            }
-        }
-        throw new BusinessException("团队唯一码生成失败，请重试");
-    }
-
-    /**
-     * 生成随机码。
-     *
-     * @return 随机码
-     */
-    private String randomCode() {
-        StringBuilder builder = new StringBuilder(TEAM_CODE_RANDOM_LENGTH);
-        for (int index = 0; index < TEAM_CODE_RANDOM_LENGTH; index += 1) {
-            builder.append(TEAM_CODE_ALPHABET.charAt(RANDOM.nextInt(TEAM_CODE_ALPHABET.length())));
-        }
-        return builder.toString();
+        return uniqueCodeGenerator.generate(UniqueCodeGenerator.TEAM_PREFIX, candidates ->
+                teamEntityMapper.selectList(
+                                Wrappers.<TeamEntity>query()
+                                        .select("unique_code")
+                                        .in("unique_code", candidates))
+                        .stream()
+                        .map(TeamEntity::getUniqueCode)
+                        .collect(Collectors.toSet()));
     }
 
     /**

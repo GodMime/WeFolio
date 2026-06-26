@@ -2,6 +2,7 @@ package com.jxc.wefolio.service;
 
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
+import com.jxc.wefolio.common.UniqueCodeGenerator;
 import com.jxc.wefolio.common.auth.AuthContext;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
 import com.jxc.wefolio.dict.JoinStatusDict;
@@ -75,6 +76,10 @@ class MineTeamServiceTest {
     @Mock
     private PointService pointService;
 
+    /** 唯一码生成器模拟 */
+    @Mock
+    private UniqueCodeGenerator uniqueCodeGenerator;
+
     @BeforeEach
     void setUp() {
         AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
@@ -121,14 +126,13 @@ class MineTeamServiceTest {
         MineTeamCreateRequest request = new MineTeamCreateRequest();
         request.setName(" 星曜司仪团 ");
         request.setIntro(" 高端婚礼主持团队 ");
-        when(teamEntityMapper.selectCount(any())).thenReturn(0L);
+        when(uniqueCodeGenerator.generate(eq(UniqueCodeGenerator.TEAM_PREFIX), any())).thenReturn("TMTEST0001");
         when(teamRegistrationService.createTeamWithOwner(
-                anyString(), eq(7L), eq("星曜司仪团"), eq("高端婚礼主持团队"), eq("")))
+                eq("TMTEST0001"), eq(7L), eq("星曜司仪团"), eq("高端婚礼主持团队"), eq("")))
                 .thenAnswer(invocation -> {
-                    String uniqueCode = invocation.getArgument(0);
                     TeamRegistrationService.TeamCreationResult result =
                             new TeamRegistrationService.TeamCreationResult();
-                    result.setTeam(team(100L, uniqueCode, "星曜司仪团", ""));
+                    result.setTeam(team(100L, "TMTEST0001", "星曜司仪团", ""));
                     result.getTeam().setIntro("高端婚礼主持团队");
                     result.setOwnerMembership(member(
                             21L, 100L, 7L, TeamRoleDict.OWNER, JoinStatusDict.JOINED));
@@ -154,7 +158,6 @@ class MineTeamServiceTest {
     void createTeamRejectsInsufficientPointsBeforeInitializingCos() {
         MineTeamCreateRequest request = new MineTeamCreateRequest();
         request.setName("星曜司仪团");
-        when(teamEntityMapper.selectCount(any())).thenReturn(0L);
         doThrow(new BusinessException("积分余额不足，请充值后再试"))
                 .when(pointService).assertCanConsume(7L, PointSceneCodeDict.CREATE_TEAM.getCode(), 1);
 
@@ -400,7 +403,8 @@ class MineTeamServiceTest {
                 userEntityMapper,
                 cosService,
                 teamRegistrationService,
-                pointService
+                pointService,
+                uniqueCodeGenerator
         );
     }
 }

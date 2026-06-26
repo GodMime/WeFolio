@@ -8,6 +8,7 @@ import com.jxc.wefolio.entity.UserEntity;
 import com.jxc.wefolio.entity.UserAuthEntity;
 import com.jxc.wefolio.mapper.UserAuthEntityMapper;
 import com.jxc.wefolio.mapper.UserEntityMapper;
+import com.jxc.wefolio.common.UniqueCodeGenerator;
 import com.jxc.wefolio.config.WechatMiniappProperties;
 import com.jxc.wefolio.config.CosProperties;
 import com.jxc.wefolio.exception.BusinessException;
@@ -16,11 +17,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.util.Collections;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -46,6 +46,9 @@ class MiniappAuthServiceTest {
 
     @Mock
     private PointService pointService;
+
+    @Mock
+    private UniqueCodeGenerator uniqueCodeGenerator;
 
     @Test
     void parsesDevelopmentBearerToken() {
@@ -80,7 +83,7 @@ class MiniappAuthServiceTest {
         when(wechatMiniappClient.exchangePhoneCode("phone-code")).thenReturn(phoneInfo);
         when(wechatMiniappClient.exchangePluginOpenpid("plugin-code")).thenReturn("openpid-abc");
         when(userAuthEntityMapper.selectOne(any())).thenReturn(null);
-        when(userEntityMapper.selectList(any())).thenReturn(Collections.emptyList());
+        when(uniqueCodeGenerator.generate(eq(UniqueCodeGenerator.USER_PREFIX), any())).thenReturn("WFTEST0001");
         doAnswer(invocation -> {
             UserEntity user = invocation.getArgument(0);
             user.setId(11L);
@@ -127,7 +130,7 @@ class MiniappAuthServiceTest {
         phoneInfo.setCountryCode("86");
         when(wechatMiniappClient.exchangePhoneCode("phone-code")).thenReturn(phoneInfo);
         when(userAuthEntityMapper.selectOne(any())).thenReturn(null);
-        when(userEntityMapper.selectList(any())).thenReturn(Collections.emptyList());
+        when(uniqueCodeGenerator.generate(eq(UniqueCodeGenerator.USER_PREFIX), any())).thenReturn("WFTEST0001");
         doAnswer(invocation -> {
             UserEntity user = invocation.getArgument(0);
             user.setId(11L);
@@ -168,7 +171,7 @@ class MiniappAuthServiceTest {
         phoneInfo.setCountryCode("86");
         when(wechatMiniappClient.exchangePhoneCode("phone-code")).thenReturn(phoneInfo);
         when(userAuthEntityMapper.selectOne(any())).thenReturn(null);
-        when(userEntityMapper.selectList(any())).thenReturn(Collections.emptyList());
+        when(uniqueCodeGenerator.generate(eq(UniqueCodeGenerator.USER_PREFIX), any())).thenReturn("WFTEST0001");
         doAnswer(invocation -> {
             UserEntity user = invocation.getArgument(0);
             user.setId(11L);
@@ -248,7 +251,8 @@ class MiniappAuthServiceTest {
                 properties(),
                 cosService,
                 cosProperties,
-                new UserRegistrationService(userEntityMapper, userAuthEntityMapper, pointService)
+                new UserRegistrationService(userEntityMapper, userAuthEntityMapper, pointService),
+                uniqueCodeGenerator
         );
     }
 
