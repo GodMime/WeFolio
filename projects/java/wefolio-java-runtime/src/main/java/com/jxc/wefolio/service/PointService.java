@@ -3,6 +3,11 @@ package com.jxc.wefolio.service;
 import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.jxc.wefolio.constant.PointConstants;
+import com.jxc.wefolio.dict.MessageActionTypeDict;
+import com.jxc.wefolio.dict.MessageCategoryDict;
+import com.jxc.wefolio.dict.MessageReadStatusDict;
+import com.jxc.wefolio.dict.MessageTypeDict;
 import com.jxc.wefolio.dict.PointCalcModeDict;
 import com.jxc.wefolio.dict.PointRuleStatusDict;
 import com.jxc.wefolio.dict.PointSceneCodeDict;
@@ -17,12 +22,14 @@ import com.jxc.wefolio.entity.PointAccountEntity;
 import com.jxc.wefolio.entity.PointMeterEntity;
 import com.jxc.wefolio.entity.PointRuleEntity;
 import com.jxc.wefolio.entity.PointTransactionEntity;
+import com.jxc.wefolio.entity.SystemMessageEntity;
 import com.jxc.wefolio.entity.UserEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.PointAccountEntityMapper;
 import com.jxc.wefolio.mapper.PointMeterEntityMapper;
 import com.jxc.wefolio.mapper.PointRuleEntityMapper;
 import com.jxc.wefolio.mapper.PointTransactionEntityMapper;
+import com.jxc.wefolio.mapper.SystemMessageEntityMapper;
 import com.jxc.wefolio.mapper.UserEntityMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -48,8 +55,23 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class PointService {
 
-    /** 低余额提醒阈值 */
-    private static final long LOW_BALANCE_THRESHOLD = 50L;
+    /** 低余额消息幂等键前缀 */
+    private static final String LOW_BALANCE_MESSAGE_IDEMPOTENCY_PREFIX = "POINT_LOW_BALANCE:";
+
+    /** 低余额消息标题 */
+    private static final String LOW_BALANCE_MESSAGE_TITLE = "积分余额不足";
+
+    /** 低余额消息内容前缀 */
+    private static final String LOW_BALANCE_MESSAGE_CONTENT_PREFIX = "当前积分余额已低于 ";
+
+    /** 低余额消息内容后缀 */
+    private static final String LOW_BALANCE_MESSAGE_CONTENT_SUFFIX = "，请及时充值，避免影响作品维护和客户访问。";
+
+    /** 低余额消息业务来源类型 */
+    private static final String LOW_BALANCE_MESSAGE_BIZ_TYPE = "POINT_TRANSACTION";
+
+    /** 低余额消息跳转地址 */
+    private static final String LOW_BALANCE_MESSAGE_ACTION_URL = "/pages/index/index";
 
     /** 默认页码 */
     private static final int DEFAULT_PAGE = 1;
@@ -98,6 +120,9 @@ public class PointService {
     /** 积分流水 Mapper */
     private final PointTransactionEntityMapper pointTransactionEntityMapper;
 
+    /** 系统消息 Mapper */
+    private final SystemMessageEntityMapper systemMessageEntityMapper;
+
     /**
      * 确保用户积分账户存在。
      *
@@ -133,8 +158,8 @@ public class PointService {
         response.setTodayConsumed(sumConsumed(userId, null, LocalDate.now().atStartOfDay(), LocalDate.now().plusDays(1).atStartOfDay()));
         response.setVisitorConsumed(sumConsumed(userId, VISITOR_SCENES, null, null));
         response.setMaintenanceConsumed(sumConsumed(userId, MAINTENANCE_SCENES, null, null));
-        response.setLowBalance(safeLong(account.getBalance()) < LOW_BALANCE_THRESHOLD);
-        response.setLowBalanceThreshold(LOW_BALANCE_THRESHOLD);
+        response.setLowBalance(safeLong(account.getBalance()) < PointConstants.LOW_BALANCE_THRESHOLD);
+        response.setLowBalanceThreshold(PointConstants.LOW_BALANCE_THRESHOLD);
         response.setRules(loadActiveRules(LocalDateTime.now()).stream()
                 .map(this::buildRuleItem)
                 .toList());
@@ -289,6 +314,7 @@ public class PointService {
         transaction.setRemark(normalizeOptionalString(remark));
         transaction.setOccurredAt(LocalDateTime.now());
         pointTransactionEntityMapper.insert(transaction);
+        createLowBalanceMessageIfNeeded(transaction);
         log.info("后台人工加分成功: userId={}, points={}, balanceAfter={}, idempotencyKey={}",
                 userId, normalizedPoints, balanceAfter, normalizedIdempotencyKey);
         return buildMutationFromTransaction(transaction, false, true);
@@ -374,6 +400,7 @@ public class PointService {
         transaction.setRemark(normalizeOptionalString(remark));
         transaction.setOccurredAt(LocalDateTime.now());
         pointTransactionEntityMapper.insert(transaction);
+        createLowBalanceMessageIfNeeded(transaction);
         return buildMutationFromTransaction(transaction, false, true);
     }
 
@@ -715,6 +742,53 @@ public class PointService {
         }
         account.setUpdatedAt(LocalDateTime.now());
         updateAccount(account);
+    }
+
+    /**
+     * 余额低于阈值时写入站内消息。
+     *
+     * @param transaction 积分流水
+     */
+    private void createLowBalanceMessageIfNeeded(PointTransactionEntity transaction) {
+        if (transaction == null || safeLong(transaction.getBalanceAfter()) >= PointConstants.LOW_BALANCE_THRESHOLD) {
+            return;
+        }
+        SystemMessageEntity message = new SystemMessageEntity();
+        message.setUserId(transaction.getUserId());
+        message.setMessageType(MessageTypeDict.POINT_LOW_BALANCE.getCode());
+        message.setCategory(MessageCategoryDict.POINT.getCode());
+        message.setReadStatus(MessageReadStatusDict.UNREAD.getCode());
+        message.setTitle(LOW_BALANCE_MESSAGE_TITLE);
+        message.setContent(LOW_BALANCE_MESSAGE_CONTENT_PREFIX
+                + PointConstants.LOW_BALANCE_THRESHOLD
+                + LOW_BALANCE_MESSAGE_CONTENT_SUFFIX);
+        message.setActionType(MessageActionTypeDict.POINT_RECHARGE.getCode());
+        message.setActionUrl(LOW_BALANCE_MESSAGE_ACTION_URL);
+        message.setBizType(LOW_BALANCE_MESSAGE_BIZ_TYPE);
+        message.setBizId(transaction.getId());
+        message.setIdempotencyKey(buildLowBalanceMessageIdempotencyKey(transaction));
+        LocalDateTime now = LocalDateTime.now();
+        message.setCreatedAt(now);
+        message.setUpdatedAt(now);
+        try {
+            systemMessageEntityMapper.insert(message);
+        } catch (DuplicateKeyException e) {
+            log.info("低余额站内消息已存在: userId={}, transactionId={}, idempotencyKey={}",
+                    transaction.getUserId(), transaction.getId(), message.getIdempotencyKey());
+        }
+    }
+
+    /**
+     * 构建低余额消息幂等键。
+     *
+     * @param transaction 积分流水
+     * @return 消息幂等键
+     */
+    private String buildLowBalanceMessageIdempotencyKey(PointTransactionEntity transaction) {
+        if (transaction.getId() != null) {
+            return LOW_BALANCE_MESSAGE_IDEMPOTENCY_PREFIX + transaction.getId();
+        }
+        return LOW_BALANCE_MESSAGE_IDEMPOTENCY_PREFIX + normalizeOptionalString(transaction.getIdempotencyKey());
     }
 
     /**

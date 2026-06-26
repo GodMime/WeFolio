@@ -5,6 +5,7 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
+import com.jxc.wefolio.constant.PointConstants;
 import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
 import com.jxc.wefolio.dict.PortfolioStatusDict;
 import com.jxc.wefolio.dict.UserStatusDict;
@@ -42,9 +43,6 @@ import java.util.Set;
 @Service
 @RequiredArgsConstructor
 public class MineDashboardService {
-
-    /** 低余额提醒阈值 */
-    private static final long LOW_BALANCE_THRESHOLD = 50L;
 
     /** 用户资料 Mapper */
     private final UserEntityMapper userEntityMapper;
@@ -124,7 +122,7 @@ public class MineDashboardService {
         point.setTodayConsumed(sumTodayConsumed(userId));
         point.setTotalRecharged(totalRecharged);
         point.setTotalConsumed(totalConsumed);
-        point.setLowBalance(balance < LOW_BALANCE_THRESHOLD);
+        point.setLowBalance(balance < PointConstants.LOW_BALANCE_THRESHOLD);
         return point;
     }
 

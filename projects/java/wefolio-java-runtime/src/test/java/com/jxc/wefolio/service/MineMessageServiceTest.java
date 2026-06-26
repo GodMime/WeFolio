@@ -105,6 +105,30 @@ class MineMessageServiceTest {
     }
 
     @Test
+    void listMessagesTreatsBlankReadStatusAsUnreadDefault() {
+        SystemMessageEntity blankStatusMessage = message(
+                201L,
+                MessageTypeDict.TEAM_INVITATION.getCode(),
+                MessageCategoryDict.TEAM.getCode(),
+                "",
+                "团队邀请",
+                "星曜司仪团邀请你加入团队",
+                MessageActionTypeDict.TEAM_INVITATION.getCode(),
+                "/pages/team-invitations/team-invitations?id=88",
+                LocalDateTime.of(2026, 6, 25, 10, 30)
+        );
+        when(systemMessageEntityMapper.selectList(any())).thenReturn(List.of(blankStatusMessage));
+        when(systemMessageEntityMapper.selectCount(any())).thenReturn(1L);
+        MineMessageService service = new MineMessageService(systemMessageEntityMapper);
+
+        MineMessageListResponse response = service.listMessages(null, null, null, 20);
+
+        MineMessageListResponse.MessageItem item = response.getMessages().get(0);
+        assertThat(item.getReadStatus()).isEqualTo(MessageReadStatusDict.UNREAD.getCode());
+        assertThat(item.isUnread()).isTrue();
+    }
+
+    @Test
     void unreadCountReturnsTotalTeamAndPointCountsForCurrentUser() {
         when(systemMessageEntityMapper.selectCount(any()))
                 .thenReturn(5L)

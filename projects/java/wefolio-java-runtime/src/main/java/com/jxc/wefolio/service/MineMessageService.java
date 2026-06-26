@@ -20,7 +20,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Objects;
 
 /**
  * 我的消息服务 — 负责当前用户系统消息查询、统计和已读状态维护。
@@ -63,9 +62,6 @@ public class MineMessageService {
     /** 更新时间列名 */
     private static final String COLUMN_UPDATED_AT = "updated_at";
 
-    /** LIMIT SQL 片段前缀 */
-    private static final String LIMIT_SQL_PREFIX = "LIMIT ";
-
     /** 消息时间展示格式 */
     private static final DateTimeFormatter MESSAGE_TIME_FORMATTER = DateTimeFormatter.ofPattern("MM-dd HH:mm");
 
@@ -100,7 +96,7 @@ public class MineMessageService {
         }
         query.orderByDesc(COLUMN_CREATED_AT)
                 .orderByDesc(COLUMN_ID)
-                .last(LIMIT_SQL_PREFIX + querySize);
+                .last("LIMIT " + querySize);
 
         List<SystemMessageEntity> rawMessages = safeList(systemMessageEntityMapper.selectList(query));
         boolean hasMore = rawMessages.size() > pageSize;
@@ -307,6 +303,6 @@ public class MineMessageService {
      * @return 非空字符串
      */
     private String defaultString(String value, String defaultValue) {
-        return Objects.toString(value, defaultValue);
+        return value == null || value.isBlank() ? defaultValue : value;
     }
 }

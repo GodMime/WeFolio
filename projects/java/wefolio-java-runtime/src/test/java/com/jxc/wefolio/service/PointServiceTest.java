@@ -1,6 +1,10 @@
 package com.jxc.wefolio.service;
 
 import com.jxc.wefolio.dict.PointCalcModeDict;
+import com.jxc.wefolio.dict.MessageActionTypeDict;
+import com.jxc.wefolio.dict.MessageCategoryDict;
+import com.jxc.wefolio.dict.MessageReadStatusDict;
+import com.jxc.wefolio.dict.MessageTypeDict;
 import com.jxc.wefolio.dict.PointRuleStatusDict;
 import com.jxc.wefolio.dict.PointSceneCodeDict;
 import com.jxc.wefolio.dict.PointTransactionTypeDict;
@@ -13,12 +17,14 @@ import com.jxc.wefolio.entity.PointAccountEntity;
 import com.jxc.wefolio.entity.PointMeterEntity;
 import com.jxc.wefolio.entity.PointRuleEntity;
 import com.jxc.wefolio.entity.PointTransactionEntity;
+import com.jxc.wefolio.entity.SystemMessageEntity;
 import com.jxc.wefolio.entity.UserEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.PointAccountEntityMapper;
 import com.jxc.wefolio.mapper.PointMeterEntityMapper;
 import com.jxc.wefolio.mapper.PointRuleEntityMapper;
 import com.jxc.wefolio.mapper.PointTransactionEntityMapper;
+import com.jxc.wefolio.mapper.SystemMessageEntityMapper;
 import com.jxc.wefolio.mapper.UserEntityMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -64,6 +70,10 @@ class PointServiceTest {
     /** 积分流水 Mapper 模拟 */
     @Mock
     private PointTransactionEntityMapper pointTransactionEntityMapper;
+
+    /** 系统消息 Mapper 模拟 */
+    @Mock
+    private SystemMessageEntityMapper systemMessageEntityMapper;
 
     @Test
     void grantPointsWritesGiftTransactionAndUpdatesBalance() {
@@ -170,6 +180,81 @@ class PointServiceTest {
         assertThat(transactionCaptor.getValue().getBusinessId()).isEqualTo("100");
         assertThat(response.getBalanceAfter()).isEqualTo(200L);
         assertThat(response.isCharged()).isTrue();
+    }
+
+    @Test
+    void consumeWritesLowBalanceMessageWhenBalanceAfterBelowThreshold() {
+        activeUser(7L);
+        when(pointTransactionEntityMapper.selectOne(any())).thenReturn(null);
+        when(pointRuleEntityMapper.selectList(any())).thenReturn(List.of(rule(
+                1L,
+                PointSceneCodeDict.UPLOAD_IMAGE,
+                PointCalcModeDict.FIXED_PER_ACTION,
+                1,
+                1L
+        )));
+        when(pointAccountEntityMapper.selectByUserIdForUpdate(7L)).thenReturn(account(10L, 7L, 50L));
+        when(pointAccountEntityMapper.updateById(any(PointAccountEntity.class))).thenReturn(1);
+        doAnswer(invocation -> {
+            PointTransactionEntity transaction = invocation.getArgument(0);
+            transaction.setId(90L);
+            return 1;
+        }).when(pointTransactionEntityMapper).insert(any(PointTransactionEntity.class));
+
+        PointMutationResponse response = service().consume(
+                7L,
+                PointSceneCodeDict.UPLOAD_IMAGE.getCode(),
+                "WORK",
+                "100",
+                1,
+                "UPLOAD_IMAGE:100",
+                "上传图片扣除积分"
+        );
+
+        ArgumentCaptor<SystemMessageEntity> messageCaptor = ArgumentCaptor.forClass(SystemMessageEntity.class);
+        verify(systemMessageEntityMapper).insert(messageCaptor.capture());
+        assertThat(response.getBalanceAfter()).isEqualTo(49L);
+        assertThat(messageCaptor.getValue().getUserId()).isEqualTo(7L);
+        assertThat(messageCaptor.getValue().getMessageType()).isEqualTo(MessageTypeDict.POINT_LOW_BALANCE.getCode());
+        assertThat(messageCaptor.getValue().getCategory()).isEqualTo(MessageCategoryDict.POINT.getCode());
+        assertThat(messageCaptor.getValue().getReadStatus()).isEqualTo(MessageReadStatusDict.UNREAD.getCode());
+        assertThat(messageCaptor.getValue().getActionType()).isEqualTo(MessageActionTypeDict.POINT_RECHARGE.getCode());
+        assertThat(messageCaptor.getValue().getBizType()).isEqualTo("POINT_TRANSACTION");
+        assertThat(messageCaptor.getValue().getBizId()).isEqualTo(90L);
+        assertThat(messageCaptor.getValue().getIdempotencyKey()).isEqualTo("POINT_LOW_BALANCE:90");
+    }
+
+    @Test
+    void consumeDoesNotWriteLowBalanceMessageWhenBalanceAfterEqualsThreshold() {
+        activeUser(7L);
+        when(pointTransactionEntityMapper.selectOne(any())).thenReturn(null);
+        when(pointRuleEntityMapper.selectList(any())).thenReturn(List.of(rule(
+                1L,
+                PointSceneCodeDict.UPLOAD_IMAGE,
+                PointCalcModeDict.FIXED_PER_ACTION,
+                1,
+                1L
+        )));
+        when(pointAccountEntityMapper.selectByUserIdForUpdate(7L)).thenReturn(account(10L, 7L, 51L));
+        when(pointAccountEntityMapper.updateById(any(PointAccountEntity.class))).thenReturn(1);
+        doAnswer(invocation -> {
+            PointTransactionEntity transaction = invocation.getArgument(0);
+            transaction.setId(91L);
+            return 1;
+        }).when(pointTransactionEntityMapper).insert(any(PointTransactionEntity.class));
+
+        PointMutationResponse response = service().consume(
+                7L,
+                PointSceneCodeDict.UPLOAD_IMAGE.getCode(),
+                "WORK",
+                "100",
+                1,
+                "UPLOAD_IMAGE:101",
+                "上传图片扣除积分"
+        );
+
+        assertThat(response.getBalanceAfter()).isEqualTo(50L);
+        verify(systemMessageEntityMapper, never()).insert(any(SystemMessageEntity.class));
     }
 
     @Test
@@ -387,7 +472,8 @@ class PointServiceTest {
                 pointAccountEntityMapper,
                 pointRuleEntityMapper,
                 pointMeterEntityMapper,
-                pointTransactionEntityMapper
+                pointTransactionEntityMapper,
+                systemMessageEntityMapper
         );
     }
 

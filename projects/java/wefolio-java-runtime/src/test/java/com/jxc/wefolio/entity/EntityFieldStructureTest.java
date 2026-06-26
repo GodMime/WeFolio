@@ -20,4 +20,14 @@ class EntityFieldStructureTest {
 
         assertThat(declaresCreatedAt).isFalse();
     }
+
+    @Test
+    void systemMessageEqualityShouldIncludeBaseEntityFields() {
+        SystemMessageEntity first = new SystemMessageEntity();
+        first.setId(1L);
+        SystemMessageEntity second = new SystemMessageEntity();
+        second.setId(2L);
+
+        assertThat(first).isNotEqualTo(second);
+    }
 }

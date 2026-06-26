@@ -25,7 +25,7 @@ function buildEntries(messageUnread = normalizeUnreadCount({})) {
     {
       type: MESSAGE_ENTRY_TYPE,
       title: '我的消息',
-      desc: '系统提醒、团队邀请、积分不足',
+      desc: '系统提醒、团队邀请',
       iconUrl: MESSAGE_ICON_URL,
       badgeText: messageUnread.badgeText
     }
