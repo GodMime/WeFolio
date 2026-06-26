@@ -71,6 +71,8 @@ test('mine action entries use COS image logos and keep content left aligned', ()
 
   assert.match(indexJs, /iconUrl:\s*'https:\/\/cos\.we-folio\.dingchenyong\.top\/system\/wefolio-visitor-record-icon\.png'/)
   assert.match(indexJs, /iconUrl:\s*'https:\/\/cos\.we-folio\.dingchenyong\.top\/system\/wefolio-team-icon\.png'/)
+  assert.match(indexJs, /const MESSAGE_ICON_URL = 'https:\/\/cos\.we-folio\.dingchenyong\.top\/system\/wefolio-message-icon\.png'/)
+  assert.match(indexJs, /iconUrl:\s*MESSAGE_ICON_URL/)
   assert.match(indexWxml, /<view\b[^>]*class="entry-row"[^>]*bindtap="handleEntryTap"[^>]*>/)
   assert.doesNotMatch(indexWxml, /<button\b[^>]*class="entry-row"/)
   assert.match(indexWxml, /<image[\s\S]*class="entry-icon"[\s\S]*src="\{\{item\.iconUrl\}\}"[\s\S]*mode="aspectFit"/)

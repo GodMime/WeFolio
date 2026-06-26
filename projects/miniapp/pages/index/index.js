@@ -1,26 +1,43 @@
 const { request } = require('../../utils/request')
 const { handleAuthRequired, hasLocalToken } = require('../../utils/session')
 const { normalizeDashboard } = require('../../utils/dashboard')
+const { normalizeUnreadCount } = require('../../utils/messages')
+
+const MESSAGE_ENTRY_TYPE = 'messages'
+const MESSAGE_ICON_URL = 'https://cos.we-folio.dingchenyong.top/system/wefolio-message-icon.png'
+const MESSAGE_UNREAD_COUNT_URL = '/api/mine/messages/unread-count'
+const MESSAGES_PAGE_URL = '/pages/messages/messages'
+
+function buildEntries(messageUnread = normalizeUnreadCount({})) {
+  return [
+    {
+      type: 'visits',
+      title: '访问记录',
+      desc: '访客来源、访问次数、跟进状态',
+      iconUrl: 'https://cos.we-folio.dingchenyong.top/system/wefolio-visitor-record-icon.png'
+    },
+    {
+      type: 'teams',
+      title: '我的团队',
+      desc: '按角色显示可用功能',
+      iconUrl: 'https://cos.we-folio.dingchenyong.top/system/wefolio-team-icon.png'
+    },
+    {
+      type: MESSAGE_ENTRY_TYPE,
+      title: '我的消息',
+      desc: '系统提醒、团队邀请、积分不足',
+      iconUrl: MESSAGE_ICON_URL,
+      badgeText: messageUnread.badgeText
+    }
+  ]
+}
 
 Page({
   data: {
     loading: true,
     errorMessage: '',
     dashboard: normalizeDashboard({}),
-    entries: [
-      {
-        type: 'visits',
-        title: '访问记录',
-        desc: '访客来源、访问次数、跟进状态',
-        iconUrl: 'https://cos.we-folio.dingchenyong.top/system/wefolio-visitor-record-icon.png'
-      },
-      {
-        type: 'teams',
-        title: '我的团队',
-        desc: '按角色显示可用功能',
-        iconUrl: 'https://cos.we-folio.dingchenyong.top/system/wefolio-team-icon.png'
-      }
-    ],
+    entries: buildEntries(),
     tabs: [
       { key: 'schedule', label: '档期', icon: 'schedule' },
       { key: 'work', label: '作品', icon: 'work' },
@@ -59,6 +76,7 @@ Page({
         dashboard: normalizeDashboard(dashboard),
         loading: false
       })
+      this.loadMessageUnreadCount()
     } catch (error) {
       if (error && error.authRequired) {
         handleAuthRequired(error.message)
@@ -68,6 +86,21 @@ Page({
         loading: false,
         errorMessage: error && error.message ? error.message : '首页加载失败'
       })
+    }
+  },
+
+  async loadMessageUnreadCount() {
+    try {
+      const response = await request({
+        url: MESSAGE_UNREAD_COUNT_URL
+      })
+      this.setData({
+        entries: buildEntries(normalizeUnreadCount(response))
+      })
+    } catch (error) {
+      if (error && error.authRequired) {
+        handleAuthRequired(error.message)
+      }
     }
   },
 
@@ -118,6 +151,12 @@ Page({
     if (type === 'teams') {
       wx.navigateTo({
         url: '/pages/teams/teams'
+      })
+      return
+    }
+    if (type === MESSAGE_ENTRY_TYPE) {
+      wx.navigateTo({
+        url: MESSAGES_PAGE_URL
       })
       return
     }

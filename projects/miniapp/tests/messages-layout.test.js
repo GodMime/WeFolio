@@ -1,0 +1,79 @@
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
+const test = require('node:test')
+
+function readProjectFile(filePath) {
+  return fs.readFileSync(path.join(__dirname, '..', filePath), 'utf8')
+}
+
+function readRule(content, selector) {
+  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const match = content.match(new RegExp(`${escapedSelector}\\s*\\{([^}]*)\\}`))
+  return match ? match[1] : ''
+}
+
+test('mine message entry registers page route and navigates from mine page', () => {
+  const appJson = JSON.parse(readProjectFile('app.json'))
+  const indexJs = readProjectFile('pages/index/index.js')
+  const indexWxml = readProjectFile('pages/index/index.wxml')
+  const indexWxss = readProjectFile('pages/index/index.wxss')
+
+  assert.ok(appJson.pages.includes('pages/messages/messages'))
+  assert.match(indexJs, /const MESSAGE_ENTRY_TYPE = 'messages'/)
+  assert.match(indexJs, /const MESSAGE_ICON_URL = 'https:\/\/cos\.we-folio\.dingchenyong\.top\/system\/wefolio-message-icon\.png'/)
+  assert.match(indexJs, /const MESSAGE_UNREAD_COUNT_URL = '\/api\/mine\/messages\/unread-count'/)
+  assert.match(indexJs, /const MESSAGES_PAGE_URL = '\/pages\/messages\/messages'/)
+  assert.match(indexJs, /type:\s*MESSAGE_ENTRY_TYPE/)
+  assert.match(indexJs, /iconUrl:\s*MESSAGE_ICON_URL/)
+  assert.match(indexJs, /type === MESSAGE_ENTRY_TYPE[\s\S]*url:\s*MESSAGES_PAGE_URL/)
+  assert.match(indexJs, /url:\s*MESSAGE_UNREAD_COUNT_URL/)
+  assert.match(indexWxml, /class="entry-badge" wx:if="\{\{item\.badgeText\}\}"/)
+  assert.match(indexWxss, /\.entry-badge/)
+})
+
+test('messages page files match approved page A structure and backend endpoints', () => {
+  const messagesJsPath = path.join(__dirname, '../pages/messages/messages.js')
+  const messagesJsonPath = path.join(__dirname, '../pages/messages/messages.json')
+  const messagesWxmlPath = path.join(__dirname, '../pages/messages/messages.wxml')
+  const messagesWxssPath = path.join(__dirname, '../pages/messages/messages.wxss')
+
+  assert.equal(fs.existsSync(messagesJsPath), true)
+  assert.equal(fs.existsSync(messagesJsonPath), true)
+  assert.equal(fs.existsSync(messagesWxmlPath), true)
+  assert.equal(fs.existsSync(messagesWxssPath), true)
+
+  const messagesJs = fs.readFileSync(messagesJsPath, 'utf8')
+  const messagesWxml = fs.readFileSync(messagesWxmlPath, 'utf8')
+  const messagesWxss = fs.readFileSync(messagesWxssPath, 'utf8')
+  const filterTabsRule = readRule(messagesWxss, '.filter-tabs')
+  const messageRowRule = readRule(messagesWxss, '.message-row')
+  const messageCopyRule = readRule(messagesWxss, '.message-copy')
+
+  assert.match(messagesJs, /const MESSAGE_LIST_URL = '\/api\/mine\/messages'/)
+  assert.match(messagesJs, /const MESSAGE_MARK_READ_URL = '\/api\/mine\/messages\/read'/)
+  assert.match(messagesJs, /const MESSAGE_MARK_ALL_READ_URL = '\/api\/mine\/messages\/read-all'/)
+  assert.match(messagesJs, /url:\s*MESSAGE_LIST_URL/)
+  assert.match(messagesJs, /url:\s*MESSAGE_MARK_READ_URL/)
+  assert.match(messagesJs, /url:\s*MESSAGE_MARK_ALL_READ_URL/)
+  assert.match(messagesJs, /normalizeMessageList/)
+  assert.match(messagesJs, /handleFilterTap/)
+  assert.match(messagesJs, /handleMarkSelectedRead/)
+  assert.match(messagesJs, /handleMarkAllRead/)
+  assert.match(messagesWxml, /navigation-bar title="我的消息" back="\{\{true\}\}"/)
+  assert.match(messagesWxml, /class="[^"]*summary-panel[^"]*"/)
+  assert.match(messagesWxml, /未读消息/)
+  assert.match(messagesWxml, /class="filter-tabs"/)
+  assert.match(messagesWxml, /wx:for="\{\{filters\}\}"/)
+  assert.match(messagesWxml, /bindtap="handleMarkSelectedRead"/)
+  assert.match(messagesWxml, /bindtap="handleMarkAllRead"/)
+  assert.match(messagesWxml, /wx:for="\{\{messageData\.messages\}\}"/)
+  assert.match(messagesWxml, /class="\{\{item\.unreadDotClass\}\}"/)
+  assert.match(messagesWxml, /wx:if="\{\{item\.actionVisible\}\}"/)
+  assert.match(filterTabsRule, /display:\s*flex/)
+  assert.doesNotMatch(filterTabsRule, /display:\s*grid/)
+  assert.match(messageRowRule, /display:\s*flex/)
+  assert.match(messageRowRule, /align-items:\s*flex-start/)
+  assert.match(messageCopyRule, /flex:\s*1/)
+  assert.match(messageCopyRule, /min-width:\s*0/)
+})

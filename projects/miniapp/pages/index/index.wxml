@@ -77,7 +77,10 @@
                 <view class="entry-title">{{item.title}}</view>
                 <view class="entry-desc">{{item.desc}}</view>
               </view>
-              <view class="entry-arrow"></view>
+              <view class="entry-side">
+                <view class="entry-badge" wx:if="{{item.badgeText}}">{{item.badgeText}}</view>
+                <view class="entry-arrow"></view>
+              </view>
             </view>
           </view>
         </view>

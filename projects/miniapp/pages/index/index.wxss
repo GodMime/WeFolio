@@ -295,6 +295,30 @@
   min-width: 0;
 }
 
+.entry-side {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 12rpx;
+  margin-left: 14rpx;
+}
+
+.entry-badge {
+  min-width: 36rpx;
+  height: 36rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10rpx;
+  color: #ffffff;
+  font-size: 20rpx;
+  font-weight: 800;
+  line-height: 1;
+  border-radius: 999rpx;
+  background: #d9901f;
+  box-sizing: border-box;
+}
+
 .entry-title {
   color: #17202a;
   font-size: 28rpx;
@@ -317,7 +341,6 @@
   width: 28rpx;
   height: 28rpx;
   flex: none;
-  margin-left: 14rpx;
 }
 
 .entry-arrow::before {
