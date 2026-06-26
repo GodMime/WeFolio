@@ -1,5 +1,6 @@
 const TEAM_NAME_MAX_LENGTH = 100
 const TEAM_INTRO_MAX_LENGTH = 1000
+const TEAM_UNIQUE_CODE_DISPLAY_LENGTH = 10
 
 const ROLE_TEXT = {
   OWNER: '拥有者',
@@ -29,6 +30,15 @@ function memberCountText(value, fallback) {
     return fallback
   }
   return `${toNumber(value)} 位成员`
+}
+
+// 维护页顶部空间有限，团队唯一码固定展示前 10 位，复制仍使用完整唯一码。
+function displayTeamUniqueCode(value) {
+  const uniqueCode = String(value || '')
+  if (!uniqueCode) {
+    return '-'
+  }
+  return uniqueCode.slice(0, TEAM_UNIQUE_CODE_DISPLAY_LENGTH)
 }
 
 // 列表摘要统一在工具层生成，页面只关心展示，不重复拼业务文案。
@@ -92,9 +102,11 @@ function normalizeTeamList(raw = {}) {
 function normalizeTeamInfo(raw = {}) {
   const memberCount = toNumber(raw.memberCount)
   const computedMemberText = memberCountText(memberCount, raw.memberCountText)
+  const uniqueCode = raw.uniqueCode || '-'
   return {
     teamId: raw.teamId || raw.id || null,
-    uniqueCode: raw.uniqueCode || '-',
+    uniqueCode,
+    displayUniqueCode: displayTeamUniqueCode(uniqueCode),
     name: raw.name || '未命名团队',
     avatarUrl: raw.avatarUrl || '',
     intro: raw.intro || '',
@@ -105,7 +117,7 @@ function normalizeTeamInfo(raw = {}) {
     memberText: computedMemberText,
     memberCountText: computedMemberText,
     canMaintain: Boolean(raw.canMaintain),
-    codeText: `团队唯一码 ${raw.uniqueCode || '-'}`
+    codeText: `团队唯一码 ${uniqueCode}`
   }
 }
 

@@ -95,6 +95,7 @@ test('normalizes team detail response for maintenance page', () => {
   })
 
   assert.equal(detail.team.codeText, '团队唯一码 TM2048')
+  assert.equal(detail.team.displayUniqueCode, 'TM2048')
   assert.equal(detail.team.memberText, '2 位成员')
   assert.equal(detail.team.canMaintain, true)
   assert.equal(detail.members[0].summaryText, '婚礼司仪 · WF8392 · 拥有者')
@@ -103,6 +104,18 @@ test('normalizes team detail response for maintenance page', () => {
   assert.equal(detail.members[1].userStatusVisible, true)
   assert.equal(detail.members[1].userStatusText, '已停用')
   assert.equal(detail.members[1].userStatusTone, 'muted')
+})
+
+test('team detail exposes ten-character display code for maintenance header', () => {
+  const detail = normalizeTeamDetail({
+    team: {
+      uniqueCode: 'TM7H9C4V2X99'
+    }
+  })
+
+  assert.equal(detail.team.uniqueCode, 'TM7H9C4V2X99')
+  assert.equal(detail.team.displayUniqueCode, 'TM7H9C4V2X')
+  assert.equal(detail.team.codeText, '团队唯一码 TM7H9C4V2X99')
 })
 
 test('validates and builds team form payloads', () => {

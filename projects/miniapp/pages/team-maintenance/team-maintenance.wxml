@@ -34,9 +34,9 @@
               <view class="pill-row">
                 <view class="role-pill blue">{{detail.team.memberText}}</view>
                 <view class="role-pill blue">{{detail.team.roleText}}</view>
+                <view class="role-pill teal team-code-button" data-code="{{detail.team.uniqueCode}}" bindtap="handleCopyTeamCode" aria-role="button" aria-label="复制团队唯一码 {{detail.team.uniqueCode}}">{{detail.team.displayUniqueCode}}</view>
               </view>
             </view>
-            <view class="team-code-button" data-code="{{detail.team.uniqueCode}}" bindtap="handleCopyTeamCode" aria-role="button" aria-label="复制团队唯一码 {{detail.team.uniqueCode}}">{{detail.team.uniqueCode}}</view>
           </view>
 
           <view class="form-row">

@@ -120,26 +120,8 @@
   line-height: 1.45;
 }
 
-.team-code-button {
-  flex: none;
-  align-self: flex-start;
-  max-width: 180rpx;
-  margin-top: 6rpx;
-  margin-left: auto;
-  padding: 12rpx 16rpx;
-  overflow: hidden;
-  color: #0f766e;
-  font-size: 22rpx;
-  font-weight: 700;
-  line-height: 1;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  border-radius: 999rpx;
-  background: #dcf7f1;
-  box-sizing: border-box;
-}
-
 .pill-row {
+  width: 100%;
   flex-wrap: wrap;
   gap: 10rpx;
   margin-top: 12rpx;
@@ -147,8 +129,13 @@
 
 .role-pill {
   flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   max-width: 132rpx;
-  padding: 8rpx 14rpx;
+  height: 38rpx;
+  min-height: 38rpx;
+  padding: 0 14rpx;
   overflow: hidden;
   font-size: 22rpx;
   font-weight: 800;
@@ -167,6 +154,14 @@
 .role-pill.teal {
   color: #0f766e;
   background: #dcf7f1;
+}
+
+.role-pill.team-code-button {
+  width: 200rpx;
+  min-width: 200rpx;
+  max-width: 200rpx;
+  margin-left: auto;
+  text-align: center;
 }
 
 .role-pill.amber {
