@@ -68,35 +68,38 @@
 
         <button class="primary-button full" bindtap="handleCreateToggle">{{createFormVisible ? '收起创建团队' : '创建团队'}}</button>
 
-        <!-- 创建团队表单从按钮下方滑出；本地头像会在保存后通过上传接口补写。 -->
-        <view class="panel create-form-panel" wx:if="{{createFormVisible}}">
-          <view class="panel-heading">
-            <view class="section-title">创建团队</view>
-            <view class="panel-desc">生成团队唯一码</view>
-          </view>
-          <view class="avatar-field">
-            <view class="team-logo large">
-              <image wx:if="{{form.avatarUrl}}" class="team-logo-image" src="{{form.avatarUrl}}" mode="aspectFill"></image>
-              <view wx:else class="team-logo-fallback">TM</view>
+        <!-- 创建团队区常驻页面，通过高度过渡从按钮下方展开；本地头像会在保存后通过上传接口补写。 -->
+        <view class="create-section {{createFormVisible ? 'expanded' : 'collapsed'}}" aria-hidden="{{!createFormVisible}}">
+          <view class="create-section-body">
+            <view class="panel create-form-panel">
+              <view class="panel-heading">
+                <view class="section-title">创建团队</view>
+                <view class="panel-desc">生成团队唯一码</view>
+              </view>
+              <view class="avatar-field">
+                <button class="team-logo large avatar-picker" open-type="chooseAvatar" bindchooseavatar="handleChooseAvatar" disabled="{{saving}}" aria-label="编辑团队图标">
+                  <image wx:if="{{form.avatarUrl}}" class="team-logo-image" src="{{form.avatarUrl}}" mode="aspectFill"></image>
+                  <view wx:else class="team-logo-fallback">TM</view>
+                </button>
+                <view class="avatar-name-field form-row">
+                  <view class="field-heading">
+                    <view class="label">团队名称</view>
+                    <view class="field-limit">{{fieldCounters.name}}</view>
+                  </view>
+                  <input class="input" value="{{form.name}}" data-field="name" bindinput="handleInput" maxlength="100" placeholder="请输入团队名称" />
+                </view>
+              </view>
+              <view class="form-row">
+                <view class="field-heading">
+                  <view class="label">团队简介</view>
+                  <view class="field-limit">{{fieldCounters.intro}}</view>
+                </view>
+                <textarea class="input textarea" value="{{form.intro}}" data-field="intro" bindinput="handleInput" maxlength="1000" auto-height placeholder="介绍团队服务风格、城市或成员特色" />
+              </view>
+              <view class="create-note">创建团队会生成团队唯一码，后续可通过个人唯一码邀请成员加入。</view>
             </view>
-            <button class="secondary-button avatar-button" open-type="chooseAvatar" bindchooseavatar="handleChooseAvatar" disabled="{{saving}}">团队图标</button>
+            <button class="primary-button full create-save-button" loading="{{saving}}" bindtap="handleCreateTeam">保存创建</button>
           </view>
-          <view class="form-row">
-            <view class="field-heading">
-              <view class="label">团队名称</view>
-              <view class="field-limit">{{fieldCounters.name}}</view>
-            </view>
-            <input class="input" value="{{form.name}}" data-field="name" bindinput="handleInput" maxlength="100" placeholder="请输入团队名称" />
-          </view>
-          <view class="form-row">
-            <view class="field-heading">
-              <view class="label">团队简介</view>
-              <view class="field-limit">{{fieldCounters.intro}}</view>
-            </view>
-            <textarea class="input textarea" value="{{form.intro}}" data-field="intro" bindinput="handleInput" maxlength="1000" auto-height placeholder="介绍团队服务风格、城市或成员特色" />
-          </view>
-          <view class="create-note">创建团队会生成团队唯一码，后续可通过个人唯一码邀请成员加入。</view>
-          <button class="primary-button full" loading="{{saving}}" bindtap="handleCreateTeam">保存创建</button>
         </view>
       </block>
     </view>
