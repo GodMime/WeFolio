@@ -42,3 +42,8 @@ wechat:
   miniapp:
     app-id: ${WECHAT_MINIAPP_APP_ID}
     app-secret: ${WECHAT_MINIAPP_APP_SECRET}
+
+# --- Admin Point Configuration ---
+admin:
+  point:
+    secret: ${POINT_ADMIN_SECRET:}

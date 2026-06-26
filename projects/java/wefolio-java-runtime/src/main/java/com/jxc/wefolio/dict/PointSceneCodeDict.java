@@ -1,0 +1,89 @@
+package com.jxc.wefolio.dict;
+
+import java.util.Map;
+import java.util.Optional;
+
+/**
+ * 积分场景编码字典 — 对应积分规则、流水和前端筛选条件。
+ */
+public class PointSceneCodeDict {
+
+    /** 上传图片作品 */
+    public static final DictValue UPLOAD_IMAGE = new DictValue("UPLOAD_IMAGE", "上传图片作品");
+
+    /** 上传视频作品 */
+    public static final DictValue UPLOAD_VIDEO = new DictValue("UPLOAD_VIDEO", "上传视频作品");
+
+    /** 新建团队 */
+    public static final DictValue CREATE_TEAM = new DictValue("CREATE_TEAM", "新建团队");
+
+    /** 维护标准作品集 */
+    public static final DictValue MAINTAIN_STANDARD_PORTFOLIO =
+            new DictValue("MAINTAIN_STANDARD_PORTFOLIO", "维护标准作品集");
+
+    /** 维护高级作品集 */
+    public static final DictValue MAINTAIN_ADVANCED_PORTFOLIO =
+            new DictValue("MAINTAIN_ADVANCED_PORTFOLIO", "维护高级作品集");
+
+    /** 访问个人作品集 */
+    public static final DictValue VISIT_PERSONAL_PORTFOLIO =
+            new DictValue("VISIT_PERSONAL_PORTFOLIO", "访问个人作品集");
+
+    /** 查看作品集图片 */
+    public static final DictValue VIEW_PORTFOLIO_IMAGES =
+            new DictValue("VIEW_PORTFOLIO_IMAGES", "查看作品集图片");
+
+    /** 查看作品集视频 */
+    public static final DictValue VIEW_PORTFOLIO_VIDEO =
+            new DictValue("VIEW_PORTFOLIO_VIDEO", "查看作品集视频");
+
+    /** 后台人工加分 */
+    public static final DictValue MANUAL_ADMIN_GRANT =
+            new DictValue("MANUAL_ADMIN_GRANT", "后台人工加分");
+
+    /** 场景编码索引 */
+    private static final Map<String, DictValue> CODE_MAP = Map.of(
+            UPLOAD_IMAGE.getCode(), UPLOAD_IMAGE,
+            UPLOAD_VIDEO.getCode(), UPLOAD_VIDEO,
+            CREATE_TEAM.getCode(), CREATE_TEAM,
+            MAINTAIN_STANDARD_PORTFOLIO.getCode(), MAINTAIN_STANDARD_PORTFOLIO,
+            MAINTAIN_ADVANCED_PORTFOLIO.getCode(), MAINTAIN_ADVANCED_PORTFOLIO,
+            VISIT_PERSONAL_PORTFOLIO.getCode(), VISIT_PERSONAL_PORTFOLIO,
+            VIEW_PORTFOLIO_IMAGES.getCode(), VIEW_PORTFOLIO_IMAGES,
+            VIEW_PORTFOLIO_VIDEO.getCode(), VIEW_PORTFOLIO_VIDEO,
+            MANUAL_ADMIN_GRANT.getCode(), MANUAL_ADMIN_GRANT
+    );
+
+    private PointSceneCodeDict() {
+    }
+
+    /**
+     * 根据编码获取字典值。
+     *
+     * @param code 场景编码
+     * @return 字典值
+     */
+    public static Optional<DictValue> fromCode(String code) {
+        if (code == null) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(CODE_MAP.get(code));
+    }
+
+    /**
+     * 字典值。
+     *
+     * @param code 编码
+     * @param displayName 中文展示名称
+     */
+    public record DictValue(String code, String displayName) {
+
+        public String getCode() {
+            return code;
+        }
+
+        public String getDisplayName() {
+            return displayName;
+        }
+    }
+}

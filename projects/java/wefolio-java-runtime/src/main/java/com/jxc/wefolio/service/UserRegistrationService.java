@@ -31,6 +31,9 @@ public class UserRegistrationService {
     /** 用户登录身份 Mapper */
     private final UserAuthEntityMapper userAuthEntityMapper;
 
+    /** 积分服务 */
+    private final PointService pointService;
+
     /**
      * 创建维护者微信用户，并在同一事务中创建微信身份绑定。
      *
@@ -72,6 +75,7 @@ public class UserRegistrationService {
         }
 
         createWechatAuth(user, openidHash, unionidHash, now);
+        pointService.ensureAccount(user.getId());
         return user;
     }
 

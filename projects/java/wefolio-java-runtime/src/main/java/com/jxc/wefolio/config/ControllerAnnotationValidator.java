@@ -97,7 +97,7 @@ public class ControllerAnnotationValidator {
     }
 
     /**
-     * 校验单个 Controller 的所有接口方法。
+     * 校验单个 Controller 的所有公开接口方法，包含从父类或接口继承的映射方法。
      *
      * @param controllerClass Controller 类
      * @return 未标记注解的方法列表（格式："ClassName.methodName"）
@@ -106,18 +106,35 @@ public class ControllerAnnotationValidator {
         List<String> unannotated = new ArrayList<>();
         boolean classAnnotated = isAccessAnnotated(controllerClass);
 
-        for (Method method : controllerClass.getDeclaredMethods()) {
+        for (Method method : controllerClass.getMethods()) {
             if (!isRequestMappingMethod(method)) {
                 continue;
             }
-            // 方法级注解优先，若无则继承类级注解
-            if (isAccessAnnotated(method) || classAnnotated) {
+            if (isAccessAnnotationCovered(controllerClass, method, classAnnotated)) {
                 continue;
             }
             unannotated.add(controllerClass.getSimpleName() + "." + method.getName() + "()");
         }
 
         return unannotated;
+    }
+
+    /**
+     * 判断接口方法是否已由方法级、当前 Controller 类级或声明类级访问控制注解覆盖。
+     *
+     * @param controllerClass Controller 类
+     * @param method 接口方法
+     * @param controllerClassAnnotated 当前 Controller 类是否已标记访问控制注解
+     * @return 是否已覆盖访问控制注解
+     */
+    private boolean isAccessAnnotationCovered(
+            Class<?> controllerClass,
+            Method method,
+            boolean controllerClassAnnotated
+    ) {
+        return isAccessAnnotated(method)
+                || controllerClassAnnotated
+                || (method.getDeclaringClass() != controllerClass && isAccessAnnotated(method.getDeclaringClass()));
     }
 
     /**

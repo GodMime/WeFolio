@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.jxc.wefolio.common.auth.AuthContext;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
 import com.jxc.wefolio.dict.JoinStatusDict;
+import com.jxc.wefolio.dict.PointSceneCodeDict;
 import com.jxc.wefolio.dict.TeamRoleDict;
 import com.jxc.wefolio.dict.TeamStatusDict;
 import com.jxc.wefolio.dict.UserStatusDict;
@@ -38,7 +39,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -67,6 +70,10 @@ class MineTeamServiceTest {
     /** 团队注册事务服务模拟 */
     @Mock
     private TeamRegistrationService teamRegistrationService;
+
+    /** 积分服务模拟 */
+    @Mock
+    private PointService pointService;
 
     @BeforeEach
     void setUp() {
@@ -110,7 +117,7 @@ class MineTeamServiceTest {
     }
 
     @Test
-    void createTeamGeneratesTeamCodeInitializesCosAndCreatesOwnerMember() {
+    void createTeamPreChecksPointsInitializesCosAndCreatesOwnerMember() {
         MineTeamCreateRequest request = new MineTeamCreateRequest();
         request.setName(" 星曜司仪团 ");
         request.setIntro(" 高端婚礼主持团队 ");
@@ -132,14 +139,33 @@ class MineTeamServiceTest {
 
         MineTeamDetailResponse response = service.createTeam(request);
 
-        InOrder inOrder = inOrder(cosService, teamRegistrationService);
+        InOrder inOrder = inOrder(pointService, cosService, teamRegistrationService);
         ArgumentCaptor<String> codeCaptor = ArgumentCaptor.forClass(String.class);
+        inOrder.verify(pointService).assertCanConsume(7L, PointSceneCodeDict.CREATE_TEAM.getCode(), 1);
         inOrder.verify(cosService).initTeamStorage(codeCaptor.capture());
         inOrder.verify(teamRegistrationService).createTeamWithOwner(
                 eq(codeCaptor.getValue()), eq(7L), eq("星曜司仪团"), eq("高端婚礼主持团队"), eq(""));
         assertThat(codeCaptor.getValue()).startsWith("TM").hasSize(10);
         assertThat(response.getTeam().getTeamId()).isEqualTo(100L);
         assertThat(response.getTeam().isCanMaintain()).isTrue();
+    }
+
+    @Test
+    void createTeamRejectsInsufficientPointsBeforeInitializingCos() {
+        MineTeamCreateRequest request = new MineTeamCreateRequest();
+        request.setName("星曜司仪团");
+        when(teamEntityMapper.selectCount(any())).thenReturn(0L);
+        doThrow(new BusinessException("积分余额不足，请充值后再试"))
+                .when(pointService).assertCanConsume(7L, PointSceneCodeDict.CREATE_TEAM.getCode(), 1);
+
+        MineTeamService service = service();
+
+        assertThatThrownBy(() -> service.createTeam(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("积分余额不足，请充值后再试");
+        verify(cosService, never()).initTeamStorage(anyString());
+        verify(teamRegistrationService, never()).createTeamWithOwner(
+                anyString(), eq(7L), anyString(), anyString(), anyString());
     }
 
     @Test
@@ -373,7 +399,8 @@ class MineTeamServiceTest {
                 teamMemberEntityMapper,
                 userEntityMapper,
                 cosService,
-                teamRegistrationService
+                teamRegistrationService,
+                pointService
         );
     }
 }

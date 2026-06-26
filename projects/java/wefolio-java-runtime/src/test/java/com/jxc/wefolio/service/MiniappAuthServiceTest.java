@@ -44,6 +44,9 @@ class MiniappAuthServiceTest {
     @Mock
     private CosProperties cosProperties;
 
+    @Mock
+    private PointService pointService;
+
     @Test
     void parsesDevelopmentBearerToken() {
         MiniappAuthService service = buildService();
@@ -100,6 +103,7 @@ class MiniappAuthServiceTest {
         assertThat(response.getUserId()).isEqualTo(11L);
         assertThat(response.getTokenType()).isEqualTo("Bearer");
         verify(cosService).initUserStorage(any());
+        verify(pointService).ensureAccount(11L);
         verify(userEntityMapper).insert(org.mockito.ArgumentMatchers.<UserEntity>argThat(user ->
                 "林安".equals(user.getNickname())
                         && "https://example.com/avatar.jpg".equals(user.getAvatarUrl())
@@ -144,6 +148,7 @@ class MiniappAuthServiceTest {
         assertThat(response.getToken()).isEqualTo("wf-dev-user-11");
         verify(wechatMiniappClient, never()).exchangePluginOpenpid(any());
         verify(cosService).initUserStorage(any());
+        verify(pointService).ensureAccount(11L);
         verify(userEntityMapper).insert(org.mockito.ArgumentMatchers.<UserEntity>argThat(user ->
                 "林安".equals(user.getNickname())
                         && "https://example.com/avatar.jpg".equals(user.getAvatarUrl())
@@ -182,6 +187,7 @@ class MiniappAuthServiceTest {
         assertThat(response.getToken()).isEqualTo("wf-dev-user-11");
         verify(cosService).initUserStorage(any());
         verify(cosService, never()).uploadFromUrl(any(), any());
+        verify(pointService).ensureAccount(11L);
         verify(userEntityMapper).insert(org.mockito.ArgumentMatchers.<UserEntity>argThat(user ->
                 "林安".equals(user.getNickname())
                         && "".equals(user.getAvatarUrl())
@@ -242,7 +248,7 @@ class MiniappAuthServiceTest {
                 properties(),
                 cosService,
                 cosProperties,
-                new UserRegistrationService(userEntityMapper, userAuthEntityMapper)
+                new UserRegistrationService(userEntityMapper, userAuthEntityMapper, pointService)
         );
     }
 

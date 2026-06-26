@@ -1,6 +1,7 @@
 package com.jxc.wefolio.service;
 
 import com.jxc.wefolio.dict.JoinStatusDict;
+import com.jxc.wefolio.dict.PointSceneCodeDict;
 import com.jxc.wefolio.dict.TeamRoleDict;
 import com.jxc.wefolio.dict.TeamStatusDict;
 import com.jxc.wefolio.entity.TeamEntity;
@@ -31,6 +32,9 @@ public class TeamRegistrationService {
     /** 团队成员 Mapper */
     private final TeamMemberEntityMapper teamMemberEntityMapper;
 
+    /** 积分服务 */
+    private final PointService pointService;
+
     /**
      * 创建团队，并创建当前用户的拥有者成员关系。
      *
@@ -49,6 +53,8 @@ public class TeamRegistrationService {
             String intro,
             String avatarUrl
     ) {
+        // 事务内再次确认积分足够，防止 COS 初始化后账户余额被并发消耗。
+        pointService.assertCanConsume(ownerUserId, PointSceneCodeDict.CREATE_TEAM.getCode(), 1);
         LocalDateTime now = LocalDateTime.now();
         TeamEntity team = new TeamEntity();
         team.setUniqueCode(uniqueCode);
@@ -81,6 +87,17 @@ public class TeamRegistrationService {
         owner.setRespondedAt(now);
         owner.setJoinedAt(now);
         teamMemberEntityMapper.insert(owner);
+
+        // 新建团队按 PRD 扣除创建者个人账户积分；失败时团队和成员关系随事务一起回滚。
+        pointService.consume(
+                ownerUserId,
+                PointSceneCodeDict.CREATE_TEAM.getCode(),
+                "TEAM",
+                String.valueOf(team.getId()),
+                1,
+                "CREATE_TEAM:" + team.getId(),
+                "新建团队扣除积分"
+        );
 
         TeamCreationResult result = new TeamCreationResult();
         result.setTeam(team);

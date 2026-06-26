@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
 import com.jxc.wefolio.dict.JoinStatusDict;
+import com.jxc.wefolio.dict.PointSceneCodeDict;
 import com.jxc.wefolio.dict.TeamRoleDict;
 import com.jxc.wefolio.dict.TeamStatusDict;
 import com.jxc.wefolio.dict.UserStatusDict;
@@ -90,6 +91,9 @@ public class MineTeamService {
     /** 团队注册事务服务 */
     private final TeamRegistrationService teamRegistrationService;
 
+    /** 积分服务 */
+    private final PointService pointService;
+
     /**
      * 获取当前用户加入的团队列表。
      *
@@ -158,8 +162,9 @@ public class MineTeamService {
         String avatarUrl = normalizeOptionalString(request.getAvatarUrl(), AVATAR_URL_MAX_LENGTH, "团队图标");
         String uniqueCode = generateUniqueTeamCode();
 
+        pointService.assertCanConsume(userId, PointSceneCodeDict.CREATE_TEAM.getCode(), 1);
         try {
-            // 先初始化团队 COS 目录；成功后再进入团队注册事务，避免事务中夹杂远端存储调用。
+            // 积分预校验通过后初始化团队 COS 目录；事务内仍会二次扣分校验，避免并发余额变化。
             cosService.initTeamStorage(uniqueCode);
         } catch (Exception e) {
             throw new BusinessException("团队存储初始化失败，请重试", e);

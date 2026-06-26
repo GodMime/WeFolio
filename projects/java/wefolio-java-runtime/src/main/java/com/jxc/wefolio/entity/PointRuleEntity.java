@@ -3,6 +3,7 @@ package com.jxc.wefolio.entity;
 import java.time.LocalDateTime;
 
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.jxc.wefolio.dict.PointRuleStatusDict;
 import lombok.Data;
 
 
@@ -46,7 +47,11 @@ public class PointRuleEntity extends BaseEntity {
     /** 生效结束时间，空表示长期有效 */
     private LocalDateTime effectiveTo;
 
-    /** 状态：ACTIVE 启用 / DISABLED 停用 */
+    /**
+     * 状态：ACTIVE 启用 / DISABLED 停用。
+     *
+     * @see PointRuleStatusDict
+     */
     private String status;
 
 }
