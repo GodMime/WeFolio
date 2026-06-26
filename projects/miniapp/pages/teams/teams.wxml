@@ -54,7 +54,6 @@
                 </view>
               </view>
               <view class="team-actions">
-                <view class="mini-action">{{item.actionText}}</view>
                 <view class="entry-arrow"></view>
               </view>
             </view>

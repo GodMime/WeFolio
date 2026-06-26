@@ -115,6 +115,33 @@ test('profile tag remove control renders as a compact icon trigger', () => {
   assert.match(tagRemoveRule, /overflow:\s*hidden/)
 })
 
+test('profile tag dialog uses Skyline compatible bottom sheet positioning', () => {
+  const profileWxss = fs.readFileSync(profileWxssPath, 'utf8')
+  const tagDialogRule = readProfileRule('.tag-dialog')
+  const tagDialogPanelRule = readProfileRule('.tag-dialog-panel')
+  const colorGridRule = readProfileRule('.color-grid')
+  const colorChoiceRule = readProfileRule('.color-choice')
+
+  assert.match(tagDialogRule, /position:\s*fixed/)
+  assert.match(tagDialogRule, /left:\s*0/)
+  assert.match(tagDialogRule, /right:\s*0/)
+  assert.match(tagDialogRule, /top:\s*0/)
+  assert.match(tagDialogRule, /bottom:\s*0/)
+  assert.doesNotMatch(tagDialogRule, /display:\s*flex/)
+  assert.doesNotMatch(tagDialogRule, /align-items:\s*flex-end/)
+  assert.match(tagDialogPanelRule, /position:\s*absolute/)
+  assert.match(tagDialogPanelRule, /left:\s*0/)
+  assert.match(tagDialogPanelRule, /right:\s*0/)
+  assert.match(tagDialogPanelRule, /bottom:\s*0/)
+  assert.match(colorGridRule, /display:\s*flex/)
+  assert.match(colorGridRule, /flex-wrap:\s*wrap/)
+  assert.doesNotMatch(colorGridRule, /display:\s*grid/)
+  assert.doesNotMatch(profileWxss, /grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)/)
+  assert.doesNotMatch(colorChoiceRule, /\/\s*3/)
+  assert.match(colorChoiceRule, /width:\s*31\.3%/)
+  assert.match(colorChoiceRule, /flex:\s*none/)
+})
+
 test('basic profile action buttons use wider tap targets', () => {
   const profileWxml = fs.readFileSync(profileWxmlPath, 'utf8')
   const wideButtonRule = readProfileRule('.wide-button')

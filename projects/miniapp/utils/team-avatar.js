@@ -1,6 +1,8 @@
 const { DEFAULT_BASE_URL, TOKEN_STORAGE_KEY } = require('./request')
 
 const TEAM_AVATAR_MAX_SIZE_BYTES = 5 * 1024 * 1024
+const TEAM_AVATAR_COMPRESS_QUALITY = 95
+const TEAM_AVATAR_COMPRESSED_SIZE = 512
 
 // 测试时允许注入 wxApi；真机运行时使用微信小程序全局 wx。
 function getRuntimeWx(wxApi) {
@@ -35,6 +37,52 @@ function getLocalFileSize(filePath, wxApi) {
   return stats && typeof stats.size === 'number' ? stats.size : 0
 }
 
+// 团队图标与个人头像保持一致：超过 5MB 时压缩为 512x512，减少无效上传。
+function compressTeamAvatar(filePath, wxApi) {
+  const runtimeWx = getRuntimeWx(wxApi)
+  if (!runtimeWx.compressImage) {
+    return Promise.reject(new Error('当前微信版本不支持团队图标压缩'))
+  }
+
+  return new Promise((resolve, reject) => {
+    runtimeWx.compressImage({
+      src: filePath,
+      quality: TEAM_AVATAR_COMPRESS_QUALITY,
+      compressedWidth: TEAM_AVATAR_COMPRESSED_SIZE,
+      compressedHeight: TEAM_AVATAR_COMPRESSED_SIZE,
+      success(response) {
+        if (response && response.tempFilePath) {
+          resolve(response.tempFilePath)
+          return
+        }
+        reject(new Error('团队图标压缩失败'))
+      },
+      fail(error) {
+        reject(new Error(error && error.errMsg ? error.errMsg : '团队图标压缩失败'))
+      }
+    })
+  })
+}
+
+async function prepareTeamAvatarFilePath(filePath, options = {}) {
+  if (!filePath || isRemoteUrl(filePath)) {
+    return filePath || ''
+  }
+
+  const wxApi = options.wxApi
+  const originalSize = getLocalFileSize(filePath, wxApi)
+  if (originalSize <= TEAM_AVATAR_MAX_SIZE_BYTES) {
+    return filePath
+  }
+
+  const compressedPath = await compressTeamAvatar(filePath, wxApi)
+  const compressedSize = getLocalFileSize(compressedPath, wxApi)
+  if (compressedSize > TEAM_AVATAR_MAX_SIZE_BYTES) {
+    throw new Error('团队图标不能超过 5MB')
+  }
+  return compressedPath
+}
+
 // 后端 Response 包装体通过 uploadFile 原样返回字符串，这里统一解析并抛出可读错误。
 function parseUploadResponse(response) {
   try {
@@ -54,10 +102,7 @@ async function uploadTeamAvatar(teamId, filePath, options = {}) {
   }
 
   const runtimeWx = getRuntimeWx(options.wxApi)
-  const fileSize = getLocalFileSize(filePath, options.wxApi)
-  if (fileSize > TEAM_AVATAR_MAX_SIZE_BYTES) {
-    throw new Error('团队图标不能超过 5MB')
-  }
+  const preparedFilePath = await prepareTeamAvatarFilePath(filePath, options)
 
   const token = options.token !== undefined
     ? options.token
@@ -71,7 +116,7 @@ async function uploadTeamAvatar(teamId, filePath, options = {}) {
   return new Promise((resolve, reject) => {
     runtimeWx.uploadFile({
       url: joinUrl(options.baseUrl || DEFAULT_BASE_URL, `/api/mine/teams/${teamId}/avatar`),
-      filePath,
+      filePath: preparedFilePath,
       name: 'file',
       header,
       success(response) {
@@ -103,5 +148,6 @@ async function uploadTeamAvatar(teamId, filePath, options = {}) {
 
 module.exports = {
   TEAM_AVATAR_MAX_SIZE_BYTES,
+  prepareTeamAvatarFilePath,
   uploadTeamAvatar
 }

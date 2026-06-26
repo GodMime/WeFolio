@@ -118,6 +118,26 @@ Page({
     this.bootstrap()
   },
 
+  handleCopyTeamCode(event) {
+    const uniqueCode = event.currentTarget.dataset.code || this.data.detail.team.uniqueCode
+    if (!uniqueCode || uniqueCode === '-') {
+      wx.showToast({
+        title: '暂无团队唯一码',
+        icon: 'none'
+      })
+      return
+    }
+    wx.setClipboardData({
+      data: uniqueCode,
+      success() {
+        wx.showToast({
+          title: '已复制团队唯一码',
+          icon: 'success'
+        })
+      }
+    })
+  },
+
   handleInput(event) {
     // 资料表单共用输入处理器，保证字数统计和实际提交内容来自同一份 form。
     const field = event.currentTarget.dataset.field

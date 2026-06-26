@@ -41,8 +41,11 @@ test('teams page contains list cards and slide-down create form', () => {
   assert.match(teamsWxml, /class="create-section \{\{createFormVisible \? 'expanded' : 'collapsed'\}\}"/)
   assert.match(teamsWxml, /open-type="chooseAvatar"/)
   assert.match(teamsWxml, /bindtap="handleCreateTeam"/)
+  assert.doesNotMatch(teamsWxml, /item\.actionText/)
+  assert.doesNotMatch(teamsWxml, /class="mini-action"/)
   assert.match(teamsWxss, /\.create-form-panel/)
   assert.match(teamsWxss, /\.team-card/)
+  assert.doesNotMatch(teamsWxss, /\.mini-action/)
 })
 
 test('team create form expands slowly instead of mounting instantly', () => {
@@ -128,6 +131,52 @@ test('team create save button sits below the white create panel', () => {
   assert.match(createSaveButtonRule, /max-width:\s*100%/)
   assert.match(createSaveButtonRule, /margin-left:\s*0/)
   assert.match(createSaveButtonRule, /margin-right:\s*0/)
+})
+
+test('team maintenance status filters use Skyline compatible flex columns', () => {
+  const pageWxml = readProjectFile('pages/team-maintenance/team-maintenance.wxml')
+  const pageWxss = readProjectFile('pages/team-maintenance/team-maintenance.wxss')
+  const segmentedRule = readRule(pageWxss, '.segmented')
+  const segmentRule = readRule(pageWxss, '.segmented .segment')
+
+  assert.match(pageWxml, /class="segmented"[\s\S]*class="segment \{\{statusFilter === item\.key \? 'active' : ''\}\}"/)
+  assert.match(segmentedRule, /display:\s*flex/)
+  assert.match(segmentedRule, /gap:\s*12rpx/)
+  assert.doesNotMatch(segmentedRule, /display:\s*grid/)
+  assert.doesNotMatch(segmentedRule, /grid-template-columns/)
+  assert.match(segmentRule, /flex:\s*1\s+1\s+0/)
+  assert.match(segmentRule, /min-width:\s*0/)
+})
+
+test('team maintenance profile header uses avatar picker and copyable team code', () => {
+  const pageJs = readProjectFile('pages/team-maintenance/team-maintenance.js')
+  const pageWxml = readProjectFile('pages/team-maintenance/team-maintenance.wxml')
+  const pageWxss = readProjectFile('pages/team-maintenance/team-maintenance.wxss')
+  const identityRule = readRule(pageWxss, '.team-identity')
+  const avatarPickerRule = readRule(pageWxss, '.avatar-picker')
+  const codeButtonRule = readRule(pageWxss, '.team-code-button')
+  const saveButtonRule = readRule(pageWxss, '.profile-panel > .primary-button.full')
+
+  assert.match(
+    pageWxml,
+    /<button wx:if="\{\{detail\.team\.canMaintain\}\}" class="team-logo large avatar-picker"[\s\S]*open-type="chooseAvatar"[\s\S]*bindchooseavatar="handleChooseAvatar"[\s\S]*aria-label="编辑团队图标"/
+  )
+  assert.match(pageWxml, /<view wx:else class="team-logo large"/)
+  assert.doesNotMatch(pageWxml, /class="secondary-button avatar-button"/)
+  assert.doesNotMatch(pageWxml, />更换</)
+  assert.match(
+    pageWxml,
+    /class="team-code-button"[\s\S]*data-code="\{\{detail\.team\.uniqueCode\}\}"[\s\S]*bindtap="handleCopyTeamCode"/
+  )
+  assert.match(pageJs, /handleCopyTeamCode\(/)
+  assert.match(pageJs, /wx\.setClipboardData\(\{[\s\S]*data:\s*uniqueCode/)
+  assert.match(pageJs, /title:\s*'已复制团队唯一码'/)
+  assert.match(identityRule, /align-items:\s*flex-start/)
+  assert.match(avatarPickerRule, /padding:\s*0/)
+  assert.match(codeButtonRule, /max-width:\s*100%/)
+  assert.match(saveButtonRule, /width:\s*100%/)
+  assert.match(saveButtonRule, /margin-left:\s*0/)
+  assert.match(saveButtonRule, /margin-right:\s*0/)
 })
 
 test('team maintenance page renders editable team profile and member controls', () => {

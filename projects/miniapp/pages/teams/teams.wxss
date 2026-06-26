@@ -183,21 +183,6 @@
   gap: 12rpx;
 }
 
-.mini-action {
-  min-width: 80rpx;
-  min-height: 52rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 18rpx;
-  color: #17202a;
-  font-size: 23rpx;
-  font-weight: 800;
-  border-radius: 999rpx;
-  background: #eef2f6;
-  box-sizing: border-box;
-}
-
 .entry-arrow {
   width: 24rpx;
   height: 24rpx;

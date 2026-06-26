@@ -21,19 +21,25 @@
       <block wx:else>
         <view class="panel profile-panel">
           <view class="team-identity">
-            <view class="team-logo large">
+            <button wx:if="{{detail.team.canMaintain}}" class="team-logo large avatar-picker" open-type="chooseAvatar" bindchooseavatar="handleChooseAvatar" disabled="{{saving}}" aria-label="编辑团队图标">
+              <image wx:if="{{form.avatarUrl}}" class="team-logo-image" src="{{form.avatarUrl}}" mode="aspectFill"></image>
+              <view wx:else class="team-logo-fallback">TM</view>
+            </button>
+            <view wx:else class="team-logo large">
               <image wx:if="{{form.avatarUrl}}" class="team-logo-image" src="{{form.avatarUrl}}" mode="aspectFill"></image>
               <view wx:else class="team-logo-fallback">TM</view>
             </view>
             <view class="team-heading">
               <view class="team-name">{{detail.team.name}}</view>
-              <view class="team-code">团队唯一码 {{detail.team.uniqueCode}}</view>
+              <view class="team-code-button" data-code="{{detail.team.uniqueCode}}" bindtap="handleCopyTeamCode" aria-role="button" aria-label="复制团队唯一码 {{detail.team.uniqueCode}}">
+                <text class="team-code-label">团队唯一码</text>
+                <text class="team-code-value">{{detail.team.uniqueCode}}</text>
+              </view>
               <view class="pill-row">
                 <view class="role-pill blue">{{detail.team.memberText}}</view>
                 <view class="role-pill blue">{{detail.team.roleText}}</view>
               </view>
             </view>
-            <button wx:if="{{detail.team.canMaintain}}" class="secondary-button avatar-button" open-type="chooseAvatar" bindchooseavatar="handleChooseAvatar" disabled="{{saving}}">更换</button>
           </view>
 
           <view class="form-row">

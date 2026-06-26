@@ -336,21 +336,30 @@
 
 .tag-dialog {
   position: fixed;
-  inset: 0;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
   z-index: 30;
-  display: flex;
-  align-items: flex-end;
 }
 
 .tag-dialog-backdrop {
   position: absolute;
-  inset: 0;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
   background: rgba(23, 32, 42, 0.36);
 }
 
 .tag-dialog-panel {
-  position: relative;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
   width: 100%;
+  max-height: calc(100% - env(safe-area-inset-top));
+  overflow-y: auto;
   padding: 28rpx 28rpx calc(28rpx + env(safe-area-inset-bottom));
   border-radius: 24rpx 24rpx 0 0;
   background: #fff;
@@ -365,13 +374,15 @@
 }
 
 .color-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 14rpx;
   margin-top: 14rpx;
 }
 
 .color-choice {
+  width: 31.3%;
+  flex: none;
   min-height: 64rpx;
   display: flex;
   align-items: center;

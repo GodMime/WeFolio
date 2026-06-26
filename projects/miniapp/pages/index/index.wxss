@@ -193,13 +193,14 @@
 }
 
 .metric-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
   gap: 16rpx;
   margin-top: 22rpx;
 }
 
 .metric {
+  flex: 1 1 0;
+  min-width: 0;
   min-height: 136rpx;
   padding: 24rpx 12rpx;
   text-align: center;

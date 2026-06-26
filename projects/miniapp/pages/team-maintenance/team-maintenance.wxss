@@ -40,12 +40,20 @@
 
 .team-identity {
   gap: 20rpx;
+  align-items: flex-start;
 }
 
 .team-heading,
 .member-copy {
   flex: 1;
   min-width: 0;
+}
+
+.team-heading {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding-top: 2rpx;
 }
 
 .team-logo {
@@ -61,6 +69,16 @@
   width: 116rpx;
   height: 116rpx;
   border-radius: 28rpx;
+}
+
+.avatar-picker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  line-height: 1;
 }
 
 .team-logo-image,
@@ -95,7 +113,8 @@
   white-space: nowrap;
 }
 
-.team-code,
+.team-code-label,
+.team-code-value,
 .member-summary,
 .empty-desc {
   color: #778392;
@@ -103,8 +122,29 @@
   line-height: 1.45;
 }
 
-.team-code {
+.team-code-button {
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   margin-top: 8rpx;
+  padding: 0;
+  overflow: hidden;
+  background: transparent;
+  box-sizing: border-box;
+}
+
+.team-code-label,
+.team-code-value {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.team-code-value {
+  margin-top: 2rpx;
+  font-weight: 700;
 }
 
 .pill-row {
@@ -223,16 +263,17 @@
   background: #eef2f6;
 }
 
-.avatar-button {
-  flex: none;
-  min-width: 112rpx;
-  min-height: 72rpx;
-  font-size: 24rpx;
-}
-
 .full {
   width: 100%;
   margin-top: 22rpx;
+}
+
+.profile-panel > .primary-button.full {
+  width: 100%;
+  min-width: 100%;
+  max-width: 100%;
+  margin-left: 0;
+  margin-right: 0;
 }
 
 .search-row,
@@ -242,9 +283,13 @@
 }
 
 .segmented {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
   gap: 12rpx;
+}
+
+.segmented .segment {
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .segment {

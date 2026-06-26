@@ -52,6 +52,19 @@ test('mine recharge button stays pinned to the right of balance band', () => {
   assert.match(buttonRule, /margin-left:\s*auto/)
 })
 
+test('mine metric cards use Skyline compatible three column flex layout', () => {
+  const metricGridRule = readRule('.metric-grid')
+  const metricRule = readRule('.metric')
+
+  assert.match(indexWxml, /class="metric-grid"[\s\S]*class="metric"/)
+  assert.match(metricGridRule, /display:\s*flex/)
+  assert.match(metricGridRule, /gap:\s*16rpx/)
+  assert.doesNotMatch(metricGridRule, /display:\s*grid/)
+  assert.doesNotMatch(metricGridRule, /grid-template-columns/)
+  assert.match(metricRule, /flex:\s*1\s+1\s+0/)
+  assert.match(metricRule, /min-width:\s*0/)
+})
+
 test('mine action entries use COS image logos and keep content left aligned', () => {
   const entryRowRule = readRule('.entry-row')
   const entryIconRule = readRule('.entry-icon')
