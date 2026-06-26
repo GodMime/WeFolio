@@ -138,14 +138,43 @@ test('team maintenance status filters use Skyline compatible flex columns', () =
   const pageWxss = readProjectFile('pages/team-maintenance/team-maintenance.wxss')
   const segmentedRule = readRule(pageWxss, '.segmented')
   const segmentRule = readRule(pageWxss, '.segmented .segment')
+  const activeSegmentRule = readRule(pageWxss, '.segment.active')
 
   assert.match(pageWxml, /class="segmented"[\s\S]*class="segment \{\{statusFilter === item\.key \? 'active' : ''\}\}"/)
   assert.match(segmentedRule, /display:\s*flex/)
-  assert.match(segmentedRule, /gap:\s*12rpx/)
+  assert.match(segmentedRule, /padding:\s*8rpx/)
+  assert.match(segmentedRule, /border:\s*1rpx solid #d8e0e8/)
+  assert.match(segmentedRule, /background:\s*rgba\(255,\s*255,\s*255,\s*0\.94\)/)
   assert.doesNotMatch(segmentedRule, /display:\s*grid/)
   assert.doesNotMatch(segmentedRule, /grid-template-columns/)
   assert.match(segmentRule, /flex:\s*1\s+1\s+0/)
   assert.match(segmentRule, /min-width:\s*0/)
+  assert.match(segmentRule, /margin:\s*0/)
+  assert.match(segmentRule, /background:\s*transparent/)
+  assert.match(activeSegmentRule, /background:\s*#17202a/)
+})
+
+test('team maintenance add member action sits in panel heading as outline pill', () => {
+  const pageWxml = readProjectFile('pages/team-maintenance/team-maintenance.wxml')
+  const pageWxss = readProjectFile('pages/team-maintenance/team-maintenance.wxss')
+  const panelHeadingRule = readRule(pageWxss, '.panel-heading')
+  const actionRule = readRule(pageWxss, '.add-member-button')
+
+  assert.match(
+    pageWxml,
+    /class="panel-heading"[\s\S]*class="section-title">团队成员<\/view>\s*<view class="add-member-button" bindtap="handleAddMember" aria-role="button" aria-label="添加团队成员">添加成员<\/view>/
+  )
+  assert.doesNotMatch(pageWxml, /class="mini-action"/)
+  assert.doesNotMatch(pageWxss, /\.mini-action/)
+  assert.match(panelHeadingRule, /justify-content:\s*space-between/)
+  assert.match(actionRule, /flex:\s*none/)
+  assert.match(actionRule, /width:\s*128rpx/)
+  assert.match(actionRule, /min-width:\s*0/)
+  assert.match(actionRule, /margin-left:\s*auto/)
+  assert.match(actionRule, /margin-right:\s*0/)
+  assert.match(actionRule, /padding:\s*0 12rpx/)
+  assert.match(actionRule, /border:\s*1rpx solid #cbd6e2/)
+  assert.match(actionRule, /background:\s*#f7fafc/)
 })
 
 test('team maintenance profile header uses avatar picker and copyable team code', () => {
@@ -166,14 +195,23 @@ test('team maintenance profile header uses avatar picker and copyable team code'
   assert.doesNotMatch(pageWxml, />更换</)
   assert.match(
     pageWxml,
-    /class="team-code-button"[\s\S]*data-code="\{\{detail\.team\.uniqueCode\}\}"[\s\S]*bindtap="handleCopyTeamCode"/
+    /class="team-identity"[\s\S]*class="team-heading"[\s\S]*class="pill-row"[\s\S]*<\/view>\s*<\/view>\s*<view class="team-code-button" data-code="\{\{detail\.team\.uniqueCode\}\}" bindtap="handleCopyTeamCode"/
   )
+  assert.doesNotMatch(pageWxml, /class="team-code-label"/)
+  assert.match(pageWxml, /class="team-code-button"[^>]*>\{\{detail\.team\.uniqueCode\}\}<\/view>/)
   assert.match(pageJs, /handleCopyTeamCode\(/)
   assert.match(pageJs, /wx\.setClipboardData\(\{[\s\S]*data:\s*uniqueCode/)
   assert.match(pageJs, /title:\s*'已复制团队唯一码'/)
   assert.match(identityRule, /align-items:\s*flex-start/)
   assert.match(avatarPickerRule, /padding:\s*0/)
-  assert.match(codeButtonRule, /max-width:\s*100%/)
+  assert.match(codeButtonRule, /flex:\s*none/)
+  assert.match(codeButtonRule, /max-width:\s*180rpx/)
+  assert.match(codeButtonRule, /align-self:\s*flex-start/)
+  assert.match(codeButtonRule, /margin-left:\s*auto/)
+  assert.match(codeButtonRule, /color:\s*#0f766e/)
+  assert.match(codeButtonRule, /text-overflow:\s*ellipsis/)
+  assert.match(codeButtonRule, /border-radius:\s*999rpx/)
+  assert.match(codeButtonRule, /background:\s*#dcf7f1/)
   assert.match(saveButtonRule, /width:\s*100%/)
   assert.match(saveButtonRule, /margin-left:\s*0/)
   assert.match(saveButtonRule, /margin-right:\s*0/)

@@ -113,8 +113,6 @@
   white-space: nowrap;
 }
 
-.team-code-label,
-.team-code-value,
 .member-summary,
 .empty-desc {
   color: #778392;
@@ -123,28 +121,22 @@
 }
 
 .team-code-button {
-  max-width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  margin-top: 8rpx;
-  padding: 0;
+  flex: none;
+  align-self: flex-start;
+  max-width: 180rpx;
+  margin-top: 6rpx;
+  margin-left: auto;
+  padding: 12rpx 16rpx;
   overflow: hidden;
-  background: transparent;
-  box-sizing: border-box;
-}
-
-.team-code-label,
-.team-code-value {
-  max-width: 100%;
-  overflow: hidden;
+  color: #0f766e;
+  font-size: 22rpx;
+  font-weight: 700;
+  line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.team-code-value {
-  margin-top: 2rpx;
-  font-weight: 700;
+  border-radius: 999rpx;
+  background: #dcf7f1;
+  box-sizing: border-box;
 }
 
 .pill-row {
@@ -235,7 +227,7 @@
 
 .primary-button,
 .secondary-button,
-.mini-action,
+.add-member-button,
 .segment {
   display: flex;
   align-items: center;
@@ -284,21 +276,28 @@
 
 .segmented {
   display: flex;
-  gap: 12rpx;
+  padding: 8rpx;
+  border: 1rpx solid #d8e0e8;
+  border-radius: 18rpx;
+  background: rgba(255, 255, 255, 0.94);
+  box-sizing: border-box;
 }
 
 .segmented .segment {
   flex: 1 1 0;
   min-width: 0;
+  margin: 0;
+  background: transparent;
 }
 
 .segment {
   min-height: 68rpx;
+  margin: 0;
   color: #667085;
   font-size: 24rpx;
   font-weight: 800;
-  border-radius: 16rpx;
-  background: #eef2f6;
+  border-radius: 14rpx;
+  background: transparent;
 }
 
 .segment.active {
@@ -312,15 +311,20 @@
   font-weight: 800;
 }
 
-.mini-action {
-  min-width: 116rpx;
+.add-member-button {
+  flex: none;
+  width: 128rpx;
+  min-width: 0;
   min-height: 56rpx;
-  padding: 0 18rpx;
-  color: #17202a;
+  margin-left: auto;
+  margin-right: 0;
+  padding: 0 12rpx;
+  color: #536579;
   font-size: 23rpx;
   font-weight: 800;
+  border: 1rpx solid #cbd6e2;
   border-radius: 999rpx;
-  background: #eef2f6;
+  background: #f7fafc;
 }
 
 .member-list {
