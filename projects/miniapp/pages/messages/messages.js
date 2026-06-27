@@ -218,10 +218,18 @@ Page({
         title: successTitle,
         icon: 'success'
       })
+      // 本地更新已读状态，保留滚动位置和分页游标
+      const idSet = new Set(messageIds)
       this.setData({
-        saving: false
+        saving: false,
+        selectedIds: [],
+        'messageData.messages': this.data.messageData.messages.map((item) => {
+          if (idSet.has(item.id)) {
+            return Object.assign({}, item, { unread: false, selected: false })
+          }
+          return item
+        })
       })
-      this.loadMessages()
     } catch (error) {
       if (error && error.authRequired) {
         handleAuthRequired(error.message)
@@ -254,10 +262,12 @@ Page({
         title: '已全部标记',
         icon: 'success'
       })
+      // 本地更新全部消息为已读，保留滚动位置和分页游标
       this.setData({
-        saving: false
+        saving: false,
+        selectedIds: [],
+        'messageData.messages': this.data.messageData.messages.map((item) => Object.assign({}, item, { unread: false, selected: false }))
       })
-      this.loadMessages()
     } catch (error) {
       if (error && error.authRequired) {
         handleAuthRequired(error.message)

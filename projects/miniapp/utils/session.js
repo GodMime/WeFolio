@@ -47,8 +47,7 @@ function handleAuthRequired(message, wxApi) {
 
 function ensureSession() {
   return request({
-    url: '/api/auth/session',
-    requireAuth: false
+    url: '/api/auth/session'
   })
 }
 
@@ -56,8 +55,7 @@ function maintainerWechatLogin(payload) {
   return request({
     url: '/api/auth/maintainer/wechat-login',
     method: 'POST',
-    data: payload || {},
-    requireAuth: false
+    data: payload || {}
   })
 }
 

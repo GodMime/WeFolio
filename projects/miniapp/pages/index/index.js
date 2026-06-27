@@ -66,10 +66,6 @@ Page({
     })
 
     try {
-      await request({
-        url: '/api/auth/session',
-        requireAuth: false
-      })
       const dashboard = await request({
         url: '/api/mine/dashboard'
       })

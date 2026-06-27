@@ -68,7 +68,7 @@ test('basic profile avatar picker only previews and save uploads the selected im
   assert.match(profileJs, /'form\.avatarUrl': avatarUrl/)
   assert.doesNotMatch(profileJs, /avatarUploading/)
   assert.doesNotMatch(profileJs, /const uploadedAvatarUrl = await uploadAvatar\(avatarUrl\)/)
-  assert.match(profileJs, /const avatarUrl = await uploadAvatar\(payload\.avatarUrl\)/)
+  assert.match(profileJs, /avatarUrl = await uploadAvatar\(payload\.avatarUrl\)/)
   assert.match(profileJs, /data:\s*Object\.assign\(\{\}, payload, \{[\s\S]*avatarUrl/)
 })
 

@@ -127,7 +127,11 @@ async function uploadAvatar(filePath, options = {}) {
           reject(new Error(body.message || '头像上传失败'))
           return
         }
-        resolve(body.data && body.data.url ? body.data.url : '')
+        if (body.data && body.data.url) {
+          resolve(body.data.url)
+        } else {
+          reject(new Error('头像上传成功但未获取到文件地址'))
+        }
       },
       fail(error) {
         reject(new Error(error && error.errMsg ? error.errMsg : '头像上传失败'))

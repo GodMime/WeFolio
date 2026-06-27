@@ -229,7 +229,20 @@ Page({
 
     try {
       const payload = buildProfilePayload(this.data.form)
-      const avatarUrl = await uploadAvatar(payload.avatarUrl)
+      let avatarUrl = payload.avatarUrl
+      try {
+        avatarUrl = await uploadAvatar(payload.avatarUrl)
+        if (!avatarUrl) {
+          avatarUrl = this.data.profile.avatarUrl
+        }
+      } catch (uploadError) {
+        // 上传失败时保留已有头像，不覆盖为空
+        avatarUrl = this.data.profile.avatarUrl
+        wx.showToast({
+          title: '头像上传失败，已保留原有头像',
+          icon: 'none'
+        })
+      }
       const response = await request({
         url: '/api/mine/profile',
         method: 'PUT',

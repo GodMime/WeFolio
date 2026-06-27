@@ -190,20 +190,30 @@ Page({
       })
       setToken(response.token)
       if (preparedAvatarFilePath) {
-        const avatarUrl = await uploadAvatar(preparedAvatarFilePath, {
-          skipPrepare: true
-        })
-        await request({
-          url: '/api/mine/profile',
-          method: 'PUT',
-          data: {
-            nickname,
-            avatarUrl
+        try {
+          const avatarUrl = await uploadAvatar(preparedAvatarFilePath, {
+            skipPrepare: true
+          })
+          if (avatarUrl) {
+            await request({
+              url: '/api/mine/profile',
+              method: 'PUT',
+              data: {
+                nickname,
+                avatarUrl
+              }
+            })
+            this.setData({
+              avatarUrl
+            })
           }
-        })
-        this.setData({
-          avatarUrl
-        })
+        } catch (uploadError) {
+          // 头像上传失败不阻断登录，仅提示用户后续可在基础信息中重新设置
+          wx.showToast({
+            title: '头像上传失败，可在基础信息中重新设置',
+            icon: 'none'
+          })
+        }
       }
       wx.redirectTo({
         url: '/pages/index/index'
