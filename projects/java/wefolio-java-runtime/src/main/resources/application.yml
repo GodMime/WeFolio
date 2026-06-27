@@ -55,3 +55,9 @@ auth:
 admin:
   point:
     secret: ${POINT_ADMIN_SECRET:}
+
+# --- Registration Point Configuration ---
+registration:
+  point:
+    new-user-gift-points: ${REGISTRATION_NEW_USER_GIFT_POINTS:500}
+    referral-gift-points: ${REGISTRATION_REFERRAL_GIFT_POINTS:500}

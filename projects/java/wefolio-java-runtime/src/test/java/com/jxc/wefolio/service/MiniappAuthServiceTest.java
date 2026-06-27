@@ -6,12 +6,14 @@ import com.jxc.wefolio.dto.WechatPhoneNumberResponse;
 import com.jxc.wefolio.dto.WechatSessionResponse;
 import com.jxc.wefolio.entity.UserEntity;
 import com.jxc.wefolio.entity.UserAuthEntity;
+import com.jxc.wefolio.mapper.ReferralRelationEntityMapper;
 import com.jxc.wefolio.mapper.UserAuthEntityMapper;
 import com.jxc.wefolio.mapper.UserEntityMapper;
 import com.jxc.wefolio.common.UniqueCodeGenerator;
 import com.jxc.wefolio.config.AuthTokenProperties;
 import com.jxc.wefolio.config.WechatMiniappProperties;
 import com.jxc.wefolio.config.CosProperties;
+import com.jxc.wefolio.config.RegistrationPointProperties;
 import com.jxc.wefolio.exception.BusinessException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -68,6 +70,9 @@ class MiniappAuthServiceTest {
 
     @Mock
     private UserAuthEntityMapper userAuthEntityMapper;
+
+    @Mock
+    private ReferralRelationEntityMapper referralRelationEntityMapper;
 
     @Mock
     private WechatMiniappClient wechatMiniappClient;
@@ -352,7 +357,13 @@ class MiniappAuthServiceTest {
                 authTokenProperties,
                 cosService,
                 cosProperties,
-                new UserRegistrationService(userEntityMapper, userAuthEntityMapper, pointService),
+                new UserRegistrationService(
+                        userEntityMapper,
+                        userAuthEntityMapper,
+                        referralRelationEntityMapper,
+                        pointService,
+                        registrationPointProperties()
+                ),
                 uniqueCodeGenerator
         );
     }
@@ -377,6 +388,18 @@ class MiniappAuthServiceTest {
     private AuthTokenProperties authTokenProperties(String secret) {
         AuthTokenProperties properties = new AuthTokenProperties();
         properties.setSecret(secret);
+        return properties;
+    }
+
+    /**
+     * 构造测试注册积分配置。
+     *
+     * @return 注册积分配置
+     */
+    private RegistrationPointProperties registrationPointProperties() {
+        RegistrationPointProperties properties = new RegistrationPointProperties();
+        properties.setNewUserGiftPoints(500L);
+        properties.setReferralGiftPoints(500L);
         return properties;
     }
 

@@ -109,6 +109,46 @@ class PointServiceTest {
     }
 
     @Test
+    void grantGiftWritesConfiguredGiftSceneTransactionAndUpdatesBalance() {
+        activeUser(7L);
+        when(pointTransactionEntityMapper.selectOne(any())).thenReturn(null);
+        when(pointAccountEntityMapper.selectByUserIdForUpdate(7L)).thenReturn(account(10L, 7L, 20L));
+        when(pointAccountEntityMapper.updateById(any(PointAccountEntity.class))).thenReturn(1);
+        doAnswer(invocation -> {
+            PointTransactionEntity transaction = invocation.getArgument(0);
+            transaction.setId(89L);
+            return 1;
+        }).when(pointTransactionEntityMapper).insert(any(PointTransactionEntity.class));
+
+        PointMutationResponse response = service().grantGift(
+                7L,
+                500L,
+                PointSceneCodeDict.NEW_USER_REGISTRATION_GIFT.getCode(),
+                "USER_REGISTRATION",
+                "7",
+                "NEW_USER_REGISTRATION_GIFT:7",
+                "新用户注册赠送"
+        );
+
+        ArgumentCaptor<PointAccountEntity> accountCaptor = ArgumentCaptor.forClass(PointAccountEntity.class);
+        ArgumentCaptor<PointTransactionEntity> transactionCaptor = ArgumentCaptor.forClass(PointTransactionEntity.class);
+        verify(pointAccountEntityMapper).updateById(accountCaptor.capture());
+        verify(pointTransactionEntityMapper).insert(transactionCaptor.capture());
+        assertThat(accountCaptor.getValue().getBalance()).isEqualTo(520L);
+        assertThat(accountCaptor.getValue().getTotalGifted()).isEqualTo(500L);
+        assertThat(transactionCaptor.getValue().getTransactionType()).isEqualTo(PointTransactionTypeDict.GIFT.getCode());
+        assertThat(transactionCaptor.getValue().getSceneCode()).isEqualTo(PointSceneCodeDict.NEW_USER_REGISTRATION_GIFT.getCode());
+        assertThat(transactionCaptor.getValue().getPointsChange()).isEqualTo(500L);
+        assertThat(transactionCaptor.getValue().getBusinessType()).isEqualTo("USER_REGISTRATION");
+        assertThat(transactionCaptor.getValue().getBusinessId()).isEqualTo("7");
+        assertThat(transactionCaptor.getValue().getIdempotencyKey()).isEqualTo("NEW_USER_REGISTRATION_GIFT:7");
+        assertThat(transactionCaptor.getValue().getRemark()).isEqualTo("新用户注册赠送");
+        assertThat(response.getTransactionId()).isEqualTo(89L);
+        assertThat(response.getSceneCode()).isEqualTo(PointSceneCodeDict.NEW_USER_REGISTRATION_GIFT.getCode());
+        assertThat(response.getBalanceAfter()).isEqualTo(520L);
+    }
+
+    @Test
     void grantPointsReturnsExistingTransactionForIdempotencyKey() {
         activeUser(7L);
         PointTransactionEntity existing = transaction(88L, 10L, 7L, 100L, 20L, 120L);

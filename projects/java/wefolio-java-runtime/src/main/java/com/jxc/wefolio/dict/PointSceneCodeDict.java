@@ -41,17 +41,27 @@ public class PointSceneCodeDict {
     public static final DictValue MANUAL_ADMIN_GRANT =
             new DictValue("MANUAL_ADMIN_GRANT", "后台人工加分");
 
+    /** 新用户注册赠送 */
+    public static final DictValue NEW_USER_REGISTRATION_GIFT =
+            new DictValue("NEW_USER_REGISTRATION_GIFT", "新用户注册赠送");
+
+    /** 推荐用户赠送 */
+    public static final DictValue REFERRAL_USER_GIFT =
+            new DictValue("REFERRAL_USER_GIFT", "推荐用户赠送");
+
     /** 场景编码索引 */
-    private static final Map<String, DictValue> CODE_MAP = Map.of(
-            UPLOAD_IMAGE.getCode(), UPLOAD_IMAGE,
-            UPLOAD_VIDEO.getCode(), UPLOAD_VIDEO,
-            CREATE_TEAM.getCode(), CREATE_TEAM,
-            MAINTAIN_STANDARD_PORTFOLIO.getCode(), MAINTAIN_STANDARD_PORTFOLIO,
-            MAINTAIN_ADVANCED_PORTFOLIO.getCode(), MAINTAIN_ADVANCED_PORTFOLIO,
-            VISIT_PERSONAL_PORTFOLIO.getCode(), VISIT_PERSONAL_PORTFOLIO,
-            VIEW_PORTFOLIO_IMAGES.getCode(), VIEW_PORTFOLIO_IMAGES,
-            VIEW_PORTFOLIO_VIDEO.getCode(), VIEW_PORTFOLIO_VIDEO,
-            MANUAL_ADMIN_GRANT.getCode(), MANUAL_ADMIN_GRANT
+    private static final Map<String, DictValue> CODE_MAP = Map.ofEntries(
+            Map.entry(UPLOAD_IMAGE.getCode(), UPLOAD_IMAGE),
+            Map.entry(UPLOAD_VIDEO.getCode(), UPLOAD_VIDEO),
+            Map.entry(CREATE_TEAM.getCode(), CREATE_TEAM),
+            Map.entry(MAINTAIN_STANDARD_PORTFOLIO.getCode(), MAINTAIN_STANDARD_PORTFOLIO),
+            Map.entry(MAINTAIN_ADVANCED_PORTFOLIO.getCode(), MAINTAIN_ADVANCED_PORTFOLIO),
+            Map.entry(VISIT_PERSONAL_PORTFOLIO.getCode(), VISIT_PERSONAL_PORTFOLIO),
+            Map.entry(VIEW_PORTFOLIO_IMAGES.getCode(), VIEW_PORTFOLIO_IMAGES),
+            Map.entry(VIEW_PORTFOLIO_VIDEO.getCode(), VIEW_PORTFOLIO_VIDEO),
+            Map.entry(MANUAL_ADMIN_GRANT.getCode(), MANUAL_ADMIN_GRANT),
+            Map.entry(NEW_USER_REGISTRATION_GIFT.getCode(), NEW_USER_REGISTRATION_GIFT),
+            Map.entry(REFERRAL_USER_GIFT.getCode(), REFERRAL_USER_GIFT)
     );
 
     private PointSceneCodeDict() {

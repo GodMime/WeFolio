@@ -285,8 +285,44 @@ public class PointService {
      */
     @Transactional(rollbackFor = Exception.class)
     public PointMutationResponse grantPoints(Long userId, Long points, String idempotencyKey, String remark) {
+        return grantGift(
+                userId,
+                points,
+                PointSceneCodeDict.MANUAL_ADMIN_GRANT.getCode(),
+                BUSINESS_TYPE_ADMIN_GRANT,
+                String.valueOf(userId),
+                idempotencyKey,
+                remark
+        );
+    }
+
+    /**
+     * 赠送积分并写入指定赠送场景流水。
+     *
+     * @param userId 用户 ID
+     * @param points 赠送积分
+     * @param sceneCode 赠送场景编码
+     * @param businessType 业务类型
+     * @param businessId 业务 ID
+     * @param idempotencyKey 幂等键
+     * @param remark 备注
+     * @return 积分变动响应
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public PointMutationResponse grantGift(
+            Long userId,
+            Long points,
+            String sceneCode,
+            String businessType,
+            String businessId,
+            String idempotencyKey,
+            String remark
+    ) {
         requireActiveUser(userId);
         long normalizedPoints = normalizePositiveLong(points, "增加积分必须大于 0");
+        String normalizedSceneCode = normalizeRequiredString(sceneCode, "积分场景不能为空");
+        String normalizedBusinessType = normalizeRequiredString(businessType, "业务类型不能为空");
+        String normalizedBusinessId = normalizeRequiredString(businessId, "业务 ID 不能为空");
         String normalizedIdempotencyKey = normalizeRequiredString(idempotencyKey, "幂等键不能为空");
         PointTransactionEntity existing = findTransaction(normalizedIdempotencyKey);
         if (existing != null) {
@@ -306,20 +342,21 @@ public class PointService {
         transaction.setAccountId(account.getId());
         transaction.setUserId(userId);
         transaction.setTransactionType(PointTransactionTypeDict.GIFT.getCode());
-        transaction.setSceneCode(PointSceneCodeDict.MANUAL_ADMIN_GRANT.getCode());
+        transaction.setSceneCode(normalizedSceneCode);
         transaction.setPointsChange(normalizedPoints);
         transaction.setBalanceBefore(balanceBefore);
         transaction.setBalanceAfter(balanceAfter);
-        transaction.setBusinessType(BUSINESS_TYPE_ADMIN_GRANT);
-        transaction.setBusinessId(String.valueOf(userId));
-        transaction.setCalculationSnapshot(toJson(snapshot("MANUAL_ADJUSTMENT", normalizedPoints, 1L, null)));
+        transaction.setBusinessType(normalizedBusinessType);
+        transaction.setBusinessId(normalizedBusinessId);
+        transaction.setCalculationSnapshot(toJson(snapshot(
+                PointCalcModeDict.MANUAL_ADJUSTMENT.getCode(), normalizedPoints, 1L, null)));
         transaction.setIdempotencyKey(normalizedIdempotencyKey);
         transaction.setRemark(normalizeOptionalString(remark));
         transaction.setOccurredAt(LocalDateTime.now());
         pointTransactionEntityMapper.insert(transaction);
         createLowBalanceMessageIfNeeded(transaction);
-        log.info("后台人工加分成功: userId={}, points={}, balanceAfter={}, idempotencyKey={}",
-                userId, normalizedPoints, balanceAfter, normalizedIdempotencyKey);
+        log.info("赠送积分成功: userId={}, sceneCode={}, points={}, balanceAfter={}, idempotencyKey={}",
+                userId, normalizedSceneCode, normalizedPoints, balanceAfter, normalizedIdempotencyKey);
         return buildMutationFromTransaction(transaction, false, true);
     }
 
