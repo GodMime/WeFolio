@@ -10,6 +10,7 @@ const profileJsPath = path.join(__dirname, '../pages/profile/profile.js')
 const profileWxmlPath = path.join(__dirname, '../pages/profile/profile.wxml')
 const profileWxssPath = path.join(__dirname, '../pages/profile/profile.wxss')
 const avatarJsPath = path.join(__dirname, '../utils/avatar.js')
+const uploadFileJsPath = path.join(__dirname, '../utils/upload-file.js')
 
 function readProfileRule(selector) {
   const profileWxss = fs.readFileSync(profileWxssPath, 'utf8')
@@ -51,12 +52,15 @@ test('basic profile page files and controls match design draft', () => {
 test('basic profile page uses backend profile and shared avatar endpoints', () => {
   const profileJs = fs.readFileSync(profileJsPath, 'utf8')
   const avatarJs = fs.readFileSync(avatarJsPath, 'utf8')
+  const uploadFileJs = fs.readFileSync(uploadFileJsPath, 'utf8')
 
   assert.match(profileJs, /url:\s*'\/api\/mine\/profile'/)
   assert.match(profileJs, /method:\s*'PUT'/)
   assert.match(profileJs, /uploadAvatar/)
   assert.match(avatarJs, /\/api\/auth\/avatar/)
-  assert.match(avatarJs, /TOKEN_STORAGE_KEY/)
+  assert.match(avatarJs, /uploadPreparedFile/)
+  assert.match(uploadFileJs, /TOKEN_STORAGE_KEY/)
+  assert.match(uploadFileJs, /Authorization = `Bearer \$\{token\}`/)
   assert.match(profileJs, /url:\s*'\/api\/auth\/account\/cancel'/)
   assert.match(profileJs, /wx\.showModal/)
 })

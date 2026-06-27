@@ -1,6 +1,8 @@
 package com.jxc.wefolio.service;
 
+import com.jxc.wefolio.common.cache.CacheService;
 import com.jxc.wefolio.common.cache.LocalCacheService;
+import com.jxc.wefolio.dict.UserStatusDict;
 import com.jxc.wefolio.entity.UserEntity;
 import com.jxc.wefolio.mapper.UserEntityMapper;
 import org.junit.jupiter.api.Test;
@@ -10,7 +12,15 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.never;
@@ -63,7 +73,7 @@ class AuthTokenServiceTest {
         when(miniappAuthService.resolveAuthToken("Bearer wf-dev-user-7")).thenReturn(resolvedToken(7L));
         UserEntity user = new UserEntity();
         user.setId(7L);
-        user.setStatus("ACTIVE");
+        user.setStatus(UserStatusDict.ACTIVE.getCode());
         when(userEntityMapper.selectById(7L)).thenReturn(user);
         LocalCacheService cacheService = new LocalCacheService();
         AuthTokenService service = new AuthTokenService(miniappAuthService, userEntityMapper, cacheService);
@@ -91,7 +101,7 @@ class AuthTokenServiceTest {
         when(miniappAuthService.resolveAuthToken("Bearer wf-dev-user-7")).thenReturn(resolvedToken(7L));
         UserEntity user = new UserEntity();
         user.setId(7L);
-        user.setStatus("DISABLED");
+        user.setStatus(UserStatusDict.DISABLED.getCode());
         when(userEntityMapper.selectById(7L)).thenReturn(user);
         LocalCacheService cacheService = new LocalCacheService();
         AuthTokenService service = new AuthTokenService(miniappAuthService, userEntityMapper, cacheService);
@@ -107,10 +117,10 @@ class AuthTokenServiceTest {
         when(miniappAuthService.resolveAuthToken("Bearer wf-dev-user-7")).thenReturn(resolvedToken(7L));
         UserEntity activeUser = new UserEntity();
         activeUser.setId(7L);
-        activeUser.setStatus("ACTIVE");
+        activeUser.setStatus(UserStatusDict.ACTIVE.getCode());
         UserEntity disabledUser = new UserEntity();
         disabledUser.setId(7L);
-        disabledUser.setStatus("DISABLED");
+        disabledUser.setStatus(UserStatusDict.DISABLED.getCode());
         when(userEntityMapper.selectById(7L)).thenReturn(activeUser, disabledUser);
         LocalCacheService cacheService = new LocalCacheService();
         AuthTokenService service = new AuthTokenService(miniappAuthService, userEntityMapper, cacheService);
@@ -125,6 +135,36 @@ class AuthTokenServiceTest {
         verify(userEntityMapper, times(2)).selectById(7L);
     }
 
+    @Test
+    void evictUserClearsAllTokensRememberedDuringConcurrentCacheMisses() throws Exception {
+        when(miniappAuthService.resolveAuthToken("Bearer token-a")).thenReturn(resolvedToken(7L));
+        when(miniappAuthService.resolveAuthToken("Bearer token-b")).thenReturn(resolvedToken(7L));
+        UserEntity activeUser = new UserEntity();
+        activeUser.setId(7L);
+        activeUser.setStatus(UserStatusDict.ACTIVE.getCode());
+        when(userEntityMapper.selectById(7L)).thenReturn(activeUser);
+        CoordinatedCacheService cacheService = new CoordinatedCacheService("auth:user-tokens:7", 2);
+        AuthTokenService service = new AuthTokenService(miniappAuthService, userEntityMapper, cacheService);
+        ExecutorService executorService = Executors.newFixedThreadPool(2);
+
+        try {
+            Future<Optional<Long>> first = executorService.submit(
+                    () -> service.resolveAuthenticatedUserId("Bearer token-a"));
+            Future<Optional<Long>> second = executorService.submit(
+                    () -> service.resolveAuthenticatedUserId("Bearer token-b"));
+
+            assertThat(first.get()).contains(7L);
+            assertThat(second.get()).contains(7L);
+            service.evictUser(7L);
+
+            assertThat(cacheService.get("auth:token:token-a", Long.class)).isEmpty();
+            assertThat(cacheService.get("auth:token:token-b", Long.class)).isEmpty();
+        } finally {
+            executorService.shutdownNow();
+            executorService.awaitTermination(1, TimeUnit.SECONDS);
+        }
+    }
+
     /**
      * 构造已解析的测试令牌。
      *
@@ -133,5 +173,58 @@ class AuthTokenServiceTest {
      */
     private MiniappAuthService.ResolvedAuthToken resolvedToken(Long userId) {
         return new MiniappAuthService.ResolvedAuthToken(userId, Instant.now().plus(Duration.ofHours(1)));
+    }
+
+    /**
+     * 可控缓存服务，用于稳定复现令牌反向索引的并发读改写丢失。
+     */
+    private static class CoordinatedCacheService implements CacheService {
+
+        /** 需要协调读取的缓存 key */
+        private final String coordinatedKey;
+
+        /** 等待并发读取同时到达的门闩 */
+        private final CountDownLatch coordinatedReads;
+
+        /** 内存缓存值 */
+        private final Map<String, Object> values = new ConcurrentHashMap<>();
+
+        /**
+         * 创建可控缓存服务。
+         *
+         * @param coordinatedKey 需要协调读取的缓存 key
+         * @param expectedReaders 期望并发读取数量
+         */
+        private CoordinatedCacheService(String coordinatedKey, int expectedReaders) {
+            this.coordinatedKey = coordinatedKey;
+            this.coordinatedReads = new CountDownLatch(expectedReaders);
+        }
+
+        @Override
+        public <T> Optional<T> get(String key, Class<T> valueType) {
+            Object value = values.get(key);
+            if (coordinatedKey.equals(key) && Set.class.equals(valueType)) {
+                coordinatedReads.countDown();
+                try {
+                    coordinatedReads.await(100, TimeUnit.MILLISECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+            if (!valueType.isInstance(value)) {
+                return Optional.empty();
+            }
+            return Optional.of(valueType.cast(value));
+        }
+
+        @Override
+        public void put(String key, Object value, Duration ttl) {
+            values.put(key, value);
+        }
+
+        @Override
+        public void evict(String key) {
+            values.remove(key);
+        }
     }
 }

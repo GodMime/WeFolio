@@ -3,6 +3,7 @@ const { handleAuthRequired, hasLocalToken } = require('../../utils/session')
 const { normalizeTeamInvitation } = require('../../utils/teams')
 
 const LOGIN_PAGE_URL = '/pages/login/login'
+const TOAST_NAVIGATE_BACK_DELAY_MS = 1200
 
 function emptyInvitation() {
   return normalizeTeamInvitation({})
@@ -102,8 +103,12 @@ Page({
         title: successTitle,
         icon: 'success'
       })
+      this.navigateBackAfterToast()
     } catch (error) {
       if (error && error.authRequired) {
+        this.setData({
+          saving: false
+        })
         handleAuthRequired(error.message)
         return
       }
@@ -115,5 +120,11 @@ Page({
         icon: 'none'
       })
     }
+  },
+
+  navigateBackAfterToast() {
+    setTimeout(() => {
+      wx.navigateBack()
+    }, TOAST_NAVIGATE_BACK_DELAY_MS)
   }
 })

@@ -20,6 +20,7 @@ import com.jxc.wefolio.mapper.UserAuthEntityMapper;
 import com.jxc.wefolio.mapper.UserEntityMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.Cipher;
@@ -71,6 +72,9 @@ public class MiniappAuthService {
 
     /** 令牌类型 */
     private static final String TOKEN_TYPE = "Bearer";
+
+    /** 手机号并发注册冲突提示 */
+    private static final String PHONE_REGISTRATION_CONFLICT_MESSAGE = "手机号注册状态已变化，请重试";
 
     /** 维护者令牌有效期 */
     private static final long MAINTAINER_EXPIRES_IN_SECONDS = 30L * 24L * 60L * 60L;
@@ -274,15 +278,21 @@ public class MiniappAuthService {
                 // COS 文件夹初始化在前，失败直接抛异常，不污染数据库
                 cosService.initUserStorage(uniqueCode);
                 // 注册前端头像为本地临时路径时无法由服务端读取，后续由已登录上传接口写回 COS 地址
+                String originalAvatarUrl = request.getAvatarUrl();
                 request.setAvatarUrl(uploadAvatarToCos(request.getAvatarUrl(), uniqueCode, ""));
-                user = userRegistrationService.createWechatMaintainerUser(
-                        uniqueCode,
-                        request,
-                        phoneInfo,
-                        openpid,
-                        openidHash,
-                        digestIdentifierIfPresent(session.getUnionid())
-                );
+                try {
+                    user = userRegistrationService.createWechatMaintainerUser(
+                            uniqueCode,
+                            request,
+                            phoneInfo,
+                            openpid,
+                            openidHash,
+                            digestIdentifierIfPresent(session.getUnionid())
+                    );
+                } catch (DuplicateKeyException e) {
+                    request.setAvatarUrl(originalAvatarUrl);
+                    user = bindExistingPhoneUserAfterRegistrationConflict(request, session, phoneInfo, openpid, openidHash, e);
+                }
             } else {
                 updateWechatRegistrationProfile(user, request, phoneInfo, openpid);
                 createWechatAuth(user, session, openidHash);
@@ -299,6 +309,36 @@ public class MiniappAuthService {
         }
 
         return buildMaintainerLoginResponse(user.getId());
+    }
+
+    /**
+     * 处理手机号并发首次注册冲突。
+     * <p>数据库唯一索引会阻止重复用户；冲突后重新读取已有手机号用户，并复用普通“手机号已存在”分支完成微信身份绑定。</p>
+     *
+     * @param request 维护者微信登录请求
+     * @param session 微信会话
+     * @param phoneInfo 微信手机号信息
+     * @param openpid 插件用户 openpid
+     * @param openidHash openid 摘要
+     * @param cause 数据库唯一键异常
+     * @return 已存在的用户实体
+     */
+    private UserEntity bindExistingPhoneUserAfterRegistrationConflict(
+            MaintainerWechatLoginRequest request,
+            WechatSessionResponse session,
+            WechatPhoneNumberResponse.PhoneInfo phoneInfo,
+            String openpid,
+            String openidHash,
+            DuplicateKeyException cause
+    ) {
+        log.warn("手机号并发注册冲突，尝试复用已存在用户: phoneLast4={}", last4(phoneInfo.getPhoneNumber()));
+        UserEntity existingUser = findActiveUserByPhone(phoneInfo.getPhoneNumber());
+        if (existingUser == null) {
+            throw new BusinessException(PHONE_REGISTRATION_CONFLICT_MESSAGE, cause);
+        }
+        updateWechatRegistrationProfile(existingUser, request, phoneInfo, openpid);
+        createWechatAuth(existingUser, session, openidHash);
+        return existingUser;
     }
 
     /**

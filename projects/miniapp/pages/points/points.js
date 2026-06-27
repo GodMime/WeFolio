@@ -11,6 +11,7 @@ const POINT_OVERVIEW_URL = '/api/mine/points'
 const POINT_TRANSACTIONS_URL = '/api/mine/points/transactions'
 const POINT_RULES_PAGE_URL = '/pages/points-rules/points-rules'
 const LOGIN_PAGE_URL = '/pages/login/login'
+const FIRST_PAGE = 1
 const PAGE_SIZE = 20
 
 function emptyPointData() {
@@ -43,6 +44,7 @@ Page({
   },
 
   async loadPoints() {
+    const requestContext = this.createPointRequestContext(false)
     this.setData({
       loading: true,
       loadingMore: false,
@@ -54,16 +56,26 @@ Page({
         request({ url: POINT_OVERVIEW_URL }),
         request({
           url: POINT_TRANSACTIONS_URL,
-          data: buildPointTransactionQuery({ page: 1, pageSize: PAGE_SIZE })
+          data: buildPointTransactionQuery({ page: FIRST_PAGE, pageSize: PAGE_SIZE })
         })
       ])
+      if (!this.isCurrentPointRequest(requestContext)) {
+        return
+      }
       this.setData({
         pointData: normalizePointOverview(overview),
         transactionData: normalizePointTransactions(transactions),
         loading: false
       })
     } catch (error) {
+      if (!this.isCurrentPointRequest(requestContext)) {
+        return
+      }
       if (error && error.authRequired) {
+        this.setData({
+          loading: false,
+          loadingMore: false
+        })
         handleAuthRequired(error.message)
         return
       }
@@ -74,11 +86,27 @@ Page({
     }
   },
 
+  createPointRequestContext(append) {
+    const transactionData = this.data.transactionData || {}
+    const requestId = (this.pointRequestId || 0) + 1
+    this.pointRequestId = requestId
+    return {
+      requestId,
+      append,
+      page: append ? transactionData.nextPage : FIRST_PAGE
+    }
+  },
+
+  isCurrentPointRequest(requestContext) {
+    return Boolean(requestContext) && this.pointRequestId === requestContext.requestId
+  },
+
   async handleLoadMore() {
     const transactionData = this.data.transactionData || {}
     if (this.data.loading || this.data.loadingMore || !transactionData.hasMore) {
       return
     }
+    const requestContext = this.createPointRequestContext(true)
     this.setData({
       loadingMore: true
     })
@@ -86,16 +114,25 @@ Page({
       const response = await request({
         url: POINT_TRANSACTIONS_URL,
         data: buildPointTransactionQuery({
-          page: transactionData.nextPage,
+          page: requestContext.page,
           pageSize: PAGE_SIZE
         })
       })
+      if (!this.isCurrentPointRequest(requestContext)) {
+        return
+      }
       this.setData({
         transactionData: appendPointTransactions(this.data.transactionData, response),
         loadingMore: false
       })
     } catch (error) {
+      if (!this.isCurrentPointRequest(requestContext)) {
+        return
+      }
       if (error && error.authRequired) {
+        this.setData({
+          loadingMore: false
+        })
         handleAuthRequired(error.message)
         return
       }

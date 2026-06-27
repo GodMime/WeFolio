@@ -6,6 +6,7 @@ import com.jxc.wefolio.dto.WechatPhoneNumberResponse;
 import com.jxc.wefolio.dto.WechatSessionResponse;
 import com.jxc.wefolio.entity.UserEntity;
 import com.jxc.wefolio.entity.UserAuthEntity;
+import com.jxc.wefolio.dict.UserStatusDict;
 import com.jxc.wefolio.mapper.ReferralRelationEntityMapper;
 import com.jxc.wefolio.mapper.UserAuthEntityMapper;
 import com.jxc.wefolio.mapper.UserEntityMapper;
@@ -19,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DuplicateKeyException;
 
 import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
@@ -258,6 +260,50 @@ class MiniappAuthServiceTest {
                         && "".equals(user.getAvatarUrl())
                         && "+8613812348000".equals(user.getPhoneNumber())
         ));
+    }
+
+    @Test
+    void concurrentWechatRegistrationReusesExistingUserAfterPhoneUniqueConflict() {
+        WechatSessionResponse session = new WechatSessionResponse();
+        session.setOpenid("openid-new");
+        when(wechatMiniappClient.exchangeCode("wx-code")).thenReturn(session);
+        WechatPhoneNumberResponse.PhoneInfo phoneInfo = new WechatPhoneNumberResponse.PhoneInfo();
+        phoneInfo.setPhoneNumber("+8613812348000");
+        phoneInfo.setPurePhoneNumber("13812348000");
+        phoneInfo.setCountryCode("86");
+        when(wechatMiniappClient.exchangePhoneCode("phone-code")).thenReturn(phoneInfo);
+        when(userAuthEntityMapper.selectOne(any())).thenReturn(null);
+        when(uniqueCodeGenerator.generate(eq(UniqueCodeGenerator.USER_PREFIX), any())).thenReturn("WFTEST0002");
+        doAnswer(invocation -> {
+            throw new DuplicateKeyException("uk_user_phone_number");
+        }).when(userEntityMapper).insert(any(UserEntity.class));
+
+        UserEntity existingUser = new UserEntity();
+        existingUser.setId(22L);
+        existingUser.setUniqueCode("WFOLD0001");
+        existingUser.setNickname("旧用户");
+        existingUser.setAvatarUrl("");
+        existingUser.setStatus(UserStatusDict.ACTIVE.getCode());
+        when(userEntityMapper.selectOne(any())).thenReturn(null, existingUser);
+
+        MiniappAuthService service = buildService();
+        MaintainerWechatLoginRequest request = new MaintainerWechatLoginRequest();
+        request.setCode("wx-code");
+        request.setNickname("林安");
+        request.setAvatarUrl("wxfile://tmp_avatar.jpg");
+        request.setPhoneCode("phone-code");
+
+        MaintainerWechatLoginResponse response = service.loginMaintainerByWechat(request);
+
+        assertThat(response.getUserId()).isEqualTo(22L);
+        assertThat(service.resolveUserId("Bearer " + response.getToken())).isEqualTo(22L);
+        verify(cosService).initUserStorage("WFTEST0002");
+        verify(userEntityMapper).updateById(org.mockito.ArgumentMatchers.<UserEntity>argThat(user ->
+                Long.valueOf(22L).equals(user.getId())
+                        && "林安".equals(user.getNickname())
+                        && "+8613812348000".equals(user.getPhoneNumber())
+        ));
+        verify(userAuthEntityMapper).insert(any(UserAuthEntity.class));
     }
 
     @Test

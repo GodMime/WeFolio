@@ -40,6 +40,9 @@ public class AuthTokenService {
     /** 统一缓存服务 */
     private final CacheService cacheService;
 
+    /** 用户令牌反向索引监视器，保证本地缓存读改写与清理互斥 */
+    private final Object userTokenIndexMonitor = new Object();
+
     /**
      * 解析并校验当前登录用户 ID。
      *
@@ -86,12 +89,14 @@ public class AuthTokenService {
         if (userId == null) {
             return;
         }
-        String userTokenCacheKey = buildUserTokenCacheKey(userId);
-        Set<String> tokens = readUserTokens(userTokenCacheKey);
-        for (String token : tokens) {
-            cacheService.evict(buildCacheKey(token));
+        synchronized (userTokenIndexMonitor) {
+            String userTokenCacheKey = buildUserTokenCacheKey(userId);
+            Set<String> tokens = readUserTokens(userTokenCacheKey);
+            for (String token : tokens) {
+                cacheService.evict(buildCacheKey(token));
+            }
+            cacheService.evict(userTokenCacheKey);
         }
-        cacheService.evict(userTokenCacheKey);
     }
 
     /**
@@ -150,10 +155,12 @@ public class AuthTokenService {
      * @param token 标准化后的令牌
      */
     private void rememberUserToken(Long userId, String token) {
-        String userTokenCacheKey = buildUserTokenCacheKey(userId);
-        Set<String> tokens = readUserTokens(userTokenCacheKey);
-        tokens.add(token);
-        cacheService.put(userTokenCacheKey, Collections.unmodifiableSet(tokens), AUTH_CACHE_TTL);
+        synchronized (userTokenIndexMonitor) {
+            String userTokenCacheKey = buildUserTokenCacheKey(userId);
+            Set<String> tokens = readUserTokens(userTokenCacheKey);
+            tokens.add(token);
+            cacheService.put(userTokenCacheKey, Collections.unmodifiableSet(tokens), AUTH_CACHE_TTL);
+        }
     }
 
     /**

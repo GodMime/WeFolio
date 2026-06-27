@@ -9,6 +9,7 @@ const {
 } = require('../../utils/teams')
 
 const LOGIN_PAGE_URL = '/pages/login/login'
+const TOAST_NAVIGATE_BACK_DELAY_MS = 1200
 
 Page({
   data: {
@@ -57,11 +58,13 @@ Page({
 
   handleUniqueCodeInput(event) {
     const uniqueCode = event.detail.value || ''
+    this.invalidateCandidateSearch()
     this.setData({
       uniqueCode,
       'form.uniqueCode': uniqueCode,
       candidateVisible: false,
-      candidate: null
+      candidate: null,
+      loading: false
     })
   },
 
@@ -77,6 +80,7 @@ Page({
       })
       return
     }
+    const requestContext = this.createCandidateRequestContext(uniqueCode)
     this.setData({
       loading: true,
       errorMessage: ''
@@ -86,6 +90,9 @@ Page({
         url: `/api/mine/teams/${this.data.teamId}/member-candidate`,
         data: buildMemberCandidateQuery(uniqueCode)
       })
+      if (!this.isCurrentCandidateRequest(requestContext)) {
+        return
+      }
       const candidate = normalizeTeamMemberCandidate(response)
       this.setData({
         candidate,
@@ -101,7 +108,13 @@ Page({
         })
       }
     } catch (error) {
+      if (!this.isCurrentCandidateRequest(requestContext)) {
+        return
+      }
       if (error && error.authRequired) {
+        this.setData({
+          loading: false
+        })
         handleAuthRequired(error.message)
         return
       }
@@ -116,6 +129,28 @@ Page({
         icon: 'none'
       })
     }
+  },
+
+  createCandidateRequestContext(uniqueCode) {
+    const requestId = (this.candidateSearchRequestId || 0) + 1
+    this.candidateSearchRequestId = requestId
+    return {
+      requestId,
+      teamId: this.data.teamId,
+      uniqueCode
+    }
+  },
+
+  invalidateCandidateSearch() {
+    this.candidateSearchRequestId = (this.candidateSearchRequestId || 0) + 1
+  },
+
+  isCurrentCandidateRequest(requestContext) {
+    const currentUniqueCode = (this.data.uniqueCode || '').trim()
+    return Boolean(requestContext)
+      && this.candidateSearchRequestId === requestContext.requestId
+      && this.data.teamId === requestContext.teamId
+      && currentUniqueCode === requestContext.uniqueCode
   },
 
   handleRoleTap(event) {
@@ -170,9 +205,12 @@ Page({
       this.setData({
         saving: false
       })
-      wx.navigateBack()
+      this.navigateBackAfterToast()
     } catch (error) {
       if (error && error.authRequired) {
+        this.setData({
+          saving: false
+        })
         handleAuthRequired(error.message)
         return
       }
@@ -188,6 +226,12 @@ Page({
 
   handleCancel() {
     wx.navigateBack()
+  },
+
+  navigateBackAfterToast() {
+    setTimeout(() => {
+      wx.navigateBack()
+    }, TOAST_NAVIGATE_BACK_DELAY_MS)
   },
 
   refreshPreviousPage() {
