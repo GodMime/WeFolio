@@ -1,5 +1,6 @@
 package com.jxc.wefolio.service;
 
+import com.jxc.wefolio.dict.ScheduleStatusDict;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -38,6 +39,25 @@ class StatusDictionaryUsageTest {
         assertThat(source).doesNotContain("Wrappers.lambdaQuery(com.jxc.wefolio.entity.PortfolioEntity.class)");
         assertThat(source).doesNotContain(".eq(com.jxc.wefolio.entity.WorkEntity::");
         assertThat(source).doesNotContain(".eq(com.jxc.wefolio.entity.PortfolioEntity::");
+    }
+
+    /**
+     * 档期状态色调属于前后端约定，应由字典统一承载。
+     *
+     * @throws Exception 读取源码失败时抛出异常
+     */
+    @Test
+    void scheduleStatusToneComesFromDictionary() throws Exception {
+        String source = readSource("src/main/java/com/jxc/wefolio/service/MineScheduleService.java");
+
+        assertThat(ScheduleStatusDict.AVAILABLE.getTone()).isEqualTo("teal");
+        assertThat(ScheduleStatusDict.BOOKED.getTone()).isEqualTo("rose");
+        assertThat(ScheduleStatusDict.TENTATIVE.getTone()).isEqualTo("amber");
+        assertThat(ScheduleStatusDict.REST.getTone()).isEqualTo("muted");
+        assertThat(source).doesNotContain("return \"teal\"");
+        assertThat(source).doesNotContain("return \"rose\"");
+        assertThat(source).doesNotContain("return \"amber\"");
+        assertThat(source).doesNotContain("return \"muted\"");
     }
 
     /**

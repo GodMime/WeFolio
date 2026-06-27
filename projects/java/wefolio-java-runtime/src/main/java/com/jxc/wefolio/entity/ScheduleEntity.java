@@ -38,10 +38,10 @@ public class ScheduleEntity extends BaseEntity {
     /** 档期状态：AVAILABLE 空闲 / BOOKED 已约 / TENTATIVE 待定 / REST 休息 */
     private String status;
 
-    /** 联系人姓名密文，仅维护者可见 */
+    /** 联系人姓名，沿用历史字段名存储明文，仅维护者可见 */
     private String contactNameCiphertext;
 
-    /** 联系电话密文，仅维护者可见 */
+    /** 联系电话，沿用历史字段名存储明文，仅维护者可见 */
     private String contactPhoneCiphertext;
 
     /** 内部备注，仅维护者可见 */

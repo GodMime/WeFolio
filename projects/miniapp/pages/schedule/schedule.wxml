@@ -1,0 +1,232 @@
+<view class="page-shell schedule-page">
+  <navigation-bar title="档期" back="{{false}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+
+  <scroll-view class="schedule-scroll" scroll-y type="list">
+    <view class="schedule-content">
+      <view class="schedule-segmented">
+        <button class="segment {{activeMode === 'maintenance' ? 'active' : ''}}" data-mode="maintenance" bindtap="handleModeTap">档期维护</button>
+        <button class="segment {{activeMode === 'definitions' ? 'active' : ''}}" data-mode="definitions" bindtap="handleModeTap">档位定义</button>
+      </view>
+
+      <block wx:if="{{loading}}">
+        <view class="panel skeleton-panel"></view>
+        <view class="panel skeleton-panel tall"></view>
+      </block>
+
+      <block wx:elif="{{errorMessage}}">
+        <view class="empty-state">
+          <view class="empty-icon"></view>
+          <view class="empty-title">加载失败</view>
+          <view class="empty-desc">{{errorMessage}}</view>
+          <button class="primary-button compact" bindtap="handleRetry">重试</button>
+        </view>
+      </block>
+
+      <block wx:else>
+        <block wx:if="{{activeMode === 'definitions'}}">
+          <view class="panel definition-list-panel">
+            <view class="panel-heading">
+              <view>
+                <view class="panel-title">所有定义</view>
+                <view class="panel-meta">启用 / 停用可切换</view>
+              </view>
+            </view>
+
+            <view wx:if="{{overview.slotDefinitions.length === 0}}" class="inline-empty">
+              <view class="empty-title small">暂无档位定义</view>
+              <view class="empty-desc">新增后才会出现在维护档期的可选列表中</view>
+            </view>
+
+            <view
+              wx:for="{{overview.slotDefinitions}}"
+              wx:key="id"
+              class="slot-line"
+              data-id="{{item.id}}"
+              bindtap="handleSlotEdit"
+            >
+              <view class="slot-main">
+                <view class="swatch" style="{{item.colorStyle}}"></view>
+                <view class="slot-copy">
+                  <view class="slot-name">{{item.name}}</view>
+                  <view class="slot-desc">{{item.timeRangeText}} · {{item.statusText}}</view>
+                </view>
+              </view>
+              <button
+                class="mini-action {{item.enabled ? 'warn' : ''}}"
+                catchtap="handleToggleSlotStatus"
+                data-id="{{item.id}}"
+              >{{item.enabled ? '停用' : '启用'}}</button>
+            </view>
+            <button class="primary-button definition-add-button" bindtap="handleSlotAdd">新增定义</button>
+          </view>
+        </block>
+
+        <block wx:else>
+          <view class="panel schedule-color-card">
+            <view class="panel-heading">
+              <view>
+                <view class="panel-title">档位定义</view>
+                <view class="panel-meta">名称 / 时间 / 颜色</view>
+              </view>
+            </view>
+            <view class="color-legend">
+              <view class="swatch-option" wx:for="{{overview.slotDefinitions}}" wx:key="id">
+                <view class="swatch" style="{{item.colorStyle}}"></view>
+                <text>{{item.name}} {{item.timeRangeText}}</text>
+              </view>
+              <view wx:if="{{overview.slotDefinitions.length === 0}}" class="legend-empty">暂无档位定义</view>
+            </view>
+          </view>
+
+          <view class="calendar-group">
+            <view class="calendar-toolbar">
+              <button class="month-control" bindtap="handlePrevMonth">‹</button>
+              <view class="month-title">
+                <view class="month-main">{{overview.month.titleText}}</view>
+                <view class="month-sub">当前查看月份</view>
+              </view>
+              <button class="month-control" bindtap="handleNextMonth">›</button>
+            </view>
+
+            <view class="calendar">
+              <view class="weekday" wx:for="{{weekdays}}" wx:key="*this">{{item}}</view>
+              <view
+                class="{{item.dayClass}}"
+                wx:for="{{overview.month.days}}"
+                wx:key="date"
+                data-date="{{item.date}}"
+                bindtap="handleDayTap"
+              >
+                <view class="day-number">{{item.dayNumber}}</view>
+                <view class="day-colors" wx:if="{{item.markerColors.length}}">
+                  <view
+                    class="day-color"
+                    wx:for="{{item.markerColors}}"
+                    wx:for-item="marker"
+                    wx:key="color"
+                    style="{{marker.style}}"
+                  ></view>
+                </view>
+              </view>
+            </view>
+          </view>
+
+          <view class="day-panel">
+            <view class="panel-heading">
+              <view>
+                <view class="panel-title">{{overview.selectedDate.titleText}}</view>
+                <view class="panel-meta">{{overview.selectedDate.summaryText}}</view>
+              </view>
+            </view>
+
+            <view wx:if="{{overview.selectedDate.empty}}" class="inline-empty">
+              <view class="empty-title small">当天暂无档期</view>
+              <view class="empty-desc">点击新增档期，为这个日期选择一个已定义档位</view>
+            </view>
+
+            <view
+              wx:for="{{overview.selectedDate.schedules}}"
+              wx:key="id"
+              class="schedule-line"
+              data-id="{{item.id}}"
+              data-date="{{item.scheduleDate}}"
+              bindtap="handleScheduleTap"
+            >
+              <view class="slot-main">
+                <view class="swatch" style="{{item.colorStyle}}"></view>
+                <view class="slot-copy">
+                  <view class="slot-name">{{item.slotName}}</view>
+                  <view class="slot-desc">{{item.timeRangeText}} · {{item.contactText}}</view>
+                </view>
+              </view>
+              <view class="{{item.statusClass}}">{{item.statusText}}</view>
+            </view>
+            <button class="primary-button schedule-add-button" bindtap="handleMaintainDate">新增档期</button>
+          </view>
+        </block>
+      </block>
+    </view>
+  </scroll-view>
+
+  <view class="tabbar">
+    <button
+      class="tab {{item.active ? 'active' : ''}}"
+      wx:for="{{tabs}}"
+      wx:key="key"
+      data-label="{{item.label}}"
+      bindtap="handleTabTap"
+    >
+      <view class="tab-icon {{item.icon}}-tab-icon"></view>
+      <view class="tab-label">{{item.label}}</view>
+    </button>
+  </view>
+
+  <view class="definition-sheet-overlay {{slotFormVisible ? 'visible' : ''}}" catchtap="handleSlotCancel">
+    <view class="definition-sheet" catchtap="noop">
+      <view class="sheet-grabber"></view>
+      <view class="panel-heading">
+        <view class="panel-title">{{slotSheetTitle}}</view>
+        <view class="slot-status {{slotForm.status === 'ACTIVE' ? 'active' : 'muted'}}">{{slotForm.status === 'ACTIVE' ? '启用' : '停用'}}</view>
+      </view>
+
+      <view class="form-grid">
+        <view class="form-row">
+          <view class="field-heading">
+            <view class="field-label">档位名称</view>
+            <view class="field-limit">{{slotFieldCounters.name}}</view>
+          </view>
+          <input class="field-input" value="{{slotForm.name}}" data-field="name" bindinput="handleSlotInput" maxlength="30" placeholder="如 中午档" />
+        </view>
+      </view>
+
+      <view class="form-grid slot-control-row">
+        <picker mode="time" value="{{slotForm.startTime}}" data-field="startTime" bindchange="handleSlotTimeChange">
+          <view class="form-row">
+            <view class="field-label">开始时间</view>
+            <view class="field-input picker-value">{{slotForm.startTime}}</view>
+          </view>
+        </picker>
+        <picker mode="time" value="{{slotForm.endTime}}" data-field="endTime" bindchange="handleSlotTimeChange">
+          <view class="form-row">
+            <view class="field-label">结束时间</view>
+            <view class="field-input picker-value">{{slotForm.endTime}}</view>
+          </view>
+        </picker>
+        <view class="form-row status-form-row">
+          <view class="field-label">启用状态</view>
+          <view class="choice-row inline-choice-row">
+            <view
+              wx:for="{{slotStatusOptions}}"
+              wx:key="value"
+              class="slot-status-choice {{item.tone}} {{slotForm.status === item.value ? 'active' : ''}}"
+              data-status="{{item.value}}"
+              bindtap="handleSlotStatusTap"
+            >{{item.text}}</view>
+          </view>
+        </view>
+      </view>
+
+      <view class="field-label standalone">档位颜色</view>
+      <view class="slot-color-grid">
+        <view
+          wx:for="{{slotColorOptions}}"
+          wx:key="color"
+          class="slot-color-choice {{slotForm.color === item.color ? 'active' : ''}}"
+          style="{{item.choiceStyle}}"
+          data-color="{{item.color}}"
+          bindtap="handleSlotColorTap"
+          aria-role="button"
+          aria-label="选择{{item.name}}档位颜色"
+        >
+          <view class="slot-color-swatch" style="{{item.swatchStyle}}"></view>
+          <text class="slot-color-name">{{item.name}}</text>
+        </view>
+      </view>
+
+      <view class="button-row">
+        <button class="secondary-button" bindtap="handleSlotCancel">取消</button>
+        <button class="primary-button" loading="{{saving}}" bindtap="handleSaveSlot">保存定义</button>
+      </view>
+    </view>
+  </view>
+</view>

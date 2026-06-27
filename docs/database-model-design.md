@@ -268,13 +268,12 @@ erDiagram
 | `start_time` | TIME | 否 | - | 开始时间 |
 | `end_time` | TIME | 否 | - | 结束时间 |
 | `color` | CHAR(7) | 否 | - | 十六进制展示颜色 |
-| `sort_order` | INT | 否 | `0` | 展示顺序 |
 | `is_system_default` | TINYINT UNSIGNED | 否 | `0` | 是否由系统初始化 |
 | `status` | VARCHAR(32) | 否 | `'ACTIVE'` | `ACTIVE` 启用，`DISABLED` 停用 |
 | `created_at` | DATETIME(3) | 否 | CURRENT_TIMESTAMP(3) | 创建时间 |
 | `updated_at` | DATETIME(3) | 否 | 自动更新 | 更新时间 |
 
-索引：`uk_slot_user_name(user_id, name)` 保证用户内名称唯一；`idx_slot_user_status_sort(user_id, status, sort_order, id)` 支持档位选择。
+索引：`uk_slot_user_name(user_id, name)` 保证用户内名称唯一；`idx_slot_user_status_start_time(user_id, status, start_time, id)` 支持档位选择和开始时间排序。
 
 ### 6.8 `wf_schedule` 档期表
 
@@ -910,7 +909,6 @@ CREATE TABLE `wf_slot_definition` (
   `start_time` TIME NOT NULL COMMENT '开始时间',
   `end_time` TIME NOT NULL COMMENT '结束时间',
   `color` CHAR(7) NOT NULL COMMENT '展示颜色',
-  `sort_order` INT NOT NULL DEFAULT 0 COMMENT '排序值',
   `is_system_default` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '是否系统默认',
   `status` VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin
     NOT NULL DEFAULT 'ACTIVE' COMMENT 'ACTIVE启用 DISABLED停用',
@@ -919,7 +917,7 @@ CREATE TABLE `wf_slot_definition` (
     ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_slot_user_name` (`user_id`, `name`),
-  KEY `idx_slot_user_status_sort` (`user_id`, `status`, `sort_order`, `id`),
+  KEY `idx_slot_user_status_start_time` (`user_id`, `status`, `start_time`, `id`),
   CONSTRAINT `chk_slot_time` CHECK (`start_time` < `end_time`),
   CONSTRAINT `chk_slot_default` CHECK (`is_system_default` IN (0, 1)),
   CONSTRAINT `chk_slot_status` CHECK (`status` IN ('ACTIVE', 'DISABLED'))

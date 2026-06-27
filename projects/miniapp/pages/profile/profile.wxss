@@ -273,15 +273,20 @@
   margin-top: 22rpx;
 }
 
+/* 一行一个按钮统一吃满父容器内容区：面板内等于输入框宽，面板外等于白色面板宽。 */
 .wide-button {
+  width: 100%;
+  min-width: 100%;
+  max-width: 100%;
   margin-left: auto;
   margin-right: auto;
+  box-sizing: border-box;
 }
 
 .profile-content > .wide-button {
-  width: calc(100% - 48rpx);
-  min-width: calc(100% - 48rpx);
-  max-width: calc(100% - 48rpx);
+  width: 100%;
+  min-width: 100%;
+  max-width: 100%;
 }
 
 .tag-editor-panel .wide-button,

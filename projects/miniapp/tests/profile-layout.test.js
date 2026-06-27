@@ -146,7 +146,7 @@ test('profile tag dialog uses Skyline compatible bottom sheet positioning', () =
   assert.match(colorChoiceRule, /flex:\s*none/)
 })
 
-test('basic profile action buttons use wider tap targets', () => {
+test('single full-width profile buttons follow their container width rule', () => {
   const profileWxml = fs.readFileSync(profileWxmlPath, 'utf8')
   const wideButtonRule = readProfileRule('.wide-button')
   const contentWideButtonRule = readProfileRule('.profile-content > .wide-button')
@@ -156,11 +156,15 @@ test('basic profile action buttons use wider tap targets', () => {
   assert.match(profileWxml, /class="primary-button full wide-button"[\s\S]*>保存修改</)
   assert.match(profileWxml, /class="secondary-button full wide-button"[\s\S]*>退出登录</)
   assert.match(profileWxml, /class="danger-button full wide-button"[\s\S]*>注销账号</)
+  assert.match(wideButtonRule, /width:\s*100%/)
+  assert.match(wideButtonRule, /min-width:\s*100%/)
+  assert.match(wideButtonRule, /max-width:\s*100%/)
   assert.match(wideButtonRule, /margin-left:\s*auto/)
   assert.match(wideButtonRule, /margin-right:\s*auto/)
-  assert.match(contentWideButtonRule, /width:\s*calc\(100% - 48rpx\)/)
-  assert.match(contentWideButtonRule, /min-width:\s*calc\(100% - 48rpx\)/)
-  assert.match(contentWideButtonRule, /max-width:\s*calc\(100% - 48rpx\)/)
+  assert.match(contentWideButtonRule, /width:\s*100%/)
+  assert.match(contentWideButtonRule, /min-width:\s*100%/)
+  assert.match(contentWideButtonRule, /max-width:\s*100%/)
+  assert.doesNotMatch(contentWideButtonRule, /calc\(100% - 48rpx\)/)
   assert.match(dangerWideButtonRule, /width:\s*100%/)
   assert.match(dangerWideButtonRule, /min-width:\s*100%/)
   assert.match(dangerWideButtonRule, /max-width:\s*100%/)

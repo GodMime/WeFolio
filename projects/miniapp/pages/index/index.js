@@ -8,6 +8,7 @@ const MESSAGE_ICON_URL = 'https://cos.we-folio.dingchenyong.top/system/wefolio-m
 const MESSAGE_UNREAD_COUNT_URL = '/api/mine/messages/unread-count'
 const MESSAGES_PAGE_URL = '/pages/messages/messages'
 const POINTS_PAGE_URL = '/pages/points/points'
+const SCHEDULE_PAGE_URL = '/pages/schedule/schedule'
 
 function buildEntries(messageUnread = normalizeUnreadCount({})) {
   return [
@@ -178,6 +179,12 @@ Page({
 
   handleTabTap(event) {
     const label = event.currentTarget.dataset.label
+    if (label === '档期') {
+      wx.redirectTo({
+        url: SCHEDULE_PAGE_URL
+      })
+      return
+    }
     if (label === '我的') {
       return
     }

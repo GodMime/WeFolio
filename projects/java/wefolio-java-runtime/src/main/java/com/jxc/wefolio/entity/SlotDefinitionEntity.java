@@ -19,17 +19,14 @@ public class SlotDefinitionEntity extends BaseEntity {
     /** 档位名称，如中午档、晚间档、迎亲档 */
     private String name;
 
-    /** 默认开始时间 */
+    /** 开始时间 */
     private LocalTime startTime;
 
-    /** 默认结束时间 */
+    /** 结束时间 */
     private LocalTime endTime;
 
     /** 十六进制展示颜色，用于月历多色彩标记 */
     private String color;
-
-    /** 展示顺序 */
-    private Integer sortOrder;
 
     /** 是否系统初始化默认档位：0 否 / 1 是 */
     private Integer isSystemDefault;
