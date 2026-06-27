@@ -1,0 +1,75 @@
+<view class="page-shell points-page">
+  <navigation-bar title="我的积分" back="{{true}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+
+  <scroll-view class="points-scroll" scroll-y type="list" bindscrolltolower="handleLoadMore" lower-threshold="120">
+    <view class="points-content">
+      <block wx:if="{{loading}}">
+        <view class="points-balance-band skeleton-panel"></view>
+        <view class="points-metric-grid">
+          <view class="points-metric skeleton-panel"></view>
+          <view class="points-metric skeleton-panel"></view>
+          <view class="points-metric skeleton-panel"></view>
+        </view>
+        <view class="panel ledger-panel skeleton-panel"></view>
+      </block>
+
+      <block wx:elif="{{errorMessage}}">
+        <view class="empty-state">
+          <view class="empty-icon"></view>
+          <view class="empty-title">加载失败</view>
+          <view class="empty-desc">{{errorMessage}}</view>
+          <button class="primary-button compact" bindtap="handleRetry">重试</button>
+        </view>
+      </block>
+
+      <block wx:else>
+        <view class="points-balance-band">
+          <view class="balance-top">
+            <view class="balance-copy">
+              <view class="balance-label">当前可用积分</view>
+              <view class="balance-value">{{pointData.balanceText}}</view>
+            </view>
+            <button class="light-button" catchtap="handleRechargeTap">去充值</button>
+          </view>
+          <view class="balance-bottom">
+            <text>{{pointData.totalRechargedText}}</text>
+            <text>{{pointData.totalConsumedText}}</text>
+          </view>
+        </view>
+
+        <view class="points-metric-grid">
+          <view class="points-metric" wx:for="{{pointData.metrics}}" wx:key="label">
+            <view class="metric-value">{{item.value}}</view>
+            <view class="metric-label">{{item.label}}</view>
+          </view>
+        </view>
+
+        <view class="panel ledger-panel">
+          <view class="panel-heading ledger-heading">
+            <view class="section-title">积分流水</view>
+            <view class="ledger-action">
+              <view class="rule-link" bindtap="handleRuleTap" aria-role="button">查看积分规则</view>
+            </view>
+          </view>
+
+          <view wx:if="{{transactionData.records.length}}" class="ledger-list">
+            <view class="ledger-row" wx:for="{{transactionData.records}}" wx:key="id">
+              <view class="ledger-copy">
+                <view class="ledger-title">{{item.title}}</view>
+                <view class="ledger-desc">{{item.desc}}</view>
+              </view>
+              <view class="points-change {{item.pointsTone}}">{{item.pointsText}}</view>
+            </view>
+            <view wx:if="{{loadingMore}}" class="load-more-text">加载中...</view>
+            <view wx:elif="{{!transactionData.hasMore}}" class="load-more-text">已加载全部流水</view>
+          </view>
+
+          <view wx:else class="ledger-empty">
+            <view class="empty-title small">暂无积分流水</view>
+            <view class="empty-desc">充值到账、作品维护和访客访问消耗会出现在这里。</view>
+          </view>
+        </view>
+      </block>
+    </view>
+  </scroll-view>
+</view>

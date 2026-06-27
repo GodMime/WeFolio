@@ -1,6 +1,8 @@
 {
   "pages": [
     "pages/index/index",
+    "pages/points/points",
+    "pages/points-rules/points-rules",
     "pages/teams/teams",
     "pages/team-maintenance/team-maintenance",
     "pages/team-member-add/team-member-add",

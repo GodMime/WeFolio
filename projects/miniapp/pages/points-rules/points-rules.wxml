@@ -1,0 +1,71 @@
+<view class="page-shell points-rules-page">
+  <navigation-bar title="积分规则" back="{{true}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+
+  <scroll-view class="points-rules-scroll" scroll-y type="list">
+    <view class="points-rules-content">
+      <block wx:if="{{loading}}">
+        <view class="panel intro-panel skeleton-panel"></view>
+        <view class="cost-board skeleton-panel"></view>
+        <view class="panel account-panel skeleton-panel"></view>
+      </block>
+
+      <block wx:elif="{{errorMessage}}">
+        <view class="empty-state">
+          <view class="empty-icon"></view>
+          <view class="empty-title">加载失败</view>
+          <view class="empty-desc">{{errorMessage}}</view>
+          <button class="primary-button compact" bindtap="handleRetry">重试</button>
+        </view>
+      </block>
+
+      <block wx:else>
+        <view class="panel intro-panel">
+          <view class="panel-heading">
+            <view class="section-title">积分消耗具体规则</view>
+          </view>
+        </view>
+
+        <view wx:if="{{pointData.ruleGroups.length}}" class="cost-board">
+          <view class="cost-group" wx:for="{{pointData.ruleGroups}}" wx:key="groupCode">
+            <view class="cost-mark {{item.groupTone}}">{{item.groupText}}</view>
+            <view class="cost-lines">
+              <view class="cost-line" wx:for="{{item.rules}}" wx:for-item="rule" wx:key="id">
+                <view class="cost-copy">
+                  <view class="cost-title">{{rule.ruleName}}</view>
+                  <view class="cost-desc">{{rule.desc}}</view>
+                </view>
+                <view class="cost-chip">{{rule.costText}}</view>
+              </view>
+            </view>
+          </view>
+        </view>
+
+        <view wx:else class="panel rules-empty">
+          <view class="empty-title small">暂无扣分规则</view>
+          <view class="empty-desc">后台启用积分消耗规则后会在这里展示。</view>
+        </view>
+
+        <view class="panel account-panel">
+          <view class="panel-heading">
+            <view class="section-title">扣费归属</view>
+            <view class="rule-pill muted">账户</view>
+          </view>
+          <view class="rule-list">
+            <view class="rule-item">
+              <view class="check">1</view>
+              <view>团队无积分账户，团队作品集访问无消耗。</view>
+            </view>
+            <view class="rule-item">
+              <view class="check">2</view>
+              <view>从团队跳转到个人作品集后，扣个人作品集所属维护者积分。</view>
+            </view>
+            <view class="rule-item">
+              <view class="check">3</view>
+              <view>个人余额不足时，访客端内容区遮罩提示“UNDER MAINTENANCE / 维护中”。</view>
+            </view>
+          </view>
+        </view>
+      </block>
+    </view>
+  </scroll-view>
+</view>

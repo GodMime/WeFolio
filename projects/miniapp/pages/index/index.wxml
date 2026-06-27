@@ -37,13 +37,13 @@
           <button class="code-pill" catchtap="handleCopyCode">{{dashboard.profile.uniqueCode}}</button>
         </view>
 
-        <view class="balance-band">
+        <view class="balance-band" bindtap="handlePointsTap" aria-role="button">
           <view class="balance-top">
             <view class="balance-copy">
               <view class="balance-label">当前积分余额</view>
               <view class="balance-value">{{dashboard.point.balanceText}}</view>
             </view>
-            <button class="light-button" bindtap="handleRechargeTap">充值</button>
+            <button class="light-button" catchtap="handleRechargeTap">充值</button>
           </view>
           <view class="balance-bottom">
             <text>{{dashboard.point.todayConsumedText}}</text>

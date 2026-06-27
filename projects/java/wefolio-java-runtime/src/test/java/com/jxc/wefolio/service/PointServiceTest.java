@@ -1,5 +1,6 @@
 package com.jxc.wefolio.service;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.jxc.wefolio.dict.PointCalcModeDict;
 import com.jxc.wefolio.dict.MessageActionTypeDict;
 import com.jxc.wefolio.dict.MessageCategoryDict;
@@ -10,6 +11,7 @@ import com.jxc.wefolio.dict.PointSceneCodeDict;
 import com.jxc.wefolio.dict.PointTransactionTypeDict;
 import com.jxc.wefolio.dict.UserStatusDict;
 import com.jxc.wefolio.dto.MinePointOverviewResponse;
+import com.jxc.wefolio.dto.MinePointTransactionsResponse;
 import com.jxc.wefolio.dto.PointCalculationRequest;
 import com.jxc.wefolio.dto.PointCalculationResponse;
 import com.jxc.wefolio.dto.PointMutationResponse;
@@ -219,6 +221,7 @@ class PointServiceTest {
         assertThat(messageCaptor.getValue().getCategory()).isEqualTo(MessageCategoryDict.POINT.getCode());
         assertThat(messageCaptor.getValue().getReadStatus()).isEqualTo(MessageReadStatusDict.UNREAD.getCode());
         assertThat(messageCaptor.getValue().getActionType()).isEqualTo(MessageActionTypeDict.POINT_RECHARGE.getCode());
+        assertThat(messageCaptor.getValue().getActionUrl()).isEqualTo("/pages/points/points");
         assertThat(messageCaptor.getValue().getBizType()).isEqualTo("POINT_TRANSACTION");
         assertThat(messageCaptor.getValue().getBizId()).isEqualTo(90L);
         assertThat(messageCaptor.getValue().getIdempotencyKey()).isEqualTo("POINT_LOW_BALANCE:90");
@@ -430,6 +433,22 @@ class PointServiceTest {
                 .hasMessage("积分计量器更新失败，请重试");
         verify(pointAccountEntityMapper, never()).updateById(any(PointAccountEntity.class));
         verify(pointTransactionEntityMapper, never()).insert(any(PointTransactionEntity.class));
+    }
+
+    @Test
+    void listTransactionsAllowsEmptyFilters() {
+        activeUser(7L);
+        Page<PointTransactionEntity> page = new Page<>(1, 20);
+        page.setTotal(1);
+        page.setRecords(List.of(transaction(90L, 10L, 7L, 5000L, 0L, 5000L)));
+        when(pointTransactionEntityMapper.selectPage(any(), any())).thenReturn(page);
+
+        MinePointTransactionsResponse response = service().listTransactions(7L, null, "  ", 1, 20);
+
+        assertThat(response.getPage()).isEqualTo(1);
+        assertThat(response.getPageSize()).isEqualTo(20);
+        assertThat(response.getRecords()).hasSize(1);
+        assertThat(response.getRecords().get(0).getPointsText()).isEqualTo("+5000");
     }
 
     @Test

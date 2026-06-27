@@ -7,6 +7,7 @@ const MESSAGE_ENTRY_TYPE = 'messages'
 const MESSAGE_ICON_URL = 'https://cos.we-folio.dingchenyong.top/system/wefolio-message-icon.png'
 const MESSAGE_UNREAD_COUNT_URL = '/api/mine/messages/unread-count'
 const MESSAGES_PAGE_URL = '/pages/messages/messages'
+const POINTS_PAGE_URL = '/pages/points/points'
 
 function buildEntries(messageUnread = normalizeUnreadCount({})) {
   return [
@@ -137,6 +138,12 @@ Page({
   handleProfileTap() {
     wx.navigateTo({
       url: '/pages/profile/profile'
+    })
+  },
+
+  handlePointsTap() {
+    wx.navigateTo({
+      url: POINTS_PAGE_URL
     })
   },
 

@@ -72,7 +72,7 @@ public class PointService {
     private static final String LOW_BALANCE_MESSAGE_BIZ_TYPE = "POINT_TRANSACTION";
 
     /** 低余额消息跳转地址 */
-    private static final String LOW_BALANCE_MESSAGE_ACTION_URL = "/pages/index/index";
+    private static final String LOW_BALANCE_MESSAGE_ACTION_URL = "/pages/points/points";
 
     /** 默认页码 */
     private static final int DEFAULT_PAGE = 1;
@@ -187,15 +187,17 @@ public class PointService {
         requireActiveUser(userId);
         int normalizedPage = page <= 0 ? DEFAULT_PAGE : page;
         int normalizedPageSize = pageSize <= 0 ? DEFAULT_PAGE_SIZE : Math.min(pageSize, MAX_PAGE_SIZE);
+        String normalizedTransactionType = hasText(transactionType) ? transactionType.strip() : null;
+        String normalizedSceneCode = hasText(sceneCode) ? sceneCode.strip() : null;
         Page<PointTransactionEntity> requestPage = new Page<>(normalizedPage, normalizedPageSize);
         Page<PointTransactionEntity> resultPage = pointTransactionEntityMapper.selectPage(
                 requestPage,
                 Wrappers.lambdaQuery(PointTransactionEntity.class)
                         .eq(PointTransactionEntity::getUserId, userId)
-                        .eq(transactionType != null && !transactionType.isBlank(),
-                                PointTransactionEntity::getTransactionType, transactionType.strip())
-                        .eq(sceneCode != null && !sceneCode.isBlank(),
-                                PointTransactionEntity::getSceneCode, sceneCode.strip())
+                        .eq(normalizedTransactionType != null,
+                                PointTransactionEntity::getTransactionType, normalizedTransactionType)
+                        .eq(normalizedSceneCode != null,
+                                PointTransactionEntity::getSceneCode, normalizedSceneCode)
                         .orderByDesc(PointTransactionEntity::getOccurredAt)
                         .orderByDesc(PointTransactionEntity::getId)
         );

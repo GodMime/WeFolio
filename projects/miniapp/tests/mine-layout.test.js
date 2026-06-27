@@ -25,7 +25,7 @@ function readRule(selector) {
 test('mine recharge button matches design draft button shape', () => {
   const buttonRule = readRule('.light-button')
 
-  assert.match(indexWxml, /class="light-button"[\s\S]*bindtap="handleRechargeTap"[\s\S]*>充值</)
+  assert.match(indexWxml, /class="light-button"[\s\S]*catchtap="handleRechargeTap"[\s\S]*>充值</)
   assert.match(buttonRule, /height:\s*88rpx/)
   assert.match(buttonRule, /display:\s*inline-flex/)
   assert.match(buttonRule, /align-items:\s*center/)

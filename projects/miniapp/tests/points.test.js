@@ -1,0 +1,132 @@
+const assert = require('node:assert/strict')
+const test = require('node:test')
+
+const {
+  appendPointTransactions,
+  buildPointTransactionQuery,
+  normalizePointOverview,
+  normalizePointTransactions
+} = require('../utils/points')
+
+test('normalizes point overview with grouped consumption rules', () => {
+  const overview = normalizePointOverview({
+    balance: 286,
+    totalRecharged: 820,
+    totalConsumed: 534,
+    todayConsumed: 14,
+    visitorConsumed: 42,
+    maintenanceConsumed: 8,
+    lowBalance: false,
+    rules: [
+      {
+        ruleId: 1,
+        ruleName: '上传图片作品',
+        sceneCode: 'UPLOAD_IMAGE',
+        sceneText: '上传图片作品',
+        groupCode: 'MAINTENANCE',
+        groupText: '维护',
+        calcMode: 'FIXED_PER_ACTION',
+        transactionType: 'CONSUMPTION',
+        unitCount: 1,
+        pointsValue: 1
+      },
+      {
+        ruleId: 2,
+        ruleName: '查看作品集图片',
+        sceneCode: 'VIEW_PORTFOLIO_IMAGES',
+        sceneText: '查看作品集图片',
+        groupCode: 'VISITOR',
+        groupText: '访客',
+        calcMode: 'ACCUMULATED_THRESHOLD',
+        transactionType: 'CONSUMPTION',
+        unitCount: 10,
+        pointsValue: 1
+      },
+      {
+        ruleId: 3,
+        ruleName: '后台人工加分',
+        sceneCode: 'MANUAL_ADMIN_GRANT',
+        sceneText: '后台人工加分',
+        groupCode: 'OTHER',
+        groupText: '其他',
+        calcMode: 'MANUAL_ADJUSTMENT',
+        transactionType: 'GIFT',
+        unitCount: 1,
+        pointsValue: 100
+      }
+    ]
+  })
+
+  assert.equal(overview.balanceText, '286')
+  assert.equal(overview.totalRechargedText, '累计充值 820 积分')
+  assert.equal(overview.totalConsumedText, '累计消耗 534 积分')
+  assert.deepEqual(overview.metrics, [
+    { label: '今日消耗', value: '14' },
+    { label: '访客消耗', value: '42' },
+    { label: '维护消耗', value: '8' }
+  ])
+  assert.deepEqual(overview.ruleGroups.map((group) => group.groupCode), ['MAINTENANCE', 'VISITOR'])
+  assert.equal(overview.ruleGroups[0].rules[0].costText, '1 分')
+  assert.equal(overview.ruleGroups[1].rules[0].costText, '每 10 次 1 分')
+  assert.equal(overview.ruleGroups[1].rules[0].desc, '累计 10 次计费一次')
+})
+
+test('normalizes point transactions and appends next page without duplicates', () => {
+  const first = normalizePointTransactions({
+    page: 1,
+    pageSize: 2,
+    total: 3,
+    hasMore: true,
+    records: [
+      {
+        transactionId: 12,
+        sceneText: '访问个人作品集',
+        transactionTypeText: '消耗',
+        pointsChange: -1,
+        pointsText: '-1',
+        remark: '林安婚礼司仪',
+        occurredAt: '2026-06-26 14:28:00'
+      },
+      {
+        transactionId: 11,
+        sceneText: '充值到账',
+        transactionTypeText: '充值',
+        pointsChange: 520,
+        pointsText: '+520',
+        remark: '50 元档',
+        occurredAt: '2026-06-25 20:12:00'
+      }
+    ]
+  })
+  const second = normalizePointTransactions({
+    page: 2,
+    pageSize: 2,
+    total: 3,
+    hasMore: false,
+    records: [
+      { transactionId: 11, sceneText: '重复充值', pointsChange: 520 },
+      { transactionId: 10, sceneText: '维护高级作品集', pointsChange: -10 }
+    ]
+  })
+
+  const result = appendPointTransactions(first, second)
+
+  assert.deepEqual(first.records.map((item) => item.pointsTone), ['minus', 'plus'])
+  assert.equal(first.records[0].desc, '2026-06-26 14:28:00 · 林安婚礼司仪')
+  assert.deepEqual(result.records.map((item) => item.id), [12, 11, 10])
+  assert.equal(result.hasMore, false)
+  assert.equal(result.nextPage, 3)
+})
+
+test('builds point transaction query with safe page defaults', () => {
+  assert.deepEqual(buildPointTransactionQuery({ page: 2, pageSize: 10 }), {
+    page: 2,
+    pageSize: 10
+  })
+  assert.deepEqual(buildPointTransactionQuery({ transactionType: 'CONSUMPTION', sceneCode: 'CREATE_TEAM' }), {
+    transactionType: 'CONSUMPTION',
+    sceneCode: 'CREATE_TEAM',
+    page: 1,
+    pageSize: 20
+  })
+})
