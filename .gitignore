@@ -6,6 +6,7 @@
 .superpowers/
 .claude/
 /design/tests/
+/codeReview/
 
 # WeChat mini-program private config
 project.private.config.json
