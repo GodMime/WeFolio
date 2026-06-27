@@ -151,10 +151,70 @@ class RestWechatMiniappClientTest {
         field.set(client, restClient);
     }
 
+    /**
+     * 构造 verbose 模式配置，保留完整日志断言。
+     *
+     * @return 微信小程序配置
+     */
     private WechatMiniappProperties properties() {
         WechatMiniappProperties properties = new WechatMiniappProperties();
         properties.setAppId("wxa-test");
         properties.setAppSecret("secret-for-hmac");
+        properties.setLogVerbose(true);
         return properties;
+    }
+
+    /**
+     * 构造非 verbose 模式配置，用于验证脱敏行为。
+     *
+     * @return 微信小程序配置
+     */
+    private WechatMiniappProperties nonVerboseProperties() {
+        WechatMiniappProperties properties = new WechatMiniappProperties();
+        properties.setAppId("wxa-test");
+        properties.setAppSecret("secret-for-hmac");
+        properties.setLogVerbose(false);
+        return properties;
+    }
+
+    /**
+     * 非 verbose 模式下，日志中 access_token 和手机号应被脱敏。
+     */
+    @Test
+    void masksSensitiveFieldsInLogsWhenNotVerbose(CapturedOutput output) throws Exception {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        RestWechatMiniappClient client = new RestWechatMiniappClient(nonVerboseProperties(), new LocalCacheService());
+        injectRestClient(client, builder.build());
+        server.expect(requestTo(
+                        "https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=wxa-test&secret=secret-for-hmac"
+                ))
+                .andRespond(withSuccess(
+                        "{\"access_token\":\"token-123\",\"expires_in\":7200}",
+                        MediaType.APPLICATION_JSON
+                ));
+        server.expect(requestTo(
+                        "https://api.weixin.qq.com/wxa/business/getuserphonenumber?access_token=token-123"
+                ))
+                .andExpect(content().json("{\"code\":\"phone-code\"}"))
+                .andRespond(withSuccess(
+                        "{\"errcode\":0,\"phone_info\":{\"phoneNumber\":\"+8613812348000\",\"purePhoneNumber\":\"13812348000\",\"countryCode\":\"86\"}}",
+                        MediaType.APPLICATION_JSON
+                ));
+
+        client.exchangePhoneCode("phone-code");
+
+        // secret 无条件脱敏（access_token 获取的日志中也会包含 secret）
+        assertThat(output).contains("secret=***");
+        // access_token 在非 verbose 模式脱敏
+        assertThat(output).contains("access_token=***");
+        assertThat(output).doesNotContain("access_token=token-123");
+        // 手机号脱敏
+        assertThat(output).doesNotContain("+8613812348000");
+        assertThat(output).doesNotContain("13812348000");
+        assertThat(output).contains("\"phoneNumber\":\"***\"");
+        assertThat(output).contains("\"purePhoneNumber\":\"***\"");
+        assertThat(output).contains("\"countryCode\":\"***\"");
+        server.verify();
     }
 }

@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 
@@ -303,7 +304,7 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
     }
 
     /**
-     * 打印微信远端请求原始入参
+     * 打印微信远端请求原始入参 — URL 中的 secret 无条件脱敏，access_token 按配置脱敏。
      *
      * @param serviceName 服务名称
      * @param method HTTP 方法
@@ -315,13 +316,13 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
                 "微信远端请求入参 serviceName={} method={} url={} requestBody={}",
                 serviceName,
                 method,
-                url,
+                maskUrl(url),
                 requestBody
         );
     }
 
     /**
-     * 打印微信远端响应原始出参
+     * 打印微信远端响应原始出参 — 按配置脱敏响应体中的手机号等敏感字段。
      *
      * @param serviceName 服务名称
      * @param status HTTP 状态码
@@ -332,8 +333,87 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
                 "微信远端响应出参 serviceName={} status={} responseBody={}",
                 serviceName,
                 status,
-                responseBody
+                maskResponseBody(responseBody)
         );
+    }
+
+    /**
+     * 脱敏 URL 中的敏感查询参数。
+     *
+     * <p>secret 无条件脱敏（永不打日志）。
+     * access_token 按 {@code wechat.miniapp.log-verbose} 配置脱敏。</p>
+     *
+     * @param url 原始 URL
+     * @return 脱敏后的 URL
+     */
+    private String maskUrl(String url) {
+        if (url == null) {
+            return "";
+        }
+        // secret 永不打日志
+        String masked = url.replaceAll("(?<=[&?]secret=)[^&]+", "***");
+        // access_token 按配置脱敏
+        if (!properties.isLogVerbose()) {
+            masked = masked.replaceAll("(?<=[&?]access_token=)[^&]+", "***");
+        }
+        return masked;
+    }
+
+    /**
+     * 脱敏微信响应体中的手机号等敏感字段。
+     *
+     * <p>非 verbose 模式时，递归遍历 JSON 替换敏感字段值为 {@code ***}。
+     * JSON 解析失败时回退为正则替换，保证日志不丢失。</p>
+     *
+     * @param body 原始响应体
+     * @return 脱敏后的响应体
+     */
+    private String maskResponseBody(String body) {
+        if (properties.isLogVerbose() || isBlank(body)) {
+            return body;
+        }
+        try {
+            Map<?, ?> map = JSON.parseObject(body, Map.class);
+            return JSON.toJSONString(maskSensitiveFields(map));
+        } catch (JSONException e) {
+            // JSON 解析失败时回退为正则脱敏，保证日志不丢失
+            return body
+                    .replaceAll("\"(phoneNumber|purePhoneNumber)\"\\s*:\\s*\"[^\"]*\"", "\"$1\":\"***\"")
+                    .replaceAll("\"countryCode\"\\s*:\\s*\"[^\"]*\"", "\"countryCode\":\"***\"");
+        }
+    }
+
+    /**
+     * 递归脱敏 Map 中的手机号等敏感字段。
+     *
+     * @param map 原始 Map
+     * @return 脱敏后的 Map
+     */
+    @SuppressWarnings("unchecked")
+    private Map<Object, Object> maskSensitiveFields(Map<?, ?> map) {
+        Map<Object, Object> result = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+            String key = String.valueOf(entry.getKey());
+            Object value = entry.getValue();
+            if (isPhoneField(key) && value instanceof String) {
+                result.put(key, "***");
+            } else if (value instanceof Map) {
+                result.put(key, maskSensitiveFields((Map<?, ?>) value));
+            } else {
+                result.put(key, value);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * 判断是否为手机号相关字段。
+     *
+     * @param key JSON 键名
+     * @return 是否为手机号字段
+     */
+    private boolean isPhoneField(String key) {
+        return "phoneNumber".equals(key) || "purePhoneNumber".equals(key) || "countryCode".equals(key);
     }
 
     /**
@@ -418,8 +498,8 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
         try {
             return JSON.parseObject(body, responseType);
         } catch (JSONException e) {
-            // 打印原始 body 和 Fastjson 具体原因，方便定位字段不匹配问题
-            log.error("微信接口响应解析失败 body={} targetType={}", body, responseType.getSimpleName(), e);
+            // 打印原始 body 和 Fastjson 具体原因，方便定位字段不匹配问题（body 已脱敏）
+            log.error("微信接口响应解析失败 body={} targetType={}", maskResponseBody(body), responseType.getSimpleName(), e);
             throw new BusinessException("微信接口响应解析失败：" + e.getMessage());
         }
     }

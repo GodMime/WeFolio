@@ -20,10 +20,13 @@ spring:
 
 mybatis-plus:
   configuration:
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
     map-underscore-to-camel-case: true
   mapper-locations: classpath:mapper/**/*.xml
   type-aliases-package: com.jxc.wefolio.entity
+
+wefolio:
+  mybatis:
+    sql-log-enabled: ${WEFOLIO_MYBATIS_SQL_LOG_ENABLED:false}
 
 server:
   address: 127.0.0.1
@@ -42,6 +45,11 @@ wechat:
   miniapp:
     app-id: ${WECHAT_MINIAPP_APP_ID}
     app-secret: ${WECHAT_MINIAPP_APP_SECRET}
+
+# --- Auth Token Configuration ---
+auth:
+  token:
+    secret: ${AUTH_TOKEN_SECRET}
 
 # --- Admin Point Configuration ---
 admin:

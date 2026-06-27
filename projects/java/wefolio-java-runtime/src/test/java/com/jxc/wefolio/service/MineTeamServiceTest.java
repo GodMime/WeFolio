@@ -294,19 +294,42 @@ class MineTeamServiceTest {
         when(teamEntityMapper.selectById(100L)).thenReturn(team);
         when(teamMemberEntityMapper.selectOne(any()))
                 .thenReturn(member(22L, 100L, 7L, TeamRoleDict.MANAGER, JoinStatusDict.JOINED));
-        when(teamEntityMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
+        when(teamEntityMapper.update(any(TeamEntity.class), any(Wrapper.class))).thenReturn(1);
 
         MineTeamService service = service();
 
         MineTeamDetailResponse response = service.updateTeam(100L, request);
 
+        ArgumentCaptor<TeamEntity> entityCaptor = ArgumentCaptor.forClass(TeamEntity.class);
         ArgumentCaptor<Wrapper<TeamEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
-        verify(teamEntityMapper).update(isNull(), captor.capture());
-        String sqlSet = ((UpdateWrapper<TeamEntity>) captor.getValue()).getSqlSet();
-        assertThat(sqlSet).contains("name", "intro", "avatar_url", "updated_at");
+        verify(teamEntityMapper).update(entityCaptor.capture(), captor.capture());
+        TeamEntity updateEntity = entityCaptor.getValue();
+        assertThat(updateEntity.getName()).isEqualTo("星曜司仪团升级版");
+        assertThat(updateEntity.getIntro()).isEqualTo("双城服务团队");
+        assertThat(updateEntity.getAvatarUrl()).isEqualTo("https://cos.example.com/new.png");
+        assertThat(updateEntity.getUpdatedAt()).isNotNull();
+        assertThat(updateEntity.getVersion()).isEqualTo(3);
+        assertThat(captor.getValue().getSqlSegment()).contains("id");
         assertThat(response.getTeam().getName()).isEqualTo("星曜司仪团升级版");
         assertThat(response.getTeam().getIntro()).isEqualTo("双城服务团队");
         assertThat(response.getTeam().getAvatarUrl()).isEqualTo("https://cos.example.com/new.png");
+    }
+
+    @Test
+    void updateTeamReportsOptimisticLockConflict() {
+        TeamEntity team = team(100L, "TM2048", "星曜司仪团", "");
+        MineTeamUpdateRequest request = new MineTeamUpdateRequest();
+        request.setName("星曜司仪团升级版");
+        when(teamEntityMapper.selectById(100L)).thenReturn(team);
+        when(teamMemberEntityMapper.selectOne(any()))
+                .thenReturn(member(22L, 100L, 7L, TeamRoleDict.MANAGER, JoinStatusDict.JOINED));
+        when(teamEntityMapper.update(any(TeamEntity.class), any(Wrapper.class))).thenReturn(0);
+
+        MineTeamService service = service();
+
+        assertThatThrownBy(() -> service.updateTeam(100L, request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("团队资料已被其他管理员更新，请刷新后重试");
     }
 
     @Test
@@ -319,7 +342,7 @@ class MineTeamServiceTest {
         TeamMemberEntity member = member(23L, 100L, 9L, TeamRoleDict.MEMBER, JoinStatusDict.JOINED);
         when(teamEntityMapper.selectById(100L)).thenReturn(team);
         when(teamMemberEntityMapper.selectOne(any())).thenReturn(manager);
-        when(teamEntityMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
+        when(teamEntityMapper.update(any(TeamEntity.class), any(Wrapper.class))).thenReturn(1);
         when(teamMemberEntityMapper.selectList(any())).thenReturn(List.of(owner, manager, member));
         when(userEntityMapper.selectBatchIds(any(Collection.class))).thenReturn(List.of(
                 user(7L, "WF8392", "林安", "婚礼司仪", "https://cos.example.com/u7.png"),
@@ -337,10 +360,10 @@ class MineTeamServiceTest {
     }
 
     /**
-     * 团队维护详情只查询已加入成员，避免暴露已拒绝或已移除成员资料。
+     * 团队维护详情查询已加入和待确认成员，避免维护页的待确认筛选无数据。
      */
     @Test
-    void getTeamDetailQueriesOnlyJoinedMembersForMaintenanceView() throws IOException {
+    void getTeamDetailQueriesJoinedAndPendingMembersForMaintenanceView() throws IOException {
         String source = Files.readString(Path.of("src/main/java/com/jxc/wefolio/service/MineTeamService.java"));
         int methodIndex = source.indexOf("private MineTeamDetailResponse buildDetailResponseWithMembers(");
         int userMapIndex = source.indexOf("Map<Long, UserEntity> userMap", methodIndex);
@@ -349,7 +372,9 @@ class MineTeamServiceTest {
 
         assertThat(queryBlock)
                 .contains(".eq(TeamMemberEntity::getTeamId, team.getId())")
-                .contains(".eq(TeamMemberEntity::getJoinStatus, JoinStatusDict.JOINED.getCode())");
+                .contains(".in(TeamMemberEntity::getJoinStatus")
+                .contains("JoinStatusDict.JOINED.getCode()")
+                .contains("JoinStatusDict.PENDING_CONFIRMATION.getCode()");
     }
 
     @Test
@@ -362,7 +387,7 @@ class MineTeamServiceTest {
         when(teamEntityMapper.selectById(100L)).thenReturn(team);
         when(teamMemberEntityMapper.selectOne(any()))
                 .thenReturn(member(21L, 100L, 7L, TeamRoleDict.OWNER, JoinStatusDict.JOINED));
-        when(teamEntityMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
+        when(teamEntityMapper.update(any(TeamEntity.class), any(Wrapper.class))).thenReturn(1);
 
         MineTeamService service = service();
 
@@ -648,6 +673,7 @@ class MineTeamServiceTest {
         team.setOwnerUserId(7L);
         team.setStatus(TeamStatusDict.ACTIVE.getCode());
         team.setUpdatedAt(LocalDateTime.of(2026, 6, 18, 10, 0));
+        team.setVersion(3);
         return team;
     }
 

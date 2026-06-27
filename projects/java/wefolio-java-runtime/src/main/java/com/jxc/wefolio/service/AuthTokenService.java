@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Optional;
@@ -57,16 +58,21 @@ public class AuthTokenService {
             return cachedUserId;
         }
 
-        Long userId = miniappAuthService.resolveUserId(authorization);
-        if (userId == null) {
+        MiniappAuthService.ResolvedAuthToken resolvedToken = miniappAuthService.resolveAuthToken(authorization);
+        if (resolvedToken == null) {
             return Optional.empty();
         }
+        Long userId = resolvedToken.userId();
         UserEntity user = userEntityMapper.selectById(userId);
         if (user == null || !UserStatusDict.ACTIVE.getCode().equals(user.getStatus())) {
             return Optional.empty();
         }
 
-        cacheService.put(cacheKey, userId, AUTH_CACHE_TTL);
+        Duration cacheTtl = resolveCacheTtl(resolvedToken.expiresAt());
+        if (cacheTtl.isZero() || cacheTtl.isNegative()) {
+            return Optional.empty();
+        }
+        cacheService.put(cacheKey, userId, cacheTtl);
         rememberUserToken(userId, token);
         return Optional.of(userId);
     }
@@ -118,6 +124,23 @@ public class AuthTokenService {
      */
     private String buildCacheKey(String token) {
         return CACHE_KEY_PREFIX + token;
+    }
+
+    /**
+     * 计算登录态缓存有效期，不能超过令牌服务端剩余有效期。
+     *
+     * @param tokenExpiresAt 令牌服务端过期时间
+     * @return 登录态缓存有效期
+     */
+    private Duration resolveCacheTtl(Instant tokenExpiresAt) {
+        if (tokenExpiresAt == null) {
+            return Duration.ZERO;
+        }
+        Duration remainingTtl = Duration.between(Instant.now(), tokenExpiresAt);
+        if (remainingTtl.compareTo(AUTH_CACHE_TTL) < 0) {
+            return remainingTtl;
+        }
+        return AUTH_CACHE_TTL;
     }
 
     /**

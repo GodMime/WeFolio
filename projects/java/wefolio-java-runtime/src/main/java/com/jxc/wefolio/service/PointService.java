@@ -9,6 +9,7 @@ import com.jxc.wefolio.dict.MessageCategoryDict;
 import com.jxc.wefolio.dict.MessageReadStatusDict;
 import com.jxc.wefolio.dict.MessageTypeDict;
 import com.jxc.wefolio.dict.PointCalcModeDict;
+import com.jxc.wefolio.dict.PointRuleGroupDict;
 import com.jxc.wefolio.dict.PointRuleStatusDict;
 import com.jxc.wefolio.dict.PointSceneCodeDict;
 import com.jxc.wefolio.dict.PointTransactionTypeDict;
@@ -932,6 +933,8 @@ public class PointService {
         item.setRuleName(defaultString(rule.getRuleName()));
         item.setSceneCode(defaultString(rule.getSceneCode()));
         item.setSceneText(sceneText(rule.getSceneCode()));
+        item.setGroupCode(ruleGroupCode(rule.getGroupCode()));
+        item.setGroupText(ruleGroupText(rule.getGroupCode()));
         item.setCalcMode(defaultString(rule.getCalcMode()));
         item.setTransactionType(defaultString(rule.getTransactionType()));
         item.setUnitCount(rule.getUnitCount());
@@ -1161,6 +1164,28 @@ public class PointService {
         return PointSceneCodeDict.fromCode(sceneCode)
                 .map(PointSceneCodeDict.DictValue::getDisplayName)
                 .orElse(defaultString(sceneCode));
+    }
+
+    /**
+     * 规则分组编码。
+     *
+     * @param groupCode 分组编码
+     * @return 规则分组编码
+     */
+    private String ruleGroupCode(String groupCode) {
+        PointRuleGroupDict dict = PointRuleGroupDict.fromCode(groupCode);
+        return dict == null ? PointRuleGroupDict.OTHER.getCode() : dict.getCode();
+    }
+
+    /**
+     * 规则分组文案。
+     *
+     * @param groupCode 分组编码
+     * @return 规则分组文案
+     */
+    private String ruleGroupText(String groupCode) {
+        PointRuleGroupDict dict = PointRuleGroupDict.fromCode(groupCode);
+        return dict == null ? PointRuleGroupDict.OTHER.getDisplayName() : dict.getDisplayName();
     }
 
     /**

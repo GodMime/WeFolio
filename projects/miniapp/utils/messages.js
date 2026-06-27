@@ -94,7 +94,7 @@ function normalizeMessageItem(raw = {}) {
     actionVisible: actionType !== MESSAGE_ACTION_TYPE.NONE && Boolean(raw.actionUrl),
     actionText: raw.actionText || actionText(actionType),
     createdAtText: raw.createdAtText || '',
-    selected: false
+    selected: Boolean(raw.selected)
   }
 }
 
@@ -129,6 +129,23 @@ function buildMessageQuery(options = {}) {
   return query
 }
 
+function appendMessageList(current = {}, next = {}) {
+  const currentData = normalizeMessageList(current)
+  const nextData = normalizeMessageList(next)
+  const seen = {}
+  const messages = []
+  currentData.messages.concat(nextData.messages).forEach((item) => {
+    if (item.id) {
+      if (seen[item.id]) {
+        return
+      }
+      seen[item.id] = true
+    }
+    messages.push(item)
+  })
+  return Object.assign({}, nextData, { messages })
+}
+
 function buildMarkReadPayload(messageIds = []) {
   const normalized = []
   messageIds.forEach((messageId) => {
@@ -148,6 +165,7 @@ function buildReadAllPayload(filter) {
 }
 
 module.exports = {
+  appendMessageList,
   buildMarkReadPayload,
   buildMessageQuery,
   buildReadAllPayload,

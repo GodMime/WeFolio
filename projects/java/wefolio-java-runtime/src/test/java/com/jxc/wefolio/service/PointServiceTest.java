@@ -461,6 +461,27 @@ class PointServiceTest {
         assertThat(response.getRules().get(0).getPointsValue()).isEqualTo(2L);
     }
 
+    @Test
+    void getOverviewReturnsRuleGroupForRulesPage() {
+        activeUser(7L);
+        when(pointAccountEntityMapper.selectOne(any())).thenReturn(account(10L, 7L, 30L));
+        PointRuleEntity rule = rule(
+                1L,
+                PointSceneCodeDict.UPLOAD_IMAGE,
+                PointCalcModeDict.FIXED_PER_ACTION,
+                1,
+                1L
+        );
+        rule.setGroupCode("MAINTENANCE");
+        when(pointRuleEntityMapper.selectList(any())).thenReturn(List.of(rule));
+
+        MinePointOverviewResponse response = service().getOverview(7L);
+
+        assertThat(response.getRules()).hasSize(1);
+        assertThat(response.getRules().get(0).getGroupCode()).isEqualTo("MAINTENANCE");
+        assertThat(response.getRules().get(0).getGroupText()).isEqualTo("维护");
+    }
+
     /**
      * 构造被测积分服务。
      *

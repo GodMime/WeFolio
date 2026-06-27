@@ -68,6 +68,12 @@ public class MinePointOverviewResponse {
         /** 场景文案 */
         private String sceneText;
 
+        /** 规则分组编码 */
+        private String groupCode;
+
+        /** 规则分组文案 */
+        private String groupText;
+
         /** 计算模式 */
         private String calcMode;
 

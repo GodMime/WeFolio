@@ -38,3 +38,8 @@ wechat:
   miniapp:
     app-id: wx-test-app-id
     app-secret: test-app-secret
+
+# --- 认证令牌测试占位配置 ---
+auth:
+  token:
+    secret: test-auth-token-secret

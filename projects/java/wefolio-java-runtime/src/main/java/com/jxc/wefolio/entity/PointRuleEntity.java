@@ -3,6 +3,7 @@ package com.jxc.wefolio.entity;
 import java.time.LocalDateTime;
 
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.jxc.wefolio.dict.PointRuleGroupDict;
 import com.jxc.wefolio.dict.PointRuleStatusDict;
 import lombok.Data;
 
@@ -28,6 +29,13 @@ public class PointRuleEntity extends BaseEntity {
 
     /** 可扩展业务场景编码 */
     private String sceneCode;
+
+    /**
+     * 规则展示分组。
+     *
+     * @see PointRuleGroupDict
+     */
+    private String groupCode;
 
     /** 计算模式：FIXED_PER_ACTION 单次固定 / ACCUMULATED_THRESHOLD 累计阶梯 / RECHARGE_PACKAGE 充值档位 / MANUAL_ADJUSTMENT 人工调整 */
     private String calcMode;

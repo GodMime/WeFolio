@@ -9,6 +9,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -59,7 +60,7 @@ class AuthTokenServiceTest {
 
     @Test
     void validatesUserAndWritesCacheWhenCacheMisses() {
-        when(miniappAuthService.resolveUserId("Bearer wf-dev-user-7")).thenReturn(7L);
+        when(miniappAuthService.resolveAuthToken("Bearer wf-dev-user-7")).thenReturn(resolvedToken(7L));
         UserEntity user = new UserEntity();
         user.setId(7L);
         user.setStatus("ACTIVE");
@@ -75,7 +76,7 @@ class AuthTokenServiceTest {
 
     @Test
     void rejectsInvalidTokenWithoutWritingCache() {
-        when(miniappAuthService.resolveUserId("Bearer invalid")).thenReturn(null);
+        when(miniappAuthService.resolveAuthToken("Bearer invalid")).thenReturn(null);
         LocalCacheService cacheService = new LocalCacheService();
         AuthTokenService service = new AuthTokenService(miniappAuthService, userEntityMapper, cacheService);
 
@@ -87,7 +88,7 @@ class AuthTokenServiceTest {
 
     @Test
     void rejectsDisabledUser() {
-        when(miniappAuthService.resolveUserId("Bearer wf-dev-user-7")).thenReturn(7L);
+        when(miniappAuthService.resolveAuthToken("Bearer wf-dev-user-7")).thenReturn(resolvedToken(7L));
         UserEntity user = new UserEntity();
         user.setId(7L);
         user.setStatus("DISABLED");
@@ -103,7 +104,7 @@ class AuthTokenServiceTest {
 
     @Test
     void evictUserClearsCachedTokenBeforeDisabledUserAccessesAgain() {
-        when(miniappAuthService.resolveUserId("Bearer wf-dev-user-7")).thenReturn(7L);
+        when(miniappAuthService.resolveAuthToken("Bearer wf-dev-user-7")).thenReturn(resolvedToken(7L));
         UserEntity activeUser = new UserEntity();
         activeUser.setId(7L);
         activeUser.setStatus("ACTIVE");
@@ -122,5 +123,15 @@ class AuthTokenServiceTest {
         assertThat(resolvedAfterDisabled).isEmpty();
         assertThat(cacheService.get("auth:token:wf-dev-user-7", Long.class)).isEmpty();
         verify(userEntityMapper, times(2)).selectById(7L);
+    }
+
+    /**
+     * 构造已解析的测试令牌。
+     *
+     * @param userId 用户 ID
+     * @return 已解析令牌
+     */
+    private MiniappAuthService.ResolvedAuthToken resolvedToken(Long userId) {
+        return new MiniappAuthService.ResolvedAuthToken(userId, Instant.now().plus(Duration.ofHours(1)));
     }
 }

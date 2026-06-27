@@ -5,6 +5,7 @@ const {
   buildMarkReadPayload,
   buildMessageQuery,
   buildReadAllPayload,
+  appendMessageList,
   normalizeMessageList,
   normalizeUnreadCount
 } = require('../utils/messages')
@@ -106,4 +107,33 @@ test('normalizes unread count for mine entry badge', () => {
   })
   assert.equal(normalizeUnreadCount({ unreadCount: 120 }).badgeText, '99+')
   assert.equal(normalizeUnreadCount({}).hasUnread, false)
+})
+
+test('appends next message page without duplicating existing messages', () => {
+  const current = normalizeMessageList({
+    summary: { unreadCount: 3 },
+    hasMore: true,
+    nextCursor: 100,
+    messages: [
+      { messageId: 101, title: '第一条', readStatus: 'UNREAD' },
+      { messageId: 100, title: '第二条', readStatus: 'READ' }
+    ]
+  })
+  const next = normalizeMessageList({
+    summary: { unreadCount: 2 },
+    hasMore: false,
+    nextCursor: null,
+    messages: [
+      { messageId: 100, title: '第二条重复', readStatus: 'READ' },
+      { messageId: 99, title: '第三条', readStatus: 'UNREAD' }
+    ]
+  })
+
+  const result = appendMessageList(current, next)
+
+  assert.equal(result.summary.unreadCount, 2)
+  assert.deepEqual(result.messages.map((item) => item.id), [101, 100, 99])
+  assert.equal(result.messages[1].title, '第二条')
+  assert.equal(result.hasMore, false)
+  assert.equal(result.nextCursor, null)
 })

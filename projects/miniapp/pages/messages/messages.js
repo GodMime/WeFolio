@@ -1,6 +1,7 @@
 const { request } = require('../../utils/request')
 const { handleAuthRequired, hasLocalToken } = require('../../utils/session')
 const {
+  appendMessageList,
   buildMarkReadPayload,
   buildMessageQuery,
   buildReadAllPayload,
@@ -20,6 +21,7 @@ function emptyMessageData() {
 Page({
   data: {
     loading: true,
+    loadingMore: false,
     saving: false,
     errorMessage: '',
     activeFilter: 'all',
@@ -45,9 +47,14 @@ Page({
     this.loadMessages()
   },
 
-  async loadMessages() {
-    this.setData({
+  async loadMessages(options = {}) {
+    const append = Boolean(options.append)
+    const requestContext = this.createMessageRequestContext(append)
+    this.setData(append ? {
+      loadingMore: true
+    } : {
       loading: true,
+      loadingMore: false,
       errorMessage: ''
     })
 
@@ -55,25 +62,67 @@ Page({
       const response = await request({
         url: MESSAGE_LIST_URL,
         data: buildMessageQuery({
-          filter: this.data.activeFilter,
+          filter: requestContext.filter,
+          cursor: requestContext.cursor,
           size: PAGE_SIZE
         })
       })
+      if (!this.isCurrentMessageRequest(requestContext)) {
+        return
+      }
+      const normalized = normalizeMessageList(response)
       this.setData({
-        messageData: normalizeMessageList(response),
-        selectedIds: [],
-        loading: false
+        messageData: append ? appendMessageList(this.data.messageData, normalized) : normalized,
+        selectedIds: append ? this.data.selectedIds : [],
+        loading: false,
+        loadingMore: false
       })
     } catch (error) {
+      if (!this.isCurrentMessageRequest(requestContext)) {
+        return
+      }
       if (error && error.authRequired) {
+        this.setData({
+          loading: false,
+          loadingMore: false
+        })
         handleAuthRequired(error.message)
+        return
+      }
+      if (append) {
+        this.setData({
+          loadingMore: false
+        })
+        wx.showToast({
+          title: error && error.message ? error.message : '更多消息加载失败',
+          icon: 'none'
+        })
         return
       }
       this.setData({
         loading: false,
+        loadingMore: false,
         errorMessage: error && error.message ? error.message : '消息加载失败'
       })
     }
+  },
+
+  createMessageRequestContext(append) {
+    const messageData = this.data.messageData || {}
+    const requestId = (this.messageListRequestId || 0) + 1
+    this.messageListRequestId = requestId
+    return {
+      requestId,
+      append,
+      filter: this.data.activeFilter,
+      cursor: append ? messageData.nextCursor : null
+    }
+  },
+
+  isCurrentMessageRequest(requestContext) {
+    return Boolean(requestContext)
+      && this.messageListRequestId === requestContext.requestId
+      && this.data.activeFilter === requestContext.filter
   },
 
   redirectToLogin() {
@@ -84,6 +133,20 @@ Page({
 
   handleRetry() {
     this.bootstrap()
+  },
+
+  handleLoadMore() {
+    const messageData = this.data.messageData || {}
+    if (
+      this.data.loading ||
+      this.data.loadingMore ||
+      this.data.saving ||
+      !messageData.hasMore ||
+      !messageData.nextCursor
+    ) {
+      return
+    }
+    this.loadMessages({ append: true })
   },
 
   handleFilterTap(event) {

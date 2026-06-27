@@ -310,22 +310,27 @@ public class MineTeamService {
         if (!canMaintain(membership.getRole())) {
             throw new BusinessException("无团队维护权限");
         }
+        if (team.getVersion() == null) {
+            throw new BusinessException("团队版本号异常，请刷新后重试");
+        }
 
         // 更新请求按“字段存在才覆盖”处理，便于团队图标上传后只补写 avatarUrl。
+        TeamEntity updateEntity = new TeamEntity();
+        updateEntity.setVersion(team.getVersion());
         UpdateWrapper<TeamEntity> updateWrapper = new UpdateWrapper<>();
-        updateWrapper.eq("id", teamId);
+        updateWrapper.eq(COLUMN_ID, teamId);
         applyStringField(request.getName(), NAME_MAX_LENGTH, "团队名称",
-                team::setName, value -> updateWrapper.set("name", value));
+                team::setName, updateEntity::setName);
         applyOptionalStringField(request.getIntro(), INTRO_MAX_LENGTH, "团队简介",
-                team::setIntro, value -> updateWrapper.set("intro", value));
+                team::setIntro, updateEntity::setIntro);
         applyOptionalStringField(request.getAvatarUrl(), AVATAR_URL_MAX_LENGTH, "团队图标",
-                team::setAvatarUrl, value -> updateWrapper.set("avatar_url", value));
+                team::setAvatarUrl, updateEntity::setAvatarUrl);
         LocalDateTime updatedAt = LocalDateTime.now();
         team.setUpdatedAt(updatedAt);
-        updateWrapper.set("updated_at", updatedAt);
-        int updated = teamEntityMapper.update(null, updateWrapper);
+        updateEntity.setUpdatedAt(updatedAt);
+        int updated = teamEntityMapper.update(updateEntity, updateWrapper);
         if (updated <= 0) {
-            throw new BusinessException("团队保存失败，请重试");
+            throw new BusinessException("团队资料已被其他管理员更新，请刷新后重试");
         }
         return buildDetailResponseWithMembers(team, membership);
     }
@@ -533,7 +538,9 @@ public class MineTeamService {
         List<TeamMemberEntity> members = safeList(teamMemberEntityMapper.selectList(
                 Wrappers.lambdaQuery(TeamMemberEntity.class)
                         .eq(TeamMemberEntity::getTeamId, team.getId())
-                        .eq(TeamMemberEntity::getJoinStatus, JoinStatusDict.JOINED.getCode())
+                        .in(TeamMemberEntity::getJoinStatus,
+                                JoinStatusDict.JOINED.getCode(),
+                                JoinStatusDict.PENDING_CONFIRMATION.getCode())
         ));
         Map<Long, UserEntity> userMap = loadUsers(members.stream().map(TeamMemberEntity::getUserId).toList());
         return buildDetailResponse(team, currentMembership, members, userMap);

@@ -3,6 +3,7 @@ package com.jxc.wefolio.service;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.jxc.wefolio.common.UniqueCodeGenerator;
 import com.jxc.wefolio.common.auth.AuthorizationHeaderUtils;
+import com.jxc.wefolio.config.AuthTokenProperties;
 import com.jxc.wefolio.config.CosProperties;
 import com.jxc.wefolio.config.WechatMiniappProperties;
 import com.jxc.wefolio.dto.AuthSessionResponse;
@@ -21,10 +22,17 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import javax.crypto.Cipher;
 import javax.crypto.Mac;
+import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.Base64;
 import java.util.HexFormat;
 import java.util.Locale;
 import java.util.stream.Collectors;
@@ -37,20 +45,59 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class MiniappAuthService {
 
-    /** 简单令牌前缀，后续可替换为 JWT 或服务端会话 */
-    private static final String DEVELOPMENT_TOKEN_PREFIX = "wf-dev-user-";
+    /** 维护者登录令牌前缀 */
+    private static final String MAINTAINER_TOKEN_PREFIX = "wf-maintainer-v1.";
+
+    /** 维护者令牌 payload 分隔符 */
+    private static final String TOKEN_PAYLOAD_SEPARATOR = ":";
+
+    /** 维护者令牌 payload 字段数量 */
+    private static final int TOKEN_PAYLOAD_PART_COUNT = 2;
+
+    /** 维护者令牌 payload 用户 ID 下标 */
+    private static final int TOKEN_PAYLOAD_USER_ID_INDEX = 0;
+
+    /** 维护者令牌 payload 签发时间下标 */
+    private static final int TOKEN_PAYLOAD_ISSUED_AT_INDEX = 1;
+
+    /** 令牌解析失败提示 */
+    private static final String TOKEN_PARSE_FAILED_MESSAGE = "登录令牌解析失败，请重新登录";
+
+    /** 令牌过期提示 */
+    private static final String TOKEN_EXPIRED_MESSAGE = "登录令牌已过期，请重新登录";
+
+    /** 令牌密钥未配置提示 */
+    private static final String TOKEN_SECRET_MISSING_MESSAGE = "登录令牌密钥未配置";
 
     /** 令牌类型 */
     private static final String TOKEN_TYPE = "Bearer";
 
-    /** 简单令牌有效期 */
-    private static final long DEVELOPMENT_EXPIRES_IN_SECONDS = 30L * 24L * 60L * 60L;
+    /** 维护者令牌有效期 */
+    private static final long MAINTAINER_EXPIRES_IN_SECONDS = 30L * 24L * 60L * 60L;
 
     /** 微信小程序登录类型 */
     private static final String WECHAT_AUTH_TYPE = AuthTypeDict.WECHAT_MINI_APP.getCode();
 
     /** HMAC 算法 */
     private static final String HMAC_SHA256 = "HmacSHA256";
+
+    /** 登录令牌密钥摘要算法 */
+    private static final String SHA_256 = "SHA-256";
+
+    /** 登录令牌加密算法 */
+    private static final String AES_GCM_TRANSFORMATION = "AES/GCM/NoPadding";
+
+    /** AES 密钥算法 */
+    private static final String AES_ALGORITHM = "AES";
+
+    /** GCM 初始向量字节数 */
+    private static final int TOKEN_IV_LENGTH_BYTES = 12;
+
+    /** GCM 认证标签位数 */
+    private static final int TOKEN_GCM_TAG_LENGTH_BITS = 128;
+
+    /** 令牌随机数生成器 */
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     /** 用户资料 Mapper */
     private final UserEntityMapper userEntityMapper;
@@ -63,6 +110,9 @@ public class MiniappAuthService {
 
     /** 微信小程序配置 */
     private final WechatMiniappProperties wechatMiniappProperties;
+
+    /** 认证令牌配置 */
+    private final AuthTokenProperties authTokenProperties;
 
     /** COS 对象存储服务 */
     private final CosService cosService;
@@ -77,24 +127,98 @@ public class MiniappAuthService {
     private final UniqueCodeGenerator uniqueCodeGenerator;
 
     /**
+     * 已解析的维护者登录令牌。
+     *
+     * @param userId 用户 ID
+     * @param expiresAt 令牌服务端过期时间
+     */
+    public record ResolvedAuthToken(Long userId, Instant expiresAt) {
+    }
+
+    /**
      * 解析 bearer token 中的用户 ID
      *
      * @param authorizationHeader Authorization 请求头
      * @return 用户 ID，无法解析时返回空
      */
     public Long resolveUserId(String authorizationHeader) {
+        ResolvedAuthToken resolvedAuthToken = resolveAuthToken(authorizationHeader);
+        return resolvedAuthToken == null ? null : resolvedAuthToken.userId();
+    }
+
+    /**
+     * 解析 bearer token 中的登录态信息。
+     *
+     * @param authorizationHeader Authorization 请求头
+     * @return 登录态信息，无法解析为维护者令牌时返回空
+     */
+    public ResolvedAuthToken resolveAuthToken(String authorizationHeader) {
         String value = AuthorizationHeaderUtils.normalizeBearerToken(authorizationHeader);
         if (value.isBlank()) {
             return null;
         }
-        if (!value.startsWith(DEVELOPMENT_TOKEN_PREFIX)) {
+        if (!value.startsWith(MAINTAINER_TOKEN_PREFIX)) {
             return null;
         }
+        return decryptUserIdToken(value);
+    }
+
+    /**
+     * 解密维护者登录令牌。
+     *
+     * @param token 登录令牌
+     * @return 登录态信息
+     */
+    private ResolvedAuthToken decryptUserIdToken(String token) {
         try {
-            return Long.parseLong(value.substring(DEVELOPMENT_TOKEN_PREFIX.length()));
-        } catch (NumberFormatException e) {
-            return null;
+            byte[] tokenBytes = Base64.getUrlDecoder().decode(token.substring(MAINTAINER_TOKEN_PREFIX.length()));
+            if (tokenBytes.length <= TOKEN_IV_LENGTH_BYTES) {
+                throw new BusinessException(TOKEN_PARSE_FAILED_MESSAGE);
+            }
+            byte[] iv = Arrays.copyOfRange(tokenBytes, 0, TOKEN_IV_LENGTH_BYTES);
+            byte[] cipherText = Arrays.copyOfRange(tokenBytes, TOKEN_IV_LENGTH_BYTES, tokenBytes.length);
+
+            Cipher cipher = Cipher.getInstance(AES_GCM_TRANSFORMATION);
+            cipher.init(Cipher.DECRYPT_MODE, buildTokenSecretKey(), new GCMParameterSpec(TOKEN_GCM_TAG_LENGTH_BITS, iv));
+            String payload = new String(cipher.doFinal(cipherText), StandardCharsets.UTF_8);
+            return parseTokenPayload(payload);
+        } catch (BusinessException e) {
+            log.warn("维护者登录令牌解析失败: {}", e.getMessage());
+            throw e;
+        } catch (Exception e) {
+            log.warn("维护者登录令牌解析失败: errorType={}, errorMessage={}",
+                    e.getClass().getSimpleName(), e.getMessage(), e);
+            throw new BusinessException(TOKEN_PARSE_FAILED_MESSAGE, e);
         }
+    }
+
+    /**
+     * 解析维护者登录令牌 payload。
+     *
+     * @param payload 解密后的 payload
+     * @return 登录态信息
+     */
+    private ResolvedAuthToken parseTokenPayload(String payload) {
+        String[] parts = payload.split(TOKEN_PAYLOAD_SEPARATOR, -1);
+        if (parts.length != TOKEN_PAYLOAD_PART_COUNT) {
+            throw new BusinessException(TOKEN_PARSE_FAILED_MESSAGE);
+        }
+        long userId;
+        long issuedAtEpochSeconds;
+        try {
+            userId = Long.parseLong(parts[TOKEN_PAYLOAD_USER_ID_INDEX]);
+            issuedAtEpochSeconds = Long.parseLong(parts[TOKEN_PAYLOAD_ISSUED_AT_INDEX]);
+        } catch (NumberFormatException e) {
+            throw new BusinessException(TOKEN_PARSE_FAILED_MESSAGE, e);
+        }
+        if (userId <= 0 || issuedAtEpochSeconds <= 0) {
+            throw new BusinessException(TOKEN_PARSE_FAILED_MESSAGE);
+        }
+        Instant expiresAt = Instant.ofEpochSecond(issuedAtEpochSeconds).plusSeconds(MAINTAINER_EXPIRES_IN_SECONDS);
+        if (!expiresAt.isAfter(Instant.now())) {
+            throw new BusinessException(TOKEN_EXPIRED_MESSAGE);
+        }
+        return new ResolvedAuthToken(userId, expiresAt);
     }
 
     /**
@@ -323,10 +447,54 @@ public class MiniappAuthService {
     private MaintainerWechatLoginResponse buildMaintainerLoginResponse(Long userId) {
         MaintainerWechatLoginResponse response = new MaintainerWechatLoginResponse();
         response.setTokenType(TOKEN_TYPE);
-        response.setToken(DEVELOPMENT_TOKEN_PREFIX + userId);
+        response.setToken(encryptUserIdToken(userId));
         response.setUserId(userId);
-        response.setExpiresInSeconds(DEVELOPMENT_EXPIRES_IN_SECONDS);
+        response.setExpiresInSeconds(MAINTAINER_EXPIRES_IN_SECONDS);
         return response;
+    }
+
+    /**
+     * 加密用户 ID 生成维护者登录令牌。
+     *
+     * @param userId 当前登录用户 ID
+     * @return 加密后的登录令牌
+     */
+    private String encryptUserIdToken(Long userId) {
+        if (userId == null || userId <= 0) {
+            throw new BusinessException("登录用户异常");
+        }
+        try {
+            byte[] iv = new byte[TOKEN_IV_LENGTH_BYTES];
+            SECURE_RANDOM.nextBytes(iv);
+            Cipher cipher = Cipher.getInstance(AES_GCM_TRANSFORMATION);
+            cipher.init(Cipher.ENCRYPT_MODE, buildTokenSecretKey(), new GCMParameterSpec(TOKEN_GCM_TAG_LENGTH_BITS, iv));
+            String payload = userId + TOKEN_PAYLOAD_SEPARATOR + Instant.now().getEpochSecond();
+            byte[] cipherText = cipher.doFinal(payload.getBytes(StandardCharsets.UTF_8));
+            byte[] tokenBytes = new byte[iv.length + cipherText.length];
+            System.arraycopy(iv, 0, tokenBytes, 0, iv.length);
+            System.arraycopy(cipherText, 0, tokenBytes, iv.length, cipherText.length);
+            return MAINTAINER_TOKEN_PREFIX + Base64.getUrlEncoder().withoutPadding().encodeToString(tokenBytes);
+        } catch (Exception e) {
+            throw new BusinessException("登录令牌生成失败", e);
+        }
+    }
+
+    /**
+     * 从应用层令牌密钥派生令牌加密密钥。
+     *
+     * @return AES 密钥
+     */
+    private SecretKeySpec buildTokenSecretKey() {
+        String tokenSecret = authTokenProperties.getSecret();
+        if (tokenSecret == null || tokenSecret.isBlank()) {
+            throw new BusinessException(TOKEN_SECRET_MISSING_MESSAGE);
+        }
+        try {
+            byte[] key = MessageDigest.getInstance(SHA_256).digest(tokenSecret.getBytes(StandardCharsets.UTF_8));
+            return new SecretKeySpec(key, AES_ALGORITHM);
+        } catch (Exception e) {
+            throw new BusinessException("登录令牌密钥生成失败", e);
+        }
     }
 
     /**
