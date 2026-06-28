@@ -6,9 +6,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 我的档期聚合响应。
+ * 我的档期响应片段。
  *
- * <p>一次返回档位定义、月历颜色标记和选中日期明细，减少小程序页面多次请求。</p>
+ * <p>维护者档期页面按档位定义、月历颜色标记和选中日期明细分别读取。</p>
  */
 @Data
 public class MineScheduleResponse {

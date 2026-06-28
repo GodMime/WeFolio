@@ -10,7 +10,11 @@ const {
   buildScheduleItemPayload,
   buildSlotDefinitionFieldCounters,
   buildSlotDefinitionPayload,
+  markMonthSelectedDate,
+  normalizeMonthOverview,
   normalizeScheduleOverview,
+  normalizeSelectedDateOverview,
+  normalizeSlotDefinitions,
   validateScheduleItemPayload,
   validateSlotDefinitionPayload
 } = require('../../utils/schedule')
@@ -106,12 +110,23 @@ const INITIAL_SLOT_FORM = buildDefaultSlotForm()
 const INITIAL_SCHEDULE_FORM = buildDefaultScheduleForm(INITIAL_TODAY_STATE.selectedDate)
 
 Page({
+  slotDefinitionsRequestSeq: 0,
+  calendarRequestSeq: 0,
+  dayRequestSeq: 0,
+
   data: Object.assign({
-    loading: true,
+    slotDefinitionsLoading: true,
+    calendarLoading: true,
+    dayLoading: true,
     saving: false,
-    errorMessage: '',
+    slotDefinitionsErrorMessage: '',
+    calendarErrorMessage: '',
+    dayErrorMessage: '',
     activeMode: MODE_MAINTENANCE,
-    overview: normalizeScheduleOverview({}),
+    overview: normalizeScheduleOverview({
+      month: { yearMonth: INITIAL_TODAY_STATE.selectedMonth },
+      selectedDate: { date: INITIAL_TODAY_STATE.selectedDate }
+    }),
     weekdays: ['日', '一', '二', '三', '四', '五', '六'],
     slotColorOptions: SLOT_COLOR_OPTIONS,
     statusOptions: SCHEDULE_STATUS_OPTIONS,
@@ -150,6 +165,10 @@ Page({
     this.setData({
       selectedDate: initialDate,
       selectedMonth: initialMonth,
+      overview: normalizeScheduleOverview({
+        month: { yearMonth: initialMonth },
+        selectedDate: { date: initialDate }
+      }),
       scheduleForm,
       scheduleFieldCounters: buildScheduleFieldCounters(scheduleForm)
     })
@@ -164,49 +183,138 @@ Page({
       this.redirectToLogin()
       return
     }
-    this.loadSchedule()
+    this.loadInitialSchedule()
   },
 
-  async loadSchedule(showLoading = true) {
+  loadInitialSchedule() {
+    this.loadSlotDefinitions()
+    this.loadCalendar()
+    this.loadDaySchedules()
+  },
+
+  async loadSlotDefinitions(showLoading = true) {
+    const requestSeq = this.slotDefinitionsRequestSeq + 1
+    this.slotDefinitionsRequestSeq = requestSeq
     if (showLoading) {
       this.setData({
-        loading: true,
-        errorMessage: ''
+        slotDefinitionsLoading: true,
+        slotDefinitionsErrorMessage: ''
       })
     }
     try {
       const response = await request({
-        url: '/api/mine/schedule',
-        data: {
-          month: this.data.selectedMonth,
-          date: this.data.selectedDate
-        }
+        url: '/api/mine/schedule/slot-definitions'
       })
+      if (requestSeq !== this.slotDefinitionsRequestSeq) {
+        return
+      }
       this.setData({
-        overview: normalizeScheduleOverview(response),
-        loading: false,
-        errorMessage: ''
+        'overview.slotDefinitions': normalizeSlotDefinitions(response),
+        slotDefinitionsLoading: false,
+        slotDefinitionsErrorMessage: ''
       })
     } catch (error) {
       if (error && error.authRequired) {
+        this.setData({ slotDefinitionsLoading: false })
         handleAuthRequired(error.message)
         return
       }
       this.setData({
-        loading: false,
-        errorMessage: error && error.message ? error.message : '档期加载失败'
+        slotDefinitionsLoading: false,
+        slotDefinitionsErrorMessage: error && error.message ? error.message : '档位定义加载失败'
       })
     }
+  },
+
+  async loadCalendar(showLoading = true) {
+    const requestSeq = this.calendarRequestSeq + 1
+    const selectedMonth = this.data.selectedMonth
+    this.calendarRequestSeq = requestSeq
+    if (showLoading) {
+      this.setData({
+        calendarLoading: true,
+        calendarErrorMessage: ''
+      })
+    }
+    try {
+      const response = await request({
+        url: '/api/mine/schedule/month',
+        data: {
+          month: selectedMonth
+        }
+      })
+      if (requestSeq !== this.calendarRequestSeq || selectedMonth !== this.data.selectedMonth) {
+        return
+      }
+      this.setData({
+        'overview.month': normalizeMonthOverview(response, this.data.selectedDate),
+        calendarLoading: false,
+        calendarErrorMessage: ''
+      })
+    } catch (error) {
+      if (error && error.authRequired) {
+        this.setData({ calendarLoading: false })
+        handleAuthRequired(error.message)
+        return
+      }
+      this.setData({
+        calendarLoading: false,
+        calendarErrorMessage: error && error.message ? error.message : '月历加载失败'
+      })
+    }
+  },
+
+  async loadDaySchedules(showLoading = true) {
+    const requestSeq = this.dayRequestSeq + 1
+    const selectedDate = this.data.selectedDate
+    this.dayRequestSeq = requestSeq
+    if (showLoading) {
+      this.setData({
+        dayLoading: true,
+        dayErrorMessage: ''
+      })
+    } else {
+      this.setData({
+        dayErrorMessage: ''
+      })
+    }
+    try {
+      const response = await request({
+        url: '/api/mine/schedule/day',
+        data: {
+          date: selectedDate
+        }
+      })
+      if (requestSeq !== this.dayRequestSeq || selectedDate !== this.data.selectedDate) {
+        return
+      }
+      this.setData({
+        'overview.selectedDate': normalizeSelectedDateOverview(response),
+        dayLoading: false,
+        dayErrorMessage: ''
+      })
+    } catch (error) {
+      if (error && error.authRequired) {
+        this.setData({ dayLoading: false })
+        handleAuthRequired(error.message)
+        return
+      }
+      this.setData({
+        dayLoading: false,
+        dayErrorMessage: error && error.message ? error.message : '当天档期加载失败'
+      })
+    }
+  },
+
+  refreshCalendarAndDay() {
+    this.loadCalendar()
+    this.loadDaySchedules()
   },
 
   redirectToLogin() {
     wx.redirectTo({
       url: '/pages/login/login'
     })
-  },
-
-  handleRetry() {
-    this.bootstrap()
   },
 
   noop() {},
@@ -219,22 +327,34 @@ Page({
 
   handlePrevMonth() {
     const selectedMonth = shiftMonth(this.data.selectedMonth, -1)
+    const selectedDate = formatMonthFirstDate(selectedMonth)
     this.setData({
       selectedMonth,
-      selectedDate: formatMonthFirstDate(selectedMonth),
-      revealedScheduleId: null
+      selectedDate,
+      revealedScheduleId: null,
+      calendarLoading: true,
+      dayLoading: true,
+      calendarErrorMessage: '',
+      dayErrorMessage: '',
+      'overview.selectedDate': normalizeSelectedDateOverview({ date: selectedDate })
     })
-    this.loadSchedule()
+    this.refreshCalendarAndDay()
   },
 
   handleNextMonth() {
     const selectedMonth = shiftMonth(this.data.selectedMonth, 1)
+    const selectedDate = formatMonthFirstDate(selectedMonth)
     this.setData({
       selectedMonth,
-      selectedDate: formatMonthFirstDate(selectedMonth),
-      revealedScheduleId: null
+      selectedDate,
+      revealedScheduleId: null,
+      calendarLoading: true,
+      dayLoading: true,
+      calendarErrorMessage: '',
+      dayErrorMessage: '',
+      'overview.selectedDate': normalizeSelectedDateOverview({ date: selectedDate })
     })
-    this.loadSchedule()
+    this.refreshCalendarAndDay()
   },
 
   handleMonthPickerChange(event) {
@@ -242,12 +362,18 @@ Page({
     if (!isValidMonth(selectedMonth)) {
       return
     }
+    const selectedDate = formatMonthFirstDate(selectedMonth)
     this.setData({
       selectedMonth,
-      selectedDate: formatMonthFirstDate(selectedMonth),
-      revealedScheduleId: null
+      selectedDate,
+      revealedScheduleId: null,
+      calendarLoading: true,
+      dayLoading: true,
+      calendarErrorMessage: '',
+      dayErrorMessage: '',
+      'overview.selectedDate': normalizeSelectedDateOverview({ date: selectedDate })
     })
-    this.loadSchedule()
+    this.refreshCalendarAndDay()
   },
 
   handleDayTap(event) {
@@ -255,12 +381,28 @@ Page({
     if (!date) {
       return
     }
-    this.setData({
+    const selectedMonth = date.slice(0, 7)
+    const sameMonth = selectedMonth === this.data.selectedMonth
+    const updates = {
       selectedDate: date,
-      selectedMonth: date.slice(0, 7),
-      revealedScheduleId: null
-    })
-    this.loadSchedule(false)
+      selectedMonth,
+      revealedScheduleId: null,
+      dayErrorMessage: ''
+    }
+    if (sameMonth) {
+      updates['overview.month'] = markMonthSelectedDate(this.data.overview.month, date)
+    } else {
+      updates.calendarLoading = true
+      updates.dayLoading = true
+      updates.calendarErrorMessage = ''
+      updates['overview.selectedDate'] = normalizeSelectedDateOverview({ date })
+    }
+    this.setData(updates)
+    if (sameMonth) {
+      this.loadDaySchedules(false)
+      return
+    }
+    this.refreshCalendarAndDay()
   },
 
   handleMaintainDate() {
@@ -523,7 +665,7 @@ Page({
         revealedScheduleId: null,
         saving: false
       })
-      this.loadSchedule(false)
+      this.refreshCalendarAndDay()
       wx.showToast({
         title: '已保存档期',
         icon: 'success'
@@ -552,11 +694,12 @@ Page({
       })
       return
     }
+    const editingSlotId = this.data.editingSlotId
     this.setData({ saving: true })
     try {
-      if (this.data.editingSlotId) {
+      if (editingSlotId) {
         await request({
-          url: `/api/mine/schedule/slot-definitions/save/${this.data.editingSlotId}`,
+          url: `/api/mine/schedule/slot-definitions/save/${editingSlotId}`,
           method: 'POST',
           data: payload
         })
@@ -572,7 +715,10 @@ Page({
         editingSlotId: null,
         saving: false
       })
-      this.loadSchedule(false)
+      this.loadSlotDefinitions()
+      if (editingSlotId) {
+        this.refreshCalendarAndDay()
+      }
       wx.showToast({
         title: '已保存定义',
         icon: 'success'
@@ -606,7 +752,7 @@ Page({
         }
       })
       this.setData({ revealedSlotId: null })
-      this.loadSchedule(false)
+      this.loadSlotDefinitions()
     } catch (error) {
       if (error && error.authRequired) {
         handleAuthRequired(error.message)
@@ -649,7 +795,7 @@ Page({
             title: '已删除档期',
             icon: 'success'
           })
-          this.loadSchedule(false)
+          this.refreshCalendarAndDay()
         } catch (error) {
           if (error && error.authRequired) {
             this.setData({
@@ -709,7 +855,7 @@ Page({
             title: '已删除档位',
             icon: 'success'
           })
-          this.loadSchedule(false)
+          this.loadSlotDefinitions()
         } catch (error) {
           if (error && error.authRequired) {
             this.setData({

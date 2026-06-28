@@ -530,12 +530,15 @@ flowchart TD
 
 维护者端接口约定：
 
-- 档期聚合读取：`GET /api/mine/schedule?month=yyyy-MM&date=yyyy-MM-dd`，返回档位定义、当月月历标记和选中日期明细。
+- 档位定义读取：`GET /api/mine/schedule/slot-definitions`，返回当前维护者全部档位定义。
+- 月历档期读取：`GET /api/mine/schedule/month?month=yyyy-MM`，返回当月月历标记。
+- 某日档期读取：`GET /api/mine/schedule/day?date=yyyy-MM-dd`，返回指定日期档期明细。
 - 新增档位定义：`POST /api/mine/schedule/slot-definitions`。
-- 编辑档位定义：`PUT /api/mine/schedule/slot-definitions/{id}`。
-- 启用或停用档位定义：`PUT /api/mine/schedule/slot-definitions/{id}/status`。
-- 保存档期记录：`POST /api/mine/schedule/items/save`。请求包含 `scheduleId` 时更新该记录；不包含 `scheduleId` 时按当前用户、日期和档位定义幂等保存，已存在则更新，不存在则新增。
-- 删除档期记录：`POST /api/mine/schedule/items/{id}/delete`。不使用 HTTP `DELETE`，服务端执行逻辑删除。
+- 编辑档位定义：`POST /api/mine/schedule/slot-definitions/save/{id}`。
+- 启用或停用档位定义：`POST /api/mine/schedule/slot-definitions/status/{id}`。
+- 删除档位定义：`POST /api/mine/schedule/slot-definitions/delete/{id}`，仅允许删除已停用且无关联档期的定义。
+- 保存档期记录：`POST /api/mine/schedule/items/save`。请求包含 `scheduleId` 时更新该记录；不包含 `scheduleId` 时新增，若同日同档位已存在则返回错误。
+- 删除档期记录：`POST /api/mine/schedule/items/delete/{id}`。不使用 HTTP `DELETE`，服务端执行逻辑删除。
 - 档期记录唯一性由数据库兜底：`user_id + schedule_date + slot_definition_id + deleted` 在未删除记录内唯一。
 
 访客端能力：

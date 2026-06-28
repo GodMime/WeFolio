@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 /**
  * 我的档期控制器 — 提供维护者个人档位定义和档期维护接口。
  */
@@ -27,18 +29,35 @@ public class MineScheduleController {
     private final MineScheduleService mineScheduleService;
 
     /**
-     * 获取档期聚合数据。
+     * 获取档位定义列表。
+     *
+     * @return 档位定义列表
+     */
+    @GetMapping("/api/mine/schedule/slot-definitions")
+    public Response<List<MineScheduleResponse.SlotDefinitionItem>> slotDefinitions() {
+        return Response.success(mineScheduleService.getSlotDefinitions());
+    }
+
+    /**
+     * 获取月历档期标记。
      *
      * @param month 月份，格式 yyyy-MM
-     * @param date 选中日期，格式 yyyy-MM-dd
-     * @return 档期聚合响应
+     * @return 月历档期标记
      */
-    @GetMapping("/api/mine/schedule")
-    public Response<MineScheduleResponse> schedule(
-            @RequestParam("month") String month,
-            @RequestParam("date") String date
-    ) {
-        return Response.success(mineScheduleService.getScheduleOverview(month, date));
+    @GetMapping("/api/mine/schedule/month")
+    public Response<MineScheduleResponse.MonthOverview> monthOverview(@RequestParam("month") String month) {
+        return Response.success(mineScheduleService.getMonthOverview(month));
+    }
+
+    /**
+     * 获取某日档期明细。
+     *
+     * @param date 日期，格式 yyyy-MM-dd
+     * @return 某日档期明细
+     */
+    @GetMapping("/api/mine/schedule/day")
+    public Response<MineScheduleResponse.SelectedDateOverview> dayOverview(@RequestParam("date") String date) {
+        return Response.success(mineScheduleService.getSelectedDateOverview(date));
     }
 
     /**

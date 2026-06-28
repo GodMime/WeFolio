@@ -17,8 +17,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
-import java.lang.reflect.Method;
 import java.util.Arrays;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
@@ -37,19 +37,24 @@ class MineScheduleControllerTest {
     @Test
     void scheduleEndpointsUseMaintainerAccessAndDelegateToService() throws NoSuchMethodException {
         MineScheduleController controller = new MineScheduleController(mineScheduleService);
-        MineScheduleResponse overview = new MineScheduleResponse();
         MineScheduleResponse.SlotDefinitionItem definition = new MineScheduleResponse.SlotDefinitionItem();
+        MineScheduleResponse.MonthOverview month = new MineScheduleResponse.MonthOverview();
+        MineScheduleResponse.SelectedDateOverview selectedDate = new MineScheduleResponse.SelectedDateOverview();
         MineScheduleResponse.ScheduleItem scheduleItem = new MineScheduleResponse.ScheduleItem();
         ScheduleSlotDefinitionRequest definitionRequest = new ScheduleSlotDefinitionRequest();
         ScheduleSlotDefinitionStatusRequest statusRequest = new ScheduleSlotDefinitionStatusRequest();
         ScheduleItemSaveRequest saveRequest = new ScheduleItemSaveRequest();
-        when(mineScheduleService.getScheduleOverview("2026-06", "2026-06-24")).thenReturn(overview);
+        when(mineScheduleService.getSlotDefinitions()).thenReturn(List.of(definition));
+        when(mineScheduleService.getMonthOverview("2026-06")).thenReturn(month);
+        when(mineScheduleService.getSelectedDateOverview("2026-06-24")).thenReturn(selectedDate);
         when(mineScheduleService.createSlotDefinition(definitionRequest)).thenReturn(definition);
         when(mineScheduleService.updateSlotDefinition(1L, definitionRequest)).thenReturn(definition);
         when(mineScheduleService.updateSlotDefinitionStatus(1L, statusRequest)).thenReturn(definition);
         when(mineScheduleService.saveScheduleItem(saveRequest)).thenReturn(scheduleItem);
 
-        Response<MineScheduleResponse> overviewResponse = controller.schedule("2026-06", "2026-06-24");
+        Response<List<MineScheduleResponse.SlotDefinitionItem>> slotDefinitions = controller.slotDefinitions();
+        Response<MineScheduleResponse.MonthOverview> monthResponse = controller.monthOverview("2026-06");
+        Response<MineScheduleResponse.SelectedDateOverview> dayResponse = controller.dayOverview("2026-06-24");
         Response<MineScheduleResponse.SlotDefinitionItem> created = controller.createSlotDefinition(definitionRequest);
         Response<MineScheduleResponse.SlotDefinitionItem> updated =
                 controller.updateSlotDefinition(1L, definitionRequest);
@@ -60,7 +65,10 @@ class MineScheduleControllerTest {
         Response<Void> deleted = controller.deleteScheduleItem(9L);
 
         assertThat(MineScheduleController.class.isAnnotationPresent(MaintainerAccess.class)).isTrue();
-        assertGetMapping("schedule", new Class<?>[] {String.class, String.class}, "/api/mine/schedule");
+        assertGetMapping("slotDefinitions", new Class<?>[] {}, "/api/mine/schedule/slot-definitions");
+        assertGetMapping("monthOverview", new Class<?>[] {String.class}, "/api/mine/schedule/month");
+        assertGetMapping("dayOverview", new Class<?>[] {String.class}, "/api/mine/schedule/day");
+        assertThat(hasGetMappingPath("/api/mine/schedule")).isFalse();
         assertPostMapping("createSlotDefinition",
                 new Class<?>[] {ScheduleSlotDefinitionRequest.class},
                 "/api/mine/schedule/slot-definitions");
@@ -79,18 +87,24 @@ class MineScheduleControllerTest {
         assertPostMapping("deleteScheduleItem", new Class<?>[] {Long.class}, "/api/mine/schedule/items/delete/{id}");
         assertThat(MineScheduleController.class.getMethod("deleteScheduleItem", Long.class)
                 .isAnnotationPresent(DeleteMapping.class)).isFalse();
-        assertThat(MineScheduleController.class.getMethod("schedule", String.class, String.class)
+        assertThat(MineScheduleController.class.getMethod("monthOverview", String.class)
+                .getParameters()[0].isAnnotationPresent(RequestParam.class)).isTrue();
+        assertThat(MineScheduleController.class.getMethod("dayOverview", String.class)
                 .getParameters()[0].isAnnotationPresent(RequestParam.class)).isTrue();
         assertThat(MineScheduleController.class.getMethod("deleteScheduleItem", Long.class)
                 .getParameters()[0].isAnnotationPresent(PathVariable.class)).isTrue();
-        assertThat(overviewResponse.getData()).isSameAs(overview);
+        assertThat(slotDefinitions.getData()).containsExactly(definition);
+        assertThat(monthResponse.getData()).isSameAs(month);
+        assertThat(dayResponse.getData()).isSameAs(selectedDate);
         assertThat(created.getData()).isSameAs(definition);
         assertThat(updated.getData()).isSameAs(definition);
         assertThat(statusUpdated.getData()).isSameAs(definition);
         assertThat(slotDefinitionDeleted.isSuccess()).isTrue();
         assertThat(saved.getData()).isSameAs(scheduleItem);
         assertThat(deleted.isSuccess()).isTrue();
-        verify(mineScheduleService).getScheduleOverview("2026-06", "2026-06-24");
+        verify(mineScheduleService).getSlotDefinitions();
+        verify(mineScheduleService).getMonthOverview("2026-06");
+        verify(mineScheduleService).getSelectedDateOverview("2026-06-24");
         verify(mineScheduleService).createSlotDefinition(definitionRequest);
         verify(mineScheduleService).updateSlotDefinition(1L, definitionRequest);
         verify(mineScheduleService).updateSlotDefinitionStatus(1L, statusRequest);
@@ -137,5 +151,19 @@ class MineScheduleControllerTest {
                 .anyMatch(method -> method.isAnnotationPresent(DeleteMapping.class));
 
         assertThat(hasDeleteMapping).isFalse();
+    }
+
+    /**
+     * 判断控制器是否声明指定 GET 路径。
+     *
+     * @param path 接口路径
+     * @return 是否存在
+     */
+    private boolean hasGetMappingPath(String path) {
+        return Arrays.stream(MineScheduleController.class.getDeclaredMethods())
+                .map(method -> method.getAnnotation(GetMapping.class))
+                .filter(mapping -> mapping != null)
+                .flatMap(mapping -> Arrays.stream(mapping.value()))
+                .anyMatch(path::equals);
     }
 }

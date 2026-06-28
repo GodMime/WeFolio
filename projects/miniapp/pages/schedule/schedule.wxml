@@ -8,22 +8,7 @@
         <button class="segment {{activeMode === 'definitions' ? 'active' : ''}}" data-mode="definitions" bindtap="handleModeTap">档位定义</button>
       </view>
 
-      <block wx:if="{{loading}}">
-        <view class="panel skeleton-panel"></view>
-        <view class="panel skeleton-panel tall"></view>
-      </block>
-
-      <block wx:elif="{{errorMessage}}">
-        <view class="empty-state">
-          <view class="empty-icon"></view>
-          <view class="empty-title">加载失败</view>
-          <view class="empty-desc">{{errorMessage}}</view>
-          <button class="primary-button compact" bindtap="handleRetry">重试</button>
-        </view>
-      </block>
-
-      <block wx:else>
-        <block wx:if="{{activeMode === 'definitions'}}">
+      <block wx:if="{{activeMode === 'definitions'}}">
           <view class="panel definition-list-panel">
             <view class="panel-heading">
               <view>
@@ -32,51 +17,64 @@
               </view>
             </view>
 
-            <view wx:if="{{overview.slotDefinitions.length === 0}}" class="inline-empty">
-              <view class="empty-title small">暂无档位定义</view>
-              <view class="empty-desc">新增后才会出现在维护档期的可选列表中</view>
+            <view wx:if="{{slotDefinitionsLoading}}" class="component-loading">
+              <view class="loading-spinner"></view>
+              <view class="loading-copy">档位定义加载中</view>
             </view>
 
-            <view
-              wx:for="{{overview.slotDefinitions}}"
-              wx:key="id"
-              data-id="{{item.id}}"
-              class="slot-swipe-row {{revealedSlotId === item.id && !item.enabled ? 'revealed' : ''}}"
-              bindtouchstart="handleSlotTouchStart"
-              bindtouchmove="handleSlotTouchMove"
-              bindtouchend="handleSlotTouchEnd"
-              bindtouchcancel="handleSlotTouchCancel"
-            >
-              <view class="slot-delete-pane" wx:if="{{!item.enabled}}">
-                <button
-                  class="mini-action danger"
-                  loading="{{deletingSlotId === item.id}}"
-                  disabled="{{deletingSlotId === item.id}}"
-                  catchtap="handleDeleteSlotDefinition"
-                  data-id="{{item.id}}"
-                >删除</button>
+            <view wx:elif="{{slotDefinitionsErrorMessage}}" class="inline-empty">
+              <view class="empty-title small">档位定义加载失败</view>
+              <view class="empty-desc">{{slotDefinitionsErrorMessage}}</view>
+              <button class="primary-button compact" bindtap="loadSlotDefinitions">重试</button>
+            </view>
+
+            <block wx:else>
+              <view wx:if="{{overview.slotDefinitions.length === 0}}" class="inline-empty">
+                <view class="empty-title small">暂无档位定义</view>
+                <view class="empty-desc">新增后才会出现在维护档期的可选列表中</view>
               </view>
+
               <view
-                class="slot-line"
+                wx:for="{{overview.slotDefinitions}}"
+                wx:key="id"
                 data-id="{{item.id}}"
-                bindtap="handleSlotEdit"
+                class="slot-swipe-row {{revealedSlotId === item.id && !item.enabled ? 'revealed' : ''}}"
+                bindtouchstart="handleSlotTouchStart"
+                bindtouchmove="handleSlotTouchMove"
+                bindtouchend="handleSlotTouchEnd"
+                bindtouchcancel="handleSlotTouchCancel"
               >
-                <view class="slot-main">
-                  <view class="swatch" style="{{item.colorStyle}}"></view>
-                  <view class="slot-copy">
-                    <view class="slot-name">{{item.name}}</view>
-                    <view class="slot-desc">{{item.timeRangeText}} · {{item.statusText}}</view>
+                <view class="slot-delete-pane" wx:if="{{!item.enabled}}">
+                  <button
+                    class="mini-action danger"
+                    loading="{{deletingSlotId === item.id}}"
+                    disabled="{{deletingSlotId === item.id}}"
+                    catchtap="handleDeleteSlotDefinition"
+                    data-id="{{item.id}}"
+                  >删除</button>
+                </view>
+                <view
+                  class="slot-line"
+                  data-id="{{item.id}}"
+                  bindtap="handleSlotEdit"
+                >
+                  <view class="slot-main">
+                    <view class="swatch" style="{{item.colorStyle}}"></view>
+                    <view class="slot-copy">
+                      <view class="slot-name">{{item.name}}</view>
+                      <view class="slot-desc">{{item.timeRangeText}} · {{item.statusText}}</view>
+                    </view>
+                  </view>
+                  <view class="slot-actions">
+                    <button
+                      class="mini-action {{item.enabled ? 'warn' : ''}}"
+                      catchtap="handleToggleSlotStatus"
+                      data-id="{{item.id}}"
+                    >{{item.enabled ? '停用' : '启用'}}</button>
                   </view>
                 </view>
-                <view class="slot-actions">
-                  <button
-                    class="mini-action {{item.enabled ? 'warn' : ''}}"
-                    catchtap="handleToggleSlotStatus"
-                    data-id="{{item.id}}"
-                  >{{item.enabled ? '停用' : '启用'}}</button>
-                </view>
               </view>
-            </view>
+            </block>
             <button class="primary-button definition-add-button" bindtap="handleSlotAdd">新增定义</button>
           </view>
         </block>
@@ -90,11 +88,18 @@
               </view>
             </view>
             <view class="color-legend">
-              <view class="swatch-option" wx:for="{{overview.slotDefinitions}}" wx:key="id">
-                <view class="swatch" style="{{item.colorStyle}}"></view>
-                <text>{{item.name}} {{item.timeRangeText}}</text>
+              <view wx:if="{{slotDefinitionsLoading}}" class="component-loading compact">
+                <view class="loading-spinner"></view>
+                <view class="loading-copy">档位定义加载中</view>
               </view>
-              <view wx:if="{{overview.slotDefinitions.length === 0}}" class="legend-empty">暂无档位定义</view>
+              <view wx:elif="{{slotDefinitionsErrorMessage}}" class="legend-empty">{{slotDefinitionsErrorMessage}}</view>
+              <block wx:else>
+                <view class="swatch-option" wx:for="{{overview.slotDefinitions}}" wx:key="id">
+                  <view class="swatch" style="{{item.colorStyle}}"></view>
+                  <text>{{item.name}} {{item.timeRangeText}}</text>
+                </view>
+                <view wx:if="{{overview.slotDefinitions.length === 0}}" class="legend-empty">暂无档位定义</view>
+              </block>
             </view>
           </view>
 
@@ -110,28 +115,39 @@
               <button class="month-control" bindtap="handleNextMonth">›</button>
             </view>
 
-            <view class="calendar">
-              <view class="weekday" wx:for="{{weekdays}}" wx:key="*this">{{item}}</view>
-              <view
-                class="{{item.dayClass}}"
-                wx:for="{{overview.month.days}}"
-                wx:key="date"
-                data-date="{{item.date}}"
-                bindtap="handleDayTap"
-              >
-                <view class="date-stack">
-                  <view class="day-number">{{item.dayNumber}}</view>
-                  <view class="day-meta" wx:if="{{item.metaText}}">{{item.metaText}}</view>
+            <view class="calendar-region">
+              <view class="calendar {{calendarLoading ? 'loading' : ''}}">
+                <view class="weekday" wx:for="{{weekdays}}" wx:key="*this">{{item}}</view>
+                <view
+                  class="{{item.dayClass}}"
+                  wx:for="{{overview.month.days}}"
+                  wx:key="date"
+                  data-date="{{item.date}}"
+                  bindtap="handleDayTap"
+                >
+                  <view class="date-stack">
+                    <view class="day-number">{{item.dayNumber}}</view>
+                    <view class="day-meta" wx:if="{{item.metaText}}">{{item.metaText}}</view>
+                  </view>
+                  <view class="day-colors">
+                    <view
+                      class="day-color"
+                      wx:for="{{item.markerColors}}"
+                      wx:for-item="marker"
+                      wx:key="color"
+                      style="{{marker.style}}"
+                    ></view>
+                  </view>
                 </view>
-                <view class="day-colors">
-                  <view
-                    class="day-color"
-                    wx:for="{{item.markerColors}}"
-                    wx:for-item="marker"
-                    wx:key="color"
-                    style="{{marker.style}}"
-                  ></view>
-                </view>
+              </view>
+              <view wx:if="{{calendarLoading}}" class="component-loading-overlay">
+                <view class="loading-spinner"></view>
+                <view class="loading-copy">月历加载中</view>
+              </view>
+              <view wx:if="{{calendarErrorMessage && !calendarLoading}}" class="component-error-overlay">
+                <view class="empty-title small">月历加载失败</view>
+                <view class="empty-desc">{{calendarErrorMessage}}</view>
+                <button class="primary-button compact" bindtap="loadCalendar">重试</button>
               </view>
             </view>
           </view>
@@ -145,50 +161,64 @@
               <view class="day-summary">{{overview.selectedDate.summaryText}}</view>
             </view>
 
-            <view wx:if="{{overview.selectedDate.empty}}" class="inline-empty">
-              <view class="empty-title small">当天暂无档期</view>
-              <view class="empty-desc">点击新增档期，为这个日期选择一个已定义档位</view>
-            </view>
-
-            <view
-              wx:for="{{overview.selectedDate.schedules}}"
-              wx:key="id"
-              data-id="{{item.id}}"
-              class="schedule-swipe-row {{revealedScheduleId === item.id ? 'revealed' : ''}}"
-              bindtouchstart="handleScheduleTouchStart"
-              bindtouchmove="handleScheduleTouchMove"
-              bindtouchend="handleScheduleTouchEnd"
-              bindtouchcancel="handleScheduleTouchCancel"
-            >
-              <view class="schedule-delete-pane">
-                <button
-                  class="mini-action danger"
-                  loading="{{deletingScheduleId === item.id}}"
-                  disabled="{{deletingScheduleId === item.id}}"
-                  catchtap="handleDeleteScheduleItem"
-                  data-id="{{item.id}}"
-                >删除</button>
+            <view class="day-list-region">
+              <view wx:if="{{dayLoading}}" class="component-loading day-list-loading">
+                <view class="loading-spinner"></view>
+                <view class="loading-copy">当天档期加载中</view>
               </view>
-              <view
-                class="schedule-line"
-                data-id="{{item.id}}"
-                data-date="{{item.scheduleDate}}"
-                bindtap="handleScheduleTap"
-              >
-                <view class="slot-main">
-                  <view class="swatch" style="{{item.colorStyle}}"></view>
-                  <view class="slot-copy">
-                    <view class="slot-name">{{item.slotName}}</view>
-                    <view class="slot-desc">{{item.timeRangeText}} · {{item.contactText}}</view>
+
+              <view wx:elif="{{dayErrorMessage}}" class="inline-empty">
+                <view class="empty-title small">当天档期加载失败</view>
+                <view class="empty-desc">{{dayErrorMessage}}</view>
+                <button class="primary-button compact" bindtap="loadDaySchedules">重试</button>
+              </view>
+
+              <block wx:else>
+                <view wx:if="{{overview.selectedDate.empty}}" class="inline-empty">
+                  <view class="empty-title small">当天暂无档期</view>
+                  <view class="empty-desc">点击新增档期，为这个日期选择一个已定义档位</view>
+                </view>
+
+                <view
+                  wx:for="{{overview.selectedDate.schedules}}"
+                  wx:key="id"
+                  data-id="{{item.id}}"
+                  class="schedule-swipe-row {{revealedScheduleId === item.id ? 'revealed' : ''}}"
+                  bindtouchstart="handleScheduleTouchStart"
+                  bindtouchmove="handleScheduleTouchMove"
+                  bindtouchend="handleScheduleTouchEnd"
+                  bindtouchcancel="handleScheduleTouchCancel"
+                >
+                  <view class="schedule-delete-pane">
+                    <button
+                      class="mini-action danger"
+                      loading="{{deletingScheduleId === item.id}}"
+                      disabled="{{deletingScheduleId === item.id}}"
+                      catchtap="handleDeleteScheduleItem"
+                      data-id="{{item.id}}"
+                    >删除</button>
+                  </view>
+                  <view
+                    class="schedule-line"
+                    data-id="{{item.id}}"
+                    data-date="{{item.scheduleDate}}"
+                    bindtap="handleScheduleTap"
+                  >
+                    <view class="slot-main">
+                      <view class="swatch" style="{{item.colorStyle}}"></view>
+                      <view class="slot-copy">
+                        <view class="slot-name">{{item.slotName}}</view>
+                        <view class="slot-desc">{{item.timeRangeText}} · {{item.contactText}}</view>
+                      </view>
+                    </view>
+                    <view class="{{item.statusClass}}">{{item.statusText}}</view>
                   </view>
                 </view>
-                <view class="{{item.statusClass}}">{{item.statusText}}</view>
-              </view>
+              </block>
             </view>
             <button class="primary-button schedule-add-button" bindtap="handleMaintainDate">新增档期</button>
           </view>
         </block>
-      </block>
     </view>
   </scroll-view>
 

@@ -81,44 +81,39 @@ public class MineScheduleService {
     private final ScheduleEntityMapper scheduleEntityMapper;
 
     /**
-     * 获取档期聚合数据。
+     * 获取档位定义列表。
+     *
+     * @return 档位定义列表
+     */
+    public List<MineScheduleResponse.SlotDefinitionItem> getSlotDefinitions() {
+        Long userId = AuthContextHolder.requireUserId();
+        return findSlotDefinitions(userId).stream()
+                .map(this::buildSlotDefinitionItem)
+                .toList();
+    }
+
+    /**
+     * 获取月历档期标记。
      *
      * @param monthText 月份，格式 yyyy-MM
-     * @param dateText 选中日期，格式 yyyy-MM-dd
-     * @return 档期聚合响应
+     * @return 月历档期标记
      */
-    public MineScheduleResponse getScheduleOverview(String monthText, String dateText) {
+    public MineScheduleResponse.MonthOverview getMonthOverview(String monthText) {
         Long userId = AuthContextHolder.requireUserId();
         YearMonth month = parseYearMonth(monthText);
-        LocalDate selectedDate = parseSelectedDate(dateText, month);
-        LocalDate startDate = month.atDay(1);
-        LocalDate endDate = month.atEndOfMonth();
+        return buildMonthOverview(month, null, findMonthSchedules(userId, month));
+    }
 
-        List<SlotDefinitionEntity> definitions = safeList(slotDefinitionEntityMapper.selectList(
-                Wrappers.lambdaQuery(SlotDefinitionEntity.class)
-                        .eq(SlotDefinitionEntity::getUserId, userId)
-                        .orderByAsc(SlotDefinitionEntity::getStartTime)
-                        .orderByAsc(SlotDefinitionEntity::getId)
-        ));
-        List<ScheduleEntity> monthSchedules = safeList(scheduleEntityMapper.selectList(
-                Wrappers.lambdaQuery(ScheduleEntity.class)
-                        .eq(ScheduleEntity::getUserId, userId)
-                        .ge(ScheduleEntity::getScheduleDate, startDate)
-                        .le(ScheduleEntity::getScheduleDate, endDate)
-                        .orderByAsc(ScheduleEntity::getScheduleDate)
-                        .orderByAsc(ScheduleEntity::getStartTimeSnapshot)
-                        .orderByAsc(ScheduleEntity::getId)
-        ));
-
-        MineScheduleResponse response = new MineScheduleResponse();
-        response.setSlotDefinitions(definitions.stream()
-                .sorted(Comparator.comparing(SlotDefinitionEntity::getStartTime)
-                        .thenComparing(SlotDefinitionEntity::getId))
-                .map(this::buildSlotDefinitionItem)
-                .toList());
-        response.setMonth(buildMonthOverview(month, selectedDate, monthSchedules));
-        response.setSelectedDate(buildSelectedDateOverview(selectedDate, monthSchedules));
-        return response;
+    /**
+     * 获取某日档期明细。
+     *
+     * @param dateText 日期，格式 yyyy-MM-dd
+     * @return 某日档期明细
+     */
+    public MineScheduleResponse.SelectedDateOverview getSelectedDateOverview(String dateText) {
+        Long userId = AuthContextHolder.requireUserId();
+        LocalDate selectedDate = parseDate(dateText, "档期日期");
+        return buildSelectedDateOverview(selectedDate, findDateSchedules(userId, selectedDate));
     }
 
     /**
@@ -288,6 +283,59 @@ public class MineScheduleService {
         if (deleted <= 0) {
             throw new BusinessException("档期删除失败，请刷新后重试");
         }
+    }
+
+    /**
+     * 查询用户档位定义列表。
+     *
+     * @param userId 用户 ID
+     * @return 档位定义实体列表
+     */
+    private List<SlotDefinitionEntity> findSlotDefinitions(Long userId) {
+        return safeList(slotDefinitionEntityMapper.selectList(
+                Wrappers.lambdaQuery(SlotDefinitionEntity.class)
+                        .eq(SlotDefinitionEntity::getUserId, userId)
+                        .orderByAsc(SlotDefinitionEntity::getStartTime)
+                        .orderByAsc(SlotDefinitionEntity::getId)
+        ));
+    }
+
+    /**
+     * 查询用户当月档期。
+     *
+     * @param userId 用户 ID
+     * @param month 月份
+     * @return 当月档期实体列表
+     */
+    private List<ScheduleEntity> findMonthSchedules(Long userId, YearMonth month) {
+        LocalDate startDate = month.atDay(1);
+        LocalDate endDate = month.atEndOfMonth();
+        return safeList(scheduleEntityMapper.selectList(
+                Wrappers.lambdaQuery(ScheduleEntity.class)
+                        .eq(ScheduleEntity::getUserId, userId)
+                        .ge(ScheduleEntity::getScheduleDate, startDate)
+                        .le(ScheduleEntity::getScheduleDate, endDate)
+                        .orderByAsc(ScheduleEntity::getScheduleDate)
+                        .orderByAsc(ScheduleEntity::getStartTimeSnapshot)
+                        .orderByAsc(ScheduleEntity::getId)
+        ));
+    }
+
+    /**
+     * 查询用户某日档期。
+     *
+     * @param userId 用户 ID
+     * @param selectedDate 日期
+     * @return 当天档期实体列表
+     */
+    private List<ScheduleEntity> findDateSchedules(Long userId, LocalDate selectedDate) {
+        return safeList(scheduleEntityMapper.selectList(
+                Wrappers.lambdaQuery(ScheduleEntity.class)
+                        .eq(ScheduleEntity::getUserId, userId)
+                        .eq(ScheduleEntity::getScheduleDate, selectedDate)
+                        .orderByAsc(ScheduleEntity::getStartTimeSnapshot)
+                        .orderByAsc(ScheduleEntity::getId)
+        ));
     }
 
     /**
@@ -532,7 +580,7 @@ public class MineScheduleService {
             item.setDate(date.format(DATE_FORMATTER));
             item.setDayNumber(date.getDayOfMonth());
             item.setCurrentMonth(YearMonth.from(date).equals(month));
-            item.setSelected(date.equals(selectedDate));
+            item.setSelected(selectedDate != null && date.equals(selectedDate));
             item.setColors(daySchedules.stream()
                     .map(ScheduleEntity::getColorSnapshot)
                     .filter(color -> color != null && !color.isBlank())
@@ -557,7 +605,6 @@ public class MineScheduleService {
             List<ScheduleEntity> schedules
     ) {
         List<MineScheduleResponse.ScheduleItem> items = schedules.stream()
-                .filter(schedule -> selectedDate.equals(schedule.getScheduleDate()))
                 .sorted(Comparator.comparing(ScheduleEntity::getStartTimeSnapshot)
                         .thenComparing(ScheduleEntity::getId))
                 .map(this::buildScheduleItem)
@@ -649,20 +696,6 @@ public class MineScheduleService {
         } catch (DateTimeParseException e) {
             throw new BusinessException("月份格式无效");
         }
-    }
-
-    /**
-     * 解析选中日期。
-     *
-     * @param value 日期文本
-     * @param month 当前月份
-     * @return 日期
-     */
-    private LocalDate parseSelectedDate(String value, YearMonth month) {
-        if (value == null || value.isBlank()) {
-            return month.atDay(1);
-        }
-        return parseDate(value, "档期日期");
     }
 
     /**

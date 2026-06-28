@@ -8,7 +8,11 @@ const {
   buildScheduleItemPayload,
   buildSlotDefinitionFieldCounters,
   buildSlotDefinitionPayload,
+  markMonthSelectedDate,
+  normalizeMonthOverview,
   normalizeScheduleOverview,
+  normalizeSelectedDateOverview,
+  normalizeSlotDefinitions,
   validateScheduleItemPayload,
   validateScheduleItemForm,
   validateSlotDefinitionPayload,
@@ -89,6 +93,61 @@ test('normalizes empty schedule overview with safe defaults', () => {
   assert.deepEqual(result.month.days, [])
   assert.equal(result.selectedDate.summaryText, '暂无档期')
   assert.equal(result.selectedDate.empty, true)
+})
+
+test('normalizes split schedule responses and selected date locally', () => {
+  const slotDefinitions = normalizeSlotDefinitions([
+    {
+      id: 1,
+      name: '迎亲档',
+      startTime: '07:30',
+      endTime: '09:30',
+      color: '#d98200',
+      status: 'ACTIVE',
+      statusText: '启用',
+      enabled: true
+    }
+  ])
+  const month = normalizeMonthOverview({
+    yearMonth: '2026-06',
+    days: [
+      {
+        date: '2026-06-24',
+        dayNumber: 24,
+        currentMonth: true,
+        colors: ['#d98200'],
+        count: 1
+      }
+    ]
+  }, '2026-06-28')
+  const selectedMonth = markMonthSelectedDate(month, '2026-06-24')
+  const selectedDate = normalizeSelectedDateOverview({
+    date: '2026-06-24',
+    summaryText: '1 条档期',
+    schedules: [
+      {
+        id: 9,
+        scheduleDate: '2026-06-24',
+        slotDefinitionId: 1,
+        slotName: '迎亲档',
+        startTime: '07:30',
+        endTime: '09:30',
+        color: '#d98200',
+        status: 'TENTATIVE',
+        statusText: '待定',
+        statusTone: 'amber'
+      }
+    ]
+  })
+
+  assert.equal(slotDefinitions[0].timeRangeText, '07:30-09:30')
+  assert.equal(month.titleText, '2026 年 6 月')
+  assert.equal(month.days[0].selected, false)
+  assert.equal(selectedMonth.days[0].selected, true)
+  assert.match(selectedMonth.days[0].dayClass, /selected/)
+  assert.equal(selectedDate.titleText, '06月24日')
+  assert.equal(selectedDate.summaryText, '1 条档期')
+  assert.equal(selectedDate.schedules[0].statusClass, 'schedule-status amber')
 })
 
 test('prefers holiday text for calendar day meta', () => {

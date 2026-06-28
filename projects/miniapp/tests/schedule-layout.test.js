@@ -84,6 +84,10 @@ test('schedule page contains definition and maintenance views wired to backend A
 
   assert.equal(pageJson.usingComponents['navigation-bar'], '/components/navigation-bar/navigation-bar')
   assert.match(pageWxml, /navigation-bar title="档期" back="\{\{false\}\}"/)
+  assert.doesNotMatch(pageWxml, /<block wx:if="\{\{loading\}\}">/)
+  assert.match(pageWxml, /slotDefinitionsLoading/)
+  assert.match(pageWxml, /calendarLoading/)
+  assert.match(pageWxml, /dayLoading/)
   assert.match(pageWxml, /data-mode="definitions"[\s\S]*档位定义/)
   assert.match(pageWxml, /data-mode="maintenance"[\s\S]*档期维护/)
   assert.doesNotMatch(pageWxml, />排序</)
@@ -121,7 +125,7 @@ test('schedule page contains definition and maintenance views wired to backend A
   assert.match(pageWxml, /class="month-control wide"[\s\S]*切换年月/)
   assert.match(pageWxml, /class="date-stack"[\s\S]*class="day-number">\{\{item\.dayNumber\}\}<\/view>/)
   assert.match(pageWxml, /class="day-meta" wx:if="\{\{item\.metaText\}\}">\{\{item\.metaText\}\}<\/view>/)
-  assert.match(pageJs, /handleMonthPickerChange\(event\)[\s\S]*selectedMonth[\s\S]*selectedDate:\s*formatMonthFirstDate\(selectedMonth\)/)
+  assert.match(pageJs, /handleMonthPickerChange\(event\)[\s\S]*const selectedDate = formatMonthFirstDate\(selectedMonth\)[\s\S]*selectedDate,/)
   assert.match(pageWxml, /class="primary-button schedule-add-button" bindtap="handleMaintainDate">新增档期<\/button>/)
   assert.match(dayPanelHeaderMarkup, /class="day-heading"[\s\S]*class="day-date-copy"[\s\S]*class="day-title">\{\{overview\.selectedDate\.titleText\}\}<\/view>[\s\S]*class="day-lunar-title">\{\{overview\.selectedDate\.lunarTitleText\}\}<\/view>[\s\S]*class="day-summary">\{\{overview\.selectedDate\.summaryText\}\}<\/view>/)
   assert.doesNotMatch(dayPanelHeaderMarkup, /class="panel-meta">\{\{overview\.selectedDate\.summaryText\}\}<\/view>/)
@@ -156,9 +160,14 @@ test('schedule page contains definition and maintenance views wired to backend A
   assert.doesNotMatch(pageJs, /\/pages\/schedule-entry\/schedule-entry/)
   assert.match(pageJs, /slotStatusOptions:\s*\[[\s\S]*tone:\s*'teal'[\s\S]*tone:\s*'muted'/)
   assert.match(pageJs, /statusOptions:\s*SCHEDULE_STATUS_OPTIONS/)
-  assert.match(pageJs, /url:\s*'\/api\/mine\/schedule'/)
+  assert.doesNotMatch(pageJs, /url:\s*'\/api\/mine\/schedule'/)
   assert.match(pageJs, /url:\s*'\/api\/mine\/schedule\/slot-definitions'/)
-  assert.match(pageJs, /`\/api\/mine\/schedule\/slot-definitions\/save\/\$\{this\.data\.editingSlotId\}`/)
+  assert.match(pageJs, /url:\s*'\/api\/mine\/schedule\/month'/)
+  assert.match(pageJs, /url:\s*'\/api\/mine\/schedule\/day'/)
+  assert.match(pageJs, /handleDayTap\(event\)[\s\S]*this\.loadDaySchedules\(false\)/)
+  assert.doesNotMatch(pageJs, /handleDayTap\(event\)[\s\S]*this\.loadSchedule/)
+  assert.match(pageJs, /url:\s*'\/api\/mine\/schedule\/slot-definitions'/)
+  assert.match(pageJs, /const editingSlotId = this\.data\.editingSlotId[\s\S]*`\/api\/mine\/schedule\/slot-definitions\/save\/\$\{editingSlotId\}`/)
   assert.match(pageJs, /`\/api\/mine\/schedule\/slot-definitions\/status\/\$\{slotId\}`/)
   assert.match(pageJs, /url:\s*'\/api\/mine\/schedule\/items\/save'/)
   assert.match(pageJs, /handleDeleteSlotDefinition/)
@@ -268,4 +277,22 @@ test('schedule page contains definition and maintenance views wired to backend A
   assert.match(scheduleSlotCardRule, /width:\s*calc\(50%\s*-\s*8rpx\)/)
   assert.match(scheduleStatusRowRule, /display:\s*flex/)
   assert.match(scheduleStatusRowRule, /flex-wrap:\s*wrap/)
+})
+
+test('schedule page keeps existing content while split reads are loading', () => {
+  const pageJs = readProjectFile('pages/schedule/schedule.js')
+
+  assert.match(pageJs, /slotDefinitionsLoading:\s*true/)
+  assert.match(pageJs, /calendarLoading:\s*true/)
+  assert.match(pageJs, /dayLoading:\s*true/)
+  assert.doesNotMatch(
+    pageJs,
+    /'overview\.month':\s*normalizeMonthOverview\(\{\s*yearMonth:\s*selectedMonth\s*\},\s*selectedDate\s*\)/
+  )
+  assert.doesNotMatch(
+    pageJs,
+    /'overview\.month':\s*sameMonth\s*\?[\s\S]*?:\s*normalizeMonthOverview\(\{\s*yearMonth:\s*selectedMonth\s*\},\s*date\s*\)/
+  )
+  assert.match(pageJs, /if \(sameMonth\) \{[\s\S]*this\.loadDaySchedules\(false\)/)
+  assert.doesNotMatch(pageJs, /handleRetry\(\)/)
 })

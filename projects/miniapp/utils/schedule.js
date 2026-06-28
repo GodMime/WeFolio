@@ -211,29 +211,47 @@ function buildContactText(contactName, contactPhone) {
   return '未留联系人'
 }
 
-function normalizeScheduleOverview(raw = {}) {
-  const month = raw.month || {}
-  const selectedDate = raw.selectedDate || {}
-  const schedules = Array.isArray(selectedDate.schedules)
-    ? selectedDate.schedules.map(normalizeScheduleItem)
+function normalizeSlotDefinitions(raw = []) {
+  return Array.isArray(raw) ? raw.map(normalizeSlotDefinition) : []
+}
+
+function normalizeMonthOverview(raw = {}, selectedDate = '') {
+  const selectedDateText = trimText(selectedDate)
+  return {
+    yearMonth: raw.yearMonth || '',
+    titleText: formatYearMonthTitle(raw.yearMonth),
+    days: Array.isArray(raw.days)
+      ? raw.days.map((item) => normalizeMonthDay(selectedDateText
+        ? Object.assign({}, item, { selected: item.date === selectedDateText })
+        : item))
+      : []
+  }
+}
+
+function normalizeSelectedDateOverview(raw = {}) {
+  const schedules = Array.isArray(raw.schedules)
+    ? raw.schedules.map(normalizeScheduleItem)
     : []
   return {
-    slotDefinitions: Array.isArray(raw.slotDefinitions)
-      ? raw.slotDefinitions.map(normalizeSlotDefinition)
-      : [],
-    month: {
-      yearMonth: month.yearMonth || '',
-      titleText: formatYearMonthTitle(month.yearMonth),
-      days: Array.isArray(month.days) ? month.days.map(normalizeMonthDay) : []
-    },
-    selectedDate: {
-      date: selectedDate.date || '',
-      titleText: formatDateTitle(selectedDate.date),
-      lunarTitleText: buildSelectedDateLunarTitleText(selectedDate),
-      summaryText: selectedDate.summaryText || (schedules.length > 0 ? `${schedules.length} 条档期` : '暂无档期'),
-      schedules,
-      empty: schedules.length === 0
-    }
+    date: raw.date || '',
+    titleText: formatDateTitle(raw.date),
+    lunarTitleText: buildSelectedDateLunarTitleText(raw),
+    summaryText: raw.summaryText || (schedules.length > 0 ? `${schedules.length} 条档期` : '暂无档期'),
+    schedules,
+    empty: schedules.length === 0
+  }
+}
+
+function markMonthSelectedDate(month = {}, selectedDate = '') {
+  return normalizeMonthOverview(month, selectedDate)
+}
+
+function normalizeScheduleOverview(raw = {}) {
+  const selectedDate = raw.selectedDate || {}
+  return {
+    slotDefinitions: normalizeSlotDefinitions(raw.slotDefinitions),
+    month: normalizeMonthOverview(raw.month || {}, selectedDate.date),
+    selectedDate: normalizeSelectedDateOverview(selectedDate)
   }
 }
 
@@ -341,7 +359,11 @@ module.exports = {
   buildScheduleItemPayload,
   buildSlotDefinitionFieldCounters,
   buildSlotDefinitionPayload,
+  markMonthSelectedDate,
+  normalizeMonthOverview,
   normalizeScheduleOverview,
+  normalizeSelectedDateOverview,
+  normalizeSlotDefinitions,
   validateScheduleItemForm,
   validateScheduleItemPayload,
   validateSlotDefinitionPayload,

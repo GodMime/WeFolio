@@ -23,6 +23,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.lang.reflect.Field;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.Arrays;
@@ -60,7 +62,7 @@ class MineScheduleServiceTest {
     }
 
     @Test
-    void overviewReturnsDefinitionsMonthMarkersAndSelectedDateSchedules() {
+    void splitQueriesReturnDefinitionsMonthMarkersAndSelectedDateSchedules() {
         SlotDefinitionEntity welcome = slotDefinition(1L, "迎亲档", "07:30", "09:30", "#d98200",
                 SlotDefinitionStatusDict.ACTIVE);
         SlotDefinitionEntity noon = slotDefinition(2L, "午宴档", "10:00", "13:00", "#1677ff",
@@ -72,43 +74,53 @@ class MineScheduleServiceTest {
         ScheduleEntity otherDay = schedule(13L, 1L, "2026-06-28", "迎亲档", "07:30", "09:30",
                 "#d98200", ScheduleStatusDict.BOOKED, "林先生", "13900002026");
         when(slotDefinitionEntityMapper.selectList(any())).thenReturn(List.of(welcome, noon));
-        when(scheduleEntityMapper.selectList(any())).thenReturn(List.of(tentative, booked, otherDay));
+        when(scheduleEntityMapper.selectList(any()))
+                .thenReturn(List.of(tentative, booked, otherDay), List.of(tentative, booked));
 
-        MineScheduleResponse response = service().getScheduleOverview("2026-06", "2026-06-24");
+        List<MineScheduleResponse.SlotDefinitionItem> definitions = service().getSlotDefinitions();
+        MineScheduleResponse.MonthOverview month = service().getMonthOverview("2026-06");
+        MineScheduleResponse.SelectedDateOverview selectedDate = service().getSelectedDateOverview("2026-06-24");
 
-        assertThat(response.getSlotDefinitions()).extracting(MineScheduleResponse.SlotDefinitionItem::getName)
+        assertThat(definitions).extracting(MineScheduleResponse.SlotDefinitionItem::getName)
                 .containsExactly("迎亲档", "午宴档");
-        assertThat(response.getSlotDefinitions().get(0).isEnabled()).isTrue();
-        assertThat(response.getSlotDefinitions().get(1).isEnabled()).isFalse();
-        assertThat(response.getMonth().getYearMonth()).isEqualTo("2026-06");
-        MineScheduleResponse.MonthDayItem selectedDay = response.getMonth().getDays().stream()
+        assertThat(definitions.get(0).isEnabled()).isTrue();
+        assertThat(definitions.get(1).isEnabled()).isFalse();
+        assertThat(month.getYearMonth()).isEqualTo("2026-06");
+        MineScheduleResponse.MonthDayItem selectedDay = month.getDays().stream()
                 .filter(day -> "2026-06-24".equals(day.getDate()))
                 .findFirst()
                 .orElseThrow();
-        assertThat(selectedDay.isSelected()).isTrue();
+        assertThat(selectedDay.isSelected()).isFalse();
         assertThat(selectedDay.getColors()).containsExactly("#d98200", "#1677ff");
         assertThat(selectedDay.getCount()).isEqualTo(2);
-        assertThat(response.getSelectedDate().getDate()).isEqualTo("2026-06-24");
-        assertThat(response.getSelectedDate().getSummaryText()).isEqualTo("2 条档期");
-        assertThat(response.getSelectedDate().getSchedules()).extracting(MineScheduleResponse.ScheduleItem::getStatusText)
+        assertThat(selectedDate.getDate()).isEqualTo("2026-06-24");
+        assertThat(selectedDate.getSummaryText()).isEqualTo("2 条档期");
+        assertThat(selectedDate.getSchedules()).extracting(MineScheduleResponse.ScheduleItem::getStatusText)
                 .containsExactly("待定", "已约");
     }
 
     /**
-     * 档位定义聚合 — 即使 Mapper 返回顺序不稳定，也按开始时间和 ID 升序输出。
+     * 档位定义查询 — 排序由数据库执行，服务层不再重复排序。
      */
     @Test
-    void overviewSortsSlotDefinitionsByStartTimeAndId() {
+    void slotDefinitionsQuerySortsByStartTimeAndId() throws Exception {
         SlotDefinitionEntity afternoon = slotDefinition(2L, "午后仪式档", "14:00", "16:00", "#1677ff",
                 SlotDefinitionStatusDict.ACTIVE);
         SlotDefinitionEntity morning = slotDefinition(1L, "迎亲档", "07:30", "09:30", "#d98200",
                 SlotDefinitionStatusDict.ACTIVE);
-        when(slotDefinitionEntityMapper.selectList(any())).thenReturn(List.of(afternoon, morning));
-        when(scheduleEntityMapper.selectList(any())).thenReturn(List.of());
+        when(slotDefinitionEntityMapper.selectList(any())).thenReturn(List.of(morning, afternoon));
 
-        MineScheduleResponse response = service().getScheduleOverview("2026-06", "2026-06-24");
+        List<MineScheduleResponse.SlotDefinitionItem> response = service().getSlotDefinitions();
 
-        assertThat(response.getSlotDefinitions()).extracting(MineScheduleResponse.SlotDefinitionItem::getName)
+        String source = Files.readString(Path.of("src/main/java/com/jxc/wefolio/service/MineScheduleService.java"));
+        String findSlotDefinitionsMethod = source.substring(
+                source.indexOf("private List<SlotDefinitionEntity> findSlotDefinitions(Long userId)"),
+                source.indexOf("/**\n     * 查询用户当月档期。")
+        );
+        assertThat(findSlotDefinitionsMethod)
+                .contains(".orderByAsc(SlotDefinitionEntity::getStartTime)")
+                .contains(".orderByAsc(SlotDefinitionEntity::getId)");
+        assertThat(response).extracting(MineScheduleResponse.SlotDefinitionItem::getName)
                 .containsExactly("迎亲档", "午后仪式档");
     }
 
@@ -120,6 +132,22 @@ class MineScheduleServiceTest {
         assertThat(fieldNames(ScheduleSlotDefinitionRequest.class)).doesNotContain("sortOrder");
         assertThat(fieldNames(MineScheduleResponse.SlotDefinitionItem.class)).doesNotContain("sortOrder");
         assertThat(fieldNames(SlotDefinitionEntity.class)).doesNotContain("sortOrder");
+    }
+
+    @Test
+    void splitReadQueriesDoNotResortOrRefilterAlreadyScopedData() throws Exception {
+        String source = Files.readString(Path.of("src/main/java/com/jxc/wefolio/service/MineScheduleService.java"));
+        String slotDefinitionsMethod = source.substring(
+                source.indexOf("public List<MineScheduleResponse.SlotDefinitionItem> getSlotDefinitions()"),
+                source.indexOf("/**\n     * 获取月历档期标记。")
+        );
+        String selectedDateMethod = source.substring(
+                source.indexOf("private MineScheduleResponse.SelectedDateOverview buildSelectedDateOverview("),
+                source.indexOf("/**\n     * 构建档位定义响应。")
+        );
+
+        assertThat(slotDefinitionsMethod).doesNotContain(".sorted(");
+        assertThat(selectedDateMethod).doesNotContain(".filter(schedule -> selectedDate.equals(schedule.getScheduleDate()))");
     }
 
     @Test
