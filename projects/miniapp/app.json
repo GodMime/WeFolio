@@ -8,6 +8,7 @@
     "pages/team-maintenance/team-maintenance",
     "pages/team-member-add/team-member-add",
     "pages/team-invitations/team-invitations",
+    "pages/team-member-change/team-member-change",
     "pages/messages/messages",
     "pages/visits/visits",
     "pages/profile/profile",

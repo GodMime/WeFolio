@@ -23,7 +23,7 @@ public class MineTeamMemberCandidateResponse {
     /** 头像地址 */
     private String avatarUrl;
 
-    /** 职业身份 */
+    /** 候选人团队身份 */
     private String profession;
 
     /** 城市或服务区域 */

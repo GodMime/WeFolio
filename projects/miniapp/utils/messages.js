@@ -18,6 +18,7 @@ const MESSAGE_TYPE = {
 const MESSAGE_ACTION_TYPE = {
   NONE: 'NONE',
   TEAM_INVITATION: 'TEAM_INVITATION',
+  TEAM_MEMBER_CHANGE: 'TEAM_MEMBER_CHANGE',
   POINT_RECHARGE: 'POINT_RECHARGE',
   PAGE_NAVIGATION: 'PAGE_NAVIGATION'
 }
@@ -59,7 +60,7 @@ function normalizeUnreadCount(raw = {}) {
 }
 
 function actionText(actionType) {
-  if (actionType === MESSAGE_ACTION_TYPE.TEAM_INVITATION) {
+  if (actionType === MESSAGE_ACTION_TYPE.TEAM_INVITATION || actionType === MESSAGE_ACTION_TYPE.TEAM_MEMBER_CHANGE) {
     return '去处理'
   }
   if (actionType === MESSAGE_ACTION_TYPE.POINT_RECHARGE || actionType === MESSAGE_ACTION_TYPE.PAGE_NAVIGATION) {
@@ -95,18 +96,23 @@ function normalizeMessageItem(raw = {}) {
   }
 }
 
-function normalizeMessageList(raw = {}) {
-  const messages = Array.isArray(raw.messages) ? raw.messages.map(normalizeMessageItem) : []
-  const unreadCount = toNumber(raw.summary && raw.summary.unreadCount)
+function buildMessageSummary(unreadCount, messages = []) {
+  const normalizedUnreadCount = toNumber(unreadCount)
   const invitationCount = messages.filter((item) => (
     item.unread && item.messageType === MESSAGE_TYPE.TEAM_INVITATION
   )).length
   return {
-    summary: {
-      unreadCount,
-      unreadText: unreadCount > 0 ? `${unreadCount} 条未读` : '暂无未读',
-      invitationText: invitationCount > 0 ? `含 ${invitationCount} 条邀请` : '暂无待处理邀请'
-    },
+    unreadCount: normalizedUnreadCount,
+    unreadText: normalizedUnreadCount > 0 ? `${normalizedUnreadCount} 条未读` : '暂无未读',
+    invitationText: invitationCount > 0 ? `含 ${invitationCount} 条邀请` : '暂无待处理邀请'
+  }
+}
+
+function normalizeMessageList(raw = {}) {
+  const messages = Array.isArray(raw.messages) ? raw.messages.map(normalizeMessageItem) : []
+  const unreadCount = toNumber(raw.summary && raw.summary.unreadCount)
+  return {
+    summary: buildMessageSummary(unreadCount, messages),
     messages,
     hasMore: Boolean(raw.hasMore),
     nextCursor: raw.nextCursor || null
@@ -161,8 +167,70 @@ function buildReadAllPayload(filter) {
   return query.category ? { category: query.category } : {}
 }
 
+function readCountFromResponse(response = {}, fallback) {
+  if (Object.prototype.hasOwnProperty.call(response, 'unreadCount')) {
+    return toNumber(response.unreadCount)
+  }
+  return toNumber(fallback)
+}
+
+function markMessageItemRead(item) {
+  return normalizeMessageItem(Object.assign({}, item, {
+    readStatus: MESSAGE_READ_STATUS.READ,
+    selected: false
+  }))
+}
+
+function shouldMarkAllItemRead(item, filter) {
+  if (!item.unread) {
+    return false
+  }
+  if (filter === 'team') {
+    return item.category === MESSAGE_CATEGORY.TEAM
+  }
+  if (filter === 'point') {
+    return item.category === MESSAGE_CATEGORY.POINT
+  }
+  return true
+}
+
+function applyMessagesRead(messageData = {}, messageIds = [], unreadCountResponse = {}, options = {}) {
+  const current = normalizeMessageList(messageData)
+  const idSet = new Set(buildMarkReadPayload(messageIds).messageIds)
+  const removeFromUnreadFilter = options.filter === 'unread'
+  const messages = current.messages
+    .map((item) => (idSet.has(item.id) ? markMessageItemRead(item) : normalizeMessageItem(item)))
+    .filter((item) => !(removeFromUnreadFilter && idSet.has(item.id)))
+  return Object.assign({}, current, {
+    summary: buildMessageSummary(readCountFromResponse(unreadCountResponse, current.summary.unreadCount), messages),
+    messages
+  })
+}
+
+function applyMessagesReadAll(messageData = {}, unreadCountResponse = {}, options = {}) {
+  const current = normalizeMessageList(messageData)
+  const filter = options.filter || 'all'
+  const removeFromUnreadFilter = filter === 'unread'
+  const messages = []
+  current.messages.forEach((item) => {
+    if (!shouldMarkAllItemRead(item, filter)) {
+      messages.push(normalizeMessageItem(item))
+      return
+    }
+    if (!removeFromUnreadFilter) {
+      messages.push(markMessageItemRead(item))
+    }
+  })
+  return Object.assign({}, current, {
+    summary: buildMessageSummary(readCountFromResponse(unreadCountResponse, current.summary.unreadCount), messages),
+    messages
+  })
+}
+
 module.exports = {
   appendMessageList,
+  applyMessagesRead,
+  applyMessagesReadAll,
   buildMarkReadPayload,
   buildMessageQuery,
   buildReadAllPayload,

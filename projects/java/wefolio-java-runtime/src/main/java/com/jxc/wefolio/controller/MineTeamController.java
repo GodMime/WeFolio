@@ -7,9 +7,14 @@ import com.jxc.wefolio.dto.MineTeamCreateRequest;
 import com.jxc.wefolio.dto.MineTeamDetailResponse;
 import com.jxc.wefolio.dto.MineTeamInvitationResponse;
 import com.jxc.wefolio.dto.MineTeamListResponse;
+import com.jxc.wefolio.dto.MineTeamMemberChangeCreateRequest;
+import com.jxc.wefolio.dto.MineTeamMemberChangeDetailRequest;
+import com.jxc.wefolio.dto.MineTeamMemberChangeDetailResponse;
 import com.jxc.wefolio.dto.MineTeamMemberCandidateResponse;
 import com.jxc.wefolio.dto.MineTeamMemberInviteRequest;
+import com.jxc.wefolio.dto.MineTeamMemberRemoveRequest;
 import com.jxc.wefolio.dto.MineTeamUpdateRequest;
+import com.jxc.wefolio.dto.MineTeamOwnerTransferRequest;
 import com.jxc.wefolio.service.MineTeamService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -155,6 +160,84 @@ public class MineTeamController {
     @PostMapping("/api/mine/team-invitations/{memberId}/reject")
     public Response<MineTeamInvitationResponse> rejectInvitation(@PathVariable Long memberId) {
         return Response.success(mineTeamService.rejectInvitation(memberId));
+    }
+
+    /**
+     * 发起团队成员信息变更。
+     *
+     * @param request 成员信息变更请求
+     * @return 最新团队维护详情
+     */
+    @PostMapping("/api/mine/team-member-change-requests")
+    public Response<MineTeamDetailResponse> createMemberChangeRequest(
+            @RequestBody MineTeamMemberChangeCreateRequest request
+    ) {
+        log.info("发起团队成员信息变更: teamId={}, memberId={}, role={}",
+                request.getTeamId(), request.getMemberId(), request.getRole());
+        return Response.success(mineTeamService.createMemberChangeRequest(request));
+    }
+
+    /**
+     * 获取团队成员信息变更详情。
+     *
+     * @param request 详情请求
+     * @return 变更详情
+     */
+    @PostMapping("/api/mine/team-member-change-requests/detail")
+    public Response<MineTeamMemberChangeDetailResponse> memberChangeRequestDetail(
+            @RequestBody MineTeamMemberChangeDetailRequest request
+    ) {
+        return Response.success(mineTeamService.getMemberChangeRequestDetail(request));
+    }
+
+    /**
+     * 同意团队成员信息变更。
+     *
+     * @param request 详情请求
+     * @return 变更详情
+     */
+    @PostMapping("/api/mine/team-member-change-requests/accept")
+    public Response<MineTeamMemberChangeDetailResponse> acceptMemberChangeRequest(
+            @RequestBody MineTeamMemberChangeDetailRequest request
+    ) {
+        return Response.success(mineTeamService.acceptMemberChangeRequest(request));
+    }
+
+    /**
+     * 拒绝团队成员信息变更。
+     *
+     * @param request 详情请求
+     * @return 变更详情
+     */
+    @PostMapping("/api/mine/team-member-change-requests/reject")
+    public Response<MineTeamMemberChangeDetailResponse> rejectMemberChangeRequest(
+            @RequestBody MineTeamMemberChangeDetailRequest request
+    ) {
+        return Response.success(mineTeamService.rejectMemberChangeRequest(request));
+    }
+
+    /**
+     * 转让团队拥有者。
+     *
+     * @param request 转让请求
+     * @return 最新团队维护详情
+     */
+    @PostMapping("/api/mine/teams/transfer-owner")
+    public Response<MineTeamDetailResponse> transferOwner(@RequestBody MineTeamOwnerTransferRequest request) {
+        log.info("转让团队拥有者: teamId={}, memberId={}", request.getTeamId(), request.getMemberId());
+        return Response.success(mineTeamService.transferOwner(request));
+    }
+
+    /**
+     * 移除团队成员。
+     *
+     * @param request 移除请求
+     * @return 最新团队维护详情
+     */
+    @PostMapping("/api/mine/teams/remove-member")
+    public Response<MineTeamDetailResponse> removeMember(@RequestBody MineTeamMemberRemoveRequest request) {
+        log.info("移除团队成员: teamId={}, memberId={}", request.getTeamId(), request.getMemberId());
+        return Response.success(mineTeamService.removeMember(request));
     }
 
     /**

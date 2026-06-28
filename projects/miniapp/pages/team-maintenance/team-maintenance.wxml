@@ -58,7 +58,7 @@
 
         <!-- 搜索和状态筛选只在本地过滤 visibleMembers，不触发后端请求。 -->
         <view class="search-row">
-          <input class="search-input" value="{{keyword}}" bindinput="handleSearchInput" placeholder="输入姓名、职业或个人唯一码" />
+          <input class="search-input" value="{{keyword}}" bindinput="handleSearchInput" placeholder="输入姓名、团队身份或个人唯一码" />
         </view>
 
         <view class="segmented">
@@ -79,24 +79,39 @@
             <view wx:if="{{detail.team.canManageMembers}}" class="add-member-button" bindtap="handleAddMember" aria-role="button" aria-label="添加团队成员">添加成员</view>
           </view>
           <view wx:if="{{visibleMembers.length}}" class="member-list">
-            <view class="member-row" wx:for="{{visibleMembers}}" wx:key="memberId">
-              <view class="member-avatar">
-                <image wx:if="{{item.avatarUrl}}" class="member-avatar-image" src="{{item.avatarUrl}}" mode="aspectFill"></image>
-                <view wx:else class="member-avatar-fallback">{{item.initial}}</view>
+            <view
+              class="member-row {{openedMemberActionId === item.memberId ? 'actions-open' : ''}}"
+              wx:for="{{visibleMembers}}"
+              wx:key="memberId"
+              data-member-id="{{item.memberId}}"
+              bindtap="handleMemberRowTap"
+              bindtouchstart="handleMemberTouchStart"
+              bindtouchend="handleMemberTouchEnd"
+            >
+              <view wx:if="{{detail.team.canManageMembers && item.role !== 'OWNER' && item.joinStatus === 'JOINED'}}" class="member-action-buttons" catchtap="noop">
+                <button class="member-action-button transfer" data-member-id="{{item.memberId}}" bindtap="handleTransferOwner">转让团队</button>
+                <button class="member-action-button remove" data-member-id="{{item.memberId}}" bindtap="handleRemoveMember">移除成员</button>
               </view>
-              <view class="member-copy">
-                <view class="member-name">{{item.displayName}}</view>
-                <view class="member-summary">{{item.summaryText}}</view>
-              </view>
-              <!--
-                成员状态标签分两层：
-                1. joinStatusText/statusTone 是团队成员关系状态，后端已映射好颜色 token，始终展示。
-                2. userStatusText/userStatusTone 是账号状态，只有非 ACTIVE 时展示，例如“已停用”。
-                这样维护页能区分“成员已加入但账号停用”和“成员资料缺失”。
-              -->
-              <view class="member-status">
-                <view class="role-pill {{item.statusTone}}">{{item.joinStatusText}}</view>
-                <view wx:if="{{item.userStatusVisible}}" class="role-pill {{item.userStatusTone}}">{{item.userStatusText}}</view>
+              <view class="member-row-main">
+                <view class="member-avatar">
+                  <image wx:if="{{item.avatarUrl}}" class="member-avatar-image" src="{{item.avatarUrl}}" mode="aspectFill"></image>
+                  <view wx:else class="member-avatar-fallback">{{item.initial}}</view>
+                </view>
+                <view class="member-copy">
+                  <view class="member-name">{{item.displayName}}</view>
+                  <view class="member-summary">{{item.summaryText}}</view>
+                </view>
+                <!--
+                  成员状态标签分两层：
+                  1. joinStatusText/statusTone 是团队成员关系状态，后端已映射好颜色 token，始终展示。
+                  2. userStatusText/userStatusTone 是账号状态，只有非 ACTIVE 时展示，例如“已停用”。
+                  这样维护页能区分“成员已加入但账号停用”和“成员资料缺失”。
+                -->
+                <view class="member-status">
+                  <view class="role-pill {{item.statusTone}}">{{item.joinStatusText}}</view>
+                  <view wx:if="{{item.pendingChange}}" class="role-pill amber pending-change-pill">{{item.pendingChangeText}}</view>
+                  <view wx:if="{{item.userStatusVisible}}" class="role-pill {{item.userStatusTone}}">{{item.userStatusText}}</view>
+                </view>
               </view>
             </view>
           </view>
@@ -108,6 +123,87 @@
       </block>
     </view>
   </scroll-view>
+
+  <view class="member-change-sheet-overlay {{memberChangeVisible ? 'visible' : ''}}" catchtap="handleMemberChangeCancel">
+    <view class="member-change-sheet" catchtap="noop">
+      <view class="sheet-grabber"></view>
+      <view class="panel-heading member-sheet-heading">
+        <view>
+          <view class="section-title">成员信息</view>
+          <view class="sheet-meta">{{selectedMember.displayName}}</view>
+        </view>
+      </view>
+
+      <view class="member-sheet-section">
+        <view class="form-row">
+          <view class="label">团队角色</view>
+          <view class="segmented member-role-segmented">
+            <button
+              class="segment {{memberChangeForm.role === item.key ? 'active' : ''}}"
+              wx:for="{{memberRoleOptions}}"
+              wx:key="key"
+              data-role="{{item.key}}"
+              bindtap="handleMemberChangeRoleTap"
+            >
+              {{item.label}}
+            </button>
+          </view>
+        </view>
+
+        <view class="form-row">
+          <view class="label">团队身份</view>
+          <input class="input" value="{{memberChangeForm.profession}}" bindinput="handleMemberChangeProfessionInput" maxlength="50" placeholder="用于团队内展示" />
+        </view>
+
+        <view class="form-row">
+          <view class="label">可被团队作品集引用</view>
+          <view class="permission-list">
+            <view
+              class="permission-row {{memberChangeForm.allowPortfolio ? 'active' : ''}}"
+              data-field="allowPortfolio"
+              bindtap="handleMemberChangePermissionTap"
+              aria-role="checkbox"
+              aria-checked="{{memberChangeForm.allowPortfolio}}"
+            >
+              <view class="permission-check"></view>
+              <view class="permission-label">个人作品集</view>
+            </view>
+            <view
+              class="permission-row {{memberChangeForm.allowProfile ? 'active' : ''}}"
+              data-field="allowProfile"
+              bindtap="handleMemberChangePermissionTap"
+              aria-role="checkbox"
+              aria-checked="{{memberChangeForm.allowProfile}}"
+            >
+              <view class="permission-check"></view>
+              <view class="permission-label">头像资料</view>
+            </view>
+            <view
+              class="permission-row {{memberChangeForm.allowWorks ? 'active' : ''}}"
+              data-field="allowWorks"
+              bindtap="handleMemberChangePermissionTap"
+              aria-role="checkbox"
+              aria-checked="{{memberChangeForm.allowWorks}}"
+            >
+              <view class="permission-check"></view>
+              <view class="permission-label">个人作品素材</view>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view class="member-confirm-row">
+        <view class="row-title">生效方式</view>
+        <view class="role-pill amber">需本人同意</view>
+        <view class="confirm-desc">保存后将发送站内信，成员同意后修改才会生效。</view>
+      </view>
+
+      <view class="button-row">
+        <button class="secondary-button" bindtap="handleMemberChangeCancel">取消</button>
+        <button class="primary-button" loading="{{saving}}" bindtap="handleSaveMemberChange">发送确认</button>
+      </view>
+    </view>
+  </view>
 
   <view class="member-add-sheet-overlay {{memberAddVisible ? 'visible' : ''}}" catchtap="handleMemberAddCancel">
     <view class="member-add-sheet" catchtap="noop">
@@ -160,7 +256,7 @@
         </view>
 
         <view class="form-row">
-          <view class="label">职业身份</view>
+          <view class="label">团队身份</view>
           <input class="input" value="{{memberInviteForm.profession}}" bindinput="handleMemberProfessionInput" maxlength="50" placeholder="用于团队内展示" />
         </view>
 

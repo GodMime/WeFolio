@@ -44,7 +44,7 @@
         </view>
 
         <view class="form-row">
-          <view class="label">职业身份</view>
+          <view class="label">团队身份</view>
           <input class="input" value="{{form.profession}}" bindinput="handleProfessionInput" maxlength="50" placeholder="用于团队内展示" />
         </view>
 

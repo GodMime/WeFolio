@@ -9,27 +9,45 @@ import com.jxc.wefolio.dict.MessageActionTypeDict;
 import com.jxc.wefolio.dict.MessageCategoryDict;
 import com.jxc.wefolio.dict.MessageReadStatusDict;
 import com.jxc.wefolio.dict.MessageTypeDict;
+import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
+import com.jxc.wefolio.dict.PortfolioStatusDict;
 import com.jxc.wefolio.dict.PointSceneCodeDict;
+import com.jxc.wefolio.dict.ReferenceTypeDict;
+import com.jxc.wefolio.dict.TeamMemberChangeStatusDict;
 import com.jxc.wefolio.dict.TeamRoleDict;
 import com.jxc.wefolio.dict.TeamStatusDict;
 import com.jxc.wefolio.dict.UserStatusDict;
+import com.jxc.wefolio.dict.WorkStatusDict;
 import com.jxc.wefolio.dto.FileUploadResponse;
 import com.jxc.wefolio.dto.MineTeamInvitationResponse;
+import com.jxc.wefolio.dto.MineTeamMemberChangeCreateRequest;
+import com.jxc.wefolio.dto.MineTeamMemberChangeDetailRequest;
+import com.jxc.wefolio.dto.MineTeamMemberChangeDetailResponse;
 import com.jxc.wefolio.dto.MineTeamMemberCandidateResponse;
 import com.jxc.wefolio.dto.MineTeamMemberInviteRequest;
+import com.jxc.wefolio.dto.MineTeamMemberRemoveRequest;
 import com.jxc.wefolio.dto.MineTeamCreateRequest;
 import com.jxc.wefolio.dto.MineTeamDetailResponse;
 import com.jxc.wefolio.dto.MineTeamListResponse;
 import com.jxc.wefolio.dto.MineTeamUpdateRequest;
+import com.jxc.wefolio.dto.MineTeamOwnerTransferRequest;
+import com.jxc.wefolio.entity.PortfolioEntity;
+import com.jxc.wefolio.entity.PortfolioReferenceEntity;
 import com.jxc.wefolio.entity.SystemMessageEntity;
 import com.jxc.wefolio.entity.TeamEntity;
+import com.jxc.wefolio.entity.TeamMemberChangeRequestEntity;
 import com.jxc.wefolio.entity.TeamMemberEntity;
 import com.jxc.wefolio.entity.UserEntity;
+import com.jxc.wefolio.entity.WorkEntity;
 import com.jxc.wefolio.exception.BusinessException;
+import com.jxc.wefolio.mapper.PortfolioEntityMapper;
+import com.jxc.wefolio.mapper.PortfolioReferenceEntityMapper;
 import com.jxc.wefolio.mapper.SystemMessageEntityMapper;
 import com.jxc.wefolio.mapper.TeamEntityMapper;
+import com.jxc.wefolio.mapper.TeamMemberChangeRequestEntityMapper;
 import com.jxc.wefolio.mapper.TeamMemberEntityMapper;
 import com.jxc.wefolio.mapper.UserEntityMapper;
+import com.jxc.wefolio.mapper.WorkEntityMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
@@ -45,6 +63,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -69,8 +88,11 @@ public class MineTeamService {
     /** 团队简介最大长度 */
     private static final int INTRO_MAX_LENGTH = 1000;
 
-    /** 团队成员职业最大长度 */
+    /** 团队身份最大长度 */
     private static final int MEMBER_PROFESSION_MAX_LENGTH = 50;
+
+    /** 团队身份字段名称 */
+    private static final String MEMBER_PROFESSION_FIELD_NAME = "团队身份";
 
     /** 唯一码最大长度 */
     private static final int UNIQUE_CODE_MAX_LENGTH = 16;
@@ -80,6 +102,9 @@ public class MineTeamService {
 
     /** 更新时间展示格式 */
     private static final DateTimeFormatter UPDATED_FORMATTER = DateTimeFormatter.ofPattern("MM-dd");
+
+    /** 详情时间展示格式 */
+    private static final DateTimeFormatter DETAIL_TIME_FORMATTER = DateTimeFormatter.ofPattern("MM-dd HH:mm");
 
     /** 团队邀请消息标题 */
     private static final String INVITATION_MESSAGE_TITLE = "团队邀请";
@@ -102,6 +127,46 @@ public class MineTeamService {
     /** 团队邀请消息幂等键前缀 */
     private static final String INVITATION_IDEMPOTENCY_PREFIX = "team_invitation:";
 
+    /** 团队成员信息变更消息标题 */
+    private static final String MEMBER_CHANGE_MESSAGE_TITLE = "团队信息变更待确认";
+
+    /** 团队成员信息变更消息业务类型 */
+    private static final String MEMBER_CHANGE_MESSAGE_BIZ_TYPE = "TEAM_MEMBER_CHANGE_REQUEST";
+
+    /** 团队成员信息变更消息跳转路径前缀 */
+    private static final String MEMBER_CHANGE_ACTION_URL_PREFIX =
+            "/pages/team-member-change/team-member-change?changeRequestId=";
+
+    /** 团队成员信息变更消息幂等键前缀 */
+    private static final String MEMBER_CHANGE_IDEMPOTENCY_PREFIX = "team_member_change:";
+
+    /** 空动作地址 */
+    private static final String EMPTY_ACTION_URL = "";
+
+    /** 团队拥有者转让消息标题 */
+    private static final String OWNER_TRANSFER_MESSAGE_TITLE = "团队拥有者变更";
+
+    /** 团队成员移除消息标题 */
+    private static final String MEMBER_REMOVED_MESSAGE_TITLE = "团队成员移除通知";
+
+    /** 团队成员移除原因 */
+    private static final String MEMBER_REMOVED_REASON = "团队拥有者移除";
+
+    /** 团队通知消息业务类型 */
+    private static final String TEAM_NOTICE_BIZ_TYPE = "TEAM_NOTICE";
+
+    /** 团队拥有者转让消息幂等键前缀 */
+    private static final String OWNER_TRANSFER_IDEMPOTENCY_PREFIX = "team_owner_transfer:";
+
+    /** 团队成员移除消息幂等键前缀 */
+    private static final String MEMBER_REMOVED_IDEMPOTENCY_PREFIX = "team_member_removed:";
+
+    /** 成员信息变更待同意提示 */
+    private static final String PENDING_MEMBER_CHANGE_TEXT = "信息变更待同意";
+
+    /** 成员信息变更保存失败提示 */
+    private static final String MEMBER_CHANGE_SAVE_FAILED_MESSAGE = "成员信息变更保存失败，请重试";
+
     /** 并发邀请已存在时的提示 */
     private static final String PENDING_INVITATION_EXISTS_MESSAGE = "已有待确认邀请，请刷新后查看";
 
@@ -110,6 +175,15 @@ public class MineTeamService {
 
     /** 团队成员状态列 */
     private static final String COLUMN_JOIN_STATUS = "join_status";
+
+    /** 团队 ID 列 */
+    private static final String COLUMN_TEAM_ID = "team_id";
+
+    /** 团队成员关系 ID 列 */
+    private static final String COLUMN_MEMBER_ID = "member_id";
+
+    /** 变更请求状态列 */
+    private static final String COLUMN_STATUS = "status";
 
     /** 团队成员角色列 */
     private static final String COLUMN_ROLE = "role";
@@ -177,6 +251,15 @@ public class MineTeamService {
     /** 消息业务 ID 列 */
     private static final String COLUMN_BIZ_ID = "biz_id";
 
+    /** 团队当前拥有者列 */
+    private static final String COLUMN_OWNER_USER_ID = "owner_user_id";
+
+    /** 乐观锁版本列 */
+    private static final String COLUMN_VERSION = "version";
+
+    /** 乐观锁版本递增表达式 */
+    private static final String VERSION_INCREMENT_SQL = COLUMN_VERSION + " = " + COLUMN_VERSION + " + 1";
+
     /** 团队 Mapper */
     private final TeamEntityMapper teamEntityMapper;
 
@@ -188,6 +271,21 @@ public class MineTeamService {
 
     /** 系统消息 Mapper */
     private final SystemMessageEntityMapper systemMessageEntityMapper;
+
+    /** 团队成员信息变更请求 Mapper */
+    private final TeamMemberChangeRequestEntityMapper teamMemberChangeRequestEntityMapper;
+
+    /** 团队成员信息变更事务辅助服务 */
+    private final TeamMemberChangeRequestTransactionService teamMemberChangeRequestTransactionService;
+
+    /** 作品集 Mapper */
+    private final PortfolioEntityMapper portfolioEntityMapper;
+
+    /** 作品集引用 Mapper */
+    private final PortfolioReferenceEntityMapper portfolioReferenceEntityMapper;
+
+    /** 作品 Mapper */
+    private final WorkEntityMapper workEntityMapper;
 
     /** COS 文件服务 */
     private final CosService cosService;
@@ -410,7 +508,7 @@ public class MineTeamService {
         }
         String role = normalizeInviteRole(request.getRole());
         String profession = firstPresent(
-                normalizeOptionalString(request.getProfession(), MEMBER_PROFESSION_MAX_LENGTH, "团队内职业"),
+                normalizeOptionalString(request.getProfession(), MEMBER_PROFESSION_MAX_LENGTH, MEMBER_PROFESSION_FIELD_NAME),
                 invitee.getProfession()
         );
         TeamMemberEntity membership = findMembership(teamId, invitee.getId());
@@ -500,6 +598,261 @@ public class MineTeamService {
     }
 
     /**
+     * 发起团队成员信息变更请求。
+     *
+     * @param request 成员信息变更请求
+     * @return 最新团队维护详情
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public MineTeamDetailResponse createMemberChangeRequest(MineTeamMemberChangeCreateRequest request) {
+        if (request == null) {
+            throw new BusinessException("成员信息变更内容不能为空");
+        }
+        Long userId = AuthContextHolder.requireUserId();
+        TeamEntity team = requireActiveTeam(request.getTeamId());
+        TeamMemberEntity ownerMembership = requireOwnerMembership(team.getId(), userId);
+        TeamMemberEntity target = requireJoinedTeamMemberById(team.getId(), request.getMemberId(), "成员不存在或已不在团队中");
+        if (TeamRoleDict.OWNER.getCode().equals(target.getRole())) {
+            throw new BusinessException("不能修改团队拥有者信息");
+        }
+        String roleAfter = normalizeInviteRole(request.getRole());
+        String professionAfter = normalizeOptionalString(
+                request.getProfession(),
+                MEMBER_PROFESSION_MAX_LENGTH,
+                MEMBER_PROFESSION_FIELD_NAME
+        );
+        int allowPortfolioAfter = permissionFlag(request.getAllowPortfolio(), isEnabled(target.getAllowPortfolio()));
+        int allowProfileAfter = permissionFlag(request.getAllowProfile(), isEnabled(target.getAllowProfile()));
+        int allowWorksAfter = permissionFlag(request.getAllowWorks(), isEnabled(target.getAllowWorks()));
+        if (!hasMemberChange(target, roleAfter, professionAfter, allowPortfolioAfter, allowProfileAfter, allowWorksAfter)) {
+            throw new BusinessException("成员信息没有变化");
+        }
+        assertNoPendingMemberChange(target.getId());
+
+        TeamMemberChangeRequestEntity changeRequest = new TeamMemberChangeRequestEntity();
+        LocalDateTime now = LocalDateTime.now();
+        changeRequest.setTeamId(team.getId());
+        changeRequest.setMemberId(target.getId());
+        changeRequest.setTargetUserId(target.getUserId());
+        changeRequest.setRequestedByUserId(userId);
+        changeRequest.setMemberVersionBefore(target.getVersion() == null ? 0 : target.getVersion());
+        changeRequest.setRoleBefore(defaultString(target.getRole(), TeamRoleDict.MEMBER.getCode()));
+        changeRequest.setRoleAfter(roleAfter);
+        changeRequest.setProfessionBefore(defaultString(target.getProfession()));
+        changeRequest.setProfessionAfter(professionAfter);
+        changeRequest.setAllowPortfolioBefore(flagOrZero(target.getAllowPortfolio()));
+        changeRequest.setAllowPortfolioAfter(allowPortfolioAfter);
+        changeRequest.setAllowProfileBefore(flagOrZero(target.getAllowProfile()));
+        changeRequest.setAllowProfileAfter(allowProfileAfter);
+        changeRequest.setAllowWorksBefore(flagOrZero(target.getAllowWorks()));
+        changeRequest.setAllowWorksAfter(allowWorksAfter);
+        changeRequest.setStatus(TeamMemberChangeStatusDict.PENDING_CONFIRMATION.getCode());
+        changeRequest.setRequestedAt(now);
+        changeRequest.setCreatedAt(now);
+        changeRequest.setUpdatedAt(now);
+        try {
+            teamMemberChangeRequestEntityMapper.insert(changeRequest);
+        } catch (DuplicateKeyException e) {
+            throw new BusinessException("已有信息变更待同意", e);
+        }
+        createMemberChangeMessage(team, changeRequest);
+        return buildDetailResponseWithMembers(team, ownerMembership);
+    }
+
+    /**
+     * 查看团队成员信息变更详情，打开时同步标记站内信为已读。
+     *
+     * @param request 详情请求
+     * @return 变更详情
+     */
+    public MineTeamMemberChangeDetailResponse getMemberChangeRequestDetail(MineTeamMemberChangeDetailRequest request) {
+        Long userId = AuthContextHolder.requireUserId();
+        TeamMemberChangeRequestEntity changeRequest = requireMemberChangeForCurrentUser(request, userId);
+        TeamEntity team = requireActiveTeam(changeRequest.getTeamId());
+        markMemberChangeMessageRead(changeRequest.getId(), userId);
+        return buildMemberChangeDetailResponse(changeRequest, team, userId);
+    }
+
+    /**
+     * 同意团队成员信息变更。
+     *
+     * @param request 详情请求
+     * @return 处理后的变更详情
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public MineTeamMemberChangeDetailResponse acceptMemberChangeRequest(MineTeamMemberChangeDetailRequest request) {
+        Long userId = AuthContextHolder.requireUserId();
+        TeamMemberChangeRequestEntity changeRequest = requirePendingMemberChangeForCurrentUser(request, userId);
+        TeamEntity team = requireActiveTeam(changeRequest.getTeamId());
+        TeamMemberEntity member = requireJoinedTeamMemberById(team.getId(), changeRequest.getMemberId(), "成员信息已变化，请联系团队拥有者重新发起。");
+        if (!Objects.equals(member.getVersion(), changeRequest.getMemberVersionBefore())) {
+            teamMemberChangeRequestTransactionService.invalidateMemberChangeAndClearAction(
+                    changeRequest.getId(), userId);
+            changeRequest.setStatus(TeamMemberChangeStatusDict.INVALIDATED.getCode());
+            throw new BusinessException("成员信息已变化，请联系团队拥有者重新发起。");
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        UpdateWrapper<TeamMemberEntity> memberUpdate = new UpdateWrapper<>();
+        memberUpdate.eq(COLUMN_ID, changeRequest.getMemberId())
+                .eq(COLUMN_TEAM_ID, changeRequest.getTeamId())
+                .eq(COLUMN_USER_ID, userId)
+                .eq(COLUMN_JOIN_STATUS, JoinStatusDict.JOINED.getCode())
+                .eq(COLUMN_ROLE, changeRequest.getRoleBefore())
+                .eq(COLUMN_VERSION, changeRequest.getMemberVersionBefore())
+                .set(COLUMN_ROLE, changeRequest.getRoleAfter())
+                .set(COLUMN_PROFESSION, defaultString(changeRequest.getProfessionAfter()))
+                .set(COLUMN_ALLOW_PORTFOLIO, flagOrZero(changeRequest.getAllowPortfolioAfter()))
+                .set(COLUMN_ALLOW_PROFILE, flagOrZero(changeRequest.getAllowProfileAfter()))
+                .set(COLUMN_ALLOW_WORKS, flagOrZero(changeRequest.getAllowWorksAfter()))
+                .set(COLUMN_UPDATED_AT, now)
+                .setSql(VERSION_INCREMENT_SQL);
+        int memberUpdated = teamMemberEntityMapper.update(null, memberUpdate);
+        if (memberUpdated <= 0) {
+            teamMemberChangeRequestTransactionService.invalidateMemberChangeAndClearAction(
+                    changeRequest.getId(), userId);
+            changeRequest.setStatus(TeamMemberChangeStatusDict.INVALIDATED.getCode());
+            throw new BusinessException("成员信息已变化，请联系团队拥有者重新发起。");
+        }
+        updateMemberChangeStatus(changeRequest.getId(), TeamMemberChangeStatusDict.ACCEPTED.getCode(), now);
+        changeRequest.setStatus(TeamMemberChangeStatusDict.ACCEPTED.getCode());
+        changeRequest.setRespondedAt(now);
+        clearMemberChangeMessageAction(changeRequest.getId(), userId);
+        return buildMemberChangeDetailResponse(changeRequest, team, userId);
+    }
+
+    /**
+     * 拒绝团队成员信息变更。
+     *
+     * @param request 详情请求
+     * @return 处理后的变更详情
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public MineTeamMemberChangeDetailResponse rejectMemberChangeRequest(MineTeamMemberChangeDetailRequest request) {
+        Long userId = AuthContextHolder.requireUserId();
+        TeamMemberChangeRequestEntity changeRequest = requirePendingMemberChangeForCurrentUser(request, userId);
+        TeamEntity team = requireActiveTeam(changeRequest.getTeamId());
+        LocalDateTime now = LocalDateTime.now();
+        updateMemberChangeStatus(changeRequest.getId(), TeamMemberChangeStatusDict.REJECTED.getCode(), now);
+        changeRequest.setStatus(TeamMemberChangeStatusDict.REJECTED.getCode());
+        changeRequest.setRespondedAt(now);
+        clearMemberChangeMessageAction(changeRequest.getId(), userId);
+        return buildMemberChangeDetailResponse(changeRequest, team, userId);
+    }
+
+    /**
+     * 转让团队拥有者。
+     *
+     * @param request 转让请求
+     * @return 最新团队维护详情
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public MineTeamDetailResponse transferOwner(MineTeamOwnerTransferRequest request) {
+        if (request == null) {
+            throw new BusinessException("团队转让内容不能为空");
+        }
+        Long userId = AuthContextHolder.requireUserId();
+        TeamEntity team = requireActiveTeam(request.getTeamId());
+        TeamMemberEntity ownerMembership = requireOwnerMembership(team.getId(), userId);
+        TeamMemberEntity target = requireJoinedTeamMemberById(team.getId(), request.getMemberId(), "转让成员不存在或已不在团队中");
+        if (userId.equals(target.getUserId())) {
+            throw new BusinessException("不能转让给自己");
+        }
+        if (TeamRoleDict.OWNER.getCode().equals(target.getRole())) {
+            throw new BusinessException("对方已是团队拥有者");
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        String noticeIdempotencyKey = buildOwnerTransferIdempotencyKey(team, target);
+        updateMemberRole(ownerMembership.getId(), ownerMembership.getVersion(), TeamRoleDict.OWNER.getCode(),
+                TeamRoleDict.MANAGER.getCode(), now,
+                "团队拥有者变更失败，请刷新后重试");
+        updateMemberRole(target.getId(), target.getVersion(), target.getRole(), TeamRoleDict.OWNER.getCode(), now,
+                "团队拥有者变更失败，请刷新后重试");
+        UpdateWrapper<TeamEntity> teamUpdate = new UpdateWrapper<>();
+        teamUpdate.eq(COLUMN_ID, team.getId())
+                .eq(COLUMN_VERSION, team.getVersion())
+                .set(COLUMN_OWNER_USER_ID, target.getUserId())
+                .set(COLUMN_UPDATED_AT, now)
+                .setSql(VERSION_INCREMENT_SQL);
+        int teamUpdated = teamEntityMapper.update(null, teamUpdate);
+        if (teamUpdated <= 0) {
+            throw new BusinessException("团队拥有者变更失败，请刷新后重试");
+        }
+        ownerMembership.setRole(TeamRoleDict.MANAGER.getCode());
+        ownerMembership.setVersion(incrementVersion(ownerMembership.getVersion()));
+        target.setRole(TeamRoleDict.OWNER.getCode());
+        target.setVersion(incrementVersion(target.getVersion()));
+        team.setOwnerUserId(target.getUserId());
+        team.setUpdatedAt(now);
+        team.setVersion(incrementVersion(team.getVersion()));
+        invalidatePendingChangesForMember(target.getId());
+        createPlainTeamNotice(
+                target.getUserId(),
+                OWNER_TRANSFER_MESSAGE_TITLE,
+                "你已被指定为「" + defaultString(team.getName(), "未命名团队") + "」的拥有者。",
+                team.getId(),
+                noticeIdempotencyKey
+        );
+        return buildDetailResponseWithMembers(team, ownerMembership);
+    }
+
+    /**
+     * 移除团队成员。
+     *
+     * @param request 移除请求
+     * @return 最新团队维护详情
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public MineTeamDetailResponse removeMember(MineTeamMemberRemoveRequest request) {
+        if (request == null) {
+            throw new BusinessException("成员移除内容不能为空");
+        }
+        Long userId = AuthContextHolder.requireUserId();
+        TeamEntity team = requireActiveTeam(request.getTeamId());
+        TeamMemberEntity ownerMembership = requireOwnerMembership(team.getId(), userId);
+        TeamMemberEntity target = requireJoinedTeamMemberById(team.getId(), request.getMemberId(), "成员不存在或已不在团队中");
+        if (userId.equals(target.getUserId())) {
+            throw new BusinessException("不能移除自己");
+        }
+        if (TeamRoleDict.OWNER.getCode().equals(target.getRole())) {
+            throw new BusinessException("不能移除团队拥有者");
+        }
+        assertMemberContentNotReferenced(team.getId(), target.getUserId());
+
+        LocalDateTime now = LocalDateTime.now();
+        String noticeIdempotencyKey = buildMemberRemovedIdempotencyKey(target);
+        UpdateWrapper<TeamMemberEntity> memberUpdate = new UpdateWrapper<>();
+        memberUpdate.eq(COLUMN_ID, target.getId())
+                .eq(COLUMN_TEAM_ID, team.getId())
+                .eq(COLUMN_JOIN_STATUS, JoinStatusDict.JOINED.getCode())
+                .eq(COLUMN_VERSION, target.getVersion())
+                .set(COLUMN_JOIN_STATUS, JoinStatusDict.REMOVED.getCode())
+                .set(COLUMN_REMOVED_AT, now)
+                .set(COLUMN_REMOVAL_REASON, MEMBER_REMOVED_REASON)
+                .set(COLUMN_UPDATED_AT, now)
+                .setSql(VERSION_INCREMENT_SQL);
+        int updated = teamMemberEntityMapper.update(null, memberUpdate);
+        if (updated <= 0) {
+            throw new BusinessException("成员状态已变化，请刷新后重试");
+        }
+        target.setJoinStatus(JoinStatusDict.REMOVED.getCode());
+        target.setRemovedAt(now);
+        target.setRemovalReason(MEMBER_REMOVED_REASON);
+        target.setUpdatedAt(now);
+        target.setVersion(incrementVersion(target.getVersion()));
+        invalidatePendingChangesForMember(target.getId());
+        createPlainTeamNotice(
+                target.getUserId(),
+                MEMBER_REMOVED_MESSAGE_TITLE,
+                "你已被移出「" + defaultString(team.getName(), "未命名团队") + "」。",
+                team.getId(),
+                noticeIdempotencyKey
+        );
+        return buildDetailResponseWithMembers(team, ownerMembership);
+    }
+
+    /**
      * 构建团队列表项。
      *
      * @param team 团队实体
@@ -551,7 +904,11 @@ public class MineTeamService {
                                 JoinStatusDict.PENDING_CONFIRMATION.getCode())
         ));
         Map<Long, UserEntity> userMap = loadUsers(members.stream().map(TeamMemberEntity::getUserId).toList());
-        return buildDetailResponse(team, currentMembership, members, userMap);
+        Map<Long, TeamMemberChangeRequestEntity> pendingChangeMap =
+                canManageMembers(currentMembership.getRole())
+                        ? loadPendingChangeMap(team.getId(), members.stream().map(TeamMemberEntity::getId).toList())
+                        : Collections.emptyMap();
+        return buildDetailResponse(team, currentMembership, members, userMap, pendingChangeMap);
     }
 
     /**
@@ -568,6 +925,26 @@ public class MineTeamService {
             TeamMemberEntity membership,
             List<TeamMemberEntity> members,
             Map<Long, UserEntity> userMap
+    ) {
+        return buildDetailResponse(team, membership, members, userMap, Collections.emptyMap());
+    }
+
+    /**
+     * 构建团队详情响应。
+     *
+     * @param team 团队实体
+     * @param membership 当前用户成员关系
+     * @param members 成员关系列表
+     * @param userMap 用户资料映射
+     * @param pendingChangeMap 待确认成员信息变更映射
+     * @return 团队详情响应
+     */
+    private MineTeamDetailResponse buildDetailResponse(
+            TeamEntity team,
+            TeamMemberEntity membership,
+            List<TeamMemberEntity> members,
+            Map<Long, UserEntity> userMap,
+            Map<Long, TeamMemberChangeRequestEntity> pendingChangeMap
     ) {
         // 成员展示时拥有者、管理者靠前，其余成员按成员关系 ID 稳定排序。
         List<TeamMemberEntity> safeMembers = safeList(members).stream()
@@ -589,7 +966,7 @@ public class MineTeamService {
         info.setMemberCountText(info.getMemberCount() + " 位成员");
         response.setTeam(info);
         response.setMembers(safeMembers.stream()
-                .map(member -> buildMemberItem(member, userMap.get(member.getUserId())))
+                .map(member -> buildMemberItem(member, userMap.get(member.getUserId()), pendingChangeMap.get(member.getId())))
                 .toList());
         return response;
     }
@@ -601,7 +978,11 @@ public class MineTeamService {
      * @param user 用户资料
      * @return 成员列表项
      */
-    private MineTeamDetailResponse.MemberItem buildMemberItem(TeamMemberEntity member, UserEntity user) {
+    private MineTeamDetailResponse.MemberItem buildMemberItem(
+            TeamMemberEntity member,
+            UserEntity user,
+            TeamMemberChangeRequestEntity pendingChange
+    ) {
         String profession = firstPresent(member.getProfession(), user == null ? "" : user.getProfession());
         String nickname = user == null ? "微信用户" : defaultString(user.getNickname(), "微信用户");
         String userStatus = user == null ? "" : defaultString(user.getStatus(), UserStatusDict.ACTIVE.getCode());
@@ -626,6 +1007,11 @@ public class MineTeamService {
         item.setAllowPortfolio(isEnabled(member.getAllowPortfolio()));
         item.setAllowProfile(isEnabled(member.getAllowProfile()));
         item.setAllowWorks(isEnabled(member.getAllowWorks()));
+        if (pendingChange != null) {
+            item.setPendingChange(true);
+            item.setPendingChangeId(pendingChange.getId());
+            item.setPendingChangeText(PENDING_MEMBER_CHANGE_TEXT);
+        }
         return item;
     }
 
@@ -733,6 +1119,70 @@ public class MineTeamService {
     }
 
     /**
+     * 按成员关系 ID 查询团队内已加入成员。
+     *
+     * @param teamId 团队 ID
+     * @param memberId 成员关系 ID
+     * @param message 异常文案
+     * @return 成员关系
+     */
+    private TeamMemberEntity requireJoinedTeamMemberById(Long teamId, Long memberId, String message) {
+        if (memberId == null) {
+            throw new BusinessException(message);
+        }
+        TeamMemberEntity member = teamMemberEntityMapper.selectById(memberId);
+        if (member == null
+                || !Objects.equals(teamId, member.getTeamId())
+                || !JoinStatusDict.JOINED.getCode().equals(member.getJoinStatus())) {
+            throw new BusinessException(message);
+        }
+        return member;
+    }
+
+    /**
+     * 确认成员没有待处理的信息变更。
+     *
+     * @param memberId 成员关系 ID
+     */
+    private void assertNoPendingMemberChange(Long memberId) {
+        Long count = teamMemberChangeRequestEntityMapper.selectCount(
+                Wrappers.lambdaQuery(TeamMemberChangeRequestEntity.class)
+                        .eq(TeamMemberChangeRequestEntity::getMemberId, memberId)
+                        .eq(TeamMemberChangeRequestEntity::getStatus,
+                                TeamMemberChangeStatusDict.PENDING_CONFIRMATION.getCode())
+        );
+        if (count != null && count > 0) {
+            throw new BusinessException("已有信息变更待同意");
+        }
+    }
+
+    /**
+     * 判断提交内容是否改变成员信息。
+     *
+     * @param member 当前成员
+     * @param roleAfter 修改后角色
+     * @param professionAfter 修改后团队身份
+     * @param allowPortfolioAfter 修改后作品集权限
+     * @param allowProfileAfter 修改后资料权限
+     * @param allowWorksAfter 修改后作品素材权限
+     * @return 是否发生变化
+     */
+    private boolean hasMemberChange(
+            TeamMemberEntity member,
+            String roleAfter,
+            String professionAfter,
+            int allowPortfolioAfter,
+            int allowProfileAfter,
+            int allowWorksAfter
+    ) {
+        return !Objects.equals(defaultString(member.getRole()), roleAfter)
+                || !Objects.equals(defaultString(member.getProfession()), professionAfter)
+                || flagOrZero(member.getAllowPortfolio()) != allowPortfolioAfter
+                || flagOrZero(member.getAllowProfile()) != allowProfileAfter
+                || flagOrZero(member.getAllowWorks()) != allowWorksAfter;
+    }
+
+    /**
      * 按个人唯一码查询可邀请的启用用户。
      *
      * @param uniqueCode 个人唯一码
@@ -795,7 +1245,7 @@ public class MineTeamService {
      * @param inviterUserId 邀请人用户 ID
      * @param inviteeUserId 被邀请人用户 ID
      * @param role 团队角色
-     * @param profession 团队内职业
+     * @param profession 团队身份
      * @param request 邀请请求
      * @return 成员关系
      */
@@ -835,7 +1285,7 @@ public class MineTeamService {
      * @param membership 既有成员关系
      * @param inviterUserId 邀请人用户 ID
      * @param role 团队角色
-     * @param profession 团队内职业
+     * @param profession 团队身份
      * @param request 邀请请求
      */
     private void restorePendingMembership(
@@ -989,9 +1439,143 @@ public class MineTeamService {
         updateWrapper.eq(COLUMN_USER_ID, userId)
                 .eq(COLUMN_IDEMPOTENCY_KEY, INVITATION_IDEMPOTENCY_PREFIX + memberId)
                 .set(COLUMN_ACTION_TYPE, MessageActionTypeDict.NONE.getCode())
-                .set(COLUMN_ACTION_URL, "")
+                .set(COLUMN_ACTION_URL, EMPTY_ACTION_URL)
                 .set(COLUMN_UPDATED_AT, now);
         systemMessageEntityMapper.update(null, updateWrapper);
+    }
+
+    /**
+     * 创建团队成员信息变更站内消息。
+     *
+     * @param team 团队实体
+     * @param changeRequest 变更请求
+     */
+    private void createMemberChangeMessage(TeamEntity team, TeamMemberChangeRequestEntity changeRequest) {
+        if (changeRequest.getId() == null) {
+            throw new BusinessException(MEMBER_CHANGE_SAVE_FAILED_MESSAGE);
+        }
+        String changeIdentity = String.valueOf(changeRequest.getId());
+        String actionUrl = MEMBER_CHANGE_ACTION_URL_PREFIX + changeIdentity;
+        String idempotencyKey = MEMBER_CHANGE_IDEMPOTENCY_PREFIX + changeIdentity;
+        LocalDateTime now = LocalDateTime.now();
+        SystemMessageEntity message = new SystemMessageEntity();
+        message.setUserId(changeRequest.getTargetUserId());
+        message.setMessageType(MessageTypeDict.TEAM_ROLE_CHANGED.getCode());
+        message.setCategory(MessageCategoryDict.TEAM.getCode());
+        message.setReadStatus(MessageReadStatusDict.UNREAD.getCode());
+        message.setTitle(MEMBER_CHANGE_MESSAGE_TITLE);
+        message.setContent("团队「" + defaultString(team.getName(), "未命名团队") + "」的成员信息有变更，请确认后生效。");
+        message.setActionType(MessageActionTypeDict.TEAM_MEMBER_CHANGE.getCode());
+        message.setActionUrl(actionUrl);
+        message.setBizType(MEMBER_CHANGE_MESSAGE_BIZ_TYPE);
+        message.setBizId(changeRequest.getId());
+        message.setIdempotencyKey(idempotencyKey);
+        message.setCreatedAt(now);
+        message.setUpdatedAt(now);
+        try {
+            systemMessageEntityMapper.insert(message);
+        } catch (DuplicateKeyException e) {
+            UpdateWrapper<SystemMessageEntity> updateWrapper = new UpdateWrapper<>();
+            updateWrapper.eq(COLUMN_IDEMPOTENCY_KEY, idempotencyKey)
+                    .set(COLUMN_READ_STATUS, MessageReadStatusDict.UNREAD.getCode())
+                    .set(COLUMN_READ_AT, null)
+                    .set(COLUMN_TITLE, MEMBER_CHANGE_MESSAGE_TITLE)
+                    .set(COLUMN_CONTENT, message.getContent())
+                    .set(COLUMN_ACTION_TYPE, MessageActionTypeDict.TEAM_MEMBER_CHANGE.getCode())
+                    .set(COLUMN_ACTION_URL, actionUrl)
+                    .set(COLUMN_BIZ_ID, changeRequest.getId())
+                    .set(COLUMN_UPDATED_AT, now);
+            systemMessageEntityMapper.update(null, updateWrapper);
+        }
+    }
+
+    /**
+     * 将团队成员信息变更消息标记为已读。
+     *
+     * @param changeRequestId 变更请求 ID
+     * @param userId 当前用户 ID
+     */
+    private void markMemberChangeMessageRead(Long changeRequestId, Long userId) {
+        LocalDateTime now = LocalDateTime.now();
+        UpdateWrapper<SystemMessageEntity> updateWrapper = new UpdateWrapper<>();
+        updateWrapper.eq(COLUMN_USER_ID, userId)
+                .eq(COLUMN_IDEMPOTENCY_KEY, MEMBER_CHANGE_IDEMPOTENCY_PREFIX + changeRequestId)
+                .eq(COLUMN_READ_STATUS, MessageReadStatusDict.UNREAD.getCode())
+                .set(COLUMN_READ_STATUS, MessageReadStatusDict.READ.getCode())
+                .set(COLUMN_READ_AT, now)
+                .set(COLUMN_UPDATED_AT, now);
+        systemMessageEntityMapper.update(null, updateWrapper);
+    }
+
+    /**
+     * 清理团队成员信息变更消息动作。
+     *
+     * @param changeRequestId 变更请求 ID
+     * @param userId 当前用户 ID
+     */
+    private void clearMemberChangeMessageAction(Long changeRequestId, Long userId) {
+        LocalDateTime now = LocalDateTime.now();
+        UpdateWrapper<SystemMessageEntity> updateWrapper = new UpdateWrapper<>();
+        updateWrapper.eq(COLUMN_USER_ID, userId)
+                .eq(COLUMN_IDEMPOTENCY_KEY, MEMBER_CHANGE_IDEMPOTENCY_PREFIX + changeRequestId)
+                .set(COLUMN_ACTION_TYPE, MessageActionTypeDict.NONE.getCode())
+                .set(COLUMN_ACTION_URL, EMPTY_ACTION_URL)
+                .set(COLUMN_UPDATED_AT, now);
+        systemMessageEntityMapper.update(null, updateWrapper);
+    }
+
+    /**
+     * 更新团队成员信息变更状态。
+     *
+     * @param changeRequestId 变更请求 ID
+     * @param status 目标状态
+     * @param respondedAt 响应时间
+     */
+    private void updateMemberChangeStatus(Long changeRequestId, String status, LocalDateTime respondedAt) {
+        UpdateWrapper<TeamMemberChangeRequestEntity> updateWrapper = new UpdateWrapper<>();
+        updateWrapper.eq(COLUMN_ID, changeRequestId)
+                .eq(COLUMN_STATUS, TeamMemberChangeStatusDict.PENDING_CONFIRMATION.getCode())
+                .set(COLUMN_STATUS, status)
+                .set(COLUMN_RESPONDED_AT, respondedAt)
+                .set(COLUMN_UPDATED_AT, respondedAt);
+        int updated = teamMemberChangeRequestEntityMapper.update(null, updateWrapper);
+        if (updated <= 0) {
+            throw new BusinessException("成员信息变更状态已变化，请刷新后重试");
+        }
+    }
+
+    /**
+     * 将团队成员信息变更置为失效。
+     *
+     * @param changeRequestId 变更请求 ID
+     */
+    private void invalidateMemberChange(Long changeRequestId) {
+        LocalDateTime now = LocalDateTime.now();
+        UpdateWrapper<TeamMemberChangeRequestEntity> updateWrapper = new UpdateWrapper<>();
+        updateWrapper.eq(COLUMN_ID, changeRequestId)
+                .eq(COLUMN_STATUS, TeamMemberChangeStatusDict.PENDING_CONFIRMATION.getCode())
+                .set(COLUMN_STATUS, TeamMemberChangeStatusDict.INVALIDATED.getCode())
+                .set(COLUMN_RESPONDED_AT, now)
+                .set(COLUMN_UPDATED_AT, now);
+        teamMemberChangeRequestEntityMapper.update(null, updateWrapper);
+    }
+
+    /**
+     * 将成员所有待确认信息变更置为失效。
+     *
+     * @param memberId 成员关系 ID
+     */
+    private void invalidatePendingChangesForMember(Long memberId) {
+        List<TeamMemberChangeRequestEntity> pendingChanges = safeList(teamMemberChangeRequestEntityMapper.selectList(
+                Wrappers.lambdaQuery(TeamMemberChangeRequestEntity.class)
+                        .eq(TeamMemberChangeRequestEntity::getMemberId, memberId)
+                        .eq(TeamMemberChangeRequestEntity::getStatus,
+                                TeamMemberChangeStatusDict.PENDING_CONFIRMATION.getCode())
+        ));
+        for (TeamMemberChangeRequestEntity changeRequest : pendingChanges) {
+            invalidateMemberChange(changeRequest.getId());
+            clearMemberChangeMessageAction(changeRequest.getId(), changeRequest.getTargetUserId());
+        }
     }
 
     /**
@@ -1025,6 +1609,46 @@ public class MineTeamService {
             throw new BusinessException("团队邀请已处理");
         }
         return invitation;
+    }
+
+    /**
+     * 查询当前用户可查看的成员信息变更。
+     *
+     * @param request 详情请求
+     * @param userId 当前用户 ID
+     * @return 变更请求
+     */
+    private TeamMemberChangeRequestEntity requireMemberChangeForCurrentUser(
+            MineTeamMemberChangeDetailRequest request,
+            Long userId
+    ) {
+        Long changeRequestId = request == null ? null : request.getChangeRequestId();
+        if (changeRequestId == null) {
+            throw new BusinessException("成员信息变更不存在");
+        }
+        TeamMemberChangeRequestEntity changeRequest = teamMemberChangeRequestEntityMapper.selectById(changeRequestId);
+        if (changeRequest == null || !userId.equals(changeRequest.getTargetUserId())) {
+            throw new BusinessException("成员信息变更不存在");
+        }
+        return changeRequest;
+    }
+
+    /**
+     * 查询当前用户待确认成员信息变更。
+     *
+     * @param request 详情请求
+     * @param userId 当前用户 ID
+     * @return 待确认变更请求
+     */
+    private TeamMemberChangeRequestEntity requirePendingMemberChangeForCurrentUser(
+            MineTeamMemberChangeDetailRequest request,
+            Long userId
+    ) {
+        TeamMemberChangeRequestEntity changeRequest = requireMemberChangeForCurrentUser(request, userId);
+        if (!TeamMemberChangeStatusDict.PENDING_CONFIRMATION.getCode().equals(changeRequest.getStatus())) {
+            throw new BusinessException("成员信息变更已处理");
+        }
+        return changeRequest;
     }
 
     /**
@@ -1063,6 +1687,330 @@ public class MineTeamService {
         response.setStatusTone(statusTone(invitation.getJoinStatus()));
         response.setCanRespond(JoinStatusDict.PENDING_CONFIRMATION.getCode().equals(invitation.getJoinStatus()));
         return response;
+    }
+
+    /**
+     * 构建团队成员信息变更详情响应。
+     *
+     * @param changeRequest 变更请求
+     * @param team 团队实体
+     * @param currentUserId 当前用户 ID
+     * @return 详情响应
+     */
+    private MineTeamMemberChangeDetailResponse buildMemberChangeDetailResponse(
+            TeamMemberChangeRequestEntity changeRequest,
+            TeamEntity team,
+            Long currentUserId
+    ) {
+        Map<Long, UserEntity> users = loadUsers(List.of(
+                changeRequest.getTargetUserId(),
+                changeRequest.getRequestedByUserId()
+        ));
+        UserEntity target = users.get(changeRequest.getTargetUserId());
+        UserEntity requester = users.get(changeRequest.getRequestedByUserId());
+        MineTeamMemberChangeDetailResponse response = new MineTeamMemberChangeDetailResponse();
+        response.setChangeRequestId(changeRequest.getId());
+        response.setTeamId(team.getId());
+        response.setTeamName(defaultString(team.getName()));
+        response.setTeamAvatarUrl(defaultString(team.getAvatarUrl()));
+        response.setMemberId(changeRequest.getMemberId());
+        response.setTargetUserId(changeRequest.getTargetUserId());
+        response.setTargetName(userDisplayName(target, "成员"));
+        response.setRequesterUserId(changeRequest.getRequestedByUserId());
+        response.setRequesterName(userDisplayName(requester, INVITER_FALLBACK_NAME));
+        response.setStatus(defaultString(changeRequest.getStatus()));
+        response.setStatusText(memberChangeStatusText(changeRequest.getStatus()));
+        response.setCanRespond(currentUserId.equals(changeRequest.getTargetUserId())
+                && TeamMemberChangeStatusDict.PENDING_CONFIRMATION.getCode().equals(changeRequest.getStatus()));
+        response.setRoleBefore(defaultString(changeRequest.getRoleBefore()));
+        response.setRoleBeforeText(roleText(changeRequest.getRoleBefore()));
+        response.setRoleAfter(defaultString(changeRequest.getRoleAfter()));
+        response.setRoleAfterText(roleText(changeRequest.getRoleAfter()));
+        response.setProfessionBefore(defaultString(changeRequest.getProfessionBefore()));
+        response.setProfessionAfter(defaultString(changeRequest.getProfessionAfter()));
+        response.setAllowPortfolioBefore(isEnabled(changeRequest.getAllowPortfolioBefore()));
+        response.setAllowPortfolioAfter(isEnabled(changeRequest.getAllowPortfolioAfter()));
+        response.setAllowProfileBefore(isEnabled(changeRequest.getAllowProfileBefore()));
+        response.setAllowProfileAfter(isEnabled(changeRequest.getAllowProfileAfter()));
+        response.setAllowWorksBefore(isEnabled(changeRequest.getAllowWorksBefore()));
+        response.setAllowWorksAfter(isEnabled(changeRequest.getAllowWorksAfter()));
+        response.setPermissionBeforeText(permissionText(
+                response.isAllowPortfolioBefore(), response.isAllowProfileBefore(), response.isAllowWorksBefore()));
+        response.setPermissionAfterText(permissionText(
+                response.isAllowPortfolioAfter(), response.isAllowProfileAfter(), response.isAllowWorksAfter()));
+        response.setRequestedAtText(formatDetailTime(changeRequest.getRequestedAt()));
+        response.setRespondedAtText(formatDetailTime(changeRequest.getRespondedAt()));
+        return response;
+    }
+
+    /**
+     * 读取成员待确认信息变更映射。
+     *
+     * @param teamId 团队 ID
+     * @param memberIds 成员关系 ID 集合
+     * @return 成员关系 ID 到变更请求的映射
+     */
+    private Map<Long, TeamMemberChangeRequestEntity> loadPendingChangeMap(Long teamId, Collection<Long> memberIds) {
+        Set<Long> ids = memberIds.stream().filter(Objects::nonNull).collect(Collectors.toSet());
+        if (ids.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return safeList(teamMemberChangeRequestEntityMapper.selectList(
+                Wrappers.lambdaQuery(TeamMemberChangeRequestEntity.class)
+                        .eq(TeamMemberChangeRequestEntity::getTeamId, teamId)
+                        .in(TeamMemberChangeRequestEntity::getMemberId, ids)
+                        .eq(TeamMemberChangeRequestEntity::getStatus,
+                                TeamMemberChangeStatusDict.PENDING_CONFIRMATION.getCode())
+        )).stream().collect(Collectors.toMap(
+                TeamMemberChangeRequestEntity::getMemberId,
+                changeRequest -> changeRequest,
+                (left, right) -> left,
+                LinkedHashMap::new
+        ));
+    }
+
+    /**
+     * 更新团队成员角色。
+     *
+     * @param memberId 成员关系 ID
+     * @param versionBefore 修改前版本号
+     * @param roleBefore 原角色
+     * @param roleAfter 新角色
+     * @param updatedAt 更新时间
+     * @param message 失败文案
+     */
+    private void updateMemberRole(
+            Long memberId,
+            Integer versionBefore,
+            String roleBefore,
+            String roleAfter,
+            LocalDateTime updatedAt,
+            String message
+    ) {
+        UpdateWrapper<TeamMemberEntity> updateWrapper = new UpdateWrapper<>();
+        updateWrapper.eq(COLUMN_ID, memberId)
+                .eq(COLUMN_ROLE, roleBefore)
+                .eq(COLUMN_JOIN_STATUS, JoinStatusDict.JOINED.getCode())
+                .eq(COLUMN_VERSION, versionBefore)
+                .set(COLUMN_ROLE, roleAfter)
+                .set(COLUMN_UPDATED_AT, updatedAt)
+                .setSql(VERSION_INCREMENT_SQL);
+        int updated = teamMemberEntityMapper.update(null, updateWrapper);
+        if (updated <= 0) {
+            throw new BusinessException(message);
+        }
+    }
+
+    /**
+     * 构建团队拥有者转让通知幂等键。
+     *
+     * @param team 团队实体
+     * @param target 目标成员关系
+     * @return 幂等键
+     */
+    private String buildOwnerTransferIdempotencyKey(TeamEntity team, TeamMemberEntity target) {
+        return OWNER_TRANSFER_IDEMPOTENCY_PREFIX
+                + team.getId()
+                + ":"
+                + versionOrZero(team.getVersion())
+                + ":"
+                + target.getId();
+    }
+
+    /**
+     * 构建成员移除通知幂等键。
+     *
+     * @param target 被移除成员关系
+     * @return 幂等键
+     */
+    private String buildMemberRemovedIdempotencyKey(TeamMemberEntity target) {
+        return MEMBER_REMOVED_IDEMPOTENCY_PREFIX
+                + target.getId()
+                + ":"
+                + versionOrZero(target.getVersion());
+    }
+
+    /**
+     * 将空版本号按 0 处理，便于构建确定性的幂等键。
+     *
+     * @param version 版本号
+     * @return 非空版本号
+     */
+    private int versionOrZero(Integer version) {
+        return version == null ? 0 : version;
+    }
+
+    /**
+     * 计算内存实体中的下一个版本号。
+     *
+     * @param version 当前版本号
+     * @return 下一个版本号
+     */
+    private Integer incrementVersion(Integer version) {
+        return version == null ? 1 : version + 1;
+    }
+
+    /**
+     * 创建无需用户处理的团队通知消息。
+     *
+     * @param targetUserId 接收用户 ID
+     * @param title 标题
+     * @param content 正文
+     * @param teamId 团队 ID
+     * @param idempotencyKey 幂等键
+     */
+    private void createPlainTeamNotice(Long targetUserId, String title, String content, Long teamId, String idempotencyKey) {
+        LocalDateTime now = LocalDateTime.now();
+        SystemMessageEntity message = new SystemMessageEntity();
+        message.setUserId(targetUserId);
+        message.setMessageType(MessageTypeDict.TEAM_ROLE_CHANGED.getCode());
+        message.setCategory(MessageCategoryDict.TEAM.getCode());
+        message.setReadStatus(MessageReadStatusDict.UNREAD.getCode());
+        message.setTitle(title);
+        message.setContent(content);
+        message.setActionType(MessageActionTypeDict.NONE.getCode());
+        message.setActionUrl(EMPTY_ACTION_URL);
+        message.setBizType(TEAM_NOTICE_BIZ_TYPE);
+        message.setBizId(teamId);
+        message.setIdempotencyKey(idempotencyKey);
+        message.setCreatedAt(now);
+        message.setUpdatedAt(now);
+        try {
+            systemMessageEntityMapper.insert(message);
+        } catch (DuplicateKeyException e) {
+            UpdateWrapper<SystemMessageEntity> updateWrapper = new UpdateWrapper<>();
+            updateWrapper.eq(COLUMN_IDEMPOTENCY_KEY, idempotencyKey)
+                    .set(COLUMN_READ_STATUS, MessageReadStatusDict.UNREAD.getCode())
+                    .set(COLUMN_READ_AT, null)
+                    .set(COLUMN_TITLE, title)
+                    .set(COLUMN_CONTENT, content)
+                    .set(COLUMN_ACTION_TYPE, MessageActionTypeDict.NONE.getCode())
+                    .set(COLUMN_ACTION_URL, EMPTY_ACTION_URL)
+                    .set(COLUMN_BIZ_ID, teamId)
+                    .set(COLUMN_UPDATED_AT, now);
+            systemMessageEntityMapper.update(null, updateWrapper);
+        }
+    }
+
+    /**
+     * 校验成员内容是否仍被团队作品集引用。
+     *
+     * @param teamId 团队 ID
+     * @param memberUserId 成员用户 ID
+     */
+    private void assertMemberContentNotReferenced(Long teamId, Long memberUserId) {
+        List<WorkEntity> works = safeList(workEntityMapper.selectList(
+                Wrappers.lambdaQuery(WorkEntity.class)
+                        .eq(WorkEntity::getUserId, memberUserId)
+                        .eq(WorkEntity::getStatus, WorkStatusDict.ACTIVE.getCode())
+        ));
+        List<PortfolioEntity> memberPortfolios = safeList(portfolioEntityMapper.selectList(
+                Wrappers.lambdaQuery(PortfolioEntity.class)
+                        .eq(PortfolioEntity::getOwnerType, PortfolioOwnerTypeDict.USER.getCode())
+                        .eq(PortfolioEntity::getOwnerId, memberUserId)
+                        .eq(PortfolioEntity::getStatus, PortfolioStatusDict.ACTIVE.getCode())
+        ));
+        List<PortfolioEntity> teamPortfolios = safeList(portfolioEntityMapper.selectList(
+                Wrappers.lambdaQuery(PortfolioEntity.class)
+                        .eq(PortfolioEntity::getOwnerType, PortfolioOwnerTypeDict.TEAM.getCode())
+                        .eq(PortfolioEntity::getOwnerId, teamId)
+                        .eq(PortfolioEntity::getStatus, PortfolioStatusDict.ACTIVE.getCode())
+        ));
+        if (teamPortfolios.isEmpty()) {
+            return;
+        }
+        Set<Long> workIds = works.stream().map(WorkEntity::getId).filter(Objects::nonNull).collect(Collectors.toSet());
+        Set<Long> memberPortfolioIds = memberPortfolios.stream()
+                .map(PortfolioEntity::getId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Set<Long> teamPortfolioIds = teamPortfolios.stream()
+                .map(PortfolioEntity::getId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (teamPortfolioIds.isEmpty()) {
+            return;
+        }
+        List<PortfolioReferenceEntity> references = safeList(portfolioReferenceEntityMapper.selectList(
+                Wrappers.lambdaQuery(PortfolioReferenceEntity.class)
+                        .in(PortfolioReferenceEntity::getPortfolioId, teamPortfolioIds)
+                        .eq(PortfolioReferenceEntity::getIsValid, 1)
+        ));
+        Set<Long> referencedPortfolioIds = collectReferencedTeamPortfolioIds(
+                references, workIds, memberPortfolioIds, memberUserId);
+        if (referencedPortfolioIds.isEmpty()) {
+            return;
+        }
+        Map<Long, String> titleMap = teamPortfolios.stream().collect(Collectors.toMap(
+                PortfolioEntity::getId,
+                portfolio -> defaultString(portfolio.getTitle(), "未命名作品集"),
+                (left, right) -> left,
+                LinkedHashMap::new
+        ));
+        List<String> names = referencedPortfolioIds.stream()
+                .map(id -> titleMap.getOrDefault(id, "未命名作品集"))
+                .toList();
+        throw new BusinessException(formatRemoveBlockedMessage(names));
+    }
+
+    /**
+     * 收集团队作品集中引用了成员内容的作品集 ID。
+     *
+     * @param references 引用记录
+     * @param workIds 成员作品 ID
+     * @param memberPortfolioIds 成员个人作品集 ID
+     * @param memberUserId 成员用户 ID
+     * @return 被阻塞的团队作品集 ID
+     */
+    private Set<Long> collectReferencedTeamPortfolioIds(
+            List<PortfolioReferenceEntity> references,
+            Set<Long> workIds,
+            Set<Long> memberPortfolioIds,
+            Long memberUserId
+    ) {
+        Set<Long> ids = new LinkedHashSet<>();
+        for (PortfolioReferenceEntity reference : references) {
+            if (reference == null || reference.getPortfolioId() == null) {
+                continue;
+            }
+            String type = reference.getReferenceType();
+            Long referenceId = reference.getReferenceId();
+            boolean referenced = (ReferenceTypeDict.WORK.getCode().equals(type) && workIds.contains(referenceId))
+                    || (ReferenceTypeDict.MEMBER_PORTFOLIO.getCode().equals(type) && memberPortfolioIds.contains(referenceId))
+                    || (ReferenceTypeDict.USER_PROFILE.getCode().equals(type) && Objects.equals(memberUserId, referenceId));
+            if (referenced) {
+                ids.add(reference.getPortfolioId());
+            }
+        }
+        return ids;
+    }
+
+    /**
+     * 构建移除受阻提示。
+     *
+     * @param portfolioNames 作品集名称
+     * @return 提示文案
+     */
+    private String formatRemoveBlockedMessage(List<String> portfolioNames) {
+        List<String> names = portfolioNames.stream()
+                .filter(name -> name != null && !name.isBlank())
+                .distinct()
+                .toList();
+        if (names.size() <= 2) {
+            return "无法移除，成员内容仍被" + quotePortfolioNames(names) + "使用，请先移除引用。";
+        }
+        return "无法移除，成员内容仍被" + quotePortfolioNames(names.subList(0, 2))
+                + "等 " + names.size() + " 个作品集使用，请先移除引用。";
+    }
+
+    /**
+     * 拼接作品集名称。
+     *
+     * @param names 作品集名称
+     * @return 带书名号的名称串
+     */
+    private String quotePortfolioNames(List<String> names) {
+        return names.stream().map(name -> "《" + name + "》").collect(Collectors.joining());
     }
 
     /**
@@ -1261,6 +2209,16 @@ public class MineTeamService {
     }
 
     /**
+     * 将数据库权限标记规整为 0 或 1。
+     *
+     * @param value 权限标记
+     * @return 0 或 1
+     */
+    private int flagOrZero(Integer value) {
+        return isEnabled(value) ? 1 : 0;
+    }
+
+    /**
      * 团队角色文案。
      *
      * @param role 角色 code
@@ -1280,6 +2238,17 @@ public class MineTeamService {
     private String joinStatusText(String joinStatus) {
         JoinStatusDict dict = JoinStatusDict.fromCode(joinStatus);
         return dict == null ? "待确认" : dict.getDisplayName();
+    }
+
+    /**
+     * 团队成员信息变更状态文案。
+     *
+     * @param status 状态 code
+     * @return 文案
+     */
+    private String memberChangeStatusText(String status) {
+        TeamMemberChangeStatusDict dict = TeamMemberChangeStatusDict.fromCode(status);
+        return dict == null ? "待同意" : dict.getDisplayName();
     }
 
     /**
@@ -1358,7 +2327,7 @@ public class MineTeamService {
      * 构建展示名称。
      *
      * @param nickname 昵称
-     * @param profession 职业身份
+     * @param profession 团队身份
      * @return 展示名称
      */
     private String buildDisplayName(String nickname, String profession) {
@@ -1366,6 +2335,45 @@ public class MineTeamService {
             return nickname;
         }
         return nickname + " · " + profession;
+    }
+
+    /**
+     * 构建用户展示名称。
+     *
+     * @param user 用户实体
+     * @param fallback 兜底名称
+     * @return 展示名称
+     */
+    private String userDisplayName(UserEntity user, String fallback) {
+        if (user == null) {
+            return fallback;
+        }
+        return buildDisplayName(defaultString(user.getNickname(), fallback), user.getProfession());
+    }
+
+    /**
+     * 构建成员引用权限文案。
+     *
+     * @param allowPortfolio 是否允许作品集
+     * @param allowProfile 是否允许主页资料
+     * @param allowWorks 是否允许作品素材
+     * @return 权限文案
+     */
+    private String permissionText(boolean allowPortfolio, boolean allowProfile, boolean allowWorks) {
+        List<String> names = new ArrayList<>();
+        if (allowPortfolio) {
+            names.add("作品集");
+        }
+        if (allowProfile) {
+            names.add("主页资料");
+        }
+        if (allowWorks) {
+            names.add("作品素材");
+        }
+        if (names.isEmpty()) {
+            return "未开放";
+        }
+        return String.join("、", names);
     }
 
     /**
@@ -1379,6 +2387,19 @@ public class MineTeamService {
             return "最近更新 -";
         }
         return "最近更新 " + UPDATED_FORMATTER.format(updatedAt);
+    }
+
+    /**
+     * 格式化详情时间。
+     *
+     * @param time 时间
+     * @return 时间文案
+     */
+    private String formatDetailTime(LocalDateTime time) {
+        if (time == null) {
+            return "";
+        }
+        return DETAIL_TIME_FORMATTER.format(time);
     }
 
     /**

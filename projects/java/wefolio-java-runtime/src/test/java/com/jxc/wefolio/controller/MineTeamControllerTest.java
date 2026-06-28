@@ -7,9 +7,14 @@ import com.jxc.wefolio.dto.MineTeamCreateRequest;
 import com.jxc.wefolio.dto.MineTeamDetailResponse;
 import com.jxc.wefolio.dto.MineTeamInvitationResponse;
 import com.jxc.wefolio.dto.MineTeamListResponse;
+import com.jxc.wefolio.dto.MineTeamMemberChangeCreateRequest;
+import com.jxc.wefolio.dto.MineTeamMemberChangeDetailRequest;
+import com.jxc.wefolio.dto.MineTeamMemberChangeDetailResponse;
 import com.jxc.wefolio.dto.MineTeamMemberCandidateResponse;
 import com.jxc.wefolio.dto.MineTeamMemberInviteRequest;
+import com.jxc.wefolio.dto.MineTeamMemberRemoveRequest;
 import com.jxc.wefolio.dto.MineTeamUpdateRequest;
+import com.jxc.wefolio.dto.MineTeamOwnerTransferRequest;
 import com.jxc.wefolio.service.MineTeamService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,6 +25,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.multipart.MultipartFile;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -43,9 +49,14 @@ class MineTeamControllerTest {
         MineTeamDetailResponse detailResponse = new MineTeamDetailResponse();
         MineTeamMemberCandidateResponse candidateResponse = new MineTeamMemberCandidateResponse();
         MineTeamInvitationResponse invitationResponse = new MineTeamInvitationResponse();
+        MineTeamMemberChangeDetailResponse changeDetailResponse = new MineTeamMemberChangeDetailResponse();
         MineTeamCreateRequest createRequest = new MineTeamCreateRequest();
         MineTeamUpdateRequest updateRequest = new MineTeamUpdateRequest();
         MineTeamMemberInviteRequest inviteRequest = new MineTeamMemberInviteRequest();
+        MineTeamMemberChangeCreateRequest changeRequest = new MineTeamMemberChangeCreateRequest();
+        MineTeamMemberChangeDetailRequest changeDetailRequest = new MineTeamMemberChangeDetailRequest();
+        MineTeamOwnerTransferRequest transferRequest = new MineTeamOwnerTransferRequest();
+        MineTeamMemberRemoveRequest removeRequest = new MineTeamMemberRemoveRequest();
         FileUploadResponse uploadResponse = new FileUploadResponse();
         MockMultipartFile file = new MockMultipartFile("file", "team.png", "image/png", "png".getBytes());
         when(mineTeamService.listTeams()).thenReturn(listResponse);
@@ -57,6 +68,12 @@ class MineTeamControllerTest {
         when(mineTeamService.getInvitation(31L)).thenReturn(invitationResponse);
         when(mineTeamService.acceptInvitation(31L)).thenReturn(invitationResponse);
         when(mineTeamService.rejectInvitation(31L)).thenReturn(invitationResponse);
+        when(mineTeamService.createMemberChangeRequest(changeRequest)).thenReturn(detailResponse);
+        when(mineTeamService.getMemberChangeRequestDetail(changeDetailRequest)).thenReturn(changeDetailResponse);
+        when(mineTeamService.acceptMemberChangeRequest(changeDetailRequest)).thenReturn(changeDetailResponse);
+        when(mineTeamService.rejectMemberChangeRequest(changeDetailRequest)).thenReturn(changeDetailResponse);
+        when(mineTeamService.transferOwner(transferRequest)).thenReturn(detailResponse);
+        when(mineTeamService.removeMember(removeRequest)).thenReturn(detailResponse);
         when(mineTeamService.uploadTeamAvatar(100L, file)).thenReturn(uploadResponse);
 
         Response<MineTeamListResponse> teams = controller.teams();
@@ -68,6 +85,12 @@ class MineTeamControllerTest {
         Response<MineTeamInvitationResponse> invitation = controller.invitation(31L);
         Response<MineTeamInvitationResponse> accepted = controller.acceptInvitation(31L);
         Response<MineTeamInvitationResponse> rejected = controller.rejectInvitation(31L);
+        Response<MineTeamDetailResponse> changeCreated = controller.createMemberChangeRequest(changeRequest);
+        Response<MineTeamMemberChangeDetailResponse> changeDetail = controller.memberChangeRequestDetail(changeDetailRequest);
+        Response<MineTeamMemberChangeDetailResponse> changeAccepted = controller.acceptMemberChangeRequest(changeDetailRequest);
+        Response<MineTeamMemberChangeDetailResponse> changeRejected = controller.rejectMemberChangeRequest(changeDetailRequest);
+        Response<MineTeamDetailResponse> transferred = controller.transferOwner(transferRequest);
+        Response<MineTeamDetailResponse> removed = controller.removeMember(removeRequest);
         Response<FileUploadResponse> uploaded = controller.uploadTeamAvatar(100L, file);
 
         assertThat(MineTeamController.class.isAnnotationPresent(MaintainerAccess.class)).isTrue();
@@ -80,9 +103,29 @@ class MineTeamControllerTest {
         assertGetMapping("invitation", new Class<?>[] {Long.class}, "/api/mine/team-invitations/{memberId}");
         assertPostMapping("acceptInvitation", new Class<?>[] {Long.class}, "/api/mine/team-invitations/{memberId}/accept");
         assertPostMapping("rejectInvitation", new Class<?>[] {Long.class}, "/api/mine/team-invitations/{memberId}/reject");
+        assertPostMapping("createMemberChangeRequest",
+                new Class<?>[] {MineTeamMemberChangeCreateRequest.class},
+                "/api/mine/team-member-change-requests");
+        assertPostMapping("memberChangeRequestDetail",
+                new Class<?>[] {MineTeamMemberChangeDetailRequest.class},
+                "/api/mine/team-member-change-requests/detail");
+        assertPostMapping("acceptMemberChangeRequest",
+                new Class<?>[] {MineTeamMemberChangeDetailRequest.class},
+                "/api/mine/team-member-change-requests/accept");
+        assertPostMapping("rejectMemberChangeRequest",
+                new Class<?>[] {MineTeamMemberChangeDetailRequest.class},
+                "/api/mine/team-member-change-requests/reject");
+        assertPostMapping("transferOwner", new Class<?>[] {MineTeamOwnerTransferRequest.class}, "/api/mine/teams/transfer-owner");
+        assertPostMapping("removeMember", new Class<?>[] {MineTeamMemberRemoveRequest.class}, "/api/mine/teams/remove-member");
         assertPostMapping("uploadTeamAvatar", new Class<?>[] {Long.class, MultipartFile.class}, "/api/mine/teams/{teamId}/avatar");
         assertThat(MineTeamController.class.getMethod("teamDetail", Long.class)
                 .getParameters()[0].isAnnotationPresent(PathVariable.class)).isTrue();
+        assertRequestBody("createMemberChangeRequest", MineTeamMemberChangeCreateRequest.class);
+        assertRequestBody("memberChangeRequestDetail", MineTeamMemberChangeDetailRequest.class);
+        assertRequestBody("acceptMemberChangeRequest", MineTeamMemberChangeDetailRequest.class);
+        assertRequestBody("rejectMemberChangeRequest", MineTeamMemberChangeDetailRequest.class);
+        assertRequestBody("transferOwner", MineTeamOwnerTransferRequest.class);
+        assertRequestBody("removeMember", MineTeamMemberRemoveRequest.class);
         assertThat(teams.getData()).isSameAs(listResponse);
         assertThat(created.getData()).isSameAs(detailResponse);
         assertThat(detail.getData()).isSameAs(detailResponse);
@@ -92,6 +135,12 @@ class MineTeamControllerTest {
         assertThat(invitation.getData()).isSameAs(invitationResponse);
         assertThat(accepted.getData()).isSameAs(invitationResponse);
         assertThat(rejected.getData()).isSameAs(invitationResponse);
+        assertThat(changeCreated.getData()).isSameAs(detailResponse);
+        assertThat(changeDetail.getData()).isSameAs(changeDetailResponse);
+        assertThat(changeAccepted.getData()).isSameAs(changeDetailResponse);
+        assertThat(changeRejected.getData()).isSameAs(changeDetailResponse);
+        assertThat(transferred.getData()).isSameAs(detailResponse);
+        assertThat(removed.getData()).isSameAs(detailResponse);
         assertThat(uploaded.getData()).isSameAs(uploadResponse);
         verify(mineTeamService).listTeams();
         verify(mineTeamService).createTeam(createRequest);
@@ -102,6 +151,12 @@ class MineTeamControllerTest {
         verify(mineTeamService).getInvitation(31L);
         verify(mineTeamService).acceptInvitation(31L);
         verify(mineTeamService).rejectInvitation(31L);
+        verify(mineTeamService).createMemberChangeRequest(changeRequest);
+        verify(mineTeamService).getMemberChangeRequestDetail(changeDetailRequest);
+        verify(mineTeamService).acceptMemberChangeRequest(changeDetailRequest);
+        verify(mineTeamService).rejectMemberChangeRequest(changeDetailRequest);
+        verify(mineTeamService).transferOwner(transferRequest);
+        verify(mineTeamService).removeMember(removeRequest);
         verify(mineTeamService).uploadTeamAvatar(100L, file);
     }
 
@@ -156,5 +211,17 @@ class MineTeamControllerTest {
         PutMapping mapping = MineTeamController.class.getMethod(methodName, parameterTypes).getAnnotation(PutMapping.class);
         assertThat(mapping).isNotNull();
         assertThat(mapping.value()).containsExactly(path);
+    }
+
+    /**
+     * 断言单参数接口参数来自请求体。
+     *
+     * @param methodName 方法名
+     * @param parameterType 参数类型
+     * @throws NoSuchMethodException 方法不存在时抛出
+     */
+    private void assertRequestBody(String methodName, Class<?> parameterType) throws NoSuchMethodException {
+        assertThat(MineTeamController.class.getMethod(methodName, parameterType)
+                .getParameters()[0].isAnnotationPresent(RequestBody.class)).isTrue();
     }
 }

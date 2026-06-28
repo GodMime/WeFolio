@@ -3,18 +3,21 @@ package com.jxc.wefolio.dto;
 import lombok.Data;
 
 /**
- * 团队成员邀请请求。
+ * 团队成员信息变更发起请求。
  */
 @Data
-public class MineTeamMemberInviteRequest {
+public class MineTeamMemberChangeCreateRequest {
 
-    /** 被邀请成员的个人唯一码 */
-    private String uniqueCode;
+    /** 团队 ID */
+    private Long teamId;
 
-    /** 团队角色，仅允许 MANAGER 或 MEMBER */
+    /** 团队成员关系 ID */
+    private Long memberId;
+
+    /** 修改后的团队角色 */
     private String role;
 
-    /** 团队身份 */
+    /** 修改后的团队身份 */
     private String profession;
 
     /** 是否允许团队引用个人作品集 */

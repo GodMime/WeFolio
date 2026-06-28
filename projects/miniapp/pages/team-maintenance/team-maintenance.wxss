@@ -32,8 +32,7 @@
 .team-identity,
 .panel-heading,
 .field-heading,
-.pill-row,
-.member-row {
+.pill-row {
   display: flex;
   align-items: center;
 }
@@ -327,14 +326,31 @@
 }
 
 .member-row {
+  position: relative;
   min-height: 118rpx;
-  gap: 18rpx;
-  padding: 18rpx 0;
+  overflow: hidden;
   border-bottom: 1rpx solid #edf1f5;
 }
 
 .member-row:last-child {
   border-bottom: 0;
+}
+
+.member-row-main {
+  position: relative;
+  z-index: 2;
+  min-height: 118rpx;
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+  padding: 18rpx 0;
+  background: #ffffff;
+  box-sizing: border-box;
+  transition: transform 160ms ease;
+}
+
+.member-row.actions-open .member-row-main {
+  transform: translateX(-360rpx);
 }
 
 .member-avatar {
@@ -369,12 +385,73 @@
 
 .member-status {
   /* 两个状态标签按竖向排列：团队加入状态常驻，账号停用状态按需出现，避免挤压成员姓名。 */
-  max-width: 150rpx;
+  max-width: 190rpx;
   flex: none;
+  align-self: stretch;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
+  justify-content: center;
   gap: 8rpx;
+}
+
+.member-status .role-pill {
+  height: 40rpx;
+  min-height: 40rpx;
+  line-height: 40rpx;
+}
+
+.pending-change-pill {
+  max-width: 190rpx;
+}
+
+.member-action-buttons {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
+  width: 320rpx;
+  height: 100%;
+  flex: none;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 20rpx;
+  box-sizing: border-box;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease;
+}
+
+.member-row.actions-open .member-action-buttons {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.member-action-button {
+  width: 148rpx;
+  min-width: 148rpx;
+  height: 60rpx;
+  min-height: 60rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  color: #17202a;
+  font-size: 21rpx;
+  font-weight: 800;
+  line-height: 60rpx;
+  border-radius: 12rpx;
+  background: #eef2f6;
+  box-sizing: border-box;
+}
+
+.member-action-button.remove {
+  color: #b42318;
+  background: #fee4e2;
 }
 
 .member-empty,
@@ -444,7 +521,29 @@
   box-sizing: border-box;
 }
 
+.member-change-sheet-overlay {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 30;
+  display: flex;
+  align-items: flex-end;
+  padding: 28rpx;
+  opacity: 0;
+  pointer-events: none;
+  background: rgba(23, 32, 42, 0.36);
+  transition: opacity 180ms ease;
+  box-sizing: border-box;
+}
+
 .member-add-sheet-overlay.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.member-change-sheet-overlay.visible {
   opacity: 1;
   pointer-events: auto;
 }
@@ -461,7 +560,23 @@
   transition: transform 180ms ease;
 }
 
+.member-change-sheet {
+  width: 100%;
+  max-height: calc(90vh - env(safe-area-inset-bottom));
+  padding: 24rpx;
+  overflow-y: auto;
+  border-radius: 24rpx 24rpx 18rpx 18rpx;
+  background: #ffffff;
+  box-sizing: border-box;
+  transform: translateY(32rpx);
+  transition: transform 180ms ease;
+}
+
 .member-add-sheet-overlay.visible .member-add-sheet {
+  transform: translateY(0);
+}
+
+.member-change-sheet-overlay.visible .member-change-sheet {
   transform: translateY(0);
 }
 

@@ -6,6 +6,8 @@ const {
   buildMessageQuery,
   buildReadAllPayload,
   appendMessageList,
+  applyMessagesRead,
+  applyMessagesReadAll,
   normalizeMessageList,
   normalizeUnreadCount
 } = require('../utils/messages')
@@ -63,6 +65,24 @@ test('normalizes message list response for page rendering', () => {
   assert.equal(result.messages[1].actionText, '去查看')
 })
 
+test('team member change action uses processing button text', () => {
+  const result = normalizeMessageList({
+    messages: [
+      {
+        messageId: 103,
+        category: 'TEAM',
+        readStatus: 'UNREAD',
+        title: '团队信息变更待确认',
+        actionType: 'TEAM_MEMBER_CHANGE',
+        actionUrl: '/pages/team-member-change/team-member-change?changeRequestId=41'
+      }
+    ]
+  })
+
+  assert.equal(result.messages[0].actionVisible, true)
+  assert.equal(result.messages[0].actionText, '去处理')
+})
+
 test('builds message query parameters from page filters', () => {
   assert.deepEqual(buildMessageQuery({ filter: 'all', cursor: 88, size: 20 }), {
     cursor: 88,
@@ -91,6 +111,54 @@ test('builds mark read and read all payloads', () => {
   })
   assert.deepEqual(buildReadAllPayload('all'), {})
   assert.deepEqual(buildReadAllPayload('unread'), {})
+})
+
+test('applies read response to message state and unread summary', () => {
+  const current = normalizeMessageList({
+    summary: { unreadCount: 1 },
+    messages: [
+      {
+        messageId: 101,
+        messageType: 'TEAM_INVITATION',
+        category: 'TEAM',
+        readStatus: 'UNREAD',
+        selected: true
+      },
+      {
+        messageId: 100,
+        category: 'POINT',
+        readStatus: 'READ'
+      }
+    ]
+  })
+
+  const result = applyMessagesRead(current, [101], { unreadCount: 0 })
+
+  assert.equal(result.summary.unreadCount, 0)
+  assert.equal(result.summary.unreadText, '暂无未读')
+  assert.equal(result.summary.invitationText, '暂无待处理邀请')
+  assert.equal(result.messages[0].readStatus, 'READ')
+  assert.equal(result.messages[0].unread, false)
+  assert.equal(result.messages[0].unreadDotClass, 'unread-dot muted')
+  assert.equal(result.messages[0].selected, false)
+})
+
+test('removes read messages from unread filter state', () => {
+  const current = normalizeMessageList({
+    summary: { unreadCount: 2 },
+    messages: [
+      { messageId: 101, category: 'TEAM', readStatus: 'UNREAD' },
+      { messageId: 100, category: 'POINT', readStatus: 'UNREAD' }
+    ]
+  })
+
+  const batchResult = applyMessagesRead(current, [101], { unreadCount: 1 }, { filter: 'unread' })
+  const allResult = applyMessagesReadAll(current, { unreadCount: 0 }, { filter: 'unread' })
+
+  assert.deepEqual(batchResult.messages.map((item) => item.id), [100])
+  assert.equal(batchResult.summary.unreadText, '1 条未读')
+  assert.equal(allResult.messages.length, 0)
+  assert.equal(allResult.summary.unreadText, '暂无未读')
 })
 
 test('normalizes unread count for mine entry badge', () => {

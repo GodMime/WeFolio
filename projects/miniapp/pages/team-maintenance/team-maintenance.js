@@ -4,14 +4,19 @@ const { uploadTeamAvatar } = require('../../utils/team-avatar')
 const {
   DEFAULT_MEMBER_INVITE_FORM,
   buildMemberCandidateQuery,
+  buildMemberChangePayload,
   buildMemberInvitePayload,
   buildTeamFieldCounters,
   buildTeamPayload,
   normalizeTeamMemberCandidate,
   normalizeTeamDetail,
+  validateMemberChangeForm,
   validateMemberInviteForm,
   validateTeamForm
 } = require('../../utils/teams')
+
+const TRANSFER_OWNER_REQUEST = { url: '/api/mine/teams/transfer-owner' }
+const REMOVE_MEMBER_REQUEST = { url: '/api/mine/teams/remove-member' }
 
 // 维护页表单的空值结构，与创建页保持一致。
 function emptyForm() {
@@ -41,6 +46,30 @@ function emptyMemberInviteForm() {
   return Object.assign({}, DEFAULT_MEMBER_INVITE_FORM)
 }
 
+function emptyMemberChangeForm() {
+  return {
+    teamId: null,
+    memberId: null,
+    role: 'MEMBER',
+    profession: '',
+    allowPortfolio: false,
+    allowProfile: false,
+    allowWorks: false
+  }
+}
+
+function changeFormFromMember(teamId, member) {
+  return {
+    teamId,
+    memberId: member.memberId,
+    role: member.role === 'MANAGER' ? 'MANAGER' : 'MEMBER',
+    profession: member.profession || '',
+    allowPortfolio: Boolean(member.allowPortfolio),
+    allowProfile: Boolean(member.allowProfile),
+    allowWorks: Boolean(member.allowWorks)
+  }
+}
+
 Page({
   data: {
     teamId: null,
@@ -58,6 +87,7 @@ Page({
       { key: 'JOINED', label: '已加入' }
     ],
     visibleMembers: [],
+    openedMemberActionId: null,
     memberAddVisible: false,
     memberSearching: false,
     memberAddErrorMessage: '',
@@ -65,6 +95,9 @@ Page({
     candidate: null,
     candidateVisible: false,
     memberInviteForm: emptyMemberInviteForm(),
+    selectedMember: null,
+    memberChangeVisible: false,
+    memberChangeForm: emptyMemberChangeForm(),
     memberRoleOptions: [
       { key: 'MANAGER', label: '管理者', desc: '作品集管理、预览、分享' },
       { key: 'MEMBER', label: '普通成员', desc: '仅预览、分享' }
@@ -317,6 +350,236 @@ Page({
   },
 
   noop() {},
+
+  getMemberById(memberId) {
+    return this.data.detail.members.find((member) => Number(member.memberId) === Number(memberId)) || null
+  },
+
+  handleMemberRowTap(event) {
+    if (this.justOpenedMemberAction) {
+      this.justOpenedMemberAction = false
+      return
+    }
+    if (this.data.openedMemberActionId) {
+      this.setData({
+        openedMemberActionId: null
+      })
+      return
+    }
+    if (!this.data.detail.team.canManageMembers) {
+      return
+    }
+    const member = this.getMemberById(event.currentTarget.dataset.memberId)
+    if (!member || member.role === 'OWNER' || member.joinStatus !== 'JOINED') {
+      return
+    }
+    if (member.pendingChange) {
+      wx.showToast({
+        title: member.pendingChangeText || '信息变更待同意',
+        icon: 'none'
+      })
+      return
+    }
+    this.setData({
+      selectedMember: member,
+      memberChangeVisible: true,
+      memberChangeForm: changeFormFromMember(this.data.teamId, member)
+    })
+  },
+
+  handleMemberTouchStart(event) {
+    this.memberTouchStartX = event.touches && event.touches[0] ? event.touches[0].clientX : 0
+    this.memberTouchMemberId = event.currentTarget.dataset.memberId
+  },
+
+  handleMemberTouchEnd(event) {
+    const endX = event.changedTouches && event.changedTouches[0] ? event.changedTouches[0].clientX : this.memberTouchStartX
+    const deltaX = endX - this.memberTouchStartX
+    const member = this.getMemberById(this.memberTouchMemberId)
+    if (!member || !this.data.detail.team.canManageMembers || member.role === 'OWNER' || member.joinStatus !== 'JOINED') {
+      return
+    }
+    if (deltaX < -36) {
+      this.justOpenedMemberAction = true
+      this.setData({
+        openedMemberActionId: member.memberId
+      })
+    } else if (deltaX > 36) {
+      this.setData({
+        openedMemberActionId: null
+      })
+    }
+  },
+
+  handleMemberChangeCancel() {
+    this.setData({
+      selectedMember: null,
+      memberChangeVisible: false,
+      memberChangeForm: emptyMemberChangeForm(),
+      saving: false
+    })
+  },
+
+  handleMemberChangeRoleTap(event) {
+    const role = event.currentTarget.dataset.role || 'MEMBER'
+    this.setData({
+      'memberChangeForm.role': role
+    })
+  },
+
+  handleMemberChangeProfessionInput(event) {
+    this.setData({
+      'memberChangeForm.profession': event.detail.value || ''
+    })
+  },
+
+  handleMemberChangePermissionTap(event) {
+    const field = event.currentTarget.dataset.field
+    if (!field) {
+      return
+    }
+    this.setData({
+      [`memberChangeForm.${field}`]: !this.data.memberChangeForm[field]
+    })
+  },
+
+  async handleSaveMemberChange() {
+    if (this.data.saving || !this.data.selectedMember) {
+      return
+    }
+    const validation = validateMemberChangeForm(this.data.memberChangeForm, this.data.selectedMember)
+    if (!validation.valid) {
+      wx.showToast({
+        title: validation.message,
+        icon: 'none'
+      })
+      return
+    }
+    this.setData({
+      saving: true
+    })
+    try {
+      await request({
+        url: '/api/mine/team-member-change-requests',
+        method: 'POST',
+        data: buildMemberChangePayload(this.data.memberChangeForm)
+      })
+      wx.showToast({
+        title: '已发送确认',
+        icon: 'success'
+      })
+      this.setData({
+        selectedMember: null,
+        memberChangeVisible: false,
+        memberChangeForm: emptyMemberChangeForm(),
+        openedMemberActionId: null,
+        saving: false
+      })
+      await this.loadDetail()
+    } catch (error) {
+      if (error && error.authRequired) {
+        this.setData({
+          saving: false
+        })
+        handleAuthRequired(error.message)
+        return
+      }
+      this.setData({
+        saving: false
+      })
+      wx.showToast({
+        title: error && error.message ? error.message : '发送失败',
+        icon: 'none'
+      })
+    }
+  },
+
+  handleTransferOwner(event) {
+    const member = this.getMemberById(event.currentTarget.dataset.memberId)
+    if (!member || this.data.saving) {
+      return
+    }
+    wx.showModal({
+      title: '转让团队',
+      content: `确认将团队转让给${member.displayName}？转让后你将变为管理员。`,
+      confirmText: '确认转让',
+      success: (result) => {
+        if (!result.confirm) {
+          return
+        }
+        this.handleConfirmedMemberAction(TRANSFER_OWNER_REQUEST.url, member.memberId, '已转让')
+      }
+    })
+  },
+
+  handleRemoveMember(event) {
+    const member = this.getMemberById(event.currentTarget.dataset.memberId)
+    if (!member || this.data.saving) {
+      return
+    }
+    wx.showModal({
+      title: '移除成员',
+      content: `确认将${member.displayName}移出团队？`,
+      confirmText: '确认移除',
+      success: (result) => {
+        if (!result.confirm) {
+          return
+        }
+        this.handleConfirmedMemberAction(REMOVE_MEMBER_REQUEST.url, member.memberId, '已移除')
+      }
+    })
+  },
+
+  handleConfirmedMemberAction(url, memberId, successTitle) {
+    this.submitMemberAction(url, memberId, successTitle).catch((error) => {
+      this.setData({
+        saving: false
+      })
+      wx.showToast({
+        title: error && error.message ? error.message : '处理失败',
+        icon: 'none'
+      })
+    })
+  },
+
+  async submitMemberAction(url, memberId, successTitle) {
+    this.setData({
+      saving: true
+    })
+    try {
+      await request({
+        url,
+        method: 'POST',
+        data: {
+          teamId: this.data.teamId,
+          memberId
+        }
+      })
+      wx.showToast({
+        title: successTitle,
+        icon: 'success'
+      })
+      this.setData({
+        saving: false
+      })
+      await this.loadDetail()
+    } catch (error) {
+      if (error && error.authRequired) {
+        this.setData({
+          saving: false
+        })
+        handleAuthRequired(error.message)
+        return
+      }
+      this.setData({
+        saving: false
+      })
+      wx.showToast({
+        title: error && error.message ? error.message : '操作失败',
+        icon: 'none'
+      })
+    }
+  },
 
   handleMemberUniqueCodeInput(event) {
     const uniqueCode = event.detail.value || ''

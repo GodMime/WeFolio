@@ -11,6 +11,7 @@ public enum MessageActionTypeDict {
 
     NONE("NONE", "无动作"),
     TEAM_INVITATION("TEAM_INVITATION", "团队邀请处理"),
+    TEAM_MEMBER_CHANGE("TEAM_MEMBER_CHANGE", "团队成员信息变更处理"),
     POINT_RECHARGE("POINT_RECHARGE", "积分充值"),
     PAGE_NAVIGATION("PAGE_NAVIGATION", "页面跳转");
 

@@ -3,13 +3,17 @@ const test = require('node:test')
 
 const {
   buildMemberCandidateQuery,
+  buildMemberChangePayload,
   buildMemberInvitePayload,
   buildTeamFieldCounters,
   buildTeamPayload,
+  normalizeTeamMemberChangeDetail,
   normalizeTeamInvitation,
   normalizeTeamMemberCandidate,
   normalizeTeamDetail,
   normalizeTeamList,
+  validateMemberChangeForm,
+  validateMemberInviteForm,
   validateTeamForm
 } = require('../utils/teams')
 
@@ -85,7 +89,10 @@ test('normalizes team detail response for maintenance page', () => {
         statusTone: 'teal',
         allowPortfolio: true,
         allowProfile: true,
-        allowWorks: false
+        allowWorks: false,
+        pendingChange: true,
+        pendingChangeId: 41,
+        pendingChangeText: '信息变更待同意'
       },
       {
         memberId: 22,
@@ -111,11 +118,101 @@ test('normalizes team detail response for maintenance page', () => {
   assert.equal(detail.members[0].allowPortfolio, true)
   assert.equal(detail.members[0].allowProfile, true)
   assert.equal(detail.members[0].allowWorks, false)
+  assert.equal(detail.members[0].pendingChange, true)
+  assert.equal(detail.members[0].pendingChangeId, 41)
+  assert.equal(detail.members[0].pendingChangeText, '信息变更待同意')
   assert.equal(detail.members[1].summaryText, '成员 · MU1186 · 管理者')
   assert.equal(detail.members[1].statusTone, 'amber')
   assert.equal(detail.members[1].userStatusVisible, true)
   assert.equal(detail.members[1].userStatusText, '已停用')
   assert.equal(detail.members[1].userStatusTone, 'muted')
+})
+
+test('validates and builds member change payload with body parameters', () => {
+  const member = {
+    memberId: 31,
+    role: 'MEMBER',
+    profession: '摄影师',
+    allowPortfolio: true,
+    allowProfile: false,
+    allowWorks: true
+  }
+  const form = {
+    teamId: 100,
+    memberId: 31,
+    role: 'MANAGER',
+    profession: ' 导演 ',
+    allowPortfolio: false,
+    allowProfile: true,
+    allowWorks: true
+  }
+
+  assert.deepEqual(validateMemberChangeForm(form, member), {
+    valid: true,
+    message: ''
+  })
+  assert.deepEqual(buildMemberChangePayload(form), {
+    teamId: 100,
+    memberId: 31,
+    role: 'MANAGER',
+    profession: '导演',
+    allowPortfolio: false,
+    allowProfile: true,
+    allowWorks: true
+  })
+  assert.deepEqual(validateMemberChangeForm(Object.assign({}, form, { role: 'OWNER' }), member), {
+    valid: false,
+    message: '请选择团队角色'
+  })
+  assert.deepEqual(validateMemberChangeForm(Object.assign({}, form, { profession: '团'.repeat(51) }), member), {
+    valid: false,
+    message: '团队身份不能超过 50 个字'
+  })
+  assert.deepEqual(validateMemberChangeForm(Object.assign({}, form, {
+    role: 'MEMBER',
+    profession: '摄影师',
+    allowPortfolio: true,
+    allowProfile: false,
+    allowWorks: true
+  }), member), {
+    valid: false,
+    message: '成员信息没有变化'
+  })
+})
+
+test('normalizes member change detail for read-only accept reject page', () => {
+  const detail = normalizeTeamMemberChangeDetail({
+    changeRequestId: 41,
+    teamId: 100,
+    teamName: '星曜司仪团',
+    teamAvatarUrl: 'https://cos.example.com/tm.png',
+    requesterName: '林安 · 主持人',
+    targetName: '乔伊 · 摄影师',
+    status: 'PENDING_CONFIRMATION',
+    statusText: '待同意',
+    canRespond: true,
+    roleBeforeText: '普通成员',
+    roleAfterText: '管理者',
+    professionBefore: '摄影师',
+    professionAfter: '导演',
+    permissionBeforeText: '作品集、作品素材',
+    permissionAfterText: '主页资料、作品素材',
+    requestedAtText: '06-28 16:00'
+  })
+
+  assert.equal(detail.changeRequestId, 41)
+  assert.equal(detail.titleText, '星曜司仪团')
+  assert.equal(detail.summaryText, '林安 · 主持人发起成员信息变更')
+  assert.equal(detail.statusTone, 'amber')
+  assert.equal(detail.canRespond, true)
+  assert.deepEqual(detail.changeRows, [
+    { label: '团队角色', before: '普通成员', after: '管理者' },
+    { label: '团队身份', before: '摄影师', after: '导演' },
+    { label: '引用权限', before: '作品集、作品素材', after: '主页资料、作品素材' }
+  ])
+  assert.equal(normalizeTeamMemberChangeDetail({ status: 'ACCEPTED' }).statusText, '已同意')
+  assert.equal(normalizeTeamMemberChangeDetail({ status: 'REJECTED' }).statusText, '已拒绝')
+  assert.equal(normalizeTeamMemberChangeDetail({ status: 'INVALIDATED' }).statusText, '已失效')
 })
 
 test('team detail exposes ten-character display code for maintenance header', () => {
@@ -190,6 +287,15 @@ test('normalizes member candidate and builds candidate query', () => {
 })
 
 test('builds member invite payload with prototype default permissions', () => {
+  assert.deepEqual(validateMemberInviteForm({
+    uniqueCode: 'WF1186',
+    role: 'MEMBER',
+    profession: '团'.repeat(51)
+  }, { canInvite: true }), {
+    valid: false,
+    message: '团队身份不能超过 50 个字'
+  })
+
   const payload = buildMemberInvitePayload({
     uniqueCode: ' WF1186 ',
     role: 'MEMBER',

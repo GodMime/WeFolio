@@ -28,8 +28,12 @@ import com.jxc.wefolio.entity.UserEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.SystemMessageEntityMapper;
 import com.jxc.wefolio.mapper.TeamEntityMapper;
+import com.jxc.wefolio.mapper.TeamMemberChangeRequestEntityMapper;
 import com.jxc.wefolio.mapper.TeamMemberEntityMapper;
 import com.jxc.wefolio.mapper.UserEntityMapper;
+import com.jxc.wefolio.mapper.PortfolioEntityMapper;
+import com.jxc.wefolio.mapper.PortfolioReferenceEntityMapper;
+import com.jxc.wefolio.mapper.WorkEntityMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -82,6 +86,26 @@ class MineTeamServiceTest {
     /** 系统消息 Mapper 模拟 */
     @Mock
     private SystemMessageEntityMapper systemMessageEntityMapper;
+
+    /** 成员信息变更请求 Mapper 模拟 */
+    @Mock
+    private TeamMemberChangeRequestEntityMapper teamMemberChangeRequestEntityMapper;
+
+    /** 成员信息变更事务辅助服务模拟 */
+    @Mock
+    private TeamMemberChangeRequestTransactionService teamMemberChangeRequestTransactionService;
+
+    /** 作品集 Mapper 模拟 */
+    @Mock
+    private PortfolioEntityMapper portfolioEntityMapper;
+
+    /** 作品集引用 Mapper 模拟 */
+    @Mock
+    private PortfolioReferenceEntityMapper portfolioReferenceEntityMapper;
+
+    /** 作品 Mapper 模拟 */
+    @Mock
+    private WorkEntityMapper workEntityMapper;
 
     /** COS 服务模拟 */
     @Mock
@@ -507,6 +531,31 @@ class MineTeamServiceTest {
     }
 
     /**
+     * 邀请成员时团队身份超长应返回团队身份文案。
+     */
+    @Test
+    void inviteMemberRejectsTooLongTeamIdentityWithTeamIdentityMessage() {
+        TeamEntity team = team(100L, "TM2048", "星曜司仪团", "");
+        TeamMemberEntity owner = member(21L, 100L, 7L, TeamRoleDict.OWNER, JoinStatusDict.JOINED);
+        UserEntity invitee = user(8L, "WF1186", "乔伊", "化妆师", "https://cos.example.com/u8.png");
+        MineTeamMemberInviteRequest request = new MineTeamMemberInviteRequest();
+        request.setUniqueCode("WF1186");
+        request.setRole(TeamRoleDict.MEMBER.getCode());
+        request.setProfession("团".repeat(51));
+        when(teamEntityMapper.selectById(100L)).thenReturn(team);
+        when(teamMemberEntityMapper.selectOne(any())).thenReturn(owner);
+        when(userEntityMapper.selectOne(any())).thenReturn(invitee);
+
+        MineTeamService service = service();
+
+        assertThatThrownBy(() -> service.inviteMember(100L, request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("团队身份不能超过 50 个字");
+        verify(teamMemberEntityMapper, never()).insert(any(TeamMemberEntity.class));
+        verify(systemMessageEntityMapper, never()).insert(any(SystemMessageEntity.class));
+    }
+
+    /**
      * 成员关系 ID 未回填时不创建无法打开的邀请消息。
      */
     @Test
@@ -774,7 +823,7 @@ class MineTeamServiceTest {
      * @param id 用户 ID
      * @param uniqueCode 个人唯一码
      * @param nickname 昵称
-     * @param profession 职业身份
+     * @param profession 个人职业信息
      * @param avatarUrl 头像地址
      * @return 用户实体
      */
@@ -800,6 +849,11 @@ class MineTeamServiceTest {
                 teamMemberEntityMapper,
                 userEntityMapper,
                 systemMessageEntityMapper,
+                teamMemberChangeRequestEntityMapper,
+                teamMemberChangeRequestTransactionService,
+                portfolioEntityMapper,
+                portfolioReferenceEntityMapper,
+                workEntityMapper,
                 cosService,
                 teamRegistrationService,
                 pointService,

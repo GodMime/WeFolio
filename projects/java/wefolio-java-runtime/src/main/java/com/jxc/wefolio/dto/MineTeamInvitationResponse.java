@@ -35,7 +35,7 @@ public class MineTeamInvitationResponse {
     /** 团队角色文案 */
     private String roleText;
 
-    /** 团队内展示职业身份 */
+    /** 团队身份 */
     private String profession;
 
     /** 是否允许团队引用个人作品集 */

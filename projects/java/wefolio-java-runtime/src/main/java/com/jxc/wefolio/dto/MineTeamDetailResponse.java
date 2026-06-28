@@ -103,7 +103,7 @@ public class MineTeamDetailResponse {
         /** 成员账号状态色调，供小程序展示停用标签，如 muted */
         private String userStatusTone;
 
-        /** 团队内职业 */
+        /** 团队身份 */
         private String profession;
 
         /** 团队角色 */
@@ -129,5 +129,14 @@ public class MineTeamDetailResponse {
 
         /** 是否允许团队引用个人作品素材 */
         private boolean allowWorks;
+
+        /** 是否有待成员本人同意的信息变更 */
+        private boolean pendingChange;
+
+        /** 待确认信息变更 ID */
+        private Long pendingChangeId;
+
+        /** 待确认信息变更提示文案 */
+        private String pendingChangeText;
     }
 }

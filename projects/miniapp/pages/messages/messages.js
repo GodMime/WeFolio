@@ -2,6 +2,8 @@ const { request } = require('../../utils/request')
 const { handleAuthRequired, hasLocalToken } = require('../../utils/session')
 const {
   appendMessageList,
+  applyMessagesRead,
+  applyMessagesReadAll,
   buildMarkReadPayload,
   buildMessageQuery,
   buildReadAllPayload,
@@ -217,7 +219,7 @@ Page({
       saving: true
     })
     try {
-      await request({
+      const unreadCountResponse = await request({
         url: MESSAGE_MARK_READ_URL,
         method: 'PUT',
         data: buildMarkReadPayload(messageIds)
@@ -227,15 +229,11 @@ Page({
         icon: 'success'
       })
       // 本地更新已读状态，保留滚动位置和分页游标
-      const idSet = new Set(messageIds)
       this.setData({
         saving: false,
         selectedIds: [],
-        'messageData.messages': this.data.messageData.messages.map((item) => {
-          if (idSet.has(item.id)) {
-            return Object.assign({}, item, { unread: false, selected: false })
-          }
-          return item
+        messageData: applyMessagesRead(this.data.messageData, messageIds, unreadCountResponse, {
+          filter: this.data.activeFilter
         })
       })
     } catch (error) {
@@ -261,7 +259,7 @@ Page({
       saving: true
     })
     try {
-      await request({
+      const unreadCountResponse = await request({
         url: MESSAGE_MARK_ALL_READ_URL,
         method: 'PUT',
         data: buildReadAllPayload(this.data.activeFilter)
@@ -274,7 +272,9 @@ Page({
       this.setData({
         saving: false,
         selectedIds: [],
-        'messageData.messages': this.data.messageData.messages.map((item) => Object.assign({}, item, { unread: false, selected: false }))
+        messageData: applyMessagesReadAll(this.data.messageData, unreadCountResponse, {
+          filter: this.data.activeFilter
+        })
       })
     } catch (error) {
       if (error && error.authRequired) {

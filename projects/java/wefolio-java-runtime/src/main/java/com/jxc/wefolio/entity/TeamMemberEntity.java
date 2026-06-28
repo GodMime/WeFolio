@@ -24,7 +24,7 @@ public class TeamMemberEntity extends BaseEntity {
     /** 角色：OWNER 拥有者 / MANAGER 管理者 / MEMBER 普通成员 */
     private String role;
 
-    /** 在该团队展示的职业身份 */
+    /** 在该团队展示的团队身份 */
     private String profession;
 
     /** 加入状态：PENDING_CONFIRMATION 待确认 / JOINED 已加入 / REJECTED 已拒绝 / REMOVED 已移除 */

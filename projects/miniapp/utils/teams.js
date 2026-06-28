@@ -14,6 +14,13 @@ const ROLE_SUMMARY = {
   MEMBER: '仅预览、分享'
 }
 
+const MEMBER_CHANGE_STATUS_TEXT = {
+  PENDING_CONFIRMATION: '待同意',
+  ACCEPTED: '已同意',
+  REJECTED: '已拒绝',
+  INVALIDATED: '已失效'
+}
+
 const DEFAULT_MEMBER_INVITE_FORM = {
   uniqueCode: '',
   role: 'MEMBER',
@@ -39,6 +46,19 @@ function toBoolean(value, fallback = false) {
     return fallback
   }
   return Boolean(value)
+}
+
+function statusTone(status, fallback = 'muted') {
+  if (status === 'PENDING_CONFIRMATION') {
+    return 'amber'
+  }
+  if (status === 'ACCEPTED' || status === 'JOINED') {
+    return 'teal'
+  }
+  if (status === 'REJECTED' || status === 'INVALIDATED' || status === 'REMOVED') {
+    return 'muted'
+  }
+  return fallback
 }
 
 // 角色文案优先使用后端给出的 display 文案，缺失时再由小程序兜底。
@@ -178,6 +198,9 @@ function normalizeMember(raw = {}) {
     allowPortfolio: toBoolean(raw.allowPortfolio),
     allowProfile: toBoolean(raw.allowProfile),
     allowWorks: toBoolean(raw.allowWorks),
+    pendingChange: Boolean(raw.pendingChange),
+    pendingChangeId: raw.pendingChangeId || null,
+    pendingChangeText: raw.pendingChangeText || (raw.pendingChange ? '信息变更待同意' : ''),
     // ACTIVE 是正常账号状态，不需要额外标签；DISABLED/资料缺失/未知状态才额外展示。
     userStatusVisible: Boolean(userStatus && userStatus !== 'ACTIVE'),
     summaryText: `${profession} · ${uniqueCode} · ${computedRoleText}`
@@ -277,7 +300,7 @@ function validateMemberInviteForm(form = {}, candidate = {}) {
     return { valid: false, message: '请选择团队角色' }
   }
   if (normalized.profession.length > MEMBER_PROFESSION_MAX_LENGTH) {
-    return { valid: false, message: `职业身份不能超过 ${MEMBER_PROFESSION_MAX_LENGTH} 个字` }
+    return { valid: false, message: `团队身份不能超过 ${MEMBER_PROFESSION_MAX_LENGTH} 个字` }
   }
   return { valid: true, message: '' }
 }
@@ -293,6 +316,81 @@ function buildMemberInvitePayload(form = {}) {
     allowProfile: toBoolean(normalized.allowProfile, true),
     allowWorks: toBoolean(normalized.allowWorks, false)
   }
+}
+
+function normalizeMemberChangeForm(form = {}) {
+  return {
+    teamId: toNumber(form.teamId),
+    memberId: toNumber(form.memberId),
+    role: form.role === 'MANAGER' ? 'MANAGER' : 'MEMBER',
+    profession: trimText(form.profession),
+    allowPortfolio: toBoolean(form.allowPortfolio),
+    allowProfile: toBoolean(form.allowProfile),
+    allowWorks: toBoolean(form.allowWorks)
+  }
+}
+
+function buildMemberChangePayload(form = {}) {
+  return normalizeMemberChangeForm(form)
+}
+
+function validateMemberChangeForm(form = {}, member = {}) {
+  const rawRole = form.role || ''
+  if (rawRole !== 'MANAGER' && rawRole !== 'MEMBER') {
+    return { valid: false, message: '请选择团队角色' }
+  }
+  const normalized = normalizeMemberChangeForm(form)
+  if (!normalized.teamId || !normalized.memberId) {
+    return { valid: false, message: '成员信息不完整' }
+  }
+  if (normalized.profession.length > MEMBER_PROFESSION_MAX_LENGTH) {
+    return { valid: false, message: `团队身份不能超过 ${MEMBER_PROFESSION_MAX_LENGTH} 个字` }
+  }
+  const unchanged = normalized.role === (member.role || 'MEMBER')
+    && normalized.profession === trimText(member.profession)
+    && normalized.allowPortfolio === toBoolean(member.allowPortfolio)
+    && normalized.allowProfile === toBoolean(member.allowProfile)
+    && normalized.allowWorks === toBoolean(member.allowWorks)
+  if (unchanged) {
+    return { valid: false, message: '成员信息没有变化' }
+  }
+  return { valid: true, message: '' }
+}
+
+function normalizeTeamMemberChangeDetail(raw = {}) {
+  const status = raw.status || 'PENDING_CONFIRMATION'
+  const roleBeforeText = raw.roleBeforeText || roleText(raw.roleBefore)
+  const roleAfterText = raw.roleAfterText || roleText(raw.roleAfter)
+  const permissionBeforeText = raw.permissionBeforeText || '未开放'
+  const permissionAfterText = raw.permissionAfterText || '未开放'
+  const detail = {
+    changeRequestId: raw.changeRequestId || raw.id || null,
+    teamId: raw.teamId || null,
+    teamName: raw.teamName || '团队信息变更',
+    teamAvatarUrl: raw.teamAvatarUrl || '',
+    requesterName: raw.requesterName || '团队拥有者',
+    targetName: raw.targetName || '成员',
+    status,
+    statusText: raw.statusText || MEMBER_CHANGE_STATUS_TEXT[status] || status,
+    statusTone: raw.statusTone || statusTone(status, 'amber'),
+    canRespond: Boolean(raw.canRespond),
+    roleBeforeText,
+    roleAfterText,
+    professionBefore: raw.professionBefore || '未填写',
+    professionAfter: raw.professionAfter || '未填写',
+    permissionBeforeText,
+    permissionAfterText,
+    requestedAtText: raw.requestedAtText || '',
+    respondedAtText: raw.respondedAtText || ''
+  }
+  detail.titleText = detail.teamName
+  detail.summaryText = `${detail.requesterName}发起成员信息变更`
+  detail.changeRows = [
+    { label: '团队角色', before: detail.roleBeforeText, after: detail.roleAfterText },
+    { label: '团队身份', before: detail.professionBefore, after: detail.professionAfter },
+    { label: '引用权限', before: detail.permissionBeforeText, after: detail.permissionAfterText }
+  ]
+  return detail
 }
 
 function permissionText(invitation = {}) {
@@ -345,15 +443,18 @@ function normalizeTeamInvitation(raw = {}) {
 module.exports = {
   DEFAULT_MEMBER_INVITE_FORM,
   buildMemberCandidateQuery,
+  buildMemberChangePayload,
   buildMemberInvitePayload,
   TEAM_INTRO_MAX_LENGTH,
   TEAM_NAME_MAX_LENGTH,
   buildTeamFieldCounters,
   buildTeamPayload,
+  normalizeTeamMemberChangeDetail,
   normalizeTeamInvitation,
   normalizeTeamMemberCandidate,
   normalizeTeamDetail,
   normalizeTeamList,
+  validateMemberChangeForm,
   validateMemberInviteForm,
   validateTeamForm
 }
