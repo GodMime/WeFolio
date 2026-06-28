@@ -255,7 +255,6 @@ test('wechat authorization tab only shows the design CTA', () => {
   assert.doesNotMatch(loginWxml, /使用微信身份快速进入已有账号/)
 })
 
-test('mine page uses configured background image', () => {
-  assert.ok(indexWxss.includes(`url("${BACKGROUND_IMAGE_URL}")`))
-  assert.match(indexWxss, /background-size:\s*cover/)
+test('mine page does not use login background image', () => {
+  assert.ok(!indexWxss.includes(BACKGROUND_IMAGE_URL))
 })

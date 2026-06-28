@@ -4,12 +4,6 @@
   flex-direction: column;
   overflow: hidden;
   background-color: #f5f7fb;
-  background-image:
-    linear-gradient(180deg, rgba(245, 247, 251, 0.76) 0%, rgba(245, 247, 251, 0.94) 58%, #f5f7fb 100%),
-    url("https://cos.we-folio.dingchenyong.top/system/backgroud.jpeg");
-  background-position: center top;
-  background-repeat: no-repeat;
-  background-size: cover;
 }
 
 .mine-scroll {
