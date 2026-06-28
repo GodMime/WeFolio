@@ -168,6 +168,9 @@ public class MineTeamService {
     /** 消息正文列 */
     private static final String COLUMN_CONTENT = "content";
 
+    /** 消息动作类型列 */
+    private static final String COLUMN_ACTION_TYPE = "action_type";
+
     /** 消息动作地址列 */
     private static final String COLUMN_ACTION_URL = "action_url";
 
@@ -430,6 +433,7 @@ public class MineTeamService {
         Long userId = AuthContextHolder.requireUserId();
         TeamMemberEntity invitation = requireInvitationForCurrentUser(memberId, userId);
         TeamEntity team = requireActiveTeam(invitation.getTeamId());
+        markInvitationMessageRead(memberId, userId);
         return buildInvitationResponse(invitation, team);
     }
 
@@ -439,6 +443,7 @@ public class MineTeamService {
      * @param memberId 团队成员关系 ID
      * @return 团队邀请响应
      */
+    @Transactional(rollbackFor = Exception.class)
     public MineTeamInvitationResponse acceptInvitation(Long memberId) {
         Long userId = AuthContextHolder.requireUserId();
         TeamMemberEntity invitation = requirePendingInvitationForCurrentUser(memberId, userId);
@@ -460,6 +465,7 @@ public class MineTeamService {
         invitation.setRespondedAt(now);
         invitation.setJoinedAt(now);
         invitation.setUpdatedAt(now);
+        clearInvitationMessageAction(memberId, userId);
         return buildInvitationResponse(invitation, team);
     }
 
@@ -469,6 +475,7 @@ public class MineTeamService {
      * @param memberId 团队成员关系 ID
      * @return 团队邀请响应
      */
+    @Transactional(rollbackFor = Exception.class)
     public MineTeamInvitationResponse rejectInvitation(Long memberId) {
         Long userId = AuthContextHolder.requireUserId();
         TeamMemberEntity invitation = requirePendingInvitationForCurrentUser(memberId, userId);
@@ -488,6 +495,7 @@ public class MineTeamService {
         invitation.setJoinStatus(JoinStatusDict.REJECTED.getCode());
         invitation.setRespondedAt(now);
         invitation.setUpdatedAt(now);
+        clearInvitationMessageAction(memberId, userId);
         return buildInvitationResponse(invitation, team);
     }
 
@@ -927,6 +935,7 @@ public class MineTeamService {
                     .set(COLUMN_READ_AT, null)
                     .set(COLUMN_TITLE, INVITATION_MESSAGE_TITLE)
                     .set(COLUMN_CONTENT, message.getContent())
+                    .set(COLUMN_ACTION_TYPE, MessageActionTypeDict.TEAM_INVITATION.getCode())
                     .set(COLUMN_ACTION_URL, actionUrl)
                     .set(COLUMN_BIZ_ID, membership.getId())
                     .set(COLUMN_UPDATED_AT, now);
@@ -948,6 +957,41 @@ public class MineTeamService {
                 ? INVITER_FALLBACK_NAME
                 : buildDisplayName(defaultString(inviter.getNickname(), INVITER_FALLBACK_NAME), inviter.getProfession());
         return inviterName + INVITATION_CONTENT_MIDDLE + defaultString(team.getName(), "未命名团队") + INVITATION_CONTENT_SUFFIX;
+    }
+
+    /**
+     * 将团队邀请详情对应的站内消息标记为已读。
+     *
+     * @param memberId 成员关系 ID
+     * @param userId 当前用户 ID
+     */
+    private void markInvitationMessageRead(Long memberId, Long userId) {
+        LocalDateTime now = LocalDateTime.now();
+        UpdateWrapper<SystemMessageEntity> updateWrapper = new UpdateWrapper<>();
+        updateWrapper.eq(COLUMN_USER_ID, userId)
+                .eq(COLUMN_IDEMPOTENCY_KEY, INVITATION_IDEMPOTENCY_PREFIX + memberId)
+                .eq(COLUMN_READ_STATUS, MessageReadStatusDict.UNREAD.getCode())
+                .set(COLUMN_READ_STATUS, MessageReadStatusDict.READ.getCode())
+                .set(COLUMN_READ_AT, now)
+                .set(COLUMN_UPDATED_AT, now);
+        systemMessageEntityMapper.update(null, updateWrapper);
+    }
+
+    /**
+     * 邀请已响应后清理消息动作，避免消息列表继续展示“去处理”。
+     *
+     * @param memberId 成员关系 ID
+     * @param userId 当前用户 ID
+     */
+    private void clearInvitationMessageAction(Long memberId, Long userId) {
+        LocalDateTime now = LocalDateTime.now();
+        UpdateWrapper<SystemMessageEntity> updateWrapper = new UpdateWrapper<>();
+        updateWrapper.eq(COLUMN_USER_ID, userId)
+                .eq(COLUMN_IDEMPOTENCY_KEY, INVITATION_IDEMPOTENCY_PREFIX + memberId)
+                .set(COLUMN_ACTION_TYPE, MessageActionTypeDict.NONE.getCode())
+                .set(COLUMN_ACTION_URL, "")
+                .set(COLUMN_UPDATED_AT, now);
+        systemMessageEntityMapper.update(null, updateWrapper);
     }
 
     /**

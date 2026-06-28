@@ -39,6 +39,14 @@ Page({
     this.bootstrap()
   },
 
+  onShow() {
+    if (!this.shouldRefreshOnShow) {
+      return
+    }
+    this.shouldRefreshOnShow = false
+    this.loadMessages()
+  },
+
   bootstrap() {
     if (!hasLocalToken()) {
       this.redirectToLogin()
@@ -289,7 +297,10 @@ Page({
       return
     }
     wx.navigateTo({
-      url: actionUrl
+      url: actionUrl,
+      success: () => {
+        this.shouldRefreshOnShow = true
+      }
     })
   }
 })

@@ -600,6 +600,36 @@ class MineTeamServiceTest {
     }
 
     /**
+     * 打开团队邀请详情时自动将对应邀请消息标记为已读。
+     */
+    @Test
+    void getInvitationMarksRelatedInvitationMessageRead() {
+        TeamEntity team = team(100L, "TM2048", "星曜司仪团", "");
+        TeamMemberEntity pending = pendingMember(31L, 100L, 7L);
+        when(teamMemberEntityMapper.selectById(31L)).thenReturn(pending);
+        when(teamEntityMapper.selectById(100L)).thenReturn(team);
+        when(userEntityMapper.selectBatchIds(any(Collection.class))).thenReturn(List.of(
+                user(7L, "WF8392", "林安", "婚礼司仪", "https://cos.example.com/u7.png")
+        ));
+
+        MineTeamService service = service();
+
+        MineTeamInvitationResponse response = service.getInvitation(31L);
+
+        assertThat(response.getMemberId()).isEqualTo(31L);
+        ArgumentCaptor<Wrapper<SystemMessageEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
+        verify(systemMessageEntityMapper).update(isNull(), captor.capture());
+        UpdateWrapper<SystemMessageEntity> updateWrapper = (UpdateWrapper<SystemMessageEntity>) captor.getValue();
+        String sqlSet = updateWrapper.getSqlSet();
+        String sqlSegment = updateWrapper.getSqlSegment();
+        assertThat(sqlSet).contains("read_status", "read_at", "updated_at");
+        assertThat(sqlSegment).contains("user_id", "idempotency_key", "read_status");
+        assertThat(updateWrapper.getParamNameValuePairs().values())
+                .contains(7L, "team_invitation:31",
+                        MessageReadStatusDict.UNREAD.getCode(), MessageReadStatusDict.READ.getCode());
+    }
+
+    /**
      * 接受邀请时仅当前用户的待确认成员关系可变更为已加入。
      */
     @Test
@@ -625,6 +655,7 @@ class MineTeamServiceTest {
         verify(teamMemberEntityMapper).update(isNull(), captor.capture());
         assertThat(((UpdateWrapper<TeamMemberEntity>) captor.getValue()).getSqlSet())
                 .contains("join_status", "responded_at", "joined_at", "updated_at");
+        assertInvitationMessageActionCleared();
     }
 
     /**
@@ -651,6 +682,22 @@ class MineTeamServiceTest {
         verify(teamMemberEntityMapper).update(isNull(), captor.capture());
         assertThat(((UpdateWrapper<TeamMemberEntity>) captor.getValue()).getSqlSet())
                 .contains("join_status", "responded_at", "updated_at");
+        assertInvitationMessageActionCleared();
+    }
+
+    /**
+     * 断言团队邀请消息动作已被清理。
+     */
+    private void assertInvitationMessageActionCleared() {
+        ArgumentCaptor<Wrapper<SystemMessageEntity>> messageCaptor = ArgumentCaptor.forClass(Wrapper.class);
+        verify(systemMessageEntityMapper).update(isNull(), messageCaptor.capture());
+        UpdateWrapper<SystemMessageEntity> updateWrapper = (UpdateWrapper<SystemMessageEntity>) messageCaptor.getValue();
+        String sqlSet = updateWrapper.getSqlSet();
+        String sqlSegment = updateWrapper.getSqlSegment();
+        assertThat(sqlSet).contains("action_type", "action_url", "updated_at");
+        assertThat(sqlSegment).contains("user_id", "idempotency_key");
+        assertThat(updateWrapper.getParamNameValuePairs().values())
+                .contains(7L, "team_invitation:31", MessageActionTypeDict.NONE.getCode(), "");
     }
 
     /**

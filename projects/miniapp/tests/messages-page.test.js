@@ -145,3 +145,65 @@ test('ignores stale load-more response after switching message filter', async ()
   assert.equal(page.data.loading, false)
   assert.equal(page.data.loadingMore, false)
 })
+
+test('refreshes message list after returning from action page', async () => {
+  const requests = []
+  const fakeRequest = (options) => {
+    const pending = deferred()
+    requests.push(Object.assign({ pending }, options))
+    return pending.promise
+  }
+  const page = loadMessagesPage(fakeRequest)
+  page.data.loading = false
+  page.data.activeFilter = 'team'
+  page.data.messageData = normalizeMessageList({
+    hasMore: false,
+    nextCursor: null,
+    summary: { unreadCount: 1 },
+    messages: [
+      {
+        messageId: 31,
+        title: '团队邀请',
+        category: 'TEAM',
+        readStatus: 'UNREAD',
+        actionUrl: '/pages/team-invitations/team-invitations?memberId=31'
+      }
+    ]
+  })
+  let navigatedUrl = ''
+  global.wx.navigateTo = ({ url, success }) => {
+    navigatedUrl = url
+    success()
+  }
+
+  page.handleActionTap({
+    currentTarget: {
+      dataset: {
+        actionUrl: '/pages/team-invitations/team-invitations?memberId=31'
+      }
+    }
+  })
+  page.onShow()
+
+  assert.equal(navigatedUrl, '/pages/team-invitations/team-invitations?memberId=31')
+  assert.deepEqual(requests[0].data, { category: 'TEAM', size: 20 })
+
+  requests[0].pending.resolve({
+    hasMore: false,
+    nextCursor: null,
+    summary: { unreadCount: 0 },
+    messages: [
+      {
+        messageId: 31,
+        title: '团队邀请',
+        category: 'TEAM',
+        readStatus: 'READ',
+        actionUrl: '/pages/team-invitations/team-invitations?memberId=31'
+      }
+    ]
+  })
+  await flushPromises()
+
+  assert.equal(page.data.messageData.summary.unreadCount, 0)
+  assert.equal(page.data.messageData.messages[0].unread, false)
+})
