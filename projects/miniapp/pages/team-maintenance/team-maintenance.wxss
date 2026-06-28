@@ -427,6 +427,233 @@
   min-height: 480rpx;
 }
 
+.member-add-sheet-overlay {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 30;
+  display: flex;
+  align-items: flex-end;
+  padding: 28rpx;
+  opacity: 0;
+  pointer-events: none;
+  background: rgba(23, 32, 42, 0.36);
+  transition: opacity 180ms ease;
+  box-sizing: border-box;
+}
+
+.member-add-sheet-overlay.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.member-add-sheet {
+  width: 100%;
+  max-height: calc(90vh - env(safe-area-inset-bottom));
+  padding: 24rpx;
+  overflow-y: auto;
+  border-radius: 24rpx 24rpx 18rpx 18rpx;
+  background: #ffffff;
+  box-sizing: border-box;
+  transform: translateY(32rpx);
+  transition: transform 180ms ease;
+}
+
+.member-add-sheet-overlay.visible .member-add-sheet {
+  transform: translateY(0);
+}
+
+.sheet-grabber {
+  width: 72rpx;
+  height: 8rpx;
+  margin: 0 auto 22rpx;
+  border-radius: 999rpx;
+  background: #d8e0e8;
+}
+
+.member-sheet-heading {
+  align-items: flex-start;
+}
+
+.sheet-meta,
+.candidate-summary,
+.confirm-desc,
+.error-banner {
+  color: #667085;
+  font-size: 24rpx;
+  line-height: 1.5;
+}
+
+.sheet-meta {
+  margin-top: 6rpx;
+}
+
+.member-sheet-section {
+  padding: 22rpx 0;
+  border-bottom: 1rpx solid #edf1f5;
+}
+
+.member-sheet-section > .form-row:first-child {
+  margin-top: 0;
+}
+
+.member-add-sheet .form-row + .form-row {
+  margin-top: 24rpx;
+}
+
+.lookup-row,
+.candidate-card,
+.permission-row,
+.member-confirm-row,
+.button-row {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+}
+
+.lookup-row {
+  align-items: flex-end;
+  gap: 16rpx;
+}
+
+.lookup-input {
+  flex: 1 1 0;
+  width: 0;
+  min-width: 0;
+}
+
+.lookup-button {
+  flex: 0 0 112rpx;
+  width: 112rpx;
+  min-width: 112rpx;
+  max-width: 112rpx;
+  min-height: 84rpx;
+  margin-top: 12rpx;
+  padding: 0;
+}
+
+.candidate-card {
+  min-height: 118rpx;
+  gap: 18rpx;
+  margin-top: 24rpx;
+  padding-top: 22rpx;
+  border-top: 1rpx solid #edf1f5;
+}
+
+.candidate-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.candidate-name {
+  overflow: hidden;
+  color: #17202a;
+  font-size: 28rpx;
+  font-weight: 800;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.candidate-summary {
+  margin-top: 6rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.candidate-card .role-pill {
+  max-width: 180rpx;
+}
+
+.member-role-segmented {
+  margin-top: 12rpx;
+}
+
+.permission-list {
+  margin-top: 12rpx;
+}
+
+.permission-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 72rpx;
+  gap: 16rpx;
+  padding: 0 18rpx;
+  border-bottom: 1rpx solid #edf1f5;
+  color: #667085;
+  font-size: 26rpx;
+  font-weight: 700;
+}
+
+.permission-row:last-child {
+  border-bottom: 0;
+}
+
+.permission-row.active {
+  color: #0f766e;
+}
+
+.permission-check {
+  width: 28rpx;
+  height: 28rpx;
+  flex: none;
+  border: 2rpx solid #cbd6e2;
+  border-radius: 50%;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.permission-row.active .permission-check {
+  border-color: #0f766e;
+  background: #0f766e;
+}
+
+.permission-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.member-confirm-row {
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  padding-top: 22rpx;
+}
+
+.row-title {
+  color: #17202a;
+  font-size: 28rpx;
+  font-weight: 800;
+}
+
+.confirm-desc {
+  width: 100%;
+}
+
+.error-banner {
+  margin-top: 18rpx;
+  padding: 18rpx 22rpx;
+  border-radius: 16rpx;
+  color: #8a4b09;
+  background: #fff1d6;
+  box-sizing: border-box;
+}
+
+.button-row {
+  gap: 16rpx;
+  margin-top: 24rpx;
+}
+
+.button-row .primary-button,
+.button-row .secondary-button {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
 button::after {
   border: 0;
 }

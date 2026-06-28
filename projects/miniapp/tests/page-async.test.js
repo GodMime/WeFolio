@@ -241,6 +241,72 @@ test('team member invite waits for success toast before navigating back', async 
   }
 })
 
+test('team maintenance opens member add sheet instead of navigating to add page', () => {
+  const fakeRequest = () => Promise.resolve({})
+  let navigateToCount = 0
+  const page = loadPage('pages/team-maintenance/team-maintenance.js', fakeRequest, {
+    navigateTo() {
+      navigateToCount += 1
+    }
+  })
+  page.data.teamId = 100
+  page.data.detail.team.canManageMembers = true
+
+  page.handleAddMember()
+
+  assert.equal(navigateToCount, 0)
+  assert.equal(page.data.memberAddVisible, true)
+})
+
+test('team maintenance member invite closes sheet and refreshes current detail', async () => {
+  const requests = []
+  const fakeRequest = (options) => {
+    requests.push(options)
+    if (options.method === 'POST') {
+      return Promise.resolve({})
+    }
+    return Promise.resolve({
+      teamId: 100,
+      name: '映期团队',
+      canManageMembers: true,
+      members: []
+    })
+  }
+  const toasts = []
+  let navigateBackCount = 0
+  const page = loadPage('pages/team-maintenance/team-maintenance.js', fakeRequest, {
+    showToast(options) {
+      toasts.push(options)
+    },
+    navigateBack() {
+      navigateBackCount += 1
+    }
+  })
+  page.data.teamId = 100
+  page.data.memberAddVisible = true
+  page.data.candidate = {
+    canInvite: true
+  }
+  page.data.memberInviteForm = {
+    uniqueCode: 'WF1186',
+    role: 'MEMBER',
+    profession: '化妆师',
+    allowPortfolio: true,
+    allowProfile: true,
+    allowWorks: false
+  }
+
+  await page.handleInviteMember()
+
+  assert.equal(requests[0].url, '/api/mine/teams/100/members')
+  assert.equal(requests[0].method, 'POST')
+  assert.equal(requests[1].url, '/api/mine/teams/100')
+  assert.equal(toasts[0].title, '邀请已发送')
+  assert.equal(navigateBackCount, 0)
+  assert.equal(page.data.memberAddVisible, false)
+  assert.equal(page.data.saving, false)
+})
+
 test('team invitation response waits for toast before navigating back', async () => {
   const scheduled = []
   const originalSetTimeout = global.setTimeout

@@ -2,9 +2,14 @@ const { request } = require('../../utils/request')
 const { handleAuthRequired, hasLocalToken } = require('../../utils/session')
 const { uploadTeamAvatar } = require('../../utils/team-avatar')
 const {
+  DEFAULT_MEMBER_INVITE_FORM,
+  buildMemberCandidateQuery,
+  buildMemberInvitePayload,
   buildTeamFieldCounters,
   buildTeamPayload,
+  normalizeTeamMemberCandidate,
   normalizeTeamDetail,
+  validateMemberInviteForm,
   validateTeamForm
 } = require('../../utils/teams')
 
@@ -31,6 +36,11 @@ function formFromDetail(detail) {
   }
 }
 
+// 添加成员弹窗每次打开都使用干净表单，避免沿用上一次候选人和权限选择。
+function emptyMemberInviteForm() {
+  return Object.assign({}, DEFAULT_MEMBER_INVITE_FORM)
+}
+
 Page({
   data: {
     teamId: null,
@@ -47,7 +57,18 @@ Page({
       { key: 'PENDING_CONFIRMATION', label: '待确认' },
       { key: 'JOINED', label: '已加入' }
     ],
-    visibleMembers: []
+    visibleMembers: [],
+    memberAddVisible: false,
+    memberSearching: false,
+    memberAddErrorMessage: '',
+    memberUniqueCode: '',
+    candidate: null,
+    candidateVisible: false,
+    memberInviteForm: emptyMemberInviteForm(),
+    memberRoleOptions: [
+      { key: 'MANAGER', label: '管理者', desc: '作品集管理、预览、分享' },
+      { key: 'MEMBER', label: '普通成员', desc: '仅预览、分享' }
+    ]
   },
 
   onLoad(options = {}) {
@@ -269,8 +290,207 @@ Page({
       })
       return
     }
-    wx.navigateTo({
-      url: `/pages/team-member-add/team-member-add?teamId=${this.data.teamId}`
+    this.invalidateCandidateSearch()
+    this.setData({
+      memberAddVisible: true,
+      memberSearching: false,
+      memberAddErrorMessage: '',
+      memberUniqueCode: '',
+      candidate: null,
+      candidateVisible: false,
+      memberInviteForm: emptyMemberInviteForm()
     })
+  },
+
+  handleMemberAddCancel() {
+    this.invalidateCandidateSearch()
+    this.setData({
+      memberAddVisible: false,
+      memberSearching: false,
+      memberAddErrorMessage: '',
+      memberUniqueCode: '',
+      candidate: null,
+      candidateVisible: false,
+      memberInviteForm: emptyMemberInviteForm(),
+      saving: false
+    })
+  },
+
+  noop() {},
+
+  handleMemberUniqueCodeInput(event) {
+    const uniqueCode = event.detail.value || ''
+    this.invalidateCandidateSearch()
+    this.setData({
+      memberUniqueCode: uniqueCode,
+      'memberInviteForm.uniqueCode': uniqueCode,
+      candidateVisible: false,
+      candidate: null,
+      memberSearching: false,
+      memberAddErrorMessage: ''
+    })
+  },
+
+  async handleSearchCandidate() {
+    if (this.data.memberSearching || !this.data.teamId) {
+      return
+    }
+    const uniqueCode = (this.data.memberUniqueCode || '').trim()
+    if (!uniqueCode) {
+      wx.showToast({
+        title: '请输入个人唯一码',
+        icon: 'none'
+      })
+      return
+    }
+    const requestContext = this.createCandidateRequestContext(uniqueCode)
+    this.setData({
+      memberSearching: true,
+      memberAddErrorMessage: ''
+    })
+    try {
+      const response = await request({
+        url: `/api/mine/teams/${this.data.teamId}/member-candidate`,
+        data: buildMemberCandidateQuery(uniqueCode)
+      })
+      if (!this.isCurrentCandidateRequest(requestContext)) {
+        return
+      }
+      const candidate = normalizeTeamMemberCandidate(response)
+      this.setData({
+        candidate,
+        candidateVisible: true,
+        memberSearching: false,
+        'memberInviteForm.uniqueCode': candidate.uniqueCode || uniqueCode,
+        'memberInviteForm.profession': candidate.profession || ''
+      })
+      if (!candidate.canInvite) {
+        wx.showToast({
+          title: candidate.reason,
+          icon: 'none'
+        })
+      }
+    } catch (error) {
+      if (!this.isCurrentCandidateRequest(requestContext)) {
+        return
+      }
+      if (error && error.authRequired) {
+        this.setData({
+          memberSearching: false
+        })
+        handleAuthRequired(error.message)
+        return
+      }
+      this.setData({
+        memberSearching: false,
+        candidateVisible: false,
+        candidate: null,
+        memberAddErrorMessage: error && error.message ? error.message : '成员查询失败'
+      })
+      wx.showToast({
+        title: error && error.message ? error.message : '成员查询失败',
+        icon: 'none'
+      })
+    }
+  },
+
+  createCandidateRequestContext(uniqueCode) {
+    const requestId = (this.candidateSearchRequestId || 0) + 1
+    this.candidateSearchRequestId = requestId
+    return {
+      requestId,
+      teamId: this.data.teamId,
+      uniqueCode
+    }
+  },
+
+  invalidateCandidateSearch() {
+    this.candidateSearchRequestId = (this.candidateSearchRequestId || 0) + 1
+  },
+
+  isCurrentCandidateRequest(requestContext) {
+    const currentUniqueCode = (this.data.memberUniqueCode || '').trim()
+    return Boolean(requestContext)
+      && this.candidateSearchRequestId === requestContext.requestId
+      && this.data.teamId === requestContext.teamId
+      && currentUniqueCode === requestContext.uniqueCode
+  },
+
+  handleMemberRoleTap(event) {
+    const role = event.currentTarget.dataset.role || 'MEMBER'
+    this.setData({
+      'memberInviteForm.role': role
+    })
+  },
+
+  handleMemberProfessionInput(event) {
+    this.setData({
+      'memberInviteForm.profession': event.detail.value || ''
+    })
+  },
+
+  handleMemberPermissionTap(event) {
+    const field = event.currentTarget.dataset.field
+    if (!field) {
+      return
+    }
+    this.setData({
+      [`memberInviteForm.${field}`]: !this.data.memberInviteForm[field]
+    })
+  },
+
+  async handleInviteMember() {
+    if (this.data.saving || !this.data.teamId) {
+      return
+    }
+    const validation = validateMemberInviteForm(this.data.memberInviteForm, this.data.candidate)
+    if (!validation.valid) {
+      wx.showToast({
+        title: validation.message,
+        icon: 'none'
+      })
+      return
+    }
+    this.setData({
+      saving: true
+    })
+    try {
+      await request({
+        url: `/api/mine/teams/${this.data.teamId}/members`,
+        method: 'POST',
+        data: buildMemberInvitePayload(this.data.memberInviteForm)
+      })
+      wx.showToast({
+        title: '邀请已发送',
+        icon: 'success'
+      })
+      this.invalidateCandidateSearch()
+      this.setData({
+        memberAddVisible: false,
+        memberSearching: false,
+        memberAddErrorMessage: '',
+        memberUniqueCode: '',
+        candidate: null,
+        candidateVisible: false,
+        memberInviteForm: emptyMemberInviteForm(),
+        saving: false
+      })
+      await this.loadDetail()
+    } catch (error) {
+      if (error && error.authRequired) {
+        this.setData({
+          saving: false
+        })
+        handleAuthRequired(error.message)
+        return
+      }
+      this.setData({
+        saving: false
+      })
+      wx.showToast({
+        title: error && error.message ? error.message : '邀请发送失败',
+        icon: 'none'
+      })
+    }
   }
 })
