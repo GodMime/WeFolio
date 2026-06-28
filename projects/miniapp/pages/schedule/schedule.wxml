@@ -40,22 +40,42 @@
             <view
               wx:for="{{overview.slotDefinitions}}"
               wx:key="id"
-              class="slot-line"
               data-id="{{item.id}}"
-              bindtap="handleSlotEdit"
+              class="slot-swipe-row {{revealedSlotId === item.id && !item.enabled ? 'revealed' : ''}}"
+              bindtouchstart="handleSlotTouchStart"
+              bindtouchmove="handleSlotTouchMove"
+              bindtouchend="handleSlotTouchEnd"
+              bindtouchcancel="handleSlotTouchCancel"
             >
-              <view class="slot-main">
-                <view class="swatch" style="{{item.colorStyle}}"></view>
-                <view class="slot-copy">
-                  <view class="slot-name">{{item.name}}</view>
-                  <view class="slot-desc">{{item.timeRangeText}} · {{item.statusText}}</view>
+              <view class="slot-delete-pane" wx:if="{{!item.enabled}}">
+                <button
+                  class="mini-action danger"
+                  loading="{{deletingSlotId === item.id}}"
+                  disabled="{{deletingSlotId === item.id}}"
+                  catchtap="handleDeleteSlotDefinition"
+                  data-id="{{item.id}}"
+                >删除</button>
+              </view>
+              <view
+                class="slot-line"
+                data-id="{{item.id}}"
+                bindtap="handleSlotEdit"
+              >
+                <view class="slot-main">
+                  <view class="swatch" style="{{item.colorStyle}}"></view>
+                  <view class="slot-copy">
+                    <view class="slot-name">{{item.name}}</view>
+                    <view class="slot-desc">{{item.timeRangeText}} · {{item.statusText}}</view>
+                  </view>
+                </view>
+                <view class="slot-actions">
+                  <button
+                    class="mini-action {{item.enabled ? 'warn' : ''}}"
+                    catchtap="handleToggleSlotStatus"
+                    data-id="{{item.id}}"
+                  >{{item.enabled ? '停用' : '启用'}}</button>
                 </view>
               </view>
-              <button
-                class="mini-action {{item.enabled ? 'warn' : ''}}"
-                catchtap="handleToggleSlotStatus"
-                data-id="{{item.id}}"
-              >{{item.enabled ? '停用' : '启用'}}</button>
             </view>
             <button class="primary-button definition-add-button" bindtap="handleSlotAdd">新增定义</button>
           </view>
@@ -83,8 +103,10 @@
               <button class="month-control" bindtap="handlePrevMonth">‹</button>
               <view class="month-title">
                 <view class="month-main">{{overview.month.titleText}}</view>
-                <view class="month-sub">当前查看月份</view>
               </view>
+              <picker class="month-picker" mode="date" fields="month" value="{{selectedMonth}}" bindchange="handleMonthPickerChange">
+                <view class="month-control wide">切换年月</view>
+              </picker>
               <button class="month-control" bindtap="handleNextMonth">›</button>
             </view>
 
@@ -97,8 +119,11 @@
                 data-date="{{item.date}}"
                 bindtap="handleDayTap"
               >
-                <view class="day-number">{{item.dayNumber}}</view>
-                <view class="day-colors" wx:if="{{item.markerColors.length}}">
+                <view class="date-stack">
+                  <view class="day-number">{{item.dayNumber}}</view>
+                  <view class="day-meta" wx:if="{{item.metaText}}">{{item.metaText}}</view>
+                </view>
+                <view class="day-colors">
                   <view
                     class="day-color"
                     wx:for="{{item.markerColors}}"
@@ -112,11 +137,12 @@
           </view>
 
           <view class="day-panel">
-            <view class="panel-heading">
-              <view>
-                <view class="panel-title">{{overview.selectedDate.titleText}}</view>
-                <view class="panel-meta">{{overview.selectedDate.summaryText}}</view>
+            <view class="day-heading">
+              <view class="day-date-copy">
+                <view class="day-title">{{overview.selectedDate.titleText}}</view>
+                <view class="day-lunar-title">{{overview.selectedDate.lunarTitleText}}</view>
               </view>
+              <view class="day-summary">{{overview.selectedDate.summaryText}}</view>
             </view>
 
             <view wx:if="{{overview.selectedDate.empty}}" class="inline-empty">
@@ -127,19 +153,37 @@
             <view
               wx:for="{{overview.selectedDate.schedules}}"
               wx:key="id"
-              class="schedule-line"
               data-id="{{item.id}}"
-              data-date="{{item.scheduleDate}}"
-              bindtap="handleScheduleTap"
+              class="schedule-swipe-row {{revealedScheduleId === item.id ? 'revealed' : ''}}"
+              bindtouchstart="handleScheduleTouchStart"
+              bindtouchmove="handleScheduleTouchMove"
+              bindtouchend="handleScheduleTouchEnd"
+              bindtouchcancel="handleScheduleTouchCancel"
             >
-              <view class="slot-main">
-                <view class="swatch" style="{{item.colorStyle}}"></view>
-                <view class="slot-copy">
-                  <view class="slot-name">{{item.slotName}}</view>
-                  <view class="slot-desc">{{item.timeRangeText}} · {{item.contactText}}</view>
-                </view>
+              <view class="schedule-delete-pane">
+                <button
+                  class="mini-action danger"
+                  loading="{{deletingScheduleId === item.id}}"
+                  disabled="{{deletingScheduleId === item.id}}"
+                  catchtap="handleDeleteScheduleItem"
+                  data-id="{{item.id}}"
+                >删除</button>
               </view>
-              <view class="{{item.statusClass}}">{{item.statusText}}</view>
+              <view
+                class="schedule-line"
+                data-id="{{item.id}}"
+                data-date="{{item.scheduleDate}}"
+                bindtap="handleScheduleTap"
+              >
+                <view class="slot-main">
+                  <view class="swatch" style="{{item.colorStyle}}"></view>
+                  <view class="slot-copy">
+                    <view class="slot-name">{{item.slotName}}</view>
+                    <view class="slot-desc">{{item.timeRangeText}} · {{item.contactText}}</view>
+                  </view>
+                </view>
+                <view class="{{item.statusClass}}">{{item.statusText}}</view>
+              </view>
             </view>
             <button class="primary-button schedule-add-button" bindtap="handleMaintainDate">新增档期</button>
           </view>
@@ -226,6 +270,80 @@
       <view class="button-row">
         <button class="secondary-button" bindtap="handleSlotCancel">取消</button>
         <button class="primary-button" loading="{{saving}}" bindtap="handleSaveSlot">保存定义</button>
+      </view>
+    </view>
+  </view>
+
+  <view class="schedule-sheet-overlay {{scheduleFormVisible ? 'visible' : ''}}" catchtap="handleScheduleCancel">
+    <view class="schedule-sheet" catchtap="noop">
+      <view class="sheet-grabber"></view>
+      <view class="panel-heading">
+        <view>
+          <view class="panel-title">{{scheduleSheetTitle}}</view>
+          <view class="panel-meta">{{overview.selectedDate.titleText}}</view>
+        </view>
+      </view>
+
+      <view class="field-label standalone">选择档位定义</view>
+      <view class="schedule-slot-grid">
+        <view
+          wx:for="{{overview.slotDefinitions}}"
+          wx:key="id"
+          class="schedule-slot-card {{scheduleForm.slotDefinitionId === item.id ? 'active' : ''}} {{item.enabled ? '' : 'disabled'}}"
+          data-id="{{item.id}}"
+          bindtap="handleScheduleSlotTap"
+        >
+          <view class="schedule-slot-card-top">
+            <view class="slot-name">{{item.name}}</view>
+            <view class="swatch" style="{{item.colorStyle}}"></view>
+          </view>
+          <view class="slot-desc">{{item.timeRangeText}}</view>
+        </view>
+      </view>
+      <view wx:if="{{overview.slotDefinitions.length === 0}}" class="inline-empty compact">
+        <view class="empty-title small">暂无可选档位</view>
+        <view class="empty-desc">请先新增档位定义</view>
+      </view>
+
+      <view class="field-label standalone">档期状态</view>
+      <view class="schedule-status-row">
+        <view
+          wx:for="{{statusOptions}}"
+          wx:key="value"
+          class="schedule-status-choice {{scheduleForm.status === item.value ? 'active' : ''}} {{item.tone}}"
+          data-status="{{item.value}}"
+          bindtap="handleScheduleStatusTap"
+        >{{item.text}}</view>
+      </view>
+
+      <view class="form-grid">
+        <view class="form-row">
+          <view class="field-heading">
+            <view class="field-label">联系人姓名</view>
+            <view class="field-limit">{{scheduleFieldCounters.contactName}}</view>
+          </view>
+          <input class="field-input" value="{{scheduleForm.contactName}}" maxlength="50" data-field="contactName" bindinput="handleScheduleInput" placeholder="如 陈女士" />
+        </view>
+        <view class="form-row">
+          <view class="field-heading">
+            <view class="field-label">联系电话</view>
+            <view class="field-limit">{{scheduleFieldCounters.contactPhone}}</view>
+          </view>
+          <input class="field-input" value="{{scheduleForm.contactPhone}}" maxlength="50" data-field="contactPhone" bindinput="handleScheduleInput" placeholder="手机号 / 微信号" />
+        </view>
+      </view>
+
+      <view class="form-row full">
+        <view class="field-heading">
+          <view class="field-label">档期备注</view>
+          <view class="field-limit">{{scheduleFieldCounters.note}}</view>
+        </view>
+        <textarea class="field-input textarea" value="{{scheduleForm.note}}" maxlength="1000" data-field="note" bindinput="handleScheduleInput" placeholder="仅维护者可见，访客端不展示"></textarea>
+      </view>
+
+      <view class="button-row">
+        <button class="secondary-button" bindtap="handleScheduleCancel">取消</button>
+        <button class="primary-button" loading="{{saving}}" bindtap="handleSaveSchedule">保存档期</button>
       </view>
     </view>
   </view>

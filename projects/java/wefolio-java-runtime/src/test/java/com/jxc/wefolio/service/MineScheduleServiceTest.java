@@ -67,12 +67,12 @@ class MineScheduleServiceTest {
                 SlotDefinitionStatusDict.DISABLED);
         ScheduleEntity tentative = schedule(11L, 1L, "2026-06-24", "迎亲档", "07:30", "09:30",
                 "#d98200", ScheduleStatusDict.TENTATIVE, "陈女士", "13800002026");
-        ScheduleEntity available = schedule(12L, 2L, "2026-06-24", "午宴档", "10:00", "13:00",
-                "#1677ff", ScheduleStatusDict.AVAILABLE, "", "");
+        ScheduleEntity booked = schedule(12L, 2L, "2026-06-24", "午宴档", "10:00", "13:00",
+                "#1677ff", ScheduleStatusDict.BOOKED, "", "");
         ScheduleEntity otherDay = schedule(13L, 1L, "2026-06-28", "迎亲档", "07:30", "09:30",
                 "#d98200", ScheduleStatusDict.BOOKED, "林先生", "13900002026");
         when(slotDefinitionEntityMapper.selectList(any())).thenReturn(List.of(welcome, noon));
-        when(scheduleEntityMapper.selectList(any())).thenReturn(List.of(tentative, available, otherDay));
+        when(scheduleEntityMapper.selectList(any())).thenReturn(List.of(tentative, booked, otherDay));
 
         MineScheduleResponse response = service().getScheduleOverview("2026-06", "2026-06-24");
 
@@ -89,9 +89,9 @@ class MineScheduleServiceTest {
         assertThat(selectedDay.getColors()).containsExactly("#d98200", "#1677ff");
         assertThat(selectedDay.getCount()).isEqualTo(2);
         assertThat(response.getSelectedDate().getDate()).isEqualTo("2026-06-24");
-        assertThat(response.getSelectedDate().getSummaryText()).isEqualTo("2 条档期，1 个可约");
+        assertThat(response.getSelectedDate().getSummaryText()).isEqualTo("2 条档期");
         assertThat(response.getSelectedDate().getSchedules()).extracting(MineScheduleResponse.ScheduleItem::getStatusText)
-                .containsExactly("待定", "空闲");
+                .containsExactly("待定", "已约");
     }
 
     /**
@@ -162,9 +162,30 @@ class MineScheduleServiceTest {
         verify(slotDefinitionEntityMapper, never()).updateById(any(SlotDefinitionEntity.class));
     }
 
+    /**
+     * 档位定义编辑 — 启用中的定义必须先停用，避免影响正在使用的快照。
+     */
+    @Test
+    void updateSlotDefinitionRejectsActiveDefinition() {
+        when(slotDefinitionEntityMapper.selectById(1L)).thenReturn(slotDefinition(1L, 7L, "迎亲档"));
+        ScheduleSlotDefinitionRequest request = new ScheduleSlotDefinitionRequest();
+        request.setName("早妆档");
+        request.setStartTime("06:30");
+        request.setEndTime("08:30");
+        request.setColor("#0f8ea8");
+
+        assertThatThrownBy(() -> service().updateSlotDefinition(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("该档位启用中，请先停用后再编辑");
+        verify(slotDefinitionEntityMapper, never()).updateById(any(SlotDefinitionEntity.class));
+        verify(scheduleEntityMapper, never()).update(any(ScheduleEntity.class), any(Wrapper.class));
+    }
+
     @Test
     void updateSlotDefinitionSyncsFutureUnlockedScheduleSnapshots() {
-        when(slotDefinitionEntityMapper.selectById(1L)).thenReturn(slotDefinition(1L, 7L, "迎亲档"));
+        SlotDefinitionEntity definition = slotDefinition(1L, 7L, "迎亲档");
+        definition.setStatus(SlotDefinitionStatusDict.DISABLED.getCode());
+        when(slotDefinitionEntityMapper.selectById(1L)).thenReturn(definition);
         when(slotDefinitionEntityMapper.updateById(any(SlotDefinitionEntity.class))).thenReturn(1);
         when(scheduleEntityMapper.update(any(ScheduleEntity.class), any(Wrapper.class))).thenReturn(3);
         ScheduleSlotDefinitionRequest request = new ScheduleSlotDefinitionRequest();
@@ -198,30 +219,39 @@ class MineScheduleServiceTest {
     }
 
     @Test
-    void saveScheduleItemWithoutIdUpdatesExistingDateAndSlot() {
-        SlotDefinitionEntity welcome = slotDefinition(1L, "迎亲档", "07:30", "09:30", "#d98200",
-                SlotDefinitionStatusDict.ACTIVE);
+    void saveScheduleItemWithoutIdRejectsExistingDateAndSlot() {
         ScheduleEntity existing = schedule(11L, 1L, "2026-06-24", "迎亲档", "07:30", "09:30",
-                "#d98200", ScheduleStatusDict.AVAILABLE, "", "");
-        when(slotDefinitionEntityMapper.selectById(1L)).thenReturn(welcome);
+                "#d98200", ScheduleStatusDict.TENTATIVE, "", "");
         when(scheduleEntityMapper.selectOne(any())).thenReturn(existing);
-        when(scheduleEntityMapper.updateById(any(ScheduleEntity.class))).thenReturn(1);
         ScheduleItemSaveRequest request = scheduleSaveRequest(null, 1L);
         request.setStatus(ScheduleStatusDict.TENTATIVE.getCode());
         request.setContactName("陈女士");
         request.setContactPhone("13800002026");
         request.setNote("今晚回电");
 
-        MineScheduleResponse.ScheduleItem item = service().saveScheduleItem(request);
+        assertThatThrownBy(() -> service().saveScheduleItem(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("当天该档位已存在");
 
-        ArgumentCaptor<ScheduleEntity> captor = ArgumentCaptor.forClass(ScheduleEntity.class);
-        verify(scheduleEntityMapper).updateById(captor.capture());
+        verify(scheduleEntityMapper, never()).updateById(any(ScheduleEntity.class));
         verify(scheduleEntityMapper, never()).insert(any(ScheduleEntity.class));
-        assertThat(captor.getValue().getId()).isEqualTo(11L);
-        assertThat(captor.getValue().getStatus()).isEqualTo(ScheduleStatusDict.TENTATIVE.getCode());
-        assertThat(captor.getValue().getContactPhoneCiphertext()).isEqualTo("13800002026");
-        assertThat(item.getId()).isEqualTo(11L);
-        assertThat(item.getStatusText()).isEqualTo("待定");
+    }
+
+    /**
+     * 档期状态校验 — 已移除的 AVAILABLE 状态不能继续保存。
+     */
+    @Test
+    void saveScheduleItemRejectsRemovedAvailableStatus() {
+        ScheduleItemSaveRequest request = scheduleSaveRequest(null, 1L);
+        request.setStatus("AVAILABLE");
+
+        assertThatThrownBy(() -> service().saveScheduleItem(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("档期状态无效");
+
+        verify(slotDefinitionEntityMapper, never()).selectById(any());
+        verify(scheduleEntityMapper, never()).selectOne(any());
+        verify(scheduleEntityMapper, never()).insert(any(ScheduleEntity.class));
     }
 
     @Test
@@ -265,6 +295,36 @@ class MineScheduleServiceTest {
         assertThat(item.getStatusTone()).isEqualTo(ScheduleStatusDict.BOOKED.getTone());
     }
 
+    /**
+     * 档期编辑 — 原档位停用后，仍允许修改已有档期的联系人、状态和备注。
+     */
+    @Test
+    void saveScheduleItemWithIdAllowsExistingDisabledSlotDefinition() {
+        SlotDefinitionEntity disabled = slotDefinition(1L, "迎亲档", "07:30", "09:30", "#d98200",
+                SlotDefinitionStatusDict.DISABLED);
+        when(scheduleEntityMapper.selectById(77L)).thenReturn(schedule(77L, 7L, 1L));
+        when(slotDefinitionEntityMapper.selectById(1L)).thenReturn(disabled);
+        when(scheduleEntityMapper.updateById(any(ScheduleEntity.class))).thenReturn(1);
+        ScheduleItemSaveRequest request = scheduleSaveRequest(77L, 1L);
+        request.setStatus(ScheduleStatusDict.BOOKED.getCode());
+        request.setContactName("陈女士");
+        request.setContactPhone("13800002026");
+        request.setNote("已确认");
+
+        MineScheduleResponse.ScheduleItem item = service().saveScheduleItem(request);
+
+        ArgumentCaptor<ScheduleEntity> captor = ArgumentCaptor.forClass(ScheduleEntity.class);
+        verify(scheduleEntityMapper).updateById(captor.capture());
+        assertThat(captor.getValue().getId()).isEqualTo(77L);
+        assertThat(captor.getValue().getSlotDefinitionId()).isEqualTo(1L);
+        assertThat(captor.getValue().getStatus()).isEqualTo(ScheduleStatusDict.BOOKED.getCode());
+        assertThat(captor.getValue().getContactNameCiphertext()).isEqualTo("陈女士");
+        assertThat(captor.getValue().getContactPhoneCiphertext()).isEqualTo("13800002026");
+        assertThat(captor.getValue().getNote()).isEqualTo("已确认");
+        assertThat(item.getId()).isEqualTo(77L);
+        assertThat(item.getStatusText()).isEqualTo("已约");
+    }
+
     @Test
     void saveScheduleItemWithIdRejectsRecordsOutsideCurrentUser() {
         when(scheduleEntityMapper.selectById(77L)).thenReturn(schedule(77L, 8L, 1L));
@@ -284,6 +344,87 @@ class MineScheduleServiceTest {
         service().deleteScheduleItem(11L);
 
         verify(scheduleEntityMapper).delete(any(Wrapper.class));
+    }
+
+    /**
+     * 档位定义删除 — 启用中的定义不能直接删除。
+     */
+    @Test
+    void deleteSlotDefinitionRejectsActiveDefinition() {
+        SlotDefinitionEntity definition = slotDefinition(1L, 7L, "迎亲档");
+        definition.setStatus(SlotDefinitionStatusDict.ACTIVE.getCode());
+        when(slotDefinitionEntityMapper.selectById(1L)).thenReturn(definition);
+
+        assertThatThrownBy(() -> service().deleteSlotDefinition(1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("请先停用档位后再删除");
+        verify(scheduleEntityMapper, never()).selectList(any());
+        verify(slotDefinitionEntityMapper, never()).delete(any(Wrapper.class));
+    }
+
+    /**
+     * 档位定义删除 — 删除前提示最早几个关联档期日期。
+     */
+    @Test
+    void deleteSlotDefinitionReportsScheduleDatesBeforeDelete() {
+        SlotDefinitionEntity definition = slotDefinition(1L, 7L, "迎亲档");
+        definition.setStatus(SlotDefinitionStatusDict.DISABLED.getCode());
+        ScheduleEntity first = schedule(21L, 7L, 1L);
+        ScheduleEntity second = schedule(22L, 7L, 1L);
+        ScheduleEntity third = schedule(23L, 7L, 1L);
+        ScheduleEntity fourth = schedule(24L, 7L, 1L);
+        first.setScheduleDate(LocalDate.of(2026, 6, 24));
+        second.setScheduleDate(LocalDate.of(2026, 6, 25));
+        third.setScheduleDate(LocalDate.of(2026, 6, 26));
+        fourth.setScheduleDate(LocalDate.of(2026, 6, 27));
+        when(slotDefinitionEntityMapper.selectById(1L)).thenReturn(definition);
+        when(scheduleEntityMapper.selectList(any())).thenReturn(List.of(first, second, third, fourth));
+
+        assertThatThrownBy(() -> service().deleteSlotDefinition(1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("该档位已用于 2026-06-24、2026-06-25、2026-06-26 等档期，请先删除对应档期后再删除档位");
+        verify(slotDefinitionEntityMapper, never()).delete(any(Wrapper.class));
+    }
+
+    /**
+     * 档位定义删除 — 即使最早返回的档期集中在同一天，也要提示还有更多关联档期。
+     */
+    @Test
+    void deleteSlotDefinitionReportsMoreSchedulesOnSameDate() {
+        SlotDefinitionEntity definition = slotDefinition(1L, 7L, "迎亲档");
+        definition.setStatus(SlotDefinitionStatusDict.DISABLED.getCode());
+        ScheduleEntity first = schedule(21L, 7L, 1L);
+        ScheduleEntity second = schedule(22L, 7L, 1L);
+        ScheduleEntity third = schedule(23L, 7L, 1L);
+        ScheduleEntity fourth = schedule(24L, 7L, 1L);
+        first.setScheduleDate(LocalDate.of(2026, 6, 24));
+        second.setScheduleDate(LocalDate.of(2026, 6, 24));
+        third.setScheduleDate(LocalDate.of(2026, 6, 24));
+        fourth.setScheduleDate(LocalDate.of(2026, 6, 24));
+        when(slotDefinitionEntityMapper.selectById(1L)).thenReturn(definition);
+        when(scheduleEntityMapper.selectList(any())).thenReturn(List.of(first, second, third, fourth));
+
+        assertThatThrownBy(() -> service().deleteSlotDefinition(1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("该档位已用于 2026-06-24 等档期，请先删除对应档期后再删除档位");
+        verify(slotDefinitionEntityMapper, never()).delete(any(Wrapper.class));
+    }
+
+    /**
+     * 档位定义删除 — 停用且无关联档期时允许逻辑删除。
+     */
+    @Test
+    void deleteSlotDefinitionDeletesDisabledDefinitionWithoutSchedules() {
+        SlotDefinitionEntity definition = slotDefinition(1L, 7L, "迎亲档");
+        definition.setStatus(SlotDefinitionStatusDict.DISABLED.getCode());
+        when(slotDefinitionEntityMapper.selectById(1L)).thenReturn(definition);
+        when(scheduleEntityMapper.selectList(any())).thenReturn(List.of());
+        when(slotDefinitionEntityMapper.delete(any(Wrapper.class))).thenReturn(1);
+
+        service().deleteSlotDefinition(1L);
+
+        verify(scheduleEntityMapper).selectList(any());
+        verify(slotDefinitionEntityMapper).delete(any(Wrapper.class));
     }
 
     /**
@@ -411,7 +552,7 @@ class MineScheduleServiceTest {
         entity.setStartTimeSnapshot(LocalTime.of(7, 30));
         entity.setEndTimeSnapshot(LocalTime.of(9, 30));
         entity.setColorSnapshot("#d98200");
-        entity.setStatus(ScheduleStatusDict.AVAILABLE.getCode());
+        entity.setStatus(ScheduleStatusDict.TENTATIVE.getCode());
         entity.setLockedSnapshot(0);
         return entity;
     }
@@ -428,7 +569,7 @@ class MineScheduleServiceTest {
         request.setScheduleId(scheduleId);
         request.setScheduleDate("2026-06-24");
         request.setSlotDefinitionId(slotDefinitionId);
-        request.setStatus(ScheduleStatusDict.AVAILABLE.getCode());
+        request.setStatus(ScheduleStatusDict.TENTATIVE.getCode());
         return request;
     }
 }

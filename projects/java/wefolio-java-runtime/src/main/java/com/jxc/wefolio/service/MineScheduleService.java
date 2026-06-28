@@ -53,6 +53,9 @@ public class MineScheduleService {
     /** 档期备注最大长度 */
     private static final int NOTE_MAX_LENGTH = 1000;
 
+    /** 重复档期提示 */
+    private static final String SCHEDULE_DUPLICATE_MESSAGE = "当天该档位已存在";
+
     /** 月历固定格子数 */
     private static final int CALENDAR_DAY_COUNT = 42;
 
@@ -158,6 +161,9 @@ public class MineScheduleService {
             ScheduleSlotDefinitionRequest request
     ) {
         SlotDefinitionEntity entity = requireOwnedSlotDefinition(slotDefinitionId);
+        if (SlotDefinitionStatusDict.ACTIVE.getCode().equals(entity.getStatus())) {
+            throw new BusinessException("该档位启用中，请先停用后再编辑");
+        }
         applySlotDefinitionRequest(entity, request, false);
         entity.setUpdatedAt(LocalDateTime.now());
         try {
@@ -196,7 +202,34 @@ public class MineScheduleService {
     }
 
     /**
-     * 保存档期记录。传入 ID 时更新指定记录，未传 ID 时按日期和档位定义幂等新增或更新。
+     * 删除停用档位定义。
+     *
+     * <p>已有档期会保留档位快照。为了避免维护者误删仍在使用的定义，删除前必须先清空关联档期。</p>
+     *
+     * @param slotDefinitionId 档位定义 ID
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteSlotDefinition(Long slotDefinitionId) {
+        SlotDefinitionEntity entity = requireOwnedSlotDefinition(slotDefinitionId);
+        if (!SlotDefinitionStatusDict.DISABLED.getCode().equals(entity.getStatus())) {
+            throw new BusinessException("请先停用档位后再删除");
+        }
+        List<ScheduleEntity> schedules = findSlotDefinitionSchedules(entity);
+        if (!schedules.isEmpty()) {
+            throw new BusinessException(buildSlotDefinitionDeleteBlockedMessage(schedules));
+        }
+        int deleted = slotDefinitionEntityMapper.delete(
+                Wrappers.lambdaQuery(SlotDefinitionEntity.class)
+                        .eq(SlotDefinitionEntity::getId, entity.getId())
+                        .eq(SlotDefinitionEntity::getUserId, entity.getUserId())
+        );
+        if (deleted <= 0) {
+            throw new BusinessException("档位定义删除失败，请刷新后重试");
+        }
+    }
+
+    /**
+     * 保存档期记录。传入 ID 时更新指定记录，未传 ID 时新增记录，若同日同档位已存在则报错。
      *
      * @param request 保存请求
      * @return 保存后的档期记录
@@ -207,17 +240,21 @@ public class MineScheduleService {
             throw new BusinessException("档期内容不能为空");
         }
         Long userId = AuthContextHolder.requireUserId();
-        ScheduleEntity target = request.getScheduleId() == null
-                ? findExistingSchedule(userId, request)
-                : requireOwnedSchedule(request.getScheduleId());
-        SlotDefinitionEntity definition = requireActiveSlotDefinitionForSchedule(userId, request.getSlotDefinitionId());
-        if (target == null) {
+        ScheduleStatusDict scheduleStatus = parseScheduleStatus(request.getStatus());
+        ScheduleEntity target;
+        if (request.getScheduleId() == null) {
+            if (findExistingSchedule(userId, request) != null) {
+                throw new BusinessException(SCHEDULE_DUPLICATE_MESSAGE);
+            }
             target = new ScheduleEntity();
             target.setUserId(userId);
             target.setCreatedAt(LocalDateTime.now());
             target.setLockedSnapshot(SNAPSHOT_UNLOCKED);
+        } else {
+            target = requireOwnedSchedule(request.getScheduleId());
         }
-        applyScheduleRequest(target, definition, request);
+        SlotDefinitionEntity definition = requireSlotDefinitionForSchedule(userId, request.getSlotDefinitionId(), target);
+        applyScheduleRequest(target, definition, scheduleStatus, request);
         target.setUpdatedAt(LocalDateTime.now());
         try {
             if (target.getId() == null) {
@@ -229,7 +266,7 @@ public class MineScheduleService {
                 }
             }
         } catch (DuplicateKeyException e) {
-            throw new BusinessException("当天该档位已存在，请刷新后重试", e);
+            throw new BusinessException(SCHEDULE_DUPLICATE_MESSAGE, e);
         }
         return buildScheduleItem(target);
     }
@@ -294,6 +331,7 @@ public class MineScheduleService {
     private void applyScheduleRequest(
             ScheduleEntity entity,
             SlotDefinitionEntity definition,
+            ScheduleStatusDict scheduleStatus,
             ScheduleItemSaveRequest request
     ) {
         entity.setScheduleDate(parseDate(request.getScheduleDate(), "档期日期"));
@@ -302,7 +340,7 @@ public class MineScheduleService {
         entity.setStartTimeSnapshot(definition.getStartTime());
         entity.setEndTimeSnapshot(definition.getEndTime());
         entity.setColorSnapshot(definition.getColor());
-        entity.setStatus(parseScheduleStatus(request.getStatus()).getCode());
+        entity.setStatus(scheduleStatus.getCode());
         entity.setContactNameCiphertext(normalizeOptionalString(
                 request.getContactName(), CONTACT_NAME_MAX_LENGTH, "联系人姓名"));
         entity.setContactPhoneCiphertext(normalizeOptionalString(
@@ -333,6 +371,47 @@ public class MineScheduleService {
                         .eq(ScheduleEntity::getLockedSnapshot, SNAPSHOT_UNLOCKED)
                         .ge(ScheduleEntity::getScheduleDate, LocalDate.now())
         );
+    }
+
+    /**
+     * 查询阻止档位定义删除的关联档期。
+     *
+     * @param definition 档位定义
+     * @return 最早的关联档期列表
+     */
+    private List<ScheduleEntity> findSlotDefinitionSchedules(SlotDefinitionEntity definition) {
+        return safeList(scheduleEntityMapper.selectList(
+                Wrappers.lambdaQuery(ScheduleEntity.class)
+                        .eq(ScheduleEntity::getUserId, definition.getUserId())
+                        .eq(ScheduleEntity::getSlotDefinitionId, definition.getId())
+                        .orderByAsc(ScheduleEntity::getScheduleDate)
+                        .last("LIMIT 4")
+        ));
+    }
+
+    /**
+     * 构建档位定义删除被阻止时的提示语。
+     *
+     * @param schedules 关联档期列表
+     * @return 提示语
+     */
+    private String buildSlotDefinitionDeleteBlockedMessage(List<ScheduleEntity> schedules) {
+        List<String> dates = schedules.stream()
+                .map(ScheduleEntity::getScheduleDate)
+                .filter(Objects::nonNull)
+                .distinct()
+                .map(date -> date.format(DATE_FORMATTER))
+                .limit(4)
+                .toList();
+        if (dates.isEmpty()) {
+            return "该档位已有关联档期，请先删除对应档期后再删除档位";
+        }
+        boolean hasMore = schedules.size() > 3;
+        String dateText = dates.stream()
+                .limit(3)
+                .collect(Collectors.joining("、"));
+        return "该档位已用于 " + dateText + (hasMore ? " 等档期" : " 的档期")
+                + "，请先删除对应档期后再删除档位";
     }
 
     /**
@@ -374,19 +453,29 @@ public class MineScheduleService {
     }
 
     /**
-     * 获取用于维护档期的启用档位定义。
+     * 获取用于维护档期的档位定义。
+     *
+     * <p>新增档期或切换档位时必须选择启用定义；编辑原有关联档位时允许定义已停用。</p>
      *
      * @param userId 用户 ID
      * @param slotDefinitionId 档位定义 ID
+     * @param currentSchedule 当前档期记录
      * @return 档位定义
      */
-    private SlotDefinitionEntity requireActiveSlotDefinitionForSchedule(Long userId, Long slotDefinitionId) {
+    private SlotDefinitionEntity requireSlotDefinitionForSchedule(
+            Long userId,
+            Long slotDefinitionId,
+            ScheduleEntity currentSchedule
+    ) {
         if (slotDefinitionId == null) {
             throw new BusinessException("请选择档位定义");
         }
         SlotDefinitionEntity entity = slotDefinitionEntityMapper.selectById(slotDefinitionId);
         if (entity == null || !Objects.equals(entity.getUserId(), userId)) {
             throw new BusinessException("档位定义不存在或无访问权限");
+        }
+        if (currentSchedule.getId() != null && Objects.equals(currentSchedule.getSlotDefinitionId(), entity.getId())) {
+            return entity;
         }
         if (!SlotDefinitionStatusDict.ACTIVE.getCode().equals(entity.getStatus())) {
             throw new BusinessException("停用档位不能维护新档期");
@@ -473,13 +562,10 @@ public class MineScheduleService {
                         .thenComparing(ScheduleEntity::getId))
                 .map(this::buildScheduleItem)
                 .toList();
-        long availableCount = items.stream()
-                .filter(item -> ScheduleStatusDict.AVAILABLE.getCode().equals(item.getStatus()))
-                .count();
         MineScheduleResponse.SelectedDateOverview overview = new MineScheduleResponse.SelectedDateOverview();
         overview.setDate(selectedDate.format(DATE_FORMATTER));
         overview.setSchedules(items);
-        overview.setSummaryText(items.size() + " 条档期，" + availableCount + " 个可约");
+        overview.setSummaryText(items.size() + " 条档期");
         return overview;
     }
 
@@ -543,9 +629,7 @@ public class MineScheduleService {
             contact = item.getContactPhone();
         }
         if (contact == null || contact.isBlank()) {
-            contact = ScheduleStatusDict.AVAILABLE.getCode().equals(item.getStatus())
-                    ? "空闲无联系人"
-                    : "未填写联系人";
+            contact = "未填写联系人";
         }
         return item.getStartTime() + "-" + item.getEndTime() + " · " + contact;
     }

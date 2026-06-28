@@ -9,7 +9,9 @@ const {
   buildSlotDefinitionFieldCounters,
   buildSlotDefinitionPayload,
   normalizeScheduleOverview,
+  validateScheduleItemPayload,
   validateScheduleItemForm,
+  validateSlotDefinitionPayload,
   validateSlotDefinitionForm
 } = require('../utils/schedule')
 
@@ -36,6 +38,7 @@ test('normalizes schedule overview for page rendering', () => {
           dayNumber: 24,
           currentMonth: true,
           selected: true,
+          lunarText: '初十',
           colors: ['#d98200'],
           count: 1
         }
@@ -43,7 +46,7 @@ test('normalizes schedule overview for page rendering', () => {
     },
     selectedDate: {
       date: '2026-06-24',
-      summaryText: '1 条档期，0 个可约',
+      summaryText: '1 条档期',
       schedules: [
         {
           id: 9,
@@ -68,9 +71,11 @@ test('normalizes schedule overview for page rendering', () => {
   assert.equal(result.slotDefinitions[0].statusClass, 'slot-status active')
   assert.equal(result.slotDefinitions[0].colorStyle, 'background: #d98200;')
   assert.equal(Object.hasOwn(result.slotDefinitions[0], 'sortOrder'), false)
-  assert.equal(result.month.titleText, '2026年06月')
+  assert.equal(result.month.titleText, '2026 年 6 月')
+  assert.equal(result.month.days[0].metaText, '初十')
   assert.equal(result.month.days[0].markerColors[0].style, 'background: #d98200;')
   assert.equal(result.selectedDate.titleText, '06月24日')
+  assert.equal(result.selectedDate.lunarTitleText, '农历五月初十')
   assert.equal(result.selectedDate.empty, false)
   assert.equal(result.selectedDate.schedules[0].statusClass, 'schedule-status amber')
   assert.equal(result.selectedDate.schedules[0].contactText, '陈女士 · 13800002026')
@@ -84,6 +89,65 @@ test('normalizes empty schedule overview with safe defaults', () => {
   assert.deepEqual(result.month.days, [])
   assert.equal(result.selectedDate.summaryText, '暂无档期')
   assert.equal(result.selectedDate.empty, true)
+})
+
+test('prefers holiday text for calendar day meta', () => {
+  const result = normalizeScheduleOverview({
+    month: {
+      yearMonth: '2026-06',
+      days: [
+        {
+          date: '2026-06-19',
+          dayNumber: 19,
+          currentMonth: true,
+          selected: false,
+          lunarText: '初五',
+          holidayText: '端午节'
+        }
+      ]
+    }
+  })
+
+  assert.equal(result.month.days[0].metaText, '端午节')
+})
+
+test('calculates lunar day meta when backend omits it', () => {
+  const result = normalizeScheduleOverview({
+    month: {
+      yearMonth: '2026-06',
+      days: [
+        { date: '2026-06-01', dayNumber: 1, currentMonth: true },
+        { date: '2026-06-15', dayNumber: 15, currentMonth: true },
+        { date: '2026-06-24', dayNumber: 24, currentMonth: true }
+      ]
+    }
+  })
+
+  assert.deepEqual(result.month.days.map((item) => item.metaText), ['十六', '五月', '初十'])
+})
+
+test('calculates lunar festival meta when backend omits holiday text', () => {
+  const result = normalizeScheduleOverview({
+    month: {
+      yearMonth: '2026-06',
+      days: [
+        { date: '2026-06-19', dayNumber: 19, currentMonth: true }
+      ]
+    }
+  })
+
+  assert.equal(result.month.days[0].metaText, '端午节')
+})
+
+test('calculates full lunar text for selected date detail', () => {
+  const result = normalizeScheduleOverview({
+    selectedDate: {
+      date: '2026-06-28',
+      schedules: []
+    }
+  })
+
+  assert.equal(result.selectedDate.lunarTitleText, '农历五月十四')
 })
 
 test('builds and validates slot definition payloads', () => {
@@ -112,6 +176,13 @@ test('builds and validates slot definition payloads', () => {
     endTime: '09:30',
     color: '#d98200'
   }), { valid: true, message: '' })
+  assert.deepEqual(validateSlotDefinitionPayload({
+    name: '迎亲档',
+    startTime: '07:30',
+    endTime: '09:30',
+    color: '#d98200',
+    status: 'ACTIVE'
+  }), { valid: true, message: '' })
   assert.equal(validateSlotDefinitionForm({}).message, '请输入档位名称')
   assert.equal(validateSlotDefinitionForm({
     name: '迎亲档',
@@ -122,6 +193,18 @@ test('builds and validates slot definition payloads', () => {
 })
 
 test('builds and validates schedule item payloads', () => {
+  assert.deepEqual(buildScheduleItemPayload({
+    scheduleDate: '2026-06-24',
+    slotDefinitionId: '1'
+  }), {
+    scheduleDate: '2026-06-24',
+    slotDefinitionId: 1,
+    status: 'TENTATIVE',
+    contactName: '',
+    contactPhone: '',
+    note: ''
+  })
+
   assert.deepEqual(buildScheduleItemPayload({
     scheduleId: '9',
     scheduleDate: '2026-06-24',
@@ -154,11 +237,25 @@ test('builds and validates schedule item payloads', () => {
     slotDefinitionId: 1,
     status: 'TENTATIVE'
   }), { valid: true, message: '' })
+  assert.deepEqual(validateScheduleItemPayload({
+    scheduleDate: '2026-06-24',
+    slotDefinitionId: 1,
+    status: 'TENTATIVE',
+    contactName: '',
+    contactPhone: '',
+    note: ''
+  }), { valid: true, message: '' })
   assert.equal(validateScheduleItemForm({ scheduleDate: '2026-06-24' }).message, '请选择档位定义')
+  assert.equal(validateScheduleItemForm({
+    scheduleDate: '2026-06-24',
+    slotDefinitionId: 1,
+    status: 'AVAILABLE'
+  }).message, '请选择有效的档期状态')
 })
 
 test('exposes schedule form options', () => {
-  assert.deepEqual(SCHEDULE_STATUS_OPTIONS.map((item) => item.value), ['AVAILABLE', 'TENTATIVE', 'BOOKED', 'REST'])
+  assert.deepEqual(SCHEDULE_STATUS_OPTIONS.map((item) => item.value), ['TENTATIVE', 'BOOKED', 'REST'])
+  assert.deepEqual(SCHEDULE_STATUS_OPTIONS.map((item) => item.text), ['待定', '已约', '休息'])
   assert.equal(SLOT_COLOR_OPTIONS.length, 8)
   assert.equal(SLOT_COLOR_OPTIONS[0].color, '#d98200')
   assert.equal(SLOT_COLOR_OPTIONS[0].name, '琥珀')

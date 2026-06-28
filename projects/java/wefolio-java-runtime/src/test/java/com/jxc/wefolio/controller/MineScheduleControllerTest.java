@@ -15,7 +15,6 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import java.lang.reflect.Method;
@@ -56,6 +55,7 @@ class MineScheduleControllerTest {
                 controller.updateSlotDefinition(1L, definitionRequest);
         Response<MineScheduleResponse.SlotDefinitionItem> statusUpdated =
                 controller.updateSlotDefinitionStatus(1L, statusRequest);
+        Response<Void> slotDefinitionDeleted = controller.deleteSlotDefinition(1L);
         Response<MineScheduleResponse.ScheduleItem> saved = controller.saveScheduleItem(saveRequest);
         Response<Void> deleted = controller.deleteScheduleItem(9L);
 
@@ -64,16 +64,19 @@ class MineScheduleControllerTest {
         assertPostMapping("createSlotDefinition",
                 new Class<?>[] {ScheduleSlotDefinitionRequest.class},
                 "/api/mine/schedule/slot-definitions");
-        assertPutMapping("updateSlotDefinition",
+        assertPostMapping("updateSlotDefinition",
                 new Class<?>[] {Long.class, ScheduleSlotDefinitionRequest.class},
-                "/api/mine/schedule/slot-definitions/{id}");
-        assertPutMapping("updateSlotDefinitionStatus",
+                "/api/mine/schedule/slot-definitions/save/{id}");
+        assertPostMapping("updateSlotDefinitionStatus",
                 new Class<?>[] {Long.class, ScheduleSlotDefinitionStatusRequest.class},
-                "/api/mine/schedule/slot-definitions/{id}/status");
+                "/api/mine/schedule/slot-definitions/status/{id}");
+        assertPostMapping("deleteSlotDefinition",
+                new Class<?>[] {Long.class},
+                "/api/mine/schedule/slot-definitions/delete/{id}");
         assertPostMapping("saveScheduleItem",
                 new Class<?>[] {ScheduleItemSaveRequest.class},
                 "/api/mine/schedule/items/save");
-        assertPostMapping("deleteScheduleItem", new Class<?>[] {Long.class}, "/api/mine/schedule/items/{id}/delete");
+        assertPostMapping("deleteScheduleItem", new Class<?>[] {Long.class}, "/api/mine/schedule/items/delete/{id}");
         assertThat(MineScheduleController.class.getMethod("deleteScheduleItem", Long.class)
                 .isAnnotationPresent(DeleteMapping.class)).isFalse();
         assertThat(MineScheduleController.class.getMethod("schedule", String.class, String.class)
@@ -84,12 +87,14 @@ class MineScheduleControllerTest {
         assertThat(created.getData()).isSameAs(definition);
         assertThat(updated.getData()).isSameAs(definition);
         assertThat(statusUpdated.getData()).isSameAs(definition);
+        assertThat(slotDefinitionDeleted.isSuccess()).isTrue();
         assertThat(saved.getData()).isSameAs(scheduleItem);
         assertThat(deleted.isSuccess()).isTrue();
         verify(mineScheduleService).getScheduleOverview("2026-06", "2026-06-24");
         verify(mineScheduleService).createSlotDefinition(definitionRequest);
         verify(mineScheduleService).updateSlotDefinition(1L, definitionRequest);
         verify(mineScheduleService).updateSlotDefinitionStatus(1L, statusRequest);
+        verify(mineScheduleService).deleteSlotDefinition(1L);
         verify(mineScheduleService).saveScheduleItem(saveRequest);
         verify(mineScheduleService).deleteScheduleItem(9L);
     }
@@ -122,22 +127,6 @@ class MineScheduleControllerTest {
             throws NoSuchMethodException {
         PostMapping mapping = MineScheduleController.class.getMethod(methodName, parameterTypes)
                 .getAnnotation(PostMapping.class);
-        assertThat(mapping).isNotNull();
-        assertThat(mapping.value()).containsExactly(path);
-    }
-
-    /**
-     * 断言 PUT 映射路径。
-     *
-     * @param methodName 方法名
-     * @param parameterTypes 参数类型
-     * @param path 路径
-     * @throws NoSuchMethodException 方法不存在时抛出
-     */
-    private void assertPutMapping(String methodName, Class<?>[] parameterTypes, String path)
-            throws NoSuchMethodException {
-        PutMapping mapping = MineScheduleController.class.getMethod(methodName, parameterTypes)
-                .getAnnotation(PutMapping.class);
         assertThat(mapping).isNotNull();
         assertThat(mapping.value()).containsExactly(path);
     }

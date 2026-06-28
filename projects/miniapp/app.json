@@ -2,7 +2,6 @@
   "pages": [
     "pages/index/index",
     "pages/schedule/schedule",
-    "pages/schedule-entry/schedule-entry",
     "pages/points/points",
     "pages/points-rules/points-rules",
     "pages/teams/teams",

@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.jxc.wefolio.dict.ScheduleStatusDict;
 import lombok.Data;
 
 
@@ -35,7 +36,11 @@ public class ScheduleEntity extends BaseEntity {
     /** 展示颜色快照 */
     private String colorSnapshot;
 
-    /** 档期状态：AVAILABLE 空闲 / BOOKED 已约 / TENTATIVE 待定 / REST 休息 */
+    /**
+     * 档期状态。
+     *
+     * @see ScheduleStatusDict
+     */
     private String status;
 
     /** 联系人姓名，沿用历史字段名存储明文，仅维护者可见 */

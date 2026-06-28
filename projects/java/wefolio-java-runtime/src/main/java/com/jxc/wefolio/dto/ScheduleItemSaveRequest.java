@@ -8,7 +8,7 @@ import lombok.Data;
 @Data
 public class ScheduleItemSaveRequest {
 
-    /** 档期 ID；为空时按日期和档位定义幂等新增或更新 */
+    /** 档期 ID；为空时新增档期，同日同档位重复新增会报错 */
     private Long scheduleId;
 
     /** 档期日期，格式 yyyy-MM-dd */

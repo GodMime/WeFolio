@@ -1,3 +1,5 @@
+const { normalizeId } = require('./id')
+
 const MESSAGE_READ_STATUS = {
   UNREAD: 'UNREAD',
   READ: 'READ'
@@ -41,11 +43,6 @@ const CATEGORY_TONE = {
 function toNumber(value) {
   const numberValue = Number(value)
   return Number.isFinite(numberValue) ? numberValue : 0
-}
-
-function normalizeId(value) {
-  const id = Number(value)
-  return Number.isFinite(id) && id > 0 ? id : null
 }
 
 function normalizeUnreadCount(raw = {}) {

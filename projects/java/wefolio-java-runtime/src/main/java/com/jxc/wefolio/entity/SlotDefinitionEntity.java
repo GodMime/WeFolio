@@ -3,6 +3,7 @@ package com.jxc.wefolio.entity;
 import java.time.LocalTime;
 
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.jxc.wefolio.dict.SlotDefinitionStatusDict;
 import lombok.Data;
 
 
@@ -31,7 +32,11 @@ public class SlotDefinitionEntity extends BaseEntity {
     /** 是否系统初始化默认档位：0 否 / 1 是 */
     private Integer isSystemDefault;
 
-    /** 状态：ACTIVE 启用 / DISABLED 停用 */
+    /**
+     * 档位定义状态。
+     *
+     * @see SlotDefinitionStatusDict
+     */
     private String status;
 
 }

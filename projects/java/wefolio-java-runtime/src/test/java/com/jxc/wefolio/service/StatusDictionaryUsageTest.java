@@ -50,7 +50,7 @@ class StatusDictionaryUsageTest {
     void scheduleStatusToneComesFromDictionary() throws Exception {
         String source = readSource("src/main/java/com/jxc/wefolio/service/MineScheduleService.java");
 
-        assertThat(ScheduleStatusDict.AVAILABLE.getTone()).isEqualTo("teal");
+        assertThat(ScheduleStatusDict.fromCode("AVAILABLE")).isNull();
         assertThat(ScheduleStatusDict.BOOKED.getTone()).isEqualTo("rose");
         assertThat(ScheduleStatusDict.TENTATIVE.getTone()).isEqualTo("amber");
         assertThat(ScheduleStatusDict.REST.getTone()).isEqualTo("muted");

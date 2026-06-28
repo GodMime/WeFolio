@@ -11,7 +11,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -62,7 +61,7 @@ public class MineScheduleController {
      * @param request 档位定义请求
      * @return 更新后的档位定义
      */
-    @PutMapping("/api/mine/schedule/slot-definitions/{id}")
+    @PostMapping("/api/mine/schedule/slot-definitions/save/{id}")
     public Response<MineScheduleResponse.SlotDefinitionItem> updateSlotDefinition(
             @PathVariable Long id,
             @RequestBody ScheduleSlotDefinitionRequest request
@@ -77,12 +76,24 @@ public class MineScheduleController {
      * @param request 状态请求
      * @return 更新后的档位定义
      */
-    @PutMapping("/api/mine/schedule/slot-definitions/{id}/status")
+    @PostMapping("/api/mine/schedule/slot-definitions/status/{id}")
     public Response<MineScheduleResponse.SlotDefinitionItem> updateSlotDefinitionStatus(
             @PathVariable Long id,
             @RequestBody ScheduleSlotDefinitionStatusRequest request
     ) {
         return Response.success(mineScheduleService.updateSlotDefinitionStatus(id, request));
+    }
+
+    /**
+     * 删除停用档位定义。
+     *
+     * @param id 档位定义 ID
+     * @return 空响应
+     */
+    @PostMapping("/api/mine/schedule/slot-definitions/delete/{id}")
+    public Response<Void> deleteSlotDefinition(@PathVariable Long id) {
+        mineScheduleService.deleteSlotDefinition(id);
+        return Response.success();
     }
 
     /**
@@ -104,7 +115,7 @@ public class MineScheduleController {
      * @param id 档期 ID
      * @return 空响应
      */
-    @PostMapping("/api/mine/schedule/items/{id}/delete")
+    @PostMapping("/api/mine/schedule/items/delete/{id}")
     public Response<Void> deleteScheduleItem(@PathVariable Long id) {
         mineScheduleService.deleteScheduleItem(id);
         return Response.success();

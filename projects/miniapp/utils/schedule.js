@@ -1,3 +1,10 @@
+const { normalizeId } = require('./id')
+const {
+  formatLunarDayMeta,
+  formatLunarFullText,
+  toLunarDate
+} = require('./lunar')
+
 const DEFAULT_SLOT_COLOR = '#d98200'
 
 const SLOT_COLOR_OPTIONS = [
@@ -20,8 +27,9 @@ const SLOT_STATUS_TEXT = {
   DISABLED: '停用'
 }
 
+const DEFAULT_SCHEDULE_STATUS = 'TENTATIVE'
+
 const SCHEDULE_STATUS_OPTIONS = [
-  { value: 'AVAILABLE', text: '空闲', tone: 'teal' },
   { value: 'TENTATIVE', text: '待定', tone: 'amber' },
   { value: 'BOOKED', text: '已约', tone: 'rose' },
   { value: 'REST', text: '休息', tone: 'muted' }
@@ -45,6 +53,7 @@ const SCHEDULE_FIELD_LIMITS = {
 const COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const TIME_PATTERN = /^\d{2}:\d{2}$/
+const DAY_META_FIELDS = ['holidayText', 'festivalText', 'noteText', 'lunarText', 'metaText']
 
 function trimText(value) {
   return String(value || '').trim()
@@ -52,11 +61,6 @@ function trimText(value) {
 
 function countText(value) {
   return Array.from(String(value || '')).length
-}
-
-function normalizeId(value) {
-  const id = Number(value)
-  return Number.isFinite(id) && id > 0 ? id : null
 }
 
 function toNumber(value, fallback = 0) {
@@ -106,7 +110,7 @@ function normalizeSlotDefinition(raw = {}) {
 function formatYearMonthTitle(yearMonth) {
   const value = trimText(yearMonth)
   const match = value.match(/^(\d{4})-(\d{2})$/)
-  return match ? `${match[1]}年${match[2]}月` : '本月'
+  return match ? `${match[1]} 年 ${Number(match[2])} 月` : '本月'
 }
 
 function formatDateTitle(dateText) {
@@ -123,6 +127,20 @@ function normalizeMarkerColors(colors) {
     color,
     style: `background: ${color};`
   }))
+}
+
+function buildSelectedDateLunarTitleText(raw = {}) {
+  const titleText = trimText(raw.lunarTitleText)
+  if (titleText) {
+    return titleText
+  }
+  const lunarText = formatLunarFullText(toLunarDate(raw.date))
+  return lunarText ? `农历${lunarText}` : ''
+}
+
+function buildDayMetaText(raw = {}) {
+  const field = DAY_META_FIELDS.find((item) => trimText(raw[item]))
+  return field ? trimText(raw[field]) : formatLunarDayMeta(toLunarDate(raw.date))
 }
 
 function normalizeMonthDay(raw = {}) {
@@ -144,6 +162,7 @@ function normalizeMonthDay(raw = {}) {
     selected: Boolean(raw.selected),
     colors: Array.isArray(raw.colors) ? raw.colors.map(normalizeColor) : [],
     markerColors: normalizeMarkerColors(raw.colors),
+    metaText: buildDayMetaText(raw),
     count,
     countText: count > 0 ? String(count) : '',
     dayClass: classes.join(' ')
@@ -151,7 +170,7 @@ function normalizeMonthDay(raw = {}) {
 }
 
 function normalizeScheduleItem(raw = {}) {
-  const status = trimText(raw.status) || 'AVAILABLE'
+  const status = trimText(raw.status) || DEFAULT_SCHEDULE_STATUS
   const statusOption = SCHEDULE_STATUS_MAP[status] || {}
   const tone = raw.statusTone || statusOption.tone || 'muted'
   const contactName = trimText(raw.contactName)
@@ -210,6 +229,7 @@ function normalizeScheduleOverview(raw = {}) {
     selectedDate: {
       date: selectedDate.date || '',
       titleText: formatDateTitle(selectedDate.date),
+      lunarTitleText: buildSelectedDateLunarTitleText(selectedDate),
       summaryText: selectedDate.summaryText || (schedules.length > 0 ? `${schedules.length} 条档期` : '暂无档期'),
       schedules,
       empty: schedules.length === 0
@@ -231,7 +251,7 @@ function buildScheduleItemPayload(form = {}) {
   const payload = {
     scheduleDate: trimText(form.scheduleDate),
     slotDefinitionId: normalizeId(form.slotDefinitionId),
-    status: trimText(form.status) || 'AVAILABLE',
+    status: trimText(form.status) || DEFAULT_SCHEDULE_STATUS,
     contactName: trimText(form.contactName),
     contactPhone: trimText(form.contactPhone),
     note: trimText(form.note)
@@ -257,8 +277,7 @@ function buildSlotDefinitionFieldCounters(form = {}) {
   }, {})
 }
 
-function validateSlotDefinitionForm(form = {}) {
-  const payload = buildSlotDefinitionPayload(form)
+function validateSlotDefinitionPayload(payload = {}) {
   if (!payload.name) {
     return { valid: false, message: '请输入档位名称' }
   }
@@ -274,17 +293,20 @@ function validateSlotDefinitionForm(form = {}) {
   if (payload.startTime >= payload.endTime) {
     return { valid: false, message: '开始时间必须早于结束时间' }
   }
-  if (!COLOR_PATTERN.test(trimText(form.color))) {
+  if (!COLOR_PATTERN.test(trimText(payload.color))) {
     return { valid: false, message: '请选择有效的档位颜色' }
   }
   if (!SLOT_STATUS_TEXT[payload.status]) {
-    return { valid: false, message: '请选择有效的档位状态' }
+    return { valid: false, message: '请选择有效的档位定义状态' }
   }
   return { valid: true, message: '' }
 }
 
-function validateScheduleItemForm(form = {}) {
-  const payload = buildScheduleItemPayload(form)
+function validateSlotDefinitionForm(form = {}) {
+  return validateSlotDefinitionPayload(buildSlotDefinitionPayload(form))
+}
+
+function validateScheduleItemPayload(payload = {}) {
   if (!DATE_PATTERN.test(payload.scheduleDate)) {
     return { valid: false, message: '请选择档期日期' }
   }
@@ -306,7 +328,12 @@ function validateScheduleItemForm(form = {}) {
   return { valid: true, message: '' }
 }
 
+function validateScheduleItemForm(form = {}) {
+  return validateScheduleItemPayload(buildScheduleItemPayload(form))
+}
+
 module.exports = {
+  DEFAULT_SCHEDULE_STATUS,
   DEFAULT_SLOT_COLOR,
   SCHEDULE_STATUS_OPTIONS,
   SLOT_COLOR_OPTIONS,
@@ -316,5 +343,7 @@ module.exports = {
   buildSlotDefinitionPayload,
   normalizeScheduleOverview,
   validateScheduleItemForm,
+  validateScheduleItemPayload,
+  validateSlotDefinitionPayload,
   validateSlotDefinitionForm
 }

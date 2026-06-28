@@ -1,3 +1,5 @@
+const { normalizeId } = require('./id')
+
 const POINT_TRANSACTION_TYPE = {
   CONSUMPTION: 'CONSUMPTION'
 }
@@ -24,11 +26,6 @@ function toPositiveNumber(value, fallback) {
 
 function toDisplayText(value) {
   return String(toNumber(value))
-}
-
-function normalizeId(value) {
-  const id = Number(value)
-  return Number.isFinite(id) && id > 0 ? id : null
 }
 
 function formatSignedPoints(value) {

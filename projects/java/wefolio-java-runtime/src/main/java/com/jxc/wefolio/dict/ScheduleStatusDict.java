@@ -10,7 +10,6 @@ import java.util.stream.Collectors;
  */
 public enum ScheduleStatusDict {
 
-    AVAILABLE("AVAILABLE", "空闲", "teal"),
     BOOKED("BOOKED", "已约", "rose"),
     TENTATIVE("TENTATIVE", "待定", "amber"),
     REST("REST", "休息", "muted");
