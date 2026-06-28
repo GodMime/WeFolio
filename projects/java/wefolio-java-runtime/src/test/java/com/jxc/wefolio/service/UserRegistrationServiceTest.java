@@ -116,7 +116,7 @@ class UserRegistrationServiceTest {
                 eq("REFERRAL_REGISTRATION"),
                 eq("21"),
                 eq("REFERRAL_USER_GIFT:21"),
-                eq("推荐用户赠送")
+                eq("推荐用户注册赠送")
         );
     }
 

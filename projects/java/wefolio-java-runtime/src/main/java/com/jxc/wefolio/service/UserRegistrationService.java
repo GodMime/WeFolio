@@ -33,8 +33,8 @@ public class UserRegistrationService {
     /** 新用户注册赠送描述 */
     private static final String NEW_USER_REGISTRATION_GIFT_REMARK = "新用户注册赠送";
 
-    /** 推荐用户赠送描述 */
-    private static final String REFERRAL_USER_GIFT_REMARK = "推荐用户赠送";
+    /** 推荐用户注册赠送描述 */
+    private static final String REFERRAL_USER_GIFT_REMARK = "推荐用户注册赠送";
 
     /** 新用户注册业务类型 */
     private static final String BUSINESS_TYPE_USER_REGISTRATION = "USER_REGISTRATION";
@@ -45,7 +45,7 @@ public class UserRegistrationService {
     /** 新用户注册赠送幂等键前缀 */
     private static final String NEW_USER_REGISTRATION_GIFT_IDEMPOTENCY_PREFIX = "NEW_USER_REGISTRATION_GIFT:";
 
-    /** 推荐用户赠送幂等键前缀 */
+    /** 推荐用户注册赠送幂等键前缀 */
     private static final String REFERRAL_USER_GIFT_IDEMPOTENCY_PREFIX = "REFERRAL_USER_GIFT:";
 
     /** 用户资料 Mapper */

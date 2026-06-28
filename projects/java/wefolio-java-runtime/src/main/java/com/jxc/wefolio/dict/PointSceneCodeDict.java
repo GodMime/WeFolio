@@ -45,9 +45,9 @@ public class PointSceneCodeDict {
     public static final DictValue NEW_USER_REGISTRATION_GIFT =
             new DictValue("NEW_USER_REGISTRATION_GIFT", "新用户注册赠送");
 
-    /** 推荐用户赠送 */
+    /** 推荐用户注册赠送 */
     public static final DictValue REFERRAL_USER_GIFT =
-            new DictValue("REFERRAL_USER_GIFT", "推荐用户赠送");
+            new DictValue("REFERRAL_USER_GIFT", "推荐用户注册赠送");
 
     /** 场景编码索引 */
     private static final Map<String, DictValue> CODE_MAP = Map.ofEntries(
