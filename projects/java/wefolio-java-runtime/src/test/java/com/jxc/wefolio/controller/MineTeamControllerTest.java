@@ -29,6 +29,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.multipart.MultipartFile;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -58,7 +59,7 @@ class MineTeamControllerTest {
         MineTeamOwnerTransferRequest transferRequest = new MineTeamOwnerTransferRequest();
         MineTeamMemberRemoveRequest removeRequest = new MineTeamMemberRemoveRequest();
         FileUploadResponse uploadResponse = new FileUploadResponse();
-        MockMultipartFile file = new MockMultipartFile("file", "team.png", "image/png", "png".getBytes());
+        MockMultipartFile file = new MockMultipartFile("file", "team.png", "image/png", pngBytes());
         when(mineTeamService.listTeams()).thenReturn(listResponse);
         when(mineTeamService.createTeam(createRequest)).thenReturn(detailResponse);
         when(mineTeamService.getTeamDetail(100L)).thenReturn(detailResponse);
@@ -160,6 +161,36 @@ class MineTeamControllerTest {
         verify(mineTeamService).uploadTeamAvatar(100L, file);
     }
 
+    @Test
+    void uploadTeamAvatarRejectsFilesLargerThanTwoHundredKilobytes() {
+        byte[] content = new byte[200 * 1024 + 1];
+        MockMultipartFile file = new MockMultipartFile("file", "team.png", "image/png", content);
+        MineTeamController controller = new MineTeamController(mineTeamService);
+
+        Response<FileUploadResponse> response = controller.uploadTeamAvatar(100L, file);
+
+        assertThat(response.isSuccess()).isFalse();
+        assertThat(response.getMessage()).isEqualTo("团队图标不能超过 200KB");
+        verify(mineTeamService, never()).uploadTeamAvatar(100L, file);
+    }
+
+    @Test
+    void uploadTeamAvatarRejectsUnsupportedImageType() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "team.png",
+                "image/png",
+                "not an image".getBytes()
+        );
+        MineTeamController controller = new MineTeamController(mineTeamService);
+
+        Response<FileUploadResponse> response = controller.uploadTeamAvatar(100L, file);
+
+        assertThat(response.isSuccess()).isFalse();
+        assertThat(response.getMessage()).isEqualTo("团队图标仅支持 JPG、PNG、GIF、WebP 格式");
+        verify(mineTeamService, never()).uploadTeamAvatar(100L, file);
+    }
+
     /**
      * 断言 GET 映射路径。
      *
@@ -223,5 +254,16 @@ class MineTeamControllerTest {
     private void assertRequestBody(String methodName, Class<?> parameterType) throws NoSuchMethodException {
         assertThat(MineTeamController.class.getMethod(methodName, parameterType)
                 .getParameters()[0].isAnnotationPresent(RequestBody.class)).isTrue();
+    }
+
+    /**
+     * 构造最小 PNG 文件头，用于通过头像图片魔数校验。
+     *
+     * @return PNG 文件头字节
+     */
+    private byte[] pngBytes() {
+        return new byte[] {
+                (byte) 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'
+        };
     }
 }

@@ -47,7 +47,7 @@ class RestWechatMiniappClientTest {
     }
 
     @Test
-    void exchangePhoneCodeLogsRemoteRequestAndResponse(CapturedOutput output) throws Exception {
+    void exchangePhoneCodeMasksSensitiveRemoteRequestAndResponseLogs(CapturedOutput output) throws Exception {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         RestWechatMiniappClient client = new RestWechatMiniappClient(properties(), new LocalCacheService());
@@ -74,11 +74,14 @@ class RestWechatMiniappClientTest {
         assertThat(output).contains("微信远端请求入参");
         assertThat(output).contains("serviceName=微信手机号服务");
         assertThat(output).contains("method=POST");
-        assertThat(output).contains("url=https://api.weixin.qq.com/wxa/business/getuserphonenumber?access_token=token-123");
-        assertThat(output).contains("requestBody={\"code\":\"phone-code\"}");
+        assertThat(output).contains("url=https://api.weixin.qq.com/wxa/business/getuserphonenumber?access_token=tok***-123");
+        assertThat(output).contains("requestBody={\"code\":\"pho***code\"}");
         assertThat(output).contains("微信远端响应出参");
         assertThat(output).contains("status=200");
-        assertThat(output).contains("\"phoneNumber\":\"+8613812348000\"");
+        assertThat(output).contains("\"phoneNumber\":\"+86***8000\"");
+        assertThat(output).doesNotContain("access_token=token-123");
+        assertThat(output).doesNotContain("phone-code");
+        assertThat(output).doesNotContain("+8613812348000");
         server.verify();
     }
 
@@ -145,6 +148,19 @@ class RestWechatMiniappClientTest {
         server.verify();
     }
 
+    @Test
+    void logMaskingFailureLogsStackTraceAndReturnsSafePlaceholder(CapturedOutput output) {
+        RestWechatMiniappClient client = new RestWechatMiniappClient(properties(), new LocalCacheService());
+
+        String maskedText = client.maskLogTextSafely(() -> {
+            throw new IllegalStateException("mask boom");
+        });
+
+        assertThat(maskedText).isEqualTo("[日志脱敏失败]");
+        assertThat(output).contains("微信日志脱敏失败");
+        assertThat(output).contains("java.lang.IllegalStateException: mask boom");
+    }
+
     private void injectRestClient(RestWechatMiniappClient client, RestClient restClient) throws Exception {
         Field field = RestWechatMiniappClient.class.getDeclaredField("restClient");
         field.setAccessible(true);
@@ -152,7 +168,7 @@ class RestWechatMiniappClientTest {
     }
 
     /**
-     * 构造 verbose 模式配置，保留完整日志断言。
+     * 构造 verbose 模式配置，用于验证详细日志仍会基础脱敏。
      *
      * @return 微信小程序配置
      */
@@ -205,15 +221,18 @@ class RestWechatMiniappClientTest {
         client.exchangePhoneCode("phone-code");
 
         // secret 无条件脱敏（access_token 获取的日志中也会包含 secret）
-        assertThat(output).contains("secret=***");
-        // access_token 在非 verbose 模式脱敏
-        assertThat(output).contains("access_token=***");
+        assertThat(output).contains("secret=sec***hmac");
+        // access_token 脱敏后保留头尾，便于比对
+        assertThat(output).contains("access_token=tok***-123");
         assertThat(output).doesNotContain("access_token=token-123");
+        // 一次性授权 code 脱敏
+        assertThat(output).contains("requestBody={\"code\":\"pho***code\"}");
+        assertThat(output).doesNotContain("phone-code");
         // 手机号脱敏
         assertThat(output).doesNotContain("+8613812348000");
         assertThat(output).doesNotContain("13812348000");
-        assertThat(output).contains("\"phoneNumber\":\"***\"");
-        assertThat(output).contains("\"purePhoneNumber\":\"***\"");
+        assertThat(output).contains("\"phoneNumber\":\"+86***8000\"");
+        assertThat(output).contains("\"purePhoneNumber\":\"138***8000\"");
         assertThat(output).contains("\"countryCode\":\"***\"");
         server.verify();
     }

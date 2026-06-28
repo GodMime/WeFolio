@@ -16,6 +16,7 @@ import com.jxc.wefolio.dict.UserStatusDict;
 import com.jxc.wefolio.entity.UserAuthEntity;
 import com.jxc.wefolio.entity.UserEntity;
 import com.jxc.wefolio.exception.BusinessException;
+import com.jxc.wefolio.exception.InvalidAuthTokenException;
 import com.jxc.wefolio.mapper.UserAuthEntityMapper;
 import com.jxc.wefolio.mapper.UserEntityMapper;
 import lombok.RequiredArgsConstructor;
@@ -177,7 +178,7 @@ public class MiniappAuthService {
         try {
             byte[] tokenBytes = Base64.getUrlDecoder().decode(token.substring(MAINTAINER_TOKEN_PREFIX.length()));
             if (tokenBytes.length <= TOKEN_IV_LENGTH_BYTES) {
-                throw new BusinessException(TOKEN_PARSE_FAILED_MESSAGE);
+                throw new InvalidAuthTokenException(TOKEN_PARSE_FAILED_MESSAGE);
             }
             byte[] iv = Arrays.copyOfRange(tokenBytes, 0, TOKEN_IV_LENGTH_BYTES);
             byte[] cipherText = Arrays.copyOfRange(tokenBytes, TOKEN_IV_LENGTH_BYTES, tokenBytes.length);
@@ -192,7 +193,7 @@ public class MiniappAuthService {
         } catch (Exception e) {
             log.warn("维护者登录令牌解析失败: errorType={}, errorMessage={}",
                     e.getClass().getSimpleName(), e.getMessage(), e);
-            throw new BusinessException(TOKEN_PARSE_FAILED_MESSAGE, e);
+            throw new InvalidAuthTokenException(TOKEN_PARSE_FAILED_MESSAGE, e);
         }
     }
 
@@ -205,7 +206,7 @@ public class MiniappAuthService {
     private ResolvedAuthToken parseTokenPayload(String payload) {
         String[] parts = payload.split(TOKEN_PAYLOAD_SEPARATOR, -1);
         if (parts.length != TOKEN_PAYLOAD_PART_COUNT) {
-            throw new BusinessException(TOKEN_PARSE_FAILED_MESSAGE);
+            throw new InvalidAuthTokenException(TOKEN_PARSE_FAILED_MESSAGE);
         }
         long userId;
         long issuedAtEpochSeconds;
@@ -213,14 +214,14 @@ public class MiniappAuthService {
             userId = Long.parseLong(parts[TOKEN_PAYLOAD_USER_ID_INDEX]);
             issuedAtEpochSeconds = Long.parseLong(parts[TOKEN_PAYLOAD_ISSUED_AT_INDEX]);
         } catch (NumberFormatException e) {
-            throw new BusinessException(TOKEN_PARSE_FAILED_MESSAGE, e);
+            throw new InvalidAuthTokenException(TOKEN_PARSE_FAILED_MESSAGE, e);
         }
         if (userId <= 0 || issuedAtEpochSeconds <= 0) {
-            throw new BusinessException(TOKEN_PARSE_FAILED_MESSAGE);
+            throw new InvalidAuthTokenException(TOKEN_PARSE_FAILED_MESSAGE);
         }
         Instant expiresAt = Instant.ofEpochSecond(issuedAtEpochSeconds).plusSeconds(MAINTAINER_EXPIRES_IN_SECONDS);
         if (!expiresAt.isAfter(Instant.now())) {
-            throw new BusinessException(TOKEN_EXPIRED_MESSAGE);
+            throw new InvalidAuthTokenException(TOKEN_EXPIRED_MESSAGE);
         }
         return new ResolvedAuthToken(userId, expiresAt);
     }
@@ -279,7 +280,7 @@ public class MiniappAuthService {
                 cosService.initUserStorage(uniqueCode);
                 // 注册前端头像为本地临时路径时无法由服务端读取，后续由已登录上传接口写回 COS 地址
                 String originalAvatarUrl = request.getAvatarUrl();
-                request.setAvatarUrl(uploadAvatarToCos(request.getAvatarUrl(), uniqueCode, ""));
+                request.setAvatarUrl(resolveAvatarUrl(request.getAvatarUrl(), uniqueCode, ""));
                 try {
                     user = userRegistrationService.createWechatMaintainerUser(
                             uniqueCode,
@@ -359,16 +360,16 @@ public class MiniappAuthService {
     }
 
     /**
-     * 将头像远程 URL 上传到 COS 的 {@code {uniqueCode}/others/} 目录。
-     * 非 http(s) 地址通常是小程序本地临时路径，服务端无法读取，直接回退。
+     * 解析头像 URL。
+     * <p>头像文件必须通过已登录的 multipart 上传接口写入 COS；这里不再抓取客户端传入的远程地址，避免服务端访问不可信 URL。</p>
      *
      * @param avatarUrl 头像地址
      * @param uniqueCode 用户唯一码
      * @param fallbackUrl 无法上传时使用的回退地址
-     * @return COS 公开 URL、原远程 URL 或回退地址
+     * @return 已有 COS 公开 URL 或回退地址
      */
-    private String uploadAvatarToCos(String avatarUrl, String uniqueCode, String fallbackUrl) {
-        log.info("注册头像上传 COS 开始: uniqueCode={}, avatarUrl={}", uniqueCode, avatarUrl);
+    private String resolveAvatarUrl(String avatarUrl, String uniqueCode, String fallbackUrl) {
+        log.info("解析注册头像地址: uniqueCode={}, avatarUrl={}", uniqueCode, avatarUrl);
         if (avatarUrl == null || avatarUrl.isBlank()) {
             return defaultString(fallbackUrl, "");
         }
@@ -382,15 +383,8 @@ public class MiniappAuthService {
             log.info("跳过非远程头像路径: uniqueCode={}, avatarUrl={}", uniqueCode, normalizedAvatarUrl);
             return defaultString(fallbackUrl, "");
         }
-        try {
-            String key = cosService.uploadFromUrl(normalizedAvatarUrl, uniqueCode + "/others");
-            String cosUrl = cosService.publicUrl(key);
-            log.info("头像上传 COS 成功: uniqueCode={}, cosUrl={}", uniqueCode, cosUrl);
-            return cosUrl;
-        } catch (Exception e) {
-            log.warn("头像上传 COS 失败，使用原始 URL: uniqueCode={}, avatarUrl={}", uniqueCode, normalizedAvatarUrl, e);
-            return normalizedAvatarUrl;
-        }
+        log.info("跳过远程头像地址，等待已登录上传接口写入 COS: uniqueCode={}", uniqueCode);
+        return defaultString(fallbackUrl, "");
     }
 
     /**
@@ -409,7 +403,7 @@ public class MiniappAuthService {
     ) {
         LocalDateTime now = LocalDateTime.now();
         String nickname = defaultString(request.getNickname(), user.getNickname());
-        String avatarUrl = uploadAvatarToCos(request.getAvatarUrl(), user.getUniqueCode(), user.getAvatarUrl());
+        String avatarUrl = resolveAvatarUrl(request.getAvatarUrl(), user.getUniqueCode(), user.getAvatarUrl());
         user.setNickname(nickname);
 
         // 头像地址变更时校验每月更新次数限制（跨月自动重置）

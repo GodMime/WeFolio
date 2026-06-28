@@ -4,13 +4,13 @@ const {
   uploadPreparedFile
 } = require('./upload-file')
 
-const TEAM_AVATAR_MAX_SIZE_BYTES = 5 * 1024 * 1024
+const TEAM_AVATAR_MAX_SIZE_BYTES = 200 * 1024
 const TEAM_AVATAR_COMPRESS_QUALITY = 95
 const TEAM_AVATAR_COMPRESSED_SIZE = 512
 const TEAM_AVATAR_UPLOAD_MESSAGES = {
   unsupportedCompress: '当前微信版本不支持团队图标压缩',
   compressFailed: '团队图标压缩失败',
-  tooLarge: '团队图标不能超过 5MB',
+  tooLarge: '团队图标不能超过 200KB',
   parseFailed: '团队图标上传响应解析失败',
   uploadFailed: '团队图标上传失败',
   missingUrl: '团队图标上传成功但未获取到文件地址'

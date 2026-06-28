@@ -4,14 +4,14 @@ const {
   uploadPreparedFile
 } = require('./upload-file')
 
-const AVATAR_MAX_SIZE_BYTES = 5 * 1024 * 1024
+const AVATAR_MAX_SIZE_BYTES = 200 * 1024
 const AVATAR_COMPRESS_QUALITY = 95
 const AVATAR_COMPRESSED_SIZE = 512
 const AVATAR_UPLOAD_URL = '/api/auth/avatar'
 const AVATAR_UPLOAD_MESSAGES = {
   unsupportedCompress: '当前微信版本不支持头像压缩',
   compressFailed: '头像压缩失败',
-  tooLarge: '头像文件不能超过 5MB',
+  tooLarge: '头像文件不能超过 200KB',
   parseFailed: '头像上传响应解析失败',
   uploadFailed: '头像上传失败',
   missingUrl: '头像上传成功但未获取到文件地址'

@@ -4,6 +4,7 @@ import com.jxc.wefolio.common.cache.CacheService;
 import com.jxc.wefolio.common.cache.LocalCacheService;
 import com.jxc.wefolio.dict.UserStatusDict;
 import com.jxc.wefolio.entity.UserEntity;
+import com.jxc.wefolio.exception.InvalidAuthTokenException;
 import com.jxc.wefolio.mapper.UserEntityMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -94,6 +95,19 @@ class AuthTokenServiceTest {
 
         assertThat(userId).isEmpty();
         assertThat(cacheService.get("auth:token:invalid", Long.class)).isEmpty();
+    }
+
+    @Test
+    void treatsBrokenMaintainerTokenAsUnauthenticatedWithoutWritingCache() {
+        when(miniappAuthService.resolveAuthToken("Bearer broken"))
+                .thenThrow(new InvalidAuthTokenException("登录令牌解析失败，请重新登录"));
+        LocalCacheService cacheService = new LocalCacheService();
+        AuthTokenService service = new AuthTokenService(miniappAuthService, userEntityMapper, cacheService);
+
+        Optional<Long> userId = service.resolveAuthenticatedUserId("Bearer broken");
+
+        assertThat(userId).isEmpty();
+        assertThat(cacheService.get("auth:token:broken", Long.class)).isEmpty();
     }
 
     @Test

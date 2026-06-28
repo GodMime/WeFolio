@@ -4,6 +4,7 @@ import com.jxc.wefolio.common.Response;
 import com.jxc.wefolio.annotation.LoginAccess;
 import com.jxc.wefolio.annotation.MaintainerAccess;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
+import com.jxc.wefolio.common.upload.AvatarFileValidator;
 import com.jxc.wefolio.dto.AuthSessionResponse;
 import com.jxc.wefolio.dto.FileUploadResponse;
 import com.jxc.wefolio.dto.MaintainerWechatLoginRequest;
@@ -35,8 +36,8 @@ import org.springframework.web.multipart.MultipartFile;
 @RequestMapping("/api/auth")
 public class MiniappAuthController {
 
-    /** 头像文件最大大小：5MB */
-    private static final long MAX_AVATAR_SIZE_BYTES = 5L * 1024L * 1024L;
+    /** 头像文件提示名称 */
+    private static final String AVATAR_FILE_LABEL = "头像文件";
 
     /** 小程序登录服务 */
     private final MiniappAuthService miniappAuthService;
@@ -92,11 +93,9 @@ public class MiniappAuthController {
     @PostMapping(value = "/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Response<FileUploadResponse> uploadAvatar(@RequestParam("file") MultipartFile file) {
         Long userId = AuthContextHolder.requireUserId();
-        if (file == null || file.isEmpty()) {
-            return Response.fail("头像文件不能为空");
-        }
-        if (file.getSize() > MAX_AVATAR_SIZE_BYTES) {
-            return Response.fail("头像文件不能超过 5MB");
+        String validationMessage = AvatarFileValidator.validate(file, AVATAR_FILE_LABEL);
+        if (validationMessage != null) {
+            return Response.fail(validationMessage);
         }
         String uniqueCode = miniappAuthService.getUniqueCodeByUserId(userId);
         log.info("头像上传开始: userId={}, uniqueCode={}, originalFilename={}, size={}",

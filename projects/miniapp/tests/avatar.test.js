@@ -58,7 +58,7 @@ test('prepare avatar rejects images that remain too large after compression', as
 
   await assert.rejects(
     () => prepareAvatarFilePath('tmp/original.jpg', { wxApi }),
-    /头像文件不能超过 5MB/
+    /头像文件不能超过 200KB/
   )
 })
 

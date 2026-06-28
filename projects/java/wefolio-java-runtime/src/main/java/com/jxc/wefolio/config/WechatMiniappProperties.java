@@ -18,6 +18,6 @@ public class WechatMiniappProperties {
     /** 微信小程序 AppSecret */
     private String appSecret;
 
-    /** 是否打印微信接口详细日志（含 access_token、手机号等敏感字段），生产环境建议关闭 */
+    /** 是否打印微信接口详细日志；敏感字段仍会基础脱敏，生产环境建议关闭 */
     private boolean logVerbose = false;
 }

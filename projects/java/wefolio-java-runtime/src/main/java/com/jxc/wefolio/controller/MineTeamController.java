@@ -2,6 +2,7 @@ package com.jxc.wefolio.controller;
 
 import com.jxc.wefolio.annotation.MaintainerAccess;
 import com.jxc.wefolio.common.Response;
+import com.jxc.wefolio.common.upload.AvatarFileValidator;
 import com.jxc.wefolio.dto.FileUploadResponse;
 import com.jxc.wefolio.dto.MineTeamCreateRequest;
 import com.jxc.wefolio.dto.MineTeamDetailResponse;
@@ -40,8 +41,8 @@ import org.springframework.web.multipart.MultipartFile;
 @RequiredArgsConstructor
 public class MineTeamController {
 
-    /** 团队图标最大大小：5MB，与小程序上传前校验保持一致 */
-    private static final long MAX_TEAM_AVATAR_SIZE_BYTES = 5L * 1024L * 1024L;
+    /** 团队图标提示名称 */
+    private static final String TEAM_AVATAR_FILE_LABEL = "团队图标";
 
     /** 我的团队业务服务，负责权限、团队唯一码、COS 目录和成员关系等核心逻辑 */
     private final MineTeamService mineTeamService;
@@ -252,12 +253,10 @@ public class MineTeamController {
             @PathVariable Long teamId,
             @RequestParam("file") MultipartFile file
     ) {
-        // 上传文件的空值和大小在 Controller 层先拦截，权限与 COS 目录归属由 Service 统一判断。
-        if (file == null || file.isEmpty()) {
-            return Response.fail("团队图标不能为空");
-        }
-        if (file.getSize() > MAX_TEAM_AVATAR_SIZE_BYTES) {
-            return Response.fail("团队图标不能超过 5MB");
+        // 头像类文件格式在 Controller 层先拦截，权限与 COS 目录归属由 Service 统一判断。
+        String validationMessage = AvatarFileValidator.validate(file, TEAM_AVATAR_FILE_LABEL);
+        if (validationMessage != null) {
+            return Response.fail(validationMessage);
         }
         log.info("团队图标上传开始: teamId={}, originalFilename={}, size={}",
                 teamId, file.getOriginalFilename(), file.getSize());

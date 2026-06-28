@@ -58,7 +58,7 @@ test('prepare team avatar rejects images that remain too large after compression
 
   await assert.rejects(
     () => prepareTeamAvatarFilePath('tmp/original-team.png', { wxApi }),
-    /团队图标不能超过 5MB/
+    /团队图标不能超过 200KB/
   )
 })
 

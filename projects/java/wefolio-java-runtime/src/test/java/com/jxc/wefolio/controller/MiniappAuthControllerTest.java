@@ -21,6 +21,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import java.lang.reflect.Method;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -62,8 +64,8 @@ class MiniappAuthControllerTest {
     }
 
     @Test
-    void uploadAvatarRejectsFilesLargerThanFiveMegabytes() {
-        byte[] content = new byte[5 * 1024 * 1024 + 1];
+    void uploadAvatarRejectsFilesLargerThanTwoHundredKilobytes() {
+        byte[] content = new byte[200 * 1024 + 1];
         MockMultipartFile file = new MockMultipartFile(
                 "file",
                 "avatar.jpg",
@@ -81,8 +83,31 @@ class MiniappAuthControllerTest {
         Response<FileUploadResponse> response = controller.uploadAvatar(file);
 
         assertThat(response.isSuccess()).isFalse();
-        assertThat(response.getMessage()).isEqualTo("头像文件不能超过 5MB");
+        assertThat(response.getMessage()).isEqualTo("头像文件不能超过 200KB");
         verify(cosService, never()).upload(file, "WF8392/others");
+    }
+
+    @Test
+    void uploadAvatarRejectsUnsupportedImageType() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "avatar.jpg",
+                "image/jpeg",
+                "<script>alert(1)</script>".getBytes()
+        );
+        AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
+        MiniappAuthController controller = new MiniappAuthController(
+                miniappAuthService,
+                authTokenService,
+                accountCancellationService,
+                cosService
+        );
+
+        Response<FileUploadResponse> response = controller.uploadAvatar(file);
+
+        assertThat(response.isSuccess()).isFalse();
+        assertThat(response.getMessage()).isEqualTo("头像文件仅支持 JPG、PNG、GIF、WebP 格式");
+        verify(cosService, never()).upload(eq(file), anyString());
     }
 
     @Test

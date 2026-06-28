@@ -150,9 +150,6 @@ class MiniappAuthServiceTest {
             user.setId(11L);
             return 1;
         }).when(userEntityMapper).insert(any(UserEntity.class));
-        // 模拟头像上传 COS 失败，降级保留原始 URL
-        when(cosService.uploadFromUrl(any(), any())).thenThrow(new RuntimeException("mock"));
-
         MiniappAuthService service = buildService();
         MaintainerWechatLoginRequest request = new MaintainerWechatLoginRequest();
         request.setCode("wx-code");
@@ -169,9 +166,10 @@ class MiniappAuthServiceTest {
         assertThat(response.getTokenType()).isEqualTo("Bearer");
         verify(cosService).initUserStorage(any());
         verify(pointService).ensureAccount(11L);
+        verify(cosService, never()).uploadFromUrl(any(), any());
         verify(userEntityMapper).insert(org.mockito.ArgumentMatchers.<UserEntity>argThat(user ->
                 "林安".equals(user.getNickname())
-                        && "https://example.com/avatar.jpg".equals(user.getAvatarUrl())
+                        && "".equals(user.getAvatarUrl())
                         && "+8613812348000".equals(user.getPhoneNumber())
                         && "86".equals(user.getPhoneCountryCode())
                         && "8000".equals(user.getPhoneLast4())
@@ -198,9 +196,6 @@ class MiniappAuthServiceTest {
             user.setId(11L);
             return 1;
         }).when(userEntityMapper).insert(any(UserEntity.class));
-        // 模拟头像上传 COS 失败，降级保留原始 URL
-        when(cosService.uploadFromUrl(any(), any())).thenThrow(new RuntimeException("mock"));
-
         MiniappAuthService service = buildService();
         MaintainerWechatLoginRequest request = new MaintainerWechatLoginRequest();
         request.setCode("wx-code");
@@ -215,9 +210,10 @@ class MiniappAuthServiceTest {
         verify(wechatMiniappClient, never()).exchangePluginOpenpid(any());
         verify(cosService).initUserStorage(any());
         verify(pointService).ensureAccount(11L);
+        verify(cosService, never()).uploadFromUrl(any(), any());
         verify(userEntityMapper).insert(org.mockito.ArgumentMatchers.<UserEntity>argThat(user ->
                 "林安".equals(user.getNickname())
-                        && "https://example.com/avatar.jpg".equals(user.getAvatarUrl())
+                        && "".equals(user.getAvatarUrl())
                         && user.getWechatOpenpid() == null
         ));
         verify(userAuthEntityMapper).insert(any(UserAuthEntity.class));

@@ -4,6 +4,7 @@ import com.jxc.wefolio.common.cache.CacheService;
 import com.jxc.wefolio.common.auth.AuthorizationHeaderUtils;
 import com.jxc.wefolio.dict.UserStatusDict;
 import com.jxc.wefolio.entity.UserEntity;
+import com.jxc.wefolio.exception.InvalidAuthTokenException;
 import com.jxc.wefolio.mapper.UserEntityMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -61,7 +62,12 @@ public class AuthTokenService {
             return cachedUserId;
         }
 
-        MiniappAuthService.ResolvedAuthToken resolvedToken = miniappAuthService.resolveAuthToken(authorization);
+        MiniappAuthService.ResolvedAuthToken resolvedToken;
+        try {
+            resolvedToken = miniappAuthService.resolveAuthToken(authorization);
+        } catch (InvalidAuthTokenException e) {
+            return Optional.empty();
+        }
         if (resolvedToken == null) {
             return Optional.empty();
         }

@@ -25,6 +25,9 @@ import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Supplier;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * REST 微信小程序客户端 — 统一封装微信小程序服务端接口调用、原始入参出参日志和响应解析
@@ -51,6 +54,30 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
 
     /** access_token 过期前刷新缓冲秒数 */
     private static final long ACCESS_TOKEN_REFRESH_BUFFER_SECONDS = 5L * 60L;
+
+    /** 日志脱敏占位符 */
+    private static final String MASKED_VALUE = "***";
+
+    /** 日志脱敏失败占位符 */
+    private static final String MASK_FAILED_MESSAGE = "[日志脱敏失败]";
+
+    /** 敏感值头部保留字符数 */
+    private static final int MASK_VISIBLE_HEAD_LENGTH = 3;
+
+    /** 敏感值尾部保留字符数 */
+    private static final int MASK_VISIBLE_TAIL_LENGTH = 4;
+
+    /** JSON 脱敏字段正则分组 */
+    private static final String SENSITIVE_JSON_FIELD_GROUP =
+            "access_token|phoneNumber|purePhoneNumber|countryCode|openid|unionid|session_key|code";
+
+    /** URL 敏感查询参数正则 */
+    private static final Pattern SENSITIVE_URL_PARAMETER_PATTERN =
+            Pattern.compile("([&?](?:secret|access_token|js_code)=)([^&]+)");
+
+    /** JSON 敏感字段正则 */
+    private static final Pattern SENSITIVE_JSON_FIELD_PATTERN =
+            Pattern.compile("\"(" + SENSITIVE_JSON_FIELD_GROUP + ")\"\\s*:\\s*\"([^\"]*)\"");
 
     /** 微信小程序配置 */
     private final WechatMiniappProperties properties;
@@ -304,7 +331,7 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
     }
 
     /**
-     * 打印微信远端请求原始入参 — URL 中的 secret 无条件脱敏，access_token 按配置脱敏。
+     * 打印微信远端请求原始入参，敏感查询参数和请求体字段会基础脱敏。
      *
      * @param serviceName 服务名称
      * @param method HTTP 方法
@@ -317,12 +344,12 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
                 serviceName,
                 method,
                 maskUrl(url),
-                requestBody
+                maskRequestBody(requestBody)
         );
     }
 
     /**
-     * 打印微信远端响应原始出参 — 按配置脱敏响应体中的手机号等敏感字段。
+     * 打印微信远端响应原始出参，敏感字段会基础脱敏。
      *
      * @param serviceName 服务名称
      * @param status HTTP 状态码
@@ -340,8 +367,7 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
     /**
      * 脱敏 URL 中的敏感查询参数。
      *
-     * <p>secret 无条件脱敏（永不打日志）。
-     * access_token 按 {@code wechat.miniapp.log-verbose} 配置脱敏。</p>
+     * <p>secret、access_token、js_code 等凭证类参数永不打明文日志。</p>
      *
      * @param url 原始 URL
      * @return 脱敏后的 URL
@@ -350,26 +376,53 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
         if (url == null) {
             return "";
         }
-        // secret 永不打日志
-        String masked = url.replaceAll("(?<=[&?]secret=)[^&]+", "***");
-        // access_token 按配置脱敏
-        if (!properties.isLogVerbose()) {
-            masked = masked.replaceAll("(?<=[&?]access_token=)[^&]+", "***");
-        }
-        return masked;
+        return maskLogTextSafely(() -> maskUrlParameters(url));
     }
 
     /**
-     * 脱敏微信响应体中的手机号等敏感字段。
+     * 脱敏微信请求体中的敏感字段。
      *
-     * <p>非 verbose 模式时，递归遍历 JSON 替换敏感字段值为 {@code ***}。
-     * JSON 解析失败时回退为正则替换，保证日志不丢失。</p>
+     * @param body 原始请求体
+     * @return 脱敏后的请求体
+     */
+    private String maskRequestBody(String body) {
+        return maskLogTextSafely(() -> maskJsonBody(body));
+    }
+
+    /**
+     * 脱敏微信响应体中的手机号、access_token 等敏感字段。
      *
      * @param body 原始响应体
      * @return 脱敏后的响应体
      */
     private String maskResponseBody(String body) {
-        if (properties.isLogVerbose() || isBlank(body)) {
+        return maskLogTextSafely(() -> maskJsonBody(body));
+    }
+
+    /**
+     * 安全执行日志脱敏。脱敏失败时打印异常堆栈并返回安全占位文本，不阻断业务流程。
+     *
+     * @param maskOperation 脱敏操作
+     * @return 脱敏文本或安全占位文本
+     */
+    String maskLogTextSafely(Supplier<String> maskOperation) {
+        try {
+            return maskOperation.get();
+        } catch (RuntimeException e) {
+            log.error("微信日志脱敏失败", e);
+            return MASK_FAILED_MESSAGE;
+        }
+    }
+
+    /**
+     * 脱敏 JSON 文本中的敏感字段。
+     * <p>优先递归遍历 JSON 替换敏感字段值为 {@code ***}；JSON 解析失败时回退为正则替换，保证日志不丢失。</p>
+     *
+     * @param body 原始 JSON 文本
+     * @return 脱敏后的 JSON 文本
+     */
+    private String maskJsonBody(String body) {
+        if (isBlank(body)) {
             return body;
         }
         try {
@@ -377,9 +430,7 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
             return JSON.toJSONString(maskSensitiveFields(map));
         } catch (JSONException e) {
             // JSON 解析失败时回退为正则脱敏，保证日志不丢失
-            return body
-                    .replaceAll("\"(phoneNumber|purePhoneNumber)\"\\s*:\\s*\"[^\"]*\"", "\"$1\":\"***\"")
-                    .replaceAll("\"countryCode\"\\s*:\\s*\"[^\"]*\"", "\"countryCode\":\"***\"");
+            return maskJsonFieldsByPattern(body);
         }
     }
 
@@ -395,8 +446,8 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
         for (Map.Entry<?, ?> entry : map.entrySet()) {
             String key = String.valueOf(entry.getKey());
             Object value = entry.getValue();
-            if (isPhoneField(key) && value instanceof String) {
-                result.put(key, "***");
+            if (isSensitiveField(key) && value instanceof String) {
+                result.put(key, maskSensitiveValue((String) value));
             } else if (value instanceof Map) {
                 result.put(key, maskSensitiveFields((Map<?, ?>) value));
             } else {
@@ -407,13 +458,71 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
     }
 
     /**
-     * 判断是否为手机号相关字段。
+     * 判断是否为需要脱敏的敏感字段。
      *
      * @param key JSON 键名
-     * @return 是否为手机号字段
+     * @return 是否为敏感字段
      */
-    private boolean isPhoneField(String key) {
-        return "phoneNumber".equals(key) || "purePhoneNumber".equals(key) || "countryCode".equals(key);
+    private boolean isSensitiveField(String key) {
+        return "access_token".equals(key)
+                || "phoneNumber".equals(key)
+                || "purePhoneNumber".equals(key)
+                || "countryCode".equals(key)
+                || "openid".equals(key)
+                || "unionid".equals(key)
+                || "session_key".equals(key)
+                || "code".equals(key);
+    }
+
+    /**
+     * 脱敏 URL 中的敏感查询参数值。
+     *
+     * @param url 原始 URL
+     * @return 脱敏后的 URL
+     */
+    private String maskUrlParameters(String url) {
+        Matcher matcher = SENSITIVE_URL_PARAMETER_PATTERN.matcher(url);
+        StringBuilder result = new StringBuilder();
+        while (matcher.find()) {
+            matcher.appendReplacement(
+                    result,
+                    Matcher.quoteReplacement(matcher.group(1) + maskSensitiveValue(matcher.group(2)))
+            );
+        }
+        matcher.appendTail(result);
+        return result.toString();
+    }
+
+    /**
+     * 使用正则兜底脱敏 JSON 文本中的敏感字段值。
+     *
+     * @param body 原始 JSON 文本
+     * @return 脱敏后的 JSON 文本
+     */
+    private String maskJsonFieldsByPattern(String body) {
+        Matcher matcher = SENSITIVE_JSON_FIELD_PATTERN.matcher(body);
+        StringBuilder result = new StringBuilder();
+        while (matcher.find()) {
+            String replacement = "\"" + matcher.group(1) + "\":\"" + maskSensitiveValue(matcher.group(2)) + "\"";
+            matcher.appendReplacement(result, Matcher.quoteReplacement(replacement));
+        }
+        matcher.appendTail(result);
+        return result.toString();
+    }
+
+    /**
+     * 脱敏敏感值，保留头尾少量字符用于日志比对。
+     *
+     * @param value 原始敏感值
+     * @return 脱敏后的敏感值
+     */
+    private String maskSensitiveValue(String value) {
+        if (value == null || value.length() <= MASK_VISIBLE_HEAD_LENGTH + MASK_VISIBLE_TAIL_LENGTH) {
+            return MASKED_VALUE;
+        }
+        return value.substring(0, MASK_VISIBLE_HEAD_LENGTH)
+                + MASKED_VALUE
+                + value.substring(value.length() - MASK_VISIBLE_TAIL_LENGTH);
     }
 
     /**
