@@ -281,9 +281,9 @@
 
 .calendar-toolbar {
   min-height: 88rpx;
-  display: grid;
-  grid-template-columns: 64rpx minmax(0, 1fr) auto 64rpx;
+  display: flex;
   align-items: center;
+  justify-content: flex-start;
   flex-wrap: nowrap;
   gap: 12rpx;
   margin-bottom: 0;
