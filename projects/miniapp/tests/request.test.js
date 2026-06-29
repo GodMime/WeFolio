@@ -34,6 +34,42 @@ test('request client injects bearer token and unwraps successful response data',
   assert.deepEqual(data, { ok: true })
 })
 
+test('request client omits empty GET query parameters', async () => {
+  let capturedOptions
+  const wxApi = {
+    request(options) {
+      capturedOptions = options
+      options.success({
+        statusCode: 200,
+        data: {
+          success: true,
+          data: { ok: true }
+        }
+      })
+    }
+  }
+  const client = createRequestClient({
+    baseUrl: 'http://api.test',
+    wxApi,
+    getToken: () => ''
+  })
+
+  await client.request({
+    url: '/api/mine/works',
+    data: {
+      keyword: '',
+      tagId: undefined,
+      page: 1,
+      pageSize: 20
+    }
+  })
+
+  assert.deepEqual(capturedOptions.data, {
+    page: 1,
+    pageSize: 20
+  })
+})
+
 test('request client marks 401 responses as auth required', async () => {
   const wxApi = {
     request(options) {

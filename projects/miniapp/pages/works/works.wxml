@@ -1,0 +1,190 @@
+<view class="page-shell works-page">
+  <navigation-bar title="作品" back="{{false}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+
+  <scroll-view class="works-scroll" scroll-y type="list" bindscrolltolower="handleScrollToLower">
+    <view class="works-content" bindtap="handleCloseTagManageMode">
+      <view class="search-panel">
+        <view class="search-box">
+          <view class="search-icon"></view>
+          <input
+            class="search-input"
+            value="{{keyword}}"
+            confirm-type="search"
+            placeholder="搜索作品标题、标签"
+            placeholder-class="search-placeholder"
+            bindinput="handleSearchInput"
+            bindconfirm="handleSearchConfirm"
+          />
+        </view>
+      </view>
+
+      <view class="filter-panel">
+        <view class="filter-shell" catchtap="handleFilterShellTap">
+          <scroll-view class="tag-scroll" scroll-x type="list">
+            <view class="tag-row">
+              <view
+                wx:for="{{list.filterTags}}"
+                wx:key="id"
+                class="tag-pill {{(!selectedTagId && !item.id) || selectedTagId === item.id ? 'active' : ''}} {{tagManageMode && item.id ? 'manage' : ''}}"
+                style="{{item.style}}"
+                data-id="{{item.id}}"
+                bindtap="handleTagTap"
+                bindlongpress="handleTagLongPress"
+              >
+                <text class="tag-text">{{item.labelText}}</text>
+                <view
+                  wx:if="{{tagManageMode && item.id}}"
+                  class="tag-delete"
+                  style="{{item.deleteStyle}}"
+                  data-id="{{item.id}}"
+                  catchtap="handleTagDeleteTap"
+                >
+                  <text class="tag-delete-mark">×</text>
+                </view>
+              </view>
+            </view>
+          </scroll-view>
+          <view class="tag-add-button" catchtap="handleOpenCreateTagDialog" aria-role="button" aria-label="新增作品标签">+</view>
+        </view>
+      </view>
+
+      <view class="library-panel">
+        <view class="list-heading">
+          <view class="section-title">素材库</view>
+          <button class="text-action {{batchMode ? 'active' : ''}}" bindtap="handleBatchTap">批量管理</button>
+        </view>
+
+        <view wx:if="{{loading}}" class="component-loading">
+          <view class="loading-spinner"></view>
+          <view class="loading-copy">作品加载中</view>
+        </view>
+
+        <view wx:elif="{{errorMessage}}" class="inline-empty">
+          <view class="empty-title small">作品加载失败</view>
+          <view class="empty-desc">{{errorMessage}}</view>
+          <button class="primary-button compact" bindtap="handleRetry">重试</button>
+        </view>
+
+        <block wx:else>
+          <view wx:if="{{list.empty}}" class="empty-state">
+            <view class="empty-logo-frame">
+              <image
+                class="empty-logo"
+                src="https://cos.we-folio.dingchenyong.top/system/work-logo-100kb.jpg"
+                mode="aspectFit"
+              ></image>
+            </view>
+            <view class="empty-title">暂无作品</view>
+            <view class="empty-desc">从相册选择图片或视频，整理为可复用的作品素材</view>
+          </view>
+
+          <view wx:else class="work-list">
+            <view
+              wx:for="{{list.works}}"
+              wx:for-index="workIndex"
+              wx:key="id"
+              class="work-card"
+              data-id="{{item.id}}"
+              bindtap="handleWorkTap"
+            >
+              <view class="thumb">
+                <image wx:if="{{item.hasCover}}" src="{{item.coverUrl}}" mode="aspectFill"></image>
+                <view wx:else class="thumb-placeholder">{{item.typeText}}</view>
+                <view wx:if="{{item.mediaType === 'VIDEO'}}" class="play-badge"></view>
+                <view wx:else class="thumb-order">{{workIndex + 1}}</view>
+              </view>
+              <view class="work-copy">
+                <view class="work-title">{{item.title}}</view>
+                <view class="work-meta">
+                  <text>{{item.typeText}}</text>
+                  <text wx:if="{{item.durationText}}"> · {{item.durationText}}</text>
+                  <text> / {{item.tagText}}</text>
+                </view>
+                <view class="reference-pill {{item.referenceCount > 0 ? 'used' : ''}}">{{item.referenceText}}</view>
+              </view>
+              <view class="card-arrow"></view>
+            </view>
+
+            <view wx:if="{{loadingMore}}" class="loading-more">加载更多作品</view>
+            <view wx:if="{{!list.hasMore && list.works.length > 0}}" class="list-end">已显示全部作品</view>
+          </view>
+        </block>
+      </view>
+
+      <button wx:if="{{!loading && !errorMessage}}" class="primary-button full page-add-button" bindtap="handleAddTap">添加作品</button>
+
+      <view class="batch-panel" wx:if="{{!loading && !errorMessage}}">
+        <view class="batch-heading">
+          <view>
+            <view class="batch-title">批量动作</view>
+            <view class="batch-desc">选择多个作品后可统一加入作品集或调整排序</view>
+          </view>
+          <view class="batch-count">0 已选</view>
+        </view>
+        <view class="batch-actions">
+          <button class="batch-action" bindtap="handleBatchTap">加入作品集</button>
+          <button class="batch-action" bindtap="handleBatchTap">调整排序</button>
+        </view>
+      </view>
+    </view>
+  </scroll-view>
+
+  <view class="tag-dialog" wx:if="{{tagDialogVisible}}">
+    <view class="tag-dialog-backdrop" bindtap="handleCloseTagDialog"></view>
+    <view class="tag-dialog-panel" catchtap="handleFilterShellTap">
+      <view class="tag-dialog-grabber"></view>
+      <view class="tag-dialog-heading">
+        <view class="tag-dialog-title">{{tagDialogTitle}}</view>
+      </view>
+
+      <view class="tag-field">
+        <view class="tag-field-label">标签文字</view>
+        <input
+          class="tag-input"
+          value="{{tagForm.name}}"
+          maxlength="10"
+          placeholder="输入标签名称"
+          placeholder-class="search-placeholder"
+          bindinput="handleTagNameInput"
+        />
+      </view>
+
+      <view class="tag-field">
+        <view class="tag-field-label">标签颜色</view>
+        <view class="color-grid">
+          <view
+            wx:for="{{tagColorOptions}}"
+            wx:key="color"
+            class="color-choice {{tagForm.color === item.color ? 'active' : ''}}"
+            style="{{item.choiceStyle}}"
+            data-color="{{item.color}}"
+            bindtap="handleSelectTagColor"
+          >
+            <view class="color-swatch" style="{{item.swatchStyle}}"></view>
+            <text>{{item.name}}</text>
+          </view>
+        </view>
+      </view>
+
+      <view wx:if="{{tagErrorText}}" class="tag-error">{{tagErrorText}}</view>
+
+      <view class="tag-dialog-actions">
+        <button class="secondary-button" disabled="{{tagSaving}}" bindtap="handleCloseTagDialog">取消</button>
+        <button class="dialog-button" loading="{{tagSaving}}" bindtap="handleSaveTag">保存</button>
+      </view>
+    </view>
+  </view>
+
+  <view class="tabbar">
+    <button
+      wx:for="{{tabs}}"
+      wx:key="key"
+      class="tab {{item.active ? 'active' : ''}}"
+      data-label="{{item.label}}"
+      bindtap="handleTabTap"
+    >
+      <view class="tab-icon {{item.icon}}-tab-icon"></view>
+      <view class="tab-label">{{item.label}}</view>
+    </button>
+  </view>
+</view>

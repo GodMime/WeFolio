@@ -1,5 +1,6 @@
 package com.jxc.wefolio.entity;
 
+import com.baomidou.mybatisplus.annotation.TableLogic;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
@@ -11,6 +12,17 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 实体字段结构约束测试。
  */
 class EntityFieldStructureTest {
+
+    @Test
+    void baseEntityDeletedShouldUseIdAsLogicDeleteValue() throws NoSuchFieldException {
+        Field deletedField = BaseEntity.class.getDeclaredField("deleted");
+        TableLogic tableLogic = deletedField.getAnnotation(TableLogic.class);
+
+        assertThat(deletedField.getType()).isEqualTo(Long.class);
+        assertThat(tableLogic).isNotNull();
+        assertThat(tableLogic.value()).isEqualTo("0");
+        assertThat(tableLogic.delval()).isEqualTo("id");
+    }
 
     @Test
     void portfolioShareRecordShouldUseBaseCreatedAtOnly() {

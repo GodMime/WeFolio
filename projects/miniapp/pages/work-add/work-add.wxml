@@ -1,0 +1,95 @@
+<view class="page-shell work-add-page">
+  <navigation-bar title="添加作品" color="#17202a" background="rgba(252, 253, 253, 0.96)"></navigation-bar>
+
+  <scroll-view class="work-add-scroll" scroll-y type="list">
+    <view class="work-add-content">
+      <button class="upload-box" bindtap="handleChooseMedia" disabled="{{saving}}">
+        <view class="upload-plus">+</view>
+        <view class="upload-title">选择图片或视频</view>
+        <view class="upload-desc">一次最多勾选 9 个，标题默认使用文件名。</view>
+      </button>
+
+      <view wx:if="{{files.length > 0}}" class="selected-panel">
+        <view class="panel-heading">
+          <view class="panel-title">已选作品</view>
+          <view class="selected-count">{{files.length}} / 9</view>
+        </view>
+        <scroll-view class="selected-work-list" scroll-y type="list">
+          <view class="selected-work-list-content">
+            <view wx:for="{{files}}" wx:key="id" class="selected-work-row">
+              <view class="selected-work-thumb {{item.isVideo ? 'video' : ''}}">
+                <image wx:if="{{item.mediaType === 'IMAGE'}}" src="{{item.tempFilePath}}" mode="aspectFill"></image>
+                <image wx:elif="{{item.coverPath}}" src="{{item.coverPath}}" mode="aspectFill"></image>
+                <view wx:else class="video-thumb">视频</view>
+                <view wx:if="{{item.isVideo}}" class="play-badge">▶</view>
+              </view>
+              <view class="selected-work-copy">
+                <view class="selected-work-title">{{item.fileName}}</view>
+                <view class="selected-work-meta">{{item.metaText}}</view>
+              </view>
+              <view class="selected-work-arrow">›</view>
+            </view>
+          </view>
+        </scroll-view>
+      </view>
+
+      <view wx:if="{{files.length === 0}}" class="empty-state">
+        <view class="empty-title">尚未选择作品</view>
+        <view class="empty-desc">只支持从相册选择，图片不超过 10MB，视频不超过 100MB 且 10 分钟以内</view>
+      </view>
+
+      <view class="tag-panel">
+        <view class="tag-label">统一标签（可选）</view>
+        <view class="tag-row">
+          <view wx:for="{{unifiedTags}}" wx:key="id" class="tag-chip" style="{{item.style}}">{{item.name}}</view>
+          <view class="tag-add-trigger" catchtap="handleOpenTagPicker" aria-role="button" aria-label="添加统一作品标签">+添加</view>
+        </view>
+        <view class="tag-note" wx:if="{{files.length > 0}}">选中的标签会同时应用到本次 {{files.length}} 个作品；作品说明可保存后补充。</view>
+        <view class="tag-note muted" wx:else>可先选择统一标签，添加作品后会自动应用；作品说明可保存后补充。</view>
+      </view>
+
+      <view wx:if="{{errorMessage}}" class="error-copy">{{errorMessage}}</view>
+      <button class="primary-button {{files.length === 0 ? 'empty-disabled' : ''}}" loading="{{saving}}" disabled="{{saving}}" bindtap="handleSubmit">保存作品</button>
+    </view>
+  </scroll-view>
+
+  <view class="tag-picker-mask" wx:if="{{tagPickerVisible}}" catchtap="handleCloseTagPicker">
+    <view class="tag-picker-panel" catchtap="handleTagPickerPanelTap">
+      <view class="tag-picker-grabber"></view>
+      <view class="tag-picker-heading">
+        <view class="tag-picker-title">选择作品标签</view>
+        <view class="tag-picker-count">{{selectedUnifiedTagCount}} 个已选</view>
+      </view>
+
+      <view wx:if="{{tagLoading}}" class="tag-picker-state">加载中...</view>
+      <view wx:elif="{{tagErrorText}}" class="tag-picker-state error">
+        <view>{{tagErrorText}}</view>
+        <view class="tag-picker-retry" catchtap="handleRetryLoadTags" aria-role="button" aria-label="重新加载作品标签">重试</view>
+      </view>
+      <view wx:elif="{{tagPickerTags.length === 0}}" class="tag-picker-state">暂无作品标签</view>
+      <scroll-view wx:else class="tag-option-list" scroll-y type="list">
+        <view class="tag-option-list-content">
+          <view
+            wx:for="{{tagPickerTags}}"
+            wx:key="id"
+            class="tag-option {{item.selected ? 'selected' : ''}}"
+            style="{{item.style}}"
+            data-id="{{item.id}}"
+            catchtap="handleToggleUnifiedTag"
+            aria-role="checkbox"
+            aria-checked="{{item.selected}}"
+            aria-label="选择{{item.name}}标签"
+          >
+            <view class="tag-option-name">{{item.name}}</view>
+            <view class="tag-option-check">{{item.selected ? '✓' : ''}}</view>
+          </view>
+        </view>
+      </scroll-view>
+
+      <view class="tag-picker-actions">
+        <button class="tag-picker-clear" catchtap="handleClearUnifiedTags" disabled="{{tagLoading}}">清空</button>
+        <button class="tag-picker-confirm" catchtap="handleConfirmTagPicker" disabled="{{tagLoading}}">完成</button>
+      </view>
+    </view>
+  </view>
+</view>

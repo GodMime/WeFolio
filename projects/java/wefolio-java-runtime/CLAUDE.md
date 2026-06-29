@@ -118,7 +118,7 @@ resources/
 | id | Long | `@TableId(type = IdType.AUTO)` | 自增主键 |
 | createdAt | LocalDateTime | — | 创建时间 |
 | updatedAt | LocalDateTime | — | 更新时间 |
-| deleted | Integer | `@TableLogic` | 逻辑删除（0 未删除 / 1 已删除） |
+| deleted | Long | `@TableLogic(value = "0", delval = "id")` | 逻辑删除（0 未删除，已删除时为主键 ID） |
 | version | Integer | `@Version` | 乐观锁版本号 |
 
 ### MyBatis Plus 插件

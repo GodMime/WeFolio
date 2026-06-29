@@ -1,5 +1,8 @@
 package com.jxc.wefolio.service;
 
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONArray;
+import com.alibaba.fastjson2.JSONObject;
 import com.jxc.wefolio.config.CosProperties;
 import com.qcloud.cos.COSClient;
 import com.qcloud.cos.model.COSObject;
@@ -20,7 +23,10 @@ import org.springframework.mock.web.MockMultipartFile;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
+import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -45,10 +51,114 @@ class CosServiceTest {
     @BeforeEach
     void setUp() {
         cosService = new CosService(transferManager, cosProperties);
-        when(cosProperties.getBucketName()).thenReturn("test-bucket");
+        lenient().when(cosProperties.getBucketName()).thenReturn("test-bucket");
     }
 
     // ── upload ──────────────────────────────────────────────
+
+    @Test
+    void createPostUploadTicketShouldRestrictKeyAndSizeInPolicy() {
+        when(cosProperties.getRegion()).thenReturn("ap-guangzhou");
+        when(cosProperties.getSecretId()).thenReturn("AKID_TEST");
+        when(cosProperties.getSecretKey()).thenReturn("SECRET_TEST");
+
+        CosService.PostUploadTicket ticket = cosService.createPostUploadTicket(
+                "WFA3B1E7A2/work/image/photo.jpg",
+                "image/jpeg",
+                10 * 1024 * 1024L,
+                LocalDateTime.now().plusMinutes(30));
+
+        Map<String, String> formData = ticket.formData();
+        String policy = new String(Base64.getDecoder().decode(formData.get("policy")));
+        assertThat(ticket.uploadUrl()).isEqualTo("https://test-bucket.cos.ap-guangzhou.myqcloud.com");
+        assertThat(ticket.objectKey()).isEqualTo("WFA3B1E7A2/work/image/photo.jpg");
+        assertThat(formData).containsEntry("key", "WFA3B1E7A2/work/image/photo.jpg");
+        assertThat(formData).containsEntry("q-ak", "AKID_TEST");
+        assertThat(formData).containsEntry("q-sign-algorithm", "sha1");
+        assertThat(formData).containsEntry("success_action_status", "200");
+        assertThat(formData.get("q-signature")).isNotBlank();
+        assertThat(formData.get("q-signature")).doesNotContain("SECRET_TEST");
+        assertThat(policy).contains("\"bucket\":\"test-bucket\"");
+        assertThat(policy).contains("\"key\":\"WFA3B1E7A2/work/image/photo.jpg\"");
+        assertThat(policy).contains("[\"content-length-range\",0,10485760]");
+        assertThat(policy).contains("\"success_action_status\":\"200\"");
+    }
+
+    @Test
+    void createPostUploadTicketShouldEscapeJsonPolicyValues() {
+        when(cosProperties.getRegion()).thenReturn("ap-guangzhou");
+        when(cosProperties.getSecretId()).thenReturn("AKID_\"TEST\\");
+        when(cosProperties.getSecretKey()).thenReturn("SECRET_TEST");
+        String objectKey = "WFA3B1E7A2/work/image/photo\"quote\\slash.jpg";
+
+        CosService.PostUploadTicket ticket = cosService.createPostUploadTicket(
+                objectKey,
+                "image/jpeg",
+                1024L,
+                LocalDateTime.now().plusMinutes(30));
+
+        String policy = new String(Base64.getDecoder().decode(ticket.formData().get("policy")));
+        JSONObject policyObject = JSON.parseObject(policy);
+        JSONArray conditions = policyObject.getJSONArray("conditions");
+        assertThat(conditions.stream()
+                .filter(JSONObject.class::isInstance)
+                .map(JSONObject.class::cast)
+                .map(condition -> condition.getString("key"))
+                .filter(value -> value != null)
+                .findFirst())
+                .contains(objectKey);
+        assertThat(conditions.stream()
+                .filter(JSONObject.class::isInstance)
+                .map(JSONObject.class::cast)
+                .map(condition -> condition.getString("q-ak"))
+                .filter(value -> value != null)
+                .findFirst())
+                .contains("AKID_\"TEST\\");
+    }
+
+    @Test
+    void createPostUploadTicketShouldBackdateKeyTimeForClockSkew() {
+        when(cosProperties.getRegion()).thenReturn("ap-guangzhou");
+        when(cosProperties.getSecretId()).thenReturn("AKID_TEST");
+        when(cosProperties.getSecretKey()).thenReturn("SECRET_TEST");
+        long beforeEpochSecond = System.currentTimeMillis() / 1000;
+
+        CosService.PostUploadTicket ticket = cosService.createPostUploadTicket(
+                "WFA3B1E7A2/work/image/photo.jpg",
+                "image/jpeg",
+                1024L,
+                LocalDateTime.now().plusMinutes(15));
+
+        String[] keyTimeParts = ticket.formData().get("q-key-time").split(";");
+        assertThat(Long.parseLong(keyTimeParts[0])).isLessThanOrEqualTo(beforeEpochSecond - 55);
+    }
+
+    @Test
+    void createPostUploadTicketShouldRejectPastExpiration() {
+        assertThatThrownBy(() -> cosService.createPostUploadTicket(
+                "WFA3B1E7A2/work/image/photo.jpg",
+                "image/jpeg",
+                1024L,
+                LocalDateTime.now().minusMinutes(1)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("上传票据过期时间不能早于当前时间");
+    }
+
+    @Test
+    void headObjectShouldReturnContentTypeAndLength() {
+        COSClient cosClient = mock(COSClient.class);
+        ObjectMetadata metadata = new ObjectMetadata();
+        metadata.setContentType("video/mp4");
+        metadata.setContentLength(4096L);
+        when(transferManager.getCOSClient()).thenReturn(cosClient);
+        when(cosClient.getObjectMetadata("test-bucket", "WFA3B1E7A2/work/video/film.mp4"))
+                .thenReturn(metadata);
+
+        CosService.ObjectHead head = cosService.headObject("WFA3B1E7A2/work/video/film.mp4");
+
+        assertThat(head.contentType()).isEqualTo("video/mp4");
+        assertThat(head.contentLength()).isEqualTo(4096L);
+    }
 
     @Test
     void uploadShouldReturnKey() throws Exception {

@@ -29,6 +29,24 @@ function createRequestError(message, extra = {}) {
   return error
 }
 
+function isEmptyGetQueryValue(value) {
+  return value === undefined || value === null || value === ''
+}
+
+function normalizeRequestData(method, data) {
+  const requestData = data || {}
+  if (String(method).toUpperCase() !== 'GET' || !requestData || typeof requestData !== 'object' || Array.isArray(requestData)) {
+    return requestData
+  }
+  return Object.keys(requestData).reduce((result, key) => {
+    const value = requestData[key]
+    if (!isEmptyGetQueryValue(value)) {
+      result[key] = value
+    }
+    return result
+  }, {})
+}
+
 function createRequestClient(options = {}) {
   const baseUrl = options.baseUrl || DEFAULT_BASE_URL
   const wxApi = options.wxApi
@@ -50,7 +68,7 @@ function createRequestClient(options = {}) {
       runtimeWx.request({
         url: joinUrl(baseUrl, requestOptions.url),
         method,
-        data: requestOptions.data || {},
+        data: normalizeRequestData(method, requestOptions.data),
         header,
         success(response) {
           const body = response.data || {}

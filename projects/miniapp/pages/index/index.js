@@ -9,6 +9,7 @@ const MESSAGE_UNREAD_COUNT_URL = '/api/mine/messages/unread-count'
 const MESSAGES_PAGE_URL = '/pages/messages/messages'
 const POINTS_PAGE_URL = '/pages/points/points'
 const SCHEDULE_PAGE_URL = '/pages/schedule/schedule'
+const WORKS_PAGE_URL = '/pages/works/works'
 
 function buildEntries(messageUnread = normalizeUnreadCount({})) {
   return [
@@ -186,6 +187,12 @@ Page({
       return
     }
     if (label === '我的') {
+      return
+    }
+    if (label === '作品') {
+      wx.redirectTo({
+        url: WORKS_PAGE_URL
+      })
       return
     }
     wx.showToast({

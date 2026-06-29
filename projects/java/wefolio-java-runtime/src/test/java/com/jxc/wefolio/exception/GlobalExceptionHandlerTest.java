@@ -9,8 +9,13 @@ import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.validation.BindException;
+import org.springframework.validation.FieldError;
 import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
@@ -116,6 +121,99 @@ class GlobalExceptionHandlerTest {
         assertThat(responseStatus.value()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(output).contains("WARN");
         assertThat(output).contains("Static resource not found: method=GET url=https://api.we-folio.dingchenyong.top/favicon.ico?v=1");
+        assertThat(output).doesNotContain("Unexpected error");
+    }
+
+    @Test
+    void handleMethodArgumentTypeMismatchReturnsBadRequest(CapturedOutput output) throws Exception {
+        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+        MethodArgumentTypeMismatchException exception = new MethodArgumentTypeMismatchException(
+                "undefined",
+                Long.class,
+                "tagId",
+                null,
+                new NumberFormatException("For input string: \"undefined\"")
+        );
+        Method method = GlobalExceptionHandler.class.getMethod(
+                "handleMethodArgumentTypeMismatch",
+                MethodArgumentTypeMismatchException.class
+        );
+
+        @SuppressWarnings("unchecked")
+        Response<Void> response = (Response<Void>) method.invoke(handler, exception);
+        ResponseStatus responseStatus = method.getAnnotation(ResponseStatus.class);
+
+        assertThat(response.isSuccess()).isFalse();
+        assertThat(response.getMessage()).isEqualTo("请求参数格式错误：tagId");
+        assertThat(responseStatus).isNotNull();
+        assertThat(responseStatus.value()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(output).contains("WARN");
+        assertThat(output).contains("Request parameter type mismatch: name=tagId, requiredType=Long");
+        assertThat(output).doesNotContain("Unexpected error");
+    }
+
+    @Test
+    void handleHttpMessageNotReadableReturnsBadRequest(CapturedOutput output) throws Exception {
+        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+        HttpMessageNotReadableException exception = new HttpMessageNotReadableException("JSON parse error");
+        Method method = GlobalExceptionHandler.class.getMethod(
+                "handleHttpMessageNotReadable",
+                HttpMessageNotReadableException.class
+        );
+
+        @SuppressWarnings("unchecked")
+        Response<Void> response = (Response<Void>) method.invoke(handler, exception);
+        ResponseStatus responseStatus = method.getAnnotation(ResponseStatus.class);
+
+        assertThat(response.isSuccess()).isFalse();
+        assertThat(response.getMessage()).isEqualTo("请求体格式错误");
+        assertThat(responseStatus).isNotNull();
+        assertThat(responseStatus.value()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(output).contains("WARN");
+        assertThat(output).contains("Request body not readable");
+        assertThat(output).doesNotContain("Unexpected error");
+    }
+
+    @Test
+    void handleBindExceptionReturnsBadRequestWithFieldMessage(CapturedOutput output) throws Exception {
+        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+        BindException exception = new BindException(new Object(), "mineWorkSortRequest");
+        exception.addError(new FieldError("mineWorkSortRequest", "items", "排序列表不能为空"));
+        Method method = GlobalExceptionHandler.class.getMethod("handleBindException", BindException.class);
+
+        @SuppressWarnings("unchecked")
+        Response<Void> response = (Response<Void>) method.invoke(handler, exception);
+        ResponseStatus responseStatus = method.getAnnotation(ResponseStatus.class);
+
+        assertThat(response.isSuccess()).isFalse();
+        assertThat(response.getMessage()).isEqualTo("参数校验失败：排序列表不能为空");
+        assertThat(responseStatus).isNotNull();
+        assertThat(responseStatus.value()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(output).contains("WARN");
+        assertThat(output).contains("Request bind validation failed: object=mineWorkSortRequest");
+        assertThat(output).doesNotContain("Unexpected error");
+    }
+
+    @Test
+    void handleMissingServletRequestParameterReturnsBadRequest(CapturedOutput output) throws Exception {
+        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+        MissingServletRequestParameterException exception =
+                new MissingServletRequestParameterException("page", "Integer");
+        Method method = GlobalExceptionHandler.class.getMethod(
+                "handleMissingServletRequestParameter",
+                MissingServletRequestParameterException.class
+        );
+
+        @SuppressWarnings("unchecked")
+        Response<Void> response = (Response<Void>) method.invoke(handler, exception);
+        ResponseStatus responseStatus = method.getAnnotation(ResponseStatus.class);
+
+        assertThat(response.isSuccess()).isFalse();
+        assertThat(response.getMessage()).isEqualTo("缺少必填参数：page");
+        assertThat(responseStatus).isNotNull();
+        assertThat(responseStatus.value()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(output).contains("WARN");
+        assertThat(output).contains("Missing request parameter: name=page, type=Integer");
         assertThat(output).doesNotContain("Unexpected error");
     }
 

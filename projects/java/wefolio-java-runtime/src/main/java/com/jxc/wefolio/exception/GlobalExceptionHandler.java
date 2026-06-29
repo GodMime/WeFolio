@@ -5,9 +5,14 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.validation.BindException;
+import org.springframework.validation.ObjectError;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
@@ -17,6 +22,21 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    /** 请求参数格式错误提示 */
+    private static final String REQUEST_PARAMETER_FORMAT_ERROR_MESSAGE = "请求参数格式错误";
+
+    /** 请求体格式错误提示 */
+    private static final String REQUEST_BODY_FORMAT_ERROR_MESSAGE = "请求体格式错误";
+
+    /** 参数校验失败提示 */
+    private static final String REQUEST_BIND_ERROR_MESSAGE = "参数校验失败";
+
+    /** 缺少必填参数提示 */
+    private static final String MISSING_REQUEST_PARAMETER_MESSAGE = "缺少必填参数";
+
+    /** 缺省参数类型名称 */
+    private static final String UNKNOWN_PARAMETER_TYPE = "unknown";
 
     /**
      * 处理上传文件超限异常
@@ -69,6 +89,69 @@ public class GlobalExceptionHandler {
         String method = request.getMethod() == null ? e.getHttpMethod().name() : request.getMethod();
         log.warn("Static resource not found: method={} url={}", method, buildOriginalRequestUrl(request));
         return Response.fail("资源不存在");
+    }
+
+    /**
+     * 处理请求参数类型转换异常 — 客户端传入格式错误时返回 400，避免落入 500。
+     *
+     * @param e 参数类型转换异常
+     * @return 失败响应
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Response<Void> handleMethodArgumentTypeMismatch(MethodArgumentTypeMismatchException e) {
+        Class<?> requiredType = e.getRequiredType();
+        String requiredTypeName = requiredType == null ? UNKNOWN_PARAMETER_TYPE : requiredType.getSimpleName();
+        log.warn("Request parameter type mismatch: name={}, requiredType={}", e.getName(), requiredTypeName);
+        if (e.getName() == null || e.getName().isBlank()) {
+            return Response.fail(REQUEST_PARAMETER_FORMAT_ERROR_MESSAGE);
+        }
+        return Response.fail(REQUEST_PARAMETER_FORMAT_ERROR_MESSAGE + "：" + e.getName());
+    }
+
+    /**
+     * 处理请求体 JSON 解析异常 — 客户端提交非法 JSON 时返回 400。
+     *
+     * @param e 请求体不可读异常
+     * @return 失败响应
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Response<Void> handleHttpMessageNotReadable(HttpMessageNotReadableException e) {
+        log.warn("Request body not readable: {}", e.getMessage());
+        return Response.fail(REQUEST_BODY_FORMAT_ERROR_MESSAGE);
+    }
+
+    /**
+     * 处理参数绑定和校验异常 — 表单或查询参数校验失败时返回 400。
+     *
+     * @param e 参数绑定异常
+     * @return 失败响应
+     */
+    @ExceptionHandler(BindException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Response<Void> handleBindException(BindException e) {
+        log.warn("Request bind validation failed: object={}", e.getObjectName());
+        String message = e.getAllErrors().stream()
+                .map(ObjectError::getDefaultMessage)
+                .filter(errorMessage -> errorMessage != null && !errorMessage.isBlank())
+                .findFirst()
+                .map(errorMessage -> REQUEST_BIND_ERROR_MESSAGE + "：" + errorMessage)
+                .orElse(REQUEST_BIND_ERROR_MESSAGE);
+        return Response.fail(message);
+    }
+
+    /**
+     * 处理缺少必填请求参数异常 — 缺少 query/form 参数时返回 400。
+     *
+     * @param e 缺少必填参数异常
+     * @return 失败响应
+     */
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Response<Void> handleMissingServletRequestParameter(MissingServletRequestParameterException e) {
+        log.warn("Missing request parameter: name={}, type={}", e.getParameterName(), e.getParameterType());
+        return Response.fail(MISSING_REQUEST_PARAMETER_MESSAGE + "：" + e.getParameterName());
     }
 
     /**

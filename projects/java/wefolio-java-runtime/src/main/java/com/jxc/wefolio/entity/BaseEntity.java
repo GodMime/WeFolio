@@ -25,9 +25,9 @@ public abstract class BaseEntity {
     /** 更新时间 */
     private LocalDateTime updatedAt;
 
-    /** 逻辑删除：0 未删除 / 1 已删除 */
-    @TableLogic
-    private Integer deleted;
+    /** 逻辑删除：0 未删除，已删除时记录本行主键 ID */
+    @TableLogic(value = "0", delval = "id")
+    private Long deleted;
 
     /** 乐观锁版本号 */
     @Version

@@ -1,0 +1,87 @@
+<view class="page-shell work-edit-page">
+  <navigation-bar title="编辑作品" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+
+  <scroll-view class="work-edit-scroll" scroll-y type="list">
+    <view class="work-edit-content">
+      <view wx:if="{{loading}}" class="component-loading">
+        <view class="loading-spinner"></view>
+        <view class="loading-copy">作品加载中</view>
+      </view>
+
+      <view wx:elif="{{errorMessage}}" class="inline-empty">
+        <view class="empty-title small">作品加载失败</view>
+        <view class="empty-desc">{{errorMessage}}</view>
+        <button class="primary-button compact" bindtap="loadDetail">重试</button>
+      </view>
+
+      <block wx:else>
+        <view class="preview-panel">
+          <view class="preview-media">
+            <image wx:if="{{detail.work.hasCover}}" src="{{detail.work.coverUrl}}" mode="aspectFill"></image>
+            <view wx:else class="preview-placeholder">{{detail.work.typeText}}</view>
+            <view class="media-badge">{{detail.work.typeText}}</view>
+          </view>
+          <view class="preview-copy">
+            <view class="preview-title">{{detail.work.title}}</view>
+            <view class="preview-meta">{{detail.work.fileSizeText}} {{detail.work.durationText}}</view>
+          </view>
+        </view>
+
+        <view class="form-panel">
+          <view class="field-label">标题 <text>{{fieldCounters.title}}</text></view>
+          <input
+            class="text-input"
+            value="{{form.title}}"
+            data-field="title"
+            maxlength="30"
+            bindinput="handleInput"
+          />
+
+          <view class="field-label">标签</view>
+          <view class="tag-editor">
+            <input class="tag-input" value="{{form.tagInput}}" placeholder="输入标签" bindinput="handleTagInput" />
+            <button class="tag-add" bindtap="handleAddTag">添加</button>
+          </view>
+          <view class="tag-list">
+            <button
+              wx:for="{{form.tags}}"
+              wx:key="*this"
+              class="tag-pill"
+              data-index="{{index}}"
+              bindtap="handleRemoveTag"
+            >{{item}} ×</button>
+          </view>
+
+          <view class="field-label">说明 <text>{{fieldCounters.description}}</text></view>
+          <textarea
+            class="desc-input"
+            value="{{form.description}}"
+            data-field="description"
+            maxlength="1000"
+            bindinput="handleInput"
+          ></textarea>
+        </view>
+
+        <view class="reference-panel">
+          <view class="panel-heading">
+            <view>
+              <view class="panel-title">引用</view>
+              <view class="panel-meta">{{detail.referenceSummaryText}}</view>
+            </view>
+          </view>
+          <view wx:if="{{detail.references.length === 0}}" class="reference-empty">暂无引用</view>
+          <view wx:for="{{detail.references}}" wx:key="id" class="reference-row">
+            <view class="reference-title">{{item.titleText}}</view>
+            <view class="reference-path">{{item.componentPath}}</view>
+          </view>
+        </view>
+
+        <button class="danger-button" loading="{{deleting}}" disabled="{{saving || deleting}}" bindtap="handleDeleteTap">删除作品</button>
+      </block>
+    </view>
+  </scroll-view>
+
+  <view class="bottom-action" wx:if="{{!loading && !errorMessage}}">
+    <button class="primary-button" loading="{{saving}}" disabled="{{saving || deleting}}" bindtap="handleSave">保存</button>
+  </view>
+</view>

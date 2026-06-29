@@ -108,7 +108,7 @@ Flyway 规则：
 id          Long           @TableId(type = IdType.AUTO)
 createdAt   LocalDateTime
 updatedAt   LocalDateTime
-deleted     Integer        @TableLogic
+deleted     Long           @TableLogic(value = "0", delval = "id")
 version     Integer        @Version
 ```
 

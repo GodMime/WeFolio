@@ -22,6 +22,7 @@ const {
 const MODE_DEFINITIONS = 'definitions'
 const MODE_MAINTENANCE = 'maintenance'
 const MINE_PAGE_URL = '/pages/index/index'
+const WORKS_PAGE_URL = '/pages/works/works'
 const MONTH_PATTERN = /^(\d{4})-(\d{2})$/
 const MONTH_FIRST_DAY = '01'
 
@@ -888,6 +889,12 @@ Page({
     if (label === '我的') {
       wx.redirectTo({
         url: MINE_PAGE_URL
+      })
+      return
+    }
+    if (label === '作品') {
+      wx.redirectTo({
+        url: WORKS_PAGE_URL
       })
       return
     }

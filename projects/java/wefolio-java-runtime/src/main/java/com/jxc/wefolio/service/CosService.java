@@ -1,10 +1,12 @@
 package com.jxc.wefolio.service;
 
+import com.alibaba.fastjson2.JSON;
 import com.jxc.wefolio.config.CosProperties;
 import com.qcloud.cos.model.CannedAccessControlList;
 import com.qcloud.cos.model.COSObject;
 import com.qcloud.cos.model.GetObjectRequest;
 import com.qcloud.cos.model.ObjectMetadata;
+import com.qcloud.cos.auth.COSSigner;
 import com.qcloud.cos.transfer.TransferManager;
 import com.qcloud.cos.transfer.Upload;
 import lombok.RequiredArgsConstructor;
@@ -19,16 +21,71 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.net.URLConnection;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class CosService {
+
+    /** COS 表单上传签名算法 */
+    private static final String POST_SIGN_ALGORITHM = "sha1";
+
+    /** COS 表单上传成功状态码 */
+    private static final String POST_SUCCESS_STATUS = "200";
+
+    /** COS 表单对象键字段 */
+    private static final String POST_FIELD_KEY = "key";
+
+    /** COS 表单签名算法字段 */
+    private static final String POST_FIELD_SIGN_ALGORITHM = "q-sign-algorithm";
+
+    /** COS 表单访问密钥字段 */
+    private static final String POST_FIELD_ACCESS_KEY = "q-ak";
+
+    /** COS 表单签名时间字段 */
+    private static final String POST_FIELD_KEY_TIME = "q-key-time";
+
+    /** COS policy 中的签名时间字段 */
+    private static final String POST_FIELD_SIGN_TIME = "q-sign-time";
+
+    /** COS 表单 policy 字段 */
+    private static final String POST_FIELD_POLICY = "policy";
+
+    /** COS 表单签名字段 */
+    private static final String POST_FIELD_SIGNATURE = "q-signature";
+
+    /** COS 表单成功状态字段 */
+    private static final String POST_FIELD_SUCCESS_STATUS = "success_action_status";
+
+    /** COS policy 存储桶字段 */
+    private static final String POST_POLICY_BUCKET = "bucket";
+
+    /** COS policy 上传大小约束字段 */
+    private static final String POST_POLICY_CONTENT_LENGTH_RANGE = "content-length-range";
+
+    /** COS 表单签名起始时间回退秒数，用于容忍服务器与 COS 的轻微时钟偏差 */
+    private static final long POST_KEY_TIME_CLOCK_SKEW_SECONDS = 60L;
+
+    /** COS 表单上传地址模板 */
+    private static final String POST_UPLOAD_URL_TEMPLATE = "https://%s.cos.%s.myqcloud.com";
+
+    /** UTC 时间格式，用于 COS POST policy expiration */
+    private static final DateTimeFormatter POLICY_EXPIRATION_FORMATTER =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
 
     private final TransferManager transferManager;
     private final CosProperties cosProperties;
@@ -41,6 +98,60 @@ public class CosService {
      */
     public String upload(MultipartFile file) {
         return upload(file, "");
+    }
+
+    /**
+     * 创建 COS 表单直传票据。
+     *
+     * <p>票据只允许上传到一个精确对象键，并限制最大 Content-Length。小程序端只需要将
+     * {@link PostUploadTicket#formData()} 原样传给 {@code wx.uploadFile} 的 formData。</p>
+     *
+     * @param objectKey 后端生成的 COS 对象键
+     * @param contentType 文件 MIME 类型
+     * @param maxBytes 最大允许字节数
+     * @param expiresAt 票据过期时间
+     * @return COS 表单直传票据
+     */
+    public PostUploadTicket createPostUploadTicket(
+            String objectKey,
+            String contentType,
+            long maxBytes,
+            LocalDateTime expiresAt
+    ) {
+        LocalDateTime now = LocalDateTime.now();
+        if (expiresAt != null && expiresAt.isBefore(now)) {
+            throw new IllegalArgumentException("上传票据过期时间不能早于当前时间");
+        }
+        LocalDateTime safeExpiresAt = expiresAt == null ? now.plusMinutes(15) : expiresAt;
+        long nowEpochSecond = System.currentTimeMillis() / 1000;
+        long expiresEpochSecond = safeExpiresAt.atZone(ZoneId.systemDefault()).toEpochSecond();
+        long keyTimeStart = Math.max(0L, nowEpochSecond - POST_KEY_TIME_CLOCK_SKEW_SECONDS);
+        String keyTime = keyTimeStart + ";" + expiresEpochSecond;
+        String policy = buildPostPolicy(objectKey, maxBytes, safeExpiresAt, keyTime);
+        String encodedPolicy = Base64.getEncoder().encodeToString(policy.getBytes(StandardCharsets.UTF_8));
+        String signature = new COSSigner().buildPostObjectSignature(
+                cosProperties.getSecretKey(),
+                keyTime,
+                policy
+        );
+
+        Map<String, String> formData = new LinkedHashMap<>();
+        formData.put(POST_FIELD_KEY, objectKey);
+        formData.put(POST_FIELD_SIGN_ALGORITHM, POST_SIGN_ALGORITHM);
+        formData.put(POST_FIELD_ACCESS_KEY, cosProperties.getSecretId());
+        formData.put(POST_FIELD_KEY_TIME, keyTime);
+        formData.put(POST_FIELD_POLICY, encodedPolicy);
+        formData.put(POST_FIELD_SIGNATURE, signature);
+        formData.put(POST_FIELD_SUCCESS_STATUS, POST_SUCCESS_STATUS);
+
+        return new PostUploadTicket(
+                buildPostUploadUrl(),
+                objectKey,
+                contentType,
+                maxBytes,
+                safeExpiresAt,
+                formData
+        );
     }
 
     /**
@@ -275,6 +386,25 @@ public class CosService {
         }
     }
 
+    /**
+     * 读取 COS 对象头信息。
+     *
+     * @param key COS 对象键
+     * @return 对象头信息
+     */
+    public ObjectHead headObject(String key) {
+        try {
+            ObjectMetadata metadata = transferManager.getCOSClient()
+                    .getObjectMetadata(cosProperties.getBucketName(), key);
+            log.info("COS head success: key={}, contentType={}, contentLength={}",
+                    key, metadata.getContentType(), metadata.getContentLength());
+            return new ObjectHead(metadata.getContentType(), metadata.getContentLength());
+        } catch (Exception e) {
+            log.error("COS head failed: key={}", key, e);
+            throw new RuntimeException("File metadata read failed: " + e.getMessage(), e);
+        }
+    }
+
     public void delete(String key) {
         try {
             transferManager.getCOSClient().deleteObject(cosProperties.getBucketName(), key);
@@ -291,6 +421,69 @@ public class CosService {
             return key;
         }
         return baseUrl.replaceAll("/+$", "") + "/" + key.replaceAll("^/+", "");
+    }
+
+    /**
+     * 构造 COS 表单上传策略。
+     *
+     * @param objectKey COS 对象键
+     * @param maxBytes 最大允许字节数
+     * @param expiresAt 过期时间
+     * @param keyTime 签名时间范围
+     * @return policy JSON
+     */
+    private String buildPostPolicy(String objectKey, long maxBytes, LocalDateTime expiresAt, String keyTime) {
+        String expiration = expiresAt.atZone(ZoneId.systemDefault())
+                .withZoneSameInstant(ZoneOffset.UTC)
+                .format(POLICY_EXPIRATION_FORMATTER);
+        Map<String, Object> policy = new LinkedHashMap<>();
+        List<Object> conditions = new ArrayList<>();
+        conditions.add(postPolicyCondition(POST_POLICY_BUCKET, cosProperties.getBucketName()));
+        conditions.add(postPolicyCondition(POST_FIELD_KEY, objectKey));
+        conditions.add(postPolicyCondition(POST_FIELD_SIGN_ALGORITHM, POST_SIGN_ALGORITHM));
+        conditions.add(postPolicyCondition(POST_FIELD_ACCESS_KEY, cosProperties.getSecretId()));
+        conditions.add(postPolicyCondition(POST_FIELD_SIGN_TIME, keyTime));
+        conditions.add(postPolicyCondition(POST_FIELD_SUCCESS_STATUS, POST_SUCCESS_STATUS));
+        conditions.add(postPolicyContentLengthRange(maxBytes));
+        policy.put("expiration", expiration);
+        policy.put("conditions", conditions);
+        return JSON.toJSONString(policy);
+    }
+
+    /**
+     * 构造 COS POST policy 的等值条件。
+     *
+     * @param name 条件字段名
+     * @param value 条件字段值
+     * @return policy 条件对象
+     */
+    private Map<String, String> postPolicyCondition(String name, String value) {
+        Map<String, String> condition = new LinkedHashMap<>();
+        condition.put(name, value);
+        return condition;
+    }
+
+    /**
+     * 构造 COS POST policy 的上传大小范围条件。
+     *
+     * @param maxBytes 最大允许字节数
+     * @return policy 条件数组
+     */
+    private List<Object> postPolicyContentLengthRange(long maxBytes) {
+        List<Object> condition = new ArrayList<>();
+        condition.add(POST_POLICY_CONTENT_LENGTH_RANGE);
+        condition.add(0L);
+        condition.add(maxBytes);
+        return condition;
+    }
+
+    /**
+     * 构造 COS 表单上传地址。
+     *
+     * @return 上传地址
+     */
+    private String buildPostUploadUrl() {
+        return String.format(POST_UPLOAD_URL_TEMPLATE, cosProperties.getBucketName(), cosProperties.getRegion());
     }
 
     private String extractExtension(String filename) {
@@ -324,5 +517,34 @@ public class CosService {
             return ".bmp";
         }
         return ".jpg";
+    }
+
+    /**
+     * COS 表单直传票据。
+     *
+     * @param uploadUrl 表单上传地址
+     * @param objectKey COS 对象键
+     * @param contentType MIME 类型
+     * @param maxBytes 最大允许字节数
+     * @param expiresAt 过期时间
+     * @param formData wx.uploadFile 表单字段
+     */
+    public record PostUploadTicket(
+            String uploadUrl,
+            String objectKey,
+            String contentType,
+            long maxBytes,
+            LocalDateTime expiresAt,
+            Map<String, String> formData
+    ) {
+    }
+
+    /**
+     * COS 对象头信息。
+     *
+     * @param contentType MIME 类型
+     * @param contentLength 文件字节数
+     */
+    public record ObjectHead(String contentType, long contentLength) {
     }
 }
