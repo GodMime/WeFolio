@@ -65,13 +65,13 @@ test('mine metric cards use Skyline compatible three column flex layout', () => 
   assert.match(metricRule, /min-width:\s*0/)
 })
 
-test('mine action entries use COS image logos and keep content left aligned', () => {
+test('mine action entries use local package image logos and keep content left aligned', () => {
   const entryRowRule = readRule('.entry-row')
   const entryIconRule = readRule('.entry-icon')
 
-  assert.match(indexJs, /iconUrl:\s*'https:\/\/cos\.we-folio\.dingchenyong\.top\/system\/wefolio-visitor-record-icon\.png'/)
-  assert.match(indexJs, /iconUrl:\s*'https:\/\/cos\.we-folio\.dingchenyong\.top\/system\/wefolio-team-icon\.png'/)
-  assert.match(indexJs, /const MESSAGE_ICON_URL = 'https:\/\/cos\.we-folio\.dingchenyong\.top\/system\/wefolio-message-icon\.png'/)
+  assert.match(indexJs, /iconUrl:\s*'\/assets\/system\/wefolio-visitor-record-icon\.png'/)
+  assert.match(indexJs, /iconUrl:\s*'\/assets\/system\/wefolio-team-icon\.png'/)
+  assert.match(indexJs, /const MESSAGE_ICON_URL = '\/assets\/system\/wefolio-message-icon\.png'/)
   assert.match(indexJs, /iconUrl:\s*MESSAGE_ICON_URL/)
   assert.match(indexJs, /title:\s*'我的消息'[\s\S]*desc:\s*'系统提醒、团队邀请'/)
   assert.doesNotMatch(indexJs, /desc:\s*'系统提醒、团队邀请、积分不足'/)

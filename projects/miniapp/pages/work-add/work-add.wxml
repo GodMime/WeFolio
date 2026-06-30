@@ -14,20 +14,46 @@
           <view class="panel-title">已选作品</view>
           <view class="selected-count">{{files.length}} / 9</view>
         </view>
-        <scroll-view class="selected-work-list" scroll-y type="list">
+        <scroll-view class="selected-work-list count-{{files.length > 3 ? 'many' : files.length}}" scroll-y type="list">
           <view class="selected-work-list-content">
-            <view wx:for="{{files}}" wx:key="id" class="selected-work-row">
-              <view class="selected-work-thumb {{item.isVideo ? 'video' : ''}}">
-                <image wx:if="{{item.mediaType === 'IMAGE'}}" src="{{item.tempFilePath}}" mode="aspectFill"></image>
-                <image wx:elif="{{item.coverPath}}" src="{{item.coverPath}}" mode="aspectFill"></image>
-                <view wx:else class="video-thumb">视频</view>
-                <view wx:if="{{item.isVideo}}" class="play-badge">▶</view>
+            <view
+              wx:for="{{files}}"
+              wx:key="id"
+              class="selected-work-swipe-row {{revealedFileId === item.id ? 'revealed' : ''}}"
+              data-id="{{item.id}}"
+              bindtouchstart="handleFileTouchStart"
+              bindtouchmove="handleFileTouchMove"
+              bindtouchend="handleFileTouchEnd"
+              bindtouchcancel="handleFileTouchCancel"
+            >
+              <view class="selected-work-remove-pane" catchtap="handleEditPanelTap">
+                <button class="selected-work-remove-button" data-index="{{index}}" catchtap="handleRemoveFile">移除</button>
               </view>
-              <view class="selected-work-copy">
-                <view class="selected-work-title">{{item.fileName}}</view>
-                <view class="selected-work-meta">{{item.metaText}}</view>
+              <view class="selected-work-row" data-index="{{index}}" bindtap="handleOpenFileEditor">
+                <view class="selected-work-thumb {{item.isVideo ? 'video' : ''}}">
+                  <image wx:if="{{item.mediaType === 'IMAGE'}}" src="{{item.tempFilePath}}" mode="aspectFill"></image>
+                  <image wx:elif="{{item.coverPath}}" src="{{item.coverPath}}" mode="aspectFill"></image>
+                  <view wx:else class="video-thumb">视频</view>
+                  <view wx:if="{{item.isVideo}}" class="play-badge">▶</view>
+                </view>
+                <view class="selected-work-copy">
+                  <view class="selected-work-title">{{item.title || item.fileName}}</view>
+                  <view class="selected-work-meta">{{item.metaText}}</view>
+                  <view
+                    wx:if="{{saving && (item.status === 'UPLOADING' || item.status === 'UPLOADED' || item.customCoverStatus === 'UPLOADING' || item.customCoverStatus === 'UPLOADED')}}"
+                    class="selected-work-progress"
+                  >
+                    <view class="selected-work-progress-head">
+                      <view>{{item.customCoverStatus === 'UPLOADING' ? '处理封面' : item.customCoverStatus === 'UPLOADED' ? '封面已上传' : item.status === 'UPLOADED' ? '文件已上传' : '上传中'}}</view>
+                      <view>{{item.customCoverStatus === 'UPLOADING' || item.customCoverStatus === 'UPLOADED' ? item.customCoverProgress : item.progress || 0}}%</view>
+                    </view>
+                    <view class="selected-work-progress-track">
+                      <view class="selected-work-progress-fill" style="width: {{item.customCoverStatus === 'UPLOADING' || item.customCoverStatus === 'UPLOADED' ? item.customCoverProgress : item.progress || 0}}%;"></view>
+                    </view>
+                  </view>
+                </view>
+                <view class="selected-work-arrow">›</view>
               </view>
-              <view class="selected-work-arrow">›</view>
             </view>
           </view>
         </scroll-view>
@@ -49,7 +75,14 @@
       </view>
 
       <view wx:if="{{errorMessage}}" class="error-copy">{{errorMessage}}</view>
-      <button class="primary-button {{files.length === 0 ? 'empty-disabled' : ''}}" loading="{{saving}}" disabled="{{saving}}" bindtap="handleSubmit">保存作品</button>
+      <button class="primary-button {{files.length === 0 ? 'empty-disabled' : ''}}" disabled="{{saving}}" bindtap="handleSubmit">
+        <view class="primary-button-content">
+          <view class="primary-button-label">{{saving ? uploadOverallText : '保存作品'}}</view>
+          <view wx:if="{{saving}}" class="primary-button-progress">
+            <view class="primary-button-progress-fill" style="width: {{uploadOverallProgress}}%;"></view>
+          </view>
+        </view>
+      </button>
     </view>
   </scroll-view>
 
@@ -92,4 +125,95 @@
       </view>
     </view>
   </view>
+
+  <view class="work-edit-mask" wx:if="{{editSheetVisible}}" catchtap="handleCloseFileEditor">
+    <view class="work-edit-panel" catchtap="handleEditPanelTap">
+      <view class="work-edit-grabber"></view>
+      <view class="work-edit-heading">
+        <view class="work-edit-title">{{editForm.isVideo ? '编辑视频作品' : '编辑图片作品'}}</view>
+        <view class="work-edit-type">{{editForm.isVideo ? '视频' : '图片'}}</view>
+      </view>
+
+      <scroll-view class="work-edit-scroll" scroll-y type="list">
+        <view class="work-edit-content">
+          <view class="work-preview">
+            <image wx:if="{{!editForm.isVideo}}" class="work-preview-media" src="{{editForm.tempFilePath}}" mode="aspectFit"></image>
+            <image wx:elif="{{editForm.coverPath}}" class="work-preview-media" src="{{editForm.coverPath}}" mode="aspectFill"></image>
+            <view wx:else class="work-preview-empty">视频</view>
+          </view>
+
+          <view class="field-group">
+            <view class="field-label">作品标题</view>
+            <input
+              class="text-field"
+              value="{{editForm.title}}"
+              maxlength="30"
+              placeholder="填写作品标题"
+              data-field="title"
+              bindinput="handleEditInput"
+            />
+          </view>
+
+          <view class="field-group">
+            <view class="field-label">作品说明</view>
+            <textarea
+              class="textarea-field"
+              value="{{editForm.description}}"
+              placeholder="填写作品说明"
+              maxlength="1000"
+              data-field="description"
+              bindinput="handleEditInput"
+              auto-height="{{false}}"
+            ></textarea>
+          </view>
+
+          <view wx:if="{{editForm.isVideo}}" class="cover-section">
+            <view class="cover-heading">
+              <view class="field-label">视频封面</view>
+              <view class="cover-time">{{editFrameTimeText}} / {{editForm.durationText}}</view>
+            </view>
+            <video
+              id="workCoverVideo"
+              class="cover-video"
+              src="{{editForm.tempFilePath}}"
+              controls
+              show-center-play-btn="{{true}}"
+              enable-progress-gesture="{{true}}"
+              bindloadedmetadata="handleEditVideoMetadata"
+              bindtimeupdate="handleEditVideoTimeUpdate"
+            ></video>
+            <slider
+              class="cover-slider"
+              min="0"
+              max="{{editForm.durationMs}}"
+              step="100"
+              value="{{editFrameTimeMs}}"
+              bindchanging="handleCoverSliderChanging"
+              bindchange="handleCoverSliderChange"
+            ></slider>
+            <button
+              class="cover-export-button"
+              bindtap="handleExportVideoCover"
+              loading="{{editFrameExporting}}"
+              disabled="{{editFrameExporting}}"
+            >使用当前帧做封面</button>
+          </view>
+
+          <view wx:if="{{editErrorText}}" class="edit-error">{{editErrorText}}</view>
+        </view>
+      </scroll-view>
+
+      <view class="work-edit-actions">
+        <button class="work-edit-cancel" catchtap="handleCloseFileEditor" disabled="{{editFrameExporting}}">取消</button>
+        <button class="work-edit-confirm" catchtap="handleConfirmFileEdit" disabled="{{editFrameExporting}}">完成</button>
+      </view>
+    </view>
+  </view>
+
+  <canvas
+    id="workCoverCanvas"
+    type="2d"
+    class="frame-export-canvas"
+    style="width: {{frameCanvasWidth}}px; height: {{frameCanvasHeight}}px;"
+  ></canvas>
 </view>

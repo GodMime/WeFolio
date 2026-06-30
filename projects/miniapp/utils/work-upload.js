@@ -5,7 +5,24 @@ const VIDEO_MAX_DURATION_SECONDS = 10 * 60
 const IMAGE_UPLOAD_CONCURRENCY = 2
 const VIDEO_UPLOAD_CONCURRENCY = 1
 const COS_UPLOAD_TIMEOUT = 10 * 60 * 1000
+const TITLE_MAX_LENGTH = 30
 const UPLOAD_COMPLETE_FAILURE_FALLBACK = '部分作品确认失败'
+const CHOOSE_MEDIA_TYPE_MIX = 'mix'
+const CHOOSE_SOURCE_TYPE_ALBUM = 'album'
+const COVER_CLIENT_ID_SUFFIX = '-cover'
+const DEFAULT_COVER_MIME_TYPE = 'image/jpeg'
+const THUMB_MAX_BYTES = 100 * 1024
+const THUMB_FILE_SUFFIX = '-thumb'
+const THUMB_FILE_EXTENSION = 'jpg'
+const THUMB_COMPRESS_ATTEMPTS = [
+  { quality: 85, compressedSize: 960 },
+  { quality: 75, compressedSize: 720 },
+  { quality: 65, compressedSize: 540 },
+  { quality: 55, compressedSize: 360 },
+  { quality: 45, compressedSize: 240 }
+]
+const THUMB_TOO_LARGE_MESSAGE = '缩略图或封面图不能超过 100KB'
+const VIDEO_COVER_MISSING_MESSAGE = '视频封面图缺失，请重新选择视频'
 
 function getRuntimeWx(wxApi) {
   if (wxApi) {
@@ -30,8 +47,8 @@ function createChooseMediaOptions(remainingCount = MAX_BATCH_COUNT) {
   const count = Math.max(0, Math.min(MAX_BATCH_COUNT, Number(remainingCount) || MAX_BATCH_COUNT))
   return {
     count,
-    mediaType: ['image', 'video'],
-    sourceType: ['album']
+    mediaType: [CHOOSE_MEDIA_TYPE_MIX],
+    sourceType: [CHOOSE_SOURCE_TYPE_ALBUM]
   }
 }
 
@@ -41,10 +58,73 @@ function fileNameFromPath(filePath) {
   return segments[segments.length - 1] || '未命名作品'
 }
 
-function titleFromFileName(fileName) {
+function fileStemFromFileName(fileName) {
   const value = trimText(fileName)
   const index = value.lastIndexOf('.')
   return index > 0 ? value.slice(0, index) : value
+}
+
+function titleFromFileName(fileName) {
+  const stem = fileStemFromFileName(fileName)
+  return stem.length > TITLE_MAX_LENGTH ? stem.slice(0, TITLE_MAX_LENGTH) : stem
+}
+
+function buildThumbFileName(fileName) {
+  const stem = fileStemFromFileName(fileName) || 'work'
+  return `${stem}${THUMB_FILE_SUFFIX}.${THUMB_FILE_EXTENSION}`
+}
+
+function getLocalFileSize(filePath, wxApi) {
+  const runtimeWx = getRuntimeWx(wxApi)
+  const fileSystemManager = runtimeWx.getFileSystemManager()
+  const stats = fileSystemManager.statSync(filePath)
+  return stats && typeof stats.size === 'number' ? stats.size : 0
+}
+
+function compressImageFile(filePath, attempt, options = {}) {
+  const runtimeWx = getRuntimeWx(options.wxApi)
+  if (!runtimeWx.compressImage) {
+    return Promise.reject(new Error('当前微信版本不支持图片压缩'))
+  }
+  return new Promise((resolve, reject) => {
+    runtimeWx.compressImage({
+      src: filePath,
+      quality: attempt.quality,
+      compressedWidth: attempt.compressedSize,
+      compressedHeight: attempt.compressedSize,
+      success(response) {
+        if (response && response.tempFilePath) {
+          resolve(response.tempFilePath)
+          return
+        }
+        reject(new Error('图片压缩失败'))
+      },
+      fail(error) {
+        reject(new Error(error && error.errMsg ? error.errMsg : '图片压缩失败'))
+      }
+    })
+  })
+}
+
+async function prepareThumbFile(filePath, options = {}) {
+  const originalSize = getLocalFileSize(filePath, options.wxApi)
+  if (originalSize > 0 && originalSize <= THUMB_MAX_BYTES) {
+    return {
+      filePath,
+      fileSize: originalSize
+    }
+  }
+  for (const attempt of THUMB_COMPRESS_ATTEMPTS) {
+    const tempFilePath = await compressImageFile(filePath, attempt, options)
+    const fileSize = getLocalFileSize(tempFilePath, options.wxApi)
+    if (fileSize > 0 && fileSize <= THUMB_MAX_BYTES) {
+      return {
+        filePath: tempFilePath,
+        fileSize
+      }
+    }
+  }
+  throw new Error(THUMB_TOO_LARGE_MESSAGE)
 }
 
 function formatDurationText(durationMs) {
@@ -108,6 +188,18 @@ function normalizeChosenMediaFiles(files = []) {
   return Array.isArray(files) ? files.map(normalizeChosenMediaFile) : []
 }
 
+function isConfirmedFile(file = {}) {
+  return file.status === 'CONFIRMED' || Boolean(file.confirmedWorkId)
+}
+
+function shouldCreateUploadTicket(file = {}) {
+  return !isConfirmedFile(file) && !file.taskId
+}
+
+function shouldUploadMainFile(file = {}) {
+  return !isConfirmedFile(file) && file.status !== 'UPLOADED'
+}
+
 function validateChosenMediaFiles(files = []) {
   if (!Array.isArray(files) || files.length === 0) {
     return { valid: false, message: '请选择图片或视频' }
@@ -135,16 +227,201 @@ function validateChosenMediaFiles(files = []) {
 function buildUploadTicketPayload(files = [], batchId = '') {
   return {
     batchId,
-    files: files.map((file) => ({
-      clientId: file.clientId,
-      mediaType: file.mediaType,
-      fileName: file.fileName,
-      mimeType: file.mimeType,
-      fileSize: file.size,
-      durationMs: file.mediaType === 'VIDEO' ? file.durationMs : null,
-      width: file.width,
-      height: file.height,
-      idempotencyKey: `ticket-${file.clientId}`
+    files: files
+      .filter(shouldCreateUploadTicket)
+      .map((file) => ({
+        clientId: file.clientId,
+        mediaType: file.mediaType,
+        fileName: file.fileName,
+        mimeType: file.mimeType,
+        fileSize: file.size,
+        durationMs: file.mediaType === 'VIDEO' ? file.durationMs : null,
+        width: file.width,
+        height: file.height,
+        idempotencyKey: `ticket-${file.clientId}`
+      }))
+  }
+}
+
+function getCoverUploadPath(file = {}) {
+  return trimText(file.customCoverPath) || trimText(file.coverPath)
+}
+
+function hasCustomCover(file = {}) {
+  return Boolean(trimText(file.customCoverPath))
+}
+
+function getCoverFileName(file = {}) {
+  return trimText(file.coverFileName)
+    || trimText(file.customCoverFileName)
+    || buildThumbFileName(file.fileName)
+}
+
+function getCoverFileSize(file = {}) {
+  if (normalizeSize(file.coverSize)) {
+    return normalizeSize(file.coverSize)
+  }
+  return hasCustomCover(file) ? normalizeSize(file.customCoverSize) : 0
+}
+
+function getCoverWidth(file = {}) {
+  return hasCustomCover(file)
+    ? normalizeSize(file.customCoverWidth)
+    : normalizeSize(file.coverWidth)
+}
+
+function getCoverHeight(file = {}) {
+  return hasCustomCover(file)
+    ? normalizeSize(file.customCoverHeight)
+    : normalizeSize(file.coverHeight)
+}
+
+function getCoverIdempotencyKey(file = {}) {
+  return trimText(file.coverIdempotencyKey)
+    || trimText(file.customCoverIdempotencyKey)
+    || `cover-ticket-${file.clientId}`
+}
+
+function shouldUploadCoverFile(file = {}) {
+  if (isConfirmedFile(file) || file.customCoverStatus === 'UPLOADED') {
+    return false
+  }
+  if (file.mediaType === 'VIDEO') {
+    return Boolean(getCoverUploadPath(file))
+  }
+  if (file.mediaType === 'IMAGE') {
+    return normalizeSize(file.size) > THUMB_MAX_BYTES && Boolean(getCoverUploadPath(file))
+  }
+  return false
+}
+
+async function prepareCoverUploadFiles(files = [], options = {}) {
+  const preparedFiles = []
+  for (const file of files) {
+    const nextFile = Object.assign({}, file)
+    if (isConfirmedFile(nextFile) || nextFile.customCoverStatus === 'UPLOADED') {
+      preparedFiles.push(nextFile)
+      continue
+    }
+    if (nextFile.mediaType === 'IMAGE') {
+      if (normalizeSize(nextFile.size) <= THUMB_MAX_BYTES) {
+        nextFile.coverPath = ''
+        nextFile.coverSize = 0
+        preparedFiles.push(nextFile)
+        continue
+      }
+      const thumb = await prepareThumbFile(nextFile.tempFilePath, options)
+      Object.assign(nextFile, {
+        coverPath: thumb.filePath,
+        coverSize: thumb.fileSize,
+        coverFileName: buildThumbFileName(nextFile.fileName),
+        coverIdempotencyKey: `cover-ticket-${nextFile.clientId}`
+      })
+      preparedFiles.push(nextFile)
+      continue
+    }
+    if (nextFile.mediaType === 'VIDEO') {
+      const coverPath = getCoverUploadPath(nextFile)
+      if (!coverPath) {
+        throw new Error(VIDEO_COVER_MISSING_MESSAGE)
+      }
+      const thumb = await prepareThumbFile(coverPath, options)
+      Object.assign(nextFile, {
+        coverPath: thumb.filePath,
+        coverSize: thumb.fileSize,
+        coverFileName: buildThumbFileName(nextFile.fileName),
+        coverIdempotencyKey: `cover-ticket-${nextFile.clientId}`
+      })
+      if (hasCustomCover(nextFile)) {
+        Object.assign(nextFile, {
+          customCoverPath: thumb.filePath,
+          customCoverSize: thumb.fileSize,
+          customCoverFileName: buildThumbFileName(nextFile.fileName)
+        })
+      }
+      preparedFiles.push(nextFile)
+      continue
+    }
+    preparedFiles.push(nextFile)
+  }
+  return preparedFiles
+}
+
+function normalizeProgress(value) {
+  const numberValue = Number(value)
+  if (!Number.isFinite(numberValue)) {
+    return 0
+  }
+  return Math.max(0, Math.min(100, Math.round(numberValue)))
+}
+
+function shouldCountCoverProgress(file = {}) {
+  if (file.customCoverUploadTicket || file.customCoverStatus) {
+    return true
+  }
+  if (file.mediaType === 'VIDEO') {
+    return Boolean(getCoverUploadPath(file))
+  }
+  return file.mediaType === 'IMAGE' && normalizeSize(file.size) > THUMB_MAX_BYTES
+}
+
+function buildUploadProgressSummary(files = [], saving = false) {
+  if (!saving) {
+    return {
+      active: false,
+      percent: 0,
+      text: '保存作品'
+    }
+  }
+  if (!Array.isArray(files) || files.length === 0) {
+    return {
+      active: true,
+      percent: 0,
+      text: '准备上传'
+    }
+  }
+  let totalProgress = 0
+  let totalUnits = 0
+  files.forEach((file) => {
+    if (!file) {
+      return
+    }
+    totalUnits += 1
+    if (isConfirmedFile(file)) {
+      totalProgress += 100
+      return
+    }
+    totalProgress += file.status === 'UPLOADED' ? 100 : normalizeProgress(file.progress)
+    if (shouldCountCoverProgress(file)) {
+      totalUnits += 1
+      totalProgress += file.customCoverStatus === 'UPLOADED'
+        ? 100
+        : normalizeProgress(file.customCoverProgress)
+    }
+  })
+  const percent = totalUnits > 0 ? Math.min(100, Math.round(totalProgress / totalUnits)) : 0
+  return {
+    active: true,
+    percent,
+    text: percent >= 100 ? '确认作品' : `保存中 ${percent}%`
+  }
+}
+
+function buildCoverUploadTicketPayload(files = [], batchId = '') {
+  const coverFiles = files.filter(shouldUploadCoverFile)
+  return {
+    batchId,
+    files: coverFiles.map((file) => ({
+      clientId: `${file.clientId}${COVER_CLIENT_ID_SUFFIX}`,
+      mediaType: 'IMAGE',
+      fileName: getCoverFileName(file),
+      mimeType: DEFAULT_COVER_MIME_TYPE,
+      fileSize: getCoverFileSize(file),
+      durationMs: null,
+      width: getCoverWidth(file),
+      height: getCoverHeight(file),
+      sourceTaskId: file.taskId || null,
+      idempotencyKey: getCoverIdempotencyKey(file)
     }))
   }
 }
@@ -152,15 +429,53 @@ function buildUploadTicketPayload(files = [], batchId = '') {
 function buildUploadCompletePayload(files = []) {
   return {
     items: files
-      .filter((file) => file.taskId)
-      .map((file) => ({
-        taskId: file.taskId,
-        title: trimText(file.title),
-        description: trimText(file.description),
-        tagNames: Array.isArray(file.tags) ? file.tags.map(trimText).filter(Boolean) : [],
-        idempotencyKey: file.confirmIdempotencyKey
-      }))
+      .filter((file) => file.taskId && !isConfirmedFile(file))
+      .map((file) => {
+        const item = {
+          taskId: file.taskId,
+          title: trimText(file.title),
+          description: trimText(file.description),
+          tagNames: Array.isArray(file.tags) ? file.tags.map(trimText).filter(Boolean) : [],
+          idempotencyKey: file.confirmIdempotencyKey
+        }
+        if (file.customCoverTaskId && file.customCoverStatus === 'UPLOADED') {
+          item.coverTaskId = file.customCoverTaskId
+        }
+        return item
+      })
   }
+}
+
+function applyUploadCompleteResults(files = [], items = []) {
+  const itemMap = (Array.isArray(items) ? items : []).reduce((result, item) => {
+    if (item && item.taskId) {
+      result[String(item.taskId)] = item
+    }
+    return result
+  }, {})
+  return (Array.isArray(files) ? files : []).map((file) => {
+    if (!file || !file.taskId) {
+      return file
+    }
+    const item = itemMap[String(file.taskId)]
+    if (!item) {
+      return file
+    }
+    if (item.success) {
+      return Object.assign({}, file, {
+        status: 'CONFIRMED',
+        progress: 100,
+        confirmedWorkId: item.workId || file.confirmedWorkId || null,
+        errorMessage: '',
+        uploadTicket: null,
+        customCoverUploadTicket: null,
+        customCoverStatus: file.customCoverTaskId ? 'CONFIRMED' : file.customCoverStatus
+      })
+    }
+    return Object.assign({}, file, {
+      errorMessage: trimText(item.message) || UPLOAD_COMPLETE_FAILURE_FALLBACK
+    })
+  })
 }
 
 function buildUploadCompleteFailureMessage(items = []) {
@@ -221,8 +536,9 @@ async function runPool(items, concurrency, uploadFn) {
 async function runWorkUploadQueue(items = [], uploadFn, options = {}) {
   const imageConcurrency = options.imageConcurrency || IMAGE_UPLOAD_CONCURRENCY
   const videoConcurrency = options.videoConcurrency || VIDEO_UPLOAD_CONCURRENCY
-  const images = items.filter((item) => item.mediaType === 'IMAGE')
-  const videos = items.filter((item) => item.mediaType === 'VIDEO')
+  const pendingItems = items.filter(shouldUploadMainFile)
+  const images = pendingItems.filter((item) => item.mediaType === 'IMAGE')
+  const videos = pendingItems.filter((item) => item.mediaType === 'VIDEO')
   const [imageResults, videoResults] = await Promise.all([
     runPool(images, imageConcurrency, uploadFn),
     runPool(videos, videoConcurrency, uploadFn)
@@ -235,14 +551,20 @@ module.exports = {
   IMAGE_MAX_BYTES,
   IMAGE_UPLOAD_CONCURRENCY,
   MAX_BATCH_COUNT,
+  THUMB_MAX_BYTES,
   VIDEO_MAX_BYTES,
   VIDEO_MAX_DURATION_SECONDS,
   VIDEO_UPLOAD_CONCURRENCY,
+  applyUploadCompleteResults,
+  buildThumbFileName,
+  buildUploadProgressSummary,
   buildUploadCompletePayload,
   buildUploadCompleteFailureMessage,
+  buildCoverUploadTicketPayload,
   buildUploadTicketPayload,
   createChooseMediaOptions,
   normalizeChosenMediaFiles,
+  prepareCoverUploadFiles,
   uploadToCos,
   runWorkUploadQueue,
   validateChosenMediaFiles

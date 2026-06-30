@@ -71,6 +71,12 @@ public class CosService {
     /** COS 表单成功状态字段 */
     private static final String POST_FIELD_SUCCESS_STATUS = "success_action_status";
 
+    /** COS 表单对象访问权限字段 */
+    private static final String POST_FIELD_ACL = "x-cos-acl";
+
+    /** COS 表单上传对象访问权限：公有读私有写 */
+    private static final String POST_ACL_PUBLIC_READ = CannedAccessControlList.PublicRead.toString();
+
     /** COS policy 存储桶字段 */
     private static final String POST_POLICY_BUCKET = "bucket";
 
@@ -82,6 +88,9 @@ public class CosService {
 
     /** COS 表单上传地址模板 */
     private static final String POST_UPLOAD_URL_TEMPLATE = "https://%s.cos.%s.myqcloud.com";
+
+    /** URL 末尾斜杠匹配表达式 */
+    private static final String TRAILING_SLASH_REGEX = "/+$";
 
     /** UTC 时间格式，用于 COS POST policy expiration */
     private static final DateTimeFormatter POLICY_EXPIRATION_FORMATTER =
@@ -143,6 +152,7 @@ public class CosService {
         formData.put(POST_FIELD_POLICY, encodedPolicy);
         formData.put(POST_FIELD_SIGNATURE, signature);
         formData.put(POST_FIELD_SUCCESS_STATUS, POST_SUCCESS_STATUS);
+        formData.put(POST_FIELD_ACL, POST_ACL_PUBLIC_READ);
 
         return new PostUploadTicket(
                 buildPostUploadUrl(),
@@ -420,7 +430,7 @@ public class CosService {
         if (baseUrl == null || baseUrl.isBlank()) {
             return key;
         }
-        return baseUrl.replaceAll("/+$", "") + "/" + key.replaceAll("^/+", "");
+        return baseUrl.replaceAll(TRAILING_SLASH_REGEX, "") + "/" + key.replaceAll("^/+", "");
     }
 
     /**
@@ -444,6 +454,7 @@ public class CosService {
         conditions.add(postPolicyCondition(POST_FIELD_ACCESS_KEY, cosProperties.getSecretId()));
         conditions.add(postPolicyCondition(POST_FIELD_SIGN_TIME, keyTime));
         conditions.add(postPolicyCondition(POST_FIELD_SUCCESS_STATUS, POST_SUCCESS_STATUS));
+        conditions.add(postPolicyCondition(POST_FIELD_ACL, POST_ACL_PUBLIC_READ));
         conditions.add(postPolicyContentLengthRange(maxBytes));
         policy.put("expiration", expiration);
         policy.put("conditions", conditions);
@@ -483,6 +494,10 @@ public class CosService {
      * @return 上传地址
      */
     private String buildPostUploadUrl() {
+        String uploadBaseUrl = cosProperties.getUploadBaseUrl();
+        if (uploadBaseUrl != null && !uploadBaseUrl.isBlank()) {
+            return uploadBaseUrl.replaceAll(TRAILING_SLASH_REGEX, "");
+        }
         return String.format(POST_UPLOAD_URL_TEMPLATE, cosProperties.getBucketName(), cosProperties.getRegion());
     }
 

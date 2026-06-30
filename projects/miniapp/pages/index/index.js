@@ -4,7 +4,7 @@ const { normalizeDashboard } = require('../../utils/dashboard')
 const { normalizeUnreadCount } = require('../../utils/messages')
 
 const MESSAGE_ENTRY_TYPE = 'messages'
-const MESSAGE_ICON_URL = 'https://cos.we-folio.dingchenyong.top/system/wefolio-message-icon.png'
+const MESSAGE_ICON_URL = '/assets/system/wefolio-message-icon.png'
 const MESSAGE_UNREAD_COUNT_URL = '/api/mine/messages/unread-count'
 const MESSAGES_PAGE_URL = '/pages/messages/messages'
 const POINTS_PAGE_URL = '/pages/points/points'
@@ -17,13 +17,13 @@ function buildEntries(messageUnread = normalizeUnreadCount({})) {
       type: 'visits',
       title: '访问记录',
       desc: '访客来源、访问次数、跟进状态',
-      iconUrl: 'https://cos.we-folio.dingchenyong.top/system/wefolio-visitor-record-icon.png'
+      iconUrl: '/assets/system/wefolio-visitor-record-icon.png'
     },
     {
       type: 'teams',
       title: '我的团队',
       desc: '按角色显示可用功能',
-      iconUrl: 'https://cos.we-folio.dingchenyong.top/system/wefolio-team-icon.png'
+      iconUrl: '/assets/system/wefolio-team-icon.png'
     },
     {
       type: MESSAGE_ENTRY_TYPE,

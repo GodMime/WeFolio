@@ -104,11 +104,38 @@ public class MineWorkService {
     /** 视频 COS 目录 */
     private static final String WORK_VIDEO_FOLDER = "work/video";
 
+    /** 图片作品文件名类型标识 */
+    private static final String IMAGE_FILE_MARKER = "P";
+
+    /** 视频作品文件名类型标识 */
+    private static final String VIDEO_FILE_MARKER = "V";
+
+    /** 作品文件名字段分隔符 */
+    private static final String WORK_FILE_NAME_SEPARATOR = "-";
+
+    /** 文件扩展名前缀 */
+    private static final String FILE_EXTENSION_SEPARATOR = ".";
+
+    /** 缩略图和封面图最大字节数 */
+    private static final long THUMB_MAX_BYTES = 100L * 1024L;
+
+    /** 缩略图文件名后缀 */
+    private static final String THUMB_FILE_SUFFIX = "-thumb";
+
+    /** 缩略图文件扩展名 */
+    private static final String THUMB_FILE_EXTENSION = "jpg";
+
     /** 上传任务幂等键兜底前缀 */
     private static final String TICKET_IDEMPOTENCY_PREFIX = "WORK_UPLOAD_TICKET:";
 
     /** 上传任务保存失败提示 */
     private static final String UPLOAD_TASK_SAVE_FAILED_MESSAGE = "上传任务创建失败，请刷新后重试";
+
+    /** 同批次重复文件提示 */
+    private static final String SAME_BATCH_DUPLICATE_FILE_MESSAGE = "同一批次存在重复文件，请重新选择后上传";
+
+    /** 作品对象键命名冲突提示 */
+    private static final String WORK_OBJECT_KEY_CONFLICT_MESSAGE = "上传文件命名冲突，请稍后重试";
 
     /** 作品表主键列 */
     private static final String WORK_COLUMN_ID = "id";
@@ -169,6 +196,21 @@ public class MineWorkService {
 
     /** 上传确认未预期失败提示 */
     private static final String UPLOAD_CONFIRM_UNEXPECTED_FAILED_MESSAGE = "作品确认失败，请稍后重试";
+
+    /** 图片缩略图缺失提示 */
+    private static final String IMAGE_THUMB_REQUIRED_MESSAGE = "图片缩略图缺失，请重新上传";
+
+    /** 视频封面图缺失提示 */
+    private static final String VIDEO_COVER_REQUIRED_MESSAGE = "视频封面图缺失，请重新选择视频";
+
+    /** 缩略图或封面图超限提示 */
+    private static final String COVER_TASK_SIZE_MESSAGE = "缩略图或封面图不能超过 100KB";
+
+    /** 缩略图或封面图文件名错误提示 */
+    private static final String COVER_TASK_FILE_NAME_MESSAGE = "缩略图或封面图文件名必须为原文件名-thumb";
+
+    /** 缩略图或封面图来源任务错误提示 */
+    private static final String COVER_SOURCE_TASK_INVALID_MESSAGE = "缩略图或封面图来源任务无效";
 
     /** 单个作品标签数量超限提示 */
     private static final String WORK_TAG_COUNT_LIMIT_MESSAGE = "作品标签最多 10 个";
@@ -415,12 +457,17 @@ public class MineWorkService {
         response.setImageMaxBytes(IMAGE_MAX_BYTES);
         response.setVideoMaxBytes(VIDEO_MAX_BYTES);
         response.setVideoMaxDurationMs(VIDEO_MAX_DURATION_MS);
-        for (MineWorkUploadTicketRequest.UploadFileItem file : files) {
-            validateUploadFile(file);
-            String mediaType = normalizeMediaType(file.getMediaType());
-            String extension = normalizeExtension(file.getFileName(), file.getMimeType(), mediaType);
-            String objectKey = buildWorkObjectKey(user.getUniqueCode(), mediaType, extension);
-            WorkUploadTaskEntity task = buildUploadTask(userId, batchId, file, mediaType, objectKey, expiresAt);
+        List<PreparedUploadFile> preparedFiles = prepareUploadFiles(userId, user.getUniqueCode(), batchId, files);
+        for (PreparedUploadFile preparedFile : preparedFiles) {
+            MineWorkUploadTicketRequest.UploadFileItem file = preparedFile.file();
+            WorkUploadTaskEntity task = buildUploadTask(
+                    userId,
+                    batchId,
+                    file,
+                    preparedFile.mediaType(),
+                    preparedFile.objectKey(),
+                    preparedFile.idempotencyKey(),
+                    expiresAt);
             WorkUploadTaskEntity persistedTask = saveOrFindUploadTask(task);
             long maxBytes = maxBytes(persistedTask.getMediaType());
             CosService.PostUploadTicket ticket = cosService.createPostUploadTicket(
@@ -450,7 +497,8 @@ public class MineWorkService {
             Long taskId = item == null ? null : item.getTaskId();
             try {
                 WorkUploadTaskEntity task = requireOwnedUploadTask(userId, taskId);
-                validateCosObject(task);
+                CosService.ObjectHead head = validateCosObject(task);
+                validateCoverTask(userId, task, head, item);
                 response.getItems().add(workUploadTransactionService.confirmUploadedTask(userId, task, item));
             } catch (BusinessException e) {
                 markTaskFailedIfPossible(taskId, e.getMessage());
@@ -561,6 +609,52 @@ public class MineWorkService {
     }
 
     /**
+     * 预处理上传文件并检查同批次重复项。
+     *
+     * @param userId 当前用户 ID
+     * @param uniqueCode 用户唯一码
+     * @param batchId 批次 ID
+     * @param files 文件元信息列表
+     * @return 预处理后的上传文件
+     */
+    private List<PreparedUploadFile> prepareUploadFiles(
+            Long userId,
+            String uniqueCode,
+            String batchId,
+            List<MineWorkUploadTicketRequest.UploadFileItem> files
+    ) {
+        long uploadTimestamp = System.currentTimeMillis();
+        Set<String> idempotencyKeys = new LinkedHashSet<>();
+        Set<String> objectKeys = new LinkedHashSet<>();
+        List<PreparedUploadFile> preparedFiles = new ArrayList<>();
+        for (int index = 0; index < files.size(); index++) {
+            MineWorkUploadTicketRequest.UploadFileItem file = files.get(index);
+            int uploadSequence = index + 1;
+            validateUploadFile(file);
+            String idempotencyKey = normalizeTicketIdempotency(batchId, file);
+            if (!idempotencyKeys.add(idempotencyKey)) {
+                throw new BusinessException(SAME_BATCH_DUPLICATE_FILE_MESSAGE);
+            }
+            String mediaType = normalizeMediaType(file.getMediaType());
+            String extension = normalizeExtension(file.getFileName(), file.getMimeType(), mediaType);
+            WorkUploadTaskEntity sourceTask = resolveThumbSourceTask(userId, file);
+            String objectKey = sourceTask == null
+                    ? buildWorkObjectKey(
+                            uniqueCode,
+                            mediaType,
+                            extension,
+                            uploadTimestamp,
+                            uploadSequence)
+                    : buildThumbObjectKeyFromSource(sourceTask, extension);
+            if (!objectKeys.add(objectKey)) {
+                throw new BusinessException(WORK_OBJECT_KEY_CONFLICT_MESSAGE);
+            }
+            preparedFiles.add(new PreparedUploadFile(file, mediaType, objectKey, idempotencyKey));
+        }
+        return preparedFiles;
+    }
+
+    /**
      * 构造上传任务实体。
      *
      * @param userId 当前用户 ID
@@ -568,6 +662,7 @@ public class MineWorkService {
      * @param file 文件元信息
      * @param mediaType 媒体类型
      * @param objectKey COS 对象键
+     * @param idempotencyKey 上传任务幂等键
      * @param expiresAt 过期时间
      * @return 上传任务实体
      */
@@ -577,6 +672,7 @@ public class MineWorkService {
             MineWorkUploadTicketRequest.UploadFileItem file,
             String mediaType,
             String objectKey,
+            String idempotencyKey,
             LocalDateTime expiresAt
     ) {
         WorkUploadTaskEntity task = new WorkUploadTaskEntity();
@@ -592,10 +688,26 @@ public class MineWorkService {
         task.setHeight(file.getHeight());
         task.setStatus(WorkUploadTaskStatusDict.CREATED.getCode());
         task.setExpiresAt(expiresAt);
-        task.setIdempotencyKey(normalizeTicketIdempotency(batchId, file));
+        task.setIdempotencyKey(idempotencyKey);
         task.setCreatedAt(LocalDateTime.now());
         task.setUpdatedAt(LocalDateTime.now());
         return task;
+    }
+
+    /**
+     * 作品上传预处理结果。
+     *
+     * @param file 文件元信息
+     * @param mediaType 标准媒体类型
+     * @param objectKey COS 对象键
+     * @param idempotencyKey 上传任务幂等键
+     */
+    private record PreparedUploadFile(
+            MineWorkUploadTicketRequest.UploadFileItem file,
+            String mediaType,
+            String objectKey,
+            String idempotencyKey
+    ) {
     }
 
     /**
@@ -688,7 +800,7 @@ public class MineWorkService {
      *
      * @param task 上传任务
      */
-    private void validateCosObject(WorkUploadTaskEntity task) {
+    private CosService.ObjectHead validateCosObject(WorkUploadTaskEntity task) {
         CosService.ObjectHead head;
         try {
             head = cosService.headObject(task.getObjectKey());
@@ -703,6 +815,55 @@ public class MineWorkService {
         }
         if (!contentTypeCompatible(task.getMimeType(), head.contentType())) {
             throw new BusinessException("上传文件类型与任务不一致");
+        }
+        return head;
+    }
+
+    /**
+     * 校验缩略图或封面图上传任务。
+     *
+     * @param userId 当前用户 ID
+     * @param task 主上传任务
+     * @param head 主上传对象头
+     * @param item 确认参数
+     */
+    private void validateCoverTask(
+            Long userId,
+            WorkUploadTaskEntity task,
+            CosService.ObjectHead head,
+            MineWorkUploadCompleteRequest.CompleteItem item
+    ) {
+        Long coverTaskId = item == null ? null : item.getCoverTaskId();
+        if (coverTaskId == null) {
+            if (MediaTypeDict.VIDEO.getCode().equals(task.getMediaType())) {
+                throw new BusinessException(VIDEO_COVER_REQUIRED_MESSAGE);
+            }
+            if (MediaTypeDict.IMAGE.getCode().equals(task.getMediaType())
+                    && head.contentLength() > THUMB_MAX_BYTES) {
+                throw new BusinessException(IMAGE_THUMB_REQUIRED_MESSAGE);
+            }
+            return;
+        }
+        WorkUploadCoverTaskValidator.ensureNotSelfReference(task, coverTaskId);
+        WorkUploadTaskEntity coverTask = requireOwnedUploadTask(userId, coverTaskId);
+        WorkUploadCoverTaskValidator.ensureImageCoverTask(coverTask);
+        CosService.ObjectHead coverHead = validateCosObject(coverTask);
+        if (coverHead.contentLength() > THUMB_MAX_BYTES) {
+            throw new BusinessException(COVER_TASK_SIZE_MESSAGE);
+        }
+        validateCoverFileName(task, coverTask);
+    }
+
+    /**
+     * 校验缩略图或封面图文件名。
+     *
+     * @param task 主上传任务
+     * @param coverTask 缩略图或封面图任务
+     */
+    private void validateCoverFileName(WorkUploadTaskEntity task, WorkUploadTaskEntity coverTask) {
+        String expectedFileName = buildThumbFileName(task.getOriginalFileName());
+        if (!expectedFileName.equals(normalizeText(coverTask.getOriginalFileName()))) {
+            throw new BusinessException(COVER_TASK_FILE_NAME_MESSAGE);
         }
     }
 
@@ -1343,11 +1504,70 @@ public class MineWorkService {
      * @param uniqueCode 用户唯一码
      * @param mediaType 媒体类型
      * @param extension 扩展名
+     * @param uploadTimestamp 上传批次毫秒时间戳
+     * @param uploadSequence 上传序号
      * @return COS 对象键
      */
-    private String buildWorkObjectKey(String uniqueCode, String mediaType, String extension) {
+    private String buildWorkObjectKey(
+            String uniqueCode,
+            String mediaType,
+            String extension,
+            long uploadTimestamp,
+            int uploadSequence
+    ) {
         String folder = MediaTypeDict.VIDEO.getCode().equals(mediaType) ? WORK_VIDEO_FOLDER : WORK_IMAGE_FOLDER;
-        return uniqueCode + "/" + folder + "/" + generateUuid() + "." + extension;
+        String typeMarker = MediaTypeDict.VIDEO.getCode().equals(mediaType) ? VIDEO_FILE_MARKER : IMAGE_FILE_MARKER;
+        String fileName = uniqueCode
+                + WORK_FILE_NAME_SEPARATOR
+                + typeMarker
+                + WORK_FILE_NAME_SEPARATOR
+                + uploadTimestamp
+                + WORK_FILE_NAME_SEPARATOR
+                + uploadSequence
+                + FILE_EXTENSION_SEPARATOR
+                + extension;
+        return uniqueCode + "/" + folder + "/" + fileName;
+    }
+
+    /**
+     * 查询缩略图或封面图对应的主上传任务。
+     *
+     * @param userId 当前用户 ID
+     * @param file 文件元信息
+     * @return 主上传任务，可为空
+     */
+    private WorkUploadTaskEntity resolveThumbSourceTask(
+            Long userId,
+            MineWorkUploadTicketRequest.UploadFileItem file
+    ) {
+        Long sourceTaskId = file == null ? null : file.getSourceTaskId();
+        if (sourceTaskId == null) {
+            return null;
+        }
+        if (!isThumbFileName(file.getFileName())) {
+            throw new BusinessException(COVER_TASK_FILE_NAME_MESSAGE);
+        }
+        return requireOwnedUploadTask(userId, sourceTaskId);
+    }
+
+    /**
+     * 按主对象键构造缩略图或封面图对象键。
+     *
+     * @param sourceTask 主上传任务
+     * @param extension 缩略图扩展名
+     * @return 缩略图或封面图对象键
+     */
+    private String buildThumbObjectKeyFromSource(WorkUploadTaskEntity sourceTask, String extension) {
+        String sourceObjectKey = normalizeText(sourceTask == null ? null : sourceTask.getObjectKey());
+        int lastSlashIndex = sourceObjectKey.lastIndexOf('/');
+        int extensionIndex = sourceObjectKey.lastIndexOf('.');
+        if (sourceObjectKey.isBlank() || extensionIndex <= lastSlashIndex) {
+            throw new BusinessException(COVER_SOURCE_TASK_INVALID_MESSAGE);
+        }
+        return sourceObjectKey.substring(0, extensionIndex)
+                + THUMB_FILE_SUFFIX
+                + FILE_EXTENSION_SEPARATOR
+                + extension;
     }
 
     /**
@@ -1397,6 +1617,35 @@ public class MineWorkService {
             return "";
         }
         return value.substring(index + 1).toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * 构造缩略图或封面图文件名。
+     *
+     * @param fileName 原始文件名
+     * @return 缩略图或封面图文件名
+     */
+    private String buildThumbFileName(String fileName) {
+        String value = normalizeText(fileName);
+        int index = value.lastIndexOf('.');
+        String stem = index > 0 ? value.substring(0, index) : value;
+        if (stem.isBlank()) {
+            stem = "work";
+        }
+        return stem + THUMB_FILE_SUFFIX + FILE_EXTENSION_SEPARATOR + THUMB_FILE_EXTENSION;
+    }
+
+    /**
+     * 判断文件名是否为缩略图或封面图。
+     *
+     * @param fileName 文件名
+     * @return 是否缩略图或封面图
+     */
+    private boolean isThumbFileName(String fileName) {
+        String value = normalizeText(fileName).toLowerCase(Locale.ROOT);
+        int index = value.lastIndexOf('.');
+        String stem = index > 0 ? value.substring(0, index) : value;
+        return stem.endsWith(THUMB_FILE_SUFFIX);
     }
 
     /**

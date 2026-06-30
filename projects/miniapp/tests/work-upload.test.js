@@ -6,18 +6,24 @@ const {
   MAX_BATCH_COUNT,
   VIDEO_MAX_BYTES,
   VIDEO_MAX_DURATION_SECONDS,
+  THUMB_MAX_BYTES,
+  buildUploadProgressSummary,
   buildUploadCompleteFailureMessage,
   buildUploadCompletePayload,
+  applyUploadCompleteResults,
+  buildCoverUploadTicketPayload,
+  buildUploadTicketPayload,
   createChooseMediaOptions,
   normalizeChosenMediaFiles,
+  prepareCoverUploadFiles,
   runWorkUploadQueue,
   validateChosenMediaFiles
 } = require('../utils/work-upload')
 
-test('chooseMedia options only allow album and cap count at 9', () => {
+test('chooseMedia options use mixed album picker and cap count at 9', () => {
   assert.deepEqual(createChooseMediaOptions(20), {
     count: MAX_BATCH_COUNT,
-    mediaType: ['image', 'video'],
+    mediaType: ['mix'],
     sourceType: ['album']
   })
   assert.equal(createChooseMediaOptions(3).count, 3)
@@ -46,6 +52,20 @@ test('normalizes chosen media files with default titles and media types', () => 
   assert.equal(files[1].mediaType, 'VIDEO')
   assert.equal(files[1].durationMs, 12000)
   assert.equal(files[1].coverPath, 'wxfile://tmp/thumb.jpg')
+})
+
+test('truncates default titles from long file names to thirty characters', () => {
+  const longStem = '一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十额外'
+  const files = normalizeChosenMediaFiles([
+    {
+      tempFilePath: `wxfile://tmp/${longStem}.jpg`,
+      size: 1024,
+      fileType: 'image'
+    }
+  ])
+
+  assert.equal(files[0].title, longStem.slice(0, 30))
+  assert.equal(files[0].title.length, 30)
 })
 
 test('normalizes chosen media files for add page display rows', () => {
@@ -100,6 +120,500 @@ test('builds upload complete payload with per-file metadata', () => {
       }
     ]
   })
+})
+
+test('skips confirmed files when building retry upload and complete payloads', () => {
+  const files = [
+    {
+      clientId: 'saved-a',
+      taskId: 99,
+      status: 'CONFIRMED',
+      mediaType: 'IMAGE',
+      fileName: 'saved.jpg',
+      mimeType: 'image/jpeg',
+      size: 1024,
+      title: '已保存'
+    },
+    {
+      clientId: 'retry-b',
+      taskId: 100,
+      status: 'UPLOADED',
+      mediaType: 'IMAGE',
+      fileName: 'retry.jpg',
+      mimeType: 'image/jpeg',
+      size: 1024,
+      title: '待重试',
+      confirmIdempotencyKey: 'confirm-100'
+    },
+    {
+      clientId: 'new-c',
+      status: 'READY',
+      mediaType: 'VIDEO',
+      fileName: 'new.mp4',
+      mimeType: 'video/mp4',
+      size: 2048,
+      durationMs: 3000
+    }
+  ]
+
+  assert.deepEqual(buildUploadTicketPayload(files), {
+    batchId: '',
+    files: [
+      {
+        clientId: 'new-c',
+        mediaType: 'VIDEO',
+        fileName: 'new.mp4',
+        mimeType: 'video/mp4',
+        fileSize: 2048,
+        durationMs: 3000,
+        width: undefined,
+        height: undefined,
+        idempotencyKey: 'ticket-new-c'
+      }
+    ]
+  })
+
+  assert.deepEqual(buildUploadCompletePayload(files), {
+    items: [
+      {
+        taskId: 100,
+        title: '待重试',
+        description: '',
+        tagNames: [],
+        idempotencyKey: 'confirm-100'
+      }
+    ]
+  })
+
+  assert.deepEqual(buildCoverUploadTicketPayload([
+    {
+      clientId: 'saved-cover',
+      taskId: 201,
+      customCoverTaskId: 301,
+      status: 'CONFIRMED',
+      mediaType: 'VIDEO',
+      coverPath: 'wxfile://tmp/saved-thumb.jpg',
+      coverSize: 1024,
+      fileName: 'saved.mp4'
+    },
+    {
+      clientId: 'retry-cover',
+      taskId: 202,
+      customCoverTaskId: 302,
+      customCoverStatus: 'UPLOADED',
+      status: 'UPLOADED',
+      mediaType: 'VIDEO',
+      coverPath: 'wxfile://tmp/retry-thumb.jpg',
+      coverSize: 1024,
+      fileName: 'retry.mp4'
+    },
+    {
+      clientId: 'new-cover',
+      taskId: 203,
+      mediaType: 'VIDEO',
+      coverPath: 'wxfile://tmp/new-thumb.jpg',
+      coverSize: 1024,
+      fileName: 'new.mp4'
+    }
+  ], 'cover-retry'), {
+    batchId: 'cover-retry',
+    files: [
+      {
+        clientId: 'new-cover-cover',
+        mediaType: 'IMAGE',
+        fileName: 'new-thumb.jpg',
+        mimeType: 'image/jpeg',
+        fileSize: 1024,
+        durationMs: null,
+        width: 0,
+        height: 0,
+        sourceTaskId: 203,
+        idempotencyKey: 'cover-ticket-new-cover'
+      }
+    ]
+  })
+})
+
+test('applies partial upload complete success before retrying failures', () => {
+  const files = [
+    { id: 'a', taskId: 99, status: 'UPLOADED', progress: 100 },
+    { id: 'b', taskId: 100, status: 'UPLOADED', progress: 100 },
+    { id: 'c', taskId: 101, status: 'UPLOADED', progress: 100 }
+  ]
+
+  const nextFiles = applyUploadCompleteResults(files, [
+    { taskId: 99, success: true, workId: 120 },
+    { taskId: 100, success: true, workId: 121 },
+    { taskId: 101, success: false, message: '标签名称不能超过 10 个字' }
+  ])
+
+  assert.equal(nextFiles[0].status, 'CONFIRMED')
+  assert.equal(nextFiles[0].confirmedWorkId, 120)
+  assert.equal(nextFiles[1].status, 'CONFIRMED')
+  assert.equal(nextFiles[1].confirmedWorkId, 121)
+  assert.equal(nextFiles[2].status, 'UPLOADED')
+  assert.equal(nextFiles[2].errorMessage, '标签名称不能超过 10 个字')
+  assert.deepEqual(buildUploadCompletePayload(nextFiles).items.map((item) => item.taskId), [101])
+})
+
+test('builds upload progress summary from main files and cover uploads', () => {
+  assert.deepEqual(buildUploadProgressSummary([], false), {
+    active: false,
+    percent: 0,
+    text: '保存作品'
+  })
+
+  assert.deepEqual(buildUploadProgressSummary([
+    {
+      status: 'UPLOADING',
+      progress: 50
+    },
+    {
+      status: 'UPLOADED',
+      progress: 100,
+      customCoverStatus: 'UPLOADING',
+      customCoverProgress: 20
+    },
+    {
+      status: 'READY',
+      progress: 0
+    }
+  ], true), {
+    active: true,
+    percent: 43,
+    text: '保存中 43%'
+  })
+
+  assert.equal(buildUploadProgressSummary([
+    {
+      status: 'UPLOADED',
+      progress: 100,
+      customCoverStatus: 'UPLOADED',
+      customCoverProgress: 100
+    }
+  ], true).text, '确认作品')
+
+  assert.deepEqual(buildUploadProgressSummary([
+    {
+      mediaType: 'IMAGE',
+      size: THUMB_MAX_BYTES + 1,
+      status: 'UPLOADED',
+      progress: 100
+    }
+  ], true), {
+    active: true,
+    percent: 50,
+    text: '保存中 50%'
+  })
+})
+
+test('prepares cover uploads by skipping small images and compressing large images and videos', async () => {
+  const compressCalls = []
+  const sizes = {
+    'wxfile://tmp/small.jpg': THUMB_MAX_BYTES,
+    'wxfile://tmp/photo.jpg': THUMB_MAX_BYTES + 1,
+    'wxfile://tmp/film-cover.jpg': THUMB_MAX_BYTES + 2048,
+    'wxfile://tmp/photo-thumb.jpg': 90000,
+    'wxfile://tmp/film-thumb.jpg': 88000
+  }
+  const wxApi = {
+    getFileSystemManager() {
+      return {
+        statSync(filePath) {
+          return { size: sizes[filePath] || 0 }
+        }
+      }
+    },
+    compressImage(options) {
+      compressCalls.push(options)
+      options.success({
+        tempFilePath: compressCalls.length === 1
+          ? 'wxfile://tmp/photo-thumb.jpg'
+          : 'wxfile://tmp/film-thumb.jpg'
+      })
+    }
+  }
+
+  const files = await prepareCoverUploadFiles([
+    {
+      clientId: 'image-small',
+      mediaType: 'IMAGE',
+      tempFilePath: 'wxfile://tmp/small.jpg',
+      fileName: 'small.jpg',
+      size: THUMB_MAX_BYTES
+    },
+    {
+      clientId: 'image-large',
+      taskId: 99,
+      mediaType: 'IMAGE',
+      tempFilePath: 'wxfile://tmp/photo.jpg',
+      fileName: 'photo.png',
+      size: THUMB_MAX_BYTES + 1
+    },
+    {
+      clientId: 'video-a',
+      mediaType: 'VIDEO',
+      coverPath: 'wxfile://tmp/film-cover.jpg',
+      fileName: 'film.mp4'
+    }
+  ], { wxApi })
+
+  assert.equal(files[0].coverPath, '')
+  assert.equal(files[1].coverPath, 'wxfile://tmp/photo-thumb.jpg')
+  assert.equal(files[1].coverSize, 90000)
+  assert.equal(files[1].coverFileName, 'photo-thumb.jpg')
+  assert.equal(files[2].coverPath, 'wxfile://tmp/film-thumb.jpg')
+  assert.equal(files[2].coverSize, 88000)
+  assert.equal(files[2].coverFileName, 'film-thumb.jpg')
+  assert.equal(compressCalls.length, 2)
+  assert.equal(compressCalls[0].src, 'wxfile://tmp/photo.jpg')
+  assert.equal(compressCalls[1].src, 'wxfile://tmp/film-cover.jpg')
+})
+
+test('builds cover upload tickets for image thumbnails and video covers', () => {
+  const longStem = '一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十额外'
+  const payload = buildCoverUploadTicketPayload([
+    {
+      clientId: 'image-small',
+      mediaType: 'IMAGE',
+      tempFilePath: 'wxfile://tmp/small.jpg',
+      fileName: 'small.jpg',
+      size: THUMB_MAX_BYTES
+    },
+    {
+      clientId: 'image-large',
+      taskId: 99,
+      mediaType: 'IMAGE',
+      tempFilePath: 'wxfile://tmp/photo.jpg',
+      coverPath: 'wxfile://tmp/photo-thumb.jpg',
+      coverSize: 90000,
+      coverFileName: 'photo-thumb.jpg',
+      fileName: 'photo.png',
+      size: THUMB_MAX_BYTES + 1
+    },
+    {
+      clientId: 'video-default',
+      taskId: 100,
+      mediaType: 'VIDEO',
+      coverPath: 'wxfile://tmp/default-thumb.jpg',
+      coverSize: 2048,
+      fileName: 'film.mp4'
+    },
+    {
+      clientId: 'video-a',
+      taskId: 101,
+      mediaType: 'VIDEO',
+      coverPath: 'wxfile://tmp/default-cover.jpg',
+      customCoverPath: 'wxfile://tmp/video-cover.jpg',
+      customCoverSize: 4096,
+      customCoverWidth: 1280,
+      customCoverHeight: 720,
+      fileName: 'clip.mov',
+      customCoverIdempotencyKey: 'cover-ticket-video-a'
+    },
+    {
+      clientId: 'video-long-name',
+      taskId: 102,
+      mediaType: 'VIDEO',
+      coverPath: 'wxfile://tmp/long-default-thumb.jpg',
+      coverSize: 1024,
+      fileName: `${longStem}.mp4`
+    }
+  ], 'cover-batch')
+
+  assert.deepEqual(payload, {
+    batchId: 'cover-batch',
+    files: [
+      {
+        clientId: 'image-large-cover',
+        mediaType: 'IMAGE',
+        fileName: 'photo-thumb.jpg',
+        mimeType: 'image/jpeg',
+        fileSize: 90000,
+        durationMs: null,
+        width: 0,
+        height: 0,
+        sourceTaskId: 99,
+        idempotencyKey: 'cover-ticket-image-large'
+      },
+      {
+        clientId: 'video-default-cover',
+        mediaType: 'IMAGE',
+        fileName: 'film-thumb.jpg',
+        mimeType: 'image/jpeg',
+        fileSize: 2048,
+        durationMs: null,
+        width: 0,
+        height: 0,
+        sourceTaskId: 100,
+        idempotencyKey: 'cover-ticket-video-default'
+      },
+      {
+        clientId: 'video-a-cover',
+        mediaType: 'IMAGE',
+        fileName: 'clip-thumb.jpg',
+        mimeType: 'image/jpeg',
+        fileSize: 4096,
+        durationMs: null,
+        width: 1280,
+        height: 720,
+        sourceTaskId: 101,
+        idempotencyKey: 'cover-ticket-video-a'
+      },
+      {
+        clientId: 'video-long-name-cover',
+        mediaType: 'IMAGE',
+        fileName: `${longStem}-thumb.jpg`,
+        mimeType: 'image/jpeg',
+        fileSize: 1024,
+        durationMs: null,
+        width: 0,
+        height: 0,
+        sourceTaskId: 102,
+        idempotencyKey: 'cover-ticket-video-long-name'
+      }
+    ]
+  })
+})
+
+test('builds upload complete payload with optional custom cover task id', () => {
+  const payload = buildUploadCompletePayload([
+    {
+      taskId: 99,
+      customCoverTaskId: 101,
+      customCoverStatus: 'UPLOADED',
+      title: ' 片头快剪 ',
+      description: ' 现场仪式 ',
+      tags: [],
+      confirmIdempotencyKey: 'confirm-99'
+    }
+  ])
+
+  assert.deepEqual(payload.items[0], {
+    taskId: 99,
+    coverTaskId: 101,
+    title: '片头快剪',
+    description: '现场仪式',
+    tagNames: [],
+    idempotencyKey: 'confirm-99'
+  })
+})
+
+test('only confirms custom cover task after cover upload succeeds', () => {
+  const payload = buildUploadCompletePayload([
+    {
+      taskId: 99,
+      customCoverTaskId: 101,
+      customCoverStatus: 'UPLOADING',
+      title: '等待封面',
+      description: '',
+      tags: [],
+      confirmIdempotencyKey: 'confirm-99'
+    },
+    {
+      taskId: 100,
+      customCoverTaskId: 102,
+      customCoverStatus: 'UPLOADED',
+      title: '封面完成',
+      description: '',
+      tags: [],
+      confirmIdempotencyKey: 'confirm-100'
+    }
+  ])
+
+  assert.equal(payload.items[0].coverTaskId, undefined)
+  assert.equal(payload.items[1].coverTaskId, 102)
+})
+
+test('retries custom cover ticket when previous cover upload did not finish', () => {
+  const payload = buildCoverUploadTicketPayload([
+    {
+      clientId: 'cover-uploading',
+      taskId: 201,
+      customCoverTaskId: 301,
+      customCoverStatus: 'UPLOADING',
+      mediaType: 'VIDEO',
+      customCoverPath: 'wxfile://tmp/uploading-cover.jpg',
+      customCoverSize: 90112,
+      fileName: 'uploading.mp4'
+    },
+    {
+      clientId: 'cover-failed',
+      taskId: 202,
+      customCoverTaskId: 302,
+      customCoverStatus: 'FAILED',
+      mediaType: 'VIDEO',
+      customCoverPath: 'wxfile://tmp/failed-cover.jpg',
+      customCoverSize: 88064,
+      fileName: 'failed.mp4'
+    },
+    {
+      clientId: 'cover-uploaded',
+      taskId: 203,
+      customCoverTaskId: 303,
+      customCoverStatus: 'UPLOADED',
+      mediaType: 'VIDEO',
+      customCoverPath: 'wxfile://tmp/uploaded-cover.jpg',
+      customCoverSize: 86016,
+      fileName: 'uploaded.mp4'
+    }
+  ], 'cover-retry')
+
+  assert.deepEqual(payload.files.map((file) => file.clientId), [
+    'cover-uploading-cover',
+    'cover-failed-cover'
+  ])
+})
+
+test('prepares unfinished custom cover again on retry', async () => {
+  const compressCalls = []
+  const sizes = {
+    'wxfile://tmp/failed-cover.jpg': THUMB_MAX_BYTES + 4096,
+    'wxfile://tmp/failed-cover-thumb.jpg': 86016
+  }
+  const wxApi = {
+    getFileSystemManager() {
+      return {
+        statSync(filePath) {
+          return { size: sizes[filePath] || 0 }
+        }
+      }
+    },
+    compressImage(options) {
+      compressCalls.push(options)
+      options.success({ tempFilePath: 'wxfile://tmp/failed-cover-thumb.jpg' })
+    }
+  }
+
+  const files = await prepareCoverUploadFiles([
+    {
+      clientId: 'failed-cover',
+      taskId: 204,
+      customCoverTaskId: 304,
+      customCoverStatus: 'FAILED',
+      mediaType: 'VIDEO',
+      customCoverPath: 'wxfile://tmp/failed-cover.jpg',
+      customCoverSize: THUMB_MAX_BYTES + 4096,
+      fileName: 'failed.mp4'
+    },
+    {
+      clientId: 'uploaded-cover',
+      taskId: 205,
+      customCoverTaskId: 305,
+      customCoverStatus: 'UPLOADED',
+      mediaType: 'VIDEO',
+      customCoverPath: 'wxfile://tmp/uploaded-cover.jpg',
+      customCoverSize: 86016,
+      fileName: 'uploaded.mp4'
+    }
+  ], { wxApi })
+
+  assert.equal(files[0].customCoverPath, 'wxfile://tmp/failed-cover-thumb.jpg')
+  assert.equal(files[0].customCoverSize, 86016)
+  assert.equal(files[0].customCoverFileName, 'failed-thumb.jpg')
+  assert.equal(files[1].customCoverPath, 'wxfile://tmp/uploaded-cover.jpg')
+  assert.equal(compressCalls.length, 1)
+  assert.equal(compressCalls[0].src, 'wxfile://tmp/failed-cover.jpg')
 })
 
 test('builds upload complete failure message with every failed item', () => {

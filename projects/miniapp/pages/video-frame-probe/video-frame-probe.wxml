@@ -1,0 +1,61 @@
+<view class="page-shell probe-page">
+  <navigation-bar title="视频帧探针" color="#17202a" background="rgba(245, 247, 251, 0.96)"></navigation-bar>
+
+  <scroll-view class="probe-scroll" scroll-y type="list">
+    <view class="probe-content">
+      <view class="probe-panel">
+        <view class="probe-title">视频帧导出探针</view>
+        <view class="probe-desc">选择一个本地视频，设置时间点，验证 VideoDecoder 当前帧能否写入 canvas 并导出图片。</view>
+        <button class="probe-button" bindtap="handleChooseVideo" disabled="{{working}}">选择视频</button>
+      </view>
+
+      <view wx:if="{{videoPath}}" class="probe-panel">
+        <view class="probe-label">原视频</view>
+        <video
+          class="probe-video"
+          src="{{videoPath}}"
+          controls
+          show-center-play-btn="{{true}}"
+          enable-progress-gesture="{{true}}"
+          bindloadedmetadata="handleVideoMetadata"
+        ></video>
+        <view class="probe-meta">{{videoMetaText}}</view>
+
+        <view class="probe-slider-row">
+          <view class="probe-time">{{targetTimeText}}</view>
+          <slider
+            class="probe-slider"
+            min="0"
+            max="{{durationMs}}"
+            step="100"
+            value="{{targetTimeMs}}"
+            bindchanging="handleTimeChanging"
+            bindchange="handleTimeChange"
+          ></slider>
+        </view>
+
+        <button class="probe-button dark" bindtap="handleExtractFrame" loading="{{working}}" disabled="{{working || !videoPath}}">导出当前帧</button>
+      </view>
+
+      <view wx:if="{{coverPath}}" class="probe-panel">
+        <view class="probe-label">导出的封面图</view>
+        <image class="probe-cover" src="{{coverPath}}" mode="aspectFit"></image>
+        <view class="probe-path">{{coverPath}}</view>
+      </view>
+
+      <view class="probe-panel">
+        <view class="probe-label">运行日志</view>
+        <view class="probe-log">
+          <view wx:for="{{logs}}" wx:key="*this" class="probe-log-line">{{item}}</view>
+        </view>
+      </view>
+    </view>
+  </scroll-view>
+
+  <canvas
+    id="frameProbeCanvas"
+    type="2d"
+    class="frame-probe-canvas"
+    style="width: {{canvasWidth}}px; height: {{canvasHeight}}px;"
+  ></canvas>
+</view>

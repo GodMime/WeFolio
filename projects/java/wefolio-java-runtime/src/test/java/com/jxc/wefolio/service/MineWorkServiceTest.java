@@ -41,7 +41,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.IOException;
 import java.lang.reflect.Method;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -51,6 +54,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -286,39 +290,139 @@ class MineWorkServiceTest {
         when(userEntityMapper.selectById(7L)).thenReturn(user);
         when(cosService.createPostUploadTicket(
                 any(String.class),
-                eq("image/jpeg"),
-                eq(10 * 1024 * 1024L),
+                any(String.class),
+                anyLong(),
                 any(LocalDateTime.class)))
                 .thenAnswer(invocation -> {
                     String objectKey = invocation.getArgument(0);
                     return new CosService.PostUploadTicket(
                             "https://bucket.cos.ap-guangzhou.myqcloud.com",
                             objectKey,
-                            "image/jpeg",
-                            10 * 1024 * 1024L,
-                            LocalDateTime.now().plusMinutes(15),
+                            invocation.getArgument(1),
+                            invocation.getArgument(2),
+                            invocation.getArgument(3),
                             java.util.Map.of("key", objectKey));
                 });
-        MineWorkUploadTicketRequest.UploadFileItem file = ticketFile(
+        MineWorkUploadTicketRequest.UploadFileItem imageFile = ticketFile(
                 "client-1", MediaTypeDict.IMAGE.getCode(), "photo.jpg", "image/jpeg", 1024L);
+        MineWorkUploadTicketRequest.UploadFileItem videoFile = ticketFile(
+                "client-2", MediaTypeDict.VIDEO.getCode(), "film.mp4", "video/mp4", 4096L);
+        videoFile.setDurationMs(30_000);
         MineWorkUploadTicketRequest request = new MineWorkUploadTicketRequest();
         request.setBatchId("batch-a");
-        request.setFiles(List.of(file));
+        request.setFiles(List.of(imageFile, videoFile));
 
         MineWorkUploadTicketResponse response = service().createUploadTickets(request);
 
         ArgumentCaptor<WorkUploadTaskEntity> captor = ArgumentCaptor.forClass(WorkUploadTaskEntity.class);
-        verify(workUploadTaskEntityMapper).insert(captor.capture());
-        WorkUploadTaskEntity task = captor.getValue();
-        assertThat(task.getUserId()).isEqualTo(7L);
-        assertThat(task.getBatchId()).isEqualTo("batch-a");
-        assertThat(task.getMediaType()).isEqualTo(MediaTypeDict.IMAGE.getCode());
-        assertThat(task.getObjectKey()).startsWith("WFA3B1E7A2/work/image/");
-        assertThat(task.getObjectKey()).endsWith(".jpg");
-        assertThat(task.getStatus()).isEqualTo(WorkUploadTaskStatusDict.CREATED.getCode());
-        assertThat(response.getItems()).hasSize(1);
-        assertThat(response.getItems().get(0).getObjectKey()).isEqualTo(task.getObjectKey());
+        verify(workUploadTaskEntityMapper, times(2)).insert(captor.capture());
+        WorkUploadTaskEntity firstTask = captor.getAllValues().get(0);
+        WorkUploadTaskEntity secondTask = captor.getAllValues().get(1);
+        assertThat(firstTask.getUserId()).isEqualTo(7L);
+        assertThat(firstTask.getBatchId()).isEqualTo("batch-a");
+        assertThat(firstTask.getMediaType()).isEqualTo(MediaTypeDict.IMAGE.getCode());
+        assertThat(firstTask.getObjectKey())
+                .matches("WFA3B1E7A2/work/image/WFA3B1E7A2-P-\\d{13}-1\\.jpg");
+        assertThat(firstTask.getStatus()).isEqualTo(WorkUploadTaskStatusDict.CREATED.getCode());
+        assertThat(secondTask.getUserId()).isEqualTo(7L);
+        assertThat(secondTask.getBatchId()).isEqualTo("batch-a");
+        assertThat(secondTask.getMediaType()).isEqualTo(MediaTypeDict.VIDEO.getCode());
+        assertThat(secondTask.getObjectKey())
+                .matches("WFA3B1E7A2/work/video/WFA3B1E7A2-V-\\d{13}-2\\.mp4");
+        assertThat(secondTask.getStatus()).isEqualTo(WorkUploadTaskStatusDict.CREATED.getCode());
+        assertThat(response.getItems()).hasSize(2);
+        assertThat(response.getItems().get(0).getObjectKey()).isEqualTo(firstTask.getObjectKey());
+        assertThat(response.getItems().get(1).getObjectKey()).isEqualTo(secondTask.getObjectKey());
         assertThat(response.getItems().get(0).getUploadUrl()).contains("myqcloud.com");
+    }
+
+    @Test
+    void createUploadTicketsShouldDeriveThumbObjectKeysFromSourceTask() {
+        when(userEntityMapper.selectById(7L)).thenReturn(activeUser());
+        WorkUploadTaskEntity sourceImageTask = uploadTask(
+                201L,
+                "batch-a",
+                "WFA3B1E7A2/work/image/WFA3B1E7A2-P-1782807167829-1.jpg",
+                "ticket-image-large");
+        sourceImageTask.setMediaType(MediaTypeDict.IMAGE.getCode());
+        sourceImageTask.setOriginalFileName("photo.png");
+        WorkUploadTaskEntity sourceVideoTask = uploadTask(
+                202L,
+                "batch-a",
+                "WFA3B1E7A2/work/video/WFA3B1E7A2-V-1782807167829-3.mp4",
+                "ticket-video-a");
+        sourceVideoTask.setMediaType(MediaTypeDict.VIDEO.getCode());
+        sourceVideoTask.setOriginalFileName("film.mp4");
+        sourceVideoTask.setMimeType("video/mp4");
+        when(workUploadTaskEntityMapper.selectById(201L)).thenReturn(sourceImageTask);
+        when(workUploadTaskEntityMapper.selectById(202L)).thenReturn(sourceVideoTask);
+        when(cosService.createPostUploadTicket(
+                any(String.class),
+                any(String.class),
+                anyLong(),
+                any(LocalDateTime.class)))
+                .thenAnswer(invocation -> {
+                    String objectKey = invocation.getArgument(0);
+                    return new CosService.PostUploadTicket(
+                            "https://bucket.cos.ap-guangzhou.myqcloud.com",
+                            objectKey,
+                            invocation.getArgument(1),
+                            invocation.getArgument(2),
+                            invocation.getArgument(3),
+                            java.util.Map.of("key", objectKey));
+                });
+        MineWorkUploadTicketRequest.UploadFileItem imageThumbFile = ticketFile(
+                "image-large-cover", MediaTypeDict.IMAGE.getCode(), "photo-thumb.jpg", "image/jpeg", 90_000L);
+        imageThumbFile.setSourceTaskId(201L);
+        MineWorkUploadTicketRequest.UploadFileItem videoCoverFile = ticketFile(
+                "video-a-cover", MediaTypeDict.IMAGE.getCode(), "film-thumb.jpg", "image/jpeg", 80_000L);
+        videoCoverFile.setSourceTaskId(202L);
+        MineWorkUploadTicketRequest request = new MineWorkUploadTicketRequest();
+        request.setBatchId("cover-batch");
+        request.setFiles(List.of(imageThumbFile, videoCoverFile));
+
+        MineWorkUploadTicketResponse response = service().createUploadTickets(request);
+
+        assertThat(response.getItems()).hasSize(2);
+        assertThat(response.getItems().get(0).getObjectKey())
+                .isEqualTo("WFA3B1E7A2/work/image/WFA3B1E7A2-P-1782807167829-1-thumb.jpg");
+        assertThat(response.getItems().get(1).getObjectKey())
+                .isEqualTo("WFA3B1E7A2/work/video/WFA3B1E7A2-V-1782807167829-3-thumb.jpg");
+    }
+
+    /**
+     * 主作品文件名带 -thumb 后缀时，没有 sourceTaskId 也仍按主作品生成对象键。
+     */
+    @Test
+    void createUploadTicketsShouldNotTreatMainFileNameThumbSuffixAsThumbnail() {
+        when(userEntityMapper.selectById(7L)).thenReturn(activeUser());
+        when(cosService.createPostUploadTicket(
+                any(String.class),
+                any(String.class),
+                anyLong(),
+                any(LocalDateTime.class)))
+                .thenAnswer(invocation -> {
+                    String objectKey = invocation.getArgument(0);
+                    return new CosService.PostUploadTicket(
+                            "https://bucket.cos.ap-guangzhou.myqcloud.com",
+                            objectKey,
+                            invocation.getArgument(1),
+                            invocation.getArgument(2),
+                            invocation.getArgument(3),
+                            java.util.Map.of("key", objectKey));
+                });
+        MineWorkUploadTicketRequest.UploadFileItem imageFile = ticketFile(
+                "client-thumb-name", MediaTypeDict.IMAGE.getCode(), "photo-thumb.jpg", "image/jpeg", 1024L);
+        MineWorkUploadTicketRequest request = new MineWorkUploadTicketRequest();
+        request.setBatchId("batch-thumb-name");
+        request.setFiles(List.of(imageFile));
+
+        MineWorkUploadTicketResponse response = service().createUploadTickets(request);
+
+        assertThat(response.getItems()).hasSize(1);
+        assertThat(response.getItems().get(0).getObjectKey())
+                .matches("WFA3B1E7A2/work/image/WFA3B1E7A2-P-\\d{13}-1\\.jpg");
+        assertThat(response.getItems().get(0).getObjectKey()).doesNotContain("-1-thumb.jpg");
     }
 
     @Test
@@ -335,6 +439,67 @@ class MineWorkServiceTest {
                 .hasMessage("视频作品不能超过 100MB");
         verify(workUploadTaskEntityMapper, never()).insert(any(WorkUploadTaskEntity.class));
         verify(cosService, never()).createPostUploadTicket(any(), any(), anyLong(), any());
+    }
+
+    @Test
+    void createUploadTicketsShouldRejectSameBatchDuplicateFileBeforeCreatingTask() {
+        when(userEntityMapper.selectById(7L)).thenReturn(activeUser());
+        lenient().when(cosService.createPostUploadTicket(
+                any(String.class),
+                any(String.class),
+                anyLong(),
+                any(LocalDateTime.class)))
+                .thenAnswer(invocation -> new CosService.PostUploadTicket(
+                        "https://bucket.cos.ap-guangzhou.myqcloud.com",
+                        invocation.getArgument(0),
+                        invocation.getArgument(1),
+                        invocation.getArgument(2),
+                        invocation.getArgument(3),
+                        java.util.Map.of("key", invocation.getArgument(0))));
+        MineWorkUploadTicketRequest.UploadFileItem firstFile = ticketFile(
+                "client-1", MediaTypeDict.IMAGE.getCode(), "photo.jpg", "image/jpeg", 1024L);
+        MineWorkUploadTicketRequest.UploadFileItem secondFile = ticketFile(
+                "client-2", MediaTypeDict.IMAGE.getCode(), "photo-copy.jpg", "image/jpeg", 2048L);
+        secondFile.setIdempotencyKey(firstFile.getIdempotencyKey());
+        MineWorkUploadTicketRequest request = new MineWorkUploadTicketRequest();
+        request.setBatchId("batch-a");
+        request.setFiles(List.of(firstFile, secondFile));
+
+        assertThatThrownBy(() -> service().createUploadTickets(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("同一批次存在重复文件，请重新选择后上传");
+        verify(workUploadTaskEntityMapper, never()).insert(any(WorkUploadTaskEntity.class));
+        verify(cosService, never()).createPostUploadTicket(any(), any(), anyLong(), any());
+    }
+
+    @Test
+    void createUploadTicketsShouldUseDedicatedMessageForObjectKeyCollisionGuard() throws IOException {
+        String source = Files.readString(Path.of("src/main/java/com/jxc/wefolio/service/MineWorkService.java"));
+        int objectKeyGuardIndex = source.indexOf("if (!objectKeys.add(objectKey))");
+        assertThat(objectKeyGuardIndex).isGreaterThanOrEqualTo(0);
+        String objectKeyGuard = source.substring(
+                objectKeyGuardIndex,
+                source.indexOf("preparedFiles.add", objectKeyGuardIndex));
+
+        assertThat(source).contains("WORK_OBJECT_KEY_CONFLICT_MESSAGE = \"上传文件命名冲突，请稍后重试\"");
+        assertThat(objectKeyGuard)
+                .contains("throw new BusinessException(WORK_OBJECT_KEY_CONFLICT_MESSAGE);")
+                .doesNotContain("SAME_BATCH_DUPLICATE_FILE_MESSAGE");
+    }
+
+    @Test
+    void createUploadTicketsShouldReusePreparedIdempotencyKeyWhenBuildingTask() throws IOException {
+        String source = Files.readString(Path.of("src/main/java/com/jxc/wefolio/service/MineWorkService.java"));
+        int buildTaskIndex = source.indexOf("private WorkUploadTaskEntity buildUploadTask");
+        assertThat(buildTaskIndex).isGreaterThanOrEqualTo(0);
+        String buildUploadTask = source.substring(buildTaskIndex, source.indexOf("private record PreparedUploadFile"));
+
+        assertThat(source).contains("String idempotencyKey");
+        assertThat(source).contains("new PreparedUploadFile(file, mediaType, objectKey, idempotencyKey)");
+        assertThat(source).contains("preparedFile.idempotencyKey()");
+        assertThat(buildUploadTask)
+                .contains("task.setIdempotencyKey(idempotencyKey);")
+                .doesNotContain("normalizeTicketIdempotency(batchId, file)");
     }
 
     @Test
@@ -380,24 +545,24 @@ class MineWorkServiceTest {
         WorkUploadTaskEntity task = new WorkUploadTaskEntity();
         task.setId(99L);
         task.setUserId(7L);
-        task.setMediaType(MediaTypeDict.VIDEO.getCode());
-        task.setObjectKey("WFA3B1E7A2/work/video/film.mp4");
-        task.setMimeType("video/mp4");
+        task.setMediaType(MediaTypeDict.IMAGE.getCode());
+        task.setObjectKey("WFA3B1E7A2/work/image/photo.jpg");
+        task.setOriginalFileName("photo.jpg");
+        task.setMimeType("image/jpeg");
         task.setFileSize(4096L);
-        task.setDurationMs(60_000);
         task.setStatus(WorkUploadTaskStatusDict.CREATED.getCode());
         task.setExpiresAt(LocalDateTime.now().plusMinutes(5));
         WorkEntity work = new WorkEntity();
         work.setId(120L);
-        work.setTitle("片头快剪");
+        work.setTitle("草坪婚礼");
         when(workUploadTaskEntityMapper.selectById(99L)).thenReturn(task);
-        when(cosService.headObject("WFA3B1E7A2/work/video/film.mp4"))
-                .thenReturn(new CosService.ObjectHead("video/mp4", 4096L));
+        when(cosService.headObject("WFA3B1E7A2/work/image/photo.jpg"))
+                .thenReturn(new CosService.ObjectHead("image/jpeg", 4096L));
         when(workUploadTransactionService.confirmUploadedTask(eq(7L), eq(task), any()))
                 .thenReturn(MineWorkUploadCompleteResponse.Item.success(99L, work, "上传成功"));
         MineWorkUploadCompleteRequest.CompleteItem item = new MineWorkUploadCompleteRequest.CompleteItem();
         item.setTaskId(99L);
-        item.setTitle(" 片头快剪 ");
+        item.setTitle(" 草坪婚礼 ");
         item.setTagNames(List.of("户外仪式"));
         item.setIdempotencyKey("confirm-99");
         MineWorkUploadCompleteRequest request = new MineWorkUploadCompleteRequest();
@@ -405,11 +570,173 @@ class MineWorkServiceTest {
 
         MineWorkUploadCompleteResponse response = service().completeUpload(request);
 
-        verify(cosService).headObject("WFA3B1E7A2/work/video/film.mp4");
+        verify(cosService).headObject("WFA3B1E7A2/work/image/photo.jpg");
         verify(workUploadTransactionService).confirmUploadedTask(eq(7L), eq(task), any());
         assertThat(response.getItems()).hasSize(1);
         assertThat(response.getItems().get(0).isSuccess()).isTrue();
         assertThat(response.getItems().get(0).getWorkId()).isEqualTo(120L);
+    }
+
+    @Test
+    void completeUploadShouldVerifyCustomCoverTaskBeforeTransactionalConfirmation() {
+        WorkUploadTaskEntity videoTask = new WorkUploadTaskEntity();
+        videoTask.setId(99L);
+        videoTask.setUserId(7L);
+        videoTask.setMediaType(MediaTypeDict.VIDEO.getCode());
+        videoTask.setObjectKey("WFA3B1E7A2/work/video/film.mp4");
+        videoTask.setOriginalFileName("film.mp4");
+        videoTask.setMimeType("video/mp4");
+        videoTask.setFileSize(4096L);
+        videoTask.setDurationMs(60_000);
+        videoTask.setStatus(WorkUploadTaskStatusDict.CREATED.getCode());
+        videoTask.setExpiresAt(LocalDateTime.now().plusMinutes(5));
+        WorkUploadTaskEntity coverTask = uploadTask(
+                101L,
+                "cover-batch",
+                "WFA3B1E7A2/work/image/film-cover.jpg",
+                "cover-ticket-video-a");
+        coverTask.setOriginalFileName("film-thumb.jpg");
+        WorkEntity work = new WorkEntity();
+        work.setId(120L);
+        work.setTitle("片头快剪");
+        when(workUploadTaskEntityMapper.selectById(99L)).thenReturn(videoTask);
+        when(workUploadTaskEntityMapper.selectById(101L)).thenReturn(coverTask);
+        when(cosService.headObject("WFA3B1E7A2/work/video/film.mp4"))
+                .thenReturn(new CosService.ObjectHead("video/mp4", 4096L));
+        when(cosService.headObject("WFA3B1E7A2/work/image/film-cover.jpg"))
+                .thenReturn(new CosService.ObjectHead("image/jpeg", 1024L));
+        when(workUploadTransactionService.confirmUploadedTask(eq(7L), eq(videoTask), any()))
+                .thenReturn(MineWorkUploadCompleteResponse.Item.success(99L, work, "上传成功"));
+        MineWorkUploadCompleteRequest.CompleteItem item = new MineWorkUploadCompleteRequest.CompleteItem();
+        item.setTaskId(99L);
+        item.setCoverTaskId(101L);
+        item.setTitle(" 片头快剪 ");
+        item.setIdempotencyKey("confirm-99");
+        MineWorkUploadCompleteRequest request = new MineWorkUploadCompleteRequest();
+        request.setItems(List.of(item));
+
+        MineWorkUploadCompleteResponse response = service().completeUpload(request);
+
+        verify(cosService).headObject("WFA3B1E7A2/work/video/film.mp4");
+        verify(cosService).headObject("WFA3B1E7A2/work/image/film-cover.jpg");
+        verify(workUploadTransactionService).confirmUploadedTask(eq(7L), eq(videoTask), any());
+        assertThat(response.getItems()).hasSize(1);
+        assertThat(response.getItems().get(0).isSuccess()).isTrue();
+    }
+
+    @Test
+    void completeUploadShouldVerifyLargeImageThumbnailTaskBeforeTransactionalConfirmation() {
+        WorkUploadTaskEntity imageTask = new WorkUploadTaskEntity();
+        imageTask.setId(99L);
+        imageTask.setUserId(7L);
+        imageTask.setMediaType(MediaTypeDict.IMAGE.getCode());
+        imageTask.setObjectKey("WFA3B1E7A2/work/image/photo.jpg");
+        imageTask.setOriginalFileName("photo.png");
+        imageTask.setMimeType("image/png");
+        imageTask.setFileSize(150L * 1024L);
+        imageTask.setStatus(WorkUploadTaskStatusDict.CREATED.getCode());
+        imageTask.setExpiresAt(LocalDateTime.now().plusMinutes(5));
+        WorkUploadTaskEntity coverTask = uploadTask(
+                101L,
+                "cover-batch",
+                "WFA3B1E7A2/work/image/photo-thumb.jpg",
+                "cover-ticket-image-a");
+        coverTask.setOriginalFileName("photo-thumb.jpg");
+        coverTask.setFileSize(90L * 1024L);
+        WorkEntity work = new WorkEntity();
+        work.setId(120L);
+        work.setTitle("草坪婚礼");
+        when(workUploadTaskEntityMapper.selectById(99L)).thenReturn(imageTask);
+        when(workUploadTaskEntityMapper.selectById(101L)).thenReturn(coverTask);
+        when(cosService.headObject("WFA3B1E7A2/work/image/photo.jpg"))
+                .thenReturn(new CosService.ObjectHead("image/png", 150L * 1024L));
+        when(cosService.headObject("WFA3B1E7A2/work/image/photo-thumb.jpg"))
+                .thenReturn(new CosService.ObjectHead("image/jpeg", 90L * 1024L));
+        when(workUploadTransactionService.confirmUploadedTask(eq(7L), eq(imageTask), any()))
+                .thenReturn(MineWorkUploadCompleteResponse.Item.success(99L, work, "上传成功"));
+        MineWorkUploadCompleteRequest.CompleteItem item = new MineWorkUploadCompleteRequest.CompleteItem();
+        item.setTaskId(99L);
+        item.setCoverTaskId(101L);
+        item.setTitle(" 草坪婚礼 ");
+        item.setIdempotencyKey("confirm-99");
+        MineWorkUploadCompleteRequest request = new MineWorkUploadCompleteRequest();
+        request.setItems(List.of(item));
+
+        MineWorkUploadCompleteResponse response = service().completeUpload(request);
+
+        verify(cosService).headObject("WFA3B1E7A2/work/image/photo.jpg");
+        verify(cosService).headObject("WFA3B1E7A2/work/image/photo-thumb.jpg");
+        verify(workUploadTransactionService).confirmUploadedTask(eq(7L), eq(imageTask), any());
+        assertThat(response.getItems()).hasSize(1);
+        assertThat(response.getItems().get(0).isSuccess()).isTrue();
+    }
+
+    @Test
+    void completeUploadShouldFailWhenLargeImageMissingThumbnailTask() {
+        WorkUploadTaskEntity imageTask = new WorkUploadTaskEntity();
+        imageTask.setId(99L);
+        imageTask.setUserId(7L);
+        imageTask.setMediaType(MediaTypeDict.IMAGE.getCode());
+        imageTask.setObjectKey("WFA3B1E7A2/work/image/photo.jpg");
+        imageTask.setOriginalFileName("photo.jpg");
+        imageTask.setMimeType("image/jpeg");
+        imageTask.setFileSize(150L * 1024L);
+        imageTask.setStatus(WorkUploadTaskStatusDict.CREATED.getCode());
+        imageTask.setExpiresAt(LocalDateTime.now().plusMinutes(5));
+        when(workUploadTaskEntityMapper.selectById(99L)).thenReturn(imageTask);
+        when(cosService.headObject("WFA3B1E7A2/work/image/photo.jpg"))
+                .thenReturn(new CosService.ObjectHead("image/jpeg", 150L * 1024L));
+        MineWorkUploadCompleteRequest.CompleteItem item = new MineWorkUploadCompleteRequest.CompleteItem();
+        item.setTaskId(99L);
+        MineWorkUploadCompleteRequest request = new MineWorkUploadCompleteRequest();
+        request.setItems(List.of(item));
+
+        MineWorkUploadCompleteResponse response = service().completeUpload(request);
+
+        assertThat(response.getItems()).hasSize(1);
+        assertThat(response.getItems().get(0).isSuccess()).isFalse();
+        assertThat(response.getItems().get(0).getMessage()).isEqualTo("图片缩略图缺失，请重新上传");
+        verify(workUploadTransactionService, never()).confirmUploadedTask(any(), any(), any());
+    }
+
+    @Test
+    void completeUploadShouldFailWhenCoverTaskExceedsThumbLimit() {
+        WorkUploadTaskEntity videoTask = new WorkUploadTaskEntity();
+        videoTask.setId(99L);
+        videoTask.setUserId(7L);
+        videoTask.setMediaType(MediaTypeDict.VIDEO.getCode());
+        videoTask.setObjectKey("WFA3B1E7A2/work/video/film.mp4");
+        videoTask.setOriginalFileName("film.mp4");
+        videoTask.setMimeType("video/mp4");
+        videoTask.setFileSize(4096L);
+        videoTask.setDurationMs(60_000);
+        videoTask.setStatus(WorkUploadTaskStatusDict.CREATED.getCode());
+        videoTask.setExpiresAt(LocalDateTime.now().plusMinutes(5));
+        WorkUploadTaskEntity coverTask = uploadTask(
+                101L,
+                "cover-batch",
+                "WFA3B1E7A2/work/image/film-thumb.jpg",
+                "cover-ticket-video-a");
+        coverTask.setOriginalFileName("film-thumb.jpg");
+        coverTask.setFileSize(100L * 1024L + 1L);
+        when(workUploadTaskEntityMapper.selectById(99L)).thenReturn(videoTask);
+        when(workUploadTaskEntityMapper.selectById(101L)).thenReturn(coverTask);
+        when(cosService.headObject("WFA3B1E7A2/work/video/film.mp4"))
+                .thenReturn(new CosService.ObjectHead("video/mp4", 4096L));
+        when(cosService.headObject("WFA3B1E7A2/work/image/film-thumb.jpg"))
+                .thenReturn(new CosService.ObjectHead("image/jpeg", 100L * 1024L + 1L));
+        MineWorkUploadCompleteRequest.CompleteItem item = new MineWorkUploadCompleteRequest.CompleteItem();
+        item.setTaskId(99L);
+        item.setCoverTaskId(101L);
+        MineWorkUploadCompleteRequest request = new MineWorkUploadCompleteRequest();
+        request.setItems(List.of(item));
+
+        MineWorkUploadCompleteResponse response = service().completeUpload(request);
+
+        assertThat(response.getItems()).hasSize(1);
+        assertThat(response.getItems().get(0).isSuccess()).isFalse();
+        assertThat(response.getItems().get(0).getMessage()).isEqualTo("缩略图或封面图不能超过 100KB");
+        verify(workUploadTransactionService, never()).confirmUploadedTask(any(), any(), any());
     }
 
     @Test

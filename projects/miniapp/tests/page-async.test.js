@@ -258,6 +258,64 @@ test('team maintenance opens member add sheet instead of navigating to add page'
   assert.equal(page.data.memberAddVisible, true)
 })
 
+test('work add retry skips upload tickets for already ticketed files', async () => {
+  const requests = []
+  const fakeRequest = (options) => {
+    requests.push(options)
+    if (options.url === '/api/mine/works/upload-complete') {
+      return Promise.resolve({
+        items: [
+          { taskId: 100, success: true, workId: 220, message: '上传成功' }
+        ]
+      })
+    }
+    return Promise.resolve({ items: [] })
+  }
+  const page = loadPage('pages/work-add/work-add.js', fakeRequest)
+  page.data.files = [
+    {
+      id: 'saved-a',
+      clientId: 'saved-a',
+      taskId: 99,
+      confirmedWorkId: 219,
+      status: 'CONFIRMED',
+      mediaType: 'IMAGE',
+      fileType: 'image',
+      fileName: 'saved.jpg',
+      mimeType: 'image/jpeg',
+      size: 1024,
+      title: '已保存',
+      description: '',
+      tags: [],
+      progress: 100
+    },
+    {
+      id: 'retry-b',
+      clientId: 'retry-b',
+      taskId: 100,
+      status: 'UPLOADED',
+      mediaType: 'IMAGE',
+      fileType: 'image',
+      fileName: 'retry.jpg',
+      mimeType: 'image/jpeg',
+      size: 1024,
+      title: '待重试',
+      description: '',
+      tags: [],
+      progress: 100,
+      confirmIdempotencyKey: 'confirm-100'
+    }
+  ]
+
+  await page.handleSubmit()
+
+  assert.deepEqual(requests.map((request) => request.url), ['/api/mine/works/upload-complete'])
+  assert.deepEqual(requests[0].data.items.map((item) => item.taskId), [100])
+  assert.equal(page.data.files[0].status, 'CONFIRMED')
+  assert.equal(page.data.files[1].status, 'CONFIRMED')
+  assert.equal(page.data.files[1].confirmedWorkId, 220)
+})
+
 test('team maintenance member invite closes sheet and refreshes current detail', async () => {
   const requests = []
   const fakeRequest = (options) => {

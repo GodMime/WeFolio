@@ -23,6 +23,9 @@ public class MineWorkUploadCompleteRequest {
         /** 上传任务 ID */
         private Long taskId;
 
+        /** 缩略图或封面图上传任务 ID，小图可不传 */
+        private Long coverTaskId;
+
         /** 作品标题，最长 30 字 */
         private String title;
 

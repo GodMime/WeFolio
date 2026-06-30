@@ -75,13 +75,46 @@ class CosServiceTest {
         assertThat(formData).containsEntry("key", "WFA3B1E7A2/work/image/photo.jpg");
         assertThat(formData).containsEntry("q-ak", "AKID_TEST");
         assertThat(formData).containsEntry("q-sign-algorithm", "sha1");
+        assertThat(formData).containsEntry("x-cos-acl", "public-read");
         assertThat(formData).containsEntry("success_action_status", "200");
         assertThat(formData.get("q-signature")).isNotBlank();
         assertThat(formData.get("q-signature")).doesNotContain("SECRET_TEST");
         assertThat(policy).contains("\"bucket\":\"test-bucket\"");
         assertThat(policy).contains("\"key\":\"WFA3B1E7A2/work/image/photo.jpg\"");
+        assertThat(policy).contains("\"x-cos-acl\":\"public-read\"");
         assertThat(policy).contains("[\"content-length-range\",0,10485760]");
         assertThat(policy).contains("\"success_action_status\":\"200\"");
+    }
+
+    @Test
+    void createPostUploadTicketShouldUseUploadBaseUrlForMiniappUploadDomain() {
+        when(cosProperties.getSecretId()).thenReturn("AKID_TEST");
+        when(cosProperties.getSecretKey()).thenReturn("SECRET_TEST");
+        when(cosProperties.getUploadBaseUrl()).thenReturn("https://cos-upload.we-folio.dingchenyong.top/");
+
+        CosService.PostUploadTicket ticket = cosService.createPostUploadTicket(
+                "WFA3B1E7A2/work/image/photo.jpg",
+                "image/jpeg",
+                1024L,
+                LocalDateTime.now().plusMinutes(30));
+
+        assertThat(ticket.uploadUrl()).isEqualTo("https://cos-upload.we-folio.dingchenyong.top");
+    }
+
+    @Test
+    void createPostUploadTicketShouldIgnorePublicBaseUrlForMiniappUploadDomain() {
+        when(cosProperties.getRegion()).thenReturn("ap-guangzhou");
+        when(cosProperties.getSecretId()).thenReturn("AKID_TEST");
+        when(cosProperties.getSecretKey()).thenReturn("SECRET_TEST");
+
+        CosService.PostUploadTicket ticket = cosService.createPostUploadTicket(
+                "WFA3B1E7A2/work/image/photo.jpg",
+                "image/jpeg",
+                1024L,
+                LocalDateTime.now().plusMinutes(30));
+
+        assertThat(ticket.uploadUrl()).isEqualTo("https://test-bucket.cos.ap-guangzhou.myqcloud.com");
+        verify(cosProperties, never()).getPublicBaseUrl();
     }
 
     @Test

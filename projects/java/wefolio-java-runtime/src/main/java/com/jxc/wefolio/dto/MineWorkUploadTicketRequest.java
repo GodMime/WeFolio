@@ -47,6 +47,9 @@ public class MineWorkUploadTicketRequest {
         /** 像素高度 */
         private Integer height;
 
+        /** 缩略图或封面图对应的主上传任务 ID */
+        private Long sourceTaskId;
+
         /** 创建上传任务幂等键 */
         private String idempotencyKey;
     }

@@ -58,6 +58,12 @@ public class WorkUploadTransactionService {
     /** 确认幂等键前缀 */
     private static final String CONFIRM_IDEMPOTENCY_PREFIX = "WORK_UPLOAD_CONFIRM:";
 
+    /** 缩略图或封面图已使用提示 */
+    private static final String COVER_TASK_USED_MESSAGE = "缩略图或封面图已被使用，请重新上传";
+
+    /** 缩略图或封面图过期提示 */
+    private static final String COVER_TASK_EXPIRED_MESSAGE = "缩略图或封面图已过期，请重新上传";
+
     /** 上传任务 Mapper */
     private final WorkUploadTaskEntityMapper workUploadTaskEntityMapper;
 
@@ -108,6 +114,8 @@ public class WorkUploadTransactionService {
         String title = normalizeTitle(item == null ? null : item.getTitle(), task.getOriginalFileName());
         String description = normalizeDescription(item == null ? null : item.getDescription());
         List<String> tagNames = normalizeTagNames(item == null ? null : item.getTagNames());
+        WorkUploadTaskEntity coverTask = resolveCoverTask(userId, task, item);
+        String coverObjectKey = coverTask == null ? null : coverTask.getObjectKey();
         String sceneCode = resolvePointScene(task.getMediaType());
         String remark = buildPointRemark(task.getMediaType());
         String idempotencyKey = normalizeText(item == null ? null : item.getIdempotencyKey());
@@ -124,7 +132,7 @@ public class WorkUploadTransactionService {
                 idempotencyKey,
                 remark);
 
-        WorkEntity work = buildWork(task, title, description);
+        WorkEntity work = buildWork(task, title, description, coverObjectKey);
         workEntityMapper.insert(work);
         if (work.getId() == null) {
             throw new BusinessException("作品保存失败，请重试");
@@ -133,9 +141,13 @@ public class WorkUploadTransactionService {
 
         task.setStatus(WorkUploadTaskStatusDict.CONFIRMED.getCode());
         task.setConfirmedWorkId(work.getId());
+        if (hasText(coverObjectKey)) {
+            task.setCoverObjectKey(coverObjectKey);
+        }
         task.setErrorMessage(null);
         task.setUpdatedAt(LocalDateTime.now());
         workUploadTaskEntityMapper.updateById(task);
+        confirmCoverTaskIfNeeded(coverTask, work.getId());
         return MineWorkUploadCompleteResponse.Item.success(taskId, work, "上传成功");
     }
 
@@ -160,16 +172,22 @@ public class WorkUploadTransactionService {
      * @param task 上传任务
      * @param title 作品标题
      * @param description 作品说明
+     * @param coverObjectKey 缩略图或封面图对象键
      * @return 作品实体
      */
-    private WorkEntity buildWork(WorkUploadTaskEntity task, String title, String description) {
+    private WorkEntity buildWork(
+            WorkUploadTaskEntity task,
+            String title,
+            String description,
+            String coverObjectKey
+    ) {
         WorkEntity work = new WorkEntity();
         work.setUserId(task.getUserId());
         work.setMediaType(task.getMediaType());
         work.setTitle(title);
         work.setOriginalFileName(task.getOriginalFileName());
         work.setMediaObjectKey(task.getObjectKey());
-        work.setCoverObjectKey(resolveCoverObjectKey(task));
+        work.setCoverObjectKey(resolveCoverObjectKey(task, coverObjectKey));
         work.setMimeType(task.getMimeType());
         work.setFileSize(task.getFileSize());
         work.setDurationMs(task.getDurationMs());
@@ -187,9 +205,13 @@ public class WorkUploadTransactionService {
      * 解析作品封面对象键。
      *
      * @param task 上传任务
+     * @param coverObjectKey 缩略图或封面图对象键
      * @return 封面对象键
      */
-    private String resolveCoverObjectKey(WorkUploadTaskEntity task) {
+    private String resolveCoverObjectKey(WorkUploadTaskEntity task, String coverObjectKey) {
+        if (hasText(coverObjectKey)) {
+            return coverObjectKey;
+        }
         if (hasText(task.getCoverObjectKey())) {
             return task.getCoverObjectKey();
         }
@@ -197,6 +219,57 @@ public class WorkUploadTransactionService {
             return task.getObjectKey();
         }
         return null;
+    }
+
+    /**
+     * 解析缩略图或封面图任务。
+     *
+     * @param userId 当前用户 ID
+     * @param task 主上传任务
+     * @param item 确认参数
+     * @return 缩略图或封面图上传任务，可为空
+     */
+    private WorkUploadTaskEntity resolveCoverTask(
+            Long userId,
+            WorkUploadTaskEntity task,
+            MineWorkUploadCompleteRequest.CompleteItem item
+    ) {
+        Long coverTaskId = item == null ? null : item.getCoverTaskId();
+        if (coverTaskId == null) {
+            return null;
+        }
+        WorkUploadCoverTaskValidator.ensureNotSelfReference(task, coverTaskId);
+        WorkUploadTaskEntity coverTask = workUploadTaskEntityMapper.selectById(coverTaskId);
+        requireOwnedTask(userId, coverTask);
+        WorkUploadCoverTaskValidator.ensureImageCoverTask(coverTask);
+        if (WorkUploadTaskStatusDict.CONFIRMED.getCode().equals(coverTask.getStatus())) {
+            throw new BusinessException(COVER_TASK_USED_MESSAGE);
+        }
+        if (coverTask.getExpiresAt() != null && coverTask.getExpiresAt().isBefore(LocalDateTime.now())) {
+            coverTask.setStatus(WorkUploadTaskStatusDict.EXPIRED.getCode());
+            coverTask.setErrorMessage("封面上传任务已过期");
+            coverTask.setUpdatedAt(LocalDateTime.now());
+            workUploadTaskEntityMapper.updateById(coverTask);
+            throw new BusinessException(COVER_TASK_EXPIRED_MESSAGE);
+        }
+        return coverTask;
+    }
+
+    /**
+     * 缩略图或封面图任务不创建独立作品，确认后绑定到主作品。
+     *
+     * @param coverTask 缩略图或封面图任务
+     * @param workId 主作品 ID
+     */
+    private void confirmCoverTaskIfNeeded(WorkUploadTaskEntity coverTask, Long workId) {
+        if (coverTask == null) {
+            return;
+        }
+        coverTask.setStatus(WorkUploadTaskStatusDict.CONFIRMED.getCode());
+        coverTask.setConfirmedWorkId(workId);
+        coverTask.setErrorMessage(null);
+        coverTask.setUpdatedAt(LocalDateTime.now());
+        workUploadTaskEntityMapper.updateById(coverTask);
     }
 
     /**
@@ -329,6 +402,9 @@ public class WorkUploadTransactionService {
         String value = normalizeText(title);
         if (value.isBlank()) {
             value = stripExtension(normalizeText(originalFileName));
+            if (value.length() > TITLE_MAX_LENGTH) {
+                value = value.substring(0, TITLE_MAX_LENGTH);
+            }
         }
         if (value.isBlank()) {
             value = "未命名作品";

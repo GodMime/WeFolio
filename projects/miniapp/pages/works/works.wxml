@@ -70,7 +70,7 @@
             <view class="empty-logo-frame">
               <image
                 class="empty-logo"
-                src="https://cos.we-folio.dingchenyong.top/system/work-logo-100kb.jpg"
+                src="/assets/system/work-logo-100kb.jpg"
                 mode="aspectFit"
               ></image>
             </view>

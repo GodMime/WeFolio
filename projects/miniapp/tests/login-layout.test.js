@@ -19,13 +19,44 @@ const indexWxss = fs.readFileSync(
   path.join(__dirname, '../pages/index/index.wxss'),
   'utf8'
 )
+const indexJs = fs.readFileSync(
+  path.join(__dirname, '../pages/index/index.js'),
+  'utf8'
+)
+const worksWxml = fs.readFileSync(
+  path.join(__dirname, '../pages/works/works.wxml'),
+  'utf8'
+)
 
-const STATIC_ASSET_ORIGIN = 'https://cos.we-folio.dingchenyong.top'
-const BACKGROUND_IMAGE_URL = `${STATIC_ASSET_ORIGIN}/system/backgroud.jpeg`
-const LOGO_IMAGE_URL = `${STATIC_ASSET_ORIGIN}/system/logo.png`
-const LEGACY_STATIC_ASSET_URLS = [
-  `${STATIC_ASSET_ORIGIN}/backgroud.jpeg`,
-  `${STATIC_ASSET_ORIGIN}/logo.png`
+const STATIC_ASSET_ROOT = '/assets/system'
+const REMOTE_STATIC_ASSET_ROOT = 'https://cdn.we-folio.dingchenyong.top/system'
+const STATIC_ASSET_DIR = path.join(__dirname, '../assets/system')
+const MAX_LOCAL_STATIC_ASSET_BYTES = 200 * 1024
+const MAX_LOCAL_STATIC_ASSET_TOTAL_BYTES = 200 * 1024
+const COS_SYSTEM_STATIC_ASSET_PATTERN = /https:\/\/cos\.we-folio\.dingchenyong\.top\/system/
+const BACKGROUND_IMAGE_URL = `${REMOTE_STATIC_ASSET_ROOT}/backgroud.jpeg`
+const LOGO_IMAGE_URL = `${REMOTE_STATIC_ASSET_ROOT}/logo.png`
+const MESSAGE_ICON_URL = `${STATIC_ASSET_ROOT}/wefolio-message-icon.png`
+const VISITOR_RECORD_ICON_URL = `${STATIC_ASSET_ROOT}/wefolio-visitor-record-icon.png`
+const TEAM_ICON_URL = `${STATIC_ASSET_ROOT}/wefolio-team-icon.png`
+const WORK_LOGO_URL = `${STATIC_ASSET_ROOT}/work-logo-100kb.jpg`
+const REMOTE_SYSTEM_STATIC_ASSETS = [
+  { fileName: 'backgroud.jpeg', url: BACKGROUND_IMAGE_URL },
+  { fileName: 'logo.png', url: LOGO_IMAGE_URL }
+]
+const LOCAL_SYSTEM_STATIC_ASSETS = [
+  { fileName: 'wefolio-message-icon.png', url: MESSAGE_ICON_URL },
+  { fileName: 'wefolio-visitor-record-icon.png', url: VISITOR_RECORD_ICON_URL },
+  { fileName: 'wefolio-team-icon.png', url: TEAM_ICON_URL },
+  { fileName: 'work-logo-100kb.jpg', url: WORK_LOGO_URL }
+]
+const SYSTEM_STATIC_ASSETS = [
+  ...REMOTE_SYSTEM_STATIC_ASSETS,
+  ...LOCAL_SYSTEM_STATIC_ASSETS
+]
+const NON_SYSTEM_STATIC_ASSET_URLS = [
+  '/assets/backgroud.jpeg',
+  '/assets/logo.png'
 ]
 
 function readRule(selector) {
@@ -58,16 +89,52 @@ test('login hero uses configured background image', () => {
 })
 
 test('miniapp pages use system static asset urls', () => {
-  const staticAssetConsumers = [loginWxml, indexWxss]
+  const staticAssetConsumers = [loginWxml, indexJs, worksWxml, indexWxss]
+  const combinedStaticAssetConsumers = staticAssetConsumers.join('\n')
 
-  assert.ok(staticAssetConsumers.some((content) => content.includes(BACKGROUND_IMAGE_URL)))
-  assert.ok(staticAssetConsumers.some((content) => content.includes(LOGO_IMAGE_URL)))
+  for (const systemAsset of SYSTEM_STATIC_ASSETS) {
+    assert.ok(combinedStaticAssetConsumers.includes(systemAsset.url), `missing system asset url: ${systemAsset.url}`)
+  }
+
+  for (const systemAsset of LOCAL_SYSTEM_STATIC_ASSETS) {
+    const assetPath = path.join(STATIC_ASSET_DIR, systemAsset.fileName)
+    assert.ok(
+      fs.existsSync(assetPath),
+      `missing local system asset file: ${systemAsset.fileName}`
+    )
+    const assetSize = fs.statSync(assetPath).size
+    assert.ok(
+      assetSize <= MAX_LOCAL_STATIC_ASSET_BYTES,
+      `local system asset ${systemAsset.fileName} is ${assetSize} bytes, max ${MAX_LOCAL_STATIC_ASSET_BYTES} bytes`
+    )
+  }
+
+  for (const systemAsset of REMOTE_SYSTEM_STATIC_ASSETS) {
+    assert.ok(
+      !fs.existsSync(path.join(STATIC_ASSET_DIR, systemAsset.fileName)),
+      `oversized system asset should stay remote: ${systemAsset.fileName}`
+    )
+  }
 
   for (const content of staticAssetConsumers) {
-    for (const legacyUrl of LEGACY_STATIC_ASSET_URLS) {
-      assert.ok(!content.includes(legacyUrl), `legacy asset url remains: ${legacyUrl}`)
+    assert.doesNotMatch(content, COS_SYSTEM_STATIC_ASSET_PATTERN)
+    for (const nonSystemUrl of NON_SYSTEM_STATIC_ASSET_URLS) {
+      assert.ok(!content.includes(nonSystemUrl), `non-system asset url remains: ${nonSystemUrl}`)
     }
   }
+})
+
+test('local system static assets stay within code quality package budget', () => {
+  let totalBytes = 0
+
+  for (const systemAsset of LOCAL_SYSTEM_STATIC_ASSETS) {
+    totalBytes += fs.statSync(path.join(STATIC_ASSET_DIR, systemAsset.fileName)).size
+  }
+
+  assert.ok(
+    totalBytes <= MAX_LOCAL_STATIC_ASSET_TOTAL_BYTES,
+    `local system static assets use ${totalBytes} bytes, max ${MAX_LOCAL_STATIC_ASSET_TOTAL_BYTES} bytes`
+  )
 })
 
 test('login layout keeps content at the bottom while hero resizes', () => {

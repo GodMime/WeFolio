@@ -35,6 +35,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -128,6 +129,102 @@ class WorkUploadTransactionServiceTest {
         assertThat(response.isSuccess()).isTrue();
         assertThat(response.getWorkId()).isEqualTo(120L);
         verify(workUploadTaskEntityMapper, never()).selectById(anyLong());
+    }
+
+    @Test
+    void confirmUploadedTaskShouldUseCustomCoverTaskForVideoWork() {
+        WorkUploadTaskEntity task = createdVideoTask();
+        WorkUploadTaskEntity coverTask = createdImageTask();
+        coverTask.setId(101L);
+        coverTask.setObjectKey("WFA3B1E7A2/work/image/film-cover.jpg");
+        coverTask.setOriginalFileName("film-thumb.jpg");
+        when(workUploadTaskEntityMapper.selectById(101L)).thenReturn(coverTask);
+        when(workEntityMapper.insert(any(WorkEntity.class))).thenAnswer(invocation -> {
+            WorkEntity work = invocation.getArgument(0);
+            work.setId(120L);
+            return 1;
+        });
+        MineWorkUploadCompleteRequest.CompleteItem item = completeItem();
+        item.setCoverTaskId(101L);
+
+        MineWorkUploadCompleteResponse.Item response = service().confirmUploadedTask(7L, task, item);
+
+        verify(pointService).consume(
+                eq(7L),
+                eq(PointSceneCodeDict.UPLOAD_VIDEO.getCode()),
+                eq("WORK_UPLOAD"),
+                eq("99"),
+                eq(1),
+                eq("confirm-99"),
+                eq("上传视频作品"));
+        ArgumentCaptor<WorkEntity> workCaptor = ArgumentCaptor.forClass(WorkEntity.class);
+        verify(workEntityMapper).insert(workCaptor.capture());
+        assertThat(workCaptor.getValue().getMediaType()).isEqualTo(MediaTypeDict.VIDEO.getCode());
+        assertThat(workCaptor.getValue().getCoverObjectKey()).isEqualTo("WFA3B1E7A2/work/image/film-cover.jpg");
+        ArgumentCaptor<WorkUploadTaskEntity> taskCaptor = ArgumentCaptor.forClass(WorkUploadTaskEntity.class);
+        verify(workUploadTaskEntityMapper, times(2)).updateById(taskCaptor.capture());
+        assertThat(taskCaptor.getAllValues().get(0).getId()).isEqualTo(99L);
+        assertThat(taskCaptor.getAllValues().get(0).getCoverObjectKey()).isEqualTo("WFA3B1E7A2/work/image/film-cover.jpg");
+        assertThat(taskCaptor.getAllValues().get(1).getId()).isEqualTo(101L);
+        assertThat(taskCaptor.getAllValues().get(1).getStatus()).isEqualTo(WorkUploadTaskStatusDict.CONFIRMED.getCode());
+        assertThat(taskCaptor.getAllValues().get(1).getConfirmedWorkId()).isEqualTo(120L);
+        assertThat(response.isSuccess()).isTrue();
+    }
+
+    @Test
+    void confirmUploadedTaskShouldUseThumbnailTaskForLargeImageWork() {
+        WorkUploadTaskEntity task = createdImageTask();
+        task.setFileSize(150L * 1024L);
+        WorkUploadTaskEntity coverTask = createdImageTask();
+        coverTask.setId(101L);
+        coverTask.setObjectKey("WFA3B1E7A2/work/image/photo-thumb.jpg");
+        coverTask.setOriginalFileName("photo-thumb.jpg");
+        coverTask.setFileSize(90L * 1024L);
+        when(workUploadTaskEntityMapper.selectById(101L)).thenReturn(coverTask);
+        when(workEntityMapper.insert(any(WorkEntity.class))).thenAnswer(invocation -> {
+            WorkEntity work = invocation.getArgument(0);
+            work.setId(120L);
+            return 1;
+        });
+        MineWorkUploadCompleteRequest.CompleteItem item = completeItem();
+        item.setCoverTaskId(101L);
+
+        MineWorkUploadCompleteResponse.Item response = service().confirmUploadedTask(7L, task, item);
+
+        ArgumentCaptor<WorkEntity> workCaptor = ArgumentCaptor.forClass(WorkEntity.class);
+        verify(workEntityMapper).insert(workCaptor.capture());
+        assertThat(workCaptor.getValue().getMediaType()).isEqualTo(MediaTypeDict.IMAGE.getCode());
+        assertThat(workCaptor.getValue().getMediaObjectKey()).isEqualTo("WFA3B1E7A2/work/image/photo.jpg");
+        assertThat(workCaptor.getValue().getCoverObjectKey()).isEqualTo("WFA3B1E7A2/work/image/photo-thumb.jpg");
+        ArgumentCaptor<WorkUploadTaskEntity> taskCaptor = ArgumentCaptor.forClass(WorkUploadTaskEntity.class);
+        verify(workUploadTaskEntityMapper, times(2)).updateById(taskCaptor.capture());
+        assertThat(taskCaptor.getAllValues().get(0).getId()).isEqualTo(99L);
+        assertThat(taskCaptor.getAllValues().get(0).getCoverObjectKey()).isEqualTo("WFA3B1E7A2/work/image/photo-thumb.jpg");
+        assertThat(taskCaptor.getAllValues().get(1).getId()).isEqualTo(101L);
+        assertThat(taskCaptor.getAllValues().get(1).getConfirmedWorkId()).isEqualTo(120L);
+        assertThat(response.isSuccess()).isTrue();
+    }
+
+    @Test
+    void confirmUploadedTaskShouldTruncateDefaultTitleFromLongOriginalFileName() {
+        String longStem = "一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十额外";
+        WorkUploadTaskEntity task = createdImageTask();
+        task.setOriginalFileName(longStem + ".jpg");
+        when(workEntityMapper.insert(any(WorkEntity.class))).thenAnswer(invocation -> {
+            WorkEntity work = invocation.getArgument(0);
+            work.setId(120L);
+            return 1;
+        });
+        MineWorkUploadCompleteRequest.CompleteItem item = completeItem();
+        item.setTitle("  ");
+        item.setTagNames(List.of());
+
+        MineWorkUploadCompleteResponse.Item response = service().confirmUploadedTask(7L, task, item);
+
+        ArgumentCaptor<WorkEntity> workCaptor = ArgumentCaptor.forClass(WorkEntity.class);
+        verify(workEntityMapper).insert(workCaptor.capture());
+        assertThat(workCaptor.getValue().getTitle()).isEqualTo(longStem.substring(0, 30));
+        assertThat(response.isSuccess()).isTrue();
     }
 
     @Test
@@ -267,6 +364,19 @@ class WorkUploadTransactionServiceTest {
         task.setHeight(800);
         task.setStatus(WorkUploadTaskStatusDict.CREATED.getCode());
         task.setExpiresAt(LocalDateTime.now().plusMinutes(5));
+        return task;
+    }
+
+    private WorkUploadTaskEntity createdVideoTask() {
+        WorkUploadTaskEntity task = createdImageTask();
+        task.setMediaType(MediaTypeDict.VIDEO.getCode());
+        task.setObjectKey("WFA3B1E7A2/work/video/film.mp4");
+        task.setOriginalFileName("film.mp4");
+        task.setMimeType("video/mp4");
+        task.setFileSize(4096L);
+        task.setDurationMs(60_000);
+        task.setWidth(1920);
+        task.setHeight(1080);
         return task;
     }
 

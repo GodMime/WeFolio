@@ -107,28 +107,32 @@
 
 .filter-panel {
   margin-top: 24rpx;
-  padding: 16rpx 18rpx;
+  padding: 12rpx 18rpx;
 }
 
 .filter-shell {
   display: flex;
   align-items: center;
   gap: 14rpx;
+  min-height: 64rpx;
 }
 
 .tag-scroll {
+  height: 64rpx;
   flex: 1 1 auto;
   min-width: 0;
   white-space: nowrap;
 }
 
 .tag-row {
+  height: 64rpx;
   width: auto;
   min-width: 0;
   display: inline-flex;
+  align-items: center;
   gap: 12rpx;
   justify-content: flex-start;
-  padding: 4rpx 0;
+  padding: 0;
 }
 
 .tag-pill {

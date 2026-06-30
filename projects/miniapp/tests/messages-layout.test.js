@@ -21,7 +21,7 @@ test('mine message entry registers page route and navigates from mine page', () 
 
   assert.ok(appJson.pages.includes('pages/messages/messages'))
   assert.match(indexJs, /const MESSAGE_ENTRY_TYPE = 'messages'/)
-  assert.match(indexJs, /const MESSAGE_ICON_URL = 'https:\/\/cos\.we-folio\.dingchenyong\.top\/system\/wefolio-message-icon\.png'/)
+  assert.match(indexJs, /const MESSAGE_ICON_URL = '\/assets\/system\/wefolio-message-icon\.png'/)
   assert.match(indexJs, /const MESSAGE_UNREAD_COUNT_URL = '\/api\/mine\/messages\/unread-count'/)
   assert.match(indexJs, /const MESSAGES_PAGE_URL = '\/pages\/messages\/messages'/)
   assert.match(indexJs, /type:\s*MESSAGE_ENTRY_TYPE/)
