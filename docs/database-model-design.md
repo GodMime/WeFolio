@@ -216,7 +216,9 @@ erDiagram
 | `title` | VARCHAR(30) | 否 | - | 作品标题 |
 | `original_file_name` | VARCHAR(255) | 是 | NULL | 上传时文件名 |
 | `media_object_key` | VARCHAR(512) | 否 | - | COS 对象键，访问 URL 由服务端生成 |
-| `cover_object_key` | VARCHAR(512) | 是 | NULL | 缩略图或视频封面对象键 |
+| `media_sha256` | CHAR(64) | 否 | - | 原文件 SHA-256 |
+| `cover_object_key` | VARCHAR(512) | 否 | - | 缩略图或视频封面对象键 |
+| `cover_sha256` | CHAR(64) | 否 | - | 缩略图或视频封面 SHA-256 |
 | `mime_type` | VARCHAR(100) | 是 | NULL | 文件 MIME 类型 |
 | `file_size` | BIGINT UNSIGNED | 是 | NULL | 文件字节数 |
 | `duration_ms` | INT UNSIGNED | 是 | NULL | 视频时长，图片为空 |
@@ -230,7 +232,7 @@ erDiagram
 | `updated_at` | DATETIME(3) | 否 | 自动更新 | 更新时间 |
 | `deleted` | TINYINT UNSIGNED | 否 | `0` | 逻辑删除：0未删除 1已删除 |
 
-索引：`idx_work_user_list(user_id, deleted, sort_order, id)` 支持作品列表；`idx_work_user_title(user_id, title)` 支持标题筛选；`idx_work_user_media(user_id, media_type, deleted_at)` 支持素材类型选择。
+索引：`idx_work_user_list(user_id, deleted, sort_order, id)` 支持作品列表；`idx_work_user_title(user_id, title)` 支持标题筛选；`idx_work_user_media(user_id, media_type, deleted)` 支持素材类型选择；`uk_work_user_media_sha256(user_id, media_sha256, deleted)` 防止同一用户重复上传同一原文件。
 
 ### 6.5 `wf_tag` 作品标签表
 
@@ -846,7 +848,11 @@ CREATE TABLE `wf_work` (
   `title` VARCHAR(30) NOT NULL COMMENT '作品标题',
   `original_file_name` VARCHAR(255) NULL COMMENT '原始文件名',
   `media_object_key` VARCHAR(512) NOT NULL COMMENT 'COS媒体对象键',
-  `cover_object_key` VARCHAR(512) NULL COMMENT 'COS封面对象键',
+  `media_sha256` CHAR(64) CHARACTER SET ascii COLLATE ascii_bin
+    NOT NULL COMMENT '原文件 SHA-256',
+  `cover_object_key` VARCHAR(512) NOT NULL COMMENT 'COS缩略图或封面对象键',
+  `cover_sha256` CHAR(64) CHARACTER SET ascii COLLATE ascii_bin
+    NOT NULL COMMENT '缩略图或封面 SHA-256',
   `mime_type` VARCHAR(100) NULL COMMENT 'MIME类型',
   `file_size` BIGINT UNSIGNED NULL COMMENT '文件字节数',
   `duration_ms` INT UNSIGNED NULL COMMENT '视频时长毫秒',
@@ -865,6 +871,7 @@ CREATE TABLE `wf_work` (
   KEY `idx_work_user_list` (`user_id`, `deleted`, `sort_order`, `id`),
   KEY `idx_work_user_title` (`user_id`, `title`),
   KEY `idx_work_user_media` (`user_id`, `media_type`, `deleted`),
+  UNIQUE KEY `uk_work_user_media_sha256` (`user_id`, `media_sha256`, `deleted`),
   CONSTRAINT `chk_work_media_type` CHECK (`media_type` IN ('IMAGE', 'VIDEO')),
   CONSTRAINT `chk_work_status` CHECK (
     `status` IN ('ACTIVE', 'PROCESSING', 'PROCESSING_FAILED')

@@ -7,7 +7,6 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Update;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 
@@ -22,7 +21,6 @@ public interface WorkEntityMapper extends BaseMapper<WorkEntity> {
      *
      * @param userId 当前用户 ID
      * @param items 排序项
-     * @param updatedAt 应用层更新时间
      * @return 影响行数
      */
     @Update({
@@ -32,7 +30,7 @@ public interface WorkEntityMapper extends BaseMapper<WorkEntity> {
             "<foreach collection='items' item='item'>",
             "WHEN #{item.workId} THEN #{item.sortOrder}",
             "</foreach>",
-            "END, updated_at = #{updatedAt}",
+            "END",
             "WHERE user_id = #{userId}",
             "AND deleted = 0",
             "AND id IN",
@@ -43,7 +41,6 @@ public interface WorkEntityMapper extends BaseMapper<WorkEntity> {
     })
     int updateSortOrders(
             @Param("userId") Long userId,
-            @Param("items") List<MineWorkSortRequest.Item> items,
-            @Param("updatedAt") LocalDateTime updatedAt
+            @Param("items") List<MineWorkSortRequest.Item> items
     );
 }

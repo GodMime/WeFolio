@@ -218,9 +218,6 @@ public class MineTeamService {
     /** 移除原因列 */
     private static final String COLUMN_REMOVAL_REASON = "removal_reason";
 
-    /** 更新时间列 */
-    private static final String COLUMN_UPDATED_AT = "updated_at";
-
     /** 主键列 */
     private static final String COLUMN_ID = "id";
 
@@ -426,9 +423,6 @@ public class MineTeamService {
                 team::setIntro, updateEntity::setIntro);
         applyOptionalStringField(request.getAvatarUrl(), AVATAR_URL_MAX_LENGTH, "团队图标",
                 team::setAvatarUrl, updateEntity::setAvatarUrl);
-        LocalDateTime updatedAt = LocalDateTime.now();
-        team.setUpdatedAt(updatedAt);
-        updateEntity.setUpdatedAt(updatedAt);
         int updated = teamEntityMapper.update(updateEntity, updateWrapper);
         if (updated <= 0) {
             throw new BusinessException("团队资料已被其他管理员更新，请刷新后重试");
@@ -553,16 +547,14 @@ public class MineTeamService {
                 .eq(COLUMN_JOIN_STATUS, JoinStatusDict.PENDING_CONFIRMATION.getCode())
                 .set(COLUMN_JOIN_STATUS, JoinStatusDict.JOINED.getCode())
                 .set(COLUMN_RESPONDED_AT, now)
-                .set(COLUMN_JOINED_AT, now)
-                .set(COLUMN_UPDATED_AT, now);
-        int updated = teamMemberEntityMapper.update(null, updateWrapper);
+                .set(COLUMN_JOINED_AT, now);
+        int updated = teamMemberEntityMapper.update(new TeamMemberEntity(), updateWrapper);
         if (updated <= 0) {
             throw new BusinessException("团队邀请状态已变化，请刷新后重试");
         }
         invitation.setJoinStatus(JoinStatusDict.JOINED.getCode());
         invitation.setRespondedAt(now);
         invitation.setJoinedAt(now);
-        invitation.setUpdatedAt(now);
         clearInvitationMessageAction(memberId, userId);
         return buildInvitationResponse(invitation, team);
     }
@@ -584,15 +576,13 @@ public class MineTeamService {
                 .eq(COLUMN_USER_ID, userId)
                 .eq(COLUMN_JOIN_STATUS, JoinStatusDict.PENDING_CONFIRMATION.getCode())
                 .set(COLUMN_JOIN_STATUS, JoinStatusDict.REJECTED.getCode())
-                .set(COLUMN_RESPONDED_AT, now)
-                .set(COLUMN_UPDATED_AT, now);
-        int updated = teamMemberEntityMapper.update(null, updateWrapper);
+                .set(COLUMN_RESPONDED_AT, now);
+        int updated = teamMemberEntityMapper.update(new TeamMemberEntity(), updateWrapper);
         if (updated <= 0) {
             throw new BusinessException("团队邀请状态已变化，请刷新后重试");
         }
         invitation.setJoinStatus(JoinStatusDict.REJECTED.getCode());
         invitation.setRespondedAt(now);
-        invitation.setUpdatedAt(now);
         clearInvitationMessageAction(memberId, userId);
         return buildInvitationResponse(invitation, team);
     }
@@ -648,8 +638,6 @@ public class MineTeamService {
         changeRequest.setAllowWorksAfter(allowWorksAfter);
         changeRequest.setStatus(TeamMemberChangeStatusDict.PENDING_CONFIRMATION.getCode());
         changeRequest.setRequestedAt(now);
-        changeRequest.setCreatedAt(now);
-        changeRequest.setUpdatedAt(now);
         try {
             teamMemberChangeRequestEntityMapper.insert(changeRequest);
         } catch (DuplicateKeyException e) {
@@ -705,9 +693,8 @@ public class MineTeamService {
                 .set(COLUMN_ALLOW_PORTFOLIO, flagOrZero(changeRequest.getAllowPortfolioAfter()))
                 .set(COLUMN_ALLOW_PROFILE, flagOrZero(changeRequest.getAllowProfileAfter()))
                 .set(COLUMN_ALLOW_WORKS, flagOrZero(changeRequest.getAllowWorksAfter()))
-                .set(COLUMN_UPDATED_AT, now)
                 .setSql(VERSION_INCREMENT_SQL);
-        int memberUpdated = teamMemberEntityMapper.update(null, memberUpdate);
+        int memberUpdated = teamMemberEntityMapper.update(new TeamMemberEntity(), memberUpdate);
         if (memberUpdated <= 0) {
             teamMemberChangeRequestTransactionService.invalidateMemberChangeAndClearAction(
                     changeRequest.getId(), userId);
@@ -762,20 +749,17 @@ public class MineTeamService {
             throw new BusinessException("对方已是团队拥有者");
         }
 
-        LocalDateTime now = LocalDateTime.now();
         String noticeIdempotencyKey = buildOwnerTransferIdempotencyKey(team, target);
         updateMemberRole(ownerMembership.getId(), ownerMembership.getVersion(), TeamRoleDict.OWNER.getCode(),
-                TeamRoleDict.MANAGER.getCode(), now,
-                "团队拥有者变更失败，请刷新后重试");
-        updateMemberRole(target.getId(), target.getVersion(), target.getRole(), TeamRoleDict.OWNER.getCode(), now,
+                TeamRoleDict.MANAGER.getCode(), "团队拥有者变更失败，请刷新后重试");
+        updateMemberRole(target.getId(), target.getVersion(), target.getRole(), TeamRoleDict.OWNER.getCode(),
                 "团队拥有者变更失败，请刷新后重试");
         UpdateWrapper<TeamEntity> teamUpdate = new UpdateWrapper<>();
         teamUpdate.eq(COLUMN_ID, team.getId())
                 .eq(COLUMN_VERSION, team.getVersion())
                 .set(COLUMN_OWNER_USER_ID, target.getUserId())
-                .set(COLUMN_UPDATED_AT, now)
                 .setSql(VERSION_INCREMENT_SQL);
-        int teamUpdated = teamEntityMapper.update(null, teamUpdate);
+        int teamUpdated = teamEntityMapper.update(new TeamEntity(), teamUpdate);
         if (teamUpdated <= 0) {
             throw new BusinessException("团队拥有者变更失败，请刷新后重试");
         }
@@ -784,7 +768,6 @@ public class MineTeamService {
         target.setRole(TeamRoleDict.OWNER.getCode());
         target.setVersion(incrementVersion(target.getVersion()));
         team.setOwnerUserId(target.getUserId());
-        team.setUpdatedAt(now);
         team.setVersion(incrementVersion(team.getVersion()));
         invalidatePendingChangesForMember(target.getId());
         createPlainTeamNotice(
@@ -830,16 +813,14 @@ public class MineTeamService {
                 .set(COLUMN_JOIN_STATUS, JoinStatusDict.REMOVED.getCode())
                 .set(COLUMN_REMOVED_AT, now)
                 .set(COLUMN_REMOVAL_REASON, MEMBER_REMOVED_REASON)
-                .set(COLUMN_UPDATED_AT, now)
                 .setSql(VERSION_INCREMENT_SQL);
-        int updated = teamMemberEntityMapper.update(null, memberUpdate);
+        int updated = teamMemberEntityMapper.update(new TeamMemberEntity(), memberUpdate);
         if (updated <= 0) {
             throw new BusinessException("成员状态已变化，请刷新后重试");
         }
         target.setJoinStatus(JoinStatusDict.REMOVED.getCode());
         target.setRemovedAt(now);
         target.setRemovalReason(MEMBER_REMOVED_REASON);
-        target.setUpdatedAt(now);
         target.setVersion(incrementVersion(target.getVersion()));
         invalidatePendingChangesForMember(target.getId());
         createPlainTeamNotice(
@@ -1269,8 +1250,6 @@ public class MineTeamService {
         membership.setAllowWorks(permissionFlag(request.getAllowWorks(), false));
         membership.setInvitedBy(inviterUserId);
         membership.setInvitedAt(now);
-        membership.setCreatedAt(now);
-        membership.setUpdatedAt(now);
         try {
             teamMemberEntityMapper.insert(membership);
         } catch (DuplicateKeyException e) {
@@ -1319,9 +1298,8 @@ public class MineTeamService {
                 .set(COLUMN_RESPONDED_AT, null)
                 .set(COLUMN_JOINED_AT, null)
                 .set(COLUMN_REMOVED_AT, null)
-                .set(COLUMN_REMOVAL_REASON, "")
-                .set(COLUMN_UPDATED_AT, now);
-        int updated = teamMemberEntityMapper.update(null, updateWrapper);
+                .set(COLUMN_REMOVAL_REASON, "");
+        int updated = teamMemberEntityMapper.update(new TeamMemberEntity(), updateWrapper);
         if (updated <= 0) {
             throw new BusinessException("成员邀请保存失败，请重试");
         }
@@ -1337,7 +1315,6 @@ public class MineTeamService {
         membership.setJoinedAt(null);
         membership.setRemovedAt(null);
         membership.setRemovalReason("");
-        membership.setUpdatedAt(now);
     }
 
     /**
@@ -1374,8 +1351,6 @@ public class MineTeamService {
         message.setBizType(INVITATION_MESSAGE_BIZ_TYPE);
         message.setBizId(membership.getId());
         message.setIdempotencyKey(idempotencyKey);
-        message.setCreatedAt(now);
-        message.setUpdatedAt(now);
         try {
             systemMessageEntityMapper.insert(message);
         } catch (DuplicateKeyException e) {
@@ -1387,9 +1362,8 @@ public class MineTeamService {
                     .set(COLUMN_CONTENT, message.getContent())
                     .set(COLUMN_ACTION_TYPE, MessageActionTypeDict.TEAM_INVITATION.getCode())
                     .set(COLUMN_ACTION_URL, actionUrl)
-                    .set(COLUMN_BIZ_ID, membership.getId())
-                    .set(COLUMN_UPDATED_AT, now);
-            systemMessageEntityMapper.update(null, updateWrapper);
+                    .set(COLUMN_BIZ_ID, membership.getId());
+            systemMessageEntityMapper.update(new SystemMessageEntity(), updateWrapper);
             log.info("团队邀请站内消息已存在，已刷新: teamId={}, memberId={}, userId={}",
                     team.getId(), membership.getId(), invitee.getId());
         }
@@ -1422,9 +1396,8 @@ public class MineTeamService {
                 .eq(COLUMN_IDEMPOTENCY_KEY, INVITATION_IDEMPOTENCY_PREFIX + memberId)
                 .eq(COLUMN_READ_STATUS, MessageReadStatusDict.UNREAD.getCode())
                 .set(COLUMN_READ_STATUS, MessageReadStatusDict.READ.getCode())
-                .set(COLUMN_READ_AT, now)
-                .set(COLUMN_UPDATED_AT, now);
-        systemMessageEntityMapper.update(null, updateWrapper);
+                .set(COLUMN_READ_AT, now);
+        systemMessageEntityMapper.update(new SystemMessageEntity(), updateWrapper);
     }
 
     /**
@@ -1439,9 +1412,8 @@ public class MineTeamService {
         updateWrapper.eq(COLUMN_USER_ID, userId)
                 .eq(COLUMN_IDEMPOTENCY_KEY, INVITATION_IDEMPOTENCY_PREFIX + memberId)
                 .set(COLUMN_ACTION_TYPE, MessageActionTypeDict.NONE.getCode())
-                .set(COLUMN_ACTION_URL, EMPTY_ACTION_URL)
-                .set(COLUMN_UPDATED_AT, now);
-        systemMessageEntityMapper.update(null, updateWrapper);
+                .set(COLUMN_ACTION_URL, EMPTY_ACTION_URL);
+        systemMessageEntityMapper.update(new SystemMessageEntity(), updateWrapper);
     }
 
     /**
@@ -1470,8 +1442,6 @@ public class MineTeamService {
         message.setBizType(MEMBER_CHANGE_MESSAGE_BIZ_TYPE);
         message.setBizId(changeRequest.getId());
         message.setIdempotencyKey(idempotencyKey);
-        message.setCreatedAt(now);
-        message.setUpdatedAt(now);
         try {
             systemMessageEntityMapper.insert(message);
         } catch (DuplicateKeyException e) {
@@ -1483,9 +1453,8 @@ public class MineTeamService {
                     .set(COLUMN_CONTENT, message.getContent())
                     .set(COLUMN_ACTION_TYPE, MessageActionTypeDict.TEAM_MEMBER_CHANGE.getCode())
                     .set(COLUMN_ACTION_URL, actionUrl)
-                    .set(COLUMN_BIZ_ID, changeRequest.getId())
-                    .set(COLUMN_UPDATED_AT, now);
-            systemMessageEntityMapper.update(null, updateWrapper);
+                    .set(COLUMN_BIZ_ID, changeRequest.getId());
+            systemMessageEntityMapper.update(new SystemMessageEntity(), updateWrapper);
         }
     }
 
@@ -1502,9 +1471,8 @@ public class MineTeamService {
                 .eq(COLUMN_IDEMPOTENCY_KEY, MEMBER_CHANGE_IDEMPOTENCY_PREFIX + changeRequestId)
                 .eq(COLUMN_READ_STATUS, MessageReadStatusDict.UNREAD.getCode())
                 .set(COLUMN_READ_STATUS, MessageReadStatusDict.READ.getCode())
-                .set(COLUMN_READ_AT, now)
-                .set(COLUMN_UPDATED_AT, now);
-        systemMessageEntityMapper.update(null, updateWrapper);
+                .set(COLUMN_READ_AT, now);
+        systemMessageEntityMapper.update(new SystemMessageEntity(), updateWrapper);
     }
 
     /**
@@ -1519,9 +1487,8 @@ public class MineTeamService {
         updateWrapper.eq(COLUMN_USER_ID, userId)
                 .eq(COLUMN_IDEMPOTENCY_KEY, MEMBER_CHANGE_IDEMPOTENCY_PREFIX + changeRequestId)
                 .set(COLUMN_ACTION_TYPE, MessageActionTypeDict.NONE.getCode())
-                .set(COLUMN_ACTION_URL, EMPTY_ACTION_URL)
-                .set(COLUMN_UPDATED_AT, now);
-        systemMessageEntityMapper.update(null, updateWrapper);
+                .set(COLUMN_ACTION_URL, EMPTY_ACTION_URL);
+        systemMessageEntityMapper.update(new SystemMessageEntity(), updateWrapper);
     }
 
     /**
@@ -1536,9 +1503,8 @@ public class MineTeamService {
         updateWrapper.eq(COLUMN_ID, changeRequestId)
                 .eq(COLUMN_STATUS, TeamMemberChangeStatusDict.PENDING_CONFIRMATION.getCode())
                 .set(COLUMN_STATUS, status)
-                .set(COLUMN_RESPONDED_AT, respondedAt)
-                .set(COLUMN_UPDATED_AT, respondedAt);
-        int updated = teamMemberChangeRequestEntityMapper.update(null, updateWrapper);
+                .set(COLUMN_RESPONDED_AT, respondedAt);
+        int updated = teamMemberChangeRequestEntityMapper.update(new TeamMemberChangeRequestEntity(), updateWrapper);
         if (updated <= 0) {
             throw new BusinessException("成员信息变更状态已变化，请刷新后重试");
         }
@@ -1555,9 +1521,8 @@ public class MineTeamService {
         updateWrapper.eq(COLUMN_ID, changeRequestId)
                 .eq(COLUMN_STATUS, TeamMemberChangeStatusDict.PENDING_CONFIRMATION.getCode())
                 .set(COLUMN_STATUS, TeamMemberChangeStatusDict.INVALIDATED.getCode())
-                .set(COLUMN_RESPONDED_AT, now)
-                .set(COLUMN_UPDATED_AT, now);
-        teamMemberChangeRequestEntityMapper.update(null, updateWrapper);
+                .set(COLUMN_RESPONDED_AT, now);
+        teamMemberChangeRequestEntityMapper.update(new TeamMemberChangeRequestEntity(), updateWrapper);
     }
 
     /**
@@ -1776,7 +1741,6 @@ public class MineTeamService {
      * @param versionBefore 修改前版本号
      * @param roleBefore 原角色
      * @param roleAfter 新角色
-     * @param updatedAt 更新时间
      * @param message 失败文案
      */
     private void updateMemberRole(
@@ -1784,7 +1748,6 @@ public class MineTeamService {
             Integer versionBefore,
             String roleBefore,
             String roleAfter,
-            LocalDateTime updatedAt,
             String message
     ) {
         UpdateWrapper<TeamMemberEntity> updateWrapper = new UpdateWrapper<>();
@@ -1793,9 +1756,8 @@ public class MineTeamService {
                 .eq(COLUMN_JOIN_STATUS, JoinStatusDict.JOINED.getCode())
                 .eq(COLUMN_VERSION, versionBefore)
                 .set(COLUMN_ROLE, roleAfter)
-                .set(COLUMN_UPDATED_AT, updatedAt)
                 .setSql(VERSION_INCREMENT_SQL);
-        int updated = teamMemberEntityMapper.update(null, updateWrapper);
+        int updated = teamMemberEntityMapper.update(new TeamMemberEntity(), updateWrapper);
         if (updated <= 0) {
             throw new BusinessException(message);
         }
@@ -1873,8 +1835,6 @@ public class MineTeamService {
         message.setBizType(TEAM_NOTICE_BIZ_TYPE);
         message.setBizId(teamId);
         message.setIdempotencyKey(idempotencyKey);
-        message.setCreatedAt(now);
-        message.setUpdatedAt(now);
         try {
             systemMessageEntityMapper.insert(message);
         } catch (DuplicateKeyException e) {
@@ -1886,9 +1846,8 @@ public class MineTeamService {
                     .set(COLUMN_CONTENT, content)
                     .set(COLUMN_ACTION_TYPE, MessageActionTypeDict.NONE.getCode())
                     .set(COLUMN_ACTION_URL, EMPTY_ACTION_URL)
-                    .set(COLUMN_BIZ_ID, teamId)
-                    .set(COLUMN_UPDATED_AT, now);
-            systemMessageEntityMapper.update(null, updateWrapper);
+                    .set(COLUMN_BIZ_ID, teamId);
+            systemMessageEntityMapper.update(new SystemMessageEntity(), updateWrapper);
         }
     }
 

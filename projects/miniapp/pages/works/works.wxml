@@ -175,6 +175,168 @@
     </view>
   </view>
 
+  <view class="work-edit-mask image-edit-mask" wx:if="{{imageEditSheetVisible}}" catchtap="handleCloseImageEditor">
+    <view class="work-edit-panel" catchtap="handleEditPanelTap">
+      <view class="work-edit-grabber"></view>
+      <view class="work-edit-heading">
+        <view class="work-edit-title">编辑图片作品</view>
+        <view class="work-edit-type">图片</view>
+      </view>
+
+      <scroll-view class="work-edit-scroll" scroll-y type="list">
+        <view class="work-edit-content">
+          <view class="work-preview">
+            <image class="work-preview-media" src="{{imageEditForm.previewPath}}" mode="aspectFit"></image>
+          </view>
+
+          <view class="field-group">
+            <view class="field-heading">
+              <view class="field-label">作品标题</view>
+              <view class="field-limit">{{imageEditFieldCounters.title}}</view>
+            </view>
+            <input
+              class="text-field"
+              value="{{imageEditForm.title}}"
+              maxlength="30"
+              placeholder="填写作品标题"
+              placeholder-class="search-placeholder"
+              data-field="title"
+              bindinput="handleImageEditInput"
+            />
+          </view>
+
+          <view class="field-group">
+            <view class="field-heading">
+              <view class="field-label">作品说明</view>
+              <view class="field-limit">{{imageEditFieldCounters.description}}</view>
+            </view>
+            <textarea
+              class="textarea-field"
+              value="{{imageEditForm.description}}"
+              placeholder="填写作品说明"
+              placeholder-class="search-placeholder"
+              maxlength="1000"
+              data-field="description"
+              bindinput="handleImageEditInput"
+              auto-height="{{false}}"
+            ></textarea>
+          </view>
+
+          <view wx:if="{{imageEditErrorText}}" class="edit-error">{{imageEditErrorText}}</view>
+        </view>
+      </scroll-view>
+
+      <view class="work-edit-actions">
+        <button class="work-edit-cancel" catchtap="handleCloseImageEditor" disabled="{{imageEditSaving}}">取消</button>
+        <button class="work-edit-confirm" loading="{{imageEditSaving}}" catchtap="handleConfirmImageEdit" disabled="{{imageEditSaving}}">完成</button>
+      </view>
+    </view>
+  </view>
+
+  <view class="work-edit-mask video-edit-mask" wx:if="{{videoEditSheetVisible}}" catchtap="handleCloseVideoEditor">
+    <view class="work-edit-panel" catchtap="handleEditPanelTap">
+      <view class="work-edit-grabber"></view>
+      <view class="work-edit-heading">
+        <view class="work-edit-title">编辑视频作品</view>
+        <view class="work-edit-type">视频</view>
+      </view>
+
+      <scroll-view class="work-edit-scroll" scroll-y type="list">
+        <view class="work-edit-content">
+          <view class="work-preview">
+            <image wx:if="{{videoEditForm.previewPath}}" class="work-preview-media" src="{{videoEditForm.previewPath}}" mode="aspectFill"></image>
+            <view wx:else class="work-preview-empty">视频</view>
+          </view>
+
+          <view class="field-group">
+            <view class="field-heading">
+              <view class="field-label">作品标题</view>
+              <view class="field-limit">{{videoEditFieldCounters.title}}</view>
+            </view>
+            <input
+              class="text-field"
+              value="{{videoEditForm.title}}"
+              maxlength="30"
+              placeholder="填写作品标题"
+              placeholder-class="search-placeholder"
+              data-field="title"
+              bindinput="handleVideoEditInput"
+            />
+          </view>
+
+          <view class="field-group">
+            <view class="field-heading">
+              <view class="field-label">作品说明</view>
+              <view class="field-limit">{{videoEditFieldCounters.description}}</view>
+            </view>
+            <textarea
+              class="textarea-field"
+              value="{{videoEditForm.description}}"
+              placeholder="填写作品说明"
+              placeholder-class="search-placeholder"
+              maxlength="1000"
+              data-field="description"
+              bindinput="handleVideoEditInput"
+              auto-height="{{false}}"
+            ></textarea>
+          </view>
+
+          <view class="cover-section">
+            <view class="cover-heading">
+              <view class="field-label">视频封面</view>
+              <view wx:if="{{!videoEditForm.coverEditorReady}}" class="cover-time">{{videoFrameTimeText}} / {{videoEditForm.durationText}}</view>
+            </view>
+            <view wx:if="{{!videoEditForm.coverEditorReady}}" class="cover-standby">
+              <button
+                class="cover-export-button"
+                bindtap="handleStartVideoCoverEdit"
+                loading="{{videoDownloading}}"
+                disabled="{{videoEditSaving || videoDownloading || videoFrameExporting}}"
+              >选帧修改封面</button>
+            </view>
+            <block wx:else>
+              <view class="cover-edit-toolbar">
+                <view class="cover-edit-time">{{videoFrameTimeText}} / {{videoEditForm.durationText}}</view>
+                <button
+                  class="cover-use-frame-button"
+                  bindtap="handleExportVideoCover"
+                  loading="{{videoFrameExporting}}"
+                  disabled="{{videoEditSaving || videoDownloading || videoFrameExporting}}"
+                >使用当前帧</button>
+              </view>
+              <video
+                id="workCoverVideo"
+                class="cover-video"
+                src="{{videoEditForm.tempFilePath}}"
+                controls
+                show-center-play-btn="{{true}}"
+                enable-progress-gesture="{{true}}"
+                bindloadedmetadata="handleVideoEditMetadata"
+                bindtimeupdate="handleVideoEditTimeUpdate"
+              ></video>
+              <slider
+                class="cover-slider"
+                min="0"
+                max="{{videoEditForm.durationMs}}"
+                step="100"
+                value="{{videoFrameTimeMs}}"
+                bindchanging="handleVideoCoverSliderChanging"
+                bindchange="handleVideoCoverSliderChange"
+              ></slider>
+            </block>
+          </view>
+
+          <view wx:if="{{videoEditErrorText}}" class="edit-error">{{videoEditErrorText}}</view>
+        </view>
+      </scroll-view>
+
+      <view class="work-edit-actions">
+        <button class="work-edit-cancel" catchtap="handleCloseVideoEditor" disabled="{{videoEditSaving || videoDownloading || videoFrameExporting}}">取消</button>
+        <button class="work-edit-confirm" loading="{{videoEditSaving}}" catchtap="handleConfirmVideoEdit" disabled="{{videoEditSaving || videoDownloading || videoFrameExporting}}">完成</button>
+      </view>
+    </view>
+  </view>
+
   <view class="tabbar">
     <button
       wx:for="{{tabs}}"

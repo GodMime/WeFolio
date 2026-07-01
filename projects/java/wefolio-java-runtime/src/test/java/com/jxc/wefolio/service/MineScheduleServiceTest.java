@@ -317,8 +317,8 @@ class MineScheduleServiceTest {
         assertThat(inserted.getContactPhoneCiphertext()).isEqualTo("13900002026");
         assertThat(inserted.getNote()).isEqualTo("已收定金");
         assertThat(inserted.getLockedSnapshot()).isZero();
-        assertThat(inserted.getCreatedAt()).isNotNull();
-        assertThat(inserted.getUpdatedAt()).isNotNull();
+        assertThat(inserted.getCreatedAt()).isNull();
+        assertThat(inserted.getUpdatedAt()).isNull();
         assertThat(item.getId()).isEqualTo(88L);
         assertThat(item.getStatusTone()).isEqualTo(ScheduleStatusDict.BOOKED.getTone());
     }

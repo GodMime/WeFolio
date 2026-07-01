@@ -42,7 +42,7 @@ class MineVisitServiceTest {
     void visitRecordsAggregateSummaryTrendAndRecentDetails() {
         AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
         LocalDate today = LocalDate.now();
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = today.atTime(12, 0);
 
         VisitRecordEntity firstRecord = buildRecord(
                 101L,
@@ -77,7 +77,7 @@ class MineVisitServiceTest {
         List<VisitEventEntity> trendEvents = List.of(
                 buildOpenedEvent(now),
                 buildOpenedEvent(now.minusMinutes(8)),
-                buildOpenedEvent(now.minusHours(2)),
+                buildOpenedEvent(now.minusMinutes(16)),
                 buildOpenedEvent(now.minusDays(1)),
                 buildOpenedEvent(now.minusDays(6))
         );

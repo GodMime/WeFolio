@@ -22,7 +22,6 @@ const THUMB_COMPRESS_ATTEMPTS = [
   { quality: 45, compressedSize: 240 }
 ]
 const THUMB_TOO_LARGE_MESSAGE = '缩略图或封面图不能超过 100KB'
-const VIDEO_COVER_MISSING_MESSAGE = '视频封面图缺失，请重新选择视频'
 
 function getRuntimeWx(wxApi) {
   if (wxApi) {
@@ -41,6 +40,11 @@ function trimText(value) {
 function normalizeSize(value) {
   const numberValue = Number(value)
   return Number.isFinite(numberValue) && numberValue > 0 ? numberValue : 0
+}
+
+function normalizeDimension(value) {
+  const numberValue = normalizeSize(value)
+  return numberValue > 0 ? Math.round(numberValue) : 0
 }
 
 function createChooseMediaOptions(remainingCount = MAX_BATCH_COUNT) {
@@ -173,19 +177,75 @@ function normalizeChosenMediaFile(raw = {}, index = 0) {
     fileType: mediaType === 'VIDEO' ? 'video' : 'image',
     mimeType: mimeTypeFromFile(raw),
     size: normalizeSize(raw.size),
+    sha256: trimText(raw.sha256),
     durationMs,
-    width: normalizeSize(raw.width),
-    height: normalizeSize(raw.height),
+    width: normalizeDimension(raw.width),
+    height: normalizeDimension(raw.height),
     status: 'READY',
     progress: 0,
     taskId: null,
     uploadTicket: null,
+    coverSha256: trimText(raw.coverSha256),
+    customCoverSha256: trimText(raw.customCoverSha256),
     confirmIdempotencyKey: raw.confirmIdempotencyKey || `confirm-${Date.now()}-${index}`
   }
 }
 
 function normalizeChosenMediaFiles(files = []) {
   return Array.isArray(files) ? files.map(normalizeChosenMediaFile) : []
+}
+
+function getVideoInfo(filePath, wxApi) {
+  let runtimeWx
+  try {
+    runtimeWx = getRuntimeWx(wxApi)
+  } catch (error) {
+    return Promise.resolve(null)
+  }
+  if (!filePath || !runtimeWx.getVideoInfo) {
+    return Promise.resolve(null)
+  }
+  return new Promise((resolve) => {
+    runtimeWx.getVideoInfo({
+      src: filePath,
+      success: resolve,
+      fail() {
+        resolve(null)
+      }
+    })
+  })
+}
+
+async function enrichVideoFileMetadata(files = [], options = {}) {
+  if (!Array.isArray(files)) {
+    return []
+  }
+  return Promise.all(files.map(async (file) => {
+    if (!file || file.mediaType !== 'VIDEO') {
+      return file
+    }
+    const currentWidth = normalizeDimension(file.width)
+    const currentHeight = normalizeDimension(file.height)
+    const currentDurationMs = normalizeSize(file.durationMs)
+    if (currentWidth > 0 && currentHeight > 0 && currentDurationMs > 0) {
+      return file
+    }
+    const videoInfo = await getVideoInfo(file.tempFilePath, options.wxApi)
+    if (!videoInfo) {
+      return file
+    }
+    const durationSeconds = normalizeSize(videoInfo.duration)
+    const durationMs = currentDurationMs || (durationSeconds > 0
+      ? Math.round(durationSeconds * 1000)
+      : normalizeSize(videoInfo.durationMs))
+    const nextFile = Object.assign({}, file, {
+      width: currentWidth || normalizeDimension(videoInfo.width),
+      height: currentHeight || normalizeDimension(videoInfo.height),
+      durationMs
+    })
+    nextFile.metaText = buildMediaMetaText(nextFile.mediaType, nextFile.durationMs)
+    return nextFile
+  }))
 }
 
 function isConfirmedFile(file = {}) {
@@ -229,17 +289,24 @@ function buildUploadTicketPayload(files = [], batchId = '') {
     batchId,
     files: files
       .filter(shouldCreateUploadTicket)
-      .map((file) => ({
-        clientId: file.clientId,
-        mediaType: file.mediaType,
-        fileName: file.fileName,
-        mimeType: file.mimeType,
-        fileSize: file.size,
-        durationMs: file.mediaType === 'VIDEO' ? file.durationMs : null,
-        width: file.width,
-        height: file.height,
-        idempotencyKey: `ticket-${file.clientId}`
-      }))
+      .map((file) => {
+        const item = {
+          clientId: file.clientId,
+          mediaType: file.mediaType,
+          fileName: file.fileName,
+          mimeType: file.mimeType,
+          fileSize: file.size,
+          durationMs: file.mediaType === 'VIDEO' ? file.durationMs : null,
+          width: file.width,
+          height: file.height,
+          idempotencyKey: `ticket-${file.clientId}`
+        }
+        const sha256 = trimText(file.sha256)
+        if (sha256) {
+          item.sha256 = sha256
+        }
+        return item
+      })
   }
 }
 
@@ -277,9 +344,18 @@ function getCoverHeight(file = {}) {
 }
 
 function getCoverIdempotencyKey(file = {}) {
+  if (hasCustomCover(file)) {
+    return trimText(file.customCoverIdempotencyKey)
+      || trimText(file.coverIdempotencyKey)
+      || `cover-ticket-${file.clientId}`
+  }
   return trimText(file.coverIdempotencyKey)
     || trimText(file.customCoverIdempotencyKey)
     || `cover-ticket-${file.clientId}`
+}
+
+function getCoverSha256(file = {}) {
+  return trimText(file.customCoverSha256) || trimText(file.coverSha256)
 }
 
 function shouldUploadCoverFile(file = {}) {
@@ -287,7 +363,7 @@ function shouldUploadCoverFile(file = {}) {
     return false
   }
   if (file.mediaType === 'VIDEO') {
-    return Boolean(getCoverUploadPath(file))
+    return false
   }
   if (file.mediaType === 'IMAGE') {
     return normalizeSize(file.size) > THUMB_MAX_BYTES && Boolean(getCoverUploadPath(file))
@@ -307,6 +383,7 @@ async function prepareCoverUploadFiles(files = [], options = {}) {
       if (normalizeSize(nextFile.size) <= THUMB_MAX_BYTES) {
         nextFile.coverPath = ''
         nextFile.coverSize = 0
+        nextFile.coverSha256 = trimText(nextFile.sha256)
         preparedFiles.push(nextFile)
         continue
       }
@@ -315,30 +392,13 @@ async function prepareCoverUploadFiles(files = [], options = {}) {
         coverPath: thumb.filePath,
         coverSize: thumb.fileSize,
         coverFileName: buildThumbFileName(nextFile.fileName),
+        coverSha256: '',
         coverIdempotencyKey: `cover-ticket-${nextFile.clientId}`
       })
       preparedFiles.push(nextFile)
       continue
     }
     if (nextFile.mediaType === 'VIDEO') {
-      const coverPath = getCoverUploadPath(nextFile)
-      if (!coverPath) {
-        throw new Error(VIDEO_COVER_MISSING_MESSAGE)
-      }
-      const thumb = await prepareThumbFile(coverPath, options)
-      Object.assign(nextFile, {
-        coverPath: thumb.filePath,
-        coverSize: thumb.fileSize,
-        coverFileName: buildThumbFileName(nextFile.fileName),
-        coverIdempotencyKey: `cover-ticket-${nextFile.clientId}`
-      })
-      if (hasCustomCover(nextFile)) {
-        Object.assign(nextFile, {
-          customCoverPath: thumb.filePath,
-          customCoverSize: thumb.fileSize,
-          customCoverFileName: buildThumbFileName(nextFile.fileName)
-        })
-      }
       preparedFiles.push(nextFile)
       continue
     }
@@ -356,11 +416,11 @@ function normalizeProgress(value) {
 }
 
 function shouldCountCoverProgress(file = {}) {
+  if (file.mediaType === 'VIDEO') {
+    return false
+  }
   if (file.customCoverUploadTicket || file.customCoverStatus) {
     return true
-  }
-  if (file.mediaType === 'VIDEO') {
-    return Boolean(getCoverUploadPath(file))
   }
   return file.mediaType === 'IMAGE' && normalizeSize(file.size) > THUMB_MAX_BYTES
 }
@@ -411,18 +471,25 @@ function buildCoverUploadTicketPayload(files = [], batchId = '') {
   const coverFiles = files.filter(shouldUploadCoverFile)
   return {
     batchId,
-    files: coverFiles.map((file) => ({
-      clientId: `${file.clientId}${COVER_CLIENT_ID_SUFFIX}`,
-      mediaType: 'IMAGE',
-      fileName: getCoverFileName(file),
-      mimeType: DEFAULT_COVER_MIME_TYPE,
-      fileSize: getCoverFileSize(file),
-      durationMs: null,
-      width: getCoverWidth(file),
-      height: getCoverHeight(file),
-      sourceTaskId: file.taskId || null,
-      idempotencyKey: getCoverIdempotencyKey(file)
-    }))
+    files: coverFiles.map((file) => {
+      const item = {
+        clientId: `${file.clientId}${COVER_CLIENT_ID_SUFFIX}`,
+        mediaType: 'IMAGE',
+        fileName: getCoverFileName(file),
+        mimeType: DEFAULT_COVER_MIME_TYPE,
+        fileSize: getCoverFileSize(file),
+        durationMs: null,
+        width: getCoverWidth(file),
+        height: getCoverHeight(file),
+        sourceTaskId: file.taskId || null,
+        idempotencyKey: getCoverIdempotencyKey(file)
+      }
+      const sha256 = getCoverSha256(file)
+      if (sha256) {
+        item.sha256 = sha256
+      }
+      return item
+    })
   }
 }
 
@@ -563,6 +630,7 @@ module.exports = {
   buildCoverUploadTicketPayload,
   buildUploadTicketPayload,
   createChooseMediaOptions,
+  enrichVideoFileMetadata,
   normalizeChosenMediaFiles,
   prepareCoverUploadFiles,
   uploadToCos,

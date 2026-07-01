@@ -228,11 +228,40 @@ test('builds and validates work update payload', () => {
 
   assert.deepEqual(payload, {
     title: '海边仪式',
-    description: '夕阳时段',
-    tagNames: ['高端婚礼', '户外仪式']
+    description: '夕阳时段'
   })
   assert.equal(validateWorkForm(payload).valid, true)
   assert.equal(buildWorkFieldCounters(payload).title, '4/30')
+})
+
+test('builds work update payload with selected cover frame time', () => {
+  const payload = buildWorkUpdatePayload({
+    title: ' 片头快剪 ',
+    description: ' 晚宴开场 ',
+    coverFrameTimeMs: 5200,
+    width: 1080,
+    height: 1920
+  })
+
+  assert.deepEqual(payload, {
+    title: '片头快剪',
+    description: '晚宴开场',
+    coverFrameTimeMs: 5200,
+    width: 1080,
+    height: 1920
+  })
+})
+
+test('builds work update payload without cover frame when cover is unchanged', () => {
+  const payload = buildWorkUpdatePayload({
+    title: ' 片头快剪 ',
+    description: ' 晚宴开场 '
+  })
+
+  assert.deepEqual(payload, {
+    title: '片头快剪',
+    description: '晚宴开场'
+  })
 })
 
 test('rejects invalid work form fields', () => {

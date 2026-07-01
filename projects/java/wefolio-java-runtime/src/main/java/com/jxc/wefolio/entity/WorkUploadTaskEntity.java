@@ -30,6 +30,9 @@ public class WorkUploadTaskEntity extends BaseEntity {
     /** 后端生成的 COS 原文件对象键 */
     private String objectKey;
 
+    /** 当前上传对象的 SHA-256，由小程序端计算提交，后端为避免下载 COS 文件而信任该值。 */
+    private String fileSha256;
+
     /** 封面对象键，图片作品默认等于原文件 */
     private String coverObjectKey;
 

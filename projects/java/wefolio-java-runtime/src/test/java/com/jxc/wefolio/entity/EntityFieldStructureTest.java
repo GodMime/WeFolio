@@ -1,6 +1,8 @@
 package com.jxc.wefolio.entity;
 
 import com.baomidou.mybatisplus.annotation.TableLogic;
+import com.baomidou.mybatisplus.annotation.FieldFill;
+import com.baomidou.mybatisplus.annotation.TableField;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
@@ -22,6 +24,19 @@ class EntityFieldStructureTest {
         assertThat(tableLogic).isNotNull();
         assertThat(tableLogic.value()).isEqualTo("0");
         assertThat(tableLogic.delval()).isEqualTo("id");
+    }
+
+    @Test
+    void baseEntityTimeFieldsShouldDeclareAutoFillStrategy() throws NoSuchFieldException {
+        Field createdAtField = BaseEntity.class.getDeclaredField("createdAt");
+        Field updatedAtField = BaseEntity.class.getDeclaredField("updatedAt");
+        TableField createdAtTableField = createdAtField.getAnnotation(TableField.class);
+        TableField updatedAtTableField = updatedAtField.getAnnotation(TableField.class);
+
+        assertThat(createdAtTableField).isNotNull();
+        assertThat(createdAtTableField.fill()).isEqualTo(FieldFill.INSERT);
+        assertThat(updatedAtTableField).isNotNull();
+        assertThat(updatedAtTableField.fill()).isEqualTo(FieldFill.INSERT_UPDATE);
     }
 
     @Test

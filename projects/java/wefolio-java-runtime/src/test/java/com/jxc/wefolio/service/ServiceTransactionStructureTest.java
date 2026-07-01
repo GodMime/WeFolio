@@ -5,6 +5,9 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -15,6 +18,19 @@ class ServiceTransactionStructureTest {
 
     /** 后端源码根目录 */
     private static final Path MAIN_SOURCE_ROOT = Path.of("src/main/java");
+
+    /** 服务层源码目录 */
+    private static final Path SERVICE_SOURCE_ROOT = MAIN_SOURCE_ROOT.resolve("com/jxc/wefolio/service");
+
+    /** 业务层手动填充 BaseEntity 时间字段的调用模式 */
+    private static final Pattern BUSINESS_BASE_TIME_SETTER_PATTERN = Pattern.compile(
+            "\\.set(?:CreatedAt|UpdatedAt)\\((?:LocalDateTime\\.now\\(\\)|now|updatedAt)\\)"
+    );
+
+    /** 服务层局部更新手动写入 updated_at 的调用模式 */
+    private static final Pattern BUSINESS_UPDATED_AT_WRAPPER_PATTERN = Pattern.compile(
+            "\\.set\\((?:COLUMN_UPDATED_AT|COL_UPDATED_AT|WORK_COLUMN_UPDATED_AT|\"updated_at\")\\s*,"
+    );
 
     @Test
     void miniappAuthServiceShouldNotUseSelfInjectionForTransactionalRegistration() throws IOException {
@@ -64,7 +80,38 @@ class ServiceTransactionStructureTest {
                 .doesNotContain("@Transactional(rollbackFor = Exception.class)\n    public MineTeamDetailResponse createTeam(");
     }
 
+    @Test
+    void serviceLayerShouldNotManuallyFillBaseEntityTimestamps() throws IOException {
+        try (Stream<Path> serviceFiles = Files.list(SERVICE_SOURCE_ROOT)) {
+            List<String> violations = serviceFiles
+                    .filter(path -> path.getFileName().toString().endsWith(".java"))
+                    .flatMap(ServiceTransactionStructureTest::baseTimeSetterViolations)
+                    .toList();
+
+            assertThat(violations).isEmpty();
+        }
+    }
+
     private String readSource(String relativePath) throws IOException {
         return Files.readString(MAIN_SOURCE_ROOT.resolve(relativePath));
+    }
+
+    /**
+     * 提取服务类中手动填充基础实体时间字段的位置。
+     *
+     * @param path 源码路径
+     * @return 违规位置列表
+     */
+    private static Stream<String> baseTimeSetterViolations(Path path) {
+        try {
+            List<String> lines = Files.readAllLines(path);
+            return Stream.iterate(0, index -> index + 1)
+                    .limit(lines.size())
+                    .filter(index -> BUSINESS_BASE_TIME_SETTER_PATTERN.matcher(lines.get(index)).find()
+                            || BUSINESS_UPDATED_AT_WRAPPER_PATTERN.matcher(lines.get(index)).find())
+                    .map(index -> path.getFileName() + ":" + (index + 1) + " " + lines.get(index).trim());
+        } catch (IOException e) {
+            throw new IllegalStateException("读取服务源码失败: " + path, e);
+        }
     }
 }

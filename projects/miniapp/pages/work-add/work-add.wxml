@@ -167,38 +167,6 @@
             ></textarea>
           </view>
 
-          <view wx:if="{{editForm.isVideo}}" class="cover-section">
-            <view class="cover-heading">
-              <view class="field-label">视频封面</view>
-              <view class="cover-time">{{editFrameTimeText}} / {{editForm.durationText}}</view>
-            </view>
-            <video
-              id="workCoverVideo"
-              class="cover-video"
-              src="{{editForm.tempFilePath}}"
-              controls
-              show-center-play-btn="{{true}}"
-              enable-progress-gesture="{{true}}"
-              bindloadedmetadata="handleEditVideoMetadata"
-              bindtimeupdate="handleEditVideoTimeUpdate"
-            ></video>
-            <slider
-              class="cover-slider"
-              min="0"
-              max="{{editForm.durationMs}}"
-              step="100"
-              value="{{editFrameTimeMs}}"
-              bindchanging="handleCoverSliderChanging"
-              bindchange="handleCoverSliderChange"
-            ></slider>
-            <button
-              class="cover-export-button"
-              bindtap="handleExportVideoCover"
-              loading="{{editFrameExporting}}"
-              disabled="{{editFrameExporting}}"
-            >使用当前帧做封面</button>
-          </view>
-
           <view wx:if="{{editErrorText}}" class="edit-error">{{editErrorText}}</view>
         </view>
       </scroll-view>
@@ -210,10 +178,4 @@
     </view>
   </view>
 
-  <canvas
-    id="workCoverCanvas"
-    type="2d"
-    class="frame-export-canvas"
-    style="width: {{frameCanvasWidth}}px; height: {{frameCanvasHeight}}px;"
-  ></canvas>
 </view>

@@ -30,9 +30,6 @@ public class TeamMemberChangeRequestTransactionService {
     /** 响应时间列 */
     private static final String COLUMN_RESPONDED_AT = "responded_at";
 
-    /** 更新时间列 */
-    private static final String COLUMN_UPDATED_AT = "updated_at";
-
     /** 用户 ID 列 */
     private static final String COLUMN_USER_ID = "user_id";
 
@@ -72,16 +69,14 @@ public class TeamMemberChangeRequestTransactionService {
         requestUpdate.eq(COLUMN_ID, changeRequestId)
                 .eq(COLUMN_STATUS, TeamMemberChangeStatusDict.PENDING_CONFIRMATION.getCode())
                 .set(COLUMN_STATUS, TeamMemberChangeStatusDict.INVALIDATED.getCode())
-                .set(COLUMN_RESPONDED_AT, now)
-                .set(COLUMN_UPDATED_AT, now);
-        teamMemberChangeRequestEntityMapper.update(null, requestUpdate);
+                .set(COLUMN_RESPONDED_AT, now);
+        teamMemberChangeRequestEntityMapper.update(new TeamMemberChangeRequestEntity(), requestUpdate);
 
         UpdateWrapper<SystemMessageEntity> messageUpdate = new UpdateWrapper<>();
         messageUpdate.eq(COLUMN_USER_ID, targetUserId)
                 .eq(COLUMN_IDEMPOTENCY_KEY, MEMBER_CHANGE_IDEMPOTENCY_PREFIX + changeRequestId)
                 .set(COLUMN_ACTION_TYPE, MessageActionTypeDict.NONE.getCode())
-                .set(COLUMN_ACTION_URL, EMPTY_ACTION_URL)
-                .set(COLUMN_UPDATED_AT, now);
-        systemMessageEntityMapper.update(null, messageUpdate);
+                .set(COLUMN_ACTION_URL, EMPTY_ACTION_URL);
+        systemMessageEntityMapper.update(new SystemMessageEntity(), messageUpdate);
     }
 }

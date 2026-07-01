@@ -38,7 +38,7 @@ cos:
   secret-key: ${COS_SECRET_KEY}
   region: ${COS_REGION:ap-guangzhou}
   bucket-name: ${COS_BUCKET_NAME}
-  upload-base-url: ${COS_UPLOAD_BASE_URL:}
+  upload-base-url: ${COS_UPLOAD_BASE_URL:https://cos.we-folio.dingchenyong.top}
   public-base-url: ${COS_PUBLIC_BASE_URL:https://cos.we-folio.dingchenyong.top}
 
 # --- WeChat Mini Program Configuration ---

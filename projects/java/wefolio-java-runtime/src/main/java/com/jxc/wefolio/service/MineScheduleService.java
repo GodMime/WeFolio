@@ -129,9 +129,6 @@ public class MineScheduleService {
         applySlotDefinitionRequest(entity, request, true);
         entity.setUserId(userId);
         entity.setIsSystemDefault(0);
-        LocalDateTime now = LocalDateTime.now();
-        entity.setCreatedAt(now);
-        entity.setUpdatedAt(now);
         try {
             slotDefinitionEntityMapper.insert(entity);
         } catch (DuplicateKeyException e) {
@@ -160,7 +157,6 @@ public class MineScheduleService {
             throw new BusinessException("该档位启用中，请先停用后再编辑");
         }
         applySlotDefinitionRequest(entity, request, false);
-        entity.setUpdatedAt(LocalDateTime.now());
         try {
             int updated = slotDefinitionEntityMapper.updateById(entity);
             if (updated <= 0) {
@@ -188,7 +184,6 @@ public class MineScheduleService {
         SlotDefinitionEntity entity = requireOwnedSlotDefinition(slotDefinitionId);
         SlotDefinitionStatusDict status = parseSlotStatus(request == null ? null : request.getStatus());
         entity.setStatus(status.getCode());
-        entity.setUpdatedAt(LocalDateTime.now());
         int updated = slotDefinitionEntityMapper.updateById(entity);
         if (updated <= 0) {
             throw new BusinessException("档位定义保存失败，请重试");
@@ -243,14 +238,12 @@ public class MineScheduleService {
             }
             target = new ScheduleEntity();
             target.setUserId(userId);
-            target.setCreatedAt(LocalDateTime.now());
             target.setLockedSnapshot(SNAPSHOT_UNLOCKED);
         } else {
             target = requireOwnedSchedule(request.getScheduleId());
         }
         SlotDefinitionEntity definition = requireSlotDefinitionForSchedule(userId, request.getSlotDefinitionId(), target);
         applyScheduleRequest(target, definition, scheduleStatus, request);
-        target.setUpdatedAt(LocalDateTime.now());
         try {
             if (target.getId() == null) {
                 scheduleEntityMapper.insert(target);
@@ -410,7 +403,6 @@ public class MineScheduleService {
         snapshot.setStartTimeSnapshot(definition.getStartTime());
         snapshot.setEndTimeSnapshot(definition.getEndTime());
         snapshot.setColorSnapshot(definition.getColor());
-        snapshot.setUpdatedAt(LocalDateTime.now());
         scheduleEntityMapper.update(
                 snapshot,
                 Wrappers.lambdaUpdate(ScheduleEntity.class)

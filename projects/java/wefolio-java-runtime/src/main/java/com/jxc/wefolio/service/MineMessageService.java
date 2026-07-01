@@ -59,9 +59,6 @@ public class MineMessageService {
     /** 已读时间列名 */
     private static final String COLUMN_READ_AT = "read_at";
 
-    /** 更新时间列名 */
-    private static final String COLUMN_UPDATED_AT = "updated_at";
-
     /** 消息时间展示格式 */
     private static final DateTimeFormatter MESSAGE_TIME_FORMATTER = DateTimeFormatter.ofPattern("MM-dd HH:mm");
 
@@ -142,9 +139,8 @@ public class MineMessageService {
                     .in(COLUMN_ID, messageIds)
                     .eq(COLUMN_READ_STATUS, MessageReadStatusDict.UNREAD.getCode())
                     .set(COLUMN_READ_STATUS, MessageReadStatusDict.READ.getCode())
-                    .set(COLUMN_READ_AT, now)
-                    .set(COLUMN_UPDATED_AT, now);
-            systemMessageEntityMapper.update(null, updateWrapper);
+                    .set(COLUMN_READ_AT, now);
+            systemMessageEntityMapper.update(new SystemMessageEntity(), updateWrapper);
         }
         return getUnreadCount();
     }
@@ -162,13 +158,12 @@ public class MineMessageService {
         updateWrapper.eq(COLUMN_USER_ID, userId)
                 .eq(COLUMN_READ_STATUS, MessageReadStatusDict.UNREAD.getCode())
                 .set(COLUMN_READ_STATUS, MessageReadStatusDict.READ.getCode())
-                .set(COLUMN_READ_AT, now)
-                .set(COLUMN_UPDATED_AT, now);
+                .set(COLUMN_READ_AT, now);
         String category = normalizeCategory(request == null ? null : request.getCategory());
         if (!category.isBlank()) {
             updateWrapper.eq(COLUMN_CATEGORY, category);
         }
-        systemMessageEntityMapper.update(null, updateWrapper);
+        systemMessageEntityMapper.update(new SystemMessageEntity(), updateWrapper);
         return getUnreadCount();
     }
 

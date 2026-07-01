@@ -22,6 +22,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.lang.reflect.Method;
@@ -42,7 +45,7 @@ import static org.mockito.Mockito.when;
 /**
  * 作品上传确认事务测试 — 覆盖扣积分、建作品和幂等确认。
  */
-@ExtendWith(MockitoExtension.class)
+@ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 class WorkUploadTransactionServiceTest {
 
     /** 上传任务 Mapper 模拟 */
@@ -113,7 +116,9 @@ class WorkUploadTransactionServiceTest {
         assertThat(work.getMediaType()).isEqualTo(MediaTypeDict.IMAGE.getCode());
         assertThat(work.getTitle()).isEqualTo("草坪婚礼");
         assertThat(work.getMediaObjectKey()).isEqualTo("WFA3B1E7A2/work/image/photo.jpg");
+        assertThat(work.getMediaSha256()).isEqualTo("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
         assertThat(work.getCoverObjectKey()).isEqualTo("WFA3B1E7A2/work/image/photo.jpg");
+        assertThat(work.getCoverSha256()).isEqualTo("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
         assertThat(work.getStatus()).isEqualTo(WorkStatusDict.ACTIVE.getCode());
         inOrder.verify(wfTagEntityMapper).selectOne(any());
         inOrder.verify(wfTagEntityMapper).insert(any(WfTagEntity.class));
@@ -137,6 +142,7 @@ class WorkUploadTransactionServiceTest {
         WorkUploadTaskEntity coverTask = createdImageTask();
         coverTask.setId(101L);
         coverTask.setObjectKey("WFA3B1E7A2/work/image/film-cover.jpg");
+        coverTask.setFileSha256("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
         coverTask.setOriginalFileName("film-thumb.jpg");
         when(workUploadTaskEntityMapper.selectById(101L)).thenReturn(coverTask);
         when(workEntityMapper.insert(any(WorkEntity.class))).thenAnswer(invocation -> {
@@ -161,6 +167,8 @@ class WorkUploadTransactionServiceTest {
         verify(workEntityMapper).insert(workCaptor.capture());
         assertThat(workCaptor.getValue().getMediaType()).isEqualTo(MediaTypeDict.VIDEO.getCode());
         assertThat(workCaptor.getValue().getCoverObjectKey()).isEqualTo("WFA3B1E7A2/work/image/film-cover.jpg");
+        assertThat(workCaptor.getValue().getCoverSha256())
+                .isEqualTo("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
         ArgumentCaptor<WorkUploadTaskEntity> taskCaptor = ArgumentCaptor.forClass(WorkUploadTaskEntity.class);
         verify(workUploadTaskEntityMapper, times(2)).updateById(taskCaptor.capture());
         assertThat(taskCaptor.getAllValues().get(0).getId()).isEqualTo(99L);
@@ -178,6 +186,7 @@ class WorkUploadTransactionServiceTest {
         WorkUploadTaskEntity coverTask = createdImageTask();
         coverTask.setId(101L);
         coverTask.setObjectKey("WFA3B1E7A2/work/image/photo-thumb.jpg");
+        coverTask.setFileSha256("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
         coverTask.setOriginalFileName("photo-thumb.jpg");
         coverTask.setFileSize(90L * 1024L);
         when(workUploadTaskEntityMapper.selectById(101L)).thenReturn(coverTask);
@@ -196,6 +205,8 @@ class WorkUploadTransactionServiceTest {
         assertThat(workCaptor.getValue().getMediaType()).isEqualTo(MediaTypeDict.IMAGE.getCode());
         assertThat(workCaptor.getValue().getMediaObjectKey()).isEqualTo("WFA3B1E7A2/work/image/photo.jpg");
         assertThat(workCaptor.getValue().getCoverObjectKey()).isEqualTo("WFA3B1E7A2/work/image/photo-thumb.jpg");
+        assertThat(workCaptor.getValue().getCoverSha256())
+                .isEqualTo("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
         ArgumentCaptor<WorkUploadTaskEntity> taskCaptor = ArgumentCaptor.forClass(WorkUploadTaskEntity.class);
         verify(workUploadTaskEntityMapper, times(2)).updateById(taskCaptor.capture());
         assertThat(taskCaptor.getAllValues().get(0).getId()).isEqualTo(99L);
@@ -203,6 +214,19 @@ class WorkUploadTransactionServiceTest {
         assertThat(taskCaptor.getAllValues().get(1).getId()).isEqualTo(101L);
         assertThat(taskCaptor.getAllValues().get(1).getConfirmedWorkId()).isEqualTo(120L);
         assertThat(response.isSuccess()).isTrue();
+    }
+
+    @Test
+    void confirmUploadedTaskShouldRequireThumbnailForLargeImageBeforeConsumingPoints() {
+        WorkUploadTaskEntity task = createdImageTask();
+        task.setFileSize(150L * 1024L);
+
+        assertThatThrownBy(() -> service().confirmUploadedTask(7L, task, completeItem()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("缩略图或封面图不能为空");
+
+        verify(pointService, never()).consume(anyLong(), any(), any(), any(), eq(1), any(), any());
+        verify(workEntityMapper, never()).insert(any(WorkEntity.class));
     }
 
     @Test
@@ -245,6 +269,42 @@ class WorkUploadTransactionServiceTest {
         assertThat(response.isSuccess()).isTrue();
         assertThat(response.getWorkId()).isEqualTo(120L);
         assertThat(response.getMessage()).isEqualTo("作品已确认");
+    }
+
+    @Test
+    void confirmUploadedTaskShouldRejectDuplicateWorkBySha256BeforeConsumingPoints() {
+        WorkUploadTaskEntity task = createdImageTask();
+        WorkEntity existing = new WorkEntity();
+        existing.setId(130L);
+        existing.setUserId(7L);
+        existing.setTitle("草坪婚礼");
+        when(workEntityMapper.selectOne(any())).thenReturn(existing);
+
+        assertThatThrownBy(() -> service().confirmUploadedTask(7L, task, completeItem()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("作品已存在：「草坪婚礼」");
+        verify(pointService, never()).consume(any(), any(), any(), any(), any(Integer.class), any(), any());
+        verify(workEntityMapper, never()).insert(any(WorkEntity.class));
+    }
+
+    /**
+     * 插入作品发生未知唯一键冲突时，应保留原始异常日志辅助排查。
+     */
+    @Test
+    void confirmUploadedTaskShouldLogRawDuplicateKeyWhenSha256LookupMisses(CapturedOutput output) {
+        WorkUploadTaskEntity task = createdImageTask();
+        DuplicateKeyException duplicateKeyException = new DuplicateKeyException("duplicate primary key");
+        when(workEntityMapper.insert(any(WorkEntity.class))).thenThrow(duplicateKeyException);
+
+        assertThatThrownBy(() -> service().confirmUploadedTask(7L, task, completeItem()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("作品已存在，请勿重复上传")
+                .hasCause(duplicateKeyException);
+        assertThat(output).contains("作品保存唯一键冲突未匹配到已存在 SHA-256 作品");
+        assertThat(output).contains("userId=7");
+        assertThat(output).contains("taskId=99");
+        assertThat(output).contains("mediaSha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        assertThat(output).contains("org.springframework.dao.DuplicateKeyException: duplicate primary key");
     }
 
     @Test
@@ -357,6 +417,7 @@ class WorkUploadTransactionServiceTest {
         task.setBatchId("batch-a");
         task.setMediaType(MediaTypeDict.IMAGE.getCode());
         task.setObjectKey("WFA3B1E7A2/work/image/photo.jpg");
+        task.setFileSha256("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
         task.setOriginalFileName("photo.jpg");
         task.setMimeType("image/jpeg");
         task.setFileSize(1024L);

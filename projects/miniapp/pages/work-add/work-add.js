@@ -13,37 +13,25 @@ const {
   buildUploadCompletePayload,
   buildCoverUploadTicketPayload,
   buildUploadTicketPayload,
-  buildThumbFileName,
   buildUploadProgressSummary,
   createChooseMediaOptions,
+  enrichVideoFileMetadata,
   normalizeChosenMediaFiles,
   prepareCoverUploadFiles,
   runWorkUploadQueue,
   uploadToCos,
   validateChosenMediaFiles
 } = require('../../utils/work-upload')
-const { writeRgbaFrameToCanvas } = require('../../utils/frame-canvas')
+const { calculateFileSha256: calculateLocalFileSha256 } = require('../../utils/sha256')
 
 const WORKS_PAGE_URL = '/pages/works/works'
 const WORK_TAGS_API_URL = '/api/mine/works/tags'
-const COVER_CANVAS_ID = 'workCoverCanvas'
-const DEFAULT_CANVAS_SIZE = 1
-const VIDEO_FRAME_FILE_TYPE = 'jpg'
-const VIDEO_FRAME_QUALITY = 0.92
 const TITLE_MAX_LENGTH = 30
 const DESCRIPTION_MAX_LENGTH = 1000
 const SWIPE_REVEAL_THRESHOLD = -32
 const SWIPE_CLOSE_THRESHOLD = 24
 const SWIPE_VERTICAL_TOLERANCE = 48
 const COVER_BATCH_PREFIX = 'cover'
-
-function clampNumber(value, min, max) {
-  const numberValue = Number(value)
-  if (!Number.isFinite(numberValue)) {
-    return min
-  }
-  return Math.max(min, Math.min(max, numberValue))
-}
 
 function formatFrameTime(milliseconds) {
   const totalSeconds = Math.max(0, Math.round(Number(milliseconds || 0) / 1000))
@@ -54,7 +42,6 @@ function formatFrameTime(milliseconds) {
 
 function buildEditForm(file, index) {
   const durationMs = Math.max(0, Number(file.durationMs || 0))
-  const frameTimeMs = clampNumber(file.coverFrameTimeMs || 0, 0, durationMs)
   return {
     index,
     id: file.id,
@@ -67,13 +54,7 @@ function buildEditForm(file, index) {
     description: file.description || '',
     durationMs,
     durationText: formatFrameTime(durationMs),
-    coverFrameTimeMs: frameTimeMs,
-    customCoverPath: file.customCoverPath || '',
-    customCoverSize: file.customCoverSize || 0,
-    customCoverWidth: file.customCoverWidth || 0,
-    customCoverHeight: file.customCoverHeight || 0,
-    customCoverFileName: file.customCoverFileName || '',
-    customCoverIdempotencyKey: file.customCoverIdempotencyKey || ''
+    coverFrameTimeMs: 0
   }
 }
 
@@ -103,12 +84,7 @@ Page({
     fileTouchStart: null,
     editSheetVisible: false,
     editForm: null,
-    editFrameTimeMs: 0,
-    editFrameTimeText: '00:00',
-    editFrameExporting: false,
-    editErrorText: '',
-    frameCanvasWidth: DEFAULT_CANVAS_SIZE,
-    frameCanvasHeight: DEFAULT_CANVAS_SIZE
+    editErrorText: ''
   },
 
   onLoad() {
@@ -144,8 +120,9 @@ Page({
     }
     try {
       const response = await this.chooseMedia(createChooseMediaOptions(remainingCount))
+      const mediaFiles = await enrichVideoFileMetadata(normalizeChosenMediaFiles(response.tempFiles || []))
       const selectedFiles = applyUnifiedWorkTags(
-        normalizeChosenMediaFiles(response.tempFiles || []),
+        mediaFiles,
         this.data.unifiedTags
       )
       const nextFiles = this.data.files.concat(selectedFiles)
@@ -253,8 +230,6 @@ Page({
     this.setData({
       editSheetVisible: true,
       editForm,
-      editFrameTimeMs: editForm.coverFrameTimeMs,
-      editFrameTimeText: formatFrameTime(editForm.coverFrameTimeMs),
       editErrorText: '',
       revealedFileId: ''
     })
@@ -264,9 +239,6 @@ Page({
   },
 
   handleCloseFileEditor() {
-    if (this.data.editFrameExporting) {
-      return
-    }
     this.setData({
       editSheetVisible: false,
       editForm: null,
@@ -281,155 +253,6 @@ Page({
     }
     this.setData({
       [`editForm.${field}`]: event.detail.value || ''
-    })
-  },
-
-  handleEditVideoMetadata(event) {
-    const detail = event.detail || {}
-    if (!this.data.editForm || !detail.duration) {
-      return
-    }
-    const durationMs = Math.round(Number(detail.duration || 0) * 1000)
-    const frameTimeMs = clampNumber(this.data.editFrameTimeMs, 0, durationMs)
-    this.setData({
-      'editForm.durationMs': durationMs,
-      'editForm.durationText': formatFrameTime(durationMs),
-      'editForm.coverFrameTimeMs': frameTimeMs,
-      editFrameTimeMs: frameTimeMs,
-      editFrameTimeText: formatFrameTime(frameTimeMs)
-    })
-  },
-
-  handleEditVideoTimeUpdate(event) {
-    if (!this.data.editForm || this.data.editFrameExporting) {
-      return
-    }
-    const currentTime = event.detail && event.detail.currentTime
-    const frameTimeMs = clampNumber(Math.round(Number(currentTime || 0) * 1000), 0, this.data.editForm.durationMs || 0)
-    this.setData({
-      'editForm.coverFrameTimeMs': frameTimeMs,
-      editFrameTimeMs: frameTimeMs,
-      editFrameTimeText: formatFrameTime(frameTimeMs)
-    })
-  },
-
-  handleCoverSliderChanging(event) {
-    this.updateCoverFrameTime(event.detail.value, false)
-  },
-
-  handleCoverSliderChange(event) {
-    this.updateCoverFrameTime(event.detail.value, true)
-  },
-
-  updateCoverFrameTime(value, syncVideo) {
-    if (!this.data.editForm) {
-      return
-    }
-    const frameTimeMs = clampNumber(value, 0, this.data.editForm.durationMs || 0)
-    this.setData({
-      'editForm.coverFrameTimeMs': frameTimeMs,
-      editFrameTimeMs: frameTimeMs,
-      editFrameTimeText: formatFrameTime(frameTimeMs)
-    })
-    if (syncVideo && wx.createVideoContext) {
-      const videoContext = wx.createVideoContext('workCoverVideo', this)
-      if (videoContext && videoContext.seek) {
-        videoContext.seek(frameTimeMs / 1000)
-      }
-    }
-  },
-
-  async handleExportVideoCover() {
-    const editForm = this.data.editForm
-    if (!editForm || !editForm.isVideo) {
-      return
-    }
-    if (!wx.createVideoDecoder) {
-      this.setData({ editErrorText: '当前基础库不支持视频帧导出，请保留默认封面' })
-      wx.showToast({
-        title: '当前环境不支持',
-        icon: 'none'
-      })
-      return
-    }
-    this.setData({
-      editFrameExporting: true,
-      editErrorText: ''
-    })
-    let decoder = null
-    try {
-      decoder = wx.createVideoDecoder()
-      await decoder.start({
-        source: editForm.tempFilePath,
-        abortAudio: true
-      })
-      await decoder.seek(this.data.editFrameTimeMs)
-      const frame = await this.readVideoFrame(decoder)
-      const coverPath = await this.writeFrameToCanvas(frame)
-      const fileInfo = await this.getFileInfo(coverPath)
-      this.setData({
-        'editForm.coverPath': coverPath,
-        'editForm.customCoverPath': coverPath,
-        'editForm.customCoverSize': fileInfo.size || 0,
-        'editForm.customCoverWidth': frame.width,
-        'editForm.customCoverHeight': frame.height,
-        'editForm.customCoverFileName': buildThumbFileName(editForm.fileName),
-        'editForm.customCoverIdempotencyKey': `cover-ticket-${editForm.id}-${this.data.editFrameTimeMs}`,
-        'editForm.coverFrameTimeMs': this.data.editFrameTimeMs,
-        editErrorText: ''
-      })
-      wx.showToast({
-        title: '已设置封面',
-        icon: 'success'
-      })
-    } catch (error) {
-      const message = error && error.message ? error.message : '封面导出失败，请用真机重试'
-      this.setData({ editErrorText: message })
-      wx.showToast({
-        title: '封面导出失败',
-        icon: 'none'
-      })
-    } finally {
-      if (decoder && decoder.stop) {
-        decoder.stop()
-      }
-      if (decoder && decoder.remove) {
-        decoder.remove()
-      }
-      this.setData({ editFrameExporting: false })
-    }
-  },
-
-  async readVideoFrame(decoder) {
-    for (let index = 0; index < 12; index++) {
-      const frame = decoder.getFrameData()
-      if (frame && frame.data && frame.width && frame.height) {
-        return frame
-      }
-      await new Promise((resolve) => setTimeout(resolve, 80))
-    }
-    throw new Error('未能读取当前帧，请换一个时间点重试')
-  },
-
-  async writeFrameToCanvas(frame) {
-    return writeRgbaFrameToCanvas({
-      page: this,
-      canvasId: COVER_CANVAS_ID,
-      frame,
-      canvasWidthDataKey: 'frameCanvasWidth',
-      canvasHeightDataKey: 'frameCanvasHeight',
-      fileType: VIDEO_FRAME_FILE_TYPE,
-      quality: VIDEO_FRAME_QUALITY
-    })
-  },
-
-  getFileInfo(filePath) {
-    return new Promise((resolve, reject) => {
-      wx.getFileInfo({
-        filePath,
-        success: resolve,
-        fail: reject
-      })
     })
   },
 
@@ -454,19 +277,7 @@ Page({
     }
     const patch = {
       title,
-      description,
-      coverFrameTimeMs: editForm.coverFrameTimeMs || 0
-    }
-    if (editForm.isVideo && editForm.customCoverPath) {
-      Object.assign(patch, {
-        coverPath: editForm.coverPath,
-        customCoverPath: editForm.customCoverPath,
-        customCoverSize: editForm.customCoverSize,
-        customCoverWidth: editForm.customCoverWidth,
-        customCoverHeight: editForm.customCoverHeight,
-        customCoverFileName: editForm.customCoverFileName,
-        customCoverIdempotencyKey: editForm.customCoverIdempotencyKey
-      })
+      description
     }
     this.setData({
       [`files[${editForm.index}]`]: Object.assign({}, this.data.files[editForm.index], patch),
@@ -608,15 +419,17 @@ Page({
       uploadOverallText: '准备上传'
     })
     try {
-      const ticketPayload = buildUploadTicketPayload(this.data.files)
-      let filesWithTickets = this.data.files
+      const filesWithSha256 = await this.ensureFileSha256(this.data.files)
+      this.setUploadFiles(filesWithSha256)
+      const ticketPayload = buildUploadTicketPayload(filesWithSha256)
+      let filesWithTickets = filesWithSha256
       if (ticketPayload.files.length > 0) {
         const ticketResponse = await request({
           url: '/api/mine/works/upload-tickets',
           method: 'POST',
           data: ticketPayload
         })
-        filesWithTickets = this.attachTickets(this.data.files, ticketResponse.items || [])
+        filesWithTickets = this.attachTickets(filesWithSha256, ticketResponse.items || [])
       }
       this.setUploadFiles(filesWithTickets)
       await runWorkUploadQueue(filesWithTickets, (file) => this.uploadSingleFile(file))
@@ -679,6 +492,60 @@ Page({
     })
   },
 
+  async calculateFileSha256(filePath) {
+    return calculateLocalFileSha256(filePath)
+  },
+
+  async ensureFileSha256(files) {
+    const nextFiles = files.map((file) => Object.assign({}, file))
+    for (let index = 0; index < nextFiles.length; index++) {
+      const file = nextFiles[index]
+      if (!file || file.confirmedWorkId || file.taskId || file.sha256) {
+        continue
+      }
+      if (!file.tempFilePath) {
+        throw new Error('作品文件缺失，请重新选择')
+      }
+      this.setData({ uploadOverallText: '计算文件指纹' })
+      file.sha256 = await this.calculateFileSha256(file.tempFilePath)
+      this.setData({ [`files[${index}].sha256`]: file.sha256 })
+    }
+    return nextFiles
+  },
+
+  async ensureCoverSha256(files) {
+    const nextFiles = files.map((file) => Object.assign({}, file))
+    for (let index = 0; index < nextFiles.length; index++) {
+      const file = nextFiles[index]
+      if (!file || file.confirmedWorkId || file.customCoverStatus === 'UPLOADED') {
+        continue
+      }
+      const coverPath = getCoverUploadPath(file)
+      if (!coverPath) {
+        if (file.mediaType === 'IMAGE' && file.sha256) {
+          file.coverSha256 = file.sha256
+        }
+        continue
+      }
+      if (file.customCoverPath && file.customCoverSha256) {
+        continue
+      }
+      if (!file.customCoverPath && file.coverSha256) {
+        continue
+      }
+      this.setData({ uploadOverallText: '计算文件指纹' })
+      const sha256 = await this.calculateFileSha256(coverPath)
+      if (file.customCoverPath) {
+        file.customCoverSha256 = sha256
+        this.setData({ [`files[${index}].customCoverSha256`]: sha256 })
+      } else {
+        file.coverSha256 = sha256
+        this.setData({ [`files[${index}].coverSha256`]: sha256 })
+      }
+    }
+    return nextFiles
+  },
+
   attachTickets(files, tickets) {
     const ticketMap = tickets.reduce((result, ticket) => {
       result[ticket.clientId] = ticket
@@ -721,7 +588,8 @@ Page({
   },
 
   async uploadCustomCoverFiles() {
-    const filesWithCoverInfo = await prepareCoverUploadFiles(this.data.files)
+    const filesWithPreparedCover = await prepareCoverUploadFiles(this.data.files)
+    const filesWithCoverInfo = await this.ensureCoverSha256(filesWithPreparedCover)
     const coverTicketPayload = buildCoverUploadTicketPayload(filesWithCoverInfo, `${COVER_BATCH_PREFIX}-${Date.now()}`)
     if (!coverTicketPayload.files.length) {
       return

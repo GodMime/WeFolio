@@ -18,6 +18,7 @@ import com.jxc.wefolio.mapper.WorkEntityMapper;
 import com.jxc.wefolio.mapper.WorkTagEntityMapper;
 import com.jxc.wefolio.mapper.WorkUploadTaskEntityMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +33,7 @@ import java.util.Set;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class WorkUploadTransactionService {
 
     /** 作品标题最大长度 */
@@ -39,6 +41,9 @@ public class WorkUploadTransactionService {
 
     /** 作品说明最大长度 */
     private static final int DESCRIPTION_MAX_LENGTH = 1000;
+
+    /** 图片原图可直接复用为缩略图的最大字节数 */
+    private static final long THUMB_MAX_BYTES = 100L * 1024L;
 
     /** 标签最大数量 */
     private static final int TAG_MAX_COUNT = 10;
@@ -63,6 +68,15 @@ public class WorkUploadTransactionService {
 
     /** 缩略图或封面图过期提示 */
     private static final String COVER_TASK_EXPIRED_MESSAGE = "缩略图或封面图已过期，请重新上传";
+
+    /** 重复作品提示模板 */
+    private static final String DUPLICATE_WORK_MESSAGE_TEMPLATE = "作品已存在：「%s」";
+
+    /** 重复作品兜底提示 */
+    private static final String DUPLICATE_WORK_FALLBACK_MESSAGE = "作品已存在，请勿重复上传";
+
+    /** 缩略图或封面图缺失提示 */
+    private static final String COVER_REQUIRED_MESSAGE = "缩略图或封面图不能为空";
 
     /** 上传任务 Mapper */
     private final WorkUploadTaskEntityMapper workUploadTaskEntityMapper;
@@ -115,13 +129,15 @@ public class WorkUploadTransactionService {
         String description = normalizeDescription(item == null ? null : item.getDescription());
         List<String> tagNames = normalizeTagNames(item == null ? null : item.getTagNames());
         WorkUploadTaskEntity coverTask = resolveCoverTask(userId, task, item);
-        String coverObjectKey = coverTask == null ? null : coverTask.getObjectKey();
+        String coverObjectKey = resolveCoverObjectKey(task, coverTask);
+        String coverSha256 = resolveCoverSha256(task, coverTask);
         String sceneCode = resolvePointScene(task.getMediaType());
         String remark = buildPointRemark(task.getMediaType());
         String idempotencyKey = normalizeText(item == null ? null : item.getIdempotencyKey());
         if (idempotencyKey.isBlank()) {
             idempotencyKey = CONFIRM_IDEMPOTENCY_PREFIX + task.getId();
         }
+        ensureNoDuplicateWork(userId, task.getFileSha256());
 
         pointService.consume(
                 userId,
@@ -132,8 +148,22 @@ public class WorkUploadTransactionService {
                 idempotencyKey,
                 remark);
 
-        WorkEntity work = buildWork(task, title, description, coverObjectKey);
-        workEntityMapper.insert(work);
+        WorkEntity work = buildWork(task, title, description, coverObjectKey, coverSha256);
+        try {
+            workEntityMapper.insert(work);
+        } catch (DuplicateKeyException e) {
+            WorkEntity duplicateWork = findNonDeletedWorkBySha256(userId, task.getFileSha256());
+            if (duplicateWork != null) {
+                throw duplicateWorkException(duplicateWork, e);
+            }
+            log.error(
+                    "作品保存唯一键冲突未匹配到已存在 SHA-256 作品：userId={} taskId={} mediaSha256={}",
+                    userId,
+                    task.getId(),
+                    task.getFileSha256(),
+                    e);
+            throw new BusinessException(DUPLICATE_WORK_FALLBACK_MESSAGE, e);
+        }
         if (work.getId() == null) {
             throw new BusinessException("作品保存失败，请重试");
         }
@@ -145,7 +175,6 @@ public class WorkUploadTransactionService {
             task.setCoverObjectKey(coverObjectKey);
         }
         task.setErrorMessage(null);
-        task.setUpdatedAt(LocalDateTime.now());
         workUploadTaskEntityMapper.updateById(task);
         confirmCoverTaskIfNeeded(coverTask, work.getId());
         return MineWorkUploadCompleteResponse.Item.success(taskId, work, "上传成功");
@@ -173,13 +202,15 @@ public class WorkUploadTransactionService {
      * @param title 作品标题
      * @param description 作品说明
      * @param coverObjectKey 缩略图或封面图对象键
+     * @param coverSha256 缩略图或封面图 SHA-256
      * @return 作品实体
      */
     private WorkEntity buildWork(
             WorkUploadTaskEntity task,
             String title,
             String description,
-            String coverObjectKey
+            String coverObjectKey,
+            String coverSha256
     ) {
         WorkEntity work = new WorkEntity();
         work.setUserId(task.getUserId());
@@ -187,7 +218,9 @@ public class WorkUploadTransactionService {
         work.setTitle(title);
         work.setOriginalFileName(task.getOriginalFileName());
         work.setMediaObjectKey(task.getObjectKey());
-        work.setCoverObjectKey(resolveCoverObjectKey(task, coverObjectKey));
+        work.setMediaSha256(task.getFileSha256());
+        work.setCoverObjectKey(coverObjectKey);
+        work.setCoverSha256(coverSha256);
         work.setMimeType(task.getMimeType());
         work.setFileSize(task.getFileSize());
         work.setDurationMs(task.getDurationMs());
@@ -196,8 +229,6 @@ public class WorkUploadTransactionService {
         work.setDescription(description);
         work.setSortOrder(0);
         work.setStatus(WorkStatusDict.ACTIVE.getCode());
-        work.setCreatedAt(LocalDateTime.now());
-        work.setUpdatedAt(LocalDateTime.now());
         return work;
     }
 
@@ -205,20 +236,52 @@ public class WorkUploadTransactionService {
      * 解析作品封面对象键。
      *
      * @param task 上传任务
-     * @param coverObjectKey 缩略图或封面图对象键
+     * @param coverTask 缩略图或封面图任务
      * @return 封面对象键
      */
-    private String resolveCoverObjectKey(WorkUploadTaskEntity task, String coverObjectKey) {
-        if (hasText(coverObjectKey)) {
-            return coverObjectKey;
+    private String resolveCoverObjectKey(WorkUploadTaskEntity task, WorkUploadTaskEntity coverTask) {
+        if (coverTask != null && hasText(coverTask.getObjectKey())) {
+            return coverTask.getObjectKey();
         }
         if (hasText(task.getCoverObjectKey())) {
             return task.getCoverObjectKey();
         }
-        if (MediaTypeDict.IMAGE.getCode().equals(task.getMediaType())) {
+        if (canUseOriginalAsCover(task)) {
             return task.getObjectKey();
         }
-        return null;
+        throw new BusinessException(COVER_REQUIRED_MESSAGE);
+    }
+
+    /**
+     * 解析作品封面 SHA-256。
+     *
+     * <p>SHA-256 由小程序端计算提交。后端为避免下载 COS 文件带来的性能开销，信任前端值，
+     * 小图复用原图时直接复制原文件 SHA-256。</p>
+     *
+     * @param task 上传任务
+     * @param coverTask 缩略图或封面图任务
+     * @return 缩略图或封面图 SHA-256
+     */
+    private String resolveCoverSha256(WorkUploadTaskEntity task, WorkUploadTaskEntity coverTask) {
+        if (coverTask != null && hasText(coverTask.getFileSha256())) {
+            return coverTask.getFileSha256();
+        }
+        if (canUseOriginalAsCover(task) && hasText(task.getFileSha256())) {
+            return task.getFileSha256();
+        }
+        throw new BusinessException(COVER_REQUIRED_MESSAGE);
+    }
+
+    /**
+     * 判断原文件是否可直接作为缩略图。
+     *
+     * @param task 上传任务
+     * @return 是否可复用原文件
+     */
+    private boolean canUseOriginalAsCover(WorkUploadTaskEntity task) {
+        return MediaTypeDict.IMAGE.getCode().equals(task.getMediaType())
+                && task.getFileSize() != null
+                && task.getFileSize() <= THUMB_MAX_BYTES;
     }
 
     /**
@@ -248,7 +311,6 @@ public class WorkUploadTransactionService {
         if (coverTask.getExpiresAt() != null && coverTask.getExpiresAt().isBefore(LocalDateTime.now())) {
             coverTask.setStatus(WorkUploadTaskStatusDict.EXPIRED.getCode());
             coverTask.setErrorMessage("封面上传任务已过期");
-            coverTask.setUpdatedAt(LocalDateTime.now());
             workUploadTaskEntityMapper.updateById(coverTask);
             throw new BusinessException(COVER_TASK_EXPIRED_MESSAGE);
         }
@@ -268,8 +330,51 @@ public class WorkUploadTransactionService {
         coverTask.setStatus(WorkUploadTaskStatusDict.CONFIRMED.getCode());
         coverTask.setConfirmedWorkId(workId);
         coverTask.setErrorMessage(null);
-        coverTask.setUpdatedAt(LocalDateTime.now());
         workUploadTaskEntityMapper.updateById(coverTask);
+    }
+
+    /**
+     * 校验当前用户未上传过同一原文件。
+     *
+     * @param userId 当前用户 ID
+     * @param mediaSha256 原文件 SHA-256
+     */
+    private void ensureNoDuplicateWork(Long userId, String mediaSha256) {
+        WorkEntity duplicateWork = findNonDeletedWorkBySha256(userId, mediaSha256);
+        if (duplicateWork != null) {
+            throw duplicateWorkException(duplicateWork, null);
+        }
+    }
+
+    /**
+     * 按客户端 SHA-256 查询当前用户未删除作品。
+     *
+     * @param userId 当前用户 ID
+     * @param mediaSha256 原文件 SHA-256
+     * @return 已存在作品，可为空
+     */
+    private WorkEntity findNonDeletedWorkBySha256(Long userId, String mediaSha256) {
+        return workEntityMapper.selectOne(
+                Wrappers.lambdaQuery(WorkEntity.class)
+                        .eq(WorkEntity::getUserId, userId)
+                        .eq(WorkEntity::getMediaSha256, mediaSha256)
+                        .last("LIMIT 1")
+        );
+    }
+
+    /**
+     * 构造重复作品异常。
+     *
+     * @param duplicateWork 已存在作品
+     * @param cause 原始异常，可为空
+     * @return 业务异常
+     */
+    private BusinessException duplicateWorkException(WorkEntity duplicateWork, Throwable cause) {
+        String title = duplicateWork == null ? "" : normalizeText(duplicateWork.getTitle());
+        String message = title.isBlank()
+                ? DUPLICATE_WORK_FALLBACK_MESSAGE
+                : String.format(DUPLICATE_WORK_MESSAGE_TEMPLATE, title);
+        return cause == null ? new BusinessException(message) : new BusinessException(message, cause);
     }
 
     /**
@@ -286,7 +391,6 @@ public class WorkUploadTransactionService {
             relation.setUserId(userId);
             relation.setWorkId(workId);
             relation.setTagId(tag.getId());
-            relation.setCreatedAt(LocalDateTime.now());
             workTagEntityMapper.insert(relation);
         }
     }
@@ -308,8 +412,6 @@ public class WorkUploadTransactionService {
         tag.setUserId(userId);
         tag.setName(tagName);
         tag.setStatus(WfTagStatusDict.ACTIVE.getCode());
-        tag.setCreatedAt(LocalDateTime.now());
-        tag.setUpdatedAt(LocalDateTime.now());
         try {
             wfTagEntityMapper.insert(tag);
             return tag;

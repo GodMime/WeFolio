@@ -335,7 +335,6 @@ public class PointService {
         long balanceAfter = Math.addExact(balanceBefore, normalizedPoints);
         account.setBalance(balanceAfter);
         account.setTotalGifted(Math.addExact(safeLong(account.getTotalGifted()), normalizedPoints));
-        account.setUpdatedAt(LocalDateTime.now());
         updateAccount(account);
 
         PointTransactionEntity transaction = new PointTransactionEntity();
@@ -472,9 +471,6 @@ public class PointService {
         account.setTotalRecharged(0L);
         account.setTotalGifted(0L);
         account.setTotalConsumed(0L);
-        LocalDateTime now = LocalDateTime.now();
-        account.setCreatedAt(now);
-        account.setUpdatedAt(now);
         try {
             pointAccountEntityMapper.insert(account);
         } catch (DuplicateKeyException e) {
@@ -661,9 +657,6 @@ public class PointService {
         created.setPendingCount(0);
         created.setTotalCount(0L);
         created.setTotalBilledUnits(0L);
-        LocalDateTime now = LocalDateTime.now();
-        created.setCreatedAt(now);
-        created.setUpdatedAt(now);
         try {
             pointMeterEntityMapper.insert(created);
         } catch (DuplicateKeyException e) {
@@ -708,9 +701,7 @@ public class PointService {
         target.setPendingCount(calculation.pendingAfter());
         target.setTotalCount(Math.addExact(safeLong(target.getTotalCount()), (long) calculation.actionCount()));
         target.setTotalBilledUnits(Math.addExact(safeLong(target.getTotalBilledUnits()), calculation.billedUnits()));
-        target.setUpdatedAt(LocalDateTime.now());
         if (target.getId() == null) {
-            target.setCreatedAt(LocalDateTime.now());
             pointMeterEntityMapper.insert(target);
         } else {
             int updated = pointMeterEntityMapper.updateById(target);
@@ -780,7 +771,6 @@ public class PointService {
         } else if (PointTransactionTypeDict.GIFT.getCode().equals(transactionType)) {
             account.setTotalGifted(Math.addExact(safeLong(account.getTotalGifted()), absolutePoints));
         }
-        account.setUpdatedAt(LocalDateTime.now());
         updateAccount(account);
     }
 
@@ -807,9 +797,6 @@ public class PointService {
         message.setBizType(LOW_BALANCE_MESSAGE_BIZ_TYPE);
         message.setBizId(transaction.getId());
         message.setIdempotencyKey(buildLowBalanceMessageIdempotencyKey(transaction));
-        LocalDateTime now = LocalDateTime.now();
-        message.setCreatedAt(now);
-        message.setUpdatedAt(now);
         try {
             systemMessageEntityMapper.insert(message);
         } catch (DuplicateKeyException e) {

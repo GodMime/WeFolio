@@ -58,7 +58,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
@@ -331,7 +330,7 @@ class MineTeamServiceTest {
         assertThat(updateEntity.getName()).isEqualTo("星曜司仪团升级版");
         assertThat(updateEntity.getIntro()).isEqualTo("双城服务团队");
         assertThat(updateEntity.getAvatarUrl()).isEqualTo("https://cos.example.com/new.png");
-        assertThat(updateEntity.getUpdatedAt()).isNotNull();
+        assertThat(updateEntity.getUpdatedAt()).isNull();
         assertThat(updateEntity.getVersion()).isEqualTo(3);
         assertThat(captor.getValue().getSqlSegment()).contains("id");
         assertThat(response.getTeam().getName()).isEqualTo("星曜司仪团升级版");
@@ -624,7 +623,7 @@ class MineTeamServiceTest {
                 .thenReturn(owner)
                 .thenReturn(removed);
         when(userEntityMapper.selectOne(any())).thenReturn(invitee);
-        when(teamMemberEntityMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
+        when(teamMemberEntityMapper.update(any(TeamMemberEntity.class), any(Wrapper.class))).thenReturn(1);
         when(teamMemberEntityMapper.selectList(any())).thenReturn(List.of(owner, removed));
         when(userEntityMapper.selectBatchIds(any(Collection.class))).thenReturn(List.of(
                 user(7L, "WF8392", "林安", "婚礼司仪", "https://cos.example.com/u7.png"),
@@ -636,7 +635,7 @@ class MineTeamServiceTest {
         service.inviteMember(100L, request);
 
         ArgumentCaptor<Wrapper<TeamMemberEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
-        verify(teamMemberEntityMapper).update(isNull(), captor.capture());
+        verify(teamMemberEntityMapper).update(any(TeamMemberEntity.class), captor.capture());
         String sqlSet = ((UpdateWrapper<TeamMemberEntity>) captor.getValue()).getSqlSet();
         String sqlSegment = captor.getValue().getSqlSegment();
         assertThat(sqlSet).contains("join_status", "role", "allow_portfolio", "allow_profile", "allow_works");
@@ -667,11 +666,11 @@ class MineTeamServiceTest {
 
         assertThat(response.getMemberId()).isEqualTo(31L);
         ArgumentCaptor<Wrapper<SystemMessageEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
-        verify(systemMessageEntityMapper).update(isNull(), captor.capture());
+        verify(systemMessageEntityMapper).update(any(SystemMessageEntity.class), captor.capture());
         UpdateWrapper<SystemMessageEntity> updateWrapper = (UpdateWrapper<SystemMessageEntity>) captor.getValue();
         String sqlSet = updateWrapper.getSqlSet();
         String sqlSegment = updateWrapper.getSqlSegment();
-        assertThat(sqlSet).contains("read_status", "read_at", "updated_at");
+        assertThat(sqlSet).contains("read_status", "read_at");
         assertThat(sqlSegment).contains("user_id", "idempotency_key", "read_status");
         assertThat(updateWrapper.getParamNameValuePairs().values())
                 .contains(7L, "team_invitation:31",
@@ -688,7 +687,7 @@ class MineTeamServiceTest {
         pending.setInvitedBy(8L);
         when(teamMemberEntityMapper.selectById(31L)).thenReturn(pending);
         when(teamEntityMapper.selectById(100L)).thenReturn(team);
-        when(teamMemberEntityMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
+        when(teamMemberEntityMapper.update(any(TeamMemberEntity.class), any(Wrapper.class))).thenReturn(1);
         when(userEntityMapper.selectBatchIds(any(Collection.class))).thenReturn(List.of(
                 user(7L, "WF8392", "林安", "婚礼司仪", "https://cos.example.com/u7.png"),
                 user(8L, "WF8888", "乔伊", "化妆师", "https://cos.example.com/u8.png")
@@ -701,9 +700,9 @@ class MineTeamServiceTest {
         assertThat(response.getJoinStatus()).isEqualTo(JoinStatusDict.JOINED.getCode());
         assertThat(response.isCanRespond()).isFalse();
         ArgumentCaptor<Wrapper<TeamMemberEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
-        verify(teamMemberEntityMapper).update(isNull(), captor.capture());
+        verify(teamMemberEntityMapper).update(any(TeamMemberEntity.class), captor.capture());
         assertThat(((UpdateWrapper<TeamMemberEntity>) captor.getValue()).getSqlSet())
-                .contains("join_status", "responded_at", "joined_at", "updated_at");
+                .contains("join_status", "responded_at", "joined_at");
         assertInvitationMessageActionCleared();
     }
 
@@ -716,7 +715,7 @@ class MineTeamServiceTest {
         TeamMemberEntity pending = pendingMember(31L, 100L, 7L);
         when(teamMemberEntityMapper.selectById(31L)).thenReturn(pending);
         when(teamEntityMapper.selectById(100L)).thenReturn(team);
-        when(teamMemberEntityMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
+        when(teamMemberEntityMapper.update(any(TeamMemberEntity.class), any(Wrapper.class))).thenReturn(1);
         when(userEntityMapper.selectBatchIds(any(Collection.class))).thenReturn(List.of(
                 user(7L, "WF8392", "林安", "婚礼司仪", "https://cos.example.com/u7.png")
         ));
@@ -728,9 +727,9 @@ class MineTeamServiceTest {
         assertThat(response.getJoinStatus()).isEqualTo(JoinStatusDict.REJECTED.getCode());
         assertThat(response.isCanRespond()).isFalse();
         ArgumentCaptor<Wrapper<TeamMemberEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
-        verify(teamMemberEntityMapper).update(isNull(), captor.capture());
+        verify(teamMemberEntityMapper).update(any(TeamMemberEntity.class), captor.capture());
         assertThat(((UpdateWrapper<TeamMemberEntity>) captor.getValue()).getSqlSet())
-                .contains("join_status", "responded_at", "updated_at");
+                .contains("join_status", "responded_at");
         assertInvitationMessageActionCleared();
     }
 
@@ -739,11 +738,11 @@ class MineTeamServiceTest {
      */
     private void assertInvitationMessageActionCleared() {
         ArgumentCaptor<Wrapper<SystemMessageEntity>> messageCaptor = ArgumentCaptor.forClass(Wrapper.class);
-        verify(systemMessageEntityMapper).update(isNull(), messageCaptor.capture());
+        verify(systemMessageEntityMapper).update(any(SystemMessageEntity.class), messageCaptor.capture());
         UpdateWrapper<SystemMessageEntity> updateWrapper = (UpdateWrapper<SystemMessageEntity>) messageCaptor.getValue();
         String sqlSet = updateWrapper.getSqlSet();
         String sqlSegment = updateWrapper.getSqlSegment();
-        assertThat(sqlSet).contains("action_type", "action_url", "updated_at");
+        assertThat(sqlSet).contains("action_type", "action_url");
         assertThat(sqlSegment).contains("user_id", "idempotency_key");
         assertThat(updateWrapper.getParamNameValuePairs().values())
                 .contains(7L, "team_invitation:31", MessageActionTypeDict.NONE.getCode(), "");

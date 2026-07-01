@@ -35,9 +35,12 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.apache.ibatis.annotations.Update;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -48,6 +51,7 @@ import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -63,7 +67,7 @@ import static org.mockito.Mockito.when;
 /**
  * 我的作品服务测试 — 覆盖直传票据、上传完成确认和引用删除拦截。
  */
-@ExtendWith(MockitoExtension.class)
+@ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 class MineWorkServiceTest {
 
     /** 用户 Mapper 模拟 */
@@ -152,8 +156,8 @@ class MineWorkServiceTest {
         assertThat(inserted.getName()).isEqualTo("高端婚礼");
         assertThat(inserted.getColor()).isEqualTo("#0f766e");
         assertThat(inserted.getStatus()).isEqualTo(WfTagStatusDict.ACTIVE.getCode());
-        assertThat(inserted.getCreatedAt()).isNotNull();
-        assertThat(inserted.getUpdatedAt()).isNotNull();
+        assertThat(inserted.getCreatedAt()).isNull();
+        assertThat(inserted.getUpdatedAt()).isNull();
         assertThat(response.getId()).isEqualTo(31L);
         assertThat(response.getName()).isEqualTo("高端婚礼");
         assertThat(response.getColor()).isEqualTo("#0f766e");
@@ -187,7 +191,7 @@ class MineWorkServiceTest {
         assertThat(updated.getId()).isEqualTo(31L);
         assertThat(updated.getName()).isEqualTo("草坪婚礼");
         assertThat(updated.getColor()).isEqualTo("#2d5f9a");
-        assertThat(updated.getUpdatedAt()).isNotNull();
+        assertThat(updated.getUpdatedAt()).isNull();
         assertThat(response.getName()).isEqualTo("草坪婚礼");
         assertThat(response.getColor()).isEqualTo("#2d5f9a");
         assertThat(response.getCount()).isEqualTo(3L);
@@ -334,6 +338,71 @@ class MineWorkServiceTest {
         assertThat(response.getItems().get(0).getObjectKey()).isEqualTo(firstTask.getObjectKey());
         assertThat(response.getItems().get(1).getObjectKey()).isEqualTo(secondTask.getObjectKey());
         assertThat(response.getItems().get(0).getUploadUrl()).contains("myqcloud.com");
+    }
+
+    @Test
+    void createUploadTicketsShouldPersistClientSha256OnTask() {
+        when(userEntityMapper.selectById(7L)).thenReturn(activeUser());
+        when(cosService.createPostUploadTicket(
+                any(String.class),
+                any(String.class),
+                anyLong(),
+                any(LocalDateTime.class)))
+                .thenAnswer(invocation -> new CosService.PostUploadTicket(
+                        "https://bucket.cos.ap-guangzhou.myqcloud.com",
+                        invocation.getArgument(0),
+                        invocation.getArgument(1),
+                        invocation.getArgument(2),
+                        invocation.getArgument(3),
+                        java.util.Map.of("key", invocation.getArgument(0))));
+        MineWorkUploadTicketRequest.UploadFileItem file = ticketFile(
+                "client-1", MediaTypeDict.IMAGE.getCode(), "photo.jpg", "image/jpeg", 1024L);
+        file.setSha256("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+        MineWorkUploadTicketRequest request = new MineWorkUploadTicketRequest();
+        request.setFiles(List.of(file));
+
+        service().createUploadTickets(request);
+
+        ArgumentCaptor<WorkUploadTaskEntity> captor = ArgumentCaptor.forClass(WorkUploadTaskEntity.class);
+        verify(workUploadTaskEntityMapper).insert(captor.capture());
+        assertThat(captor.getValue().getFileSha256())
+                .isEqualTo("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    }
+
+    @Test
+    void createUploadTicketsShouldRejectInvalidSha256() {
+        when(userEntityMapper.selectById(7L)).thenReturn(activeUser());
+        MineWorkUploadTicketRequest.UploadFileItem file = ticketFile(
+                "client-1", MediaTypeDict.IMAGE.getCode(), "photo.jpg", "image/jpeg", 1024L);
+        file.setSha256("not-sha256");
+        MineWorkUploadTicketRequest request = new MineWorkUploadTicketRequest();
+        request.setFiles(List.of(file));
+
+        assertThatThrownBy(() -> service().createUploadTickets(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("文件 SHA-256 格式不正确");
+        verify(workUploadTaskEntityMapper, never()).insert(any(WorkUploadTaskEntity.class));
+    }
+
+    @Test
+    void createUploadTicketsShouldRejectDuplicateExistingWorkBySha256() {
+        when(userEntityMapper.selectById(7L)).thenReturn(activeUser());
+        WorkEntity existing = new WorkEntity();
+        existing.setId(120L);
+        existing.setUserId(7L);
+        existing.setTitle("草坪婚礼");
+        existing.setMediaSha256("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        when(workEntityMapper.selectOne(any())).thenReturn(existing);
+        MineWorkUploadTicketRequest.UploadFileItem file = ticketFile(
+                "client-1", MediaTypeDict.IMAGE.getCode(), "photo.jpg", "image/jpeg", 1024L);
+        file.setSha256("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        MineWorkUploadTicketRequest request = new MineWorkUploadTicketRequest();
+        request.setFiles(List.of(file));
+
+        assertThatThrownBy(() -> service().createUploadTickets(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("作品已存在：「草坪婚礼」");
+        verify(workUploadTaskEntityMapper, never()).insert(any(WorkUploadTaskEntity.class));
     }
 
     @Test
@@ -495,8 +564,9 @@ class MineWorkServiceTest {
         String buildUploadTask = source.substring(buildTaskIndex, source.indexOf("private record PreparedUploadFile"));
 
         assertThat(source).contains("String idempotencyKey");
-        assertThat(source).contains("new PreparedUploadFile(file, mediaType, objectKey, idempotencyKey)");
+        assertThat(source).contains("new PreparedUploadFile(file, mediaType, objectKey, idempotencyKey, fileSha256)");
         assertThat(source).contains("preparedFile.idempotencyKey()");
+        assertThat(source).contains("preparedFile.fileSha256()");
         assertThat(buildUploadTask)
                 .contains("task.setIdempotencyKey(idempotencyKey);")
                 .doesNotContain("normalizeTicketIdempotency(batchId, file)");
@@ -588,6 +658,8 @@ class MineWorkServiceTest {
         videoTask.setMimeType("video/mp4");
         videoTask.setFileSize(4096L);
         videoTask.setDurationMs(60_000);
+        videoTask.setWidth(1080);
+        videoTask.setHeight(1920);
         videoTask.setStatus(WorkUploadTaskStatusDict.CREATED.getCode());
         videoTask.setExpiresAt(LocalDateTime.now().plusMinutes(5));
         WorkUploadTaskEntity coverTask = uploadTask(
@@ -622,6 +694,92 @@ class MineWorkServiceTest {
         verify(workUploadTransactionService).confirmUploadedTask(eq(7L), eq(videoTask), any());
         assertThat(response.getItems()).hasSize(1);
         assertThat(response.getItems().get(0).isSuccess()).isTrue();
+    }
+
+    @Test
+    void completeUploadShouldGenerateFirstFrameCoverForVideoWithoutCoverTask(CapturedOutput output) {
+        WorkUploadTaskEntity videoTask = new WorkUploadTaskEntity();
+        videoTask.setId(99L);
+        videoTask.setUserId(7L);
+        videoTask.setBatchId("batch-video");
+        videoTask.setMediaType(MediaTypeDict.VIDEO.getCode());
+        videoTask.setObjectKey("WFA3B1E7A2/work/video/film.mp4");
+        videoTask.setFileSha256("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        videoTask.setOriginalFileName("film.mp4");
+        videoTask.setMimeType("video/mp4");
+        videoTask.setFileSize(4096L);
+        videoTask.setDurationMs(60_000);
+        videoTask.setWidth(1080);
+        videoTask.setHeight(1920);
+        videoTask.setStatus(WorkUploadTaskStatusDict.CREATED.getCode());
+        videoTask.setExpiresAt(LocalDateTime.now().plusMinutes(5));
+        AtomicReference<WorkUploadTaskEntity> generatedCoverTask = new AtomicReference<>();
+        WorkEntity work = new WorkEntity();
+        work.setId(120L);
+        work.setTitle("片头快剪");
+        when(workUploadTaskEntityMapper.selectById(99L)).thenReturn(videoTask);
+        when(workUploadTaskEntityMapper.selectById(202L)).thenAnswer(invocation -> generatedCoverTask.get());
+        when(workUploadTaskEntityMapper.insert(any(WorkUploadTaskEntity.class))).thenAnswer(invocation -> {
+            WorkUploadTaskEntity task = invocation.getArgument(0);
+            task.setId(202L);
+            generatedCoverTask.set(task);
+            return 1;
+        });
+        when(cosService.headObject("WFA3B1E7A2/work/video/film.mp4"))
+                .thenReturn(new CosService.ObjectHead("video/mp4", 4096L));
+        when(cosService.headObject("WFA3B1E7A2/work/video/film-thumb.jpg"))
+                .thenReturn(new CosService.ObjectHead("image/jpeg", 12_345L));
+        when(cosService.snapshotVideoFrameToObject(
+                "WFA3B1E7A2/work/video/film.mp4",
+                "WFA3B1E7A2/work/video/film-thumb.jpg",
+                0L,
+                360,
+                640))
+                .thenReturn(new CosService.SnapshotObject(
+                        "WFA3B1E7A2/work/video/film-thumb.jpg",
+                        "image/jpeg",
+                        12_345L,
+                        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
+        when(workUploadTransactionService.confirmUploadedTask(eq(7L), eq(videoTask), any()))
+                .thenReturn(MineWorkUploadCompleteResponse.Item.success(99L, work, "上传成功"));
+        MineWorkUploadCompleteRequest.CompleteItem item = new MineWorkUploadCompleteRequest.CompleteItem();
+        item.setTaskId(99L);
+        item.setTitle(" 片头快剪 ");
+        MineWorkUploadCompleteRequest request = new MineWorkUploadCompleteRequest();
+        request.setItems(List.of(item));
+
+        MineWorkUploadCompleteResponse response = service().completeUpload(request);
+
+        ArgumentCaptor<WorkUploadTaskEntity> coverCaptor = ArgumentCaptor.forClass(WorkUploadTaskEntity.class);
+        ArgumentCaptor<MineWorkUploadCompleteRequest.CompleteItem> itemCaptor =
+                ArgumentCaptor.forClass(MineWorkUploadCompleteRequest.CompleteItem.class);
+        verify(workUploadTaskEntityMapper).insert(coverCaptor.capture());
+        verify(workUploadTransactionService).confirmUploadedTask(eq(7L), eq(videoTask), itemCaptor.capture());
+        WorkUploadTaskEntity coverTask = coverCaptor.getValue();
+        assertThat(coverTask.getUserId()).isEqualTo(7L);
+        assertThat(coverTask.getBatchId()).isEqualTo("batch-video");
+        assertThat(coverTask.getMediaType()).isEqualTo(MediaTypeDict.IMAGE.getCode());
+        assertThat(coverTask.getObjectKey()).isEqualTo("WFA3B1E7A2/work/video/film-thumb.jpg");
+        assertThat(coverTask.getOriginalFileName()).isEqualTo("film-thumb.jpg");
+        assertThat(coverTask.getMimeType()).isEqualTo("image/jpeg");
+        assertThat(coverTask.getFileSize()).isEqualTo(12_345L);
+        assertThat(coverTask.getFileSha256())
+                .isEqualTo("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+        assertThat(coverTask.getStatus()).isEqualTo(WorkUploadTaskStatusDict.UPLOADED.getCode());
+        assertThat(itemCaptor.getValue().getCoverTaskId()).isEqualTo(202L);
+        assertThat(response.getItems()).hasSize(1);
+        assertThat(response.getItems().get(0).isSuccess()).isTrue();
+        assertThat(output)
+                .contains("视频作品默认封面截帧入参")
+                .contains("userId=7")
+                .contains("sourceTaskId=99")
+                .contains("sourceObjectKey=WFA3B1E7A2/work/video/film.mp4")
+                .contains("coverObjectKey=WFA3B1E7A2/work/video/film-thumb.jpg")
+                .contains("frameTimeMs=0")
+                .contains("mediaWidth=1080")
+                .contains("mediaHeight=1920")
+                .contains("snapshotWidth=360")
+                .contains("snapshotHeight=640");
     }
 
     @Test
@@ -813,37 +971,38 @@ class MineWorkServiceTest {
     }
 
     @Test
-    void updateWorkShouldReuseTagCreatedByConcurrentRequest() {
+    void updateWorkShouldOnlySaveEditableFieldsWithoutReplacingTags() {
         WorkEntity work = new WorkEntity();
         work.setId(18L);
         work.setUserId(7L);
         work.setTitle("旧标题");
+        work.setDescription("旧说明");
         work.setMediaType(MediaTypeDict.IMAGE.getCode());
         work.setMediaObjectKey("WFA3B1E7A2/work/image/photo.jpg");
+        work.setCoverObjectKey("WFA3B1E7A2/work/image/photo-thumb.jpg");
         work.setOriginalFileName("photo.jpg");
-        WfTagEntity duplicateTag = new WfTagEntity();
-        duplicateTag.setId(44L);
-        duplicateTag.setUserId(7L);
-        duplicateTag.setName("户外仪式");
         when(workEntityMapper.selectById(18L)).thenReturn(work, work);
         when(workEntityMapper.updateById(any(WorkEntity.class))).thenReturn(1);
-        when(wfTagEntityMapper.selectOne(any())).thenReturn(null, duplicateTag);
-        when(wfTagEntityMapper.insert(any(WfTagEntity.class))).thenThrow(new DuplicateKeyException("duplicate"));
         when(portfolioReferenceEntityMapper.selectList(any())).thenReturn(List.of());
         when(workTagEntityMapper.selectList(any())).thenReturn(List.of());
+        when(cosService.publicUrl(any())).thenAnswer(invocation -> "https://cos.example/" + invocation.getArgument(0));
         MineWorkUpdateRequest request = new MineWorkUpdateRequest();
-        request.setTitle("新标题");
-        request.setTagNames(List.of("户外仪式"));
+        request.setTitle(" 新标题 ");
+        request.setDescription(" 新说明 ");
 
         service().updateWork(18L, request);
 
-        ArgumentCaptor<WorkTagEntity> relationCaptor = ArgumentCaptor.forClass(WorkTagEntity.class);
-        verify(workTagEntityMapper).insert(relationCaptor.capture());
-        assertThat(relationCaptor.getValue().getTagId()).isEqualTo(44L);
+        ArgumentCaptor<WorkEntity> workCaptor = ArgumentCaptor.forClass(WorkEntity.class);
+        verify(workEntityMapper).updateById(workCaptor.capture());
+        assertThat(workCaptor.getValue().getTitle()).isEqualTo("新标题");
+        assertThat(workCaptor.getValue().getDescription()).isEqualTo("新说明");
+        verify(workTagEntityMapper, never()).delete(any());
+        verify(workTagEntityMapper, never()).insert(any(WorkTagEntity.class));
+        verify(wfTagEntityMapper, never()).insert(any(WfTagEntity.class));
     }
 
     @Test
-    void updateWorkShouldRejectTagNameLongerThanTenWords() {
+    void updateWorkShouldRejectCoverFrameForImageWork() {
         WorkEntity work = new WorkEntity();
         work.setId(18L);
         work.setUserId(7L);
@@ -852,40 +1011,147 @@ class MineWorkServiceTest {
         work.setMediaObjectKey("WFA3B1E7A2/work/image/photo.jpg");
         work.setOriginalFileName("photo.jpg");
         when(workEntityMapper.selectById(18L)).thenReturn(work);
-        when(workEntityMapper.updateById(any(WorkEntity.class))).thenReturn(1);
         MineWorkUpdateRequest request = new MineWorkUpdateRequest();
         request.setTitle("新标题");
-        request.setTagNames(List.of("一二三四五六七八九十长"));
+        request.setCoverFrameTimeMs(1200L);
 
         assertThatThrownBy(() -> service().updateWork(18L, request))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage("标签名称不能超过 10 个字");
-        verify(wfTagEntityMapper, never()).insert(any(WfTagEntity.class));
-        verify(workTagEntityMapper, never()).insert(any(WorkTagEntity.class));
+                .hasMessage("只有视频作品可以修改封面");
+        verify(workEntityMapper, never()).updateById(any(WorkEntity.class));
     }
 
     @Test
-    void updateWorkShouldRejectCreatingTagWhenUserAlreadyHasTenTags() {
+    void updateWorkShouldReplaceVideoCoverFromFrameTimeAndDeleteOldCoverObject(CapturedOutput output) {
         WorkEntity work = new WorkEntity();
         work.setId(18L);
         work.setUserId(7L);
         work.setTitle("旧标题");
-        work.setMediaType(MediaTypeDict.IMAGE.getCode());
-        work.setMediaObjectKey("WFA3B1E7A2/work/image/photo.jpg");
-        work.setOriginalFileName("photo.jpg");
+        work.setDescription("旧说明");
+        work.setMediaType(MediaTypeDict.VIDEO.getCode());
+        work.setMediaObjectKey("WFA3B1E7A2/work/video/film.mp4");
+        work.setCoverObjectKey("WFA3B1E7A2/work/video/old-thumb.jpg");
+        work.setCoverSha256("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        work.setOriginalFileName("film.mp4");
+        work.setWidth(1920);
+        work.setHeight(1080);
         when(workEntityMapper.selectById(18L)).thenReturn(work, work);
+        when(cosService.snapshotVideoFrameToObject(
+                "WFA3B1E7A2/work/video/film.mp4",
+                "WFA3B1E7A2/work/video/film-thumb-5200.jpg",
+                5200L,
+                360,
+                640))
+                .thenReturn(new CosService.SnapshotObject(
+                        "WFA3B1E7A2/work/video/film-thumb-5200.jpg",
+                        "image/jpeg",
+                        90L * 1024L,
+                        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"));
         when(workEntityMapper.updateById(any(WorkEntity.class))).thenReturn(1);
-        when(wfTagEntityMapper.selectOne(any())).thenReturn(null);
-        when(wfTagEntityMapper.selectCount(any())).thenReturn(10L);
+        when(portfolioReferenceEntityMapper.selectList(any())).thenReturn(List.of());
+        when(workTagEntityMapper.selectList(any())).thenReturn(List.of());
+        when(cosService.publicUrl(any())).thenAnswer(invocation -> "https://cos.example/" + invocation.getArgument(0));
+        MineWorkUpdateRequest request = new MineWorkUpdateRequest();
+        request.setTitle(" 新标题 ");
+        request.setDescription(" 新说明 ");
+        request.setCoverFrameTimeMs(5200L);
+        request.setWidth(1080);
+        request.setHeight(1920);
+
+        service().updateWork(18L, request);
+
+        ArgumentCaptor<WorkEntity> workCaptor = ArgumentCaptor.forClass(WorkEntity.class);
+        verify(workEntityMapper).updateById(workCaptor.capture());
+        verify(cosService).delete("WFA3B1E7A2/work/video/old-thumb.jpg");
+        verify(workUploadTaskEntityMapper, never()).updateById(any(WorkUploadTaskEntity.class));
+        WorkEntity updatedWork = workCaptor.getValue();
+        assertThat(updatedWork.getTitle()).isEqualTo("新标题");
+        assertThat(updatedWork.getDescription()).isEqualTo("新说明");
+        assertThat(updatedWork.getCoverObjectKey()).isEqualTo("WFA3B1E7A2/work/video/film-thumb-5200.jpg");
+        assertThat(updatedWork.getCoverSha256())
+                .isEqualTo("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc");
+        assertThat(updatedWork.getWidth()).isEqualTo(1080);
+        assertThat(updatedWork.getHeight()).isEqualTo(1920);
+        assertThat(output)
+                .contains("视频作品替换封面截帧入参")
+                .contains("workId=18")
+                .contains("sourceObjectKey=WFA3B1E7A2/work/video/film.mp4")
+                .contains("coverObjectKey=WFA3B1E7A2/work/video/film-thumb-5200.jpg")
+                .contains("requestedFrameTimeMs=5200")
+                .contains("frameTimeMs=5200")
+                .contains("requestWidth=1080")
+                .contains("requestHeight=1920")
+                .contains("snapshotWidth=360")
+                .contains("snapshotHeight=640");
+    }
+
+    @Test
+    void updateWorkShouldDeleteGeneratedCoverWhenSnapshotExceedsLimit() {
+        WorkEntity work = new WorkEntity();
+        work.setId(18L);
+        work.setUserId(7L);
+        work.setTitle("旧标题");
+        work.setDescription("旧说明");
+        work.setMediaType(MediaTypeDict.VIDEO.getCode());
+        work.setMediaObjectKey("WFA3B1E7A2/work/video/film.mp4");
+        work.setCoverObjectKey("WFA3B1E7A2/work/video/old-thumb.jpg");
+        work.setOriginalFileName("film.mp4");
+        when(workEntityMapper.selectById(18L)).thenReturn(work);
+        when(cosService.snapshotVideoFrameToObject(
+                "WFA3B1E7A2/work/video/film.mp4",
+                "WFA3B1E7A2/work/video/film-thumb-5200.jpg",
+                5200L,
+                640,
+                640))
+                .thenReturn(new CosService.SnapshotObject(
+                        "WFA3B1E7A2/work/video/film-thumb-5200.jpg",
+                        "image/jpeg",
+                        100L * 1024L + 1L,
+                        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"));
         MineWorkUpdateRequest request = new MineWorkUpdateRequest();
         request.setTitle("新标题");
-        request.setTagNames(List.of("户外仪式"));
+        request.setCoverFrameTimeMs(5200L);
 
         assertThatThrownBy(() -> service().updateWork(18L, request))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage("标签最多保留 10 个");
-        verify(wfTagEntityMapper, never()).insert(any(WfTagEntity.class));
-        verify(workTagEntityMapper, never()).insert(any(WorkTagEntity.class));
+                .hasMessage("缩略图或封面图不能超过 100KB");
+        verify(cosService).delete("WFA3B1E7A2/work/video/film-thumb-5200.jpg");
+        verify(workEntityMapper, never()).updateById(any(WorkEntity.class));
+    }
+
+    @Test
+    void updateWorkShouldDeleteGeneratedCoverWhenSaveFails() {
+        WorkEntity work = new WorkEntity();
+        work.setId(18L);
+        work.setUserId(7L);
+        work.setTitle("旧标题");
+        work.setDescription("旧说明");
+        work.setMediaType(MediaTypeDict.VIDEO.getCode());
+        work.setMediaObjectKey("WFA3B1E7A2/work/video/film.mp4");
+        work.setCoverObjectKey("WFA3B1E7A2/work/video/old-thumb.jpg");
+        work.setOriginalFileName("film.mp4");
+        when(workEntityMapper.selectById(18L)).thenReturn(work);
+        when(cosService.snapshotVideoFrameToObject(
+                "WFA3B1E7A2/work/video/film.mp4",
+                "WFA3B1E7A2/work/video/film-thumb-5200.jpg",
+                5200L,
+                640,
+                640))
+                .thenReturn(new CosService.SnapshotObject(
+                        "WFA3B1E7A2/work/video/film-thumb-5200.jpg",
+                        "image/jpeg",
+                        90L * 1024L,
+                        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"));
+        when(workEntityMapper.updateById(any(WorkEntity.class))).thenReturn(0);
+        MineWorkUpdateRequest request = new MineWorkUpdateRequest();
+        request.setTitle("新标题");
+        request.setCoverFrameTimeMs(5200L);
+
+        assertThatThrownBy(() -> service().updateWork(18L, request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("作品保存失败，请刷新后重试");
+        verify(cosService).delete("WFA3B1E7A2/work/video/film-thumb-5200.jpg");
+        verify(cosService, never()).delete("WFA3B1E7A2/work/video/old-thumb.jpg");
     }
 
     @Test
@@ -896,7 +1162,7 @@ class MineWorkServiceTest {
         assertThatThrownBy(() -> service().sortWorks(request))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("请提交要排序的作品");
-        verify(workEntityMapper, never()).updateSortOrders(any(), any(), any());
+        verify(workEntityMapper, never()).updateSortOrders(any(), any());
     }
 
     @Test
@@ -904,27 +1170,27 @@ class MineWorkServiceTest {
         WorkEntity first = ownedWork(11L);
         WorkEntity second = ownedWork(12L);
         when(workEntityMapper.selectBatchIds(any())).thenReturn(List.of(first, second));
-        when(workEntityMapper.updateSortOrders(eq(7L), any(), any())).thenReturn(2);
+        when(workEntityMapper.updateSortOrders(eq(7L), any())).thenReturn(2);
         MineWorkSortRequest.Item firstItem = sortItem(11L, 20);
         MineWorkSortRequest.Item secondItem = sortItem(12L, 10);
         MineWorkSortRequest request = new MineWorkSortRequest();
         request.setItems(List.of(firstItem, secondItem));
-        LocalDateTime beforeSort = LocalDateTime.now();
 
         service().sortWorks(request);
 
-        LocalDateTime afterSort = LocalDateTime.now();
         verify(workEntityMapper, never()).updateById(any(WorkEntity.class));
-        ArgumentCaptor<LocalDateTime> updatedAtCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
-        verify(workEntityMapper).updateSortOrders(eq(7L), any(), updatedAtCaptor.capture());
-        assertThat(updatedAtCaptor.getValue()).isBetween(beforeSort, afterSort);
+        verify(workEntityMapper).updateSortOrders(eq(7L), any());
     }
 
     @Test
-    void updateSortOrdersMapperShouldAcceptApplicationUpdatedAt() throws NoSuchMethodException {
-        Method method = WorkEntityMapper.class.getMethod("updateSortOrders", Long.class, List.class, LocalDateTime.class);
+    void updateSortOrdersMapperShouldNotAcceptApplicationUpdatedAt() throws NoSuchMethodException {
+        Method method = WorkEntityMapper.class.getMethod("updateSortOrders", Long.class, List.class);
 
         assertThat(method).isNotNull();
+        Update update = method.getAnnotation(Update.class);
+        assertThat(String.join(" ", update.value()))
+                .doesNotContain("#{updatedAt}")
+                .doesNotContain("updated_at =");
     }
 
     @Test
@@ -966,8 +1232,8 @@ class MineWorkServiceTest {
         @SuppressWarnings("unchecked")
         UpdateWrapper<WorkEntity> wrapper = updateCaptor.getValue();
         Map<String, Object> params = wrapper.getParamNameValuePairs();
-        assertThat(wrapper.getSqlSet()).contains("deleted=#{ew.paramNameValuePairs.MPGENVAL3}");
-        assertThat(params.get("MPGENVAL3")).isEqualTo(18L);
+        assertThat(wrapper.getSqlSet()).contains("deleted=#{ew.paramNameValuePairs.MPGENVAL2}");
+        assertThat(params.get("MPGENVAL2")).isEqualTo(18L);
         verify(workEntityMapper, never()).delete(any());
     }
 
@@ -1090,7 +1356,12 @@ class MineWorkServiceTest {
         item.setFileName(fileName);
         item.setMimeType(mimeType);
         item.setFileSize(size);
+        item.setSha256(defaultSha256(clientId));
         item.setIdempotencyKey("ticket-" + clientId);
         return item;
+    }
+
+    private String defaultSha256(String clientId) {
+        return String.format("%064x", Integer.toUnsignedLong(clientId.hashCode()));
     }
 }

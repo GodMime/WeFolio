@@ -2,7 +2,9 @@ package com.jxc.wefolio.entity;
 
 import java.time.LocalDateTime;
 
+import com.baomidou.mybatisplus.annotation.FieldFill;
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.Version;
@@ -20,9 +22,11 @@ public abstract class BaseEntity {
     private Long id;
 
     /** 创建时间 */
+    @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;
 
     /** 更新时间 */
+    @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updatedAt;
 
     /** 逻辑删除：0 未删除，已删除时记录本行主键 ID */

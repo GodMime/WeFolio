@@ -5,22 +5,92 @@ const {
   DEFAULT_WORK_TAG_COLOR,
   WORK_TAG_COLOR_OPTIONS,
   WORK_TAG_MAX_COUNT,
+  buildWorkFieldCounters,
+  buildWorkUpdatePayload,
   buildWorkTagDeleteBlockedMessage,
   buildWorkTagPayload,
   createWorkTagForm,
   normalizeWorkList,
+  validateWorkForm,
   validateWorkTagForm
 } = require('../../utils/works')
 
 const ADD_WORK_PAGE_URL = '/pages/work-add/work-add'
-const EDIT_WORK_PAGE_URL = '/pages/work-edit/work-edit'
 const MINE_PAGE_URL = '/pages/index/index'
 const SCHEDULE_PAGE_URL = '/pages/schedule/schedule'
 const WORK_TAGS_API_URL = '/api/mine/works/tags'
 const WORK_TAG_DELETE_API_PREFIX = '/api/mine/works/tags/delete'
+const WORKS_API_PREFIX = '/api/mine/works'
+const EDIT_COVER_CLIENT_PREFIX = 'edit-work'
+
+function clampNumber(value, min, max) {
+  const numberValue = Number(value)
+  if (!Number.isFinite(numberValue)) {
+    return min
+  }
+  return Math.max(min, Math.min(max, numberValue))
+}
+
+function formatFrameTime(milliseconds) {
+  const totalSeconds = Math.max(0, Math.round(Number(milliseconds || 0) / 1000))
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+}
+
+function getEditFileName(work = {}) {
+  if (work.originalFileName) {
+    return work.originalFileName
+  }
+  return work.mediaType === 'VIDEO' ? `work-${work.id || Date.now()}.mp4` : `work-${work.id || Date.now()}.jpg`
+}
+
+function buildBaseWorkEditForm(work = {}) {
+  const fileName = getEditFileName(work)
+  const previewPath = work.coverUrl || work.mediaUrl || ''
+  return {
+    id: work.id,
+    mediaType: work.mediaType,
+    title: work.title || '',
+    description: work.description || '',
+    originalFileName: work.originalFileName || fileName,
+    fileName,
+    mediaUrl: work.mediaUrl || '',
+    previewPath,
+    coverPath: work.coverUrl || '',
+    width: Math.max(0, Number(work.width || 0)),
+    height: Math.max(0, Number(work.height || 0))
+  }
+}
+
+function buildImageEditForm(work = {}) {
+  return Object.assign(buildBaseWorkEditForm(work), {
+    isVideo: false
+  })
+}
+
+function buildVideoEditForm(work = {}) {
+  const durationMs = Math.max(0, Number(work.durationMs || 0))
+  return Object.assign(buildBaseWorkEditForm(work), {
+    clientId: `${EDIT_COVER_CLIENT_PREFIX}-${work.id}`,
+    isVideo: true,
+    tempFilePath: work.mediaUrl || '',
+    localVideoPath: '',
+    coverEditorReady: false,
+    durationMs,
+    durationText: work.durationText || formatFrameTime(durationMs),
+    coverFrameTimeMs: 0,
+    coverFrameSelected: false
+  })
+}
+
+function hasOwnField(object, field) {
+  return Object.prototype.hasOwnProperty.call(object || {}, field)
+}
 
 Page({
   requestSeq: 0,
+  uploadTasks: {},
 
   data: {
     loading: true,
@@ -38,6 +108,20 @@ Page({
     tagSaving: false,
     tagErrorText: '',
     list: normalizeWorkList({}),
+    imageEditSheetVisible: false,
+    imageEditForm: null,
+    imageEditFieldCounters: buildWorkFieldCounters({}),
+    imageEditSaving: false,
+    imageEditErrorText: '',
+    videoEditSheetVisible: false,
+    videoEditForm: null,
+    videoEditFieldCounters: buildWorkFieldCounters({}),
+    videoEditSaving: false,
+    videoDownloading: false,
+    videoFrameTimeMs: 0,
+    videoFrameTimeText: '00:00',
+    videoFrameExporting: false,
+    videoEditErrorText: '',
     tabs: [
       { key: 'schedule', label: '档期', icon: 'schedule' },
       { key: 'work', label: '作品', icon: 'work', active: true },
@@ -48,6 +132,16 @@ Page({
 
   onShow() {
     this.bootstrap()
+  },
+
+  onUnload() {
+    Object.keys(this.uploadTasks).forEach((key) => {
+      const task = this.uploadTasks[key]
+      if (task && task.abort) {
+        task.abort()
+      }
+    })
+    this.uploadTasks = {}
   },
 
   bootstrap() {
@@ -318,8 +412,329 @@ Page({
     if (!workId) {
       return
     }
-    wx.navigateTo({
-      url: `${EDIT_WORK_PAGE_URL}?workId=${workId}`
+    const work = this.findWorkById(workId)
+    if (!work) {
+      return
+    }
+    if (work.mediaType === 'VIDEO') {
+      this.openVideoEditSheet(work)
+      return
+    }
+    this.openImageEditSheet(work)
+  },
+
+  openImageEditSheet(work) {
+    const imageEditForm = buildImageEditForm(work)
+    this.setData({
+      imageEditSheetVisible: true,
+      imageEditForm,
+      imageEditFieldCounters: buildWorkFieldCounters(imageEditForm),
+      imageEditSaving: false,
+      imageEditErrorText: '',
+      videoEditSheetVisible: false,
+      videoEditForm: null,
+      videoEditFieldCounters: buildWorkFieldCounters({}),
+      videoEditSaving: false,
+      videoDownloading: false,
+      videoFrameExporting: false,
+      videoEditErrorText: '',
+      tagManageMode: false
+    })
+  },
+
+  openVideoEditSheet(work) {
+    const videoEditForm = buildVideoEditForm(work)
+    this.setData({
+      imageEditSheetVisible: false,
+      imageEditForm: null,
+      imageEditFieldCounters: buildWorkFieldCounters({}),
+      imageEditSaving: false,
+      imageEditErrorText: '',
+      videoEditSheetVisible: true,
+      videoEditForm,
+      videoEditFieldCounters: buildWorkFieldCounters(videoEditForm),
+      videoEditSaving: false,
+      videoDownloading: false,
+      videoFrameTimeMs: videoEditForm.coverFrameTimeMs,
+      videoFrameTimeText: formatFrameTime(videoEditForm.coverFrameTimeMs),
+      videoFrameExporting: false,
+      videoEditErrorText: '',
+      tagManageMode: false
+    })
+  },
+
+  findWorkById(workId) {
+    return (this.data.list.works || []).find((work) => work.id === workId) || null
+  },
+
+  handleEditPanelTap() {
+  },
+
+  handleCloseImageEditor() {
+    if (this.data.imageEditSaving) {
+      return
+    }
+    this.setData({
+      imageEditSheetVisible: false,
+      imageEditForm: null,
+      imageEditFieldCounters: buildWorkFieldCounters({}),
+      imageEditErrorText: ''
+    })
+  },
+
+  handleCloseVideoEditor() {
+    if (this.data.videoEditSaving || this.data.videoDownloading || this.data.videoFrameExporting) {
+      return
+    }
+    this.setData({
+      videoEditSheetVisible: false,
+      videoEditForm: null,
+      videoEditFieldCounters: buildWorkFieldCounters({}),
+      videoEditErrorText: ''
+    })
+  },
+
+  handleImageEditInput(event) {
+    const field = event.currentTarget.dataset.field
+    if (!field || !this.data.imageEditForm) {
+      return
+    }
+    const value = event.detail.value || ''
+    const imageEditForm = Object.assign({}, this.data.imageEditForm, {
+      [field]: value
+    })
+    this.setData({
+      [`imageEditForm.${field}`]: value,
+      imageEditFieldCounters: buildWorkFieldCounters(imageEditForm),
+      imageEditErrorText: ''
+    })
+  },
+
+  handleVideoEditInput(event) {
+    const field = event.currentTarget.dataset.field
+    if (!field || !this.data.videoEditForm) {
+      return
+    }
+    const value = event.detail.value || ''
+    const videoEditForm = Object.assign({}, this.data.videoEditForm, {
+      [field]: value
+    })
+    this.setData({
+      [`videoEditForm.${field}`]: value,
+      videoEditFieldCounters: buildWorkFieldCounters(videoEditForm),
+      videoEditErrorText: ''
+    })
+  },
+
+  async handleConfirmImageEdit() {
+    const imageEditForm = this.data.imageEditForm
+    if (!imageEditForm || this.data.imageEditSaving) {
+      return
+    }
+    const validation = validateWorkForm(imageEditForm)
+    if (!validation.valid) {
+      this.setData({ imageEditErrorText: validation.message })
+      return
+    }
+    this.setData({
+      imageEditSaving: true,
+      imageEditErrorText: ''
+    })
+    try {
+      const payload = buildWorkUpdatePayload({
+        title: imageEditForm.title,
+        description: imageEditForm.description
+      })
+      const response = await request({
+        url: `${WORKS_API_PREFIX}/${imageEditForm.id}`,
+        method: 'PUT',
+        data: payload
+      })
+      this.patchWorkInList(imageEditForm, response && response.work ? response.work : payload)
+      wx.showToast({
+        title: '作品已更新',
+        icon: 'success'
+      })
+      this.setData({
+        imageEditSheetVisible: false,
+        imageEditForm: null,
+        imageEditFieldCounters: buildWorkFieldCounters({}),
+        imageEditSaving: false,
+        imageEditErrorText: ''
+      })
+    } catch (error) {
+      if (error && error.authRequired) {
+        this.setData({ imageEditSaving: false })
+        handleAuthRequired(error.message)
+        return
+      }
+      this.setData({
+        imageEditSaving: false,
+        imageEditErrorText: error && error.message ? error.message : '作品保存失败'
+      })
+    }
+  },
+
+  handleVideoEditMetadata(event) {
+    const detail = event.detail || {}
+    if (!this.data.videoEditForm || !detail.duration) {
+      return
+    }
+    const durationMs = Math.round(Number(detail.duration || 0) * 1000)
+    const frameTimeMs = clampNumber(this.data.videoFrameTimeMs, 0, durationMs)
+    const width = Math.max(0, Math.round(Number(detail.width || detail.videoWidth || this.data.videoEditForm.width || 0)))
+    const height = Math.max(0, Math.round(Number(detail.height || detail.videoHeight || this.data.videoEditForm.height || 0)))
+    this.setData({
+      'videoEditForm.durationMs': durationMs,
+      'videoEditForm.durationText': formatFrameTime(durationMs),
+      'videoEditForm.coverFrameTimeMs': frameTimeMs,
+      'videoEditForm.width': width,
+      'videoEditForm.height': height,
+      videoFrameTimeMs: frameTimeMs,
+      videoFrameTimeText: formatFrameTime(frameTimeMs)
+    })
+  },
+
+  handleVideoEditTimeUpdate(event) {
+    if (!this.data.videoEditForm || this.data.videoFrameExporting) {
+      return
+    }
+    const currentTime = event.detail && event.detail.currentTime
+    const frameTimeMs = clampNumber(Math.round(Number(currentTime || 0) * 1000), 0, this.data.videoEditForm.durationMs || 0)
+    this.setData({
+      'videoEditForm.coverFrameTimeMs': frameTimeMs,
+      videoFrameTimeMs: frameTimeMs,
+      videoFrameTimeText: formatFrameTime(frameTimeMs)
+    })
+  },
+
+  handleVideoCoverSliderChanging(event) {
+    this.updateVideoCoverFrameTime(event.detail.value, false)
+  },
+
+  handleVideoCoverSliderChange(event) {
+    this.updateVideoCoverFrameTime(event.detail.value, true)
+  },
+
+  updateVideoCoverFrameTime(value, syncVideo) {
+    if (!this.data.videoEditForm) {
+      return
+    }
+    const frameTimeMs = clampNumber(value, 0, this.data.videoEditForm.durationMs || 0)
+    this.setData({
+      'videoEditForm.coverFrameTimeMs': frameTimeMs,
+      videoFrameTimeMs: frameTimeMs,
+      videoFrameTimeText: formatFrameTime(frameTimeMs)
+    })
+    if (syncVideo && wx.createVideoContext) {
+      const videoContext = wx.createVideoContext('workCoverVideo', this)
+      if (videoContext && videoContext.seek) {
+        videoContext.seek(frameTimeMs / 1000)
+      }
+    }
+  },
+
+  async handleExportVideoCover() {
+    const videoEditForm = this.data.videoEditForm
+    if (!videoEditForm || !videoEditForm.isVideo) {
+      return
+    }
+    this.setData({
+      'videoEditForm.coverFrameSelected': true,
+      'videoEditForm.coverFrameTimeMs': this.data.videoFrameTimeMs,
+      videoEditErrorText: ''
+    })
+    wx.showToast({
+      title: '已选择当前帧',
+      icon: 'success'
+    })
+  },
+
+  async handleStartVideoCoverEdit() {
+    const videoEditForm = this.data.videoEditForm
+    if (!videoEditForm || !videoEditForm.isVideo || this.data.videoDownloading) {
+      return
+    }
+    this.setData({
+      'videoEditForm.coverEditorReady': true,
+      'videoEditForm.tempFilePath': videoEditForm.tempFilePath || videoEditForm.mediaUrl || '',
+      videoEditErrorText: ''
+    })
+  },
+
+  async handleConfirmVideoEdit() {
+    const videoEditForm = this.data.videoEditForm
+    if (!videoEditForm || this.data.videoEditSaving || this.data.videoFrameExporting || this.data.videoDownloading) {
+      return
+    }
+    const validation = validateWorkForm(videoEditForm)
+    if (!validation.valid) {
+      this.setData({ videoEditErrorText: validation.message })
+      return
+    }
+    this.setData({
+      videoEditSaving: true,
+      videoEditErrorText: ''
+    })
+    try {
+      const payload = buildWorkUpdatePayload({
+        title: videoEditForm.title,
+        description: videoEditForm.description,
+        ...(videoEditForm.coverFrameSelected ? {
+          coverFrameTimeMs: videoEditForm.coverFrameTimeMs,
+          width: videoEditForm.width,
+          height: videoEditForm.height
+        } : {})
+      })
+      const response = await request({
+        url: `${WORKS_API_PREFIX}/${videoEditForm.id}`,
+        method: 'PUT',
+        data: payload
+      })
+      this.patchWorkInList(videoEditForm, response && response.work ? response.work : payload)
+      wx.showToast({
+        title: '作品已更新',
+        icon: 'success'
+      })
+      this.setData({
+        videoEditSheetVisible: false,
+        videoEditForm: null,
+        videoEditFieldCounters: buildWorkFieldCounters({}),
+        videoEditSaving: false,
+        videoEditErrorText: ''
+      })
+    } catch (error) {
+      if (error && error.authRequired) {
+        this.setData({ videoEditSaving: false })
+        handleAuthRequired(error.message)
+        return
+      }
+      this.setData({
+        videoEditSaving: false,
+        videoEditErrorText: error && error.message ? error.message : '作品保存失败'
+      })
+    }
+  },
+
+  patchWorkInList(sourceForm, patch = {}) {
+    if (!sourceForm) {
+      return
+    }
+    const workId = sourceForm.id
+    const works = (this.data.list.works || []).map((work) => {
+      if (work.id !== workId) {
+        return work
+      }
+      return Object.assign({}, work, {
+        title: hasOwnField(patch, 'title') ? patch.title : sourceForm.title,
+        description: hasOwnField(patch, 'description') ? patch.description : sourceForm.description,
+        coverUrl: patch.coverUrl || (sourceForm.customCoverPath ? sourceForm.customCoverPath : work.coverUrl),
+        hasCover: Boolean(patch.coverUrl || sourceForm.customCoverPath || work.coverUrl),
+        updatedAt: patch.updatedAt || work.updatedAt
+      })
+    })
+    this.setData({
+      'list.works': works
     })
   },
 

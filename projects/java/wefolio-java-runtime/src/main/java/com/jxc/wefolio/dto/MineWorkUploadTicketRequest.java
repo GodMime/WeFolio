@@ -38,6 +38,9 @@ public class MineWorkUploadTicketRequest {
         /** 文件字节数 */
         private Long fileSize;
 
+        /** 文件 SHA-256，由小程序端计算提交 */
+        private String sha256;
+
         /** 视频时长毫秒，图片为空 */
         private Integer durationMs;
 

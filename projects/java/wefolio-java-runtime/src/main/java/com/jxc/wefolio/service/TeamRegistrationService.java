@@ -65,8 +65,6 @@ public class TeamRegistrationService {
         team.setContactQrUrl("");
         team.setOwnerUserId(ownerUserId);
         team.setStatus(TeamStatusDict.ACTIVE.getCode());
-        team.setCreatedAt(now);
-        team.setUpdatedAt(now);
         teamEntityMapper.insert(team);
         if (team.getId() == null) {
             throw new BusinessException("团队创建失败，请重试");

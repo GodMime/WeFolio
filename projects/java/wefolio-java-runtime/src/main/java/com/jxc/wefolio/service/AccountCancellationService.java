@@ -9,8 +9,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
-
 /**
  * 账号注销服务 — 负责停用用户账号并清理相关登录缓存。
  */
@@ -51,7 +49,6 @@ public class AccountCancellationService {
 
         if (!UserStatusDict.DISABLED.getCode().equals(user.getStatus())) {
             user.setStatus(UserStatusDict.DISABLED.getCode());
-            user.setUpdatedAt(LocalDateTime.now());
             int updated = userEntityMapper.updateById(user);
             if (updated <= 0) {
                 throw new BusinessException("账号注销失败，请重试");

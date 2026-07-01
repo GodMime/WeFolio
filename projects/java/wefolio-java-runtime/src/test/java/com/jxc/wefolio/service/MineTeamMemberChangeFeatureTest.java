@@ -61,7 +61,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -284,9 +283,9 @@ class MineTeamMemberChangeFeatureTest {
         assertThat(response.getProfessionAfter()).isEqualTo("导演");
         assertThat(response.getPermissionAfterText()).isEqualTo("主页资料、作品素材");
         ArgumentCaptor<Wrapper<SystemMessageEntity>> messageCaptor = ArgumentCaptor.forClass(Wrapper.class);
-        verify(systemMessageEntityMapper).update(isNull(), messageCaptor.capture());
+        verify(systemMessageEntityMapper).update(any(SystemMessageEntity.class), messageCaptor.capture());
         UpdateWrapper<SystemMessageEntity> updateWrapper = (UpdateWrapper<SystemMessageEntity>) messageCaptor.getValue();
-        assertThat(updateWrapper.getSqlSet()).contains("read_status", "read_at", "updated_at");
+        assertThat(updateWrapper.getSqlSet()).contains("read_status", "read_at");
         assertThat(updateWrapper.getSqlSegment()).contains("user_id", "idempotency_key", "read_status");
         assertThat(updateWrapper.getParamNameValuePairs().values())
                 .contains(8L, "team_member_change:41",
@@ -304,8 +303,8 @@ class MineTeamMemberChangeFeatureTest {
         when(teamMemberChangeRequestEntityMapper.selectById(41L)).thenReturn(changeRequest);
         when(teamEntityMapper.selectById(100L)).thenReturn(team());
         when(teamMemberEntityMapper.selectById(31L)).thenReturn(target);
-        when(teamMemberEntityMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
-        when(teamMemberChangeRequestEntityMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
+        when(teamMemberEntityMapper.update(any(TeamMemberEntity.class), any(Wrapper.class))).thenReturn(1);
+        when(teamMemberChangeRequestEntityMapper.update(any(TeamMemberChangeRequestEntity.class), any(Wrapper.class))).thenReturn(1);
         when(userEntityMapper.selectBatchIds(any(Collection.class))).thenReturn(List.of(
                 user(7L, "WF0007", "林安", "主持人"),
                 user(8L, "WF0008", "乔伊", "摄影师")
@@ -316,19 +315,18 @@ class MineTeamMemberChangeFeatureTest {
         assertThat(response.getStatus()).isEqualTo(TeamMemberChangeStatusDict.ACCEPTED.getCode());
         assertThat(response.isCanRespond()).isFalse();
         ArgumentCaptor<Wrapper<TeamMemberEntity>> memberCaptor = ArgumentCaptor.forClass(Wrapper.class);
-        verify(teamMemberEntityMapper).update(isNull(), memberCaptor.capture());
+        verify(teamMemberEntityMapper).update(any(TeamMemberEntity.class), memberCaptor.capture());
         UpdateWrapper<TeamMemberEntity> memberUpdate = (UpdateWrapper<TeamMemberEntity>) memberCaptor.getValue();
         assertThat(memberUpdate.getSqlSet())
-                .contains("role", "profession", "allow_portfolio", "allow_profile", "allow_works", "updated_at",
-                        "version");
+                .contains("role", "profession", "allow_portfolio", "allow_profile", "allow_works", "version");
         assertThat(memberUpdate.getSqlSegment()).contains("role", "version");
         assertThat(memberUpdate.getParamNameValuePairs().values())
                 .contains(TeamRoleDict.MEMBER.getCode(), TeamRoleDict.MANAGER.getCode(), 5);
         ArgumentCaptor<Wrapper<SystemMessageEntity>> messageCaptor = ArgumentCaptor.forClass(Wrapper.class);
-        verify(systemMessageEntityMapper).update(isNull(), messageCaptor.capture());
+        verify(systemMessageEntityMapper).update(any(SystemMessageEntity.class), messageCaptor.capture());
         UpdateWrapper<SystemMessageEntity> updateWrapper = (UpdateWrapper<SystemMessageEntity>) messageCaptor.getValue();
         assertThat(updateWrapper.getSqlSet())
-                .contains("action_type", "action_url", "updated_at");
+                .contains("action_type", "action_url");
         assertThat(updateWrapper.getSqlSegment()).contains("user_id", "idempotency_key");
         assertThat(updateWrapper.getParamNameValuePairs().values()).contains(MessageActionTypeDict.NONE.getCode(), "");
     }
@@ -350,7 +348,7 @@ class MineTeamMemberChangeFeatureTest {
                 .hasMessage("成员信息已变化，请联系团队拥有者重新发起。");
 
         verify(teamMemberChangeRequestTransactionService).invalidateMemberChangeAndClearAction(41L, 8L);
-        verify(teamMemberEntityMapper, never()).update(isNull(), any(Wrapper.class));
+        verify(teamMemberEntityMapper, never()).update(any(TeamMemberEntity.class), any(Wrapper.class));
     }
 
     @Test
@@ -365,9 +363,9 @@ class MineTeamMemberChangeFeatureTest {
         when(teamEntityMapper.selectById(100L)).thenReturn(team);
         when(teamMemberEntityMapper.selectOne(any())).thenReturn(owner);
         when(teamMemberEntityMapper.selectById(31L)).thenReturn(target);
-        when(teamMemberEntityMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
-        when(teamEntityMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
-        when(teamMemberChangeRequestEntityMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
+        when(teamMemberEntityMapper.update(any(TeamMemberEntity.class), any(Wrapper.class))).thenReturn(1);
+        when(teamEntityMapper.update(any(TeamEntity.class), any(Wrapper.class))).thenReturn(1);
+        when(teamMemberChangeRequestEntityMapper.update(any(TeamMemberChangeRequestEntity.class), any(Wrapper.class))).thenReturn(1);
         when(teamMemberEntityMapper.selectList(any())).thenReturn(List.of(owner, target));
         when(userEntityMapper.selectBatchIds(any(Collection.class))).thenReturn(List.of(
                 user(7L, "WF0007", "林安", "主持人"),
@@ -384,17 +382,17 @@ class MineTeamMemberChangeFeatureTest {
         assertThat(target.getRole()).isEqualTo(TeamRoleDict.OWNER.getCode());
         assertThat(team.getOwnerUserId()).isEqualTo(8L);
         ArgumentCaptor<Wrapper<TeamMemberEntity>> memberUpdateCaptor = ArgumentCaptor.forClass(Wrapper.class);
-        verify(teamMemberEntityMapper, times(2)).update(isNull(), memberUpdateCaptor.capture());
+        verify(teamMemberEntityMapper, times(2)).update(any(TeamMemberEntity.class), memberUpdateCaptor.capture());
         assertThat(memberUpdateCaptor.getAllValues()).allSatisfy(wrapper -> {
             UpdateWrapper<TeamMemberEntity> updateWrapper = (UpdateWrapper<TeamMemberEntity>) wrapper;
-            assertThat(updateWrapper.getSqlSet()).contains("role", "updated_at", "version");
+            assertThat(updateWrapper.getSqlSet()).contains("role", "version");
             assertThat(updateWrapper.getSqlSegment()).contains("role", "join_status", "version");
             assertThat(updateWrapper.getParamNameValuePairs().values()).contains(5);
         });
         ArgumentCaptor<Wrapper<TeamEntity>> teamUpdateCaptor = ArgumentCaptor.forClass(Wrapper.class);
-        verify(teamEntityMapper).update(isNull(), teamUpdateCaptor.capture());
+        verify(teamEntityMapper).update(any(TeamEntity.class), teamUpdateCaptor.capture());
         UpdateWrapper<TeamEntity> teamUpdate = (UpdateWrapper<TeamEntity>) teamUpdateCaptor.getValue();
-        assertThat(teamUpdate.getSqlSet()).contains("owner_user_id", "updated_at", "version");
+        assertThat(teamUpdate.getSqlSet()).contains("owner_user_id", "version");
         assertThat(teamUpdate.getSqlSegment()).contains("id", "version");
         assertThat(teamUpdate.getParamNameValuePairs().values()).contains(100L, 3, 8L);
         ArgumentCaptor<SystemMessageEntity> messageCaptor = ArgumentCaptor.forClass(SystemMessageEntity.class);
@@ -403,7 +401,7 @@ class MineTeamMemberChangeFeatureTest {
         assertThat(messageCaptor.getValue().getContent()).isEqualTo("你已被指定为「星曜司仪团」的拥有者。");
         assertThat(messageCaptor.getValue().getIdempotencyKey()).isEqualTo("team_owner_transfer:100:3:31");
         ArgumentCaptor<Wrapper<SystemMessageEntity>> messageUpdateCaptor = ArgumentCaptor.forClass(Wrapper.class);
-        verify(systemMessageEntityMapper).update(isNull(), messageUpdateCaptor.capture());
+        verify(systemMessageEntityMapper).update(any(SystemMessageEntity.class), messageUpdateCaptor.capture());
         UpdateWrapper<SystemMessageEntity> messageUpdate =
                 (UpdateWrapper<SystemMessageEntity>) messageUpdateCaptor.getValue();
         assertThat(messageUpdate.getSqlSegment()).contains("idempotency_key");
@@ -422,8 +420,8 @@ class MineTeamMemberChangeFeatureTest {
         when(teamEntityMapper.selectById(100L)).thenReturn(team);
         when(teamMemberEntityMapper.selectOne(any())).thenReturn(owner);
         when(teamMemberEntityMapper.selectById(31L)).thenReturn(target);
-        when(teamMemberEntityMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
-        when(teamEntityMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
+        when(teamMemberEntityMapper.update(any(TeamMemberEntity.class), any(Wrapper.class))).thenReturn(1);
+        when(teamEntityMapper.update(any(TeamEntity.class), any(Wrapper.class))).thenReturn(1);
         when(teamMemberChangeRequestEntityMapper.selectList(any())).thenReturn(List.of()).thenReturn(List.of());
         when(systemMessageEntityMapper.insert(any(SystemMessageEntity.class)))
                 .thenThrow(new DuplicateKeyException("duplicate"));
@@ -437,10 +435,10 @@ class MineTeamMemberChangeFeatureTest {
 
         assertThat(response.getTeam().getRole()).isEqualTo(TeamRoleDict.MANAGER.getCode());
         ArgumentCaptor<Wrapper<SystemMessageEntity>> messageUpdateCaptor = ArgumentCaptor.forClass(Wrapper.class);
-        verify(systemMessageEntityMapper).update(isNull(), messageUpdateCaptor.capture());
+        verify(systemMessageEntityMapper).update(any(SystemMessageEntity.class), messageUpdateCaptor.capture());
         UpdateWrapper<SystemMessageEntity> updateWrapper = (UpdateWrapper<SystemMessageEntity>) messageUpdateCaptor.getValue();
         assertThat(updateWrapper.getSqlSet())
-                .contains("read_status", "read_at", "title", "content", "action_type", "action_url", "updated_at");
+                .contains("read_status", "read_at", "title", "content", "action_type", "action_url");
         assertThat(updateWrapper.getSqlSegment()).contains("idempotency_key");
         assertThat(updateWrapper.getParamNameValuePairs().values())
                 .contains(MessageReadStatusDict.UNREAD.getCode(), MessageActionTypeDict.NONE.getCode(), "");
@@ -473,7 +471,7 @@ class MineTeamMemberChangeFeatureTest {
         assertThatThrownBy(() -> service().removeMember(request))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("无法移除，成员内容仍被《婚礼案例集》《主持作品集》等 3 个作品集使用，请先移除引用。");
-        verify(teamMemberEntityMapper, never()).update(isNull(), any(Wrapper.class));
+        verify(teamMemberEntityMapper, never()).update(any(TeamMemberEntity.class), any(Wrapper.class));
         verify(systemMessageEntityMapper, never()).insert(any(SystemMessageEntity.class));
     }
 
@@ -493,7 +491,7 @@ class MineTeamMemberChangeFeatureTest {
                 .thenReturn(List.of())
                 .thenReturn(List.of(portfolio(701L, PortfolioOwnerTypeDict.TEAM, 100L, "婚礼案例集")));
         when(portfolioReferenceEntityMapper.selectList(any())).thenReturn(List.of());
-        when(teamMemberEntityMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
+        when(teamMemberEntityMapper.update(any(TeamMemberEntity.class), any(Wrapper.class))).thenReturn(1);
         when(teamMemberEntityMapper.selectList(any())).thenReturn(List.of(owner));
         when(userEntityMapper.selectBatchIds(any(Collection.class))).thenReturn(List.of(
                 user(7L, "WF0007", "林安", "主持人")
@@ -505,9 +503,9 @@ class MineTeamMemberChangeFeatureTest {
         assertThat(response.getMembers()).hasSize(1);
         assertThat(target.getJoinStatus()).isEqualTo(JoinStatusDict.REMOVED.getCode());
         ArgumentCaptor<Wrapper<TeamMemberEntity>> memberCaptor = ArgumentCaptor.forClass(Wrapper.class);
-        verify(teamMemberEntityMapper).update(isNull(), memberCaptor.capture());
+        verify(teamMemberEntityMapper).update(any(TeamMemberEntity.class), memberCaptor.capture());
         assertThat(((UpdateWrapper<TeamMemberEntity>) memberCaptor.getValue()).getSqlSet())
-                .contains("join_status", "removed_at", "removal_reason", "updated_at");
+                .contains("join_status", "removed_at", "removal_reason");
         ArgumentCaptor<SystemMessageEntity> messageCaptor = ArgumentCaptor.forClass(SystemMessageEntity.class);
         verify(systemMessageEntityMapper).insert(messageCaptor.capture());
         assertThat(messageCaptor.getValue().getUserId()).isEqualTo(8L);

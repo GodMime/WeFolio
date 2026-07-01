@@ -1,4 +1,5 @@
 const { writeRgbaFrameToCanvas } = require('../../utils/frame-canvas')
+const { decodeVideoFrameAtTime } = require('../../utils/video-frame-decoder')
 
 const CANVAS_ID = 'frameProbeCanvas'
 const DEFAULT_VIDEO_DURATION_MS = 1000
@@ -125,17 +126,15 @@ Page({
       working: true,
       coverPath: ''
     })
-    let decoder = null
     try {
-      decoder = wx.createVideoDecoder()
-      this.appendLog('创建 VideoDecoder 成功')
-      await decoder.start({
+      this.appendLog(`开始解码，等待 start/seek 事件，目标 ${this.data.targetTimeMs}ms`)
+      const { frame, seekTimeMs } = await decodeVideoFrameAtTime({
+        wxApi: wx,
         source: this.data.videoPath,
-        abortAudio: true
+        timeMs: this.data.targetTimeMs,
+        durationMs: this.data.durationMs
       })
-      this.appendLog(`开始解码，seek 到 ${this.data.targetTimeMs}ms`)
-      await decoder.seek(this.data.targetTimeMs)
-      const frame = await this.readFrame(decoder)
+      this.appendLog(`已完成 seek: ${seekTimeMs}ms`)
       const coverPath = await this.writeFrameToCanvas(frame)
       this.setData({ coverPath })
       this.appendLog(`导出成功: ${coverPath}`)
@@ -146,26 +145,8 @@ Page({
         icon: 'none'
       })
     } finally {
-      if (decoder && decoder.stop) {
-        decoder.stop()
-      }
-      if (decoder && decoder.remove) {
-        decoder.remove()
-      }
       this.setData({ working: false })
     }
-  },
-
-  async readFrame(decoder) {
-    for (let index = 0; index < 12; index++) {
-      const frame = decoder.getFrameData()
-      if (frame && frame.data && frame.width && frame.height) {
-        this.appendLog(`拿到帧: ${frame.width}x${frame.height}, bytes=${frame.data.byteLength}`)
-        return frame
-      }
-      await new Promise((resolve) => setTimeout(resolve, 80))
-    }
-    throw new Error('多次读取后仍未拿到帧数据')
   },
 
   async writeFrameToCanvas(frame) {

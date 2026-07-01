@@ -149,8 +149,6 @@ public class UserRegistrationService {
         relation.setReferredUserId(referredUser.getId());
         relation.setReferralCodeSnapshot(normalizedReferralCode);
         relation.setBoundAt(now);
-        relation.setCreatedAt(now);
-        relation.setUpdatedAt(now);
         referralRelationEntityMapper.insert(relation);
 
         pointService.grantGift(

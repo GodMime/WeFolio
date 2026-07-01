@@ -289,11 +289,21 @@ function buildTagNames(form = {}) {
 }
 
 function buildWorkUpdatePayload(form = {}) {
-  return {
+  const payload = {
     title: trimText(form.title),
-    description: trimText(form.description),
-    tagNames: buildTagNames(form)
+    description: trimText(form.description)
   }
+  if (Object.prototype.hasOwnProperty.call(form, 'coverFrameTimeMs')) {
+    const frameTimeMs = Math.max(0, Math.round(toNumber(form.coverFrameTimeMs)))
+    payload.coverFrameTimeMs = frameTimeMs
+  }
+  const width = Math.max(0, Math.round(toNumber(form.width)))
+  const height = Math.max(0, Math.round(toNumber(form.height)))
+  if (width > 0 && height > 0) {
+    payload.width = width
+    payload.height = height
+  }
+  return payload
 }
 
 function createWorkTagForm(raw = {}) {

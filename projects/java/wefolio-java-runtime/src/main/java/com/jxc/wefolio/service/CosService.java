@@ -7,6 +7,7 @@ import com.qcloud.cos.model.COSObject;
 import com.qcloud.cos.model.GetObjectRequest;
 import com.qcloud.cos.model.ObjectMetadata;
 import com.qcloud.cos.auth.COSSigner;
+import com.qcloud.cos.model.ciModel.snapshot.CosSnapshotRequest;
 import com.qcloud.cos.transfer.TransferManager;
 import com.qcloud.cos.transfer.Upload;
 import lombok.RequiredArgsConstructor;
@@ -16,15 +17,27 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.qcloud.cos.model.PutObjectRequest;
 
+import javax.imageio.IIOImage;
+import javax.imageio.ImageIO;
+import javax.imageio.ImageWriteParam;
+import javax.imageio.ImageWriter;
+import javax.imageio.stream.ImageOutputStream;
+import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
 import java.net.URL;
 import java.net.URLConnection;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
@@ -33,6 +46,7 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -40,6 +54,12 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class CosService {
+
+    /** Java AWT 无头模式配置键 */
+    private static final String JAVA_AWT_HEADLESS_PROPERTY = "java.awt.headless";
+
+    /** 布尔真字符串 */
+    private static final String TRUE_VALUE = "true";
 
     /** COS 表单上传签名算法 */
     private static final String POST_SIGN_ALGORITHM = "sha1";
@@ -86,11 +106,45 @@ public class CosService {
     /** COS 表单签名起始时间回退秒数，用于容忍服务器与 COS 的轻微时钟偏差 */
     private static final long POST_KEY_TIME_CLOCK_SKEW_SECONDS = 60L;
 
-    /** COS 表单上传地址模板 */
-    private static final String POST_UPLOAD_URL_TEMPLATE = "https://%s.cos.%s.myqcloud.com";
+    /** 小程序合法上传域名默认值 */
+    private static final String DEFAULT_POST_UPLOAD_BASE_URL = "https://cos.we-folio.dingchenyong.top";
+
+    /** 腾讯云 COS 源站域名后缀，未加入小程序 uploadFile 合法域名 */
+    private static final String TENCENT_COS_SOURCE_DOMAIN_SUFFIX = ".myqcloud.com";
 
     /** URL 末尾斜杠匹配表达式 */
     private static final String TRAILING_SLASH_REGEX = "/+$";
+
+    /** 数据万象截帧输出格式 */
+    private static final String SNAPSHOT_FORMAT = "jpg";
+
+    /** 数据万象截帧输出 MIME */
+    private static final String SNAPSHOT_CONTENT_TYPE = "image/jpeg";
+
+    /** 数据万象截帧默认宽度，控制封面体积 */
+    private static final int SNAPSHOT_DEFAULT_WIDTH = 640;
+
+    /** 数据万象截帧默认高度，控制封面体积 */
+    private static final int SNAPSHOT_DEFAULT_HEIGHT = 640;
+
+    /** 视频封面最大字节数 */
+    private static final int SNAPSHOT_MAX_BYTES = 100 * 1024;
+
+    /** 视频封面压缩质量梯度 */
+    private static final float[] SNAPSHOT_COMPRESS_QUALITIES = {
+            0.85f, 0.75f, 0.65f, 0.55f, 0.45f, 0.35f, 0.25f
+    };
+
+    /** 视频封面压缩尺寸梯度 */
+    private static final double[] SNAPSHOT_COMPRESS_SCALES = {
+            1D, 0.85D, 0.7D, 0.55D, 0.4D, 0.3D, 0.25D
+    };
+
+    /** SHA-256 摘要算法名称 */
+    private static final String SHA_256_ALGORITHM = "SHA-256";
+
+    /** 毫秒转秒的除数 */
+    private static final double MILLIS_PER_SECOND = 1000D;
 
     /** UTC 时间格式，用于 COS POST policy expiration */
     private static final DateTimeFormatter POLICY_EXPIRATION_FORMATTER =
@@ -98,6 +152,12 @@ public class CosService {
 
     private final TransferManager transferManager;
     private final CosProperties cosProperties;
+
+    static {
+        if (System.getProperty(JAVA_AWT_HEADLESS_PROPERTY) == null) {
+            System.setProperty(JAVA_AWT_HEADLESS_PROPERTY, TRUE_VALUE);
+        }
+    }
 
     /**
      * 上传文件到 COS 根目录。生成的 key 格式为 {@code {UUID}.ext}。
@@ -415,6 +475,86 @@ public class CosService {
         }
     }
 
+    /**
+     * 使用腾讯云数据万象从视频截取一帧并写回 COS。
+     *
+     * @param sourceKey 视频对象键
+     * @param targetKey 封面图对象键
+     * @param frameTimeMs 截帧时间点，单位毫秒
+     * @return 已写入的封面对象信息
+     */
+    public SnapshotObject snapshotVideoFrameToObject(String sourceKey, String targetKey, long frameTimeMs) {
+        return snapshotVideoFrameToObject(
+                sourceKey,
+                targetKey,
+                frameTimeMs,
+                SNAPSHOT_DEFAULT_WIDTH,
+                SNAPSHOT_DEFAULT_HEIGHT);
+    }
+
+    /**
+     * 使用腾讯云数据万象从视频截取一帧并写回 COS。
+     *
+     * @param sourceKey 视频对象键
+     * @param targetKey 封面图对象键
+     * @param frameTimeMs 截帧时间点，单位毫秒
+     * @param snapshotWidth 截帧输出宽度
+     * @param snapshotHeight 截帧输出高度
+     * @return 已写入的封面对象信息
+     */
+    public SnapshotObject snapshotVideoFrameToObject(
+            String sourceKey,
+            String targetKey,
+            long frameTimeMs,
+            Integer snapshotWidth,
+            Integer snapshotHeight
+    ) {
+        try {
+            String bucketName = cosProperties.getBucketName();
+            String snapshotTime = formatSnapshotTime(frameTimeMs);
+            int outputWidth = normalizeSnapshotDimension(snapshotWidth, SNAPSHOT_DEFAULT_WIDTH);
+            int outputHeight = normalizeSnapshotDimension(snapshotHeight, SNAPSHOT_DEFAULT_HEIGHT);
+            CosSnapshotRequest snapshotRequest = new CosSnapshotRequest();
+            snapshotRequest.setBucketName(bucketName);
+            snapshotRequest.setObjectKey(sourceKey);
+            snapshotRequest.setTime(snapshotTime);
+            snapshotRequest.setFormat(SNAPSHOT_FORMAT);
+            snapshotRequest.setWidth(String.valueOf(outputWidth));
+            snapshotRequest.setHeight(String.valueOf(outputHeight));
+            log.info("COS video snapshot request: bucketName={}, sourceKey={}, targetKey={}, frameTimeMs={}, snapshotTime={}, format={}, width={}, height={}",
+                    bucketName, sourceKey, targetKey, frameTimeMs, snapshotTime, SNAPSHOT_FORMAT, outputWidth, outputHeight);
+
+            byte[] imageBytes;
+            try (InputStream snapshotStream = transferManager.getCOSClient().getSnapshot(snapshotRequest)) {
+                imageBytes = snapshotStream.readAllBytes();
+            }
+            if (imageBytes.length == 0) {
+                throw new RuntimeException("snapshot body is empty");
+            }
+            byte[] uploadBytes = compressSnapshotIfNeeded(imageBytes, sourceKey, targetKey);
+
+            ObjectMetadata metadata = new ObjectMetadata();
+            metadata.setContentType(SNAPSHOT_CONTENT_TYPE);
+            metadata.setContentLength(uploadBytes.length);
+            PutObjectRequest putObjectRequest = new PutObjectRequest(
+                    bucketName,
+                    targetKey,
+                    new ByteArrayInputStream(uploadBytes),
+                    metadata);
+            putObjectRequest.setCannedAcl(CannedAccessControlList.PublicRead);
+            transferManager.getCOSClient().putObject(putObjectRequest);
+
+            String sha256 = sha256Hex(uploadBytes);
+            log.info("COS video snapshot success: sourceKey={}, targetKey={}, timeMs={}, originalSize={}, finalSize={}",
+                    sourceKey, targetKey, frameTimeMs, imageBytes.length, uploadBytes.length);
+            return new SnapshotObject(targetKey, SNAPSHOT_CONTENT_TYPE, uploadBytes.length, sha256);
+        } catch (Exception e) {
+            log.error("COS video snapshot failed: sourceKey={}, targetKey={}, timeMs={}, width={}, height={}",
+                    sourceKey, targetKey, frameTimeMs, snapshotWidth, snapshotHeight, e);
+            throw new RuntimeException("Video snapshot failed: " + e.getMessage(), e);
+        }
+    }
+
     public void delete(String key) {
         try {
             transferManager.getCOSClient().deleteObject(cosProperties.getBucketName(), key);
@@ -495,10 +635,154 @@ public class CosService {
      */
     private String buildPostUploadUrl() {
         String uploadBaseUrl = cosProperties.getUploadBaseUrl();
-        if (uploadBaseUrl != null && !uploadBaseUrl.isBlank()) {
-            return uploadBaseUrl.replaceAll(TRAILING_SLASH_REGEX, "");
+        String normalizedUploadBaseUrl = uploadBaseUrl == null ? "" : uploadBaseUrl.trim();
+        if (!normalizedUploadBaseUrl.isBlank() && !isTencentCosSourceDomain(normalizedUploadBaseUrl)) {
+            return normalizedUploadBaseUrl.replaceAll(TRAILING_SLASH_REGEX, "");
         }
-        return String.format(POST_UPLOAD_URL_TEMPLATE, cosProperties.getBucketName(), cosProperties.getRegion());
+        return DEFAULT_POST_UPLOAD_BASE_URL;
+    }
+
+    /**
+     * 判断配置的上传域名是否为腾讯云 COS 源站域名。
+     *
+     * @param uploadBaseUrl 上传域名配置
+     * @return 是否为 COS 源站域名
+     */
+    private boolean isTencentCosSourceDomain(String uploadBaseUrl) {
+        try {
+            String host = URI.create(uploadBaseUrl).getHost();
+            return host != null && host.endsWith(TENCENT_COS_SOURCE_DOMAIN_SUFFIX);
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+
+    /**
+     * 格式化数据万象截帧时间。
+     *
+     * @param frameTimeMs 毫秒时间点
+     * @return 秒格式时间，保留三位小数
+     */
+    private String formatSnapshotTime(long frameTimeMs) {
+        return String.format(Locale.ROOT, "%.3f", Math.max(0L, frameTimeMs) / MILLIS_PER_SECOND);
+    }
+
+    /**
+     * 归一化数据万象截帧输出尺寸。
+     *
+     * @param value 请求尺寸
+     * @param fallback 默认尺寸
+     * @return 可提交给数据万象的尺寸
+     */
+    private int normalizeSnapshotDimension(Integer value, int fallback) {
+        if (value == null || value <= 0) {
+            return fallback;
+        }
+        return value;
+    }
+
+    /**
+     * 视频封面超过限制时进行内存压缩。
+     *
+     * @param imageBytes 数据万象返回的原始图片字节
+     * @param sourceKey 视频对象键
+     * @param targetKey 封面对象键
+     * @return 可上传的图片字节
+     */
+    private byte[] compressSnapshotIfNeeded(byte[] imageBytes, String sourceKey, String targetKey) throws IOException {
+        if (imageBytes.length <= SNAPSHOT_MAX_BYTES) {
+            return imageBytes;
+        }
+        BufferedImage sourceImage = ImageIO.read(new ByteArrayInputStream(imageBytes));
+        if (sourceImage == null) {
+            throw new IOException("数据万象截帧图片解码失败");
+        }
+        byte[] bestBytes = imageBytes;
+        for (double scale : SNAPSHOT_COMPRESS_SCALES) {
+            BufferedImage scaledImage = scaleSnapshotImage(sourceImage, scale);
+            for (float quality : SNAPSHOT_COMPRESS_QUALITIES) {
+                byte[] compressedBytes = writeJpeg(scaledImage, quality);
+                if (compressedBytes.length < bestBytes.length) {
+                    bestBytes = compressedBytes;
+                }
+                if (compressedBytes.length <= SNAPSHOT_MAX_BYTES) {
+                    log.info("COS video snapshot compressed: sourceKey={}, targetKey={}, originalSize={}, compressedSize={}, limit={}, quality={}, scale={}",
+                            sourceKey,
+                            targetKey,
+                            imageBytes.length,
+                            compressedBytes.length,
+                            SNAPSHOT_MAX_BYTES,
+                            quality,
+                            scale);
+                    return compressedBytes;
+                }
+            }
+        }
+        log.warn("COS video snapshot compression still exceeds limit: sourceKey={}, targetKey={}, originalSize={}, bestSize={}, limit={}",
+                sourceKey, targetKey, imageBytes.length, bestBytes.length, SNAPSHOT_MAX_BYTES);
+        throw new IOException("视频封面压缩后仍超过 100KB");
+    }
+
+    /**
+     * 按比例缩放封面图并转换为 JPEG 可写入的 RGB 图。
+     *
+     * @param sourceImage 原始图片
+     * @param scale 缩放比例
+     * @return RGB 图片
+     */
+    private BufferedImage scaleSnapshotImage(BufferedImage sourceImage, double scale) {
+        int width = Math.max(1, (int) Math.round(sourceImage.getWidth() * scale));
+        int height = Math.max(1, (int) Math.round(sourceImage.getHeight() * scale));
+        BufferedImage targetImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        Graphics2D graphics = targetImage.createGraphics();
+        try {
+            graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            graphics.setColor(Color.WHITE);
+            graphics.fillRect(0, 0, width, height);
+            graphics.drawImage(sourceImage, 0, 0, width, height, null);
+            return targetImage;
+        } finally {
+            graphics.dispose();
+        }
+    }
+
+    /**
+     * 按指定质量写出 JPEG。
+     *
+     * @param image 图片
+     * @param quality 压缩质量
+     * @return JPEG 字节
+     */
+    private byte[] writeJpeg(BufferedImage image, float quality) throws IOException {
+        ImageWriter writer = ImageIO.getImageWritersByFormatName(SNAPSHOT_FORMAT).next();
+        ImageWriteParam param = writer.getDefaultWriteParam();
+        param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+        param.setCompressionQuality(quality);
+        try (ByteArrayOutputStream output = new ByteArrayOutputStream();
+             ImageOutputStream imageOutput = ImageIO.createImageOutputStream(output)) {
+            writer.setOutput(imageOutput);
+            writer.write(null, new IIOImage(image, null, null), param);
+            return output.toByteArray();
+        } finally {
+            writer.dispose();
+        }
+    }
+
+    /**
+     * 计算字节内容 SHA-256。
+     *
+     * @param bytes 原始字节
+     * @return 小写十六进制 SHA-256
+     */
+    private String sha256Hex(byte[] bytes) throws Exception {
+        byte[] digest = MessageDigest.getInstance(SHA_256_ALGORITHM).digest(bytes);
+        StringBuilder builder = new StringBuilder(digest.length * 2);
+        for (byte value : digest) {
+            builder.append(String.format("%02x", value & 0xff));
+        }
+        return builder.toString();
     }
 
     private String extractExtension(String filename) {
@@ -561,5 +845,16 @@ public class CosService {
      * @param contentLength 文件字节数
      */
     public record ObjectHead(String contentType, long contentLength) {
+    }
+
+    /**
+     * 数据万象截帧写入后的对象信息。
+     *
+     * @param objectKey COS 对象键
+     * @param contentType MIME 类型
+     * @param contentLength 文件字节数
+     * @param sha256 文件 SHA-256
+     */
+    public record SnapshotObject(String objectKey, String contentType, long contentLength, String sha256) {
     }
 }

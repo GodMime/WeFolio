@@ -42,6 +42,60 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value))
 }
 
+function createEventDrivenVideoDecoder(calls) {
+  const handlers = {}
+  let started = false
+  let seeked = false
+  return {
+    on(eventName, callback) {
+      handlers[eventName] = callback
+    },
+    off(eventName, callback) {
+      if (handlers[eventName] === callback) {
+        delete handlers[eventName]
+      }
+    },
+    start(options) {
+      calls.push({ type: 'start', options })
+      setImmediate(() => {
+        started = true
+        if (handlers.start) {
+          handlers.start({ width: 1920, height: 1080 })
+        }
+      })
+    },
+    seek(position) {
+      calls.push({ type: 'seek', position })
+      if (!started) {
+        throw new Error('seek before decoder start event')
+      }
+      setImmediate(() => {
+        seeked = true
+        if (handlers.seek) {
+          handlers.seek()
+        }
+      })
+    },
+    getFrameData() {
+      calls.push({ type: 'frame' })
+      if (!seeked) {
+        throw new Error('read before decoder seek event')
+      }
+      return {
+        width: 1,
+        height: 1,
+        data: new Uint8ClampedArray([1, 2, 3, 4])
+      }
+    },
+    stop() {
+      calls.push({ type: 'stop' })
+    },
+    remove() {
+      calls.push({ type: 'remove' })
+    }
+  }
+}
+
 function loadPage(pageRelativePath, fakeRequest, wxOverrides = {}) {
   const pagePath = path.join(__dirname, '..', pageRelativePath)
   const requestPath = path.join(__dirname, '../utils/request.js')
@@ -314,6 +368,305 @@ test('work add retry skips upload tickets for already ticketed files', async () 
   assert.equal(page.data.files[0].status, 'CONFIRMED')
   assert.equal(page.data.files[1].status, 'CONFIRMED')
   assert.equal(page.data.files[1].confirmedWorkId, 220)
+})
+
+test('work add keeps video cover generation on backend first frame', async () => {
+  const fakeRequest = () => Promise.resolve({})
+  const page = loadPage('pages/work-add/work-add.js', fakeRequest)
+  page.data.files = [{
+    id: 'video-a',
+    title: '旧标题',
+    description: '',
+    customCoverPath: 'wxfile://tmp/old-cover.jpg'
+  }]
+  page.data.editForm = {
+    index: 0,
+    id: 'video-a',
+    isVideo: true,
+    title: ' 新标题 ',
+    description: ' 新说明 ',
+    coverFrameTimeMs: 1200,
+    customCoverPath: 'wxfile://tmp/new-cover.jpg'
+  }
+
+  page.handleConfirmFileEdit()
+
+  const patchedFile = page.data['files[0]']
+  assert.equal(patchedFile.title, '新标题')
+  assert.equal(patchedFile.description, '新说明')
+  assert.equal(patchedFile.customCoverPath, 'wxfile://tmp/old-cover.jpg')
+  assert.equal(patchedFile.coverFrameTimeMs, undefined)
+})
+
+test('works page opens image edit sheet and saves image text directly', async () => {
+  const requests = []
+  const fakeRequest = (options) => {
+    requests.push(options)
+    if (options.method === 'PUT') {
+      return Promise.resolve({
+        work: {
+          id: 17,
+          title: '海边仪式',
+          description: '新说明'
+        },
+        references: []
+      })
+    }
+    return Promise.resolve({ works: [], tags: [], summary: {} })
+  }
+  let navigateToCount = 0
+  const page = loadPage('pages/works/works.js', fakeRequest, {
+    navigateTo() {
+      navigateToCount += 1
+    }
+  })
+  page.data.list.works = [
+    {
+      id: 17,
+      mediaType: 'IMAGE',
+      title: '旧标题',
+      description: '旧说明',
+      originalFileName: 'photo.jpg',
+      mediaUrl: 'https://cos.we-folio.dingchenyong.top/WF/work/image/photo.jpg',
+      coverUrl: 'https://cos.we-folio.dingchenyong.top/WF/work/image/photo-thumb.jpg'
+    }
+  ]
+
+  page.handleWorkTap({
+    currentTarget: {
+      dataset: {
+        id: '17'
+      }
+    }
+  })
+  assert.equal(page.data.imageEditSheetVisible, true)
+  assert.equal(page.data.videoEditSheetVisible, false)
+  assert.deepEqual(page.data.imageEditFieldCounters, {
+    title: '3/30',
+    description: '3/1000'
+  })
+  page.handleImageEditInput({
+    currentTarget: {
+      dataset: {
+        field: 'title'
+      }
+    },
+    detail: {
+      value: ' 海边仪式 '
+    }
+  })
+  page.handleImageEditInput({
+    currentTarget: {
+      dataset: {
+        field: 'description'
+      }
+    },
+    detail: {
+      value: ' 新说明 '
+    }
+  })
+  assert.deepEqual(page.data.imageEditFieldCounters, {
+    title: '6/30',
+    description: '5/1000'
+  })
+  await page.handleConfirmImageEdit()
+
+  assert.equal(navigateToCount, 0)
+  assert.equal(requests[0].url, '/api/mine/works/17')
+  assert.equal(requests[0].method, 'PUT')
+  assert.deepEqual(requests[0].data, {
+    title: '海边仪式',
+    description: '新说明'
+  })
+  assert.equal(page.data.imageEditSheetVisible, false)
+})
+
+test('works page opens video edit sheet and saves video text without downloading remote media', async () => {
+  const requests = []
+  const fakeRequest = (options) => {
+    requests.push(options)
+    if (options.method === 'PUT') {
+      return Promise.resolve({
+        work: {
+          id: 18,
+          title: '新标题',
+          description: '新说明'
+        },
+        references: []
+      })
+    }
+    return Promise.resolve({ works: [], tags: [], summary: {} })
+  }
+  let navigateToCount = 0
+  let downloadCount = 0
+  const page = loadPage('pages/works/works.js', fakeRequest, {
+    navigateTo() {
+      navigateToCount += 1
+    },
+    downloadFile() {
+      downloadCount += 1
+    }
+  })
+  page.data.list.works = [
+    {
+      id: 18,
+      mediaType: 'VIDEO',
+      title: '旧标题',
+      description: '旧说明',
+      originalFileName: 'film.mp4',
+      mediaUrl: 'https://cos.we-folio.dingchenyong.top/WF/work/video/film.mp4',
+      coverUrl: 'https://cos.we-folio.dingchenyong.top/WF/work/video/film-thumb.jpg',
+      durationMs: 60000,
+      durationText: '01:00'
+    }
+  ]
+
+  page.handleWorkTap({
+    currentTarget: {
+      dataset: {
+        id: '18'
+      }
+    }
+  })
+  assert.equal(page.data.videoEditSheetVisible, true)
+  assert.equal(page.data.imageEditSheetVisible, false)
+  assert.equal(page.data.videoEditForm.coverEditorReady, false)
+  assert.deepEqual(page.data.videoEditFieldCounters, {
+    title: '3/30',
+    description: '3/1000'
+  })
+  page.handleVideoEditInput({
+    currentTarget: {
+      dataset: {
+        field: 'title'
+      }
+    },
+    detail: {
+      value: ' 新标题 '
+    }
+  })
+  page.handleVideoEditInput({
+    currentTarget: {
+      dataset: {
+        field: 'description'
+      }
+    },
+    detail: {
+      value: ' 新说明 '
+    }
+  })
+  assert.deepEqual(page.data.videoEditFieldCounters, {
+    title: '5/30',
+    description: '5/1000'
+  })
+  await page.handleConfirmVideoEdit()
+
+  assert.equal(navigateToCount, 0)
+  assert.equal(downloadCount, 0)
+  assert.equal(requests[0].url, '/api/mine/works/18')
+  assert.equal(requests[0].method, 'PUT')
+  assert.deepEqual(requests[0].data, {
+    title: '新标题',
+    description: '新说明'
+  })
+  assert.equal(page.data.videoEditSheetVisible, false)
+})
+
+test('works page starts remote video frame selection without downloading the video', async () => {
+  const fakeRequest = () => Promise.resolve({})
+  const downloadUrls = []
+  const page = loadPage('pages/works/works.js', fakeRequest, {
+    downloadFile(options) {
+      downloadUrls.push(options.url)
+      options.success({
+        statusCode: 200,
+        tempFilePath: 'wxfile://tmp/film.mp4'
+      })
+    }
+  })
+  page.data.videoEditForm = {
+    id: 18,
+    isVideo: true,
+    mediaUrl: 'https://cos.we-folio.dingchenyong.top/WF/work/video/film.mp4',
+    tempFilePath: '',
+    localVideoPath: ''
+  }
+
+  await page.handleStartVideoCoverEdit()
+
+  assert.equal(page.data.videoEditForm.coverEditorReady, true)
+  assert.deepEqual(downloadUrls, [])
+  assert.equal(page.data.videoEditForm.tempFilePath, 'https://cos.we-folio.dingchenyong.top/WF/work/video/film.mp4')
+  assert.equal(page.data.videoEditForm.localVideoPath, '')
+})
+
+test('works page marks current frame time for backend snapshot without local decoding', async () => {
+  const fakeRequest = () => Promise.resolve({})
+  const page = loadPage('pages/works/works.js', fakeRequest)
+  page.data.videoEditForm = {
+    id: 18,
+    clientId: 'edit-work-18',
+    isVideo: true,
+    mediaType: 'VIDEO',
+    fileName: 'film.mp4',
+    mediaUrl: 'wxfile://tmp/film.mp4',
+    tempFilePath: 'wxfile://tmp/film.mp4',
+    localVideoPath: 'wxfile://tmp/film.mp4',
+    durationMs: 5000,
+    coverFrameTimeMs: 1800
+  }
+  page.data.videoFrameTimeMs = 1800
+
+  await page.handleExportVideoCover()
+
+  assert.equal(page.data.videoEditErrorText, '')
+  assert.equal(page.data.videoEditForm.coverFrameSelected, true)
+  assert.equal(page.data.videoEditForm.coverFrameTimeMs, 1800)
+  assert.equal(page.data.videoEditForm.customCoverPath, undefined)
+})
+
+test('works page saves selected video cover frame time directly', async () => {
+  const requests = []
+  const fakeRequest = (options) => {
+    requests.push(options)
+    return Promise.resolve({
+      work: {
+        id: 18,
+        title: '片头快剪',
+        description: '新封面'
+      },
+      references: []
+    })
+  }
+  const page = loadPage('pages/works/works.js', fakeRequest)
+  page.data.videoEditForm = {
+    id: 18,
+    clientId: 'edit-work-18',
+    isVideo: true,
+    mediaType: 'VIDEO',
+    title: ' 片头快剪 ',
+    description: ' 新封面 ',
+    originalFileName: 'film.mp4',
+    fileName: 'film.mp4',
+    mediaUrl: 'https://cos.we-folio.dingchenyong.top/WF/work/video/film.mp4',
+    coverFrameSelected: true,
+    coverFrameTimeMs: 5200,
+    width: 1080,
+    height: 1920
+  }
+
+  await page.handleConfirmVideoEdit()
+
+  assert.deepEqual(requests.map((request) => request.url), [
+    '/api/mine/works/18'
+  ])
+  assert.deepEqual(requests[0].data, {
+    title: '片头快剪',
+    description: '新封面',
+    coverFrameTimeMs: 5200,
+    width: 1080,
+    height: 1920
+  })
 })
 
 test('team maintenance member invite closes sheet and refreshes current detail', async () => {

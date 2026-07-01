@@ -125,6 +125,18 @@ public class MineWorkService {
     /** 缩略图文件扩展名 */
     private static final String THUMB_FILE_EXTENSION = "jpg";
 
+    /** 后端生成视频封面任务幂等前缀 */
+    private static final String GENERATED_VIDEO_COVER_IDEMPOTENCY_PREFIX = "WORK_VIDEO_COVER:";
+
+    /** 视频默认封面截帧时间点 */
+    private static final long DEFAULT_VIDEO_COVER_FRAME_TIME_MS = 0L;
+
+    /** 数据万象封面截帧最长边 */
+    private static final int SNAPSHOT_MAX_SIDE = 640;
+
+    /** 小程序可信媒体尺寸最大值，防止异常入参 */
+    private static final int MEDIA_DIMENSION_MAX = 10000;
+
     /** 上传任务幂等键兜底前缀 */
     private static final String TICKET_IDEMPOTENCY_PREFIX = "WORK_UPLOAD_TICKET:";
 
@@ -133,6 +145,15 @@ public class MineWorkService {
 
     /** 同批次重复文件提示 */
     private static final String SAME_BATCH_DUPLICATE_FILE_MESSAGE = "同一批次存在重复文件，请重新选择后上传";
+
+    /** 文件 SHA-256 格式错误提示 */
+    private static final String FILE_SHA256_INVALID_MESSAGE = "文件 SHA-256 格式不正确";
+
+    /** 重复作品提示模板 */
+    private static final String DUPLICATE_WORK_MESSAGE_TEMPLATE = "作品已存在：「%s」";
+
+    /** SHA-256 小写十六进制格式 */
+    private static final String SHA256_PATTERN = "^[0-9a-f]{64}$";
 
     /** 作品对象键命名冲突提示 */
     private static final String WORK_OBJECT_KEY_CONFLICT_MESSAGE = "上传文件命名冲突，请稍后重试";
@@ -148,9 +169,6 @@ public class MineWorkService {
 
     /** 作品表删除时间列 */
     private static final String WORK_COLUMN_DELETED_AT = "deleted_at";
-
-    /** 作品表更新时间列 */
-    private static final String WORK_COLUMN_UPDATED_AT = "updated_at";
 
     /** 作品表媒体类型列 */
     private static final String WORK_COLUMN_MEDIA_TYPE = "media_type";
@@ -197,6 +215,12 @@ public class MineWorkService {
     /** 上传确认未预期失败提示 */
     private static final String UPLOAD_CONFIRM_UNEXPECTED_FAILED_MESSAGE = "作品确认失败，请稍后重试";
 
+    /** 作品保存失败提示 */
+    private static final String WORK_SAVE_FAILED_MESSAGE = "作品保存失败，请刷新后重试";
+
+    /** 非视频作品修改封面提示 */
+    private static final String VIDEO_COVER_UPDATE_MEDIA_TYPE_MESSAGE = "只有视频作品可以修改封面";
+
     /** 图片缩略图缺失提示 */
     private static final String IMAGE_THUMB_REQUIRED_MESSAGE = "图片缩略图缺失，请重新上传";
 
@@ -211,6 +235,9 @@ public class MineWorkService {
 
     /** 缩略图或封面图来源任务错误提示 */
     private static final String COVER_SOURCE_TASK_INVALID_MESSAGE = "缩略图或封面图来源任务无效";
+
+    /** 视频封面生成失败提示 */
+    private static final String VIDEO_COVER_GENERATE_FAILED_MESSAGE = "视频封面生成失败，请稍后重试";
 
     /** 单个作品标签数量超限提示 */
     private static final String WORK_TAG_COUNT_LIMIT_MESSAGE = "作品标签最多 10 个";
@@ -357,8 +384,6 @@ public class MineWorkService {
         tag.setName(name);
         tag.setColor(color);
         tag.setStatus(WfTagStatusDict.ACTIVE.getCode());
-        tag.setCreatedAt(LocalDateTime.now());
-        tag.setUpdatedAt(LocalDateTime.now());
         try {
             wfTagEntityMapper.insert(tag);
         } catch (DuplicateKeyException e) {
@@ -386,7 +411,6 @@ public class MineWorkService {
 
         tag.setName(name);
         tag.setColor(color);
-        tag.setUpdatedAt(LocalDateTime.now());
         int updated = wfTagEntityMapper.updateById(tag);
         if (updated <= 0) {
             throw new BusinessException(TAG_SAVE_FAILED_MESSAGE);
@@ -467,6 +491,7 @@ public class MineWorkService {
                     preparedFile.mediaType(),
                     preparedFile.objectKey(),
                     preparedFile.idempotencyKey(),
+                    preparedFile.fileSha256(),
                     expiresAt);
             WorkUploadTaskEntity persistedTask = saveOrFindUploadTask(task);
             long maxBytes = maxBytes(persistedTask.getMediaType());
@@ -498,6 +523,7 @@ public class MineWorkService {
             try {
                 WorkUploadTaskEntity task = requireOwnedUploadTask(userId, taskId);
                 CosService.ObjectHead head = validateCosObject(task);
+                ensureGeneratedVideoCoverTask(userId, task, item);
                 validateCoverTask(userId, task, head, item);
                 response.getItems().add(workUploadTransactionService.confirmUploadedTask(userId, task, item));
             } catch (BusinessException e) {
@@ -524,14 +550,34 @@ public class MineWorkService {
     @Transactional(rollbackFor = Exception.class)
     public MineWorkDetailResponse updateWork(Long workId, MineWorkUpdateRequest request) {
         WorkEntity work = requireOwnedWork(workId);
-        work.setTitle(normalizeRequiredTitle(request == null ? null : request.getTitle()));
-        work.setDescription(normalizeDescription(request == null ? null : request.getDescription()));
-        work.setUpdatedAt(LocalDateTime.now());
+        Long coverFrameTimeMs = request == null ? null : request.getCoverFrameTimeMs();
+        String title = normalizeRequiredTitle(request == null ? null : request.getTitle());
+        String description = normalizeDescription(request == null ? null : request.getDescription());
+        MediaDimensions requestDimensions = request == null
+                ? null
+                : normalizeMediaDimensions(request.getWidth(), request.getHeight());
+        String oldCoverObjectKey = work.getCoverObjectKey();
+        CosService.SnapshotObject generatedCover = coverFrameTimeMs == null
+                ? null
+                : generateReplacementVideoCover(work, coverFrameTimeMs, requestDimensions);
+        work.setTitle(title);
+        work.setDescription(description);
+        if (generatedCover != null) {
+            work.setCoverObjectKey(generatedCover.objectKey());
+            work.setCoverSha256(generatedCover.sha256());
+            if (requestDimensions != null) {
+                work.setWidth(requestDimensions.width());
+                work.setHeight(requestDimensions.height());
+            }
+        }
         int updated = workEntityMapper.updateById(work);
         if (updated <= 0) {
-            throw new BusinessException("作品保存失败，请刷新后重试");
+            deleteGeneratedCoverIfNeeded(generatedCover, oldCoverObjectKey, work.getMediaObjectKey());
+            throw new BusinessException(WORK_SAVE_FAILED_MESSAGE);
         }
-        replaceTags(work.getUserId(), work.getId(), request == null ? List.of() : request.getTagNames());
+        if (generatedCover != null) {
+            deleteOldVideoCoverIfNeeded(oldCoverObjectKey, work.getCoverObjectKey(), work.getMediaObjectKey());
+        }
         return getWorkDetail(work.getId());
     }
 
@@ -561,7 +607,7 @@ public class MineWorkService {
         if (ownedWorkIds.size() != workIds.size() || !ownedWorkIds.containsAll(workIds)) {
             throw new BusinessException("作品不存在或无访问权限");
         }
-        workEntityMapper.updateSortOrders(userId, validItems, LocalDateTime.now());
+        workEntityMapper.updateSortOrders(userId, validItems);
     }
 
     /**
@@ -594,10 +640,9 @@ public class MineWorkService {
         }
         LocalDateTime now = LocalDateTime.now();
         int updated = workEntityMapper.update(
-                null,
+                new WorkEntity(),
                 new UpdateWrapper<WorkEntity>()
                         .set(WORK_COLUMN_DELETED_AT, now)
-                        .set(WORK_COLUMN_UPDATED_AT, now)
                         .set(WORK_COLUMN_DELETED, work.getId())
                         .eq(WORK_COLUMN_ID, work.getId())
                         .eq(WORK_COLUMN_USER_ID, work.getUserId())
@@ -625,6 +670,7 @@ public class MineWorkService {
     ) {
         long uploadTimestamp = System.currentTimeMillis();
         Set<String> idempotencyKeys = new LinkedHashSet<>();
+        Set<String> mainFileSha256Set = new LinkedHashSet<>();
         Set<String> objectKeys = new LinkedHashSet<>();
         List<PreparedUploadFile> preparedFiles = new ArrayList<>();
         for (int index = 0; index < files.size(); index++) {
@@ -635,9 +681,19 @@ public class MineWorkService {
             if (!idempotencyKeys.add(idempotencyKey)) {
                 throw new BusinessException(SAME_BATCH_DUPLICATE_FILE_MESSAGE);
             }
+            String fileSha256 = normalizeClientSha256(file.getSha256());
             String mediaType = normalizeMediaType(file.getMediaType());
             String extension = normalizeExtension(file.getFileName(), file.getMimeType(), mediaType);
             WorkUploadTaskEntity sourceTask = resolveThumbSourceTask(userId, file);
+            if (sourceTask == null) {
+                if (!mainFileSha256Set.add(fileSha256)) {
+                    throw new BusinessException(SAME_BATCH_DUPLICATE_FILE_MESSAGE);
+                }
+                WorkEntity duplicateWork = findNonDeletedWorkBySha256(userId, fileSha256);
+                if (duplicateWork != null) {
+                    throw new BusinessException(String.format(DUPLICATE_WORK_MESSAGE_TEMPLATE, duplicateWork.getTitle()));
+                }
+            }
             String objectKey = sourceTask == null
                     ? buildWorkObjectKey(
                             uniqueCode,
@@ -649,7 +705,7 @@ public class MineWorkService {
             if (!objectKeys.add(objectKey)) {
                 throw new BusinessException(WORK_OBJECT_KEY_CONFLICT_MESSAGE);
             }
-            preparedFiles.add(new PreparedUploadFile(file, mediaType, objectKey, idempotencyKey));
+            preparedFiles.add(new PreparedUploadFile(file, mediaType, objectKey, idempotencyKey, fileSha256));
         }
         return preparedFiles;
     }
@@ -663,6 +719,7 @@ public class MineWorkService {
      * @param mediaType 媒体类型
      * @param objectKey COS 对象键
      * @param idempotencyKey 上传任务幂等键
+     * @param fileSha256 当前上传对象 SHA-256
      * @param expiresAt 过期时间
      * @return 上传任务实体
      */
@@ -673,6 +730,7 @@ public class MineWorkService {
             String mediaType,
             String objectKey,
             String idempotencyKey,
+            String fileSha256,
             LocalDateTime expiresAt
     ) {
         WorkUploadTaskEntity task = new WorkUploadTaskEntity();
@@ -680,6 +738,7 @@ public class MineWorkService {
         task.setUserId(userId);
         task.setMediaType(mediaType);
         task.setObjectKey(objectKey);
+        task.setFileSha256(fileSha256);
         task.setOriginalFileName(normalizeText(file.getFileName()));
         task.setMimeType(normalizeText(file.getMimeType()));
         task.setFileSize(file.getFileSize());
@@ -689,8 +748,6 @@ public class MineWorkService {
         task.setStatus(WorkUploadTaskStatusDict.CREATED.getCode());
         task.setExpiresAt(expiresAt);
         task.setIdempotencyKey(idempotencyKey);
-        task.setCreatedAt(LocalDateTime.now());
-        task.setUpdatedAt(LocalDateTime.now());
         return task;
     }
 
@@ -701,13 +758,33 @@ public class MineWorkService {
      * @param mediaType 标准媒体类型
      * @param objectKey COS 对象键
      * @param idempotencyKey 上传任务幂等键
+     * @param fileSha256 当前上传对象 SHA-256
      */
     private record PreparedUploadFile(
             MineWorkUploadTicketRequest.UploadFileItem file,
             String mediaType,
             String objectKey,
-            String idempotencyKey
+            String idempotencyKey,
+            String fileSha256
     ) {
+    }
+
+    /**
+     * 小程序上报的视频媒体尺寸。
+     *
+     * @param width 像素宽度
+     * @param height 像素高度
+     */
+    private record MediaDimensions(int width, int height) {
+    }
+
+    /**
+     * 数据万象截帧输出尺寸。
+     *
+     * @param width 输出宽度
+     * @param height 输出高度
+     */
+    private record SnapshotDimensions(int width, int height) {
     }
 
     /**
@@ -820,6 +897,168 @@ public class MineWorkService {
     }
 
     /**
+     * 视频作品上传确认时如未携带封面任务，由后端使用数据万象生成默认首帧封面。
+     *
+     * @param userId 当前用户 ID
+     * @param task 主上传任务
+     * @param item 确认参数
+     */
+    private void ensureGeneratedVideoCoverTask(
+            Long userId,
+            WorkUploadTaskEntity task,
+            MineWorkUploadCompleteRequest.CompleteItem item
+    ) {
+        if (item == null
+                || item.getCoverTaskId() != null
+                || !MediaTypeDict.VIDEO.getCode().equals(task.getMediaType())) {
+            return;
+        }
+        String coverObjectKey = buildThumbObjectKeyFromSource(task, THUMB_FILE_EXTENSION);
+        MediaDimensions mediaDimensions = resolveMediaDimensions(task.getWidth(), task.getHeight(), null, null);
+        SnapshotDimensions snapshotDimensions = buildSnapshotDimensions(mediaDimensions);
+        log.info("视频作品默认封面截帧入参: userId={}, sourceTaskId={}, batchId={}, sourceObjectKey={}, coverObjectKey={}, frameTimeMs={}, originalFileName={}, mediaWidth={}, mediaHeight={}, snapshotWidth={}, snapshotHeight={}",
+                userId,
+                task.getId(),
+                normalizeText(task.getBatchId()),
+                task.getObjectKey(),
+                coverObjectKey,
+                DEFAULT_VIDEO_COVER_FRAME_TIME_MS,
+                task.getOriginalFileName(),
+                mediaDimensions.width(),
+                mediaDimensions.height(),
+                snapshotDimensions.width(),
+                snapshotDimensions.height());
+        WorkUploadTaskEntity coverTask = generateVideoCoverTask(
+                userId,
+                task,
+                DEFAULT_VIDEO_COVER_FRAME_TIME_MS,
+                coverObjectKey,
+                buildThumbFileName(task.getOriginalFileName()),
+                snapshotDimensions);
+        item.setCoverTaskId(coverTask.getId());
+    }
+
+    /**
+     * 为已存在的视频作品生成替换封面。
+     *
+     * @param work 视频作品
+     * @param requestedFrameTimeMs 请求的截帧时间点
+     * @return 已生成封面对象
+     */
+    private CosService.SnapshotObject generateReplacementVideoCover(
+            WorkEntity work,
+            Long requestedFrameTimeMs,
+            MediaDimensions requestDimensions
+    ) {
+        if (!MediaTypeDict.VIDEO.getCode().equals(work.getMediaType())) {
+            throw new BusinessException(VIDEO_COVER_UPDATE_MEDIA_TYPE_MESSAGE);
+        }
+        long frameTimeMs = normalizeCoverFrameTimeMs(requestedFrameTimeMs, work.getDurationMs());
+        String coverObjectKey = buildFrameCoverObjectKey(work.getMediaObjectKey(), frameTimeMs);
+        MediaDimensions mediaDimensions = requestDimensions == null
+                ? resolveMediaDimensions(null, null, work.getWidth(), work.getHeight())
+                : requestDimensions;
+        SnapshotDimensions snapshotDimensions = buildSnapshotDimensions(mediaDimensions);
+        log.info("视频作品替换封面截帧入参: workId={}, sourceObjectKey={}, oldCoverObjectKey={}, coverObjectKey={}, requestedFrameTimeMs={}, frameTimeMs={}, durationMs={}, requestWidth={}, requestHeight={}, mediaWidth={}, mediaHeight={}, snapshotWidth={}, snapshotHeight={}",
+                work.getId(),
+                work.getMediaObjectKey(),
+                work.getCoverObjectKey(),
+                coverObjectKey,
+                requestedFrameTimeMs,
+                frameTimeMs,
+                work.getDurationMs(),
+                requestDimensions == null ? null : requestDimensions.width(),
+                requestDimensions == null ? null : requestDimensions.height(),
+                mediaDimensions.width(),
+                mediaDimensions.height(),
+                snapshotDimensions.width(),
+                snapshotDimensions.height());
+        return generateVideoCoverObject(work.getMediaObjectKey(), coverObjectKey, frameTimeMs, snapshotDimensions);
+    }
+
+    /**
+     * 生成视频封面上传任务。
+     *
+     * @param userId 当前用户 ID
+     * @param sourceTask 视频主任务
+     * @param frameTimeMs 截帧时间点
+     * @param coverObjectKey 封面对象键
+     * @param coverFileName 封面文件名
+     * @return 封面上传任务
+     */
+    private WorkUploadTaskEntity generateVideoCoverTask(
+            Long userId,
+            WorkUploadTaskEntity sourceTask,
+            long frameTimeMs,
+            String coverObjectKey,
+            String coverFileName,
+            SnapshotDimensions snapshotDimensions
+    ) {
+        String idempotencyKey = GENERATED_VIDEO_COVER_IDEMPOTENCY_PREFIX
+                + sourceTask.getId()
+                + WORK_FILE_NAME_SEPARATOR
+                + frameTimeMs;
+        WorkUploadTaskEntity existing = findUploadTaskByIdempotency(userId, idempotencyKey);
+        if (existing != null) {
+            return existing;
+        }
+        CosService.SnapshotObject snapshot = generateVideoCoverObject(
+                sourceTask.getObjectKey(),
+                coverObjectKey,
+                frameTimeMs,
+                snapshotDimensions);
+        WorkUploadTaskEntity coverTask = new WorkUploadTaskEntity();
+        coverTask.setBatchId(normalizeText(sourceTask.getBatchId()));
+        coverTask.setUserId(userId);
+        coverTask.setMediaType(MediaTypeDict.IMAGE.getCode());
+        coverTask.setObjectKey(snapshot.objectKey());
+        coverTask.setFileSha256(snapshot.sha256());
+        coverTask.setCoverObjectKey(snapshot.objectKey());
+        coverTask.setOriginalFileName(coverFileName);
+        coverTask.setMimeType(snapshot.contentType());
+        coverTask.setFileSize(snapshot.contentLength());
+        coverTask.setStatus(WorkUploadTaskStatusDict.UPLOADED.getCode());
+        coverTask.setExpiresAt(LocalDateTime.now().plusMinutes(TICKET_EXPIRE_MINUTES));
+        coverTask.setIdempotencyKey(idempotencyKey);
+        return saveOrFindUploadTask(coverTask);
+    }
+
+    /**
+     * 调用数据万象生成视频封面对象。
+     *
+     * @param sourceObjectKey 视频对象键
+     * @param coverObjectKey 封面对象键
+     * @param frameTimeMs 截帧时间点
+     * @return 已生成封面对象
+     */
+    private CosService.SnapshotObject generateVideoCoverObject(
+            String sourceObjectKey,
+            String coverObjectKey,
+            long frameTimeMs,
+            SnapshotDimensions snapshotDimensions
+    ) {
+        try {
+            log.info("视频封面数据万象截帧调用入参: sourceObjectKey={}, coverObjectKey={}, frameTimeMs={}, snapshotWidth={}, snapshotHeight={}",
+                    sourceObjectKey, coverObjectKey, frameTimeMs, snapshotDimensions.width(), snapshotDimensions.height());
+            CosService.SnapshotObject snapshot = cosService.snapshotVideoFrameToObject(
+                    sourceObjectKey,
+                    coverObjectKey,
+                    frameTimeMs,
+                    snapshotDimensions.width(),
+                    snapshotDimensions.height());
+            if (snapshot.contentLength() > THUMB_MAX_BYTES) {
+                cosService.delete(snapshot.objectKey());
+                throw new BusinessException(COVER_TASK_SIZE_MESSAGE);
+            }
+            return snapshot;
+        } catch (BusinessException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw new BusinessException(VIDEO_COVER_GENERATE_FAILED_MESSAGE, e);
+        }
+    }
+
+    /**
      * 校验缩略图或封面图上传任务。
      *
      * @param userId 当前用户 ID
@@ -836,10 +1075,16 @@ public class MineWorkService {
         Long coverTaskId = item == null ? null : item.getCoverTaskId();
         if (coverTaskId == null) {
             if (MediaTypeDict.VIDEO.getCode().equals(task.getMediaType())) {
+                if (hasText(task.getCoverObjectKey())) {
+                    return;
+                }
                 throw new BusinessException(VIDEO_COVER_REQUIRED_MESSAGE);
             }
             if (MediaTypeDict.IMAGE.getCode().equals(task.getMediaType())
                     && head.contentLength() > THUMB_MAX_BYTES) {
+                if (hasText(task.getCoverObjectKey())) {
+                    return;
+                }
                 throw new BusinessException(IMAGE_THUMB_REQUIRED_MESSAGE);
             }
             return;
@@ -855,13 +1100,60 @@ public class MineWorkService {
     }
 
     /**
+     * 删除视频作品被替换下来的旧封面对象。
+     *
+     * @param oldCoverObjectKey 旧封面对象键
+     * @param newCoverObjectKey 新封面对象键
+     * @param mediaObjectKey 视频源文件对象键
+     */
+    private void deleteOldVideoCoverIfNeeded(String oldCoverObjectKey, String newCoverObjectKey, String mediaObjectKey) {
+        if (!hasText(oldCoverObjectKey)
+                || oldCoverObjectKey.equals(newCoverObjectKey)
+                || oldCoverObjectKey.equals(mediaObjectKey)) {
+            return;
+        }
+        cosService.delete(oldCoverObjectKey);
+    }
+
+    /**
+     * 保存失败时删除刚生成但未入库的视频封面对象。
+     *
+     * @param generatedCover 新生成封面对象
+     * @param oldCoverObjectKey 旧封面对象键
+     * @param mediaObjectKey 视频源文件对象键
+     */
+    private void deleteGeneratedCoverIfNeeded(
+            CosService.SnapshotObject generatedCover,
+            String oldCoverObjectKey,
+            String mediaObjectKey
+    ) {
+        if (generatedCover == null
+                || !hasText(generatedCover.objectKey())
+                || generatedCover.objectKey().equals(oldCoverObjectKey)
+                || generatedCover.objectKey().equals(mediaObjectKey)) {
+            return;
+        }
+        cosService.delete(generatedCover.objectKey());
+    }
+
+    /**
      * 校验缩略图或封面图文件名。
      *
      * @param task 主上传任务
      * @param coverTask 缩略图或封面图任务
      */
     private void validateCoverFileName(WorkUploadTaskEntity task, WorkUploadTaskEntity coverTask) {
-        String expectedFileName = buildThumbFileName(task.getOriginalFileName());
+        validateCoverFileName(task.getOriginalFileName(), coverTask);
+    }
+
+    /**
+     * 校验缩略图或封面图文件名。
+     *
+     * @param originalFileName 原作品文件名
+     * @param coverTask 缩略图或封面图任务
+     */
+    private void validateCoverFileName(String originalFileName, WorkUploadTaskEntity coverTask) {
+        String expectedFileName = buildThumbFileName(originalFileName);
         if (!expectedFileName.equals(normalizeText(coverTask.getOriginalFileName()))) {
             throw new BusinessException(COVER_TASK_FILE_NAME_MESSAGE);
         }
@@ -900,7 +1192,6 @@ public class MineWorkService {
         }
         task.setStatus(WorkUploadTaskStatusDict.FAILED.getCode());
         task.setErrorMessage(message);
-        task.setUpdatedAt(LocalDateTime.now());
         workUploadTaskEntityMapper.updateById(task);
     }
 
@@ -920,6 +1211,39 @@ public class MineWorkService {
             throw new BusinessException("上传任务不存在");
         }
         return task;
+    }
+
+    /**
+     * 归一化前端提交的 SHA-256。
+     *
+     * <p>SHA-256 由小程序端计算提交。后端为避免下载 COS 文件带来的性能开销，信任前端值，
+     * 仅做必填、格式和唯一性校验。</p>
+     *
+     * @param value 前端提交的 SHA-256
+     * @return 小写 SHA-256
+     */
+    private String normalizeClientSha256(String value) {
+        String normalized = normalizeText(value).toLowerCase(Locale.ROOT);
+        if (!normalized.matches(SHA256_PATTERN)) {
+            throw new BusinessException(FILE_SHA256_INVALID_MESSAGE);
+        }
+        return normalized;
+    }
+
+    /**
+     * 按客户端 SHA-256 查询当前用户未删除作品。
+     *
+     * @param userId 当前用户 ID
+     * @param mediaSha256 原文件 SHA-256
+     * @return 已存在作品，可为空
+     */
+    private WorkEntity findNonDeletedWorkBySha256(Long userId, String mediaSha256) {
+        return workEntityMapper.selectOne(
+                Wrappers.lambdaQuery(WorkEntity.class)
+                        .eq(WorkEntity::getUserId, userId)
+                        .eq(WorkEntity::getMediaSha256, mediaSha256)
+                        .last("LIMIT 1")
+        );
     }
 
     /**
@@ -1365,7 +1689,6 @@ public class MineWorkService {
             relation.setUserId(userId);
             relation.setWorkId(workId);
             relation.setTagId(tag.getId());
-            relation.setCreatedAt(LocalDateTime.now());
             workTagEntityMapper.insert(relation);
         }
     }
@@ -1387,8 +1710,6 @@ public class MineWorkService {
         tag.setUserId(userId);
         tag.setName(tagName);
         tag.setStatus(WfTagStatusDict.ACTIVE.getCode());
-        tag.setCreatedAt(LocalDateTime.now());
-        tag.setUpdatedAt(LocalDateTime.now());
         try {
             wfTagEntityMapper.insert(tag);
             return tag;
@@ -1568,6 +1889,117 @@ public class MineWorkService {
                 + THUMB_FILE_SUFFIX
                 + FILE_EXTENSION_SEPARATOR
                 + extension;
+    }
+
+    /**
+     * 按视频对象键和帧时间构造替换封面对象键。
+     *
+     * @param sourceObjectKey 视频对象键
+     * @param frameTimeMs 截帧时间点
+     * @return 封面对象键
+     */
+    private String buildFrameCoverObjectKey(String sourceObjectKey, long frameTimeMs) {
+        String normalizedSourceObjectKey = normalizeText(sourceObjectKey);
+        int lastSlashIndex = normalizedSourceObjectKey.lastIndexOf('/');
+        int extensionIndex = normalizedSourceObjectKey.lastIndexOf('.');
+        if (normalizedSourceObjectKey.isBlank() || extensionIndex <= lastSlashIndex) {
+            throw new BusinessException(COVER_SOURCE_TASK_INVALID_MESSAGE);
+        }
+        return normalizedSourceObjectKey.substring(0, extensionIndex)
+                + THUMB_FILE_SUFFIX
+                + WORK_FILE_NAME_SEPARATOR
+                + frameTimeMs
+                + FILE_EXTENSION_SEPARATOR
+                + THUMB_FILE_EXTENSION;
+    }
+
+    /**
+     * 归一化封面截帧时间，防止越界。
+     *
+     * @param requestedFrameTimeMs 请求时间点
+     * @param durationMs 视频时长
+     * @return 归一化后的毫秒时间点
+     */
+    private long normalizeCoverFrameTimeMs(Long requestedFrameTimeMs, Integer durationMs) {
+        long frameTimeMs = Math.max(0L, requestedFrameTimeMs == null ? 0L : requestedFrameTimeMs);
+        if (durationMs != null && durationMs > 0) {
+            return Math.min(frameTimeMs, durationMs.longValue());
+        }
+        return frameTimeMs;
+    }
+
+    /**
+     * 解析小程序上报或历史保存的视频尺寸。
+     *
+     * @param requestedWidth 本次请求宽度
+     * @param requestedHeight 本次请求高度
+     * @param fallbackWidth 历史宽度
+     * @param fallbackHeight 历史高度
+     * @return 可用于截帧比例计算的媒体尺寸
+     */
+    private MediaDimensions resolveMediaDimensions(
+            Integer requestedWidth,
+            Integer requestedHeight,
+            Integer fallbackWidth,
+            Integer fallbackHeight
+    ) {
+        MediaDimensions requested = normalizeMediaDimensions(requestedWidth, requestedHeight);
+        if (requested != null) {
+            return requested;
+        }
+        MediaDimensions fallback = normalizeMediaDimensions(fallbackWidth, fallbackHeight);
+        if (fallback != null) {
+            return fallback;
+        }
+        return new MediaDimensions(SNAPSHOT_MAX_SIDE, SNAPSHOT_MAX_SIDE);
+    }
+
+    /**
+     * 归一化媒体尺寸。
+     *
+     * @param width 像素宽度
+     * @param height 像素高度
+     * @return 合法尺寸，不合法时返回 null
+     */
+    private MediaDimensions normalizeMediaDimensions(Integer width, Integer height) {
+        int normalizedWidth = normalizeMediaDimension(width);
+        int normalizedHeight = normalizeMediaDimension(height);
+        if (normalizedWidth <= 0 || normalizedHeight <= 0) {
+            return null;
+        }
+        return new MediaDimensions(normalizedWidth, normalizedHeight);
+    }
+
+    /**
+     * 归一化单个媒体尺寸。
+     *
+     * @param value 像素尺寸
+     * @return 合法尺寸，不合法时返回 0
+     */
+    private int normalizeMediaDimension(Integer value) {
+        if (value == null || value <= 0 || value > MEDIA_DIMENSION_MAX) {
+            return 0;
+        }
+        return value;
+    }
+
+    /**
+     * 按原始比例计算数据万象截帧输出尺寸。
+     *
+     * @param mediaDimensions 视频媒体尺寸
+     * @return 最长边不超过限制的输出尺寸
+     */
+    private SnapshotDimensions buildSnapshotDimensions(MediaDimensions mediaDimensions) {
+        int mediaWidth = mediaDimensions == null ? SNAPSHOT_MAX_SIDE : mediaDimensions.width();
+        int mediaHeight = mediaDimensions == null ? SNAPSHOT_MAX_SIDE : mediaDimensions.height();
+        if (mediaWidth >= mediaHeight) {
+            int outputWidth = Math.min(mediaWidth, SNAPSHOT_MAX_SIDE);
+            int outputHeight = Math.max(1, (int) Math.round((double) mediaHeight * outputWidth / mediaWidth));
+            return new SnapshotDimensions(outputWidth, outputHeight);
+        }
+        int outputHeight = Math.min(mediaHeight, SNAPSHOT_MAX_SIDE);
+        int outputWidth = Math.max(1, (int) Math.round((double) mediaWidth * outputHeight / mediaHeight));
+        return new SnapshotDimensions(outputWidth, outputHeight);
     }
 
     /**

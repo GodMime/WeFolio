@@ -29,8 +29,14 @@ public class WorkEntity extends BaseEntity {
     /** COS 对象键，访问 URL 由服务端生成 */
     private String mediaObjectKey;
 
+    /** 原文件 SHA-256，由小程序端计算提交；后端信任该值，仅做格式和唯一性校验。 */
+    private String mediaSha256;
+
     /** 缩略图或视频封面 COS 对象键 */
     private String coverObjectKey;
+
+    /** 缩略图或封面 SHA-256，由小程序端计算提交；后端不下载 COS 文件重新计算。 */
+    private String coverSha256;
 
     /** 文件 MIME 类型 */
     private String mimeType;

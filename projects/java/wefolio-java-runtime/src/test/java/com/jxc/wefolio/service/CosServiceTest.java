@@ -9,6 +9,7 @@ import com.qcloud.cos.model.COSObject;
 import com.qcloud.cos.model.GetObjectRequest;
 import com.qcloud.cos.model.ObjectMetadata;
 import com.qcloud.cos.model.PutObjectRequest;
+import com.qcloud.cos.model.ciModel.snapshot.CosSnapshotRequest;
 import com.qcloud.cos.transfer.TransferManager;
 import com.qcloud.cos.transfer.Upload;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,10 +19,21 @@ import org.junit.jupiter.api.io.TempDir;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.mock.web.MockMultipartFile;
 
+import javax.imageio.IIOImage;
+import javax.imageio.ImageIO;
+import javax.imageio.ImageWriteParam;
+import javax.imageio.ImageWriter;
+import javax.imageio.stream.ImageOutputStream;
+import java.awt.Color;
+import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.security.MessageDigest;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.Base64;
@@ -34,7 +46,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
-@ExtendWith(MockitoExtension.class)
+@ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 class CosServiceTest {
 
     @Mock
@@ -58,7 +70,6 @@ class CosServiceTest {
 
     @Test
     void createPostUploadTicketShouldRestrictKeyAndSizeInPolicy() {
-        when(cosProperties.getRegion()).thenReturn("ap-guangzhou");
         when(cosProperties.getSecretId()).thenReturn("AKID_TEST");
         when(cosProperties.getSecretKey()).thenReturn("SECRET_TEST");
 
@@ -70,7 +81,7 @@ class CosServiceTest {
 
         Map<String, String> formData = ticket.formData();
         String policy = new String(Base64.getDecoder().decode(formData.get("policy")));
-        assertThat(ticket.uploadUrl()).isEqualTo("https://test-bucket.cos.ap-guangzhou.myqcloud.com");
+        assertThat(ticket.uploadUrl()).isEqualTo("https://cos.we-folio.dingchenyong.top");
         assertThat(ticket.objectKey()).isEqualTo("WFA3B1E7A2/work/image/photo.jpg");
         assertThat(formData).containsEntry("key", "WFA3B1E7A2/work/image/photo.jpg");
         assertThat(formData).containsEntry("q-ak", "AKID_TEST");
@@ -102,8 +113,37 @@ class CosServiceTest {
     }
 
     @Test
-    void createPostUploadTicketShouldIgnorePublicBaseUrlForMiniappUploadDomain() {
-        when(cosProperties.getRegion()).thenReturn("ap-guangzhou");
+    void createPostUploadTicketShouldUseDefaultMiniappDomainWhenUploadBaseUrlIsBlank() {
+        when(cosProperties.getSecretId()).thenReturn("AKID_TEST");
+        when(cosProperties.getSecretKey()).thenReturn("SECRET_TEST");
+        when(cosProperties.getUploadBaseUrl()).thenReturn(" ");
+
+        CosService.PostUploadTicket ticket = cosService.createPostUploadTicket(
+                "WFA3B1E7A2/work/image/photo.jpg",
+                "image/jpeg",
+                1024L,
+                LocalDateTime.now().plusMinutes(30));
+
+        assertThat(ticket.uploadUrl()).isEqualTo("https://cos.we-folio.dingchenyong.top");
+    }
+
+    @Test
+    void createPostUploadTicketShouldUseDefaultMiniappDomainWhenUploadBaseUrlIsCosOriginDomain() {
+        when(cosProperties.getSecretId()).thenReturn("AKID_TEST");
+        when(cosProperties.getSecretKey()).thenReturn("SECRET_TEST");
+        when(cosProperties.getUploadBaseUrl()).thenReturn("https://we-folio-1302927298.cos.ap-guangzhou.myqcloud.com");
+
+        CosService.PostUploadTicket ticket = cosService.createPostUploadTicket(
+                "WFA3B1E7A2/work/image/photo.jpg",
+                "image/jpeg",
+                1024L,
+                LocalDateTime.now().plusMinutes(30));
+
+        assertThat(ticket.uploadUrl()).isEqualTo("https://cos.we-folio.dingchenyong.top");
+    }
+
+    @Test
+    void createPostUploadTicketShouldNotUsePublicBaseUrlForMiniappUploadDomain() {
         when(cosProperties.getSecretId()).thenReturn("AKID_TEST");
         when(cosProperties.getSecretKey()).thenReturn("SECRET_TEST");
 
@@ -113,13 +153,12 @@ class CosServiceTest {
                 1024L,
                 LocalDateTime.now().plusMinutes(30));
 
-        assertThat(ticket.uploadUrl()).isEqualTo("https://test-bucket.cos.ap-guangzhou.myqcloud.com");
+        assertThat(ticket.uploadUrl()).isEqualTo("https://cos.we-folio.dingchenyong.top");
         verify(cosProperties, never()).getPublicBaseUrl();
     }
 
     @Test
     void createPostUploadTicketShouldEscapeJsonPolicyValues() {
-        when(cosProperties.getRegion()).thenReturn("ap-guangzhou");
         when(cosProperties.getSecretId()).thenReturn("AKID_\"TEST\\");
         when(cosProperties.getSecretKey()).thenReturn("SECRET_TEST");
         String objectKey = "WFA3B1E7A2/work/image/photo\"quote\\slash.jpg";
@@ -151,7 +190,6 @@ class CosServiceTest {
 
     @Test
     void createPostUploadTicketShouldBackdateKeyTimeForClockSkew() {
-        when(cosProperties.getRegion()).thenReturn("ap-guangzhou");
         when(cosProperties.getSecretId()).thenReturn("AKID_TEST");
         when(cosProperties.getSecretKey()).thenReturn("SECRET_TEST");
         long beforeEpochSecond = System.currentTimeMillis() / 1000;
@@ -191,6 +229,83 @@ class CosServiceTest {
 
         assertThat(head.contentType()).isEqualTo("video/mp4");
         assertThat(head.contentLength()).isEqualTo(4096L);
+    }
+
+    @Test
+    void snapshotVideoFrameToObjectShouldRequestCiSnapshotAndUploadJpeg(CapturedOutput output) throws Exception {
+        COSClient cosClient = mock(COSClient.class);
+        byte[] imageBytes = "jpeg-frame".getBytes();
+        when(transferManager.getCOSClient()).thenReturn(cosClient);
+        when(cosClient.getSnapshot(any(CosSnapshotRequest.class)))
+                .thenReturn(new ByteArrayInputStream(imageBytes));
+
+        CosService.SnapshotObject result = cosService.snapshotVideoFrameToObject(
+                "WFA3B1E7A2/work/video/film.mp4",
+                "WFA3B1E7A2/work/video/film-thumb.jpg",
+                1500L,
+                640,
+                360);
+
+        ArgumentCaptor<CosSnapshotRequest> snapshotCaptor = ArgumentCaptor.forClass(CosSnapshotRequest.class);
+        ArgumentCaptor<PutObjectRequest> putCaptor = ArgumentCaptor.forClass(PutObjectRequest.class);
+        verify(cosClient).getSnapshot(snapshotCaptor.capture());
+        verify(cosClient).putObject(putCaptor.capture());
+        CosSnapshotRequest snapshotRequest = snapshotCaptor.getValue();
+        assertThat(snapshotRequest.getBucketName()).isEqualTo("test-bucket");
+        assertThat(snapshotRequest.getObjectKey()).isEqualTo("WFA3B1E7A2/work/video/film.mp4");
+        assertThat(snapshotRequest.getTime()).isEqualTo("1.500");
+        assertThat(snapshotRequest.getFormat()).isEqualTo("jpg");
+        assertThat(snapshotRequest.getWidth()).isEqualTo("640");
+        assertThat(snapshotRequest.getHeight()).isEqualTo("360");
+        PutObjectRequest putRequest = putCaptor.getValue();
+        assertThat(putRequest.getBucketName()).isEqualTo("test-bucket");
+        assertThat(putRequest.getKey()).isEqualTo("WFA3B1E7A2/work/video/film-thumb.jpg");
+        assertThat(putRequest.getMetadata().getContentType()).isEqualTo("image/jpeg");
+        assertThat(putRequest.getMetadata().getContentLength()).isEqualTo(imageBytes.length);
+        assertThat(result.objectKey()).isEqualTo("WFA3B1E7A2/work/video/film-thumb.jpg");
+        assertThat(result.contentType()).isEqualTo("image/jpeg");
+        assertThat(result.contentLength()).isEqualTo(imageBytes.length);
+        assertThat(result.sha256()).isEqualTo(hexSha256(imageBytes));
+        assertThat(output)
+                .contains("COS video snapshot request: bucketName=test-bucket")
+                .contains("sourceKey=WFA3B1E7A2/work/video/film.mp4")
+                .contains("targetKey=WFA3B1E7A2/work/video/film-thumb.jpg")
+                .contains("frameTimeMs=1500")
+                .contains("snapshotTime=1.500")
+                .contains("format=jpg")
+                .contains("width=640")
+                .contains("height=360");
+    }
+
+    @Test
+    void snapshotVideoFrameToObjectShouldCompressSnapshotWhenOverLimit(CapturedOutput output) throws Exception {
+        COSClient cosClient = mock(COSClient.class);
+        byte[] imageBytes = createLargeJpeg();
+        assertThat(imageBytes.length).isGreaterThan(100 * 1024);
+        when(transferManager.getCOSClient()).thenReturn(cosClient);
+        when(cosClient.getSnapshot(any(CosSnapshotRequest.class)))
+                .thenReturn(new ByteArrayInputStream(imageBytes));
+
+        CosService.SnapshotObject result = cosService.snapshotVideoFrameToObject(
+                "WFA3B1E7A2/work/video/film.mp4",
+                "WFA3B1E7A2/work/video/film-thumb.jpg",
+                1500L,
+                640,
+                640);
+
+        ArgumentCaptor<PutObjectRequest> putCaptor = ArgumentCaptor.forClass(PutObjectRequest.class);
+        verify(cosClient).putObject(putCaptor.capture());
+        PutObjectRequest putRequest = putCaptor.getValue();
+        byte[] uploadedBytes = putRequest.getInputStream().readAllBytes();
+        assertThat(uploadedBytes.length).isLessThanOrEqualTo(100 * 1024);
+        assertThat(uploadedBytes.length).isLessThan(imageBytes.length);
+        assertThat(putRequest.getMetadata().getContentLength()).isEqualTo(uploadedBytes.length);
+        assertThat(result.contentLength()).isEqualTo(uploadedBytes.length);
+        assertThat(result.sha256()).isEqualTo(hexSha256(uploadedBytes));
+        assertThat(output)
+                .contains("COS video snapshot compressed")
+                .contains("originalSize=" + imageBytes.length)
+                .contains("compressedSize=" + uploadedBytes.length);
     }
 
     @Test
@@ -366,5 +481,42 @@ class CosServiceTest {
                 .isInstanceOf(RuntimeException.class)
                 .hasMessageContaining("File delete failed")
                 .hasMessageContaining("AccessDenied");
+    }
+
+    private String hexSha256(byte[] bytes) throws Exception {
+        byte[] digest = MessageDigest.getInstance("SHA-256").digest(bytes);
+        StringBuilder builder = new StringBuilder(digest.length * 2);
+        for (byte value : digest) {
+            builder.append(String.format("%02x", value & 0xff));
+        }
+        return builder.toString();
+    }
+
+    private byte[] createLargeJpeg() throws Exception {
+        BufferedImage image = new BufferedImage(640, 640, BufferedImage.TYPE_INT_RGB);
+        for (int y = 0; y < image.getHeight(); y++) {
+            for (int x = 0; x < image.getWidth(); x++) {
+                int red = (x * 13 + y * 7) & 0xff;
+                int green = (x * 5 + y * 17) & 0xff;
+                int blue = (x * 19 + y * 3) & 0xff;
+                image.setRGB(x, y, new Color(red, green, blue).getRGB());
+            }
+        }
+        return writeJpeg(image, 1.0f);
+    }
+
+    private byte[] writeJpeg(BufferedImage image, float quality) throws Exception {
+        ImageWriter writer = ImageIO.getImageWritersByFormatName("jpg").next();
+        ImageWriteParam param = writer.getDefaultWriteParam();
+        param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+        param.setCompressionQuality(quality);
+        try (ByteArrayOutputStream output = new ByteArrayOutputStream();
+             ImageOutputStream imageOutput = ImageIO.createImageOutputStream(output)) {
+            writer.setOutput(imageOutput);
+            writer.write(null, new IIOImage(image, null, null), param);
+            return output.toByteArray();
+        } finally {
+            writer.dispose();
+        }
     }
 }

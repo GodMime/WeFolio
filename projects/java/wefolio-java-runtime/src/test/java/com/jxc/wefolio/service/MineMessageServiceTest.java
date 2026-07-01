@@ -26,7 +26,6 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -147,7 +146,7 @@ class MineMessageServiceTest {
     void markReadUpdatesOnlyCurrentUserUnreadMessagesAndReturnsUnreadSummary() {
         MineMessageReadRequest request = new MineMessageReadRequest();
         request.setMessageIds(List.of(101L, 102L, 101L, -1L));
-        when(systemMessageEntityMapper.update(isNull(), any(UpdateWrapper.class))).thenReturn(2);
+        when(systemMessageEntityMapper.update(any(SystemMessageEntity.class), any(UpdateWrapper.class))).thenReturn(2);
         when(systemMessageEntityMapper.selectCount(any()))
                 .thenReturn(1L)
                 .thenReturn(0L)
@@ -158,10 +157,10 @@ class MineMessageServiceTest {
 
         assertThat(response.getUnreadCount()).isEqualTo(1L);
         ArgumentCaptor<UpdateWrapper<SystemMessageEntity>> captor = ArgumentCaptor.forClass(UpdateWrapper.class);
-        verify(systemMessageEntityMapper).update(isNull(), captor.capture());
+        verify(systemMessageEntityMapper).update(any(SystemMessageEntity.class), captor.capture());
         String sqlSet = captor.getValue().getSqlSet();
         String sqlSegment = captor.getValue().getSqlSegment();
-        assertThat(sqlSet).contains("read_status", "read_at", "updated_at");
+        assertThat(sqlSet).contains("read_status", "read_at");
         assertThat(sqlSegment).contains("user_id", "id", "read_status");
     }
 
@@ -169,7 +168,7 @@ class MineMessageServiceTest {
     void markAllReadCanLimitByCategoryForCurrentUser() {
         MineMessageReadRequest request = new MineMessageReadRequest();
         request.setCategory(MessageCategoryDict.POINT.getCode());
-        when(systemMessageEntityMapper.update(isNull(), any(UpdateWrapper.class))).thenReturn(4);
+        when(systemMessageEntityMapper.update(any(SystemMessageEntity.class), any(UpdateWrapper.class))).thenReturn(4);
         when(systemMessageEntityMapper.selectCount(any()))
                 .thenReturn(0L)
                 .thenReturn(0L)
@@ -180,7 +179,7 @@ class MineMessageServiceTest {
 
         assertThat(response.getUnreadCount()).isZero();
         ArgumentCaptor<UpdateWrapper<SystemMessageEntity>> captor = ArgumentCaptor.forClass(UpdateWrapper.class);
-        verify(systemMessageEntityMapper).update(isNull(), captor.capture());
+        verify(systemMessageEntityMapper).update(any(SystemMessageEntity.class), captor.capture());
         assertThat(captor.getValue().getSqlSegment()).contains("user_id", "read_status", "category");
     }
 

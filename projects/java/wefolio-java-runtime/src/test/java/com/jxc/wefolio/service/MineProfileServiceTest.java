@@ -28,7 +28,6 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -113,15 +112,15 @@ class MineProfileServiceTest {
                 tag(" 高端婚礼 ", "#0F766E"),
                 tag("双语主持", "#2d5f9a")
         ));
-        when(userEntityMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
+        when(userEntityMapper.update(any(UserEntity.class), any(Wrapper.class))).thenReturn(1);
 
         MineProfileService service = new MineProfileService(userEntityMapper);
         service.updateProfile(request);
 
         ArgumentCaptor<Wrapper<UserEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
-        verify(userEntityMapper).update(isNull(), captor.capture());
+        verify(userEntityMapper).update(any(UserEntity.class), captor.capture());
         String sqlSet = ((UpdateWrapper<UserEntity>) captor.getValue()).getSqlSet();
-        assertThat(sqlSet).contains("nickname", "avatar_url", "profession", "city", "intro", "profile_tags", "updated_at", "last_avatar_updated_at", "avatar_update_count");
+        assertThat(sqlSet).contains("nickname", "avatar_url", "profession", "city", "intro", "profile_tags", "last_avatar_updated_at", "avatar_update_count");
         assertThat(user.getNickname()).isEqualTo("林安");
         assertThat(user.getAvatarUrl()).isEqualTo("https://example.com/new-avatar.jpg");
         assertThat(user.getProfession()).isEqualTo("婚礼司仪");
@@ -141,7 +140,7 @@ class MineProfileServiceTest {
         UserEntity user = activeUser();
         user.setProfileTags("[\"高端婚礼\",\"双语主持\"]");
         when(userEntityMapper.selectById(7L)).thenReturn(user);
-        when(userEntityMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
+        when(userEntityMapper.update(any(UserEntity.class), any(Wrapper.class))).thenReturn(1);
 
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setNickname("新名字");
@@ -150,9 +149,10 @@ class MineProfileServiceTest {
         service.updateProfile(request);
 
         ArgumentCaptor<Wrapper<UserEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
-        verify(userEntityMapper).update(isNull(), captor.capture());
+        verify(userEntityMapper).update(any(UserEntity.class), captor.capture());
         String sqlSet = ((UpdateWrapper<UserEntity>) captor.getValue()).getSqlSet();
-        assertThat(sqlSet).contains("nickname", "updated_at");
+        assertThat(sqlSet).contains("nickname");
+        assertThat(sqlSet).doesNotContain("updated_at");
         assertThat(sqlSet).doesNotContain("avatar_url", "profession", "city", "intro", "profile_tags");
         assertThat(user.getNickname()).isEqualTo("新名字");
         assertThat(user.getAvatarUrl()).isEqualTo("https://example.com/avatar.jpg");
@@ -165,12 +165,12 @@ class MineProfileServiceTest {
     }
 
     @Test
-    void updateProfileRefreshesUpdatedAt() {
+    void updateProfileDelegatesUpdatedAtToAutoFill() {
         UserEntity user = activeUser();
         LocalDateTime oldUpdatedAt = LocalDateTime.of(2024, 1, 1, 10, 0);
         user.setUpdatedAt(oldUpdatedAt);
         when(userEntityMapper.selectById(7L)).thenReturn(user);
-        when(userEntityMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
+        when(userEntityMapper.update(any(UserEntity.class), any(Wrapper.class))).thenReturn(1);
 
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setNickname("林安");
@@ -178,8 +178,10 @@ class MineProfileServiceTest {
         MineProfileService service = new MineProfileService(userEntityMapper);
         service.updateProfile(request);
 
-        verify(userEntityMapper).update(isNull(), any(Wrapper.class));
-        assertThat(user.getUpdatedAt()).isAfter(oldUpdatedAt);
+        ArgumentCaptor<UserEntity> entityCaptor = ArgumentCaptor.forClass(UserEntity.class);
+        verify(userEntityMapper).update(entityCaptor.capture(), any(Wrapper.class));
+        assertThat(entityCaptor.getValue()).isNotNull();
+        assertThat(user.getUpdatedAt()).isEqualTo(oldUpdatedAt);
         verify(userEntityMapper, never()).updateById(any(UserEntity.class));
     }
 
@@ -230,7 +232,7 @@ class MineProfileServiceTest {
     void updateProfileAcceptsExpandedTagColor() {
         UserEntity user = activeUser();
         when(userEntityMapper.selectById(7L)).thenReturn(user);
-        when(userEntityMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
+        when(userEntityMapper.update(any(UserEntity.class), any(Wrapper.class))).thenReturn(1);
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setTags((List) List.of(tag("舞台灯光", "#36516e")));
 
@@ -249,7 +251,7 @@ class MineProfileServiceTest {
         UserEntity user = activeUser();
         // 首次更新：lastAvatarUpdatedAt 为 null，avatarUpdateCount 默认 0
         when(userEntityMapper.selectById(7L)).thenReturn(user);
-        when(userEntityMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
+        when(userEntityMapper.update(any(UserEntity.class), any(Wrapper.class))).thenReturn(1);
 
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setAvatarUrl("https://example.com/new-avatar.jpg");
@@ -258,7 +260,7 @@ class MineProfileServiceTest {
         service.updateProfile(request);
 
         ArgumentCaptor<Wrapper<UserEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
-        verify(userEntityMapper).update(isNull(), captor.capture());
+        verify(userEntityMapper).update(any(UserEntity.class), captor.capture());
         String sqlSet = ((UpdateWrapper<UserEntity>) captor.getValue()).getSqlSet();
         assertThat(sqlSet).contains("avatar_url", "last_avatar_updated_at", "avatar_update_count");
         assertThat(user.getAvatarUrl()).isEqualTo("https://example.com/new-avatar.jpg");
@@ -269,11 +271,11 @@ class MineProfileServiceTest {
     @Test
     void avatarSameMonthUpdateIncrementsCount() {
         UserEntity user = activeUser();
-        LocalDateTime lastUpdate = LocalDateTime.of(2026, 6, 10, 12, 0);
+        LocalDateTime lastUpdate = LocalDateTime.now().toLocalDate().atStartOfDay();
         user.setLastAvatarUpdatedAt(lastUpdate);
         user.setAvatarUpdateCount(3);
         when(userEntityMapper.selectById(7L)).thenReturn(user);
-        when(userEntityMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
+        when(userEntityMapper.update(any(UserEntity.class), any(Wrapper.class))).thenReturn(1);
 
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setAvatarUrl("https://example.com/another-avatar.jpg");
@@ -289,10 +291,16 @@ class MineProfileServiceTest {
     void avatarCrossMonthResetsCountToOne() {
         UserEntity user = activeUser();
         // 上次更新在上个月
-        user.setLastAvatarUpdatedAt(LocalDateTime.of(2026, 5, 28, 15, 0));
+        user.setLastAvatarUpdatedAt(LocalDateTime.now()
+                .minusMonths(1)
+                .withDayOfMonth(1)
+                .withHour(15)
+                .withMinute(0)
+                .withSecond(0)
+                .withNano(0));
         user.setAvatarUpdateCount(8);
         when(userEntityMapper.selectById(7L)).thenReturn(user);
-        when(userEntityMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
+        when(userEntityMapper.update(any(UserEntity.class), any(Wrapper.class))).thenReturn(1);
 
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setAvatarUrl("https://example.com/new-month-avatar.jpg");
@@ -306,11 +314,17 @@ class MineProfileServiceTest {
     @Test
     void avatarCrossYearResetsCountToOne() {
         UserEntity user = activeUser();
-        // 上次更新在去年 12 月
-        user.setLastAvatarUpdatedAt(LocalDateTime.of(2025, 12, 15, 10, 0));
+        // 上次更新在去年
+        user.setLastAvatarUpdatedAt(LocalDateTime.now()
+                .minusYears(1)
+                .withDayOfMonth(15)
+                .withHour(10)
+                .withMinute(0)
+                .withSecond(0)
+                .withNano(0));
         user.setAvatarUpdateCount(5);
         when(userEntityMapper.selectById(7L)).thenReturn(user);
-        when(userEntityMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
+        when(userEntityMapper.update(any(UserEntity.class), any(Wrapper.class))).thenReturn(1);
 
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setAvatarUrl("https://example.com/new-year-avatar.jpg");
@@ -326,10 +340,10 @@ class MineProfileServiceTest {
         UserEntity user = activeUser();
         // 当前头像地址与请求相同
         user.setAvatarUrl("https://example.com/avatar.jpg");
-        user.setLastAvatarUpdatedAt(LocalDateTime.of(2026, 6, 1, 10, 0));
+        user.setLastAvatarUpdatedAt(LocalDateTime.now().toLocalDate().atStartOfDay());
         user.setAvatarUpdateCount(2);
         when(userEntityMapper.selectById(7L)).thenReturn(user);
-        when(userEntityMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
+        when(userEntityMapper.update(any(UserEntity.class), any(Wrapper.class))).thenReturn(1);
 
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setAvatarUrl("https://example.com/avatar.jpg");
@@ -338,20 +352,20 @@ class MineProfileServiceTest {
         service.updateProfile(request);
 
         ArgumentCaptor<Wrapper<UserEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
-        verify(userEntityMapper).update(isNull(), captor.capture());
+        verify(userEntityMapper).update(any(UserEntity.class), captor.capture());
         String sqlSet = ((UpdateWrapper<UserEntity>) captor.getValue()).getSqlSet();
-        // 头像未变化，不应包含追踪字段
-        assertThat(sqlSet).doesNotContain("last_avatar_updated_at", "avatar_update_count");
+        // 头像未变化，不应生成业务字段更新片段。
+        assertThat(sqlSet).isNull();
         assertThat(user.getAvatarUpdateCount()).isEqualTo(2);
     }
 
     @Test
     void avatarAtLimitNineSucceedsAndBecomesTen() {
         UserEntity user = activeUser();
-        user.setLastAvatarUpdatedAt(LocalDateTime.of(2026, 6, 10, 10, 0));
+        user.setLastAvatarUpdatedAt(LocalDateTime.now().toLocalDate().atStartOfDay());
         user.setAvatarUpdateCount(9);
         when(userEntityMapper.selectById(7L)).thenReturn(user);
-        when(userEntityMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
+        when(userEntityMapper.update(any(UserEntity.class), any(Wrapper.class))).thenReturn(1);
 
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setAvatarUrl("https://example.com/final-avatar.jpg");
@@ -365,7 +379,7 @@ class MineProfileServiceTest {
     @Test
     void avatarExceedLimitThrowsWhenCountAlreadyTen() {
         UserEntity user = activeUser();
-        user.setLastAvatarUpdatedAt(LocalDateTime.of(2026, 6, 15, 9, 0));
+        user.setLastAvatarUpdatedAt(LocalDateTime.now().toLocalDate().atStartOfDay());
         user.setAvatarUpdateCount(10);
         when(userEntityMapper.selectById(7L)).thenReturn(user);
 
@@ -384,7 +398,7 @@ class MineProfileServiceTest {
         UserEntity user = activeUser();
         user.setAvatarUpdateCount(11);
         when(userEntityMapper.selectById(7L)).thenReturn(user);
-        when(userEntityMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
+        when(userEntityMapper.update(any(UserEntity.class), any(Wrapper.class))).thenReturn(1);
 
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setNickname("新名字");
@@ -393,7 +407,7 @@ class MineProfileServiceTest {
         service.updateProfile(request);
 
         ArgumentCaptor<Wrapper<UserEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
-        verify(userEntityMapper).update(isNull(), captor.capture());
+        verify(userEntityMapper).update(any(UserEntity.class), captor.capture());
         String sqlSet = ((UpdateWrapper<UserEntity>) captor.getValue()).getSqlSet();
         // 未传头像字段，不应包含追踪字段
         assertThat(sqlSet).doesNotContain("last_avatar_updated_at", "avatar_update_count");

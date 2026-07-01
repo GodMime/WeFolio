@@ -93,9 +93,6 @@ public class MineProfileService {
     /** 标签列 */
     private static final String COL_PROFILE_TAGS = "profile_tags";
 
-    /** 更新时间列 */
-    private static final String COL_UPDATED_AT = "updated_at";
-
     /** 用户资料 Mapper */
     private final UserEntityMapper userEntityMapper;
 
@@ -140,11 +137,8 @@ public class MineProfileService {
             user.setProfileTags(profileTags);
             updateWrapper.set(COL_PROFILE_TAGS, profileTags);
         }
-        LocalDateTime updatedAt = LocalDateTime.now();
-        user.setUpdatedAt(updatedAt);
-        updateWrapper.set(COL_UPDATED_AT, updatedAt);
 
-        int updated = userEntityMapper.update(null, updateWrapper);
+        int updated = userEntityMapper.update(new UserEntity(), updateWrapper);
         if (updated <= 0) {
             throw new BusinessException("资料保存失败，请重试");
         }

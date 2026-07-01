@@ -45,7 +45,7 @@ class AccountCancellationServiceTest {
         ArgumentCaptor<UserEntity> captor = ArgumentCaptor.forClass(UserEntity.class);
         verify(userEntityMapper).updateById(captor.capture());
         assertThat(captor.getValue().getStatus()).isEqualTo("DISABLED");
-        assertThat(captor.getValue().getUpdatedAt()).isNotNull();
+        assertThat(captor.getValue().getUpdatedAt()).isNull();
         verify(authTokenService).evictUser(7L);
     }
 }
