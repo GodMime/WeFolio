@@ -5,6 +5,8 @@ import com.jxc.wefolio.common.Response;
 import com.jxc.wefolio.dto.MineWorkBatchDeleteCheckResponse;
 import com.jxc.wefolio.dto.MineWorkBatchDeleteRequest;
 import com.jxc.wefolio.dto.MineWorkBatchDeleteResponse;
+import com.jxc.wefolio.dto.MineWorkCoverUploadTicketRequest;
+import com.jxc.wefolio.dto.MineWorkCoverUploadTicketResponse;
 import com.jxc.wefolio.dto.MineWorkDeleteCheckResponse;
 import com.jxc.wefolio.dto.MineWorkDetailResponse;
 import com.jxc.wefolio.dto.MineWorkListResponse;
@@ -53,6 +55,8 @@ class MineWorkControllerTest {
         MineWorkDetailResponse detailResponse = new MineWorkDetailResponse();
         MineWorkUploadTicketRequest ticketRequest = new MineWorkUploadTicketRequest();
         MineWorkUploadTicketResponse ticketResponse = new MineWorkUploadTicketResponse();
+        MineWorkCoverUploadTicketRequest coverTicketRequest = new MineWorkCoverUploadTicketRequest();
+        MineWorkCoverUploadTicketResponse coverTicketResponse = new MineWorkCoverUploadTicketResponse();
         MineWorkUploadCompleteRequest completeRequest = new MineWorkUploadCompleteRequest();
         MineWorkUploadCompleteResponse completeResponse = new MineWorkUploadCompleteResponse();
         MineWorkUpdateRequest updateRequest = new MineWorkUpdateRequest();
@@ -78,6 +82,7 @@ class MineWorkControllerTest {
         when(mineWorkService.updateTag(31L, updateTagRequest)).thenReturn(updatedTag);
         when(mineWorkService.getWorkDetail(99L)).thenReturn(detailResponse);
         when(mineWorkService.createUploadTickets(ticketRequest)).thenReturn(ticketResponse);
+        when(mineWorkService.createCoverUploadTicket(99L, coverTicketRequest)).thenReturn(coverTicketResponse);
         when(mineWorkService.completeUpload(completeRequest)).thenReturn(completeResponse);
         when(mineWorkService.updateWork(99L, updateRequest)).thenReturn(detailResponse);
         when(mineWorkService.listSortItems("TAG", 12L)).thenReturn(sortItemsResponse);
@@ -92,6 +97,7 @@ class MineWorkControllerTest {
         Response<Void> tagDeleted = controller.deleteTag(31L);
         Response<MineWorkDetailResponse> detail = controller.detail(99L);
         Response<MineWorkUploadTicketResponse> ticket = controller.createUploadTickets(ticketRequest);
+        Response<MineWorkCoverUploadTicketResponse> coverTicket = controller.createCoverUploadTicket(99L, coverTicketRequest);
         Response<MineWorkUploadCompleteResponse> completed = controller.completeUpload(completeRequest);
         Response<MineWorkDetailResponse> updated = controller.updateWork(99L, updateRequest);
         Response<MineWorkSortItemsResponse> sortItems = controller.sortItems("TAG", 12L);
@@ -114,6 +120,9 @@ class MineWorkControllerTest {
         assertPostMapping("createUploadTickets",
                 new Class<?>[] {MineWorkUploadTicketRequest.class},
                 "/api/mine/works/upload-tickets");
+        assertPostMapping("createCoverUploadTicket",
+                new Class<?>[] {Long.class, MineWorkCoverUploadTicketRequest.class},
+                "/api/mine/works/{workId}/cover-upload-ticket");
         assertPostMapping("completeUpload",
                 new Class<?>[] {MineWorkUploadCompleteRequest.class},
                 "/api/mine/works/upload-complete");
@@ -142,6 +151,7 @@ class MineWorkControllerTest {
         assertThat(tagDeleted.isSuccess()).isTrue();
         assertThat(detail.getData()).isSameAs(detailResponse);
         assertThat(ticket.getData()).isSameAs(ticketResponse);
+        assertThat(coverTicket.getData()).isSameAs(coverTicketResponse);
         assertThat(completed.getData()).isSameAs(completeResponse);
         assertThat(updated.getData()).isSameAs(detailResponse);
         assertThat(sortItems.getData()).isSameAs(sortItemsResponse);

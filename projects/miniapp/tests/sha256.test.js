@@ -48,6 +48,35 @@ test('calculateFileSha256 prefers native getFileInfo sha256 digest', async () =>
   assert.equal(calls[0].digestAlgorithm, 'sha256')
 })
 
+test('calculateFileSha256 prefers FileSystemManager getFileInfo sha256 digest', async () => {
+  const calls = []
+  const wxApi = {
+    getFileInfo() {
+      throw new Error('不应调用即将废弃的 wx.getFileInfo')
+    },
+    getFileSystemManager() {
+      return {
+        getFileInfo(options) {
+          calls.push(options)
+          options.success({
+            digest: 'BA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD'
+          })
+        },
+        readFile() {
+          throw new Error('不应读取整个文件')
+        }
+      }
+    }
+  }
+
+  const digest = await calculateFileSha256('wxfile://tmp/video.mp4', { wxApi })
+
+  assert.equal(digest, 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad')
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].filePath, 'wxfile://tmp/video.mp4')
+  assert.equal(calls[0].digestAlgorithm, 'sha256')
+})
+
 test('calculateFileSha256 falls back to JS hashing when native digest is unavailable', async () => {
   const readCalls = []
   const wxApi = {

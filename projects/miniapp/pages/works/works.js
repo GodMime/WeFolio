@@ -2,6 +2,13 @@ const { request } = require('../../utils/request')
 const { normalizeId } = require('../../utils/id')
 const { handleAuthRequired, hasLocalToken } = require('../../utils/session')
 const {
+  buildThumbFileName,
+  createChooseCoverImageOptions,
+  prepareLocalCoverUploadFile,
+  uploadToCos
+} = require('../../utils/work-upload')
+const { calculateFileSha256: calculateLocalFileSha256 } = require('../../utils/sha256')
+const {
   DEFAULT_WORK_TAG_COLOR,
   WORK_TAG_COLOR_OPTIONS,
   WORK_TAG_MAX_COUNT,
@@ -35,6 +42,11 @@ const SORT_SCOPE_ALL = 'ALL'
 const SORT_SCOPE_TAG = 'TAG'
 const SORT_ORDER_STEP = 1000
 const SORT_DRAG_SCALE = 1.015
+const COVER_EDIT_MODE_FRAME = 'frame'
+const COVER_EDIT_MODE_LOCAL = 'local'
+const DEFAULT_COVER_MIME_TYPE = 'image/jpeg'
+const DEFAULT_COVER_FILE_NAME = 'cover.jpg'
+const LOCAL_COVER_CLIENT_SUFFIX = '-local-cover'
 
 function clampNumber(value, min, max) {
   const numberValue = Number(value)
@@ -56,6 +68,41 @@ function getEditFileName(work = {}) {
     return work.originalFileName
   }
   return work.mediaType === 'VIDEO' ? `work-${work.id || Date.now()}.mp4` : `work-${work.id || Date.now()}.jpg`
+}
+
+function fileNameFromPath(filePath) {
+  const value = String(filePath || '').trim()
+  const segments = value.split('/')
+  return segments[segments.length - 1] || DEFAULT_COVER_FILE_NAME
+}
+
+function mimeTypeFromFileName(fileName) {
+  const value = String(fileName || '').toLowerCase()
+  if (value.endsWith('.png')) {
+    return 'image/png'
+  }
+  if (value.endsWith('.webp')) {
+    return 'image/webp'
+  }
+  if (value.endsWith('.gif')) {
+    return 'image/gif'
+  }
+  return DEFAULT_COVER_MIME_TYPE
+}
+
+function normalizeChosenCoverFile(response = {}) {
+  const files = Array.isArray(response.tempFiles) ? response.tempFiles : []
+  const file = files[0] || {}
+  const filePath = String(file.tempFilePath || file.path || '').trim()
+  const fileName = String(file.name || fileNameFromPath(filePath)).trim() || DEFAULT_COVER_FILE_NAME
+  return {
+    filePath,
+    fileName,
+    mimeType: String(file.mimeType || file.type || mimeTypeFromFileName(fileName)).trim() || DEFAULT_COVER_MIME_TYPE,
+    fileSize: Math.max(0, Number(file.size || 0)),
+    width: Math.max(0, Math.round(Number(file.width || 0))),
+    height: Math.max(0, Math.round(Number(file.height || 0)))
+  }
 }
 
 function buildBaseWorkEditForm(work = {}) {
@@ -90,10 +137,19 @@ function buildVideoEditForm(work = {}) {
     tempFilePath: work.mediaUrl || '',
     localVideoPath: '',
     coverEditorReady: false,
+    coverEditMode: '',
     durationMs,
     durationText: work.durationText || formatFrameTime(durationMs),
     coverFrameTimeMs: 0,
-    coverFrameSelected: false
+    coverFrameSelected: false,
+    localCoverPath: '',
+    localCoverFileName: '',
+    localCoverMimeType: DEFAULT_COVER_MIME_TYPE,
+    localCoverSize: 0,
+    localCoverWidth: 0,
+    localCoverHeight: 0,
+    localCoverSha256: '',
+    localCoverIdempotencyKey: ''
   })
 }
 
@@ -218,6 +274,7 @@ Page({
     videoFrameTimeMs: 0,
     videoFrameTimeText: '00:00',
     videoFrameExporting: false,
+    videoCoverUploadProgress: 0,
     videoEditErrorText: '',
     videoPreviewVisible: false,
     videoPreview: null,
@@ -712,6 +769,7 @@ Page({
       videoEditSaving: false,
       videoDownloading: false,
       videoFrameExporting: false,
+      videoCoverUploadProgress: 0,
       videoEditErrorText: '',
       tagManageMode: false
     })
@@ -733,6 +791,7 @@ Page({
       videoFrameTimeMs: videoEditForm.coverFrameTimeMs,
       videoFrameTimeText: formatFrameTime(videoEditForm.coverFrameTimeMs),
       videoFrameExporting: false,
+      videoCoverUploadProgress: 0,
       videoEditErrorText: '',
       tagManageMode: false
     })
@@ -804,7 +863,8 @@ Page({
       videoEditSheetVisible: false,
       videoEditForm: null,
       videoEditFieldCounters: buildWorkFieldCounters({}),
-      videoEditErrorText: ''
+      videoEditErrorText: '',
+      videoCoverUploadProgress: 0
     })
   },
 
@@ -948,12 +1008,63 @@ Page({
     }
   },
 
+  chooseCoverImage(options) {
+    return new Promise((resolve, reject) => {
+      wx.chooseMedia(Object.assign({}, options, {
+        success: resolve,
+        fail: reject
+      }))
+    })
+  },
+
+  async handleChooseVideoCoverUpload() {
+    const videoEditForm = this.data.videoEditForm
+    if (!videoEditForm || this.data.videoEditSaving || this.data.videoFrameExporting || this.data.videoDownloading) {
+      return
+    }
+    try {
+      const response = await this.chooseCoverImage(createChooseCoverImageOptions())
+      const coverFile = normalizeChosenCoverFile(response)
+      if (!coverFile.filePath) {
+        wx.showToast({
+          title: '封面文件缺失',
+          icon: 'none'
+        })
+        return
+      }
+      this.setData({
+        'videoEditForm.coverEditMode': COVER_EDIT_MODE_LOCAL,
+        'videoEditForm.coverEditorReady': false,
+        'videoEditForm.coverFrameSelected': false,
+        'videoEditForm.localCoverPath': coverFile.filePath,
+        'videoEditForm.localCoverFileName': coverFile.fileName,
+        'videoEditForm.localCoverMimeType': coverFile.mimeType,
+        'videoEditForm.localCoverSize': coverFile.fileSize,
+        'videoEditForm.localCoverWidth': coverFile.width,
+        'videoEditForm.localCoverHeight': coverFile.height,
+        'videoEditForm.localCoverSha256': '',
+        'videoEditForm.localCoverIdempotencyKey': `cover-ticket-${videoEditForm.clientId}-${Date.now()}`,
+        videoCoverUploadProgress: 0,
+        videoEditErrorText: ''
+      })
+    } catch (error) {
+      if (error && /cancel/.test(error.errMsg || error.message || '')) {
+        return
+      }
+      wx.showToast({
+        title: error && error.message ? error.message : '选择封面失败',
+        icon: 'none'
+      })
+    }
+  },
+
   async handleExportVideoCover() {
     const videoEditForm = this.data.videoEditForm
-    if (!videoEditForm || !videoEditForm.isVideo) {
+    if (!videoEditForm || !videoEditForm.isVideo || videoEditForm.coverEditMode === COVER_EDIT_MODE_LOCAL) {
       return
     }
     this.setData({
+      'videoEditForm.coverEditMode': COVER_EDIT_MODE_FRAME,
       'videoEditForm.coverFrameSelected': true,
       'videoEditForm.coverFrameTimeMs': this.data.videoFrameTimeMs,
       videoEditErrorText: ''
@@ -970,10 +1081,70 @@ Page({
       return
     }
     this.setData({
+      'videoEditForm.coverEditMode': COVER_EDIT_MODE_FRAME,
       'videoEditForm.coverEditorReady': true,
       'videoEditForm.tempFilePath': videoEditForm.tempFilePath || videoEditForm.mediaUrl || '',
+      'videoEditForm.localCoverPath': '',
+      'videoEditForm.localCoverFileName': '',
+      'videoEditForm.localCoverSha256': '',
+      'videoEditForm.localCoverIdempotencyKey': '',
+      videoCoverUploadProgress: 0,
       videoEditErrorText: ''
     })
+  },
+
+  async uploadVideoCoverOnConfirm(videoEditForm) {
+    if (!videoEditForm.localCoverPath) {
+      throw new Error('封面文件缺失')
+    }
+    this.setData({
+      videoCoverUploadProgress: 1,
+      videoEditErrorText: ''
+    })
+    const preparedCover = await prepareLocalCoverUploadFile(videoEditForm.localCoverPath)
+    const coverSha256 = await calculateLocalFileSha256(preparedCover.filePath)
+    const compressed = preparedCover.filePath !== videoEditForm.localCoverPath
+    const coverFileName = compressed
+      ? buildThumbFileName(videoEditForm.originalFileName || videoEditForm.fileName)
+      : (videoEditForm.localCoverFileName || DEFAULT_COVER_FILE_NAME)
+    const coverMimeType = compressed
+      ? DEFAULT_COVER_MIME_TYPE
+      : (videoEditForm.localCoverMimeType || DEFAULT_COVER_MIME_TYPE)
+    const ticket = await request({
+      url: `${WORKS_API_PREFIX}/${videoEditForm.id}/cover-upload-ticket`,
+      method: 'POST',
+      data: {
+        clientId: `${videoEditForm.clientId}${LOCAL_COVER_CLIENT_SUFFIX}`,
+        fileName: coverFileName,
+        mimeType: coverMimeType,
+        fileSize: preparedCover.fileSize,
+        sha256: coverSha256,
+        width: videoEditForm.localCoverWidth,
+        height: videoEditForm.localCoverHeight,
+        idempotencyKey: videoEditForm.localCoverIdempotencyKey
+      }
+    })
+    const uploadFile = {
+      id: `${videoEditForm.clientId}${LOCAL_COVER_CLIENT_SUFFIX}`,
+      mediaType: 'IMAGE',
+      tempFilePath: preparedCover.filePath
+    }
+    await uploadToCos(uploadFile, ticket, {
+      onTask: (target, task) => {
+        this.uploadTasks[target.id] = task
+      },
+      onProgress: (target, progress) => {
+        this.setData({
+          videoCoverUploadProgress: progress.progress || 0
+        })
+      }
+    })
+    delete this.uploadTasks[uploadFile.id]
+    this.setData({
+      'videoEditForm.localCoverSha256': coverSha256,
+      videoCoverUploadProgress: 100
+    })
+    return ticket
   },
 
   async handleConfirmVideoEdit() {
@@ -991,13 +1162,20 @@ Page({
       videoEditErrorText: ''
     })
     try {
+      const coverTicket = videoEditForm.coverEditMode === COVER_EDIT_MODE_LOCAL && videoEditForm.localCoverPath
+        ? await this.uploadVideoCoverOnConfirm(videoEditForm)
+        : null
+      const shouldUpdateCoverFrame = videoEditForm.coverEditMode !== COVER_EDIT_MODE_LOCAL && videoEditForm.coverFrameSelected
       const payload = buildWorkUpdatePayload({
         title: videoEditForm.title,
         description: videoEditForm.description,
-        ...(videoEditForm.coverFrameSelected ? {
+        ...(shouldUpdateCoverFrame ? {
           coverFrameTimeMs: videoEditForm.coverFrameTimeMs,
           width: videoEditForm.width,
           height: videoEditForm.height
+        } : {}),
+        ...(coverTicket && coverTicket.taskId ? {
+          coverTaskId: coverTicket.taskId
         } : {})
       })
       const response = await request({
@@ -1015,6 +1193,7 @@ Page({
         videoEditForm: null,
         videoEditFieldCounters: buildWorkFieldCounters({}),
         videoEditSaving: false,
+        videoCoverUploadProgress: 0,
         videoEditErrorText: ''
       })
     } catch (error) {
@@ -1025,6 +1204,7 @@ Page({
       }
       this.setData({
         videoEditSaving: false,
+        videoCoverUploadProgress: 0,
         videoEditErrorText: error && error.message ? error.message : '作品保存失败'
       })
     }

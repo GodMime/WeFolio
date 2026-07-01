@@ -5,6 +5,8 @@ import com.jxc.wefolio.common.Response;
 import com.jxc.wefolio.dto.MineWorkBatchDeleteCheckResponse;
 import com.jxc.wefolio.dto.MineWorkBatchDeleteRequest;
 import com.jxc.wefolio.dto.MineWorkBatchDeleteResponse;
+import com.jxc.wefolio.dto.MineWorkCoverUploadTicketRequest;
+import com.jxc.wefolio.dto.MineWorkCoverUploadTicketResponse;
 import com.jxc.wefolio.dto.MineWorkDeleteCheckResponse;
 import com.jxc.wefolio.dto.MineWorkDetailResponse;
 import com.jxc.wefolio.dto.MineWorkListResponse;
@@ -140,6 +142,22 @@ public class MineWorkController {
         int count = request == null || request.getFiles() == null ? 0 : request.getFiles().size();
         log.info("创建作品上传票据: fileCount={}", count);
         return Response.success(mineWorkService.createUploadTickets(request));
+    }
+
+    /**
+     * 创建视频作品封面直传 COS 票据。
+     *
+     * @param workId 作品 ID
+     * @param request 封面票据创建请求
+     * @return 封面票据响应
+     */
+    @PostMapping("/api/mine/works/{workId}/cover-upload-ticket")
+    public Response<MineWorkCoverUploadTicketResponse> createCoverUploadTicket(
+            @PathVariable Long workId,
+            @RequestBody MineWorkCoverUploadTicketRequest request
+    ) {
+        log.info("创建视频作品封面上传票据: workId={}, fileSize={}", workId, request == null ? null : request.getFileSize());
+        return Response.success(mineWorkService.createCoverUploadTicket(workId, request));
     }
 
     /**

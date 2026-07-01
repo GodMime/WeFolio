@@ -1299,6 +1299,19 @@
   flex: 0 1 auto;
   height: auto;
   max-height: calc(78vh - 176rpx - env(safe-area-inset-bottom));
+  min-height: 0;
+}
+
+.video-edit-mask .work-edit-panel {
+  height: auto;
+  max-height: calc(84vh - env(safe-area-inset-bottom));
+}
+
+.video-edit-mask .work-edit-scroll {
+  flex: 0 1 auto;
+  height: auto;
+  max-height: calc(84vh - 176rpx - env(safe-area-inset-bottom));
+  min-height: 0;
 }
 
 .work-edit-content {
@@ -1402,6 +1415,9 @@
 
 .cover-standby {
   width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
 }
 
 .cover-edit-toolbar {
@@ -1444,14 +1460,16 @@
   box-sizing: border-box;
 }
 
-.cover-export-button {
+.cover-export-button,
+.cover-upload-button {
   width: 100%;
-  min-width: 100%;
+  min-width: 0;
   max-width: 100%;
   height: 76rpx;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex: 1 1 0;
   margin: 0;
   color: #17202a;
   font-size: 25rpx;
@@ -1460,6 +1478,80 @@
   border-radius: 14rpx;
   background: #eef3f7;
   box-sizing: border-box;
+}
+
+.cover-upload-button {
+  background: #ffffff;
+}
+
+.cover-upload-button.compact {
+  width: auto;
+  min-width: 150rpx;
+  max-width: 180rpx;
+  height: 62rpx;
+  flex: 0 0 auto;
+  padding: 0 18rpx;
+  font-size: 23rpx;
+}
+
+.local-cover-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14rpx;
+}
+
+.local-cover-preview {
+  width: 100%;
+  height: 300rpx;
+  overflow: hidden;
+  border-radius: 16rpx;
+  background: #eef3f7;
+}
+
+.local-cover-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding: 14rpx 16rpx;
+  border: 1rpx solid #d8e0e8;
+  border-radius: 14rpx;
+  background: #f8fafc;
+  box-sizing: border-box;
+}
+
+.local-cover-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.local-cover-title {
+  color: #17202a;
+  font-size: 24rpx;
+  font-weight: 900;
+  line-height: 1.35;
+}
+
+.local-cover-desc {
+  margin-top: 4rpx;
+  color: #66727f;
+  font-size: 22rpx;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.local-cover-progress {
+  width: 100%;
+  height: 8rpx;
+  overflow: hidden;
+  border-radius: 999rpx;
+  background: #e4ebf2;
+}
+
+.local-cover-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: #3d6fad;
 }
 
 .edit-error {

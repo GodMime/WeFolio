@@ -308,6 +308,12 @@ function buildWorkUpdatePayload(form = {}) {
     const frameTimeMs = Math.max(0, Math.round(toNumber(form.coverFrameTimeMs)))
     payload.coverFrameTimeMs = frameTimeMs
   }
+  if (Object.prototype.hasOwnProperty.call(form, 'coverTaskId')) {
+    const coverTaskId = normalizeId(form.coverTaskId)
+    if (coverTaskId) {
+      payload.coverTaskId = coverTaskId
+    }
+  }
   const width = Math.max(0, Math.round(toNumber(form.width)))
   const height = Math.max(0, Math.round(toNumber(form.height)))
   if (width > 0 && height > 0) {

@@ -87,12 +87,14 @@ class CosServiceTest {
         assertThat(formData).containsEntry("q-ak", "AKID_TEST");
         assertThat(formData).containsEntry("q-sign-algorithm", "sha1");
         assertThat(formData).containsEntry("x-cos-acl", "public-read");
+        assertThat(formData).containsEntry("Content-Type", "image/jpeg");
         assertThat(formData).containsEntry("success_action_status", "200");
         assertThat(formData.get("q-signature")).isNotBlank();
         assertThat(formData.get("q-signature")).doesNotContain("SECRET_TEST");
         assertThat(policy).contains("\"bucket\":\"test-bucket\"");
         assertThat(policy).contains("\"key\":\"WFA3B1E7A2/work/image/photo.jpg\"");
         assertThat(policy).contains("\"x-cos-acl\":\"public-read\"");
+        assertThat(policy).contains("\"Content-Type\":\"image/jpeg\"");
         assertThat(policy).contains("[\"content-length-range\",0,10485760]");
         assertThat(policy).contains("\"success_action_status\":\"200\"");
     }

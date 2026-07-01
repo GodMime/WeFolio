@@ -13,9 +13,11 @@ const {
   applyUploadCompleteResults,
   buildCoverUploadTicketPayload,
   buildUploadTicketPayload,
+  createChooseCoverImageOptions,
   createChooseMediaOptions,
   enrichVideoFileMetadata,
   normalizeChosenMediaFiles,
+  prepareLocalCoverUploadFile,
   prepareCoverUploadFiles,
   runWorkUploadQueue,
   validateChosenMediaFiles
@@ -28,6 +30,14 @@ test('chooseMedia options use mixed album picker and cap count at 9', () => {
     sourceType: ['album']
   })
   assert.equal(createChooseMediaOptions(3).count, 3)
+})
+
+test('cover image picker only allows one album image', () => {
+  assert.deepEqual(createChooseCoverImageOptions(), {
+    count: 1,
+    mediaType: ['image'],
+    sourceType: ['album']
+  })
 })
 
 test('normalizes chosen media files with default titles and media types', () => {
@@ -449,6 +459,34 @@ test('prepares cover uploads by skipping small images, compressing large images,
   assert.equal(files[2].coverFileName, undefined)
   assert.equal(compressCalls.length, 1)
   assert.equal(compressCalls[0].src, 'wxfile://tmp/photo.jpg')
+})
+
+test('prepares local edited cover only when finish triggers upload', async () => {
+  const compressCalls = []
+  const sizes = {
+    'wxfile://tmp/local-cover.jpg': THUMB_MAX_BYTES + 1,
+    'wxfile://tmp/local-cover-compressed.jpg': 88000
+  }
+  const wxApi = {
+    getFileSystemManager() {
+      return {
+        statSync(filePath) {
+          return { size: sizes[filePath] || 0 }
+        }
+      }
+    },
+    compressImage(options) {
+      compressCalls.push(options)
+      options.success({ tempFilePath: 'wxfile://tmp/local-cover-compressed.jpg' })
+    }
+  }
+
+  const coverFile = await prepareLocalCoverUploadFile('wxfile://tmp/local-cover.jpg', { wxApi })
+
+  assert.equal(coverFile.filePath, 'wxfile://tmp/local-cover-compressed.jpg')
+  assert.equal(coverFile.fileSize, 88000)
+  assert.equal(compressCalls.length, 1)
+  assert.equal(compressCalls[0].src, 'wxfile://tmp/local-cover.jpg')
 })
 
 test('builds cover upload tickets only for image thumbnails', () => {

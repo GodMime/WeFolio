@@ -17,6 +17,9 @@ public class MineWorkUpdateRequest {
     /** 视频封面截帧时间点，单位毫秒，仅视频作品可提交 */
     private Long coverFrameTimeMs;
 
+    /** 小程序直传 COS 后得到的封面上传任务 ID，仅视频作品可提交 */
+    private Long coverTaskId;
+
     /** 视频像素宽度，仅视频封面截帧时用于计算封面输出尺寸 */
     private Integer width;
 

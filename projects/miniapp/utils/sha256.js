@@ -175,11 +175,18 @@ function normalizeSha256Digest(value) {
 
 function getNativeFileSha256(filePath, wxApi) {
   const runtimeWx = getRuntimeWx(wxApi)
-  if (typeof runtimeWx.getFileInfo !== 'function') {
+  const fileSystemManager = typeof runtimeWx.getFileSystemManager === 'function'
+    ? runtimeWx.getFileSystemManager()
+    : null
+  const getFileInfo = fileSystemManager && typeof fileSystemManager.getFileInfo === 'function'
+    ? fileSystemManager.getFileInfo.bind(fileSystemManager)
+    : runtimeWx.getFileInfo && runtimeWx.getFileInfo.bind(runtimeWx)
+
+  if (typeof getFileInfo !== 'function') {
     return Promise.resolve('')
   }
   return new Promise((resolve) => {
-    runtimeWx.getFileInfo({
+    getFileInfo({
       filePath,
       digestAlgorithm: SHA256_DIGEST_ALGORITHM,
       success(response) {

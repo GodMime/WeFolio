@@ -302,7 +302,7 @@
         <view class="work-edit-type">图片</view>
       </view>
 
-      <scroll-view class="work-edit-scroll" scroll-y type="list">
+      <scroll-view class="work-edit-scroll" scroll-y>
         <view class="work-edit-content">
           <view class="work-preview">
             <image class="work-preview-media" src="{{imageEditForm.previewPath}}" mode="aspectFit"></image>
@@ -360,7 +360,7 @@
         <view class="work-edit-type">视频</view>
       </view>
 
-      <scroll-view class="work-edit-scroll" scroll-y type="list">
+      <scroll-view class="work-edit-scroll" scroll-y>
         <view class="work-edit-content">
           <view class="work-preview">
             <image wx:if="{{videoEditForm.previewPath}}" class="work-preview-media" src="{{videoEditForm.previewPath}}" mode="aspectFill"></image>
@@ -403,17 +403,22 @@
           <view class="cover-section">
             <view class="cover-heading">
               <view class="field-label">视频封面</view>
-              <view wx:if="{{!videoEditForm.coverEditorReady}}" class="cover-time">{{videoFrameTimeText}} / {{videoEditForm.durationText}}</view>
+              <view wx:if="{{videoEditForm.coverEditMode === 'frame'}}" class="cover-time">{{videoFrameTimeText}} / {{videoEditForm.durationText}}</view>
             </view>
-            <view wx:if="{{!videoEditForm.coverEditorReady}}" class="cover-standby">
+            <view wx:if="{{videoEditForm.coverEditMode === ''}}" class="cover-standby">
               <button
                 class="cover-export-button"
                 bindtap="handleStartVideoCoverEdit"
                 loading="{{videoDownloading}}"
                 disabled="{{videoEditSaving || videoDownloading || videoFrameExporting}}"
               >选帧修改封面</button>
+              <button
+                class="cover-upload-button"
+                bindtap="handleChooseVideoCoverUpload"
+                disabled="{{videoEditSaving || videoDownloading || videoFrameExporting}}"
+              >上传封面</button>
             </view>
-            <block wx:else>
+            <block wx:if="{{videoEditForm.coverEditMode === 'frame'}}">
               <view class="cover-edit-toolbar">
                 <view class="cover-edit-time">{{videoFrameTimeText}} / {{videoEditForm.durationText}}</view>
                 <button
@@ -443,6 +448,23 @@
                 bindchange="handleVideoCoverSliderChange"
               ></slider>
             </block>
+            <view wx:if="{{videoEditForm.coverEditMode === 'local'}}" class="local-cover-panel">
+              <image class="local-cover-preview" src="{{videoEditForm.localCoverPath}}" mode="aspectFill"></image>
+              <view class="local-cover-actions">
+                <view class="local-cover-copy">
+                  <view class="local-cover-title">已选择本地封面</view>
+                  <view class="local-cover-desc">点完成后上传并替换当前封面</view>
+                </view>
+                <button
+                  class="cover-upload-button compact"
+                  bindtap="handleChooseVideoCoverUpload"
+                  disabled="{{videoEditSaving || videoDownloading || videoFrameExporting}}"
+                >重新选择</button>
+              </view>
+              <view wx:if="{{videoEditSaving && videoCoverUploadProgress > 0}}" class="local-cover-progress">
+                <view class="local-cover-progress-fill" style="width: {{videoCoverUploadProgress}}%;"></view>
+              </view>
+            </view>
           </view>
 
           <view wx:if="{{videoEditErrorText}}" class="edit-error">{{videoEditErrorText}}</view>

@@ -328,6 +328,7 @@
 .month-picker {
   flex: none;
   min-width: 0;
+  margin-right: 12rpx;
 }
 
 .month-title {
@@ -409,13 +410,15 @@
 .calendar {
   display: flex;
   flex-wrap: wrap;
-  gap: 8rpx 6rpx;
+  gap: 8rpx 0;
+  justify-content: space-between;
   padding: 18rpx 20rpx 20rpx;
   background: #ffffff;
   box-sizing: border-box;
 }
 
 .weekday {
+  flex: 0 0 calc((100% - 36rpx) / 7);
   width: calc((100% - 36rpx) / 7);
   min-height: 44rpx;
   display: flex;
@@ -430,6 +433,7 @@
 
 .calendar-day {
   position: relative;
+  flex: 0 0 calc((100% - 36rpx) / 7);
   width: calc((100% - 36rpx) / 7);
   min-height: 112rpx;
   display: flex;
@@ -891,6 +895,8 @@
 .slot-color-grid {
   display: flex;
   flex-wrap: wrap;
+  gap: 12rpx 0;
+  justify-content: space-between;
 }
 
 .schedule-slot-grid {
@@ -1004,11 +1010,12 @@
 .slot-color-choice {
   width: calc((100% - 36rpx) / 4);
   min-height: 64rpx;
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8rpx;
-  flex: none;
+  flex: 0 0 calc((100% - 36rpx) / 4);
   padding: 0 10rpx;
   border: 2rpx solid transparent;
   border-radius: 999rpx;

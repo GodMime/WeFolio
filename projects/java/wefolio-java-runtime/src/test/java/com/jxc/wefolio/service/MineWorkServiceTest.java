@@ -12,6 +12,8 @@ import com.jxc.wefolio.dict.WorkUploadTaskStatusDict;
 import com.jxc.wefolio.dto.MineWorkBatchDeleteCheckResponse;
 import com.jxc.wefolio.dto.MineWorkBatchDeleteRequest;
 import com.jxc.wefolio.dto.MineWorkBatchDeleteResponse;
+import com.jxc.wefolio.dto.MineWorkCoverUploadTicketRequest;
+import com.jxc.wefolio.dto.MineWorkCoverUploadTicketResponse;
 import com.jxc.wefolio.dto.MineWorkDeleteCheckResponse;
 import com.jxc.wefolio.dto.MineWorkListResponse;
 import com.jxc.wefolio.dto.MineWorkSortRequest;
@@ -462,6 +464,64 @@ class MineWorkServiceTest {
                 .isEqualTo("WFA3B1E7A2/work/image/WFA3B1E7A2-P-1782807167829-1-thumb.jpg");
         assertThat(response.getItems().get(1).getObjectKey())
                 .isEqualTo("WFA3B1E7A2/work/video/WFA3B1E7A2-V-1782807167829-3-thumb.jpg");
+    }
+
+    @Test
+    void createCoverUploadTicketShouldCreateDerivedVideoCoverTask() {
+        WorkEntity work = new WorkEntity();
+        work.setId(18L);
+        work.setUserId(7L);
+        work.setMediaType(MediaTypeDict.VIDEO.getCode());
+        work.setMediaObjectKey("WFA3B1E7A2/work/video/WFA3B1E7A2-V-1782807167829-3.mp4");
+        work.setOriginalFileName("film.mp4");
+        when(workEntityMapper.selectById(18L)).thenReturn(work);
+        when(cosService.createPostUploadTicket(
+                any(String.class),
+                eq("image/jpeg"),
+                eq(100L * 1024L),
+                any(LocalDateTime.class)))
+                .thenAnswer(invocation -> new CosService.PostUploadTicket(
+                        "https://bucket.cos.ap-guangzhou.myqcloud.com",
+                        invocation.getArgument(0),
+                        invocation.getArgument(1),
+                        invocation.getArgument(2),
+                        invocation.getArgument(3),
+                        java.util.Map.of("key", invocation.getArgument(0))));
+        when(workUploadTaskEntityMapper.insert(any(WorkUploadTaskEntity.class))).thenAnswer(invocation -> {
+            WorkUploadTaskEntity task = invocation.getArgument(0);
+            task.setId(301L);
+            return 1;
+        });
+        MineWorkCoverUploadTicketRequest request = new MineWorkCoverUploadTicketRequest();
+        request.setClientId("edit-cover-18");
+        request.setFileName("cover.jpg");
+        request.setMimeType("image/jpeg");
+        request.setFileSize(90_000L);
+        request.setSha256("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+        request.setWidth(640);
+        request.setHeight(360);
+        request.setIdempotencyKey("cover-ticket-18");
+
+        MineWorkCoverUploadTicketResponse response = service().createCoverUploadTicket(18L, request);
+
+        ArgumentCaptor<WorkUploadTaskEntity> taskCaptor = ArgumentCaptor.forClass(WorkUploadTaskEntity.class);
+        verify(workUploadTaskEntityMapper).insert(taskCaptor.capture());
+        WorkUploadTaskEntity task = taskCaptor.getValue();
+        assertThat(task.getUserId()).isEqualTo(7L);
+        assertThat(task.getMediaType()).isEqualTo(MediaTypeDict.IMAGE.getCode());
+        assertThat(task.getObjectKey())
+                .startsWith("WFA3B1E7A2/work/video/WFA3B1E7A2-V-1782807167829-3-thumb-")
+                .endsWith(".jpg");
+        assertThat(task.getOriginalFileName()).isEqualTo("film-thumb.jpg");
+        assertThat(task.getFileSha256())
+                .isEqualTo("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+        assertThat(task.getFileSize()).isEqualTo(90_000L);
+        assertThat(task.getWidth()).isEqualTo(640);
+        assertThat(task.getHeight()).isEqualTo(360);
+        assertThat(response.getTaskId()).isEqualTo(301L);
+        assertThat(response.getClientId()).isEqualTo("edit-cover-18");
+        assertThat(response.getMaxBytes()).isEqualTo(100L * 1024L);
+        assertThat(response.getObjectKey()).isEqualTo(task.getObjectKey());
     }
 
     /**
@@ -1089,6 +1149,58 @@ class MineWorkServiceTest {
                 .contains("requestHeight=1920")
                 .contains("snapshotWidth=360")
                 .contains("snapshotHeight=640");
+    }
+
+    @Test
+    void updateWorkShouldReplaceVideoCoverFromUploadedCoverTaskAndDeleteOldCoverObject() {
+        WorkEntity work = new WorkEntity();
+        work.setId(18L);
+        work.setUserId(7L);
+        work.setTitle("旧标题");
+        work.setDescription("旧说明");
+        work.setMediaType(MediaTypeDict.VIDEO.getCode());
+        work.setMediaObjectKey("WFA3B1E7A2/work/video/film.mp4");
+        work.setCoverObjectKey("WFA3B1E7A2/work/video/old-thumb.jpg");
+        work.setCoverSha256("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        work.setOriginalFileName("film.mp4");
+        WorkUploadTaskEntity coverTask = uploadTask(
+                301L,
+                "edit-cover-18",
+                "WFA3B1E7A2/work/video/film-thumb-1782807167829.jpg",
+                "cover-ticket-18");
+        coverTask.setOriginalFileName("film-thumb.jpg");
+        coverTask.setFileSha256("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+        coverTask.setFileSize(90_000L);
+        when(workEntityMapper.selectById(18L)).thenReturn(work, work);
+        when(workUploadTaskEntityMapper.selectById(301L)).thenReturn(coverTask);
+        when(cosService.headObject("WFA3B1E7A2/work/video/film-thumb-1782807167829.jpg"))
+                .thenReturn(new CosService.ObjectHead("image/jpeg", 90_000L));
+        when(workEntityMapper.updateById(any(WorkEntity.class))).thenReturn(1);
+        when(workUploadTaskEntityMapper.updateById(any(WorkUploadTaskEntity.class))).thenReturn(1);
+        when(portfolioReferenceEntityMapper.selectList(any())).thenReturn(List.of());
+        when(workTagEntityMapper.selectList(any())).thenReturn(List.of());
+        when(cosService.publicUrl(any())).thenAnswer(invocation -> "https://cos.example/" + invocation.getArgument(0));
+        MineWorkUpdateRequest request = new MineWorkUpdateRequest();
+        request.setTitle(" 新标题 ");
+        request.setDescription(" 新说明 ");
+        request.setCoverTaskId(301L);
+
+        service().updateWork(18L, request);
+
+        ArgumentCaptor<WorkEntity> workCaptor = ArgumentCaptor.forClass(WorkEntity.class);
+        ArgumentCaptor<WorkUploadTaskEntity> taskCaptor = ArgumentCaptor.forClass(WorkUploadTaskEntity.class);
+        verify(workEntityMapper).updateById(workCaptor.capture());
+        verify(workUploadTaskEntityMapper).updateById(taskCaptor.capture());
+        verify(cosService).delete("WFA3B1E7A2/work/video/old-thumb.jpg");
+        WorkEntity updatedWork = workCaptor.getValue();
+        assertThat(updatedWork.getTitle()).isEqualTo("新标题");
+        assertThat(updatedWork.getDescription()).isEqualTo("新说明");
+        assertThat(updatedWork.getCoverObjectKey()).isEqualTo("WFA3B1E7A2/work/video/film-thumb-1782807167829.jpg");
+        assertThat(updatedWork.getCoverSha256())
+                .isEqualTo("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+        WorkUploadTaskEntity updatedTask = taskCaptor.getValue();
+        assertThat(updatedTask.getStatus()).isEqualTo(WorkUploadTaskStatusDict.CONFIRMED.getCode());
+        assertThat(updatedTask.getConfirmedWorkId()).isEqualTo(18L);
     }
 
     @Test

@@ -14,6 +14,8 @@ import com.jxc.wefolio.dict.WorkUploadTaskStatusDict;
 import com.jxc.wefolio.dto.MineWorkBatchDeleteCheckResponse;
 import com.jxc.wefolio.dto.MineWorkBatchDeleteRequest;
 import com.jxc.wefolio.dto.MineWorkBatchDeleteResponse;
+import com.jxc.wefolio.dto.MineWorkCoverUploadTicketRequest;
+import com.jxc.wefolio.dto.MineWorkCoverUploadTicketResponse;
 import com.jxc.wefolio.dto.MineWorkDeleteCheckResponse;
 import com.jxc.wefolio.dto.MineWorkDetailResponse;
 import com.jxc.wefolio.dto.MineWorkListResponse;
@@ -149,6 +151,15 @@ public class MineWorkService {
 
     /** 后端生成视频封面任务幂等前缀 */
     private static final String GENERATED_VIDEO_COVER_IDEMPOTENCY_PREFIX = "WORK_VIDEO_COVER:";
+
+    /** 手动上传视频封面任务批次前缀 */
+    private static final String MANUAL_VIDEO_COVER_BATCH_PREFIX = "edit-cover-";
+
+    /** 手动上传视频封面任务幂等前缀 */
+    private static final String MANUAL_VIDEO_COVER_IDEMPOTENCY_PREFIX = "WORK_VIDEO_COVER_UPLOAD:";
+
+    /** 视频封面编辑方式冲突提示 */
+    private static final String VIDEO_COVER_EDIT_MODE_CONFLICT_MESSAGE = "不能同时选择选帧封面和上传封面";
 
     /** 视频默认封面截帧时间点 */
     private static final long DEFAULT_VIDEO_COVER_FRAME_TIME_MS = 0L;
@@ -471,6 +482,35 @@ public class MineWorkService {
     }
 
     /**
+     * 为已存在的视频作品创建封面直传票据。
+     *
+     * @param workId 作品 ID
+     * @param request 封面票据创建请求
+     * @return 封面票据响应
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public MineWorkCoverUploadTicketResponse createCoverUploadTicket(
+            Long workId,
+            MineWorkCoverUploadTicketRequest request
+    ) {
+        Long userId = AuthContextHolder.requireUserId();
+        WorkEntity work = requireOwnedWork(workId);
+        if (!MediaTypeDict.VIDEO.getCode().equals(work.getMediaType())) {
+            throw new BusinessException(MineWorkMessage.VIDEO_COVER_UPDATE_MEDIA_TYPE_MESSAGE);
+        }
+        validateManualCoverUploadFile(request);
+        LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(TICKET_EXPIRE_MINUTES);
+        WorkUploadTaskEntity task = buildManualCoverUploadTask(userId, work, request, expiresAt);
+        WorkUploadTaskEntity persistedTask = saveOrFindUploadTask(task);
+        CosService.PostUploadTicket ticket = cosService.createPostUploadTicket(
+                persistedTask.getObjectKey(),
+                normalizeText(persistedTask.getMimeType()),
+                THUMB_MAX_BYTES,
+                persistedTask.getExpiresAt());
+        return buildCoverTicketResponse(persistedTask, request.getClientId(), ticket);
+    }
+
+    /**
      * 上传完成后确认入库。
      *
      * @param request 上传完成请求
@@ -516,6 +556,10 @@ public class MineWorkService {
     public MineWorkDetailResponse updateWork(Long workId, MineWorkUpdateRequest request) {
         WorkEntity work = requireOwnedWork(workId);
         Long coverFrameTimeMs = request == null ? null : request.getCoverFrameTimeMs();
+        Long coverTaskId = request == null ? null : request.getCoverTaskId();
+        if (coverFrameTimeMs != null && coverTaskId != null) {
+            throw new BusinessException(VIDEO_COVER_EDIT_MODE_CONFLICT_MESSAGE);
+        }
         String title = normalizeRequiredTitle(request == null ? null : request.getTitle());
         String description = normalizeDescription(request == null ? null : request.getDescription());
         MediaDimensions requestDimensions = request == null
@@ -525,6 +569,9 @@ public class MineWorkService {
         CosService.SnapshotObject generatedCover = coverFrameTimeMs == null
                 ? null
                 : generateReplacementVideoCover(work, coverFrameTimeMs, requestDimensions);
+        WorkUploadTaskEntity uploadedCoverTask = coverTaskId == null
+                ? null
+                : validateReplacementCoverTask(work, coverTaskId);
         work.setTitle(title);
         work.setDescription(description);
         if (generatedCover != null) {
@@ -535,12 +582,23 @@ public class MineWorkService {
                 work.setHeight(requestDimensions.height());
             }
         }
+        if (uploadedCoverTask != null) {
+            work.setCoverObjectKey(uploadedCoverTask.getObjectKey());
+            work.setCoverSha256(uploadedCoverTask.getFileSha256());
+        }
         int updated = workEntityMapper.updateById(work);
         if (updated <= 0) {
             deleteGeneratedCoverIfNeeded(generatedCover, oldCoverObjectKey, work.getMediaObjectKey());
+            deleteUploadedCoverIfNeeded(uploadedCoverTask, oldCoverObjectKey, work.getMediaObjectKey());
             throw new BusinessException(MineWorkMessage.WORK_SAVE_FAILED_MESSAGE);
         }
+        if (uploadedCoverTask != null) {
+            confirmReplacementCoverTask(uploadedCoverTask, work.getId(), oldCoverObjectKey, work.getMediaObjectKey());
+        }
         if (generatedCover != null) {
+            deleteOldVideoCoverIfNeeded(oldCoverObjectKey, work.getCoverObjectKey(), work.getMediaObjectKey());
+        }
+        if (uploadedCoverTask != null) {
             deleteOldVideoCoverIfNeeded(oldCoverObjectKey, work.getCoverObjectKey(), work.getMediaObjectKey());
         }
         return getWorkDetail(work.getId());
@@ -910,6 +968,89 @@ public class MineWorkService {
     }
 
     /**
+     * 校验手动上传的视频封面元信息。
+     *
+     * @param request 封面票据创建请求
+     */
+    private void validateManualCoverUploadFile(MineWorkCoverUploadTicketRequest request) {
+        if (request == null) {
+            throw new BusinessException(MineWorkMessage.COVER_REQUIRED_MESSAGE);
+        }
+        long fileSize = request.getFileSize() == null ? 0L : request.getFileSize();
+        if (fileSize <= 0L) {
+            throw new BusinessException(MineWorkMessage.COVER_REQUIRED_MESSAGE);
+        }
+        if (fileSize > THUMB_MAX_BYTES) {
+            throw new BusinessException(MineWorkMessage.COVER_TASK_SIZE_MESSAGE);
+        }
+        String mimeType = normalizeText(request.getMimeType()).toLowerCase(Locale.ROOT);
+        if (!mimeType.startsWith(IMAGE_MIME_PREFIX)) {
+            throw new BusinessException(MineWorkMessage.COVER_TASK_MEDIA_TYPE_MESSAGE);
+        }
+        normalizeExtension(request.getFileName(), request.getMimeType(), MediaTypeDict.IMAGE.getCode());
+        normalizeClientSha256(request.getSha256());
+    }
+
+    /**
+     * 构造手动上传视频封面的上传任务。
+     *
+     * @param userId 当前用户 ID
+     * @param work 视频作品
+     * @param request 封面票据创建请求
+     * @param expiresAt 票据过期时间
+     * @return 上传任务
+     */
+    private WorkUploadTaskEntity buildManualCoverUploadTask(
+            Long userId,
+            WorkEntity work,
+            MineWorkCoverUploadTicketRequest request,
+            LocalDateTime expiresAt
+    ) {
+        String objectKey = buildManualCoverObjectKey(work.getMediaObjectKey());
+        WorkUploadTaskEntity task = new WorkUploadTaskEntity();
+        task.setBatchId(MANUAL_VIDEO_COVER_BATCH_PREFIX + work.getId());
+        task.setUserId(userId);
+        task.setMediaType(MediaTypeDict.IMAGE.getCode());
+        task.setObjectKey(objectKey);
+        task.setFileSha256(normalizeClientSha256(request.getSha256()));
+        task.setCoverObjectKey(objectKey);
+        task.setOriginalFileName(buildThumbFileName(work.getOriginalFileName()));
+        task.setMimeType(normalizeText(request.getMimeType()));
+        task.setFileSize(request.getFileSize());
+        task.setWidth(normalizeMediaDimension(request.getWidth()));
+        task.setHeight(normalizeMediaDimension(request.getHeight()));
+        task.setStatus(WorkUploadTaskStatusDict.CREATED.getCode());
+        task.setExpiresAt(expiresAt);
+        task.setIdempotencyKey(normalizeManualCoverIdempotency(work, request));
+        return task;
+    }
+
+    /**
+     * 构造视频封面票据响应。
+     *
+     * @param task 上传任务
+     * @param clientId 前端本地 ID
+     * @param ticket COS 票据
+     * @return 封面票据响应
+     */
+    private MineWorkCoverUploadTicketResponse buildCoverTicketResponse(
+            WorkUploadTaskEntity task,
+            String clientId,
+            CosService.PostUploadTicket ticket
+    ) {
+        MineWorkCoverUploadTicketResponse response = new MineWorkCoverUploadTicketResponse();
+        response.setTaskId(task.getId());
+        response.setClientId(clientId);
+        response.setMediaType(task.getMediaType());
+        response.setObjectKey(task.getObjectKey());
+        response.setUploadUrl(ticket.uploadUrl());
+        response.setFormData(ticket.formData());
+        response.setExpiresAt(ticket.expiresAt());
+        response.setMaxBytes(ticket.maxBytes());
+        return response;
+    }
+
+    /**
      * 校验上传文件元信息。
      *
      * @param file 文件元信息
@@ -1162,6 +1303,61 @@ public class MineWorkService {
     }
 
     /**
+     * 校验视频作品替换封面使用的上传任务。
+     *
+     * @param work 视频作品
+     * @param coverTaskId 封面上传任务 ID
+     * @return 封面上传任务
+     */
+    private WorkUploadTaskEntity validateReplacementCoverTask(WorkEntity work, Long coverTaskId) {
+        if (!MediaTypeDict.VIDEO.getCode().equals(work.getMediaType())) {
+            throw new BusinessException(MineWorkMessage.VIDEO_COVER_UPDATE_MEDIA_TYPE_MESSAGE);
+        }
+        WorkUploadTaskEntity coverTask = requireOwnedUploadTask(work.getUserId(), coverTaskId);
+        WorkUploadCoverTaskValidator.ensureImageCoverTask(coverTask);
+        if (WorkUploadTaskStatusDict.CONFIRMED.getCode().equals(coverTask.getStatus())) {
+            throw new BusinessException(MineWorkMessage.COVER_TASK_USED_MESSAGE);
+        }
+        if (coverTask.getExpiresAt() != null && coverTask.getExpiresAt().isBefore(LocalDateTime.now())) {
+            coverTask.setStatus(WorkUploadTaskStatusDict.EXPIRED.getCode());
+            coverTask.setErrorMessage("封面上传任务已过期");
+            workUploadTaskEntityMapper.updateById(coverTask);
+            throw new BusinessException(MineWorkMessage.COVER_TASK_EXPIRED_MESSAGE);
+        }
+        validateCoverFileName(work.getOriginalFileName(), coverTask);
+        CosService.ObjectHead coverHead = validateCosObject(coverTask);
+        if (coverHead.contentLength() > THUMB_MAX_BYTES) {
+            throw new BusinessException(MineWorkMessage.COVER_TASK_SIZE_MESSAGE);
+        }
+        return coverTask;
+    }
+
+    /**
+     * 确认替换封面的上传任务已被当前作品使用。
+     *
+     * @param coverTask 封面上传任务
+     * @param workId 作品 ID
+     * @param oldCoverObjectKey 旧封面对象键
+     * @param mediaObjectKey 视频源文件对象键
+     */
+    private void confirmReplacementCoverTask(
+            WorkUploadTaskEntity coverTask,
+            Long workId,
+            String oldCoverObjectKey,
+            String mediaObjectKey
+    ) {
+        coverTask.setStatus(WorkUploadTaskStatusDict.CONFIRMED.getCode());
+        coverTask.setConfirmedWorkId(workId);
+        coverTask.setCoverObjectKey(coverTask.getObjectKey());
+        coverTask.setErrorMessage(null);
+        int updated = workUploadTaskEntityMapper.updateById(coverTask);
+        if (updated <= 0) {
+            deleteUploadedCoverIfNeeded(coverTask, oldCoverObjectKey, mediaObjectKey);
+            throw new BusinessException(MineWorkMessage.WORK_SAVE_FAILED_MESSAGE);
+        }
+    }
+
+    /**
      * 删除视频作品被替换下来的旧封面对象。
      *
      * @param oldCoverObjectKey 旧封面对象键
@@ -1174,7 +1370,17 @@ public class MineWorkService {
                 || oldCoverObjectKey.equals(mediaObjectKey)) {
             return;
         }
-        cosService.delete(oldCoverObjectKey);
+        Runnable deleteTask = () -> cosService.delete(oldCoverObjectKey);
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    deleteTask.run();
+                }
+            });
+            return;
+        }
+        deleteTask.run();
     }
 
     /**
@@ -1196,6 +1402,27 @@ public class MineWorkService {
             return;
         }
         cosService.delete(generatedCover.objectKey());
+    }
+
+    /**
+     * 保存失败时删除已上传但未入库的手动封面对象。
+     *
+     * @param coverTask 封面上传任务
+     * @param oldCoverObjectKey 旧封面对象键
+     * @param mediaObjectKey 视频源文件对象键
+     */
+    private void deleteUploadedCoverIfNeeded(
+            WorkUploadTaskEntity coverTask,
+            String oldCoverObjectKey,
+            String mediaObjectKey
+    ) {
+        String objectKey = coverTask == null ? "" : normalizeText(coverTask.getObjectKey());
+        if (objectKey.isBlank()
+                || objectKey.equals(oldCoverObjectKey)
+                || objectKey.equals(mediaObjectKey)) {
+            return;
+        }
+        cosService.delete(objectKey);
     }
 
     /**
@@ -2280,6 +2507,45 @@ public class MineWorkService {
                 + frameTimeMs
                 + FILE_EXTENSION_SEPARATOR
                 + THUMB_FILE_EXTENSION;
+    }
+
+    /**
+     * 按视频对象键构造手动上传封面对象键。
+     *
+     * @param sourceObjectKey 视频对象键
+     * @return 封面对象键
+     */
+    private String buildManualCoverObjectKey(String sourceObjectKey) {
+        String normalizedSourceObjectKey = normalizeText(sourceObjectKey);
+        int lastSlashIndex = normalizedSourceObjectKey.lastIndexOf('/');
+        int extensionIndex = normalizedSourceObjectKey.lastIndexOf('.');
+        if (normalizedSourceObjectKey.isBlank() || extensionIndex <= lastSlashIndex) {
+            throw new BusinessException(MineWorkMessage.COVER_SOURCE_TASK_INVALID_MESSAGE);
+        }
+        return normalizedSourceObjectKey.substring(0, extensionIndex)
+                + THUMB_FILE_SUFFIX
+                + WORK_FILE_NAME_SEPARATOR
+                + System.currentTimeMillis()
+                + FILE_EXTENSION_SEPARATOR
+                + THUMB_FILE_EXTENSION;
+    }
+
+    /**
+     * 归一化手动上传封面任务幂等键。
+     *
+     * @param work 视频作品
+     * @param request 封面票据创建请求
+     * @return 幂等键
+     */
+    private String normalizeManualCoverIdempotency(WorkEntity work, MineWorkCoverUploadTicketRequest request) {
+        String value = normalizeText(request.getIdempotencyKey());
+        if (value.isBlank()) {
+            value = normalizeText(request.getClientId());
+        }
+        if (value.isBlank()) {
+            value = normalizeClientSha256(request.getSha256());
+        }
+        return MANUAL_VIDEO_COVER_IDEMPOTENCY_PREFIX + work.getId() + ":" + value;
     }
 
     /**

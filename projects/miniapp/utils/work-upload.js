@@ -8,6 +8,7 @@ const COS_UPLOAD_TIMEOUT = 10 * 60 * 1000
 const TITLE_MAX_LENGTH = 30
 const UPLOAD_COMPLETE_FAILURE_FALLBACK = '部分作品确认失败'
 const CHOOSE_MEDIA_TYPE_MIX = 'mix'
+const CHOOSE_MEDIA_TYPE_IMAGE = 'image'
 const CHOOSE_SOURCE_TYPE_ALBUM = 'album'
 const COVER_CLIENT_ID_SUFFIX = '-cover'
 const DEFAULT_COVER_MIME_TYPE = 'image/jpeg'
@@ -52,6 +53,14 @@ function createChooseMediaOptions(remainingCount = MAX_BATCH_COUNT) {
   return {
     count,
     mediaType: [CHOOSE_MEDIA_TYPE_MIX],
+    sourceType: [CHOOSE_SOURCE_TYPE_ALBUM]
+  }
+}
+
+function createChooseCoverImageOptions() {
+  return {
+    count: 1,
+    mediaType: [CHOOSE_MEDIA_TYPE_IMAGE],
     sourceType: [CHOOSE_SOURCE_TYPE_ALBUM]
   }
 }
@@ -129,6 +138,10 @@ async function prepareThumbFile(filePath, options = {}) {
     }
   }
   throw new Error(THUMB_TOO_LARGE_MESSAGE)
+}
+
+async function prepareLocalCoverUploadFile(filePath, options = {}) {
+  return prepareThumbFile(filePath, options)
 }
 
 function formatDurationText(durationMs) {
@@ -629,9 +642,11 @@ module.exports = {
   buildUploadCompleteFailureMessage,
   buildCoverUploadTicketPayload,
   buildUploadTicketPayload,
+  createChooseCoverImageOptions,
   createChooseMediaOptions,
   enrichVideoFileMetadata,
   normalizeChosenMediaFiles,
+  prepareLocalCoverUploadFile,
   prepareCoverUploadFiles,
   uploadToCos,
   runWorkUploadQueue,

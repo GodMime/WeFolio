@@ -94,6 +94,9 @@ public class CosService {
     /** COS 表单对象访问权限字段 */
     private static final String POST_FIELD_ACL = "x-cos-acl";
 
+    /** COS 表单对象 MIME 类型字段 */
+    private static final String POST_FIELD_CONTENT_TYPE = "Content-Type";
+
     /** COS 表单上传对象访问权限：公有读私有写 */
     private static final String POST_ACL_PUBLIC_READ = CannedAccessControlList.PublicRead.toString();
 
@@ -196,7 +199,8 @@ public class CosService {
         long expiresEpochSecond = safeExpiresAt.atZone(ZoneId.systemDefault()).toEpochSecond();
         long keyTimeStart = Math.max(0L, nowEpochSecond - POST_KEY_TIME_CLOCK_SKEW_SECONDS);
         String keyTime = keyTimeStart + ";" + expiresEpochSecond;
-        String policy = buildPostPolicy(objectKey, maxBytes, safeExpiresAt, keyTime);
+        String normalizedContentType = contentType == null ? "" : contentType.trim();
+        String policy = buildPostPolicy(objectKey, normalizedContentType, maxBytes, safeExpiresAt, keyTime);
         String encodedPolicy = Base64.getEncoder().encodeToString(policy.getBytes(StandardCharsets.UTF_8));
         String signature = new COSSigner().buildPostObjectSignature(
                 cosProperties.getSecretKey(),
@@ -213,11 +217,14 @@ public class CosService {
         formData.put(POST_FIELD_SIGNATURE, signature);
         formData.put(POST_FIELD_SUCCESS_STATUS, POST_SUCCESS_STATUS);
         formData.put(POST_FIELD_ACL, POST_ACL_PUBLIC_READ);
+        if (!normalizedContentType.isBlank()) {
+            formData.put(POST_FIELD_CONTENT_TYPE, normalizedContentType);
+        }
 
         return new PostUploadTicket(
                 buildPostUploadUrl(),
                 objectKey,
-                contentType,
+                normalizedContentType,
                 maxBytes,
                 safeExpiresAt,
                 formData
@@ -582,7 +589,13 @@ public class CosService {
      * @param keyTime 签名时间范围
      * @return policy JSON
      */
-    private String buildPostPolicy(String objectKey, long maxBytes, LocalDateTime expiresAt, String keyTime) {
+    private String buildPostPolicy(
+            String objectKey,
+            String contentType,
+            long maxBytes,
+            LocalDateTime expiresAt,
+            String keyTime
+    ) {
         String expiration = expiresAt.atZone(ZoneId.systemDefault())
                 .withZoneSameInstant(ZoneOffset.UTC)
                 .format(POLICY_EXPIRATION_FORMATTER);
@@ -595,6 +608,9 @@ public class CosService {
         conditions.add(postPolicyCondition(POST_FIELD_SIGN_TIME, keyTime));
         conditions.add(postPolicyCondition(POST_FIELD_SUCCESS_STATUS, POST_SUCCESS_STATUS));
         conditions.add(postPolicyCondition(POST_FIELD_ACL, POST_ACL_PUBLIC_READ));
+        if (contentType != null && !contentType.isBlank()) {
+            conditions.add(postPolicyCondition(POST_FIELD_CONTENT_TYPE, contentType));
+        }
         conditions.add(postPolicyContentLengthRange(maxBytes));
         policy.put("expiration", expiration);
         policy.put("conditions", conditions);
