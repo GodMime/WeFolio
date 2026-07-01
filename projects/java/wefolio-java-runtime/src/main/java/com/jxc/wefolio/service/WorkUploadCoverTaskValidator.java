@@ -3,14 +3,12 @@ package com.jxc.wefolio.service;
 import com.jxc.wefolio.dict.MediaTypeDict;
 import com.jxc.wefolio.entity.WorkUploadTaskEntity;
 import com.jxc.wefolio.exception.BusinessException;
+import com.jxc.wefolio.message.MineWorkMessage;
 
 /**
  * 作品上传封面任务校验器 — 收敛上传确认前后共同遵守的封面任务基础规则。
  */
 final class WorkUploadCoverTaskValidator {
-
-    /** 缩略图或封面图类型错误提示 */
-    static final String COVER_TASK_MEDIA_TYPE_MESSAGE = "缩略图或封面图必须是图片";
 
     private WorkUploadCoverTaskValidator() {
     }
@@ -24,7 +22,7 @@ final class WorkUploadCoverTaskValidator {
     static void ensureNotSelfReference(WorkUploadTaskEntity task, Long coverTaskId) {
         Long taskId = task == null ? null : task.getId();
         if (taskId != null && taskId.equals(coverTaskId)) {
-            throw new BusinessException(COVER_TASK_MEDIA_TYPE_MESSAGE);
+            throw new BusinessException(MineWorkMessage.COVER_TASK_MEDIA_TYPE_MESSAGE);
         }
     }
 
@@ -35,7 +33,7 @@ final class WorkUploadCoverTaskValidator {
      */
     static void ensureImageCoverTask(WorkUploadTaskEntity coverTask) {
         if (!MediaTypeDict.IMAGE.getCode().equals(coverTask.getMediaType())) {
-            throw new BusinessException(COVER_TASK_MEDIA_TYPE_MESSAGE);
+            throw new BusinessException(MineWorkMessage.COVER_TASK_MEDIA_TYPE_MESSAGE);
         }
     }
 }

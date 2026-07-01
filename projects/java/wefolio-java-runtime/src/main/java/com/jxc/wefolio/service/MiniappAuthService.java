@@ -19,6 +19,7 @@ import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.exception.InvalidAuthTokenException;
 import com.jxc.wefolio.mapper.UserAuthEntityMapper;
 import com.jxc.wefolio.mapper.UserEntityMapper;
+import com.jxc.wefolio.message.MiniappAuthMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
@@ -62,20 +63,8 @@ public class MiniappAuthService {
     /** 维护者令牌 payload 签发时间下标 */
     private static final int TOKEN_PAYLOAD_ISSUED_AT_INDEX = 1;
 
-    /** 令牌解析失败提示 */
-    private static final String TOKEN_PARSE_FAILED_MESSAGE = "登录令牌解析失败，请重新登录";
-
-    /** 令牌过期提示 */
-    private static final String TOKEN_EXPIRED_MESSAGE = "登录令牌已过期，请重新登录";
-
-    /** 令牌密钥未配置提示 */
-    private static final String TOKEN_SECRET_MISSING_MESSAGE = "登录令牌密钥未配置";
-
     /** 令牌类型 */
     private static final String TOKEN_TYPE = "Bearer";
-
-    /** 手机号并发注册冲突提示 */
-    private static final String PHONE_REGISTRATION_CONFLICT_MESSAGE = "手机号注册状态已变化，请重试";
 
     /** 维护者令牌有效期 */
     private static final long MAINTAINER_EXPIRES_IN_SECONDS = 30L * 24L * 60L * 60L;
@@ -178,7 +167,7 @@ public class MiniappAuthService {
         try {
             byte[] tokenBytes = Base64.getUrlDecoder().decode(token.substring(MAINTAINER_TOKEN_PREFIX.length()));
             if (tokenBytes.length <= TOKEN_IV_LENGTH_BYTES) {
-                throw new InvalidAuthTokenException(TOKEN_PARSE_FAILED_MESSAGE);
+                throw new InvalidAuthTokenException(MiniappAuthMessage.TOKEN_PARSE_FAILED_MESSAGE);
             }
             byte[] iv = Arrays.copyOfRange(tokenBytes, 0, TOKEN_IV_LENGTH_BYTES);
             byte[] cipherText = Arrays.copyOfRange(tokenBytes, TOKEN_IV_LENGTH_BYTES, tokenBytes.length);
@@ -193,7 +182,7 @@ public class MiniappAuthService {
         } catch (Exception e) {
             log.warn("维护者登录令牌解析失败: errorType={}, errorMessage={}",
                     e.getClass().getSimpleName(), e.getMessage(), e);
-            throw new InvalidAuthTokenException(TOKEN_PARSE_FAILED_MESSAGE, e);
+            throw new InvalidAuthTokenException(MiniappAuthMessage.TOKEN_PARSE_FAILED_MESSAGE, e);
         }
     }
 
@@ -206,7 +195,7 @@ public class MiniappAuthService {
     private ResolvedAuthToken parseTokenPayload(String payload) {
         String[] parts = payload.split(TOKEN_PAYLOAD_SEPARATOR, -1);
         if (parts.length != TOKEN_PAYLOAD_PART_COUNT) {
-            throw new InvalidAuthTokenException(TOKEN_PARSE_FAILED_MESSAGE);
+            throw new InvalidAuthTokenException(MiniappAuthMessage.TOKEN_PARSE_FAILED_MESSAGE);
         }
         long userId;
         long issuedAtEpochSeconds;
@@ -214,14 +203,14 @@ public class MiniappAuthService {
             userId = Long.parseLong(parts[TOKEN_PAYLOAD_USER_ID_INDEX]);
             issuedAtEpochSeconds = Long.parseLong(parts[TOKEN_PAYLOAD_ISSUED_AT_INDEX]);
         } catch (NumberFormatException e) {
-            throw new InvalidAuthTokenException(TOKEN_PARSE_FAILED_MESSAGE, e);
+            throw new InvalidAuthTokenException(MiniappAuthMessage.TOKEN_PARSE_FAILED_MESSAGE, e);
         }
         if (userId <= 0 || issuedAtEpochSeconds <= 0) {
-            throw new InvalidAuthTokenException(TOKEN_PARSE_FAILED_MESSAGE);
+            throw new InvalidAuthTokenException(MiniappAuthMessage.TOKEN_PARSE_FAILED_MESSAGE);
         }
         Instant expiresAt = Instant.ofEpochSecond(issuedAtEpochSeconds).plusSeconds(MAINTAINER_EXPIRES_IN_SECONDS);
         if (!expiresAt.isAfter(Instant.now())) {
-            throw new InvalidAuthTokenException(TOKEN_EXPIRED_MESSAGE);
+            throw new InvalidAuthTokenException(MiniappAuthMessage.TOKEN_EXPIRED_MESSAGE);
         }
         return new ResolvedAuthToken(userId, expiresAt);
     }
@@ -335,7 +324,7 @@ public class MiniappAuthService {
         log.warn("手机号并发注册冲突，尝试复用已存在用户: phoneLast4={}", last4(phoneInfo.getPhoneNumber()));
         UserEntity existingUser = findActiveUserByPhone(phoneInfo.getPhoneNumber());
         if (existingUser == null) {
-            throw new BusinessException(PHONE_REGISTRATION_CONFLICT_MESSAGE, cause);
+            throw new BusinessException(MiniappAuthMessage.PHONE_REGISTRATION_CONFLICT_MESSAGE, cause);
         }
         updateWechatRegistrationProfile(existingUser, request, phoneInfo, openpid);
         createWechatAuth(existingUser, session, openidHash);
@@ -521,7 +510,7 @@ public class MiniappAuthService {
     private SecretKeySpec buildTokenSecretKey() {
         String tokenSecret = authTokenProperties.getSecret();
         if (tokenSecret == null || tokenSecret.isBlank()) {
-            throw new BusinessException(TOKEN_SECRET_MISSING_MESSAGE);
+            throw new BusinessException(MiniappAuthMessage.TOKEN_SECRET_MISSING_MESSAGE);
         }
         try {
             byte[] key = MessageDigest.getInstance(SHA_256).digest(tokenSecret.getBytes(StandardCharsets.UTF_8));

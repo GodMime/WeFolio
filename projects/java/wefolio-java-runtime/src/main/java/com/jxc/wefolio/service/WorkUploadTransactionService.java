@@ -17,6 +17,7 @@ import com.jxc.wefolio.mapper.WfTagEntityMapper;
 import com.jxc.wefolio.mapper.WorkEntityMapper;
 import com.jxc.wefolio.mapper.WorkTagEntityMapper;
 import com.jxc.wefolio.mapper.WorkUploadTaskEntityMapper;
+import com.jxc.wefolio.message.MineWorkMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
@@ -51,32 +52,11 @@ public class WorkUploadTransactionService {
     /** 单个标签最大长度 */
     private static final int TAG_NAME_MAX_LENGTH = 10;
 
-    /** 标签名称超长提示 */
-    private static final String TAG_NAME_TOO_LONG_MESSAGE = "标签名称不能超过 10 个字";
-
-    /** 标签数量超限提示 */
-    private static final String TAG_COUNT_LIMIT_MESSAGE = "标签最多保留 10 个";
-
     /** 作品上传积分业务类型 */
     private static final String BUSINESS_TYPE_WORK_UPLOAD = "WORK_UPLOAD";
 
     /** 确认幂等键前缀 */
     private static final String CONFIRM_IDEMPOTENCY_PREFIX = "WORK_UPLOAD_CONFIRM:";
-
-    /** 缩略图或封面图已使用提示 */
-    private static final String COVER_TASK_USED_MESSAGE = "缩略图或封面图已被使用，请重新上传";
-
-    /** 缩略图或封面图过期提示 */
-    private static final String COVER_TASK_EXPIRED_MESSAGE = "缩略图或封面图已过期，请重新上传";
-
-    /** 重复作品提示模板 */
-    private static final String DUPLICATE_WORK_MESSAGE_TEMPLATE = "作品已存在：「%s」";
-
-    /** 重复作品兜底提示 */
-    private static final String DUPLICATE_WORK_FALLBACK_MESSAGE = "作品已存在，请勿重复上传";
-
-    /** 缩略图或封面图缺失提示 */
-    private static final String COVER_REQUIRED_MESSAGE = "缩略图或封面图不能为空";
 
     /** 上传任务 Mapper */
     private final WorkUploadTaskEntityMapper workUploadTaskEntityMapper;
@@ -162,7 +142,7 @@ public class WorkUploadTransactionService {
                     task.getId(),
                     task.getFileSha256(),
                     e);
-            throw new BusinessException(DUPLICATE_WORK_FALLBACK_MESSAGE, e);
+            throw new BusinessException(MineWorkMessage.DUPLICATE_WORK_FALLBACK_MESSAGE, e);
         }
         if (work.getId() == null) {
             throw new BusinessException("作品保存失败，请重试");
@@ -249,7 +229,7 @@ public class WorkUploadTransactionService {
         if (canUseOriginalAsCover(task)) {
             return task.getObjectKey();
         }
-        throw new BusinessException(COVER_REQUIRED_MESSAGE);
+        throw new BusinessException(MineWorkMessage.COVER_REQUIRED_MESSAGE);
     }
 
     /**
@@ -269,7 +249,7 @@ public class WorkUploadTransactionService {
         if (canUseOriginalAsCover(task) && hasText(task.getFileSha256())) {
             return task.getFileSha256();
         }
-        throw new BusinessException(COVER_REQUIRED_MESSAGE);
+        throw new BusinessException(MineWorkMessage.COVER_REQUIRED_MESSAGE);
     }
 
     /**
@@ -306,13 +286,13 @@ public class WorkUploadTransactionService {
         requireOwnedTask(userId, coverTask);
         WorkUploadCoverTaskValidator.ensureImageCoverTask(coverTask);
         if (WorkUploadTaskStatusDict.CONFIRMED.getCode().equals(coverTask.getStatus())) {
-            throw new BusinessException(COVER_TASK_USED_MESSAGE);
+            throw new BusinessException(MineWorkMessage.COVER_TASK_USED_MESSAGE);
         }
         if (coverTask.getExpiresAt() != null && coverTask.getExpiresAt().isBefore(LocalDateTime.now())) {
             coverTask.setStatus(WorkUploadTaskStatusDict.EXPIRED.getCode());
             coverTask.setErrorMessage("封面上传任务已过期");
             workUploadTaskEntityMapper.updateById(coverTask);
-            throw new BusinessException(COVER_TASK_EXPIRED_MESSAGE);
+            throw new BusinessException(MineWorkMessage.COVER_TASK_EXPIRED_MESSAGE);
         }
         return coverTask;
     }
@@ -372,8 +352,8 @@ public class WorkUploadTransactionService {
     private BusinessException duplicateWorkException(WorkEntity duplicateWork, Throwable cause) {
         String title = duplicateWork == null ? "" : normalizeText(duplicateWork.getTitle());
         String message = title.isBlank()
-                ? DUPLICATE_WORK_FALLBACK_MESSAGE
-                : String.format(DUPLICATE_WORK_MESSAGE_TEMPLATE, title);
+                ? MineWorkMessage.DUPLICATE_WORK_FALLBACK_MESSAGE
+                : String.format(MineWorkMessage.DUPLICATE_WORK_MESSAGE_TEMPLATE, title);
         return cause == null ? new BusinessException(message) : new BusinessException(message, cause);
     }
 
@@ -463,7 +443,7 @@ public class WorkUploadTransactionService {
                         .eq(WfTagEntity::getStatus, WfTagStatusDict.ACTIVE.getCode())
         );
         if (count >= TAG_MAX_COUNT) {
-            throw new BusinessException(TAG_COUNT_LIMIT_MESSAGE);
+            throw new BusinessException(MineWorkMessage.TAG_COUNT_LIMIT_MESSAGE);
         }
     }
 
@@ -548,7 +528,7 @@ public class WorkUploadTransactionService {
                 continue;
             }
             if (name.codePointCount(0, name.length()) > TAG_NAME_MAX_LENGTH) {
-                throw new BusinessException(TAG_NAME_TOO_LONG_MESSAGE);
+                throw new BusinessException(MineWorkMessage.TAG_NAME_TOO_LONG_MESSAGE);
             }
             names.add(name);
         }

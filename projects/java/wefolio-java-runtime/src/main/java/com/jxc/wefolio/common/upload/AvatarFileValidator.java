@@ -1,5 +1,6 @@
 package com.jxc.wefolio.common.upload;
 
+import com.jxc.wefolio.message.AvatarFileMessage;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -16,15 +17,6 @@ public final class AvatarFileValidator {
     /** 图片头读取长度，覆盖 JPG、PNG、GIF、WebP 的魔数判断 */
     private static final int HEADER_READ_LIMIT = 12;
 
-    /** 支持的图片格式提示 */
-    private static final String SUPPORTED_FORMATS_MESSAGE = "仅支持 JPG、PNG、GIF、WebP 格式";
-
-    /** 文件为空提示后缀 */
-    private static final String EMPTY_MESSAGE_SUFFIX = "不能为空";
-
-    /** 文件过大提示后缀 */
-    private static final String TOO_LARGE_MESSAGE_SUFFIX = "不能超过 200KB";
-
     private AvatarFileValidator() {
     }
 
@@ -37,13 +29,13 @@ public final class AvatarFileValidator {
      */
     public static String validate(MultipartFile file, String fileLabel) {
         if (file == null || file.isEmpty()) {
-            return fileLabel + EMPTY_MESSAGE_SUFFIX;
+            return fileLabel + AvatarFileMessage.EMPTY_MESSAGE_SUFFIX;
         }
         if (file.getSize() > MAX_AVATAR_SIZE_BYTES) {
-            return fileLabel + TOO_LARGE_MESSAGE_SUFFIX;
+            return fileLabel + AvatarFileMessage.TOO_LARGE_MESSAGE_SUFFIX;
         }
         if (!hasSupportedImageHeader(file)) {
-            return fileLabel + SUPPORTED_FORMATS_MESSAGE;
+            return fileLabel + AvatarFileMessage.SUPPORTED_FORMATS_MESSAGE;
         }
         return null;
     }

@@ -1,6 +1,7 @@
 package com.jxc.wefolio.exception;
 
 import com.jxc.wefolio.common.Response;
+import com.jxc.wefolio.message.GlobalExceptionMessage;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -22,18 +23,6 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
-
-    /** 请求参数格式错误提示 */
-    private static final String REQUEST_PARAMETER_FORMAT_ERROR_MESSAGE = "请求参数格式错误";
-
-    /** 请求体格式错误提示 */
-    private static final String REQUEST_BODY_FORMAT_ERROR_MESSAGE = "请求体格式错误";
-
-    /** 参数校验失败提示 */
-    private static final String REQUEST_BIND_ERROR_MESSAGE = "参数校验失败";
-
-    /** 缺少必填参数提示 */
-    private static final String MISSING_REQUEST_PARAMETER_MESSAGE = "缺少必填参数";
 
     /** 缺省参数类型名称 */
     private static final String UNKNOWN_PARAMETER_TYPE = "unknown";
@@ -104,9 +93,9 @@ public class GlobalExceptionHandler {
         String requiredTypeName = requiredType == null ? UNKNOWN_PARAMETER_TYPE : requiredType.getSimpleName();
         log.warn("Request parameter type mismatch: name={}, requiredType={}", e.getName(), requiredTypeName);
         if (e.getName() == null || e.getName().isBlank()) {
-            return Response.fail(REQUEST_PARAMETER_FORMAT_ERROR_MESSAGE);
+            return Response.fail(GlobalExceptionMessage.REQUEST_PARAMETER_FORMAT_ERROR_MESSAGE);
         }
-        return Response.fail(REQUEST_PARAMETER_FORMAT_ERROR_MESSAGE + "：" + e.getName());
+        return Response.fail(GlobalExceptionMessage.REQUEST_PARAMETER_FORMAT_ERROR_MESSAGE + "：" + e.getName());
     }
 
     /**
@@ -119,7 +108,7 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Response<Void> handleHttpMessageNotReadable(HttpMessageNotReadableException e) {
         log.warn("Request body not readable: {}", e.getMessage());
-        return Response.fail(REQUEST_BODY_FORMAT_ERROR_MESSAGE);
+        return Response.fail(GlobalExceptionMessage.REQUEST_BODY_FORMAT_ERROR_MESSAGE);
     }
 
     /**
@@ -136,8 +125,8 @@ public class GlobalExceptionHandler {
                 .map(ObjectError::getDefaultMessage)
                 .filter(errorMessage -> errorMessage != null && !errorMessage.isBlank())
                 .findFirst()
-                .map(errorMessage -> REQUEST_BIND_ERROR_MESSAGE + "：" + errorMessage)
-                .orElse(REQUEST_BIND_ERROR_MESSAGE);
+                .map(errorMessage -> GlobalExceptionMessage.REQUEST_BIND_ERROR_MESSAGE + "：" + errorMessage)
+                .orElse(GlobalExceptionMessage.REQUEST_BIND_ERROR_MESSAGE);
         return Response.fail(message);
     }
 
@@ -151,7 +140,7 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Response<Void> handleMissingServletRequestParameter(MissingServletRequestParameterException e) {
         log.warn("Missing request parameter: name={}, type={}", e.getParameterName(), e.getParameterType());
-        return Response.fail(MISSING_REQUEST_PARAMETER_MESSAGE + "：" + e.getParameterName());
+        return Response.fail(GlobalExceptionMessage.MISSING_REQUEST_PARAMETER_MESSAGE + "：" + e.getParameterName());
     }
 
     /**

@@ -9,6 +9,7 @@ import com.jxc.wefolio.dto.WechatAccessTokenResponse;
 import com.jxc.wefolio.dto.WechatSessionResponse;
 import com.jxc.wefolio.dto.WechatPhoneNumberResponse;
 import com.jxc.wefolio.dto.WechatPluginOpenpidResponse;
+import com.jxc.wefolio.message.WechatMiniappMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -57,9 +58,6 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
 
     /** 日志脱敏占位符 */
     private static final String MASKED_VALUE = "***";
-
-    /** 日志脱敏失败占位符 */
-    private static final String MASK_FAILED_MESSAGE = "[日志脱敏失败]";
 
     /** 敏感值头部保留字符数 */
     private static final int MASK_VISIBLE_HEAD_LENGTH = 3;
@@ -410,7 +408,7 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
             return maskOperation.get();
         } catch (RuntimeException e) {
             log.error("微信日志脱敏失败", e);
-            return MASK_FAILED_MESSAGE;
+            return WechatMiniappMessage.MASK_FAILED_MESSAGE;
         }
     }
 

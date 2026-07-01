@@ -544,15 +544,16 @@ class MineWorkServiceTest {
     @Test
     void createUploadTicketsShouldUseDedicatedMessageForObjectKeyCollisionGuard() throws IOException {
         String source = Files.readString(Path.of("src/main/java/com/jxc/wefolio/service/MineWorkService.java"));
+        String messageSource = Files.readString(Path.of("src/main/java/com/jxc/wefolio/message/MineWorkMessage.java"));
         int objectKeyGuardIndex = source.indexOf("if (!objectKeys.add(objectKey))");
         assertThat(objectKeyGuardIndex).isGreaterThanOrEqualTo(0);
         String objectKeyGuard = source.substring(
                 objectKeyGuardIndex,
                 source.indexOf("preparedFiles.add", objectKeyGuardIndex));
 
-        assertThat(source).contains("WORK_OBJECT_KEY_CONFLICT_MESSAGE = \"上传文件命名冲突，请稍后重试\"");
+        assertThat(messageSource).contains("WORK_OBJECT_KEY_CONFLICT_MESSAGE = \"上传文件命名冲突，请稍后重试\"");
         assertThat(objectKeyGuard)
-                .contains("throw new BusinessException(WORK_OBJECT_KEY_CONFLICT_MESSAGE);")
+                .contains("throw new BusinessException(MineWorkMessage.WORK_OBJECT_KEY_CONFLICT_MESSAGE);")
                 .doesNotContain("SAME_BATCH_DUPLICATE_FILE_MESSAGE");
     }
 

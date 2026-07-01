@@ -13,6 +13,7 @@ import com.jxc.wefolio.entity.SlotDefinitionEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.ScheduleEntityMapper;
 import com.jxc.wefolio.mapper.SlotDefinitionEntityMapper;
+import com.jxc.wefolio.message.MineScheduleMessage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
@@ -52,9 +53,6 @@ public class MineScheduleService {
 
     /** 档期备注最大长度 */
     private static final int NOTE_MAX_LENGTH = 1000;
-
-    /** 重复档期提示 */
-    private static final String SCHEDULE_DUPLICATE_MESSAGE = "当天该档位已存在";
 
     /** 月历固定格子数 */
     private static final int CALENDAR_DAY_COUNT = 42;
@@ -234,7 +232,7 @@ public class MineScheduleService {
         ScheduleEntity target;
         if (request.getScheduleId() == null) {
             if (findExistingSchedule(userId, request) != null) {
-                throw new BusinessException(SCHEDULE_DUPLICATE_MESSAGE);
+                throw new BusinessException(MineScheduleMessage.SCHEDULE_DUPLICATE_MESSAGE);
             }
             target = new ScheduleEntity();
             target.setUserId(userId);
@@ -254,7 +252,7 @@ public class MineScheduleService {
                 }
             }
         } catch (DuplicateKeyException e) {
-            throw new BusinessException(SCHEDULE_DUPLICATE_MESSAGE, e);
+            throw new BusinessException(MineScheduleMessage.SCHEDULE_DUPLICATE_MESSAGE, e);
         }
         return buildScheduleItem(target);
     }

@@ -48,6 +48,7 @@ import com.jxc.wefolio.mapper.TeamMemberChangeRequestEntityMapper;
 import com.jxc.wefolio.mapper.TeamMemberEntityMapper;
 import com.jxc.wefolio.mapper.UserEntityMapper;
 import com.jxc.wefolio.mapper.WorkEntityMapper;
+import com.jxc.wefolio.message.MineTeamMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
@@ -163,15 +164,6 @@ public class MineTeamService {
 
     /** 成员信息变更待同意提示 */
     private static final String PENDING_MEMBER_CHANGE_TEXT = "信息变更待同意";
-
-    /** 成员信息变更保存失败提示 */
-    private static final String MEMBER_CHANGE_SAVE_FAILED_MESSAGE = "成员信息变更保存失败，请重试";
-
-    /** 并发邀请已存在时的提示 */
-    private static final String PENDING_INVITATION_EXISTS_MESSAGE = "已有待确认邀请，请刷新后查看";
-
-    /** 团队邀请保存失败提示 */
-    private static final String TEAM_INVITATION_SAVE_FAILED_MESSAGE = "团队邀请保存失败，请重试";
 
     /** 团队成员状态列 */
     private static final String COLUMN_JOIN_STATUS = "join_status";
@@ -1253,7 +1245,7 @@ public class MineTeamService {
         try {
             teamMemberEntityMapper.insert(membership);
         } catch (DuplicateKeyException e) {
-            throw new BusinessException(PENDING_INVITATION_EXISTS_MESSAGE, e);
+            throw new BusinessException(MineTeamMessage.PENDING_INVITATION_EXISTS_MESSAGE, e);
         }
         return membership;
     }
@@ -1333,7 +1325,7 @@ public class MineTeamService {
     ) {
         if (membership.getId() == null) {
             log.warn("团队邀请成员关系未回填 ID: teamId={}, inviteeUserId={}", team.getId(), invitee.getId());
-            throw new BusinessException(TEAM_INVITATION_SAVE_FAILED_MESSAGE);
+            throw new BusinessException(MineTeamMessage.TEAM_INVITATION_SAVE_FAILED_MESSAGE);
         }
         String memberIdentity = String.valueOf(membership.getId());
         String actionUrl = INVITATION_ACTION_URL_PREFIX + memberIdentity;
@@ -1424,7 +1416,7 @@ public class MineTeamService {
      */
     private void createMemberChangeMessage(TeamEntity team, TeamMemberChangeRequestEntity changeRequest) {
         if (changeRequest.getId() == null) {
-            throw new BusinessException(MEMBER_CHANGE_SAVE_FAILED_MESSAGE);
+            throw new BusinessException(MineTeamMessage.MEMBER_CHANGE_SAVE_FAILED_MESSAGE);
         }
         String changeIdentity = String.valueOf(changeRequest.getId());
         String actionUrl = MEMBER_CHANGE_ACTION_URL_PREFIX + changeIdentity;

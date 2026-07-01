@@ -35,6 +35,7 @@ import com.jxc.wefolio.mapper.WfTagEntityMapper;
 import com.jxc.wefolio.mapper.WorkEntityMapper;
 import com.jxc.wefolio.mapper.WorkTagEntityMapper;
 import com.jxc.wefolio.mapper.WorkUploadTaskEntityMapper;
+import com.jxc.wefolio.message.MineWorkMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
@@ -140,23 +141,8 @@ public class MineWorkService {
     /** 上传任务幂等键兜底前缀 */
     private static final String TICKET_IDEMPOTENCY_PREFIX = "WORK_UPLOAD_TICKET:";
 
-    /** 上传任务保存失败提示 */
-    private static final String UPLOAD_TASK_SAVE_FAILED_MESSAGE = "上传任务创建失败，请刷新后重试";
-
-    /** 同批次重复文件提示 */
-    private static final String SAME_BATCH_DUPLICATE_FILE_MESSAGE = "同一批次存在重复文件，请重新选择后上传";
-
-    /** 文件 SHA-256 格式错误提示 */
-    private static final String FILE_SHA256_INVALID_MESSAGE = "文件 SHA-256 格式不正确";
-
-    /** 重复作品提示模板 */
-    private static final String DUPLICATE_WORK_MESSAGE_TEMPLATE = "作品已存在：「%s」";
-
     /** SHA-256 小写十六进制格式 */
     private static final String SHA256_PATTERN = "^[0-9a-f]{64}$";
-
-    /** 作品对象键命名冲突提示 */
-    private static final String WORK_OBJECT_KEY_CONFLICT_MESSAGE = "上传文件命名冲突，请稍后重试";
 
     /** 作品表主键列 */
     private static final String WORK_COLUMN_ID = "id";
@@ -184,69 +170,6 @@ public class MineWorkService {
 
     /** 计数查询别名 */
     private static final String COUNT_ALIAS = "itemCount";
-
-    /** 标签不存在提示 */
-    private static final String TAG_NOT_FOUND_MESSAGE = "标签不存在或已删除";
-
-    /** 标签重复提示 */
-    private static final String TAG_DUPLICATE_MESSAGE = "标签不能重复";
-
-    /** 标签保存失败提示 */
-    private static final String TAG_SAVE_FAILED_MESSAGE = "标签保存失败，请刷新后重试";
-
-    /** 标签删除失败提示 */
-    private static final String TAG_DELETE_FAILED_MESSAGE = "标签删除失败，请刷新后重试";
-
-    /** 标签数量超限提示 */
-    private static final String TAG_COUNT_LIMIT_MESSAGE = "标签最多保留 10 个";
-
-    /** 标签名称为空提示 */
-    private static final String TAG_NAME_EMPTY_MESSAGE = "标签名称不能为空";
-
-    /** 标签名称超长提示 */
-    private static final String TAG_NAME_TOO_LONG_MESSAGE = "标签名称不能超过 10 个字";
-
-    /** 排序列表为空提示 */
-    private static final String SORT_ITEMS_EMPTY_MESSAGE = "请提交要排序的作品";
-
-    /** COS 文件读取失败提示 */
-    private static final String COS_OBJECT_READ_FAILED_MESSAGE = "上传文件读取失败，请重新上传";
-
-    /** 上传确认未预期失败提示 */
-    private static final String UPLOAD_CONFIRM_UNEXPECTED_FAILED_MESSAGE = "作品确认失败，请稍后重试";
-
-    /** 作品保存失败提示 */
-    private static final String WORK_SAVE_FAILED_MESSAGE = "作品保存失败，请刷新后重试";
-
-    /** 非视频作品修改封面提示 */
-    private static final String VIDEO_COVER_UPDATE_MEDIA_TYPE_MESSAGE = "只有视频作品可以修改封面";
-
-    /** 图片缩略图缺失提示 */
-    private static final String IMAGE_THUMB_REQUIRED_MESSAGE = "图片缩略图缺失，请重新上传";
-
-    /** 视频封面图缺失提示 */
-    private static final String VIDEO_COVER_REQUIRED_MESSAGE = "视频封面图缺失，请重新选择视频";
-
-    /** 缩略图或封面图超限提示 */
-    private static final String COVER_TASK_SIZE_MESSAGE = "缩略图或封面图不能超过 100KB";
-
-    /** 缩略图或封面图文件名错误提示 */
-    private static final String COVER_TASK_FILE_NAME_MESSAGE = "缩略图或封面图文件名必须为原文件名-thumb";
-
-    /** 缩略图或封面图来源任务错误提示 */
-    private static final String COVER_SOURCE_TASK_INVALID_MESSAGE = "缩略图或封面图来源任务无效";
-
-    /** 视频封面生成失败提示 */
-    private static final String VIDEO_COVER_GENERATE_FAILED_MESSAGE = "视频封面生成失败，请稍后重试";
-
-    /** 单个作品标签数量超限提示 */
-    private static final String WORK_TAG_COUNT_LIMIT_MESSAGE = "作品标签最多 10 个";
-
-    /** 标签颜色非法提示 */
-    private static final String TAG_COLOR_INVALID_MESSAGE = "请选择有效的标签颜色";
-
-    /** 标签被作品占用提示模板 */
-    private static final String TAG_DELETE_BLOCKED_TEMPLATE = "标签「%s」下还有 %d 个作品，先移除这些作品的标签后再删除。";
 
     /** 图片扩展名 */
     private static final Set<String> IMAGE_EXTENSIONS = Set.of("jpg", "jpeg", "png", "webp", "gif");
@@ -387,7 +310,7 @@ public class MineWorkService {
         try {
             wfTagEntityMapper.insert(tag);
         } catch (DuplicateKeyException e) {
-            throw new BusinessException(TAG_DUPLICATE_MESSAGE);
+            throw new BusinessException(MineWorkMessage.TAG_DUPLICATE_MESSAGE);
         }
         MineWorkListResponse.TagItem item = buildTagItem(tag);
         item.setCount(countWorkTags(userId, tag.getId()));
@@ -413,7 +336,7 @@ public class MineWorkService {
         tag.setColor(color);
         int updated = wfTagEntityMapper.updateById(tag);
         if (updated <= 0) {
-            throw new BusinessException(TAG_SAVE_FAILED_MESSAGE);
+            throw new BusinessException(MineWorkMessage.TAG_SAVE_FAILED_MESSAGE);
         }
         MineWorkListResponse.TagItem item = buildTagItem(tag);
         item.setCount(countWorkTags(userId, tag.getId()));
@@ -431,11 +354,11 @@ public class MineWorkService {
         WfTagEntity tag = requireOwnedActiveTag(userId, tagId);
         long workCount = countWorkTags(userId, tag.getId());
         if (workCount > 0L) {
-            throw new BusinessException(String.format(TAG_DELETE_BLOCKED_TEMPLATE, tag.getName(), workCount));
+            throw new BusinessException(String.format(MineWorkMessage.TAG_DELETE_BLOCKED_TEMPLATE, tag.getName(), workCount));
         }
         int deleted = wfTagEntityMapper.deleteById(tag.getId());
         if (deleted <= 0) {
-            throw new BusinessException(TAG_DELETE_FAILED_MESSAGE);
+            throw new BusinessException(MineWorkMessage.TAG_DELETE_FAILED_MESSAGE);
         }
     }
 
@@ -531,10 +454,10 @@ public class MineWorkService {
                 response.getItems().add(MineWorkUploadCompleteResponse.Item.failure(taskId, e.getMessage()));
             } catch (Exception e) {
                 log.warn("作品确认出现未预期异常: taskId={}", taskId, e);
-                markTaskFailedIfPossible(taskId, UPLOAD_CONFIRM_UNEXPECTED_FAILED_MESSAGE);
+                markTaskFailedIfPossible(taskId, MineWorkMessage.UPLOAD_CONFIRM_UNEXPECTED_FAILED_MESSAGE);
                 response.getItems().add(MineWorkUploadCompleteResponse.Item.failure(
                         taskId,
-                        UPLOAD_CONFIRM_UNEXPECTED_FAILED_MESSAGE));
+                        MineWorkMessage.UPLOAD_CONFIRM_UNEXPECTED_FAILED_MESSAGE));
             }
         }
         return response;
@@ -573,7 +496,7 @@ public class MineWorkService {
         int updated = workEntityMapper.updateById(work);
         if (updated <= 0) {
             deleteGeneratedCoverIfNeeded(generatedCover, oldCoverObjectKey, work.getMediaObjectKey());
-            throw new BusinessException(WORK_SAVE_FAILED_MESSAGE);
+            throw new BusinessException(MineWorkMessage.WORK_SAVE_FAILED_MESSAGE);
         }
         if (generatedCover != null) {
             deleteOldVideoCoverIfNeeded(oldCoverObjectKey, work.getCoverObjectKey(), work.getMediaObjectKey());
@@ -591,11 +514,11 @@ public class MineWorkService {
         Long userId = AuthContextHolder.requireUserId();
         List<MineWorkSortRequest.Item> items = request == null ? List.of() : request.getItems();
         if (items == null || items.isEmpty()) {
-            throw new BusinessException(SORT_ITEMS_EMPTY_MESSAGE);
+            throw new BusinessException(MineWorkMessage.SORT_ITEMS_EMPTY_MESSAGE);
         }
         List<MineWorkSortRequest.Item> validItems = normalizeSortItems(items);
         if (validItems.isEmpty()) {
-            throw new BusinessException(SORT_ITEMS_EMPTY_MESSAGE);
+            throw new BusinessException(MineWorkMessage.SORT_ITEMS_EMPTY_MESSAGE);
         }
         List<Long> workIds = validItems.stream()
                 .map(MineWorkSortRequest.Item::getWorkId)
@@ -679,7 +602,7 @@ public class MineWorkService {
             validateUploadFile(file);
             String idempotencyKey = normalizeTicketIdempotency(batchId, file);
             if (!idempotencyKeys.add(idempotencyKey)) {
-                throw new BusinessException(SAME_BATCH_DUPLICATE_FILE_MESSAGE);
+                throw new BusinessException(MineWorkMessage.SAME_BATCH_DUPLICATE_FILE_MESSAGE);
             }
             String fileSha256 = normalizeClientSha256(file.getSha256());
             String mediaType = normalizeMediaType(file.getMediaType());
@@ -687,11 +610,11 @@ public class MineWorkService {
             WorkUploadTaskEntity sourceTask = resolveThumbSourceTask(userId, file);
             if (sourceTask == null) {
                 if (!mainFileSha256Set.add(fileSha256)) {
-                    throw new BusinessException(SAME_BATCH_DUPLICATE_FILE_MESSAGE);
+                    throw new BusinessException(MineWorkMessage.SAME_BATCH_DUPLICATE_FILE_MESSAGE);
                 }
                 WorkEntity duplicateWork = findNonDeletedWorkBySha256(userId, fileSha256);
                 if (duplicateWork != null) {
-                    throw new BusinessException(String.format(DUPLICATE_WORK_MESSAGE_TEMPLATE, duplicateWork.getTitle()));
+                    throw new BusinessException(String.format(MineWorkMessage.DUPLICATE_WORK_MESSAGE_TEMPLATE, duplicateWork.getTitle()));
                 }
             }
             String objectKey = sourceTask == null
@@ -703,7 +626,7 @@ public class MineWorkService {
                             uploadSequence)
                     : buildThumbObjectKeyFromSource(sourceTask, extension);
             if (!objectKeys.add(objectKey)) {
-                throw new BusinessException(WORK_OBJECT_KEY_CONFLICT_MESSAGE);
+                throw new BusinessException(MineWorkMessage.WORK_OBJECT_KEY_CONFLICT_MESSAGE);
             }
             preparedFiles.add(new PreparedUploadFile(file, mediaType, objectKey, idempotencyKey, fileSha256));
         }
@@ -802,7 +725,7 @@ public class MineWorkService {
             if (existing != null) {
                 return existing;
             }
-            throw new BusinessException(UPLOAD_TASK_SAVE_FAILED_MESSAGE);
+            throw new BusinessException(MineWorkMessage.UPLOAD_TASK_SAVE_FAILED_MESSAGE);
         }
     }
 
@@ -882,7 +805,7 @@ public class MineWorkService {
         try {
             head = cosService.headObject(task.getObjectKey());
         } catch (RuntimeException e) {
-            throw new BusinessException(COS_OBJECT_READ_FAILED_MESSAGE);
+            throw new BusinessException(MineWorkMessage.COS_OBJECT_READ_FAILED_MESSAGE);
         }
         if (task.getFileSize() != null && head.contentLength() != task.getFileSize()) {
             throw new BusinessException("上传文件大小与任务不一致");
@@ -951,7 +874,7 @@ public class MineWorkService {
             MediaDimensions requestDimensions
     ) {
         if (!MediaTypeDict.VIDEO.getCode().equals(work.getMediaType())) {
-            throw new BusinessException(VIDEO_COVER_UPDATE_MEDIA_TYPE_MESSAGE);
+            throw new BusinessException(MineWorkMessage.VIDEO_COVER_UPDATE_MEDIA_TYPE_MESSAGE);
         }
         long frameTimeMs = normalizeCoverFrameTimeMs(requestedFrameTimeMs, work.getDurationMs());
         String coverObjectKey = buildFrameCoverObjectKey(work.getMediaObjectKey(), frameTimeMs);
@@ -1048,13 +971,13 @@ public class MineWorkService {
                     snapshotDimensions.height());
             if (snapshot.contentLength() > THUMB_MAX_BYTES) {
                 cosService.delete(snapshot.objectKey());
-                throw new BusinessException(COVER_TASK_SIZE_MESSAGE);
+                throw new BusinessException(MineWorkMessage.COVER_TASK_SIZE_MESSAGE);
             }
             return snapshot;
         } catch (BusinessException e) {
             throw e;
         } catch (RuntimeException e) {
-            throw new BusinessException(VIDEO_COVER_GENERATE_FAILED_MESSAGE, e);
+            throw new BusinessException(MineWorkMessage.VIDEO_COVER_GENERATE_FAILED_MESSAGE, e);
         }
     }
 
@@ -1078,14 +1001,14 @@ public class MineWorkService {
                 if (hasText(task.getCoverObjectKey())) {
                     return;
                 }
-                throw new BusinessException(VIDEO_COVER_REQUIRED_MESSAGE);
+                throw new BusinessException(MineWorkMessage.VIDEO_COVER_REQUIRED_MESSAGE);
             }
             if (MediaTypeDict.IMAGE.getCode().equals(task.getMediaType())
                     && head.contentLength() > THUMB_MAX_BYTES) {
                 if (hasText(task.getCoverObjectKey())) {
                     return;
                 }
-                throw new BusinessException(IMAGE_THUMB_REQUIRED_MESSAGE);
+                throw new BusinessException(MineWorkMessage.IMAGE_THUMB_REQUIRED_MESSAGE);
             }
             return;
         }
@@ -1094,7 +1017,7 @@ public class MineWorkService {
         WorkUploadCoverTaskValidator.ensureImageCoverTask(coverTask);
         CosService.ObjectHead coverHead = validateCosObject(coverTask);
         if (coverHead.contentLength() > THUMB_MAX_BYTES) {
-            throw new BusinessException(COVER_TASK_SIZE_MESSAGE);
+            throw new BusinessException(MineWorkMessage.COVER_TASK_SIZE_MESSAGE);
         }
         validateCoverFileName(task, coverTask);
     }
@@ -1155,7 +1078,7 @@ public class MineWorkService {
     private void validateCoverFileName(String originalFileName, WorkUploadTaskEntity coverTask) {
         String expectedFileName = buildThumbFileName(originalFileName);
         if (!expectedFileName.equals(normalizeText(coverTask.getOriginalFileName()))) {
-            throw new BusinessException(COVER_TASK_FILE_NAME_MESSAGE);
+            throw new BusinessException(MineWorkMessage.COVER_TASK_FILE_NAME_MESSAGE);
         }
     }
 
@@ -1225,7 +1148,7 @@ public class MineWorkService {
     private String normalizeClientSha256(String value) {
         String normalized = normalizeText(value).toLowerCase(Locale.ROOT);
         if (!normalized.matches(SHA256_PATTERN)) {
-            throw new BusinessException(FILE_SHA256_INVALID_MESSAGE);
+            throw new BusinessException(MineWorkMessage.FILE_SHA256_INVALID_MESSAGE);
         }
         return normalized;
     }
@@ -1748,13 +1671,13 @@ public class MineWorkService {
      */
     private WfTagEntity requireOwnedActiveTag(Long userId, Long tagId) {
         if (tagId == null) {
-            throw new BusinessException(TAG_NOT_FOUND_MESSAGE);
+            throw new BusinessException(MineWorkMessage.TAG_NOT_FOUND_MESSAGE);
         }
         WfTagEntity tag = wfTagEntityMapper.selectById(tagId);
         if (tag == null
                 || !userId.equals(tag.getUserId())
                 || !WfTagStatusDict.ACTIVE.getCode().equals(tag.getStatus())) {
-            throw new BusinessException(TAG_NOT_FOUND_MESSAGE);
+            throw new BusinessException(MineWorkMessage.TAG_NOT_FOUND_MESSAGE);
         }
         return tag;
     }
@@ -1771,7 +1694,7 @@ public class MineWorkService {
                         .eq(WfTagEntity::getStatus, WfTagStatusDict.ACTIVE.getCode())
         );
         if (count >= TAG_MAX_COUNT) {
-            throw new BusinessException(TAG_COUNT_LIMIT_MESSAGE);
+            throw new BusinessException(MineWorkMessage.TAG_COUNT_LIMIT_MESSAGE);
         }
     }
 
@@ -1785,7 +1708,7 @@ public class MineWorkService {
     private void ensureNoDuplicateTag(Long userId, String name, Long currentTagId) {
         WfTagEntity duplicate = findTagForUpdate(userId, name);
         if (duplicate != null && !duplicate.getId().equals(currentTagId)) {
-            throw new BusinessException(TAG_DUPLICATE_MESSAGE);
+            throw new BusinessException(MineWorkMessage.TAG_DUPLICATE_MESSAGE);
         }
     }
 
@@ -1866,7 +1789,7 @@ public class MineWorkService {
             return null;
         }
         if (!isThumbFileName(file.getFileName())) {
-            throw new BusinessException(COVER_TASK_FILE_NAME_MESSAGE);
+            throw new BusinessException(MineWorkMessage.COVER_TASK_FILE_NAME_MESSAGE);
         }
         return requireOwnedUploadTask(userId, sourceTaskId);
     }
@@ -1883,7 +1806,7 @@ public class MineWorkService {
         int lastSlashIndex = sourceObjectKey.lastIndexOf('/');
         int extensionIndex = sourceObjectKey.lastIndexOf('.');
         if (sourceObjectKey.isBlank() || extensionIndex <= lastSlashIndex) {
-            throw new BusinessException(COVER_SOURCE_TASK_INVALID_MESSAGE);
+            throw new BusinessException(MineWorkMessage.COVER_SOURCE_TASK_INVALID_MESSAGE);
         }
         return sourceObjectKey.substring(0, extensionIndex)
                 + THUMB_FILE_SUFFIX
@@ -1903,7 +1826,7 @@ public class MineWorkService {
         int lastSlashIndex = normalizedSourceObjectKey.lastIndexOf('/');
         int extensionIndex = normalizedSourceObjectKey.lastIndexOf('.');
         if (normalizedSourceObjectKey.isBlank() || extensionIndex <= lastSlashIndex) {
-            throw new BusinessException(COVER_SOURCE_TASK_INVALID_MESSAGE);
+            throw new BusinessException(MineWorkMessage.COVER_SOURCE_TASK_INVALID_MESSAGE);
         }
         return normalizedSourceObjectKey.substring(0, extensionIndex)
                 + THUMB_FILE_SUFFIX
@@ -2172,10 +2095,10 @@ public class MineWorkService {
     private String normalizeRequiredTagName(String name) {
         String value = normalizeText(name);
         if (value.isBlank()) {
-            throw new BusinessException(TAG_NAME_EMPTY_MESSAGE);
+            throw new BusinessException(MineWorkMessage.TAG_NAME_EMPTY_MESSAGE);
         }
         if (value.codePointCount(0, value.length()) > TAG_MAX_LENGTH) {
-            throw new BusinessException(TAG_NAME_TOO_LONG_MESSAGE);
+            throw new BusinessException(MineWorkMessage.TAG_NAME_TOO_LONG_MESSAGE);
         }
         return value;
     }
@@ -2189,7 +2112,7 @@ public class MineWorkService {
     private String normalizeTagColor(String color) {
         String value = normalizeText(color).toLowerCase(Locale.ROOT);
         if (!TAG_COLOR_OPTIONS.contains(value)) {
-            throw new BusinessException(TAG_COLOR_INVALID_MESSAGE);
+            throw new BusinessException(MineWorkMessage.TAG_COLOR_INVALID_MESSAGE);
         }
         return value;
     }
@@ -2211,12 +2134,12 @@ public class MineWorkService {
                 continue;
             }
             if (name.codePointCount(0, name.length()) > TAG_MAX_LENGTH) {
-                throw new BusinessException(TAG_NAME_TOO_LONG_MESSAGE);
+                throw new BusinessException(MineWorkMessage.TAG_NAME_TOO_LONG_MESSAGE);
             }
             names.add(name);
         }
         if (names.size() > TAG_MAX_COUNT) {
-            throw new BusinessException(WORK_TAG_COUNT_LIMIT_MESSAGE);
+            throw new BusinessException(MineWorkMessage.WORK_TAG_COUNT_LIMIT_MESSAGE);
         }
         return List.copyOf(names);
     }
