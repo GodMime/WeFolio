@@ -52,6 +52,7 @@ com.jxc.wefolio
 ├── entity/        # MyBatis-Plus 实体类（XxxEntity），全部继承 BaseEntity
 ├── exception/     # 全局异常处理
 ├── mapper/        # MyBatis-Plus Mapper 接口（XxxEntityMapper），继承 BaseMapper<XxxEntity>
+├── message/       # 报错文案静态常量接口（XxxMessage）
 └── service/       # 业务服务
 
 resources/
@@ -181,6 +182,8 @@ public class WfTagEntity extends BaseEntity {
 - ❌ 不允许在业务逻辑中使用硬编码的状态/类型字符串（如 `"ACTIVE"`、`"DISABLED"`），必须使用对应枚举字典
 - ❌ 不允许在代码中使用完全限定类名（如 `com.jxc.wefolio.entity.WorkEntity`），必须 import 后使用短名
 - ❌ 不允许在业务代码中硬编码具有固定语义的字符串字面量（如前缀 `"WF"`/`"TM"`、配置键、类型标识等），必须提取为 `public static final` 常量并引用
+- ❌ 不允许在 Service、Controller、工具类等业务代码中散落报错文案静态常量，必须放入 `com.jxc.wefolio.message` 包下对应的 `XxxMessage` 接口类
+- ❌ 不允许 `import static` 导入 `message` 包下的报错常量；必须 import 接口类本身，并通过 `XxxMessage.CONSTANT` 引用
 
 ### 状态字段与枚举字典
 
@@ -259,6 +262,32 @@ if ("ACTIVE".equals(user.getStatus())) { ... }
 ```
 
 > **为什么**：如果某天 ACTIVE 的 code 改为 `"ENABLED"`，枚举常量只需改一处，而硬编码字符串需要全项目搜索替换，极易遗漏导致线上故障。
+
+### 报错文案常量
+
+**所有报错/异常提示文案静态常量统一放在 `com.jxc.wefolio.message` 包下**，按业务场景拆分接口类，例如：
+
+| 接口类 | 适用场景 |
+|---|---|
+| `MineWorkMessage` | 我的作品、上传任务、标签等报错 |
+| `MiniappAuthMessage` | 小程序登录、令牌、注册冲突等报错 |
+| `GlobalExceptionMessage` | 全局异常处理器返回给客户端的通用提示 |
+
+引用规则：
+
+```java
+// ✅ 正确 — import 类本身，通过类名限定常量
+import com.jxc.wefolio.message.MiniappAuthMessage;
+
+throw new BusinessException(MiniappAuthMessage.TOKEN_EXPIRED_MESSAGE);
+
+// ❌ 错误 — 禁止静态导入报错常量
+import static com.jxc.wefolio.message.MiniappAuthMessage.TOKEN_EXPIRED_MESSAGE;
+
+throw new BusinessException(TOKEN_EXPIRED_MESSAGE);
+```
+
+`message` 包只承载报错/异常提示文案。站内系统消息标题、正文、业务类型、跳转路径、幂等前缀等非报错配置，应继续保留在对应业务类或常量类中。
 
 ### 注解与 AOP 切面
 

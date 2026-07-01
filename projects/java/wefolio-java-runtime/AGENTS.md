@@ -56,6 +56,7 @@ dto/                 请求和响应 DTO
 entity/              MyBatis-Plus 实体，统一继承 BaseEntity
 exception/           业务异常、认证异常、全局异常处理
 mapper/              MyBatis-Plus Mapper
+message/             报错文案静态常量接口
 service/             业务服务、远端客户端封装
 ```
 
@@ -211,7 +212,26 @@ Spring `@Transactional` 依赖 AOP 代理，同类自调用不会触发事务。
 - 不要新增 `// TODO`；需要记录后续事项时，写入任务说明、issue 或用户可见文档。
 - 不要在业务逻辑中硬编码状态、类型、渠道字符串，使用 `dict` 字典类。
 - 不要在代码中使用完全限定类名，优先 import 后使用短名。
+- 报错文案静态常量统一放在 `com.jxc.wefolio.message` 包下按业务场景拆分的接口类中，例如 `MineWorkMessage`、`MiniappAuthMessage`。
+- 使用报错文案常量时，必须 import 对应接口类本身，并以 `XxxMessage.CONSTANT` 形式引用；禁止 `import static` 导入单个报错常量。
+- `message` 包只承载报错/异常提示文案；站内系统消息标题、正文、业务类型等非报错配置仍留在对应业务类中。
 - 新增 DTO、实体、服务或 Controller 时，沿用现有命名、包结构和响应封装。
+
+报错文案常量引用示例：
+
+```java
+import com.jxc.wefolio.message.MiniappAuthMessage;
+
+throw new BusinessException(MiniappAuthMessage.TOKEN_EXPIRED_MESSAGE);
+```
+
+禁止写法：
+
+```java
+import static com.jxc.wefolio.message.MiniappAuthMessage.TOKEN_EXPIRED_MESSAGE;
+
+throw new BusinessException(TOKEN_EXPIRED_MESSAGE);
+```
 
 ## 测试与验证
 
