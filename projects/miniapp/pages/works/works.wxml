@@ -83,26 +83,44 @@
               wx:for="{{list.works}}"
               wx:for-index="workIndex"
               wx:key="id"
-              class="work-card"
+              class="work-swipe-row {{revealedWorkId === item.id ? 'revealed' : ''}}"
               data-id="{{item.id}}"
-              bindtap="handleWorkTap"
+              bindtouchstart="handleWorkTouchStart"
+              bindtouchmove="handleWorkTouchMove"
+              bindtouchend="handleWorkTouchEnd"
+              bindtouchcancel="handleWorkTouchCancel"
             >
-              <view class="thumb">
-                <image wx:if="{{item.hasCover}}" src="{{item.coverUrl}}" mode="aspectFill"></image>
-                <view wx:else class="thumb-placeholder">{{item.typeText}}</view>
-                <view wx:if="{{item.mediaType === 'VIDEO'}}" class="play-badge"></view>
-                <view wx:else class="thumb-order">{{workIndex + 1}}</view>
+              <view class="work-delete-pane">
+                <button
+                  class="work-delete-button"
+                  loading="{{deletingWorkId === item.id}}"
+                  disabled="{{deletingWorkId === item.id}}"
+                  data-id="{{item.id}}"
+                  catchtap="handleDeleteWorkTap"
+                >删除</button>
               </view>
-              <view class="work-copy">
-                <view class="work-title">{{item.title}}</view>
-                <view class="work-meta">
-                  <text>{{item.typeText}}</text>
-                  <text wx:if="{{item.durationText}}"> · {{item.durationText}}</text>
-                  <text> / {{item.tagText}}</text>
+              <view
+                class="work-card"
+                data-id="{{item.id}}"
+                bindtap="handleWorkTap"
+              >
+                <view class="thumb">
+                  <image wx:if="{{item.hasCover}}" src="{{item.coverUrl}}" mode="aspectFill"></image>
+                  <view wx:else class="thumb-placeholder">{{item.typeText}}</view>
+                  <view wx:if="{{item.mediaType === 'VIDEO'}}" class="play-badge"></view>
+                  <view wx:else class="thumb-order">{{workIndex + 1}}</view>
                 </view>
-                <view class="reference-pill {{item.referenceCount > 0 ? 'used' : ''}}">{{item.referenceText}}</view>
+                <view class="work-copy">
+                  <view class="work-title">{{item.title}}</view>
+                  <view class="work-meta">
+                    <text>{{item.typeText}}</text>
+                    <text wx:if="{{item.durationText}}"> · {{item.durationText}}</text>
+                    <text> / {{item.tagText}}</text>
+                  </view>
+                  <view class="reference-pill {{item.referenceCount > 0 ? 'used' : ''}}">{{item.referenceText}}</view>
+                </view>
+                <view class="card-arrow"></view>
               </view>
-              <view class="card-arrow"></view>
             </view>
 
             <view wx:if="{{loadingMore}}" class="loading-more">加载更多作品</view>

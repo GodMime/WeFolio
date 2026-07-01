@@ -37,6 +37,8 @@
 .tag-delete,
 .tag-add-button,
 .list-heading,
+.work-delete-pane,
+.work-delete-button,
 .work-card,
 .work-meta,
 .reference-pill,
@@ -274,7 +276,47 @@
   margin-top: 18rpx;
 }
 
+.work-swipe-row {
+  position: relative;
+  overflow: hidden;
+  border-radius: 16rpx;
+}
+
+.work-swipe-row + .work-swipe-row {
+  margin-top: 18rpx;
+}
+
+.work-delete-pane {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
+  width: 128rpx;
+  justify-content: center;
+  background: #a9354f;
+}
+
+.work-delete-button {
+  width: 128rpx;
+  height: 100%;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  color: #ffffff;
+  font-size: 24rpx;
+  font-weight: 900;
+  line-height: 1;
+  border: 0;
+  border-radius: 0;
+  background: #a9354f;
+  box-shadow: none;
+  box-sizing: border-box;
+}
+
 .work-card {
+  position: relative;
+  z-index: 2;
   min-height: 166rpx;
   gap: 20rpx;
   padding: 20rpx;
@@ -282,10 +324,11 @@
   border-radius: 16rpx;
   background: #ffffff;
   box-sizing: border-box;
+  transition: transform 180ms ease;
 }
 
-.work-card + .work-card {
-  margin-top: 18rpx;
+.work-swipe-row.revealed .work-card {
+  transform: translateX(-140rpx);
 }
 
 .thumb {

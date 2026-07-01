@@ -41,6 +41,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -562,6 +564,7 @@ public class MineWorkService {
             throw new BusinessException(buildDeleteMessage(referenceCount));
         }
         LocalDateTime now = LocalDateTime.now();
+        deleteWorkTagRelations(work.getUserId(), work.getId());
         int updated = workEntityMapper.update(
                 new WorkEntity(),
                 new UpdateWrapper<WorkEntity>()
@@ -572,8 +575,9 @@ public class MineWorkService {
                         .eq(WORK_COLUMN_DELETED, 0L)
         );
         if (updated <= 0) {
-            throw new BusinessException("作品删除失败，请刷新后重试");
+            throw new BusinessException(MineWorkMessage.WORK_DELETE_FAILED_MESSAGE);
         }
+        deleteWorkCosObjectsAfterCommit(work);
     }
 
     /**
@@ -1178,11 +1182,11 @@ public class MineWorkService {
     private WorkEntity requireOwnedWork(Long workId) {
         Long userId = AuthContextHolder.requireUserId();
         if (workId == null) {
-            throw new BusinessException("作品不能为空");
+            throw new BusinessException(MineWorkMessage.WORK_EMPTY_MESSAGE);
         }
         WorkEntity work = workEntityMapper.selectById(workId);
         if (work == null || !userId.equals(work.getUserId())) {
-            throw new BusinessException("作品不存在或无访问权限");
+            throw new BusinessException(MineWorkMessage.WORK_NOT_FOUND_MESSAGE);
         }
         return work;
     }
@@ -1594,6 +1598,85 @@ public class MineWorkService {
     }
 
     /**
+     * 删除作品与标签的关联。
+     *
+     * @param userId 当前用户 ID
+     * @param workId 作品 ID
+     */
+    private void deleteWorkTagRelations(Long userId, Long workId) {
+        workTagEntityMapper.delete(
+                Wrappers.lambdaQuery(WorkTagEntity.class)
+                        .eq(WorkTagEntity::getUserId, userId)
+                        .eq(WorkTagEntity::getWorkId, workId)
+        );
+    }
+
+    /**
+     * 在事务提交后删除作品 COS 对象。
+     *
+     * @param work 已删除作品
+     */
+    private void deleteWorkCosObjectsAfterCommit(WorkEntity work) {
+        Set<String> objectKeys = collectWorkObjectKeys(work);
+        if (objectKeys.isEmpty()) {
+            return;
+        }
+        Runnable deleteTask = () -> deleteWorkCosObjects(work.getId(), objectKeys);
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    deleteTask.run();
+                }
+            });
+            return;
+        }
+        deleteTask.run();
+    }
+
+    /**
+     * 收集作品原文件和封面/缩略图对象键。
+     *
+     * @param work 作品实体
+     * @return 去重后的对象键集合
+     */
+    private Set<String> collectWorkObjectKeys(WorkEntity work) {
+        Set<String> objectKeys = new LinkedHashSet<>();
+        addObjectKey(objectKeys, work.getMediaObjectKey());
+        addObjectKey(objectKeys, work.getCoverObjectKey());
+        return objectKeys;
+    }
+
+    /**
+     * 添加非空 COS 对象键。
+     *
+     * @param objectKeys 对象键集合
+     * @param objectKey 对象键
+     */
+    private void addObjectKey(Set<String> objectKeys, String objectKey) {
+        String normalizedObjectKey = normalizeText(objectKey);
+        if (hasText(normalizedObjectKey)) {
+            objectKeys.add(normalizedObjectKey);
+        }
+    }
+
+    /**
+     * 删除 COS 对象，单个对象失败不影响其它对象清理。
+     *
+     * @param workId 作品 ID
+     * @param objectKeys 对象键集合
+     */
+    private void deleteWorkCosObjects(Long workId, Collection<String> objectKeys) {
+        objectKeys.forEach(objectKey -> {
+            try {
+                cosService.delete(objectKey);
+            } catch (Exception e) {
+                log.warn("作品 COS 文件删除失败: workId={}, objectKey={}", workId, objectKey, e);
+            }
+        });
+    }
+
+    /**
      * 替换作品标签。
      *
      * @param userId 当前用户 ID
@@ -1737,9 +1820,9 @@ public class MineWorkService {
      */
     private String buildDeleteMessage(long referenceCount) {
         if (referenceCount <= 0L) {
-            return "作品未被作品集引用，可以删除";
+            return MineWorkMessage.WORK_DELETE_ALLOWED_MESSAGE;
         }
-        return "作品已被 " + referenceCount + " 个作品集引用，请先从作品集中移除";
+        return String.format(MineWorkMessage.WORK_DELETE_BLOCKED_TEMPLATE, referenceCount);
     }
 
     /**

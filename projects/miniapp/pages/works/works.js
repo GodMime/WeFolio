@@ -21,7 +21,12 @@ const SCHEDULE_PAGE_URL = '/pages/schedule/schedule'
 const WORK_TAGS_API_URL = '/api/mine/works/tags'
 const WORK_TAG_DELETE_API_PREFIX = '/api/mine/works/tags/delete'
 const WORKS_API_PREFIX = '/api/mine/works'
+const WORK_DELETE_API_PREFIX = '/api/mine/works/delete'
 const EDIT_COVER_CLIENT_PREFIX = 'edit-work'
+const SWIPE_REVEAL_THRESHOLD = -32
+const SWIPE_CLOSE_THRESHOLD = 24
+const SWIPE_VERTICAL_TOLERANCE = 48
+const DELETE_CONFIRM_COLOR = '#a9354f'
 
 function clampNumber(value, min, max) {
   const numberValue = Number(value)
@@ -88,6 +93,17 @@ function hasOwnField(object, field) {
   return Object.prototype.hasOwnProperty.call(object || {}, field)
 }
 
+function buildWorkDeleteBlockedMessage(checkResult = {}, work = {}) {
+  if (checkResult.message) {
+    return checkResult.message
+  }
+  const referenceCount = Number(checkResult.referenceCount || work.referenceCount || 0)
+  if (referenceCount > 0) {
+    return `作品已被 ${referenceCount} 个作品集引用，请先从作品集中移除`
+  }
+  return '作品已被作品集引用，请先从作品集中移除'
+}
+
 Page({
   requestSeq: 0,
   uploadTasks: {},
@@ -99,6 +115,9 @@ Page({
     keyword: '',
     selectedTagId: null,
     batchMode: false,
+    revealedWorkId: null,
+    workTouchStart: null,
+    deletingWorkId: null,
     tagManageMode: false,
     tagDialogVisible: false,
     tagDialogMode: 'create',
@@ -407,9 +426,66 @@ Page({
     })
   },
 
+  handleWorkTouchStart(event) {
+    if (this.data.deletingWorkId) {
+      this.setData({ workTouchStart: null })
+      return
+    }
+    const workId = normalizeId(event.currentTarget.dataset.id)
+    const work = this.findWorkById(workId)
+    if (!work) {
+      this.setData({ workTouchStart: null })
+      return
+    }
+    const touch = (event.touches && event.touches[0]) || {}
+    this.setData({
+      workTouchStart: {
+        workId,
+        x: touch.clientX || 0,
+        y: touch.clientY || 0
+      }
+    })
+  },
+
+  handleWorkTouchMove() {
+  },
+
+  handleWorkTouchEnd(event) {
+    const start = this.data.workTouchStart
+    if (!start || !start.workId) {
+      return
+    }
+    const touch = (event.changedTouches && event.changedTouches[0]) || {}
+    const deltaX = (touch.clientX || start.x) - start.x
+    const deltaY = Math.abs((touch.clientY || start.y) - start.y)
+    if (deltaY <= SWIPE_VERTICAL_TOLERANCE && deltaX < SWIPE_REVEAL_THRESHOLD) {
+      this.setData({
+        revealedWorkId: start.workId,
+        workTouchStart: null
+      })
+      return
+    }
+    if (deltaX > SWIPE_CLOSE_THRESHOLD || Math.abs(deltaX) < 8) {
+      this.setData({
+        revealedWorkId: null,
+        workTouchStart: null
+      })
+      return
+    }
+    this.setData({ workTouchStart: null })
+  },
+
+  handleWorkTouchCancel() {
+    this.setData({ workTouchStart: null })
+  },
+
   handleWorkTap(event) {
     const workId = normalizeId(event.currentTarget.dataset.id)
     if (!workId) {
+      return
+    }
+    if (this.data.revealedWorkId === workId) {
+      this.setData({ revealedWorkId: null })
       return
     }
     const work = this.findWorkById(workId)
@@ -421,6 +497,86 @@ Page({
       return
     }
     this.openImageEditSheet(work)
+  },
+
+  async handleDeleteWorkTap(event) {
+    const workId = normalizeId(event.currentTarget.dataset.id)
+    const work = this.findWorkById(workId)
+    if (!work || this.data.deletingWorkId) {
+      return
+    }
+    try {
+      const checkResult = await request({
+        url: `${WORKS_API_PREFIX}/${workId}/delete-check`
+      })
+      if (!checkResult || !checkResult.canDelete) {
+        this.setData({ revealedWorkId: null })
+        wx.showModal({
+          title: '无法删除',
+          content: buildWorkDeleteBlockedMessage(checkResult, work),
+          showCancel: false,
+          confirmText: '知道了'
+        })
+        return
+      }
+      wx.showModal({
+        title: '删除作品',
+        content: `确认删除“${work.title || '该作品'}”？删除后会从素材库移除。`,
+        confirmText: '删除',
+        confirmColor: DELETE_CONFIRM_COLOR,
+        success: async (result) => {
+          if (!result.confirm) {
+            this.setData({ revealedWorkId: null })
+            return
+          }
+          this.setData({ deletingWorkId: workId })
+          try {
+            await request({
+              url: `${WORK_DELETE_API_PREFIX}/${workId}`,
+              method: 'POST'
+            })
+            this.setData({
+              deletingWorkId: null,
+              revealedWorkId: null
+            })
+            wx.showToast({
+              title: '作品已删除',
+              icon: 'success'
+            })
+            await this.loadWorks(true)
+          } catch (error) {
+            if (error && error.authRequired) {
+              this.setData({
+                deletingWorkId: null,
+                revealedWorkId: null
+              })
+              handleAuthRequired(error.message)
+              return
+            }
+            this.setData({
+              deletingWorkId: null,
+              revealedWorkId: null
+            })
+            wx.showToast({
+              title: error && error.message ? error.message : '作品删除失败',
+              icon: 'none',
+              duration: 2600
+            })
+          }
+        }
+      })
+    } catch (error) {
+      if (error && error.authRequired) {
+        handleAuthRequired(error.message)
+        return
+      }
+      this.setData({ revealedWorkId: null })
+      wx.showToast({
+        title: error && error.message ? error.message : '删除检查失败',
+        icon: 'none',
+        duration: 2600
+      })
+    }
   },
 
   openImageEditSheet(work) {

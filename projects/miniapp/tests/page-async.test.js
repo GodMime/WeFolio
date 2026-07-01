@@ -669,6 +669,117 @@ test('works page saves selected video cover frame time directly', async () => {
   })
 })
 
+test('works page blocks delete when backend reports portfolio references', async () => {
+  const requests = []
+  const modals = []
+  const fakeRequest = (options) => {
+    requests.push(options)
+    if (options.url === '/api/mine/works/18/delete-check') {
+      return Promise.resolve({
+        canDelete: false,
+        referenceCount: 2,
+        message: '作品已被 2 个作品集引用，请先从作品集中移除'
+      })
+    }
+    return Promise.resolve({})
+  }
+  const page = loadPage('pages/works/works.js', fakeRequest, {
+    showModal(options) {
+      modals.push(options)
+    }
+  })
+  page.data.list.works = [
+    {
+      id: 18,
+      mediaType: 'VIDEO',
+      title: '片头快剪',
+      referenceCount: 2
+    }
+  ]
+  page.data.revealedWorkId = 18
+
+  await page.handleDeleteWorkTap({
+    currentTarget: {
+      dataset: {
+        id: '18'
+      }
+    }
+  })
+
+  assert.deepEqual(requests.map((request) => request.url), [
+    '/api/mine/works/18/delete-check'
+  ])
+  assert.equal(modals[0].title, '无法删除')
+  assert.equal(modals[0].content, '作品已被 2 个作品集引用，请先从作品集中移除')
+  assert.equal(page.data.revealedWorkId, null)
+})
+
+test('works page confirms delete then refreshes work list', async () => {
+  const requests = []
+  const modals = []
+  const toasts = []
+  const fakeRequest = (options) => {
+    requests.push(options)
+    if (options.url === '/api/mine/works/18/delete-check') {
+      return Promise.resolve({
+        canDelete: true,
+        referenceCount: 0,
+        message: '作品未被作品集引用，可以删除'
+      })
+    }
+    if (options.url === '/api/mine/works/delete/18') {
+      return Promise.resolve({})
+    }
+    return Promise.resolve({
+      works: [],
+      tags: [],
+      summary: {},
+      page: 1,
+      pageSize: 20,
+      hasMore: false
+    })
+  }
+  const page = loadPage('pages/works/works.js', fakeRequest, {
+    showModal(options) {
+      modals.push(options)
+    },
+    showToast(options) {
+      toasts.push(options)
+    }
+  })
+  page.data.loading = false
+  page.data.list.works = [
+    {
+      id: 18,
+      mediaType: 'IMAGE',
+      title: '海边仪式',
+      referenceCount: 0
+    }
+  ]
+
+  await page.handleDeleteWorkTap({
+    currentTarget: {
+      dataset: {
+        id: '18'
+      }
+    }
+  })
+  assert.equal(modals[0].title, '删除作品')
+  assert.equal(modals[0].confirmText, '删除')
+  await modals[0].success({ confirm: true })
+  await flushPromises()
+
+  assert.deepEqual(requests.map((request) => `${request.method || 'GET'} ${request.url}`), [
+    'GET /api/mine/works/18/delete-check',
+    'POST /api/mine/works/delete/18',
+    'GET /api/mine/works'
+  ])
+  assert.equal(toasts[0].title, '作品已删除')
+  assert.equal(page.data.deletingWorkId, null)
+  assert.equal(page.data.revealedWorkId, null)
+  assert.equal(page.data.list.empty, true)
+})
+
 test('team maintenance member invite closes sheet and refreshes current detail', async () => {
   const requests = []
   const fakeRequest = (options) => {

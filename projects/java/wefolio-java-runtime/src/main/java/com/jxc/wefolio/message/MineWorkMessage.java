@@ -97,4 +97,19 @@ public interface MineWorkMessage {
 
     /** 缩略图或封面图类型错误提示 */
     String COVER_TASK_MEDIA_TYPE_MESSAGE = "缩略图或封面图必须是图片";
+
+    /** 作品 ID 为空提示 */
+    String WORK_EMPTY_MESSAGE = "作品不能为空";
+
+    /** 作品不存在提示 */
+    String WORK_NOT_FOUND_MESSAGE = "作品不存在或无访问权限";
+
+    /** 作品删除失败提示 */
+    String WORK_DELETE_FAILED_MESSAGE = "作品删除失败，请刷新后重试";
+
+    /** 作品允许删除提示 */
+    String WORK_DELETE_ALLOWED_MESSAGE = "作品未被作品集引用，可以删除";
+
+    /** 作品被作品集引用提示模板 */
+    String WORK_DELETE_BLOCKED_TEMPLATE = "作品已被 %d 个作品集引用，请先从作品集中移除";
 }

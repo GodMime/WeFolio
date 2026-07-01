@@ -60,6 +60,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -1213,6 +1214,8 @@ class MineWorkServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("作品已被 1 个作品集引用，请先从作品集中移除");
         verify(workEntityMapper, never()).delete(any());
+        verify(workTagEntityMapper, never()).delete(any());
+        verify(cosService, never()).delete(any());
     }
 
     @Test
@@ -1230,12 +1233,70 @@ class MineWorkServiceTest {
         @SuppressWarnings("rawtypes")
         ArgumentCaptor<UpdateWrapper> updateCaptor = ArgumentCaptor.forClass(UpdateWrapper.class);
         verify(workEntityMapper).update(any(), updateCaptor.capture());
+        verify(workTagEntityMapper).delete(any());
         @SuppressWarnings("unchecked")
         UpdateWrapper<WorkEntity> wrapper = updateCaptor.getValue();
         Map<String, Object> params = wrapper.getParamNameValuePairs();
         assertThat(wrapper.getSqlSet()).contains("deleted=#{ew.paramNameValuePairs.MPGENVAL2}");
         assertThat(params.get("MPGENVAL2")).isEqualTo(18L);
         verify(workEntityMapper, never()).delete(any());
+    }
+
+    @Test
+    void deleteWorkShouldDeleteUniqueCosObjectsAfterDatabaseDelete() {
+        WorkEntity work = new WorkEntity();
+        work.setId(18L);
+        work.setUserId(7L);
+        work.setTitle("草坪婚礼");
+        work.setMediaObjectKey("WFA3B1E7A2/work/image/photo.jpg");
+        work.setCoverObjectKey("WFA3B1E7A2/work/image/photo-thumb.jpg");
+        when(workEntityMapper.selectById(18L)).thenReturn(work);
+        when(portfolioReferenceEntityMapper.selectList(any())).thenReturn(List.of());
+        when(workEntityMapper.update(any(), any())).thenReturn(1);
+
+        service().deleteWork(18L);
+
+        verify(workTagEntityMapper).delete(any());
+        verify(cosService).delete("WFA3B1E7A2/work/image/photo.jpg");
+        verify(cosService).delete("WFA3B1E7A2/work/image/photo-thumb.jpg");
+    }
+
+    @Test
+    void deleteWorkShouldDeleteSharedMediaAndCoverKeyOnlyOnce() {
+        WorkEntity work = new WorkEntity();
+        work.setId(18L);
+        work.setUserId(7L);
+        work.setTitle("草坪婚礼");
+        work.setMediaObjectKey("WFA3B1E7A2/work/image/photo.jpg");
+        work.setCoverObjectKey("WFA3B1E7A2/work/image/photo.jpg");
+        when(workEntityMapper.selectById(18L)).thenReturn(work);
+        when(portfolioReferenceEntityMapper.selectList(any())).thenReturn(List.of());
+        when(workEntityMapper.update(any(), any())).thenReturn(1);
+
+        service().deleteWork(18L);
+
+        verify(cosService, times(1)).delete("WFA3B1E7A2/work/image/photo.jpg");
+    }
+
+    @Test
+    void deleteWorkShouldKeepDatabaseDeleteWhenCosDeleteFails() {
+        WorkEntity work = new WorkEntity();
+        work.setId(18L);
+        work.setUserId(7L);
+        work.setTitle("草坪婚礼");
+        work.setMediaObjectKey("WFA3B1E7A2/work/video/film.mp4");
+        work.setCoverObjectKey("WFA3B1E7A2/work/video/film-thumb.jpg");
+        when(workEntityMapper.selectById(18L)).thenReturn(work);
+        when(portfolioReferenceEntityMapper.selectList(any())).thenReturn(List.of());
+        when(workEntityMapper.update(any(), any())).thenReturn(1);
+        doThrow(new RuntimeException("COS 删除失败")).when(cosService).delete("WFA3B1E7A2/work/video/film.mp4");
+
+        service().deleteWork(18L);
+
+        verify(workEntityMapper).update(any(), any());
+        verify(workTagEntityMapper).delete(any());
+        verify(cosService).delete("WFA3B1E7A2/work/video/film.mp4");
+        verify(cosService).delete("WFA3B1E7A2/work/video/film-thumb.jpg");
     }
 
     @Test
