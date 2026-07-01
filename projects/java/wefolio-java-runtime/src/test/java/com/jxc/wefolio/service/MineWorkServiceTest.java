@@ -9,9 +9,13 @@ import com.jxc.wefolio.dict.ReferenceTypeDict;
 import com.jxc.wefolio.dict.UserStatusDict;
 import com.jxc.wefolio.dict.WfTagStatusDict;
 import com.jxc.wefolio.dict.WorkUploadTaskStatusDict;
+import com.jxc.wefolio.dto.MineWorkBatchDeleteCheckResponse;
+import com.jxc.wefolio.dto.MineWorkBatchDeleteRequest;
+import com.jxc.wefolio.dto.MineWorkBatchDeleteResponse;
 import com.jxc.wefolio.dto.MineWorkDeleteCheckResponse;
 import com.jxc.wefolio.dto.MineWorkListResponse;
 import com.jxc.wefolio.dto.MineWorkSortRequest;
+import com.jxc.wefolio.dto.MineWorkSortItemsResponse;
 import com.jxc.wefolio.dto.MineWorkTagUpsertRequest;
 import com.jxc.wefolio.dto.MineWorkUpdateRequest;
 import com.jxc.wefolio.dto.MineWorkUploadCompleteRequest;
@@ -1185,6 +1189,81 @@ class MineWorkServiceTest {
     }
 
     @Test
+    void sortWorksShouldUpdateTagScopedSortWithoutChangingGlobalOrder() {
+        WorkEntity first = ownedWork(11L);
+        WorkEntity second = ownedWork(12L);
+        when(wfTagEntityMapper.selectById(31L)).thenReturn(ownedTag(31L, "高端婚礼", "#0f766e"));
+        when(workEntityMapper.selectBatchIds(any())).thenReturn(List.of(first, second));
+        when(workTagEntityMapper.selectList(any())).thenReturn(List.of(
+                workTagRelation(11L, 31L),
+                workTagRelation(12L, 31L)
+        ));
+        when(workTagEntityMapper.updateSortOrders(eq(7L), eq(31L), any())).thenReturn(2);
+        MineWorkSortRequest request = new MineWorkSortRequest();
+        request.setScope("TAG");
+        request.setTagId(31L);
+        request.setItems(List.of(sortItem(11L, 2000), sortItem(12L, 1000)));
+
+        service().sortWorks(request);
+
+        verify(workEntityMapper, never()).updateSortOrders(any(), any());
+        verify(workTagEntityMapper).updateSortOrders(eq(7L), eq(31L), any());
+    }
+
+    @Test
+    void sortWorksShouldRejectTagScopeWhenWorkIsNotBoundToTag() {
+        WorkEntity first = ownedWork(11L);
+        WorkEntity second = ownedWork(12L);
+        when(wfTagEntityMapper.selectById(31L)).thenReturn(ownedTag(31L, "高端婚礼", "#0f766e"));
+        when(workEntityMapper.selectBatchIds(any())).thenReturn(List.of(first, second));
+        when(workTagEntityMapper.selectList(any())).thenReturn(List.of(workTagRelation(11L, 31L)));
+        MineWorkSortRequest request = new MineWorkSortRequest();
+        request.setScope("TAG");
+        request.setTagId(31L);
+        request.setItems(List.of(sortItem(11L, 2000), sortItem(12L, 1000)));
+
+        assertThatThrownBy(() -> service().sortWorks(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("作品不在当前标签下，请刷新后重试");
+        verify(workTagEntityMapper, never()).updateSortOrders(any(), any(), any());
+        verify(workEntityMapper, never()).updateSortOrders(any(), any());
+    }
+
+    @Test
+    void listSortItemsShouldReturnTagScopedOrderItems() {
+        WorkEntity first = ownedWork(11L);
+        first.setTitle("草坪婚礼");
+        first.setMediaType(MediaTypeDict.IMAGE.getCode());
+        first.setCoverObjectKey("WFA3B1E7A2/work/image/photo.jpg");
+        first.setSortOrder(2000);
+        WorkEntity second = ownedWork(12L);
+        second.setTitle("片头快剪");
+        second.setMediaType(MediaTypeDict.VIDEO.getCode());
+        second.setCoverObjectKey("WFA3B1E7A2/work/video/film-thumb.jpg");
+        second.setSortOrder(1000);
+        WorkTagEntity firstRelation = workTagRelation(11L, 31L);
+        firstRelation.setSortOrder(3000);
+        WorkTagEntity secondRelation = workTagRelation(12L, 31L);
+        secondRelation.setSortOrder(1000);
+        when(wfTagEntityMapper.selectById(31L)).thenReturn(ownedTag(31L, "高端婚礼", "#0f766e"));
+        when(workTagEntityMapper.selectList(any())).thenReturn(List.of(secondRelation, firstRelation));
+        when(workEntityMapper.selectBatchIds(any())).thenReturn(List.of(first, second));
+        when(cosService.publicUrl(any())).thenAnswer(invocation -> "https://cos.example/" + invocation.getArgument(0));
+
+        MineWorkSortItemsResponse response = service().listSortItems("TAG", 31L);
+
+        assertThat(response.getScope()).isEqualTo("TAG");
+        assertThat(response.getTagId()).isEqualTo(31L);
+        assertThat(response.getTotal()).isEqualTo(2L);
+        assertThat(response.getWorks()).extracting(MineWorkSortItemsResponse.SortWorkItem::getId)
+                .containsExactly(12L, 11L);
+        assertThat(response.getWorks()).extracting(MineWorkSortItemsResponse.SortWorkItem::getSortOrder)
+                .containsExactly(1000, 3000);
+        assertThat(response.getWorks().get(0).getCoverUrl())
+                .isEqualTo("https://cos.example/WFA3B1E7A2/work/video/film-thumb.jpg");
+    }
+
+    @Test
     void updateSortOrdersMapperShouldNotAcceptApplicationUpdatedAt() throws NoSuchMethodException {
         Method method = WorkEntityMapper.class.getMethod("updateSortOrders", Long.class, List.class);
 
@@ -1319,6 +1398,61 @@ class MineWorkServiceTest {
         assertThat(response.isCanDelete()).isFalse();
         assertThat(response.getReferenceCount()).isEqualTo(1);
         assertThat(response.getMessage()).isEqualTo("作品已被 1 个作品集引用，请先从作品集中移除");
+    }
+
+    @Test
+    void checkDeleteWorksShouldReportDeletableAndBlockedItems() {
+        WorkEntity first = ownedWork(11L);
+        first.setTitle("可删除作品");
+        WorkEntity second = ownedWork(12L);
+        second.setTitle("被引用作品");
+        when(workEntityMapper.selectBatchIds(any())).thenReturn(List.of(first, second));
+        when(portfolioReferenceEntityMapper.selectList(any())).thenReturn(List.of(
+                portfolioReference(12L),
+                portfolioReference(12L)
+        ));
+        MineWorkBatchDeleteRequest request = new MineWorkBatchDeleteRequest();
+        request.setWorkIds(List.of(11L, 12L));
+
+        MineWorkBatchDeleteCheckResponse response = service().checkDeleteWorks(request);
+
+        assertThat(response.getTotal()).isEqualTo(2);
+        assertThat(response.getDeletableCount()).isEqualTo(1);
+        assertThat(response.getBlockedCount()).isEqualTo(1);
+        assertThat(response.getItems()).extracting(MineWorkBatchDeleteCheckResponse.Item::getWorkId)
+                .containsExactly(11L, 12L);
+        assertThat(response.getItems().get(0).isCanDelete()).isTrue();
+        assertThat(response.getItems().get(1).isCanDelete()).isFalse();
+        assertThat(response.getItems().get(1).getMessage())
+                .isEqualTo("作品已被 2 个作品集引用，请先从作品集中移除");
+    }
+
+    @Test
+    void deleteWorksShouldKeepReferencedWorksAndDeleteOnlyAllowedItems() {
+        WorkEntity first = ownedWork(11L);
+        first.setTitle("可删除作品");
+        first.setMediaObjectKey("WFA3B1E7A2/work/image/photo.jpg");
+        WorkEntity second = ownedWork(12L);
+        second.setTitle("被引用作品");
+        when(workEntityMapper.selectBatchIds(any())).thenReturn(List.of(first, second));
+        when(portfolioReferenceEntityMapper.selectList(any())).thenReturn(List.of(portfolioReference(12L)));
+        when(workEntityMapper.update(any(), any())).thenReturn(1);
+        MineWorkBatchDeleteRequest request = new MineWorkBatchDeleteRequest();
+        request.setWorkIds(List.of(11L, 12L));
+
+        MineWorkBatchDeleteResponse response = service().deleteWorks(request);
+
+        assertThat(response.getSuccessCount()).isEqualTo(1);
+        assertThat(response.getFailedCount()).isEqualTo(1);
+        assertThat(response.getItems()).extracting(MineWorkBatchDeleteResponse.Item::getWorkId)
+                .containsExactly(11L, 12L);
+        assertThat(response.getItems().get(0).isSuccess()).isTrue();
+        assertThat(response.getItems().get(1).isSuccess()).isFalse();
+        assertThat(response.getItems().get(1).getMessage())
+                .isEqualTo("作品已被 1 个作品集引用，请先从作品集中移除");
+        verify(workEntityMapper, times(1)).update(any(), any());
+        verify(workTagEntityMapper, times(1)).delete(any());
+        verify(cosService).delete("WFA3B1E7A2/work/image/photo.jpg");
     }
 
     private MineWorkService service() {

@@ -52,6 +52,9 @@ public class WorkUploadTransactionService {
     /** 单个标签最大长度 */
     private static final int TAG_NAME_MAX_LENGTH = 10;
 
+    /** 标签内排序间隔 */
+    private static final int TAG_SORT_ORDER_STEP = 1000;
+
     /** 作品上传积分业务类型 */
     private static final String BUSINESS_TYPE_WORK_UPLOAD = "WORK_UPLOAD";
 
@@ -371,8 +374,30 @@ public class WorkUploadTransactionService {
             relation.setUserId(userId);
             relation.setWorkId(workId);
             relation.setTagId(tag.getId());
+            relation.setSortOrder(nextTagSortOrder(userId, tag.getId()));
             workTagEntityMapper.insert(relation);
         }
+    }
+
+    /**
+     * 查询标签内下一个排序值。
+     *
+     * @param userId 当前用户 ID
+     * @param tagId 标签 ID
+     * @return 下一个排序值
+     */
+    private int nextTagSortOrder(Long userId, Long tagId) {
+        WorkTagEntity lastRelation = workTagEntityMapper.selectOne(
+                Wrappers.lambdaQuery(WorkTagEntity.class)
+                        .eq(WorkTagEntity::getUserId, userId)
+                        .eq(WorkTagEntity::getTagId, tagId)
+                        .orderByDesc(WorkTagEntity::getSortOrder)
+                        .last("LIMIT 1")
+        );
+        int lastSortOrder = lastRelation == null || lastRelation.getSortOrder() == null
+                ? 0
+                : lastRelation.getSortOrder();
+        return lastSortOrder + TAG_SORT_ORDER_STEP;
     }
 
     /**

@@ -10,6 +10,7 @@ const TITLE_LIMIT = 30
 const DESCRIPTION_LIMIT = 1000
 const FILTER_TAG_LABEL_LIMIT = 10
 const WORK_TAG_DELETE_BLOCKED_SUFFIX = '先移除这些作品的标签后再删除。'
+const FILTER_ALL_ACTIVE_STYLE = 'color: #40546a; background: #eef4f7; border-color: #cbd8e5;'
 
 const MEDIA_TYPE_TEXT = {
   IMAGE: '图片',
@@ -59,6 +60,14 @@ function buildTagStyle(color) {
   return `color: ${option.color}; background: ${option.background}; border-color: ${option.border};`
 }
 
+function buildTagActiveStyle(color) {
+  if (!color) {
+    return FILTER_ALL_ACTIVE_STYLE
+  }
+  const option = getWorkTagColorOption(color)
+  return `color: #ffffff; background: ${option.color}; border-color: ${option.color};`
+}
+
 function buildTagDeleteStyle(color) {
   if (!color) {
     return ''
@@ -100,6 +109,7 @@ function normalizeTag(raw = {}) {
     active: Boolean(raw.active),
     labelText: formatFilterTagLabel(name, count),
     style: buildTagStyle(color),
+    activeStyle: buildTagActiveStyle(color),
     deleteStyle: buildTagDeleteStyle(color)
   }
 }
@@ -167,7 +177,8 @@ function buildFilterTags(summary, tags) {
       color: '',
       count: summary.totalCount,
       active: true,
-      labelText: formatFilterTagLabel('全部', summary.totalCount)
+      labelText: formatFilterTagLabel('全部', summary.totalCount),
+      activeStyle: buildTagActiveStyle('')
     },
     ...tags
   ]

@@ -20,4 +20,7 @@ public class WorkTagEntity extends BaseEntity {
     /** 标签 ID */
     private Long tagId;
 
+    /** 标签内排序值 */
+    private Integer sortOrder;
+
 }

@@ -2,10 +2,14 @@ package com.jxc.wefolio.controller;
 
 import com.jxc.wefolio.annotation.MaintainerAccess;
 import com.jxc.wefolio.common.Response;
+import com.jxc.wefolio.dto.MineWorkBatchDeleteCheckResponse;
+import com.jxc.wefolio.dto.MineWorkBatchDeleteRequest;
+import com.jxc.wefolio.dto.MineWorkBatchDeleteResponse;
 import com.jxc.wefolio.dto.MineWorkDeleteCheckResponse;
 import com.jxc.wefolio.dto.MineWorkDetailResponse;
 import com.jxc.wefolio.dto.MineWorkListResponse;
 import com.jxc.wefolio.dto.MineWorkSortRequest;
+import com.jxc.wefolio.dto.MineWorkSortItemsResponse;
 import com.jxc.wefolio.dto.MineWorkTagResponse;
 import com.jxc.wefolio.dto.MineWorkTagUpsertRequest;
 import com.jxc.wefolio.dto.MineWorkUpdateRequest;
@@ -182,6 +186,21 @@ public class MineWorkController {
     }
 
     /**
+     * 查询排序模式作品列表。
+     *
+     * @param scope 排序范围
+     * @param tagId 标签 ID
+     * @return 排序作品列表
+     */
+    @GetMapping("/api/mine/works/sort-items")
+    public Response<MineWorkSortItemsResponse> sortItems(
+            @RequestParam(value = "scope", required = false) String scope,
+            @RequestParam(value = "tagId", required = false) Long tagId
+    ) {
+        return Response.success(mineWorkService.listSortItems(scope, tagId));
+    }
+
+    /**
      * 删除前检查作品引用。
      *
      * @param workId 作品 ID
@@ -190,6 +209,19 @@ public class MineWorkController {
     @GetMapping("/api/mine/works/{workId}/delete-check")
     public Response<MineWorkDeleteCheckResponse> checkDeleteWork(@PathVariable Long workId) {
         return Response.success(mineWorkService.checkDeleteWork(workId));
+    }
+
+    /**
+     * 批量删除前检查作品引用。
+     *
+     * @param request 批量删除请求
+     * @return 批量删除检查结果
+     */
+    @PostMapping("/api/mine/works/delete-check")
+    public Response<MineWorkBatchDeleteCheckResponse> checkDeleteWorks(
+            @RequestBody MineWorkBatchDeleteRequest request
+    ) {
+        return Response.success(mineWorkService.checkDeleteWorks(request));
     }
 
     /**
@@ -202,5 +234,18 @@ public class MineWorkController {
     public Response<Void> deleteWork(@PathVariable Long workId) {
         mineWorkService.deleteWork(workId);
         return Response.success();
+    }
+
+    /**
+     * 批量删除作品。
+     *
+     * @param request 批量删除请求
+     * @return 批量删除结果
+     */
+    @PostMapping("/api/mine/works/delete")
+    public Response<MineWorkBatchDeleteResponse> deleteWorks(
+            @RequestBody MineWorkBatchDeleteRequest request
+    ) {
+        return Response.success(mineWorkService.deleteWorks(request));
     }
 }

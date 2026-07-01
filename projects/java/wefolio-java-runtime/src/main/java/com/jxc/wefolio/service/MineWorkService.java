@@ -11,10 +11,14 @@ import com.jxc.wefolio.dict.UserStatusDict;
 import com.jxc.wefolio.dict.WfTagStatusDict;
 import com.jxc.wefolio.dict.WorkStatusDict;
 import com.jxc.wefolio.dict.WorkUploadTaskStatusDict;
+import com.jxc.wefolio.dto.MineWorkBatchDeleteCheckResponse;
+import com.jxc.wefolio.dto.MineWorkBatchDeleteRequest;
+import com.jxc.wefolio.dto.MineWorkBatchDeleteResponse;
 import com.jxc.wefolio.dto.MineWorkDeleteCheckResponse;
 import com.jxc.wefolio.dto.MineWorkDetailResponse;
 import com.jxc.wefolio.dto.MineWorkListResponse;
 import com.jxc.wefolio.dto.MineWorkSortRequest;
+import com.jxc.wefolio.dto.MineWorkSortItemsResponse;
 import com.jxc.wefolio.dto.MineWorkTagResponse;
 import com.jxc.wefolio.dto.MineWorkTagUpsertRequest;
 import com.jxc.wefolio.dto.MineWorkUpdateRequest;
@@ -88,6 +92,21 @@ public class MineWorkService {
 
     /** 最大每页数量 */
     private static final int MAX_PAGE_SIZE = 100;
+
+    /** 排序间隔，便于后续插入 */
+    private static final int SORT_ORDER_STEP = 1000;
+
+    /** 全部作品排序范围 */
+    private static final String SORT_SCOPE_ALL = "ALL";
+
+    /** 标签内排序范围 */
+    private static final String SORT_SCOPE_TAG = "TAG";
+
+    /** 标签排序范围缺少标签提示 */
+    private static final String SORT_TAG_REQUIRED_MESSAGE = "请选择要排序的标签";
+
+    /** 作品不在标签下提示 */
+    private static final String SORT_TAG_WORK_MISMATCH_MESSAGE = "作品不在当前标签下，请刷新后重试";
 
     /** 作品标题最大长度 */
     private static final int TITLE_MAX_LENGTH = 30;
@@ -173,6 +192,15 @@ public class MineWorkService {
     /** 计数查询别名 */
     private static final String COUNT_ALIAS = "itemCount";
 
+    /** MySQL FIELD 排序表达式前缀 */
+    private static final String SQL_ORDER_BY_FIELD_ID_PREFIX = "ORDER BY FIELD(id, ";
+
+    /** MySQL 函数表达式右括号 */
+    private static final String SQL_FUNCTION_SUFFIX = ")";
+
+    /** 批量删除成功提示 */
+    private static final String BATCH_DELETE_SUCCESS_MESSAGE = "已删除";
+
     /** 图片扩展名 */
     private static final Set<String> IMAGE_EXTENSIONS = Set.of("jpg", "jpeg", "png", "webp", "gif");
 
@@ -235,23 +263,30 @@ public class MineWorkService {
         Long userId = AuthContextHolder.requireUserId();
         int normalizedPage = page <= 0 ? DEFAULT_PAGE : page;
         int normalizedPageSize = pageSize <= 0 ? DEFAULT_PAGE_SIZE : Math.min(pageSize, MAX_PAGE_SIZE);
-        List<Long> taggedWorkIds = tagId == null ? null : findWorkIdsByTag(userId, tagId);
+        List<WorkTagEntity> selectedTagRelations = tagId == null ? List.of() : findRelationsForTag(userId, tagId);
+        List<Long> taggedWorkIds = tagId == null
+                ? null
+                : selectedTagRelations.stream().map(WorkTagEntity::getWorkId).toList();
         List<Long> keywordWorkIds = findWorkIdsByKeywordTag(userId, keyword);
+        var query = Wrappers.lambdaQuery(WorkEntity.class)
+                .eq(WorkEntity::getUserId, userId)
+                .eq(WorkEntity::getStatus, WorkStatusDict.ACTIVE.getCode())
+                .and(hasText(keyword), wrapper -> wrapper
+                        .like(WorkEntity::getTitle, normalizeText(keyword))
+                        .or()
+                        .like(WorkEntity::getOriginalFileName, normalizeText(keyword))
+                        .or(!keywordWorkIds.isEmpty())
+                        .in(!keywordWorkIds.isEmpty(), WorkEntity::getId, keywordWorkIds))
+                .in(taggedWorkIds != null && !taggedWorkIds.isEmpty(), WorkEntity::getId, taggedWorkIds)
+                .eq(taggedWorkIds != null && taggedWorkIds.isEmpty(), WorkEntity::getId, -1L);
+        if (tagId == null) {
+            query.orderByAsc(WorkEntity::getSortOrder).orderByDesc(WorkEntity::getId);
+        } else if (!taggedWorkIds.isEmpty()) {
+            query.last(buildWorkIdOrderClause(taggedWorkIds));
+        }
         Page<WorkEntity> resultPage = workEntityMapper.selectPage(
                 new Page<>(normalizedPage, normalizedPageSize),
-                Wrappers.lambdaQuery(WorkEntity.class)
-                        .eq(WorkEntity::getUserId, userId)
-                        .eq(WorkEntity::getStatus, WorkStatusDict.ACTIVE.getCode())
-                        .and(hasText(keyword), wrapper -> wrapper
-                                .like(WorkEntity::getTitle, normalizeText(keyword))
-                                .or()
-                                .like(WorkEntity::getOriginalFileName, normalizeText(keyword))
-                                .or(!keywordWorkIds.isEmpty())
-                                .in(!keywordWorkIds.isEmpty(), WorkEntity::getId, keywordWorkIds))
-                        .in(taggedWorkIds != null && !taggedWorkIds.isEmpty(), WorkEntity::getId, taggedWorkIds)
-                        .eq(taggedWorkIds != null && taggedWorkIds.isEmpty(), WorkEntity::getId, -1L)
-                        .orderByAsc(WorkEntity::getSortOrder)
-                        .orderByDesc(WorkEntity::getId)
+                query
         );
 
         MineWorkListResponse response = new MineWorkListResponse();
@@ -268,9 +303,14 @@ public class MineWorkService {
         Map<Long, Long> referenceCounts = buildWorkReferenceCounts(resultPage.getRecords());
         Map<Long, List<MineWorkListResponse.TagItem>> workTags =
                 buildWorkTagItems(resultPage.getRecords(), activeTagRelations, activeTagMap);
-        response.setWorks(resultPage.getRecords().stream()
+        Map<Long, Integer> selectedTagSortOrders = buildRelationSortOrderMap(selectedTagRelations);
+        List<MineWorkListResponse.WorkItem> workItems = resultPage.getRecords().stream()
                 .map(work -> buildWorkItem(work, referenceCounts, workTags))
-                .toList());
+                .toList();
+        if (tagId != null) {
+            workItems.forEach(item -> item.setSortOrder(selectedTagSortOrders.getOrDefault(item.getId(), item.getSortOrder())));
+        }
+        response.setWorks(workItems);
         return response;
     }
 
@@ -522,6 +562,11 @@ public class MineWorkService {
         if (validItems.isEmpty()) {
             throw new BusinessException(MineWorkMessage.SORT_ITEMS_EMPTY_MESSAGE);
         }
+        String scope = normalizeSortScope(request == null ? null : request.getScope());
+        if (SORT_SCOPE_TAG.equals(scope)) {
+            sortTagWorks(userId, request == null ? null : request.getTagId(), validItems);
+            return;
+        }
         List<Long> workIds = validItems.stream()
                 .map(MineWorkSortRequest.Item::getWorkId)
                 .toList();
@@ -533,6 +578,45 @@ public class MineWorkService {
             throw new BusinessException("作品不存在或无访问权限");
         }
         workEntityMapper.updateSortOrders(userId, validItems);
+    }
+
+    /**
+     * 查询排序模式使用的作品列表。
+     *
+     * @param scope 排序范围
+     * @param tagId 标签 ID
+     * @return 排序作品列表
+     */
+    public MineWorkSortItemsResponse listSortItems(String scope, Long tagId) {
+        Long userId = AuthContextHolder.requireUserId();
+        String normalizedScope = normalizeSortScope(scope);
+        MineWorkSortItemsResponse response = new MineWorkSortItemsResponse();
+        response.setScope(normalizedScope);
+        response.setTagId(SORT_SCOPE_TAG.equals(normalizedScope) ? tagId : null);
+        if (SORT_SCOPE_TAG.equals(normalizedScope)) {
+            requireOwnedActiveTag(userId, tagId);
+            List<WorkTagEntity> relations = findRelationsForTag(userId, tagId);
+            List<Long> workIds = relations.stream().map(WorkTagEntity::getWorkId).toList();
+            Map<Long, WorkEntity> workMap = buildOwnedWorkMap(userId, workIds);
+            response.setWorks(relations.stream()
+                    .filter(relation -> workMap.containsKey(relation.getWorkId()))
+                    .map(relation -> buildSortWorkItem(workMap.get(relation.getWorkId()), relation.getSortOrder()))
+                    .toList());
+            response.setTotal(response.getWorks().size());
+            return response;
+        }
+        List<WorkEntity> works = workEntityMapper.selectList(
+                Wrappers.lambdaQuery(WorkEntity.class)
+                        .eq(WorkEntity::getUserId, userId)
+                        .eq(WorkEntity::getStatus, WorkStatusDict.ACTIVE.getCode())
+                        .orderByAsc(WorkEntity::getSortOrder)
+                        .orderByDesc(WorkEntity::getId)
+        );
+        response.setWorks(works.stream()
+                .map(work -> buildSortWorkItem(work, work.getSortOrder()))
+                .toList());
+        response.setTotal(response.getWorks().size());
+        return response;
     }
 
     /**
@@ -552,6 +636,36 @@ public class MineWorkService {
     }
 
     /**
+     * 批量检查作品是否可删除。
+     *
+     * @param request 批量删除请求
+     * @return 批量删除检查响应
+     */
+    public MineWorkBatchDeleteCheckResponse checkDeleteWorks(MineWorkBatchDeleteRequest request) {
+        Long userId = AuthContextHolder.requireUserId();
+        List<Long> workIds = normalizeWorkIds(request == null ? null : request.getWorkIds());
+        if (workIds.isEmpty()) {
+            throw new BusinessException(MineWorkMessage.WORK_EMPTY_MESSAGE);
+        }
+        List<WorkEntity> works = findOwnedWorks(userId, workIds);
+        ensureAllWorksOwned(workIds, works);
+        Map<Long, Long> referenceCounts = buildWorkReferenceCounts(works);
+        MineWorkBatchDeleteCheckResponse response = new MineWorkBatchDeleteCheckResponse();
+        response.setTotal(works.size());
+        for (WorkEntity work : orderWorksByIds(workIds, works)) {
+            long referenceCount = referenceCounts.getOrDefault(work.getId(), 0L);
+            MineWorkBatchDeleteCheckResponse.Item item = buildBatchDeleteCheckItem(work, referenceCount);
+            response.getItems().add(item);
+            if (item.isCanDelete()) {
+                response.setDeletableCount(response.getDeletableCount() + 1);
+            } else {
+                response.setBlockedCount(response.getBlockedCount() + 1);
+            }
+        }
+        return response;
+    }
+
+    /**
      * 删除作品。
      *
      * @param workId 作品 ID
@@ -563,21 +677,42 @@ public class MineWorkService {
         if (referenceCount > 0L) {
             throw new BusinessException(buildDeleteMessage(referenceCount));
         }
-        LocalDateTime now = LocalDateTime.now();
-        deleteWorkTagRelations(work.getUserId(), work.getId());
-        int updated = workEntityMapper.update(
-                new WorkEntity(),
-                new UpdateWrapper<WorkEntity>()
-                        .set(WORK_COLUMN_DELETED_AT, now)
-                        .set(WORK_COLUMN_DELETED, work.getId())
-                        .eq(WORK_COLUMN_ID, work.getId())
-                        .eq(WORK_COLUMN_USER_ID, work.getUserId())
-                        .eq(WORK_COLUMN_DELETED, 0L)
-        );
-        if (updated <= 0) {
-            throw new BusinessException(MineWorkMessage.WORK_DELETE_FAILED_MESSAGE);
+        deleteOwnedWork(work);
+    }
+
+    /**
+     * 批量删除作品；被作品集引用的作品会保留并返回失败项。
+     *
+     * @param request 批量删除请求
+     * @return 批量删除结果
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public MineWorkBatchDeleteResponse deleteWorks(MineWorkBatchDeleteRequest request) {
+        Long userId = AuthContextHolder.requireUserId();
+        List<Long> workIds = normalizeWorkIds(request == null ? null : request.getWorkIds());
+        if (workIds.isEmpty()) {
+            throw new BusinessException(MineWorkMessage.WORK_EMPTY_MESSAGE);
         }
-        deleteWorkCosObjectsAfterCommit(work);
+        List<WorkEntity> works = findOwnedWorks(userId, workIds);
+        ensureAllWorksOwned(workIds, works);
+        Map<Long, Long> referenceCounts = buildWorkReferenceCounts(works);
+        MineWorkBatchDeleteResponse response = new MineWorkBatchDeleteResponse();
+        for (WorkEntity work : orderWorksByIds(workIds, works)) {
+            long referenceCount = referenceCounts.getOrDefault(work.getId(), 0L);
+            MineWorkBatchDeleteResponse.Item item = buildBatchDeleteItem(work, referenceCount);
+            if (referenceCount <= 0L) {
+                deleteOwnedWork(work);
+                item.setSuccess(true);
+                item.setMessage(BATCH_DELETE_SUCCESS_MESSAGE);
+                response.setSuccessCount(response.getSuccessCount() + 1);
+            } else {
+                item.setSuccess(false);
+                item.setMessage(buildDeleteMessage(referenceCount));
+                response.setFailedCount(response.getFailedCount() + 1);
+            }
+            response.getItems().add(item);
+        }
+        return response;
     }
 
     /**
@@ -1423,6 +1558,21 @@ public class MineWorkService {
     }
 
     /**
+     * 构造作品在当前标签下的排序值映射。
+     *
+     * @param relations 标签关系
+     * @return 作品排序值映射
+     */
+    private Map<Long, Integer> buildRelationSortOrderMap(List<WorkTagEntity> relations) {
+        return relations.stream()
+                .collect(Collectors.toMap(
+                        WorkTagEntity::getWorkId,
+                        relation -> relation.getSortOrder() == null ? 0 : relation.getSortOrder(),
+                        (left, right) -> left,
+                        LinkedHashMap::new));
+    }
+
+    /**
      * 批量统计本页作品引用数量。
      *
      * @param works 本页作品
@@ -1542,13 +1692,39 @@ public class MineWorkService {
      * @return 作品 ID
      */
     private List<Long> findWorkIdsByTag(Long userId, Long tagId) {
-        return workTagEntityMapper.selectList(
-                        Wrappers.lambdaQuery(WorkTagEntity.class)
-                                .eq(WorkTagEntity::getUserId, userId)
-                                .eq(WorkTagEntity::getTagId, tagId))
+        return findRelationsForTag(userId, tagId)
                 .stream()
                 .map(WorkTagEntity::getWorkId)
                 .toList();
+    }
+
+    /**
+     * 查询当前用户指定标签下的作品关系，按标签内排序返回。
+     *
+     * @param userId 当前用户 ID
+     * @param tagId 标签 ID
+     * @return 标签作品关系
+     */
+    private List<WorkTagEntity> findRelationsForTag(Long userId, Long tagId) {
+        return workTagEntityMapper.selectList(
+                Wrappers.lambdaQuery(WorkTagEntity.class)
+                        .eq(WorkTagEntity::getUserId, userId)
+                        .eq(WorkTagEntity::getTagId, tagId)
+                        .orderByAsc(WorkTagEntity::getSortOrder)
+                        .orderByDesc(WorkTagEntity::getWorkId)
+        );
+    }
+
+    /**
+     * 构造按作品 ID 列表顺序排序的 SQL 片段。
+     *
+     * @param workIds 作品 ID
+     * @return SQL 排序片段
+     */
+    private String buildWorkIdOrderClause(List<Long> workIds) {
+        return SQL_ORDER_BY_FIELD_ID_PREFIX
+                + workIds.stream().map(String::valueOf).collect(Collectors.joining(","))
+                + SQL_FUNCTION_SUFFIX;
     }
 
     /**
@@ -1810,6 +1986,193 @@ public class MineWorkService {
             itemMap.put(item.getWorkId(), item);
         }
         return List.copyOf(itemMap.values());
+    }
+
+    /**
+     * 归一化排序范围；空值兼容旧版全局排序接口。
+     *
+     * @param scope 排序范围
+     * @return 排序范围
+     */
+    private String normalizeSortScope(String scope) {
+        String value = normalizeText(scope).toUpperCase(Locale.ROOT);
+        return SORT_SCOPE_TAG.equals(value) ? SORT_SCOPE_TAG : SORT_SCOPE_ALL;
+    }
+
+    /**
+     * 更新标签内作品排序。
+     *
+     * @param userId 当前用户 ID
+     * @param tagId 标签 ID
+     * @param validItems 排序项
+     */
+    private void sortTagWorks(Long userId, Long tagId, List<MineWorkSortRequest.Item> validItems) {
+        if (tagId == null) {
+            throw new BusinessException(SORT_TAG_REQUIRED_MESSAGE);
+        }
+        requireOwnedActiveTag(userId, tagId);
+        List<Long> workIds = validItems.stream()
+                .map(MineWorkSortRequest.Item::getWorkId)
+                .toList();
+        Map<Long, WorkEntity> ownedWorkMap = buildOwnedWorkMap(userId, workIds);
+        if (ownedWorkMap.size() != workIds.size()) {
+            throw new BusinessException(MineWorkMessage.WORK_NOT_FOUND_MESSAGE);
+        }
+        Set<Long> relationWorkIds = findRelationsForTag(userId, tagId).stream()
+                .map(WorkTagEntity::getWorkId)
+                .collect(Collectors.toSet());
+        if (!relationWorkIds.containsAll(workIds)) {
+            throw new BusinessException(SORT_TAG_WORK_MISMATCH_MESSAGE);
+        }
+        workTagEntityMapper.updateSortOrders(userId, tagId, validItems);
+    }
+
+    /**
+     * 归一化作品 ID 列表，过滤空值并保持首次出现顺序。
+     *
+     * @param workIds 原始作品 ID
+     * @return 有效作品 ID
+     */
+    private List<Long> normalizeWorkIds(List<Long> workIds) {
+        if (workIds == null || workIds.isEmpty()) {
+            return List.of();
+        }
+        return workIds.stream()
+                .filter(id -> id != null && id > 0L)
+                .collect(Collectors.toCollection(LinkedHashSet::new))
+                .stream()
+                .toList();
+    }
+
+    /**
+     * 查询当前用户作品集合。
+     *
+     * @param userId 当前用户 ID
+     * @param workIds 作品 ID
+     * @return 当前用户作品
+     */
+    private List<WorkEntity> findOwnedWorks(Long userId, List<Long> workIds) {
+        if (workIds.isEmpty()) {
+            return List.of();
+        }
+        return workEntityMapper.selectBatchIds(workIds).stream()
+                .filter(work -> work != null && userId.equals(work.getUserId()))
+                .toList();
+    }
+
+    /**
+     * 构造当前用户作品映射。
+     *
+     * @param userId 当前用户 ID
+     * @param workIds 作品 ID
+     * @return 作品映射
+     */
+    private Map<Long, WorkEntity> buildOwnedWorkMap(Long userId, List<Long> workIds) {
+        return findOwnedWorks(userId, workIds).stream()
+                .collect(Collectors.toMap(WorkEntity::getId, work -> work, (left, right) -> left, LinkedHashMap::new));
+    }
+
+    /**
+     * 校验提交作品均归属当前用户。
+     *
+     * @param workIds 请求作品 ID
+     * @param works 查询到的作品
+     */
+    private void ensureAllWorksOwned(List<Long> workIds, List<WorkEntity> works) {
+        Set<Long> ownedIds = works.stream()
+                .map(WorkEntity::getId)
+                .collect(Collectors.toSet());
+        if (ownedIds.size() != workIds.size() || !ownedIds.containsAll(workIds)) {
+            throw new BusinessException(MineWorkMessage.WORK_NOT_FOUND_MESSAGE);
+        }
+    }
+
+    /**
+     * 按请求顺序排列作品。
+     *
+     * @param workIds 请求作品 ID
+     * @param works 作品列表
+     * @return 排序后的作品
+     */
+    private List<WorkEntity> orderWorksByIds(List<Long> workIds, List<WorkEntity> works) {
+        Map<Long, WorkEntity> workMap = works.stream()
+                .collect(Collectors.toMap(WorkEntity::getId, work -> work, (left, right) -> left, LinkedHashMap::new));
+        return workIds.stream()
+                .map(workMap::get)
+                .filter(work -> work != null)
+                .toList();
+    }
+
+    /**
+     * 构造排序作品项。
+     *
+     * @param work 作品
+     * @param sortOrder 当前排序值
+     * @return 排序作品项
+     */
+    private MineWorkSortItemsResponse.SortWorkItem buildSortWorkItem(WorkEntity work, Integer sortOrder) {
+        MineWorkSortItemsResponse.SortWorkItem item = new MineWorkSortItemsResponse.SortWorkItem();
+        item.setId(work.getId());
+        item.setMediaType(work.getMediaType());
+        item.setTitle(work.getTitle());
+        item.setCoverUrl(hasText(work.getCoverObjectKey()) ? cosService.publicUrl(work.getCoverObjectKey()) : "");
+        item.setSortOrder(sortOrder);
+        return item;
+    }
+
+    /**
+     * 构造批量删除检查项。
+     *
+     * @param work 作品
+     * @param referenceCount 引用次数
+     * @return 检查项
+     */
+    private MineWorkBatchDeleteCheckResponse.Item buildBatchDeleteCheckItem(WorkEntity work, long referenceCount) {
+        MineWorkBatchDeleteCheckResponse.Item item = new MineWorkBatchDeleteCheckResponse.Item();
+        item.setWorkId(work.getId());
+        item.setTitle(work.getTitle());
+        item.setReferenceCount(referenceCount);
+        item.setCanDelete(referenceCount <= 0L);
+        item.setMessage(buildDeleteMessage(referenceCount));
+        return item;
+    }
+
+    /**
+     * 构造批量删除结果项。
+     *
+     * @param work 作品
+     * @param referenceCount 引用次数
+     * @return 删除结果项
+     */
+    private MineWorkBatchDeleteResponse.Item buildBatchDeleteItem(WorkEntity work, long referenceCount) {
+        MineWorkBatchDeleteResponse.Item item = new MineWorkBatchDeleteResponse.Item();
+        item.setWorkId(work.getId());
+        item.setTitle(work.getTitle());
+        item.setReferenceCount(referenceCount);
+        return item;
+    }
+
+    /**
+     * 删除已确认归属且无引用的作品。
+     *
+     * @param work 作品
+     */
+    private void deleteOwnedWork(WorkEntity work) {
+        LocalDateTime now = LocalDateTime.now();
+        deleteWorkTagRelations(work.getUserId(), work.getId());
+        int updated = workEntityMapper.update(
+                new WorkEntity(),
+                new UpdateWrapper<WorkEntity>()
+                        .set(WORK_COLUMN_DELETED_AT, now)
+                        .set(WORK_COLUMN_DELETED, work.getId())
+                        .eq(WORK_COLUMN_ID, work.getId())
+                        .eq(WORK_COLUMN_USER_ID, work.getUserId())
+                        .eq(WORK_COLUMN_DELETED, 0L)
+        );
+        if (updated <= 0) {
+            throw new BusinessException(MineWorkMessage.WORK_DELETE_FAILED_MESSAGE);
+        }
+        deleteWorkCosObjectsAfterCommit(work);
     }
 
     /**

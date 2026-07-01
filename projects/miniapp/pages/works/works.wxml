@@ -1,7 +1,7 @@
 <view class="page-shell works-page">
   <navigation-bar title="作品" back="{{false}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
 
-  <scroll-view class="works-scroll" scroll-y type="list" bindscrolltolower="handleScrollToLower">
+  <view class="works-scroll">
     <view class="works-content" bindtap="handleCloseTagManageMode">
       <view class="search-panel">
         <view class="search-box">
@@ -15,6 +15,9 @@
             bindinput="handleSearchInput"
             bindconfirm="handleSearchConfirm"
           />
+          <view class="search-clear" wx:if="{{keyword}}" catchtap="handleClearSearch" aria-role="button" aria-label="清空搜索">
+            <text class="search-clear-mark">×</text>
+          </view>
         </view>
       </view>
 
@@ -26,7 +29,7 @@
                 wx:for="{{list.filterTags}}"
                 wx:key="id"
                 class="tag-pill {{(!selectedTagId && !item.id) || selectedTagId === item.id ? 'active' : ''}} {{tagManageMode && item.id ? 'manage' : ''}}"
-                style="{{item.style}}"
+                style="{{((!selectedTagId && !item.id) || selectedTagId === item.id) ? item.activeStyle : item.style}}"
                 data-id="{{item.id}}"
                 bindtap="handleTagTap"
                 bindlongpress="handleTagLongPress"
@@ -51,7 +54,10 @@
       <view class="library-panel">
         <view class="list-heading">
           <view class="section-title">素材库</view>
-          <button class="text-action {{batchMode ? 'active' : ''}}" bindtap="handleBatchTap">批量管理</button>
+          <view class="list-actions">
+            <button class="text-action {{batchMode ? 'active' : ''}}" bindtap="handleBatchTap">{{batchMode ? '完成' : '批量管理'}}</button>
+            <view class="tag-add-button work-add-button" catchtap="handleAddTap" aria-role="button" aria-label="添加作品">+</view>
+          </view>
         </view>
 
         <view wx:if="{{loading}}" class="component-loading">
@@ -78,76 +84,171 @@
             <view class="empty-desc">从相册选择图片或视频，整理为可复用的作品素材</view>
           </view>
 
-          <view wx:else class="work-list">
-            <view
-              wx:for="{{list.works}}"
-              wx:for-index="workIndex"
-              wx:key="id"
-              class="work-swipe-row {{revealedWorkId === item.id ? 'revealed' : ''}}"
-              data-id="{{item.id}}"
-              bindtouchstart="handleWorkTouchStart"
-              bindtouchmove="handleWorkTouchMove"
-              bindtouchend="handleWorkTouchEnd"
-              bindtouchcancel="handleWorkTouchCancel"
-            >
-              <view class="work-delete-pane">
-                <button
-                  class="work-delete-button"
-                  loading="{{deletingWorkId === item.id}}"
-                  disabled="{{deletingWorkId === item.id}}"
-                  data-id="{{item.id}}"
-                  catchtap="handleDeleteWorkTap"
-                >删除</button>
-              </view>
+          <scroll-view wx:else class="work-list-scroll" scroll-y type="list" bindscrolltolower="handleScrollToLower">
+            <view class="work-list">
               <view
-                class="work-card"
+                wx:for="{{list.works}}"
+                wx:for-index="workIndex"
+                wx:key="id"
+                class="work-swipe-row {{revealedWorkId === item.id ? 'revealed' : ''}} {{batchMode ? 'batch-mode' : ''}}"
                 data-id="{{item.id}}"
-                bindtap="handleWorkTap"
+                bindtouchstart="handleWorkTouchStart"
+                bindtouchmove="handleWorkTouchMove"
+                bindtouchend="handleWorkTouchEnd"
+                bindtouchcancel="handleWorkTouchCancel"
               >
-                <view class="thumb">
-                  <image wx:if="{{item.hasCover}}" src="{{item.coverUrl}}" mode="aspectFill"></image>
-                  <view wx:else class="thumb-placeholder">{{item.typeText}}</view>
-                  <view wx:if="{{item.mediaType === 'VIDEO'}}" class="play-badge"></view>
-                  <view wx:else class="thumb-order">{{workIndex + 1}}</view>
+                <view class="work-delete-pane">
+                  <button
+                    class="work-delete-button"
+                    loading="{{deletingWorkId === item.id}}"
+                    disabled="{{deletingWorkId === item.id}}"
+                    data-id="{{item.id}}"
+                    catchtap="handleDeleteWorkTap"
+                  >删除</button>
                 </view>
-                <view class="work-copy">
-                  <view class="work-title">{{item.title}}</view>
-                  <view class="work-meta">
-                    <text>{{item.typeText}}</text>
-                    <text wx:if="{{item.durationText}}"> · {{item.durationText}}</text>
-                    <text> / {{item.tagText}}</text>
+                <view
+                  class="work-card {{item.selected ? 'selected' : ''}}"
+                  data-id="{{item.id}}"
+                  bindtap="handleWorkTap"
+                >
+                  <view wx:if="{{batchMode}}" class="work-select {{item.selected ? 'selected' : ''}}">
+                    <view class="work-select-dot"></view>
                   </view>
-                  <view class="reference-pill {{item.referenceCount > 0 ? 'used' : ''}}">{{item.referenceText}}</view>
+                  <view class="thumb">
+                    <image wx:if="{{item.hasCover}}" src="{{item.coverUrl}}" mode="aspectFill"></image>
+                    <view wx:else class="thumb-placeholder">{{item.typeText}}</view>
+                    <view
+                      wx:if="{{item.mediaType === 'VIDEO'}}"
+                      class="play-badge"
+                      data-id="{{item.id}}"
+                      catchtap="handlePlayVideoTap"
+                      aria-role="button"
+                      aria-label="播放视频"
+                    ></view>
+                  </view>
+                  <view class="work-copy">
+                    <view class="work-title">{{item.title}}</view>
+                    <view class="work-meta">
+                      <text>{{item.typeText}}</text>
+                      <text wx:if="{{item.durationText}}"> · {{item.durationText}}</text>
+                      <text> / {{item.tagText}}</text>
+                    </view>
+                    <view class="reference-pill {{item.referenceCount > 0 ? 'used' : ''}}">{{item.referenceText}}</view>
+                  </view>
+                  <view class="card-arrow"></view>
                 </view>
-                <view class="card-arrow"></view>
               </view>
-            </view>
 
-            <view wx:if="{{loadingMore}}" class="loading-more">加载更多作品</view>
-            <view wx:if="{{!list.hasMore && list.works.length > 0}}" class="list-end">已显示全部作品</view>
-          </view>
+              <view wx:if="{{loadingMore}}" class="loading-more">加载更多作品</view>
+              <view wx:if="{{!list.hasMore && list.works.length > 0}}" class="list-end">已显示全部作品</view>
+            </view>
+          </scroll-view>
         </block>
       </view>
 
-      <button wx:if="{{!loading && !errorMessage}}" class="primary-button full page-add-button" bindtap="handleAddTap">添加作品</button>
-
-      <view class="batch-panel" wx:if="{{!loading && !errorMessage}}">
+      <view class="batch-panel" wx:if="{{batchMode && !loading && !errorMessage}}">
         <view class="batch-heading">
-          <view>
+          <view class="batch-copy">
             <view class="batch-title">批量动作</view>
-            <view class="batch-desc">选择多个作品后可统一加入作品集或调整排序</view>
+            <view class="batch-desc">选择多个作品后可统一删除，作品集入口先保留位置</view>
           </view>
-          <view class="batch-count">0 已选</view>
+          <view class="batch-heading-actions">
+            <view class="batch-count">{{batchSelectedCountText}}</view>
+            <button class="batch-select-all" bindtap="handleSelectAllBatchTap">{{batchSelectAllText}}</button>
+          </view>
         </view>
         <view class="batch-actions">
-          <button class="batch-action" bindtap="handleBatchTap">加入作品集</button>
-          <button class="batch-action" bindtap="handleBatchTap">调整排序</button>
+          <button class="batch-action danger" loading="{{batchDeleting}}" disabled="{{batchDeleting}}" bindtap="handleBatchDeleteTap">删除</button>
+          <button class="batch-action muted" bindtap="handleBatchPortfolioTap">加入作品集</button>
+          <button class="batch-action" bindtap="handleOpenSortMode">调整排序</button>
         </view>
       </view>
     </view>
-  </scroll-view>
+  </view>
 
-  <view class="tag-dialog" wx:if="{{tagDialogVisible}}">
+  <view class="sort-mode-mask {{sortMode ? 'visible' : ''}}" catchtap="handleCloseSortMode">
+    <view class="sort-mode-panel" catchtap="handleEditPanelTap">
+      <view class="sort-mode-grabber"></view>
+      <view class="sort-mode-heading">
+        <view>
+          <view class="sort-mode-title">{{sortTitle}}</view>
+          <view class="sort-mode-desc">调整完成后保存生效</view>
+        </view>
+        <view class="sort-mode-count">{{sortWorks.length}} 个</view>
+      </view>
+
+      <view wx:if="{{sortLoading}}" class="component-loading compact">
+        <view class="loading-spinner"></view>
+        <view class="loading-copy">排序列表加载中</view>
+      </view>
+
+      <view wx:elif="{{sortErrorText}}" class="inline-empty">
+        <view class="empty-title small">排序列表加载失败</view>
+        <view class="empty-desc">{{sortErrorText}}</view>
+        <button class="primary-button compact" bindtap="handleOpenSortMode">重试</button>
+      </view>
+
+      <scroll-view wx:else class="sort-work-scroll" scroll-y="{{!sortDraggingWorkId}}" type="list">
+        <view class="sort-work-list">
+          <view
+            wx:for="{{sortWorks}}"
+            wx:for-index="sortIndex"
+            wx:key="id"
+            class="sort-work-row {{sortDraggingWorkId === item.id ? 'dragging' : ''}}"
+            style="{{sortDraggingWorkId === item.id ? sortDragStyle : ''}}"
+            data-index="{{sortIndex}}"
+            data-id="{{item.id}}"
+            bindlongpress="handleSortDragStart"
+            bindtouchmove="handleSortDragMove"
+            bindtouchend="handleSortDragEnd"
+            bindtouchcancel="handleSortDragCancel"
+          >
+            <view class="sort-work-order">{{sortIndex + 1}}</view>
+            <view class="sort-work-thumb">
+              <image wx:if="{{item.hasCover}}" src="{{item.coverUrl}}" mode="aspectFill"></image>
+              <view wx:else class="thumb-placeholder">{{item.typeText}}</view>
+            </view>
+            <view class="sort-work-copy">
+              <view class="sort-work-title">{{item.title}}</view>
+              <view class="sort-work-meta">{{item.typeText}}</view>
+            </view>
+            <view class="sort-drag-handle" aria-role="button" aria-label="拖动排序">
+              <view class="sort-drag-line"></view>
+              <view class="sort-drag-line"></view>
+              <view class="sort-drag-line"></view>
+            </view>
+          </view>
+        </view>
+      </scroll-view>
+
+      <view class="sort-mode-actions">
+        <button class="work-edit-cancel" catchtap="handleCloseSortMode" disabled="{{sortSaving}}">取消</button>
+        <button class="work-edit-confirm" loading="{{sortSaving}}" catchtap="handleSaveSort" disabled="{{sortSaving || sortLoading}}">保存排序</button>
+      </view>
+    </view>
+  </view>
+
+  <view class="video-preview-mask {{videoPreviewVisible ? 'visible' : ''}}" catchtap="handleCloseVideoPreview">
+    <view class="video-preview-panel" catchtap="handleVideoPreviewPanelTap">
+      <view class="video-preview-heading">
+        <view class="video-preview-title">{{videoPreview.title}}</view>
+        <view class="video-preview-close" catchtap="handleCloseVideoPreview" aria-role="button" aria-label="关闭视频">×</view>
+      </view>
+      <video
+        id="workPreviewVideo"
+        class="video-preview-player"
+        src="{{videoPreview.src}}"
+        poster="{{videoPreview.poster}}"
+        controls="{{true}}"
+        autoplay="{{true}}"
+        show-center-play-btn="{{true}}"
+        enable-progress-gesture="{{true}}"
+        object-fit="contain"
+      ></video>
+    </view>
+  </view>
+
+  <view class="tag-dialog {{tagDialogVisible ? 'visible' : ''}}">
     <view class="tag-dialog-backdrop" bindtap="handleCloseTagDialog"></view>
     <view class="tag-dialog-panel" catchtap="handleFilterShellTap">
       <view class="tag-dialog-grabber"></view>
@@ -193,7 +294,7 @@
     </view>
   </view>
 
-  <view class="work-edit-mask image-edit-mask" wx:if="{{imageEditSheetVisible}}" catchtap="handleCloseImageEditor">
+  <view class="work-edit-mask image-edit-mask {{imageEditSheetVisible ? 'visible' : ''}}" catchtap="handleCloseImageEditor">
     <view class="work-edit-panel" catchtap="handleEditPanelTap">
       <view class="work-edit-grabber"></view>
       <view class="work-edit-heading">
@@ -251,7 +352,7 @@
     </view>
   </view>
 
-  <view class="work-edit-mask video-edit-mask" wx:if="{{videoEditSheetVisible}}" catchtap="handleCloseVideoEditor">
+  <view class="work-edit-mask video-edit-mask {{videoEditSheetVisible ? 'visible' : ''}}" catchtap="handleCloseVideoEditor">
     <view class="work-edit-panel" catchtap="handleEditPanelTap">
       <view class="work-edit-grabber"></view>
       <view class="work-edit-heading">

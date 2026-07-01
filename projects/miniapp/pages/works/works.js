@@ -22,11 +22,19 @@ const WORK_TAGS_API_URL = '/api/mine/works/tags'
 const WORK_TAG_DELETE_API_PREFIX = '/api/mine/works/tags/delete'
 const WORKS_API_PREFIX = '/api/mine/works'
 const WORK_DELETE_API_PREFIX = '/api/mine/works/delete'
+const WORK_BATCH_DELETE_CHECK_API_URL = '/api/mine/works/delete-check'
+const WORK_BATCH_DELETE_API_URL = '/api/mine/works/delete'
+const WORK_SORT_ITEMS_API_URL = '/api/mine/works/sort-items'
+const WORK_SORT_API_URL = '/api/mine/works/sort'
 const EDIT_COVER_CLIENT_PREFIX = 'edit-work'
 const SWIPE_REVEAL_THRESHOLD = -32
 const SWIPE_CLOSE_THRESHOLD = 24
 const SWIPE_VERTICAL_TOLERANCE = 48
 const DELETE_CONFIRM_COLOR = '#a9354f'
+const SORT_SCOPE_ALL = 'ALL'
+const SORT_SCOPE_TAG = 'TAG'
+const SORT_ORDER_STEP = 1000
+const SORT_DRAG_SCALE = 1.015
 
 function clampNumber(value, min, max) {
   const numberValue = Number(value)
@@ -104,9 +112,75 @@ function buildWorkDeleteBlockedMessage(checkResult = {}, work = {}) {
   return '作品已被作品集引用，请先从作品集中移除'
 }
 
+function hasSelectedWork(selectedIds = [], workId) {
+  return selectedIds.some((id) => id === workId)
+}
+
+function getVisibleWorkIds(works = []) {
+  return works
+    .map((work) => work && work.id)
+    .filter(Boolean)
+}
+
+function mergeSelectedWorkIds(selectedIds = [], workIds = []) {
+  return workIds.reduce((result, workId) => (
+    hasSelectedWork(result, workId) ? result : result.concat(workId)
+  ), selectedIds.slice())
+}
+
+function buildBatchSelectAllText(works = [], selectedIds = []) {
+  const visibleWorkIds = getVisibleWorkIds(works)
+  if (!visibleWorkIds.length) {
+    return '全选'
+  }
+  return visibleWorkIds.every((workId) => hasSelectedWork(selectedIds, workId)) ? '取消全选' : '全选'
+}
+
+function applyWorkSelections(works = [], selectedIds = []) {
+  return works.map((work) => Object.assign({}, work, {
+    selected: hasSelectedWork(selectedIds, work.id)
+  }))
+}
+
+function normalizeSortWorks(raw = {}) {
+  return normalizeWorkList({
+    works: Array.isArray(raw.works) ? raw.works : []
+  }).works
+}
+
+function readTouchClientY(event = {}) {
+  const touch = (event.touches && event.touches[0]) || (event.changedTouches && event.changedTouches[0]) || {}
+  const clientY = Number(touch.clientY)
+  return Number.isFinite(clientY) ? clientY : null
+}
+
+function resolveSortTargetIndex(rects = [], clientY) {
+  if (!Array.isArray(rects) || !rects.length || !Number.isFinite(clientY)) {
+    return -1
+  }
+  for (let index = 0; index < rects.length; index += 1) {
+    const rect = rects[index] || {}
+    const top = Number(rect.top)
+    const height = Number(rect.height)
+    if (!Number.isFinite(top) || !Number.isFinite(height)) {
+      continue
+    }
+    if (clientY < top + height / 2) {
+      return index
+    }
+  }
+  return rects.length - 1
+}
+
+function buildSortDragStyle(offsetY = 0) {
+  const roundedOffset = Math.round(Number(offsetY) || 0)
+  return `transform: translate3d(0, ${roundedOffset}px, 0) scale(${SORT_DRAG_SCALE}); transition: transform 80ms linear, box-shadow 160ms ease, border-color 160ms ease, background 160ms ease; z-index: 2;`
+}
+
 Page({
   requestSeq: 0,
   uploadTasks: {},
+  sortDragRects: [],
 
   data: {
     loading: true,
@@ -115,6 +189,10 @@ Page({
     keyword: '',
     selectedTagId: null,
     batchMode: false,
+    selectedWorkIds: [],
+    batchSelectedCountText: '0 已选',
+    batchSelectAllText: '全选',
+    batchDeleting: false,
     revealedWorkId: null,
     workTouchStart: null,
     deletingWorkId: null,
@@ -141,6 +219,20 @@ Page({
     videoFrameTimeText: '00:00',
     videoFrameExporting: false,
     videoEditErrorText: '',
+    videoPreviewVisible: false,
+    videoPreview: null,
+    sortMode: false,
+    sortScope: SORT_SCOPE_ALL,
+    sortTagId: null,
+    sortTitle: '调整作品顺序',
+    sortWorks: [],
+    sortLoading: false,
+    sortSaving: false,
+    sortErrorText: '',
+    sortDraggingWorkId: null,
+    sortDragStartY: null,
+    sortDragOffsetY: 0,
+    sortDragStyle: '',
     tabs: [
       { key: 'schedule', label: '档期', icon: 'schedule' },
       { key: 'work', label: '作品', icon: 'work', active: true },
@@ -198,15 +290,17 @@ Page({
         return
       }
       const normalized = normalizeWorkList(response)
+      normalized.works = applyWorkSelections(normalized.works, this.data.selectedWorkIds)
       if (!reset) {
-        normalized.works = currentList.works.concat(normalized.works)
+        normalized.works = applyWorkSelections(currentList.works.concat(normalized.works), this.data.selectedWorkIds)
         normalized.empty = normalized.works.length === 0
       }
       this.setData({
         list: normalized,
         loading: false,
         loadingMore: false,
-        errorMessage: ''
+        errorMessage: '',
+        batchSelectAllText: buildBatchSelectAllText(normalized.works, this.data.selectedWorkIds)
       })
     } catch (error) {
       if (error && error.authRequired) {
@@ -245,6 +339,16 @@ Page({
     this.loadWorks(true)
   },
 
+  handleClearSearch() {
+    if (!this.data.keyword) {
+      return
+    }
+    this.setData({
+      keyword: ''
+    })
+    this.loadWorks(true)
+  },
+
   handleFilterShellTap() {
   },
 
@@ -258,6 +362,9 @@ Page({
   },
 
   handleTagTap(event) {
+    if (this.data.sortMode) {
+      return
+    }
     const tagId = normalizeId(event.currentTarget.dataset.id)
     if (this.data.tagManageMode && tagId) {
       this.openTagDialog('edit', this.findTagById(tagId))
@@ -265,7 +372,12 @@ Page({
     }
     this.setData({
       selectedTagId: tagId || null,
-      tagManageMode: false
+      tagManageMode: false,
+      batchMode: false,
+      selectedWorkIds: [],
+      batchSelectedCountText: '0 已选',
+      batchSelectAllText: '全选',
+      revealedWorkId: null
     })
     this.loadWorks(true)
   },
@@ -427,7 +539,7 @@ Page({
   },
 
   handleWorkTouchStart(event) {
-    if (this.data.deletingWorkId) {
+    if (this.data.deletingWorkId || this.data.batchMode || this.data.sortMode) {
       this.setData({ workTouchStart: null })
       return
     }
@@ -482,6 +594,13 @@ Page({
   handleWorkTap(event) {
     const workId = normalizeId(event.currentTarget.dataset.id)
     if (!workId) {
+      return
+    }
+    if (this.data.batchMode) {
+      this.toggleWorkSelection(workId)
+      return
+    }
+    if (this.data.sortMode) {
       return
     }
     if (this.data.revealedWorkId === workId) {
@@ -624,6 +743,45 @@ Page({
   },
 
   handleEditPanelTap() {
+  },
+
+  handleVideoPreviewPanelTap() {
+  },
+
+  handlePlayVideoTap(event) {
+    if (this.data.batchMode || this.data.sortMode) {
+      return
+    }
+    const workId = normalizeId(event.currentTarget.dataset.id)
+    const work = this.findWorkById(workId)
+    if (!work || work.mediaType !== 'VIDEO') {
+      return
+    }
+    const src = work.mediaUrl || ''
+    if (!src) {
+      wx.showToast({
+        title: '视频地址缺失',
+        icon: 'none'
+      })
+      return
+    }
+    this.setData({
+      videoPreviewVisible: true,
+      videoPreview: {
+        src,
+        poster: work.coverUrl || '',
+        title: work.title || '视频作品'
+      },
+      revealedWorkId: null,
+      tagManageMode: false
+    })
+  },
+
+  handleCloseVideoPreview() {
+    this.setData({
+      videoPreviewVisible: false,
+      videoPreview: null
+    })
   },
 
   handleCloseImageEditor() {
@@ -895,9 +1053,391 @@ Page({
   },
 
   handleBatchTap() {
+    if (this.data.sortMode) {
+      return
+    }
+    const nextBatchMode = !this.data.batchMode
     this.setData({
-      batchMode: !this.data.batchMode
+      batchMode: nextBatchMode,
+      revealedWorkId: null,
+      selectedWorkIds: nextBatchMode ? this.data.selectedWorkIds : [],
+      batchSelectedCountText: nextBatchMode ? this.data.batchSelectedCountText : '0 已选',
+      batchSelectAllText: nextBatchMode
+        ? buildBatchSelectAllText(this.data.list.works, this.data.selectedWorkIds)
+        : '全选',
+      'list.works': nextBatchMode
+        ? applyWorkSelections(this.data.list.works, this.data.selectedWorkIds)
+        : applyWorkSelections(this.data.list.works, [])
     })
+  },
+
+  toggleWorkSelection(workId) {
+    const selectedWorkIds = hasSelectedWork(this.data.selectedWorkIds, workId)
+      ? this.data.selectedWorkIds.filter((id) => id !== workId)
+      : this.data.selectedWorkIds.concat(workId)
+    this.setSelectedWorkIds(selectedWorkIds)
+  },
+
+  setSelectedWorkIds(selectedWorkIds = []) {
+    this.setData({
+      selectedWorkIds,
+      batchSelectedCountText: `${selectedWorkIds.length} 已选`,
+      batchSelectAllText: buildBatchSelectAllText(this.data.list.works, selectedWorkIds),
+      'list.works': applyWorkSelections(this.data.list.works, selectedWorkIds)
+    })
+  },
+
+  handleSelectAllBatchTap() {
+    if (!this.data.batchMode) {
+      return
+    }
+    const visibleWorkIds = getVisibleWorkIds(this.data.list.works)
+    if (!visibleWorkIds.length) {
+      return
+    }
+    const allVisibleSelected = visibleWorkIds.every((workId) => hasSelectedWork(this.data.selectedWorkIds, workId))
+    const selectedWorkIds = allVisibleSelected
+      ? this.data.selectedWorkIds.filter((workId) => !hasSelectedWork(visibleWorkIds, workId))
+      : mergeSelectedWorkIds(this.data.selectedWorkIds, visibleWorkIds)
+    this.setSelectedWorkIds(selectedWorkIds)
+  },
+
+  handleBatchPortfolioTap() {
+    wx.showToast({
+      title: '作品集编辑器接入中',
+      icon: 'none'
+    })
+  },
+
+  async handleBatchDeleteTap() {
+    if (this.data.batchDeleting) {
+      return
+    }
+    if (!this.data.selectedWorkIds.length) {
+      wx.showToast({
+        title: '请选择作品',
+        icon: 'none'
+      })
+      return
+    }
+    this.setData({ batchDeleting: true })
+    try {
+      const checkResult = await request({
+        url: WORK_BATCH_DELETE_CHECK_API_URL,
+        method: 'POST',
+        data: {
+          workIds: this.data.selectedWorkIds
+        }
+      })
+      const items = Array.isArray(checkResult && checkResult.items) ? checkResult.items : []
+      const deletableIds = items
+        .filter((item) => item && item.canDelete)
+        .map((item) => normalizeId(item.workId))
+        .filter(Boolean)
+      if (!deletableIds.length) {
+        this.setData({ batchDeleting: false })
+        const firstBlocked = items.find((item) => item && !item.canDelete) || {}
+        wx.showModal({
+          title: '无法删除',
+          content: firstBlocked.message || '所选作品已被作品集引用，请先移除引用',
+          showCancel: false,
+          confirmText: '知道了'
+        })
+        return
+      }
+      const blockedCount = Math.max(0, Number(checkResult.blockedCount || (items.length - deletableIds.length)))
+      wx.showModal({
+        title: blockedCount > 0 ? '部分作品无法删除' : '删除作品',
+        content: blockedCount > 0
+          ? `可删除 ${deletableIds.length} 个，${blockedCount} 个已被作品集引用，将保留。`
+          : `确认删除 ${deletableIds.length} 个作品？`,
+        confirmText: blockedCount > 0 ? '删除可删项' : '删除',
+        confirmColor: DELETE_CONFIRM_COLOR,
+        success: async (result) => {
+          if (!result.confirm) {
+            this.setData({ batchDeleting: false })
+            return
+          }
+          try {
+            const response = await request({
+              url: WORK_BATCH_DELETE_API_URL,
+              method: 'POST',
+              data: {
+                workIds: deletableIds
+              }
+            })
+            const successCount = Number(response && response.successCount ? response.successCount : deletableIds.length)
+            wx.showToast({
+              title: `已删除 ${successCount} 个作品`,
+              icon: 'success'
+            })
+            this.setData({
+              batchMode: false,
+              batchDeleting: false
+            })
+            this.setSelectedWorkIds([])
+            await this.loadWorks(true)
+          } catch (error) {
+            if (error && error.authRequired) {
+              this.setData({ batchDeleting: false })
+              handleAuthRequired(error.message)
+              return
+            }
+            this.setData({ batchDeleting: false })
+            wx.showToast({
+              title: error && error.message ? error.message : '作品删除失败',
+              icon: 'none',
+              duration: 2600
+            })
+          }
+        }
+      })
+    } catch (error) {
+      if (error && error.authRequired) {
+        this.setData({ batchDeleting: false })
+        handleAuthRequired(error.message)
+        return
+      }
+      this.setData({ batchDeleting: false })
+      wx.showToast({
+        title: error && error.message ? error.message : '删除检查失败',
+        icon: 'none',
+        duration: 2600
+      })
+    }
+  },
+
+  getSelectedTagName() {
+    const tag = this.findTagById(this.data.selectedTagId)
+    return tag && tag.name ? tag.name : '当前标签'
+  },
+
+  async handleOpenSortMode() {
+    if (String(this.data.keyword || '').trim()) {
+      wx.showToast({
+        title: '清空搜索后调整排序',
+        icon: 'none'
+      })
+      return
+    }
+    const sortScope = this.data.selectedTagId ? SORT_SCOPE_TAG : SORT_SCOPE_ALL
+    const sortTagId = sortScope === SORT_SCOPE_TAG ? this.data.selectedTagId : null
+    this.setData({
+      sortMode: true,
+      sortScope,
+      sortTagId,
+      sortTitle: sortScope === SORT_SCOPE_TAG ? `调整「${this.getSelectedTagName()}」顺序` : '调整全部作品顺序',
+      sortWorks: [],
+      sortLoading: true,
+      sortSaving: false,
+      sortErrorText: '',
+      sortDraggingWorkId: null,
+      sortDragStartY: null,
+      sortDragOffsetY: 0,
+      sortDragStyle: '',
+      batchMode: false,
+      revealedWorkId: null
+    })
+    this.sortDragRects = []
+    this.setSelectedWorkIds([])
+    try {
+      const response = await request({
+        url: WORK_SORT_ITEMS_API_URL,
+        data: sortTagId ? {
+          scope: sortScope,
+          tagId: sortTagId
+        } : {
+          scope: sortScope
+        }
+      })
+      this.setData({
+        sortWorks: normalizeSortWorks(response),
+        sortLoading: false,
+        sortErrorText: ''
+      })
+    } catch (error) {
+      if (error && error.authRequired) {
+        this.setData({ sortLoading: false })
+        handleAuthRequired(error.message)
+        return
+      }
+      this.setData({
+        sortLoading: false,
+        sortErrorText: error && error.message ? error.message : '排序列表加载失败'
+      })
+    }
+  },
+
+  handleCloseSortMode() {
+    if (this.data.sortSaving) {
+      return
+    }
+    this.setData({
+      sortMode: false,
+      sortWorks: [],
+      sortLoading: false,
+      sortSaving: false,
+      sortErrorText: '',
+      sortDraggingWorkId: null,
+      sortDragStartY: null,
+      sortDragOffsetY: 0,
+      sortDragStyle: ''
+    })
+    this.sortDragRects = []
+  },
+
+  moveSortWork(fromIndex, toIndex) {
+    const works = (this.data.sortWorks || []).slice()
+    if (fromIndex < 0 || fromIndex >= works.length || toIndex < 0 || toIndex >= works.length) {
+      return null
+    }
+    const [item] = works.splice(fromIndex, 1)
+    works.splice(toIndex, 0, item)
+    this.setData({ sortWorks: works })
+    return works
+  },
+
+  captureSortDragRects() {
+    if (!wx.createSelectorQuery) {
+      this.sortDragRects = []
+      return
+    }
+    try {
+      wx.createSelectorQuery()
+        .selectAll('.sort-work-row')
+        .boundingClientRect((rects) => {
+          this.sortDragRects = Array.isArray(rects) ? rects : []
+        })
+        .exec()
+    } catch (error) {
+      this.sortDragRects = []
+    }
+  },
+
+  handleSortDragStart(event) {
+    if (this.data.sortSaving || this.data.sortLoading) {
+      return
+    }
+    const index = Number(event.currentTarget.dataset.index)
+    const work = (this.data.sortWorks || [])[index]
+    if (!work) {
+      return
+    }
+    const clientY = readTouchClientY(event)
+    this.setData({
+      sortDraggingWorkId: work.id,
+      sortDragStartY: clientY,
+      sortDragOffsetY: 0,
+      sortDragStyle: buildSortDragStyle(0)
+    })
+    this.captureSortDragRects()
+  },
+
+  handleSortDragMove(event) {
+    const draggingWorkId = this.data.sortDraggingWorkId
+    if (!draggingWorkId || this.data.sortSaving || this.data.sortLoading) {
+      return
+    }
+    const works = this.data.sortWorks || []
+    const fromIndex = works.findIndex((work) => work.id === draggingWorkId)
+    if (fromIndex < 0) {
+      return
+    }
+    const clientY = readTouchClientY(event)
+    if (clientY !== null && this.data.sortDragStartY !== null) {
+      const offsetY = clientY - this.data.sortDragStartY
+      this.setData({
+        sortDragOffsetY: offsetY,
+        sortDragStyle: buildSortDragStyle(offsetY)
+      })
+    }
+    let toIndex = resolveSortTargetIndex(this.sortDragRects, clientY)
+    if (toIndex < 0) {
+      toIndex = Number(event.currentTarget.dataset.index)
+    }
+    if (!Number.isInteger(toIndex) || toIndex === fromIndex) {
+      return
+    }
+    this.moveSortWork(fromIndex, toIndex)
+  },
+
+  clearSortDragState() {
+    if (!this.data.sortDraggingWorkId) {
+      return
+    }
+    this.sortDragRects = []
+    this.setData({
+      sortDraggingWorkId: null,
+      sortDragStartY: null,
+      sortDragOffsetY: 0,
+      sortDragStyle: ''
+    })
+  },
+
+  handleSortDragEnd() {
+    this.clearSortDragState()
+  },
+
+  handleSortDragCancel() {
+    this.clearSortDragState()
+  },
+
+  async handleSaveSort() {
+    if (this.data.sortSaving || this.data.sortLoading) {
+      return
+    }
+    const items = (this.data.sortWorks || []).map((work, index) => ({
+      workId: work.id,
+      sortOrder: (index + 1) * SORT_ORDER_STEP
+    }))
+    if (!items.length) {
+      wx.showToast({
+        title: '暂无可排序作品',
+        icon: 'none'
+      })
+      return
+    }
+    this.setData({
+      sortSaving: true,
+      sortErrorText: ''
+    })
+    try {
+      await request({
+        url: WORK_SORT_API_URL,
+        method: 'POST',
+        data: {
+          scope: this.data.sortScope,
+          tagId: this.data.sortTagId || undefined,
+          items
+        }
+      })
+      wx.showToast({
+        title: '顺序已保存',
+        icon: 'success'
+      })
+      this.setData({
+        sortMode: false,
+        sortWorks: [],
+        sortSaving: false,
+        sortErrorText: '',
+        sortDraggingWorkId: null,
+        sortDragStartY: null,
+        sortDragOffsetY: 0,
+        sortDragStyle: ''
+      })
+      this.sortDragRects = []
+      await this.loadWorks(true)
+    } catch (error) {
+      if (error && error.authRequired) {
+        this.setData({ sortSaving: false })
+        handleAuthRequired(error.message)
+        return
+      }
+      this.setData({
+        sortSaving: false,
+        sortErrorText: error && error.message ? error.message : '顺序保存失败'
+      })
+    }
   },
 
   handleScrollToLower() {

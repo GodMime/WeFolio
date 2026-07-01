@@ -19,6 +19,24 @@ function readProfileRule(selector) {
   return match ? match[1] : ''
 }
 
+function assertProfileTagDialogAnimation() {
+  const tagDialogRule = readProfileRule('.tag-dialog')
+  const visibleTagDialogRule = readProfileRule('.tag-dialog.visible')
+  const tagDialogPanelRule = readProfileRule('.tag-dialog-panel')
+  const visiblePanelRule = readProfileRule('.tag-dialog.visible .tag-dialog-panel')
+
+  assert.match(tagDialogRule, /opacity:\s*0/)
+  assert.match(tagDialogRule, /pointer-events:\s*none/)
+  assert.match(tagDialogRule, /transition:[^;]*opacity\s+\d+ms/)
+  assert.match(visibleTagDialogRule, /opacity:\s*1/)
+  assert.match(visibleTagDialogRule, /pointer-events:\s*auto/)
+  assert.match(tagDialogPanelRule, /transform:/)
+  assert.match(tagDialogPanelRule, /transition:[^;]*transform\s+\d+ms/)
+  assert.match(visiblePanelRule, /transform:/)
+  assert.doesNotMatch(tagDialogPanelRule, /translateY\(32rpx\)/)
+  assert.doesNotMatch(tagDialogPanelRule, /transition:\s*transform 180ms ease/)
+}
+
 test('mine profile card navigates to basic profile page', () => {
   assert.match(appJson, /"pages\/profile\/profile"/)
   assert.match(indexJs, /handleProfileTap/)
@@ -43,7 +61,8 @@ test('basic profile page files and controls match design draft', () => {
   assert.match(profileWxml, /bindtap="handleSave"[\s\S]*>保存修改</)
   assert.match(profileWxml, /bindtap="handleLogout"[\s\S]*>退出登录</)
   assert.match(profileWxml, /bindtap="handleCancelAccount"[\s\S]*>注销账号</)
-  assert.match(profileWxml, /wx:if="{{tagDialogVisible}}"/)
+  assert.match(profileWxml, /class="tag-dialog \{\{tagDialogVisible \? 'visible' : ''\}\}"/)
+  assert.doesNotMatch(profileWxml, /wx:if="{{tagDialogVisible}}"/)
   assert.match(profileWxml, />标签颜色</)
   assert.match(profileWxml, /wx:for="{{tagColorOptions}}"/)
   assert.match(profileWxml, /bindtap="handleSelectTagColor"/)
@@ -137,6 +156,7 @@ test('profile tag dialog uses Skyline compatible bottom sheet positioning', () =
   assert.match(tagDialogPanelRule, /left:\s*0/)
   assert.match(tagDialogPanelRule, /right:\s*0/)
   assert.match(tagDialogPanelRule, /bottom:\s*0/)
+  assertProfileTagDialogAnimation()
   assert.match(colorGridRule, /display:\s*flex/)
   assert.match(colorGridRule, /flex-wrap:\s*wrap/)
   assert.doesNotMatch(colorGridRule, /display:\s*grid/)

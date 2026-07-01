@@ -91,7 +91,7 @@
     </view>
   </scroll-view>
 
-  <view class="tag-dialog" wx:if="{{tagDialogVisible}}">
+  <view class="tag-dialog {{tagDialogVisible ? 'visible' : ''}}">
     <view class="tag-dialog-backdrop" bindtap="handleCloseTagDialog"></view>
     <view class="tag-dialog-panel">
       <view class="tag-heading">

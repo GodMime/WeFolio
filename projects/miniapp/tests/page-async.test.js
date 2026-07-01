@@ -572,6 +572,47 @@ test('works page opens video edit sheet and saves video text without downloading
   assert.equal(page.data.videoEditSheetVisible, false)
 })
 
+test('works page previews video from remote url without downloading full file', async () => {
+  const fakeRequest = () => Promise.resolve({ works: [], tags: [], summary: {} })
+  let downloadCount = 0
+  const page = loadPage('pages/works/works.js', fakeRequest, {
+    downloadFile() {
+      downloadCount += 1
+    }
+  })
+  page.data.list.works = [
+    {
+      id: 18,
+      mediaType: 'VIDEO',
+      title: '片头快剪',
+      mediaUrl: 'https://cos.we-folio.dingchenyong.top/WF/work/video/film.mp4',
+      coverUrl: 'https://cos.we-folio.dingchenyong.top/WF/work/video/film-thumb.jpg'
+    }
+  ]
+
+  page.handlePlayVideoTap({
+    currentTarget: {
+      dataset: {
+        id: '18'
+      }
+    }
+  })
+
+  assert.equal(downloadCount, 0)
+  assert.equal(page.data.videoPreviewVisible, true)
+  assert.deepEqual(page.data.videoPreview, {
+    src: 'https://cos.we-folio.dingchenyong.top/WF/work/video/film.mp4',
+    poster: 'https://cos.we-folio.dingchenyong.top/WF/work/video/film-thumb.jpg',
+    title: '片头快剪'
+  })
+  assert.equal(page.data.videoEditSheetVisible, false)
+
+  page.handleCloseVideoPreview()
+
+  assert.equal(page.data.videoPreviewVisible, false)
+  assert.equal(page.data.videoPreview, null)
+})
+
 test('works page starts remote video frame selection without downloading the video', async () => {
   const fakeRequest = () => Promise.resolve({})
   const downloadUrls = []
@@ -778,6 +819,222 @@ test('works page confirms delete then refreshes work list', async () => {
   assert.equal(page.data.deletingWorkId, null)
   assert.equal(page.data.revealedWorkId, null)
   assert.equal(page.data.list.empty, true)
+})
+
+test('works page batch mode toggles selection instead of opening editors', async () => {
+  const fakeRequest = () => Promise.resolve({})
+  const page = loadPage('pages/works/works.js', fakeRequest)
+  page.data.list.works = [
+    {
+      id: 17,
+      mediaType: 'IMAGE',
+      title: '海边仪式'
+    }
+  ]
+
+  page.handleBatchTap()
+  page.handleWorkTap({
+    currentTarget: {
+      dataset: {
+        id: '17'
+      }
+    }
+  })
+
+  assert.equal(page.data.batchMode, true)
+  assert.deepEqual(page.data.selectedWorkIds, [17])
+  assert.equal(page.data.imageEditSheetVisible, false)
+  assert.equal(page.data.videoEditSheetVisible, false)
+
+  page.handleWorkTap({
+    currentTarget: {
+      dataset: {
+        id: '17'
+      }
+    }
+  })
+
+  assert.deepEqual(page.data.selectedWorkIds, [])
+})
+
+test('works page batch select all toggles loaded works', async () => {
+  const fakeRequest = () => Promise.resolve({})
+  const page = loadPage('pages/works/works.js', fakeRequest)
+  page.data.batchMode = true
+  page.data.list.works = [
+    {
+      id: 17,
+      mediaType: 'IMAGE',
+      title: '海边仪式'
+    },
+    {
+      id: 18,
+      mediaType: 'VIDEO',
+      title: '片头快剪'
+    }
+  ]
+
+  page.handleSelectAllBatchTap()
+
+  assert.deepEqual(page.data.selectedWorkIds, [17, 18])
+  assert.equal(page.data.batchSelectedCountText, '2 已选')
+  assert.equal(page.data.batchSelectAllText, '取消全选')
+  assert.equal(page.data.list.works[0].selected, true)
+  assert.equal(page.data.list.works[1].selected, true)
+
+  page.handleSelectAllBatchTap()
+
+  assert.deepEqual(page.data.selectedWorkIds, [])
+  assert.equal(page.data.batchSelectedCountText, '0 已选')
+  assert.equal(page.data.batchSelectAllText, '全选')
+  assert.equal(page.data.list.works[0].selected, false)
+  assert.equal(page.data.list.works[1].selected, false)
+})
+
+test('works page batch delete checks references then deletes allowed works', async () => {
+  const requests = []
+  const modals = []
+  const toasts = []
+  const fakeRequest = (options) => {
+    requests.push(options)
+    if (options.url === '/api/mine/works/delete-check') {
+      return Promise.resolve({
+        total: 2,
+        deletableCount: 1,
+        blockedCount: 1,
+        items: [
+          { workId: 17, canDelete: true, referenceCount: 0, message: '作品未被作品集引用，可以删除' },
+          { workId: 18, canDelete: false, referenceCount: 2, message: '作品已被 2 个作品集引用，请先从作品集中移除' }
+        ]
+      })
+    }
+    if (options.url === '/api/mine/works/delete') {
+      return Promise.resolve({
+        successCount: 1,
+        failedCount: 1,
+        items: [
+          { workId: 17, success: true, message: '已删除' },
+          { workId: 18, success: false, message: '作品已被 2 个作品集引用，请先从作品集中移除' }
+        ]
+      })
+    }
+    return Promise.resolve({
+      works: [],
+      tags: [],
+      summary: {},
+      page: 1,
+      pageSize: 20,
+      hasMore: false
+    })
+  }
+  const page = loadPage('pages/works/works.js', fakeRequest, {
+    showModal(options) {
+      modals.push(options)
+    },
+    showToast(options) {
+      toasts.push(options)
+    }
+  })
+  page.data.loading = false
+  page.data.batchMode = true
+  page.data.selectedWorkIds = [17, 18]
+
+  await page.handleBatchDeleteTap()
+  assert.equal(modals[0].title, '部分作品无法删除')
+  assert.equal(modals[0].confirmText, '删除可删项')
+  await modals[0].success({ confirm: true })
+  await flushPromises()
+
+  assert.deepEqual(requests.map((request) => `${request.method || 'GET'} ${request.url}`), [
+    'POST /api/mine/works/delete-check',
+    'POST /api/mine/works/delete',
+    'GET /api/mine/works'
+  ])
+  assert.deepEqual(requests[0].data, { workIds: [17, 18] })
+  assert.deepEqual(requests[1].data, { workIds: [17] })
+  assert.equal(toasts[0].title, '已删除 1 个作品')
+  assert.equal(page.data.batchMode, false)
+  assert.deepEqual(page.data.selectedWorkIds, [])
+})
+
+test('works page drags tag scoped sort order then saves', async () => {
+  const requests = []
+  const fakeRequest = (options) => {
+    requests.push(options)
+    if (options.url === '/api/mine/works/sort-items') {
+      return Promise.resolve({
+        scope: 'TAG',
+        tagId: 31,
+        total: 2,
+        works: [
+          { id: 12, title: '片头快剪', mediaType: 'VIDEO', sortOrder: 1000 },
+          { id: 11, title: '草坪婚礼', mediaType: 'IMAGE', sortOrder: 3000 }
+        ]
+      })
+    }
+    if (options.url === '/api/mine/works/sort') {
+      return Promise.resolve({})
+    }
+    return Promise.resolve({
+      works: [],
+      tags: [{ id: 31, name: '高端婚礼', color: '#0f766e', count: 2 }],
+      summary: {},
+      page: 1,
+      pageSize: 20,
+      hasMore: false
+    })
+  }
+  const page = loadPage('pages/works/works.js', fakeRequest)
+  page.data.loading = false
+  page.data.keyword = ''
+  page.data.selectedTagId = 31
+  page.data.list.tags = [{ id: 31, name: '高端婚礼', color: '#0f766e', count: 2 }]
+
+  await page.handleOpenSortMode()
+  page.handleSortDragStart({
+    currentTarget: {
+      dataset: {
+        index: '1'
+      }
+    },
+    touches: [
+      { clientY: 220 }
+    ]
+  })
+  page.handleSortDragMove({
+    currentTarget: {
+      dataset: {
+        index: '0'
+      }
+    },
+    touches: [
+      { clientY: 120 }
+    ]
+  })
+  assert.equal(page.data.sortDraggingWorkId, 11)
+  assert.match(page.data.sortDragStyle, /translate3d\(0,\s*-100px,\s*0\)/)
+  page.handleSortDragEnd()
+  assert.equal(page.data.sortDragStyle, '')
+  await page.handleSaveSort()
+  await flushPromises()
+
+  assert.deepEqual(requests.map((request) => `${request.method || 'GET'} ${request.url}`), [
+    'GET /api/mine/works/sort-items',
+    'POST /api/mine/works/sort',
+    'GET /api/mine/works'
+  ])
+  assert.deepEqual(requests[0].data, { scope: 'TAG', tagId: 31 })
+  assert.deepEqual(requests[1].data, {
+    scope: 'TAG',
+    tagId: 31,
+    items: [
+      { workId: 11, sortOrder: 1000 },
+      { workId: 12, sortOrder: 2000 }
+    ]
+  })
+  assert.deepEqual(page.data.sortWorks.map((work) => work.id), [])
+  assert.equal(page.data.sortDraggingWorkId, null)
+  assert.equal(page.data.sortMode, false)
 })
 
 test('team maintenance member invite closes sheet and refreshes current detail', async () => {

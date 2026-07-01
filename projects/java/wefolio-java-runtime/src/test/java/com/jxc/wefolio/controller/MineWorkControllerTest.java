@@ -2,10 +2,14 @@ package com.jxc.wefolio.controller;
 
 import com.jxc.wefolio.annotation.MaintainerAccess;
 import com.jxc.wefolio.common.Response;
+import com.jxc.wefolio.dto.MineWorkBatchDeleteCheckResponse;
+import com.jxc.wefolio.dto.MineWorkBatchDeleteRequest;
+import com.jxc.wefolio.dto.MineWorkBatchDeleteResponse;
 import com.jxc.wefolio.dto.MineWorkDeleteCheckResponse;
 import com.jxc.wefolio.dto.MineWorkDetailResponse;
 import com.jxc.wefolio.dto.MineWorkListResponse;
 import com.jxc.wefolio.dto.MineWorkSortRequest;
+import com.jxc.wefolio.dto.MineWorkSortItemsResponse;
 import com.jxc.wefolio.dto.MineWorkTagResponse;
 import com.jxc.wefolio.dto.MineWorkTagUpsertRequest;
 import com.jxc.wefolio.dto.MineWorkUpdateRequest;
@@ -53,7 +57,11 @@ class MineWorkControllerTest {
         MineWorkUploadCompleteResponse completeResponse = new MineWorkUploadCompleteResponse();
         MineWorkUpdateRequest updateRequest = new MineWorkUpdateRequest();
         MineWorkSortRequest sortRequest = new MineWorkSortRequest();
+        MineWorkSortItemsResponse sortItemsResponse = new MineWorkSortItemsResponse();
         MineWorkDeleteCheckResponse deleteCheckResponse = new MineWorkDeleteCheckResponse();
+        MineWorkBatchDeleteRequest batchDeleteRequest = new MineWorkBatchDeleteRequest();
+        MineWorkBatchDeleteCheckResponse batchDeleteCheckResponse = new MineWorkBatchDeleteCheckResponse();
+        MineWorkBatchDeleteResponse batchDeleteResponse = new MineWorkBatchDeleteResponse();
         MineWorkTagUpsertRequest createTagRequest = new MineWorkTagUpsertRequest();
         MineWorkTagUpsertRequest updateTagRequest = new MineWorkTagUpsertRequest();
         MineWorkListResponse.TagItem createdTag = new MineWorkListResponse.TagItem();
@@ -72,7 +80,10 @@ class MineWorkControllerTest {
         when(mineWorkService.createUploadTickets(ticketRequest)).thenReturn(ticketResponse);
         when(mineWorkService.completeUpload(completeRequest)).thenReturn(completeResponse);
         when(mineWorkService.updateWork(99L, updateRequest)).thenReturn(detailResponse);
+        when(mineWorkService.listSortItems("TAG", 12L)).thenReturn(sortItemsResponse);
         when(mineWorkService.checkDeleteWork(99L)).thenReturn(deleteCheckResponse);
+        when(mineWorkService.checkDeleteWorks(batchDeleteRequest)).thenReturn(batchDeleteCheckResponse);
+        when(mineWorkService.deleteWorks(batchDeleteRequest)).thenReturn(batchDeleteResponse);
 
         Response<MineWorkListResponse> listed = controller.works("草坪", 12L, 2, 10);
         Response<MineWorkTagResponse> tags = controller.tags();
@@ -83,9 +94,12 @@ class MineWorkControllerTest {
         Response<MineWorkUploadTicketResponse> ticket = controller.createUploadTickets(ticketRequest);
         Response<MineWorkUploadCompleteResponse> completed = controller.completeUpload(completeRequest);
         Response<MineWorkDetailResponse> updated = controller.updateWork(99L, updateRequest);
+        Response<MineWorkSortItemsResponse> sortItems = controller.sortItems("TAG", 12L);
         Response<Void> sorted = controller.sortWorks(sortRequest);
         Response<MineWorkDeleteCheckResponse> deleteCheck = controller.checkDeleteWork(99L);
+        Response<MineWorkBatchDeleteCheckResponse> batchDeleteCheck = controller.checkDeleteWorks(batchDeleteRequest);
         Response<Void> deleted = controller.deleteWork(99L);
+        Response<MineWorkBatchDeleteResponse> batchDeleted = controller.deleteWorks(batchDeleteRequest);
 
         assertThat(MineWorkController.class.isAnnotationPresent(MaintainerAccess.class)).isTrue();
         assertGetMapping("works", new Class<?>[] {String.class, Long.class, int.class, int.class}, "/api/mine/works");
@@ -107,8 +121,15 @@ class MineWorkControllerTest {
                 new Class<?>[] {Long.class, MineWorkUpdateRequest.class},
                 "/api/mine/works/{workId}");
         assertPostMapping("sortWorks", new Class<?>[] {MineWorkSortRequest.class}, "/api/mine/works/sort");
+        assertGetMapping("sortItems", new Class<?>[] {String.class, Long.class}, "/api/mine/works/sort-items");
         assertGetMapping("checkDeleteWork", new Class<?>[] {Long.class}, "/api/mine/works/{workId}/delete-check");
+        assertPostMapping("checkDeleteWorks",
+                new Class<?>[] {MineWorkBatchDeleteRequest.class},
+                "/api/mine/works/delete-check");
         assertPostMapping("deleteWork", new Class<?>[] {Long.class}, "/api/mine/works/delete/{workId}");
+        assertPostMapping("deleteWorks",
+                new Class<?>[] {MineWorkBatchDeleteRequest.class},
+                "/api/mine/works/delete");
         assertPostMapping("deleteTag", new Class<?>[] {Long.class}, "/api/mine/works/tags/delete/{tagId}");
         assertThat(MineWorkController.class.getMethod("works", String.class, Long.class, int.class, int.class)
                 .getParameters()[0].isAnnotationPresent(RequestParam.class)).isTrue();
@@ -123,11 +144,17 @@ class MineWorkControllerTest {
         assertThat(ticket.getData()).isSameAs(ticketResponse);
         assertThat(completed.getData()).isSameAs(completeResponse);
         assertThat(updated.getData()).isSameAs(detailResponse);
+        assertThat(sortItems.getData()).isSameAs(sortItemsResponse);
         assertThat(sorted.isSuccess()).isTrue();
         assertThat(deleteCheck.getData()).isSameAs(deleteCheckResponse);
+        assertThat(batchDeleteCheck.getData()).isSameAs(batchDeleteCheckResponse);
         assertThat(deleted.isSuccess()).isTrue();
+        assertThat(batchDeleted.getData()).isSameAs(batchDeleteResponse);
+        verify(mineWorkService).listSortItems("TAG", 12L);
         verify(mineWorkService).sortWorks(sortRequest);
+        verify(mineWorkService).checkDeleteWorks(batchDeleteRequest);
         verify(mineWorkService).deleteWork(99L);
+        verify(mineWorkService).deleteWorks(batchDeleteRequest);
         verify(mineWorkService).deleteTag(31L);
     }
 

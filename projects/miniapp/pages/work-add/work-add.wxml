@@ -86,7 +86,7 @@
     </view>
   </scroll-view>
 
-  <view class="tag-picker-mask" wx:if="{{tagPickerVisible}}" catchtap="handleCloseTagPicker">
+  <view class="tag-picker-mask {{tagPickerVisible ? 'visible' : ''}}" catchtap="handleCloseTagPicker">
     <view class="tag-picker-panel" catchtap="handleTagPickerPanelTap">
       <view class="tag-picker-grabber"></view>
       <view class="tag-picker-heading">
@@ -126,7 +126,7 @@
     </view>
   </view>
 
-  <view class="work-edit-mask" wx:if="{{editSheetVisible}}" catchtap="handleCloseFileEditor">
+  <view class="work-edit-mask {{editForm.isVideo ? 'video-edit-mask' : 'image-edit-mask'}} {{editSheetVisible ? 'visible' : ''}}" catchtap="handleCloseFileEditor">
     <view class="work-edit-panel" catchtap="handleEditPanelTap">
       <view class="work-edit-grabber"></view>
       <view class="work-edit-heading">
