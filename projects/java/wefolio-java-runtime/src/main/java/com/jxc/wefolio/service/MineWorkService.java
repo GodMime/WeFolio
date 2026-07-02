@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
 import com.jxc.wefolio.dict.MediaTypeDict;
+import com.jxc.wefolio.dict.PortfolioConfigScopeDict;
 import com.jxc.wefolio.dict.ReferenceTypeDict;
 import com.jxc.wefolio.dict.UserStatusDict;
 import com.jxc.wefolio.dict.WfTagStatusDict;
@@ -1821,7 +1822,10 @@ public class MineWorkService {
                 .collect(Collectors.groupingBy(
                         PortfolioReferenceEntity::getReferenceId,
                         LinkedHashMap::new,
-                        Collectors.counting()));
+                        Collectors.mapping(
+                                PortfolioReferenceEntity::getPortfolioId,
+                                Collectors.collectingAndThen(Collectors.toSet(), set -> (long) set.size())
+                        )));
     }
 
     /**
@@ -1992,12 +1996,39 @@ public class MineWorkService {
      * @return 引用列表
      */
     private List<PortfolioReferenceEntity> findWorkReferences(Long workId) {
-        return portfolioReferenceEntityMapper.selectList(
+        List<PortfolioReferenceEntity> references = portfolioReferenceEntityMapper.selectList(
                 Wrappers.lambdaQuery(PortfolioReferenceEntity.class)
                         .eq(PortfolioReferenceEntity::getReferenceType, ReferenceTypeDict.WORK.getCode())
                         .eq(PortfolioReferenceEntity::getReferenceId, workId)
                         .eq(PortfolioReferenceEntity::getIsValid, 1)
         );
+        return references.stream()
+                .collect(Collectors.toMap(
+                        PortfolioReferenceEntity::getPortfolioId,
+                        reference -> reference,
+                        this::preferPublishedReference,
+                        LinkedHashMap::new
+                ))
+                .values()
+                .stream()
+                .toList();
+    }
+
+    /**
+     * 同一作品集草稿和正式同时引用时，优先保留正式引用用于删除阻断文案。
+     *
+     * @param first 已收集引用
+     * @param second 新引用
+     * @return 更适合作为明细展示的引用
+     */
+    private PortfolioReferenceEntity preferPublishedReference(
+            PortfolioReferenceEntity first,
+            PortfolioReferenceEntity second
+    ) {
+        if (PortfolioConfigScopeDict.PUBLISHED.getCode().equals(second.getConfigScope())) {
+            return second;
+        }
+        return first;
     }
 
     /**

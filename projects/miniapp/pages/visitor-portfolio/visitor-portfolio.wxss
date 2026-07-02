@@ -1,0 +1,80 @@
+.visitor-portfolio-page {
+  background: #f5f7fb;
+}
+
+.visitor-scroll {
+  height: 100vh;
+}
+
+.visitor-hero,
+.visitor-component {
+  margin: 24rpx 28rpx;
+  padding: 24rpx;
+  background: #ffffff;
+  border-radius: 12rpx;
+  border: 1rpx solid #e2e8f0;
+}
+
+.visitor-title {
+  font-size: 38rpx;
+  font-weight: 800;
+}
+
+.visitor-subtitle,
+.component-title {
+  margin-top: 10rpx;
+  color: #536274;
+}
+
+.qr-image {
+  margin-top: 18rpx;
+  width: 260rpx;
+  height: 260rpx;
+}
+
+.field {
+  margin-top: 16rpx;
+  padding: 18rpx;
+  min-height: 72rpx;
+  background: #f8fafc;
+  border-radius: 8rpx;
+}
+
+.textarea {
+  min-height: 150rpx;
+}
+
+.primary-button {
+  margin-top: 18rpx;
+  background: #2d5f9a;
+  color: #ffffff;
+  border-radius: 8rpx;
+}
+
+.maintenance-mask {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(245, 247, 251, 0.72);
+  backdrop-filter: blur(12rpx);
+}
+
+.maintenance-panel {
+  padding: 42rpx;
+  background: rgba(255, 255, 255, 0.86);
+  border-radius: 12rpx;
+  text-align: center;
+}
+
+.maintenance-primary {
+  font-size: 34rpx;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.maintenance-secondary {
+  margin-top: 12rpx;
+  color: #6b7787;
+}

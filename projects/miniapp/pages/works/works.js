@@ -25,6 +25,7 @@ const {
 const ADD_WORK_PAGE_URL = '/pages/work-add/work-add'
 const MINE_PAGE_URL = '/pages/index/index'
 const SCHEDULE_PAGE_URL = '/pages/schedule/schedule'
+const PORTFOLIOS_PAGE_URL = '/pages/portfolios/portfolios'
 const WORK_TAGS_API_URL = '/api/mine/works/tags'
 const WORK_TAG_DELETE_API_PREFIX = '/api/mine/works/tags/delete'
 const WORKS_API_PREFIX = '/api/mine/works'
@@ -1641,6 +1642,12 @@ Page({
     if (label === '我的') {
       wx.redirectTo({
         url: MINE_PAGE_URL
+      })
+      return
+    }
+    if (label === '作品集') {
+      wx.redirectTo({
+        url: PORTFOLIOS_PAGE_URL
       })
       return
     }

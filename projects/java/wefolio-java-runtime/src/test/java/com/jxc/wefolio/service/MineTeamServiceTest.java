@@ -400,6 +400,22 @@ class MineTeamServiceTest {
                 .contains("JoinStatusDict.PENDING_CONFIRMATION.getCode()");
     }
 
+    /**
+     * 团队作品集标题解析复用标准作品集配置 DTO，避免手动维护 JSON 路径。
+     */
+    @Test
+    void portfolioShareTitleParsingUsesStandardConfigDto() throws IOException {
+        String source = Files.readString(Path.of("src/main/java/com/jxc/wefolio/service/MineTeamService.java"));
+        int methodIndex = source.indexOf("private String extractShareTitle(String configJson)");
+        int nextMethodIndex = source.indexOf("/**\n     * 收集团队作品集中引用了成员内容的作品集 ID。", methodIndex);
+
+        String methodSource = source.substring(methodIndex, nextMethodIndex);
+
+        assertThat(source).contains("import com.jxc.wefolio.dto.PortfolioConfigDto;");
+        assertThat(methodSource).contains("JSON.parseObject(configJson, PortfolioConfigDto.class)");
+        assertThat(methodSource).doesNotContain("getJSONObject(\"share\")");
+    }
+
     @Test
     void updateTeamAllowsClearingOptionalIntroAndAvatar() {
         TeamEntity team = team(100L, "TM2048", "星曜司仪团", "https://cos.example.com/old.png");

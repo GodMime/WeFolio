@@ -7,7 +7,7 @@ import lombok.Data;
 
 
 /**
- * wf_portfolio — 作品集表 — 当前生效配置，每次保存直接覆盖，访客直接读取
+ * wf_portfolio — 作品集表 — 同一作品集保存草稿配置与正式发布配置
  */
 @Data
 @TableName("wf_portfolio")
@@ -25,26 +25,44 @@ public class PortfolioEntity extends BaseEntity {
     /** 模板类型：STANDARD 标准 / ADVANCED 高级 */
     private String templateType;
 
-    /** 作品集标题 */
-    private String title;
-
-    /** 作品集简介 */
-    private String intro;
-
-    /** 分享封面 */
-    private String shareCoverUrl;
-
-    /** 分享头像 */
-    private String shareAvatarUrl;
-
     /** 状态：ACTIVE 生效 / DISABLED 停用 */
     private String status;
 
     /** 当前组件 Schema 版本号 */
     private String schemaVersion;
 
-    /** 当前生效的页面配置 JSON，访客直接读取渲染 */
-    private String schemaJson;
+    /** 草稿完整配置 JSON，维护端读取和保存 */
+    private String draftConfigJson;
+
+    /** 草稿版本号，保存草稿成功后递增 */
+    private Integer draftRevision;
+
+    /** 草稿配置规范化后的 SHA-256 */
+    private String draftContentHash;
+
+    /** 草稿最近保存人用户 ID */
+    private Long draftSavedBy;
+
+    /** 草稿最近保存时间 */
+    private LocalDateTime draftSavedAt;
+
+    /** 正式发布完整配置 JSON，访客端读取 */
+    private String publishedConfigJson;
+
+    /** 正式发布版本号，发布成功后递增 */
+    private Integer publishedRevision;
+
+    /** 正式配置规范化后的 SHA-256 */
+    private String publishedContentHash;
+
+    /** 最近发布人用户 ID */
+    private Long publishedBy;
+
+    /** 最近发布时间 */
+    private LocalDateTime publishedAt;
+
+    /** 发布状态：DRAFT_ONLY 草稿 / PUBLISHED 已发布 / OFFLINE 下线 */
+    private String publicationStatus;
 
     /** 当前高级作品集自然语言描述 */
     private String aiPrompt;

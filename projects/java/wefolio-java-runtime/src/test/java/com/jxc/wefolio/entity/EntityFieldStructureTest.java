@@ -49,6 +49,39 @@ class EntityFieldStructureTest {
     }
 
     @Test
+    void portfolioEntityShouldUseExplicitDraftAndPublishedConfigFields() {
+        assertThat(PortfolioEntity.class.getDeclaredFields())
+                .extracting(Field::getName)
+                .contains(
+                        "draftConfigJson",
+                        "draftRevision",
+                        "draftContentHash",
+                        "draftSavedBy",
+                        "draftSavedAt",
+                        "publishedConfigJson",
+                        "publishedRevision",
+                        "publishedContentHash",
+                        "publishedBy",
+                        "publishedAt",
+                        "publicationStatus"
+                )
+                .doesNotContain(
+                        "title",
+                        "intro",
+                        "shareCoverUrl",
+                        "shareAvatarUrl",
+                        "schemaJson"
+                );
+    }
+
+    @Test
+    void portfolioReferenceEntityShouldDeclareConfigScope() {
+        assertThat(PortfolioReferenceEntity.class.getDeclaredFields())
+                .extracting(Field::getName)
+                .contains("configScope");
+    }
+
+    @Test
     void systemMessageEqualityShouldIncludeBaseEntityFields() {
         SystemMessageEntity first = new SystemMessageEntity();
         first.setId(1L);

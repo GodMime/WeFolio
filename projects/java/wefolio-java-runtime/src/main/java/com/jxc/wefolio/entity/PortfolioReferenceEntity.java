@@ -14,6 +14,9 @@ public class PortfolioReferenceEntity extends BaseEntity {
     /** 当前生效作品集 ID */
     private Long portfolioId;
 
+    /** 配置作用域：DRAFT 草稿 / PUBLISHED 正式 */
+    private String configScope;
+
     /** 引用类型：WORK / MEMBER_PORTFOLIO / USER_PROFILE / TEAM_PROFILE / SCHEDULE_COMPONENT / QR_CODE_ASSET */
     private String referenceType;
 

@@ -10,6 +10,7 @@ const MESSAGES_PAGE_URL = '/pages/messages/messages'
 const POINTS_PAGE_URL = '/pages/points/points'
 const SCHEDULE_PAGE_URL = '/pages/schedule/schedule'
 const WORKS_PAGE_URL = '/pages/works/works'
+const PORTFOLIOS_PAGE_URL = '/pages/portfolios/portfolios'
 
 function buildEntries(messageUnread = normalizeUnreadCount({})) {
   return [
@@ -192,6 +193,12 @@ Page({
     if (label === '作品') {
       wx.redirectTo({
         url: WORKS_PAGE_URL
+      })
+      return
+    }
+    if (label === '作品集') {
+      wx.redirectTo({
+        url: PORTFOLIOS_PAGE_URL
       })
       return
     }

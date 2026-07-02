@@ -1,5 +1,6 @@
 package com.jxc.wefolio.service;
 
+import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.jxc.wefolio.common.UniqueCodeGenerator;
@@ -31,6 +32,7 @@ import com.jxc.wefolio.dto.MineTeamDetailResponse;
 import com.jxc.wefolio.dto.MineTeamListResponse;
 import com.jxc.wefolio.dto.MineTeamUpdateRequest;
 import com.jxc.wefolio.dto.MineTeamOwnerTransferRequest;
+import com.jxc.wefolio.dto.PortfolioConfigDto;
 import com.jxc.wefolio.entity.PortfolioEntity;
 import com.jxc.wefolio.entity.PortfolioReferenceEntity;
 import com.jxc.wefolio.entity.SystemMessageEntity;
@@ -1894,7 +1896,7 @@ public class MineTeamService {
         }
         Map<Long, String> titleMap = teamPortfolios.stream().collect(Collectors.toMap(
                 PortfolioEntity::getId,
-                portfolio -> defaultString(portfolio.getTitle(), "未命名作品集"),
+                portfolio -> resolvePortfolioShareTitle(portfolio),
                 (left, right) -> left,
                 LinkedHashMap::new
         ));
@@ -1902,6 +1904,42 @@ public class MineTeamService {
                 .map(id -> titleMap.getOrDefault(id, "未命名作品集"))
                 .toList();
         throw new BusinessException(formatRemoveBlockedMessage(names));
+    }
+
+    /**
+     * 从作品集草稿或正式配置中解析分享标题。
+     *
+     * @param portfolio 作品集实体
+     * @return 分享标题
+     */
+    private String resolvePortfolioShareTitle(PortfolioEntity portfolio) {
+        if (portfolio == null) {
+            return "未命名作品集";
+        }
+        String title = extractShareTitle(portfolio.getPublishedConfigJson());
+        if (hasText(title)) {
+            return title;
+        }
+        title = extractShareTitle(portfolio.getDraftConfigJson());
+        return hasText(title) ? title : "未命名作品集";
+    }
+
+    /**
+     * 从配置 JSON 中提取 share.title。
+     *
+     * @param configJson 配置 JSON
+     * @return 分享标题
+     */
+    private String extractShareTitle(String configJson) {
+        if (!hasText(configJson)) {
+            return "";
+        }
+        try {
+            PortfolioConfigDto config = JSON.parseObject(configJson, PortfolioConfigDto.class);
+            return config == null || config.getShare() == null ? "" : defaultString(config.getShare().getTitle());
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     /**
@@ -2387,6 +2425,16 @@ public class MineTeamService {
      */
     private String defaultString(String value, String fallback) {
         return value == null || value.isBlank() ? fallback : value;
+    }
+
+    /**
+     * 判断字符串是否包含非空白字符。
+     *
+     * @param value 原字符串
+     * @return true 表示有内容
+     */
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     /**

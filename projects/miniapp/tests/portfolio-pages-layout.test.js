@@ -1,0 +1,245 @@
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
+const test = require('node:test')
+
+const appJson = JSON.parse(fs.readFileSync(path.join(__dirname, '../app.json'), 'utf8'))
+
+function read(relativePath) {
+  return fs.readFileSync(path.join(__dirname, '..', relativePath), 'utf8')
+}
+
+function assertPageRegistered(pagePath) {
+  assert.ok(appJson.pages.includes(pagePath), `${pagePath} should be registered`)
+}
+
+function assertUsesNavigation(pagePath) {
+  const json = JSON.parse(read(`${pagePath}.json`))
+  assert.equal(json.usingComponents['navigation-bar'], '/components/navigation-bar/navigation-bar')
+}
+
+test('app registers portfolio pages', () => {
+  [
+    'pages/portfolios/portfolios',
+    'pages/portfolio-standard-edit/portfolio-standard-edit',
+    'pages/portfolio-component-library/portfolio-component-library',
+    'pages/portfolio-standard-preview/portfolio-standard-preview',
+    'pages/visitor-portfolio/visitor-portfolio',
+    'pages/visitor-schedule/visitor-schedule',
+    'pages/portfolio-unavailable/portfolio-unavailable'
+  ].forEach(assertPageRegistered)
+})
+
+test('portfolio pages use custom navigation bar', () => {
+  [
+    'pages/portfolios/portfolios',
+    'pages/portfolio-standard-edit/portfolio-standard-edit',
+    'pages/portfolio-component-library/portfolio-component-library',
+    'pages/portfolio-standard-preview/portfolio-standard-preview',
+    'pages/visitor-portfolio/visitor-portfolio',
+    'pages/visitor-schedule/visitor-schedule',
+    'pages/portfolio-unavailable/portfolio-unavailable'
+  ].forEach(assertUsesNavigation)
+})
+
+test('bottom portfolio tabs navigate to portfolio list page', () => {
+  [
+    'pages/index/index.js',
+    'pages/schedule/schedule.js',
+    'pages/works/works.js'
+  ].forEach((pagePath) => {
+    const pageJs = read(pagePath)
+
+    assert.match(pageJs, /PORTFOLIOS_PAGE_URL\s*=\s*'\/pages\/portfolios\/portfolios'/)
+    assert.match(pageJs, /label === '作品集'[\s\S]*wx\.redirectTo\(\{[\s\S]*url:\s*PORTFOLIOS_PAGE_URL/)
+    assert.doesNotMatch(pageJs, /title:\s*`\$\{label\}页面接入中`[\s\S]*label === '作品集'/)
+  })
+})
+
+test('maintainer portfolio pages expose expected controls', () => {
+  const listWxml = read('pages/portfolios/portfolios.wxml')
+  const listWxss = read('pages/portfolios/portfolios.wxss')
+  const editWxml = read('pages/portfolio-standard-edit/portfolio-standard-edit.wxml')
+  const libraryWxml = read('pages/portfolio-component-library/portfolio-component-library.wxml')
+  const previewWxml = read('pages/portfolio-standard-preview/portfolio-standard-preview.wxml')
+  const unavailableWxml = read('pages/portfolio-unavailable/portfolio-unavailable.wxml')
+
+  assert.match(listWxml, /个人/)
+  assert.match(listWxml, /团队/)
+  assert.match(listWxml, /class="portfolio-list-panel/)
+  assert.match(listWxml, /个人作品集/)
+  assert.match(listWxml, /class="summary-pill published/)
+  assert.match(listWxml, /class="summary-pill draft/)
+  assert.match(listWxml, /class="portfolio-item-card/)
+  assert.match(listWxml, /class="portfolio-cover/)
+  assert.match(listWxml, /class="portfolio-share-button/)
+  assert.match(listWxml, /open-type="\{\{item\.actionType === 'SHARE' \? 'share' : ''\}\}"/)
+  assert.match(listWxml, /class="portfolio-arrow/)
+  assert.match(listWxml, /class="create-actions/)
+  assert.match(listWxml, /新建标准个人作品集/)
+  assert.match(listWxml, /新建高级个人作品集/)
+  assert.match(listWxml, /class="tabbar"/)
+  assert.match(listWxml, /item\.active/)
+  assert.match(listWxss, /\.portfolios-page\s*\{[\s\S]*height:\s*100vh;[\s\S]*display:\s*flex;[\s\S]*overflow:\s*hidden;/)
+  assert.match(listWxss, /\.portfolio-content\s*\{[\s\S]*padding:\s*28rpx 28rpx calc\(172rpx \+ env\(safe-area-inset-bottom\)\);/)
+  assert.match(listWxss, /\.portfolio-list-panel\s*\{[\s\S]*border-radius:\s*16rpx;[\s\S]*box-shadow:/)
+  assert.match(listWxss, /\.create-actions\s*\{[\s\S]*display:\s*flex;[\s\S]*gap:\s*16rpx;[\s\S]*margin:\s*24rpx 0 0;/)
+  assert.doesNotMatch(listWxss, /\.create-actions\s*\{[\s\S]*grid-template-columns:/)
+  assert.match(listWxss, /\.tabbar\s*\{[\s\S]*position:\s*fixed;[\s\S]*bottom:\s*0;/)
+  assert.match(editWxml, /分享信息/)
+  assert.match(editWxml, /分享封面/)
+  assert.match(editWxml, /bindtap="handleChooseShareCover"/)
+  assert.match(editWxml, /bindtap="handleRemoveShareCover"/)
+  assert.match(editWxml, /组件编排/)
+  assert.match(editWxml, /保存草稿/)
+  assert.match(editWxml, /预览/)
+  assert.match(editWxml, /发布/)
+  assert.match(editWxml, /二维码联系/)
+  assert.match(editWxml, /预留联系信息/)
+  assert.match(libraryWxml, /轮播图/)
+  assert.match(libraryWxml, /双列作品列表/)
+  assert.match(libraryWxml, /二维码联系/)
+  assert.match(libraryWxml, /预留联系信息/)
+  assert.match(previewWxml, /预览/)
+  assert.match(previewWxml, /禁用真实提交/)
+  assert.match(unavailableWxml, /暂未开放/)
+})
+
+test('visitor portfolio pages expose maintenance, QR, contact and schedule surfaces', () => {
+  const visitorWxml = read('pages/visitor-portfolio/visitor-portfolio.wxml')
+  const scheduleWxml = read('pages/visitor-schedule/visitor-schedule.wxml')
+
+  assert.match(visitorWxml, /UNDER MAINTENANCE/)
+  assert.match(visitorWxml, /二维码联系/)
+  assert.match(visitorWxml, /预留联系信息/)
+  assert.match(visitorWxml, /提交/)
+  assert.match(scheduleWxml, /档期查询/)
+  assert.match(scheduleWxml, /查询/)
+  assert.doesNotMatch(scheduleWxml, /联系人电话/)
+  assert.doesNotMatch(scheduleWxml, /内部备注/)
+})
+
+test('portfolio create action buttons align to the list panel width', () => {
+  const listWxss = read('pages/portfolios/portfolios.wxss')
+
+  assert.match(listWxss, /\.create-actions\s*\{[\s\S]*width:\s*100%;[\s\S]*max-width:\s*100%;[\s\S]*box-sizing:\s*border-box;/)
+  assert.match(listWxss, /\.create-action\s*\{[\s\S]*flex:\s*1 1 0;[\s\S]*width:\s*auto;[\s\S]*min-width:\s*0;[\s\S]*margin:\s*0;[\s\S]*box-sizing:\s*border-box;/)
+})
+
+test('portfolio list cards keep action buttons from squeezing title copy', () => {
+  const listWxss = read('pages/portfolios/portfolios.wxss')
+
+  assert.match(listWxss, /\.portfolio-copy\s*\{[\s\S]*min-width:\s*0;[\s\S]*flex:\s*1 1 0;/)
+  assert.match(listWxss, /\.portfolio-side\s*\{[\s\S]*flex:\s*0 0 auto;[\s\S]*min-width:\s*0;/)
+  assert.match(listWxss, /\.portfolio-share-button\s*\{[\s\S]*width:\s*96rpx;[\s\S]*min-width:\s*96rpx;[\s\S]*max-width:\s*96rpx;[\s\S]*flex:\s*none;[\s\S]*box-sizing:\s*border-box;/)
+})
+
+test('portfolio list cards only show status without revision or metric badges', () => {
+  const listWxml = read('pages/portfolios/portfolios.wxml')
+  const listJs = read('pages/portfolios/portfolios.js')
+
+  assert.match(listWxml, /item\.statusText/)
+  assert.doesNotMatch(listWxml, /item\.revisionText/)
+  assert.doesNotMatch(listWxml, /item\.metricText/)
+  assert.doesNotMatch(listWxml, /class="metric-badge/)
+  assert.doesNotMatch(listJs, /revisionText:/)
+  assert.doesNotMatch(listJs, /metricText:/)
+  assert.doesNotMatch(listJs, /resolveMetricText/)
+  assert.doesNotMatch(listJs, /草稿\s*\$\{[^}]*Revision/)
+  assert.doesNotMatch(listJs, /正式\s*\$\{[^}]*Revision/)
+  assert.match(listJs, /onShareAppMessage/)
+  assert.match(listJs, /pages\/visitor-portfolio\/visitor-portfolio\?shareCode=/)
+  assert.match(listJs, /imageUrl:\s*portfolio\.coverUrl/)
+})
+
+test('standard personal portfolio editor follows shared maintainer layout', () => {
+  const editWxml = read('pages/portfolio-standard-edit/portfolio-standard-edit.wxml')
+  const editWxss = read('pages/portfolio-standard-edit/portfolio-standard-edit.wxss')
+  const editJs = read('pages/portfolio-standard-edit/portfolio-standard-edit.js')
+
+  assert.match(editWxml, /class="edit-content"/)
+  assert.match(editWxml, /class="panel share-panel"/)
+  assert.match(editWxml, /class="panel component-panel"/)
+  assert.match(editWxml, /class="section-desc"/)
+  assert.match(editWxml, /class="field-heading"/)
+  assert.match(editWxml, /class="field-label"[\s\S]*作品集标题/)
+  assert.match(editWxml, /class="input textarea"/)
+  assert.match(editWxml, /class="component-list"/)
+  assert.match(editWxml, /class="component-swipe-row \{\{revealedComponentKey === item\.componentKey \? 'revealed' : ''\}\} \{\{draggingIndex === index \? 'dragging' : ''\}\}"/)
+  assert.match(editWxml, /class="component-order"/)
+  assert.match(editWxml, /class="component-drag-handle"/)
+  assert.match(editWxml, /class="component-row-arrow \{\{item\.componentType === 'CAROUSEL' \? '' : 'placeholder'\}\}"/)
+  assert.doesNotMatch(editWxml, /wx:if="\{\{item\.componentType === 'CAROUSEL'\}\}" class="component-row-arrow"/)
+  assert.match(editWxml, /class="component-remove-pane"/)
+  assert.match(editWxml, /class="component-remove-button"/)
+  assert.match(editWxml, /class="action-button secondary-button"/)
+  assert.match(editWxml, /class="action-button primary-button"/)
+  assert.match(editWxml, /style="\{\{draggingIndex === index \? componentDragStyle : ''\}\}"/)
+  assert.match(editWxml, /data-type="\{\{item\.componentType\}\}"/)
+  assert.match(editWxml, /catchtap="handleComponentTap"/)
+  assert.match(editWxml, /class="component-picker-mask \{\{componentSheetVisible \? 'visible' : ''\}\}"/)
+  assert.match(editWxml, /class="component-picker-panel"/)
+  assert.match(editWxml, /class="component-picker-grabber"/)
+  assert.match(editWxml, /class="component-work-picker-mask \{\{componentWorkSheetVisible \? 'visible' : ''\}\}"/)
+  assert.match(editWxml, /wx:for="{{componentWorkOptions}}"/)
+  assert.match(editWxml, /catchtap="handleToggleComponentWork"/)
+  assert.match(editWxml, /catchtap="handleConfirmComponentWorks"/)
+  assert.match(editWxml, /wx:for="{{componentOptions}}"/)
+  assert.match(editWxml, /data-type="{{item\.componentType}}"/)
+  assert.match(editWxml, /catchtap="handleSelectComponent"/)
+  assert.match(editWxml, /catchtap="handleCloseComponentSheet"/)
+  assert.match(editWxml, /bindlongpress="handleComponentDragStart"/)
+  assert.match(editWxml, /bindtouchstart="handleComponentTouchStart"/)
+  assert.match(editWxml, /bindtouchmove="handleComponentTouchMove"/)
+  assert.match(editWxml, /bindtouchend="handleComponentTouchEnd"/)
+  assert.match(editWxml, /bindtouchcancel="handleComponentTouchCancel"/)
+  assert.doesNotMatch(editWxml, />上移</)
+  assert.doesNotMatch(editWxml, />下移</)
+  assert.match(editJs, /componentSheetVisible/)
+  assert.match(editJs, /revealedComponentKey/)
+  assert.match(editJs, /componentDragStyle/)
+  assert.match(editJs, /componentWorkSheetVisible/)
+  assert.match(editJs, /uploadPortfolioCover/)
+  assert.match(editJs, /handleChooseShareCover/)
+  assert.match(editJs, /handleRemoveShareCover/)
+  assert.match(editJs, /addComponent/)
+  assert.match(editJs, /handleSelectComponent/)
+  assert.match(editJs, /handleComponentTap/)
+  assert.match(editJs, /updateComponentWorkIds/)
+  assert.doesNotMatch(editJs, /handleOpenComponentLibrary\(\)\s*\{[\s\S]*wx\.navigateTo/)
+
+  assert.match(editWxss, /\.portfolio-edit-page\s*\{[\s\S]*height:\s*100vh;[\s\S]*display:\s*flex;[\s\S]*overflow:\s*hidden;/)
+  assert.match(editWxss, /\.edit-scroll\s*\{[\s\S]*flex:\s*1;[\s\S]*min-height:\s*0;/)
+  assert.match(editWxss, /\.edit-content\s*\{[\s\S]*padding:\s*28rpx 28rpx calc\(156rpx \+ env\(safe-area-inset-bottom\)\);[\s\S]*box-sizing:\s*border-box;/)
+  assert.match(editWxss, /\.panel\s*\{[\s\S]*background:\s*rgba\(255,\s*255,\s*255,\s*0\.96\);[\s\S]*border-radius:\s*16rpx;[\s\S]*box-shadow:/)
+  assert.match(editWxss, /\.input\s*\{[\s\S]*width:\s*100%;[\s\S]*min-height:\s*84rpx;[\s\S]*border-radius:\s*16rpx;[\s\S]*box-sizing:\s*border-box;/)
+  assert.match(editWxss, /\.cover-row\s*\{[\s\S]*display:\s*flex;[\s\S]*gap:/)
+  assert.match(editWxss, /\.cover-preview\s*\{[\s\S]*width:\s*180rpx;[\s\S]*height:\s*144rpx;/)
+  assert.match(editWxss, /\.cover-action-button\s*\{[\s\S]*width:\s*148rpx;[\s\S]*height:\s*56rpx;/)
+  assert.match(editWxss, /\.component-swipe-row\s*\{[\s\S]*position:\s*relative;[\s\S]*overflow:\s*hidden;/)
+  assert.match(editWxss, /\.component-row\s*\{[\s\S]*position:\s*relative;[\s\S]*display:\s*flex;[\s\S]*transition:\s*transform 180ms ease/)
+  assert.match(editWxss, /\.component-swipe-row\.revealed \.component-row\s*\{[\s\S]*transform:\s*translateX\(-140rpx\);/)
+  assert.match(editWxss, /\.component-remove-pane\s*\{[\s\S]*position:\s*absolute;[\s\S]*right:\s*0;[\s\S]*width:\s*128rpx;/)
+  assert.match(editWxss, /\.component-row\.dragging\s*\{[\s\S]*border-color:/)
+  assert.match(editWxss, /\.component-drag-handle\s*\{[\s\S]*repeating-linear-gradient/)
+  assert.match(editWxss, /\.component-row-arrow\s*\{[\s\S]*width:\s*28rpx;[\s\S]*flex:\s*none;/)
+  assert.match(editWxss, /\.component-row-arrow\.placeholder\s*\{[\s\S]*visibility:\s*hidden;/)
+  assert.match(editWxss, /\.component-picker-mask\s*\{[\s\S]*position:\s*fixed;[\s\S]*align-items:\s*flex-end;[\s\S]*background:\s*rgba\(17,\s*24,\s*39,\s*0\.35\);/)
+  assert.match(editWxss, /\.component-picker-mask\.visible\s*\{[\s\S]*opacity:\s*1;[\s\S]*pointer-events:\s*auto;/)
+  assert.match(editWxss, /\.component-picker-panel\s*\{[\s\S]*max-height:\s*72vh;[\s\S]*border-radius:\s*24rpx 24rpx 18rpx 18rpx;[\s\S]*transform:\s*translateY\(36rpx\);/)
+  assert.match(editWxss, /\.component-picker-mask\.visible \.component-picker-panel\s*\{[\s\S]*transform:\s*translateY\(0\);/)
+  assert.match(editWxss, /\.component-picker-grabber\s*\{[\s\S]*width:\s*72rpx;[\s\S]*height:\s*8rpx;/)
+  assert.match(editWxss, /\.component-option\s*\{[\s\S]*width:\s*100%;[\s\S]*box-sizing:\s*border-box;/)
+  assert.match(editWxss, /\.component-work-picker-mask\s*\{[\s\S]*position:\s*fixed;[\s\S]*align-items:\s*flex-end;/)
+  assert.match(editWxss, /\.component-work-option\.selected\s*\{[\s\S]*border-color:/)
+  assert.match(editWxss, /\.bottom-actions\s*\{[\s\S]*position:\s*fixed;[\s\S]*display:\s*flex;[\s\S]*gap:\s*12rpx;/)
+  assert.match(editWxss, /\.action-button\s*\{[\s\S]*flex:\s*1 1 0;[\s\S]*min-width:\s*0;[\s\S]*height:\s*88rpx;[\s\S]*border-radius:\s*16rpx;/)
+})
+
+test('standard personal portfolio editor keeps add button compact and delete hidden behind swipe', () => {
+  const editWxss = read('pages/portfolio-standard-edit/portfolio-standard-edit.wxss')
+
+  assert.match(editWxss, /\.link-button\s*\{[\s\S]*width:\s*136rpx;[\s\S]*min-width:\s*136rpx;[\s\S]*max-width:\s*136rpx;[\s\S]*flex:\s*0 0 136rpx;[\s\S]*padding:\s*0;/)
+  assert.match(editWxss, /\.component-remove-button\s*\{[\s\S]*width:\s*108rpx;[\s\S]*min-width:\s*108rpx;[\s\S]*height:\s*64rpx;/)
+  assert.doesNotMatch(editWxss, /\.component-actions\s*\{/)
+})

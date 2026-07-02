@@ -1,0 +1,187 @@
+<view class="page-shell portfolio-edit-page">
+  <navigation-bar title="标准个人作品集" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+
+  <scroll-view class="edit-scroll" scroll-y type="list">
+    <view class="edit-content">
+      <view class="panel share-panel">
+        <view class="panel-heading">
+          <view class="heading-copy">
+            <view class="section-title">分享信息</view>
+            <view class="section-desc">用于微信分享卡片和访客首屏展示</view>
+          </view>
+          <view class="status-pill">草稿</view>
+        </view>
+
+        <view class="form-row cover-form-row">
+          <view class="field-heading">
+            <view class="field-label">分享封面</view>
+          </view>
+          <view class="cover-row">
+            <view class="cover-preview" bindtap="handleChooseShareCover" aria-role="button" aria-label="选择分享封面">
+              <image wx:if="{{config.share.coverUrl}}" src="{{config.share.coverUrl}}" mode="aspectFill"></image>
+              <view wx:else class="cover-empty">封面</view>
+            </view>
+            <view class="cover-actions">
+              <button class="cover-action-button" bindtap="handleChooseShareCover">{{config.share.coverUrl ? '更换' : '选择'}}</button>
+              <button wx:if="{{config.share.coverUrl}}" class="cover-action-button remove" bindtap="handleRemoveShareCover">移除</button>
+            </view>
+          </view>
+        </view>
+
+        <view class="form-row">
+          <view class="field-heading">
+            <view class="field-label">作品集标题</view>
+          </view>
+          <input class="input" placeholder="未命名作品集" value="{{config.share.title}}" data-path="share.title" bindinput="handleShareInput" />
+        </view>
+
+        <view class="form-row">
+          <view class="field-heading">
+            <view class="field-label">分享简介</view>
+          </view>
+          <textarea class="input textarea" placeholder="填写服务风格、适合场景或代表作品说明" value="{{config.share.intro}}" data-path="share.intro" bindinput="handleShareInput"></textarea>
+        </view>
+      </view>
+
+      <view class="panel component-panel">
+        <view class="panel-heading">
+          <view class="heading-copy">
+            <view class="section-title">组件编排</view>
+            <view class="section-desc">访客将按当前顺序浏览作品集内容</view>
+          </view>
+          <button class="link-button" bindtap="handleOpenComponentSheet">添加组件</button>
+        </view>
+
+        <view class="component-list">
+          <view
+            wx:for="{{config.components}}"
+            wx:key="componentKey"
+            class="component-swipe-row {{revealedComponentKey === item.componentKey ? 'revealed' : ''}} {{draggingIndex === index ? 'dragging' : ''}}"
+            data-index="{{index}}"
+            data-key="{{item.componentKey}}"
+            data-type="{{item.componentType}}"
+            bindtouchstart="handleComponentTouchStart"
+            bindlongpress="handleComponentDragStart"
+            bindtouchmove="handleComponentTouchMove"
+            bindtouchend="handleComponentTouchEnd"
+            bindtouchcancel="handleComponentTouchCancel"
+          >
+            <view class="component-remove-pane" catchtap="noop">
+              <button class="component-remove-button" data-key="{{item.componentKey}}" catchtap="handleRemoveComponent">删除</button>
+            </view>
+            <view
+              class="component-row {{draggingIndex === index ? 'dragging' : ''}} {{dragTargetIndex === index && draggingIndex !== -1 ? 'drag-target' : ''}} {{item.componentType === 'CAROUSEL' ? 'editable' : ''}}"
+              style="{{draggingIndex === index ? componentDragStyle : ''}}"
+              data-key="{{item.componentKey}}"
+              data-type="{{item.componentType}}"
+              catchtap="handleComponentTap"
+              aria-role="{{item.componentType === 'CAROUSEL' ? 'button' : 'text'}}"
+              aria-label="{{item.componentType === 'CAROUSEL' ? '编辑轮播图作品' : item.name}}"
+            >
+              <view class="component-order">{{index + 1}}</view>
+              <view class="component-copy">
+                <view class="component-title">{{item.name || item.componentType}}</view>
+                <view class="component-meta">{{item.componentType}} · {{item.componentKey}}</view>
+              </view>
+              <view class="component-drag-handle"></view>
+              <view class="component-row-arrow {{item.componentType === 'CAROUSEL' ? '' : 'placeholder'}}">{{item.componentType === 'CAROUSEL' ? '›' : ''}}</view>
+            </view>
+          </view>
+        </view>
+
+        <view class="component-hints">
+          <view class="hint-chip">轮播图</view>
+          <view class="hint-chip">双列作品列表</view>
+          <view class="hint-chip">二维码联系</view>
+          <view class="hint-chip">预留联系信息</view>
+        </view>
+      </view>
+    </view>
+  </scroll-view>
+
+  <view class="component-picker-mask {{componentSheetVisible ? 'visible' : ''}}" catchtap="handleCloseComponentSheet">
+    <view class="component-picker-panel" catchtap="noop">
+      <view class="component-picker-grabber"></view>
+      <view class="component-picker-heading">
+        <view class="component-picker-title">选择组件</view>
+        <view class="component-picker-count">{{componentOptions.length}} 个可选</view>
+      </view>
+
+      <scroll-view class="component-option-scroll" scroll-y type="list">
+        <view class="component-option-list-content">
+          <view
+            wx:for="{{componentOptions}}"
+            wx:key="componentType"
+            class="component-option"
+            data-type="{{item.componentType}}"
+            catchtap="handleSelectComponent"
+            aria-role="button"
+            aria-label="添加{{item.name}}组件"
+          >
+            <view class="component-option-copy">
+              <view class="component-option-name">{{item.name}}</view>
+              <view class="component-option-desc">{{item.description}}</view>
+            </view>
+            <view class="component-option-plus">+</view>
+          </view>
+        </view>
+      </scroll-view>
+
+      <view class="component-picker-actions">
+        <button class="component-picker-cancel" catchtap="handleCloseComponentSheet">取消</button>
+      </view>
+    </view>
+  </view>
+
+  <view class="component-work-picker-mask {{componentWorkSheetVisible ? 'visible' : ''}}" catchtap="handleCloseComponentWorkSheet">
+    <view class="component-work-picker-panel" catchtap="noop">
+      <view class="component-picker-grabber"></view>
+      <view class="component-picker-heading">
+        <view class="component-picker-title">{{componentWorkSheetTitle}}</view>
+        <view class="component-picker-count">{{componentWorkSelectedCountText}}</view>
+      </view>
+
+      <view wx:if="{{componentWorkLoading}}" class="component-work-state">加载中...</view>
+      <view wx:elif="{{componentWorkErrorText}}" class="component-work-state error">
+        <view>{{componentWorkErrorText}}</view>
+        <view class="component-work-retry" catchtap="handleRetryLoadComponentWorks" aria-role="button" aria-label="重新加载作品">重试</view>
+      </view>
+      <view wx:elif="{{componentWorkOptions.length === 0}}" class="component-work-state">暂无图片作品</view>
+      <scroll-view wx:else class="component-work-scroll" scroll-y type="list">
+        <view class="component-work-list-content">
+          <view
+            wx:for="{{componentWorkOptions}}"
+            wx:key="id"
+            class="component-work-option {{item.selected ? 'selected' : ''}}"
+            data-id="{{item.id}}"
+            catchtap="handleToggleComponentWork"
+            aria-role="checkbox"
+            aria-checked="{{item.selected}}"
+            aria-label="选择{{item.title}}"
+          >
+            <view class="component-work-thumb">
+              <image wx:if="{{item.thumbUrl}}" src="{{item.thumbUrl}}" mode="aspectFill"></image>
+              <view wx:else class="component-work-thumb-empty">图片</view>
+            </view>
+            <view class="component-work-copy">
+              <view class="component-work-title">{{item.title}}</view>
+              <view class="component-work-meta">{{item.metaText}}</view>
+            </view>
+            <view class="component-work-check">{{item.selected ? '✓' : ''}}</view>
+          </view>
+        </view>
+      </scroll-view>
+
+      <view class="component-work-actions">
+        <button class="component-work-cancel" catchtap="handleCloseComponentWorkSheet">取消</button>
+        <button class="component-work-confirm" catchtap="handleConfirmComponentWorks">完成</button>
+      </view>
+    </view>
+  </view>
+
+  <view class="bottom-actions">
+    <button class="action-button secondary-button" bindtap="handleSaveDraft">保存草稿</button>
+    <button class="action-button secondary-button" bindtap="handlePreview">预览</button>
+    <button class="action-button primary-button" bindtap="handlePublish">发布</button>
+  </view>
+</view>

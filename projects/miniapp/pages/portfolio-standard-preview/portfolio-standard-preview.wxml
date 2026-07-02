@@ -1,0 +1,14 @@
+<view class="page-shell portfolio-preview-page">
+  <navigation-bar title="预览" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+  <scroll-view scroll-y class="preview-scroll">
+    <view class="preview-banner">
+      <view class="preview-title">{{config.share.title || '未命名作品集'}}</view>
+      <view class="preview-desc">{{config.share.intro}}</view>
+      <view class="preview-note">预览模式：禁用真实提交，不统计访问，不扣积分。</view>
+    </view>
+    <view wx:for="{{config.components}}" wx:key="componentKey" class="preview-component">
+      <view class="component-type">{{item.componentType}}</view>
+      <view>{{item.config.title || item.name || '组件'}}</view>
+    </view>
+  </scroll-view>
+</view>

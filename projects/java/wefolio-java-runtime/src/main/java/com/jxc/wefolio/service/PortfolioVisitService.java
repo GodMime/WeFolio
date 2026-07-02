@@ -1,0 +1,314 @@
+package com.jxc.wefolio.service;
+
+import com.alibaba.fastjson2.JSON;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
+import com.jxc.wefolio.dict.PortfolioTypeDict;
+import com.jxc.wefolio.dict.PointSceneCodeDict;
+import com.jxc.wefolio.dict.VisitEventTypeDict;
+import com.jxc.wefolio.dict.VisitSourceTypeDict;
+import com.jxc.wefolio.dto.VisitorPortfolioEventRequest;
+import com.jxc.wefolio.entity.PortfolioEntity;
+import com.jxc.wefolio.entity.VisitEventEntity;
+import com.jxc.wefolio.entity.VisitRecordEntity;
+import com.jxc.wefolio.mapper.VisitEventEntityMapper;
+import com.jxc.wefolio.mapper.VisitRecordEntityMapper;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Map;
+
+/**
+ * 作品集访问服务 — 负责访客访问汇总、事件明细和访客侧扣费。
+ */
+@Service
+@RequiredArgsConstructor
+public class PortfolioVisitService {
+
+    /** 打开个人作品集业务类型 */
+    private static final String BUSINESS_TYPE_PORTFOLIO_OPEN = "PORTFOLIO_OPEN";
+
+    /** 图片查看业务类型 */
+    private static final String BUSINESS_TYPE_PORTFOLIO_IMAGE = "PORTFOLIO_IMAGE";
+
+    /** 视频播放业务类型 */
+    private static final String BUSINESS_TYPE_PORTFOLIO_VIDEO = "PORTFOLIO_VIDEO";
+
+    /** 打开个人作品集备注 */
+    private static final String REMARK_PORTFOLIO_OPEN = "访客打开个人作品集";
+
+    /** 查看图片备注 */
+    private static final String REMARK_IMAGE_VIEW = "访客查看作品集图片";
+
+    /** 播放视频备注 */
+    private static final String REMARK_VIDEO_PLAY = "访客播放作品集视频";
+
+    /** 打开计费幂等前缀 */
+    private static final String OPEN_IDEMPOTENCY_PREFIX = "PORTFOLIO_OPEN:";
+
+    /** 日期时间窗口格式 */
+    private static final DateTimeFormatter OPEN_WINDOW_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHH");
+
+    /** 访问汇总 Mapper */
+    private final VisitRecordEntityMapper visitRecordEntityMapper;
+
+    /** 访问事件 Mapper */
+    private final VisitEventEntityMapper visitEventEntityMapper;
+
+    /** 积分服务 */
+    private final PointService pointService;
+
+    /**
+     * 记录作品集打开。
+     *
+     * @param portfolio 作品集
+     * @param visitorKey 访客摘要
+     * @param sourceType 来源
+     * @param idempotencyKey 事件幂等键
+     * @return 访问汇总
+     */
+    public VisitRecordEntity recordOpen(
+            PortfolioEntity portfolio,
+            String visitorKey,
+            String sourceType,
+            String idempotencyKey
+    ) {
+        LocalDateTime now = LocalDateTime.now();
+        VisitRecordEntity record = findRecord(portfolio.getId(), visitorKey);
+        if (record == null) {
+            record = new VisitRecordEntity();
+            record.setVisitorKey(visitorKey);
+            record.setPortfolioId(portfolio.getId());
+            record.setLastPortfolioRevision(portfolio.getPublishedRevision());
+            record.setPortfolioType(PortfolioTypeDict.PERSONAL.getCode());
+            record.setOwnerType(portfolio.getOwnerType());
+            record.setOwnerId(portfolio.getOwnerId());
+            record.setSourceType(defaultSource(sourceType));
+            record.setVisitCount(1);
+            record.setViewWorkCount(0);
+            record.setPlayVideoCount(0);
+            record.setScheduleQueryCount(0);
+            record.setQrActionCount(0);
+            record.setContactSubmitCount(0);
+            record.setTotalDurationSeconds(0);
+            record.setFirstVisitedAt(now);
+            record.setLastVisitedAt(now);
+            visitRecordEntityMapper.insert(record);
+        } else {
+            record.setVisitCount(safeInt(record.getVisitCount()) + 1);
+            record.setLastPortfolioRevision(portfolio.getPublishedRevision());
+            record.setLastVisitedAt(now);
+            visitRecordEntityMapper.updateById(record);
+        }
+        consumePortfolioOpen(portfolio, visitorKey, now);
+        insertEvent(record, portfolio, VisitEventTypeDict.PORTFOLIO_OPENED.getCode(), null, null, null,
+                idempotencyKey, null, now);
+        return record;
+    }
+
+    /**
+     * 记录普通访客事件。
+     *
+     * @param portfolio 作品集
+     * @param request 事件请求
+     */
+    public void recordEvent(PortfolioEntity portfolio, VisitorPortfolioEventRequest request) {
+        VisitRecordEntity record = requireRecord(portfolio.getId(), request.getVisitorKey());
+        String eventType = request.getEventType();
+        if (VisitEventTypeDict.WORK_VIEWED.getCode().equals(eventType)) {
+            record.setViewWorkCount(safeInt(record.getViewWorkCount()) + 1);
+            pointService.consume(
+                    portfolio.getOwnerId(),
+                    PointSceneCodeDict.VIEW_PORTFOLIO_IMAGES.getCode(),
+                    BUSINESS_TYPE_PORTFOLIO_IMAGE,
+                    portfolio.getId() + ":" + request.getWorkId() + ":" + request.getVisitorKey(),
+                    1,
+                    request.getIdempotencyKey(),
+                    REMARK_IMAGE_VIEW
+            );
+        } else if (VisitEventTypeDict.VIDEO_PLAYED.getCode().equals(eventType)) {
+            record.setPlayVideoCount(safeInt(record.getPlayVideoCount()) + 1);
+            pointService.consume(
+                    portfolio.getOwnerId(),
+                    PointSceneCodeDict.VIEW_PORTFOLIO_VIDEO.getCode(),
+                    BUSINESS_TYPE_PORTFOLIO_VIDEO,
+                    portfolio.getId() + ":" + request.getWorkId() + ":" + request.getVisitorKey(),
+                    1,
+                    request.getIdempotencyKey(),
+                    REMARK_VIDEO_PLAY
+            );
+        } else if (VisitEventTypeDict.QR_CODE_INTERACTED.getCode().equals(eventType)) {
+            record.setQrActionCount(safeInt(record.getQrActionCount()) + 1);
+        } else if (VisitEventTypeDict.CONTACT_FORM_EXPOSED.getCode().equals(eventType)) {
+            record.setLastVisitedAt(LocalDateTime.now());
+        }
+        visitRecordEntityMapper.updateById(record);
+        insertEvent(record, portfolio, eventType, request.getWorkId(), request.getQueriedDate(),
+                request.getDurationSeconds(), request.getIdempotencyKey(), request.getMetadata(), LocalDateTime.now());
+    }
+
+    /**
+     * 记录档期查询事件。
+     *
+     * @param portfolio 作品集
+     * @param visitorKey 访客摘要
+     * @param queriedDate 查询日期
+     * @param idempotencyKey 幂等键
+     */
+    public void recordScheduleQuery(PortfolioEntity portfolio, String visitorKey, LocalDate queriedDate, String idempotencyKey) {
+        VisitRecordEntity record = findRecord(portfolio.getId(), visitorKey);
+        if (record == null) {
+            return;
+        }
+        record.setScheduleQueryCount(safeInt(record.getScheduleQueryCount()) + 1);
+        visitRecordEntityMapper.updateById(record);
+        insertEvent(record, portfolio, VisitEventTypeDict.SCHEDULE_QUERIED.getCode(), null, queriedDate,
+                null, idempotencyKey, null, LocalDateTime.now());
+    }
+
+    /**
+     * 记录联系线索提交事件。
+     *
+     * @param portfolio 作品集
+     * @param visitorKey 访客摘要
+     * @param leadId 线索 ID
+     * @param idempotencyKey 幂等键
+     */
+    public void recordContactLeadSubmitted(PortfolioEntity portfolio, String visitorKey, Long leadId, String idempotencyKey) {
+        VisitRecordEntity record = findRecord(portfolio.getId(), visitorKey);
+        if (record != null) {
+            record.setContactSubmitCount(safeInt(record.getContactSubmitCount()) + 1);
+            visitRecordEntityMapper.updateById(record);
+            insertEvent(record, portfolio, VisitEventTypeDict.CONTACT_LEAD_SUBMITTED.getCode(), null, null,
+                    null, idempotencyKey, Map.of("leadId", leadId), LocalDateTime.now());
+        }
+    }
+
+    /**
+     * 查询访问汇总。
+     *
+     * @param portfolioId 作品集 ID
+     * @param visitorKey 访客摘要
+     * @return 访问汇总
+     */
+    private VisitRecordEntity findRecord(Long portfolioId, String visitorKey) {
+        return visitRecordEntityMapper.selectOne(
+                Wrappers.lambdaQuery(VisitRecordEntity.class)
+                        .eq(VisitRecordEntity::getPortfolioId, portfolioId)
+                        .eq(VisitRecordEntity::getVisitorKey, visitorKey)
+                        .last("LIMIT 1")
+        );
+    }
+
+    /**
+     * 要求访问汇总存在。
+     *
+     * @param portfolioId 作品集 ID
+     * @param visitorKey 访客摘要
+     * @return 访问汇总
+     */
+    private VisitRecordEntity requireRecord(Long portfolioId, String visitorKey) {
+        VisitRecordEntity record = findRecord(portfolioId, visitorKey);
+        if (record == null) {
+            record = new VisitRecordEntity();
+            record.setVisitorKey(visitorKey);
+            record.setPortfolioId(portfolioId);
+            record.setVisitCount(0);
+            record.setViewWorkCount(0);
+            record.setPlayVideoCount(0);
+            record.setScheduleQueryCount(0);
+            record.setQrActionCount(0);
+            record.setContactSubmitCount(0);
+        }
+        return record;
+    }
+
+    /**
+     * 消费打开个人作品集积分。
+     *
+     * @param portfolio 作品集
+     * @param visitorKey 访客摘要
+     * @param now 当前时间
+     */
+    private void consumePortfolioOpen(PortfolioEntity portfolio, String visitorKey, LocalDateTime now) {
+        String window = now.withMinute(0).withSecond(0).withNano(0)
+                .minusHours(now.getHour() % 2L)
+                .format(OPEN_WINDOW_FORMATTER);
+        String businessId = portfolio.getId() + ":" + visitorKey + ":" + window;
+        pointService.consume(
+                portfolio.getOwnerId(),
+                PointSceneCodeDict.VISIT_PERSONAL_PORTFOLIO.getCode(),
+                BUSINESS_TYPE_PORTFOLIO_OPEN,
+                businessId,
+                1,
+                OPEN_IDEMPOTENCY_PREFIX + businessId,
+                REMARK_PORTFOLIO_OPEN
+        );
+    }
+
+    /**
+     * 写入事件。
+     *
+     * @param record 访问汇总
+     * @param portfolio 作品集
+     * @param eventType 事件类型
+     * @param workId 作品 ID
+     * @param queriedDate 查询日期
+     * @param durationSeconds 时长
+     * @param idempotencyKey 幂等键
+     * @param metadata 元数据
+     * @param occurredAt 发生时间
+     */
+    private void insertEvent(
+            VisitRecordEntity record,
+            PortfolioEntity portfolio,
+            String eventType,
+            Long workId,
+            LocalDate queriedDate,
+            Integer durationSeconds,
+            String idempotencyKey,
+            Map<String, Object> metadata,
+            LocalDateTime occurredAt
+    ) {
+        VisitEventEntity event = new VisitEventEntity();
+        event.setVisitRecordId(record.getId());
+        event.setPortfolioId(portfolio.getId());
+        event.setPortfolioRevision(portfolio.getPublishedRevision());
+        event.setVisitorKey(record.getVisitorKey());
+        event.setEventType(eventType);
+        event.setWorkId(workId);
+        event.setOwnerType(portfolio.getOwnerType());
+        event.setOwnerId(portfolio.getOwnerId());
+        event.setQueriedDate(queriedDate);
+        event.setDurationSeconds(durationSeconds);
+        event.setIdempotencyKey(idempotencyKey);
+        event.setMetadata(metadata == null ? null : JSON.toJSONString(metadata));
+        event.setOccurredAt(occurredAt);
+        visitEventEntityMapper.insert(event);
+    }
+
+    /**
+     * 来源兜底。
+     *
+     * @param sourceType 原来源
+     * @return 来源编码
+     */
+    private String defaultSource(String sourceType) {
+        return VisitSourceTypeDict.fromCode(sourceType) == null
+                ? VisitSourceTypeDict.UNKNOWN.getCode()
+                : sourceType;
+    }
+
+    /**
+     * 安全整数。
+     *
+     * @param value 原值
+     * @return 非空整数
+     */
+    private int safeInt(Integer value) {
+        return value == null ? 0 : value;
+    }
+}

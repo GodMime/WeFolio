@@ -613,7 +613,8 @@ class MineTeamMemberChangeFeatureTest {
         portfolio.setId(id);
         portfolio.setOwnerType(ownerType.getCode());
         portfolio.setOwnerId(ownerId);
-        portfolio.setTitle(title);
+        portfolio.setDraftConfigJson("{\"share\":{\"title\":\"" + title + "\"},\"components\":[]}");
+        portfolio.setPublishedConfigJson("{\"share\":{\"title\":\"" + title + "\"},\"components\":[]}");
         portfolio.setStatus(PortfolioStatusDict.ACTIVE.getCode());
         return portfolio;
     }

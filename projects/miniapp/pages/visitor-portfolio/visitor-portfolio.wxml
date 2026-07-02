@@ -1,0 +1,35 @@
+<view class="page-shell visitor-portfolio-page">
+  <navigation-bar title="{{portfolio.title || '个人作品集'}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+
+  <scroll-view scroll-y class="visitor-scroll">
+    <view class="visitor-hero">
+      <view class="visitor-title">{{portfolio.title || '个人作品集'}}</view>
+      <view class="visitor-subtitle">{{portfolio.config.share.intro}}</view>
+    </view>
+
+    <view wx:for="{{portfolio.components}}" wx:key="componentKey" class="visitor-component">
+      <block wx:if="{{item.componentType === 'QR_CONTACT'}}">
+        <view class="component-title">二维码联系</view>
+        <image wx:if="{{item.config.qrUrl}}" class="qr-image" src="{{item.config.qrUrl}}" mode="aspectFit"></image>
+      </block>
+      <block wx:elif="{{item.componentType === 'CONTACT_FORM'}}">
+        <view class="component-title">预留联系信息</view>
+        <input class="field" placeholder="联系人" value="{{contactForm.contactName}}" data-field="contactName" bindinput="handleContactInput" />
+        <input class="field" placeholder="手机号" value="{{contactForm.phone}}" data-field="phone" bindinput="handleContactInput" />
+        <input class="field" placeholder="微信号" value="{{contactForm.wechat}}" data-field="wechat" bindinput="handleContactInput" />
+        <textarea class="field textarea" placeholder="需求描述" value="{{contactForm.needs}}" data-field="needs" bindinput="handleContactInput"></textarea>
+        <button class="primary-button" bindtap="handleSubmitContact">提交</button>
+      </block>
+      <block wx:else>
+        <view class="component-title">{{item.config.title || item.componentType}}</view>
+      </block>
+    </view>
+  </scroll-view>
+
+  <view wx:if="{{portfolio.underMaintenance}}" class="maintenance-mask">
+    <view class="maintenance-panel">
+      <view class="maintenance-primary">UNDER MAINTENANCE</view>
+      <view class="maintenance-secondary">维护中</view>
+    </view>
+  </view>
+</view>

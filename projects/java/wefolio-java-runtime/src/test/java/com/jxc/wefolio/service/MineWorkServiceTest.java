@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.jxc.wefolio.common.auth.AuthContext;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
 import com.jxc.wefolio.dict.MediaTypeDict;
+import com.jxc.wefolio.dict.PortfolioConfigScopeDict;
 import com.jxc.wefolio.dict.ReferenceTypeDict;
 import com.jxc.wefolio.dict.UserStatusDict;
 import com.jxc.wefolio.dict.WfTagStatusDict;
@@ -267,9 +268,9 @@ class MineWorkServiceTest {
                 workTagRelation(12L, 32L)
         ));
         when(portfolioReferenceEntityMapper.selectList(any())).thenReturn(List.of(
-                portfolioReference(11L),
-                portfolioReference(12L),
-                portfolioReference(12L)
+                portfolioReference(11L, 201L, PortfolioConfigScopeDict.PUBLISHED.getCode()),
+                portfolioReference(12L, 202L, PortfolioConfigScopeDict.PUBLISHED.getCode()),
+                portfolioReference(12L, 203L, PortfolioConfigScopeDict.PUBLISHED.getCode())
         ));
         when(cosService.publicUrl(any())).thenAnswer(invocation -> "https://cos.example/" + invocation.getArgument(0));
 
@@ -293,6 +294,30 @@ class MineWorkServiceTest {
         verify(workTagEntityMapper, times(1)).selectList(any());
         verify(portfolioReferenceEntityMapper, times(1)).selectList(any());
         verify(wfTagEntityMapper, never()).selectBatchIds(any());
+    }
+
+    @Test
+    void listWorksShouldCountDraftAndPublishedReferencesFromSamePortfolioOnlyOnce() {
+        WorkEntity work = ownedWork(11L);
+        work.setMediaType(MediaTypeDict.IMAGE.getCode());
+        work.setTitle("草坪婚礼");
+        Page<WorkEntity> page = new Page<>(1, 20);
+        page.setRecords(List.of(work));
+        page.setTotal(1L);
+        when(workEntityMapper.selectPage(any(), any())).thenReturn(page);
+        when(workEntityMapper.selectMaps(any())).thenReturn(List.of(
+                Map.of("mediaType", MediaTypeDict.IMAGE.getCode(), "itemCount", 1L)
+        ));
+        when(wfTagEntityMapper.selectList(any())).thenReturn(List.of());
+        when(portfolioReferenceEntityMapper.selectList(any())).thenReturn(List.of(
+                portfolioReference(11L, 200L, PortfolioConfigScopeDict.DRAFT.getCode()),
+                portfolioReference(11L, 200L, PortfolioConfigScopeDict.PUBLISHED.getCode())
+        ));
+        when(cosService.publicUrl(any())).thenAnswer(invocation -> "https://cos.example/" + invocation.getArgument(0));
+
+        MineWorkListResponse response = service().listWorks(null, null, 1, 20);
+
+        assertThat(response.getWorks().get(0).getReferenceCount()).isEqualTo(1L);
     }
 
     @Test
@@ -1520,8 +1545,8 @@ class MineWorkServiceTest {
         second.setTitle("被引用作品");
         when(workEntityMapper.selectBatchIds(any())).thenReturn(List.of(first, second));
         when(portfolioReferenceEntityMapper.selectList(any())).thenReturn(List.of(
-                portfolioReference(12L),
-                portfolioReference(12L)
+                portfolioReference(12L, 212L, PortfolioConfigScopeDict.PUBLISHED.getCode()),
+                portfolioReference(12L, 213L, PortfolioConfigScopeDict.PUBLISHED.getCode())
         ));
         MineWorkBatchDeleteRequest request = new MineWorkBatchDeleteRequest();
         request.setWorkIds(List.of(11L, 12L));
@@ -1537,6 +1562,26 @@ class MineWorkServiceTest {
         assertThat(response.getItems().get(1).isCanDelete()).isFalse();
         assertThat(response.getItems().get(1).getMessage())
                 .isEqualTo("作品已被 2 个作品集引用，请先从作品集中移除");
+    }
+
+    @Test
+    void checkDeleteWorksShouldDeduplicateReferencesByPortfolioIdAcrossScopes() {
+        WorkEntity work = ownedWork(12L);
+        work.setTitle("被引用作品");
+        when(workEntityMapper.selectBatchIds(any())).thenReturn(List.of(work));
+        when(portfolioReferenceEntityMapper.selectList(any())).thenReturn(List.of(
+                portfolioReference(12L, 220L, PortfolioConfigScopeDict.DRAFT.getCode()),
+                portfolioReference(12L, 220L, PortfolioConfigScopeDict.PUBLISHED.getCode()),
+                portfolioReference(12L, 220L, PortfolioConfigScopeDict.PUBLISHED.getCode())
+        ));
+        MineWorkBatchDeleteRequest request = new MineWorkBatchDeleteRequest();
+        request.setWorkIds(List.of(12L));
+
+        MineWorkBatchDeleteCheckResponse response = service().checkDeleteWorks(request);
+
+        assertThat(response.getItems().get(0).getReferenceCount()).isEqualTo(1L);
+        assertThat(response.getItems().get(0).getMessage())
+                .isEqualTo("作品已被 1 个作品集引用，请先从作品集中移除");
     }
 
     @Test
@@ -1604,9 +1649,15 @@ class MineWorkServiceTest {
     }
 
     private PortfolioReferenceEntity portfolioReference(Long workId) {
+        return portfolioReference(workId, workId + 1000L, PortfolioConfigScopeDict.PUBLISHED.getCode());
+    }
+
+    private PortfolioReferenceEntity portfolioReference(Long workId, Long portfolioId, String configScope) {
         PortfolioReferenceEntity reference = new PortfolioReferenceEntity();
+        reference.setPortfolioId(portfolioId);
         reference.setReferenceType(ReferenceTypeDict.WORK.getCode());
         reference.setReferenceId(workId);
+        reference.setConfigScope(configScope);
         reference.setIsValid(1);
         return reference;
     }

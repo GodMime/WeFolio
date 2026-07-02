@@ -42,6 +42,18 @@ class StatusDictionaryUsageTest {
     }
 
     /**
+     * 我的作品服务不应硬编码作品集配置作用域，应通过字典常量读取。
+     *
+     * @throws Exception 读取源码失败时抛出异常
+     */
+    @Test
+    void mineWorkServiceUsesPortfolioConfigScopeDictionary() throws Exception {
+        String source = readSource("src/main/java/com/jxc/wefolio/service/MineWorkService.java");
+
+        assertThat(source).doesNotContain("\"PUBLISHED\"");
+    }
+
+    /**
      * 档期状态色调属于前后端约定，应由字典统一承载。
      *
      * @throws Exception 读取源码失败时抛出异常
