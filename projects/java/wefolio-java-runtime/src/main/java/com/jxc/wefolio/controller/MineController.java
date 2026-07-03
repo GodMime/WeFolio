@@ -3,6 +3,8 @@ package com.jxc.wefolio.controller;
 import com.jxc.wefolio.common.Response;
 import com.jxc.wefolio.annotation.MaintainerAccess;
 import com.jxc.wefolio.dto.MineDashboardResponse;
+import com.jxc.wefolio.dto.MineProfileAssetUploadTicketRequest;
+import com.jxc.wefolio.dto.MineProfileAssetUploadTicketResponse;
 import com.jxc.wefolio.dto.MineProfileResponse;
 import com.jxc.wefolio.dto.MineProfileUpdateRequest;
 import com.jxc.wefolio.dto.MineVisitRecordsResponse;
@@ -12,6 +14,7 @@ import com.jxc.wefolio.service.MineVisitService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -52,6 +55,23 @@ public class MineController {
     @GetMapping("/api/mine/profile")
     public Response<MineProfileResponse> profile() {
         return Response.success(mineProfileService.getProfile());
+    }
+
+    /**
+     * 创建基础信息资料图片直传 COS 票据。
+     *
+     * @param request 票据创建请求
+     * @return 直传票据响应
+     */
+    @PostMapping("/api/mine/profile/assets/upload-ticket")
+    public Response<MineProfileAssetUploadTicketResponse> createProfileAssetUploadTicket(
+            @RequestBody MineProfileAssetUploadTicketRequest request
+    ) {
+        log.info("创建基础信息资料图片直传票据: assetType={}, mimeType={}, fileSize={}",
+                request == null ? null : request.getAssetType(),
+                request == null ? null : request.getMimeType(),
+                request == null ? null : request.getFileSize());
+        return Response.success(mineProfileService.createProfileAssetUploadTicket(request));
     }
 
     /**

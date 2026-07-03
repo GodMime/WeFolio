@@ -57,6 +57,8 @@ class PortfolioVisitServiceTest {
         verify(visitRecordEntityMapper).insert(recordCaptor.capture());
         assertThat(record.getId()).isEqualTo(33L);
         assertThat(recordCaptor.getValue().getVisitorKey()).isEqualTo("visitor-a");
+        assertThat(recordCaptor.getValue().getPortfolioTitleSnapshot()).isEqualTo("林安婚礼司仪");
+        assertThat(recordCaptor.getValue().getPortfolioShareCodeSnapshot()).isEqualTo("PF001");
         assertThat(recordCaptor.getValue().getPortfolioType()).isEqualTo(PortfolioTypeDict.PERSONAL.getCode());
         assertThat(recordCaptor.getValue().getVisitCount()).isEqualTo(1);
         verify(pointService).consume(
@@ -69,6 +71,26 @@ class PortfolioVisitServiceTest {
                 eq("访客打开个人作品集")
         );
         verify(visitEventEntityMapper).insert(any(VisitEventEntity.class));
+    }
+
+    @Test
+    void recordOpenShouldRefreshPortfolioSnapshotOnExistingRecord() {
+        VisitRecordEntity record = new VisitRecordEntity();
+        record.setId(33L);
+        record.setVisitorKey("visitor-a");
+        record.setPortfolioId(88L);
+        record.setVisitCount(1);
+        record.setPortfolioTitleSnapshot("旧标题");
+        record.setPortfolioShareCodeSnapshot("OLD001");
+        when(visitRecordEntityMapper.selectOne(any())).thenReturn(record);
+
+        service().recordOpen(portfolio(), "visitor-a", "WECHAT_SHARE_CARD", "open-2");
+
+        ArgumentCaptor<VisitRecordEntity> recordCaptor = ArgumentCaptor.forClass(VisitRecordEntity.class);
+        verify(visitRecordEntityMapper).updateById(recordCaptor.capture());
+        assertThat(recordCaptor.getValue().getPortfolioTitleSnapshot()).isEqualTo("林安婚礼司仪");
+        assertThat(recordCaptor.getValue().getPortfolioShareCodeSnapshot()).isEqualTo("PF001");
+        assertThat(recordCaptor.getValue().getVisitCount()).isEqualTo(2);
     }
 
     @Test
@@ -111,9 +133,13 @@ class PortfolioVisitServiceTest {
     private PortfolioEntity portfolio() {
         PortfolioEntity portfolio = new PortfolioEntity();
         portfolio.setId(88L);
+        portfolio.setShareCode("PF001");
         portfolio.setOwnerType(PortfolioOwnerTypeDict.USER.getCode());
         portfolio.setOwnerId(7L);
         portfolio.setPublishedRevision(3);
+        portfolio.setPublishedConfigJson("""
+                {"schemaVersion":"standard-personal-v1","share":{"title":"林安婚礼司仪"},"components":[]}
+                """);
         return portfolio;
     }
 }

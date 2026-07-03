@@ -16,4 +16,7 @@ public interface GlobalExceptionMessage {
 
     /** 缺少必填参数提示 */
     String MISSING_REQUEST_PARAMETER_MESSAGE = "缺少必填参数";
+
+    /** 静态资源不存在提示 */
+    String RESOURCE_NOT_FOUND_MESSAGE = "资源不存在";
 }

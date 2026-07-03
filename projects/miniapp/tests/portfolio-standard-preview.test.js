@@ -153,3 +153,53 @@ test('preview markup exposes loading skeleton and retryable error state', () => 
   assert.match(wxml, /wx:elif="\{\{errorMessage\}\}"/)
   assert.match(wxml, /bindtap="handleRetryPreview"/)
 })
+
+test('profile component can render selected wechat qr in actual pages', () => {
+  const previewWxml = fs.readFileSync(
+    path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.wxml'),
+    'utf8'
+  )
+  const visitorWxml = fs.readFileSync(
+    path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.wxml'),
+    'utf8'
+  )
+
+  assert.match(previewWxml, /wx:if="\{\{item\.profile\.wechatQrUrl\}\}"[\s\S]*src="\{\{item\.profile\.wechatQrUrl\}\}"[\s\S]*bindtap="handlePreviewQr"/)
+  assert.match(visitorWxml, /wx:if="\{\{item\.profile\.wechatQrUrl\}\}"[\s\S]*src="\{\{item\.profile\.wechatQrUrl\}\}"[\s\S]*bindtap="handlePreviewQr"/)
+})
+
+test('actual portfolio pages do not render share intro as page content', () => {
+  const previewWxml = fs.readFileSync(
+    path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.wxml'),
+    'utf8'
+  )
+  const visitorWxml = fs.readFileSync(
+    path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.wxml'),
+    'utf8'
+  )
+
+  assert.doesNotMatch(previewWxml, /portfolio\.share\.intro/)
+  assert.doesNotMatch(visitorWxml, /portfolio\.share\.intro/)
+  assert.doesNotMatch(previewWxml, /class="share-intro"/)
+  assert.doesNotMatch(visitorWxml, /class="share-intro"/)
+})
+
+test('portfolio user-authored text preserves line breaks in actual pages', () => {
+  const appWxss = fs.readFileSync(
+    path.join(__dirname, '../app.wxss'),
+    'utf8'
+  )
+  const previewWxss = fs.readFileSync(
+    path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.wxss'),
+    'utf8'
+  )
+  const visitorWxss = fs.readFileSync(
+    path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.wxss'),
+    'utf8'
+  )
+
+  ;[previewWxss, visitorWxss].forEach((wxss) => {
+    assert.match(wxss, /\.profile-bio,\s*\.section-desc,\s*\.text-content,\s*\.work-desc\s*\{[^}]*white-space:\s*pre-wrap;/)
+  })
+  assert.match(appWxss, /\.user-authored-text,[\s\S]*\.message-content,[\s\S]*\.team-summary,[\s\S]*\.member-summary,[\s\S]*\.candidate-summary,[\s\S]*\.visit-summary\s*\{[^}]*white-space:\s*pre-wrap;/)
+})

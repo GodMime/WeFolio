@@ -16,6 +16,12 @@ public class ContactLeadEntity extends BaseEntity {
     /** 来源作品集 ID */
     private Long portfolioId;
 
+    /** 来源作品集标题快照，作品集删除后仍用于线索展示 */
+    private String portfolioTitleSnapshot;
+
+    /** 来源作品集分享编码快照，便于删除后排查线索来源 */
+    private String portfolioShareCodeSnapshot;
+
     /** 提交时的生效修订号 */
     private Integer portfolioRevision;
 

@@ -150,4 +150,16 @@ public class MinePortfolioController {
         minePortfolioService.createShareRecord(portfolioId, request);
         return Response.success();
     }
+
+    /**
+     * 删除作品集。
+     *
+     * @param portfolioId 作品集 ID
+     * @return 空响应
+     */
+    @PostMapping("/api/mine/portfolios/delete/{portfolioId}")
+    public Response<Void> deletePortfolio(@PathVariable Long portfolioId) {
+        minePortfolioService.deletePortfolio(portfolioId);
+        return Response.success();
+    }
 }

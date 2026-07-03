@@ -68,6 +68,7 @@ class MinePortfolioControllerTest {
         Response<MinePortfolioDetailResponse> preview = controller.preview(88L);
         Response<MinePortfolioDetailResponse> published = controller.publish(88L, publishRequest);
         Response<Void> shared = controller.createShareRecord(88L, shareRequest);
+        Response<Void> deleted = controller.deletePortfolio(88L);
 
         assertThat(MinePortfolioController.class.isAnnotationPresent(MaintainerAccess.class)).isTrue();
         assertGetMapping("list", new Class<?>[] {String.class}, "/api/mine/portfolios");
@@ -89,6 +90,9 @@ class MinePortfolioControllerTest {
         assertPostMapping("createShareRecord",
                 new Class<?>[] {Long.class, MinePortfolioShareRecordRequest.class},
                 "/api/mine/portfolios/{portfolioId}/share-records");
+        assertPostMapping("deletePortfolio",
+                new Class<?>[] {Long.class},
+                "/api/mine/portfolios/delete/{portfolioId}");
         assertThat(MinePortfolioController.class.getMethod("list", String.class)
                 .getParameters()[0].isAnnotationPresent(RequestParam.class)).isTrue();
         assertThat(MinePortfolioController.class.getMethod("detail", Long.class)
@@ -104,7 +108,9 @@ class MinePortfolioControllerTest {
         assertThat(preview.getData()).isSameAs(detailResponse);
         assertThat(published.getData()).isSameAs(detailResponse);
         assertThat(shared.isSuccess()).isTrue();
+        assertThat(deleted.isSuccess()).isTrue();
         verify(minePortfolioService).createShareRecord(88L, shareRequest);
+        verify(minePortfolioService).deletePortfolio(88L);
     }
 
     private void assertGetMapping(String methodName, Class<?>[] parameterTypes, String path)

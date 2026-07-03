@@ -9,8 +9,7 @@ const indexWxml = fs.readFileSync(path.join(__dirname, '../pages/index/index.wxm
 const profileJsPath = path.join(__dirname, '../pages/profile/profile.js')
 const profileWxmlPath = path.join(__dirname, '../pages/profile/profile.wxml')
 const profileWxssPath = path.join(__dirname, '../pages/profile/profile.wxss')
-const avatarJsPath = path.join(__dirname, '../utils/avatar.js')
-const uploadFileJsPath = path.join(__dirname, '../utils/upload-file.js')
+const profileAssetsJsPath = path.join(__dirname, '../utils/profile-assets.js')
 
 function readProfileRule(selector) {
   const profileWxss = fs.readFileSync(profileWxssPath, 'utf8')
@@ -57,6 +56,15 @@ test('basic profile page files and controls match design draft', () => {
   assert.match(profileWxml, />职业身份</)
   assert.match(profileWxml, />服务城市</)
   assert.match(profileWxml, />个人简介</)
+  assert.match(profileWxml, />微信二维码</)
+  assert.match(profileWxml, />小于300KB · 每月可修改3次</)
+  assert.doesNotMatch(profileWxml, />小于300KB · 每月3次</)
+  assert.match(profileWxml, /bindtap="handleChooseWechatQr"/)
+  assert.match(profileWxml, /class="secondary-button profile-action-button avatar-button"[\s\S]*>更换头像</)
+  assert.match(profileWxml, /class="secondary-button profile-action-button qr-button"[\s\S]*>上传二维码</)
+  assert.doesNotMatch(profileWxml, /bindtap="handleClearWechatQr"/)
+  assert.doesNotMatch(profileWxml, />清空二维码</)
+  assert.doesNotMatch(profileWxml, /class="panel profile-qr-panel"/)
   assert.match(profileWxml, />个人标签</)
   assert.match(profileWxml, /bindtap="handleSave"[\s\S]*>保存修改</)
   assert.match(profileWxml, /bindtap="handleLogout"[\s\S]*>退出登录</)
@@ -68,18 +76,55 @@ test('basic profile page files and controls match design draft', () => {
   assert.match(profileWxml, /bindtap="handleSelectTagColor"/)
 })
 
+test('wechat QR editor sits directly below intro inside profile fields panel', () => {
+  const profileWxml = fs.readFileSync(profileWxmlPath, 'utf8')
+  const fieldsPanelStart = profileWxml.indexOf('class="panel profile-fields-panel"')
+  const tagPanelStart = profileWxml.indexOf('class="panel tag-editor-panel"')
+  const introStart = profileWxml.indexOf('>个人简介<')
+  const qrStart = profileWxml.indexOf('>微信二维码<')
+
+  assert.notEqual(fieldsPanelStart, -1)
+  assert.notEqual(tagPanelStart, -1)
+  assert.notEqual(introStart, -1)
+  assert.notEqual(qrStart, -1)
+  assert.ok(fieldsPanelStart < introStart)
+  assert.ok(introStart < qrStart)
+  assert.ok(qrStart < tagPanelStart)
+  assert.match(
+    profileWxml,
+    /class="panel profile-fields-panel"[\s\S]*>个人简介<[\s\S]*<textarea[^>]*\/>\s*<\/view>\s*<view class="form-row qr-form-row">[\s\S]*>微信二维码</
+  )
+})
+
+test('profile asset buttons share one compact secondary style', () => {
+  const profileWxss = fs.readFileSync(profileWxssPath, 'utf8')
+  const actionButtonRule = readProfileRule('.profile-action-button')
+  const qrButtonRule = readProfileRule('.qr-button')
+  const qrActionsRule = readProfileRule('.qr-actions')
+
+  assert.match(actionButtonRule, /flex:\s*none/)
+  assert.match(actionButtonRule, /min-width:\s*140rpx/)
+  assert.match(actionButtonRule, /min-height:\s*72rpx/)
+  assert.match(actionButtonRule, /font-size:\s*24rpx/)
+  assert.match(qrActionsRule, /display:\s*flex/)
+  assert.match(qrActionsRule, /align-items:\s*center/)
+  assert.doesNotMatch(qrButtonRule, /width:\s*100%/)
+  assert.doesNotMatch(qrButtonRule, /min-height:\s*70rpx/)
+  assert.doesNotMatch(profileWxss, /\.qr-button\s*\{[^}]*font-size:\s*24rpx/)
+})
+
 test('basic profile page uses backend profile and shared avatar endpoints', () => {
   const profileJs = fs.readFileSync(profileJsPath, 'utf8')
-  const avatarJs = fs.readFileSync(avatarJsPath, 'utf8')
-  const uploadFileJs = fs.readFileSync(uploadFileJsPath, 'utf8')
+  const profileAssetsJs = fs.readFileSync(profileAssetsJsPath, 'utf8')
 
   assert.match(profileJs, /url:\s*'\/api\/mine\/profile'/)
   assert.match(profileJs, /method:\s*'PUT'/)
-  assert.match(profileJs, /uploadAvatar/)
-  assert.match(avatarJs, /\/api\/auth\/avatar/)
-  assert.match(avatarJs, /uploadPreparedFile/)
-  assert.match(uploadFileJs, /TOKEN_STORAGE_KEY/)
-  assert.match(uploadFileJs, /Authorization = `Bearer \$\{token\}`/)
+  assert.match(profileJs, /uploadProfileAvatar/)
+  assert.match(profileJs, /uploadWechatQr/)
+  assert.doesNotMatch(profileJs, /uploadAvatar/)
+  assert.match(profileAssetsJs, /\/api\/mine\/profile\/assets\/upload-ticket/)
+  assert.match(profileAssetsJs, /WECHAT_QR/)
+  assert.match(profileAssetsJs, /AVATAR/)
   assert.match(profileJs, /url:\s*'\/api\/auth\/account\/cancel'/)
   assert.match(profileJs, /wx\.showModal/)
 })
@@ -90,9 +135,10 @@ test('basic profile avatar picker only previews and save uploads the selected im
   assert.match(profileJs, /handleChooseAvatar\(event\)/)
   assert.match(profileJs, /'form\.avatarUrl': avatarUrl/)
   assert.doesNotMatch(profileJs, /avatarUploading/)
-  assert.doesNotMatch(profileJs, /const uploadedAvatarUrl = await uploadAvatar\(avatarUrl\)/)
-  assert.match(profileJs, /avatarUrl = await uploadAvatar\(payload\.avatarUrl\)/)
-  assert.match(profileJs, /data:\s*Object\.assign\(\{\}, payload, \{[\s\S]*avatarUrl/)
+  assert.doesNotMatch(profileJs, /const uploadedAvatarUrl = await uploadProfileAvatar\(avatarUrl\)/)
+  assert.match(profileJs, /avatarUrl = await uploadProfileAvatar\(payload\.avatarUrl\)/)
+  assert.match(profileJs, /wechatQrUrl = await uploadWechatQr\(payload\.wechatQrUrl\)/)
+  assert.match(profileJs, /data:\s*Object\.assign\(\{\}, payload, \{[\s\S]*avatarUrl[\s\S]*wechatQrUrl/)
 })
 
 test('basic profile fields show character limit counters', () => {

@@ -1,3 +1,13 @@
+const PROFILE_VISIBLE_FIELD_DEFAULTS = {
+  avatar: true,
+  displayName: true,
+  profession: true,
+  city: true,
+  bio: true,
+  tags: true,
+  wechatQr: false
+}
+
 function trimText(value) {
   return String(value || '').trim()
 }
@@ -41,20 +51,30 @@ function normalizeDisplayGroups(rawGroups = []) {
   })
 }
 
+function normalizeProfileVisibleFields(visibleFields = {}) {
+  return Object.keys(PROFILE_VISIBLE_FIELD_DEFAULTS).reduce((result, field) => {
+    result[field] = Object.prototype.hasOwnProperty.call(visibleFields, field)
+      ? Boolean(visibleFields[field])
+      : PROFILE_VISIBLE_FIELD_DEFAULTS[field]
+    return result
+  }, {})
+}
+
 function normalizeProfile(raw = {}) {
   const tags = Array.isArray(raw.tags) ? raw.tags : []
+  const visibleFields = normalizeProfileVisibleFields(raw.visibleFields)
   return {
-    avatarUrl: trimText(raw.avatarUrl),
-    displayName: trimText(raw.displayName),
-    profession: trimText(raw.profession),
-    city: trimText(raw.city),
-    bio: trimText(raw.bio),
-    wechatQrUrl: trimText(raw.wechatQrUrl),
-    visibleFields: Object.assign({}, raw.visibleFields || {}),
-    tags: tags.map((tag) => ({
+    avatarUrl: visibleFields.avatar ? trimText(raw.avatarUrl) : '',
+    displayName: visibleFields.displayName ? trimText(raw.displayName) : '',
+    profession: visibleFields.profession ? trimText(raw.profession) : '',
+    city: visibleFields.city ? trimText(raw.city) : '',
+    bio: visibleFields.bio ? trimText(raw.bio) : '',
+    wechatQrUrl: visibleFields.wechatQr ? trimText(raw.wechatQrUrl) : '',
+    visibleFields,
+    tags: visibleFields.tags ? tags.map((tag) => ({
       name: trimText(tag.name),
       color: trimText(tag.color)
-    })).filter((tag) => tag.name)
+    })).filter((tag) => tag.name) : []
   }
 }
 
@@ -72,13 +92,17 @@ function normalizeRenderComponent(raw = {}) {
   const groups = normalizeDisplayGroups(raw.groups)
   const activeGroup = groups[0] || { groupKey: '', name: '', sortOrder: 0, works: [] }
   const qrContact = normalizeQrContact(raw.qrContact || {})
+  const config = raw.config || {}
+  const profileSource = raw.profile || Object.assign({}, config.profile || {}, {
+    visibleFields: config.visibleFields || {}
+  })
   const component = {
     componentKey: trimText(raw.componentKey),
     componentType,
     name: trimText(raw.name),
     sortOrder: toNumber(raw.sortOrder),
     title: trimText(raw.title),
-    config: Object.assign({}, raw.config || {}),
+    config: Object.assign({}, config),
     works: Array.isArray(raw.works) ? raw.works.map(normalizeRenderWork) : [],
     groups,
     displayTags: groups.map((group, index) => ({
@@ -89,7 +113,7 @@ function normalizeRenderComponent(raw = {}) {
     activeGroupKey: activeGroup.groupKey,
     activeGroup,
     layout: componentType === 'WORK_LIST' ? 'single' : componentType === 'WORK_GRID' ? 'grid' : '',
-    profile: normalizeProfile(raw.profile || {}),
+    profile: normalizeProfile(profileSource),
     scheduleQuery: Object.assign({}, raw.scheduleQuery || {}),
     qrContact,
     previewImageUrl: qrContact.qrUrl,

@@ -1,11 +1,13 @@
 package com.jxc.wefolio.service;
 
+import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.jxc.wefolio.dict.FollowStatusDict;
 import com.jxc.wefolio.dict.PortfolioPublicationStatusDict;
 import com.jxc.wefolio.dict.VisitSourceTypeDict;
 import com.jxc.wefolio.dto.ContactLeadSubmitRequest;
 import com.jxc.wefolio.dto.ContactLeadSubmitResponse;
+import com.jxc.wefolio.dto.PortfolioConfigDto;
 import com.jxc.wefolio.entity.ContactLeadEntity;
 import com.jxc.wefolio.entity.PortfolioEntity;
 import com.jxc.wefolio.exception.BusinessException;
@@ -33,6 +35,12 @@ public class ContactLeadService {
 
     /** SHA-256 算法名 */
     private static final String SHA_256_ALGORITHM = "SHA-256";
+
+    /** 作品集标题快照兜底 */
+    private static final String DEFAULT_PORTFOLIO_TITLE_SNAPSHOT = "个人作品集";
+
+    /** 分享编码快照兜底 */
+    private static final String DEFAULT_PORTFOLIO_SHARE_CODE_SNAPSHOT = "";
 
     /** 联系线索 Mapper */
     private final ContactLeadEntityMapper contactLeadEntityMapper;
@@ -79,6 +87,8 @@ public class ContactLeadService {
         LocalDateTime now = LocalDateTime.now();
         ContactLeadEntity lead = new ContactLeadEntity();
         lead.setPortfolioId(portfolio.getId());
+        lead.setPortfolioTitleSnapshot(resolvePortfolioTitleSnapshot(portfolio));
+        lead.setPortfolioShareCodeSnapshot(resolvePortfolioShareCodeSnapshot(portfolio));
         lead.setPortfolioRevision(portfolio.getPublishedRevision());
         lead.setVisitRecordId(request.getVisitRecordId());
         lead.setOwnerType(portfolio.getOwnerType());
@@ -108,6 +118,42 @@ public class ContactLeadService {
         response.setLeadId(lead.getId());
         response.setSubmittedAt(now);
         return response;
+    }
+
+    /**
+     * 解析作品集标题快照。
+     *
+     * @param portfolio 作品集
+     * @return 标题快照
+     */
+    private String resolvePortfolioTitleSnapshot(PortfolioEntity portfolio) {
+        if (portfolio == null || portfolio.getPublishedConfigJson() == null
+                || portfolio.getPublishedConfigJson().isBlank()) {
+            return DEFAULT_PORTFOLIO_TITLE_SNAPSHOT;
+        }
+        try {
+            PortfolioConfigDto config = JSON.parseObject(portfolio.getPublishedConfigJson(), PortfolioConfigDto.class);
+            if (config != null && config.getShare() != null && config.getShare().getTitle() != null
+                    && !config.getShare().getTitle().isBlank()) {
+                return config.getShare().getTitle().strip();
+            }
+            return DEFAULT_PORTFOLIO_TITLE_SNAPSHOT;
+        } catch (Exception e) {
+            return DEFAULT_PORTFOLIO_TITLE_SNAPSHOT;
+        }
+    }
+
+    /**
+     * 解析作品集分享编码快照。
+     *
+     * @param portfolio 作品集
+     * @return 分享编码快照
+     */
+    private String resolvePortfolioShareCodeSnapshot(PortfolioEntity portfolio) {
+        if (portfolio == null || portfolio.getShareCode() == null || portfolio.getShareCode().isBlank()) {
+            return DEFAULT_PORTFOLIO_SHARE_CODE_SNAPSHOT;
+        }
+        return portfolio.getShareCode().strip();
     }
 
     /**

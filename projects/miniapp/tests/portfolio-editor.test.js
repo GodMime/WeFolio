@@ -53,6 +53,27 @@ function createSelectorQuery(rects) {
   return query
 }
 
+function buildMockShareCoverCropState(imageInfo = {}) {
+  return {
+    imagePath: imageInfo.path || imageInfo.tempFilePath || '',
+    imageWidth: imageInfo.width || 1200,
+    imageHeight: imageInfo.height || 800,
+    cropBoxWidth: 320,
+    cropBoxHeight: 256,
+    displayWidth: 384,
+    displayHeight: 256,
+    offsetX: -32,
+    offsetY: 0,
+    minOffsetX: -64,
+    maxOffsetX: 0,
+    minOffsetY: 0,
+    maxOffsetY: 0,
+    scale: 0.32,
+    cropBoxStyle: 'width: 320px; height: 256px;',
+    imageStyle: 'width: 384px; height: 256px; transform: translate3d(-32px, 0px, 0);'
+  }
+}
+
 function loadPortfolioEditorPage(fakeRequest, wxOverrides = {}, assetOverrides = {}, harnessOptions = {}) {
   const pagePath = path.join(__dirname, '../pages/portfolio-standard-edit/portfolio-standard-edit.js')
   const requestPath = path.join(__dirname, '../utils/request.js')
@@ -97,6 +118,33 @@ function loadPortfolioEditorPage(fakeRequest, wxOverrides = {}, assetOverrides =
       },
       createChoosePortfolioImageOptions() {
         return { count: 1, mediaType: ['image'], sourceType: ['album'] }
+      },
+      getPortfolioCoverImageInfo(imageFile) {
+        return Promise.resolve({
+          path: imageFile.tempFilePath || imageFile.path || '',
+          width: imageFile.width || 0,
+          height: imageFile.height || 0
+        })
+      },
+      shouldCropPortfolioCover(imageInfo) {
+        return Number(imageInfo.width) * 4 !== Number(imageInfo.height) * 5
+      },
+      buildPortfolioCoverCropState: buildMockShareCoverCropState,
+      movePortfolioCoverCropState(state) {
+        return state
+      },
+      buildPortfolioCoverCropFrame() {
+        return {
+          sx: 0,
+          sy: 0,
+          sWidth: 1000,
+          sHeight: 800,
+          destWidth: 1000,
+          destHeight: 800
+        }
+      },
+      cropPortfolioCoverToTempFilePath() {
+        return Promise.resolve('wxfile://tmp/share-cover-cropped.jpg')
       },
       uploadPortfolioImageAsset(portfolioId, filePath) {
         return Promise.resolve(filePath)
@@ -212,6 +260,80 @@ test('standard portfolio component drag moves row with animated style before reo
 
   assert.deepEqual(page.data.config.components.map((item) => item.componentKey), ['c_carousel', 'c_profile', 'c_qr'])
   assert.equal(page.data.componentDragStyle, '')
+})
+
+test('share fields update character limit counters while editing', () => {
+  const page = loadPortfolioEditorPage(() => Promise.resolve({}))
+
+  assert.equal(page.data.shareFieldCounters.title, '0 / 50')
+  assert.equal(page.data.shareFieldCounters.intro, '0 / 500')
+
+  page.handleShareInput({
+    currentTarget: { dataset: { path: 'share.title' } },
+    detail: { value: '婚礼主持作品集' }
+  })
+  page.handleShareInput({
+    currentTarget: { dataset: { path: 'share.intro' } },
+    detail: { value: '温暖沉稳\n' }
+  })
+
+  assert.equal(page.data.config.share.title, '婚礼主持作品集')
+  assert.equal(page.data.config.share.intro, '温暖沉稳\n')
+  assert.equal(page.data.shareFieldCounters.title, '7 / 50')
+  assert.equal(page.data.shareFieldCounters.intro, '5 / 500')
+})
+
+test('share cover chooser uses native 5:4 image without crop sheet', async () => {
+  let chooseOptions = null
+  const page = loadPortfolioEditorPage(() => Promise.resolve({}), {
+    chooseMedia(options) {
+      chooseOptions = options
+      options.success({
+        tempFiles: [
+          { tempFilePath: 'wxfile://tmp/share-cover-5x4.jpg', width: 1000, height: 800 }
+        ]
+      })
+    }
+  })
+
+  page.handleChooseShareCover()
+  await flushPromises()
+
+  assert.deepEqual(chooseOptions.mediaType, ['image'])
+  assert.equal(page.data.config.share.coverUrl, 'wxfile://tmp/share-cover-5x4.jpg')
+  assert.equal(page.data.shareCoverCropVisible, false)
+})
+
+test('share cover chooser opens manual crop sheet for non 5:4 image', async () => {
+  const cropCalls = []
+  const page = loadPortfolioEditorPage(() => Promise.resolve({}), {
+    chooseMedia(options) {
+      options.success({
+        tempFiles: [
+          { tempFilePath: 'wxfile://tmp/share-cover-wide.jpg', width: 1200, height: 800 }
+        ]
+      })
+    }
+  }, {
+    cropPortfolioCoverToTempFilePath(options) {
+      cropCalls.push(options)
+      return Promise.resolve('wxfile://tmp/share-cover-cropped.jpg')
+    }
+  })
+
+  page.handleChooseShareCover()
+  await flushPromises()
+
+  assert.equal(page.data.config.share.coverUrl, '')
+  assert.equal(page.data.shareCoverCropVisible, true)
+  assert.equal(page.data.shareCoverCropState.imagePath, 'wxfile://tmp/share-cover-wide.jpg')
+  assert.match(page.data.shareCoverCropState.imageStyle, /translate3d\(-32px, 0px, 0\)/)
+
+  await page.handleConfirmShareCoverCrop()
+
+  assert.equal(cropCalls[0].imagePath, 'wxfile://tmp/share-cover-wide.jpg')
+  assert.equal(page.data.config.share.coverUrl, 'wxfile://tmp/share-cover-cropped.jpg')
+  assert.equal(page.data.shareCoverCropVisible, false)
 })
 
 test('tapping carousel component edits selected image works', async () => {
@@ -347,6 +469,31 @@ test('create mode defaults profile component from basic profile', async () => {
   assert.deepEqual(profile.tags.map((item) => item.name), ['主持'])
 })
 
+test('profile refresh copies nickname without profession suffix', async () => {
+  const requests = []
+  const fakeRequest = (options) => {
+    requests.push(options)
+    if (options.url === '/api/mine/profile') {
+      return Promise.resolve({
+        nickname: '丁Sir',
+        avatarUrl: 'https://cos.example.com/avatar.jpg',
+        profession: '全栈',
+        city: '杭州、湖州',
+        intro: 'OPC',
+        tags: [{ content: '主持' }]
+      })
+    }
+    return Promise.resolve({})
+  }
+  const page = loadPortfolioEditorPage(fakeRequest)
+
+  await page.refreshProfileFromBase()
+
+  assert.equal(requests[0].url, '/api/mine/profile')
+  assert.equal(page.data.profileForm.displayName, '丁Sir')
+  assert.equal(page.data.profileForm.profession, '全栈')
+})
+
 test('profile sheet chooses avatar from media picker without url input', async () => {
   let chooseOptions = null
   const page = loadPortfolioEditorPage(() => Promise.resolve({}), {
@@ -376,6 +523,37 @@ test('profile sheet chooses avatar from media picker without url input', async (
 
   assert.deepEqual(chooseOptions.mediaType, ['image'])
   assert.equal(page.data.profileForm.avatarUrl, 'wxfile://tmp/profile-avatar.jpg')
+})
+
+test('profile sheet chooses wechat qr from media picker without url input', async () => {
+  let chooseOptions = null
+  const page = loadPortfolioEditorPage(() => Promise.resolve({}), {
+    chooseMedia(options) {
+      chooseOptions = options
+      options.success({
+        tempFiles: [
+          { tempFilePath: 'wxfile://tmp/profile-wechat-qr.jpg' }
+        ]
+      })
+    }
+  })
+  page.data.config = normalizePortfolioConfig({
+    components: [
+      createComponent(COMPONENT_TYPES.PROFILE, {
+        componentKey: 'c_profile',
+        sortOrder: 1000,
+        config: {
+          profile: { displayName: '林安' }
+        }
+      })
+    ]
+  })
+
+  await page.handleComponentTap({ currentTarget: { dataset: { key: 'c_profile', type: COMPONENT_TYPES.PROFILE } } })
+  page.handleChooseProfileWechatQr()
+
+  assert.deepEqual(chooseOptions.mediaType, ['image'])
+  assert.equal(page.data.profileForm.wechatQrUrl, 'wxfile://tmp/profile-wechat-qr.jpg')
 })
 
 test('tapping work grid component opens portfolio display tag sheet', async () => {
@@ -516,6 +694,7 @@ test('saving draft in create mode does not send local image paths when creating 
         config: {
           profile: {
             avatarUrl: 'wxfile://tmp/profile-avatar.jpg',
+            wechatQrUrl: 'wxfile://tmp/profile-wechat-qr.jpg',
             displayName: '林安'
           }
         }
@@ -536,9 +715,11 @@ test('saving draft in create mode does not send local image paths when creating 
   assert.equal(requests[0].url, '/api/mine/portfolios/standard-personal')
   assert.equal(requests[0].data.config.share.coverUrl, '')
   assert.equal(requests[0].data.config.components[0].config.profile.avatarUrl, '')
+  assert.equal(requests[0].data.config.components[0].config.profile.wechatQrUrl, '')
   assert.equal(requests[0].data.config.components[1].config.qrUrl, '')
   assert.equal(requests[1].data.config.share.coverUrl, 'https://cos.example.com/88/COVER.jpg')
   assert.equal(requests[1].data.config.components[0].config.profile.avatarUrl, 'https://cos.example.com/88/PROFILE_AVATAR.jpg')
+  assert.equal(requests[1].data.config.components[0].config.profile.wechatQrUrl, 'https://cos.example.com/88/QR_CONTACT.jpg')
   assert.equal(requests[1].data.config.components[1].config.qrUrl, 'https://cos.example.com/88/QR_CONTACT.jpg')
 })
 
@@ -698,6 +879,55 @@ test('saving draft uploads local profile avatar before saving config', async () 
   assert.equal(
     page.data.config.components[0].config.profile.avatarUrl,
     'https://cos.example.com/WFA3B1E7A2/protfolio/profile-avatar-88-20260702120000-a1b2c3d4.jpg'
+  )
+})
+
+test('saving draft uploads local profile wechat qr before saving config', async () => {
+  const requests = []
+  const uploads = []
+  const fakeRequest = (options) => {
+    requests.push(options)
+    return Promise.resolve({ portfolioId: 88, draftRevision: 4 })
+  }
+  const page = loadPortfolioEditorPage(fakeRequest, {}, {
+    uploadPortfolioImageAsset(portfolioId, filePath, options) {
+      uploads.push({ portfolioId, filePath, assetType: options.assetType })
+      return Promise.resolve('https://cos.example.com/WFA3B1E7A2/protfolio/qr-contact-88-20260702120000-a1b2c3d4.jpg')
+    }
+  })
+  page.data.portfolioId = 88
+  page.data.draftRevision = 3
+  page.data.config = normalizePortfolioConfig({
+    share: {
+      title: '林安婚礼司仪'
+    },
+    components: [
+      createComponent(COMPONENT_TYPES.PROFILE, {
+        componentKey: 'c_profile',
+        sortOrder: 1000,
+        config: {
+          profile: {
+            wechatQrUrl: 'wxfile://tmp/profile-wechat-qr.jpg',
+            displayName: '林安'
+          }
+        }
+      })
+    ]
+  })
+
+  await page.handleSaveDraft()
+
+  assert.deepEqual(uploads, [
+    { portfolioId: 88, filePath: 'wxfile://tmp/profile-wechat-qr.jpg', assetType: 'QR_CONTACT' }
+  ])
+  assert.equal(requests[0].url, '/api/mine/portfolios/88/draft')
+  assert.equal(
+    requests[0].data.config.components[0].config.profile.wechatQrUrl,
+    'https://cos.example.com/WFA3B1E7A2/protfolio/qr-contact-88-20260702120000-a1b2c3d4.jpg'
+  )
+  assert.equal(
+    page.data.config.components[0].config.profile.wechatQrUrl,
+    'https://cos.example.com/WFA3B1E7A2/protfolio/qr-contact-88-20260702120000-a1b2c3d4.jpg'
   )
 })
 

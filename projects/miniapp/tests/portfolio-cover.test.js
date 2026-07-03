@@ -59,6 +59,177 @@ function wxApiWithSizes(sizes, hooks = {}) {
   }
 }
 
+test('portfolio cover accepts native 5:4 images without crop', () => {
+  const {
+    isPortfolioCoverFiveFour,
+    shouldCropPortfolioCover
+  } = loadPortfolioCoverUtils(() => Promise.resolve({}))
+
+  assert.equal(isPortfolioCoverFiveFour({ width: 1000, height: 800 }), true)
+  assert.equal(shouldCropPortfolioCover({ width: 1000, height: 800 }), false)
+  assert.equal(shouldCropPortfolioCover({ width: 1200, height: 800 }), true)
+  assert.equal(shouldCropPortfolioCover({ width: 800, height: 1200 }), true)
+})
+
+test('portfolio cover crop state centers wide and tall images and clamps drag', () => {
+  const {
+    buildPortfolioCoverCropState,
+    movePortfolioCoverCropState
+  } = loadPortfolioCoverUtils(() => Promise.resolve({}))
+
+  const wideState = buildPortfolioCoverCropState({
+    path: 'wxfile://tmp/wide.jpg',
+    width: 1200,
+    height: 800
+  }, {
+    cropBoxWidth: 500
+  })
+  const tallState = buildPortfolioCoverCropState({
+    path: 'wxfile://tmp/tall.jpg',
+    width: 800,
+    height: 1200
+  }, {
+    cropBoxWidth: 500
+  })
+
+  assert.equal(wideState.cropBoxWidth, 500)
+  assert.equal(wideState.cropBoxHeight, 400)
+  assert.equal(wideState.displayWidth, 600)
+  assert.equal(wideState.displayHeight, 400)
+  assert.equal(wideState.offsetX, -50)
+  assert.equal(wideState.offsetY, 0)
+  assert.equal(movePortfolioCoverCropState(wideState, { deltaX: -80, deltaY: 0 }).offsetX, -100)
+  assert.equal(movePortfolioCoverCropState(wideState, { deltaX: 80, deltaY: 0 }).offsetX, 0)
+
+  assert.equal(tallState.displayWidth, 500)
+  assert.equal(tallState.displayHeight, 750)
+  assert.equal(tallState.offsetX, 0)
+  assert.equal(tallState.offsetY, -175)
+  assert.equal(movePortfolioCoverCropState(tallState, { deltaX: 0, deltaY: -240 }).offsetY, -350)
+  assert.equal(movePortfolioCoverCropState(tallState, { deltaX: 0, deltaY: 240 }).offsetY, 0)
+})
+
+test('portfolio cover crop frame maps preview offset back to source pixels', () => {
+  const {
+    buildPortfolioCoverCropState,
+    buildPortfolioCoverCropFrame,
+    movePortfolioCoverCropState
+  } = loadPortfolioCoverUtils(() => Promise.resolve({}))
+
+  const centeredState = buildPortfolioCoverCropState({
+    path: 'wxfile://tmp/wide.jpg',
+    width: 1200,
+    height: 800
+  }, {
+    cropBoxWidth: 500
+  })
+  const leftState = movePortfolioCoverCropState(centeredState, { deltaX: 80, deltaY: 0 })
+
+  assert.deepEqual(buildPortfolioCoverCropFrame(centeredState, { outputWidth: 1000 }), {
+    sx: 100,
+    sy: 0,
+    sWidth: 1000,
+    sHeight: 800,
+    destWidth: 1000,
+    destHeight: 800
+  })
+  assert.deepEqual(buildPortfolioCoverCropFrame(leftState, { outputWidth: 1000 }), {
+    sx: 0,
+    sy: 0,
+    sWidth: 1000,
+    sHeight: 800,
+    destWidth: 1000,
+    destHeight: 800
+  })
+})
+
+test('portfolio cover crops selected image through Canvas 2D', async () => {
+  const {
+    cropPortfolioCoverToTempFilePath
+  } = loadPortfolioCoverUtils(() => Promise.resolve({}))
+  const drawCalls = []
+  const canvas = {
+    width: 0,
+    height: 0,
+    createImage() {
+      return {
+        set src(value) {
+          this.path = value
+          this.onload()
+        }
+      }
+    },
+    getContext(type) {
+      assert.equal(type, '2d')
+      return {
+        clearRect(x, y, width, height) {
+          drawCalls.push(['clearRect', x, y, width, height])
+        },
+        drawImage(...args) {
+          drawCalls.push(['drawImage'].concat(args.slice(1)))
+        }
+      }
+    }
+  }
+  const page = {}
+  const wxApi = {
+    createSelectorQuery() {
+      return {
+        in(target) {
+          assert.equal(target, page)
+          return this
+        },
+        select(selector) {
+          assert.equal(selector, '#portfolioCoverCropCanvas')
+          return this
+        },
+        fields(options) {
+          assert.deepEqual(options, { node: true, size: true })
+          return this
+        },
+        exec(callback) {
+          callback([{ node: canvas }])
+        }
+      }
+    },
+    canvasToTempFilePath(options) {
+      assert.equal(options.canvas, canvas)
+      assert.equal(options.width, 1000)
+      assert.equal(options.height, 800)
+      assert.equal(options.destWidth, 1000)
+      assert.equal(options.destHeight, 800)
+      assert.equal(options.fileType, 'jpg')
+      assert.equal(options.quality, 0.92)
+      options.success({ tempFilePath: 'wxfile://tmp/cropped-cover.jpg' })
+    }
+  }
+
+  const filePath = await cropPortfolioCoverToTempFilePath({
+    page,
+    wxApi,
+    canvasId: 'portfolioCoverCropCanvas',
+    imagePath: 'wxfile://tmp/wide.jpg',
+    cropFrame: {
+      sx: 100,
+      sy: 0,
+      sWidth: 1000,
+      sHeight: 800,
+      destWidth: 1000,
+      destHeight: 800
+    },
+    fileType: 'jpg',
+    quality: 0.92
+  })
+
+  assert.equal(filePath, 'wxfile://tmp/cropped-cover.jpg')
+  assert.equal(canvas.width, 1000)
+  assert.equal(canvas.height, 800)
+  assert.deepEqual(drawCalls, [
+    ['clearRect', 0, 0, 1000, 800],
+    ['drawImage', 100, 0, 1000, 800, 0, 0, 1000, 800]
+  ])
+})
+
 test('portfolio cover keeps image unchanged when it is within 300KB', async () => {
   const { preparePortfolioCoverFile } = loadPortfolioCoverUtils(() => Promise.resolve({}))
   let compressCount = 0

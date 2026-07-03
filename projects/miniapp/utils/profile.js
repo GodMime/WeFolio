@@ -172,6 +172,7 @@ function normalizeProfile(raw = {}) {
     displayName: buildDisplayName(raw),
     nickname: raw.nickname || '',
     avatarUrl: raw.avatarUrl || '',
+    wechatQrUrl: raw.wechatQrUrl || '',
     profession: raw.profession || '',
     city: raw.city || '',
     intro: raw.intro || '',
@@ -195,6 +196,7 @@ function buildProfilePayload(form = {}) {
   return {
     nickname: trimText(form.nickname),
     avatarUrl: trimText(form.avatarUrl),
+    wechatQrUrl: trimText(form.wechatQrUrl),
     profession: trimText(form.profession),
     city: trimText(form.city),
     intro: trimText(form.intro),
@@ -217,6 +219,7 @@ function validateLength(value, maxLength, fieldName) {
 function validateProfileForm(form = {}) {
   const fieldError = validateLength(form.nickname, 50, '姓名 / 艺名') ||
     validateLength(form.avatarUrl, 512, '头像地址') ||
+    validateLength(form.wechatQrUrl, 512, '微信二维码地址') ||
     validateLength(form.profession, 50, '职业身份') ||
     validateLength(form.city, 50, '服务城市') ||
     validateLength(form.intro, 500, '个人简介')

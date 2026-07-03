@@ -97,6 +97,57 @@ test('normalizes visitor portfolio from backend render data first', () => {
   assert.equal(result.components[0].activeGroup.works[0].workId, 11)
 })
 
+test('normalizes profile component with visible field switches applied', () => {
+  const result = normalizeVisitorPortfolio({
+    renderData: {
+      title: '丁Sir 个人作品集',
+      components: [
+        {
+          componentKey: 'c_profile',
+          componentType: 'PROFILE',
+          sortOrder: 1000,
+          profile: {
+            avatarUrl: 'https://cdn.example.com/avatar.jpg',
+            displayName: '丁Sir',
+            profession: '全栈',
+            city: '杭州、湖州',
+            bio: 'OPC',
+            wechatQrUrl: 'https://cdn.example.com/wechat-qr.jpg',
+            tags: [{ name: '主持', color: '#0f766e' }],
+            visibleFields: {
+              avatar: true,
+              displayName: true,
+              profession: false,
+              city: false,
+              bio: true,
+              tags: false,
+              wechatQr: true
+            }
+          }
+        }
+      ]
+    }
+  })
+
+  const profile = result.components[0].profile
+  assert.equal(profile.avatarUrl, 'https://cdn.example.com/avatar.jpg')
+  assert.equal(profile.displayName, '丁Sir')
+  assert.equal(profile.profession, '')
+  assert.equal(profile.city, '')
+  assert.equal(profile.bio, 'OPC')
+  assert.deepEqual(profile.tags, [])
+  assert.equal(profile.wechatQrUrl, 'https://cdn.example.com/wechat-qr.jpg')
+  assert.deepEqual(profile.visibleFields, {
+    avatar: true,
+    displayName: true,
+    profession: false,
+    city: false,
+    bio: true,
+    tags: false,
+    wechatQr: true
+  })
+})
+
 test('normalizes work grid tags and qr contact preview url from render data', () => {
   const result = normalizeVisitorPortfolio({
     renderData: {

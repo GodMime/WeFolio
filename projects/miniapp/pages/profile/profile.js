@@ -1,6 +1,6 @@
 const { request } = require('../../utils/request')
 const { clearToken, handleAuthRequired, hasLocalToken } = require('../../utils/session')
-const { uploadAvatar } = require('../../utils/avatar')
+const { uploadProfileAvatar, uploadWechatQr } = require('../../utils/profile-assets')
 const {
   DEFAULT_TAG_COLOR,
   TAG_COLOR_OPTIONS,
@@ -22,6 +22,7 @@ function emptyForm() {
     profession: '',
     city: '',
     intro: '',
+    wechatQrUrl: '',
     tags: []
   }
 }
@@ -33,6 +34,7 @@ function formFromProfile(profile) {
     profession: profile.profession,
     city: profile.city,
     intro: profile.intro,
+    wechatQrUrl: profile.wechatQrUrl,
     tags: profile.tags.slice()
   }
 }
@@ -134,6 +136,41 @@ Page({
     })
   },
 
+  handleChooseWechatQr() {
+    if (this.data.saving) {
+      return
+    }
+    wx.chooseMedia({
+      count: 1,
+      mediaType: ['image'],
+      sourceType: ['album'],
+      success: (response) => {
+        const tempFiles = response && Array.isArray(response.tempFiles) ? response.tempFiles : []
+        const firstFile = tempFiles[0] || {}
+        const wechatQrUrl = firstFile.tempFilePath || ''
+        if (!wechatQrUrl) {
+          return
+        }
+        const form = Object.assign({}, this.data.form, {
+          wechatQrUrl
+        })
+        this.setData({
+          'form.wechatQrUrl': wechatQrUrl,
+          fieldCounters: buildProfileFieldCounters(form)
+        })
+      },
+      fail: (error) => {
+        if (error && /cancel/i.test(error.errMsg || '')) {
+          return
+        }
+        wx.showToast({
+          title: error && error.errMsg ? error.errMsg : '二维码选择失败',
+          icon: 'none'
+        })
+      }
+    })
+  },
+
   handleOpenTagDialog() {
     if (this.data.form.tags.length >= 10) {
       wx.showToast({
@@ -231,7 +268,7 @@ Page({
       const payload = buildProfilePayload(this.data.form)
       let avatarUrl = payload.avatarUrl
       try {
-        avatarUrl = await uploadAvatar(payload.avatarUrl)
+        avatarUrl = await uploadProfileAvatar(payload.avatarUrl)
         if (!avatarUrl) {
           avatarUrl = this.data.profile.avatarUrl
         }
@@ -243,11 +280,22 @@ Page({
           icon: 'none'
         })
       }
+      let wechatQrUrl = payload.wechatQrUrl
+      try {
+        wechatQrUrl = await uploadWechatQr(payload.wechatQrUrl)
+      } catch (uploadError) {
+        wechatQrUrl = this.data.profile.wechatQrUrl
+        wx.showToast({
+          title: '微信二维码上传失败，已保留原有二维码',
+          icon: 'none'
+        })
+      }
       const response = await request({
         url: '/api/mine/profile',
         method: 'PUT',
         data: Object.assign({}, payload, {
-          avatarUrl
+          avatarUrl,
+          wechatQrUrl
         })
       })
       const profile = normalizeProfile(response)

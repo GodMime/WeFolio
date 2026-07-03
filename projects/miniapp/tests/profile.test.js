@@ -67,6 +67,7 @@ test('builds trimmed profile save payload', () => {
   assert.deepEqual(payload, {
     nickname: '林安',
     avatarUrl: 'https://example.com/avatar.jpg',
+    wechatQrUrl: '',
     profession: '婚礼司仪',
     city: '上海、杭州、苏州',
     intro: '10 年婚礼主持经验',

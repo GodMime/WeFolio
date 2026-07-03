@@ -5,6 +5,7 @@ import com.jxc.wefolio.message.GlobalExceptionMessage;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindException;
@@ -73,11 +74,12 @@ public class GlobalExceptionHandler {
      * @return 失败响应
      */
     @ExceptionHandler(NoResourceFoundException.class)
-    @ResponseStatus(HttpStatus.NOT_FOUND)
-    public Response<Void> handleNoResourceFound(NoResourceFoundException e, HttpServletRequest request) {
+    public ResponseEntity<Response<Void>> handleNoResourceFound(NoResourceFoundException e, HttpServletRequest request) {
         String method = request.getMethod() == null ? e.getHttpMethod().name() : request.getMethod();
         log.warn("Static resource not found: method={} url={}", method, buildOriginalRequestUrl(request));
-        return Response.fail("资源不存在");
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(Response.fail(GlobalExceptionMessage.RESOURCE_NOT_FOUND_MESSAGE));
     }
 
     /**

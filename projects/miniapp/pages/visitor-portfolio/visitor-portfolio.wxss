@@ -6,14 +6,6 @@
   height: 100vh;
 }
 
-.share-intro {
-  padding: 30rpx 34rpx 0;
-  color: #505a65;
-  font-size: 26rpx;
-  line-height: 1.75;
-  text-align: center;
-}
-
 .folio-component {
   margin-top: 34rpx;
 }
@@ -62,6 +54,7 @@
   color: #59636f;
   font-size: 26rpx;
   line-height: 1.75;
+  white-space: pre-wrap;
 }
 
 .profile-line {
@@ -207,7 +200,6 @@
 .text-content {
   margin-top: 12rpx;
   text-align: left;
-  white-space: pre-wrap;
 }
 
 .folio-footer {

@@ -5,7 +5,18 @@ const { normalizeProfile: normalizeBasicProfile } = require('../../utils/profile
 const { normalizeWorkList, normalizeWorkTags } = require('../../utils/works')
 const {
   PORTFOLIO_ASSET_TYPES,
+  PORTFOLIO_COVER_CROP_FILE_TYPE,
+  PORTFOLIO_COVER_CROP_OUTPUT_WIDTH,
+  PORTFOLIO_COVER_CROP_QUALITY,
+  PORTFOLIO_COVER_RATIO_HEIGHT,
+  PORTFOLIO_COVER_RATIO_WIDTH,
+  buildPortfolioCoverCropFrame,
+  buildPortfolioCoverCropState,
   createChoosePortfolioImageOptions,
+  cropPortfolioCoverToTempFilePath,
+  getPortfolioCoverImageInfo,
+  movePortfolioCoverCropState,
+  shouldCropPortfolioCover,
   uploadPortfolioImageAsset
 } = require('../../utils/portfolio-assets')
 const {
@@ -37,6 +48,10 @@ const SWIPE_REVEAL_THRESHOLD = -32
 const SWIPE_CLOSE_THRESHOLD = 24
 const SWIPE_VERTICAL_TOLERANCE = 48
 const COMPONENT_DRAG_SCALE = 1.015
+const DESIGN_VIEWPORT_RPX = 750
+const SHARE_COVER_CROP_CANVAS_ID = 'portfolioCoverCropCanvas'
+const SHARE_COVER_CROP_MAX_WIDTH_RPX = 640
+const SHARE_COVER_CROP_HORIZONTAL_GUTTER_RPX = 112
 const PROFILE_TAG_SPLIT_REGEXP = /[,\n，、]/
 const PROFILE_VISIBLE_FIELD_OPTIONS = [
   { field: 'avatar', label: '头像' },
@@ -49,13 +64,16 @@ const PROFILE_VISIBLE_FIELD_OPTIONS = [
 ]
 const QR_CONTACT_SOURCE_PROFILE = 'PROFILE'
 const QR_CONTACT_SOURCE_CUSTOM = 'CUSTOM'
+const SHARE_FIELD_LIMITS = {
+  title: 50,
+  intro: 500
+}
 const PROFILE_FIELD_LIMITS = {
   displayName: 50,
   profession: 50,
   city: 50,
   bio: 500,
-  tagsText: 100,
-  wechatQrUrl: 512
+  tagsText: 100
 }
 
 const DEFAULT_COMPONENT_DESCRIPTIONS = {
@@ -168,6 +186,13 @@ function countText(value) {
   return Array.from(String(value || '')).length
 }
 
+function buildShareFieldCounters(share = {}) {
+  return Object.keys(SHARE_FIELD_LIMITS).reduce((result, field) => {
+    result[field] = `${countText(share[field])} / ${SHARE_FIELD_LIMITS[field]}`
+    return result
+  }, {})
+}
+
 function buildProfileFieldCounters(form = {}) {
   return Object.keys(PROFILE_FIELD_LIMITS).reduce((result, field) => {
     result[field] = `${countText(form[field])} / ${PROFILE_FIELD_LIMITS[field]}`
@@ -241,9 +266,10 @@ function updateComponentQrContactConfig(config, componentKey, qrContactForm = {}
 
 function buildProfileFormFromBasicProfile(raw = {}, currentForm = {}) {
   const profile = normalizeBasicProfile(raw)
+  const nickname = String(profile.nickname || '').trim()
   return {
     avatarUrl: profile.avatarUrl,
-    displayName: profile.displayName,
+    displayName: nickname || profile.displayName,
     profession: profile.profession,
     city: profile.city,
     bio: profile.intro,
@@ -314,10 +340,37 @@ function resolvePortfolioListBackDelta() {
   return 0
 }
 
-function resolveChosenImagePath(response = {}) {
+function resolveChosenImageFile(response = {}) {
   const files = Array.isArray(response.tempFiles) ? response.tempFiles : []
   const firstFile = files[0] || {}
-  return firstFile.tempFilePath || firstFile.path || ''
+  const filePath = firstFile.tempFilePath || firstFile.path || ''
+  return filePath ? Object.assign({}, firstFile, { path: filePath }) : null
+}
+
+function resolveChosenImagePath(response = {}) {
+  const imageFile = resolveChosenImageFile(response)
+  return imageFile ? imageFile.path : ''
+}
+
+function getShareCoverCropBoxWidth() {
+  const fallbackWindowWidth = 375
+  const systemInfo = typeof wx !== 'undefined' && wx.getSystemInfoSync ? wx.getSystemInfoSync() : {}
+  const windowWidth = Number(systemInfo.windowWidth) || fallbackWindowWidth
+  const rpxScale = windowWidth / DESIGN_VIEWPORT_RPX
+  return Math.floor(Math.min(
+    SHARE_COVER_CROP_MAX_WIDTH_RPX * rpxScale,
+    windowWidth - SHARE_COVER_CROP_HORIZONTAL_GUTTER_RPX * rpxScale
+  ))
+}
+
+function resetShareCoverCropState() {
+  return {
+    shareCoverCropVisible: false,
+    shareCoverCropSaving: false,
+    shareCoverCropErrorText: '',
+    shareCoverCropState: null,
+    shareCoverCropTouchStart: null
+  }
 }
 
 function resolveServerSafeAssetUrl(url) {
@@ -403,6 +456,16 @@ Page({
     qrContactSheetVisible: false,
     editingQrContactComponentKey: '',
     qrContactForm: buildQrContactForm(),
+    shareFieldCounters: buildShareFieldCounters(),
+    shareCoverCropVisible: false,
+    shareCoverCropSaving: false,
+    shareCoverCropErrorText: '',
+    shareCoverCropState: null,
+    shareCoverCropTouchStart: null,
+    shareCoverCropCanvasWidth: PORTFOLIO_COVER_CROP_OUTPUT_WIDTH,
+    shareCoverCropCanvasHeight: Math.round(
+      PORTFOLIO_COVER_CROP_OUTPUT_WIDTH * PORTFOLIO_COVER_RATIO_HEIGHT / PORTFOLIO_COVER_RATIO_WIDTH
+    ),
     config: normalizePortfolioConfig({
       components: [createComponent(COMPONENT_TYPES.PROFILE)]
     })
@@ -427,7 +490,8 @@ Page({
         this.setData({
           draftRevision: response.draftRevision || 0,
           publishedRevision: response.publishedRevision || 0,
-          config
+          config,
+          shareFieldCounters: buildShareFieldCounters(config.share)
         })
         return this.loadBasicProfileDefaults(config)
       })
@@ -448,7 +512,10 @@ Page({
     return request({ url: BASIC_PROFILE_API_URL })
       .then((response) => {
         const nextConfig = applyBasicProfileDefaultsToConfig(normalizedConfig, response)
-        this.setData({ config: nextConfig })
+        this.setData({
+          config: nextConfig,
+          shareFieldCounters: buildShareFieldCounters(nextConfig.share)
+        })
         return nextConfig
       })
       .catch((error) => {
@@ -465,25 +532,61 @@ Page({
     config.share = Object.assign({}, config.share)
     if (path === 'share.title') {
       config.share.title = event.detail.value
-    }
-    if (path === 'share.intro') {
+    } else if (path === 'share.intro') {
       config.share.intro = event.detail.value
+    } else {
+      return
     }
-    this.setData({ config: normalizePortfolioConfig(config) })
+    this.setData({
+      config,
+      shareFieldCounters: buildShareFieldCounters(config.share)
+    })
   },
 
   setShareCoverUrl(coverUrl) {
     const config = Object.assign({}, this.data.config)
     config.share = Object.assign({}, config.share, { coverUrl })
-    this.setData({ config: normalizePortfolioConfig(config) })
+    const normalizedConfig = normalizePortfolioConfig(config)
+    this.setData({
+      config: normalizedConfig,
+      shareFieldCounters: buildShareFieldCounters(normalizedConfig.share),
+      shareCoverCropVisible: false,
+      shareCoverCropSaving: false,
+      shareCoverCropErrorText: '',
+      shareCoverCropState: null,
+      shareCoverCropTouchStart: null
+    })
+  },
+
+  prepareSelectedShareCover(imageFile) {
+    return getPortfolioCoverImageInfo(imageFile)
+      .then((imageInfo) => {
+        if (!shouldCropPortfolioCover(imageInfo)) {
+          this.setShareCoverUrl(imageInfo.path)
+          return
+        }
+        const cropState = buildPortfolioCoverCropState(imageInfo, {
+          cropBoxWidth: getShareCoverCropBoxWidth()
+        })
+        this.setData({
+          shareCoverCropVisible: true,
+          shareCoverCropSaving: false,
+          shareCoverCropErrorText: '',
+          shareCoverCropState: cropState,
+          shareCoverCropTouchStart: null
+        })
+      })
+      .catch((error) => {
+        wx.showToast({ title: error && error.message ? error.message : '选择封面失败', icon: 'none' })
+      })
   },
 
   handleChooseShareCover() {
     wx.chooseMedia(Object.assign({}, createChoosePortfolioImageOptions(), {
       success: (response) => {
-        const coverPath = resolveChosenImagePath(response)
-        if (coverPath) {
-          this.setShareCoverUrl(coverPath)
+        const imageFile = resolveChosenImageFile(response)
+        if (imageFile) {
+          this.prepareSelectedShareCover(imageFile)
         }
       },
       fail: (error) => {
@@ -492,6 +595,87 @@ Page({
         }
       }
     }))
+  },
+
+  handleCloseShareCoverCrop() {
+    if (this.data.shareCoverCropSaving) {
+      return
+    }
+    this.setData(resetShareCoverCropState())
+  },
+
+  handleShareCoverCropTouchStart(event) {
+    const clientX = getTouchClientX(event)
+    const clientY = getTouchClientY(event)
+    const cropState = this.data.shareCoverCropState || {}
+    this.setData({
+      shareCoverCropTouchStart: {
+        x: clientX === null ? 0 : clientX,
+        y: clientY === null ? 0 : clientY,
+        offsetX: Number(cropState.offsetX) || 0,
+        offsetY: Number(cropState.offsetY) || 0
+      }
+    })
+  },
+
+  handleShareCoverCropTouchMove(event) {
+    const start = this.data.shareCoverCropTouchStart
+    const cropState = this.data.shareCoverCropState
+    if (!start || !cropState) {
+      return
+    }
+    const clientX = getTouchClientX(event)
+    const clientY = getTouchClientY(event)
+    const baseState = Object.assign({}, cropState, {
+      offsetX: start.offsetX,
+      offsetY: start.offsetY
+    })
+    this.setData({
+      shareCoverCropState: movePortfolioCoverCropState(baseState, {
+        deltaX: (clientX === null ? start.x : clientX) - start.x,
+        deltaY: (clientY === null ? start.y : clientY) - start.y
+      })
+    })
+  },
+
+  handleShareCoverCropTouchEnd() {
+    this.setData({ shareCoverCropTouchStart: null })
+  },
+
+  handleShareCoverCropTouchCancel() {
+    this.setData({ shareCoverCropTouchStart: null })
+  },
+
+  handleConfirmShareCoverCrop() {
+    if (this.data.shareCoverCropSaving || !this.data.shareCoverCropState) {
+      return Promise.resolve()
+    }
+    const cropState = this.data.shareCoverCropState
+    const cropFrame = buildPortfolioCoverCropFrame(cropState, {
+      outputWidth: PORTFOLIO_COVER_CROP_OUTPUT_WIDTH
+    })
+    this.setData({
+      shareCoverCropSaving: true,
+      shareCoverCropErrorText: ''
+    })
+    return cropPortfolioCoverToTempFilePath({
+      page: this,
+      wxApi: wx,
+      canvasId: SHARE_COVER_CROP_CANVAS_ID,
+      imagePath: cropState.imagePath,
+      cropFrame,
+      fileType: PORTFOLIO_COVER_CROP_FILE_TYPE,
+      quality: PORTFOLIO_COVER_CROP_QUALITY
+    }).then((croppedPath) => {
+      this.setShareCoverUrl(croppedPath)
+    }).catch((error) => {
+      const message = error && error.message ? error.message : '封面裁剪失败'
+      this.setData({
+        shareCoverCropSaving: false,
+        shareCoverCropErrorText: message
+      })
+      wx.showToast({ title: message, icon: 'none' })
+    })
   },
 
   handleOpenComponentSheet() {
@@ -739,6 +923,14 @@ Page({
     })
   },
 
+  setProfileWechatQrUrl(wechatQrUrl) {
+    const nextForm = Object.assign({}, this.data.profileForm, { wechatQrUrl })
+    this.setData({
+      'profileForm.wechatQrUrl': wechatQrUrl,
+      profileFieldCounters: buildProfileFieldCounters(nextForm)
+    })
+  },
+
   handleChooseProfileAvatar() {
     wx.chooseMedia(Object.assign({}, createChoosePortfolioImageOptions(), {
       success: (response) => {
@@ -750,6 +942,22 @@ Page({
       fail: (error) => {
         if (error && error.errMsg && !/cancel/i.test(error.errMsg)) {
           wx.showToast({ title: '选择头像失败', icon: 'none' })
+        }
+      }
+    }))
+  },
+
+  handleChooseProfileWechatQr() {
+    wx.chooseMedia(Object.assign({}, createChoosePortfolioImageOptions(), {
+      success: (response) => {
+        const qrPath = resolveChosenImagePath(response)
+        if (qrPath) {
+          this.setProfileWechatQrUrl(qrPath)
+        }
+      },
+      fail: (error) => {
+        if (error && error.errMsg && !/cancel/i.test(error.errMsg)) {
+          wx.showToast({ title: '选择二维码失败', icon: 'none' })
         }
       }
     }))
@@ -1168,7 +1376,7 @@ Page({
     })
   },
 
-  uploadLocalProfileAvatars(portfolioId, config = this.data.config) {
+  uploadLocalProfileImages(portfolioId, config = this.data.config) {
     let nextConfig = normalizePortfolioConfig(config)
     const profileComponents = (nextConfig.components || [])
       .filter((component) => component.componentType === COMPONENT_TYPES.PROFILE)
@@ -1176,23 +1384,43 @@ Page({
     return profileComponents.reduce((chain, component) => {
       return chain.then(() => {
         const currentComponent = findComponentByKey(nextConfig, component.componentKey) || component
-        const profileConfig = normalizeProfileComponentConfig(currentComponent.config || {})
+        let profileConfig = normalizeProfileComponentConfig(currentComponent.config || {})
         const avatarUrl = profileConfig.profile.avatarUrl
-        if (!avatarUrl) {
-          return ''
-        }
-        return uploadPortfolioImageAsset(portfolioId, avatarUrl, {
-          assetType: PORTFOLIO_ASSET_TYPES.PROFILE_AVATAR,
-          assetLabel: '头像图片',
-          clientIdPrefix: 'profile-avatar'
-        }).then((uploadedUrl) => {
-          if (uploadedUrl && uploadedUrl !== avatarUrl) {
-            const nextProfileConfig = normalizeProfileComponentConfig(Object.assign({}, profileConfig, {
-              profile: Object.assign({}, profileConfig.profile, { avatarUrl: uploadedUrl })
-            }))
-            nextConfig = updateComponentProfileConfig(nextConfig, component.componentKey, nextProfileConfig)
+
+        const uploadAvatar = avatarUrl
+          ? uploadPortfolioImageAsset(portfolioId, avatarUrl, {
+            assetType: PORTFOLIO_ASSET_TYPES.PROFILE_AVATAR,
+            assetLabel: '头像图片',
+            clientIdPrefix: 'profile-avatar'
+          }).then((uploadedUrl) => {
+            if (uploadedUrl && uploadedUrl !== avatarUrl) {
+              profileConfig = normalizeProfileComponentConfig(Object.assign({}, profileConfig, {
+                profile: Object.assign({}, profileConfig.profile, { avatarUrl: uploadedUrl })
+              }))
+              nextConfig = updateComponentProfileConfig(nextConfig, component.componentKey, profileConfig)
+            }
+            return uploadedUrl || avatarUrl
+          })
+          : Promise.resolve('')
+
+        return uploadAvatar.then(() => {
+          const wechatQrUrl = profileConfig.profile.wechatQrUrl
+          if (!wechatQrUrl) {
+            return ''
           }
-          return uploadedUrl || avatarUrl
+          return uploadPortfolioImageAsset(portfolioId, wechatQrUrl, {
+            assetType: PORTFOLIO_ASSET_TYPES.QR_CONTACT,
+            assetLabel: '微信二维码图片',
+            clientIdPrefix: 'profile-wechat-qr'
+          }).then((uploadedUrl) => {
+            if (uploadedUrl && uploadedUrl !== wechatQrUrl) {
+              const nextProfileConfig = normalizeProfileComponentConfig(Object.assign({}, profileConfig, {
+                profile: Object.assign({}, profileConfig.profile, { wechatQrUrl: uploadedUrl })
+              }))
+              nextConfig = updateComponentProfileConfig(nextConfig, component.componentKey, nextProfileConfig)
+            }
+            return uploadedUrl || wechatQrUrl
+          })
         })
       })
     }, Promise.resolve('')).then(() => nextConfig)
@@ -1230,10 +1458,13 @@ Page({
 
   uploadLocalPortfolioAssets(portfolioId) {
     return this.uploadLocalShareCover(portfolioId, this.data.config)
-      .then((config) => this.uploadLocalProfileAvatars(portfolioId, config))
+      .then((config) => this.uploadLocalProfileImages(portfolioId, config))
       .then((config) => this.uploadLocalQrContactImages(portfolioId, config))
       .then((config) => {
-        this.setData({ config })
+        this.setData({
+          config,
+          shareFieldCounters: buildShareFieldCounters(config.share)
+        })
         return config
       })
   },

@@ -1,6 +1,7 @@
 package com.jxc.wefolio.service;
 
 import com.alibaba.fastjson2.JSON;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
 import com.jxc.wefolio.dict.PortfolioComponentTypeDict;
@@ -136,8 +137,26 @@ public class MinePortfolioService {
     /** 头像地址配置键 */
     private static final String CONFIG_KEY_AVATAR_URL = "avatarUrl";
 
+    /** 微信二维码地址配置键 */
+    private static final String CONFIG_KEY_WECHAT_QR_URL = "wechatQrUrl";
+
     /** 二维码地址配置键 */
     private static final String CONFIG_KEY_QR_URL = "qrUrl";
+
+    /** 作品集表主键列 */
+    private static final String PORTFOLIO_COLUMN_ID = "id";
+
+    /** 作品集表归属类型列 */
+    private static final String PORTFOLIO_COLUMN_OWNER_TYPE = "owner_type";
+
+    /** 作品集表归属 ID 列 */
+    private static final String PORTFOLIO_COLUMN_OWNER_ID = "owner_id";
+
+    /** 作品集表逻辑删除列 */
+    private static final String PORTFOLIO_COLUMN_DELETED = "deleted";
+
+    /** 作品集表删除时间列 */
+    private static final String PORTFOLIO_COLUMN_DELETED_AT = "deleted_at";
 
     /** 上传票据有效分钟数 */
     private static final int TICKET_EXPIRE_MINUTES = 15;
@@ -440,6 +459,37 @@ public class MinePortfolioService {
         ));
         record.setShareScene(defaultString(request == null ? null : request.getShareScene()));
         portfolioShareRecordEntityMapper.insert(record);
+    }
+
+    /**
+     * 删除标准个人作品集。
+     *
+     * @param portfolioId 作品集 ID
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void deletePortfolio(Long portfolioId) {
+        Long userId = AuthContextHolder.requireUserId();
+        PortfolioEntity portfolio = requireOwnedStandardPersonal(portfolioId);
+        List<String> deletedObjectKeys = resolveDeletedPortfolioAssetObjectKeys(userId, portfolio);
+        portfolioReferenceEntityMapper.delete(
+                Wrappers.lambdaQuery(PortfolioReferenceEntity.class)
+                        .eq(PortfolioReferenceEntity::getPortfolioId, portfolio.getId())
+        );
+        LocalDateTime now = LocalDateTime.now();
+        int updated = portfolioEntityMapper.update(
+                new PortfolioEntity(),
+                new UpdateWrapper<PortfolioEntity>()
+                        .set(PORTFOLIO_COLUMN_DELETED_AT, now)
+                        .set(PORTFOLIO_COLUMN_DELETED, portfolio.getId())
+                        .eq(PORTFOLIO_COLUMN_ID, portfolio.getId())
+                        .eq(PORTFOLIO_COLUMN_OWNER_TYPE, PortfolioOwnerTypeDict.USER.getCode())
+                        .eq(PORTFOLIO_COLUMN_OWNER_ID, userId)
+                        .eq(PORTFOLIO_COLUMN_DELETED, 0L)
+        );
+        if (updated <= 0) {
+            throw new BusinessException(PortfolioMessage.PORTFOLIO_DELETE_FAILED_MESSAGE);
+        }
+        deletePortfolioAssetsAfterCommit(portfolio.getId(), deletedObjectKeys);
     }
 
     /**
@@ -748,6 +798,29 @@ public class MinePortfolioService {
     }
 
     /**
+     * 解析删除作品集后需要清理的当前作品集图片素材对象键。
+     *
+     * @param userId 用户 ID
+     * @param portfolio 作品集
+     * @return 需要删除的 COS 对象键列表
+     */
+    private List<String> resolveDeletedPortfolioAssetObjectKeys(Long userId, PortfolioEntity portfolio) {
+        String uniqueCode = miniappAuthService.getUniqueCodeByUserId(userId);
+        Set<String> objectKeys = new LinkedHashSet<>();
+        objectKeys.addAll(collectOwnedPortfolioAssetObjectKeys(
+                parseConfig(portfolio.getDraftConfigJson()),
+                uniqueCode,
+                portfolio.getId()
+        ));
+        objectKeys.addAll(collectOwnedPortfolioAssetObjectKeys(
+                parseConfig(portfolio.getPublishedConfigJson()),
+                uniqueCode,
+                portfolio.getId()
+        ));
+        return new ArrayList<>(objectKeys);
+    }
+
+    /**
      * 解析发布后需要删除的旧正式作品集图片素材对象键。
      *
      * @param userId 用户 ID
@@ -793,7 +866,8 @@ public class MinePortfolioService {
             Map<String, Object> componentConfig = component.getConfig() == null ? Map.of() : component.getConfig();
             if (PortfolioComponentTypeDict.PROFILE.getCode().equals(component.getComponentType())) {
                 Map<String, Object> profileConfig = asObjectMap(componentConfig.get(CONFIG_KEY_PROFILE));
-                if (hasText(asString(profileConfig.get(CONFIG_KEY_AVATAR_URL)))) {
+                if (hasText(asString(profileConfig.get(CONFIG_KEY_AVATAR_URL)))
+                        || hasText(asString(profileConfig.get(CONFIG_KEY_WECHAT_QR_URL)))) {
                     return true;
                 }
             }
@@ -834,6 +908,7 @@ public class MinePortfolioService {
             if (PortfolioComponentTypeDict.PROFILE.getCode().equals(component.getComponentType())) {
                 Map<String, Object> profileConfig = asObjectMap(componentConfig.get(CONFIG_KEY_PROFILE));
                 addOwnedPortfolioAssetObjectKey(objectKeys, asString(profileConfig.get(CONFIG_KEY_AVATAR_URL)), uniqueCode, portfolioId);
+                addOwnedPortfolioAssetObjectKey(objectKeys, asString(profileConfig.get(CONFIG_KEY_WECHAT_QR_URL)), uniqueCode, portfolioId);
             }
             if (PortfolioComponentTypeDict.QR_CONTACT.getCode().equals(component.getComponentType())) {
                 addOwnedPortfolioAssetObjectKey(objectKeys, asString(componentConfig.get(CONFIG_KEY_QR_URL)), uniqueCode, portfolioId);
@@ -899,6 +974,37 @@ public class MinePortfolioService {
                     cosService.delete(objectKey);
                 } catch (Exception e) {
                     log.warn("作品集旧图片素材删除失败: portfolioId={}, objectKey={}", portfolioId, objectKey, e);
+                }
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    deleteTask.run();
+                }
+            });
+            return;
+        }
+        deleteTask.run();
+    }
+
+    /**
+     * 删除事务提交后清理当前作品集图片素材。
+     *
+     * @param portfolioId 作品集 ID
+     * @param objectKeys COS 对象键列表
+     */
+    private void deletePortfolioAssetsAfterCommit(Long portfolioId, List<String> objectKeys) {
+        if (objectKeys == null || objectKeys.isEmpty()) {
+            return;
+        }
+        Runnable deleteTask = () -> {
+            for (String objectKey : objectKeys) {
+                try {
+                    cosService.delete(objectKey);
+                } catch (Exception e) {
+                    log.warn("作品集图片素材删除失败: portfolioId={}, objectKey={}", portfolioId, objectKey, e);
                 }
             }
         };

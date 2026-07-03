@@ -8,13 +8,18 @@ import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
@@ -22,6 +27,11 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 import java.lang.reflect.Method;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * 全局异常处理器日志与 HTTP 状态码测试。
@@ -112,16 +122,31 @@ class GlobalExceptionHandlerTest {
         );
 
         @SuppressWarnings("unchecked")
-        Response<Void> response = (Response<Void>) method.invoke(handler, exception, request);
-        ResponseStatus responseStatus = method.getAnnotation(ResponseStatus.class);
+        ResponseEntity<Response<Void>> response = (ResponseEntity<Response<Void>>) method.invoke(handler, exception, request);
 
-        assertThat(response.isSuccess()).isFalse();
-        assertThat(response.getMessage()).isEqualTo("资源不存在");
-        assertThat(responseStatus).isNotNull();
-        assertThat(responseStatus.value()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(response.getHeaders().getContentType()).isEqualTo(MediaType.APPLICATION_JSON);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().isSuccess()).isFalse();
+        assertThat(response.getBody().getMessage()).isEqualTo("资源不存在");
         assertThat(output).contains("WARN");
         assertThat(output).contains("Static resource not found: method=GET url=https://api.we-folio.dingchenyong.top/favicon.ico?v=1");
         assertThat(output).doesNotContain("Unexpected error");
+    }
+
+    @Test
+    void handleNoResourceFoundReturnsJsonWhenClientAcceptsImageOnly() {
+        MockMvc mockMvc = MockMvcBuilders
+                .standaloneSetup(new MissingResourceProbeController())
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
+
+        assertThatCode(() -> mockMvc.perform(get("/missing-resource-probe").accept(MediaType.IMAGE_PNG))
+                .andExpect(status().isNotFound())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("资源不存在")))
+                .doesNotThrowAnyException();
     }
 
     @Test
@@ -225,5 +250,22 @@ class GlobalExceptionHandlerTest {
 
         assertThat(responseStatus).isNotNull();
         assertThat(responseStatus.value()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    /**
+     * 缺失静态资源探针控制器 — 用于复现静态资源请求的媒体类型协商场景。
+     */
+    @RestController
+    static class MissingResourceProbeController {
+
+        /**
+         * 模拟 Spring 静态资源处理器抛出的资源不存在异常。
+         *
+         * @throws NoResourceFoundException 静态资源不存在异常
+         */
+        @GetMapping("/missing-resource-probe")
+        public void missingResource() throws NoResourceFoundException {
+            throw new NoResourceFoundException(HttpMethod.GET, "favicon.ico");
+        }
     }
 }

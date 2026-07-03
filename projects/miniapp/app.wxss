@@ -23,3 +23,20 @@ button::after {
   background:
     linear-gradient(180deg, #eef6f4 0%, #f5f7fb 34%, #f5f7fb 100%);
 }
+
+.user-authored-text,
+.profile-bio,
+.section-desc,
+.text-content,
+.work-desc,
+.message-content,
+.summary-desc,
+.team-summary,
+.member-summary,
+.candidate-summary,
+.confirm-desc,
+.visit-summary {
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}

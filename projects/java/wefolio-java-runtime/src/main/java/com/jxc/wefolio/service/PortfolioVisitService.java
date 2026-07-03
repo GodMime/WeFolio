@@ -7,6 +7,7 @@ import com.jxc.wefolio.dict.PortfolioTypeDict;
 import com.jxc.wefolio.dict.PointSceneCodeDict;
 import com.jxc.wefolio.dict.VisitEventTypeDict;
 import com.jxc.wefolio.dict.VisitSourceTypeDict;
+import com.jxc.wefolio.dto.PortfolioConfigDto;
 import com.jxc.wefolio.dto.VisitorPortfolioEventRequest;
 import com.jxc.wefolio.entity.PortfolioEntity;
 import com.jxc.wefolio.entity.VisitEventEntity;
@@ -52,6 +53,12 @@ public class PortfolioVisitService {
     /** 日期时间窗口格式 */
     private static final DateTimeFormatter OPEN_WINDOW_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHH");
 
+    /** 作品集标题快照兜底 */
+    private static final String DEFAULT_PORTFOLIO_TITLE_SNAPSHOT = "个人作品集";
+
+    /** 分享编码快照兜底 */
+    private static final String DEFAULT_PORTFOLIO_SHARE_CODE_SNAPSHOT = "";
+
     /** 访问汇总 Mapper */
     private final VisitRecordEntityMapper visitRecordEntityMapper;
 
@@ -82,6 +89,7 @@ public class PortfolioVisitService {
             record = new VisitRecordEntity();
             record.setVisitorKey(visitorKey);
             record.setPortfolioId(portfolio.getId());
+            fillPortfolioSnapshot(record, portfolio);
             record.setLastPortfolioRevision(portfolio.getPublishedRevision());
             record.setPortfolioType(PortfolioTypeDict.PERSONAL.getCode());
             record.setOwnerType(portfolio.getOwnerType());
@@ -99,6 +107,7 @@ public class PortfolioVisitService {
             visitRecordEntityMapper.insert(record);
         } else {
             record.setVisitCount(safeInt(record.getVisitCount()) + 1);
+            fillPortfolioSnapshot(record, portfolio);
             record.setLastPortfolioRevision(portfolio.getPublishedRevision());
             record.setLastVisitedAt(now);
             visitRecordEntityMapper.updateById(record);
@@ -107,6 +116,53 @@ public class PortfolioVisitService {
         insertEvent(record, portfolio, VisitEventTypeDict.PORTFOLIO_OPENED.getCode(), null, null, null,
                 idempotencyKey, null, now);
         return record;
+    }
+
+    /**
+     * 填充被访问作品集快照，保证作品集删除后访问历史仍可展示上下文。
+     *
+     * @param record 访问汇总
+     * @param portfolio 作品集
+     */
+    private void fillPortfolioSnapshot(VisitRecordEntity record, PortfolioEntity portfolio) {
+        record.setPortfolioTitleSnapshot(resolvePortfolioTitleSnapshot(portfolio));
+        record.setPortfolioShareCodeSnapshot(resolvePortfolioShareCodeSnapshot(portfolio));
+    }
+
+    /**
+     * 解析作品集标题快照。
+     *
+     * @param portfolio 作品集
+     * @return 标题快照
+     */
+    private String resolvePortfolioTitleSnapshot(PortfolioEntity portfolio) {
+        if (portfolio == null || portfolio.getPublishedConfigJson() == null
+                || portfolio.getPublishedConfigJson().isBlank()) {
+            return DEFAULT_PORTFOLIO_TITLE_SNAPSHOT;
+        }
+        try {
+            PortfolioConfigDto config = JSON.parseObject(portfolio.getPublishedConfigJson(), PortfolioConfigDto.class);
+            if (config != null && config.getShare() != null && config.getShare().getTitle() != null
+                    && !config.getShare().getTitle().isBlank()) {
+                return config.getShare().getTitle().strip();
+            }
+            return DEFAULT_PORTFOLIO_TITLE_SNAPSHOT;
+        } catch (Exception e) {
+            return DEFAULT_PORTFOLIO_TITLE_SNAPSHOT;
+        }
+    }
+
+    /**
+     * 解析作品集分享编码快照。
+     *
+     * @param portfolio 作品集
+     * @return 分享编码快照
+     */
+    private String resolvePortfolioShareCodeSnapshot(PortfolioEntity portfolio) {
+        if (portfolio == null || portfolio.getShareCode() == null || portfolio.getShareCode().isBlank()) {
+            return DEFAULT_PORTFOLIO_SHARE_CODE_SNAPSHOT;
+        }
+        return portfolio.getShareCode().strip();
     }
 
     /**

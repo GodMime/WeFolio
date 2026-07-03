@@ -19,6 +19,12 @@ public class VisitRecordEntity extends BaseEntity {
     /** 被访问作品集 ID */
     private Long portfolioId;
 
+    /** 被访问作品集标题快照，作品集删除后仍用于历史展示 */
+    private String portfolioTitleSnapshot;
+
+    /** 被访问作品集分享编码快照，便于删除后排查历史访问来源 */
+    private String portfolioShareCodeSnapshot;
+
     /** 最近一次访问的生效修订号 */
     private Integer lastPortfolioRevision;
 

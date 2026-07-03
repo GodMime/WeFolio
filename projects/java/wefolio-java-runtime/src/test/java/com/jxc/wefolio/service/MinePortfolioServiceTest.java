@@ -1,5 +1,6 @@
 package com.jxc.wefolio.service;
 
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.jxc.wefolio.common.auth.AuthContext;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
 import com.jxc.wefolio.dict.PortfolioConfigScopeDict;
@@ -48,7 +49,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -456,7 +459,7 @@ class MinePortfolioServiceTest {
                   "schemaVersion":"standard-personal-v1",
                   "share":{"title":"旧素材","coverUrl":"https://cos.we-folio.dingchenyong.top/WFA3B1E7A2/protfolio/cover-88-20260701110000-a1b2c3d4.jpg"},
                   "components":[
-                    {"componentKey":"c_profile","componentType":"PROFILE","sortOrder":1000,"enabled":true,"config":{"profile":{"avatarUrl":"https://cos.we-folio.dingchenyong.top/WFA3B1E7A2/protfolio/profile-avatar-88-20260701111000-a1b2c3d4.jpg"}}},
+                    {"componentKey":"c_profile","componentType":"PROFILE","sortOrder":1000,"enabled":true,"config":{"profile":{"avatarUrl":"https://cos.we-folio.dingchenyong.top/WFA3B1E7A2/protfolio/profile-avatar-88-20260701111000-a1b2c3d4.jpg","wechatQrUrl":"https://cos.we-folio.dingchenyong.top/WFA3B1E7A2/protfolio/qr-contact-88-20260701111500-a1b2c3d4.png"}}},
                     {"componentKey":"c_qr","componentType":"QR_CONTACT","sortOrder":2000,"enabled":true,"config":{"qrUrlSource":"CUSTOM","qrUrl":"https://cos.we-folio.dingchenyong.top/WFA3B1E7A2/protfolio/qr-contact-88-20260701112000-a1b2c3d4.png"}}
                   ]
                 }
@@ -466,7 +469,7 @@ class MinePortfolioServiceTest {
                   "schemaVersion":"standard-personal-v1",
                   "share":{"title":"新素材","coverUrl":"https://cos.we-folio.dingchenyong.top/WFA3B1E7A2/protfolio/cover-88-20260702120000-d4c3b2a1.jpg"},
                   "components":[
-                    {"componentKey":"c_profile","componentType":"PROFILE","sortOrder":1000,"enabled":true,"config":{"profile":{"avatarUrl":"https://cos.we-folio.dingchenyong.top/WFA3B1E7A2/protfolio/profile-avatar-88-20260702121000-d4c3b2a1.jpg"}}},
+                    {"componentKey":"c_profile","componentType":"PROFILE","sortOrder":1000,"enabled":true,"config":{"profile":{"avatarUrl":"https://cos.we-folio.dingchenyong.top/WFA3B1E7A2/protfolio/profile-avatar-88-20260702121000-d4c3b2a1.jpg","wechatQrUrl":"https://cos.we-folio.dingchenyong.top/WFA3B1E7A2/protfolio/qr-contact-88-20260702121500-d4c3b2a1.png"}}},
                     {"componentKey":"c_qr","componentType":"QR_CONTACT","sortOrder":2000,"enabled":true,"config":{"qrUrlSource":"CUSTOM","qrUrl":"https://cos.we-folio.dingchenyong.top/WFA3B1E7A2/protfolio/qr-contact-88-20260702122000-d4c3b2a1.png"}}
                   ]
                 }
@@ -490,6 +493,7 @@ class MinePortfolioServiceTest {
 
         verify(cosService).delete("WFA3B1E7A2/protfolio/cover-88-20260701110000-a1b2c3d4.jpg");
         verify(cosService).delete("WFA3B1E7A2/protfolio/profile-avatar-88-20260701111000-a1b2c3d4.jpg");
+        verify(cosService).delete("WFA3B1E7A2/protfolio/qr-contact-88-20260701111500-a1b2c3d4.png");
         verify(cosService).delete("WFA3B1E7A2/protfolio/qr-contact-88-20260701112000-a1b2c3d4.png");
     }
 
@@ -538,6 +542,72 @@ class MinePortfolioServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("草稿已更新，请刷新后再发布");
         verify(pointService, never()).consume(any(), any(), any(), any(), any(Integer.class), any(), any());
+    }
+
+    @Test
+    void deletePortfolioShouldSoftDeleteReferencesAndConservativeSavedAssets() {
+        PortfolioEntity portfolio = ownedPortfolio();
+        portfolio.setDraftConfigJson("""
+                {
+                  "schemaVersion":"standard-personal-v1",
+                  "share":{"title":"草稿","coverUrl":"https://cos.we-folio.dingchenyong.top/WFA3B1E7A2/protfolio/cover-88-20260703110000-a1b2c3d4.jpg"},
+                  "components":[
+                    {"componentKey":"c_profile","componentType":"PROFILE","sortOrder":1000,"enabled":true,"config":{"profile":{"avatarUrl":"https://cos.we-folio.dingchenyong.top/WFA3B1E7A2/protfolio/profile-avatar-88-20260703111000-a1b2c3d4.png","wechatQrUrl":"https://cos.we-folio.dingchenyong.top/WFA3B1E7A2/protfolio/qr-contact-88-20260703111500-a1b2c3d4.jpg"}}}
+                  ]
+                }
+                """);
+        portfolio.setPublishedConfigJson("""
+                {
+                  "schemaVersion":"standard-personal-v1",
+                  "share":{"title":"正式","coverUrl":"https://cos.we-folio.dingchenyong.top/WFA3B1E7A2/protfolio/cover-88-20260703110000-a1b2c3d4.jpg"},
+                  "components":[
+                    {"componentKey":"c_qr","componentType":"QR_CONTACT","sortOrder":2000,"enabled":true,"config":{"qrUrlSource":"CUSTOM","qrUrl":"https://cos.we-folio.dingchenyong.top/WFA3B1E7A2/protfolio/qr-contact-88-20260703112000-a1b2c3d4.jpg"}},
+                    {"componentKey":"c_foreign","componentType":"PROFILE","sortOrder":3000,"enabled":true,"config":{"profile":{"avatarUrl":"https://cos.we-folio.dingchenyong.top/WFA3B1E7A2/protfolio/profile-avatar-99-20260703113000-a1b2c3d4.jpg"}}}
+                  ]
+                }
+                """);
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+        when(miniappAuthService.getUniqueCodeByUserId(7L)).thenReturn("WFA3B1E7A2");
+        when(portfolioEntityMapper.update(any(PortfolioEntity.class), any())).thenReturn(1);
+
+        service().deletePortfolio(88L);
+
+        verify(portfolioReferenceEntityMapper).delete(any());
+        @SuppressWarnings("rawtypes")
+        ArgumentCaptor<UpdateWrapper> updateCaptor = ArgumentCaptor.forClass(UpdateWrapper.class);
+        verify(portfolioEntityMapper).update(any(PortfolioEntity.class), updateCaptor.capture());
+        @SuppressWarnings("unchecked")
+        UpdateWrapper<PortfolioEntity> wrapper = updateCaptor.getValue();
+        assertThat(wrapper.getSqlSet()).contains("deleted_at=");
+        assertThat(wrapper.getSqlSet()).contains("deleted=#{");
+        assertThat(wrapper.getParamNameValuePairs()).containsValue(88L);
+        verify(cosService, times(1)).delete("WFA3B1E7A2/protfolio/cover-88-20260703110000-a1b2c3d4.jpg");
+        verify(cosService).delete("WFA3B1E7A2/protfolio/profile-avatar-88-20260703111000-a1b2c3d4.png");
+        verify(cosService).delete("WFA3B1E7A2/protfolio/qr-contact-88-20260703111500-a1b2c3d4.jpg");
+        verify(cosService).delete("WFA3B1E7A2/protfolio/qr-contact-88-20260703112000-a1b2c3d4.jpg");
+        verify(cosService, never()).delete("WFA3B1E7A2/protfolio/profile-avatar-99-20260703113000-a1b2c3d4.jpg");
+    }
+
+    @Test
+    void deletePortfolioShouldContinueWhenOneCosDeleteFails() {
+        PortfolioEntity portfolio = ownedPortfolio();
+        portfolio.setDraftConfigJson("""
+                {"schemaVersion":"standard-personal-v1","share":{"coverUrl":"https://cos.we-folio.dingchenyong.top/WFA3B1E7A2/protfolio/cover-88-20260703110000-a1b2c3d4.jpg"},"components":[]}
+                """);
+        portfolio.setPublishedConfigJson("""
+                {"schemaVersion":"standard-personal-v1","share":{"coverUrl":"https://cos.we-folio.dingchenyong.top/WFA3B1E7A2/protfolio/cover-88-20260703120000-d4c3b2a1.png"},"components":[]}
+                """);
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+        when(miniappAuthService.getUniqueCodeByUserId(7L)).thenReturn("WFA3B1E7A2");
+        when(portfolioEntityMapper.update(any(PortfolioEntity.class), any())).thenReturn(1);
+        doThrow(new RuntimeException("COS 删除失败"))
+                .when(cosService).delete("WFA3B1E7A2/protfolio/cover-88-20260703110000-a1b2c3d4.jpg");
+
+        service().deletePortfolio(88L);
+
+        verify(portfolioEntityMapper).update(any(PortfolioEntity.class), any());
+        verify(cosService).delete("WFA3B1E7A2/protfolio/cover-88-20260703110000-a1b2c3d4.jpg");
+        verify(cosService).delete("WFA3B1E7A2/protfolio/cover-88-20260703120000-d4c3b2a1.png");
     }
 
     private MinePortfolioService service() {

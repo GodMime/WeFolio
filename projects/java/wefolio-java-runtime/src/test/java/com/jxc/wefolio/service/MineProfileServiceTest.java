@@ -7,6 +7,8 @@ import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.jxc.wefolio.common.auth.AuthContext;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
+import com.jxc.wefolio.dto.MineProfileAssetUploadTicketRequest;
+import com.jxc.wefolio.dto.MineProfileAssetUploadTicketResponse;
 import com.jxc.wefolio.dto.MineProfileResponse;
 import com.jxc.wefolio.dto.MineProfileUpdateRequest;
 import com.jxc.wefolio.entity.UserEntity;
@@ -22,8 +24,11 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -40,6 +45,9 @@ class MineProfileServiceTest {
 
     @Mock
     private UserEntityMapper userEntityMapper;
+
+    @Mock
+    private CosService cosService;
 
     @BeforeEach
     void setUp() {
@@ -59,7 +67,7 @@ class MineProfileServiceTest {
                 """);
         when(userEntityMapper.selectById(7L)).thenReturn(user);
 
-        MineProfileService service = new MineProfileService(userEntityMapper);
+        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
 
         MineProfileResponse response = service.getProfile();
 
@@ -68,6 +76,7 @@ class MineProfileServiceTest {
         assertThat(response.getDisplayName()).isEqualTo("林安 · 婚礼司仪");
         assertThat(response.getNickname()).isEqualTo("林安");
         assertThat(response.getAvatarUrl()).isEqualTo("https://example.com/avatar.jpg");
+        assertThat(response.getWechatQrUrl()).isEqualTo("https://example.com/wechat-qr.png");
         assertThat(response.getProfession()).isEqualTo("婚礼司仪");
         assertThat(response.getCity()).isEqualTo("上海、杭州、苏州");
         assertThat(response.getIntro()).isEqualTo("10 年婚礼主持经验");
@@ -87,7 +96,7 @@ class MineProfileServiceTest {
         user.setProfileTags("[\"高端婚礼\",\"双语主持\"]");
         when(userEntityMapper.selectById(7L)).thenReturn(user);
 
-        MineProfileService service = new MineProfileService(userEntityMapper);
+        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
 
         MineProfileResponse response = service.getProfile();
 
@@ -104,7 +113,7 @@ class MineProfileServiceTest {
 
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setNickname(" 林安 ");
-        request.setAvatarUrl(" https://example.com/new-avatar.jpg ");
+        request.setAvatarUrl(" https://cos.example.com/WF8392/others/avatar-20260703141000-a1b2c3d4.jpg ");
         request.setProfession(" 婚礼司仪 ");
         request.setCity(" 上海、杭州、苏州 ");
         request.setIntro(" 10 年婚礼主持经验 ");
@@ -113,8 +122,10 @@ class MineProfileServiceTest {
                 tag("双语主持", "#2d5f9a")
         ));
         when(userEntityMapper.update(any(UserEntity.class), any(Wrapper.class))).thenReturn(1);
+        when(cosService.headObject("WF8392/others/avatar-20260703141000-a1b2c3d4.jpg"))
+                .thenReturn(new CosService.ObjectHead("image/jpeg", 1024L));
 
-        MineProfileService service = new MineProfileService(userEntityMapper);
+        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
         service.updateProfile(request);
 
         ArgumentCaptor<Wrapper<UserEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
@@ -122,7 +133,7 @@ class MineProfileServiceTest {
         String sqlSet = ((UpdateWrapper<UserEntity>) captor.getValue()).getSqlSet();
         assertThat(sqlSet).contains("nickname", "avatar_url", "profession", "city", "intro", "profile_tags", "last_avatar_updated_at", "avatar_update_count");
         assertThat(user.getNickname()).isEqualTo("林安");
-        assertThat(user.getAvatarUrl()).isEqualTo("https://example.com/new-avatar.jpg");
+        assertThat(user.getAvatarUrl()).isEqualTo("https://cos.example.com/WF8392/others/avatar-20260703141000-a1b2c3d4.jpg");
         assertThat(user.getProfession()).isEqualTo("婚礼司仪");
         assertThat(user.getCity()).isEqualTo("上海、杭州、苏州");
         assertThat(user.getIntro()).isEqualTo("10 年婚礼主持经验");
@@ -145,7 +156,7 @@ class MineProfileServiceTest {
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setNickname("新名字");
 
-        MineProfileService service = new MineProfileService(userEntityMapper);
+        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
         service.updateProfile(request);
 
         ArgumentCaptor<Wrapper<UserEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
@@ -165,6 +176,28 @@ class MineProfileServiceTest {
     }
 
     @Test
+    void updateProfilePersistsWechatQrUrlWhenPresent() {
+        UserEntity user = activeUser();
+        when(userEntityMapper.selectById(7L)).thenReturn(user);
+        when(userEntityMapper.update(any(UserEntity.class), any(Wrapper.class))).thenReturn(1);
+
+        MineProfileUpdateRequest request = new MineProfileUpdateRequest();
+        request.setWechatQrUrl(" https://cos.example.com/WF8392/others/wechat-qr-20260703140512-a1b2c3d4.png ");
+        when(cosService.headObject("WF8392/others/wechat-qr-20260703140512-a1b2c3d4.png"))
+                .thenReturn(new CosService.ObjectHead("image/png", 1200L));
+
+        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        MineProfileResponse response = service.updateProfile(request);
+
+        ArgumentCaptor<Wrapper<UserEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
+        verify(userEntityMapper).update(any(UserEntity.class), captor.capture());
+        String sqlSet = ((UpdateWrapper<UserEntity>) captor.getValue()).getSqlSet();
+        assertThat(sqlSet).contains("wechat_qr_url");
+        assertThat(user.getWechatQrUrl()).isEqualTo("https://cos.example.com/WF8392/others/wechat-qr-20260703140512-a1b2c3d4.png");
+        assertThat(response.getWechatQrUrl()).isEqualTo("https://cos.example.com/WF8392/others/wechat-qr-20260703140512-a1b2c3d4.png");
+    }
+
+    @Test
     void updateProfileDelegatesUpdatedAtToAutoFill() {
         UserEntity user = activeUser();
         LocalDateTime oldUpdatedAt = LocalDateTime.of(2024, 1, 1, 10, 0);
@@ -175,7 +208,7 @@ class MineProfileServiceTest {
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setNickname("林安");
 
-        MineProfileService service = new MineProfileService(userEntityMapper);
+        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
         service.updateProfile(request);
 
         ArgumentCaptor<UserEntity> entityCaptor = ArgumentCaptor.forClass(UserEntity.class);
@@ -191,7 +224,7 @@ class MineProfileServiceTest {
         user.setProfileTags("[,]");
         when(userEntityMapper.selectById(7L)).thenReturn(user);
 
-        MineProfileService service = new MineProfileService(userEntityMapper);
+        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
         MineProfileResponse response = service.getProfile();
 
         assertThat(response.getTags()).isEmpty();
@@ -208,7 +241,7 @@ class MineProfileServiceTest {
                 tag(" 高端婚礼 ", "#2d5f9a")
         ));
 
-        MineProfileService service = new MineProfileService(userEntityMapper);
+        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
 
         assertThatThrownBy(() -> service.updateProfile(request))
                 .isInstanceOf(BusinessException.class)
@@ -221,11 +254,53 @@ class MineProfileServiceTest {
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setTags((List) List.of(tag("高端婚礼", "#123456")));
 
-        MineProfileService service = new MineProfileService(userEntityMapper);
+        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
 
         assertThatThrownBy(() -> service.updateProfile(request))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("请选择有效的标签颜色");
+    }
+
+    /**
+     * 资料图片报错文案应集中在 MineProfileMessage，避免服务层散落硬编码文案。
+     *
+     * @throws Exception 读取源码失败时抛出异常
+     */
+    @Test
+    void profileAssetErrorMessagesUseDedicatedMessageInterface() throws Exception {
+        String serviceSource = Files.readString(Path.of("src/main/java/com/jxc/wefolio/service/MineProfileService.java"));
+        String messageSource = Files.readString(Path.of("src/main/java/com/jxc/wefolio/message/MineProfileMessage.java"));
+        String entitySource = Files.readString(Path.of("src/main/java/com/jxc/wefolio/entity/UserEntity.java"));
+
+        assertThat(messageSource)
+                .contains("PROFILE_ASSET_REQUIRED_MESSAGE = \"资料图片不能为空\"")
+                .contains("PROFILE_ASSET_TYPE_UNSUPPORTED_MESSAGE = \"资料图片类型不支持\"")
+                .contains("WECHAT_QR_FORMAT_UNSUPPORTED_MESSAGE = \"微信二维码格式仅支持 JPG、PNG\"")
+                .contains("PROFILE_ASSET_SIZE_INVALID_MESSAGE = \"资料图片大小异常\"")
+                .contains("WECHAT_QR_SIZE_LIMIT_MESSAGE = \"微信二维码不能超过 300KB\"")
+                .contains("AVATAR_SIZE_LIMIT_MESSAGE = \"头像文件不能超过 200KB\"")
+                .contains("AVATAR_OWNERSHIP_INVALID_MESSAGE = \"头像地址不属于当前用户\"")
+                .contains("WECHAT_QR_OWNERSHIP_INVALID_MESSAGE = \"微信二维码地址不属于当前用户\"")
+                .contains("PROFILE_ASSET_EXPIRED_MESSAGE = \"资料图片不存在或已过期，请重新上传\"")
+                .contains("WECHAT_QR_UPDATE_LIMIT_TEMPLATE = \"微信二维码当月更换次数已达上限（%d次），请下月再试\"");
+        assertThat(serviceSource)
+                .contains("MineProfileMessage.PROFILE_ASSET_REQUIRED_MESSAGE")
+                .contains("MineProfileMessage.WECHAT_QR_UPDATE_LIMIT_TEMPLATE")
+                .contains("UserEntity.WECHAT_QR_MONTHLY_MAX_COUNT")
+                .doesNotContain("private static final int WECHAT_QR_MONTHLY_MAX_COUNT")
+                .doesNotContain("\"资料图片不能为空\"")
+                .doesNotContain("\"资料图片类型不支持\"")
+                .doesNotContain("\"微信二维码格式仅支持 JPG、PNG\"")
+                .doesNotContain("\"资料图片大小异常\"")
+                .doesNotContain("\"微信二维码不能超过 300KB\"")
+                .doesNotContain("\"头像文件不能超过 200KB\"")
+                .doesNotContain("\"头像地址不属于当前用户\"")
+                .doesNotContain("\"微信二维码地址不属于当前用户\"")
+                .doesNotContain("\"资料图片不存在或已过期，请重新上传\"")
+                .doesNotContain("\"微信二维码当月更换次数已达上限（\"");
+        assertThat(entitySource)
+                .contains("public static final int AVATAR_MONTHLY_MAX_COUNT = 10")
+                .contains("public static final int WECHAT_QR_MONTHLY_MAX_COUNT = 3");
     }
 
     @Test
@@ -236,12 +311,197 @@ class MineProfileServiceTest {
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setTags((List) List.of(tag("舞台灯光", "#36516e")));
 
-        MineProfileService service = new MineProfileService(userEntityMapper);
+        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
         service.updateProfile(request);
 
         JSONArray tags = JSON.parseArray(user.getProfileTags());
         assertThat(tags.getJSONObject(0).getString("content")).isEqualTo("舞台灯光");
         assertThat(tags.getJSONObject(0).getString("color")).isEqualTo("#36516e");
+    }
+
+    @Test
+    void createAvatarUploadTicketUsesNormalizedAvatarObjectKey() {
+        UserEntity user = activeUser();
+        when(userEntityMapper.selectById(7L)).thenReturn(user);
+        when(cosService.createPostUploadTicket(any(), any(), any(Long.class), any()))
+                .thenAnswer(invocation -> new CosService.PostUploadTicket(
+                        "https://upload.example.com",
+                        invocation.getArgument(0),
+                        invocation.getArgument(1),
+                        invocation.getArgument(2),
+                        LocalDateTime.now().plusMinutes(15),
+                        Map.of("key", invocation.getArgument(0))
+                ));
+        when(cosService.publicUrl(any())).thenAnswer(invocation -> "https://cos.example.com/" + invocation.getArgument(0));
+        MineProfileAssetUploadTicketRequest request = new MineProfileAssetUploadTicketRequest();
+        request.setAssetType("AVATAR");
+        request.setMimeType("image/jpeg");
+        request.setFileSize(1024L);
+
+        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        MineProfileAssetUploadTicketResponse response = service.createProfileAssetUploadTicket(request);
+
+        assertThat(response.getAssetType()).isEqualTo("AVATAR");
+        assertThat(response.getObjectKey()).startsWith("WF8392/others/avatar-");
+        assertThat(response.getObjectKey()).matches("WF8392/others/avatar-\\d{14}-[a-f0-9]{8}\\.jpg");
+        assertThat(response.getPublicUrl()).isEqualTo("https://cos.example.com/" + response.getObjectKey());
+    }
+
+    @Test
+    void createWechatQrUploadTicketUsesNormalizedQrObjectKey() {
+        UserEntity user = activeUser();
+        when(userEntityMapper.selectById(7L)).thenReturn(user);
+        when(cosService.createPostUploadTicket(any(), any(), any(Long.class), any()))
+                .thenAnswer(invocation -> new CosService.PostUploadTicket(
+                        "https://upload.example.com",
+                        invocation.getArgument(0),
+                        invocation.getArgument(1),
+                        invocation.getArgument(2),
+                        LocalDateTime.now().plusMinutes(15),
+                        Map.of("key", invocation.getArgument(0))
+                ));
+        when(cosService.publicUrl(any())).thenAnswer(invocation -> "https://cos.example.com/" + invocation.getArgument(0));
+        MineProfileAssetUploadTicketRequest request = new MineProfileAssetUploadTicketRequest();
+        request.setAssetType("WECHAT_QR");
+        request.setMimeType("image/png");
+        request.setFileSize(200L * 1024L);
+
+        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        MineProfileAssetUploadTicketResponse response = service.createProfileAssetUploadTicket(request);
+
+        assertThat(response.getAssetType()).isEqualTo("WECHAT_QR");
+        assertThat(response.getObjectKey()).startsWith("WF8392/others/wechat-qr-");
+        assertThat(response.getObjectKey()).matches("WF8392/others/wechat-qr-\\d{14}-[a-f0-9]{8}\\.png");
+        assertThat(response.getMaxBytes()).isEqualTo(300L * 1024L - 1L);
+    }
+
+    @Test
+    void createWechatQrUploadTicketRejectsOversizedFile() {
+        when(userEntityMapper.selectById(7L)).thenReturn(activeUser());
+        MineProfileAssetUploadTicketRequest request = new MineProfileAssetUploadTicketRequest();
+        request.setAssetType("WECHAT_QR");
+        request.setMimeType("image/png");
+        request.setFileSize(300L * 1024L);
+
+        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+
+        assertThatThrownBy(() -> service.createProfileAssetUploadTicket(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("微信二维码不能超过 300KB");
+    }
+
+    @Test
+    void wechatQrSameUrlDoesNotIncrementCount() {
+        UserEntity user = activeUser();
+        user.setWechatQrUrl("https://cos.example.com/WF8392/others/wechat-qr-20260701120000-a1b2c3d4.png");
+        user.setLastWechatQrUpdatedAt(LocalDateTime.now().toLocalDate().atStartOfDay());
+        user.setWechatQrUpdateCount(2);
+        when(userEntityMapper.selectById(7L)).thenReturn(user);
+        when(userEntityMapper.update(any(UserEntity.class), any(Wrapper.class))).thenReturn(1);
+
+        MineProfileUpdateRequest request = new MineProfileUpdateRequest();
+        request.setWechatQrUrl("https://cos.example.com/WF8392/others/wechat-qr-20260701120000-a1b2c3d4.png");
+
+        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        service.updateProfile(request);
+
+        ArgumentCaptor<Wrapper<UserEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
+        verify(userEntityMapper).update(any(UserEntity.class), captor.capture());
+        String sqlSet = ((UpdateWrapper<UserEntity>) captor.getValue()).getSqlSet();
+        assertThat(sqlSet).isNull();
+        assertThat(user.getWechatQrUpdateCount()).isEqualTo(2);
+    }
+
+    @Test
+    void wechatQrAtLimitTwoSucceedsAndBecomesThree() {
+        UserEntity user = activeUser();
+        LocalDateTime lastUpdate = LocalDateTime.now().toLocalDate().atStartOfDay();
+        user.setWechatQrUrl("https://cos.example.com/WF8392/others/wechat-qr-20260701120000-a1b2c3d4.png");
+        user.setLastWechatQrUpdatedAt(lastUpdate);
+        user.setWechatQrUpdateCount(2);
+        when(userEntityMapper.selectById(7L)).thenReturn(user);
+        when(userEntityMapper.update(any(UserEntity.class), any(Wrapper.class))).thenReturn(1);
+        when(cosService.headObject("WF8392/others/wechat-qr-20260703140512-f6e7d8c9.png"))
+                .thenReturn(new CosService.ObjectHead("image/png", 1200L));
+
+        MineProfileUpdateRequest request = new MineProfileUpdateRequest();
+        request.setWechatQrUrl("https://cos.example.com/WF8392/others/wechat-qr-20260703140512-f6e7d8c9.png");
+
+        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        service.updateProfile(request);
+
+        assertThat(user.getWechatQrUpdateCount()).isEqualTo(3);
+        assertThat(user.getLastWechatQrUpdatedAt()).isAfter(lastUpdate);
+    }
+
+    @Test
+    void wechatQrExceedLimitThrowsWhenCountAlreadyThree() {
+        UserEntity user = activeUser();
+        user.setWechatQrUrl("https://cos.example.com/WF8392/others/wechat-qr-20260701120000-a1b2c3d4.png");
+        user.setLastWechatQrUpdatedAt(LocalDateTime.now().toLocalDate().atStartOfDay());
+        user.setWechatQrUpdateCount(3);
+        when(userEntityMapper.selectById(7L)).thenReturn(user);
+        when(cosService.headObject("WF8392/others/wechat-qr-20260703140512-f6e7d8c9.png"))
+                .thenReturn(new CosService.ObjectHead("image/png", 1200L));
+
+        MineProfileUpdateRequest request = new MineProfileUpdateRequest();
+        request.setWechatQrUrl("https://cos.example.com/WF8392/others/wechat-qr-20260703140512-f6e7d8c9.png");
+
+        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+
+        assertThatThrownBy(() -> service.updateProfile(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("微信二维码当月更换次数已达上限（3次），请下月再试");
+    }
+
+    @Test
+    void wechatQrRejectsEmptyCosObject() {
+        when(userEntityMapper.selectById(7L)).thenReturn(activeUser());
+        when(cosService.headObject("WF8392/others/wechat-qr-20260703140512-f6e7d8c9.png"))
+                .thenReturn(new CosService.ObjectHead("image/png", 0L));
+
+        MineProfileUpdateRequest request = new MineProfileUpdateRequest();
+        request.setWechatQrUrl("https://cos.example.com/WF8392/others/wechat-qr-20260703140512-f6e7d8c9.png");
+
+        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+
+        assertThatThrownBy(() -> service.updateProfile(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("微信二维码不能超过 300KB");
+        verify(userEntityMapper, never()).update(any(UserEntity.class), any(Wrapper.class));
+    }
+
+    @Test
+    void wechatQrCrossMonthResetsCountToOne() {
+        UserEntity user = activeUser();
+        user.setWechatQrUrl("https://cos.example.com/WF8392/others/wechat-qr-20260701120000-a1b2c3d4.png");
+        user.setLastWechatQrUpdatedAt(LocalDateTime.now().minusMonths(1).withDayOfMonth(1));
+        user.setWechatQrUpdateCount(3);
+        when(userEntityMapper.selectById(7L)).thenReturn(user);
+        when(userEntityMapper.update(any(UserEntity.class), any(Wrapper.class))).thenReturn(1);
+        when(cosService.headObject("WF8392/others/wechat-qr-20260703140512-f6e7d8c9.png"))
+                .thenReturn(new CosService.ObjectHead("image/png", 1200L));
+
+        MineProfileUpdateRequest request = new MineProfileUpdateRequest();
+        request.setWechatQrUrl("https://cos.example.com/WF8392/others/wechat-qr-20260703140512-f6e7d8c9.png");
+
+        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        service.updateProfile(request);
+
+        assertThat(user.getWechatQrUpdateCount()).isEqualTo(1);
+    }
+
+    @Test
+    void wechatQrRejectsObjectKeyOutsideCurrentUserFolder() {
+        when(userEntityMapper.selectById(7L)).thenReturn(activeUser());
+        MineProfileUpdateRequest request = new MineProfileUpdateRequest();
+        request.setWechatQrUrl("https://cos.example.com/WF9999/others/wechat-qr-20260703140512-f6e7d8c9.png");
+
+        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+
+        assertThatThrownBy(() -> service.updateProfile(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("微信二维码地址不属于当前用户");
     }
 
     // ── 头像月度更新次数限制 ──────────────────────────────
@@ -252,20 +512,23 @@ class MineProfileServiceTest {
         // 首次更新：lastAvatarUpdatedAt 为 null，avatarUpdateCount 默认 0
         when(userEntityMapper.selectById(7L)).thenReturn(user);
         when(userEntityMapper.update(any(UserEntity.class), any(Wrapper.class))).thenReturn(1);
+        when(cosService.headObject("WF8392/others/avatar-20260703141000-a1b2c3d4.jpg"))
+                .thenReturn(new CosService.ObjectHead("image/jpeg", 1024L));
 
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
-        request.setAvatarUrl("https://example.com/new-avatar.jpg");
+        request.setAvatarUrl("https://cos.example.com/WF8392/others/avatar-20260703141000-a1b2c3d4.jpg");
 
-        MineProfileService service = new MineProfileService(userEntityMapper);
+        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
         service.updateProfile(request);
 
         ArgumentCaptor<Wrapper<UserEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
         verify(userEntityMapper).update(any(UserEntity.class), captor.capture());
         String sqlSet = ((UpdateWrapper<UserEntity>) captor.getValue()).getSqlSet();
         assertThat(sqlSet).contains("avatar_url", "last_avatar_updated_at", "avatar_update_count");
-        assertThat(user.getAvatarUrl()).isEqualTo("https://example.com/new-avatar.jpg");
+        assertThat(user.getAvatarUrl()).isEqualTo("https://cos.example.com/WF8392/others/avatar-20260703141000-a1b2c3d4.jpg");
         assertThat(user.getLastAvatarUpdatedAt()).isNotNull();
         assertThat(user.getAvatarUpdateCount()).isEqualTo(1);
+        verify(cosService).headObject("WF8392/others/avatar-20260703141000-a1b2c3d4.jpg");
     }
 
     @Test
@@ -276,11 +539,13 @@ class MineProfileServiceTest {
         user.setAvatarUpdateCount(3);
         when(userEntityMapper.selectById(7L)).thenReturn(user);
         when(userEntityMapper.update(any(UserEntity.class), any(Wrapper.class))).thenReturn(1);
+        when(cosService.headObject("WF8392/others/avatar-20260703141100-b1b2c3d4.jpg"))
+                .thenReturn(new CosService.ObjectHead("image/jpeg", 1024L));
 
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
-        request.setAvatarUrl("https://example.com/another-avatar.jpg");
+        request.setAvatarUrl("https://cos.example.com/WF8392/others/avatar-20260703141100-b1b2c3d4.jpg");
 
-        MineProfileService service = new MineProfileService(userEntityMapper);
+        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
         service.updateProfile(request);
 
         assertThat(user.getAvatarUpdateCount()).isEqualTo(4);
@@ -301,11 +566,13 @@ class MineProfileServiceTest {
         user.setAvatarUpdateCount(8);
         when(userEntityMapper.selectById(7L)).thenReturn(user);
         when(userEntityMapper.update(any(UserEntity.class), any(Wrapper.class))).thenReturn(1);
+        when(cosService.headObject("WF8392/others/avatar-20260703141200-c1b2c3d4.jpg"))
+                .thenReturn(new CosService.ObjectHead("image/jpeg", 1024L));
 
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
-        request.setAvatarUrl("https://example.com/new-month-avatar.jpg");
+        request.setAvatarUrl("https://cos.example.com/WF8392/others/avatar-20260703141200-c1b2c3d4.jpg");
 
-        MineProfileService service = new MineProfileService(userEntityMapper);
+        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
         service.updateProfile(request);
 
         assertThat(user.getAvatarUpdateCount()).isEqualTo(1);
@@ -325,11 +592,13 @@ class MineProfileServiceTest {
         user.setAvatarUpdateCount(5);
         when(userEntityMapper.selectById(7L)).thenReturn(user);
         when(userEntityMapper.update(any(UserEntity.class), any(Wrapper.class))).thenReturn(1);
+        when(cosService.headObject("WF8392/others/avatar-20260703141300-d1b2c3d4.jpg"))
+                .thenReturn(new CosService.ObjectHead("image/jpeg", 1024L));
 
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
-        request.setAvatarUrl("https://example.com/new-year-avatar.jpg");
+        request.setAvatarUrl("https://cos.example.com/WF8392/others/avatar-20260703141300-d1b2c3d4.jpg");
 
-        MineProfileService service = new MineProfileService(userEntityMapper);
+        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
         service.updateProfile(request);
 
         assertThat(user.getAvatarUpdateCount()).isEqualTo(1);
@@ -348,7 +617,7 @@ class MineProfileServiceTest {
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setAvatarUrl("https://example.com/avatar.jpg");
 
-        MineProfileService service = new MineProfileService(userEntityMapper);
+        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
         service.updateProfile(request);
 
         ArgumentCaptor<Wrapper<UserEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
@@ -360,17 +629,40 @@ class MineProfileServiceTest {
     }
 
     @Test
+    void avatarBlankMatchesNullUrlAndDoesNotIncrementCount() {
+        UserEntity user = activeUser();
+        user.setAvatarUrl(null);
+        user.setAvatarUpdateCount(2);
+        when(userEntityMapper.selectById(7L)).thenReturn(user);
+        when(userEntityMapper.update(any(UserEntity.class), any(Wrapper.class))).thenReturn(1);
+
+        MineProfileUpdateRequest request = new MineProfileUpdateRequest();
+        request.setAvatarUrl("");
+
+        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        service.updateProfile(request);
+
+        ArgumentCaptor<Wrapper<UserEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
+        verify(userEntityMapper).update(any(UserEntity.class), captor.capture());
+        String sqlSet = ((UpdateWrapper<UserEntity>) captor.getValue()).getSqlSet();
+        assertThat(sqlSet).isNull();
+        assertThat(user.getAvatarUpdateCount()).isEqualTo(2);
+    }
+
+    @Test
     void avatarAtLimitNineSucceedsAndBecomesTen() {
         UserEntity user = activeUser();
         user.setLastAvatarUpdatedAt(LocalDateTime.now().toLocalDate().atStartOfDay());
         user.setAvatarUpdateCount(9);
         when(userEntityMapper.selectById(7L)).thenReturn(user);
         when(userEntityMapper.update(any(UserEntity.class), any(Wrapper.class))).thenReturn(1);
+        when(cosService.headObject("WF8392/others/avatar-20260703141400-e1b2c3d4.jpg"))
+                .thenReturn(new CosService.ObjectHead("image/jpeg", 1024L));
 
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
-        request.setAvatarUrl("https://example.com/final-avatar.jpg");
+        request.setAvatarUrl("https://cos.example.com/WF8392/others/avatar-20260703141400-e1b2c3d4.jpg");
 
-        MineProfileService service = new MineProfileService(userEntityMapper);
+        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
         service.updateProfile(request);
 
         assertThat(user.getAvatarUpdateCount()).isEqualTo(10);
@@ -382,15 +674,30 @@ class MineProfileServiceTest {
         user.setLastAvatarUpdatedAt(LocalDateTime.now().toLocalDate().atStartOfDay());
         user.setAvatarUpdateCount(10);
         when(userEntityMapper.selectById(7L)).thenReturn(user);
+        when(cosService.headObject("WF8392/others/avatar-20260703141500-f1b2c3d4.jpg"))
+                .thenReturn(new CosService.ObjectHead("image/jpeg", 1024L));
 
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
-        request.setAvatarUrl("https://example.com/exceed-avatar.jpg");
+        request.setAvatarUrl("https://cos.example.com/WF8392/others/avatar-20260703141500-f1b2c3d4.jpg");
 
-        MineProfileService service = new MineProfileService(userEntityMapper);
+        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
 
         assertThatThrownBy(() -> service.updateProfile(request))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("当月头像更新次数已达上限（10次），请下月再试");
+    }
+
+    @Test
+    void avatarRejectsObjectKeyOutsideCurrentUserFolder() {
+        when(userEntityMapper.selectById(7L)).thenReturn(activeUser());
+        MineProfileUpdateRequest request = new MineProfileUpdateRequest();
+        request.setAvatarUrl("https://cos.example.com/WF9999/others/avatar-20260703141600-a1b2c3d4.jpg");
+
+        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+
+        assertThatThrownBy(() -> service.updateProfile(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("头像地址不属于当前用户");
     }
 
     @Test
@@ -403,7 +710,7 @@ class MineProfileServiceTest {
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setNickname("新名字");
 
-        MineProfileService service = new MineProfileService(userEntityMapper);
+        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
         service.updateProfile(request);
 
         ArgumentCaptor<Wrapper<UserEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
@@ -431,7 +738,7 @@ class MineProfileServiceTest {
                 tag("第十一个超长标签", "#0f766e")
         ));
 
-        MineProfileService service = new MineProfileService(userEntityMapper);
+        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
 
         assertThatThrownBy(() -> service.updateProfile(request))
                 .isInstanceOf(BusinessException.class)
@@ -444,6 +751,7 @@ class MineProfileServiceTest {
         user.setUniqueCode("WF8392");
         user.setNickname("林安");
         user.setAvatarUrl("https://example.com/avatar.jpg");
+        user.setWechatQrUrl("https://example.com/wechat-qr.png");
         user.setProfession("婚礼司仪");
         user.setCity("上海、杭州、苏州");
         user.setIntro("10 年婚礼主持经验");

@@ -28,26 +28,46 @@
         </view>
 
         <view wx:else class="portfolio-list">
-          <view wx:for="{{displayPortfolios}}" wx:key="portfolioId" class="portfolio-item-card" data-id="{{item.portfolioId}}" bindtap="handleEditTap">
-            <view class="portfolio-cover">
-              <image class="portfolio-cover-image" src="{{item.coverUrl}}" mode="aspectFill" aria-label="{{item.coverAlt}}"></image>
-            </view>
-            <view class="portfolio-copy">
-              <view class="portfolio-title">{{item.title}}</view>
-              <view class="portfolio-meta">{{item.templateText}} · {{item.updatedText}}</view>
-              <view class="portfolio-badges">
-                <view class="status-badge {{item.statusTone}}">{{item.statusText}}</view>
-              </view>
-            </view>
-            <view class="portfolio-side">
+          <view
+            wx:for="{{displayPortfolios}}"
+            wx:key="portfolioId"
+            class="portfolio-swipe-row {{revealedPortfolioId === item.portfolioId ? 'revealed' : ''}}"
+            data-id="{{item.portfolioId}}"
+            bindtouchstart="handlePortfolioTouchStart"
+            bindtouchmove="handlePortfolioTouchMove"
+            bindtouchend="handlePortfolioTouchEnd"
+            bindtouchcancel="handlePortfolioTouchCancel"
+          >
+            <view class="portfolio-delete-pane" wx:if="{{ownerType === 'USER'}}">
               <button
-                class="portfolio-share-button {{item.actionType === 'EDIT' ? 'draft' : ''}}"
+                class="portfolio-delete-button"
+                loading="{{deletingPortfolioId === item.portfolioId}}"
+                disabled="{{deletingPortfolioId === item.portfolioId}}"
                 data-id="{{item.portfolioId}}"
-                data-action="{{item.actionType}}"
-                open-type="{{item.actionType === 'SHARE' ? 'share' : ''}}"
-                catchtap="handlePrimaryActionTap"
-              >{{item.actionText}}</button>
-              <view class="portfolio-arrow"></view>
+                catchtap="handleDeletePortfolioTap"
+              >删除</button>
+            </view>
+            <view class="portfolio-item-card" data-id="{{item.portfolioId}}" bindtap="handlePortfolioCardTap">
+              <view class="portfolio-cover">
+                <image class="portfolio-cover-image" src="{{item.coverUrl}}" mode="aspectFill" aria-label="{{item.coverAlt}}"></image>
+              </view>
+              <view class="portfolio-copy">
+                <view class="portfolio-title">{{item.title}}</view>
+                <view class="portfolio-meta">{{item.templateText}} · {{item.updatedText}}</view>
+                <view class="portfolio-badges">
+                  <view class="status-badge {{item.statusTone}}">{{item.statusText}}</view>
+                </view>
+              </view>
+              <view class="portfolio-side">
+                <button
+                  class="portfolio-share-button {{item.actionType === 'EDIT' ? 'draft' : ''}}"
+                  data-id="{{item.portfolioId}}"
+                  data-action="{{item.actionType}}"
+                  open-type="{{item.actionType === 'SHARE' ? 'share' : ''}}"
+                  catchtap="handlePrimaryActionTap"
+                >{{item.actionText}}</button>
+                <view class="portfolio-arrow"></view>
+              </view>
             </view>
           </view>
         </view>

@@ -7,7 +7,7 @@
         <view class="panel-heading">
           <view class="heading-copy">
             <view class="section-title">分享信息</view>
-            <view class="section-desc">用于微信分享卡片和访客首屏展示</view>
+            <view class="section-desc">用于微信分享卡片说明</view>
           </view>
           <view class="status-pill">草稿</view>
         </view>
@@ -21,24 +21,23 @@
               <image wx:if="{{config.share.coverUrl}}" src="{{config.share.coverUrl}}" mode="aspectFill"></image>
               <view wx:else class="cover-empty">封面</view>
             </view>
-            <view class="cover-actions">
-              <button class="cover-action-button" bindtap="handleChooseShareCover">{{config.share.coverUrl ? '更换' : '选择'}}</button>
-            </view>
           </view>
         </view>
 
         <view class="form-row">
           <view class="field-heading">
             <view class="field-label">作品集标题</view>
+            <view class="field-limit">{{shareFieldCounters.title}}</view>
           </view>
-          <input class="input" placeholder="未命名作品集" value="{{config.share.title}}" data-path="share.title" bindinput="handleShareInput" />
+          <input class="input" placeholder="未命名作品集" value="{{config.share.title}}" data-path="share.title" bindinput="handleShareInput" maxlength="50" />
         </view>
 
         <view class="form-row">
           <view class="field-heading">
             <view class="field-label">分享简介</view>
+            <view class="field-limit">{{shareFieldCounters.intro}}</view>
           </view>
-          <textarea class="input textarea" placeholder="填写服务风格、适合场景或代表作品说明" value="{{config.share.intro}}" data-path="share.intro" bindinput="handleShareInput"></textarea>
+          <textarea class="input textarea" placeholder="填写服务风格、适合场景或代表作品说明" value="{{config.share.intro}}" data-path="share.intro" bindinput="handleShareInput" maxlength="500"></textarea>
         </view>
       </view>
 
@@ -80,20 +79,11 @@
               <view class="component-order">{{index + 1}}</view>
               <view class="component-copy">
                 <view class="component-title">{{item.name || item.componentType}}</view>
-                <view class="component-meta">{{item.componentType}} · {{item.componentKey}}</view>
               </view>
               <view class="component-drag-handle"></view>
               <view class="component-row-arrow {{item.componentType === 'CAROUSEL' || item.componentType === 'PROFILE' || item.componentType === 'QR_CONTACT' || item.componentType === 'WORK_GRID' || item.componentType === 'WORK_LIST' ? '' : 'placeholder'}}">{{item.componentType === 'CAROUSEL' || item.componentType === 'PROFILE' || item.componentType === 'QR_CONTACT' || item.componentType === 'WORK_GRID' || item.componentType === 'WORK_LIST' ? '›' : ''}}</view>
             </view>
           </view>
-        </view>
-
-        <view class="component-hints">
-          <view class="hint-chip">轮播图</view>
-          <view class="hint-chip">双列作品列表</view>
-          <view class="hint-chip">单列作品列表</view>
-          <view class="hint-chip">二维码联系</view>
-          <view class="hint-chip">预留联系信息</view>
         </view>
       </view>
     </view>
@@ -242,10 +232,18 @@
             </view>
             <view class="form-row">
               <view class="field-heading">
-                <view class="field-label">微信二维码地址</view>
-                <view class="profile-field-limit">{{profileFieldCounters.wechatQrUrl}}</view>
+                <view class="field-label">微信二维码</view>
               </view>
-              <input class="input profile-sheet-input" placeholder="二维码图片 URL" value="{{profileForm.wechatQrUrl}}" data-field="wechatQrUrl" bindinput="handleProfileInput" maxlength="512" />
+              <view class="profile-qr-editor">
+                <view class="profile-qr-preview" catchtap="handleChooseProfileWechatQr" aria-role="button" aria-label="选择微信二维码">
+                  <image wx:if="{{profileForm.wechatQrUrl}}" src="{{profileForm.wechatQrUrl}}" mode="aspectFit"></image>
+                  <view wx:else class="profile-qr-placeholder">二维码</view>
+                </view>
+                <view class="profile-avatar-copy">
+                  <view class="profile-avatar-state">{{profileForm.wechatQrUrl ? '已选择' : '未选择'}}</view>
+                </view>
+                <button class="profile-avatar-button" catchtap="handleChooseProfileWechatQr">{{profileForm.wechatQrUrl ? '更换图片' : '选择图片'}}</button>
+              </view>
             </view>
           </view>
 
@@ -374,6 +372,43 @@
       </view>
     </view>
   </view>
+
+  <view class="share-cover-crop-mask {{shareCoverCropVisible ? 'visible' : ''}}" catchtap="handleCloseShareCoverCrop">
+    <view class="share-cover-crop-panel" catchtap="noop">
+      <view class="component-picker-grabber"></view>
+      <view class="component-picker-heading">
+        <view class="component-picker-title">裁剪分享封面</view>
+        <view class="component-picker-count">5:4</view>
+      </view>
+
+      <view
+        wx:if="{{shareCoverCropState}}"
+        class="share-cover-crop-stage"
+        style="{{shareCoverCropState.cropBoxStyle}}"
+        catchtouchstart="handleShareCoverCropTouchStart"
+        catchtouchmove="handleShareCoverCropTouchMove"
+        catchtouchend="handleShareCoverCropTouchEnd"
+        catchtouchcancel="handleShareCoverCropTouchCancel"
+      >
+        <image class="share-cover-crop-image" src="{{shareCoverCropState.imagePath}}" mode="scaleToFill" style="{{shareCoverCropState.imageStyle}}"></image>
+        <view class="share-cover-crop-frame"></view>
+      </view>
+
+      <view wx:if="{{shareCoverCropErrorText}}" class="share-cover-crop-error">{{shareCoverCropErrorText}}</view>
+
+      <view class="component-work-actions share-cover-crop-actions">
+        <button class="component-work-cancel" catchtap="handleCloseShareCoverCrop">取消</button>
+        <button class="component-work-confirm" catchtap="handleConfirmShareCoverCrop" loading="{{shareCoverCropSaving}}" disabled="{{shareCoverCropSaving}}">完成</button>
+      </view>
+    </view>
+  </view>
+
+  <canvas
+    id="portfolioCoverCropCanvas"
+    type="2d"
+    class="share-cover-crop-canvas"
+    style="width: {{shareCoverCropCanvasWidth}}px; height: {{shareCoverCropCanvasHeight}}px;"
+  ></canvas>
 
   <view class="bottom-actions">
     <button class="action-button secondary-button" bindtap="handleSaveDraft">保存草稿</button>

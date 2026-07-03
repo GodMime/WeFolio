@@ -2,8 +2,6 @@
   <navigation-bar title="{{portfolio.title || '个人作品集'}}" color="#17202a" background="rgba(255, 255, 255, 0.94)"></navigation-bar>
 
   <scroll-view scroll-y class="visitor-scroll">
-    <view wx:if="{{portfolio.share.intro}}" class="share-intro">{{portfolio.share.intro}}</view>
-
     <view wx:for="{{portfolio.components}}" wx:key="componentKey" class="folio-component">
       <block wx:if="{{item.componentType === 'CAROUSEL'}}">
         <swiper class="folio-carousel" indicator-dots autoplay circular>
@@ -23,6 +21,7 @@
           <view wx:if="{{item.profile.tags.length}}" class="profile-tags">
             <view wx:for="{{item.profile.tags}}" wx:key="name" wx:for-item="tag" class="profile-tag">{{tag.name}}</view>
           </view>
+          <image wx:if="{{item.profile.wechatQrUrl}}" class="profile-qr-image qr-image" src="{{item.profile.wechatQrUrl}}" mode="aspectFit" data-url="{{item.profile.wechatQrUrl}}" bindtap="handlePreviewQr"></image>
         </view>
       </block>
 

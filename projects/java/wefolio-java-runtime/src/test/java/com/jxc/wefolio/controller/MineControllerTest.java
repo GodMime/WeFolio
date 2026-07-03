@@ -2,6 +2,8 @@ package com.jxc.wefolio.controller;
 
 import com.jxc.wefolio.common.Response;
 import com.jxc.wefolio.annotation.MaintainerAccess;
+import com.jxc.wefolio.dto.MineProfileAssetUploadTicketRequest;
+import com.jxc.wefolio.dto.MineProfileAssetUploadTicketResponse;
 import com.jxc.wefolio.dto.MineVisitRecordsResponse;
 import com.jxc.wefolio.service.MineDashboardService;
 import com.jxc.wefolio.service.MineProfileService;
@@ -11,6 +13,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 
 import java.lang.reflect.Method;
 
@@ -50,5 +53,29 @@ class MineControllerTest {
         assertThat(response.isSuccess()).isTrue();
         assertThat(response.getData()).isSameAs(serviceResponse);
         verify(mineVisitService).getVisitRecords();
+    }
+
+    @Test
+    void profileAssetUploadTicketEndpointDelegatesToService() throws NoSuchMethodException {
+        Method method = MineController.class.getMethod(
+                "createProfileAssetUploadTicket",
+                MineProfileAssetUploadTicketRequest.class
+        );
+        PostMapping postMapping = method.getAnnotation(PostMapping.class);
+        MineProfileAssetUploadTicketRequest request = new MineProfileAssetUploadTicketRequest();
+        request.setAssetType("WECHAT_QR");
+        MineProfileAssetUploadTicketResponse serviceResponse = new MineProfileAssetUploadTicketResponse();
+        serviceResponse.setAssetType("WECHAT_QR");
+        when(mineProfileService.createProfileAssetUploadTicket(request)).thenReturn(serviceResponse);
+        MineController controller = new MineController(
+                mineDashboardService, mineProfileService, mineVisitService);
+
+        Response<MineProfileAssetUploadTicketResponse> response = controller.createProfileAssetUploadTicket(request);
+
+        assertThat(postMapping).isNotNull();
+        assertThat(postMapping.value()).containsExactly("/api/mine/profile/assets/upload-ticket");
+        assertThat(response.isSuccess()).isTrue();
+        assertThat(response.getData()).isSameAs(serviceResponse);
+        verify(mineProfileService).createProfileAssetUploadTicket(request);
     }
 }

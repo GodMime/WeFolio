@@ -1,7 +1,9 @@
 const { request } = require('../../utils/request')
+const { normalizeId } = require('../../utils/id')
 const { handleAuthRequired, hasLocalToken } = require('../../utils/session')
 
 const PORTFOLIOS_API_URL = '/api/mine/portfolios'
+const PORTFOLIO_DELETE_API_PREFIX = '/api/mine/portfolios/delete'
 const EDIT_PAGE_URL = '/pages/portfolio-standard-edit/portfolio-standard-edit'
 const VISITOR_PORTFOLIO_SHARE_PATH_PREFIX = '/pages/visitor-portfolio/visitor-portfolio?shareCode='
 const UNAVAILABLE_PAGE_URL = '/pages/portfolio-unavailable/portfolio-unavailable'
@@ -11,6 +13,10 @@ const MINE_PAGE_URL = '/pages/index/index'
 const DEFAULT_COVER_URL = '/assets/system/work-logo-100kb.jpg'
 const SHARE_CHANNEL_WECHAT_MINIAPP = 'WECHAT_MINIAPP'
 const SHARE_SCENE_PORTFOLIO_LIST = 'PORTFOLIO_LIST'
+const SWIPE_REVEAL_THRESHOLD = -32
+const SWIPE_CLOSE_THRESHOLD = 24
+const SWIPE_VERTICAL_TOLERANCE = 48
+const DELETE_CONFIRM_COLOR = '#a9354f'
 
 function defaultString(value, fallback = '') {
   const text = String(value || '').trim()
@@ -81,6 +87,9 @@ Page({
     portfolios: [],
     displayPortfolios: [],
     summary: buildSummary([]),
+    revealedPortfolioId: null,
+    portfolioTouchStart: null,
+    deletingPortfolioId: null,
     tabs: [
       { key: 'schedule', label: '档期', icon: 'schedule' },
       { key: 'work', label: '作品', icon: 'work' },
@@ -98,8 +107,8 @@ Page({
       wx.navigateTo({ url: '/pages/login/login' })
       return
     }
-    this.setData({ loading: true, errorMessage: '' })
-    request({
+    this.setData({ loading: true, errorMessage: '', revealedPortfolioId: null })
+    return request({
       url: PORTFOLIOS_API_URL,
       data: { ownerType: this.data.ownerType }
     }).then((response) => {
@@ -123,7 +132,9 @@ Page({
     const ownerType = event.currentTarget.dataset.type || 'USER'
     this.setData({
       ownerType,
-      ownerTitle: ownerType === 'TEAM' ? '团队作品集' : '个人作品集'
+      ownerTitle: ownerType === 'TEAM' ? '团队作品集' : '个人作品集',
+      revealedPortfolioId: null,
+      portfolioTouchStart: null
     })
     this.bootstrap()
   },
@@ -137,23 +148,142 @@ Page({
     wx.navigateTo({ url: `${UNAVAILABLE_PAGE_URL}?type=${type}` })
   },
 
-  handleEditTap(event) {
-    const portfolioId = event.currentTarget.dataset.id
+  findPortfolioById(portfolioId) {
+    return (this.data.displayPortfolios || []).find((item) => normalizeId(item.portfolioId) === portfolioId) || null
+  },
+
+  handlePortfolioTouchStart(event) {
+    if (this.data.deletingPortfolioId || this.data.ownerType !== 'USER') {
+      this.setData({ portfolioTouchStart: null })
+      return
+    }
+    const portfolioId = normalizeId(event.currentTarget.dataset.id)
+    const portfolio = this.findPortfolioById(portfolioId)
+    if (!portfolio) {
+      this.setData({ portfolioTouchStart: null })
+      return
+    }
+    const touch = (event.touches && event.touches[0]) || {}
+    this.setData({
+      portfolioTouchStart: {
+        portfolioId,
+        x: touch.clientX || 0,
+        y: touch.clientY || 0
+      }
+    })
+  },
+
+  handlePortfolioTouchMove() {
+  },
+
+  handlePortfolioTouchEnd(event) {
+    const start = this.data.portfolioTouchStart
+    if (!start || !start.portfolioId) {
+      return
+    }
+    const touch = (event.changedTouches && event.changedTouches[0]) || {}
+    const deltaX = (touch.clientX || start.x) - start.x
+    const deltaY = Math.abs((touch.clientY || start.y) - start.y)
+    if (deltaY <= SWIPE_VERTICAL_TOLERANCE && deltaX < SWIPE_REVEAL_THRESHOLD) {
+      this.setData({
+        revealedPortfolioId: start.portfolioId,
+        portfolioTouchStart: null
+      })
+      return
+    }
+    if (deltaX > SWIPE_CLOSE_THRESHOLD || Math.abs(deltaX) < 8) {
+      this.setData({
+        revealedPortfolioId: null,
+        portfolioTouchStart: null
+      })
+      return
+    }
+    this.setData({ portfolioTouchStart: null })
+  },
+
+  handlePortfolioTouchCancel() {
+    this.setData({ portfolioTouchStart: null })
+  },
+
+  handlePortfolioCardTap(event) {
+    const portfolioId = normalizeId(event.currentTarget.dataset.id)
     if (portfolioId) {
+      if (this.data.revealedPortfolioId === portfolioId) {
+        this.setData({ revealedPortfolioId: null })
+        return
+      }
       wx.navigateTo({ url: `${EDIT_PAGE_URL}?portfolioId=${portfolioId}` })
     }
   },
 
   handlePrimaryActionTap(event) {
-    const portfolioId = event.currentTarget.dataset.id
+    const portfolioId = normalizeId(event.currentTarget.dataset.id)
     const actionType = event.currentTarget.dataset.action
     if (!portfolioId) {
+      return
+    }
+    if (this.data.revealedPortfolioId === portfolioId) {
+      this.setData({ revealedPortfolioId: null })
       return
     }
     if (actionType === 'SHARE') {
       return
     }
     wx.navigateTo({ url: `${EDIT_PAGE_URL}?portfolioId=${portfolioId}` })
+  },
+
+  async handleDeletePortfolioTap(event) {
+    const portfolioId = normalizeId(event.currentTarget.dataset.id)
+    const portfolio = this.findPortfolioById(portfolioId)
+    if (!portfolio || this.data.deletingPortfolioId) {
+      return
+    }
+    wx.showModal({
+      title: '删除作品集',
+      content: `确认删除“${portfolio.title || '该作品集'}”？删除后该作品集链接将不可访问。`,
+      confirmText: '删除',
+      confirmColor: DELETE_CONFIRM_COLOR,
+      success: async (result) => {
+        if (!result.confirm) {
+          this.setData({ revealedPortfolioId: null })
+          return
+        }
+        this.setData({ deletingPortfolioId: portfolioId })
+        try {
+          await request({
+            url: `${PORTFOLIO_DELETE_API_PREFIX}/${portfolioId}`,
+            method: 'POST'
+          })
+          this.setData({
+            deletingPortfolioId: null,
+            revealedPortfolioId: null
+          })
+          wx.showToast({
+            title: '作品集已删除',
+            icon: 'success'
+          })
+          await this.bootstrap()
+        } catch (error) {
+          if (error && error.authRequired) {
+            this.setData({
+              deletingPortfolioId: null,
+              revealedPortfolioId: null
+            })
+            handleAuthRequired(error.message)
+            return
+          }
+          this.setData({
+            deletingPortfolioId: null,
+            revealedPortfolioId: null
+          })
+          wx.showToast({
+            title: error && error.message ? error.message : '作品集删除失败',
+            icon: 'none',
+            duration: 2600
+          })
+        }
+      }
+    })
   },
 
   onShareAppMessage(event = {}) {

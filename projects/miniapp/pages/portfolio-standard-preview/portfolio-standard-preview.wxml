@@ -3,7 +3,6 @@
 
   <scroll-view scroll-y class="preview-scroll">
     <view class="preview-toolbar">
-      <button class="preview-back-button" bindtap="handleBackToEditor">返回编辑</button>
       <view class="preview-note">预览模式：禁用真实提交，不统计访问，不扣积分。</view>
     </view>
 
@@ -30,8 +29,6 @@
     </block>
 
     <block wx:else>
-      <view wx:if="{{portfolio.share.intro}}" class="share-intro">{{portfolio.share.intro}}</view>
-
       <view wx:for="{{portfolio.components}}" wx:key="componentKey" class="folio-component">
         <block wx:if="{{item.componentType === 'CAROUSEL'}}">
           <swiper class="folio-carousel" indicator-dots autoplay circular>
@@ -51,6 +48,7 @@
             <view wx:if="{{item.profile.tags.length}}" class="profile-tags">
               <view wx:for="{{item.profile.tags}}" wx:key="name" wx:for-item="tag" class="profile-tag">{{tag.name}}</view>
             </view>
+            <image wx:if="{{item.profile.wechatQrUrl}}" class="profile-qr-image qr-image" src="{{item.profile.wechatQrUrl}}" mode="aspectFit" data-url="{{item.profile.wechatQrUrl}}" bindtap="handlePreviewQr"></image>
           </view>
         </block>
 

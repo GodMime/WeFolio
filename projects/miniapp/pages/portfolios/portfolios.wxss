@@ -51,6 +51,7 @@
 
 .segment-item::after,
 .create-action::after,
+.portfolio-delete-button::after,
 .portfolio-share-button::after,
 .small-button::after,
 .tab::after {
@@ -75,6 +76,7 @@
 .portfolio-item-card,
 .portfolio-side,
 .portfolio-badges,
+.portfolio-delete-pane,
 .tabbar,
 .tab {
   display: flex;
@@ -137,13 +139,66 @@
   gap: 16rpx;
 }
 
+.portfolio-swipe-row {
+  position: relative;
+  overflow: hidden;
+  border-radius: 14rpx;
+}
+
+.portfolio-delete-pane {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
+  width: 128rpx;
+  justify-content: center;
+  background: #a9354f;
+  transform: translateX(100%);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 180ms ease, opacity 120ms ease;
+}
+
+.portfolio-delete-button {
+  width: 128rpx;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  color: #ffffff;
+  font-size: 24rpx;
+  font-weight: 900;
+  line-height: 1;
+  border: 0;
+  border-radius: 0;
+  background: #a9354f;
+  box-shadow: none;
+  box-sizing: border-box;
+}
+
+.portfolio-swipe-row.revealed .portfolio-delete-pane {
+  transform: translateX(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
 .portfolio-item-card {
+  position: relative;
+  z-index: 2;
   min-height: 180rpx;
   padding: 20rpx;
   gap: 20rpx;
   border-radius: 14rpx;
   box-shadow: 0 8rpx 22rpx rgba(23, 32, 42, 0.04);
   box-sizing: border-box;
+  transition: transform 180ms ease;
+}
+
+.portfolio-swipe-row.revealed .portfolio-item-card {
+  transform: translateX(-140rpx);
 }
 
 .portfolio-cover {

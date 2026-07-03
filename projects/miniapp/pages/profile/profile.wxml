@@ -28,7 +28,7 @@
             <view class="profile-name">{{profile.displayName}}</view>
             <view class="profile-code">{{profile.uniqueCode}}</view>
           </view>
-          <button class="secondary-button avatar-button" open-type="chooseAvatar" bindchooseavatar="handleChooseAvatar" disabled="{{saving}}">更换头像</button>
+          <button class="secondary-button profile-action-button avatar-button" open-type="chooseAvatar" bindchooseavatar="handleChooseAvatar" disabled="{{saving}}">更换头像</button>
         </view>
 
         <view class="panel profile-fields-panel">
@@ -59,6 +59,21 @@
               <view class="field-limit">{{fieldCounters.intro}}</view>
             </view>
             <textarea class="input textarea" value="{{form.intro}}" data-field="intro" bindinput="handleInput" maxlength="500" auto-height />
+          </view>
+          <view class="form-row qr-form-row">
+            <view class="qr-heading">
+              <view class="section-title">微信二维码</view>
+              <view class="qr-limit">小于300KB · 每月可修改3次</view>
+            </view>
+            <view class="qr-body">
+              <view class="qr-preview">
+                <image wx:if="{{form.wechatQrUrl}}" class="qr-image" src="{{form.wechatQrUrl}}" mode="aspectFill"></image>
+                <view wx:else class="qr-placeholder">QR</view>
+              </view>
+              <view class="qr-actions">
+                <button class="secondary-button profile-action-button qr-button" bindtap="handleChooseWechatQr" disabled="{{saving}}">上传二维码</button>
+              </view>
+            </view>
           </view>
         </view>
 

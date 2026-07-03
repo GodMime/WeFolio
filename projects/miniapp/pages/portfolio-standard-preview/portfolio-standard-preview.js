@@ -44,10 +44,6 @@ Page({
     return this.bootstrap()
   },
 
-  handleBackToEditor() {
-    wx.navigateBack()
-  },
-
   handlePreviewQr(event) {
     const url = event.currentTarget.dataset.url
     if (!url) {

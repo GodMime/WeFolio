@@ -25,6 +25,9 @@ public class MineProfileResponse {
     /** 头像地址 */
     private String avatarUrl;
 
+    /** 微信二维码地址 */
+    private String wechatQrUrl;
+
     /** 职业身份 */
     private String profession;
 

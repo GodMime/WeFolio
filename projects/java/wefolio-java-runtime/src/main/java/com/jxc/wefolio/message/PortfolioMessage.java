@@ -65,6 +65,9 @@ public interface PortfolioMessage {
     /** 作品集并发更新冲突提示 */
     String PORTFOLIO_CONCURRENT_UPDATE_MESSAGE = "并发冲突，请刷新重试";
 
+    /** 作品集删除失败提示 */
+    String PORTFOLIO_DELETE_FAILED_MESSAGE = "作品集删除失败，请刷新重试";
+
     /** 作品集维护能力不可用提示 */
     String PORTFOLIO_MAINTENANCE_UNAVAILABLE_MESSAGE = "当前作品集暂未开放维护";
 

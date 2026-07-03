@@ -71,6 +71,8 @@ class ContactLeadServiceTest {
         ContactLeadEntity lead = captor.getValue();
         assertThat(response.getLeadId()).isEqualTo(66L);
         assertThat(lead.getContactName()).isEqualTo("林安");
+        assertThat(lead.getPortfolioTitleSnapshot()).isEqualTo("林安婚礼司仪");
+        assertThat(lead.getPortfolioShareCodeSnapshot()).isEqualTo("PF001");
         assertThat(lead.getPhoneLast4()).isEqualTo("8000");
         assertThat(lead.getPhoneCiphertext()).isNotEqualTo("13800138000");
         assertThat(lead.getWechatMaskHint()).isEqualTo("we***io");
@@ -100,9 +102,13 @@ class ContactLeadServiceTest {
     private PortfolioEntity portfolio() {
         PortfolioEntity portfolio = new PortfolioEntity();
         portfolio.setId(88L);
+        portfolio.setShareCode("PF001");
         portfolio.setOwnerType(PortfolioOwnerTypeDict.USER.getCode());
         portfolio.setOwnerId(7L);
         portfolio.setPublishedRevision(3);
+        portfolio.setPublishedConfigJson("""
+                {"schemaVersion":"standard-personal-v1","share":{"title":"林安婚礼司仪"},"components":[]}
+                """);
         return portfolio;
     }
 }

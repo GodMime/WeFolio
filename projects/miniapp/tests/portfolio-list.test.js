@@ -110,3 +110,95 @@ test('creating a standard personal portfolio opens an unsaved editor draft', asy
     page.cleanup()
   }
 })
+
+test('left swiping a personal portfolio reveals delete and confirm delete refreshes list', async () => {
+  const requests = []
+  const toasts = []
+  const page = loadPortfolioListPage((options) => {
+    requests.push(options)
+    if (options.url === '/api/mine/portfolios') {
+      return Promise.resolve({
+        portfolios: [
+          {
+            portfolioId: 88,
+            ownerType: 'USER',
+            templateType: 'STANDARD',
+            publicationStatus: 'PUBLISHED',
+            title: '林安婚礼司仪',
+            shareCode: 'PF001',
+            coverUrl: 'https://example.test/cover.jpg'
+          }
+        ]
+      })
+    }
+    if (options.url === '/api/mine/portfolios/delete/88') {
+      return Promise.resolve({})
+    }
+    return Promise.resolve({})
+  }, {
+    showModal(options) {
+      options.success({ confirm: true })
+    },
+    showToast(options) {
+      toasts.push(options)
+    }
+  })
+
+  page.bootstrap()
+  await flushPromises()
+
+  page.handlePortfolioTouchStart({
+    currentTarget: { dataset: { id: 88 } },
+    touches: [{ clientX: 180, clientY: 20 }]
+  })
+  page.handlePortfolioTouchEnd({
+    changedTouches: [{ clientX: 120, clientY: 22 }]
+  })
+
+  await page.handleDeletePortfolioTap({
+    currentTarget: { dataset: { id: 88 } }
+  })
+  await flushPromises()
+  await flushPromises()
+
+  try {
+    assert.equal(page.data.revealedPortfolioId, null)
+    assert.equal(page.data.deletingPortfolioId, null)
+    assert.deepEqual(requests.map((item) => [item.url, item.method || 'GET']), [
+      ['/api/mine/portfolios', 'GET'],
+      ['/api/mine/portfolios/delete/88', 'POST'],
+      ['/api/mine/portfolios', 'GET']
+    ])
+    assert.equal(toasts[0].title, '作品集已删除')
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('tapping a revealed portfolio card closes delete action instead of opening editor', async () => {
+  const navigations = []
+  const page = loadPortfolioListPage(() => Promise.resolve({ portfolios: [] }), {
+    navigateTo(options) {
+      navigations.push(options)
+    }
+  })
+
+  page.data.displayPortfolios = [
+    {
+      portfolioId: 88,
+      title: '林安婚礼司仪'
+    }
+  ]
+  page.data.revealedPortfolioId = 88
+
+  page.handlePortfolioCardTap({
+    currentTarget: { dataset: { id: 88 } }
+  })
+
+  try {
+    assert.equal(page.data.revealedPortfolioId, null)
+    assert.deepEqual(navigations, [])
+  } finally {
+    page.cleanup()
+  }
+})
