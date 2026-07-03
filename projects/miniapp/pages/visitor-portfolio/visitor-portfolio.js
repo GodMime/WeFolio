@@ -79,5 +79,54 @@ Page({
     }).catch((error) => {
       wx.showToast({ title: error.message || '提交失败', icon: 'none' })
     })
+  },
+
+  handlePreviewQr(event) {
+    const url = event.currentTarget.dataset.url
+    if (!url) {
+      return
+    }
+    wx.previewImage({ current: url, urls: [url] })
+  },
+
+  handleDisplayTagTap(event) {
+    const componentKey = event.currentTarget.dataset.componentKey
+    const groupKey = event.currentTarget.dataset.groupKey
+    this.setData({
+      portfolio: switchDisplayGroup(this.data.portfolio, componentKey, groupKey)
+    })
+  },
+
+  onShareAppMessage() {
+    return {
+      title: this.data.portfolio.share.title || this.data.portfolio.title || '个人作品集',
+      path: `/pages/visitor-portfolio/visitor-portfolio?shareCode=${this.data.shareCode}`,
+      imageUrl: this.data.portfolio.share.coverUrl
+    }
   }
 })
+
+function switchDisplayGroup(portfolio, componentKey, groupKey) {
+  const sourcePortfolio = portfolio || {}
+  const components = (Array.isArray(sourcePortfolio.components) ? sourcePortfolio.components : []).map((component) => {
+    if (!component || component.componentKey !== componentKey) {
+      return component
+    }
+    const groups = Array.isArray(component.groups) ? component.groups : []
+    const activeGroup = groups.find((group) => group.groupKey === groupKey)
+      || component.activeGroup
+      || groups[0]
+      || { groupKey: '', name: '', sortOrder: 0, works: [] }
+    const displayTags = Array.isArray(component.displayTags)
+      ? component.displayTags
+      : groups.map((group) => ({ groupKey: group.groupKey, name: group.name, active: false }))
+    return Object.assign({}, component, {
+      activeGroupKey: activeGroup.groupKey,
+      activeGroup,
+      displayTags: displayTags.map((tag) => Object.assign({}, tag, {
+        active: tag.groupKey === activeGroup.groupKey
+      }))
+    })
+  })
+  return Object.assign({}, sourcePortfolio, { components })
+}

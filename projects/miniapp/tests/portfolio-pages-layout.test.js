@@ -89,7 +89,7 @@ test('maintainer portfolio pages expose expected controls', () => {
   assert.match(editWxml, /分享信息/)
   assert.match(editWxml, /分享封面/)
   assert.match(editWxml, /bindtap="handleChooseShareCover"/)
-  assert.match(editWxml, /bindtap="handleRemoveShareCover"/)
+  assert.doesNotMatch(editWxml, /bindtap="handleRemoveShareCover"/)
   assert.match(editWxml, /组件编排/)
   assert.match(editWxml, /保存草稿/)
   assert.match(editWxml, /预览/)
@@ -102,6 +102,20 @@ test('maintainer portfolio pages expose expected controls', () => {
   assert.match(libraryWxml, /预留联系信息/)
   assert.match(previewWxml, /预览/)
   assert.match(previewWxml, /禁用真实提交/)
+  assert.match(previewWxml, /bindtap="handleBackToEditor"/)
+  assert.doesNotMatch(previewWxml, /maintenance-mask/)
+  ;[
+    'CAROUSEL',
+    'PROFILE',
+    'WORK_GRID',
+    'WORK_LIST',
+    'SCHEDULE_QUERY',
+    'QR_CONTACT',
+    'CONTACT_FORM',
+    'TEXT_SECTION'
+  ].forEach((componentType) => {
+    assert.match(previewWxml, new RegExp(`item\\.componentType === '${componentType}'`))
+  })
   assert.match(unavailableWxml, /暂未开放/)
 })
 
@@ -113,6 +127,19 @@ test('visitor portfolio pages expose maintenance, QR, contact and schedule surfa
   assert.match(visitorWxml, /二维码联系/)
   assert.match(visitorWxml, /预留联系信息/)
   assert.match(visitorWxml, /提交/)
+  ;[
+    'CAROUSEL',
+    'PROFILE',
+    'WORK_GRID',
+    'WORK_LIST',
+    'SCHEDULE_QUERY',
+    'QR_CONTACT',
+    'CONTACT_FORM',
+    'TEXT_SECTION'
+  ].forEach((componentType) => {
+    assert.match(visitorWxml, new RegExp(`item\\.componentType === '${componentType}'`))
+  })
+  assert.match(visitorWxml, /bindtap="handlePreviewQr"/)
   assert.match(scheduleWxml, /档期查询/)
   assert.match(scheduleWxml, /查询/)
   assert.doesNotMatch(scheduleWxml, /联系人电话/)
@@ -168,8 +195,26 @@ test('standard personal portfolio editor follows shared maintainer layout', () =
   assert.match(editWxml, /class="component-swipe-row \{\{revealedComponentKey === item\.componentKey \? 'revealed' : ''\}\} \{\{draggingIndex === index \? 'dragging' : ''\}\}"/)
   assert.match(editWxml, /class="component-order"/)
   assert.match(editWxml, /class="component-drag-handle"/)
-  assert.match(editWxml, /class="component-row-arrow \{\{item\.componentType === 'CAROUSEL' \? '' : 'placeholder'\}\}"/)
+  assert.match(editWxml, /class="component-row-arrow \{\{item\.componentType === 'CAROUSEL' \|\| item\.componentType === 'PROFILE' \|\| item\.componentType === 'QR_CONTACT' \|\| item\.componentType === 'WORK_GRID' \|\| item\.componentType === 'WORK_LIST' \? '' : 'placeholder'\}\}"/)
   assert.doesNotMatch(editWxml, /wx:if="\{\{item\.componentType === 'CAROUSEL'\}\}" class="component-row-arrow"/)
+  assert.match(editWxml, /class="profile-sheet-mask component-work-picker-mask \{\{profileSheetVisible \? 'visible' : ''\}\}"/)
+  assert.match(editWxml, /catchtap="handleConfirmProfileSheet"/)
+  assert.match(editWxml, /bindchange="handleProfileVisibleFieldChange"/)
+  assert.match(editWxml, />从基础资料刷新</)
+  assert.doesNotMatch(editWxml, /例如/)
+  assert.doesNotMatch(editWxml, /头像地址/)
+  assert.doesNotMatch(editWxml, /data-field="avatarUrl"/)
+  assert.doesNotMatch(editWxml, /头像图片 URL/)
+  assert.doesNotMatch(editWxml, /handleRemoveProfileAvatar/)
+  assert.doesNotMatch(editWxml, /profile-avatar-remove/)
+  assert.doesNotMatch(editWxml, />移除</)
+  assert.doesNotMatch(editWxml, /class="profile-form-section-title">资料副本/)
+  assert.match(editWxml, /class="profile-sheet-fields-panel"/)
+  assert.match(editWxml, /class="profile-avatar-editor"/)
+  assert.match(editWxml, /catchtap="handleChooseProfileAvatar"/)
+  assert.match(editWxml, /class="profile-field-limit"/)
+  assert.match(editWxml, /maxlength="50"/)
+  assert.match(editWxml, /maxlength="500"/)
   assert.match(editWxml, /class="component-remove-pane"/)
   assert.match(editWxml, /class="component-remove-button"/)
   assert.match(editWxml, /class="action-button secondary-button"/)
@@ -199,9 +244,15 @@ test('standard personal portfolio editor follows shared maintainer layout', () =
   assert.match(editJs, /revealedComponentKey/)
   assert.match(editJs, /componentDragStyle/)
   assert.match(editJs, /componentWorkSheetVisible/)
-  assert.match(editJs, /uploadPortfolioCover/)
+  assert.match(editJs, /profileSheetVisible/)
+  assert.match(editJs, /updateComponentProfileConfig/)
+  assert.match(editJs, /isEditableComponentType/)
+  assert.match(editJs, /uploadPortfolioImageAsset/)
+  assert.match(editJs, /PORTFOLIO_ASSET_TYPES/)
+  assert.match(editJs, /handleChooseProfileAvatar/)
   assert.match(editJs, /handleChooseShareCover/)
-  assert.match(editJs, /handleRemoveShareCover/)
+  assert.doesNotMatch(editJs, /handleRemoveShareCover/)
+  assert.doesNotMatch(editJs, /handleRemoveProfileAvatar/)
   assert.match(editJs, /addComponent/)
   assert.match(editJs, /handleSelectComponent/)
   assert.match(editJs, /handleComponentTap/)
@@ -216,6 +267,8 @@ test('standard personal portfolio editor follows shared maintainer layout', () =
   assert.match(editWxss, /\.cover-row\s*\{[\s\S]*display:\s*flex;[\s\S]*gap:/)
   assert.match(editWxss, /\.cover-preview\s*\{[\s\S]*width:\s*180rpx;[\s\S]*height:\s*144rpx;/)
   assert.match(editWxss, /\.cover-action-button\s*\{[\s\S]*width:\s*148rpx;[\s\S]*height:\s*56rpx;/)
+  assert.doesNotMatch(editWxss, /\.cover-action-button\.remove\s*\{/)
+  assert.doesNotMatch(editWxss, /\.profile-avatar-remove\s*\{/)
   assert.match(editWxss, /\.component-swipe-row\s*\{[\s\S]*position:\s*relative;[\s\S]*overflow:\s*hidden;/)
   assert.match(editWxss, /\.component-row\s*\{[\s\S]*position:\s*relative;[\s\S]*display:\s*flex;[\s\S]*transition:\s*transform 180ms ease/)
   assert.match(editWxss, /\.component-swipe-row\.revealed \.component-row\s*\{[\s\S]*transform:\s*translateX\(-140rpx\);/)

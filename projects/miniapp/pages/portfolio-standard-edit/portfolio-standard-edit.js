@@ -1,27 +1,35 @@
 const { request } = require('../../utils/request')
 const { handleAuthRequired, hasLocalToken } = require('../../utils/session')
-const { normalizeWorkList } = require('../../utils/works')
+const { isRemoteUrl } = require('../../utils/upload-file')
+const { normalizeProfile: normalizeBasicProfile } = require('../../utils/profile')
+const { normalizeWorkList, normalizeWorkTags } = require('../../utils/works')
 const {
-  createChoosePortfolioCoverOptions,
-  uploadPortfolioCover
-} = require('../../utils/portfolio-cover')
+  PORTFOLIO_ASSET_TYPES,
+  createChoosePortfolioImageOptions,
+  uploadPortfolioImageAsset
+} = require('../../utils/portfolio-assets')
 const {
   COMPONENT_NAMES,
   COMPONENT_TYPES,
   addComponent,
   buildDraftPayload,
   buildPublishPayload,
+  copyWorkTagsToDisplayGroups,
   createComponent,
+  importWorksIntoDisplayGroup,
+  normalizeProfileComponentConfig,
   normalizePortfolioConfig,
   normalizeWorkIds,
   reorderComponent,
   removeComponent,
+  updateComponentProfileConfig,
   updateComponentWorkIds
 } = require('../../utils/portfolios')
 
 const PORTFOLIO_API_PREFIX = '/api/mine/portfolios'
 const STANDARD_PERSONAL_API_URL = '/api/mine/portfolios/standard-personal'
 const COMPONENT_LIBRARY_API_URL = '/api/mine/portfolios/component-library'
+const BASIC_PROFILE_API_URL = '/api/mine/profile'
 const WORKS_API_URL = '/api/mine/works'
 const PORTFOLIOS_PAGE_ROUTE = 'pages/portfolios/portfolios'
 const PORTFOLIOS_PAGE_URL = `/${PORTFOLIOS_PAGE_ROUTE}`
@@ -29,12 +37,33 @@ const SWIPE_REVEAL_THRESHOLD = -32
 const SWIPE_CLOSE_THRESHOLD = 24
 const SWIPE_VERTICAL_TOLERANCE = 48
 const COMPONENT_DRAG_SCALE = 1.015
+const PROFILE_TAG_SPLIT_REGEXP = /[,\n，、]/
+const PROFILE_VISIBLE_FIELD_OPTIONS = [
+  { field: 'avatar', label: '头像' },
+  { field: 'displayName', label: '姓名 / 艺名' },
+  { field: 'profession', label: '职业身份' },
+  { field: 'city', label: '服务城市' },
+  { field: 'bio', label: '个人简介' },
+  { field: 'tags', label: '个人标签' },
+  { field: 'wechatQr', label: '微信二维码' }
+]
+const QR_CONTACT_SOURCE_PROFILE = 'PROFILE'
+const QR_CONTACT_SOURCE_CUSTOM = 'CUSTOM'
+const PROFILE_FIELD_LIMITS = {
+  displayName: 50,
+  profession: 50,
+  city: 50,
+  bio: 500,
+  tagsText: 100,
+  wechatQrUrl: 512
+}
 
 const DEFAULT_COMPONENT_DESCRIPTIONS = {
   CAROUSEL: '展示已选择的图片作品',
   PROFILE: '展示个人资料和服务标签',
   SCHEDULE_QUERY: '开放访客查询档期',
   WORK_GRID: '双列展示图片和视频作品',
+  WORK_LIST: '单列展示重点图片和视频作品',
   QR_CONTACT: '展示二维码联系方式',
   CONTACT_FORM: '收集访客预留联系信息',
   TEXT_SECTION: '添加服务说明文字'
@@ -76,8 +105,31 @@ function findComponentByKey(config = {}, componentKey) {
   return (config.components || []).find((component) => component.componentKey === componentKey) || null
 }
 
+function isDisplayGroupComponent(componentType) {
+  return componentType === COMPONENT_TYPES.WORK_GRID || componentType === COMPONENT_TYPES.WORK_LIST
+}
+
+function isEditableComponentType(componentType) {
+  return componentType === COMPONENT_TYPES.CAROUSEL ||
+    componentType === COMPONENT_TYPES.PROFILE ||
+    componentType === COMPONENT_TYPES.QR_CONTACT ||
+    isDisplayGroupComponent(componentType)
+}
+
 function buildSelectedCountText(workIds = []) {
   return `${normalizeWorkIds(workIds).length} 已选`
+}
+
+function buildDisplayGroupOptions(component = {}, activeGroupKey = '') {
+  const groups = component.config && Array.isArray(component.config.groups) ? component.config.groups : []
+  const activeKey = activeGroupKey || (groups[0] && groups[0].groupKey) || ''
+  return groups.map((group) => {
+    const workIds = normalizeWorkIds(group.workIds)
+    return Object.assign({}, group, {
+      active: group.groupKey === activeKey,
+      countText: `${workIds.length} 个作品`
+    })
+  })
 }
 
 function buildComponentWorkOptions(works = [], selectedIds = [], componentType = '') {
@@ -91,6 +143,167 @@ function buildComponentWorkOptions(works = [], selectedIds = [], componentType =
     }))
 }
 
+function buildProfileForm(profile = {}) {
+  return {
+    avatarUrl: profile.avatarUrl || '',
+    displayName: profile.displayName || '',
+    profession: profile.profession || '',
+    city: profile.city || '',
+    bio: profile.bio || '',
+    tagsText: Array.isArray(profile.tags) ? profile.tags.map((tag) => tag.name).filter(Boolean).join('，') : '',
+    wechatQrUrl: profile.wechatQrUrl || ''
+  }
+}
+
+function buildQrContactForm(config = {}) {
+  return {
+    title: config.title || '',
+    description: config.description || '',
+    qrUrlSource: config.qrUrlSource === QR_CONTACT_SOURCE_CUSTOM ? QR_CONTACT_SOURCE_CUSTOM : QR_CONTACT_SOURCE_PROFILE,
+    qrUrl: config.qrUrl || ''
+  }
+}
+
+function countText(value) {
+  return Array.from(String(value || '')).length
+}
+
+function buildProfileFieldCounters(form = {}) {
+  return Object.keys(PROFILE_FIELD_LIMITS).reduce((result, field) => {
+    result[field] = `${countText(form[field])} / ${PROFILE_FIELD_LIMITS[field]}`
+    return result
+  }, {})
+}
+
+function buildProfileVisibleOptions(visibleFields = {}) {
+  const normalized = normalizeProfileComponentConfig({ visibleFields }).visibleFields
+  return PROFILE_VISIBLE_FIELD_OPTIONS.map((item) => Object.assign({}, item, {
+    checked: Boolean(normalized[item.field])
+  }))
+}
+
+function buildVisibleFieldsFromOptions(options = []) {
+  return options.reduce((result, item) => {
+    result[item.field] = Boolean(item.checked)
+    return result
+  }, {})
+}
+
+function parseProfileTagsText(tagsText = '') {
+  const seen = new Set()
+  return String(tagsText || '')
+    .split(PROFILE_TAG_SPLIT_REGEXP)
+    .map((item) => item.trim())
+    .filter((item) => {
+      if (!item || seen.has(item)) {
+        return false
+      }
+      seen.add(item)
+      return true
+    })
+    .map((name) => ({ name }))
+}
+
+function buildProfileConfigFromForm(form = {}, visibleOptions = []) {
+  return normalizeProfileComponentConfig({
+    profile: {
+      avatarUrl: form.avatarUrl,
+      displayName: form.displayName,
+      profession: form.profession,
+      city: form.city,
+      bio: form.bio,
+      tags: parseProfileTagsText(form.tagsText),
+      wechatQrUrl: form.wechatQrUrl
+    },
+    visibleFields: buildVisibleFieldsFromOptions(visibleOptions)
+  })
+}
+
+function updateComponentQrContactConfig(config, componentKey, qrContactForm = {}) {
+  const normalizedConfig = normalizePortfolioConfig(config)
+  const targetKey = componentKey || ''
+  const form = buildQrContactForm(qrContactForm)
+  const components = (normalizedConfig.components || []).map((component) => {
+    if (component.componentKey !== targetKey || component.componentType !== COMPONENT_TYPES.QR_CONTACT) {
+      return component
+    }
+    return Object.assign({}, component, {
+      config: Object.assign({}, component.config || {}, {
+        title: form.title,
+        description: form.description,
+        qrUrlSource: form.qrUrlSource,
+        qrUrl: form.qrUrl
+      })
+    })
+  })
+  return normalizePortfolioConfig(Object.assign({}, normalizedConfig, { components }))
+}
+
+function buildProfileFormFromBasicProfile(raw = {}, currentForm = {}) {
+  const profile = normalizeBasicProfile(raw)
+  return {
+    avatarUrl: profile.avatarUrl,
+    displayName: profile.displayName,
+    profession: profile.profession,
+    city: profile.city,
+    bio: profile.intro,
+    tagsText: profile.tags.map((tag) => tag.content).filter(Boolean).join('，'),
+    wechatQrUrl: currentForm.wechatQrUrl || ''
+  }
+}
+
+function hasProfileCopyValue(profile = {}) {
+  return Boolean(profile.avatarUrl ||
+    profile.displayName ||
+    profile.profession ||
+    profile.city ||
+    profile.bio ||
+    profile.wechatQrUrl ||
+    (Array.isArray(profile.tags) && profile.tags.length > 0))
+}
+
+function shouldApplyBasicProfileDefaults(config = {}) {
+  return (config.components || []).some((component) => {
+    if (component.componentType !== COMPONENT_TYPES.PROFILE) {
+      return false
+    }
+    const profileConfig = normalizeProfileComponentConfig(component.config || {})
+    return !hasProfileCopyValue(profileConfig.profile)
+  })
+}
+
+function buildProfileConfigFromBasicProfile(raw = {}, currentConfig = {}) {
+  const profileConfig = normalizeProfileComponentConfig(currentConfig)
+  const profileForm = buildProfileFormFromBasicProfile(raw, buildProfileForm(profileConfig.profile))
+  return buildProfileConfigFromForm(profileForm, buildProfileVisibleOptions(profileConfig.visibleFields))
+}
+
+function applyBasicProfileDefaultsToConfig(config = {}, raw = {}) {
+  const normalizedConfig = normalizePortfolioConfig(config)
+  let changed = false
+  const components = (normalizedConfig.components || []).map((component) => {
+    if (component.componentType !== COMPONENT_TYPES.PROFILE) {
+      return component
+    }
+    const profileConfig = normalizeProfileComponentConfig(component.config || {})
+    if (hasProfileCopyValue(profileConfig.profile)) {
+      return component
+    }
+    const nextProfileConfig = buildProfileConfigFromBasicProfile(raw, profileConfig)
+    if (!hasProfileCopyValue(nextProfileConfig.profile)) {
+      return component
+    }
+    changed = true
+    return Object.assign({}, component, {
+      config: nextProfileConfig
+    })
+  })
+  if (!changed) {
+    return normalizedConfig
+  }
+  return normalizePortfolioConfig(Object.assign({}, normalizedConfig, { components }))
+}
+
 function resolvePortfolioListBackDelta() {
   const pages = typeof getCurrentPages === 'function' ? getCurrentPages() : []
   for (let index = pages.length - 2; index >= 0; index -= 1) {
@@ -101,10 +314,51 @@ function resolvePortfolioListBackDelta() {
   return 0
 }
 
-function resolveChosenCoverPath(response = {}) {
+function resolveChosenImagePath(response = {}) {
   const files = Array.isArray(response.tempFiles) ? response.tempFiles : []
   const firstFile = files[0] || {}
   return firstFile.tempFilePath || firstFile.path || ''
+}
+
+function resolveServerSafeAssetUrl(url) {
+  const value = String(url || '').trim()
+  return !value || isRemoteUrl(value) ? value : ''
+}
+
+function buildServerSafePortfolioConfig(config = {}) {
+  const normalizedConfig = normalizePortfolioConfig(config)
+  const share = Object.assign({}, normalizedConfig.share, {
+    coverUrl: resolveServerSafeAssetUrl(normalizedConfig.share && normalizedConfig.share.coverUrl),
+    avatarUrl: resolveServerSafeAssetUrl(normalizedConfig.share && normalizedConfig.share.avatarUrl)
+  })
+  const components = (normalizedConfig.components || []).map((component) => {
+    if (component.componentType === COMPONENT_TYPES.PROFILE) {
+      const profileConfig = normalizeProfileComponentConfig(component.config || {})
+      const profile = Object.assign({}, profileConfig.profile, {
+        avatarUrl: resolveServerSafeAssetUrl(profileConfig.profile.avatarUrl),
+        wechatQrUrl: resolveServerSafeAssetUrl(profileConfig.profile.wechatQrUrl)
+      })
+      return Object.assign({}, component, {
+        config: Object.assign({}, component.config || {}, profileConfig, { profile })
+      })
+    }
+    if (component.componentType === COMPONENT_TYPES.QR_CONTACT) {
+      return Object.assign({}, component, {
+        config: Object.assign({}, component.config || {}, {
+          qrUrl: resolveServerSafeAssetUrl(component.config && component.config.qrUrl)
+        })
+      })
+    }
+    return component
+  })
+  return normalizePortfolioConfig(Object.assign({}, normalizedConfig, { share, components }))
+}
+
+function updateShareCoverUrlInConfig(config = {}, coverUrl = '') {
+  const normalizedConfig = normalizePortfolioConfig(config)
+  return normalizePortfolioConfig(Object.assign({}, normalizedConfig, {
+    share: Object.assign({}, normalizedConfig.share, { coverUrl })
+  }))
 }
 
 Page({
@@ -131,6 +385,24 @@ Page({
     componentWorkSelectedCountText: '0 已选',
     editingComponentKey: '',
     editingComponentType: '',
+    displayGroupSheetVisible: false,
+    editingDisplayComponentKey: '',
+    editingDisplayComponentType: '',
+    displayGroupOptions: [],
+    activeDisplayGroupKey: '',
+    workTagOptions: [],
+    displayGroupLoading: false,
+    displayGroupErrorText: '',
+    profileSheetVisible: false,
+    profileSheetLoading: false,
+    profileSheetErrorText: '',
+    editingProfileComponentKey: '',
+    profileForm: buildProfileForm(),
+    profileFieldCounters: buildProfileFieldCounters(buildProfileForm()),
+    profileVisibleOptions: buildProfileVisibleOptions(),
+    qrContactSheetVisible: false,
+    editingQrContactComponentKey: '',
+    qrContactForm: buildQrContactForm(),
     config: normalizePortfolioConfig({
       components: [createComponent(COMPONENT_TYPES.PROFILE)]
     })
@@ -138,7 +410,7 @@ Page({
 
   onLoad(options = {}) {
     this.setData({ portfolioId: options.portfolioId || null })
-    this.bootstrap()
+    return this.bootstrap()
   },
 
   bootstrap() {
@@ -147,15 +419,17 @@ Page({
       return
     }
     if (!this.data.portfolioId) {
-      return
+      return this.loadBasicProfileDefaults(this.data.config)
     }
-    request({ url: `${PORTFOLIO_API_PREFIX}/${this.data.portfolioId}` })
+    return request({ url: `${PORTFOLIO_API_PREFIX}/${this.data.portfolioId}` })
       .then((response) => {
+        const config = normalizePortfolioConfig(response.config || {})
         this.setData({
           draftRevision: response.draftRevision || 0,
           publishedRevision: response.publishedRevision || 0,
-          config: normalizePortfolioConfig(response.config || {})
+          config
         })
+        return this.loadBasicProfileDefaults(config)
       })
       .catch((error) => {
         if (error.authRequired) {
@@ -163,6 +437,25 @@ Page({
           return
         }
         wx.showToast({ title: error.message || '加载失败', icon: 'none' })
+      })
+  },
+
+  loadBasicProfileDefaults(config = this.data.config) {
+    const normalizedConfig = normalizePortfolioConfig(config)
+    if (!shouldApplyBasicProfileDefaults(normalizedConfig)) {
+      return Promise.resolve(normalizedConfig)
+    }
+    return request({ url: BASIC_PROFILE_API_URL })
+      .then((response) => {
+        const nextConfig = applyBasicProfileDefaultsToConfig(normalizedConfig, response)
+        this.setData({ config: nextConfig })
+        return nextConfig
+      })
+      .catch((error) => {
+        if (error && error.authRequired) {
+          handleAuthRequired(error.message)
+        }
+        return normalizedConfig
       })
   },
 
@@ -186,9 +479,9 @@ Page({
   },
 
   handleChooseShareCover() {
-    wx.chooseMedia(Object.assign({}, createChoosePortfolioCoverOptions(), {
+    wx.chooseMedia(Object.assign({}, createChoosePortfolioImageOptions(), {
       success: (response) => {
-        const coverPath = resolveChosenCoverPath(response)
+        const coverPath = resolveChosenImagePath(response)
         if (coverPath) {
           this.setShareCoverUrl(coverPath)
         }
@@ -199,10 +492,6 @@ Page({
         }
       }
     }))
-  },
-
-  handleRemoveShareCover() {
-    this.setShareCoverUrl('')
   },
 
   handleOpenComponentSheet() {
@@ -354,10 +643,366 @@ Page({
       this.setData({ revealedComponentKey: '' })
       return undefined
     }
+    if (!isEditableComponentType(componentType)) {
+      return undefined
+    }
     if (componentType === COMPONENT_TYPES.CAROUSEL) {
       return this.openComponentWorkSheet(componentKey, componentType)
     }
+    if (componentType === COMPONENT_TYPES.PROFILE) {
+      return this.openProfileSheet(componentKey)
+    }
+    if (componentType === COMPONENT_TYPES.QR_CONTACT) {
+      return this.openQrContactSheet(componentKey)
+    }
+    if (isDisplayGroupComponent(componentType)) {
+      return this.openDisplayGroupSheet(componentKey, componentType)
+    }
     return undefined
+  },
+
+  openDisplayGroupSheet(componentKey, componentType) {
+    const component = findComponentByKey(this.data.config, componentKey)
+    if (!component) {
+      return Promise.resolve()
+    }
+    const groups = component.config && Array.isArray(component.config.groups) ? component.config.groups : []
+    const activeGroupKey = groups[0] ? groups[0].groupKey : ''
+    this.setData({
+      displayGroupSheetVisible: true,
+      editingDisplayComponentKey: componentKey,
+      editingDisplayComponentType: componentType,
+      activeDisplayGroupKey: activeGroupKey,
+      displayGroupOptions: buildDisplayGroupOptions(component, activeGroupKey),
+      displayGroupErrorText: ''
+    })
+    return Promise.resolve()
+  },
+
+  openProfileSheet(componentKey) {
+    const component = findComponentByKey(this.data.config, componentKey)
+    if (!component) {
+      return Promise.resolve()
+    }
+    const profileConfig = normalizeProfileComponentConfig(component.config || {})
+    if (!hasProfileCopyValue(profileConfig.profile)) {
+      return this.loadBasicProfileDefaults(this.data.config).then((config) => {
+        const nextComponent = findComponentByKey(config, componentKey) || component
+        this.showProfileSheet(componentKey, nextComponent)
+      })
+    }
+    this.showProfileSheet(componentKey, component)
+    return Promise.resolve()
+  },
+
+  showProfileSheet(componentKey, component) {
+    const profileConfig = normalizeProfileComponentConfig(component.config || {})
+    this.setData({
+      profileSheetVisible: true,
+      profileSheetLoading: false,
+      profileSheetErrorText: '',
+      editingProfileComponentKey: componentKey,
+      profileForm: buildProfileForm(profileConfig.profile),
+      profileFieldCounters: buildProfileFieldCounters(buildProfileForm(profileConfig.profile)),
+      profileVisibleOptions: buildProfileVisibleOptions(profileConfig.visibleFields)
+    })
+  },
+
+  handleCloseProfileSheet() {
+    this.setData({
+      profileSheetVisible: false,
+      profileSheetLoading: false,
+      profileSheetErrorText: '',
+      editingProfileComponentKey: ''
+    })
+  },
+
+  handleProfileInput(event) {
+    const field = event.currentTarget.dataset.field || ''
+    if (!field) {
+      return
+    }
+    const nextForm = Object.assign({}, this.data.profileForm, {
+      [field]: event.detail.value
+    })
+    this.setData({
+      [`profileForm.${field}`]: event.detail.value,
+      profileFieldCounters: buildProfileFieldCounters(nextForm)
+    })
+  },
+
+  setProfileAvatarUrl(avatarUrl) {
+    const nextForm = Object.assign({}, this.data.profileForm, { avatarUrl })
+    this.setData({
+      'profileForm.avatarUrl': avatarUrl,
+      profileFieldCounters: buildProfileFieldCounters(nextForm)
+    })
+  },
+
+  handleChooseProfileAvatar() {
+    wx.chooseMedia(Object.assign({}, createChoosePortfolioImageOptions(), {
+      success: (response) => {
+        const avatarPath = resolveChosenImagePath(response)
+        if (avatarPath) {
+          this.setProfileAvatarUrl(avatarPath)
+        }
+      },
+      fail: (error) => {
+        if (error && error.errMsg && !/cancel/i.test(error.errMsg)) {
+          wx.showToast({ title: '选择头像失败', icon: 'none' })
+        }
+      }
+    }))
+  },
+
+  handleProfileVisibleFieldChange(event) {
+    const field = event.currentTarget.dataset.field || ''
+    if (!field) {
+      return
+    }
+    this.setData({
+      profileVisibleOptions: this.data.profileVisibleOptions.map((item) => {
+        if (item.field !== field) {
+          return item
+        }
+        return Object.assign({}, item, { checked: Boolean(event.detail.value) })
+      })
+    })
+  },
+
+  handleRefreshProfileFromBase() {
+    return new Promise((resolve) => {
+      wx.showModal({
+        title: '刷新基础资料',
+        content: '将用当前基础信息覆盖作品集内个人资料副本，是否继续？',
+        confirmText: '刷新',
+        success: (response) => {
+          if (!response.confirm) {
+            resolve(false)
+            return
+          }
+          resolve(this.refreshProfileFromBase())
+        },
+        fail: () => resolve(false)
+      })
+    })
+  },
+
+  refreshProfileFromBase() {
+    this.setData({
+      profileSheetLoading: true,
+      profileSheetErrorText: ''
+    })
+    return request({ url: BASIC_PROFILE_API_URL })
+      .then((response) => {
+        const profileForm = buildProfileFormFromBasicProfile(response, this.data.profileForm)
+        this.setData({
+          profileSheetLoading: false,
+          profileForm,
+          profileFieldCounters: buildProfileFieldCounters(profileForm)
+        })
+      })
+      .catch((error) => {
+        if (error && error.authRequired) {
+          this.setData({ profileSheetLoading: false })
+          handleAuthRequired(error.message)
+          return
+        }
+        this.setData({
+          profileSheetLoading: false,
+          profileSheetErrorText: error && error.message ? error.message : '基础资料加载失败'
+        })
+      })
+  },
+
+  handleConfirmProfileSheet() {
+    if (!this.data.editingProfileComponentKey) {
+      return
+    }
+    const profileConfig = buildProfileConfigFromForm(this.data.profileForm, this.data.profileVisibleOptions)
+    this.setData({
+      config: updateComponentProfileConfig(this.data.config, this.data.editingProfileComponentKey, profileConfig),
+      profileSheetVisible: false,
+      profileSheetLoading: false,
+      profileSheetErrorText: '',
+      editingProfileComponentKey: ''
+    })
+  },
+
+  openQrContactSheet(componentKey) {
+    const component = findComponentByKey(this.data.config, componentKey)
+    if (!component) {
+      return Promise.resolve()
+    }
+    this.setData({
+      qrContactSheetVisible: true,
+      editingQrContactComponentKey: componentKey,
+      qrContactForm: buildQrContactForm(component.config || {})
+    })
+    return Promise.resolve()
+  },
+
+  handleCloseQrContactSheet() {
+    this.setData({
+      qrContactSheetVisible: false,
+      editingQrContactComponentKey: '',
+      qrContactForm: buildQrContactForm()
+    })
+  },
+
+  handleQrContactInput(event) {
+    const field = event.currentTarget.dataset.field || ''
+    if (!field) {
+      return
+    }
+    this.setData({
+      [`qrContactForm.${field}`]: event.detail.value || ''
+    })
+  },
+
+  handleUseProfileQrContact() {
+    this.setData({
+      'qrContactForm.qrUrlSource': QR_CONTACT_SOURCE_PROFILE
+    })
+  },
+
+  handleUseCustomQrContact() {
+    this.setData({
+      'qrContactForm.qrUrlSource': QR_CONTACT_SOURCE_CUSTOM
+    })
+  },
+
+  setQrContactImageUrl(qrUrl) {
+    this.setData({
+      'qrContactForm.qrUrlSource': QR_CONTACT_SOURCE_CUSTOM,
+      'qrContactForm.qrUrl': qrUrl
+    })
+  },
+
+  handleChooseQrContactImage() {
+    wx.chooseMedia(Object.assign({}, createChoosePortfolioImageOptions(), {
+      success: (response) => {
+        const qrPath = resolveChosenImagePath(response)
+        if (qrPath) {
+          this.setQrContactImageUrl(qrPath)
+        }
+      },
+      fail: (error) => {
+        if (error && error.errMsg && !/cancel/i.test(error.errMsg)) {
+          wx.showToast({ title: '选择二维码失败', icon: 'none' })
+        }
+      }
+    }))
+  },
+
+  handleConfirmQrContactSheet() {
+    if (!this.data.editingQrContactComponentKey) {
+      return
+    }
+    this.setData({
+      config: updateComponentQrContactConfig(
+        this.data.config,
+        this.data.editingQrContactComponentKey,
+        this.data.qrContactForm
+      ),
+      qrContactSheetVisible: false,
+      editingQrContactComponentKey: '',
+      qrContactForm: buildQrContactForm()
+    })
+  },
+
+  handleCloseDisplayGroupSheet() {
+    this.setData({
+      displayGroupSheetVisible: false,
+      editingDisplayComponentKey: '',
+      editingDisplayComponentType: '',
+      activeDisplayGroupKey: '',
+      displayGroupErrorText: ''
+    })
+  },
+
+  refreshDisplayGroupOptions(componentKey = this.data.editingDisplayComponentKey, activeGroupKey = this.data.activeDisplayGroupKey) {
+    const component = findComponentByKey(this.data.config, componentKey)
+    this.setData({
+      displayGroupOptions: buildDisplayGroupOptions(component || {}, activeGroupKey)
+    })
+  },
+
+  handleSelectDisplayGroup(event) {
+    const groupKey = event.currentTarget.dataset.groupKey || ''
+    this.setData({ activeDisplayGroupKey: groupKey })
+    this.refreshDisplayGroupOptions(this.data.editingDisplayComponentKey, groupKey)
+  },
+
+  handleCopyWorkTagsToDisplayGroups() {
+    if (!this.data.editingDisplayComponentKey) {
+      return Promise.resolve()
+    }
+    this.setData({ displayGroupLoading: true, displayGroupErrorText: '' })
+    return request({ url: `${WORKS_API_URL}/tags` })
+      .then((response) => {
+        const tags = normalizeWorkTags(response)
+        const config = copyWorkTagsToDisplayGroups(this.data.config, this.data.editingDisplayComponentKey, tags)
+        const component = findComponentByKey(config, this.data.editingDisplayComponentKey)
+        const firstGroupKey = component && component.config.groups[0] ? component.config.groups[0].groupKey : ''
+        this.setData({
+          config,
+          workTagOptions: tags,
+          activeDisplayGroupKey: firstGroupKey,
+          displayGroupLoading: false
+        })
+        this.refreshDisplayGroupOptions(this.data.editingDisplayComponentKey, firstGroupKey)
+      })
+      .catch((error) => {
+        if (error && error.authRequired) {
+          this.setData({ displayGroupLoading: false })
+          handleAuthRequired(error.message)
+          return
+        }
+        this.setData({
+          displayGroupLoading: false,
+          displayGroupErrorText: error && error.message ? error.message : '作品标签加载失败'
+        })
+      })
+  },
+
+  handleImportWorksByTag(event) {
+    const tagId = Number(event.currentTarget.dataset.tagId)
+    if (!this.data.editingDisplayComponentKey || !this.data.activeDisplayGroupKey || !Number.isFinite(tagId) || tagId <= 0) {
+      return Promise.resolve()
+    }
+    this.setData({ displayGroupLoading: true, displayGroupErrorText: '' })
+    return request({
+      url: WORKS_API_URL,
+      data: {
+        page: 1,
+        pageSize: 100,
+        tagId
+      }
+    }).then((response) => {
+      const works = normalizeWorkList(response).works
+      const config = importWorksIntoDisplayGroup(
+        this.data.config,
+        this.data.editingDisplayComponentKey,
+        this.data.activeDisplayGroupKey,
+        works.map((work) => work.id)
+      )
+      this.setData({
+        config,
+        displayGroupLoading: false
+      })
+      this.refreshDisplayGroupOptions()
+    }).catch((error) => {
+      if (error && error.authRequired) {
+        this.setData({ displayGroupLoading: false })
+        handleAuthRequired(error.message)
+        return
+      }
+      this.setData({
+        displayGroupLoading: false,
+        displayGroupErrorText: error && error.message ? error.message : '作品导入失败'
+      })
+    })
   },
 
   handleRemoveComponent(event) {
@@ -473,7 +1118,7 @@ Page({
       url: STANDARD_PERSONAL_API_URL,
       method: 'POST',
       data: {
-        config: this.data.config
+        config: buildServerSafePortfolioConfig(this.data.config)
       }
     }).then((response = {}) => {
       const portfolioId = response.portfolioId
@@ -489,11 +1134,11 @@ Page({
     })
   },
 
-  saveDraftForPortfolio(portfolioId) {
+  saveDraftForPortfolio(portfolioId, config = this.data.config) {
     return request({
       url: `${PORTFOLIO_API_PREFIX}/${portfolioId}/draft`,
       method: 'PUT',
-      data: buildDraftPayload(this.data.config, this.data.draftRevision, makeIdempotencyKey('draft'))
+      data: buildDraftPayload(config, this.data.draftRevision, makeIdempotencyKey('draft'))
     }).then((response) => {
       this.setData({
         portfolioId: response.portfolioId || portfolioId,
@@ -505,22 +1150,98 @@ Page({
     })
   },
 
-  uploadLocalShareCover(portfolioId) {
-    const coverUrl = this.data.config.share && this.data.config.share.coverUrl
+  uploadLocalShareCover(portfolioId, config = this.data.config) {
+    const nextConfig = normalizePortfolioConfig(config)
+    const coverUrl = nextConfig.share && nextConfig.share.coverUrl
     if (!coverUrl) {
-      return Promise.resolve('')
+      return Promise.resolve(nextConfig)
     }
-    return uploadPortfolioCover(portfolioId, coverUrl).then((uploadedUrl) => {
+    return uploadPortfolioImageAsset(portfolioId, coverUrl, {
+      assetType: PORTFOLIO_ASSET_TYPES.COVER,
+      assetLabel: '封面图片',
+      clientIdPrefix: 'cover'
+    }).then((uploadedUrl) => {
       if (uploadedUrl && uploadedUrl !== coverUrl) {
-        this.setShareCoverUrl(uploadedUrl)
+        return updateShareCoverUrlInConfig(nextConfig, uploadedUrl)
       }
-      return uploadedUrl || coverUrl
+      return nextConfig
     })
+  },
+
+  uploadLocalProfileAvatars(portfolioId, config = this.data.config) {
+    let nextConfig = normalizePortfolioConfig(config)
+    const profileComponents = (nextConfig.components || [])
+      .filter((component) => component.componentType === COMPONENT_TYPES.PROFILE)
+
+    return profileComponents.reduce((chain, component) => {
+      return chain.then(() => {
+        const currentComponent = findComponentByKey(nextConfig, component.componentKey) || component
+        const profileConfig = normalizeProfileComponentConfig(currentComponent.config || {})
+        const avatarUrl = profileConfig.profile.avatarUrl
+        if (!avatarUrl) {
+          return ''
+        }
+        return uploadPortfolioImageAsset(portfolioId, avatarUrl, {
+          assetType: PORTFOLIO_ASSET_TYPES.PROFILE_AVATAR,
+          assetLabel: '头像图片',
+          clientIdPrefix: 'profile-avatar'
+        }).then((uploadedUrl) => {
+          if (uploadedUrl && uploadedUrl !== avatarUrl) {
+            const nextProfileConfig = normalizeProfileComponentConfig(Object.assign({}, profileConfig, {
+              profile: Object.assign({}, profileConfig.profile, { avatarUrl: uploadedUrl })
+            }))
+            nextConfig = updateComponentProfileConfig(nextConfig, component.componentKey, nextProfileConfig)
+          }
+          return uploadedUrl || avatarUrl
+        })
+      })
+    }, Promise.resolve('')).then(() => nextConfig)
+  },
+
+  uploadLocalQrContactImages(portfolioId, config = this.data.config) {
+    let nextConfig = normalizePortfolioConfig(config)
+    const qrContactComponents = (nextConfig.components || [])
+      .filter((component) => component.componentType === COMPONENT_TYPES.QR_CONTACT)
+
+    return qrContactComponents.reduce((chain, component) => {
+      return chain.then(() => {
+        const currentComponent = findComponentByKey(nextConfig, component.componentKey) || component
+        const componentConfig = currentComponent.config || {}
+        const qrUrl = componentConfig.qrUrl || ''
+        if (componentConfig.qrUrlSource !== QR_CONTACT_SOURCE_CUSTOM || !qrUrl) {
+          return ''
+        }
+        return uploadPortfolioImageAsset(portfolioId, qrUrl, {
+          assetType: PORTFOLIO_ASSET_TYPES.QR_CONTACT,
+          assetLabel: '二维码图片',
+          clientIdPrefix: 'qr-contact'
+        }).then((uploadedUrl) => {
+          if (uploadedUrl && uploadedUrl !== qrUrl) {
+            nextConfig = updateComponentQrContactConfig(nextConfig, component.componentKey, Object.assign({}, componentConfig, {
+              qrUrl: uploadedUrl,
+              qrUrlSource: QR_CONTACT_SOURCE_CUSTOM
+            }))
+          }
+          return uploadedUrl || qrUrl
+        })
+      })
+    }, Promise.resolve('')).then(() => nextConfig)
+  },
+
+  uploadLocalPortfolioAssets(portfolioId) {
+    return this.uploadLocalShareCover(portfolioId, this.data.config)
+      .then((config) => this.uploadLocalProfileAvatars(portfolioId, config))
+      .then((config) => this.uploadLocalQrContactImages(portfolioId, config))
+      .then((config) => {
+        this.setData({ config })
+        return config
+      })
   },
 
   handleSaveDraft() {
     return this.ensureDraftPortfolio().then((portfolioId) => {
-      return this.uploadLocalShareCover(portfolioId).then(() => this.saveDraftForPortfolio(portfolioId))
+      return this.uploadLocalPortfolioAssets(portfolioId)
+        .then((config) => this.saveDraftForPortfolio(portfolioId, config))
     }).catch((error) => {
       wx.showToast({ title: error.message || '保存失败', icon: 'none' })
     })
@@ -536,6 +1257,9 @@ Page({
   },
 
   handlePreview() {
+    if (!this.data.portfolioId) {
+      return
+    }
     wx.navigateTo({ url: `/pages/portfolio-standard-preview/portfolio-standard-preview?portfolioId=${this.data.portfolioId}` })
   },
 

@@ -4,7 +4,7 @@
   <scroll-view class="login-scroll" scroll-y type="list">
     <view class="login-layout">
       <view class="login-hero {{activeTab === 'register' ? 'register-mode' : 'wechat-mode'}}">
-        <image class="hero-image" src="https://cdn.we-folio.dingchenyong.top/system/backgroud.jpeg" mode="aspectFill"></image>
+        <image class="hero-image" src="https://cdn2.we-folio.dingchenyong.top/system/backgroud.jpeg" mode="aspectFill"></image>
         <view class="hero-shade"></view>
         <view class="hero-copy">
           <view class="hero-title">把作品和档期，装进一张可分享名片</view>
@@ -17,7 +17,7 @@
             <view class="welcome-title">欢迎使用映期Folio</view>
             <view class="welcome-desc">适合司仪、化妆、模特和婚庆团队的作品展示工具。</view>
           </view>
-          <image class="welcome-avatar" src="https://cdn.we-folio.dingchenyong.top/system/logo.png" mode="aspectFill"></image>
+          <image class="welcome-avatar" src="https://cdn2.we-folio.dingchenyong.top/system/folio-logo.png" mode="aspectFill"></image>
         </view>
 
         <view class="panel auth-panel">

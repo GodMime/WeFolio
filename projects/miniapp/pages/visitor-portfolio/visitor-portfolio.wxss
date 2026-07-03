@@ -1,54 +1,221 @@
 .visitor-portfolio-page {
-  background: #f5f7fb;
+  background: #ffffff;
 }
 
 .visitor-scroll {
   height: 100vh;
 }
 
-.visitor-hero,
-.visitor-component {
-  margin: 24rpx 28rpx;
-  padding: 24rpx;
-  background: #ffffff;
-  border-radius: 12rpx;
-  border: 1rpx solid #e2e8f0;
+.share-intro {
+  padding: 30rpx 34rpx 0;
+  color: #505a65;
+  font-size: 26rpx;
+  line-height: 1.75;
+  text-align: center;
 }
 
-.visitor-title {
-  font-size: 38rpx;
-  font-weight: 800;
+.folio-component {
+  margin-top: 34rpx;
 }
 
-.visitor-subtitle,
-.component-title {
-  margin-top: 10rpx;
-  color: #536274;
+.folio-carousel {
+  width: 100%;
+  height: 760rpx;
+  background: #f3f4f6;
 }
 
-.qr-image {
+.carousel-image,
+.work-cover {
+  width: 100%;
+  height: 100%;
+}
+
+.profile-section,
+.simple-section,
+.qr-section,
+.form-section,
+.text-section {
+  padding: 8rpx 34rpx;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.profile-avatar {
+  width: 132rpx;
+  height: 132rpx;
+  border-radius: 50%;
+}
+
+.profile-name {
   margin-top: 18rpx;
-  width: 260rpx;
-  height: 260rpx;
+  color: #17202a;
+  font-size: 36rpx;
+  font-weight: 900;
+  line-height: 1.25;
 }
 
-.field {
-  margin-top: 16rpx;
-  padding: 18rpx;
-  min-height: 72rpx;
-  background: #f8fafc;
+.profile-line,
+.profile-bio,
+.section-desc,
+.text-content,
+.work-desc {
+  color: #59636f;
+  font-size: 26rpx;
+  line-height: 1.75;
+}
+
+.profile-line {
+  margin-top: 8rpx;
+}
+
+.profile-bio {
+  margin: 22rpx auto 0;
+  max-width: 620rpx;
+}
+
+.profile-tags,
+.display-tags {
+  display: flex;
+  align-items: center;
+  gap: 22rpx;
+}
+
+.profile-tags {
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 22rpx;
+}
+
+.profile-tag,
+.display-tag {
+  color: #6b7280;
+  font-size: 24rpx;
+  line-height: 1.4;
+}
+
+.component-title {
+  padding: 0 24rpx;
+  color: #17202a;
+  font-size: 32rpx;
+  font-weight: 900;
+  line-height: 1.35;
+  box-sizing: border-box;
+}
+
+.display-tag-scroll {
+  margin-top: 22rpx;
+  white-space: nowrap;
+}
+
+.display-tags {
+  padding: 0 24rpx;
+}
+
+.display-tag.active {
+  color: #17202a;
+  font-weight: 900;
+}
+
+.work-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12rpx;
+  padding: 22rpx 12rpx 0;
+  box-sizing: border-box;
+}
+
+.work-list {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+  padding: 22rpx 20rpx 0;
+  box-sizing: border-box;
+}
+
+.work-card {
+  min-width: 0;
+}
+
+.grid-card .work-cover {
+  height: 236rpx;
+}
+
+.list-card .work-cover {
+  height: 430rpx;
+}
+
+.work-title {
+  overflow: hidden;
+  margin-top: 10rpx;
+  color: #17202a;
+  font-size: 24rpx;
+  font-weight: 700;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.secondary-action,
+.primary-button {
+  width: 260rpx;
+  height: 72rpx;
+  margin: 24rpx auto 0;
+  padding: 0;
+  font-size: 26rpx;
+  line-height: 72rpx;
   border-radius: 8rpx;
 }
 
-.textarea {
-  min-height: 150rpx;
+.secondary-action {
+  color: #17202a;
+  border: 1rpx solid #d8dee5;
+  background: #ffffff;
 }
 
 .primary-button {
-  margin-top: 18rpx;
-  background: #2d5f9a;
   color: #ffffff;
+  background: #17202a;
+}
+
+.qr-image {
+  width: 280rpx;
+  height: 280rpx;
+  margin-top: 24rpx;
+}
+
+.field {
+  width: 100%;
+  min-height: 78rpx;
+  margin-top: 16rpx;
+  padding: 0 20rpx;
+  color: #17202a;
+  font-size: 26rpx;
+  line-height: 78rpx;
+  text-align: left;
+  border: 1rpx solid #e4e8ee;
   border-radius: 8rpx;
+  background: #ffffff;
+  box-sizing: border-box;
+}
+
+.textarea {
+  height: 156rpx;
+  padding-top: 18rpx;
+  line-height: 1.6;
+}
+
+.text-content {
+  margin-top: 12rpx;
+  text-align: left;
+  white-space: pre-wrap;
+}
+
+.folio-footer {
+  padding: 56rpx 0 calc(56rpx + env(safe-area-inset-bottom));
+  color: #c0c6ce;
+  font-size: 22rpx;
+  font-weight: 800;
+  text-align: center;
 }
 
 .maintenance-mask {
@@ -57,24 +224,24 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(245, 247, 251, 0.72);
+  background: rgba(255, 255, 255, 0.78);
   backdrop-filter: blur(12rpx);
 }
 
 .maintenance-panel {
   padding: 42rpx;
-  background: rgba(255, 255, 255, 0.86);
-  border-radius: 12rpx;
   text-align: center;
 }
 
 .maintenance-primary {
+  color: #17202a;
   font-size: 34rpx;
-  font-weight: 800;
+  font-weight: 900;
   letter-spacing: 0;
 }
 
 .maintenance-secondary {
   margin-top: 12rpx;
   color: #6b7787;
+  font-size: 26rpx;
 }

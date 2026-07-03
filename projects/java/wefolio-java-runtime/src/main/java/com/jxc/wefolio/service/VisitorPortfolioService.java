@@ -55,6 +55,9 @@ public class VisitorPortfolioService {
     /** 访问服务 */
     private final PortfolioVisitService portfolioVisitService;
 
+    /** 作品集渲染服务 */
+    private final PortfolioRenderService portfolioRenderService;
+
     /**
      * 获取访客作品集。
      *
@@ -80,6 +83,14 @@ public class VisitorPortfolioService {
         VisitRecordEntity record = portfolioVisitService.recordOpen(portfolio, visitorKey, sourceType, idempotencyKey);
         VisitorPortfolioResponse response = buildNormalResponse(portfolio, config);
         response.setVisitRecordId(record == null ? null : record.getId());
+        response.setRenderData(portfolioRenderService.render(
+                portfolio,
+                config,
+                false,
+                false,
+                null,
+                response.getVisitRecordId()
+        ));
         return response;
     }
 
@@ -183,6 +194,7 @@ public class VisitorPortfolioService {
         text.setPrimary(MAINTENANCE_PRIMARY);
         text.setSecondary(MAINTENANCE_SECONDARY);
         response.setMaintenanceText(text);
+        response.setRenderData(portfolioRenderService.render(portfolio, config, false, true, text, null));
         return response;
     }
 

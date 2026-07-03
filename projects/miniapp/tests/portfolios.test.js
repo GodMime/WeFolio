@@ -6,10 +6,17 @@ const {
   addComponent,
   buildDraftPayload,
   buildPublishPayload,
+  copyWorkTagsToDisplayGroups,
   createComponent,
+  importWorksIntoDisplayGroup,
   normalizePortfolioConfig,
   reorderComponent,
+  reorderDisplayGroup,
   removeComponent,
+  removeDisplayGroup,
+  updateComponentProfileConfig,
+  updateDisplayGroupName,
+  updateDisplayGroupWorkIds,
   updateComponentWorkIds,
   validateCarouselComponent,
   validateWorkGridComponent
@@ -32,6 +39,22 @@ test('normalizes portfolio config with stable component order', () => {
   assert.deepEqual(result.components.map((item) => item.componentKey), ['c_profile', 'c_grid'])
   assert.deepEqual(result.components.map((item) => item.sortOrder), [1000, 2000])
   assert.deepEqual(result.components[1].config.workIds, [12, 13])
+  assert.deepEqual(result.components[1].config.groups[0].workIds, [12, 13])
+  assert.equal(result.components[1].config.groups[0].name, '全部作品')
+})
+
+test('supports single-column work list component type', () => {
+  const config = normalizePortfolioConfig({
+    components: [
+      createComponent(COMPONENT_TYPES.PROFILE, { componentKey: 'c_profile', sortOrder: 1000 })
+    ]
+  })
+
+  const result = addComponent(config, COMPONENT_TYPES.WORK_LIST)
+
+  assert.equal(COMPONENT_TYPES.WORK_LIST, 'WORK_LIST')
+  assert.equal(result.components[1].name, '单列作品列表')
+  assert.equal(result.components[1].componentType, COMPONENT_TYPES.WORK_LIST)
 })
 
 test('validates carousel as image-only work selector', () => {
@@ -120,6 +143,112 @@ test('updates selected works for a portfolio component', () => {
   assert.deepEqual(result.components[0].config.workIds || [], [])
   assert.deepEqual(result.components[1].config.workIds, [12, 13])
   assert.deepEqual(result.components.map((item) => item.sortOrder), [1000, 2000])
+})
+
+test('updates independent profile copy for portfolio profile component', () => {
+  const config = normalizePortfolioConfig({
+    components: [
+      createComponent(COMPONENT_TYPES.PROFILE, { componentKey: 'c_profile', sortOrder: 1000 }),
+      createComponent(COMPONENT_TYPES.CAROUSEL, { componentKey: 'c_carousel', sortOrder: 2000 })
+    ]
+  })
+
+  const result = updateComponentProfileConfig(config, 'c_profile', {
+    profile: {
+      avatarUrl: ' https://example.com/avatar.jpg ',
+      displayName: ' 林安 ',
+      profession: ' 婚礼主持人 ',
+      city: ' 上海 ',
+      bio: ' 温暖沉稳 ',
+      tags: [
+        { name: ' 高端婚礼 ', color: '#0f766e' },
+        { content: ' 双语主持 ', color: '#2d5f9a' },
+        { name: '高端婚礼', color: '#0f766e' }
+      ],
+      wechatQrUrl: ' https://example.com/qr.jpg '
+    },
+    visibleFields: {
+      avatar: true,
+      displayName: true,
+      profession: false,
+      city: true,
+      bio: true,
+      tags: true,
+      wechatQr: false
+    }
+  })
+
+  assert.deepEqual(result.components[0].config.profile, {
+    avatarUrl: 'https://example.com/avatar.jpg',
+    displayName: '林安',
+    profession: '婚礼主持人',
+    city: '上海',
+    bio: '温暖沉稳',
+    tags: [
+      { name: '高端婚礼', color: '#0f766e' },
+      { name: '双语主持', color: '#2d5f9a' }
+    ],
+    wechatQrUrl: 'https://example.com/qr.jpg'
+  })
+  assert.deepEqual(result.components[0].config.visibleFields, {
+    avatar: true,
+    displayName: true,
+    profession: false,
+    city: true,
+    bio: true,
+    tags: true,
+    wechatQr: false
+  })
+  assert.deepEqual(result.components[1].config, {})
+})
+
+test('maintains independent portfolio display tags for work list components', () => {
+  const config = normalizePortfolioConfig({
+    components: [
+      createComponent(COMPONENT_TYPES.WORK_LIST, {
+        componentKey: 'c_list',
+        sortOrder: 1000,
+        config: {
+          groups: [
+            { groupKey: 'g_a', name: '全部案例', sortOrder: 1000, workIds: [11] },
+            { groupKey: 'g_b', name: '户外案例', sortOrder: 2000, workIds: [12] }
+          ]
+        }
+      })
+    ]
+  })
+
+  const renamed = updateDisplayGroupName(config, 'c_list', 'g_a', '精选案例')
+  const imported = importWorksIntoDisplayGroup(renamed, 'c_list', 'g_a', [12, '13', 13])
+  const updatedWorks = updateDisplayGroupWorkIds(imported, 'c_list', 'g_b', [15, 16, 15])
+  const reordered = reorderDisplayGroup(updatedWorks, 'c_list', 1, 0)
+  const removed = removeDisplayGroup(reordered, 'c_list', 'g_a')
+
+  assert.equal(renamed.components[0].config.groups[0].name, '精选案例')
+  assert.deepEqual(imported.components[0].config.groups[0].workIds, [11, 12, 13])
+  assert.deepEqual(updatedWorks.components[0].config.groups[1].workIds, [15, 16])
+  assert.deepEqual(reordered.components[0].config.groups.map((item) => item.groupKey), ['g_b', 'g_a'])
+  assert.deepEqual(reordered.components[0].config.groups.map((item) => item.sortOrder), [1000, 2000])
+  assert.deepEqual(removed.components[0].config.groups.map((item) => item.groupKey), ['g_b'])
+})
+
+test('copies work tags into independent portfolio display tags without source binding', () => {
+  const config = normalizePortfolioConfig({
+    components: [
+      createComponent(COMPONENT_TYPES.WORK_GRID, { componentKey: 'c_grid', sortOrder: 1000 })
+    ]
+  })
+
+  const result = copyWorkTagsToDisplayGroups(config, 'c_grid', [
+    { id: 8, name: '户外案例' },
+    { id: 9, name: '室内案例' }
+  ])
+
+  assert.deepEqual(result.components[0].config.groups, [
+    { groupKey: 'g_1', name: '户外案例', sortOrder: 1000, workIds: [] },
+    { groupKey: 'g_2', name: '室内案例', sortOrder: 2000, workIds: [] }
+  ])
+  assert.equal(JSON.stringify(result.components[0].config.groups).includes('tagId'), false)
 })
 
 test('builds draft and publish payloads', () => {

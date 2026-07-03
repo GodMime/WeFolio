@@ -14,6 +14,8 @@ import com.jxc.wefolio.message.PortfolioMessage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -37,6 +39,9 @@ public class PortfolioConfigValidator {
     /** 双列作品列表最大作品数量 */
     private static final int WORK_GRID_MAX_COUNT = 50;
 
+    /** 单列作品列表最大作品数量 */
+    private static final int WORK_LIST_MAX_COUNT = 50;
+
     /** 默认排序间隔 */
     private static final int DEFAULT_SORT_ORDER_STEP = 1000;
 
@@ -51,6 +56,21 @@ public class PortfolioConfigValidator {
 
     /** 作品 ID 配置键 */
     private static final String CONFIG_KEY_WORK_IDS = "workIds";
+
+    /** 作品集展示标签配置键 */
+    private static final String CONFIG_KEY_GROUPS = "groups";
+
+    /** 展示列数配置键 */
+    private static final String CONFIG_KEY_COLUMNS = "columns";
+
+    /** 作品集展示标签标识配置键 */
+    private static final String CONFIG_KEY_GROUP_KEY = "groupKey";
+
+    /** 作品集展示标签名称配置键 */
+    private static final String CONFIG_KEY_GROUP_NAME = "name";
+
+    /** 排序配置键 */
+    private static final String CONFIG_KEY_SORT_ORDER = "sortOrder";
 
     /** 二维码来源配置键 */
     private static final String CONFIG_KEY_QR_URL_SOURCE = "qrUrlSource";
@@ -67,11 +87,41 @@ public class PortfolioConfigValidator {
     /** 组件内容配置键 */
     private static final String CONFIG_KEY_CONTENT = "content";
 
+    /** 档期查询范围配置键 */
+    private static final String CONFIG_KEY_QUERY_RANGE = "queryRange";
+
+    /** 档期查询范围类型配置键 */
+    private static final String CONFIG_KEY_RANGE_TYPE = "type";
+
+    /** 档期未来天数配置键 */
+    private static final String CONFIG_KEY_FUTURE_DAYS = "futureDays";
+
+    /** 档期开始日期配置键 */
+    private static final String CONFIG_KEY_START_DATE = "startDate";
+
+    /** 档期结束日期配置键 */
+    private static final String CONFIG_KEY_END_DATE = "endDate";
+
     /** 使用资料二维码 */
     private static final String QR_SOURCE_PROFILE = "PROFILE";
 
     /** 使用自定义二维码 */
     private static final String QR_SOURCE_CUSTOM = "CUSTOM";
+
+    /** 不限制档期查询范围 */
+    private static final String QUERY_RANGE_UNLIMITED = "UNLIMITED";
+
+    /** 限制未来天数档期查询 */
+    private static final String QUERY_RANGE_FUTURE_DAYS = "FUTURE_DAYS";
+
+    /** 限制固定日期范围档期查询 */
+    private static final String QUERY_RANGE_DATE_RANGE = "DATE_RANGE";
+
+    /** 默认作品集展示标签标识前缀 */
+    private static final String DEFAULT_GROUP_KEY_PREFIX = "g_";
+
+    /** 旧作品列表迁移默认展示标签 */
+    private static final String DEFAULT_WORK_GROUP_NAME = "全部作品";
 
     /** 作品 Mapper */
     private final WorkEntityMapper workEntityMapper;
@@ -185,7 +235,8 @@ public class PortfolioConfigValidator {
                         componentPath,
                         0
                 ));
-                case CAROUSEL, WORK_GRID -> addWorkReferences(references, portfolioId, configScope, component, componentPath);
+                case CAROUSEL -> addFlatWorkReferences(references, portfolioId, configScope, component, componentPath);
+                case WORK_GRID, WORK_LIST -> addGroupedWorkReferences(references, portfolioId, configScope, component, componentPath);
                 default -> {
                 }
             }
@@ -228,7 +279,9 @@ public class PortfolioConfigValidator {
         }
         switch (componentType) {
             case CAROUSEL -> validateCarousel(userId, component);
-            case WORK_GRID -> validateWorkGrid(userId, component);
+            case WORK_GRID -> validateWorkDisplayGroups(userId, component, WORK_GRID_MAX_COUNT, 2);
+            case WORK_LIST -> validateWorkDisplayGroups(userId, component, WORK_LIST_MAX_COUNT, 1);
+            case SCHEDULE_QUERY -> validateScheduleQuery(component);
             case QR_CONTACT -> validateQrContact(component);
             case CONTACT_FORM -> validateContactForm(component);
             case TEXT_SECTION -> validateTextSection(component);
@@ -258,19 +311,30 @@ public class PortfolioConfigValidator {
     }
 
     /**
-     * 校验双列作品列表组件。
+     * 校验作品列表展示标签。
      *
      * @param userId 当前用户 ID
      * @param component 组件
+     * @param maxCount 每个展示标签最大作品数
+     * @param columns 展示列数
      */
-    private void validateWorkGrid(Long userId, PortfolioConfigDto.Component component) {
-        List<Long> workIds = normalizeWorkIds(component, WORK_GRID_MAX_COUNT);
+    private void validateWorkDisplayGroups(
+            Long userId,
+            PortfolioConfigDto.Component component,
+            int maxCount,
+            int columns
+    ) {
+        List<Map<String, Object>> groups = normalizeDisplayGroups(component, maxCount);
+        List<Long> workIds = groups.stream()
+                .flatMap(group -> asLongList(group.get(CONFIG_KEY_WORK_IDS)).stream())
+                .distinct()
+                .toList();
         Map<Long, WorkEntity> workMap = loadUsableWorks(userId, workIds);
         if (workMap.size() != workIds.size()) {
             throw new BusinessException(PortfolioMessage.WORK_REFERENCE_INVALID_MESSAGE);
         }
-        component.getConfig().put(CONFIG_KEY_WORK_IDS, workIds);
-        component.getConfig().putIfAbsent("columns", 2);
+        component.getConfig().put(CONFIG_KEY_GROUPS, groups);
+        component.getConfig().put(CONFIG_KEY_COLUMNS, columns);
     }
 
     /**
@@ -306,15 +370,70 @@ public class PortfolioConfigValidator {
     }
 
     /**
+     * 校验档期查询组件。
+     *
+     * @param component 组件
+     */
+    private void validateScheduleQuery(PortfolioConfigDto.Component component) {
+        Map<String, Object> source = asObjectMap(component.getConfig().get(CONFIG_KEY_QUERY_RANGE));
+        String rangeType = defaultString(asString(source.get(CONFIG_KEY_RANGE_TYPE)), QUERY_RANGE_UNLIMITED);
+        Map<String, Object> normalized = new LinkedHashMap<>();
+        normalized.put(CONFIG_KEY_RANGE_TYPE, rangeType);
+        switch (rangeType) {
+            case QUERY_RANGE_UNLIMITED -> {
+                normalized.put(CONFIG_KEY_FUTURE_DAYS, null);
+                normalized.put(CONFIG_KEY_START_DATE, null);
+                normalized.put(CONFIG_KEY_END_DATE, null);
+            }
+            case QUERY_RANGE_FUTURE_DAYS -> normalizeFutureDaysRange(source, normalized);
+            case QUERY_RANGE_DATE_RANGE -> normalizeDateRange(source, normalized);
+            default -> throw new BusinessException(PortfolioMessage.SCHEDULE_QUERY_RANGE_UNSUPPORTED_MESSAGE);
+        }
+        component.getConfig().put(CONFIG_KEY_QUERY_RANGE, normalized);
+    }
+
+    /**
      * 校验文字说明组件。
      *
      * @param component 组件
      */
     private void validateTextSection(PortfolioConfigDto.Component component) {
-        if (!hasText(asString(component.getConfig().get(CONFIG_KEY_TITLE)))
-                && !hasText(asString(component.getConfig().get(CONFIG_KEY_CONTENT)))) {
+        if (!hasText(asString(component.getConfig().get(CONFIG_KEY_CONTENT)))) {
             throw new BusinessException(PortfolioMessage.TEXT_SECTION_CONTENT_REQUIRED_MESSAGE);
         }
+    }
+
+    /**
+     * 规范化未来天数档期范围。
+     *
+     * @param source 原始范围
+     * @param normalized 规范化范围
+     */
+    private void normalizeFutureDaysRange(Map<String, Object> source, Map<String, Object> normalized) {
+        Integer futureDays = asInteger(source.get(CONFIG_KEY_FUTURE_DAYS));
+        if (futureDays == null || futureDays <= 0) {
+            throw new BusinessException(PortfolioMessage.SCHEDULE_QUERY_FUTURE_DAYS_INVALID_MESSAGE);
+        }
+        normalized.put(CONFIG_KEY_FUTURE_DAYS, futureDays);
+        normalized.put(CONFIG_KEY_START_DATE, null);
+        normalized.put(CONFIG_KEY_END_DATE, null);
+    }
+
+    /**
+     * 规范化固定日期档期范围。
+     *
+     * @param source 原始范围
+     * @param normalized 规范化范围
+     */
+    private void normalizeDateRange(Map<String, Object> source, Map<String, Object> normalized) {
+        LocalDate startDate = parseDate(source.get(CONFIG_KEY_START_DATE));
+        LocalDate endDate = parseDate(source.get(CONFIG_KEY_END_DATE));
+        if (startDate.isAfter(endDate)) {
+            throw new BusinessException(PortfolioMessage.SCHEDULE_QUERY_DATE_RANGE_INVALID_MESSAGE);
+        }
+        normalized.put(CONFIG_KEY_FUTURE_DAYS, null);
+        normalized.put(CONFIG_KEY_START_DATE, startDate.toString());
+        normalized.put(CONFIG_KEY_END_DATE, endDate.toString());
     }
 
     /**
@@ -328,9 +447,13 @@ public class PortfolioConfigValidator {
         List<WorkEntity> works = workIds.isEmpty()
                 ? List.of()
                 : safeList(workEntityMapper.selectBatchIds(workIds));
+        Set<Long> requestedIds = new LinkedHashSet<>(workIds);
         Map<Long, WorkEntity> result = new LinkedHashMap<>();
         for (WorkEntity work : works) {
             if (work == null || work.getId() == null) {
+                continue;
+            }
+            if (!requestedIds.contains(work.getId())) {
                 continue;
             }
             if (!Objects.equals(userId, work.getUserId())) {
@@ -345,6 +468,57 @@ public class PortfolioConfigValidator {
     }
 
     /**
+     * 规范化作品集展示标签。
+     *
+     * @param component 组件
+     * @param maxCount 每个展示标签最大作品数
+     * @return 规范化展示标签列表
+     */
+    private List<Map<String, Object>> normalizeDisplayGroups(PortfolioConfigDto.Component component, int maxCount) {
+        List<Map<String, Object>> sourceGroups = asMapList(component.getConfig().get(CONFIG_KEY_GROUPS));
+        if (sourceGroups.isEmpty()) {
+            List<Long> workIds = normalizeWorkIds(component, maxCount);
+            Map<String, Object> group = new LinkedHashMap<>();
+            group.put(CONFIG_KEY_GROUP_KEY, DEFAULT_GROUP_KEY_PREFIX + "all");
+            group.put(CONFIG_KEY_GROUP_NAME, DEFAULT_WORK_GROUP_NAME);
+            group.put(CONFIG_KEY_SORT_ORDER, DEFAULT_SORT_ORDER_STEP);
+            group.put(CONFIG_KEY_WORK_IDS, workIds);
+            sourceGroups = List.of(group);
+            component.getConfig().put(CONFIG_KEY_WORK_IDS, workIds);
+        }
+        List<Map<String, Object>> sortedGroups = sourceGroups.stream()
+                .sorted(Comparator
+                        .comparing(this::safeGroupSortOrder)
+                        .thenComparing(group -> defaultString(asString(group.get(CONFIG_KEY_GROUP_KEY)))))
+                .toList();
+        List<Map<String, Object>> normalized = new ArrayList<>();
+        Set<String> groupNames = new LinkedHashSet<>();
+        Set<String> groupKeys = new LinkedHashSet<>();
+        for (int index = 0; index < sortedGroups.size(); index++) {
+            Map<String, Object> group = sortedGroups.get(index);
+            String groupKey = defaultString(asString(group.get(CONFIG_KEY_GROUP_KEY)), DEFAULT_GROUP_KEY_PREFIX + (index + 1));
+            if (!groupKeys.add(groupKey)) {
+                throw new BusinessException(PortfolioMessage.DISPLAY_TAG_KEY_DUPLICATE_MESSAGE);
+            }
+            String name = asString(group.get(CONFIG_KEY_GROUP_NAME));
+            if (!hasText(name)) {
+                throw new BusinessException(PortfolioMessage.DISPLAY_TAG_NAME_REQUIRED_MESSAGE);
+            }
+            if (!groupNames.add(name)) {
+                throw new BusinessException(PortfolioMessage.DISPLAY_TAG_NAME_DUPLICATE_MESSAGE);
+            }
+            List<Long> workIds = normalizeWorkIds(group, maxCount);
+            Map<String, Object> normalizedGroup = new LinkedHashMap<>();
+            normalizedGroup.put(CONFIG_KEY_GROUP_KEY, groupKey);
+            normalizedGroup.put(CONFIG_KEY_GROUP_NAME, name);
+            normalizedGroup.put(CONFIG_KEY_SORT_ORDER, (index + 1) * DEFAULT_SORT_ORDER_STEP);
+            normalizedGroup.put(CONFIG_KEY_WORK_IDS, workIds);
+            normalized.add(normalizedGroup);
+        }
+        return normalized;
+    }
+
+    /**
      * 规范化组件作品 ID。
      *
      * @param component 组件
@@ -352,7 +526,18 @@ public class PortfolioConfigValidator {
      * @return 去重后的作品 ID
      */
     private List<Long> normalizeWorkIds(PortfolioConfigDto.Component component, int maxCount) {
-        List<Long> workIds = asLongList(component.getConfig().get(CONFIG_KEY_WORK_IDS));
+        return normalizeWorkIds(component.getConfig(), maxCount);
+    }
+
+    /**
+     * 规范化配置 Map 中的作品 ID。
+     *
+     * @param config 配置 Map
+     * @param maxCount 最大数量
+     * @return 去重后的作品 ID
+     */
+    private List<Long> normalizeWorkIds(Map<String, Object> config, int maxCount) {
+        List<Long> workIds = asLongList(config.get(CONFIG_KEY_WORK_IDS));
         if (workIds.isEmpty()) {
             throw new BusinessException(PortfolioMessage.DISPLAY_WORK_REQUIRED_MESSAGE);
         }
@@ -363,7 +548,7 @@ public class PortfolioConfigValidator {
     }
 
     /**
-     * 添加作品引用。
+     * 添加扁平作品引用。
      *
      * @param references 引用列表
      * @param portfolioId 作品集 ID
@@ -371,7 +556,7 @@ public class PortfolioConfigValidator {
      * @param component 组件
      * @param componentPath 组件路径
      */
-    private void addWorkReferences(
+    private void addFlatWorkReferences(
             List<PortfolioReferenceEntity> references,
             Long portfolioId,
             String configScope,
@@ -389,6 +574,40 @@ public class PortfolioConfigValidator {
                     componentPath + ".workIds[" + index + "]",
                     index
             ));
+        }
+    }
+
+    /**
+     * 添加作品集展示标签中的作品引用。
+     *
+     * @param references 引用列表
+     * @param portfolioId 作品集 ID
+     * @param configScope 配置作用域
+     * @param component 组件
+     * @param componentPath 组件路径
+     */
+    private void addGroupedWorkReferences(
+            List<PortfolioReferenceEntity> references,
+            Long portfolioId,
+            String configScope,
+            PortfolioConfigDto.Component component,
+            String componentPath
+    ) {
+        List<Map<String, Object>> groups = asMapList(component.getConfig().get(CONFIG_KEY_GROUPS));
+        for (int groupIndex = 0; groupIndex < groups.size(); groupIndex++) {
+            List<Long> workIds = asLongList(groups.get(groupIndex).get(CONFIG_KEY_WORK_IDS));
+            for (int workIndex = 0; workIndex < workIds.size(); workIndex++) {
+                references.add(reference(
+                        portfolioId,
+                        configScope,
+                        ReferenceTypeDict.WORK.getCode(),
+                        workIds.get(workIndex),
+                        component,
+                        componentPath + "." + CONFIG_KEY_GROUPS + "[" + groupIndex + "]."
+                                + CONFIG_KEY_WORK_IDS + "[" + workIndex + "]",
+                        workIndex
+                ));
+            }
         }
     }
 
@@ -473,6 +692,17 @@ public class PortfolioConfigValidator {
     }
 
     /**
+     * 安全读取展示标签排序值。
+     *
+     * @param group 展示标签
+     * @return 排序值
+     */
+    private int safeGroupSortOrder(Map<String, Object> group) {
+        Integer sortOrder = asInteger(group.get(CONFIG_KEY_SORT_ORDER));
+        return sortOrder == null ? Integer.MAX_VALUE : sortOrder;
+    }
+
+    /**
      * 转换为 Long 列表。
      *
      * @param value 原值
@@ -490,6 +720,45 @@ public class PortfolioConfigValidator {
             }
         }
         return new ArrayList<>(result);
+    }
+
+    /**
+     * 转换为 Map 列表。
+     *
+     * @param value 原值
+     * @return Map 列表
+     */
+    private List<Map<String, Object>> asMapList(Object value) {
+        if (!(value instanceof Collection<?> collection)) {
+            return List.of();
+        }
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Object item : collection) {
+            Map<String, Object> map = asObjectMap(item);
+            if (!map.isEmpty()) {
+                result.add(map);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * 转换为字符串键 Map。
+     *
+     * @param value 原值
+     * @return 字符串键 Map
+     */
+    private Map<String, Object> asObjectMap(Object value) {
+        if (!(value instanceof Map<?, ?> map)) {
+            return Map.of();
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+            if (entry.getKey() != null) {
+                result.put(String.valueOf(entry.getKey()), entry.getValue());
+            }
+        }
+        return result;
     }
 
     /**
@@ -530,6 +799,44 @@ public class PortfolioConfigValidator {
             }
         }
         return null;
+    }
+
+    /**
+     * 转换为 Integer。
+     *
+     * @param value 原值
+     * @return Integer 值
+     */
+    private Integer asInteger(Object value) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        if (value instanceof String text && hasText(text)) {
+            try {
+                return Integer.parseInt(text.strip());
+            } catch (NumberFormatException e) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 解析 ISO 日期。
+     *
+     * @param value 原值
+     * @return 日期
+     */
+    private LocalDate parseDate(Object value) {
+        String text = asString(value);
+        if (!hasText(text)) {
+            throw new BusinessException(PortfolioMessage.SCHEDULE_QUERY_DATE_INVALID_MESSAGE);
+        }
+        try {
+            return LocalDate.parse(text);
+        } catch (DateTimeParseException e) {
+            throw new BusinessException(PortfolioMessage.SCHEDULE_QUERY_DATE_INVALID_MESSAGE);
+        }
     }
 
     /**

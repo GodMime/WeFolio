@@ -94,6 +94,134 @@ class PortfolioConfigValidatorTest {
     }
 
     @Test
+    void workListShouldNormalizeDisplayGroupsWithWorks() {
+        when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(
+                work(11L, 7L, MediaTypeDict.IMAGE.getCode(), WorkStatusDict.ACTIVE.getCode()),
+                work(12L, 7L, MediaTypeDict.VIDEO.getCode(), WorkStatusDict.ACTIVE.getCode())
+        ));
+        PortfolioConfigDto config = config(component(
+                "c_list",
+                PortfolioComponentTypeDict.WORK_LIST.getCode(),
+                1000,
+                true,
+                Map.of("title", "精选案例", "groups", List.of(
+                        group("g_featured", "精选", 3000, List.of(11L, "12", 11L))
+                ))
+        ));
+
+        PortfolioConfigDto normalized = validator().normalize(7L, config);
+
+        List<?> groups = (List<?>) normalized.getComponents().get(0).getConfig().get("groups");
+        Map<?, ?> firstGroup = (Map<?, ?>) groups.get(0);
+        assertThat(firstGroup.get("groupKey")).isEqualTo("g_featured");
+        assertThat(firstGroup.get("name")).isEqualTo("精选");
+        assertThat(firstGroup.get("sortOrder")).isEqualTo(1000);
+        assertThat(firstGroup.get("workIds")).isEqualTo(List.of(11L, 12L));
+    }
+
+    @Test
+    void displayGroupsShouldRejectBlankOrDuplicatedNames() {
+        PortfolioConfigDto blankNameConfig = config(component(
+                "c_grid",
+                PortfolioComponentTypeDict.WORK_GRID.getCode(),
+                1000,
+                true,
+                Map.of("groups", List.of(group("g_blank", " ", 1000, List.of(11L))))
+        ));
+        PortfolioConfigDto duplicateNameConfig = config(component(
+                "c_grid",
+                PortfolioComponentTypeDict.WORK_GRID.getCode(),
+                1000,
+                true,
+                Map.of("groups", List.of(
+                        group("g_a", "户外案例", 1000, List.of(11L)),
+                        group("g_b", "户外案例", 2000, List.of(12L))
+                ))
+        ));
+
+        assertThatThrownBy(() -> validator().normalize(7L, blankNameConfig))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("作品集展示标签名称不能为空");
+        assertThatThrownBy(() -> validator().normalize(7L, duplicateNameConfig))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("作品集展示标签名称不能重复");
+    }
+
+    @Test
+    void displayGroupsShouldRejectDuplicatedGroupKeys() {
+        PortfolioConfigDto config = config(component(
+                "c_grid",
+                PortfolioComponentTypeDict.WORK_GRID.getCode(),
+                1000,
+                true,
+                Map.of("groups", List.of(
+                        group("g_same", "户外案例", 1000, List.of(11L)),
+                        group("g_same", "室内案例", 2000, List.of(12L))
+                ))
+        ));
+
+        assertThatThrownBy(() -> validator().normalize(7L, config))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("作品集展示标签标识不能重复");
+    }
+
+    @Test
+    void textSectionShouldAllowBlankTitleButRequireContent() {
+        PortfolioConfigDto validConfig = config(component(
+                "c_text",
+                PortfolioComponentTypeDict.TEXT_SECTION.getCode(),
+                1000,
+                true,
+                Map.of("title", " ", "content", "报价以沟通确认为准")
+        ));
+        PortfolioConfigDto invalidConfig = config(component(
+                "c_text",
+                PortfolioComponentTypeDict.TEXT_SECTION.getCode(),
+                1000,
+                true,
+                Map.of("title", "服务说明", "content", " ")
+        ));
+
+        assertThat(validator().normalize(7L, validConfig).getComponents()).hasSize(1);
+        assertThatThrownBy(() -> validator().normalize(7L, invalidConfig))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("文字说明内容不能为空");
+    }
+
+    @Test
+    void scheduleQueryShouldValidateQueryRange() {
+        PortfolioConfigDto unlimitedConfig = config(component(
+                "c_schedule",
+                PortfolioComponentTypeDict.SCHEDULE_QUERY.getCode(),
+                1000,
+                true,
+                Map.of("queryRange", Map.of("type", "UNLIMITED"))
+        ));
+        PortfolioConfigDto futureDaysConfig = config(component(
+                "c_schedule",
+                PortfolioComponentTypeDict.SCHEDULE_QUERY.getCode(),
+                1000,
+                true,
+                Map.of("queryRange", Map.of("type", "FUTURE_DAYS", "futureDays", 0))
+        ));
+        PortfolioConfigDto dateRangeConfig = config(component(
+                "c_schedule",
+                PortfolioComponentTypeDict.SCHEDULE_QUERY.getCode(),
+                1000,
+                true,
+                Map.of("queryRange", Map.of("type", "DATE_RANGE", "startDate", "2026-08-01", "endDate", "2026-07-01"))
+        ));
+
+        assertThat(validator().normalize(7L, unlimitedConfig).getComponents()).hasSize(1);
+        assertThatThrownBy(() -> validator().normalize(7L, futureDaysConfig))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("档期查询未来天数必须大于 0");
+        assertThatThrownBy(() -> validator().normalize(7L, dateRangeConfig))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("档期查询开始日期不能晚于结束日期");
+    }
+
+    @Test
     void unknownComponentTypeShouldBeRejected() {
         PortfolioConfigDto config = config(component("c_unknown", "PRICE_TABLE", 1000, true, Map.of()));
 
@@ -153,6 +281,11 @@ class PortfolioConfigValidatorTest {
                 component("c_schedule", PortfolioComponentTypeDict.SCHEDULE_QUERY.getCode(), 2000, true, Map.of()),
                 component("c_grid", PortfolioComponentTypeDict.WORK_GRID.getCode(), 3000, true,
                         Map.of("workIds", List.of(11L, 12L), "columns", 2)),
+                component("c_list", PortfolioComponentTypeDict.WORK_LIST.getCode(), 3500, true,
+                        Map.of("groups", List.of(
+                                group("g_a", "全部案例", 1000, List.of(11L)),
+                                group("g_b", "精选案例", 2000, List.of(11L))
+                        ))),
                 component("c_qr", PortfolioComponentTypeDict.QR_CONTACT.getCode(), 4000, true,
                         Map.of("qrUrlSource", "PROFILE"))
         );
@@ -177,10 +310,20 @@ class PortfolioConfigValidatorTest {
             assertThat(reference.getConfigScope()).isEqualTo(PortfolioConfigScopeDict.DRAFT.getCode());
             assertThat(reference.getIsValid()).isEqualTo(1);
         });
-        assertThat(references.stream()
+        List<PortfolioReferenceEntity> workReferences = references.stream()
                 .filter(reference -> ReferenceTypeDict.WORK.getCode().equals(reference.getReferenceType()))
+                .toList();
+        assertThat(workReferences.stream()
+                .map(PortfolioReferenceEntity::getComponentPath))
+                .containsExactly(
+                        "components[2].groups[0].workIds[0]",
+                        "components[2].groups[0].workIds[1]",
+                        "components[3].groups[0].workIds[0]",
+                        "components[3].groups[1].workIds[0]"
+                );
+        assertThat(workReferences.stream()
                 .map(PortfolioReferenceEntity::getReferenceId))
-                .containsExactly(11L, 12L);
+                .containsExactly(11L, 12L, 11L, 11L);
     }
 
     private PortfolioConfigValidator validator() {
@@ -212,6 +355,15 @@ class PortfolioConfigValidatorTest {
         component.setEnabled(enabled);
         component.setConfig(new LinkedHashMap<>(config));
         return component;
+    }
+
+    private Map<String, Object> group(String key, String name, Integer sortOrder, List<?> workIds) {
+        Map<String, Object> group = new LinkedHashMap<>();
+        group.put("groupKey", key);
+        group.put("name", name);
+        group.put("sortOrder", sortOrder);
+        group.put("workIds", workIds);
+        return group;
     }
 
     private WorkEntity work(Long id, Long userId, String mediaType, String status) {

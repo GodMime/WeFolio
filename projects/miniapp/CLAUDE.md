@@ -56,7 +56,7 @@ Spring Boot REST API (:8090)
 | 懒加载 | `lazyCodeLoading: "requiredComponents"` |
 | 基础库 | 3.15.0+（`project.private.config.json`） |
 | API 基址 | `https://api.we-folio.dingchenyong.top`（`app.js` globalData） |
-| 静态系统资源 | 小图 `/assets/system/`；大图 `https://cdn.we-folio.dingchenyong.top/system/` |
+| 静态系统资源 | 小图 `/assets/system/`；大图 `https://cdn2.we-folio.dingchenyong.top/system/` |
 
 ## 代码结构
 
@@ -331,7 +331,7 @@ if (!hasLocalToken()) {
 
 - 一级 tab 页面（我的）不展示返回按钮，二级页面展示返回。
 - 底部主导航固定为"档期 / 作品 / 作品集 / 我的"，图标 + 文字，当前仅"我的"可用。
-- 静态系统小图放在小程序本地包 `assets/system/`，页面和脚本使用 `/assets/system/...` 引用；代码包内图片和音频资源总量需控制在 200KB 内。超过 200KB 的大图使用 `https://cdn.we-folio.dingchenyong.top/system/...` 远程加载并依赖微信/CDN 缓存。不要退回旧 OSS URL 或 COS 源站域名。
+- 静态系统小图放在小程序本地包 `assets/system/`，页面和脚本使用 `/assets/system/...` 引用；代码包内图片和音频资源总量需控制在 200KB 内。超过 200KB 的大图使用 `https://cdn2.we-folio.dingchenyong.top/system/...` 远程加载并依赖微信/CDN 缓存。不要退回旧 OSS URL 或 COS 源站域名。
 
 ## 测试约定
 

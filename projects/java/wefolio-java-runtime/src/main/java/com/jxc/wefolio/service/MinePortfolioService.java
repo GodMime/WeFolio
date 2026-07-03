@@ -10,9 +10,9 @@ import com.jxc.wefolio.dict.PortfolioPublicationStatusDict;
 import com.jxc.wefolio.dict.PortfolioStatusDict;
 import com.jxc.wefolio.dict.PortfolioTemplateTypeDict;
 import com.jxc.wefolio.dict.PointSceneCodeDict;
+import com.jxc.wefolio.dto.MinePortfolioAssetUploadTicketRequest;
+import com.jxc.wefolio.dto.MinePortfolioAssetUploadTicketResponse;
 import com.jxc.wefolio.dto.MinePortfolioCreateRequest;
-import com.jxc.wefolio.dto.MinePortfolioCoverUploadTicketRequest;
-import com.jxc.wefolio.dto.MinePortfolioCoverUploadTicketResponse;
 import com.jxc.wefolio.dto.MinePortfolioDetailResponse;
 import com.jxc.wefolio.dto.MinePortfolioDraftSaveRequest;
 import com.jxc.wefolio.dto.MinePortfolioListResponse;
@@ -42,10 +42,14 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.HexFormat;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -76,11 +80,29 @@ public class MinePortfolioService {
     /** 作品集封面最大字节数 */
     private static final long COVER_MAX_BYTES = 300L * 1024L;
 
+    /** 作品集图片素材最大字节数 */
+    private static final long PORTFOLIO_IMAGE_ASSET_MAX_BYTES = COVER_MAX_BYTES;
+
     /** 作品集素材 COS 目录 */
     private static final String PORTFOLIO_ASSET_FOLDER = "protfolio";
 
+    /** 封面素材类型 */
+    private static final String ASSET_TYPE_COVER = "COVER";
+
+    /** 个人资料头像素材类型 */
+    private static final String ASSET_TYPE_PROFILE_AVATAR = "PROFILE_AVATAR";
+
+    /** 二维码联系素材类型 */
+    private static final String ASSET_TYPE_QR_CONTACT = "QR_CONTACT";
+
     /** 封面文件名前缀 */
     private static final String COVER_FILE_PREFIX = "cover";
+
+    /** 个人资料头像文件名前缀 */
+    private static final String PROFILE_AVATAR_FILE_PREFIX = "profile-avatar";
+
+    /** 二维码联系文件名前缀 */
+    private static final String QR_CONTACT_FILE_PREFIX = "qr-contact";
 
     /** 封面文件名时间格式 */
     private static final DateTimeFormatter COVER_FILE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
@@ -103,9 +125,19 @@ public class MinePortfolioService {
     /** PNG 文件扩展名 */
     private static final String COVER_EXTENSION_PNG = "png";
 
-    /** 封面对象键匹配模板 */
-    private static final String COVER_OBJECT_KEY_PATTERN_TEMPLATE = "%s/" + PORTFOLIO_ASSET_FOLDER
-            + "/" + COVER_FILE_PREFIX + "-%d-\\d{14}-[0-9a-f]{8}\\.(jpg|png)";
+    /** 作品集图片素材对象键匹配模板 */
+    private static final String PORTFOLIO_ASSET_OBJECT_KEY_PATTERN_TEMPLATE = "%s/" + PORTFOLIO_ASSET_FOLDER
+            + "/(" + COVER_FILE_PREFIX + "|" + PROFILE_AVATAR_FILE_PREFIX + "|" + QR_CONTACT_FILE_PREFIX
+            + ")-%d-\\d{14}-[0-9a-f]{8}\\.(jpg|png)";
+
+    /** 个人资料组件配置键 */
+    private static final String CONFIG_KEY_PROFILE = "profile";
+
+    /** 头像地址配置键 */
+    private static final String CONFIG_KEY_AVATAR_URL = "avatarUrl";
+
+    /** 二维码地址配置键 */
+    private static final String CONFIG_KEY_QR_URL = "qrUrl";
 
     /** 上传票据有效分钟数 */
     private static final int TICKET_EXPIRE_MINUTES = 15;
@@ -136,6 +168,9 @@ public class MinePortfolioService {
 
     /** 配置校验器 */
     private final PortfolioConfigValidator portfolioConfigValidator;
+
+    /** 作品集渲染服务 */
+    private final PortfolioRenderService portfolioRenderService;
 
     /** 登录注册服务 */
     private final MiniappAuthService miniappAuthService;
@@ -176,6 +211,7 @@ public class MinePortfolioService {
                 componentLibraryItem(PortfolioComponentTypeDict.PROFILE, "展示个人资料和服务标签"),
                 componentLibraryItem(PortfolioComponentTypeDict.SCHEDULE_QUERY, "允许访客查询公开档期"),
                 componentLibraryItem(PortfolioComponentTypeDict.WORK_GRID, "双列展示图片和视频作品"),
+                componentLibraryItem(PortfolioComponentTypeDict.WORK_LIST, "单列展示重点图片和视频作品"),
                 componentLibraryItem(PortfolioComponentTypeDict.QR_CONTACT, "展示微信二维码联系方式"),
                 componentLibraryItem(PortfolioComponentTypeDict.CONTACT_FORM, "收集访客预留联系信息"),
                 componentLibraryItem(PortfolioComponentTypeDict.TEXT_SECTION, "展示服务说明和补充文字")
@@ -219,29 +255,36 @@ public class MinePortfolioService {
     }
 
     /**
-     * 创建作品集封面直传 COS 票据。
+     * 创建作品集图片素材直传 COS 票据。
      *
      * @param portfolioId 作品集 ID
-     * @param request 封面票据创建请求
-     * @return 封面票据响应
+     * @param request 素材票据创建请求
+     * @return 素材票据响应
      */
-    public MinePortfolioCoverUploadTicketResponse createCoverUploadTicket(
+    public MinePortfolioAssetUploadTicketResponse createAssetUploadTicket(
             Long portfolioId,
-            MinePortfolioCoverUploadTicketRequest request
+            MinePortfolioAssetUploadTicketRequest request
     ) {
         Long userId = AuthContextHolder.requireUserId();
         PortfolioEntity portfolio = requireOwnedStandardPersonal(portfolioId);
-        String contentType = normalizeCoverContentType(request);
+        String assetType = normalizePortfolioAssetType(request);
+        String contentType = normalizePortfolioAssetContentType(request, assetType);
         String uniqueCode = miniappAuthService.getUniqueCodeByUserId(userId);
-        String objectKey = buildCoverObjectKey(uniqueCode, portfolio.getId(), contentType, LocalDateTime.now());
+        String objectKey = buildPortfolioAssetObjectKey(
+                uniqueCode,
+                portfolio.getId(),
+                assetType,
+                contentType,
+                LocalDateTime.now()
+        );
         LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(TICKET_EXPIRE_MINUTES);
         CosService.PostUploadTicket ticket = cosService.createPostUploadTicket(
                 objectKey,
                 contentType,
-                COVER_MAX_BYTES,
+                PORTFOLIO_IMAGE_ASSET_MAX_BYTES,
                 expiresAt
         );
-        return buildCoverUploadTicketResponse(request, ticket);
+        return buildAssetUploadTicketResponse(request, assetType, ticket);
     }
 
     /**
@@ -290,7 +333,10 @@ public class MinePortfolioService {
         if (!PortfolioPublicationStatusDict.PUBLISHED.getCode().equals(portfolio.getPublicationStatus())) {
             portfolio.setPublicationStatus(PortfolioPublicationStatusDict.DRAFT_ONLY.getCode());
         }
-        portfolioEntityMapper.updateById(portfolio);
+        int updated = portfolioEntityMapper.updateById(portfolio);
+        if (updated != 1) {
+            throw new BusinessException(PortfolioMessage.PORTFOLIO_CONCURRENT_UPDATE_MESSAGE);
+        }
         rebuildReferences(portfolio.getId(), PortfolioConfigScopeDict.DRAFT.getCode(),
                 portfolioConfigValidator.buildReferences(portfolio.getId(), userId, PortfolioConfigScopeDict.DRAFT.getCode(), normalized));
         insertHistory(portfolio, nextDraftRevision, normalized, hash, userId, now, HISTORY_ACTION_DRAFT_SAVE);
@@ -305,7 +351,10 @@ public class MinePortfolioService {
      */
     public MinePortfolioDetailResponse preview(Long portfolioId) {
         PortfolioEntity portfolio = requireOwnedStandardPersonal(portfolioId);
-        return buildDetail(portfolio, parseConfig(portfolio.getDraftConfigJson()));
+        PortfolioConfigDto config = parseConfig(portfolio.getDraftConfigJson());
+        MinePortfolioDetailResponse response = buildDetail(portfolio, config);
+        response.setRenderData(portfolioRenderService.render(portfolio, config, true, false, null, null));
+        return response;
     }
 
     /**
@@ -330,20 +379,15 @@ public class MinePortfolioService {
             throw new BusinessException(PortfolioMessage.DRAFT_SAVE_REQUIRED_MESSAGE);
         }
         PortfolioConfigDto normalized = portfolioConfigValidator.normalize(userId, parseConfig(draftConfigJson));
-        String oldCoverObjectKey = resolveDeletedPublishedCoverObjectKey(
+        List<String> deletedObjectKeys = resolveDeletedPublishedAssetObjectKeys(
                 userId,
                 portfolio.getId(),
-                resolveCoverUrl(parseConfig(portfolio.getPublishedConfigJson())),
-                resolveCoverUrl(normalized)
+                parseConfig(portfolio.getPublishedConfigJson()),
+                normalized
         );
-        pointService.consume(
-                userId,
-                PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode(),
-                POINT_BUSINESS_TYPE_PORTFOLIO,
-                String.valueOf(portfolio.getId()),
-                1,
-                normalizeRequiredString(request.getIdempotencyKey(), PortfolioMessage.PUBLISH_IDEMPOTENCY_REQUIRED_MESSAGE),
-                PUBLISH_POINT_REMARK
+        String idempotencyKey = normalizeRequiredString(
+                request.getIdempotencyKey(),
+                PortfolioMessage.PUBLISH_IDEMPOTENCY_REQUIRED_MESSAGE
         );
         int nextPublishedRevision = safeInt(portfolio.getPublishedRevision()) + 1;
         String configJson = toJson(normalized);
@@ -355,11 +399,23 @@ public class MinePortfolioService {
         portfolio.setPublishedBy(userId);
         portfolio.setPublishedAt(now);
         portfolio.setPublicationStatus(PortfolioPublicationStatusDict.PUBLISHED.getCode());
-        portfolioEntityMapper.updateById(portfolio);
+        int updated = portfolioEntityMapper.updateById(portfolio);
+        if (updated != 1) {
+            throw new BusinessException(PortfolioMessage.PORTFOLIO_CONCURRENT_UPDATE_MESSAGE);
+        }
         rebuildReferences(portfolio.getId(), PortfolioConfigScopeDict.PUBLISHED.getCode(),
                 portfolioConfigValidator.buildReferences(portfolio.getId(), userId, PortfolioConfigScopeDict.PUBLISHED.getCode(), normalized));
         insertHistory(portfolio, nextPublishedRevision, normalized, hash, userId, now, HISTORY_ACTION_PUBLISH);
-        deletePublishedCoverAfterCommit(portfolio.getId(), oldCoverObjectKey);
+        pointService.consume(
+                userId,
+                PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode(),
+                POINT_BUSINESS_TYPE_PORTFOLIO,
+                String.valueOf(portfolio.getId()),
+                1,
+                idempotencyKey,
+                PUBLISH_POINT_REMARK
+        );
+        deletePublishedAssetsAfterCommit(portfolio.getId(), deletedObjectKeys);
         return buildDetail(portfolio, normalized);
     }
 
@@ -541,17 +597,37 @@ public class MinePortfolioService {
     }
 
     /**
-     * 规范化封面 MIME 类型并校验大小。
+     * 规范化作品集素材类型。
      *
-     * @param request 封面票据请求
+     * @param request 素材票据请求
+     * @return 素材类型
+     */
+    private String normalizePortfolioAssetType(MinePortfolioAssetUploadTicketRequest request) {
+        String assetType = request == null ? "" : defaultString(request.getAssetType()).toUpperCase(Locale.ROOT);
+        if (ASSET_TYPE_COVER.equals(assetType)
+                || ASSET_TYPE_PROFILE_AVATAR.equals(assetType)
+                || ASSET_TYPE_QR_CONTACT.equals(assetType)) {
+            return assetType;
+        }
+        throw new BusinessException(PortfolioMessage.PORTFOLIO_ASSET_TYPE_UNSUPPORTED_MESSAGE);
+    }
+
+    /**
+     * 规范化作品集图片素材 MIME 类型并校验大小。
+     *
+     * @param request 素材票据请求
+     * @param assetType 素材类型
      * @return 允许写入 COS policy 的 MIME 类型
      */
-    private String normalizeCoverContentType(MinePortfolioCoverUploadTicketRequest request) {
+    private String normalizePortfolioAssetContentType(
+            MinePortfolioAssetUploadTicketRequest request,
+            String assetType
+    ) {
         if (request == null || request.getFileSize() == null || request.getFileSize() <= 0L) {
-            throw new BusinessException(PortfolioMessage.COVER_REQUIRED_MESSAGE);
+            throw new BusinessException(resolveAssetRequiredMessage(assetType));
         }
-        if (request.getFileSize() > COVER_MAX_BYTES) {
-            throw new BusinessException(PortfolioMessage.COVER_SIZE_LIMIT_MESSAGE);
+        if (request.getFileSize() > PORTFOLIO_IMAGE_ASSET_MAX_BYTES) {
+            throw new BusinessException(resolveAssetSizeLimitMessage(assetType));
         }
         String mimeType = defaultString(request.getMimeType()).toLowerCase(Locale.ROOT);
         if (MIME_IMAGE_JPEG.equals(mimeType) || MIME_IMAGE_JPG.equals(mimeType)) {
@@ -560,22 +636,68 @@ public class MinePortfolioService {
         if (MIME_IMAGE_PNG.equals(mimeType)) {
             return MIME_IMAGE_PNG;
         }
-        throw new BusinessException(PortfolioMessage.COVER_FORMAT_UNSUPPORTED_MESSAGE);
+        throw new BusinessException(resolveAssetFormatUnsupportedMessage(assetType));
     }
 
     /**
-     * 构建作品集封面对象键。
+     * 解析素材为空提示。
+     *
+     * @param assetType 素材类型
+     * @return 提示文案
+     */
+    private String resolveAssetRequiredMessage(String assetType) {
+        if (ASSET_TYPE_PROFILE_AVATAR.equals(assetType)) {
+            return PortfolioMessage.PROFILE_AVATAR_REQUIRED_MESSAGE;
+        }
+        return PortfolioMessage.COVER_REQUIRED_MESSAGE;
+    }
+
+    /**
+     * 解析素材大小超限提示。
+     *
+     * @param assetType 素材类型
+     * @return 提示文案
+     */
+    private String resolveAssetSizeLimitMessage(String assetType) {
+        if (ASSET_TYPE_PROFILE_AVATAR.equals(assetType)) {
+            return PortfolioMessage.PROFILE_AVATAR_SIZE_LIMIT_MESSAGE;
+        }
+        return PortfolioMessage.COVER_SIZE_LIMIT_MESSAGE;
+    }
+
+    /**
+     * 解析素材格式不支持提示。
+     *
+     * @param assetType 素材类型
+     * @return 提示文案
+     */
+    private String resolveAssetFormatUnsupportedMessage(String assetType) {
+        if (ASSET_TYPE_PROFILE_AVATAR.equals(assetType)) {
+            return PortfolioMessage.PROFILE_AVATAR_FORMAT_UNSUPPORTED_MESSAGE;
+        }
+        return PortfolioMessage.COVER_FORMAT_UNSUPPORTED_MESSAGE;
+    }
+
+    /**
+     * 构建作品集图片素材对象键。
      *
      * @param uniqueCode 用户唯一码
      * @param portfolioId 作品集 ID
+     * @param assetType 素材类型
      * @param contentType MIME 类型
      * @param now 当前时间
      * @return COS 对象键
      */
-    private String buildCoverObjectKey(String uniqueCode, Long portfolioId, String contentType, LocalDateTime now) {
+    private String buildPortfolioAssetObjectKey(
+            String uniqueCode,
+            Long portfolioId,
+            String assetType,
+            String contentType,
+            LocalDateTime now
+    ) {
         String extension = MIME_IMAGE_PNG.equals(contentType) ? COVER_EXTENSION_PNG : COVER_EXTENSION_JPG;
         String random = UUID.randomUUID().toString().replace("-", "").substring(0, COVER_RANDOM_LENGTH);
-        String fileName = COVER_FILE_PREFIX
+        String fileName = resolveAssetFilePrefix(assetType)
                 + "-" + portfolioId
                 + "-" + now.format(COVER_FILE_TIME_FORMATTER)
                 + "-" + random
@@ -584,18 +706,37 @@ public class MinePortfolioService {
     }
 
     /**
-     * 构建封面直传票据响应。
+     * 解析素材文件名前缀。
+     *
+     * @param assetType 素材类型
+     * @return 文件名前缀
+     */
+    private String resolveAssetFilePrefix(String assetType) {
+        if (ASSET_TYPE_PROFILE_AVATAR.equals(assetType)) {
+            return PROFILE_AVATAR_FILE_PREFIX;
+        }
+        if (ASSET_TYPE_QR_CONTACT.equals(assetType)) {
+            return QR_CONTACT_FILE_PREFIX;
+        }
+        return COVER_FILE_PREFIX;
+    }
+
+    /**
+     * 构建图片素材直传票据响应。
      *
      * @param request 前端请求
+     * @param assetType 素材类型
      * @param ticket COS 直传票据
-     * @return 封面票据响应
+     * @return 素材票据响应
      */
-    private MinePortfolioCoverUploadTicketResponse buildCoverUploadTicketResponse(
-            MinePortfolioCoverUploadTicketRequest request,
+    private MinePortfolioAssetUploadTicketResponse buildAssetUploadTicketResponse(
+            MinePortfolioAssetUploadTicketRequest request,
+            String assetType,
             CosService.PostUploadTicket ticket
     ) {
-        MinePortfolioCoverUploadTicketResponse response = new MinePortfolioCoverUploadTicketResponse();
+        MinePortfolioAssetUploadTicketResponse response = new MinePortfolioAssetUploadTicketResponse();
         response.setClientId(request.getClientId());
+        response.setAssetType(assetType);
         response.setObjectKey(ticket.objectKey());
         response.setPublicUrl(cosService.publicUrl(ticket.objectKey()));
         response.setUploadUrl(ticket.uploadUrl());
@@ -607,48 +748,134 @@ public class MinePortfolioService {
     }
 
     /**
-     * 解析发布后需要删除的旧正式封面对象键。
+     * 解析发布后需要删除的旧正式作品集图片素材对象键。
      *
      * @param userId 用户 ID
      * @param portfolioId 作品集 ID
-     * @param oldCoverUrl 旧正式封面地址
-     * @param newCoverUrl 即将发布的封面地址
-     * @return 需要删除的 COS 对象键；空字符串表示不删除
+     * @param oldConfig 旧正式配置
+     * @param newConfig 即将发布的新配置
+     * @return 需要删除的 COS 对象键列表
      */
-    private String resolveDeletedPublishedCoverObjectKey(
+    private List<String> resolveDeletedPublishedAssetObjectKeys(
             Long userId,
             Long portfolioId,
-            String oldCoverUrl,
-            String newCoverUrl
+            PortfolioConfigDto oldConfig,
+            PortfolioConfigDto newConfig
     ) {
-        String normalizedOldUrl = defaultString(oldCoverUrl);
-        String normalizedNewUrl = defaultString(newCoverUrl);
-        if (!hasText(normalizedOldUrl) || normalizedOldUrl.equals(normalizedNewUrl)) {
-            return "";
+        if (!hasPortfolioAssetValue(oldConfig)) {
+            return List.of();
         }
         String uniqueCode = miniappAuthService.getUniqueCodeByUserId(userId);
-        String oldObjectKey = extractOwnedCoverObjectKey(normalizedOldUrl, uniqueCode, portfolioId);
-        String newObjectKey = extractOwnedCoverObjectKey(normalizedNewUrl, uniqueCode, portfolioId);
-        if (!hasText(oldObjectKey) || oldObjectKey.equals(newObjectKey)) {
-            return "";
-        }
-        return oldObjectKey;
+        Set<String> oldObjectKeys = collectOwnedPortfolioAssetObjectKeys(oldConfig, uniqueCode, portfolioId);
+        Set<String> newObjectKeys = collectOwnedPortfolioAssetObjectKeys(newConfig, uniqueCode, portfolioId);
+        oldObjectKeys.removeAll(newObjectKeys);
+        return new ArrayList<>(oldObjectKeys);
     }
 
     /**
-     * 从 URL 或对象键中提取当前作品集拥有的封面对象键。
+     * 判断配置中是否包含可能需要清理的作品集图片素材值。
      *
-     * @param value 封面 URL 或对象键
+     * @param config 作品集配置
+     * @return true 表示至少有一个图片素材字段存在
+     */
+    private boolean hasPortfolioAssetValue(PortfolioConfigDto config) {
+        if (config == null) {
+            return false;
+        }
+        if (config.getShare() != null
+                && (hasText(config.getShare().getCoverUrl()) || hasText(config.getShare().getAvatarUrl()))) {
+            return true;
+        }
+        for (PortfolioConfigDto.Component component : safeList(config.getComponents())) {
+            if (component == null) {
+                continue;
+            }
+            Map<String, Object> componentConfig = component.getConfig() == null ? Map.of() : component.getConfig();
+            if (PortfolioComponentTypeDict.PROFILE.getCode().equals(component.getComponentType())) {
+                Map<String, Object> profileConfig = asObjectMap(componentConfig.get(CONFIG_KEY_PROFILE));
+                if (hasText(asString(profileConfig.get(CONFIG_KEY_AVATAR_URL)))) {
+                    return true;
+                }
+            }
+            if (PortfolioComponentTypeDict.QR_CONTACT.getCode().equals(component.getComponentType())
+                    && hasText(asString(componentConfig.get(CONFIG_KEY_QR_URL)))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 收集配置中当前作品集拥有的图片素材对象键。
+     *
+     * @param config 作品集配置
+     * @param uniqueCode 用户唯一码
+     * @param portfolioId 作品集 ID
+     * @return 去重且保序的对象键
+     */
+    private Set<String> collectOwnedPortfolioAssetObjectKeys(
+            PortfolioConfigDto config,
+            String uniqueCode,
+            Long portfolioId
+    ) {
+        Set<String> objectKeys = new LinkedHashSet<>();
+        if (config == null) {
+            return objectKeys;
+        }
+        if (config.getShare() != null) {
+            addOwnedPortfolioAssetObjectKey(objectKeys, config.getShare().getCoverUrl(), uniqueCode, portfolioId);
+            addOwnedPortfolioAssetObjectKey(objectKeys, config.getShare().getAvatarUrl(), uniqueCode, portfolioId);
+        }
+        for (PortfolioConfigDto.Component component : safeList(config.getComponents())) {
+            if (component == null) {
+                continue;
+            }
+            Map<String, Object> componentConfig = component.getConfig() == null ? Map.of() : component.getConfig();
+            if (PortfolioComponentTypeDict.PROFILE.getCode().equals(component.getComponentType())) {
+                Map<String, Object> profileConfig = asObjectMap(componentConfig.get(CONFIG_KEY_PROFILE));
+                addOwnedPortfolioAssetObjectKey(objectKeys, asString(profileConfig.get(CONFIG_KEY_AVATAR_URL)), uniqueCode, portfolioId);
+            }
+            if (PortfolioComponentTypeDict.QR_CONTACT.getCode().equals(component.getComponentType())) {
+                addOwnedPortfolioAssetObjectKey(objectKeys, asString(componentConfig.get(CONFIG_KEY_QR_URL)), uniqueCode, portfolioId);
+            }
+        }
+        return objectKeys;
+    }
+
+    /**
+     * 有归属匹配时加入图片素材对象键。
+     *
+     * @param objectKeys 对象键集合
+     * @param value URL 或对象键
+     * @param uniqueCode 用户唯一码
+     * @param portfolioId 作品集 ID
+     */
+    private void addOwnedPortfolioAssetObjectKey(
+            Set<String> objectKeys,
+            String value,
+            String uniqueCode,
+            Long portfolioId
+    ) {
+        String objectKey = extractOwnedPortfolioAssetObjectKey(value, uniqueCode, portfolioId);
+        if (hasText(objectKey)) {
+            objectKeys.add(objectKey);
+        }
+    }
+
+    /**
+     * 从 URL 或对象键中提取当前作品集拥有的图片素材对象键。
+     *
+     * @param value 素材 URL 或对象键
      * @param uniqueCode 用户唯一码
      * @param portfolioId 作品集 ID
      * @return 匹配到的对象键；未匹配时为空
      */
-    private String extractOwnedCoverObjectKey(String value, String uniqueCode, Long portfolioId) {
+    private String extractOwnedPortfolioAssetObjectKey(String value, String uniqueCode, Long portfolioId) {
         if (!hasText(value) || !hasText(uniqueCode) || portfolioId == null) {
             return "";
         }
         String patternText = String.format(
-                COVER_OBJECT_KEY_PATTERN_TEMPLATE,
+                PORTFOLIO_ASSET_OBJECT_KEY_PATTERN_TEMPLATE,
                 Pattern.quote(uniqueCode),
                 portfolioId
         );
@@ -657,20 +884,22 @@ public class MinePortfolioService {
     }
 
     /**
-     * 发布事务提交后删除旧正式封面。
+     * 发布事务提交后删除旧正式作品集图片素材。
      *
      * @param portfolioId 作品集 ID
-     * @param objectKey COS 对象键
+     * @param objectKeys COS 对象键列表
      */
-    private void deletePublishedCoverAfterCommit(Long portfolioId, String objectKey) {
-        if (!hasText(objectKey)) {
+    private void deletePublishedAssetsAfterCommit(Long portfolioId, List<String> objectKeys) {
+        if (objectKeys == null || objectKeys.isEmpty()) {
             return;
         }
         Runnable deleteTask = () -> {
-            try {
-                cosService.delete(objectKey);
-            } catch (Exception e) {
-                log.warn("作品集旧封面删除失败: portfolioId={}, objectKey={}", portfolioId, objectKey, e);
+            for (String objectKey : objectKeys) {
+                try {
+                    cosService.delete(objectKey);
+                } catch (Exception e) {
+                    log.warn("作品集旧图片素材删除失败: portfolioId={}, objectKey={}", portfolioId, objectKey, e);
+                }
             }
         };
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
@@ -683,6 +912,35 @@ public class MinePortfolioService {
             return;
         }
         deleteTask.run();
+    }
+
+    /**
+     * 转换为字符串键 Map。
+     *
+     * @param value 原始值
+     * @return 字符串键 Map
+     */
+    private Map<String, Object> asObjectMap(Object value) {
+        if (!(value instanceof Map<?, ?> map)) {
+            return Map.of();
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+            if (entry.getKey() != null) {
+                result.put(String.valueOf(entry.getKey()), entry.getValue());
+            }
+        }
+        return result;
+    }
+
+    /**
+     * 转换为字符串。
+     *
+     * @param value 原始值
+     * @return 字符串
+     */
+    private String asString(Object value) {
+        return value == null ? "" : String.valueOf(value).strip();
     }
 
     /**

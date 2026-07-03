@@ -2,9 +2,9 @@ package com.jxc.wefolio.controller;
 
 import com.jxc.wefolio.annotation.MaintainerAccess;
 import com.jxc.wefolio.common.Response;
+import com.jxc.wefolio.dto.MinePortfolioAssetUploadTicketRequest;
+import com.jxc.wefolio.dto.MinePortfolioAssetUploadTicketResponse;
 import com.jxc.wefolio.dto.MinePortfolioCreateRequest;
-import com.jxc.wefolio.dto.MinePortfolioCoverUploadTicketRequest;
-import com.jxc.wefolio.dto.MinePortfolioCoverUploadTicketResponse;
 import com.jxc.wefolio.dto.MinePortfolioDetailResponse;
 import com.jxc.wefolio.dto.MinePortfolioDraftSaveRequest;
 import com.jxc.wefolio.dto.MinePortfolioListResponse;
@@ -69,18 +69,18 @@ public class MinePortfolioController {
     }
 
     /**
-     * 创建作品集封面直传 COS 票据。
+     * 创建作品集图片素材直传 COS 票据。
      *
      * @param portfolioId 作品集 ID
-     * @param request 封面票据创建请求
-     * @return 封面票据响应
+     * @param request 素材票据创建请求
+     * @return 素材票据响应
      */
-    @PostMapping("/api/mine/portfolios/{portfolioId}/cover/upload-ticket")
-    public Response<MinePortfolioCoverUploadTicketResponse> createCoverUploadTicket(
+    @PostMapping("/api/mine/portfolios/{portfolioId}/asset/upload-ticket")
+    public Response<MinePortfolioAssetUploadTicketResponse> createAssetUploadTicket(
             @PathVariable Long portfolioId,
-            @RequestBody MinePortfolioCoverUploadTicketRequest request
+            @RequestBody MinePortfolioAssetUploadTicketRequest request
     ) {
-        return Response.success(minePortfolioService.createCoverUploadTicket(portfolioId, request));
+        return Response.success(minePortfolioService.createAssetUploadTicket(portfolioId, request));
     }
 
     /**

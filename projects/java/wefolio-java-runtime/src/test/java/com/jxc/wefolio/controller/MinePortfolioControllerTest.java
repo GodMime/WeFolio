@@ -2,9 +2,9 @@ package com.jxc.wefolio.controller;
 
 import com.jxc.wefolio.annotation.MaintainerAccess;
 import com.jxc.wefolio.common.Response;
+import com.jxc.wefolio.dto.MinePortfolioAssetUploadTicketRequest;
+import com.jxc.wefolio.dto.MinePortfolioAssetUploadTicketResponse;
 import com.jxc.wefolio.dto.MinePortfolioCreateRequest;
-import com.jxc.wefolio.dto.MinePortfolioCoverUploadTicketRequest;
-import com.jxc.wefolio.dto.MinePortfolioCoverUploadTicketResponse;
 import com.jxc.wefolio.dto.MinePortfolioDetailResponse;
 import com.jxc.wefolio.dto.MinePortfolioDraftSaveRequest;
 import com.jxc.wefolio.dto.MinePortfolioListResponse;
@@ -21,6 +21,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+
+import java.util.Arrays;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
@@ -42,8 +44,8 @@ class MinePortfolioControllerTest {
         MinePortfolioListResponse listResponse = new MinePortfolioListResponse();
         PortfolioComponentLibraryResponse libraryResponse = new PortfolioComponentLibraryResponse();
         MinePortfolioCreateRequest createRequest = new MinePortfolioCreateRequest();
-        MinePortfolioCoverUploadTicketRequest coverTicketRequest = new MinePortfolioCoverUploadTicketRequest();
-        MinePortfolioCoverUploadTicketResponse coverTicketResponse = new MinePortfolioCoverUploadTicketResponse();
+        MinePortfolioAssetUploadTicketRequest assetTicketRequest = new MinePortfolioAssetUploadTicketRequest();
+        MinePortfolioAssetUploadTicketResponse assetTicketResponse = new MinePortfolioAssetUploadTicketResponse();
         MinePortfolioDraftSaveRequest draftRequest = new MinePortfolioDraftSaveRequest();
         MinePortfolioPublishRequest publishRequest = new MinePortfolioPublishRequest();
         MinePortfolioShareRecordRequest shareRequest = new MinePortfolioShareRecordRequest();
@@ -51,7 +53,7 @@ class MinePortfolioControllerTest {
         when(minePortfolioService.listPortfolios("USER")).thenReturn(listResponse);
         when(minePortfolioService.getComponentLibrary()).thenReturn(libraryResponse);
         when(minePortfolioService.createStandardPersonal(createRequest)).thenReturn(detailResponse);
-        when(minePortfolioService.createCoverUploadTicket(88L, coverTicketRequest)).thenReturn(coverTicketResponse);
+        when(minePortfolioService.createAssetUploadTicket(88L, assetTicketRequest)).thenReturn(assetTicketResponse);
         when(minePortfolioService.getDetail(88L)).thenReturn(detailResponse);
         when(minePortfolioService.saveDraft(88L, draftRequest)).thenReturn(detailResponse);
         when(minePortfolioService.preview(88L)).thenReturn(detailResponse);
@@ -60,7 +62,7 @@ class MinePortfolioControllerTest {
         Response<MinePortfolioListResponse> listed = controller.list("USER");
         Response<PortfolioComponentLibraryResponse> library = controller.componentLibrary();
         Response<MinePortfolioDetailResponse> created = controller.createStandardPersonal(createRequest);
-        Response<MinePortfolioCoverUploadTicketResponse> coverTicket = controller.createCoverUploadTicket(88L, coverTicketRequest);
+        Response<MinePortfolioAssetUploadTicketResponse> assetTicket = controller.createAssetUploadTicket(88L, assetTicketRequest);
         Response<MinePortfolioDetailResponse> detail = controller.detail(88L);
         Response<MinePortfolioDetailResponse> saved = controller.saveDraft(88L, draftRequest);
         Response<MinePortfolioDetailResponse> preview = controller.preview(88L);
@@ -74,9 +76,9 @@ class MinePortfolioControllerTest {
                 new Class<?>[] {MinePortfolioCreateRequest.class},
                 "/api/mine/portfolios/standard-personal");
         assertGetMapping("detail", new Class<?>[] {Long.class}, "/api/mine/portfolios/{portfolioId}");
-        assertPostMapping("createCoverUploadTicket",
-                new Class<?>[] {Long.class, MinePortfolioCoverUploadTicketRequest.class},
-                "/api/mine/portfolios/{portfolioId}/cover/upload-ticket");
+        assertPostMapping("createAssetUploadTicket",
+                new Class<?>[] {Long.class, MinePortfolioAssetUploadTicketRequest.class},
+                "/api/mine/portfolios/{portfolioId}/asset/upload-ticket");
         assertPutMapping("saveDraft",
                 new Class<?>[] {Long.class, MinePortfolioDraftSaveRequest.class},
                 "/api/mine/portfolios/{portfolioId}/draft");
@@ -91,10 +93,12 @@ class MinePortfolioControllerTest {
                 .getParameters()[0].isAnnotationPresent(RequestParam.class)).isTrue();
         assertThat(MinePortfolioController.class.getMethod("detail", Long.class)
                 .getParameters()[0].isAnnotationPresent(PathVariable.class)).isTrue();
+        assertThat(Arrays.stream(MinePortfolioController.class.getMethods()).map(method -> method.getName()))
+                .doesNotContain("createCoverUploadTicket");
         assertThat(listed.getData()).isSameAs(listResponse);
         assertThat(library.getData()).isSameAs(libraryResponse);
         assertThat(created.getData()).isSameAs(detailResponse);
-        assertThat(coverTicket.getData()).isSameAs(coverTicketResponse);
+        assertThat(assetTicket.getData()).isSameAs(assetTicketResponse);
         assertThat(detail.getData()).isSameAs(detailResponse);
         assertThat(saved.getData()).isSameAs(detailResponse);
         assertThat(preview.getData()).isSameAs(detailResponse);

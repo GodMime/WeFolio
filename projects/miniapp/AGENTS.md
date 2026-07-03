@@ -277,7 +277,7 @@ if (!hasLocalToken()) {
 - 消息筛选、团队角色选择、权限开关等横向控件优先使用 flex，避免 Skyline 下 grid 兼容差异。
 - 需要动画展开的区域保持节点常驻，用 `max-height/opacity/transform/pointer-events` 切换，避免 `wx:if` 导致无法过渡。
 - 底部主导航固定为“档期 / 作品 / 作品集 / 我的”，图标 + 文字，当前仅“我的”可用。
-- 静态系统小图放在小程序本地包 `assets/system/`，页面和脚本使用 `/assets/system/...` 引用；代码包内图片和音频资源总量需控制在 200KB 内。超过 200KB 的大图使用 `https://cdn.we-folio.dingchenyong.top/system/...` 远程加载并依赖微信/CDN 缓存。当前本地图包括访客记录、团队、消息和作品空态图，登录背景与 logo 走 CDN；不要退回旧 OSS URL、COS 源站域名或无 `/system/` 的路径。
+- 静态系统小图放在小程序本地包 `assets/system/`，页面和脚本使用 `/assets/system/...` 引用；代码包内图片和音频资源总量需控制在 200KB 内。超过 200KB 的大图使用 `https://cdn2.we-folio.dingchenyong.top/system/...` 远程加载并依赖微信/CDN 缓存。当前本地图包括访客记录、团队、消息和作品空态图，登录背景与 logo 走 CDN；不要退回旧 OSS URL、COS 源站域名或无 `/system/` 的路径。
 - 按钮和行项目要保证足够点击区域；用于删除、返回等图标触发器可使用 `view` 加 `aria-role="button"` 和清晰 `aria-label`。
 
 改 WXML/WXSS 时，优先运行相关 layout 测试，因为它们锁定了 Skyline 兼容、动画挂载、按钮宽度、静态资源和图标结构。

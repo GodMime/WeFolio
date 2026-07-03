@@ -2,7 +2,6 @@ const { request } = require('../../utils/request')
 const { handleAuthRequired, hasLocalToken } = require('../../utils/session')
 
 const PORTFOLIOS_API_URL = '/api/mine/portfolios'
-const STANDARD_PERSONAL_API_URL = '/api/mine/portfolios/standard-personal'
 const EDIT_PAGE_URL = '/pages/portfolio-standard-edit/portfolio-standard-edit'
 const VISITOR_PORTFOLIO_SHARE_PATH_PREFIX = '/pages/visitor-portfolio/visitor-portfolio?shareCode='
 const UNAVAILABLE_PAGE_URL = '/pages/portfolio-unavailable/portfolio-unavailable'
@@ -130,15 +129,7 @@ Page({
   },
 
   handleCreateStandardPersonal() {
-    request({
-      url: STANDARD_PERSONAL_API_URL,
-      method: 'POST',
-      data: {}
-    }).then((response) => {
-      wx.navigateTo({ url: `${EDIT_PAGE_URL}?portfolioId=${response.portfolioId}` })
-    }).catch((error) => {
-      wx.showToast({ title: error.message || '创建失败', icon: 'none' })
-    })
+    wx.navigateTo({ url: EDIT_PAGE_URL })
   },
 
   handleUnavailableTap(event) {

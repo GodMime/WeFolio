@@ -7,13 +7,16 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * 作品集封面直传 COS 票据响应。
+ * 作品集图片素材直传 COS 票据响应。
  */
 @Data
-public class MinePortfolioCoverUploadTicketResponse {
+public class MinePortfolioAssetUploadTicketResponse {
 
     /** 前端本地临时 ID */
     private String clientId;
+
+    /** 作品集素材类型 */
+    private String assetType;
 
     /** COS 对象键 */
     private String objectKey;
@@ -24,7 +27,7 @@ public class MinePortfolioCoverUploadTicketResponse {
     /** COS 表单上传地址 */
     private String uploadUrl;
 
-    /** 封面 MIME 类型 */
+    /** 图片 MIME 类型 */
     private String contentType;
 
     /** COS 表单字段，前端原样传给 wx.uploadFile 的 formData */

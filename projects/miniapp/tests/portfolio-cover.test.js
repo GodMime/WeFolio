@@ -4,11 +4,13 @@ const test = require('node:test')
 
 function loadPortfolioCoverUtils(fakeRequest) {
   const utilPath = path.join(__dirname, '../utils/portfolio-cover.js')
+  const assetsPath = path.join(__dirname, '../utils/portfolio-assets.js')
   const requestPath = path.join(__dirname, '../utils/request.js')
   const requestCacheKey = require.resolve(requestPath)
   const originalRequestCache = require.cache[requestCacheKey]
 
   delete require.cache[require.resolve(utilPath)]
+  delete require.cache[require.resolve(assetsPath)]
   require.cache[requestCacheKey] = {
     id: requestPath,
     filename: requestPath,
@@ -32,6 +34,9 @@ function wxApiWithSizes(sizes, hooks = {}) {
     getFileSystemManager() {
       return {
         statSync(filePath) {
+          if (hooks.throwStatFor && hooks.throwStatFor.includes(filePath)) {
+            throw new Error('file missing')
+          }
           return { size: sizes[filePath] || 0 }
         }
       }
@@ -86,7 +91,40 @@ test('portfolio cover compresses oversized image and rejects if still above 300K
   )
 })
 
-test('portfolio cover uploads local cover through backend ticket and returns public url', async () => {
+test('portfolio cover compression preserves aspect ratio by omitting fixed height', async () => {
+  const { preparePortfolioCoverFile } = loadPortfolioCoverUtils(() => Promise.resolve({}))
+  const compressOptions = []
+  const wxApi = wxApiWithSizes({
+    '/tmp/wide-cover.jpg': 480 * 1024,
+    '/tmp/portfolio-cover-compressed.jpg': 180 * 1024
+  }, {
+    onCompress(options) {
+      compressOptions.push(options)
+    }
+  })
+
+  const prepared = await preparePortfolioCoverFile('/tmp/wide-cover.jpg', { wxApi })
+
+  assert.equal(prepared.filePath, '/tmp/portfolio-cover-compressed.jpg')
+  assert.equal(compressOptions[0].compressedWidth, 1080)
+  assert.equal(Object.prototype.hasOwnProperty.call(compressOptions[0], 'compressedHeight'), false)
+})
+
+test('portfolio cover stat failure falls back to compression instead of throwing raw file error', async () => {
+  const { preparePortfolioCoverFile } = loadPortfolioCoverUtils(() => Promise.resolve({}))
+  const wxApi = wxApiWithSizes({
+    '/tmp/portfolio-cover-compressed.jpg': 180 * 1024
+  }, {
+    throwStatFor: ['/tmp/missing-cover.jpg']
+  })
+
+  const prepared = await preparePortfolioCoverFile('/tmp/missing-cover.jpg', { wxApi })
+
+  assert.equal(prepared.filePath, '/tmp/portfolio-cover-compressed.jpg')
+  assert.equal(prepared.fileSize, 180 * 1024)
+})
+
+test('portfolio cover uploads local cover through unified asset ticket and returns public url', async () => {
   const requests = []
   const uploads = []
   const { uploadPortfolioCover } = loadPortfolioCoverUtils((options) => {
@@ -108,8 +146,9 @@ test('portfolio cover uploads local cover through backend ticket and returns pub
 
   const url = await uploadPortfolioCover(88, '/tmp/cover.jpg', { wxApi })
 
-  assert.equal(requests[0].url, '/api/mine/portfolios/88/cover/upload-ticket')
+  assert.equal(requests[0].url, '/api/mine/portfolios/88/asset/upload-ticket')
   assert.equal(requests[0].method, 'POST')
+  assert.equal(requests[0].data.assetType, 'COVER')
   assert.equal(requests[0].data.fileSize, 180 * 1024)
   assert.equal(requests[0].data.mimeType, 'image/jpeg')
   assert.equal(uploads[0].url, 'https://cos-upload.example.com')
@@ -118,4 +157,41 @@ test('portfolio cover uploads local cover through backend ticket and returns pub
     key: 'WFA3B1E7A2/protfolio/cover-88-20260702120000-a1b2c3d4.jpg'
   })
   assert.equal(url, 'https://cos.example.com/WFA3B1E7A2/protfolio/cover-88-20260702120000-a1b2c3d4.jpg')
+})
+
+test('portfolio qr contact uploads local image through unified asset ticket and returns public url', async () => {
+  const requests = []
+  const uploads = []
+  const { uploadPortfolioImageAsset, PORTFOLIO_ASSET_TYPES } = loadPortfolioCoverUtils((options) => {
+    requests.push(options)
+    return Promise.resolve({
+      uploadUrl: 'https://cos-upload.example.com',
+      objectKey: 'WFA3B1E7A2/protfolio/qr-contact-88-20260702120000-a1b2c3d4.jpg',
+      publicUrl: 'https://cos.example.com/WFA3B1E7A2/protfolio/qr-contact-88-20260702120000-a1b2c3d4.jpg',
+      formData: { key: 'WFA3B1E7A2/protfolio/qr-contact-88-20260702120000-a1b2c3d4.jpg' }
+    })
+  })
+  const wxApi = wxApiWithSizes({
+    '/tmp/qr.jpg': 96 * 1024
+  }, {
+    onUpload(options) {
+      uploads.push(options)
+    }
+  })
+
+  const url = await uploadPortfolioImageAsset(88, '/tmp/qr.jpg', {
+    wxApi,
+    assetType: PORTFOLIO_ASSET_TYPES.QR_CONTACT,
+    assetLabel: '二维码图片',
+    clientIdPrefix: 'qr-contact'
+  })
+
+  assert.equal(requests[0].url, '/api/mine/portfolios/88/asset/upload-ticket')
+  assert.equal(requests[0].method, 'POST')
+  assert.equal(requests[0].data.assetType, 'QR_CONTACT')
+  assert.equal(requests[0].data.fileSize, 96 * 1024)
+  assert.equal(requests[0].data.mimeType, 'image/jpeg')
+  assert.equal(uploads[0].url, 'https://cos-upload.example.com')
+  assert.equal(uploads[0].filePath, '/tmp/qr.jpg')
+  assert.equal(url, 'https://cos.example.com/WFA3B1E7A2/protfolio/qr-contact-88-20260702120000-a1b2c3d4.jpg')
 })

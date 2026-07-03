@@ -5,6 +5,7 @@ import com.jxc.wefolio.dict.PortfolioPublicationStatusDict;
 import com.jxc.wefolio.dict.PortfolioStatusDict;
 import com.jxc.wefolio.dict.PortfolioTemplateTypeDict;
 import com.jxc.wefolio.dict.ScheduleStatusDict;
+import com.jxc.wefolio.dto.PortfolioRenderDto;
 import com.jxc.wefolio.dto.VisitorPortfolioResponse;
 import com.jxc.wefolio.dto.VisitorPortfolioScheduleResponse;
 import com.jxc.wefolio.entity.PortfolioEntity;
@@ -26,6 +27,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -52,6 +54,10 @@ class VisitorPortfolioServiceTest {
     @Mock
     private PortfolioVisitService portfolioVisitService;
 
+    /** 作品集渲染服务模拟 */
+    @Mock
+    private PortfolioRenderService portfolioRenderService;
+
     @Test
     void getPortfolioShouldRejectUnpublishedPortfolio() {
         PortfolioEntity portfolio = publishedPortfolio();
@@ -69,6 +75,11 @@ class VisitorPortfolioServiceTest {
         when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
         org.mockito.Mockito.doThrow(new BusinessException("积分余额不足，请充值后再试"))
                 .when(pointService).assertCanConsume(any(), any(), any(Integer.class));
+        PortfolioRenderDto renderData = new PortfolioRenderDto();
+        renderData.setUnderMaintenance(true);
+        renderData.setComponents(List.of());
+        when(portfolioRenderService.render(eq(portfolio), any(), eq(false), eq(true), any(), eq(null)))
+                .thenReturn(renderData);
 
         VisitorPortfolioResponse response = service().getPortfolio("PF001", "visitor-a", "WECHAT_SHARE_CARD", "open-1");
 
@@ -76,6 +87,7 @@ class VisitorPortfolioServiceTest {
         assertThat(response.getMaintenanceText().getPrimary()).isEqualTo("UNDER MAINTENANCE");
         assertThat(response.getMaintenanceText().getSecondary()).isEqualTo("维护中");
         assertThat(response.getVisitRecordId()).isNull();
+        assertThat(response.getRenderData()).isSameAs(renderData);
         verify(portfolioVisitService, never()).recordOpen(any(), any(), any(), any());
     }
 
@@ -86,6 +98,11 @@ class VisitorPortfolioServiceTest {
         record.setId(33L);
         when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
         when(portfolioVisitService.recordOpen(portfolio, "visitor-a", "WECHAT_SHARE_CARD", "open-1")).thenReturn(record);
+        PortfolioRenderDto renderData = new PortfolioRenderDto();
+        renderData.setPreview(false);
+        renderData.setVisitRecordId(33L);
+        when(portfolioRenderService.render(eq(portfolio), any(), eq(false), eq(false), eq(null), eq(33L)))
+                .thenReturn(renderData);
 
         VisitorPortfolioResponse response = service().getPortfolio("PF001", "visitor-a", "WECHAT_SHARE_CARD", "open-1");
 
@@ -95,6 +112,7 @@ class VisitorPortfolioServiceTest {
         assertThat(response.getTitle()).isEqualTo("林安婚礼司仪");
         assertThat(response.getConfig()).isNotNull();
         assertThat(response.getVisitRecordId()).isEqualTo(33L);
+        assertThat(response.getRenderData()).isSameAs(renderData);
     }
 
     @Test
@@ -152,7 +170,8 @@ class VisitorPortfolioServiceTest {
                 portfolioEntityMapper,
                 scheduleEntityMapper,
                 pointService,
-                portfolioVisitService
+                portfolioVisitService,
+                portfolioRenderService
         );
     }
 

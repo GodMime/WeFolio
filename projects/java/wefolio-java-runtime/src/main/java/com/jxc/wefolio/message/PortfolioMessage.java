@@ -44,11 +44,26 @@ public interface PortfolioMessage {
     /** 封面图片格式不支持提示 */
     String COVER_FORMAT_UNSUPPORTED_MESSAGE = "封面图片仅支持 JPG 或 PNG";
 
+    /** 作品集素材类型不支持提示 */
+    String PORTFOLIO_ASSET_TYPE_UNSUPPORTED_MESSAGE = "作品集素材类型不支持";
+
+    /** 头像图片为空提示 */
+    String PROFILE_AVATAR_REQUIRED_MESSAGE = "请选择头像图片";
+
+    /** 头像图片大小超限提示 */
+    String PROFILE_AVATAR_SIZE_LIMIT_MESSAGE = "头像图片不能超过 300KB";
+
+    /** 头像图片格式不支持提示 */
+    String PROFILE_AVATAR_FORMAT_UNSUPPORTED_MESSAGE = "头像图片仅支持 JPG 或 PNG";
+
     /** 分享渠道为空提示 */
     String SHARE_CHANNEL_REQUIRED_MESSAGE = "分享渠道不能为空";
 
     /** 作品集不存在提示 */
     String PORTFOLIO_NOT_FOUND_MESSAGE = "作品集不存在";
+
+    /** 作品集并发更新冲突提示 */
+    String PORTFOLIO_CONCURRENT_UPDATE_MESSAGE = "并发冲突，请刷新重试";
 
     /** 作品集维护能力不可用提示 */
     String PORTFOLIO_MAINTENANCE_UNAVAILABLE_MESSAGE = "当前作品集暂未开放维护";
@@ -97,6 +112,27 @@ public interface PortfolioMessage {
 
     /** 文字说明内容为空提示 */
     String TEXT_SECTION_CONTENT_REQUIRED_MESSAGE = "文字说明内容不能为空";
+
+    /** 作品集展示标签名称为空提示 */
+    String DISPLAY_TAG_NAME_REQUIRED_MESSAGE = "作品集展示标签名称不能为空";
+
+    /** 作品集展示标签名称重复提示 */
+    String DISPLAY_TAG_NAME_DUPLICATE_MESSAGE = "作品集展示标签名称不能重复";
+
+    /** 作品集展示标签标识重复提示 */
+    String DISPLAY_TAG_KEY_DUPLICATE_MESSAGE = "作品集展示标签标识不能重复";
+
+    /** 档期查询范围类型不支持提示 */
+    String SCHEDULE_QUERY_RANGE_UNSUPPORTED_MESSAGE = "档期查询范围不支持";
+
+    /** 档期查询未来天数无效提示 */
+    String SCHEDULE_QUERY_FUTURE_DAYS_INVALID_MESSAGE = "档期查询未来天数必须大于 0";
+
+    /** 档期查询日期格式无效提示 */
+    String SCHEDULE_QUERY_DATE_INVALID_MESSAGE = "档期查询日期格式不正确";
+
+    /** 档期查询日期范围无效提示 */
+    String SCHEDULE_QUERY_DATE_RANGE_INVALID_MESSAGE = "档期查询开始日期不能晚于结束日期";
 
     /** 展示作品为空提示 */
     String DISPLAY_WORK_REQUIRED_MESSAGE = "请选择要展示的作品";

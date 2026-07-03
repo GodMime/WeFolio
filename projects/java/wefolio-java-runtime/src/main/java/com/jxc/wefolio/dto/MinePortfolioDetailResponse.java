@@ -37,4 +37,7 @@ public class MinePortfolioDetailResponse {
 
     /** 当前返回配置 */
     private PortfolioConfigDto config;
+
+    /** 预览渲染模型 */
+    private PortfolioRenderDto renderData;
 }

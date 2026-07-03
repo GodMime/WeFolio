@@ -23,7 +23,6 @@
             </view>
             <view class="cover-actions">
               <button class="cover-action-button" bindtap="handleChooseShareCover">{{config.share.coverUrl ? '更换' : '选择'}}</button>
-              <button wx:if="{{config.share.coverUrl}}" class="cover-action-button remove" bindtap="handleRemoveShareCover">移除</button>
             </view>
           </view>
         </view>
@@ -70,13 +69,13 @@
               <button class="component-remove-button" data-key="{{item.componentKey}}" catchtap="handleRemoveComponent">删除</button>
             </view>
             <view
-              class="component-row {{draggingIndex === index ? 'dragging' : ''}} {{dragTargetIndex === index && draggingIndex !== -1 ? 'drag-target' : ''}} {{item.componentType === 'CAROUSEL' ? 'editable' : ''}}"
+              class="component-row {{draggingIndex === index ? 'dragging' : ''}} {{dragTargetIndex === index && draggingIndex !== -1 ? 'drag-target' : ''}} {{item.componentType === 'CAROUSEL' || item.componentType === 'PROFILE' || item.componentType === 'QR_CONTACT' || item.componentType === 'WORK_GRID' || item.componentType === 'WORK_LIST' ? 'editable' : ''}}"
               style="{{draggingIndex === index ? componentDragStyle : ''}}"
               data-key="{{item.componentKey}}"
               data-type="{{item.componentType}}"
               catchtap="handleComponentTap"
-              aria-role="{{item.componentType === 'CAROUSEL' ? 'button' : 'text'}}"
-              aria-label="{{item.componentType === 'CAROUSEL' ? '编辑轮播图作品' : item.name}}"
+              aria-role="{{item.componentType === 'CAROUSEL' || item.componentType === 'PROFILE' || item.componentType === 'QR_CONTACT' || item.componentType === 'WORK_GRID' || item.componentType === 'WORK_LIST' ? 'button' : 'text'}}"
+              aria-label="{{item.componentType === 'CAROUSEL' ? '编辑轮播图作品' : item.componentType === 'PROFILE' ? '编辑个人资料' : item.componentType === 'QR_CONTACT' ? '编辑二维码联系' : item.componentType === 'WORK_GRID' || item.componentType === 'WORK_LIST' ? '编辑作品集展示标签' : item.name}}"
             >
               <view class="component-order">{{index + 1}}</view>
               <view class="component-copy">
@@ -84,7 +83,7 @@
                 <view class="component-meta">{{item.componentType}} · {{item.componentKey}}</view>
               </view>
               <view class="component-drag-handle"></view>
-              <view class="component-row-arrow {{item.componentType === 'CAROUSEL' ? '' : 'placeholder'}}">{{item.componentType === 'CAROUSEL' ? '›' : ''}}</view>
+              <view class="component-row-arrow {{item.componentType === 'CAROUSEL' || item.componentType === 'PROFILE' || item.componentType === 'QR_CONTACT' || item.componentType === 'WORK_GRID' || item.componentType === 'WORK_LIST' ? '' : 'placeholder'}}">{{item.componentType === 'CAROUSEL' || item.componentType === 'PROFILE' || item.componentType === 'QR_CONTACT' || item.componentType === 'WORK_GRID' || item.componentType === 'WORK_LIST' ? '›' : ''}}</view>
             </view>
           </view>
         </view>
@@ -92,6 +91,7 @@
         <view class="component-hints">
           <view class="hint-chip">轮播图</view>
           <view class="hint-chip">双列作品列表</view>
+          <view class="hint-chip">单列作品列表</view>
           <view class="hint-chip">二维码联系</view>
           <view class="hint-chip">预留联系信息</view>
         </view>
@@ -175,6 +175,202 @@
       <view class="component-work-actions">
         <button class="component-work-cancel" catchtap="handleCloseComponentWorkSheet">取消</button>
         <button class="component-work-confirm" catchtap="handleConfirmComponentWorks">完成</button>
+      </view>
+    </view>
+  </view>
+
+  <view class="profile-sheet-mask component-work-picker-mask {{profileSheetVisible ? 'visible' : ''}}" catchtap="handleCloseProfileSheet">
+    <view class="profile-sheet-panel component-work-picker-panel" catchtap="noop">
+      <view class="component-picker-grabber"></view>
+      <view class="component-picker-heading">
+        <view class="component-picker-title">编辑个人资料</view>
+        <button class="profile-refresh-button" catchtap="handleRefreshProfileFromBase" loading="{{profileSheetLoading}}">从基础资料刷新</button>
+      </view>
+
+      <view wx:if="{{profileSheetErrorText}}" class="component-work-state error profile-sheet-error">{{profileSheetErrorText}}</view>
+
+      <scroll-view class="profile-form-scroll" scroll-y type="list">
+        <view class="profile-form-list-content">
+          <view class="profile-sheet-fields-panel">
+            <view class="form-row">
+              <view class="profile-avatar-editor">
+                <view class="profile-avatar-preview" catchtap="handleChooseProfileAvatar">
+                  <image wx:if="{{profileForm.avatarUrl}}" src="{{profileForm.avatarUrl}}" mode="aspectFill"></image>
+                  <view wx:else class="profile-avatar-placeholder">头像</view>
+                </view>
+                <view class="profile-avatar-copy">
+                  <view class="field-label">头像</view>
+                  <view class="profile-avatar-state">{{profileForm.avatarUrl ? '已选择' : '未选择'}}</view>
+                </view>
+                <button class="profile-avatar-button" catchtap="handleChooseProfileAvatar">更换头像</button>
+              </view>
+            </view>
+            <view class="form-row">
+              <view class="field-heading">
+                <view class="field-label">姓名 / 艺名</view>
+                <view class="profile-field-limit">{{profileFieldCounters.displayName}}</view>
+              </view>
+              <input class="input profile-sheet-input" value="{{profileForm.displayName}}" data-field="displayName" bindinput="handleProfileInput" maxlength="50" />
+            </view>
+            <view class="form-row">
+              <view class="field-heading">
+                <view class="field-label">职业身份</view>
+                <view class="profile-field-limit">{{profileFieldCounters.profession}}</view>
+              </view>
+              <input class="input profile-sheet-input" value="{{profileForm.profession}}" data-field="profession" bindinput="handleProfileInput" maxlength="50" />
+            </view>
+            <view class="form-row">
+              <view class="field-heading">
+                <view class="field-label">服务城市</view>
+                <view class="profile-field-limit">{{profileFieldCounters.city}}</view>
+              </view>
+              <input class="input profile-sheet-input" value="{{profileForm.city}}" data-field="city" bindinput="handleProfileInput" maxlength="50" />
+            </view>
+            <view class="form-row">
+              <view class="field-heading">
+                <view class="field-label">个人简介</view>
+                <view class="profile-field-limit">{{profileFieldCounters.bio}}</view>
+              </view>
+              <textarea class="input textarea profile-sheet-textarea" value="{{profileForm.bio}}" data-field="bio" bindinput="handleProfileInput" maxlength="500"></textarea>
+            </view>
+            <view class="form-row">
+              <view class="field-heading">
+                <view class="field-label">个人标签</view>
+                <view class="profile-field-limit">{{profileFieldCounters.tagsText}}</view>
+              </view>
+              <input class="input profile-sheet-input" placeholder="多个标签用逗号分隔" value="{{profileForm.tagsText}}" data-field="tagsText" bindinput="handleProfileInput" maxlength="100" />
+            </view>
+            <view class="form-row">
+              <view class="field-heading">
+                <view class="field-label">微信二维码地址</view>
+                <view class="profile-field-limit">{{profileFieldCounters.wechatQrUrl}}</view>
+              </view>
+              <input class="input profile-sheet-input" placeholder="二维码图片 URL" value="{{profileForm.wechatQrUrl}}" data-field="wechatQrUrl" bindinput="handleProfileInput" maxlength="512" />
+            </view>
+          </view>
+
+          <view class="profile-form-section">
+            <view class="profile-form-section-title">展示字段</view>
+            <view class="profile-visibility-list">
+              <view
+                wx:for="{{profileVisibleOptions}}"
+                wx:key="field"
+                class="profile-visibility-option"
+              >
+                <view class="profile-visibility-label">{{item.label}}</view>
+                <switch checked="{{item.checked}}" color="#17202a" data-field="{{item.field}}" bindchange="handleProfileVisibleFieldChange" />
+              </view>
+            </view>
+          </view>
+        </view>
+      </scroll-view>
+
+      <view class="component-work-actions">
+        <button class="component-work-cancel" catchtap="handleCloseProfileSheet">取消</button>
+        <button class="component-work-confirm" catchtap="handleConfirmProfileSheet">完成</button>
+      </view>
+    </view>
+  </view>
+
+  <view class="display-group-picker-mask {{displayGroupSheetVisible ? 'visible' : ''}}" catchtap="handleCloseDisplayGroupSheet">
+    <view class="display-group-picker-panel" catchtap="noop">
+      <view class="component-picker-grabber"></view>
+      <view class="component-picker-heading">
+        <view class="component-picker-title">作品集展示标签</view>
+        <view class="component-picker-count">{{displayGroupOptions.length}} 个标签</view>
+      </view>
+
+      <view class="display-group-actions">
+        <button class="display-group-copy-button" catchtap="handleCopyWorkTagsToDisplayGroups">一键复制作品标签</button>
+      </view>
+
+      <view wx:if="{{displayGroupLoading}}" class="component-work-state">处理中...</view>
+      <view wx:elif="{{displayGroupErrorText}}" class="component-work-state error">{{displayGroupErrorText}}</view>
+
+      <scroll-view class="display-group-scroll" scroll-y type="list">
+        <view class="display-group-list-content">
+          <view
+            wx:for="{{displayGroupOptions}}"
+            wx:key="groupKey"
+            class="display-group-option {{item.active ? 'active' : ''}}"
+            data-group-key="{{item.groupKey}}"
+            catchtap="handleSelectDisplayGroup"
+            aria-role="button"
+            aria-label="选择{{item.name}}"
+          >
+            <view class="display-group-name">{{item.name}}</view>
+            <view class="display-group-count">{{item.countText}}</view>
+          </view>
+        </view>
+      </scroll-view>
+
+      <view wx:if="{{workTagOptions.length}}" class="work-tag-import-section">
+        <view class="work-tag-import-title">按作品标签导入作品</view>
+        <view class="work-tag-import-list">
+          <button
+            wx:for="{{workTagOptions}}"
+            wx:key="id"
+            class="work-tag-import-button"
+            data-tag-id="{{item.id}}"
+            catchtap="handleImportWorksByTag"
+          >{{item.name}}</button>
+        </view>
+      </view>
+
+      <view class="component-work-actions">
+        <button class="component-work-cancel" catchtap="handleCloseDisplayGroupSheet">关闭</button>
+      </view>
+    </view>
+  </view>
+
+  <view class="qr-contact-sheet-mask component-work-picker-mask {{qrContactSheetVisible ? 'visible' : ''}}" catchtap="handleCloseQrContactSheet">
+    <view class="qr-contact-sheet-panel component-work-picker-panel" catchtap="noop">
+      <view class="component-picker-grabber"></view>
+      <view class="component-picker-heading">
+        <view class="component-picker-title">编辑二维码联系</view>
+        <view class="component-picker-count">{{qrContactForm.qrUrlSource === 'CUSTOM' ? '自定义' : '资料'}}</view>
+      </view>
+
+      <scroll-view class="profile-form-scroll" scroll-y type="list">
+        <view class="profile-form-list-content">
+          <view class="profile-sheet-fields-panel">
+            <view class="form-row">
+              <view class="field-heading">
+                <view class="field-label">标题</view>
+              </view>
+              <input class="input profile-sheet-input" value="{{qrContactForm.title}}" data-field="title" bindinput="handleQrContactInput" maxlength="50" />
+            </view>
+            <view class="form-row">
+              <view class="field-heading">
+                <view class="field-label">说明</view>
+              </view>
+              <textarea class="input textarea profile-sheet-textarea" value="{{qrContactForm.description}}" data-field="description" bindinput="handleQrContactInput" maxlength="120"></textarea>
+            </view>
+            <view class="form-row">
+              <view class="field-heading">
+                <view class="field-label">二维码来源</view>
+              </view>
+              <view class="qr-source-tabs">
+                <button class="qr-source-tab {{qrContactForm.qrUrlSource !== 'CUSTOM' ? 'active' : ''}}" catchtap="handleUseProfileQrContact">个人资料</button>
+                <button class="qr-source-tab {{qrContactForm.qrUrlSource === 'CUSTOM' ? 'active' : ''}}" catchtap="handleUseCustomQrContact">自定义图片</button>
+              </view>
+            </view>
+            <view wx:if="{{qrContactForm.qrUrlSource === 'CUSTOM'}}" class="form-row">
+              <view class="qr-contact-image-editor">
+                <view class="qr-contact-image-preview" catchtap="handleChooseQrContactImage">
+                  <image wx:if="{{qrContactForm.qrUrl}}" src="{{qrContactForm.qrUrl}}" mode="aspectFit"></image>
+                  <view wx:else class="qr-contact-image-placeholder">二维码</view>
+                </view>
+                <button class="profile-avatar-button" catchtap="handleChooseQrContactImage">{{qrContactForm.qrUrl ? '更换图片' : '选择图片'}}</button>
+              </view>
+            </view>
+          </view>
+        </view>
+      </scroll-view>
+
+      <view class="component-work-actions">
+        <button class="component-work-cancel" catchtap="handleCloseQrContactSheet">取消</button>
+        <button class="component-work-confirm" catchtap="handleConfirmQrContactSheet">完成</button>
       </view>
     </view>
   </view>

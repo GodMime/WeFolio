@@ -1,14 +1,141 @@
 <view class="page-shell portfolio-preview-page">
-  <navigation-bar title="预览" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+  <navigation-bar title="{{portfolio.title || '预览'}}" color="#17202a" background="rgba(255, 255, 255, 0.94)"></navigation-bar>
+
   <scroll-view scroll-y class="preview-scroll">
-    <view class="preview-banner">
-      <view class="preview-title">{{config.share.title || '未命名作品集'}}</view>
-      <view class="preview-desc">{{config.share.intro}}</view>
+    <view class="preview-toolbar">
+      <button class="preview-back-button" bindtap="handleBackToEditor">返回编辑</button>
       <view class="preview-note">预览模式：禁用真实提交，不统计访问，不扣积分。</view>
     </view>
-    <view wx:for="{{config.components}}" wx:key="componentKey" class="preview-component">
-      <view class="component-type">{{item.componentType}}</view>
-      <view>{{item.config.title || item.name || '组件'}}</view>
-    </view>
+
+    <block wx:if="{{loading}}">
+      <view class="preview-skeleton">
+        <view class="preview-skeleton-hero"></view>
+        <view class="preview-skeleton-line short"></view>
+        <view class="preview-skeleton-line"></view>
+        <view class="preview-skeleton-grid">
+          <view class="preview-skeleton-tile"></view>
+          <view class="preview-skeleton-tile"></view>
+          <view class="preview-skeleton-tile"></view>
+          <view class="preview-skeleton-tile"></view>
+        </view>
+      </view>
+    </block>
+
+    <block wx:elif="{{errorMessage}}">
+      <view class="preview-error">
+        <view class="preview-error-title">预览加载失败</view>
+        <view class="preview-error-message">{{errorMessage}}</view>
+        <button class="secondary-action" bindtap="handleRetryPreview">重试</button>
+      </view>
+    </block>
+
+    <block wx:else>
+      <view wx:if="{{portfolio.share.intro}}" class="share-intro">{{portfolio.share.intro}}</view>
+
+      <view wx:for="{{portfolio.components}}" wx:key="componentKey" class="folio-component">
+        <block wx:if="{{item.componentType === 'CAROUSEL'}}">
+          <swiper class="folio-carousel" indicator-dots autoplay circular>
+            <swiper-item wx:for="{{item.works}}" wx:for-item="work" wx:key="workId">
+              <image class="carousel-image" src="{{work.coverUrl || work.mediaUrl}}" mode="aspectFill"></image>
+            </swiper-item>
+          </swiper>
+        </block>
+
+        <block wx:elif="{{item.componentType === 'PROFILE'}}">
+          <view class="profile-section">
+            <image wx:if="{{item.profile.avatarUrl}}" class="profile-avatar" src="{{item.profile.avatarUrl}}" mode="aspectFill"></image>
+            <view wx:if="{{item.profile.displayName}}" class="profile-name">{{item.profile.displayName}}</view>
+            <view wx:if="{{item.profile.profession}}" class="profile-line">{{item.profile.profession}}</view>
+            <view wx:if="{{item.profile.city}}" class="profile-line">{{item.profile.city}}</view>
+            <view wx:if="{{item.profile.bio}}" class="profile-bio">{{item.profile.bio}}</view>
+            <view wx:if="{{item.profile.tags.length}}" class="profile-tags">
+              <view wx:for="{{item.profile.tags}}" wx:key="name" wx:for-item="tag" class="profile-tag">{{tag.name}}</view>
+            </view>
+          </view>
+        </block>
+
+        <block wx:elif="{{item.componentType === 'WORK_GRID'}}">
+          <view wx:if="{{item.title}}" class="component-title">{{item.title}}</view>
+          <scroll-view wx:if="{{item.displayTags.length > 1}}" scroll-x class="display-tag-scroll">
+            <view class="display-tags">
+              <view
+                wx:for="{{item.displayTags}}"
+                wx:key="groupKey"
+                wx:for-item="tag"
+                class="display-tag {{tag.active ? 'active' : ''}}"
+                data-component-key="{{item.componentKey}}"
+                data-group-key="{{tag.groupKey}}"
+                bindtap="handleDisplayTagTap"
+              >{{tag.name}}</view>
+            </view>
+          </scroll-view>
+          <view class="work-grid">
+            <view wx:for="{{item.activeGroup.works}}" wx:key="workId" wx:for-item="work" class="work-card grid-card">
+              <image class="work-cover" src="{{work.coverUrl || work.mediaUrl}}" mode="aspectFill"></image>
+              <view class="work-title">{{work.title}}</view>
+            </view>
+          </view>
+        </block>
+
+        <block wx:elif="{{item.componentType === 'WORK_LIST'}}">
+          <view wx:if="{{item.title}}" class="component-title">{{item.title}}</view>
+          <scroll-view wx:if="{{item.displayTags.length > 1}}" scroll-x class="display-tag-scroll">
+            <view class="display-tags">
+              <view
+                wx:for="{{item.displayTags}}"
+                wx:key="groupKey"
+                wx:for-item="tag"
+                class="display-tag {{tag.active ? 'active' : ''}}"
+                data-component-key="{{item.componentKey}}"
+                data-group-key="{{tag.groupKey}}"
+                bindtap="handleDisplayTagTap"
+              >{{tag.name}}</view>
+            </view>
+          </scroll-view>
+          <view class="work-list">
+            <view wx:for="{{item.activeGroup.works}}" wx:key="workId" wx:for-item="work" class="work-card list-card">
+              <image class="work-cover" src="{{work.coverUrl || work.mediaUrl}}" mode="aspectFill"></image>
+              <view class="work-title">{{work.title}}</view>
+              <view wx:if="{{work.description}}" class="work-desc">{{work.description}}</view>
+            </view>
+          </view>
+        </block>
+
+        <block wx:elif="{{item.componentType === 'SCHEDULE_QUERY'}}">
+          <view class="simple-section">
+            <view wx:if="{{item.scheduleQuery.title}}" class="component-title">{{item.scheduleQuery.title}}</view>
+            <view wx:if="{{item.scheduleQuery.description}}" class="section-desc">{{item.scheduleQuery.description}}</view>
+            <button class="secondary-action">档期查询</button>
+          </view>
+        </block>
+
+        <block wx:elif="{{item.componentType === 'QR_CONTACT'}}">
+          <view class="qr-section">
+            <view class="component-title">{{item.qrContact.title || '二维码联系'}}</view>
+            <view wx:if="{{item.qrContact.description}}" class="section-desc">{{item.qrContact.description}}</view>
+            <image wx:if="{{item.qrContact.qrUrl}}" class="qr-image" src="{{item.qrContact.qrUrl}}" mode="aspectFit" data-url="{{item.qrContact.qrUrl}}" bindtap="handlePreviewQr"></image>
+          </view>
+        </block>
+
+        <block wx:elif="{{item.componentType === 'CONTACT_FORM'}}">
+          <view class="form-section">
+            <view class="component-title">{{item.contactForm.title || '预留联系信息'}}</view>
+            <view wx:if="{{item.contactForm.description}}" class="section-desc">{{item.contactForm.description}}</view>
+            <input class="field" placeholder="联系人" value="{{contactForm.contactName}}" data-field="contactName" bindinput="handleContactInput" />
+            <input class="field" placeholder="手机号" value="{{contactForm.phone}}" data-field="phone" bindinput="handleContactInput" />
+            <input class="field" placeholder="微信号" value="{{contactForm.wechat}}" data-field="wechat" bindinput="handleContactInput" />
+            <textarea class="field textarea" placeholder="需求描述" value="{{contactForm.needs}}" data-field="needs" bindinput="handleContactInput"></textarea>
+            <button class="primary-button" bindtap="handleSubmitContact">预览提交</button>
+          </view>
+        </block>
+
+        <block wx:elif="{{item.componentType === 'TEXT_SECTION'}}">
+          <view class="text-section">
+            <view wx:if="{{item.textSection.title}}" class="component-title">{{item.textSection.title}}</view>
+            <view class="text-content">{{item.textSection.content}}</view>
+          </view>
+        </block>
+      </view>
+    </block>
   </scroll-view>
 </view>

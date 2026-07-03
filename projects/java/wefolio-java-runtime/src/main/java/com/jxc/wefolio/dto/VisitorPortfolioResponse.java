@@ -29,6 +29,9 @@ public class VisitorPortfolioResponse {
     /** 正式发布配置 */
     private PortfolioConfigDto config;
 
+    /** 访客端渲染模型 */
+    private PortfolioRenderDto renderData;
+
     /** 访问汇总记录 ID */
     private Long visitRecordId;
 

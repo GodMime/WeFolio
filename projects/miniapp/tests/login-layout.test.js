@@ -29,20 +29,20 @@ const worksWxml = fs.readFileSync(
 )
 
 const STATIC_ASSET_ROOT = '/assets/system'
-const REMOTE_STATIC_ASSET_ROOT = 'https://cdn.we-folio.dingchenyong.top/system'
+const REMOTE_STATIC_ASSET_ROOT = 'https://cdn2.we-folio.dingchenyong.top/system'
 const STATIC_ASSET_DIR = path.join(__dirname, '../assets/system')
 const MAX_LOCAL_STATIC_ASSET_BYTES = 200 * 1024
 const MAX_LOCAL_STATIC_ASSET_TOTAL_BYTES = 200 * 1024
 const COS_SYSTEM_STATIC_ASSET_PATTERN = /https:\/\/cos\.we-folio\.dingchenyong\.top\/system/
 const BACKGROUND_IMAGE_URL = `${REMOTE_STATIC_ASSET_ROOT}/backgroud.jpeg`
-const LOGO_IMAGE_URL = `${REMOTE_STATIC_ASSET_ROOT}/logo.png`
+const LOGO_IMAGE_URL = `${REMOTE_STATIC_ASSET_ROOT}/folio-logo.png`
 const MESSAGE_ICON_URL = `${STATIC_ASSET_ROOT}/wefolio-message-icon.png`
 const VISITOR_RECORD_ICON_URL = `${STATIC_ASSET_ROOT}/wefolio-visitor-record-icon.png`
 const TEAM_ICON_URL = `${STATIC_ASSET_ROOT}/wefolio-team-icon.png`
 const WORK_LOGO_URL = `${STATIC_ASSET_ROOT}/work-logo-100kb.jpg`
 const REMOTE_SYSTEM_STATIC_ASSETS = [
   { fileName: 'backgroud.jpeg', url: BACKGROUND_IMAGE_URL },
-  { fileName: 'logo.png', url: LOGO_IMAGE_URL }
+  { fileName: 'folio-logo.png', url: LOGO_IMAGE_URL }
 ]
 const LOCAL_SYSTEM_STATIC_ASSETS = [
   { fileName: 'wefolio-message-icon.png', url: MESSAGE_ICON_URL },
