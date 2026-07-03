@@ -66,8 +66,21 @@
   align-items: center;
   justify-content: center;
   font-weight: bold;
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
   height: 100%;
+  overflow: hidden;
+  padding: 0 8px;
+  box-sizing: border-box;
+}
+
+.weui-navigation-bar__title {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  word-break: keep-all;
 }
 
 .weui-navigation-bar__loading {

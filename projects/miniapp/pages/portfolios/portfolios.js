@@ -1,6 +1,7 @@
 const { request } = require('../../utils/request')
 const { normalizeId } = require('../../utils/id')
 const { handleAuthRequired, hasLocalToken } = require('../../utils/session')
+const { buildPublishPayload } = require('../../utils/portfolios')
 
 const PORTFOLIOS_API_URL = '/api/mine/portfolios'
 const PORTFOLIO_DELETE_API_PREFIX = '/api/mine/portfolios/delete'
@@ -17,6 +18,16 @@ const SWIPE_REVEAL_THRESHOLD = -32
 const SWIPE_CLOSE_THRESHOLD = 24
 const SWIPE_VERTICAL_TOLERANCE = 48
 const DELETE_CONFIRM_COLOR = '#a9354f'
+const PUBLICATION_STATUS_PUBLISHED = 'PUBLISHED'
+const PUBLICATION_STATUS_OFFLINE = 'OFFLINE'
+const ACTION_TYPE_SHARE = 'SHARE'
+const ACTION_TYPE_EDIT = 'EDIT'
+const ACTION_TYPE_PUBLISH = 'PUBLISH'
+const IDEMPOTENCY_PREFIX_PUBLISH = 'publish'
+
+function makeIdempotencyKey(prefix) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`
+}
 
 function defaultString(value, fallback = '') {
   const text = String(value || '').trim()
@@ -30,27 +41,27 @@ function resolveTemplateText(item = {}) {
 }
 
 function resolveStatus(item = {}) {
-  if (item.publicationStatus === 'PUBLISHED') {
+  if (item.publicationStatus === PUBLICATION_STATUS_PUBLISHED) {
     return {
       statusText: '已发布',
       statusTone: 'published',
       actionText: '分享',
-      actionType: 'SHARE'
+      actionType: ACTION_TYPE_SHARE
     }
   }
-  if (item.publicationStatus === 'OFFLINE') {
+  if (item.publicationStatus === PUBLICATION_STATUS_OFFLINE) {
     return {
       statusText: '已下线',
       statusTone: 'muted',
       actionText: '编辑',
-      actionType: 'EDIT'
+      actionType: ACTION_TYPE_EDIT
     }
   }
   return {
     statusText: '草稿',
     statusTone: 'draft',
     actionText: '发布',
-    actionType: 'EDIT'
+    actionType: ACTION_TYPE_PUBLISH
   }
 }
 
@@ -66,8 +77,8 @@ function normalizePortfolioItem(item = {}) {
 }
 
 function buildSummary(portfolios = []) {
-  const publishedCount = portfolios.filter((item) => item.publicationStatus === 'PUBLISHED').length
-  const draftCount = portfolios.filter((item) => item.publicationStatus !== 'PUBLISHED').length
+  const publishedCount = portfolios.filter((item) => item.publicationStatus === PUBLICATION_STATUS_PUBLISHED).length
+  const draftCount = portfolios.filter((item) => item.publicationStatus !== PUBLICATION_STATUS_PUBLISHED).length
   return {
     publishedText: `${publishedCount} 已发布`,
     draftText: `${draftCount} 草稿`
@@ -206,6 +217,10 @@ Page({
   },
 
   handlePortfolioCardTap(event) {
+    const targetDataset = event.target && event.target.dataset ? event.target.dataset : {}
+    if (targetDataset.action) {
+      return
+    }
     const portfolioId = normalizeId(event.currentTarget.dataset.id)
     if (portfolioId) {
       if (this.data.revealedPortfolioId === portfolioId) {
@@ -226,10 +241,34 @@ Page({
       this.setData({ revealedPortfolioId: null })
       return
     }
-    if (actionType === 'SHARE') {
+    if (actionType === ACTION_TYPE_SHARE) {
       return
     }
+    if (actionType === ACTION_TYPE_PUBLISH) {
+      return this.publishPortfolioFromList(portfolioId)
+    }
     wx.navigateTo({ url: `${EDIT_PAGE_URL}?portfolioId=${portfolioId}` })
+  },
+
+  publishPortfolioFromList(portfolioId) {
+    const portfolio = this.findPortfolioById(portfolioId)
+    if (!portfolio) {
+      return Promise.resolve()
+    }
+    return request({
+      url: `${PORTFOLIOS_API_URL}/${portfolioId}/publish`,
+      method: 'POST',
+      data: buildPublishPayload(portfolio.draftRevision || 0, makeIdempotencyKey(IDEMPOTENCY_PREFIX_PUBLISH))
+    }).then(() => {
+      wx.showToast({ title: '已发布', icon: 'success' })
+      return this.bootstrap()
+    }).catch((error) => {
+      if (error && error.authRequired) {
+        handleAuthRequired(error.message)
+        return
+      }
+      wx.showToast({ title: error && error.message ? error.message : '发布失败', icon: 'none' })
+    })
   },
 
   async handleDeletePortfolioTap(event) {

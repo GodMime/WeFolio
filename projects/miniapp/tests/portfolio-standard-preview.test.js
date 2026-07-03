@@ -29,6 +29,12 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value))
 }
 
+function readRule(content, selector) {
+  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const match = content.match(new RegExp(`${escapedSelector}\\s*\\{([^}]*)\\}`))
+  return match ? match[1] : ''
+}
+
 function loadPreviewPage(fakeRequest, wxOverrides = {}) {
   const pagePath = path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.js')
   const requestPath = path.join(__dirname, '../utils/request.js')
@@ -72,6 +78,25 @@ function loadPreviewPage(fakeRequest, wxOverrides = {}) {
     }
   })
 }
+
+test('portfolio preview and visitor pages render miniapp brand footer', () => {
+  const logoUrl = 'https://cdn2.we-folio.dingchenyong.top/system/folio-logo.png'
+  const brandName = '映期Folio'
+  const previewWxml = fs.readFileSync(
+    path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.wxml'),
+    'utf8'
+  )
+  const visitorWxml = fs.readFileSync(
+    path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.wxml'),
+    'utf8'
+  )
+
+  ;[previewWxml, visitorWxml].forEach((wxml) => {
+    assert.match(wxml, /class="folio-brand-footer"/)
+    assert.match(wxml, new RegExp(`src="${logoUrl.replace(/\./g, '\\.')}"`))
+    assert.match(wxml, new RegExp(`class="folio-brand-name">${brandName}</view>`))
+  })
+})
 
 test('preview page keeps recoverable loading and error states when request fails', async () => {
   const requests = []
@@ -185,6 +210,14 @@ test('actual portfolio pages do not render share intro as page content', () => {
 })
 
 test('portfolio user-authored text preserves line breaks in actual pages', () => {
+  const previewWxml = fs.readFileSync(
+    path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.wxml'),
+    'utf8'
+  )
+  const visitorWxml = fs.readFileSync(
+    path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.wxml'),
+    'utf8'
+  )
   const appWxss = fs.readFileSync(
     path.join(__dirname, '../app.wxss'),
     'utf8'
@@ -198,8 +231,30 @@ test('portfolio user-authored text preserves line breaks in actual pages', () =>
     'utf8'
   )
 
+  ;[previewWxml, visitorWxml].forEach((wxml) => {
+    assert.match(wxml, /<text wx:if="\{\{item\.profile\.bio\}\}" class="profile-bio" space="nbsp">\{\{item\.profile\.bio\}\}<\/text>/)
+    assert.doesNotMatch(wxml, /<view wx:if="\{\{item\.profile\.bio\}\}" class="profile-bio">/)
+  })
   ;[previewWxss, visitorWxss].forEach((wxss) => {
     assert.match(wxss, /\.profile-bio,\s*\.section-desc,\s*\.text-content,\s*\.work-desc\s*\{[^}]*white-space:\s*pre-wrap;/)
+    assert.match(readRule(wxss, '.profile-bio'), /display:\s*block;/)
   })
   assert.match(appWxss, /\.user-authored-text,[\s\S]*\.message-content,[\s\S]*\.team-summary,[\s\S]*\.member-summary,[\s\S]*\.candidate-summary,[\s\S]*\.visit-summary\s*\{[^}]*white-space:\s*pre-wrap;/)
+})
+
+test('portfolio profile avatar is centered in actual pages', () => {
+  const previewWxss = fs.readFileSync(
+    path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.wxss'),
+    'utf8'
+  )
+  const visitorWxss = fs.readFileSync(
+    path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.wxss'),
+    'utf8'
+  )
+
+  ;[previewWxss, visitorWxss].forEach((wxss) => {
+    const profileAvatarRule = readRule(wxss, '.profile-avatar')
+    assert.match(profileAvatarRule, /display:\s*block;/)
+    assert.match(profileAvatarRule, /margin:\s*0 auto;/)
+  })
 })

@@ -56,6 +56,7 @@ public class MineWorkController {
      *
      * @param keyword 搜索关键词
      * @param tagId 标签 ID
+     * @param mediaType 媒体类型，可为空
      * @param page 页码
      * @param pageSize 每页数量
      * @return 作品列表
@@ -64,10 +65,11 @@ public class MineWorkController {
     public Response<MineWorkListResponse> works(
             @RequestParam(value = "keyword", required = false) String keyword,
             @RequestParam(value = "tagId", required = false) Long tagId,
+            @RequestParam(value = "mediaType", required = false) String mediaType,
             @RequestParam(value = "page", defaultValue = "1") int page,
             @RequestParam(value = "pageSize", defaultValue = "20") int pageSize
     ) {
-        return Response.success(mineWorkService.listWorks(keyword, tagId, page, pageSize));
+        return Response.success(mineWorkService.listWorks(keyword, tagId, mediaType, page, pageSize));
     }
 
     /**

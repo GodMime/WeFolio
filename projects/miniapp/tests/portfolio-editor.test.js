@@ -363,7 +363,7 @@ test('tapping carousel component edits selected image works', async () => {
   await flushPromises()
 
   assert.equal(requests[0].url, '/api/mine/works')
-  assert.deepEqual(requests[0].data, { page: 1, pageSize: 100 })
+  assert.deepEqual(requests[0].data, { keyword: '', tagId: undefined, mediaType: 'IMAGE', page: 1, pageSize: 20 })
   assert.equal(page.data.componentWorkSheetVisible, true)
   assert.deepEqual(page.data.componentWorkOptions.map((item) => item.id), [11, 13])
   assert.deepEqual(page.data.componentWorkOptions.map((item) => item.selected), [false, true])
@@ -373,6 +373,106 @@ test('tapping carousel component edits selected image works', async () => {
 
   assert.deepEqual(page.data.config.components[0].config.workIds, [13, 11])
   assert.equal(page.data.componentWorkSheetVisible, false)
+})
+
+test('component work picker searches filters by tag and appends next page', async () => {
+  const requests = []
+  const fakeRequest = (options) => {
+    requests.push(options)
+    if (options.url !== '/api/mine/works') {
+      return Promise.resolve({})
+    }
+    const data = options.data || {}
+    if (data.keyword === '迎宾') {
+      return Promise.resolve({
+        page: 1,
+        pageSize: 20,
+        hasMore: false,
+        summary: { totalCount: 1 },
+        tags: [{ id: 7, name: '中式婚礼', count: 2 }],
+        works: [
+          { id: 21, mediaType: 'IMAGE', title: '迎宾区', coverUrl: 'https://example.com/21.jpg' }
+        ]
+      })
+    }
+    if (data.tagId === 7 && data.page === 2) {
+      return Promise.resolve({
+        page: 2,
+        pageSize: 20,
+        hasMore: false,
+        summary: { totalCount: 2 },
+        tags: [{ id: 7, name: '中式婚礼', count: 2 }],
+        works: [
+          { id: 32, mediaType: 'IMAGE', title: '中式合影', coverUrl: 'https://example.com/32.jpg' }
+        ]
+      })
+    }
+    if (data.tagId === 7) {
+      return Promise.resolve({
+        page: 1,
+        pageSize: 20,
+        hasMore: true,
+        summary: { totalCount: 2 },
+        tags: [{ id: 7, name: '中式婚礼', count: 2 }],
+        works: [
+          { id: 31, mediaType: 'IMAGE', title: '中式仪式', coverUrl: 'https://example.com/31.jpg' }
+        ]
+      })
+    }
+    return Promise.resolve({
+      page: 1,
+      pageSize: 20,
+      hasMore: true,
+      summary: { totalCount: 3 },
+      tags: [{ id: 7, name: '中式婚礼', count: 2 }],
+      works: [
+        { id: 11, mediaType: 'IMAGE', title: '仪式合影', coverUrl: 'https://example.com/11.jpg' },
+        { id: 12, mediaType: 'VIDEO', title: '婚礼快剪', coverUrl: 'https://example.com/12.jpg' }
+      ]
+    })
+  }
+  const page = loadPortfolioEditorPage(fakeRequest)
+  page.data.config = normalizePortfolioConfig({
+    components: [
+      createComponent(COMPONENT_TYPES.CAROUSEL, {
+        componentKey: 'c_carousel',
+        sortOrder: 1000,
+        config: { workIds: [32] }
+      })
+    ]
+  })
+
+  await page.handleComponentTap({ currentTarget: { dataset: { key: 'c_carousel', type: COMPONENT_TYPES.CAROUSEL } } })
+
+  assert.deepEqual(requests[0].data, { keyword: '', tagId: undefined, mediaType: 'IMAGE', page: 1, pageSize: 20 })
+  assert.deepEqual(page.data.componentWorkOptions.map((item) => item.id), [11])
+  assert.deepEqual(page.data.componentWorkFilterTags.map((item) => item.name), ['全部', '中式婚礼'])
+  assert.equal(page.data.componentWorkHasMore, true)
+
+  page.handleComponentWorkKeywordInput({ detail: { value: '迎宾' } })
+  await page.handleComponentWorkSearchConfirm()
+
+  assert.deepEqual(requests[1].data, { keyword: '迎宾', tagId: undefined, mediaType: 'IMAGE', page: 1, pageSize: 20 })
+  assert.deepEqual(page.data.componentWorkOptions.map((item) => item.id), [21])
+  assert.equal(page.data.componentWorkHasMore, false)
+
+  await page.handleComponentWorkTagTap({ currentTarget: { dataset: { tagId: 7 } } })
+
+  assert.deepEqual(requests[2].data, { keyword: '迎宾', tagId: 7, mediaType: 'IMAGE', page: 1, pageSize: 20 })
+  assert.deepEqual(page.data.componentWorkOptions.map((item) => item.id), [21])
+
+  page.handleComponentWorkKeywordInput({ detail: { value: '' } })
+  await page.handleComponentWorkSearchConfirm()
+
+  assert.deepEqual(requests[3].data, { keyword: '', tagId: 7, mediaType: 'IMAGE', page: 1, pageSize: 20 })
+  assert.deepEqual(page.data.componentWorkOptions.map((item) => item.id), [31])
+
+  await page.handleComponentWorkScrollToLower()
+
+  assert.deepEqual(requests[4].data, { keyword: '', tagId: 7, mediaType: 'IMAGE', page: 2, pageSize: 20 })
+  assert.deepEqual(page.data.componentWorkOptions.map((item) => item.id), [31, 32])
+  assert.deepEqual(page.data.componentWorkOptions.map((item) => item.selected), [false, true])
+  assert.equal(page.data.componentWorkHasMore, false)
 })
 
 test('tapping profile component edits independent profile copy', async () => {
@@ -629,6 +729,59 @@ test('portfolio display tag sheet copies work tags and imports works by tag', as
   assert.deepEqual(page.data.config.components[0].config.groups.map((item) => item.name), ['户外案例', '室内案例'])
   assert.deepEqual(page.data.config.components[0].config.groups[0].workIds, [21, 22])
   assert.deepEqual(page.data.displayGroupOptions.map((item) => item.name), ['户外案例', '室内案例'])
+})
+
+test('portfolio display tag sheet creates renames and deletes tags', async () => {
+  const page = loadPortfolioEditorPage(() => Promise.resolve({}))
+  page.data.config = normalizePortfolioConfig({
+    components: [
+      createComponent(COMPONENT_TYPES.WORK_GRID, {
+        componentKey: 'c_grid',
+        sortOrder: 1000,
+        config: {
+          groups: [
+            { groupKey: 'g_all', name: '全部案例', sortOrder: 1000, workIds: [11] }
+          ]
+        }
+      })
+    ]
+  })
+
+  await page.handleComponentTap({ currentTarget: { dataset: { key: 'c_grid', type: COMPONENT_TYPES.WORK_GRID } } })
+  page.handleOpenCreateDisplayGroup()
+  page.handleDisplayGroupNameInput({ detail: { value: '全部案例' } })
+  page.handleConfirmDisplayGroupForm()
+
+  assert.equal(page.data.displayGroupFormErrorText, '展示标签名称不能重复')
+  assert.deepEqual(page.data.config.components[0].config.groups.map((item) => item.name), ['全部案例'])
+
+  page.handleDisplayGroupNameInput({ detail: { value: '仪式现场' } })
+  page.handleConfirmDisplayGroupForm()
+
+  const createdGroupKey = page.data.config.components[0].config.groups[1].groupKey
+  assert.equal(page.data.displayGroupFormVisible, false)
+  assert.equal(page.data.activeDisplayGroupKey, createdGroupKey)
+  assert.deepEqual(page.data.config.components[0].config.groups.map((item) => item.name), ['全部案例', '仪式现场'])
+
+  page.handleDisplayGroupLongPress({ currentTarget: { dataset: { groupKey: createdGroupKey } } })
+
+  assert.equal(page.data.displayGroupManageMode, true)
+
+  page.handleSelectDisplayGroup({ currentTarget: { dataset: { groupKey: createdGroupKey } } })
+
+  assert.equal(page.data.displayGroupFormMode, 'edit')
+  page.handleDisplayGroupNameInput({ detail: { value: '迎宾区' } })
+  page.handleConfirmDisplayGroupForm()
+
+  assert.deepEqual(page.data.config.components[0].config.groups.map((item) => item.name), ['全部案例', '迎宾区'])
+
+  page.handleDisplayGroupLongPress({ currentTarget: { dataset: { groupKey: 'g_all' } } })
+  page.handleDeleteDisplayGroup({ currentTarget: { dataset: { groupKey: 'g_all' } } })
+
+  assert.equal(page.data.activeDisplayGroupKey, createdGroupKey)
+  assert.equal(page.data.displayGroupManageMode, false)
+  assert.deepEqual(page.data.config.components[0].config.groups.map((item) => item.name), ['迎宾区'])
+  assert.deepEqual(page.data.displayGroupOptions.map((item) => item.name), ['迎宾区'])
 })
 
 test('saving draft in create mode creates portfolio before saving draft', async () => {

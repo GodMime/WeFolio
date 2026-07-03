@@ -131,13 +131,48 @@
         <view class="component-picker-count">{{componentWorkSelectedCountText}}</view>
       </view>
 
+      <view class="component-work-tools">
+        <view class="component-work-search">
+          <view class="component-work-search-icon"></view>
+          <input
+            class="component-work-search-input"
+            value="{{componentWorkKeyword}}"
+            confirm-type="search"
+            placeholder="搜索作品名称"
+            placeholder-class="search-placeholder"
+            bindinput="handleComponentWorkKeywordInput"
+            bindconfirm="handleComponentWorkSearchConfirm"
+          />
+          <view wx:if="{{componentWorkKeyword}}" class="component-work-search-clear" catchtap="handleClearComponentWorkSearch" aria-role="button" aria-label="清空作品搜索">
+            <text>×</text>
+          </view>
+        </view>
+
+        <scroll-view wx:if="{{componentWorkFilterTags.length}}" class="component-work-filter-scroll" scroll-x type="list">
+          <view class="component-work-filter-row">
+            <view
+              wx:for="{{componentWorkFilterTags}}"
+              wx:key="id"
+              class="component-work-filter-pill {{(!componentWorkSelectedTagId && !item.id) || componentWorkSelectedTagId === item.id ? 'active' : ''}}"
+              style="{{((!componentWorkSelectedTagId && !item.id) || componentWorkSelectedTagId === item.id) ? item.activeStyle : item.style}}"
+              data-tag-id="{{item.id}}"
+              catchtap="handleComponentWorkTagTap"
+              aria-role="button"
+              aria-label="筛选{{item.name}}"
+            >
+              <text>{{item.labelText}}</text>
+            </view>
+          </view>
+        </scroll-view>
+      </view>
+
       <view wx:if="{{componentWorkLoading}}" class="component-work-state">加载中...</view>
       <view wx:elif="{{componentWorkErrorText}}" class="component-work-state error">
         <view>{{componentWorkErrorText}}</view>
         <view class="component-work-retry" catchtap="handleRetryLoadComponentWorks" aria-role="button" aria-label="重新加载作品">重试</view>
       </view>
       <view wx:elif="{{componentWorkOptions.length === 0}}" class="component-work-state">暂无图片作品</view>
-      <scroll-view wx:else class="component-work-scroll" scroll-y type="list">
+      <scroll-view wx:else class="component-work-scroll" scroll-y type="list" bindscrolltolower="handleComponentWorkScrollToLower">
         <view class="component-work-list-content">
           <view
             wx:for="{{componentWorkOptions}}"
@@ -159,6 +194,8 @@
             </view>
             <view class="component-work-check">{{item.selected ? '✓' : ''}}</view>
           </view>
+          <view wx:if="{{componentWorkLoadingMore}}" class="component-work-footer">加载更多作品</view>
+          <view wx:if="{{!componentWorkHasMore && componentWorkOptions.length > 0}}" class="component-work-footer">已显示全部作品</view>
         </view>
       </scroll-view>
 
@@ -279,7 +316,24 @@
       </view>
 
       <view class="display-group-actions">
+        <button class="display-group-add-button" catchtap="handleOpenCreateDisplayGroup">新增标签</button>
         <button class="display-group-copy-button" catchtap="handleCopyWorkTagsToDisplayGroups">一键复制作品标签</button>
+      </view>
+
+      <view class="display-group-form {{displayGroupFormVisible ? 'visible' : ''}}">
+        <view class="display-group-form-title">{{displayGroupFormMode === 'edit' ? '重命名展示标签' : '新增展示标签'}}</view>
+        <view class="display-group-form-row">
+          <input
+            class="input display-group-input"
+            placeholder="输入展示标签名称"
+            value="{{displayGroupFormName}}"
+            maxlength="{{displayGroupNameMaxLength}}"
+            bindinput="handleDisplayGroupNameInput"
+          />
+          <button class="display-group-save-button" catchtap="handleConfirmDisplayGroupForm">{{displayGroupFormMode === 'edit' ? '保存' : '新增'}}</button>
+        </view>
+        <view wx:if="{{displayGroupFormErrorText}}" class="display-group-form-error">{{displayGroupFormErrorText}}</view>
+        <button class="display-group-cancel-button" catchtap="handleCancelDisplayGroupForm">取消</button>
       </view>
 
       <view wx:if="{{displayGroupLoading}}" class="component-work-state">处理中...</view>
@@ -290,14 +344,27 @@
           <view
             wx:for="{{displayGroupOptions}}"
             wx:key="groupKey"
-            class="display-group-option {{item.active ? 'active' : ''}}"
+            class="display-group-pill {{item.active ? 'active' : ''}} {{displayGroupManageMode ? 'manage' : ''}}"
             data-group-key="{{item.groupKey}}"
             catchtap="handleSelectDisplayGroup"
+            bindlongpress="handleDisplayGroupLongPress"
             aria-role="button"
             aria-label="选择{{item.name}}"
           >
-            <view class="display-group-name">{{item.name}}</view>
-            <view class="display-group-count">{{item.countText}}</view>
+            <view class="display-group-main">
+              <view class="display-group-name">{{item.name}}</view>
+              <view class="display-group-count">{{item.countText}}</view>
+            </view>
+            <view
+              wx:if="{{displayGroupManageMode}}"
+              class="display-group-delete"
+              data-group-key="{{item.groupKey}}"
+              catchtap="handleDeleteDisplayGroup"
+              aria-role="button"
+              aria-label="删除{{item.name}}展示标签"
+            >
+              <text class="display-group-delete-mark">×</text>
+            </view>
           </view>
         </view>
       </scroll-view>

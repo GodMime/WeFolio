@@ -22,6 +22,8 @@ const {
 const {
   COMPONENT_NAMES,
   COMPONENT_TYPES,
+  DISPLAY_GROUP_NAME_MAX_LENGTH,
+  addDisplayGroup,
   addComponent,
   buildDraftPayload,
   buildPublishPayload,
@@ -32,7 +34,10 @@ const {
   normalizePortfolioConfig,
   normalizeWorkIds,
   reorderComponent,
+  removeDisplayGroup,
+  updateDisplayGroupName,
   removeComponent,
+  validateDisplayGroupName,
   updateComponentProfileConfig,
   updateComponentWorkIds
 } = require('../../utils/portfolios')
@@ -48,6 +53,7 @@ const SWIPE_REVEAL_THRESHOLD = -32
 const SWIPE_CLOSE_THRESHOLD = 24
 const SWIPE_VERTICAL_TOLERANCE = 48
 const COMPONENT_DRAG_SCALE = 1.015
+const COMPONENT_WORK_PAGE_SIZE = 20
 const DESIGN_VIEWPORT_RPX = 750
 const SHARE_COVER_CROP_CANVAS_ID = 'portfolioCoverCropCanvas'
 const SHARE_COVER_CROP_MAX_WIDTH_RPX = 640
@@ -150,6 +156,15 @@ function buildDisplayGroupOptions(component = {}, activeGroupKey = '') {
   })
 }
 
+function getDisplayGroups(component = {}) {
+  return component.config && Array.isArray(component.config.groups) ? component.config.groups : []
+}
+
+function findDisplayGroupByKey(component = {}, groupKey = '') {
+  const targetGroupKey = String(groupKey || '')
+  return getDisplayGroups(component).find((group) => group.groupKey === targetGroupKey) || null
+}
+
 function buildComponentWorkOptions(works = [], selectedIds = [], componentType = '') {
   const selectedSet = new Set(normalizeWorkIds(selectedIds))
   return works
@@ -159,6 +174,23 @@ function buildComponentWorkOptions(works = [], selectedIds = [], componentType =
       thumbUrl: work.coverUrl || work.mediaUrl || '',
       metaText: work.tagText && work.tagText !== '未设置标签' ? `${work.typeText} · ${work.tagText}` : work.typeText
     }))
+}
+
+function normalizeComponentWorkTagId(value) {
+  const tagId = Number(value)
+  return Number.isFinite(tagId) && tagId > 0 ? tagId : null
+}
+
+function mergeComponentWorks(currentWorks = [], nextWorks = []) {
+  const seen = new Set()
+  return currentWorks.concat(nextWorks).filter((work) => {
+    const workId = Number(work && work.id)
+    if (!Number.isFinite(workId) || workId <= 0 || seen.has(workId)) {
+      return false
+    }
+    seen.add(workId)
+    return true
+  })
 }
 
 function buildProfileForm(profile = {}) {
@@ -432,8 +464,15 @@ Page({
     componentWorkSheetVisible: false,
     componentWorkSheetTitle: '编辑轮播作品',
     componentWorkLoading: false,
+    componentWorkLoadingMore: false,
     componentWorkErrorText: '',
     componentWorkOptions: [],
+    componentWorkFilterTags: [],
+    componentWorkKeyword: '',
+    componentWorkSelectedTagId: null,
+    componentWorkPage: 1,
+    componentWorkPageSize: COMPONENT_WORK_PAGE_SIZE,
+    componentWorkHasMore: false,
     componentWorkSelectedIds: [],
     componentWorkSelectedCountText: '0 已选',
     editingComponentKey: '',
@@ -446,6 +485,13 @@ Page({
     workTagOptions: [],
     displayGroupLoading: false,
     displayGroupErrorText: '',
+    displayGroupManageMode: false,
+    displayGroupFormVisible: false,
+    displayGroupFormMode: 'create',
+    editingDisplayGroupKey: '',
+    displayGroupFormName: '',
+    displayGroupFormErrorText: '',
+    displayGroupNameMaxLength: DISPLAY_GROUP_NAME_MAX_LENGTH,
     profileSheetVisible: false,
     profileSheetLoading: false,
     profileSheetErrorText: '',
@@ -850,7 +896,7 @@ Page({
     if (!component) {
       return Promise.resolve()
     }
-    const groups = component.config && Array.isArray(component.config.groups) ? component.config.groups : []
+    const groups = getDisplayGroups(component)
     const activeGroupKey = groups[0] ? groups[0].groupKey : ''
     this.setData({
       displayGroupSheetVisible: true,
@@ -858,7 +904,13 @@ Page({
       editingDisplayComponentType: componentType,
       activeDisplayGroupKey: activeGroupKey,
       displayGroupOptions: buildDisplayGroupOptions(component, activeGroupKey),
-      displayGroupErrorText: ''
+      displayGroupErrorText: '',
+      displayGroupManageMode: false,
+      displayGroupFormVisible: false,
+      displayGroupFormMode: 'create',
+      editingDisplayGroupKey: '',
+      displayGroupFormName: '',
+      displayGroupFormErrorText: ''
     })
     return Promise.resolve()
   },
@@ -1125,7 +1177,13 @@ Page({
       editingDisplayComponentKey: '',
       editingDisplayComponentType: '',
       activeDisplayGroupKey: '',
-      displayGroupErrorText: ''
+      displayGroupErrorText: '',
+      displayGroupManageMode: false,
+      displayGroupFormVisible: false,
+      displayGroupFormMode: 'create',
+      editingDisplayGroupKey: '',
+      displayGroupFormName: '',
+      displayGroupFormErrorText: ''
     })
   },
 
@@ -1138,8 +1196,123 @@ Page({
 
   handleSelectDisplayGroup(event) {
     const groupKey = event.currentTarget.dataset.groupKey || ''
+    if (this.data.displayGroupManageMode && groupKey) {
+      this.openDisplayGroupForm('edit', groupKey)
+      return
+    }
     this.setData({ activeDisplayGroupKey: groupKey })
     this.refreshDisplayGroupOptions(this.data.editingDisplayComponentKey, groupKey)
+  },
+
+  handleDisplayGroupLongPress(event) {
+    const groupKey = event.currentTarget.dataset.groupKey || ''
+    if (!groupKey) {
+      return
+    }
+    this.setData({
+      displayGroupManageMode: true
+    })
+  },
+
+  handleOpenCreateDisplayGroup() {
+    this.openDisplayGroupForm('create')
+  },
+
+  openDisplayGroupForm(mode, groupKey = '') {
+    const isEdit = mode === 'edit'
+    const component = findComponentByKey(this.data.config, this.data.editingDisplayComponentKey)
+    const group = isEdit ? findDisplayGroupByKey(component || {}, groupKey) : null
+    if (isEdit && !group) {
+      return
+    }
+    this.setData({
+      displayGroupFormVisible: true,
+      displayGroupFormMode: isEdit ? 'edit' : 'create',
+      editingDisplayGroupKey: isEdit ? groupKey : '',
+      displayGroupFormName: isEdit ? group.name : '',
+      displayGroupFormErrorText: ''
+    })
+  },
+
+  handleDisplayGroupNameInput(event) {
+    this.setData({
+      displayGroupFormName: event.detail.value || '',
+      displayGroupFormErrorText: ''
+    })
+  },
+
+  handleCancelDisplayGroupForm() {
+    this.setData({
+      displayGroupFormVisible: false,
+      displayGroupFormMode: 'create',
+      editingDisplayGroupKey: '',
+      displayGroupFormName: '',
+      displayGroupFormErrorText: ''
+    })
+  },
+
+  handleConfirmDisplayGroupForm() {
+    const componentKey = this.data.editingDisplayComponentKey
+    const component = findComponentByKey(this.data.config, componentKey)
+    if (!component) {
+      return
+    }
+    const groups = getDisplayGroups(component)
+    const editingGroupKey = this.data.displayGroupFormMode === 'edit' ? this.data.editingDisplayGroupKey : ''
+    const validation = validateDisplayGroupName(groups, this.data.displayGroupFormName, editingGroupKey)
+    if (!validation.valid) {
+      this.setData({ displayGroupFormErrorText: validation.message })
+      return
+    }
+
+    let config = this.data.config
+    let activeGroupKey = editingGroupKey
+    if (this.data.displayGroupFormMode === 'edit') {
+      config = updateDisplayGroupName(config, componentKey, editingGroupKey, validation.name)
+    } else {
+      const previousKeys = new Set(groups.map((group) => group.groupKey))
+      config = addDisplayGroup(config, componentKey, validation.name)
+      const nextComponent = findComponentByKey(config, componentKey)
+      const createdGroup = getDisplayGroups(nextComponent || {}).find((group) => !previousKeys.has(group.groupKey))
+      activeGroupKey = createdGroup ? createdGroup.groupKey : ''
+    }
+
+    this.setData({
+      config,
+      activeDisplayGroupKey: activeGroupKey,
+      displayGroupFormVisible: false,
+      displayGroupFormMode: 'create',
+      editingDisplayGroupKey: '',
+      displayGroupFormName: '',
+      displayGroupFormErrorText: '',
+      displayGroupManageMode: false
+    })
+    this.refreshDisplayGroupOptions(componentKey, activeGroupKey)
+  },
+
+  handleDeleteDisplayGroup(event) {
+    const groupKey = event.currentTarget.dataset.groupKey || ''
+    const componentKey = this.data.editingDisplayComponentKey
+    if (!componentKey || !groupKey) {
+      return
+    }
+    const config = removeDisplayGroup(this.data.config, componentKey, groupKey)
+    const component = findComponentByKey(config, componentKey)
+    const groups = getDisplayGroups(component || {})
+    const activeGroupKey = this.data.activeDisplayGroupKey === groupKey
+      ? (groups[0] && groups[0].groupKey) || ''
+      : this.data.activeDisplayGroupKey
+    this.setData({
+      config,
+      activeDisplayGroupKey: activeGroupKey,
+      displayGroupFormVisible: false,
+      displayGroupFormMode: 'create',
+      editingDisplayGroupKey: '',
+      displayGroupFormName: '',
+      displayGroupFormErrorText: '',
+      displayGroupManageMode: false
+    })
+    this.refreshDisplayGroupOptions(componentKey, activeGroupKey)
   },
 
   handleCopyWorkTagsToDisplayGroups() {
@@ -1157,7 +1330,12 @@ Page({
           config,
           workTagOptions: tags,
           activeDisplayGroupKey: firstGroupKey,
-          displayGroupLoading: false
+          displayGroupLoading: false,
+          displayGroupFormVisible: false,
+          editingDisplayGroupKey: '',
+          displayGroupFormName: '',
+          displayGroupFormErrorText: '',
+          displayGroupManageMode: false
         })
         this.refreshDisplayGroupOptions(this.data.editingDisplayComponentKey, firstGroupKey)
       })
@@ -1230,44 +1408,81 @@ Page({
       componentWorkSheetVisible: true,
       componentWorkSheetTitle: componentType === COMPONENT_TYPES.CAROUSEL ? '编辑轮播作品' : '编辑展示作品',
       componentWorkLoading: true,
+      componentWorkLoadingMore: false,
       componentWorkErrorText: '',
-      componentWorkOptions: buildComponentWorkOptions(this.data.componentWorkOptions, selectedIds, componentType),
+      componentWorkOptions: [],
+      componentWorkFilterTags: [],
+      componentWorkKeyword: '',
+      componentWorkSelectedTagId: null,
+      componentWorkPage: 1,
+      componentWorkPageSize: COMPONENT_WORK_PAGE_SIZE,
+      componentWorkHasMore: false,
       componentWorkSelectedIds: selectedIds,
       componentWorkSelectedCountText: buildSelectedCountText(selectedIds),
       editingComponentKey: componentKey,
       editingComponentType: componentType
     })
-    return this.loadComponentWorks(componentType, selectedIds)
+    return this.loadComponentWorks({ reset: true, componentType, selectedIds })
   },
 
-  async loadComponentWorks(componentType = this.data.editingComponentType, selectedIds = this.data.componentWorkSelectedIds) {
+  async loadComponentWorks(options = {}) {
+    const reset = options.reset !== false
+    const componentType = options.componentType || this.data.editingComponentType
+    const selectedIds = options.selectedIds || this.data.componentWorkSelectedIds
+    const pageSize = Number(this.data.componentWorkPageSize) || COMPONENT_WORK_PAGE_SIZE
+    const nextPage = reset ? 1 : (Number(this.data.componentWorkPage) || 1) + 1
+    const keyword = String(this.data.componentWorkKeyword || '').trim()
+    const tagId = normalizeComponentWorkTagId(this.data.componentWorkSelectedTagId)
+    const mediaType = componentType === COMPONENT_TYPES.CAROUSEL ? 'IMAGE' : ''
     const requestSeq = this.componentWorkRequestSeq + 1
     this.componentWorkRequestSeq = requestSeq
+    this.setData(reset ? {
+      componentWorkLoading: true,
+      componentWorkLoadingMore: false,
+      componentWorkErrorText: '',
+      componentWorkOptions: []
+    } : {
+      componentWorkLoadingMore: true,
+      componentWorkErrorText: ''
+    })
     try {
       const response = await request({
         url: WORKS_API_URL,
         data: {
-          page: 1,
-          pageSize: 100
+          keyword,
+          tagId: tagId || undefined,
+          mediaType: mediaType || undefined,
+          page: nextPage,
+          pageSize
         }
       })
       if (requestSeq !== this.componentWorkRequestSeq) {
         return
       }
-      const works = normalizeWorkList(response).works
+      const list = normalizeWorkList(response)
+      const works = reset ? list.works : mergeComponentWorks(this.data.componentWorkOptions, list.works)
       this.setData({
         componentWorkLoading: false,
+        componentWorkLoadingMore: false,
         componentWorkErrorText: '',
-        componentWorkOptions: buildComponentWorkOptions(works, selectedIds, componentType)
+        componentWorkOptions: buildComponentWorkOptions(works, selectedIds, componentType),
+        componentWorkFilterTags: list.filterTags,
+        componentWorkPage: list.page,
+        componentWorkPageSize: list.pageSize || pageSize,
+        componentWorkHasMore: list.hasMore
       })
     } catch (error) {
       if (error && error.authRequired) {
-        this.setData({ componentWorkLoading: false })
+        this.setData({
+          componentWorkLoading: false,
+          componentWorkLoadingMore: false
+        })
         handleAuthRequired(error.message)
         return
       }
       this.setData({
         componentWorkLoading: false,
+        componentWorkLoadingMore: false,
         componentWorkErrorText: error && error.message ? error.message : '作品加载失败'
       })
     }
@@ -1276,9 +1491,48 @@ Page({
   handleRetryLoadComponentWorks() {
     this.setData({
       componentWorkLoading: true,
+      componentWorkLoadingMore: false,
       componentWorkErrorText: ''
     })
-    this.loadComponentWorks()
+    return this.loadComponentWorks({ reset: true })
+  },
+
+  handleComponentWorkKeywordInput(event) {
+    this.setData({
+      componentWorkKeyword: event.detail.value || ''
+    })
+  },
+
+  handleComponentWorkSearchConfirm() {
+    return this.loadComponentWorks({ reset: true })
+  },
+
+  handleClearComponentWorkSearch() {
+    if (!this.data.componentWorkKeyword) {
+      return Promise.resolve()
+    }
+    this.setData({
+      componentWorkKeyword: ''
+    })
+    return this.loadComponentWorks({ reset: true })
+  },
+
+  handleComponentWorkTagTap(event) {
+    const tagId = normalizeComponentWorkTagId(event.currentTarget.dataset.tagId)
+    if ((this.data.componentWorkSelectedTagId || null) === tagId) {
+      return Promise.resolve()
+    }
+    this.setData({
+      componentWorkSelectedTagId: tagId
+    })
+    return this.loadComponentWorks({ reset: true })
+  },
+
+  handleComponentWorkScrollToLower() {
+    if (this.data.componentWorkLoading || this.data.componentWorkLoadingMore || !this.data.componentWorkHasMore) {
+      return Promise.resolve()
+    }
+    return this.loadComponentWorks({ reset: false })
   },
 
   handleCloseComponentWorkSheet() {
@@ -1286,7 +1540,8 @@ Page({
       componentWorkSheetVisible: false,
       editingComponentKey: '',
       editingComponentType: '',
-      componentWorkErrorText: ''
+      componentWorkErrorText: '',
+      componentWorkLoadingMore: false
     })
   },
 

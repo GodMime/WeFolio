@@ -3,6 +3,7 @@ const test = require('node:test')
 
 const {
   COMPONENT_TYPES,
+  addDisplayGroup,
   addComponent,
   buildDraftPayload,
   buildPublishPayload,
@@ -18,6 +19,7 @@ const {
   updateDisplayGroupName,
   updateDisplayGroupWorkIds,
   updateComponentWorkIds,
+  validateDisplayGroupName,
   validateCarouselComponent,
   validateWorkGridComponent
 } = require('../utils/portfolios')
@@ -230,6 +232,33 @@ test('maintains independent portfolio display tags for work list components', ()
   assert.deepEqual(reordered.components[0].config.groups.map((item) => item.groupKey), ['g_b', 'g_a'])
   assert.deepEqual(reordered.components[0].config.groups.map((item) => item.sortOrder), [1000, 2000])
   assert.deepEqual(removed.components[0].config.groups.map((item) => item.groupKey), ['g_b'])
+})
+
+test('adds portfolio display tags with validation and stable keys', () => {
+  const config = normalizePortfolioConfig({
+    components: [
+      createComponent(COMPONENT_TYPES.WORK_GRID, {
+        componentKey: 'c_grid',
+        sortOrder: 1000,
+        config: {
+          groups: [
+            { groupKey: 'g_1', name: '全部案例', sortOrder: 1000, workIds: [11] }
+          ]
+        }
+      })
+    ]
+  })
+
+  assert.deepEqual(validateDisplayGroupName(config.components[0].config.groups, '').message, '展示标签名称不能为空')
+  assert.deepEqual(validateDisplayGroupName(config.components[0].config.groups, '全部案例').message, '展示标签名称不能重复')
+  assert.equal(validateDisplayGroupName(config.components[0].config.groups, '户外案例').valid, true)
+
+  const result = addDisplayGroup(config, 'c_grid', '户外案例')
+
+  assert.deepEqual(result.components[0].config.groups, [
+    { groupKey: 'g_1', name: '全部案例', sortOrder: 1000, workIds: [11] },
+    { groupKey: 'g_2', name: '户外案例', sortOrder: 2000, workIds: [] }
+  ])
 })
 
 test('copies work tags into independent portfolio display tags without source binding', () => {

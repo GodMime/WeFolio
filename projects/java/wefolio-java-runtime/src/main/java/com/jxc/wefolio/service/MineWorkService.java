@@ -272,9 +272,24 @@ public class MineWorkService {
      * @return 作品列表响应
      */
     public MineWorkListResponse listWorks(String keyword, Long tagId, int page, int pageSize) {
+        return listWorks(keyword, tagId, null, page, pageSize);
+    }
+
+    /**
+     * 分页查询我的作品。
+     *
+     * @param keyword 关键词，可为空
+     * @param tagId 标签 ID，可为空
+     * @param mediaType 媒体类型，可为空
+     * @param page 页码
+     * @param pageSize 每页数量
+     * @return 作品列表响应
+     */
+    public MineWorkListResponse listWorks(String keyword, Long tagId, String mediaType, int page, int pageSize) {
         Long userId = AuthContextHolder.requireUserId();
         int normalizedPage = page <= 0 ? DEFAULT_PAGE : page;
         int normalizedPageSize = pageSize <= 0 ? DEFAULT_PAGE_SIZE : Math.min(pageSize, MAX_PAGE_SIZE);
+        String normalizedMediaType = normalizeOptionalMediaType(mediaType);
         List<WorkTagEntity> selectedTagRelations = tagId == null ? List.of() : findRelationsForTag(userId, tagId);
         List<Long> taggedWorkIds = tagId == null
                 ? null
@@ -283,6 +298,7 @@ public class MineWorkService {
         var query = Wrappers.lambdaQuery(WorkEntity.class)
                 .eq(WorkEntity::getUserId, userId)
                 .eq(WorkEntity::getStatus, WorkStatusDict.ACTIVE.getCode())
+                .eq(hasText(normalizedMediaType), WorkEntity::getMediaType, normalizedMediaType)
                 .and(hasText(keyword), wrapper -> wrapper
                         .like(WorkEntity::getTitle, normalizeText(keyword))
                         .or()
@@ -306,12 +322,13 @@ public class MineWorkService {
         response.setPageSize(normalizedPageSize);
         response.setTotal(resultPage.getTotal());
         response.setHasMore(resultPage.getCurrent() < resultPage.getPages());
-        MineWorkListResponse.Summary summary = buildSummary(userId);
+        MineWorkListResponse.Summary summary = buildSummary(userId, normalizedMediaType);
         List<WfTagEntity> activeTags = findActiveTags(userId);
         Map<Long, WfTagEntity> activeTagMap = buildTagMap(activeTags);
         List<WorkTagEntity> activeTagRelations = findRelationsForTags(userId, activeTagMap.keySet());
+        List<WorkTagEntity> countedTagRelations = filterTagRelationsByMediaType(userId, activeTagRelations, normalizedMediaType);
         response.setSummary(summary);
-        response.setTags(buildTagItems(activeTags, buildTagUsageCounts(activeTagRelations), tagId, summary.getTotalCount()));
+        response.setTags(buildTagItems(activeTags, buildTagUsageCounts(countedTagRelations), tagId, summary.getTotalCount()));
         Map<Long, Long> referenceCounts = buildWorkReferenceCounts(resultPage.getRecords());
         Map<Long, List<MineWorkListResponse.TagItem>> workTags =
                 buildWorkTagItems(resultPage.getRecords(), activeTagRelations, activeTagMap);
@@ -1641,9 +1658,10 @@ public class MineWorkService {
      * 构造作品摘要。
      *
      * @param userId 当前用户 ID
+     * @param mediaType 媒体类型，可为空
      * @return 摘要
      */
-    private MineWorkListResponse.Summary buildSummary(Long userId) {
+    private MineWorkListResponse.Summary buildSummary(Long userId, String mediaType) {
         MineWorkListResponse.Summary summary = new MineWorkListResponse.Summary();
         List<Map<String, Object>> rows = workEntityMapper.selectMaps(
                 new QueryWrapper<WorkEntity>()
@@ -1652,19 +1670,20 @@ public class MineWorkService {
                                 SQL_COUNT_ALL_EXPRESSION + " AS " + COUNT_ALIAS)
                         .eq(WORK_COLUMN_USER_ID, userId)
                         .eq(WORK_COLUMN_STATUS, WorkStatusDict.ACTIVE.getCode())
+                        .eq(hasText(mediaType), WORK_COLUMN_MEDIA_TYPE, mediaType)
                         .groupBy(WORK_COLUMN_MEDIA_TYPE)
         );
         if (rows == null || rows.isEmpty()) {
             return summary;
         }
         for (Map<String, Object> row : rows) {
-            String mediaType = rowValueAsString(row.get(WORK_MEDIA_TYPE_ALIAS));
+            String rowMediaType = rowValueAsString(row.get(WORK_MEDIA_TYPE_ALIAS));
             long count = rowValueAsLong(row.get(COUNT_ALIAS));
             summary.setTotalCount(summary.getTotalCount() + count);
-            if (MediaTypeDict.IMAGE.getCode().equals(mediaType)) {
+            if (MediaTypeDict.IMAGE.getCode().equals(rowMediaType)) {
                 summary.setImageCount(count);
             }
-            if (MediaTypeDict.VIDEO.getCode().equals(mediaType)) {
+            if (MediaTypeDict.VIDEO.getCode().equals(rowMediaType)) {
                 summary.setVideoCount(count);
             }
         }
@@ -1783,6 +1802,36 @@ public class MineWorkService {
                         WorkTagEntity::getTagId,
                         LinkedHashMap::new,
                         Collectors.counting()));
+    }
+
+    /**
+     * 按媒体类型过滤标签关系。
+     *
+     * @param userId 当前用户 ID
+     * @param relations 标签关系
+     * @param mediaType 媒体类型，可为空
+     * @return 过滤后的标签关系
+     */
+    private List<WorkTagEntity> filterTagRelationsByMediaType(Long userId, List<WorkTagEntity> relations, String mediaType) {
+        if (!hasText(mediaType) || relations.isEmpty()) {
+            return relations;
+        }
+        Set<Long> relationWorkIds = relations.stream()
+                .map(WorkTagEntity::getWorkId)
+                .collect(Collectors.toSet());
+        Set<Long> mediaWorkIds = workEntityMapper.selectList(
+                        new QueryWrapper<WorkEntity>()
+                                .select(WORK_COLUMN_ID)
+                                .eq(WORK_COLUMN_USER_ID, userId)
+                                .eq(WORK_COLUMN_STATUS, WorkStatusDict.ACTIVE.getCode())
+                                .eq(WORK_COLUMN_MEDIA_TYPE, mediaType)
+                                .in(WORK_COLUMN_ID, relationWorkIds))
+                .stream()
+                .map(WorkEntity::getId)
+                .collect(Collectors.toSet());
+        return relations.stream()
+                .filter(relation -> mediaWorkIds.contains(relation.getWorkId()))
+                .toList();
     }
 
     /**
@@ -2679,7 +2728,20 @@ public class MineWorkService {
         if (MediaTypeDict.IMAGE.getCode().equals(value) || MediaTypeDict.VIDEO.getCode().equals(value)) {
             return value;
         }
-        throw new BusinessException("作品媒体类型不支持");
+        throw new BusinessException(MineWorkMessage.WORK_MEDIA_TYPE_UNSUPPORTED_MESSAGE);
+    }
+
+    /**
+     * 解析可选媒体类型。
+     *
+     * @param mediaType 媒体类型
+     * @return 标准媒体类型或空字符串
+     */
+    private String normalizeOptionalMediaType(String mediaType) {
+        if (!hasText(mediaType)) {
+            return "";
+        }
+        return normalizeMediaType(mediaType);
     }
 
     /**

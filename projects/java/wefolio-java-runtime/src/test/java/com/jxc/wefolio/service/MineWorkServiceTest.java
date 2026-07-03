@@ -297,6 +297,39 @@ class MineWorkServiceTest {
     }
 
     @Test
+    void listWorksShouldCountTagUsageByRequestedMediaType() {
+        WorkEntity imageWork = ownedWork(11L);
+        imageWork.setMediaType(MediaTypeDict.IMAGE.getCode());
+        imageWork.setTitle("草坪婚礼");
+        Page<WorkEntity> page = new Page<>(1, 20);
+        page.setRecords(List.of(imageWork));
+        page.setTotal(1L);
+        when(workEntityMapper.selectPage(any(), any())).thenReturn(page);
+        when(workEntityMapper.selectMaps(any())).thenReturn(List.of(
+                Map.of("mediaType", MediaTypeDict.IMAGE.getCode(), "itemCount", 1L)
+        ));
+        WfTagEntity ceremonyTag = ownedTag(31L, "户外仪式", "#0f766e");
+        WfTagEntity videoTag = ownedTag(32L, "快剪", "#2d5f9a");
+        when(wfTagEntityMapper.selectList(any())).thenReturn(List.of(ceremonyTag, videoTag));
+        when(workTagEntityMapper.selectList(any())).thenReturn(List.of(
+                workTagRelation(11L, 31L),
+                workTagRelation(12L, 32L)
+        ));
+        when(workEntityMapper.selectList(any())).thenReturn(List.of(imageWork));
+        when(cosService.publicUrl(any())).thenAnswer(invocation -> "https://cos.example/" + invocation.getArgument(0));
+
+        MineWorkListResponse response = service().listWorks(null, null, MediaTypeDict.IMAGE.getCode(), 1, 20);
+
+        assertThat(response.getSummary().getTotalCount()).isEqualTo(1L);
+        assertThat(response.getSummary().getImageCount()).isEqualTo(1L);
+        assertThat(response.getSummary().getVideoCount()).isZero();
+        assertThat(response.getTags()).extracting(MineWorkListResponse.TagItem::getCount)
+                .containsExactly(1L, 1L, 0L);
+        assertThat(response.getWorks()).extracting(MineWorkListResponse.WorkItem::getMediaType)
+                .containsExactly(MediaTypeDict.IMAGE.getCode());
+    }
+
+    @Test
     void listWorksShouldCountDraftAndPublishedReferencesFromSamePortfolioOnlyOnce() {
         WorkEntity work = ownedWork(11L);
         work.setMediaType(MediaTypeDict.IMAGE.getCode());

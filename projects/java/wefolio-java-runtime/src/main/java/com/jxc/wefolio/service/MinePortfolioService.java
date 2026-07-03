@@ -336,6 +336,7 @@ public class MinePortfolioService {
         }
         PortfolioConfigDto normalized = portfolioConfigValidator.normalize(userId, request.getConfig());
         int nextDraftRevision = safeInt(portfolio.getDraftRevision()) + 1;
+        int nextHistoryRevision = nextHistoryRevision(portfolio);
         String configJson = toJson(normalized);
         String hash = sha256(configJson);
         LocalDateTime now = LocalDateTime.now();
@@ -346,7 +347,7 @@ public class MinePortfolioService {
         portfolio.setDraftSavedBy(userId);
         portfolio.setDraftSavedAt(now);
         portfolio.setContentHash(hash);
-        portfolio.setCurrentRevision(nextDraftRevision);
+        portfolio.setCurrentRevision(nextHistoryRevision);
         portfolio.setLastSavedBy(userId);
         portfolio.setLastSavedAt(now);
         if (!PortfolioPublicationStatusDict.PUBLISHED.getCode().equals(portfolio.getPublicationStatus())) {
@@ -358,7 +359,7 @@ public class MinePortfolioService {
         }
         rebuildReferences(portfolio.getId(), PortfolioConfigScopeDict.DRAFT.getCode(),
                 portfolioConfigValidator.buildReferences(portfolio.getId(), userId, PortfolioConfigScopeDict.DRAFT.getCode(), normalized));
-        insertHistory(portfolio, nextDraftRevision, normalized, hash, userId, now, HISTORY_ACTION_DRAFT_SAVE);
+        insertHistory(portfolio, nextHistoryRevision, normalized, hash, userId, now, HISTORY_ACTION_DRAFT_SAVE);
         return buildDetail(portfolio, normalized);
     }
 
@@ -409,6 +410,7 @@ public class MinePortfolioService {
                 PortfolioMessage.PUBLISH_IDEMPOTENCY_REQUIRED_MESSAGE
         );
         int nextPublishedRevision = safeInt(portfolio.getPublishedRevision()) + 1;
+        int nextHistoryRevision = nextHistoryRevision(portfolio);
         String configJson = toJson(normalized);
         String hash = sha256(configJson);
         LocalDateTime now = LocalDateTime.now();
@@ -418,13 +420,17 @@ public class MinePortfolioService {
         portfolio.setPublishedBy(userId);
         portfolio.setPublishedAt(now);
         portfolio.setPublicationStatus(PortfolioPublicationStatusDict.PUBLISHED.getCode());
+        portfolio.setContentHash(hash);
+        portfolio.setCurrentRevision(nextHistoryRevision);
+        portfolio.setLastSavedBy(userId);
+        portfolio.setLastSavedAt(now);
         int updated = portfolioEntityMapper.updateById(portfolio);
         if (updated != 1) {
             throw new BusinessException(PortfolioMessage.PORTFOLIO_CONCURRENT_UPDATE_MESSAGE);
         }
         rebuildReferences(portfolio.getId(), PortfolioConfigScopeDict.PUBLISHED.getCode(),
                 portfolioConfigValidator.buildReferences(portfolio.getId(), userId, PortfolioConfigScopeDict.PUBLISHED.getCode(), normalized));
-        insertHistory(portfolio, nextPublishedRevision, normalized, hash, userId, now, HISTORY_ACTION_PUBLISH);
+        insertHistory(portfolio, nextHistoryRevision, normalized, hash, userId, now, HISTORY_ACTION_PUBLISH);
         pointService.consume(
                 userId,
                 PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode(),
@@ -557,6 +563,19 @@ public class MinePortfolioService {
         history.setSavedBy(userId);
         history.setSavedAt(savedAt);
         portfolioHistoryEntityMapper.insert(history);
+    }
+
+    /**
+     * 计算下一条历史快照的全局修订号，避免草稿版本与发布版本各自从 1 开始时冲突。
+     *
+     * @param portfolio 作品集
+     * @return 下一条历史修订号
+     */
+    private int nextHistoryRevision(PortfolioEntity portfolio) {
+        return Math.max(
+                safeInt(portfolio.getCurrentRevision()),
+                Math.max(safeInt(portfolio.getDraftRevision()), safeInt(portfolio.getPublishedRevision()))
+        ) + 1;
     }
 
     /**

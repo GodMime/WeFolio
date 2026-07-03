@@ -56,6 +56,9 @@ public interface MineWorkMessage {
     /** 非视频作品修改封面提示 */
     String VIDEO_COVER_UPDATE_MEDIA_TYPE_MESSAGE = "只有视频作品可以修改封面";
 
+    /** 作品媒体类型不支持提示 */
+    String WORK_MEDIA_TYPE_UNSUPPORTED_MESSAGE = "作品媒体类型不支持";
+
     /** 图片缩略图缺失提示 */
     String IMAGE_THUMB_REQUIRED_MESSAGE = "图片缩略图缺失，请重新上传";
 

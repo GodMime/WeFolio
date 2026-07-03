@@ -49,7 +49,7 @@
         ></view>
       </view>
       <block wx:if="{{title}}">
-        <text>{{title}}</text>
+        <text class="weui-navigation-bar__title">{{title}}</text>
       </block>
       <block wx:else>
         <slot name="center"></slot>

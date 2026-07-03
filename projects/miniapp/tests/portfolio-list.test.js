@@ -202,3 +202,118 @@ test('tapping a revealed portfolio card closes delete action instead of opening 
     page.cleanup()
   }
 })
+
+test('publishing a draft portfolio from list posts publish api without opening editor', async () => {
+  const requests = []
+  const navigations = []
+  const toasts = []
+  let listLoadCount = 0
+  const page = loadPortfolioListPage((options) => {
+    requests.push(options)
+    if (options.url === '/api/mine/portfolios') {
+      listLoadCount += 1
+      return Promise.resolve({
+        portfolios: [
+          {
+            portfolioId: 88,
+            ownerType: 'USER',
+            templateType: 'STANDARD',
+            publicationStatus: listLoadCount > 1 ? 'PUBLISHED' : 'DRAFT',
+            title: '林安婚礼司仪',
+            draftRevision: 3,
+            publishedRevision: listLoadCount > 1 ? 4 : 0,
+            shareCode: 'PF001'
+          }
+        ]
+      })
+    }
+    if (options.url === '/api/mine/portfolios/88/publish') {
+      return Promise.resolve({ portfolioId: 88, publishedRevision: 4 })
+    }
+    return Promise.resolve({})
+  }, {
+    navigateTo(options) {
+      navigations.push(options)
+    },
+    showToast(options) {
+      toasts.push(options)
+    }
+  })
+
+  page.bootstrap()
+  await flushPromises()
+
+  await page.handlePrimaryActionTap({
+    currentTarget: {
+      dataset: {
+        id: 88,
+        action: page.data.displayPortfolios[0].actionType
+      }
+    }
+  })
+  await flushPromises()
+  await flushPromises()
+
+  try {
+    assert.deepEqual(navigations, [])
+    assert.deepEqual(requests.map((item) => [item.url, item.method || 'GET']), [
+      ['/api/mine/portfolios', 'GET'],
+      ['/api/mine/portfolios/88/publish', 'POST'],
+      ['/api/mine/portfolios', 'GET']
+    ])
+    assert.equal(requests[1].data.draftRevision, 3)
+    assert.match(requests[1].data.idempotencyKey, /^publish-/)
+    assert.equal(toasts[0].title, '已发布')
+    assert.equal(page.data.displayPortfolios[0].statusText, '已发布')
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('bubbled primary action tap does not open portfolio editor', async () => {
+  const requests = []
+  const navigations = []
+  const page = loadPortfolioListPage((options) => {
+    requests.push(options)
+    return Promise.resolve({ portfolioId: 88, publishedRevision: 4 })
+  }, {
+    navigateTo(options) {
+      navigations.push(options)
+    }
+  })
+  page.data.displayPortfolios = [
+    {
+      portfolioId: 88,
+      title: '林安婚礼司仪',
+      draftRevision: 3,
+      actionType: 'PUBLISH'
+    }
+  ]
+
+  const publishPromise = page.handlePrimaryActionTap({
+    currentTarget: {
+      dataset: {
+        id: 88,
+        action: 'PUBLISH'
+      }
+    }
+  })
+  page.handlePortfolioCardTap({
+    currentTarget: { dataset: { id: 88 } },
+    target: {
+      dataset: {
+        id: 88,
+        action: 'PUBLISH'
+      }
+    }
+  })
+  await publishPromise
+  await flushPromises()
+
+  try {
+    assert.deepEqual(navigations, [])
+    assert.equal(requests[0].url, '/api/mine/portfolios/88/publish')
+  } finally {
+    page.cleanup()
+  }
+})

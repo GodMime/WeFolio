@@ -1,5 +1,6 @@
 const SCHEMA_VERSION = 'standard-personal-v1'
 const SORT_ORDER_STEP = 1000
+const DISPLAY_GROUP_NAME_MAX_LENGTH = 20
 const PROFILE_TAG_DEFAULT_COLOR = '#0f766e'
 const PROFILE_VISIBLE_FIELD_DEFAULTS = {
   avatar: true,
@@ -35,6 +36,10 @@ const COMPONENT_NAMES = {
 
 function trimText(value) {
   return String(value || '').trim()
+}
+
+function countText(value) {
+  return Array.from(String(value || '')).length
 }
 
 function toNumber(value, fallback = 0) {
@@ -308,6 +313,48 @@ function updateComponentDisplayGroups(config, componentKey, updater) {
   return normalizePortfolioConfig(Object.assign({}, normalized, { components }))
 }
 
+function validateDisplayGroupName(groups = [], name = '', currentGroupKey = '') {
+  const nextName = trimText(name)
+  if (!nextName) {
+    return { valid: false, message: '展示标签名称不能为空', name: '' }
+  }
+  if (countText(nextName) > DISPLAY_GROUP_NAME_MAX_LENGTH) {
+    return { valid: false, message: `展示标签名称不能超过${DISPLAY_GROUP_NAME_MAX_LENGTH}个字`, name: nextName }
+  }
+  const targetGroupKey = trimText(currentGroupKey)
+  const duplicated = normalizeDisplayGroups(groups).some((group) => {
+    return group.groupKey !== targetGroupKey && group.name === nextName
+  })
+  if (duplicated) {
+    return { valid: false, message: '展示标签名称不能重复', name: nextName }
+  }
+  return { valid: true, message: '', name: nextName }
+}
+
+function createDisplayGroupKey(groups = []) {
+  const usedKeys = new Set(groups.map((group) => trimText(group.groupKey)).filter(Boolean))
+  let index = groups.length + 1
+  while (usedKeys.has(`g_${index}`)) {
+    index += 1
+  }
+  return `g_${index}`
+}
+
+function addDisplayGroup(config, componentKey, name) {
+  return updateComponentDisplayGroups(config, componentKey, (groups) => {
+    const validation = validateDisplayGroupName(groups, name)
+    if (!validation.valid) {
+      return groups
+    }
+    return groups.concat({
+      groupKey: createDisplayGroupKey(groups),
+      name: validation.name,
+      sortOrder: (groups.length + 1) * SORT_ORDER_STEP,
+      workIds: []
+    })
+  })
+}
+
 function copyWorkTagsToDisplayGroups(config, componentKey, tags = []) {
   const groups = Array.isArray(tags)
     ? tags.map((tag, index) => ({
@@ -413,7 +460,9 @@ function buildPublishPayload(draftRevision, idempotencyKey) {
 module.exports = {
   COMPONENT_NAMES,
   COMPONENT_TYPES,
+  DISPLAY_GROUP_NAME_MAX_LENGTH,
   SCHEMA_VERSION,
+  addDisplayGroup,
   addComponent,
   buildDraftPayload,
   buildPublishPayload,
@@ -432,6 +481,7 @@ module.exports = {
   updateDisplayGroupWorkIds,
   updateComponentProfileConfig,
   updateComponentWorkIds,
+  validateDisplayGroupName,
   validateCarouselComponent,
   validateWorkGridComponent
 }

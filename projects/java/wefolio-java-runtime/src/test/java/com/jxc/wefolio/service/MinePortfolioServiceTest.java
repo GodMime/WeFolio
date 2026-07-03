@@ -313,6 +313,35 @@ class MinePortfolioServiceTest {
     }
 
     @Test
+    void saveDraftShouldUseCurrentRevisionForHistoryAfterPublishedRevisionExists() {
+        PortfolioEntity portfolio = ownedPortfolio();
+        portfolio.setDraftRevision(1);
+        portfolio.setPublishedRevision(1);
+        portfolio.setCurrentRevision(2);
+        portfolio.setPublicationStatus(PortfolioPublicationStatusDict.PUBLISHED.getCode());
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+        PortfolioConfigDto normalized = config();
+        when(portfolioConfigValidator.normalize(7L, normalized)).thenReturn(normalized);
+        when(portfolioConfigValidator.buildReferences(88L, 7L, PortfolioConfigScopeDict.DRAFT.getCode(), normalized))
+                .thenReturn(List.of());
+        when(portfolioEntityMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
+        MinePortfolioDraftSaveRequest request = new MinePortfolioDraftSaveRequest();
+        request.setConfig(normalized);
+        request.setClientRevision(1);
+        request.setIdempotencyKey("draft-after-publish");
+
+        service().saveDraft(88L, request);
+
+        ArgumentCaptor<PortfolioEntity> portfolioCaptor = ArgumentCaptor.forClass(PortfolioEntity.class);
+        verify(portfolioEntityMapper).updateById(portfolioCaptor.capture());
+        assertThat(portfolioCaptor.getValue().getDraftRevision()).isEqualTo(2);
+        assertThat(portfolioCaptor.getValue().getCurrentRevision()).isEqualTo(3);
+        ArgumentCaptor<PortfolioHistoryEntity> historyCaptor = ArgumentCaptor.forClass(PortfolioHistoryEntity.class);
+        verify(portfolioHistoryEntityMapper).insert(historyCaptor.capture());
+        assertThat(historyCaptor.getValue().getRevisionNo()).isEqualTo(3);
+    }
+
+    @Test
     void saveDraftShouldRejectConcurrentUpdateBeforeWritingReferencesAndHistory() {
         PortfolioEntity portfolio = ownedPortfolio();
         portfolio.setDraftRevision(3);
@@ -394,6 +423,35 @@ class MinePortfolioServiceTest {
         verify(portfolioHistoryEntityMapper).insert(any(PortfolioHistoryEntity.class));
         assertThat(response.getPublishedRevision()).isEqualTo(2);
         assertThat(response.getPublicationStatus()).isEqualTo(PortfolioPublicationStatusDict.PUBLISHED.getCode());
+    }
+
+    @Test
+    void publishShouldUseCurrentRevisionForHistoryAfterDraftSave() {
+        PortfolioEntity portfolio = ownedPortfolio();
+        portfolio.setDraftRevision(1);
+        portfolio.setPublishedRevision(0);
+        portfolio.setCurrentRevision(1);
+        portfolio.setDraftConfigJson("{\"schemaVersion\":\"standard-personal-v1\",\"share\":{\"title\":\"林安婚礼司仪\"},\"components\":[]}");
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+        PortfolioConfigDto normalized = config();
+        when(portfolioConfigValidator.normalize(eq(7L), any(PortfolioConfigDto.class))).thenReturn(normalized);
+        when(portfolioConfigValidator.buildReferences(88L, 7L, PortfolioConfigScopeDict.PUBLISHED.getCode(), normalized))
+                .thenReturn(List.of());
+        when(portfolioEntityMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
+        MinePortfolioPublishRequest request = new MinePortfolioPublishRequest();
+        request.setDraftRevision(1);
+        request.setIdempotencyKey("publish-after-first-draft");
+
+        MinePortfolioDetailResponse response = service().publish(88L, request);
+
+        ArgumentCaptor<PortfolioEntity> portfolioCaptor = ArgumentCaptor.forClass(PortfolioEntity.class);
+        verify(portfolioEntityMapper).updateById(portfolioCaptor.capture());
+        assertThat(portfolioCaptor.getValue().getPublishedRevision()).isEqualTo(1);
+        assertThat(portfolioCaptor.getValue().getCurrentRevision()).isEqualTo(2);
+        ArgumentCaptor<PortfolioHistoryEntity> historyCaptor = ArgumentCaptor.forClass(PortfolioHistoryEntity.class);
+        verify(portfolioHistoryEntityMapper).insert(historyCaptor.capture());
+        assertThat(historyCaptor.getValue().getRevisionNo()).isEqualTo(2);
+        assertThat(response.getPublishedRevision()).isEqualTo(1);
     }
 
     @Test

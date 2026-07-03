@@ -76,7 +76,7 @@ class MineWorkControllerTest {
         updatedTag.setId(31L);
         updatedTag.setName("草坪婚礼");
         updatedTag.setColor("#2d5f9a");
-        when(mineWorkService.listWorks("草坪", 12L, 2, 10)).thenReturn(listResponse);
+        when(mineWorkService.listWorks("草坪", 12L, "IMAGE", 2, 10)).thenReturn(listResponse);
         when(mineWorkService.listTags()).thenReturn(tagResponse);
         when(mineWorkService.createTag(createTagRequest)).thenReturn(createdTag);
         when(mineWorkService.updateTag(31L, updateTagRequest)).thenReturn(updatedTag);
@@ -90,7 +90,7 @@ class MineWorkControllerTest {
         when(mineWorkService.checkDeleteWorks(batchDeleteRequest)).thenReturn(batchDeleteCheckResponse);
         when(mineWorkService.deleteWorks(batchDeleteRequest)).thenReturn(batchDeleteResponse);
 
-        Response<MineWorkListResponse> listed = controller.works("草坪", 12L, 2, 10);
+        Response<MineWorkListResponse> listed = controller.works("草坪", 12L, "IMAGE", 2, 10);
         Response<MineWorkTagResponse> tags = controller.tags();
         Response<MineWorkListResponse.TagItem> created = controller.createTag(createTagRequest);
         Response<MineWorkListResponse.TagItem> tagUpdated = controller.updateTag(31L, updateTagRequest);
@@ -108,7 +108,7 @@ class MineWorkControllerTest {
         Response<MineWorkBatchDeleteResponse> batchDeleted = controller.deleteWorks(batchDeleteRequest);
 
         assertThat(MineWorkController.class.isAnnotationPresent(MaintainerAccess.class)).isTrue();
-        assertGetMapping("works", new Class<?>[] {String.class, Long.class, int.class, int.class}, "/api/mine/works");
+        assertGetMapping("works", new Class<?>[] {String.class, Long.class, String.class, int.class, int.class}, "/api/mine/works");
         assertGetMapping("tags", new Class<?>[] {}, "/api/mine/works/tags");
         assertPostMapping("createTag",
                 new Class<?>[] {MineWorkTagUpsertRequest.class},
@@ -140,7 +140,7 @@ class MineWorkControllerTest {
                 new Class<?>[] {MineWorkBatchDeleteRequest.class},
                 "/api/mine/works/delete");
         assertPostMapping("deleteTag", new Class<?>[] {Long.class}, "/api/mine/works/tags/delete/{tagId}");
-        assertThat(MineWorkController.class.getMethod("works", String.class, Long.class, int.class, int.class)
+        assertThat(MineWorkController.class.getMethod("works", String.class, Long.class, String.class, int.class, int.class)
                 .getParameters()[0].isAnnotationPresent(RequestParam.class)).isTrue();
         assertThat(MineWorkController.class.getMethod("detail", Long.class)
                 .getParameters()[0].isAnnotationPresent(PathVariable.class)).isTrue();

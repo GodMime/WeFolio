@@ -44,7 +44,7 @@
             <view wx:if="{{item.profile.displayName}}" class="profile-name">{{item.profile.displayName}}</view>
             <view wx:if="{{item.profile.profession}}" class="profile-line">{{item.profile.profession}}</view>
             <view wx:if="{{item.profile.city}}" class="profile-line">{{item.profile.city}}</view>
-            <view wx:if="{{item.profile.bio}}" class="profile-bio">{{item.profile.bio}}</view>
+            <text wx:if="{{item.profile.bio}}" class="profile-bio" space="nbsp">{{item.profile.bio}}</text>
             <view wx:if="{{item.profile.tags.length}}" class="profile-tags">
               <view wx:for="{{item.profile.tags}}" wx:key="name" wx:for-item="tag" class="profile-tag">{{tag.name}}</view>
             </view>
@@ -133,6 +133,11 @@
             <view class="text-content">{{item.textSection.content}}</view>
           </view>
         </block>
+      </view>
+
+      <view class="folio-brand-footer">
+        <image class="folio-brand-logo" src="https://cdn2.we-folio.dingchenyong.top/system/folio-logo.png" mode="aspectFit"></image>
+        <view class="folio-brand-name">映期Folio</view>
       </view>
     </block>
   </scroll-view>
