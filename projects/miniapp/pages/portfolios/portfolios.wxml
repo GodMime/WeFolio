@@ -74,27 +74,15 @@
                     data-action="PREVIEW_DRAFT"
                     catchtap="handleDraftPreviewTap"
                   >预览</button>
-                  <view
+                  <button
                     wx:if="{{item.actionType === 'SHARE'}}"
-                    class="portfolio-icon-button share"
+                    class="portfolio-action-button share"
+                    open-type="share"
+                    data-id="{{item.portfolioId}}"
+                    data-action="{{item.actionType}}"
+                    catchtap="handlePrimaryActionTap"
                     aria-label="分享作品集"
-                  >
-                    <view class="portfolio-share-icon" aria-hidden="true">
-                      <view class="portfolio-share-line upper"></view>
-                      <view class="portfolio-share-line lower"></view>
-                      <view class="portfolio-share-dot source"></view>
-                      <view class="portfolio-share-dot upper"></view>
-                      <view class="portfolio-share-dot lower"></view>
-                    </view>
-                    <button
-                      class="portfolio-share-hit"
-                      open-type="share"
-                      data-id="{{item.portfolioId}}"
-                      data-action="{{item.actionType}}"
-                      catchtap="handlePrimaryActionTap"
-                      aria-label="分享作品集"
-                    ></button>
-                  </view>
+                  >分享</button>
                   <button
                     wx:else
                     class="portfolio-action-button {{item.actionType === 'PUBLISH' ? 'publish' : ''}} {{item.actionType === 'EDIT' ? 'edit' : ''}}"
