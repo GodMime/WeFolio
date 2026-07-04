@@ -51,7 +51,13 @@ class PortfolioVisitServiceTest {
             return 1;
         });
 
-        VisitRecordEntity record = service().recordOpen(portfolio(), "visitor-a", "WECHAT_SHARE_CARD", "open-1");
+        VisitRecordEntity record = service().recordOpen(
+                portfolio(),
+                "visitor-a",
+                "wx-openid-hash",
+                "WECHAT_SHARE_CARD",
+                "open-1"
+        );
 
         ArgumentCaptor<VisitRecordEntity> recordCaptor = ArgumentCaptor.forClass(VisitRecordEntity.class);
         verify(visitRecordEntityMapper).insert(recordCaptor.capture());
@@ -65,9 +71,9 @@ class PortfolioVisitServiceTest {
                 eq(7L),
                 eq(PointSceneCodeDict.VISIT_PERSONAL_PORTFOLIO.getCode()),
                 eq("PORTFOLIO_OPEN"),
-                startsWith("88:visitor-a:"),
+                startsWith("88:wx-openid-hash:"),
                 eq(1),
-                startsWith("PORTFOLIO_OPEN:88:visitor-a:"),
+                startsWith("PF_OPEN:88:wx-openid-hash:"),
                 eq("访客打开个人作品集")
         );
         verify(visitEventEntityMapper).insert(any(VisitEventEntity.class));
@@ -84,7 +90,7 @@ class PortfolioVisitServiceTest {
         record.setPortfolioShareCodeSnapshot("OLD001");
         when(visitRecordEntityMapper.selectOne(any())).thenReturn(record);
 
-        service().recordOpen(portfolio(), "visitor-a", "WECHAT_SHARE_CARD", "open-2");
+        service().recordOpen(portfolio(), "visitor-a", "wx-openid-hash", "WECHAT_SHARE_CARD", "open-2");
 
         ArgumentCaptor<VisitRecordEntity> recordCaptor = ArgumentCaptor.forClass(VisitRecordEntity.class);
         verify(visitRecordEntityMapper).updateById(recordCaptor.capture());

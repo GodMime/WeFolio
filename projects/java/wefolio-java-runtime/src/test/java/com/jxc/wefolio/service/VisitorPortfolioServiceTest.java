@@ -8,6 +8,7 @@ import com.jxc.wefolio.dict.ScheduleStatusDict;
 import com.jxc.wefolio.dto.PortfolioRenderDto;
 import com.jxc.wefolio.dto.VisitorPortfolioResponse;
 import com.jxc.wefolio.dto.VisitorPortfolioScheduleResponse;
+import com.jxc.wefolio.dto.WechatSessionResponse;
 import com.jxc.wefolio.entity.PortfolioEntity;
 import com.jxc.wefolio.entity.ScheduleEntity;
 import com.jxc.wefolio.entity.VisitRecordEntity;
@@ -17,6 +18,7 @@ import com.jxc.wefolio.mapper.ScheduleEntityMapper;
 import com.jxc.wefolio.message.PortfolioMessage;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -58,13 +60,17 @@ class VisitorPortfolioServiceTest {
     @Mock
     private PortfolioRenderService portfolioRenderService;
 
+    /** 微信小程序客户端模拟 */
+    @Mock
+    private WechatMiniappClient wechatMiniappClient;
+
     @Test
     void getPortfolioShouldRejectUnpublishedPortfolio() {
         PortfolioEntity portfolio = publishedPortfolio();
         portfolio.setPublicationStatus(PortfolioPublicationStatusDict.DRAFT_ONLY.getCode());
         when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
 
-        assertThatThrownBy(() -> service().getPortfolio("PF001", "visitor-a", "WECHAT_SHARE_CARD", "open-1"))
+        assertThatThrownBy(() -> service().getPortfolio("PF001", "visitor-a", "wx-code", "WECHAT_SHARE_CARD", "open-1"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("作品集暂不可访问");
     }
@@ -81,14 +87,14 @@ class VisitorPortfolioServiceTest {
         when(portfolioRenderService.render(eq(portfolio), any(), eq(false), eq(true), any(), eq(null)))
                 .thenReturn(renderData);
 
-        VisitorPortfolioResponse response = service().getPortfolio("PF001", "visitor-a", "WECHAT_SHARE_CARD", "open-1");
+        VisitorPortfolioResponse response = service().getPortfolio("PF001", "visitor-a", "wx-code", "WECHAT_SHARE_CARD", "open-1");
 
         assertThat(response.isUnderMaintenance()).isTrue();
         assertThat(response.getMaintenanceText().getPrimary()).isEqualTo("UNDER MAINTENANCE");
         assertThat(response.getMaintenanceText().getSecondary()).isEqualTo("维护中");
         assertThat(response.getVisitRecordId()).isNull();
         assertThat(response.getRenderData()).isSameAs(renderData);
-        verify(portfolioVisitService, never()).recordOpen(any(), any(), any(), any());
+        verify(portfolioVisitService, never()).recordOpen(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -97,14 +103,18 @@ class VisitorPortfolioServiceTest {
         VisitRecordEntity record = new VisitRecordEntity();
         record.setId(33L);
         when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
-        when(portfolioVisitService.recordOpen(portfolio, "visitor-a", "WECHAT_SHARE_CARD", "open-1")).thenReturn(record);
+        WechatSessionResponse session = new WechatSessionResponse();
+        session.setOpenid("openid-123");
+        when(wechatMiniappClient.exchangeCode("wx-code")).thenReturn(session);
+        when(portfolioVisitService.recordOpen(eq(portfolio), eq("visitor-a"), any(), eq("WECHAT_SHARE_CARD"), eq("open-1")))
+                .thenReturn(record);
         PortfolioRenderDto renderData = new PortfolioRenderDto();
         renderData.setPreview(false);
         renderData.setVisitRecordId(33L);
         when(portfolioRenderService.render(eq(portfolio), any(), eq(false), eq(false), eq(null), eq(33L)))
                 .thenReturn(renderData);
 
-        VisitorPortfolioResponse response = service().getPortfolio("PF001", "visitor-a", "WECHAT_SHARE_CARD", "open-1");
+        VisitorPortfolioResponse response = service().getPortfolio("PF001", "visitor-a", "wx-code", "WECHAT_SHARE_CARD", "open-1");
 
         assertThat(response.isUnderMaintenance()).isFalse();
         assertThat(response.getPortfolioId()).isEqualTo(88L);
@@ -113,6 +123,16 @@ class VisitorPortfolioServiceTest {
         assertThat(response.getConfig()).isNotNull();
         assertThat(response.getVisitRecordId()).isEqualTo(33L);
         assertThat(response.getRenderData()).isSameAs(renderData);
+        ArgumentCaptor<String> billingKeyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(portfolioVisitService).recordOpen(
+                eq(portfolio),
+                eq("visitor-a"),
+                billingKeyCaptor.capture(),
+                eq("WECHAT_SHARE_CARD"),
+                eq("open-1")
+        );
+        assertThat(billingKeyCaptor.getValue()).startsWith("WX_OPENID:");
+        assertThat(billingKeyCaptor.getValue()).doesNotContain("openid-123");
     }
 
     @Test
@@ -121,11 +141,11 @@ class VisitorPortfolioServiceTest {
         portfolio.setPublishedConfigJson("{invalid-json");
         when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
 
-        assertThatThrownBy(() -> service().getPortfolio("PF001", "visitor-a", "WECHAT_SHARE_CARD", "open-1"))
+        assertThatThrownBy(() -> service().getPortfolio("PF001", "visitor-a", "wx-code", "WECHAT_SHARE_CARD", "open-1"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage(PortfolioMessage.PORTFOLIO_UNAVAILABLE_MESSAGE);
         verify(pointService, never()).assertCanConsume(any(), any(), any(Integer.class));
-        verify(portfolioVisitService, never()).recordOpen(any(), any(), any(), any());
+        verify(portfolioVisitService, never()).recordOpen(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -171,7 +191,8 @@ class VisitorPortfolioServiceTest {
                 scheduleEntityMapper,
                 pointService,
                 portfolioVisitService,
-                portfolioRenderService
+                portfolioRenderService,
+                wechatMiniappClient
         );
     }
 

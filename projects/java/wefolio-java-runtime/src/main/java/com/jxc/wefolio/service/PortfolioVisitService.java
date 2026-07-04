@@ -16,6 +16,7 @@ import com.jxc.wefolio.mapper.VisitEventEntityMapper;
 import com.jxc.wefolio.mapper.VisitRecordEntityMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -47,8 +48,8 @@ public class PortfolioVisitService {
     /** 播放视频备注 */
     private static final String REMARK_VIDEO_PLAY = "访客播放作品集视频";
 
-    /** 打开计费幂等前缀 */
-    private static final String OPEN_IDEMPOTENCY_PREFIX = "PORTFOLIO_OPEN:";
+    /** 打开计费幂等前缀，需给业务 ID 预留数据库长度 */
+    private static final String OPEN_IDEMPOTENCY_PREFIX = "PF_OPEN:";
 
     /** 日期时间窗口格式 */
     private static final DateTimeFormatter OPEN_WINDOW_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHH");
@@ -73,13 +74,16 @@ public class PortfolioVisitService {
      *
      * @param portfolio 作品集
      * @param visitorKey 访客摘要
+     * @param billingVisitorKey 计费访客摘要
      * @param sourceType 来源
      * @param idempotencyKey 事件幂等键
      * @return 访问汇总
      */
+    @Transactional(rollbackFor = Exception.class)
     public VisitRecordEntity recordOpen(
             PortfolioEntity portfolio,
             String visitorKey,
+            String billingVisitorKey,
             String sourceType,
             String idempotencyKey
     ) {
@@ -112,7 +116,7 @@ public class PortfolioVisitService {
             record.setLastVisitedAt(now);
             visitRecordEntityMapper.updateById(record);
         }
-        consumePortfolioOpen(portfolio, visitorKey, now);
+        consumePortfolioOpen(portfolio, billingVisitorKey, now);
         insertEvent(record, portfolio, VisitEventTypeDict.PORTFOLIO_OPENED.getCode(), null, null, null,
                 idempotencyKey, null, now);
         return record;
@@ -171,6 +175,7 @@ public class PortfolioVisitService {
      * @param portfolio 作品集
      * @param request 事件请求
      */
+    @Transactional(rollbackFor = Exception.class)
     public void recordEvent(PortfolioEntity portfolio, VisitorPortfolioEventRequest request) {
         VisitRecordEntity record = requireRecord(portfolio.getId(), request.getVisitorKey());
         String eventType = request.getEventType();
@@ -214,6 +219,7 @@ public class PortfolioVisitService {
      * @param queriedDate 查询日期
      * @param idempotencyKey 幂等键
      */
+    @Transactional(rollbackFor = Exception.class)
     public void recordScheduleQuery(PortfolioEntity portfolio, String visitorKey, LocalDate queriedDate, String idempotencyKey) {
         VisitRecordEntity record = findRecord(portfolio.getId(), visitorKey);
         if (record == null) {
@@ -233,6 +239,7 @@ public class PortfolioVisitService {
      * @param leadId 线索 ID
      * @param idempotencyKey 幂等键
      */
+    @Transactional(rollbackFor = Exception.class)
     public void recordContactLeadSubmitted(PortfolioEntity portfolio, String visitorKey, Long leadId, String idempotencyKey) {
         VisitRecordEntity record = findRecord(portfolio.getId(), visitorKey);
         if (record != null) {
@@ -286,14 +293,14 @@ public class PortfolioVisitService {
      * 消费打开个人作品集积分。
      *
      * @param portfolio 作品集
-     * @param visitorKey 访客摘要
+     * @param billingVisitorKey 计费访客摘要
      * @param now 当前时间
      */
-    private void consumePortfolioOpen(PortfolioEntity portfolio, String visitorKey, LocalDateTime now) {
+    private void consumePortfolioOpen(PortfolioEntity portfolio, String billingVisitorKey, LocalDateTime now) {
         String window = now.withMinute(0).withSecond(0).withNano(0)
                 .minusHours(now.getHour() % 2L)
                 .format(OPEN_WINDOW_FORMATTER);
-        String businessId = portfolio.getId() + ":" + visitorKey + ":" + window;
+        String businessId = portfolio.getId() + ":" + billingVisitorKey + ":" + window;
         pointService.consume(
                 portfolio.getOwnerId(),
                 PointSceneCodeDict.VISIT_PERSONAL_PORTFOLIO.getCode(),

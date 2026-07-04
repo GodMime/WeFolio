@@ -1,5 +1,6 @@
 package com.jxc.wefolio.service;
 
+import com.alibaba.fastjson2.JSON;
 import com.jxc.wefolio.dict.MediaTypeDict;
 import com.jxc.wefolio.dict.PortfolioComponentTypeDict;
 import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
@@ -73,6 +74,7 @@ class PortfolioRenderServiceTest {
         assertThat(render.getTitle()).isEqualTo("林安婚礼司仪");
         assertThat(render.getComponents()).extracting(PortfolioRenderDto.Component::getComponentKey)
                 .containsExactly("c_profile", "c_grid", "c_carousel");
+        assertThat(JSON.toJSONString(render.getShare())).doesNotContain("\"intro\"");
         PortfolioRenderDto.Component grid = render.getComponents().get(1);
         assertThat(grid.getGroups()).hasSize(1);
         assertThat(grid.getGroups().get(0).getName()).isEqualTo("全部案例");
@@ -141,7 +143,6 @@ class PortfolioRenderServiceTest {
         config.setSchemaVersion(PortfolioConfigDto.SCHEMA_VERSION_STANDARD_PERSONAL_V1);
         PortfolioConfigDto.Share share = new PortfolioConfigDto.Share();
         share.setTitle("林安婚礼司仪");
-        share.setIntro("温暖沉稳");
         share.setCoverUrl("https://cdn.example.com/share.jpg");
         config.setShare(share);
         config.setComponents(List.of(components));

@@ -386,6 +386,33 @@ class MinePortfolioServiceTest {
     }
 
     @Test
+    void previewPublishedShouldReturnPublishedConfigWithoutConsumingPointsOrWritingReferences() {
+        PortfolioEntity portfolio = ownedPortfolio();
+        portfolio.setPublicationStatus(PortfolioPublicationStatusDict.PUBLISHED.getCode());
+        portfolio.setDraftConfigJson("{\"schemaVersion\":\"standard-personal-v1\",\"share\":{\"title\":\"草稿标题\"},\"components\":[]}");
+        portfolio.setPublishedConfigJson("{\"schemaVersion\":\"standard-personal-v1\",\"share\":{\"title\":\"发布标题\"},\"components\":[]}");
+        portfolio.setDraftRevision(5);
+        portfolio.setPublishedRevision(4);
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+        PortfolioRenderDto renderData = new PortfolioRenderDto();
+        renderData.setPreview(true);
+        renderData.setTitle("发布标题");
+        when(portfolioRenderService.render(eq(portfolio), any(PortfolioConfigDto.class), eq(true), eq(false), isNull(), isNull()))
+                .thenReturn(renderData);
+
+        MinePortfolioDetailResponse response = service().previewPublished(88L);
+
+        assertThat(response.getDraftRevision()).isEqualTo(5);
+        assertThat(response.getPublishedRevision()).isEqualTo(4);
+        assertThat(response.getConfig().getShare().getTitle()).isEqualTo("发布标题");
+        assertThat(response.getRenderData()).isSameAs(renderData);
+        assertThat(response.getRenderData().isPreview()).isTrue();
+        verify(pointService, never()).consume(any(), any(), any(), any(), any(Integer.class), any(), any());
+        verify(portfolioReferenceEntityMapper, never()).insert(any(PortfolioReferenceEntity.class));
+        verify(portfolioHistoryEntityMapper, never()).insert(any(PortfolioHistoryEntity.class));
+    }
+
+    @Test
     void publishShouldCopyDraftConfigConsumeOnePointAndRebuildPublishedReferences() {
         PortfolioEntity portfolio = ownedPortfolio();
         portfolio.setDraftRevision(4);

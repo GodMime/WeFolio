@@ -90,6 +90,7 @@ test('normalizes visitor portfolio from backend render data first', () => {
 
   assert.equal(result.preview, true)
   assert.equal(result.title, '林安婚礼司仪')
+  assert.equal(Object.hasOwn(result.share, 'intro'), false)
   assert.equal(result.share.coverUrl, 'https://cdn.example.com/share.jpg')
   assert.deepEqual(result.components.map((item) => item.componentKey), ['c_list'])
   assert.equal(result.components[0].layout, 'single')

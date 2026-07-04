@@ -16,15 +16,12 @@ import com.jxc.wefolio.mapper.PortfolioEntityMapper;
 import com.jxc.wefolio.message.PortfolioMessage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
-import java.util.HexFormat;
 
 /**
- * 联系线索服务 — 负责访客预留联系信息校验、脱敏存储和事件记录。
+ * 联系线索服务 — 负责访客预留联系信息校验、明文存储和事件记录。
  */
 @Service
 @RequiredArgsConstructor
@@ -32,9 +29,6 @@ public class ContactLeadService {
 
     /** 默认隐私说明版本 */
     private static final String DEFAULT_CONSENT_VERSION = "v1";
-
-    /** SHA-256 算法名 */
-    private static final String SHA_256_ALGORITHM = "SHA-256";
 
     /** 作品集标题快照兜底 */
     private static final String DEFAULT_PORTFOLIO_TITLE_SNAPSHOT = "个人作品集";
@@ -58,6 +52,7 @@ public class ContactLeadService {
      * @param request 提交请求
      * @return 提交响应
      */
+    @Transactional(rollbackFor = Exception.class)
     public ContactLeadSubmitResponse submit(String shareCode, ContactLeadSubmitRequest request) {
         PortfolioEntity portfolio = portfolioEntityMapper.selectOne(
                 Wrappers.lambdaQuery(PortfolioEntity.class)
@@ -77,6 +72,7 @@ public class ContactLeadService {
      * @param request 提交请求
      * @return 提交响应
      */
+    @Transactional(rollbackFor = Exception.class)
     public ContactLeadSubmitResponse submit(PortfolioEntity portfolio, ContactLeadSubmitRequest request) {
         if (request == null || !hasText(request.getContactName())) {
             throw new BusinessException(PortfolioMessage.CONTACT_NAME_REQUIRED_MESSAGE);
@@ -94,9 +90,9 @@ public class ContactLeadService {
         lead.setOwnerType(portfolio.getOwnerType());
         lead.setOwnerId(portfolio.getOwnerId());
         lead.setContactName(request.getContactName().strip());
-        lead.setPhoneCiphertext(hasText(request.getPhone()) ? digest(request.getPhone().strip()) : null);
+        lead.setPhoneCiphertext(hasText(request.getPhone()) ? request.getPhone().strip() : null);
         lead.setPhoneLast4(last4(request.getPhone()));
-        lead.setWechatCiphertext(hasText(request.getWechat()) ? digest(request.getWechat().strip()) : null);
+        lead.setWechatCiphertext(hasText(request.getWechat()) ? request.getWechat().strip() : null);
         lead.setWechatMaskHint(maskWechat(request.getWechat()));
         lead.setDesiredSchedule(defaultString(request.getDesiredSchedule()));
         lead.setNeeds(defaultString(request.getNeeds()));
@@ -154,21 +150,6 @@ public class ContactLeadService {
             return DEFAULT_PORTFOLIO_SHARE_CODE_SNAPSHOT;
         }
         return portfolio.getShareCode().strip();
-    }
-
-    /**
-     * 计算摘要。
-     *
-     * @param value 原值
-     * @return 摘要
-     */
-    private String digest(String value) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance(SHA_256_ALGORITHM);
-            return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 算法不可用", e);
-        }
     }
 
     /**

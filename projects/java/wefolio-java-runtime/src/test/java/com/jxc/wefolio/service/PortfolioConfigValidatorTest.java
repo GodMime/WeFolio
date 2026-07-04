@@ -1,5 +1,6 @@
 package com.jxc.wefolio.service;
 
+import com.alibaba.fastjson2.JSON;
 import com.jxc.wefolio.dict.MediaTypeDict;
 import com.jxc.wefolio.dict.PortfolioConfigScopeDict;
 import com.jxc.wefolio.dict.PortfolioComponentTypeDict;
@@ -53,6 +54,20 @@ class PortfolioConfigValidatorTest {
                 .containsExactly("c_text", "c_profile");
         assertThat(normalized.getComponents()).extracting(PortfolioConfigDto.Component::getSortOrder)
                 .containsExactly(1000, 2000);
+    }
+
+    @Test
+    void normalizeShouldDropLegacyShareIntro() {
+        String legacyConfigJson = """
+                {"schemaVersion":"standard-personal-v1","share":{"title":"林安婚礼司仪","intro":"温暖沉稳"},"components":[
+                  {"componentKey":"c_profile","componentType":"PROFILE","sortOrder":1000,"enabled":true,"config":{}}
+                ]}
+                """;
+        PortfolioConfigDto config = JSON.parseObject(legacyConfigJson, PortfolioConfigDto.class);
+
+        PortfolioConfigDto normalized = validator().normalize(7L, config);
+
+        assertThat(JSON.toJSONString(normalized)).doesNotContain("\"intro\"");
     }
 
     @Test
@@ -335,7 +350,6 @@ class PortfolioConfigValidatorTest {
         config.setSchemaVersion(PortfolioConfigDto.SCHEMA_VERSION_STANDARD_PERSONAL_V1);
         PortfolioConfigDto.Share share = new PortfolioConfigDto.Share();
         share.setTitle("林安婚礼司仪");
-        share.setIntro("沉稳、温暖、节奏清晰");
         config.setShare(share);
         config.setComponents(List.of(components));
         return config;

@@ -45,7 +45,7 @@ class VisitorPortfolioControllerTest {
         VisitorPortfolioEventRequest eventRequest = new VisitorPortfolioEventRequest();
         ContactLeadSubmitRequest leadRequest = new ContactLeadSubmitRequest();
         ContactLeadSubmitResponse leadResponse = new ContactLeadSubmitResponse();
-        when(visitorPortfolioService.getPortfolio("PF001", "visitor-a", "WECHAT_SHARE_CARD", "open-1"))
+        when(visitorPortfolioService.getPortfolio("PF001", "visitor-a", "wx-code", "WECHAT_SHARE_CARD", "open-1"))
                 .thenReturn(portfolioResponse);
         when(visitorPortfolioService.querySchedule(
                 "PF001",
@@ -57,7 +57,7 @@ class VisitorPortfolioControllerTest {
         when(contactLeadService.submit("PF001", leadRequest)).thenReturn(leadResponse);
 
         Response<VisitorPortfolioResponse> portfolio = controller.portfolio(
-                "PF001", "visitor-a", "WECHAT_SHARE_CARD", "open-1");
+                "PF001", "visitor-a", "wx-code", "WECHAT_SHARE_CARD", "open-1");
         Response<VisitorPortfolioScheduleResponse> schedule = controller.schedule(
                 "PF001", "2026-07-18", "2026-07-18", "ALL", "visitor-a", "schedule-1");
         Response<Void> event = controller.event("PF001", eventRequest);
@@ -65,7 +65,7 @@ class VisitorPortfolioControllerTest {
 
         assertThat(VisitorPortfolioController.class.isAnnotationPresent(VisitorAccess.class)).isTrue();
         assertGetMapping("portfolio",
-                new Class<?>[] {String.class, String.class, String.class, String.class},
+                new Class<?>[] {String.class, String.class, String.class, String.class, String.class},
                 "/api/visitor/portfolios/{shareCode}");
         assertGetMapping("schedule",
                 new Class<?>[] {String.class, String.class, String.class, String.class, String.class, String.class},
@@ -76,7 +76,14 @@ class VisitorPortfolioControllerTest {
         assertPostMapping("contactLead",
                 new Class<?>[] {String.class, ContactLeadSubmitRequest.class},
                 "/api/visitor/portfolios/{shareCode}/contact-leads");
-        assertThat(VisitorPortfolioController.class.getMethod("portfolio", String.class, String.class, String.class, String.class)
+        assertThat(VisitorPortfolioController.class.getMethod(
+                        "portfolio",
+                        String.class,
+                        String.class,
+                        String.class,
+                        String.class,
+                        String.class
+                )
                 .getParameters()[0].isAnnotationPresent(PathVariable.class)).isTrue();
         assertThat(portfolio.getData()).isSameAs(portfolioResponse);
         assertThat(schedule.getData()).isSameAs(scheduleResponse);

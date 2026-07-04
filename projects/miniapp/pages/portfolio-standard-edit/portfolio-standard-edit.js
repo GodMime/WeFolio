@@ -26,7 +26,6 @@ const {
   addDisplayGroup,
   addComponent,
   buildDraftPayload,
-  buildPublishPayload,
   copyWorkTagsToDisplayGroups,
   createComponent,
   importWorksIntoDisplayGroup,
@@ -71,8 +70,7 @@ const PROFILE_VISIBLE_FIELD_OPTIONS = [
 const QR_CONTACT_SOURCE_PROFILE = 'PROFILE'
 const QR_CONTACT_SOURCE_CUSTOM = 'CUSTOM'
 const SHARE_FIELD_LIMITS = {
-  title: 50,
-  intro: 500
+  title: 50
 }
 const PROFILE_FIELD_LIMITS = {
   displayName: 50,
@@ -578,8 +576,6 @@ Page({
     config.share = Object.assign({}, config.share)
     if (path === 'share.title') {
       config.share.title = event.detail.value
-    } else if (path === 'share.intro') {
-      config.share.intro = event.detail.value
     } else {
       return
     }
@@ -1747,18 +1743,5 @@ Page({
       return
     }
     wx.navigateTo({ url: `/pages/portfolio-standard-preview/portfolio-standard-preview?portfolioId=${this.data.portfolioId}` })
-  },
-
-  handlePublish() {
-    request({
-      url: `${PORTFOLIO_API_PREFIX}/${this.data.portfolioId}/publish`,
-      method: 'POST',
-      data: buildPublishPayload(this.data.draftRevision, makeIdempotencyKey('publish'))
-    }).then((response) => {
-      this.setData({ publishedRevision: response.publishedRevision || this.data.publishedRevision })
-      wx.showToast({ title: '已发布', icon: 'success' })
-    }).catch((error) => {
-      wx.showToast({ title: error.message || '发布失败', icon: 'none' })
-    })
   }
 })

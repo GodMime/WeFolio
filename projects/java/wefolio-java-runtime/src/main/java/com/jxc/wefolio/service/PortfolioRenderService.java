@@ -427,7 +427,6 @@ public class PortfolioRenderService {
             return copied;
         }
         copied.setTitle(defaultString(share.getTitle()));
-        copied.setIntro(defaultString(share.getIntro()));
         copied.setCoverUrl(defaultString(share.getCoverUrl()));
         copied.setAvatarUrl(defaultString(share.getAvatarUrl()));
         return copied;

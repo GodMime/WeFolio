@@ -121,6 +121,17 @@ public class MinePortfolioController {
     }
 
     /**
+     * 预览正式发布版本。
+     *
+     * @param portfolioId 作品集 ID
+     * @return 详情响应
+     */
+    @GetMapping("/api/mine/portfolios/{portfolioId}/published-preview")
+    public Response<MinePortfolioDetailResponse> previewPublished(@PathVariable Long portfolioId) {
+        return Response.success(minePortfolioService.previewPublished(portfolioId));
+    }
+
+    /**
      * 发布草稿。
      *
      * @param portfolioId 作品集 ID

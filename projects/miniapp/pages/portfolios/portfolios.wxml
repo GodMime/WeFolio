@@ -59,13 +59,22 @@
                 </view>
               </view>
               <view class="portfolio-side">
-                <button
-                  class="portfolio-share-button {{item.actionType === 'EDIT' ? 'draft' : ''}}"
-                  data-id="{{item.portfolioId}}"
-                  data-action="{{item.actionType}}"
-                  open-type="{{item.actionType === 'SHARE' ? 'share' : ''}}"
-                  catchtap="handlePrimaryActionTap"
-                >{{item.actionText}}</button>
+                <view class="portfolio-action-stack">
+                  <button
+                    wx:if="{{item.showPublishedPreview}}"
+                    class="portfolio-share-button"
+                    data-id="{{item.portfolioId}}"
+                    data-action="PREVIEW_PUBLISHED"
+                    catchtap="handlePublishedPreviewTap"
+                  >预览</button>
+                  <button
+                    class="portfolio-share-button {{item.actionType === 'EDIT' ? 'draft' : ''}}"
+                    data-id="{{item.portfolioId}}"
+                    data-action="{{item.actionType}}"
+                    open-type="{{item.actionType === 'SHARE' ? 'share' : ''}}"
+                    catchtap="handlePrimaryActionTap"
+                  >{{item.actionText}}</button>
+                </view>
                 <view class="portfolio-arrow"></view>
               </view>
             </view>

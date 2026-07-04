@@ -57,6 +57,7 @@ class MinePortfolioControllerTest {
         when(minePortfolioService.getDetail(88L)).thenReturn(detailResponse);
         when(minePortfolioService.saveDraft(88L, draftRequest)).thenReturn(detailResponse);
         when(minePortfolioService.preview(88L)).thenReturn(detailResponse);
+        when(minePortfolioService.previewPublished(88L)).thenReturn(detailResponse);
         when(minePortfolioService.publish(88L, publishRequest)).thenReturn(detailResponse);
 
         Response<MinePortfolioListResponse> listed = controller.list("USER");
@@ -66,6 +67,7 @@ class MinePortfolioControllerTest {
         Response<MinePortfolioDetailResponse> detail = controller.detail(88L);
         Response<MinePortfolioDetailResponse> saved = controller.saveDraft(88L, draftRequest);
         Response<MinePortfolioDetailResponse> preview = controller.preview(88L);
+        Response<MinePortfolioDetailResponse> publishedPreview = controller.previewPublished(88L);
         Response<MinePortfolioDetailResponse> published = controller.publish(88L, publishRequest);
         Response<Void> shared = controller.createShareRecord(88L, shareRequest);
         Response<Void> deleted = controller.deletePortfolio(88L);
@@ -84,6 +86,9 @@ class MinePortfolioControllerTest {
                 new Class<?>[] {Long.class, MinePortfolioDraftSaveRequest.class},
                 "/api/mine/portfolios/{portfolioId}/draft");
         assertGetMapping("preview", new Class<?>[] {Long.class}, "/api/mine/portfolios/{portfolioId}/preview");
+        assertGetMapping("previewPublished",
+                new Class<?>[] {Long.class},
+                "/api/mine/portfolios/{portfolioId}/published-preview");
         assertPostMapping("publish",
                 new Class<?>[] {Long.class, MinePortfolioPublishRequest.class},
                 "/api/mine/portfolios/{portfolioId}/publish");
@@ -106,6 +111,7 @@ class MinePortfolioControllerTest {
         assertThat(detail.getData()).isSameAs(detailResponse);
         assertThat(saved.getData()).isSameAs(detailResponse);
         assertThat(preview.getData()).isSameAs(detailResponse);
+        assertThat(publishedPreview.getData()).isSameAs(detailResponse);
         assertThat(published.getData()).isSameAs(detailResponse);
         assertThat(shared.isSuccess()).isTrue();
         assertThat(deleted.isSuccess()).isTrue();

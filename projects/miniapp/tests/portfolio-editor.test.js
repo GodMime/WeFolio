@@ -262,11 +262,11 @@ test('standard portfolio component drag moves row with animated style before reo
   assert.equal(page.data.componentDragStyle, '')
 })
 
-test('share fields update character limit counters while editing', () => {
+test('share fields only keep title counter while editing', () => {
   const page = loadPortfolioEditorPage(() => Promise.resolve({}))
 
   assert.equal(page.data.shareFieldCounters.title, '0 / 50')
-  assert.equal(page.data.shareFieldCounters.intro, '0 / 500')
+  assert.equal(Object.hasOwn(page.data.shareFieldCounters, 'intro'), false)
 
   page.handleShareInput({
     currentTarget: { dataset: { path: 'share.title' } },
@@ -278,9 +278,9 @@ test('share fields update character limit counters while editing', () => {
   })
 
   assert.equal(page.data.config.share.title, '婚礼主持作品集')
-  assert.equal(page.data.config.share.intro, '温暖沉稳\n')
+  assert.equal(Object.hasOwn(page.data.config.share, 'intro'), false)
   assert.equal(page.data.shareFieldCounters.title, '7 / 50')
-  assert.equal(page.data.shareFieldCounters.intro, '5 / 500')
+  assert.equal(Object.hasOwn(page.data.shareFieldCounters, 'intro'), false)
 })
 
 test('share cover chooser uses native 5:4 image without crop sheet', async () => {

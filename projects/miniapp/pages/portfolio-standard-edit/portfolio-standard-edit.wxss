@@ -1470,6 +1470,35 @@
   box-sizing: border-box;
 }
 
+.preview-action-stack {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.preview-action-stack .action-button {
+  width: 100%;
+}
+
+.preview-draft-button {
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.preview-action-title {
+  color: #17202a;
+  font-size: 28rpx;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.preview-action-note {
+  color: #697786;
+  font-size: 20rpx;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+}
+
 .primary-button {
   color: #ffffff;
   background: #17202a;

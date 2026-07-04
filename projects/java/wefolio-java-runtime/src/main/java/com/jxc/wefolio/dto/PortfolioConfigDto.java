@@ -32,9 +32,6 @@ public class PortfolioConfigDto {
         /** 分享标题 */
         private String title;
 
-        /** 分享简介 */
-        private String intro;
-
         /** 分享封面 */
         private String coverUrl;
 

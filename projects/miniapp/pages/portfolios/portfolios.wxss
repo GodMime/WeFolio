@@ -273,6 +273,14 @@
   gap: 14rpx;
 }
 
+.portfolio-action-stack {
+  width: 104rpx;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
 .portfolio-share-button {
   width: 104rpx;
   min-width: 104rpx;

@@ -4,6 +4,10 @@ const { normalizeVisitorPortfolio } = require('../../utils/visitor-portfolio')
 
 const VISITOR_PORTFOLIO_API_PREFIX = '/api/visitor/portfolios'
 const VISITOR_KEY_STORAGE = 'wefolio_visitor_key'
+const WX_LOGIN_EMPTY_MESSAGE = '微信登录凭证为空'
+const WX_LOGIN_FAILED_MESSAGE = '微信登录失败'
+const WX_LOGIN_TIMEOUT_MESSAGE = '微信登录超时，请重试'
+const WX_LOGIN_TIMEOUT_MS = 5000
 
 function idempotencyKey(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
@@ -19,6 +23,39 @@ function getVisitorKey() {
   return key
 }
 
+function wxLogin() {
+  return new Promise((resolve, reject) => {
+    let settled = false
+    const finish = (handler, value, timer) => {
+      if (settled) {
+        return
+      }
+      settled = true
+      clearTimeout(timer)
+      handler(value)
+    }
+    const timer = setTimeout(() => {
+      if (settled) {
+        return
+      }
+      settled = true
+      reject(new Error(WX_LOGIN_TIMEOUT_MESSAGE))
+    }, WX_LOGIN_TIMEOUT_MS)
+    wx.login({
+      success(response) {
+        if (response && response.code) {
+          finish(resolve, response.code, timer)
+          return
+        }
+        finish(reject, new Error(WX_LOGIN_EMPTY_MESSAGE), timer)
+      },
+      fail(error) {
+        finish(reject, new Error(error && error.errMsg ? error.errMsg : WX_LOGIN_FAILED_MESSAGE), timer)
+      }
+    })
+  })
+}
+
 Page({
   data: {
     shareCode: '',
@@ -31,25 +68,28 @@ Page({
     const shareCode = options.shareCode || options.scene || ''
     const visitorKey = getVisitorKey()
     this.setData({ shareCode, visitorKey })
-    this.bootstrap()
+    return this.bootstrap()
   },
 
-  bootstrap() {
+  async bootstrap() {
     if (!this.data.shareCode) {
       return
     }
-    request({
-      url: `${VISITOR_PORTFOLIO_API_PREFIX}/${this.data.shareCode}`,
-      data: {
-        visitorKey: this.data.visitorKey,
-        sourceType: 'WECHAT_SHARE_CARD',
-        idempotencyKey: idempotencyKey('open')
-      }
-    }).then((response) => {
+    try {
+      const loginCode = await wxLogin()
+      const response = await request({
+        url: `${VISITOR_PORTFOLIO_API_PREFIX}/${this.data.shareCode}`,
+        data: {
+          visitorKey: this.data.visitorKey,
+          loginCode,
+          sourceType: 'WECHAT_SHARE_CARD',
+          idempotencyKey: idempotencyKey('open')
+        }
+      })
       this.setData({ portfolio: normalizeVisitorPortfolio(response) })
-    }).catch((error) => {
+    } catch (error) {
       wx.showToast({ title: error.message || '作品集加载失败', icon: 'none' })
-    })
+    }
   },
 
   handleContactInput(event) {

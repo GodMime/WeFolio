@@ -38,6 +38,7 @@ public class VisitorPortfolioController {
      *
      * @param shareCode 分享编码
      * @param visitorKey 访客摘要
+     * @param loginCode wx.login 返回的临时登录凭证
      * @param sourceType 来源类型
      * @param idempotencyKey 幂等键
      * @return 作品集响应
@@ -46,10 +47,11 @@ public class VisitorPortfolioController {
     public Response<VisitorPortfolioResponse> portfolio(
             @PathVariable String shareCode,
             @RequestParam("visitorKey") String visitorKey,
+            @RequestParam("loginCode") String loginCode,
             @RequestParam(value = "sourceType", required = false) String sourceType,
             @RequestParam("idempotencyKey") String idempotencyKey
     ) {
-        return Response.success(visitorPortfolioService.getPortfolio(shareCode, visitorKey, sourceType, idempotencyKey));
+        return Response.success(visitorPortfolioService.getPortfolio(shareCode, visitorKey, loginCode, sourceType, idempotencyKey));
     }
 
     /**

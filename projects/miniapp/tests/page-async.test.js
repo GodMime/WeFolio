@@ -211,6 +211,136 @@ test('points page ignores stale load-more response after reloading first page', 
   assert.equal(page.data.loadingMore, false)
 })
 
+test('visitor portfolio sends wx login code when opening share', async () => {
+  const requests = []
+  let loginCalled = false
+  const page = loadPage('pages/visitor-portfolio/visitor-portfolio.js', (options) => {
+    requests.push(options)
+    return Promise.resolve({
+      shareCode: 'PF001',
+      title: '访客作品集',
+      config: { components: [] }
+    })
+  }, {
+    getStorageSync() {
+      return 'visitor-a'
+    },
+    setStorageSync() {},
+    login({ success }) {
+      loginCalled = true
+      success({ code: 'wx-code' })
+    },
+    previewImage() {}
+  })
+
+  await page.onLoad({ shareCode: 'PF001' })
+  await flushPromises()
+
+  assert.equal(loginCalled, true)
+  assert.equal(requests[0].url, '/api/visitor/portfolios/PF001')
+  assert.equal(requests[0].data.visitorKey, 'visitor-a')
+  assert.equal(requests[0].data.loginCode, 'wx-code')
+})
+
+test('visitor portfolio stops loading when wx login returns empty code', async () => {
+  const requests = []
+  const toasts = []
+  const page = loadPage('pages/visitor-portfolio/visitor-portfolio.js', (options) => {
+    requests.push(options)
+    return Promise.resolve({})
+  }, {
+    getStorageSync() {
+      return 'visitor-a'
+    },
+    setStorageSync() {},
+    login({ success }) {
+      success({})
+    },
+    showToast(options) {
+      toasts.push(options)
+    },
+    previewImage() {}
+  })
+
+  await page.onLoad({ shareCode: 'PF001' })
+  await flushPromises()
+
+  assert.equal(requests.length, 0)
+  assert.equal(toasts[0].title, '微信登录凭证为空')
+  assert.equal(toasts[0].icon, 'none')
+})
+
+test('visitor portfolio stops loading when wx login fails', async () => {
+  const requests = []
+  const toasts = []
+  const page = loadPage('pages/visitor-portfolio/visitor-portfolio.js', (options) => {
+    requests.push(options)
+    return Promise.resolve({})
+  }, {
+    getStorageSync() {
+      return 'visitor-a'
+    },
+    setStorageSync() {},
+    login({ fail }) {
+      fail({ errMsg: 'login:fail network unavailable' })
+    },
+    showToast(options) {
+      toasts.push(options)
+    },
+    previewImage() {}
+  })
+
+  await page.onLoad({ shareCode: 'PF001' })
+  await flushPromises()
+
+  assert.equal(requests.length, 0)
+  assert.equal(toasts[0].title, 'login:fail network unavailable')
+  assert.equal(toasts[0].icon, 'none')
+})
+
+test('visitor portfolio stops loading when wx login times out', async () => {
+  const originalSetTimeout = global.setTimeout
+  const originalClearTimeout = global.clearTimeout
+  const scheduled = []
+  const requests = []
+  const toasts = []
+  global.setTimeout = (callback, delay) => {
+    scheduled.push({ callback, delay })
+    return scheduled.length
+  }
+  global.clearTimeout = () => {}
+  try {
+    const page = loadPage('pages/visitor-portfolio/visitor-portfolio.js', (options) => {
+      requests.push(options)
+      return Promise.resolve({})
+    }, {
+      getStorageSync() {
+        return 'visitor-a'
+      },
+      setStorageSync() {},
+      login() {},
+      showToast(options) {
+        toasts.push(options)
+      },
+      previewImage() {}
+    })
+
+    const loadPromise = page.onLoad({ shareCode: 'PF001' })
+    assert.equal(scheduled.length, 1)
+    assert.equal(scheduled[0].delay, 5000)
+    scheduled[0].callback()
+    await loadPromise
+    await flushPromises()
+
+    assert.equal(requests.length, 0)
+    assert.equal(toasts[0].title, '微信登录超时，请重试')
+    assert.equal(toasts[0].icon, 'none')
+  } finally {
+    global.setTimeout = originalSetTimeout
+    global.clearTimeout = originalClearTimeout
+  }
+})
+
 test('team member candidate search ignores stale response after unique code changes', async () => {
   const requests = []
   const fakeRequest = (options) => {

@@ -8,6 +8,15 @@ public interface PortfolioMessage {
     /** 作品集不可访问提示 */
     String PORTFOLIO_UNAVAILABLE_MESSAGE = "作品集暂不可访问";
 
+    /** 微信登录凭证为空提示 */
+    String WECHAT_LOGIN_CODE_REQUIRED_MESSAGE = "微信登录凭证不能为空";
+
+    /** 微信 openid 缺失提示 */
+    String WECHAT_OPENID_MISSING_MESSAGE = "微信登录未返回 openid";
+
+    /** 微信身份摘要生成失败提示 */
+    String OPENID_DIGEST_FAILED_MESSAGE = "微信身份摘要生成失败";
+
     /** 联系人必填提示 */
     String CONTACT_NAME_REQUIRED_MESSAGE = "请填写联系人";
 

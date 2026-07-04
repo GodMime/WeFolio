@@ -378,6 +378,24 @@ public class MinePortfolioService {
     }
 
     /**
+     * 预览正式发布版本。
+     *
+     * @param portfolioId 作品集 ID
+     * @return 作品集详情
+     */
+    public MinePortfolioDetailResponse previewPublished(Long portfolioId) {
+        PortfolioEntity portfolio = requireOwnedStandardPersonal(portfolioId);
+        if (!PortfolioPublicationStatusDict.PUBLISHED.getCode().equals(portfolio.getPublicationStatus())
+                || !hasText(portfolio.getPublishedConfigJson())) {
+            throw new BusinessException(PortfolioMessage.PORTFOLIO_UNAVAILABLE_MESSAGE);
+        }
+        PortfolioConfigDto config = parseConfig(portfolio.getPublishedConfigJson());
+        MinePortfolioDetailResponse response = buildDetail(portfolio, config);
+        response.setRenderData(portfolioRenderService.render(portfolio, config, true, false, null, null));
+        return response;
+    }
+
+    /**
      * 发布草稿。
      *
      * @param portfolioId 作品集 ID

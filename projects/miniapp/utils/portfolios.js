@@ -168,7 +168,6 @@ function createComponent(componentType, options = {}) {
 function normalizeShare(raw = {}) {
   return {
     title: trimText(raw.title),
-    intro: trimText(raw.intro),
     coverUrl: trimText(raw.coverUrl),
     avatarUrl: trimText(raw.avatarUrl)
   }

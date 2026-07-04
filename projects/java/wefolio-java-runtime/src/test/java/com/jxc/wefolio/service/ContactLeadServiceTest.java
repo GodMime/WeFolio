@@ -74,9 +74,9 @@ class ContactLeadServiceTest {
         assertThat(lead.getPortfolioTitleSnapshot()).isEqualTo("林安婚礼司仪");
         assertThat(lead.getPortfolioShareCodeSnapshot()).isEqualTo("PF001");
         assertThat(lead.getPhoneLast4()).isEqualTo("8000");
-        assertThat(lead.getPhoneCiphertext()).isNotEqualTo("13800138000");
+        assertThat(lead.getPhoneCiphertext()).isEqualTo("13800138000");
         assertThat(lead.getWechatMaskHint()).isEqualTo("we***io");
-        assertThat(lead.getWechatCiphertext()).isNotEqualTo("wefolio");
+        assertThat(lead.getWechatCiphertext()).isEqualTo("wefolio");
         verify(portfolioVisitService).recordContactLeadSubmitted(portfolio(), "visitor-a", 66L, "lead-1");
     }
 

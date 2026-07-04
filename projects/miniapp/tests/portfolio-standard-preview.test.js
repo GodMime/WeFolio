@@ -138,6 +138,29 @@ test('preview page keeps recoverable loading and error states when request fails
   assert.equal(page.data.portfolio.title, '预览成功')
 })
 
+test('preview page requests published preview endpoint for published scope', async () => {
+  const requests = []
+  const page = loadPreviewPage((options) => {
+    requests.push(options)
+    return Promise.resolve({
+      portfolioId: 88,
+      publishedRevision: 4,
+      renderData: {
+        preview: true,
+        title: '已发布作品集',
+        components: []
+      }
+    })
+  })
+
+  page.onLoad({ portfolioId: '88', scope: 'published' })
+  await flushPromises()
+
+  assert.equal(requests[0].url, '/api/mine/portfolios/88/published-preview')
+  assert.equal(page.data.portfolio.title, '已发布作品集')
+  assert.equal(page.data.portfolio.preview, true)
+})
+
 test('preview display group switch tolerates unnormalized component arrays', () => {
   const page = loadPreviewPage(() => Promise.resolve({}))
   page.data.portfolio = {

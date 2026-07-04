@@ -20,7 +20,6 @@ function toNumber(value, fallback = 0) {
 function normalizeShare(raw = {}) {
   return {
     title: trimText(raw.title),
-    intro: trimText(raw.intro),
     coverUrl: trimText(raw.coverUrl),
     avatarUrl: trimText(raw.avatarUrl)
   }

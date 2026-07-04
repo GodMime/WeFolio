@@ -38,6 +38,7 @@ test('normalizes portfolio config with stable component order', () => {
 
   assert.equal(result.schemaVersion, 'standard-personal-v1')
   assert.equal(result.share.title, '林安婚礼司仪')
+  assert.equal(Object.hasOwn(result.share, 'intro'), false)
   assert.deepEqual(result.components.map((item) => item.componentKey), ['c_profile', 'c_grid'])
   assert.deepEqual(result.components.map((item) => item.sortOrder), [1000, 2000])
   assert.deepEqual(result.components[1].config.workIds, [12, 13])

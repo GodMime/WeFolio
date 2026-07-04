@@ -3,10 +3,12 @@ const { createContactLeadForm } = require('../../utils/contact-lead')
 const { normalizeVisitorPortfolio } = require('../../utils/visitor-portfolio')
 
 const PORTFOLIO_API_PREFIX = '/api/mine/portfolios'
+const PUBLISHED_PREVIEW_SCOPE = 'published'
 
 Page({
   data: {
     portfolioId: null,
+    previewScope: '',
     loading: false,
     errorMessage: '',
     portfolio: normalizeVisitorPortfolio({ renderData: { preview: true } }),
@@ -14,7 +16,10 @@ Page({
   },
 
   onLoad(options = {}) {
-    this.setData({ portfolioId: options.portfolioId || null })
+    this.setData({
+      portfolioId: options.portfolioId || null,
+      previewScope: options.scope || ''
+    })
     return this.bootstrap()
   },
 
@@ -24,7 +29,8 @@ Page({
       return Promise.resolve()
     }
     this.setData({ loading: true, errorMessage: '' })
-    return request({ url: `${PORTFOLIO_API_PREFIX}/${this.data.portfolioId}/preview` })
+    const previewPath = this.data.previewScope === PUBLISHED_PREVIEW_SCOPE ? 'published-preview' : 'preview'
+    return request({ url: `${PORTFOLIO_API_PREFIX}/${this.data.portfolioId}/${previewPath}` })
       .then((response) => {
         this.setData({
           portfolio: normalizeVisitorPortfolio(response),

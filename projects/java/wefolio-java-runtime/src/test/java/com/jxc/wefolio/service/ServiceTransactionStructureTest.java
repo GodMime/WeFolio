@@ -68,6 +68,21 @@ class ServiceTransactionStructureTest {
     }
 
     @Test
+    void visitorSubmissionServicesShouldOwnTransactionalWrites() throws IOException {
+        String visitSource = readSource("com/jxc/wefolio/service/PortfolioVisitService.java");
+        String leadSource = readSource("com/jxc/wefolio/service/ContactLeadService.java");
+
+        assertThat(visitSource)
+                .contains("@Transactional(rollbackFor = Exception.class)\n    public VisitRecordEntity recordOpen(")
+                .contains("@Transactional(rollbackFor = Exception.class)\n    public void recordEvent(")
+                .contains("@Transactional(rollbackFor = Exception.class)\n    public void recordScheduleQuery(")
+                .contains("@Transactional(rollbackFor = Exception.class)\n    public void recordContactLeadSubmitted(");
+        assertThat(leadSource)
+                .contains("@Transactional(rollbackFor = Exception.class)\n    public ContactLeadSubmitResponse submit(String shareCode")
+                .contains("@Transactional(rollbackFor = Exception.class)\n    public ContactLeadSubmitResponse submit(PortfolioEntity portfolio");
+    }
+
+    @Test
     void mineTeamServiceShouldInitializeCosBeforeTransactionalTeamCreation() throws IOException {
         String source = readSource("com/jxc/wefolio/service/MineTeamService.java");
         int initStorageIndex = source.indexOf("cosService.initTeamStorage(uniqueCode)");

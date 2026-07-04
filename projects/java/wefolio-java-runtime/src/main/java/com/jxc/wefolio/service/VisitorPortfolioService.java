@@ -10,6 +10,7 @@ import com.jxc.wefolio.dto.PortfolioConfigDto;
 import com.jxc.wefolio.dto.VisitorPortfolioEventRequest;
 import com.jxc.wefolio.dto.VisitorPortfolioResponse;
 import com.jxc.wefolio.dto.VisitorPortfolioScheduleResponse;
+import com.jxc.wefolio.dto.WechatSessionResponse;
 import com.jxc.wefolio.entity.PortfolioEntity;
 import com.jxc.wefolio.entity.ScheduleEntity;
 import com.jxc.wefolio.entity.VisitRecordEntity;
@@ -20,8 +21,11 @@ import com.jxc.wefolio.message.PortfolioMessage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.HexFormat;
 import java.util.List;
 
 /**
@@ -39,6 +43,15 @@ public class VisitorPortfolioService {
 
     /** 默认标题 */
     private static final String DEFAULT_TITLE = "个人作品集";
+
+    /** 微信 openid 计费主体前缀 */
+    private static final String WECHAT_OPENID_BILLING_PREFIX = "WX_OPENID:";
+
+    /** SHA-256 算法名 */
+    private static final String SHA_256_ALGORITHM = "SHA-256";
+
+    /** openid 摘要截断长度，兼容积分流水 64 字符幂等键 */
+    private static final int OPENID_BILLING_DIGEST_LENGTH = 19;
 
     /** 时间展示格式 */
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
@@ -58,11 +71,15 @@ public class VisitorPortfolioService {
     /** 作品集渲染服务 */
     private final PortfolioRenderService portfolioRenderService;
 
+    /** 微信小程序客户端 */
+    private final WechatMiniappClient wechatMiniappClient;
+
     /**
      * 获取访客作品集。
      *
      * @param shareCode 分享编码
      * @param visitorKey 访客摘要
+     * @param loginCode wx.login 返回的临时登录凭证
      * @param sourceType 来源类型
      * @param idempotencyKey 打开事件幂等键
      * @return 访客作品集响应
@@ -70,6 +87,7 @@ public class VisitorPortfolioService {
     public VisitorPortfolioResponse getPortfolio(
             String shareCode,
             String visitorKey,
+            String loginCode,
             String sourceType,
             String idempotencyKey
     ) {
@@ -80,7 +98,15 @@ public class VisitorPortfolioService {
         } catch (BusinessException e) {
             return buildMaintenanceResponse(portfolio, config);
         }
-        VisitRecordEntity record = portfolioVisitService.recordOpen(portfolio, visitorKey, sourceType, idempotencyKey);
+        // wx.login 凭证一次性且短时有效；前端每次 onLoad 重新登录，后续写入失败时可用新凭证重试。
+        String billingVisitorKey = resolveBillingVisitorKey(loginCode);
+        VisitRecordEntity record = portfolioVisitService.recordOpen(
+                portfolio,
+                visitorKey,
+                billingVisitorKey,
+                sourceType,
+                idempotencyKey
+        );
         VisitorPortfolioResponse response = buildNormalResponse(portfolio, config);
         response.setVisitRecordId(record == null ? null : record.getId());
         response.setRenderData(portfolioRenderService.render(
@@ -92,6 +118,39 @@ public class VisitorPortfolioService {
                 response.getVisitRecordId()
         ));
         return response;
+    }
+
+    /**
+     * 解析访客计费主体。
+     *
+     * @param loginCode wx.login 返回的临时登录凭证
+     * @return openid 摘要计费主体
+     */
+    private String resolveBillingVisitorKey(String loginCode) {
+        if (loginCode == null || loginCode.isBlank()) {
+            throw new BusinessException(PortfolioMessage.WECHAT_LOGIN_CODE_REQUIRED_MESSAGE);
+        }
+        WechatSessionResponse session = wechatMiniappClient.exchangeCode(loginCode.strip());
+        if (session == null || session.getOpenid() == null || session.getOpenid().isBlank()) {
+            throw new BusinessException(PortfolioMessage.WECHAT_OPENID_MISSING_MESSAGE);
+        }
+        return WECHAT_OPENID_BILLING_PREFIX + digestOpenid(session.getOpenid());
+    }
+
+    /**
+     * 对 openid 做摘要，避免原始 openid 写入积分流水幂等键。
+     *
+     * @param openid 微信 openid
+     * @return 十六进制摘要
+     */
+    private String digestOpenid(String openid) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance(SHA_256_ALGORITHM);
+            String fullDigest = HexFormat.of().formatHex(digest.digest(openid.getBytes(StandardCharsets.UTF_8)));
+            return fullDigest.substring(0, OPENID_BILLING_DIGEST_LENGTH);
+        } catch (Exception e) {
+            throw new BusinessException(PortfolioMessage.OPENID_DIGEST_FAILED_MESSAGE, e);
+        }
     }
 
     /**

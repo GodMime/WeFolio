@@ -31,14 +31,6 @@
           </view>
           <input class="input" placeholder="未命名作品集" value="{{config.share.title}}" data-path="share.title" bindinput="handleShareInput" maxlength="50" />
         </view>
-
-        <view class="form-row">
-          <view class="field-heading">
-            <view class="field-label">分享简介</view>
-            <view class="field-limit">{{shareFieldCounters.intro}}</view>
-          </view>
-          <textarea class="input textarea" placeholder="填写服务风格、适合场景或代表作品说明" value="{{config.share.intro}}" data-path="share.intro" bindinput="handleShareInput" maxlength="500"></textarea>
-        </view>
       </view>
 
       <view class="panel component-panel">
@@ -478,8 +470,12 @@
   ></canvas>
 
   <view class="bottom-actions">
-    <button class="action-button secondary-button" bindtap="handleSaveDraft">保存草稿</button>
-    <button class="action-button secondary-button" bindtap="handlePreview">预览</button>
-    <button class="action-button primary-button" bindtap="handlePublish">发布</button>
+    <button class="action-button primary-button" bindtap="handleSaveDraft">保存草稿</button>
+    <view class="preview-action-stack">
+      <button class="action-button secondary-button preview-draft-button" bindtap="handlePreview">
+        <view class="preview-action-title">预览草稿</view>
+        <view class="preview-action-note">请保存后预览</view>
+      </button>
+    </view>
   </view>
 </view>
