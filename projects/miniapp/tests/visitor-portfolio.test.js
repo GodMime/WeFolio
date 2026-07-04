@@ -32,13 +32,41 @@ test('normalizes visitor portfolio components from published config', () => {
       share: { title: ' 林安婚礼司仪 ' },
       components: [
         { componentKey: 'c_profile', componentType: 'PROFILE', sortOrder: 2000, enabled: true, config: {} },
-        { componentKey: 'c_text', componentType: 'TEXT_SECTION', sortOrder: 1000, enabled: true, config: { title: '服务说明' } }
+        { componentKey: 'c_text', componentType: 'TEXT_SECTION', sortOrder: 1000, enabled: true, config: { title: '服务说明' } },
+        { componentKey: 'c_carousel', componentType: 'CAROUSEL', sortOrder: 3000, enabled: true, config: { carouselIntervalMs: 4500 } }
       ]
     }
   })
 
   assert.equal(result.title, '林安婚礼司仪')
-  assert.deepEqual(result.components.map((item) => item.componentKey), ['c_text', 'c_profile'])
+  assert.deepEqual(result.components.map((item) => item.componentKey), ['c_text', 'c_profile', 'c_carousel'])
+  assert.equal(result.components[2].carouselIntervalMs, 4500)
+})
+
+test('normalizes carousel interval with three second default for render pages', () => {
+  const defaultResult = normalizeVisitorPortfolio({
+    renderData: {
+      components: [
+        { componentKey: 'c_carousel', componentType: 'CAROUSEL', sortOrder: 1000, works: [] }
+      ]
+    }
+  })
+  const configuredResult = normalizeVisitorPortfolio({
+    renderData: {
+      components: [
+        {
+          componentKey: 'c_carousel',
+          componentType: 'CAROUSEL',
+          sortOrder: 1000,
+          config: { carouselIntervalMs: 5200 },
+          works: []
+        }
+      ]
+    }
+  })
+
+  assert.equal(defaultResult.components[0].carouselIntervalMs, 3000)
+  assert.equal(configuredResult.components[0].carouselIntervalMs, 5200)
 })
 
 test('normalizes visitor portfolio from backend render data first', () => {

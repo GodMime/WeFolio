@@ -80,8 +80,9 @@ function loadPreviewPage(fakeRequest, wxOverrides = {}) {
 }
 
 test('portfolio preview and visitor pages render miniapp brand footer', () => {
-  const logoUrl = 'https://cdn2.we-folio.dingchenyong.top/system/folio-logo.png'
+  const logoUrl = '/assets/system/folio-logo-stack-bold-small-50kb.png'
   const brandName = '映期Folio'
+  const logoPath = path.join(__dirname, `..${logoUrl}`)
   const previewWxml = fs.readFileSync(
     path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.wxml'),
     'utf8'
@@ -96,6 +97,7 @@ test('portfolio preview and visitor pages render miniapp brand footer', () => {
     assert.match(wxml, new RegExp(`src="${logoUrl.replace(/\./g, '\\.')}"`))
     assert.match(wxml, new RegExp(`class="folio-brand-name">${brandName}</view>`))
   })
+  assert.equal(fs.existsSync(logoPath), true)
 })
 
 test('preview page keeps recoverable loading and error states when request fails', async () => {

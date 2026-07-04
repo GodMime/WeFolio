@@ -163,7 +163,7 @@
         <view>{{componentWorkErrorText}}</view>
         <view class="component-work-retry" catchtap="handleRetryLoadComponentWorks" aria-role="button" aria-label="重新加载作品">重试</view>
       </view>
-      <view wx:elif="{{componentWorkOptions.length === 0}}" class="component-work-state">暂无图片作品</view>
+      <view wx:elif="{{componentWorkOptions.length === 0}}" class="component-work-state">{{componentWorkEmptyText}}</view>
       <scroll-view wx:else class="component-work-scroll" scroll-y type="list" bindscrolltolower="handleComponentWorkScrollToLower">
         <view class="component-work-list-content">
           <view
@@ -304,42 +304,20 @@
       <view class="component-picker-grabber"></view>
       <view class="component-picker-heading">
         <view class="component-picker-title">作品集展示标签</view>
-        <view class="component-picker-count">{{displayGroupOptions.length}} 个标签</view>
-      </view>
-
-      <view class="display-group-actions">
-        <button class="display-group-add-button" catchtap="handleOpenCreateDisplayGroup">新增标签</button>
-        <button class="display-group-copy-button" catchtap="handleCopyWorkTagsToDisplayGroups">一键复制作品标签</button>
-      </view>
-
-      <view class="display-group-form {{displayGroupFormVisible ? 'visible' : ''}}">
-        <view class="display-group-form-title">{{displayGroupFormMode === 'edit' ? '重命名展示标签' : '新增展示标签'}}</view>
-        <view class="display-group-form-row">
-          <input
-            class="input display-group-input"
-            placeholder="输入展示标签名称"
-            value="{{displayGroupFormName}}"
-            maxlength="{{displayGroupNameMaxLength}}"
-            bindinput="handleDisplayGroupNameInput"
-          />
-          <button class="display-group-save-button" catchtap="handleConfirmDisplayGroupForm">{{displayGroupFormMode === 'edit' ? '保存' : '新增'}}</button>
-        </view>
-        <view wx:if="{{displayGroupFormErrorText}}" class="display-group-form-error">{{displayGroupFormErrorText}}</view>
-        <button class="display-group-cancel-button" catchtap="handleCancelDisplayGroupForm">取消</button>
+        <view class="component-picker-count">{{displayGroupOptions.length}} 个作品标签</view>
       </view>
 
       <view wx:if="{{displayGroupLoading}}" class="component-work-state">处理中...</view>
       <view wx:elif="{{displayGroupErrorText}}" class="component-work-state error">{{displayGroupErrorText}}</view>
 
-      <scroll-view class="display-group-scroll" scroll-y type="list">
+      <scroll-view wx:else class="display-group-scroll" scroll-y type="list">
         <view class="display-group-list-content">
           <view
             wx:for="{{displayGroupOptions}}"
             wx:key="groupKey"
-            class="display-group-pill {{item.active ? 'active' : ''}} {{displayGroupManageMode ? 'manage' : ''}}"
+            class="display-group-pill {{item.active ? 'active' : ''}} {{item.selected ? 'selected' : ''}}"
             data-group-key="{{item.groupKey}}"
             catchtap="handleSelectDisplayGroup"
-            bindlongpress="handleDisplayGroupLongPress"
             aria-role="button"
             aria-label="选择{{item.name}}"
           >
@@ -348,34 +326,59 @@
               <view class="display-group-count">{{item.countText}}</view>
             </view>
             <view
-              wx:if="{{displayGroupManageMode}}"
-              class="display-group-delete"
-              data-group-key="{{item.groupKey}}"
-              catchtap="handleDeleteDisplayGroup"
-              aria-role="button"
-              aria-label="删除{{item.name}}展示标签"
+              class="display-group-order {{item.selected ? 'selected' : ''}}"
+              data-tag-id="{{item.id}}"
+              catchtap="handleToggleDisplayGroupTag"
+              aria-role="checkbox"
+              aria-checked="{{item.selected}}"
+              aria-label="{{item.selected ? '取消选择' : '选择'}}{{item.name}}作品标签"
             >
-              <text class="display-group-delete-mark">×</text>
+              <text>{{item.selectionOrder ? item.selectionOrder : ''}}</text>
             </view>
           </view>
         </view>
       </scroll-view>
 
-      <view wx:if="{{workTagOptions.length}}" class="work-tag-import-section">
-        <view class="work-tag-import-title">按作品标签导入作品</view>
-        <view class="work-tag-import-list">
-          <button
-            wx:for="{{workTagOptions}}"
-            wx:key="id"
-            class="work-tag-import-button"
-            data-tag-id="{{item.id}}"
-            catchtap="handleImportWorksByTag"
-          >{{item.name}}</button>
+      <view wx:if="{{!displayGroupLoading && !displayGroupErrorText}}" class="display-group-work-section">
+        <view class="display-group-work-header">
+          <view class="display-group-work-copy">
+            <view class="display-group-work-title">当前作品标签作品</view>
+            <view class="display-group-work-count">{{activeDisplayGroupWorkCountText}}</view>
+          </view>
         </view>
+
+        <scroll-view wx:if="{{displayGroupWorkOptions.length}}" class="display-group-work-scroll" scroll-y type="list">
+          <view class="display-group-work-list">
+            <view
+              wx:for="{{displayGroupWorkOptions}}"
+              wx:key="id"
+              class="display-group-work-item {{item.selected ? 'selected' : ''}}"
+              data-id="{{item.id}}"
+              catchtap="handleToggleDisplayGroupWork"
+              aria-role="checkbox"
+              aria-checked="{{item.selected}}"
+              aria-label="选择{{item.title}}"
+            >
+              <view class="display-group-work-thumb">
+                <image wx:if="{{item.thumbUrl}}" src="{{item.thumbUrl}}" mode="aspectFill"></image>
+                <view wx:else class="display-group-work-thumb-empty">作品</view>
+              </view>
+              <view class="display-group-work-item-copy">
+                <view class="display-group-work-item-title">{{item.title}}</view>
+                <view class="display-group-work-item-meta">{{item.metaText}}</view>
+              </view>
+              <view class="display-group-work-order {{item.selected ? 'selected' : ''}}">
+                <text>{{item.selectionOrder ? item.selectionOrder : ''}}</text>
+              </view>
+            </view>
+          </view>
+        </scroll-view>
+        <view wx:else class="display-group-work-empty">该作品标签暂无作品</view>
       </view>
 
       <view class="component-work-actions">
-        <button class="component-work-cancel" catchtap="handleCloseDisplayGroupSheet">关闭</button>
+        <button class="component-work-cancel" catchtap="handleCancelDisplayGroupSheet">取消</button>
+        <button class="component-work-confirm" catchtap="handleConfirmDisplayGroupSheet">完成</button>
       </view>
     </view>
   </view>

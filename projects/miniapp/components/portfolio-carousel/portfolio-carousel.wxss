@@ -1,0 +1,66 @@
+.portfolio-carousel {
+  position: relative;
+  width: 100%;
+  height: 760rpx;
+  overflow: hidden;
+  background: #f3f4f6;
+}
+
+.portfolio-carousel-swiper,
+.portfolio-carousel-image {
+  width: 100%;
+  height: 100%;
+}
+
+.carousel-progress-bar {
+  position: absolute;
+  left: 50%;
+  right: auto;
+  bottom: 28rpx;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.carousel-progress-segment {
+  flex: none;
+  width: 32rpx;
+  height: 6rpx;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 999rpx;
+  background: rgba(255, 255, 255, 0.34);
+  box-shadow: inset 0 0 0 1rpx rgba(255, 255, 255, 0.18);
+}
+
+.carousel-progress-fill {
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: #ffffff;
+}
+
+.carousel-progress-segment.done .carousel-progress-fill {
+  width: 100%;
+}
+
+.carousel-progress-segment.current {
+  width: 48rpx;
+}
+
+.carousel-progress-segment.current .carousel-progress-fill {
+  animation: portfolioCarouselProgress linear both;
+}
+
+@keyframes portfolioCarouselProgress {
+  from {
+    width: 0;
+  }
+
+  to {
+    width: 100%;
+  }
+}

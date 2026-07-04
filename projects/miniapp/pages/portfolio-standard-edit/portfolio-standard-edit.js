@@ -22,21 +22,14 @@ const {
 const {
   COMPONENT_NAMES,
   COMPONENT_TYPES,
-  DISPLAY_GROUP_NAME_MAX_LENGTH,
-  addDisplayGroup,
   addComponent,
   buildDraftPayload,
-  copyWorkTagsToDisplayGroups,
   createComponent,
-  importWorksIntoDisplayGroup,
   normalizeProfileComponentConfig,
   normalizePortfolioConfig,
   normalizeWorkIds,
   reorderComponent,
-  removeDisplayGroup,
-  updateDisplayGroupName,
   removeComponent,
-  validateDisplayGroupName,
   updateComponentProfileConfig,
   updateComponentWorkIds
 } = require('../../utils/portfolios')
@@ -53,6 +46,9 @@ const SWIPE_CLOSE_THRESHOLD = 24
 const SWIPE_VERTICAL_TOLERANCE = 48
 const COMPONENT_DRAG_SCALE = 1.015
 const COMPONENT_WORK_PAGE_SIZE = 20
+const DISPLAY_GROUP_WORK_PAGE_SIZE = 100
+const DISPLAY_GROUP_TAG_KEY_PREFIX = 'tag_'
+const DISPLAY_GROUP_SORT_ORDER_STEP = 1000
 const DESIGN_VIEWPORT_RPX = 750
 const SHARE_COVER_CROP_CANVAS_ID = 'portfolioCoverCropCanvas'
 const SHARE_COVER_CROP_MAX_WIDTH_RPX = 640
@@ -142,25 +138,93 @@ function buildSelectedCountText(workIds = []) {
   return `${normalizeWorkIds(workIds).length} 已选`
 }
 
-function buildDisplayGroupOptions(component = {}, activeGroupKey = '') {
-  const groups = component.config && Array.isArray(component.config.groups) ? component.config.groups : []
-  const activeKey = activeGroupKey || (groups[0] && groups[0].groupKey) || ''
-  return groups.map((group) => {
-    const workIds = normalizeWorkIds(group.workIds)
-    return Object.assign({}, group, {
-      active: group.groupKey === activeKey,
-      countText: `${workIds.length} 个作品`
-    })
-  })
+function clonePlainObject(value = {}) {
+  return JSON.parse(JSON.stringify(value || {}))
+}
+
+function buildDisplayGroupTagKey(tagId) {
+  const normalizedTagId = Number(tagId)
+  return Number.isFinite(normalizedTagId) && normalizedTagId > 0 ? `${DISPLAY_GROUP_TAG_KEY_PREFIX}${normalizedTagId}` : ''
+}
+
+function parseDisplayGroupTagId(groupKey = '') {
+  const value = String(groupKey || '')
+  if (!value.startsWith(DISPLAY_GROUP_TAG_KEY_PREFIX)) {
+    return null
+  }
+  const tagId = Number(value.slice(DISPLAY_GROUP_TAG_KEY_PREFIX.length))
+  return Number.isFinite(tagId) && tagId > 0 ? tagId : null
 }
 
 function getDisplayGroups(component = {}) {
   return component.config && Array.isArray(component.config.groups) ? component.config.groups : []
 }
 
-function findDisplayGroupByKey(component = {}, groupKey = '') {
-  const targetGroupKey = String(groupKey || '')
-  return getDisplayGroups(component).find((group) => group.groupKey === targetGroupKey) || null
+function findWorkTagByGroupKey(tags = [], groupKey = '') {
+  const tagId = parseDisplayGroupTagId(groupKey)
+  return tags.find((tag) => tag.id === tagId) || null
+}
+
+function findWorkTagForDisplayGroup(tags = [], group = {}) {
+  const matchedByKey = findWorkTagByGroupKey(tags, group.groupKey)
+  if (matchedByKey) {
+    return matchedByKey
+  }
+  const groupName = String(group.name || '').trim()
+  return tags.find((tag) => tag.name === groupName) || null
+}
+
+function findDisplayGroupByTag(component = {}, tag = {}) {
+  const targetKey = buildDisplayGroupTagKey(tag.id)
+  const groups = getDisplayGroups(component)
+  return groups.find((group) => group.groupKey === targetKey) ||
+    groups.find((group) => group.name === tag.name) ||
+    null
+}
+
+function buildSelectedDisplayGroups(component = {}, tags = []) {
+  const seenKeys = new Set()
+  return getDisplayGroups(component).reduce((result, group) => {
+    const tag = findWorkTagForDisplayGroup(tags, group)
+    const groupKey = tag ? buildDisplayGroupTagKey(tag.id) : ''
+    if (!tag || !groupKey || seenKeys.has(groupKey)) {
+      return result
+    }
+    seenKeys.add(groupKey)
+    result.push({
+      groupKey,
+      name: tag.name,
+      sortOrder: (result.length + 1) * DISPLAY_GROUP_SORT_ORDER_STEP,
+      workIds: normalizeWorkIds(group.workIds)
+    })
+    return result
+  }, [])
+}
+
+function buildDisplayGroupOptions(component = {}, activeGroupKey = '', tags = []) {
+  const selectedGroups = buildSelectedDisplayGroups(component, tags)
+  const selectedMap = selectedGroups.reduce((result, group, index) => {
+    result[group.groupKey] = Object.assign({}, group, { selectionOrder: index + 1 })
+    return result
+  }, {})
+  return tags.map((tag) => {
+    const groupKey = buildDisplayGroupTagKey(tag.id)
+    const selectedGroup = selectedMap[groupKey]
+    const workIds = normalizeWorkIds(selectedGroup && selectedGroup.workIds)
+    return Object.assign({}, tag, {
+      groupKey,
+      active: groupKey === activeGroupKey,
+      selected: Boolean(selectedGroup),
+      selectionOrder: selectedGroup ? selectedGroup.selectionOrder : 0,
+      countText: `${workIds.length}`
+    })
+  })
+}
+
+function buildActiveDisplayGroupWorkCountText(component = {}, activeGroupKey = '', tags = []) {
+  const tag = findWorkTagByGroupKey(tags, activeGroupKey)
+  const group = tag ? findDisplayGroupByTag(component, tag) : null
+  return `${normalizeWorkIds(group && group.workIds).length} 个已选`
 }
 
 function buildComponentWorkOptions(works = [], selectedIds = [], componentType = '') {
@@ -172,6 +236,87 @@ function buildComponentWorkOptions(works = [], selectedIds = [], componentType =
       thumbUrl: work.coverUrl || work.mediaUrl || '',
       metaText: work.tagText && work.tagText !== '未设置标签' ? `${work.typeText} · ${work.tagText}` : work.typeText
     }))
+}
+
+function normalizeDisplayGroupWorkPreview(work = {}, fallbackId = 0) {
+  const workId = Number(work.id || fallbackId)
+  const title = String(work.title || '').trim() || `作品 #${workId}`
+  const typeText = String(work.typeText || work.mediaType || '').trim()
+  const tagText = String(work.tagText || '').trim()
+  return {
+    id: workId,
+    title,
+    thumbUrl: work.thumbUrl || work.coverUrl || work.mediaUrl || '',
+    metaText: tagText && tagText !== '未设置标签' ? `${typeText || '作品'} · ${tagText}` : (typeText || '作品')
+  }
+}
+
+function mergeDisplayGroupWorkMap(currentMap = {}, works = []) {
+  return works.reduce((result, work) => {
+    const workId = Number(work && work.id)
+    if (!Number.isFinite(workId) || workId <= 0) {
+      return result
+    }
+    result[workId] = normalizeDisplayGroupWorkPreview(work, workId)
+    return result
+  }, Object.assign({}, currentMap))
+}
+
+function workHasTag(work = {}, tagId) {
+  return Array.isArray(work.tags) && work.tags.some((tag) => tag.id === tagId)
+}
+
+function buildDisplayGroupWorkOptions(component = {}, activeGroupKey = '', tags = [], works = []) {
+  const tag = findWorkTagByGroupKey(tags, activeGroupKey)
+  if (!tag) {
+    return []
+  }
+  const group = findDisplayGroupByTag(component, tag)
+  const selectedIds = normalizeWorkIds(group && group.workIds)
+  const selectedOrderMap = selectedIds.reduce((result, workId, index) => {
+    result[workId] = index + 1
+    return result
+  }, {})
+  return works
+    .filter((work) => workHasTag(work, tag.id))
+    .map((work) => Object.assign(normalizeDisplayGroupWorkPreview(work, work.id), {
+      selected: Boolean(selectedOrderMap[work.id]),
+      selectionOrder: selectedOrderMap[work.id] || 0
+    }))
+}
+
+function resolveActiveDisplayGroupKey(component = {}, tags = [], preferredGroupKey = '') {
+  if (findWorkTagByGroupKey(tags, preferredGroupKey)) {
+    return preferredGroupKey
+  }
+  const selectedGroups = buildSelectedDisplayGroups(component, tags)
+  if (selectedGroups[0]) {
+    return selectedGroups[0].groupKey
+  }
+  return tags[0] ? buildDisplayGroupTagKey(tags[0].id) : ''
+}
+
+function replaceDisplayComponentGroups(config = {}, componentKey = '', groups = []) {
+  const targetKey = String(componentKey || '')
+  const normalized = normalizePortfolioConfig(config)
+  const normalizedGroups = groups.map((group, index) => ({
+    groupKey: String(group.groupKey || ''),
+    name: String(group.name || '').trim(),
+    sortOrder: (index + 1) * DISPLAY_GROUP_SORT_ORDER_STEP,
+    workIds: normalizeWorkIds(group.workIds)
+  })).filter((group) => group.groupKey && group.name)
+  const components = normalized.components.map((component) => {
+    if (component.componentKey !== targetKey || !isDisplayGroupComponent(component.componentType)) {
+      return component
+    }
+    return Object.assign({}, component, {
+      config: Object.assign({}, component.config || {}, {
+        workIds: [],
+        groups: normalizedGroups
+      })
+    })
+  })
+  return normalizePortfolioConfig(Object.assign({}, normalized, { components }))
 }
 
 function normalizeComponentWorkTagId(value) {
@@ -464,6 +609,7 @@ Page({
     componentWorkLoading: false,
     componentWorkLoadingMore: false,
     componentWorkErrorText: '',
+    componentWorkEmptyText: '暂无图片作品',
     componentWorkOptions: [],
     componentWorkFilterTags: [],
     componentWorkKeyword: '',
@@ -480,16 +626,14 @@ Page({
     editingDisplayComponentType: '',
     displayGroupOptions: [],
     activeDisplayGroupKey: '',
+    activeDisplayGroupWorkCountText: '0 个已选',
+    displayGroupWorkOptions: [],
+    displayGroupAllWorks: [],
+    displayGroupWorkMap: {},
+    displayGroupOriginalConfig: null,
     workTagOptions: [],
     displayGroupLoading: false,
     displayGroupErrorText: '',
-    displayGroupManageMode: false,
-    displayGroupFormVisible: false,
-    displayGroupFormMode: 'create',
-    editingDisplayGroupKey: '',
-    displayGroupFormName: '',
-    displayGroupFormErrorText: '',
-    displayGroupNameMaxLength: DISPLAY_GROUP_NAME_MAX_LENGTH,
     profileSheetVisible: false,
     profileSheetLoading: false,
     profileSheetErrorText: '',
@@ -892,23 +1036,20 @@ Page({
     if (!component) {
       return Promise.resolve()
     }
-    const groups = getDisplayGroups(component)
-    const activeGroupKey = groups[0] ? groups[0].groupKey : ''
     this.setData({
       displayGroupSheetVisible: true,
       editingDisplayComponentKey: componentKey,
       editingDisplayComponentType: componentType,
-      activeDisplayGroupKey: activeGroupKey,
-      displayGroupOptions: buildDisplayGroupOptions(component, activeGroupKey),
+      activeDisplayGroupKey: '',
+      displayGroupOptions: [],
+      activeDisplayGroupWorkCountText: '0 个已选',
+      displayGroupWorkOptions: [],
+      displayGroupAllWorks: [],
+      displayGroupOriginalConfig: clonePlainObject(this.data.config),
       displayGroupErrorText: '',
-      displayGroupManageMode: false,
-      displayGroupFormVisible: false,
-      displayGroupFormMode: 'create',
-      editingDisplayGroupKey: '',
-      displayGroupFormName: '',
-      displayGroupFormErrorText: ''
+      displayGroupLoading: true
     })
-    return Promise.resolve()
+    return this.loadDisplayGroupCatalog(componentKey)
   },
 
   openProfileSheet(componentKey) {
@@ -1168,213 +1309,91 @@ Page({
   },
 
   handleCloseDisplayGroupSheet() {
+    const originalConfig = this.data.displayGroupOriginalConfig
+    this.setData(Object.assign({
+      displayGroupSheetVisible: false,
+      editingDisplayComponentKey: '',
+      editingDisplayComponentType: '',
+      activeDisplayGroupKey: '',
+      activeDisplayGroupWorkCountText: '0 个已选',
+      displayGroupWorkOptions: [],
+      displayGroupAllWorks: [],
+      displayGroupOriginalConfig: null,
+      displayGroupErrorText: '',
+      displayGroupLoading: false
+    }, originalConfig ? { config: originalConfig } : {}))
+  },
+
+  handleCancelDisplayGroupSheet() {
+    this.handleCloseDisplayGroupSheet()
+  },
+
+  handleConfirmDisplayGroupSheet() {
     this.setData({
       displayGroupSheetVisible: false,
       editingDisplayComponentKey: '',
       editingDisplayComponentType: '',
       activeDisplayGroupKey: '',
+      activeDisplayGroupWorkCountText: '0 个已选',
+      displayGroupWorkOptions: [],
+      displayGroupAllWorks: [],
+      displayGroupOriginalConfig: null,
       displayGroupErrorText: '',
-      displayGroupManageMode: false,
-      displayGroupFormVisible: false,
-      displayGroupFormMode: 'create',
-      editingDisplayGroupKey: '',
-      displayGroupFormName: '',
-      displayGroupFormErrorText: ''
+      displayGroupLoading: false
     })
   },
 
   refreshDisplayGroupOptions(componentKey = this.data.editingDisplayComponentKey, activeGroupKey = this.data.activeDisplayGroupKey) {
     const component = findComponentByKey(this.data.config, componentKey)
+    const tags = this.data.workTagOptions
+    const works = this.data.displayGroupAllWorks
     this.setData({
-      displayGroupOptions: buildDisplayGroupOptions(component || {}, activeGroupKey)
+      displayGroupOptions: buildDisplayGroupOptions(component || {}, activeGroupKey, tags),
+      activeDisplayGroupWorkCountText: buildActiveDisplayGroupWorkCountText(component || {}, activeGroupKey, tags),
+      displayGroupWorkOptions: buildDisplayGroupWorkOptions(component || {}, activeGroupKey, tags, works)
     })
   },
 
-  handleSelectDisplayGroup(event) {
-    const groupKey = event.currentTarget.dataset.groupKey || ''
-    if (this.data.displayGroupManageMode && groupKey) {
-      this.openDisplayGroupForm('edit', groupKey)
-      return
-    }
-    this.setData({ activeDisplayGroupKey: groupKey })
-    this.refreshDisplayGroupOptions(this.data.editingDisplayComponentKey, groupKey)
-  },
-
-  handleDisplayGroupLongPress(event) {
-    const groupKey = event.currentTarget.dataset.groupKey || ''
-    if (!groupKey) {
-      return
-    }
-    this.setData({
-      displayGroupManageMode: true
-    })
-  },
-
-  handleOpenCreateDisplayGroup() {
-    this.openDisplayGroupForm('create')
-  },
-
-  openDisplayGroupForm(mode, groupKey = '') {
-    const isEdit = mode === 'edit'
-    const component = findComponentByKey(this.data.config, this.data.editingDisplayComponentKey)
-    const group = isEdit ? findDisplayGroupByKey(component || {}, groupKey) : null
-    if (isEdit && !group) {
-      return
-    }
-    this.setData({
-      displayGroupFormVisible: true,
-      displayGroupFormMode: isEdit ? 'edit' : 'create',
-      editingDisplayGroupKey: isEdit ? groupKey : '',
-      displayGroupFormName: isEdit ? group.name : '',
-      displayGroupFormErrorText: ''
-    })
-  },
-
-  handleDisplayGroupNameInput(event) {
-    this.setData({
-      displayGroupFormName: event.detail.value || '',
-      displayGroupFormErrorText: ''
-    })
-  },
-
-  handleCancelDisplayGroupForm() {
-    this.setData({
-      displayGroupFormVisible: false,
-      displayGroupFormMode: 'create',
-      editingDisplayGroupKey: '',
-      displayGroupFormName: '',
-      displayGroupFormErrorText: ''
-    })
-  },
-
-  handleConfirmDisplayGroupForm() {
-    const componentKey = this.data.editingDisplayComponentKey
-    const component = findComponentByKey(this.data.config, componentKey)
-    if (!component) {
-      return
-    }
-    const groups = getDisplayGroups(component)
-    const editingGroupKey = this.data.displayGroupFormMode === 'edit' ? this.data.editingDisplayGroupKey : ''
-    const validation = validateDisplayGroupName(groups, this.data.displayGroupFormName, editingGroupKey)
-    if (!validation.valid) {
-      this.setData({ displayGroupFormErrorText: validation.message })
-      return
-    }
-
-    let config = this.data.config
-    let activeGroupKey = editingGroupKey
-    if (this.data.displayGroupFormMode === 'edit') {
-      config = updateDisplayGroupName(config, componentKey, editingGroupKey, validation.name)
-    } else {
-      const previousKeys = new Set(groups.map((group) => group.groupKey))
-      config = addDisplayGroup(config, componentKey, validation.name)
-      const nextComponent = findComponentByKey(config, componentKey)
-      const createdGroup = getDisplayGroups(nextComponent || {}).find((group) => !previousKeys.has(group.groupKey))
-      activeGroupKey = createdGroup ? createdGroup.groupKey : ''
-    }
-
-    this.setData({
-      config,
-      activeDisplayGroupKey: activeGroupKey,
-      displayGroupFormVisible: false,
-      displayGroupFormMode: 'create',
-      editingDisplayGroupKey: '',
-      displayGroupFormName: '',
-      displayGroupFormErrorText: '',
-      displayGroupManageMode: false
-    })
-    this.refreshDisplayGroupOptions(componentKey, activeGroupKey)
-  },
-
-  handleDeleteDisplayGroup(event) {
-    const groupKey = event.currentTarget.dataset.groupKey || ''
-    const componentKey = this.data.editingDisplayComponentKey
-    if (!componentKey || !groupKey) {
-      return
-    }
-    const config = removeDisplayGroup(this.data.config, componentKey, groupKey)
-    const component = findComponentByKey(config, componentKey)
-    const groups = getDisplayGroups(component || {})
-    const activeGroupKey = this.data.activeDisplayGroupKey === groupKey
-      ? (groups[0] && groups[0].groupKey) || ''
-      : this.data.activeDisplayGroupKey
-    this.setData({
-      config,
-      activeDisplayGroupKey: activeGroupKey,
-      displayGroupFormVisible: false,
-      displayGroupFormMode: 'create',
-      editingDisplayGroupKey: '',
-      displayGroupFormName: '',
-      displayGroupFormErrorText: '',
-      displayGroupManageMode: false
-    })
-    this.refreshDisplayGroupOptions(componentKey, activeGroupKey)
-  },
-
-  handleCopyWorkTagsToDisplayGroups() {
-    if (!this.data.editingDisplayComponentKey) {
-      return Promise.resolve()
-    }
-    this.setData({ displayGroupLoading: true, displayGroupErrorText: '' })
-    return request({ url: `${WORKS_API_URL}/tags` })
-      .then((response) => {
-        const tags = normalizeWorkTags(response)
-        const config = copyWorkTagsToDisplayGroups(this.data.config, this.data.editingDisplayComponentKey, tags)
-        const component = findComponentByKey(config, this.data.editingDisplayComponentKey)
-        const firstGroupKey = component && component.config.groups[0] ? component.config.groups[0].groupKey : ''
-        this.setData({
-          config,
-          workTagOptions: tags,
-          activeDisplayGroupKey: firstGroupKey,
-          displayGroupLoading: false,
-          displayGroupFormVisible: false,
-          editingDisplayGroupKey: '',
-          displayGroupFormName: '',
-          displayGroupFormErrorText: '',
-          displayGroupManageMode: false
-        })
-        this.refreshDisplayGroupOptions(this.data.editingDisplayComponentKey, firstGroupKey)
-      })
-      .catch((error) => {
-        if (error && error.authRequired) {
-          this.setData({ displayGroupLoading: false })
-          handleAuthRequired(error.message)
-          return
-        }
-        this.setData({
-          displayGroupLoading: false,
-          displayGroupErrorText: error && error.message ? error.message : '作品标签加载失败'
-        })
-      })
-  },
-
-  handleImportWorksByTag(event) {
-    const tagId = Number(event.currentTarget.dataset.tagId)
-    if (!this.data.editingDisplayComponentKey || !this.data.activeDisplayGroupKey || !Number.isFinite(tagId) || tagId <= 0) {
-      return Promise.resolve()
-    }
-    this.setData({ displayGroupLoading: true, displayGroupErrorText: '' })
-    return request({
+  async loadAllDisplayGroupWorks(page = 1, collectedWorks = []) {
+    const response = await request({
       url: WORKS_API_URL,
       data: {
-        page: 1,
-        pageSize: 100,
-        tagId
+        page,
+        pageSize: DISPLAY_GROUP_WORK_PAGE_SIZE
       }
-    }).then((response) => {
-      const works = normalizeWorkList(response).works
-      const config = importWorksIntoDisplayGroup(
-        this.data.config,
-        this.data.editingDisplayComponentKey,
-        this.data.activeDisplayGroupKey,
-        works.map((work) => work.id)
-      )
+    })
+    const list = normalizeWorkList(response)
+    const works = collectedWorks.concat(list.works)
+    if (list.hasMore) {
+      return this.loadAllDisplayGroupWorks((list.page || page) + 1, works)
+    }
+    return works
+  },
+
+  async loadDisplayGroupCatalog(componentKey) {
+    try {
+      const tagResponse = await request({ url: `${WORKS_API_URL}/tags` })
+      const tags = normalizeWorkTags(tagResponse)
+      const works = await this.loadAllDisplayGroupWorks()
+      const currentComponent = findComponentByKey(this.data.config, componentKey)
+      const selectedGroups = buildSelectedDisplayGroups(currentComponent || {}, tags)
+      const config = replaceDisplayComponentGroups(this.data.config, componentKey, selectedGroups)
+      const component = findComponentByKey(config, componentKey)
+      const activeGroupKey = resolveActiveDisplayGroupKey(component || {}, tags, this.data.activeDisplayGroupKey)
+      const displayGroupWorkMap = mergeDisplayGroupWorkMap(this.data.displayGroupWorkMap, works)
       this.setData({
         config,
-        displayGroupLoading: false
+        workTagOptions: tags,
+        displayGroupAllWorks: works,
+        displayGroupWorkMap,
+        activeDisplayGroupKey: activeGroupKey,
+        displayGroupOptions: buildDisplayGroupOptions(component || {}, activeGroupKey, tags),
+        activeDisplayGroupWorkCountText: buildActiveDisplayGroupWorkCountText(component || {}, activeGroupKey, tags),
+        displayGroupWorkOptions: buildDisplayGroupWorkOptions(component || {}, activeGroupKey, tags, works),
+        displayGroupLoading: false,
+        displayGroupErrorText: ''
       })
-      this.refreshDisplayGroupOptions()
-    }).catch((error) => {
+    } catch (error) {
       if (error && error.authRequired) {
         this.setData({ displayGroupLoading: false })
         handleAuthRequired(error.message)
@@ -1382,9 +1401,79 @@ Page({
       }
       this.setData({
         displayGroupLoading: false,
-        displayGroupErrorText: error && error.message ? error.message : '作品导入失败'
+        displayGroupErrorText: error && error.message ? error.message : '作品标签和作品加载失败'
       })
+    }
+  },
+
+  handleSelectDisplayGroup(event) {
+    const groupKey = event.currentTarget.dataset.groupKey || ''
+    if (!groupKey) {
+      return
+    }
+    this.setData({ activeDisplayGroupKey: groupKey })
+    this.refreshDisplayGroupOptions(this.data.editingDisplayComponentKey, groupKey)
+  },
+
+  handleToggleDisplayGroupTag(event) {
+    const tagId = Number(event.currentTarget.dataset.tagId)
+    const tag = this.data.workTagOptions.find((item) => item.id === tagId)
+    const componentKey = this.data.editingDisplayComponentKey
+    const component = findComponentByKey(this.data.config, componentKey)
+    if (!tag || !component) {
+      return
+    }
+    const groupKey = buildDisplayGroupTagKey(tag.id)
+    const selectedGroups = buildSelectedDisplayGroups(component, this.data.workTagOptions)
+    const existingIndex = selectedGroups.findIndex((group) => group.groupKey === groupKey)
+    const nextGroups = existingIndex >= 0
+      ? selectedGroups.filter((group) => group.groupKey !== groupKey)
+      : selectedGroups.concat({
+          groupKey,
+          name: tag.name,
+          sortOrder: (selectedGroups.length + 1) * DISPLAY_GROUP_SORT_ORDER_STEP,
+          workIds: []
+        })
+    const config = replaceDisplayComponentGroups(this.data.config, componentKey, nextGroups)
+    this.setData({
+      config,
+      activeDisplayGroupKey: groupKey,
+      displayGroupErrorText: ''
     })
+    this.refreshDisplayGroupOptions(componentKey, groupKey)
+  },
+
+  handleToggleDisplayGroupWork(event) {
+    const workId = Number(event.currentTarget.dataset.id)
+    const componentKey = this.data.editingDisplayComponentKey
+    const component = findComponentByKey(this.data.config, componentKey)
+    const tag = findWorkTagByGroupKey(this.data.workTagOptions, this.data.activeDisplayGroupKey)
+    if (!component || !tag || !Number.isFinite(workId) || workId <= 0) {
+      return
+    }
+    const groupKey = buildDisplayGroupTagKey(tag.id)
+    const selectedGroups = buildSelectedDisplayGroups(component, this.data.workTagOptions)
+    const existingGroup = selectedGroups.find((group) => group.groupKey === groupKey)
+    const sourceWorkIds = normalizeWorkIds(existingGroup && existingGroup.workIds)
+    const nextWorkIds = sourceWorkIds.includes(workId)
+      ? sourceWorkIds.filter((id) => id !== workId)
+      : sourceWorkIds.concat(workId)
+    const nextGroup = {
+      groupKey,
+      name: tag.name,
+      sortOrder: existingGroup ? existingGroup.sortOrder : (selectedGroups.length + 1) * DISPLAY_GROUP_SORT_ORDER_STEP,
+      workIds: nextWorkIds
+    }
+    const nextGroups = existingGroup
+      ? selectedGroups.map((group) => group.groupKey === groupKey ? nextGroup : group)
+      : selectedGroups.concat(nextGroup)
+    const config = replaceDisplayComponentGroups(this.data.config, componentKey, nextGroups)
+    this.setData({
+      config,
+      activeDisplayGroupKey: groupKey,
+      displayGroupErrorText: ''
+    })
+    this.refreshDisplayGroupOptions(componentKey, groupKey)
   },
 
   handleRemoveComponent(event) {
@@ -1394,18 +1483,23 @@ Page({
     })
   },
 
-  openComponentWorkSheet(componentKey, componentType) {
+  openComponentWorkSheet(componentKey, componentType, options = {}) {
     const component = findComponentByKey(this.data.config, componentKey)
     if (!component) {
       return Promise.resolve()
     }
-    const selectedIds = normalizeWorkIds(component.config && component.config.workIds)
+    const selectedIds = normalizeWorkIds(
+      Object.prototype.hasOwnProperty.call(options, 'selectedIds')
+        ? options.selectedIds
+        : component.config && component.config.workIds
+    )
     this.setData({
       componentWorkSheetVisible: true,
-      componentWorkSheetTitle: componentType === COMPONENT_TYPES.CAROUSEL ? '编辑轮播作品' : '编辑展示作品',
+      componentWorkSheetTitle: options.title || (componentType === COMPONENT_TYPES.CAROUSEL ? '编辑轮播作品' : '编辑展示作品'),
       componentWorkLoading: true,
       componentWorkLoadingMore: false,
       componentWorkErrorText: '',
+      componentWorkEmptyText: componentType === COMPONENT_TYPES.CAROUSEL ? '暂无图片作品' : '暂无作品',
       componentWorkOptions: [],
       componentWorkFilterTags: [],
       componentWorkKeyword: '',
@@ -1457,6 +1551,7 @@ Page({
       }
       const list = normalizeWorkList(response)
       const works = reset ? list.works : mergeComponentWorks(this.data.componentWorkOptions, list.works)
+      const displayGroupWorkMap = mergeDisplayGroupWorkMap(this.data.displayGroupWorkMap, works)
       this.setData({
         componentWorkLoading: false,
         componentWorkLoadingMore: false,
@@ -1465,7 +1560,8 @@ Page({
         componentWorkFilterTags: list.filterTags,
         componentWorkPage: list.page,
         componentWorkPageSize: list.pageSize || pageSize,
-        componentWorkHasMore: list.hasMore
+        componentWorkHasMore: list.hasMore,
+        displayGroupWorkMap
       })
     } catch (error) {
       if (error && error.authRequired) {
@@ -1561,8 +1657,12 @@ Page({
     if (!this.data.editingComponentKey) {
       return
     }
+    const componentKey = this.data.editingComponentKey
+    const config = updateComponentWorkIds(this.data.config, componentKey, this.data.componentWorkSelectedIds)
+    const displayGroupWorkMap = mergeDisplayGroupWorkMap(this.data.displayGroupWorkMap, this.data.componentWorkOptions)
     this.setData({
-      config: updateComponentWorkIds(this.data.config, this.data.editingComponentKey, this.data.componentWorkSelectedIds),
+      config,
+      displayGroupWorkMap,
       componentWorkSheetVisible: false,
       editingComponentKey: '',
       editingComponentType: ''

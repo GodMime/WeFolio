@@ -1,0 +1,24 @@
+<view class="portfolio-carousel">
+  <swiper
+    class="portfolio-carousel-swiper"
+    autoplay="{{canAutoplay}}"
+    circular="{{canAutoplay}}"
+    interval="{{safeInterval}}"
+    duration="{{safeDuration}}"
+    bindchange="handleSwiperChange"
+  >
+    <swiper-item wx:for="{{works}}" wx:key="workId">
+      <image class="portfolio-carousel-image" src="{{item.coverUrl || item.mediaUrl}}" mode="aspectFill"></image>
+    </swiper-item>
+  </swiper>
+
+  <view wx:if="{{progressSegments.length > 1}}" class="carousel-progress-bar" aria-hidden="true">
+    <view
+      wx:for="{{progressSegments}}"
+      wx:key="key"
+      class="carousel-progress-segment {{item.state}}"
+    >
+      <view class="carousel-progress-fill" style="{{item.state === 'current' ? progressStyle : ''}}"></view>
+    </view>
+  </view>
+</view>

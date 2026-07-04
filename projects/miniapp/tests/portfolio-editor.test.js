@@ -656,8 +656,34 @@ test('profile sheet chooses wechat qr from media picker without url input', asyn
   assert.equal(page.data.profileForm.wechatQrUrl, 'wxfile://tmp/profile-wechat-qr.jpg')
 })
 
-test('tapping work grid component opens portfolio display tag sheet', async () => {
-  const page = loadPortfolioEditorPage(() => Promise.resolve({}))
+test('tapping work grid component loads tag-driven display group selector', async () => {
+  const requests = []
+  const fakeRequest = (options) => {
+    requests.push(options)
+    if (options.url === '/api/mine/works/tags') {
+      return Promise.resolve({
+        tags: [
+          { id: 8, name: '户外案例' },
+          { id: 9, name: '室内案例' },
+          { id: 10, name: '快剪视频' }
+        ]
+      })
+    }
+    if (options.url === '/api/mine/works') {
+      return Promise.resolve({
+        page: 1,
+        pageSize: 100,
+        hasMore: false,
+        works: [
+          { id: 21, mediaType: 'IMAGE', title: '户外仪式', coverUrl: 'https://example.com/21.jpg', tags: [{ id: 8, name: '户外案例' }] },
+          { id: 22, mediaType: 'VIDEO', title: '户外快剪', coverUrl: 'https://example.com/22.jpg', tags: [{ id: 8, name: '户外案例' }, { id: 10, name: '快剪视频' }] },
+          { id: 31, mediaType: 'IMAGE', title: '室内迎宾', coverUrl: 'https://example.com/31.jpg', tags: [{ id: 9, name: '室内案例' }] }
+        ]
+      })
+    }
+    return Promise.resolve({})
+  }
+  const page = loadPortfolioEditorPage(fakeRequest)
   page.data.config = normalizePortfolioConfig({
     components: [
       createComponent(COMPONENT_TYPES.WORK_GRID, {
@@ -665,7 +691,8 @@ test('tapping work grid component opens portfolio display tag sheet', async () =
         sortOrder: 1000,
         config: {
           groups: [
-            { groupKey: 'g_all', name: '全部案例', sortOrder: 1000, workIds: [11] }
+            { groupKey: 'tag_8', name: '户外案例', sortOrder: 1000, workIds: [22, 21] },
+            { groupKey: 'tag_9', name: '室内案例', sortOrder: 2000, workIds: [] }
           ]
         }
       })
@@ -673,14 +700,23 @@ test('tapping work grid component opens portfolio display tag sheet', async () =
   })
 
   await page.handleComponentTap({ currentTarget: { dataset: { key: 'c_grid', type: COMPONENT_TYPES.WORK_GRID } } })
+  await flushPromises()
 
   assert.equal(page.data.displayGroupSheetVisible, true)
   assert.equal(page.data.editingDisplayComponentKey, 'c_grid')
-  assert.equal(page.data.activeDisplayGroupKey, 'g_all')
-  assert.deepEqual(page.data.displayGroupOptions.map((item) => item.name), ['全部案例'])
+  assert.equal(page.data.activeDisplayGroupKey, 'tag_8')
+  assert.deepEqual(requests.map((item) => item.url), ['/api/mine/works/tags', '/api/mine/works'])
+  assert.deepEqual(requests[1].data, { page: 1, pageSize: 100 })
+  assert.deepEqual(page.data.displayGroupOptions.map((item) => item.name), ['户外案例', '室内案例', '快剪视频'])
+  assert.deepEqual(page.data.displayGroupOptions.map((item) => item.selectionOrder), [1, 2, 0])
+  assert.deepEqual(page.data.displayGroupOptions.map((item) => item.selected), [true, true, false])
+  assert.deepEqual(page.data.displayGroupOptions.map((item) => item.countText), ['2', '0', '0'])
+  assert.deepEqual(page.data.displayGroupWorkOptions.map((item) => item.id), [21, 22])
+  assert.deepEqual(page.data.displayGroupWorkOptions.map((item) => item.selectionOrder), [2, 1])
+  assert.deepEqual(page.data.displayGroupWorkOptions.map((item) => item.selected), [true, true])
 })
 
-test('portfolio display tag sheet copies work tags and imports works by tag', async () => {
+test('work list display group records tag and work selection order independently', async () => {
   const requests = []
   const fakeRequest = (options) => {
     requests.push(options)
@@ -694,9 +730,14 @@ test('portfolio display tag sheet copies work tags and imports works by tag', as
     }
     if (options.url === '/api/mine/works') {
       return Promise.resolve({
+        page: 1,
+        pageSize: 100,
+        hasMore: false,
         works: [
-          { id: 21, mediaType: 'IMAGE', title: '户外仪式', coverUrl: 'https://example.com/21.jpg' },
-          { id: 22, mediaType: 'VIDEO', title: '户外快剪', coverUrl: 'https://example.com/22.jpg' }
+          { id: 21, mediaType: 'IMAGE', title: '户外仪式', coverUrl: 'https://example.com/21.jpg', tags: [{ id: 8, name: '户外案例' }] },
+          { id: 22, mediaType: 'VIDEO', title: '户外快剪', coverUrl: 'https://example.com/22.jpg', tags: [{ id: 8, name: '户外案例' }] },
+          { id: 31, mediaType: 'IMAGE', title: '室内迎宾', coverUrl: 'https://example.com/31.jpg', tags: [{ id: 9, name: '室内案例' }] },
+          { id: 32, mediaType: 'VIDEO', title: '室内快剪', coverUrl: 'https://example.com/32.jpg', tags: [{ id: 9, name: '室内案例' }] }
         ]
       })
     }
@@ -709,30 +750,72 @@ test('portfolio display tag sheet copies work tags and imports works by tag', as
         componentKey: 'c_list',
         sortOrder: 1000,
         config: {
-          groups: [
-            { groupKey: 'g_all', name: '全部案例', sortOrder: 1000, workIds: [] }
-          ]
+          groups: []
         }
       })
     ]
   })
 
   await page.handleComponentTap({ currentTarget: { dataset: { key: 'c_list', type: COMPONENT_TYPES.WORK_LIST } } })
-  await page.handleCopyWorkTagsToDisplayGroups()
-  page.handleSelectDisplayGroup({ currentTarget: { dataset: { groupKey: 'g_1' } } })
-  await page.handleImportWorksByTag({ currentTarget: { dataset: { tagId: 8 } } })
   await flushPromises()
 
   assert.equal(requests[0].url, '/api/mine/works/tags')
   assert.equal(requests[1].url, '/api/mine/works')
-  assert.deepEqual(requests[1].data, { page: 1, pageSize: 100, tagId: 8 })
-  assert.deepEqual(page.data.config.components[0].config.groups.map((item) => item.name), ['户外案例', '室内案例'])
-  assert.deepEqual(page.data.config.components[0].config.groups[0].workIds, [21, 22])
-  assert.deepEqual(page.data.displayGroupOptions.map((item) => item.name), ['户外案例', '室内案例'])
+  assert.equal(page.data.componentWorkSheetVisible, false)
+
+  page.handleToggleDisplayGroupTag({ currentTarget: { dataset: { tagId: 8 } } })
+  page.handleToggleDisplayGroupTag({ currentTarget: { dataset: { tagId: 9 } } })
+
+  assert.deepEqual(page.data.config.components[0].config.groups.map((item) => item.groupKey), ['tag_8', 'tag_9'])
+  assert.deepEqual(page.data.config.components[0].config.groups.map((item) => item.sortOrder), [1000, 2000])
+  assert.deepEqual(page.data.displayGroupOptions.map((item) => item.selectionOrder), [1, 2])
+
+  page.handleSelectDisplayGroup({ currentTarget: { dataset: { groupKey: 'tag_9' } } })
+  page.handleToggleDisplayGroupWork({ currentTarget: { dataset: { id: 31 } } })
+  page.handleToggleDisplayGroupWork({ currentTarget: { dataset: { id: 32 } } })
+
+  assert.deepEqual(page.data.config.components[0].config.groups[1].workIds, [31, 32])
+  assert.deepEqual(page.data.displayGroupWorkOptions.map((item) => item.selectionOrder), [1, 2])
+
+  page.handleSelectDisplayGroup({ currentTarget: { dataset: { groupKey: 'tag_8' } } })
+  page.handleToggleDisplayGroupWork({ currentTarget: { dataset: { id: 22 } } })
+  page.handleToggleDisplayGroupWork({ currentTarget: { dataset: { id: 21 } } })
+
+  assert.deepEqual(page.data.config.components[0].config.groups[0].workIds, [22, 21])
+  assert.deepEqual(page.data.config.components[0].config.groups[1].workIds, [31, 32])
+  assert.deepEqual(page.data.displayGroupWorkOptions.map((item) => item.selectionOrder), [2, 1])
+
+  page.handleToggleDisplayGroupTag({ currentTarget: { dataset: { tagId: 8 } } })
+
+  assert.deepEqual(page.data.config.components[0].config.groups.map((item) => item.groupKey), ['tag_9'])
+  assert.deepEqual(page.data.config.components[0].config.groups.map((item) => item.sortOrder), [1000])
+  assert.deepEqual(page.data.displayGroupOptions.map((item) => item.selectionOrder), [0, 1])
 })
 
-test('portfolio display tag sheet creates renames and deletes tags', async () => {
-  const page = loadPortfolioEditorPage(() => Promise.resolve({}))
+test('display group sheet cancel restores selections and confirm keeps them', async () => {
+  const fakeRequest = (options) => {
+    if (options.url === '/api/mine/works/tags') {
+      return Promise.resolve({
+        tags: [
+          { id: 8, name: '户外案例' },
+          { id: 9, name: '室内案例' }
+        ]
+      })
+    }
+    if (options.url === '/api/mine/works') {
+      return Promise.resolve({
+        page: 1,
+        pageSize: 100,
+        hasMore: false,
+        works: [
+          { id: 21, mediaType: 'IMAGE', title: '户外仪式', coverUrl: 'https://example.com/21.jpg', tags: [{ id: 8, name: '户外案例' }] },
+          { id: 31, mediaType: 'IMAGE', title: '室内迎宾', coverUrl: 'https://example.com/31.jpg', tags: [{ id: 9, name: '室内案例' }] }
+        ]
+      })
+    }
+    return Promise.resolve({})
+  }
+  const page = loadPortfolioEditorPage(fakeRequest)
   page.data.config = normalizePortfolioConfig({
     components: [
       createComponent(COMPONENT_TYPES.WORK_GRID, {
@@ -740,7 +823,7 @@ test('portfolio display tag sheet creates renames and deletes tags', async () =>
         sortOrder: 1000,
         config: {
           groups: [
-            { groupKey: 'g_all', name: '全部案例', sortOrder: 1000, workIds: [11] }
+            { groupKey: 'tag_8', name: '户外案例', sortOrder: 1000, workIds: [21] }
           ]
         }
       })
@@ -748,40 +831,20 @@ test('portfolio display tag sheet creates renames and deletes tags', async () =>
   })
 
   await page.handleComponentTap({ currentTarget: { dataset: { key: 'c_grid', type: COMPONENT_TYPES.WORK_GRID } } })
-  page.handleOpenCreateDisplayGroup()
-  page.handleDisplayGroupNameInput({ detail: { value: '全部案例' } })
-  page.handleConfirmDisplayGroupForm()
+  await flushPromises()
+  page.handleToggleDisplayGroupTag({ currentTarget: { dataset: { tagId: 9 } } })
+  page.handleCancelDisplayGroupSheet()
 
-  assert.equal(page.data.displayGroupFormErrorText, '展示标签名称不能重复')
-  assert.deepEqual(page.data.config.components[0].config.groups.map((item) => item.name), ['全部案例'])
+  assert.deepEqual(page.data.config.components[0].config.groups.map((item) => item.groupKey), ['tag_8'])
+  assert.equal(page.data.displayGroupSheetVisible, false)
 
-  page.handleDisplayGroupNameInput({ detail: { value: '仪式现场' } })
-  page.handleConfirmDisplayGroupForm()
+  await page.handleComponentTap({ currentTarget: { dataset: { key: 'c_grid', type: COMPONENT_TYPES.WORK_GRID } } })
+  await flushPromises()
+  page.handleToggleDisplayGroupTag({ currentTarget: { dataset: { tagId: 9 } } })
+  page.handleConfirmDisplayGroupSheet()
 
-  const createdGroupKey = page.data.config.components[0].config.groups[1].groupKey
-  assert.equal(page.data.displayGroupFormVisible, false)
-  assert.equal(page.data.activeDisplayGroupKey, createdGroupKey)
-  assert.deepEqual(page.data.config.components[0].config.groups.map((item) => item.name), ['全部案例', '仪式现场'])
-
-  page.handleDisplayGroupLongPress({ currentTarget: { dataset: { groupKey: createdGroupKey } } })
-
-  assert.equal(page.data.displayGroupManageMode, true)
-
-  page.handleSelectDisplayGroup({ currentTarget: { dataset: { groupKey: createdGroupKey } } })
-
-  assert.equal(page.data.displayGroupFormMode, 'edit')
-  page.handleDisplayGroupNameInput({ detail: { value: '迎宾区' } })
-  page.handleConfirmDisplayGroupForm()
-
-  assert.deepEqual(page.data.config.components[0].config.groups.map((item) => item.name), ['全部案例', '迎宾区'])
-
-  page.handleDisplayGroupLongPress({ currentTarget: { dataset: { groupKey: 'g_all' } } })
-  page.handleDeleteDisplayGroup({ currentTarget: { dataset: { groupKey: 'g_all' } } })
-
-  assert.equal(page.data.activeDisplayGroupKey, createdGroupKey)
-  assert.equal(page.data.displayGroupManageMode, false)
-  assert.deepEqual(page.data.config.components[0].config.groups.map((item) => item.name), ['迎宾区'])
-  assert.deepEqual(page.data.displayGroupOptions.map((item) => item.name), ['迎宾区'])
+  assert.deepEqual(page.data.config.components[0].config.groups.map((item) => item.groupKey), ['tag_8', 'tag_9'])
+  assert.equal(page.data.displayGroupSheetVisible, false)
 })
 
 test('saving draft in create mode creates portfolio before saving draft', async () => {

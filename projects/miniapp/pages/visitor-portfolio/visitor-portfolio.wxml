@@ -4,11 +4,7 @@
   <scroll-view scroll-y class="visitor-scroll">
     <view wx:for="{{portfolio.components}}" wx:key="componentKey" class="folio-component">
       <block wx:if="{{item.componentType === 'CAROUSEL'}}">
-        <swiper class="folio-carousel" indicator-dots autoplay circular>
-          <swiper-item wx:for="{{item.works}}" wx:for-item="work" wx:key="workId">
-            <image class="carousel-image" src="{{work.coverUrl || work.mediaUrl}}" mode="aspectFill"></image>
-          </swiper-item>
-        </swiper>
+        <portfolio-carousel works="{{item.works}}" interval="{{item.carouselIntervalMs}}"></portfolio-carousel>
       </block>
 
       <block wx:elif="{{item.componentType === 'PROFILE'}}">
@@ -109,7 +105,7 @@
     </view>
 
     <view class="folio-brand-footer">
-      <image class="folio-brand-logo" src="https://cdn2.we-folio.dingchenyong.top/system/folio-logo.png" mode="aspectFit"></image>
+      <image class="folio-brand-logo" src="/assets/system/folio-logo-stack-bold-small-50kb.png" mode="aspectFit"></image>
       <view class="folio-brand-name">映期Folio</view>
     </view>
   </scroll-view>

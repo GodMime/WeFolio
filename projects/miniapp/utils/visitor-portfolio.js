@@ -7,6 +7,7 @@ const PROFILE_VISIBLE_FIELD_DEFAULTS = {
   tags: true,
   wechatQr: false
 }
+const DEFAULT_CAROUSEL_INTERVAL_MS = 3000
 
 function trimText(value) {
   return String(value || '').trim()
@@ -15,6 +16,11 @@ function trimText(value) {
 function toNumber(value, fallback = 0) {
   const numberValue = Number(value)
   return Number.isFinite(numberValue) ? numberValue : fallback
+}
+
+function toPositiveNumber(value, fallback) {
+  const numberValue = toNumber(value, fallback)
+  return numberValue > 0 ? Math.round(numberValue) : fallback
 }
 
 function normalizeShare(raw = {}) {
@@ -86,6 +92,13 @@ function normalizeQrContact(raw = {}) {
   }
 }
 
+function normalizeCarouselIntervalMs(raw = {}, config = {}) {
+  return toPositiveNumber(
+    raw.carouselIntervalMs || config.carouselIntervalMs || config.intervalMs,
+    DEFAULT_CAROUSEL_INTERVAL_MS
+  )
+}
+
 function normalizeRenderComponent(raw = {}) {
   const componentType = trimText(raw.componentType)
   const groups = normalizeDisplayGroups(raw.groups)
@@ -102,6 +115,7 @@ function normalizeRenderComponent(raw = {}) {
     sortOrder: toNumber(raw.sortOrder),
     title: trimText(raw.title),
     config: Object.assign({}, config),
+    carouselIntervalMs: normalizeCarouselIntervalMs(raw, config),
     works: Array.isArray(raw.works) ? raw.works.map(normalizeRenderWork) : [],
     groups,
     displayTags: groups.map((group, index) => ({
