@@ -35,12 +35,6 @@ function defaultString(value, fallback = '') {
   return text || fallback
 }
 
-function resolveTemplateText(item = {}) {
-  const ownerText = item.ownerType === 'TEAM' ? '团队' : '个人'
-  const templateText = item.templateType === 'ADVANCED' ? '高级' : '标准'
-  return `${templateText}${ownerText}作品集`
-}
-
 function resolveStatus(item = {}) {
   if (item.publicationStatus === PUBLICATION_STATUS_PUBLISHED) {
     return {
@@ -69,13 +63,14 @@ function resolveStatus(item = {}) {
 function normalizePortfolioItem(item = {}) {
   const status = resolveStatus(item)
   const isPublished = item.publicationStatus === PUBLICATION_STATUS_PUBLISHED
+  const isDraft = status.actionType === ACTION_TYPE_PUBLISH
   return Object.assign({}, item, status, {
     title: defaultString(item.title, '未命名作品集'),
-    templateText: resolveTemplateText(item),
     coverUrl: defaultString(item.coverUrl, DEFAULT_COVER_URL),
     updatedText: item.updatedAt ? `最近更新 ${String(item.updatedAt).slice(5, 10)}` : '最近更新',
     coverAlt: defaultString(item.title, '作品集封面'),
-    showPublishedPreview: isPublished
+    showPublishedPreview: isPublished,
+    showDraftPreview: isDraft
   })
 }
 
@@ -263,6 +258,18 @@ Page({
       return
     }
     wx.navigateTo({ url: `${PREVIEW_PAGE_URL}?portfolioId=${portfolioId}&scope=published` })
+  },
+
+  handleDraftPreviewTap(event) {
+    const portfolioId = normalizeId(event.currentTarget.dataset.id)
+    if (!portfolioId) {
+      return
+    }
+    if (this.data.revealedPortfolioId === portfolioId) {
+      this.setData({ revealedPortfolioId: null })
+      return
+    }
+    wx.navigateTo({ url: `${PREVIEW_PAGE_URL}?portfolioId=${portfolioId}` })
   },
 
   publishPortfolioFromList(portfolioId) {

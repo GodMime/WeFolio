@@ -2,6 +2,7 @@ package com.jxc.wefolio.dto;
 
 import lombok.Data;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -45,5 +46,8 @@ public class MinePortfolioListResponse {
 
         /** 正式版本 */
         private Integer publishedRevision;
+
+        /** 更新时间 */
+        private LocalDateTime updatedAt;
     }
 }

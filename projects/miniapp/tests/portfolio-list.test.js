@@ -315,6 +315,51 @@ test('previewing a published portfolio from list opens published preview without
   }
 })
 
+test('previewing a draft portfolio from list opens draft preview without publishing', async () => {
+  const requests = []
+  const navigations = []
+  const page = loadPortfolioListPage((options) => {
+    requests.push(options)
+    return Promise.resolve({
+      portfolios: [
+        {
+          portfolioId: 88,
+          ownerType: 'USER',
+          templateType: 'STANDARD',
+          publicationStatus: 'DRAFT',
+          title: '林安婚礼司仪',
+          draftRevision: 5,
+          publishedRevision: 0,
+          shareCode: 'PF001'
+        }
+      ]
+    })
+  }, {
+    navigateTo(options) {
+      navigations.push(options)
+    }
+  })
+
+  page.bootstrap()
+  await flushPromises()
+
+  page.handleDraftPreviewTap({
+    currentTarget: { dataset: { id: 88 } }
+  })
+
+  try {
+    assert.equal(page.data.displayPortfolios[0].showDraftPreview, true)
+    assert.deepEqual(requests.map((item) => [item.url, item.method || 'GET']), [
+      ['/api/mine/portfolios', 'GET']
+    ])
+    assert.deepEqual(navigations, [
+      { url: '/pages/portfolio-standard-preview/portfolio-standard-preview?portfolioId=88' }
+    ])
+  } finally {
+    page.cleanup()
+  }
+})
+
 test('bubbled primary action tap does not open portfolio editor', async () => {
   const requests = []
   const navigations = []

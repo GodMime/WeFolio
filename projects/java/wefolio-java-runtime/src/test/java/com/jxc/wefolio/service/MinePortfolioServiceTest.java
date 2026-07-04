@@ -274,6 +274,20 @@ class MinePortfolioServiceTest {
     }
 
     @Test
+    void listPortfoliosShouldReturnUpdatedAtForPageDisplay() {
+        PortfolioEntity portfolio = ownedPortfolio();
+        LocalDateTime updatedAt = LocalDateTime.of(2026, 7, 4, 16, 30, 12);
+        portfolio.setUpdatedAt(updatedAt);
+        when(portfolioEntityMapper.selectList(any())).thenReturn(List.of(portfolio));
+
+        MinePortfolioListResponse response = service().listPortfolios("USER");
+
+        assertThat(response.getPortfolios()).hasSize(1);
+        assertThat(response.getPortfolios().get(0))
+                .hasFieldOrPropertyWithValue("updatedAt", updatedAt);
+    }
+
+    @Test
     void componentLibraryShouldExposeSingleColumnWorkList() {
         assertThat(service().getComponentLibrary().getComponents())
                 .extracting("componentType")

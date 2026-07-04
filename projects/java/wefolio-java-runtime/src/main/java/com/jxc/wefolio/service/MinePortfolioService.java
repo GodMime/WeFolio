@@ -636,6 +636,7 @@ public class MinePortfolioService {
         item.setPublicationStatus(portfolio.getPublicationStatus());
         item.setDraftRevision(safeInt(portfolio.getDraftRevision()));
         item.setPublishedRevision(safeInt(portfolio.getPublishedRevision()));
+        item.setUpdatedAt(portfolio.getUpdatedAt());
         return item;
     }
 

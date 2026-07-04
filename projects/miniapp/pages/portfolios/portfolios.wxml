@@ -53,25 +53,53 @@
               </view>
               <view class="portfolio-copy">
                 <view class="portfolio-title">{{item.title}}</view>
-                <view class="portfolio-meta">{{item.templateText}} · {{item.updatedText}}</view>
+                <view class="portfolio-meta">{{item.updatedText}}</view>
                 <view class="portfolio-badges">
                   <view class="status-badge {{item.statusTone}}">{{item.statusText}}</view>
                 </view>
               </view>
               <view class="portfolio-side">
-                <view class="portfolio-action-stack">
+                <view class="portfolio-action-row">
                   <button
                     wx:if="{{item.showPublishedPreview}}"
-                    class="portfolio-share-button"
+                    class="portfolio-action-button preview"
                     data-id="{{item.portfolioId}}"
                     data-action="PREVIEW_PUBLISHED"
                     catchtap="handlePublishedPreviewTap"
                   >预览</button>
                   <button
-                    class="portfolio-share-button {{item.actionType === 'EDIT' ? 'draft' : ''}}"
+                    wx:if="{{item.showDraftPreview}}"
+                    class="portfolio-action-button preview"
+                    data-id="{{item.portfolioId}}"
+                    data-action="PREVIEW_DRAFT"
+                    catchtap="handleDraftPreviewTap"
+                  >预览</button>
+                  <view
+                    wx:if="{{item.actionType === 'SHARE'}}"
+                    class="portfolio-icon-button share"
+                    aria-label="分享作品集"
+                  >
+                    <view class="portfolio-share-icon" aria-hidden="true">
+                      <view class="portfolio-share-line upper"></view>
+                      <view class="portfolio-share-line lower"></view>
+                      <view class="portfolio-share-dot source"></view>
+                      <view class="portfolio-share-dot upper"></view>
+                      <view class="portfolio-share-dot lower"></view>
+                    </view>
+                    <button
+                      class="portfolio-share-hit"
+                      open-type="share"
+                      data-id="{{item.portfolioId}}"
+                      data-action="{{item.actionType}}"
+                      catchtap="handlePrimaryActionTap"
+                      aria-label="分享作品集"
+                    ></button>
+                  </view>
+                  <button
+                    wx:else
+                    class="portfolio-action-button {{item.actionType === 'PUBLISH' ? 'publish' : ''}} {{item.actionType === 'EDIT' ? 'edit' : ''}}"
                     data-id="{{item.portfolioId}}"
                     data-action="{{item.actionType}}"
-                    open-type="{{item.actionType === 'SHARE' ? 'share' : ''}}"
                     catchtap="handlePrimaryActionTap"
                   >{{item.actionText}}</button>
                 </view>
