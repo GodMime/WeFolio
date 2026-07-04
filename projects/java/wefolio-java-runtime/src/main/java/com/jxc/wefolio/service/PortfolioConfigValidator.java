@@ -54,6 +54,17 @@ public class PortfolioConfigValidator {
     /** 微信号字段 */
     private static final String CONTACT_FIELD_WECHAT = "wechat";
 
+    /** 需求描述字段 */
+    private static final String CONTACT_FIELD_NEEDS = "needs";
+
+    /** 默认访客联系表单字段 */
+    private static final List<String> DEFAULT_CONTACT_FORM_FIELDS = List.of(
+            CONTACT_FIELD_NAME,
+            CONTACT_FIELD_PHONE,
+            CONTACT_FIELD_WECHAT,
+            CONTACT_FIELD_NEEDS
+    );
+
     /** 作品 ID 配置键 */
     private static final String CONFIG_KEY_WORK_IDS = "workIds";
 
@@ -86,6 +97,15 @@ public class PortfolioConfigValidator {
 
     /** 组件内容配置键 */
     private static final String CONFIG_KEY_CONTENT = "content";
+
+    /** 文字说明对齐配置键 */
+    private static final String CONFIG_KEY_ALIGNMENT = "alignment";
+
+    /** 分割线颜色配置键 */
+    private static final String CONFIG_KEY_DIVIDER_COLOR = "color";
+
+    /** 分割线高度配置键 */
+    private static final String CONFIG_KEY_DIVIDER_HEIGHT_PX = "heightPx";
 
     /** 档期查询范围配置键 */
     private static final String CONFIG_KEY_QUERY_RANGE = "queryRange";
@@ -125,6 +145,54 @@ public class PortfolioConfigValidator {
 
     /** 内联月历展示方式 */
     private static final String SCHEDULE_DISPLAY_MODE_INLINE_CALENDAR = "INLINE_CALENDAR";
+
+    /** 联系表单弹层展示方式 */
+    private static final String CONTACT_FORM_DISPLAY_MODE_MODAL_FORM = "MODAL_FORM";
+
+    /** 联系表单直接展示方式 */
+    private static final String CONTACT_FORM_DISPLAY_MODE_INLINE_FORM = "INLINE_FORM";
+
+    /** 文字说明最大字数 */
+    private static final int TEXT_SECTION_CONTENT_MAX_LENGTH = 200;
+
+    /** 文字说明左对齐 */
+    private static final String TEXT_SECTION_ALIGNMENT_LEFT = "LEFT";
+
+    /** 文字说明居中 */
+    private static final String TEXT_SECTION_ALIGNMENT_CENTER = "CENTER";
+
+    /** 文字说明右对齐 */
+    private static final String TEXT_SECTION_ALIGNMENT_RIGHT = "RIGHT";
+
+    /** 支持的文字说明对齐方式 */
+    private static final Set<String> TEXT_SECTION_ALIGNMENTS = Set.of(
+            TEXT_SECTION_ALIGNMENT_LEFT,
+            TEXT_SECTION_ALIGNMENT_CENTER,
+            TEXT_SECTION_ALIGNMENT_RIGHT
+    );
+
+    /** 分割线黑色 */
+    private static final String DIVIDER_COLOR_BLACK = "BLACK";
+
+    /** 分割线白色 */
+    private static final String DIVIDER_COLOR_WHITE = "WHITE";
+
+    /** 分割线灰色 */
+    private static final String DIVIDER_COLOR_GRAY = "GRAY";
+
+    /** 分割线透明 */
+    private static final String DIVIDER_COLOR_TRANSPARENT = "TRANSPARENT";
+
+    /** 支持的分割线颜色 */
+    private static final Set<String> DIVIDER_COLORS = Set.of(
+            DIVIDER_COLOR_BLACK,
+            DIVIDER_COLOR_WHITE,
+            DIVIDER_COLOR_GRAY,
+            DIVIDER_COLOR_TRANSPARENT
+    );
+
+    /** 默认分割线高度 */
+    private static final int DEFAULT_DIVIDER_HEIGHT_PX = 16;
 
     /** 默认作品集展示标签标识前缀 */
     private static final String DEFAULT_GROUP_KEY_PREFIX = "g_";
@@ -294,6 +362,7 @@ public class PortfolioConfigValidator {
             case QR_CONTACT -> validateQrContact(component);
             case CONTACT_FORM -> validateContactForm(component);
             case TEXT_SECTION -> validateTextSection(component);
+            case DIVIDER -> validateDivider(component);
             default -> {
             }
         }
@@ -369,13 +438,25 @@ public class PortfolioConfigValidator {
      */
     private void validateContactForm(PortfolioConfigDto.Component component) {
         List<String> fields = asStringList(component.getConfig().get(CONFIG_KEY_FIELDS));
+        if (fields.isEmpty()) {
+            fields = DEFAULT_CONTACT_FORM_FIELDS;
+        }
         if (!fields.contains(CONTACT_FIELD_NAME)) {
             throw new BusinessException(PortfolioMessage.CONTACT_FORM_NAME_FIELD_REQUIRED_MESSAGE);
         }
         if (!fields.contains(CONTACT_FIELD_PHONE) && !fields.contains(CONTACT_FIELD_WECHAT)) {
             throw new BusinessException(PortfolioMessage.CONTACT_FORM_CONTACT_FIELD_REQUIRED_MESSAGE);
         }
+        String displayMode = defaultString(
+                asString(component.getConfig().get(CONFIG_KEY_DISPLAY_MODE)),
+                CONTACT_FORM_DISPLAY_MODE_MODAL_FORM
+        );
+        if (!CONTACT_FORM_DISPLAY_MODE_MODAL_FORM.equals(displayMode)
+                && !CONTACT_FORM_DISPLAY_MODE_INLINE_FORM.equals(displayMode)) {
+            throw new BusinessException(PortfolioMessage.CONTACT_FORM_DISPLAY_MODE_UNSUPPORTED_MESSAGE);
+        }
         component.getConfig().put(CONFIG_KEY_FIELDS, fields);
+        component.getConfig().put(CONFIG_KEY_DISPLAY_MODE, displayMode);
     }
 
     /**
@@ -416,9 +497,44 @@ public class PortfolioConfigValidator {
      * @param component 组件
      */
     private void validateTextSection(PortfolioConfigDto.Component component) {
-        if (!hasText(asString(component.getConfig().get(CONFIG_KEY_CONTENT)))) {
+        String content = asString(component.getConfig().get(CONFIG_KEY_CONTENT));
+        if (!hasText(content)) {
             throw new BusinessException(PortfolioMessage.TEXT_SECTION_CONTENT_REQUIRED_MESSAGE);
         }
+        if (content.codePointCount(0, content.length()) > TEXT_SECTION_CONTENT_MAX_LENGTH) {
+            throw new BusinessException(PortfolioMessage.TEXT_SECTION_CONTENT_LENGTH_MESSAGE);
+        }
+        String alignment = defaultString(
+                asString(component.getConfig().get(CONFIG_KEY_ALIGNMENT)),
+                TEXT_SECTION_ALIGNMENT_LEFT
+        );
+        if (!TEXT_SECTION_ALIGNMENTS.contains(alignment)) {
+            throw new BusinessException(PortfolioMessage.TEXT_SECTION_ALIGNMENT_UNSUPPORTED_MESSAGE);
+        }
+        component.getConfig().put(CONFIG_KEY_CONTENT, content);
+        component.getConfig().put(CONFIG_KEY_ALIGNMENT, alignment);
+    }
+
+    /**
+     * 校验分割线组件。
+     *
+     * @param component 组件
+     */
+    private void validateDivider(PortfolioConfigDto.Component component) {
+        String color = defaultString(
+                asString(component.getConfig().get(CONFIG_KEY_DIVIDER_COLOR)),
+                DIVIDER_COLOR_GRAY
+        );
+        if (!DIVIDER_COLORS.contains(color)) {
+            throw new BusinessException(PortfolioMessage.DIVIDER_COLOR_UNSUPPORTED_MESSAGE);
+        }
+        Object heightSource = component.getConfig().get(CONFIG_KEY_DIVIDER_HEIGHT_PX);
+        Integer heightPx = heightSource == null ? DEFAULT_DIVIDER_HEIGHT_PX : asInteger(heightSource);
+        if (heightPx == null || heightPx <= 0) {
+            throw new BusinessException(PortfolioMessage.DIVIDER_HEIGHT_INVALID_MESSAGE);
+        }
+        component.getConfig().put(CONFIG_KEY_DIVIDER_COLOR, color);
+        component.getConfig().put(CONFIG_KEY_DIVIDER_HEIGHT_PX, heightPx);
     }
 
     /**

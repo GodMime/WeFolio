@@ -240,6 +240,174 @@ test('normalizes carousel interval with three second default for render pages', 
   assert.equal(configuredResult.components[0].carouselIntervalMs, 5200)
 })
 
+test('normalizes contact form display mode for render and config pages', () => {
+  const renderResult = normalizeVisitorPortfolio({
+    renderData: {
+      components: [
+        {
+          componentKey: 'c_contact',
+          componentType: 'CONTACT_FORM',
+          sortOrder: 1000,
+          contactForm: {
+            title: '留下联系方式',
+            displayMode: 'INLINE_FORM',
+            fields: ['contactName', 'phone']
+          }
+        }
+      ]
+    }
+  })
+  const configResult = normalizeVisitorPortfolio({
+    config: {
+      components: [
+        {
+          componentKey: 'c_contact',
+          componentType: 'CONTACT_FORM',
+          sortOrder: 1000,
+          config: {
+            title: '预约沟通',
+            displayMode: 'MODAL_FORM',
+            fields: ['contactName', 'wechat']
+          }
+        }
+      ]
+    }
+  })
+  const invalidResult = normalizeVisitorPortfolio({
+    renderData: {
+      components: [
+        {
+          componentKey: 'c_contact',
+          componentType: 'CONTACT_FORM',
+          sortOrder: 1000,
+          contactForm: { displayMode: 'SIDE_PANEL' }
+        }
+      ]
+    }
+  })
+
+  assert.equal(renderResult.components[0].contactForm.displayMode, 'INLINE_FORM')
+  assert.equal(renderResult.components[0].contactForm.title, '留下联系方式')
+  assert.deepEqual(renderResult.components[0].contactForm.fields, ['contactName', 'phone'])
+  assert.equal(configResult.components[0].contactForm.displayMode, 'MODAL_FORM')
+  assert.equal(configResult.components[0].contactForm.title, '预约沟通')
+  assert.equal(invalidResult.components[0].contactForm.displayMode, 'MODAL_FORM')
+})
+
+test('normalizes text section content and alignment for render and config pages', () => {
+  const renderResult = normalizeVisitorPortfolio({
+    renderData: {
+      components: [
+        {
+          componentKey: 'c_text',
+          componentType: 'TEXT_SECTION',
+          sortOrder: 1000,
+          textSection: {
+            content: '第一行\n第二行',
+            alignment: 'RIGHT'
+          }
+        }
+      ]
+    }
+  })
+  const configResult = normalizeVisitorPortfolio({
+    config: {
+      components: [
+        {
+          componentKey: 'c_text',
+          componentType: 'TEXT_SECTION',
+          sortOrder: 1000,
+          config: {
+            content: ' 服务说明 ',
+            alignment: 'CENTER'
+          }
+        }
+      ]
+    }
+  })
+  const invalidResult = normalizeVisitorPortfolio({
+    renderData: {
+      components: [
+        {
+          componentKey: 'c_text',
+          componentType: 'TEXT_SECTION',
+          sortOrder: 1000,
+          textSection: {
+            content: '说明',
+            alignment: 'JUSTIFY'
+          }
+        }
+      ]
+    }
+  })
+
+  assert.equal(renderResult.components[0].textSection.content, '第一行\n第二行')
+  assert.equal(renderResult.components[0].textSection.alignment, 'RIGHT')
+  assert.equal(renderResult.components[0].textSection.alignmentClass, 'align-right')
+  assert.equal(configResult.components[0].textSection.content, '服务说明')
+  assert.equal(configResult.components[0].textSection.alignmentClass, 'align-center')
+  assert.equal(invalidResult.components[0].textSection.alignment, 'LEFT')
+  assert.equal(invalidResult.components[0].textSection.alignmentClass, 'align-left')
+})
+
+test('normalizes divider color and height for render and config pages', () => {
+  const renderResult = normalizeVisitorPortfolio({
+    renderData: {
+      components: [
+        {
+          componentKey: 'c_divider',
+          componentType: 'DIVIDER',
+          sortOrder: 1000,
+          divider: {
+            color: 'BLACK',
+            heightPx: 24
+          }
+        }
+      ]
+    }
+  })
+  const configResult = normalizeVisitorPortfolio({
+    config: {
+      components: [
+        {
+          componentKey: 'c_divider',
+          componentType: 'DIVIDER',
+          sortOrder: 1000,
+          config: {
+            color: 'TRANSPARENT',
+            heightPx: '32'
+          }
+        }
+      ]
+    }
+  })
+  const invalidResult = normalizeVisitorPortfolio({
+    renderData: {
+      components: [
+        {
+          componentKey: 'c_divider',
+          componentType: 'DIVIDER',
+          sortOrder: 1000,
+          divider: {
+            color: 'BLUE',
+            heightPx: 0
+          }
+        }
+      ]
+    }
+  })
+
+  assert.equal(renderResult.components[0].divider.color, 'BLACK')
+  assert.equal(renderResult.components[0].divider.heightPx, 24)
+  assert.match(renderResult.components[0].divider.style, /height:\s*24px/)
+  assert.match(renderResult.components[0].divider.style, /background-color:\s*#000000/)
+  assert.equal(configResult.components[0].divider.color, 'TRANSPARENT')
+  assert.equal(configResult.components[0].divider.heightPx, 32)
+  assert.match(configResult.components[0].divider.style, /background-color:\s*transparent/)
+  assert.equal(invalidResult.components[0].divider.color, 'GRAY')
+  assert.equal(invalidResult.components[0].divider.heightPx, 16)
+})
+
 test('normalizes visitor portfolio from backend render data first', () => {
   const result = normalizeVisitorPortfolio({
     title: '旧标题',
@@ -382,6 +550,8 @@ test('normalizes work grid tags and qr contact preview url from render data', ()
     { groupKey: 'g_outdoor', name: '户外案例', active: false }
   ])
   assert.equal(result.components[1].qrContact.qrUrl, 'https://cdn.example.com/qr.jpg')
+  assert.equal(Object.prototype.hasOwnProperty.call(result.components[1].qrContact, 'title'), false)
+  assert.equal(Object.prototype.hasOwnProperty.call(result.components[1].qrContact, 'description'), false)
   assert.equal(result.components[1].previewImageUrl, 'https://cdn.example.com/qr.jpg')
 })
 

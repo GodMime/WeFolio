@@ -20,21 +20,36 @@ const {
   uploadPortfolioImageAsset
 } = require('../../utils/portfolio-assets')
 const {
+  CONTACT_FORM_DISPLAY_MODE_OPTIONS,
+  CONTACT_FORM_DISPLAY_MODES,
   COMPONENT_NAMES,
   COMPONENT_TYPES,
+  DEFAULT_DIVIDER_HEIGHT_PX,
+  DIVIDER_COLOR_OPTIONS,
+  DIVIDER_COLORS,
   SCHEDULE_QUERY_DISPLAY_MODE_OPTIONS,
   SCHEDULE_QUERY_DISPLAY_MODES,
+  TEXT_SECTION_ALIGNMENT_OPTIONS,
+  TEXT_SECTION_ALIGNMENTS,
+  TEXT_SECTION_MAX_LENGTH,
   addComponent,
   buildDraftPayload,
+  buildPublishPayload,
   createComponent,
+  normalizeContactFormConfig,
+  normalizeDividerConfig,
   normalizeScheduleQueryConfig,
   normalizeProfileComponentConfig,
   normalizePortfolioConfig,
+  normalizeTextSectionConfig,
   normalizeWorkIds,
   reorderComponent,
   removeComponent,
+  updateComponentContactFormConfig,
+  updateComponentDividerConfig,
   updateComponentScheduleQueryConfig,
   updateComponentProfileConfig,
+  updateComponentTextSectionConfig,
   updateComponentWorkIds
 } = require('../../utils/portfolios')
 
@@ -79,6 +94,24 @@ const PROFILE_FIELD_LIMITS = {
   bio: 500,
   tagsText: 100
 }
+const PUBLICATION_STATUS_DRAFT = 'DRAFT'
+const PUBLICATION_STATUS_PUBLISHED = 'PUBLISHED'
+const PUBLICATION_STATUS_OFFLINE = 'OFFLINE'
+const PUBLICATION_STATUS_TEXT_MAP = {
+  [PUBLICATION_STATUS_DRAFT]: '草稿',
+  [PUBLICATION_STATUS_PUBLISHED]: '已发布',
+  [PUBLICATION_STATUS_OFFLINE]: '已下线'
+}
+const PUBLICATION_STATUS_TONE_MAP = {
+  [PUBLICATION_STATUS_DRAFT]: 'draft',
+  [PUBLICATION_STATUS_PUBLISHED]: 'published',
+  [PUBLICATION_STATUS_OFFLINE]: 'muted'
+}
+const IDEMPOTENCY_PREFIX_DRAFT = 'draft'
+const IDEMPOTENCY_PREFIX_PUBLISH = 'publish'
+const BASIC_PROFILE_LOAD_ERROR_MESSAGE = '基础资料加载失败'
+const TEXT_SECTION_REQUIRED_MESSAGE = '请填写文字说明'
+const DIVIDER_HEIGHT_REQUIRED_MESSAGE = '请输入大于 0 的高度'
 
 const DEFAULT_COMPONENT_DESCRIPTIONS = {
   CAROUSEL: '展示已选择的图片作品',
@@ -88,12 +121,27 @@ const DEFAULT_COMPONENT_DESCRIPTIONS = {
   WORK_LIST: '单列展示重点图片和视频作品',
   QR_CONTACT: '展示二维码联系方式',
   CONTACT_FORM: '收集访客预留联系信息',
-  TEXT_SECTION: '添加服务说明文字'
+  TEXT_SECTION: '添加服务说明文字',
+  DIVIDER: '分隔不同内容区块'
 }
 
 function makeIdempotencyKey(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
 }
+
+function buildPublicationStatusState(publicationStatus) {
+  const normalizedStatus = PUBLICATION_STATUS_TEXT_MAP[publicationStatus]
+    ? publicationStatus
+    : PUBLICATION_STATUS_DRAFT
+  return {
+    publicationStatus: normalizedStatus,
+    statusText: PUBLICATION_STATUS_TEXT_MAP[normalizedStatus],
+    statusTone: PUBLICATION_STATUS_TONE_MAP[normalizedStatus],
+    showPublishAction: normalizedStatus === PUBLICATION_STATUS_PUBLISHED
+  }
+}
+
+const DEFAULT_PUBLICATION_STATUS_STATE = buildPublicationStatusState()
 
 function buildDefaultComponentOptions() {
   return Object.keys(COMPONENT_TYPES).map((key) => {
@@ -136,6 +184,9 @@ function isEditableComponentType(componentType) {
     componentType === COMPONENT_TYPES.PROFILE ||
     componentType === COMPONENT_TYPES.QR_CONTACT ||
     componentType === COMPONENT_TYPES.SCHEDULE_QUERY ||
+    componentType === COMPONENT_TYPES.CONTACT_FORM ||
+    componentType === COMPONENT_TYPES.TEXT_SECTION ||
+    componentType === COMPONENT_TYPES.DIVIDER ||
     isDisplayGroupComponent(componentType)
 }
 
@@ -354,12 +405,27 @@ function buildProfileForm(profile = {}) {
 }
 
 function buildQrContactForm(config = {}) {
+  const qrUrlSource = config.qrUrlSource === QR_CONTACT_SOURCE_CUSTOM ? QR_CONTACT_SOURCE_CUSTOM : QR_CONTACT_SOURCE_PROFILE
   return {
-    title: config.title || '',
-    description: config.description || '',
-    qrUrlSource: config.qrUrlSource === QR_CONTACT_SOURCE_CUSTOM ? QR_CONTACT_SOURCE_CUSTOM : QR_CONTACT_SOURCE_PROFILE,
-    qrUrl: config.qrUrl || ''
+    qrUrlSource,
+    qrUrl: qrUrlSource === QR_CONTACT_SOURCE_CUSTOM ? config.qrUrl || '' : ''
   }
+}
+
+function buildQrContactSourcePatch(currentSource, nextSource) {
+  const normalizedCurrentSource = currentSource === QR_CONTACT_SOURCE_CUSTOM
+    ? QR_CONTACT_SOURCE_CUSTOM
+    : QR_CONTACT_SOURCE_PROFILE
+  const normalizedNextSource = nextSource === QR_CONTACT_SOURCE_CUSTOM
+    ? QR_CONTACT_SOURCE_CUSTOM
+    : QR_CONTACT_SOURCE_PROFILE
+  const patch = {
+    'qrContactForm.qrUrlSource': normalizedNextSource
+  }
+  if (normalizedCurrentSource !== normalizedNextSource) {
+    patch['qrContactForm.qrUrl'] = ''
+  }
+  return patch
 }
 
 function buildScheduleQueryForm(config = {}) {
@@ -367,6 +433,34 @@ function buildScheduleQueryForm(config = {}) {
   return {
     displayMode: normalized.displayMode || SCHEDULE_QUERY_DISPLAY_MODES.MODAL_CALENDAR
   }
+}
+
+function buildContactFormConfigForm(config = {}) {
+  const normalized = normalizeContactFormConfig(config)
+  return {
+    displayMode: normalized.displayMode || CONTACT_FORM_DISPLAY_MODES.MODAL_FORM
+  }
+}
+
+function buildTextSectionForm(config = {}) {
+  const normalized = normalizeTextSectionConfig(config)
+  return {
+    content: normalized.content || '',
+    alignment: normalized.alignment || TEXT_SECTION_ALIGNMENTS.LEFT
+  }
+}
+
+function buildDividerForm(config = {}) {
+  const normalized = normalizeDividerConfig(config)
+  return {
+    color: normalized.color || DIVIDER_COLORS.GRAY,
+    heightPx: normalized.heightPx || DEFAULT_DIVIDER_HEIGHT_PX
+  }
+}
+
+function parseDividerHeightPx(value) {
+  const height = Math.round(Number(value))
+  return Number.isFinite(height) && height > 0 ? height : null
 }
 
 function countText(value) {
@@ -385,6 +479,12 @@ function buildProfileFieldCounters(form = {}) {
     result[field] = `${countText(form[field])} / ${PROFILE_FIELD_LIMITS[field]}`
     return result
   }, {})
+}
+
+function buildTextSectionFieldCounters(form = {}) {
+  return {
+    content: `${countText(form.content)} / ${TEXT_SECTION_MAX_LENGTH}`
+  }
 }
 
 function buildProfileVisibleOptions(visibleFields = {}) {
@@ -431,6 +531,10 @@ function buildProfileConfigFromForm(form = {}, visibleOptions = []) {
   })
 }
 
+function resolveBasicProfileQrContactQrUrl(raw = {}) {
+  return normalizeBasicProfile(raw).wechatQrUrl || ''
+}
+
 function updateComponentQrContactConfig(config, componentKey, qrContactForm = {}) {
   const normalizedConfig = normalizePortfolioConfig(config)
   const targetKey = componentKey || ''
@@ -440,12 +544,10 @@ function updateComponentQrContactConfig(config, componentKey, qrContactForm = {}
       return component
     }
     return Object.assign({}, component, {
-      config: Object.assign({}, component.config || {}, {
-        title: form.title,
-        description: form.description,
+      config: {
         qrUrlSource: form.qrUrlSource,
         qrUrl: form.qrUrl
-      })
+      }
     })
   })
   return normalizePortfolioConfig(Object.assign({}, normalizedConfig, { components }))
@@ -608,6 +710,10 @@ Page({
     portfolioId: null,
     draftRevision: 0,
     publishedRevision: 0,
+    publicationStatus: DEFAULT_PUBLICATION_STATUS_STATE.publicationStatus,
+    statusText: DEFAULT_PUBLICATION_STATUS_STATE.statusText,
+    statusTone: DEFAULT_PUBLICATION_STATUS_STATE.statusTone,
+    showPublishAction: DEFAULT_PUBLICATION_STATUS_STATE.showPublishAction,
     draggingIndex: -1,
     dragTargetIndex: -1,
     componentDragStartY: null,
@@ -655,11 +761,26 @@ Page({
     profileVisibleOptions: buildProfileVisibleOptions(),
     qrContactSheetVisible: false,
     editingQrContactComponentKey: '',
+    qrContactProfileQrUrl: '',
     qrContactForm: buildQrContactForm(),
     scheduleQuerySheetVisible: false,
     scheduleQueryEditingComponentKey: '',
     scheduleQueryDisplayModeOptions: SCHEDULE_QUERY_DISPLAY_MODE_OPTIONS,
     scheduleQueryForm: buildScheduleQueryForm(),
+    contactFormSheetVisible: false,
+    contactFormEditingComponentKey: '',
+    contactFormDisplayModeOptions: CONTACT_FORM_DISPLAY_MODE_OPTIONS,
+    contactFormConfigForm: buildContactFormConfigForm(),
+    textSectionSheetVisible: false,
+    textSectionEditingComponentKey: '',
+    textSectionAlignmentOptions: TEXT_SECTION_ALIGNMENT_OPTIONS,
+    textSectionMaxLength: TEXT_SECTION_MAX_LENGTH,
+    textSectionForm: buildTextSectionForm(),
+    textSectionFieldCounters: buildTextSectionFieldCounters(buildTextSectionForm()),
+    dividerSheetVisible: false,
+    dividerEditingComponentKey: '',
+    dividerColorOptions: DIVIDER_COLOR_OPTIONS,
+    dividerForm: buildDividerForm(),
     shareFieldCounters: buildShareFieldCounters(),
     shareCoverCropVisible: false,
     shareCoverCropSaving: false,
@@ -691,12 +812,12 @@ Page({
     return request({ url: `${PORTFOLIO_API_PREFIX}/${this.data.portfolioId}` })
       .then((response) => {
         const config = normalizePortfolioConfig(response.config || {})
-        this.setData({
+        this.setData(Object.assign({
           draftRevision: response.draftRevision || 0,
           publishedRevision: response.publishedRevision || 0,
           config,
           shareFieldCounters: buildShareFieldCounters(config.share)
-        })
+        }, buildPublicationStatusState(response.publicationStatus)))
         return this.loadBasicProfileDefaults(config)
       })
       .catch((error) => {
@@ -1044,6 +1165,15 @@ Page({
     if (componentType === COMPONENT_TYPES.SCHEDULE_QUERY) {
       return this.openScheduleQuerySheet(componentKey)
     }
+    if (componentType === COMPONENT_TYPES.CONTACT_FORM) {
+      return this.openContactFormSheet(componentKey)
+    }
+    if (componentType === COMPONENT_TYPES.TEXT_SECTION) {
+      return this.openTextSectionSheet(componentKey)
+    }
+    if (componentType === COMPONENT_TYPES.DIVIDER) {
+      return this.openDividerSheet(componentKey)
+    }
     if (isDisplayGroupComponent(componentType)) {
       return this.openDisplayGroupSheet(componentKey, componentType)
     }
@@ -1089,6 +1219,163 @@ Page({
       scheduleQuerySheetVisible: false,
       scheduleQueryEditingComponentKey: '',
       scheduleQueryForm: buildScheduleQueryForm()
+    })
+  },
+
+  openContactFormSheet(componentKey) {
+    const component = findComponentByKey(this.data.config, componentKey)
+    if (!component || component.componentType !== COMPONENT_TYPES.CONTACT_FORM) {
+      return undefined
+    }
+    this.setData({
+      contactFormSheetVisible: true,
+      contactFormEditingComponentKey: componentKey,
+      contactFormConfigForm: buildContactFormConfigForm(component.config || {})
+    })
+    return undefined
+  },
+
+  handleCloseContactFormSheet() {
+    this.setData({
+      contactFormSheetVisible: false,
+      contactFormEditingComponentKey: '',
+      contactFormConfigForm: buildContactFormConfigForm()
+    })
+  },
+
+  handleContactFormDisplayModeTap(event) {
+    const value = event.currentTarget.dataset.value
+    this.setData({
+      'contactFormConfigForm.displayMode': value
+    })
+  },
+
+  handleConfirmContactFormConfig() {
+    const config = updateComponentContactFormConfig(
+      this.data.config,
+      this.data.contactFormEditingComponentKey,
+      this.data.contactFormConfigForm
+    )
+    this.setData({
+      config,
+      contactFormSheetVisible: false,
+      contactFormEditingComponentKey: '',
+      contactFormConfigForm: buildContactFormConfigForm()
+    })
+  },
+
+  openTextSectionSheet(componentKey) {
+    const component = findComponentByKey(this.data.config, componentKey)
+    if (!component || component.componentType !== COMPONENT_TYPES.TEXT_SECTION) {
+      return undefined
+    }
+    const textSectionForm = buildTextSectionForm(component.config || {})
+    this.setData({
+      textSectionSheetVisible: true,
+      textSectionEditingComponentKey: componentKey,
+      textSectionForm,
+      textSectionFieldCounters: buildTextSectionFieldCounters(textSectionForm)
+    })
+    return undefined
+  },
+
+  handleCloseTextSectionSheet() {
+    const textSectionForm = buildTextSectionForm()
+    this.setData({
+      textSectionSheetVisible: false,
+      textSectionEditingComponentKey: '',
+      textSectionForm,
+      textSectionFieldCounters: buildTextSectionFieldCounters(textSectionForm)
+    })
+  },
+
+  handleTextSectionInput(event) {
+    const content = event.detail.value || ''
+    const textSectionForm = Object.assign({}, this.data.textSectionForm, { content })
+    this.setData({
+      'textSectionForm.content': content,
+      textSectionFieldCounters: buildTextSectionFieldCounters(textSectionForm)
+    })
+  },
+
+  handleTextSectionAlignmentTap(event) {
+    const value = event.currentTarget.dataset.value
+    this.setData({
+      'textSectionForm.alignment': value
+    })
+  },
+
+  handleConfirmTextSectionConfig() {
+    const form = buildTextSectionForm(this.data.textSectionForm)
+    if (!form.content) {
+      wx.showToast({ title: TEXT_SECTION_REQUIRED_MESSAGE, icon: 'none' })
+      return
+    }
+    const config = updateComponentTextSectionConfig(
+      this.data.config,
+      this.data.textSectionEditingComponentKey,
+      form
+    )
+    const textSectionForm = buildTextSectionForm()
+    this.setData({
+      config,
+      textSectionSheetVisible: false,
+      textSectionEditingComponentKey: '',
+      textSectionForm,
+      textSectionFieldCounters: buildTextSectionFieldCounters(textSectionForm)
+    })
+  },
+
+  openDividerSheet(componentKey) {
+    const component = findComponentByKey(this.data.config, componentKey)
+    if (!component || component.componentType !== COMPONENT_TYPES.DIVIDER) {
+      return undefined
+    }
+    this.setData({
+      dividerSheetVisible: true,
+      dividerEditingComponentKey: componentKey,
+      dividerForm: buildDividerForm(component.config || {})
+    })
+    return undefined
+  },
+
+  handleCloseDividerSheet() {
+    this.setData({
+      dividerSheetVisible: false,
+      dividerEditingComponentKey: '',
+      dividerForm: buildDividerForm()
+    })
+  },
+
+  handleDividerColorTap(event) {
+    const value = event.currentTarget.dataset.value
+    this.setData({
+      'dividerForm.color': value
+    })
+  },
+
+  handleDividerHeightInput(event) {
+    this.setData({
+      'dividerForm.heightPx': event.detail.value || ''
+    })
+  },
+
+  handleConfirmDividerConfig() {
+    const heightPx = parseDividerHeightPx(this.data.dividerForm.heightPx)
+    if (!heightPx) {
+      wx.showToast({ title: DIVIDER_HEIGHT_REQUIRED_MESSAGE, icon: 'none' })
+      return
+    }
+    const config = updateComponentDividerConfig(
+      this.data.config,
+      this.data.dividerEditingComponentKey,
+      Object.assign({}, this.data.dividerForm, { heightPx })
+    )
+    this.setData({
+      config,
+      dividerSheetVisible: false,
+      dividerEditingComponentKey: '',
+      dividerForm: buildDividerForm()
     })
   },
 
@@ -1268,7 +1555,7 @@ Page({
         }
         this.setData({
           profileSheetLoading: false,
-          profileSheetErrorText: error && error.message ? error.message : '基础资料加载失败'
+          profileSheetErrorText: error && error.message ? error.message : BASIC_PROFILE_LOAD_ERROR_MESSAGE
         })
       })
   },
@@ -1292,11 +1579,16 @@ Page({
     if (!component) {
       return Promise.resolve()
     }
+    const qrContactForm = buildQrContactForm(component.config || {})
     this.setData({
       qrContactSheetVisible: true,
       editingQrContactComponentKey: componentKey,
-      qrContactForm: buildQrContactForm(component.config || {})
+      qrContactProfileQrUrl: '',
+      qrContactForm
     })
+    if (qrContactForm.qrUrlSource !== QR_CONTACT_SOURCE_CUSTOM) {
+      return this.loadQrContactProfileQrUrl()
+    }
     return Promise.resolve()
   },
 
@@ -1304,30 +1596,45 @@ Page({
     this.setData({
       qrContactSheetVisible: false,
       editingQrContactComponentKey: '',
+      qrContactProfileQrUrl: '',
       qrContactForm: buildQrContactForm()
     })
   },
 
-  handleQrContactInput(event) {
-    const field = event.currentTarget.dataset.field || ''
-    if (!field) {
-      return
-    }
-    this.setData({
-      [`qrContactForm.${field}`]: event.detail.value || ''
-    })
-  },
-
   handleUseProfileQrContact() {
-    this.setData({
-      'qrContactForm.qrUrlSource': QR_CONTACT_SOURCE_PROFILE
-    })
+    this.setData(Object.assign(
+      buildQrContactSourcePatch(this.data.qrContactForm.qrUrlSource, QR_CONTACT_SOURCE_PROFILE),
+      { qrContactProfileQrUrl: '' }
+    ))
+    return this.loadQrContactProfileQrUrl()
   },
 
   handleUseCustomQrContact() {
-    this.setData({
-      'qrContactForm.qrUrlSource': QR_CONTACT_SOURCE_CUSTOM
-    })
+    this.setData(Object.assign(
+      buildQrContactSourcePatch(this.data.qrContactForm.qrUrlSource, QR_CONTACT_SOURCE_CUSTOM),
+      { qrContactProfileQrUrl: '' }
+    ))
+  },
+
+  loadQrContactProfileQrUrl() {
+    return request({ url: BASIC_PROFILE_API_URL })
+      .then((response) => {
+        const qrUrl = resolveBasicProfileQrContactQrUrl(response)
+        this.setData({ qrContactProfileQrUrl: qrUrl })
+        return qrUrl
+      })
+      .catch((error) => {
+        this.setData({ qrContactProfileQrUrl: '' })
+        if (error && error.authRequired) {
+          handleAuthRequired(error.message)
+          return ''
+        }
+        wx.showToast({
+          title: error && error.message ? error.message : BASIC_PROFILE_LOAD_ERROR_MESSAGE,
+          icon: 'none'
+        })
+        return ''
+      })
   },
 
   setQrContactImageUrl(qrUrl) {
@@ -1365,6 +1672,7 @@ Page({
       ),
       qrContactSheetVisible: false,
       editingQrContactComponentKey: '',
+      qrContactProfileQrUrl: '',
       qrContactForm: buildQrContactForm()
     })
   },
@@ -1745,28 +2053,33 @@ Page({
       if (!portfolioId) {
         throw new Error('创建失败')
       }
-      this.setData({
+      this.setData(Object.assign({
         portfolioId,
         draftRevision: response.draftRevision || 0,
         publishedRevision: response.publishedRevision || 0
-      })
+      }, buildPublicationStatusState(response.publicationStatus)))
       return portfolioId
     })
   },
 
-  saveDraftForPortfolio(portfolioId, config = this.data.config) {
+  saveDraftForPortfolio(portfolioId, config = this.data.config, options = {}) {
     return request({
       url: `${PORTFOLIO_API_PREFIX}/${portfolioId}/draft`,
       method: 'PUT',
-      data: buildDraftPayload(config, this.data.draftRevision, makeIdempotencyKey('draft'))
-    }).then((response) => {
-      this.setData({
+      data: buildDraftPayload(config, this.data.draftRevision, makeIdempotencyKey(IDEMPOTENCY_PREFIX_DRAFT))
+    }).then((response = {}) => {
+      this.setData(Object.assign({
         portfolioId: response.portfolioId || portfolioId,
         draftRevision: response.draftRevision || this.data.draftRevision,
         publishedRevision: response.publishedRevision || this.data.publishedRevision
-      })
-      wx.showToast({ title: '草稿已保存', icon: 'success' })
-      this.returnToPortfolioList()
+      }, buildPublicationStatusState(response.publicationStatus || this.data.publicationStatus)))
+      if (options.showToast !== false) {
+        wx.showToast({ title: '草稿已保存', icon: 'success' })
+      }
+      if (options.returnToList !== false) {
+        this.returnToPortfolioList()
+      }
+      return response
     })
   },
 
@@ -1887,6 +2200,36 @@ Page({
         .then((config) => this.saveDraftForPortfolio(portfolioId, config))
     }).catch((error) => {
       wx.showToast({ title: error.message || '保存失败', icon: 'none' })
+    })
+  },
+
+  handlePublish() {
+    return this.ensureDraftPortfolio().then((portfolioId) => {
+      return this.uploadLocalPortfolioAssets(portfolioId)
+        .then((config) => this.saveDraftForPortfolio(portfolioId, config, {
+          showToast: false,
+          returnToList: false
+        }))
+        .then(() => request({
+          url: `${PORTFOLIO_API_PREFIX}/${portfolioId}/publish`,
+          method: 'POST',
+          data: buildPublishPayload(this.data.draftRevision, makeIdempotencyKey(IDEMPOTENCY_PREFIX_PUBLISH))
+        }))
+        .then((response = {}) => {
+          this.setData(Object.assign({
+            portfolioId: response.portfolioId || portfolioId,
+            draftRevision: response.draftRevision || this.data.draftRevision,
+            publishedRevision: response.publishedRevision || this.data.publishedRevision
+          }, buildPublicationStatusState(response.publicationStatus || PUBLICATION_STATUS_PUBLISHED)))
+          wx.showToast({ title: '已发布', icon: 'success' })
+          this.returnToPortfolioList()
+        })
+    }).catch((error) => {
+      if (error && error.authRequired) {
+        handleAuthRequired(error.message)
+        return
+      }
+      wx.showToast({ title: error && error.message ? error.message : '发布失败', icon: 'none' })
     })
   },
 

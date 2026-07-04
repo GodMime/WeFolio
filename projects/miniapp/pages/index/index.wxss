@@ -452,16 +452,14 @@
   height: 30rpx;
   border: 4rpx solid currentColor;
   border-radius: 10rpx;
-  background:
-    linear-gradient(currentColor, currentColor) 6rpx 10rpx / calc(100% - 12rpx) 4rpx no-repeat;
 }
 
 .schedule-tab-icon::after {
-  left: 18rpx;
-  top: 23rpx;
-  width: 6rpx;
-  height: 6rpx;
-  border-radius: 50%;
+  left: 12rpx;
+  top: 18rpx;
+  width: 18rpx;
+  height: 4rpx;
+  border-radius: 999rpx;
   background: currentColor;
 }
 

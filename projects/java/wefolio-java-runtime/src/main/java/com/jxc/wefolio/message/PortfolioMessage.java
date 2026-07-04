@@ -122,8 +122,23 @@ public interface PortfolioMessage {
     /** 联系表单联系方式字段缺失提示 */
     String CONTACT_FORM_CONTACT_FIELD_REQUIRED_MESSAGE = "预留联系信息必须包含手机号或微信号字段";
 
+    /** 联系表单展示方式不支持提示 */
+    String CONTACT_FORM_DISPLAY_MODE_UNSUPPORTED_MESSAGE = "预留联系信息展示方式不支持";
+
     /** 文字说明内容为空提示 */
     String TEXT_SECTION_CONTENT_REQUIRED_MESSAGE = "文字说明内容不能为空";
+
+    /** 文字说明内容超长提示 */
+    String TEXT_SECTION_CONTENT_LENGTH_MESSAGE = "文字说明不能超过 200 字";
+
+    /** 文字说明对齐方式不支持提示 */
+    String TEXT_SECTION_ALIGNMENT_UNSUPPORTED_MESSAGE = "文字说明对齐方式不支持";
+
+    /** 分割线颜色不支持提示 */
+    String DIVIDER_COLOR_UNSUPPORTED_MESSAGE = "分割线颜色不支持";
+
+    /** 分割线高度无效提示 */
+    String DIVIDER_HEIGHT_INVALID_MESSAGE = "分割线高度必须大于 0";
 
     /** 作品集展示标签名称为空提示 */
     String DISPLAY_TAG_NAME_REQUIRED_MESSAGE = "作品集展示标签名称不能为空";

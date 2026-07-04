@@ -20,6 +20,24 @@ const DEFAULT_ALL_GROUP_NAME = '全部作品'
 const MEDIA_TYPE_VIDEO = 'VIDEO'
 const DEFAULT_SCHEDULE_DISPLAY_MODE = 'MODAL_CALENDAR'
 const VALID_SCHEDULE_DISPLAY_MODES = ['MODAL_CALENDAR', 'INLINE_CALENDAR']
+const DEFAULT_CONTACT_FORM_DISPLAY_MODE = 'MODAL_FORM'
+const VALID_CONTACT_FORM_DISPLAY_MODES = ['MODAL_FORM', 'INLINE_FORM']
+const DEFAULT_TEXT_SECTION_ALIGNMENT = 'LEFT'
+const VALID_TEXT_SECTION_ALIGNMENTS = ['LEFT', 'CENTER', 'RIGHT']
+const TEXT_SECTION_ALIGNMENT_CLASS_MAP = {
+  LEFT: 'align-left',
+  CENTER: 'align-center',
+  RIGHT: 'align-right'
+}
+const DEFAULT_DIVIDER_COLOR = 'GRAY'
+const DEFAULT_DIVIDER_HEIGHT_PX = 16
+const VALID_DIVIDER_COLORS = ['BLACK', 'WHITE', 'GRAY', 'TRANSPARENT']
+const DIVIDER_COLOR_VALUE_MAP = {
+  BLACK: '#000000',
+  WHITE: '#ffffff',
+  GRAY: '#eef1f4',
+  TRANSPARENT: 'transparent'
+}
 const SCHEDULE_DAY_META_FIELDS = ['holidayText', 'festivalText', 'noteText', 'lunarText', 'metaText']
 
 function trimText(value) {
@@ -147,8 +165,6 @@ function normalizeProfile(raw = {}) {
 
 function normalizeQrContact(raw = {}) {
   return {
-    title: trimText(raw.title),
-    description: trimText(raw.description),
     qrUrlSource: trimText(raw.qrUrlSource),
     qrUrl: trimText(raw.qrUrl)
   }
@@ -158,6 +174,43 @@ function normalizeScheduleQuery(raw = {}) {
   const displayMode = trimText(raw.displayMode)
   return Object.assign({}, raw || {}, {
     displayMode: VALID_SCHEDULE_DISPLAY_MODES.includes(displayMode) ? displayMode : DEFAULT_SCHEDULE_DISPLAY_MODE
+  })
+}
+
+function normalizeContactForm(raw = {}) {
+  const displayMode = trimText(raw.displayMode)
+  const fields = Array.isArray(raw.fields) ? raw.fields.map(trimText).filter(Boolean) : []
+  return Object.assign({}, raw || {}, {
+    title: trimText(raw.title),
+    description: trimText(raw.description),
+    displayMode: VALID_CONTACT_FORM_DISPLAY_MODES.includes(displayMode) ? displayMode : DEFAULT_CONTACT_FORM_DISPLAY_MODE,
+    fields
+  })
+}
+
+function normalizeTextSection(raw = {}) {
+  const alignment = trimText(raw.alignment)
+  const normalizedAlignment = VALID_TEXT_SECTION_ALIGNMENTS.includes(alignment)
+    ? alignment
+    : DEFAULT_TEXT_SECTION_ALIGNMENT
+  return Object.assign({}, raw || {}, {
+    title: trimText(raw.title),
+    content: trimText(raw.content),
+    alignment: normalizedAlignment,
+    alignmentClass: TEXT_SECTION_ALIGNMENT_CLASS_MAP[normalizedAlignment]
+  })
+}
+
+function normalizeDivider(raw = {}) {
+  const color = trimText(raw.color)
+  const normalizedColor = VALID_DIVIDER_COLORS.includes(color) ? color : DEFAULT_DIVIDER_COLOR
+  const heightPx = toPositiveNumber(raw.heightPx, DEFAULT_DIVIDER_HEIGHT_PX)
+  const colorValue = DIVIDER_COLOR_VALUE_MAP[normalizedColor]
+  return Object.assign({}, raw || {}, {
+    color: normalizedColor,
+    heightPx,
+    colorValue,
+    style: `height: ${heightPx}px; background-color: ${colorValue};`
   })
 }
 
@@ -199,8 +252,9 @@ function normalizeRenderComponent(raw = {}) {
     scheduleQuery: normalizeScheduleQuery(raw.scheduleQuery || config),
     qrContact,
     previewImageUrl: qrContact.qrUrl,
-    contactForm: Object.assign({ fields: [] }, raw.contactForm || {}),
-    textSection: Object.assign({ title: '', content: '' }, raw.textSection || {})
+    contactForm: normalizeContactForm(raw.contactForm || config),
+    textSection: normalizeTextSection(raw.textSection || config),
+    divider: normalizeDivider(raw.divider || config)
   }
   return component
 }

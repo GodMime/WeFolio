@@ -80,6 +80,9 @@ public class PortfolioRenderDto {
 
         /** 文字说明渲染数据 */
         private TextSection textSection;
+
+        /** 分割线渲染数据 */
+        private Divider divider;
     }
 
     /**
@@ -223,6 +226,9 @@ public class PortfolioRenderDto {
         /** 说明文案 */
         private String description;
 
+        /** 展示方式：MODAL_FORM 弹层表单 / INLINE_FORM 直接表单 */
+        private String displayMode;
+
         /** 展示字段 */
         private List<String> fields = new ArrayList<>();
     }
@@ -238,5 +244,21 @@ public class PortfolioRenderDto {
 
         /** 正文 */
         private String content;
+
+        /** 对齐方式：LEFT / CENTER / RIGHT */
+        private String alignment;
+    }
+
+    /**
+     * 分割线渲染数据。
+     */
+    @Data
+    public static class Divider {
+
+        /** 颜色：BLACK / WHITE / GRAY / TRANSPARENT */
+        private String color;
+
+        /** 高度，单位 px */
+        private Integer heightPx;
     }
 }

@@ -276,7 +276,8 @@ public class MinePortfolioService {
                 componentLibraryItem(PortfolioComponentTypeDict.WORK_LIST, "单列展示重点图片和视频作品"),
                 componentLibraryItem(PortfolioComponentTypeDict.QR_CONTACT, "展示微信二维码联系方式"),
                 componentLibraryItem(PortfolioComponentTypeDict.CONTACT_FORM, "收集访客预留联系信息"),
-                componentLibraryItem(PortfolioComponentTypeDict.TEXT_SECTION, "展示服务说明和补充文字")
+                componentLibraryItem(PortfolioComponentTypeDict.TEXT_SECTION, "展示服务说明和补充文字"),
+                componentLibraryItem(PortfolioComponentTypeDict.DIVIDER, "在内容之间加入可调高度的分割线")
         ));
         return response;
     }

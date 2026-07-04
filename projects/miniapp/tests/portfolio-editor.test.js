@@ -3,11 +3,20 @@ const path = require('node:path')
 const test = require('node:test')
 
 const {
+  CONTACT_FORM_DISPLAY_MODES,
+  DEFAULT_DIVIDER_HEIGHT_PX,
+  DIVIDER_COLOR_OPTIONS,
+  DIVIDER_COLORS,
   COMPONENT_TYPES,
   SCHEDULE_QUERY_DISPLAY_MODES,
+  TEXT_SECTION_ALIGNMENTS,
+  TEXT_SECTION_MAX_LENGTH,
   createComponent,
   normalizePortfolioConfig,
-  updateComponentScheduleQueryConfig
+  updateComponentContactFormConfig,
+  updateComponentDividerConfig,
+  updateComponentScheduleQueryConfig,
+  updateComponentTextSectionConfig
 } = require('../utils/portfolios')
 
 function flushPromises() {
@@ -118,6 +127,128 @@ test('updates schedule query component display mode in draft config', () => {
   })
 
   assert.equal(updated.components[0].config.displayMode, SCHEDULE_QUERY_DISPLAY_MODES.INLINE_CALENDAR)
+})
+
+test('normalizes contact form display mode in portfolio config', () => {
+  const config = normalizePortfolioConfig({
+    components: [
+      createComponent(COMPONENT_TYPES.CONTACT_FORM, {
+        componentKey: 'c_default',
+        sortOrder: 1000,
+        config: {}
+      }),
+      createComponent(COMPONENT_TYPES.CONTACT_FORM, {
+        componentKey: 'c_inline',
+        sortOrder: 2000,
+        config: { displayMode: 'INLINE_FORM' }
+      }),
+      createComponent(COMPONENT_TYPES.CONTACT_FORM, {
+        componentKey: 'c_invalid',
+        sortOrder: 3000,
+        config: { displayMode: 'SIDE_PANEL' }
+      })
+    ]
+  })
+
+  assert.equal(config.components[0].config.displayMode, CONTACT_FORM_DISPLAY_MODES.MODAL_FORM)
+  assert.equal(config.components[1].config.displayMode, CONTACT_FORM_DISPLAY_MODES.INLINE_FORM)
+  assert.equal(config.components[2].config.displayMode, CONTACT_FORM_DISPLAY_MODES.MODAL_FORM)
+})
+
+test('updates contact form component display mode in draft config', () => {
+  const config = normalizePortfolioConfig({
+    components: [
+      createComponent(COMPONENT_TYPES.CONTACT_FORM, {
+        componentKey: 'c_contact',
+        sortOrder: 1000,
+        config: {}
+      })
+    ]
+  })
+
+  const updated = updateComponentContactFormConfig(config, 'c_contact', {
+    displayMode: 'INLINE_FORM'
+  })
+
+  assert.equal(updated.components[0].config.displayMode, CONTACT_FORM_DISPLAY_MODES.INLINE_FORM)
+})
+
+test('normalizes and updates text section component config', () => {
+  const config = normalizePortfolioConfig({
+    components: [
+      createComponent(COMPONENT_TYPES.TEXT_SECTION, {
+        componentKey: 'c_text',
+        sortOrder: 1000,
+        config: {
+          content: ' 第一行\n第二行 ',
+          alignment: 'CENTER'
+        }
+      }),
+      createComponent(COMPONENT_TYPES.TEXT_SECTION, {
+        componentKey: 'c_invalid',
+        sortOrder: 2000,
+        config: {
+          content: '说明',
+          alignment: 'JUSTIFY'
+        }
+      })
+    ]
+  })
+
+  assert.equal(config.components[0].config.content, '第一行\n第二行')
+  assert.equal(config.components[0].config.alignment, TEXT_SECTION_ALIGNMENTS.CENTER)
+  assert.equal(config.components[1].config.alignment, TEXT_SECTION_ALIGNMENTS.LEFT)
+
+  const updated = updateComponentTextSectionConfig(config, 'c_text', {
+    content: '更新说明',
+    alignment: TEXT_SECTION_ALIGNMENTS.RIGHT
+  })
+
+  assert.equal(updated.components[0].config.content, '更新说明')
+  assert.equal(updated.components[0].config.alignment, TEXT_SECTION_ALIGNMENTS.RIGHT)
+  assert.equal(TEXT_SECTION_MAX_LENGTH, 200)
+})
+
+test('normalizes and updates divider component config', () => {
+  const config = normalizePortfolioConfig({
+    components: [
+      createComponent(COMPONENT_TYPES.DIVIDER, {
+        componentKey: 'c_divider',
+        sortOrder: 1000,
+        config: {
+          color: 'BLACK',
+          heightPx: '24'
+        }
+      }),
+      createComponent(COMPONENT_TYPES.DIVIDER, {
+        componentKey: 'c_invalid',
+        sortOrder: 2000,
+        config: {
+          color: 'BLUE',
+          heightPx: '0'
+        }
+      })
+    ]
+  })
+
+  assert.equal(config.components[0].config.color, DIVIDER_COLORS.BLACK)
+  assert.equal(config.components[0].config.heightPx, 24)
+  assert.equal(config.components[1].config.color, DIVIDER_COLORS.GRAY)
+  assert.equal(config.components[1].config.heightPx, DEFAULT_DIVIDER_HEIGHT_PX)
+  assert.deepEqual(DIVIDER_COLOR_OPTIONS.map((item) => item.value), [
+    DIVIDER_COLORS.BLACK,
+    DIVIDER_COLORS.WHITE,
+    DIVIDER_COLORS.GRAY,
+    DIVIDER_COLORS.TRANSPARENT
+  ])
+
+  const updated = updateComponentDividerConfig(config, 'c_divider', {
+    color: DIVIDER_COLORS.TRANSPARENT,
+    heightPx: '32'
+  })
+
+  assert.equal(updated.components[0].config.color, DIVIDER_COLORS.TRANSPARENT)
+  assert.equal(updated.components[0].config.heightPx, 32)
 })
 
 function loadPortfolioEditorPage(fakeRequest, wxOverrides = {}, assetOverrides = {}, harnessOptions = {}) {
@@ -311,6 +442,129 @@ test('tapping schedule query component edits display mode', () => {
 
   assert.equal(page.data.scheduleQuerySheetVisible, false)
   assert.equal(page.data.config.components[0].config.displayMode, SCHEDULE_QUERY_DISPLAY_MODES.INLINE_CALENDAR)
+})
+
+test('tapping contact form component edits display mode', () => {
+  const page = loadPortfolioEditorPage(() => Promise.resolve({}))
+  page.data.config = normalizePortfolioConfig({
+    components: [
+      createComponent(COMPONENT_TYPES.CONTACT_FORM, {
+        componentKey: 'c_contact',
+        sortOrder: 1000,
+        config: { displayMode: 'MODAL_FORM' }
+      })
+    ]
+  })
+
+  page.handleComponentTap({ currentTarget: { dataset: { key: 'c_contact', type: COMPONENT_TYPES.CONTACT_FORM } } })
+
+  assert.equal(page.data.contactFormSheetVisible, true)
+  assert.equal(page.data.contactFormEditingComponentKey, 'c_contact')
+  assert.equal(page.data.contactFormConfigForm.displayMode, CONTACT_FORM_DISPLAY_MODES.MODAL_FORM)
+  assert.equal(page.data.contactFormDisplayModeOptions[1].label, '直接显示表单')
+
+  page.handleContactFormDisplayModeTap({
+    currentTarget: { dataset: { value: CONTACT_FORM_DISPLAY_MODES.INLINE_FORM } }
+  })
+  page.handleConfirmContactFormConfig()
+
+  assert.equal(page.data.contactFormSheetVisible, false)
+  assert.equal(page.data.config.components[0].config.displayMode, CONTACT_FORM_DISPLAY_MODES.INLINE_FORM)
+})
+
+test('tapping text section component edits required content and alignment', () => {
+  const toasts = []
+  const page = loadPortfolioEditorPage(() => Promise.resolve({}), {
+    showToast(options) {
+      toasts.push(options)
+    }
+  })
+  page.data.config = normalizePortfolioConfig({
+    components: [
+      createComponent(COMPONENT_TYPES.TEXT_SECTION, {
+        componentKey: 'c_text',
+        sortOrder: 1000,
+        config: {
+          content: '原始说明',
+          alignment: TEXT_SECTION_ALIGNMENTS.LEFT
+        }
+      })
+    ]
+  })
+
+  page.handleComponentTap({ currentTarget: { dataset: { key: 'c_text', type: COMPONENT_TYPES.TEXT_SECTION } } })
+
+  assert.equal(page.data.textSectionSheetVisible, true)
+  assert.equal(page.data.textSectionEditingComponentKey, 'c_text')
+  assert.equal(page.data.textSectionForm.content, '原始说明')
+  assert.equal(page.data.textSectionForm.alignment, TEXT_SECTION_ALIGNMENTS.LEFT)
+  assert.equal(page.data.textSectionFieldCounters.content, '4 / 200')
+  assert.deepEqual(page.data.textSectionAlignmentOptions.map((item) => item.value), [
+    TEXT_SECTION_ALIGNMENTS.LEFT,
+    TEXT_SECTION_ALIGNMENTS.CENTER,
+    TEXT_SECTION_ALIGNMENTS.RIGHT
+  ])
+
+  page.handleTextSectionInput({ detail: { value: '第一行\n第二行' } })
+  page.handleTextSectionAlignmentTap({
+    currentTarget: { dataset: { value: TEXT_SECTION_ALIGNMENTS.RIGHT } }
+  })
+  page.handleConfirmTextSectionConfig()
+
+  assert.equal(page.data.textSectionSheetVisible, false)
+  assert.equal(page.data.config.components[0].config.content, '第一行\n第二行')
+  assert.equal(page.data.config.components[0].config.alignment, TEXT_SECTION_ALIGNMENTS.RIGHT)
+
+  page.handleComponentTap({ currentTarget: { dataset: { key: 'c_text', type: COMPONENT_TYPES.TEXT_SECTION } } })
+  page.handleTextSectionInput({ detail: { value: '   ' } })
+  page.handleConfirmTextSectionConfig()
+
+  assert.equal(page.data.textSectionSheetVisible, true)
+  assert.equal(toasts.at(-1).title, '请填写文字说明')
+})
+
+test('tapping divider component edits color and pixel height', () => {
+  const toasts = []
+  const page = loadPortfolioEditorPage(() => Promise.resolve({}), {
+    showToast(options) {
+      toasts.push(options)
+    }
+  })
+  page.data.config = normalizePortfolioConfig({
+    components: [
+      createComponent(COMPONENT_TYPES.DIVIDER, {
+        componentKey: 'c_divider',
+        sortOrder: 1000,
+        config: {
+          color: DIVIDER_COLORS.GRAY,
+          heightPx: 12
+        }
+      })
+    ]
+  })
+
+  page.handleComponentTap({ currentTarget: { dataset: { key: 'c_divider', type: COMPONENT_TYPES.DIVIDER } } })
+
+  assert.equal(page.data.dividerSheetVisible, true)
+  assert.equal(page.data.dividerEditingComponentKey, 'c_divider')
+  assert.equal(page.data.dividerForm.color, DIVIDER_COLORS.GRAY)
+  assert.equal(page.data.dividerForm.heightPx, 12)
+  assert.deepEqual(page.data.dividerColorOptions.map((item) => item.label), ['黑', '白', '灰', '透明'])
+
+  page.handleDividerColorTap({ currentTarget: { dataset: { value: DIVIDER_COLORS.BLACK } } })
+  page.handleDividerHeightInput({ detail: { value: '28' } })
+  page.handleConfirmDividerConfig()
+
+  assert.equal(page.data.dividerSheetVisible, false)
+  assert.equal(page.data.config.components[0].config.color, DIVIDER_COLORS.BLACK)
+  assert.equal(page.data.config.components[0].config.heightPx, 28)
+
+  page.handleComponentTap({ currentTarget: { dataset: { key: 'c_divider', type: COMPONENT_TYPES.DIVIDER } } })
+  page.handleDividerHeightInput({ detail: { value: '0' } })
+  page.handleConfirmDividerConfig()
+
+  assert.equal(page.data.dividerSheetVisible, true)
+  assert.equal(toasts.at(-1).title, '请输入大于 0 的高度')
 })
 
 test('standard portfolio component drag moves row with animated style before reordering', () => {
@@ -606,6 +860,91 @@ test('tapping profile component edits independent profile copy', async () => {
   assert.equal(page.data.config.components[0].config.profile.displayName, '沈佳磊')
   assert.deepEqual(page.data.config.components[0].config.profile.tags.map((item) => item.name), ['主持', '双语'])
   assert.equal(page.data.config.components[0].config.visibleFields.profession, false)
+})
+
+test('qr contact source tab switch reloads basic profile image and clears stale image before saving', async () => {
+  const requests = []
+  let basicProfileQrUrl = 'https://cdn.example.com/basic-profile-qr.jpg'
+  const fakeRequest = (options) => {
+    requests.push(options)
+    if (options.url === '/api/mine/profile') {
+      return Promise.resolve({ wechatQrUrl: basicProfileQrUrl })
+    }
+    return Promise.resolve({})
+  }
+  const basicProfileRequests = () => requests.filter((options) => options.url === '/api/mine/profile')
+  const page = loadPortfolioEditorPage(fakeRequest)
+  page.data.config = normalizePortfolioConfig({
+    components: [
+      createComponent(COMPONENT_TYPES.PROFILE, {
+        componentKey: 'c_profile',
+        sortOrder: 1000,
+        config: {
+          profile: {
+            wechatQrUrl: 'https://cdn.example.com/stale-component-profile-qr.jpg'
+          }
+        }
+      }),
+      createComponent(COMPONENT_TYPES.QR_CONTACT, {
+        componentKey: 'c_qr',
+        sortOrder: 2000,
+        config: {
+          title: '微信咨询',
+          description: '扫码沟通档期',
+          qrUrlSource: 'CUSTOM',
+          qrUrl: 'wxfile://tmp/custom-qr.jpg'
+        }
+      })
+    ]
+  })
+
+  await page.handleComponentTap({ currentTarget: { dataset: { key: 'c_qr', type: COMPONENT_TYPES.QR_CONTACT } } })
+
+  assert.equal(page.data.qrContactSheetVisible, true)
+  assert.equal(page.data.qrContactForm.qrUrl, 'wxfile://tmp/custom-qr.jpg')
+  assert.equal(page.data.qrContactProfileQrUrl, '')
+
+  await page.handleUseProfileQrContact()
+  assert.equal(basicProfileRequests().length, 1)
+  assert.equal(page.data.qrContactForm.qrUrlSource, 'PROFILE')
+  assert.equal(page.data.qrContactForm.qrUrl, '')
+  assert.equal(page.data.qrContactProfileQrUrl, 'https://cdn.example.com/basic-profile-qr.jpg')
+  page.handleConfirmQrContactSheet()
+
+  assert.equal(page.data.config.components[1].config.qrUrlSource, 'PROFILE')
+  assert.equal(page.data.config.components[1].config.qrUrl, '')
+  assert.equal(page.data.config.components[1].config.title, undefined)
+  assert.equal(page.data.config.components[1].config.description, undefined)
+  assert.equal(page.data.qrContactProfileQrUrl, '')
+
+  await page.handleComponentTap({ currentTarget: { dataset: { key: 'c_qr', type: COMPONENT_TYPES.QR_CONTACT } } })
+  assert.equal(basicProfileRequests().length, 2)
+  assert.equal(page.data.qrContactProfileQrUrl, 'https://cdn.example.com/basic-profile-qr.jpg')
+  page.handleUseCustomQrContact()
+
+  assert.equal(page.data.qrContactProfileQrUrl, '')
+
+  page.setQrContactImageUrl('wxfile://tmp/custom-qr-next.jpg')
+  page.handleUseCustomQrContact()
+
+  assert.equal(page.data.qrContactForm.qrUrlSource, 'CUSTOM')
+  assert.equal(page.data.qrContactForm.qrUrl, 'wxfile://tmp/custom-qr-next.jpg')
+
+  page.data.config.components[0].config.profile.wechatQrUrl = 'https://cdn.example.com/ignored-component-profile-qr.jpg'
+  basicProfileQrUrl = 'https://cdn.example.com/basic-profile-qr-updated.jpg'
+  const requestCountBeforeProfileSwitch = basicProfileRequests().length
+  await page.handleUseProfileQrContact()
+
+  assert.equal(basicProfileRequests().length, requestCountBeforeProfileSwitch + 1)
+  assert.equal(page.data.qrContactForm.qrUrlSource, 'PROFILE')
+  assert.equal(page.data.qrContactForm.qrUrl, '')
+  assert.equal(page.data.qrContactProfileQrUrl, 'https://cdn.example.com/basic-profile-qr-updated.jpg')
+
+  page.handleUseCustomQrContact()
+
+  assert.equal(page.data.qrContactForm.qrUrlSource, 'CUSTOM')
+  assert.equal(page.data.qrContactForm.qrUrl, '')
+  assert.equal(page.data.qrContactProfileQrUrl, '')
 })
 
 test('create mode defaults profile component from basic profile', async () => {
@@ -1266,6 +1605,97 @@ test('saving draft uploads local qr contact image before saving config', async (
     page.data.config.components[0].config.qrUrl,
     'https://cos.example.com/WFA3B1E7A2/protfolio/qr-contact-88-20260702120000-a1b2c3d4.jpg'
   )
+})
+
+test('loading a published portfolio shows published status and publish action', async () => {
+  const page = loadPortfolioEditorPage((options) => {
+    if (options.url === '/api/mine/portfolios/88') {
+      return Promise.resolve({
+        portfolioId: 88,
+        publicationStatus: 'PUBLISHED',
+        draftRevision: 5,
+        publishedRevision: 4,
+        config: {
+          share: { title: '林安婚礼司仪' },
+          components: []
+        }
+      })
+    }
+    return Promise.resolve({})
+  })
+
+  await page.onLoad({ portfolioId: 88 })
+
+  assert.equal(page.data.publicationStatus, 'PUBLISHED')
+  assert.equal(page.data.statusText, '已发布')
+  assert.equal(page.data.statusTone, 'published')
+  assert.equal(page.data.showPublishAction, true)
+})
+
+test('publishing from editor saves current draft before publishing and returns to portfolio list', async (t) => {
+  const requests = []
+  const navigations = []
+  const toasts = []
+  const originalGetCurrentPages = global.getCurrentPages
+  global.getCurrentPages = () => [
+    { route: 'pages/portfolios/portfolios' },
+    { route: 'pages/portfolio-standard-edit/portfolio-standard-edit' }
+  ]
+  t.after(() => {
+    if (originalGetCurrentPages) {
+      global.getCurrentPages = originalGetCurrentPages
+    } else {
+      delete global.getCurrentPages
+    }
+  })
+  const page = loadPortfolioEditorPage((options) => {
+    requests.push(options)
+    if (options.url === '/api/mine/portfolios/88/draft') {
+      return Promise.resolve({
+        portfolioId: 88,
+        publicationStatus: 'PUBLISHED',
+        draftRevision: 6,
+        publishedRevision: 4
+      })
+    }
+    if (options.url === '/api/mine/portfolios/88/publish') {
+      return Promise.resolve({
+        portfolioId: 88,
+        publicationStatus: 'PUBLISHED',
+        draftRevision: 5,
+        publishedRevision: 6
+      })
+    }
+    return Promise.resolve({})
+  }, {
+    navigateBack(options) {
+      navigations.push({ type: 'back', options })
+    },
+    redirectTo(options) {
+      navigations.push({ type: 'redirect', options })
+    },
+    showToast(options) {
+      toasts.push(options)
+    }
+  })
+  page.data.portfolioId = 88
+  page.data.draftRevision = 5
+  page.data.publicationStatus = 'PUBLISHED'
+
+  await page.handlePublish()
+
+  assert.deepEqual(requests.map((item) => [item.url, item.method || 'GET']), [
+    ['/api/mine/portfolios/88/draft', 'PUT'],
+    ['/api/mine/portfolios/88/publish', 'POST']
+  ])
+  assert.equal(requests[0].data.clientRevision, 5)
+  assert.match(requests[0].data.idempotencyKey, /^draft-/)
+  assert.equal(requests[1].data.draftRevision, 6)
+  assert.match(requests[1].data.idempotencyKey, /^publish-/)
+  assert.deepEqual(toasts.map((item) => item.title), ['已发布'])
+  assert.deepEqual(navigations, [
+    { type: 'back', options: { delta: 1 } }
+  ])
 })
 
 test('saving draft returns to portfolio list so list onShow reloads data', async (t) => {

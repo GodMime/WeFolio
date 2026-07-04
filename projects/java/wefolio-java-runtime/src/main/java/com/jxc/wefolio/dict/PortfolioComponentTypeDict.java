@@ -16,7 +16,8 @@ public enum PortfolioComponentTypeDict {
     WORK_LIST("WORK_LIST", "单列作品列表"),
     QR_CONTACT("QR_CONTACT", "二维码联系"),
     CONTACT_FORM("CONTACT_FORM", "预留联系信息"),
-    TEXT_SECTION("TEXT_SECTION", "文字说明");
+    TEXT_SECTION("TEXT_SECTION", "文字说明"),
+    DIVIDER("DIVIDER", "分割线");
 
     private final String code;
     private final String displayName;

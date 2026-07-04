@@ -6,7 +6,9 @@ import com.jxc.wefolio.dto.PortfolioConfigDto;
 import com.jxc.wefolio.dto.PortfolioRenderDto;
 import com.jxc.wefolio.dto.VisitorPortfolioResponse;
 import com.jxc.wefolio.entity.PortfolioEntity;
+import com.jxc.wefolio.entity.UserEntity;
 import com.jxc.wefolio.entity.WorkEntity;
+import com.jxc.wefolio.mapper.UserEntityMapper;
 import com.jxc.wefolio.mapper.WorkEntityMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -54,6 +56,15 @@ public class PortfolioRenderService {
 
     /** 文字内容配置键 */
     private static final String CONFIG_KEY_CONTENT = "content";
+
+    /** 文字说明对齐配置键 */
+    private static final String CONFIG_KEY_ALIGNMENT = "alignment";
+
+    /** 分割线颜色配置键 */
+    private static final String CONFIG_KEY_DIVIDER_COLOR = "color";
+
+    /** 分割线高度配置键 */
+    private static final String CONFIG_KEY_DIVIDER_HEIGHT_PX = "heightPx";
 
     /** 个人资料配置键 */
     private static final String CONFIG_KEY_PROFILE = "profile";
@@ -118,11 +129,26 @@ public class PortfolioRenderService {
     /** 档期查询默认弹层月历展示方式 */
     private static final String SCHEDULE_DISPLAY_MODE_MODAL_CALENDAR = "MODAL_CALENDAR";
 
+    /** 联系表单默认弹层展示方式 */
+    private static final String CONTACT_FORM_DISPLAY_MODE_MODAL_FORM = "MODAL_FORM";
+
+    /** 文字说明默认左对齐 */
+    private static final String TEXT_SECTION_ALIGNMENT_LEFT = "LEFT";
+
+    /** 分割线默认灰色 */
+    private static final String DIVIDER_COLOR_GRAY = "GRAY";
+
+    /** 分割线默认高度 */
+    private static final int DEFAULT_DIVIDER_HEIGHT_PX = 16;
+
     /** 作品 Mapper */
     private final WorkEntityMapper workEntityMapper;
 
     /** COS 服务 */
     private final CosService cosService;
+
+    /** 用户 Mapper */
+    private final UserEntityMapper userEntityMapper;
 
     /**
      * 构建作品集渲染模型。
@@ -169,7 +195,7 @@ public class PortfolioRenderService {
      */
     private List<PortfolioRenderDto.Component> buildComponents(PortfolioEntity portfolio, PortfolioConfigDto config) {
         Long ownerId = portfolio == null ? null : portfolio.getOwnerId();
-        String profileQrUrl = resolveProfileQrUrl(config);
+        String profileQrUrl = shouldResolveProfileQrUrl(config) ? resolveBasicProfileQrUrl(ownerId) : "";
         return safeList(config == null ? null : config.getComponents()).stream()
                 .filter(component -> component != null && !Boolean.FALSE.equals(component.getEnabled()))
                 .sorted(Comparator
@@ -184,6 +210,7 @@ public class PortfolioRenderService {
      *
      * @param ownerId 作品集归属用户 ID
      * @param component 配置组件
+     * @param profileQrUrl 基础资料二维码地址
      * @return 渲染组件
      */
     private PortfolioRenderDto.Component buildComponent(Long ownerId, PortfolioConfigDto.Component component, String profileQrUrl) {
@@ -207,6 +234,7 @@ public class PortfolioRenderService {
             case QR_CONTACT -> render.setQrContact(buildQrContact(componentConfig, profileQrUrl));
             case CONTACT_FORM -> render.setContactForm(buildContactForm(componentConfig));
             case TEXT_SECTION -> render.setTextSection(buildTextSection(componentConfig));
+            case DIVIDER -> render.setDivider(buildDivider(componentConfig));
         }
         return render;
     }
@@ -363,6 +391,7 @@ public class PortfolioRenderService {
      * 构建二维码联系渲染数据。
      *
      * @param componentConfig 组件配置
+     * @param profileQrUrl 基础资料二维码地址
      * @return 二维码联系
      */
     private PortfolioRenderDto.QrContact buildQrContact(Map<String, Object> componentConfig, String profileQrUrl) {
@@ -378,24 +407,39 @@ public class PortfolioRenderService {
     }
 
     /**
-     * 从个人资料组件中解析微信二维码地址。
+     * 判断渲染组件中是否需要读取基础资料二维码。
      *
      * @param config 作品集配置
-     * @return 微信二维码地址
+     * @return 是否需要读取
      */
-    private String resolveProfileQrUrl(PortfolioConfigDto config) {
+    private boolean shouldResolveProfileQrUrl(PortfolioConfigDto config) {
         for (PortfolioConfigDto.Component component : safeList(config == null ? null : config.getComponents())) {
-            if (component == null || !PortfolioComponentTypeDict.PROFILE.getCode().equals(component.getComponentType())) {
+            if (component == null
+                    || Boolean.FALSE.equals(component.getEnabled())
+                    || !PortfolioComponentTypeDict.QR_CONTACT.getCode().equals(component.getComponentType())) {
                 continue;
             }
             Map<String, Object> componentConfig = component.getConfig() == null ? Map.of() : component.getConfig();
-            Map<String, Object> profileConfig = asObjectMap(componentConfig.get(CONFIG_KEY_PROFILE));
-            String qrUrl = asString(profileConfig.get(PROFILE_KEY_WECHAT_QR_URL));
-            if (hasText(qrUrl)) {
-                return qrUrl;
+            String source = defaultString(asString(componentConfig.get(CONFIG_KEY_QR_URL_SOURCE)), QR_SOURCE_PROFILE);
+            if (QR_SOURCE_PROFILE.equals(source)) {
+                return true;
             }
         }
-        return "";
+        return false;
+    }
+
+    /**
+     * 从基础资料中读取微信二维码地址。
+     *
+     * @param ownerId 作品集归属用户 ID
+     * @return 微信二维码地址
+     */
+    private String resolveBasicProfileQrUrl(Long ownerId) {
+        if (ownerId == null) {
+            return "";
+        }
+        UserEntity user = userEntityMapper.selectById(ownerId);
+        return user == null ? "" : defaultString(user.getWechatQrUrl());
     }
 
     /**
@@ -408,6 +452,10 @@ public class PortfolioRenderService {
         PortfolioRenderDto.ContactForm contactForm = new PortfolioRenderDto.ContactForm();
         contactForm.setTitle(asString(componentConfig.get(CONFIG_KEY_TITLE)));
         contactForm.setDescription(asString(componentConfig.get(CONFIG_KEY_DESCRIPTION)));
+        contactForm.setDisplayMode(defaultString(
+                asString(componentConfig.get(CONFIG_KEY_DISPLAY_MODE)),
+                CONTACT_FORM_DISPLAY_MODE_MODAL_FORM
+        ));
         contactForm.setFields(asStringList(componentConfig.get(CONFIG_KEY_FIELDS)));
         return contactForm;
     }
@@ -422,7 +470,28 @@ public class PortfolioRenderService {
         PortfolioRenderDto.TextSection textSection = new PortfolioRenderDto.TextSection();
         textSection.setTitle(asString(componentConfig.get(CONFIG_KEY_TITLE)));
         textSection.setContent(asString(componentConfig.get(CONFIG_KEY_CONTENT)));
+        textSection.setAlignment(defaultString(
+                asString(componentConfig.get(CONFIG_KEY_ALIGNMENT)),
+                TEXT_SECTION_ALIGNMENT_LEFT
+        ));
         return textSection;
+    }
+
+    /**
+     * 构建分割线渲染数据。
+     *
+     * @param componentConfig 组件配置
+     * @return 分割线
+     */
+    private PortfolioRenderDto.Divider buildDivider(Map<String, Object> componentConfig) {
+        PortfolioRenderDto.Divider divider = new PortfolioRenderDto.Divider();
+        divider.setColor(defaultString(
+                asString(componentConfig.get(CONFIG_KEY_DIVIDER_COLOR)),
+                DIVIDER_COLOR_GRAY
+        ));
+        Integer heightPx = asInteger(componentConfig.get(CONFIG_KEY_DIVIDER_HEIGHT_PX));
+        divider.setHeightPx(heightPx == null || heightPx <= 0 ? DEFAULT_DIVIDER_HEIGHT_PX : heightPx);
+        return divider;
     }
 
     /**

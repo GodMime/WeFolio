@@ -54,6 +54,166 @@ function wxApiWithSizes(sizes, hooks = {}) {
   }
 }
 
+test('wechat qr crop state uses a fixed square frame and clamps drag', () => {
+  const {
+    buildWechatQrCropState,
+    moveWechatQrCropState
+  } = loadProfileAssetsUtils(() => Promise.resolve({}))
+
+  const wideState = buildWechatQrCropState({
+    path: 'wxfile://tmp/qr-wide.jpg',
+    width: 1200,
+    height: 800
+  }, {
+    cropBoxWidth: 360
+  })
+  const tallState = buildWechatQrCropState({
+    path: 'wxfile://tmp/qr-tall.jpg',
+    width: 800,
+    height: 1200
+  }, {
+    cropBoxWidth: 360
+  })
+
+  assert.equal(wideState.cropBoxWidth, 360)
+  assert.equal(wideState.cropBoxHeight, 360)
+  assert.equal(wideState.displayWidth, 540)
+  assert.equal(wideState.displayHeight, 360)
+  assert.equal(wideState.offsetX, -90)
+  assert.equal(wideState.offsetY, 0)
+  assert.equal(moveWechatQrCropState(wideState, { deltaX: -120, deltaY: 0 }).offsetX, -180)
+  assert.equal(moveWechatQrCropState(wideState, { deltaX: 120, deltaY: 0 }).offsetX, 0)
+
+  assert.equal(tallState.cropBoxWidth, tallState.cropBoxHeight)
+  assert.equal(tallState.displayWidth, 360)
+  assert.equal(tallState.displayHeight, 540)
+  assert.equal(tallState.offsetX, 0)
+  assert.equal(tallState.offsetY, -90)
+  assert.equal(moveWechatQrCropState(tallState, { deltaX: 0, deltaY: -120 }).offsetY, -180)
+  assert.equal(moveWechatQrCropState(tallState, { deltaX: 0, deltaY: 120 }).offsetY, 0)
+})
+
+test('wechat qr crop frame maps the square preview to source pixels', () => {
+  const {
+    buildWechatQrCropFrame,
+    buildWechatQrCropState,
+    moveWechatQrCropState
+  } = loadProfileAssetsUtils(() => Promise.resolve({}))
+
+  const centeredState = buildWechatQrCropState({
+    path: 'wxfile://tmp/qr-wide.jpg',
+    width: 1200,
+    height: 800
+  }, {
+    cropBoxWidth: 360
+  })
+  const leftState = moveWechatQrCropState(centeredState, { deltaX: 120, deltaY: 0 })
+
+  assert.deepEqual(buildWechatQrCropFrame(centeredState, { outputWidth: 720 }), {
+    sx: 200,
+    sy: 0,
+    sWidth: 800,
+    sHeight: 800,
+    destWidth: 720,
+    destHeight: 720
+  })
+  assert.deepEqual(buildWechatQrCropFrame(leftState, { outputWidth: 720 }), {
+    sx: 0,
+    sy: 0,
+    sWidth: 800,
+    sHeight: 800,
+    destWidth: 720,
+    destHeight: 720
+  })
+})
+
+test('wechat qr crop exports a square temporary file through Canvas 2D', async () => {
+  const {
+    cropWechatQrToTempFilePath
+  } = loadProfileAssetsUtils(() => Promise.resolve({}))
+  const drawCalls = []
+  const canvas = {
+    width: 0,
+    height: 0,
+    createImage() {
+      return {
+        set src(value) {
+          this.path = value
+          this.onload()
+        }
+      }
+    },
+    getContext(type) {
+      assert.equal(type, '2d')
+      return {
+        clearRect(x, y, width, height) {
+          drawCalls.push(['clearRect', x, y, width, height])
+        },
+        drawImage(...args) {
+          drawCalls.push(['drawImage'].concat(args.slice(1)))
+        }
+      }
+    }
+  }
+  const page = {}
+  const wxApi = {
+    createSelectorQuery() {
+      return {
+        in(target) {
+          assert.equal(target, page)
+          return this
+        },
+        select(selector) {
+          assert.equal(selector, '#wechatQrCropCanvas')
+          return this
+        },
+        fields(options) {
+          assert.deepEqual(options, { node: true, size: true })
+          return this
+        },
+        exec(callback) {
+          callback([{ node: canvas }])
+        }
+      }
+    },
+    canvasToTempFilePath(options) {
+      assert.equal(options.canvas, canvas)
+      assert.equal(options.width, 720)
+      assert.equal(options.height, 720)
+      assert.equal(options.destWidth, 720)
+      assert.equal(options.destHeight, 720)
+      assert.equal(options.fileType, 'jpg')
+      assert.equal(options.quality, 0.92)
+      options.success({ tempFilePath: 'wxfile://tmp/wechat-qr-cropped.jpg' })
+    }
+  }
+
+  const filePath = await cropWechatQrToTempFilePath({
+    page,
+    wxApi,
+    canvasId: 'wechatQrCropCanvas',
+    imagePath: 'wxfile://tmp/qr-wide.jpg',
+    cropFrame: {
+      sx: 200,
+      sy: 0,
+      sWidth: 800,
+      sHeight: 800,
+      destWidth: 720,
+      destHeight: 720
+    },
+    fileType: 'jpg',
+    quality: 0.92
+  })
+
+  assert.equal(filePath, 'wxfile://tmp/wechat-qr-cropped.jpg')
+  assert.equal(canvas.width, 720)
+  assert.equal(canvas.height, 720)
+  assert.deepEqual(drawCalls, [
+    ['clearRect', 0, 0, 720, 720],
+    ['drawImage', 200, 0, 800, 800, 0, 0, 720, 720]
+  ])
+})
+
 test('profile wechat qr uploads local image through profile asset ticket', async () => {
   const requests = []
   const uploads = []

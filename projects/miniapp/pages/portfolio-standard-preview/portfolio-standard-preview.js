@@ -9,6 +9,24 @@ const IMAGE_MISSING_MESSAGE = '图片地址缺失'
 const VIDEO_MISSING_MESSAGE = '视频地址缺失'
 const DEFAULT_VIDEO_TITLE = '视频作品'
 
+function createActiveContactFormComponent() {
+  return {
+    componentKey: '',
+    contactForm: {
+      title: '',
+      description: '',
+      displayMode: 'MODAL_FORM',
+      fields: []
+    }
+  }
+}
+
+function findContactFormComponent(portfolio = {}, componentKey = '') {
+  const targetKey = String(componentKey || '')
+  return (Array.isArray(portfolio.components) ? portfolio.components : [])
+    .find((component) => component && component.componentKey === targetKey && component.componentType === 'CONTACT_FORM') || null
+}
+
 Page({
   data: {
     portfolioId: null,
@@ -17,6 +35,8 @@ Page({
     errorMessage: '',
     portfolio: normalizeVisitorPortfolio({ renderData: { preview: true } }),
     contactForm: createContactLeadForm({}),
+    contactFormModalVisible: false,
+    activeContactFormComponent: createActiveContactFormComponent(),
     videoPreviewVisible: false,
     videoPreview: null
   },
@@ -81,6 +101,26 @@ Page({
   handleSubmitContact() {
     wx.showToast({ title: '预览模式不提交', icon: 'none' })
   },
+
+  handleOpenContactFormModal(event) {
+    const component = findContactFormComponent(this.data.portfolio, event.currentTarget.dataset.componentKey)
+    if (!component) {
+      return
+    }
+    this.setData({
+      contactFormModalVisible: true,
+      activeContactFormComponent: component
+    })
+  },
+
+  handleCloseContactFormModal() {
+    this.setData({
+      contactFormModalVisible: false,
+      activeContactFormComponent: createActiveContactFormComponent()
+    })
+  },
+
+  noop() {},
 
   handleWorkTap(event) {
     const work = normalizeWorkTapDataset(event.currentTarget.dataset)

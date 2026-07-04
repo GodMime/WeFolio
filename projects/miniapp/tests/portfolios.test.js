@@ -60,6 +60,15 @@ test('supports single-column work list component type', () => {
   assert.equal(result.components[1].componentType, COMPONENT_TYPES.WORK_LIST)
 })
 
+test('contact form component defaults to visitor input fields', () => {
+  const component = createComponent(COMPONENT_TYPES.CONTACT_FORM, {
+    componentKey: 'c_form',
+    sortOrder: 1000
+  })
+
+  assert.deepEqual(component.config.fields, ['contactName', 'phone', 'wechat', 'needs'])
+})
+
 test('validates carousel as image-only work selector', () => {
   const works = [
     { id: 11, mediaType: 'IMAGE' },

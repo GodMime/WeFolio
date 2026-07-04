@@ -35,7 +35,7 @@ test('normalizes mine dashboard response for page rendering', () => {
   assert.equal(dashboard.point.warningText, '低于 50 提醒')
   assert.deepEqual(dashboard.metrics, [
     { label: '作品素材', value: '36' },
-    { label: '已发布作品集', value: '4' },
+    { label: '作品集', value: '4' },
     { label: '近 7 日访问', value: '128' }
   ])
 })

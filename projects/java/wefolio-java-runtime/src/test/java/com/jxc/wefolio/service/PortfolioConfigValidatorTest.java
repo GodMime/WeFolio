@@ -187,7 +187,7 @@ class PortfolioConfigValidatorTest {
                 PortfolioComponentTypeDict.TEXT_SECTION.getCode(),
                 1000,
                 true,
-                Map.of("title", " ", "content", "报价以沟通确认为准")
+                Map.of("title", " ", "content", "报价以沟通确认为准", "alignment", "CENTER")
         ));
         PortfolioConfigDto invalidConfig = config(component(
                 "c_text",
@@ -197,10 +197,101 @@ class PortfolioConfigValidatorTest {
                 Map.of("title", "服务说明", "content", " ")
         ));
 
-        assertThat(validator().normalize(7L, validConfig).getComponents()).hasSize(1);
+        PortfolioConfigDto normalized = validator().normalize(7L, validConfig);
+
+        assertThat(normalized.getComponents()).hasSize(1);
+        assertThat(normalized.getComponents().get(0).getConfig().get("alignment")).isEqualTo("CENTER");
         assertThatThrownBy(() -> validator().normalize(7L, invalidConfig))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("文字说明内容不能为空");
+    }
+
+    @Test
+    void textSectionShouldLimitContentLengthAndValidateAlignment() {
+        PortfolioConfigDto tooLongConfig = config(component(
+                "c_text",
+                PortfolioComponentTypeDict.TEXT_SECTION.getCode(),
+                1000,
+                true,
+                Map.of("content", "字".repeat(201), "alignment", "LEFT")
+        ));
+        PortfolioConfigDto invalidAlignmentConfig = config(component(
+                "c_text",
+                PortfolioComponentTypeDict.TEXT_SECTION.getCode(),
+                1000,
+                true,
+                Map.of("content", "报价以沟通确认为准", "alignment", "JUSTIFY")
+        ));
+        PortfolioConfigDto defaultAlignmentConfig = config(component(
+                "c_text",
+                PortfolioComponentTypeDict.TEXT_SECTION.getCode(),
+                1000,
+                true,
+                Map.of("content", "报价以沟通确认为准")
+        ));
+
+        assertThatThrownBy(() -> validator().normalize(7L, tooLongConfig))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("文字说明不能超过 200 字");
+        assertThatThrownBy(() -> validator().normalize(7L, invalidAlignmentConfig))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("文字说明对齐方式不支持");
+        assertThat(validator().normalize(7L, defaultAlignmentConfig)
+                .getComponents().get(0).getConfig().get("alignment"))
+                .isEqualTo("LEFT");
+    }
+
+    @Test
+    void dividerShouldNormalizeColorAndHeight() {
+        PortfolioConfigDto explicitConfig = config(component(
+                "c_divider",
+                PortfolioComponentTypeDict.DIVIDER.getCode(),
+                1000,
+                true,
+                Map.of("color", "BLACK", "heightPx", "24")
+        ));
+        PortfolioConfigDto defaultConfig = config(component(
+                "c_divider",
+                PortfolioComponentTypeDict.DIVIDER.getCode(),
+                1000,
+                true,
+                Map.of()
+        ));
+
+        PortfolioConfigDto explicitNormalized = validator().normalize(7L, explicitConfig);
+        PortfolioConfigDto defaultNormalized = validator().normalize(7L, defaultConfig);
+
+        assertThat(explicitNormalized.getComponents().get(0).getConfig())
+                .containsEntry("color", "BLACK")
+                .containsEntry("heightPx", 24);
+        assertThat(defaultNormalized.getComponents().get(0).getConfig())
+                .containsEntry("color", "GRAY")
+                .containsEntry("heightPx", 16);
+    }
+
+    @Test
+    void dividerShouldRejectUnsupportedColorOrHeight() {
+        PortfolioConfigDto invalidColorConfig = config(component(
+                "c_divider",
+                PortfolioComponentTypeDict.DIVIDER.getCode(),
+                1000,
+                true,
+                Map.of("color", "BLUE", "heightPx", 16)
+        ));
+        PortfolioConfigDto invalidHeightConfig = config(component(
+                "c_divider",
+                PortfolioComponentTypeDict.DIVIDER.getCode(),
+                1000,
+                true,
+                Map.of("color", "GRAY", "heightPx", 0)
+        ));
+
+        assertThatThrownBy(() -> validator().normalize(7L, invalidColorConfig))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("分割线颜色不支持");
+        assertThatThrownBy(() -> validator().normalize(7L, invalidHeightConfig))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("分割线高度必须大于 0");
     }
 
     @Test
@@ -319,6 +410,22 @@ class PortfolioConfigValidatorTest {
                 .hasMessage("请填写联系人");
 
         validator().validateContactFormSubmission(component, Map.of("contactName", "林安", "wechat", "wefolio"));
+    }
+
+    @Test
+    void contactFormShouldDefaultVisitorInputFieldsWhenMaintainerOnlyAddsComponent() {
+        PortfolioConfigDto config = config(component(
+                "c_form",
+                PortfolioComponentTypeDict.CONTACT_FORM.getCode(),
+                1000,
+                true,
+                Map.of()
+        ));
+
+        PortfolioConfigDto normalized = validator().normalize(7L, config);
+
+        assertThat(normalized.getComponents().get(0).getConfig().get("fields"))
+                .isEqualTo(List.of("contactName", "phone", "wechat", "needs"));
     }
 
     @Test

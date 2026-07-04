@@ -1115,11 +1115,11 @@
 }
 
 .schedule-tab-icon::after {
-  left: 18rpx;
-  top: 23rpx;
-  width: 6rpx;
-  height: 6rpx;
-  border-radius: 50%;
+  left: 12rpx;
+  top: 18rpx;
+  width: 18rpx;
+  height: 4rpx;
+  border-radius: 999rpx;
   background: currentColor;
 }
 

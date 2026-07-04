@@ -62,12 +62,32 @@ function wxLogin() {
   })
 }
 
+function createActiveContactFormComponent() {
+  return {
+    componentKey: '',
+    contactForm: {
+      title: '',
+      description: '',
+      displayMode: 'MODAL_FORM',
+      fields: []
+    }
+  }
+}
+
+function findContactFormComponent(portfolio = {}, componentKey = '') {
+  const targetKey = String(componentKey || '')
+  return (Array.isArray(portfolio.components) ? portfolio.components : [])
+    .find((component) => component && component.componentKey === targetKey && component.componentType === 'CONTACT_FORM') || null
+}
+
 Page({
   data: {
     shareCode: '',
     visitorKey: '',
     portfolio: normalizeVisitorPortfolio({}),
     contactForm: createContactLeadForm({}),
+    contactFormModalVisible: false,
+    activeContactFormComponent: createActiveContactFormComponent(),
     videoPreviewVisible: false,
     videoPreview: null
   },
@@ -124,10 +144,31 @@ Page({
     }).then(() => {
       wx.showToast({ title: '已提交', icon: 'success' })
       this.setData({ contactForm: createContactLeadForm({}) })
+      this.handleCloseContactFormModal()
     }).catch((error) => {
       wx.showToast({ title: error.message || '提交失败', icon: 'none' })
     })
   },
+
+  handleOpenContactFormModal(event) {
+    const component = findContactFormComponent(this.data.portfolio, event.currentTarget.dataset.componentKey)
+    if (!component) {
+      return
+    }
+    this.setData({
+      contactFormModalVisible: true,
+      activeContactFormComponent: component
+    })
+  },
+
+  handleCloseContactFormModal() {
+    this.setData({
+      contactFormModalVisible: false,
+      activeContactFormComponent: createActiveContactFormComponent()
+    })
+  },
+
+  noop() {},
 
   handlePreviewQr(event) {
     const url = event.currentTarget.dataset.url

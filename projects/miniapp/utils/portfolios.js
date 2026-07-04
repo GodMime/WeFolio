@@ -11,6 +11,7 @@ const PROFILE_VISIBLE_FIELD_DEFAULTS = {
   tags: true,
   wechatQr: false
 }
+const DEFAULT_CONTACT_FORM_FIELDS = ['contactName', 'phone', 'wechat', 'needs']
 
 const COMPONENT_TYPES = {
   CAROUSEL: 'CAROUSEL',
@@ -20,7 +21,8 @@ const COMPONENT_TYPES = {
   WORK_LIST: 'WORK_LIST',
   QR_CONTACT: 'QR_CONTACT',
   CONTACT_FORM: 'CONTACT_FORM',
-  TEXT_SECTION: 'TEXT_SECTION'
+  TEXT_SECTION: 'TEXT_SECTION',
+  DIVIDER: 'DIVIDER'
 }
 
 const COMPONENT_NAMES = {
@@ -31,7 +33,8 @@ const COMPONENT_NAMES = {
   WORK_LIST: '单列作品列表',
   QR_CONTACT: '二维码联系',
   CONTACT_FORM: '预留联系信息',
-  TEXT_SECTION: '文字说明'
+  TEXT_SECTION: '文字说明',
+  DIVIDER: '分割线'
 }
 
 const SCHEDULE_QUERY_DISPLAY_MODES = {
@@ -42,6 +45,46 @@ const SCHEDULE_QUERY_DISPLAY_MODES = {
 const SCHEDULE_QUERY_DISPLAY_MODE_OPTIONS = [
   { value: SCHEDULE_QUERY_DISPLAY_MODES.MODAL_CALENDAR, label: '弹层显示月历' },
   { value: SCHEDULE_QUERY_DISPLAY_MODES.INLINE_CALENDAR, label: '直接显示月历' }
+]
+
+const CONTACT_FORM_DISPLAY_MODES = {
+  MODAL_FORM: 'MODAL_FORM',
+  INLINE_FORM: 'INLINE_FORM'
+}
+
+const CONTACT_FORM_DISPLAY_MODE_OPTIONS = [
+  { value: CONTACT_FORM_DISPLAY_MODES.MODAL_FORM, label: '弹层显示表单' },
+  { value: CONTACT_FORM_DISPLAY_MODES.INLINE_FORM, label: '直接显示表单' }
+]
+const TEXT_SECTION_MAX_LENGTH = 200
+const TEXT_SECTION_ALIGNMENTS = {
+  LEFT: 'LEFT',
+  CENTER: 'CENTER',
+  RIGHT: 'RIGHT'
+}
+const TEXT_SECTION_ALIGNMENT_OPTIONS = [
+  { value: TEXT_SECTION_ALIGNMENTS.LEFT, label: '左对齐' },
+  { value: TEXT_SECTION_ALIGNMENTS.CENTER, label: '居中' },
+  { value: TEXT_SECTION_ALIGNMENTS.RIGHT, label: '右对齐' }
+]
+const DEFAULT_DIVIDER_HEIGHT_PX = 16
+const DIVIDER_COLORS = {
+  BLACK: 'BLACK',
+  WHITE: 'WHITE',
+  GRAY: 'GRAY',
+  TRANSPARENT: 'TRANSPARENT'
+}
+const DIVIDER_COLOR_VALUES = {
+  BLACK: '#000000',
+  WHITE: '#ffffff',
+  GRAY: '#eef1f4',
+  TRANSPARENT: 'transparent'
+}
+const DIVIDER_COLOR_OPTIONS = [
+  { value: DIVIDER_COLORS.BLACK, label: '黑', colorValue: DIVIDER_COLOR_VALUES.BLACK },
+  { value: DIVIDER_COLORS.WHITE, label: '白', colorValue: DIVIDER_COLOR_VALUES.WHITE },
+  { value: DIVIDER_COLORS.GRAY, label: '灰', colorValue: DIVIDER_COLOR_VALUES.GRAY },
+  { value: DIVIDER_COLORS.TRANSPARENT, label: '透明', colorValue: DIVIDER_COLOR_VALUES.TRANSPARENT }
 ]
 
 function trimText(value) {
@@ -161,6 +204,56 @@ function normalizeScheduleQueryConfig(raw = {}) {
   })
 }
 
+function normalizeContactFormDisplayMode(value) {
+  const displayMode = trimText(value)
+  return CONTACT_FORM_DISPLAY_MODE_OPTIONS.some((item) => item.value === displayMode)
+    ? displayMode
+    : CONTACT_FORM_DISPLAY_MODES.MODAL_FORM
+}
+
+function normalizeContactFormConfig(raw = {}) {
+  const fields = Array.isArray(raw.fields)
+    ? raw.fields.map(trimText).filter(Boolean)
+    : []
+  return Object.assign({}, raw || {}, {
+    displayMode: normalizeContactFormDisplayMode(raw && raw.displayMode),
+    fields: fields.length > 0 ? Array.from(new Set(fields)) : DEFAULT_CONTACT_FORM_FIELDS.slice()
+  })
+}
+
+function normalizeTextSectionAlignment(value) {
+  const alignment = trimText(value)
+  return TEXT_SECTION_ALIGNMENT_OPTIONS.some((item) => item.value === alignment)
+    ? alignment
+    : TEXT_SECTION_ALIGNMENTS.LEFT
+}
+
+function normalizeTextSectionConfig(raw = {}) {
+  return Object.assign({}, raw || {}, {
+    content: trimText(raw && raw.content),
+    alignment: normalizeTextSectionAlignment(raw && raw.alignment)
+  })
+}
+
+function normalizeDividerColor(value) {
+  const color = trimText(value)
+  return DIVIDER_COLOR_OPTIONS.some((item) => item.value === color)
+    ? color
+    : DIVIDER_COLORS.GRAY
+}
+
+function normalizeDividerHeightPx(value) {
+  const height = Math.round(toNumber(value, DEFAULT_DIVIDER_HEIGHT_PX))
+  return height > 0 ? height : DEFAULT_DIVIDER_HEIGHT_PX
+}
+
+function normalizeDividerConfig(raw = {}) {
+  return Object.assign({}, raw || {}, {
+    color: normalizeDividerColor(raw && raw.color),
+    heightPx: normalizeDividerHeightPx(raw && raw.heightPx)
+  })
+}
+
 function collectComponentWorkIds(component = {}) {
   const config = component.config || {}
   const groups = normalizeDisplayGroups(config.groups, config.workIds)
@@ -177,6 +270,15 @@ function createComponent(componentType, options = {}) {
   }
   if (isWorkListComponent(componentType)) {
     config.groups = normalizeDisplayGroups(config.groups, config.workIds)
+  }
+  if (componentType === COMPONENT_TYPES.CONTACT_FORM) {
+    Object.assign(config, normalizeContactFormConfig(config))
+  }
+  if (componentType === COMPONENT_TYPES.TEXT_SECTION) {
+    Object.assign(config, normalizeTextSectionConfig(config))
+  }
+  if (componentType === COMPONENT_TYPES.DIVIDER) {
+    Object.assign(config, normalizeDividerConfig(config))
   }
   return {
     componentKey: trimText(options.componentKey) || `c_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`,
@@ -209,6 +311,15 @@ function normalizeComponent(raw = {}, index = 0) {
   }
   if (component.componentType === COMPONENT_TYPES.SCHEDULE_QUERY) {
     component.config = normalizeScheduleQueryConfig(component.config)
+  }
+  if (component.componentType === COMPONENT_TYPES.CONTACT_FORM) {
+    component.config = normalizeContactFormConfig(component.config)
+  }
+  if (component.componentType === COMPONENT_TYPES.TEXT_SECTION) {
+    component.config = normalizeTextSectionConfig(component.config)
+  }
+  if (component.componentType === COMPONENT_TYPES.DIVIDER) {
+    component.config = normalizeDividerConfig(component.config)
   }
   return component
 }
@@ -331,6 +442,51 @@ function updateComponentScheduleQueryConfig(config, componentKey, scheduleQueryC
     }
     return Object.assign({}, component, {
       config: Object.assign({}, component.config || {}, nextScheduleQueryConfig)
+    })
+  })
+  return normalizePortfolioConfig(Object.assign({}, normalized, { components }))
+}
+
+function updateComponentContactFormConfig(config, componentKey, contactFormConfig = {}) {
+  const normalized = normalizePortfolioConfig(config)
+  const targetKey = trimText(componentKey)
+  const nextContactFormConfig = normalizeContactFormConfig(contactFormConfig)
+  const components = normalized.components.map((component) => {
+    if (component.componentKey !== targetKey || component.componentType !== COMPONENT_TYPES.CONTACT_FORM) {
+      return component
+    }
+    return Object.assign({}, component, {
+      config: Object.assign({}, component.config || {}, nextContactFormConfig)
+    })
+  })
+  return normalizePortfolioConfig(Object.assign({}, normalized, { components }))
+}
+
+function updateComponentTextSectionConfig(config, componentKey, textSectionConfig = {}) {
+  const normalized = normalizePortfolioConfig(config)
+  const targetKey = trimText(componentKey)
+  const nextTextSectionConfig = normalizeTextSectionConfig(textSectionConfig)
+  const components = normalized.components.map((component) => {
+    if (component.componentKey !== targetKey || component.componentType !== COMPONENT_TYPES.TEXT_SECTION) {
+      return component
+    }
+    return Object.assign({}, component, {
+      config: Object.assign({}, component.config || {}, nextTextSectionConfig)
+    })
+  })
+  return normalizePortfolioConfig(Object.assign({}, normalized, { components }))
+}
+
+function updateComponentDividerConfig(config, componentKey, dividerConfig = {}) {
+  const normalized = normalizePortfolioConfig(config)
+  const targetKey = trimText(componentKey)
+  const nextDividerConfig = normalizeDividerConfig(dividerConfig)
+  const components = normalized.components.map((component) => {
+    if (component.componentKey !== targetKey || component.componentType !== COMPONENT_TYPES.DIVIDER) {
+      return component
+    }
+    return Object.assign({}, component, {
+      config: Object.assign({}, component.config || {}, nextDividerConfig)
     })
   })
   return normalizePortfolioConfig(Object.assign({}, normalized, { components }))
@@ -498,12 +654,20 @@ function buildPublishPayload(draftRevision, idempotencyKey) {
 }
 
 module.exports = {
+  CONTACT_FORM_DISPLAY_MODE_OPTIONS,
+  CONTACT_FORM_DISPLAY_MODES,
   COMPONENT_NAMES,
   COMPONENT_TYPES,
+  DEFAULT_DIVIDER_HEIGHT_PX,
+  DIVIDER_COLOR_OPTIONS,
+  DIVIDER_COLORS,
   DISPLAY_GROUP_NAME_MAX_LENGTH,
   SCHEDULE_QUERY_DISPLAY_MODE_OPTIONS,
   SCHEDULE_QUERY_DISPLAY_MODES,
   SCHEMA_VERSION,
+  TEXT_SECTION_ALIGNMENT_OPTIONS,
+  TEXT_SECTION_ALIGNMENTS,
+  TEXT_SECTION_MAX_LENGTH,
   addDisplayGroup,
   addComponent,
   buildDraftPayload,
@@ -512,9 +676,12 @@ module.exports = {
   createComponent,
   importWorksIntoDisplayGroup,
   normalizePortfolioConfig,
+  normalizeContactFormConfig,
+  normalizeDividerConfig,
   normalizeDisplayGroups,
   normalizeProfileComponentConfig,
   normalizeScheduleQueryConfig,
+  normalizeTextSectionConfig,
   normalizeWorkIds,
   reorderComponent,
   reorderDisplayGroup,
@@ -522,8 +689,11 @@ module.exports = {
   removeDisplayGroup,
   updateDisplayGroupName,
   updateDisplayGroupWorkIds,
+  updateComponentContactFormConfig,
+  updateComponentDividerConfig,
   updateComponentProfileConfig,
   updateComponentScheduleQueryConfig,
+  updateComponentTextSectionConfig,
   updateComponentWorkIds,
   validateDisplayGroupName,
   validateCarouselComponent,

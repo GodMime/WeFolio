@@ -1,6 +1,17 @@
 const { request } = require('../../utils/request')
 const { clearToken, handleAuthRequired, hasLocalToken } = require('../../utils/session')
-const { uploadProfileAvatar, uploadWechatQr } = require('../../utils/profile-assets')
+const {
+  WECHAT_QR_CROP_FILE_TYPE,
+  WECHAT_QR_CROP_OUTPUT_WIDTH,
+  WECHAT_QR_CROP_QUALITY,
+  buildWechatQrCropFrame,
+  buildWechatQrCropState,
+  cropWechatQrToTempFilePath,
+  getWechatQrImageInfo,
+  moveWechatQrCropState,
+  uploadProfileAvatar,
+  uploadWechatQr
+} = require('../../utils/profile-assets')
 const {
   DEFAULT_TAG_COLOR,
   TAG_COLOR_OPTIONS,
@@ -10,6 +21,13 @@ const {
   normalizeProfile,
   validateProfileForm
 } = require('../../utils/profile')
+
+const DESIGN_VIEWPORT_RPX = 750
+const WECHAT_QR_CROP_CANVAS_ID = 'wechatQrCropCanvas'
+const WECHAT_QR_CROP_MAX_WIDTH_RPX = 560
+const WECHAT_QR_CROP_HORIZONTAL_GUTTER_RPX = 116
+const WECHAT_QR_PICK_FAILED_MESSAGE = '二维码选择失败'
+const WECHAT_QR_CROP_FAILED_MESSAGE = '二维码裁剪失败'
 
 function emptyProfile() {
   return normalizeProfile({})
@@ -43,6 +61,46 @@ function trimText(value) {
   return (value || '').trim()
 }
 
+function getTouchClientX(event = {}) {
+  const touch = (event.touches && event.touches[0]) || (event.changedTouches && event.changedTouches[0])
+  const clientX = touch && Number(touch.clientX)
+  return Number.isFinite(clientX) ? clientX : null
+}
+
+function getTouchClientY(event = {}) {
+  const touch = (event.touches && event.touches[0]) || (event.changedTouches && event.changedTouches[0])
+  const clientY = touch && Number(touch.clientY)
+  return Number.isFinite(clientY) ? clientY : null
+}
+
+function resolveChosenImageFile(response = {}) {
+  const files = Array.isArray(response.tempFiles) ? response.tempFiles : []
+  const firstFile = files[0] || {}
+  const filePath = firstFile.tempFilePath || firstFile.path || ''
+  return filePath ? Object.assign({}, firstFile, { path: filePath }) : null
+}
+
+function getWechatQrCropBoxWidth() {
+  const fallbackWindowWidth = 375
+  const systemInfo = typeof wx !== 'undefined' && wx.getSystemInfoSync ? wx.getSystemInfoSync() : {}
+  const windowWidth = Number(systemInfo.windowWidth) || fallbackWindowWidth
+  const rpxScale = windowWidth / DESIGN_VIEWPORT_RPX
+  return Math.floor(Math.min(
+    WECHAT_QR_CROP_MAX_WIDTH_RPX * rpxScale,
+    windowWidth - WECHAT_QR_CROP_HORIZONTAL_GUTTER_RPX * rpxScale
+  ))
+}
+
+function resetWechatQrCropState() {
+  return {
+    wechatQrCropVisible: false,
+    wechatQrCropSaving: false,
+    wechatQrCropErrorText: '',
+    wechatQrCropState: null,
+    wechatQrCropTouchStart: null
+  }
+}
+
 Page({
   data: {
     loading: true,
@@ -56,7 +114,14 @@ Page({
     tagColorOptions: TAG_COLOR_OPTIONS,
     selectedTagColor: DEFAULT_TAG_COLOR,
     newTag: '',
-    tagErrorText: ''
+    tagErrorText: '',
+    wechatQrCropVisible: false,
+    wechatQrCropSaving: false,
+    wechatQrCropErrorText: '',
+    wechatQrCropState: null,
+    wechatQrCropTouchStart: null,
+    wechatQrCropCanvasWidth: WECHAT_QR_CROP_OUTPUT_WIDTH,
+    wechatQrCropCanvasHeight: WECHAT_QR_CROP_OUTPUT_WIDTH
   },
 
   onLoad() {
@@ -107,6 +172,8 @@ Page({
     })
   },
 
+  noop() {},
+
   handleRetry() {
     this.bootstrap()
   },
@@ -145,29 +212,136 @@ Page({
       mediaType: ['image'],
       sourceType: ['album'],
       success: (response) => {
-        const tempFiles = response && Array.isArray(response.tempFiles) ? response.tempFiles : []
-        const firstFile = tempFiles[0] || {}
-        const wechatQrUrl = firstFile.tempFilePath || ''
-        if (!wechatQrUrl) {
-          return
+        const imageFile = resolveChosenImageFile(response)
+        if (imageFile) {
+          this.prepareSelectedWechatQr(imageFile)
         }
-        const form = Object.assign({}, this.data.form, {
-          wechatQrUrl
-        })
-        this.setData({
-          'form.wechatQrUrl': wechatQrUrl,
-          fieldCounters: buildProfileFieldCounters(form)
-        })
       },
       fail: (error) => {
         if (error && /cancel/i.test(error.errMsg || '')) {
           return
         }
         wx.showToast({
-          title: error && error.errMsg ? error.errMsg : '二维码选择失败',
+          title: error && error.errMsg ? error.errMsg : WECHAT_QR_PICK_FAILED_MESSAGE,
           icon: 'none'
         })
       }
+    })
+  },
+
+  prepareSelectedWechatQr(imageFile) {
+    return getWechatQrImageInfo(imageFile)
+      .then((imageInfo) => {
+        const cropState = buildWechatQrCropState(imageInfo, {
+          cropBoxWidth: getWechatQrCropBoxWidth()
+        })
+        this.setData({
+          wechatQrCropVisible: true,
+          wechatQrCropSaving: false,
+          wechatQrCropErrorText: '',
+          wechatQrCropState: cropState,
+          wechatQrCropTouchStart: null
+        })
+      })
+      .catch((error) => {
+        wx.showToast({
+          title: error && error.message ? error.message : WECHAT_QR_PICK_FAILED_MESSAGE,
+          icon: 'none'
+        })
+      })
+  },
+
+  setWechatQrUrl(wechatQrUrl) {
+    const form = Object.assign({}, this.data.form, {
+      wechatQrUrl
+    })
+    this.setData(Object.assign({
+      'form.wechatQrUrl': wechatQrUrl,
+      fieldCounters: buildProfileFieldCounters(form)
+    }, resetWechatQrCropState()))
+  },
+
+  handleCloseWechatQrCrop() {
+    if (this.data.wechatQrCropSaving) {
+      return
+    }
+    this.setData(resetWechatQrCropState())
+  },
+
+  handleWechatQrCropTouchStart(event) {
+    const clientX = getTouchClientX(event)
+    const clientY = getTouchClientY(event)
+    const cropState = this.data.wechatQrCropState || {}
+    this.setData({
+      wechatQrCropTouchStart: {
+        x: clientX === null ? 0 : clientX,
+        y: clientY === null ? 0 : clientY,
+        offsetX: Number(cropState.offsetX) || 0,
+        offsetY: Number(cropState.offsetY) || 0
+      }
+    })
+  },
+
+  handleWechatQrCropTouchMove(event) {
+    const start = this.data.wechatQrCropTouchStart
+    const cropState = this.data.wechatQrCropState
+    if (!start || !cropState) {
+      return
+    }
+    const clientX = getTouchClientX(event)
+    const clientY = getTouchClientY(event)
+    const baseState = Object.assign({}, cropState, {
+      offsetX: start.offsetX,
+      offsetY: start.offsetY
+    })
+    this.setData({
+      wechatQrCropState: moveWechatQrCropState(baseState, {
+        deltaX: (clientX === null ? start.x : clientX) - start.x,
+        deltaY: (clientY === null ? start.y : clientY) - start.y
+      })
+    })
+  },
+
+  handleWechatQrCropTouchEnd() {
+    this.setData({ wechatQrCropTouchStart: null })
+  },
+
+  handleWechatQrCropTouchCancel() {
+    this.setData({ wechatQrCropTouchStart: null })
+  },
+
+  handleConfirmWechatQrCrop() {
+    if (this.data.wechatQrCropSaving || !this.data.wechatQrCropState) {
+      return Promise.resolve()
+    }
+    const cropState = this.data.wechatQrCropState
+    const cropFrame = buildWechatQrCropFrame(cropState, {
+      outputWidth: WECHAT_QR_CROP_OUTPUT_WIDTH
+    })
+    this.setData({
+      wechatQrCropSaving: true,
+      wechatQrCropErrorText: ''
+    })
+    return cropWechatQrToTempFilePath({
+      page: this,
+      wxApi: wx,
+      canvasId: WECHAT_QR_CROP_CANVAS_ID,
+      imagePath: cropState.imagePath,
+      cropFrame,
+      fileType: WECHAT_QR_CROP_FILE_TYPE,
+      quality: WECHAT_QR_CROP_QUALITY
+    }).then((croppedPath) => {
+      this.setWechatQrUrl(croppedPath)
+    }).catch((error) => {
+      const message = error && error.message ? error.message : WECHAT_QR_CROP_FAILED_MESSAGE
+      this.setData({
+        wechatQrCropSaving: false,
+        wechatQrCropErrorText: message
+      })
+      wx.showToast({
+        title: message,
+        icon: 'none'
+      })
     })
   },
 

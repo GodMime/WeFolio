@@ -9,7 +9,7 @@
             <view class="section-title">分享信息</view>
             <view class="section-desc">用于微信分享卡片说明</view>
           </view>
-          <view class="status-pill">草稿</view>
+          <view class="status-pill {{statusTone}}">{{statusText}}</view>
         </view>
 
         <view class="form-row cover-form-row">
@@ -60,21 +60,21 @@
               <button class="component-remove-button" data-key="{{item.componentKey}}" catchtap="handleRemoveComponent">删除</button>
             </view>
             <view
-              class="component-row {{draggingIndex === index ? 'dragging' : ''}} {{dragTargetIndex === index && draggingIndex !== -1 ? 'drag-target' : ''}} {{item.componentType === 'CAROUSEL' || item.componentType === 'PROFILE' || item.componentType === 'QR_CONTACT' || item.componentType === 'SCHEDULE_QUERY' || item.componentType === 'WORK_GRID' || item.componentType === 'WORK_LIST' ? 'editable' : ''}}"
+              class="component-row {{draggingIndex === index ? 'dragging' : ''}} {{dragTargetIndex === index && draggingIndex !== -1 ? 'drag-target' : ''}} {{item.componentType === 'CAROUSEL' || item.componentType === 'PROFILE' || item.componentType === 'QR_CONTACT' || item.componentType === 'SCHEDULE_QUERY' || item.componentType === 'CONTACT_FORM' || item.componentType === 'TEXT_SECTION' || item.componentType === 'DIVIDER' || item.componentType === 'WORK_GRID' || item.componentType === 'WORK_LIST' ? 'editable' : ''}}"
               style="{{draggingIndex === index ? componentDragStyle : ''}}"
               data-key="{{item.componentKey}}"
               data-type="{{item.componentType}}"
               catchtap="handleComponentTap"
-              aria-role="{{item.componentType === 'CAROUSEL' || item.componentType === 'PROFILE' || item.componentType === 'QR_CONTACT' || item.componentType === 'SCHEDULE_QUERY' || item.componentType === 'WORK_GRID' || item.componentType === 'WORK_LIST' ? 'button' : 'text'}}"
-              aria-label="{{item.componentType === 'CAROUSEL' ? '编辑轮播图作品' : item.componentType === 'PROFILE' ? '编辑个人资料' : item.componentType === 'QR_CONTACT' ? '编辑二维码联系' : item.componentType === 'SCHEDULE_QUERY' ? '编辑档期查询' : item.componentType === 'WORK_GRID' || item.componentType === 'WORK_LIST' ? '编辑作品集展示标签' : item.name}}"
+              aria-role="{{item.componentType === 'CAROUSEL' || item.componentType === 'PROFILE' || item.componentType === 'QR_CONTACT' || item.componentType === 'SCHEDULE_QUERY' || item.componentType === 'CONTACT_FORM' || item.componentType === 'TEXT_SECTION' || item.componentType === 'DIVIDER' || item.componentType === 'WORK_GRID' || item.componentType === 'WORK_LIST' ? 'button' : 'text'}}"
+              aria-label="{{item.componentType === 'CAROUSEL' ? '编辑轮播图作品' : item.componentType === 'PROFILE' ? '编辑个人资料' : item.componentType === 'QR_CONTACT' ? '编辑二维码联系' : item.componentType === 'SCHEDULE_QUERY' ? '编辑档期查询' : item.componentType === 'CONTACT_FORM' ? '编辑预留联系信息' : item.componentType === 'TEXT_SECTION' ? '编辑文字说明' : item.componentType === 'DIVIDER' ? '编辑分割线' : item.componentType === 'WORK_GRID' || item.componentType === 'WORK_LIST' ? '编辑作品集展示标签' : item.name}}"
             >
               <view class="component-order">{{index + 1}}</view>
               <view class="component-copy">
                 <view class="component-title">{{item.name || item.componentType}}</view>
               </view>
               <view class="component-drag-handle"></view>
-              <view class="component-row-arrow {{item.componentType === 'CAROUSEL' || item.componentType === 'PROFILE' || item.componentType === 'QR_CONTACT' || item.componentType === 'SCHEDULE_QUERY' || item.componentType === 'WORK_GRID' || item.componentType === 'WORK_LIST' ? '' : 'placeholder'}}">
-                <view wx:if="{{item.componentType === 'CAROUSEL' || item.componentType === 'PROFILE' || item.componentType === 'QR_CONTACT' || item.componentType === 'SCHEDULE_QUERY' || item.componentType === 'WORK_GRID' || item.componentType === 'WORK_LIST'}}" class="component-row-arrow-icon"></view>
+              <view class="component-row-arrow {{item.componentType === 'CAROUSEL' || item.componentType === 'PROFILE' || item.componentType === 'QR_CONTACT' || item.componentType === 'SCHEDULE_QUERY' || item.componentType === 'CONTACT_FORM' || item.componentType === 'TEXT_SECTION' || item.componentType === 'DIVIDER' || item.componentType === 'WORK_GRID' || item.componentType === 'WORK_LIST' ? '' : 'placeholder'}}">
+                <view wx:if="{{item.componentType === 'CAROUSEL' || item.componentType === 'PROFILE' || item.componentType === 'QR_CONTACT' || item.componentType === 'SCHEDULE_QUERY' || item.componentType === 'CONTACT_FORM' || item.componentType === 'TEXT_SECTION' || item.componentType === 'DIVIDER' || item.componentType === 'WORK_GRID' || item.componentType === 'WORK_LIST'}}" class="component-row-arrow-icon"></view>
               </view>
             </view>
           </view>
@@ -396,34 +396,27 @@
       <scroll-view class="profile-form-scroll" scroll-y type="list">
         <view class="profile-form-list-content">
           <view class="profile-sheet-fields-panel">
-            <view class="form-row">
-              <view class="field-heading">
-                <view class="field-label">标题</view>
-              </view>
-              <input class="input profile-sheet-input" value="{{qrContactForm.title}}" data-field="title" bindinput="handleQrContactInput" maxlength="50" />
-            </view>
-            <view class="form-row">
-              <view class="field-heading">
-                <view class="field-label">说明</view>
-              </view>
-              <textarea class="input textarea profile-sheet-textarea" value="{{qrContactForm.description}}" data-field="description" bindinput="handleQrContactInput" maxlength="120"></textarea>
-            </view>
-            <view class="form-row">
+            <view class="form-row qr-source-row">
               <view class="field-heading">
                 <view class="field-label">二维码来源</view>
               </view>
-              <view class="qr-source-tabs">
-                <button class="qr-source-tab {{qrContactForm.qrUrlSource !== 'CUSTOM' ? 'active' : ''}}" catchtap="handleUseProfileQrContact">个人资料</button>
-                <button class="qr-source-tab {{qrContactForm.qrUrlSource === 'CUSTOM' ? 'active' : ''}}" catchtap="handleUseCustomQrContact">自定义图片</button>
+              <view class="qr-source-tabs" aria-role="tablist">
+                <button class="qr-source-tab {{qrContactForm.qrUrlSource !== 'CUSTOM' ? 'active' : ''}}" aria-role="tab" aria-selected="{{qrContactForm.qrUrlSource !== 'CUSTOM'}}" catchtap="handleUseProfileQrContact">个人资料</button>
+                <button class="qr-source-tab {{qrContactForm.qrUrlSource === 'CUSTOM' ? 'active' : ''}}" aria-role="tab" aria-selected="{{qrContactForm.qrUrlSource === 'CUSTOM'}}" catchtap="handleUseCustomQrContact">自定义图片</button>
               </view>
-            </view>
-            <view wx:if="{{qrContactForm.qrUrlSource === 'CUSTOM'}}" class="form-row">
-              <view class="qr-contact-image-editor">
-                <view class="qr-contact-image-preview" catchtap="handleChooseQrContactImage">
-                  <image wx:if="{{qrContactForm.qrUrl}}" src="{{qrContactForm.qrUrl}}" mode="aspectFit"></image>
-                  <view wx:else class="qr-contact-image-placeholder">二维码</view>
+              <view class="qr-source-tab-panel" aria-role="tabpanel">
+                <view wx:if="{{qrContactForm.qrUrlSource !== 'CUSTOM'}}" class="qr-contact-image-editor">
+                  <view class="qr-contact-image-preview profile">
+                    <image wx:if="{{qrContactProfileQrUrl}}" src="{{qrContactProfileQrUrl}}" mode="aspectFit"></image>
+                    <view wx:else class="qr-contact-image-placeholder">资料</view>
+                  </view>
                 </view>
-                <button class="profile-avatar-button" catchtap="handleChooseQrContactImage">{{qrContactForm.qrUrl ? '更换图片' : '选择图片'}}</button>
+                <view wx:else class="qr-contact-image-editor">
+                  <view class="qr-contact-image-preview custom" catchtap="handleChooseQrContactImage" aria-role="button" aria-label="选择自定义二维码图片">
+                    <image wx:if="{{qrContactForm.qrUrl}}" src="{{qrContactForm.qrUrl}}" mode="aspectFit"></image>
+                    <view wx:else class="qr-contact-image-placeholder">二维码</view>
+                  </view>
+                </view>
               </view>
             </view>
           </view>
@@ -474,6 +467,144 @@
     </view>
   </view>
 
+  <view class="contact-form-sheet-mask component-work-picker-mask {{contactFormSheetVisible ? 'visible' : ''}}" catchtap="handleCloseContactFormSheet">
+    <view class="contact-form-sheet-panel component-work-picker-panel" catchtap="noop">
+      <view class="component-picker-grabber"></view>
+      <view class="component-picker-heading">
+        <view class="component-picker-title">编辑预留联系信息</view>
+        <view class="component-picker-count">{{contactFormConfigForm.displayMode === 'INLINE_FORM' ? '直接' : '弹层'}}</view>
+      </view>
+
+      <view class="schedule-query-form">
+        <view class="form-row">
+          <view class="field-heading">
+            <view class="field-label">展示方式</view>
+          </view>
+          <view class="schedule-query-mode-list">
+            <view
+              wx:for="{{contactFormDisplayModeOptions}}"
+              wx:key="value"
+              class="schedule-query-mode-option {{contactFormConfigForm.displayMode === item.value ? 'active' : ''}}"
+              data-value="{{item.value}}"
+              catchtap="handleContactFormDisplayModeTap"
+              aria-role="radio"
+              aria-checked="{{contactFormConfigForm.displayMode === item.value}}"
+            >
+              <view class="schedule-query-mode-radio"></view>
+              <view class="schedule-query-mode-label">{{item.label}}</view>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view class="component-work-actions">
+        <button class="component-work-cancel" catchtap="handleCloseContactFormSheet">取消</button>
+        <button class="component-work-confirm" catchtap="handleConfirmContactFormConfig">完成</button>
+      </view>
+    </view>
+  </view>
+
+  <view class="text-section-sheet-mask component-work-picker-mask {{textSectionSheetVisible ? 'visible' : ''}}" catchtap="handleCloseTextSectionSheet">
+    <view class="text-section-sheet-panel component-work-picker-panel" catchtap="noop">
+      <view class="component-picker-grabber"></view>
+      <view class="component-picker-heading">
+        <view class="component-picker-title">编辑文字说明</view>
+        <view class="component-picker-count">{{textSectionFieldCounters.content}}</view>
+      </view>
+
+      <view class="text-section-form">
+        <view class="form-row">
+          <view class="field-heading">
+            <view class="field-label">说明</view>
+            <view class="field-limit">{{textSectionFieldCounters.content}}</view>
+          </view>
+          <textarea
+            class="input textarea profile-sheet-textarea text-section-sheet-textarea"
+            value="{{textSectionForm.content}}"
+            placeholder="请输入给访客看的说明文字"
+            maxlength="{{textSectionMaxLength}}"
+            bindinput="handleTextSectionInput"
+          ></textarea>
+        </view>
+
+        <view class="form-row">
+          <view class="field-heading">
+            <view class="field-label">对齐方式</view>
+          </view>
+          <view class="schedule-query-mode-list">
+            <view
+              wx:for="{{textSectionAlignmentOptions}}"
+              wx:key="value"
+              class="schedule-query-mode-option {{textSectionForm.alignment === item.value ? 'active' : ''}}"
+              data-value="{{item.value}}"
+              catchtap="handleTextSectionAlignmentTap"
+              aria-role="radio"
+              aria-checked="{{textSectionForm.alignment === item.value}}"
+            >
+              <view class="schedule-query-mode-radio"></view>
+              <view class="schedule-query-mode-label">{{item.label}}</view>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view class="component-work-actions">
+        <button class="component-work-cancel" catchtap="handleCloseTextSectionSheet">取消</button>
+        <button class="component-work-confirm" catchtap="handleConfirmTextSectionConfig">完成</button>
+      </view>
+    </view>
+  </view>
+
+  <view class="divider-sheet-mask component-work-picker-mask {{dividerSheetVisible ? 'visible' : ''}}" catchtap="handleCloseDividerSheet">
+    <view class="divider-sheet-panel component-work-picker-panel" catchtap="noop">
+      <view class="component-picker-grabber"></view>
+      <view class="component-picker-heading">
+        <view class="component-picker-title">编辑分割线</view>
+        <view class="component-picker-count">{{dividerForm.heightPx}}px</view>
+      </view>
+
+      <view class="divider-form">
+        <view class="form-row">
+          <view class="field-heading">
+            <view class="field-label">颜色</view>
+          </view>
+          <view class="divider-color-list">
+            <view
+              wx:for="{{dividerColorOptions}}"
+              wx:key="value"
+              class="divider-color-option {{dividerForm.color === item.value ? 'active' : ''}}"
+              data-value="{{item.value}}"
+              catchtap="handleDividerColorTap"
+              aria-role="radio"
+              aria-checked="{{dividerForm.color === item.value}}"
+            >
+              <view class="divider-color-swatch" style="background-color: {{item.colorValue}};"></view>
+              <view class="divider-color-label">{{item.label}}</view>
+            </view>
+          </view>
+        </view>
+
+        <view class="form-row">
+          <view class="field-heading">
+            <view class="field-label">高度(px)</view>
+          </view>
+          <input
+            class="input divider-height-input"
+            type="number"
+            value="{{dividerForm.heightPx}}"
+            placeholder="16"
+            bindinput="handleDividerHeightInput"
+          />
+        </view>
+      </view>
+
+      <view class="component-work-actions">
+        <button class="component-work-cancel" catchtap="handleCloseDividerSheet">取消</button>
+        <button class="component-work-confirm" catchtap="handleConfirmDividerConfig">完成</button>
+      </view>
+    </view>
+  </view>
+
   <view class="share-cover-crop-mask {{shareCoverCropVisible ? 'visible' : ''}}" catchtap="handleCloseShareCoverCrop">
     <view class="share-cover-crop-panel" catchtap="noop">
       <view class="component-picker-grabber"></view>
@@ -519,5 +650,6 @@
         <view class="preview-action-note">请保存后预览</view>
       </button>
     </view>
+    <button wx:if="{{showPublishAction}}" class="action-button publish-button" bindtap="handlePublish">发布</button>
   </view>
 </view>

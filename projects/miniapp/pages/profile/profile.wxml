@@ -142,4 +142,38 @@
       </view>
     </view>
   </view>
+
+  <view class="wechat-qr-crop-dialog {{wechatQrCropVisible ? 'visible' : ''}}">
+    <view class="wechat-qr-crop-backdrop" bindtap="handleCloseWechatQrCrop"></view>
+    <view class="wechat-qr-crop-panel" catchtap="noop">
+      <view class="tag-heading">
+        <view class="section-title">裁剪微信二维码</view>
+        <view class="count-pill">1:1</view>
+      </view>
+      <view
+        wx:if="{{wechatQrCropState}}"
+        class="wechat-qr-crop-stage"
+        style="{{wechatQrCropState.cropBoxStyle}}"
+        catchtouchstart="handleWechatQrCropTouchStart"
+        catchtouchmove="handleWechatQrCropTouchMove"
+        catchtouchend="handleWechatQrCropTouchEnd"
+        catchtouchcancel="handleWechatQrCropTouchCancel"
+      >
+        <image class="wechat-qr-crop-image" src="{{wechatQrCropState.imagePath}}" mode="scaleToFill" style="{{wechatQrCropState.imageStyle}}"></image>
+        <view class="wechat-qr-crop-frame"></view>
+      </view>
+      <view wx:if="{{wechatQrCropErrorText}}" class="wechat-qr-crop-error">{{wechatQrCropErrorText}}</view>
+      <view class="dialog-actions">
+        <button class="secondary-button dialog-button" catchtap="handleCloseWechatQrCrop" disabled="{{wechatQrCropSaving}}">取消</button>
+        <button class="primary-button dialog-button" catchtap="handleConfirmWechatQrCrop" loading="{{wechatQrCropSaving}}" disabled="{{wechatQrCropSaving}}">完成</button>
+      </view>
+    </view>
+  </view>
+
+  <canvas
+    id="wechatQrCropCanvas"
+    type="2d"
+    class="wechat-qr-crop-canvas"
+    style="width: {{wechatQrCropCanvasWidth}}px; height: {{wechatQrCropCanvasHeight}}px;"
+  ></canvas>
 </view>

@@ -307,7 +307,10 @@ class MinePortfolioServiceTest {
     void componentLibraryShouldExposeSingleColumnWorkList() {
         assertThat(service().getComponentLibrary().getComponents())
                 .extracting("componentType")
-                .contains(PortfolioComponentTypeDict.WORK_LIST.getCode());
+                .contains(
+                        PortfolioComponentTypeDict.WORK_LIST.getCode(),
+                        PortfolioComponentTypeDict.DIVIDER.getCode()
+                );
     }
 
     @Test

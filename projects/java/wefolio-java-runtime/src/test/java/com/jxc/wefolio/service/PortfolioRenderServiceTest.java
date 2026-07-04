@@ -11,7 +11,9 @@ import com.jxc.wefolio.dto.PortfolioConfigDto;
 import com.jxc.wefolio.dto.PortfolioRenderDto;
 import com.jxc.wefolio.dto.VisitorPortfolioResponse;
 import com.jxc.wefolio.entity.PortfolioEntity;
+import com.jxc.wefolio.entity.UserEntity;
 import com.jxc.wefolio.entity.WorkEntity;
+import com.jxc.wefolio.mapper.UserEntityMapper;
 import com.jxc.wefolio.mapper.WorkEntityMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -35,6 +37,10 @@ class PortfolioRenderServiceTest {
     /** 作品 Mapper 模拟 */
     @Mock
     private WorkEntityMapper workEntityMapper;
+
+    /** 用户 Mapper 模拟 */
+    @Mock
+    private UserEntityMapper userEntityMapper;
 
     /** COS 服务模拟 */
     @Mock
@@ -103,13 +109,16 @@ class PortfolioRenderServiceTest {
     }
 
     /**
-     * 二维码联系组件使用资料来源时应复制个人资料二维码地址。
+     * 二维码联系组件使用资料来源时应读取基础资料二维码地址。
      */
     @Test
-    void renderShouldResolveQrContactFromProfileCopy() {
+    void renderShouldResolveQrContactFromBasicProfile() {
+        UserEntity user = new UserEntity();
+        user.setWechatQrUrl("https://cdn.example.com/basic-profile-qr.jpg");
+        when(userEntityMapper.selectById(7L)).thenReturn(user);
         PortfolioConfigDto config = config(
                 component("c_profile", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, Map.of(
-                        "profile", Map.of("displayName", "林安", "wechatQrUrl", "https://cdn.example.com/profile-qr.jpg")
+                        "profile", Map.of("displayName", "林安", "wechatQrUrl", "https://cdn.example.com/stale-component-qr.jpg")
                 )),
                 component("c_qr", PortfolioComponentTypeDict.QR_CONTACT.getCode(), 2000, Map.of(
                         "qrUrlSource", "PROFILE",
@@ -120,7 +129,7 @@ class PortfolioRenderServiceTest {
         PortfolioRenderDto render = service().render(portfolio(), config, false, false, null, null);
 
         assertThat(render.getComponents().get(1).getQrContact().getQrUrl())
-                .isEqualTo("https://cdn.example.com/profile-qr.jpg");
+                .isEqualTo("https://cdn.example.com/basic-profile-qr.jpg");
     }
 
     /**
@@ -149,8 +158,78 @@ class PortfolioRenderServiceTest {
         assertThat(scheduleQuery.getQueryRange()).containsEntry("type", "UNLIMITED");
     }
 
+    /**
+     * 联系信息组件应透出展示模式，供访客页决定按钮弹层或直接表单。
+     */
+    @Test
+    void renderShouldExposeContactFormDisplayMode() {
+        PortfolioConfigDto config = config(component(
+                "c_contact",
+                PortfolioComponentTypeDict.CONTACT_FORM.getCode(),
+                1000,
+                Map.of(
+                        "title", "留下联系方式",
+                        "description", "稍后联系你",
+                        "displayMode", "INLINE_FORM",
+                        "fields", List.of("contactName", "phone")
+                )
+        ));
+
+        PortfolioRenderDto render = service().render(portfolio(), config, false, false, null, null);
+
+        PortfolioRenderDto.ContactForm contactForm = render.getComponents().get(0).getContactForm();
+        assertThat(contactForm.getTitle()).isEqualTo("留下联系方式");
+        assertThat(contactForm.getDescription()).isEqualTo("稍后联系你");
+        assertThat(contactForm.getDisplayMode()).isEqualTo("INLINE_FORM");
+        assertThat(contactForm.getFields()).containsExactly("contactName", "phone");
+    }
+
+    /**
+     * 文字说明组件应透出正文和对齐方式，供预览页和访客页一致展示。
+     */
+    @Test
+    void renderShouldExposeTextSectionContentAndAlignment() {
+        PortfolioConfigDto config = config(component(
+                "c_text",
+                PortfolioComponentTypeDict.TEXT_SECTION.getCode(),
+                1000,
+                Map.of(
+                        "content", "第一行\n第二行",
+                        "alignment", "RIGHT"
+                )
+        ));
+
+        PortfolioRenderDto render = service().render(portfolio(), config, false, false, null, null);
+
+        PortfolioRenderDto.TextSection textSection = render.getComponents().get(0).getTextSection();
+        assertThat(textSection.getContent()).isEqualTo("第一行\n第二行");
+        assertThat(textSection.getAlignment()).isEqualTo("RIGHT");
+    }
+
+    /**
+     * 分割线组件应透出颜色和高度，供预览页和访客页一致展示。
+     */
+    @Test
+    void renderShouldExposeDividerColorAndHeight() {
+        PortfolioConfigDto config = config(component(
+                "c_divider",
+                PortfolioComponentTypeDict.DIVIDER.getCode(),
+                1000,
+                Map.of(
+                        "color", "WHITE",
+                        "heightPx", 28
+                )
+        ));
+
+        PortfolioRenderDto render = service().render(portfolio(), config, false, false, null, null);
+
+        PortfolioRenderDto.Divider divider = render.getComponents().get(0).getDivider();
+        assertThat(divider.getColor()).isEqualTo("WHITE");
+        assertThat(divider.getHeightPx()).isEqualTo(28);
+    }
+
     private PortfolioRenderService service() {
-        return new PortfolioRenderService(workEntityMapper, cosService);
+        return new PortfolioRenderService(workEntityMapper, cosService, userEntityMapper);
     }
 
     private PortfolioEntity portfolio() {

@@ -1,4 +1,7 @@
 const DEFAULT_PROFILE_SUBTITLE = '完善资料后展示服务区域和标签'
+const METRIC_LABEL_WORK = '作品素材'
+const METRIC_LABEL_PORTFOLIO = '作品集'
+const METRIC_LABEL_RECENT_VISIT = '近 7 日访问'
 
 function toNumber(value) {
   const numberValue = Number(value)
@@ -60,9 +63,9 @@ function normalizeDashboard(raw = {}) {
       warningText: point.lowBalance ? '低于 50 提醒' : ''
     },
     metrics: [
-      { label: '作品素材', value: toDisplayText(metrics.workCount) },
-      { label: '已发布作品集', value: toDisplayText(metrics.publishedPortfolioCount) },
-      { label: '近 7 日访问', value: toDisplayText(metrics.recentVisitCount) }
+      { label: METRIC_LABEL_WORK, value: toDisplayText(metrics.workCount) },
+      { label: METRIC_LABEL_PORTFOLIO, value: toDisplayText(metrics.publishedPortfolioCount) },
+      { label: METRIC_LABEL_RECENT_VISIT, value: toDisplayText(metrics.recentVisitCount) }
     ]
   }
 }

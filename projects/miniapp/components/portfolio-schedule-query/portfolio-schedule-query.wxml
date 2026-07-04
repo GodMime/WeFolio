@@ -2,10 +2,10 @@
   <view class="schedule-query-calendar">
     <view class="schedule-query-month-bar">
       <view class="schedule-query-month-button" catchtap="handlePrevMonth" aria-role="button" aria-label="上个月">‹</view>
+      <view class="schedule-query-month-text">{{selectedMonthText || selectedMonth}}</view>
       <picker class="schedule-query-month-picker" mode="date" fields="month" value="{{selectedMonth}}" bindchange="handleMonthPickerChange">
         <view class="schedule-query-month-picker-button">切换年月</view>
       </picker>
-      <view class="schedule-query-month-text">{{selectedMonthText || selectedMonth}}</view>
       <view class="schedule-query-month-button" catchtap="handleNextMonth" aria-role="button" aria-label="下个月">›</view>
     </view>
 

@@ -340,6 +340,24 @@ test('profile component can render selected wechat qr in actual pages', () => {
   assert.match(visitorWxml, /wx:if="\{\{item\.profile\.wechatQrUrl\}\}"[\s\S]*src="\{\{item\.profile\.wechatQrUrl\}\}"[\s\S]*bindtap="handlePreviewQr"/)
 })
 
+test('contact form components support modal entry and inline form in actual pages', () => {
+  const previewWxml = fs.readFileSync(
+    path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.wxml'),
+    'utf8'
+  )
+  const visitorWxml = fs.readFileSync(
+    path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.wxml'),
+    'utf8'
+  )
+
+  ;[previewWxml, visitorWxml].forEach((wxml) => {
+    assert.match(wxml, /item\.contactForm\.displayMode === 'INLINE_FORM'[\s\S]*class="form-section"/)
+    assert.match(wxml, /class="form-entry-section"[\s\S]*bindtap="handleOpenContactFormModal"/)
+    assert.match(wxml, /class="contact-form-mask \{\{contactFormModalVisible \? 'visible' : ''\}\}"/)
+    assert.match(wxml, /class="contact-form-panel"[\s\S]*activeContactFormComponent\.contactForm\.title/)
+  })
+})
+
 test('actual portfolio pages do not render share intro as page content', () => {
   const previewWxml = fs.readFileSync(
     path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.wxml'),
