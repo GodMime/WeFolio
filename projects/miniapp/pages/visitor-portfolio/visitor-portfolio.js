@@ -1,6 +1,6 @@
 const { request } = require('../../utils/request')
 const { buildContactLeadPayload, createContactLeadForm, validateContactLeadForm } = require('../../utils/contact-lead')
-const { normalizeVisitorPortfolio } = require('../../utils/visitor-portfolio')
+const { buildVisitorEventPayload, normalizeVisitorPortfolio, switchDisplayGroup } = require('../../utils/visitor-portfolio')
 
 const VISITOR_PORTFOLIO_API_PREFIX = '/api/visitor/portfolios'
 const VISITOR_KEY_STORAGE = 'wefolio_visitor_key'
@@ -8,6 +8,12 @@ const WX_LOGIN_EMPTY_MESSAGE = '微信登录凭证为空'
 const WX_LOGIN_FAILED_MESSAGE = '微信登录失败'
 const WX_LOGIN_TIMEOUT_MESSAGE = '微信登录超时，请重试'
 const WX_LOGIN_TIMEOUT_MS = 5000
+const MEDIA_TYPE_VIDEO = 'VIDEO'
+const WORK_VIEWED_EVENT_TYPE = 'WORK_VIEWED'
+const VIDEO_PLAYED_EVENT_TYPE = 'VIDEO_PLAYED'
+const IMAGE_MISSING_MESSAGE = '图片地址缺失'
+const VIDEO_MISSING_MESSAGE = '视频地址缺失'
+const DEFAULT_VIDEO_TITLE = '视频作品'
 
 function idempotencyKey(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
@@ -61,7 +67,9 @@ Page({
     shareCode: '',
     visitorKey: '',
     portfolio: normalizeVisitorPortfolio({}),
-    contactForm: createContactLeadForm({})
+    contactForm: createContactLeadForm({}),
+    videoPreviewVisible: false,
+    videoPreview: null
   },
 
   onLoad(options = {}) {
@@ -143,30 +151,76 @@ Page({
       path: `/pages/visitor-portfolio/visitor-portfolio?shareCode=${this.data.shareCode}`,
       imageUrl: this.data.portfolio.share.coverUrl
     }
+  },
+
+  handleWorkTap(event) {
+    const work = normalizeWorkTapDataset(event.currentTarget.dataset)
+    if (!work.previewUrl) {
+      wx.showToast({
+        title: work.mediaType === MEDIA_TYPE_VIDEO ? VIDEO_MISSING_MESSAGE : IMAGE_MISSING_MESSAGE,
+        icon: 'none'
+      })
+      return Promise.resolve(false)
+    }
+    return this.recordWorkEvent(work)
+      .then(() => this.openWorkMedia(work))
+      .catch((error) => {
+        wx.showToast({ title: error.message || '作品打开失败', icon: 'none' })
+        return false
+      })
+  },
+
+  recordWorkEvent(work) {
+    if (!this.data.shareCode) {
+      return Promise.resolve()
+    }
+    const eventType = work.mediaType === MEDIA_TYPE_VIDEO ? VIDEO_PLAYED_EVENT_TYPE : WORK_VIEWED_EVENT_TYPE
+    return request({
+      url: `${VISITOR_PORTFOLIO_API_PREFIX}/${this.data.shareCode}/events`,
+      method: 'POST',
+      data: buildVisitorEventPayload({
+        visitorKey: this.data.visitorKey,
+        eventType,
+        workId: work.workId,
+        mediaType: work.mediaType
+      }, idempotencyKey('work'))
+    })
+  },
+
+  openWorkMedia(work) {
+    if (work.mediaType === MEDIA_TYPE_VIDEO) {
+      this.setData({
+        videoPreviewVisible: true,
+        videoPreview: {
+          src: work.previewUrl,
+          poster: work.coverUrl,
+          title: work.title || DEFAULT_VIDEO_TITLE
+        }
+      })
+      return true
+    }
+    wx.previewImage({ current: work.previewUrl, urls: [work.previewUrl] })
+    return true
+  },
+
+  handleCloseVideoPreview() {
+    this.setData({
+      videoPreviewVisible: false,
+      videoPreview: null
+    })
+  },
+
+  handleVideoPreviewPanelTap() {
   }
 })
 
-function switchDisplayGroup(portfolio, componentKey, groupKey) {
-  const sourcePortfolio = portfolio || {}
-  const components = (Array.isArray(sourcePortfolio.components) ? sourcePortfolio.components : []).map((component) => {
-    if (!component || component.componentKey !== componentKey) {
-      return component
-    }
-    const groups = Array.isArray(component.groups) ? component.groups : []
-    const activeGroup = groups.find((group) => group.groupKey === groupKey)
-      || component.activeGroup
-      || groups[0]
-      || { groupKey: '', name: '', sortOrder: 0, works: [] }
-    const displayTags = Array.isArray(component.displayTags)
-      ? component.displayTags
-      : groups.map((group) => ({ groupKey: group.groupKey, name: group.name, active: false }))
-    return Object.assign({}, component, {
-      activeGroupKey: activeGroup.groupKey,
-      activeGroup,
-      displayTags: displayTags.map((tag) => Object.assign({}, tag, {
-        active: tag.groupKey === activeGroup.groupKey
-      }))
-    })
-  })
-  return Object.assign({}, sourcePortfolio, { components })
+function normalizeWorkTapDataset(dataset = {}) {
+  const previewUrl = dataset.mediaUrl || dataset.previewUrl || dataset.coverUrl || ''
+  return {
+    workId: Number(dataset.workId),
+    mediaType: dataset.mediaType || '',
+    previewUrl,
+    coverUrl: dataset.coverUrl || '',
+    title: dataset.title || ''
+  }
 }

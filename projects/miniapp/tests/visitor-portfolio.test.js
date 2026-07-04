@@ -1,11 +1,75 @@
 const assert = require('node:assert/strict')
 const test = require('node:test')
+const path = require('node:path')
 
 const {
   buildVisitorEventPayload,
   normalizeVisitorPortfolio,
-  normalizeVisitorSchedule
+  normalizeVisitorSchedule,
+  switchDisplayGroup
 } = require('../utils/visitor-portfolio')
+
+function clone(value) {
+  return JSON.parse(JSON.stringify(value))
+}
+
+function applyData(target, patch) {
+  Object.keys(patch).forEach((key) => {
+    target[key] = patch[key]
+  })
+}
+
+function flushPromises() {
+  return new Promise((resolve) => {
+    setImmediate(resolve)
+  })
+}
+
+function loadVisitorPage(fakeRequest, wxOverrides = {}) {
+  const pagePath = path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.js')
+  const requestPath = path.join(__dirname, '../utils/request.js')
+  const requestCacheKey = require.resolve(requestPath)
+  const originalRequestCache = require.cache[requestCacheKey]
+  delete require.cache[require.resolve(pagePath)]
+  require.cache[requestCacheKey] = {
+    id: requestPath,
+    filename: requestPath,
+    loaded: true,
+    exports: {
+      request: fakeRequest
+    }
+  }
+
+  let pageDefinition
+  global.Page = (definition) => {
+    pageDefinition = definition
+  }
+  global.wx = Object.assign({
+    getStorageSync() { return 'visitor-a' },
+    setStorageSync() {},
+    login() {},
+    previewImage() {},
+    showToast() {}
+  }, wxOverrides)
+  require(pagePath)
+  delete global.Page
+  delete global.wx
+  if (originalRequestCache) {
+    require.cache[requestCacheKey] = originalRequestCache
+  } else {
+    delete require.cache[requestCacheKey]
+  }
+
+  return Object.assign({}, pageDefinition, {
+    data: clone(pageDefinition.data),
+    setData(patch, callback) {
+      applyData(this.data, patch)
+      if (callback) {
+        callback()
+      }
+    }
+  })
+}
 
 test('normalizes visitor portfolio under maintenance state', () => {
   const result = normalizeVisitorPortfolio({
@@ -122,7 +186,7 @@ test('normalizes visitor portfolio from backend render data first', () => {
   assert.equal(result.share.coverUrl, 'https://cdn.example.com/share.jpg')
   assert.deepEqual(result.components.map((item) => item.componentKey), ['c_list'])
   assert.equal(result.components[0].layout, 'single')
-  assert.equal(result.components[0].activeGroup.name, '精选')
+  assert.equal(result.components[0].activeGroup.name, '全部')
   assert.equal(result.components[0].activeGroup.works[0].workId, 11)
 })
 
@@ -206,11 +270,90 @@ test('normalizes work grid tags and qr contact preview url from render data', ()
 
   assert.equal(result.components[0].layout, 'grid')
   assert.deepEqual(result.components[0].displayTags, [
-    { groupKey: 'g_all', name: '全部案例', active: true },
+    { groupKey: '__all', name: '全部', active: true },
+    { groupKey: 'g_all', name: '全部案例', active: false },
     { groupKey: 'g_outdoor', name: '户外案例', active: false }
   ])
   assert.equal(result.components[1].qrContact.qrUrl, 'https://cdn.example.com/qr.jpg')
   assert.equal(result.components[1].previewImageUrl, 'https://cdn.example.com/qr.jpg')
+})
+
+test('work display groups expose all tab in tag order and dedupe repeated works', () => {
+  const result = normalizeVisitorPortfolio({
+    renderData: {
+      components: [
+        {
+          componentKey: 'c_grid',
+          componentType: 'WORK_GRID',
+          sortOrder: 1000,
+          groups: [
+            {
+              groupKey: 'g_indoor',
+              name: '室内案例',
+              sortOrder: 2000,
+              works: [
+                { workId: 22, title: '室内 B', mediaType: 'VIDEO', coverUrl: 'b.jpg', mediaUrl: 'b.mp4' },
+                { workId: 11, title: '室内 A', mediaType: 'IMAGE', coverUrl: 'a-thumb.jpg', mediaUrl: 'a.jpg' }
+              ]
+            },
+            {
+              groupKey: 'g_outdoor',
+              name: '户外案例',
+              sortOrder: 1000,
+              works: [
+                { workId: 33, title: '户外 C', mediaType: 'IMAGE', coverUrl: 'c-thumb.jpg', mediaUrl: 'c.jpg' },
+                { workId: 22, title: '室内 B', mediaType: 'VIDEO', coverUrl: 'b.jpg', mediaUrl: 'b.mp4' }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  })
+
+  const component = result.components[0]
+  assert.equal(component.activeGroupKey, '__all')
+  assert.deepEqual(component.activeGroup.works.map((work) => work.workId), [33, 22, 11])
+  assert.deepEqual(component.displayTags.map((tag) => tag.name), ['全部', '户外案例', '室内案例'])
+  assert.equal(component.activeGroup.works[1].isVideo, true)
+  assert.equal(component.activeGroup.works[1].thumbnailUrl, 'b.jpg')
+  assert.equal(component.activeGroup.works[1].previewUrl, 'b.mp4')
+})
+
+test('display group switch can return from a tag to all works', () => {
+  const portfolio = normalizeVisitorPortfolio({
+    renderData: {
+      components: [
+        {
+          componentKey: 'c_list',
+          componentType: 'WORK_LIST',
+          sortOrder: 1000,
+          groups: [
+            {
+              groupKey: 'g_a',
+              name: 'A',
+              sortOrder: 1000,
+              works: [{ workId: 1, title: 'A1', mediaType: 'IMAGE', mediaUrl: 'a.jpg' }]
+            },
+            {
+              groupKey: 'g_b',
+              name: 'B',
+              sortOrder: 2000,
+              works: [{ workId: 2, title: 'B1', mediaType: 'IMAGE', mediaUrl: 'b.jpg' }]
+            }
+          ]
+        }
+      ]
+    }
+  })
+
+  const tagged = switchDisplayGroup(portfolio, 'c_list', 'g_b')
+  assert.equal(tagged.components[0].activeGroupKey, 'g_b')
+  assert.deepEqual(tagged.components[0].activeGroup.works.map((work) => work.workId), [2])
+
+  const all = switchDisplayGroup(tagged, 'c_list', '__all')
+  assert.equal(all.components[0].activeGroupKey, '__all')
+  assert.deepEqual(all.components[0].activeGroup.works.map((work) => work.workId), [1, 2])
 })
 
 test('builds visitor event payload with idempotency key', () => {
@@ -218,6 +361,7 @@ test('builds visitor event payload with idempotency key', () => {
     visitorKey: 'visitor-a',
     eventType: 'VIDEO_PLAYED',
     workId: 11,
+    mediaType: 'VIDEO',
     durationSeconds: 18
   }, 'event-1')
 
@@ -225,9 +369,97 @@ test('builds visitor event payload with idempotency key', () => {
     visitorKey: 'visitor-a',
     eventType: 'VIDEO_PLAYED',
     workId: 11,
+    mediaType: 'VIDEO',
     durationSeconds: 18,
     idempotencyKey: 'event-1'
   })
+})
+
+test('visitor page records image view before opening original image', async () => {
+  const requests = []
+  const previews = []
+  const wxMock = {
+    previewImage(options) {
+      previews.push(options)
+    }
+  }
+  const page = loadVisitorPage((options) => {
+    requests.push(options)
+    return Promise.resolve({})
+  }, wxMock)
+  page.data.shareCode = 'PF001'
+  page.data.visitorKey = 'visitor-a'
+  global.wx = Object.assign({
+    showToast() {}
+  }, wxMock)
+
+  try {
+    const promise = page.handleWorkTap({
+      currentTarget: {
+        dataset: {
+          workId: '11',
+          mediaType: 'IMAGE',
+          mediaUrl: 'https://cdn.example.com/original.jpg',
+          coverUrl: 'https://cdn.example.com/thumb.jpg',
+          title: '迎宾图'
+        }
+      }
+    })
+    await promise
+  } finally {
+    delete global.wx
+  }
+
+  assert.equal(requests[0].url, '/api/visitor/portfolios/PF001/events')
+  assert.equal(requests[0].method, 'POST')
+  assert.equal(requests[0].data.eventType, 'WORK_VIEWED')
+  assert.equal(requests[0].data.workId, 11)
+  assert.equal(requests[0].data.mediaType, 'IMAGE')
+  assert.deepEqual(previews[0], {
+    current: 'https://cdn.example.com/original.jpg',
+    urls: ['https://cdn.example.com/original.jpg']
+  })
+})
+
+test('visitor page records video play before showing video overlay', async () => {
+  const requests = []
+  const page = loadVisitorPage((options) => {
+    requests.push(options)
+    return Promise.resolve({})
+  })
+  page.data.shareCode = 'PF001'
+  page.data.visitorKey = 'visitor-a'
+  global.wx = { showToast() {} }
+
+  try {
+    await page.handleWorkTap({
+      currentTarget: {
+        dataset: {
+          workId: '12',
+          mediaType: 'VIDEO',
+          mediaUrl: 'https://cdn.example.com/movie.mp4',
+          coverUrl: 'https://cdn.example.com/movie.jpg',
+          title: '婚礼快剪'
+        }
+      }
+    })
+    await flushPromises()
+  } finally {
+    delete global.wx
+  }
+
+  assert.equal(requests[0].data.eventType, 'VIDEO_PLAYED')
+  assert.equal(requests[0].data.mediaType, 'VIDEO')
+  assert.equal(page.data.videoPreviewVisible, true)
+  assert.deepEqual(page.data.videoPreview, {
+    src: 'https://cdn.example.com/movie.mp4',
+    poster: 'https://cdn.example.com/movie.jpg',
+    title: '婚礼快剪'
+  })
+
+  page.handleCloseVideoPreview()
+  assert.equal(page.data.videoPreviewVisible, false)
+  assert.equal(page.data.videoPreview, null)
 })
 
 test('normalizes visitor schedule without internal fields', () => {

@@ -91,11 +91,22 @@ test('portfolio preview and visitor pages render miniapp brand footer', () => {
     path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.wxml'),
     'utf8'
   )
+  const previewWxss = fs.readFileSync(
+    path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.wxss'),
+    'utf8'
+  )
+  const visitorWxss = fs.readFileSync(
+    path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.wxss'),
+    'utf8'
+  )
 
   ;[previewWxml, visitorWxml].forEach((wxml) => {
     assert.match(wxml, /class="folio-brand-footer"/)
     assert.match(wxml, new RegExp(`src="${logoUrl.replace(/\./g, '\\.')}"`))
     assert.match(wxml, new RegExp(`class="folio-brand-name">${brandName}</view>`))
+  })
+  ;[previewWxss, visitorWxss].forEach((wxss) => {
+    assert.match(readRule(wxss, '.folio-brand-footer'), /padding:\s*56rpx 0 calc\(160rpx \+ env\(safe-area-inset-bottom\)\);/)
   })
   assert.equal(fs.existsSync(logoPath), true)
 })
@@ -193,6 +204,64 @@ test('preview display group switch tolerates unnormalized component arrays', () 
   assert.equal(page.data.portfolio.components[0].activeGroupKey, 'g_existing')
 })
 
+test('preview page opens image and video work media without visitor event request', () => {
+  const requests = []
+  const previews = []
+  const wxMock = {
+    previewImage(options) {
+      previews.push(options)
+    }
+  }
+  const page = loadPreviewPage((options) => {
+    requests.push(options)
+    return Promise.resolve({})
+  }, wxMock)
+  global.wx = Object.assign({
+    showToast() {}
+  }, wxMock)
+
+  try {
+    page.handleWorkTap({
+      currentTarget: {
+        dataset: {
+          workId: '11',
+          mediaType: 'IMAGE',
+          mediaUrl: 'https://cdn.example.com/original.jpg',
+          coverUrl: 'https://cdn.example.com/thumb.jpg',
+          title: '迎宾图'
+        }
+      }
+    })
+
+    assert.deepEqual(previews[0], {
+      current: 'https://cdn.example.com/original.jpg',
+      urls: ['https://cdn.example.com/original.jpg']
+    })
+
+    page.handleWorkTap({
+      currentTarget: {
+        dataset: {
+          workId: '12',
+          mediaType: 'VIDEO',
+          mediaUrl: 'https://cdn.example.com/movie.mp4',
+          coverUrl: 'https://cdn.example.com/movie.jpg',
+          title: '婚礼快剪'
+        }
+      }
+    })
+  } finally {
+    delete global.wx
+  }
+
+  assert.equal(requests.length, 0)
+  assert.equal(page.data.videoPreviewVisible, true)
+  assert.deepEqual(page.data.videoPreview, {
+    src: 'https://cdn.example.com/movie.mp4',
+    poster: 'https://cdn.example.com/movie.jpg',
+    title: '婚礼快剪'
+  })
+})
+
 test('preview markup exposes loading skeleton and retryable error state', () => {
   const wxml = fs.readFileSync(
     path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.wxml'),
@@ -202,6 +271,43 @@ test('preview markup exposes loading skeleton and retryable error state', () => 
   assert.match(wxml, /wx:if="\{\{loading\}\}"/)
   assert.match(wxml, /wx:elif="\{\{errorMessage\}\}"/)
   assert.match(wxml, /bindtap="handleRetryPreview"/)
+})
+
+test('portfolio work sections render fixed title, all tags, play badge, and video overlay', () => {
+  const previewWxml = fs.readFileSync(
+    path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.wxml'),
+    'utf8'
+  )
+  const visitorWxml = fs.readFileSync(
+    path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.wxml'),
+    'utf8'
+  )
+  const previewWxss = fs.readFileSync(
+    path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.wxss'),
+    'utf8'
+  )
+  const visitorWxss = fs.readFileSync(
+    path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.wxss'),
+    'utf8'
+  )
+
+  ;[previewWxml, visitorWxml].forEach((wxml) => {
+    assert.match(wxml, /class="work-section-title">作品列表<\/view>/)
+    assert.doesNotMatch(wxml, /class="work-section-title">作品 &gt;<\/view>/)
+    assert.match(wxml, /wx:for="\{\{item\.displayTags\}\}"[\s\S]*>\{\{tag\.name\}\}<\/view>/)
+    assert.match(wxml, /class="work-cover-wrap"[\s\S]*bindtap="handleWorkTap"/)
+    assert.match(wxml, /data-media-url="\{\{work\.previewUrl\}\}"/)
+    assert.match(wxml, /wx:if="\{\{work\.isVideo\}\}"[\s\S]*class="work-play-badge"/)
+    assert.match(wxml, /class="work-video-mask \{\{videoPreviewVisible \? 'visible' : ''\}\}"/)
+    assert.match(wxml, /id="portfolioWorkVideo"[\s\S]*src="\{\{videoPreview\.src\}\}"[\s\S]*poster="\{\{videoPreview\.poster\}\}"[\s\S]*controls="\{\{true\}\}"[\s\S]*show-fullscreen-btn="\{\{true\}\}"/)
+  })
+  ;[previewWxss, visitorWxss].forEach((wxss) => {
+    assert.match(wxss, /\.work-section-title\s*\{[\s\S]*color:\s*#000000;[\s\S]*font-size:\s*34rpx;/)
+    assert.match(wxss, /\.display-tag\s*\{[\s\S]*color:\s*#8a8f98;[\s\S]*font-size:\s*28rpx;/)
+    assert.match(wxss, /\.display-tag\.active\s*\{[\s\S]*color:\s*#000000;/)
+    assert.match(wxss, /\.work-play-badge\s*\{[\s\S]*position:\s*absolute;[\s\S]*right:\s*16rpx;[\s\S]*bottom:\s*16rpx;/)
+    assert.doesNotMatch(wxss, /\.work-play-badge\s*\{[\s\S]*top:\s*50%;[\s\S]*left:\s*50%;/)
+  })
 })
 
 test('profile component can render selected wechat qr in actual pages', () => {

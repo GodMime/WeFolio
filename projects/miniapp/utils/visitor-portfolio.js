@@ -8,6 +8,11 @@ const PROFILE_VISIBLE_FIELD_DEFAULTS = {
   wechatQr: false
 }
 const DEFAULT_CAROUSEL_INTERVAL_MS = 3000
+const ALL_DISPLAY_GROUP_KEY = '__all'
+const ALL_DISPLAY_GROUP_NAME = '全部'
+const DEFAULT_ALL_GROUP_KEY = 'g_all'
+const DEFAULT_ALL_GROUP_NAME = '全部作品'
+const MEDIA_TYPE_VIDEO = 'VIDEO'
 
 function trimText(value) {
   return String(value || '').trim()
@@ -32,12 +37,18 @@ function normalizeShare(raw = {}) {
 }
 
 function normalizeRenderWork(raw = {}) {
+  const mediaType = trimText(raw.mediaType) || 'IMAGE'
+  const coverUrl = trimText(raw.coverUrl)
+  const mediaUrl = trimText(raw.mediaUrl)
   return {
     workId: toNumber(raw.workId || raw.id),
     title: trimText(raw.title) || '未命名作品',
-    mediaType: trimText(raw.mediaType) || 'IMAGE',
-    coverUrl: trimText(raw.coverUrl),
-    mediaUrl: trimText(raw.mediaUrl),
+    mediaType,
+    isVideo: mediaType === MEDIA_TYPE_VIDEO,
+    coverUrl,
+    mediaUrl,
+    thumbnailUrl: coverUrl || mediaUrl,
+    previewUrl: mediaUrl || coverUrl,
     durationMs: toNumber(raw.durationMs),
     description: trimText(raw.description)
   }
@@ -45,15 +56,58 @@ function normalizeRenderWork(raw = {}) {
 
 function normalizeDisplayGroups(rawGroups = []) {
   const groups = Array.isArray(rawGroups) ? rawGroups : []
-  return groups.map((group, index) => ({
+  const sortedGroups = groups.map((group, index) => ({
     groupKey: trimText(group.groupKey) || `g_${index + 1}`,
-    name: trimText(group.name) || '作品集展示标签',
+    name: trimText(group.name) || DEFAULT_ALL_GROUP_NAME,
     sortOrder: toNumber(group.sortOrder, (index + 1) * 1000),
     works: Array.isArray(group.works) ? group.works.map(normalizeRenderWork) : []
   })).sort((left, right) => {
     const orderDiff = left.sortOrder - right.sortOrder
     return orderDiff || left.groupKey.localeCompare(right.groupKey)
   })
+  if (!sortedGroups.length) {
+    return []
+  }
+  const allGroup = {
+    groupKey: ALL_DISPLAY_GROUP_KEY,
+    name: ALL_DISPLAY_GROUP_NAME,
+    sortOrder: 0,
+    works: buildAllDisplayWorks(sortedGroups)
+  }
+  return isDefaultAllOnlyGroup(sortedGroups)
+    ? [allGroup]
+    : [allGroup].concat(sortedGroups)
+}
+
+function buildWorkIdentity(work = {}, fallbackIndex = 0) {
+  if (work.workId > 0) {
+    return `id:${work.workId}`
+  }
+  return `media:${work.mediaUrl || work.coverUrl || work.title || fallbackIndex}`
+}
+
+function buildAllDisplayWorks(groups = []) {
+  const seen = new Set()
+  return groups.reduce((result, group) => {
+    const works = Array.isArray(group.works) ? group.works : []
+    works.forEach((work, index) => {
+      const identity = buildWorkIdentity(work, index)
+      if (seen.has(identity)) {
+        return
+      }
+      seen.add(identity)
+      result.push(work)
+    })
+    return result
+  }, [])
+}
+
+function isDefaultAllOnlyGroup(groups = []) {
+  if (groups.length !== 1) {
+    return false
+  }
+  const group = groups[0]
+  return group.groupKey === DEFAULT_ALL_GROUP_KEY || group.name === DEFAULT_ALL_GROUP_NAME
 }
 
 function normalizeProfileVisibleFields(visibleFields = {}) {
@@ -220,6 +274,9 @@ function buildVisitorEventPayload(event = {}, idempotencyKey) {
   if (event.workId !== undefined && event.workId !== null) {
     payload.workId = toNumber(event.workId)
   }
+  if (event.mediaType) {
+    payload.mediaType = trimText(event.mediaType)
+  }
   if (event.durationSeconds !== undefined && event.durationSeconds !== null) {
     payload.durationSeconds = toNumber(event.durationSeconds)
   }
@@ -227,6 +284,32 @@ function buildVisitorEventPayload(event = {}, idempotencyKey) {
     payload.queriedDate = trimText(event.queriedDate)
   }
   return payload
+}
+
+function switchDisplayGroup(portfolio, componentKey, groupKey) {
+  const sourcePortfolio = portfolio || {}
+  const targetGroupKey = trimText(groupKey)
+  const components = (Array.isArray(sourcePortfolio.components) ? sourcePortfolio.components : []).map((component) => {
+    if (!component || component.componentKey !== componentKey) {
+      return component
+    }
+    const groups = Array.isArray(component.groups) ? component.groups : []
+    const activeGroup = groups.find((group) => group.groupKey === targetGroupKey)
+      || component.activeGroup
+      || groups[0]
+      || { groupKey: '', name: '', sortOrder: 0, works: [] }
+    const displayTags = Array.isArray(component.displayTags) && component.displayTags.length
+      ? component.displayTags
+      : groups.map((group) => ({ groupKey: group.groupKey, name: group.name, active: false }))
+    return Object.assign({}, component, {
+      activeGroupKey: activeGroup.groupKey,
+      activeGroup,
+      displayTags: displayTags.map((tag) => Object.assign({}, tag, {
+        active: tag.groupKey === activeGroup.groupKey
+      }))
+    })
+  })
+  return Object.assign({}, sourcePortfolio, { components })
 }
 
 function normalizeVisitorSchedule(raw = {}) {
@@ -255,5 +338,6 @@ module.exports = {
   normalizeRenderComponent,
   normalizeRenderWork,
   normalizeVisitorPortfolio,
-  normalizeVisitorSchedule
+  normalizeVisitorSchedule,
+  switchDisplayGroup
 }

@@ -279,6 +279,22 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  transform: translateX(100%);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 180ms ease, opacity 160ms ease;
+}
+
+.component-swipe-row.revealed .component-remove-pane {
+  transform: translateX(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.component-swipe-row.dragging .component-remove-pane {
+  transform: translateX(100%);
+  opacity: 0;
+  pointer-events: none;
 }
 
 .component-remove-button {

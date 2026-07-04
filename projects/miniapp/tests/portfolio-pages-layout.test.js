@@ -257,6 +257,14 @@ test('portfolio list delete action stays hidden at rest and centers its label wh
   assert.match(listWxss, /\.portfolio-delete-button\s*\{[\s\S]*display:\s*flex;[\s\S]*align-items:\s*center;[\s\S]*justify-content:\s*center;/)
 })
 
+test('portfolio editor component delete action stays hidden at rest and while dragging', () => {
+  const editWxss = read('pages/portfolio-standard-edit/portfolio-standard-edit.wxss')
+
+  assert.match(editWxss, /\.component-remove-pane\s*\{[\s\S]*transform:\s*translateX\(100%\);[\s\S]*opacity:\s*0;[\s\S]*pointer-events:\s*none;/)
+  assert.match(editWxss, /\.component-swipe-row\.revealed \.component-remove-pane\s*\{[\s\S]*transform:\s*translateX\(0\);[\s\S]*opacity:\s*1;[\s\S]*pointer-events:\s*auto;/)
+  assert.match(editWxss, /\.component-swipe-row\.dragging \.component-remove-pane\s*\{[\s\S]*transform:\s*translateX\(100%\);[\s\S]*opacity:\s*0;[\s\S]*pointer-events:\s*none;/)
+})
+
 test('standard personal portfolio editor follows shared maintainer layout', () => {
   const editWxml = read('pages/portfolio-standard-edit/portfolio-standard-edit.wxml')
   const editWxss = read('pages/portfolio-standard-edit/portfolio-standard-edit.wxss')

@@ -49,8 +49,8 @@
         </block>
 
         <block wx:elif="{{item.componentType === 'WORK_GRID'}}">
-          <view wx:if="{{item.title}}" class="component-title">{{item.title}}</view>
-          <scroll-view wx:if="{{item.displayTags.length > 1}}" scroll-x class="display-tag-scroll">
+          <view class="work-section-title">作品列表</view>
+          <scroll-view wx:if="{{item.displayTags.length}}" scroll-x class="display-tag-scroll">
             <view class="display-tags">
               <view
                 wx:for="{{item.displayTags}}"
@@ -65,15 +65,30 @@
           </scroll-view>
           <view class="work-grid">
             <view wx:for="{{item.activeGroup.works}}" wx:key="workId" wx:for-item="work" class="work-card grid-card">
-              <image class="work-cover" src="{{work.coverUrl || work.mediaUrl}}" mode="aspectFill"></image>
+              <view
+                class="work-cover-wrap"
+                data-work-id="{{work.workId}}"
+                data-media-type="{{work.mediaType}}"
+                data-media-url="{{work.previewUrl}}"
+                data-cover-url="{{work.thumbnailUrl}}"
+                data-title="{{work.title}}"
+                bindtap="handleWorkTap"
+                aria-role="button"
+                aria-label="{{work.isVideo ? '播放视频' : '查看原图'}}{{work.title}}"
+              >
+                <image class="work-cover" src="{{work.thumbnailUrl}}" mode="aspectFill"></image>
+                <view wx:if="{{work.isVideo}}" class="work-play-badge" aria-hidden="true">
+                  <view class="work-play-icon"></view>
+                </view>
+              </view>
               <view class="work-title">{{work.title}}</view>
             </view>
           </view>
         </block>
 
         <block wx:elif="{{item.componentType === 'WORK_LIST'}}">
-          <view wx:if="{{item.title}}" class="component-title">{{item.title}}</view>
-          <scroll-view wx:if="{{item.displayTags.length > 1}}" scroll-x class="display-tag-scroll">
+          <view class="work-section-title">作品列表</view>
+          <scroll-view wx:if="{{item.displayTags.length}}" scroll-x class="display-tag-scroll">
             <view class="display-tags">
               <view
                 wx:for="{{item.displayTags}}"
@@ -88,7 +103,22 @@
           </scroll-view>
           <view class="work-list">
             <view wx:for="{{item.activeGroup.works}}" wx:key="workId" wx:for-item="work" class="work-card list-card">
-              <image class="work-cover" src="{{work.coverUrl || work.mediaUrl}}" mode="aspectFill"></image>
+              <view
+                class="work-cover-wrap"
+                data-work-id="{{work.workId}}"
+                data-media-type="{{work.mediaType}}"
+                data-media-url="{{work.previewUrl}}"
+                data-cover-url="{{work.thumbnailUrl}}"
+                data-title="{{work.title}}"
+                bindtap="handleWorkTap"
+                aria-role="button"
+                aria-label="{{work.isVideo ? '播放视频' : '查看原图'}}{{work.title}}"
+              >
+                <image class="work-cover" src="{{work.thumbnailUrl}}" mode="aspectFill"></image>
+                <view wx:if="{{work.isVideo}}" class="work-play-badge" aria-hidden="true">
+                  <view class="work-play-icon"></view>
+                </view>
+              </view>
               <view class="work-title">{{work.title}}</view>
               <view wx:if="{{work.description}}" class="work-desc">{{work.description}}</view>
             </view>
@@ -137,4 +167,25 @@
       </view>
     </block>
   </scroll-view>
+
+  <view class="work-video-mask {{videoPreviewVisible ? 'visible' : ''}}" catchtap="handleCloseVideoPreview">
+    <view class="work-video-panel" catchtap="handleVideoPreviewPanelTap">
+      <view class="work-video-heading">
+        <view class="work-video-title">{{videoPreview.title}}</view>
+        <view class="work-video-close" catchtap="handleCloseVideoPreview" aria-role="button" aria-label="关闭视频">×</view>
+      </view>
+      <video
+        id="portfolioWorkVideo"
+        class="work-video-player"
+        src="{{videoPreview.src}}"
+        poster="{{videoPreview.poster}}"
+        controls="{{true}}"
+        autoplay="{{true}}"
+        show-fullscreen-btn="{{true}}"
+        show-center-play-btn="{{true}}"
+        enable-progress-gesture="{{true}}"
+        object-fit="contain"
+      ></video>
+    </view>
+  </view>
 </view>

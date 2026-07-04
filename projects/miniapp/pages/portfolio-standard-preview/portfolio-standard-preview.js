@@ -1,9 +1,13 @@
 const { request } = require('../../utils/request')
 const { createContactLeadForm } = require('../../utils/contact-lead')
-const { normalizeVisitorPortfolio } = require('../../utils/visitor-portfolio')
+const { normalizeVisitorPortfolio, switchDisplayGroup } = require('../../utils/visitor-portfolio')
 
 const PORTFOLIO_API_PREFIX = '/api/mine/portfolios'
 const PUBLISHED_PREVIEW_SCOPE = 'published'
+const MEDIA_TYPE_VIDEO = 'VIDEO'
+const IMAGE_MISSING_MESSAGE = '图片地址缺失'
+const VIDEO_MISSING_MESSAGE = '视频地址缺失'
+const DEFAULT_VIDEO_TITLE = '视频作品'
 
 Page({
   data: {
@@ -12,7 +16,9 @@ Page({
     loading: false,
     errorMessage: '',
     portfolio: normalizeVisitorPortfolio({ renderData: { preview: true } }),
-    contactForm: createContactLeadForm({})
+    contactForm: createContactLeadForm({}),
+    videoPreviewVisible: false,
+    videoPreview: null
   },
 
   onLoad(options = {}) {
@@ -74,30 +80,55 @@ Page({
 
   handleSubmitContact() {
     wx.showToast({ title: '预览模式不提交', icon: 'none' })
+  },
+
+  handleWorkTap(event) {
+    const work = normalizeWorkTapDataset(event.currentTarget.dataset)
+    return this.openWorkMedia(work)
+  },
+
+  openWorkMedia(work) {
+    if (work.mediaType === MEDIA_TYPE_VIDEO) {
+      if (!work.previewUrl) {
+        wx.showToast({ title: VIDEO_MISSING_MESSAGE, icon: 'none' })
+        return Promise.resolve(false)
+      }
+      this.setData({
+        videoPreviewVisible: true,
+        videoPreview: {
+          src: work.previewUrl,
+          poster: work.coverUrl,
+          title: work.title || DEFAULT_VIDEO_TITLE
+        }
+      })
+      return Promise.resolve(true)
+    }
+    if (!work.previewUrl) {
+      wx.showToast({ title: IMAGE_MISSING_MESSAGE, icon: 'none' })
+      return Promise.resolve(false)
+    }
+    wx.previewImage({ current: work.previewUrl, urls: [work.previewUrl] })
+    return Promise.resolve(true)
+  },
+
+  handleCloseVideoPreview() {
+    this.setData({
+      videoPreviewVisible: false,
+      videoPreview: null
+    })
+  },
+
+  handleVideoPreviewPanelTap() {
   }
 })
 
-function switchDisplayGroup(portfolio, componentKey, groupKey) {
-  const sourcePortfolio = portfolio || {}
-  const components = (Array.isArray(sourcePortfolio.components) ? sourcePortfolio.components : []).map((component) => {
-    if (!component || component.componentKey !== componentKey) {
-      return component
-    }
-    const groups = Array.isArray(component.groups) ? component.groups : []
-    const activeGroup = groups.find((group) => group.groupKey === groupKey)
-      || component.activeGroup
-      || groups[0]
-      || { groupKey: '', name: '', sortOrder: 0, works: [] }
-    const displayTags = Array.isArray(component.displayTags)
-      ? component.displayTags
-      : groups.map((group) => ({ groupKey: group.groupKey, name: group.name, active: false }))
-    return Object.assign({}, component, {
-      activeGroupKey: activeGroup.groupKey,
-      activeGroup,
-      displayTags: displayTags.map((tag) => Object.assign({}, tag, {
-        active: tag.groupKey === activeGroup.groupKey
-      }))
-    })
-  })
-  return Object.assign({}, sourcePortfolio, { components })
+function normalizeWorkTapDataset(dataset = {}) {
+  const previewUrl = dataset.mediaUrl || dataset.previewUrl || dataset.coverUrl || ''
+  return {
+    workId: Number(dataset.workId),
+    mediaType: dataset.mediaType || '',
+    previewUrl,
+    coverUrl: dataset.coverUrl || '',
+    title: dataset.title || ''
+  }
 }
