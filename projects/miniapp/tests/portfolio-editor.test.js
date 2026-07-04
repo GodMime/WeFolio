@@ -4,8 +4,10 @@ const test = require('node:test')
 
 const {
   COMPONENT_TYPES,
+  SCHEDULE_QUERY_DISPLAY_MODES,
   createComponent,
-  normalizePortfolioConfig
+  normalizePortfolioConfig,
+  updateComponentScheduleQueryConfig
 } = require('../utils/portfolios')
 
 function flushPromises() {
@@ -73,6 +75,50 @@ function buildMockShareCoverCropState(imageInfo = {}) {
     imageStyle: 'width: 384px; height: 256px; transform: translate3d(-32px, 0px, 0);'
   }
 }
+
+test('normalizes schedule query display mode in portfolio config', () => {
+  const config = normalizePortfolioConfig({
+    components: [
+      createComponent(COMPONENT_TYPES.SCHEDULE_QUERY, {
+        componentKey: 'c_default',
+        sortOrder: 1000,
+        config: {}
+      }),
+      createComponent(COMPONENT_TYPES.SCHEDULE_QUERY, {
+        componentKey: 'c_inline',
+        sortOrder: 2000,
+        config: { displayMode: 'INLINE_CALENDAR' }
+      }),
+      createComponent(COMPONENT_TYPES.SCHEDULE_QUERY, {
+        componentKey: 'c_invalid',
+        sortOrder: 3000,
+        config: { displayMode: 'SIDE_PANEL' }
+      })
+    ]
+  })
+
+  assert.equal(config.components[0].config.displayMode, SCHEDULE_QUERY_DISPLAY_MODES.MODAL_CALENDAR)
+  assert.equal(config.components[1].config.displayMode, SCHEDULE_QUERY_DISPLAY_MODES.INLINE_CALENDAR)
+  assert.equal(config.components[2].config.displayMode, SCHEDULE_QUERY_DISPLAY_MODES.MODAL_CALENDAR)
+})
+
+test('updates schedule query component display mode in draft config', () => {
+  const config = normalizePortfolioConfig({
+    components: [
+      createComponent(COMPONENT_TYPES.SCHEDULE_QUERY, {
+        componentKey: 'c_schedule',
+        sortOrder: 1000,
+        config: {}
+      })
+    ]
+  })
+
+  const updated = updateComponentScheduleQueryConfig(config, 'c_schedule', {
+    displayMode: 'INLINE_CALENDAR'
+  })
+
+  assert.equal(updated.components[0].config.displayMode, SCHEDULE_QUERY_DISPLAY_MODES.INLINE_CALENDAR)
+})
 
 function loadPortfolioEditorPage(fakeRequest, wxOverrides = {}, assetOverrides = {}, harnessOptions = {}) {
   const pagePath = path.join(__dirname, '../pages/portfolio-standard-edit/portfolio-standard-edit.js')
@@ -237,6 +283,34 @@ test('standard portfolio component row reveals delete only after left swipe', ()
 
   assert.equal(page.data.revealedComponentKey, '')
   assert.equal(page.data.componentWorkSheetVisible, false)
+})
+
+test('tapping schedule query component edits display mode', () => {
+  const page = loadPortfolioEditorPage(() => Promise.resolve({}))
+  page.data.config = normalizePortfolioConfig({
+    components: [
+      createComponent(COMPONENT_TYPES.SCHEDULE_QUERY, {
+        componentKey: 'c_schedule',
+        sortOrder: 1000,
+        config: { displayMode: 'MODAL_CALENDAR' }
+      })
+    ]
+  })
+
+  page.handleComponentTap({ currentTarget: { dataset: { key: 'c_schedule', type: COMPONENT_TYPES.SCHEDULE_QUERY } } })
+
+  assert.equal(page.data.scheduleQuerySheetVisible, true)
+  assert.equal(page.data.scheduleQueryEditingComponentKey, 'c_schedule')
+  assert.equal(page.data.scheduleQueryForm.displayMode, SCHEDULE_QUERY_DISPLAY_MODES.MODAL_CALENDAR)
+  assert.equal(page.data.scheduleQueryDisplayModeOptions[1].label, '直接显示月历')
+
+  page.handleScheduleQueryDisplayModeTap({
+    currentTarget: { dataset: { value: SCHEDULE_QUERY_DISPLAY_MODES.INLINE_CALENDAR } }
+  })
+  page.handleConfirmScheduleQueryConfig()
+
+  assert.equal(page.data.scheduleQuerySheetVisible, false)
+  assert.equal(page.data.config.components[0].config.displayMode, SCHEDULE_QUERY_DISPLAY_MODES.INLINE_CALENDAR)
 })
 
 test('standard portfolio component drag moves row with animated style before reordering', () => {

@@ -1,3 +1,8 @@
+const {
+  formatLunarDayMeta,
+  toLunarDate
+} = require('./lunar')
+
 const PROFILE_VISIBLE_FIELD_DEFAULTS = {
   avatar: true,
   displayName: true,
@@ -13,6 +18,9 @@ const ALL_DISPLAY_GROUP_NAME = '全部'
 const DEFAULT_ALL_GROUP_KEY = 'g_all'
 const DEFAULT_ALL_GROUP_NAME = '全部作品'
 const MEDIA_TYPE_VIDEO = 'VIDEO'
+const DEFAULT_SCHEDULE_DISPLAY_MODE = 'MODAL_CALENDAR'
+const VALID_SCHEDULE_DISPLAY_MODES = ['MODAL_CALENDAR', 'INLINE_CALENDAR']
+const SCHEDULE_DAY_META_FIELDS = ['holidayText', 'festivalText', 'noteText', 'lunarText', 'metaText']
 
 function trimText(value) {
   return String(value || '').trim()
@@ -146,6 +154,13 @@ function normalizeQrContact(raw = {}) {
   }
 }
 
+function normalizeScheduleQuery(raw = {}) {
+  const displayMode = trimText(raw.displayMode)
+  return Object.assign({}, raw || {}, {
+    displayMode: VALID_SCHEDULE_DISPLAY_MODES.includes(displayMode) ? displayMode : DEFAULT_SCHEDULE_DISPLAY_MODE
+  })
+}
+
 function normalizeCarouselIntervalMs(raw = {}, config = {}) {
   return toPositiveNumber(
     raw.carouselIntervalMs || config.carouselIntervalMs || config.intervalMs,
@@ -181,7 +196,7 @@ function normalizeRenderComponent(raw = {}) {
     activeGroup,
     layout: componentType === 'WORK_LIST' ? 'single' : componentType === 'WORK_GRID' ? 'grid' : '',
     profile: normalizeProfile(profileSource),
-    scheduleQuery: Object.assign({}, raw.scheduleQuery || {}),
+    scheduleQuery: normalizeScheduleQuery(raw.scheduleQuery || config),
     qrContact,
     previewImageUrl: qrContact.qrUrl,
     contactForm: Object.assign({ fields: [] }, raw.contactForm || {}),
@@ -331,6 +346,102 @@ function normalizeVisitorSchedule(raw = {}) {
   }
 }
 
+function buildScheduleTimeRangeText(startTime = '', endTime = '') {
+  const start = trimText(startTime)
+  const end = trimText(endTime)
+  return start && end ? `${start}-${end}` : '未设置时间'
+}
+
+function normalizeScheduleOptionSlot(raw = {}) {
+  const startTime = trimText(raw.startTime)
+  const endTime = trimText(raw.endTime)
+  return {
+    id: toNumber(raw.id),
+    name: trimText(raw.name) || '未命名档位',
+    startTime,
+    endTime,
+    timeRangeText: buildScheduleTimeRangeText(startTime, endTime),
+    color: trimText(raw.color)
+  }
+}
+
+function normalizeScheduleOptionDay(raw = {}) {
+  const count = toNumber(raw.count)
+  const classes = ['schedule-calendar-day']
+  if (!raw.currentMonth) {
+    classes.push('muted')
+  }
+  if (count > 0) {
+    classes.push('filled')
+  }
+  return {
+    date: trimText(raw.date),
+    dayNumber: toNumber(raw.dayNumber),
+    currentMonth: Boolean(raw.currentMonth),
+    metaText: buildScheduleDayMetaText(raw),
+    colors: Array.isArray(raw.colors) ? raw.colors.map(trimText).filter(Boolean) : [],
+    count,
+    dayClass: classes.join(' ')
+  }
+}
+
+function buildScheduleDayMetaText(raw = {}) {
+  const field = SCHEDULE_DAY_META_FIELDS.find((item) => trimText(raw[item]))
+  return field ? trimText(raw[field]) : formatLunarDayMeta(toLunarDate(raw.date))
+}
+
+function normalizeScheduleOptionItem(raw = {}) {
+  const startTime = trimText(raw.startTime)
+  const endTime = trimText(raw.endTime)
+  return {
+    date: trimText(raw.date),
+    slotDefinitionId: toNumber(raw.slotDefinitionId),
+    slotName: trimText(raw.slotName),
+    startTime,
+    endTime,
+    timeRangeText: buildScheduleTimeRangeText(startTime, endTime),
+    color: trimText(raw.color),
+    status: trimText(raw.status),
+    statusText: trimText(raw.statusText),
+    statusTone: trimText(raw.statusTone),
+    contactName: '',
+    contactPhone: '',
+    note: ''
+  }
+}
+
+function normalizeVisitorScheduleOptions(raw = {}) {
+  return {
+    yearMonth: trimText(raw.yearMonth),
+    slotDefinitions: Array.isArray(raw.slotDefinitions)
+      ? raw.slotDefinitions.map(normalizeScheduleOptionSlot)
+      : [],
+    days: Array.isArray(raw.days) ? raw.days.map(normalizeScheduleOptionDay) : [],
+    schedules: Array.isArray(raw.schedules) ? raw.schedules.map(normalizeScheduleOptionItem) : []
+  }
+}
+
+function normalizeVisitorScheduleQueryResult(raw = {}) {
+  const startTime = trimText(raw.startTime)
+  const endTime = trimText(raw.endTime)
+  return {
+    queriedDate: trimText(raw.queriedDate),
+    slotDefinitionId: toNumber(raw.slotDefinitionId),
+    slotName: trimText(raw.slotName),
+    startTime,
+    endTime,
+    timeRangeText: buildScheduleTimeRangeText(startTime, endTime),
+    color: trimText(raw.color),
+    status: trimText(raw.status),
+    statusText: trimText(raw.statusText),
+    available: Boolean(raw.available),
+    message: trimText(raw.message),
+    contactName: '',
+    contactPhone: '',
+    note: ''
+  }
+}
+
 module.exports = {
   buildVisitorEventPayload,
   normalizeDisplayGroups,
@@ -339,5 +450,7 @@ module.exports = {
   normalizeRenderWork,
   normalizeVisitorPortfolio,
   normalizeVisitorSchedule,
+  normalizeVisitorScheduleOptions,
+  normalizeVisitorScheduleQueryResult,
   switchDisplayGroup
 }

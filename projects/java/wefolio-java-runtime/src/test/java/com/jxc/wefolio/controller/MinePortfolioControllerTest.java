@@ -11,6 +11,9 @@ import com.jxc.wefolio.dto.MinePortfolioListResponse;
 import com.jxc.wefolio.dto.MinePortfolioPublishRequest;
 import com.jxc.wefolio.dto.MinePortfolioShareRecordRequest;
 import com.jxc.wefolio.dto.PortfolioComponentLibraryResponse;
+import com.jxc.wefolio.dto.PortfolioScheduleOptionsResponse;
+import com.jxc.wefolio.dto.PortfolioScheduleQueryRequest;
+import com.jxc.wefolio.dto.PortfolioScheduleQueryResponse;
 import com.jxc.wefolio.service.MinePortfolioService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -50,6 +53,9 @@ class MinePortfolioControllerTest {
         MinePortfolioPublishRequest publishRequest = new MinePortfolioPublishRequest();
         MinePortfolioShareRecordRequest shareRequest = new MinePortfolioShareRecordRequest();
         MinePortfolioDetailResponse detailResponse = new MinePortfolioDetailResponse();
+        PortfolioScheduleOptionsResponse scheduleOptionsResponse = new PortfolioScheduleOptionsResponse();
+        PortfolioScheduleQueryRequest scheduleQueryRequest = new PortfolioScheduleQueryRequest();
+        PortfolioScheduleQueryResponse scheduleQueryResponse = new PortfolioScheduleQueryResponse();
         when(minePortfolioService.listPortfolios("USER")).thenReturn(listResponse);
         when(minePortfolioService.getComponentLibrary()).thenReturn(libraryResponse);
         when(minePortfolioService.createStandardPersonal(createRequest)).thenReturn(detailResponse);
@@ -59,6 +65,10 @@ class MinePortfolioControllerTest {
         when(minePortfolioService.preview(88L)).thenReturn(detailResponse);
         when(minePortfolioService.previewPublished(88L)).thenReturn(detailResponse);
         when(minePortfolioService.publish(88L, publishRequest)).thenReturn(detailResponse);
+        when(minePortfolioService.queryPreviewScheduleOptions(88L, "2026-07", "c_schedule", "published"))
+                .thenReturn(scheduleOptionsResponse);
+        when(minePortfolioService.submitPreviewScheduleQuery(88L, scheduleQueryRequest, "published"))
+                .thenReturn(scheduleQueryResponse);
 
         Response<MinePortfolioListResponse> listed = controller.list("USER");
         Response<PortfolioComponentLibraryResponse> library = controller.componentLibrary();
@@ -68,6 +78,10 @@ class MinePortfolioControllerTest {
         Response<MinePortfolioDetailResponse> saved = controller.saveDraft(88L, draftRequest);
         Response<MinePortfolioDetailResponse> preview = controller.preview(88L);
         Response<MinePortfolioDetailResponse> publishedPreview = controller.previewPublished(88L);
+        Response<PortfolioScheduleOptionsResponse> scheduleOptions = controller.scheduleOptions(
+                88L, "2026-07", "c_schedule", "published");
+        Response<PortfolioScheduleQueryResponse> scheduleQuery = controller.scheduleQueryPreview(
+                88L, scheduleQueryRequest, "published");
         Response<MinePortfolioDetailResponse> published = controller.publish(88L, publishRequest);
         Response<Void> shared = controller.createShareRecord(88L, shareRequest);
         Response<Void> deleted = controller.deletePortfolio(88L);
@@ -89,6 +103,12 @@ class MinePortfolioControllerTest {
         assertGetMapping("previewPublished",
                 new Class<?>[] {Long.class},
                 "/api/mine/portfolios/{portfolioId}/published-preview");
+        assertGetMapping("scheduleOptions",
+                new Class<?>[] {Long.class, String.class, String.class, String.class},
+                "/api/mine/portfolios/{portfolioId}/schedule-options");
+        assertPostMapping("scheduleQueryPreview",
+                new Class<?>[] {Long.class, PortfolioScheduleQueryRequest.class, String.class},
+                "/api/mine/portfolios/{portfolioId}/schedule-query-preview");
         assertPostMapping("publish",
                 new Class<?>[] {Long.class, MinePortfolioPublishRequest.class},
                 "/api/mine/portfolios/{portfolioId}/publish");
@@ -112,6 +132,8 @@ class MinePortfolioControllerTest {
         assertThat(saved.getData()).isSameAs(detailResponse);
         assertThat(preview.getData()).isSameAs(detailResponse);
         assertThat(publishedPreview.getData()).isSameAs(detailResponse);
+        assertThat(scheduleOptions.getData()).isSameAs(scheduleOptionsResponse);
+        assertThat(scheduleQuery.getData()).isSameAs(scheduleQueryResponse);
         assertThat(published.getData()).isSameAs(detailResponse);
         assertThat(shared.isSuccess()).isTrue();
         assertThat(deleted.isSuccess()).isTrue();

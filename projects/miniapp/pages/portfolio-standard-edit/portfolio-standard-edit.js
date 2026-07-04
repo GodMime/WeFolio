@@ -22,14 +22,18 @@ const {
 const {
   COMPONENT_NAMES,
   COMPONENT_TYPES,
+  SCHEDULE_QUERY_DISPLAY_MODE_OPTIONS,
+  SCHEDULE_QUERY_DISPLAY_MODES,
   addComponent,
   buildDraftPayload,
   createComponent,
+  normalizeScheduleQueryConfig,
   normalizeProfileComponentConfig,
   normalizePortfolioConfig,
   normalizeWorkIds,
   reorderComponent,
   removeComponent,
+  updateComponentScheduleQueryConfig,
   updateComponentProfileConfig,
   updateComponentWorkIds
 } = require('../../utils/portfolios')
@@ -131,6 +135,7 @@ function isEditableComponentType(componentType) {
   return componentType === COMPONENT_TYPES.CAROUSEL ||
     componentType === COMPONENT_TYPES.PROFILE ||
     componentType === COMPONENT_TYPES.QR_CONTACT ||
+    componentType === COMPONENT_TYPES.SCHEDULE_QUERY ||
     isDisplayGroupComponent(componentType)
 }
 
@@ -354,6 +359,13 @@ function buildQrContactForm(config = {}) {
     description: config.description || '',
     qrUrlSource: config.qrUrlSource === QR_CONTACT_SOURCE_CUSTOM ? QR_CONTACT_SOURCE_CUSTOM : QR_CONTACT_SOURCE_PROFILE,
     qrUrl: config.qrUrl || ''
+  }
+}
+
+function buildScheduleQueryForm(config = {}) {
+  const normalized = normalizeScheduleQueryConfig(config)
+  return {
+    displayMode: normalized.displayMode || SCHEDULE_QUERY_DISPLAY_MODES.MODAL_CALENDAR
   }
 }
 
@@ -644,6 +656,10 @@ Page({
     qrContactSheetVisible: false,
     editingQrContactComponentKey: '',
     qrContactForm: buildQrContactForm(),
+    scheduleQuerySheetVisible: false,
+    scheduleQueryEditingComponentKey: '',
+    scheduleQueryDisplayModeOptions: SCHEDULE_QUERY_DISPLAY_MODE_OPTIONS,
+    scheduleQueryForm: buildScheduleQueryForm(),
     shareFieldCounters: buildShareFieldCounters(),
     shareCoverCropVisible: false,
     shareCoverCropSaving: false,
@@ -1025,10 +1041,55 @@ Page({
     if (componentType === COMPONENT_TYPES.QR_CONTACT) {
       return this.openQrContactSheet(componentKey)
     }
+    if (componentType === COMPONENT_TYPES.SCHEDULE_QUERY) {
+      return this.openScheduleQuerySheet(componentKey)
+    }
     if (isDisplayGroupComponent(componentType)) {
       return this.openDisplayGroupSheet(componentKey, componentType)
     }
     return undefined
+  },
+
+  openScheduleQuerySheet(componentKey) {
+    const component = findComponentByKey(this.data.config, componentKey)
+    if (!component || component.componentType !== COMPONENT_TYPES.SCHEDULE_QUERY) {
+      return undefined
+    }
+    this.setData({
+      scheduleQuerySheetVisible: true,
+      scheduleQueryEditingComponentKey: componentKey,
+      scheduleQueryForm: buildScheduleQueryForm(component.config || {})
+    })
+    return undefined
+  },
+
+  handleCloseScheduleQuerySheet() {
+    this.setData({
+      scheduleQuerySheetVisible: false,
+      scheduleQueryEditingComponentKey: '',
+      scheduleQueryForm: buildScheduleQueryForm()
+    })
+  },
+
+  handleScheduleQueryDisplayModeTap(event) {
+    const value = event.currentTarget.dataset.value
+    this.setData({
+      'scheduleQueryForm.displayMode': value
+    })
+  },
+
+  handleConfirmScheduleQueryConfig() {
+    const config = updateComponentScheduleQueryConfig(
+      this.data.config,
+      this.data.scheduleQueryEditingComponentKey,
+      this.data.scheduleQueryForm
+    )
+    this.setData({
+      config,
+      scheduleQuerySheetVisible: false,
+      scheduleQueryEditingComponentKey: '',
+      scheduleQueryForm: buildScheduleQueryForm()
+    })
   },
 
   openDisplayGroupSheet(componentKey, componentType) {

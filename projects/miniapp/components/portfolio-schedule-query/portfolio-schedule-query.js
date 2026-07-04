@@ -1,0 +1,328 @@
+const { request } = require('../../utils/request')
+const {
+  normalizeVisitorScheduleOptions,
+  normalizeVisitorScheduleQueryResult
+} = require('../../utils/visitor-portfolio')
+
+const VISITOR_PORTFOLIO_API_PREFIX = '/api/visitor/portfolios'
+const MINE_PORTFOLIO_API_PREFIX = '/api/mine/portfolios'
+const DISPLAY_MODE_INLINE_CALENDAR = 'INLINE_CALENDAR'
+const PUBLISHED_PREVIEW_SCOPE = 'published'
+const DATE_REQUIRED_MESSAGE = '请选择日期'
+const SLOT_REQUIRED_MESSAGE = '请选择档位'
+const LOAD_FAILED_MESSAGE = '月历加载失败'
+const QUERY_FAILED_MESSAGE = '档期查询失败'
+const IDEMPOTENCY_KEY_PREFIX = 'schedule-query'
+const MONTH_PATTERN = /^(\d{4})-(\d{2})$/
+
+function pad2(value) {
+  return String(value).padStart(2, '0')
+}
+
+function formatYearMonth(date) {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}`
+}
+
+function formatYearMonthTitle(yearMonth) {
+  const match = String(yearMonth || '').match(MONTH_PATTERN)
+  return match ? `${match[1]} 年 ${Number(match[2])} 月` : yearMonth || ''
+}
+
+function getCurrentYearMonth() {
+  return formatYearMonth(new Date())
+}
+
+function shiftMonth(yearMonth, offset) {
+  const parts = String(yearMonth || '').split('-')
+  const year = Number(parts[0])
+  const month = Number(parts[1])
+  const base = Number.isFinite(year) && Number.isFinite(month)
+    ? new Date(year, month - 1 + offset, 1)
+    : new Date()
+  return formatYearMonth(base)
+}
+
+function isValidMonth(value) {
+  return MONTH_PATTERN.test(String(value || ''))
+}
+
+function normalizeIdempotencySegment(value) {
+  const text = String(value === undefined || value === null ? '' : value).trim()
+  return encodeURIComponent(text || 'none')
+}
+
+function createIdempotencyKey(data = {}) {
+  return [
+    IDEMPOTENCY_KEY_PREFIX,
+    normalizeIdempotencySegment(data.componentKey),
+    normalizeIdempotencySegment(data.selectedDate),
+    normalizeIdempotencySegment(data.selectedSlotDefinitionId)
+  ].join('-')
+}
+
+function getRuntimeWx() {
+  return typeof wx !== 'undefined' ? wx : { showToast() {} }
+}
+
+function isPublishedScope(scope) {
+  return String(scope || '') === PUBLISHED_PREVIEW_SCOPE
+}
+
+function canLoadOptions(data = {}) {
+  return data.preview ? Boolean(data.portfolioId) : Boolean(data.shareCode)
+}
+
+function buildOptionsRequest(data = {}, month) {
+  if (data.preview) {
+    const requestData = {
+      month,
+      componentKey: data.componentKey || ''
+    }
+    if (isPublishedScope(data.previewScope)) {
+      requestData.scope = PUBLISHED_PREVIEW_SCOPE
+    }
+    return {
+      url: `${MINE_PORTFOLIO_API_PREFIX}/${data.portfolioId}/schedule-options`,
+      data: requestData
+    }
+  }
+  return {
+    url: `${VISITOR_PORTFOLIO_API_PREFIX}/${data.shareCode}/schedule-options`,
+    data: {
+      month,
+      componentKey: data.componentKey || ''
+    }
+  }
+}
+
+function buildQueryRequest(data = {}) {
+  const payload = {
+    componentKey: data.componentKey || '',
+    queriedDate: data.selectedDate || '',
+    slotDefinitionId: data.selectedSlotDefinitionId,
+    idempotencyKey: createIdempotencyKey(data)
+  }
+  if (data.preview) {
+    const scopeQuery = isPublishedScope(data.previewScope) ? '?scope=published' : ''
+    return {
+      url: `${MINE_PORTFOLIO_API_PREFIX}/${data.portfolioId}/schedule-query-preview${scopeQuery}`,
+      method: 'POST',
+      data: payload
+    }
+  }
+  return {
+    url: `${VISITOR_PORTFOLIO_API_PREFIX}/${data.shareCode}/schedule-query`,
+    method: 'POST',
+    data: Object.assign({
+      visitorKey: data.visitorKey || ''
+    }, payload)
+  }
+}
+
+function findSchedulesByDate(options = {}, date = '') {
+  const schedules = Array.isArray(options.schedules) ? options.schedules : []
+  return schedules.filter((item) => item.date === date)
+}
+
+Component({
+  properties: {
+    shareCode: {
+      type: String,
+      value: ''
+    },
+    portfolioId: {
+      type: Number,
+      value: 0
+    },
+    visitorKey: {
+      type: String,
+      value: ''
+    },
+    preview: {
+      type: Boolean,
+      value: false
+    },
+    previewScope: {
+      type: String,
+      value: ''
+    },
+    componentKey: {
+      type: String,
+      value: ''
+    },
+    scheduleQuery: {
+      type: Object,
+      value: {}
+    }
+  },
+
+  data: {
+    visible: false,
+    selectedMonth: getCurrentYearMonth(),
+    selectedMonthText: formatYearMonthTitle(getCurrentYearMonth()),
+    options: normalizeVisitorScheduleOptions({}),
+    selectedDate: '',
+    selectedDaySchedules: [],
+    selectedSlotDefinitionId: null,
+    loading: false,
+    submitting: false,
+    errorMessage: '',
+    result: null
+  },
+
+  observers: {
+    'scheduleQuery.displayMode, shareCode, portfolioId, preview': function() {
+      this.ensureInlineOptionsLoaded()
+    }
+  },
+
+  lifetimes: {
+    ready() {
+      this.ensureInlineOptionsLoaded()
+    }
+  },
+
+  methods: {
+    noop() {},
+
+    ensureInlineOptionsLoaded() {
+      if (this.data.scheduleQuery
+          && this.data.scheduleQuery.displayMode === DISPLAY_MODE_INLINE_CALENDAR
+          && !this.data.options.yearMonth
+          && !this.data.loading
+          && canLoadOptions(this.data)) {
+        this.loadScheduleOptions(this.data.selectedMonth)
+      }
+    },
+
+    handleOpenCalendar() {
+      this.setData({ visible: true })
+      if (!this.data.options.yearMonth && !this.data.loading) {
+        return this.loadScheduleOptions(this.data.selectedMonth)
+      }
+      return Promise.resolve()
+    },
+
+    handleCloseCalendar() {
+      this.setData({ visible: false })
+    },
+
+    handlePrevMonth() {
+      return this.loadScheduleOptions(shiftMonth(this.data.selectedMonth, -1))
+    },
+
+    handleNextMonth() {
+      return this.loadScheduleOptions(shiftMonth(this.data.selectedMonth, 1))
+    },
+
+    handleMonthPickerChange(event) {
+      const selectedMonth = event.detail && event.detail.value
+      if (!isValidMonth(selectedMonth)) {
+        return Promise.resolve(null)
+      }
+      return this.loadScheduleOptions(selectedMonth)
+    },
+
+    handleRetryLoad() {
+      return this.loadScheduleOptions(this.data.selectedMonth)
+    },
+
+    async loadScheduleOptions(month) {
+      if (this.data.loading) {
+        return null
+      }
+      const targetMonth = month || this.data.selectedMonth || getCurrentYearMonth()
+      this.setData({
+        selectedMonth: targetMonth,
+        selectedMonthText: formatYearMonthTitle(targetMonth),
+        loading: true,
+        errorMessage: '',
+        result: null
+      })
+      try {
+        const requestOptions = buildOptionsRequest(this.data, targetMonth)
+        const response = await request(requestOptions)
+        const options = normalizeVisitorScheduleOptions(response)
+        const selectedDate = this.data.selectedDate && String(this.data.selectedDate).startsWith(options.yearMonth || targetMonth)
+          ? this.data.selectedDate
+          : ''
+        this.setData({
+          selectedMonth: options.yearMonth || targetMonth,
+          selectedMonthText: formatYearMonthTitle(options.yearMonth || targetMonth),
+          options,
+          selectedDate,
+          selectedDaySchedules: selectedDate ? findSchedulesByDate(options, selectedDate) : [],
+          selectedSlotDefinitionId: null,
+          loading: false,
+          errorMessage: ''
+        })
+        return options
+      } catch (error) {
+        const message = error && error.message ? error.message : LOAD_FAILED_MESSAGE
+        this.setData({
+          loading: false,
+          errorMessage: message
+        })
+        getRuntimeWx().showToast({ title: message, icon: 'none' })
+        return null
+      }
+    },
+
+    handleDayTap(event) {
+      const date = event.currentTarget.dataset.date || ''
+      if (!date) {
+        return
+      }
+      this.setData({
+        selectedDate: date,
+        selectedDaySchedules: findSchedulesByDate(this.data.options, date),
+        selectedSlotDefinitionId: null,
+        result: null
+      })
+    },
+
+    handleSlotTap(event) {
+      const slotDefinitionId = Number(event.currentTarget.dataset.id)
+      if (!slotDefinitionId) {
+        return
+      }
+      this.setData({
+        selectedSlotDefinitionId: slotDefinitionId,
+        result: null
+      })
+    },
+
+    async handleSubmitQuery() {
+      if (!this.data.selectedDate) {
+        getRuntimeWx().showToast({ title: DATE_REQUIRED_MESSAGE, icon: 'none' })
+        return false
+      }
+      if (!this.data.selectedSlotDefinitionId) {
+        getRuntimeWx().showToast({ title: SLOT_REQUIRED_MESSAGE, icon: 'none' })
+        return false
+      }
+      this.setData({
+        submitting: true,
+        errorMessage: ''
+      })
+      try {
+        const response = await request(buildQueryRequest(this.data))
+        const result = normalizeVisitorScheduleQueryResult(response)
+        this.setData({
+          submitting: false,
+          result
+        })
+        getRuntimeWx().showToast({ title: result.message || '查询完成', icon: 'none' })
+        return result
+      } catch (error) {
+        const message = error && error.message ? error.message : QUERY_FAILED_MESSAGE
+        this.setData({
+          submitting: false,
+          errorMessage: message
+        })
+        getRuntimeWx().showToast({ title: message, icon: 'none' })
+        return false
+      }
+    }
+  }
+})

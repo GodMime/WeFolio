@@ -6,6 +6,8 @@ const {
   buildVisitorEventPayload,
   normalizeVisitorPortfolio,
   normalizeVisitorSchedule,
+  normalizeVisitorScheduleOptions,
+  normalizeVisitorScheduleQueryResult,
   switchDisplayGroup
 } = require('../utils/visitor-portfolio')
 
@@ -23,6 +25,16 @@ function flushPromises() {
   return new Promise((resolve) => {
     setImmediate(resolve)
   })
+}
+
+function createDeferred() {
+  let resolve
+  let reject
+  const promise = new Promise((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+  return { promise, resolve, reject }
 }
 
 function loadVisitorPage(fakeRequest, wxOverrides = {}) {
@@ -70,6 +82,101 @@ function loadVisitorPage(fakeRequest, wxOverrides = {}) {
     }
   })
 }
+
+function loadScheduleQueryComponent(fakeRequest, wxOverrides = {}) {
+  const componentPath = path.join(__dirname, '../components/portfolio-schedule-query/portfolio-schedule-query.js')
+  const requestPath = path.join(__dirname, '../utils/request.js')
+  const requestCacheKey = require.resolve(requestPath)
+  const originalRequestCache = require.cache[requestCacheKey]
+  const previousComponent = global.Component
+  const previousWx = global.wx
+  delete require.cache[require.resolve(componentPath)]
+  require.cache[requestCacheKey] = {
+    id: requestPath,
+    filename: requestPath,
+    loaded: true,
+    exports: {
+      request: fakeRequest
+    }
+  }
+
+  let componentDefinition
+  try {
+    global.Component = (definition) => {
+      componentDefinition = definition
+    }
+    global.wx = Object.assign({
+      showToast() {}
+    }, wxOverrides)
+    require(componentPath)
+  } finally {
+    if (previousComponent === undefined) {
+      delete global.Component
+    } else {
+      global.Component = previousComponent
+    }
+    if (previousWx === undefined) {
+      delete global.wx
+    } else {
+      global.wx = previousWx
+    }
+    if (originalRequestCache) {
+      require.cache[requestCacheKey] = originalRequestCache
+    } else {
+      delete require.cache[requestCacheKey]
+    }
+  }
+
+  const component = {
+    data: clone(componentDefinition.data || {}),
+    setData(patch, callback) {
+      applyData(this.data, patch)
+      if (callback) {
+        callback()
+      }
+    }
+  }
+  Object.keys(componentDefinition.methods || {}).forEach((methodName) => {
+    component[methodName] = componentDefinition.methods[methodName].bind(component)
+  })
+  return component
+}
+
+test('loadScheduleQueryComponent restores globals when component module fails to load', () => {
+  const visitorUtilsPath = path.join(__dirname, '../utils/visitor-portfolio.js')
+  const visitorUtilsCacheKey = require.resolve(visitorUtilsPath)
+  const originalVisitorUtilsCache = require.cache[visitorUtilsCacheKey]
+  const previousComponent = global.Component
+  const previousWx = global.wx
+  require.cache[visitorUtilsCacheKey] = {
+    id: visitorUtilsPath,
+    filename: visitorUtilsPath,
+    loaded: true,
+    exports: null
+  }
+
+  try {
+    assert.throws(() => loadScheduleQueryComponent(() => Promise.resolve({})))
+    assert.equal(global.Component, previousComponent)
+    assert.equal(global.wx, previousWx)
+  } finally {
+    if (originalVisitorUtilsCache) {
+      require.cache[visitorUtilsCacheKey] = originalVisitorUtilsCache
+    } else {
+      delete require.cache[visitorUtilsCacheKey]
+    }
+    if (previousComponent === undefined) {
+      delete global.Component
+    } else {
+      global.Component = previousComponent
+    }
+    if (previousWx === undefined) {
+      delete global.wx
+    } else {
+      global.wx = previousWx
+    }
+  }
+})
 
 test('normalizes visitor portfolio under maintenance state', () => {
   const result = normalizeVisitorPortfolio({
@@ -480,4 +587,247 @@ test('normalizes visitor schedule without internal fields', () => {
   assert.equal(result.schedules[0].slotName, '午宴')
   assert.equal(result.schedules[0].contactName, '')
   assert.equal(result.schedules[0].note, '')
+})
+
+test('normalizes visitor schedule options without internal fields', () => {
+  const result = normalizeVisitorScheduleOptions({
+    yearMonth: '2026-07',
+    slotDefinitions: [
+      { id: 12, name: '午宴', startTime: '10:00', endTime: '14:00', color: '#2d5f9a' }
+    ],
+    days: [
+      { date: '2026-06-19', dayNumber: 19, currentMonth: false, colors: [], count: 0 },
+      { date: '2026-07-18', dayNumber: 18, currentMonth: true, colors: ['#2d5f9a'], count: 1, holidayText: '宜嫁娶' }
+    ],
+    schedules: [
+      {
+        date: '2026-07-18',
+        slotDefinitionId: 12,
+        slotName: '午宴',
+        startTime: '10:00',
+        endTime: '14:00',
+        color: '#2d5f9a',
+        status: 'TENTATIVE',
+        statusText: '待定',
+        contactName: '内部客户',
+        note: '内部备注'
+      }
+    ]
+  })
+
+  assert.equal(result.yearMonth, '2026-07')
+  assert.equal(result.slotDefinitions[0].timeRangeText, '10:00-14:00')
+  assert.equal(result.days[0].metaText, '端午节')
+  assert.equal(result.days[1].metaText, '宜嫁娶')
+  assert.equal(result.days[1].dayClass, 'schedule-calendar-day filled')
+  assert.equal(result.schedules[0].slotDefinitionId, 12)
+  assert.equal(result.schedules[0].contactName, '')
+  assert.equal(result.schedules[0].note, '')
+})
+
+test('normalizes visitor schedule query result', () => {
+  const result = normalizeVisitorScheduleQueryResult({
+    queriedDate: '2026-07-18',
+    slotDefinitionId: 12,
+    slotName: '午宴',
+    startTime: '10:00',
+    endTime: '14:00',
+    status: 'BOOKED',
+    statusText: '已约',
+    available: false,
+    message: '该档期已约',
+    contactPhone: '13800138000'
+  })
+
+  assert.equal(result.slotDefinitionId, 12)
+  assert.equal(result.timeRangeText, '10:00-14:00')
+  assert.equal(result.available, false)
+  assert.equal(result.message, '该档期已约')
+  assert.equal(result.contactPhone, '')
+})
+
+test('portfolio schedule query component uses visitor endpoints and payload', async () => {
+  const requests = []
+  const component = loadScheduleQueryComponent((options) => {
+    requests.push(options)
+    if (options.method === 'POST') {
+      return Promise.resolve({
+        queriedDate: '2026-07-18',
+        slotDefinitionId: 12,
+        slotName: '午宴',
+        startTime: '10:00',
+        endTime: '14:00',
+        available: true,
+        message: '档期空闲'
+      })
+    }
+    return Promise.resolve({
+      yearMonth: '2026-07',
+      slotDefinitions: [
+        { id: 12, name: '午宴', startTime: '10:00', endTime: '14:00', color: '#2d5f9a' }
+      ],
+      days: [],
+      schedules: []
+    })
+  })
+  component.setData({
+    shareCode: 'PF001',
+    visitorKey: 'visitor-a',
+    componentKey: 'c_schedule',
+    scheduleQuery: { displayMode: 'MODAL_CALENDAR' }
+  })
+
+  await component.loadScheduleOptions('2026-07')
+  component.setData({
+    selectedDate: '2026-07-18',
+    selectedSlotDefinitionId: 12
+  })
+  await component.handleSubmitQuery()
+
+  assert.equal(requests[0].url, '/api/visitor/portfolios/PF001/schedule-options')
+  assert.deepEqual(requests[0].data, { month: '2026-07', componentKey: 'c_schedule' })
+  assert.equal(requests[1].url, '/api/visitor/portfolios/PF001/schedule-query')
+  assert.equal(requests[1].method, 'POST')
+  assert.equal(requests[1].data.visitorKey, 'visitor-a')
+  assert.equal(requests[1].data.componentKey, 'c_schedule')
+  assert.equal(requests[1].data.queriedDate, '2026-07-18')
+  assert.equal(requests[1].data.slotDefinitionId, 12)
+  assert.equal(requests[1].data.idempotencyKey, 'schedule-query-c_schedule-2026-07-18-12')
+  assert.equal(component.data.result.message, '档期空闲')
+})
+
+test('portfolio schedule query component ignores month switching while loading', async () => {
+  const requests = []
+  const pendingOptions = createDeferred()
+  const component = loadScheduleQueryComponent((options) => {
+    requests.push(options)
+    return pendingOptions.promise
+  })
+  component.setData({
+    shareCode: 'PF001',
+    componentKey: 'c_schedule',
+    scheduleQuery: { displayMode: 'MODAL_CALENDAR' }
+  })
+
+  const firstLoad = component.loadScheduleOptions('2026-07')
+  const secondLoad = component.handleNextMonth()
+
+  assert.equal(requests.length, 1)
+  assert.equal(requests[0].data.month, '2026-07')
+  pendingOptions.resolve({
+    yearMonth: '2026-07',
+    slotDefinitions: [],
+    days: [],
+    schedules: []
+  })
+  await firstLoad
+  await Promise.resolve(secondLoad)
+  assert.equal(component.data.selectedMonth, '2026-07')
+})
+
+test('portfolio schedule query component loads picker selected month', async () => {
+  const requests = []
+  const component = loadScheduleQueryComponent((options) => {
+    requests.push(options)
+    return Promise.resolve({
+      yearMonth: options.data.month,
+      slotDefinitions: [],
+      days: [],
+      schedules: []
+    })
+  })
+  component.setData({
+    shareCode: 'PF001',
+    componentKey: 'c_schedule',
+    scheduleQuery: { displayMode: 'MODAL_CALENDAR' }
+  })
+
+  await component.handleMonthPickerChange({
+    detail: { value: '2026-09' }
+  })
+
+  assert.equal(requests.length, 1)
+  assert.equal(requests[0].data.month, '2026-09')
+  assert.equal(component.data.selectedMonth, '2026-09')
+})
+
+test('portfolio schedule query component reuses idempotency key for the same selection', async () => {
+  const requests = []
+  const component = loadScheduleQueryComponent((options) => {
+    requests.push(options)
+    return Promise.resolve({
+      queriedDate: '2026-07-18',
+      slotDefinitionId: 12,
+      slotName: '午宴',
+      startTime: '10:00',
+      endTime: '14:00',
+      available: true,
+      message: '档期空闲'
+    })
+  })
+  component.setData({
+    shareCode: 'PF001',
+    visitorKey: 'visitor-a',
+    componentKey: 'c_schedule',
+    selectedDate: '2026-07-18',
+    selectedSlotDefinitionId: 12,
+    scheduleQuery: { displayMode: 'MODAL_CALENDAR' }
+  })
+
+  await component.handleSubmitQuery()
+  await component.handleSubmitQuery()
+
+  assert.equal(requests.length, 2)
+  assert.equal(requests[0].data.idempotencyKey, 'schedule-query-c_schedule-2026-07-18-12')
+  assert.equal(requests[1].data.idempotencyKey, requests[0].data.idempotencyKey)
+})
+
+test('portfolio schedule query component uses preview endpoints and scope', async () => {
+  const requests = []
+  const component = loadScheduleQueryComponent((options) => {
+    requests.push(options)
+    if (options.method === 'POST') {
+      return Promise.resolve({
+        queriedDate: '2026-07-18',
+        slotDefinitionId: 12,
+        slotName: '午宴',
+        startTime: '10:00',
+        endTime: '14:00',
+        available: false,
+        message: '该档期已约'
+      })
+    }
+    return Promise.resolve({
+      yearMonth: '2026-07',
+      slotDefinitions: [
+        { id: 12, name: '午宴', startTime: '10:00', endTime: '14:00', color: '#2d5f9a' }
+      ],
+      days: [],
+      schedules: []
+    })
+  })
+  component.setData({
+    preview: true,
+    portfolioId: 88,
+    previewScope: 'published',
+    componentKey: 'c_schedule',
+    scheduleQuery: { displayMode: 'INLINE_CALENDAR' }
+  })
+
+  await component.loadScheduleOptions('2026-07')
+  component.setData({
+    selectedDate: '2026-07-18',
+    selectedSlotDefinitionId: 12
+  })
+  await component.handleSubmitQuery()
+
+  assert.equal(requests[0].url, '/api/mine/portfolios/88/schedule-options')
+  assert.deepEqual(requests[0].data, { month: '2026-07', componentKey: 'c_schedule', scope: 'published' })
+  assert.equal(requests[1].url, '/api/mine/portfolios/88/schedule-query-preview?scope=published')
+  assert.equal(requests[1].method, 'POST')
+  assert.equal(requests[1].data.componentKey, 'c_schedule')
+  assert.equal(requests[1].data.queriedDate, '2026-07-18')
+  assert.equal(requests[1].data.slotDefinitionId, 12)
+  assert.equal(Object.hasOwn(requests[1].data, 'visitorKey'), false)
+  assert.equal(component.data.result.available, false)
 })

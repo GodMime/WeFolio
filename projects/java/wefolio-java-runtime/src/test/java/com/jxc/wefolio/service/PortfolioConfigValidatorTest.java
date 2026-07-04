@@ -237,6 +237,42 @@ class PortfolioConfigValidatorTest {
     }
 
     @Test
+    void scheduleQueryShouldNormalizeDisplayMode() {
+        PortfolioConfigDto defaultConfig = config(component(
+                "c_schedule",
+                PortfolioComponentTypeDict.SCHEDULE_QUERY.getCode(),
+                1000,
+                true,
+                Map.of()
+        ));
+        PortfolioConfigDto inlineConfig = config(component(
+                "c_schedule",
+                PortfolioComponentTypeDict.SCHEDULE_QUERY.getCode(),
+                1000,
+                true,
+                Map.of("displayMode", "INLINE_CALENDAR")
+        ));
+        PortfolioConfigDto invalidConfig = config(component(
+                "c_schedule",
+                PortfolioComponentTypeDict.SCHEDULE_QUERY.getCode(),
+                1000,
+                true,
+                Map.of("displayMode", "SIDE_PANEL")
+        ));
+
+        PortfolioConfigDto defaultNormalized = validator().normalize(7L, defaultConfig);
+        PortfolioConfigDto inlineNormalized = validator().normalize(7L, inlineConfig);
+
+        assertThat(defaultNormalized.getComponents().get(0).getConfig().get("displayMode"))
+                .isEqualTo("MODAL_CALENDAR");
+        assertThat(inlineNormalized.getComponents().get(0).getConfig().get("displayMode"))
+                .isEqualTo("INLINE_CALENDAR");
+        assertThatThrownBy(() -> validator().normalize(7L, invalidConfig))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("档期查询展示方式不支持");
+    }
+
+    @Test
     void unknownComponentTypeShouldBeRejected() {
         PortfolioConfigDto config = config(component("c_unknown", "PRICE_TABLE", 1000, true, Map.of()));
 

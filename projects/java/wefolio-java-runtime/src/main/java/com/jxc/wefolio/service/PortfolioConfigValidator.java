@@ -90,6 +90,9 @@ public class PortfolioConfigValidator {
     /** 档期查询范围配置键 */
     private static final String CONFIG_KEY_QUERY_RANGE = "queryRange";
 
+    /** 档期查询展示方式配置键 */
+    private static final String CONFIG_KEY_DISPLAY_MODE = "displayMode";
+
     /** 档期查询范围类型配置键 */
     private static final String CONFIG_KEY_RANGE_TYPE = "type";
 
@@ -116,6 +119,12 @@ public class PortfolioConfigValidator {
 
     /** 限制固定日期范围档期查询 */
     private static final String QUERY_RANGE_DATE_RANGE = "DATE_RANGE";
+
+    /** 弹层月历展示方式 */
+    private static final String SCHEDULE_DISPLAY_MODE_MODAL_CALENDAR = "MODAL_CALENDAR";
+
+    /** 内联月历展示方式 */
+    private static final String SCHEDULE_DISPLAY_MODE_INLINE_CALENDAR = "INLINE_CALENDAR";
 
     /** 默认作品集展示标签标识前缀 */
     private static final String DEFAULT_GROUP_KEY_PREFIX = "g_";
@@ -376,6 +385,14 @@ public class PortfolioConfigValidator {
      */
     private void validateScheduleQuery(PortfolioConfigDto.Component component) {
         Map<String, Object> source = asObjectMap(component.getConfig().get(CONFIG_KEY_QUERY_RANGE));
+        String displayMode = defaultString(
+                asString(component.getConfig().get(CONFIG_KEY_DISPLAY_MODE)),
+                SCHEDULE_DISPLAY_MODE_MODAL_CALENDAR
+        );
+        if (!SCHEDULE_DISPLAY_MODE_MODAL_CALENDAR.equals(displayMode)
+                && !SCHEDULE_DISPLAY_MODE_INLINE_CALENDAR.equals(displayMode)) {
+            throw new BusinessException(PortfolioMessage.SCHEDULE_QUERY_DISPLAY_MODE_UNSUPPORTED_MESSAGE);
+        }
         String rangeType = defaultString(asString(source.get(CONFIG_KEY_RANGE_TYPE)), QUERY_RANGE_UNLIMITED);
         Map<String, Object> normalized = new LinkedHashMap<>();
         normalized.put(CONFIG_KEY_RANGE_TYPE, rangeType);
@@ -389,6 +406,7 @@ public class PortfolioConfigValidator {
             case QUERY_RANGE_DATE_RANGE -> normalizeDateRange(source, normalized);
             default -> throw new BusinessException(PortfolioMessage.SCHEDULE_QUERY_RANGE_UNSUPPORTED_MESSAGE);
         }
+        component.getConfig().put(CONFIG_KEY_DISPLAY_MODE, displayMode);
         component.getConfig().put(CONFIG_KEY_QUERY_RANGE, normalized);
     }
 

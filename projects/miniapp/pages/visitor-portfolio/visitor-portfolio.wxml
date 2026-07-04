@@ -99,11 +99,13 @@
       </block>
 
       <block wx:elif="{{item.componentType === 'SCHEDULE_QUERY'}}">
-        <view class="simple-section">
-          <view class="component-title">{{item.scheduleQuery.title || '档期查询'}}</view>
-          <view wx:if="{{item.scheduleQuery.description}}" class="section-desc">{{item.scheduleQuery.description}}</view>
-          <button class="secondary-action">档期查询</button>
-        </view>
+        <portfolio-schedule-query
+          share-code="{{shareCode}}"
+          visitor-key="{{visitorKey}}"
+          preview="{{false}}"
+          component-key="{{item.componentKey}}"
+          schedule-query="{{item.scheduleQuery}}"
+        ></portfolio-schedule-query>
       </block>
 
       <block wx:elif="{{item.componentType === 'QR_CONTACT'}}">

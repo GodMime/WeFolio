@@ -4,6 +4,9 @@ import com.jxc.wefolio.annotation.VisitorAccess;
 import com.jxc.wefolio.common.Response;
 import com.jxc.wefolio.dto.ContactLeadSubmitRequest;
 import com.jxc.wefolio.dto.ContactLeadSubmitResponse;
+import com.jxc.wefolio.dto.PortfolioScheduleOptionsResponse;
+import com.jxc.wefolio.dto.PortfolioScheduleQueryRequest;
+import com.jxc.wefolio.dto.PortfolioScheduleQueryResponse;
 import com.jxc.wefolio.dto.VisitorPortfolioEventRequest;
 import com.jxc.wefolio.dto.VisitorPortfolioResponse;
 import com.jxc.wefolio.dto.VisitorPortfolioScheduleResponse;
@@ -82,6 +85,38 @@ public class VisitorPortfolioController {
                 visitorKey,
                 idempotencyKey
         ));
+    }
+
+    /**
+     * 查询档期组件月历选项。
+     *
+     * @param shareCode 分享编码
+     * @param month 月份，格式 yyyy-MM
+     * @param componentKey 组件实例键
+     * @return 月历选项响应
+     */
+    @GetMapping("/api/visitor/portfolios/{shareCode}/schedule-options")
+    public Response<PortfolioScheduleOptionsResponse> scheduleOptions(
+            @PathVariable String shareCode,
+            @RequestParam("month") String month,
+            @RequestParam("componentKey") String componentKey
+    ) {
+        return Response.success(visitorPortfolioService.queryScheduleOptions(shareCode, month, componentKey));
+    }
+
+    /**
+     * 提交档期查询。
+     *
+     * @param shareCode 分享编码
+     * @param request 查询请求
+     * @return 查询结果
+     */
+    @PostMapping("/api/visitor/portfolios/{shareCode}/schedule-query")
+    public Response<PortfolioScheduleQueryResponse> scheduleQuery(
+            @PathVariable String shareCode,
+            @RequestBody PortfolioScheduleQueryRequest request
+    ) {
+        return Response.success(visitorPortfolioService.submitScheduleQuery(shareCode, request));
     }
 
     /**

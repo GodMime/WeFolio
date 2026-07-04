@@ -137,6 +137,9 @@ public interface PortfolioMessage {
     /** 档期查询范围类型不支持提示 */
     String SCHEDULE_QUERY_RANGE_UNSUPPORTED_MESSAGE = "档期查询范围不支持";
 
+    /** 档期查询展示方式不支持提示 */
+    String SCHEDULE_QUERY_DISPLAY_MODE_UNSUPPORTED_MESSAGE = "档期查询展示方式不支持";
+
     /** 档期查询未来天数无效提示 */
     String SCHEDULE_QUERY_FUTURE_DAYS_INVALID_MESSAGE = "档期查询未来天数必须大于 0";
 
@@ -145,6 +148,21 @@ public interface PortfolioMessage {
 
     /** 档期查询日期范围无效提示 */
     String SCHEDULE_QUERY_DATE_RANGE_INVALID_MESSAGE = "档期查询开始日期不能晚于结束日期";
+
+    /** 档期查询组件不存在提示 */
+    String SCHEDULE_QUERY_COMPONENT_NOT_FOUND_MESSAGE = "档期查询组件不存在";
+
+    /** 档期查询请求体为空提示 */
+    String SCHEDULE_QUERY_REQUEST_REQUIRED_MESSAGE = "档期查询请求不能为空";
+
+    /** 档期查询日期为空提示 */
+    String SCHEDULE_QUERY_DATE_REQUIRED_MESSAGE = "请选择查询日期";
+
+    /** 档期查询档位为空提示 */
+    String SCHEDULE_QUERY_SLOT_REQUIRED_MESSAGE = "请选择查询档位";
+
+    /** 档期查询档位不可用提示 */
+    String SCHEDULE_QUERY_SLOT_UNAVAILABLE_MESSAGE = "档位不可用";
 
     /** 展示作品为空提示 */
     String DISPLAY_WORK_REQUIRED_MESSAGE = "请选择要展示的作品";

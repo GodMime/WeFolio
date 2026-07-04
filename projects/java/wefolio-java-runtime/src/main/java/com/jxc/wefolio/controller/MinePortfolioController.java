@@ -11,6 +11,9 @@ import com.jxc.wefolio.dto.MinePortfolioListResponse;
 import com.jxc.wefolio.dto.MinePortfolioPublishRequest;
 import com.jxc.wefolio.dto.MinePortfolioShareRecordRequest;
 import com.jxc.wefolio.dto.PortfolioComponentLibraryResponse;
+import com.jxc.wefolio.dto.PortfolioScheduleOptionsResponse;
+import com.jxc.wefolio.dto.PortfolioScheduleQueryRequest;
+import com.jxc.wefolio.dto.PortfolioScheduleQueryResponse;
 import com.jxc.wefolio.service.MinePortfolioService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -129,6 +132,42 @@ public class MinePortfolioController {
     @GetMapping("/api/mine/portfolios/{portfolioId}/published-preview")
     public Response<MinePortfolioDetailResponse> previewPublished(@PathVariable Long portfolioId) {
         return Response.success(minePortfolioService.previewPublished(portfolioId));
+    }
+
+    /**
+     * 查询预览页档期组件月历选项。
+     *
+     * @param portfolioId 作品集 ID
+     * @param month 月份，格式 yyyy-MM
+     * @param componentKey 组件实例键
+     * @param scope 预览配置范围
+     * @return 月历选项响应
+     */
+    @GetMapping("/api/mine/portfolios/{portfolioId}/schedule-options")
+    public Response<PortfolioScheduleOptionsResponse> scheduleOptions(
+            @PathVariable Long portfolioId,
+            @RequestParam("month") String month,
+            @RequestParam("componentKey") String componentKey,
+            @RequestParam(value = "scope", required = false) String scope
+    ) {
+        return Response.success(minePortfolioService.queryPreviewScheduleOptions(portfolioId, month, componentKey, scope));
+    }
+
+    /**
+     * 提交预览页档期查询。
+     *
+     * @param portfolioId 作品集 ID
+     * @param request 查询请求
+     * @param scope 预览配置范围
+     * @return 查询结果
+     */
+    @PostMapping("/api/mine/portfolios/{portfolioId}/schedule-query-preview")
+    public Response<PortfolioScheduleQueryResponse> scheduleQueryPreview(
+            @PathVariable Long portfolioId,
+            @RequestBody PortfolioScheduleQueryRequest request,
+            @RequestParam(value = "scope", required = false) String scope
+    ) {
+        return Response.success(minePortfolioService.submitPreviewScheduleQuery(portfolioId, request, scope));
     }
 
     /**

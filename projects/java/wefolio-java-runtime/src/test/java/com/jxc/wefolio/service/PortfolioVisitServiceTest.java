@@ -17,6 +17,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -130,6 +131,41 @@ class PortfolioVisitServiceTest {
                 "访客播放作品集视频"
         );
         verify(visitEventEntityMapper).insert(any(VisitEventEntity.class));
+    }
+
+    @Test
+    void recordScheduleQueryShouldStoreSlotMetadata() {
+        VisitRecordEntity record = new VisitRecordEntity();
+        record.setId(33L);
+        record.setVisitorKey("visitor-a");
+        record.setPortfolioId(88L);
+        record.setScheduleQueryCount(2);
+        when(visitRecordEntityMapper.selectOne(any())).thenReturn(record);
+
+        service().recordScheduleQuery(
+                portfolio(),
+                "visitor-a",
+                LocalDate.of(2026, 7, 18),
+                Map.of(
+                        "componentKey", "c_schedule",
+                        "displayMode", "MODAL_CALENDAR",
+                        "slotDefinitionId", 12L,
+                        "slotName", "午宴",
+                        "available", true
+                ),
+                "schedule-submit-1"
+        );
+
+        ArgumentCaptor<VisitRecordEntity> recordCaptor = ArgumentCaptor.forClass(VisitRecordEntity.class);
+        verify(visitRecordEntityMapper).updateById(recordCaptor.capture());
+        assertThat(recordCaptor.getValue().getScheduleQueryCount()).isEqualTo(3);
+        ArgumentCaptor<VisitEventEntity> eventCaptor = ArgumentCaptor.forClass(VisitEventEntity.class);
+        verify(visitEventEntityMapper).insert(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().getEventType()).isEqualTo(VisitEventTypeDict.SCHEDULE_QUERIED.getCode());
+        assertThat(eventCaptor.getValue().getQueriedDate()).isEqualTo(LocalDate.of(2026, 7, 18));
+        assertThat(eventCaptor.getValue().getMetadata()).contains("\"slotDefinitionId\":12");
+        assertThat(eventCaptor.getValue().getMetadata()).contains("\"slotName\":\"午宴\"");
+        assertThat(eventCaptor.getValue().getIdempotencyKey()).isEqualTo("schedule-submit-1");
     }
 
     private PortfolioVisitService service() {

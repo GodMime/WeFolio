@@ -273,6 +273,22 @@ test('preview markup exposes loading skeleton and retryable error state', () => 
   assert.match(wxml, /bindtap="handleRetryPreview"/)
 })
 
+test('preview page passes schedule query context to shared component', () => {
+  const wxml = fs.readFileSync(
+    path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.wxml'),
+    'utf8'
+  )
+  const json = JSON.parse(fs.readFileSync(
+    path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.json'),
+    'utf8'
+  ))
+
+  assert.equal(json.usingComponents['portfolio-schedule-query'], '/components/portfolio-schedule-query/portfolio-schedule-query')
+  assert.match(wxml, /<portfolio-schedule-query[\s\S]*portfolio-id="\{\{portfolioId\}\}"[\s\S]*preview="\{\{true\}\}"[\s\S]*preview-scope="\{\{previewScope\}\}"/)
+  assert.match(wxml, /<portfolio-schedule-query[\s\S]*component-key="\{\{item\.componentKey\}\}"[\s\S]*schedule-query="\{\{item\.scheduleQuery\}\}"/)
+  assert.doesNotMatch(wxml, /<button class="secondary-action">档期查询<\/button>/)
+})
+
 test('portfolio work sections render fixed title, all tags, play badge, and video overlay', () => {
   const previewWxml = fs.readFileSync(
     path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.wxml'),

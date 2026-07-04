@@ -11,6 +11,8 @@ import com.jxc.wefolio.dict.PortfolioPublicationStatusDict;
 import com.jxc.wefolio.dict.PortfolioStatusDict;
 import com.jxc.wefolio.dict.PortfolioTemplateTypeDict;
 import com.jxc.wefolio.dict.PointSceneCodeDict;
+import com.jxc.wefolio.dict.ScheduleStatusDict;
+import com.jxc.wefolio.dict.SlotDefinitionStatusDict;
 import com.jxc.wefolio.dto.MinePortfolioAssetUploadTicketRequest;
 import com.jxc.wefolio.dto.MinePortfolioAssetUploadTicketResponse;
 import com.jxc.wefolio.dto.MinePortfolioCreateRequest;
@@ -21,15 +23,22 @@ import com.jxc.wefolio.dto.MinePortfolioPublishRequest;
 import com.jxc.wefolio.dto.MinePortfolioShareRecordRequest;
 import com.jxc.wefolio.dto.PortfolioComponentLibraryResponse;
 import com.jxc.wefolio.dto.PortfolioConfigDto;
+import com.jxc.wefolio.dto.PortfolioScheduleOptionsResponse;
+import com.jxc.wefolio.dto.PortfolioScheduleQueryRequest;
+import com.jxc.wefolio.dto.PortfolioScheduleQueryResponse;
 import com.jxc.wefolio.entity.PortfolioEntity;
 import com.jxc.wefolio.entity.PortfolioHistoryEntity;
 import com.jxc.wefolio.entity.PortfolioReferenceEntity;
 import com.jxc.wefolio.entity.PortfolioShareRecordEntity;
+import com.jxc.wefolio.entity.ScheduleEntity;
+import com.jxc.wefolio.entity.SlotDefinitionEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.PortfolioEntityMapper;
 import com.jxc.wefolio.mapper.PortfolioHistoryEntityMapper;
 import com.jxc.wefolio.mapper.PortfolioReferenceEntityMapper;
 import com.jxc.wefolio.mapper.PortfolioShareRecordEntityMapper;
+import com.jxc.wefolio.mapper.ScheduleEntityMapper;
+import com.jxc.wefolio.mapper.SlotDefinitionEntityMapper;
 import com.jxc.wefolio.message.PortfolioMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -41,8 +50,13 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
@@ -50,10 +64,12 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * 我的作品集服务 — 负责标准个人作品集维护端创建、草稿、预览、发布和分享记录。
@@ -110,6 +126,27 @@ public class MinePortfolioService {
 
     /** 封面文件随机后缀长度 */
     private static final int COVER_RANDOM_LENGTH = 8;
+
+    /** 档期查询组件类型 */
+    private static final String COMPONENT_TYPE_SCHEDULE_QUERY = "SCHEDULE_QUERY";
+
+    /** 已发布预览配置范围 */
+    private static final String PREVIEW_SCOPE_PUBLISHED = "published";
+
+    /** 可约状态兜底编码 */
+    private static final String STATUS_AVAILABLE = "AVAILABLE";
+
+    /** 可约提示 */
+    private static final String MESSAGE_AVAILABLE = "档期空闲";
+
+    /** 已约提示 */
+    private static final String MESSAGE_BOOKED = "该档期已约";
+
+    /** 月份格式 */
+    private static final DateTimeFormatter MONTH_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM");
+
+    /** 档期时间格式 */
+    private static final DateTimeFormatter SCHEDULE_TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
 
     /** JPEG MIME 类型 */
     private static final String MIME_IMAGE_JPEG = "image/jpeg";
@@ -181,6 +218,12 @@ public class MinePortfolioService {
 
     /** 分享记录 Mapper */
     private final PortfolioShareRecordEntityMapper portfolioShareRecordEntityMapper;
+
+    /** 档期 Mapper */
+    private final ScheduleEntityMapper scheduleEntityMapper;
+
+    /** 档位定义 Mapper */
+    private final SlotDefinitionEntityMapper slotDefinitionEntityMapper;
 
     /** 积分服务 */
     private final PointService pointService;
@@ -393,6 +436,49 @@ public class MinePortfolioService {
         MinePortfolioDetailResponse response = buildDetail(portfolio, config);
         response.setRenderData(portfolioRenderService.render(portfolio, config, true, false, null, null));
         return response;
+    }
+
+    /**
+     * 查询预览页档期组件月历选项。
+     *
+     * @param portfolioId 作品集 ID
+     * @param month 月份，格式 yyyy-MM
+     * @param componentKey 组件实例键
+     * @param scope 预览配置范围
+     * @return 月历选项响应
+     */
+    public PortfolioScheduleOptionsResponse queryPreviewScheduleOptions(
+            Long portfolioId,
+            String month,
+            String componentKey,
+            String scope
+    ) {
+        PortfolioEntity portfolio = requireOwnedStandardPersonal(portfolioId);
+        PortfolioConfigDto config = resolvePreviewConfig(portfolio, scope);
+        requireScheduleComponentConfig(config, componentKey);
+        return buildScheduleOptions(portfolio.getOwnerId(), parseMonth(month));
+    }
+
+    /**
+     * 提交预览页档期查询。
+     *
+     * @param portfolioId 作品集 ID
+     * @param request 查询请求
+     * @param scope 预览配置范围
+     * @return 查询响应
+     */
+    public PortfolioScheduleQueryResponse submitPreviewScheduleQuery(
+            Long portfolioId,
+            PortfolioScheduleQueryRequest request,
+            String scope
+    ) {
+        if (request == null) {
+            throw new BusinessException(PortfolioMessage.SCHEDULE_QUERY_REQUEST_REQUIRED_MESSAGE);
+        }
+        PortfolioEntity portfolio = requireOwnedStandardPersonal(portfolioId);
+        PortfolioConfigDto config = resolvePreviewConfig(portfolio, scope);
+        requireScheduleComponentConfig(config, request.getComponentKey());
+        return buildScheduleQueryResponse(portfolio.getOwnerId(), request);
     }
 
     /**
@@ -1085,6 +1171,228 @@ public class MinePortfolioService {
      */
     private String asString(Object value) {
         return value == null ? "" : String.valueOf(value).strip();
+    }
+
+    /**
+     * 解析预览配置。
+     *
+     * @param portfolio 作品集
+     * @param scope 预览范围
+     * @return 作品集配置
+     */
+    private PortfolioConfigDto resolvePreviewConfig(PortfolioEntity portfolio, String scope) {
+        if (PREVIEW_SCOPE_PUBLISHED.equals(scope)) {
+            if (!PortfolioPublicationStatusDict.PUBLISHED.getCode().equals(portfolio.getPublicationStatus())
+                    || !hasText(portfolio.getPublishedConfigJson())) {
+                throw new BusinessException(PortfolioMessage.PORTFOLIO_UNAVAILABLE_MESSAGE);
+            }
+            return parseConfig(portfolio.getPublishedConfigJson());
+        }
+        return parseConfig(portfolio.getDraftConfigJson());
+    }
+
+    /**
+     * 校验档期查询组件存在。
+     *
+     * @param config 作品集配置
+     * @param componentKey 组件实例键
+     */
+    private void requireScheduleComponentConfig(PortfolioConfigDto config, String componentKey) {
+        safeList(config == null ? null : config.getComponents()).stream()
+                .filter(component -> component != null && Boolean.TRUE.equals(component.getEnabled()))
+                .filter(component -> COMPONENT_TYPE_SCHEDULE_QUERY.equals(component.getComponentType()))
+                .filter(component -> Objects.equals(component.getComponentKey(), componentKey))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(PortfolioMessage.SCHEDULE_QUERY_COMPONENT_NOT_FOUND_MESSAGE));
+    }
+
+    /**
+     * 构建预览档期选项。
+     *
+     * @param ownerId 作品集归属用户 ID
+     * @param yearMonth 月份
+     * @return 档期选项
+     */
+    private PortfolioScheduleOptionsResponse buildScheduleOptions(Long ownerId, YearMonth yearMonth) {
+        LocalDate monthStart = yearMonth.atDay(1);
+        LocalDate monthEnd = yearMonth.atEndOfMonth();
+        List<SlotDefinitionEntity> slots = safeList(slotDefinitionEntityMapper.selectList(
+                Wrappers.lambdaQuery(SlotDefinitionEntity.class)
+                        .eq(SlotDefinitionEntity::getUserId, ownerId)
+                        .eq(SlotDefinitionEntity::getStatus, SlotDefinitionStatusDict.ACTIVE.getCode())
+                        .orderByAsc(SlotDefinitionEntity::getStartTime)
+                        .orderByAsc(SlotDefinitionEntity::getId)
+        ));
+        List<ScheduleEntity> schedules = safeList(scheduleEntityMapper.selectList(
+                Wrappers.lambdaQuery(ScheduleEntity.class)
+                        .eq(ScheduleEntity::getUserId, ownerId)
+                        .ge(ScheduleEntity::getScheduleDate, monthStart)
+                        .le(ScheduleEntity::getScheduleDate, monthEnd)
+                        .orderByAsc(ScheduleEntity::getScheduleDate)
+                        .orderByAsc(ScheduleEntity::getStartTimeSnapshot)
+        ));
+        PortfolioScheduleOptionsResponse response = new PortfolioScheduleOptionsResponse();
+        response.setYearMonth(yearMonth.format(MONTH_FORMATTER));
+        response.setSlotDefinitions(slots.stream().map(this::buildSlotDefinitionItem).toList());
+        response.setSchedules(schedules.stream().map(this::buildScheduleOptionItem).toList());
+        response.setDays(buildMonthDays(yearMonth, schedules));
+        return response;
+    }
+
+    /**
+     * 构建预览档期查询结果。
+     *
+     * @param ownerId 作品集归属用户 ID
+     * @param request 查询请求
+     * @return 查询结果
+     */
+    private PortfolioScheduleQueryResponse buildScheduleQueryResponse(Long ownerId, PortfolioScheduleQueryRequest request) {
+        if (request == null || request.getQueriedDate() == null) {
+            throw new BusinessException(PortfolioMessage.SCHEDULE_QUERY_DATE_REQUIRED_MESSAGE);
+        }
+        if (request.getSlotDefinitionId() == null) {
+            throw new BusinessException(PortfolioMessage.SCHEDULE_QUERY_SLOT_REQUIRED_MESSAGE);
+        }
+        SlotDefinitionEntity slot = slotDefinitionEntityMapper.selectById(request.getSlotDefinitionId());
+        if (slot == null
+                || !Objects.equals(slot.getUserId(), ownerId)
+                || !SlotDefinitionStatusDict.ACTIVE.getCode().equals(slot.getStatus())) {
+            throw new BusinessException(PortfolioMessage.SCHEDULE_QUERY_SLOT_UNAVAILABLE_MESSAGE);
+        }
+        ScheduleEntity schedule = scheduleEntityMapper.selectOne(
+                Wrappers.lambdaQuery(ScheduleEntity.class)
+                        .eq(ScheduleEntity::getUserId, ownerId)
+                        .eq(ScheduleEntity::getScheduleDate, request.getQueriedDate())
+                        .eq(ScheduleEntity::getSlotDefinitionId, request.getSlotDefinitionId())
+                        .last("LIMIT 1")
+        );
+        return buildScheduleQueryResponse(request.getQueriedDate(), slot, schedule);
+    }
+
+    /**
+     * 构建档期查询结果。
+     *
+     * @param queriedDate 查询日期
+     * @param slot 档位定义
+     * @param schedule 档期记录
+     * @return 查询结果
+     */
+    private PortfolioScheduleQueryResponse buildScheduleQueryResponse(
+            LocalDate queriedDate,
+            SlotDefinitionEntity slot,
+            ScheduleEntity schedule
+    ) {
+        ScheduleStatusDict status = schedule == null ? null : ScheduleStatusDict.fromCode(schedule.getStatus());
+        boolean booked = schedule != null && ScheduleStatusDict.BOOKED.getCode().equals(schedule.getStatus());
+        PortfolioScheduleQueryResponse response = new PortfolioScheduleQueryResponse();
+        response.setQueriedDate(queriedDate.toString());
+        response.setSlotDefinitionId(slot.getId());
+        response.setSlotName(schedule == null ? slot.getName() : schedule.getSlotNameSnapshot());
+        response.setStartTime(formatTime(schedule == null ? slot.getStartTime() : schedule.getStartTimeSnapshot()));
+        response.setEndTime(formatTime(schedule == null ? slot.getEndTime() : schedule.getEndTimeSnapshot()));
+        response.setColor(schedule == null ? slot.getColor() : schedule.getColorSnapshot());
+        response.setStatus(schedule == null ? STATUS_AVAILABLE : schedule.getStatus());
+        response.setStatusText(schedule == null ? MESSAGE_AVAILABLE : status == null ? schedule.getStatus() : status.getDisplayName());
+        response.setAvailable(!booked);
+        response.setMessage(booked ? MESSAGE_BOOKED : MESSAGE_AVAILABLE);
+        return response;
+    }
+
+    /**
+     * 构建档位定义响应项。
+     *
+     * @param slot 档位定义
+     * @return 响应项
+     */
+    private PortfolioScheduleOptionsResponse.SlotDefinitionItem buildSlotDefinitionItem(SlotDefinitionEntity slot) {
+        PortfolioScheduleOptionsResponse.SlotDefinitionItem item = new PortfolioScheduleOptionsResponse.SlotDefinitionItem();
+        item.setId(slot.getId());
+        item.setName(slot.getName());
+        item.setStartTime(formatTime(slot.getStartTime()));
+        item.setEndTime(formatTime(slot.getEndTime()));
+        item.setColor(slot.getColor());
+        return item;
+    }
+
+    /**
+     * 构建访客可见档期响应项。
+     *
+     * @param schedule 档期
+     * @return 响应项
+     */
+    private PortfolioScheduleOptionsResponse.ScheduleItem buildScheduleOptionItem(ScheduleEntity schedule) {
+        String statusCode = defaultString(schedule.getStatus());
+        ScheduleStatusDict status = ScheduleStatusDict.fromCode(statusCode);
+        PortfolioScheduleOptionsResponse.ScheduleItem item = new PortfolioScheduleOptionsResponse.ScheduleItem();
+        item.setDate(schedule.getScheduleDate() == null ? "" : schedule.getScheduleDate().toString());
+        item.setSlotDefinitionId(schedule.getSlotDefinitionId());
+        item.setSlotName(defaultString(schedule.getSlotNameSnapshot()));
+        item.setStartTime(formatTime(schedule.getStartTimeSnapshot()));
+        item.setEndTime(formatTime(schedule.getEndTimeSnapshot()));
+        item.setColor(defaultString(schedule.getColorSnapshot()));
+        item.setStatus(statusCode);
+        item.setStatusText(status == null ? statusCode : status.getDisplayName());
+        item.setStatusTone(status == null ? "muted" : status.getTone());
+        return item;
+    }
+
+    /**
+     * 构建固定 6 行月历格子。
+     *
+     * @param yearMonth 月份
+     * @param schedules 当月档期
+     * @return 月历格子
+     */
+    private List<PortfolioScheduleOptionsResponse.MonthDayItem> buildMonthDays(
+            YearMonth yearMonth,
+            List<ScheduleEntity> schedules
+    ) {
+        LocalDate firstDay = yearMonth.atDay(1);
+        LocalDate cursor = firstDay.minusDays(firstDay.getDayOfWeek().getValue() % 7L);
+        Map<LocalDate, List<ScheduleEntity>> schedulesByDate = safeList(schedules).stream()
+                .filter(schedule -> schedule.getScheduleDate() != null)
+                .collect(Collectors.groupingBy(ScheduleEntity::getScheduleDate));
+        List<PortfolioScheduleOptionsResponse.MonthDayItem> days = new ArrayList<>();
+        for (int index = 0; index < 42; index++) {
+            LocalDate date = cursor.plus(index, ChronoUnit.DAYS);
+            List<ScheduleEntity> daySchedules = schedulesByDate.getOrDefault(date, List.of());
+            PortfolioScheduleOptionsResponse.MonthDayItem item = new PortfolioScheduleOptionsResponse.MonthDayItem();
+            item.setDate(date.toString());
+            item.setDayNumber(date.getDayOfMonth());
+            item.setCurrentMonth(YearMonth.from(date).equals(yearMonth));
+            item.setColors(daySchedules.stream()
+                    .map(ScheduleEntity::getColorSnapshot)
+                    .filter(this::hasText)
+                    .distinct()
+                    .toList());
+            item.setCount(daySchedules.size());
+            days.add(item);
+        }
+        return days;
+    }
+
+    /**
+     * 解析月份。
+     *
+     * @param month 月份文本
+     * @return 月份
+     */
+    private YearMonth parseMonth(String month) {
+        try {
+            return YearMonth.parse(month, MONTH_FORMATTER);
+        } catch (DateTimeParseException e) {
+            throw new BusinessException(PortfolioMessage.SCHEDULE_QUERY_DATE_INVALID_MESSAGE, e);
+        }
+    }
+
+    /**
+     * 格式化时间。
+     *
+     * @param time 时间
+     * @return HH:mm 文本
+     */
+    private String formatTime(LocalTime time) {
+        return time == null ? "" : time.format(SCHEDULE_TIME_FORMATTER);
     }
 
     /**

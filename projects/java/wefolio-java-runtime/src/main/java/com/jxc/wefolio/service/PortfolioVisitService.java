@@ -221,6 +221,26 @@ public class PortfolioVisitService {
      */
     @Transactional(rollbackFor = Exception.class)
     public void recordScheduleQuery(PortfolioEntity portfolio, String visitorKey, LocalDate queriedDate, String idempotencyKey) {
+        recordScheduleQuery(portfolio, visitorKey, queriedDate, null, idempotencyKey);
+    }
+
+    /**
+     * 记录档期查询事件。
+     *
+     * @param portfolio 作品集
+     * @param visitorKey 访客摘要
+     * @param queriedDate 查询日期
+     * @param metadata 查询档位等扩展元数据
+     * @param idempotencyKey 幂等键
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void recordScheduleQuery(
+            PortfolioEntity portfolio,
+            String visitorKey,
+            LocalDate queriedDate,
+            Map<String, Object> metadata,
+            String idempotencyKey
+    ) {
         VisitRecordEntity record = findRecord(portfolio.getId(), visitorKey);
         if (record == null) {
             return;
@@ -228,7 +248,7 @@ public class PortfolioVisitService {
         record.setScheduleQueryCount(safeInt(record.getScheduleQueryCount()) + 1);
         visitRecordEntityMapper.updateById(record);
         insertEvent(record, portfolio, VisitEventTypeDict.SCHEDULE_QUERIED.getCode(), null, queriedDate,
-                null, idempotencyKey, null, LocalDateTime.now());
+                null, idempotencyKey, metadata, LocalDateTime.now());
     }
 
     /**

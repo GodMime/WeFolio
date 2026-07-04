@@ -60,20 +60,22 @@
               <button class="component-remove-button" data-key="{{item.componentKey}}" catchtap="handleRemoveComponent">删除</button>
             </view>
             <view
-              class="component-row {{draggingIndex === index ? 'dragging' : ''}} {{dragTargetIndex === index && draggingIndex !== -1 ? 'drag-target' : ''}} {{item.componentType === 'CAROUSEL' || item.componentType === 'PROFILE' || item.componentType === 'QR_CONTACT' || item.componentType === 'WORK_GRID' || item.componentType === 'WORK_LIST' ? 'editable' : ''}}"
+              class="component-row {{draggingIndex === index ? 'dragging' : ''}} {{dragTargetIndex === index && draggingIndex !== -1 ? 'drag-target' : ''}} {{item.componentType === 'CAROUSEL' || item.componentType === 'PROFILE' || item.componentType === 'QR_CONTACT' || item.componentType === 'SCHEDULE_QUERY' || item.componentType === 'WORK_GRID' || item.componentType === 'WORK_LIST' ? 'editable' : ''}}"
               style="{{draggingIndex === index ? componentDragStyle : ''}}"
               data-key="{{item.componentKey}}"
               data-type="{{item.componentType}}"
               catchtap="handleComponentTap"
-              aria-role="{{item.componentType === 'CAROUSEL' || item.componentType === 'PROFILE' || item.componentType === 'QR_CONTACT' || item.componentType === 'WORK_GRID' || item.componentType === 'WORK_LIST' ? 'button' : 'text'}}"
-              aria-label="{{item.componentType === 'CAROUSEL' ? '编辑轮播图作品' : item.componentType === 'PROFILE' ? '编辑个人资料' : item.componentType === 'QR_CONTACT' ? '编辑二维码联系' : item.componentType === 'WORK_GRID' || item.componentType === 'WORK_LIST' ? '编辑作品集展示标签' : item.name}}"
+              aria-role="{{item.componentType === 'CAROUSEL' || item.componentType === 'PROFILE' || item.componentType === 'QR_CONTACT' || item.componentType === 'SCHEDULE_QUERY' || item.componentType === 'WORK_GRID' || item.componentType === 'WORK_LIST' ? 'button' : 'text'}}"
+              aria-label="{{item.componentType === 'CAROUSEL' ? '编辑轮播图作品' : item.componentType === 'PROFILE' ? '编辑个人资料' : item.componentType === 'QR_CONTACT' ? '编辑二维码联系' : item.componentType === 'SCHEDULE_QUERY' ? '编辑档期查询' : item.componentType === 'WORK_GRID' || item.componentType === 'WORK_LIST' ? '编辑作品集展示标签' : item.name}}"
             >
               <view class="component-order">{{index + 1}}</view>
               <view class="component-copy">
                 <view class="component-title">{{item.name || item.componentType}}</view>
               </view>
               <view class="component-drag-handle"></view>
-              <view class="component-row-arrow {{item.componentType === 'CAROUSEL' || item.componentType === 'PROFILE' || item.componentType === 'QR_CONTACT' || item.componentType === 'WORK_GRID' || item.componentType === 'WORK_LIST' ? '' : 'placeholder'}}">{{item.componentType === 'CAROUSEL' || item.componentType === 'PROFILE' || item.componentType === 'QR_CONTACT' || item.componentType === 'WORK_GRID' || item.componentType === 'WORK_LIST' ? '›' : ''}}</view>
+              <view class="component-row-arrow {{item.componentType === 'CAROUSEL' || item.componentType === 'PROFILE' || item.componentType === 'QR_CONTACT' || item.componentType === 'SCHEDULE_QUERY' || item.componentType === 'WORK_GRID' || item.componentType === 'WORK_LIST' ? '' : 'placeholder'}}">
+                <view wx:if="{{item.componentType === 'CAROUSEL' || item.componentType === 'PROFILE' || item.componentType === 'QR_CONTACT' || item.componentType === 'SCHEDULE_QUERY' || item.componentType === 'WORK_GRID' || item.componentType === 'WORK_LIST'}}" class="component-row-arrow-icon"></view>
+              </view>
             </view>
           </view>
         </view>
@@ -431,6 +433,43 @@
       <view class="component-work-actions">
         <button class="component-work-cancel" catchtap="handleCloseQrContactSheet">取消</button>
         <button class="component-work-confirm" catchtap="handleConfirmQrContactSheet">完成</button>
+      </view>
+    </view>
+  </view>
+
+  <view class="schedule-query-sheet-mask component-work-picker-mask {{scheduleQuerySheetVisible ? 'visible' : ''}}" catchtap="handleCloseScheduleQuerySheet">
+    <view class="schedule-query-sheet-panel component-work-picker-panel" catchtap="noop">
+      <view class="component-picker-grabber"></view>
+      <view class="component-picker-heading">
+        <view class="component-picker-title">编辑档期查询</view>
+        <view class="component-picker-count">{{scheduleQueryForm.displayMode === 'INLINE_CALENDAR' ? '内联' : '弹层'}}</view>
+      </view>
+
+      <view class="schedule-query-form">
+        <view class="form-row">
+          <view class="field-heading">
+            <view class="field-label">展示方式</view>
+          </view>
+          <view class="schedule-query-mode-list">
+            <view
+              wx:for="{{scheduleQueryDisplayModeOptions}}"
+              wx:key="value"
+              class="schedule-query-mode-option {{scheduleQueryForm.displayMode === item.value ? 'active' : ''}}"
+              data-value="{{item.value}}"
+              catchtap="handleScheduleQueryDisplayModeTap"
+              aria-role="radio"
+              aria-checked="{{scheduleQueryForm.displayMode === item.value}}"
+            >
+              <view class="schedule-query-mode-radio"></view>
+              <view class="schedule-query-mode-label">{{item.label}}</view>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view class="component-work-actions">
+        <button class="component-work-cancel" catchtap="handleCloseScheduleQuerySheet">取消</button>
+        <button class="component-work-confirm" catchtap="handleConfirmScheduleQueryConfig">完成</button>
       </view>
     </view>
   </view>

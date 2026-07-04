@@ -185,6 +185,9 @@ public class PortfolioRenderDto {
         /** 查询说明 */
         private String description;
 
+        /** 展示方式：MODAL_CALENDAR 弹层月历 / INLINE_CALENDAR 内联月历 */
+        private String displayMode;
+
         /** 查询范围 */
         private Map<String, Object> queryRange;
     }

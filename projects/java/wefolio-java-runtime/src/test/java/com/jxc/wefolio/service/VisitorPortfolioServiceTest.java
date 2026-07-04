@@ -5,16 +5,22 @@ import com.jxc.wefolio.dict.PortfolioPublicationStatusDict;
 import com.jxc.wefolio.dict.PortfolioStatusDict;
 import com.jxc.wefolio.dict.PortfolioTemplateTypeDict;
 import com.jxc.wefolio.dict.ScheduleStatusDict;
+import com.jxc.wefolio.dict.SlotDefinitionStatusDict;
+import com.jxc.wefolio.dto.PortfolioScheduleOptionsResponse;
+import com.jxc.wefolio.dto.PortfolioScheduleQueryRequest;
+import com.jxc.wefolio.dto.PortfolioScheduleQueryResponse;
 import com.jxc.wefolio.dto.PortfolioRenderDto;
 import com.jxc.wefolio.dto.VisitorPortfolioResponse;
 import com.jxc.wefolio.dto.VisitorPortfolioScheduleResponse;
 import com.jxc.wefolio.dto.WechatSessionResponse;
 import com.jxc.wefolio.entity.PortfolioEntity;
 import com.jxc.wefolio.entity.ScheduleEntity;
+import com.jxc.wefolio.entity.SlotDefinitionEntity;
 import com.jxc.wefolio.entity.VisitRecordEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.PortfolioEntityMapper;
 import com.jxc.wefolio.mapper.ScheduleEntityMapper;
+import com.jxc.wefolio.mapper.SlotDefinitionEntityMapper;
 import com.jxc.wefolio.message.PortfolioMessage;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -47,6 +53,10 @@ class VisitorPortfolioServiceTest {
     /** 档期 Mapper 模拟 */
     @Mock
     private ScheduleEntityMapper scheduleEntityMapper;
+
+    /** 档位定义 Mapper 模拟 */
+    @Mock
+    private SlotDefinitionEntityMapper slotDefinitionEntityMapper;
 
     /** 积分服务模拟 */
     @Mock
@@ -185,10 +195,132 @@ class VisitorPortfolioServiceTest {
         verify(portfolioVisitService).recordScheduleQuery(portfolio, "visitor-a", LocalDate.of(2026, 7, 18), "schedule-1");
     }
 
+    @Test
+    void queryScheduleOptionsShouldReturnPublicMonthDataWithoutRecordingEvent() {
+        PortfolioEntity portfolio = publishedPortfolioWithScheduleComponent();
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
+        when(slotDefinitionEntityMapper.selectList(any())).thenReturn(List.of(slotDefinition(12L, "午宴")));
+        when(scheduleEntityMapper.selectList(any())).thenReturn(List.of(schedule(
+                9L,
+                12L,
+                LocalDate.of(2026, 7, 18),
+                "午宴",
+                ScheduleStatusDict.TENTATIVE.getCode()
+        )));
+
+        PortfolioScheduleOptionsResponse response = service().queryScheduleOptions("PF001", "2026-07", "c_schedule");
+
+        assertThat(response.getYearMonth()).isEqualTo("2026-07");
+        assertThat(response.getSlotDefinitions()).hasSize(1);
+        assertThat(response.getSlotDefinitions().get(0).getId()).isEqualTo(12L);
+        assertThat(response.getDays()).hasSize(42);
+        assertThat(response.getDays()).anySatisfy(day -> {
+            assertThat(day.getDate()).isEqualTo("2026-07-18");
+            assertThat(day.getColors()).contains("#2d5f9a");
+            assertThat(day.getCount()).isEqualTo(1);
+        });
+        assertThat(response.getSchedules()).hasSize(1);
+        assertThat(response.getSchedules().get(0).getSlotDefinitionId()).isEqualTo(12L);
+        verify(portfolioVisitService, never()).recordScheduleQuery(any(), any(), any(), any());
+    }
+
+    @Test
+    void queryScheduleOptionsShouldReturnEmptyStringsForNullableScheduleFields() {
+        PortfolioEntity portfolio = publishedPortfolioWithScheduleComponent();
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
+        when(slotDefinitionEntityMapper.selectList(any())).thenReturn(List.of(slotDefinition(12L, "午宴")));
+        when(scheduleEntityMapper.selectList(any())).thenReturn(List.of(scheduleWithNullableSnapshots(
+                9L,
+                12L,
+                LocalDate.of(2026, 7, 18)
+        )));
+
+        PortfolioScheduleOptionsResponse response = service().queryScheduleOptions("PF001", "2026-07", "c_schedule");
+
+        assertThat(response.getSchedules()).hasSize(1);
+        PortfolioScheduleOptionsResponse.ScheduleItem item = response.getSchedules().get(0);
+        assertThat(item.getDate()).isEqualTo("2026-07-18");
+        assertThat(item.getSlotName()).isEmpty();
+        assertThat(item.getStartTime()).isEmpty();
+        assertThat(item.getEndTime()).isEmpty();
+        assertThat(item.getColor()).isEmpty();
+        assertThat(item.getStatus()).isEmpty();
+        assertThat(item.getStatusText()).isEmpty();
+        assertThat(item.getStatusTone()).isEqualTo("muted");
+    }
+
+    @Test
+    void submitScheduleQueryShouldRecordSlotMetadataAndReturnAvailability() {
+        PortfolioEntity portfolio = publishedPortfolioWithScheduleComponent();
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
+        when(slotDefinitionEntityMapper.selectById(12L)).thenReturn(slotDefinition(12L, "午宴"));
+        when(scheduleEntityMapper.selectOne(any())).thenReturn(schedule(
+                9L,
+                12L,
+                LocalDate.of(2026, 7, 18),
+                "午宴",
+                ScheduleStatusDict.BOOKED.getCode()
+        ));
+        PortfolioScheduleQueryRequest request = new PortfolioScheduleQueryRequest();
+        request.setVisitorKey("visitor-a");
+        request.setComponentKey("c_schedule");
+        request.setQueriedDate(LocalDate.of(2026, 7, 18));
+        request.setSlotDefinitionId(12L);
+        request.setIdempotencyKey("schedule-submit-1");
+
+        PortfolioScheduleQueryResponse response = service().submitScheduleQuery("PF001", request);
+
+        assertThat(response.isAvailable()).isFalse();
+        assertThat(response.getMessage()).isEqualTo("该档期已约");
+        assertThat(response.getSlotDefinitionId()).isEqualTo(12L);
+        verify(portfolioVisitService).recordScheduleQuery(
+                eq(portfolio),
+                eq("visitor-a"),
+                eq(LocalDate.of(2026, 7, 18)),
+                org.mockito.ArgumentMatchers.argThat(metadata ->
+                        "c_schedule".equals(metadata.get("componentKey"))
+                                && Long.valueOf(12L).equals(metadata.get("slotDefinitionId"))
+                                && "午宴".equals(metadata.get("slotName"))
+                                && Boolean.FALSE.equals(metadata.get("available"))
+                ),
+                eq("schedule-submit-1")
+        );
+    }
+
+    @Test
+    void submitScheduleQueryShouldRejectEmptyRequestBodyBeforeComponentLookup() {
+        assertThatThrownBy(() -> service().submitScheduleQuery("PF001", null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("档期查询请求不能为空");
+        verify(portfolioEntityMapper, never()).selectOne(any());
+        verify(portfolioVisitService, never()).recordScheduleQuery(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void submitScheduleQueryShouldTreatMissingScheduleAsAvailable() {
+        PortfolioEntity portfolio = publishedPortfolioWithScheduleComponent();
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
+        when(slotDefinitionEntityMapper.selectById(12L)).thenReturn(slotDefinition(12L, "午宴"));
+        when(scheduleEntityMapper.selectOne(any())).thenReturn(null);
+        PortfolioScheduleQueryRequest request = new PortfolioScheduleQueryRequest();
+        request.setVisitorKey("visitor-a");
+        request.setComponentKey("c_schedule");
+        request.setQueriedDate(LocalDate.of(2026, 7, 18));
+        request.setSlotDefinitionId(12L);
+        request.setIdempotencyKey("schedule-submit-2");
+
+        PortfolioScheduleQueryResponse response = service().submitScheduleQuery("PF001", request);
+
+        assertThat(response.isAvailable()).isTrue();
+        assertThat(response.getStatus()).isEqualTo("AVAILABLE");
+        assertThat(response.getMessage()).isEqualTo("档期空闲");
+    }
+
     private VisitorPortfolioService service() {
         return new VisitorPortfolioService(
                 portfolioEntityMapper,
                 scheduleEntityMapper,
+                slotDefinitionEntityMapper,
                 pointService,
                 portfolioVisitService,
                 portfolioRenderService,
@@ -208,5 +340,57 @@ class VisitorPortfolioServiceTest {
         portfolio.setPublishedRevision(3);
         portfolio.setPublishedConfigJson("{\"schemaVersion\":\"standard-personal-v1\",\"share\":{\"title\":\"林安婚礼司仪\"},\"components\":[]}");
         return portfolio;
+    }
+
+    private PortfolioEntity publishedPortfolioWithScheduleComponent() {
+        PortfolioEntity portfolio = publishedPortfolio();
+        portfolio.setPublishedConfigJson("""
+                {"schemaVersion":"standard-personal-v1","share":{"title":"林安婚礼司仪"},"components":[
+                  {"componentKey":"c_schedule","componentType":"SCHEDULE_QUERY","sortOrder":1000,"enabled":true,
+                   "config":{"displayMode":"MODAL_CALENDAR","queryRange":{"type":"UNLIMITED"}}}
+                ]}
+                """);
+        return portfolio;
+    }
+
+    private SlotDefinitionEntity slotDefinition(Long id, String name) {
+        SlotDefinitionEntity entity = new SlotDefinitionEntity();
+        entity.setId(id);
+        entity.setUserId(7L);
+        entity.setName(name);
+        entity.setStartTime(LocalTime.of(10, 0));
+        entity.setEndTime(LocalTime.of(14, 0));
+        entity.setColor("#2d5f9a");
+        entity.setStatus(SlotDefinitionStatusDict.ACTIVE.getCode());
+        return entity;
+    }
+
+    private ScheduleEntity schedule(
+            Long id,
+            Long slotDefinitionId,
+            LocalDate scheduleDate,
+            String slotName,
+            String status
+    ) {
+        ScheduleEntity entity = new ScheduleEntity();
+        entity.setId(id);
+        entity.setUserId(7L);
+        entity.setScheduleDate(scheduleDate);
+        entity.setSlotDefinitionId(slotDefinitionId);
+        entity.setSlotNameSnapshot(slotName);
+        entity.setStartTimeSnapshot(LocalTime.of(10, 0));
+        entity.setEndTimeSnapshot(LocalTime.of(14, 0));
+        entity.setColorSnapshot("#2d5f9a");
+        entity.setStatus(status);
+        return entity;
+    }
+
+    private ScheduleEntity scheduleWithNullableSnapshots(Long id, Long slotDefinitionId, LocalDate scheduleDate) {
+        ScheduleEntity entity = new ScheduleEntity();
+        entity.setId(id);
+        entity.setUserId(7L);
+        entity.setScheduleDate(scheduleDate);
+        entity.setSlotDefinitionId(slotDefinitionId);
+        return entity;
     }
 }

@@ -34,6 +34,16 @@ const COMPONENT_NAMES = {
   TEXT_SECTION: '文字说明'
 }
 
+const SCHEDULE_QUERY_DISPLAY_MODES = {
+  MODAL_CALENDAR: 'MODAL_CALENDAR',
+  INLINE_CALENDAR: 'INLINE_CALENDAR'
+}
+
+const SCHEDULE_QUERY_DISPLAY_MODE_OPTIONS = [
+  { value: SCHEDULE_QUERY_DISPLAY_MODES.MODAL_CALENDAR, label: '弹层显示月历' },
+  { value: SCHEDULE_QUERY_DISPLAY_MODES.INLINE_CALENDAR, label: '直接显示月历' }
+]
+
 function trimText(value) {
   return String(value || '').trim()
 }
@@ -138,6 +148,19 @@ function isWorkListComponent(componentType) {
   return componentType === COMPONENT_TYPES.WORK_GRID || componentType === COMPONENT_TYPES.WORK_LIST
 }
 
+function normalizeScheduleQueryDisplayMode(value) {
+  const displayMode = trimText(value)
+  return SCHEDULE_QUERY_DISPLAY_MODE_OPTIONS.some((item) => item.value === displayMode)
+    ? displayMode
+    : SCHEDULE_QUERY_DISPLAY_MODES.MODAL_CALENDAR
+}
+
+function normalizeScheduleQueryConfig(raw = {}) {
+  return Object.assign({}, raw || {}, {
+    displayMode: normalizeScheduleQueryDisplayMode(raw && raw.displayMode)
+  })
+}
+
 function collectComponentWorkIds(component = {}) {
   const config = component.config || {}
   const groups = normalizeDisplayGroups(config.groups, config.workIds)
@@ -183,6 +206,9 @@ function normalizeComponent(raw = {}, index = 0) {
   }
   if (isWorkListComponent(component.componentType)) {
     component.config.groups = normalizeDisplayGroups(component.config.groups, component.config.workIds)
+  }
+  if (component.componentType === COMPONENT_TYPES.SCHEDULE_QUERY) {
+    component.config = normalizeScheduleQueryConfig(component.config)
   }
   return component
 }
@@ -290,6 +316,21 @@ function updateComponentProfileConfig(config, componentKey, profileConfig = {}) 
     }
     return Object.assign({}, component, {
       config: Object.assign({}, component.config || {}, nextProfileConfig)
+    })
+  })
+  return normalizePortfolioConfig(Object.assign({}, normalized, { components }))
+}
+
+function updateComponentScheduleQueryConfig(config, componentKey, scheduleQueryConfig = {}) {
+  const normalized = normalizePortfolioConfig(config)
+  const targetKey = trimText(componentKey)
+  const nextScheduleQueryConfig = normalizeScheduleQueryConfig(scheduleQueryConfig)
+  const components = normalized.components.map((component) => {
+    if (component.componentKey !== targetKey || component.componentType !== COMPONENT_TYPES.SCHEDULE_QUERY) {
+      return component
+    }
+    return Object.assign({}, component, {
+      config: Object.assign({}, component.config || {}, nextScheduleQueryConfig)
     })
   })
   return normalizePortfolioConfig(Object.assign({}, normalized, { components }))
@@ -460,6 +501,8 @@ module.exports = {
   COMPONENT_NAMES,
   COMPONENT_TYPES,
   DISPLAY_GROUP_NAME_MAX_LENGTH,
+  SCHEDULE_QUERY_DISPLAY_MODE_OPTIONS,
+  SCHEDULE_QUERY_DISPLAY_MODES,
   SCHEMA_VERSION,
   addDisplayGroup,
   addComponent,
@@ -471,6 +514,7 @@ module.exports = {
   normalizePortfolioConfig,
   normalizeDisplayGroups,
   normalizeProfileComponentConfig,
+  normalizeScheduleQueryConfig,
   normalizeWorkIds,
   reorderComponent,
   reorderDisplayGroup,
@@ -479,6 +523,7 @@ module.exports = {
   updateDisplayGroupName,
   updateDisplayGroupWorkIds,
   updateComponentProfileConfig,
+  updateComponentScheduleQueryConfig,
   updateComponentWorkIds,
   validateDisplayGroupName,
   validateCarouselComponent,

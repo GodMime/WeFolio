@@ -1,0 +1,113 @@
+<template name="scheduleCalendarContent">
+  <view class="schedule-query-calendar">
+    <view class="schedule-query-month-bar">
+      <view class="schedule-query-month-button" catchtap="handlePrevMonth" aria-role="button" aria-label="上个月">‹</view>
+      <picker class="schedule-query-month-picker" mode="date" fields="month" value="{{selectedMonth}}" bindchange="handleMonthPickerChange">
+        <view class="schedule-query-month-picker-button">切换年月</view>
+      </picker>
+      <view class="schedule-query-month-text">{{selectedMonthText || selectedMonth}}</view>
+      <view class="schedule-query-month-button" catchtap="handleNextMonth" aria-role="button" aria-label="下个月">›</view>
+    </view>
+
+    <view wx:if="{{loading}}" class="schedule-query-state">加载中...</view>
+    <view wx:elif="{{errorMessage}}" class="schedule-query-state error">
+      <view>{{errorMessage}}</view>
+      <view class="schedule-query-retry" catchtap="handleRetryLoad" aria-role="button" aria-label="重新加载档期月历">重试</view>
+    </view>
+    <block wx:else>
+      <view class="schedule-query-weekdays">
+        <view>日</view>
+        <view>一</view>
+        <view>二</view>
+        <view>三</view>
+        <view>四</view>
+        <view>五</view>
+        <view>六</view>
+      </view>
+      <view class="schedule-query-days">
+        <view
+          wx:for="{{options.days}}"
+          wx:key="date"
+          class="{{item.dayClass}} {{selectedDate === item.date ? 'selected' : ''}}"
+          data-date="{{item.date}}"
+          catchtap="handleDayTap"
+          aria-role="button"
+          aria-label="选择{{item.date}}"
+        >
+          <view class="schedule-query-day-stack">
+            <view class="schedule-query-day-number">{{item.dayNumber}}</view>
+            <view class="schedule-query-day-meta" wx:if="{{item.metaText}}">{{item.metaText}}</view>
+          </view>
+          <view class="schedule-query-day-dots">
+            <view wx:for="{{item.colors}}" wx:for-item="color" wx:key="*this" class="schedule-query-day-dot" style="background: {{color}};"></view>
+          </view>
+        </view>
+      </view>
+
+      <view class="schedule-query-slot-section">
+        <view class="schedule-query-slot-heading">{{selectedDate || '请选择日期'}}</view>
+        <view wx:if="{{!selectedDate}}" class="schedule-query-empty">选择日期后可查看档位</view>
+        <view wx:elif="{{options.slotDefinitions.length === 0}}" class="schedule-query-empty">暂无可选档位</view>
+        <view wx:else class="schedule-query-slot-list">
+          <view
+            wx:for="{{options.slotDefinitions}}"
+            wx:key="id"
+            class="schedule-query-slot {{selectedSlotDefinitionId === item.id ? 'selected' : ''}}"
+            data-id="{{item.id}}"
+            catchtap="handleSlotTap"
+            aria-role="radio"
+            aria-checked="{{selectedSlotDefinitionId === item.id}}"
+            aria-label="选择{{item.name}}"
+          >
+            <view class="schedule-query-slot-color" style="background: {{item.color || '#2d5f9a'}};"></view>
+            <view class="schedule-query-slot-copy">
+              <view class="schedule-query-slot-name">{{item.name}}</view>
+              <view class="schedule-query-slot-time">{{item.timeRangeText}}</view>
+            </view>
+            <view class="schedule-query-slot-check">{{selectedSlotDefinitionId === item.id ? '✓' : ''}}</view>
+          </view>
+        </view>
+      </view>
+
+      <view wx:if="{{selectedDaySchedules.length}}" class="schedule-query-day-summary">
+        <view wx:for="{{selectedDaySchedules}}" wx:key="slotDefinitionId" class="schedule-query-summary-item">
+          <view>{{item.slotName}}</view>
+          <view>{{item.statusText}}</view>
+        </view>
+      </view>
+
+      <view wx:if="{{result}}" class="schedule-query-result {{result.available ? 'available' : 'unavailable'}}">
+        <view class="schedule-query-result-title">{{result.message}}</view>
+        <view class="schedule-query-result-desc">{{result.queriedDate}} {{result.slotName}} {{result.timeRangeText}}</view>
+      </view>
+
+      <button class="schedule-query-submit" disabled="{{!selectedDate || !selectedSlotDefinitionId || submitting}}" loading="{{submitting}}" catchtap="handleSubmitQuery">提交查询</button>
+    </block>
+  </view>
+</template>
+
+<view class="schedule-query {{scheduleQuery.displayMode === 'INLINE_CALENDAR' ? 'inline' : 'modal'}}">
+  <block wx:if="{{scheduleQuery.displayMode === 'INLINE_CALENDAR'}}">
+    <view class="schedule-query-inline-shell">
+      <view class="component-title">{{scheduleQuery.title || '档期查询'}}</view>
+      <view wx:if="{{scheduleQuery.description}}" class="section-desc">{{scheduleQuery.description}}</view>
+      <template is="scheduleCalendarContent" data="{{selectedMonth: selectedMonth, selectedMonthText: selectedMonthText, options: options, selectedDate: selectedDate, selectedDaySchedules: selectedDaySchedules, selectedSlotDefinitionId: selectedSlotDefinitionId, loading: loading, submitting: submitting, errorMessage: errorMessage, result: result}}" />
+    </view>
+  </block>
+  <block wx:else>
+    <view class="schedule-query-entry">
+      <view class="schedule-query-entry-spacer" aria-hidden="true"></view>
+      <view wx:if="{{scheduleQuery.description}}" class="section-desc">{{scheduleQuery.description}}</view>
+      <button class="schedule-query-open-button" catchtap="handleOpenCalendar">{{scheduleQuery.buttonText || '档期查询'}}</button>
+    </view>
+    <view class="schedule-query-modal-mask {{visible ? 'visible' : ''}}" catchtap="handleCloseCalendar">
+      <view class="schedule-query-modal-panel" catchtap="noop">
+        <view class="schedule-query-modal-heading">
+          <view class="schedule-query-modal-title">{{scheduleQuery.title || '档期查询'}}</view>
+          <view class="schedule-query-close" catchtap="handleCloseCalendar" aria-role="button" aria-label="关闭档期查询">×</view>
+        </view>
+        <template is="scheduleCalendarContent" data="{{selectedMonth: selectedMonth, selectedMonthText: selectedMonthText, options: options, selectedDate: selectedDate, selectedDaySchedules: selectedDaySchedules, selectedSlotDefinitionId: selectedSlotDefinitionId, loading: loading, submitting: submitting, errorMessage: errorMessage, result: result}}" />
+      </view>
+    </view>
+  </block>
+</view>

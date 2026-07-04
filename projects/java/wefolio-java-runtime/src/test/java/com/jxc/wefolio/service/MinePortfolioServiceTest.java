@@ -11,6 +11,7 @@ import com.jxc.wefolio.dict.PortfolioStatusDict;
 import com.jxc.wefolio.dict.PortfolioTemplateTypeDict;
 import com.jxc.wefolio.dict.PointSceneCodeDict;
 import com.jxc.wefolio.dict.ReferenceTypeDict;
+import com.jxc.wefolio.dict.SlotDefinitionStatusDict;
 import com.jxc.wefolio.dto.MinePortfolioAssetUploadTicketRequest;
 import com.jxc.wefolio.dto.MinePortfolioAssetUploadTicketResponse;
 import com.jxc.wefolio.dto.MinePortfolioCreateRequest;
@@ -20,14 +21,19 @@ import com.jxc.wefolio.dto.MinePortfolioListResponse;
 import com.jxc.wefolio.dto.MinePortfolioPublishRequest;
 import com.jxc.wefolio.dto.PortfolioConfigDto;
 import com.jxc.wefolio.dto.PortfolioRenderDto;
+import com.jxc.wefolio.dto.PortfolioScheduleOptionsResponse;
 import com.jxc.wefolio.entity.PortfolioEntity;
 import com.jxc.wefolio.entity.PortfolioHistoryEntity;
 import com.jxc.wefolio.entity.PortfolioReferenceEntity;
+import com.jxc.wefolio.entity.ScheduleEntity;
+import com.jxc.wefolio.entity.SlotDefinitionEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.PortfolioEntityMapper;
 import com.jxc.wefolio.mapper.PortfolioHistoryEntityMapper;
 import com.jxc.wefolio.mapper.PortfolioReferenceEntityMapper;
 import com.jxc.wefolio.mapper.PortfolioShareRecordEntityMapper;
+import com.jxc.wefolio.mapper.ScheduleEntityMapper;
+import com.jxc.wefolio.mapper.SlotDefinitionEntityMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -38,7 +44,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.lang.reflect.Method;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -76,6 +84,14 @@ class MinePortfolioServiceTest {
     /** 分享记录 Mapper 模拟 */
     @Mock
     private PortfolioShareRecordEntityMapper portfolioShareRecordEntityMapper;
+
+    /** 档期 Mapper 模拟 */
+    @Mock
+    private ScheduleEntityMapper scheduleEntityMapper;
+
+    /** 档位定义 Mapper 模拟 */
+    @Mock
+    private SlotDefinitionEntityMapper slotDefinitionEntityMapper;
 
     /** 积分服务模拟 */
     @Mock
@@ -427,6 +443,41 @@ class MinePortfolioServiceTest {
     }
 
     @Test
+    void queryPreviewScheduleOptionsShouldReturnEmptyStringsForNullableScheduleFields() {
+        PortfolioEntity portfolio = ownedPortfolio();
+        portfolio.setDraftConfigJson(scheduleComponentConfigJson());
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+        when(slotDefinitionEntityMapper.selectList(any())).thenReturn(List.of(slotDefinition(12L, "午宴")));
+        when(scheduleEntityMapper.selectList(any())).thenReturn(List.of(scheduleWithNullableSnapshots(
+                9L,
+                12L,
+                LocalDate.of(2026, 7, 18)
+        )));
+
+        PortfolioScheduleOptionsResponse response = service().queryPreviewScheduleOptions(88L, "2026-07", "c_schedule", null);
+
+        assertThat(response.getSchedules()).hasSize(1);
+        PortfolioScheduleOptionsResponse.ScheduleItem item = response.getSchedules().get(0);
+        assertThat(item.getDate()).isEqualTo("2026-07-18");
+        assertThat(item.getSlotName()).isEmpty();
+        assertThat(item.getStartTime()).isEmpty();
+        assertThat(item.getEndTime()).isEmpty();
+        assertThat(item.getColor()).isEmpty();
+        assertThat(item.getStatus()).isEmpty();
+        assertThat(item.getStatusText()).isEmpty();
+        assertThat(item.getStatusTone()).isEqualTo("muted");
+    }
+
+    @Test
+    void submitPreviewScheduleQueryShouldRejectEmptyRequestBodyBeforeComponentLookup() {
+        assertThatThrownBy(() -> service().submitPreviewScheduleQuery(88L, null, null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("档期查询请求不能为空");
+        verify(portfolioEntityMapper, never()).selectById(any());
+        verify(slotDefinitionEntityMapper, never()).selectById(any());
+    }
+
+    @Test
     void publishShouldCopyDraftConfigConsumeOnePointAndRebuildPublishedReferences() {
         PortfolioEntity portfolio = ownedPortfolio();
         portfolio.setDraftRevision(4);
@@ -715,6 +766,8 @@ class MinePortfolioServiceTest {
                 portfolioHistoryEntityMapper,
                 portfolioReferenceEntityMapper,
                 portfolioShareRecordEntityMapper,
+                scheduleEntityMapper,
+                slotDefinitionEntityMapper,
                 pointService,
                 portfolioConfigValidator,
                 portfolioRenderService,
@@ -772,6 +825,36 @@ class MinePortfolioServiceTest {
         )));
         config.setComponents(List.of(profile, qrContact));
         return config;
+    }
+
+    private String scheduleComponentConfigJson() {
+        return """
+                {"schemaVersion":"standard-personal-v1","share":{"title":"林安婚礼司仪"},"components":[
+                  {"componentKey":"c_schedule","componentType":"SCHEDULE_QUERY","sortOrder":1000,"enabled":true,
+                   "config":{"displayMode":"MODAL_CALENDAR","queryRange":{"type":"UNLIMITED"}}}
+                ]}
+                """;
+    }
+
+    private SlotDefinitionEntity slotDefinition(Long id, String name) {
+        SlotDefinitionEntity entity = new SlotDefinitionEntity();
+        entity.setId(id);
+        entity.setUserId(7L);
+        entity.setName(name);
+        entity.setStartTime(LocalTime.of(10, 0));
+        entity.setEndTime(LocalTime.of(14, 0));
+        entity.setColor("#2d5f9a");
+        entity.setStatus(SlotDefinitionStatusDict.ACTIVE.getCode());
+        return entity;
+    }
+
+    private ScheduleEntity scheduleWithNullableSnapshots(Long id, Long slotDefinitionId, LocalDate scheduleDate) {
+        ScheduleEntity entity = new ScheduleEntity();
+        entity.setId(id);
+        entity.setUserId(7L);
+        entity.setScheduleDate(scheduleDate);
+        entity.setSlotDefinitionId(slotDefinitionId);
+        return entity;
     }
 
     private PortfolioReferenceEntity reference(Long portfolioId, String scope, Long workId) {

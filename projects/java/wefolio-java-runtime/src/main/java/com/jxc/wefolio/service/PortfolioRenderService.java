@@ -91,6 +91,9 @@ public class PortfolioRenderService {
     /** 档期查询范围配置键 */
     private static final String CONFIG_KEY_QUERY_RANGE = "queryRange";
 
+    /** 档期查询展示方式配置键 */
+    private static final String CONFIG_KEY_DISPLAY_MODE = "displayMode";
+
     /** 二维码来源配置键 */
     private static final String CONFIG_KEY_QR_URL_SOURCE = "qrUrlSource";
 
@@ -111,6 +114,9 @@ public class PortfolioRenderService {
 
     /** 默认展示标签排序值 */
     private static final int DEFAULT_GROUP_SORT_ORDER = 1000;
+
+    /** 档期查询默认弹层月历展示方式 */
+    private static final String SCHEDULE_DISPLAY_MODE_MODAL_CALENDAR = "MODAL_CALENDAR";
 
     /** 作品 Mapper */
     private final WorkEntityMapper workEntityMapper;
@@ -345,6 +351,10 @@ public class PortfolioRenderService {
         PortfolioRenderDto.ScheduleQuery scheduleQuery = new PortfolioRenderDto.ScheduleQuery();
         scheduleQuery.setTitle(asString(componentConfig.get(CONFIG_KEY_TITLE)));
         scheduleQuery.setDescription(asString(componentConfig.get(CONFIG_KEY_DESCRIPTION)));
+        scheduleQuery.setDisplayMode(defaultString(
+                asString(componentConfig.get(CONFIG_KEY_DISPLAY_MODE)),
+                SCHEDULE_DISPLAY_MODE_MODAL_CALENDAR
+        ));
         scheduleQuery.setQueryRange(asObjectMap(componentConfig.get(CONFIG_KEY_QUERY_RANGE)));
         return scheduleQuery;
     }

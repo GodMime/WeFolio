@@ -123,6 +123,32 @@ class PortfolioRenderServiceTest {
                 .isEqualTo("https://cdn.example.com/profile-qr.jpg");
     }
 
+    /**
+     * 档期查询组件应透出展示模式，供访客页决定弹层或内联月历。
+     */
+    @Test
+    void renderShouldExposeScheduleQueryDisplayMode() {
+        PortfolioConfigDto config = config(component(
+                "c_schedule",
+                PortfolioComponentTypeDict.SCHEDULE_QUERY.getCode(),
+                1000,
+                Map.of(
+                        "title", "档期查询",
+                        "description", "请选择日期和档位",
+                        "displayMode", "INLINE_CALENDAR",
+                        "queryRange", Map.of("type", "UNLIMITED")
+                )
+        ));
+
+        PortfolioRenderDto render = service().render(portfolio(), config, false, false, null, null);
+
+        PortfolioRenderDto.ScheduleQuery scheduleQuery = render.getComponents().get(0).getScheduleQuery();
+        assertThat(scheduleQuery.getTitle()).isEqualTo("档期查询");
+        assertThat(scheduleQuery.getDescription()).isEqualTo("请选择日期和档位");
+        assertThat(scheduleQuery.getDisplayMode()).isEqualTo("INLINE_CALENDAR");
+        assertThat(scheduleQuery.getQueryRange()).containsEntry("type", "UNLIMITED");
+    }
+
     private PortfolioRenderService service() {
         return new PortfolioRenderService(workEntityMapper, cosService);
     }
