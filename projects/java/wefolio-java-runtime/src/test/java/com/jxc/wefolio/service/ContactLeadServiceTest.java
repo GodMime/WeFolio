@@ -1,6 +1,7 @@
 package com.jxc.wefolio.service;
 
 import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
+import com.jxc.wefolio.dict.PortfolioPublicationStatusDict;
 import com.jxc.wefolio.dto.ContactLeadSubmitRequest;
 import com.jxc.wefolio.dto.ContactLeadSubmitResponse;
 import com.jxc.wefolio.entity.ContactLeadEntity;
@@ -12,10 +13,14 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DuplicateKeyException;
+
+import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -39,10 +44,11 @@ class ContactLeadServiceTest {
 
     @Test
     void submitShouldRejectMissingContactNameOrContactMethod() {
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio());
         ContactLeadSubmitRequest missingName = request();
         missingName.setContactName("");
 
-        assertThatThrownBy(() -> service().submit(portfolio(), missingName))
+        assertThatThrownBy(() -> service().submit("PF001", missingName))
                 .isInstanceOf(com.jxc.wefolio.exception.BusinessException.class)
                 .hasMessage("请填写联系人");
 
@@ -50,13 +56,14 @@ class ContactLeadServiceTest {
         missingContact.setPhone("");
         missingContact.setWechat("");
 
-        assertThatThrownBy(() -> service().submit(portfolio(), missingContact))
+        assertThatThrownBy(() -> service().submit("PF001", missingContact))
                 .isInstanceOf(com.jxc.wefolio.exception.BusinessException.class)
                 .hasMessage("请至少填写手机号或微信号");
     }
 
     @Test
     void submitShouldStoreMaskedLeadAndRecordSubmitEvent() {
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio());
         when(contactLeadEntityMapper.insert(any(ContactLeadEntity.class))).thenAnswer(invocation -> {
             ContactLeadEntity lead = invocation.getArgument(0);
             lead.setId(66L);
@@ -64,7 +71,7 @@ class ContactLeadServiceTest {
         });
         ContactLeadSubmitRequest request = request();
 
-        ContactLeadSubmitResponse response = service().submit(portfolio(), request);
+        ContactLeadSubmitResponse response = service().submit("PF001", request);
 
         ArgumentCaptor<ContactLeadEntity> captor = ArgumentCaptor.forClass(ContactLeadEntity.class);
         verify(contactLeadEntityMapper).insert(captor.capture());
@@ -78,6 +85,28 @@ class ContactLeadServiceTest {
         assertThat(lead.getWechatMaskHint()).isEqualTo("we***io");
         assertThat(lead.getWechatCiphertext()).isEqualTo("wefolio");
         verify(portfolioVisitService).recordContactLeadSubmitted(portfolio(), "visitor-a", 66L, "lead-1");
+    }
+
+    @Test
+    void submitShouldReturnExistingLeadWhenIdempotencyKeyAlreadyInserted() {
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio());
+        ContactLeadEntity existingLead = new ContactLeadEntity();
+        existingLead.setId(77L);
+        existingLead.setPortfolioId(88L);
+        existingLead.setOwnerType(PortfolioOwnerTypeDict.USER.getCode());
+        existingLead.setOwnerId(7L);
+        existingLead.setIdempotencyKey("lead-1");
+        existingLead.setSubmittedAt(LocalDateTime.of(2026, 7, 18, 12, 30));
+        when(contactLeadEntityMapper.insert(any(ContactLeadEntity.class)))
+                .thenThrow(new DuplicateKeyException("duplicate"));
+        when(contactLeadEntityMapper.selectOne(any())).thenReturn(existingLead);
+
+        ContactLeadSubmitResponse response = service().submit("PF001", request());
+
+        assertThat(response.getLeadId()).isEqualTo(77L);
+        assertThat(response.getSubmittedAt()).isEqualTo(existingLead.getSubmittedAt());
+        verify(contactLeadEntityMapper).selectOne(any());
+        verify(portfolioVisitService, never()).recordContactLeadSubmitted(any(), any(), any(), any());
     }
 
     private ContactLeadService service() {
@@ -105,6 +134,7 @@ class ContactLeadServiceTest {
         portfolio.setShareCode("PF001");
         portfolio.setOwnerType(PortfolioOwnerTypeDict.USER.getCode());
         portfolio.setOwnerId(7L);
+        portfolio.setPublicationStatus(PortfolioPublicationStatusDict.PUBLISHED.getCode());
         portfolio.setPublishedRevision(3);
         portfolio.setPublishedConfigJson("""
                 {"schemaVersion":"standard-personal-v1","share":{"title":"林安婚礼司仪"},"components":[]}

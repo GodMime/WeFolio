@@ -550,11 +550,11 @@ public class MineWorkService {
                 validateCoverTask(userId, task, head, item);
                 response.getItems().add(workUploadTransactionService.confirmUploadedTask(userId, task, item));
             } catch (BusinessException e) {
-                markTaskFailedIfPossible(taskId, e.getMessage());
+                markTaskFailedIfPossible(userId, taskId, e.getMessage());
                 response.getItems().add(MineWorkUploadCompleteResponse.Item.failure(taskId, e.getMessage()));
             } catch (Exception e) {
                 log.warn("作品确认出现未预期异常: taskId={}", taskId, e);
-                markTaskFailedIfPossible(taskId, MineWorkMessage.UPLOAD_CONFIRM_UNEXPECTED_FAILED_MESSAGE);
+                markTaskFailedIfPossible(userId, taskId, MineWorkMessage.UPLOAD_CONFIRM_UNEXPECTED_FAILED_MESSAGE);
                 response.getItems().add(MineWorkUploadCompleteResponse.Item.failure(
                         taskId,
                         MineWorkMessage.UPLOAD_CONFIRM_UNEXPECTED_FAILED_MESSAGE));
@@ -1486,15 +1486,18 @@ public class MineWorkService {
     /**
      * 标记上传任务失败。
      *
+     * @param userId 当前用户 ID
      * @param taskId 上传任务 ID
      * @param message 失败消息
      */
-    private void markTaskFailedIfPossible(Long taskId, String message) {
+    private void markTaskFailedIfPossible(Long userId, Long taskId, String message) {
         if (taskId == null) {
             return;
         }
         WorkUploadTaskEntity task = workUploadTaskEntityMapper.selectById(taskId);
-        if (task == null || WorkUploadTaskStatusDict.CONFIRMED.getCode().equals(task.getStatus())) {
+        if (task == null
+                || !userId.equals(task.getUserId())
+                || WorkUploadTaskStatusDict.CONFIRMED.getCode().equals(task.getStatus())) {
             return;
         }
         task.setStatus(WorkUploadTaskStatusDict.FAILED.getCode());

@@ -772,6 +772,28 @@ class MineWorkServiceTest {
     }
 
     @Test
+    void completeUploadShouldNotMarkForeignTaskFailedWhenOwnershipCheckFails() {
+        WorkUploadTaskEntity foreignTask = uploadTask(
+                404L,
+                "foreign-batch",
+                "WFA9C9E9A0/work/image/foreign.jpg",
+                "foreign-ticket");
+        foreignTask.setUserId(8L);
+        when(workUploadTaskEntityMapper.selectById(404L)).thenReturn(foreignTask);
+        MineWorkUploadCompleteRequest.CompleteItem item = new MineWorkUploadCompleteRequest.CompleteItem();
+        item.setTaskId(404L);
+        MineWorkUploadCompleteRequest request = new MineWorkUploadCompleteRequest();
+        request.setItems(List.of(item));
+
+        MineWorkUploadCompleteResponse response = service().completeUpload(request);
+
+        assertThat(response.getItems()).hasSize(1);
+        assertThat(response.getItems().get(0).isSuccess()).isFalse();
+        assertThat(response.getItems().get(0).getMessage()).isEqualTo("上传任务不存在");
+        verify(workUploadTaskEntityMapper, never()).updateById(any(WorkUploadTaskEntity.class));
+    }
+
+    @Test
     void completeUploadShouldVerifyCustomCoverTaskBeforeTransactionalConfirmation() {
         WorkUploadTaskEntity videoTask = new WorkUploadTaskEntity();
         videoTask.setId(99L);

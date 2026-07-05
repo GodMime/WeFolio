@@ -15,6 +15,7 @@ import com.jxc.wefolio.mapper.ContactLeadEntityMapper;
 import com.jxc.wefolio.mapper.PortfolioEntityMapper;
 import com.jxc.wefolio.message.PortfolioMessage;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -62,7 +63,7 @@ public class ContactLeadService {
         if (portfolio == null || !PortfolioPublicationStatusDict.PUBLISHED.getCode().equals(portfolio.getPublicationStatus())) {
             throw new BusinessException(PortfolioMessage.PORTFOLIO_UNAVAILABLE_MESSAGE);
         }
-        return submit(portfolio, request);
+        return submitInternal(portfolio, request);
     }
 
     /**
@@ -72,8 +73,7 @@ public class ContactLeadService {
      * @param request 提交请求
      * @return 提交响应
      */
-    @Transactional(rollbackFor = Exception.class)
-    public ContactLeadSubmitResponse submit(PortfolioEntity portfolio, ContactLeadSubmitRequest request) {
+    private ContactLeadSubmitResponse submitInternal(PortfolioEntity portfolio, ContactLeadSubmitRequest request) {
         if (request == null || !hasText(request.getContactName())) {
             throw new BusinessException(PortfolioMessage.CONTACT_NAME_REQUIRED_MESSAGE);
         }
@@ -107,12 +107,48 @@ public class ContactLeadService {
                 PortfolioMessage.CONTACT_SUBMIT_IDEMPOTENCY_REQUIRED_MESSAGE
         ));
         lead.setSubmittedAt(now);
-        contactLeadEntityMapper.insert(lead);
-        portfolioVisitService.recordContactLeadSubmitted(portfolio, request.getVisitorKey(), lead.getId(), request.getIdempotencyKey());
+        try {
+            contactLeadEntityMapper.insert(lead);
+        } catch (DuplicateKeyException e) {
+            ContactLeadEntity existingLead = findExistingLead(portfolio, lead.getIdempotencyKey());
+            if (existingLead != null) {
+                return buildSubmitResponse(existingLead);
+            }
+            throw e;
+        }
+        portfolioVisitService.recordContactLeadSubmitted(portfolio, request.getVisitorKey(), lead.getId(), lead.getIdempotencyKey());
 
+        return buildSubmitResponse(lead);
+    }
+
+    /**
+     * 按幂等键查询同一作品集下已提交的线索。
+     *
+     * @param portfolio 作品集
+     * @param idempotencyKey 幂等键
+     * @return 已存在的线索，找不到时返回 null
+     */
+    private ContactLeadEntity findExistingLead(PortfolioEntity portfolio, String idempotencyKey) {
+        return contactLeadEntityMapper.selectOne(
+                Wrappers.lambdaQuery(ContactLeadEntity.class)
+                        .eq(ContactLeadEntity::getPortfolioId, portfolio.getId())
+                        .eq(ContactLeadEntity::getOwnerType, portfolio.getOwnerType())
+                        .eq(ContactLeadEntity::getOwnerId, portfolio.getOwnerId())
+                        .eq(ContactLeadEntity::getIdempotencyKey, idempotencyKey)
+                        .last("LIMIT 1")
+        );
+    }
+
+    /**
+     * 构建线索提交响应。
+     *
+     * @param lead 联系线索
+     * @return 提交响应
+     */
+    private ContactLeadSubmitResponse buildSubmitResponse(ContactLeadEntity lead) {
         ContactLeadSubmitResponse response = new ContactLeadSubmitResponse();
         response.setLeadId(lead.getId());
-        response.setSubmittedAt(now);
+        response.setSubmittedAt(lead.getSubmittedAt());
         return response;
     }
 

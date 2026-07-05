@@ -79,7 +79,10 @@ class ServiceTransactionStructureTest {
                 .contains("@Transactional(rollbackFor = Exception.class)\n    public void recordContactLeadSubmitted(");
         assertThat(leadSource)
                 .contains("@Transactional(rollbackFor = Exception.class)\n    public ContactLeadSubmitResponse submit(String shareCode")
-                .contains("@Transactional(rollbackFor = Exception.class)\n    public ContactLeadSubmitResponse submit(PortfolioEntity portfolio");
+                .contains("private ContactLeadSubmitResponse submitInternal(PortfolioEntity portfolio")
+                .contains("return submitInternal(portfolio, request);")
+                .doesNotContain("@Transactional(rollbackFor = Exception.class)\n    public ContactLeadSubmitResponse submit(PortfolioEntity portfolio")
+                .doesNotContain("return submit(portfolio, request);");
     }
 
     @Test
