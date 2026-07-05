@@ -10,6 +10,8 @@ const FOLLOW_TONE_ROSE = 'rose'
 const FOLLOW_TONE_TEAL = 'teal'
 const FOLLOW_TONE_BLUE = 'blue'
 const FOLLOW_TONE_MUTED = 'muted'
+const DETAIL_TYPE_SCHEDULE_QUERIES = 'scheduleQueries'
+const DETAIL_TYPE_CONTACT_LEADS = 'contactLeads'
 
 function toNumber(value) {
   const numberValue = Number(value)
@@ -23,6 +25,17 @@ function toDisplayText(value) {
 function toPositiveNumber(value, fallback) {
   const numberValue = Number(value)
   return Number.isFinite(numberValue) && numberValue > 0 ? numberValue : fallback
+}
+
+function buildMetric(label, value, action = '') {
+  const interactive = Boolean(action)
+  return {
+    label,
+    value: toDisplayText(value),
+    action,
+    interactive,
+    className: interactive ? 'metric interactive' : 'metric'
+  }
 }
 
 function defaultTrendPoints() {
@@ -187,15 +200,101 @@ function appendVisitEventTimeline(current = {}, nextPage = {}) {
   })
 }
 
+function normalizeScheduleQueryItem(item = {}) {
+  const available = Boolean(item.available)
+  return {
+    id: item.id || '',
+    visitorLabel: item.visitorLabel || '微信访客',
+    visitorAvatarUrl: item.visitorAvatarUrl || '',
+    visitorInitial: extractVisitorInitial(item),
+    portfolioTitle: item.portfolioTitle || '',
+    queriedDateText: item.queriedDateText || '',
+    slotText: item.slotText || '',
+    resultStatus: item.resultStatus || '',
+    resultStatusText: item.resultStatusText || item.resultMessage || '',
+    available,
+    resultMessage: item.resultMessage || '',
+    resultToneClass: `detail-status ${available ? 'teal' : 'rose'}`,
+    sourceText: item.sourceText || '来自未知来源',
+    createdTimeText: item.createdTimeText || ''
+  }
+}
+
+function normalizeContactLeadItem(item = {}) {
+  const followStatus = item.followStatus || FOLLOW_STATUS_NOT_FOLLOWED_UP
+  const phone = item.phone || ''
+  const phoneLast4 = item.phoneLast4 || ''
+  const wechat = item.wechat || ''
+  const wechatMaskHint = item.wechatMaskHint || ''
+  return {
+    id: item.id || '',
+    contactName: item.contactName || '未留姓名',
+    phone,
+    phoneLast4,
+    phoneText: phone || '未留手机',
+    phoneCopyText: phone,
+    phoneCanCopy: Boolean(phone),
+    phoneLast4Text: phoneLast4 ? `手机尾号 ${phoneLast4}` : '未留手机',
+    wechat,
+    wechatMaskHint,
+    wechatText: wechat || '未留微信',
+    wechatCopyText: wechat,
+    wechatCanCopy: Boolean(wechat),
+    desiredSchedule: item.desiredSchedule || '',
+    needs: item.needs || '',
+    portfolioTitle: item.portfolioTitle || '',
+    sourceText: item.sourceText || '来自未知来源',
+    followStatus,
+    followStatusText: buildFollowStatusText(followStatus, item.followStatusText),
+    followToneClass: `follow-pill ${buildFollowTone(followStatus, item.followTone)}`,
+    canMarkFollowed: followStatus === FOLLOW_STATUS_NOT_FOLLOWED_UP,
+    submittedTimeText: item.submittedTimeText || ''
+  }
+}
+
+function normalizeVisitDetailPage(type, raw = {}, fallbackPage = {}) {
+  const pageNo = toPositiveNumber(raw.pageNo, toPositiveNumber(fallbackPage.pageNo, 1))
+  const pageSize = toPositiveNumber(raw.pageSize, toPositiveNumber(fallbackPage.pageSize, 20))
+  const hasMore = Boolean(raw.hasMore)
+  const normalizer = type === DETAIL_TYPE_CONTACT_LEADS ? normalizeContactLeadItem : normalizeScheduleQueryItem
+  return {
+    type,
+    title: type === DETAIL_TYPE_CONTACT_LEADS ? '预留信息' : '查询档期',
+    pageNo,
+    pageSize,
+    hasMore,
+    nextPage: hasMore ? pageNo + 1 : null,
+    items: Array.isArray(raw.items) ? raw.items.map(normalizer) : []
+  }
+}
+
+function appendVisitDetailPage(current = {}, nextPage = {}) {
+  const pageNo = toPositiveNumber(nextPage.pageNo, toPositiveNumber(current.pageNo, 1))
+  const pageSize = toPositiveNumber(nextPage.pageSize, toPositiveNumber(current.pageSize, 20))
+  const hasMore = Boolean(nextPage.hasMore)
+  return Object.assign({}, current, nextPage, {
+    type: nextPage.type || current.type || DETAIL_TYPE_SCHEDULE_QUERIES,
+    title: nextPage.title || current.title || '查询档期',
+    items: []
+      .concat(Array.isArray(current.items) ? current.items : [])
+      .concat(Array.isArray(nextPage.items) ? nextPage.items : []),
+    pageNo,
+    pageSize,
+    hasMore,
+    nextPage: hasMore ? pageNo + 1 : null
+  })
+}
+
 function normalizeVisitRecords(raw = {}) {
   const summary = raw.summary || {}
   const trend = raw.trend || {}
   const points = normalizeTrendPoints(trend.points)
   return {
     metrics: [
-      { label: '累计访问次数', value: toDisplayText(summary.totalVisitCount) },
-      { label: '今日访问', value: toDisplayText(summary.todayVisitCount) },
-      { label: '查询档期', value: toDisplayText(summary.scheduleQueryCount) }
+      buildMetric('累计访问次数', summary.totalVisitCount),
+      buildMetric('今日访问', summary.todayVisitCount),
+      buildMetric('查询档期', summary.scheduleQueryCount, DETAIL_TYPE_SCHEDULE_QUERIES),
+      buildMetric('预留信息', summary.contactLeadCount, DETAIL_TYPE_CONTACT_LEADS)
     ],
     trend: {
       changeText: trend.changeText || '暂无趋势',
@@ -226,9 +325,31 @@ function markVisitRecordFollowed(visitData = {}, recordId, followedRecord = {}) 
   })
 }
 
+function markContactLeadFollowed(detailPage = {}, leadId, followedLead = {}) {
+  const items = Array.isArray(detailPage.items) ? detailPage.items : []
+  const normalizedLeadId = String(leadId)
+  return Object.assign({}, detailPage, {
+    items: items.map((item) => {
+      if (String(item.id) !== normalizedLeadId) {
+        return item
+      }
+      return normalizeContactLeadItem(Object.assign({}, item, {
+        followStatus: FOLLOW_STATUS_CONTACTED,
+        followStatusText: FOLLOW_STATUS_TEXT_CONTACTED,
+        followTone: FOLLOW_TONE_TEAL
+      }, followedLead, {
+        id: followedLead.id || item.id
+      }))
+    })
+  })
+}
+
 module.exports = {
+  appendVisitDetailPage,
   appendVisitEventTimeline,
+  markContactLeadFollowed,
   markVisitRecordFollowed,
+  normalizeVisitDetailPage,
   normalizeVisitEventTimeline,
   normalizeVisitRecords
 }

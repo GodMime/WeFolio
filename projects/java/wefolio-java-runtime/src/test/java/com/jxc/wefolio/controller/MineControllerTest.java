@@ -90,6 +90,58 @@ class MineControllerTest {
     }
 
     @Test
+    void scheduleQueriesEndpointDelegatesToServiceWithPagination() throws NoSuchMethodException {
+        Method method = MineController.class.getMethod("scheduleQueries", Integer.class, Integer.class);
+        GetMapping getMapping = method.getAnnotation(GetMapping.class);
+        Annotation[][] parameterAnnotations = method.getParameterAnnotations();
+        RequestParam pageNoParam = findRequestParam(parameterAnnotations[0]);
+        RequestParam pageSizeParam = findRequestParam(parameterAnnotations[1]);
+        MineVisitRecordsResponse.ScheduleQueryPage serviceResponse = new MineVisitRecordsResponse.ScheduleQueryPage();
+        serviceResponse.setPageNo(1);
+        when(mineVisitService.getScheduleQueryRecords(1, 20)).thenReturn(serviceResponse);
+        MineController controller = new MineController(
+                mineDashboardService, mineProfileService, mineVisitService);
+
+        Response<MineVisitRecordsResponse.ScheduleQueryPage> response = controller.scheduleQueries(1, 20);
+
+        assertThat(getMapping).isNotNull();
+        assertThat(getMapping.value()).containsExactly("/api/mine/visits/schedule-queries");
+        assertThat(parameterAnnotations[0]).anyMatch(annotation -> annotation instanceof RequestParam);
+        assertThat(parameterAnnotations[1]).anyMatch(annotation -> annotation instanceof RequestParam);
+        assertThat(pageNoParam.required()).isFalse();
+        assertThat(pageSizeParam.required()).isFalse();
+        assertThat(response.isSuccess()).isTrue();
+        assertThat(response.getData()).isSameAs(serviceResponse);
+        verify(mineVisitService).getScheduleQueryRecords(1, 20);
+    }
+
+    @Test
+    void contactLeadsEndpointDelegatesToServiceWithPagination() throws NoSuchMethodException {
+        Method method = MineController.class.getMethod("contactLeads", Integer.class, Integer.class);
+        GetMapping getMapping = method.getAnnotation(GetMapping.class);
+        Annotation[][] parameterAnnotations = method.getParameterAnnotations();
+        RequestParam pageNoParam = findRequestParam(parameterAnnotations[0]);
+        RequestParam pageSizeParam = findRequestParam(parameterAnnotations[1]);
+        MineVisitRecordsResponse.ContactLeadPage serviceResponse = new MineVisitRecordsResponse.ContactLeadPage();
+        serviceResponse.setPageNo(1);
+        when(mineVisitService.getContactLeads(1, 20)).thenReturn(serviceResponse);
+        MineController controller = new MineController(
+                mineDashboardService, mineProfileService, mineVisitService);
+
+        Response<MineVisitRecordsResponse.ContactLeadPage> response = controller.contactLeads(1, 20);
+
+        assertThat(getMapping).isNotNull();
+        assertThat(getMapping.value()).containsExactly("/api/mine/visits/contact-leads");
+        assertThat(parameterAnnotations[0]).anyMatch(annotation -> annotation instanceof RequestParam);
+        assertThat(parameterAnnotations[1]).anyMatch(annotation -> annotation instanceof RequestParam);
+        assertThat(pageNoParam.required()).isFalse();
+        assertThat(pageSizeParam.required()).isFalse();
+        assertThat(response.isSuccess()).isTrue();
+        assertThat(response.getData()).isSameAs(serviceResponse);
+        verify(mineVisitService).getContactLeads(1, 20);
+    }
+
+    @Test
     void markVisitFollowedEndpointDelegatesToService() throws NoSuchMethodException {
         Method method = MineController.class.getMethod("markVisitFollowed", Long.class);
         PutMapping putMapping = method.getAnnotation(PutMapping.class);
@@ -107,6 +159,26 @@ class MineControllerTest {
         assertThat(response.isSuccess()).isTrue();
         assertThat(response.getData()).isSameAs(serviceResponse);
         verify(mineVisitService).markVisitFollowed(101L);
+    }
+
+    @Test
+    void markContactLeadFollowedEndpointDelegatesToService() throws NoSuchMethodException {
+        Method method = MineController.class.getMethod("markContactLeadFollowed", Long.class);
+        PutMapping putMapping = method.getAnnotation(PutMapping.class);
+        MineVisitRecordsResponse.ContactLeadItem serviceResponse = new MineVisitRecordsResponse.ContactLeadItem();
+        serviceResponse.setId(401L);
+        serviceResponse.setFollowStatusText("已跟进");
+        when(mineVisitService.markContactLeadFollowed(401L)).thenReturn(serviceResponse);
+        MineController controller = new MineController(
+                mineDashboardService, mineProfileService, mineVisitService);
+
+        Response<MineVisitRecordsResponse.ContactLeadItem> response = controller.markContactLeadFollowed(401L);
+
+        assertThat(putMapping).isNotNull();
+        assertThat(putMapping.value()).containsExactly("/api/mine/visits/contact-leads/{leadId}/followed");
+        assertThat(response.isSuccess()).isTrue();
+        assertThat(response.getData()).isSameAs(serviceResponse);
+        verify(mineVisitService).markContactLeadFollowed(401L);
     }
 
     @Test

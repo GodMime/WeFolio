@@ -789,6 +789,9 @@ test('visitor page records image view before opening original image', async () =
   assert.equal(requests[0].data.eventType, 'WORK_VIEWED')
   assert.equal(requests[0].data.workId, 11)
   assert.equal(requests[0].data.mediaType, 'IMAGE')
+  assert.deepEqual(requests[0].data.metadata, {
+    workTitle: '迎宾图'
+  })
   assert.deepEqual(previews[0], {
     current: 'https://cdn.example.com/original.jpg',
     urls: ['https://cdn.example.com/original.jpg']
@@ -1011,6 +1014,9 @@ test('visitor page records video play before showing video overlay', async () =>
 
   assert.equal(requests[0].data.eventType, 'VIDEO_PLAYED')
   assert.equal(requests[0].data.mediaType, 'VIDEO')
+  assert.deepEqual(requests[0].data.metadata, {
+    workTitle: '婚礼快剪'
+  })
   assert.equal(page.data.videoPreviewVisible, true)
   assert.deepEqual(page.data.videoPreview, {
     src: 'https://cdn.example.com/movie.mp4',
@@ -1146,8 +1152,86 @@ test('portfolio schedule query component uses visitor endpoints and payload', as
   assert.equal(requests[1].data.componentKey, 'c_schedule')
   assert.equal(requests[1].data.queriedDate, '2026-07-18')
   assert.equal(requests[1].data.slotDefinitionId, 12)
-  assert.equal(requests[1].data.idempotencyKey, 'schedule-query-c_schedule-2026-07-18-12')
+  assert.match(requests[1].data.idempotencyKey, /^schedule-query-c_schedule-2026-07-18-12-/)
   assert.equal(component.data.result.message, '档期空闲')
+})
+
+test('portfolio schedule query component hides visitor month schedule marks before submit', async () => {
+  const component = loadScheduleQueryComponent(() => Promise.resolve({
+    yearMonth: '2026-07',
+    slotDefinitions: [
+      { id: 12, name: '午宴', startTime: '10:00', endTime: '14:00', color: '#2d5f9a' }
+    ],
+    days: [
+      { date: '2026-07-18', dayNumber: 18, currentMonth: true, colors: ['#2d5f9a'], count: 1 }
+    ],
+    schedules: [
+      {
+        date: '2026-07-18',
+        slotDefinitionId: 12,
+        slotName: '午宴',
+        startTime: '10:00',
+        endTime: '14:00',
+        color: '#2d5f9a',
+        status: 'BOOKED',
+        statusText: '已约'
+      }
+    ]
+  }))
+  component.setData({
+    shareCode: 'PF001',
+    componentKey: 'c_schedule',
+    scheduleQuery: { displayMode: 'MODAL_CALENDAR' }
+  })
+
+  await component.loadScheduleOptions('2026-07')
+  component.handleDayTap({ currentTarget: { dataset: { date: '2026-07-18' } } })
+
+  const day = component.data.options.days[0]
+  assert.equal(day.dayClass, 'schedule-calendar-day')
+  assert.deepEqual(day.colors, [])
+  assert.equal(day.count, 0)
+  assert.deepEqual(component.data.options.schedules, [])
+  assert.deepEqual(component.data.selectedDaySchedules, [])
+})
+
+test('portfolio schedule query component keeps preview month schedule marks', async () => {
+  const component = loadScheduleQueryComponent(() => Promise.resolve({
+    yearMonth: '2026-07',
+    slotDefinitions: [
+      { id: 12, name: '午宴', startTime: '10:00', endTime: '14:00', color: '#2d5f9a' }
+    ],
+    days: [
+      { date: '2026-07-18', dayNumber: 18, currentMonth: true, colors: ['#2d5f9a'], count: 1 }
+    ],
+    schedules: [
+      {
+        date: '2026-07-18',
+        slotDefinitionId: 12,
+        slotName: '午宴',
+        startTime: '10:00',
+        endTime: '14:00',
+        color: '#2d5f9a',
+        status: 'BOOKED',
+        statusText: '已约'
+      }
+    ]
+  }))
+  component.setData({
+    preview: true,
+    portfolioId: 88,
+    componentKey: 'c_schedule',
+    scheduleQuery: { displayMode: 'MODAL_CALENDAR' }
+  })
+
+  await component.loadScheduleOptions('2026-07')
+  component.handleDayTap({ currentTarget: { dataset: { date: '2026-07-18' } } })
+
+  const day = component.data.options.days[0]
+  assert.equal(day.dayClass, 'schedule-calendar-day filled')
+  assert.deepEqual(day.colors, ['#2d5f9a'])
+  assert.equal(day.count, 1)
+  assert.equal(component.data.selectedDaySchedules[0].statusText, '已约')
 })
 
 test('portfolio schedule query component ignores month switching while loading', async () => {
@@ -1205,7 +1289,7 @@ test('portfolio schedule query component loads picker selected month', async () 
   assert.equal(component.data.selectedMonth, '2026-09')
 })
 
-test('portfolio schedule query component reuses idempotency key for the same selection', async () => {
+test('portfolio schedule query component creates a fresh idempotency key for each submit', async () => {
   const requests = []
   const component = loadScheduleQueryComponent((options) => {
     requests.push(options)
@@ -1232,8 +1316,9 @@ test('portfolio schedule query component reuses idempotency key for the same sel
   await component.handleSubmitQuery()
 
   assert.equal(requests.length, 2)
-  assert.equal(requests[0].data.idempotencyKey, 'schedule-query-c_schedule-2026-07-18-12')
-  assert.equal(requests[1].data.idempotencyKey, requests[0].data.idempotencyKey)
+  assert.match(requests[0].data.idempotencyKey, /^schedule-query-c_schedule-2026-07-18-12-/)
+  assert.match(requests[1].data.idempotencyKey, /^schedule-query-c_schedule-2026-07-18-12-/)
+  assert.notEqual(requests[1].data.idempotencyKey, requests[0].data.idempotencyKey)
 })
 
 test('portfolio schedule query component uses preview endpoints and scope', async () => {

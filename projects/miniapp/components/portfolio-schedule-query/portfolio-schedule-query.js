@@ -13,7 +13,11 @@ const SLOT_REQUIRED_MESSAGE = '请选择档位'
 const LOAD_FAILED_MESSAGE = '月历加载失败'
 const QUERY_FAILED_MESSAGE = '档期查询失败'
 const IDEMPOTENCY_KEY_PREFIX = 'schedule-query'
+const IDEMPOTENCY_KEY_MAX_LENGTH = 64
+const IDEMPOTENCY_RANDOM_SEGMENT_LENGTH = 8
 const MONTH_PATTERN = /^(\d{4})-(\d{2})$/
+const CALENDAR_DAY_BASE_CLASS = 'schedule-calendar-day'
+const CALENDAR_DAY_FILLED_CLASS = 'filled'
 
 function pad2(value) {
   return String(value).padStart(2, '0')
@@ -51,13 +55,21 @@ function normalizeIdempotencySegment(value) {
   return encodeURIComponent(text || 'none')
 }
 
+function createIdempotencySuffix() {
+  const randomSegment = Math.random().toString(16).slice(2, 2 + IDEMPOTENCY_RANDOM_SEGMENT_LENGTH)
+  return `${Date.now()}-${randomSegment}`
+}
+
 function createIdempotencyKey(data = {}) {
-  return [
+  const baseKey = [
     IDEMPOTENCY_KEY_PREFIX,
     normalizeIdempotencySegment(data.componentKey),
     normalizeIdempotencySegment(data.selectedDate),
     normalizeIdempotencySegment(data.selectedSlotDefinitionId)
   ].join('-')
+  const suffix = createIdempotencySuffix()
+  const maxBaseLength = IDEMPOTENCY_KEY_MAX_LENGTH - suffix.length - 1
+  return `${baseKey.slice(0, maxBaseLength)}-${suffix}`
 }
 
 function getRuntimeWx() {
@@ -122,6 +134,29 @@ function buildQueryRequest(data = {}) {
 function findSchedulesByDate(options = {}, date = '') {
   const schedules = Array.isArray(options.schedules) ? options.schedules : []
   return schedules.filter((item) => item.date === date)
+}
+
+function removeFilledDayClass(dayClass = '') {
+  const classes = String(dayClass || '')
+    .split(/\s+/)
+    .filter((item) => item && item !== CALENDAR_DAY_FILLED_CLASS)
+  return classes.length ? classes.join(' ') : CALENDAR_DAY_BASE_CLASS
+}
+
+function hideVisitorScheduleHints(options = {}) {
+  const days = Array.isArray(options.days) ? options.days : []
+  return Object.assign({}, options, {
+    days: days.map((day) => Object.assign({}, day, {
+      colors: [],
+      count: 0,
+      dayClass: removeFilledDayClass(day.dayClass)
+    })),
+    schedules: []
+  })
+}
+
+function buildDisplayOptions(data = {}, options = {}) {
+  return data.preview ? options : hideVisitorScheduleHints(options)
 }
 
 Component({
@@ -243,15 +278,16 @@ Component({
         const requestOptions = buildOptionsRequest(this.data, targetMonth)
         const response = await request(requestOptions)
         const options = normalizeVisitorScheduleOptions(response)
+        const displayOptions = buildDisplayOptions(this.data, options)
         const selectedDate = this.data.selectedDate && String(this.data.selectedDate).startsWith(options.yearMonth || targetMonth)
           ? this.data.selectedDate
           : ''
         this.setData({
           selectedMonth: options.yearMonth || targetMonth,
           selectedMonthText: formatYearMonthTitle(options.yearMonth || targetMonth),
-          options,
+          options: displayOptions,
           selectedDate,
-          selectedDaySchedules: selectedDate ? findSchedulesByDate(options, selectedDate) : [],
+          selectedDaySchedules: selectedDate ? findSchedulesByDate(displayOptions, selectedDate) : [],
           selectedSlotDefinitionId: null,
           loading: false,
           errorMessage: ''

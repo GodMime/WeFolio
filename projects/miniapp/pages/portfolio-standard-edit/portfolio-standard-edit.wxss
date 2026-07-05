@@ -487,7 +487,10 @@
 }
 
 .component-option-scroll {
+  height: 46vh;
+  min-height: 320rpx;
   max-height: 46vh;
+  flex: 1 1 auto;
 }
 
 .component-option-list-content {

@@ -303,6 +303,53 @@ class PortfolioVisitServiceTest {
     }
 
     @Test
+    void recordScheduleQueryShouldIgnoreRepeatedIdempotencyKey() {
+        VisitEventEntity existingEvent = new VisitEventEntity();
+        existingEvent.setId(91L);
+        existingEvent.setIdempotencyKey("schedule-submit-1");
+        when(visitEventEntityMapper.selectOne(any())).thenReturn(existingEvent);
+
+        service().recordScheduleQuery(
+                portfolio(),
+                "visitor-a",
+                LocalDate.of(2026, 7, 18),
+                Map.of("slotDefinitionId", 12L),
+                "schedule-submit-1"
+        );
+
+        verify(visitEventEntityMapper).selectOne(any());
+        verify(visitRecordEntityMapper, never()).selectOne(any());
+        verify(visitRecordEntityMapper, never()).updateById(any(VisitRecordEntity.class));
+        verify(visitEventEntityMapper, never()).insert(any(VisitEventEntity.class));
+    }
+
+    @Test
+    void recordScheduleQueryShouldKeepSnapshotRecordableWhenDuplicateInsertIsConcurrentConflict() {
+        VisitRecordEntity record = new VisitRecordEntity();
+        record.setId(33L);
+        record.setVisitorKey("visitor-a");
+        record.setPortfolioId(88L);
+        record.setScheduleQueryCount(2);
+        when(visitRecordEntityMapper.selectOne(any())).thenReturn(record);
+        when(visitEventEntityMapper.insert(any(VisitEventEntity.class)))
+                .thenThrow(new DuplicateKeyException("Duplicate entry 'schedule-race-1' for key 'uk_visit_event_idempotency'"));
+
+        PortfolioVisitService.ScheduleQueryRecordResult result = service().recordScheduleQuery(
+                portfolio(),
+                "visitor-a",
+                LocalDate.of(2026, 7, 18),
+                Map.of("slotDefinitionId", 12L),
+                "schedule-race-1"
+        );
+
+        assertThat(result.isRecorded()).isFalse();
+        assertThat(result.isSnapshotRecordable()).isTrue();
+        assertThat(result.getRecord()).isSameAs(record);
+        assertThat(result.getOccurredAt()).isNotNull();
+        verify(visitRecordEntityMapper, never()).updateById(any(VisitRecordEntity.class));
+    }
+
+    @Test
     void recordScheduleQueryShouldStoreSlotMetadata() {
         VisitRecordEntity record = new VisitRecordEntity();
         record.setId(33L);

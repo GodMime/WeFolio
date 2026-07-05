@@ -27,6 +27,10 @@ const worksWxml = fs.readFileSync(
   path.join(__dirname, '../pages/works/works.wxml'),
   'utf8'
 )
+const visitsWxml = fs.readFileSync(
+  path.join(__dirname, '../pages/visits/visits.wxml'),
+  'utf8'
+)
 
 const STATIC_ASSET_ROOT = '/assets/system'
 const REMOTE_STATIC_ASSET_ROOT = 'https://cdn2.we-folio.dingchenyong.top/system'
@@ -40,6 +44,7 @@ const MESSAGE_ICON_URL = `${STATIC_ASSET_ROOT}/wefolio-message-icon.png`
 const VISITOR_RECORD_ICON_URL = `${STATIC_ASSET_ROOT}/wefolio-visitor-record-icon.png`
 const TEAM_ICON_URL = `${STATIC_ASSET_ROOT}/wefolio-team-icon.png`
 const WORK_LOGO_URL = `${STATIC_ASSET_ROOT}/work-logo-100kb.jpg`
+const COPY_ICON_URL = `${STATIC_ASSET_ROOT}/copy-line.svg`
 const REMOTE_SYSTEM_STATIC_ASSETS = [
   { fileName: 'backgroud.jpeg', url: BACKGROUND_IMAGE_URL },
   { fileName: 'folio-logo.png', url: LOGO_IMAGE_URL }
@@ -48,7 +53,8 @@ const LOCAL_SYSTEM_STATIC_ASSETS = [
   { fileName: 'wefolio-message-icon.png', url: MESSAGE_ICON_URL },
   { fileName: 'wefolio-visitor-record-icon.png', url: VISITOR_RECORD_ICON_URL },
   { fileName: 'wefolio-team-icon.png', url: TEAM_ICON_URL },
-  { fileName: 'work-logo-100kb.jpg', url: WORK_LOGO_URL }
+  { fileName: 'work-logo-100kb.jpg', url: WORK_LOGO_URL },
+  { fileName: 'copy-line.svg', url: COPY_ICON_URL }
 ]
 const SYSTEM_STATIC_ASSETS = [
   ...REMOTE_SYSTEM_STATIC_ASSETS,
@@ -89,7 +95,7 @@ test('login hero uses configured background image', () => {
 })
 
 test('miniapp pages use system static asset urls', () => {
-  const staticAssetConsumers = [loginWxml, indexJs, worksWxml, indexWxss]
+  const staticAssetConsumers = [loginWxml, indexJs, worksWxml, visitsWxml, indexWxss]
   const combinedStaticAssetConsumers = staticAssetConsumers.join('\n')
 
   for (const systemAsset of SYSTEM_STATIC_ASSETS) {

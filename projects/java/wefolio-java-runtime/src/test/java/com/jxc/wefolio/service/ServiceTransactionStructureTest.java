@@ -75,7 +75,7 @@ class ServiceTransactionStructureTest {
         assertThat(visitSource)
                 .contains("@Transactional(rollbackFor = Exception.class)\n    public VisitRecordEntity recordOpen(")
                 .contains("@Transactional(rollbackFor = Exception.class)\n    public void recordEvent(")
-                .contains("@Transactional(rollbackFor = Exception.class)\n    public void recordScheduleQuery(")
+                .contains("@Transactional(rollbackFor = Exception.class)\n    public ScheduleQueryRecordResult recordScheduleQuery(")
                 .contains("@Transactional(rollbackFor = Exception.class)\n    public void recordContactLeadSubmitted(");
         assertThat(leadSource)
                 .contains("@Transactional(rollbackFor = Exception.class)\n    public ContactLeadSubmitResponse submit(String shareCode")

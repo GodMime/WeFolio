@@ -1,18 +1,24 @@
 package com.jxc.wefolio.service;
 
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
 import com.jxc.wefolio.dict.FollowStatusDict;
 import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
+import com.jxc.wefolio.dict.PortfolioTypeDict;
 import com.jxc.wefolio.dict.VisitEventTypeDict;
 import com.jxc.wefolio.dict.VisitSourceTypeDict;
 import com.jxc.wefolio.dto.MineVisitRecordsResponse;
+import com.jxc.wefolio.entity.ContactLeadEntity;
+import com.jxc.wefolio.entity.ScheduleQueryRecordEntity;
 import com.jxc.wefolio.entity.VisitEventEntity;
 import com.jxc.wefolio.entity.VisitRecordEntity;
 import com.jxc.wefolio.entity.VisitorEntity;
 import com.jxc.wefolio.exception.BusinessException;
+import com.jxc.wefolio.mapper.ContactLeadEntityMapper;
+import com.jxc.wefolio.mapper.ScheduleQueryRecordEntityMapper;
 import com.jxc.wefolio.mapper.VisitEventEntityMapper;
 import com.jxc.wefolio.mapper.VisitRecordEntityMapper;
 import com.jxc.wefolio.mapper.VisitorEntityMapper;
@@ -22,6 +28,7 @@ import org.springframework.stereotype.Service;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
@@ -50,6 +57,15 @@ public class MineVisitService {
     /** 事件明细最大页大小 */
     private static final int MAX_EVENT_PAGE_SIZE = 50;
 
+    /** 明细弹层默认页码 */
+    private static final int FIRST_DETAIL_PAGE_NO = 1;
+
+    /** 明细弹层默认页大小 */
+    private static final int DEFAULT_DETAIL_PAGE_SIZE = 20;
+
+    /** 明细弹层最大页大小 */
+    private static final int MAX_DETAIL_PAGE_SIZE = 50;
+
     /** 趋势覆盖天数 */
     private static final int TREND_DAYS = 7;
 
@@ -68,11 +84,62 @@ public class MineVisitService {
     /** 事件时间展示格式 */
     private static final DateTimeFormatter EVENT_TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
 
+    /** 明细创建时间展示格式 */
+    private static final DateTimeFormatter DETAIL_TIME_FORMATTER = DateTimeFormatter.ofPattern("MM-dd HH:mm");
+
     /** 访问记录不存在提示 */
     private static final String VISIT_RECORD_NOT_FOUND_MESSAGE = "访问记录不存在或无访问权限";
 
+    /** 预留信息不存在提示 */
+    private static final String CONTACT_LEAD_NOT_FOUND_MESSAGE = "预留信息不存在或无访问权限";
+
+    /** 预留信息跟进状态保存失败提示 */
+    private static final String CONTACT_LEAD_FOLLOW_SAVE_FAILED_MESSAGE = "预留信息跟进状态保存失败";
+
     /** 默认事件补充说明 */
     private static final String DEFAULT_EVENT_DETAIL_TEXT = "暂无补充信息";
+
+    /** 查询档期无日期补充说明 */
+    private static final String SCHEDULE_QUERY_NO_DATE_DETAIL_TEXT = "查询档期";
+
+    /** 查询档期补充说明前缀 */
+    private static final String SCHEDULE_QUERY_DETAIL_PREFIX = "查询 ";
+
+    /** 查询档期补充说明后缀 */
+    private static final String SCHEDULE_QUERY_DETAIL_SUFFIX = " 档期";
+
+    /** 文案空格分隔符 */
+    private static final String DETAIL_TEXT_SPACE_SEPARATOR = " ";
+
+    /** 时间范围分隔符 */
+    private static final String TIME_RANGE_SEPARATOR = "-";
+
+    /** 图片作品标题明细前缀 */
+    private static final String IMAGE_WORK_TITLE_DETAIL_PREFIX = "查看图片：";
+
+    /** 视频作品标题明细前缀 */
+    private static final String VIDEO_WORK_TITLE_DETAIL_PREFIX = "查看视频：";
+
+    /** 历史图片作品 ID 明细前缀 */
+    private static final String LEGACY_IMAGE_WORK_ID_DETAIL_PREFIX = "作品 ID ";
+
+    /** 历史视频作品 ID 明细前缀 */
+    private static final String LEGACY_VIDEO_WORK_ID_DETAIL_PREFIX = "视频作品 ID ";
+
+    /** 作品标题元数据键 */
+    private static final String METADATA_KEY_WORK_TITLE = "workTitle";
+
+    /** 查档档位名称元数据键 */
+    private static final String METADATA_KEY_SLOT_NAME = "slotName";
+
+    /** 查档档位开始时间元数据键 */
+    private static final String METADATA_KEY_START_TIME = "startTime";
+
+    /** 查档档位结束时间元数据键 */
+    private static final String METADATA_KEY_END_TIME = "endTime";
+
+    /** 作品标题明细最大长度 */
+    private static final int MAX_WORK_TITLE_DETAIL_LENGTH = 30;
 
     /** 访问汇总 Mapper */
     private final VisitRecordEntityMapper visitRecordEntityMapper;
@@ -82,6 +149,12 @@ public class MineVisitService {
 
     /** 访客身份 Mapper */
     private final VisitorEntityMapper visitorEntityMapper;
+
+    /** 查询档期记录 Mapper */
+    private final ScheduleQueryRecordEntityMapper scheduleQueryRecordEntityMapper;
+
+    /** 联系线索 Mapper */
+    private final ContactLeadEntityMapper contactLeadEntityMapper;
 
     /**
      * 获取当前维护者访问记录页数据。
@@ -93,9 +166,11 @@ public class MineVisitService {
         List<VisitRecordEntity> records = selectOwnerVisitRecords(userId);
         List<VisitEventEntity> openedEvents = selectRecentOpenedEvents(userId);
         Map<Long, VisitorEntity> visitorsById = selectVisitorsById(records);
+        long scheduleQueryCount = countOwnerScheduleQueries(userId);
+        long contactLeadCount = countOwnerContactLeads(userId);
 
         MineVisitRecordsResponse response = new MineVisitRecordsResponse();
-        response.setSummary(buildSummary(records, openedEvents));
+        response.setSummary(buildSummary(records, openedEvents, scheduleQueryCount, contactLeadCount));
         response.setTrend(buildTrend(openedEvents));
         response.setRecords(buildRecords(records, visitorsById));
         return response;
@@ -178,6 +253,93 @@ public class MineVisitService {
     }
 
     /**
+     * 获取当前维护者查询档期分页明细。
+     *
+     * @param pageNo 页码，从 1 开始
+     * @param pageSize 每页数量
+     * @return 查询档期分页明细
+     */
+    public MineVisitRecordsResponse.ScheduleQueryPage getScheduleQueryRecords(Integer pageNo, Integer pageSize) {
+        Long userId = AuthContextHolder.requireUserId();
+        int normalizedPageNo = normalizeDetailPageNo(pageNo);
+        int normalizedPageSize = normalizeDetailPageSize(pageSize);
+        Page<ScheduleQueryRecordEntity> resultPage = scheduleQueryRecordEntityMapper.selectPage(
+                new Page<>(normalizedPageNo, normalizedPageSize),
+                Wrappers.lambdaQuery(ScheduleQueryRecordEntity.class)
+                        .eq(ScheduleQueryRecordEntity::getOwnerType, PortfolioOwnerTypeDict.USER.getCode())
+                        .eq(ScheduleQueryRecordEntity::getOwnerId, userId)
+                        .eq(ScheduleQueryRecordEntity::getPortfolioType, PortfolioTypeDict.PERSONAL.getCode())
+                        .orderByDesc(ScheduleQueryRecordEntity::getQueriedAt)
+                        .orderByDesc(ScheduleQueryRecordEntity::getId)
+        );
+        List<ScheduleQueryRecordEntity> records = resultPage.getRecords();
+        Map<Long, VisitorEntity> visitorsById = selectVisitorsByIds(records.stream()
+                .map(ScheduleQueryRecordEntity::getVisitorId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList());
+
+        MineVisitRecordsResponse.ScheduleQueryPage response = new MineVisitRecordsResponse.ScheduleQueryPage();
+        response.setPageNo(normalizedPageNo);
+        response.setPageSize(normalizedPageSize);
+        response.setHasMore(resultPage.getCurrent() < resultPage.getPages());
+        response.setItems(records.stream()
+                .map(record -> buildScheduleQueryItem(record, visitorsById.get(record.getVisitorId())))
+                .toList());
+        return response;
+    }
+
+    /**
+     * 获取当前维护者预留信息分页明细。
+     *
+     * @param pageNo 页码，从 1 开始
+     * @param pageSize 每页数量
+     * @return 预留信息分页明细
+     */
+    public MineVisitRecordsResponse.ContactLeadPage getContactLeads(Integer pageNo, Integer pageSize) {
+        Long userId = AuthContextHolder.requireUserId();
+        int normalizedPageNo = normalizeDetailPageNo(pageNo);
+        int normalizedPageSize = normalizeDetailPageSize(pageSize);
+        Page<ContactLeadEntity> resultPage = contactLeadEntityMapper.selectPage(
+                new Page<>(normalizedPageNo, normalizedPageSize),
+                Wrappers.lambdaQuery(ContactLeadEntity.class)
+                        .eq(ContactLeadEntity::getOwnerType, PortfolioOwnerTypeDict.USER.getCode())
+                        .eq(ContactLeadEntity::getOwnerId, userId)
+                        .orderByDesc(ContactLeadEntity::getSubmittedAt)
+                        .orderByDesc(ContactLeadEntity::getId)
+        );
+
+        MineVisitRecordsResponse.ContactLeadPage response = new MineVisitRecordsResponse.ContactLeadPage();
+        response.setPageNo(normalizedPageNo);
+        response.setPageSize(normalizedPageSize);
+        response.setHasMore(resultPage.getCurrent() < resultPage.getPages());
+        response.setItems(resultPage.getRecords().stream()
+                .map(this::buildContactLeadItem)
+                .toList());
+        return response;
+    }
+
+    /**
+     * 标记当前维护者某条预留信息已跟进。
+     *
+     * @param leadId 预留信息 ID
+     * @return 更新后的预留信息明细
+     */
+    public MineVisitRecordsResponse.ContactLeadItem markContactLeadFollowed(Long leadId) {
+        Long userId = AuthContextHolder.requireUserId();
+        ContactLeadEntity lead = selectOwnerContactLead(userId, leadId);
+        if (lead == null) {
+            throw new BusinessException(CONTACT_LEAD_NOT_FOUND_MESSAGE);
+        }
+        lead.setFollowStatus(FollowStatusDict.CONTACTED.getCode());
+        int updated = contactLeadEntityMapper.updateById(lead);
+        if (updated <= 0) {
+            throw new BusinessException(CONTACT_LEAD_FOLLOW_SAVE_FAILED_MESSAGE);
+        }
+        return buildContactLeadItem(lead);
+    }
+
+    /**
      * 查询当前维护者名下访问汇总。
      *
      * @param userId 当前用户 ID
@@ -190,6 +352,35 @@ public class MineVisitService {
                         .eq(VisitRecordEntity::getOwnerId, userId)
                         .orderByDesc(VisitRecordEntity::getLastVisitedAt)
         );
+    }
+
+    /**
+     * 统计当前维护者个人作品集查询档期次数。
+     *
+     * @param userId 当前用户 ID
+     * @return 查询档期次数
+     */
+    private long countOwnerScheduleQueries(Long userId) {
+        return safeLong(scheduleQueryRecordEntityMapper.selectCount(
+                Wrappers.lambdaQuery(ScheduleQueryRecordEntity.class)
+                        .eq(ScheduleQueryRecordEntity::getOwnerType, PortfolioOwnerTypeDict.USER.getCode())
+                        .eq(ScheduleQueryRecordEntity::getOwnerId, userId)
+                        .eq(ScheduleQueryRecordEntity::getPortfolioType, PortfolioTypeDict.PERSONAL.getCode())
+        ));
+    }
+
+    /**
+     * 统计当前维护者预留信息次数。
+     *
+     * @param userId 当前用户 ID
+     * @return 预留信息次数
+     */
+    private long countOwnerContactLeads(Long userId) {
+        return safeLong(contactLeadEntityMapper.selectCount(
+                Wrappers.lambdaQuery(ContactLeadEntity.class)
+                        .eq(ContactLeadEntity::getOwnerType, PortfolioOwnerTypeDict.USER.getCode())
+                        .eq(ContactLeadEntity::getOwnerId, userId)
+        ));
     }
 
     /**
@@ -208,6 +399,26 @@ public class MineVisitService {
                         .eq(VisitRecordEntity::getId, recordId)
                         .eq(VisitRecordEntity::getOwnerType, PortfolioOwnerTypeDict.USER.getCode())
                         .eq(VisitRecordEntity::getOwnerId, userId)
+                        .last(SQL_SINGLE_LIMIT_CLAUSE)
+        );
+    }
+
+    /**
+     * 查询当前维护者名下单条预留信息。
+     *
+     * @param userId 当前用户 ID
+     * @param leadId 预留信息 ID
+     * @return 预留信息
+     */
+    private ContactLeadEntity selectOwnerContactLead(Long userId, Long leadId) {
+        if (leadId == null) {
+            return null;
+        }
+        return contactLeadEntityMapper.selectOne(
+                Wrappers.lambdaQuery(ContactLeadEntity.class)
+                        .eq(ContactLeadEntity::getId, leadId)
+                        .eq(ContactLeadEntity::getOwnerType, PortfolioOwnerTypeDict.USER.getCode())
+                        .eq(ContactLeadEntity::getOwnerId, userId)
                         .last(SQL_SINGLE_LIMIT_CLAUSE)
         );
     }
@@ -260,6 +471,32 @@ public class MineVisitService {
     }
 
     /**
+     * 归一化明细弹层页码。
+     *
+     * @param pageNo 原始页码
+     * @return 合法页码
+     */
+    private int normalizeDetailPageNo(Integer pageNo) {
+        if (pageNo == null || pageNo < FIRST_DETAIL_PAGE_NO) {
+            return FIRST_DETAIL_PAGE_NO;
+        }
+        return pageNo;
+    }
+
+    /**
+     * 归一化明细弹层页大小。
+     *
+     * @param pageSize 原始页大小
+     * @return 合法页大小
+     */
+    private int normalizeDetailPageSize(Integer pageSize) {
+        if (pageSize == null || pageSize <= 0) {
+            return DEFAULT_DETAIL_PAGE_SIZE;
+        }
+        return Math.min(pageSize, MAX_DETAIL_PAGE_SIZE);
+    }
+
+    /**
      * 查询近 7 日作品集打开事件。
      *
      * @param userId 当前用户 ID
@@ -285,11 +522,15 @@ public class MineVisitService {
      *
      * @param records 访问汇总
      * @param openedEvents 近 7 日打开事件
+     * @param scheduleQueryCount 查询档期次数
+     * @param contactLeadCount 预留信息次数
      * @return 顶部统计
      */
     private MineVisitRecordsResponse.Summary buildSummary(
             List<VisitRecordEntity> records,
-            List<VisitEventEntity> openedEvents
+            List<VisitEventEntity> openedEvents,
+            long scheduleQueryCount,
+            long contactLeadCount
     ) {
         LocalDate today = LocalDate.now();
         MineVisitRecordsResponse.Summary summary = new MineVisitRecordsResponse.Summary();
@@ -299,7 +540,8 @@ public class MineVisitService {
                 .filter(Objects::nonNull)
                 .filter(time -> today.equals(time.toLocalDate()))
                 .count());
-        summary.setScheduleQueryCount(sumInteger(records, VisitRecordEntity::getScheduleQueryCount));
+        summary.setScheduleQueryCount(scheduleQueryCount);
+        summary.setContactLeadCount(contactLeadCount);
         return summary;
     }
 
@@ -397,6 +639,60 @@ public class MineVisitService {
     }
 
     /**
+     * 构建查询档期明细项。
+     *
+     * @param record 查询档期记录
+     * @param visitor 访客资料
+     * @return 查询档期明细项
+     */
+    private MineVisitRecordsResponse.ScheduleQueryItem buildScheduleQueryItem(
+            ScheduleQueryRecordEntity record,
+            VisitorEntity visitor
+    ) {
+        String visitorCode = buildVisitorCode(record.getVisitorKey());
+        MineVisitRecordsResponse.ScheduleQueryItem item = new MineVisitRecordsResponse.ScheduleQueryItem();
+        item.setId(record.getId());
+        item.setVisitorLabel(resolveVisitorLabel(visitor, visitorCode));
+        item.setVisitorAvatarUrl(resolveVisitorAvatarUrl(visitor));
+        item.setVisitorInitial(visitorCode.substring(0, 1));
+        item.setPortfolioTitle(defaultString(record.getPortfolioTitleSnapshot(), ""));
+        item.setQueriedDateText(record.getQueriedDate() == null ? "" : record.getQueriedDate().format(DATE_FORMATTER));
+        item.setSlotText(buildSlotText(record));
+        item.setResultStatus(defaultString(record.getResultStatus(), ""));
+        item.setResultStatusText(defaultString(record.getResultStatusText(), ""));
+        item.setAvailable(safeInt(record.getAvailable()) == 1);
+        item.setResultMessage(defaultString(record.getResultMessage(), ""));
+        item.setSourceText(buildSourceText(record.getSourceType(), ""));
+        item.setCreatedTimeText(formatDetailTime(record.getQueriedAt()));
+        return item;
+    }
+
+    /**
+     * 构建预留信息明细项。
+     *
+     * @param lead 联系线索
+     * @return 预留信息明细项
+     */
+    private MineVisitRecordsResponse.ContactLeadItem buildContactLeadItem(ContactLeadEntity lead) {
+        String followStatus = defaultString(lead.getFollowStatus(), FollowStatusDict.NOT_FOLLOWED_UP.getCode());
+        MineVisitRecordsResponse.ContactLeadItem item = new MineVisitRecordsResponse.ContactLeadItem();
+        item.setId(lead.getId());
+        item.setContactName(defaultString(lead.getContactName(), ""));
+        item.setPhone(defaultString(lead.getPhoneCiphertext(), ""));
+        item.setPhoneLast4(defaultString(lead.getPhoneLast4(), ""));
+        item.setWechat(defaultString(lead.getWechatCiphertext(), ""));
+        item.setWechatMaskHint(defaultString(lead.getWechatMaskHint(), ""));
+        item.setDesiredSchedule(defaultString(lead.getDesiredSchedule(), ""));
+        item.setNeeds(defaultString(lead.getNeeds(), ""));
+        item.setPortfolioTitle(defaultString(lead.getPortfolioTitleSnapshot(), ""));
+        item.setSourceText(buildSourceText(lead.getSourceType(), ""));
+        item.setFollowStatus(followStatus);
+        item.setFollowStatusText(buildFollowStatusText(followStatus));
+        item.setSubmittedTimeText(formatDetailTime(lead.getSubmittedAt()));
+        return item;
+    }
+
+    /**
      * 构建事件标题。
      *
      * @param eventType 事件类型
@@ -416,15 +712,21 @@ public class MineVisitService {
     private String buildEventDetailText(VisitEventEntity event) {
         String eventType = defaultString(event.getEventType(), "");
         if (VisitEventTypeDict.WORK_VIEWED.getCode().equals(eventType)) {
-            return event.getWorkId() == null ? DEFAULT_EVENT_DETAIL_TEXT : "作品 ID " + event.getWorkId();
+            return buildWorkEventDetailText(
+                    event,
+                    IMAGE_WORK_TITLE_DETAIL_PREFIX,
+                    LEGACY_IMAGE_WORK_ID_DETAIL_PREFIX
+            );
         }
         if (VisitEventTypeDict.VIDEO_PLAYED.getCode().equals(eventType)) {
-            return event.getWorkId() == null ? DEFAULT_EVENT_DETAIL_TEXT : "视频作品 ID " + event.getWorkId();
+            return buildWorkEventDetailText(
+                    event,
+                    VIDEO_WORK_TITLE_DETAIL_PREFIX,
+                    LEGACY_VIDEO_WORK_ID_DETAIL_PREFIX
+            );
         }
         if (VisitEventTypeDict.SCHEDULE_QUERIED.getCode().equals(eventType)) {
-            return event.getQueriedDate() == null
-                    ? "查询档期"
-                    : "查询 " + event.getQueriedDate().format(DATE_FORMATTER) + " 档期";
+            return buildScheduleQueryEventDetailText(event);
         }
         if (VisitEventTypeDict.QR_CODE_INTERACTED.getCode().equals(eventType)) {
             return "点击或长按二维码";
@@ -442,6 +744,100 @@ public class MineVisitService {
             return "访问作品集页面";
         }
         return DEFAULT_EVENT_DETAIL_TEXT;
+    }
+
+    /**
+     * 构建查档事件补充说明，新记录优先展示档位快照，历史记录保留日期兜底文案。
+     *
+     * @param event 访问事件
+     * @return 查档事件补充说明
+     */
+    private String buildScheduleQueryEventDetailText(VisitEventEntity event) {
+        if (event.getQueriedDate() == null) {
+            return SCHEDULE_QUERY_NO_DATE_DETAIL_TEXT;
+        }
+        String dateText = event.getQueriedDate().format(DATE_FORMATTER);
+        String slotText = resolveMetadataScheduleSlotText(event.getMetadata());
+        if (hasText(slotText)) {
+            return SCHEDULE_QUERY_DETAIL_PREFIX + dateText + DETAIL_TEXT_SPACE_SEPARATOR
+                    + slotText + SCHEDULE_QUERY_DETAIL_SUFFIX;
+        }
+        return SCHEDULE_QUERY_DETAIL_PREFIX + dateText + SCHEDULE_QUERY_DETAIL_SUFFIX;
+    }
+
+    /**
+     * 构建作品事件补充说明，优先展示新事件写入的作品标题快照。
+     *
+     * @param event 访问事件
+     * @param workTitlePrefix 作品标题前缀
+     * @param legacyPrefix 历史事件 ID 兜底前缀
+     * @return 作品事件补充说明
+     */
+    private String buildWorkEventDetailText(VisitEventEntity event, String workTitlePrefix, String legacyPrefix) {
+        String workTitle = resolveMetadataWorkTitle(event.getMetadata());
+        if (hasText(workTitle)) {
+            return workTitlePrefix + workTitle;
+        }
+        return event.getWorkId() == null ? DEFAULT_EVENT_DETAIL_TEXT : legacyPrefix + event.getWorkId();
+    }
+
+    /**
+     * 解析事件元数据中的作品标题。
+     *
+     * @param metadata 事件元数据 JSON
+     * @return 作品标题，缺失或格式异常时返回空字符串
+     */
+    private String resolveMetadataWorkTitle(String metadata) {
+        if (!hasText(metadata)) {
+            return "";
+        }
+        try {
+            Object value = JSON.parseObject(metadata).get(METADATA_KEY_WORK_TITLE);
+            String title = stringifyMetadataValue(value);
+            if (title.length() > MAX_WORK_TITLE_DETAIL_LENGTH) {
+                return title.substring(0, MAX_WORK_TITLE_DETAIL_LENGTH);
+            }
+            return title;
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /**
+     * 解析查档元数据中的档位名称与起止时间。
+     *
+     * @param metadata 事件元数据 JSON
+     * @return 档位明细，缺失或格式异常时返回空字符串
+     */
+    private String resolveMetadataScheduleSlotText(String metadata) {
+        if (!hasText(metadata)) {
+            return "";
+        }
+        try {
+            JSONObject metadataObject = JSON.parseObject(metadata);
+            String slotName = stringifyMetadataValue(metadataObject.get(METADATA_KEY_SLOT_NAME));
+            if (!hasText(slotName)) {
+                return "";
+            }
+            String startTime = stringifyMetadataValue(metadataObject.get(METADATA_KEY_START_TIME));
+            String endTime = stringifyMetadataValue(metadataObject.get(METADATA_KEY_END_TIME));
+            if (hasText(startTime) && hasText(endTime)) {
+                return slotName + DETAIL_TEXT_SPACE_SEPARATOR + startTime + TIME_RANGE_SEPARATOR + endTime;
+            }
+            return slotName;
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /**
+     * 将元数据字段转为去除首尾空白的展示字符串。
+     *
+     * @param value 元数据字段值
+     * @return 展示字符串
+     */
+    private String stringifyMetadataValue(Object value) {
+        return value == null ? "" : String.valueOf(value).strip();
     }
 
     /**
@@ -497,6 +893,16 @@ public class MineVisitService {
                 .filter(Objects::nonNull)
                 .distinct()
                 .toList();
+        return selectVisitorsByIds(visitorIds);
+    }
+
+    /**
+     * 按访客 ID 批量查询访客资料。
+     *
+     * @param visitorIds 访客 ID 列表
+     * @return 访客 ID 到访客资料的映射
+     */
+    private Map<Long, VisitorEntity> selectVisitorsByIds(List<Long> visitorIds) {
         if (visitorIds.isEmpty()) {
             return Map.of();
         }
@@ -568,8 +974,20 @@ public class MineVisitService {
      */
     private String buildSourceText(VisitRecordEntity record) {
         String title = defaultString(record.getSourcePortfolioTitleSnapshot(), "");
+        return buildSourceText(record.getSourceType(), title);
+    }
+
+    /**
+     * 构建访问来源文案。
+     *
+     * @param rawSourceType 来源类型
+     * @param sourceTitle 来源作品集标题
+     * @return 来源文案
+     */
+    private String buildSourceText(String rawSourceType, String sourceTitle) {
+        String title = defaultString(sourceTitle, "");
         String titlePart = title.isBlank() ? "" : "「" + title + "」";
-        String sourceType = defaultString(record.getSourceType(), VisitSourceTypeDict.UNKNOWN.getCode());
+        String sourceType = defaultString(rawSourceType, VisitSourceTypeDict.UNKNOWN.getCode());
         if (VisitSourceTypeDict.WECHAT_SHARE_CARD.getCode().equals(sourceType)) {
             return "来自分享卡片" + titlePart;
         }
@@ -583,6 +1001,22 @@ public class MineVisitService {
             return "来自个人作品集" + titlePart + "跳转";
         }
         return "来自未知来源";
+    }
+
+    /**
+     * 构建档位与时间文案。
+     *
+     * @param record 查询档期记录
+     * @return 档位与时间文案
+     */
+    private String buildSlotText(ScheduleQueryRecordEntity record) {
+        String slotName = defaultString(record.getSlotNameSnapshot(), "");
+        String startTime = formatTime(record.getStartTimeSnapshot());
+        String endTime = formatTime(record.getEndTimeSnapshot());
+        if (startTime.isBlank() || endTime.isBlank()) {
+            return slotName;
+        }
+        return slotName + " " + startTime + "-" + endTime;
     }
 
     /**
@@ -692,6 +1126,26 @@ public class MineVisitService {
     }
 
     /**
+     * 构建明细创建时间文案。
+     *
+     * @param time 创建时间
+     * @return 时间文案
+     */
+    private String formatDetailTime(LocalDateTime time) {
+        return time == null ? "" : time.format(DETAIL_TIME_FORMATTER);
+    }
+
+    /**
+     * 构建时间文案。
+     *
+     * @param time 时间
+     * @return HH:mm 文案
+     */
+    private String formatTime(LocalTime time) {
+        return time == null ? "" : time.format(EVENT_TIME_FORMATTER);
+    }
+
+    /**
      * 构建趋势变化文案。
      *
      * @param points 趋势点
@@ -739,6 +1193,16 @@ public class MineVisitService {
      */
     private int safeInt(Integer value) {
         return value == null ? 0 : value;
+    }
+
+    /**
+     * 安全长整数。
+     *
+     * @param value 可空长整数
+     * @return 非空长整数
+     */
+    private long safeLong(Long value) {
+        return value == null ? 0L : value;
     }
 
     /**

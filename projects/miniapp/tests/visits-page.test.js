@@ -163,6 +163,192 @@ test('visit event sheet loads first page and appends next page when scrolled to 
   assert.equal(page.data.eventSheetLoadingMore, false)
 })
 
+test('schedule query metric opens paged detail sheet and appends next page', async () => {
+  const requests = []
+  const page = loadVisitsPage((options) => {
+    requests.push(options)
+    const pageNo = options.data && options.data.pageNo
+    if (pageNo === 2) {
+      return Promise.resolve({
+        pageNo: 2,
+        pageSize: 20,
+        hasMore: false,
+        items: [
+          {
+            id: 301,
+            visitorLabel: '微信访客 C19F',
+            queriedDateText: '2026-07-17',
+            slotText: '晚宴 17:00-21:00',
+            resultStatusText: '档期空闲',
+            available: true,
+            resultMessage: '档期空闲',
+            portfolioTitle: '林安婚礼司仪',
+            sourceText: '来自分享卡片',
+            createdTimeText: '07-05 13:58'
+          }
+        ]
+      })
+    }
+    return Promise.resolve({
+      pageNo: 1,
+      pageSize: 20,
+      hasMore: true,
+      items: [
+        {
+          id: 302,
+          visitorLabel: '小陈',
+          queriedDateText: '2026-07-18',
+          slotText: '午宴 10:00-14:00',
+          resultStatusText: '已约',
+          available: false,
+          resultMessage: '该档期已约',
+          portfolioTitle: '林安婚礼司仪',
+          sourceText: '来自分享卡片',
+          createdTimeText: '07-05 14:18'
+        }
+      ]
+    })
+  })
+
+  page.handleMetricTap({ currentTarget: { dataset: { action: 'scheduleQueries' } } })
+  await flushPromises()
+  page.handleVisitDetailScrollToLower()
+  await flushPromises()
+
+  assert.deepEqual(requests.map((item) => item.url), [
+    '/api/mine/visits/schedule-queries',
+    '/api/mine/visits/schedule-queries'
+  ])
+  assert.deepEqual(requests.map((item) => item.data), [
+    { pageNo: 1, pageSize: 20 },
+    { pageNo: 2, pageSize: 20 }
+  ])
+  assert.equal(page.data.detailSheetVisible, true)
+  assert.equal(page.data.detailSheet.title, '查询档期')
+  assert.deepEqual(page.data.detailSheet.items.map((item) => item.id), [302, 301])
+  assert.equal(page.data.detailSheet.hasMore, false)
+  assert.equal(page.data.detailSheetLoadingMore, false)
+})
+
+test('contact lead metric opens contact lead detail endpoint', async () => {
+  const requests = []
+  const page = loadVisitsPage((options) => {
+    requests.push(options)
+    return Promise.resolve({
+      pageNo: 1,
+      pageSize: 20,
+      hasMore: false,
+      items: [
+        {
+          id: 401,
+          contactName: '王小姐',
+          phone: '13800108899',
+          phoneLast4: '8899',
+          wechat: 'wx-full-99',
+          wechatMaskHint: 'wx***99',
+          desiredSchedule: '2026-10-03 午宴',
+          needs: '想了解主持和摄影套餐',
+          portfolioTitle: '林安婚礼司仪',
+          sourceText: '来自分享卡片',
+          followStatusText: '未跟进',
+          submittedTimeText: '07-05 13:30'
+        }
+      ]
+    })
+  })
+
+  page.handleMetricTap({ currentTarget: { dataset: { action: 'contactLeads' } } })
+  await flushPromises()
+
+  assert.deepEqual(requests.map((item) => item.url), [
+    '/api/mine/visits/contact-leads'
+  ])
+  assert.equal(page.data.detailSheetVisible, true)
+  assert.equal(page.data.detailSheet.title, '预留信息')
+  assert.equal(page.data.detailSheet.items[0].contactName, '王小姐')
+  assert.equal(page.data.detailSheet.items[0].phoneText, '13800108899')
+  assert.equal(page.data.detailSheet.items[0].wechatText, 'wx-full-99')
+})
+
+test('contact lead detail button marks lead followed', async () => {
+  const requests = []
+  const page = loadVisitsPage((options) => {
+    requests.push(options)
+    if (options.method === 'PUT') {
+      return Promise.resolve({
+        id: 401,
+        followStatus: 'CONTACTED',
+        followStatusText: '已跟进'
+      })
+    }
+    return Promise.resolve({})
+  })
+  page.setData({
+    detailSheetVisible: true,
+    detailSheetType: 'contactLeads',
+    detailSheet: {
+      type: 'contactLeads',
+      title: '预留信息',
+      pageNo: 1,
+      pageSize: 20,
+      hasMore: false,
+      items: [
+        {
+          id: 401,
+          contactName: '王小姐',
+          phoneText: '13800108899',
+          wechatText: 'wx-full-99',
+          followStatus: 'NOT_FOLLOWED_UP',
+          followStatusText: '未跟进',
+          followToneClass: 'follow-pill rose',
+          canMarkFollowed: true
+        }
+      ]
+    }
+  })
+
+  await page.handleMarkContactLeadFollowedTap({
+    currentTarget: { dataset: { leadId: 401 } }
+  })
+
+  assert.equal(page.data.followingContactLeadId, null)
+  assert.deepEqual(requests.map((item) => ({ url: item.url, method: item.method })), [
+    { url: '/api/mine/visits/contact-leads/401/followed', method: 'PUT' }
+  ])
+  assert.equal(page.data.detailSheet.items[0].followStatus, 'CONTACTED')
+  assert.equal(page.data.detailSheet.items[0].followStatusText, '已跟进')
+  assert.equal(page.data.detailSheet.items[0].followToneClass, 'follow-pill teal')
+  assert.equal(page.data.detailSheet.items[0].canMarkFollowed, false)
+})
+
+test('contact lead copy buttons copy full phone and wechat values', () => {
+  const page = loadVisitsPage(() => Promise.resolve({}))
+  const copiedValues = []
+  const originalWx = global.wx
+  global.wx = {
+    setClipboardData(options) {
+      copiedValues.push(options.data)
+      if (typeof options.success === 'function') {
+        options.success()
+      }
+    },
+    showToast() {}
+  }
+
+  try {
+    page.handleCopyContactValueTap({
+      currentTarget: { dataset: { copyText: '13800108899' } }
+    })
+    page.handleCopyContactValueTap({
+      currentTarget: { dataset: { copyText: 'wx-full-99' } }
+    })
+  } finally {
+    global.wx = originalWx
+  }
+
+  assert.deepEqual(copiedValues, ['13800108899', 'wx-full-99'])
+})
+
 test('visit detail row reveals follow action and marks record followed', async () => {
   const requests = []
   const page = loadVisitsPage((options) => {

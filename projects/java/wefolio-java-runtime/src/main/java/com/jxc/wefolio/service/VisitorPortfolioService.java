@@ -4,9 +4,11 @@ import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
 import com.jxc.wefolio.dict.PortfolioPublicationStatusDict;
+import com.jxc.wefolio.dict.PortfolioTypeDict;
 import com.jxc.wefolio.dict.PointSceneCodeDict;
 import com.jxc.wefolio.dict.ScheduleStatusDict;
 import com.jxc.wefolio.dict.SlotDefinitionStatusDict;
+import com.jxc.wefolio.dict.VisitSourceTypeDict;
 import com.jxc.wefolio.dto.PortfolioConfigDto;
 import com.jxc.wefolio.dto.PortfolioScheduleOptionsResponse;
 import com.jxc.wefolio.dto.PortfolioScheduleQueryRequest;
@@ -21,16 +23,19 @@ import com.jxc.wefolio.dto.VisitorProfileUpdateRequest;
 import com.jxc.wefolio.dto.WechatSessionResponse;
 import com.jxc.wefolio.entity.PortfolioEntity;
 import com.jxc.wefolio.entity.ScheduleEntity;
+import com.jxc.wefolio.entity.ScheduleQueryRecordEntity;
 import com.jxc.wefolio.entity.SlotDefinitionEntity;
 import com.jxc.wefolio.entity.VisitRecordEntity;
 import com.jxc.wefolio.entity.VisitorEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.PortfolioEntityMapper;
 import com.jxc.wefolio.mapper.ScheduleEntityMapper;
+import com.jxc.wefolio.mapper.ScheduleQueryRecordEntityMapper;
 import com.jxc.wefolio.mapper.SlotDefinitionEntityMapper;
 import com.jxc.wefolio.message.PortfolioMessage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -120,6 +125,9 @@ public class VisitorPortfolioService {
 
     /** 访客身份服务 */
     private final VisitorService visitorService;
+
+    /** 查询档期记录 Mapper */
+    private final ScheduleQueryRecordEntityMapper scheduleQueryRecordEntityMapper;
 
     /**
      * 获取访客作品集。
@@ -373,6 +381,7 @@ public class VisitorPortfolioService {
      * @param request 查询请求
      * @return 查询响应
      */
+    @Transactional(rollbackFor = Exception.class)
     public PortfolioScheduleQueryResponse submitScheduleQuery(String shareCode, PortfolioScheduleQueryRequest request) {
         if (request == null) {
             throw new BusinessException(PortfolioMessage.SCHEDULE_QUERY_REQUEST_REQUIRED_MESSAGE);
@@ -382,13 +391,14 @@ public class VisitorPortfolioService {
         Map<String, Object> componentConfig = requireScheduleComponentConfig(config, request.getComponentKey());
         PortfolioScheduleQueryResponse response = buildScheduleQueryResponse(portfolio.getOwnerId(), request);
         Map<String, Object> metadata = buildScheduleQueryMetadata(request, response, componentConfig);
-        portfolioVisitService.recordScheduleQuery(
+        PortfolioVisitService.ScheduleQueryRecordResult recordResult = portfolioVisitService.recordScheduleQuery(
                 portfolio,
                 request.getVisitorKey(),
                 request.getQueriedDate(),
                 metadata,
                 request.getIdempotencyKey()
         );
+        recordScheduleQuerySnapshot(portfolio, config, request, response, componentConfig, recordResult);
         return response;
     }
 
@@ -481,15 +491,15 @@ public class VisitorPortfolioService {
     }
 
     /**
-     * 构建月历选项。
+     * 构建访客月历选项。
+     *
+     * <p>访客端只提前展示可查询档位和空白月历，不返回已有档期标记，避免查询前泄露维护者档期。</p>
      *
      * @param ownerId 作品集归属用户 ID
      * @param yearMonth 月份
      * @return 月历选项
      */
     private PortfolioScheduleOptionsResponse buildScheduleOptions(Long ownerId, YearMonth yearMonth) {
-        LocalDate monthStart = yearMonth.atDay(1);
-        LocalDate monthEnd = yearMonth.atEndOfMonth();
         List<SlotDefinitionEntity> slots = safeList(slotDefinitionEntityMapper.selectList(
                 Wrappers.lambdaQuery(SlotDefinitionEntity.class)
                         .eq(SlotDefinitionEntity::getUserId, ownerId)
@@ -497,19 +507,11 @@ public class VisitorPortfolioService {
                         .orderByAsc(SlotDefinitionEntity::getStartTime)
                         .orderByAsc(SlotDefinitionEntity::getId)
         ));
-        List<ScheduleEntity> schedules = safeList(scheduleEntityMapper.selectList(
-                Wrappers.lambdaQuery(ScheduleEntity.class)
-                        .eq(ScheduleEntity::getUserId, ownerId)
-                        .ge(ScheduleEntity::getScheduleDate, monthStart)
-                        .le(ScheduleEntity::getScheduleDate, monthEnd)
-                        .orderByAsc(ScheduleEntity::getScheduleDate)
-                        .orderByAsc(ScheduleEntity::getStartTimeSnapshot)
-        ));
         PortfolioScheduleOptionsResponse response = new PortfolioScheduleOptionsResponse();
         response.setYearMonth(yearMonth.format(MONTH_FORMATTER));
         response.setSlotDefinitions(slots.stream().map(this::buildSlotDefinitionItem).toList());
-        response.setSchedules(schedules.stream().map(this::buildScheduleOptionItem).toList());
-        response.setDays(buildMonthDays(yearMonth, schedules));
+        response.setSchedules(List.of());
+        response.setDays(buildMonthDays(yearMonth, List.of()));
         return response;
     }
 
@@ -596,6 +598,54 @@ public class VisitorPortfolioService {
         metadata.put("available", response.isAvailable());
         metadata.put("resultMessage", response.getMessage());
         return metadata;
+    }
+
+    /**
+     * 写入按钮查档业务快照。
+     *
+     * @param portfolio 作品集
+     * @param config 作品集配置
+     * @param request 查询请求
+     * @param response 查询响应
+     * @param componentConfig 查档组件配置
+     * @param recordResult 访问事件写入结果
+     */
+    private void recordScheduleQuerySnapshot(
+            PortfolioEntity portfolio,
+            PortfolioConfigDto config,
+            PortfolioScheduleQueryRequest request,
+            PortfolioScheduleQueryResponse response,
+            Map<String, Object> componentConfig,
+            PortfolioVisitService.ScheduleQueryRecordResult recordResult
+    ) {
+        if (recordResult == null || !recordResult.isSnapshotRecordable()
+                || recordResult.getRecord() == null || recordResult.getOccurredAt() == null) {
+            return;
+        }
+        VisitRecordEntity visitRecord = recordResult.getRecord();
+        ScheduleQueryRecordEntity record = new ScheduleQueryRecordEntity();
+        record.setPortfolioId(portfolio.getId());
+        record.setPortfolioType(PortfolioTypeDict.PERSONAL.getCode());
+        record.setPortfolioTitleSnapshot(resolveTitle(config));
+        record.setVisitRecordId(visitRecord.getId());
+        record.setVisitorId(visitRecord.getVisitorId());
+        record.setVisitorKey(defaultString(visitRecord.getVisitorKey(), request.getVisitorKey()));
+        record.setOwnerType(portfolio.getOwnerType());
+        record.setOwnerId(portfolio.getOwnerId());
+        record.setSourceType(defaultSourceType(visitRecord.getSourceType()));
+        record.setDisplayMode(defaultString(asString(componentConfig.get(CONFIG_KEY_DISPLAY_MODE)), DISPLAY_MODE_MODAL_CALENDAR));
+        record.setQueriedDate(request.getQueriedDate());
+        record.setSlotDefinitionId(response.getSlotDefinitionId());
+        record.setSlotNameSnapshot(defaultString(response.getSlotName(), ""));
+        record.setStartTimeSnapshot(parseTime(response.getStartTime()));
+        record.setEndTimeSnapshot(parseTime(response.getEndTime()));
+        record.setColorSnapshot(defaultString(response.getColor(), ""));
+        record.setResultStatus(defaultString(response.getStatus(), ""));
+        record.setResultStatusText(defaultString(response.getStatusText(), ""));
+        record.setAvailable(response.isAvailable() ? 1 : 0);
+        record.setResultMessage(defaultString(response.getMessage(), ""));
+        record.setQueriedAt(recordResult.getOccurredAt());
+        scheduleQueryRecordEntityMapper.insert(record);
     }
 
     /**
@@ -753,6 +803,23 @@ public class VisitorPortfolioService {
     }
 
     /**
+     * 解析 HH:mm 时间。
+     *
+     * @param value 时间文本
+     * @return 时间
+     */
+    private LocalTime parseTime(String value) {
+        if (!hasText(value)) {
+            return null;
+        }
+        try {
+            return LocalTime.parse(value.strip(), TIME_FORMATTER);
+        } catch (DateTimeParseException e) {
+            return null;
+        }
+    }
+
+    /**
      * 空字符串兜底。
      *
      * @param value 原值
@@ -771,6 +838,18 @@ public class VisitorPortfolioService {
      */
     private String defaultString(String value, String fallback) {
         return hasText(value) ? value.strip() : fallback;
+    }
+
+    /**
+     * 来源类型兜底。
+     *
+     * @param sourceType 来源类型
+     * @return 有效来源类型
+     */
+    private String defaultSourceType(String sourceType) {
+        return VisitSourceTypeDict.fromCode(sourceType) == null
+                ? VisitSourceTypeDict.UNKNOWN.getCode()
+                : sourceType;
     }
 
     /**

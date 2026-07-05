@@ -5,9 +5,18 @@
     <view class="visits-content">
       <block wx:if="{{loading}}">
         <view class="metric-grid">
-          <view class="metric skeleton-panel"></view>
-          <view class="metric skeleton-panel"></view>
-          <view class="metric skeleton-panel"></view>
+          <view class="metric-cell">
+            <view class="metric skeleton-panel"></view>
+          </view>
+          <view class="metric-cell">
+            <view class="metric skeleton-panel"></view>
+          </view>
+          <view class="metric-cell">
+            <view class="metric skeleton-panel"></view>
+          </view>
+          <view class="metric-cell">
+            <view class="metric skeleton-panel"></view>
+          </view>
         </view>
         <view class="panel trend-panel skeleton-panel"></view>
         <view class="panel visit-detail-panel skeleton-panel"></view>
@@ -24,9 +33,19 @@
 
       <block wx:else>
         <view class="metric-grid">
-          <view class="metric" wx:for="{{visitData.metrics}}" wx:key="label">
-            <view class="metric-value">{{item.value}}</view>
-            <view class="metric-label">{{item.label}}</view>
+          <view
+            class="metric-cell {{item.interactive ? 'interactive' : ''}}"
+            wx:for="{{visitData.metrics}}"
+            wx:key="label"
+            data-action="{{item.action}}"
+            bindtap="handleMetricTap"
+            aria-role="{{item.interactive ? 'button' : 'text'}}"
+            aria-label="{{item.label}} {{item.value}}"
+          >
+            <view class="{{item.className}}">
+              <view class="metric-value">{{item.value}}</view>
+              <view class="metric-label">{{item.label}}</view>
+            </view>
           </view>
         </view>
 
@@ -36,7 +55,7 @@
             <view class="trend-pill">{{visitData.trend.changeText}}</view>
           </view>
           <view class="trend-chart">
-            <canvas wx:if="{{!eventSheetVisible}}" id="trendLineCanvas" class="trend-line-canvas" type="2d"></canvas>
+            <canvas wx:if="{{!eventSheetVisible && !detailSheetVisible}}" id="trendLineCanvas" class="trend-line-canvas" type="2d"></canvas>
           </view>
           <view class="trend-label-row">
             <view class="trend-label" wx:for="{{visitData.trend.points}}" wx:key="label">{{item.label}}</view>
@@ -144,6 +163,120 @@
         <view wx:else class="visit-event-empty">
           <view class="empty-title small">暂无具体事件</view>
           <view class="empty-desc">该访客暂时只有汇总记录，后续行为会在这里展示。</view>
+        </view>
+      </view>
+    </view>
+  </root-portal>
+
+  <root-portal wx:if="{{detailSheetVisible}}">
+    <view class="visit-detail-sheet-mask" catchtap="handleCloseDetailSheet" catchtouchmove="noop">
+      <view class="visit-detail-sheet-panel" catchtap="noop">
+        <view class="sheet-grabber"></view>
+        <view class="visit-detail-sheet-heading">
+          <view class="section-title">{{detailSheet.title}}</view>
+          <view class="visit-event-close" bindtap="handleCloseDetailSheet" aria-role="button" aria-label="关闭明细">×</view>
+        </view>
+
+        <view wx:if="{{detailSheetLoading}}" class="visit-event-loading">明细加载中...</view>
+        <view wx:elif="{{detailSheetErrorMessage}}" class="visit-event-empty">
+          <view class="empty-title small">加载失败</view>
+          <view class="empty-desc">{{detailSheetErrorMessage}}</view>
+        </view>
+        <scroll-view
+          wx:elif="{{detailSheet.items.length}}"
+          class="visit-detail-sheet-list"
+          scroll-y
+          type="list"
+          bindscrolltolower="handleVisitDetailScrollToLower"
+          lower-threshold="120"
+        >
+          <view class="visit-detail-sheet-item" wx:for="{{detailSheet.items}}" wx:key="id">
+            <block wx:if="{{detailSheet.type === 'scheduleQueries'}}">
+              <view class="visit-detail-item-row">
+                <view class="visit-detail-person">
+                  <image wx:if="{{item.visitorAvatarUrl}}" class="visitor-avatar detail-avatar" src="{{item.visitorAvatarUrl}}" mode="aspectFill"></image>
+                  <view wx:else class="visitor-icon detail-avatar">{{item.visitorInitial}}</view>
+                  <view class="visit-detail-main-copy">
+                    <view class="visitor-name">{{item.visitorLabel}}</view>
+                    <view class="visit-source">{{item.sourceText}}</view>
+                  </view>
+                </view>
+                <view class="{{item.resultToneClass}}">{{item.resultStatusText}}</view>
+              </view>
+              <view class="visit-detail-primary">{{item.queriedDateText}} · {{item.slotText}}</view>
+              <view class="visit-detail-secondary">{{item.resultMessage}}</view>
+              <view class="visit-detail-meta">{{item.portfolioTitle}} · {{item.createdTimeText}}</view>
+            </block>
+            <block wx:else>
+              <view class="contact-lead-layout">
+                <view class="contact-lead-status">
+                  <view class="{{item.followToneClass}}">{{item.followStatusText}}</view>
+                </view>
+                <view class="contact-lead-main">
+                  <view class="visit-detail-main-copy">
+                    <view class="contact-lead-title-row">
+                      <view class="visitor-name">{{item.contactName}}</view>
+                    </view>
+                    <view class="visit-source">{{item.sourceText}}</view>
+                  </view>
+                  <view class="contact-method-list">
+                    <view class="contact-method-row">
+                      <view class="contact-method-copy">
+                        <text class="contact-method-label">手机</text>
+                        <view class="contact-value-copy">
+                          <text class="contact-method-value">{{item.phoneText}}</text>
+                          <button
+                            wx:if="{{item.phoneCanCopy}}"
+                            class="contact-copy-icon-button"
+                            data-copy-text="{{item.phoneCopyText}}"
+                            catchtap="handleCopyContactValueTap"
+                            aria-label="复制手机号"
+                          >
+                            <image class="contact-copy-icon" src="/assets/system/copy-line.svg" mode="aspectFit"></image>
+                          </button>
+                        </view>
+                      </view>
+                    </view>
+                    <view class="contact-method-row">
+                      <view class="contact-method-copy">
+                        <text class="contact-method-label">微信</text>
+                        <view class="contact-value-copy">
+                          <text class="contact-method-value">{{item.wechatText}}</text>
+                          <button
+                            wx:if="{{item.wechatCanCopy}}"
+                            class="contact-copy-icon-button"
+                            data-copy-text="{{item.wechatCopyText}}"
+                            catchtap="handleCopyContactValueTap"
+                            aria-label="复制微信号"
+                          >
+                            <image class="contact-copy-icon" src="/assets/system/copy-line.svg" mode="aspectFit"></image>
+                          </button>
+                        </view>
+                      </view>
+                    </view>
+                  </view>
+                  <view class="visit-detail-secondary">{{item.desiredSchedule}}</view>
+                  <view class="visit-detail-secondary">{{item.needs}}</view>
+                  <view class="visit-detail-meta">{{item.portfolioTitle}} · {{item.submittedTimeText}}</view>
+                </view>
+                <view wx:if="{{item.canMarkFollowed}}" class="contact-lead-action-column">
+                  <button
+                    class="contact-lead-follow-button"
+                    loading="{{followingContactLeadId === item.id}}"
+                    disabled="{{followingContactLeadId === item.id}}"
+                    data-lead-id="{{item.id}}"
+                    catchtap="handleMarkContactLeadFollowedTap"
+                  >标记为已跟进</button>
+                </view>
+              </view>
+            </block>
+          </view>
+          <view wx:if="{{detailSheetLoadingMore}}" class="visit-detail-load-more">明细加载中...</view>
+          <view wx:elif="{{!detailSheetHasMore}}" class="visit-detail-load-more">已加载全部明细</view>
+        </scroll-view>
+        <view wx:else class="visit-event-empty">
+          <view class="empty-title small">暂无明细</view>
+          <view class="empty-desc">新的记录会在这里展示。</view>
         </view>
       </view>
     </view>

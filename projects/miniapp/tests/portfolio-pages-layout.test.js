@@ -566,6 +566,15 @@ test('portfolio editor component rows keep order title drag handle and edit cue 
   })
 })
 
+test('portfolio editor component picker keeps option list visible in Skyline', () => {
+  const editWxss = read('pages/portfolio-standard-edit/portfolio-standard-edit.wxss')
+  const optionScrollRule = readRule(editWxss, '.component-option-scroll')
+
+  assert.match(optionScrollRule, /height:\s*46vh/)
+  assert.match(optionScrollRule, /min-height:\s*320rpx/)
+  assert.match(optionScrollRule, /flex:\s*1\s+1\s+auto/)
+})
+
 test('standard personal portfolio editor follows shared maintainer layout', () => {
   const editWxml = read('pages/portfolio-standard-edit/portfolio-standard-edit.wxml')
   const editWxss = read('pages/portfolio-standard-edit/portfolio-standard-edit.wxss')

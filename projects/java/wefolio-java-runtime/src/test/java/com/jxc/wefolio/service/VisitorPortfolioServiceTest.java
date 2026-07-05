@@ -6,6 +6,7 @@ import com.jxc.wefolio.dict.PortfolioStatusDict;
 import com.jxc.wefolio.dict.PortfolioTemplateTypeDict;
 import com.jxc.wefolio.dict.ScheduleStatusDict;
 import com.jxc.wefolio.dict.SlotDefinitionStatusDict;
+import com.jxc.wefolio.dict.VisitSourceTypeDict;
 import com.jxc.wefolio.dto.PortfolioScheduleOptionsResponse;
 import com.jxc.wefolio.dto.PortfolioScheduleQueryRequest;
 import com.jxc.wefolio.dto.PortfolioScheduleQueryResponse;
@@ -16,12 +17,14 @@ import com.jxc.wefolio.dto.VisitorPortfolioScheduleResponse;
 import com.jxc.wefolio.dto.WechatSessionResponse;
 import com.jxc.wefolio.entity.PortfolioEntity;
 import com.jxc.wefolio.entity.ScheduleEntity;
+import com.jxc.wefolio.entity.ScheduleQueryRecordEntity;
 import com.jxc.wefolio.entity.SlotDefinitionEntity;
 import com.jxc.wefolio.entity.VisitRecordEntity;
 import com.jxc.wefolio.entity.VisitorEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.PortfolioEntityMapper;
 import com.jxc.wefolio.mapper.ScheduleEntityMapper;
+import com.jxc.wefolio.mapper.ScheduleQueryRecordEntityMapper;
 import com.jxc.wefolio.mapper.SlotDefinitionEntityMapper;
 import com.jxc.wefolio.message.PortfolioMessage;
 import org.junit.jupiter.api.Test;
@@ -29,8 +32,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 
@@ -61,6 +66,10 @@ class VisitorPortfolioServiceTest {
     /** 档位定义 Mapper 模拟 */
     @Mock
     private SlotDefinitionEntityMapper slotDefinitionEntityMapper;
+
+    /** 查询档期记录 Mapper 模拟 */
+    @Mock
+    private ScheduleQueryRecordEntityMapper scheduleQueryRecordEntityMapper;
 
     /** 积分服务模拟 */
     @Mock
@@ -355,17 +364,10 @@ class VisitorPortfolioServiceTest {
     }
 
     @Test
-    void queryScheduleOptionsShouldReturnPublicMonthDataWithoutRecordingEvent() {
+    void queryScheduleOptionsShouldHideVisitorScheduleMarksWithoutRecordingEvent() {
         PortfolioEntity portfolio = publishedPortfolioWithScheduleComponent();
         when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
         when(slotDefinitionEntityMapper.selectList(any())).thenReturn(List.of(slotDefinition(12L, "午宴")));
-        when(scheduleEntityMapper.selectList(any())).thenReturn(List.of(schedule(
-                9L,
-                12L,
-                LocalDate.of(2026, 7, 18),
-                "午宴",
-                ScheduleStatusDict.TENTATIVE.getCode()
-        )));
 
         PortfolioScheduleOptionsResponse response = service().queryScheduleOptions("PF001", "2026-07", "c_schedule");
 
@@ -375,37 +377,27 @@ class VisitorPortfolioServiceTest {
         assertThat(response.getDays()).hasSize(42);
         assertThat(response.getDays()).anySatisfy(day -> {
             assertThat(day.getDate()).isEqualTo("2026-07-18");
-            assertThat(day.getColors()).contains("#2d5f9a");
-            assertThat(day.getCount()).isEqualTo(1);
+            assertThat(day.getColors()).isEmpty();
+            assertThat(day.getCount()).isZero();
         });
-        assertThat(response.getSchedules()).hasSize(1);
-        assertThat(response.getSchedules().get(0).getSlotDefinitionId()).isEqualTo(12L);
+        assertThat(response.getSchedules()).isEmpty();
+        verify(scheduleEntityMapper, never()).selectList(any());
         verify(portfolioVisitService, never()).recordScheduleQuery(any(), any(), any(), any());
     }
 
     @Test
-    void queryScheduleOptionsShouldReturnEmptyStringsForNullableScheduleFields() {
+    void queryScheduleOptionsShouldNotReturnNullableScheduleFieldsToVisitor() {
         PortfolioEntity portfolio = publishedPortfolioWithScheduleComponent();
         when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
         when(slotDefinitionEntityMapper.selectList(any())).thenReturn(List.of(slotDefinition(12L, "午宴")));
-        when(scheduleEntityMapper.selectList(any())).thenReturn(List.of(scheduleWithNullableSnapshots(
-                9L,
-                12L,
-                LocalDate.of(2026, 7, 18)
-        )));
 
         PortfolioScheduleOptionsResponse response = service().queryScheduleOptions("PF001", "2026-07", "c_schedule");
 
-        assertThat(response.getSchedules()).hasSize(1);
-        PortfolioScheduleOptionsResponse.ScheduleItem item = response.getSchedules().get(0);
-        assertThat(item.getDate()).isEqualTo("2026-07-18");
-        assertThat(item.getSlotName()).isEmpty();
-        assertThat(item.getStartTime()).isEmpty();
-        assertThat(item.getEndTime()).isEmpty();
-        assertThat(item.getColor()).isEmpty();
-        assertThat(item.getStatus()).isEmpty();
-        assertThat(item.getStatusText()).isEmpty();
-        assertThat(item.getStatusTone()).isEqualTo("muted");
+        assertThat(response.getSchedules()).isEmpty();
+        assertThat(response.getDays()).allSatisfy(day -> {
+            assertThat(day.getColors()).isEmpty();
+            assertThat(day.getCount()).isZero();
+        });
     }
 
     @Test
@@ -447,6 +439,178 @@ class VisitorPortfolioServiceTest {
     }
 
     @Test
+    void submitScheduleQueryShouldPersistButtonQueryRecordSnapshot() {
+        PortfolioEntity portfolio = publishedPortfolioWithScheduleComponent();
+        VisitRecordEntity visitRecord = new VisitRecordEntity();
+        visitRecord.setId(33L);
+        visitRecord.setVisitorId(1024L);
+        visitRecord.setVisitorKey("visitor-a");
+        visitRecord.setSourceType(VisitSourceTypeDict.WECHAT_SHARE_CARD.getCode());
+        LocalDateTime queriedAt = LocalDateTime.of(2026, 7, 5, 14, 18);
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
+        when(slotDefinitionEntityMapper.selectById(12L)).thenReturn(slotDefinition(12L, "午宴"));
+        when(scheduleEntityMapper.selectOne(any())).thenReturn(schedule(
+                9L,
+                12L,
+                LocalDate.of(2026, 7, 18),
+                "午宴",
+                ScheduleStatusDict.BOOKED.getCode()
+        ));
+        when(portfolioVisitService.recordScheduleQuery(
+                eq(portfolio),
+                eq("visitor-a"),
+                eq(LocalDate.of(2026, 7, 18)),
+                any(),
+                eq("schedule-submit-1")
+        )).thenReturn(PortfolioVisitService.ScheduleQueryRecordResult.recorded(visitRecord, queriedAt));
+        PortfolioScheduleQueryRequest request = new PortfolioScheduleQueryRequest();
+        request.setVisitorKey("visitor-a");
+        request.setComponentKey("c_schedule");
+        request.setQueriedDate(LocalDate.of(2026, 7, 18));
+        request.setSlotDefinitionId(12L);
+        request.setIdempotencyKey("schedule-submit-1");
+
+        service().submitScheduleQuery("PF001", request);
+
+        ArgumentCaptor<ScheduleQueryRecordEntity> recordCaptor = ArgumentCaptor.forClass(ScheduleQueryRecordEntity.class);
+        verify(scheduleQueryRecordEntityMapper).insert(recordCaptor.capture());
+        ScheduleQueryRecordEntity record = recordCaptor.getValue();
+        assertThat(record.getPortfolioId()).isEqualTo(88L);
+        assertThat(record.getPortfolioType()).isEqualTo("PERSONAL");
+        assertThat(record.getPortfolioTitleSnapshot()).isEqualTo("林安婚礼司仪");
+        assertThat(record.getVisitRecordId()).isEqualTo(33L);
+        assertThat(record.getVisitorId()).isEqualTo(1024L);
+        assertThat(record.getVisitorKey()).isEqualTo("visitor-a");
+        assertThat(record.getOwnerType()).isEqualTo("USER");
+        assertThat(record.getOwnerId()).isEqualTo(7L);
+        assertThat(record.getSourceType()).isEqualTo("WECHAT_SHARE_CARD");
+        assertThat(record.getDisplayMode()).isEqualTo("MODAL_CALENDAR");
+        assertThat(record.getQueriedDate()).isEqualTo(LocalDate.of(2026, 7, 18));
+        assertThat(record.getSlotDefinitionId()).isEqualTo(12L);
+        assertThat(record.getSlotNameSnapshot()).isEqualTo("午宴");
+        assertThat(record.getStartTimeSnapshot()).isEqualTo(LocalTime.of(10, 0));
+        assertThat(record.getEndTimeSnapshot()).isEqualTo(LocalTime.of(14, 0));
+        assertThat(record.getColorSnapshot()).isEqualTo("#2d5f9a");
+        assertThat(record.getResultStatus()).isEqualTo(ScheduleStatusDict.BOOKED.getCode());
+        assertThat(record.getResultStatusText()).isEqualTo("已约");
+        assertThat(record.getAvailable()).isEqualTo(0);
+        assertThat(record.getResultMessage()).isEqualTo("该档期已约");
+        assertThat(record.getQueriedAt()).isEqualTo(queriedAt);
+    }
+
+    @Test
+    void submitScheduleQueryShouldPersistBusinessRecordWhenScheduleTimeSnapshotsMissing() {
+        PortfolioEntity portfolio = publishedPortfolioWithScheduleComponent();
+        VisitRecordEntity visitRecord = new VisitRecordEntity();
+        visitRecord.setId(33L);
+        visitRecord.setVisitorKey("visitor-a");
+        LocalDateTime queriedAt = LocalDateTime.of(2026, 7, 5, 14, 18);
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
+        when(slotDefinitionEntityMapper.selectById(12L)).thenReturn(slotDefinition(12L, "午宴"));
+        when(scheduleEntityMapper.selectOne(any())).thenReturn(scheduleWithNullableSnapshots(
+                9L,
+                12L,
+                LocalDate.of(2026, 7, 18)
+        ));
+        when(portfolioVisitService.recordScheduleQuery(
+                eq(portfolio),
+                eq("visitor-a"),
+                eq(LocalDate.of(2026, 7, 18)),
+                any(),
+                eq("schedule-submit-1")
+        )).thenReturn(PortfolioVisitService.ScheduleQueryRecordResult.recorded(visitRecord, queriedAt));
+        PortfolioScheduleQueryRequest request = new PortfolioScheduleQueryRequest();
+        request.setVisitorKey("visitor-a");
+        request.setComponentKey("c_schedule");
+        request.setQueriedDate(LocalDate.of(2026, 7, 18));
+        request.setSlotDefinitionId(12L);
+        request.setIdempotencyKey("schedule-submit-1");
+
+        service().submitScheduleQuery("PF001", request);
+
+        ArgumentCaptor<ScheduleQueryRecordEntity> recordCaptor = ArgumentCaptor.forClass(ScheduleQueryRecordEntity.class);
+        verify(scheduleQueryRecordEntityMapper).insert(recordCaptor.capture());
+        ScheduleQueryRecordEntity record = recordCaptor.getValue();
+        assertThat(record.getStartTimeSnapshot()).isNull();
+        assertThat(record.getEndTimeSnapshot()).isNull();
+    }
+
+    @Test
+    void submitScheduleQueryShouldPersistBusinessRecordWhenVisitEventInsertHitsConcurrentConflict() {
+        PortfolioEntity portfolio = publishedPortfolioWithScheduleComponent();
+        VisitRecordEntity visitRecord = new VisitRecordEntity();
+        visitRecord.setId(33L);
+        visitRecord.setVisitorKey("visitor-a");
+        visitRecord.setSourceType(VisitSourceTypeDict.WECHAT_SHARE_CARD.getCode());
+        LocalDateTime queriedAt = LocalDateTime.of(2026, 7, 5, 14, 18);
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
+        when(slotDefinitionEntityMapper.selectById(12L)).thenReturn(slotDefinition(12L, "午宴"));
+        when(scheduleEntityMapper.selectOne(any())).thenReturn(null);
+        when(portfolioVisitService.recordScheduleQuery(
+                eq(portfolio),
+                eq("visitor-a"),
+                eq(LocalDate.of(2026, 7, 18)),
+                any(),
+                eq("schedule-submit-1")
+        )).thenReturn(PortfolioVisitService.ScheduleQueryRecordResult.concurrentConflict(visitRecord, queriedAt));
+        PortfolioScheduleQueryRequest request = new PortfolioScheduleQueryRequest();
+        request.setVisitorKey("visitor-a");
+        request.setComponentKey("c_schedule");
+        request.setQueriedDate(LocalDate.of(2026, 7, 18));
+        request.setSlotDefinitionId(12L);
+        request.setIdempotencyKey("schedule-submit-1");
+
+        PortfolioScheduleQueryResponse response = service().submitScheduleQuery("PF001", request);
+
+        assertThat(response.isAvailable()).isTrue();
+        ArgumentCaptor<ScheduleQueryRecordEntity> recordCaptor = ArgumentCaptor.forClass(ScheduleQueryRecordEntity.class);
+        verify(scheduleQueryRecordEntityMapper).insert(recordCaptor.capture());
+        ScheduleQueryRecordEntity record = recordCaptor.getValue();
+        assertThat(record.getVisitRecordId()).isEqualTo(33L);
+        assertThat(record.getVisitorKey()).isEqualTo("visitor-a");
+        assertThat(record.getSourceType()).isEqualTo(VisitSourceTypeDict.WECHAT_SHARE_CARD.getCode());
+        assertThat(record.getAvailable()).isEqualTo(1);
+        assertThat(record.getResultMessage()).isEqualTo(response.getMessage());
+        assertThat(record.getQueriedAt()).isEqualTo(queriedAt);
+    }
+
+    @Test
+    void parseTimeShouldReturnNullWhenSnapshotTextInvalid() {
+        LocalTime parsedTime = ReflectionTestUtils.invokeMethod(service(), "parseTime", "10点");
+
+        assertThat(parsedTime).isNull();
+    }
+
+    @Test
+    void submitScheduleQueryShouldSkipBusinessRecordWhenIdempotencyKeyRepeated() {
+        PortfolioEntity portfolio = publishedPortfolioWithScheduleComponent();
+        VisitRecordEntity visitRecord = new VisitRecordEntity();
+        visitRecord.setId(33L);
+        visitRecord.setVisitorKey("visitor-a");
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
+        when(slotDefinitionEntityMapper.selectById(12L)).thenReturn(slotDefinition(12L, "午宴"));
+        when(scheduleEntityMapper.selectOne(any())).thenReturn(null);
+        when(portfolioVisitService.recordScheduleQuery(
+                eq(portfolio),
+                eq("visitor-a"),
+                eq(LocalDate.of(2026, 7, 18)),
+                any(),
+                eq("schedule-submit-1")
+        )).thenReturn(PortfolioVisitService.ScheduleQueryRecordResult.skipped(visitRecord));
+        PortfolioScheduleQueryRequest request = new PortfolioScheduleQueryRequest();
+        request.setVisitorKey("visitor-a");
+        request.setComponentKey("c_schedule");
+        request.setQueriedDate(LocalDate.of(2026, 7, 18));
+        request.setSlotDefinitionId(12L);
+        request.setIdempotencyKey("schedule-submit-1");
+
+        PortfolioScheduleQueryResponse response = service().submitScheduleQuery("PF001", request);
+
+        assertThat(response.isAvailable()).isTrue();
+        verify(scheduleQueryRecordEntityMapper, never()).insert(any(ScheduleQueryRecordEntity.class));
+    }
+
+    @Test
     void submitScheduleQueryShouldRejectEmptyRequestBodyBeforeComponentLookup() {
         assertThatThrownBy(() -> service().submitScheduleQuery("PF001", null))
                 .isInstanceOf(BusinessException.class)
@@ -484,7 +648,8 @@ class VisitorPortfolioServiceTest {
                 portfolioVisitService,
                 portfolioRenderService,
                 wechatMiniappClient,
-                visitorService
+                visitorService,
+                scheduleQueryRecordEntityMapper
         );
     }
 

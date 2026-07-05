@@ -33,6 +33,9 @@ public class MineVisitRecordsResponse {
 
         /** 累计查询档期次数 */
         private Long scheduleQueryCount;
+
+        /** 累计预留信息次数 */
+        private Long contactLeadCount;
     }
 
     /**
@@ -173,5 +176,135 @@ public class MineVisitRecordsResponse {
 
         /** 事件颜色语义 */
         private String tone;
+    }
+
+    /**
+     * 查询档期分页响应。
+     */
+    @Data
+    public static class ScheduleQueryPage {
+
+        /** 当前页码，从 1 开始 */
+        private Integer pageNo;
+
+        /** 当前页大小 */
+        private Integer pageSize;
+
+        /** 是否还有下一页 */
+        private Boolean hasMore;
+
+        /** 查询档期明细 */
+        private List<ScheduleQueryItem> items;
+    }
+
+    /**
+     * 查询档期明细项。
+     */
+    @Data
+    public static class ScheduleQueryItem {
+
+        /** 查询档期记录 ID */
+        private Long id;
+
+        /** 访客展示名称 */
+        private String visitorLabel;
+
+        /** 访客头像地址 */
+        private String visitorAvatarUrl;
+
+        /** 访客头像占位字 */
+        private String visitorInitial;
+
+        /** 来源作品集标题 */
+        private String portfolioTitle;
+
+        /** 查询日期文案 */
+        private String queriedDateText;
+
+        /** 档位与时间文案 */
+        private String slotText;
+
+        /** 查询结果状态编码 */
+        private String resultStatus;
+
+        /** 查询结果状态文案 */
+        private String resultStatusText;
+
+        /** 是否可约 */
+        private Boolean available;
+
+        /** 查询结果提示 */
+        private String resultMessage;
+
+        /** 来源文案 */
+        private String sourceText;
+
+        /** 创建时间文案 */
+        private String createdTimeText;
+    }
+
+    /**
+     * 预留信息分页响应。
+     */
+    @Data
+    public static class ContactLeadPage {
+
+        /** 当前页码，从 1 开始 */
+        private Integer pageNo;
+
+        /** 当前页大小 */
+        private Integer pageSize;
+
+        /** 是否还有下一页 */
+        private Boolean hasMore;
+
+        /** 预留信息明细 */
+        private List<ContactLeadItem> items;
+    }
+
+    /**
+     * 预留信息明细项。
+     */
+    @Data
+    public static class ContactLeadItem {
+
+        /** 线索 ID */
+        private Long id;
+
+        /** 联系人姓名 */
+        private String contactName;
+
+        /** 维护端展示手机号 */
+        private String phone;
+
+        /** 手机号尾号 */
+        private String phoneLast4;
+
+        /** 维护端展示微信号 */
+        private String wechat;
+
+        /** 微信号脱敏提示 */
+        private String wechatMaskHint;
+
+        /** 意向档期 */
+        private String desiredSchedule;
+
+        /** 需求描述 */
+        private String needs;
+
+        /** 来源作品集标题 */
+        private String portfolioTitle;
+
+        /** 来源文案 */
+        private String sourceText;
+
+        /** 跟进状态编码 */
+        private String followStatus;
+
+        /** 跟进状态文案 */
+        private String followStatusText;
+
+        /** 提交时间文案 */
+        private String submittedTimeText;
     }
 }

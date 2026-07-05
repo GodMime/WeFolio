@@ -19,6 +19,7 @@ const VIDEO_PLAYED_EVENT_TYPE = 'VIDEO_PLAYED'
 const QR_CODE_INTERACTED_EVENT_TYPE = 'QR_CODE_INTERACTED'
 const SOURCE_TYPE_WECHAT_SHARE_CARD = 'WECHAT_SHARE_CARD'
 const QR_ACTION_PREVIEW = 'PREVIEW_QR'
+const WORK_TITLE_METADATA_KEY = 'workTitle'
 const IMAGE_MISSING_MESSAGE = '图片地址缺失'
 const VIDEO_MISSING_MESSAGE = '视频地址缺失'
 const DEFAULT_VIDEO_TITLE = '视频作品'
@@ -59,6 +60,11 @@ function wxLogin() {
       }
     })
   })
+}
+
+function buildWorkEventMetadata(work) {
+  const workTitle = work && work.title ? String(work.title).trim() : ''
+  return workTitle ? { [WORK_TITLE_METADATA_KEY]: workTitle } : null
 }
 
 Page({
@@ -252,7 +258,8 @@ Page({
         visitorKey: this.data.visitorKey,
         eventType,
         workId: work.workId,
-        mediaType: work.mediaType
+        mediaType: work.mediaType,
+        metadata: buildWorkEventMetadata(work)
       }, idempotencyKey('work'))
     })
   },

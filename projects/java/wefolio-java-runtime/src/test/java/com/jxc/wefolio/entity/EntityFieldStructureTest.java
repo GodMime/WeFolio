@@ -5,7 +5,10 @@ import com.baomidou.mybatisplus.annotation.FieldFill;
 import com.baomidou.mybatisplus.annotation.TableField;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.lang.reflect.Field;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -79,6 +82,54 @@ class EntityFieldStructureTest {
         assertThat(PortfolioReferenceEntity.class.getDeclaredFields())
                 .extracting(Field::getName)
                 .contains("configScope");
+    }
+
+    @Test
+    void scheduleQueryRecordShouldOnlyDeclareApprovedBusinessFields() {
+        assertThat(ScheduleQueryRecordEntity.class.getDeclaredFields())
+                .extracting(Field::getName)
+                .contains(
+                        "portfolioId",
+                        "portfolioType",
+                        "portfolioTitleSnapshot",
+                        "visitRecordId",
+                        "visitorId",
+                        "visitorKey",
+                        "ownerType",
+                        "ownerId",
+                        "sourceType",
+                        "displayMode",
+                        "queriedDate",
+                        "slotDefinitionId",
+                        "slotNameSnapshot",
+                        "startTimeSnapshot",
+                        "endTimeSnapshot",
+                        "colorSnapshot",
+                        "resultStatus",
+                        "resultStatusText",
+                        "available",
+                        "resultMessage",
+                        "queriedAt"
+                )
+                .doesNotContain(
+                        "portfolioShareCodeSnapshot",
+                        "portfolioRevision",
+                        "triggerType",
+                        "idempotencyKey",
+                        "componentKey"
+                );
+    }
+
+    @Test
+    void scheduleQueryRecordEnumFieldsShouldDeclareDictionaryReferences() throws IOException {
+        String source = Files.readString(Path.of("src/main/java/com/jxc/wefolio/entity/ScheduleQueryRecordEntity.java"));
+
+        assertThat(source)
+                .contains("@see PortfolioTypeDict")
+                .contains("@see PortfolioOwnerTypeDict")
+                .contains("@see VisitSourceTypeDict")
+                .contains("展示方式：MODAL_CALENDAR 弹层月历 / INLINE_CALENDAR 内联月历")
+                .contains("@see ScheduleStatusDict");
     }
 
     @Test

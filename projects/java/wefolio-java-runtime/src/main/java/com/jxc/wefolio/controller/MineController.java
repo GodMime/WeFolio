@@ -104,6 +104,48 @@ public class MineController {
     }
 
     /**
+     * 获取查询档期分页明细。
+     *
+     * @param pageNo 页码，从 1 开始
+     * @param pageSize 每页数量
+     * @return 查询档期分页明细
+     */
+    @GetMapping("/api/mine/visits/schedule-queries")
+    public Response<MineVisitRecordsResponse.ScheduleQueryPage> scheduleQueries(
+            @RequestParam(required = false) Integer pageNo,
+            @RequestParam(required = false) Integer pageSize
+    ) {
+        return Response.success(mineVisitService.getScheduleQueryRecords(pageNo, pageSize));
+    }
+
+    /**
+     * 获取预留信息分页明细。
+     *
+     * @param pageNo 页码，从 1 开始
+     * @param pageSize 每页数量
+     * @return 预留信息分页明细
+     */
+    @GetMapping("/api/mine/visits/contact-leads")
+    public Response<MineVisitRecordsResponse.ContactLeadPage> contactLeads(
+            @RequestParam(required = false) Integer pageNo,
+            @RequestParam(required = false) Integer pageSize
+    ) {
+        return Response.success(mineVisitService.getContactLeads(pageNo, pageSize));
+    }
+
+    /**
+     * 标记预留信息已跟进。
+     *
+     * @param leadId 预留信息 ID
+     * @return 更新后的预留信息明细
+     */
+    @PutMapping("/api/mine/visits/contact-leads/{leadId}/followed")
+    public Response<MineVisitRecordsResponse.ContactLeadItem> markContactLeadFollowed(@PathVariable Long leadId) {
+        log.info("标记预留信息已跟进: leadId={}", leadId);
+        return Response.success(mineVisitService.markContactLeadFollowed(leadId));
+    }
+
+    /**
      * 标记访问记录已跟进。
      *
      * @param recordId 访问汇总记录 ID

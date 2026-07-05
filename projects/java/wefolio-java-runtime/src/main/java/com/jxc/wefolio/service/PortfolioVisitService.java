@@ -14,6 +14,7 @@ import com.jxc.wefolio.entity.VisitEventEntity;
 import com.jxc.wefolio.entity.VisitRecordEntity;
 import com.jxc.wefolio.mapper.VisitEventEntityMapper;
 import com.jxc.wefolio.mapper.VisitRecordEntityMapper;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
@@ -325,8 +326,13 @@ public class PortfolioVisitService {
      * @param idempotencyKey 幂等键
      */
     @Transactional(rollbackFor = Exception.class)
-    public void recordScheduleQuery(PortfolioEntity portfolio, String visitorKey, LocalDate queriedDate, String idempotencyKey) {
-        recordScheduleQuery(portfolio, visitorKey, queriedDate, null, idempotencyKey);
+    public ScheduleQueryRecordResult recordScheduleQuery(
+            PortfolioEntity portfolio,
+            String visitorKey,
+            LocalDate queriedDate,
+            String idempotencyKey
+    ) {
+        return recordScheduleQuery(portfolio, visitorKey, queriedDate, null, idempotencyKey);
     }
 
     /**
@@ -337,23 +343,32 @@ public class PortfolioVisitService {
      * @param queriedDate 查询日期
      * @param metadata 查询档位等扩展元数据
      * @param idempotencyKey 幂等键
+     * @return 本次查档事件写入结果
      */
     @Transactional(rollbackFor = Exception.class)
-    public void recordScheduleQuery(
+    public ScheduleQueryRecordResult recordScheduleQuery(
             PortfolioEntity portfolio,
             String visitorKey,
             LocalDate queriedDate,
             Map<String, Object> metadata,
             String idempotencyKey
     ) {
+        if (hasRecordedEvent(idempotencyKey)) {
+            return ScheduleQueryRecordResult.skipped(null);
+        }
         VisitRecordEntity record = findRecord(portfolio.getId(), visitorKey);
         if (record == null) {
-            return;
+            return ScheduleQueryRecordResult.skipped(null);
+        }
+        LocalDateTime now = LocalDateTime.now();
+        boolean inserted = insertEventIfAbsent(record, portfolio, VisitEventTypeDict.SCHEDULE_QUERIED.getCode(),
+                null, queriedDate, null, idempotencyKey, metadata, now);
+        if (!inserted) {
+            return ScheduleQueryRecordResult.concurrentConflict(record, now);
         }
         record.setScheduleQueryCount(safeInt(record.getScheduleQueryCount()) + 1);
         visitRecordEntityMapper.updateById(record);
-        insertEvent(record, portfolio, VisitEventTypeDict.SCHEDULE_QUERIED.getCode(), null, queriedDate,
-                null, idempotencyKey, metadata, LocalDateTime.now());
+        return ScheduleQueryRecordResult.recorded(record, now);
     }
 
     /**
@@ -560,5 +575,68 @@ public class PortfolioVisitService {
      */
     private int safeInt(Integer value) {
         return value == null ? 0 : value;
+    }
+
+    /**
+     * 查档事件写入结果。
+     */
+    @Getter
+    public static final class ScheduleQueryRecordResult {
+
+        /** 关联访问汇总，未命中访问记录时为空 */
+        private final VisitRecordEntity record;
+
+        /** 是否新写入查档事件 */
+        private final boolean recorded;
+
+        /** 是否允许写入查档业务快照 */
+        private final boolean snapshotRecordable;
+
+        /** 事件发生时间 */
+        private final LocalDateTime occurredAt;
+
+        private ScheduleQueryRecordResult(
+                VisitRecordEntity record,
+                boolean recorded,
+                boolean snapshotRecordable,
+                LocalDateTime occurredAt
+        ) {
+            this.record = record;
+            this.recorded = recorded;
+            this.snapshotRecordable = snapshotRecordable;
+            this.occurredAt = occurredAt;
+        }
+
+        /**
+         * 构建新写入结果。
+         *
+         * @param record 访问汇总
+         * @param occurredAt 事件发生时间
+         * @return 写入结果
+         */
+        public static ScheduleQueryRecordResult recorded(VisitRecordEntity record, LocalDateTime occurredAt) {
+            return new ScheduleQueryRecordResult(record, true, true, occurredAt);
+        }
+
+        /**
+         * 构建并发幂等冲突结果。
+         *
+         * @param record 访问汇总
+         * @param occurredAt 本次查询发生时间
+         * @return 并发冲突结果
+         */
+        public static ScheduleQueryRecordResult concurrentConflict(VisitRecordEntity record, LocalDateTime occurredAt) {
+            return new ScheduleQueryRecordResult(record, false, true, occurredAt);
+        }
+
+        /**
+         * 构建跳过写入结果。
+         *
+         * @param record 访问汇总
+         * @return 跳过结果
+         */
+        public static ScheduleQueryRecordResult skipped(VisitRecordEntity record) {
+            return new ScheduleQueryRecordResult(record, false, false, null);
+        }
     }
 }

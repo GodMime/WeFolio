@@ -2,8 +2,11 @@ const assert = require('node:assert/strict')
 const test = require('node:test')
 
 const {
+  appendVisitDetailPage,
   appendVisitEventTimeline,
+  markContactLeadFollowed,
   markVisitRecordFollowed,
+  normalizeVisitDetailPage,
   normalizeVisitEventTimeline,
   normalizeVisitRecords
 } = require('../utils/visits')
@@ -13,7 +16,8 @@ test('normalizes visit records response for page rendering', () => {
     summary: {
       totalVisitCount: 428,
       todayVisitCount: 36,
-      scheduleQueryCount: 19
+      scheduleQueryCount: 19,
+      contactLeadCount: 7
     },
     trend: {
       changeText: '上升 24%',
@@ -45,9 +49,10 @@ test('normalizes visit records response for page rendering', () => {
   })
 
   assert.deepEqual(result.metrics, [
-    { label: '累计访问次数', value: '428' },
-    { label: '今日访问', value: '36' },
-    { label: '查询档期', value: '19' }
+    { label: '累计访问次数', value: '428', action: '', interactive: false, className: 'metric' },
+    { label: '今日访问', value: '36', action: '', interactive: false, className: 'metric' },
+    { label: '查询档期', value: '19', action: 'scheduleQueries', interactive: true, className: 'metric interactive' },
+    { label: '预留信息', value: '7', action: 'contactLeads', interactive: true, className: 'metric interactive' }
   ])
   assert.equal(result.trend.changeText, '上升 24%')
   assert.deepEqual(result.trend.points.map((item) => item.height), [67, 100, 83])
@@ -214,10 +219,143 @@ test('appends visit event timeline pages and refreshes loaded count', () => {
   assert.equal(result.eventCountText, '2 个事件')
 })
 
+test('normalizes schedule query detail page for bottom sheet rendering', () => {
+  const result = normalizeVisitDetailPage('scheduleQueries', {
+    pageNo: 1,
+    pageSize: 20,
+    hasMore: true,
+    items: [
+      {
+        id: 301,
+        visitorLabel: '小陈',
+        visitorAvatarUrl: 'https://cdn.example.com/avatar.jpg',
+        visitorInitial: 'C',
+        portfolioTitle: '林安婚礼司仪',
+        queriedDateText: '2026-07-18',
+        slotText: '午宴 10:00-14:00',
+        resultStatusText: '已约',
+        available: false,
+        resultMessage: '该档期已约',
+        sourceText: '来自分享卡片',
+        createdTimeText: '07-05 14:18'
+      }
+    ]
+  })
+
+  assert.equal(result.type, 'scheduleQueries')
+  assert.equal(result.pageNo, 1)
+  assert.equal(result.pageSize, 20)
+  assert.equal(result.hasMore, true)
+  assert.equal(result.nextPage, 2)
+  assert.equal(result.items[0].visitorLabel, '小陈')
+  assert.equal(result.items[0].slotText, '午宴 10:00-14:00')
+  assert.equal(result.items[0].resultToneClass, 'detail-status rose')
+})
+
+test('normalizes and appends contact lead detail pages without ciphertext fields', () => {
+  const firstPage = normalizeVisitDetailPage('contactLeads', {
+    pageNo: 1,
+    pageSize: 1,
+    hasMore: true,
+    items: [
+      {
+        id: 401,
+        contactName: '王小姐',
+        phone: '13800108899',
+        phoneLast4: '8899',
+        wechat: 'wx-full-99',
+        wechatMaskHint: 'wx***99',
+        desiredSchedule: '2026-10-03 午宴',
+        needs: '想了解主持和摄影套餐',
+        portfolioTitle: '林安婚礼司仪',
+        sourceText: '来自分享卡片',
+        followStatusText: '未跟进',
+        submittedTimeText: '07-05 13:30'
+      }
+    ]
+  })
+  const secondPage = normalizeVisitDetailPage('contactLeads', {
+    pageNo: 2,
+    pageSize: 1,
+    hasMore: false,
+    items: [
+      {
+        id: 402,
+        contactName: '李先生',
+        phoneLast4: '',
+        wechatMaskHint: '',
+        desiredSchedule: '',
+        needs: '',
+        portfolioTitle: '',
+        sourceText: '',
+        followStatusText: '已跟进',
+        submittedTimeText: '07-05 12:00',
+        phoneCiphertext: 'secret-phone',
+        wechatCiphertext: 'secret-wechat'
+      }
+    ]
+  }, firstPage)
+
+  const result = appendVisitDetailPage(firstPage, secondPage)
+
+  assert.equal(result.type, 'contactLeads')
+  assert.equal(result.items.length, 2)
+  assert.equal(result.items[0].phoneText, '13800108899')
+  assert.equal(result.items[0].phoneCanCopy, true)
+  assert.equal(result.items[0].phoneCopyText, '13800108899')
+  assert.equal(result.items[0].wechatText, 'wx-full-99')
+  assert.equal(result.items[0].wechatCanCopy, true)
+  assert.equal(result.items[0].wechatCopyText, 'wx-full-99')
+  assert.equal(result.items[1].phoneText, '未留手机')
+  assert.equal(result.items[1].wechatText, '未留微信')
+  assert.equal(Object.prototype.hasOwnProperty.call(result.items[1], 'phoneCiphertext'), false)
+  assert.equal(Object.prototype.hasOwnProperty.call(result.items[1], 'wechatCiphertext'), false)
+  assert.equal(result.hasMore, false)
+  assert.equal(result.nextPage, null)
+})
+
+test('marks one contact lead followed inside current detail page', () => {
+  const detailPage = normalizeVisitDetailPage('contactLeads', {
+    pageNo: 1,
+    pageSize: 20,
+    hasMore: false,
+    items: [
+      {
+        id: 401,
+        contactName: '王小姐',
+        phoneLast4: '8899',
+        wechatMaskHint: 'wx***99',
+        sourceText: '来自分享卡片',
+        followStatus: 'NOT_FOLLOWED_UP',
+        followStatusText: '未跟进',
+        submittedTimeText: '07-05 13:30'
+      },
+      {
+        id: 402,
+        contactName: '李先生',
+        followStatus: 'CONTACTED',
+        followStatusText: '已跟进'
+      }
+    ]
+  })
+
+  const result = markContactLeadFollowed(detailPage, 401, {
+    id: 401,
+    followStatus: 'CONTACTED',
+    followStatusText: '已跟进'
+  })
+
+  assert.equal(result.items[0].followStatus, 'CONTACTED')
+  assert.equal(result.items[0].followStatusText, '已跟进')
+  assert.equal(result.items[0].followToneClass, 'follow-pill teal')
+  assert.equal(result.items[0].canMarkFollowed, false)
+  assert.equal(result.items[1].followStatus, 'CONTACTED')
+})
+
 test('normalizes empty visit records response with safe defaults', () => {
   const result = normalizeVisitRecords({})
 
-  assert.deepEqual(result.metrics.map((item) => item.value), ['0', '0', '0'])
+  assert.deepEqual(result.metrics.map((item) => item.value), ['0', '0', '0', '0'])
   assert.equal(result.trend.changeText, '暂无趋势')
   assert.equal(result.trend.points.length, 7)
   assert.deepEqual(result.records, [])
