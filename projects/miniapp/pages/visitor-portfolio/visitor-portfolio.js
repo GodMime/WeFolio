@@ -1,5 +1,9 @@
 const { request } = require('../../utils/request')
 const { buildContactLeadPayload, createContactLeadForm, validateContactLeadForm } = require('../../utils/contact-lead')
+const {
+  createActiveContactFormComponent,
+  findContactFormComponent
+} = require('../../utils/portfolio-contact-form')
 const { buildVisitorEventPayload, normalizeVisitorPortfolio, switchDisplayGroup } = require('../../utils/visitor-portfolio')
 
 const VISITOR_PORTFOLIO_API_PREFIX = '/api/visitor/portfolios'
@@ -62,24 +66,6 @@ function wxLogin() {
   })
 }
 
-function createActiveContactFormComponent() {
-  return {
-    componentKey: '',
-    contactForm: {
-      title: '',
-      description: '',
-      displayMode: 'MODAL_FORM',
-      fields: []
-    }
-  }
-}
-
-function findContactFormComponent(portfolio = {}, componentKey = '') {
-  const targetKey = String(componentKey || '')
-  return (Array.isArray(portfolio.components) ? portfolio.components : [])
-    .find((component) => component && component.componentKey === targetKey && component.componentType === 'CONTACT_FORM') || null
-}
-
 Page({
   data: {
     shareCode: '',
@@ -121,8 +107,14 @@ Page({
   },
 
   handleContactInput(event) {
-    const field = event.currentTarget.dataset.field
-    const contactForm = Object.assign({}, this.data.contactForm, { [field]: event.detail.value })
+    const field = (event.detail && event.detail.field) || (event.currentTarget && event.currentTarget.dataset.field)
+    if (!field) {
+      return
+    }
+    const value = event.detail && Object.prototype.hasOwnProperty.call(event.detail, 'value')
+      ? event.detail.value
+      : ''
+    const contactForm = Object.assign({}, this.data.contactForm, { [field]: value })
     this.setData({ contactForm: createContactLeadForm(contactForm) })
   },
 
@@ -151,7 +143,9 @@ Page({
   },
 
   handleOpenContactFormModal(event) {
-    const component = findContactFormComponent(this.data.portfolio, event.currentTarget.dataset.componentKey)
+    const componentKey = (event.detail && event.detail.componentKey) ||
+      (event.currentTarget && event.currentTarget.dataset.componentKey)
+    const component = findContactFormComponent(this.data.portfolio, componentKey)
     if (!component) {
       return
     }
@@ -167,8 +161,6 @@ Page({
       activeContactFormComponent: createActiveContactFormComponent()
     })
   },
-
-  noop() {},
 
   handlePreviewQr(event) {
     const url = event.currentTarget.dataset.url

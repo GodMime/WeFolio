@@ -1,0 +1,29 @@
+var EDIT_LABELS = {
+  CAROUSEL: '编辑轮播图作品',
+  PROFILE: '编辑个人资料',
+  QR_CONTACT: '编辑二维码联系',
+  SCHEDULE_QUERY: '编辑档期查询',
+  CONTACT_FORM: '编辑预留联系信息',
+  TEXT_SECTION: '编辑文字说明',
+  DIVIDER: '编辑分割线',
+  WORK_GRID: '编辑作品集展示标签',
+  WORK_LIST: '编辑作品集展示标签'
+}
+
+function isEditable(componentType) {
+  return !!EDIT_LABELS[componentType]
+}
+
+function resolveAriaRole(componentType) {
+  return isEditable(componentType) ? 'button' : 'text'
+}
+
+function resolveAriaLabel(componentType, fallbackName) {
+  return EDIT_LABELS[componentType] || fallbackName || ''
+}
+
+module.exports = {
+  isEditable: isEditable,
+  resolveAriaRole: resolveAriaRole,
+  resolveAriaLabel: resolveAriaLabel
+}

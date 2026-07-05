@@ -35,6 +35,12 @@ function readRule(content, selector) {
   return match ? match[1] : ''
 }
 
+function readExisting(relativePath) {
+  const absolutePath = path.join(__dirname, '..', relativePath)
+  assert.equal(fs.existsSync(absolutePath), true, `${relativePath} should exist`)
+  return fs.readFileSync(absolutePath, 'utf8')
+}
+
 function loadPreviewPage(fakeRequest, wxOverrides = {}) {
   const pagePath = path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.js')
   const requestPath = path.join(__dirname, '../utils/request.js')
@@ -306,6 +312,7 @@ test('portfolio work sections render fixed title, all tags, play badge, and vide
     path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.wxss'),
     'utf8'
   )
+  const sharedWxss = readExisting('styles/portfolio-render-shared.wxss')
 
   ;[previewWxml, visitorWxml].forEach((wxml) => {
     assert.match(wxml, /class="work-section-title">作品列表<\/view>/)
@@ -318,11 +325,14 @@ test('portfolio work sections render fixed title, all tags, play badge, and vide
     assert.match(wxml, /id="portfolioWorkVideo"[\s\S]*src="\{\{videoPreview\.src\}\}"[\s\S]*poster="\{\{videoPreview\.poster\}\}"[\s\S]*controls="\{\{true\}\}"[\s\S]*show-fullscreen-btn="\{\{true\}\}"/)
   })
   ;[previewWxss, visitorWxss].forEach((wxss) => {
+    assert.match(wxss, /@import "\.\.\/\.\.\/styles\/portfolio-render-shared\.wxss";/)
     assert.match(wxss, /\.work-section-title\s*\{[\s\S]*color:\s*#000000;[\s\S]*font-size:\s*34rpx;/)
-    assert.match(wxss, /\.display-tag\s*\{[\s\S]*color:\s*#8a8f98;[\s\S]*font-size:\s*28rpx;/)
-    assert.match(wxss, /\.display-tag\.active\s*\{[\s\S]*color:\s*#000000;/)
     assert.match(wxss, /\.work-play-badge\s*\{[\s\S]*position:\s*absolute;[\s\S]*right:\s*16rpx;[\s\S]*bottom:\s*16rpx;/)
     assert.doesNotMatch(wxss, /\.work-play-badge\s*\{[\s\S]*top:\s*50%;[\s\S]*left:\s*50%;/)
+  })
+  ;[sharedWxss].forEach((wxss) => {
+    assert.match(wxss, /\.display-tag\s*\{[\s\S]*color:\s*#8a8f98;[\s\S]*font-size:\s*28rpx;/)
+    assert.match(wxss, /\.display-tag\.active\s*\{[\s\S]*color:\s*#000000;/)
   })
 })
 
@@ -349,13 +359,27 @@ test('contact form components support modal entry and inline form in actual page
     path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.wxml'),
     'utf8'
   )
+  const previewJson = JSON.parse(fs.readFileSync(
+    path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.json'),
+    'utf8'
+  ))
+  const visitorJson = JSON.parse(fs.readFileSync(
+    path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.json'),
+    'utf8'
+  ))
+  const componentWxml = readExisting('components/portfolio-contact-form/portfolio-contact-form.wxml')
 
+  assert.equal(previewJson.usingComponents['portfolio-contact-form'], '/components/portfolio-contact-form/portfolio-contact-form')
+  assert.equal(visitorJson.usingComponents['portfolio-contact-form'], '/components/portfolio-contact-form/portfolio-contact-form')
   ;[previewWxml, visitorWxml].forEach((wxml) => {
-    assert.match(wxml, /item\.contactForm\.displayMode === 'INLINE_FORM'[\s\S]*class="form-section"/)
-    assert.match(wxml, /class="form-entry-section"[\s\S]*bindtap="handleOpenContactFormModal"/)
-    assert.match(wxml, /class="contact-form-mask \{\{contactFormModalVisible \? 'visible' : ''\}\}"/)
-    assert.match(wxml, /class="contact-form-panel"[\s\S]*activeContactFormComponent\.contactForm\.title/)
+    assert.match(wxml, /<portfolio-contact-form[\s\S]*contact-component="\{\{item\}\}"[\s\S]*bindcontactinput="handleContactInput"[\s\S]*bindopenmodal="handleOpenContactFormModal"/)
+    assert.match(wxml, /<portfolio-contact-form[\s\S]*view-mode="modal"[\s\S]*modal-visible="\{\{contactFormModalVisible\}\}"[\s\S]*contact-component="\{\{activeContactFormComponent\}\}"/)
+    assert.doesNotMatch(wxml, /class="contact-form-mask/)
   })
+  assert.match(componentWxml, /contactComponent\.contactForm\.displayMode === inlineMode[\s\S]*class="form-section"/)
+  assert.match(componentWxml, /class="form-entry-section"[\s\S]*bindtap="handleOpenModal"/)
+  assert.match(componentWxml, /class="contact-form-mask \{\{modalVisible \? 'visible' : ''\}\}"/)
+  assert.match(componentWxml, /class="contact-form-panel"[\s\S]*contactComponent\.contactForm\.title/)
 })
 
 test('actual portfolio pages do not render share intro as page content', () => {

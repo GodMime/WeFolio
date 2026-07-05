@@ -31,6 +31,12 @@ function assertUsesNavigation(pagePath) {
   assert.equal(json.usingComponents['navigation-bar'], '/components/navigation-bar/navigation-bar')
 }
 
+function readExisting(relativePath) {
+  const absolutePath = path.join(__dirname, '..', relativePath)
+  assert.equal(fs.existsSync(absolutePath), true, `${relativePath} should exist`)
+  return fs.readFileSync(absolutePath, 'utf8')
+}
+
 test('app registers portfolio pages', () => {
   [
     'pages/portfolios/portfolios',
@@ -188,20 +194,20 @@ test('maintainer portfolio pages expose expected controls', () => {
   assert.match(qrContactImageEditorRule, /justify-content:\s*center/)
   assert.match(qrContactImagePreviewRule, /width:\s*220rpx/)
   assert.match(qrContactImagePreviewRule, /height:\s*220rpx/)
-  assert.match(editWxml, /item\.componentType === 'SCHEDULE_QUERY'[\s\S]*editable/)
+  assert.match(editWxml, /componentRows\.isEditable\(item\.componentType\)[\s\S]*editable/)
   assert.match(editWxml, /schedule-query-sheet-mask/)
   assert.match(editWxml, /编辑档期查询/)
   assert.match(editWxml, /scheduleQueryDisplayModeOptions/)
   assert.match(editWxml, /aria-role="radio"/)
   assert.match(editWxml, /handleScheduleQueryDisplayModeTap/)
-  assert.match(editWxml, /item\.componentType === 'TEXT_SECTION'[\s\S]*editable/)
+  assert.match(editWxml, /componentRows\.isEditable\(item\.componentType\)[\s\S]*editable/)
   assert.match(editWxml, /text-section-sheet-mask/)
   assert.match(editWxml, /编辑文字说明/)
   assert.match(editWxml, /文字说明/)
   assert.match(editWxml, /maxlength="\{\{textSectionMaxLength\}\}"/)
   assert.match(editWxml, /textSectionAlignmentOptions/)
   assert.match(editWxml, /handleTextSectionAlignmentTap/)
-  assert.match(editWxml, /item\.componentType === 'DIVIDER'[\s\S]*editable/)
+  assert.match(editWxml, /componentRows\.isEditable\(item\.componentType\)[\s\S]*editable/)
   assert.match(editWxml, /divider-sheet-mask/)
   assert.match(editWxml, /编辑分割线/)
   assert.match(editWxml, /dividerColorOptions/)
@@ -244,6 +250,8 @@ test('visitor portfolio pages expose maintenance, QR, contact and schedule surfa
   const visitorJson = JSON.parse(read('pages/visitor-portfolio/visitor-portfolio.json'))
   const previewWxml = read('pages/portfolio-standard-preview/portfolio-standard-preview.wxml')
   const previewJson = JSON.parse(read('pages/portfolio-standard-preview/portfolio-standard-preview.json'))
+  const contactFormWxml = readExisting('components/portfolio-contact-form/portfolio-contact-form.wxml')
+  const contactFormJs = readExisting('components/portfolio-contact-form/portfolio-contact-form.js')
   const scheduleWxml = read('pages/visitor-schedule/visitor-schedule.wxml')
   const visitorQrMarkup = visitorWxml.slice(
     visitorWxml.indexOf(`<block wx:elif="{{item.componentType === 'QR_CONTACT'}}">`),
@@ -255,8 +263,9 @@ test('visitor portfolio pages expose maintenance, QR, contact and schedule surfa
   )
 
   assert.match(visitorWxml, /UNDER MAINTENANCE/)
-  assert.match(visitorWxml, /预留联系信息/)
-  assert.match(visitorWxml, /提交/)
+  assert.match(contactFormJs, /DEFAULT_CONTACT_FORM_TITLE\s*=\s*'预留联系信息'/)
+  assert.match(contactFormWxml, /contactComponent\.contactForm\.title \|\| defaultTitle/)
+  assert.match(contactFormWxml, /\{\{submitText\}\}/)
   ;[
     'CAROUSEL',
     'PROFILE',
@@ -277,8 +286,16 @@ test('visitor portfolio pages expose maintenance, QR, contact and schedule surfa
   assert.doesNotMatch(previewQrMarkup, /qrContact\.title|qrContact\.description|component-title|section-desc/)
   assert.equal(visitorJson.usingComponents['portfolio-schedule-query'], '/components/portfolio-schedule-query/portfolio-schedule-query')
   assert.equal(previewJson.usingComponents['portfolio-schedule-query'], '/components/portfolio-schedule-query/portfolio-schedule-query')
+  assert.equal(visitorJson.usingComponents['portfolio-contact-form'], '/components/portfolio-contact-form/portfolio-contact-form')
+  assert.equal(previewJson.usingComponents['portfolio-contact-form'], '/components/portfolio-contact-form/portfolio-contact-form')
   assert.match(visitorWxml, /<portfolio-schedule-query[\s\S]*share-code="\{\{shareCode\}\}"[\s\S]*visitor-key="\{\{visitorKey\}\}"[\s\S]*component-key="\{\{item\.componentKey\}\}"[\s\S]*schedule-query="\{\{item\.scheduleQuery\}\}"/)
   assert.match(previewWxml, /<portfolio-schedule-query[\s\S]*portfolio-id="\{\{portfolioId\}\}"[\s\S]*preview="\{\{true\}\}"[\s\S]*preview-scope="\{\{previewScope\}\}"[\s\S]*component-key="\{\{item\.componentKey\}\}"[\s\S]*schedule-query="\{\{item\.scheduleQuery\}\}"/)
+  assert.match(visitorWxml, /<portfolio-contact-form[\s\S]*contact-component="\{\{item\}\}"[\s\S]*bindcontactinput="handleContactInput"[\s\S]*bindopenmodal="handleOpenContactFormModal"/)
+  assert.match(previewWxml, /<portfolio-contact-form[\s\S]*contact-component="\{\{item\}\}"[\s\S]*submit-text="预览提交"[\s\S]*bindcontactinput="handleContactInput"[\s\S]*bindopenmodal="handleOpenContactFormModal"/)
+  assert.match(visitorWxml, /<portfolio-contact-form[\s\S]*view-mode="modal"[\s\S]*modal-visible="\{\{contactFormModalVisible\}\}"[\s\S]*contact-component="\{\{activeContactFormComponent\}\}"[\s\S]*bindclosemodal="handleCloseContactFormModal"/)
+  assert.match(previewWxml, /<portfolio-contact-form[\s\S]*view-mode="modal"[\s\S]*modal-visible="\{\{contactFormModalVisible\}\}"[\s\S]*contact-component="\{\{activeContactFormComponent\}\}"[\s\S]*bindclosemodal="handleCloseContactFormModal"/)
+  assert.doesNotMatch(visitorWxml, /class="contact-form-mask/)
+  assert.doesNotMatch(previewWxml, /class="contact-form-mask/)
   assert.match(visitorWxml, /class="text-section \{\{item\.textSection\.alignmentClass\}\}"/)
   assert.match(previewWxml, /class="text-section \{\{item\.textSection\.alignmentClass\}\}"/)
   assert.match(visitorWxml, /<text class="text-content" space="nbsp">\{\{item\.textSection\.content\}\}<\/text>/)
@@ -294,12 +311,19 @@ test('visitor portfolio pages expose maintenance, QR, contact and schedule surfa
 })
 
 test('visitor work list components keep tags visible and grid cards in two columns', () => {
+  const sharedWxss = readExisting('styles/portfolio-render-shared.wxss')
   const pages = [
     ['visitor', read('pages/visitor-portfolio/visitor-portfolio.wxss')],
     ['preview', read('pages/portfolio-standard-preview/portfolio-standard-preview.wxss')]
   ]
 
   pages.forEach(([pageName, wxss]) => {
+    assert.match(wxss, /@import "\.\.\/\.\.\/styles\/portfolio-render-shared\.wxss";/, `${pageName} should import shared render styles`)
+  })
+
+  ;[
+    ['shared', sharedWxss]
+  ].forEach(([pageName, wxss]) => {
     const displayTagScrollRule = readRule(wxss, '.display-tag-scroll')
     const displayTagsRule = readRules(wxss, '.display-tags')
     const workGridRule = readRule(wxss, '.work-grid')
@@ -324,12 +348,11 @@ test('visitor work list components keep tags visible and grid cards in two colum
 })
 
 test('contact form modal uses full-screen fixed bottom sheet layout', () => {
-  const pages = [
-    ['visitor', read('pages/visitor-portfolio/visitor-portfolio.wxss')],
-    ['preview', read('pages/portfolio-standard-preview/portfolio-standard-preview.wxss')]
-  ]
+  const componentWxss = readExisting('components/portfolio-contact-form/portfolio-contact-form.wxss')
 
-  pages.forEach(([pageName, wxss]) => {
+  ;[
+    ['component', componentWxss]
+  ].forEach(([pageName, wxss]) => {
     const maskRule = readRule(wxss, '.contact-form-mask')
     const visibleRule = readRule(wxss, '.contact-form-mask.visible')
     const panelRule = readRule(wxss, '.contact-form-panel')
@@ -572,7 +595,11 @@ test('standard personal portfolio editor follows shared maintainer layout', () =
   assert.doesNotMatch(editWxml, /class="component-meta"/)
   assert.doesNotMatch(editWxml, /\{\{item\.componentType\}\} · \{\{item\.componentKey\}\}/)
   assert.match(editWxml, /class="component-drag-handle"/)
-  assert.match(editWxml, /class="component-row-arrow \{\{item\.componentType === 'CAROUSEL' \|\| item\.componentType === 'PROFILE' \|\| item\.componentType === 'QR_CONTACT' \|\| item\.componentType === 'SCHEDULE_QUERY' \|\| item\.componentType === 'CONTACT_FORM' \|\| item\.componentType === 'TEXT_SECTION' \|\| item\.componentType === 'DIVIDER' \|\| item\.componentType === 'WORK_GRID' \|\| item\.componentType === 'WORK_LIST' \? '' : 'placeholder'\}\}"/)
+  assert.match(editWxml, /<wxs module="componentRows" src="\.\/component-rows\.wxs"><\/wxs>/)
+  assert.match(editWxml, /componentRows\.isEditable\(item\.componentType\)/)
+  assert.match(editWxml, /componentRows\.resolveAriaLabel\(item\.componentType,\s*item\.name\)/)
+  assert.doesNotMatch(editWxml, /item\.componentType === 'CAROUSEL' \|\| item\.componentType === 'PROFILE' \|\| item\.componentType === 'QR_CONTACT'/)
+  assert.match(editWxml, /class="component-row-arrow \{\{componentRows\.isEditable\(item\.componentType\) \? '' : 'placeholder'\}\}"/)
   assert.doesNotMatch(editWxml, /wx:if="\{\{item\.componentType === 'CAROUSEL'\}\}" class="component-row-arrow"/)
   assert.match(editWxml, /class="profile-sheet-mask component-work-picker-mask \{\{profileSheetVisible \? 'visible' : ''\}\}"/)
   assert.match(editWxml, /catchtap="handleConfirmProfileSheet"/)

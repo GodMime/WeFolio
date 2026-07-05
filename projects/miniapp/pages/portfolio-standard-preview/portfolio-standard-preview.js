@@ -1,5 +1,9 @@
 const { request } = require('../../utils/request')
 const { createContactLeadForm } = require('../../utils/contact-lead')
+const {
+  createActiveContactFormComponent,
+  findContactFormComponent
+} = require('../../utils/portfolio-contact-form')
 const { normalizeVisitorPortfolio, switchDisplayGroup } = require('../../utils/visitor-portfolio')
 
 const PORTFOLIO_API_PREFIX = '/api/mine/portfolios'
@@ -8,24 +12,6 @@ const MEDIA_TYPE_VIDEO = 'VIDEO'
 const IMAGE_MISSING_MESSAGE = '图片地址缺失'
 const VIDEO_MISSING_MESSAGE = '视频地址缺失'
 const DEFAULT_VIDEO_TITLE = '视频作品'
-
-function createActiveContactFormComponent() {
-  return {
-    componentKey: '',
-    contactForm: {
-      title: '',
-      description: '',
-      displayMode: 'MODAL_FORM',
-      fields: []
-    }
-  }
-}
-
-function findContactFormComponent(portfolio = {}, componentKey = '') {
-  const targetKey = String(componentKey || '')
-  return (Array.isArray(portfolio.components) ? portfolio.components : [])
-    .find((component) => component && component.componentKey === targetKey && component.componentType === 'CONTACT_FORM') || null
-}
 
 Page({
   data: {
@@ -93,8 +79,14 @@ Page({
   },
 
   handleContactInput(event) {
-    const field = event.currentTarget.dataset.field
-    const contactForm = Object.assign({}, this.data.contactForm, { [field]: event.detail.value })
+    const field = (event.detail && event.detail.field) || (event.currentTarget && event.currentTarget.dataset.field)
+    if (!field) {
+      return
+    }
+    const value = event.detail && Object.prototype.hasOwnProperty.call(event.detail, 'value')
+      ? event.detail.value
+      : ''
+    const contactForm = Object.assign({}, this.data.contactForm, { [field]: value })
     this.setData({ contactForm: createContactLeadForm(contactForm) })
   },
 
@@ -103,7 +95,9 @@ Page({
   },
 
   handleOpenContactFormModal(event) {
-    const component = findContactFormComponent(this.data.portfolio, event.currentTarget.dataset.componentKey)
+    const componentKey = (event.detail && event.detail.componentKey) ||
+      (event.currentTarget && event.currentTarget.dataset.componentKey)
+    const component = findContactFormComponent(this.data.portfolio, componentKey)
     if (!component) {
       return
     }
@@ -119,8 +113,6 @@ Page({
       activeContactFormComponent: createActiveContactFormComponent()
     })
   },
-
-  noop() {},
 
   handleWorkTap(event) {
     const work = normalizeWorkTapDataset(event.currentTarget.dataset)

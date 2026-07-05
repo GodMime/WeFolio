@@ -891,6 +891,8 @@ test('qr contact source tab switch reloads basic profile image and clears stale 
         config: {
           title: '微信咨询',
           description: '扫码沟通档期',
+          qrSize: 240,
+          showLabel: true,
           qrUrlSource: 'CUSTOM',
           qrUrl: 'wxfile://tmp/custom-qr.jpg'
         }
@@ -913,6 +915,8 @@ test('qr contact source tab switch reloads basic profile image and clears stale 
 
   assert.equal(page.data.config.components[1].config.qrUrlSource, 'PROFILE')
   assert.equal(page.data.config.components[1].config.qrUrl, '')
+  assert.equal(page.data.config.components[1].config.qrSize, 240)
+  assert.equal(page.data.config.components[1].config.showLabel, true)
   assert.equal(page.data.config.components[1].config.title, undefined)
   assert.equal(page.data.config.components[1].config.description, undefined)
   assert.equal(page.data.qrContactProfileQrUrl, '')
@@ -1605,6 +1609,49 @@ test('saving draft uploads local qr contact image before saving config', async (
     page.data.config.components[0].config.qrUrl,
     'https://cos.example.com/WFA3B1E7A2/protfolio/qr-contact-88-20260702120000-a1b2c3d4.jpg'
   )
+})
+
+test('saving draft stores basic profile qr url into profile-source qr contact config', async () => {
+  const requests = []
+  const fakeRequest = (options) => {
+    requests.push(options)
+    if (options.url === '/api/mine/profile') {
+      return Promise.resolve({ wechatQrUrl: 'https://cdn.example.com/basic-profile-qr-current.jpg' })
+    }
+    return Promise.resolve({ portfolioId: 88, draftRevision: 4 })
+  }
+  const page = loadPortfolioEditorPage(fakeRequest)
+  page.data.portfolioId = 88
+  page.data.draftRevision = 3
+  page.data.config = normalizePortfolioConfig({
+    share: {
+      title: '林安婚礼司仪'
+    },
+    components: [
+      createComponent(COMPONENT_TYPES.QR_CONTACT, {
+        componentKey: 'c_qr',
+        sortOrder: 1000,
+        config: {
+          qrUrlSource: 'PROFILE',
+          qrUrl: 'https://cdn.example.com/basic-profile-qr-old.jpg',
+          qrSize: 240
+        }
+      })
+    ]
+  })
+
+  await page.handleSaveDraft()
+
+  const profileRequest = requests.find((options) => options.url === '/api/mine/profile')
+  const draftRequest = requests.find((options) => options.url === '/api/mine/portfolios/88/draft')
+  assert.ok(profileRequest)
+  assert.equal(draftRequest.data.config.components[0].config.qrUrlSource, 'PROFILE')
+  assert.equal(
+    draftRequest.data.config.components[0].config.qrUrl,
+    'https://cdn.example.com/basic-profile-qr-current.jpg'
+  )
+  assert.equal(draftRequest.data.config.components[0].config.qrSize, 240)
+  assert.equal(page.data.config.components[0].config.qrUrl, 'https://cdn.example.com/basic-profile-qr-current.jpg')
 })
 
 test('loading a published portfolio shows published status and publish action', async () => {

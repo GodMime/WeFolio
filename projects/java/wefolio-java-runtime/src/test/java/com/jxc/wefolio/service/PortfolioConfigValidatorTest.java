@@ -206,6 +206,9 @@ class PortfolioConfigValidatorTest {
                 .hasMessage("文字说明内容不能为空");
     }
 
+    /**
+     * 文字说明组件应限制正文长度，并拒绝不支持的对齐方式。
+     */
     @Test
     void textSectionShouldLimitContentLengthAndValidateAlignment() {
         PortfolioConfigDto tooLongConfig = config(component(
@@ -241,6 +244,9 @@ class PortfolioConfigValidatorTest {
                 .isEqualTo("LEFT");
     }
 
+    /**
+     * 分割线组件应补齐默认颜色和默认高度，并规范化显式配置。
+     */
     @Test
     void dividerShouldNormalizeColorAndHeight() {
         PortfolioConfigDto explicitConfig = config(component(
@@ -269,6 +275,9 @@ class PortfolioConfigValidatorTest {
                 .containsEntry("heightPx", 16);
     }
 
+    /**
+     * 分割线组件应拒绝不支持的颜色或非正数高度。
+     */
     @Test
     void dividerShouldRejectUnsupportedColorOrHeight() {
         PortfolioConfigDto invalidColorConfig = config(component(
@@ -412,6 +421,9 @@ class PortfolioConfigValidatorTest {
         validator().validateContactFormSubmission(component, Map.of("contactName", "林安", "wechat", "wefolio"));
     }
 
+    /**
+     * 维护端只添加联系表单组件时，应默认启用访客输入字段。
+     */
     @Test
     void contactFormShouldDefaultVisitorInputFieldsWhenMaintainerOnlyAddsComponent() {
         PortfolioConfigDto config = config(component(

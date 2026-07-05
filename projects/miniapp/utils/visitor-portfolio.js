@@ -2,6 +2,9 @@ const {
   formatLunarDayMeta,
   toLunarDate
 } = require('./lunar')
+const {
+  DIVIDER_COLOR_VALUES
+} = require('./portfolios')
 
 const PROFILE_VISIBLE_FIELD_DEFAULTS = {
   avatar: true,
@@ -32,12 +35,7 @@ const TEXT_SECTION_ALIGNMENT_CLASS_MAP = {
 const DEFAULT_DIVIDER_COLOR = 'GRAY'
 const DEFAULT_DIVIDER_HEIGHT_PX = 16
 const VALID_DIVIDER_COLORS = ['BLACK', 'WHITE', 'GRAY', 'TRANSPARENT']
-const DIVIDER_COLOR_VALUE_MAP = {
-  BLACK: '#000000',
-  WHITE: '#ffffff',
-  GRAY: '#eef1f4',
-  TRANSPARENT: 'transparent'
-}
+const DIVIDER_COLOR_VALUE_MAP = DIVIDER_COLOR_VALUES
 const SCHEDULE_DAY_META_FIELDS = ['holidayText', 'festivalText', 'noteText', 'lunarText', 'metaText']
 
 function trimText(value) {

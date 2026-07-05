@@ -142,18 +142,14 @@
         </block>
 
         <block wx:elif="{{item.componentType === 'CONTACT_FORM'}}">
-          <view wx:if="{{item.contactForm.displayMode === 'INLINE_FORM'}}" class="form-section">
-            <view class="component-title">{{item.contactForm.title || '预留联系信息'}}</view>
-            <view wx:if="{{item.contactForm.description}}" class="section-desc">{{item.contactForm.description}}</view>
-            <input class="field" placeholder="联系人" value="{{contactForm.contactName}}" data-field="contactName" bindinput="handleContactInput" />
-            <input class="field" placeholder="手机号" value="{{contactForm.phone}}" data-field="phone" bindinput="handleContactInput" />
-            <input class="field" placeholder="微信号" value="{{contactForm.wechat}}" data-field="wechat" bindinput="handleContactInput" />
-            <textarea class="field textarea" placeholder="需求描述" value="{{contactForm.needs}}" data-field="needs" bindinput="handleContactInput"></textarea>
-            <button class="primary-button" bindtap="handleSubmitContact">预览提交</button>
-          </view>
-          <view wx:else class="form-entry-section">
-            <button class="primary-button contact-form-entry-button" data-component-key="{{item.componentKey}}" bindtap="handleOpenContactFormModal">{{item.contactForm.title || '预留联系信息'}}</button>
-          </view>
+          <portfolio-contact-form
+            contact-component="{{item}}"
+            contact-form="{{contactForm}}"
+            submit-text="预览提交"
+            bindcontactinput="handleContactInput"
+            bindsubmitcontact="handleSubmitContact"
+            bindopenmodal="handleOpenContactFormModal"
+          ></portfolio-contact-form>
         </block>
 
         <block wx:elif="{{item.componentType === 'TEXT_SECTION'}}">
@@ -196,18 +192,14 @@
     </view>
   </view>
 
-  <view class="contact-form-mask {{contactFormModalVisible ? 'visible' : ''}}" catchtap="handleCloseContactFormModal">
-    <view class="contact-form-panel" catchtap="noop">
-      <view class="contact-form-heading">
-        <view class="component-title">{{activeContactFormComponent.contactForm.title || '预留联系信息'}}</view>
-        <view class="contact-form-close" catchtap="handleCloseContactFormModal" aria-role="button" aria-label="关闭联系表单">×</view>
-      </view>
-      <view wx:if="{{activeContactFormComponent.contactForm.description}}" class="section-desc">{{activeContactFormComponent.contactForm.description}}</view>
-      <input class="field" placeholder="联系人" value="{{contactForm.contactName}}" data-field="contactName" bindinput="handleContactInput" />
-      <input class="field" placeholder="手机号" value="{{contactForm.phone}}" data-field="phone" bindinput="handleContactInput" />
-      <input class="field" placeholder="微信号" value="{{contactForm.wechat}}" data-field="wechat" bindinput="handleContactInput" />
-      <textarea class="field textarea" placeholder="需求描述" value="{{contactForm.needs}}" data-field="needs" bindinput="handleContactInput"></textarea>
-      <button class="primary-button" bindtap="handleSubmitContact">预览提交</button>
-    </view>
-  </view>
+  <portfolio-contact-form
+    view-mode="modal"
+    modal-visible="{{contactFormModalVisible}}"
+    contact-component="{{activeContactFormComponent}}"
+    contact-form="{{contactForm}}"
+    submit-text="预览提交"
+    bindcontactinput="handleContactInput"
+    bindsubmitcontact="handleSubmitContact"
+    bindclosemodal="handleCloseContactFormModal"
+  ></portfolio-contact-form>
 </view>

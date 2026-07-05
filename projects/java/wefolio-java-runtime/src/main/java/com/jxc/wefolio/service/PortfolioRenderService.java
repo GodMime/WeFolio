@@ -6,9 +6,7 @@ import com.jxc.wefolio.dto.PortfolioConfigDto;
 import com.jxc.wefolio.dto.PortfolioRenderDto;
 import com.jxc.wefolio.dto.VisitorPortfolioResponse;
 import com.jxc.wefolio.entity.PortfolioEntity;
-import com.jxc.wefolio.entity.UserEntity;
 import com.jxc.wefolio.entity.WorkEntity;
-import com.jxc.wefolio.mapper.UserEntityMapper;
 import com.jxc.wefolio.mapper.WorkEntityMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -147,9 +145,6 @@ public class PortfolioRenderService {
     /** COS 服务 */
     private final CosService cosService;
 
-    /** 用户 Mapper */
-    private final UserEntityMapper userEntityMapper;
-
     /**
      * 构建作品集渲染模型。
      *
@@ -195,13 +190,12 @@ public class PortfolioRenderService {
      */
     private List<PortfolioRenderDto.Component> buildComponents(PortfolioEntity portfolio, PortfolioConfigDto config) {
         Long ownerId = portfolio == null ? null : portfolio.getOwnerId();
-        String profileQrUrl = shouldResolveProfileQrUrl(config) ? resolveBasicProfileQrUrl(ownerId) : "";
         return safeList(config == null ? null : config.getComponents()).stream()
                 .filter(component -> component != null && !Boolean.FALSE.equals(component.getEnabled()))
                 .sorted(Comparator
                         .comparing(this::safeComponentSortOrder)
                         .thenComparing(component -> defaultString(component.getComponentKey())))
-                .map(component -> buildComponent(ownerId, component, profileQrUrl))
+                .map(component -> buildComponent(ownerId, component))
                 .toList();
     }
 
@@ -210,10 +204,9 @@ public class PortfolioRenderService {
      *
      * @param ownerId 作品集归属用户 ID
      * @param component 配置组件
-     * @param profileQrUrl 基础资料二维码地址
      * @return 渲染组件
      */
-    private PortfolioRenderDto.Component buildComponent(Long ownerId, PortfolioConfigDto.Component component, String profileQrUrl) {
+    private PortfolioRenderDto.Component buildComponent(Long ownerId, PortfolioConfigDto.Component component) {
         PortfolioRenderDto.Component render = new PortfolioRenderDto.Component();
         String componentTypeCode = defaultString(component.getComponentType());
         PortfolioComponentTypeDict componentType = PortfolioComponentTypeDict.fromCode(componentTypeCode);
@@ -231,7 +224,7 @@ public class PortfolioRenderService {
             case PROFILE -> render.setProfile(buildProfile(componentConfig));
             case WORK_GRID, WORK_LIST -> render.setGroups(buildDisplayGroups(ownerId, componentConfig));
             case SCHEDULE_QUERY -> render.setScheduleQuery(buildScheduleQuery(componentConfig));
-            case QR_CONTACT -> render.setQrContact(buildQrContact(componentConfig, profileQrUrl));
+            case QR_CONTACT -> render.setQrContact(buildQrContact(componentConfig));
             case CONTACT_FORM -> render.setContactForm(buildContactForm(componentConfig));
             case TEXT_SECTION -> render.setTextSection(buildTextSection(componentConfig));
             case DIVIDER -> render.setDivider(buildDivider(componentConfig));
@@ -391,55 +384,16 @@ public class PortfolioRenderService {
      * 构建二维码联系渲染数据。
      *
      * @param componentConfig 组件配置
-     * @param profileQrUrl 基础资料二维码地址
      * @return 二维码联系
      */
-    private PortfolioRenderDto.QrContact buildQrContact(Map<String, Object> componentConfig, String profileQrUrl) {
+    private PortfolioRenderDto.QrContact buildQrContact(Map<String, Object> componentConfig) {
         PortfolioRenderDto.QrContact qrContact = new PortfolioRenderDto.QrContact();
         String source = defaultString(asString(componentConfig.get(CONFIG_KEY_QR_URL_SOURCE)), QR_SOURCE_PROFILE);
         qrContact.setTitle(asString(componentConfig.get(CONFIG_KEY_TITLE)));
         qrContact.setDescription(asString(componentConfig.get(CONFIG_KEY_DESCRIPTION)));
         qrContact.setQrUrlSource(source);
-        qrContact.setQrUrl(QR_SOURCE_PROFILE.equals(source)
-                ? profileQrUrl
-                : asString(componentConfig.get(CONFIG_KEY_QR_URL)));
+        qrContact.setQrUrl(asString(componentConfig.get(CONFIG_KEY_QR_URL)));
         return qrContact;
-    }
-
-    /**
-     * 判断渲染组件中是否需要读取基础资料二维码。
-     *
-     * @param config 作品集配置
-     * @return 是否需要读取
-     */
-    private boolean shouldResolveProfileQrUrl(PortfolioConfigDto config) {
-        for (PortfolioConfigDto.Component component : safeList(config == null ? null : config.getComponents())) {
-            if (component == null
-                    || Boolean.FALSE.equals(component.getEnabled())
-                    || !PortfolioComponentTypeDict.QR_CONTACT.getCode().equals(component.getComponentType())) {
-                continue;
-            }
-            Map<String, Object> componentConfig = component.getConfig() == null ? Map.of() : component.getConfig();
-            String source = defaultString(asString(componentConfig.get(CONFIG_KEY_QR_URL_SOURCE)), QR_SOURCE_PROFILE);
-            if (QR_SOURCE_PROFILE.equals(source)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * 从基础资料中读取微信二维码地址。
-     *
-     * @param ownerId 作品集归属用户 ID
-     * @return 微信二维码地址
-     */
-    private String resolveBasicProfileQrUrl(Long ownerId) {
-        if (ownerId == null) {
-            return "";
-        }
-        UserEntity user = userEntityMapper.selectById(ownerId);
-        return user == null ? "" : defaultString(user.getWechatQrUrl());
     }
 
     /**

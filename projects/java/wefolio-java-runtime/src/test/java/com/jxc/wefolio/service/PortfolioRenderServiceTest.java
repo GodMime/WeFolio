@@ -11,9 +11,7 @@ import com.jxc.wefolio.dto.PortfolioConfigDto;
 import com.jxc.wefolio.dto.PortfolioRenderDto;
 import com.jxc.wefolio.dto.VisitorPortfolioResponse;
 import com.jxc.wefolio.entity.PortfolioEntity;
-import com.jxc.wefolio.entity.UserEntity;
 import com.jxc.wefolio.entity.WorkEntity;
-import com.jxc.wefolio.mapper.UserEntityMapper;
 import com.jxc.wefolio.mapper.WorkEntityMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -37,10 +35,6 @@ class PortfolioRenderServiceTest {
     /** 作品 Mapper 模拟 */
     @Mock
     private WorkEntityMapper workEntityMapper;
-
-    /** 用户 Mapper 模拟 */
-    @Mock
-    private UserEntityMapper userEntityMapper;
 
     /** COS 服务模拟 */
     @Mock
@@ -109,19 +103,17 @@ class PortfolioRenderServiceTest {
     }
 
     /**
-     * 二维码联系组件使用资料来源时应读取基础资料二维码地址。
+     * 二维码联系组件使用资料来源时应直接读取配置中的二维码地址。
      */
     @Test
-    void renderShouldResolveQrContactFromBasicProfile() {
-        UserEntity user = new UserEntity();
-        user.setWechatQrUrl("https://cdn.example.com/basic-profile-qr.jpg");
-        when(userEntityMapper.selectById(7L)).thenReturn(user);
+    void renderShouldReadProfileQrContactUrlFromConfigWithoutUserQuery() {
         PortfolioConfigDto config = config(
                 component("c_profile", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, Map.of(
                         "profile", Map.of("displayName", "林安", "wechatQrUrl", "https://cdn.example.com/stale-component-qr.jpg")
                 )),
                 component("c_qr", PortfolioComponentTypeDict.QR_CONTACT.getCode(), 2000, Map.of(
                         "qrUrlSource", "PROFILE",
+                        "qrUrl", "https://cdn.example.com/saved-profile-qr.jpg",
                         "title", "微信联系"
                 ))
         );
@@ -129,7 +121,7 @@ class PortfolioRenderServiceTest {
         PortfolioRenderDto render = service().render(portfolio(), config, false, false, null, null);
 
         assertThat(render.getComponents().get(1).getQrContact().getQrUrl())
-                .isEqualTo("https://cdn.example.com/basic-profile-qr.jpg");
+                .isEqualTo("https://cdn.example.com/saved-profile-qr.jpg");
     }
 
     /**
@@ -229,7 +221,7 @@ class PortfolioRenderServiceTest {
     }
 
     private PortfolioRenderService service() {
-        return new PortfolioRenderService(workEntityMapper, cosService, userEntityMapper);
+        return new PortfolioRenderService(workEntityMapper, cosService);
     }
 
     private PortfolioEntity portfolio() {

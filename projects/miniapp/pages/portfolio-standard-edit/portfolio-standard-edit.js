@@ -1,5 +1,6 @@
 const { request } = require('../../utils/request')
 const { handleAuthRequired, hasLocalToken } = require('../../utils/session')
+const { noop } = require('../../utils/noop')
 const { isRemoteUrl } = require('../../utils/upload-file')
 const { normalizeProfile: normalizeBasicProfile } = require('../../utils/profile')
 const { normalizeWorkList, normalizeWorkTags } = require('../../utils/works')
@@ -84,6 +85,7 @@ const PROFILE_VISIBLE_FIELD_OPTIONS = [
 ]
 const QR_CONTACT_SOURCE_PROFILE = 'PROFILE'
 const QR_CONTACT_SOURCE_CUSTOM = 'CUSTOM'
+const QR_CONTACT_REMOVED_CONFIG_KEYS = ['title', 'description']
 const SHARE_FIELD_LIMITS = {
   title: 50
 }
@@ -539,15 +541,20 @@ function updateComponentQrContactConfig(config, componentKey, qrContactForm = {}
   const normalizedConfig = normalizePortfolioConfig(config)
   const targetKey = componentKey || ''
   const form = buildQrContactForm(qrContactForm)
+  const qrUrl = form.qrUrlSource === QR_CONTACT_SOURCE_CUSTOM ? form.qrUrl : String(qrContactForm.qrUrl || '')
   const components = (normalizedConfig.components || []).map((component) => {
     if (component.componentKey !== targetKey || component.componentType !== COMPONENT_TYPES.QR_CONTACT) {
       return component
     }
+    const nextComponentConfig = Object.assign({}, component.config || {}, qrContactForm || {}, {
+      qrUrlSource: form.qrUrlSource,
+      qrUrl
+    })
+    QR_CONTACT_REMOVED_CONFIG_KEYS.forEach((key) => {
+      delete nextComponentConfig[key]
+    })
     return Object.assign({}, component, {
-      config: {
-        qrUrlSource: form.qrUrlSource,
-        qrUrl: form.qrUrl
-      }
+      config: nextComponentConfig
     })
   })
   return normalizePortfolioConfig(Object.assign({}, normalizedConfig, { components }))
@@ -1020,7 +1027,7 @@ Page({
     this.setData({ componentSheetVisible: false })
   },
 
-  noop() {},
+  noop,
 
   handleSelectComponent(event) {
     const componentType = event.currentTarget.dataset.type
@@ -1637,6 +1644,28 @@ Page({
       })
   },
 
+  loadQrContactProfileQrUrlForSaving(config = this.data.config) {
+    const normalizedConfig = normalizePortfolioConfig(config)
+    const shouldLoadProfileQr = (normalizedConfig.components || []).some((component) => {
+      if (!component || component.componentType !== COMPONENT_TYPES.QR_CONTACT) {
+        return false
+      }
+      const componentConfig = component.config || {}
+      return componentConfig.qrUrlSource !== QR_CONTACT_SOURCE_CUSTOM
+    })
+    if (!shouldLoadProfileQr) {
+      return Promise.resolve('')
+    }
+    return request({ url: BASIC_PROFILE_API_URL })
+      .then((response) => resolveBasicProfileQrContactQrUrl(response))
+      .catch((error) => {
+        if (error && error.authRequired) {
+          handleAuthRequired(error.message)
+        }
+        throw new Error(error && error.message ? error.message : BASIC_PROFILE_LOAD_ERROR_MESSAGE)
+      })
+  },
+
   setQrContactImageUrl(qrUrl) {
     this.setData({
       'qrContactForm.qrUrlSource': QR_CONTACT_SOURCE_CUSTOM,
@@ -2156,29 +2185,39 @@ Page({
     const qrContactComponents = (nextConfig.components || [])
       .filter((component) => component.componentType === COMPONENT_TYPES.QR_CONTACT)
 
-    return qrContactComponents.reduce((chain, component) => {
-      return chain.then(() => {
-        const currentComponent = findComponentByKey(nextConfig, component.componentKey) || component
-        const componentConfig = currentComponent.config || {}
-        const qrUrl = componentConfig.qrUrl || ''
-        if (componentConfig.qrUrlSource !== QR_CONTACT_SOURCE_CUSTOM || !qrUrl) {
-          return ''
-        }
-        return uploadPortfolioImageAsset(portfolioId, qrUrl, {
-          assetType: PORTFOLIO_ASSET_TYPES.QR_CONTACT,
-          assetLabel: '二维码图片',
-          clientIdPrefix: 'qr-contact'
-        }).then((uploadedUrl) => {
-          if (uploadedUrl && uploadedUrl !== qrUrl) {
+    return this.loadQrContactProfileQrUrlForSaving(nextConfig).then((profileQrUrl) => {
+      return qrContactComponents.reduce((chain, component) => {
+        return chain.then(() => {
+          const currentComponent = findComponentByKey(nextConfig, component.componentKey) || component
+          const componentConfig = currentComponent.config || {}
+          const qrUrlSource = componentConfig.qrUrlSource || QR_CONTACT_SOURCE_PROFILE
+          const qrUrl = componentConfig.qrUrl || ''
+          if (qrUrlSource !== QR_CONTACT_SOURCE_CUSTOM) {
             nextConfig = updateComponentQrContactConfig(nextConfig, component.componentKey, Object.assign({}, componentConfig, {
-              qrUrl: uploadedUrl,
-              qrUrlSource: QR_CONTACT_SOURCE_CUSTOM
+              qrUrl: profileQrUrl,
+              qrUrlSource: QR_CONTACT_SOURCE_PROFILE
             }))
+            return profileQrUrl
           }
-          return uploadedUrl || qrUrl
+          if (!qrUrl) {
+            return ''
+          }
+          return uploadPortfolioImageAsset(portfolioId, qrUrl, {
+            assetType: PORTFOLIO_ASSET_TYPES.QR_CONTACT,
+            assetLabel: '二维码图片',
+            clientIdPrefix: 'qr-contact'
+          }).then((uploadedUrl) => {
+            if (uploadedUrl && uploadedUrl !== qrUrl) {
+              nextConfig = updateComponentQrContactConfig(nextConfig, component.componentKey, Object.assign({}, componentConfig, {
+                qrUrl: uploadedUrl,
+                qrUrlSource: QR_CONTACT_SOURCE_CUSTOM
+              }))
+            }
+            return uploadedUrl || qrUrl
+          })
         })
-      })
-    }, Promise.resolve('')).then(() => nextConfig)
+      }, Promise.resolve('')).then(() => nextConfig)
+    })
   },
 
   uploadLocalPortfolioAssets(portfolioId) {

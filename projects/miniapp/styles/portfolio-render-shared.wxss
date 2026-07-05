@@ -1,0 +1,67 @@
+.display-tag-scroll {
+  height: 56rpx;
+  margin-top: 24rpx;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.display-tags {
+  min-width: 100%;
+  height: 56rpx;
+  padding: 0 24rpx;
+  box-sizing: border-box;
+}
+
+.display-tag.active {
+  color: #000000;
+  font-weight: 900;
+}
+
+.display-tag {
+  color: #8a8f98;
+  font-size: 28rpx;
+}
+
+.work-grid {
+  display: flex;
+  flex-wrap: wrap;
+  padding: 22rpx 6rpx 0;
+  box-sizing: border-box;
+}
+
+.work-list {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+  padding: 22rpx 20rpx 0;
+  box-sizing: border-box;
+}
+
+.grid-card {
+  width: 50%;
+  padding: 0 6rpx 18rpx;
+  box-sizing: border-box;
+}
+
+.text-section.align-left,
+.text-section.align-left .component-title,
+.text-section.align-left .text-content {
+  text-align: left;
+}
+
+.text-section.align-center,
+.text-section.align-center .component-title,
+.text-section.align-center .text-content {
+  text-align: center;
+}
+
+.text-section.align-right,
+.text-section.align-right .component-title,
+.text-section.align-right .text-content {
+  text-align: right;
+}
+
+.divider-section {
+  width: 100%;
+  box-sizing: border-box;
+}

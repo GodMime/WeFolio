@@ -1,5 +1,6 @@
 const { request } = require('../../utils/request')
 const { clearToken, handleAuthRequired, hasLocalToken } = require('../../utils/session')
+const { noop } = require('../../utils/noop')
 const {
   WECHAT_QR_CROP_FILE_TYPE,
   WECHAT_QR_CROP_OUTPUT_WIDTH,
@@ -172,7 +173,7 @@ Page({
     })
   },
 
-  noop() {},
+  noop,
 
   handleRetry() {
     this.bootstrap()

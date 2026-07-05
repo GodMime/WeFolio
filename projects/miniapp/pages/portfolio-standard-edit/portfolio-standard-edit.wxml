@@ -1,3 +1,5 @@
+<wxs module="componentRows" src="./component-rows.wxs"></wxs>
+
 <view class="page-shell portfolio-edit-page">
   <navigation-bar title="标准个人作品集" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
 
@@ -60,21 +62,21 @@
               <button class="component-remove-button" data-key="{{item.componentKey}}" catchtap="handleRemoveComponent">删除</button>
             </view>
             <view
-              class="component-row {{draggingIndex === index ? 'dragging' : ''}} {{dragTargetIndex === index && draggingIndex !== -1 ? 'drag-target' : ''}} {{item.componentType === 'CAROUSEL' || item.componentType === 'PROFILE' || item.componentType === 'QR_CONTACT' || item.componentType === 'SCHEDULE_QUERY' || item.componentType === 'CONTACT_FORM' || item.componentType === 'TEXT_SECTION' || item.componentType === 'DIVIDER' || item.componentType === 'WORK_GRID' || item.componentType === 'WORK_LIST' ? 'editable' : ''}}"
+              class="component-row {{draggingIndex === index ? 'dragging' : ''}} {{dragTargetIndex === index && draggingIndex !== -1 ? 'drag-target' : ''}} {{componentRows.isEditable(item.componentType) ? 'editable' : ''}}"
               style="{{draggingIndex === index ? componentDragStyle : ''}}"
               data-key="{{item.componentKey}}"
               data-type="{{item.componentType}}"
               catchtap="handleComponentTap"
-              aria-role="{{item.componentType === 'CAROUSEL' || item.componentType === 'PROFILE' || item.componentType === 'QR_CONTACT' || item.componentType === 'SCHEDULE_QUERY' || item.componentType === 'CONTACT_FORM' || item.componentType === 'TEXT_SECTION' || item.componentType === 'DIVIDER' || item.componentType === 'WORK_GRID' || item.componentType === 'WORK_LIST' ? 'button' : 'text'}}"
-              aria-label="{{item.componentType === 'CAROUSEL' ? '编辑轮播图作品' : item.componentType === 'PROFILE' ? '编辑个人资料' : item.componentType === 'QR_CONTACT' ? '编辑二维码联系' : item.componentType === 'SCHEDULE_QUERY' ? '编辑档期查询' : item.componentType === 'CONTACT_FORM' ? '编辑预留联系信息' : item.componentType === 'TEXT_SECTION' ? '编辑文字说明' : item.componentType === 'DIVIDER' ? '编辑分割线' : item.componentType === 'WORK_GRID' || item.componentType === 'WORK_LIST' ? '编辑作品集展示标签' : item.name}}"
+              aria-role="{{componentRows.resolveAriaRole(item.componentType)}}"
+              aria-label="{{componentRows.resolveAriaLabel(item.componentType, item.name)}}"
             >
               <view class="component-order">{{index + 1}}</view>
               <view class="component-copy">
                 <view class="component-title">{{item.name || item.componentType}}</view>
               </view>
               <view class="component-drag-handle"></view>
-              <view class="component-row-arrow {{item.componentType === 'CAROUSEL' || item.componentType === 'PROFILE' || item.componentType === 'QR_CONTACT' || item.componentType === 'SCHEDULE_QUERY' || item.componentType === 'CONTACT_FORM' || item.componentType === 'TEXT_SECTION' || item.componentType === 'DIVIDER' || item.componentType === 'WORK_GRID' || item.componentType === 'WORK_LIST' ? '' : 'placeholder'}}">
-                <view wx:if="{{item.componentType === 'CAROUSEL' || item.componentType === 'PROFILE' || item.componentType === 'QR_CONTACT' || item.componentType === 'SCHEDULE_QUERY' || item.componentType === 'CONTACT_FORM' || item.componentType === 'TEXT_SECTION' || item.componentType === 'DIVIDER' || item.componentType === 'WORK_GRID' || item.componentType === 'WORK_LIST'}}" class="component-row-arrow-icon"></view>
+              <view class="component-row-arrow {{componentRows.isEditable(item.componentType) ? '' : 'placeholder'}}">
+                <view wx:if="{{componentRows.isEditable(item.componentType)}}" class="component-row-arrow-icon"></view>
               </view>
             </view>
           </view>
