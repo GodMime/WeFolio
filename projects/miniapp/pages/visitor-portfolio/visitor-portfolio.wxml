@@ -36,7 +36,7 @@
             >{{tag.name}}</view>
           </view>
         </scroll-view>
-        <view class="work-grid">
+        <view class="work-grid {{displaySwitchingComponentKey === item.componentKey ? 'display-switching' : ''}}">
           <view wx:for="{{item.activeGroup.works}}" wx:key="workId" wx:for-item="work" class="work-card grid-card">
             <view
               class="work-cover-wrap"
@@ -74,7 +74,7 @@
             >{{tag.name}}</view>
           </view>
         </scroll-view>
-        <view class="work-list">
+        <view class="work-list {{displaySwitchingComponentKey === item.componentKey ? 'display-switching' : ''}}">
           <view wx:for="{{item.activeGroup.works}}" wx:key="workId" wx:for-item="work" class="work-card list-card">
             <view
               class="work-cover-wrap"
@@ -142,26 +142,28 @@
     </view>
   </scroll-view>
 
-  <view class="work-video-mask {{videoPreviewVisible ? 'visible' : ''}}" catchtap="handleCloseVideoPreview">
-    <view class="work-video-panel" catchtap="handleVideoPreviewPanelTap">
-      <view class="work-video-heading">
-        <view class="work-video-title">{{videoPreview.title}}</view>
-        <view class="work-video-close" catchtap="handleCloseVideoPreview" aria-role="button" aria-label="关闭视频">×</view>
+  <root-portal wx:if="{{videoPreviewVisible}}">
+    <view class="work-video-mask {{videoPreviewVisible ? 'visible' : ''}}" catchtap="handleCloseVideoPreview">
+      <view class="work-video-panel" catchtap="handleVideoPreviewPanelTap">
+        <view class="work-video-heading">
+          <view class="work-video-title">{{videoPreview.title}}</view>
+          <view class="work-video-close" catchtap="handleCloseVideoPreview" aria-role="button" aria-label="关闭视频">×</view>
+        </view>
+        <video
+          id="portfolioWorkVideo"
+          class="work-video-player"
+          src="{{videoPreview.src}}"
+          poster="{{videoPreview.poster}}"
+          controls="{{true}}"
+          autoplay="{{true}}"
+          show-fullscreen-btn="{{true}}"
+          show-center-play-btn="{{true}}"
+          enable-progress-gesture="{{true}}"
+          object-fit="contain"
+        ></video>
       </view>
-      <video
-        id="portfolioWorkVideo"
-        class="work-video-player"
-        src="{{videoPreview.src}}"
-        poster="{{videoPreview.poster}}"
-        controls="{{true}}"
-        autoplay="{{true}}"
-        show-fullscreen-btn="{{true}}"
-        show-center-play-btn="{{true}}"
-        enable-progress-gesture="{{true}}"
-        object-fit="contain"
-      ></video>
     </view>
-  </view>
+  </root-portal>
 
   <portfolio-contact-form
     view-mode="modal"
@@ -172,6 +174,44 @@
     bindsubmitcontact="handleSubmitContact"
     bindclosemodal="handleCloseContactFormModal"
   ></portfolio-contact-form>
+
+  <root-portal wx:if="{{visitorProfileAuthVisible}}">
+    <view class="visitor-profile-mask" catchtap="handleVisitorProfileMaskTap" catchtouchmove="handleVisitorProfileMaskTouchMove">
+      <view class="visitor-profile-panel" catchtap="handleVisitorProfilePanelTap">
+        <view class="visitor-profile-title">完善访客资料</view>
+        <view class="visitor-profile-desc">授权头像和昵称，维护者查看访客记录时能识别你。</view>
+        <view class="visitor-profile-form">
+          <view class="visitor-avatar-field">
+            <view class="visitor-avatar-control">
+              <view class="visitor-avatar-visual">
+                <image wx:if="{{visitorProfileForm.avatarUrl}}" class="visitor-avatar-preview" src="{{visitorProfileForm.avatarUrl}}" mode="aspectFill"></image>
+                <view wx:else class="visitor-avatar-placeholder">
+                  <view class="visitor-avatar-placeholder-head"></view>
+                  <view class="visitor-avatar-placeholder-body"></view>
+                </view>
+              </view>
+              <button class="visitor-avatar-picker" open-type="chooseAvatar" bindchooseavatar="handleVisitorAvatarChoose" aria-label="点击授权头像"></button>
+            </view>
+            <view class="visitor-avatar-label">点击授权头像</view>
+          </view>
+          <view class="visitor-nickname-field">
+            <input
+              class="visitor-nickname-input"
+              type="nickname"
+              value="{{visitorProfileForm.nickname}}"
+              placeholder="点击授权昵称"
+              placeholder-class="visitor-nickname-placeholder"
+              bindinput="handleVisitorNicknameInput"
+            />
+          </view>
+        </view>
+        <view class="visitor-profile-actions">
+          <button class="visitor-profile-secondary" bindtap="handleVisitorProfileSkip">跳过</button>
+          <button class="visitor-profile-primary" loading="{{visitorProfileSaving}}" bindtap="handleVisitorProfileSubmit">保存</button>
+        </view>
+      </view>
+    </view>
+  </root-portal>
 
   <view wx:if="{{portfolio.underMaintenance}}" class="maintenance-mask">
     <view class="maintenance-panel">

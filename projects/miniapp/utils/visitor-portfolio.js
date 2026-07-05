@@ -302,13 +302,23 @@ function normalizeComponents(components = []) {
 }
 
 function normalizeVisitorPortfolio(raw = {}) {
+  const visitorMeta = {
+    visitorKey: trimText(raw.visitorKey),
+    isNewVisitor: Boolean(raw.isNewVisitor || raw.newVisitor),
+    needVisitorProfile: Boolean(raw.needVisitorProfile),
+    visitorProfileToken: trimText(raw.visitorProfileToken)
+  }
   if (raw.renderData) {
     const render = normalizePortfolioRender(Object.assign({}, raw.renderData, {
       underMaintenance: Boolean(raw.underMaintenance || raw.renderData.underMaintenance)
     }))
     return Object.assign({}, render, {
       config: raw.config || {},
-      publishedRevision: toNumber(raw.publishedRevision)
+      publishedRevision: toNumber(raw.publishedRevision),
+      visitorKey: visitorMeta.visitorKey,
+      isNewVisitor: visitorMeta.isNewVisitor,
+      needVisitorProfile: visitorMeta.needVisitorProfile,
+      visitorProfileToken: visitorMeta.visitorProfileToken
     })
   }
   const config = raw.config || {}
@@ -328,7 +338,11 @@ function normalizeVisitorPortfolio(raw = {}) {
     },
     visitRecordId: raw.visitRecordId || null,
     config,
-    components: underMaintenance ? [] : normalizeComponents(config.components)
+    components: underMaintenance ? [] : normalizeComponents(config.components),
+    visitorKey: visitorMeta.visitorKey,
+    isNewVisitor: visitorMeta.isNewVisitor,
+    needVisitorProfile: visitorMeta.needVisitorProfile,
+    visitorProfileToken: visitorMeta.visitorProfileToken
   }
 }
 
@@ -349,6 +363,9 @@ function buildVisitorEventPayload(event = {}, idempotencyKey) {
   }
   if (event.queriedDate) {
     payload.queriedDate = trimText(event.queriedDate)
+  }
+  if (event.metadata && typeof event.metadata === 'object' && !Array.isArray(event.metadata)) {
+    payload.metadata = Object.assign({}, event.metadata)
   }
   return payload
 }

@@ -4,6 +4,7 @@ import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
 import com.jxc.wefolio.dict.PortfolioTypeDict;
 import com.jxc.wefolio.dict.PointSceneCodeDict;
 import com.jxc.wefolio.dict.VisitEventTypeDict;
+import com.jxc.wefolio.dict.VisitSourceTypeDict;
 import com.jxc.wefolio.dto.VisitorPortfolioEventRequest;
 import com.jxc.wefolio.entity.PortfolioEntity;
 import com.jxc.wefolio.entity.VisitEventEntity;
@@ -15,14 +16,20 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DuplicateKeyException;
 
 import java.time.LocalDate;
 import java.util.Map;
 
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.startsWith;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -81,6 +88,63 @@ class PortfolioVisitServiceTest {
     }
 
     @Test
+    void recordOpenShouldCreateVisitRecordWithGlobalVisitorId() {
+        when(visitRecordEntityMapper.insert(any(VisitRecordEntity.class))).thenAnswer(invocation -> {
+            VisitRecordEntity record = invocation.getArgument(0);
+            record.setId(33L);
+            return 1;
+        });
+
+        service().recordOpen(
+                portfolio(),
+                1024L,
+                "visitor-stable-key",
+                "WX_OPENID:digest-123",
+                "WECHAT_SHARE_CARD",
+                "open-visitor-1"
+        );
+
+        ArgumentCaptor<VisitRecordEntity> recordCaptor = ArgumentCaptor.forClass(VisitRecordEntity.class);
+        verify(visitRecordEntityMapper).insert(recordCaptor.capture());
+        assertThat(recordCaptor.getValue().getVisitorId()).isEqualTo(1024L);
+        assertThat(recordCaptor.getValue().getVisitorKey()).isEqualTo("visitor-stable-key");
+        ArgumentCaptor<VisitEventEntity> eventCaptor = ArgumentCaptor.forClass(VisitEventEntity.class);
+        verify(visitEventEntityMapper).insert(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().getVisitorKey()).isEqualTo("visitor-stable-key");
+    }
+
+    /**
+     * 迁移期旧访问汇总 — 全局访客 ID 未命中时回退 visitorKey 并绑定访客 ID。
+     */
+    @Test
+    void recordOpenShouldFallbackToVisitorKeyWhenGlobalVisitorRecordIsMissing() {
+        VisitRecordEntity legacyRecord = new VisitRecordEntity();
+        legacyRecord.setId(44L);
+        legacyRecord.setVisitorKey("legacy-key");
+        legacyRecord.setPortfolioId(88L);
+        legacyRecord.setVisitCount(2);
+        when(visitRecordEntityMapper.selectOne(any())).thenReturn(null, legacyRecord);
+
+        VisitRecordEntity record = service().recordOpen(
+                portfolio(),
+                1024L,
+                "legacy-key",
+                "WX_OPENID:digest-123",
+                VisitSourceTypeDict.WECHAT_SHARE_CARD.getCode(),
+                "open-migrated-1"
+        );
+
+        ArgumentCaptor<VisitRecordEntity> recordCaptor = ArgumentCaptor.forClass(VisitRecordEntity.class);
+        verify(visitRecordEntityMapper, times(2)).selectOne(any());
+        verify(visitRecordEntityMapper, never()).insert(any(VisitRecordEntity.class));
+        verify(visitRecordEntityMapper).updateById(recordCaptor.capture());
+        assertThat(record.getId()).isEqualTo(44L);
+        assertThat(recordCaptor.getValue().getVisitorId()).isEqualTo(1024L);
+        assertThat(recordCaptor.getValue().getVisitorKey()).isEqualTo("legacy-key");
+        assertThat(recordCaptor.getValue().getVisitCount()).isEqualTo(3);
+    }
+
+    @Test
     void recordOpenShouldRefreshPortfolioSnapshotOnExistingRecord() {
         VisitRecordEntity record = new VisitRecordEntity();
         record.setId(33L);
@@ -131,6 +195,111 @@ class PortfolioVisitServiceTest {
                 "访客播放作品集视频"
         );
         verify(visitEventEntityMapper).insert(any(VisitEventEntity.class));
+    }
+
+    @Test
+    void recordImageEventShouldKeepRawVisitorKeyInBusinessId() {
+        String longVisitorKey = "a".repeat(64);
+        VisitRecordEntity record = new VisitRecordEntity();
+        record.setId(33L);
+        record.setVisitorKey(longVisitorKey);
+        record.setPortfolioId(88L);
+        record.setViewWorkCount(0);
+        when(visitRecordEntityMapper.selectOne(any())).thenReturn(record);
+        VisitorPortfolioEventRequest request = new VisitorPortfolioEventRequest();
+        request.setVisitorKey(longVisitorKey);
+        request.setEventType(VisitEventTypeDict.WORK_VIEWED.getCode());
+        request.setWorkId(11L);
+        request.setIdempotencyKey("image-long-1");
+
+        service().recordEvent(portfolio(), request);
+
+        ArgumentCaptor<String> businessIdCaptor = ArgumentCaptor.forClass(String.class);
+        verify(pointService).consumeWithMeterBusinessId(
+                eq(7L),
+                eq(PointSceneCodeDict.VIEW_PORTFOLIO_IMAGES.getCode()),
+                eq("PORTFOLIO_IMAGE"),
+                businessIdCaptor.capture(),
+                eq("88:" + longVisitorKey),
+                eq(1),
+                eq("image-long-1"),
+                eq("访客查看作品集图片")
+        );
+        assertThat(businessIdCaptor.getValue()).isEqualTo("88:11:" + longVisitorKey);
+    }
+
+    @Test
+    void recordImageEventShouldAccumulateByPortfolioVisitorAndKeepWorkInTransactionBusinessId() {
+        VisitRecordEntity record = new VisitRecordEntity();
+        record.setId(33L);
+        record.setVisitorKey("visitor-a");
+        record.setPortfolioId(88L);
+        record.setViewWorkCount(0);
+        when(visitRecordEntityMapper.selectOne(any())).thenReturn(record);
+        VisitorPortfolioEventRequest request = new VisitorPortfolioEventRequest();
+        request.setVisitorKey("visitor-a");
+        request.setEventType(VisitEventTypeDict.WORK_VIEWED.getCode());
+        request.setWorkId(11L);
+        request.setIdempotencyKey("image-1");
+
+        service().recordEvent(portfolio(), request);
+
+        verify(pointService).consumeWithMeterBusinessId(
+                7L,
+                PointSceneCodeDict.VIEW_PORTFOLIO_IMAGES.getCode(),
+                "PORTFOLIO_IMAGE",
+                "88:11:visitor-a",
+                "88:visitor-a",
+                1,
+                "image-1",
+                "访客查看作品集图片"
+        );
+    }
+
+    @Test
+    void recordEventShouldIgnoreRepeatedIdempotencyKey() {
+        VisitEventEntity existingEvent = new VisitEventEntity();
+        existingEvent.setId(91L);
+        existingEvent.setIdempotencyKey("video-1");
+        lenient().when(visitEventEntityMapper.selectOne(any())).thenReturn(existingEvent);
+        VisitorPortfolioEventRequest request = new VisitorPortfolioEventRequest();
+        request.setVisitorKey("visitor-a");
+        request.setEventType(VisitEventTypeDict.VIDEO_PLAYED.getCode());
+        request.setWorkId(11L);
+        request.setDurationSeconds(18);
+        request.setIdempotencyKey("video-1");
+
+        service().recordEvent(portfolio(), request);
+
+        verify(visitEventEntityMapper).selectOne(any());
+        verify(visitRecordEntityMapper, never()).selectOne(any());
+        verify(visitRecordEntityMapper, never()).updateById(any(VisitRecordEntity.class));
+        verify(pointService, never()).consume(any(), any(), any(), any(), anyInt(), any(), any());
+        verify(visitEventEntityMapper, never()).insert(any(VisitEventEntity.class));
+    }
+
+    @Test
+    void recordEventShouldTreatDuplicateInsertAsIdempotentRaceWithoutSideEffects() {
+        VisitRecordEntity record = new VisitRecordEntity();
+        record.setId(33L);
+        record.setVisitorKey("visitor-a");
+        record.setPortfolioId(88L);
+        record.setViewWorkCount(0);
+        when(visitRecordEntityMapper.selectOne(any())).thenReturn(record);
+        when(visitEventEntityMapper.insert(any(VisitEventEntity.class)))
+                .thenThrow(new DuplicateKeyException("Duplicate entry 'image-race-1' for key 'uk_visit_event_idempotency'"));
+        VisitorPortfolioEventRequest request = new VisitorPortfolioEventRequest();
+        request.setVisitorKey("visitor-a");
+        request.setEventType(VisitEventTypeDict.WORK_VIEWED.getCode());
+        request.setWorkId(11L);
+        request.setIdempotencyKey("image-race-1");
+
+        assertThatCode(() -> service().recordEvent(portfolio(), request))
+                .doesNotThrowAnyException();
+
+        verify(visitRecordEntityMapper, never()).updateById(any(VisitRecordEntity.class));
+        verify(pointService, never()).consumeWithMeterBusinessId(
+                any(), any(), any(), any(), any(), anyInt(), any(), any());
     }
 
     @Test

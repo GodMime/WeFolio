@@ -15,6 +15,7 @@ import com.jxc.wefolio.entity.VisitRecordEntity;
 import com.jxc.wefolio.mapper.VisitEventEntityMapper;
 import com.jxc.wefolio.mapper.VisitRecordEntityMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -51,8 +52,14 @@ public class PortfolioVisitService {
     /** 打开计费幂等前缀，需给业务 ID 预留数据库长度 */
     private static final String OPEN_IDEMPOTENCY_PREFIX = "PF_OPEN:";
 
+    /** 业务 ID 分隔符 */
+    private static final String BUSINESS_ID_SEPARATOR = ":";
+
     /** 日期时间窗口格式 */
     private static final DateTimeFormatter OPEN_WINDOW_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHH");
+
+    /** MySQL 单条限制片段 */
+    private static final String SQL_SINGLE_LIMIT_CLAUSE = "LIMIT 1";
 
     /** 作品集标题快照兜底 */
     private static final String DEFAULT_PORTFOLIO_TITLE_SNAPSHOT = "个人作品集";
@@ -87,10 +94,56 @@ public class PortfolioVisitService {
             String sourceType,
             String idempotencyKey
     ) {
+        return recordOpenInternal(portfolio, null, visitorKey, billingVisitorKey, sourceType, idempotencyKey);
+    }
+
+    /**
+     * 记录作品集打开。
+     *
+     * @param portfolio 作品集
+     * @param visitorId 全局访客 ID
+     * @param visitorKey 访客摘要
+     * @param billingVisitorKey 计费访客摘要
+     * @param sourceType 来源
+     * @param idempotencyKey 事件幂等键
+     * @return 访问汇总
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public VisitRecordEntity recordOpen(
+            PortfolioEntity portfolio,
+            Long visitorId,
+            String visitorKey,
+            String billingVisitorKey,
+            String sourceType,
+            String idempotencyKey
+    ) {
+        return recordOpenInternal(portfolio, visitorId, visitorKey, billingVisitorKey, sourceType, idempotencyKey);
+    }
+
+    /**
+     * 记录作品集打开内部实现。
+     *
+     * @param portfolio 作品集
+     * @param visitorId 全局访客 ID
+     * @param visitorKey 访客摘要
+     * @param billingVisitorKey 计费访客摘要
+     * @param sourceType 来源
+     * @param idempotencyKey 事件幂等键
+     * @return 访问汇总
+     */
+    private VisitRecordEntity recordOpenInternal(
+            PortfolioEntity portfolio,
+            Long visitorId,
+            String visitorKey,
+            String billingVisitorKey,
+            String sourceType,
+            String idempotencyKey
+    ) {
         LocalDateTime now = LocalDateTime.now();
-        VisitRecordEntity record = findRecord(portfolio.getId(), visitorKey);
+        VisitRecordEntity record = findRecord(portfolio.getId(), visitorId, visitorKey);
         if (record == null) {
             record = new VisitRecordEntity();
+            record.setVisitorId(visitorId);
             record.setVisitorKey(visitorKey);
             record.setPortfolioId(portfolio.getId());
             fillPortfolioSnapshot(record, portfolio);
@@ -110,6 +163,9 @@ public class PortfolioVisitService {
             record.setLastVisitedAt(now);
             visitRecordEntityMapper.insert(record);
         } else {
+            if (visitorId != null) {
+                record.setVisitorId(visitorId);
+            }
             record.setVisitCount(safeInt(record.getVisitCount()) + 1);
             fillPortfolioSnapshot(record, portfolio);
             record.setLastPortfolioRevision(portfolio.getPublishedRevision());
@@ -177,15 +233,25 @@ public class PortfolioVisitService {
      */
     @Transactional(rollbackFor = Exception.class)
     public void recordEvent(PortfolioEntity portfolio, VisitorPortfolioEventRequest request) {
+        if (hasRecordedEvent(request.getIdempotencyKey())) {
+            return;
+        }
         VisitRecordEntity record = requireRecord(portfolio.getId(), request.getVisitorKey());
         String eventType = request.getEventType();
+        LocalDateTime now = LocalDateTime.now();
+        boolean inserted = insertEventIfAbsent(record, portfolio, eventType, request.getWorkId(), request.getQueriedDate(),
+                request.getDurationSeconds(), request.getIdempotencyKey(), request.getMetadata(), now);
+        if (!inserted) {
+            return;
+        }
         if (VisitEventTypeDict.WORK_VIEWED.getCode().equals(eventType)) {
             record.setViewWorkCount(safeInt(record.getViewWorkCount()) + 1);
-            pointService.consume(
+            pointService.consumeWithMeterBusinessId(
                     portfolio.getOwnerId(),
                     PointSceneCodeDict.VIEW_PORTFOLIO_IMAGES.getCode(),
                     BUSINESS_TYPE_PORTFOLIO_IMAGE,
-                    portfolio.getId() + ":" + request.getWorkId() + ":" + request.getVisitorKey(),
+                    buildWorkBillingBusinessId(portfolio.getId(), request.getWorkId(), request.getVisitorKey()),
+                    buildImageMeterBusinessId(portfolio.getId(), request.getVisitorKey()),
                     1,
                     request.getIdempotencyKey(),
                     REMARK_IMAGE_VIEW
@@ -196,7 +262,7 @@ public class PortfolioVisitService {
                     portfolio.getOwnerId(),
                     PointSceneCodeDict.VIEW_PORTFOLIO_VIDEO.getCode(),
                     BUSINESS_TYPE_PORTFOLIO_VIDEO,
-                    portfolio.getId() + ":" + request.getWorkId() + ":" + request.getVisitorKey(),
+                    buildWorkBillingBusinessId(portfolio.getId(), request.getWorkId(), request.getVisitorKey()),
                     1,
                     request.getIdempotencyKey(),
                     REMARK_VIDEO_PLAY
@@ -204,11 +270,50 @@ public class PortfolioVisitService {
         } else if (VisitEventTypeDict.QR_CODE_INTERACTED.getCode().equals(eventType)) {
             record.setQrActionCount(safeInt(record.getQrActionCount()) + 1);
         } else if (VisitEventTypeDict.CONTACT_FORM_EXPOSED.getCode().equals(eventType)) {
-            record.setLastVisitedAt(LocalDateTime.now());
+            record.setLastVisitedAt(now);
         }
         visitRecordEntityMapper.updateById(record);
-        insertEvent(record, portfolio, eventType, request.getWorkId(), request.getQueriedDate(),
-                request.getDurationSeconds(), request.getIdempotencyKey(), request.getMetadata(), LocalDateTime.now());
+    }
+
+    /**
+     * 判断事件幂等键是否已入库，避免客户端重试导致重复计数或重复扣费。
+     *
+     * @param idempotencyKey 事件幂等键
+     * @return 是否已有事件
+     */
+    private boolean hasRecordedEvent(String idempotencyKey) {
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            return false;
+        }
+        VisitEventEntity existing = visitEventEntityMapper.selectOne(
+                Wrappers.lambdaQuery(VisitEventEntity.class)
+                        .eq(VisitEventEntity::getIdempotencyKey, idempotencyKey)
+                        .last(SQL_SINGLE_LIMIT_CLAUSE)
+        );
+        return existing != null;
+    }
+
+    /**
+     * 构建作品媒体扣费流水业务 ID。
+     *
+     * @param portfolioId 作品集 ID
+     * @param workId 作品 ID
+     * @param visitorKey 访客摘要
+     * @return 积分业务 ID
+     */
+    private String buildWorkBillingBusinessId(Long portfolioId, Long workId, String visitorKey) {
+        return portfolioId + BUSINESS_ID_SEPARATOR + workId + BUSINESS_ID_SEPARATOR + visitorKey;
+    }
+
+    /**
+     * 构建图片查看累计计量业务 ID。
+     *
+     * @param portfolioId 作品集 ID
+     * @param visitorKey 访客摘要
+     * @return 计量业务 ID
+     */
+    private String buildImageMeterBusinessId(Long portfolioId, String visitorKey) {
+        return portfolioId + BUSINESS_ID_SEPARATOR + visitorKey;
     }
 
     /**
@@ -278,11 +383,37 @@ public class PortfolioVisitService {
      * @return 访问汇总
      */
     private VisitRecordEntity findRecord(Long portfolioId, String visitorKey) {
+        return findRecord(portfolioId, null, visitorKey);
+    }
+
+    /**
+     * 查询访问汇总。
+     *
+     * @param portfolioId 作品集 ID
+     * @param visitorId 全局访客 ID
+     * @param visitorKey 访客摘要
+     * @return 访问汇总
+     */
+    private VisitRecordEntity findRecord(Long portfolioId, Long visitorId, String visitorKey) {
+        if (visitorId != null) {
+            VisitRecordEntity record = visitRecordEntityMapper.selectOne(
+                    Wrappers.lambdaQuery(VisitRecordEntity.class)
+                            .eq(VisitRecordEntity::getPortfolioId, portfolioId)
+                            .eq(VisitRecordEntity::getVisitorId, visitorId)
+                            .last(SQL_SINGLE_LIMIT_CLAUSE)
+            );
+            if (record != null) {
+                return record;
+            }
+        }
+        if (visitorKey == null) {
+            return null;
+        }
         return visitRecordEntityMapper.selectOne(
                 Wrappers.lambdaQuery(VisitRecordEntity.class)
                         .eq(VisitRecordEntity::getPortfolioId, portfolioId)
                         .eq(VisitRecordEntity::getVisitorKey, visitorKey)
-                        .last("LIMIT 1")
+                        .last(SQL_SINGLE_LIMIT_CLAUSE)
         );
     }
 
@@ -371,6 +502,42 @@ public class PortfolioVisitService {
         event.setMetadata(metadata == null ? null : JSON.toJSONString(metadata));
         event.setOccurredAt(occurredAt);
         visitEventEntityMapper.insert(event);
+    }
+
+    /**
+     * 尝试先写入事件，用数据库唯一索引兜底处理并发幂等请求。
+     *
+     * @param record 访问汇总
+     * @param portfolio 作品集
+     * @param eventType 事件类型
+     * @param workId 作品 ID
+     * @param queriedDate 查询日期
+     * @param durationSeconds 时长
+     * @param idempotencyKey 幂等键
+     * @param metadata 元数据
+     * @param occurredAt 发生时间
+     * @return 是否成功写入新事件
+     */
+    private boolean insertEventIfAbsent(
+            VisitRecordEntity record,
+            PortfolioEntity portfolio,
+            String eventType,
+            Long workId,
+            LocalDate queriedDate,
+            Integer durationSeconds,
+            String idempotencyKey,
+            Map<String, Object> metadata,
+            LocalDateTime occurredAt
+    ) {
+        try {
+            insertEvent(record, portfolio, eventType, workId, queriedDate, durationSeconds, idempotencyKey, metadata, occurredAt);
+            return true;
+        } catch (DuplicateKeyException e) {
+            if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+                return false;
+            }
+            throw e;
+        }
     }
 
     /**

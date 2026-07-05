@@ -2,17 +2,18 @@ const { request } = require('../../utils/request')
 const { normalizeId } = require('../../utils/id')
 const { handleAuthRequired, hasLocalToken } = require('../../utils/session')
 const { buildPublishPayload } = require('../../utils/portfolios')
+const { confirmPortfolioPublishDisclaimer } = require('../../utils/portfolio-publish-disclaimer')
 
 const PORTFOLIOS_API_URL = '/api/mine/portfolios'
 const PORTFOLIO_DELETE_API_PREFIX = '/api/mine/portfolios/delete'
 const EDIT_PAGE_URL = '/pages/portfolio-standard-edit/portfolio-standard-edit'
 const PREVIEW_PAGE_URL = '/pages/portfolio-standard-preview/portfolio-standard-preview'
 const VISITOR_PORTFOLIO_SHARE_PATH_PREFIX = '/pages/visitor-portfolio/visitor-portfolio?shareCode='
-const UNAVAILABLE_PAGE_URL = '/pages/portfolio-unavailable/portfolio-unavailable'
 const SCHEDULE_PAGE_URL = '/pages/schedule/schedule'
 const WORKS_PAGE_URL = '/pages/works/works'
 const MINE_PAGE_URL = '/pages/index/index'
 const DEFAULT_COVER_URL = '/assets/system/work-logo-100kb.jpg'
+const UNAVAILABLE_TOAST_TITLE = '暂未开放，即将发布'
 const SHARE_CHANNEL_WECHAT_MINIAPP = 'WECHAT_MINIAPP'
 const SHARE_SCENE_PORTFOLIO_LIST = 'PORTFOLIO_LIST'
 const SWIPE_REVEAL_THRESHOLD = -32
@@ -152,9 +153,8 @@ Page({
     wx.navigateTo({ url: EDIT_PAGE_URL })
   },
 
-  handleUnavailableTap(event) {
-    const type = event.currentTarget.dataset.type || ''
-    wx.navigateTo({ url: `${UNAVAILABLE_PAGE_URL}?type=${type}` })
+  handleUnavailableTap() {
+    wx.showToast({ title: UNAVAILABLE_TOAST_TITLE, icon: 'none' })
   },
 
   findPortfolioById(portfolioId) {
@@ -277,19 +277,24 @@ Page({
     if (!portfolio) {
       return Promise.resolve()
     }
-    return request({
-      url: `${PORTFOLIOS_API_URL}/${portfolioId}/publish`,
-      method: 'POST',
-      data: buildPublishPayload(portfolio.draftRevision || 0, makeIdempotencyKey(IDEMPOTENCY_PREFIX_PUBLISH))
-    }).then(() => {
-      wx.showToast({ title: '已发布', icon: 'success' })
-      return this.bootstrap()
-    }).catch((error) => {
-      if (error && error.authRequired) {
-        handleAuthRequired(error.message)
+    return confirmPortfolioPublishDisclaimer().then((confirmed) => {
+      if (!confirmed) {
         return
       }
-      wx.showToast({ title: error && error.message ? error.message : '发布失败', icon: 'none' })
+      return request({
+        url: `${PORTFOLIOS_API_URL}/${portfolioId}/publish`,
+        method: 'POST',
+        data: buildPublishPayload(portfolio.draftRevision || 0, makeIdempotencyKey(IDEMPOTENCY_PREFIX_PUBLISH))
+      }).then(() => {
+        wx.showToast({ title: '已发布', icon: 'success' })
+        return this.bootstrap()
+      }).catch((error) => {
+        if (error && error.authRequired) {
+          handleAuthRequired(error.message)
+          return
+        }
+        wx.showToast({ title: error && error.message ? error.message : '发布失败', icon: 'none' })
+      })
     })
   },
 

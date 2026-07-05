@@ -4,6 +4,7 @@ const { noop } = require('../../utils/noop')
 const { isRemoteUrl } = require('../../utils/upload-file')
 const { normalizeProfile: normalizeBasicProfile } = require('../../utils/profile')
 const { normalizeWorkList, normalizeWorkTags } = require('../../utils/works')
+const { confirmPortfolioPublishDisclaimer } = require('../../utils/portfolio-publish-disclaimer')
 const {
   PORTFOLIO_ASSET_TYPES,
   PORTFOLIO_COVER_CROP_FILE_TYPE,
@@ -2243,26 +2244,31 @@ Page({
   },
 
   handlePublish() {
-    return this.ensureDraftPortfolio().then((portfolioId) => {
-      return this.uploadLocalPortfolioAssets(portfolioId)
-        .then((config) => this.saveDraftForPortfolio(portfolioId, config, {
-          showToast: false,
-          returnToList: false
-        }))
-        .then(() => request({
-          url: `${PORTFOLIO_API_PREFIX}/${portfolioId}/publish`,
-          method: 'POST',
-          data: buildPublishPayload(this.data.draftRevision, makeIdempotencyKey(IDEMPOTENCY_PREFIX_PUBLISH))
-        }))
-        .then((response = {}) => {
-          this.setData(Object.assign({
-            portfolioId: response.portfolioId || portfolioId,
-            draftRevision: response.draftRevision || this.data.draftRevision,
-            publishedRevision: response.publishedRevision || this.data.publishedRevision
-          }, buildPublicationStatusState(response.publicationStatus || PUBLICATION_STATUS_PUBLISHED)))
-          wx.showToast({ title: '已发布', icon: 'success' })
-          this.returnToPortfolioList()
-        })
+    return confirmPortfolioPublishDisclaimer().then((confirmed) => {
+      if (!confirmed) {
+        return
+      }
+      return this.ensureDraftPortfolio().then((portfolioId) => {
+        return this.uploadLocalPortfolioAssets(portfolioId)
+          .then((config) => this.saveDraftForPortfolio(portfolioId, config, {
+            showToast: false,
+            returnToList: false
+          }))
+          .then(() => request({
+            url: `${PORTFOLIO_API_PREFIX}/${portfolioId}/publish`,
+            method: 'POST',
+            data: buildPublishPayload(this.data.draftRevision, makeIdempotencyKey(IDEMPOTENCY_PREFIX_PUBLISH))
+          }))
+          .then((response = {}) => {
+            this.setData(Object.assign({
+              portfolioId: response.portfolioId || portfolioId,
+              draftRevision: response.draftRevision || this.data.draftRevision,
+              publishedRevision: response.publishedRevision || this.data.publishedRevision
+            }, buildPublicationStatusState(response.publicationStatus || PUBLICATION_STATUS_PUBLISHED)))
+            wx.showToast({ title: '已发布', icon: 'success' })
+            this.returnToPortfolioList()
+          })
+      })
     }).catch((error) => {
       if (error && error.authRequired) {
         handleAuthRequired(error.message)

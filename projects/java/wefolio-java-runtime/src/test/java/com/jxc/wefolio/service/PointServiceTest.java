@@ -33,8 +33,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 import org.springframework.dao.DuplicateKeyException;
 
+import java.lang.reflect.Method;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -78,10 +81,49 @@ class PointServiceTest {
     private SystemMessageEntityMapper systemMessageEntityMapper;
 
     @Test
+    void pointAccountMapperShouldDeductConsumptionWithAtomicUpdateSql() throws NoSuchMethodException {
+        Method method = PointAccountEntityMapper.class.getMethod(
+                "deductConsumedPoints",
+                Long.class,
+                Long.class,
+                Long.class
+        );
+        Update update = method.getAnnotation(Update.class);
+
+        assertThat(update).isNotNull();
+        String sql = String.join("\n", update.value());
+        assertThat(sql)
+                .contains("UPDATE wf_point_account")
+                .contains("balance = balance - #{points}")
+                .contains("total_consumed = total_consumed + #{points}")
+                .contains("version = version + 1")
+                .contains("balance >= #{points}")
+                .doesNotContain("FOR UPDATE");
+    }
+
+    @Test
+    void pointMeterMapperShouldSelectAccumulatedMeterWithoutRowLock() throws NoSuchMethodException {
+        Method method = PointMeterEntityMapper.class.getMethod(
+                "selectMeter",
+                Long.class,
+                String.class,
+                String.class,
+                String.class
+        );
+        Select select = method.getAnnotation(Select.class);
+
+        assertThat(select).isNotNull();
+        String sql = String.join("\n", select.value());
+        assertThat(sql)
+                .contains("FROM wf_point_meter")
+                .doesNotContain("FOR UPDATE");
+    }
+
+    @Test
     void grantPointsWritesGiftTransactionAndUpdatesBalance() {
         activeUser(7L);
         when(pointTransactionEntityMapper.selectOne(any())).thenReturn(null);
-        when(pointAccountEntityMapper.selectByUserIdForUpdate(7L)).thenReturn(account(10L, 7L, 20L));
+        when(pointAccountEntityMapper.selectOne(any())).thenReturn(account(10L, 7L, 20L));
         when(pointAccountEntityMapper.updateById(any(PointAccountEntity.class))).thenReturn(1);
         doAnswer(invocation -> {
             PointTransactionEntity transaction = invocation.getArgument(0);
@@ -112,7 +154,7 @@ class PointServiceTest {
     void grantGiftWritesConfiguredGiftSceneTransactionAndUpdatesBalance() {
         activeUser(7L);
         when(pointTransactionEntityMapper.selectOne(any())).thenReturn(null);
-        when(pointAccountEntityMapper.selectByUserIdForUpdate(7L)).thenReturn(account(10L, 7L, 20L));
+        when(pointAccountEntityMapper.selectOne(any())).thenReturn(account(10L, 7L, 20L));
         when(pointAccountEntityMapper.updateById(any(PointAccountEntity.class))).thenReturn(1);
         doAnswer(invocation -> {
             PointTransactionEntity transaction = invocation.getArgument(0);
@@ -192,8 +234,11 @@ class PointServiceTest {
                 1,
                 1000L
         )));
-        when(pointAccountEntityMapper.selectByUserIdForUpdate(7L)).thenReturn(account(10L, 7L, 1200L));
-        when(pointAccountEntityMapper.updateById(any(PointAccountEntity.class))).thenReturn(1);
+        when(pointAccountEntityMapper.selectOne(any())).thenReturn(
+                account(10L, 7L, 1200L),
+                account(10L, 7L, 200L)
+        );
+        when(pointAccountEntityMapper.deductConsumedPoints(10L, 7L, 1000L)).thenReturn(1);
         doAnswer(invocation -> {
             PointTransactionEntity transaction = invocation.getArgument(0);
             transaction.setId(90L);
@@ -210,12 +255,10 @@ class PointServiceTest {
                 "新建团队扣除积分"
         );
 
-        ArgumentCaptor<PointAccountEntity> accountCaptor = ArgumentCaptor.forClass(PointAccountEntity.class);
         ArgumentCaptor<PointTransactionEntity> transactionCaptor = ArgumentCaptor.forClass(PointTransactionEntity.class);
-        verify(pointAccountEntityMapper).updateById(accountCaptor.capture());
+        verify(pointAccountEntityMapper).deductConsumedPoints(10L, 7L, 1000L);
+        verify(pointAccountEntityMapper, never()).updateById(any(PointAccountEntity.class));
         verify(pointTransactionEntityMapper).insert(transactionCaptor.capture());
-        assertThat(accountCaptor.getValue().getBalance()).isEqualTo(200L);
-        assertThat(accountCaptor.getValue().getTotalConsumed()).isEqualTo(1000L);
         assertThat(transactionCaptor.getValue().getTransactionType()).isEqualTo(PointTransactionTypeDict.CONSUMPTION.getCode());
         assertThat(transactionCaptor.getValue().getPointsChange()).isEqualTo(-1000L);
         assertThat(transactionCaptor.getValue().getBusinessType()).isEqualTo("TEAM");
@@ -235,8 +278,11 @@ class PointServiceTest {
                 1,
                 1L
         )));
-        when(pointAccountEntityMapper.selectByUserIdForUpdate(7L)).thenReturn(account(10L, 7L, 50L));
-        when(pointAccountEntityMapper.updateById(any(PointAccountEntity.class))).thenReturn(1);
+        when(pointAccountEntityMapper.selectOne(any())).thenReturn(
+                account(10L, 7L, 50L),
+                account(10L, 7L, 49L)
+        );
+        when(pointAccountEntityMapper.deductConsumedPoints(10L, 7L, 1L)).thenReturn(1);
         doAnswer(invocation -> {
             PointTransactionEntity transaction = invocation.getArgument(0);
             transaction.setId(90L);
@@ -278,8 +324,11 @@ class PointServiceTest {
                 1,
                 1L
         )));
-        when(pointAccountEntityMapper.selectByUserIdForUpdate(7L)).thenReturn(account(10L, 7L, 51L));
-        when(pointAccountEntityMapper.updateById(any(PointAccountEntity.class))).thenReturn(1);
+        when(pointAccountEntityMapper.selectOne(any())).thenReturn(
+                account(10L, 7L, 51L),
+                account(10L, 7L, 50L)
+        );
+        when(pointAccountEntityMapper.deductConsumedPoints(10L, 7L, 1L)).thenReturn(1);
         doAnswer(invocation -> {
             PointTransactionEntity transaction = invocation.getArgument(0);
             transaction.setId(91L);
@@ -311,7 +360,8 @@ class PointServiceTest {
                 1,
                 1000L
         )));
-        when(pointAccountEntityMapper.selectByUserIdForUpdate(7L)).thenReturn(account(10L, 7L, 999L));
+        when(pointAccountEntityMapper.selectOne(any())).thenReturn(account(10L, 7L, 999L));
+        when(pointAccountEntityMapper.deductConsumedPoints(10L, 7L, 1000L)).thenReturn(0);
 
         assertThatThrownBy(() -> service().consume(
                 7L,
@@ -343,7 +393,7 @@ class PointServiceTest {
         assertThatThrownBy(() -> service().assertCanConsume(7L, PointSceneCodeDict.CREATE_TEAM.getCode(), 1))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("积分余额不足，请充值后再试");
-        verify(pointAccountEntityMapper, never()).selectByUserIdForUpdate(any());
+        verify(pointAccountEntityMapper, never()).deductConsumedPoints(any(), any(), any());
         verify(pointAccountEntityMapper, never()).updateById(any(PointAccountEntity.class));
         verify(pointTransactionEntityMapper, never()).insert(any(PointTransactionEntity.class));
     }
@@ -362,7 +412,7 @@ class PointServiceTest {
 
         service().assertCanConsume(7L, PointSceneCodeDict.CREATE_TEAM.getCode(), 1);
 
-        verify(pointAccountEntityMapper, never()).selectByUserIdForUpdate(any());
+        verify(pointAccountEntityMapper, never()).deductConsumedPoints(any(), any(), any());
         verify(pointAccountEntityMapper, never()).updateById(any(PointAccountEntity.class));
         verify(pointTransactionEntityMapper, never()).insert(any(PointTransactionEntity.class));
     }
@@ -410,10 +460,13 @@ class PointServiceTest {
                 10,
                 1L
         )));
-        when(pointAccountEntityMapper.selectByUserIdForUpdate(7L)).thenReturn(account(10L, 7L, 30L));
-        when(pointAccountEntityMapper.updateById(any(PointAccountEntity.class))).thenReturn(1);
+        when(pointAccountEntityMapper.selectOne(any())).thenReturn(
+                account(10L, 7L, 30L),
+                account(10L, 7L, 29L)
+        );
+        when(pointAccountEntityMapper.deductConsumedPoints(10L, 7L, 1L)).thenReturn(1);
         PointMeterEntity existingMeter = meter(30L, 10L, 7L, PointSceneCodeDict.VIEW_PORTFOLIO_IMAGES, 9, 9L, 0L);
-        when(pointMeterEntityMapper.selectMeterForUpdate(10L, PointSceneCodeDict.VIEW_PORTFOLIO_IMAGES.getCode(), "PORTFOLIO", "200"))
+        when(pointMeterEntityMapper.selectMeter(10L, PointSceneCodeDict.VIEW_PORTFOLIO_IMAGES.getCode(), "PORTFOLIO", "200"))
                 .thenReturn(null, existingMeter);
         doThrow(new DuplicateKeyException("duplicate meter"))
                 .when(pointMeterEntityMapper).insert(any(PointMeterEntity.class));
@@ -442,6 +495,58 @@ class PointServiceTest {
         assertThat(response.getTransactionId()).isEqualTo(91L);
         assertThat(response.getBilledUnits()).isEqualTo(1L);
         assertThat(response.getBalanceAfter()).isEqualTo(29L);
+        verify(pointAccountEntityMapper).deductConsumedPoints(10L, 7L, 1L);
+        verify(pointAccountEntityMapper, never()).updateById(any(PointAccountEntity.class));
+    }
+
+    @Test
+    void consumeAccumulatedRuleCanSeparateMeterAndTransactionBusinessId() {
+        activeUser(7L);
+        when(pointTransactionEntityMapper.selectOne(any())).thenReturn(null);
+        when(pointRuleEntityMapper.selectList(any())).thenReturn(List.of(rule(
+                8L,
+                PointSceneCodeDict.VIEW_PORTFOLIO_IMAGES,
+                PointCalcModeDict.ACCUMULATED_THRESHOLD,
+                10,
+                1L
+        )));
+        when(pointAccountEntityMapper.selectOne(any())).thenReturn(
+                account(10L, 7L, 30L),
+                account(10L, 7L, 29L)
+        );
+        when(pointMeterEntityMapper.selectMeter(
+                10L, PointSceneCodeDict.VIEW_PORTFOLIO_IMAGES.getCode(), "PORTFOLIO_IMAGE", "88:visitor-a"))
+                .thenReturn(meter(30L, 10L, 7L, PointSceneCodeDict.VIEW_PORTFOLIO_IMAGES, 9, 9L, 0L));
+        when(pointMeterEntityMapper.updateById(any(PointMeterEntity.class))).thenReturn(1);
+        when(pointAccountEntityMapper.deductConsumedPoints(10L, 7L, 1L)).thenReturn(1);
+        doAnswer(invocation -> {
+            PointTransactionEntity transaction = invocation.getArgument(0);
+            transaction.setId(92L);
+            return 1;
+        }).when(pointTransactionEntityMapper).insert(any(PointTransactionEntity.class));
+
+        PointMutationResponse response = service().consumeWithMeterBusinessId(
+                7L,
+                PointSceneCodeDict.VIEW_PORTFOLIO_IMAGES.getCode(),
+                "PORTFOLIO_IMAGE",
+                "88:11:visitor-a",
+                "88:visitor-a",
+                1,
+                "image-10",
+                "查看图片扣除积分"
+        );
+
+        ArgumentCaptor<PointMeterEntity> meterCaptor = ArgumentCaptor.forClass(PointMeterEntity.class);
+        ArgumentCaptor<PointTransactionEntity> transactionCaptor = ArgumentCaptor.forClass(PointTransactionEntity.class);
+        verify(pointMeterEntityMapper).updateById(meterCaptor.capture());
+        verify(pointTransactionEntityMapper).insert(transactionCaptor.capture());
+        assertThat(meterCaptor.getValue().getBusinessId()).isEqualTo("88:visitor-a");
+        assertThat(meterCaptor.getValue().getPendingCount()).isZero();
+        assertThat(transactionCaptor.getValue().getBusinessId()).isEqualTo("88:11:visitor-a");
+        assertThat(response.getTransactionId()).isEqualTo(92L);
+        assertThat(response.getBalanceAfter()).isEqualTo(29L);
+        verify(pointAccountEntityMapper).deductConsumedPoints(10L, 7L, 1L);
+        verify(pointAccountEntityMapper, never()).updateById(any(PointAccountEntity.class));
     }
 
     @Test
@@ -455,8 +560,8 @@ class PointServiceTest {
                 10,
                 1L
         )));
-        when(pointAccountEntityMapper.selectByUserIdForUpdate(7L)).thenReturn(account(10L, 7L, 30L));
-        when(pointMeterEntityMapper.selectMeterForUpdate(10L, PointSceneCodeDict.VIEW_PORTFOLIO_IMAGES.getCode(), "PORTFOLIO", "200"))
+        when(pointAccountEntityMapper.selectOne(any())).thenReturn(account(10L, 7L, 30L));
+        when(pointMeterEntityMapper.selectMeter(10L, PointSceneCodeDict.VIEW_PORTFOLIO_IMAGES.getCode(), "PORTFOLIO", "200"))
                 .thenReturn(meter(30L, 10L, 7L, PointSceneCodeDict.VIEW_PORTFOLIO_IMAGES, 9, 9L, 0L));
         when(pointMeterEntityMapper.updateById(any(PointMeterEntity.class))).thenReturn(0);
 
@@ -471,6 +576,7 @@ class PointServiceTest {
         ))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("积分计量器更新失败，请重试");
+        verify(pointAccountEntityMapper, never()).deductConsumedPoints(any(), any(), any());
         verify(pointAccountEntityMapper, never()).updateById(any(PointAccountEntity.class));
         verify(pointTransactionEntityMapper, never()).insert(any(PointTransactionEntity.class));
     }

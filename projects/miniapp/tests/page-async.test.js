@@ -218,14 +218,11 @@ test('visitor portfolio sends wx login code when opening share', async () => {
     requests.push(options)
     return Promise.resolve({
       shareCode: 'PF001',
+      visitorKey: 'visitor-a',
       title: '访客作品集',
       config: { components: [] }
     })
   }, {
-    getStorageSync() {
-      return 'visitor-a'
-    },
-    setStorageSync() {},
     login({ success }) {
       loginCalled = true
       success({ code: 'wx-code' })
@@ -237,9 +234,10 @@ test('visitor portfolio sends wx login code when opening share', async () => {
   await flushPromises()
 
   assert.equal(loginCalled, true)
-  assert.equal(requests[0].url, '/api/visitor/portfolios/PF001')
-  assert.equal(requests[0].data.visitorKey, 'visitor-a')
+  assert.equal(requests[0].url, '/api/visitor/portfolios/PF001/open')
+  assert.equal(requests[0].data.visitorKey, undefined)
   assert.equal(requests[0].data.loginCode, 'wx-code')
+  assert.equal(page.data.visitorKey, 'visitor-a')
 })
 
 test('visitor portfolio stops loading when wx login returns empty code', async () => {

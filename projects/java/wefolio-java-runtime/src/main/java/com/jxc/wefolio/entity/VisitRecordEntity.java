@@ -13,6 +13,9 @@ import lombok.Data;
 @TableName("wf_visit_record")
 public class VisitRecordEntity extends BaseEntity {
 
+    /** 全局访客 ID，用于跨维护者和跨作品集复用访客头像昵称 */
+    private Long visitorId;
+
     /** 服务端生成的匿名访客稳定摘要，不存设备标识明文 */
     private String visitorKey;
 

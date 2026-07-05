@@ -7,9 +7,13 @@ import com.jxc.wefolio.dto.ContactLeadSubmitResponse;
 import com.jxc.wefolio.dto.PortfolioScheduleOptionsResponse;
 import com.jxc.wefolio.dto.PortfolioScheduleQueryRequest;
 import com.jxc.wefolio.dto.PortfolioScheduleQueryResponse;
+import com.jxc.wefolio.dto.VisitorAvatarUploadTicketRequest;
+import com.jxc.wefolio.dto.VisitorAvatarUploadTicketResponse;
+import com.jxc.wefolio.dto.VisitorPortfolioOpenRequest;
 import com.jxc.wefolio.dto.VisitorPortfolioEventRequest;
 import com.jxc.wefolio.dto.VisitorPortfolioResponse;
 import com.jxc.wefolio.dto.VisitorPortfolioScheduleResponse;
+import com.jxc.wefolio.dto.VisitorProfileUpdateRequest;
 import com.jxc.wefolio.service.ContactLeadService;
 import com.jxc.wefolio.service.VisitorPortfolioService;
 import org.junit.jupiter.api.Test;
@@ -49,10 +53,17 @@ class VisitorPortfolioControllerTest {
         PortfolioScheduleQueryRequest queryRequest = new PortfolioScheduleQueryRequest();
         PortfolioScheduleQueryResponse queryResponse = new PortfolioScheduleQueryResponse();
         VisitorPortfolioEventRequest eventRequest = new VisitorPortfolioEventRequest();
+        VisitorPortfolioOpenRequest openRequest = new VisitorPortfolioOpenRequest();
+        VisitorAvatarUploadTicketRequest uploadTicketRequest = new VisitorAvatarUploadTicketRequest();
+        VisitorAvatarUploadTicketResponse uploadTicketResponse = new VisitorAvatarUploadTicketResponse();
+        VisitorProfileUpdateRequest profileUpdateRequest = new VisitorProfileUpdateRequest();
         ContactLeadSubmitRequest leadRequest = new ContactLeadSubmitRequest();
         ContactLeadSubmitResponse leadResponse = new ContactLeadSubmitResponse();
         when(visitorPortfolioService.getPortfolio("PF001", "visitor-a", "wx-code", "WECHAT_SHARE_CARD", "open-1"))
                 .thenReturn(portfolioResponse);
+        when(visitorPortfolioService.openPortfolio("PF001", openRequest)).thenReturn(portfolioResponse);
+        when(visitorPortfolioService.createVisitorAvatarUploadTicket("PF001", uploadTicketRequest))
+                .thenReturn(uploadTicketResponse);
         when(visitorPortfolioService.querySchedule(
                 "PF001",
                 LocalDate.of(2026, 7, 18),
@@ -67,6 +78,12 @@ class VisitorPortfolioControllerTest {
 
         Response<VisitorPortfolioResponse> portfolio = controller.portfolio(
                 "PF001", "visitor-a", "wx-code", "WECHAT_SHARE_CARD", "open-1");
+        Response<VisitorPortfolioResponse> open = controller.open("PF001", openRequest);
+        Response<VisitorAvatarUploadTicketResponse> uploadTicket = controller.createVisitorAvatarUploadTicket(
+                "PF001",
+                uploadTicketRequest
+        );
+        Response<Void> profileUpdate = controller.updateVisitorProfile("PF001", profileUpdateRequest);
         Response<VisitorPortfolioScheduleResponse> schedule = controller.schedule(
                 "PF001", "2026-07-18", "2026-07-18", "ALL", "visitor-a", "schedule-1");
         Response<PortfolioScheduleOptionsResponse> scheduleOptions = controller.scheduleOptions(
@@ -79,6 +96,15 @@ class VisitorPortfolioControllerTest {
         assertGetMapping("portfolio",
                 new Class<?>[] {String.class, String.class, String.class, String.class, String.class},
                 "/api/visitor/portfolios/{shareCode}");
+        assertPostMapping("open",
+                new Class<?>[] {String.class, VisitorPortfolioOpenRequest.class},
+                "/api/visitor/portfolios/{shareCode}/open");
+        assertPostMapping("createVisitorAvatarUploadTicket",
+                new Class<?>[] {String.class, VisitorAvatarUploadTicketRequest.class},
+                "/api/visitor/portfolios/{shareCode}/visitor-avatar/upload-ticket");
+        assertPutMapping("updateVisitorProfile",
+                new Class<?>[] {String.class, VisitorProfileUpdateRequest.class},
+                "/api/visitor/portfolios/{shareCode}/visitor-profile");
         assertGetMapping("schedule",
                 new Class<?>[] {String.class, String.class, String.class, String.class, String.class, String.class},
                 "/api/visitor/portfolios/{shareCode}/schedule");
@@ -104,12 +130,16 @@ class VisitorPortfolioControllerTest {
                 )
                 .getParameters()[0].isAnnotationPresent(PathVariable.class)).isTrue();
         assertThat(portfolio.getData()).isSameAs(portfolioResponse);
+        assertThat(open.getData()).isSameAs(portfolioResponse);
+        assertThat(uploadTicket.getData()).isSameAs(uploadTicketResponse);
+        assertThat(profileUpdate.isSuccess()).isTrue();
         assertThat(schedule.getData()).isSameAs(scheduleResponse);
         assertThat(scheduleOptions.getData()).isSameAs(optionsResponse);
         assertThat(scheduleQuery.getData()).isSameAs(queryResponse);
         assertThat(event.isSuccess()).isTrue();
         assertThat(lead.getData()).isSameAs(leadResponse);
         verify(visitorPortfolioService).recordEvent("PF001", eventRequest);
+        verify(visitorPortfolioService).updateVisitorProfile("PF001", profileUpdateRequest);
     }
 
     private void assertGetMapping(String methodName, Class<?>[] parameterTypes, String path)
@@ -124,6 +154,15 @@ class VisitorPortfolioControllerTest {
             throws NoSuchMethodException {
         PostMapping mapping = VisitorPortfolioController.class.getMethod(methodName, parameterTypes)
                 .getAnnotation(PostMapping.class);
+        assertThat(mapping).isNotNull();
+        assertThat(mapping.value()).containsExactly(path);
+    }
+
+    private void assertPutMapping(String methodName, Class<?>[] parameterTypes, String path)
+            throws NoSuchMethodException {
+        org.springframework.web.bind.annotation.PutMapping mapping =
+                VisitorPortfolioController.class.getMethod(methodName, parameterTypes)
+                        .getAnnotation(org.springframework.web.bind.annotation.PutMapping.class);
         assertThat(mapping).isNotNull();
         assertThat(mapping.value()).containsExactly(path);
     }

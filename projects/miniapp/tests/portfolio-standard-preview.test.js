@@ -210,6 +210,68 @@ test('preview display group switch tolerates unnormalized component arrays', () 
   assert.equal(page.data.portfolio.components[0].activeGroupKey, 'g_existing')
 })
 
+test('preview display group switch marks work content as switching briefly', () => {
+  const originalSetTimeout = global.setTimeout
+  const originalClearTimeout = global.clearTimeout
+  const timers = []
+  const clearedTimers = []
+  global.setTimeout = (handler, delay) => {
+    timers.push({ handler, delay })
+    return `timer-${timers.length}`
+  }
+  global.clearTimeout = (timerId) => {
+    clearedTimers.push(timerId)
+  }
+
+  try {
+    const page = loadPreviewPage(() => Promise.resolve({}))
+    page.data.portfolio = {
+      components: [
+        {
+          componentKey: 'c_grid',
+          componentType: 'WORK_GRID',
+          activeGroupKey: 'all',
+          activeGroup: {
+            groupKey: 'all',
+            name: '全部',
+            works: []
+          },
+          groups: [
+            { groupKey: 'all', name: '全部', works: [] },
+            { groupKey: 'tag_1', name: '中式婚礼', works: [] }
+          ],
+          displayTags: [
+            { groupKey: 'all', name: '全部', active: true },
+            { groupKey: 'tag_1', name: '中式婚礼', active: false }
+          ]
+        }
+      ]
+    }
+
+    page.handleDisplayTagTap({
+      currentTarget: {
+        dataset: {
+          componentKey: 'c_grid',
+          groupKey: 'tag_1'
+        }
+      }
+    })
+
+    assert.equal(page.data.portfolio.components[0].activeGroupKey, 'tag_1')
+    assert.equal(page.data.displaySwitchingComponentKey, 'c_grid')
+    assert.equal(timers.length, 1)
+    assert.equal(timers[0].delay, 180)
+    assert.deepEqual(clearedTimers, [])
+
+    timers[0].handler()
+
+    assert.equal(page.data.displaySwitchingComponentKey, '')
+  } finally {
+    global.setTimeout = originalSetTimeout
+    global.clearTimeout = originalClearTimeout
+  }
+})
+
 test('preview page opens image and video work media without visitor event request', () => {
   const requests = []
   const previews = []
@@ -318,6 +380,8 @@ test('portfolio work sections render fixed title, all tags, play badge, and vide
     assert.match(wxml, /class="work-section-title">作品列表<\/view>/)
     assert.doesNotMatch(wxml, /class="work-section-title">作品 &gt;<\/view>/)
     assert.match(wxml, /wx:for="\{\{item\.displayTags\}\}"[\s\S]*>\{\{tag\.name\}\}<\/view>/)
+    assert.match(wxml, /class="work-grid \{\{displaySwitchingComponentKey === item\.componentKey \? 'display-switching' : ''\}\}"/)
+    assert.match(wxml, /class="work-list \{\{displaySwitchingComponentKey === item\.componentKey \? 'display-switching' : ''\}\}"/)
     assert.match(wxml, /class="work-cover-wrap"[\s\S]*bindtap="handleWorkTap"/)
     assert.match(wxml, /data-media-url="\{\{work\.previewUrl\}\}"/)
     assert.match(wxml, /wx:if="\{\{work\.isVideo\}\}"[\s\S]*class="work-play-badge"/)

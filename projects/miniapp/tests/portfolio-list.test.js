@@ -111,6 +111,38 @@ test('creating a standard personal portfolio opens an unsaved editor draft', asy
   }
 })
 
+test('unavailable portfolio creation buttons show toast without navigation', async () => {
+  const navigations = []
+  const toasts = []
+  const page = loadPortfolioListPage(() => Promise.resolve({ portfolios: [] }), {
+    navigateTo(options) {
+      navigations.push(options)
+    },
+    showToast(options) {
+      toasts.push(options)
+    }
+  })
+
+  ;['advanced-personal', 'standard-team', 'advanced-team'].forEach((type) => {
+    page.handleUnavailableTap({
+      currentTarget: {
+        dataset: { type }
+      }
+    })
+  })
+
+  try {
+    assert.deepEqual(navigations, [])
+    assert.deepEqual(toasts, [
+      { title: '暂未开放，即将发布', icon: 'none' },
+      { title: '暂未开放，即将发布', icon: 'none' },
+      { title: '暂未开放，即将发布', icon: 'none' }
+    ])
+  } finally {
+    page.cleanup()
+  }
+})
+
 test('left swiping a personal portfolio reveals delete and confirm delete refreshes list', async () => {
   const requests = []
   const toasts = []
@@ -203,10 +235,11 @@ test('tapping a revealed portfolio card closes delete action instead of opening 
   }
 })
 
-test('publishing a draft portfolio from list posts publish api without opening editor', async () => {
+test('publishing a draft portfolio from list confirms disclaimer before posting publish api', async () => {
   const requests = []
   const navigations = []
   const toasts = []
+  const modals = []
   let listLoadCount = 0
   const page = loadPortfolioListPage((options) => {
     requests.push(options)
@@ -235,6 +268,10 @@ test('publishing a draft portfolio from list posts publish api without opening e
     navigateTo(options) {
       navigations.push(options)
     },
+    showModal(options) {
+      modals.push(options)
+      options.success({ confirm: true })
+    },
     showToast(options) {
       toasts.push(options)
     }
@@ -256,6 +293,11 @@ test('publishing a draft portfolio from list posts publish api without opening e
 
   try {
     assert.deepEqual(navigations, [])
+    assert.equal(modals.length, 1)
+    assert.equal(modals[0].title, '发布免责声明')
+    assert.match(modals[0].content, /肖像/)
+    assert.match(modals[0].content, /侵权/)
+    assert.equal(modals[0].confirmText, '确认发布')
     assert.deepEqual(requests.map((item) => [item.url, item.method || 'GET']), [
       ['/api/mine/portfolios', 'GET'],
       ['/api/mine/portfolios/88/publish', 'POST'],
@@ -265,6 +307,45 @@ test('publishing a draft portfolio from list posts publish api without opening e
     assert.match(requests[1].data.idempotencyKey, /^publish-/)
     assert.equal(toasts[0].title, '已发布')
     assert.equal(page.data.displayPortfolios[0].statusText, '已发布')
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('canceling publish disclaimer from list does not call publish api', async () => {
+  const requests = []
+  const modals = []
+  const page = loadPortfolioListPage((options) => {
+    requests.push(options)
+    return Promise.resolve({})
+  }, {
+    showModal(options) {
+      modals.push(options)
+      options.success({ confirm: false })
+    }
+  })
+  page.data.displayPortfolios = [
+    {
+      portfolioId: 88,
+      title: '林安婚礼司仪',
+      draftRevision: 3,
+      actionType: 'PUBLISH'
+    }
+  ]
+
+  await page.handlePrimaryActionTap({
+    currentTarget: {
+      dataset: {
+        id: 88,
+        action: 'PUBLISH'
+      }
+    }
+  })
+  await flushPromises()
+
+  try {
+    assert.equal(modals.length, 1)
+    assert.deepEqual(requests, [])
   } finally {
     page.cleanup()
   }
@@ -363,12 +444,17 @@ test('previewing a draft portfolio from list opens draft preview without publish
 test('bubbled primary action tap does not open portfolio editor', async () => {
   const requests = []
   const navigations = []
+  const modals = []
   const page = loadPortfolioListPage((options) => {
     requests.push(options)
     return Promise.resolve({ portfolioId: 88, publishedRevision: 4 })
   }, {
     navigateTo(options) {
       navigations.push(options)
+    },
+    showModal(options) {
+      modals.push(options)
+      options.success({ confirm: true })
     }
   })
   page.data.displayPortfolios = [
@@ -402,6 +488,7 @@ test('bubbled primary action tap does not open portfolio editor', async () => {
 
   try {
     assert.deepEqual(navigations, [])
+    assert.equal(modals.length, 1)
     assert.equal(requests[0].url, '/api/mine/portfolios/88/publish')
   } finally {
     page.cleanup()

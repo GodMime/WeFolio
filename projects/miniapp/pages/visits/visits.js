@@ -1,12 +1,36 @@
 const { request } = require('../../utils/request')
 const { handleAuthRequired, hasLocalToken } = require('../../utils/session')
-const { normalizeVisitRecords } = require('../../utils/visits')
+const {
+  appendVisitEventTimeline,
+  markVisitRecordFollowed,
+  normalizeVisitEventTimeline,
+  normalizeVisitRecords
+} = require('../../utils/visits')
+
+const MINE_VISITS_URL = '/api/mine/visits'
+const FIRST_VISIT_EVENT_PAGE = 1
+const VISIT_EVENT_PAGE_SIZE = 20
+const SWIPE_REVEAL_THRESHOLD = -32
+const SWIPE_CLOSE_THRESHOLD = 24
+const SWIPE_VERTICAL_TOLERANCE = 48
 
 Page({
   data: {
     loading: true,
     errorMessage: '',
-    visitData: normalizeVisitRecords({})
+    visitData: normalizeVisitRecords({}),
+    eventSheetVisible: false,
+    eventSheetLoading: false,
+    eventSheetLoadingMore: false,
+    eventSheetErrorMessage: '',
+    eventSheetRecordId: null,
+    eventSheetPageNo: FIRST_VISIT_EVENT_PAGE,
+    eventSheetPageSize: VISIT_EVENT_PAGE_SIZE,
+    eventSheetHasMore: false,
+    selectedVisitRecord: normalizeVisitEventTimeline({ events: [] }),
+    revealedVisitRecordId: null,
+    followingVisitRecordId: null,
+    visitTouchStart: null
   },
 
   onLoad() {
@@ -33,11 +57,14 @@ Page({
 
     try {
       const response = await request({
-        url: '/api/mine/visits'
+        url: MINE_VISITS_URL
       })
       this.setData({
         visitData: normalizeVisitRecords(response),
-        loading: false
+        loading: false,
+        revealedVisitRecordId: null,
+        followingVisitRecordId: null,
+        visitTouchStart: null
       }, () => {
         this.drawTrendLineChart()
       })
@@ -63,8 +90,258 @@ Page({
     this.bootstrap()
   },
 
+  noop() {
+    // 用于 catchtouchmove 阻止弹层触摸事件继续穿透到页面。
+  },
+
+  handleVisitTouchStart(event) {
+    if (this.data.followingVisitRecordId) {
+      this.setData({ visitTouchStart: null })
+      return
+    }
+    const recordId = event.currentTarget && event.currentTarget.dataset
+      ? event.currentTarget.dataset.recordId
+      : ''
+    const record = this.findVisitRecord(recordId)
+    if (!record || !record.canMarkFollowed) {
+      this.setData({ visitTouchStart: null })
+      return
+    }
+    const touch = (event.touches && event.touches[0]) || {}
+    this.setData({
+      visitTouchStart: {
+        recordId: record.id,
+        x: touch.clientX || 0,
+        y: touch.clientY || 0
+      }
+    })
+  },
+
+  handleVisitTouchMove() {
+  },
+
+  handleVisitTouchEnd(event) {
+    const start = this.data.visitTouchStart
+    if (!start || !start.recordId) {
+      return
+    }
+    const touch = (event.changedTouches && event.changedTouches[0]) || {}
+    const deltaX = (touch.clientX || start.x) - start.x
+    const deltaY = Math.abs((touch.clientY || start.y) - start.y)
+    if (deltaY <= SWIPE_VERTICAL_TOLERANCE && deltaX < SWIPE_REVEAL_THRESHOLD) {
+      this.setData({
+        revealedVisitRecordId: start.recordId,
+        visitTouchStart: null
+      })
+      return
+    }
+    if (deltaX > SWIPE_CLOSE_THRESHOLD || Math.abs(deltaX) < 8) {
+      this.setData({
+        revealedVisitRecordId: null,
+        visitTouchStart: null
+      })
+      return
+    }
+    this.setData({ visitTouchStart: null })
+  },
+
+  handleVisitTouchCancel() {
+    this.setData({ visitTouchStart: null })
+  },
+
+  handleVisitRowTap(event) {
+    const recordId = event.currentTarget && event.currentTarget.dataset
+      ? event.currentTarget.dataset.recordId
+      : ''
+    if (this.data.revealedVisitRecordId && String(this.data.revealedVisitRecordId) === String(recordId)) {
+      this.setData({ revealedVisitRecordId: null })
+      return
+    }
+    const record = this.findVisitRecord(recordId)
+    if (!record || !record.id) {
+      return
+    }
+    this.setData({
+      eventSheetVisible: true,
+      eventSheetLoading: true,
+      eventSheetLoadingMore: false,
+      eventSheetErrorMessage: '',
+      eventSheetRecordId: record.id,
+      eventSheetPageNo: FIRST_VISIT_EVENT_PAGE,
+      eventSheetPageSize: VISIT_EVENT_PAGE_SIZE,
+      eventSheetHasMore: false,
+      selectedVisitRecord: record,
+      revealedVisitRecordId: null
+    })
+    return this.loadVisitEvents(record, {
+      pageNo: FIRST_VISIT_EVENT_PAGE
+    })
+  },
+
+  findVisitRecord(recordId) {
+    const records = this.data.visitData && Array.isArray(this.data.visitData.records)
+      ? this.data.visitData.records
+      : []
+    return records.find((record) => String(record.id) === String(recordId))
+  },
+
+  async handleMarkVisitFollowedTap(event) {
+    const recordId = event.currentTarget && event.currentTarget.dataset
+      ? event.currentTarget.dataset.recordId
+      : ''
+    const record = this.findVisitRecord(recordId)
+    if (!record || !record.id || !record.canMarkFollowed || this.data.followingVisitRecordId) {
+      return
+    }
+    this.setData({ followingVisitRecordId: record.id })
+    try {
+      const response = await request({
+        url: `${MINE_VISITS_URL}/${record.id}/followed`,
+        method: 'PUT'
+      })
+      const visitData = markVisitRecordFollowed(this.data.visitData, record.id, response)
+      const shouldUpdateSelected = this.data.selectedVisitRecord
+        && String(this.data.selectedVisitRecord.id || this.data.selectedVisitRecord.recordId || '') === String(record.id)
+      const selectedVisitRecord = shouldUpdateSelected
+        ? markVisitRecordFollowed({ records: [this.data.selectedVisitRecord] }, record.id, response).records[0]
+        : this.data.selectedVisitRecord
+      this.setData({
+        visitData,
+        selectedVisitRecord,
+        followingVisitRecordId: null,
+        revealedVisitRecordId: null,
+        visitTouchStart: null
+      })
+    } catch (error) {
+      if (error && error.authRequired) {
+        this.setData({ followingVisitRecordId: null })
+        handleAuthRequired(error.message)
+        return
+      }
+      this.setData({ followingVisitRecordId: null })
+      if (typeof wx !== 'undefined' && wx.showToast) {
+        wx.showToast({
+          title: error && error.message ? error.message : '标记跟进失败',
+          icon: 'none'
+        })
+      }
+    }
+  },
+
+  async loadVisitEvents(record, options = {}) {
+    const recordId = record.recordId || record.id
+    const append = Boolean(options.append)
+    const pageNo = options.pageNo || (append ? (this.data.eventSheetPageNo || FIRST_VISIT_EVENT_PAGE) + 1 : FIRST_VISIT_EVENT_PAGE)
+    const pageSize = this.data.eventSheetPageSize || VISIT_EVENT_PAGE_SIZE
+    const requestContext = this.createVisitEventRequestContext(recordId, pageNo)
+    this.setData(append ? {
+      eventSheetLoadingMore: true
+    } : {
+      eventSheetLoading: true,
+      eventSheetLoadingMore: false,
+      eventSheetErrorMessage: ''
+    })
+    try {
+      const response = await request({
+        url: `${MINE_VISITS_URL}/${recordId}/events`,
+        data: {
+          pageNo,
+          pageSize
+        }
+      })
+      if (!this.isCurrentVisitEventRequest(requestContext)) {
+        return
+      }
+      const selectedVisitRecord = normalizeVisitEventTimeline(response, record)
+      const mergedVisitRecord = append
+        ? appendVisitEventTimeline(this.data.selectedVisitRecord, selectedVisitRecord)
+        : selectedVisitRecord
+      this.setData({
+        eventSheetLoading: false,
+        eventSheetLoadingMore: false,
+        eventSheetErrorMessage: '',
+        eventSheetPageNo: mergedVisitRecord.pageNo,
+        eventSheetPageSize: mergedVisitRecord.pageSize,
+        eventSheetHasMore: mergedVisitRecord.hasMore,
+        selectedVisitRecord: mergedVisitRecord
+      })
+    } catch (error) {
+      if (!this.isCurrentVisitEventRequest(requestContext)) {
+        return
+      }
+      if (error && error.authRequired) {
+        this.setData({
+          eventSheetLoading: false,
+          eventSheetLoadingMore: false
+        })
+        handleAuthRequired(error.message)
+        return
+      }
+      if (append) {
+        this.setData({
+          eventSheetLoadingMore: false
+        })
+        wx.showToast({
+          title: error && error.message ? error.message : '更多事件加载失败',
+          icon: 'none'
+        })
+        return
+      }
+      this.setData({
+        eventSheetLoading: false,
+        eventSheetLoadingMore: false,
+        eventSheetErrorMessage: error && error.message ? error.message : '事件明细加载失败'
+      })
+    }
+  },
+
+  createVisitEventRequestContext(recordId, pageNo) {
+    const requestId = (this.visitEventRequestId || 0) + 1
+    this.visitEventRequestId = requestId
+    return {
+      requestId,
+      recordId,
+      pageNo
+    }
+  },
+
+  isCurrentVisitEventRequest(requestContext) {
+    return Boolean(requestContext)
+      && this.visitEventRequestId === requestContext.requestId
+      && String(this.data.eventSheetRecordId || '') === String(requestContext.recordId || '')
+  },
+
+  handleVisitEventScrollToLower() {
+    if (
+      this.data.eventSheetLoading ||
+      this.data.eventSheetLoadingMore ||
+      !this.data.eventSheetHasMore ||
+      !this.data.eventSheetRecordId
+    ) {
+      return
+    }
+    return this.loadVisitEvents(this.data.selectedVisitRecord, {
+      append: true,
+      pageNo: (this.data.eventSheetPageNo || FIRST_VISIT_EVENT_PAGE) + 1
+    })
+  },
+
+  handleCloseEventSheet() {
+    this.visitEventRequestId = (this.visitEventRequestId || 0) + 1
+    this.setData({
+      eventSheetVisible: false,
+      eventSheetLoading: false,
+      eventSheetLoadingMore: false,
+      eventSheetErrorMessage: '',
+      eventSheetRecordId: null,
+      eventSheetHasMore: false
+    }, () => {
+      this.drawTrendLineChart()
+    })
+  },
+
   drawTrendLineChart() {
-    if (typeof wx === 'undefined' || !wx.createSelectorQuery) {
+    if (this.data.eventSheetVisible || typeof wx === 'undefined' || !wx.createSelectorQuery) {
       return
     }
 

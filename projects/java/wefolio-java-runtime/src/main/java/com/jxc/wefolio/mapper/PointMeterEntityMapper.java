@@ -14,7 +14,7 @@ import org.apache.ibatis.annotations.Select;
 public interface PointMeterEntityMapper extends BaseMapper<PointMeterEntity> {
 
     /**
-     * 锁定指定业务的积分计量器。
+     * 查询指定业务的积分计量器。
      *
      * @param accountId 积分账户 ID
      * @param ruleCode 规则编码
@@ -33,9 +33,8 @@ public interface PointMeterEntityMapper extends BaseMapper<PointMeterEntity> {
                AND business_id = #{businessId}
                AND deleted = 0
              LIMIT 1
-             FOR UPDATE
             """)
-    PointMeterEntity selectMeterForUpdate(
+    PointMeterEntity selectMeter(
             @Param("accountId") Long accountId,
             @Param("ruleCode") String ruleCode,
             @Param("businessType") String businessType,

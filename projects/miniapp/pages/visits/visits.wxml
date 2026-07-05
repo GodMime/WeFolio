@@ -36,7 +36,7 @@
             <view class="trend-pill">{{visitData.trend.changeText}}</view>
           </view>
           <view class="trend-chart">
-            <canvas id="trendLineCanvas" class="trend-line-canvas" type="2d"></canvas>
+            <canvas wx:if="{{!eventSheetVisible}}" id="trendLineCanvas" class="trend-line-canvas" type="2d"></canvas>
           </view>
           <view class="trend-label-row">
             <view class="trend-label" wx:for="{{visitData.trend.points}}" wx:key="label">{{item.label}}</view>
@@ -49,14 +49,41 @@
             <view class="panel-desc">来源与行为摘要</view>
           </view>
           <view class="visit-list" wx:if="{{visitData.records.length}}">
-            <view class="visit-row" wx:for="{{visitData.records}}" wx:key="id">
-              <view class="visitor-icon {{item.followTone}}">{{item.visitorInitial}}</view>
-              <view class="visit-copy">
-                <view class="visitor-name">{{item.visitorLabel}}</view>
-                <view class="visit-source">{{item.sourceText}}</view>
-                <view class="visit-summary">{{item.summaryText}}</view>
+            <view
+              class="visit-swipe-row {{revealedVisitRecordId === item.id && item.canMarkFollowed ? 'revealed' : ''}}"
+              wx:for="{{visitData.records}}"
+              wx:key="id"
+              data-record-id="{{item.id}}"
+              bindtouchstart="handleVisitTouchStart"
+              bindtouchmove="handleVisitTouchMove"
+              bindtouchend="handleVisitTouchEnd"
+              bindtouchcancel="handleVisitTouchCancel"
+            >
+              <view wx:if="{{item.canMarkFollowed}}" class="visit-follow-pane">
+                <button
+                  class="visit-follow-button"
+                  loading="{{followingVisitRecordId === item.id}}"
+                  disabled="{{followingVisitRecordId === item.id}}"
+                  data-record-id="{{item.id}}"
+                  catchtap="handleMarkVisitFollowedTap"
+                >标记已跟进</button>
               </view>
-              <view class="{{item.followToneClass}}">{{item.followStatusText}}</view>
+              <view
+                class="visit-row"
+                data-record-id="{{item.id}}"
+                bindtap="handleVisitRowTap"
+                aria-role="button"
+                aria-label="查看{{item.visitorLabel}}的访问事件"
+              >
+                <image wx:if="{{item.visitorAvatarUrl}}" class="visitor-avatar" src="{{item.visitorAvatarUrl}}" mode="aspectFill"></image>
+                <view wx:else class="visitor-icon {{item.followTone}}">{{item.visitorInitial}}</view>
+                <view class="visit-copy">
+                  <view class="visitor-name">{{item.visitorLabel}}</view>
+                  <view class="visit-source">{{item.sourceText}}</view>
+                  <view class="visit-summary">{{item.summaryText}}</view>
+                </view>
+                <view class="{{item.followToneClass}}">{{item.followStatusText}}</view>
+              </view>
             </view>
           </view>
           <view wx:else class="visit-empty">
@@ -67,4 +94,58 @@
       </block>
     </view>
   </scroll-view>
+
+  <root-portal wx:if="{{eventSheetVisible}}">
+    <view class="visit-event-sheet-mask" catchtap="handleCloseEventSheet" catchtouchmove="noop">
+      <view class="visit-event-sheet-panel" catchtap="noop">
+        <view class="sheet-grabber"></view>
+        <view class="visit-event-heading">
+          <image wx:if="{{selectedVisitRecord.visitorAvatarUrl}}" class="visitor-avatar event-avatar" src="{{selectedVisitRecord.visitorAvatarUrl}}" mode="aspectFill"></image>
+          <view wx:else class="visitor-icon event-avatar {{selectedVisitRecord.followTone}}">{{selectedVisitRecord.visitorInitial}}</view>
+          <view class="visit-event-heading-copy">
+            <view class="visitor-name">{{selectedVisitRecord.visitorLabel}}</view>
+            <view class="visit-source">{{selectedVisitRecord.sourceText}}</view>
+          </view>
+          <view class="visit-event-close" bindtap="handleCloseEventSheet" aria-role="button" aria-label="关闭事件明细">×</view>
+        </view>
+
+        <view class="visit-event-summary-row">
+          <view class="{{selectedVisitRecord.followToneClass}}">{{selectedVisitRecord.followStatusText}}</view>
+          <view class="visit-event-meta">{{selectedVisitRecord.lastVisitedText || selectedVisitRecord.eventCountText}}</view>
+        </view>
+
+        <view wx:if="{{eventSheetLoading}}" class="visit-event-loading">事件加载中...</view>
+        <view wx:elif="{{eventSheetErrorMessage}}" class="visit-event-empty">
+          <view class="empty-title small">加载失败</view>
+          <view class="empty-desc">{{eventSheetErrorMessage}}</view>
+        </view>
+        <scroll-view
+          wx:elif="{{selectedVisitRecord.events.length}}"
+          class="visit-event-list"
+          scroll-y
+          type="list"
+          bindscrolltolower="handleVisitEventScrollToLower"
+          lower-threshold="120"
+        >
+          <view class="visit-event-item" wx:for="{{selectedVisitRecord.events}}" wx:key="id">
+            <view class="{{item.toneClass}}"></view>
+            <view class="visit-event-content">
+              <view class="visit-event-row">
+                <view class="visit-event-title">{{item.title}}</view>
+                <view class="visit-event-time">{{item.occurredTimeText}}</view>
+              </view>
+              <view class="visit-event-detail">{{item.detailText}}</view>
+              <view class="visit-event-date">{{item.occurredDateText}}</view>
+            </view>
+          </view>
+          <view wx:if="{{eventSheetLoadingMore}}" class="visit-event-load-more">事件加载中...</view>
+          <view wx:elif="{{!eventSheetHasMore}}" class="visit-event-load-more">已加载全部事件</view>
+        </scroll-view>
+        <view wx:else class="visit-event-empty">
+          <view class="empty-title small">暂无具体事件</view>
+          <view class="empty-desc">该访客暂时只有汇总记录，后续行为会在这里展示。</view>
+        </view>
+      </view>
+    </view>
+  </root-portal>
 </view>

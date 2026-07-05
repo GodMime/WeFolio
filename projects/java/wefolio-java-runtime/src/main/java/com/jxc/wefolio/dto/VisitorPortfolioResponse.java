@@ -1,5 +1,6 @@
 package com.jxc.wefolio.dto;
 
+import com.alibaba.fastjson2.annotation.JSONField;
 import lombok.Data;
 
 /**
@@ -34,6 +35,19 @@ public class VisitorPortfolioResponse {
 
     /** 访问汇总记录 ID */
     private Long visitRecordId;
+
+    /** 服务端生成的匿名访客稳定 key */
+    private String visitorKey;
+
+    /** 是否本次新建访客 */
+    @JSONField(name = "isNewVisitor")
+    private boolean newVisitor;
+
+    /** 是否需要补充访客头像昵称 */
+    private boolean needVisitorProfile;
+
+    /** 访客头像昵称资料更新短期 token */
+    private String visitorProfileToken;
 
     /**
      * 维护中文案。

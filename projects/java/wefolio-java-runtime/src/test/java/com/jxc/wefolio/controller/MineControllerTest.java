@@ -13,8 +13,13 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ValueConstants;
 
+import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -56,6 +61,55 @@ class MineControllerTest {
     }
 
     @Test
+    void visitEventsEndpointDelegatesToServiceWithPagination() throws NoSuchMethodException {
+        Method method = MineController.class.getMethod("visitEvents", Long.class, Integer.class, Integer.class);
+        GetMapping getMapping = method.getAnnotation(GetMapping.class);
+        Annotation[][] parameterAnnotations = method.getParameterAnnotations();
+        RequestParam pageNoParam = findRequestParam(parameterAnnotations[1]);
+        RequestParam pageSizeParam = findRequestParam(parameterAnnotations[2]);
+        MineVisitRecordsResponse.EventTimeline serviceResponse = new MineVisitRecordsResponse.EventTimeline();
+        serviceResponse.setRecordId(101L);
+        when(mineVisitService.getVisitEvents(101L, 2, 10)).thenReturn(serviceResponse);
+        MineController controller = new MineController(
+                mineDashboardService, mineProfileService, mineVisitService);
+
+        Response<MineVisitRecordsResponse.EventTimeline> response = controller.visitEvents(101L, 2, 10);
+
+        assertThat(getMapping).isNotNull();
+        assertThat(getMapping.value()).containsExactly("/api/mine/visits/{recordId}/events");
+        assertThat(parameterAnnotations[0]).anyMatch(annotation -> annotation instanceof PathVariable);
+        assertThat(parameterAnnotations[1]).anyMatch(annotation -> annotation instanceof RequestParam);
+        assertThat(parameterAnnotations[2]).anyMatch(annotation -> annotation instanceof RequestParam);
+        assertThat(pageNoParam.required()).isFalse();
+        assertThat(pageNoParam.defaultValue()).isEqualTo(ValueConstants.DEFAULT_NONE);
+        assertThat(pageSizeParam.required()).isFalse();
+        assertThat(pageSizeParam.defaultValue()).isEqualTo(ValueConstants.DEFAULT_NONE);
+        assertThat(response.isSuccess()).isTrue();
+        assertThat(response.getData()).isSameAs(serviceResponse);
+        verify(mineVisitService).getVisitEvents(101L, 2, 10);
+    }
+
+    @Test
+    void markVisitFollowedEndpointDelegatesToService() throws NoSuchMethodException {
+        Method method = MineController.class.getMethod("markVisitFollowed", Long.class);
+        PutMapping putMapping = method.getAnnotation(PutMapping.class);
+        MineVisitRecordsResponse.Record serviceResponse = new MineVisitRecordsResponse.Record();
+        serviceResponse.setId(101L);
+        serviceResponse.setFollowStatusText("已跟进");
+        when(mineVisitService.markVisitFollowed(101L)).thenReturn(serviceResponse);
+        MineController controller = new MineController(
+                mineDashboardService, mineProfileService, mineVisitService);
+
+        Response<MineVisitRecordsResponse.Record> response = controller.markVisitFollowed(101L);
+
+        assertThat(putMapping).isNotNull();
+        assertThat(putMapping.value()).containsExactly("/api/mine/visits/{recordId}/followed");
+        assertThat(response.isSuccess()).isTrue();
+        assertThat(response.getData()).isSameAs(serviceResponse);
+        verify(mineVisitService).markVisitFollowed(101L);
+    }
+
+    @Test
     void profileAssetUploadTicketEndpointDelegatesToService() throws NoSuchMethodException {
         Method method = MineController.class.getMethod(
                 "createProfileAssetUploadTicket",
@@ -77,5 +131,20 @@ class MineControllerTest {
         assertThat(response.isSuccess()).isTrue();
         assertThat(response.getData()).isSameAs(serviceResponse);
         verify(mineProfileService).createProfileAssetUploadTicket(request);
+    }
+
+    /**
+     * 从参数注解中读取请求参数注解。
+     *
+     * @param annotations 单个方法参数上的注解
+     * @return 请求参数注解
+     */
+    private RequestParam findRequestParam(Annotation[] annotations) {
+        for (Annotation annotation : annotations) {
+            if (annotation instanceof RequestParam requestParam) {
+                return requestParam;
+            }
+        }
+        throw new AssertionError("缺少 RequestParam 注解");
     }
 }

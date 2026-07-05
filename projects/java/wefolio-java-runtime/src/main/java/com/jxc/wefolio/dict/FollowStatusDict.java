@@ -11,9 +11,9 @@ import java.util.stream.Collectors;
 public enum FollowStatusDict {
 
     NOT_FOLLOWED_UP("NOT_FOLLOWED_UP", "未跟进"),
-        CONTACTED("CONTACTED", "已联系"),
-        DEAL_WON("DEAL_WON", "已成交"),
-        INVALID("INVALID", "无效");
+    CONTACTED("CONTACTED", "已跟进"),
+    DEAL_WON("DEAL_WON", "已成交"),
+    INVALID("INVALID", "无效");
 
     private final String code;
     private final String displayName;

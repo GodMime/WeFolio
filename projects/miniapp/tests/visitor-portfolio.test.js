@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
 const test = require('node:test')
 const path = require('node:path')
 
@@ -193,6 +194,25 @@ test('normalizes visitor portfolio under maintenance state', () => {
   assert.equal(result.title, '林安婚礼司仪')
   assert.equal(result.maintenanceText.primary, 'UNDER MAINTENANCE')
   assert.deepEqual(result.components, [])
+})
+
+test('normalizes visitor open metadata from backend response', () => {
+  const result = normalizeVisitorPortfolio({
+    visitorKey: 'server-visitor-key',
+    isNewVisitor: true,
+    needVisitorProfile: true,
+    visitorProfileToken: 'profile-token-1',
+    renderData: {
+      shareCode: 'PF001',
+      title: '林安婚礼司仪',
+      components: []
+    }
+  })
+
+  assert.equal(result.visitorKey, 'server-visitor-key')
+  assert.equal(result.isNewVisitor, true)
+  assert.equal(result.needVisitorProfile, true)
+  assert.equal(result.visitorProfileToken, 'profile-token-1')
 })
 
 test('normalizes visitor portfolio components from published config', () => {
@@ -633,13 +653,76 @@ test('display group switch can return from a tag to all works', () => {
   assert.deepEqual(all.components[0].activeGroup.works.map((work) => work.workId), [1, 2])
 })
 
+test('visitor display group switch marks work content as switching briefly', () => {
+  const originalSetTimeout = global.setTimeout
+  const originalClearTimeout = global.clearTimeout
+  const timers = []
+  global.setTimeout = (handler, delay) => {
+    timers.push({ handler, delay })
+    return `timer-${timers.length}`
+  }
+  global.clearTimeout = () => {}
+
+  try {
+    const page = loadVisitorPage(() => Promise.resolve({}))
+    page.data.portfolio = normalizeVisitorPortfolio({
+      renderData: {
+        components: [
+          {
+            componentKey: 'c_list',
+            componentType: 'WORK_LIST',
+            groups: [
+              {
+                groupKey: 'g_a',
+                name: 'A',
+                sortOrder: 1000,
+                works: [{ workId: 1, title: 'A1', mediaType: 'IMAGE', mediaUrl: 'a.jpg' }]
+              },
+              {
+                groupKey: 'g_b',
+                name: 'B',
+                sortOrder: 2000,
+                works: [{ workId: 2, title: 'B1', mediaType: 'IMAGE', mediaUrl: 'b.jpg' }]
+              }
+            ]
+          }
+        ]
+      }
+    })
+
+    page.handleDisplayTagTap({
+      currentTarget: {
+        dataset: {
+          componentKey: 'c_list',
+          groupKey: 'g_b'
+        }
+      }
+    })
+
+    assert.equal(page.data.portfolio.components[0].activeGroupKey, 'g_b')
+    assert.equal(page.data.displaySwitchingComponentKey, 'c_list')
+    assert.equal(timers.length, 1)
+    assert.equal(timers[0].delay, 180)
+
+    timers[0].handler()
+
+    assert.equal(page.data.displaySwitchingComponentKey, '')
+  } finally {
+    global.setTimeout = originalSetTimeout
+    global.clearTimeout = originalClearTimeout
+  }
+})
+
 test('builds visitor event payload with idempotency key', () => {
   const payload = buildVisitorEventPayload({
     visitorKey: 'visitor-a',
     eventType: 'VIDEO_PLAYED',
     workId: 11,
     mediaType: 'VIDEO',
-    durationSeconds: 18
+    durationSeconds: 18,
+    metadata: {
+      action: 'PREVIEW_QR'
+    }
   }, 'event-1')
 
   assert.deepEqual(payload, {
@@ -648,8 +731,22 @@ test('builds visitor event payload with idempotency key', () => {
     workId: 11,
     mediaType: 'VIDEO',
     durationSeconds: 18,
+    metadata: {
+      action: 'PREVIEW_QR'
+    },
     idempotencyKey: 'event-1'
   })
+})
+
+test('visitor page uses source type constant for WeChat share card', () => {
+  const pageSource = fs.readFileSync(
+    path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.js'),
+    'utf8'
+  )
+
+  assert.match(pageSource, /const SOURCE_TYPE_WECHAT_SHARE_CARD = 'WECHAT_SHARE_CARD'/)
+  assert.equal((pageSource.match(/sourceType: SOURCE_TYPE_WECHAT_SHARE_CARD/g) || []).length, 2)
+  assert.equal((pageSource.match(/sourceType: 'WECHAT_SHARE_CARD'/g) || []).length, 0)
 })
 
 test('visitor page records image view before opening original image', async () => {
@@ -696,6 +793,193 @@ test('visitor page records image view before opening original image', async () =
     current: 'https://cdn.example.com/original.jpg',
     urls: ['https://cdn.example.com/original.jpg']
   })
+})
+
+test('visitor page records qr interaction when previewing contact qr', async () => {
+  const requests = []
+  const previews = []
+  const wxMock = {
+    previewImage(options) {
+      previews.push(options)
+    }
+  }
+  const page = loadVisitorPage((options) => {
+    requests.push(options)
+    return Promise.resolve({})
+  }, wxMock)
+  page.data.shareCode = 'PF001'
+  page.data.visitorKey = 'visitor-a'
+  global.wx = Object.assign({
+    showToast() {}
+  }, wxMock)
+
+  try {
+    await page.handlePreviewQr({
+      currentTarget: {
+        dataset: {
+          url: 'https://cdn.example.com/contact-qr.jpg'
+        }
+      }
+    })
+    await flushPromises()
+  } finally {
+    delete global.wx
+  }
+
+  assert.deepEqual(previews[0], {
+    current: 'https://cdn.example.com/contact-qr.jpg',
+    urls: ['https://cdn.example.com/contact-qr.jpg']
+  })
+  assert.equal(requests[0].url, '/api/visitor/portfolios/PF001/events')
+  assert.equal(requests[0].method, 'POST')
+  assert.equal(requests[0].data.visitorKey, 'visitor-a')
+  assert.equal(requests[0].data.eventType, 'QR_CODE_INTERACTED')
+  assert.deepEqual(requests[0].data.metadata, {
+    action: 'PREVIEW_QR'
+  })
+})
+
+test('visitor page opens portfolio with wx login code and stores backend visitor key', async () => {
+  const requests = []
+  const page = loadVisitorPage((options) => {
+    requests.push(options)
+    return Promise.resolve({
+      visitorKey: 'server-visitor-key',
+      isNewVisitor: false,
+      renderData: {
+        shareCode: 'PF001',
+        title: '林安婚礼司仪',
+        components: []
+      }
+    })
+  }, {
+    login(options) {
+      options.success({ code: 'wx-code' })
+    }
+  })
+  global.wx = {
+    login(options) {
+      options.success({ code: 'wx-code' })
+    },
+    showToast() {}
+  }
+
+  try {
+    await page.onLoad({ shareCode: 'PF001' })
+  } finally {
+    delete global.wx
+  }
+
+  assert.equal(requests[0].url, '/api/visitor/portfolios/PF001/open')
+  assert.equal(requests[0].method, 'POST')
+  assert.equal(requests[0].data.loginCode, 'wx-code')
+  assert.equal(Object.hasOwn(requests[0].data, 'visitorKey'), false)
+  assert.equal(page.data.visitorKey, 'server-visitor-key')
+})
+
+test('visitor page shows profile authorization panel when profile is missing', async () => {
+  const page = loadVisitorPage(() => Promise.resolve({
+    visitorKey: 'server-visitor-key',
+    isNewVisitor: false,
+    needVisitorProfile: true,
+    visitorProfileToken: 'profile-token-1',
+    renderData: {
+      shareCode: 'PF001',
+      title: '林安婚礼司仪',
+      components: []
+    }
+  }), {
+    login(options) {
+      options.success({ code: 'wx-code' })
+    }
+  })
+  global.wx = {
+    login(options) {
+      options.success({ code: 'wx-code' })
+    },
+    showToast() {}
+  }
+
+  try {
+    await page.onLoad({ shareCode: 'PF001' })
+  } finally {
+    delete global.wx
+  }
+
+  assert.equal(page.data.visitorProfileAuthVisible, true)
+  assert.equal(page.data.visitorProfileToken, 'profile-token-1')
+})
+
+test('visitor profile prompt keeps skip and save copy in bottom sheet', () => {
+  const wxml = fs.readFileSync(path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.wxml'), 'utf8')
+  const wxss = fs.readFileSync(path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.wxss'), 'utf8')
+
+  assert.match(wxml, /<root-portal wx:if="\{\{visitorProfileAuthVisible\}\}">/)
+  assert.match(wxml, /class="visitor-profile-mask"[^>]*catchtap="handleVisitorProfileMaskTap"[^>]*catchtouchmove="handleVisitorProfileMaskTouchMove"/)
+  assert.match(wxml, /class="visitor-profile-panel"[^>]*catchtap="handleVisitorProfilePanelTap"/)
+  assert.match(wxml, /class="visitor-profile-desc"[^>]*>授权头像和昵称，维护者查看访客记录时能识别你。<\/view>/)
+  assert.match(wxml, /class="visitor-avatar-visual"/)
+  assert.match(wxml, /class="visitor-avatar-label">点击授权头像<\/view>/)
+  assert.match(wxml, /placeholder="点击授权昵称"/)
+  assert.match(wxml, /class="visitor-profile-secondary"[^>]*>跳过<\/button>/)
+  assert.match(wxml, /class="visitor-profile-primary"[^>]*>保存<\/button>/)
+  assert.match(wxss, /\.visitor-profile-mask\s*\{[\s\S]*left:\s*0;[\s\S]*right:\s*0;[\s\S]*top:\s*0;[\s\S]*bottom:\s*0;[\s\S]*z-index:\s*120;/)
+  assert.match(wxss, /\.visitor-profile-panel\s*\{[\s\S]*position:\s*absolute;[\s\S]*left:\s*0;[\s\S]*right:\s*0;[\s\S]*bottom:\s*0;[\s\S]*border-radius:\s*28rpx 28rpx 0 0;/)
+  assert.match(wxss, /\.visitor-avatar-picker\s*\{[\s\S]*position:\s*absolute;[\s\S]*left:\s*0;[\s\S]*top:\s*0;[\s\S]*width:\s*116rpx;[\s\S]*height:\s*116rpx;[\s\S]*opacity:\s*0;/)
+  assert.match(wxss, /\.visitor-avatar-visual\s*\{[\s\S]*width:\s*116rpx;[\s\S]*height:\s*116rpx;[\s\S]*border-radius:\s*50%;[\s\S]*overflow:\s*hidden;/)
+})
+
+test('visitor profile submit requires both avatar and nickname before upload', async () => {
+  const toasts = []
+  const requests = []
+  const page = loadVisitorPage((options) => {
+    requests.push(options)
+    return Promise.resolve({})
+  })
+  global.wx = {
+    showToast(options) {
+      toasts.push(options)
+    }
+  }
+
+  try {
+    page.data.visitorProfileForm = {
+      avatarUrl: '',
+      nickname: ''
+    }
+    await page.handleVisitorProfileSubmit()
+    assert.equal(toasts.at(-1).title, '请授权头像和昵称')
+
+    page.data.visitorProfileForm = {
+      avatarUrl: 'wxfile://avatar.jpg',
+      nickname: ''
+    }
+    await page.handleVisitorProfileSubmit()
+    assert.equal(toasts.at(-1).title, '请授权头像和昵称')
+  } finally {
+    delete global.wx
+  }
+
+  assert.equal(requests.length, 0)
+})
+
+test('visitor video preview uses root portal so native video overlay covers viewport', () => {
+  const wxml = fs.readFileSync(path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.wxml'), 'utf8')
+  const wxss = fs.readFileSync(path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.wxss'), 'utf8')
+  const portalStart = wxml.indexOf('<root-portal wx:if="{{videoPreviewVisible}}">')
+  const maskStart = wxml.indexOf('class="work-video-mask {{videoPreviewVisible ? \'visible\' : \'\'}}"')
+  const portalEnd = wxml.indexOf('</root-portal>', portalStart)
+  const maskRuleStart = wxss.indexOf('.work-video-mask {')
+  const maskRuleEnd = wxss.indexOf('}', maskRuleStart)
+  const maskRule = wxss.slice(maskRuleStart, maskRuleEnd)
+
+  assert.notEqual(portalStart, -1)
+  assert.notEqual(maskStart, -1)
+  assert.notEqual(maskRuleStart, -1)
+  assert.ok(maskStart > portalStart)
+  assert.ok(maskStart < portalEnd)
+  assert.match(maskRule, /left:\s*0;[\s\S]*right:\s*0;[\s\S]*top:\s*0;[\s\S]*bottom:\s*0;/)
+  assert.doesNotMatch(maskRule, /inset:\s*0;/)
 })
 
 test('visitor page records video play before showing video overlay', async () => {

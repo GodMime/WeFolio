@@ -2,6 +2,7 @@ package com.jxc.wefolio.service;
 
 import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
 import com.jxc.wefolio.dict.FollowStatusDict;
 import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
@@ -10,8 +11,11 @@ import com.jxc.wefolio.dict.VisitSourceTypeDict;
 import com.jxc.wefolio.dto.MineVisitRecordsResponse;
 import com.jxc.wefolio.entity.VisitEventEntity;
 import com.jxc.wefolio.entity.VisitRecordEntity;
+import com.jxc.wefolio.entity.VisitorEntity;
+import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.VisitEventEntityMapper;
 import com.jxc.wefolio.mapper.VisitRecordEntityMapper;
+import com.jxc.wefolio.mapper.VisitorEntityMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -37,8 +41,20 @@ public class MineVisitService {
     /** 明细列表最多返回条数 */
     private static final int RECORD_LIMIT = 20;
 
+    /** 事件明细默认页码 */
+    private static final int FIRST_EVENT_PAGE_NO = 1;
+
+    /** 事件明细默认页大小 */
+    private static final int DEFAULT_EVENT_PAGE_SIZE = 20;
+
+    /** 事件明细最大页大小 */
+    private static final int MAX_EVENT_PAGE_SIZE = 50;
+
     /** 趋势覆盖天数 */
     private static final int TREND_DAYS = 7;
+
+    /** MySQL 单条限制片段 */
+    private static final String SQL_SINGLE_LIMIT_CLAUSE = "LIMIT 1";
 
     /** 日期展示格式 */
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE;
@@ -49,11 +65,23 @@ public class MineVisitService {
     /** 最近访问时间展示格式 */
     private static final DateTimeFormatter VISITED_TIME_FORMATTER = DateTimeFormatter.ofPattern("MM-dd HH:mm");
 
+    /** 事件时间展示格式 */
+    private static final DateTimeFormatter EVENT_TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
+
+    /** 访问记录不存在提示 */
+    private static final String VISIT_RECORD_NOT_FOUND_MESSAGE = "访问记录不存在或无访问权限";
+
+    /** 默认事件补充说明 */
+    private static final String DEFAULT_EVENT_DETAIL_TEXT = "暂无补充信息";
+
     /** 访问汇总 Mapper */
     private final VisitRecordEntityMapper visitRecordEntityMapper;
 
     /** 访问事件 Mapper */
     private final VisitEventEntityMapper visitEventEntityMapper;
+
+    /** 访客身份 Mapper */
+    private final VisitorEntityMapper visitorEntityMapper;
 
     /**
      * 获取当前维护者访问记录页数据。
@@ -64,12 +92,89 @@ public class MineVisitService {
         Long userId = AuthContextHolder.requireUserId();
         List<VisitRecordEntity> records = selectOwnerVisitRecords(userId);
         List<VisitEventEntity> openedEvents = selectRecentOpenedEvents(userId);
+        Map<Long, VisitorEntity> visitorsById = selectVisitorsById(records);
 
         MineVisitRecordsResponse response = new MineVisitRecordsResponse();
         response.setSummary(buildSummary(records, openedEvents));
         response.setTrend(buildTrend(openedEvents));
-        response.setRecords(buildRecords(records));
+        response.setRecords(buildRecords(records, visitorsById));
         return response;
+    }
+
+    /**
+     * 获取当前维护者某条访问记录的事件时间线。
+     *
+     * @param recordId 访问汇总记录 ID
+     * @return 事件时间线
+     */
+    public MineVisitRecordsResponse.EventTimeline getVisitEvents(Long recordId) {
+        return getVisitEvents(recordId, FIRST_EVENT_PAGE_NO, DEFAULT_EVENT_PAGE_SIZE);
+    }
+
+    /**
+     * 获取当前维护者某条访问记录的分页事件时间线。
+     *
+     * @param recordId 访问汇总记录 ID
+     * @param pageNo 页码，从 1 开始
+     * @param pageSize 每页事件数量
+     * @return 事件时间线
+     */
+    public MineVisitRecordsResponse.EventTimeline getVisitEvents(Long recordId, Integer pageNo, Integer pageSize) {
+        Long userId = AuthContextHolder.requireUserId();
+        VisitRecordEntity record = selectOwnerVisitRecord(userId, recordId);
+        if (record == null) {
+            throw new BusinessException(VISIT_RECORD_NOT_FOUND_MESSAGE);
+        }
+        int normalizedPageNo = normalizeEventPageNo(pageNo);
+        int normalizedPageSize = normalizeEventPageSize(pageSize);
+        VisitorEntity visitor = record.getVisitorId() == null
+                ? null
+                : visitorEntityMapper.selectById(record.getVisitorId());
+        MineVisitRecordsResponse.Record recordView = buildRecord(record, visitor);
+        Page<VisitEventEntity> eventPage = selectVisitEvents(record, normalizedPageNo, normalizedPageSize);
+        List<VisitEventEntity> pagedEvents = eventPage.getRecords();
+        boolean hasMore = eventPage.getCurrent() < eventPage.getPages();
+        List<MineVisitRecordsResponse.VisitEventItem> eventItems = pagedEvents.stream()
+                .map(this::buildVisitEventItem)
+                .toList();
+
+        MineVisitRecordsResponse.EventTimeline timeline = new MineVisitRecordsResponse.EventTimeline();
+        timeline.setRecordId(record.getId());
+        timeline.setVisitorLabel(recordView.getVisitorLabel());
+        timeline.setVisitorInitial(recordView.getVisitorInitial());
+        timeline.setVisitorAvatarUrl(recordView.getVisitorAvatarUrl());
+        timeline.setSourceText(recordView.getSourceText());
+        timeline.setFollowStatusText(recordView.getFollowStatusText());
+        timeline.setFollowTone(recordView.getFollowTone());
+        timeline.setLastVisitedText(recordView.getLastVisitedText());
+        timeline.setPageNo(normalizedPageNo);
+        timeline.setPageSize(normalizedPageSize);
+        timeline.setHasMore(hasMore);
+        timeline.setEvents(eventItems);
+        return timeline;
+    }
+
+    /**
+     * 标记当前维护者某条访问记录已跟进。
+     *
+     * @param recordId 访问汇总记录 ID
+     * @return 更新后的访问明细
+     */
+    public MineVisitRecordsResponse.Record markVisitFollowed(Long recordId) {
+        Long userId = AuthContextHolder.requireUserId();
+        VisitRecordEntity record = selectOwnerVisitRecord(userId, recordId);
+        if (record == null) {
+            throw new BusinessException(VISIT_RECORD_NOT_FOUND_MESSAGE);
+        }
+        record.setFollowStatus(FollowStatusDict.CONTACTED.getCode());
+        int updated = visitRecordEntityMapper.updateById(record);
+        if (updated <= 0) {
+            throw new BusinessException("访问记录跟进状态保存失败");
+        }
+        VisitorEntity visitor = record.getVisitorId() == null
+                ? null
+                : visitorEntityMapper.selectById(record.getVisitorId());
+        return buildRecord(record, visitor);
     }
 
     /**
@@ -85,6 +190,73 @@ public class MineVisitService {
                         .eq(VisitRecordEntity::getOwnerId, userId)
                         .orderByDesc(VisitRecordEntity::getLastVisitedAt)
         );
+    }
+
+    /**
+     * 查询当前维护者名下单条访问汇总。
+     *
+     * @param userId 当前用户 ID
+     * @param recordId 访问汇总记录 ID
+     * @return 访问汇总
+     */
+    private VisitRecordEntity selectOwnerVisitRecord(Long userId, Long recordId) {
+        if (recordId == null) {
+            return null;
+        }
+        return visitRecordEntityMapper.selectOne(
+                Wrappers.lambdaQuery(VisitRecordEntity.class)
+                        .eq(VisitRecordEntity::getId, recordId)
+                        .eq(VisitRecordEntity::getOwnerType, PortfolioOwnerTypeDict.USER.getCode())
+                        .eq(VisitRecordEntity::getOwnerId, userId)
+                        .last(SQL_SINGLE_LIMIT_CLAUSE)
+        );
+    }
+
+    /**
+     * 查询访问记录的具体事件。
+     *
+     * @param record 访问汇总
+     * @param pageNo 页码，从 1 开始
+     * @param pageSize 每页事件数量
+     * @return 访问事件列表
+     */
+    private Page<VisitEventEntity> selectVisitEvents(VisitRecordEntity record, int pageNo, int pageSize) {
+        Page<VisitEventEntity> eventPage = new Page<>(pageNo, pageSize);
+        return visitEventEntityMapper.selectPage(
+                eventPage,
+                Wrappers.lambdaQuery(VisitEventEntity.class)
+                        .eq(VisitEventEntity::getVisitRecordId, record.getId())
+                        .eq(VisitEventEntity::getOwnerType, record.getOwnerType())
+                        .eq(VisitEventEntity::getOwnerId, record.getOwnerId())
+                        .orderByDesc(VisitEventEntity::getOccurredAt)
+                        .orderByDesc(VisitEventEntity::getId)
+        );
+    }
+
+    /**
+     * 归一化事件明细页码。
+     *
+     * @param pageNo 原始页码
+     * @return 合法页码
+     */
+    private int normalizeEventPageNo(Integer pageNo) {
+        if (pageNo == null || pageNo < FIRST_EVENT_PAGE_NO) {
+            return FIRST_EVENT_PAGE_NO;
+        }
+        return pageNo;
+    }
+
+    /**
+     * 归一化事件明细页大小。
+     *
+     * @param pageSize 原始页大小
+     * @return 合法页大小
+     */
+    private int normalizeEventPageSize(Integer pageSize) {
+        if (pageSize == null || pageSize <= 0) {
+            return DEFAULT_EVENT_PAGE_SIZE;
+        }
+        return Math.min(pageSize, MAX_EVENT_PAGE_SIZE);
     }
 
     /**
@@ -169,12 +341,15 @@ public class MineVisitService {
      * @param records 访问汇总
      * @return 明细列表
      */
-    private List<MineVisitRecordsResponse.Record> buildRecords(List<VisitRecordEntity> records) {
+    private List<MineVisitRecordsResponse.Record> buildRecords(
+            List<VisitRecordEntity> records,
+            Map<Long, VisitorEntity> visitorsById
+    ) {
         return records.stream()
                 .sorted(Comparator.comparing(VisitRecordEntity::getLastVisitedAt,
                         Comparator.nullsLast(Comparator.reverseOrder())))
                 .limit(RECORD_LIMIT)
-                .map(this::buildRecord)
+                .map(record -> buildRecord(record, record.getVisitorId() == null ? null : visitorsById.get(record.getVisitorId())))
                 .toList();
     }
 
@@ -184,14 +359,15 @@ public class MineVisitService {
      * @param record 访问汇总实体
      * @return 访问明细 DTO
      */
-    private MineVisitRecordsResponse.Record buildRecord(VisitRecordEntity record) {
+    private MineVisitRecordsResponse.Record buildRecord(VisitRecordEntity record, VisitorEntity visitor) {
         String visitorCode = buildVisitorCode(record.getVisitorKey());
         String followStatus = defaultString(record.getFollowStatus(), FollowStatusDict.NOT_FOLLOWED_UP.getCode());
         MineVisitRecordsResponse.Record item = new MineVisitRecordsResponse.Record();
         item.setId(record.getId());
         item.setVisitorCode(visitorCode);
-        item.setVisitorLabel("微信访客 " + visitorCode);
+        item.setVisitorLabel(resolveVisitorLabel(visitor, visitorCode));
         item.setVisitorInitial(visitorCode.substring(0, 1));
+        item.setVisitorAvatarUrl(resolveVisitorAvatarUrl(visitor));
         item.setSourceText(buildSourceText(record));
         item.setSummaryText(buildSummaryText(record));
         item.setFollowStatus(followStatus);
@@ -199,6 +375,160 @@ public class MineVisitService {
         item.setFollowTone(buildFollowTone(followStatus));
         item.setLastVisitedText(buildLastVisitedText(record.getLastVisitedAt()));
         return item;
+    }
+
+    /**
+     * 构建访问事件展示项。
+     *
+     * @param event 访问事件
+     * @return 事件展示项
+     */
+    private MineVisitRecordsResponse.VisitEventItem buildVisitEventItem(VisitEventEntity event) {
+        String eventType = defaultString(event.getEventType(), "");
+        MineVisitRecordsResponse.VisitEventItem item = new MineVisitRecordsResponse.VisitEventItem();
+        item.setEventId(event.getId());
+        item.setEventType(eventType);
+        item.setTitle(buildEventTitle(eventType));
+        item.setDetailText(buildEventDetailText(event));
+        item.setOccurredDateText(buildEventDateText(event.getOccurredAt()));
+        item.setOccurredTimeText(buildEventTimeText(event.getOccurredAt()));
+        item.setTone(buildEventTone(eventType));
+        return item;
+    }
+
+    /**
+     * 构建事件标题。
+     *
+     * @param eventType 事件类型
+     * @return 事件标题
+     */
+    private String buildEventTitle(String eventType) {
+        VisitEventTypeDict type = VisitEventTypeDict.fromCode(eventType);
+        return type == null ? "未知事件" : type.getDisplayName();
+    }
+
+    /**
+     * 构建事件补充说明。
+     *
+     * @param event 访问事件
+     * @return 补充说明
+     */
+    private String buildEventDetailText(VisitEventEntity event) {
+        String eventType = defaultString(event.getEventType(), "");
+        if (VisitEventTypeDict.WORK_VIEWED.getCode().equals(eventType)) {
+            return event.getWorkId() == null ? DEFAULT_EVENT_DETAIL_TEXT : "作品 ID " + event.getWorkId();
+        }
+        if (VisitEventTypeDict.VIDEO_PLAYED.getCode().equals(eventType)) {
+            return event.getWorkId() == null ? DEFAULT_EVENT_DETAIL_TEXT : "视频作品 ID " + event.getWorkId();
+        }
+        if (VisitEventTypeDict.SCHEDULE_QUERIED.getCode().equals(eventType)) {
+            return event.getQueriedDate() == null
+                    ? "查询档期"
+                    : "查询 " + event.getQueriedDate().format(DATE_FORMATTER) + " 档期";
+        }
+        if (VisitEventTypeDict.QR_CODE_INTERACTED.getCode().equals(eventType)) {
+            return "点击或长按二维码";
+        }
+        if (VisitEventTypeDict.CONTACT_FORM_EXPOSED.getCode().equals(eventType)) {
+            return "打开联系表单";
+        }
+        if (VisitEventTypeDict.CONTACT_LEAD_SUBMITTED.getCode().equals(eventType)) {
+            return "提交联系信息";
+        }
+        if (VisitEventTypeDict.MEMBER_PORTFOLIO_OPENED.getCode().equals(eventType)) {
+            return "打开成员作品集";
+        }
+        if (VisitEventTypeDict.PORTFOLIO_OPENED.getCode().equals(eventType)) {
+            return "访问作品集页面";
+        }
+        return DEFAULT_EVENT_DETAIL_TEXT;
+    }
+
+    /**
+     * 构建事件日期文案。
+     *
+     * @param occurredAt 事件发生时间
+     * @return 日期文案
+     */
+    private String buildEventDateText(LocalDateTime occurredAt) {
+        return occurredAt == null ? "" : occurredAt.toLocalDate().format(DATE_FORMATTER);
+    }
+
+    /**
+     * 构建事件时间文案。
+     *
+     * @param occurredAt 事件发生时间
+     * @return 时间文案
+     */
+    private String buildEventTimeText(LocalDateTime occurredAt) {
+        return occurredAt == null ? "" : occurredAt.format(EVENT_TIME_FORMATTER);
+    }
+
+    /**
+     * 构建事件颜色语义。
+     *
+     * @param eventType 事件类型
+     * @return 颜色语义
+     */
+    private String buildEventTone(String eventType) {
+        if (VisitEventTypeDict.SCHEDULE_QUERIED.getCode().equals(eventType)) {
+            return "blue";
+        }
+        if (VisitEventTypeDict.QR_CODE_INTERACTED.getCode().equals(eventType)
+                || VisitEventTypeDict.CONTACT_LEAD_SUBMITTED.getCode().equals(eventType)) {
+            return "rose";
+        }
+        if (VisitEventTypeDict.WORK_VIEWED.getCode().equals(eventType)
+                || VisitEventTypeDict.VIDEO_PLAYED.getCode().equals(eventType)) {
+            return "teal";
+        }
+        return "muted";
+    }
+
+    /**
+     * 批量查询访客资料。
+     *
+     * @param records 访问汇总
+     * @return 访客 ID 到访客资料的映射
+     */
+    private Map<Long, VisitorEntity> selectVisitorsById(List<VisitRecordEntity> records) {
+        List<Long> visitorIds = records.stream()
+                .map(VisitRecordEntity::getVisitorId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (visitorIds.isEmpty()) {
+            return Map.of();
+        }
+        return visitorEntityMapper.selectBatchIds(visitorIds).stream()
+                .collect(Collectors.toMap(VisitorEntity::getId, Function.identity(), (left, right) -> left));
+    }
+
+    /**
+     * 解析访客展示名称。
+     *
+     * @param visitor 访客资料
+     * @param visitorCode 匿名短码
+     * @return 展示名称
+     */
+    private String resolveVisitorLabel(VisitorEntity visitor, String visitorCode) {
+        if (visitor != null && hasText(visitor.getNickname())) {
+            return visitor.getNickname().strip();
+        }
+        return "微信访客 " + visitorCode;
+    }
+
+    /**
+     * 解析访客头像地址。
+     *
+     * @param visitor 访客资料
+     * @return 头像地址
+     */
+    private String resolveVisitorAvatarUrl(VisitorEntity visitor) {
+        if (visitor != null && hasText(visitor.getAvatarUrl())) {
+            return visitor.getAvatarUrl().strip();
+        }
+        return "";
     }
 
     /**
@@ -420,5 +750,15 @@ public class MineVisitService {
      */
     private String defaultString(String value, String fallback) {
         return value == null ? fallback : value;
+    }
+
+    /**
+     * 判断文本是否有内容。
+     *
+     * @param value 原值
+     * @return 是否有非空白内容
+     */
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 }

@@ -27,15 +27,15 @@ public class PointSceneCodeDict {
 
     /** 访问个人作品集 */
     public static final DictValue VISIT_PERSONAL_PORTFOLIO =
-            new DictValue("VISIT_PERSONAL_PORTFOLIO", "访问个人作品集");
+            new DictValue("VISIT_PERSONAL_PORTFOLIO", "访客访问个人作品集");
 
     /** 查看作品集图片 */
     public static final DictValue VIEW_PORTFOLIO_IMAGES =
-            new DictValue("VIEW_PORTFOLIO_IMAGES", "查看作品集图片");
+            new DictValue("VIEW_PORTFOLIO_IMAGES", "访客查看作品集图片");
 
     /** 查看作品集视频 */
     public static final DictValue VIEW_PORTFOLIO_VIDEO =
-            new DictValue("VIEW_PORTFOLIO_VIDEO", "查看作品集视频");
+            new DictValue("VIEW_PORTFOLIO_VIDEO", "访客查看作品集视频");
 
     /** 后台人工加分 */
     public static final DictValue MANUAL_ADMIN_GRANT =

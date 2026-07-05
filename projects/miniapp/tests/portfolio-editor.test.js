@@ -1683,6 +1683,7 @@ test('publishing from editor saves current draft before publishing and returns t
   const requests = []
   const navigations = []
   const toasts = []
+  const modals = []
   const originalGetCurrentPages = global.getCurrentPages
   global.getCurrentPages = () => [
     { route: 'pages/portfolios/portfolios' },
@@ -1721,6 +1722,10 @@ test('publishing from editor saves current draft before publishing and returns t
     redirectTo(options) {
       navigations.push({ type: 'redirect', options })
     },
+    showModal(options) {
+      modals.push(options)
+      options.success({ confirm: true })
+    },
     showToast(options) {
       toasts.push(options)
     }
@@ -1731,6 +1736,11 @@ test('publishing from editor saves current draft before publishing and returns t
 
   await page.handlePublish()
 
+  assert.equal(modals.length, 1)
+  assert.equal(modals[0].title, '发布免责声明')
+  assert.match(modals[0].content, /肖像/)
+  assert.match(modals[0].content, /侵权/)
+  assert.equal(modals[0].confirmText, '确认发布')
   assert.deepEqual(requests.map((item) => [item.url, item.method || 'GET']), [
     ['/api/mine/portfolios/88/draft', 'PUT'],
     ['/api/mine/portfolios/88/publish', 'POST']
@@ -1743,6 +1753,32 @@ test('publishing from editor saves current draft before publishing and returns t
   assert.deepEqual(navigations, [
     { type: 'back', options: { delta: 1 } }
   ])
+})
+
+test('canceling publish disclaimer from editor skips saving and publishing', async () => {
+  const requests = []
+  const modals = []
+  const page = loadPortfolioEditorPage((options) => {
+    requests.push(options)
+    return Promise.resolve({})
+  }, {
+    showModal(options) {
+      modals.push(options)
+      options.success({ confirm: false })
+    }
+  }, {
+    uploadPortfolioImageAsset() {
+      throw new Error('should not upload assets after cancel')
+    }
+  })
+  page.data.portfolioId = 88
+  page.data.draftRevision = 5
+  page.data.publicationStatus = 'DRAFT'
+
+  await page.handlePublish()
+
+  assert.equal(modals.length, 1)
+  assert.deepEqual(requests, [])
 })
 
 test('saving draft returns to portfolio list so list onShow reloads data', async (t) => {

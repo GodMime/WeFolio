@@ -63,7 +63,7 @@
               >{{tag.name}}</view>
             </view>
           </scroll-view>
-          <view class="work-grid">
+          <view class="work-grid {{displaySwitchingComponentKey === item.componentKey ? 'display-switching' : ''}}">
             <view wx:for="{{item.activeGroup.works}}" wx:key="workId" wx:for-item="work" class="work-card grid-card">
               <view
                 class="work-cover-wrap"
@@ -101,7 +101,7 @@
               >{{tag.name}}</view>
             </view>
           </scroll-view>
-          <view class="work-list">
+          <view class="work-list {{displaySwitchingComponentKey === item.componentKey ? 'display-switching' : ''}}">
             <view wx:for="{{item.activeGroup.works}}" wx:key="workId" wx:for-item="work" class="work-card list-card">
               <view
                 class="work-cover-wrap"

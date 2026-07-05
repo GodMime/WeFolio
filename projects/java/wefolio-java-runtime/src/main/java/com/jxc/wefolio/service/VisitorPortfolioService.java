@@ -11,14 +11,19 @@ import com.jxc.wefolio.dto.PortfolioConfigDto;
 import com.jxc.wefolio.dto.PortfolioScheduleOptionsResponse;
 import com.jxc.wefolio.dto.PortfolioScheduleQueryRequest;
 import com.jxc.wefolio.dto.PortfolioScheduleQueryResponse;
+import com.jxc.wefolio.dto.VisitorAvatarUploadTicketRequest;
+import com.jxc.wefolio.dto.VisitorAvatarUploadTicketResponse;
 import com.jxc.wefolio.dto.VisitorPortfolioEventRequest;
+import com.jxc.wefolio.dto.VisitorPortfolioOpenRequest;
 import com.jxc.wefolio.dto.VisitorPortfolioResponse;
 import com.jxc.wefolio.dto.VisitorPortfolioScheduleResponse;
+import com.jxc.wefolio.dto.VisitorProfileUpdateRequest;
 import com.jxc.wefolio.dto.WechatSessionResponse;
 import com.jxc.wefolio.entity.PortfolioEntity;
 import com.jxc.wefolio.entity.ScheduleEntity;
 import com.jxc.wefolio.entity.SlotDefinitionEntity;
 import com.jxc.wefolio.entity.VisitRecordEntity;
+import com.jxc.wefolio.entity.VisitorEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.PortfolioEntityMapper;
 import com.jxc.wefolio.mapper.ScheduleEntityMapper;
@@ -113,6 +118,9 @@ public class VisitorPortfolioService {
     /** 微信小程序客户端 */
     private final WechatMiniappClient wechatMiniappClient;
 
+    /** 访客身份服务 */
+    private final VisitorService visitorService;
+
     /**
      * 获取访客作品集。
      *
@@ -139,13 +147,18 @@ public class VisitorPortfolioService {
         }
         // wx.login 凭证一次性且短时有效；前端每次 onLoad 重新登录，后续写入失败时可用新凭证重试。
         String billingVisitorKey = resolveBillingVisitorKey(loginCode);
-        VisitRecordEntity record = portfolioVisitService.recordOpen(
-                portfolio,
-                visitorKey,
-                billingVisitorKey,
-                sourceType,
-                idempotencyKey
-        );
+        VisitRecordEntity record;
+        try {
+            record = portfolioVisitService.recordOpen(
+                    portfolio,
+                    visitorKey,
+                    billingVisitorKey,
+                    sourceType,
+                    idempotencyKey
+            );
+        } catch (BusinessException e) {
+            return buildMaintenanceResponse(portfolio, config);
+        }
         VisitorPortfolioResponse response = buildNormalResponse(portfolio, config);
         response.setVisitRecordId(record == null ? null : record.getId());
         response.setRenderData(portfolioRenderService.render(
@@ -157,6 +170,116 @@ public class VisitorPortfolioService {
                 response.getVisitRecordId()
         ));
         return response;
+    }
+
+    /**
+     * 打开访客作品集，使用微信 openid 创建或复用全局访客。
+     *
+     * @param shareCode 分享编码
+     * @param request 打开请求
+     * @return 访客作品集响应
+     */
+    public VisitorPortfolioResponse openPortfolio(String shareCode, VisitorPortfolioOpenRequest request) {
+        PortfolioEntity portfolio = requirePublishedPortfolio(shareCode);
+        PortfolioConfigDto config = parseConfig(portfolio.getPublishedConfigJson());
+        VisitorService.VisitorSession visitorSession = visitorService.resolveByLoginCode(
+                request == null ? null : request.getLoginCode()
+        );
+        VisitorEntity visitor = visitorSession.visitor();
+        try {
+            pointService.assertCanConsume(portfolio.getOwnerId(), PointSceneCodeDict.VISIT_PERSONAL_PORTFOLIO.getCode(), 1);
+        } catch (BusinessException e) {
+            VisitorPortfolioResponse maintenanceResponse = buildMaintenanceResponse(portfolio, config);
+            fillVisitorProfileOpenFields(maintenanceResponse, visitorSession, null, portfolio.getId());
+            return maintenanceResponse;
+        }
+        VisitRecordEntity record;
+        try {
+            record = portfolioVisitService.recordOpen(
+                    portfolio,
+                    visitor.getId(),
+                    visitor.getVisitorKey(),
+                    visitorSession.billingVisitorKey(),
+                    request == null ? null : request.getSourceType(),
+                    request == null ? null : request.getIdempotencyKey()
+            );
+        } catch (BusinessException e) {
+            VisitorPortfolioResponse maintenanceResponse = buildMaintenanceResponse(portfolio, config);
+            fillVisitorProfileOpenFields(maintenanceResponse, visitorSession, null, portfolio.getId());
+            return maintenanceResponse;
+        }
+        VisitorPortfolioResponse response = buildNormalResponse(portfolio, config);
+        response.setVisitRecordId(record == null ? null : record.getId());
+        fillVisitorProfileOpenFields(response, visitorSession, response.getVisitRecordId(), portfolio.getId());
+        response.setRenderData(portfolioRenderService.render(
+                portfolio,
+                config,
+                false,
+                false,
+                null,
+                response.getVisitRecordId()
+        ));
+        return response;
+    }
+
+    /**
+     * 创建访客头像上传票据。
+     *
+     * @param shareCode 分享编码
+     * @param request 票据请求
+     * @return 直传票据响应
+     */
+    public VisitorAvatarUploadTicketResponse createVisitorAvatarUploadTicket(
+            String shareCode,
+            VisitorAvatarUploadTicketRequest request
+    ) {
+        PortfolioEntity portfolio = requirePublishedPortfolio(shareCode);
+        return visitorService.createAvatarUploadTicket(portfolio.getId(), request);
+    }
+
+    /**
+     * 更新访客头像昵称。
+     *
+     * @param shareCode 分享编码
+     * @param request 保存请求
+     */
+    public void updateVisitorProfile(String shareCode, VisitorProfileUpdateRequest request) {
+        PortfolioEntity portfolio = requirePublishedPortfolio(shareCode);
+        visitorService.saveProfile(portfolio.getId(), request);
+    }
+
+    /**
+     * 填充访客打开相关字段。
+     *
+     * @param response 响应
+     * @param visitorSession 访客会话
+     * @param visitRecordId 访问汇总 ID
+     * @param portfolioId 作品集 ID
+     */
+    private void fillVisitorProfileOpenFields(
+            VisitorPortfolioResponse response,
+            VisitorService.VisitorSession visitorSession,
+            Long visitRecordId,
+            Long portfolioId
+    ) {
+        VisitorEntity visitor = visitorSession.visitor();
+        response.setVisitorKey(visitor.getVisitorKey());
+        response.setNewVisitor(visitorSession.newVisitor());
+        boolean needVisitorProfile = needVisitorProfile(visitor);
+        response.setNeedVisitorProfile(needVisitorProfile);
+        if (needVisitorProfile) {
+            response.setVisitorProfileToken(visitorService.createProfileToken(visitor.getId(), portfolioId, visitRecordId));
+        }
+    }
+
+    /**
+     * 判断访客是否仍需补充头像昵称。
+     *
+     * @param visitor 访客实体
+     * @return 是否需要补充资料
+     */
+    private boolean needVisitorProfile(VisitorEntity visitor) {
+        return visitor == null || !hasText(visitor.getNickname()) || !hasText(visitor.getAvatarUrl());
     }
 
     /**

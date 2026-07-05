@@ -14,8 +14,10 @@ import com.jxc.wefolio.service.MineVisitService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -82,6 +84,35 @@ public class MineController {
     @GetMapping("/api/mine/visits")
     public Response<MineVisitRecordsResponse> visits() {
         return Response.success(mineVisitService.getVisitRecords());
+    }
+
+    /**
+     * 获取访问记录事件明细。
+     *
+     * @param recordId 访问汇总记录 ID
+     * @param pageNo 页码，从 1 开始
+     * @param pageSize 每页事件数量
+     * @return 访问事件时间线
+     */
+    @GetMapping("/api/mine/visits/{recordId}/events")
+    public Response<MineVisitRecordsResponse.EventTimeline> visitEvents(
+            @PathVariable Long recordId,
+            @RequestParam(required = false) Integer pageNo,
+            @RequestParam(required = false) Integer pageSize
+    ) {
+        return Response.success(mineVisitService.getVisitEvents(recordId, pageNo, pageSize));
+    }
+
+    /**
+     * 标记访问记录已跟进。
+     *
+     * @param recordId 访问汇总记录 ID
+     * @return 更新后的访问明细
+     */
+    @PutMapping("/api/mine/visits/{recordId}/followed")
+    public Response<MineVisitRecordsResponse.Record> markVisitFollowed(@PathVariable Long recordId) {
+        log.info("标记访问记录已跟进: recordId={}", recordId);
+        return Response.success(mineVisitService.markVisitFollowed(recordId));
     }
 
     /**

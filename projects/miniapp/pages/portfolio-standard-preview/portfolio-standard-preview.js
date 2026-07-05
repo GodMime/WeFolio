@@ -4,6 +4,7 @@ const {
   createActiveContactFormComponent,
   findContactFormComponent
 } = require('../../utils/portfolio-contact-form')
+const { clearDisplaySwitchingTimer, markDisplaySwitching } = require('../../utils/display-switching')
 const { normalizeVisitorPortfolio, switchDisplayGroup } = require('../../utils/visitor-portfolio')
 
 const PORTFOLIO_API_PREFIX = '/api/mine/portfolios'
@@ -24,7 +25,8 @@ Page({
     contactFormModalVisible: false,
     activeContactFormComponent: createActiveContactFormComponent(),
     videoPreviewVisible: false,
-    videoPreview: null
+    videoPreview: null,
+    displaySwitchingComponentKey: ''
   },
 
   onLoad(options = {}) {
@@ -73,9 +75,18 @@ Page({
   handleDisplayTagTap(event) {
     const componentKey = event.currentTarget.dataset.componentKey
     const groupKey = event.currentTarget.dataset.groupKey
+    if (!componentKey) {
+      return
+    }
     this.setData({
       portfolio: switchDisplayGroup(this.data.portfolio, componentKey, groupKey)
+    }, () => {
+      markDisplaySwitching(this, componentKey)
     })
+  },
+
+  onUnload() {
+    clearDisplaySwitchingTimer(this)
   },
 
   handleContactInput(event) {

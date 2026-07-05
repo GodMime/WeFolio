@@ -4,7 +4,7 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.jxc.wefolio.entity.PointAccountEntity;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
-import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 
 /**
@@ -14,19 +14,27 @@ import org.apache.ibatis.annotations.Select;
 public interface PointAccountEntityMapper extends BaseMapper<PointAccountEntity> {
 
     /**
-     * 按用户 ID 锁定积分账户行。
+     * 原子扣减消费积分，并同步累计消耗和版本号。
      *
+     * @param accountId 积分账户 ID
      * @param userId 用户 ID
-     * @return 积分账户
+     * @param points 扣减积分
+     * @return 更新行数
      */
-    @Select("""
-            SELECT id, user_id, balance, total_recharged, total_gifted, total_consumed,
-                   version, created_at, updated_at, deleted
-              FROM wf_point_account
-             WHERE user_id = #{userId}
+    @Update("""
+            UPDATE wf_point_account
+               SET balance = balance - #{points},
+                   total_consumed = total_consumed + #{points},
+                   version = version + 1,
+                   updated_at = CURRENT_TIMESTAMP(3)
+             WHERE id = #{accountId}
+               AND user_id = #{userId}
                AND deleted = 0
-             LIMIT 1
-             FOR UPDATE
+               AND balance >= #{points}
             """)
-    PointAccountEntity selectByUserIdForUpdate(@Param("userId") Long userId);
+    int deductConsumedPoints(
+            @Param("accountId") Long accountId,
+            @Param("userId") Long userId,
+            @Param("points") Long points
+    );
 }

@@ -7,15 +7,20 @@ import com.jxc.wefolio.dto.ContactLeadSubmitResponse;
 import com.jxc.wefolio.dto.PortfolioScheduleOptionsResponse;
 import com.jxc.wefolio.dto.PortfolioScheduleQueryRequest;
 import com.jxc.wefolio.dto.PortfolioScheduleQueryResponse;
+import com.jxc.wefolio.dto.VisitorAvatarUploadTicketRequest;
+import com.jxc.wefolio.dto.VisitorAvatarUploadTicketResponse;
 import com.jxc.wefolio.dto.VisitorPortfolioEventRequest;
+import com.jxc.wefolio.dto.VisitorPortfolioOpenRequest;
 import com.jxc.wefolio.dto.VisitorPortfolioResponse;
 import com.jxc.wefolio.dto.VisitorPortfolioScheduleResponse;
+import com.jxc.wefolio.dto.VisitorProfileUpdateRequest;
 import com.jxc.wefolio.service.ContactLeadService;
 import com.jxc.wefolio.service.VisitorPortfolioService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -55,6 +60,52 @@ public class VisitorPortfolioController {
             @RequestParam("idempotencyKey") String idempotencyKey
     ) {
         return Response.success(visitorPortfolioService.getPortfolio(shareCode, visitorKey, loginCode, sourceType, idempotencyKey));
+    }
+
+    /**
+     * 打开访客作品集。
+     *
+     * @param shareCode 分享编码
+     * @param request 打开请求
+     * @return 作品集响应
+     */
+    @PostMapping("/api/visitor/portfolios/{shareCode}/open")
+    public Response<VisitorPortfolioResponse> open(
+            @PathVariable String shareCode,
+            @RequestBody VisitorPortfolioOpenRequest request
+    ) {
+        return Response.success(visitorPortfolioService.openPortfolio(shareCode, request));
+    }
+
+    /**
+     * 创建访客头像直传 COS 票据。
+     *
+     * @param shareCode 分享编码
+     * @param request 票据请求
+     * @return 票据响应
+     */
+    @PostMapping("/api/visitor/portfolios/{shareCode}/visitor-avatar/upload-ticket")
+    public Response<VisitorAvatarUploadTicketResponse> createVisitorAvatarUploadTicket(
+            @PathVariable String shareCode,
+            @RequestBody VisitorAvatarUploadTicketRequest request
+    ) {
+        return Response.success(visitorPortfolioService.createVisitorAvatarUploadTicket(shareCode, request));
+    }
+
+    /**
+     * 保存访客头像昵称。
+     *
+     * @param shareCode 分享编码
+     * @param request 保存请求
+     * @return 空响应
+     */
+    @PutMapping("/api/visitor/portfolios/{shareCode}/visitor-profile")
+    public Response<Void> updateVisitorProfile(
+            @PathVariable String shareCode,
+            @RequestBody VisitorProfileUpdateRequest request
+    ) {
+        visitorPortfolioService.updateVisitorProfile(shareCode, request);
+        return Response.success();
     }
 
     /**

@@ -4,10 +4,11 @@ const {
   createActiveContactFormComponent,
   findContactFormComponent
 } = require('../../utils/portfolio-contact-form')
+const { clearDisplaySwitchingTimer, markDisplaySwitching } = require('../../utils/display-switching')
 const { buildVisitorEventPayload, normalizeVisitorPortfolio, switchDisplayGroup } = require('../../utils/visitor-portfolio')
+const { uploadVisitorAvatarProfile } = require('../../utils/visitor-profile')
 
 const VISITOR_PORTFOLIO_API_PREFIX = '/api/visitor/portfolios'
-const VISITOR_KEY_STORAGE = 'wefolio_visitor_key'
 const WX_LOGIN_EMPTY_MESSAGE = '微信登录凭证为空'
 const WX_LOGIN_FAILED_MESSAGE = '微信登录失败'
 const WX_LOGIN_TIMEOUT_MESSAGE = '微信登录超时，请重试'
@@ -15,22 +16,16 @@ const WX_LOGIN_TIMEOUT_MS = 5000
 const MEDIA_TYPE_VIDEO = 'VIDEO'
 const WORK_VIEWED_EVENT_TYPE = 'WORK_VIEWED'
 const VIDEO_PLAYED_EVENT_TYPE = 'VIDEO_PLAYED'
+const QR_CODE_INTERACTED_EVENT_TYPE = 'QR_CODE_INTERACTED'
+const SOURCE_TYPE_WECHAT_SHARE_CARD = 'WECHAT_SHARE_CARD'
+const QR_ACTION_PREVIEW = 'PREVIEW_QR'
 const IMAGE_MISSING_MESSAGE = '图片地址缺失'
 const VIDEO_MISSING_MESSAGE = '视频地址缺失'
 const DEFAULT_VIDEO_TITLE = '视频作品'
+const VISITOR_PROFILE_REQUIRED_MESSAGE = '请授权头像和昵称'
 
 function idempotencyKey(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
-}
-
-function getVisitorKey() {
-  const existing = wx.getStorageSync(VISITOR_KEY_STORAGE)
-  if (existing) {
-    return existing
-  }
-  const key = `visitor-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
-  wx.setStorageSync(VISITOR_KEY_STORAGE, key)
-  return key
 }
 
 function wxLogin() {
@@ -75,13 +70,20 @@ Page({
     contactFormModalVisible: false,
     activeContactFormComponent: createActiveContactFormComponent(),
     videoPreviewVisible: false,
-    videoPreview: null
+    videoPreview: null,
+    visitorProfileAuthVisible: false,
+    visitorProfileToken: '',
+    visitorProfileForm: {
+      avatarUrl: '',
+      nickname: ''
+    },
+    visitorProfileSaving: false,
+    displaySwitchingComponentKey: ''
   },
 
   onLoad(options = {}) {
     const shareCode = options.shareCode || options.scene || ''
-    const visitorKey = getVisitorKey()
-    this.setData({ shareCode, visitorKey })
+    this.setData({ shareCode, visitorKey: '' })
     return this.bootstrap()
   },
 
@@ -92,15 +94,23 @@ Page({
     try {
       const loginCode = await wxLogin()
       const response = await request({
-        url: `${VISITOR_PORTFOLIO_API_PREFIX}/${this.data.shareCode}`,
+        url: `${VISITOR_PORTFOLIO_API_PREFIX}/${this.data.shareCode}/open`,
+        method: 'POST',
         data: {
-          visitorKey: this.data.visitorKey,
           loginCode,
-          sourceType: 'WECHAT_SHARE_CARD',
+          sourceType: SOURCE_TYPE_WECHAT_SHARE_CARD,
           idempotencyKey: idempotencyKey('open')
         }
       })
-      this.setData({ portfolio: normalizeVisitorPortfolio(response) })
+      const portfolio = normalizeVisitorPortfolio(response)
+      this.setData({
+        portfolio,
+        visitorKey: portfolio.visitorKey || '',
+        visitorProfileToken: portfolio.visitorProfileToken || '',
+        visitorProfileAuthVisible: Boolean(
+          portfolio.needVisitorProfile && portfolio.visitorProfileToken && !portfolio.underMaintenance
+        )
+      })
     } catch (error) {
       wx.showToast({ title: error.message || '作品集加载失败', icon: 'none' })
     }
@@ -130,7 +140,7 @@ Page({
       data: buildContactLeadPayload(this.data.contactForm, {
         visitorKey: this.data.visitorKey,
         visitRecordId: this.data.portfolio.visitRecordId,
-        sourceType: 'WECHAT_SHARE_CARD',
+        sourceType: SOURCE_TYPE_WECHAT_SHARE_CARD,
         idempotencyKey: idempotencyKey('lead')
       })
     }).then(() => {
@@ -165,17 +175,44 @@ Page({
   handlePreviewQr(event) {
     const url = event.currentTarget.dataset.url
     if (!url) {
-      return
+      return Promise.resolve(false)
     }
     wx.previewImage({ current: url, urls: [url] })
+    return this.recordQrEvent()
+  },
+
+  recordQrEvent() {
+    if (!this.data.shareCode || !this.data.visitorKey) {
+      return Promise.resolve(false)
+    }
+    return request({
+      url: `${VISITOR_PORTFOLIO_API_PREFIX}/${this.data.shareCode}/events`,
+      method: 'POST',
+      data: buildVisitorEventPayload({
+        visitorKey: this.data.visitorKey,
+        eventType: QR_CODE_INTERACTED_EVENT_TYPE,
+        metadata: {
+          action: QR_ACTION_PREVIEW
+        }
+      }, idempotencyKey('qr'))
+    }).then(() => true).catch(() => false)
   },
 
   handleDisplayTagTap(event) {
     const componentKey = event.currentTarget.dataset.componentKey
     const groupKey = event.currentTarget.dataset.groupKey
+    if (!componentKey) {
+      return
+    }
     this.setData({
       portfolio: switchDisplayGroup(this.data.portfolio, componentKey, groupKey)
+    }, () => {
+      markDisplaySwitching(this, componentKey)
     })
+  },
+
+  onUnload() {
+    clearDisplaySwitchingTimer(this)
   },
 
   onShareAppMessage() {
@@ -244,6 +281,68 @@ Page({
   },
 
   handleVideoPreviewPanelTap() {
+  },
+
+  handleVisitorProfileMaskTap() {
+  },
+
+  handleVisitorProfilePanelTap() {
+  },
+
+  handleVisitorProfileMaskTouchMove() {
+  },
+
+  handleVisitorAvatarChoose(event) {
+    const avatarUrl = event.detail && event.detail.avatarUrl
+    if (!avatarUrl) {
+      return
+    }
+    this.setData({
+      'visitorProfileForm.avatarUrl': avatarUrl
+    })
+  },
+
+  handleVisitorNicknameInput(event) {
+    const value = event.detail && Object.prototype.hasOwnProperty.call(event.detail, 'value')
+      ? event.detail.value
+      : ''
+    this.setData({
+      'visitorProfileForm.nickname': value
+    })
+  },
+
+  handleVisitorProfileSkip() {
+    this.setData({
+      visitorProfileAuthVisible: false
+    })
+  },
+
+  async handleVisitorProfileSubmit() {
+    const form = this.data.visitorProfileForm || {}
+    if (!form.avatarUrl || !String(form.nickname || '').trim()) {
+      wx.showToast({ title: VISITOR_PROFILE_REQUIRED_MESSAGE, icon: 'none' })
+      return
+    }
+    if (!this.data.visitorProfileToken) {
+      this.setData({ visitorProfileAuthVisible: false })
+      return
+    }
+    this.setData({ visitorProfileSaving: true })
+    try {
+      await uploadVisitorAvatarProfile({
+        shareCode: this.data.shareCode,
+        visitorProfileToken: this.data.visitorProfileToken,
+        nickname: form.nickname,
+        avatarFilePath: form.avatarUrl
+      })
+      this.setData({
+        visitorProfileAuthVisible: false,
+        visitorProfileSaving: false
+      })
+    } catch (error) {
+      this.setData({ visitorProfileSaving: false })
+      wx.showToast({ title: error.message || '资料保存失败', icon: 'none' })
+    }
   }
 })
 

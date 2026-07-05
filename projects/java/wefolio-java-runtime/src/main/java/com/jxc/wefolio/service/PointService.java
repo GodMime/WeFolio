@@ -250,7 +250,7 @@ public class PointService {
      * 只读校验指定场景是否有足够积分完成扣除。
      *
      * <p>该方法用于远端副作用前的预检，不创建积分账户、不加行锁、不写流水；
-     * 真正扣除仍必须调用 {@link #consume(Long, String, String, String, int, String, String)} 做事务内二次校验。</p>
+     * 真正扣除仍必须调用 {@link #consume(Long, String, String, String, int, String, String)} 做原子更新兜底。</p>
      *
      * @param userId 当前用户 ID
      * @param sceneCode 场景编码
@@ -330,7 +330,7 @@ public class PointService {
             return buildMutationFromTransaction(existing, true, true);
         }
 
-        PointAccountEntity account = requireAccountForUpdate(userId);
+        PointAccountEntity account = requireAccount(userId);
         long balanceBefore = safeLong(account.getBalance());
         long balanceAfter = Math.addExact(balanceBefore, normalizedPoints);
         account.setBalance(balanceAfter);
@@ -381,10 +381,67 @@ public class PointService {
             String idempotencyKey,
             String remark
     ) {
+        return consumeInternal(userId, sceneCode, businessType, businessId, businessId, actionCount, idempotencyKey, remark);
+    }
+
+    /**
+     * 按指定计量业务 ID 消费积分。
+     *
+     * <p>累计阈值场景会使用计量业务 ID 读取和更新计量器，积分流水仍写入业务 ID，
+     * 便于把扣费流水反查到更细的业务对象。</p>
+     *
+     * @param userId 用户 ID
+     * @param sceneCode 场景编码
+     * @param businessType 业务类型
+     * @param businessId 流水业务 ID
+     * @param meterBusinessId 计量业务 ID
+     * @param actionCount 动作次数
+     * @param idempotencyKey 幂等键
+     * @param remark 备注
+     * @return 积分变动响应
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public PointMutationResponse consumeWithMeterBusinessId(
+            Long userId,
+            String sceneCode,
+            String businessType,
+            String businessId,
+            String meterBusinessId,
+            int actionCount,
+            String idempotencyKey,
+            String remark
+    ) {
+        return consumeInternal(userId, sceneCode, businessType, businessId, meterBusinessId, actionCount, idempotencyKey, remark);
+    }
+
+    /**
+     * 执行积分消费。
+     *
+     * @param userId 用户 ID
+     * @param sceneCode 场景编码
+     * @param businessType 业务类型
+     * @param businessId 流水业务 ID
+     * @param meterBusinessId 计量业务 ID
+     * @param actionCount 动作次数
+     * @param idempotencyKey 幂等键
+     * @param remark 备注
+     * @return 积分变动响应
+     */
+    private PointMutationResponse consumeInternal(
+            Long userId,
+            String sceneCode,
+            String businessType,
+            String businessId,
+            String meterBusinessId,
+            int actionCount,
+            String idempotencyKey,
+            String remark
+    ) {
         requireActiveUser(userId);
         String normalizedSceneCode = normalizeRequiredString(sceneCode, "积分场景不能为空");
         String normalizedBusinessType = normalizeRequiredString(businessType, "业务类型不能为空");
         String normalizedBusinessId = normalizeRequiredString(businessId, "业务 ID 不能为空");
+        String normalizedMeterBusinessId = normalizeRequiredString(meterBusinessId, "计量业务 ID 不能为空");
         String normalizedIdempotencyKey = normalizeRequiredString(idempotencyKey, "幂等键不能为空");
         PointTransactionEntity existing = findTransaction(normalizedIdempotencyKey);
         if (existing != null) {
@@ -393,12 +450,12 @@ public class PointService {
         }
 
         PointRuleEntity rule = requireActiveRule(normalizedSceneCode, LocalDateTime.now());
-        PointAccountEntity account = requireAccountForUpdate(userId);
+        PointAccountEntity account = requireAccount(userId);
         PointMeterEntity meter = isAccumulated(rule)
-                ? requireMeterForUpdate(account, rule, normalizedBusinessType, normalizedBusinessId)
+                ? requireMeter(account, rule, normalizedBusinessType, normalizedMeterBusinessId)
                 : null;
         PointCalculation calculation = calculateByRule(rule, normalizeActionCount(actionCount), meter);
-        applyMeter(calculation, meter, account, rule, normalizedBusinessType, normalizedBusinessId);
+        applyMeter(calculation, meter, account, rule, normalizedBusinessType, normalizedMeterBusinessId);
         if (calculation.points() <= 0L) {
             PointMutationResponse response = new PointMutationResponse();
             response.setAccountId(account.getId());
@@ -414,14 +471,18 @@ public class PointService {
             return response;
         }
 
-        long balanceBefore = safeLong(account.getBalance());
         long signedPoints = signedPoints(rule.getTransactionType(), calculation.points());
-        long balanceAfter = calculateBalanceAfter(balanceBefore, signedPoints);
-        if (PointTransactionTypeDict.CONSUMPTION.getCode().equals(rule.getTransactionType())
-                && balanceAfter < 0L) {
-            throw new BusinessException("积分余额不足，请充值后再试");
+        long balanceBefore;
+        long balanceAfter;
+        if (PointTransactionTypeDict.CONSUMPTION.getCode().equals(rule.getTransactionType())) {
+            account = deductConsumedPoints(account, userId, calculation.points());
+            balanceAfter = safeLong(account.getBalance());
+            balanceBefore = Math.addExact(balanceAfter, calculation.points());
+        } else {
+            balanceBefore = safeLong(account.getBalance());
+            balanceAfter = calculateBalanceAfter(balanceBefore, signedPoints);
+            applyAccountChange(account, rule.getTransactionType(), calculation.points(), balanceAfter);
         }
-        applyAccountChange(account, rule.getTransactionType(), calculation.points(), balanceAfter);
 
         PointTransactionEntity transaction = new PointTransactionEntity();
         transaction.setAccountId(account.getId());
@@ -499,22 +560,42 @@ public class PointService {
     }
 
     /**
-     * 锁定或创建积分账户。
+     * 查询或创建积分账户。
      *
      * @param userId 用户 ID
      * @return 积分账户
      */
-    private PointAccountEntity requireAccountForUpdate(Long userId) {
-        PointAccountEntity account = pointAccountEntityMapper.selectByUserIdForUpdate(userId);
+    private PointAccountEntity requireAccount(Long userId) {
+        PointAccountEntity account = findAccount(userId);
         if (account != null) {
             return fillAccountDefaults(account);
         }
         createZeroAccount(userId);
-        account = pointAccountEntityMapper.selectByUserIdForUpdate(userId);
+        account = findAccount(userId);
         if (account == null) {
             throw new BusinessException("积分账户创建失败，请重试");
         }
         return fillAccountDefaults(account);
+    }
+
+    /**
+     * 原子扣减消费积分。
+     *
+     * @param account 积分账户
+     * @param userId 用户 ID
+     * @param points 扣减积分
+     * @return 扣减后的积分账户
+     */
+    private PointAccountEntity deductConsumedPoints(PointAccountEntity account, Long userId, long points) {
+        int updated = pointAccountEntityMapper.deductConsumedPoints(account.getId(), userId, points);
+        if (updated <= 0) {
+            throw new BusinessException("积分余额不足，请充值后再试");
+        }
+        PointAccountEntity updatedAccount = findAccount(userId);
+        if (updatedAccount == null) {
+            throw new BusinessException("积分账户更新失败，请重试");
+        }
+        return fillAccountDefaults(updatedAccount);
     }
 
     /**
@@ -628,7 +709,7 @@ public class PointService {
     }
 
     /**
-     * 锁定或创建累计计量器。
+     * 查询或创建累计计量器。
      *
      * @param account 积分账户
      * @param rule 积分规则
@@ -636,13 +717,13 @@ public class PointService {
      * @param businessId 业务 ID
      * @return 积分计量器
      */
-    private PointMeterEntity requireMeterForUpdate(
+    private PointMeterEntity requireMeter(
             PointAccountEntity account,
             PointRuleEntity rule,
             String businessType,
             String businessId
     ) {
-        PointMeterEntity meter = pointMeterEntityMapper.selectMeterForUpdate(
+        PointMeterEntity meter = pointMeterEntityMapper.selectMeter(
                 account.getId(), rule.getRuleCode(), businessType, businessId);
         if (meter != null) {
             return fillMeterDefaults(meter);
@@ -660,7 +741,7 @@ public class PointService {
         try {
             pointMeterEntityMapper.insert(created);
         } catch (DuplicateKeyException e) {
-            PointMeterEntity existing = pointMeterEntityMapper.selectMeterForUpdate(
+            PointMeterEntity existing = pointMeterEntityMapper.selectMeter(
                     account.getId(), rule.getRuleCode(), businessType, businessId);
             if (existing != null) {
                 return fillMeterDefaults(existing);
