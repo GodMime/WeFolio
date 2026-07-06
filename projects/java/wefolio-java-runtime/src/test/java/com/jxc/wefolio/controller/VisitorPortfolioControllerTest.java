@@ -1,6 +1,7 @@
 package com.jxc.wefolio.controller;
 
 import com.jxc.wefolio.annotation.VisitorAccess;
+import com.jxc.wefolio.annotation.LoginAccess;
 import com.jxc.wefolio.common.Response;
 import com.jxc.wefolio.dto.ContactLeadSubmitRequest;
 import com.jxc.wefolio.dto.ContactLeadSubmitResponse;
@@ -21,7 +22,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 
 import java.time.LocalDate;
@@ -59,8 +59,6 @@ class VisitorPortfolioControllerTest {
         VisitorProfileUpdateRequest profileUpdateRequest = new VisitorProfileUpdateRequest();
         ContactLeadSubmitRequest leadRequest = new ContactLeadSubmitRequest();
         ContactLeadSubmitResponse leadResponse = new ContactLeadSubmitResponse();
-        when(visitorPortfolioService.getPortfolio("PF001", "visitor-a", "wx-code", "WECHAT_SHARE_CARD", "open-1"))
-                .thenReturn(portfolioResponse);
         when(visitorPortfolioService.openPortfolio("PF001", openRequest)).thenReturn(portfolioResponse);
         when(visitorPortfolioService.createVisitorAvatarUploadTicket("PF001", uploadTicketRequest))
                 .thenReturn(uploadTicketResponse);
@@ -76,8 +74,6 @@ class VisitorPortfolioControllerTest {
         when(visitorPortfolioService.submitScheduleQuery("PF001", queryRequest)).thenReturn(queryResponse);
         when(contactLeadService.submit("PF001", leadRequest)).thenReturn(leadResponse);
 
-        Response<VisitorPortfolioResponse> portfolio = controller.portfolio(
-                "PF001", "visitor-a", "wx-code", "WECHAT_SHARE_CARD", "open-1");
         Response<VisitorPortfolioResponse> open = controller.open("PF001", openRequest);
         Response<VisitorAvatarUploadTicketResponse> uploadTicket = controller.createVisitorAvatarUploadTicket(
                 "PF001",
@@ -93,9 +89,9 @@ class VisitorPortfolioControllerTest {
         Response<ContactLeadSubmitResponse> lead = controller.contactLead("PF001", leadRequest);
 
         assertThat(VisitorPortfolioController.class.isAnnotationPresent(VisitorAccess.class)).isTrue();
-        assertGetMapping("portfolio",
-                new Class<?>[] {String.class, String.class, String.class, String.class, String.class},
-                "/api/visitor/portfolios/{shareCode}");
+        assertThat(VisitorPortfolioController.class
+                .getMethod("open", String.class, VisitorPortfolioOpenRequest.class)
+                .isAnnotationPresent(LoginAccess.class)).isTrue();
         assertPostMapping("open",
                 new Class<?>[] {String.class, VisitorPortfolioOpenRequest.class},
                 "/api/visitor/portfolios/{shareCode}/open");
@@ -120,16 +116,6 @@ class VisitorPortfolioControllerTest {
         assertPostMapping("contactLead",
                 new Class<?>[] {String.class, ContactLeadSubmitRequest.class},
                 "/api/visitor/portfolios/{shareCode}/contact-leads");
-        assertThat(VisitorPortfolioController.class.getMethod(
-                        "portfolio",
-                        String.class,
-                        String.class,
-                        String.class,
-                        String.class,
-                        String.class
-                )
-                .getParameters()[0].isAnnotationPresent(PathVariable.class)).isTrue();
-        assertThat(portfolio.getData()).isSameAs(portfolioResponse);
         assertThat(open.getData()).isSameAs(portfolioResponse);
         assertThat(uploadTicket.getData()).isSameAs(uploadTicketResponse);
         assertThat(profileUpdate.isSuccess()).isTrue();
@@ -140,6 +126,17 @@ class VisitorPortfolioControllerTest {
         assertThat(lead.getData()).isSameAs(leadResponse);
         verify(visitorPortfolioService).recordEvent("PF001", eventRequest);
         verify(visitorPortfolioService).updateVisitorProfile("PF001", profileUpdateRequest);
+    }
+
+    @Test
+    void legacyGetPortfolioEndpointShouldBeRemoved() {
+        assertThat(VisitorPortfolioController.class.getDeclaredMethods())
+                .filteredOn(method -> {
+                    GetMapping mapping = method.getAnnotation(GetMapping.class);
+                    return mapping != null
+                            && java.util.Arrays.asList(mapping.value()).contains("/api/visitor/portfolios/{shareCode}");
+                })
+                .isEmpty();
     }
 
     private void assertGetMapping(String methodName, Class<?>[] parameterTypes, String path)

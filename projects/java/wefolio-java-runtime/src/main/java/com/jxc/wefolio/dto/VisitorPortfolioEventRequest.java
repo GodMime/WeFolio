@@ -11,7 +11,8 @@ import java.util.Map;
 @Data
 public class VisitorPortfolioEventRequest {
 
-    /** 匿名访客摘要 */
+    /** 旧版客户端兼容字段，服务端已改用访客认证上下文并覆盖该值 */
+    @Deprecated
     private String visitorKey;
 
     /** 事件类型 */

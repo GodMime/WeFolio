@@ -1,6 +1,7 @@
 package com.jxc.wefolio.service;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.jxc.wefolio.common.auth.VisitorContextHolder;
 import com.jxc.wefolio.common.cache.CacheService;
 import com.jxc.wefolio.dto.VisitorAvatarUploadTicketRequest;
 import com.jxc.wefolio.dto.VisitorAvatarUploadTicketResponse;
@@ -12,6 +13,7 @@ import com.jxc.wefolio.mapper.VisitorEntityMapper;
 import com.jxc.wefolio.message.PortfolioMessage;
 import com.jxc.wefolio.message.VisitorMessage;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,6 +33,7 @@ import java.util.Objects;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class VisitorService {
 
     /** 微信 openid 计费主体前缀 */
@@ -290,6 +293,22 @@ public class VisitorService {
                 VisitorProfileTokenContext.class
         ).orElseThrow(() -> new BusinessException(VisitorMessage.VISITOR_PROFILE_TOKEN_INVALID_MESSAGE));
         if (!Objects.equals(context.portfolioId(), portfolioId)) {
+            log.warn(
+                    "访客资料 token 作品集不匹配: tokenPortfolioId={}, requestPortfolioId={}, visitorId={}",
+                    context.portfolioId(),
+                    portfolioId,
+                    context.visitorId()
+            );
+            throw new BusinessException(VisitorMessage.VISITOR_PROFILE_TOKEN_INVALID_MESSAGE);
+        }
+        Long currentVisitorId = VisitorContextHolder.requireVisitorId();
+        if (!Objects.equals(context.visitorId(), currentVisitorId)) {
+            log.warn(
+                    "访客资料 token 跨访客使用: tokenVisitorId={}, currentVisitorId={}, portfolioId={}",
+                    context.visitorId(),
+                    currentVisitorId,
+                    portfolioId
+            );
             throw new BusinessException(VisitorMessage.VISITOR_PROFILE_TOKEN_INVALID_MESSAGE);
         }
         return context;

@@ -1,5 +1,7 @@
 package com.jxc.wefolio.service;
 
+import com.jxc.wefolio.common.auth.VisitorContext;
+import com.jxc.wefolio.common.auth.VisitorContextHolder;
 import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
 import com.jxc.wefolio.dict.PortfolioPublicationStatusDict;
 import com.jxc.wefolio.dto.ContactLeadSubmitRequest;
@@ -8,6 +10,8 @@ import com.jxc.wefolio.entity.ContactLeadEntity;
 import com.jxc.wefolio.entity.PortfolioEntity;
 import com.jxc.wefolio.mapper.ContactLeadEntityMapper;
 import com.jxc.wefolio.mapper.PortfolioEntityMapper;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -41,6 +45,16 @@ class ContactLeadServiceTest {
     /** 访问服务模拟 */
     @Mock
     private PortfolioVisitService portfolioVisitService;
+
+    @BeforeEach
+    void setUp() {
+        VisitorContextHolder.set(new VisitorContext(1024L, "visitor-a", "Bearer wf-visitor-v1.test"));
+    }
+
+    @AfterEach
+    void tearDown() {
+        VisitorContextHolder.clear();
+    }
 
     @Test
     void submitShouldRejectMissingContactNameOrContactMethod() {
@@ -86,6 +100,24 @@ class ContactLeadServiceTest {
         assertThat(lead.getWechatCiphertext()).isEqualTo("wefolio");
         verify(portfolioVisitService).recordContactLeadSubmitted(portfolio(), "visitor-a", 66L, "lead-1");
     }
+
+    @Test
+    void submitShouldIgnoreRequestVisitorKeyAndUseVisitorContext() {
+        VisitorContextHolder.set(new VisitorContext(2048L, "server-key", "Bearer wf-visitor-v1.server"));
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio());
+        when(contactLeadEntityMapper.insert(any(ContactLeadEntity.class))).thenAnswer(invocation -> {
+            ContactLeadEntity lead = invocation.getArgument(0);
+            lead.setId(66L);
+            return 1;
+        });
+        ContactLeadSubmitRequest request = request();
+        request.setVisitorKey("attacker-key");
+
+        service().submit("PF001", request);
+
+        verify(portfolioVisitService).recordContactLeadSubmitted(portfolio(), "server-key", 66L, "lead-1");
+    }
+
 
     @Test
     void submitShouldReturnExistingLeadWhenIdempotencyKeyAlreadyInserted() {

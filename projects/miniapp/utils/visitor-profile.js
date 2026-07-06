@@ -154,6 +154,7 @@ async function uploadVisitorAvatarProfile(payload = {}, options = {}) {
     const ticket = await request({
       url: `/api/visitor/portfolios/${shareCode}/visitor-avatar/upload-ticket`,
       method: 'POST',
+      authMode: 'visitor',
       data: {
         visitorProfileToken,
         mimeType: prepared.mimeType,
@@ -170,6 +171,7 @@ async function uploadVisitorAvatarProfile(payload = {}, options = {}) {
   await request({
     url: `/api/visitor/portfolios/${shareCode}/visitor-profile`,
     method: 'PUT',
+    authMode: 'visitor',
     data: {
       visitorProfileToken,
       nickname,

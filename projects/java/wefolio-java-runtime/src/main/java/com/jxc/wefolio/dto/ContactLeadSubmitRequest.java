@@ -8,7 +8,8 @@ import lombok.Data;
 @Data
 public class ContactLeadSubmitRequest {
 
-    /** 匿名访客摘要 */
+    /** 旧版客户端兼容字段，服务端已改用访客认证上下文并忽略该值 */
+    @Deprecated
     private String visitorKey;
 
     /** 访问汇总记录 ID */

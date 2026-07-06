@@ -1,5 +1,7 @@
 package com.jxc.wefolio.service;
 
+import com.jxc.wefolio.common.auth.VisitorContext;
+import com.jxc.wefolio.common.auth.VisitorContextHolder;
 import com.jxc.wefolio.common.cache.LocalCacheService;
 import com.jxc.wefolio.dto.VisitorAvatarUploadTicketRequest;
 import com.jxc.wefolio.dto.VisitorAvatarUploadTicketResponse;
@@ -8,6 +10,9 @@ import com.jxc.wefolio.dto.WechatSessionResponse;
 import com.jxc.wefolio.entity.VisitorEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.VisitorEntityMapper;
+import com.jxc.wefolio.message.VisitorMessage;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -41,6 +46,16 @@ class VisitorServiceTest {
     /** COS 服务模拟 */
     @Mock
     private CosService cosService;
+
+    @BeforeEach
+    void setUp() {
+        VisitorContextHolder.set(new VisitorContext(1024L, "visitor-a", "Bearer wf-visitor-v1.test"));
+    }
+
+    @AfterEach
+    void tearDown() {
+        VisitorContextHolder.clear();
+    }
 
     @Test
     void resolveByLoginCodeShouldCreateGlobalVisitorWithPlainOpenidAndStableVisitorKey() {
@@ -129,6 +144,29 @@ class VisitorServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("请选择访客头像");
     }
+
+    @Test
+    void profileActionsShouldRejectTokenOwnedByAnotherAuthenticatedVisitor() {
+        VisitorService service = service();
+        String token = service.createProfileToken(1024L, 88L, 33L);
+        VisitorContextHolder.set(new VisitorContext(2048L, "visitor-b", "Bearer wf-visitor-v1.other"));
+        VisitorAvatarUploadTicketRequest ticketRequest = new VisitorAvatarUploadTicketRequest();
+        ticketRequest.setVisitorProfileToken(token);
+        ticketRequest.setMimeType("image/jpeg");
+        ticketRequest.setFileSize(120_000L);
+        VisitorProfileUpdateRequest profileRequest = new VisitorProfileUpdateRequest();
+        profileRequest.setVisitorProfileToken(token);
+        profileRequest.setNickname("小陈");
+        profileRequest.setAvatarUrl("https://cdn.example.com/visit/visitor-avatar-1024-20260705093000-a1b2c3d4.jpg");
+
+        assertThatThrownBy(() -> service.createAvatarUploadTicket(88L, ticketRequest))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage(VisitorMessage.VISITOR_PROFILE_TOKEN_INVALID_MESSAGE);
+        assertThatThrownBy(() -> service.saveProfile(88L, profileRequest))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage(VisitorMessage.VISITOR_PROFILE_TOKEN_INVALID_MESSAGE);
+    }
+
 
     @Test
     void saveProfileShouldValidateCosObjectAndUpdateVisitorProfileWithCurrentVersion() {

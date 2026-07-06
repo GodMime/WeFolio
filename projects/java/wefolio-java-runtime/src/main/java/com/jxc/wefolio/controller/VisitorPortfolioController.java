@@ -1,5 +1,6 @@
 package com.jxc.wefolio.controller;
 
+import com.jxc.wefolio.annotation.LoginAccess;
 import com.jxc.wefolio.annotation.VisitorAccess;
 import com.jxc.wefolio.common.Response;
 import com.jxc.wefolio.dto.ContactLeadSubmitRequest;
@@ -42,33 +43,13 @@ public class VisitorPortfolioController {
     private final ContactLeadService contactLeadService;
 
     /**
-     * 获取访客作品集。
-     *
-     * @param shareCode 分享编码
-     * @param visitorKey 访客摘要
-     * @param loginCode wx.login 返回的临时登录凭证
-     * @param sourceType 来源类型
-     * @param idempotencyKey 幂等键
-     * @return 作品集响应
-     */
-    @GetMapping("/api/visitor/portfolios/{shareCode}")
-    public Response<VisitorPortfolioResponse> portfolio(
-            @PathVariable String shareCode,
-            @RequestParam("visitorKey") String visitorKey,
-            @RequestParam("loginCode") String loginCode,
-            @RequestParam(value = "sourceType", required = false) String sourceType,
-            @RequestParam("idempotencyKey") String idempotencyKey
-    ) {
-        return Response.success(visitorPortfolioService.getPortfolio(shareCode, visitorKey, loginCode, sourceType, idempotencyKey));
-    }
-
-    /**
      * 打开访客作品集。
      *
      * @param shareCode 分享编码
      * @param request 打开请求
      * @return 作品集响应
      */
+    @LoginAccess
     @PostMapping("/api/visitor/portfolios/{shareCode}/open")
     public Response<VisitorPortfolioResponse> open(
             @PathVariable String shareCode,
@@ -115,7 +96,7 @@ public class VisitorPortfolioController {
      * @param startDate 开始日期
      * @param endDate 结束日期
      * @param scope 范围
-     * @param visitorKey 访客摘要
+     * @param visitorKey 旧版客户端兼容参数，服务端已改用访客认证上下文并忽略该值
      * @param idempotencyKey 幂等键
      * @return 档期响应
      */
@@ -125,7 +106,8 @@ public class VisitorPortfolioController {
             @RequestParam("startDate") String startDate,
             @RequestParam("endDate") String endDate,
             @RequestParam(value = "scope", required = false) String scope,
-            @RequestParam("visitorKey") String visitorKey,
+            @Deprecated
+            @RequestParam(value = "visitorKey", required = false) String visitorKey,
             @RequestParam("idempotencyKey") String idempotencyKey
     ) {
         return Response.success(visitorPortfolioService.querySchedule(

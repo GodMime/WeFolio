@@ -1,5 +1,10 @@
 const DEFAULT_BASE_URL = 'https://api.we-folio.dingchenyong.top'
 const TOKEN_STORAGE_KEY = 'wefolio_token'
+const VISITOR_TOKEN_STORAGE_KEY = 'wefolio_visitor_token'
+const VISITOR_TOKEN_EXPIRES_AT_STORAGE_KEY = 'wefolio_visitor_token_expires_at'
+const AUTH_MODE_MAINTAINER = 'maintainer'
+const AUTH_MODE_VISITOR = 'visitor'
+const AUTH_MODE_NONE = 'none'
 
 function getRuntimeWx(wxApi) {
   if (wxApi) {
@@ -14,6 +19,52 @@ function getRuntimeWx(wxApi) {
 function defaultGetToken(wxApi) {
   const runtimeWx = getRuntimeWx(wxApi)
   return runtimeWx.getStorageSync ? runtimeWx.getStorageSync(TOKEN_STORAGE_KEY) : ''
+}
+
+function defaultGetVisitorToken(wxApi) {
+  const runtimeWx = getRuntimeWx(wxApi)
+  return runtimeWx.getStorageSync ? runtimeWx.getStorageSync(VISITOR_TOKEN_STORAGE_KEY) : ''
+}
+
+function defaultGetVisitorTokenExpiresAt(wxApi) {
+  const runtimeWx = getRuntimeWx(wxApi)
+  return runtimeWx.getStorageSync ? runtimeWx.getStorageSync(VISITOR_TOKEN_EXPIRES_AT_STORAGE_KEY) : ''
+}
+
+function clearVisitorTokenStorage(wxApi) {
+  const runtimeWx = getRuntimeWx(wxApi)
+  if (!runtimeWx.removeStorageSync) {
+    return
+  }
+  try {
+    runtimeWx.removeStorageSync(VISITOR_TOKEN_STORAGE_KEY)
+    runtimeWx.removeStorageSync(VISITOR_TOKEN_EXPIRES_AT_STORAGE_KEY)
+  } catch (error) {
+    // 本地存储清理失败不影响请求降级为无令牌。
+  }
+}
+
+function isKnownExpiredVisitorToken(expiresAt) {
+  const expiresAtMs = Number(expiresAt)
+  return Number.isFinite(expiresAtMs) && expiresAtMs > 0 && expiresAtMs <= Date.now()
+}
+
+function resolveAuthToken(authMode, getToken, getVisitorToken, getVisitorTokenExpiresAt, clearVisitorToken) {
+  if (authMode === AUTH_MODE_NONE) {
+    return ''
+  }
+  if (authMode === AUTH_MODE_VISITOR) {
+    const visitorToken = getVisitorToken()
+    if (!visitorToken) {
+      return ''
+    }
+    if (isKnownExpiredVisitorToken(getVisitorTokenExpiresAt())) {
+      clearVisitorToken()
+      return ''
+    }
+    return visitorToken
+  }
+  return getToken()
 }
 
 function joinUrl(baseUrl, url) {
@@ -51,11 +102,15 @@ function createRequestClient(options = {}) {
   const baseUrl = options.baseUrl || DEFAULT_BASE_URL
   const wxApi = options.wxApi
   const getToken = options.getToken || (() => defaultGetToken(wxApi))
+  const getVisitorToken = options.getVisitorToken || (() => defaultGetVisitorToken(wxApi))
+  const getVisitorTokenExpiresAt = options.getVisitorTokenExpiresAt || (() => defaultGetVisitorTokenExpiresAt(wxApi))
+  const clearVisitorToken = options.clearVisitorToken || (() => clearVisitorTokenStorage(wxApi))
 
   function request(requestOptions = {}) {
     const runtimeWx = getRuntimeWx(wxApi)
     const method = requestOptions.method || 'GET'
-    const token = getToken()
+    const authMode = requestOptions.authMode || AUTH_MODE_MAINTAINER
+    const token = resolveAuthToken(authMode, getToken, getVisitorToken, getVisitorTokenExpiresAt, clearVisitorToken)
     const header = Object.assign({
       'content-type': 'application/json'
     }, requestOptions.header || {})
@@ -103,6 +158,8 @@ const defaultClient = createRequestClient()
 module.exports = {
   DEFAULT_BASE_URL,
   TOKEN_STORAGE_KEY,
+  VISITOR_TOKEN_STORAGE_KEY,
+  VISITOR_TOKEN_EXPIRES_AT_STORAGE_KEY,
   createRequestClient,
   request: defaultClient.request
 }

@@ -10,7 +10,8 @@ import java.time.LocalDate;
 @Data
 public class PortfolioScheduleQueryRequest {
 
-    /** 匿名访客摘要，预览模式可为空 */
+    /** 旧版客户端兼容字段，访客端服务端已改用认证上下文并覆盖该值；预览模式可为空 */
+    @Deprecated
     private String visitorKey;
 
     /** 档期查询组件实例键 */

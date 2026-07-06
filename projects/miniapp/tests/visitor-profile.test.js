@@ -85,6 +85,7 @@ test('visitor profile helper uploads avatar to visit ticket and saves nickname p
   }, { wxApi })
 
   assert.equal(requests[0].url, '/api/visitor/portfolios/PF001/visitor-avatar/upload-ticket')
+  assert.equal(requests[0].authMode, 'visitor')
   assert.equal(requests[0].method, 'POST')
   assert.deepEqual(requests[0].data, {
     visitorProfileToken: 'profile-token-1',
@@ -97,6 +98,7 @@ test('visitor profile helper uploads avatar to visit ticket and saves nickname p
     key: 'visit/visitor-avatar-1024-20260705093000-a1b2c3d4.jpg'
   })
   assert.equal(requests[1].url, '/api/visitor/portfolios/PF001/visitor-profile')
+  assert.equal(requests[1].authMode, 'visitor')
   assert.equal(requests[1].method, 'PUT')
   assert.deepEqual(requests[1].data, {
     visitorProfileToken: 'profile-token-1',

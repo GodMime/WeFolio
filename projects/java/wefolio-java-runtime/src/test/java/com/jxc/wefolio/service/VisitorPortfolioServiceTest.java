@@ -1,5 +1,7 @@
 package com.jxc.wefolio.service;
 
+import com.jxc.wefolio.common.auth.VisitorContext;
+import com.jxc.wefolio.common.auth.VisitorContextHolder;
 import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
 import com.jxc.wefolio.dict.PortfolioPublicationStatusDict;
 import com.jxc.wefolio.dict.PortfolioStatusDict;
@@ -10,11 +12,11 @@ import com.jxc.wefolio.dict.VisitSourceTypeDict;
 import com.jxc.wefolio.dto.PortfolioScheduleOptionsResponse;
 import com.jxc.wefolio.dto.PortfolioScheduleQueryRequest;
 import com.jxc.wefolio.dto.PortfolioScheduleQueryResponse;
+import com.jxc.wefolio.dto.VisitorPortfolioEventRequest;
 import com.jxc.wefolio.dto.VisitorPortfolioOpenRequest;
 import com.jxc.wefolio.dto.PortfolioRenderDto;
 import com.jxc.wefolio.dto.VisitorPortfolioResponse;
 import com.jxc.wefolio.dto.VisitorPortfolioScheduleResponse;
-import com.jxc.wefolio.dto.WechatSessionResponse;
 import com.jxc.wefolio.entity.PortfolioEntity;
 import com.jxc.wefolio.entity.ScheduleEntity;
 import com.jxc.wefolio.entity.ScheduleQueryRecordEntity;
@@ -27,6 +29,8 @@ import com.jxc.wefolio.mapper.ScheduleEntityMapper;
 import com.jxc.wefolio.mapper.ScheduleQueryRecordEntityMapper;
 import com.jxc.wefolio.mapper.SlotDefinitionEntityMapper;
 import com.jxc.wefolio.message.PortfolioMessage;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -48,6 +52,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.lenient;
 
 /**
  * 访客作品集服务测试 — 覆盖已发布配置读取、维护中遮罩和访客档期。
@@ -83,29 +88,56 @@ class VisitorPortfolioServiceTest {
     @Mock
     private PortfolioRenderService portfolioRenderService;
 
-    /** 微信小程序客户端模拟 */
-    @Mock
-    private WechatMiniappClient wechatMiniappClient;
-
     /** 访客身份服务模拟 */
     @Mock
     private VisitorService visitorService;
 
-    @Test
-    void getPortfolioShouldRejectUnpublishedPortfolio() {
-        PortfolioEntity portfolio = publishedPortfolio();
-        portfolio.setPublicationStatus(PortfolioPublicationStatusDict.DRAFT_ONLY.getCode());
-        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
+    /** 访客登录令牌服务模拟 */
+    @Mock
+    private VisitorAuthTokenService visitorAuthTokenService;
 
-        assertThatThrownBy(() -> service().getPortfolio("PF001", "visitor-a", "wx-code", "WECHAT_SHARE_CARD", "open-1"))
-                .isInstanceOf(BusinessException.class)
-                .hasMessage("作品集暂不可访问");
+    @BeforeEach
+    void setUp() {
+        VisitorContextHolder.set(new VisitorContext(1024L, "visitor-a", "Bearer wf-visitor-v1.test"));
+        lenient().when(visitorAuthTokenService.issueToken(any(Long.class), any()))
+                .thenReturn(new VisitorAuthTokenService.VisitorLoginToken(
+                        "Bearer",
+                        "wf-visitor-v1.test",
+                        30L * 24L * 60L * 60L
+                ));
+    }
+
+    @AfterEach
+    void tearDown() {
+        VisitorContextHolder.clear();
     }
 
     @Test
-    void getPortfolioShouldReturnUnderMaintenanceWhenOwnerBalanceIsInsufficient() {
+    void openPortfolioShouldRejectUnpublishedPortfolio() {
         PortfolioEntity portfolio = publishedPortfolio();
+        portfolio.setPublicationStatus(PortfolioPublicationStatusDict.DRAFT_ONLY.getCode());
         when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
+        VisitorPortfolioOpenRequest request = new VisitorPortfolioOpenRequest();
+        request.setLoginCode("wx-code");
+
+        assertThatThrownBy(() -> service().openPortfolio("PF001", request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("作品集暂不可访问");
+        verify(visitorService, never()).resolveByLoginCode(any());
+    }
+
+    @Test
+    void openPortfolioShouldReturnMaintenanceWhenOwnerBalanceIsInsufficient() {
+        PortfolioEntity portfolio = publishedPortfolio();
+        VisitorEntity visitor = new VisitorEntity();
+        visitor.setId(1024L);
+        visitor.setOpenid("openid-123");
+        visitor.setVisitorKey("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
+        visitor.setNickname("小陈");
+        visitor.setAvatarUrl("https://cdn.example.com/visit/visitor-avatar-1024-20260705093000-a1b2c3d4.jpg");
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
+        when(visitorService.resolveByLoginCode("wx-code"))
+                .thenReturn(new VisitorService.VisitorSession(visitor, false, "WX_OPENID:digest-123"));
         org.mockito.Mockito.doThrow(new BusinessException("积分余额不足，请充值后再试"))
                 .when(pointService).assertCanConsume(any(), any(), any(Integer.class));
         PortfolioRenderDto renderData = new PortfolioRenderDto();
@@ -113,53 +145,36 @@ class VisitorPortfolioServiceTest {
         renderData.setComponents(List.of());
         when(portfolioRenderService.render(eq(portfolio), any(), eq(false), eq(true), any(), eq(null)))
                 .thenReturn(renderData);
+        VisitorPortfolioOpenRequest request = new VisitorPortfolioOpenRequest();
+        request.setLoginCode("wx-code");
+        request.setSourceType("WECHAT_SHARE_CARD");
+        request.setIdempotencyKey("open-1");
 
-        VisitorPortfolioResponse response = service().getPortfolio("PF001", "visitor-a", "wx-code", "WECHAT_SHARE_CARD", "open-1");
+        VisitorPortfolioResponse response = service().openPortfolio("PF001", request);
 
         assertThat(response.isUnderMaintenance()).isTrue();
         assertThat(response.getMaintenanceText().getPrimary()).isEqualTo("UNDER MAINTENANCE");
         assertThat(response.getMaintenanceText().getSecondary()).isEqualTo("维护中");
         assertThat(response.getVisitRecordId()).isNull();
+        assertThat(response.getVisitorKey()).isEqualTo(visitor.getVisitorKey());
         assertThat(response.getRenderData()).isSameAs(renderData);
-        verify(portfolioVisitService, never()).recordOpen(any(), any(), any(), any(), any());
+        verify(portfolioVisitService, never()).recordOpen(any(), any(Long.class), any(), any(), any(), any());
     }
 
     @Test
-    void getPortfolioShouldReturnPublishedConfigAndRecordVisit() {
+    void openPortfolioShouldRejectInvalidPublishedConfigWithUnavailableMessage() {
         PortfolioEntity portfolio = publishedPortfolio();
-        VisitRecordEntity record = new VisitRecordEntity();
-        record.setId(33L);
+        portfolio.setPublishedConfigJson("{invalid-json");
         when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
-        WechatSessionResponse session = new WechatSessionResponse();
-        session.setOpenid("openid-123");
-        when(wechatMiniappClient.exchangeCode("wx-code")).thenReturn(session);
-        when(portfolioVisitService.recordOpen(eq(portfolio), eq("visitor-a"), any(), eq("WECHAT_SHARE_CARD"), eq("open-1")))
-                .thenReturn(record);
-        PortfolioRenderDto renderData = new PortfolioRenderDto();
-        renderData.setPreview(false);
-        renderData.setVisitRecordId(33L);
-        when(portfolioRenderService.render(eq(portfolio), any(), eq(false), eq(false), eq(null), eq(33L)))
-                .thenReturn(renderData);
+        VisitorPortfolioOpenRequest request = new VisitorPortfolioOpenRequest();
+        request.setLoginCode("wx-code");
 
-        VisitorPortfolioResponse response = service().getPortfolio("PF001", "visitor-a", "wx-code", "WECHAT_SHARE_CARD", "open-1");
-
-        assertThat(response.isUnderMaintenance()).isFalse();
-        assertThat(response.getPortfolioId()).isEqualTo(88L);
-        assertThat(response.getPublishedRevision()).isEqualTo(3);
-        assertThat(response.getTitle()).isEqualTo("林安婚礼司仪");
-        assertThat(response.getConfig()).isNotNull();
-        assertThat(response.getVisitRecordId()).isEqualTo(33L);
-        assertThat(response.getRenderData()).isSameAs(renderData);
-        ArgumentCaptor<String> billingKeyCaptor = ArgumentCaptor.forClass(String.class);
-        verify(portfolioVisitService).recordOpen(
-                eq(portfolio),
-                eq("visitor-a"),
-                billingKeyCaptor.capture(),
-                eq("WECHAT_SHARE_CARD"),
-                eq("open-1")
-        );
-        assertThat(billingKeyCaptor.getValue()).startsWith("WX_OPENID:");
-        assertThat(billingKeyCaptor.getValue()).doesNotContain("openid-123");
+        assertThatThrownBy(() -> service().openPortfolio("PF001", request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage(PortfolioMessage.PORTFOLIO_UNAVAILABLE_MESSAGE);
+        verify(visitorService, never()).resolveByLoginCode(any());
+        verify(pointService, never()).assertCanConsume(any(), any(), any(Integer.class));
+        verify(portfolioVisitService, never()).recordOpen(any(), any(Long.class), any(), any(), any(), any());
     }
 
     @Test
@@ -195,6 +210,9 @@ class VisitorPortfolioServiceTest {
         VisitorPortfolioResponse response = service().openPortfolio("PF001", request);
 
         assertThat(response.getVisitorKey()).isEqualTo(visitor.getVisitorKey());
+        assertThat(response.getTokenType()).isEqualTo("Bearer");
+        assertThat(response.getToken()).isEqualTo("wf-visitor-v1.test");
+        assertThat(response.getExpiresInSeconds()).isEqualTo(30L * 24L * 60L * 60L);
         assertThat(response.isNewVisitor()).isTrue();
         assertThat(response.getVisitorProfileToken()).isEqualTo("profile-token-1");
         assertThat(response.getVisitRecordId()).isEqualTo(33L);
@@ -314,19 +332,6 @@ class VisitorPortfolioServiceTest {
     }
 
     @Test
-    void getPortfolioShouldRejectInvalidPublishedConfigWithUnavailableMessage() {
-        PortfolioEntity portfolio = publishedPortfolio();
-        portfolio.setPublishedConfigJson("{invalid-json");
-        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
-
-        assertThatThrownBy(() -> service().getPortfolio("PF001", "visitor-a", "wx-code", "WECHAT_SHARE_CARD", "open-1"))
-                .isInstanceOf(BusinessException.class)
-                .hasMessage(PortfolioMessage.PORTFOLIO_UNAVAILABLE_MESSAGE);
-        verify(pointService, never()).assertCanConsume(any(), any(), any(Integer.class));
-        verify(portfolioVisitService, never()).recordOpen(any(), any(), any(), any(), any());
-    }
-
-    @Test
     void queryScheduleShouldHideInternalContactAndNoteFields() {
         PortfolioEntity portfolio = publishedPortfolio();
         when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
@@ -361,6 +366,25 @@ class VisitorPortfolioServiceTest {
         assertThat(item.getContactPhone()).isNull();
         assertThat(item.getNote()).isNull();
         verify(portfolioVisitService).recordScheduleQuery(portfolio, "visitor-a", LocalDate.of(2026, 7, 18), "schedule-1");
+    }
+
+    @Test
+    void queryScheduleShouldIgnoreRequestVisitorKeyAndUseVisitorContext() {
+        VisitorContextHolder.set(new VisitorContext(2048L, "server-key", "Bearer wf-visitor-v1.server"));
+        PortfolioEntity portfolio = publishedPortfolio();
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
+        when(scheduleEntityMapper.selectList(any())).thenReturn(List.of());
+
+        service().querySchedule(
+                "PF001",
+                LocalDate.of(2026, 7, 18),
+                LocalDate.of(2026, 7, 18),
+                "ALL",
+                "attacker-key",
+                "schedule-1"
+        );
+
+        verify(portfolioVisitService).recordScheduleQuery(portfolio, "server-key", LocalDate.of(2026, 7, 18), "schedule-1");
     }
 
     @Test
@@ -639,6 +663,48 @@ class VisitorPortfolioServiceTest {
         assertThat(response.getMessage()).isEqualTo("档期空闲");
     }
 
+    @Test
+    void submitScheduleQueryShouldIgnoreRequestVisitorKeyAndUseVisitorContext() {
+        VisitorContextHolder.set(new VisitorContext(2048L, "server-key", "Bearer wf-visitor-v1.server"));
+        PortfolioEntity portfolio = publishedPortfolioWithScheduleComponent();
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
+        when(slotDefinitionEntityMapper.selectById(12L)).thenReturn(slotDefinition(12L, "午宴"));
+        when(scheduleEntityMapper.selectOne(any())).thenReturn(null);
+        PortfolioScheduleQueryRequest request = new PortfolioScheduleQueryRequest();
+        request.setVisitorKey("attacker-key");
+        request.setComponentKey("c_schedule");
+        request.setQueriedDate(LocalDate.of(2026, 7, 18));
+        request.setSlotDefinitionId(12L);
+        request.setIdempotencyKey("schedule-submit-ctx");
+
+        service().submitScheduleQuery("PF001", request);
+
+        verify(portfolioVisitService).recordScheduleQuery(
+                eq(portfolio),
+                eq("server-key"),
+                eq(LocalDate.of(2026, 7, 18)),
+                any(),
+                eq("schedule-submit-ctx")
+        );
+        assertThat(request.getVisitorKey()).isEqualTo("server-key");
+    }
+
+    @Test
+    void recordEventShouldIgnoreRequestVisitorKeyAndUseVisitorContext() {
+        VisitorContextHolder.set(new VisitorContext(2048L, "server-key", "Bearer wf-visitor-v1.server"));
+        PortfolioEntity portfolio = publishedPortfolio();
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
+        VisitorPortfolioEventRequest request = new VisitorPortfolioEventRequest();
+        request.setVisitorKey("attacker-key");
+        request.setEventType("WORK_VIEWED");
+        request.setIdempotencyKey("event-ctx");
+
+        service().recordEvent("PF001", request);
+
+        assertThat(request.getVisitorKey()).isEqualTo("server-key");
+        verify(portfolioVisitService).recordEvent(portfolio, request);
+    }
+
     private VisitorPortfolioService service() {
         return new VisitorPortfolioService(
                 portfolioEntityMapper,
@@ -647,8 +713,8 @@ class VisitorPortfolioServiceTest {
                 pointService,
                 portfolioVisitService,
                 portfolioRenderService,
-                wechatMiniappClient,
                 visitorService,
+                visitorAuthTokenService,
                 scheduleQueryRecordEntityMapper
         );
     }

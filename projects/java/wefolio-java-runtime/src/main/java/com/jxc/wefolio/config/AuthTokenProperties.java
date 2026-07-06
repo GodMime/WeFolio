@@ -12,6 +12,12 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "auth.token")
 public class AuthTokenProperties {
 
+    /** 默认访客登录令牌有效期：30 天 */
+    private static final long DEFAULT_VISITOR_EXPIRES_IN_SECONDS = 30L * 24L * 60L * 60L;
+
     /** 维护者登录令牌加密密钥 */
     private String secret;
+
+    /** 访客登录令牌有效期秒数 */
+    private long visitorExpiresInSeconds = DEFAULT_VISITOR_EXPIRES_IN_SECONDS;
 }

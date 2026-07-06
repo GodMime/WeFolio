@@ -2,6 +2,7 @@ package com.jxc.wefolio.service;
 
 import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.jxc.wefolio.common.auth.VisitorContextHolder;
 import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
 import com.jxc.wefolio.dict.PortfolioPublicationStatusDict;
 import com.jxc.wefolio.dict.PortfolioTypeDict;
@@ -20,7 +21,6 @@ import com.jxc.wefolio.dto.VisitorPortfolioOpenRequest;
 import com.jxc.wefolio.dto.VisitorPortfolioResponse;
 import com.jxc.wefolio.dto.VisitorPortfolioScheduleResponse;
 import com.jxc.wefolio.dto.VisitorProfileUpdateRequest;
-import com.jxc.wefolio.dto.WechatSessionResponse;
 import com.jxc.wefolio.entity.PortfolioEntity;
 import com.jxc.wefolio.entity.ScheduleEntity;
 import com.jxc.wefolio.entity.ScheduleQueryRecordEntity;
@@ -37,8 +37,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.YearMonth;
@@ -46,7 +44,6 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -68,15 +65,6 @@ public class VisitorPortfolioService {
 
     /** 默认标题 */
     private static final String DEFAULT_TITLE = "个人作品集";
-
-    /** 微信 openid 计费主体前缀 */
-    private static final String WECHAT_OPENID_BILLING_PREFIX = "WX_OPENID:";
-
-    /** SHA-256 算法名 */
-    private static final String SHA_256_ALGORITHM = "SHA-256";
-
-    /** openid 摘要截断长度，兼容积分流水 64 字符幂等键 */
-    private static final int OPENID_BILLING_DIGEST_LENGTH = 19;
 
     /** 时间展示格式 */
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
@@ -120,65 +108,14 @@ public class VisitorPortfolioService {
     /** 作品集渲染服务 */
     private final PortfolioRenderService portfolioRenderService;
 
-    /** 微信小程序客户端 */
-    private final WechatMiniappClient wechatMiniappClient;
-
     /** 访客身份服务 */
     private final VisitorService visitorService;
 
+    /** 访客登录令牌服务 */
+    private final VisitorAuthTokenService visitorAuthTokenService;
+
     /** 查询档期记录 Mapper */
     private final ScheduleQueryRecordEntityMapper scheduleQueryRecordEntityMapper;
-
-    /**
-     * 获取访客作品集。
-     *
-     * @param shareCode 分享编码
-     * @param visitorKey 访客摘要
-     * @param loginCode wx.login 返回的临时登录凭证
-     * @param sourceType 来源类型
-     * @param idempotencyKey 打开事件幂等键
-     * @return 访客作品集响应
-     */
-    public VisitorPortfolioResponse getPortfolio(
-            String shareCode,
-            String visitorKey,
-            String loginCode,
-            String sourceType,
-            String idempotencyKey
-    ) {
-        PortfolioEntity portfolio = requirePublishedPortfolio(shareCode);
-        PortfolioConfigDto config = parseConfig(portfolio.getPublishedConfigJson());
-        try {
-            pointService.assertCanConsume(portfolio.getOwnerId(), PointSceneCodeDict.VISIT_PERSONAL_PORTFOLIO.getCode(), 1);
-        } catch (BusinessException e) {
-            return buildMaintenanceResponse(portfolio, config);
-        }
-        // wx.login 凭证一次性且短时有效；前端每次 onLoad 重新登录，后续写入失败时可用新凭证重试。
-        String billingVisitorKey = resolveBillingVisitorKey(loginCode);
-        VisitRecordEntity record;
-        try {
-            record = portfolioVisitService.recordOpen(
-                    portfolio,
-                    visitorKey,
-                    billingVisitorKey,
-                    sourceType,
-                    idempotencyKey
-            );
-        } catch (BusinessException e) {
-            return buildMaintenanceResponse(portfolio, config);
-        }
-        VisitorPortfolioResponse response = buildNormalResponse(portfolio, config);
-        response.setVisitRecordId(record == null ? null : record.getId());
-        response.setRenderData(portfolioRenderService.render(
-                portfolio,
-                config,
-                false,
-                false,
-                null,
-                response.getVisitRecordId()
-        ));
-        return response;
-    }
 
     /**
      * 打开访客作品集，使用微信 openid 创建或复用全局访客。
@@ -272,6 +209,11 @@ public class VisitorPortfolioService {
     ) {
         VisitorEntity visitor = visitorSession.visitor();
         response.setVisitorKey(visitor.getVisitorKey());
+        VisitorAuthTokenService.VisitorLoginToken loginToken =
+                visitorAuthTokenService.issueToken(visitor.getId(), visitor.getVisitorKey());
+        response.setTokenType(loginToken.tokenType());
+        response.setToken(loginToken.token());
+        response.setExpiresInSeconds(loginToken.expiresInSeconds());
         response.setNewVisitor(visitorSession.newVisitor());
         boolean needVisitorProfile = needVisitorProfile(visitor);
         response.setNeedVisitorProfile(needVisitorProfile);
@@ -291,46 +233,13 @@ public class VisitorPortfolioService {
     }
 
     /**
-     * 解析访客计费主体。
-     *
-     * @param loginCode wx.login 返回的临时登录凭证
-     * @return openid 摘要计费主体
-     */
-    private String resolveBillingVisitorKey(String loginCode) {
-        if (loginCode == null || loginCode.isBlank()) {
-            throw new BusinessException(PortfolioMessage.WECHAT_LOGIN_CODE_REQUIRED_MESSAGE);
-        }
-        WechatSessionResponse session = wechatMiniappClient.exchangeCode(loginCode.strip());
-        if (session == null || session.getOpenid() == null || session.getOpenid().isBlank()) {
-            throw new BusinessException(PortfolioMessage.WECHAT_OPENID_MISSING_MESSAGE);
-        }
-        return WECHAT_OPENID_BILLING_PREFIX + digestOpenid(session.getOpenid());
-    }
-
-    /**
-     * 对 openid 做摘要，避免原始 openid 写入积分流水幂等键。
-     *
-     * @param openid 微信 openid
-     * @return 十六进制摘要
-     */
-    private String digestOpenid(String openid) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance(SHA_256_ALGORITHM);
-            String fullDigest = HexFormat.of().formatHex(digest.digest(openid.getBytes(StandardCharsets.UTF_8)));
-            return fullDigest.substring(0, OPENID_BILLING_DIGEST_LENGTH);
-        } catch (Exception e) {
-            throw new BusinessException(PortfolioMessage.OPENID_DIGEST_FAILED_MESSAGE, e);
-        }
-    }
-
-    /**
      * 查询访客档期。
      *
      * @param shareCode 分享编码
      * @param startDate 开始日期
      * @param endDate 结束日期
      * @param scope 查询范围
-     * @param visitorKey 访客摘要
+     * @param visitorKey 旧版客户端兼容参数，服务端已改用访客认证上下文并忽略该值
      * @param idempotencyKey 幂等键
      * @return 档期响应
      */
@@ -339,10 +248,12 @@ public class VisitorPortfolioService {
             LocalDate startDate,
             LocalDate endDate,
             String scope,
+            @Deprecated
             String visitorKey,
             String idempotencyKey
     ) {
         PortfolioEntity portfolio = requirePublishedPortfolio(shareCode);
+        String authenticatedVisitorKey = VisitorContextHolder.requireVisitorKey();
         LocalDate normalizedStart = startDate == null ? LocalDate.now() : startDate;
         LocalDate normalizedEnd = endDate == null ? normalizedStart : endDate;
         List<ScheduleEntity> schedules = scheduleEntityMapper.selectList(
@@ -353,7 +264,7 @@ public class VisitorPortfolioService {
                         .orderByAsc(ScheduleEntity::getScheduleDate)
                         .orderByAsc(ScheduleEntity::getStartTimeSnapshot)
         );
-        portfolioVisitService.recordScheduleQuery(portfolio, visitorKey, normalizedStart, idempotencyKey);
+        portfolioVisitService.recordScheduleQuery(portfolio, authenticatedVisitorKey, normalizedStart, idempotencyKey);
         VisitorPortfolioScheduleResponse response = new VisitorPortfolioScheduleResponse();
         response.setSchedules(safeList(schedules).stream().map(this::buildScheduleItem).toList());
         return response;
@@ -386,6 +297,7 @@ public class VisitorPortfolioService {
         if (request == null) {
             throw new BusinessException(PortfolioMessage.SCHEDULE_QUERY_REQUEST_REQUIRED_MESSAGE);
         }
+        request.setVisitorKey(VisitorContextHolder.requireVisitorKey());
         PortfolioEntity portfolio = requirePublishedPortfolio(shareCode);
         PortfolioConfigDto config = parseConfig(portfolio.getPublishedConfigJson());
         Map<String, Object> componentConfig = requireScheduleComponentConfig(config, request.getComponentKey());
@@ -410,6 +322,7 @@ public class VisitorPortfolioService {
      */
     public void recordEvent(String shareCode, VisitorPortfolioEventRequest request) {
         PortfolioEntity portfolio = requirePublishedPortfolio(shareCode);
+        request.setVisitorKey(VisitorContextHolder.requireVisitorKey());
         portfolioVisitService.recordEvent(portfolio, request);
     }
 

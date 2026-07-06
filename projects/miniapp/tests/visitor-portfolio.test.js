@@ -49,7 +49,9 @@ function loadVisitorPage(fakeRequest, wxOverrides = {}) {
     filename: requestPath,
     loaded: true,
     exports: {
-      request: fakeRequest
+      request: fakeRequest,
+      VISITOR_TOKEN_STORAGE_KEY: 'wefolio_visitor_token',
+      VISITOR_TOKEN_EXPIRES_AT_STORAGE_KEY: 'wefolio_visitor_token_expires_at'
     }
   }
 
@@ -785,6 +787,7 @@ test('visitor page records image view before opening original image', async () =
   }
 
   assert.equal(requests[0].url, '/api/visitor/portfolios/PF001/events')
+  assert.equal(requests[0].authMode, 'visitor')
   assert.equal(requests[0].method, 'POST')
   assert.equal(requests[0].data.eventType, 'WORK_VIEWED')
   assert.equal(requests[0].data.workId, 11)
@@ -834,6 +837,7 @@ test('visitor page records qr interaction when previewing contact qr', async () 
     urls: ['https://cdn.example.com/contact-qr.jpg']
   })
   assert.equal(requests[0].url, '/api/visitor/portfolios/PF001/events')
+  assert.equal(requests[0].authMode, 'visitor')
   assert.equal(requests[0].method, 'POST')
   assert.equal(requests[0].data.visitorKey, 'visitor-a')
   assert.equal(requests[0].data.eventType, 'QR_CODE_INTERACTED')
@@ -844,10 +848,13 @@ test('visitor page records qr interaction when previewing contact qr', async () 
 
 test('visitor page opens portfolio with wx login code and stores backend visitor key', async () => {
   const requests = []
+  const storageWrites = []
   const page = loadVisitorPage((options) => {
     requests.push(options)
     return Promise.resolve({
       visitorKey: 'server-visitor-key',
+      token: 'wf-visitor-v1.server',
+      expiresInSeconds: 60,
       isNewVisitor: false,
       renderData: {
         shareCode: 'PF001',
@@ -864,6 +871,9 @@ test('visitor page opens portfolio with wx login code and stores backend visitor
     login(options) {
       options.success({ code: 'wx-code' })
     },
+    setStorageSync(key, value) {
+      storageWrites.push({ key, value })
+    },
     showToast() {}
   }
 
@@ -874,10 +884,60 @@ test('visitor page opens portfolio with wx login code and stores backend visitor
   }
 
   assert.equal(requests[0].url, '/api/visitor/portfolios/PF001/open')
+  assert.equal(requests[0].authMode, 'none')
   assert.equal(requests[0].method, 'POST')
   assert.equal(requests[0].data.loginCode, 'wx-code')
   assert.equal(Object.hasOwn(requests[0].data, 'visitorKey'), false)
   assert.equal(page.data.visitorKey, 'server-visitor-key')
+  assert.deepEqual(storageWrites[0], {
+    key: 'wefolio_visitor_token',
+    value: 'wf-visitor-v1.server'
+  })
+  assert.equal(storageWrites[1].key, 'wefolio_visitor_token_expires_at')
+  assert.equal(typeof storageWrites[1].value, 'number')
+})
+
+test('visitor page ignores visitor token storage failure while opening portfolio', async () => {
+  const requests = []
+  const toastMessages = []
+  const page = loadVisitorPage((options) => {
+    requests.push(options)
+    return Promise.resolve({
+      visitorKey: 'server-visitor-key',
+      token: 'wf-visitor-v1.server',
+      expiresInSeconds: 60,
+      renderData: {
+        shareCode: 'PF001',
+        title: '林安婚礼司仪',
+        components: []
+      }
+    })
+  }, {
+    login(options) {
+      options.success({ code: 'wx-code' })
+    }
+  })
+  global.wx = {
+    login(options) {
+      options.success({ code: 'wx-code' })
+    },
+    setStorageSync() {
+      throw new Error('storage full')
+    },
+    showToast(options) {
+      toastMessages.push(options.title)
+    }
+  }
+
+  try {
+    await page.onLoad({ shareCode: 'PF001' })
+  } finally {
+    delete global.wx
+  }
+
+  assert.equal(requests[0].url, '/api/visitor/portfolios/PF001/open')
+  assert.equal(page.data.visitorKey, 'server-visitor-key')
+  assert.deepEqual(toastMessages, [])
 })
 
 test('visitor page shows profile authorization panel when profile is missing', async () => {
@@ -1013,6 +1073,7 @@ test('visitor page records video play before showing video overlay', async () =>
   }
 
   assert.equal(requests[0].data.eventType, 'VIDEO_PLAYED')
+  assert.equal(requests[0].authMode, 'visitor')
   assert.equal(requests[0].data.mediaType, 'VIDEO')
   assert.deepEqual(requests[0].data.metadata, {
     workTitle: '婚礼快剪'
@@ -1145,8 +1206,10 @@ test('portfolio schedule query component uses visitor endpoints and payload', as
   await component.handleSubmitQuery()
 
   assert.equal(requests[0].url, '/api/visitor/portfolios/PF001/schedule-options')
+  assert.equal(requests[0].authMode, 'visitor')
   assert.deepEqual(requests[0].data, { month: '2026-07', componentKey: 'c_schedule' })
   assert.equal(requests[1].url, '/api/visitor/portfolios/PF001/schedule-query')
+  assert.equal(requests[1].authMode, 'visitor')
   assert.equal(requests[1].method, 'POST')
   assert.equal(requests[1].data.visitorKey, 'visitor-a')
   assert.equal(requests[1].data.componentKey, 'c_schedule')
@@ -1361,8 +1424,10 @@ test('portfolio schedule query component uses preview endpoints and scope', asyn
   await component.handleSubmitQuery()
 
   assert.equal(requests[0].url, '/api/mine/portfolios/88/schedule-options')
+  assert.equal(requests[0].authMode, undefined)
   assert.deepEqual(requests[0].data, { month: '2026-07', componentKey: 'c_schedule', scope: 'published' })
   assert.equal(requests[1].url, '/api/mine/portfolios/88/schedule-query-preview?scope=published')
+  assert.equal(requests[1].authMode, undefined)
   assert.equal(requests[1].method, 'POST')
   assert.equal(requests[1].data.componentKey, 'c_schedule')
   assert.equal(requests[1].data.queriedDate, '2026-07-18')

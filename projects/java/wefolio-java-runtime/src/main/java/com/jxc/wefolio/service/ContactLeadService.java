@@ -2,6 +2,7 @@ package com.jxc.wefolio.service;
 
 import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.jxc.wefolio.common.auth.VisitorContextHolder;
 import com.jxc.wefolio.dict.FollowStatusDict;
 import com.jxc.wefolio.dict.PortfolioPublicationStatusDict;
 import com.jxc.wefolio.dict.VisitSourceTypeDict;
@@ -116,7 +117,12 @@ public class ContactLeadService {
             }
             throw e;
         }
-        portfolioVisitService.recordContactLeadSubmitted(portfolio, request.getVisitorKey(), lead.getId(), lead.getIdempotencyKey());
+        portfolioVisitService.recordContactLeadSubmitted(
+                portfolio,
+                VisitorContextHolder.requireVisitorKey(),
+                lead.getId(),
+                lead.getIdempotencyKey()
+        );
 
         return buildSubmitResponse(lead);
     }

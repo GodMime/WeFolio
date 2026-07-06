@@ -36,6 +36,15 @@ public class VisitorPortfolioResponse {
     /** 访问汇总记录 ID */
     private Long visitRecordId;
 
+    /** 访客登录令牌类型 */
+    private String tokenType;
+
+    /** 访客加密登录令牌 */
+    private String token;
+
+    /** 访客登录令牌有效期秒数 */
+    private Long expiresInSeconds;
+
     /** 服务端生成的匿名访客稳定 key */
     private String visitorKey;
 

@@ -1,4 +1,8 @@
-const { request } = require('../../utils/request')
+const {
+  VISITOR_TOKEN_EXPIRES_AT_STORAGE_KEY,
+  VISITOR_TOKEN_STORAGE_KEY,
+  request
+} = require('../../utils/request')
 const { buildContactLeadPayload, createContactLeadForm, validateContactLeadForm } = require('../../utils/contact-lead')
 const {
   createActiveContactFormComponent,
@@ -67,6 +71,20 @@ function buildWorkEventMetadata(work) {
   return workTitle ? { [WORK_TITLE_METADATA_KEY]: workTitle } : null
 }
 
+function saveVisitorToken(response = {}) {
+  if (!response.token || !wx.setStorageSync) {
+    return
+  }
+  try {
+    wx.setStorageSync(VISITOR_TOKEN_STORAGE_KEY, response.token)
+    if (response.expiresInSeconds) {
+      wx.setStorageSync(VISITOR_TOKEN_EXPIRES_AT_STORAGE_KEY, Date.now() + Number(response.expiresInSeconds) * 1000)
+    }
+  } catch (error) {
+    // 本地存储写入失败时不阻断作品集打开流程。
+  }
+}
+
 Page({
   data: {
     shareCode: '',
@@ -102,12 +120,14 @@ Page({
       const response = await request({
         url: `${VISITOR_PORTFOLIO_API_PREFIX}/${this.data.shareCode}/open`,
         method: 'POST',
+        authMode: 'none',
         data: {
           loginCode,
           sourceType: SOURCE_TYPE_WECHAT_SHARE_CARD,
           idempotencyKey: idempotencyKey('open')
         }
       })
+      saveVisitorToken(response)
       const portfolio = normalizeVisitorPortfolio(response)
       this.setData({
         portfolio,
@@ -143,6 +163,7 @@ Page({
     request({
       url: `${VISITOR_PORTFOLIO_API_PREFIX}/${this.data.shareCode}/contact-leads`,
       method: 'POST',
+      authMode: 'visitor',
       data: buildContactLeadPayload(this.data.contactForm, {
         visitorKey: this.data.visitorKey,
         visitRecordId: this.data.portfolio.visitRecordId,
@@ -194,6 +215,7 @@ Page({
     return request({
       url: `${VISITOR_PORTFOLIO_API_PREFIX}/${this.data.shareCode}/events`,
       method: 'POST',
+      authMode: 'visitor',
       data: buildVisitorEventPayload({
         visitorKey: this.data.visitorKey,
         eventType: QR_CODE_INTERACTED_EVENT_TYPE,
@@ -254,6 +276,7 @@ Page({
     return request({
       url: `${VISITOR_PORTFOLIO_API_PREFIX}/${this.data.shareCode}/events`,
       method: 'POST',
+      authMode: 'visitor',
       data: buildVisitorEventPayload({
         visitorKey: this.data.visitorKey,
         eventType,

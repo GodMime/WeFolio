@@ -100,6 +100,7 @@ function buildOptionsRequest(data = {}, month) {
   }
   return {
     url: `${VISITOR_PORTFOLIO_API_PREFIX}/${data.shareCode}/schedule-options`,
+    authMode: 'visitor',
     data: {
       month,
       componentKey: data.componentKey || ''
@@ -125,6 +126,7 @@ function buildQueryRequest(data = {}) {
   return {
     url: `${VISITOR_PORTFOLIO_API_PREFIX}/${data.shareCode}/schedule-query`,
     method: 'POST',
+    authMode: 'visitor',
     data: Object.assign({
       visitorKey: data.visitorKey || ''
     }, payload)

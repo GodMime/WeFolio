@@ -6,8 +6,11 @@ import com.jxc.wefolio.annotation.SystemAccess;
 import com.jxc.wefolio.annotation.VisitorAccess;
 import com.jxc.wefolio.common.auth.AuthContext;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
+import com.jxc.wefolio.common.auth.VisitorContext;
+import com.jxc.wefolio.common.auth.VisitorContextHolder;
 import com.jxc.wefolio.exception.AuthenticationRequiredException;
 import com.jxc.wefolio.service.AuthTokenService;
+import com.jxc.wefolio.service.VisitorAuthTokenService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,7 +34,7 @@ import java.util.Optional;
  *   <li>{@link LoginAccess} — 登录类接口，跳过认证直接放行</li>
  *   <li>{@link SystemAccess} — 系统类接口，跳过认证直接放行</li>
  *   <li>{@link MaintainerAccess} — 维护者类接口，要求有效的 Authorization 令牌</li>
- *   <li>{@link VisitorAccess} — 访客类接口，当前跳过认证，后续实现独立访客认证逻辑</li>
+ *   <li>{@link VisitorAccess} — 访客类接口，要求有效的访客 Authorization 令牌</li>
  * </ul>
  */
 @Slf4j
@@ -43,6 +46,9 @@ public class AuthAspect {
     /** 登录令牌认证服务 */
     private final AuthTokenService authTokenService;
 
+    /** 访客登录令牌认证服务 */
+    private final VisitorAuthTokenService visitorAuthTokenService;
+
     /**
      * 接口访问类型 — 方法级注解优先，方法未标记时继承类级注解。
      */
@@ -53,7 +59,7 @@ public class AuthAspect {
         SYSTEM,
         /** 维护者类接口，需要登录令牌 */
         MAINTAINER,
-        /** 访客类接口，当前直接放行 */
+        /** 访客类接口，需要访客登录令牌 */
         VISITOR
     }
 
@@ -76,6 +82,9 @@ public class AuthAspect {
 
         if (accessType == AccessType.MAINTAINER) {
             return authenticateMaintainer(joinPoint, request, requestInfo);
+        }
+        if (accessType == AccessType.VISITOR) {
+            return authenticateVisitor(joinPoint, request, requestInfo);
         }
 
         log.info("放行请求: {}", requestInfo);
@@ -110,6 +119,46 @@ public class AuthAspect {
             return joinPoint.proceed();
         } finally {
             AuthContextHolder.clear();
+        }
+    }
+
+    /**
+     * 访客认证 — 校验 Authorization 令牌并注入访客上下文。
+     *
+     * @param joinPoint   切点
+     * @param request     HTTP 请求
+     * @param requestInfo 请求信息（方法 + URI），用于日志
+     * @return 控制器执行结果
+     * @throws Throwable 控制器执行异常
+     */
+    private Object authenticateVisitor(ProceedingJoinPoint joinPoint, HttpServletRequest request, String requestInfo) throws Throwable {
+        if (request == null) {
+            log.warn("访客认证失败：无法获取 HTTP 请求");
+            throw new AuthenticationRequiredException();
+        }
+
+        String authorization = request.getHeader("Authorization");
+        Optional<VisitorAuthTokenService.ResolvedVisitorToken> visitorToken =
+                visitorAuthTokenService.resolveAuthenticatedVisitor(authorization);
+        if (visitorToken.isEmpty()) {
+            log.warn("访客认证失败：令牌无效或已过期, request={}", requestInfo);
+            throw new AuthenticationRequiredException();
+        }
+
+        VisitorAuthTokenService.ResolvedVisitorToken resolvedToken = visitorToken.get();
+        log.info("访客认证通过: visitorId={}, visitorKey={}, request={}",
+                resolvedToken.visitorId(),
+                resolvedToken.visitorKey(),
+                requestInfo);
+        VisitorContextHolder.set(new VisitorContext(
+                resolvedToken.visitorId(),
+                resolvedToken.visitorKey(),
+                authorization
+        ));
+        try {
+            return joinPoint.proceed();
+        } finally {
+            VisitorContextHolder.clear();
         }
     }
 

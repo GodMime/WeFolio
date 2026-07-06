@@ -22,14 +22,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DuplicateKeyException;
 
-import javax.crypto.Cipher;
-import javax.crypto.spec.GCMParameterSpec;
-import javax.crypto.spec.SecretKeySpec;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.SecureRandom;
 import java.time.Instant;
-import java.util.Base64;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -40,6 +33,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * 小程序登录服务测试 — 覆盖维护者微信登录、注册冲突和令牌解析。
+ */
 @ExtendWith(MockitoExtension.class)
 class MiniappAuthServiceTest {
 
@@ -48,21 +44,6 @@ class MiniappAuthServiceTest {
 
     /** 测试用令牌 payload 分隔符 */
     private static final String TOKEN_PAYLOAD_SEPARATOR = ":";
-
-    /** 测试用令牌加密算法 */
-    private static final String AES_GCM_TRANSFORMATION = "AES/GCM/NoPadding";
-
-    /** 测试用密钥摘要算法 */
-    private static final String SHA_256 = "SHA-256";
-
-    /** 测试用 AES 算法 */
-    private static final String AES_ALGORITHM = "AES";
-
-    /** 测试用 GCM 初始向量字节数 */
-    private static final int TOKEN_IV_LENGTH_BYTES = 12;
-
-    /** 测试用 GCM 认证标签位数 */
-    private static final int TOKEN_GCM_TAG_LENGTH_BITS = 128;
 
     /** 维护者令牌有效期 */
     private static final long MAINTAINER_EXPIRES_IN_SECONDS = 30L * 24L * 60L * 60L;
@@ -396,7 +377,7 @@ class MiniappAuthServiceTest {
                 userAuthEntityMapper,
                 wechatMiniappClient,
                 wechatProperties,
-                authTokenProperties,
+                new EncryptedAuthTokenService(authTokenProperties),
                 cosService,
                 cosProperties,
                 new UserRegistrationService(
@@ -453,34 +434,8 @@ class MiniappAuthServiceTest {
      * @return 维护者登录令牌
      */
     private String buildMaintainerToken(Long userId, Instant issuedAt) {
-        try {
-            byte[] iv = new byte[TOKEN_IV_LENGTH_BYTES];
-            new SecureRandom().nextBytes(iv);
-            Cipher cipher = Cipher.getInstance(AES_GCM_TRANSFORMATION);
-            cipher.init(Cipher.ENCRYPT_MODE, buildTokenSecretKey(), new GCMParameterSpec(TOKEN_GCM_TAG_LENGTH_BITS, iv));
-            String payload = userId + TOKEN_PAYLOAD_SEPARATOR + issuedAt.getEpochSecond();
-            byte[] cipherText = cipher.doFinal(payload.getBytes(StandardCharsets.UTF_8));
-            byte[] tokenBytes = new byte[iv.length + cipherText.length];
-            System.arraycopy(iv, 0, tokenBytes, 0, iv.length);
-            System.arraycopy(cipherText, 0, tokenBytes, iv.length, cipherText.length);
-            return MAINTAINER_TOKEN_PREFIX + Base64.getUrlEncoder().withoutPadding().encodeToString(tokenBytes);
-        } catch (Exception e) {
-            throw new AssertionError("测试令牌生成失败", e);
-        }
-    }
-
-    /**
-     * 构造测试令牌密钥。
-     *
-     * @return AES 密钥
-     */
-    private SecretKeySpec buildTokenSecretKey() {
-        try {
-            byte[] key = MessageDigest.getInstance(SHA_256)
-                    .digest(authTokenProperties("secret-for-token").getSecret().getBytes(StandardCharsets.UTF_8));
-            return new SecretKeySpec(key, AES_ALGORITHM);
-        } catch (Exception e) {
-            throw new AssertionError("测试令牌密钥生成失败", e);
-        }
+        String payload = userId + TOKEN_PAYLOAD_SEPARATOR + issuedAt.getEpochSecond();
+        return new EncryptedAuthTokenService(authTokenProperties("secret-for-token"))
+                .encryptPayload(MAINTAINER_TOKEN_PREFIX, payload);
     }
 }

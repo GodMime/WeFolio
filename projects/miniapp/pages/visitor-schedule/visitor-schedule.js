@@ -31,6 +31,7 @@ Page({
   handleQuery() {
     request({
       url: `${VISITOR_PORTFOLIO_API_PREFIX}/${this.data.shareCode}/schedule`,
+      authMode: 'visitor',
       data: {
         startDate: this.data.startDate,
         endDate: this.data.endDate,
