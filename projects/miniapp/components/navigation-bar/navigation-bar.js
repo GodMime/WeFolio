@@ -1,3 +1,5 @@
+const { buildNavigationBarLayout } = require('../../utils/navigation-bar-layout')
+
 Component({
   options: {
     multipleSlots: true // 在组件定义时的选项中启用多slot支持
@@ -59,17 +61,17 @@ Component({
   },
   lifetimes: {
     attached() {
-      const rect = wx.getMenuButtonBoundingClientRect()
-      const platform = (wx.getDeviceInfo() || wx.getSystemInfoSync()).platform
-      const isAndroid = platform === 'android'
-      const isDevtools = platform === 'devtools'
-      const { windowWidth, safeArea: { top = 0, bottom = 0 } = {} } = wx.getWindowInfo() || wx.getSystemInfoSync()
-      this.setData({
-        ios: !isAndroid,
-        innerPaddingRight: `padding-right: ${windowWidth - rect.left}px`,
-        leftWidth: `width: ${windowWidth - rect.left}px`,
-        safeAreaTop: isDevtools || isAndroid ? `height: calc(var(--height) + ${top}px); padding-top: ${top}px` : ``
-      })
+      const systemInfo = wx.getSystemInfoSync()
+      const windowInfo = wx.getWindowInfo ? wx.getWindowInfo() : systemInfo
+      const deviceInfo = wx.getDeviceInfo ? wx.getDeviceInfo() : systemInfo
+      const menuButtonRect = wx.getMenuButtonBoundingClientRect()
+
+      this.setData(buildNavigationBarLayout({
+        deviceInfo,
+        menuButtonRect,
+        windowInfo,
+        systemInfo
+      }))
     },
   },
   /**
