@@ -1,0 +1,65 @@
+<view class="page-shell portfolios-page mock-portfolios-page">
+  <navigation-bar title="作品集" back="{{false}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+
+  <scroll-view class="portfolio-scroll" scroll-y type="list">
+    <view class="portfolio-content">
+      <view class="segment">
+        <button class="segment-item active">个人</button>
+        <button class="segment-item" bindtap="handleLockedAction">团队</button>
+      </view>
+
+      <view class="portfolio-list-panel">
+        <view class="list-heading">
+          <view class="list-title">{{portfolioList.ownerTitle}}</view>
+          <view class="summary-pills">
+            <view class="summary-pill published">{{portfolioList.summary.publishedText}}</view>
+            <view class="summary-pill draft">{{portfolioList.summary.draftText}}</view>
+          </view>
+        </view>
+
+        <view class="portfolio-list">
+          <view wx:for="{{portfolioList.portfolios}}" wx:key="portfolioId" class="portfolio-swipe-row">
+            <view class="portfolio-delete-pane">
+              <button class="portfolio-delete-button" catchtap="handleActionTap" data-action="delete">删除</button>
+            </view>
+            <view class="portfolio-item-card" data-id="{{item.portfolioId}}" bindtap="handlePortfolioTap">
+              <view class="portfolio-cover">
+                <image class="portfolio-cover-image" src="{{item.coverUrl}}" mode="aspectFill" aria-label="{{item.coverAlt}}"></image>
+              </view>
+              <view class="portfolio-copy">
+                <view class="portfolio-title">{{item.title}}</view>
+                <view class="portfolio-meta">{{item.updatedText}}</view>
+                <view class="portfolio-badges">
+                  <view class="status-badge {{item.statusTone}}">{{item.statusText}}</view>
+                </view>
+              </view>
+              <view class="portfolio-side">
+                <view class="portfolio-action-row">
+                  <button
+                    wx:if="{{item.showDraftPreview}}"
+                    class="portfolio-action-button preview"
+                    catchtap="handleActionTap"
+                    data-action="preview"
+                  >预览</button>
+                  <button
+                    class="portfolio-action-button {{item.actionType === 'PUBLISH' ? 'publish' : ''}}"
+                    catchtap="handleActionTap"
+                    data-action="{{item.actionType}}"
+                  >{{item.actionText}}</button>
+                </view>
+                <view class="portfolio-arrow"></view>
+              </view>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view class="create-actions">
+        <button class="create-action standard" bindtap="handleLockedAction">新建标准个人作品集</button>
+        <button class="create-action advanced" bindtap="handleLockedAction">新建高级个人作品集</button>
+      </view>
+    </view>
+  </scroll-view>
+
+  <mock-tabbar tabs="{{tabs}}"></mock-tabbar>
+</view>

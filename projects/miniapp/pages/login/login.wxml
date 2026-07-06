@@ -3,7 +3,7 @@
 
   <scroll-view class="login-scroll" scroll-y type="list">
     <view class="login-layout">
-      <view class="login-hero {{activeTab === 'register' ? 'register-mode' : 'wechat-mode'}}">
+      <view class="login-hero {{activeTab === 'experience' ? 'experience-mode' : activeTab === 'register' ? 'register-mode' : 'wechat-mode'}}">
         <image class="hero-image" src="https://cdn2.we-folio.dingchenyong.top/system/backgroud.jpeg" mode="aspectFill"></image>
         <view class="hero-shade"></view>
         <view class="hero-copy">
@@ -22,12 +22,17 @@
 
         <view class="panel auth-panel">
           <view class="login-tabs">
+            <button class="login-tab {{activeTab === 'experience' ? 'active' : ''}}" data-tab="experience" bindtap="handleTabTap">体验</button>
             <button class="login-tab {{activeTab === 'register' ? 'active' : ''}}" data-tab="register" bindtap="handleTabTap">注册</button>
             <button class="login-tab {{activeTab === 'wechat' ? 'active' : ''}}" data-tab="wechat" bindtap="handleTabTap">微信授权</button>
-            <view class="tab-indicator {{activeTab === 'register' ? 'register' : 'wechat'}}"></view>
+            <view class="tab-indicator {{activeTab}}"></view>
           </view>
 
-          <view class="auth-body {{activeTab === 'register' ? 'register-mode' : 'wechat-mode'}}">
+          <view class="auth-body {{activeTab === 'experience' ? 'experience-mode' : activeTab === 'register' ? 'register-mode' : 'wechat-mode'}}">
+            <view class="login-form experience-form {{activeTab === 'experience' ? 'active' : 'inactive'}}">
+              <button class="primary-button" bindtap="handleExperienceTap">先体验</button>
+            </view>
+
             <view class="login-form register-form {{activeTab === 'register' ? 'active' : 'inactive'}}">
               <view class="form-row profile-row">
                 <view class="field-label">头像昵称</view>

@@ -1,0 +1,73 @@
+<view class="page-shell mine-page mock-mine-page">
+  <navigation-bar title="我的" back="{{false}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+
+  <scroll-view class="mine-scroll" scroll-y type="list">
+    <view class="mine-content">
+      <view class="panel profile-panel">
+        <view class="profile-main">
+          <view class="avatar">
+            <image class="avatar-image" src="{{dashboard.profile.avatarUrl}}" mode="aspectFill"></image>
+          </view>
+          <view class="profile-text">
+            <view class="profile-name">{{dashboard.profile.displayName}}</view>
+            <view class="profile-subtitle">{{dashboard.profile.profession}} · {{dashboard.profile.city}}</view>
+          </view>
+        </view>
+        <view class="code-pill">{{dashboard.profile.uniqueCode}}</view>
+      </view>
+
+      <view class="balance-band">
+        <view class="balance-top">
+          <view class="balance-copy">
+            <view class="balance-label">当前积分余额</view>
+            <view class="balance-value">{{dashboard.point.balance}}</view>
+          </view>
+          <view class="light-button">充值</view>
+        </view>
+        <view class="balance-bottom">
+          <text>今日已消耗 {{dashboard.point.todayConsumed}}</text>
+          <text class="warning-pill">体验版</text>
+        </view>
+      </view>
+
+      <view class="metric-grid">
+        <view class="metric">
+          <view class="metric-value">{{dashboard.metrics.workCount}}</view>
+          <view class="metric-label">作品</view>
+        </view>
+        <view class="metric">
+          <view class="metric-value">{{dashboard.metrics.publishedPortfolioCount}}</view>
+          <view class="metric-label">作品集</view>
+        </view>
+        <view class="metric">
+          <view class="metric-value">{{dashboard.metrics.recentVisitCount}}</view>
+          <view class="metric-label">近 7 日访问</view>
+        </view>
+      </view>
+
+      <view class="panel action-panel">
+        <view class="panel-heading">
+          <view class="panel-title">跟进与团队</view>
+          <view class="panel-meta">体验</view>
+        </view>
+        <view class="entry-list">
+          <view wx:for="{{dashboard.entries}}" wx:key="type" class="entry-row">
+            <image class="entry-icon" src="{{item.iconUrl}}" mode="aspectFit"></image>
+            <view class="entry-copy">
+              <view class="entry-title">{{item.title}}</view>
+              <view class="entry-desc">{{item.desc}}</view>
+            </view>
+            <view class="entry-side">
+              <view wx:if="{{item.badgeText}}" class="entry-badge">{{item.badgeText}}</view>
+              <view class="entry-arrow"></view>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <button class="primary-button return-login-button" bindtap="handleReturnLoginTap">返回登录页</button>
+    </view>
+  </scroll-view>
+
+  <mock-tabbar tabs="{{tabs}}"></mock-tabbar>
+</view>

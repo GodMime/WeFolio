@@ -23,7 +23,13 @@
     "pages/messages/messages",
     "pages/visits/visits",
     "pages/profile/profile",
-    "pages/login/login"
+    "pages/login/login",
+    "pages/mock/index/index",
+    "pages/mock/schedule/schedule",
+    "pages/mock/works/works",
+    "pages/mock/portfolios/portfolios",
+    "pages/mock/portfolio-standard-edit/portfolio-standard-edit",
+    "pages/mock/portfolio-standard-preview/portfolio-standard-preview"
   ],
   "window": {
     "navigationBarTextStyle": "black",

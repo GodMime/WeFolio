@@ -1,0 +1,153 @@
+.tabbar,
+.tab {
+  display: flex;
+  align-items: center;
+}
+
+.tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  height: calc(116rpx + env(safe-area-inset-bottom));
+  padding: 10rpx 20rpx env(safe-area-inset-bottom);
+  justify-content: space-around;
+  border-top: 1rpx solid rgba(23, 32, 42, 0.08);
+  background: rgba(255, 255, 255, 0.96);
+  box-sizing: border-box;
+}
+
+.tab {
+  position: relative;
+  width: 25%;
+  height: 96rpx;
+  flex-direction: column;
+  justify-content: center;
+  color: #8b96a3;
+  background: transparent;
+}
+
+.tab.active {
+  color: #b88a44;
+}
+
+.tab.active::before,
+.schedule-tab-icon::before,
+.schedule-tab-icon::after,
+.work-tab-icon::before,
+.work-tab-icon::after,
+.portfolio-tab-icon::before,
+.portfolio-tab-icon::after,
+.mine-tab-icon::before,
+.mine-tab-icon::after {
+  position: absolute;
+  content: "";
+  box-sizing: border-box;
+}
+
+.tab.active::before {
+  top: 4rpx;
+  left: 50%;
+  width: 42rpx;
+  height: 6rpx;
+  border-radius: 999rpx;
+  background: #b88a44;
+  box-shadow: 0 4rpx 16rpx rgba(184, 138, 68, 0.26);
+  transform: translateX(-50%);
+}
+
+.tab-icon {
+  position: relative;
+  width: 42rpx;
+  height: 42rpx;
+  margin-bottom: 7rpx;
+}
+
+.schedule-tab-icon::before {
+  left: 6rpx;
+  top: 6rpx;
+  width: 30rpx;
+  height: 30rpx;
+  border: 4rpx solid currentColor;
+  border-radius: 10rpx;
+}
+
+.schedule-tab-icon::after {
+  left: 12rpx;
+  top: 18rpx;
+  width: 18rpx;
+  height: 4rpx;
+  border-radius: 999rpx;
+  background: currentColor;
+}
+
+.work-tab-icon::before {
+  left: 6rpx;
+  top: 6rpx;
+  width: 30rpx;
+  height: 30rpx;
+  border: 4rpx solid currentColor;
+  border-radius: 10rpx;
+}
+
+.work-tab-icon::after {
+  left: 13rpx;
+  bottom: 11rpx;
+  width: 18rpx;
+  height: 14rpx;
+  border-left: 4rpx solid currentColor;
+  border-bottom: 4rpx solid currentColor;
+  transform: rotate(-45deg);
+  transform-origin: center;
+}
+
+.portfolio-tab-icon::before {
+  left: 10rpx;
+  top: 8rpx;
+  width: 28rpx;
+  height: 28rpx;
+  border: 4rpx solid currentColor;
+  border-radius: 8rpx;
+  background: rgba(255, 255, 255, 0.96);
+  z-index: 2;
+}
+
+.portfolio-tab-icon::after {
+  left: 4rpx;
+  top: 14rpx;
+  width: 28rpx;
+  height: 28rpx;
+  border: 4rpx solid currentColor;
+  border-radius: 8rpx;
+  z-index: 1;
+}
+
+.mine-tab-icon::before {
+  left: 13rpx;
+  top: 6rpx;
+  width: 16rpx;
+  height: 16rpx;
+  border: 4rpx solid currentColor;
+  border-radius: 50%;
+}
+
+.mine-tab-icon::after {
+  left: 6rpx;
+  bottom: 6rpx;
+  width: 30rpx;
+  height: 16rpx;
+  border: 4rpx solid currentColor;
+  border-bottom-width: 3rpx;
+  border-radius: 20rpx 20rpx 8rpx 8rpx;
+}
+
+.tab-label {
+  font-size: 21rpx;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.tab::after {
+  border: 0;
+}

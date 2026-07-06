@@ -33,6 +33,10 @@
     transform 0.62s cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
+.login-hero.experience-mode {
+  min-height: 500rpx;
+}
+
 .login-hero.register-mode {
   min-height: 320rpx;
 }
@@ -55,6 +59,11 @@
     filter 0.62s cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
+.login-hero.experience-mode .hero-image {
+  transform: scale(1.1) translateY(-14rpx);
+  filter: brightness(1.04);
+}
+
 .login-hero.register-mode .hero-image {
   transform: scale(1.04) translateY(0);
   filter: brightness(1);
@@ -70,6 +79,7 @@
   transition: background 0.62s cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
+.login-hero.experience-mode .hero-shade,
 .login-hero.wechat-mode .hero-shade {
   background: linear-gradient(180deg, rgba(23, 32, 42, 0.03) 0%, rgba(23, 32, 42, 0.66) 100%);
 }
@@ -195,7 +205,7 @@
 
 .tab-indicator {
   position: absolute;
-  left: 25%;
+  left: 16.6667%;
   bottom: -1rpx;
   width: 108rpx;
   height: 4rpx;
@@ -205,12 +215,16 @@
   transition: left 0.28s cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
+.tab-indicator.experience {
+  left: 16.6667%;
+}
+
 .tab-indicator.register {
-  left: 25%;
+  left: 50%;
 }
 
 .tab-indicator.wechat {
-  left: 75%;
+  left: 83.3333%;
 }
 
 .login-form {
@@ -234,12 +248,13 @@
   transition: max-height 0.62s cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
-.auth-body.register-mode {
-  max-height: 430rpx;
-}
-
+.auth-body.experience-mode,
 .auth-body.wechat-mode {
   max-height: 84rpx;
+}
+
+.auth-body.register-mode {
+  max-height: 430rpx;
 }
 
 .login-form.active {
@@ -259,6 +274,7 @@
   max-height: 430rpx;
 }
 
+.experience-form.active,
 .wechat-form.active {
   max-height: 84rpx;
 }

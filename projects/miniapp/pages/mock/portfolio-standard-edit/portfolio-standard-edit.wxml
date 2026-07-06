@@ -1,0 +1,254 @@
+<view class="page-shell portfolio-edit-page mock-portfolio-edit-page">
+  <navigation-bar title="编辑作品集" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+
+  <scroll-view class="edit-scroll" scroll-y type="list" scroll-top="{{editScrollTop}}">
+    <view class="edit-content">
+      <view class="panel share-panel">
+        <view class="panel-heading">
+          <view class="heading-copy">
+            <view class="section-title">分享信息</view>
+            <view class="section-desc">体验版可本地编辑并预览，保存和发布需要注册登录。</view>
+          </view>
+          <view class="status-pill muted">体验</view>
+        </view>
+
+        <view class="form-row cover-form-row">
+          <view class="field-heading">
+            <view class="field-label">分享封面</view>
+          </view>
+          <view class="cover-row">
+            <view class="cover-preview" bindtap="handleLockedAction" aria-role="button" aria-label="选择分享封面">
+              <image wx:if="{{draft.config.share.coverUrl}}" src="{{draft.config.share.coverUrl}}" mode="aspectFill"></image>
+              <view wx:else class="cover-empty">封面</view>
+            </view>
+          </view>
+        </view>
+
+        <view class="form-row">
+          <view class="field-heading">
+            <view class="field-label">作品集标题</view>
+          </view>
+          <input class="input" value="{{draft.config.share.title}}" data-field="title" bindinput="handleShareInput" maxlength="50" />
+        </view>
+      </view>
+
+      <view class="panel component-panel">
+        <view class="panel-heading">
+          <view class="heading-copy">
+            <view class="section-title">组件编排</view>
+            <view class="section-desc">已使用的组件按当前顺序展示</view>
+          </view>
+          <button class="link-button" bindtap="handleOpenComponentSheet">添加组件</button>
+        </view>
+
+        <view class="component-list">
+          <view
+            wx:for="{{componentRows}}"
+            wx:key="componentKey"
+            class="component-swipe-row {{item.active ? 'active' : ''}} {{revealedComponentKey === item.componentKey ? 'revealed' : ''}} {{draggingIndex === index ? 'dragging' : ''}}"
+            data-index="{{index}}"
+            data-key="{{item.componentKey}}"
+            data-type="{{item.componentType}}"
+            bindtouchstart="handleComponentTouchStart"
+            bindlongpress="handleComponentDragStart"
+            bindtouchmove="handleComponentTouchMove"
+            bindtouchend="handleComponentTouchEnd"
+            bindtouchcancel="handleComponentTouchCancel"
+          >
+            <view class="component-remove-pane" catchtap="noop">
+              <button class="component-remove-button" data-key="{{item.componentKey}}" catchtap="handleRemoveComponent">删除</button>
+            </view>
+            <view
+              class="component-row editable {{item.active ? 'active' : ''}} {{draggingIndex === index ? 'dragging' : ''}} {{dragTargetIndex === index && draggingIndex !== -1 ? 'drag-target' : ''}}"
+              style="{{draggingIndex === index ? componentDragStyle : ''}}"
+              data-key="{{item.componentKey}}"
+              data-type="{{item.componentType}}"
+              catchtap="handleComponentTap"
+              aria-role="button"
+              aria-label="编辑{{item.name}}组件"
+            >
+              <view class="component-order">{{index + 1}}</view>
+              <view class="component-copy mock-component-copy">
+                <view class="component-title">{{item.name}}</view>
+                <view class="mock-component-summary">{{item.summary}}</view>
+              </view>
+              <view class="component-drag-handle"></view>
+              <view class="component-row-arrow">
+                <view class="component-row-arrow-icon"></view>
+              </view>
+            </view>
+          </view>
+          <view wx:if="{{componentRows.length === 0}}" class="mock-component-empty">
+            <view class="section-desc">暂无组件，请添加组件后编辑。</view>
+          </view>
+        </view>
+      </view>
+
+    </view>
+  </scroll-view>
+
+  <view class="component-picker-mask {{componentSheetVisible ? 'visible' : ''}}" catchtap="handleCloseComponentSheet">
+    <view class="component-picker-panel" catchtap="noop">
+      <view class="component-picker-grabber"></view>
+      <view class="component-picker-heading">
+        <view class="component-picker-title">选择组件</view>
+        <view class="component-picker-count">{{componentOptions.length}} 个可选</view>
+      </view>
+
+      <scroll-view class="component-option-scroll" scroll-y type="list">
+        <view class="component-option-list-content">
+          <view
+            wx:for="{{componentOptions}}"
+            wx:key="componentType"
+            class="component-option"
+            data-type="{{item.componentType}}"
+            catchtap="handleSelectComponent"
+            aria-role="button"
+            aria-label="添加{{item.name}}组件"
+          >
+            <view class="component-option-copy">
+              <view class="component-option-name">{{item.name}}</view>
+              <view class="component-option-desc">{{item.description}}</view>
+            </view>
+            <view class="component-option-plus">+</view>
+          </view>
+        </view>
+      </scroll-view>
+
+      <view class="component-picker-actions">
+        <button class="component-picker-cancel" catchtap="handleCloseComponentSheet">取消</button>
+      </view>
+    </view>
+  </view>
+
+  <view class="mock-component-edit-mask component-work-picker-mask {{componentEditSheetVisible ? 'visible' : ''}}" catchtap="handleCloseComponentEditSheet">
+    <view class="mock-component-edit-panel component-work-picker-panel" catchtap="noop">
+      <view class="component-picker-grabber"></view>
+      <view class="component-picker-heading">
+        <view class="component-picker-title">{{selectedComponentName || '编辑组件'}}</view>
+        <view class="component-picker-count">可编辑</view>
+      </view>
+
+      <scroll-view class="mock-component-edit-scroll profile-form-scroll" scroll-y type="list">
+        <view class="profile-form-list-content mock-component-edit-content">
+          <block wx:if="{{selectedComponentType === 'CAROUSEL'}}">
+            <view class="section-desc mock-editor-desc">轮播图仅展示图片作品。</view>
+            <view class="component-work-list-content mock-work-list">
+              <view wx:for="{{workOptions}}" wx:key="id" class="component-work-option {{item.selected ? 'selected' : ''}}" data-id="{{item.id}}" bindtap="handleWorkToggle">
+                <view class="component-work-thumb">
+                  <image src="{{item.coverUrl}}" mode="aspectFill"></image>
+                </view>
+                <view class="component-work-copy">
+                  <view class="component-work-title">{{item.title}}</view>
+                  <view class="component-work-meta">图片 / 测试作品</view>
+                </view>
+                <view class="component-work-check">{{item.selected ? '✓' : ''}}</view>
+              </view>
+            </view>
+          </block>
+
+          <block wx:elif="{{selectedComponentType === 'WORK_GRID'}}">
+            <view class="section-desc mock-editor-desc">双列作品列表支持图片和视频作品。</view>
+            <view class="component-work-list-content mock-work-list">
+              <view wx:for="{{workOptions}}" wx:key="id" class="component-work-option {{item.selected ? 'selected' : ''}}" data-id="{{item.id}}" bindtap="handleWorkToggle">
+                <view class="component-work-thumb">
+                  <image src="{{item.coverUrl}}" mode="aspectFill"></image>
+                </view>
+                <view class="component-work-copy">
+                  <view class="component-work-title">{{item.title}}</view>
+                  <view class="component-work-meta">{{item.mediaType === 'VIDEO' ? '视频' : '图片'}} / 测试作品</view>
+                </view>
+                <view class="component-work-check">{{item.selected ? '✓' : ''}}</view>
+              </view>
+            </view>
+          </block>
+
+          <block wx:elif="{{selectedComponentType === 'PROFILE'}}">
+            <view class="profile-avatar-editor mock-profile-editor">
+              <view class="profile-avatar-preview" catchtap="handleLockedAction" aria-role="button" aria-label="上传头像">
+                <image src="{{profileForm.avatarUrl}}" mode="aspectFill"></image>
+              </view>
+              <view class="profile-avatar-copy">
+                <view class="field-label">{{profileForm.displayName}}</view>
+                <view class="profile-avatar-state">{{profileForm.profession}} · {{profileForm.city}}</view>
+              </view>
+              <button class="profile-avatar-button" catchtap="handleLockedAction">上传头像</button>
+            </view>
+            <view class="form-row">
+              <view class="field-heading">
+                <view class="field-label">昵称</view>
+              </view>
+              <input class="input profile-sheet-input" value="{{profileForm.displayName}}" data-field="displayName" bindinput="handleProfileInput" />
+            </view>
+            <view class="form-row">
+              <view class="field-heading">
+                <view class="field-label">职业</view>
+              </view>
+              <input class="input profile-sheet-input" value="{{profileForm.profession}}" data-field="profession" bindinput="handleProfileInput" />
+            </view>
+            <view class="form-row">
+              <view class="field-heading">
+                <view class="field-label">城市</view>
+              </view>
+              <input class="input profile-sheet-input" value="{{profileForm.city}}" data-field="city" bindinput="handleProfileInput" />
+            </view>
+            <view class="form-row">
+              <view class="field-heading">
+                <view class="field-label">简介</view>
+              </view>
+              <textarea class="input textarea profile-sheet-textarea" value="{{profileForm.bio}}" data-field="bio" bindinput="handleProfileInput"></textarea>
+            </view>
+          </block>
+
+          <block wx:elif="{{selectedComponentType === 'SCHEDULE_QUERY'}}">
+            <view class="form-row">
+              <view class="field-heading">
+                <view class="field-label">标题</view>
+              </view>
+              <input class="input" value="{{scheduleQueryForm.title}}" data-field="title" bindinput="handleScheduleInput" />
+            </view>
+            <view class="form-row">
+              <view class="field-heading">
+                <view class="field-label">说明</view>
+              </view>
+              <textarea class="input textarea" value="{{scheduleQueryForm.description}}" data-field="description" bindinput="handleScheduleInput"></textarea>
+            </view>
+          </block>
+
+          <block wx:elif="{{selectedComponentType === 'CONTACT_FORM'}}">
+            <view class="form-row">
+              <view class="field-heading">
+                <view class="field-label">标题</view>
+              </view>
+              <input class="input" value="{{contactFormConfig.title}}" data-field="title" bindinput="handleContactInput" />
+            </view>
+            <view class="form-row">
+              <view class="field-heading">
+                <view class="field-label">说明</view>
+              </view>
+              <textarea class="input textarea" value="{{contactFormConfig.description}}" data-field="description" bindinput="handleContactInput"></textarea>
+            </view>
+          </block>
+
+          <view wx:else class="component-work-state">请先选择组件</view>
+        </view>
+      </scroll-view>
+
+      <view class="component-work-actions">
+        <button class="component-work-cancel" catchtap="handleCloseComponentEditSheet">取消</button>
+        <button class="component-work-confirm" catchtap="handleConfirmComponentEditSheet">完成</button>
+      </view>
+    </view>
+  </view>
+
+  <view class="bottom-actions">
+    <button class="action-button primary-button" bindtap="handleSaveDraft">保存草稿</button>
+    <view class="preview-action-stack">
+      <button class="action-button secondary-button preview-draft-button" bindtap="handlePreview">
+        <view class="preview-action-title">预览</view>
+        <view class="preview-action-note">本地草稿</view>
+      </button>
+    </view>
+    <button class="action-button publish-button" bindtap="handlePublish">发布</button>
+  </view>
+</view>

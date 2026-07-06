@@ -1,0 +1,2 @@
+@import "../../portfolios/portfolios.wxss";
+@import "../common.wxss";

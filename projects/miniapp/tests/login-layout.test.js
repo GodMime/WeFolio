@@ -78,6 +78,14 @@ test('login segmented tabs use flex columns for skyline compatibility', () => {
   assert.match(tabsRule, /display:\s*flex/)
   assert.doesNotMatch(tabsRule, /display:\s*grid/)
   assert.match(tabRule, /flex:\s*1/)
+  assert.ok(
+    loginWxml.indexOf('data-tab="experience"') < loginWxml.indexOf('data-tab="register"'),
+    '体验 tab 应排在注册 tab 左侧'
+  )
+  assert.ok(
+    loginWxml.indexOf('data-tab="register"') < loginWxml.indexOf('data-tab="wechat"'),
+    '注册 tab 应排在微信授权 tab 左侧'
+  )
 })
 
 test('login welcome icon uses product logo image', () => {
@@ -170,10 +178,11 @@ test('login tab switch animates hero height and image crop', () => {
 
   assert.match(
     loginWxml,
-    /class="login-hero \{\{activeTab === 'register' \? 'register-mode' : 'wechat-mode'\}\}"/
+    /class="login-hero \{\{activeTab === 'experience' \? 'experience-mode' : activeTab === 'register' \? 'register-mode' : 'wechat-mode'\}\}"/
   )
   assert.match(heroRule, /transition:[^;]*min-height/)
   assert.match(heroImageRule, /transition:[^;]*transform/)
+  assert.match(loginWxss, /\.login-hero\.experience-mode\s+\.hero-image\s*\{[\s\S]*transform:\s*scale/)
   assert.match(loginWxss, /\.login-hero\.register-mode\s+\.hero-image\s*\{[\s\S]*transform:\s*scale/)
   assert.match(loginWxss, /\.login-hero\.wechat-mode\s+\.hero-image\s*\{[\s\S]*transform:\s*scale/)
 })
@@ -186,7 +195,11 @@ test('login tab content stays mounted for animated height transitions', () => {
 
   assert.match(
     loginWxml,
-    /class="auth-body \{\{activeTab === 'register' \? 'register-mode' : 'wechat-mode'\}\}"/
+    /class="auth-body \{\{activeTab === 'experience' \? 'experience-mode' : activeTab === 'register' \? 'register-mode' : 'wechat-mode'\}\}"/
+  )
+  assert.match(
+    loginWxml,
+    /class="login-form experience-form \{\{activeTab === 'experience' \? 'active' : 'inactive'\}\}"/
   )
   assert.match(
     loginWxml,
@@ -213,12 +226,13 @@ test('login tabs match design underline style', () => {
   const tabsRule = readRule('.login-tabs')
   const activeTabRule = readRule('.login-tab.active')
   const indicatorRule = readRule('.tab-indicator')
+  const experienceIndicatorRule = readRule('.tab-indicator.experience')
   const registerIndicatorRule = readRule('.tab-indicator.register')
   const wechatIndicatorRule = readRule('.tab-indicator.wechat')
 
   assert.match(
     loginWxml,
-    /class="tab-indicator \{\{activeTab === 'register' \? 'register' : 'wechat'\}\}"/
+    /class="tab-indicator \{\{activeTab\}\}"/
   )
   assert.match(tabsRule, /border-bottom:\s*1rpx\s+solid\s+#d7dee5/)
   assert.match(tabsRule, /background:\s*transparent/)
@@ -230,13 +244,15 @@ test('login tabs match design underline style', () => {
   assert.match(indicatorRule, /height:\s*4rpx/)
   assert.match(indicatorRule, /background:\s*#315f9d/)
   assert.match(indicatorRule, /transition:\s*left/)
-  assert.match(registerIndicatorRule, /left:\s*25%/)
-  assert.match(wechatIndicatorRule, /left:\s*75%/)
+  assert.match(experienceIndicatorRule, /left:\s*16\.6667%/)
+  assert.match(registerIndicatorRule, /left:\s*50%/)
+  assert.match(wechatIndicatorRule, /left:\s*83\.3333%/)
 })
 
 test('login buttons match first-login design copy and shape', () => {
   const buttonRule = readRule('.primary-button')
 
+  assert.match(loginWxml, />\s*先体验\s*</)
   assert.match(loginWxml, />\s*\{\{loading \? '注册中' : '注册'\}\}\s*</)
   assert.doesNotMatch(loginWxml, /微信授权获取手机号并注册/)
   assert.doesNotMatch(loginWxml, /微信授权注册/)
@@ -244,6 +260,14 @@ test('login buttons match first-login design copy and shape', () => {
   assert.match(buttonRule, /height:\s*84rpx/)
   assert.match(buttonRule, /border-radius:\s*16rpx/)
   assert.match(buttonRule, /background:\s*linear-gradient\(180deg,\s*#263445,\s*#111827\)/)
+})
+
+test('experience login tab redirects to independent mock pages', () => {
+  assert.match(loginJs, /activeTab:\s*'experience'/)
+  assert.match(loginJs, /handleExperienceTap\(\)/)
+  assert.match(loginJs, /wx\.redirectTo\(\{[\s\S]*url:\s*'\/pages\/mock\/index\/index'/)
+  assert.match(loginWxml, /data-tab="experience"[\s\S]*体验/)
+  assert.match(loginWxml, /class="login-form experience-form[\s\S]*bindtap="handleExperienceTap"[\s\S]*先体验/)
 })
 
 test('register form uses WeChat avatar nickname and phone components', () => {

@@ -1,0 +1,102 @@
+<view class="page-shell schedule-page mock-schedule-page">
+  <navigation-bar title="档期" back="{{false}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+
+  <scroll-view class="schedule-scroll" scroll-y type="list">
+    <view class="schedule-content">
+      <view class="schedule-segmented">
+        <button class="segment {{activeMode === 'maintenance' ? 'active' : ''}}" data-mode="maintenance" bindtap="handleModeTap">档期维护</button>
+        <button class="segment {{activeMode === 'definitions' ? 'active' : ''}}" data-mode="definitions" bindtap="handleModeTap">档位定义</button>
+      </view>
+
+      <block wx:if="{{activeMode === 'maintenance'}}">
+        <view class="panel schedule-color-card">
+          <view class="panel-heading">
+            <view>
+              <view class="panel-title">档位定义</view>
+              <view class="panel-meta">名称 / 时间 / 颜色</view>
+            </view>
+          </view>
+          <view class="color-legend">
+            <view class="swatch-option" wx:for="{{slotDefinitions}}" wx:key="id">
+              <view class="swatch" style="background: {{item.color}};"></view>
+              <text>{{item.name}} {{item.timeRangeText}}</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="calendar-group">
+          <view class="calendar-toolbar">
+            <button class="month-control" bindtap="handlePrevMonth">‹</button>
+            <view class="month-title">{{month.title}}</view>
+            <picker class="month-picker" mode="date" fields="month" value="{{month.yearMonth}}" bindchange="handleMonthPickerChange">
+              <view class="month-control wide">切换年月</view>
+            </picker>
+            <button class="month-control" bindtap="handleNextMonth">›</button>
+          </view>
+
+          <view class="calendar-region">
+            <view class="calendar">
+              <view class="weekday" wx:for="{{weekdays}}" wx:key="*this">{{item}}</view>
+              <view
+                wx:for="{{month.days}}"
+                wx:key="key"
+                class="{{item.dayClass}}"
+                data-date="{{item.date}}"
+                bindtap="handleDayTap"
+              >
+                <view class="date-stack">
+                  <view class="day-number">{{item.dayNumber}}</view>
+                  <view class="day-meta" wx:if="{{item.metaText}}">{{item.metaText}}</view>
+                </view>
+              </view>
+            </view>
+          </view>
+        </view>
+
+        <view class="day-panel">
+          <view class="day-heading">
+            <view class="day-date-copy">
+              <view class="day-title">{{selectedDate}}</view>
+              <view class="day-lunar-title">体验档期</view>
+            </view>
+            <view class="day-summary">{{selectedDateSummary}}</view>
+          </view>
+          <view class="inline-empty">
+            <view class="empty-title small">当天暂无档期</view>
+            <view class="empty-desc">体验版新增档期需要注册登录</view>
+          </view>
+          <button class="primary-button schedule-add-button" bindtap="handleLockedAction">新增档期</button>
+        </view>
+      </block>
+
+      <block wx:else>
+        <view class="panel definition-list-panel">
+          <view class="panel-heading">
+            <view>
+              <view class="panel-title">所有定义</view>
+              <view class="panel-meta">启用 / 停用可切换</view>
+            </view>
+          </view>
+          <view wx:for="{{slotDefinitions}}" wx:key="id" class="slot-swipe-row">
+            <view class="slot-line" bindtap="handleLockedAction">
+              <view class="slot-main">
+                <view class="swatch" style="background: {{item.color}};"></view>
+                <view class="slot-copy">
+                  <view class="slot-name">{{item.name}}</view>
+                  <view class="slot-desc">{{item.timeRangeText}} · 启用</view>
+                </view>
+              </view>
+              <view class="slot-actions">
+                <button class="mini-action" catchtap="handleLockedAction">编辑</button>
+                <button class="mini-action warn" catchtap="handleLockedAction">停用</button>
+              </view>
+            </view>
+          </view>
+          <button class="primary-button definition-add-button" bindtap="handleLockedAction">新增定义</button>
+        </view>
+      </block>
+    </view>
+  </scroll-view>
+
+  <mock-tabbar tabs="{{tabs}}"></mock-tabbar>
+</view>

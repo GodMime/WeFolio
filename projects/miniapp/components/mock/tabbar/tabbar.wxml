@@ -1,0 +1,16 @@
+<view class="tabbar">
+  <button
+    class="tab {{item.active ? 'active' : ''}}"
+    wx:for="{{tabs}}"
+    wx:key="key"
+    data-url="{{item.url}}"
+    data-active="{{item.active}}"
+    data-label="{{item.label}}"
+    catchtap="handleTabTap"
+    aria-role="button"
+    aria-label="{{item.label}}"
+  >
+    <view class="tab-icon {{item.icon}}-tab-icon"></view>
+    <view class="tab-label">{{item.label}}</view>
+  </button>
+</view>

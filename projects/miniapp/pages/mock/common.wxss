@@ -1,0 +1,164 @@
+.mock-page {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #f5f7fb;
+  color: #17202a;
+}
+
+.mock-scroll {
+  flex: 1;
+  min-height: 0;
+}
+
+.mock-content {
+  padding: 28rpx 28rpx calc(150rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+}
+
+.mock-section {
+  margin-top: 22rpx;
+  padding: 24rpx;
+  border: 1rpx solid rgba(23, 32, 42, 0.06);
+  border-radius: 16rpx;
+  background: rgba(255, 255, 255, 0.96);
+  box-sizing: border-box;
+  box-shadow: 0 18rpx 44rpx rgba(23, 32, 42, 0.06);
+}
+
+.mock-section:first-child {
+  margin-top: 0;
+}
+
+.mock-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18rpx;
+}
+
+.mock-title {
+  color: #17202a;
+  font-size: 34rpx;
+  font-weight: 900;
+  line-height: 1.35;
+}
+
+.mock-subtitle,
+.mock-meta,
+.mock-desc {
+  color: #66727f;
+  font-size: 24rpx;
+  line-height: 1.55;
+}
+
+.mock-desc {
+  margin-top: 8rpx;
+}
+
+.mock-primary-button,
+.mock-secondary-button,
+.mock-pill-button {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  border-radius: 14rpx;
+  font-size: 25rpx;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.mock-primary-button {
+  width: 100%;
+  height: 78rpx;
+  color: #ffffff;
+  background: linear-gradient(180deg, #263445, #111827);
+}
+
+.mock-secondary-button {
+  min-width: 132rpx;
+  height: 58rpx;
+  padding: 0 22rpx;
+  color: #425061;
+  border: 1rpx solid #d6dee7;
+  background: #f3f6f9;
+}
+
+.mock-pill-button {
+  min-width: 112rpx;
+  height: 52rpx;
+  padding: 0 18rpx;
+  color: #2d5f9a;
+  border: 1rpx solid #c8d7ea;
+  background: #eef5ff;
+}
+
+.mock-primary-button::after,
+.mock-secondary-button::after,
+.mock-pill-button::after {
+  border: 0;
+}
+
+.mock-tag-row,
+.mock-action-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14rpx;
+}
+
+.mock-tag {
+  display: inline-flex;
+  min-height: 48rpx;
+  align-items: center;
+  padding: 0 18rpx;
+  border-radius: 999rpx;
+  color: #0f766e;
+  background: #e9f7f4;
+  font-size: 22rpx;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.mock-empty {
+  padding: 36rpx 20rpx;
+  color: #7b8794;
+  font-size: 25rpx;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.mock-field {
+  margin-top: 20rpx;
+}
+
+.mock-field-label {
+  color: #425061;
+  font-size: 24rpx;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.mock-input,
+.mock-textarea {
+  width: 100%;
+  margin-top: 10rpx;
+  padding: 0 18rpx;
+  border: 1rpx solid #d9e2eb;
+  border-radius: 12rpx;
+  background: #ffffff;
+  color: #17202a;
+  font-size: 26rpx;
+  box-sizing: border-box;
+}
+
+.mock-input {
+  height: 72rpx;
+}
+
+.mock-textarea {
+  height: 150rpx;
+  padding-top: 16rpx;
+  line-height: 1.55;
+}

@@ -1,0 +1,99 @@
+<view class="page-shell works-page mock-works-page">
+  <navigation-bar title="作品" back="{{false}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+
+  <view class="works-scroll">
+    <view class="works-content">
+      <view class="search-panel">
+        <view class="search-box">
+          <view class="search-icon"></view>
+          <input class="search-input" disabled="{{true}}" value="" placeholder="搜索作品标题、标签" placeholder-class="search-placeholder" />
+        </view>
+      </view>
+
+      <view class="filter-panel">
+        <view class="filter-shell">
+          <scroll-view class="tag-scroll" scroll-x type="list">
+            <view class="tag-row">
+              <view class="tag-pill {{selectedTagId === 0 ? 'active' : ''}}" data-id="0" bindtap="handleTagTap">
+                <text class="tag-text">全部</text>
+              </view>
+              <view
+                wx:for="{{list.tags}}"
+                wx:key="id"
+                class="tag-pill {{selectedTagId === item.id ? 'active' : ''}}"
+                data-id="{{item.id}}"
+                bindtap="handleTagTap"
+              >
+                <text class="tag-text">{{item.name}}</text>
+              </view>
+            </view>
+          </scroll-view>
+          <view class="tag-add-button" catchtap="handleLockedAction" aria-role="button" aria-label="新增作品标签">+</view>
+        </view>
+      </view>
+
+      <view class="library-panel">
+        <view class="list-heading">
+          <view class="section-title">素材库</view>
+          <view class="list-actions">
+            <button class="text-action" bindtap="handleLockedAction">批量管理</button>
+            <view class="tag-add-button work-add-button" catchtap="handleLockedAction" aria-role="button" aria-label="添加作品">+</view>
+          </view>
+        </view>
+
+        <scroll-view class="work-list-scroll" scroll-y type="list">
+          <view class="work-list">
+            <view wx:for="{{visibleWorks}}" wx:key="id" class="work-swipe-row">
+              <view class="work-delete-pane">
+                <button class="work-delete-button" catchtap="handleLockedAction">删除</button>
+              </view>
+              <view class="work-card" data-id="{{item.id}}" bindtap="handleWorkTap">
+                <view class="thumb">
+                  <image src="{{item.coverUrl}}" mode="aspectFill"></image>
+                  <view
+                    wx:if="{{item.mediaType === 'VIDEO'}}"
+                    class="play-badge"
+                    data-id="{{item.id}}"
+                    catchtap="handleWorkTap"
+                    aria-role="button"
+                    aria-label="播放视频"
+                  ></view>
+                </view>
+                <view class="work-copy">
+                  <view class="work-title">{{item.title}}</view>
+                  <view class="work-meta">
+                    <text>{{item.mediaType === 'VIDEO' ? '视频' : '图片'}}</text>
+                    <text> / 测试作品</text>
+                  </view>
+                  <view class="reference-pill used">已使用 1 次</view>
+                </view>
+                <view class="card-arrow"></view>
+              </view>
+            </view>
+            <view class="list-end">已显示全部作品</view>
+          </view>
+        </scroll-view>
+      </view>
+    </view>
+  </view>
+
+  <view class="video-preview-mask {{videoPreviewVisible ? 'visible' : ''}}" catchtap="handleCloseVideoPreview">
+    <view class="video-preview-panel" catchtap="noop">
+      <view class="video-heading">
+        <view class="video-title">{{videoPreview.title}}</view>
+        <view class="video-close" catchtap="handleCloseVideoPreview">×</view>
+      </view>
+      <video
+        id="mockWorkVideo"
+        class="video-player"
+        src="{{videoPreview.src}}"
+        poster="{{videoPreview.poster}}"
+        controls="{{true}}"
+        autoplay="{{true}}"
+        object-fit="contain"
+      ></video>
+    </view>
+  </view>
+
+  <mock-tabbar tabs="{{tabs}}"></mock-tabbar>
+</view>

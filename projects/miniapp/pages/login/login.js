@@ -55,7 +55,7 @@ function trimText(value) {
 
 Page({
   data: {
-    activeTab: 'register',
+    activeTab: 'experience',
     loading: false,
     referralCode: '',
     nickname: '',
@@ -72,6 +72,12 @@ Page({
     }
     this.setData({
       activeTab: tab
+    })
+  },
+
+  handleExperienceTap() {
+    wx.redirectTo({
+      url: '/pages/mock/index/index'
     })
   },
 

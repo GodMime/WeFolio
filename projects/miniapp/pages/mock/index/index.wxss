@@ -1,0 +1,15 @@
+@import "../../index/index.wxss";
+@import "../common.wxss";
+
+.return-login-button {
+  display: flex;
+  width: 100%;
+  min-height: 88rpx;
+  align-items: center;
+  justify-content: center;
+  margin: 26rpx 0 0;
+  padding: 0 28rpx;
+  border-radius: 16rpx;
+  line-height: 1;
+  box-sizing: border-box;
+}

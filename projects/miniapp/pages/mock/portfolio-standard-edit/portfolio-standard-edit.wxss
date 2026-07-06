@@ -1,0 +1,75 @@
+@import "../../portfolio-standard-edit/portfolio-standard-edit.wxss";
+@import "../common.wxss";
+
+.mock-component-copy {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6rpx;
+}
+
+.mock-component-summary {
+  overflow: hidden;
+  width: 100%;
+  color: #697786;
+  font-size: 22rpx;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.component-swipe-row.active .component-row {
+  border-color: #c28b37;
+  background: #fff9ed;
+}
+
+.component-swipe-row.active.revealed .component-row,
+.component-swipe-row.active.dragging .component-row {
+  background: #fff9ed;
+}
+
+.mock-component-empty {
+  min-height: 112rpx;
+  align-items: center;
+  justify-content: center;
+  padding: 24rpx;
+  border: 1rpx dashed #cbd6df;
+  border-radius: 14rpx;
+  background: #f8fafc;
+  box-sizing: border-box;
+}
+
+.mock-component-edit-panel {
+  max-height: 78vh;
+}
+
+.mock-component-edit-scroll {
+  height: 54vh;
+  min-height: 360rpx;
+  max-height: 54vh;
+}
+
+.mock-component-edit-content {
+  gap: 20rpx;
+}
+
+.mock-editor-desc {
+  margin-top: 0;
+}
+
+.mock-work-list {
+  margin-top: 18rpx;
+}
+
+.mock-profile-editor {
+  margin-top: 24rpx;
+  padding: 18rpx;
+  border: 1rpx solid #e1e8ef;
+  border-radius: 14rpx;
+  background: #f8fafc;
+  box-sizing: border-box;
+}
+
+.profile-avatar-preview image {
+  width: 100%;
+  height: 100%;
+}
