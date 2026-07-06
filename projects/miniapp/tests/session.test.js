@@ -3,7 +3,7 @@ const test = require('node:test')
 
 const {
   TOKEN_STORAGE_KEY,
-  handleAuthRequired,
+  handleMaintainerAuthRequired,
   maintainerWechatLogin
 } = require('../utils/session')
 
@@ -37,7 +37,7 @@ test('maintainer wechat login uses dedicated auth endpoint', async () => {
   }
 })
 
-test('auth required handler clears token, shows toast and redirects to login', () => {
+test('maintainer auth required handler clears maintainer token, shows toast and redirects to login', () => {
   const storage = {
     [TOKEN_STORAGE_KEY]: 'wf-dev-user-7'
   }
@@ -59,7 +59,7 @@ test('auth required handler clears token, shows toast and redirects to login', (
     }
   }
 
-  handleAuthRequired('未登录', wxApi)
+  handleMaintainerAuthRequired('未登录', wxApi)
 
   assert.equal(calls.removedKey, TOKEN_STORAGE_KEY)
   assert.equal(storage[TOKEN_STORAGE_KEY], undefined)

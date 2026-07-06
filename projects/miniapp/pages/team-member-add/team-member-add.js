@@ -1,5 +1,5 @@
 const { request } = require('../../utils/request')
-const { handleAuthRequired, hasLocalToken } = require('../../utils/session')
+const { handleMaintainerAuthRequired, hasLocalToken } = require('../../utils/session')
 const {
   DEFAULT_MEMBER_INVITE_FORM,
   buildMemberCandidateQuery,
@@ -115,7 +115,7 @@ Page({
         this.setData({
           loading: false
         })
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({
@@ -211,7 +211,7 @@ Page({
         this.setData({
           saving: false
         })
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({

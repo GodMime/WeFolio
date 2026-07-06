@@ -1,5 +1,5 @@
 const { request } = require('../../utils/request')
-const { handleAuthRequired, hasLocalToken } = require('../../utils/session')
+const { handleMaintainerAuthRequired, hasLocalToken } = require('../../utils/session')
 const { normalizePointOverview } = require('../../utils/points')
 
 const POINT_OVERVIEW_URL = '/api/mine/points'
@@ -43,7 +43,7 @@ Page({
       })
     } catch (error) {
       if (error && error.authRequired) {
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({

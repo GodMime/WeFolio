@@ -183,7 +183,7 @@ test('schedule page contains definition and maintenance views wired to backend A
   assert.match(pageJs, /handleScheduleTouchEnd\(event\)[\s\S]*this\.handleTouchEnd\(event,\s*'scheduleTouchStart',\s*'revealedScheduleId',\s*'scheduleId'\)/)
   assert.match(pageJs, /handleSaveSchedule\(\)[\s\S]*const payload = buildScheduleItemPayload\(this\.data\.scheduleForm\)[\s\S]*validateScheduleItemPayload\(payload\)[\s\S]*data:\s*payload/)
   assert.match(pageJs, /handleSaveSlot\(\)[\s\S]*const payload = buildSlotDefinitionPayload\(this\.data\.slotForm\)[\s\S]*validateSlotDefinitionPayload\(payload\)[\s\S]*data:\s*payload/)
-  assert.match(pageJs, /handleSaveSlot\(\)[\s\S]*catch \(error\)[\s\S]*if \(error && error\.authRequired\) \{[\s\S]*this\.setData\(\{ saving: false \}\)[\s\S]*handleAuthRequired\(error\.message\)/)
+  assert.match(pageJs, /handleSaveSlot\(\)[\s\S]*catch \(error\)[\s\S]*if \(error && error\.authRequired\) \{[\s\S]*this\.setData\(\{ saving: false \}\)[\s\S]*handleMaintainerAuthRequired\(error\.message\)/)
   assert.match(pageJs, /`\/api\/mine\/schedule\/slot-definitions\/delete\/\$\{slotId\}`/)
   assert.match(pageJs, /`\/api\/mine\/schedule\/items\/delete\/\$\{scheduleId\}`/)
   assert.match(pageJs, /method:\s*'POST'/)

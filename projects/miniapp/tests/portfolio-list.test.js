@@ -44,7 +44,7 @@ function loadPortfolioListPage(fakeRequest, wxOverrides = {}) {
     filename: sessionPath,
     loaded: true,
     exports: {
-      handleAuthRequired() {},
+      handleMaintainerAuthRequired() {},
       hasLocalToken() {
         return true
       }

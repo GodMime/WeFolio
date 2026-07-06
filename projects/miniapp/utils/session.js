@@ -29,7 +29,7 @@ function hasLocalToken(wxApi) {
   return Boolean(getToken(wxApi))
 }
 
-function handleAuthRequired(message, wxApi) {
+function handleMaintainerAuthRequired(message, wxApi) {
   const runtimeWx = getRuntimeWx(wxApi)
   clearToken(runtimeWx)
   if (runtimeWx.showToast) {
@@ -65,7 +65,7 @@ module.exports = {
   setToken,
   clearToken,
   hasLocalToken,
-  handleAuthRequired,
+  handleMaintainerAuthRequired,
   ensureSession,
   maintainerWechatLogin
 }

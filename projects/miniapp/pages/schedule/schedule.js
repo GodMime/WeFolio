@@ -1,6 +1,6 @@
 const { request } = require('../../utils/request')
 const { normalizeId } = require('../../utils/id')
-const { handleAuthRequired, hasLocalToken } = require('../../utils/session')
+const { handleMaintainerAuthRequired, hasLocalToken } = require('../../utils/session')
 const {
   DEFAULT_SCHEDULE_STATUS,
   DEFAULT_SLOT_COLOR,
@@ -218,7 +218,7 @@ Page({
     } catch (error) {
       if (error && error.authRequired) {
         this.setData({ slotDefinitionsLoading: false })
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({
@@ -256,7 +256,7 @@ Page({
     } catch (error) {
       if (error && error.authRequired) {
         this.setData({ calendarLoading: false })
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({
@@ -298,7 +298,7 @@ Page({
     } catch (error) {
       if (error && error.authRequired) {
         this.setData({ dayLoading: false })
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({
@@ -675,7 +675,7 @@ Page({
     } catch (error) {
       if (error && error.authRequired) {
         this.setData({ saving: false })
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({ saving: false })
@@ -728,7 +728,7 @@ Page({
     } catch (error) {
       if (error && error.authRequired) {
         this.setData({ saving: false })
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({ saving: false })
@@ -757,7 +757,7 @@ Page({
       this.loadSlotDefinitions()
     } catch (error) {
       if (error && error.authRequired) {
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       wx.showToast({
@@ -804,7 +804,7 @@ Page({
               deletingScheduleId: null,
               revealedScheduleId: null
             })
-            handleAuthRequired(error.message)
+            handleMaintainerAuthRequired(error.message)
             return
           }
           this.setData({
@@ -864,7 +864,7 @@ Page({
               deletingSlotId: null,
               revealedSlotId: null
             })
-            handleAuthRequired(error.message)
+            handleMaintainerAuthRequired(error.message)
             return
           }
           this.setData({

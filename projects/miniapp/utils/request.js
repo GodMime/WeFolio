@@ -67,6 +67,10 @@ function resolveAuthToken(authMode, getToken, getVisitorToken, getVisitorTokenEx
   return getToken()
 }
 
+function isVisitorAuthMode(authMode) {
+  return authMode === AUTH_MODE_VISITOR
+}
+
 function joinUrl(baseUrl, url) {
   if (/^https?:\/\//.test(url)) {
     return url
@@ -128,7 +132,14 @@ function createRequestClient(options = {}) {
         success(response) {
           const body = response.data || {}
           if (response.statusCode === 401) {
-            reject(createRequestError(body.message || '未登录', { authRequired: true, statusCode: 401 }))
+            if (isVisitorAuthMode(authMode)) {
+              try {
+                clearVisitorToken()
+              } catch (error) {
+                // 清理本地访客令牌失败不改变本次认证失败结果。
+              }
+            }
+            reject(createRequestError(body.message || '未登录', { authRequired: true, authMode, statusCode: 401 }))
             return
           }
           if (response.statusCode < 200 || response.statusCode >= 300) {

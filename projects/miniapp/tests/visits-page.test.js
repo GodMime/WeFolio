@@ -38,7 +38,7 @@ function loadVisitsPage(fakeRequest) {
   const pagePath = path.join(__dirname, '../pages/visits/visits.js')
   const restoreRequest = installModuleStub('../utils/request', { request: fakeRequest })
   const restoreSession = installModuleStub('../utils/session', {
-    handleAuthRequired() {},
+    handleMaintainerAuthRequired() {},
     hasLocalToken() {
       return true
     }

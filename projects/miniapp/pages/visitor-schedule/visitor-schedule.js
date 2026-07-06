@@ -1,4 +1,4 @@
-const { request } = require('../../utils/request')
+const { requestWithVisitorSessionRefresh } = require('../../utils/visitor-session')
 const { normalizeVisitorSchedule } = require('../../utils/visitor-portfolio')
 
 const VISITOR_PORTFOLIO_API_PREFIX = '/api/visitor/portfolios'
@@ -29,7 +29,7 @@ Page({
   },
 
   handleQuery() {
-    request({
+    requestWithVisitorSessionRefresh({
       url: `${VISITOR_PORTFOLIO_API_PREFIX}/${this.data.shareCode}/schedule`,
       authMode: 'visitor',
       data: {
@@ -39,6 +39,8 @@ Page({
         visitorKey: this.data.visitorKey,
         idempotencyKey: `schedule-${Date.now()}`
       }
+    }, {
+      shareCode: this.data.shareCode
     }).then((response) => {
       this.setData({ schedules: normalizeVisitorSchedule(response).schedules })
     }).catch((error) => {

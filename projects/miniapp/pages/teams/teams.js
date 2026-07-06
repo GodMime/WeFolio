@@ -1,5 +1,5 @@
 const { request } = require('../../utils/request')
-const { handleAuthRequired, hasLocalToken } = require('../../utils/session')
+const { handleMaintainerAuthRequired, hasLocalToken } = require('../../utils/session')
 const { uploadTeamAvatar } = require('../../utils/team-avatar')
 const {
   buildTeamFieldCounters,
@@ -64,7 +64,7 @@ Page({
       })
     } catch (error) {
       if (error && error.authRequired) {
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({
@@ -174,7 +174,7 @@ Page({
       this.loadTeams()
     } catch (error) {
       if (error && error.authRequired) {
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({

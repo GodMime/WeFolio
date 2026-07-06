@@ -1,5 +1,5 @@
 const { request } = require('../../utils/request')
-const { handleAuthRequired, hasLocalToken } = require('../../utils/session')
+const { handleMaintainerAuthRequired, hasLocalToken } = require('../../utils/session')
 const {
   appendVisitDetailPage,
   appendVisitEventTimeline,
@@ -96,7 +96,7 @@ Page({
       })
     } catch (error) {
       if (error && error.authRequired) {
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({
@@ -274,7 +274,7 @@ Page({
     } catch (error) {
       if (error && error.authRequired) {
         this.setData({ followingVisitRecordId: null })
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({ followingVisitRecordId: null })
@@ -333,7 +333,7 @@ Page({
           eventSheetLoading: false,
           eventSheetLoadingMore: false
         })
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       if (append) {
@@ -444,7 +444,7 @@ Page({
           detailSheetLoading: false,
           detailSheetLoadingMore: false
         })
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       if (append) {
@@ -525,7 +525,7 @@ Page({
     } catch (error) {
       if (error && error.authRequired) {
         this.setData({ followingContactLeadId: null })
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({ followingContactLeadId: null })

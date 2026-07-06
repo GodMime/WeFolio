@@ -57,7 +57,7 @@ function loadProfilePage(fakeRequest, wxOverrides = {}, assetOverrides = {}) {
     loaded: true,
     exports: {
       clearToken() {},
-      handleAuthRequired() {},
+      handleMaintainerAuthRequired() {},
       hasLocalToken() {
         return true
       }

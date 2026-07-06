@@ -1,5 +1,5 @@
 const { request } = require('../../utils/request')
-const { handleAuthRequired, hasLocalToken } = require('../../utils/session')
+const { handleMaintainerAuthRequired, hasLocalToken } = require('../../utils/session')
 const { uploadTeamAvatar } = require('../../utils/team-avatar')
 const {
   DEFAULT_MEMBER_INVITE_FORM,
@@ -152,7 +152,7 @@ Page({
       })
     } catch (error) {
       if (error && error.authRequired) {
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({
@@ -302,7 +302,7 @@ Page({
       })
     } catch (error) {
       if (error && error.authRequired) {
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({
@@ -481,7 +481,7 @@ Page({
         this.setData({
           saving: false
         })
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({
@@ -568,7 +568,7 @@ Page({
         this.setData({
           saving: false
         })
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({
@@ -641,7 +641,7 @@ Page({
         this.setData({
           memberSearching: false
         })
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({
@@ -744,7 +744,7 @@ Page({
         this.setData({
           saving: false
         })
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({

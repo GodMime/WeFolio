@@ -1,5 +1,5 @@
 const { request } = require('../../utils/request')
-const { clearToken, handleAuthRequired, hasLocalToken } = require('../../utils/session')
+const { clearToken, handleMaintainerAuthRequired, hasLocalToken } = require('../../utils/session')
 const { noop } = require('../../utils/noop')
 const {
   WECHAT_QR_CROP_FILE_TYPE,
@@ -157,7 +157,7 @@ Page({
       })
     } catch (error) {
       if (error && error.authRequired) {
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({
@@ -487,7 +487,7 @@ Page({
       })
     } catch (error) {
       if (error && error.authRequired) {
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({
@@ -544,7 +544,7 @@ Page({
       })
     } catch (error) {
       if (error && error.authRequired) {
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({

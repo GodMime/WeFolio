@@ -144,7 +144,7 @@ tests/                         node:test 单元测试与静态布局测试
 - `setToken()` 保存后端返回的 token。
 - `clearToken()` 清除当前设备登录态。
 - `hasLocalToken()` 用于页面请求前本地预检。
-- `handleAuthRequired()` 清 token、toast 提示并跳转登录页。
+- `handleMaintainerAuthRequired()` 处理维护者 401：清维护者 token、toast 提示并跳转登录页。
 - `maintainerWechatLogin()` 调用维护者微信登录接口。
 
 页面请求维护者接口前，沿用现有模式：
@@ -156,7 +156,7 @@ if (!hasLocalToken()) {
 }
 ```
 
-收到 `error.authRequired` 时统一调用 `handleAuthRequired(error.message)`。不要在每个页面重复实现 401 清理逻辑。
+维护者接口收到 `error.authRequired` 时统一调用 `handleMaintainerAuthRequired(error.message)`。访客接口使用 `utils/visitor-session.js` 的 `/open` 刷新与重试流程，不跳转维护者登录页。
 
 注册流程注意点：
 

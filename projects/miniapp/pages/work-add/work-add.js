@@ -1,5 +1,5 @@
 const { request } = require('../../utils/request')
-const { handleAuthRequired, hasLocalToken } = require('../../utils/session')
+const { handleMaintainerAuthRequired, hasLocalToken } = require('../../utils/session')
 const {
   applyUnifiedWorkTags,
   buildUnifiedWorkTagItems,
@@ -320,7 +320,7 @@ Page({
           tagLoading: false,
           tagPickerVisible: false
         })
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({
@@ -471,7 +471,7 @@ Page({
           uploadOverallProgress: 0,
           uploadOverallText: '保存作品'
         })
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({

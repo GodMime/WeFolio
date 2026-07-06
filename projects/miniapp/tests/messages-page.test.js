@@ -60,7 +60,7 @@ function loadMessagesPage(fakeRequest) {
     filename: sessionPath,
     loaded: true,
     exports: {
-      handleAuthRequired() {},
+      handleMaintainerAuthRequired() {},
       hasLocalToken() {
         return true
       }

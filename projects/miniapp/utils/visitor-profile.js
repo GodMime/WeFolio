@@ -1,4 +1,4 @@
-const { request } = require('./request')
+const { requestWithVisitorSessionRefresh } = require('./visitor-session')
 const { isRemoteUrl } = require('./upload-file')
 
 const VISITOR_AVATAR_MAX_SIZE_BYTES = 200 * 1024
@@ -151,7 +151,7 @@ async function uploadVisitorAvatarProfile(payload = {}, options = {}) {
   let avatarUrl = avatarFilePath
   if (!isRemoteUrl(avatarFilePath)) {
     const prepared = await prepareVisitorAvatarFile(avatarFilePath, options)
-    const ticket = await request({
+    const ticket = await requestWithVisitorSessionRefresh({
       url: `/api/visitor/portfolios/${shareCode}/visitor-avatar/upload-ticket`,
       method: 'POST',
       authMode: 'visitor',
@@ -160,6 +160,8 @@ async function uploadVisitorAvatarProfile(payload = {}, options = {}) {
         mimeType: prepared.mimeType,
         fileSize: prepared.fileSize
       }
+    }, {
+      shareCode
     })
     await uploadVisitorAvatarToCos(prepared.filePath, ticket, options)
     if (!ticket.publicUrl) {
@@ -168,7 +170,7 @@ async function uploadVisitorAvatarProfile(payload = {}, options = {}) {
     avatarUrl = ticket.publicUrl
   }
 
-  await request({
+  await requestWithVisitorSessionRefresh({
     url: `/api/visitor/portfolios/${shareCode}/visitor-profile`,
     method: 'PUT',
     authMode: 'visitor',
@@ -177,6 +179,8 @@ async function uploadVisitorAvatarProfile(payload = {}, options = {}) {
       nickname,
       avatarUrl
     }
+  }, {
+    shareCode
   })
   return avatarUrl
 }

@@ -1,6 +1,6 @@
 const { request } = require('../../utils/request')
 const { normalizeId } = require('../../utils/id')
-const { handleAuthRequired, hasLocalToken } = require('../../utils/session')
+const { handleMaintainerAuthRequired, hasLocalToken } = require('../../utils/session')
 const {
   buildThumbFileName,
   createChooseCoverImageOptions,
@@ -366,7 +366,7 @@ Page({
           loading: false,
           loadingMore: false
         })
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({
@@ -535,7 +535,7 @@ Page({
         this.setData({
           tagSaving: false
         })
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({
@@ -575,7 +575,7 @@ Page({
       await this.loadWorks(true)
     } catch (error) {
       if (error && error.authRequired) {
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       wx.showToast({
@@ -727,7 +727,7 @@ Page({
                 deletingWorkId: null,
                 revealedWorkId: null
               })
-              handleAuthRequired(error.message)
+              handleMaintainerAuthRequired(error.message)
               return
             }
             this.setData({
@@ -744,7 +744,7 @@ Page({
       })
     } catch (error) {
       if (error && error.authRequired) {
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({ revealedWorkId: null })
@@ -940,7 +940,7 @@ Page({
     } catch (error) {
       if (error && error.authRequired) {
         this.setData({ imageEditSaving: false })
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({
@@ -1200,7 +1200,7 @@ Page({
     } catch (error) {
       if (error && error.authRequired) {
         this.setData({ videoEditSaving: false })
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({
@@ -1361,7 +1361,7 @@ Page({
           } catch (error) {
             if (error && error.authRequired) {
               this.setData({ batchDeleting: false })
-              handleAuthRequired(error.message)
+              handleMaintainerAuthRequired(error.message)
               return
             }
             this.setData({ batchDeleting: false })
@@ -1376,7 +1376,7 @@ Page({
     } catch (error) {
       if (error && error.authRequired) {
         this.setData({ batchDeleting: false })
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({ batchDeleting: false })
@@ -1439,7 +1439,7 @@ Page({
     } catch (error) {
       if (error && error.authRequired) {
         this.setData({ sortLoading: false })
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({
@@ -1611,7 +1611,7 @@ Page({
     } catch (error) {
       if (error && error.authRequired) {
         this.setData({ sortSaving: false })
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({

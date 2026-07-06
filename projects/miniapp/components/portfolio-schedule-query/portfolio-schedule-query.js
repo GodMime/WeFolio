@@ -1,8 +1,8 @@
-const { request } = require('../../utils/request')
 const {
   normalizeVisitorScheduleOptions,
   normalizeVisitorScheduleQueryResult
 } = require('../../utils/visitor-portfolio')
+const { requestWithVisitorSessionRefresh } = require('../../utils/visitor-session')
 
 const VISITOR_PORTFOLIO_API_PREFIX = '/api/visitor/portfolios'
 const MINE_PORTFOLIO_API_PREFIX = '/api/mine/portfolios'
@@ -131,6 +131,12 @@ function buildQueryRequest(data = {}) {
       visitorKey: data.visitorKey || ''
     }, payload)
   }
+}
+
+function sendScheduleRequest(requestOptions, data = {}) {
+  return requestWithVisitorSessionRefresh(requestOptions, {
+    shareCode: data.shareCode
+  })
 }
 
 function findSchedulesByDate(options = {}, date = '') {
@@ -278,7 +284,7 @@ Component({
       })
       try {
         const requestOptions = buildOptionsRequest(this.data, targetMonth)
-        const response = await request(requestOptions)
+        const response = await sendScheduleRequest(requestOptions, this.data)
         const options = normalizeVisitorScheduleOptions(response)
         const displayOptions = buildDisplayOptions(this.data, options)
         const selectedDate = this.data.selectedDate && String(this.data.selectedDate).startsWith(options.yearMonth || targetMonth)
@@ -344,7 +350,7 @@ Component({
         errorMessage: ''
       })
       try {
-        const response = await request(buildQueryRequest(this.data))
+        const response = await sendScheduleRequest(buildQueryRequest(this.data), this.data)
         const result = normalizeVisitorScheduleQueryResult(response)
         this.setData({
           submitting: false,

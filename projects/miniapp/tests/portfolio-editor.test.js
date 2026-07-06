@@ -277,7 +277,7 @@ function loadPortfolioEditorPage(fakeRequest, wxOverrides = {}, assetOverrides =
     filename: sessionPath,
     loaded: true,
     exports: {
-      handleAuthRequired() {},
+      handleMaintainerAuthRequired() {},
       hasLocalToken() {
         return true
       }

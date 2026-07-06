@@ -1,8 +1,3 @@
-const {
-  VISITOR_TOKEN_EXPIRES_AT_STORAGE_KEY,
-  VISITOR_TOKEN_STORAGE_KEY,
-  request
-} = require('../../utils/request')
 const { buildContactLeadPayload, createContactLeadForm, validateContactLeadForm } = require('../../utils/contact-lead')
 const {
   createActiveContactFormComponent,
@@ -11,17 +6,17 @@ const {
 const { clearDisplaySwitchingTimer, markDisplaySwitching } = require('../../utils/display-switching')
 const { buildVisitorEventPayload, normalizeVisitorPortfolio, switchDisplayGroup } = require('../../utils/visitor-portfolio')
 const { uploadVisitorAvatarProfile } = require('../../utils/visitor-profile')
+const {
+  SOURCE_TYPE_WECHAT_SHARE_CARD,
+  openVisitorSession,
+  requestWithVisitorSessionRefresh
+} = require('../../utils/visitor-session')
 
 const VISITOR_PORTFOLIO_API_PREFIX = '/api/visitor/portfolios'
-const WX_LOGIN_EMPTY_MESSAGE = '微信登录凭证为空'
-const WX_LOGIN_FAILED_MESSAGE = '微信登录失败'
-const WX_LOGIN_TIMEOUT_MESSAGE = '微信登录超时，请重试'
-const WX_LOGIN_TIMEOUT_MS = 5000
 const MEDIA_TYPE_VIDEO = 'VIDEO'
 const WORK_VIEWED_EVENT_TYPE = 'WORK_VIEWED'
 const VIDEO_PLAYED_EVENT_TYPE = 'VIDEO_PLAYED'
 const QR_CODE_INTERACTED_EVENT_TYPE = 'QR_CODE_INTERACTED'
-const SOURCE_TYPE_WECHAT_SHARE_CARD = 'WECHAT_SHARE_CARD'
 const QR_ACTION_PREVIEW = 'PREVIEW_QR'
 const WORK_TITLE_METADATA_KEY = 'workTitle'
 const IMAGE_MISSING_MESSAGE = '图片地址缺失'
@@ -33,56 +28,9 @@ function idempotencyKey(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
 }
 
-function wxLogin() {
-  return new Promise((resolve, reject) => {
-    let settled = false
-    const finish = (handler, value, timer) => {
-      if (settled) {
-        return
-      }
-      settled = true
-      clearTimeout(timer)
-      handler(value)
-    }
-    const timer = setTimeout(() => {
-      if (settled) {
-        return
-      }
-      settled = true
-      reject(new Error(WX_LOGIN_TIMEOUT_MESSAGE))
-    }, WX_LOGIN_TIMEOUT_MS)
-    wx.login({
-      success(response) {
-        if (response && response.code) {
-          finish(resolve, response.code, timer)
-          return
-        }
-        finish(reject, new Error(WX_LOGIN_EMPTY_MESSAGE), timer)
-      },
-      fail(error) {
-        finish(reject, new Error(error && error.errMsg ? error.errMsg : WX_LOGIN_FAILED_MESSAGE), timer)
-      }
-    })
-  })
-}
-
 function buildWorkEventMetadata(work) {
   const workTitle = work && work.title ? String(work.title).trim() : ''
   return workTitle ? { [WORK_TITLE_METADATA_KEY]: workTitle } : null
-}
-
-function saveVisitorToken(response = {}) {
-  if (!response.token || !wx.setStorageSync) {
-    return
-  }
-  try {
-    wx.setStorageSync(VISITOR_TOKEN_STORAGE_KEY, response.token)
-    if (response.expiresInSeconds) {
-      wx.setStorageSync(VISITOR_TOKEN_EXPIRES_AT_STORAGE_KEY, Date.now() + Number(response.expiresInSeconds) * 1000)
-    }
-  } catch (error) {
-    // 本地存储写入失败时不阻断作品集打开流程。
-  }
 }
 
 Page({
@@ -116,30 +64,33 @@ Page({
       return
     }
     try {
-      const loginCode = await wxLogin()
-      const response = await request({
-        url: `${VISITOR_PORTFOLIO_API_PREFIX}/${this.data.shareCode}/open`,
-        method: 'POST',
-        authMode: 'none',
-        data: {
-          loginCode,
-          sourceType: SOURCE_TYPE_WECHAT_SHARE_CARD,
-          idempotencyKey: idempotencyKey('open')
-        }
+      const response = await openVisitorSession(this.data.shareCode, {
+        sourceType: SOURCE_TYPE_WECHAT_SHARE_CARD
       })
-      saveVisitorToken(response)
-      const portfolio = normalizeVisitorPortfolio(response)
-      this.setData({
-        portfolio,
-        visitorKey: portfolio.visitorKey || '',
-        visitorProfileToken: portfolio.visitorProfileToken || '',
-        visitorProfileAuthVisible: Boolean(
-          portfolio.needVisitorProfile && portfolio.visitorProfileToken && !portfolio.underMaintenance
-        )
-      })
+      this.applyVisitorOpenResponse(response)
     } catch (error) {
       wx.showToast({ title: error.message || '作品集加载失败', icon: 'none' })
     }
+  },
+
+  applyVisitorOpenResponse(response) {
+    const portfolio = normalizeVisitorPortfolio(response)
+    this.setData({
+      portfolio,
+      visitorKey: portfolio.visitorKey || '',
+      visitorProfileToken: portfolio.visitorProfileToken || '',
+      visitorProfileAuthVisible: Boolean(
+        portfolio.needVisitorProfile && portfolio.visitorProfileToken && !portfolio.underMaintenance
+      )
+    })
+  },
+
+  requestWithVisitorRefresh(requestOptions) {
+    return requestWithVisitorSessionRefresh(requestOptions, {
+      shareCode: this.data.shareCode,
+      sourceType: SOURCE_TYPE_WECHAT_SHARE_CARD,
+      onRefresh: (response) => this.applyVisitorOpenResponse(response)
+    })
   },
 
   handleContactInput(event) {
@@ -160,7 +111,7 @@ Page({
       wx.showToast({ title: validation.message, icon: 'none' })
       return
     }
-    request({
+    this.requestWithVisitorRefresh({
       url: `${VISITOR_PORTFOLIO_API_PREFIX}/${this.data.shareCode}/contact-leads`,
       method: 'POST',
       authMode: 'visitor',
@@ -212,7 +163,7 @@ Page({
     if (!this.data.shareCode || !this.data.visitorKey) {
       return Promise.resolve(false)
     }
-    return request({
+    return this.requestWithVisitorRefresh({
       url: `${VISITOR_PORTFOLIO_API_PREFIX}/${this.data.shareCode}/events`,
       method: 'POST',
       authMode: 'visitor',
@@ -273,7 +224,7 @@ Page({
       return Promise.resolve()
     }
     const eventType = work.mediaType === MEDIA_TYPE_VIDEO ? VIDEO_PLAYED_EVENT_TYPE : WORK_VIEWED_EVENT_TYPE
-    return request({
+    return this.requestWithVisitorRefresh({
       url: `${VISITOR_PORTFOLIO_API_PREFIX}/${this.data.shareCode}/events`,
       method: 'POST',
       authMode: 'visitor',

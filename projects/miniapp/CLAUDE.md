@@ -174,7 +174,7 @@ tests/
 | `setToken(token)` | 保存后端返回的 token 到本地存储 |
 | `clearToken()` | 清除当前设备登录态 |
 | `hasLocalToken()` | 本地预检是否有 token |
-| `handleAuthRequired(message)` | 清 token、toast 提示并跳转登录页 |
+| `handleMaintainerAuthRequired(message)` | 处理维护者 401：清维护者 token、toast 提示并跳转登录页 |
 | `ensureSession()` | 校验当前登录态是否有效 |
 | `maintainerWechatLogin(payload)` | 调用维护者微信登录接口 |
 
@@ -186,7 +186,8 @@ if (!hasLocalToken()) {
   return
 }
 // ... 请求 ...
-// 收到 error.authRequired → handleAuthRequired(error.message)
+// 维护者接口收到 error.authRequired → handleMaintainerAuthRequired(error.message)
+// 访客接口使用 utils/visitor-session.js 的 /open 刷新与重试流程
 ```
 
 ### 注册流程注意点
@@ -349,7 +350,7 @@ node --test tests/*.test.js
 | 测试文件 | 覆盖范围 |
 |----------|----------|
 | `tests/request.test.js` | 默认 baseUrl、Bearer token 注入、401 处理、Response 解包 |
-| `tests/session.test.js` | Token CRUD、handleAuthRequired 行为、登录接口调用 |
+| `tests/session.test.js` | Token CRUD、handleMaintainerAuthRequired 行为、登录接口调用 |
 | `tests/dashboard.test.js` | normalizeDashboard 完整数据和空数据兜底 |
 | `tests/profile.test.js` | 9 色色板、归一化、payload 构造、表单校验 |
 | `tests/messages.test.js` | 消息列表归一化、筛选查询构建、已读 payload 构造 |

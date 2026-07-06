@@ -1,6 +1,6 @@
 const { request } = require('../../utils/request')
 const { normalizeId } = require('../../utils/id')
-const { handleAuthRequired, hasLocalToken } = require('../../utils/session')
+const { handleMaintainerAuthRequired, hasLocalToken } = require('../../utils/session')
 const { buildPublishPayload } = require('../../utils/portfolios')
 const { confirmPortfolioPublishDisclaimer } = require('../../utils/portfolio-publish-disclaimer')
 
@@ -131,7 +131,7 @@ Page({
       })
     }).catch((error) => {
       if (error.authRequired) {
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({ loading: false, errorMessage: error.message || '作品集加载失败' })
@@ -290,7 +290,7 @@ Page({
         return this.bootstrap()
       }).catch((error) => {
         if (error && error.authRequired) {
-          handleAuthRequired(error.message)
+          handleMaintainerAuthRequired(error.message)
           return
         }
         wx.showToast({ title: error && error.message ? error.message : '发布失败', icon: 'none' })
@@ -335,7 +335,7 @@ Page({
               deletingPortfolioId: null,
               revealedPortfolioId: null
             })
-            handleAuthRequired(error.message)
+            handleMaintainerAuthRequired(error.message)
             return
           }
           this.setData({

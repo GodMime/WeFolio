@@ -1,6 +1,6 @@
 const { request } = require('../../utils/request')
 const { normalizeId } = require('../../utils/id')
-const { handleAuthRequired, hasLocalToken } = require('../../utils/session')
+const { handleMaintainerAuthRequired, hasLocalToken } = require('../../utils/session')
 const {
   buildWorkFieldCounters,
   buildWorkUpdatePayload,
@@ -83,7 +83,7 @@ Page({
     } catch (error) {
       if (error && error.authRequired) {
         this.setData({ loading: false })
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({
@@ -166,7 +166,7 @@ Page({
     } catch (error) {
       if (error && error.authRequired) {
         this.setData({ saving: false })
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({ saving: false })
@@ -212,7 +212,7 @@ Page({
     } catch (error) {
       if (error && error.authRequired) {
         this.setData({ deleting: false })
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({ deleting: false })

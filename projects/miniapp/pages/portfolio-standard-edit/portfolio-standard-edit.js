@@ -1,5 +1,5 @@
 const { request } = require('../../utils/request')
-const { handleAuthRequired, hasLocalToken } = require('../../utils/session')
+const { handleMaintainerAuthRequired, hasLocalToken } = require('../../utils/session')
 const { noop } = require('../../utils/noop')
 const { isRemoteUrl } = require('../../utils/upload-file')
 const { normalizeProfile: normalizeBasicProfile } = require('../../utils/profile')
@@ -830,7 +830,7 @@ Page({
       })
       .catch((error) => {
         if (error.authRequired) {
-          handleAuthRequired(error.message)
+          handleMaintainerAuthRequired(error.message)
           return
         }
         wx.showToast({ title: error.message || '加载失败', icon: 'none' })
@@ -853,7 +853,7 @@ Page({
       })
       .catch((error) => {
         if (error && error.authRequired) {
-          handleAuthRequired(error.message)
+          handleMaintainerAuthRequired(error.message)
         }
         return normalizedConfig
       })
@@ -1558,7 +1558,7 @@ Page({
       .catch((error) => {
         if (error && error.authRequired) {
           this.setData({ profileSheetLoading: false })
-          handleAuthRequired(error.message)
+          handleMaintainerAuthRequired(error.message)
           return
         }
         this.setData({
@@ -1634,7 +1634,7 @@ Page({
       .catch((error) => {
         this.setData({ qrContactProfileQrUrl: '' })
         if (error && error.authRequired) {
-          handleAuthRequired(error.message)
+          handleMaintainerAuthRequired(error.message)
           return ''
         }
         wx.showToast({
@@ -1661,7 +1661,7 @@ Page({
       .then((response) => resolveBasicProfileQrContactQrUrl(response))
       .catch((error) => {
         if (error && error.authRequired) {
-          handleAuthRequired(error.message)
+          handleMaintainerAuthRequired(error.message)
         }
         throw new Error(error && error.message ? error.message : BASIC_PROFILE_LOAD_ERROR_MESSAGE)
       })
@@ -1795,7 +1795,7 @@ Page({
     } catch (error) {
       if (error && error.authRequired) {
         this.setData({ displayGroupLoading: false })
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({
@@ -1968,7 +1968,7 @@ Page({
           componentWorkLoading: false,
           componentWorkLoadingMore: false
         })
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({
@@ -2271,7 +2271,7 @@ Page({
       })
     }).catch((error) => {
       if (error && error.authRequired) {
-        handleAuthRequired(error.message)
+        handleMaintainerAuthRequired(error.message)
         return
       }
       wx.showToast({ title: error && error.message ? error.message : '发布失败', icon: 'none' })

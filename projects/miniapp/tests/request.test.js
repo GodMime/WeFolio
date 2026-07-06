@@ -114,6 +114,43 @@ test('request client clears expired visitor token and omits authorization header
   ])
 })
 
+test('request client clears visitor token and reports visitor auth mode on 401', async () => {
+  const removedKeys = []
+  const wxApi = {
+    request(options) {
+      options.success({
+        statusCode: 401,
+        data: {
+          success: false,
+          message: '访客未登录'
+        }
+      })
+    }
+  }
+  const client = createRequestClient({
+    baseUrl: 'http://api.test',
+    wxApi,
+    getVisitorToken: () => 'wf-visitor-v1.stale',
+    clearVisitorToken() {
+      removedKeys.push(VISITOR_TOKEN_STORAGE_KEY, VISITOR_TOKEN_EXPIRES_AT_STORAGE_KEY)
+    }
+  })
+
+  await assert.rejects(
+    () => client.request({ url: '/api/visitor/portfolios/PF001/events', authMode: 'visitor' }),
+    (error) => {
+      assert.equal(error.authRequired, true)
+      assert.equal(error.authMode, 'visitor')
+      assert.equal(error.message, '访客未登录')
+      return true
+    }
+  )
+  assert.deepEqual(removedKeys, [
+    VISITOR_TOKEN_STORAGE_KEY,
+    VISITOR_TOKEN_EXPIRES_AT_STORAGE_KEY
+  ])
+})
+
 test('request client omits empty GET query parameters', async () => {
   let capturedOptions
   const wxApi = {

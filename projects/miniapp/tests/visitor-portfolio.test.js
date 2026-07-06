@@ -41,9 +41,13 @@ function createDeferred() {
 function loadVisitorPage(fakeRequest, wxOverrides = {}) {
   const pagePath = path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.js')
   const requestPath = path.join(__dirname, '../utils/request.js')
+  const visitorSessionPath = path.join(__dirname, '../utils/visitor-session.js')
   const requestCacheKey = require.resolve(requestPath)
+  const visitorSessionCacheKey = require.resolve(visitorSessionPath)
   const originalRequestCache = require.cache[requestCacheKey]
+  const originalVisitorSessionCache = require.cache[visitorSessionCacheKey]
   delete require.cache[require.resolve(pagePath)]
+  delete require.cache[visitorSessionCacheKey]
   require.cache[requestCacheKey] = {
     id: requestPath,
     filename: requestPath,
@@ -74,6 +78,11 @@ function loadVisitorPage(fakeRequest, wxOverrides = {}) {
   } else {
     delete require.cache[requestCacheKey]
   }
+  if (originalVisitorSessionCache) {
+    require.cache[visitorSessionCacheKey] = originalVisitorSessionCache
+  } else {
+    delete require.cache[visitorSessionCacheKey]
+  }
 
   return Object.assign({}, pageDefinition, {
     data: clone(pageDefinition.data),
@@ -89,11 +98,15 @@ function loadVisitorPage(fakeRequest, wxOverrides = {}) {
 function loadScheduleQueryComponent(fakeRequest, wxOverrides = {}) {
   const componentPath = path.join(__dirname, '../components/portfolio-schedule-query/portfolio-schedule-query.js')
   const requestPath = path.join(__dirname, '../utils/request.js')
+  const visitorSessionPath = path.join(__dirname, '../utils/visitor-session.js')
   const requestCacheKey = require.resolve(requestPath)
+  const visitorSessionCacheKey = require.resolve(visitorSessionPath)
   const originalRequestCache = require.cache[requestCacheKey]
+  const originalVisitorSessionCache = require.cache[visitorSessionCacheKey]
   const previousComponent = global.Component
   const previousWx = global.wx
   delete require.cache[require.resolve(componentPath)]
+  delete require.cache[visitorSessionCacheKey]
   require.cache[requestCacheKey] = {
     id: requestPath,
     filename: requestPath,
@@ -127,6 +140,11 @@ function loadScheduleQueryComponent(fakeRequest, wxOverrides = {}) {
       require.cache[requestCacheKey] = originalRequestCache
     } else {
       delete require.cache[requestCacheKey]
+    }
+    if (originalVisitorSessionCache) {
+      require.cache[visitorSessionCacheKey] = originalVisitorSessionCache
+    } else {
+      delete require.cache[visitorSessionCacheKey]
     }
   }
 
@@ -745,9 +763,13 @@ test('visitor page uses source type constant for WeChat share card', () => {
     path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.js'),
     'utf8'
   )
+  const visitorSessionSource = fs.readFileSync(
+    path.join(__dirname, '../utils/visitor-session.js'),
+    'utf8'
+  )
 
-  assert.match(pageSource, /const SOURCE_TYPE_WECHAT_SHARE_CARD = 'WECHAT_SHARE_CARD'/)
-  assert.equal((pageSource.match(/sourceType: SOURCE_TYPE_WECHAT_SHARE_CARD/g) || []).length, 2)
+  assert.match(visitorSessionSource, /const SOURCE_TYPE_WECHAT_SHARE_CARD = 'WECHAT_SHARE_CARD'/)
+  assert.equal((pageSource.match(/sourceType: SOURCE_TYPE_WECHAT_SHARE_CARD/g) || []).length, 3)
   assert.equal((pageSource.match(/sourceType: 'WECHAT_SHARE_CARD'/g) || []).length, 0)
 })
 
@@ -938,6 +960,74 @@ test('visitor page ignores visitor token storage failure while opening portfolio
   assert.equal(requests[0].url, '/api/visitor/portfolios/PF001/open')
   assert.equal(page.data.visitorKey, 'server-visitor-key')
   assert.deepEqual(toastMessages, [])
+})
+
+test('visitor page refreshes visitor session with open endpoint and retries visitor request after 401', async () => {
+  const requests = []
+  const storageWrites = []
+  const page = loadVisitorPage((options) => {
+    requests.push(options)
+    if (options.url === '/api/visitor/portfolios/PF001/open') {
+      const openCount = requests.filter((requestOptions) => requestOptions.url === options.url).length
+      return Promise.resolve({
+        visitorKey: openCount === 1 ? 'visitor-initial' : 'visitor-refreshed',
+        token: openCount === 1 ? 'wf-visitor-v1.initial' : 'wf-visitor-v1.refreshed',
+        expiresInSeconds: 60,
+        renderData: {
+          shareCode: 'PF001',
+          title: '林安婚礼司仪',
+          components: []
+        }
+      })
+    }
+    if (options.url === '/api/visitor/portfolios/PF001/events') {
+      const eventCount = requests.filter((requestOptions) => requestOptions.url === options.url).length
+      if (eventCount === 1) {
+        const error = new Error('访客未登录')
+        error.authRequired = true
+        error.authMode = 'visitor'
+        return Promise.reject(error)
+      }
+      return Promise.resolve({ ok: true })
+    }
+    return Promise.reject(new Error(`unexpected request: ${options.url}`))
+  }, {
+    login(options) {
+      options.success({ code: 'wx-code' })
+    }
+  })
+  global.wx = {
+    login(options) {
+      options.success({ code: 'wx-code' })
+    },
+    setStorageSync(key, value) {
+      storageWrites.push({ key, value })
+    },
+    showToast() {}
+  }
+
+  try {
+    await page.onLoad({ shareCode: 'PF001' })
+    await page.recordWorkEvent({
+      mediaType: 'IMAGE',
+      workId: 301,
+      title: '迎宾照'
+    })
+  } finally {
+    delete global.wx
+  }
+
+  assert.deepEqual(requests.map((options) => options.url), [
+    '/api/visitor/portfolios/PF001/open',
+    '/api/visitor/portfolios/PF001/events',
+    '/api/visitor/portfolios/PF001/open',
+    '/api/visitor/portfolios/PF001/events'
+  ])
+  assert.equal(requests[2].authMode, 'none')
+  assert.equal(requests[3].authMode, 'visitor')
+  assert.equal(page.data.visitorKey, 'visitor-refreshed')
+  assert.equal(storageWrites.at(-2).key, 'wefolio_visitor_token')
+  assert.equal(storageWrites.at(-2).value, 'wf-visitor-v1.refreshed')
 })
 
 test('visitor page shows profile authorization panel when profile is missing', async () => {
@@ -1217,6 +1307,80 @@ test('portfolio schedule query component uses visitor endpoints and payload', as
   assert.equal(requests[1].data.slotDefinitionId, 12)
   assert.match(requests[1].data.idempotencyKey, /^schedule-query-c_schedule-2026-07-18-12-/)
   assert.equal(component.data.result.message, '档期空闲')
+})
+
+test('portfolio schedule query component refreshes visitor session and retries after visitor 401', async () => {
+  const requests = []
+  const previousWx = global.wx
+  const component = loadScheduleQueryComponent((options) => {
+    requests.push(options)
+    if (options.url === '/api/visitor/portfolios/PF001/open') {
+      return Promise.resolve({
+        visitorKey: 'visitor-refreshed',
+        token: 'wf-visitor-v1.refreshed',
+        expiresInSeconds: 60,
+        renderData: {
+          shareCode: 'PF001',
+          components: []
+        }
+      })
+    }
+    if (options.url === '/api/visitor/portfolios/PF001/schedule-options') {
+      const optionsCount = requests.filter((requestOptions) => requestOptions.url === options.url).length
+      if (optionsCount === 1) {
+        const error = new Error('访客未登录')
+        error.authRequired = true
+        error.authMode = 'visitor'
+        return Promise.reject(error)
+      }
+      return Promise.resolve({
+        yearMonth: '2026-07',
+        slotDefinitions: [],
+        days: [],
+        schedules: []
+      })
+    }
+    return Promise.reject(new Error(`unexpected request: ${options.url}`))
+  }, {
+    login(options) {
+      options.success({ code: 'wx-code' })
+    },
+    setStorageSync() {},
+    showToast() {}
+  })
+  component.setData({
+    shareCode: 'PF001',
+    visitorKey: 'visitor-a',
+    componentKey: 'c_schedule',
+    scheduleQuery: { displayMode: 'MODAL_CALENDAR' }
+  })
+
+  global.wx = {
+    login(options) {
+      options.success({ code: 'wx-code' })
+    },
+    setStorageSync() {},
+    showToast() {}
+  }
+  try {
+    await component.loadScheduleOptions('2026-07')
+  } finally {
+    if (previousWx === undefined) {
+      delete global.wx
+    } else {
+      global.wx = previousWx
+    }
+  }
+
+  assert.deepEqual(requests.map((options) => options.url), [
+    '/api/visitor/portfolios/PF001/schedule-options',
+    '/api/visitor/portfolios/PF001/open',
+    '/api/visitor/portfolios/PF001/schedule-options'
+  ])
+  assert.equal(requests[1].authMode, 'none')
+  assert.equal(requests[2].authMode, 'visitor')
+  assert.equal(component.data.errorMessage, '')
+  assert.equal(component.data.options.yearMonth, '2026-07')
 })
 
 test('portfolio schedule query component hides visitor month schedule marks before submit', async () => {
