@@ -92,6 +92,16 @@ tests/                         node:test 单元测试与静态布局测试
 
 实现未落地模块前，先对照 `../../docs/PRD.md` 的迭代规划和 `../../design/prototype.html` 的页面编号；若设计稿缺失，以 PRD 业务规则和通用状态要求为验收依据。涉及新接口时先查后端 Controller、DTO、Service 和 migration，不要在小程序端自行虚构字段或扣费规则。
 
+## Mock 体验版约定
+
+- mock 体验版必须完全独立于正式维护者端页面和组件；除登录页的“体验”入口和跳转外，不要改动既有正式页面或正式组件来承载 mock 行为。
+- mock 页面统一放在 `pages/mock/`，mock 专用组件统一放在 `components/mock/`，mock 数据、作品集 JSON 和本地草稿逻辑统一放在 `utils/mock-experience.js` 或同级 mock 专用文件。
+- mock 页面禁止引入 `utils/request.js`、`utils/session.js`、`utils/avatar.js`、`utils/team-avatar.js`、`utils/visitor-session.js`；禁止调用 `wx.request`、`wx.uploadFile`、`/api/`、维护者 token/session 或任何后端接口。
+- mock 的档期、作品、素材库、作品集、编辑、预览、“我的”等数据只使用本地 mock 数据或本地草稿态；新增、保存草稿、发布、档位操作等需要后端身份的动作统一提示 `请去“我的”页面注册登录`。
+- mock 页面可以复用不需要改动的展示组件和样式；如果复用会导致修改正式页面或正式组件，则新建 mock 专用组件。
+- mock 中用到头像的地方统一使用 `https://cdn2.we-folio.dingchenyong.top/demo/demo-avatar.png`。
+- mock 相关测试优先放在 `tests/mock-*.test.js`，重点覆盖“不引入 request/session、不出现 API 调用”和 mock 数据结构完整性。
+
 ## 前后端接口约定
 
 后端统一响应结构：

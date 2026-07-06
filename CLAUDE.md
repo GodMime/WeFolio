@@ -45,6 +45,15 @@ java -jar target/wefolio-java-runtime.jar
 
 用微信开发者工具打开 `projects/miniapp/` 目录。AppID: `wxa214c25850cdf268`。
 
+## Mock Experience Rules
+
+- mock 体验版必须完全独立于正式维护者端页面和组件；除登录页的“体验”入口和跳转外，不要改动既有正式页面或正式组件来承载 mock 行为。
+- mock 页面统一放在 `projects/miniapp/pages/mock/`，mock 专用组件统一放在 `projects/miniapp/components/mock/`，mock 数据、作品集 JSON 和本地草稿逻辑统一放在 `projects/miniapp/utils/mock-experience.js` 或同级 mock 专用文件。
+- mock 页面禁止引入 `projects/miniapp/utils/request.js`、`projects/miniapp/utils/session.js`、上传工具或访客会话工具；禁止调用 `wx.request`、`wx.uploadFile`、`/api/`、维护者 token/session 或任何后端接口。
+- mock 的档期、作品、素材库、作品集、编辑、预览、“我的”等数据只使用本地 mock 数据或本地草稿态；新增、保存草稿、发布、档位操作等需要后端身份的动作统一提示 `请去“我的”页面注册登录`。
+- mock 页面可以复用不需要改动的展示组件和样式；如果复用会导致修改正式页面或正式组件，则新建 mock 专用组件。
+- mock 中用到头像的地方统一使用 `https://cdn2.we-folio.dingchenyong.top/demo/demo-avatar.png`。
+
 ### 设计稿部署
 
 ```bash
