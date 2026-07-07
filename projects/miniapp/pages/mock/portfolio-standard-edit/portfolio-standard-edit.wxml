@@ -163,6 +163,22 @@
             </view>
           </block>
 
+          <block wx:elif="{{selectedComponentType === 'WORK_LIST'}}">
+            <view class="section-desc mock-editor-desc">单列作品列表支持图片和视频作品。</view>
+            <view class="component-work-list-content mock-work-list">
+              <view wx:for="{{workOptions}}" wx:key="id" class="component-work-option {{item.selected ? 'selected' : ''}}" data-id="{{item.id}}" bindtap="handleWorkToggle">
+                <view class="component-work-thumb">
+                  <image src="{{item.coverUrl}}" mode="aspectFill"></image>
+                </view>
+                <view class="component-work-copy">
+                  <view class="component-work-title">{{item.title}}</view>
+                  <view class="component-work-meta">{{item.mediaType === 'VIDEO' ? '视频' : '图片'}} / 测试作品</view>
+                </view>
+                <view class="component-work-check">{{item.selected ? '✓' : ''}}</view>
+              </view>
+            </view>
+          </block>
+
           <block wx:elif="{{selectedComponentType === 'PROFILE'}}">
             <view class="profile-avatar-editor mock-profile-editor">
               <view class="profile-avatar-preview" catchtap="handleLockedAction" aria-role="button" aria-label="上传头像">
@@ -227,6 +243,81 @@
                 <view class="field-label">说明</view>
               </view>
               <textarea class="input textarea" value="{{contactFormConfig.description}}" data-field="description" bindinput="handleContactInput"></textarea>
+            </view>
+          </block>
+
+          <block wx:elif="{{selectedComponentType === 'QR_CONTACT'}}">
+            <view class="section-desc mock-editor-desc">二维码联系组件已加入作品集。体验版不上传二维码图片，注册登录后可在正式页面配置。</view>
+            <view class="form-row">
+              <view class="field-heading">
+                <view class="field-label">二维码来源</view>
+              </view>
+              <view class="qr-source-tabs" aria-role="tablist">
+                <button class="qr-source-tab active" aria-role="tab" aria-selected="{{true}}" catchtap="handleLockedAction">个人资料</button>
+                <button class="qr-source-tab" aria-role="tab" aria-selected="{{false}}" catchtap="handleLockedAction">自定义图片</button>
+              </view>
+            </view>
+            <view class="qr-contact-image-editor">
+              <view class="qr-contact-image-preview profile" catchtap="handleLockedAction" aria-role="button" aria-label="上传二维码">
+                <view class="qr-contact-image-placeholder">二维码</view>
+              </view>
+              <button class="profile-avatar-button" catchtap="handleLockedAction">上传二维码</button>
+            </view>
+          </block>
+
+          <block wx:elif="{{selectedComponentType === 'TEXT_SECTION'}}">
+            <view class="form-row">
+              <view class="field-heading">
+                <view class="field-label">说明</view>
+              </view>
+              <textarea class="input textarea profile-sheet-textarea text-section-sheet-textarea" value="{{textSectionForm.content}}" placeholder="请输入给访客看的说明文字" maxlength="200" bindinput="handleTextSectionInput"></textarea>
+            </view>
+            <view class="form-row">
+              <view class="field-heading">
+                <view class="field-label">对齐方式</view>
+              </view>
+              <view class="schedule-query-mode-list">
+                <view
+                  wx:for="{{textSectionAlignmentOptions}}"
+                  wx:key="value"
+                  class="schedule-query-mode-option {{textSectionForm.alignment === item.value ? 'active' : ''}}"
+                  data-value="{{item.value}}"
+                  catchtap="handleTextSectionAlignmentTap"
+                  aria-role="radio"
+                  aria-checked="{{textSectionForm.alignment === item.value}}"
+                >
+                  <view class="schedule-query-mode-radio"></view>
+                  <view class="schedule-query-mode-label">{{item.label}}</view>
+                </view>
+              </view>
+            </view>
+          </block>
+
+          <block wx:elif="{{selectedComponentType === 'DIVIDER'}}">
+            <view class="form-row">
+              <view class="field-heading">
+                <view class="field-label">颜色</view>
+              </view>
+              <view class="divider-color-list">
+                <view
+                  wx:for="{{dividerColorOptions}}"
+                  wx:key="value"
+                  class="divider-color-option {{dividerForm.color === item.value ? 'active' : ''}}"
+                  data-value="{{item.value}}"
+                  catchtap="handleDividerColorTap"
+                  aria-role="radio"
+                  aria-checked="{{dividerForm.color === item.value}}"
+                >
+                  <view class="divider-color-swatch" style="background-color: {{item.colorValue}};"></view>
+                  <view class="divider-color-label">{{item.label}}</view>
+                </view>
+              </view>
+            </view>
+            <view class="form-row">
+              <view class="field-heading">
+                <view class="field-label">高度(px)</view>
+              </view>
+              <input class="input divider-height-input" type="number" value="{{dividerForm.heightPx}}" placeholder="16" bindinput="handleDividerHeightInput" />
             </view>
           </block>
 

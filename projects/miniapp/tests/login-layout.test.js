@@ -270,6 +270,21 @@ test('experience login tab redirects to independent mock pages', () => {
   assert.match(loginWxml, /class="login-form experience-form[\s\S]*bindtap="handleExperienceTap"[\s\S]*先体验/)
 })
 
+test('experience login tab explains trial before registration', () => {
+  const authExperienceRule = readRule('.auth-body.experience-mode')
+  const experienceFormRule = readRule('.experience-form.active')
+  const experienceHintRule = readRule('.experience-hint')
+
+  assert.match(
+    loginWxml,
+    /class="login-form experience-form[\s\S]*先体验[\s\S]*class="experience-hint"[\s\S]*支持先体验基础功能再授权注册/
+  )
+  assert.match(authExperienceRule, /max-height:\s*142rpx/)
+  assert.match(experienceFormRule, /max-height:\s*142rpx/)
+  assert.match(experienceHintRule, /text-align:\s*center/)
+  assert.match(experienceHintRule, /color:\s*#6b7785/)
+})
+
 test('register form uses WeChat avatar nickname and phone components', () => {
   assert.match(loginWxml, /open-type="chooseAvatar"/)
   assert.match(loginWxml, /bindchooseavatar="handleChooseAvatar"/)

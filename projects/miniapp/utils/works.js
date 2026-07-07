@@ -11,6 +11,9 @@ const DESCRIPTION_LIMIT = 1000
 const FILTER_TAG_LABEL_LIMIT = 10
 const WORK_TAG_DELETE_BLOCKED_SUFFIX = '先移除这些作品的标签后再删除。'
 const FILTER_ALL_ACTIVE_STYLE = 'color: #40546a; background: #eef4f7; border-color: #cbd8e5;'
+const WORK_TAG_PICKER_MIN_HEIGHT = 80
+const WORK_TAG_PICKER_ROW_STEP = 72
+const WORK_TAG_PICKER_MAX_HEIGHT = 520
 
 const MEDIA_TYPE_TEXT = {
   IMAGE: '图片',
@@ -228,6 +231,14 @@ function buildWorkTagPickerOptions(tags = [], selectedTagNames = []) {
   }))
 }
 
+function buildWorkTagOptionListHeight(tags = []) {
+  const count = Array.isArray(tags) ? tags.length : Math.max(0, Math.round(toNumber(tags)))
+  if (count <= 0) {
+    return 0
+  }
+  return Math.min(WORK_TAG_PICKER_MAX_HEIGHT, WORK_TAG_PICKER_MIN_HEIGHT + (count - 1) * WORK_TAG_PICKER_ROW_STEP)
+}
+
 function buildUnifiedWorkTagNames(tags = []) {
   if (!Array.isArray(tags)) {
     return []
@@ -404,6 +415,7 @@ module.exports = {
   buildUnifiedWorkTagItems,
   buildUnifiedWorkTagNames,
   buildWorkTagDeleteBlockedMessage,
+  buildWorkTagOptionListHeight,
   buildWorkTagPickerOptions,
   buildWorkTagPayload,
   buildWorkUpdatePayload,

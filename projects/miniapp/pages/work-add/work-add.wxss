@@ -598,6 +598,7 @@
 
 .tag-option-list {
   max-height: 520rpx;
+  flex: none;
   overflow: hidden;
 }
 

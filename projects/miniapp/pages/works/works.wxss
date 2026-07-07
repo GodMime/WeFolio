@@ -852,16 +852,19 @@
 }
 
 .color-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 14rpx;
   margin-top: 16rpx;
 }
 
 .color-choice {
+  width: 31.3%;
   height: 68rpx;
+  flex: none;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 10rpx;
   padding: 0 14rpx;
   overflow: hidden;

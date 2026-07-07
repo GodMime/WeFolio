@@ -13,7 +13,7 @@ function collectImageUrls(portfolio) {
         }
       })
     }
-    if (component.componentType === 'WORK_GRID') {
+    if (component.componentType === 'WORK_GRID' || component.componentType === 'WORK_LIST') {
       component.groups.forEach((group) => {
         group.works.forEach((work) => {
           if (work.mediaType === 'IMAGE') {
@@ -105,6 +105,17 @@ Page({
 
   handleOpenScheduleQuery() {
     showMockLoginRequiredToast()
+  },
+
+  handlePreviewQr(event) {
+    const url = event.currentTarget.dataset.url
+    if (!url) {
+      return
+    }
+    wx.previewImage({
+      current: url,
+      urls: [url]
+    })
   },
 
   noop() {}

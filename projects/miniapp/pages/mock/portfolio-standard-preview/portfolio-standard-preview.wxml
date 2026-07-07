@@ -62,12 +62,57 @@
         </view>
       </block>
 
+      <block wx:elif="{{item.componentType === 'WORK_LIST'}}">
+        <view class="work-section-title">单列作品列表</view>
+        <scroll-view wx:if="{{item.displayTags.length}}" scroll-x class="display-tag-scroll">
+          <view class="display-tags">
+            <view
+              wx:for="{{item.displayTags}}"
+              wx:key="groupKey"
+              wx:for-item="tag"
+              class="display-tag {{tag.active ? 'active' : ''}}"
+              data-component-key="{{item.componentKey}}"
+              data-group-key="{{tag.groupKey}}"
+              bindtap="handleDisplayTagTap"
+            >{{tag.name}}</view>
+          </view>
+        </scroll-view>
+        <view class="work-list">
+          <view wx:for="{{item.activeGroup.works}}" wx:key="workId" wx:for-item="work" class="work-card list-card">
+            <view
+              class="work-cover-wrap"
+              data-work-id="{{work.workId}}"
+              data-media-type="{{work.mediaType}}"
+              data-media-url="{{work.previewUrl}}"
+              data-cover-url="{{work.thumbnailUrl}}"
+              data-title="{{work.title}}"
+              bindtap="handleWorkTap"
+            >
+              <image class="work-cover" src="{{work.thumbnailUrl}}" mode="aspectFill"></image>
+              <view wx:if="{{work.isVideo}}" class="work-play-badge">
+                <view class="work-play-icon"></view>
+              </view>
+            </view>
+            <view class="work-title">{{work.title}}</view>
+            <view wx:if="{{work.description}}" class="work-desc">{{work.description}}</view>
+          </view>
+        </view>
+      </block>
+
       <block wx:elif="{{item.componentType === 'SCHEDULE_QUERY'}}">
         <view class="simple-section">
           <view class="component-title">档期查询</view>
           <view class="section-desc">{{item.scheduleQuery.title}}</view>
           <view class="section-desc mock-section-desc">{{item.scheduleQuery.description}}</view>
           <button class="primary-button" bindtap="handleOpenScheduleQuery">档期查询</button>
+        </view>
+      </block>
+
+      <block wx:elif="{{item.componentType === 'QR_CONTACT'}}">
+        <view class="qr-section">
+          <view class="component-title">二维码联系</view>
+          <image wx:if="{{item.qrContact.qrUrl}}" class="qr-image" src="{{item.qrContact.qrUrl}}" mode="aspectFit" data-url="{{item.qrContact.qrUrl}}" bindtap="handlePreviewQr"></image>
+          <view wx:else class="section-desc mock-section-desc">体验版未配置二维码图片。</view>
         </view>
       </block>
 
@@ -82,6 +127,17 @@
           <textarea class="contact-textarea" placeholder="需求说明"></textarea>
           <button class="primary-button" bindtap="handleSubmitContact">提交</button>
         </view>
+      </block>
+
+      <block wx:elif="{{item.componentType === 'TEXT_SECTION'}}">
+        <view class="text-section {{item.textSection.alignmentClass}}">
+          <view wx:if="{{item.textSection.title}}" class="component-title">{{item.textSection.title}}</view>
+          <text class="text-content" space="nbsp">{{item.textSection.content}}</text>
+        </view>
+      </block>
+
+      <block wx:elif="{{item.componentType === 'DIVIDER'}}">
+        <view class="divider-section" style="{{item.divider.style}}"></view>
       </block>
     </view>
 

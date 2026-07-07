@@ -31,6 +31,7 @@
           <view class="auth-body {{activeTab === 'experience' ? 'experience-mode' : activeTab === 'register' ? 'register-mode' : 'wechat-mode'}}">
             <view class="login-form experience-form {{activeTab === 'experience' ? 'active' : 'inactive'}}">
               <button class="primary-button" bindtap="handleExperienceTap">先体验</button>
+              <view class="experience-hint">支持先体验基础功能再授权注册</view>
             </view>
 
             <view class="login-form register-form {{activeTab === 'register' ? 'active' : 'inactive'}}">

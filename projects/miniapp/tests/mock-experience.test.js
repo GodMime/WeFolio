@@ -322,6 +322,35 @@ test('mock portfolio draft helpers add, remove, and reorder components locally',
   )
 })
 
+test('mock portfolio add component sheet exposes every production standard component type', () => {
+  const mock = loadMockExperience()
+  const expectedTypes = [
+    'CAROUSEL',
+    'PROFILE',
+    'SCHEDULE_QUERY',
+    'WORK_GRID',
+    'WORK_LIST',
+    'QR_CONTACT',
+    'CONTACT_FORM',
+    'TEXT_SECTION',
+    'DIVIDER'
+  ]
+
+  assert.deepEqual(
+    mock.MOCK_COMPONENT_OPTIONS.map((item) => item.componentType),
+    expectedTypes
+  )
+  expectedTypes.forEach((componentType) => {
+    assert.equal(mock.COMPONENT_TYPES[componentType], componentType)
+    const added = mock.addMockComponent(mock.MOCK_STANDARD_PORTFOLIO, componentType)
+    const addedComponent = added.config.components[added.config.components.length - 1]
+    const renderComponent = added.renderData.components[added.renderData.components.length - 1]
+
+    assert.equal(addedComponent.componentType, componentType)
+    assert.equal(renderComponent.componentType, componentType)
+  })
+})
+
 test('mock standard portfolio renders complete component json in fixed order', () => {
   const mock = loadMockExperience()
   const portfolio = mock.MOCK_STANDARD_PORTFOLIO

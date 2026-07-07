@@ -248,7 +248,10 @@
   transition: max-height 0.62s cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
-.auth-body.experience-mode,
+.auth-body.experience-mode {
+  max-height: 142rpx;
+}
+
 .auth-body.wechat-mode {
   max-height: 84rpx;
 }
@@ -274,9 +277,20 @@
   max-height: 430rpx;
 }
 
-.experience-form.active,
+.experience-form.active {
+  max-height: 142rpx;
+}
+
 .wechat-form.active {
   max-height: 84rpx;
+}
+
+.experience-hint {
+  color: #6b7785;
+  font-size: 22rpx;
+  font-weight: 700;
+  line-height: 1.4;
+  text-align: center;
 }
 
 .profile-row {

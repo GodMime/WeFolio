@@ -12,44 +12,116 @@ const MOCK_TAG = {
 const COMPONENT_TYPES = {
   CAROUSEL: 'CAROUSEL',
   PROFILE: 'PROFILE',
-  WORK_GRID: 'WORK_GRID',
   SCHEDULE_QUERY: 'SCHEDULE_QUERY',
-  CONTACT_FORM: 'CONTACT_FORM'
+  WORK_GRID: 'WORK_GRID',
+  WORK_LIST: 'WORK_LIST',
+  QR_CONTACT: 'QR_CONTACT',
+  CONTACT_FORM: 'CONTACT_FORM',
+  TEXT_SECTION: 'TEXT_SECTION',
+  DIVIDER: 'DIVIDER'
+}
+const COMPONENT_NAMES = {
+  CAROUSEL: '轮播图',
+  PROFILE: '个人资料',
+  SCHEDULE_QUERY: '档期查询',
+  WORK_GRID: '双列作品列表',
+  WORK_LIST: '单列作品列表',
+  QR_CONTACT: '二维码联系',
+  CONTACT_FORM: '预留联系信息',
+  TEXT_SECTION: '文字说明',
+  DIVIDER: '分割线'
+}
+const MOCK_COMPONENT_DESCRIPTIONS = {
+  CAROUSEL: '展示已选择的图片作品',
+  PROFILE: '展示个人资料和服务标签',
+  SCHEDULE_QUERY: '开放访客查询档期',
+  WORK_GRID: '双列展示图片和视频作品',
+  WORK_LIST: '单列展示重点图片和视频作品',
+  QR_CONTACT: '展示二维码联系方式',
+  CONTACT_FORM: '收集访客预留联系信息',
+  TEXT_SECTION: '添加服务说明文字',
+  DIVIDER: '分隔不同内容区块'
 }
 const MOCK_COMPONENT_SORT_ORDER_STEP = 1000
-const MOCK_COMPONENT_OPTIONS = [
-  {
-    componentType: COMPONENT_TYPES.CAROUSEL,
-    name: '轮播图',
-    description: '展示图片作品，适合作品集开场'
-  },
-  {
-    componentType: COMPONENT_TYPES.PROFILE,
-    name: '个人资料',
-    description: '展示头像、职业、城市和个人简介'
-  },
-  {
-    componentType: COMPONENT_TYPES.WORK_GRID,
-    name: '双列作品列表',
-    description: '展示图片和视频作品'
-  },
-  {
-    componentType: COMPONENT_TYPES.SCHEDULE_QUERY,
-    name: '档期查询',
-    description: '展示访客查询档期入口'
-  },
-  {
-    componentType: COMPONENT_TYPES.CONTACT_FORM,
-    name: '预留联系信息',
-    description: '展示访客留资入口'
+const MOCK_COMPONENT_OPTIONS = Object.keys(COMPONENT_TYPES).map((key) => {
+  const componentType = COMPONENT_TYPES[key]
+  return {
+    componentType,
+    name: COMPONENT_NAMES[componentType],
+    description: MOCK_COMPONENT_DESCRIPTIONS[componentType]
   }
-]
+})
 const MOCK_COMPONENT_KEY_PREFIXES = {
   CAROUSEL: 'mock_carousel',
   PROFILE: 'mock_profile',
-  WORK_GRID: 'mock_work_grid',
   SCHEDULE_QUERY: 'mock_schedule_query',
-  CONTACT_FORM: 'mock_contact_form'
+  WORK_GRID: 'mock_work_grid',
+  WORK_LIST: 'mock_work_list',
+  QR_CONTACT: 'mock_qr_contact',
+  CONTACT_FORM: 'mock_contact_form',
+  TEXT_SECTION: 'mock_text_section',
+  DIVIDER: 'mock_divider'
+}
+const MOCK_COMPONENT_DEFAULT_CONFIGS = {
+  CAROUSEL: {
+    carouselIntervalMs: 3000,
+    workIds: [101, 102, 103]
+  },
+  WORK_GRID: {
+    workIds: [101, 102, 103, 104, 105, 106, 107],
+    groups: [{
+      groupKey: 'g_all',
+      name: '全部作品',
+      sortOrder: 1000,
+      workIds: [101, 102, 103, 104, 105, 106, 107]
+    }]
+  },
+  WORK_LIST: {
+    workIds: [101, 102, 103, 104, 105, 106, 107],
+    groups: [{
+      groupKey: 'g_all',
+      name: '全部作品',
+      sortOrder: 1000,
+      workIds: [101, 102, 103, 104, 105, 106, 107]
+    }]
+  },
+  SCHEDULE_QUERY: {
+    displayMode: 'MODAL_CALENDAR',
+    title: '查询我的可约档期',
+    description: '体验版仅展示入口，不提交真实档期查询。'
+  },
+  QR_CONTACT: {
+    qrUrlSource: 'PROFILE',
+    qrUrl: '',
+    qrSize: 240,
+    showLabel: true
+  },
+  CONTACT_FORM: {
+    displayMode: 'MODAL_FORM',
+    title: '预留联系信息',
+    description: '留下称呼和需求，方便服务者后续联系。',
+    fields: ['contactName', 'phone', 'wechat', 'needs']
+  },
+  TEXT_SECTION: {
+    title: '',
+    content: '用一段文字说明你的服务风格、拍摄流程或报价说明。',
+    alignment: 'LEFT'
+  },
+  DIVIDER: {
+    color: 'GRAY',
+    heightPx: 16
+  }
+}
+const TEXT_SECTION_ALIGNMENT_CLASS_MAP = {
+  LEFT: 'align-left',
+  CENTER: 'align-center',
+  RIGHT: 'align-right'
+}
+const DIVIDER_COLOR_VALUE_MAP = {
+  BLACK: '#000000',
+  WHITE: '#ffffff',
+  GRAY: '#eef1f4',
+  TRANSPARENT: 'transparent'
 }
 
 function clone(value) {
@@ -570,9 +642,83 @@ function normalizeComponentConfig(component = {}) {
   })
 }
 
+function buildMockRenderGroups(componentConfig = {}) {
+  const groups = Array.isArray(componentConfig.groups) && componentConfig.groups.length
+    ? componentConfig.groups
+    : [{
+        groupKey: 'g_all',
+        name: '全部作品',
+        sortOrder: 1000,
+        workIds: componentConfig.workIds || []
+      }]
+  return groups.map((group) => ({
+    groupKey: group.groupKey || 'g_all',
+    name: group.name || '全部作品',
+    sortOrder: Number(group.sortOrder) || 1000,
+    works: findWorksByIds(group.workIds || componentConfig.workIds)
+  }))
+}
+
+function buildMockDisplayTags(renderGroups = []) {
+  return renderGroups.map((group, index) => ({
+    groupKey: group.groupKey,
+    name: group.name,
+    active: index === 0
+  }))
+}
+
+function findMockProfileQrUrl(components = []) {
+  const profileComponent = components.find((component) => component.componentType === COMPONENT_TYPES.PROFILE) || {}
+  return trimText(
+    profileComponent.config &&
+    profileComponent.config.profile &&
+    profileComponent.config.profile.wechatQrUrl
+  )
+}
+
+function buildMockQrContactConfig(componentConfig = {}, components = []) {
+  const qrUrlSource = componentConfig.qrUrlSource === 'CUSTOM' ? 'CUSTOM' : 'PROFILE'
+  return Object.assign({}, MOCK_COMPONENT_DEFAULT_CONFIGS.QR_CONTACT, componentConfig, {
+    qrUrlSource,
+    qrUrl: qrUrlSource === 'CUSTOM'
+      ? trimText(componentConfig.qrUrl)
+      : findMockProfileQrUrl(components)
+  })
+}
+
+function buildMockTextSectionConfig(componentConfig = {}) {
+  const alignment = ['LEFT', 'CENTER', 'RIGHT'].includes(componentConfig.alignment)
+    ? componentConfig.alignment
+    : MOCK_COMPONENT_DEFAULT_CONFIGS.TEXT_SECTION.alignment
+  return Object.assign({}, MOCK_COMPONENT_DEFAULT_CONFIGS.TEXT_SECTION, componentConfig, {
+    title: trimText(componentConfig.title),
+    content: trimText(componentConfig.content) || MOCK_COMPONENT_DEFAULT_CONFIGS.TEXT_SECTION.content,
+    alignment,
+    alignmentClass: TEXT_SECTION_ALIGNMENT_CLASS_MAP[alignment]
+  })
+}
+
+function buildMockDividerConfig(componentConfig = {}) {
+  const color = DIVIDER_COLOR_VALUE_MAP[componentConfig.color]
+    ? componentConfig.color
+    : MOCK_COMPONENT_DEFAULT_CONFIGS.DIVIDER.color
+  const heightPx = Number(componentConfig.heightPx)
+  const normalizedHeightPx = Number.isFinite(heightPx) && heightPx > 0
+    ? Math.round(heightPx)
+    : MOCK_COMPONENT_DEFAULT_CONFIGS.DIVIDER.heightPx
+  const colorValue = DIVIDER_COLOR_VALUE_MAP[color]
+  return Object.assign({}, MOCK_COMPONENT_DEFAULT_CONFIGS.DIVIDER, componentConfig, {
+    color,
+    heightPx: normalizedHeightPx,
+    colorValue,
+    style: `height: ${normalizedHeightPx}px; background-color: ${colorValue};`
+  })
+}
+
 function buildMockPortfolioRenderData(config = MOCK_PORTFOLIO_CONFIG) {
   const sourceConfig = clone(config)
-  const components = (Array.isArray(sourceConfig.components) ? sourceConfig.components : [])
+  const sourceComponents = Array.isArray(sourceConfig.components) ? sourceConfig.components : []
+  const components = sourceComponents
     .filter((component) => component.enabled !== false)
     .map(normalizeComponentConfig)
     .sort((left, right) => Number(left.sortOrder || 0) - Number(right.sortOrder || 0))
@@ -603,21 +749,8 @@ function buildMockPortfolioRenderData(config = MOCK_PORTFOLIO_CONFIG) {
           profile
         }
       }
-      if (component.componentType === COMPONENT_TYPES.WORK_GRID) {
-        const groups = Array.isArray(componentConfig.groups) && componentConfig.groups.length
-          ? componentConfig.groups
-          : [{
-              groupKey: 'g_all',
-              name: '全部作品',
-              sortOrder: 1000,
-              workIds: componentConfig.workIds || []
-            }]
-        const renderGroups = groups.map((group) => ({
-          groupKey: group.groupKey || 'g_all',
-          name: group.name || '全部作品',
-          sortOrder: Number(group.sortOrder) || 1000,
-          works: findWorksByIds(group.workIds || componentConfig.workIds)
-        }))
+      if (component.componentType === COMPONENT_TYPES.WORK_GRID || component.componentType === COMPONENT_TYPES.WORK_LIST) {
+        const renderGroups = buildMockRenderGroups(componentConfig)
         return {
           componentKey: component.componentKey,
           componentType: component.componentType,
@@ -625,11 +758,8 @@ function buildMockPortfolioRenderData(config = MOCK_PORTFOLIO_CONFIG) {
           sortOrder: component.sortOrder,
           groups: renderGroups,
           activeGroup: renderGroups[0] || { groupKey: '', name: '', works: [] },
-          displayTags: renderGroups.map((group, index) => ({
-            groupKey: group.groupKey,
-            name: group.name,
-            active: index === 0
-          }))
+          displayTags: buildMockDisplayTags(renderGroups),
+          layout: component.componentType === COMPONENT_TYPES.WORK_LIST ? 'single' : 'grid'
         }
       }
       if (component.componentType === COMPONENT_TYPES.SCHEDULE_QUERY) {
@@ -639,6 +769,33 @@ function buildMockPortfolioRenderData(config = MOCK_PORTFOLIO_CONFIG) {
           name: component.name,
           sortOrder: component.sortOrder,
           scheduleQuery: Object.assign({}, componentConfig)
+        }
+      }
+      if (component.componentType === COMPONENT_TYPES.QR_CONTACT) {
+        return {
+          componentKey: component.componentKey,
+          componentType: component.componentType,
+          name: component.name,
+          sortOrder: component.sortOrder,
+          qrContact: buildMockQrContactConfig(componentConfig, sourceComponents)
+        }
+      }
+      if (component.componentType === COMPONENT_TYPES.TEXT_SECTION) {
+        return {
+          componentKey: component.componentKey,
+          componentType: component.componentType,
+          name: component.name,
+          sortOrder: component.sortOrder,
+          textSection: buildMockTextSectionConfig(componentConfig)
+        }
+      }
+      if (component.componentType === COMPONENT_TYPES.DIVIDER) {
+        return {
+          componentKey: component.componentKey,
+          componentType: component.componentType,
+          name: component.name,
+          sortOrder: component.sortOrder,
+          divider: buildMockDividerConfig(componentConfig)
         }
       }
       return {
@@ -715,7 +872,7 @@ function buildMockComponent(componentType, existingComponents = []) {
         componentType: resolvedType,
         name: option.name,
         enabled: true,
-        config: {}
+        config: clone(MOCK_COMPONENT_DEFAULT_CONFIGS[resolvedType] || {})
       }
   return Object.assign({}, component, {
     componentKey: buildMockComponentKey(existingComponents, resolvedType),
