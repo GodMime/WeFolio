@@ -57,6 +57,7 @@ test('works pages expose expected upload and edit structure', () => {
   const editWxml = read('pages/work-edit/work-edit.wxml')
 
   assert.match(worksWxml, /搜索作品标题、标签/)
+  assert.match(worksWxml, /长宽比/)
   assert.match(worksWxml, /class="search-clear"[\s\S]*wx:if="\{\{keyword\}\}"[\s\S]*catchtap="handleClearSearch"[\s\S]*aria-label="清空搜索"/)
   assert.match(worksWxss, /\.search-clear\s*\{[\s\S]*width:\s*44rpx;[\s\S]*height:\s*44rpx;[\s\S]*border-radius:\s*50%;/)
   assert.match(worksJs, /handleClearSearch\(\)\s*\{[\s\S]*keyword:\s*''[\s\S]*this\.loadWorks\(true\)/)

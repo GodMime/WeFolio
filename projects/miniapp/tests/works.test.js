@@ -43,6 +43,7 @@ test('normalizes work list for page rendering', () => {
         mediaUrl: 'https://cos.example.com/video.mp4',
         durationMs: 125000,
         fileSize: 10485760,
+        aspectRatio: '16:9',
         referenceCount: 3,
         tags: [{ id: 12, name: '高端婚礼', color: '#2d5f9a' }]
       }
@@ -60,9 +61,27 @@ test('normalizes work list for page rendering', () => {
   assert.equal(result.works[0].typeText, '视频')
   assert.equal(result.works[0].durationText, '02:05')
   assert.equal(result.works[0].fileSizeText, '10.0MB')
+  assert.equal(result.works[0].aspectRatio, '16:9')
+  assert.equal(result.works[0].aspectRatioText, '16:9')
   assert.equal(result.works[0].referenceText, '引用 3 次')
   assert.equal(result.works[0].coverUrl, '')
   assert.equal(result.works[0].hasCover, false)
+})
+
+test('normalizes missing work aspect ratio as empty display text', () => {
+  const result = normalizeWorkList({
+    works: [
+      {
+        id: 10,
+        mediaType: 'IMAGE',
+        title: '宴会照片',
+        aspectRatio: '   '
+      }
+    ]
+  })
+
+  assert.equal(result.works[0].aspectRatio, '')
+  assert.equal(result.works[0].aspectRatioText, '--')
 })
 
 test('builds and validates work tag form payload', () => {

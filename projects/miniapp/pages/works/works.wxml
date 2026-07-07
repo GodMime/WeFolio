@@ -132,6 +132,7 @@
                       <text>{{item.typeText}}</text>
                       <text wx:if="{{item.durationText}}"> · {{item.durationText}}</text>
                       <text> / {{item.tagText}}</text>
+                      <text> / 长宽比 {{item.aspectRatioText}}</text>
                     </view>
                     <view class="reference-pill {{item.referenceCount > 0 ? 'used' : ''}}">{{item.referenceText}}</view>
                   </view>

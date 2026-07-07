@@ -52,6 +52,7 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -240,13 +241,14 @@ class MineWorkServiceTest {
     }
 
     @Test
-    void listWorksShouldBatchLoadSummaryReferencesAndTags() {
+    void listWorksShouldBatchLoadSummaryReferencesAndTags() throws ReflectiveOperationException {
         WorkEntity first = ownedWork(11L);
         first.setMediaType(MediaTypeDict.IMAGE.getCode());
         first.setTitle("草坪婚礼");
         first.setOriginalFileName("photo.jpg");
         first.setMediaObjectKey("WFA3B1E7A2/work/image/photo.jpg");
         first.setCoverObjectKey("WFA3B1E7A2/work/image/photo.jpg");
+        setField(first, "aspectRatio", "3:2");
         WorkEntity second = ownedWork(12L);
         second.setMediaType(MediaTypeDict.VIDEO.getCode());
         second.setTitle("片头快剪");
@@ -283,6 +285,7 @@ class MineWorkServiceTest {
                 .containsExactly(2L, 1L, 1L);
         assertThat(response.getWorks()).hasSize(2);
         assertThat(response.getWorks().get(0).getReferenceCount()).isEqualTo(1L);
+        assertThat(readField(response.getWorks().get(0), "aspectRatio")).isEqualTo("3:2");
         assertThat(response.getWorks().get(0).getTags()).extracting(MineWorkListResponse.TagItem::getName)
                 .containsExactly("户外仪式");
         assertThat(response.getWorks().get(1).getReferenceCount()).isEqualTo(2L);
@@ -1777,5 +1780,17 @@ class MineWorkServiceTest {
 
     private String defaultSha256(String clientId) {
         return String.format("%064x", Integer.toUnsignedLong(clientId.hashCode()));
+    }
+
+    private static void setField(Object target, String fieldName, Object value) throws ReflectiveOperationException {
+        Field field = target.getClass().getDeclaredField(fieldName);
+        field.setAccessible(true);
+        field.set(target, value);
+    }
+
+    private static Object readField(Object target, String fieldName) throws ReflectiveOperationException {
+        Field field = target.getClass().getDeclaredField(fieldName);
+        field.setAccessible(true);
+        return field.get(target);
     }
 }

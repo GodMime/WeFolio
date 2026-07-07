@@ -32,6 +32,9 @@ public class MineWorkUploadCompleteRequest {
         /** 作品说明，最长 1000 字 */
         private String description;
 
+        /** 长宽比，例如 16:9、9:16，由小程序端计算提交。 */
+        private String aspectRatio;
+
         /** 标签名称列表 */
         private List<String> tagNames = new ArrayList<>();
 

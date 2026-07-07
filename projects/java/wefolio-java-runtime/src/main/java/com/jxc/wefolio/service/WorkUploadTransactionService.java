@@ -43,6 +43,9 @@ public class WorkUploadTransactionService {
     /** 作品说明最大长度 */
     private static final int DESCRIPTION_MAX_LENGTH = 1000;
 
+    /** 作品长宽比最大长度 */
+    private static final int ASPECT_RATIO_MAX_LENGTH = 32;
+
     /** 图片原图可直接复用为缩略图的最大字节数 */
     private static final long THUMB_MAX_BYTES = 100L * 1024L;
 
@@ -110,6 +113,7 @@ public class WorkUploadTransactionService {
 
         String title = normalizeTitle(item == null ? null : item.getTitle(), task.getOriginalFileName());
         String description = normalizeDescription(item == null ? null : item.getDescription());
+        String aspectRatio = normalizeAspectRatio(item == null ? null : item.getAspectRatio());
         List<String> tagNames = normalizeTagNames(item == null ? null : item.getTagNames());
         WorkUploadTaskEntity coverTask = resolveCoverTask(userId, task, item);
         String coverObjectKey = resolveCoverObjectKey(task, coverTask);
@@ -131,7 +135,7 @@ public class WorkUploadTransactionService {
                 idempotencyKey,
                 remark);
 
-        WorkEntity work = buildWork(task, title, description, coverObjectKey, coverSha256);
+        WorkEntity work = buildWork(task, title, description, aspectRatio, coverObjectKey, coverSha256);
         try {
             workEntityMapper.insert(work);
         } catch (DuplicateKeyException e) {
@@ -184,6 +188,7 @@ public class WorkUploadTransactionService {
      * @param task 上传任务
      * @param title 作品标题
      * @param description 作品说明
+     * @param aspectRatio 长宽比
      * @param coverObjectKey 缩略图或封面图对象键
      * @param coverSha256 缩略图或封面图 SHA-256
      * @return 作品实体
@@ -192,6 +197,7 @@ public class WorkUploadTransactionService {
             WorkUploadTaskEntity task,
             String title,
             String description,
+            String aspectRatio,
             String coverObjectKey,
             String coverSha256
     ) {
@@ -209,6 +215,7 @@ public class WorkUploadTransactionService {
         work.setDurationMs(task.getDurationMs());
         work.setWidth(task.getWidth());
         work.setHeight(task.getHeight());
+        work.setAspectRatio(aspectRatio);
         work.setDescription(description);
         work.setSortOrder(0);
         work.setStatus(WorkStatusDict.ACTIVE.getCode());
@@ -534,6 +541,20 @@ public class WorkUploadTransactionService {
             throw new BusinessException("作品说明不能超过 1000 字");
         }
         return value;
+    }
+
+    /**
+     * 归一化长宽比。
+     *
+     * @param aspectRatio 小程序端提交的长宽比
+     * @return 可保存的长宽比，空值返回 null
+     */
+    private String normalizeAspectRatio(String aspectRatio) {
+        String value = normalizeText(aspectRatio);
+        if (value.isBlank()) {
+            return null;
+        }
+        return value.length() > ASPECT_RATIO_MAX_LENGTH ? value.substring(0, ASPECT_RATIO_MAX_LENGTH) : value;
     }
 
     /**

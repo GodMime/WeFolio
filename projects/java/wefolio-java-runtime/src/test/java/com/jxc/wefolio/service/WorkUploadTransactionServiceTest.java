@@ -27,6 +27,7 @@ import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -83,7 +84,7 @@ class WorkUploadTransactionServiceTest {
     }
 
     @Test
-    void confirmUploadedTaskShouldConsumePointsCreateWorkAndAttachTags() {
+    void confirmUploadedTaskShouldConsumePointsCreateWorkAndAttachTags() throws ReflectiveOperationException {
         WorkUploadTaskEntity task = createdImageTask();
         when(wfTagEntityMapper.selectOne(any())).thenReturn(null);
         when(wfTagEntityMapper.insert(any(WfTagEntity.class))).thenAnswer(invocation -> {
@@ -97,6 +98,7 @@ class WorkUploadTransactionServiceTest {
             return 1;
         });
         MineWorkUploadCompleteRequest.CompleteItem item = completeItem();
+        setField(item, "aspectRatio", " 16:9 ");
 
         MineWorkUploadCompleteResponse.Item response = service().confirmUploadedTask(7L, task, item);
 
@@ -119,6 +121,7 @@ class WorkUploadTransactionServiceTest {
         assertThat(work.getMediaSha256()).isEqualTo("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
         assertThat(work.getCoverObjectKey()).isEqualTo("WFA3B1E7A2/work/image/photo.jpg");
         assertThat(work.getCoverSha256()).isEqualTo("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        assertThat(readField(work, "aspectRatio")).isEqualTo("16:9");
         assertThat(work.getStatus()).isEqualTo(WorkStatusDict.ACTIVE.getCode());
         inOrder.verify(wfTagEntityMapper).selectOne(any());
         inOrder.verify(wfTagEntityMapper).insert(any(WfTagEntity.class));
@@ -134,6 +137,43 @@ class WorkUploadTransactionServiceTest {
         assertThat(response.isSuccess()).isTrue();
         assertThat(response.getWorkId()).isEqualTo(120L);
         verify(workUploadTaskEntityMapper, never()).selectById(anyLong());
+    }
+
+    @Test
+    void confirmUploadedTaskShouldSaveBlankAspectRatioAsNull() throws ReflectiveOperationException {
+        WorkUploadTaskEntity task = createdImageTask();
+        when(workEntityMapper.insert(any(WorkEntity.class))).thenAnswer(invocation -> {
+            WorkEntity work = invocation.getArgument(0);
+            work.setId(120L);
+            return 1;
+        });
+        MineWorkUploadCompleteRequest.CompleteItem item = completeItem();
+        setField(item, "aspectRatio", "   ");
+
+        service().confirmUploadedTask(7L, task, item);
+
+        ArgumentCaptor<WorkEntity> workCaptor = ArgumentCaptor.forClass(WorkEntity.class);
+        verify(workEntityMapper).insert(workCaptor.capture());
+        assertThat(readField(workCaptor.getValue(), "aspectRatio")).isNull();
+    }
+
+    @Test
+    void confirmUploadedTaskShouldTruncateAspectRatioToThirtyTwoCharacters() throws ReflectiveOperationException {
+        WorkUploadTaskEntity task = createdImageTask();
+        when(workEntityMapper.insert(any(WorkEntity.class))).thenAnswer(invocation -> {
+            WorkEntity work = invocation.getArgument(0);
+            work.setId(120L);
+            return 1;
+        });
+        MineWorkUploadCompleteRequest.CompleteItem item = completeItem();
+        setField(item, "aspectRatio", "12345678901234567890123456789012345");
+
+        service().confirmUploadedTask(7L, task, item);
+
+        ArgumentCaptor<WorkEntity> workCaptor = ArgumentCaptor.forClass(WorkEntity.class);
+        verify(workEntityMapper).insert(workCaptor.capture());
+        assertThat(readField(workCaptor.getValue(), "aspectRatio"))
+                .isEqualTo("12345678901234567890123456789012");
     }
 
     @Test
@@ -448,5 +488,17 @@ class WorkUploadTransactionServiceTest {
         item.setTagNames(List.of("高端婚礼"));
         item.setIdempotencyKey("confirm-99");
         return item;
+    }
+
+    private static void setField(Object target, String fieldName, Object value) throws ReflectiveOperationException {
+        Field field = target.getClass().getDeclaredField(fieldName);
+        field.setAccessible(true);
+        field.set(target, value);
+    }
+
+    private static Object readField(Object target, String fieldName) throws ReflectiveOperationException {
+        Field field = target.getClass().getDeclaredField(fieldName);
+        field.setAccessible(true);
+        return field.get(target);
     }
 }

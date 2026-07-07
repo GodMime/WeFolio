@@ -53,6 +53,9 @@ public class WorkEntity extends BaseEntity {
     /** 像素高度 */
     private Integer height;
 
+    /** 长宽比，例如 16:9、9:16，由小程序端计算提交，后端信任并保存。 */
+    private String aspectRatio;
+
     /** 作品说明，最长 1000 字符 */
     private String description;
 

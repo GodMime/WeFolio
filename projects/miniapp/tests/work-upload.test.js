@@ -10,6 +10,7 @@ const {
   buildUploadProgressSummary,
   buildUploadCompleteFailureMessage,
   buildUploadCompletePayload,
+  buildAspectRatio,
   applyUploadCompleteResults,
   buildCoverUploadTicketPayload,
   buildUploadTicketPayload,
@@ -40,6 +41,15 @@ test('cover image picker only allows one album image', () => {
   })
 })
 
+test('builds simplified aspect ratio from positive dimensions', () => {
+  assert.equal(buildAspectRatio(1920, 1080), '16:9')
+  assert.equal(buildAspectRatio(1080, 1920), '9:16')
+  assert.equal(buildAspectRatio(1200, 800), '3:2')
+  assert.equal(buildAspectRatio(1000, 1000), '1:1')
+  assert.equal(buildAspectRatio(0, 1000), '')
+  assert.equal(buildAspectRatio('bad', 1000), '')
+})
+
 test('normalizes chosen media files with default titles and media types', () => {
   const files = normalizeChosenMediaFiles([
     {
@@ -60,8 +70,10 @@ test('normalizes chosen media files with default titles and media types', () => 
 
   assert.equal(files[0].mediaType, 'IMAGE')
   assert.equal(files[0].title, 'photo')
+  assert.equal(files[0].aspectRatio, '3:2')
   assert.equal(files[1].mediaType, 'VIDEO')
   assert.equal(files[1].durationMs, 12000)
+  assert.equal(files[1].aspectRatio, '')
   assert.equal(files[1].coverPath, 'wxfile://tmp/thumb.jpg')
 })
 
@@ -126,7 +138,33 @@ test('enriches missing video dimensions from getVideoInfo', async () => {
   assert.equal(enrichedFiles[0].width, 1080)
   assert.equal(enrichedFiles[0].height, 1920)
   assert.equal(enrichedFiles[0].durationMs, 13000)
+  assert.equal(enrichedFiles[0].aspectRatio, '9:16')
   assert.equal(enrichedFiles[0].metaText, '默认标题 · 视频 00:13')
+})
+
+test('enriches missing image dimensions from getImageInfo', async () => {
+  const files = normalizeChosenMediaFiles([
+    {
+      tempFilePath: 'wxfile://tmp/photo.jpg',
+      size: 1024,
+      fileType: 'image'
+    }
+  ])
+  const wxApi = {
+    getImageInfo(options) {
+      assert.equal(options.src, 'wxfile://tmp/photo.jpg')
+      options.success({
+        width: 1200,
+        height: 800
+      })
+    }
+  }
+
+  const enrichedFiles = await enrichVideoFileMetadata(files, { wxApi })
+
+  assert.equal(enrichedFiles[0].width, 1200)
+  assert.equal(enrichedFiles[0].height, 800)
+  assert.equal(enrichedFiles[0].aspectRatio, '3:2')
 })
 
 test('validates upload file count size and duration limits', () => {
@@ -143,6 +181,7 @@ test('builds upload complete payload with per-file metadata', () => {
       title: ' 草坪婚礼 ',
       description: ' 晚宴快剪 ',
       tags: ['高端婚礼'],
+      aspectRatio: '16:9',
       confirmIdempotencyKey: 'confirm-99'
     }
   ])
@@ -154,10 +193,27 @@ test('builds upload complete payload with per-file metadata', () => {
         title: '草坪婚礼',
         description: '晚宴快剪',
         tagNames: ['高端婚礼'],
+        aspectRatio: '16:9',
         idempotencyKey: 'confirm-99'
       }
     ]
   })
+})
+
+test('builds upload complete payload aspect ratio from dimensions when cached ratio is missing', () => {
+  const payload = buildUploadCompletePayload([
+    {
+      taskId: 99,
+      title: '草坪婚礼',
+      description: '',
+      tags: [],
+      width: 1200,
+      height: 800,
+      confirmIdempotencyKey: 'confirm-99'
+    }
+  ])
+
+  assert.equal(payload.items[0].aspectRatio, '3:2')
 })
 
 test('builds upload ticket payload with client sha256', () => {
@@ -248,6 +304,7 @@ test('skips confirmed files when building retry upload and complete payloads', (
         title: '待重试',
         description: '',
         tagNames: [],
+        aspectRatio: '',
         idempotencyKey: 'confirm-100'
       }
     ]
@@ -549,6 +606,7 @@ test('builds upload complete payload with optional custom cover task id', () => 
     title: '片头快剪',
     description: '现场仪式',
     tagNames: [],
+    aspectRatio: '',
     idempotencyKey: 'confirm-99'
   })
 })

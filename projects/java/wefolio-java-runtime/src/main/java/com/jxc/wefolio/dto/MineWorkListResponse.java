@@ -111,6 +111,9 @@ public class MineWorkListResponse {
         /** 像素高度 */
         private Integer height;
 
+        /** 长宽比，例如 16:9、9:16 */
+        private String aspectRatio;
+
         /** 作品说明 */
         private String description;
 

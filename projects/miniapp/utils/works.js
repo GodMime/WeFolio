@@ -122,6 +122,7 @@ function normalizeWork(raw = {}) {
   const tags = Array.isArray(raw.tags) ? raw.tags.map(normalizeTag) : []
   const coverUrl = trimText(raw.coverUrl)
   const referenceCount = toNumber(raw.referenceCount)
+  const aspectRatio = trimText(raw.aspectRatio)
   return {
     id: normalizeId(raw.id),
     mediaType,
@@ -138,6 +139,8 @@ function normalizeWork(raw = {}) {
     durationText: mediaType === 'VIDEO' ? formatDuration(raw.durationMs) : '',
     width: toNumber(raw.width),
     height: toNumber(raw.height),
+    aspectRatio,
+    aspectRatioText: aspectRatio || '--',
     description: trimText(raw.description),
     serviceDate: trimText(raw.serviceDate),
     sortOrder: toNumber(raw.sortOrder),

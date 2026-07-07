@@ -120,7 +120,7 @@
   </view>
 
   <view class="component-work-picker-mask {{componentWorkSheetVisible ? 'visible' : ''}}" catchtap="handleCloseComponentWorkSheet">
-    <view class="component-work-picker-panel" catchtap="noop">
+    <view class="component-work-list-panel component-work-picker-panel" catchtap="noop">
       <view class="component-picker-grabber"></view>
       <view class="component-picker-heading">
         <view class="component-picker-title">{{componentWorkSheetTitle}}</view>
@@ -212,7 +212,7 @@
 
       <view wx:if="{{profileSheetErrorText}}" class="component-work-state error profile-sheet-error">{{profileSheetErrorText}}</view>
 
-      <scroll-view class="profile-form-scroll" scroll-y type="list">
+      <scroll-view class="profile-form-scroll profile-sheet-scroll" scroll-y type="list">
         <view class="profile-form-list-content">
           <view class="profile-sheet-fields-panel">
             <view class="form-row">

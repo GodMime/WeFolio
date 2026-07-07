@@ -608,6 +608,11 @@
   transition: transform 225ms cubic-bezier(0.2, 0, 0.1, 1);
 }
 
+.component-work-list-panel {
+  height: calc(76vh - env(safe-area-inset-bottom));
+  max-height: calc(76vh - env(safe-area-inset-bottom));
+}
+
 .component-work-picker-mask.visible .component-work-picker-panel {
   transform: translateY(0);
 }
@@ -719,7 +724,10 @@
 }
 
 .component-work-scroll {
-  max-height: 50vh;
+  flex: 1 1 auto;
+  height: 0;
+  min-height: 0;
+  max-height: none;
 }
 
 .component-work-list-content {
@@ -874,7 +882,8 @@
 }
 
 .profile-sheet-panel {
-  max-height: 82vh;
+  height: calc(82vh - env(safe-area-inset-bottom));
+  max-height: calc(82vh - env(safe-area-inset-bottom));
 }
 
 .profile-refresh-button {
@@ -897,6 +906,13 @@
 
 .profile-form-scroll {
   max-height: 54vh;
+}
+
+.profile-sheet-scroll {
+  flex: 1 1 auto;
+  height: 0;
+  min-height: 0;
+  max-height: none;
 }
 
 .profile-form-list-content {

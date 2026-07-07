@@ -48,6 +48,31 @@ function normalizeDimension(value) {
   return numberValue > 0 ? Math.round(numberValue) : 0
 }
 
+function gcd(left, right) {
+  let a = Math.abs(left)
+  let b = Math.abs(right)
+  while (b > 0) {
+    const remainder = a % b
+    a = b
+    b = remainder
+  }
+  return a
+}
+
+function buildAspectRatio(width, height) {
+  const normalizedWidth = normalizeDimension(width)
+  const normalizedHeight = normalizeDimension(height)
+  if (normalizedWidth <= 0 || normalizedHeight <= 0) {
+    return ''
+  }
+  const divisor = gcd(normalizedWidth, normalizedHeight)
+  return `${normalizedWidth / divisor}:${normalizedHeight / divisor}`
+}
+
+function resolveAspectRatio(file = {}) {
+  return trimText(file.aspectRatio) || buildAspectRatio(file.width, file.height)
+}
+
 function createChooseMediaOptions(remainingCount = MAX_BATCH_COUNT) {
   const count = Math.max(0, Math.min(MAX_BATCH_COUNT, Number(remainingCount) || MAX_BATCH_COUNT))
   return {
@@ -175,6 +200,8 @@ function normalizeChosenMediaFile(raw = {}, index = 0) {
   const fileName = trimText(raw.name) || fileNameFromPath(filePath)
   const mediaType = raw.fileType === 'video' ? 'VIDEO' : 'IMAGE'
   const durationMs = raw.duration ? Math.round(Number(raw.duration) * 1000) : normalizeSize(raw.durationMs)
+  const width = normalizeDimension(raw.width)
+  const height = normalizeDimension(raw.height)
   return {
     id: raw.id || `local-${Date.now()}-${index}`,
     clientId: raw.clientId || `client-${Date.now()}-${index}`,
@@ -192,8 +219,9 @@ function normalizeChosenMediaFile(raw = {}, index = 0) {
     size: normalizeSize(raw.size),
     sha256: trimText(raw.sha256),
     durationMs,
-    width: normalizeDimension(raw.width),
-    height: normalizeDimension(raw.height),
+    width,
+    height,
+    aspectRatio: buildAspectRatio(width, height),
     status: 'READY',
     progress: 0,
     taskId: null,
@@ -229,19 +257,62 @@ function getVideoInfo(filePath, wxApi) {
   })
 }
 
+function getImageInfo(filePath, wxApi) {
+  let runtimeWx
+  try {
+    runtimeWx = getRuntimeWx(wxApi)
+  } catch (error) {
+    return Promise.resolve(null)
+  }
+  if (!filePath || !runtimeWx.getImageInfo) {
+    return Promise.resolve(null)
+  }
+  return new Promise((resolve) => {
+    runtimeWx.getImageInfo({
+      src: filePath,
+      success: resolve,
+      fail() {
+        resolve(null)
+      }
+    })
+  })
+}
+
 async function enrichVideoFileMetadata(files = [], options = {}) {
   if (!Array.isArray(files)) {
     return []
   }
   return Promise.all(files.map(async (file) => {
-    if (!file || file.mediaType !== 'VIDEO') {
+    if (!file) {
       return file
     }
     const currentWidth = normalizeDimension(file.width)
     const currentHeight = normalizeDimension(file.height)
+    if (file.mediaType === 'IMAGE') {
+      if (currentWidth > 0 && currentHeight > 0) {
+        return Object.assign({}, file, {
+          aspectRatio: buildAspectRatio(currentWidth, currentHeight)
+        })
+      }
+      const imageInfo = await getImageInfo(file.tempFilePath, options.wxApi)
+      if (!imageInfo) {
+        return file
+      }
+      const nextFile = Object.assign({}, file, {
+        width: currentWidth || normalizeDimension(imageInfo.width),
+        height: currentHeight || normalizeDimension(imageInfo.height)
+      })
+      nextFile.aspectRatio = buildAspectRatio(nextFile.width, nextFile.height)
+      return nextFile
+    }
+    if (file.mediaType !== 'VIDEO') {
+      return file
+    }
     const currentDurationMs = normalizeSize(file.durationMs)
     if (currentWidth > 0 && currentHeight > 0 && currentDurationMs > 0) {
-      return file
+      return Object.assign({}, file, {
+        aspectRatio: buildAspectRatio(currentWidth, currentHeight)
+      })
     }
     const videoInfo = await getVideoInfo(file.tempFilePath, options.wxApi)
     if (!videoInfo) {
@@ -256,6 +327,7 @@ async function enrichVideoFileMetadata(files = [], options = {}) {
       height: currentHeight || normalizeDimension(videoInfo.height),
       durationMs
     })
+    nextFile.aspectRatio = buildAspectRatio(nextFile.width, nextFile.height)
     nextFile.metaText = buildMediaMetaText(nextFile.mediaType, nextFile.durationMs)
     return nextFile
   }))
@@ -516,6 +588,7 @@ function buildUploadCompletePayload(files = []) {
           title: trimText(file.title),
           description: trimText(file.description),
           tagNames: Array.isArray(file.tags) ? file.tags.map(trimText).filter(Boolean) : [],
+          aspectRatio: resolveAspectRatio(file),
           idempotencyKey: file.confirmIdempotencyKey
         }
         if (file.customCoverTaskId && file.customCoverStatus === 'UPLOADED') {
@@ -636,6 +709,7 @@ module.exports = {
   VIDEO_MAX_DURATION_SECONDS,
   VIDEO_UPLOAD_CONCURRENCY,
   applyUploadCompleteResults,
+  buildAspectRatio,
   buildThumbFileName,
   buildUploadProgressSummary,
   buildUploadCompletePayload,

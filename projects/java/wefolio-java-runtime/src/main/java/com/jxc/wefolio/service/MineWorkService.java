@@ -1630,6 +1630,7 @@ public class MineWorkService {
         item.setDurationMs(work.getDurationMs());
         item.setWidth(work.getWidth());
         item.setHeight(work.getHeight());
+        item.setAspectRatio(work.getAspectRatio());
         item.setDescription(work.getDescription());
         item.setServiceDate(work.getServiceDate());
         item.setSortOrder(work.getSortOrder());

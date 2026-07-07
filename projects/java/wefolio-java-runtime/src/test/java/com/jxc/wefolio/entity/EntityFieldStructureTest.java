@@ -85,6 +85,13 @@ class EntityFieldStructureTest {
     }
 
     @Test
+    void workEntityShouldDeclareAspectRatio() {
+        assertThat(WorkEntity.class.getDeclaredFields())
+                .extracting(Field::getName)
+                .contains("aspectRatio");
+    }
+
+    @Test
     void portfolioReferenceEntityShouldDeclareConfigScope() {
         assertThat(PortfolioReferenceEntity.class.getDeclaredFields())
                 .extracting(Field::getName)

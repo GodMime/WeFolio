@@ -575,6 +575,45 @@ test('portfolio editor component picker keeps option list visible in Skyline', (
   assert.match(optionScrollRule, /flex:\s*1\s+1\s+auto/)
 })
 
+test('portfolio component work picker keeps work list visible in Skyline', () => {
+  const editWxml = read('pages/portfolio-standard-edit/portfolio-standard-edit.wxml')
+  const editWxss = read('pages/portfolio-standard-edit/portfolio-standard-edit.wxss')
+  const basePanelRule = readRule(editWxss, '.component-work-picker-panel')
+  const listPanelRule = readRule(editWxss, '.component-work-list-panel')
+  const scrollRule = readRule(editWxss, '.component-work-scroll')
+
+  assert.match(editWxml, /class="component-work-list-panel component-work-picker-panel"/)
+  assert.match(editWxml, /class="qr-contact-sheet-panel component-work-picker-panel"/)
+  assert.match(editWxml, /class="schedule-query-sheet-panel component-work-picker-panel"/)
+  assert.match(editWxml, /class="contact-form-sheet-panel component-work-picker-panel"/)
+  assert.match(editWxml, /class="text-section-sheet-panel component-work-picker-panel"/)
+  assert.match(editWxml, /class="divider-sheet-panel component-work-picker-panel"/)
+  assert.match(editWxml, /<scroll-view wx:else class="component-work-scroll"[^>]*scroll-y[^>]*type="list"/)
+  assert.doesNotMatch(basePanelRule, /height:\s*calc\(76vh - env\(safe-area-inset-bottom\)\);/)
+  assert.match(basePanelRule, /max-height:\s*76vh;/)
+  assert.match(listPanelRule, /height:\s*calc\(76vh - env\(safe-area-inset-bottom\)\);/)
+  assert.match(listPanelRule, /max-height:\s*calc\(76vh - env\(safe-area-inset-bottom\)\);/)
+  assert.match(scrollRule, /flex:\s*1 1 auto;/)
+  assert.match(scrollRule, /height:\s*0;/)
+  assert.match(scrollRule, /min-height:\s*0;/)
+  assert.match(scrollRule, /max-height:\s*none;/)
+})
+
+test('portfolio profile editor sheet keeps form content visible in Skyline', () => {
+  const editWxml = read('pages/portfolio-standard-edit/portfolio-standard-edit.wxml')
+  const editWxss = read('pages/portfolio-standard-edit/portfolio-standard-edit.wxss')
+  const panelRule = readRule(editWxss, '.profile-sheet-panel')
+  const scrollRule = readRule(editWxss, '.profile-sheet-scroll')
+
+  assert.match(editWxml, /class="profile-form-scroll profile-sheet-scroll"/)
+  assert.match(panelRule, /height:\s*calc\(82vh - env\(safe-area-inset-bottom\)\);/)
+  assert.match(panelRule, /max-height:\s*calc\(82vh - env\(safe-area-inset-bottom\)\);/)
+  assert.match(scrollRule, /flex:\s*1 1 auto;/)
+  assert.match(scrollRule, /height:\s*0;/)
+  assert.match(scrollRule, /min-height:\s*0;/)
+  assert.match(scrollRule, /max-height:\s*none;/)
+})
+
 test('standard personal portfolio editor follows shared maintainer layout', () => {
   const editWxml = read('pages/portfolio-standard-edit/portfolio-standard-edit.wxml')
   const editWxss = read('pages/portfolio-standard-edit/portfolio-standard-edit.wxss')
