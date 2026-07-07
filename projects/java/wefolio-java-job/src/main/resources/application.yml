@@ -1,0 +1,23 @@
+spring:
+  application:
+    name: wefolio-java-job
+
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  mapper-locations: classpath:mapper/**/*.xml
+  type-aliases-package: com.jxc.wefolio.job.entity
+
+wefolio:
+  mybatis:
+    sql-log-enabled: ${WEFOLIO_MYBATIS_SQL_LOG_ENABLED:false}
+
+server:
+  address: 127.0.0.1
+  port: 8091

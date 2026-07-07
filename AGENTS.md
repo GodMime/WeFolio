@@ -11,6 +11,7 @@ WeFolio（映期Folio）是面向婚庆、演艺从业者的 SaaS 微信小程�
 | 目录 | 类型 | 说明 |
 |---|---|---|
 | `projects/java/wefolio-java-runtime/` | Spring Boot 3.5.3 后端 | REST API 服务 |
+| `projects/java/wefolio-java-job/` | Spring Boot 3.5.3 后台任务 | 独立部署的定时任务服务，不引入 Flyway |
 | `projects/miniapp/` | 微信小程序 | Skyline 渲染引擎 + glass-easel 组件框架 |
 | `projects/ai/` | 预留 | AI 能力模块 |
 | `docs/` | 文档 | PRD、数据库模型设计、技术台账 |
@@ -23,6 +24,9 @@ WeFolio（映期Folio）是面向婚庆、演艺从业者的 SaaS 微信小程�
   -> Spring Boot REST API (:8090)
     -> MySQL 8.0
     -> 腾讯云 COS
+
+Spring Boot Job (:8091)
+  -> MySQL 8.0
 ```
 
 ## 常用命令
@@ -36,6 +40,17 @@ cd projects/java/wefolio-java-runtime
 mvn test
 mvn clean package -DskipTests
 java -jar target/wefolio-java-runtime.jar
+```
+
+Java 后台任务：
+
+```bash
+cd projects/java/wefolio-java-job
+
+# 本机默认可能是 JDK 17；项目需要 JDK 21
+mvn test
+mvn clean package -DskipTests
+java -jar target/wefolio-java-job.jar
 ```
 
 如果 `jdk21` 别名不可用，可显式设置：
@@ -122,6 +137,8 @@ service/       业务服务
 Flyway 规则：
 
 - migration 位于 `projects/java/wefolio-java-runtime/src/main/resources/db/migration/`。
+- `projects/java/wefolio-java-job/` 不引入 Flyway，不维护 migration。
+- 所有 SQL 变更都必须走 `projects/java/wefolio-java-runtime/` 工程的 Flyway SQL 脚本，包括建表、改表、索引、约束、初始化数据和数据修正 SQL。
 - 已提交或已执行的 migration 绝对不要修改。
 - 数据库变更必须新增 `V{version}__{description}.sql`。
 
@@ -149,6 +166,9 @@ Flyway 规则：
 ```bash
 cd projects/java/wefolio-java-runtime
 JAVA_HOME=/opt/homebrew/Cellar/openjdk@21/21.0.11/libexec/openjdk.jdk/Contents/Home mvn test
+
+cd projects/java/wefolio-java-job
+JAVA_HOME=/opt/homebrew/Cellar/openjdk@21/21.0.11/libexec/openjdk.jdk/Contents/Home mvn test
 ```
 
 小程序工具类或布局改动可运行对应 Node 测试：
@@ -162,7 +182,7 @@ node --test tests/*.test.js
 
 ## 安全与工作区
 
-- `projects/java/wefolio-java-runtime/.env` 含数据库、COS、微信 AppSecret 等敏感配置，禁止提交。
+- `projects/java/wefolio-java-runtime/.env` 和 `projects/java/wefolio-java-job/.env` 含敏感配置，禁止提交。
 - 不要打印、复制或提交真实密钥，除非用户明确要求用于排查并确认风险。
 - 工作区可能已有用户未提交改动；不要回滚或覆盖与当前任务无关的改动。
 - 编辑文件时保持改动范围小，优先遵循现有结构和命名风格。

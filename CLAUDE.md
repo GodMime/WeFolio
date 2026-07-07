@@ -1,8 +1,8 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+本文件用于指导 Claude Code（claude.ai/code）在本仓库内工作。
 
-## Repo Overview
+## 仓库概览
 
 WeFolio（映期Folio）— 面向婚庆/演艺从业者的 SaaS 微信小程序。帮助个人与团队维护作品、档期、作品集展示页，追踪客户访问记录。
 
@@ -13,12 +13,13 @@ GitHub: `GodMime/WeFolio`，主分支 `main`，工作分支 `dev`。
 | 目录 | 类型 | 说明 |
 |------|------|------|
 | `projects/java/wefolio-java-runtime/` | Spring Boot 3.5.3 后端 | REST API 服务，详见该目录下的 `CLAUDE.md` |
+| `projects/java/wefolio-java-job/` | Spring Boot 3.5.3 后台任务 | 独立部署的定时任务服务，不引入 Flyway，详见该目录下的 `CLAUDE.md` |
 | `projects/miniapp/` | 微信小程序 | Skyline 渲染引擎 + glass-easel 组件框架 |
 | `projects/ai/` | 预留 | AI 能力模块（当前为空） |
 | `docs/` | 文档 | PRD、数据库模型设计、技术台账 |
 | `design/` | 设计稿 | 27 页线框原型 + 可视化测试 |
 
-## Build & Run
+## 构建与运行
 
 ### Java 后端
 
@@ -41,11 +42,31 @@ java -jar target/wefolio-java-runtime.jar
 
 `.env` 文件位于 `projects/java/wefolio-java-runtime/.env`，包含 MySQL 和腾讯云 COS 凭证。**注意：此文件含敏感信息，切勿提交到 Git。**
 
+### Java 后台任务
+
+```bash
+cd projects/java/wefolio-java-job
+
+# 先切 JDK 21（系统默认 17）
+jdk21
+
+# 编译（跳过测试）
+mvn clean package -DskipTests
+
+# 运行测试
+mvn test
+
+# 本地运行（需要数据库环境变量）
+java -jar target/wefolio-java-job.jar
+```
+
+`wefolio-java-job` 用于后台定时任务，默认端口 `8091`，健康检查和版本接口为 `/api/health`、`/api/version`。
+
 ### 微信小程序
 
 用微信开发者工具打开 `projects/miniapp/` 目录。AppID: `wxa214c25850cdf268`。
 
-## Mock Experience Rules
+## Mock 体验版规则
 
 - mock 体验版必须完全独立于正式维护者端页面和组件；除登录页的“体验”入口和跳转外，不要改动既有正式页面或正式组件来承载 mock 行为。
 - mock 页面统一放在 `projects/miniapp/pages/mock/`，mock 专用组件统一放在 `projects/miniapp/components/mock/`，mock 数据、作品集 JSON 和本地草稿逻辑统一放在 `projects/miniapp/utils/mock-experience.js` 或同级 mock 专用文件。
@@ -70,7 +91,7 @@ bash deploy.sh    # Maven 构建 + SCP 上传 + systemctl 重启
 
 目标服务器: `49.235.146.161`，服务名 `wefolio.service`。
 
-## Architecture
+## 架构
 
 ```
 微信小程序 (Skyline/glass-easel)
@@ -82,9 +103,17 @@ Spring Boot REST API (:8090)
      ▼     ▼
   MySQL  腾讯云 COS
   (8.0)  (对象存储)
+
+Spring Boot 后台任务 (:8091)
+        │
+        ▼
+      MySQL
+      (8.0)
 ```
 
-**后端技术栈：** Spring Boot 3.5.3 / Java 21 / MyBatis-Plus 3.5.7 / Flyway / MySQL 8.0 / 腾讯云 COS
+**runtime 技术栈：** Spring Boot 3.5.3 / Java 21 / MyBatis-Plus 3.5.7 / Flyway / MySQL 8.0 / 腾讯云 COS
+
+**job 技术栈：** Spring Boot 3.5.3 / Java 21 / MyBatis-Plus 3.5.7 / MySQL 8.0 / Lombok；不引入 Flyway。
 
 **包结构：** `com.jxc.wefolio` — controller / service / entity / mapper / dict / config / common / exception
 
@@ -108,7 +137,7 @@ Spring Boot REST API (:8090)
 - 失败不影响注册主流程
 - 上传接口：`CosService.upload(MultipartFile, String folderPrefix)` 传入前缀路径
 
-## Database Conventions
+## 数据库约定
 
 - 表前缀 `wf_`，InnoDB，utf8mb4，ROW_FORMAT=DYNAMIC
 - 枚举字段：`VARCHAR(32) ascii_bin` + `CHECK` 约束，Java 用 `String` 对接 `XxxDict` 枚举字典
@@ -119,8 +148,10 @@ Spring Boot REST API (:8090)
 - 不使用外键，通过服务层事务 + 唯一索引 + 巡检保证一致性
 - 敏感字段（手机号、微信 openid）应用层信封加密，等值查询用 HMAC-SHA256 摘要
 - Flyway migration：已提交 Git 的脚本**绝对不可修改**（checksum 校验），所有变更必须追加新 V 版本文件
+- 所有 SQL 变更都必须走 `projects/java/wefolio-java-runtime/` 工程的 Flyway SQL 脚本，包括建表、改表、索引、约束、初始化数据和数据修正 SQL。
+- `wefolio-java-job` 不维护 migration；如后台任务需要数据库变更，仍在 `wefolio-java-runtime` 新增 Flyway migration。
 
-## Coding Standards
+## 编码规范
 
 - **所有注释使用中文**（类/字段/方法 Javadoc 及行内注释）
 - 类注释格式：`/** 表名 — 中文描述 — 补充说明 */`
@@ -128,7 +159,7 @@ Spring Boot REST API (:8090)
 - 具有固定语义的字符串字面量（如前缀、配置键、类型标识等）必须提取为静态常量，禁止硬编码
 - 禁止：英文注释、无注释的类/字段/方法
 
-## Design Documentation
+## 设计文档
 
 | 文档 | 说明 |
 |------|------|

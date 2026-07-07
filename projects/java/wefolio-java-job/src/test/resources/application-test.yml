@@ -1,0 +1,20 @@
+spring:
+  datasource:
+    # H2 内存数据库，MySQL 兼容模式，进程内共享。
+    url: jdbc:h2:mem:wefolio_job_test;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  sql:
+    init:
+      mode: never
+
+mybatis-plus:
+  configuration:
+    # 测试环境关闭 SQL 日志，保持输出干净。
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
+    map-underscore-to-camel-case: true
+
+server:
+  port: 18091
