@@ -58,6 +58,32 @@ class WorkAuditServiceTest {
     }
 
     @Test
+    void runOneRoundShouldLogStartConfigWithChineseLabels() {
+        WorkAuditWorkRepository workRepository = mock(WorkAuditWorkRepository.class);
+        WorkAuditTaskRepository taskRepository = mock(WorkAuditTaskRepository.class);
+        WorkAuditClaimTransactionService claimTransactionService = mock(WorkAuditClaimTransactionService.class);
+        TencentCiAuditClient auditClient = mock(TencentCiAuditClient.class);
+        WorkAuditService service =
+                new WorkAuditService(workRepository, taskRepository, claimTransactionService, auditClient, properties());
+        Logger logger = (Logger) LoggerFactory.getLogger(WorkAuditService.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+
+        try {
+            service.runOneRound();
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
+
+        assertThat(appender.list)
+                .extracting(ILoggingEvent::getFormattedMessage)
+                .contains("作品审核任务开始: 单轮视频查询任务上限=1000, 单轮视频提交作品上限=500, "
+                        + "单轮图片审核作品上限=500, 视频主动查询最大次数=120");
+    }
+
+    @Test
     void runOneRoundShouldLogTotalDurationWhenFinished() {
         WorkAuditWorkRepository workRepository = mock(WorkAuditWorkRepository.class);
         WorkAuditTaskRepository taskRepository = mock(WorkAuditTaskRepository.class);

@@ -54,8 +54,8 @@ public class WorkAuditService {
      */
     public void runOneRound() {
         long startNanos = System.nanoTime();
-        log.info("作品审核任务开始: maxQueryVideoPerRun={}, maxSubmitVideoPerRun={}, maxAuditImagePerRun={}, "
-                        + "videoQueryMaxAttempts={}",
+        log.info("作品审核任务开始: 单轮视频查询任务上限={}, 单轮视频提交作品上限={}, 单轮图片审核作品上限={}, "
+                        + "视频主动查询最大次数={}",
                 properties.getMaxQueryVideoPerRun(), properties.getMaxSubmitVideoPerRun(),
                 properties.getMaxAuditImagePerRun(), properties.getVideoQueryMaxAttempts());
         try {
