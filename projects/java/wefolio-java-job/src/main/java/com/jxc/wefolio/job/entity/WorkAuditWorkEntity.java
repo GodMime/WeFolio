@@ -29,4 +29,7 @@ public class WorkAuditWorkEntity extends BaseEntity {
 
     /** 作品审核状态 */
     private String auditStatus;
+
+    /** 审核拒绝原因 */
+    private String auditRejectReason;
 }

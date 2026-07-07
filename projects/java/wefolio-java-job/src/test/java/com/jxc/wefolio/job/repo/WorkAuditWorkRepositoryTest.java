@@ -77,6 +77,7 @@ class WorkAuditWorkRepositoryTest {
     }
 
     @Test
+    @SuppressWarnings("deprecation")
     void updateAuditStatusShouldFilterNotDeletedAndRefreshAuditColumns() {
         WorkAuditWorkMapper workMapper = mock(WorkAuditWorkMapper.class);
         WorkAuditWorkRepository repository = new WorkAuditWorkRepository(workMapper);
@@ -88,6 +89,21 @@ class WorkAuditWorkRepositoryTest {
         assertThat(wrapper.getSqlSet()).contains("audit_status", "updated_at", "version = version + 1");
         assertThat(wrapper.getParamNameValuePairs().values())
                 .contains(11L, WorkAuditStatusDict.PASSED.getCode(), 0L);
+    }
+
+    @Test
+    void updateAuditStatusAndRejectReasonShouldUpdateStatusAndReasonTogether() {
+        WorkAuditWorkMapper workMapper = mock(WorkAuditWorkMapper.class);
+        WorkAuditWorkRepository repository = new WorkAuditWorkRepository(workMapper);
+
+        repository.updateAuditStatusAndRejectReason(11L, WorkAuditStatusDict.REVIEW_REQUIRED, "疑似违规");
+
+        LambdaUpdateWrapper<WorkAuditWorkEntity> wrapper = captureUpdateWrapper(workMapper);
+        assertThat(wrapper.getSqlSegment()).contains("id", "deleted");
+        assertThat(wrapper.getSqlSet())
+                .contains("audit_status", "audit_reject_reason", "updated_at", "version = version + 1");
+        assertThat(wrapper.getParamNameValuePairs().values())
+                .contains(11L, WorkAuditStatusDict.REVIEW_REQUIRED.getCode(), "疑似违规", 0L);
     }
 
     @SuppressWarnings("unchecked")

@@ -77,6 +77,7 @@ public class WorkAuditWorkRepository {
         LocalDateTime now = LocalDateTime.now();
         int updated = workMapper.update(null, Wrappers.<WorkAuditWorkEntity>lambdaUpdate()
                 .set(WorkAuditWorkEntity::getAuditStatus, WorkAuditStatusDict.AUDITING.getCode())
+                .set(WorkAuditWorkEntity::getAuditRejectReason, null)
                 .set(WorkAuditWorkEntity::getUpdatedAt, now)
                 .setSql(VERSION_INCREMENT_SQL)
                 .eq(WorkAuditWorkEntity::getId, workId)
@@ -86,16 +87,32 @@ public class WorkAuditWorkRepository {
     }
 
     /**
-     * 更新作品审核状态。
+     * 更新作品审核状态，默认清空拒绝原因。
      *
      * @param workId 作品 ID
      * @param auditStatus 目标审核状态
      * @return 是否更新成功
+     * @deprecated 审核结果落库应使用 {@link #updateAuditStatusAndRejectReason(Long, WorkAuditStatusDict, String)}
      */
+    @Deprecated(since = "0.0.1", forRemoval = false)
     public boolean updateAuditStatus(Long workId, WorkAuditStatusDict auditStatus) {
+        return updateAuditStatusAndRejectReason(workId, auditStatus, null);
+    }
+
+    /**
+     * 更新作品审核状态和拒绝原因。
+     *
+     * @param workId 作品 ID
+     * @param auditStatus 目标审核状态
+     * @param auditRejectReason 审核拒绝原因，审核通过时为空
+     * @return 是否更新成功
+     */
+    public boolean updateAuditStatusAndRejectReason(Long workId, WorkAuditStatusDict auditStatus,
+                                                    String auditRejectReason) {
         LocalDateTime now = LocalDateTime.now();
         int updated = workMapper.update(null, Wrappers.<WorkAuditWorkEntity>lambdaUpdate()
                 .set(WorkAuditWorkEntity::getAuditStatus, auditStatus.getCode())
+                .set(WorkAuditWorkEntity::getAuditRejectReason, auditRejectReason)
                 .set(WorkAuditWorkEntity::getUpdatedAt, now)
                 .setSql(VERSION_INCREMENT_SQL)
                 .eq(WorkAuditWorkEntity::getId, workId)

@@ -1,5 +1,8 @@
 package com.jxc.wefolio.job.service;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.jxc.wefolio.job.config.WorkAuditProperties;
 import com.jxc.wefolio.job.dict.AuditResultDict;
 import com.jxc.wefolio.job.dict.MediaTypeDict;
@@ -11,7 +14,9 @@ import com.jxc.wefolio.job.repo.WorkAuditWorkRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
+import org.slf4j.LoggerFactory;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
@@ -53,6 +58,31 @@ class WorkAuditServiceTest {
     }
 
     @Test
+    void runOneRoundShouldLogTotalDurationWhenFinished() {
+        WorkAuditWorkRepository workRepository = mock(WorkAuditWorkRepository.class);
+        WorkAuditTaskRepository taskRepository = mock(WorkAuditTaskRepository.class);
+        WorkAuditClaimTransactionService claimTransactionService = mock(WorkAuditClaimTransactionService.class);
+        TencentCiAuditClient auditClient = mock(TencentCiAuditClient.class);
+        WorkAuditService service =
+                new WorkAuditService(workRepository, taskRepository, claimTransactionService, auditClient, properties());
+        Logger logger = (Logger) LoggerFactory.getLogger(WorkAuditService.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+
+        try {
+            service.runOneRound();
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
+
+        assertThat(appender.list)
+                .extracting(ILoggingEvent::getFormattedMessage)
+                .anyMatch(message -> message.matches("作品审核任务结束: durationMs=\\d+"));
+    }
+
+    @Test
     void submitVideoFailureShouldMarkTaskAndWorkFailedWithoutRetry() {
         WorkAuditWorkEntity work = work(11L, MediaTypeDict.VIDEO, "video.mp4", 270000);
         WorkAuditWorkRepository workRepository = mock(WorkAuditWorkRepository.class);
@@ -72,8 +102,34 @@ class WorkAuditServiceTest {
 
         service.submitPendingVideoAudits(500);
 
-        verify(taskRepository).markFailed(eq(101L), anyString(), anyString());
-        verify(workRepository).updateAuditStatus(11L, WorkAuditStatusDict.FAILED);
+        ArgumentCaptor<String> reasonCaptor = ArgumentCaptor.forClass(String.class);
+        verify(claimTransactionService).markTaskFailedAndUpdateWorkFailed(
+                eq(101L), eq(11L), anyString(), anyString(), reasonCaptor.capture());
+        assertThat(reasonCaptor.getValue()).contains("提交腾讯云视频审核失败", "submit failed");
+    }
+
+    @Test
+    void submitVideoSuccessShouldMarkVideoSubmittedAndKeepWorkAuditing() {
+        WorkAuditWorkEntity work = work(17L, MediaTypeDict.VIDEO, "clean-video.mp4", 23000);
+        WorkAuditWorkRepository workRepository = mock(WorkAuditWorkRepository.class);
+        WorkAuditTaskRepository taskRepository = mock(WorkAuditTaskRepository.class);
+        WorkAuditClaimTransactionService claimTransactionService = mock(WorkAuditClaimTransactionService.class);
+        TencentCiAuditClient auditClient = mock(TencentCiAuditClient.class);
+        when(workRepository.findPendingVideos(500)).thenReturn(List.of(work));
+        when(claimTransactionService.claimAndCreateSubmittingTask(eq(17L), any(WorkAuditTaskEntity.class))).thenAnswer(invocation -> {
+            WorkAuditTaskEntity task = invocation.getArgument(1);
+            task.setId(107L);
+            return task;
+        });
+        when(auditClient.submitVideo(eq("clean-video.mp4"), eq(60), eq(1))).thenReturn(new TencentCiAuditResult(
+                "video-job-id", "Submitted", AuditResultDict.UNKNOWN, null, null, null, false, false, "{}"));
+        WorkAuditService service =
+                new WorkAuditService(workRepository, taskRepository, claimTransactionService, auditClient, properties());
+
+        service.submitPendingVideoAudits(500);
+
+        verify(claimTransactionService).markVideoSubmittedAndUpdateWorkAuditing(
+                107L, 17L, "video-job-id", "{}");
     }
 
     @Test
@@ -96,8 +152,36 @@ class WorkAuditServiceTest {
 
         service.auditPendingImages(500);
 
-        verify(taskRepository).markSuccess(eq(102L), eq(AuditResultDict.REVIEW), any(), eq(1), eq("Porn"), eq(90), eq("{}"));
-        verify(workRepository).updateAuditStatus(12L, WorkAuditStatusDict.REVIEW_REQUIRED);
+        ArgumentCaptor<String> reasonCaptor = ArgumentCaptor.forClass(String.class);
+        verify(claimTransactionService).markTaskSuccessAndUpdateWork(
+                eq(102L), eq(12L), eq(AuditResultDict.REVIEW), any(), eq(1), eq("Porn"), eq(90), eq("{}"),
+                eq(WorkAuditStatusDict.REVIEW_REQUIRED), reasonCaptor.capture());
+        assertThat(reasonCaptor.getValue()).contains("疑似违规", "需人工复核", "Porn", "90");
+    }
+
+    @Test
+    void imagePassResultShouldClearAuditRejectReason() {
+        WorkAuditWorkEntity work = work(16L, MediaTypeDict.IMAGE, "clean-image.jpg", null);
+        WorkAuditWorkRepository workRepository = mock(WorkAuditWorkRepository.class);
+        WorkAuditTaskRepository taskRepository = mock(WorkAuditTaskRepository.class);
+        WorkAuditClaimTransactionService claimTransactionService = mock(WorkAuditClaimTransactionService.class);
+        TencentCiAuditClient auditClient = mock(TencentCiAuditClient.class);
+        when(workRepository.findPendingImages(500)).thenReturn(List.of(work));
+        when(claimTransactionService.claimAndCreateSubmittingTask(eq(16L), any(WorkAuditTaskEntity.class))).thenAnswer(invocation -> {
+            WorkAuditTaskEntity task = invocation.getArgument(1);
+            task.setId(106L);
+            return task;
+        });
+        when(auditClient.auditImage("clean-image.jpg")).thenReturn(new TencentCiAuditResult(
+                "image-job-id", null, AuditResultDict.PASS, 0, "Normal", 0, true, false, "{}"));
+        WorkAuditService service =
+                new WorkAuditService(workRepository, taskRepository, claimTransactionService, auditClient, properties());
+
+        service.auditPendingImages(500);
+
+        verify(claimTransactionService).markTaskSuccessAndUpdateWork(
+                eq(106L), eq(16L), eq(AuditResultDict.PASS), any(), eq(0), eq("Normal"), eq(0), eq("{}"),
+                eq(WorkAuditStatusDict.PASSED), eq(null));
     }
 
     @Test
@@ -115,9 +199,31 @@ class WorkAuditServiceTest {
 
         service.queryPendingVideoResults(1000);
 
-        verify(taskRepository).markQueryFailureForNextRun(eq(103L), anyString(), anyString());
-        verify(taskRepository, never()).markFailed(eq(103L), anyString(), anyString());
-        verify(workRepository, never()).updateAuditStatus(eq(13L), eq(WorkAuditStatusDict.FAILED));
+        verify(claimTransactionService).markQueryFailureForNextRunAndKeepWorkAuditing(
+                eq(103L), eq(13L), anyString(), anyString());
+        verify(claimTransactionService, never()).markTaskFailedAndUpdateWorkFailed(
+                eq(103L), eq(13L), anyString(), anyString(), any());
+    }
+
+    @Test
+    void videoPassResultShouldSetWorkPassedAndClearAuditRejectReason() {
+        WorkAuditTaskEntity task = videoTask(108L, 18L, 3);
+        WorkAuditWorkRepository workRepository = mock(WorkAuditWorkRepository.class);
+        WorkAuditTaskRepository taskRepository = mock(WorkAuditTaskRepository.class);
+        WorkAuditClaimTransactionService claimTransactionService = mock(WorkAuditClaimTransactionService.class);
+        TencentCiAuditClient auditClient = mock(TencentCiAuditClient.class);
+        when(taskRepository.findQueryableVideoTasks(1000, 120)).thenReturn(List.of(task));
+        when(taskRepository.claimVideoQuery(eq(108L), anyString(), any(), eq(120))).thenReturn(true);
+        when(auditClient.queryVideo("video-job-id")).thenReturn(new TencentCiAuditResult(
+                "video-job-id", "Success", AuditResultDict.PASS, 0, "Normal", 0, true, false, "{}"));
+        WorkAuditService service =
+                new WorkAuditService(workRepository, taskRepository, claimTransactionService, auditClient, properties());
+
+        service.queryPendingVideoResults(1000);
+
+        verify(claimTransactionService).markTaskSuccessAndUpdateWork(
+                eq(108L), eq(18L), eq(AuditResultDict.PASS), eq("Success"), eq(0), eq("Normal"), eq(0), eq("{}"),
+                eq(WorkAuditStatusDict.PASSED), eq(null));
     }
 
     @Test
@@ -136,8 +242,10 @@ class WorkAuditServiceTest {
 
         service.queryPendingVideoResults(1000);
 
-        verify(taskRepository).markFailed(eq(104L), anyString(), eq("{}"));
-        verify(workRepository).updateAuditStatus(14L, WorkAuditStatusDict.FAILED);
+        ArgumentCaptor<String> reasonCaptor = ArgumentCaptor.forClass(String.class);
+        verify(claimTransactionService).markTaskFailedAndUpdateWorkFailed(
+                eq(104L), eq(14L), anyString(), eq("{}"), reasonCaptor.capture());
+        assertThat(reasonCaptor.getValue()).contains("视频审核查询次数超过上限", "queryCount=120", "maxQueryCount=120");
     }
 
     @Test
@@ -157,9 +265,27 @@ class WorkAuditServiceTest {
 
         service.queryPendingVideoResults(1000);
 
-        verify(taskRepository).markFailed(eq(105L), anyString(), eq("{}"));
-        verify(taskRepository, never()).markVideoRunning(eq(105L), anyString(), anyString());
-        verify(workRepository).updateAuditStatus(15L, WorkAuditStatusDict.FAILED);
+        ArgumentCaptor<String> reasonCaptor = ArgumentCaptor.forClass(String.class);
+        verify(claimTransactionService).markTaskFailedAndUpdateWorkFailed(
+                eq(105L), eq(15L), anyString(), eq("{}"), reasonCaptor.capture());
+        verify(claimTransactionService, never()).markVideoRunningAndKeepWorkAuditing(
+                eq(105L), eq(15L), anyString(), anyString());
+        assertThat(reasonCaptor.getValue()).contains("视频审核查询次数超过上限", "queryCount=120", "maxQueryCount=120");
+    }
+
+    @Test
+    void auditRejectReasonShouldBeTruncatedTo512Characters() {
+        WorkAuditWorkRepository workRepository = mock(WorkAuditWorkRepository.class);
+        WorkAuditTaskRepository taskRepository = mock(WorkAuditTaskRepository.class);
+        WorkAuditClaimTransactionService claimTransactionService = mock(WorkAuditClaimTransactionService.class);
+        TencentCiAuditClient auditClient = mock(TencentCiAuditClient.class);
+        WorkAuditService service =
+                new WorkAuditService(workRepository, taskRepository, claimTransactionService, auditClient, properties());
+        String longReason = "失败原因".repeat(200);
+
+        String truncated = ReflectionTestUtils.invokeMethod(service, "truncateAuditRejectReason", longReason);
+
+        assertThat(truncated.codePointCount(0, truncated.length())).isLessThanOrEqualTo(512);
     }
 
     @ParameterizedTest

@@ -17,6 +17,10 @@ class WorkAuditMigrationTest {
     private static final Path MIGRATION_PATH =
             Path.of("src/main/resources/db/migration/V27__add_work_audit.sql");
 
+    /** 作品审核拒绝原因迁移脚本路径 */
+    private static final Path REJECT_REASON_MIGRATION_PATH =
+            Path.of("src/main/resources/db/migration/V28__add_work_audit_reject_reason.sql");
+
     /**
      * 迁移应为作品表补充审核状态字段和扫描索引。
      *
@@ -33,6 +37,22 @@ class WorkAuditMigrationTest {
         assertThat(sql).contains("ADD KEY `idx_work_audit_scan` (`audit_status`, `media_type`, `deleted`, `id`)");
         assertThat(sql).contains("CONSTRAINT `chk_work_audit_status` CHECK");
         assertThat(sql).contains("'PENDING'", "'AUDITING'", "'PASSED'", "'REJECTED'", "'REVIEW_REQUIRED'", "'FAILED'");
+    }
+
+    /**
+     * 迁移应为作品表补充审核拒绝原因字段，且使用固定长度字符串。
+     *
+     * @throws IOException 读取脚本失败时抛出
+     */
+    @Test
+    void migrationShouldAddAuditRejectReasonToWorkTable() throws IOException {
+        assertThat(REJECT_REASON_MIGRATION_PATH).exists();
+
+        String sql = Files.readString(REJECT_REASON_MIGRATION_PATH);
+
+        assertThat(sql).contains("ADD COLUMN `audit_reject_reason` VARCHAR(512) NULL");
+        assertThat(sql).contains("AFTER `audit_status`");
+        assertThat(sql).doesNotContain("TEXT");
     }
 
     /**
