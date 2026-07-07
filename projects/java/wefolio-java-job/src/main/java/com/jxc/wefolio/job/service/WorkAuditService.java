@@ -66,7 +66,7 @@ public class WorkAuditService {
             queryAllPendingVideoResults(properties.getMaxQueryVideoPerRun());
         } finally {
             long durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos);
-            log.info("作品审核任务结束: durationMs={}", durationMs);
+            log.info("作品审核任务结束: 任务总耗时毫秒={}", durationMs);
         }
     }
 
@@ -113,8 +113,8 @@ public class WorkAuditService {
         long queryableVideoTasks = taskRepository.countQueryableVideoTasks(properties.getVideoQueryMaxAttempts());
         long pendingTotalWorks = pendingImageWorks + pendingVideoWorks;
 
-        log.info("作品审核待处理统计: pendingImageWorks={}, pendingVideoWorks={}, pendingTotalWorks={}, "
-                        + "queryableVideoTasks={}, videoQueryMaxAttempts={}",
+        log.info("作品审核待处理统计: 待审核图片作品数={}, 待审核视频作品数={}, 待审核作品总数={}, "
+                        + "待查询视频任务数={}, 视频主动查询最大次数={}",
                 pendingImageWorks, pendingVideoWorks, pendingTotalWorks, queryableVideoTasks,
                 properties.getVideoQueryMaxAttempts());
     }

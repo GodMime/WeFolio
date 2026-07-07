@@ -79,7 +79,36 @@ class WorkAuditServiceTest {
 
         assertThat(appender.list)
                 .extracting(ILoggingEvent::getFormattedMessage)
-                .anyMatch(message -> message.matches("作品审核任务结束: durationMs=\\d+"));
+                .anyMatch(message -> message.matches("作品审核任务结束: 任务总耗时毫秒=\\d+"));
+    }
+
+    @Test
+    void runOneRoundShouldLogBacklogSummaryWithChineseLabels() {
+        WorkAuditWorkRepository workRepository = mock(WorkAuditWorkRepository.class);
+        WorkAuditTaskRepository taskRepository = mock(WorkAuditTaskRepository.class);
+        WorkAuditClaimTransactionService claimTransactionService = mock(WorkAuditClaimTransactionService.class);
+        TencentCiAuditClient auditClient = mock(TencentCiAuditClient.class);
+        when(workRepository.countPendingImages()).thenReturn(1L);
+        when(workRepository.countPendingVideos()).thenReturn(2L);
+        when(taskRepository.countQueryableVideoTasks(120)).thenReturn(3L);
+        WorkAuditService service =
+                new WorkAuditService(workRepository, taskRepository, claimTransactionService, auditClient, properties());
+        Logger logger = (Logger) LoggerFactory.getLogger(WorkAuditService.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+
+        try {
+            service.runOneRound();
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
+
+        assertThat(appender.list)
+                .extracting(ILoggingEvent::getFormattedMessage)
+                .contains("作品审核待处理统计: 待审核图片作品数=1, 待审核视频作品数=2, 待审核作品总数=3, "
+                        + "待查询视频任务数=3, 视频主动查询最大次数=120");
     }
 
     @Test
