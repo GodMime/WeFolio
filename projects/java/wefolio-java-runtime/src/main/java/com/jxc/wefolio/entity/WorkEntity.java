@@ -65,6 +65,9 @@ public class WorkEntity extends BaseEntity {
     /** 作品状态：ACTIVE 正常 / PROCESSING 处理中 / PROCESSING_FAILED 处理失败 */
     private String status;
 
+    /** 审核状态：PENDING 未审核 / AUDITING 审核中 / PASSED 通过 / REJECTED 违规 / REVIEW_REQUIRED 疑似 / FAILED 失败 */
+    private String auditStatus;
+
     /** 逻辑删除时间 */
     private LocalDateTime deletedAt;
 

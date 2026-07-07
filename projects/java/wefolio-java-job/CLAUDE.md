@@ -28,6 +28,8 @@ com.jxc.wefolio.job.WefolioJavaJobApplication
 
 数据库和 COS 参数参考 `wefolio-java-runtime`：数据库使用 `DB_URL`、`DB_USERNAME`、`DB_PASSWORD`，COS 使用 `COS_SECRET_ID`、`COS_SECRET_KEY`、`COS_REGION`、`COS_BUCKET_NAME`、`COS_UPLOAD_BASE_URL`、`COS_PUBLIC_BASE_URL`。本工程不配置 Flyway。
 
+Web 接口统一通过 `server.servlet.context-path=/job-api` 增加前缀，便于 nginx 与 runtime 工程的 `/api` 路由隔离。新增 Controller 时不要使用 `/api` 前缀。
+
 ## 构建与运行
 
 ```bash
@@ -65,11 +67,11 @@ com.jxc.wefolio.job
 ## 系统接口
 
 ```text
-GET /api/health
-GET /api/version
+GET /job-api/health
+GET /job-api/version
 ```
 
-这些接口用于部署探活和构建版本确认。
+这些接口用于部署探活和构建版本确认。`/job-api` 来自全局 servlet context path，Controller 方法只维护自身业务路径。
 
 ## 编码规范
 

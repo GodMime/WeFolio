@@ -8,10 +8,11 @@ cd "$(dirname "$0")"
 
 # === 配置 ===
 SERVER="root@49.235.146.161"
-REMOTE_DIR="/root/java"
-JAR_NAME="wefolio-java-runtime.jar"
-SERVICE_NAME="wefolio.service"
-APP_NAME="wefolio-java-runtime"
+REMOTE_DIR="/root/java/job"
+JAR_NAME="wefolio-java-job.jar"
+UPLOAD_JAR_NAME="${JAR_NAME}.uploading"
+SERVICE_NAME="wefolio-job.service"
+APP_NAME="wefolio-java-job"
 DEPLOY_LABEL="${APP_NAME} / ${SERVICE_NAME}"
 
 # === 计时工具（毫秒精度）===
@@ -48,22 +49,27 @@ echo ">>> [${DEPLOY_LABEL}] 构建 JAR..."
 mvn clean package -DskipTests -q || die "Maven 构建失败，请检查编译错误"
 elapsed
 
-# === 3. 上传（服务仍在运行，先传文件）===
-echo ">>> [${DEPLOY_LABEL}] 上传 JAR 到 ${SERVER}:${REMOTE_DIR}/ ..."
-scp "target/${JAR_NAME}" "${SERVER}:${REMOTE_DIR}/${JAR_NAME}" || die "SCP 上传失败，请检查网络或 SSH 配置"
+# === 3. 准备远端目录 ===
+echo ">>> [${DEPLOY_LABEL}] 准备远端目录 ${SERVER}:${REMOTE_DIR}/ ..."
+ssh "${SERVER}" "mkdir -p ${REMOTE_DIR}" || die "远端目录创建失败"
 elapsed
 
-# === 4. 覆盖 JAR（服务仍在运行，先替换文件）===
+# === 4. 上传（服务仍在运行，先上传到临时文件）===
+echo ">>> [${DEPLOY_LABEL}] 上传 JAR 到 ${SERVER}:${REMOTE_DIR}/${UPLOAD_JAR_NAME} ..."
+scp "target/${JAR_NAME}" "${SERVER}:${REMOTE_DIR}/${UPLOAD_JAR_NAME}" || die "SCP 上传失败，请检查网络或 SSH 配置"
+elapsed
+
+# === 5. 覆盖 JAR（同目录内 mv，避免直接写正在运行的 JAR 文件）===
 echo ">>> [${DEPLOY_LABEL}] 覆盖 JAR..."
-ssh "${SERVER}" "cp ${REMOTE_DIR}/${JAR_NAME} ${REMOTE_DIR}/app.jar" || die "覆盖 JAR 失败"
+ssh "${SERVER}" "mv -f ${REMOTE_DIR}/${UPLOAD_JAR_NAME} ${REMOTE_DIR}/${JAR_NAME}" || die "覆盖 JAR 失败"
 elapsed
 
-# === 5. 重启服务（短暂停顿）===
+# === 6. 重启服务 ===
 echo ">>> [${DEPLOY_LABEL}] 重启服务 ${SERVICE_NAME}..."
 ssh "${SERVER}" "systemctl restart ${SERVICE_NAME}" || die "重启服务失败"
 elapsed
 
-# === 6. 查看状态 ===
+# === 7. 查看状态 ===
 echo ">>> [${DEPLOY_LABEL}] 服务状态..."
 ssh "${SERVER}" "systemctl status ${SERVICE_NAME} --no-pager" || die "获取服务状态失败"
 elapsed

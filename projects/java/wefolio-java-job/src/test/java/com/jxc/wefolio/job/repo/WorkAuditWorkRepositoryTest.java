@@ -1,0 +1,106 @@
+package com.jxc.wefolio.job.repo;
+
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.MybatisMapperBuilderAssistant;
+import com.baomidou.mybatisplus.core.conditions.Wrapper;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import com.jxc.wefolio.job.dict.MediaTypeDict;
+import com.jxc.wefolio.job.dict.WorkAuditStatusDict;
+import com.jxc.wefolio.job.entity.WorkAuditWorkEntity;
+import com.jxc.wefolio.job.mapper.WorkAuditWorkMapper;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+
+/**
+ * 作品审核用作品仓储测试。
+ */
+class WorkAuditWorkRepositoryTest {
+
+    /**
+     * 初始化 MyBatis-Plus Lambda 字段缓存，便于直接检查 wrapper 条件。
+     */
+    @BeforeAll
+    static void initTableInfo() {
+        if (TableInfoHelper.getTableInfo(WorkAuditWorkEntity.class) == null) {
+            TableInfoHelper.initTableInfo(
+                    new MybatisMapperBuilderAssistant(new MybatisConfiguration(), ""),
+                    WorkAuditWorkEntity.class);
+        }
+    }
+
+    @Test
+    void countPendingImagesShouldFilterPendingImageAndNotDeleted() {
+        WorkAuditWorkMapper workMapper = mock(WorkAuditWorkMapper.class);
+        WorkAuditWorkRepository repository = new WorkAuditWorkRepository(workMapper);
+
+        repository.countPendingImages();
+
+        LambdaQueryWrapper<WorkAuditWorkEntity> wrapper = captureSelectCountWrapper(workMapper);
+        assertThat(wrapper.getSqlSegment()).contains("audit_status", "media_type", "deleted");
+        assertThat(wrapper.getParamNameValuePairs().values())
+                .contains(WorkAuditStatusDict.PENDING.getCode(), MediaTypeDict.IMAGE.getCode(), 0L);
+    }
+
+    @Test
+    void countPendingVideosShouldFilterPendingVideoAndNotDeleted() {
+        WorkAuditWorkMapper workMapper = mock(WorkAuditWorkMapper.class);
+        WorkAuditWorkRepository repository = new WorkAuditWorkRepository(workMapper);
+
+        repository.countPendingVideos();
+
+        LambdaQueryWrapper<WorkAuditWorkEntity> wrapper = captureSelectCountWrapper(workMapper);
+        assertThat(wrapper.getSqlSegment()).contains("audit_status", "media_type", "deleted");
+        assertThat(wrapper.getParamNameValuePairs().values())
+                .contains(WorkAuditStatusDict.PENDING.getCode(), MediaTypeDict.VIDEO.getCode(), 0L);
+    }
+
+    @Test
+    void claimPendingWorkShouldGuardStatusAndRefreshAuditColumns() {
+        WorkAuditWorkMapper workMapper = mock(WorkAuditWorkMapper.class);
+        WorkAuditWorkRepository repository = new WorkAuditWorkRepository(workMapper);
+
+        repository.claimPendingWork(11L);
+
+        LambdaUpdateWrapper<WorkAuditWorkEntity> wrapper = captureUpdateWrapper(workMapper);
+        assertThat(wrapper.getSqlSegment()).contains("id", "audit_status", "deleted");
+        assertThat(wrapper.getSqlSet()).contains("audit_status", "updated_at", "version = version + 1");
+        assertThat(wrapper.getParamNameValuePairs().values())
+                .contains(11L, WorkAuditStatusDict.PENDING.getCode(), WorkAuditStatusDict.AUDITING.getCode(), 0L);
+    }
+
+    @Test
+    void updateAuditStatusShouldFilterNotDeletedAndRefreshAuditColumns() {
+        WorkAuditWorkMapper workMapper = mock(WorkAuditWorkMapper.class);
+        WorkAuditWorkRepository repository = new WorkAuditWorkRepository(workMapper);
+
+        repository.updateAuditStatus(11L, WorkAuditStatusDict.PASSED);
+
+        LambdaUpdateWrapper<WorkAuditWorkEntity> wrapper = captureUpdateWrapper(workMapper);
+        assertThat(wrapper.getSqlSegment()).contains("id", "deleted");
+        assertThat(wrapper.getSqlSet()).contains("audit_status", "updated_at", "version = version + 1");
+        assertThat(wrapper.getParamNameValuePairs().values())
+                .contains(11L, WorkAuditStatusDict.PASSED.getCode(), 0L);
+    }
+
+    @SuppressWarnings("unchecked")
+    private LambdaQueryWrapper<WorkAuditWorkEntity> captureSelectCountWrapper(WorkAuditWorkMapper workMapper) {
+        ArgumentCaptor<Wrapper<WorkAuditWorkEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
+        verify(workMapper).selectCount(captor.capture());
+        return (LambdaQueryWrapper<WorkAuditWorkEntity>) captor.getValue();
+    }
+
+    @SuppressWarnings("unchecked")
+    private LambdaUpdateWrapper<WorkAuditWorkEntity> captureUpdateWrapper(WorkAuditWorkMapper workMapper) {
+        ArgumentCaptor<Wrapper<WorkAuditWorkEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
+        verify(workMapper).update((WorkAuditWorkEntity) isNull(), captor.capture());
+        return (LambdaUpdateWrapper<WorkAuditWorkEntity>) captor.getValue();
+    }
+}

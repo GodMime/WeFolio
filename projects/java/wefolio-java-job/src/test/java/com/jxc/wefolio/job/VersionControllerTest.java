@@ -21,6 +21,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("test")
 class VersionControllerTest {
 
+    /** Job 系统接口统一前缀 */
+    private static final String JOB_API_PREFIX = "/job-api";
+
+    /** Runtime 接口前缀，job 工程不应占用 */
+    private static final String RUNTIME_API_PREFIX = "/api";
+
     /** Web 接口测试客户端 */
     @Autowired
     private MockMvc mockMvc;
@@ -32,7 +38,7 @@ class VersionControllerTest {
      */
     @Test
     void healthReturnsUpStatus() throws Exception {
-        mockMvc.perform(get("/api/health"))
+        mockMvc.perform(get(JOB_API_PREFIX + "/health").contextPath(JOB_API_PREFIX))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.message").value("ok"))
@@ -48,12 +54,26 @@ class VersionControllerTest {
      */
     @Test
     void versionReturnsBuildInformation() throws Exception {
-        mockMvc.perform(get("/api/version"))
+        mockMvc.perform(get(JOB_API_PREFIX + "/version").contextPath(JOB_API_PREFIX))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.message").value("ok"))
                 .andExpect(jsonPath("$.data.version").value(not(blankOrNullString())))
                 .andExpect(jsonPath("$.data.buildTime").value(not(blankOrNullString())))
                 .andExpect(jsonPath("$.data.service").value("wefolio-java-job"));
+    }
+
+    /**
+     * Job 工程不应继续暴露 runtime 风格的 api 前缀。
+     *
+     * @throws Exception MockMvc 调用失败时抛出
+     */
+    @Test
+    void runtimeApiPrefixIsNotExposedByJobService() throws Exception {
+        mockMvc.perform(get(RUNTIME_API_PREFIX + "/health"))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(get(RUNTIME_API_PREFIX + "/version"))
+                .andExpect(status().isNotFound());
     }
 }

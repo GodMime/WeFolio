@@ -31,6 +31,9 @@
     <!-- MyBatis Mapper 日志级别 -->
     <logger name="com.jxc.wefolio.job.mapper" level="DEBUG"/>
 
+    <!-- COS SDK 底层 HTTP 异常日志可能包含签名头，审核链路使用业务日志打印脱敏后的入参和出参 -->
+    <logger name="com.qcloud.cos.http.DefaultCosHttpClient" level="OFF"/>
+
     <!-- 根日志 -->
     <root level="INFO">
         <appender-ref ref="CONSOLE"/>

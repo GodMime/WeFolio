@@ -17,6 +17,12 @@ import java.util.Properties;
 @RestController
 public class VersionController {
 
+    /** 健康检查路径 */
+    private static final String HEALTH_PATH = "/health";
+
+    /** 版本信息路径 */
+    private static final String VERSION_PATH = "/version";
+
     /** 服务名 */
     private static final String SERVICE_NAME = "wefolio-java-job";
 
@@ -37,7 +43,7 @@ public class VersionController {
      *
      * @return 服务状态
      */
-    @GetMapping("/api/health")
+    @GetMapping(HEALTH_PATH)
     public Response<Map<String, String>> health() {
         return Response.success(Map.of(
                 "service", SERVICE_NAME,
@@ -51,7 +57,7 @@ public class VersionController {
      *
      * @return 当前构建版本信息
      */
-    @GetMapping("/api/version")
+    @GetMapping(VERSION_PATH)
     public Response<Map<String, String>> version() {
         Properties properties = loadBuildProperties();
 

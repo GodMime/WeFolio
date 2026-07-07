@@ -78,6 +78,13 @@ class EntityFieldStructureTest {
     }
 
     @Test
+    void workEntityShouldDeclareAuditStatus() {
+        assertThat(WorkEntity.class.getDeclaredFields())
+                .extracting(Field::getName)
+                .contains("auditStatus");
+    }
+
+    @Test
     void portfolioReferenceEntityShouldDeclareConfigScope() {
         assertThat(PortfolioReferenceEntity.class.getDeclaredFields())
                 .extracting(Field::getName)
@@ -130,6 +137,24 @@ class EntityFieldStructureTest {
                 .contains("@see VisitSourceTypeDict")
                 .contains("展示方式：MODAL_CALENDAR 弹层月历 / INLINE_CALENDAR 内联月历")
                 .contains("@see ScheduleStatusDict");
+    }
+
+    @Test
+    void workAuditStatusDictionaryShouldDeclareApprovedValues() throws IOException {
+        Path sourcePath = Path.of("src/main/java/com/jxc/wefolio/dict/WorkAuditStatusDict.java");
+
+        assertThat(sourcePath).exists();
+
+        String source = Files.readString(sourcePath);
+
+        assertThat(source)
+                .contains("PENDING(\"PENDING\", \"未审核\")")
+                .contains("AUDITING(\"AUDITING\", \"审核中\")")
+                .contains("PASSED(\"PASSED\", \"审核通过\")")
+                .contains("REJECTED(\"REJECTED\", \"确认违规\")")
+                .contains("REVIEW_REQUIRED(\"REVIEW_REQUIRED\", \"疑似违规\")")
+                .contains("FAILED(\"FAILED\", \"审核失败\")")
+                .contains("fromCode(String code)");
     }
 
     @Test

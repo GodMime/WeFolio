@@ -18,3 +18,29 @@ mybatis-plus:
 
 server:
   port: 18091
+  servlet:
+    # 测试环境保持和正式配置一致的 job 接口前缀。
+    context-path: /job-api
+
+cos:
+  # 测试环境只用于属性绑定，不调用真实腾讯云接口。
+  secret-id: test-secret-id
+  secret-key: test-secret-key
+  region: ap-guangzhou
+  bucket-name: test-bucket
+  upload-base-url: https://test.cos.example.com
+  public-base-url: https://test.cos.example.com
+
+work-audit:
+  # 单元测试默认关闭调度触发，只测试显式调用。
+  enabled: false
+  cron: "0 * * * * ?"
+  lock-owner-prefix: test
+  task-lock-seconds: 300
+  max-query-video-per-run: 1000
+  max-submit-video-per-run: 500
+  max-audit-image-per-run: 500
+  video-query-max-attempts: 120
+  video-snapshot-interval-seconds: 60
+  max-video-snapshot-count: 120
+  remote-call-timeout-seconds: 30

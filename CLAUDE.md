@@ -60,7 +60,7 @@ mvn test
 java -jar target/wefolio-java-job.jar
 ```
 
-`wefolio-java-job` 用于后台定时任务，默认端口 `8091`，健康检查和版本接口为 `/api/health`、`/api/version`。
+`wefolio-java-job` 用于后台定时任务，默认端口 `8091`，Web 接口统一使用 `/job-api` 前缀，健康检查和版本接口为 `/job-api/health`、`/job-api/version`。
 
 ### 微信小程序
 

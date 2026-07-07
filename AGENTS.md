@@ -29,6 +29,8 @@ Spring Boot Job (:8091)
   -> MySQL 8.0
 ```
 
+`wefolio-java-job` 的 Web 接口统一使用 `/job-api` 前缀，不使用 runtime 工程的 `/api` 前缀。当前探活和版本接口为 `GET /job-api/health`、`GET /job-api/version`。
+
 ## 常用命令
 
 Java 后端：
