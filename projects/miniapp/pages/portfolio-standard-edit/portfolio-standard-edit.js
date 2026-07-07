@@ -336,8 +336,26 @@ function buildDisplayGroupWorkOptions(component = {}, activeGroupKey = '', tags 
     result[workId] = index + 1
     return result
   }, {})
-  return works
-    .filter((work) => workHasTag(work, tag.id))
+  const workMap = works.reduce((result, work) => {
+    const workId = Number(work && work.id)
+    if (Number.isFinite(workId) && workId > 0) {
+      result[workId] = work
+    }
+    return result
+  }, {})
+  const taggedWorks = works.filter((work) => workHasTag(work, tag.id))
+  const taggedWorkIds = taggedWorks.reduce((result, work) => {
+    const workId = Number(work && work.id)
+    if (Number.isFinite(workId) && workId > 0) {
+      result.add(workId)
+    }
+    return result
+  }, new Set())
+  const selectedWorksWithoutTag = selectedIds
+    .map((workId) => workMap[workId])
+    .filter((work) => work && !taggedWorkIds.has(Number(work.id)))
+  return taggedWorks
+    .concat(selectedWorksWithoutTag)
     .map((work) => Object.assign(normalizeDisplayGroupWorkPreview(work, work.id), {
       selected: Boolean(selectedOrderMap[work.id]),
       selectionOrder: selectedOrderMap[work.id] || 0

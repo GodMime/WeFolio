@@ -1133,6 +1133,54 @@ test('tapping work grid component loads tag-driven display group selector', asyn
   assert.deepEqual(page.data.displayGroupWorkOptions.map((item) => item.selected), [true, true])
 })
 
+test('work grid and list editors keep saved selected works visible without catalog tag relations', async () => {
+  for (const componentType of [COMPONENT_TYPES.WORK_GRID, COMPONENT_TYPES.WORK_LIST]) {
+    const fakeRequest = (options) => {
+      if (options.url === '/api/mine/works/tags') {
+        return Promise.resolve({
+          tags: [
+            { id: 8, name: '户外案例' }
+          ]
+        })
+      }
+      if (options.url === '/api/mine/works') {
+        return Promise.resolve({
+          page: 1,
+          pageSize: 100,
+          hasMore: false,
+          works: [
+            { id: 21, mediaType: 'IMAGE', title: '户外仪式', coverUrl: 'https://example.com/21.jpg' },
+            { id: 22, mediaType: 'VIDEO', title: '户外快剪', coverUrl: 'https://example.com/22.jpg' }
+          ]
+        })
+      }
+      return Promise.resolve({})
+    }
+    const page = loadPortfolioEditorPage(fakeRequest)
+    page.data.config = normalizePortfolioConfig({
+      components: [
+        createComponent(componentType, {
+          componentKey: 'c_display',
+          sortOrder: 1000,
+          config: {
+            groups: [
+              { groupKey: 'tag_8', name: '户外案例', sortOrder: 1000, workIds: [22, 21] }
+            ]
+          }
+        })
+      ]
+    })
+
+    await page.handleComponentTap({ currentTarget: { dataset: { key: 'c_display', type: componentType } } })
+    await flushPromises()
+
+    assert.equal(page.data.activeDisplayGroupWorkCountText, '2 个已选')
+    assert.deepEqual(page.data.displayGroupWorkOptions.map((item) => item.id), [22, 21])
+    assert.deepEqual(page.data.displayGroupWorkOptions.map((item) => item.selectionOrder), [1, 2])
+    assert.deepEqual(page.data.displayGroupWorkOptions.map((item) => item.selected), [true, true])
+  }
+})
+
 test('work list display group records tag and work selection order independently', async () => {
   const requests = []
   const fakeRequest = (options) => {

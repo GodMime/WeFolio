@@ -1382,7 +1382,9 @@
 }
 
 .display-group-scroll {
+  height: 144rpx;
   max-height: 28vh;
+  flex: none;
   padding-top: 12rpx;
   box-sizing: border-box;
 }
@@ -1396,9 +1398,10 @@
 .display-group-pill {
   width: auto;
   max-width: 100%;
+  min-width: 244rpx;
   min-height: 60rpx;
-  flex: 0 1 auto;
-  justify-content: center;
+  flex: 0 0 244rpx;
+  justify-content: space-between;
   gap: 12rpx;
   padding: 0 18rpx;
   overflow: hidden;
@@ -1420,7 +1423,7 @@
 }
 
 .display-group-main {
-  flex: 1 1 0;
+  flex: 1 1 auto;
   min-width: 0;
   justify-content: space-between;
   gap: 14rpx;
@@ -1429,7 +1432,7 @@
 .display-group-name {
   overflow: hidden;
   flex: 1 1 0;
-  min-width: 0;
+  min-width: 96rpx;
   color: #17202a;
   font-size: 26rpx;
   font-weight: 900;
@@ -1472,6 +1475,7 @@
 }
 
 .display-group-work-section {
+  display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 18rpx;
@@ -1514,6 +1518,7 @@
 }
 
 .display-group-work-scroll {
+  height: 360rpx;
   max-height: 360rpx;
 }
 
