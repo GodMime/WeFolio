@@ -153,7 +153,7 @@ test('mock mine dashboard uses demo avatar and disables content entries', () => 
 
   assert.equal(dashboard.profile.avatarUrl, MOCK_AVATAR_URL)
   assert.equal(dashboard.metrics.workCount, 7)
-  assert.equal(dashboard.profile.tags[0].name, '测试作品')
+  assert.equal(dashboard.profile.tags[0].name, '风景作品')
   dashboard.entries.forEach((entry) => {
     assert.equal(entry.clickable, false)
   })
@@ -212,7 +212,7 @@ test('mock work library contains one tag, six images, one video, and correct cov
   const library = mock.MOCK_WORK_LIBRARY
 
   assert.equal(library.tags.length, 1)
-  assert.equal(library.tags[0].name, '测试作品')
+  assert.equal(library.tags[0].name, '风景作品')
   assert.equal(library.works.filter((work) => work.mediaType === 'IMAGE').length, 6)
   assert.equal(library.works.filter((work) => work.mediaType === 'VIDEO').length, 1)
   assert.equal(library.total, 7)
@@ -385,7 +385,7 @@ test('mock page markup exposes required registration prompts and navigation acti
   assert.match(mineJs, /url:\s*'\/pages\/login\/login'/)
   assert.match(scheduleWxml, /新增档期/)
   assert.match(scheduleJs, /showMockLoginRequiredToast/)
-  assert.match(worksWxml, /测试作品/)
+  assert.match(worksWxml, /风景作品/)
   assert.match(portfoliosWxml, /data-action="preview"[\s\S]*预览/)
   assert.match(editWxml, /保存草稿/)
   assert.match(editWxml, /发布/)

@@ -5,7 +5,7 @@ const MOCK_PORTFOLIO_DRAFT_STORAGE_KEY = 'wefolio_mock_portfolio_draft'
 const MOCK_PORTFOLIO_ID = 9001
 const MOCK_TAG = {
   id: 201,
-  name: '测试作品',
+  name: '风景作品',
   color: '#0f766e',
   count: 7
 }
@@ -213,7 +213,7 @@ const MOCK_DASHBOARD = {
     profession: '婚礼影像服务',
     city: '杭州',
     tags: [
-      { name: '测试作品' },
+      { name: '风景作品' },
       { name: '婚礼纪实' }
     ]
   },
@@ -302,7 +302,7 @@ const MOCK_WORK_LIBRARY = {
     buildWork({
       id: 101,
       mediaType: 'IMAGE',
-      title: '测试图片 1',
+      title: '风景图片 1',
       fileName: 'demo-image-1.jpg',
       mediaUrl: `${MOCK_ASSET_ROOT}/demo-image-1.jpg`,
       coverUrl: `${MOCK_ASSET_ROOT}/demo-image-1.jpg`,
@@ -312,7 +312,7 @@ const MOCK_WORK_LIBRARY = {
     buildWork({
       id: 102,
       mediaType: 'IMAGE',
-      title: '测试图片 2',
+      title: '风景图片 2',
       fileName: 'demo-image-2.jpg',
       mediaUrl: `${MOCK_ASSET_ROOT}/demo-image-2.jpg`,
       coverUrl: `${MOCK_ASSET_ROOT}/demo-image-2.jpg`,
@@ -322,7 +322,7 @@ const MOCK_WORK_LIBRARY = {
     buildWork({
       id: 103,
       mediaType: 'IMAGE',
-      title: '测试图片 3',
+      title: '风景图片 3',
       fileName: 'demo-image-3.jpg',
       mediaUrl: `${MOCK_ASSET_ROOT}/demo-image-3.jpg`,
       coverUrl: `${MOCK_ASSET_ROOT}/demo-image-3-thumb.jpg`,
@@ -332,7 +332,7 @@ const MOCK_WORK_LIBRARY = {
     buildWork({
       id: 104,
       mediaType: 'IMAGE',
-      title: '测试图片 4',
+      title: '风景图片 4',
       fileName: 'demo-image-4.jpg',
       mediaUrl: `${MOCK_ASSET_ROOT}/demo-image-4.jpg`,
       coverUrl: `${MOCK_ASSET_ROOT}/demo-image-4-thumb.jpg`,
@@ -342,7 +342,7 @@ const MOCK_WORK_LIBRARY = {
     buildWork({
       id: 105,
       mediaType: 'IMAGE',
-      title: '测试图片 5',
+      title: '风景图片 5',
       fileName: 'demo-image-5.jpg',
       mediaUrl: `${MOCK_ASSET_ROOT}/demo-image-5.jpg`,
       coverUrl: `${MOCK_ASSET_ROOT}/demo-image-5-thumb.jpg`,
@@ -352,7 +352,7 @@ const MOCK_WORK_LIBRARY = {
     buildWork({
       id: 106,
       mediaType: 'IMAGE',
-      title: '测试图片 6',
+      title: '风景图片 6',
       fileName: 'demo-image-6.jpg',
       mediaUrl: `${MOCK_ASSET_ROOT}/demo-image-6.jpg`,
       coverUrl: `${MOCK_ASSET_ROOT}/demo-image-6-thumb.jpg`,
@@ -362,7 +362,7 @@ const MOCK_WORK_LIBRARY = {
     buildWork({
       id: 107,
       mediaType: 'VIDEO',
-      title: '测试视频 1',
+      title: '风景视频 1',
       fileName: 'demo-video-1.mp4',
       mediaUrl: `${MOCK_ASSET_ROOT}/demo-video-1.mp4`,
       coverUrl: `${MOCK_ASSET_ROOT}/demo-video-1-thumb.jpg`,
@@ -388,10 +388,10 @@ const MOCK_PORTFOLIO_LIST = {
       publicationStatus: 'DRAFT',
       statusText: '草稿',
       statusTone: 'draft',
-      title: '测试标准个人作品集',
+      title: '风景标准个人作品集',
       shareCode: 'MOCK9001',
       coverUrl: `${MOCK_ASSET_ROOT}/demo-image-1.jpg`,
-      coverAlt: '测试标准个人作品集',
+      coverAlt: '风景标准个人作品集',
       updatedAt: '2026-07-06 12:00:00',
       updatedText: '最近更新 07-06',
       draftRevision: 1,
@@ -413,7 +413,7 @@ const MOCK_PORTFOLIO_LIST = {
 const MOCK_PORTFOLIO_CONFIG = {
   schemaVersion: 'standard-personal-v1',
   share: {
-    title: '测试标准个人作品集',
+    title: '风景标准个人作品集',
     coverUrl: `${MOCK_ASSET_ROOT}/demo-image-1.jpg`,
     avatarUrl: MOCK_AVATAR_URL
   },
@@ -444,7 +444,7 @@ const MOCK_PORTFOLIO_CONFIG = {
           bio: '这里是一份 mock 作品集，用于体验组件编辑、作品选择和预览效果。',
           tags: [
             {
-              name: '测试作品',
+              name: '风景作品',
               color: '#0f766e'
             },
             {
@@ -810,7 +810,7 @@ function buildMockPortfolioRenderData(config = MOCK_PORTFOLIO_CONFIG) {
   return {
     preview: true,
     shareCode: 'MOCK9001',
-    title: sourceConfig.share && sourceConfig.share.title ? sourceConfig.share.title : '测试标准个人作品集',
+    title: sourceConfig.share && sourceConfig.share.title ? sourceConfig.share.title : '风景标准个人作品集',
     share: Object.assign({}, sourceConfig.share || {}),
     components
   }
@@ -824,7 +824,7 @@ function buildStandardPortfolio(config = MOCK_PORTFOLIO_CONFIG) {
       ownerType: 'USER',
       templateType: 'STANDARD',
       publicationStatus: 'DRAFT',
-      title: '测试标准个人作品集',
+      title: '风景标准个人作品集',
       shareCode: 'MOCK9001',
       coverUrl: `${MOCK_ASSET_ROOT}/demo-image-1.jpg`,
       draftRevision: 1,

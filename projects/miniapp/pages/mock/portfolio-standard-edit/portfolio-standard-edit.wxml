@@ -140,7 +140,7 @@
                 </view>
                 <view class="component-work-copy">
                   <view class="component-work-title">{{item.title}}</view>
-                  <view class="component-work-meta">图片 / 测试作品</view>
+                  <view class="component-work-meta">图片 / 风景作品</view>
                 </view>
                 <view class="component-work-check">{{item.selected ? '✓' : ''}}</view>
               </view>
@@ -156,7 +156,7 @@
                 </view>
                 <view class="component-work-copy">
                   <view class="component-work-title">{{item.title}}</view>
-                  <view class="component-work-meta">{{item.mediaType === 'VIDEO' ? '视频' : '图片'}} / 测试作品</view>
+                  <view class="component-work-meta">{{item.mediaType === 'VIDEO' ? '视频' : '图片'}} / 风景作品</view>
                 </view>
                 <view class="component-work-check">{{item.selected ? '✓' : ''}}</view>
               </view>
@@ -172,7 +172,7 @@
                 </view>
                 <view class="component-work-copy">
                   <view class="component-work-title">{{item.title}}</view>
-                  <view class="component-work-meta">{{item.mediaType === 'VIDEO' ? '视频' : '图片'}} / 测试作品</view>
+                  <view class="component-work-meta">{{item.mediaType === 'VIDEO' ? '视频' : '图片'}} / 风景作品</view>
                 </view>
                 <view class="component-work-check">{{item.selected ? '✓' : ''}}</view>
               </view>

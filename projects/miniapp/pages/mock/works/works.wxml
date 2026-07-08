@@ -63,7 +63,7 @@
                   <view class="work-title">{{item.title}}</view>
                   <view class="work-meta">
                     <text>{{item.mediaType === 'VIDEO' ? '视频' : '图片'}}</text>
-                    <text> / 测试作品</text>
+                    <text> / 风景作品</text>
                   </view>
                   <view class="reference-pill used">已使用 1 次</view>
                 </view>
