@@ -114,7 +114,13 @@
                   <view wx:if="{{batchMode}}" class="work-select {{item.selected ? 'selected' : ''}}">
                     <view class="work-select-dot"></view>
                   </view>
-                  <view class="thumb">
+                  <view
+                    class="thumb"
+                    data-id="{{item.id}}"
+                    catchtap="handleWorkPreviewTap"
+                    aria-role="button"
+                    aria-label="{{item.mediaType === 'VIDEO' ? '播放原视频' : '查看原图'}}"
+                  >
                     <image wx:if="{{item.hasCover}}" src="{{item.coverUrl}}" mode="aspectFill"></image>
                     <view wx:else class="thumb-placeholder">{{item.typeText}}</view>
                     <view
@@ -226,6 +232,21 @@
         <button class="work-edit-cancel" catchtap="handleCloseSortMode" disabled="{{sortSaving}}">取消</button>
         <button class="work-edit-confirm" loading="{{sortSaving}}" catchtap="handleSaveSort" disabled="{{sortSaving || sortLoading}}">保存排序</button>
       </view>
+    </view>
+  </view>
+
+  <view class="image-preview-mask {{imagePreviewVisible ? 'visible' : ''}}" catchtap="handleCloseImagePreview">
+    <view class="image-preview-panel" catchtap="handleImagePreviewPanelTap">
+      <view class="image-preview-heading">
+        <view class="image-preview-title">{{imagePreview.title}}</view>
+        <view class="image-preview-close" catchtap="handleCloseImagePreview" aria-role="button" aria-label="关闭图片">×</view>
+      </view>
+      <image
+        wx:if="{{imagePreviewVisible && imagePreview.src}}"
+        class="image-preview-media"
+        src="{{imagePreview.src}}"
+        mode="aspectFit"
+      ></image>
     </view>
   </view>
 

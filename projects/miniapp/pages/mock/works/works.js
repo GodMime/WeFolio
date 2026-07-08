@@ -10,6 +10,8 @@ Page({
     list: MOCK_WORK_LIBRARY,
     selectedTagId: 0,
     visibleWorks: MOCK_WORK_LIBRARY.works,
+    imagePreviewVisible: false,
+    imagePreview: null,
     videoPreviewVisible: false,
     videoPreview: {
       title: '',
@@ -28,7 +30,11 @@ Page({
     })
   },
 
-  handleWorkTap(event) {
+  handleWorkTap() {
+    this.handleLockedAction()
+  },
+
+  handleWorkPreviewTap(event) {
     const workId = Number(event.currentTarget.dataset.id || 0)
     const work = MOCK_WORK_LIBRARY.works.find((item) => item.id === workId)
     if (!work) {
@@ -45,11 +51,19 @@ Page({
       })
       return
     }
-    wx.previewImage({
-      current: work.mediaUrl,
-      urls: MOCK_WORK_LIBRARY.works
-        .filter((item) => item.mediaType === 'IMAGE')
-        .map((item) => item.mediaUrl)
+    this.setData({
+      imagePreviewVisible: true,
+      imagePreview: {
+        title: work.title,
+        src: work.mediaUrl
+      }
+    })
+  },
+
+  handleCloseImagePreview() {
+    this.setData({
+      imagePreviewVisible: false,
+      imagePreview: null
     })
   },
 

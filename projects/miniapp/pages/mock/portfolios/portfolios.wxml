@@ -27,7 +27,12 @@
                 <image class="portfolio-cover-image" src="{{item.coverUrl}}" mode="aspectFill" aria-label="{{item.coverAlt}}"></image>
               </view>
               <view class="portfolio-copy">
-                <view class="portfolio-title">{{item.title}}</view>
+                <view class="portfolio-title {{item.titleScrollable ? 'scrolling' : ''}}">
+                  <view class="portfolio-title-track">
+                    <text class="portfolio-title-text">{{item.title}}</text>
+                    <text wx:if="{{item.titleScrollable}}" class="portfolio-title-text duplicate" aria-hidden="true">{{item.title}}</text>
+                  </view>
+                </view>
                 <view class="portfolio-meta">{{item.updatedText}}</view>
                 <view class="portfolio-badges">
                   <view class="status-badge {{item.statusTone}}">{{item.statusText}}</view>

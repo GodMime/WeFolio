@@ -48,13 +48,19 @@
                 <button class="work-delete-button" catchtap="handleLockedAction">删除</button>
               </view>
               <view class="work-card" data-id="{{item.id}}" bindtap="handleWorkTap">
-                <view class="thumb">
+                <view
+                  class="thumb"
+                  data-id="{{item.id}}"
+                  catchtap="handleWorkPreviewTap"
+                  aria-role="button"
+                  aria-label="{{item.mediaType === 'VIDEO' ? '播放原视频' : '查看原图'}}"
+                >
                   <image src="{{item.coverUrl}}" mode="aspectFill"></image>
                   <view
                     wx:if="{{item.mediaType === 'VIDEO'}}"
                     class="play-badge"
                     data-id="{{item.id}}"
-                    catchtap="handleWorkTap"
+                    catchtap="handleWorkPreviewTap"
                     aria-role="button"
                     aria-label="播放视频"
                   ></view>
@@ -74,6 +80,20 @@
           </view>
         </scroll-view>
       </view>
+    </view>
+  </view>
+
+  <view class="image-preview-mask {{imagePreviewVisible ? 'visible' : ''}}" catchtap="handleCloseImagePreview">
+    <view class="image-preview-panel" catchtap="noop">
+      <view class="video-heading">
+        <view class="video-title">{{imagePreview.title}}</view>
+        <view class="video-close" catchtap="handleCloseImagePreview" aria-role="button" aria-label="关闭图片">×</view>
+      </view>
+      <image
+        class="image-player"
+        src="{{imagePreview.src}}"
+        mode="aspectFit"
+      ></image>
     </view>
   </view>
 

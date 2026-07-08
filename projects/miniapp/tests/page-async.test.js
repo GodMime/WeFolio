@@ -757,6 +757,127 @@ test('works page previews video from remote url without downloading full file', 
   assert.equal(page.data.videoPreview, null)
 })
 
+test('works page previews original media from cover tap without opening edit sheet', () => {
+  const fakeRequest = () => Promise.resolve({ works: [], tags: [], summary: {} })
+  const page = loadPage('pages/works/works.js', fakeRequest)
+  page.data.list.works = [
+    {
+      id: 17,
+      mediaType: 'IMAGE',
+      title: '海边仪式',
+      mediaUrl: 'https://cos.we-folio.dingchenyong.top/WF/work/image/photo.jpg',
+      coverUrl: 'https://cos.we-folio.dingchenyong.top/WF/work/image/photo-thumb.jpg'
+    },
+    {
+      id: 18,
+      mediaType: 'IMAGE',
+      title: '山谷晨雾',
+      mediaUrl: 'https://cos.we-folio.dingchenyong.top/WF/work/image/mist.jpg',
+      coverUrl: 'https://cos.we-folio.dingchenyong.top/WF/work/image/mist-thumb.jpg'
+    },
+    {
+      id: 19,
+      mediaType: 'VIDEO',
+      title: '片头快剪',
+      mediaUrl: 'https://cos.we-folio.dingchenyong.top/WF/work/video/film.mp4',
+      coverUrl: 'https://cos.we-folio.dingchenyong.top/WF/work/video/film-thumb.jpg'
+    }
+  ]
+
+  assert.equal(typeof page.handleWorkPreviewTap, 'function')
+  page.handleWorkPreviewTap({
+    currentTarget: {
+      dataset: {
+        id: '17'
+      }
+    }
+  })
+
+  assert.equal(page.data.imagePreviewVisible, true)
+  assert.deepEqual(page.data.imagePreview, {
+    src: 'https://cos.we-folio.dingchenyong.top/WF/work/image/photo.jpg',
+    title: '海边仪式'
+  })
+  assert.equal(page.data.imageEditSheetVisible, false)
+  assert.equal(page.data.videoEditSheetVisible, false)
+
+  page.handleCloseImagePreview()
+
+  assert.equal(page.data.imagePreviewVisible, false)
+  assert.equal(page.data.imagePreview, null)
+
+  page.handleWorkPreviewTap({
+    currentTarget: {
+      dataset: {
+        id: '19'
+      }
+    }
+  })
+
+  assert.equal(page.data.videoPreviewVisible, true)
+  assert.deepEqual(page.data.videoPreview, {
+    src: 'https://cos.we-folio.dingchenyong.top/WF/work/video/film.mp4',
+    poster: 'https://cos.we-folio.dingchenyong.top/WF/work/video/film-thumb.jpg',
+    title: '片头快剪'
+  })
+  assert.equal(page.data.imageEditSheetVisible, false)
+  assert.equal(page.data.videoEditSheetVisible, false)
+})
+
+test('mock works page locks card body while cover tap previews original media', () => {
+  const fakeRequest = () => Promise.resolve({})
+  const toasts = []
+  const page = loadPage('pages/mock/works/works.js', fakeRequest, {
+    showToast(options) {
+      toasts.push(options)
+    }
+  })
+
+  page.handleWorkTap({
+    currentTarget: {
+      dataset: {
+        id: '101'
+      }
+    }
+  })
+
+  assert.equal(toasts[0].title, '请去“我的”页面注册登录')
+  assert.equal(typeof page.handleWorkPreviewTap, 'function')
+
+  page.handleWorkPreviewTap({
+    currentTarget: {
+      dataset: {
+        id: '103'
+      }
+    }
+  })
+
+  assert.equal(page.data.imagePreviewVisible, true)
+  assert.match(page.data.imagePreview.src, /demo-image-3\.jpg$/)
+  assert.equal(page.data.imagePreview.title, '风景图片 3')
+  assert.equal(page.data.videoPreviewVisible, false)
+
+  page.handleCloseImagePreview()
+
+  assert.equal(page.data.imagePreviewVisible, false)
+  assert.equal(page.data.imagePreview, null)
+
+  page.handleWorkPreviewTap({
+    currentTarget: {
+      dataset: {
+        id: '107'
+      }
+    }
+  })
+
+  assert.equal(page.data.videoPreviewVisible, true)
+  assert.deepEqual(page.data.videoPreview, {
+    title: '风景视频 1',
+    src: 'https://cdn2.we-folio.dingchenyong.top/demo/demo-video-1.mp4',
+    poster: 'https://cdn2.we-folio.dingchenyong.top/demo/demo-video-1-thumb.jpg'
+  })
+})
+
 test('works page starts remote video frame selection without downloading the video', async () => {
   const fakeRequest = () => Promise.resolve({})
   const downloadUrls = []

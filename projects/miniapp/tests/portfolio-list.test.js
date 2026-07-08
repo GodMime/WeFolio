@@ -111,6 +111,44 @@ test('creating a standard personal portfolio opens an unsaved editor draft', asy
   }
 })
 
+test('normalizes long portfolio titles for marquee display', async () => {
+  const page = loadPortfolioListPage((options) => {
+    if (options.url === '/api/mine/portfolios') {
+      return Promise.resolve({
+        portfolios: [
+          {
+            portfolioId: 88,
+            ownerType: 'USER',
+            templateType: 'STANDARD',
+            publicationStatus: 'DRAFT',
+            title: '风景标准个人作品集超长标题用于列表滚动展示',
+            coverUrl: 'https://example.test/cover.jpg'
+          },
+          {
+            portfolioId: 89,
+            ownerType: 'USER',
+            templateType: 'STANDARD',
+            publicationStatus: 'DRAFT',
+            title: '风景作品集',
+            coverUrl: 'https://example.test/cover.jpg'
+          }
+        ]
+      })
+    }
+    return Promise.resolve({})
+  })
+
+  page.bootstrap()
+  await flushPromises()
+
+  try {
+    assert.equal(page.data.displayPortfolios[0].titleScrollable, true)
+    assert.equal(page.data.displayPortfolios[1].titleScrollable, false)
+  } finally {
+    page.cleanup()
+  }
+})
+
 test('unavailable portfolio creation buttons show toast without navigation', async () => {
   const navigations = []
   const toasts = []

@@ -277,6 +277,8 @@ Page({
     videoFrameExporting: false,
     videoCoverUploadProgress: 0,
     videoEditErrorText: '',
+    imagePreviewVisible: false,
+    imagePreview: null,
     videoPreviewVisible: false,
     videoPreview: null,
     sortMode: false,
@@ -808,15 +810,43 @@ Page({
   handleVideoPreviewPanelTap() {
   },
 
-  handlePlayVideoTap(event) {
+  handleWorkPreviewTap(event) {
     if (this.data.batchMode || this.data.sortMode) {
       return
     }
     const workId = normalizeId(event.currentTarget.dataset.id)
     const work = this.findWorkById(workId)
-    if (!work || work.mediaType !== 'VIDEO') {
+    if (!work) {
       return
     }
+    if (work.mediaType === 'VIDEO') {
+      this.openVideoPreview(work)
+      return
+    }
+    this.openImagePreview(work)
+  },
+
+  openImagePreview(work = {}) {
+    const current = work.mediaUrl || ''
+    if (!current) {
+      wx.showToast({
+        title: '图片地址缺失',
+        icon: 'none'
+      })
+      return
+    }
+    this.setData({
+      imagePreviewVisible: true,
+      imagePreview: {
+        src: current,
+        title: work.title || '图片作品'
+      },
+      revealedWorkId: null,
+      tagManageMode: false
+    })
+  },
+
+  openVideoPreview(work = {}) {
     const src = work.mediaUrl || ''
     if (!src) {
       wx.showToast({
@@ -837,10 +867,32 @@ Page({
     })
   },
 
+  handlePlayVideoTap(event) {
+    if (this.data.batchMode || this.data.sortMode) {
+      return
+    }
+    const workId = normalizeId(event.currentTarget.dataset.id)
+    const work = this.findWorkById(workId)
+    if (!work || work.mediaType !== 'VIDEO') {
+      return
+    }
+    this.openVideoPreview(work)
+  },
+
   handleCloseVideoPreview() {
     this.setData({
       videoPreviewVisible: false,
       videoPreview: null
+    })
+  },
+
+  handleImagePreviewPanelTap() {
+  },
+
+  handleCloseImagePreview() {
+    this.setData({
+      imagePreviewVisible: false,
+      imagePreview: null
     })
   },
 

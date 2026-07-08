@@ -26,6 +26,7 @@ const ACTION_TYPE_SHARE = 'SHARE'
 const ACTION_TYPE_EDIT = 'EDIT'
 const ACTION_TYPE_PUBLISH = 'PUBLISH'
 const IDEMPOTENCY_PREFIX_PUBLISH = 'publish'
+const PORTFOLIO_TITLE_SCROLL_MIN_LENGTH = 7
 
 function makeIdempotencyKey(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`
@@ -34,6 +35,10 @@ function makeIdempotencyKey(prefix) {
 function defaultString(value, fallback = '') {
   const text = String(value || '').trim()
   return text || fallback
+}
+
+function shouldScrollPortfolioTitle(title) {
+  return defaultString(title).length >= PORTFOLIO_TITLE_SCROLL_MIN_LENGTH
 }
 
 function resolveStatus(item = {}) {
@@ -67,6 +72,7 @@ function normalizePortfolioItem(item = {}) {
   const isDraft = status.actionType === ACTION_TYPE_PUBLISH
   return Object.assign({}, item, status, {
     title: defaultString(item.title, '未命名作品集'),
+    titleScrollable: shouldScrollPortfolioTitle(item.title),
     coverUrl: defaultString(item.coverUrl, DEFAULT_COVER_URL),
     updatedText: item.updatedAt ? `最近更新 ${String(item.updatedAt).slice(5, 10)}` : '最近更新',
     coverAlt: defaultString(item.title, '作品集封面'),

@@ -389,6 +389,7 @@ const MOCK_PORTFOLIO_LIST = {
       statusText: '草稿',
       statusTone: 'draft',
       title: '风景标准个人作品集',
+      titleScrollable: true,
       shareCode: 'MOCK9001',
       coverUrl: `${MOCK_ASSET_ROOT}/demo-image-1.jpg`,
       coverAlt: '风景标准个人作品集',

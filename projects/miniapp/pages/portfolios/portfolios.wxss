@@ -230,8 +230,38 @@
   font-size: 31rpx;
   font-weight: 900;
   line-height: 1.25;
-  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.portfolio-title-track {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  transform: translateX(0);
+}
+
+.portfolio-title-text {
+  flex: none;
+}
+
+.portfolio-title.scrolling .portfolio-title-track {
+  animation: portfolio-title-marquee 8s linear infinite;
+}
+
+.portfolio-title.scrolling .portfolio-title-text {
+  padding-right: 80rpx;
+}
+
+@keyframes portfolio-title-marquee {
+  0%,
+  14% {
+    transform: translateX(0);
+  }
+
+  86%,
+  100% {
+    transform: translateX(-50%);
+  }
 }
 
 .portfolio-meta {
