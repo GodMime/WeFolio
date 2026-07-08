@@ -64,6 +64,7 @@ function normalizeRenderWork(raw = {}) {
   const mediaType = trimText(raw.mediaType) || 'IMAGE'
   const coverUrl = trimText(raw.coverUrl)
   const mediaUrl = trimText(raw.mediaUrl)
+  const aspectRatio = trimText(raw.aspectRatio || raw.aspectRatioText)
   return {
     workId: toNumber(raw.workId || raw.id),
     title: trimText(raw.title) || '未命名作品',
@@ -73,6 +74,10 @@ function normalizeRenderWork(raw = {}) {
     mediaUrl,
     thumbnailUrl: coverUrl || mediaUrl,
     previewUrl: mediaUrl || coverUrl,
+    aspectRatio,
+    aspectRatioText: trimText(raw.aspectRatioText || aspectRatio),
+    width: toNumber(raw.width),
+    height: toNumber(raw.height || raw.length),
     durationMs: toNumber(raw.durationMs),
     description: trimText(raw.description)
   }

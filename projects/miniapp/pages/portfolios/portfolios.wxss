@@ -193,7 +193,7 @@
   padding: 20rpx;
   display: flex;
   align-items: center;
-  gap: 20rpx;
+  gap: 14rpx;
   border-radius: 14rpx;
   box-shadow: 0 8rpx 22rpx rgba(23, 32, 42, 0.04);
   box-sizing: border-box;
@@ -205,8 +205,8 @@
 }
 
 .portfolio-cover {
-  width: 140rpx;
-  height: 112rpx;
+  width: 112rpx;
+  height: 90rpx;
   flex: none;
   overflow: hidden;
   border-radius: 14rpx;

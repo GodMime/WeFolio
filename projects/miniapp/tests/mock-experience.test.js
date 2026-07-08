@@ -250,6 +250,26 @@ test('mock draft portfolio card edits on card tap and renders only preview and p
   assert.doesNotMatch(actionRowMarkup, /data-action="share"/)
 })
 
+test('mock portfolio list inherits wider title layout without changing action buttons', () => {
+  const wxml = read('pages/mock/portfolios/portfolios.wxml')
+  const mockWxss = read('pages/mock/portfolios/portfolios.wxss')
+  const listWxss = read('pages/portfolios/portfolios.wxss')
+  const actionRowRule = readRule(listWxss, '.portfolio-action-row')
+  const actionButtonRule = readRule(listWxss, '.portfolio-action-button')
+
+  assert.match(mockWxss, /@import "\.\.\/\.\.\/portfolios\/portfolios\.wxss";/)
+  assert.match(wxml, /class="page-shell portfolios-page mock-portfolios-page"/)
+  assert.match(wxml, /class="portfolio-cover"/)
+  assert.match(wxml, /class="portfolio-action-row"/)
+  assert.match(listWxss, /\.portfolio-item-card\s*\{[\s\S]*gap:\s*14rpx;/)
+  assert.match(listWxss, /\.portfolio-cover\s*\{[\s\S]*width:\s*112rpx;[\s\S]*height:\s*90rpx;/)
+  assert.match(actionRowRule, /flex:\s*0 0 auto/)
+  assert.match(actionButtonRule, /width:\s*108rpx/)
+  assert.match(actionButtonRule, /min-width:\s*108rpx/)
+  assert.match(actionButtonRule, /max-width:\s*108rpx/)
+  assert.doesNotMatch(mockWxss, /\.portfolio-(item-card|cover|action-button)\s*\{/)
+})
+
 test('mock portfolio edit page mirrors production component orchestration interactions', () => {
   const wxml = read('pages/mock/portfolio-standard-edit/portfolio-standard-edit.wxml')
   const js = read('pages/mock/portfolio-standard-edit/portfolio-standard-edit.js')

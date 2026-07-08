@@ -149,9 +149,13 @@ function buildWork({
   mediaUrl,
   coverUrl,
   mimeType,
+  aspectRatio,
+  width,
+  height,
   durationMs,
   sortOrder
 }) {
+  const normalizedAspectRatio = trimText(aspectRatio)
   return {
     id,
     workId: id,
@@ -163,11 +167,13 @@ function buildWork({
     coverUrl,
     thumbnailUrl: coverUrl || mediaUrl,
     previewUrl: mediaUrl || coverUrl,
+    aspectRatio: normalizedAspectRatio,
+    aspectRatioText: normalizedAspectRatio,
     mimeType,
     fileSize: 0,
     durationMs: durationMs || 0,
-    width: 0,
-    height: 0,
+    width: Number(width) || 0,
+    height: Number(height) || 0,
     description: '',
     serviceDate: '',
     sortOrder,
@@ -632,6 +638,10 @@ function findWorksByIds(workIds = []) {
       mediaUrl: work.mediaUrl,
       thumbnailUrl: work.coverUrl || work.mediaUrl,
       previewUrl: work.mediaUrl || work.coverUrl,
+      aspectRatio: work.aspectRatio,
+      aspectRatioText: work.aspectRatioText,
+      width: work.width,
+      height: work.height,
       durationMs: work.durationMs || 0,
       description: work.description || ''
     }))

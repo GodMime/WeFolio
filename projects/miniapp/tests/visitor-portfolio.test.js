@@ -280,6 +280,39 @@ test('normalizes carousel interval with three second default for render pages', 
   assert.equal(configuredResult.components[0].carouselIntervalMs, 5200)
 })
 
+test('normalizes carousel work ratio fields for render pages', () => {
+  const result = normalizeVisitorPortfolio({
+    renderData: {
+      components: [
+        {
+          componentKey: 'c_carousel',
+          componentType: 'CAROUSEL',
+          sortOrder: 1000,
+          works: [
+            {
+              workId: 11,
+              title: '横版案例',
+              mediaType: 'IMAGE',
+              coverUrl: 'https://cdn.example.com/a-thumb.jpg',
+              mediaUrl: 'https://cdn.example.com/a.jpg',
+              aspectRatio: '16:9',
+              aspectRatioText: '16:9',
+              width: 1920,
+              height: 1080
+            }
+          ]
+        }
+      ]
+    }
+  })
+
+  const work = result.components[0].works[0]
+  assert.equal(work.aspectRatio, '16:9')
+  assert.equal(work.aspectRatioText, '16:9')
+  assert.equal(work.width, 1920)
+  assert.equal(work.height, 1080)
+})
+
 test('normalizes contact form display mode for render and config pages', () => {
   const renderResult = normalizeVisitorPortfolio({
     renderData: {

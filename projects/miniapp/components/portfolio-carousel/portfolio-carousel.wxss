@@ -1,7 +1,7 @@
 .portfolio-carousel {
   position: relative;
   width: 100%;
-  height: 760rpx;
+  height: 563rpx;
   overflow: hidden;
   background: #f3f4f6;
 }

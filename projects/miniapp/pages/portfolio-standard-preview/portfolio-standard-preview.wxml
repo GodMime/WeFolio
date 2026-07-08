@@ -1,5 +1,5 @@
 <view class="page-shell portfolio-preview-page">
-  <navigation-bar title="{{portfolio.title || '预览'}}" color="#17202a" background="rgba(255, 255, 255, 0.94)"></navigation-bar>
+  <navigation-bar title="{{portfolio.title || '预览'}}" back="{{true}}" color="#17202a" background="rgba(255, 255, 255, 0.94)"></navigation-bar>
 
   <scroll-view scroll-y class="preview-scroll">
     <view class="preview-toolbar">

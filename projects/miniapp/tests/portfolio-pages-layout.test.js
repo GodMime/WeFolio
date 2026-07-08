@@ -135,7 +135,8 @@ test('maintainer portfolio pages expose expected controls', () => {
   assert.match(listWxss, /\.portfolio-delete-pane\s*\{[\s\S]*position:\s*absolute;[\s\S]*right:\s*0;[\s\S]*width:\s*128rpx;/)
   assert.match(listWxss, /\.portfolio-delete-button\s*\{[\s\S]*width:\s*128rpx;[\s\S]*height:\s*100%;[\s\S]*border-radius:\s*0;/)
   assert.match(listWxss, /\.portfolio-item-card\s*\{[\s\S]*min-height:\s*180rpx;[\s\S]*display:\s*flex;[\s\S]*align-items:\s*center;/)
-  assert.match(listWxss, /\.portfolio-cover\s*\{[\s\S]*width:\s*140rpx;[\s\S]*height:\s*112rpx;/)
+  assert.match(listWxss, /\.portfolio-item-card\s*\{[\s\S]*gap:\s*14rpx;/)
+  assert.match(listWxss, /\.portfolio-cover\s*\{[\s\S]*width:\s*112rpx;[\s\S]*height:\s*90rpx;/)
   assert.match(portfolioTitleRule, /overflow:\s*hidden/)
   assert.match(portfolioTitleRule, /white-space:\s*nowrap/)
   assert.doesNotMatch(portfolioTitleRule, /text-overflow:\s*ellipsis/)
@@ -238,6 +239,7 @@ test('maintainer portfolio pages expose expected controls', () => {
   assert.match(libraryWxml, /预留联系信息/)
   assert.match(previewWxml, /预览/)
   assert.match(previewWxml, /禁用真实提交/)
+  assert.match(previewWxml, /<navigation-bar[^>]*back="\{\{true\}\}"/)
   assert.doesNotMatch(previewWxml, /返回编辑/)
   assert.doesNotMatch(previewWxml, /bindtap="handleBackToEditor"/)
   assert.doesNotMatch(previewWxml, /maintenance-mask/)
@@ -275,6 +277,7 @@ test('visitor portfolio pages expose maintenance, QR, contact and schedule surfa
   )
 
   assert.match(visitorWxml, /UNDER MAINTENANCE/)
+  assert.match(visitorWxml, /<navigation-bar[^>]*back="\{\{false\}\}"/)
   assert.match(contactFormJs, /DEFAULT_CONTACT_FORM_TITLE\s*=\s*'预留联系信息'/)
   assert.match(contactFormWxml, /contactComponent\.contactForm\.title \|\| defaultTitle/)
   assert.match(contactFormWxml, /\{\{submitText\}\}/)
@@ -489,6 +492,8 @@ test('portfolio create action buttons align to the list panel width', () => {
 test('portfolio list cards keep action buttons from squeezing title copy', () => {
   const listWxss = read('pages/portfolios/portfolios.wxss')
 
+  assert.match(listWxss, /\.portfolio-item-card\s*\{[\s\S]*gap:\s*14rpx;/)
+  assert.match(listWxss, /\.portfolio-cover\s*\{[\s\S]*width:\s*112rpx;[\s\S]*height:\s*90rpx;/)
   assert.match(listWxss, /\.portfolio-copy\s*\{[\s\S]*min-width:\s*0;[\s\S]*flex:\s*1 1 0;/)
   assert.match(listWxss, /\.portfolio-side\s*\{[\s\S]*flex:\s*0 0 auto;[\s\S]*min-width:\s*0;[\s\S]*gap:\s*12rpx;/)
   assert.match(listWxss, /\.portfolio-action-row\s*\{[\s\S]*flex:\s*0 0 auto;[\s\S]*max-width:\s*226rpx;[\s\S]*display:\s*flex;[\s\S]*align-items:\s*center;[\s\S]*gap:\s*10rpx;/)

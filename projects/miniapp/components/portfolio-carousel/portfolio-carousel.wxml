@@ -1,4 +1,4 @@
-<view class="portfolio-carousel">
+<view class="portfolio-carousel" style="{{carouselFrameStyle}}">
   <swiper
     class="portfolio-carousel-swiper"
     autoplay="{{canAutoplay}}"
@@ -8,7 +8,7 @@
     bindchange="handleSwiperChange"
   >
     <swiper-item wx:for="{{works}}" wx:key="workId">
-      <image class="portfolio-carousel-image" src="{{item.coverUrl || item.mediaUrl}}" mode="aspectFill"></image>
+      <image class="portfolio-carousel-image" src="{{item.previewUrl || item.mediaUrl || item.coverUrl}}" mode="aspectFill"></image>
     </swiper-item>
   </swiper>
 
