@@ -9,6 +9,9 @@ const MOCK_TAG = {
   color: '#0f766e',
   count: 7
 }
+const MOCK_WORK_AUDIT_STATUS = 'PASSED'
+const MOCK_WORK_AUDIT_STATUS_TEXT = '审核通过'
+const MOCK_WORK_AUDIT_STATUS_TONE = 'passed'
 const COMPONENT_TYPES = {
   CAROUSEL: 'CAROUSEL',
   PROFILE: 'PROFILE',
@@ -178,6 +181,9 @@ function buildWork({
     serviceDate: '',
     sortOrder,
     status: 'ACTIVE',
+    auditStatus: MOCK_WORK_AUDIT_STATUS,
+    auditStatusText: MOCK_WORK_AUDIT_STATUS_TEXT,
+    auditStatusTone: MOCK_WORK_AUDIT_STATUS_TONE,
     referenceCount: 1,
     tags: [clone(MOCK_TAG)]
   }

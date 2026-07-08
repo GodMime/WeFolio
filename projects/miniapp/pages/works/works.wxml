@@ -140,7 +140,14 @@
                       <text> / {{item.tagText}}</text>
                       <text> / 长宽比 {{item.aspectRatioText}}</text>
                     </view>
-                    <view class="reference-pill {{item.referenceCount > 0 ? 'used' : ''}}">{{item.referenceText}}</view>
+                    <view class="work-status-row">
+                      <view class="reference-pill {{item.referenceCount > 0 ? 'used' : ''}}">{{item.referenceText}}</view>
+                      <view class="audit-pill {{item.auditStatusTone}}">{{item.auditStatusText}}</view>
+                    </view>
+                    <view wx:if="{{item.showAuditRejectReason}}" class="audit-reject-row">
+                      <view class="audit-reject-icon">!</view>
+                      <view class="audit-reject-text">{{item.auditRejectReason}}</view>
+                    </view>
                   </view>
                   <view class="card-arrow"></view>
                 </view>
@@ -317,17 +324,49 @@
   </view>
 
   <view class="work-edit-mask image-edit-mask {{imageEditSheetVisible ? 'visible' : ''}}" catchtap="handleCloseImageEditor">
-    <view class="work-edit-panel" catchtap="handleEditPanelTap">
+    <view class="work-edit-panel image-edit-panel" catchtap="handleEditPanelTap">
       <view class="work-edit-grabber"></view>
       <view class="work-edit-heading">
-        <view class="work-edit-title">编辑图片作品</view>
-        <view class="work-edit-type">图片</view>
+        <view class="work-edit-title">{{thumbnailCropVisible ? '编辑缩略图' : '编辑图片作品'}}</view>
+        <view class="work-edit-type">{{thumbnailCropVisible ? (thumbnailSelectedRatioKey === 'original' ? '原图比例' : thumbnailSelectedRatioKey) : '图片'}}</view>
       </view>
 
-      <scroll-view class="work-edit-scroll" scroll-y>
+      <scroll-view wx:if="{{!thumbnailCropVisible}}" class="work-edit-scroll image-edit-scroll" scroll-y>
         <view class="work-edit-content">
-          <view class="work-preview">
-            <image class="work-preview-media" src="{{imageEditForm.previewPath}}" mode="aspectFit"></image>
+          <view class="cover-section thumbnail-section">
+            <view class="cover-heading">
+              <view class="field-label">缩略图</view>
+              <view class="thumbnail-state">{{imageEditForm.thumbnailEdited ? '已编辑' : '当前缩略图'}}</view>
+            </view>
+            <view class="local-cover-panel">
+              <image
+                wx:if="{{imageEditForm.thumbnailPreviewPath && !thumbnailPreviewRenderFlip}}"
+                class="local-cover-preview thumbnail-preview"
+                src="{{imageEditForm.thumbnailPreviewPath}}"
+                mode="widthFix"
+              ></image>
+              <image
+                wx:elif="{{imageEditForm.thumbnailPreviewPath}}"
+                class="local-cover-preview thumbnail-preview"
+                src="{{imageEditForm.thumbnailPreviewPath}}"
+                mode="widthFix"
+              ></image>
+              <view wx:else class="work-preview-empty thumbnail-empty">缩略图</view>
+              <view class="local-cover-actions">
+                <view class="local-cover-copy">
+                  <view class="local-cover-title">{{imageEditForm.thumbnailEdited ? '已编辑缩略图' : '列表缩略图'}}</view>
+                  <view class="local-cover-desc">{{imageEditForm.thumbnailEdited ? '点完成后覆盖当前缩略图' : '可裁剪原图生成新缩略图'}}</view>
+                </view>
+                <button
+                  class="cover-upload-button compact"
+                  bindtap="handleOpenThumbnailCrop"
+                  disabled="{{imageEditSaving || thumbnailCropSaving}}"
+                >{{imageEditForm.thumbnailEdited ? '重新编辑' : '编辑'}}</button>
+              </view>
+              <view wx:if="{{imageEditSaving && imageThumbnailUploadProgress > 0}}" class="local-cover-progress">
+                <view class="local-cover-progress-fill" style="width: {{imageThumbnailUploadProgress}}%;"></view>
+              </view>
+            </view>
           </view>
 
           <view class="field-group">
@@ -367,22 +406,59 @@
         </view>
       </scroll-view>
 
+      <scroll-view wx:else class="work-edit-scroll image-edit-scroll thumbnail-crop-editor" scroll-y>
+        <view class="thumbnail-ratio-list">
+          <button
+            wx:for="{{thumbnailRatioOptions}}"
+            wx:key="key"
+            class="thumbnail-ratio {{item.key === thumbnailSelectedRatioKey ? 'active' : ''}}"
+            data-key="{{item.key}}"
+            catchtap="handleSelectThumbnailRatio"
+            disabled="{{thumbnailCropSaving}}"
+          >{{item.label}}</button>
+        </view>
+
+        <view
+          wx:if="{{thumbnailCropState}}"
+          class="thumbnail-crop-stage"
+          style="{{thumbnailCropState.cropBoxStyle}}"
+          catchtouchstart="handleThumbnailCropTouchStart"
+          catchtouchmove="handleThumbnailCropTouchMove"
+          catchtouchend="handleThumbnailCropTouchEnd"
+          catchtouchcancel="handleThumbnailCropTouchCancel"
+        >
+          <image class="thumbnail-crop-image" src="{{thumbnailCropState.imagePath}}" mode="scaleToFill" style="{{thumbnailCropState.imageStyle}}"></image>
+          <view class="thumbnail-crop-frame"></view>
+        </view>
+
+        <view wx:if="{{thumbnailCropErrorText}}" class="edit-error">{{thumbnailCropErrorText}}</view>
+      </scroll-view>
+
       <view class="work-edit-actions">
-        <button class="work-edit-cancel" catchtap="handleCloseImageEditor" disabled="{{imageEditSaving}}">取消</button>
-        <button class="work-edit-confirm" loading="{{imageEditSaving}}" catchtap="handleConfirmImageEdit" disabled="{{imageEditSaving}}">完成</button>
+        <button wx:if="{{!thumbnailCropVisible}}" class="work-edit-cancel" catchtap="handleCloseImageEditor" disabled="{{imageEditSaving}}">取消</button>
+        <button wx:else class="work-edit-cancel" catchtap="handleCloseThumbnailCrop" disabled="{{thumbnailCropSaving}}">取消</button>
+        <button wx:if="{{!thumbnailCropVisible}}" class="work-edit-confirm" loading="{{imageEditSaving}}" catchtap="handleConfirmImageEdit" disabled="{{imageEditSaving}}">完成</button>
+        <button wx:else class="work-edit-confirm" catchtap="handleApplyThumbnailCrop" loading="{{thumbnailCropSaving}}" disabled="{{thumbnailCropSaving}}">应用裁剪</button>
       </view>
     </view>
   </view>
 
+  <canvas
+    id="workThumbnailCropCanvas"
+    type="2d"
+    class="thumbnail-crop-canvas"
+    style="width: {{thumbnailCanvasWidth}}px; height: {{thumbnailCanvasHeight}}px;"
+  ></canvas>
+
   <view class="work-edit-mask video-edit-mask {{videoEditSheetVisible ? 'visible' : ''}}" catchtap="handleCloseVideoEditor">
-    <view class="work-edit-panel" catchtap="handleEditPanelTap">
+    <view class="work-edit-panel video-edit-panel" catchtap="handleEditPanelTap">
       <view class="work-edit-grabber"></view>
       <view class="work-edit-heading">
         <view class="work-edit-title">编辑视频作品</view>
         <view class="work-edit-type">视频</view>
       </view>
 
-      <scroll-view class="work-edit-scroll" scroll-y>
+      <scroll-view class="work-edit-scroll video-edit-scroll" scroll-y>
         <view class="work-edit-content">
           <view class="work-preview">
             <image wx:if="{{videoEditForm.previewPath}}" class="work-preview-media" src="{{videoEditForm.previewPath}}" mode="aspectFill"></image>

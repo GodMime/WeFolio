@@ -14,6 +14,8 @@ import com.jxc.wefolio.dto.MineWorkSortRequest;
 import com.jxc.wefolio.dto.MineWorkSortItemsResponse;
 import com.jxc.wefolio.dto.MineWorkTagResponse;
 import com.jxc.wefolio.dto.MineWorkTagUpsertRequest;
+import com.jxc.wefolio.dto.MineWorkThumbnailUploadTicketRequest;
+import com.jxc.wefolio.dto.MineWorkThumbnailUploadTicketResponse;
 import com.jxc.wefolio.dto.MineWorkUpdateRequest;
 import com.jxc.wefolio.dto.MineWorkUploadCompleteRequest;
 import com.jxc.wefolio.dto.MineWorkUploadCompleteResponse;
@@ -57,6 +59,8 @@ class MineWorkControllerTest {
         MineWorkUploadTicketResponse ticketResponse = new MineWorkUploadTicketResponse();
         MineWorkCoverUploadTicketRequest coverTicketRequest = new MineWorkCoverUploadTicketRequest();
         MineWorkCoverUploadTicketResponse coverTicketResponse = new MineWorkCoverUploadTicketResponse();
+        MineWorkThumbnailUploadTicketRequest thumbnailTicketRequest = new MineWorkThumbnailUploadTicketRequest();
+        MineWorkThumbnailUploadTicketResponse thumbnailTicketResponse = new MineWorkThumbnailUploadTicketResponse();
         MineWorkUploadCompleteRequest completeRequest = new MineWorkUploadCompleteRequest();
         MineWorkUploadCompleteResponse completeResponse = new MineWorkUploadCompleteResponse();
         MineWorkUpdateRequest updateRequest = new MineWorkUpdateRequest();
@@ -83,6 +87,7 @@ class MineWorkControllerTest {
         when(mineWorkService.getWorkDetail(99L)).thenReturn(detailResponse);
         when(mineWorkService.createUploadTickets(ticketRequest)).thenReturn(ticketResponse);
         when(mineWorkService.createCoverUploadTicket(99L, coverTicketRequest)).thenReturn(coverTicketResponse);
+        when(mineWorkService.createThumbnailUploadTicket(99L, thumbnailTicketRequest)).thenReturn(thumbnailTicketResponse);
         when(mineWorkService.completeUpload(completeRequest)).thenReturn(completeResponse);
         when(mineWorkService.updateWork(99L, updateRequest)).thenReturn(detailResponse);
         when(mineWorkService.listSortItems("TAG", 12L)).thenReturn(sortItemsResponse);
@@ -98,6 +103,8 @@ class MineWorkControllerTest {
         Response<MineWorkDetailResponse> detail = controller.detail(99L);
         Response<MineWorkUploadTicketResponse> ticket = controller.createUploadTickets(ticketRequest);
         Response<MineWorkCoverUploadTicketResponse> coverTicket = controller.createCoverUploadTicket(99L, coverTicketRequest);
+        Response<MineWorkThumbnailUploadTicketResponse> thumbnailTicket =
+                controller.createThumbnailUploadTicket(99L, thumbnailTicketRequest);
         Response<MineWorkUploadCompleteResponse> completed = controller.completeUpload(completeRequest);
         Response<MineWorkDetailResponse> updated = controller.updateWork(99L, updateRequest);
         Response<MineWorkSortItemsResponse> sortItems = controller.sortItems("TAG", 12L);
@@ -123,6 +130,9 @@ class MineWorkControllerTest {
         assertPostMapping("createCoverUploadTicket",
                 new Class<?>[] {Long.class, MineWorkCoverUploadTicketRequest.class},
                 "/api/mine/works/{workId}/cover-upload-ticket");
+        assertPostMapping("createThumbnailUploadTicket",
+                new Class<?>[] {Long.class, MineWorkThumbnailUploadTicketRequest.class},
+                "/api/mine/works/{workId}/thumbnail-upload-ticket");
         assertPostMapping("completeUpload",
                 new Class<?>[] {MineWorkUploadCompleteRequest.class},
                 "/api/mine/works/upload-complete");
@@ -152,6 +162,7 @@ class MineWorkControllerTest {
         assertThat(detail.getData()).isSameAs(detailResponse);
         assertThat(ticket.getData()).isSameAs(ticketResponse);
         assertThat(coverTicket.getData()).isSameAs(coverTicketResponse);
+        assertThat(thumbnailTicket.getData()).isSameAs(thumbnailTicketResponse);
         assertThat(completed.getData()).isSameAs(completeResponse);
         assertThat(updated.getData()).isSameAs(detailResponse);
         assertThat(sortItems.getData()).isSameAs(sortItemsResponse);

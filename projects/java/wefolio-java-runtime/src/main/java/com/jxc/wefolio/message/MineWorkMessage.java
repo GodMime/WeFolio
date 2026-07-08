@@ -56,6 +56,12 @@ public interface MineWorkMessage {
     /** 非视频作品修改封面提示 */
     String VIDEO_COVER_UPDATE_MEDIA_TYPE_MESSAGE = "只有视频作品可以修改封面";
 
+    /** 非图片作品修改缩略图提示 */
+    String IMAGE_THUMBNAIL_UPDATE_MEDIA_TYPE_MESSAGE = "只有图片作品可以修改缩略图";
+
+    /** 多个封面或缩略图编辑模式同时提交提示 */
+    String COVER_EDIT_MODE_CONFLICT_MESSAGE = "不能同时提交多个封面或缩略图编辑";
+
     /** 作品媒体类型不支持提示 */
     String WORK_MEDIA_TYPE_UNSUPPORTED_MESSAGE = "作品媒体类型不支持";
 
@@ -100,6 +106,9 @@ public interface MineWorkMessage {
 
     /** 缩略图或封面图类型错误提示 */
     String COVER_TASK_MEDIA_TYPE_MESSAGE = "缩略图或封面图必须是图片";
+
+    /** 缩略图尺寸错误提示 */
+    String COVER_TASK_DIMENSION_MESSAGE = "缩略图宽高必须为正数且不超过 10000 像素";
 
     /** 作品 ID 为空提示 */
     String WORK_EMPTY_MESSAGE = "作品不能为空";

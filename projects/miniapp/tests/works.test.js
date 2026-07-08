@@ -44,6 +44,7 @@ test('normalizes work list for page rendering', () => {
         durationMs: 125000,
         fileSize: 10485760,
         aspectRatio: '16:9',
+        auditStatus: 'PASSED',
         referenceCount: 3,
         tags: [{ id: 12, name: '高端婚礼', color: '#2d5f9a' }]
       }
@@ -63,9 +64,41 @@ test('normalizes work list for page rendering', () => {
   assert.equal(result.works[0].fileSizeText, '10.0MB')
   assert.equal(result.works[0].aspectRatio, '16:9')
   assert.equal(result.works[0].aspectRatioText, '16:9')
+  assert.equal(result.works[0].auditStatus, 'PASSED')
+  assert.equal(result.works[0].auditStatusText, '审核通过')
+  assert.equal(result.works[0].auditStatusTone, 'passed')
   assert.equal(result.works[0].referenceText, '引用 3 次')
   assert.equal(result.works[0].coverUrl, '')
   assert.equal(result.works[0].hasCover, false)
+})
+
+test('normalizes work audit status for list badges', () => {
+  const result = normalizeWorkList({
+    works: [
+      { id: 1, title: '待审作品', auditStatus: 'PENDING' },
+      { id: 2, title: '复核作品', auditStatus: 'REVIEW_REQUIRED', auditRejectReason: ' 疑似图片风险 ' },
+      { id: 3, title: '自定义文案', auditStatus: 'PASSED', auditStatusText: '已通过平台审核' },
+      { id: 4, title: '违规作品', auditStatus: 'REJECTED', auditRejectReason: '确认违规内容' },
+      { id: 5, title: '失败作品', auditStatus: 'FAILED', auditRejectReason: '审核服务异常' }
+    ]
+  })
+
+  assert.deepEqual(
+    result.works.map((work) => ({
+      status: work.auditStatus,
+      text: work.auditStatusText,
+      tone: work.auditStatusTone,
+      rejectReason: work.auditRejectReason,
+      showRejectReason: work.showAuditRejectReason
+    })),
+    [
+      { status: 'PENDING', text: '未审核', tone: 'pending', rejectReason: '', showRejectReason: false },
+      { status: 'REVIEW_REQUIRED', text: '疑似违规', tone: 'review', rejectReason: '疑似图片风险', showRejectReason: true },
+      { status: 'PASSED', text: '已通过平台审核', tone: 'passed', rejectReason: '', showRejectReason: false },
+      { status: 'REJECTED', text: '确认违规', tone: 'rejected', rejectReason: '确认违规内容', showRejectReason: true },
+      { status: 'FAILED', text: '审核失败', tone: 'failed', rejectReason: '审核服务异常', showRejectReason: true }
+    ]
+  )
 })
 
 test('normalizes missing work aspect ratio as empty display text', () => {
@@ -285,6 +318,33 @@ test('builds work update payload with selected cover frame time', () => {
     coverFrameTimeMs: 5200,
     width: 1080,
     height: 1920
+  })
+})
+
+test('builds work update payload with edited image thumbnail task id', () => {
+  const payload = buildWorkUpdatePayload({
+    title: ' 海边仪式 ',
+    description: ' 新缩略图 ',
+    thumbnailTaskId: 88
+  })
+
+  assert.deepEqual(payload, {
+    title: '海边仪式',
+    description: '新缩略图',
+    thumbnailTaskId: 88
+  })
+})
+
+test('builds work update payload without empty thumbnail task id', () => {
+  const payload = buildWorkUpdatePayload({
+    title: ' 海边仪式 ',
+    description: ' 不改缩略图 ',
+    thumbnailTaskId: ''
+  })
+
+  assert.deepEqual(payload, {
+    title: '海边仪式',
+    description: '不改缩略图'
   })
 })
 

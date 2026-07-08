@@ -126,6 +126,15 @@ public class MineWorkListResponse {
         /** 作品状态 */
         private String status;
 
+        /** 审核状态：PENDING / AUDITING / PASSED / REJECTED / REVIEW_REQUIRED / FAILED */
+        private String auditStatus;
+
+        /** 审核状态展示文案 */
+        private String auditStatusText;
+
+        /** 审核拒绝原因，违规、疑似违规或审核失败时可能存在 */
+        private String auditRejectReason;
+
         /** 引用次数 */
         private long referenceCount;
 

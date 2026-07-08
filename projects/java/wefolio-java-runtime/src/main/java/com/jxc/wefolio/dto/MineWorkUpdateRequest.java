@@ -20,6 +20,9 @@ public class MineWorkUpdateRequest {
     /** 小程序直传 COS 后得到的封面上传任务 ID，仅视频作品可提交 */
     private Long coverTaskId;
 
+    /** 小程序直传 COS 后得到的缩略图上传任务 ID，仅图片作品可提交 */
+    private Long thumbnailTaskId;
+
     /** 视频像素宽度，仅视频封面截帧时用于计算封面输出尺寸 */
     private Integer width;
 

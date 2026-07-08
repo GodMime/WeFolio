@@ -1,12 +1,27 @@
 const { request } = require('../../utils/request')
 const { normalizeId } = require('../../utils/id')
 const { handleMaintainerAuthRequired, hasLocalToken } = require('../../utils/session')
+const { isRemoteUrl } = require('../../utils/upload-file')
 const {
+  buildAspectRatio,
   buildThumbFileName,
   createChooseCoverImageOptions,
   prepareLocalCoverUploadFile,
   uploadToCos
 } = require('../../utils/work-upload')
+const {
+  WORK_THUMBNAIL_CROP_QUALITY,
+  WORK_THUMBNAIL_FILE_TYPE,
+  WORK_THUMBNAIL_MAX_SIDE,
+  buildWorkThumbnailCropFrame,
+  buildWorkThumbnailCropState,
+  buildWorkThumbnailRatioOptions,
+  cropWorkThumbnailToTempFilePath,
+  getWorkThumbnailImageInfo,
+  moveWorkThumbnailCropState,
+  prepareWorkThumbnailUploadFile,
+  zoomWorkThumbnailCropState
+} = require('../../utils/work-thumbnail-crop')
 const { calculateFileSha256: calculateLocalFileSha256 } = require('../../utils/sha256')
 const {
   DEFAULT_WORK_TAG_COLOR,
@@ -34,6 +49,7 @@ const WORK_BATCH_DELETE_CHECK_API_URL = '/api/mine/works/delete-check'
 const WORK_BATCH_DELETE_API_URL = '/api/mine/works/delete'
 const WORK_SORT_ITEMS_API_URL = '/api/mine/works/sort-items'
 const WORK_SORT_API_URL = '/api/mine/works/sort'
+const DESIGN_VIEWPORT_RPX = 750
 const EDIT_COVER_CLIENT_PREFIX = 'edit-work'
 const SWIPE_REVEAL_THRESHOLD = -32
 const SWIPE_CLOSE_THRESHOLD = 24
@@ -48,6 +64,11 @@ const COVER_EDIT_MODE_LOCAL = 'local'
 const DEFAULT_COVER_MIME_TYPE = 'image/jpeg'
 const DEFAULT_COVER_FILE_NAME = 'cover.jpg'
 const LOCAL_COVER_CLIENT_SUFFIX = '-local-cover'
+const IMAGE_THUMBNAIL_CLIENT_SUFFIX = '-thumbnail'
+const WORK_THUMBNAIL_CROP_CANVAS_ID = 'workThumbnailCropCanvas'
+const WORK_THUMBNAIL_CROP_MAX_WIDTH_RPX = 640
+const WORK_THUMBNAIL_CROP_HORIZONTAL_GUTTER_RPX = 112
+const WORK_THUMBNAIL_PREVIEW_FILE_PREFIX = 'work-thumbnail-preview'
 
 function clampNumber(value, min, max) {
   const numberValue = Number(value)
@@ -125,8 +146,22 @@ function buildBaseWorkEditForm(work = {}) {
 }
 
 function buildImageEditForm(work = {}) {
+  const clientId = `${EDIT_COVER_CLIENT_PREFIX}-${work.id}`
+  const thumbnailPreviewPath = work.coverUrl || work.mediaUrl || ''
   return Object.assign(buildBaseWorkEditForm(work), {
-    isVideo: false
+    clientId,
+    isVideo: false,
+    previewPath: work.mediaUrl || work.coverUrl || '',
+    thumbnailPreviewPath,
+    thumbnailSourcePath: work.mediaUrl || work.coverUrl || '',
+    thumbnailEditedPath: '',
+    thumbnailEdited: false,
+    thumbnailWidth: 0,
+    thumbnailHeight: 0,
+    thumbnailFileSize: 0,
+    thumbnailPreparedFile: null,
+    thumbnailSha256: '',
+    thumbnailIdempotencyKey: `thumbnail-ticket-${work.id || Date.now()}`
   })
 }
 
@@ -156,6 +191,114 @@ function buildVideoEditForm(work = {}) {
 
 function hasOwnField(object, field) {
   return Object.prototype.hasOwnProperty.call(object || {}, field)
+}
+
+function readTouchClientX(event = {}) {
+  const touch = (event.touches && event.touches[0]) || (event.changedTouches && event.changedTouches[0]) || {}
+  const clientX = Number(touch.clientX)
+  return Number.isFinite(clientX) ? clientX : null
+}
+
+function readTouchPoints(event = {}) {
+  const touches = Array.isArray(event.touches) && event.touches.length
+    ? event.touches
+    : event.changedTouches
+  return (Array.isArray(touches) ? touches : [])
+    .map((touch) => {
+      const clientX = Number(touch && touch.clientX)
+      const clientY = Number(touch && touch.clientY)
+      return Number.isFinite(clientX) && Number.isFinite(clientY) ? { x: clientX, y: clientY } : null
+    })
+    .filter(Boolean)
+}
+
+function getTouchDistance(firstPoint = {}, secondPoint = {}) {
+  const deltaX = Number(secondPoint.x || 0) - Number(firstPoint.x || 0)
+  const deltaY = Number(secondPoint.y || 0) - Number(firstPoint.y || 0)
+  return Math.sqrt(deltaX * deltaX + deltaY * deltaY)
+}
+
+function appendCacheBustingParam(url, version) {
+  const value = String(url || '').trim()
+  if (!value) {
+    return ''
+  }
+  const separator = value.includes('?') ? '&' : '?'
+  return `${value}${separator}v=${encodeURIComponent(version || Date.now())}`
+}
+
+function choosePublishedCoverUrl(sourceForm = {}, patch = {}, work = {}) {
+  const thumbnailPreviewPath = String(sourceForm.thumbnailPreviewPath || '').trim()
+  return patch.coverUrl ||
+    sourceForm.customCoverPath ||
+    (isRemoteUrl(thumbnailPreviewPath) ? thumbnailPreviewPath : '') ||
+    work.coverUrl ||
+    ''
+}
+
+function shouldRefreshPublishedCover(sourceForm = {}, patch = {}, work = {}) {
+  const thumbnailPreviewPath = String(sourceForm.thumbnailPreviewPath || '').trim()
+  return Boolean(
+    sourceForm.thumbnailEdited &&
+    (patch.coverUrl || sourceForm.customCoverPath || isRemoteUrl(thumbnailPreviewPath) || work.coverUrl)
+  )
+}
+
+function copyWorkThumbnailPreviewFile(filePath, options = {}) {
+  const normalizedPath = String(filePath || '').trim()
+  if (!normalizedPath || isRemoteUrl(normalizedPath)) {
+    return Promise.resolve(normalizedPath)
+  }
+  const runtimeWx = options.wxApi || (typeof wx !== 'undefined' ? wx : null)
+  const userDataPath = runtimeWx && runtimeWx.env && runtimeWx.env.USER_DATA_PATH
+  const fileSystemManager = runtimeWx && runtimeWx.getFileSystemManager
+    ? runtimeWx.getFileSystemManager()
+    : null
+  if (!userDataPath || !fileSystemManager || !fileSystemManager.copyFile) {
+    return Promise.resolve(normalizedPath)
+  }
+
+  const workId = normalizeId(options.workId) || 'work'
+  const destPath = `${userDataPath}/${WORK_THUMBNAIL_PREVIEW_FILE_PREFIX}-${workId}-${Date.now()}.${WORK_THUMBNAIL_FILE_TYPE}`
+  return new Promise((resolve) => {
+    fileSystemManager.copyFile({
+      srcPath: normalizedPath,
+      destPath,
+      success() {
+        resolve(destPath)
+      },
+      fail() {
+        resolve(normalizedPath)
+      }
+    })
+  })
+}
+
+function getWorkThumbnailCropBoxWidth() {
+  const fallbackWindowWidth = 375
+  const systemInfo = typeof wx !== 'undefined' && wx.getSystemInfoSync ? wx.getSystemInfoSync() : {}
+  const windowWidth = Number(systemInfo.windowWidth) || fallbackWindowWidth
+  const rpxScale = windowWidth / DESIGN_VIEWPORT_RPX
+  return Math.floor(Math.min(
+    WORK_THUMBNAIL_CROP_MAX_WIDTH_RPX * rpxScale,
+    windowWidth - WORK_THUMBNAIL_CROP_HORIZONTAL_GUTTER_RPX * rpxScale
+  ))
+}
+
+async function resolveWorkThumbnailRatioInfo(imageEditForm = {}, fallbackInfo = {}) {
+  const thumbnailPath = String(imageEditForm.thumbnailPreviewPath || imageEditForm.coverPath || '').trim()
+  if (!thumbnailPath) {
+    return fallbackInfo
+  }
+  try {
+    return await getWorkThumbnailImageInfo({
+      path: thumbnailPath,
+      width: imageEditForm.thumbnailWidth,
+      height: imageEditForm.thumbnailHeight
+    }, { wxApi: wx })
+  } catch (error) {
+    return fallbackInfo
+  }
 }
 
 function buildWorkDeleteBlockedMessage(checkResult = {}, work = {}) {
@@ -267,6 +410,17 @@ Page({
     imageEditFieldCounters: buildWorkFieldCounters({}),
     imageEditSaving: false,
     imageEditErrorText: '',
+    thumbnailCropVisible: false,
+    thumbnailCropSaving: false,
+    thumbnailCropErrorText: '',
+    thumbnailCropState: null,
+    thumbnailCropTouchStart: null,
+    thumbnailRatioOptions: [],
+    thumbnailSelectedRatioKey: 'original',
+    thumbnailPreviewRenderFlip: false,
+    thumbnailCanvasWidth: WORK_THUMBNAIL_MAX_SIDE,
+    thumbnailCanvasHeight: WORK_THUMBNAIL_MAX_SIDE,
+    imageThumbnailUploadProgress: 0,
     videoEditSheetVisible: false,
     videoEditForm: null,
     videoEditFieldCounters: buildWorkFieldCounters({}),
@@ -766,6 +920,15 @@ Page({
       imageEditFieldCounters: buildWorkFieldCounters(imageEditForm),
       imageEditSaving: false,
       imageEditErrorText: '',
+      thumbnailCropVisible: false,
+      thumbnailCropSaving: false,
+      thumbnailCropErrorText: '',
+      thumbnailCropState: null,
+      thumbnailCropTouchStart: null,
+      thumbnailRatioOptions: [],
+      thumbnailSelectedRatioKey: 'original',
+      thumbnailPreviewRenderFlip: false,
+      imageThumbnailUploadProgress: 0,
       videoEditSheetVisible: false,
       videoEditForm: null,
       videoEditFieldCounters: buildWorkFieldCounters({}),
@@ -904,7 +1067,16 @@ Page({
       imageEditSheetVisible: false,
       imageEditForm: null,
       imageEditFieldCounters: buildWorkFieldCounters({}),
-      imageEditErrorText: ''
+      imageEditErrorText: '',
+      thumbnailCropVisible: false,
+      thumbnailCropSaving: false,
+      thumbnailCropErrorText: '',
+      thumbnailCropState: null,
+      thumbnailCropTouchStart: null,
+      thumbnailRatioOptions: [],
+      thumbnailSelectedRatioKey: 'original',
+      thumbnailPreviewRenderFlip: false,
+      imageThumbnailUploadProgress: 0
     })
   },
 
@@ -937,6 +1109,217 @@ Page({
     })
   },
 
+  async handleOpenThumbnailCrop() {
+    const imageEditForm = this.data.imageEditForm
+    if (!imageEditForm || this.data.imageEditSaving || this.data.thumbnailCropSaving) {
+      return
+    }
+    try {
+      const imageInfo = await getWorkThumbnailImageInfo({
+        path: imageEditForm.thumbnailSourcePath || imageEditForm.mediaUrl || imageEditForm.previewPath,
+        width: imageEditForm.width,
+        height: imageEditForm.height
+      }, { wxApi: wx })
+      const thumbnailRatioInfo = await resolveWorkThumbnailRatioInfo(imageEditForm, imageInfo)
+      const ratioOptions = buildWorkThumbnailRatioOptions(thumbnailRatioInfo)
+      const selectedRatio = ratioOptions[0]
+      const cropState = buildWorkThumbnailCropState(imageInfo, selectedRatio, {
+        cropBoxWidth: getWorkThumbnailCropBoxWidth()
+      })
+      this.setData({
+        thumbnailCropVisible: true,
+        thumbnailCropSaving: false,
+        thumbnailCropErrorText: '',
+        thumbnailCropState: cropState,
+        thumbnailCropTouchStart: null,
+        thumbnailRatioOptions: ratioOptions,
+        thumbnailSelectedRatioKey: selectedRatio.key
+      })
+    } catch (error) {
+      const message = error && error.message ? error.message : '无法读取原图尺寸'
+      this.setData({ imageEditErrorText: message })
+      wx.showToast({ title: message, icon: 'none' })
+    }
+  },
+
+  handleCloseThumbnailCrop() {
+    if (this.data.thumbnailCropSaving) {
+      return
+    }
+    this.setData({
+      thumbnailCropVisible: false,
+      thumbnailCropSaving: false,
+      thumbnailCropErrorText: '',
+      thumbnailCropState: null,
+      thumbnailCropTouchStart: null
+    })
+  },
+
+  handleSelectThumbnailRatio(event) {
+    const ratioKey = event.currentTarget.dataset.key
+    const currentState = this.data.thumbnailCropState
+    const ratioOptions = this.data.thumbnailRatioOptions || []
+    const selectedRatio = ratioOptions.find((item) => item.key === ratioKey)
+    if (!currentState || !selectedRatio || this.data.thumbnailCropSaving) {
+      return
+    }
+    try {
+      const cropState = buildWorkThumbnailCropState({
+        path: currentState.imagePath,
+        width: currentState.imageWidth,
+        height: currentState.imageHeight
+      }, selectedRatio, {
+        cropBoxWidth: getWorkThumbnailCropBoxWidth()
+      })
+      this.setData({
+        thumbnailSelectedRatioKey: selectedRatio.key,
+        thumbnailCropState: cropState,
+        thumbnailCropTouchStart: null,
+        thumbnailCropErrorText: ''
+      })
+    } catch (error) {
+      this.setData({
+        thumbnailCropErrorText: error && error.message ? error.message : '裁剪参数无效'
+      })
+    }
+  },
+
+  handleThumbnailCropTouchStart(event) {
+    const points = readTouchPoints(event)
+    const clientX = readTouchClientX(event)
+    const clientY = readTouchClientY(event)
+    const cropState = this.data.thumbnailCropState || {}
+    if (points.length >= 2) {
+      this.setData({
+        thumbnailCropTouchStart: {
+          mode: 'zoom',
+          distance: getTouchDistance(points[0], points[1]),
+          scale: Number(cropState.scale) || 0,
+          offsetX: Number(cropState.offsetX) || 0,
+          offsetY: Number(cropState.offsetY) || 0,
+          displayWidth: Number(cropState.displayWidth) || 0,
+          displayHeight: Number(cropState.displayHeight) || 0
+        }
+      })
+      return
+    }
+    this.setData({
+      thumbnailCropTouchStart: {
+        mode: 'pan',
+        x: clientX === null ? 0 : clientX,
+        y: clientY === null ? 0 : clientY,
+        offsetX: Number(cropState.offsetX) || 0,
+        offsetY: Number(cropState.offsetY) || 0
+      }
+    })
+  },
+
+  handleThumbnailCropTouchMove(event) {
+    const start = this.data.thumbnailCropTouchStart
+    const cropState = this.data.thumbnailCropState
+    if (!start || !cropState || this.data.thumbnailCropSaving) {
+      return
+    }
+    const points = readTouchPoints(event)
+    if (start.mode === 'zoom' && points.length >= 2 && Number(start.distance) > 0) {
+      const baseState = Object.assign({}, cropState, {
+        offsetX: start.offsetX,
+        offsetY: start.offsetY,
+        displayWidth: start.displayWidth,
+        displayHeight: start.displayHeight,
+        scale: start.scale
+      })
+      this.setData({
+        thumbnailCropState: zoomWorkThumbnailCropState(baseState, {
+          scaleRatio: getTouchDistance(points[0], points[1]) / start.distance,
+          anchorX: Number(cropState.cropBoxWidth || 0) / 2,
+          anchorY: Number(cropState.cropBoxHeight || 0) / 2
+        })
+      })
+      return
+    }
+    const clientX = readTouchClientX(event)
+    const clientY = readTouchClientY(event)
+    const baseState = Object.assign({}, cropState, {
+      offsetX: start.offsetX,
+      offsetY: start.offsetY
+    })
+    this.setData({
+      thumbnailCropState: moveWorkThumbnailCropState(baseState, {
+        deltaX: (clientX === null ? start.x : clientX) - start.x,
+        deltaY: (clientY === null ? start.y : clientY) - start.y
+      })
+    })
+  },
+
+  handleThumbnailCropTouchEnd() {
+    this.setData({ thumbnailCropTouchStart: null })
+  },
+
+  handleThumbnailCropTouchCancel() {
+    this.setData({ thumbnailCropTouchStart: null })
+  },
+
+  async handleApplyThumbnailCrop() {
+    const cropState = this.data.thumbnailCropState
+    if (!cropState || this.data.thumbnailCropSaving || !this.data.imageEditForm) {
+      return
+    }
+    const cropFrame = buildWorkThumbnailCropFrame(cropState, {
+      maxSide: WORK_THUMBNAIL_MAX_SIDE
+    })
+    this.setData({
+      thumbnailCropSaving: true,
+      thumbnailCropErrorText: '',
+      thumbnailCanvasWidth: cropFrame.destWidth,
+      thumbnailCanvasHeight: cropFrame.destHeight
+    })
+    try {
+      const croppedPath = await cropWorkThumbnailToTempFilePath({
+        page: this,
+        wxApi: wx,
+        canvasId: WORK_THUMBNAIL_CROP_CANVAS_ID,
+        imagePath: cropState.imagePath,
+        cropFrame,
+        fileType: WORK_THUMBNAIL_FILE_TYPE,
+        quality: WORK_THUMBNAIL_CROP_QUALITY
+      })
+      const prepared = await prepareWorkThumbnailUploadFile(croppedPath, { wxApi: wx })
+      const previewFilePath = await copyWorkThumbnailPreviewFile(prepared.filePath, {
+        wxApi: wx,
+        workId: this.data.imageEditForm.id
+      })
+      const preparedPreviewFile = Object.assign({}, prepared, {
+        filePath: previewFilePath
+      })
+      this.setData({
+        'imageEditForm.thumbnailPreviewPath': preparedPreviewFile.filePath,
+        'imageEditForm.thumbnailEditedPath': preparedPreviewFile.filePath,
+        'imageEditForm.thumbnailEdited': true,
+        'imageEditForm.thumbnailWidth': cropFrame.destWidth,
+        'imageEditForm.thumbnailHeight': cropFrame.destHeight,
+        'imageEditForm.thumbnailFileSize': preparedPreviewFile.fileSize,
+        'imageEditForm.thumbnailPreparedFile': preparedPreviewFile,
+        'imageEditForm.thumbnailSha256': '',
+        'imageEditForm.thumbnailIdempotencyKey': `thumbnail-ticket-${this.data.imageEditForm.id}-${Date.now()}`,
+        thumbnailCropVisible: false,
+        thumbnailCropSaving: false,
+        thumbnailCropErrorText: '',
+        thumbnailCropState: null,
+        thumbnailCropTouchStart: null,
+        thumbnailPreviewRenderFlip: !this.data.thumbnailPreviewRenderFlip,
+        imageEditErrorText: ''
+      })
+    } catch (error) {
+      const message = error && error.message ? error.message : '缩略图裁剪失败'
+      this.setData({
+        thumbnailCropSaving: false,
+        thumbnailCropErrorText: message
+      })
+      wx.showToast({ title: message, icon: 'none' })
+    }
+  },
+
   handleVideoEditInput(event) {
     const field = event.currentTarget.dataset.field
     if (!field || !this.data.videoEditForm) {
@@ -951,6 +1334,58 @@ Page({
       videoEditFieldCounters: buildWorkFieldCounters(videoEditForm),
       videoEditErrorText: ''
     })
+  },
+
+  async uploadImageThumbnailOnConfirm(imageEditForm) {
+    if (!imageEditForm.thumbnailEditedPath) {
+      throw new Error('缩略图不能为空')
+    }
+    this.setData({
+      imageThumbnailUploadProgress: 1,
+      imageEditErrorText: ''
+    })
+    const preparedThumbnail = imageEditForm.thumbnailPreparedFile ||
+      await prepareWorkThumbnailUploadFile(imageEditForm.thumbnailEditedPath, { wxApi: wx })
+    const thumbnailSha256 = await calculateLocalFileSha256(preparedThumbnail.filePath)
+    const thumbnailWidth = Math.max(0, Math.round(Number(imageEditForm.thumbnailWidth || 0)))
+    const thumbnailHeight = Math.max(0, Math.round(Number(imageEditForm.thumbnailHeight || 0)))
+    const ticket = await request({
+      url: `${WORKS_API_PREFIX}/${imageEditForm.id}/thumbnail-upload-ticket`,
+      method: 'POST',
+      data: {
+        clientId: `${imageEditForm.clientId}${IMAGE_THUMBNAIL_CLIENT_SUFFIX}`,
+        fileName: buildThumbFileName(imageEditForm.originalFileName || imageEditForm.fileName),
+        mimeType: preparedThumbnail.mimeType || DEFAULT_COVER_MIME_TYPE,
+        fileSize: preparedThumbnail.fileSize,
+        sha256: thumbnailSha256,
+        width: thumbnailWidth,
+        height: thumbnailHeight,
+        ratio: buildAspectRatio(thumbnailWidth, thumbnailHeight),
+        idempotencyKey: imageEditForm.thumbnailIdempotencyKey
+      }
+    })
+    const uploadFile = {
+      id: `${imageEditForm.clientId}${IMAGE_THUMBNAIL_CLIENT_SUFFIX}`,
+      mediaType: 'IMAGE',
+      tempFilePath: preparedThumbnail.filePath
+    }
+    await uploadToCos(uploadFile, ticket, {
+      onTask: (target, task) => {
+        this.uploadTasks[target.id] = task
+      },
+      onProgress: (target, progress) => {
+        this.setData({
+          imageThumbnailUploadProgress: progress.progress || 0
+        })
+      }
+    })
+    delete this.uploadTasks[uploadFile.id]
+    this.setData({
+      'imageEditForm.thumbnailSha256': thumbnailSha256,
+      'imageEditForm.thumbnailFileSize': preparedThumbnail.fileSize,
+      imageThumbnailUploadProgress: 100
+    })
+    return ticket
   },
 
   async handleConfirmImageEdit() {
@@ -968,9 +1403,15 @@ Page({
       imageEditErrorText: ''
     })
     try {
+      const thumbnailTicket = imageEditForm.thumbnailEdited
+        ? await this.uploadImageThumbnailOnConfirm(imageEditForm)
+        : null
       const payload = buildWorkUpdatePayload({
         title: imageEditForm.title,
-        description: imageEditForm.description
+        description: imageEditForm.description,
+        ...(thumbnailTicket && thumbnailTicket.taskId ? {
+          thumbnailTaskId: thumbnailTicket.taskId
+        } : {})
       })
       const response = await request({
         url: `${WORKS_API_PREFIX}/${imageEditForm.id}`,
@@ -987,7 +1428,8 @@ Page({
         imageEditForm: null,
         imageEditFieldCounters: buildWorkFieldCounters({}),
         imageEditSaving: false,
-        imageEditErrorText: ''
+        imageEditErrorText: '',
+        imageThumbnailUploadProgress: 0
       })
     } catch (error) {
       if (error && error.authRequired) {
@@ -997,6 +1439,7 @@ Page({
       }
       this.setData({
         imageEditSaving: false,
+        imageThumbnailUploadProgress: 0,
         imageEditErrorText: error && error.message ? error.message : '作品保存失败'
       })
     }
@@ -1272,11 +1715,15 @@ Page({
       if (work.id !== workId) {
         return work
       }
+      const rawCoverUrl = choosePublishedCoverUrl(sourceForm, patch, work)
+      const coverUrl = shouldRefreshPublishedCover(sourceForm, patch, work) && rawCoverUrl
+        ? appendCacheBustingParam(rawCoverUrl, patch.updatedAt)
+        : rawCoverUrl
       return Object.assign({}, work, {
         title: hasOwnField(patch, 'title') ? patch.title : sourceForm.title,
         description: hasOwnField(patch, 'description') ? patch.description : sourceForm.description,
-        coverUrl: patch.coverUrl || (sourceForm.customCoverPath ? sourceForm.customCoverPath : work.coverUrl),
-        hasCover: Boolean(patch.coverUrl || sourceForm.customCoverPath || work.coverUrl),
+        coverUrl,
+        hasCover: Boolean(coverUrl),
         updatedAt: patch.updatedAt || work.updatedAt
       })
     })

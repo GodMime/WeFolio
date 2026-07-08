@@ -3,6 +3,7 @@ const path = require('node:path')
 const test = require('node:test')
 
 const { normalizePointTransactions } = require('../utils/points')
+const { buildWorkThumbnailCropState } = require('../utils/work-thumbnail-crop')
 
 function deferred() {
   let resolve
@@ -585,6 +586,18 @@ test('works page opens image edit sheet and saves image text directly', async ()
   })
   assert.equal(page.data.imageEditSheetVisible, true)
   assert.equal(page.data.videoEditSheetVisible, false)
+  assert.equal(
+    page.data.imageEditForm.previewPath,
+    'https://cos.we-folio.dingchenyong.top/WF/work/image/photo.jpg'
+  )
+  assert.equal(
+    page.data.imageEditForm.thumbnailPreviewPath,
+    'https://cos.we-folio.dingchenyong.top/WF/work/image/photo-thumb.jpg'
+  )
+  assert.equal(
+    page.data.imageEditForm.thumbnailSourcePath,
+    'https://cos.we-folio.dingchenyong.top/WF/work/image/photo.jpg'
+  )
   assert.deepEqual(page.data.imageEditFieldCounters, {
     title: '3/30',
     description: '3/1000'
@@ -623,6 +636,331 @@ test('works page opens image edit sheet and saves image text directly', async ()
     description: '新说明'
   })
   assert.equal(page.data.imageEditSheetVisible, false)
+})
+
+test('works page uploads edited image thumbnail before saving image work', async () => {
+  const requests = []
+  const uploadCalls = []
+  const digest = 'a'.repeat(64)
+  let statCount = 0
+  const fakeRequest = (options) => {
+    requests.push(options)
+    if (options.url === '/api/mine/works/17/thumbnail-upload-ticket') {
+      return Promise.resolve({
+        taskId: 88,
+        uploadUrl: 'https://cos.example.com',
+        objectKey: 'WFA3B1E7A2/work/image/photo-thumb.jpg',
+        formData: {
+          key: 'WFA3B1E7A2/work/image/photo-thumb.jpg'
+        }
+      })
+    }
+    if (options.method === 'PUT') {
+      return Promise.resolve({
+        work: {
+          id: 17,
+          title: '海边仪式',
+          description: '新缩略图',
+          updatedAt: '2026-07-08T17:30:00+08:00'
+        },
+        references: []
+      })
+    }
+    return Promise.resolve({ works: [], tags: [], summary: {} })
+  }
+  const page = loadPage('pages/works/works.js', fakeRequest, {
+    getFileSystemManager() {
+      return {
+        statSync(filePath) {
+          assert.equal(filePath, 'wxfile://tmp/cropped-thumb.jpg')
+          statCount += 1
+          return { size: 96000 }
+        },
+        getFileInfo(options) {
+          assert.equal(options.filePath, 'wxfile://tmp/cropped-thumb.jpg')
+          assert.equal(options.digestAlgorithm, 'sha256')
+          options.success({ digest })
+        }
+      }
+    },
+    uploadFile(options) {
+      uploadCalls.push(options)
+      options.success({ statusCode: 204 })
+      return {
+        onProgressUpdate(callback) {
+          callback({ progress: 64 })
+        }
+      }
+    }
+  })
+  page.data.list.works = [
+    {
+      id: 17,
+      mediaType: 'IMAGE',
+      title: '旧标题',
+      description: '旧说明',
+      originalFileName: 'photo.jpg',
+      mediaUrl: 'https://cos.example.com/WFA3B1E7A2/work/image/photo.jpg',
+      coverUrl: 'https://cos.example.com/WFA3B1E7A2/work/image/photo-thumb.jpg',
+      width: 1600,
+      height: 900
+    }
+  ]
+
+  page.handleWorkTap({
+    currentTarget: {
+      dataset: {
+        id: '17'
+      }
+    }
+  })
+  page.setData({
+    'imageEditForm.title': ' 海边仪式 ',
+    'imageEditForm.description': ' 新缩略图 ',
+    'imageEditForm.thumbnailEdited': true,
+    'imageEditForm.thumbnailEditedPath': 'wxfile://tmp/cropped-thumb.jpg',
+    'imageEditForm.thumbnailPreparedFile': {
+      filePath: 'wxfile://tmp/cropped-thumb.jpg',
+      fileSize: 96000,
+      mimeType: 'image/jpeg'
+    },
+    'imageEditForm.thumbnailWidth': 960,
+    'imageEditForm.thumbnailHeight': 540,
+    'imageEditForm.thumbnailIdempotencyKey': 'thumbnail-ticket-17'
+  })
+
+  await page.handleConfirmImageEdit()
+
+  assert.equal(requests[0].url, '/api/mine/works/17/thumbnail-upload-ticket')
+  assert.equal(requests[0].method, 'POST')
+  assert.deepEqual(requests[0].data, {
+    clientId: 'edit-work-17-thumbnail',
+    fileName: 'photo-thumb.jpg',
+    mimeType: 'image/jpeg',
+    fileSize: 96000,
+    sha256: digest,
+    width: 960,
+    height: 540,
+    ratio: '16:9',
+    idempotencyKey: 'thumbnail-ticket-17'
+  })
+  assert.equal(uploadCalls.length, 1)
+  assert.equal(uploadCalls[0].filePath, 'wxfile://tmp/cropped-thumb.jpg')
+  assert.equal(statCount, 0)
+  assert.equal(requests[1].url, '/api/mine/works/17')
+  assert.equal(requests[1].method, 'PUT')
+  assert.deepEqual(requests[1].data, {
+    title: '海边仪式',
+    description: '新缩略图',
+    thumbnailTaskId: 88
+  })
+  assert.equal(page.data.imageEditSheetVisible, false)
+  assert.equal(page.data.imageThumbnailUploadProgress, 0)
+  assert.match(page.data.list.works[0].coverUrl, /\?v=/)
+})
+
+test('works page refreshes existing remote cover after edited local thumbnail is saved', () => {
+  const page = loadPage('pages/works/works.js', () => Promise.resolve({ works: [], tags: [], summary: {} }))
+  page.data.list.works = [{
+    id: 17,
+    mediaType: 'IMAGE',
+    title: '旧标题',
+    description: '旧说明',
+    coverUrl: 'https://cos.example.com/old-thumb.jpg'
+  }]
+
+  page.patchWorkInList({
+    id: 17,
+    title: '新标题',
+    description: '新说明',
+    thumbnailEdited: true,
+    thumbnailPreviewPath: 'wxfile://tmp/local-preview.jpg'
+  }, {
+    title: '新标题',
+    description: '新说明',
+    updatedAt: '2026-07-08T17:30:00+08:00'
+  })
+
+  assert.equal(page.data.list.works[0].coverUrl, 'https://cos.example.com/old-thumb.jpg?v=2026-07-08T17%3A30%3A00%2B08%3A00')
+})
+
+test('works page pinch zooms thumbnail crop inside the image editor sheet', () => {
+  const page = loadPage('pages/works/works.js', () => Promise.resolve({ works: [], tags: [], summary: {} }))
+  const cropState = buildWorkThumbnailCropState({
+    path: 'wxfile://tmp/photo.jpg',
+    width: 1600,
+    height: 900
+  }, {
+    key: '1:1',
+    width: 1,
+    height: 1
+  }, {
+    cropBoxWidth: 320
+  })
+  page.setData({
+    imageEditSheetVisible: true,
+    thumbnailCropVisible: true,
+    thumbnailCropState: cropState
+  })
+
+  page.handleThumbnailCropTouchStart({
+    touches: [
+      { clientX: 100, clientY: 140 },
+      { clientX: 220, clientY: 140 }
+    ]
+  })
+  page.handleThumbnailCropTouchMove({
+    touches: [
+      { clientX: 70, clientY: 140 },
+      { clientX: 250, clientY: 140 }
+    ]
+  })
+
+  assert.equal(page.data.imageEditSheetVisible, true)
+  assert.equal(page.data.thumbnailCropVisible, true)
+  assert.ok(page.data.thumbnailCropState.scale > cropState.scale)
+  assert.ok(page.data.thumbnailCropState.displayWidth > cropState.displayWidth)
+})
+
+test('works page uses current thumbnail ratio for original-ratio crop option', async () => {
+  const imageInfoCalls = []
+  const page = loadPage('pages/works/works.js', () => Promise.resolve({ works: [], tags: [], summary: {} }), {
+    getImageInfo(options) {
+      imageInfoCalls.push(options.src)
+      options.success({
+        path: options.src,
+        width: 400,
+        height: 300
+      })
+    }
+  })
+  page.data.list.works = [
+    {
+      id: 17,
+      mediaType: 'IMAGE',
+      title: '露营',
+      description: '',
+      originalFileName: 'photo.jpg',
+      mediaUrl: 'https://cos.example.com/WF/work/image/photo.jpg',
+      coverUrl: 'https://cos.example.com/WF/work/image/photo-thumb.jpg',
+      width: 1600,
+      height: 900
+    }
+  ]
+
+  page.handleWorkTap({
+    currentTarget: {
+      dataset: {
+        id: '17'
+      }
+    }
+  })
+  await page.handleOpenThumbnailCrop()
+
+  assert.deepEqual(imageInfoCalls, ['https://cos.example.com/WF/work/image/photo-thumb.jpg'])
+  assert.equal(page.data.thumbnailRatioOptions[0].key, 'original')
+  assert.equal(page.data.thumbnailRatioOptions[0].width, 4)
+  assert.equal(page.data.thumbnailRatioOptions[0].height, 3)
+  assert.equal(page.data.thumbnailCropState.ratioWidth, 4)
+  assert.equal(page.data.thumbnailCropState.ratioHeight, 3)
+  assert.equal(
+    page.data.thumbnailCropState.cropBoxHeight,
+    page.data.thumbnailCropState.cropBoxWidth * 3 / 4
+  )
+})
+
+test('works page writes applied thumbnail crop to a unique local preview file', async () => {
+  const copyCalls = []
+  const drawCalls = []
+  const canvas = {
+    getContext() {
+      return {
+        clearRect() {},
+        drawImage(...args) {
+          drawCalls.push(args)
+        }
+      }
+    },
+    createImage() {
+      const image = {}
+      setImmediate(() => {
+        image.onload()
+      })
+      return image
+    }
+  }
+  const page = loadPage('pages/works/works.js', () => Promise.resolve({ works: [], tags: [], summary: {} }), {
+    env: {
+      USER_DATA_PATH: 'wxfile://user'
+    },
+    getFileSystemManager() {
+      return {
+        statSync(filePath) {
+          assert.equal(filePath, 'wxfile://tmp/cropped-thumb.jpg')
+          return { size: 96000 }
+        },
+        copyFile(options) {
+          copyCalls.push(options)
+          options.success()
+        }
+      }
+    },
+    createSelectorQuery() {
+      return {
+        in() {
+          return this
+        },
+        select(selector) {
+          assert.equal(selector, '#workThumbnailCropCanvas')
+          return this
+        },
+        fields(options) {
+          assert.deepEqual(options, { node: true, size: true })
+          return this
+        },
+        exec(callback) {
+          callback([{ node: canvas }])
+        }
+      }
+    },
+    canvasToTempFilePath(options) {
+      assert.equal(options.canvas, canvas)
+      options.success({ tempFilePath: 'wxfile://tmp/cropped-thumb.jpg' })
+    }
+  })
+  page.setData({
+    imageEditForm: {
+      id: 17,
+      clientId: 'edit-work-17',
+      originalFileName: 'photo.jpg'
+    },
+    thumbnailPreviewRenderFlip: false,
+    thumbnailCropVisible: true,
+    thumbnailCropState: buildWorkThumbnailCropState({
+      path: 'wxfile://tmp/photo.jpg',
+      width: 1600,
+      height: 900
+    }, {
+      key: '1:1',
+      width: 1,
+      height: 1
+    }, {
+      cropBoxWidth: 320
+    })
+  })
+
+  await page.handleApplyThumbnailCrop()
+
+  assert.equal(drawCalls.length, 1)
+  assert.equal(copyCalls.length, 1)
+  assert.equal(copyCalls[0].srcPath, 'wxfile://tmp/cropped-thumb.jpg')
+  assert.match(copyCalls[0].destPath, /^wxfile:\/\/user\/work-thumbnail-preview-17-\d+\.jpg$/)
+  assert.equal(page.data.imageEditForm.thumbnailPreviewPath, copyCalls[0].destPath)
+  assert.equal(page.data.imageEditForm.thumbnailEditedPath, copyCalls[0].destPath)
+  assert.equal(page.data.imageEditForm.thumbnailPreparedFile.filePath, copyCalls[0].destPath)
+  assert.equal(page.data.imageEditForm.thumbnailEdited, true)
+  assert.equal(page.data.thumbnailPreviewRenderFlip, true)
+  assert.equal(page.data.thumbnailCropVisible, false)
 })
 
 test('works page opens video edit sheet and saves video text without downloading remote media', async () => {

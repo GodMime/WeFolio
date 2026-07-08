@@ -14,10 +14,35 @@ const FILTER_ALL_ACTIVE_STYLE = 'color: #40546a; background: #eef4f7; border-col
 const WORK_TAG_PICKER_MIN_HEIGHT = 80
 const WORK_TAG_PICKER_ROW_STEP = 72
 const WORK_TAG_PICKER_MAX_HEIGHT = 520
+const DEFAULT_AUDIT_STATUS = 'PENDING'
 
 const MEDIA_TYPE_TEXT = {
   IMAGE: '图片',
   VIDEO: '视频'
+}
+
+const AUDIT_STATUS_TEXT = {
+  PENDING: '未审核',
+  AUDITING: '审核中',
+  PASSED: '审核通过',
+  REJECTED: '确认违规',
+  REVIEW_REQUIRED: '疑似违规',
+  FAILED: '审核失败'
+}
+
+const AUDIT_STATUS_TONE = {
+  PENDING: 'pending',
+  AUDITING: 'auditing',
+  PASSED: 'passed',
+  REJECTED: 'rejected',
+  REVIEW_REQUIRED: 'review',
+  FAILED: 'failed'
+}
+
+const AUDIT_REJECT_REASON_STATUS_MAP = {
+  REJECTED: true,
+  REVIEW_REQUIRED: true,
+  FAILED: true
 }
 
 const TAG_COLOR_MAP = TAG_COLOR_OPTIONS.reduce((result, item) => {
@@ -49,6 +74,18 @@ function formatFilterTagLabel(name, count) {
 function normalizeWorkTagColor(color) {
   const value = trimText(color).toLowerCase()
   return TAG_COLOR_MAP[value] ? value : ''
+}
+
+function normalizeAuditStatus(raw = {}) {
+  const auditStatus = trimText(raw.auditStatus) || DEFAULT_AUDIT_STATUS
+  const auditRejectReason = trimText(raw.auditRejectReason)
+  return {
+    auditStatus,
+    auditStatusText: trimText(raw.auditStatusText) || AUDIT_STATUS_TEXT[auditStatus] || auditStatus,
+    auditStatusTone: AUDIT_STATUS_TONE[auditStatus] || AUDIT_STATUS_TONE[DEFAULT_AUDIT_STATUS],
+    auditRejectReason,
+    showAuditRejectReason: Boolean(AUDIT_REJECT_REASON_STATUS_MAP[auditStatus] && auditRejectReason)
+  }
 }
 
 function getWorkTagColorOption(color) {
@@ -123,6 +160,7 @@ function normalizeWork(raw = {}) {
   const coverUrl = trimText(raw.coverUrl)
   const referenceCount = toNumber(raw.referenceCount)
   const aspectRatio = trimText(raw.aspectRatio)
+  const auditStatus = normalizeAuditStatus(raw)
   return {
     id: normalizeId(raw.id),
     mediaType,
@@ -145,6 +183,11 @@ function normalizeWork(raw = {}) {
     serviceDate: trimText(raw.serviceDate),
     sortOrder: toNumber(raw.sortOrder),
     status: trimText(raw.status),
+    auditStatus: auditStatus.auditStatus,
+    auditStatusText: auditStatus.auditStatusText,
+    auditStatusTone: auditStatus.auditStatusTone,
+    auditRejectReason: auditStatus.auditRejectReason,
+    showAuditRejectReason: auditStatus.showAuditRejectReason,
     referenceCount,
     referenceText: referenceCount > 0 ? `引用 ${referenceCount} 次` : '未引用',
     tags,
@@ -326,6 +369,12 @@ function buildWorkUpdatePayload(form = {}) {
     const coverTaskId = normalizeId(form.coverTaskId)
     if (coverTaskId) {
       payload.coverTaskId = coverTaskId
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(form, 'thumbnailTaskId')) {
+    const thumbnailTaskId = normalizeId(form.thumbnailTaskId)
+    if (thumbnailTaskId) {
+      payload.thumbnailTaskId = thumbnailTaskId
     }
   }
   const width = Math.max(0, Math.round(toNumber(form.width)))

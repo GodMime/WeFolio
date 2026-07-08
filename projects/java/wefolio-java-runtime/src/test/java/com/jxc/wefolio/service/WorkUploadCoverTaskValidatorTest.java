@@ -45,6 +45,19 @@ class WorkUploadCoverTaskValidatorTest {
     }
 
     /**
+     * 缩略图任务必须是图片媒体类型。
+     */
+    @Test
+    void ensureImageThumbnailTaskShouldRejectNonImageTask() {
+        WorkUploadTaskEntity thumbnailTask = new WorkUploadTaskEntity();
+        thumbnailTask.setMediaType(MediaTypeDict.VIDEO.getCode());
+
+        assertThatThrownBy(() -> WorkUploadCoverTaskValidator.ensureImageThumbnailTask(thumbnailTask))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("缩略图或封面图必须是图片");
+    }
+
+    /**
      * 图片封面任务通过共享媒体类型校验。
      */
     @Test
@@ -68,6 +81,7 @@ class WorkUploadCoverTaskValidatorTest {
 
         assertThat(mineWorkService).contains("WorkUploadCoverTaskValidator.ensureNotSelfReference");
         assertThat(mineWorkService).contains("WorkUploadCoverTaskValidator.ensureImageCoverTask");
+        assertThat(mineWorkService).contains("WorkUploadCoverTaskValidator.ensureImageThumbnailTask");
         assertThat(transactionService).contains("WorkUploadCoverTaskValidator.ensureNotSelfReference");
         assertThat(transactionService).contains("WorkUploadCoverTaskValidator.ensureImageCoverTask");
     }

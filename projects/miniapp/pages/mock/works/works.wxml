@@ -71,7 +71,10 @@
                     <text>{{item.mediaType === 'VIDEO' ? '视频' : '图片'}}</text>
                     <text> / 风景作品</text>
                   </view>
-                  <view class="reference-pill used">已使用 1 次</view>
+                  <view class="work-status-row">
+                    <view class="reference-pill used">已使用 1 次</view>
+                    <view class="audit-pill {{item.auditStatusTone}}">{{item.auditStatusText}}</view>
+                  </view>
                 </view>
                 <view class="card-arrow"></view>
               </view>

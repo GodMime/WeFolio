@@ -1,3 +1,9 @@
+const {
+  THUMB_MAX_BYTES,
+  buildAspectRatio,
+  normalizeDimension
+} = require('./media')
+
 const MAX_BATCH_COUNT = 9
 const IMAGE_MAX_BYTES = 10 * 1024 * 1024
 const VIDEO_MAX_BYTES = 100 * 1024 * 1024
@@ -12,7 +18,6 @@ const CHOOSE_MEDIA_TYPE_IMAGE = 'image'
 const CHOOSE_SOURCE_TYPE_ALBUM = 'album'
 const COVER_CLIENT_ID_SUFFIX = '-cover'
 const DEFAULT_COVER_MIME_TYPE = 'image/jpeg'
-const THUMB_MAX_BYTES = 100 * 1024
 const THUMB_FILE_SUFFIX = '-thumb'
 const THUMB_FILE_EXTENSION = 'jpg'
 const THUMB_COMPRESS_ATTEMPTS = [
@@ -41,32 +46,6 @@ function trimText(value) {
 function normalizeSize(value) {
   const numberValue = Number(value)
   return Number.isFinite(numberValue) && numberValue > 0 ? numberValue : 0
-}
-
-function normalizeDimension(value) {
-  const numberValue = normalizeSize(value)
-  return numberValue > 0 ? Math.round(numberValue) : 0
-}
-
-function gcd(left, right) {
-  let a = Math.abs(left)
-  let b = Math.abs(right)
-  while (b > 0) {
-    const remainder = a % b
-    a = b
-    b = remainder
-  }
-  return a
-}
-
-function buildAspectRatio(width, height) {
-  const normalizedWidth = normalizeDimension(width)
-  const normalizedHeight = normalizeDimension(height)
-  if (normalizedWidth <= 0 || normalizedHeight <= 0) {
-    return ''
-  }
-  const divisor = gcd(normalizedWidth, normalizedHeight)
-  return `${normalizedWidth / divisor}:${normalizedHeight / divisor}`
 }
 
 function resolveAspectRatio(file = {}) {

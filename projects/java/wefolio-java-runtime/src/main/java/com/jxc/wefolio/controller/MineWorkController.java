@@ -14,6 +14,8 @@ import com.jxc.wefolio.dto.MineWorkSortRequest;
 import com.jxc.wefolio.dto.MineWorkSortItemsResponse;
 import com.jxc.wefolio.dto.MineWorkTagResponse;
 import com.jxc.wefolio.dto.MineWorkTagUpsertRequest;
+import com.jxc.wefolio.dto.MineWorkThumbnailUploadTicketRequest;
+import com.jxc.wefolio.dto.MineWorkThumbnailUploadTicketResponse;
 import com.jxc.wefolio.dto.MineWorkUpdateRequest;
 import com.jxc.wefolio.dto.MineWorkUploadCompleteRequest;
 import com.jxc.wefolio.dto.MineWorkUploadCompleteResponse;
@@ -160,6 +162,22 @@ public class MineWorkController {
     ) {
         log.info("创建视频作品封面上传票据: workId={}, fileSize={}", workId, request == null ? null : request.getFileSize());
         return Response.success(mineWorkService.createCoverUploadTicket(workId, request));
+    }
+
+    /**
+     * 创建图片作品缩略图直传 COS 票据。
+     *
+     * @param workId 作品 ID
+     * @param request 缩略图票据创建请求
+     * @return 缩略图票据响应
+     */
+    @PostMapping("/api/mine/works/{workId}/thumbnail-upload-ticket")
+    public Response<MineWorkThumbnailUploadTicketResponse> createThumbnailUploadTicket(
+            @PathVariable Long workId,
+            @RequestBody MineWorkThumbnailUploadTicketRequest request
+    ) {
+        log.info("创建图片作品缩略图上传票据: workId={}, fileSize={}", workId, request == null ? null : request.getFileSize());
+        return Response.success(mineWorkService.createThumbnailUploadTicket(workId, request));
     }
 
     /**

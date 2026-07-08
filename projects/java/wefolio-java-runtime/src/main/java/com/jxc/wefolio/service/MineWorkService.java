@@ -10,6 +10,7 @@ import com.jxc.wefolio.dict.PortfolioConfigScopeDict;
 import com.jxc.wefolio.dict.ReferenceTypeDict;
 import com.jxc.wefolio.dict.UserStatusDict;
 import com.jxc.wefolio.dict.WfTagStatusDict;
+import com.jxc.wefolio.dict.WorkAuditStatusDict;
 import com.jxc.wefolio.dict.WorkStatusDict;
 import com.jxc.wefolio.dict.WorkUploadTaskStatusDict;
 import com.jxc.wefolio.dto.MineWorkBatchDeleteCheckResponse;
@@ -24,6 +25,8 @@ import com.jxc.wefolio.dto.MineWorkSortRequest;
 import com.jxc.wefolio.dto.MineWorkSortItemsResponse;
 import com.jxc.wefolio.dto.MineWorkTagResponse;
 import com.jxc.wefolio.dto.MineWorkTagUpsertRequest;
+import com.jxc.wefolio.dto.MineWorkThumbnailUploadTicketRequest;
+import com.jxc.wefolio.dto.MineWorkThumbnailUploadTicketResponse;
 import com.jxc.wefolio.dto.MineWorkUpdateRequest;
 import com.jxc.wefolio.dto.MineWorkUploadCompleteRequest;
 import com.jxc.wefolio.dto.MineWorkUploadCompleteResponse;
@@ -159,8 +162,14 @@ public class MineWorkService {
     /** 手动上传视频封面任务幂等前缀 */
     private static final String MANUAL_VIDEO_COVER_IDEMPOTENCY_PREFIX = "WORK_VIDEO_COVER_UPLOAD:";
 
-    /** 视频封面编辑方式冲突提示 */
-    private static final String VIDEO_COVER_EDIT_MODE_CONFLICT_MESSAGE = "不能同时选择选帧封面和上传封面";
+    /** 手动上传图片缩略图任务批次前缀 */
+    private static final String IMAGE_THUMBNAIL_BATCH_PREFIX = "edit-thumbnail-";
+
+    /** 手动上传图片缩略图任务幂等前缀 */
+    private static final String IMAGE_THUMBNAIL_IDEMPOTENCY_PREFIX = "WORK_IMAGE_THUMBNAIL_UPLOAD:";
+
+    /** 图片缩略图任务过期记录提示 */
+    private static final String IMAGE_THUMBNAIL_TASK_EXPIRED_ERROR_MESSAGE = "缩略图上传任务已过期";
 
     /** 视频默认封面截帧时间点 */
     private static final long DEFAULT_VIDEO_COVER_FRAME_TIME_MS = 0L;
@@ -529,6 +538,36 @@ public class MineWorkService {
     }
 
     /**
+     * 为已存在的图片作品创建缩略图直传票据。
+     *
+     * @param workId 作品 ID
+     * @param request 缩略图票据创建请求
+     * @return 缩略图票据响应
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public MineWorkThumbnailUploadTicketResponse createThumbnailUploadTicket(
+            Long workId,
+            MineWorkThumbnailUploadTicketRequest request
+    ) {
+        Long userId = AuthContextHolder.requireUserId();
+        WorkEntity work = requireOwnedWork(workId);
+        if (!MediaTypeDict.IMAGE.getCode().equals(work.getMediaType())) {
+            throw new BusinessException(MineWorkMessage.IMAGE_THUMBNAIL_UPDATE_MEDIA_TYPE_MESSAGE);
+        }
+        validateThumbnailUploadFile(request);
+        LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(TICKET_EXPIRE_MINUTES);
+        WorkUploadTaskEntity task = buildImageThumbnailUploadTask(userId, work, request, expiresAt);
+        WorkUploadTaskEntity persistedTask = saveOrFindUploadTask(task);
+        ensureThumbnailTaskDoesNotTargetOriginal(work, persistedTask.getObjectKey());
+        CosService.PostUploadTicket ticket = cosService.createPostUploadTicket(
+                persistedTask.getObjectKey(),
+                normalizeText(persistedTask.getMimeType()),
+                THUMB_MAX_BYTES,
+                persistedTask.getExpiresAt());
+        return buildThumbnailTicketResponse(persistedTask, request.getClientId(), ticket);
+    }
+
+    /**
      * 上传完成后确认入库。
      *
      * @param request 上传完成请求
@@ -575,8 +614,13 @@ public class MineWorkService {
         WorkEntity work = requireOwnedWork(workId);
         Long coverFrameTimeMs = request == null ? null : request.getCoverFrameTimeMs();
         Long coverTaskId = request == null ? null : request.getCoverTaskId();
-        if (coverFrameTimeMs != null && coverTaskId != null) {
-            throw new BusinessException(VIDEO_COVER_EDIT_MODE_CONFLICT_MESSAGE);
+        Long thumbnailTaskId = request == null ? null : request.getThumbnailTaskId();
+        int coverEditModeCount = 0;
+        coverEditModeCount += coverFrameTimeMs == null ? 0 : 1;
+        coverEditModeCount += coverTaskId == null ? 0 : 1;
+        coverEditModeCount += thumbnailTaskId == null ? 0 : 1;
+        if (coverEditModeCount > 1) {
+            throw new BusinessException(MineWorkMessage.COVER_EDIT_MODE_CONFLICT_MESSAGE);
         }
         String title = normalizeRequiredTitle(request == null ? null : request.getTitle());
         String description = normalizeDescription(request == null ? null : request.getDescription());
@@ -590,6 +634,9 @@ public class MineWorkService {
         WorkUploadTaskEntity uploadedCoverTask = coverTaskId == null
                 ? null
                 : validateReplacementCoverTask(work, coverTaskId);
+        WorkUploadTaskEntity uploadedThumbnailTask = thumbnailTaskId == null
+                ? null
+                : validateImageThumbnailTask(work, thumbnailTaskId);
         work.setTitle(title);
         work.setDescription(description);
         if (generatedCover != null) {
@@ -604,14 +651,22 @@ public class MineWorkService {
             work.setCoverObjectKey(uploadedCoverTask.getObjectKey());
             work.setCoverSha256(uploadedCoverTask.getFileSha256());
         }
+        if (uploadedThumbnailTask != null) {
+            work.setCoverObjectKey(uploadedThumbnailTask.getObjectKey());
+            work.setCoverSha256(uploadedThumbnailTask.getFileSha256());
+        }
         int updated = workEntityMapper.updateById(work);
         if (updated <= 0) {
             deleteGeneratedCoverIfNeeded(generatedCover, oldCoverObjectKey, work.getMediaObjectKey());
             deleteUploadedCoverIfNeeded(uploadedCoverTask, oldCoverObjectKey, work.getMediaObjectKey());
+            deleteUploadedCoverIfNeeded(uploadedThumbnailTask, oldCoverObjectKey, work.getMediaObjectKey());
             throw new BusinessException(MineWorkMessage.WORK_SAVE_FAILED_MESSAGE);
         }
         if (uploadedCoverTask != null) {
             confirmReplacementCoverTask(uploadedCoverTask, work.getId(), oldCoverObjectKey, work.getMediaObjectKey());
+        }
+        if (uploadedThumbnailTask != null) {
+            confirmImageThumbnailTask(uploadedThumbnailTask, work.getId(), oldCoverObjectKey, work.getMediaObjectKey());
         }
         if (generatedCover != null) {
             deleteOldVideoCoverIfNeeded(oldCoverObjectKey, work.getCoverObjectKey(), work.getMediaObjectKey());
@@ -1069,6 +1124,102 @@ public class MineWorkService {
     }
 
     /**
+     * 校验手动上传的图片缩略图元信息。
+     *
+     * @param request 缩略图票据创建请求
+     */
+    private void validateThumbnailUploadFile(MineWorkThumbnailUploadTicketRequest request) {
+        if (request == null) {
+            throw new BusinessException(MineWorkMessage.COVER_REQUIRED_MESSAGE);
+        }
+        long fileSize = request.getFileSize() == null ? 0L : request.getFileSize();
+        if (fileSize <= 0L) {
+            throw new BusinessException(MineWorkMessage.COVER_REQUIRED_MESSAGE);
+        }
+        if (fileSize > THUMB_MAX_BYTES) {
+            throw new BusinessException(MineWorkMessage.COVER_TASK_SIZE_MESSAGE);
+        }
+        String mimeType = normalizeText(request.getMimeType()).toLowerCase(Locale.ROOT);
+        if (!mimeType.startsWith(IMAGE_MIME_PREFIX)) {
+            throw new BusinessException(MineWorkMessage.COVER_TASK_MEDIA_TYPE_MESSAGE);
+        }
+        validateThumbnailDimensions(request.getWidth(), request.getHeight());
+        normalizeExtension(request.getFileName(), request.getMimeType(), MediaTypeDict.IMAGE.getCode());
+        normalizeClientSha256(request.getSha256());
+    }
+
+    /**
+     * 校验缩略图宽高必须来自小程序可信正数尺寸。
+     *
+     * @param width 缩略图像素宽度
+     * @param height 缩略图像素高度
+     */
+    private void validateThumbnailDimensions(Integer width, Integer height) {
+        if (!isValidMediaDimension(width) || !isValidMediaDimension(height)) {
+            throw new BusinessException(MineWorkMessage.COVER_TASK_DIMENSION_MESSAGE);
+        }
+    }
+
+    /**
+     * 构造手动上传图片缩略图的上传任务。
+     *
+     * @param userId 当前用户 ID
+     * @param work 图片作品
+     * @param request 缩略图票据创建请求
+     * @param expiresAt 票据过期时间
+     * @return 上传任务
+     */
+    private WorkUploadTaskEntity buildImageThumbnailUploadTask(
+            Long userId,
+            WorkEntity work,
+            MineWorkThumbnailUploadTicketRequest request,
+            LocalDateTime expiresAt
+    ) {
+        String objectKey = resolveImageThumbnailObjectKey(work);
+        WorkUploadTaskEntity task = new WorkUploadTaskEntity();
+        task.setBatchId(IMAGE_THUMBNAIL_BATCH_PREFIX + work.getId());
+        task.setUserId(userId);
+        task.setMediaType(MediaTypeDict.IMAGE.getCode());
+        task.setObjectKey(objectKey);
+        task.setFileSha256(normalizeClientSha256(request.getSha256()));
+        task.setCoverObjectKey(objectKey);
+        task.setOriginalFileName(buildThumbFileName(work.getOriginalFileName()));
+        task.setMimeType(normalizeText(request.getMimeType()));
+        task.setFileSize(request.getFileSize());
+        task.setWidth(normalizeMediaDimension(request.getWidth()));
+        task.setHeight(normalizeMediaDimension(request.getHeight()));
+        task.setStatus(WorkUploadTaskStatusDict.CREATED.getCode());
+        task.setExpiresAt(expiresAt);
+        task.setIdempotencyKey(normalizeImageThumbnailIdempotency(work, request));
+        return task;
+    }
+
+    /**
+     * 构造图片缩略图票据响应。
+     *
+     * @param task 上传任务
+     * @param clientId 前端本地 ID
+     * @param ticket COS 票据
+     * @return 缩略图票据响应
+     */
+    private MineWorkThumbnailUploadTicketResponse buildThumbnailTicketResponse(
+            WorkUploadTaskEntity task,
+            String clientId,
+            CosService.PostUploadTicket ticket
+    ) {
+        MineWorkThumbnailUploadTicketResponse response = new MineWorkThumbnailUploadTicketResponse();
+        response.setTaskId(task.getId());
+        response.setClientId(clientId);
+        response.setMediaType(task.getMediaType());
+        response.setObjectKey(task.getObjectKey());
+        response.setUploadUrl(ticket.uploadUrl());
+        response.setFormData(ticket.formData());
+        response.setExpiresAt(ticket.expiresAt());
+        response.setMaxBytes(ticket.maxBytes());
+        return response;
+    }
+
+    /**
      * 校验上传文件元信息。
      *
      * @param file 文件元信息
@@ -1351,6 +1502,37 @@ public class MineWorkService {
     }
 
     /**
+     * 校验图片作品替换缩略图使用的上传任务。
+     *
+     * @param work 图片作品
+     * @param thumbnailTaskId 缩略图上传任务 ID
+     * @return 缩略图上传任务
+     */
+    private WorkUploadTaskEntity validateImageThumbnailTask(WorkEntity work, Long thumbnailTaskId) {
+        if (!MediaTypeDict.IMAGE.getCode().equals(work.getMediaType())) {
+            throw new BusinessException(MineWorkMessage.IMAGE_THUMBNAIL_UPDATE_MEDIA_TYPE_MESSAGE);
+        }
+        WorkUploadTaskEntity thumbnailTask = requireOwnedUploadTask(work.getUserId(), thumbnailTaskId);
+        WorkUploadCoverTaskValidator.ensureImageThumbnailTask(thumbnailTask);
+        ensureThumbnailTaskDoesNotTargetOriginal(work, thumbnailTask.getObjectKey());
+        if (WorkUploadTaskStatusDict.CONFIRMED.getCode().equals(thumbnailTask.getStatus())) {
+            throw new BusinessException(MineWorkMessage.COVER_TASK_USED_MESSAGE);
+        }
+        if (thumbnailTask.getExpiresAt() != null && thumbnailTask.getExpiresAt().isBefore(LocalDateTime.now())) {
+            thumbnailTask.setStatus(WorkUploadTaskStatusDict.EXPIRED.getCode());
+            thumbnailTask.setErrorMessage(IMAGE_THUMBNAIL_TASK_EXPIRED_ERROR_MESSAGE);
+            workUploadTaskEntityMapper.updateById(thumbnailTask);
+            throw new BusinessException(MineWorkMessage.COVER_TASK_EXPIRED_MESSAGE);
+        }
+        validateCoverFileName(work.getOriginalFileName(), thumbnailTask);
+        CosService.ObjectHead thumbnailHead = validateCosObject(thumbnailTask);
+        if (thumbnailHead.contentLength() > THUMB_MAX_BYTES) {
+            throw new BusinessException(MineWorkMessage.COVER_TASK_SIZE_MESSAGE);
+        }
+        return thumbnailTask;
+    }
+
+    /**
      * 确认替换封面的上传任务已被当前作品使用。
      *
      * @param coverTask 封面上传任务
@@ -1371,6 +1553,31 @@ public class MineWorkService {
         int updated = workUploadTaskEntityMapper.updateById(coverTask);
         if (updated <= 0) {
             deleteUploadedCoverIfNeeded(coverTask, oldCoverObjectKey, mediaObjectKey);
+            throw new BusinessException(MineWorkMessage.WORK_SAVE_FAILED_MESSAGE);
+        }
+    }
+
+    /**
+     * 确认替换缩略图的上传任务已被当前图片作品使用。
+     *
+     * @param thumbnailTask 缩略图上传任务
+     * @param workId 作品 ID
+     * @param oldCoverObjectKey 旧缩略图对象键
+     * @param mediaObjectKey 图片原图对象键
+     */
+    private void confirmImageThumbnailTask(
+            WorkUploadTaskEntity thumbnailTask,
+            Long workId,
+            String oldCoverObjectKey,
+            String mediaObjectKey
+    ) {
+        thumbnailTask.setStatus(WorkUploadTaskStatusDict.CONFIRMED.getCode());
+        thumbnailTask.setConfirmedWorkId(workId);
+        thumbnailTask.setCoverObjectKey(thumbnailTask.getObjectKey());
+        thumbnailTask.setErrorMessage(null);
+        int updated = workUploadTaskEntityMapper.updateById(thumbnailTask);
+        if (updated <= 0) {
+            deleteUploadedCoverIfNeeded(thumbnailTask, oldCoverObjectKey, mediaObjectKey);
             throw new BusinessException(MineWorkMessage.WORK_SAVE_FAILED_MESSAGE);
         }
     }
@@ -1635,11 +1842,25 @@ public class MineWorkService {
         item.setServiceDate(work.getServiceDate());
         item.setSortOrder(work.getSortOrder());
         item.setStatus(work.getStatus());
+        item.setAuditStatus(work.getAuditStatus());
+        item.setAuditStatusText(resolveAuditStatusText(work.getAuditStatus()));
+        item.setAuditRejectReason(work.getAuditRejectReason());
         item.setReferenceCount(referenceCounts.getOrDefault(work.getId(), 0L));
         item.setTags(workTags.getOrDefault(work.getId(), List.of()));
         item.setCreatedAt(work.getCreatedAt());
         item.setUpdatedAt(work.getUpdatedAt());
         return item;
+    }
+
+    /**
+     * 按审核状态字典生成展示文案。
+     *
+     * @param auditStatus 审核状态
+     * @return 审核状态展示文案
+     */
+    private String resolveAuditStatusText(String auditStatus) {
+        WorkAuditStatusDict status = WorkAuditStatusDict.fromCode(auditStatus);
+        return status == null ? "" : status.getDisplayName();
     }
 
     /**
@@ -2615,6 +2836,52 @@ public class MineWorkService {
     }
 
     /**
+     * 解析图片作品缩略图覆盖对象键。
+     *
+     * @param work 图片作品
+     * @return 缩略图对象键
+     */
+    private String resolveImageThumbnailObjectKey(WorkEntity work) {
+        String mediaObjectKey = normalizeText(work.getMediaObjectKey());
+        String coverObjectKey = normalizeText(work.getCoverObjectKey());
+        if (!coverObjectKey.isBlank() && !coverObjectKey.equals(mediaObjectKey)) {
+            return coverObjectKey;
+        }
+        return buildStableImageThumbnailObjectKey(mediaObjectKey);
+    }
+
+    /**
+     * 按图片原图对象键派生稳定缩略图对象键。
+     *
+     * @param sourceObjectKey 图片原图对象键
+     * @return 稳定缩略图对象键
+     */
+    private String buildStableImageThumbnailObjectKey(String sourceObjectKey) {
+        String normalizedSourceObjectKey = normalizeText(sourceObjectKey);
+        int lastSlashIndex = normalizedSourceObjectKey.lastIndexOf('/');
+        int extensionIndex = normalizedSourceObjectKey.lastIndexOf('.');
+        if (normalizedSourceObjectKey.isBlank() || extensionIndex <= lastSlashIndex) {
+            throw new BusinessException(MineWorkMessage.COVER_SOURCE_TASK_INVALID_MESSAGE);
+        }
+        return normalizedSourceObjectKey.substring(0, extensionIndex)
+                + THUMB_FILE_SUFFIX
+                + FILE_EXTENSION_SEPARATOR
+                + THUMB_FILE_EXTENSION;
+    }
+
+    /**
+     * 防止图片缩略图上传票据指向原图对象键。
+     *
+     * @param work 图片作品
+     * @param thumbnailObjectKey 缩略图对象键
+     */
+    private void ensureThumbnailTaskDoesNotTargetOriginal(WorkEntity work, String thumbnailObjectKey) {
+        if (normalizeText(thumbnailObjectKey).equals(normalizeText(work.getMediaObjectKey()))) {
+            throw new BusinessException(MineWorkMessage.COVER_SOURCE_TASK_INVALID_MESSAGE);
+        }
+    }
+
+    /**
      * 归一化手动上传封面任务幂等键。
      *
      * @param work 视频作品
@@ -2630,6 +2897,24 @@ public class MineWorkService {
             value = normalizeClientSha256(request.getSha256());
         }
         return MANUAL_VIDEO_COVER_IDEMPOTENCY_PREFIX + work.getId() + ":" + value;
+    }
+
+    /**
+     * 归一化手动上传图片缩略图任务幂等键。
+     *
+     * @param work 图片作品
+     * @param request 缩略图票据创建请求
+     * @return 幂等键
+     */
+    private String normalizeImageThumbnailIdempotency(WorkEntity work, MineWorkThumbnailUploadTicketRequest request) {
+        String value = normalizeText(request.getIdempotencyKey());
+        if (value.isBlank()) {
+            value = normalizeText(request.getClientId());
+        }
+        if (value.isBlank()) {
+            value = normalizeClientSha256(request.getSha256());
+        }
+        return IMAGE_THUMBNAIL_IDEMPOTENCY_PREFIX + work.getId() + ":" + value;
     }
 
     /**
@@ -2696,10 +2981,20 @@ public class MineWorkService {
      * @return 合法尺寸，不合法时返回 0
      */
     private int normalizeMediaDimension(Integer value) {
-        if (value == null || value <= 0 || value > MEDIA_DIMENSION_MAX) {
+        if (!isValidMediaDimension(value)) {
             return 0;
         }
         return value;
+    }
+
+    /**
+     * 判断媒体尺寸是否在小程序可信范围内。
+     *
+     * @param value 像素尺寸
+     * @return 尺寸是否有效
+     */
+    private boolean isValidMediaDimension(Integer value) {
+        return value != null && value > 0 && value <= MEDIA_DIMENSION_MAX;
     }
 
     /**

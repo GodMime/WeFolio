@@ -32,7 +32,25 @@ final class WorkUploadCoverTaskValidator {
      * @param coverTask 封面上传任务
      */
     static void ensureImageCoverTask(WorkUploadTaskEntity coverTask) {
-        if (!MediaTypeDict.IMAGE.getCode().equals(coverTask.getMediaType())) {
+        ensureImageTask(coverTask);
+    }
+
+    /**
+     * 校验缩略图任务必须是图片类型。
+     *
+     * @param thumbnailTask 缩略图上传任务
+     */
+    static void ensureImageThumbnailTask(WorkUploadTaskEntity thumbnailTask) {
+        ensureImageTask(thumbnailTask);
+    }
+
+    /**
+     * 校验上传任务必须是图片类型。
+     *
+     * @param imageTask 图片上传任务
+     */
+    private static void ensureImageTask(WorkUploadTaskEntity imageTask) {
+        if (!MediaTypeDict.IMAGE.getCode().equals(imageTask.getMediaType())) {
             throw new BusinessException(MineWorkMessage.COVER_TASK_MEDIA_TYPE_MESSAGE);
         }
     }
