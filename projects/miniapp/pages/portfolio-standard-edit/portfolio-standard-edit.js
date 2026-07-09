@@ -60,6 +60,7 @@ const STANDARD_PERSONAL_API_URL = '/api/mine/portfolios/standard-personal'
 const COMPONENT_LIBRARY_API_URL = '/api/mine/portfolios/component-library'
 const BASIC_PROFILE_API_URL = '/api/mine/profile'
 const WORKS_API_URL = '/api/mine/works'
+const PASSED_WORK_AUDIT_STATUS = 'PASSED'
 const PORTFOLIOS_PAGE_ROUTE = 'pages/portfolios/portfolios'
 const PORTFOLIOS_PAGE_URL = `/${PORTFOLIOS_PAGE_ROUTE}`
 const SWIPE_REVEAL_THRESHOLD = -32
@@ -1775,6 +1776,7 @@ Page({
     const response = await request({
       url: WORKS_API_URL,
       data: {
+        auditStatus: PASSED_WORK_AUDIT_STATUS,
         page,
         pageSize: DISPLAY_GROUP_WORK_PAGE_SIZE
       }
@@ -1959,6 +1961,7 @@ Page({
           keyword,
           tagId: tagId || undefined,
           mediaType: mediaType || undefined,
+          auditStatus: PASSED_WORK_AUDIT_STATUS,
           page: nextPage,
           pageSize
         }

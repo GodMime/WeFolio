@@ -691,7 +691,14 @@ test('tapping carousel component edits selected image works', async () => {
   await flushPromises()
 
   assert.equal(requests[0].url, '/api/mine/works')
-  assert.deepEqual(requests[0].data, { keyword: '', tagId: undefined, mediaType: 'IMAGE', page: 1, pageSize: 20 })
+  assert.deepEqual(requests[0].data, {
+    keyword: '',
+    tagId: undefined,
+    mediaType: 'IMAGE',
+    auditStatus: 'PASSED',
+    page: 1,
+    pageSize: 20
+  })
   assert.equal(page.data.componentWorkSheetVisible, true)
   assert.deepEqual(page.data.componentWorkOptions.map((item) => item.id), [11, 13])
   assert.deepEqual(page.data.componentWorkOptions.map((item) => item.selected), [false, true])
@@ -772,7 +779,14 @@ test('component work picker searches filters by tag and appends next page', asyn
 
   await page.handleComponentTap({ currentTarget: { dataset: { key: 'c_carousel', type: COMPONENT_TYPES.CAROUSEL } } })
 
-  assert.deepEqual(requests[0].data, { keyword: '', tagId: undefined, mediaType: 'IMAGE', page: 1, pageSize: 20 })
+  assert.deepEqual(requests[0].data, {
+    keyword: '',
+    tagId: undefined,
+    mediaType: 'IMAGE',
+    auditStatus: 'PASSED',
+    page: 1,
+    pageSize: 20
+  })
   assert.deepEqual(page.data.componentWorkOptions.map((item) => item.id), [11])
   assert.deepEqual(page.data.componentWorkFilterTags.map((item) => item.name), ['全部', '中式婚礼'])
   assert.equal(page.data.componentWorkHasMore, true)
@@ -780,24 +794,52 @@ test('component work picker searches filters by tag and appends next page', asyn
   page.handleComponentWorkKeywordInput({ detail: { value: '迎宾' } })
   await page.handleComponentWorkSearchConfirm()
 
-  assert.deepEqual(requests[1].data, { keyword: '迎宾', tagId: undefined, mediaType: 'IMAGE', page: 1, pageSize: 20 })
+  assert.deepEqual(requests[1].data, {
+    keyword: '迎宾',
+    tagId: undefined,
+    mediaType: 'IMAGE',
+    auditStatus: 'PASSED',
+    page: 1,
+    pageSize: 20
+  })
   assert.deepEqual(page.data.componentWorkOptions.map((item) => item.id), [21])
   assert.equal(page.data.componentWorkHasMore, false)
 
   await page.handleComponentWorkTagTap({ currentTarget: { dataset: { tagId: 7 } } })
 
-  assert.deepEqual(requests[2].data, { keyword: '迎宾', tagId: 7, mediaType: 'IMAGE', page: 1, pageSize: 20 })
+  assert.deepEqual(requests[2].data, {
+    keyword: '迎宾',
+    tagId: 7,
+    mediaType: 'IMAGE',
+    auditStatus: 'PASSED',
+    page: 1,
+    pageSize: 20
+  })
   assert.deepEqual(page.data.componentWorkOptions.map((item) => item.id), [21])
 
   page.handleComponentWorkKeywordInput({ detail: { value: '' } })
   await page.handleComponentWorkSearchConfirm()
 
-  assert.deepEqual(requests[3].data, { keyword: '', tagId: 7, mediaType: 'IMAGE', page: 1, pageSize: 20 })
+  assert.deepEqual(requests[3].data, {
+    keyword: '',
+    tagId: 7,
+    mediaType: 'IMAGE',
+    auditStatus: 'PASSED',
+    page: 1,
+    pageSize: 20
+  })
   assert.deepEqual(page.data.componentWorkOptions.map((item) => item.id), [31])
 
   await page.handleComponentWorkScrollToLower()
 
-  assert.deepEqual(requests[4].data, { keyword: '', tagId: 7, mediaType: 'IMAGE', page: 2, pageSize: 20 })
+  assert.deepEqual(requests[4].data, {
+    keyword: '',
+    tagId: 7,
+    mediaType: 'IMAGE',
+    auditStatus: 'PASSED',
+    page: 2,
+    pageSize: 20
+  })
   assert.deepEqual(page.data.componentWorkOptions.map((item) => item.id), [31, 32])
   assert.deepEqual(page.data.componentWorkOptions.map((item) => item.selected), [false, true])
   assert.equal(page.data.componentWorkHasMore, false)
@@ -1123,7 +1165,7 @@ test('tapping work grid component loads tag-driven display group selector', asyn
   assert.equal(page.data.editingDisplayComponentKey, 'c_grid')
   assert.equal(page.data.activeDisplayGroupKey, 'tag_8')
   assert.deepEqual(requests.map((item) => item.url), ['/api/mine/works/tags', '/api/mine/works'])
-  assert.deepEqual(requests[1].data, { page: 1, pageSize: 100 })
+  assert.deepEqual(requests[1].data, { auditStatus: 'PASSED', page: 1, pageSize: 100 })
   assert.deepEqual(page.data.displayGroupOptions.map((item) => item.name), ['户外案例', '室内案例', '快剪视频'])
   assert.deepEqual(page.data.displayGroupOptions.map((item) => item.selectionOrder), [1, 2, 0])
   assert.deepEqual(page.data.displayGroupOptions.map((item) => item.selected), [true, true, false])
@@ -1135,7 +1177,9 @@ test('tapping work grid component loads tag-driven display group selector', asyn
 
 test('work grid and list editors keep saved selected works visible without catalog tag relations', async () => {
   for (const componentType of [COMPONENT_TYPES.WORK_GRID, COMPONENT_TYPES.WORK_LIST]) {
+    const requests = []
     const fakeRequest = (options) => {
+      requests.push(options)
       if (options.url === '/api/mine/works/tags') {
         return Promise.resolve({
           tags: [
@@ -1174,6 +1218,8 @@ test('work grid and list editors keep saved selected works visible without catal
     await page.handleComponentTap({ currentTarget: { dataset: { key: 'c_display', type: componentType } } })
     await flushPromises()
 
+    const workRequest = requests.find((item) => item.url === '/api/mine/works')
+    assert.deepEqual(workRequest.data, { auditStatus: 'PASSED', page: 1, pageSize: 100 })
     assert.equal(page.data.activeDisplayGroupWorkCountText, '2 个已选')
     assert.deepEqual(page.data.displayGroupWorkOptions.map((item) => item.id), [22, 21])
     assert.deepEqual(page.data.displayGroupWorkOptions.map((item) => item.selectionOrder), [1, 2])
@@ -1226,6 +1272,7 @@ test('work list display group records tag and work selection order independently
 
   assert.equal(requests[0].url, '/api/mine/works/tags')
   assert.equal(requests[1].url, '/api/mine/works')
+  assert.deepEqual(requests[1].data, { auditStatus: 'PASSED', page: 1, pageSize: 100 })
   assert.equal(page.data.componentWorkSheetVisible, false)
 
   page.handleToggleDisplayGroupTag({ currentTarget: { dataset: { tagId: 8 } } })
