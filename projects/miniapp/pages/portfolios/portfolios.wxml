@@ -1,7 +1,14 @@
 <view class="page-shell portfolios-page">
   <navigation-bar title="作品集" back="{{false}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
 
-  <scroll-view class="portfolio-scroll" scroll-y type="list">
+  <scroll-view
+    class="portfolio-scroll"
+    scroll-y
+    type="list"
+    refresher-enabled="{{true}}"
+    refresher-triggered="{{pullDownRefreshing}}"
+    bindrefresherrefresh="handlePullDownRefresh"
+  >
     <view class="portfolio-content">
       <view class="segment">
         <button class="segment-item {{ownerType === 'USER' ? 'active' : ''}}" data-type="USER" bindtap="handleOwnerTypeTap">个人</button>

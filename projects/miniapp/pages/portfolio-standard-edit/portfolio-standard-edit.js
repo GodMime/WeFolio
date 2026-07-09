@@ -116,6 +116,7 @@ const IDEMPOTENCY_PREFIX_PUBLISH = 'publish'
 const BASIC_PROFILE_LOAD_ERROR_MESSAGE = '基础资料加载失败'
 const TEXT_SECTION_REQUIRED_MESSAGE = '请填写文字说明'
 const DIVIDER_HEIGHT_REQUIRED_MESSAGE = '请输入大于 0 的高度'
+const WORK_ASPECT_RATIO_FALLBACK_TEXT = '--'
 
 const DEFAULT_COMPONENT_DESCRIPTIONS = {
   CAROUSEL: '展示已选择的图片作品',
@@ -287,6 +288,10 @@ function buildActiveDisplayGroupWorkCountText(component = {}, activeGroupKey = '
   return `${normalizeWorkIds(group && group.workIds).length} 个已选`
 }
 
+function normalizeWorkAspectRatioText(work = {}) {
+  return String(work.aspectRatioText || work.aspectRatio || '').trim() || WORK_ASPECT_RATIO_FALLBACK_TEXT
+}
+
 function buildComponentWorkOptions(works = [], selectedIds = [], componentType = '') {
   const selectedSet = new Set(normalizeWorkIds(selectedIds))
   return works
@@ -294,7 +299,8 @@ function buildComponentWorkOptions(works = [], selectedIds = [], componentType =
     .map((work) => Object.assign({}, work, {
       selected: selectedSet.has(work.id),
       thumbUrl: work.coverUrl || work.mediaUrl || '',
-      metaText: work.tagText && work.tagText !== '未设置标签' ? `${work.typeText} · ${work.tagText}` : work.typeText
+      metaText: work.tagText && work.tagText !== '未设置标签' ? `${work.typeText} · ${work.tagText}` : work.typeText,
+      aspectRatioText: normalizeWorkAspectRatioText(work)
     }))
 }
 
@@ -307,7 +313,8 @@ function normalizeDisplayGroupWorkPreview(work = {}, fallbackId = 0) {
     id: workId,
     title,
     thumbUrl: work.thumbUrl || work.coverUrl || work.mediaUrl || '',
-    metaText: tagText && tagText !== '未设置标签' ? `${typeText || '作品'} · ${tagText}` : (typeText || '作品')
+    metaText: tagText && tagText !== '未设置标签' ? `${typeText || '作品'} · ${tagText}` : (typeText || '作品'),
+    aspectRatioText: normalizeWorkAspectRatioText(work)
   }
 }
 

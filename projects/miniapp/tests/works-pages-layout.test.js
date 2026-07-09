@@ -128,7 +128,7 @@ test('works pages expose expected upload and edit structure', () => {
   assert.match(worksWxss, /\.audit-reject-row\s*\{[\s\S]*display:\s*flex;[\s\S]*align-items:\s*flex-start;/)
   assert.match(worksWxss, /\.audit-reject-icon\s*\{[\s\S]*background:\s*#f6c343;/)
   assert.match(worksWxml, /class="work-swipe-row \{\{revealedWorkId === item\.id \? 'revealed' : ''\}\} \{\{batchMode \? 'batch-mode' : ''\}\}"/)
-  assert.match(worksWxml, /<scroll-view wx:else class="work-list-scroll" scroll-y type="list" bindscrolltolower="handleScrollToLower">[\s\S]*<view class="work-list">/)
+  assert.match(worksWxml, /<scroll-view[\s\S]*wx:else[\s\S]*class="work-list-scroll"[\s\S]*scroll-y[\s\S]*type="list"[\s\S]*bindscrolltolower="handleScrollToLower"[\s\S]*>[\s\S]*<view class="work-list">/)
   assert.match(worksWxml, /class="work-select \{\{item\.selected \? 'selected' : ''\}\}"/)
   assert.match(worksWxml, /wx:if="\{\{item\.mediaType === 'VIDEO'\}\}"[\s\S]*class="play-badge"[\s\S]*catchtap="handlePlayVideoTap"[\s\S]*aria-label="播放视频"/)
   assert.doesNotMatch(worksWxml, /class="thumb-order"/)

@@ -186,7 +186,10 @@
             </view>
             <view class="component-work-copy">
               <view class="component-work-title">{{item.title}}</view>
-              <view class="component-work-meta">{{item.metaText}}</view>
+              <view class="component-work-meta-row">
+                <view class="component-work-meta">{{item.metaText}}</view>
+                <view class="component-work-ratio">{{item.aspectRatioText}}</view>
+              </view>
             </view>
             <view class="component-work-check">{{item.selected ? '✓' : ''}}</view>
           </view>
@@ -369,7 +372,10 @@
               </view>
               <view class="display-group-work-item-copy">
                 <view class="display-group-work-item-title">{{item.title}}</view>
-                <view class="display-group-work-item-meta">{{item.metaText}}</view>
+                <view class="display-group-work-meta-row">
+                  <view class="display-group-work-item-meta">{{item.metaText}}</view>
+                  <view class="display-group-work-ratio">{{item.aspectRatioText}}</view>
+                </view>
               </view>
               <view class="display-group-work-order {{item.selected ? 'selected' : ''}}">
                 <text>{{item.selectionOrder ? item.selectionOrder : ''}}</text>

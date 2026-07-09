@@ -1134,9 +1134,9 @@ test('tapping work grid component loads tag-driven display group selector', asyn
         pageSize: 100,
         hasMore: false,
         works: [
-          { id: 21, mediaType: 'IMAGE', title: '户外仪式', coverUrl: 'https://example.com/21.jpg', tags: [{ id: 8, name: '户外案例' }] },
-          { id: 22, mediaType: 'VIDEO', title: '户外快剪', coverUrl: 'https://example.com/22.jpg', tags: [{ id: 8, name: '户外案例' }, { id: 10, name: '快剪视频' }] },
-          { id: 31, mediaType: 'IMAGE', title: '室内迎宾', coverUrl: 'https://example.com/31.jpg', tags: [{ id: 9, name: '室内案例' }] }
+          { id: 21, mediaType: 'IMAGE', title: '户外仪式', coverUrl: 'https://example.com/21.jpg', aspectRatio: '4:3', tags: [{ id: 8, name: '户外案例' }] },
+          { id: 22, mediaType: 'VIDEO', title: '户外快剪', coverUrl: 'https://example.com/22.jpg', aspectRatio: '16:9', tags: [{ id: 8, name: '户外案例' }, { id: 10, name: '快剪视频' }] },
+          { id: 31, mediaType: 'IMAGE', title: '室内迎宾', coverUrl: 'https://example.com/31.jpg', aspectRatio: '1:1', tags: [{ id: 9, name: '室内案例' }] }
         ]
       })
     }
@@ -1171,6 +1171,7 @@ test('tapping work grid component loads tag-driven display group selector', asyn
   assert.deepEqual(page.data.displayGroupOptions.map((item) => item.selected), [true, true, false])
   assert.deepEqual(page.data.displayGroupOptions.map((item) => item.countText), ['2', '0', '0'])
   assert.deepEqual(page.data.displayGroupWorkOptions.map((item) => item.id), [21, 22])
+  assert.deepEqual(page.data.displayGroupWorkOptions.map((item) => item.aspectRatioText), ['4:3', '16:9'])
   assert.deepEqual(page.data.displayGroupWorkOptions.map((item) => item.selectionOrder), [2, 1])
   assert.deepEqual(page.data.displayGroupWorkOptions.map((item) => item.selected), [true, true])
 })

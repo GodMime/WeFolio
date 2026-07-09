@@ -84,7 +84,16 @@
             <view class="empty-desc">从相册选择图片或视频，整理为可复用的作品素材</view>
           </view>
 
-          <scroll-view wx:else class="work-list-scroll" scroll-y type="list" bindscrolltolower="handleScrollToLower">
+          <scroll-view
+            wx:else
+            class="work-list-scroll"
+            scroll-y
+            type="list"
+            bindscrolltolower="handleScrollToLower"
+            refresher-enabled="{{true}}"
+            refresher-triggered="{{pullDownRefreshing}}"
+            bindrefresherrefresh="handlePullDownRefresh"
+          >
             <view class="work-list">
               <view
                 wx:for="{{list.works}}"

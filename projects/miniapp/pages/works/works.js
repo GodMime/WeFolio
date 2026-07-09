@@ -396,6 +396,7 @@ Page({
   data: {
     loading: true,
     loadingMore: false,
+    pullDownRefreshing: false,
     errorMessage: '',
     keyword: '',
     selectedTagId: null,
@@ -470,6 +471,28 @@ Page({
     this.bootstrap()
   },
 
+  onPullDownRefresh() {
+    return this.handlePullDownRefresh()
+  },
+
+  handlePullDownRefresh() {
+    if (this.data.pullDownRefreshing) {
+      if (wx.stopPullDownRefresh) {
+        wx.stopPullDownRefresh()
+      }
+      return Promise.resolve()
+    }
+    this.setData({ pullDownRefreshing: true })
+    return Promise.resolve()
+      .then(() => this.bootstrap({ showLoading: false }))
+      .finally(() => {
+        this.setData({ pullDownRefreshing: false })
+        if (wx.stopPullDownRefresh) {
+          wx.stopPullDownRefresh()
+        }
+      })
+  },
+
   onUnload() {
     Object.keys(this.uploadTasks).forEach((key) => {
       const task = this.uploadTasks[key]
@@ -480,24 +503,25 @@ Page({
     this.uploadTasks = {}
   },
 
-  bootstrap() {
+  bootstrap(options = {}) {
     if (!hasLocalToken()) {
       this.redirectToLogin()
       return
     }
-    this.loadWorks(true)
+    return this.loadWorks(true, options)
   },
 
-  async loadWorks(reset = false) {
+  async loadWorks(reset = false, options = {}) {
     const requestSeq = this.requestSeq + 1
     this.requestSeq = requestSeq
     const currentList = this.data.list
     const nextPage = reset ? 1 : currentList.page + 1
     if (reset) {
-      this.setData({
-        loading: true,
-        errorMessage: ''
-      })
+      const nextData = { errorMessage: '' }
+      if (options.showLoading !== false) {
+        nextData.loading = true
+      }
+      this.setData(nextData)
     } else {
       this.setData({ loadingMore: true })
     }

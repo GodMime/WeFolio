@@ -99,6 +99,7 @@ Page({
     ownerType: 'USER',
     ownerTitle: '个人作品集',
     loading: false,
+    pullDownRefreshing: false,
     errorMessage: '',
     portfolios: [],
     displayPortfolios: [],
@@ -116,6 +117,28 @@ Page({
 
   onShow() {
     this.bootstrap()
+  },
+
+  onPullDownRefresh() {
+    return this.handlePullDownRefresh()
+  },
+
+  handlePullDownRefresh() {
+    if (this.data.pullDownRefreshing) {
+      if (wx.stopPullDownRefresh) {
+        wx.stopPullDownRefresh()
+      }
+      return Promise.resolve()
+    }
+    this.setData({ pullDownRefreshing: true })
+    return Promise.resolve()
+      .then(() => this.bootstrap())
+      .finally(() => {
+        this.setData({ pullDownRefreshing: false })
+        if (wx.stopPullDownRefresh) {
+          wx.stopPullDownRefresh()
+        }
+      })
   },
 
   bootstrap() {
