@@ -400,6 +400,33 @@ test('portfolio work sections render fixed title, all tags, play badge, and vide
   })
 })
 
+test('preview video overlay renders in root portal like visitor page', () => {
+  const previewWxml = fs.readFileSync(
+    path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.wxml'),
+    'utf8'
+  )
+  const visitorWxml = fs.readFileSync(
+    path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.wxml'),
+    'utf8'
+  )
+  const portalOverlayPattern = /<root-portal\s+wx:if="\{\{videoPreviewVisible\}\}">[\s\S]*class="work-video-mask \{\{videoPreviewVisible \? 'visible' : ''\}\}"[\s\S]*<\/root-portal>/
+
+  assert.match(visitorWxml, portalOverlayPattern)
+  assert.match(previewWxml, portalOverlayPattern)
+})
+
+test('preview video overlay uses wxss-compatible fixed viewport offsets', () => {
+  const previewWxss = fs.readFileSync(
+    path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.wxss'),
+    'utf8'
+  )
+  const maskRule = readRule(previewWxss, '.work-video-mask')
+
+  assert.match(maskRule, /position:\s*fixed;/)
+  assert.match(maskRule, /left:\s*0;[\s\S]*right:\s*0;[\s\S]*top:\s*0;[\s\S]*bottom:\s*0;/)
+  assert.doesNotMatch(maskRule, /inset:\s*0;/)
+})
+
 test('profile component can render selected wechat qr in actual pages', () => {
   const previewWxml = fs.readFileSync(
     path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.wxml'),

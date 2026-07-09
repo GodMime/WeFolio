@@ -400,7 +400,7 @@ test('visit detail row reveals follow action and marks record followed', async (
   assert.equal(page.data.visitData.records[0].canMarkFollowed, false)
 })
 
-test('visit event sheet removes native chart layer while open and redraws after close', () => {
+test('visit event sheet closes without redrawing a native chart layer', () => {
   const page = loadVisitsPage(() => Promise.resolve({}))
   let selectorQueryCount = 0
   const originalWx = global.wx
@@ -434,17 +434,9 @@ test('visit event sheet removes native chart layer while open and redraws after 
     })
   })
 
-  page.drawTrendLineChart()
-
-  assert.equal(selectorQueryCount, 0)
-
-  let redrawCount = 0
-  page.drawTrendLineChart = () => {
-    redrawCount += 1
-  }
   page.handleCloseEventSheet()
 
   assert.equal(page.data.eventSheetVisible, false)
-  assert.equal(redrawCount, 1)
+  assert.equal(selectorQueryCount, 0)
   global.wx = originalWx
 })

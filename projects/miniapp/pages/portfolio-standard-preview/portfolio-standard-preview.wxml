@@ -171,26 +171,28 @@
     </block>
   </scroll-view>
 
-  <view class="work-video-mask {{videoPreviewVisible ? 'visible' : ''}}" catchtap="handleCloseVideoPreview">
-    <view class="work-video-panel" catchtap="handleVideoPreviewPanelTap">
-      <view class="work-video-heading">
-        <view class="work-video-title">{{videoPreview.title}}</view>
-        <view class="work-video-close" catchtap="handleCloseVideoPreview" aria-role="button" aria-label="关闭视频">×</view>
+  <root-portal wx:if="{{videoPreviewVisible}}">
+    <view class="work-video-mask {{videoPreviewVisible ? 'visible' : ''}}" catchtap="handleCloseVideoPreview">
+      <view class="work-video-panel" catchtap="handleVideoPreviewPanelTap">
+        <view class="work-video-heading">
+          <view class="work-video-title">{{videoPreview.title}}</view>
+          <view class="work-video-close" catchtap="handleCloseVideoPreview" aria-role="button" aria-label="关闭视频">×</view>
+        </view>
+        <video
+          id="portfolioWorkVideo"
+          class="work-video-player"
+          src="{{videoPreview.src}}"
+          poster="{{videoPreview.poster}}"
+          controls="{{true}}"
+          autoplay="{{true}}"
+          show-fullscreen-btn="{{true}}"
+          show-center-play-btn="{{true}}"
+          enable-progress-gesture="{{true}}"
+          object-fit="contain"
+        ></video>
       </view>
-      <video
-        id="portfolioWorkVideo"
-        class="work-video-player"
-        src="{{videoPreview.src}}"
-        poster="{{videoPreview.poster}}"
-        controls="{{true}}"
-        autoplay="{{true}}"
-        show-fullscreen-btn="{{true}}"
-        show-center-play-btn="{{true}}"
-        enable-progress-gesture="{{true}}"
-        object-fit="contain"
-      ></video>
     </view>
-  </view>
+  </root-portal>
 
   <portfolio-contact-form
     view-mode="modal"

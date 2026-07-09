@@ -421,6 +421,18 @@ test('mock page markup exposes required registration prompts and navigation acti
   assert.match(previewWxml, /预留联系信息/)
 })
 
+test('mock preview video overlay renders in root portal like production preview', () => {
+  const previewWxml = read('pages/mock/portfolio-standard-preview/portfolio-standard-preview.wxml')
+  const portalStart = previewWxml.indexOf('<root-portal wx:if="{{videoPreviewVisible}}">')
+  const maskStart = previewWxml.indexOf('class="work-video-mask {{videoPreviewVisible ? \'visible\' : \'\'}}"')
+  const portalEnd = previewWxml.indexOf('</root-portal>', portalStart)
+
+  assert.notEqual(portalStart, -1)
+  assert.notEqual(maskStart, -1)
+  assert.ok(maskStart > portalStart)
+  assert.ok(maskStart < portalEnd)
+})
+
 test('mock pages borrow the corresponding production page visual structure', () => {
   const expectations = [
     {

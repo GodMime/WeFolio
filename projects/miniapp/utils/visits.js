@@ -12,6 +12,10 @@ const FOLLOW_TONE_BLUE = 'blue'
 const FOLLOW_TONE_MUTED = 'muted'
 const DETAIL_TYPE_SCHEDULE_QUERIES = 'scheduleQueries'
 const DETAIL_TYPE_CONTACT_LEADS = 'contactLeads'
+const TREND_CHART_WIDTH = 646
+const TREND_CHART_HEIGHT = 156
+const TREND_CHART_PADDING_TOP = 30
+const TREND_CHART_PADDING_BOTTOM = 24
 
 function toNumber(value) {
   const numberValue = Number(value)
@@ -62,6 +66,51 @@ function normalizeTrendPoints(points) {
     valueText: toDisplayText(item.value),
     height: maxValue > 0 ? Math.max(18, Math.round((item.value / maxValue) * 100)) : 18
   }))
+}
+
+function formatChartCoordinate(value) {
+  const rounded = Math.round(Number(value) * 100) / 100
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2)
+}
+
+function buildTrendChartSvg(points) {
+  const list = Array.isArray(points) ? points : []
+  const values = list.map((item) => toNumber(item.value))
+  const maxValue = Math.max(...values, 0)
+  const chartHeight = TREND_CHART_HEIGHT - TREND_CHART_PADDING_TOP - TREND_CHART_PADDING_BOTTOM
+  const linePoints = values.map((value, index) => {
+    const x = list.length > 0 ? ((index + 0.5) / list.length) * TREND_CHART_WIDTH : TREND_CHART_WIDTH / 2
+    const y = maxValue > 0
+      ? TREND_CHART_PADDING_TOP + chartHeight - (value / maxValue) * chartHeight
+      : TREND_CHART_PADDING_TOP + chartHeight * 0.68
+    return { x, y, value }
+  })
+  const baselineY = TREND_CHART_HEIGHT - TREND_CHART_PADDING_BOTTOM
+  const firstX = linePoints.length ? linePoints[0].x : 0
+  const lastX = linePoints.length ? linePoints[linePoints.length - 1].x : TREND_CHART_WIDTH
+  const gridLines = [0, 1, 2].map((index) => {
+    const y = TREND_CHART_PADDING_TOP + (chartHeight / 2) * index
+    return `<path d="M${formatChartCoordinate(firstX)} ${formatChartCoordinate(y)}H${formatChartCoordinate(lastX)}" stroke="#edf2f6" stroke-width="1"/>`
+  }).join('')
+  const linePath = linePoints.map((point, index) => `${index === 0 ? 'M' : 'L'}${formatChartCoordinate(point.x)} ${formatChartCoordinate(point.y)}`).join('')
+  const areaPath = linePoints.length
+    ? `${linePath}L${formatChartCoordinate(lastX)} ${formatChartCoordinate(baselineY)}L${formatChartCoordinate(firstX)} ${formatChartCoordinate(baselineY)}Z`
+    : ''
+  const area = areaPath ? `<path d="${areaPath}" fill="#0f766e" opacity="0.12"/>` : ''
+  const line = linePath ? `<path d="${linePath}" fill="none" stroke="#0f766e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>` : ''
+  const dots = linePoints.map((point) => {
+    const isHot = maxValue > 0 && point.value === maxValue
+    const fill = isHot ? '#c9963f' : '#ffffff'
+    const stroke = isHot ? '#c9963f' : '#0f766e'
+    const radius = isHot ? 5 : 4
+    return `<circle cx="${formatChartCoordinate(point.x)}" cy="${formatChartCoordinate(point.y)}" r="${radius}" fill="${fill}" stroke="${stroke}" stroke-width="2"/>`
+  }).join('')
+  const labels = linePoints.map((point) => {
+    const labelY = Math.max(14, point.y - 9)
+    return `<text x="${formatChartCoordinate(point.x)}" y="${formatChartCoordinate(labelY)}" fill="#536b82" font-size="11" font-family="sans-serif" text-anchor="middle">${point.value}</text>`
+  }).join('')
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${TREND_CHART_WIDTH}" height="${TREND_CHART_HEIGHT}" viewBox="0 0 ${TREND_CHART_WIDTH} ${TREND_CHART_HEIGHT}" preserveAspectRatio="none">${gridLines}${area}${line}${dots}${labels}</svg>`
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`
 }
 
 function extractVisitorInitial(record) {
@@ -298,7 +347,8 @@ function normalizeVisitRecords(raw = {}) {
     ],
     trend: {
       changeText: trend.changeText || '暂无趋势',
-      points
+      points,
+      chartSvg: buildTrendChartSvg(points)
     },
     records: Array.isArray(raw.records) ? raw.records.map(normalizeRecord) : []
   }

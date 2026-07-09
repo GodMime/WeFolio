@@ -147,21 +147,23 @@
     </view>
   </scroll-view>
 
-  <view class="work-video-mask {{videoPreviewVisible ? 'visible' : ''}}" catchtap="handleCloseVideoPreview">
-    <view class="work-video-panel" catchtap="noop">
-      <view class="work-video-heading">
-        <view class="work-video-title">{{videoPreview.title}}</view>
-        <view class="work-video-close" catchtap="handleCloseVideoPreview">×</view>
+  <root-portal wx:if="{{videoPreviewVisible}}">
+    <view class="work-video-mask {{videoPreviewVisible ? 'visible' : ''}}" catchtap="handleCloseVideoPreview">
+      <view class="work-video-panel" catchtap="noop">
+        <view class="work-video-heading">
+          <view class="work-video-title">{{videoPreview.title}}</view>
+          <view class="work-video-close" catchtap="handleCloseVideoPreview">×</view>
+        </view>
+        <video
+          id="mockPortfolioWorkVideo"
+          class="work-video-player"
+          src="{{videoPreview.src}}"
+          poster="{{videoPreview.poster}}"
+          controls="{{true}}"
+          autoplay="{{true}}"
+          object-fit="contain"
+        ></video>
       </view>
-      <video
-        id="mockPortfolioWorkVideo"
-        class="work-video-player"
-        src="{{videoPreview.src}}"
-        poster="{{videoPreview.poster}}"
-        controls="{{true}}"
-        autoplay="{{true}}"
-        object-fit="contain"
-      ></video>
     </view>
-  </view>
+  </root-portal>
 </view>

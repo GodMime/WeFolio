@@ -22,9 +22,13 @@ test('normalizes visit records response for page rendering', () => {
     trend: {
       changeText: '上升 24%',
       points: [
-        { label: '周一', value: 12 },
-        { label: '周二', value: 18 },
-        { label: '周三', value: 15 }
+        { label: '周五', value: 8 },
+        { label: '周六', value: 8 },
+        { label: '周日', value: 21 },
+        { label: '周一', value: 3 },
+        { label: '周二', value: 1 },
+        { label: '周三', value: 6 },
+        { label: '周四', value: 14 }
       ]
     },
     records: [
@@ -55,7 +59,14 @@ test('normalizes visit records response for page rendering', () => {
     { label: '预留信息', value: '7', action: 'contactLeads', interactive: true, className: 'metric interactive' }
   ])
   assert.equal(result.trend.changeText, '上升 24%')
-  assert.deepEqual(result.trend.points.map((item) => item.height), [67, 100, 83])
+  assert.match(result.trend.chartSvg, /^data:image\/svg\+xml;charset=UTF-8,/)
+  const trendSvg = decodeURIComponent(result.trend.chartSvg)
+  assert.match(trendSvg, /<svg[^>]*viewBox="0 0 646 156"/)
+  assert.match(trendSvg, /<path[^>]*stroke="#0f766e"/)
+  assert.match(trendSvg, /<path d="M46\.14 93\.14L138\.43 93\.14L230\.71 30/)
+  assert.match(trendSvg, /L599\.86 64" fill="none" stroke="#0f766e"/)
+  assert.match(trendSvg, /<text x="599\.86"[^>]*>14<\/text>/)
+  assert.deepEqual(result.trend.points.map((item) => item.height), [38, 38, 100, 18, 18, 29, 67])
   assert.equal(result.records[0].visitorInitial, '8')
   assert.equal(
     result.records[0].visitorAvatarUrl,

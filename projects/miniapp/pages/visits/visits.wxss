@@ -12,7 +12,7 @@
 }
 
 .visits-content {
-  padding: 28rpx;
+  padding: 28rpx 28rpx calc(56rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
 }
 
@@ -122,10 +122,12 @@
   margin-top: 24rpx;
 }
 
-.trend-line-canvas {
-  width: 100%;
+.trend-line-image {
+  width: 646rpx;
+  max-width: 100%;
   height: 156rpx;
   display: block;
+  margin: 0 auto;
 }
 
 .trend-label-row {
@@ -149,9 +151,7 @@
 }
 
 .visit-list {
-  max-height: 660rpx;
   margin-top: 10rpx;
-  overflow-y: auto;
 }
 
 .visit-swipe-row {

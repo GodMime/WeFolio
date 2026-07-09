@@ -55,7 +55,7 @@
             <view class="trend-pill">{{visitData.trend.changeText}}</view>
           </view>
           <view class="trend-chart">
-            <canvas wx:if="{{!eventSheetVisible && !detailSheetVisible}}" id="trendLineCanvas" class="trend-line-canvas" type="2d"></canvas>
+            <image class="trend-line-image" src="{{visitData.trend.chartSvg}}" mode="scaleToFill"></image>
           </view>
           <view class="trend-label-row">
             <view class="trend-label" wx:for="{{visitData.trend.points}}" wx:key="label">{{item.label}}</view>
