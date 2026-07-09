@@ -346,6 +346,46 @@ class MineWorkServiceTest {
     }
 
     @Test
+    void listWorksShouldCountTagUsageByRequestedAuditStatus() {
+        WorkEntity passedWork = ownedWork(11L);
+        passedWork.setMediaType(MediaTypeDict.IMAGE.getCode());
+        passedWork.setTitle("草坪婚礼");
+        passedWork.setAuditStatus(WorkAuditStatusDict.PASSED.getCode());
+        Page<WorkEntity> page = new Page<>(1, 20);
+        page.setRecords(List.of(passedWork));
+        page.setTotal(1L);
+        when(workEntityMapper.selectPage(any(), any())).thenReturn(page);
+        when(workEntityMapper.selectMaps(any())).thenReturn(List.of(
+                Map.of("mediaType", MediaTypeDict.IMAGE.getCode(), "itemCount", 1L)
+        ));
+        WfTagEntity passedTag = ownedTag(31L, "户外仪式", "#0f766e");
+        WfTagEntity rejectedTag = ownedTag(32L, "违规案例", "#2d5f9a");
+        when(wfTagEntityMapper.selectList(any())).thenReturn(List.of(passedTag, rejectedTag));
+        when(workTagEntityMapper.selectList(any())).thenReturn(List.of(
+                workTagRelation(11L, 31L),
+                workTagRelation(12L, 32L)
+        ));
+        when(workEntityMapper.selectList(any())).thenReturn(List.of(passedWork));
+        when(cosService.publicUrl(any())).thenAnswer(invocation -> "https://cos.example/" + invocation.getArgument(0));
+
+        MineWorkListResponse response = service().listWorks(
+                null,
+                null,
+                null,
+                WorkAuditStatusDict.PASSED.getCode(),
+                1,
+                20);
+
+        assertThat(response.getSummary().getTotalCount()).isEqualTo(1L);
+        assertThat(response.getSummary().getImageCount()).isEqualTo(1L);
+        assertThat(response.getSummary().getVideoCount()).isZero();
+        assertThat(response.getTags()).extracting(MineWorkListResponse.TagItem::getCount)
+                .containsExactly(1L, 1L, 0L);
+        assertThat(response.getWorks()).extracting(MineWorkListResponse.WorkItem::getAuditStatus)
+                .containsExactly(WorkAuditStatusDict.PASSED.getCode());
+    }
+
+    @Test
     void listWorksShouldCountDraftAndPublishedReferencesFromSamePortfolioOnlyOnce() {
         WorkEntity work = ownedWork(11L);
         work.setMediaType(MediaTypeDict.IMAGE.getCode());

@@ -201,6 +201,9 @@ public class MineWorkService {
     /** 作品表媒体类型列 */
     private static final String WORK_COLUMN_MEDIA_TYPE = "media_type";
 
+    /** 作品表审核状态列 */
+    private static final String WORK_COLUMN_AUDIT_STATUS = "audit_status";
+
     /** 作品表状态列 */
     private static final String WORK_COLUMN_STATUS = "status";
 
@@ -281,7 +284,7 @@ public class MineWorkService {
      * @return 作品列表响应
      */
     public MineWorkListResponse listWorks(String keyword, Long tagId, int page, int pageSize) {
-        return listWorks(keyword, tagId, null, page, pageSize);
+        return listWorks(keyword, tagId, null, null, page, pageSize);
     }
 
     /**
@@ -295,10 +298,33 @@ public class MineWorkService {
      * @return 作品列表响应
      */
     public MineWorkListResponse listWorks(String keyword, Long tagId, String mediaType, int page, int pageSize) {
+        return listWorks(keyword, tagId, mediaType, null, page, pageSize);
+    }
+
+    /**
+     * 分页查询我的作品。
+     *
+     * @param keyword 关键词，可为空
+     * @param tagId 标签 ID，可为空
+     * @param mediaType 媒体类型，可为空
+     * @param auditStatus 审核状态，可为空
+     * @param page 页码
+     * @param pageSize 每页数量
+     * @return 作品列表响应
+     */
+    public MineWorkListResponse listWorks(
+            String keyword,
+            Long tagId,
+            String mediaType,
+            String auditStatus,
+            int page,
+            int pageSize
+    ) {
         Long userId = AuthContextHolder.requireUserId();
         int normalizedPage = page <= 0 ? DEFAULT_PAGE : page;
         int normalizedPageSize = pageSize <= 0 ? DEFAULT_PAGE_SIZE : Math.min(pageSize, MAX_PAGE_SIZE);
         String normalizedMediaType = normalizeOptionalMediaType(mediaType);
+        String normalizedAuditStatus = normalizeOptionalAuditStatus(auditStatus);
         List<WorkTagEntity> selectedTagRelations = tagId == null ? List.of() : findRelationsForTag(userId, tagId);
         List<Long> taggedWorkIds = tagId == null
                 ? null
@@ -308,6 +334,7 @@ public class MineWorkService {
                 .eq(WorkEntity::getUserId, userId)
                 .eq(WorkEntity::getStatus, WorkStatusDict.ACTIVE.getCode())
                 .eq(hasText(normalizedMediaType), WorkEntity::getMediaType, normalizedMediaType)
+                .eq(hasText(normalizedAuditStatus), WorkEntity::getAuditStatus, normalizedAuditStatus)
                 .and(hasText(keyword), wrapper -> wrapper
                         .like(WorkEntity::getTitle, normalizeText(keyword))
                         .or()
@@ -331,11 +358,12 @@ public class MineWorkService {
         response.setPageSize(normalizedPageSize);
         response.setTotal(resultPage.getTotal());
         response.setHasMore(resultPage.getCurrent() < resultPage.getPages());
-        MineWorkListResponse.Summary summary = buildSummary(userId, normalizedMediaType);
+        MineWorkListResponse.Summary summary = buildSummary(userId, normalizedMediaType, normalizedAuditStatus);
         List<WfTagEntity> activeTags = findActiveTags(userId);
         Map<Long, WfTagEntity> activeTagMap = buildTagMap(activeTags);
         List<WorkTagEntity> activeTagRelations = findRelationsForTags(userId, activeTagMap.keySet());
-        List<WorkTagEntity> countedTagRelations = filterTagRelationsByMediaType(userId, activeTagRelations, normalizedMediaType);
+        List<WorkTagEntity> countedTagRelations =
+                filterTagRelationsByWorkFilters(userId, activeTagRelations, normalizedMediaType, normalizedAuditStatus);
         response.setSummary(summary);
         response.setTags(buildTagItems(activeTags, buildTagUsageCounts(countedTagRelations), tagId, summary.getTotalCount()));
         Map<Long, Long> referenceCounts = buildWorkReferenceCounts(resultPage.getRecords());
@@ -1899,9 +1927,10 @@ public class MineWorkService {
      *
      * @param userId 当前用户 ID
      * @param mediaType 媒体类型，可为空
+     * @param auditStatus 审核状态，可为空
      * @return 摘要
      */
-    private MineWorkListResponse.Summary buildSummary(Long userId, String mediaType) {
+    private MineWorkListResponse.Summary buildSummary(Long userId, String mediaType, String auditStatus) {
         MineWorkListResponse.Summary summary = new MineWorkListResponse.Summary();
         List<Map<String, Object>> rows = workEntityMapper.selectMaps(
                 new QueryWrapper<WorkEntity>()
@@ -1911,6 +1940,7 @@ public class MineWorkService {
                         .eq(WORK_COLUMN_USER_ID, userId)
                         .eq(WORK_COLUMN_STATUS, WorkStatusDict.ACTIVE.getCode())
                         .eq(hasText(mediaType), WORK_COLUMN_MEDIA_TYPE, mediaType)
+                        .eq(hasText(auditStatus), WORK_COLUMN_AUDIT_STATUS, auditStatus)
                         .groupBy(WORK_COLUMN_MEDIA_TYPE)
         );
         if (rows == null || rows.isEmpty()) {
@@ -2045,32 +2075,39 @@ public class MineWorkService {
     }
 
     /**
-     * 按媒体类型过滤标签关系。
+     * 按作品筛选条件过滤标签关系。
      *
      * @param userId 当前用户 ID
      * @param relations 标签关系
      * @param mediaType 媒体类型，可为空
+     * @param auditStatus 审核状态，可为空
      * @return 过滤后的标签关系
      */
-    private List<WorkTagEntity> filterTagRelationsByMediaType(Long userId, List<WorkTagEntity> relations, String mediaType) {
-        if (!hasText(mediaType) || relations.isEmpty()) {
+    private List<WorkTagEntity> filterTagRelationsByWorkFilters(
+            Long userId,
+            List<WorkTagEntity> relations,
+            String mediaType,
+            String auditStatus
+    ) {
+        if ((!hasText(mediaType) && !hasText(auditStatus)) || relations.isEmpty()) {
             return relations;
         }
         Set<Long> relationWorkIds = relations.stream()
                 .map(WorkTagEntity::getWorkId)
                 .collect(Collectors.toSet());
-        Set<Long> mediaWorkIds = workEntityMapper.selectList(
+        Set<Long> matchedWorkIds = workEntityMapper.selectList(
                         new QueryWrapper<WorkEntity>()
                                 .select(WORK_COLUMN_ID)
                                 .eq(WORK_COLUMN_USER_ID, userId)
                                 .eq(WORK_COLUMN_STATUS, WorkStatusDict.ACTIVE.getCode())
-                                .eq(WORK_COLUMN_MEDIA_TYPE, mediaType)
+                                .eq(hasText(mediaType), WORK_COLUMN_MEDIA_TYPE, mediaType)
+                                .eq(hasText(auditStatus), WORK_COLUMN_AUDIT_STATUS, auditStatus)
                                 .in(WORK_COLUMN_ID, relationWorkIds))
                 .stream()
                 .map(WorkEntity::getId)
                 .collect(Collectors.toSet());
         return relations.stream()
-                .filter(relation -> mediaWorkIds.contains(relation.getWorkId()))
+                .filter(relation -> matchedWorkIds.contains(relation.getWorkId()))
                 .toList();
     }
 
@@ -3152,6 +3189,23 @@ public class MineWorkService {
             return "";
         }
         return normalizeMediaType(mediaType);
+    }
+
+    /**
+     * 解析可选审核状态。
+     *
+     * @param auditStatus 审核状态
+     * @return 标准审核状态或空字符串
+     */
+    private String normalizeOptionalAuditStatus(String auditStatus) {
+        if (!hasText(auditStatus)) {
+            return "";
+        }
+        String normalizedStatus = normalizeText(auditStatus).toUpperCase(Locale.ROOT);
+        if (WorkAuditStatusDict.fromCode(normalizedStatus) == null) {
+            return "";
+        }
+        return normalizedStatus;
     }
 
     /**
