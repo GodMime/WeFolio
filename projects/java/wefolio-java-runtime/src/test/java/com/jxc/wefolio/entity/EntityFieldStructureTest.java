@@ -92,6 +92,13 @@ class EntityFieldStructureTest {
     }
 
     @Test
+    void userAuthEntityShouldDeclareOpenIdForOwnerSelfVisitDetection() {
+        assertThat(UserAuthEntity.class.getDeclaredFields())
+                .extracting(Field::getName)
+                .contains("openId");
+    }
+
+    @Test
     void portfolioReferenceEntityShouldDeclareConfigScope() {
         assertThat(PortfolioReferenceEntity.class.getDeclaredFields())
                 .extracting(Field::getName)

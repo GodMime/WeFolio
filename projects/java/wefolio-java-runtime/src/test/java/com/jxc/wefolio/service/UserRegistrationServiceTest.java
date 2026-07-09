@@ -63,10 +63,14 @@ class UserRegistrationServiceTest {
                 phoneInfo(),
                 "openpid-abc",
                 "openid-hash",
+                "openid-123",
                 null
         );
 
         assertThat(user.getId()).isEqualTo(21L);
+        ArgumentCaptor<UserAuthEntity> authCaptor = ArgumentCaptor.forClass(UserAuthEntity.class);
+        verify(userAuthEntityMapper).insert(authCaptor.capture());
+        assertThat(authCaptor.getValue().getOpenId()).isEqualTo("openid-123");
         verify(pointService).ensureAccount(21L);
         verify(pointService).grantGift(
                 eq(21L),
@@ -99,6 +103,7 @@ class UserRegistrationServiceTest {
                 phoneInfo(),
                 "openpid-abc",
                 "openid-hash",
+                "openid-123",
                 null
         );
 
@@ -135,6 +140,7 @@ class UserRegistrationServiceTest {
                 phoneInfo(),
                 "openpid-abc",
                 "openid-hash",
+                "openid-123",
                 null
         );
 

@@ -1,4 +1,4 @@
-package com.jxc.wefolio.job;
+package com.jxc.wefolio;
 
 import org.junit.jupiter.api.Test;
 import org.w3c.dom.Document;
@@ -14,15 +14,12 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 日志配置测试 — 固定 job 工程日志文件按日归档并只保留 30 天。
+ * 日志配置测试 — 固定 runtime 工程错误日志单独落盘并按日归档。
  */
 class LoggingConfigurationTest {
 
     /** Logback 主配置文件路径 */
     private static final Path LOGBACK_CONFIG_PATH = Path.of("src/main/resources/logback-spring.xml");
-
-    /** 文件日志 appender 名称 */
-    private static final String FILE_APPENDER_NAME = "FILE";
 
     /** 错误日志 appender 名称 */
     private static final String ERROR_FILE_APPENDER_NAME = "ERROR_FILE";
@@ -54,9 +51,6 @@ class LoggingConfigurationTest {
     /** maxHistory 节点名 */
     private static final String MAX_HISTORY_TAG = "maxHistory";
 
-    /** cleanHistoryOnStart 节点名 */
-    private static final String CLEAN_HISTORY_ON_START_TAG = "cleanHistoryOnStart";
-
     /** Logback 滚动文件 appender 类名 */
     private static final String ROLLING_FILE_APPENDER_CLASS = "ch.qos.logback.core.rolling.RollingFileAppender";
 
@@ -65,9 +59,6 @@ class LoggingConfigurationTest {
 
     /** Logback 阈值过滤器类名 */
     private static final String THRESHOLD_FILTER_CLASS = "ch.qos.logback.classic.filter.ThresholdFilter";
-
-    /** 按日归档的日志文件名模式 */
-    private static final String DAILY_LOG_FILE_PATTERN = "${LOG_PATH}/application.%d{yyyy-MM-dd}.log";
 
     /** 当前错误日志文件 */
     private static final String ERROR_LOG_FILE = "${LOG_PATH}/error.log";
@@ -78,29 +69,8 @@ class LoggingConfigurationTest {
     /** 日志保留天数 */
     private static final String RETENTION_DAYS = "30";
 
-    /** 启动时清理过期归档的开关值 */
-    private static final String CLEAN_HISTORY_ON_START_VALUE = "true";
-
     /** 错误日志级别 */
     private static final String ERROR_LEVEL = "ERROR";
-
-    /**
-     * 文件日志应按天切分，并限制只保留 30 天归档。
-     *
-     * @throws Exception 解析 Logback 配置失败时抛出
-     */
-    @Test
-    void fileAppenderShouldRollByDayAndRetainThirtyDays() throws Exception {
-        Document document = readLogbackConfig();
-        Element fileAppender = findNamedAppender(document, FILE_APPENDER_NAME);
-        Element rollingPolicy = findSingleChild(fileAppender, ROLLING_POLICY_TAG);
-
-        assertThat(fileAppender.getAttribute("class")).isEqualTo(ROLLING_FILE_APPENDER_CLASS);
-        assertThat(rollingPolicy.getAttribute("class")).isEqualTo(TIME_BASED_ROLLING_POLICY_CLASS);
-        assertThat(childText(rollingPolicy, FILE_NAME_PATTERN_TAG)).isEqualTo(DAILY_LOG_FILE_PATTERN);
-        assertThat(childText(rollingPolicy, MAX_HISTORY_TAG)).isEqualTo(RETENTION_DAYS);
-        assertThat(childText(rollingPolicy, CLEAN_HISTORY_ON_START_TAG)).isEqualTo(CLEAN_HISTORY_ON_START_VALUE);
-    }
 
     /**
      * 错误日志应单独写入 error.log，只接收 ERROR 级别，并按天切分。

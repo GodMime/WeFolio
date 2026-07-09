@@ -157,6 +157,19 @@ public class VisitorService {
     }
 
     /**
+     * 按访客 ID 查询访客资料。
+     *
+     * @param visitorId 访客 ID
+     * @return 访客实体，不存在时返回空
+     */
+    public VisitorEntity findById(Long visitorId) {
+        if (visitorId == null) {
+            return null;
+        }
+        return visitorEntityMapper.selectById(visitorId);
+    }
+
+    /**
      * 创建访客资料短期授权 token。
      *
      * @param visitorId 访客 ID

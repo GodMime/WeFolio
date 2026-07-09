@@ -8,6 +8,7 @@ import com.jxc.wefolio.dict.PortfolioStatusDict;
 import com.jxc.wefolio.dict.PortfolioTemplateTypeDict;
 import com.jxc.wefolio.dict.ScheduleStatusDict;
 import com.jxc.wefolio.dict.SlotDefinitionStatusDict;
+import com.jxc.wefolio.dict.VisitEventTypeDict;
 import com.jxc.wefolio.dict.VisitSourceTypeDict;
 import com.jxc.wefolio.dto.PortfolioScheduleOptionsResponse;
 import com.jxc.wefolio.dto.PortfolioScheduleQueryRequest;
@@ -95,6 +96,10 @@ class VisitorPortfolioServiceTest {
     /** 访客登录令牌服务模拟 */
     @Mock
     private VisitorAuthTokenService visitorAuthTokenService;
+
+    /** 维护者本人访问识别服务模拟 */
+    @Mock
+    private OwnerSelfVisitService ownerSelfVisitService;
 
     @BeforeEach
     void setUp() {
@@ -328,6 +333,80 @@ class VisitorPortfolioServiceTest {
 
         assertThat(response.getVisitorProfileToken()).isNull();
         assertThat(JSON.toJSONString(response)).contains("\"needVisitorProfile\":false");
+        verify(visitorService, never()).createProfileToken(any(), any(), any());
+    }
+
+    @Test
+    void ownerSelfOpenShouldCreateVisitorButSkipVisitRecordAndProfilePrompt() {
+        PortfolioEntity portfolio = publishedPortfolio();
+        VisitorEntity visitor = new VisitorEntity();
+        visitor.setId(1024L);
+        visitor.setOpenid("openid-owner");
+        visitor.setVisitorKey("owner-visitor-key");
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
+        when(visitorService.resolveByLoginCode("wx-code"))
+                .thenReturn(new VisitorService.VisitorSession(visitor, false, "WX_OPENID:owner-digest"));
+        when(ownerSelfVisitService.isOwnerSelfVisitor(
+                eq(7L),
+                eq("openid-owner"),
+                eq(88L),
+                eq(1024L),
+                eq(VisitEventTypeDict.PORTFOLIO_OPENED.getCode())
+        )).thenReturn(true);
+        PortfolioRenderDto renderData = new PortfolioRenderDto();
+        when(portfolioRenderService.render(eq(portfolio), any(), eq(false), eq(false), eq(null), eq(null)))
+                .thenReturn(renderData);
+        VisitorPortfolioOpenRequest request = new VisitorPortfolioOpenRequest();
+        request.setLoginCode("wx-code");
+        request.setSourceType("WECHAT_SHARE_CARD");
+        request.setIdempotencyKey("open-owner-1");
+
+        VisitorPortfolioResponse response = service().openPortfolio("PF001", request);
+
+        assertThat(response.isUnderMaintenance()).isFalse();
+        assertThat(response.getVisitRecordId()).isNull();
+        assertThat(response.getVisitorKey()).isEqualTo("owner-visitor-key");
+        assertThat(response.getVisitorProfileToken()).isNull();
+        assertThat(JSON.toJSONString(response)).contains("\"needVisitorProfile\":false");
+        assertThat(response.getRenderData()).isSameAs(renderData);
+        verify(pointService).assertCanConsume(7L, "VISIT_PERSONAL_PORTFOLIO", 1);
+        verify(portfolioVisitService, never()).recordOpen(any(), any(Long.class), any(), any(), any(), any());
+        verify(visitorService, never()).createProfileToken(any(), any(), any());
+    }
+
+    @Test
+    void ownerSelfOpenShouldStillReturnMaintenanceWhenOwnerBalanceIsInsufficient() {
+        PortfolioEntity portfolio = publishedPortfolio();
+        VisitorEntity visitor = new VisitorEntity();
+        visitor.setId(1024L);
+        visitor.setOpenid("openid-owner");
+        visitor.setVisitorKey("owner-visitor-key");
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
+        when(visitorService.resolveByLoginCode("wx-code"))
+                .thenReturn(new VisitorService.VisitorSession(visitor, false, "WX_OPENID:owner-digest"));
+        when(ownerSelfVisitService.isOwnerSelfVisitor(
+                eq(7L),
+                eq("openid-owner"),
+                eq(88L),
+                eq(1024L),
+                eq(VisitEventTypeDict.PORTFOLIO_OPENED.getCode())
+        )).thenReturn(true);
+        org.mockito.Mockito.doThrow(new BusinessException("积分余额不足，请充值后再试"))
+                .when(pointService).assertCanConsume(any(), any(), any(Integer.class));
+        PortfolioRenderDto renderData = new PortfolioRenderDto();
+        renderData.setUnderMaintenance(true);
+        when(portfolioRenderService.render(eq(portfolio), any(), eq(false), eq(true), any(), eq(null)))
+                .thenReturn(renderData);
+        VisitorPortfolioOpenRequest request = new VisitorPortfolioOpenRequest();
+        request.setLoginCode("wx-code");
+
+        VisitorPortfolioResponse response = service().openPortfolio("PF001", request);
+
+        assertThat(response.isUnderMaintenance()).isTrue();
+        assertThat(response.getVisitRecordId()).isNull();
+        assertThat(response.getVisitorProfileToken()).isNull();
+        assertThat(JSON.toJSONString(response)).contains("\"needVisitorProfile\":false");
+        verify(portfolioVisitService, never()).recordOpen(any(), any(Long.class), any(), any(), any(), any());
         verify(visitorService, never()).createProfileToken(any(), any(), any());
     }
 
@@ -705,6 +784,33 @@ class VisitorPortfolioServiceTest {
         verify(portfolioVisitService).recordEvent(portfolio, request);
     }
 
+    @Test
+    void ownerSelfRecordEventShouldSkipVisitStatistics() {
+        VisitorContextHolder.set(new VisitorContext(2048L, "server-key", "Bearer wf-visitor-v1.server"));
+        PortfolioEntity portfolio = publishedPortfolio();
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
+        VisitorEntity visitor = new VisitorEntity();
+        visitor.setId(2048L);
+        visitor.setOpenid("openid-owner");
+        when(visitorService.findById(2048L)).thenReturn(visitor);
+        when(ownerSelfVisitService.isOwnerSelfVisitor(
+                eq(7L),
+                eq("openid-owner"),
+                eq(88L),
+                eq(2048L),
+                eq(VisitEventTypeDict.WORK_VIEWED.getCode())
+        )).thenReturn(true);
+        VisitorPortfolioEventRequest request = new VisitorPortfolioEventRequest();
+        request.setVisitorKey("attacker-key");
+        request.setEventType(VisitEventTypeDict.WORK_VIEWED.getCode());
+        request.setIdempotencyKey("event-owner-1");
+
+        service().recordEvent("PF001", request);
+
+        assertThat(request.getVisitorKey()).isEqualTo("server-key");
+        verify(portfolioVisitService, never()).recordEvent(any(), any());
+    }
+
     private VisitorPortfolioService service() {
         return new VisitorPortfolioService(
                 portfolioEntityMapper,
@@ -715,7 +821,8 @@ class VisitorPortfolioServiceTest {
                 portfolioRenderService,
                 visitorService,
                 visitorAuthTokenService,
-                scheduleQueryRecordEntityMapper
+                scheduleQueryRecordEntityMapper,
+                ownerSelfVisitService
         );
     }
 

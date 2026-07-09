@@ -18,6 +18,7 @@ import com.jxc.wefolio.config.RegistrationPointProperties;
 import com.jxc.wefolio.exception.BusinessException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DuplicateKeyException;
@@ -157,7 +158,9 @@ class MiniappAuthServiceTest {
                         && user.getPhoneBoundAt() != null
                         && "openpid-abc".equals(user.getWechatOpenpid())
         ));
-        verify(userAuthEntityMapper).insert(any(UserAuthEntity.class));
+        ArgumentCaptor<UserAuthEntity> authCaptor = ArgumentCaptor.forClass(UserAuthEntity.class);
+        verify(userAuthEntityMapper).insert(authCaptor.capture());
+        assertThat(authCaptor.getValue().getOpenId()).isEqualTo("openid-123");
     }
 
     @Test
@@ -197,7 +200,9 @@ class MiniappAuthServiceTest {
                         && "".equals(user.getAvatarUrl())
                         && user.getWechatOpenpid() == null
         ));
-        verify(userAuthEntityMapper).insert(any(UserAuthEntity.class));
+        ArgumentCaptor<UserAuthEntity> authCaptor = ArgumentCaptor.forClass(UserAuthEntity.class);
+        verify(userAuthEntityMapper).insert(authCaptor.capture());
+        assertThat(authCaptor.getValue().getOpenId()).isEqualTo("openid-123");
     }
 
     @Test
@@ -280,11 +285,13 @@ class MiniappAuthServiceTest {
                         && "林安".equals(user.getNickname())
                         && "+8613812348000".equals(user.getPhoneNumber())
         ));
-        verify(userAuthEntityMapper).insert(any(UserAuthEntity.class));
+        ArgumentCaptor<UserAuthEntity> authCaptor = ArgumentCaptor.forClass(UserAuthEntity.class);
+        verify(userAuthEntityMapper).insert(authCaptor.capture());
+        assertThat(authCaptor.getValue().getOpenId()).isEqualTo("openid-new");
     }
 
     @Test
-    void existingWechatUserLogsInWithoutRegistrationPhoneCode() {
+    void existingWechatUserLogsInWithoutRegistrationPhoneCodeAndBackfillsOpenIdWhenMissing() {
         WechatSessionResponse session = new WechatSessionResponse();
         session.setOpenid("openid-123");
         when(wechatMiniappClient.exchangeCode("wx-code")).thenReturn(session);
@@ -308,9 +315,38 @@ class MiniappAuthServiceTest {
 
         assertThat(response.getToken()).isNotEqualTo("wf-dev-user-7");
         assertThat(service.resolveUserId("Bearer " + response.getToken())).isEqualTo(7L);
+        assertThat(auth.getOpenId()).isEqualTo("openid-123");
         verify(wechatMiniappClient, never()).exchangePhoneCode(any());
         verify(wechatMiniappClient, never()).exchangePluginOpenpid(any());
         verify(userEntityMapper, never()).insert(any(UserEntity.class));
+    }
+
+    @Test
+    void existingWechatUserLoginShouldNotOverwriteStoredOpenId() {
+        WechatSessionResponse session = new WechatSessionResponse();
+        session.setOpenid("openid-fresh");
+        when(wechatMiniappClient.exchangeCode("wx-code")).thenReturn(session);
+
+        UserAuthEntity auth = new UserAuthEntity();
+        auth.setId(3L);
+        auth.setUserId(7L);
+        auth.setStatus("ACTIVE");
+        auth.setOpenId("openid-existing");
+        when(userAuthEntityMapper.selectOne(any())).thenReturn(auth);
+
+        UserEntity user = new UserEntity();
+        user.setId(7L);
+        user.setStatus("ACTIVE");
+        when(userEntityMapper.selectById(7L)).thenReturn(user);
+
+        MiniappAuthService service = buildService();
+        MaintainerWechatLoginRequest request = new MaintainerWechatLoginRequest();
+        request.setCode("wx-code");
+
+        service.loginMaintainerByWechat(request);
+
+        assertThat(auth.getOpenId()).isEqualTo("openid-existing");
+        verify(wechatMiniappClient, never()).exchangePhoneCode(any());
     }
 
     @Test

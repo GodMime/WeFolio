@@ -25,6 +25,9 @@ public class UserAuthEntity extends BaseEntity {
     /** openid 或手机号密文 */
     private String identifierCiphertext;
 
+    /** 微信 openid 明文，仅服务端用于维护者本人访问识别，不返回前端 */
+    private String openId;
+
     /** 微信 unionid 查询摘要 */
     private String unionIdentifierHash;
 

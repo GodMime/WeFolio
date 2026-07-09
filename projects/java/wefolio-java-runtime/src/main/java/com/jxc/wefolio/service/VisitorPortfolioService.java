@@ -9,6 +9,7 @@ import com.jxc.wefolio.dict.PortfolioTypeDict;
 import com.jxc.wefolio.dict.PointSceneCodeDict;
 import com.jxc.wefolio.dict.ScheduleStatusDict;
 import com.jxc.wefolio.dict.SlotDefinitionStatusDict;
+import com.jxc.wefolio.dict.VisitEventTypeDict;
 import com.jxc.wefolio.dict.VisitSourceTypeDict;
 import com.jxc.wefolio.dto.PortfolioConfigDto;
 import com.jxc.wefolio.dto.PortfolioScheduleOptionsResponse;
@@ -117,6 +118,9 @@ public class VisitorPortfolioService {
     /** 查询档期记录 Mapper */
     private final ScheduleQueryRecordEntityMapper scheduleQueryRecordEntityMapper;
 
+    /** 维护者本人访问识别服务 */
+    private final OwnerSelfVisitService ownerSelfVisitService;
+
     /**
      * 打开访客作品集，使用微信 openid 创建或复用全局访客。
      *
@@ -131,12 +135,33 @@ public class VisitorPortfolioService {
                 request == null ? null : request.getLoginCode()
         );
         VisitorEntity visitor = visitorSession.visitor();
+        boolean ownerSelfVisitor = ownerSelfVisitService.isOwnerSelfVisitor(
+                portfolio.getOwnerId(),
+                visitor == null ? null : visitor.getOpenid(),
+                portfolio.getId(),
+                visitor == null ? null : visitor.getId(),
+                VisitEventTypeDict.PORTFOLIO_OPENED.getCode()
+        );
         try {
             pointService.assertCanConsume(portfolio.getOwnerId(), PointSceneCodeDict.VISIT_PERSONAL_PORTFOLIO.getCode(), 1);
         } catch (BusinessException e) {
             VisitorPortfolioResponse maintenanceResponse = buildMaintenanceResponse(portfolio, config);
-            fillVisitorProfileOpenFields(maintenanceResponse, visitorSession, null, portfolio.getId());
+            fillVisitorProfileOpenFields(maintenanceResponse, visitorSession, null, portfolio.getId(), ownerSelfVisitor);
             return maintenanceResponse;
+        }
+        if (ownerSelfVisitor) {
+            VisitorPortfolioResponse response = buildNormalResponse(portfolio, config);
+            response.setVisitRecordId(null);
+            fillVisitorProfileOpenFields(response, visitorSession, null, portfolio.getId(), true);
+            response.setRenderData(portfolioRenderService.render(
+                    portfolio,
+                    config,
+                    false,
+                    false,
+                    null,
+                    null
+            ));
+            return response;
         }
         VisitRecordEntity record;
         try {
@@ -207,6 +232,25 @@ public class VisitorPortfolioService {
             Long visitRecordId,
             Long portfolioId
     ) {
+        fillVisitorProfileOpenFields(response, visitorSession, visitRecordId, portfolioId, false);
+    }
+
+    /**
+     * 填充访客打开相关字段。
+     *
+     * @param response 响应
+     * @param visitorSession 访客会话
+     * @param visitRecordId 访问汇总 ID
+     * @param portfolioId 作品集 ID
+     * @param suppressVisitorProfile 是否压制访客头像昵称授权
+     */
+    private void fillVisitorProfileOpenFields(
+            VisitorPortfolioResponse response,
+            VisitorService.VisitorSession visitorSession,
+            Long visitRecordId,
+            Long portfolioId,
+            boolean suppressVisitorProfile
+    ) {
         VisitorEntity visitor = visitorSession.visitor();
         response.setVisitorKey(visitor.getVisitorKey());
         VisitorAuthTokenService.VisitorLoginToken loginToken =
@@ -215,7 +259,7 @@ public class VisitorPortfolioService {
         response.setToken(loginToken.token());
         response.setExpiresInSeconds(loginToken.expiresInSeconds());
         response.setNewVisitor(visitorSession.newVisitor());
-        boolean needVisitorProfile = needVisitorProfile(visitor);
+        boolean needVisitorProfile = !suppressVisitorProfile && needVisitorProfile(visitor);
         response.setNeedVisitorProfile(needVisitorProfile);
         if (needVisitorProfile) {
             response.setVisitorProfileToken(visitorService.createProfileToken(visitor.getId(), portfolioId, visitRecordId));
@@ -322,7 +366,19 @@ public class VisitorPortfolioService {
      */
     public void recordEvent(String shareCode, VisitorPortfolioEventRequest request) {
         PortfolioEntity portfolio = requirePublishedPortfolio(shareCode);
-        request.setVisitorKey(VisitorContextHolder.requireVisitorKey());
+        Long visitorId = VisitorContextHolder.requireVisitorId();
+        String visitorKey = VisitorContextHolder.requireVisitorKey();
+        request.setVisitorKey(visitorKey);
+        VisitorEntity visitor = visitorService.findById(visitorId);
+        if (visitor != null && ownerSelfVisitService.isOwnerSelfVisitor(
+                portfolio.getOwnerId(),
+                visitor.getOpenid(),
+                portfolio.getId(),
+                visitorId,
+                request.getEventType()
+        )) {
+            return;
+        }
         portfolioVisitService.recordEvent(portfolio, request);
     }
 

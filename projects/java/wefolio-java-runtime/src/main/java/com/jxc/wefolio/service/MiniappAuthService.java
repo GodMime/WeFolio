@@ -220,7 +220,8 @@ public class MiniappAuthService {
         }
 
         WechatSessionResponse session = wechatMiniappClient.exchangeCode(request.getCode());
-        String openidHash = digestIdentifier(session.getOpenid());
+        String openId = normalizeRequiredOpenId(session.getOpenid());
+        String openidHash = digestIdentifier(openId);
         UserAuthEntity auth = findActiveAuth(WECHAT_AUTH_TYPE, openidHash);
 
         UserEntity user;
@@ -243,22 +244,31 @@ public class MiniappAuthService {
                             phoneInfo,
                             openpid,
                             openidHash,
+                            openId,
                             digestIdentifierIfPresent(session.getUnionid())
                     );
                 } catch (DuplicateKeyException e) {
                     request.setAvatarUrl(originalAvatarUrl);
-                    user = bindExistingPhoneUserAfterRegistrationConflict(request, session, phoneInfo, openpid, openidHash, e);
+                    user = bindExistingPhoneUserAfterRegistrationConflict(
+                            request,
+                            session,
+                            phoneInfo,
+                            openpid,
+                            openidHash,
+                            openId,
+                            e
+                    );
                 }
             } else {
                 updateWechatRegistrationProfile(user, request, phoneInfo, openpid);
-                createWechatAuth(user, session, openidHash);
+                createWechatAuth(user, session, openidHash, openId);
             }
         } else {
             user = userEntityMapper.selectById(auth.getUserId());
             if (user == null || !UserStatusDict.ACTIVE.getCode().equals(user.getStatus())) {
                 throw new BusinessException("微信账号状态异常");
             }
-            updateLoginTime(user, auth);
+            updateLoginTime(user, auth, openId);
 
             // 校验 COS 文件夹是否存在（处理老用户或意外删除场景），失败不影响登录
             ensureUserStorage(user);
@@ -276,6 +286,7 @@ public class MiniappAuthService {
      * @param phoneInfo 微信手机号信息
      * @param openpid 插件用户 openpid
      * @param openidHash openid 摘要
+     * @param openId 微信 openid 明文，仅服务端用于本人访问识别
      * @param cause 数据库唯一键异常
      * @return 已存在的用户实体
      */
@@ -285,6 +296,7 @@ public class MiniappAuthService {
             WechatPhoneNumberResponse.PhoneInfo phoneInfo,
             String openpid,
             String openidHash,
+            String openId,
             DuplicateKeyException cause
     ) {
         log.warn("手机号并发注册冲突，尝试复用已存在用户: phoneLast4={}", last4(phoneInfo.getPhoneNumber()));
@@ -293,7 +305,7 @@ public class MiniappAuthService {
             throw new BusinessException(MiniappAuthMessage.PHONE_REGISTRATION_CONFLICT_MESSAGE, cause);
         }
         updateWechatRegistrationProfile(existingUser, request, phoneInfo, openpid);
-        createWechatAuth(existingUser, session, openidHash);
+        createWechatAuth(existingUser, session, openidHash, openId);
         return existingUser;
     }
 
@@ -395,14 +407,16 @@ public class MiniappAuthService {
      * @param user 用户实体
      * @param session 微信会话
      * @param openidHash openid 摘要
+     * @param openId 微信 openid 明文，仅服务端用于本人访问识别
      */
-    private void createWechatAuth(UserEntity user, WechatSessionResponse session, String openidHash) {
+    private void createWechatAuth(UserEntity user, WechatSessionResponse session, String openidHash, String openId) {
         LocalDateTime now = LocalDateTime.now();
         UserAuthEntity auth = new UserAuthEntity();
         auth.setUserId(user.getId());
         auth.setAuthType(WECHAT_AUTH_TYPE);
         auth.setIdentifierHash(openidHash);
         auth.setIdentifierCiphertext("WECHAT_OPENID_BOUND");
+        auth.setOpenId(openId);
         String unionidHash = digestIdentifierIfPresent(session.getUnionid());
         if (unionidHash != null) {
             auth.setUnionIdentifierHash(unionidHash);
@@ -418,11 +432,17 @@ public class MiniappAuthService {
      *
      * @param user 用户实体
      * @param auth 登录身份实体
+     * @param openId 本次微信会话 openid
      */
-    private void updateLoginTime(UserEntity user, UserAuthEntity auth) {
+    private void updateLoginTime(UserEntity user, UserAuthEntity auth, String openId) {
         LocalDateTime now = LocalDateTime.now();
         user.setLastLoginAt(now);
         userEntityMapper.updateById(user);
+        if ((auth.getOpenId() == null || auth.getOpenId().isBlank()) && openId != null && !openId.isBlank()) {
+            auth.setOpenId(openId);
+            log.info("补写维护者微信 openId: userId={}, authId={}, openIdLast4={}",
+                    user.getId(), auth.getId(), last4(openId));
+        }
         auth.setLastAuthenticatedAt(now);
         userAuthEntityMapper.updateById(auth);
     }
@@ -546,6 +566,19 @@ public class MiniappAuthService {
     }
 
     /**
+     * 规范化微信 openid。
+     *
+     * @param openId 微信会话 openid
+     * @return 去除首尾空白后的 openid
+     */
+    private String normalizeRequiredOpenId(String openId) {
+        if (openId == null || openId.isBlank()) {
+            throw new BusinessException("微信身份标识不能为空");
+        }
+        return openId.strip();
+    }
+
+    /**
      * 尝试换取插件 openpid。普通小程序或低版本微信环境可能无法提供 wx.pluginLogin code，
      * 此时注册流程继续，只在拿到 code 时保存 openpid。
      *
@@ -573,7 +606,7 @@ public class MiniappAuthService {
     }
 
     /**
-     * 对微信身份标识做 HMAC 摘要，避免明文 openid 入库
+     * 对微信身份标识做 HMAC 摘要，用于微信身份查询匹配。
      *
      * @param identifier 微信 openid 或 unionid
      * @return 十六进制 HMAC 摘要

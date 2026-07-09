@@ -71,6 +71,7 @@ public class UserRegistrationService {
      * @param phoneInfo 微信手机号信息
      * @param openpid 插件用户 openpid
      * @param openidHash openid 摘要
+     * @param openId 微信 openid 明文，仅服务端用于本人访问识别
      * @param unionidHash unionid 摘要，可为空
      * @return 已创建的用户实体
      */
@@ -81,6 +82,7 @@ public class UserRegistrationService {
             WechatPhoneNumberResponse.PhoneInfo phoneInfo,
             String openpid,
             String openidHash,
+            String openId,
             String unionidHash
     ) {
         LocalDateTime now = LocalDateTime.now();
@@ -103,7 +105,7 @@ public class UserRegistrationService {
             throw new BusinessException("登录用户创建失败");
         }
 
-        createWechatAuth(user, openidHash, unionidHash, now);
+        createWechatAuth(user, openidHash, openId, unionidHash, now);
         pointService.ensureAccount(user.getId());
         grantNewUserRegistrationGift(user.getId());
         bindReferralAndGrantGift(user, request.getReferralCode(), now);
@@ -184,15 +186,17 @@ public class UserRegistrationService {
      *
      * @param user 用户实体
      * @param openidHash openid 摘要
+     * @param openId 微信 openid 明文，仅服务端用于本人访问识别
      * @param unionidHash unionid 摘要，可为空
      * @param now 绑定时间
      */
-    private void createWechatAuth(UserEntity user, String openidHash, String unionidHash, LocalDateTime now) {
+    private void createWechatAuth(UserEntity user, String openidHash, String openId, String unionidHash, LocalDateTime now) {
         UserAuthEntity auth = new UserAuthEntity();
         auth.setUserId(user.getId());
         auth.setAuthType(WECHAT_AUTH_TYPE);
         auth.setIdentifierHash(openidHash);
         auth.setIdentifierCiphertext("WECHAT_OPENID_BOUND");
+        auth.setOpenId(openId);
         if (unionidHash != null && !unionidHash.isBlank()) {
             auth.setUnionIdentifierHash(unionidHash);
             auth.setUnionIdentifierCiphertext("WECHAT_UNIONID_BOUND");
