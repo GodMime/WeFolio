@@ -2,6 +2,8 @@ package com.jxc.wefolio.dto;
 
 import lombok.Data;
 
+import java.util.List;
+
 /**
  * 我的作品编辑请求。
  */
@@ -22,6 +24,9 @@ public class MineWorkUpdateRequest {
 
     /** 小程序直传 COS 后得到的缩略图上传任务 ID，仅图片作品可提交 */
     private Long thumbnailTaskId;
+
+    /** 标签 ID 列表；为 null 时不修改标签绑定，空列表表示清空标签绑定 */
+    private List<Long> tagIds;
 
     /** 视频像素宽度，仅视频封面截帧时用于计算封面输出尺寸 */
     private Integer width;

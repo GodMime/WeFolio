@@ -402,6 +402,31 @@
             ></textarea>
           </view>
 
+          <view class="edit-tag-section">
+            <view class="edit-tag-header">
+              <view class="field-label">作品标签</view>
+              <view wx:if="{{imageEditForm.tagEditNotice}}" class="edit-tag-note">{{imageEditForm.tagEditNotice}}</view>
+            </view>
+            <view wx:if="{{imageEditForm.tagOptions.length}}" class="edit-tag-list">
+              <view
+                wx:for="{{imageEditForm.tagOptions}}"
+                wx:key="id"
+                class="edit-tag-option {{item.selected ? 'is-selected' : ''}} {{item.locked ? 'is-locked' : ''}}"
+                style="{{item.selected ? item.activeStyle : item.style}}"
+                data-id="{{item.id}}"
+                bindtap="handleImageEditTagToggle"
+                aria-role="checkbox"
+                aria-checked="{{item.selected}}"
+              >
+                <view class="edit-tag-checkbox {{item.selected ? 'is-checked' : ''}}">
+                  <text wx:if="{{item.selected}}" class="edit-tag-checkmark">✓</text>
+                </view>
+                <text class="edit-tag-name">{{item.name}}</text>
+              </view>
+            </view>
+            <view wx:else class="edit-tag-empty">暂无作品标签</view>
+          </view>
+
           <view wx:if="{{imageEditErrorText}}" class="edit-error">{{imageEditErrorText}}</view>
         </view>
       </scroll-view>
@@ -496,6 +521,31 @@
               bindinput="handleVideoEditInput"
               auto-height="{{false}}"
             ></textarea>
+          </view>
+
+          <view class="edit-tag-section">
+            <view class="edit-tag-header">
+              <view class="field-label">作品标签</view>
+              <view wx:if="{{videoEditForm.tagEditNotice}}" class="edit-tag-note">{{videoEditForm.tagEditNotice}}</view>
+            </view>
+            <view wx:if="{{videoEditForm.tagOptions.length}}" class="edit-tag-list">
+              <view
+                wx:for="{{videoEditForm.tagOptions}}"
+                wx:key="id"
+                class="edit-tag-option {{item.selected ? 'is-selected' : ''}} {{item.locked ? 'is-locked' : ''}}"
+                style="{{item.selected ? item.activeStyle : item.style}}"
+                data-id="{{item.id}}"
+                bindtap="handleVideoEditTagToggle"
+                aria-role="checkbox"
+                aria-checked="{{item.selected}}"
+              >
+                <view class="edit-tag-checkbox {{item.selected ? 'is-checked' : ''}}">
+                  <text wx:if="{{item.selected}}" class="edit-tag-checkmark">✓</text>
+                </view>
+                <text class="edit-tag-name">{{item.name}}</text>
+              </view>
+            </view>
+            <view wx:else class="edit-tag-empty">暂无作品标签</view>
           </view>
 
           <view class="cover-section">

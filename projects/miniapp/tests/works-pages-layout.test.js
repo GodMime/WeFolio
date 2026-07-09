@@ -15,6 +15,15 @@ function readRule(content, selector) {
   return match ? match[1] : ''
 }
 
+function readBetween(content, startPattern, endPattern) {
+  const start = content.search(startPattern)
+  assert.notEqual(start, -1)
+  const rest = content.slice(start)
+  const end = rest.search(endPattern)
+  assert.notEqual(end, -1)
+  return rest.slice(0, end)
+}
+
 function assertSoftLayerAnimation(wxss, overlaySelector, panelSelector) {
   const overlayRule = readRule(wxss, overlaySelector)
   const visibleOverlayRule = readRule(wxss, `${overlaySelector}.visible`)
@@ -343,4 +352,41 @@ test('works pages expose expected upload and edit structure', () => {
   assert.doesNotMatch(addWxss, /\.frame-export-canvas\s*\{/)
   assert.match(editWxml, /引用/)
   assert.match(editWxml, /保存/)
+})
+
+test('works edit sheets contain tag selectors and referenced-work notice', () => {
+  const worksWxml = read('pages/works/works.wxml')
+  const worksJs = read('pages/works/works.js')
+
+  assert.match(worksWxml, /handleImageEditTagToggle/)
+  assert.match(worksWxml, /handleVideoEditTagToggle/)
+  assert.match(worksWxml, /imageEditForm\.tagOptions/)
+  assert.match(worksWxml, /videoEditForm\.tagOptions/)
+  assert.match(worksWxml, /imageEditForm\.tagEditNotice/)
+  assert.match(worksWxml, /videoEditForm\.tagEditNotice/)
+  assert.match(worksJs, /已引用作品只能新增标签/)
+})
+
+test('works edit sheets refresh list after successful save', () => {
+  const worksJs = read('pages/works/works.js')
+  const imageConfirmBody = readBetween(
+    worksJs,
+    /async handleConfirmImageEdit\(\)/,
+    /handleVideoEditMetadata\(event\)/
+  )
+  const videoConfirmBody = readBetween(
+    worksJs,
+    /async handleConfirmVideoEdit\(\)/,
+    /patchWorkInList\(sourceForm/
+  )
+
+  assert.match(imageConfirmBody, /await this\.loadWorks\(true\)/)
+  assert.match(videoConfirmBody, /await this\.loadWorks\(true\)/)
+})
+
+test('works edit sheet tag options use defined tag color styles', () => {
+  const worksWxml = read('pages/works/works.wxml')
+  const coloredTagOptions = worksWxml.match(/class="edit-tag-option[\s\S]*?style="\{\{item\.selected \? item\.activeStyle : item\.style\}\}"/g) || []
+
+  assert.equal(coloredTagOptions.length, 2)
 })

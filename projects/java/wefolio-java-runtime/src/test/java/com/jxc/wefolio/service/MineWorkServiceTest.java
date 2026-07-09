@@ -17,6 +17,7 @@ import com.jxc.wefolio.dto.MineWorkBatchDeleteResponse;
 import com.jxc.wefolio.dto.MineWorkCoverUploadTicketRequest;
 import com.jxc.wefolio.dto.MineWorkCoverUploadTicketResponse;
 import com.jxc.wefolio.dto.MineWorkDeleteCheckResponse;
+import com.jxc.wefolio.dto.MineWorkDetailResponse;
 import com.jxc.wefolio.dto.MineWorkListResponse;
 import com.jxc.wefolio.dto.MineWorkSortRequest;
 import com.jxc.wefolio.dto.MineWorkSortItemsResponse;
@@ -1310,6 +1311,154 @@ class MineWorkServiceTest {
         verify(workTagEntityMapper, never()).delete(any());
         verify(workTagEntityMapper, never()).insert(any(WorkTagEntity.class));
         verify(wfTagEntityMapper, never()).insert(any(WfTagEntity.class));
+    }
+
+    @Test
+    void updateWorkShouldKeepTagsWhenTagIdsAreOmitted() {
+        WorkEntity work = new WorkEntity();
+        work.setId(18L);
+        work.setUserId(7L);
+        work.setTitle("旧标题");
+        work.setDescription("旧说明");
+        work.setMediaType(MediaTypeDict.IMAGE.getCode());
+        work.setMediaObjectKey("WFA3B1E7A2/work/image/photo.jpg");
+        work.setCoverObjectKey("WFA3B1E7A2/work/image/photo-thumb.jpg");
+        work.setOriginalFileName("photo.jpg");
+        WorkTagEntity firstRelation = workTagRelation(18L, 1L);
+        WorkTagEntity secondRelation = workTagRelation(18L, 2L);
+        when(workEntityMapper.selectById(18L)).thenReturn(work, work);
+        when(workEntityMapper.updateById(any(WorkEntity.class))).thenReturn(1);
+        when(portfolioReferenceEntityMapper.selectList(any())).thenReturn(List.of(), List.of());
+        when(workTagEntityMapper.selectList(any())).thenReturn(List.of(firstRelation, secondRelation));
+        when(wfTagEntityMapper.selectBatchIds(any())).thenReturn(List.of(
+                ownedTag(1L, "婚礼", "#0f766e"),
+                ownedTag(2L, "晚宴", "#2d5f9a")));
+        when(cosService.publicUrl(any())).thenAnswer(invocation -> "https://cos.example/" + invocation.getArgument(0));
+        MineWorkUpdateRequest request = new MineWorkUpdateRequest();
+        request.setTitle(" 新标题 ");
+        request.setDescription(" 新说明 ");
+
+        MineWorkDetailResponse response = service().updateWork(18L, request);
+
+        assertThat(response.getWork().getTags()).extracting(MineWorkListResponse.TagItem::getId)
+                .containsExactly(1L, 2L);
+        verify(wfTagEntityMapper, never()).selectById(anyLong());
+        verify(workTagEntityMapper, never()).delete(any());
+        verify(workTagEntityMapper, never()).insert(any(WorkTagEntity.class));
+    }
+
+    /**
+     * 更新作品标签 — 未被引用的作品允许新增和删除标签绑定。
+     */
+    @Test
+    void updateWorkShouldReplaceTagsWhenWorkIsNotReferenced() {
+        WorkEntity work = new WorkEntity();
+        work.setId(18L);
+        work.setUserId(7L);
+        work.setTitle("旧标题");
+        work.setDescription("旧说明");
+        work.setMediaType(MediaTypeDict.IMAGE.getCode());
+        work.setMediaObjectKey("WFA3B1E7A2/work/image/photo.jpg");
+        work.setCoverObjectKey("WFA3B1E7A2/work/image/photo-thumb.jpg");
+        work.setOriginalFileName("photo.jpg");
+        WorkTagEntity oldRelation = workTagRelation(18L, 1L);
+        WorkTagEntity keptRelation = workTagRelation(18L, 2L);
+        WorkTagEntity addedRelation = workTagRelation(18L, 3L);
+        when(workEntityMapper.selectById(18L)).thenReturn(work, work);
+        when(wfTagEntityMapper.selectById(2L)).thenReturn(ownedTag(2L, "婚礼", "#0f766e"));
+        when(wfTagEntityMapper.selectById(3L)).thenReturn(ownedTag(3L, "晚宴", "#2d5f9a"));
+        when(workTagEntityMapper.selectList(any())).thenReturn(
+                List.of(oldRelation, keptRelation),
+                List.of(),
+                List.of(keptRelation, addedRelation));
+        when(portfolioReferenceEntityMapper.selectList(any())).thenReturn(List.of(), List.of());
+        when(workEntityMapper.updateById(any(WorkEntity.class))).thenReturn(1);
+        when(wfTagEntityMapper.selectBatchIds(any())).thenReturn(List.of(
+                ownedTag(2L, "婚礼", "#0f766e"),
+                ownedTag(3L, "晚宴", "#2d5f9a")));
+        when(cosService.publicUrl(any())).thenAnswer(invocation -> "https://cos.example/" + invocation.getArgument(0));
+        MineWorkUpdateRequest request = new MineWorkUpdateRequest();
+        request.setTitle(" 新标题 ");
+        request.setDescription(" 新说明 ");
+        request.setTagIds(List.of(2L, 3L));
+
+        service().updateWork(18L, request);
+
+        verify(workTagEntityMapper).delete(any());
+        verify(workTagEntityMapper).insert(any(WorkTagEntity.class));
+    }
+
+    /**
+     * 更新作品标签 — 已被引用的作品允许保留旧标签并新增标签。
+     */
+    @Test
+    void updateWorkShouldAllowAddingTagsWhenWorkIsReferenced() {
+        WorkEntity work = new WorkEntity();
+        work.setId(18L);
+        work.setUserId(7L);
+        work.setTitle("旧标题");
+        work.setDescription("旧说明");
+        work.setMediaType(MediaTypeDict.IMAGE.getCode());
+        work.setMediaObjectKey("WFA3B1E7A2/work/image/photo.jpg");
+        work.setCoverObjectKey("WFA3B1E7A2/work/image/photo-thumb.jpg");
+        work.setOriginalFileName("photo.jpg");
+        WorkTagEntity keptRelation = workTagRelation(18L, 1L);
+        WorkTagEntity addedRelation = workTagRelation(18L, 2L);
+        when(workEntityMapper.selectById(18L)).thenReturn(work, work);
+        when(wfTagEntityMapper.selectById(1L)).thenReturn(ownedTag(1L, "婚礼", "#0f766e"));
+        when(wfTagEntityMapper.selectById(2L)).thenReturn(ownedTag(2L, "晚宴", "#2d5f9a"));
+        when(workTagEntityMapper.selectList(any())).thenReturn(
+                List.of(keptRelation),
+                List.of(),
+                List.of(keptRelation, addedRelation));
+        when(portfolioReferenceEntityMapper.selectList(any())).thenReturn(
+                List.of(portfolioReference(18L, 201L, PortfolioConfigScopeDict.PUBLISHED.getCode())));
+        when(workEntityMapper.updateById(any(WorkEntity.class))).thenReturn(1);
+        when(wfTagEntityMapper.selectBatchIds(any())).thenReturn(List.of(
+                ownedTag(1L, "婚礼", "#0f766e"),
+                ownedTag(2L, "晚宴", "#2d5f9a")));
+        when(cosService.publicUrl(any())).thenAnswer(invocation -> "https://cos.example/" + invocation.getArgument(0));
+        MineWorkUpdateRequest request = new MineWorkUpdateRequest();
+        request.setTitle(" 新标题 ");
+        request.setDescription(" 新说明 ");
+        request.setTagIds(List.of(1L, 2L));
+
+        service().updateWork(18L, request);
+
+        verify(workTagEntityMapper, never()).delete(any());
+        verify(workTagEntityMapper).insert(any(WorkTagEntity.class));
+    }
+
+    /**
+     * 更新作品标签 — 已被引用的作品不能删除任何已有标签绑定。
+     */
+    @Test
+    void updateWorkShouldRejectRemovingTagsWhenWorkIsReferenced() {
+        WorkEntity work = new WorkEntity();
+        work.setId(18L);
+        work.setUserId(7L);
+        work.setTitle("旧标题");
+        work.setDescription("旧说明");
+        work.setMediaType(MediaTypeDict.IMAGE.getCode());
+        WorkTagEntity firstRelation = workTagRelation(18L, 1L);
+        WorkTagEntity secondRelation = workTagRelation(18L, 2L);
+        when(workEntityMapper.selectById(18L)).thenReturn(work);
+        when(wfTagEntityMapper.selectById(2L)).thenReturn(ownedTag(2L, "晚宴", "#2d5f9a"));
+        when(workTagEntityMapper.selectList(any())).thenReturn(List.of(firstRelation, secondRelation));
+        when(portfolioReferenceEntityMapper.selectList(any())).thenReturn(
+                List.of(portfolioReference(18L, 201L, PortfolioConfigScopeDict.PUBLISHED.getCode())));
+        MineWorkUpdateRequest request = new MineWorkUpdateRequest();
+        request.setTitle(" 新标题 ");
+        request.setDescription(" 新说明 ");
+        request.setTagIds(List.of(2L));
+
+        assertThatThrownBy(() -> service().updateWork(18L, request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage(MineWorkMessage.WORK_TAG_REMOVE_REFERENCED_MESSAGE);
+
+        verify(workTagEntityMapper, never()).delete(any());
+        verify(workTagEntityMapper, never()).insert(any(WorkTagEntity.class));
+        verify(workEntityMapper, never()).updateById(any(WorkEntity.class));
     }
 
     @Test

@@ -27,11 +27,14 @@ const {
   DEFAULT_WORK_TAG_COLOR,
   WORK_TAG_COLOR_OPTIONS,
   WORK_TAG_MAX_COUNT,
+  buildWorkEditSelectedTagIds,
+  buildWorkEditTagOptions,
   buildWorkFieldCounters,
   buildWorkUpdatePayload,
   buildWorkTagDeleteBlockedMessage,
   buildWorkTagPayload,
   createWorkTagForm,
+  normalizeWork,
   normalizeWorkList,
   validateWorkForm,
   validateWorkTagForm
@@ -69,6 +72,8 @@ const WORK_THUMBNAIL_CROP_CANVAS_ID = 'workThumbnailCropCanvas'
 const WORK_THUMBNAIL_CROP_MAX_WIDTH_RPX = 640
 const WORK_THUMBNAIL_CROP_HORIZONTAL_GUTTER_RPX = 112
 const WORK_THUMBNAIL_PREVIEW_FILE_PREFIX = 'work-thumbnail-preview'
+const WORK_TAG_REFERENCED_NOTICE = '已引用作品只能新增标签，不能删除已有标签'
+const WORK_TAG_REFERENCED_TOAST = '已引用作品不能删除已有标签'
 
 function clampNumber(value, min, max) {
   const numberValue = Number(value)
@@ -187,6 +192,12 @@ function buildVideoEditForm(work = {}) {
     localCoverSha256: '',
     localCoverIdempotencyKey: ''
   })
+}
+
+function buildEditTagPayloadFields(form = {}) {
+  return Array.isArray(form.tagOptions) && form.tagOptions.length
+    ? { tagIds: buildWorkEditSelectedTagIds(form.tagOptions) }
+    : {}
 }
 
 function hasOwnField(object, field) {
@@ -913,7 +924,10 @@ Page({
   },
 
   openImageEditSheet(work) {
-    const imageEditForm = buildImageEditForm(work)
+    const imageEditForm = Object.assign(buildImageEditForm(work), {
+      tagOptions: buildWorkEditTagOptions(this.data.list.tags, work.tags, work.referenceCount),
+      tagEditNotice: work.referenceCount > 0 ? WORK_TAG_REFERENCED_NOTICE : ''
+    })
     this.setData({
       imageEditSheetVisible: true,
       imageEditForm,
@@ -942,7 +956,10 @@ Page({
   },
 
   openVideoEditSheet(work) {
-    const videoEditForm = buildVideoEditForm(work)
+    const videoEditForm = Object.assign(buildVideoEditForm(work), {
+      tagOptions: buildWorkEditTagOptions(this.data.list.tags, work.tags, work.referenceCount),
+      tagEditNotice: work.referenceCount > 0 ? WORK_TAG_REFERENCED_NOTICE : ''
+    })
     this.setData({
       imageEditSheetVisible: false,
       imageEditForm: null,
@@ -1106,6 +1123,37 @@ Page({
       [`imageEditForm.${field}`]: value,
       imageEditFieldCounters: buildWorkFieldCounters(imageEditForm),
       imageEditErrorText: ''
+    })
+  },
+
+  handleImageEditTagToggle(event) {
+    this.toggleEditTagOption('imageEditForm', event)
+  },
+
+  handleVideoEditTagToggle(event) {
+    this.toggleEditTagOption('videoEditForm', event)
+  },
+
+  toggleEditTagOption(formKey, event) {
+    const tagId = normalizeId(event.currentTarget.dataset.id)
+    const form = this.data[formKey] || {}
+    const tagOptions = (form.tagOptions || []).map((item) => {
+      if (item.id !== tagId) {
+        return item
+      }
+      if (item.locked && item.selected) {
+        wx.showToast({
+          title: WORK_TAG_REFERENCED_TOAST,
+          icon: 'none'
+        })
+        return item
+      }
+      return Object.assign({}, item, {
+        selected: !item.selected
+      })
+    })
+    this.setData({
+      [`${formKey}.tagOptions`]: tagOptions
     })
   },
 
@@ -1409,6 +1457,7 @@ Page({
       const payload = buildWorkUpdatePayload({
         title: imageEditForm.title,
         description: imageEditForm.description,
+        ...buildEditTagPayloadFields(imageEditForm),
         ...(thumbnailTicket && thumbnailTicket.taskId ? {
           thumbnailTaskId: thumbnailTicket.taskId
         } : {})
@@ -1431,6 +1480,8 @@ Page({
         imageEditErrorText: '',
         imageThumbnailUploadProgress: 0
       })
+      await this.loadWorks(true)
+      this.patchWorkInList(imageEditForm, response && response.work ? response.work : payload)
     } catch (error) {
       if (error && error.authRequired) {
         this.setData({ imageEditSaving: false })
@@ -1665,6 +1716,7 @@ Page({
       const payload = buildWorkUpdatePayload({
         title: videoEditForm.title,
         description: videoEditForm.description,
+        ...buildEditTagPayloadFields(videoEditForm),
         ...(shouldUpdateCoverFrame ? {
           coverFrameTimeMs: videoEditForm.coverFrameTimeMs,
           width: videoEditForm.width,
@@ -1692,6 +1744,8 @@ Page({
         videoCoverUploadProgress: 0,
         videoEditErrorText: ''
       })
+      await this.loadWorks(true)
+      this.patchWorkInList(videoEditForm, response && response.work ? response.work : payload)
     } catch (error) {
       if (error && error.authRequired) {
         this.setData({ videoEditSaving: false })
@@ -1719,11 +1773,14 @@ Page({
       const coverUrl = shouldRefreshPublishedCover(sourceForm, patch, work) && rawCoverUrl
         ? appendCacheBustingParam(rawCoverUrl, patch.updatedAt)
         : rawCoverUrl
+      const normalizedPatch = hasOwnField(patch, 'tags') ? normalizeWork(patch) : null
       return Object.assign({}, work, {
         title: hasOwnField(patch, 'title') ? patch.title : sourceForm.title,
         description: hasOwnField(patch, 'description') ? patch.description : sourceForm.description,
         coverUrl,
         hasCover: Boolean(coverUrl),
+        tags: normalizedPatch ? normalizedPatch.tags : work.tags,
+        tagText: normalizedPatch ? normalizedPatch.tagText : work.tagText,
         updatedAt: patch.updatedAt || work.updatedAt
       })
     })

@@ -627,7 +627,13 @@ public class MineWorkService {
         MediaDimensions requestDimensions = request == null
                 ? null
                 : normalizeMediaDimensions(request.getWidth(), request.getHeight());
+        WorkTagChange tagChange = request != null && request.getTagIds() != null
+                ? prepareWorkTagChange(work.getUserId(), work.getId(), request.getTagIds())
+                : null;
         String oldCoverObjectKey = work.getCoverObjectKey();
+        if (tagChange != null) {
+            syncWorkTags(work.getUserId(), work.getId(), tagChange);
+        }
         CosService.SnapshotObject generatedCover = coverFrameTimeMs == null
                 ? null
                 : generateReplacementVideoCover(work, coverFrameTimeMs, requestDimensions);
@@ -960,6 +966,15 @@ public class MineWorkService {
             String idempotencyKey,
             String fileSha256
     ) {
+    }
+
+    /**
+     * 作品标签变更计划。
+     *
+     * @param addTagIds 需要新增绑定的标签 ID
+     * @param removeTagIds 需要移除绑定的标签 ID
+     */
+    private record WorkTagChange(Set<Long> addTagIds, Set<Long> removeTagIds) {
     }
 
     /**
@@ -2158,6 +2173,102 @@ public class MineWorkService {
                 .filter(tag -> tag != null && WfTagStatusDict.ACTIVE.getCode().equals(tag.getStatus()))
                 .map(this::buildTagItem)
                 .toList();
+    }
+
+    /**
+     * 准备作品标签变更，校验标签归属和引用删除限制。
+     *
+     * @param userId 当前用户 ID
+     * @param workId 作品 ID
+     * @param tagIds 请求提交的标签 ID
+     * @return 标签变更计划
+     */
+    private WorkTagChange prepareWorkTagChange(Long userId, Long workId, List<Long> tagIds) {
+        List<Long> requestedTagIds = normalizeRequestedWorkTagIds(tagIds);
+        if (requestedTagIds.size() > TAG_MAX_COUNT) {
+            throw new BusinessException(MineWorkMessage.WORK_TAG_COUNT_LIMIT_MESSAGE);
+        }
+        requestedTagIds.forEach(tagId -> requireOwnedActiveTag(userId, tagId));
+        Set<Long> requestedTagIdSet = new LinkedHashSet<>(requestedTagIds);
+        Set<Long> existingTagIds = workTagEntityMapper.selectList(
+                        Wrappers.lambdaQuery(WorkTagEntity.class)
+                                .eq(WorkTagEntity::getUserId, userId)
+                                .eq(WorkTagEntity::getWorkId, workId))
+                .stream()
+                .map(WorkTagEntity::getTagId)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        Set<Long> addTagIds = new LinkedHashSet<>(requestedTagIdSet);
+        addTagIds.removeAll(existingTagIds);
+        Set<Long> removeTagIds = new LinkedHashSet<>(existingTagIds);
+        removeTagIds.removeAll(requestedTagIdSet);
+        if (!removeTagIds.isEmpty() && !findWorkReferences(workId).isEmpty()) {
+            throw new BusinessException(MineWorkMessage.WORK_TAG_REMOVE_REFERENCED_MESSAGE);
+        }
+        return new WorkTagChange(addTagIds, removeTagIds);
+    }
+
+    /**
+     * 归一化作品标签 ID，过滤空值和非法 ID 并保持提交顺序。
+     *
+     * @param tagIds 请求提交的标签 ID
+     * @return 去重后的有效标签 ID
+     */
+    private List<Long> normalizeRequestedWorkTagIds(List<Long> tagIds) {
+        if (tagIds == null || tagIds.isEmpty()) {
+            return List.of();
+        }
+        LinkedHashSet<Long> normalized = new LinkedHashSet<>();
+        for (Long tagId : tagIds) {
+            if (tagId != null && tagId > 0) {
+                normalized.add(tagId);
+            }
+        }
+        return new ArrayList<>(normalized);
+    }
+
+    /**
+     * 在当前事务内同步作品标签绑定。
+     *
+     * @param userId 当前用户 ID
+     * @param workId 作品 ID
+     * @param tagChange 标签变更计划
+     */
+    private void syncWorkTags(Long userId, Long workId, WorkTagChange tagChange) {
+        if (!tagChange.removeTagIds().isEmpty()) {
+            workTagEntityMapper.delete(
+                    Wrappers.lambdaQuery(WorkTagEntity.class)
+                            .eq(WorkTagEntity::getUserId, userId)
+                            .eq(WorkTagEntity::getWorkId, workId)
+                            .in(WorkTagEntity::getTagId, tagChange.removeTagIds()));
+        }
+        for (Long tagId : tagChange.addTagIds()) {
+            WorkTagEntity relation = new WorkTagEntity();
+            relation.setUserId(userId);
+            relation.setWorkId(workId);
+            relation.setTagId(tagId);
+            relation.setSortOrder(nextWorkTagSortOrder(userId, tagId));
+            workTagEntityMapper.insert(relation);
+        }
+    }
+
+    /**
+     * 计算标签下一个作品排序值。
+     *
+     * @param userId 当前用户 ID
+     * @param tagId 标签 ID
+     * @return 下一个排序值，使用 int 与 WorkTagEntity.sortOrder 的 Integer 字段保持一致
+     */
+    private int nextWorkTagSortOrder(Long userId, Long tagId) {
+        List<WorkTagEntity> relations = workTagEntityMapper.selectList(
+                Wrappers.lambdaQuery(WorkTagEntity.class)
+                        .eq(WorkTagEntity::getUserId, userId)
+                        .eq(WorkTagEntity::getTagId, tagId)
+                        .orderByDesc(WorkTagEntity::getSortOrder)
+                        .last("LIMIT 1"));
+        if (relations.isEmpty() || relations.get(0).getSortOrder() == null) {
+            return SORT_ORDER_STEP;
+        }
+        return relations.get(0).getSortOrder() + SORT_ORDER_STEP;
     }
 
     /**

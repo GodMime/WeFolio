@@ -4,6 +4,8 @@ const test = require('node:test')
 const {
   buildWorkTagPayload,
   buildWorkFieldCounters,
+  buildWorkEditSelectedTagIds,
+  buildWorkEditTagOptions,
   applyUnifiedWorkTags,
   buildUnifiedWorkTagItems,
   buildUnifiedWorkTagNames,
@@ -225,6 +227,45 @@ test('builds adaptive work tag picker list height from tag count', () => {
   }))), 520)
 })
 
+test('builds editable work tag options from all tags and current bindings', () => {
+  const options = buildWorkEditTagOptions(
+    [
+      { id: 1, name: '婚礼', color: '#ff6b81' },
+      { id: 2, name: '晚宴', color: '#4dabf7' },
+      { id: null, name: '全部', color: '#999999' }
+    ],
+    [{ id: 2, name: '晚宴', color: '#4dabf7' }],
+    0
+  )
+
+  assert.deepEqual(options.map((item) => ({
+    id: item.id,
+    selected: item.selected,
+    initiallySelected: item.initiallySelected,
+    locked: item.locked
+  })), [
+    { id: 1, selected: false, initiallySelected: false, locked: false },
+    { id: 2, selected: true, initiallySelected: true, locked: false }
+  ])
+  assert.deepEqual(buildWorkEditSelectedTagIds(options), [2])
+})
+
+test('locks existing tag bindings when work is referenced', () => {
+  const options = buildWorkEditTagOptions(
+    [
+      { id: 1, name: '婚礼', color: '#ff6b81' },
+      { id: 2, name: '晚宴', color: '#4dabf7' }
+    ],
+    [{ id: 1, name: '婚礼', color: '#ff6b81' }],
+    3
+  )
+
+  assert.equal(options[0].selected, true)
+  assert.equal(options[0].locked, true)
+  assert.equal(options[1].selected, false)
+  assert.equal(options[1].locked, false)
+})
+
 test('normalizes empty work list with safe defaults', () => {
   const result = normalizeWorkList({})
 
@@ -301,6 +342,34 @@ test('builds and validates work update payload', () => {
   })
   assert.equal(validateWorkForm(payload).valid, true)
   assert.equal(buildWorkFieldCounters(payload).title, '4/30')
+})
+
+test('builds work update payload with explicit tag ids', () => {
+  const payload = buildWorkUpdatePayload({
+    title: ' 主舞台 ',
+    description: ' 现场图 ',
+    tagIds: [2, 1, 2, null, 0]
+  })
+
+  assert.deepEqual(payload, {
+    title: '主舞台',
+    description: '现场图',
+    tagIds: [2, 1]
+  })
+})
+
+test('builds work update payload with empty tag ids to clear unreferenced bindings', () => {
+  const payload = buildWorkUpdatePayload({
+    title: ' 主舞台 ',
+    description: '',
+    tagIds: []
+  })
+
+  assert.deepEqual(payload, {
+    title: '主舞台',
+    description: '',
+    tagIds: []
+  })
 })
 
 test('builds work update payload with selected cover frame time', () => {

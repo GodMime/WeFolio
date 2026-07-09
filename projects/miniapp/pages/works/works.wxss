@@ -1590,6 +1590,103 @@
   padding: 18rpx 20rpx;
 }
 
+.edit-tag-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14rpx;
+}
+
+.edit-tag-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.edit-tag-note {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: #8a4b09;
+  font-size: 22rpx;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: right;
+}
+
+.edit-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14rpx;
+}
+
+.edit-tag-option {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 58rpx;
+  display: inline-flex;
+  align-items: center;
+  flex: 0 1 auto;
+  padding: 0 18rpx;
+  color: #40546a;
+  font-size: 24rpx;
+  font-weight: 800;
+  line-height: 1.2;
+  border: 1rpx solid #cbd8e5;
+  border-radius: 8rpx;
+  background: #ffffff;
+  box-sizing: border-box;
+}
+
+.edit-tag-option.is-selected {
+  color: #2d5f9a;
+  border-color: #2d5f9a;
+  background: #e5effb;
+}
+
+.edit-tag-option.is-locked {
+  opacity: 0.78;
+}
+
+.edit-tag-checkbox {
+  width: 28rpx;
+  height: 28rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  margin-right: 10rpx;
+  border: 2rpx solid rgba(64, 84, 106, 0.42);
+  border-radius: 6rpx;
+  box-sizing: border-box;
+}
+
+.edit-tag-checkbox.is-checked {
+  border-color: #2d5f9a;
+  background: #2d5f9a;
+}
+
+.edit-tag-checkmark {
+  color: #ffffff;
+  font-size: 20rpx;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.edit-tag-name {
+  max-width: 360rpx;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.edit-tag-empty {
+  color: #8b96a3;
+  font-size: 24rpx;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
 .cover-video {
   width: 100%;
   height: 300rpx;

@@ -86,6 +86,9 @@ public interface MineWorkMessage {
     /** 单个作品标签数量超限提示 */
     String WORK_TAG_COUNT_LIMIT_MESSAGE = "作品标签最多 10 个";
 
+    /** 已引用作品移除标签提示 */
+    String WORK_TAG_REMOVE_REFERENCED_MESSAGE = "作品已被作品集引用，只能新增标签，不能移除已有标签";
+
     /** 标签颜色非法提示 */
     String TAG_COLOR_INVALID_MESSAGE = "请选择有效的标签颜色";
 

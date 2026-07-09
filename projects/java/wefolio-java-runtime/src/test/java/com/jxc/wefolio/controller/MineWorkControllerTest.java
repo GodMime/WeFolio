@@ -1,5 +1,6 @@
 package com.jxc.wefolio.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jxc.wefolio.annotation.MaintainerAccess;
 import com.jxc.wefolio.common.Response;
 import com.jxc.wefolio.dto.MineWorkBatchDeleteCheckResponse;
@@ -185,6 +186,22 @@ class MineWorkControllerTest {
                 .anyMatch(method -> method.isAnnotationPresent(DeleteMapping.class));
 
         assertThat(hasDeleteMapping).isFalse();
+    }
+
+    /**
+     * 作品编辑请求 JSON 绑定 — 支持同一个编辑接口接收标签 ID 列表。
+     */
+    @Test
+    void updateRequestShouldBindTagIdsFromJson() throws Exception {
+        MineWorkUpdateRequest request = new ObjectMapper().readValue("""
+                {
+                  "title": "主舞台",
+                  "description": "现场图",
+                  "tagIds": [2, 3]
+                }
+                """, MineWorkUpdateRequest.class);
+
+        assertThat(request.getTagIds()).containsExactly(2L, 3L);
     }
 
     private void assertGetMapping(String methodName, Class<?>[] parameterTypes, String path)

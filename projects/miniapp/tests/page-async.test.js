@@ -666,7 +666,19 @@ test('works page uploads edited image thumbnail before saving image work', async
         references: []
       })
     }
-    return Promise.resolve({ works: [], tags: [], summary: {} })
+    return Promise.resolve({
+      works: [{
+        id: 17,
+        mediaType: 'IMAGE',
+        title: '海边仪式',
+        description: '新缩略图',
+        mediaUrl: 'https://cos.example.com/WFA3B1E7A2/work/image/photo.jpg',
+        coverUrl: 'https://cos.example.com/WFA3B1E7A2/work/image/photo-thumb.jpg',
+        updatedAt: '2026-07-08T17:30:00+08:00'
+      }],
+      tags: [],
+      summary: {}
+    })
   }
   const page = loadPage('pages/works/works.js', fakeRequest, {
     getFileSystemManager() {
@@ -1302,7 +1314,8 @@ test('works page saves selected video cover frame time directly', async () => {
   await page.handleConfirmVideoEdit()
 
   assert.deepEqual(requests.map((request) => request.url), [
-    '/api/mine/works/18'
+    '/api/mine/works/18',
+    '/api/mine/works'
   ])
   assert.deepEqual(requests[0].data, {
     title: '片头快剪',

@@ -277,6 +277,33 @@ function buildWorkTagPickerOptions(tags = [], selectedTagNames = []) {
   }))
 }
 
+function buildWorkEditTagOptions(allTags = [], boundTags = [], referenceCount = 0) {
+  const boundTagIds = new Set(normalizeWorkTags(boundTags).map((tag) => tag.id))
+  const referenced = toNumber(referenceCount) > 0
+  return normalizeWorkTags(allTags).map((tag) => {
+    const selected = boundTagIds.has(tag.id)
+    return Object.assign({}, tag, {
+      selected,
+      initiallySelected: selected,
+      locked: referenced && selected
+    })
+  })
+}
+
+function buildWorkEditSelectedTagIds(tagOptions = []) {
+  const selectedIds = []
+  const seen = {}
+  ;(Array.isArray(tagOptions) ? tagOptions : []).forEach((item) => {
+    const tagId = normalizeId(item && item.id)
+    if (!item || !item.selected || !tagId || seen[tagId]) {
+      return
+    }
+    seen[tagId] = true
+    selectedIds.push(tagId)
+  })
+  return selectedIds
+}
+
 function buildWorkTagOptionListHeight(tags = []) {
   const count = Array.isArray(tags) ? tags.length : Math.max(0, Math.round(toNumber(tags)))
   if (count <= 0) {
@@ -377,6 +404,18 @@ function buildWorkUpdatePayload(form = {}) {
       payload.thumbnailTaskId = thumbnailTaskId
     }
   }
+  if (Object.prototype.hasOwnProperty.call(form, 'tagIds')) {
+    const seenTagIds = {}
+    payload.tagIds = (Array.isArray(form.tagIds) ? form.tagIds : []).reduce((result, tagId) => {
+      const normalizedTagId = normalizeId(tagId)
+      if (!normalizedTagId || seenTagIds[normalizedTagId]) {
+        return result
+      }
+      seenTagIds[normalizedTagId] = true
+      result.push(normalizedTagId)
+      return result
+    }, [])
+  }
   const width = Math.max(0, Math.round(toNumber(form.width)))
   const height = Math.max(0, Math.round(toNumber(form.height)))
   if (width > 0 && height > 0) {
@@ -464,6 +503,8 @@ module.exports = {
   WORK_TAG_MAX_COUNT: TAG_MAX_COUNT,
   applyUnifiedWorkTags,
   buildWorkFieldCounters,
+  buildWorkEditSelectedTagIds,
+  buildWorkEditTagOptions,
   buildUnifiedWorkTagItems,
   buildUnifiedWorkTagNames,
   buildWorkTagDeleteBlockedMessage,
