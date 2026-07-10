@@ -3,7 +3,10 @@ const fs = require('node:fs')
 const path = require('node:path')
 const test = require('node:test')
 
+const { getRegisteredPageRoutes } = require('./helpers/app-pages')
+
 const appJson = JSON.parse(fs.readFileSync(path.join(__dirname, '../app.json'), 'utf8'))
+const registeredPageRoutes = getRegisteredPageRoutes(appJson)
 
 function read(relativePath) {
   return fs.readFileSync(path.join(__dirname, '..', relativePath), 'utf8')
@@ -43,9 +46,9 @@ function assertSoftLayerAnimation(wxss, overlaySelector, panelSelector) {
 }
 
 test('app registers works pages in the mini program', () => {
-  assert.ok(appJson.pages.includes('pages/works/works'))
-  assert.ok(appJson.pages.includes('pages/work-add/work-add'))
-  assert.ok(appJson.pages.includes('pages/work-edit/work-edit'))
+  assert.ok(registeredPageRoutes.includes('pages/works/works'))
+  assert.ok(registeredPageRoutes.includes('pages/works/work-add/work-add'))
+  assert.ok(registeredPageRoutes.includes('pages/works/work-edit/work-edit'))
 })
 
 test('mine and schedule bottom tabs navigate to works page', () => {
@@ -60,10 +63,10 @@ test('works pages expose expected upload and edit structure', () => {
   const worksWxml = read('pages/works/works.wxml')
   const worksWxss = read('pages/works/works.wxss')
   const worksJs = read('pages/works/works.js')
-  const addJs = read('pages/work-add/work-add.js')
-  const addWxml = read('pages/work-add/work-add.wxml')
-  const addWxss = read('pages/work-add/work-add.wxss')
-  const editWxml = read('pages/work-edit/work-edit.wxml')
+  const addJs = read('pages/works/work-add/work-add.js')
+  const addWxml = read('pages/works/work-add/work-add.wxml')
+  const addWxss = read('pages/works/work-add/work-add.wxss')
+  const editWxml = read('pages/works/work-edit/work-edit.wxml')
 
   assert.match(worksWxml, /搜索作品标题、标签/)
   assert.match(worksWxml, /长宽比/)

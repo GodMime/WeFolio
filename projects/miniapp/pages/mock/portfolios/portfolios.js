@@ -2,7 +2,7 @@ const {
   MOCK_PORTFOLIO_LIST,
   getMockTabs,
   showMockLoginRequiredToast
-} = require('../../../utils/mock-experience')
+} = require('../utils/mock-experience')
 
 const EDIT_URL = '/pages/mock/portfolio-standard-edit/portfolio-standard-edit'
 const PREVIEW_URL = '/pages/mock/portfolio-standard-preview/portfolio-standard-preview'

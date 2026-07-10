@@ -1,4 +1,4 @@
-@import "../../styles/portfolio-render-shared.wxss";
+@import "../../../styles/portfolio-render-shared.wxss";
 
 .portfolio-preview-page {
   background: #ffffff;

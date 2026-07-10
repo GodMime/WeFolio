@@ -1,2 +1,2 @@
-@import "../../schedule/schedule.wxss";
+@import "../styles/schedule.wxss";
 @import "../common.wxss";

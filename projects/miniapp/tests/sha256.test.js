@@ -2,7 +2,7 @@ const assert = require('node:assert/strict')
 const test = require('node:test')
 const vm = require('node:vm')
 
-const { calculateFileSha256, sha256ArrayBuffer, sha256Text } = require('../utils/sha256')
+const { calculateFileSha256, sha256ArrayBuffer, sha256Text } = require('../pages/works/utils/sha256')
 
 test('sha256Text matches standard vectors', () => {
   assert.equal(sha256Text(''), 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855')

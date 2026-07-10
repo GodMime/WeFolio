@@ -1,12 +1,12 @@
-const { request } = require('../../utils/request')
-const { normalizeId } = require('../../utils/id')
-const { handleMaintainerAuthRequired, hasLocalToken } = require('../../utils/session')
+const { request } = require('../../../utils/request')
+const { normalizeId } = require('../../../utils/id')
+const { handleMaintainerAuthRequired, hasLocalToken } = require('../../../utils/session')
 const {
   buildWorkFieldCounters,
   buildWorkUpdatePayload,
   normalizeWorkDetail,
   validateWorkForm
-} = require('../../utils/works')
+} = require('../utils/works')
 
 const WORKS_PAGE_URL = '/pages/works/works'
 

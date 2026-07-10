@@ -3,7 +3,7 @@ const path = require('node:path')
 const test = require('node:test')
 
 const { normalizePointTransactions } = require('../utils/points')
-const { buildWorkThumbnailCropState } = require('../utils/work-thumbnail-crop')
+const { buildWorkThumbnailCropState } = require('../pages/works/utils/work-thumbnail-crop')
 
 function deferred() {
   let resolve
@@ -215,7 +215,7 @@ test('points page ignores stale load-more response after reloading first page', 
 test('visitor portfolio sends wx login code when opening share', async () => {
   const requests = []
   let loginCalled = false
-  const page = loadPage('pages/visitor-portfolio/visitor-portfolio.js', (options) => {
+  const page = loadPage('pages/portfolios/visitor-portfolio/visitor-portfolio.js', (options) => {
     requests.push(options)
     return Promise.resolve({
       shareCode: 'PF001',
@@ -244,7 +244,7 @@ test('visitor portfolio sends wx login code when opening share', async () => {
 test('visitor portfolio stops loading when wx login returns empty code', async () => {
   const requests = []
   const toasts = []
-  const page = loadPage('pages/visitor-portfolio/visitor-portfolio.js', (options) => {
+  const page = loadPage('pages/portfolios/visitor-portfolio/visitor-portfolio.js', (options) => {
     requests.push(options)
     return Promise.resolve({})
   }, {
@@ -272,7 +272,7 @@ test('visitor portfolio stops loading when wx login returns empty code', async (
 test('visitor portfolio stops loading when wx login fails', async () => {
   const requests = []
   const toasts = []
-  const page = loadPage('pages/visitor-portfolio/visitor-portfolio.js', (options) => {
+  const page = loadPage('pages/portfolios/visitor-portfolio/visitor-portfolio.js', (options) => {
     requests.push(options)
     return Promise.resolve({})
   }, {
@@ -309,7 +309,7 @@ test('visitor portfolio stops loading when wx login times out', async () => {
   }
   global.clearTimeout = () => {}
   try {
-    const page = loadPage('pages/visitor-portfolio/visitor-portfolio.js', (options) => {
+    const page = loadPage('pages/portfolios/visitor-portfolio/visitor-portfolio.js', (options) => {
       requests.push(options)
       return Promise.resolve({})
     }, {
@@ -454,7 +454,7 @@ test('work add retry skips upload tickets for already ticketed files', async () 
     }
     return Promise.resolve({ items: [] })
   }
-  const page = loadPage('pages/work-add/work-add.js', fakeRequest)
+  const page = loadPage('pages/works/work-add/work-add.js', fakeRequest)
   page.data.files = [
     {
       id: 'saved-a',
@@ -507,7 +507,7 @@ test('work add adapts tag picker list height to loaded tag count', async () => {
       { id: 3, name: '晚宴快剪' }
     ]
   })
-  const page = loadPage('pages/work-add/work-add.js', fakeRequest)
+  const page = loadPage('pages/works/work-add/work-add.js', fakeRequest)
 
   await page.loadTagPickerTags()
 
@@ -517,7 +517,7 @@ test('work add adapts tag picker list height to loaded tag count', async () => {
 
 test('work add keeps video cover generation on backend first frame', async () => {
   const fakeRequest = () => Promise.resolve({})
-  const page = loadPage('pages/work-add/work-add.js', fakeRequest)
+  const page = loadPage('pages/works/work-add/work-add.js', fakeRequest)
   page.data.files = [{
     id: 'video-a',
     title: '旧标题',

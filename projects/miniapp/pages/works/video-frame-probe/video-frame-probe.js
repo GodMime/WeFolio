@@ -1,5 +1,5 @@
-const { writeRgbaFrameToCanvas } = require('../../utils/frame-canvas')
-const { decodeVideoFrameAtTime } = require('../../utils/video-frame-decoder')
+const { writeRgbaFrameToCanvas } = require('../utils/frame-canvas')
+const { decodeVideoFrameAtTime } = require('../utils/video-frame-decoder')
 
 const CANVAS_ID = 'frameProbeCanvas'
 const DEFAULT_VIDEO_DURATION_MS = 1000

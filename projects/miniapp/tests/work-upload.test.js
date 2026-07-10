@@ -22,7 +22,7 @@ const {
   prepareCoverUploadFiles,
   runWorkUploadQueue,
   validateChosenMediaFiles
-} = require('../utils/work-upload')
+} = require('../pages/works/utils/work-upload')
 
 test('chooseMedia options use mixed album picker and cap count at 9', () => {
   assert.deepEqual(createChooseMediaOptions(20), {

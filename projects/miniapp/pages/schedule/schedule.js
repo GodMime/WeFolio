@@ -17,7 +17,7 @@ const {
   normalizeSlotDefinitions,
   validateScheduleItemPayload,
   validateSlotDefinitionPayload
-} = require('../../utils/schedule')
+} = require('./utils/schedule')
 
 const MODE_DEFINITIONS = 'definitions'
 const MODE_MAINTENANCE = 'maintenance'

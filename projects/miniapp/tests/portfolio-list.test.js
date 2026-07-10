@@ -104,8 +104,31 @@ test('creating a standard personal portfolio opens an unsaved editor draft', asy
   try {
     assert.deepEqual(requests, [])
     assert.deepEqual(navigations, [
-      { url: '/pages/portfolio-standard-edit/portfolio-standard-edit' }
+      { url: '/pages/portfolios/standard-edit/portfolio-standard-edit' }
     ])
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('published portfolio share opens the new visitor subpackage page', () => {
+  const page = loadPortfolioListPage(() => Promise.resolve({}))
+  page.data.displayPortfolios = [{
+    portfolioId: 88,
+    title: '林安婚礼司仪',
+    shareCode: 'PF001',
+    coverUrl: 'https://example.test/cover.jpg'
+  }]
+
+  try {
+    const share = page.onShareAppMessage({
+      target: { dataset: { id: 88 } }
+    })
+
+    assert.equal(
+      share.path,
+      '/pages/portfolios/visitor-portfolio/visitor-portfolio?shareCode=PF001'
+    )
   } finally {
     page.cleanup()
   }
@@ -427,7 +450,7 @@ test('previewing a published portfolio from list opens published preview without
       ['/api/mine/portfolios', 'GET']
     ])
     assert.deepEqual(navigations, [
-      { url: '/pages/portfolio-standard-preview/portfolio-standard-preview?portfolioId=88&scope=published' }
+      { url: '/pages/portfolios/standard-preview/portfolio-standard-preview?portfolioId=88&scope=published' }
     ])
   } finally {
     page.cleanup()
@@ -472,7 +495,7 @@ test('previewing a draft portfolio from list opens draft preview without publish
       ['/api/mine/portfolios', 'GET']
     ])
     assert.deepEqual(navigations, [
-      { url: '/pages/portfolio-standard-preview/portfolio-standard-preview?portfolioId=88' }
+      { url: '/pages/portfolios/standard-preview/portfolio-standard-preview?portfolioId=88' }
     ])
   } finally {
     page.cleanup()

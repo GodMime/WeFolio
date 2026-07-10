@@ -252,10 +252,10 @@ test('normalizes and updates divider component config', () => {
 })
 
 function loadPortfolioEditorPage(fakeRequest, wxOverrides = {}, assetOverrides = {}, harnessOptions = {}) {
-  const pagePath = path.join(__dirname, '../pages/portfolio-standard-edit/portfolio-standard-edit.js')
+  const pagePath = path.join(__dirname, '../pages/portfolios/standard-edit/portfolio-standard-edit.js')
   const requestPath = path.join(__dirname, '../utils/request.js')
   const sessionPath = path.join(__dirname, '../utils/session.js')
-  const assetsPath = path.join(__dirname, '../utils/portfolio-assets.js')
+  const assetsPath = path.join(__dirname, '../pages/portfolios/utils/portfolio-assets.js')
   const requestCacheKey = require.resolve(requestPath)
   const sessionCacheKey = require.resolve(sessionPath)
   const assetsCacheKey = require.resolve(assetsPath)
@@ -1783,7 +1783,7 @@ test('publishing from editor saves current draft before publishing and returns t
   const originalGetCurrentPages = global.getCurrentPages
   global.getCurrentPages = () => [
     { route: 'pages/portfolios/portfolios' },
-    { route: 'pages/portfolio-standard-edit/portfolio-standard-edit' }
+    { route: 'pages/portfolios/standard-edit/portfolio-standard-edit' }
   ]
   t.after(() => {
     if (originalGetCurrentPages) {
@@ -1882,7 +1882,7 @@ test('saving draft returns to portfolio list so list onShow reloads data', async
   const originalGetCurrentPages = global.getCurrentPages
   global.getCurrentPages = () => [
     { route: 'pages/portfolios/portfolios' },
-    { route: 'pages/portfolio-standard-edit/portfolio-standard-edit' }
+    { route: 'pages/portfolios/standard-edit/portfolio-standard-edit' }
   ]
   t.after(() => {
     if (originalGetCurrentPages) {
@@ -1913,7 +1913,7 @@ test('saving draft redirects to portfolio list when opened without list stack', 
   const navigations = []
   const originalGetCurrentPages = global.getCurrentPages
   global.getCurrentPages = () => [
-    { route: 'pages/portfolio-standard-edit/portfolio-standard-edit' }
+    { route: 'pages/portfolios/standard-edit/portfolio-standard-edit' }
   ]
   t.after(() => {
     if (originalGetCurrentPages) {

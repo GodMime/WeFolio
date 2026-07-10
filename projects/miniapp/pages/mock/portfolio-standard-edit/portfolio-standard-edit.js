@@ -11,7 +11,7 @@ const {
   showMockLoginRequiredToast,
   trimText,
   updateComponentConfig
-} = require('../../../utils/mock-experience')
+} = require('../utils/mock-experience')
 
 const PREVIEW_URL = '/pages/mock/portfolio-standard-preview/portfolio-standard-preview'
 const DEFAULT_SELECTED_COMPONENT_KEY = 'mock_carousel'

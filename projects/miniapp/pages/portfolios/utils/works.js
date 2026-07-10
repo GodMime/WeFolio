@@ -1,10 +1,10 @@
-const { normalizeId } = require('./id')
+const { normalizeId } = require('../../../utils/id')
 const {
   DEFAULT_TAG_COLOR,
   TAG_COLOR_OPTIONS,
   TAG_MAX_COUNT,
   TAG_MAX_LENGTH
-} = require('./profile')
+} = require('../../../utils/profile')
 
 const TITLE_LIMIT = 30
 const DESCRIPTION_LIMIT = 1000

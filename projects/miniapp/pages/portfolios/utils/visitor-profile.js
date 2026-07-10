@@ -1,5 +1,5 @@
-const { requestWithVisitorSessionRefresh } = require('./visitor-session')
-const { isRemoteUrl } = require('./upload-file')
+const { requestWithVisitorSessionRefresh } = require('../../../utils/visitor-session')
+const { isRemoteUrl } = require('../../../utils/upload-file')
 
 const VISITOR_AVATAR_MAX_SIZE_BYTES = 200 * 1024
 const VISITOR_AVATAR_UPLOAD_TIMEOUT = 10 * 60 * 1000

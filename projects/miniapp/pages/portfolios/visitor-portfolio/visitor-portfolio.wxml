@@ -1,0 +1,222 @@
+<view class="page-shell visitor-portfolio-page">
+  <navigation-bar title="{{portfolio.title || '个人作品集'}}" back="{{false}}" color="#17202a" background="rgba(255, 255, 255, 0.94)"></navigation-bar>
+
+  <scroll-view scroll-y class="visitor-scroll">
+    <view wx:for="{{portfolio.components}}" wx:key="componentKey" class="folio-component">
+      <block wx:if="{{item.componentType === 'CAROUSEL'}}">
+        <portfolio-carousel works="{{item.works}}" interval="{{item.carouselIntervalMs}}"></portfolio-carousel>
+      </block>
+
+      <block wx:elif="{{item.componentType === 'PROFILE'}}">
+        <view class="profile-section">
+          <image wx:if="{{item.profile.avatarUrl}}" class="profile-avatar" src="{{item.profile.avatarUrl}}" mode="aspectFill"></image>
+          <view wx:if="{{item.profile.displayName}}" class="profile-name">{{item.profile.displayName}}</view>
+          <view wx:if="{{item.profile.profession}}" class="profile-line">{{item.profile.profession}}</view>
+          <view wx:if="{{item.profile.city}}" class="profile-line">{{item.profile.city}}</view>
+          <text wx:if="{{item.profile.bio}}" class="profile-bio" space="nbsp">{{item.profile.bio}}</text>
+          <view wx:if="{{item.profile.tags.length}}" class="profile-tags">
+            <view wx:for="{{item.profile.tags}}" wx:key="name" wx:for-item="tag" class="profile-tag">{{tag.name}}</view>
+          </view>
+          <image wx:if="{{item.profile.wechatQrUrl}}" class="profile-qr-image qr-image" src="{{item.profile.wechatQrUrl}}" mode="aspectFit" data-url="{{item.profile.wechatQrUrl}}" bindtap="handlePreviewQr"></image>
+        </view>
+      </block>
+
+      <block wx:elif="{{item.componentType === 'WORK_GRID'}}">
+        <view class="work-section-title">作品列表</view>
+        <scroll-view wx:if="{{item.displayTags.length}}" scroll-x class="display-tag-scroll">
+          <view class="display-tags">
+            <view
+              wx:for="{{item.displayTags}}"
+              wx:key="groupKey"
+              wx:for-item="tag"
+              class="display-tag {{tag.active ? 'active' : ''}}"
+              data-component-key="{{item.componentKey}}"
+              data-group-key="{{tag.groupKey}}"
+              bindtap="handleDisplayTagTap"
+            >{{tag.name}}</view>
+          </view>
+        </scroll-view>
+        <view class="work-grid {{displaySwitchingComponentKey === item.componentKey ? 'display-switching' : ''}}">
+          <view wx:for="{{item.activeGroup.works}}" wx:key="workId" wx:for-item="work" class="work-card grid-card">
+            <view
+              class="work-cover-wrap"
+              data-work-id="{{work.workId}}"
+              data-media-type="{{work.mediaType}}"
+              data-media-url="{{work.previewUrl}}"
+              data-cover-url="{{work.thumbnailUrl}}"
+              data-title="{{work.title}}"
+              bindtap="handleWorkTap"
+              aria-role="button"
+              aria-label="{{work.isVideo ? '播放视频' : '查看原图'}}{{work.title}}"
+            >
+              <image class="work-cover" src="{{work.thumbnailUrl}}" mode="aspectFill"></image>
+              <view wx:if="{{work.isVideo}}" class="work-play-badge" aria-hidden="true">
+                <view class="work-play-icon"></view>
+              </view>
+            </view>
+            <view class="work-title">{{work.title}}</view>
+          </view>
+        </view>
+      </block>
+
+      <block wx:elif="{{item.componentType === 'WORK_LIST'}}">
+        <view class="work-section-title">作品列表</view>
+        <scroll-view wx:if="{{item.displayTags.length}}" scroll-x class="display-tag-scroll">
+          <view class="display-tags">
+            <view
+              wx:for="{{item.displayTags}}"
+              wx:key="groupKey"
+              wx:for-item="tag"
+              class="display-tag {{tag.active ? 'active' : ''}}"
+              data-component-key="{{item.componentKey}}"
+              data-group-key="{{tag.groupKey}}"
+              bindtap="handleDisplayTagTap"
+            >{{tag.name}}</view>
+          </view>
+        </scroll-view>
+        <view class="work-list {{displaySwitchingComponentKey === item.componentKey ? 'display-switching' : ''}}">
+          <view wx:for="{{item.activeGroup.works}}" wx:key="workId" wx:for-item="work" class="work-card list-card">
+            <view
+              class="work-cover-wrap"
+              data-work-id="{{work.workId}}"
+              data-media-type="{{work.mediaType}}"
+              data-media-url="{{work.previewUrl}}"
+              data-cover-url="{{work.thumbnailUrl}}"
+              data-title="{{work.title}}"
+              bindtap="handleWorkTap"
+              aria-role="button"
+              aria-label="{{work.isVideo ? '播放视频' : '查看原图'}}{{work.title}}"
+            >
+              <image class="work-cover" src="{{work.thumbnailUrl}}" mode="aspectFill"></image>
+              <view wx:if="{{work.isVideo}}" class="work-play-badge" aria-hidden="true">
+                <view class="work-play-icon"></view>
+              </view>
+            </view>
+            <view class="work-title">{{work.title}}</view>
+            <view wx:if="{{work.description}}" class="work-desc">{{work.description}}</view>
+          </view>
+        </view>
+      </block>
+
+      <block wx:elif="{{item.componentType === 'SCHEDULE_QUERY'}}">
+        <portfolio-schedule-query
+          share-code="{{shareCode}}"
+          visitor-key="{{visitorKey}}"
+          preview="{{false}}"
+          component-key="{{item.componentKey}}"
+          schedule-query="{{item.scheduleQuery}}"
+        ></portfolio-schedule-query>
+      </block>
+
+      <block wx:elif="{{item.componentType === 'QR_CONTACT'}}">
+        <view class="qr-section">
+          <image wx:if="{{item.qrContact.qrUrl}}" class="qr-image" src="{{item.qrContact.qrUrl}}" mode="aspectFit" data-url="{{item.qrContact.qrUrl}}" bindtap="handlePreviewQr"></image>
+        </view>
+      </block>
+
+      <block wx:elif="{{item.componentType === 'CONTACT_FORM'}}">
+        <portfolio-contact-form
+          contact-component="{{item}}"
+          contact-form="{{contactForm}}"
+          bindcontactinput="handleContactInput"
+          bindsubmitcontact="handleSubmitContact"
+          bindopenmodal="handleOpenContactFormModal"
+        ></portfolio-contact-form>
+      </block>
+
+      <block wx:elif="{{item.componentType === 'TEXT_SECTION'}}">
+        <view class="text-section {{item.textSection.alignmentClass}}">
+          <view wx:if="{{item.textSection.title}}" class="component-title">{{item.textSection.title}}</view>
+          <text class="text-content" space="nbsp">{{item.textSection.content}}</text>
+        </view>
+      </block>
+
+      <block wx:elif="{{item.componentType === 'DIVIDER'}}">
+        <view class="divider-section" style="{{item.divider.style}}"></view>
+      </block>
+    </view>
+
+    <view class="folio-brand-footer">
+      <image class="folio-brand-logo" src="/assets/system/folio-logo-stack-bold-small-50kb.png" mode="aspectFit"></image>
+      <view class="folio-brand-name">映期Folio</view>
+    </view>
+  </scroll-view>
+
+  <root-portal wx:if="{{videoPreviewVisible}}">
+    <view class="work-video-mask {{videoPreviewVisible ? 'visible' : ''}}" catchtap="handleCloseVideoPreview">
+      <view class="work-video-panel" catchtap="handleVideoPreviewPanelTap">
+        <view class="work-video-heading">
+          <view class="work-video-title">{{videoPreview.title}}</view>
+          <view class="work-video-close" catchtap="handleCloseVideoPreview" aria-role="button" aria-label="关闭视频">×</view>
+        </view>
+        <video
+          id="portfolioWorkVideo"
+          class="work-video-player"
+          src="{{videoPreview.src}}"
+          poster="{{videoPreview.poster}}"
+          controls="{{true}}"
+          autoplay="{{true}}"
+          show-fullscreen-btn="{{true}}"
+          show-center-play-btn="{{true}}"
+          enable-progress-gesture="{{true}}"
+          object-fit="contain"
+        ></video>
+      </view>
+    </view>
+  </root-portal>
+
+  <portfolio-contact-form
+    view-mode="modal"
+    modal-visible="{{contactFormModalVisible}}"
+    contact-component="{{activeContactFormComponent}}"
+    contact-form="{{contactForm}}"
+    bindcontactinput="handleContactInput"
+    bindsubmitcontact="handleSubmitContact"
+    bindclosemodal="handleCloseContactFormModal"
+  ></portfolio-contact-form>
+
+  <root-portal wx:if="{{visitorProfileAuthVisible}}">
+    <view class="visitor-profile-mask" catchtap="handleVisitorProfileMaskTap" catchtouchmove="handleVisitorProfileMaskTouchMove">
+      <view class="visitor-profile-panel" catchtap="handleVisitorProfilePanelTap">
+        <view class="visitor-profile-title">完善访客资料</view>
+        <view class="visitor-profile-desc">授权头像和昵称，维护者查看访客记录时能识别你。</view>
+        <view class="visitor-profile-form">
+          <view class="visitor-avatar-field">
+            <view class="visitor-avatar-control">
+              <view class="visitor-avatar-visual">
+                <image wx:if="{{visitorProfileForm.avatarUrl}}" class="visitor-avatar-preview" src="{{visitorProfileForm.avatarUrl}}" mode="aspectFill"></image>
+                <view wx:else class="visitor-avatar-placeholder">
+                  <view class="visitor-avatar-placeholder-head"></view>
+                  <view class="visitor-avatar-placeholder-body"></view>
+                </view>
+              </view>
+              <button class="visitor-avatar-picker" open-type="chooseAvatar" bindchooseavatar="handleVisitorAvatarChoose" aria-label="点击授权头像"></button>
+            </view>
+            <view class="visitor-avatar-label">点击授权头像</view>
+          </view>
+          <view class="visitor-nickname-field">
+            <input
+              class="visitor-nickname-input"
+              type="nickname"
+              value="{{visitorProfileForm.nickname}}"
+              placeholder="点击授权昵称"
+              placeholder-class="visitor-nickname-placeholder"
+              bindinput="handleVisitorNicknameInput"
+            />
+          </view>
+        </view>
+        <view class="visitor-profile-actions">
+          <button class="visitor-profile-secondary" bindtap="handleVisitorProfileSkip">跳过</button>
+          <button class="visitor-profile-primary" loading="{{visitorProfileSaving}}" bindtap="handleVisitorProfileSubmit">保存</button>
+        </view>
+      </view>
+    </view>
+  </root-portal>
+
+  <view wx:if="{{portfolio.underMaintenance}}" class="maintenance-mask">
+    <view class="maintenance-panel">
+      <view class="maintenance-primary">UNDER MAINTENANCE</view>
+      <view class="maintenance-secondary">维护中</view>
+    </view>
+  </view>
+</view>

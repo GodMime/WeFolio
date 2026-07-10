@@ -39,7 +39,7 @@ function createDeferred() {
 }
 
 function loadVisitorPage(fakeRequest, wxOverrides = {}) {
-  const pagePath = path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.js')
+  const pagePath = path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.js')
   const requestPath = path.join(__dirname, '../utils/request.js')
   const visitorSessionPath = path.join(__dirname, '../utils/visitor-session.js')
   const requestCacheKey = require.resolve(requestPath)
@@ -793,7 +793,7 @@ test('builds visitor event payload with idempotency key', () => {
 
 test('visitor page uses source type constant for WeChat share card', () => {
   const pageSource = fs.readFileSync(
-    path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.js'),
+    path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.js'),
     'utf8'
   )
   const visitorSessionSource = fs.readFileSync(
@@ -804,6 +804,25 @@ test('visitor page uses source type constant for WeChat share card', () => {
   assert.match(visitorSessionSource, /const SOURCE_TYPE_WECHAT_SHARE_CARD = 'WECHAT_SHARE_CARD'/)
   assert.equal((pageSource.match(/sourceType: SOURCE_TYPE_WECHAT_SHARE_CARD/g) || []).length, 3)
   assert.equal((pageSource.match(/sourceType: 'WECHAT_SHARE_CARD'/g) || []).length, 0)
+})
+
+test('visitor page secondary share keeps the new visitor subpackage path', () => {
+  const page = loadVisitorPage(() => Promise.resolve({}))
+  page.data.shareCode = 'PF001'
+  page.data.portfolio = {
+    title: '林安婚礼司仪',
+    share: {
+      title: '林安婚礼司仪',
+      coverUrl: 'https://example.test/cover.jpg'
+    }
+  }
+
+  const share = page.onShareAppMessage()
+
+  assert.equal(
+    share.path,
+    '/pages/portfolios/visitor-portfolio/visitor-portfolio?shareCode=PF001'
+  )
 })
 
 test('visitor page records image view before opening original image', async () => {
@@ -1097,8 +1116,8 @@ test('visitor page shows profile authorization panel when profile is missing', a
 })
 
 test('visitor profile prompt keeps skip and save copy in bottom sheet', () => {
-  const wxml = fs.readFileSync(path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.wxml'), 'utf8')
-  const wxss = fs.readFileSync(path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.wxss'), 'utf8')
+  const wxml = fs.readFileSync(path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.wxml'), 'utf8')
+  const wxss = fs.readFileSync(path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.wxss'), 'utf8')
 
   assert.match(wxml, /<root-portal wx:if="\{\{visitorProfileAuthVisible\}\}">/)
   assert.match(wxml, /class="visitor-profile-mask"[^>]*catchtap="handleVisitorProfileMaskTap"[^>]*catchtouchmove="handleVisitorProfileMaskTouchMove"/)
@@ -1150,8 +1169,8 @@ test('visitor profile submit requires both avatar and nickname before upload', a
 })
 
 test('visitor video preview uses root portal so native video overlay covers viewport', () => {
-  const wxml = fs.readFileSync(path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.wxml'), 'utf8')
-  const wxss = fs.readFileSync(path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.wxss'), 'utf8')
+  const wxml = fs.readFileSync(path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.wxml'), 'utf8')
+  const wxss = fs.readFileSync(path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.wxss'), 'utf8')
   const portalStart = wxml.indexOf('<root-portal wx:if="{{videoPreviewVisible}}">')
   const maskStart = wxml.indexOf('class="work-video-mask {{videoPreviewVisible ? \'visible\' : \'\'}}"')
   const portalEnd = wxml.indexOf('</root-portal>', portalStart)

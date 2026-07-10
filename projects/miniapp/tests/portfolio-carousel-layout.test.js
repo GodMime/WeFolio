@@ -45,11 +45,11 @@ function loadCarouselComponent() {
 }
 
 test('portfolio preview, visitor, and mock preview pages render carousel through shared progress component', () => {
-  const previewJson = readJson('pages/portfolio-standard-preview/portfolio-standard-preview.json')
-  const visitorJson = readJson('pages/visitor-portfolio/visitor-portfolio.json')
+  const previewJson = readJson('pages/portfolios/standard-preview/portfolio-standard-preview.json')
+  const visitorJson = readJson('pages/portfolios/visitor-portfolio/visitor-portfolio.json')
   const mockPreviewJson = readJson('pages/mock/portfolio-standard-preview/portfolio-standard-preview.json')
-  const previewWxml = read('pages/portfolio-standard-preview/portfolio-standard-preview.wxml')
-  const visitorWxml = read('pages/visitor-portfolio/visitor-portfolio.wxml')
+  const previewWxml = read('pages/portfolios/standard-preview/portfolio-standard-preview.wxml')
+  const visitorWxml = read('pages/portfolios/visitor-portfolio/visitor-portfolio.wxml')
   const mockPreviewWxml = read('pages/mock/portfolio-standard-preview/portfolio-standard-preview.wxml')
 
   assert.equal(previewJson.usingComponents['portfolio-carousel'], '/components/portfolio-carousel/portfolio-carousel')

@@ -2,7 +2,7 @@ const {
   MOCK_WORK_LIBRARY,
   getMockTabs,
   showMockLoginRequiredToast
-} = require('../../../utils/mock-experience')
+} = require('../utils/mock-experience')
 
 Page({
   data: {

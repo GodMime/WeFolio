@@ -1,2 +1,2 @@
-@import "../../portfolios/portfolios.wxss";
+@import "../styles/portfolios.wxss";
 @import "../common.wxss";

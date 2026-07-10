@@ -1,7 +1,7 @@
 const {
   getMockPortfolioDraft,
   showMockLoginRequiredToast
-} = require('../../../utils/mock-experience')
+} = require('../utils/mock-experience')
 
 function collectImageUrls(portfolio) {
   const components = portfolio && Array.isArray(portfolio.components) ? portfolio.components : []

@@ -1,5 +1,5 @@
-const { request } = require('../../utils/request')
-const { COMPONENT_NAMES, COMPONENT_TYPES } = require('../../utils/portfolios')
+const { request } = require('../../../utils/request')
+const { COMPONENT_NAMES, COMPONENT_TYPES } = require('../../../utils/portfolios')
 
 const COMPONENT_LIBRARY_API_URL = '/api/mine/portfolios/component-library'
 

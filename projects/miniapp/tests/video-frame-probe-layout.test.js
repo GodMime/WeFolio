@@ -3,6 +3,8 @@ const fs = require('node:fs')
 const path = require('node:path')
 const test = require('node:test')
 
+const { getRegisteredPageRoutes } = require('./helpers/app-pages')
+
 const rootDir = path.join(__dirname, '..')
 
 function read(relativePath) {
@@ -11,11 +13,12 @@ function read(relativePath) {
 
 test('video frame probe page is registered and exposes decoder workflow', () => {
   const appJson = JSON.parse(read('app.json'))
-  const probeJs = read('pages/video-frame-probe/video-frame-probe.js')
-  const probeWxml = read('pages/video-frame-probe/video-frame-probe.wxml')
-  const probeWxss = read('pages/video-frame-probe/video-frame-probe.wxss')
+  const registeredPageRoutes = getRegisteredPageRoutes(appJson)
+  const probeJs = read('pages/works/video-frame-probe/video-frame-probe.js')
+  const probeWxml = read('pages/works/video-frame-probe/video-frame-probe.wxml')
+  const probeWxss = read('pages/works/video-frame-probe/video-frame-probe.wxss')
 
-  assert.ok(appJson.pages.includes('pages/video-frame-probe/video-frame-probe'))
+  assert.ok(registeredPageRoutes.includes('pages/works/video-frame-probe/video-frame-probe'))
   assert.match(probeWxml, /视频帧探针/)
   assert.match(probeWxml, /bindtap="handleChooseVideo"/)
   assert.match(probeWxml, /bindtap="handleExtractFrame"/)

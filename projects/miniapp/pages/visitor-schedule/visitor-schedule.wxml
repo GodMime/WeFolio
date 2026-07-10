@@ -1,15 +1,1 @@
-<view class="page-shell visitor-schedule-page">
-  <navigation-bar title="档期查询" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
-  <view class="query-panel">
-    <input class="field" placeholder="开始日期 YYYY-MM-DD" value="{{startDate}}" data-field="startDate" bindinput="handleInput" />
-    <input class="field" placeholder="结束日期 YYYY-MM-DD" value="{{endDate}}" data-field="endDate" bindinput="handleInput" />
-    <button class="primary-button" bindtap="handleQuery">查询</button>
-  </view>
-  <view class="schedule-list">
-    <view wx:for="{{schedules}}" wx:key="date" class="schedule-card">
-      <view class="schedule-date">{{item.date}} {{item.slotName}}</view>
-      <view class="schedule-time">{{item.startTime}} - {{item.endTime}}</view>
-      <view class="schedule-status">{{item.statusText}}</view>
-    </view>
-  </view>
-</view>
+<view class="compat-page">正在打开…</view>

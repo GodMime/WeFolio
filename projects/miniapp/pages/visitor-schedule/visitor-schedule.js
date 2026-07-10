@@ -1,50 +1,28 @@
-const { requestWithVisitorSessionRefresh } = require('../../utils/visitor-session')
-const { normalizeVisitorSchedule } = require('../../utils/visitor-portfolio')
+/**
+ * 历史访客档期分享兼容入口。
+ * 已发出的旧入口可能固化了当前页面路径，禁止删除或改作业务页面。
+ * 本页只负责透传启动参数并跳转到 portfolio 分包，禁止请求接口或查询档期。
+ */
 
-const VISITOR_PORTFOLIO_API_PREFIX = '/api/visitor/portfolios'
+// 新访客档期页真实实现位于 portfolio 分包；修改目标路由时必须同步更新兼容测试。
+const TARGET_PAGE = '/pages/portfolios/visitor-schedule/visitor-schedule'
+const FORWARDED_KEYS = ['shareCode', 'scene', 'visitorKey']
 
-function todayText() {
-  return new Date().toISOString().slice(0, 10)
+function buildForwardQuery(options = {}) {
+  return FORWARDED_KEYS
+    .filter((key) => options[key] !== undefined && options[key] !== '')
+    .map((key) => `${encodeURIComponent(key)}=${encodeURIComponent(String(options[key]))}`)
+    .join('&')
 }
 
 Page({
-  data: {
-    shareCode: '',
-    visitorKey: '',
-    startDate: todayText(),
-    endDate: todayText(),
-    schedules: []
-  },
-
   onLoad(options = {}) {
-    this.setData({
-      shareCode: options.shareCode || '',
-      visitorKey: options.visitorKey || ''
-    })
-  },
-
-  handleInput(event) {
-    const field = event.currentTarget.dataset.field
-    this.setData({ [field]: event.detail.value })
-  },
-
-  handleQuery() {
-    requestWithVisitorSessionRefresh({
-      url: `${VISITOR_PORTFOLIO_API_PREFIX}/${this.data.shareCode}/schedule`,
-      authMode: 'visitor',
-      data: {
-        startDate: this.data.startDate,
-        endDate: this.data.endDate,
-        scope: 'ALL',
-        visitorKey: this.data.visitorKey,
-        idempotencyKey: `schedule-${Date.now()}`
+    const query = buildForwardQuery(options)
+    wx.redirectTo({
+      url: `${TARGET_PAGE}${query ? `?${query}` : ''}`,
+      fail() {
+        wx.showToast({ title: '档期打开失败，请稍后重试', icon: 'none' })
       }
-    }, {
-      shareCode: this.data.shareCode
-    }).then((response) => {
-      this.setData({ schedules: normalizeVisitorSchedule(response).schedules })
-    }).catch((error) => {
-      wx.showToast({ title: error.message || '查询失败', icon: 'none' })
     })
   }
 })

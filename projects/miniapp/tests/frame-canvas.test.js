@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict')
 const test = require('node:test')
 
-const { writeRgbaFrameToCanvas } = require('../utils/frame-canvas')
+const { writeRgbaFrameToCanvas } = require('../pages/works/utils/frame-canvas')
 
 test('writes RGBA frame through Skyline Canvas 2D node and exports temp file', async () => {
   const setDataPatches = []

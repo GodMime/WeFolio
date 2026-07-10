@@ -5,7 +5,7 @@ const {
   buildContactLeadPayload,
   createContactLeadForm,
   validateContactLeadForm
-} = require('../utils/contact-lead')
+} = require('../pages/portfolios/utils/contact-lead')
 
 test('creates and validates contact lead form', () => {
   const form = createContactLeadForm({

@@ -1,4 +1,4 @@
-@import "../../portfolio-standard-preview/portfolio-standard-preview.wxss";
+@import "../styles/portfolio-standard-preview.wxss";
 @import "../common.wxss";
 
 .mock-component-label {

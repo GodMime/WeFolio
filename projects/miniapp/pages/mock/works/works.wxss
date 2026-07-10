@@ -1,4 +1,4 @@
-@import "../../works/works.wxss";
+@import "../styles/works.wxss";
 @import "../common.wxss";
 
 .image-preview-mask,

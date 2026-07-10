@@ -3,6 +3,8 @@ const fs = require('node:fs')
 const path = require('node:path')
 const test = require('node:test')
 
+const { getRegisteredPageRoutes } = require('./helpers/app-pages')
+
 function readProjectFile(filePath) {
   return fs.readFileSync(path.join(__dirname, '..', filePath), 'utf8')
 }
@@ -19,10 +21,11 @@ function readRule(content, selector) {
 
 test('app registers active schedule page and mine tab navigates to it', () => {
   const appJson = readJson('app.json')
+  const registeredPageRoutes = getRegisteredPageRoutes(appJson)
   const indexJs = readProjectFile('pages/index/index.js')
 
-  assert.ok(appJson.pages.includes('pages/schedule/schedule'))
-  assert.equal(appJson.pages.includes('pages/schedule-entry/schedule-entry'), false)
+  assert.ok(registeredPageRoutes.includes('pages/schedule/schedule'))
+  assert.equal(registeredPageRoutes.includes('pages/schedule-entry/schedule-entry'), false)
   assert.match(indexJs, /const SCHEDULE_PAGE_URL = '\/pages\/schedule\/schedule'/)
   assert.match(indexJs, /label === '档期'[\s\S]*wx\.redirectTo\(\{[\s\S]*url:\s*SCHEDULE_PAGE_URL/)
   assert.doesNotMatch(indexJs, /title:\s*`\$\{label\}页面接入中`[\s\S]*label === '档期'/)

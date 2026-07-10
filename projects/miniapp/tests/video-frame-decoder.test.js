@@ -4,7 +4,7 @@ const test = require('node:test')
 const {
   decodeVideoFrameAtTime,
   normalizeVideoFrameSeekTime
-} = require('../utils/video-frame-decoder')
+} = require('../pages/works/utils/video-frame-decoder')
 
 function createImmediateDecoder(overrides = {}) {
   const handlers = {}

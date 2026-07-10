@@ -19,7 +19,7 @@ const {
   normalizeWorkTags,
   validateWorkTagForm,
   validateWorkForm
-} = require('../utils/works')
+} = require('../pages/works/utils/works')
 
 test('normalizes work list for page rendering', () => {
   const result = normalizeWorkList({

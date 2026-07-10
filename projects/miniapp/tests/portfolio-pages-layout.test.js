@@ -3,7 +3,10 @@ const fs = require('node:fs')
 const path = require('node:path')
 const test = require('node:test')
 
+const { getRegisteredPageRoutes } = require('./helpers/app-pages')
+
 const appJson = JSON.parse(fs.readFileSync(path.join(__dirname, '../app.json'), 'utf8'))
+const registeredPageRoutes = getRegisteredPageRoutes(appJson)
 
 function read(relativePath) {
   return fs.readFileSync(path.join(__dirname, '..', relativePath), 'utf8')
@@ -23,7 +26,7 @@ function readRules(content, selector) {
 }
 
 function assertPageRegistered(pagePath) {
-  assert.ok(appJson.pages.includes(pagePath), `${pagePath} should be registered`)
+  assert.ok(registeredPageRoutes.includes(pagePath), `${pagePath} should be registered`)
 }
 
 function assertUsesNavigation(pagePath) {
@@ -40,24 +43,24 @@ function readExisting(relativePath) {
 test('app registers portfolio pages', () => {
   [
     'pages/portfolios/portfolios',
-    'pages/portfolio-standard-edit/portfolio-standard-edit',
-    'pages/portfolio-component-library/portfolio-component-library',
-    'pages/portfolio-standard-preview/portfolio-standard-preview',
-    'pages/visitor-portfolio/visitor-portfolio',
-    'pages/visitor-schedule/visitor-schedule',
-    'pages/portfolio-unavailable/portfolio-unavailable'
+    'pages/portfolios/standard-edit/portfolio-standard-edit',
+    'pages/portfolios/component-library/portfolio-component-library',
+    'pages/portfolios/standard-preview/portfolio-standard-preview',
+    'pages/portfolios/visitor-portfolio/visitor-portfolio',
+    'pages/portfolios/visitor-schedule/visitor-schedule',
+    'pages/portfolios/unavailable/portfolio-unavailable'
   ].forEach(assertPageRegistered)
 })
 
 test('portfolio pages use custom navigation bar', () => {
   [
     'pages/portfolios/portfolios',
-    'pages/portfolio-standard-edit/portfolio-standard-edit',
-    'pages/portfolio-component-library/portfolio-component-library',
-    'pages/portfolio-standard-preview/portfolio-standard-preview',
-    'pages/visitor-portfolio/visitor-portfolio',
-    'pages/visitor-schedule/visitor-schedule',
-    'pages/portfolio-unavailable/portfolio-unavailable'
+    'pages/portfolios/standard-edit/portfolio-standard-edit',
+    'pages/portfolios/component-library/portfolio-component-library',
+    'pages/portfolios/standard-preview/portfolio-standard-preview',
+    'pages/portfolios/visitor-portfolio/visitor-portfolio',
+    'pages/portfolios/visitor-schedule/visitor-schedule',
+    'pages/portfolios/unavailable/portfolio-unavailable'
   ].forEach(assertUsesNavigation)
 })
 
@@ -85,8 +88,8 @@ test('maintainer portfolio pages expose expected controls', () => {
   const portfolioTitleRule = readRule(listWxss, '.portfolio-title')
   const portfolioTitleTrackRule = readRule(listWxss, '.portfolio-title-track')
   const portfolioTitleScrollingTrackRule = readRule(listWxss, '.portfolio-title.scrolling .portfolio-title-track')
-  const editWxml = read('pages/portfolio-standard-edit/portfolio-standard-edit.wxml')
-  const editWxss = read('pages/portfolio-standard-edit/portfolio-standard-edit.wxss')
+  const editWxml = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxml')
+  const editWxss = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxss')
   const qrSourceTabsRule = readRule(editWxss, '.qr-source-tabs')
   const qrSourceTabRule = readRule(editWxss, '.qr-source-tab')
   const qrSourceTabActiveRule = readRule(editWxss, '.qr-source-tab.active')
@@ -96,9 +99,9 @@ test('maintainer portfolio pages expose expected controls', () => {
     editWxml.indexOf('<view class="qr-contact-sheet-mask'),
     editWxml.indexOf('<view class="schedule-query-sheet-mask')
   )
-  const libraryWxml = read('pages/portfolio-component-library/portfolio-component-library.wxml')
-  const previewWxml = read('pages/portfolio-standard-preview/portfolio-standard-preview.wxml')
-  const unavailableWxml = read('pages/portfolio-unavailable/portfolio-unavailable.wxml')
+  const libraryWxml = read('pages/portfolios/component-library/portfolio-component-library.wxml')
+  const previewWxml = read('pages/portfolios/standard-preview/portfolio-standard-preview.wxml')
+  const unavailableWxml = read('pages/portfolios/unavailable/portfolio-unavailable.wxml')
 
   assert.match(listWxml, /个人/)
   assert.match(listWxml, /团队/)
@@ -260,13 +263,13 @@ test('maintainer portfolio pages expose expected controls', () => {
 })
 
 test('visitor portfolio pages expose maintenance, QR, contact and schedule surfaces', () => {
-  const visitorWxml = read('pages/visitor-portfolio/visitor-portfolio.wxml')
-  const visitorJson = JSON.parse(read('pages/visitor-portfolio/visitor-portfolio.json'))
-  const previewWxml = read('pages/portfolio-standard-preview/portfolio-standard-preview.wxml')
-  const previewJson = JSON.parse(read('pages/portfolio-standard-preview/portfolio-standard-preview.json'))
+  const visitorWxml = read('pages/portfolios/visitor-portfolio/visitor-portfolio.wxml')
+  const visitorJson = JSON.parse(read('pages/portfolios/visitor-portfolio/visitor-portfolio.json'))
+  const previewWxml = read('pages/portfolios/standard-preview/portfolio-standard-preview.wxml')
+  const previewJson = JSON.parse(read('pages/portfolios/standard-preview/portfolio-standard-preview.json'))
   const contactFormWxml = readExisting('components/portfolio-contact-form/portfolio-contact-form.wxml')
   const contactFormJs = readExisting('components/portfolio-contact-form/portfolio-contact-form.js')
-  const scheduleWxml = read('pages/visitor-schedule/visitor-schedule.wxml')
+  const scheduleWxml = read('pages/portfolios/visitor-schedule/visitor-schedule.wxml')
   const visitorQrMarkup = visitorWxml.slice(
     visitorWxml.indexOf(`<block wx:elif="{{item.componentType === 'QR_CONTACT'}}">`),
     visitorWxml.indexOf(`<block wx:elif="{{item.componentType === 'CONTACT_FORM'}}">`)
@@ -328,12 +331,12 @@ test('visitor portfolio pages expose maintenance, QR, contact and schedule surfa
 test('visitor work list components keep tags visible and grid cards in two columns', () => {
   const sharedWxss = readExisting('styles/portfolio-render-shared.wxss')
   const pages = [
-    ['visitor', read('pages/visitor-portfolio/visitor-portfolio.wxss')],
-    ['preview', read('pages/portfolio-standard-preview/portfolio-standard-preview.wxss')]
+    ['visitor', read('pages/portfolios/visitor-portfolio/visitor-portfolio.wxss')],
+    ['preview', read('pages/portfolios/standard-preview/portfolio-standard-preview.wxss')]
   ]
 
   pages.forEach(([pageName, wxss]) => {
-    assert.match(wxss, /@import "\.\.\/\.\.\/styles\/portfolio-render-shared\.wxss";/, `${pageName} should import shared render styles`)
+    assert.match(wxss, /@import "\.\.\/\.\.\/\.\.\/styles\/portfolio-render-shared\.wxss";/, `${pageName} should import shared render styles`)
   })
 
   ;[
@@ -399,8 +402,8 @@ test('contact form modal uses full-screen fixed bottom sheet layout', () => {
 
 test('visitor qr contact images are centered in portfolio pages', () => {
   const pages = [
-    ['visitor', read('pages/visitor-portfolio/visitor-portfolio.wxss')],
-    ['preview', read('pages/portfolio-standard-preview/portfolio-standard-preview.wxss')]
+    ['visitor', read('pages/portfolios/visitor-portfolio/visitor-portfolio.wxss')],
+    ['preview', read('pages/portfolios/standard-preview/portfolio-standard-preview.wxss')]
   ]
 
   pages.forEach(([pageName, wxss]) => {
@@ -530,7 +533,7 @@ test('portfolio list cards show cover title update time and status as item infor
   assert.doesNotMatch(listJs, /草稿\s*\$\{[^}]*Revision/)
   assert.doesNotMatch(listJs, /正式\s*\$\{[^}]*Revision/)
   assert.match(listJs, /onShareAppMessage/)
-  assert.match(listJs, /pages\/visitor-portfolio\/visitor-portfolio\?shareCode=/)
+  assert.match(listJs, /pages\/portfolios\/visitor-portfolio\/visitor-portfolio\?shareCode=/)
   assert.match(listJs, /imageUrl:\s*portfolio\.coverUrl/)
 })
 
@@ -543,7 +546,7 @@ test('portfolio list delete action stays hidden at rest and centers its label wh
 })
 
 test('portfolio editor component delete action stays hidden at rest and while dragging', () => {
-  const editWxss = read('pages/portfolio-standard-edit/portfolio-standard-edit.wxss')
+  const editWxss = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxss')
 
   assert.match(editWxss, /\.component-remove-pane\s*\{[\s\S]*transform:\s*translateX\(100%\);[\s\S]*opacity:\s*0;[\s\S]*pointer-events:\s*none;/)
   assert.match(editWxss, /\.component-swipe-row\.revealed \.component-remove-pane\s*\{[\s\S]*transform:\s*translateX\(0\);[\s\S]*opacity:\s*1;[\s\S]*pointer-events:\s*auto;/)
@@ -551,8 +554,8 @@ test('portfolio editor component delete action stays hidden at rest and while dr
 })
 
 test('portfolio editor component rows keep order title drag handle and edit cue vertically centered', () => {
-  const editWxml = read('pages/portfolio-standard-edit/portfolio-standard-edit.wxml')
-  const editWxss = read('pages/portfolio-standard-edit/portfolio-standard-edit.wxss')
+  const editWxml = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxml')
+  const editWxss = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxss')
   const componentTitleRule = readRule(editWxss, '.component-title')
   const componentOrderRule = readRule(editWxss, '.component-order')
   const componentDragHandleRule = readRule(editWxss, '.component-drag-handle')
@@ -584,7 +587,7 @@ test('portfolio editor component rows keep order title drag handle and edit cue 
 })
 
 test('portfolio editor component picker keeps option list visible in Skyline', () => {
-  const editWxss = read('pages/portfolio-standard-edit/portfolio-standard-edit.wxss')
+  const editWxss = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxss')
   const optionScrollRule = readRule(editWxss, '.component-option-scroll')
 
   assert.match(optionScrollRule, /height:\s*46vh/)
@@ -593,8 +596,8 @@ test('portfolio editor component picker keeps option list visible in Skyline', (
 })
 
 test('portfolio component work picker keeps work list visible in Skyline', () => {
-  const editWxml = read('pages/portfolio-standard-edit/portfolio-standard-edit.wxml')
-  const editWxss = read('pages/portfolio-standard-edit/portfolio-standard-edit.wxss')
+  const editWxml = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxml')
+  const editWxss = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxss')
   const basePanelRule = readRule(editWxss, '.component-work-picker-panel')
   const listPanelRule = readRule(editWxss, '.component-work-list-panel')
   const scrollRule = readRule(editWxss, '.component-work-scroll')
@@ -617,8 +620,8 @@ test('portfolio component work picker keeps work list visible in Skyline', () =>
 })
 
 test('portfolio profile editor sheet keeps form content visible in Skyline', () => {
-  const editWxml = read('pages/portfolio-standard-edit/portfolio-standard-edit.wxml')
-  const editWxss = read('pages/portfolio-standard-edit/portfolio-standard-edit.wxss')
+  const editWxml = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxml')
+  const editWxss = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxss')
   const panelRule = readRule(editWxss, '.profile-sheet-panel')
   const scrollRule = readRule(editWxss, '.profile-sheet-scroll')
 
@@ -632,9 +635,9 @@ test('portfolio profile editor sheet keeps form content visible in Skyline', () 
 })
 
 test('standard personal portfolio editor follows shared maintainer layout', () => {
-  const editWxml = read('pages/portfolio-standard-edit/portfolio-standard-edit.wxml')
-  const editWxss = read('pages/portfolio-standard-edit/portfolio-standard-edit.wxss')
-  const editJs = read('pages/portfolio-standard-edit/portfolio-standard-edit.js')
+  const editWxml = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxml')
+  const editWxss = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxss')
+  const editJs = read('pages/portfolios/standard-edit/portfolio-standard-edit.js')
 
   assert.match(editWxml, /class="edit-content"/)
   assert.match(editWxml, /class="panel share-panel"/)
@@ -806,8 +809,8 @@ test('standard personal portfolio editor follows shared maintainer layout', () =
 })
 
 test('standard portfolio display tag sheet shows ordered tag and work selections', () => {
-  const editWxml = read('pages/portfolio-standard-edit/portfolio-standard-edit.wxml')
-  const editWxss = read('pages/portfolio-standard-edit/portfolio-standard-edit.wxss')
+  const editWxml = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxml')
+  const editWxss = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxss')
   const tagScrollRule = readRule(editWxss, '.display-group-scroll')
   const activePillRule = readRule(editWxss, '.display-group-pill.active')
   const tagPillRule = readRule(editWxss, '.display-group-pill')
@@ -868,7 +871,7 @@ test('standard portfolio display tag sheet shows ordered tag and work selections
 })
 
 test('standard personal portfolio editor keeps add button compact and delete hidden behind swipe', () => {
-  const editWxss = read('pages/portfolio-standard-edit/portfolio-standard-edit.wxss')
+  const editWxss = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxss')
 
   assert.match(editWxss, /\.link-button\s*\{[\s\S]*width:\s*136rpx;[\s\S]*min-width:\s*136rpx;[\s\S]*max-width:\s*136rpx;[\s\S]*flex:\s*0 0 136rpx;[\s\S]*padding:\s*0;/)
   assert.match(editWxss, /\.component-remove-button\s*\{[\s\S]*width:\s*108rpx;[\s\S]*min-width:\s*108rpx;[\s\S]*height:\s*64rpx;/)

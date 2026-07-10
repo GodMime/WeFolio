@@ -3,14 +3,12 @@ const path = require('node:path')
 const test = require('node:test')
 
 function loadPortfolioCoverUtils(fakeRequest) {
-  const utilPath = path.join(__dirname, '../utils/portfolio-cover.js')
-  const assetsPath = path.join(__dirname, '../utils/portfolio-assets.js')
+  const utilPath = path.join(__dirname, '../pages/portfolios/utils/portfolio-assets.js')
   const requestPath = path.join(__dirname, '../utils/request.js')
   const requestCacheKey = require.resolve(requestPath)
   const originalRequestCache = require.cache[requestCacheKey]
 
   delete require.cache[require.resolve(utilPath)]
-  delete require.cache[require.resolve(assetsPath)]
   require.cache[requestCacheKey] = {
     id: requestPath,
     filename: requestPath,

@@ -1,18 +1,6 @@
 {
   "pages": [
     "pages/index/index",
-    "pages/schedule/schedule",
-    "pages/works/works",
-    "pages/portfolios/portfolios",
-    "pages/portfolio-standard-edit/portfolio-standard-edit",
-    "pages/portfolio-component-library/portfolio-component-library",
-    "pages/portfolio-standard-preview/portfolio-standard-preview",
-    "pages/visitor-portfolio/visitor-portfolio",
-    "pages/visitor-schedule/visitor-schedule",
-    "pages/portfolio-unavailable/portfolio-unavailable",
-    "pages/work-add/work-add",
-    "pages/work-edit/work-edit",
-    "pages/video-frame-probe/video-frame-probe",
     "pages/points/points",
     "pages/points-rules/points-rules",
     "pages/teams/teams",
@@ -24,12 +12,52 @@
     "pages/visits/visits",
     "pages/profile/profile",
     "pages/login/login",
-    "pages/mock/index/index",
-    "pages/mock/schedule/schedule",
-    "pages/mock/works/works",
-    "pages/mock/portfolios/portfolios",
-    "pages/mock/portfolio-standard-edit/portfolio-standard-edit",
-    "pages/mock/portfolio-standard-preview/portfolio-standard-preview"
+    "pages/visitor-portfolio/visitor-portfolio",
+    "pages/visitor-schedule/visitor-schedule"
+  ],
+  "subPackages": [
+    {
+      "name": "mock",
+      "root": "pages/mock",
+      "pages": [
+        "index/index",
+        "schedule/schedule",
+        "works/works",
+        "portfolios/portfolios",
+        "portfolio-standard-edit/portfolio-standard-edit",
+        "portfolio-standard-preview/portfolio-standard-preview"
+      ]
+    },
+    {
+      "name": "works",
+      "root": "pages/works",
+      "pages": [
+        "works",
+        "work-add/work-add",
+        "work-edit/work-edit",
+        "video-frame-probe/video-frame-probe"
+      ]
+    },
+    {
+      "name": "portfolio",
+      "root": "pages/portfolios",
+      "pages": [
+        "portfolios",
+        "standard-edit/portfolio-standard-edit",
+        "component-library/portfolio-component-library",
+        "standard-preview/portfolio-standard-preview",
+        "visitor-portfolio/visitor-portfolio",
+        "visitor-schedule/visitor-schedule",
+        "unavailable/portfolio-unavailable"
+      ]
+    },
+    {
+      "name": "schedule",
+      "root": "pages/schedule",
+      "pages": [
+        "schedule"
+      ]
+    }
   ],
   "window": {
     "navigationBarTextStyle": "black",

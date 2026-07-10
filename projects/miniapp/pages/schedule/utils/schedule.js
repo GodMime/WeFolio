@@ -1,9 +1,9 @@
-const { normalizeId } = require('./id')
+const { normalizeId } = require('../../../utils/id')
 const {
   formatLunarDayMeta,
   formatLunarFullText,
   toLunarDate
-} = require('./lunar')
+} = require('../../../utils/lunar')
 
 const DEFAULT_SLOT_COLOR = '#d98200'
 

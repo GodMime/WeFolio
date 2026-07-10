@@ -5,7 +5,7 @@ const {
   DISPLAY_SWITCH_ANIMATION_MS,
   clearDisplaySwitchingTimer,
   markDisplaySwitching
-} = require('../utils/display-switching')
+} = require('../pages/portfolios/utils/display-switching')
 
 function createPage() {
   return {

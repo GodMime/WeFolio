@@ -17,7 +17,7 @@ const {
   validateScheduleItemForm,
   validateSlotDefinitionPayload,
   validateSlotDefinitionForm
-} = require('../utils/schedule')
+} = require('../pages/schedule/utils/schedule')
 
 test('normalizes schedule overview for page rendering', () => {
   const result = normalizeScheduleOverview({

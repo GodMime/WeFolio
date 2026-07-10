@@ -1,4 +1,4 @@
-@import "../../portfolio-standard-edit/portfolio-standard-edit.wxss";
+@import "../styles/portfolio-standard-edit.wxss";
 @import "../common.wxss";
 
 .mock-component-copy {

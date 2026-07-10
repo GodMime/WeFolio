@@ -1,10 +1,10 @@
-const { request } = require('../../utils/request')
-const { handleMaintainerAuthRequired, hasLocalToken } = require('../../utils/session')
-const { noop } = require('../../utils/noop')
-const { isRemoteUrl } = require('../../utils/upload-file')
-const { normalizeProfile: normalizeBasicProfile } = require('../../utils/profile')
-const { normalizeWorkList, normalizeWorkTags } = require('../../utils/works')
-const { confirmPortfolioPublishDisclaimer } = require('../../utils/portfolio-publish-disclaimer')
+const { request } = require('../../../utils/request')
+const { handleMaintainerAuthRequired, hasLocalToken } = require('../../../utils/session')
+const { noop } = require('../../../utils/noop')
+const { isRemoteUrl } = require('../../../utils/upload-file')
+const { normalizeProfile: normalizeBasicProfile } = require('../../../utils/profile')
+const { normalizeWorkList, normalizeWorkTags } = require('../utils/works')
+const { confirmPortfolioPublishDisclaimer } = require('../utils/portfolio-publish-disclaimer')
 const {
   PORTFOLIO_ASSET_TYPES,
   PORTFOLIO_COVER_CROP_FILE_TYPE,
@@ -20,7 +20,7 @@ const {
   movePortfolioCoverCropState,
   shouldCropPortfolioCover,
   uploadPortfolioImageAsset
-} = require('../../utils/portfolio-assets')
+} = require('../utils/portfolio-assets')
 const {
   CONTACT_FORM_DISPLAY_MODE_OPTIONS,
   CONTACT_FORM_DISPLAY_MODES,
@@ -53,7 +53,7 @@ const {
   updateComponentProfileConfig,
   updateComponentTextSectionConfig,
   updateComponentWorkIds
-} = require('../../utils/portfolios')
+} = require('../../../utils/portfolios')
 
 const PORTFOLIO_API_PREFIX = '/api/mine/portfolios'
 const STANDARD_PERSONAL_API_URL = '/api/mine/portfolios/standard-personal'
@@ -2319,6 +2319,6 @@ Page({
     if (!this.data.portfolioId) {
       return
     }
-    wx.navigateTo({ url: `/pages/portfolio-standard-preview/portfolio-standard-preview?portfolioId=${this.data.portfolioId}` })
+    wx.navigateTo({ url: `/pages/portfolios/standard-preview/portfolio-standard-preview?portfolioId=${this.data.portfolioId}` })
   }
 })

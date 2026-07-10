@@ -1,8 +1,1 @@
-{
-  "usingComponents": {
-    "navigation-bar": "/components/navigation-bar/navigation-bar",
-    "portfolio-carousel": "/components/portfolio-carousel/portfolio-carousel",
-    "portfolio-schedule-query": "/components/portfolio-schedule-query/portfolio-schedule-query",
-    "portfolio-contact-form": "/components/portfolio-contact-form/portfolio-contact-form"
-  }
-}
+{}

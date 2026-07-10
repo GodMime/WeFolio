@@ -1,4 +1,4 @@
-@import "../../index/index.wxss";
+@import "../styles/index.wxss";
 @import "../common.wxss";
 
 .return-login-button {

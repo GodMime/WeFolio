@@ -12,7 +12,7 @@ const {
   moveWorkThumbnailCropState,
   prepareWorkThumbnailUploadFile,
   zoomWorkThumbnailCropState
-} = require('../utils/work-thumbnail-crop')
+} = require('../pages/works/utils/work-thumbnail-crop')
 
 test('builds fixed thumbnail ratio options with original image ratio first', () => {
   const options = buildWorkThumbnailRatioOptions({
@@ -30,7 +30,7 @@ test('builds fixed thumbnail ratio options with original image ratio first', () 
 })
 
 test('keeps thumbnail crop shared media helpers outside upload workflow module', () => {
-  const source = fs.readFileSync(path.join(__dirname, '../utils/work-thumbnail-crop.js'), 'utf8')
+  const source = fs.readFileSync(path.join(__dirname, '../pages/works/utils/work-thumbnail-crop.js'), 'utf8')
 
   assert.doesNotMatch(source, /require\(['"]\.\/work-upload['"]\)/)
 })

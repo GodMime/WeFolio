@@ -4,7 +4,7 @@ const {
   getMockTabs,
   shiftMockYearMonth,
   showMockLoginRequiredToast
-} = require('../../../utils/mock-experience')
+} = require('../utils/mock-experience')
 
 function todayText() {
   const now = new Date()

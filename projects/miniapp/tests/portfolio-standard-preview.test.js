@@ -42,7 +42,7 @@ function readExisting(relativePath) {
 }
 
 function loadPreviewPage(fakeRequest, wxOverrides = {}) {
-  const pagePath = path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.js')
+  const pagePath = path.join(__dirname, '../pages/portfolios/standard-preview/portfolio-standard-preview.js')
   const requestPath = path.join(__dirname, '../utils/request.js')
   const requestCacheKey = require.resolve(requestPath)
   const originalRequestCache = require.cache[requestCacheKey]
@@ -90,19 +90,19 @@ test('portfolio preview and visitor pages render miniapp brand footer', () => {
   const brandName = '映期Folio'
   const logoPath = path.join(__dirname, `..${logoUrl}`)
   const previewWxml = fs.readFileSync(
-    path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.wxml'),
+    path.join(__dirname, '../pages/portfolios/standard-preview/portfolio-standard-preview.wxml'),
     'utf8'
   )
   const visitorWxml = fs.readFileSync(
-    path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.wxml'),
+    path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.wxml'),
     'utf8'
   )
   const previewWxss = fs.readFileSync(
-    path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.wxss'),
+    path.join(__dirname, '../pages/portfolios/standard-preview/portfolio-standard-preview.wxss'),
     'utf8'
   )
   const visitorWxss = fs.readFileSync(
-    path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.wxss'),
+    path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.wxss'),
     'utf8'
   )
 
@@ -332,7 +332,7 @@ test('preview page opens image and video work media without visitor event reques
 
 test('preview markup exposes loading skeleton and retryable error state', () => {
   const wxml = fs.readFileSync(
-    path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.wxml'),
+    path.join(__dirname, '../pages/portfolios/standard-preview/portfolio-standard-preview.wxml'),
     'utf8'
   )
 
@@ -343,11 +343,11 @@ test('preview markup exposes loading skeleton and retryable error state', () => 
 
 test('preview page passes schedule query context to shared component', () => {
   const wxml = fs.readFileSync(
-    path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.wxml'),
+    path.join(__dirname, '../pages/portfolios/standard-preview/portfolio-standard-preview.wxml'),
     'utf8'
   )
   const json = JSON.parse(fs.readFileSync(
-    path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.json'),
+    path.join(__dirname, '../pages/portfolios/standard-preview/portfolio-standard-preview.json'),
     'utf8'
   ))
 
@@ -359,19 +359,19 @@ test('preview page passes schedule query context to shared component', () => {
 
 test('portfolio work sections render fixed title, all tags, play badge, and video overlay', () => {
   const previewWxml = fs.readFileSync(
-    path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.wxml'),
+    path.join(__dirname, '../pages/portfolios/standard-preview/portfolio-standard-preview.wxml'),
     'utf8'
   )
   const visitorWxml = fs.readFileSync(
-    path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.wxml'),
+    path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.wxml'),
     'utf8'
   )
   const previewWxss = fs.readFileSync(
-    path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.wxss'),
+    path.join(__dirname, '../pages/portfolios/standard-preview/portfolio-standard-preview.wxss'),
     'utf8'
   )
   const visitorWxss = fs.readFileSync(
-    path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.wxss'),
+    path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.wxss'),
     'utf8'
   )
   const sharedWxss = readExisting('styles/portfolio-render-shared.wxss')
@@ -389,7 +389,7 @@ test('portfolio work sections render fixed title, all tags, play badge, and vide
     assert.match(wxml, /id="portfolioWorkVideo"[\s\S]*src="\{\{videoPreview\.src\}\}"[\s\S]*poster="\{\{videoPreview\.poster\}\}"[\s\S]*controls="\{\{true\}\}"[\s\S]*show-fullscreen-btn="\{\{true\}\}"/)
   })
   ;[previewWxss, visitorWxss].forEach((wxss) => {
-    assert.match(wxss, /@import "\.\.\/\.\.\/styles\/portfolio-render-shared\.wxss";/)
+    assert.match(wxss, /@import "\.\.\/\.\.\/\.\.\/styles\/portfolio-render-shared\.wxss";/)
     assert.match(wxss, /\.work-section-title\s*\{[\s\S]*color:\s*#000000;[\s\S]*font-size:\s*34rpx;/)
     assert.match(wxss, /\.work-play-badge\s*\{[\s\S]*position:\s*absolute;[\s\S]*right:\s*16rpx;[\s\S]*bottom:\s*16rpx;/)
     assert.doesNotMatch(wxss, /\.work-play-badge\s*\{[\s\S]*top:\s*50%;[\s\S]*left:\s*50%;/)
@@ -402,11 +402,11 @@ test('portfolio work sections render fixed title, all tags, play badge, and vide
 
 test('preview video overlay renders in root portal like visitor page', () => {
   const previewWxml = fs.readFileSync(
-    path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.wxml'),
+    path.join(__dirname, '../pages/portfolios/standard-preview/portfolio-standard-preview.wxml'),
     'utf8'
   )
   const visitorWxml = fs.readFileSync(
-    path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.wxml'),
+    path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.wxml'),
     'utf8'
   )
   const portalOverlayPattern = /<root-portal\s+wx:if="\{\{videoPreviewVisible\}\}">[\s\S]*class="work-video-mask \{\{videoPreviewVisible \? 'visible' : ''\}\}"[\s\S]*<\/root-portal>/
@@ -417,7 +417,7 @@ test('preview video overlay renders in root portal like visitor page', () => {
 
 test('preview video overlay uses wxss-compatible fixed viewport offsets', () => {
   const previewWxss = fs.readFileSync(
-    path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.wxss'),
+    path.join(__dirname, '../pages/portfolios/standard-preview/portfolio-standard-preview.wxss'),
     'utf8'
   )
   const maskRule = readRule(previewWxss, '.work-video-mask')
@@ -429,11 +429,11 @@ test('preview video overlay uses wxss-compatible fixed viewport offsets', () => 
 
 test('profile component can render selected wechat qr in actual pages', () => {
   const previewWxml = fs.readFileSync(
-    path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.wxml'),
+    path.join(__dirname, '../pages/portfolios/standard-preview/portfolio-standard-preview.wxml'),
     'utf8'
   )
   const visitorWxml = fs.readFileSync(
-    path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.wxml'),
+    path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.wxml'),
     'utf8'
   )
 
@@ -443,19 +443,19 @@ test('profile component can render selected wechat qr in actual pages', () => {
 
 test('contact form components support modal entry and inline form in actual pages', () => {
   const previewWxml = fs.readFileSync(
-    path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.wxml'),
+    path.join(__dirname, '../pages/portfolios/standard-preview/portfolio-standard-preview.wxml'),
     'utf8'
   )
   const visitorWxml = fs.readFileSync(
-    path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.wxml'),
+    path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.wxml'),
     'utf8'
   )
   const previewJson = JSON.parse(fs.readFileSync(
-    path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.json'),
+    path.join(__dirname, '../pages/portfolios/standard-preview/portfolio-standard-preview.json'),
     'utf8'
   ))
   const visitorJson = JSON.parse(fs.readFileSync(
-    path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.json'),
+    path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.json'),
     'utf8'
   ))
   const componentWxml = readExisting('components/portfolio-contact-form/portfolio-contact-form.wxml')
@@ -475,11 +475,11 @@ test('contact form components support modal entry and inline form in actual page
 
 test('actual portfolio pages do not render share intro as page content', () => {
   const previewWxml = fs.readFileSync(
-    path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.wxml'),
+    path.join(__dirname, '../pages/portfolios/standard-preview/portfolio-standard-preview.wxml'),
     'utf8'
   )
   const visitorWxml = fs.readFileSync(
-    path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.wxml'),
+    path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.wxml'),
     'utf8'
   )
 
@@ -491,11 +491,11 @@ test('actual portfolio pages do not render share intro as page content', () => {
 
 test('portfolio user-authored text preserves line breaks in actual pages', () => {
   const previewWxml = fs.readFileSync(
-    path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.wxml'),
+    path.join(__dirname, '../pages/portfolios/standard-preview/portfolio-standard-preview.wxml'),
     'utf8'
   )
   const visitorWxml = fs.readFileSync(
-    path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.wxml'),
+    path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.wxml'),
     'utf8'
   )
   const appWxss = fs.readFileSync(
@@ -503,11 +503,11 @@ test('portfolio user-authored text preserves line breaks in actual pages', () =>
     'utf8'
   )
   const previewWxss = fs.readFileSync(
-    path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.wxss'),
+    path.join(__dirname, '../pages/portfolios/standard-preview/portfolio-standard-preview.wxss'),
     'utf8'
   )
   const visitorWxss = fs.readFileSync(
-    path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.wxss'),
+    path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.wxss'),
     'utf8'
   )
 
@@ -524,11 +524,11 @@ test('portfolio user-authored text preserves line breaks in actual pages', () =>
 
 test('portfolio profile avatar is centered in actual pages', () => {
   const previewWxss = fs.readFileSync(
-    path.join(__dirname, '../pages/portfolio-standard-preview/portfolio-standard-preview.wxss'),
+    path.join(__dirname, '../pages/portfolios/standard-preview/portfolio-standard-preview.wxss'),
     'utf8'
   )
   const visitorWxss = fs.readFileSync(
-    path.join(__dirname, '../pages/visitor-portfolio/visitor-portfolio.wxss'),
+    path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.wxss'),
     'utf8'
   )
 

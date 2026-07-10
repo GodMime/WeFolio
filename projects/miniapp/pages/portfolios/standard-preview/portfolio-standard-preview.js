@@ -1,11 +1,11 @@
-const { request } = require('../../utils/request')
-const { createContactLeadForm } = require('../../utils/contact-lead')
+const { request } = require('../../../utils/request')
+const { createContactLeadForm } = require('../utils/contact-lead')
 const {
   createActiveContactFormComponent,
   findContactFormComponent
-} = require('../../utils/portfolio-contact-form')
-const { clearDisplaySwitchingTimer, markDisplaySwitching } = require('../../utils/display-switching')
-const { normalizeVisitorPortfolio, switchDisplayGroup } = require('../../utils/visitor-portfolio')
+} = require('../utils/portfolio-contact-form')
+const { clearDisplaySwitchingTimer, markDisplaySwitching } = require('../utils/display-switching')
+const { normalizeVisitorPortfolio, switchDisplayGroup } = require('../../../utils/visitor-portfolio')
 
 const PORTFOLIO_API_PREFIX = '/api/mine/portfolios'
 const PUBLISHED_PREVIEW_SCOPE = 'published'

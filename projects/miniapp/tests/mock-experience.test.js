@@ -3,6 +3,8 @@ const fs = require('node:fs')
 const path = require('node:path')
 const test = require('node:test')
 
+const { getRegisteredPageRoutes } = require('./helpers/app-pages')
+
 const ROOT = path.join(__dirname, '..')
 const MOCK_LOGIN_REQUIRED_MESSAGE = '请去“我的”页面注册登录'
 const MOCK_AVATAR_URL = 'https://cdn2.we-folio.dingchenyong.top/demo/demo-avatar.png'
@@ -17,7 +19,7 @@ const MOCK_PAGE_PATHS = [
 const MOCK_PAGE_SOURCE_FILES = MOCK_PAGE_PATHS.flatMap((pagePath) => [
   `${pagePath}.js`,
   `${pagePath}.wxml`
-])
+]).concat('pages/mock/utils/mock-experience.js')
 const FORBIDDEN_MOCK_SOURCE_PATTERNS = [
   /utils\/request/,
   /utils\/session/,
@@ -56,17 +58,18 @@ function assertExists(relativePath) {
 }
 
 function loadMockExperience() {
-  assertExists('utils/mock-experience.js')
-  const modulePath = path.join(ROOT, 'utils/mock-experience.js')
+  assertExists('pages/mock/utils/mock-experience.js')
+  const modulePath = path.join(ROOT, 'pages/mock/utils/mock-experience.js')
   delete require.cache[require.resolve(modulePath)]
   return require(modulePath)
 }
 
-test('app registers independent mock experience pages', () => {
+test('app registers mock experience pages in the mock subpackage', () => {
   const appJson = readJson('app.json')
+  const registeredPageRoutes = getRegisteredPageRoutes(appJson)
 
   MOCK_PAGE_PATHS.forEach((pagePath) => {
-    assert.ok(appJson.pages.includes(pagePath), `${pagePath} should be registered`)
+    assert.ok(registeredPageRoutes.includes(pagePath), `${pagePath} should be registered`)
     assertExists(`${pagePath}.js`)
     assertExists(`${pagePath}.wxml`)
     assertExists(`${pagePath}.wxss`)
@@ -259,7 +262,7 @@ test('mock portfolio list inherits wider title layout without changing action bu
   const actionRowRule = readRule(listWxss, '.portfolio-action-row')
   const actionButtonRule = readRule(listWxss, '.portfolio-action-button')
 
-  assert.match(mockWxss, /@import "\.\.\/\.\.\/portfolios\/portfolios\.wxss";/)
+  assert.match(mockWxss, /@import "\.\.\/styles\/portfolios\.wxss";/)
   assert.match(wxml, /class="page-shell portfolios-page mock-portfolios-page"/)
   assert.match(wxml, /class="portfolio-cover"/)
   assert.match(wxml, /class="portfolio-action-row"/)
@@ -437,7 +440,7 @@ test('mock pages borrow the corresponding production page visual structure', () 
   const expectations = [
     {
       page: 'pages/mock/index/index',
-      styleImport: '../../index/index.wxss',
+      styleImport: '../styles/index.wxss',
       classes: [
         'page-shell mine-page',
         'panel profile-panel',
@@ -448,7 +451,7 @@ test('mock pages borrow the corresponding production page visual structure', () 
     },
     {
       page: 'pages/mock/schedule/schedule',
-      styleImport: '../../schedule/schedule.wxss',
+      styleImport: '../styles/schedule.wxss',
       classes: [
         'page-shell schedule-page',
         'schedule-content',
@@ -461,7 +464,7 @@ test('mock pages borrow the corresponding production page visual structure', () 
     },
     {
       page: 'pages/mock/works/works',
-      styleImport: '../../works/works.wxss',
+      styleImport: '../styles/works.wxss',
       classes: [
         'page-shell works-page',
         'search-panel',
@@ -473,7 +476,7 @@ test('mock pages borrow the corresponding production page visual structure', () 
     },
     {
       page: 'pages/mock/portfolios/portfolios',
-      styleImport: '../../portfolios/portfolios.wxss',
+      styleImport: '../styles/portfolios.wxss',
       classes: [
         'page-shell portfolios-page',
         'portfolio-content',
@@ -485,7 +488,7 @@ test('mock pages borrow the corresponding production page visual structure', () 
     },
     {
       page: 'pages/mock/portfolio-standard-edit/portfolio-standard-edit',
-      styleImport: '../../portfolio-standard-edit/portfolio-standard-edit.wxss',
+      styleImport: '../styles/portfolio-standard-edit.wxss',
       classes: [
         'page-shell portfolio-edit-page',
         'edit-content',
@@ -496,7 +499,7 @@ test('mock pages borrow the corresponding production page visual structure', () 
     },
     {
       page: 'pages/mock/portfolio-standard-preview/portfolio-standard-preview',
-      styleImport: '../../portfolio-standard-preview/portfolio-standard-preview.wxss',
+      styleImport: '../styles/portfolio-standard-preview.wxss',
       classes: [
         'page-shell portfolio-preview-page',
         'preview-scroll',

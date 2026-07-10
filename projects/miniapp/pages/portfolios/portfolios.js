@@ -2,13 +2,13 @@ const { request } = require('../../utils/request')
 const { normalizeId } = require('../../utils/id')
 const { handleMaintainerAuthRequired, hasLocalToken } = require('../../utils/session')
 const { buildPublishPayload } = require('../../utils/portfolios')
-const { confirmPortfolioPublishDisclaimer } = require('../../utils/portfolio-publish-disclaimer')
+const { confirmPortfolioPublishDisclaimer } = require('./utils/portfolio-publish-disclaimer')
 
 const PORTFOLIOS_API_URL = '/api/mine/portfolios'
 const PORTFOLIO_DELETE_API_PREFIX = '/api/mine/portfolios/delete'
-const EDIT_PAGE_URL = '/pages/portfolio-standard-edit/portfolio-standard-edit'
-const PREVIEW_PAGE_URL = '/pages/portfolio-standard-preview/portfolio-standard-preview'
-const VISITOR_PORTFOLIO_SHARE_PATH_PREFIX = '/pages/visitor-portfolio/visitor-portfolio?shareCode='
+const EDIT_PAGE_URL = '/pages/portfolios/standard-edit/portfolio-standard-edit'
+const PREVIEW_PAGE_URL = '/pages/portfolios/standard-preview/portfolio-standard-preview'
+const VISITOR_PORTFOLIO_SHARE_PATH_PREFIX = '/pages/portfolios/visitor-portfolio/visitor-portfolio?shareCode='
 const SCHEDULE_PAGE_URL = '/pages/schedule/schedule'
 const WORKS_PAGE_URL = '/pages/works/works'
 const MINE_PAGE_URL = '/pages/index/index'

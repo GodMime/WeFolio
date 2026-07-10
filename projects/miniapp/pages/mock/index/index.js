@@ -1,7 +1,7 @@
 const {
   MOCK_DASHBOARD,
   getMockTabs
-} = require('../../../utils/mock-experience')
+} = require('../utils/mock-experience')
 
 Page({
   data: {

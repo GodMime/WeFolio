@@ -1,5 +1,5 @@
-const { request } = require('../../utils/request')
-const { handleMaintainerAuthRequired, hasLocalToken } = require('../../utils/session')
+const { request } = require('../../../utils/request')
+const { handleMaintainerAuthRequired, hasLocalToken } = require('../../../utils/session')
 const {
   applyUnifiedWorkTags,
   buildUnifiedWorkTagItems,
@@ -7,7 +7,7 @@ const {
   buildWorkTagOptionListHeight,
   buildWorkTagPickerOptions,
   normalizeWorkTags
-} = require('../../utils/works')
+} = require('../utils/works')
 const {
   applyUploadCompleteResults,
   buildUploadCompleteFailureMessage,
@@ -22,8 +22,8 @@ const {
   runWorkUploadQueue,
   uploadToCos,
   validateChosenMediaFiles
-} = require('../../utils/work-upload')
-const { calculateFileSha256: calculateLocalFileSha256 } = require('../../utils/sha256')
+} = require('../utils/work-upload')
+const { calculateFileSha256: calculateLocalFileSha256 } = require('../utils/sha256')
 
 const WORKS_PAGE_URL = '/pages/works/works'
 const WORK_TAGS_API_URL = '/api/mine/works/tags'

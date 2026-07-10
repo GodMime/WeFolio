@@ -1,7 +1,7 @@
 const {
   COMPONENT_TYPES,
   CONTACT_FORM_DISPLAY_MODES
-} = require('./portfolios')
+} = require('../../../utils/portfolios')
 
 function createActiveContactFormComponent() {
   return {

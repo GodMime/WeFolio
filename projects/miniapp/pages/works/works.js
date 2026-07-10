@@ -8,7 +8,7 @@ const {
   createChooseCoverImageOptions,
   prepareLocalCoverUploadFile,
   uploadToCos
-} = require('../../utils/work-upload')
+} = require('./utils/work-upload')
 const {
   WORK_THUMBNAIL_CROP_QUALITY,
   WORK_THUMBNAIL_FILE_TYPE,
@@ -21,8 +21,8 @@ const {
   moveWorkThumbnailCropState,
   prepareWorkThumbnailUploadFile,
   zoomWorkThumbnailCropState
-} = require('../../utils/work-thumbnail-crop')
-const { calculateFileSha256: calculateLocalFileSha256 } = require('../../utils/sha256')
+} = require('./utils/work-thumbnail-crop')
+const { calculateFileSha256: calculateLocalFileSha256 } = require('./utils/sha256')
 const {
   DEFAULT_WORK_TAG_COLOR,
   WORK_TAG_COLOR_OPTIONS,
@@ -38,9 +38,9 @@ const {
   normalizeWorkList,
   validateWorkForm,
   validateWorkTagForm
-} = require('../../utils/works')
+} = require('./utils/works')
 
-const ADD_WORK_PAGE_URL = '/pages/work-add/work-add'
+const ADD_WORK_PAGE_URL = '/pages/works/work-add/work-add'
 const MINE_PAGE_URL = '/pages/index/index'
 const SCHEDULE_PAGE_URL = '/pages/schedule/schedule'
 const PORTFOLIOS_PAGE_URL = '/pages/portfolios/portfolios'
