@@ -639,7 +639,7 @@ class MineWorkServiceTest {
     }
 
     @Test
-    void createThumbnailUploadTicketShouldUseExistingIndependentImageCoverKey() {
+    void createThumbnailUploadTicketShouldCreateVersionedKeyWhenImageHasIndependentCover() {
         WorkEntity work = new WorkEntity();
         work.setId(17L);
         work.setUserId(7L);
@@ -674,8 +674,10 @@ class MineWorkServiceTest {
         WorkUploadTaskEntity task = taskCaptor.getValue();
         assertThat(task.getBatchId()).isEqualTo("edit-thumbnail-17");
         assertThat(task.getMediaType()).isEqualTo(MediaTypeDict.IMAGE.getCode());
-        assertThat(task.getObjectKey()).isEqualTo("WFA3B1E7A2/work/image/photo-thumb.jpg");
-        assertThat(task.getCoverObjectKey()).isEqualTo("WFA3B1E7A2/work/image/photo-thumb.jpg");
+        assertThat(task.getObjectKey())
+                .matches("WFA3B1E7A2/work/image/photo-thumb-\\d+\\.jpg")
+                .isNotEqualTo("WFA3B1E7A2/work/image/photo-thumb.jpg");
+        assertThat(task.getCoverObjectKey()).isEqualTo(task.getObjectKey());
         assertThat(task.getOriginalFileName()).isEqualTo("photo-thumb.jpg");
         assertThat(task.getFileSha256())
                 .isEqualTo("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
@@ -685,7 +687,7 @@ class MineWorkServiceTest {
         assertThat(response.getTaskId()).isEqualTo(401L);
         assertThat(response.getClientId()).isEqualTo("edit-work-17-thumbnail");
         assertThat(response.getMaxBytes()).isEqualTo(100L * 1024L);
-        assertThat(response.getObjectKey()).isEqualTo("WFA3B1E7A2/work/image/photo-thumb.jpg");
+        assertThat(response.getObjectKey()).isEqualTo(task.getObjectKey());
     }
 
     @Test
@@ -731,9 +733,10 @@ class MineWorkServiceTest {
                 any(String.class),
                 anyLong(),
                 any(LocalDateTime.class));
-        assertThat(objectKeyCaptor.getValue()).isEqualTo("WFA3B1E7A2/work/image/photo-thumb.jpg");
-        assertThat(objectKeyCaptor.getValue()).isNotEqualTo(mediaObjectKey);
-        assertThat(response.getObjectKey()).isEqualTo("WFA3B1E7A2/work/image/photo-thumb.jpg");
+        assertThat(objectKeyCaptor.getValue())
+                .matches("WFA3B1E7A2/work/image/photo-thumb-\\d+\\.jpg")
+                .isNotEqualTo(mediaObjectKey);
+        assertThat(response.getObjectKey()).isEqualTo(objectKeyCaptor.getValue());
     }
 
     @Test
@@ -1638,7 +1641,7 @@ class MineWorkServiceTest {
     }
 
     @Test
-    void updateWorkShouldReplaceImageThumbnailFromUploadedTaskWithoutDeletingSameCosKey() {
+    void updateWorkShouldReplaceImageThumbnailAndDeleteOldIndependentCover() {
         WorkEntity work = new WorkEntity();
         work.setId(17L);
         work.setUserId(7L);
@@ -1652,14 +1655,14 @@ class MineWorkServiceTest {
         WorkUploadTaskEntity thumbnailTask = uploadTask(
                 401L,
                 "edit-thumbnail-17",
-                "WFA3B1E7A2/work/image/photo-thumb.jpg",
+                "WFA3B1E7A2/work/image/photo-thumb-1783651200000.jpg",
                 "thumbnail-ticket-17");
         thumbnailTask.setOriginalFileName("photo-thumb.jpg");
         thumbnailTask.setFileSha256("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
         thumbnailTask.setFileSize(90_000L);
         when(workEntityMapper.selectById(17L)).thenReturn(work, work);
         when(workUploadTaskEntityMapper.selectById(401L)).thenReturn(thumbnailTask);
-        when(cosService.headObject("WFA3B1E7A2/work/image/photo-thumb.jpg"))
+        when(cosService.headObject("WFA3B1E7A2/work/image/photo-thumb-1783651200000.jpg"))
                 .thenReturn(new CosService.ObjectHead("image/jpeg", 90_000L));
         when(workEntityMapper.updateById(any(WorkEntity.class))).thenReturn(1);
         when(workUploadTaskEntityMapper.updateById(any(WorkUploadTaskEntity.class))).thenReturn(1);
@@ -1677,16 +1680,64 @@ class MineWorkServiceTest {
         ArgumentCaptor<WorkUploadTaskEntity> taskCaptor = ArgumentCaptor.forClass(WorkUploadTaskEntity.class);
         verify(workEntityMapper).updateById(workCaptor.capture());
         verify(workUploadTaskEntityMapper).updateById(taskCaptor.capture());
-        verify(cosService, never()).delete(any(String.class));
+        verify(cosService).delete("WFA3B1E7A2/work/image/photo-thumb.jpg");
         WorkEntity updatedWork = workCaptor.getValue();
         assertThat(updatedWork.getTitle()).isEqualTo("新标题");
         assertThat(updatedWork.getDescription()).isEqualTo("新说明");
-        assertThat(updatedWork.getCoverObjectKey()).isEqualTo("WFA3B1E7A2/work/image/photo-thumb.jpg");
+        assertThat(updatedWork.getCoverObjectKey())
+                .isEqualTo("WFA3B1E7A2/work/image/photo-thumb-1783651200000.jpg");
         assertThat(updatedWork.getCoverSha256())
                 .isEqualTo("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
         WorkUploadTaskEntity updatedTask = taskCaptor.getValue();
         assertThat(updatedTask.getStatus()).isEqualTo(WorkUploadTaskStatusDict.CONFIRMED.getCode());
         assertThat(updatedTask.getConfirmedWorkId()).isEqualTo(17L);
+    }
+
+    /**
+     * 图片作品旧封面直接使用原图时，替换缩略图后必须保留原图对象。
+     */
+    @Test
+    void updateWorkShouldKeepOriginalImageWhenLegacyCoverPointsToMediaObject() {
+        String mediaObjectKey = "WFA3B1E7A2/work/image/photo.jpg";
+        String newCoverObjectKey = "WFA3B1E7A2/work/image/photo-thumb-1783651200000.jpg";
+        WorkEntity work = new WorkEntity();
+        work.setId(17L);
+        work.setUserId(7L);
+        work.setTitle("旧标题");
+        work.setDescription("旧说明");
+        work.setMediaType(MediaTypeDict.IMAGE.getCode());
+        work.setMediaObjectKey(mediaObjectKey);
+        work.setCoverObjectKey(mediaObjectKey);
+        work.setCoverSha256("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        work.setOriginalFileName("photo.jpg");
+        WorkUploadTaskEntity thumbnailTask = uploadTask(
+                401L,
+                "edit-thumbnail-17",
+                newCoverObjectKey,
+                "thumbnail-ticket-17");
+        thumbnailTask.setOriginalFileName("photo-thumb.jpg");
+        thumbnailTask.setFileSha256("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+        thumbnailTask.setFileSize(90_000L);
+        when(workEntityMapper.selectById(17L)).thenReturn(work, work);
+        when(workUploadTaskEntityMapper.selectById(401L)).thenReturn(thumbnailTask);
+        when(cosService.headObject(newCoverObjectKey))
+                .thenReturn(new CosService.ObjectHead("image/jpeg", 90_000L));
+        when(workEntityMapper.updateById(any(WorkEntity.class))).thenReturn(1);
+        when(workUploadTaskEntityMapper.updateById(any(WorkUploadTaskEntity.class))).thenReturn(1);
+        when(portfolioReferenceEntityMapper.selectList(any())).thenReturn(List.of());
+        when(workTagEntityMapper.selectList(any())).thenReturn(List.of());
+        when(cosService.publicUrl(any())).thenAnswer(invocation -> "https://cos.example/" + invocation.getArgument(0));
+        MineWorkUpdateRequest request = new MineWorkUpdateRequest();
+        request.setTitle("新标题");
+        request.setDescription("新说明");
+        request.setThumbnailTaskId(401L);
+
+        service().updateWork(17L, request);
+
+        verify(cosService, never()).delete(mediaObjectKey);
+        ArgumentCaptor<WorkEntity> workCaptor = ArgumentCaptor.forClass(WorkEntity.class);
+        verify(workEntityMapper).updateById(workCaptor.capture());
+        assertThat(workCaptor.getValue().getCoverObjectKey()).isEqualTo(newCoverObjectKey);
     }
 
     @Test

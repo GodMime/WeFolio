@@ -703,10 +703,13 @@ public class MineWorkService {
             confirmImageThumbnailTask(uploadedThumbnailTask, work.getId(), oldCoverObjectKey, work.getMediaObjectKey());
         }
         if (generatedCover != null) {
-            deleteOldVideoCoverIfNeeded(oldCoverObjectKey, work.getCoverObjectKey(), work.getMediaObjectKey());
+            deleteOldCoverIfNeeded(oldCoverObjectKey, work.getCoverObjectKey(), work.getMediaObjectKey());
         }
         if (uploadedCoverTask != null) {
-            deleteOldVideoCoverIfNeeded(oldCoverObjectKey, work.getCoverObjectKey(), work.getMediaObjectKey());
+            deleteOldCoverIfNeeded(oldCoverObjectKey, work.getCoverObjectKey(), work.getMediaObjectKey());
+        }
+        if (uploadedThumbnailTask != null) {
+            deleteOldCoverIfNeeded(oldCoverObjectKey, work.getCoverObjectKey(), work.getMediaObjectKey());
         }
         return getWorkDetail(work.getId());
     }
@@ -1122,7 +1125,7 @@ public class MineWorkService {
             MineWorkCoverUploadTicketRequest request,
             LocalDateTime expiresAt
     ) {
-        String objectKey = buildManualCoverObjectKey(work.getMediaObjectKey());
+        String objectKey = buildVersionedCoverObjectKey(work.getMediaObjectKey());
         WorkUploadTaskEntity task = new WorkUploadTaskEntity();
         task.setBatchId(MANUAL_VIDEO_COVER_BATCH_PREFIX + work.getId());
         task.setUserId(userId);
@@ -1218,7 +1221,7 @@ public class MineWorkService {
             MineWorkThumbnailUploadTicketRequest request,
             LocalDateTime expiresAt
     ) {
-        String objectKey = resolveImageThumbnailObjectKey(work);
+        String objectKey = buildVersionedCoverObjectKey(work.getMediaObjectKey());
         WorkUploadTaskEntity task = new WorkUploadTaskEntity();
         task.setBatchId(IMAGE_THUMBNAIL_BATCH_PREFIX + work.getId());
         task.setUserId(userId);
@@ -1626,13 +1629,13 @@ public class MineWorkService {
     }
 
     /**
-     * 删除视频作品被替换下来的旧封面对象。
+     * 删除作品被替换下来的旧封面对象。
      *
      * @param oldCoverObjectKey 旧封面对象键
      * @param newCoverObjectKey 新封面对象键
-     * @param mediaObjectKey 视频源文件对象键
+     * @param mediaObjectKey 作品原文件对象键
      */
-    private void deleteOldVideoCoverIfNeeded(String oldCoverObjectKey, String newCoverObjectKey, String mediaObjectKey) {
+    private void deleteOldCoverIfNeeded(String oldCoverObjectKey, String newCoverObjectKey, String mediaObjectKey) {
         if (!hasText(oldCoverObjectKey)
                 || oldCoverObjectKey.equals(newCoverObjectKey)
                 || oldCoverObjectKey.equals(mediaObjectKey)) {
@@ -2963,12 +2966,12 @@ public class MineWorkService {
     }
 
     /**
-     * 按视频对象键构造手动上传封面对象键。
+     * 按作品原文件对象键构造版本化封面对象键。
      *
-     * @param sourceObjectKey 视频对象键
+     * @param sourceObjectKey 作品原文件对象键
      * @return 封面对象键
      */
-    private String buildManualCoverObjectKey(String sourceObjectKey) {
+    private String buildVersionedCoverObjectKey(String sourceObjectKey) {
         String normalizedSourceObjectKey = normalizeText(sourceObjectKey);
         int lastSlashIndex = normalizedSourceObjectKey.lastIndexOf('/');
         int extensionIndex = normalizedSourceObjectKey.lastIndexOf('.');
@@ -2979,40 +2982,6 @@ public class MineWorkService {
                 + THUMB_FILE_SUFFIX
                 + WORK_FILE_NAME_SEPARATOR
                 + System.currentTimeMillis()
-                + FILE_EXTENSION_SEPARATOR
-                + THUMB_FILE_EXTENSION;
-    }
-
-    /**
-     * 解析图片作品缩略图覆盖对象键。
-     *
-     * @param work 图片作品
-     * @return 缩略图对象键
-     */
-    private String resolveImageThumbnailObjectKey(WorkEntity work) {
-        String mediaObjectKey = normalizeText(work.getMediaObjectKey());
-        String coverObjectKey = normalizeText(work.getCoverObjectKey());
-        if (!coverObjectKey.isBlank() && !coverObjectKey.equals(mediaObjectKey)) {
-            return coverObjectKey;
-        }
-        return buildStableImageThumbnailObjectKey(mediaObjectKey);
-    }
-
-    /**
-     * 按图片原图对象键派生稳定缩略图对象键。
-     *
-     * @param sourceObjectKey 图片原图对象键
-     * @return 稳定缩略图对象键
-     */
-    private String buildStableImageThumbnailObjectKey(String sourceObjectKey) {
-        String normalizedSourceObjectKey = normalizeText(sourceObjectKey);
-        int lastSlashIndex = normalizedSourceObjectKey.lastIndexOf('/');
-        int extensionIndex = normalizedSourceObjectKey.lastIndexOf('.');
-        if (normalizedSourceObjectKey.isBlank() || extensionIndex <= lastSlashIndex) {
-            throw new BusinessException(MineWorkMessage.COVER_SOURCE_TASK_INVALID_MESSAGE);
-        }
-        return normalizedSourceObjectKey.substring(0, extensionIndex)
-                + THUMB_FILE_SUFFIX
                 + FILE_EXTENSION_SEPARATOR
                 + THUMB_FILE_EXTENSION;
     }
