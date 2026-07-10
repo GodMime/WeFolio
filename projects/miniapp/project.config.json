@@ -12,12 +12,19 @@
       "outputPath": ""
     },
     "useCompilerPlugins": false,
-    "minifyWXML": true
+    "minifyWXML": true,
+    "ignoreDevUnusedFiles": true,
+    "ignoreUploadUnusedFiles": true
   },
   "compileType": "miniprogram",
   "simulatorPluginLibVersion": {},
   "packOptions": {
-    "ignore": [],
+    "ignore": [
+      {
+        "type": "folder",
+        "value": "tests"
+      }
+    ],
     "include": []
   },
   "appid": "wxa214c25850cdf268",
