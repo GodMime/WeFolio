@@ -1,0 +1,15 @@
+<view class="team-profile">
+  <block wx:if="{{editMode}}">
+    <image wx:if="{{draft.team.avatarUrl}}" class="avatar" src="{{draft.team.avatarUrl}}" mode="aspectFill" />
+    <text class="name">{{draft.team.teamName}}</text>
+    <text wx:if="{{draft.team.intro}}" class="intro">{{draft.team.intro}}</text>
+    <button class="maintain-button" bindtap="openTeamMaintenance">团队资料维护</button>
+    <text wx:if="{{errorMessage}}" class="error">{{errorMessage}}</text>
+    <view class="actions"><button bindtap="cancelEdit">取消</button><button class="primary" bindtap="saveEdit">确认</button></view>
+  </block>
+  <block wx:else>
+    <image wx:if="{{team.avatarUrl}}" class="avatar" src="{{team.avatarUrl}}" mode="aspectFill" />
+    <text wx:if="{{team.teamName}}" class="name">{{team.teamName}}</text>
+    <text wx:if="{{team.intro}}" class="intro">{{team.intro}}</text>
+  </block>
+</view>

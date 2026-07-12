@@ -1,0 +1,31 @@
+:host { display: block; }
+.schedule-query { padding: 24rpx; color: #17202a; overflow-wrap: anywhere; }
+.query-panel { position: relative; padding: 24rpx; border: 1rpx solid #d7dfe1; border-radius: 8px; background: #fff; }
+.date-field { padding: 22rpx; border: 1rpx solid #c9d3d6; border-radius: 6px; color: #5e6b73; }
+.query-button { margin-top: 18rpx; border-radius: 6px; background: #0f766e; color: #fff; }
+.close { position: absolute; top: 8rpx; right: 8rpx; z-index: 1; width: 64rpx; height: 64rpx; padding: 0; background: transparent; font-size: 40rpx; }
+.close::after { border: 0; }
+.member-results { margin-top: 22rpx; border-top: 1rpx solid #e4e9ea; }
+.member-result { display: grid; grid-template-columns: 64rpx minmax(0, 1fr) auto; align-items: center; gap: 16rpx; padding: 18rpx 0; border-bottom: 1rpx solid #e4e9ea; }
+.member-result image { width: 64rpx; height: 64rpx; border-radius: 50%; background: #eef2f2; }
+.member-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.state { font-size: 24rpx; }
+.state.available { color: #0f766e; }
+.state.partial { color: #a15c00; }
+.state.full { color: #9a3412; }
+.mode-row, .actions { display: flex; gap: 16rpx; margin-top: 18rpx; }
+.mode, .actions button { flex: 1; border-radius: 6px; }
+.mode.active, .primary { background: #0f766e; color: #fff; }
+.section-title { font-weight: 600; }
+.title { display: block; margin-bottom: 8rpx; font-weight: 600; }
+.description { display: block; margin-bottom: 18rpx; color: #5e6b73; line-height: 1.6; white-space: pre-wrap; }
+.config-field { box-sizing: border-box; width: 100%; margin-bottom: 16rpx; padding: 18rpx; border: 1rpx solid #d7dfe1; border-radius: 6px; }
+.description-input { min-height: 140rpx; }
+.range-title { display: block; margin-top: 24rpx; }
+.range-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10rpx; margin-top: 16rpx; }
+.range { min-width: 0; border-radius: 6px; font-size: 22rpx; }
+.range.active { background: #0f766e; color: #fff; }
+.future-days { display: flex; align-items: center; justify-content: space-between; margin-top: 18rpx; }
+.future-days input { width: 180rpx; padding: 12rpx; border: 1rpx solid #d7dfe1; border-radius: 6px; text-align: right; }
+.date-range { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12rpx; margin-top: 18rpx; }
+.error { display: block; margin-top: 16rpx; color: #b42318; }

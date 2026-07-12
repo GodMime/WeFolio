@@ -41,6 +41,7 @@ import com.jxc.wefolio.mapper.TeamMemberChangeRequestEntityMapper;
 import com.jxc.wefolio.mapper.TeamMemberEntityMapper;
 import com.jxc.wefolio.mapper.UserEntityMapper;
 import com.jxc.wefolio.mapper.WorkEntityMapper;
+import com.jxc.wefolio.service.teamportfolio.TeamPortfolioReferenceGuardService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -61,9 +62,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -123,6 +126,10 @@ class MineTeamMemberChangeFeatureTest {
     /** 唯一码生成器模拟 */
     @Mock
     private UniqueCodeGenerator uniqueCodeGenerator;
+
+    /** 团队作品集引用保护服务模拟 */
+    @Mock
+    private TeamPortfolioReferenceGuardService teamPortfolioReferenceGuardService;
 
     @BeforeEach
     void setUp() {
@@ -231,6 +238,7 @@ class MineTeamMemberChangeFeatureTest {
         assertThat(targetItem.isPendingChange()).isTrue();
         assertThat(targetItem.getPendingChangeId()).isEqualTo(41L);
         assertThat(targetItem.getPendingChangeText()).isEqualTo("信息变更待同意");
+        verifyNoInteractions(teamPortfolioReferenceGuardService);
     }
 
     /**
@@ -329,6 +337,69 @@ class MineTeamMemberChangeFeatureTest {
                 .contains("action_type", "action_url");
         assertThat(updateWrapper.getSqlSegment()).contains("user_id", "idempotency_key");
         assertThat(updateWrapper.getParamNameValuePairs().values()).contains(MessageActionTypeDict.NONE.getCode(), "");
+        verify(teamPortfolioReferenceGuardService)
+                .assertMemberPermissionsCanChange(100L, 8L, true, false);
+    }
+
+    @Test
+    void acceptMemberChangeRequestShouldBlockWorksDisableBeforeMemberUpdate() {
+        AuthContextHolder.set(new AuthContext(8L, "wf-dev-user-8"));
+        TeamMemberEntity target = member(31L, 8L, TeamRoleDict.MEMBER);
+        target.setAllowWorks(1);
+        target.setVersion(5);
+        TeamMemberChangeRequestEntity changeRequest = changeRequest(41L, target);
+        changeRequest.setAllowPortfolioBefore(1);
+        changeRequest.setAllowPortfolioAfter(1);
+        changeRequest.setAllowWorksBefore(1);
+        changeRequest.setAllowWorksAfter(0);
+        MineTeamMemberChangeDetailRequest request = new MineTeamMemberChangeDetailRequest();
+        request.setChangeRequestId(41L);
+        when(teamMemberChangeRequestEntityMapper.selectById(41L)).thenReturn(changeRequest);
+        when(teamEntityMapper.selectById(100L)).thenReturn(team());
+        when(teamMemberEntityMapper.selectById(31L)).thenReturn(target);
+        doThrow(new BusinessException("无法关闭授权，成员内容仍被团队作品集使用，请先移除引用。"))
+                .when(teamPortfolioReferenceGuardService)
+                .assertMemberPermissionsCanChange(100L, 8L, false, true);
+
+        assertThatThrownBy(() -> service().acceptMemberChangeRequest(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("无法关闭授权，成员内容仍被团队作品集使用，请先移除引用。");
+
+        verify(teamMemberEntityMapper, never()).update(any(TeamMemberEntity.class), any(Wrapper.class));
+        verify(teamMemberChangeRequestEntityMapper, never())
+                .update(any(TeamMemberChangeRequestEntity.class), any(Wrapper.class));
+        verifyNoInteractions(systemMessageEntityMapper);
+    }
+
+    @Test
+    void acceptMemberChangeRequestShouldNotGuardPermissionNoOpOrRoleOnlyChange() {
+        AuthContextHolder.set(new AuthContext(8L, "wf-dev-user-8"));
+        TeamMemberEntity target = member(31L, 8L, TeamRoleDict.MEMBER);
+        target.setAllowPortfolio(0);
+        target.setAllowWorks(0);
+        target.setVersion(5);
+        TeamMemberChangeRequestEntity changeRequest = changeRequest(41L, target);
+        changeRequest.setAllowPortfolioBefore(0);
+        changeRequest.setAllowPortfolioAfter(0);
+        changeRequest.setAllowWorksBefore(0);
+        changeRequest.setAllowWorksAfter(0);
+        MineTeamMemberChangeDetailRequest request = new MineTeamMemberChangeDetailRequest();
+        request.setChangeRequestId(41L);
+        when(teamMemberChangeRequestEntityMapper.selectById(41L)).thenReturn(changeRequest);
+        when(teamEntityMapper.selectById(100L)).thenReturn(team());
+        when(teamMemberEntityMapper.selectById(31L)).thenReturn(target);
+        when(teamMemberEntityMapper.update(any(TeamMemberEntity.class), any(Wrapper.class))).thenReturn(1);
+        when(teamMemberChangeRequestEntityMapper.update(any(TeamMemberChangeRequestEntity.class), any(Wrapper.class)))
+                .thenReturn(1);
+        when(userEntityMapper.selectBatchIds(any(Collection.class))).thenReturn(List.of(
+                user(7L, "WF0007", "林安", "主持人"),
+                user(8L, "WF0008", "乔伊", "摄影师")
+        ));
+
+        service().acceptMemberChangeRequest(request);
+
+        verifyNoInteractions(teamPortfolioReferenceGuardService);
+        verify(teamMemberEntityMapper).update(any(TeamMemberEntity.class), any(Wrapper.class));
     }
 
     @Test
@@ -454,25 +525,16 @@ class MineTeamMemberChangeFeatureTest {
         when(teamEntityMapper.selectById(100L)).thenReturn(team());
         when(teamMemberEntityMapper.selectOne(any())).thenReturn(owner);
         when(teamMemberEntityMapper.selectById(31L)).thenReturn(target);
-        when(workEntityMapper.selectList(any())).thenReturn(List.of(work(501L)));
-        when(portfolioEntityMapper.selectList(any()))
-                .thenReturn(List.of(portfolio(601L, PortfolioOwnerTypeDict.USER, 8L, "乔伊个人作品集")))
-                .thenReturn(List.of(
-                        portfolio(701L, PortfolioOwnerTypeDict.TEAM, 100L, "婚礼案例集"),
-                        portfolio(702L, PortfolioOwnerTypeDict.TEAM, 100L, "主持作品集"),
-                        portfolio(703L, PortfolioOwnerTypeDict.TEAM, 100L, "年度精选")
-                ));
-        when(portfolioReferenceEntityMapper.selectList(any())).thenReturn(List.of(
-                reference(701L, ReferenceTypeDict.WORK, 501L),
-                reference(702L, ReferenceTypeDict.MEMBER_PORTFOLIO, 601L),
-                reference(703L, ReferenceTypeDict.USER_PROFILE, 8L)
-        ));
+        doThrow(new BusinessException("无法移除，成员内容仍被团队作品集使用，请先移除引用。"))
+                .when(teamPortfolioReferenceGuardService).assertMemberCanLeave(100L, 8L);
 
         assertThatThrownBy(() -> service().removeMember(request))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage("无法移除，成员内容仍被《婚礼案例集》《主持作品集》等 3 个作品集使用，请先移除引用。");
+                .hasMessage("无法移除，成员内容仍被团队作品集使用，请先移除引用。");
+        verify(teamPortfolioReferenceGuardService).assertMemberCanLeave(100L, 8L);
         verify(teamMemberEntityMapper, never()).update(any(TeamMemberEntity.class), any(Wrapper.class));
         verify(systemMessageEntityMapper, never()).insert(any(SystemMessageEntity.class));
+        verifyNoInteractions(teamMemberChangeRequestEntityMapper);
     }
 
     @Test
@@ -486,11 +548,6 @@ class MineTeamMemberChangeFeatureTest {
         when(teamEntityMapper.selectById(100L)).thenReturn(team);
         when(teamMemberEntityMapper.selectOne(any())).thenReturn(owner);
         when(teamMemberEntityMapper.selectById(31L)).thenReturn(target);
-        when(workEntityMapper.selectList(any())).thenReturn(List.of());
-        when(portfolioEntityMapper.selectList(any()))
-                .thenReturn(List.of())
-                .thenReturn(List.of(portfolio(701L, PortfolioOwnerTypeDict.TEAM, 100L, "婚礼案例集")));
-        when(portfolioReferenceEntityMapper.selectList(any())).thenReturn(List.of());
         when(teamMemberEntityMapper.update(any(TeamMemberEntity.class), any(Wrapper.class))).thenReturn(1);
         when(teamMemberEntityMapper.selectList(any())).thenReturn(List.of(owner));
         when(userEntityMapper.selectBatchIds(any(Collection.class))).thenReturn(List.of(
@@ -510,6 +567,7 @@ class MineTeamMemberChangeFeatureTest {
         verify(systemMessageEntityMapper).insert(messageCaptor.capture());
         assertThat(messageCaptor.getValue().getUserId()).isEqualTo(8L);
         assertThat(messageCaptor.getValue().getContent()).isEqualTo("你已被移出「星曜司仪团」。");
+        verify(teamPortfolioReferenceGuardService).assertMemberCanLeave(100L, 8L);
     }
 
     private void assertTransactional(String methodName, Class<?> parameterType) throws NoSuchMethodException {
@@ -527,13 +585,11 @@ class MineTeamMemberChangeFeatureTest {
                 systemMessageEntityMapper,
                 teamMemberChangeRequestEntityMapper,
                 teamMemberChangeRequestTransactionService,
-                portfolioEntityMapper,
-                portfolioReferenceEntityMapper,
-                workEntityMapper,
                 cosService,
                 teamRegistrationService,
                 pointService,
-                uniqueCodeGenerator
+                uniqueCodeGenerator,
+                teamPortfolioReferenceGuardService
         );
     }
 

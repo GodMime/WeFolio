@@ -1,0 +1,38 @@
+<view class="schedule-query">
+  <block wx:if="{{editMode}}">
+    <input class="config-field" data-field="title" value="{{draft.title}}" bindinput="handleConfigInput" placeholder="档期标题" />
+    <textarea class="config-field description-input" data-field="description" value="{{draft.description}}" bindinput="handleConfigInput" placeholder="档期说明" />
+    <text class="section-title">档期展示方式</text>
+    <view class="mode-row">
+      <button class="mode {{draft.displayMode === 'MODAL_CALENDAR' ? 'active' : ''}}" data-mode="MODAL_CALENDAR" bindtap="selectDisplayMode">弹层日历</button>
+      <button class="mode {{draft.displayMode === 'INLINE_CALENDAR' ? 'active' : ''}}" data-mode="INLINE_CALENDAR" bindtap="selectDisplayMode">页面内日历</button>
+    </view>
+    <text class="section-title range-title">查询日期范围</text>
+    <view class="range-row">
+      <button class="range {{draft.queryRange.type === 'UNLIMITED' ? 'active' : ''}}" data-type="UNLIMITED" bindtap="selectRangeType">不限</button>
+      <button class="range {{draft.queryRange.type === 'FUTURE_DAYS' ? 'active' : ''}}" data-type="FUTURE_DAYS" bindtap="selectRangeType">未来天数</button>
+      <button class="range {{draft.queryRange.type === 'DATE_RANGE' ? 'active' : ''}}" data-type="DATE_RANGE" bindtap="selectRangeType">固定日期</button>
+    </view>
+    <label wx:if="{{draft.queryRange.type === 'FUTURE_DAYS'}}" class="future-days">未来天数<input type="number" value="{{draft.queryRange.futureDays}}" bindinput="changeFutureDays" /></label>
+    <view wx:if="{{draft.queryRange.type === 'DATE_RANGE'}}" class="date-range">
+      <picker mode="date" value="{{draft.queryRange.startDate}}" bindchange="changeRangeDate" data-field="startDate"><view class="date-field">{{draft.queryRange.startDate || '开始日期'}}</view></picker>
+      <picker mode="date" value="{{draft.queryRange.endDate}}" bindchange="changeRangeDate" data-field="endDate"><view class="date-field">{{draft.queryRange.endDate || '结束日期'}}</view></picker>
+    </view>
+    <text wx:if="{{errorMessage}}" class="error">{{errorMessage}}</text>
+    <view class="actions"><button bindtap="cancelEdit">取消</button><button class="primary" bindtap="saveEdit">确认</button></view>
+  </block>
+  <block wx:else>
+    <text wx:if="{{config.title}}" class="title">{{config.title}}</text>
+    <text wx:if="{{config.description}}" class="description">{{config.description}}</text>
+    <button wx:if="{{config.displayMode === 'MODAL_CALENDAR' && !modalVisible}}" class="query-button" bindtap="openModal">查询团队档期</button>
+    <view wx:if="{{config.displayMode === 'INLINE_CALENDAR' || modalVisible}}" class="query-panel">
+      <button wx:if="{{config.displayMode === 'MODAL_CALENDAR'}}" class="close" bindtap="closeModal" aria-label="关闭">×</button>
+      <picker mode="date" value="{{selectedDate}}" start="{{dateStart}}" end="{{dateEnd}}" bindchange="selectDate"><view class="date-field">{{selectedDate || '选择查询日期'}}</view></picker>
+      <button class="query-button" loading="{{loading}}" disabled="{{loading}}" bindtap="submitQuery">{{loading ? '查询中' : '查询'}}</button>
+      <text wx:if="{{errorMessage}}" class="error">{{errorMessage}}</text>
+      <view wx:if="{{result.members.length}}" class="member-results">
+        <view wx:for="{{result.members}}" wx:key="memberUserId" class="member-result"><image src="{{item.avatarUrl}}" mode="aspectFill" /><text class="member-name">{{item.displayName}}</text><text class="state {{item.displayState.tone}}">{{item.displayState.text}}</text></view>
+      </view>
+    </view>
+  </block>
+</view>

@@ -40,6 +40,7 @@ import com.jxc.wefolio.mapper.PortfolioShareRecordEntityMapper;
 import com.jxc.wefolio.mapper.ScheduleEntityMapper;
 import com.jxc.wefolio.mapper.SlotDefinitionEntityMapper;
 import com.jxc.wefolio.message.PortfolioMessage;
+import com.jxc.wefolio.service.teamportfolio.TeamPortfolioReferenceGuardService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -198,6 +199,9 @@ public class MinePortfolioService {
     /** 上传票据有效分钟数 */
     private static final int TICKET_EXPIRE_MINUTES = 15;
 
+    /** 作品集归属类型错误提示 */
+    private static final String INVALID_OWNER_TYPE_MESSAGE = "作品集归属类型不正确";
+
     /** 草稿保存历史动作 */
     private static final String HISTORY_ACTION_DRAFT_SAVE = "DRAFT_SAVE";
 
@@ -240,6 +244,9 @@ public class MinePortfolioService {
     /** COS 服务 */
     private final CosService cosService;
 
+    /** 团队作品集引用保护服务 */
+    private final TeamPortfolioReferenceGuardService teamPortfolioReferenceGuardService;
+
     /**
      * 查询作品集列表。
      *
@@ -249,11 +256,18 @@ public class MinePortfolioService {
     public MinePortfolioListResponse listPortfolios(String ownerType) {
         Long userId = AuthContextHolder.requireUserId();
         String normalizedOwnerType = hasText(ownerType) ? ownerType.strip() : PortfolioOwnerTypeDict.USER.getCode();
+        if (PortfolioOwnerTypeDict.TEAM.getCode().equals(normalizedOwnerType)) {
+            MinePortfolioListResponse response = new MinePortfolioListResponse();
+            response.setPortfolios(List.of());
+            return response;
+        }
+        if (!PortfolioOwnerTypeDict.USER.getCode().equals(normalizedOwnerType)) {
+            throw new BusinessException(INVALID_OWNER_TYPE_MESSAGE);
+        }
         List<PortfolioEntity> portfolios = portfolioEntityMapper.selectList(
                 Wrappers.lambdaQuery(PortfolioEntity.class)
                         .eq(PortfolioEntity::getOwnerType, normalizedOwnerType)
-                        .eq(PortfolioOwnerTypeDict.USER.getCode().equals(normalizedOwnerType),
-                                PortfolioEntity::getOwnerId, userId)
+                        .eq(PortfolioEntity::getOwnerId, userId)
                         .orderByDesc(PortfolioEntity::getUpdatedAt)
         );
         MinePortfolioListResponse response = new MinePortfolioListResponse();
@@ -581,6 +595,7 @@ public class MinePortfolioService {
     public void deletePortfolio(Long portfolioId) {
         Long userId = AuthContextHolder.requireUserId();
         PortfolioEntity portfolio = requireOwnedStandardPersonal(portfolioId);
+        teamPortfolioReferenceGuardService.assertPersonalPortfolioNotReferenced(portfolio.getId());
         List<String> deletedObjectKeys = resolveDeletedPortfolioAssetObjectKeys(userId, portfolio);
         portfolioReferenceEntityMapper.delete(
                 Wrappers.lambdaQuery(PortfolioReferenceEntity.class)

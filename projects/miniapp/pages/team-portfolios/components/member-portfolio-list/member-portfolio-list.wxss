@@ -1,0 +1,18 @@
+:host { display: block; }
+.list-component { padding: 24rpx; color: #17202a; overflow-wrap: anywhere; }
+.portfolio-list, .portfolio-options { display: flex; flex-direction: column; gap: 16rpx; }
+.portfolio-row, .option { display: grid; grid-template-columns: 220rpx minmax(0, 1fr); gap: 18rpx; min-width: 0; padding: 0; border-radius: 6px; background: #fff; overflow: hidden; text-align: left; }
+.portfolio-row image, .option image { width: 220rpx; height: 164rpx; background: #e8eeef; }
+.meta, .option view { min-width: 0; padding: 18rpx 18rpx 18rpx 0; }
+.title, .description, .member-name { display: block; overflow: hidden; text-overflow: ellipsis; }
+.title { font-weight: 600; white-space: nowrap; }
+.description { margin-top: 10rpx; color: #5e6b73; font-size: 24rpx; line-height: 1.5; }
+.member-name { margin-top: 10rpx; color: #0f766e; font-size: 22rpx; white-space: nowrap; }
+.member-strip { margin-bottom: 20rpx; white-space: nowrap; }
+.member { display: inline-block; width: auto; margin-right: 12rpx; border-radius: 6px; font-size: 26rpx; }
+.member.active { background: #0f766e; color: #fff; }
+.actions { display: flex; gap: 20rpx; margin-top: 24rpx; }
+.actions button { flex: 1; border-radius: 6px; }
+.primary { background: #0f766e; color: #fff; }
+.empty, .error { display: block; padding: 28rpx 0; text-align: center; color: #708087; }
+.error { color: #b42318; }

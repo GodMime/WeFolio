@@ -146,10 +146,8 @@ public class AuthAspect {
         }
 
         VisitorAuthTokenService.ResolvedVisitorToken resolvedToken = visitorToken.get();
-        log.info("访客认证通过: visitorId={}, visitorKey={}, request={}",
-                resolvedToken.visitorId(),
-                resolvedToken.visitorKey(),
-                requestInfo);
+        log.info("访客认证通过: visitorId={}, request={}",
+                resolvedToken.visitorId(), requestInfo);
         VisitorContextHolder.set(new VisitorContext(
                 resolvedToken.visitorId(),
                 resolvedToken.visitorKey(),

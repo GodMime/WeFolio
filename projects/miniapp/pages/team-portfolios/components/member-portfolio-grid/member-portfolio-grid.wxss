@@ -1,0 +1,15 @@
+:host { display: block; }
+.grid-component { padding: 24rpx; color: #17202a; overflow-wrap: anywhere; }
+.portfolio-grid, .portfolio-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16rpx; }
+.portfolio-card, .option { min-width: 0; padding: 0; border-radius: 6px; background: #fff; overflow: hidden; text-align: left; }
+.portfolio-card image, .option image { width: 100%; aspect-ratio: 4 / 3; background: #e8eeef; }
+.title, .member-name, .option text { display: block; padding: 12rpx 14rpx 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.member-name { padding-top: 4rpx; padding-bottom: 14rpx; color: #708087; font-size: 22rpx; }
+.member-strip { margin-bottom: 20rpx; white-space: nowrap; }
+.member { display: inline-block; width: auto; margin-right: 12rpx; border-radius: 6px; font-size: 26rpx; }
+.member.active { background: #0f766e; color: #fff; }
+.actions { display: flex; gap: 20rpx; margin-top: 24rpx; }
+.actions button { flex: 1; border-radius: 6px; }
+.primary { background: #0f766e; color: #fff; }
+.empty, .error { display: block; padding: 28rpx 0; text-align: center; color: #708087; }
+.error { color: #b42318; }

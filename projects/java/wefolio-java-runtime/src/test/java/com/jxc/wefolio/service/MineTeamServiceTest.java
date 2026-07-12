@@ -34,6 +34,7 @@ import com.jxc.wefolio.mapper.UserEntityMapper;
 import com.jxc.wefolio.mapper.PortfolioEntityMapper;
 import com.jxc.wefolio.mapper.PortfolioReferenceEntityMapper;
 import com.jxc.wefolio.mapper.WorkEntityMapper;
+import com.jxc.wefolio.service.teamportfolio.TeamPortfolioReferenceGuardService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -121,6 +122,10 @@ class MineTeamServiceTest {
     /** 唯一码生成器模拟 */
     @Mock
     private UniqueCodeGenerator uniqueCodeGenerator;
+
+    /** 团队作品集引用保护服务模拟 */
+    @Mock
+    private TeamPortfolioReferenceGuardService teamPortfolioReferenceGuardService;
 
     @BeforeEach
     void setUp() {
@@ -400,20 +405,18 @@ class MineTeamServiceTest {
                 .contains("JoinStatusDict.PENDING_CONFIRMATION.getCode()");
     }
 
-    /**
-     * 团队作品集标题解析复用标准作品集配置 DTO，避免手动维护 JSON 路径。
-     */
+    /** 团队成员引用保护不得继续解析个人作品集 DTO 或团队 JSON。 */
     @Test
-    void portfolioShareTitleParsingUsesStandardConfigDto() throws IOException {
+    void memberReferenceProtectionShouldDelegateWithoutSchemaParsingDependencies() throws IOException {
         String source = Files.readString(Path.of("src/main/java/com/jxc/wefolio/service/MineTeamService.java"));
-        int methodIndex = source.indexOf("private String extractShareTitle(String configJson)");
-        int nextMethodIndex = source.indexOf("/**\n     * 收集团队作品集中引用了成员内容的作品集 ID。", methodIndex);
 
-        String methodSource = source.substring(methodIndex, nextMethodIndex);
-
-        assertThat(source).contains("import com.jxc.wefolio.dto.PortfolioConfigDto;");
-        assertThat(methodSource).contains("JSON.parseObject(configJson, PortfolioConfigDto.class)");
-        assertThat(methodSource).doesNotContain("getJSONObject(\"share\")");
+        assertThat(source)
+                .contains("teamPortfolioReferenceGuardService.assertMemberCanLeave(")
+                .doesNotContain("assertMemberContentNotReferenced")
+                .doesNotContain("PortfolioConfigDto")
+                .doesNotContain("JSON.parseObject")
+                .doesNotContain("getSnapshotJson()")
+                .doesNotContain("getComponentPath()");
     }
 
     @Test
@@ -866,13 +869,11 @@ class MineTeamServiceTest {
                 systemMessageEntityMapper,
                 teamMemberChangeRequestEntityMapper,
                 teamMemberChangeRequestTransactionService,
-                portfolioEntityMapper,
-                portfolioReferenceEntityMapper,
-                workEntityMapper,
                 cosService,
                 teamRegistrationService,
                 pointService,
-                uniqueCodeGenerator
+                uniqueCodeGenerator,
+                teamPortfolioReferenceGuardService
         );
     }
 }

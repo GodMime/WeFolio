@@ -106,13 +106,17 @@ test('works and portfolio list scroll containers bind refresher refresh', () => 
   const worksWxml = readText('pages/works/works.wxml')
   const workListScroll = worksWxml.match(/<scroll-view[\s\S]*?class="work-list-scroll"[\s\S]*?>/)[0]
   const portfoliosWxml = readText('pages/portfolios/portfolios.wxml')
-  const portfolioScroll = portfoliosWxml.match(/<scroll-view[\s\S]*?class="portfolio-scroll"[\s\S]*?>/)[0]
+  const portfolioScrolls = Array.from(portfoliosWxml.matchAll(/<scroll-view[\s\S]*?class="portfolio-switch-panel portfolio-scroll"[\s\S]*?>/g), (match) => match[0])
 
-  ;[workListScroll, portfolioScroll].forEach((scrollView) => {
+  assert.equal(portfolioScrolls.length, 2)
+  ;[workListScroll, portfolioScrolls[0]].forEach((scrollView) => {
     assert.match(scrollView, /refresher-enabled="\{\{true\}\}"/)
     assert.match(scrollView, /refresher-triggered="\{\{pullDownRefreshing\}\}"/)
     assert.match(scrollView, /bindrefresherrefresh="handlePullDownRefresh"/)
   })
+  assert.match(portfolioScrolls[1], /refresher-enabled="\{\{true\}\}"/)
+  assert.match(portfolioScrolls[1], /refresher-triggered="\{\{teamPullDownRefreshing\}\}"/)
+  assert.match(portfolioScrolls[1], /bindrefresherrefresh="handleTeamPullDownRefresh"/)
 })
 
 test('pulling down on works list reloads first page and stops refresh indicator', async () => {

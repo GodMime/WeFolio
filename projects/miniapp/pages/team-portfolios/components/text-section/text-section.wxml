@@ -1,0 +1,10 @@
+<view class="text-section align-{{editMode ? draft.alignment : config.alignment || 'LEFT'}}">
+  <block wx:if="{{editMode}}">
+    <textarea class="field content-input" data-field="content" value="{{draft.content}}" maxlength="200" bindinput="handleInput" placeholder="正文" />
+    <text class="count">{{count}} / 200</text>
+    <view class="alignment-row"><button wx:for="{{alignments}}" wx:key="*this" class="alignment {{draft.alignment === item ? 'active' : ''}}" data-alignment="{{item}}" bindtap="selectAlignment">{{item}}</button></view>
+    <text wx:if="{{errorMessage}}" class="error">{{errorMessage}}</text>
+    <view class="actions"><button bindtap="cancelEdit">取消</button><button class="primary" bindtap="saveEdit">确认</button></view>
+  </block>
+  <block wx:else><text class="content">{{config.content}}</text></block>
+</view>

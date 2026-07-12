@@ -1,0 +1,36 @@
+<view class="contact-form">
+  <block wx:if="{{editMode}}">
+    <input class="field" data-field="title" value="{{draftConfig.title}}" bindinput="handleConfigInput" placeholder="表单标题" />
+    <textarea class="field needs" data-field="description" value="{{draftConfig.description}}" bindinput="handleConfigInput" placeholder="表单说明" />
+    <text class="section-title">表单展示方式</text>
+    <view class="mode-row">
+      <button class="mode {{draftConfig.displayMode === 'MODAL_FORM' ? 'active' : ''}}" data-mode="MODAL_FORM" bindtap="selectDisplayMode">弹窗</button>
+      <button class="mode {{draftConfig.displayMode === 'INLINE_FORM' ? 'active' : ''}}" data-mode="INLINE_FORM" bindtap="selectDisplayMode">页面内</button>
+    </view>
+    <text class="section-title fields-title">展示字段</text>
+    <view class="field-toggles">
+      <button class="field-toggle {{draftFieldVisibility.contactName ? 'active' : ''}}" data-field="contactName" bindtap="toggleField">称呼</button>
+      <button class="field-toggle {{draftFieldVisibility.phone ? 'active' : ''}}" data-field="phone" bindtap="toggleField">手机号</button>
+      <button class="field-toggle {{draftFieldVisibility.wechat ? 'active' : ''}}" data-field="wechat" bindtap="toggleField">微信号</button>
+      <button class="field-toggle {{draftFieldVisibility.needs ? 'active' : ''}}" data-field="needs" bindtap="toggleField">需求描述</button>
+    </view>
+    <text wx:if="{{errorMessage}}" class="error">{{errorMessage}}</text>
+    <view class="actions"><button bindtap="cancelEdit">取消</button><button class="primary" bindtap="saveEdit">确认</button></view>
+  </block>
+  <block wx:else>
+    <button wx:if="{{displayConfig.displayMode === 'MODAL_FORM' && !modalVisible}}" class="open-button" bindtap="openModal">{{displayConfig.title || '预留联系信息'}}</button>
+    <view wx:if="{{displayConfig.displayMode === 'INLINE_FORM' || modalVisible}}" class="form-panel">
+      <button wx:if="{{displayConfig.displayMode === 'MODAL_FORM'}}" class="close" bindtap="closeModal" aria-label="关闭">×</button>
+      <text class="title">{{displayConfig.title || '预留联系信息'}}</text>
+      <text wx:if="{{displayConfig.description}}" class="description">{{displayConfig.description}}</text>
+      <input wx:if="{{fieldVisibility.contactName}}" class="field" data-field="contactName" value="{{localForm.contactName}}" bindinput="handleInput" placeholder="称呼（必填）" />
+      <input wx:if="{{fieldVisibility.phone}}" class="field" data-field="phone" value="{{localForm.phone}}" type="number" bindinput="handleInput" placeholder="手机号" />
+      <input wx:if="{{fieldVisibility.wechat}}" class="field" data-field="wechat" value="{{localForm.wechat}}" bindinput="handleInput" placeholder="微信号" />
+      <input class="field" data-field="desiredSchedule" value="{{localForm.desiredSchedule}}" bindinput="handleInput" placeholder="意向档期（可选）" />
+      <textarea wx:if="{{fieldVisibility.needs}}" class="field needs" data-field="needs" value="{{localForm.needs}}" bindinput="handleInput" placeholder="需求描述" />
+      <text wx:if="{{errorMessage}}" class="error">{{errorMessage}}</text>
+      <text wx:if="{{success}}" class="success">已提交给团队</text>
+      <button class="primary submit" loading="{{submitting}}" disabled="{{submitting}}" bindtap="submitContact">提交给团队</button>
+    </view>
+  </block>
+</view>

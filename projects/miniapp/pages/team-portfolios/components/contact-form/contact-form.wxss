@@ -1,0 +1,21 @@
+:host { display: block; }
+.contact-form { padding: 24rpx; color: #17202a; overflow-wrap: anywhere; }
+.form-panel { position: relative; padding: 28rpx; border: 1rpx solid #d7dfe1; border-radius: 8px; background: #fff; }
+.title, .section-title { display: block; margin-bottom: 18rpx; font-weight: 600; }
+.description { display: block; margin-bottom: 18rpx; color: #5e6b73; line-height: 1.6; white-space: pre-wrap; }
+.field { box-sizing: border-box; width: 100%; margin-top: 14rpx; padding: 20rpx; border: 1rpx solid #d7dfe1; border-radius: 6px; }
+.needs { min-height: 160rpx; }
+.primary, .open-button { border-radius: 6px; background: #0f766e; color: #fff; }
+.submit { margin-top: 20rpx; }
+.close { position: absolute; top: 8rpx; right: 8rpx; width: 64rpx; height: 64rpx; padding: 0; background: transparent; font-size: 40rpx; }
+.close::after { border: 0; }
+.mode-row, .actions { display: flex; gap: 16rpx; }
+.field-toggles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12rpx; }
+.field-toggle { border-radius: 6px; font-size: 24rpx; }
+.field-toggle.active { background: #0f766e; color: #fff; }
+.fields-title { margin-top: 24rpx; }
+.mode, .actions button { flex: 1; border-radius: 6px; }
+.mode.active { background: #0f766e; color: #fff; }
+.actions { margin-top: 24rpx; }
+.error, .success { display: block; margin-top: 16rpx; color: #b42318; }
+.success { color: #0f766e; }

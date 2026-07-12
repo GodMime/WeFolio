@@ -57,6 +57,19 @@
       "pages": [
         "schedule"
       ]
+    },
+    {
+      "name": "teamPortfolio",
+      "root": "pages/team-portfolios",
+      "pages": [
+        "portfolios",
+        "team-select/team-select",
+        "standard-edit/team-portfolio-standard-edit",
+        "component-library/team-portfolio-component-library",
+        "standard-preview/team-portfolio-standard-preview",
+        "contact-leads/team-contact-leads",
+        "visitor-portfolio/team-visitor-portfolio"
+      ]
     }
   ],
   "window": {

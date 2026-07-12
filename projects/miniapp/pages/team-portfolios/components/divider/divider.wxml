@@ -1,0 +1,9 @@
+<view class="divider-component">
+  <block wx:if="{{editMode}}">
+    <view class="color-row"><button wx:for="{{colorOptions}}" wx:key="*this" class="swatch {{draft.color === item ? 'active' : ''}}" data-color="{{item}}" style="background: {{item === 'BLACK' ? '#17202a' : item === 'WHITE' ? '#ffffff' : item === 'GRAY' ? '#d7dfe1' : 'transparent'}}" bindtap="selectColor" aria-label="{{item}}"></button></view>
+    <label class="height-field">高度<input type="number" value="{{draft.heightPx}}" bindinput="changeHeight" /></label>
+    <text wx:if="{{errorMessage}}" class="error">{{errorMessage}}</text>
+    <view class="actions"><button bindtap="cancelEdit">取消</button><button class="primary" bindtap="saveEdit">确认</button></view>
+  </block>
+  <view wx:else class="line" style="height: {{config.heightPx || 16}}px; background: {{config.color === 'BLACK' ? '#17202a' : config.color === 'WHITE' ? '#ffffff' : config.color === 'TRANSPARENT' ? 'transparent' : '#d7dfe1'}};"></view>
+</view>

@@ -184,6 +184,7 @@ node --test tests/*.test.js
 
 ## 安全与工作区
 
+- 未经用户在当前任务中明确指示，禁止执行 `git commit`；完成代码修改或验证不等于获得提交授权，不得因流程、技能或“完成任务”自动创建提交。
 - `projects/java/wefolio-java-runtime/.env` 和 `projects/java/wefolio-java-job/.env` 含敏感配置，禁止提交。
 - 不要打印、复制或提交真实密钥，除非用户明确要求用于排查并确认风险。
 - 工作区可能已有用户未提交改动；不要回滚或覆盖与当前任务无关的改动。

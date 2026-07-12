@@ -1,6 +1,9 @@
 package com.jxc.wefolio.service;
 
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
+import com.baomidou.mybatisplus.core.conditions.AbstractWrapper;
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.jxc.wefolio.common.auth.AuthContext;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
 import com.jxc.wefolio.dict.PortfolioConfigScopeDict;
@@ -34,13 +37,16 @@ import com.jxc.wefolio.mapper.PortfolioReferenceEntityMapper;
 import com.jxc.wefolio.mapper.PortfolioShareRecordEntityMapper;
 import com.jxc.wefolio.mapper.ScheduleEntityMapper;
 import com.jxc.wefolio.mapper.SlotDefinitionEntityMapper;
+import com.jxc.wefolio.service.teamportfolio.TeamPortfolioReferenceGuardService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.lang.reflect.Method;
@@ -61,6 +67,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -68,6 +75,15 @@ import static org.mockito.Mockito.when;
  */
 @ExtendWith(MockitoExtension.class)
 class MinePortfolioServiceTest {
+
+    /** 初始化 Lambda 查询列缓存。 */
+    @BeforeAll
+    static void initTableInfo() {
+        TableInfoHelper.initTableInfo(
+                new MapperBuilderAssistant(new MybatisConfiguration(), ""),
+                PortfolioEntity.class
+        );
+    }
 
     /** 作品集 Mapper 模拟 */
     @Mock
@@ -112,6 +128,10 @@ class MinePortfolioServiceTest {
     /** COS 服务模拟 */
     @Mock
     private CosService cosService;
+
+    /** 团队作品集引用保护服务模拟 */
+    @Mock
+    private TeamPortfolioReferenceGuardService teamPortfolioReferenceGuardService;
 
     @BeforeEach
     void setUp() {
@@ -301,6 +321,52 @@ class MinePortfolioServiceTest {
         assertThat(response.getPortfolios()).hasSize(1);
         assertThat(response.getPortfolios().get(0))
                 .hasFieldOrPropertyWithValue("updatedAt", updatedAt);
+    }
+
+    @Test
+    void listPortfoliosShouldKeepPersonalOwnerFiltersForBlankOwnerType() {
+        when(portfolioEntityMapper.selectList(any())).thenReturn(List.of());
+
+        MinePortfolioListResponse response = service().listPortfolios(" \t ");
+
+        assertThat(response.getPortfolios()).isEmpty();
+        ArgumentCaptor<com.baomidou.mybatisplus.core.conditions.Wrapper<PortfolioEntity>> captor =
+                ArgumentCaptor.forClass(com.baomidou.mybatisplus.core.conditions.Wrapper.class);
+        verify(portfolioEntityMapper).selectList(captor.capture());
+        assertThat(captor.getValue().getSqlSegment()).contains("owner_type", "owner_id");
+        assertThat(((AbstractWrapper<?, ?, ?>) captor.getValue()).getParamNameValuePairs().values())
+                .contains(PortfolioOwnerTypeDict.USER.getCode(), 7L);
+    }
+
+    @Test
+    void listPortfoliosShouldKeepPersonalOwnerFiltersForExplicitUserOwnerType() {
+        when(portfolioEntityMapper.selectList(any())).thenReturn(List.of());
+
+        MinePortfolioListResponse response = service().listPortfolios(" USER ");
+
+        assertThat(response.getPortfolios()).isEmpty();
+        ArgumentCaptor<com.baomidou.mybatisplus.core.conditions.Wrapper<PortfolioEntity>> captor =
+                ArgumentCaptor.forClass(com.baomidou.mybatisplus.core.conditions.Wrapper.class);
+        verify(portfolioEntityMapper).selectList(captor.capture());
+        assertThat(captor.getValue().getSqlSegment()).contains("owner_type", "owner_id");
+        assertThat(((AbstractWrapper<?, ?, ?>) captor.getValue()).getParamNameValuePairs().values())
+                .contains(PortfolioOwnerTypeDict.USER.getCode(), 7L);
+    }
+
+    @Test
+    void listPortfoliosShouldReturnEmptyWithoutMapperCallForTeamOwnerType() {
+        MinePortfolioListResponse response = service().listPortfolios(" TEAM ");
+
+        assertThat(response.getPortfolios()).isEmpty();
+        verifyNoInteractions(portfolioEntityMapper);
+    }
+
+    @Test
+    void listPortfoliosShouldRejectStrippedInvalidOwnerTypeWithoutMapperCall() {
+        assertThatThrownBy(() -> service().listPortfolios(" UNKNOWN "))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("作品集归属类型不正确");
+        verifyNoInteractions(portfolioEntityMapper);
     }
 
     @Test
@@ -763,6 +829,23 @@ class MinePortfolioServiceTest {
         verify(cosService).delete("WFA3B1E7A2/protfolio/cover-88-20260703120000-d4c3b2a1.png");
     }
 
+    @Test
+    void deletePortfolioShouldStopBeforeWritesAndCosWhenTeamReferenceGuardBlocks() {
+        PortfolioEntity portfolio = ownedPortfolio();
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+        doThrow(new BusinessException("作品集正在被团队作品集使用，请先移除引用。"))
+                .when(teamPortfolioReferenceGuardService).assertPersonalPortfolioNotReferenced(88L);
+
+        assertThatThrownBy(() -> service().deletePortfolio(88L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("作品集正在被团队作品集使用，请先移除引用。");
+
+        verify(teamPortfolioReferenceGuardService).assertPersonalPortfolioNotReferenced(88L);
+        verify(portfolioReferenceEntityMapper, never()).delete(any());
+        verify(portfolioEntityMapper, never()).update(any(PortfolioEntity.class), any());
+        verifyNoInteractions(miniappAuthService, cosService);
+    }
+
     private MinePortfolioService service() {
         return new MinePortfolioService(
                 portfolioEntityMapper,
@@ -775,7 +858,8 @@ class MinePortfolioServiceTest {
                 portfolioConfigValidator,
                 portfolioRenderService,
                 miniappAuthService,
-                cosService
+                cosService,
+                teamPortfolioReferenceGuardService
         );
     }
 

@@ -1,0 +1,17 @@
+<view class="carousel">
+  <block wx:if="{{editMode}}">
+    <scroll-view class="member-strip" scroll-x><button wx:for="{{members}}" wx:key="memberUserId" class="member {{selectedMemberId === item.memberUserId ? 'active' : ''}}" data-id="{{item.memberUserId}}" bindtap="selectMember">{{item.displayName}}</button></scroll-view>
+    <view wx:if="{{selectedMemberId}}" class="work-grid"><button wx:for="{{works}}" wx:key="workId" class="work-option" data-item="{{item}}" bindtap="toggleWork"><image src="{{item.coverUrl || item.mediaUrl}}" mode="aspectFill" /><text>{{item.title}}</text></button></view>
+    <text wx:else class="empty">请先选择团队成员</text>
+    <text wx:if="{{selectedMemberId && !works.length}}" class="empty">该成员暂无审核通过的图片作品</text>
+    <text wx:if="{{errorMessage}}" class="error">{{errorMessage}}</text>
+    <view class="actions"><button bindtap="cancelEdit">取消</button><button class="primary" bindtap="saveEdit">确认</button></view>
+  </block>
+  <block wx:else>
+    <swiper wx:if="{{items.length}}" class="swiper" style="aspect-ratio: {{frameAspectRatio}};" current="{{current}}" interval="{{interval}}" autoplay="{{autoplay}}" circular="{{circular}}" bindchange="handleChange">
+      <swiper-item wx:for="{{items}}" wx:key="workId"><image class="slide" src="{{item.mediaUrl || item.coverUrl}}" mode="aspectFit" data-item="{{item}}" data-index="{{index}}" bindtap="previewItem" /></swiper-item>
+    </swiper>
+    <text wx:else class="empty">暂无轮播图片</text>
+    <text wx:if="{{items.length > 1}}" class="progress">{{current + 1}} / {{items.length}}</text>
+  </block>
+</view>

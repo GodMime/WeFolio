@@ -1,0 +1,16 @@
+<view class="qr-contact">
+  <block wx:if="{{editMode}}">
+    <input class="field" data-field="title" value="{{draft.title}}" bindinput="handleConfigInput" placeholder="二维码标题" />
+    <textarea class="field description-input" data-field="description" value="{{draft.description}}" bindinput="handleConfigInput" placeholder="二维码说明" />
+    <image wx:if="{{draft.qrUrl}}" class="qr-image" src="{{draft.qrUrl}}" mode="aspectFit" bindtap="previewDraft" />
+    <button class="choose-button" loading="{{uploading}}" disabled="{{uploading}}" bindtap="chooseImage">{{draft.qrUrl ? '更换二维码' : '选择二维码'}}</button>
+    <text wx:if="{{errorMessage}}" class="error">{{errorMessage}}</text>
+    <view class="actions"><button bindtap="cancelEdit">取消</button><button class="primary" bindtap="saveEdit">保存</button></view>
+  </block>
+  <block wx:else>
+    <text wx:if="{{config.title}}" class="title">{{config.title}}</text>
+    <text wx:if="{{config.description}}" class="description">{{config.description}}</text>
+    <image wx:if="{{config.qrUrlSource === 'CUSTOM' && config.qrUrl}}" class="qr-image" src="{{config.qrUrl}}" mode="aspectFit" bindtap="handleTap" bindlongpress="handleLongPress" />
+    <text wx:else class="empty">暂未设置团队联系二维码</text>
+  </block>
+</view>

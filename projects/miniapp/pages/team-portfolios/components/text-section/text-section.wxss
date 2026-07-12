@@ -1,0 +1,16 @@
+:host { display: block; }
+.text-section { padding: 28rpx 24rpx; color: #17202a; overflow-wrap: anywhere; }
+.align-LEFT { text-align: left; }
+.align-CENTER { text-align: center; }
+.align-RIGHT { text-align: right; }
+.content { display: block; line-height: 1.75; white-space: pre-wrap; word-break: break-word; }
+.field { box-sizing: border-box; width: 100%; margin-bottom: 16rpx; padding: 18rpx; border: 1rpx solid #d7dfe1; border-radius: 6px; text-align: left; }
+.content-input { min-height: 220rpx; }
+.count { display: block; color: #708087; text-align: right; font-size: 22rpx; }
+.alignment-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12rpx; margin-top: 18rpx; }
+.alignment { border-radius: 6px; font-size: 24rpx; }
+.alignment.active { background: #0f766e; color: #fff; }
+.actions { display: flex; gap: 20rpx; margin-top: 24rpx; }
+.actions button { flex: 1; border-radius: 6px; }
+.primary { background: #0f766e; color: #fff; }
+.error { display: block; margin-top: 16rpx; color: #b42318; text-align: left; }

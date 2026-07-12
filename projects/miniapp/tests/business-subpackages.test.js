@@ -10,7 +10,8 @@ const EXPECTED_PACKAGES = {
   mock: 'pages/mock',
   works: 'pages/works',
   portfolio: 'pages/portfolios',
-  schedule: 'pages/schedule'
+  schedule: 'pages/schedule',
+  teamPortfolio: 'pages/team-portfolios'
 }
 const PAGE_EXTENSIONS = ['.js', '.json', '.wxml', '.wxss']
 const PACKAGE_LOCAL_UTILS = {
@@ -29,15 +30,27 @@ const PACKAGE_LOCAL_UTILS = {
     'portfolio-assets.js',
     'portfolio-contact-form.js',
     'portfolio-publish-disclaimer.js',
+    'team-portfolio-list.js',
     'visitor-profile.js',
     'works.js'
   ],
-  schedule: ['schedule.js']
+  schedule: ['schedule.js'],
+  teamPortfolio: [
+    'team-contact-leads.js',
+    'team-portfolio-assets.js',
+    'team-portfolio-registry.js',
+    'team-portfolio-list.js',
+    'team-portfolios.js',
+    'team-visitor-portfolio.js',
+    'team-visitor-profile.js',
+    'team-visitor-session.js'
+  ]
 }
 const BUSINESS_SUBPACKAGE_ROOTS = [
   'pages/works',
   'pages/portfolios',
-  'pages/schedule'
+  'pages/schedule',
+  'pages/team-portfolios'
 ].map((relativePath) => path.join(MINIAPP_ROOT, relativePath))
 
 function readJson(relativePath) {
@@ -79,6 +92,26 @@ test('app registers business pages in named subpackages without duplicate routes
       )
     }
   }
+})
+
+test('team portfolio subpackage is appended without changing existing route baselines', () => {
+  const appJson = readJson('app.json')
+  const expectedMainPages = [
+    'pages/index/index', 'pages/points/points', 'pages/points-rules/points-rules', 'pages/teams/teams',
+    'pages/team-maintenance/team-maintenance', 'pages/team-member-add/team-member-add', 'pages/team-invitations/team-invitations',
+    'pages/team-member-change/team-member-change', 'pages/messages/messages', 'pages/visits/visits', 'pages/profile/profile',
+    'pages/login/login', 'pages/visitor-portfolio/visitor-portfolio', 'pages/visitor-schedule/visitor-schedule'
+  ]
+  const expectedTeamPages = [
+    'portfolios', 'team-select/team-select', 'standard-edit/team-portfolio-standard-edit',
+    'component-library/team-portfolio-component-library', 'standard-preview/team-portfolio-standard-preview',
+    'contact-leads/team-contact-leads', 'visitor-portfolio/team-visitor-portfolio'
+  ]
+  assert.deepEqual(appJson.pages, expectedMainPages)
+  assert.deepEqual(appJson.subPackages.slice(0, 4).map((pkg) => pkg.name), ['mock', 'works', 'portfolio', 'schedule'])
+  assert.deepEqual(appJson.subPackages[4], { name: 'teamPortfolio', root: 'pages/team-portfolios', pages: expectedTeamPages })
+  assert.equal(appJson.subPackages[4].independent, undefined)
+  assert.equal(appJson.preloadRule, undefined)
 })
 
 test('tests stay excluded from the uploaded package', () => {
@@ -127,6 +160,12 @@ test('subpackage pages keep business-only JavaScript out of the main package', (
   )
   const mainUtilsRoot = path.join(MINIAPP_ROOT, 'utils')
   const businessOnlyNames = new Set(Object.values(PACKAGE_LOCAL_UTILS).flat())
+
+  assert.equal(
+    fs.existsSync(path.join(mainUtilsRoot, 'team-portfolio-list.js')),
+    false,
+    'team portfolio list utility should not be shipped in the main package'
+  )
 
   for (const [packageName, utilNames] of Object.entries(PACKAGE_LOCAL_UTILS)) {
     const packageRoot = path.join(MINIAPP_ROOT, packagesByName[packageName].root)
@@ -213,4 +252,11 @@ test('works utility copies stay byte-for-byte aligned across business subpackage
   const portfolioSource = fs.readFileSync(path.join(MINIAPP_ROOT, 'pages/portfolios/utils/works.js'), 'utf8')
 
   assert.equal(portfolioSource, worksSource)
+})
+
+test('team portfolio list utility copies stay byte-for-byte aligned across business subpackages', () => {
+  const portfolioSource = fs.readFileSync(path.join(MINIAPP_ROOT, 'pages/portfolios/utils/team-portfolio-list.js'), 'utf8')
+  const teamPortfolioSource = fs.readFileSync(path.join(MINIAPP_ROOT, 'pages/team-portfolios/utils/team-portfolio-list.js'), 'utf8')
+
+  assert.equal(teamPortfolioSource, portfolioSource)
 })
