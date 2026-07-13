@@ -390,12 +390,19 @@ class MinePortfolioServiceTest {
     }
 
     @Test
-    void componentLibraryShouldExposeSingleColumnWorkList() {
+    void componentLibraryShouldReturnConfiguredDisplayOrder() {
         assertThat(service().getComponentLibrary().getComponents())
                 .extracting("componentType")
-                .contains(
+                .containsExactly(
+                        PortfolioComponentTypeDict.PROFILE.getCode(),
+                        PortfolioComponentTypeDict.CAROUSEL.getCode(),
+                        PortfolioComponentTypeDict.TEXT_SECTION.getCode(),
+                        PortfolioComponentTypeDict.DIVIDER.getCode(),
+                        PortfolioComponentTypeDict.WORK_GRID.getCode(),
                         PortfolioComponentTypeDict.WORK_LIST.getCode(),
-                        PortfolioComponentTypeDict.DIVIDER.getCode()
+                        PortfolioComponentTypeDict.SCHEDULE_QUERY.getCode(),
+                        PortfolioComponentTypeDict.CONTACT_FORM.getCode(),
+                        PortfolioComponentTypeDict.QR_CONTACT.getCode()
                 );
     }
 

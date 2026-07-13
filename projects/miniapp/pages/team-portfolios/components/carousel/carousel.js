@@ -1,7 +1,5 @@
 const MAX_CAROUSEL_ITEMS = 9
 const DEFAULT_INTERVAL = 5000
-const DEFAULT_ASPECT_RATIO = '4:3'
-const DEFAULT_FRAME_ASPECT_RATIO = '4 / 3'
 
 function createDefaultCarouselConfig() {
   return { items: [] }
@@ -29,34 +27,16 @@ function normalizeCarouselItem(item = {}) {
   return normalized
 }
 
-function greatestCommonDivisor(left, right) {
-  let a = Math.abs(left)
-  let b = Math.abs(right)
-  while (b) {
-    const remainder = a % b
-    a = b
-    b = remainder
-  }
-  return a || 1
+function normalizePositiveNumber(value, fallback) {
+  const numberValue = Number(value)
+  return Number.isFinite(numberValue) && numberValue > 0 ? Math.round(numberValue) : fallback
 }
 
-function formatCarouselAspectRatio(width, height) {
-  const numericWidth = Number(width)
-  const numericHeight = Number(height)
-  if (!Number.isFinite(numericWidth) || !Number.isFinite(numericHeight) || numericWidth <= 0 || numericHeight <= 0) return null
-  if (Number.isInteger(numericWidth) && Number.isInteger(numericHeight)) {
-    const divisor = greatestCommonDivisor(numericWidth, numericHeight)
-    return `${numericWidth / divisor} / ${numericHeight / divisor}`
-  }
-  return `${numericWidth} / ${numericHeight}`
-}
-
-function resolveCarouselAspectRatio(item = {}) {
-  const dimensionsRatio = formatCarouselAspectRatio(item.width, item.height)
-  if (dimensionsRatio) return dimensionsRatio
-  const match = String(item.aspectRatio || '').trim().match(/^(\d+(?:\.\d+)?)\s*[:/]\s*(\d+(?:\.\d+)?)$/)
-  if (!match) return DEFAULT_FRAME_ASPECT_RATIO
-  return formatCarouselAspectRatio(match[1], match[2]) || DEFAULT_FRAME_ASPECT_RATIO
+function buildProgressSegments(items, current) {
+  return (Array.isArray(items) ? items : []).map((item, index) => ({
+    key: item && item.workId ? `work-${item.workId}` : `slide-${index}`,
+    state: index < current ? 'done' : index === current ? 'current' : 'pending'
+  }))
 }
 
 function validateCarouselConfig(config = {}) {
@@ -100,11 +80,14 @@ function syncCarouselDisplay(component, requestedCurrent) {
   const candidate = requestedCurrent === undefined ? Number(component.data.current) : Number(requestedCurrent)
   const current = Number.isInteger(candidate) && candidate >= 0 && candidate < items.length ? candidate : 0
   const shouldRotate = items.length > 1
+  const safeInterval = normalizePositiveNumber(component.properties.interval, DEFAULT_INTERVAL)
   component.setData({
     current,
-    frameAspectRatio: resolveCarouselAspectRatio(items[current]),
     autoplay: shouldRotate,
-    circular: shouldRotate
+    circular: shouldRotate,
+    safeInterval,
+    progressStyle: `animation-duration: ${safeInterval}ms;`,
+    progressSegments: buildProgressSegments(items, current)
   })
 }
 
@@ -131,13 +114,19 @@ Component({
       value: false,
       observer(value, oldValue) { if (value !== oldValue) syncCarouselDraft(this, value === true) }
     },
-    interval: { type: Number, value: DEFAULT_INTERVAL }
+    interval: {
+      type: Number,
+      value: DEFAULT_INTERVAL,
+      observer() { syncCarouselDisplay(this) }
+    }
   },
   data: {
     current: 0,
-    frameAspectRatio: DEFAULT_FRAME_ASPECT_RATIO,
     autoplay: false,
     circular: false,
+    safeInterval: DEFAULT_INTERVAL,
+    progressStyle: `animation-duration: ${DEFAULT_INTERVAL}ms;`,
+    progressSegments: [],
     selectedMemberId: null,
     draftItems: [],
     errorMessage: ''
@@ -163,4 +152,4 @@ Component({
   }
 })
 
-module.exports = { DEFAULT_ASPECT_RATIO, DEFAULT_INTERVAL, MAX_CAROUSEL_ITEMS, buildCarouselConfig, createDefaultCarouselConfig, fetchCarouselMembers, fetchCarouselWorks, normalizeCarouselItem, resolveCarouselAspectRatio, toggleCarouselWork, validateCarouselConfig }
+module.exports = { DEFAULT_INTERVAL, MAX_CAROUSEL_ITEMS, buildCarouselConfig, buildProgressSegments, createDefaultCarouselConfig, fetchCarouselMembers, fetchCarouselWorks, normalizeCarouselItem, normalizePositiveNumber, toggleCarouselWork, validateCarouselConfig }

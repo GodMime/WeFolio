@@ -121,12 +121,89 @@
     </view>
   </view>
 
+  <view class="text-section-sheet-mask component-picker-mask {{textSectionSheetVisible ? 'visible' : ''}}" catchtap="handleCloseTextSectionSheet">
+    <view class="text-section-sheet-panel component-picker-panel" catchtap="noop">
+      <view class="component-picker-grabber"></view>
+      <view class="component-picker-heading">
+        <view class="component-picker-title">编辑文字说明</view>
+        <view class="component-picker-count">{{textSectionFieldCounters.content}}</view>
+      </view>
+
+      <view class="text-section-form">
+        <view class="form-row">
+          <view class="field-heading">
+            <view class="field-label">说明</view>
+            <view class="field-limit">{{textSectionFieldCounters.content}}</view>
+          </view>
+          <textarea class="input textarea text-section-sheet-textarea" value="{{textSectionForm.content}}" placeholder="请输入给访客看的说明文字" maxlength="{{textSectionMaxLength}}" bindinput="handleTextSectionInput"></textarea>
+        </view>
+
+        <view class="form-row">
+          <view class="field-heading"><view class="field-label">对齐方式</view></view>
+          <view class="text-section-alignment-list">
+            <view wx:for="{{textSectionAlignmentOptions}}" wx:key="value" class="text-section-alignment-option {{textSectionForm.alignment === item.value ? 'active' : ''}}" data-value="{{item.value}}" catchtap="handleTextSectionAlignmentTap" aria-role="radio" aria-checked="{{textSectionForm.alignment === item.value}}">
+              <view class="text-section-alignment-radio"></view>
+              <view class="text-section-alignment-label">{{item.label}}</view>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view class="text-section-actions">
+        <button class="text-section-cancel" catchtap="handleCloseTextSectionSheet">取消</button>
+        <button class="text-section-confirm" catchtap="handleConfirmTextSectionConfig">完成</button>
+      </view>
+    </view>
+  </view>
+
+  <view class="contact-form-sheet-mask component-picker-mask {{contactFormSheetVisible ? 'visible' : ''}}" catchtap="handleCloseContactFormSheet">
+    <view class="contact-form-sheet-panel component-picker-panel" catchtap="noop">
+      <view class="component-picker-grabber"></view>
+      <view class="component-picker-heading">
+        <view class="component-picker-title">编辑预留联系信息</view>
+        <view class="component-picker-count">{{contactFormConfigForm.displayMode === 'INLINE_FORM' ? '直接' : '弹层'}}</view>
+      </view>
+      <view class="contact-form-sheet-form">
+        <view class="form-row">
+          <view class="field-heading"><view class="field-label">展示方式</view></view>
+          <view class="contact-form-display-mode-list">
+            <view wx:for="{{contactFormDisplayModeOptions}}" wx:key="value" class="contact-form-display-mode-option {{contactFormConfigForm.displayMode === item.value ? 'active' : ''}}" data-value="{{item.value}}" catchtap="handleContactFormDisplayModeTap" aria-role="radio" aria-checked="{{contactFormConfigForm.displayMode === item.value}}">
+              <view class="contact-form-display-mode-radio"></view>
+              <view class="contact-form-display-mode-label">{{item.label}}</view>
+            </view>
+          </view>
+        </view>
+      </view>
+      <view class="contact-form-sheet-actions">
+        <button class="contact-form-sheet-cancel" catchtap="handleCloseContactFormSheet">取消</button>
+        <button class="contact-form-sheet-confirm" catchtap="handleConfirmContactFormConfig">完成</button>
+      </view>
+    </view>
+  </view>
+
+  <view class="schedule-query-sheet-mask component-picker-mask {{scheduleQuerySheetVisible ? 'visible' : ''}}" catchtap="handleCloseScheduleQuerySheet">
+    <view class="schedule-query-sheet-panel component-picker-panel" catchtap="noop">
+      <view class="component-picker-grabber"></view>
+      <view class="component-picker-heading"><view class="component-picker-title">编辑档期查询</view><view class="component-picker-count">{{scheduleQueryForm.displayMode === 'INLINE_CALENDAR' ? '内联' : '弹层'}}</view></view>
+      <view class="schedule-query-sheet-form"><view class="form-row"><view class="field-heading"><view class="field-label">展示方式</view></view><view class="schedule-query-display-mode-list"><view wx:for="{{scheduleQueryDisplayModeOptions}}" wx:key="value" class="schedule-query-display-mode-option {{scheduleQueryForm.displayMode === item.value ? 'active' : ''}}" data-value="{{item.value}}" catchtap="handleScheduleQueryDisplayModeTap" aria-role="radio" aria-checked="{{scheduleQueryForm.displayMode === item.value}}"><view class="schedule-query-display-mode-radio"></view><view class="schedule-query-display-mode-label">{{item.label}}</view></view></view></view></view>
+      <view class="schedule-query-sheet-actions"><button class="schedule-query-sheet-cancel" catchtap="handleCloseScheduleQuerySheet">取消</button><button class="schedule-query-sheet-confirm" catchtap="handleConfirmScheduleQueryConfig">完成</button></view>
+    </view>
+  </view>
+
+  <view class="divider-sheet-mask component-picker-mask {{dividerSheetVisible ? 'visible' : ''}}" catchtap="handleCloseDividerSheet">
+    <view class="divider-sheet-panel component-picker-panel" catchtap="noop">
+      <view class="component-picker-grabber"></view>
+      <view class="component-picker-heading"><view class="component-picker-title">编辑分割线</view><view class="component-picker-count">{{dividerForm.heightPx}}px</view></view>
+      <view class="divider-sheet-form"><view class="form-row"><view class="field-heading"><view class="field-label">颜色</view></view><view class="divider-color-list"><view wx:for="{{dividerColorOptions}}" wx:key="value" class="divider-color-option {{dividerForm.color === item.value ? 'active' : ''}}" data-value="{{item.value}}" catchtap="handleDividerColorTap" aria-role="radio" aria-checked="{{dividerForm.color === item.value}}"><view class="divider-color-swatch" style="background-color: {{item.colorValue}};"></view><view class="divider-color-label">{{item.label}}</view></view></view></view><view class="form-row"><view class="field-heading"><view class="field-label">高度(px)</view></view><input class="input divider-height-input" type="number" value="{{dividerForm.heightPx}}" placeholder="16" bindinput="handleDividerHeightInput" /></view></view>
+      <view class="divider-sheet-actions"><button class="divider-sheet-cancel" catchtap="handleCloseDividerSheet">取消</button><button class="divider-sheet-confirm" catchtap="handleConfirmDividerConfig">完成</button></view>
+    </view>
+  </view>
+
   <view class="component-editor-mask {{componentEditorVisible ? 'visible' : ''}}" catchtap="handleCloseComponentEditor">
     <view class="component-editor-panel" catchtap="noop">
       <view class="component-picker-grabber"></view>
-      <view class="component-picker-heading editor-heading">
+      <view class="component-picker-heading">
         <view class="component-picker-title">编辑{{activeComponentName}}</view>
-        <button class="editor-close" catchtap="handleCloseComponentEditor">关闭</button>
       </view>
       <view wx:if="{{!portfolioId && activeComponentNeedsPortfolio}}" class="editor-notice">请先保存草稿，再选择团队成员内容</view>
       <view wx:if="{{activeComponentSource.loadingFingerprint}}" class="source-state">正在加载团队内容...</view>
@@ -138,17 +215,17 @@
       </view>
       <scroll-view class="component-editor-scroll" scroll-y type="list">
         <view class="component-editor-content">
-          <team-profile wx:if="{{activeComponentType === 'TEAM_PROFILE'}}" id="team-profile-editor" data-key="{{activeComponentKey}}" team="{{activeComponent.config.team}}" visible-fields="{{activeComponent.config.visibleFields}}" edit-mode="{{true}}" refreshing="{{teamProfileRefreshing}}" bindchooseavatar="handleTeamProfileChooseAvatar" bindrefresh="handleTeamProfileRefresh" bindcancel="handleCloseComponentEditor" bindsave="handleComponentSave" />
-          <team-carousel wx:if="{{activeComponentType === 'CAROUSEL'}}" data-key="{{activeComponentKey}}" portfolio-id="{{portfolioId}}" items="{{activeComponent.config.items}}" members="{{activeComponentSource.members}}" works="{{activeComponentSource.works}}" edit-mode="{{true}}" bindloadmembers="handleCarouselLoadMembers" bindmemberchange="handleCarouselMemberChange" bindcancel="handleCloseComponentEditor" bindsave="handleComponentSave" />
-          <team-divider wx:if="{{activeComponentType === 'DIVIDER'}}" data-key="{{activeComponentKey}}" config="{{activeComponent.config}}" edit-mode="{{true}}" bindcancel="handleCloseComponentEditor" bindsave="handleComponentSave" />
-          <team-member-portfolio-grid wx:if="{{activeComponentType === 'MEMBER_PORTFOLIO_GRID'}}" data-key="{{activeComponentKey}}" portfolio-id="{{portfolioId}}" items="{{activeComponent.config.items}}" members="{{activeComponentSource.members}}" portfolios="{{activeComponentSource.portfolios}}" edit-mode="{{true}}" bindloadmembers="handleGridLoadMembers" bindmemberchange="handleGridMemberChange" bindcancel="handleCloseComponentEditor" bindsave="handleComponentSave" />
-          <team-member-portfolio-list wx:if="{{activeComponentType === 'MEMBER_PORTFOLIO_LIST'}}" data-key="{{activeComponentKey}}" portfolio-id="{{portfolioId}}" items="{{activeComponent.config.items}}" members="{{activeComponentSource.members}}" portfolios="{{activeComponentSource.portfolios}}" edit-mode="{{true}}" bindloadmembers="handleListLoadMembers" bindmemberchange="handleListMemberChange" bindcancel="handleCloseComponentEditor" bindsave="handleComponentSave" />
-          <team-text-section wx:if="{{activeComponentType === 'TEXT_SECTION'}}" data-key="{{activeComponentKey}}" config="{{activeComponent.config}}" edit-mode="{{true}}" bindcancel="handleCloseComponentEditor" bindsave="handleComponentSave" />
-          <team-schedule-query wx:if="{{activeComponentType === 'SCHEDULE_QUERY'}}" data-key="{{activeComponentKey}}" component-key="{{activeComponentKey}}" config="{{activeComponent.config}}" edit-mode="{{true}}" bindcancel="handleCloseComponentEditor" bindsave="handleComponentSave" />
-          <team-contact-form wx:if="{{activeComponentType === 'CONTACT_FORM'}}" data-key="{{activeComponentKey}}" config="{{activeComponent.config}}" edit-mode="{{true}}" bindcancel="handleCloseComponentEditor" bindsave="handleComponentSave" />
-          <team-qr-contact wx:if="{{activeComponentType === 'QR_CONTACT'}}" id="{{activeComponentKey}}" data-key="{{activeComponentKey}}" config="{{activeComponent.config}}" edit-mode="{{true}}" uploading="{{shareCoverUploading}}" bindchoose="handleQrChoose" bindcancel="handleCloseComponentEditor" bindsave="handleComponentSave" />
+          <team-profile wx:if="{{activeComponentType === 'TEAM_PROFILE'}}" id="active-component-editor" data-key="{{activeComponentKey}}" team="{{activeComponent.config.team}}" visible-fields="{{activeComponent.config.visibleFields}}" edit-mode="{{true}}" refreshing="{{teamProfileRefreshing}}" bindchooseavatar="handleTeamProfileChooseAvatar" bindrefresh="handleTeamProfileRefresh" bindsave="handleComponentSave" />
+          <team-carousel wx:if="{{activeComponentType === 'CAROUSEL'}}" id="active-component-editor" data-key="{{activeComponentKey}}" portfolio-id="{{portfolioId}}" items="{{activeComponent.config.items}}" members="{{activeComponentSource.members}}" works="{{activeComponentSource.works}}" edit-mode="{{true}}" bindloadmembers="handleCarouselLoadMembers" bindmemberchange="handleCarouselMemberChange" bindsave="handleComponentSave" />
+          <team-member-portfolio-grid wx:if="{{activeComponentType === 'MEMBER_PORTFOLIO_GRID'}}" id="active-component-editor" data-key="{{activeComponentKey}}" portfolio-id="{{portfolioId}}" items="{{activeComponent.config.items}}" members="{{activeComponentSource.members}}" portfolios="{{activeComponentSource.portfolios}}" edit-mode="{{true}}" bindloadmembers="handleGridLoadMembers" bindmemberchange="handleGridMemberChange" bindsave="handleComponentSave" />
+          <team-member-portfolio-list wx:if="{{activeComponentType === 'MEMBER_PORTFOLIO_LIST'}}" id="active-component-editor" data-key="{{activeComponentKey}}" portfolio-id="{{portfolioId}}" items="{{activeComponent.config.items}}" members="{{activeComponentSource.members}}" portfolios="{{activeComponentSource.portfolios}}" edit-mode="{{true}}" bindloadmembers="handleListLoadMembers" bindmemberchange="handleListMemberChange" bindsave="handleComponentSave" />
+          <team-qr-contact wx:if="{{activeComponentType === 'QR_CONTACT'}}" id="active-component-editor" data-key="{{activeComponentKey}}" config="{{activeComponent.config}}" edit-mode="{{true}}" uploading="{{shareCoverUploading}}" bindchoose="handleQrChoose" bindsave="handleComponentSave" />
         </view>
       </scroll-view>
+      <view class="component-editor-actions">
+        <button class="component-editor-cancel" catchtap="handleCloseComponentEditor">取消</button>
+        <button class="component-editor-confirm" catchtap="handleConfirmComponentEditor">完成</button>
+      </view>
     </view>
   </view>
 

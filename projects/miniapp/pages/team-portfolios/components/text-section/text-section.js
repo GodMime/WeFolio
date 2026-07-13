@@ -24,27 +24,11 @@ function validateTextSectionConfig(config = {}) {
   return { valid: true, message: '' }
 }
 
-function syncTextSectionDraft(component) {
-  const draft = createDefaultTextSectionConfig(component.properties.config)
-  component.setData({ draft, count: countTextCodePoints(draft.content), errorMessage: '' })
-}
-
 Component({
   properties: {
-    config: { type: Object, value: {}, observer() { if (!this.properties.editMode) syncTextSectionDraft(this) } },
-    editMode: { type: Boolean, value: false, observer(value, oldValue) { if (value !== oldValue) syncTextSectionDraft(this) } }
+    config: { type: Object, value: {} }
   },
-  data: { draft: createDefaultTextSectionConfig(), count: 0, alignments: TEXT_ALIGNMENTS, errorMessage: '' },
-  methods: {
-    beginEdit() { syncTextSectionDraft(this) },
-    handleInput(event) { const field = event.currentTarget.dataset.field; const draft = Object.assign({}, this.data.draft, { [field]: event.detail.value }); this.setData({ draft, count: countTextCodePoints(draft.content) }); this.triggerEvent('change', { field, value: event.detail.value }) },
-    selectAlignment(event) { const draft = Object.assign({}, this.data.draft, { alignment: event.currentTarget.dataset.alignment }); this.setData({ draft }); this.triggerEvent('change', { field: 'alignment', value: draft.alignment }) },
-    cancelEdit() { syncTextSectionDraft(this); this.triggerEvent('cancel') },
-    saveEdit() { const validation = validateTextSectionConfig(this.data.draft); if (!validation.valid) return this.setData({ errorMessage: validation.message }); this.triggerEvent('save', { config: createDefaultTextSectionConfig(this.data.draft) }) }
-  },
-  lifetimes: {
-    attached() { syncTextSectionDraft(this) }
-  }
+  data: {}
 })
 
 module.exports = { TEXT_ALIGNMENTS, TEXT_SECTION_MAX_LENGTH, countTextCodePoints, createDefaultTextSectionConfig, validateTextSectionConfig }

@@ -126,12 +126,6 @@ const EDIT_LIFECYCLE_CASES = [
     expectedConfig(exports, source) { return exports.buildListConfig(source) }
   },
   {
-    name: 'text-section', sourceProperty: 'config', draftKey: 'draft',
-    initial: { content: '初始', alignment: 'LEFT' }, latest: { content: '最新😀', alignment: 'CENTER' },
-    expectedDraft(exports, source) { return exports.createDefaultTextSectionConfig(source) },
-    expectedConfig(exports, source) { return exports.createDefaultTextSectionConfig(source) }
-  },
-  {
     name: 'schedule-query', sourceProperty: 'config', draftKey: 'draft',
     initial: { title: '初始', description: '', displayMode: 'MODAL_CALENDAR', queryRange: { type: 'UNLIMITED' } },
     latest: { title: '最新', description: '说明', displayMode: 'INLINE_CALENDAR', queryRange: { type: 'FUTURE_DAYS', futureDays: 30 } },
@@ -286,30 +280,67 @@ test('carousel loads members before approved image works and preserves selection
   assert.deepEqual(exports.buildCarouselConfig([{ memberUserId: 2, workId: 9, title: '仅展示' }]), { items: [{ memberUserId: 2, workId: 9 }] })
 })
 
-test('carousel follows the current image ratio for horizontal, vertical, single and switched items', () => {
-  const { definition, exports } = loadComponent('carousel')
-  const horizontal = { memberUserId: 2, workId: 9, width: 1600, height: 900, mediaUrl: 'horizontal.jpg' }
-  const vertical = { memberUserId: 3, workId: 10, aspectRatio: '9:16', mediaUrl: 'vertical.jpg' }
-  assert.equal(exports.resolveCarouselAspectRatio(horizontal), '16 / 9')
-  assert.equal(exports.resolveCarouselAspectRatio(vertical), '9 / 16')
-  assert.equal(exports.resolveCarouselAspectRatio({ aspectRatio: 'invalid' }), '4 / 3')
+test('carousel uses the personal-style progress indicator and only rotates multiple items', () => {
+  const { definition } = loadComponent('carousel')
+  const first = { memberUserId: 2, workId: 9, mediaUrl: 'first.jpg', coverUrl: 'first-cover.jpg' }
+  const second = { memberUserId: 3, workId: 10, mediaUrl: 'second.jpg', coverUrl: 'second-cover.jpg' }
 
-  const single = createComponentHarness(definition, { items: [horizontal], editMode: false })
-  assert.equal(single.instance.data.frameAspectRatio, '16 / 9')
+  const single = createComponentHarness(definition, { items: [first], editMode: false })
   assert.equal(single.instance.data.autoplay, false)
   assert.equal(single.instance.data.circular, false)
+  assert.deepEqual(single.instance.data.progressSegments.map((item) => item.state), ['current'])
+  assert.equal(single.instance.data.progressStyle, 'animation-duration: 5000ms;')
 
-  const switched = createComponentHarness(definition, { items: [horizontal, vertical], editMode: false })
-  assert.equal(switched.instance.data.frameAspectRatio, '16 / 9')
-  assert.equal(switched.instance.data.autoplay, true)
-  switched.instance.handleChange({ detail: { current: 1 } })
-  assert.equal(switched.instance.data.current, 1)
-  assert.equal(switched.instance.data.frameAspectRatio, '9 / 16')
-  assert.equal(switched.instance.data.autoplay, true)
+  const carousel = createComponentHarness(definition, { items: [first, second], editMode: false })
+  assert.equal(carousel.instance.data.autoplay, true)
+  assert.equal(carousel.instance.data.circular, true)
+  assert.deepEqual(carousel.instance.data.progressSegments.map((item) => item.state), ['current', 'pending'])
+  carousel.instance.handleChange({ detail: { current: 1 } })
+  assert.equal(carousel.instance.data.current, 1)
+  assert.deepEqual(carousel.instance.data.progressSegments.map((item) => item.state), ['done', 'current'])
 
   const wxml = fs.readFileSync(path.join(ROOT, 'carousel/carousel.wxml'), 'utf8')
-  assert.match(wxml, /aspect-ratio:\s*\{\{frameAspectRatio\}\}/)
-  assert.match(wxml, /mode="aspectFit"/)
+  const wxss = fs.readFileSync(path.join(ROOT, 'carousel/carousel.wxss'), 'utf8')
+  assert.match(wxml, /interval="\{\{safeInterval\}\}"/)
+  assert.match(wxml, /mode="aspectFill"/)
+  assert.match(wxml, /src="\{\{item\.mediaUrl \|\| item\.coverUrl\}\}"/)
+  assert.match(wxml, /class="carousel-progress-bar"/)
+  assert.doesNotMatch(wxml, /class="progress"/)
+  assert.match(wxss, /\.carousel\s*\{[^}]*width:\s*calc\(100% \+ 56rpx\);[^}]*margin-left:\s*-28rpx;[^}]*height:\s*563rpx;/)
+  assert.match(wxss, /\.carousel\.editor-mode\s*\{[^}]*height:\s*auto;[^}]*overflow:\s*visible;/)
+  assert.match(wxss, /\.carousel\.editor-mode\s*\{[^}]*width:\s*100%;[^}]*margin-left:\s*0;/)
+})
+
+test('shared WXS selection order avoids unavailable String and preserves numeric ID matching', () => {
+  const wxsSource = fs.readFileSync(path.join(ROOT, 'editor-selection.wxs'), 'utf8')
+  const selectionModule = { exports: {} }
+
+  assert.doesNotMatch(wxsSource, /\bString\s*\(/)
+  new Function('module', wxsSource)(selectionModule)
+
+  assert.equal(selectionModule.exports.order([{ workId: 9 }], 'workId', '9'), 1)
+  assert.equal(selectionModule.exports.order([{ workId: 9 }], 'workId', 10), 0)
+})
+
+test('carousel work picker matches the personal vertical work list visual language', () => {
+  const wxml = fs.readFileSync(path.join(ROOT, 'carousel/carousel.wxml'), 'utf8')
+  const wxss = fs.readFileSync(path.join(ROOT, 'carousel/carousel.wxss'), 'utf8')
+
+  assert.match(wxml, /class="editor-option-list"/)
+  assert.match(wxml, /class="editor-option-thumb"/)
+  assert.match(wxml, /class="editor-option-meta-row"/)
+  assert.match(wxml, /wx:if="\{\{item\.aspectRatio\}\}" class="editor-option-ratio"/)
+  assert.match(wxml, /<view wx:for="\{\{works\}\}" wx:key="workId" class="editor-option \{\{selection\.order\(draftItems, 'workId', item\.workId\) \? 'selected' : ''\}\}" data-item="\{\{item\}\}" catchtap="toggleWork"/)
+  assert.match(wxml, /class="editor-option-check">\{\{selection\.order\(draftItems, 'workId', item\.workId\) \|\| ''\}\}<\/view>/)
+  assert.doesNotMatch(wxml, /editor-option-grid/)
+
+  assert.match(wxss, /\.editor-option-list\s*\{[^}]*width:\s*100%;[^}]*flex-direction:\s*column;[^}]*align-self:\s*stretch;/)
+  assert.match(wxss, /\.editor-option\s*\{[^}]*width:\s*100%;[^}]*min-height:\s*112rpx;/)
+  assert.match(wxss, /\.editor-option-thumb\s*\{[^}]*width:\s*92rpx;[^}]*height:\s*76rpx;/)
+  assert.match(wxss, /\.editor-option\.selected\s*\{[^}]*border-color:\s*#c28b37;[^}]*background:\s*#fff9ed;/)
+  assert.match(wxss, /\.editor-option-check\s*\{[^}]*width:\s*44rpx;[^}]*height:\s*44rpx;/)
+  assert.match(wxss, /\.editor-option\.selected \.editor-option-check\s*\{[^}]*background:\s*#c28b37;/)
+  assert.doesNotMatch(wxss, /width:\s*calc\(33\.333%/)
 })
 
 test('divider owns color and positive height validation', () => {
@@ -317,6 +348,10 @@ test('divider owns color and positive height validation', () => {
   assert.deepEqual(exports.createDefaultDividerConfig(), { color: 'GRAY', heightPx: 16 })
   assert.equal(exports.validateDividerConfig({ color: 'BLACK', heightPx: 1 }).valid, true)
   assert.equal(exports.validateDividerConfig({ color: 'RED', heightPx: 0 }).valid, false)
+
+  const wxss = fs.readFileSync(path.join(ROOT, 'divider/divider.wxss'), 'utf8')
+  assert.match(wxss, /\.divider-component\s*\{[^}]*width:\s*calc\(100% \+ 56rpx\);[^}]*margin-left:\s*-28rpx;[^}]*padding:\s*16rpx 0;/)
+  assert.match(wxss, /\.divider-component\.editor-mode\s*\{[^}]*width:\s*100%;[^}]*margin-left:\s*0;[^}]*padding:\s*0;/)
 })
 
 test('grid independently loads a member before that member published portfolios', async () => {
@@ -365,9 +400,7 @@ test('text section trims required body, limits 200 chars and owns alignment', ()
   assert.equal(exports.countTextCodePoints('😀a'), 2)
   assert.equal(exports.validateTextSectionConfig({ content: '正文', alignment: 'JUSTIFY' }).valid, false)
 
-  const harness = createComponentHarness(definition, { config: { content: '', alignment: 'LEFT' }, editMode: true })
-  harness.instance.handleInput({ currentTarget: { dataset: { field: 'content' } }, detail: { value: '😀a' } })
-  assert.equal(harness.instance.data.count, 2)
+  assert.deepEqual(definition.data, {})
 })
 
 test('schedule maps members to three display states and deduplicates loading', async () => {

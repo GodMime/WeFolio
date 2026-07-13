@@ -9,25 +9,36 @@
       </view>
       <view class="editor-field editor-content-field">
         <view class="editor-label">图片作品</view>
-        <view wx:if="{{selectedMemberId && works.length}}" class="editor-option-grid">
-          <button wx:for="{{works}}" wx:key="workId" class="editor-option {{selection.order(draftItems, 'workId', item.workId) ? 'selected' : ''}}" data-item="{{item}}" bindtap="toggleWork">
-            <image src="{{item.coverUrl || item.mediaUrl}}" mode="aspectFill" />
-            <view class="editor-option-copy"><text class="editor-option-title">{{item.title}}</text></view>
-            <view class="editor-option-order">{{selection.order(draftItems, 'workId', item.workId) || ''}}</view>
-          </button>
+        <view wx:if="{{selectedMemberId && works.length}}" class="editor-option-list">
+          <view wx:for="{{works}}" wx:key="workId" class="editor-option {{selection.order(draftItems, 'workId', item.workId) ? 'selected' : ''}}" data-item="{{item}}" catchtap="toggleWork" aria-role="checkbox" aria-checked="{{selection.order(draftItems, 'workId', item.workId) ? true : false}}">
+            <view class="editor-option-thumb">
+              <image src="{{item.coverUrl || item.mediaUrl}}" mode="aspectFill" />
+            </view>
+            <view class="editor-option-copy">
+              <view class="editor-option-title">{{item.title}}</view>
+              <view class="editor-option-meta-row">
+                <view class="editor-option-meta">图片作品</view>
+                <view wx:if="{{item.aspectRatio}}" class="editor-option-ratio">{{item.aspectRatio}}</view>
+              </view>
+            </view>
+            <view class="editor-option-check">{{selection.order(draftItems, 'workId', item.workId) || ''}}</view>
+          </view>
         </view>
         <view wx:elif="{{selectedMemberId}}" class="editor-empty">该成员暂无审核通过的图片作品</view>
         <view wx:else class="editor-empty">请先选择团队成员</view>
       </view>
       <view wx:if="{{errorMessage}}" class="editor-error">{{errorMessage}}</view>
     </view>
-    <view class="editor-actions"><button class="editor-cancel" bindtap="cancelEdit">取消</button><button class="editor-confirm" bindtap="saveEdit">完成</button></view>
   </block>
   <block wx:else>
-    <swiper wx:if="{{items.length}}" class="swiper" style="aspect-ratio: {{frameAspectRatio}};" current="{{current}}" interval="{{interval}}" autoplay="{{autoplay}}" circular="{{circular}}" bindchange="handleChange">
-      <swiper-item wx:for="{{items}}" wx:key="workId"><image class="slide" src="{{item.mediaUrl || item.coverUrl}}" mode="aspectFit" data-item="{{item}}" data-index="{{index}}" bindtap="previewItem" /></swiper-item>
+    <swiper wx:if="{{items.length}}" class="swiper" current="{{current}}" interval="{{safeInterval}}" autoplay="{{autoplay}}" circular="{{circular}}" bindchange="handleChange">
+      <swiper-item wx:for="{{items}}" wx:key="workId"><image class="slide" src="{{item.mediaUrl || item.coverUrl}}" mode="aspectFill" data-item="{{item}}" data-index="{{index}}" bindtap="previewItem" /></swiper-item>
     </swiper>
     <text wx:else class="empty">暂无轮播图片</text>
-    <text wx:if="{{items.length > 1}}" class="progress">{{current + 1}} / {{items.length}}</text>
+    <view wx:if="{{progressSegments.length > 1}}" class="carousel-progress-bar" aria-hidden="true">
+      <view wx:for="{{progressSegments}}" wx:key="key" class="carousel-progress-segment {{item.state}}">
+        <view class="carousel-progress-fill" style="{{item.state === 'current' ? progressStyle : ''}}"></view>
+      </view>
+    </view>
   </block>
 </view>

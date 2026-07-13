@@ -1,7 +1,7 @@
 function order(items, field, value) {
   var source = items || []
   for (var index = 0; index < source.length; index += 1) {
-    if (String(source[index][field]) === String(value)) return index + 1
+    if (source[index][field] == value) return index + 1
   }
   return 0
 }

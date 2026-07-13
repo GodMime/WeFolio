@@ -10,6 +10,7 @@ const PAGE_NAMES = [
   'contact-leads/team-contact-leads', 'visitor-portfolio/team-visitor-portfolio'
 ]
 const NINE_COMPONENTS = ['team-profile', 'team-carousel', 'team-divider', 'team-member-portfolio-grid', 'team-member-portfolio-list', 'team-text-section', 'team-schedule-query', 'team-contact-form', 'team-qr-contact']
+const STANDARD_EDITOR_RENDERED_COMPONENTS = NINE_COMPONENTS.filter((component) => !['team-divider', 'team-text-section', 'team-schedule-query', 'team-contact-form'].includes(component))
 const EDITOR_COMPONENT_PATHS = [
   'team-profile/team-profile',
   'carousel/carousel',
@@ -63,11 +64,23 @@ test('team portfolio pages provide all page artifacts, custom navigation, and ex
   for (const name of ['standard-edit/team-portfolio-standard-edit', 'standard-preview/team-portfolio-standard-preview', 'visitor-portfolio/team-visitor-portfolio']) {
     const json = JSON.parse(read(`${name}.json`))
     const wxml = read(`${name}.wxml`)
-    for (const component of NINE_COMPONENTS) {
+    const renderedComponents = name === 'standard-edit/team-portfolio-standard-edit'
+      ? STANDARD_EDITOR_RENDERED_COMPONENTS
+      : NINE_COMPONENTS
+    for (const component of renderedComponents) {
       assert.ok(json.usingComponents[component], `${name} registers ${component}`)
       assert.match(wxml, new RegExp(`<${component}[\\s>]`), `${name} renders ${component}`)
     }
     assert.doesNotMatch(wxml, /componentType\s*===|wx:if="\{\{.*componentType/)
+  }
+})
+
+test('team preview and visitor pages share the team carousel component', () => {
+  for (const name of ['standard-preview/team-portfolio-standard-preview', 'visitor-portfolio/team-visitor-portfolio']) {
+    const json = JSON.parse(read(`${name}.json`))
+    const wxml = read(`${name}.wxml`)
+    assert.equal(json.usingComponents['team-carousel'], '../components/carousel/carousel')
+    assert.match(wxml, /<team-carousel[\s\S]*items="\{\{item\.data\.items\}\}"/)
   }
 })
 
@@ -120,7 +133,8 @@ test('standard team editor independently matches the personal editor interaction
   assert.match(wxml, /class="component-remove-pane"[\s\S]*handleRemoveComponent/)
   assert.match(wxml, /component-picker-mask \{\{componentSheetVisible \? 'visible' : ''\}\}/)
   assert.match(wxml, /component-editor-mask \{\{componentEditorVisible \? 'visible' : ''\}\}/)
-  assert.equal(Array.from(wxml.matchAll(/bindcancel="handleCloseComponentEditor"/g)).length, 9)
+  assert.equal(Array.from(wxml.matchAll(/bindcancel="handleCloseComponentEditor"/g)).length, 0)
+  assert.match(wxml, /class="component-editor-cancel" catchtap="handleCloseComponentEditor">取消<\/button>/)
   assert.match(wxml, /share-cover-crop-mask \{\{shareCoverCropVisible \? 'visible' : ''\}\}/)
   assert.match(wxml, /wx:if="\{\{shareCoverCropPath\}\}" class="share-cover-crop-image" src="\{\{shareCoverCropPath\}\}"/)
   assert.match(wxss, /\.share-cover-crop-panel\s*\{[^}]*overflow-y:\s*auto;/)
@@ -136,6 +150,88 @@ test('standard team editor independently matches the personal editor interaction
   assert.match(js, /handleComponentTouchMove/)
   assert.match(js, /handleRemoveComponent/)
   assert.doesNotMatch(js, /portfolio-standard-edit/)
+})
+
+test('team page level component editor owns the shared cancel and confirm actions for team-specific selectors', () => {
+  const wxml = read('standard-edit/team-portfolio-standard-edit.wxml')
+  const wxss = read('standard-edit/team-portfolio-standard-edit.wxss')
+  const js = read('standard-edit/team-portfolio-standard-edit.js')
+
+  assert.equal(Array.from(wxml.matchAll(/id="active-component-editor"/g)).length, 5)
+  assert.match(wxml, /class="component-editor-actions"/)
+  assert.match(wxml, /class="component-editor-cancel" catchtap="handleCloseComponentEditor">取消<\/button>/)
+  assert.match(wxml, /class="component-editor-confirm" catchtap="handleConfirmComponentEditor">完成<\/button>/)
+  assert.doesNotMatch(wxml, /class="editor-close"/)
+  assert.match(js, /handleConfirmComponentEditor\(\)/)
+  assert.match(wxss, /\.component-editor-actions\s*\{[^}]*display:\s*flex;/)
+})
+
+test('team text section opens the dedicated personal-style editing sheet', () => {
+  const wxml = read('standard-edit/team-portfolio-standard-edit.wxml')
+  const wxss = read('standard-edit/team-portfolio-standard-edit.wxss')
+  const js = read('standard-edit/team-portfolio-standard-edit.js')
+
+  assert.match(wxml, /text-section-sheet-mask component-picker-mask \{\{textSectionSheetVisible \? 'visible' : ''\}\}/)
+  assert.match(wxml, /class="component-picker-title">编辑文字说明<\/view>/)
+  assert.match(wxml, /value="\{\{textSectionForm\.content\}\}"/)
+  assert.match(wxml, /catchtap="handleTextSectionAlignmentTap"/)
+  assert.match(wxml, /catchtap="handleCloseTextSectionSheet">取消<\/button>/)
+  assert.match(wxml, /catchtap="handleConfirmTextSectionConfig">完成<\/button>/)
+  assert.doesNotMatch(wxml, /<team-text-section[\s\S]*edit-mode="\{\{true\}\}"/)
+  assert.match(wxss, /\.text-section-sheet-panel\s*\{[^}]*max-height:\s*76vh;/)
+  assert.match(wxss, /\.text-section-sheet-textarea\s*\{[^}]*height:\s*220rpx;/)
+  assert.match(js, /openTextSectionSheet/)
+  assert.match(js, /handleConfirmTextSectionConfig/)
+})
+
+test('team contact form uses an isolated display-mode sheet', () => {
+  const wxml = read('standard-edit/team-portfolio-standard-edit.wxml')
+  const wxss = read('standard-edit/team-portfolio-standard-edit.wxss')
+  const js = read('standard-edit/team-portfolio-standard-edit.js')
+
+  assert.match(wxml, /contact-form-sheet-mask component-picker-mask \{\{contactFormSheetVisible \? 'visible' : ''\}\}/)
+  assert.match(wxml, /class="component-picker-title">编辑预留联系信息<\/view>/)
+  assert.match(wxml, /catchtap="handleContactFormDisplayModeTap"/)
+  assert.match(wxml, /catchtap="handleCloseContactFormSheet">取消<\/button>/)
+  assert.match(wxml, /catchtap="handleConfirmContactFormConfig">完成<\/button>/)
+  assert.doesNotMatch(wxml, /<team-contact-form[\s\S]*edit-mode="\{\{true\}\}"/)
+  assert.match(wxss, /\.contact-form-sheet-panel\s*\{[^}]*max-height:\s*76vh;/)
+  assert.match(js, /openContactFormSheet/)
+  assert.match(js, /handleConfirmContactFormConfig/)
+  assert.doesNotMatch(js, /portfolio-standard-edit/)
+})
+
+test('team schedule and divider use isolated configuration sheets', () => {
+  const wxml = read('standard-edit/team-portfolio-standard-edit.wxml')
+  const js = read('standard-edit/team-portfolio-standard-edit.js')
+
+  assert.match(wxml, /schedule-query-sheet-mask component-picker-mask \{\{scheduleQuerySheetVisible \? 'visible' : ''\}\}/)
+  assert.match(wxml, /divider-sheet-mask component-picker-mask \{\{dividerSheetVisible \? 'visible' : ''\}\}/)
+  assert.doesNotMatch(wxml, /<team-schedule-query[\s\S]*edit-mode="\{\{true\}\}"/)
+  assert.doesNotMatch(wxml, /<team-divider[\s\S]*edit-mode="\{\{true\}\}"/)
+  assert.match(js, /openScheduleQuerySheet/)
+  assert.match(js, /openDividerSheet/)
+})
+
+test('team text section sheet saves text and alignment only after confirmation', () => {
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => ({}))
+  page.data.config = {
+    schemaVersion: 'standard-team-v1',
+    share: {},
+    components: [{ componentKey: 'text-1', componentType: 'TEXT_SECTION', sortOrder: 0, enabled: true, config: { content: '原说明', alignment: 'LEFT' } }]
+  }
+
+  page.openTextSectionSheet('text-1')
+  assert.equal(page.data.textSectionSheetVisible, true)
+  assert.deepEqual(page.data.textSectionForm, { content: '原说明', alignment: 'LEFT' })
+
+  page.handleTextSectionInput({ detail: { value: '团队说明' } })
+  page.handleTextSectionAlignmentTap({ currentTarget: { dataset: { value: 'CENTER' } } })
+  page.handleConfirmTextSectionConfig()
+
+  assert.equal(page.data.textSectionSheetVisible, false)
+  assert.deepEqual(page.data.config.components[0].config, { content: '团队说明', alignment: 'CENTER' })
+  page.cleanup()
 })
 
 test('standard team portfolio picker shows disabled team profile as an auto-width added pill', () => {
@@ -177,24 +273,18 @@ test('standard team editor uses the personal editor core visual measurements', (
   assert.doesNotMatch(teamCss, /\binset\s*:/)
 })
 
-test('all team component edit branches use the shared personal-editor visual contract', () => {
-  for (const componentPath of EDITOR_COMPONENT_PATHS) {
+test('team component edit branches retain forms while page owns editor actions', () => {
+  for (const componentPath of EDITOR_COMPONENT_PATHS.filter((componentPath) => componentPath !== 'text-section/text-section')) {
     const wxml = read(`components/${componentPath}.wxml`)
     const wxss = read(`components/${componentPath}.wxss`)
     assert.match(wxml, /class="editor-form"/, `${componentPath} provides an editor form surface`)
-    assert.match(wxml, /class="editor-actions"/, `${componentPath} provides semantic editor actions`)
-    assert.match(wxml, /class="editor-cancel"[^>]*bindtap="cancelEdit"/, `${componentPath} styles cancel consistently`)
-    assert.match(wxml, /class="editor-confirm"[^>]*bindtap="saveEdit"/, `${componentPath} styles confirm consistently`)
+    assert.doesNotMatch(wxml, /class="editor-actions"/, `${componentPath} delegates editor actions to the page`)
     assert.match(wxss, /\.editor-form\s*\{/, `${componentPath} styles the editor form`)
-    assert.match(wxss, /\.editor-actions\s*\{/, `${componentPath} styles the editor actions`)
-    assert.match(wxss, /\.editor-cancel,\s*\.editor-confirm\s*\{[^}]*display:\s*flex;[^}]*align-items:\s*center;[^}]*justify-content:\s*center;/, `${componentPath} centers action labels without default button layout`)
-    assert.match(wxss, /\.editor-cancel\s*\{/, `${componentPath} styles the cancel action`)
-    assert.match(wxss, /\.editor-confirm\s*\{/, `${componentPath} styles the confirm action`)
   }
 })
 
 test('team component editors expose styled choices, selectable assets and previews', () => {
-  for (const componentPath of ['divider/divider', 'text-section/text-section', 'schedule-query/schedule-query', 'contact-form/contact-form']) {
+  for (const componentPath of ['divider/divider', 'schedule-query/schedule-query', 'contact-form/contact-form']) {
     const wxml = read(`components/${componentPath}.wxml`)
     const wxss = read(`components/${componentPath}.wxss`)
     assert.match(wxml, /editor-choice/, `${componentPath} renders choice cards`)

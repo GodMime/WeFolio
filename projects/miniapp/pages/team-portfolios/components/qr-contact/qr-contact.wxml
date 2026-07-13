@@ -13,7 +13,6 @@
       </view>
       <view wx:if="{{errorMessage}}" class="editor-error">{{errorMessage}}</view>
     </view>
-    <view class="editor-actions"><button class="editor-cancel" bindtap="cancelEdit">取消</button><button class="editor-confirm" bindtap="saveEdit">完成</button></view>
   </block>
   <block wx:else>
     <text wx:if="{{config.title}}" class="title">{{config.title}}</text>

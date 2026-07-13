@@ -16,7 +16,6 @@
       </view>
       <view wx:if="{{errorMessage}}" class="editor-error">{{errorMessage}}</view>
     </view>
-    <view class="editor-actions"><button class="editor-cancel" bindtap="cancelEdit">取消</button><button class="editor-confirm" bindtap="saveEdit">完成</button></view>
   </block>
   <view wx:else class="line" style="height: {{config.heightPx || 16}}px; background: {{config.color === 'BLACK' ? '#17202a' : config.color === 'WHITE' ? '#ffffff' : config.color === 'TRANSPARENT' ? 'transparent' : '#d7dfe1'}};"></view>
 </view>

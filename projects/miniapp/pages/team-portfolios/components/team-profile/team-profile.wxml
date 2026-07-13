@@ -33,10 +33,6 @@
       <button class="editor-refresh" loading="{{refreshing}}" disabled="{{refreshing}}" bindtap="refreshFromTeam">从团队资料刷新</button>
       <view wx:if="{{errorMessage}}" class="editor-error">{{errorMessage}}</view>
     </view>
-    <view class="editor-actions">
-      <button class="editor-cancel" bindtap="cancelEdit">取消</button>
-      <button class="editor-confirm" bindtap="saveEdit">完成</button>
-    </view>
   </block>
   <block wx:else>
     <image wx:if="{{draft.visibleFields.avatar && draft.team.avatarUrl}}" class="avatar" src="{{draft.team.avatarUrl}}" mode="aspectFill" />

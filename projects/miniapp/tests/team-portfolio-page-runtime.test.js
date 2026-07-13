@@ -828,10 +828,11 @@ test('team editor picker, component sheet, swipe delete, and drag reorder use is
     assert.equal(page.data.config.components[2].componentType, 'DIVIDER')
 
     page.handleComponentTap({ currentTarget: { dataset: { key: 'text-1', type: 'TEXT_SECTION' } } })
-    assert.equal(page.data.componentEditorVisible, true)
-    assert.equal(page.data.activeComponentKey, 'text-1')
-    page.handleCloseComponentEditor()
+    assert.equal(page.data.textSectionSheetVisible, true)
+    assert.equal(page.data.textSectionEditingComponentKey, 'text-1')
     assert.equal(page.data.componentEditorVisible, false)
+    page.handleCloseTextSectionSheet()
+    assert.equal(page.data.textSectionSheetVisible, false)
 
     page.handleComponentDragStart({ currentTarget: { dataset: { index: 0, key: 'profile-1' } }, touches: [{ clientY: 100 }] })
     page.handleComponentTouchMove({ currentTarget: { dataset: { index: 0, key: 'profile-1' } }, touches: [{ clientX: 30, clientY: 220 }] })
@@ -843,6 +844,80 @@ test('team editor picker, component sheet, swipe delete, and drag reorder use is
     assert.equal(page.data.config.components.some((item) => item.componentKey === 'text-1'), false)
     assert.equal(page.data.revealedComponentKey, '')
   } finally { page.cleanup() }
+})
+
+test('team page level component editor confirms through the active child component', () => {
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => ({}))
+  let saveCount = 0
+  page.selectComponent = (selector) => {
+    assert.equal(selector, '#active-component-editor')
+    return { saveEdit() { saveCount += 1 } }
+  }
+  try {
+    page.handleConfirmComponentEditor()
+    assert.equal(saveCount, 1)
+  } finally { page.cleanup() }
+})
+
+test('team contact form sheet edits display mode without replacing team-only config', () => {
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => ({}))
+  page.data.config = {
+    schemaVersion: 'standard-team-v1',
+    share: {},
+    components: [{
+      componentKey: 'contact-1',
+      componentType: 'CONTACT_FORM',
+      sortOrder: 0,
+      enabled: true,
+      config: { title: '团队咨询', description: '请留下联系方式', fields: ['contactName', 'phone'], displayMode: 'MODAL_FORM' }
+    }]
+  }
+
+  try {
+    page.openContactFormSheet('contact-1')
+    assert.equal(page.data.contactFormSheetVisible, true)
+    assert.deepEqual(page.data.contactFormConfigForm, { displayMode: 'MODAL_FORM' })
+
+    page.handleContactFormDisplayModeTap({ currentTarget: { dataset: { value: 'INLINE_FORM' } } })
+    page.handleConfirmContactFormConfig()
+
+    assert.equal(page.data.contactFormSheetVisible, false)
+    assert.deepEqual(page.data.config.components[0].config, {
+      title: '团队咨询',
+      description: '请留下联系方式',
+      fields: ['contactName', 'phone'],
+      displayMode: 'INLINE_FORM'
+    })
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('team schedule and divider sheets mark their components valid after confirmation', () => {
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => ({}))
+  page.data.config = {
+    schemaVersion: 'standard-team-v1',
+    share: {},
+    components: [
+      { componentKey: 'schedule-1', componentType: 'SCHEDULE_QUERY', sortOrder: 0, enabled: true, config: {} },
+      { componentKey: 'divider-1', componentType: 'DIVIDER', sortOrder: 1, enabled: true, config: {} }
+    ]
+  }
+  page.data.componentValidation = { 'schedule-1': false, 'divider-1': false }
+  page.data.hasInvalidComponents = true
+
+  try {
+    page.openScheduleQuerySheet('schedule-1')
+    page.handleConfirmScheduleQueryConfig()
+    assert.equal(page.data.componentValidation['schedule-1'], true)
+
+    page.openDividerSheet('divider-1')
+    page.handleConfirmDividerConfig()
+    assert.equal(page.data.componentValidation['divider-1'], true)
+    assert.equal(page.data.hasInvalidComponents, false)
+  } finally {
+    page.cleanup()
+  }
 })
 
 test('team editor hides publish for a draft-only portfolio and shows it after publication', async () => {

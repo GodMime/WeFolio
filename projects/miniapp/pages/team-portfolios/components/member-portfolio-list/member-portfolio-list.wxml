@@ -13,7 +13,6 @@
       </view>
       <view wx:if="{{errorMessage}}" class="editor-error">{{errorMessage}}</view>
     </view>
-    <view class="editor-actions"><button class="editor-cancel" bindtap="cancelEdit">取消</button><button class="editor-confirm" bindtap="saveEdit">完成</button></view>
   </block>
   <view wx:else class="portfolio-list"><button wx:for="{{items}}" wx:key="portfolioId" class="portfolio-row" data-id="{{item.portfolioId}}" data-share-code="{{item.shareCode}}" bindtap="previewPortfolio"><image src="{{item.coverUrl}}" mode="aspectFill" /><view class="meta"><text class="title">{{item.title}}</text><text class="description">{{item.description}}</text><text class="member-name">{{item.memberDisplayName}}</text></view></button></view>
 </view>

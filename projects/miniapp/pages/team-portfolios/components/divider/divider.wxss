@@ -1,6 +1,6 @@
 :host { display: block; }
-.divider-component { box-sizing: border-box; width: 100%; padding: 16rpx 24rpx; color: #17202a; overflow-wrap: anywhere; }
-.divider-component.editor-mode { padding: 0; }
+.divider-component { box-sizing: border-box; width: calc(100% + 56rpx); margin-left: -28rpx; padding: 16rpx 0; color: #17202a; overflow-wrap: anywhere; }
+.divider-component.editor-mode { width: 100%; margin-left: 0; padding: 0; }
 .editor-form { display: flex; flex-direction: column; gap: 22rpx; padding: 4rpx 0 8rpx; }
 .editor-field { padding: 22rpx; border: 1rpx solid rgba(23, 32, 42, .06); border-radius: 16rpx; background: rgba(255, 255, 255, .94); }
 .editor-label { color: #5f6b7a; font-size: 24rpx; font-weight: 800; }

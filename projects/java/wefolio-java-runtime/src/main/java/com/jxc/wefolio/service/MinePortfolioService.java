@@ -286,15 +286,15 @@ public class MinePortfolioService {
     public PortfolioComponentLibraryResponse getComponentLibrary() {
         PortfolioComponentLibraryResponse response = new PortfolioComponentLibraryResponse();
         response.setComponents(List.of(
-                componentLibraryItem(PortfolioComponentTypeDict.CAROUSEL, "首页轮播展示代表作品"),
                 componentLibraryItem(PortfolioComponentTypeDict.PROFILE, "展示个人资料和服务标签"),
-                componentLibraryItem(PortfolioComponentTypeDict.SCHEDULE_QUERY, "允许访客查询公开档期"),
+                componentLibraryItem(PortfolioComponentTypeDict.CAROUSEL, "首页轮播展示代表作品"),
+                componentLibraryItem(PortfolioComponentTypeDict.TEXT_SECTION, "展示服务说明和补充文字"),
+                componentLibraryItem(PortfolioComponentTypeDict.DIVIDER, "在内容之间加入可调高度的分割线"),
                 componentLibraryItem(PortfolioComponentTypeDict.WORK_GRID, "双列展示图片和视频作品"),
                 componentLibraryItem(PortfolioComponentTypeDict.WORK_LIST, "单列展示重点图片和视频作品"),
-                componentLibraryItem(PortfolioComponentTypeDict.QR_CONTACT, "展示微信二维码联系方式"),
+                componentLibraryItem(PortfolioComponentTypeDict.SCHEDULE_QUERY, "允许访客查询公开档期"),
                 componentLibraryItem(PortfolioComponentTypeDict.CONTACT_FORM, "收集访客预留联系信息"),
-                componentLibraryItem(PortfolioComponentTypeDict.TEXT_SECTION, "展示服务说明和补充文字"),
-                componentLibraryItem(PortfolioComponentTypeDict.DIVIDER, "在内容之间加入可调高度的分割线")
+                componentLibraryItem(PortfolioComponentTypeDict.QR_CONTACT, "展示微信二维码联系方式")
         ));
         return response;
     }

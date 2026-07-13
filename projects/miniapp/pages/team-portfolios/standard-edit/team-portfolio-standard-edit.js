@@ -17,6 +17,30 @@ const TEAM_PORTFOLIO_COVER_ASSET_TYPE = 'COVER'
 const TEAM_PROFILE_AVATAR_ASSET_TYPE = 'TEAM_PROFILE_AVATAR'
 const PORTFOLIO_LIST_ROUTE_SUFFIX = '/portfolios/portfolios'
 const TEAM_PORTFOLIOS_COMPAT_PAGE_URL = '/pages/team-portfolios/portfolios'
+const TEXT_SECTION_MAX_LENGTH = 200
+const TEXT_SECTION_REQUIRED_MESSAGE = '请填写文字说明'
+const TEXT_SECTION_ALIGNMENTS = Object.freeze({ LEFT: 'LEFT', CENTER: 'CENTER', RIGHT: 'RIGHT' })
+const CONTACT_FORM_DISPLAY_MODES = Object.freeze({ MODAL_FORM: 'MODAL_FORM', INLINE_FORM: 'INLINE_FORM' })
+const CONTACT_FORM_DISPLAY_MODE_OPTIONS = Object.freeze([
+  { value: CONTACT_FORM_DISPLAY_MODES.MODAL_FORM, label: '弹窗展示' },
+  { value: CONTACT_FORM_DISPLAY_MODES.INLINE_FORM, label: '页面内展示' }
+])
+const SCHEDULE_QUERY_DISPLAY_MODES = Object.freeze({ MODAL_CALENDAR: 'MODAL_CALENDAR', INLINE_CALENDAR: 'INLINE_CALENDAR' })
+const SCHEDULE_QUERY_DISPLAY_MODE_OPTIONS = Object.freeze([
+  { value: SCHEDULE_QUERY_DISPLAY_MODES.MODAL_CALENDAR, label: '弹层日历' },
+  { value: SCHEDULE_QUERY_DISPLAY_MODES.INLINE_CALENDAR, label: '页面内日历' }
+])
+const DIVIDER_COLOR_OPTIONS = Object.freeze([
+  { value: 'BLACK', label: '黑色', colorValue: '#17202a' },
+  { value: 'WHITE', label: '白色', colorValue: '#ffffff' },
+  { value: 'GRAY', label: '灰色', colorValue: '#d7dfe1' },
+  { value: 'TRANSPARENT', label: '透明', colorValue: 'transparent' }
+])
+const TEXT_SECTION_ALIGNMENT_OPTIONS = Object.freeze([
+  { value: TEXT_SECTION_ALIGNMENTS.LEFT, label: '左对齐' },
+  { value: TEXT_SECTION_ALIGNMENTS.CENTER, label: '居中' },
+  { value: TEXT_SECTION_ALIGNMENTS.RIGHT, label: '右对齐' }
+])
 
 function buildComponentOptions(components = []) {
   const existingTypes = (Array.isArray(components) ? components : []).map((item) => item.componentType)
@@ -51,6 +75,58 @@ function buildServerSafeTeamPortfolioConfig(config = {}) {
 
 function makeKey() { return `component-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}` }
 function makeIdempotencyKey(prefix) { return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}` }
+function countTextCodePoints(value) { return Array.from(String(value || '')).length }
+function buildTextSectionForm(config = {}) {
+  const alignment = String(config.alignment || '').trim()
+  return {
+    content: String(config.content || '').trim(),
+    alignment: TEXT_SECTION_ALIGNMENT_OPTIONS.some((item) => item.value === alignment) ? alignment : TEXT_SECTION_ALIGNMENTS.LEFT
+  }
+}
+function buildTextSectionFieldCounters(form = {}) { return { content: `${countTextCodePoints(form.content)} / ${TEXT_SECTION_MAX_LENGTH}` } }
+function buildContactFormConfigForm(config = {}) {
+  return {
+    displayMode: config.displayMode === CONTACT_FORM_DISPLAY_MODES.INLINE_FORM
+      ? CONTACT_FORM_DISPLAY_MODES.INLINE_FORM
+      : CONTACT_FORM_DISPLAY_MODES.MODAL_FORM
+  }
+}
+function updateContactFormConfig(config = {}, componentKey, contactFormConfig = {}) {
+  const normalized = normalizeTeamPortfolioConfig(config)
+  const form = buildContactFormConfigForm(contactFormConfig)
+  return Object.assign({}, normalized, {
+    components: normalized.components.map((component) => component.componentKey === componentKey && component.componentType === 'CONTACT_FORM'
+      ? Object.assign({}, component, { config: Object.assign({}, component.config, form) })
+      : component)
+  })
+}
+function buildScheduleQueryForm(config = {}) {
+  return { displayMode: config.displayMode === SCHEDULE_QUERY_DISPLAY_MODES.INLINE_CALENDAR ? SCHEDULE_QUERY_DISPLAY_MODES.INLINE_CALENDAR : SCHEDULE_QUERY_DISPLAY_MODES.MODAL_CALENDAR }
+}
+function updateScheduleQueryConfig(config = {}, componentKey, scheduleQueryConfig = {}) {
+  const normalized = normalizeTeamPortfolioConfig(config)
+  const form = buildScheduleQueryForm(scheduleQueryConfig)
+  return Object.assign({}, normalized, { components: normalized.components.map((component) => component.componentKey === componentKey && component.componentType === 'SCHEDULE_QUERY' ? Object.assign({}, component, { config: Object.assign({}, component.config, form) }) : component) })
+}
+function buildDividerForm(config = {}) {
+  const color = DIVIDER_COLOR_OPTIONS.some((item) => item.value === config.color) ? config.color : 'GRAY'
+  const heightPx = Number.isInteger(Number(config.heightPx)) && Number(config.heightPx) > 0 ? Number(config.heightPx) : 16
+  return { color, heightPx }
+}
+function updateDividerConfig(config = {}, componentKey, dividerConfig = {}) {
+  const normalized = normalizeTeamPortfolioConfig(config)
+  const form = buildDividerForm(dividerConfig)
+  return Object.assign({}, normalized, { components: normalized.components.map((component) => component.componentKey === componentKey && component.componentType === 'DIVIDER' ? Object.assign({}, component, { config: Object.assign({}, component.config, form) }) : component) })
+}
+function updateTextSectionConfig(config = {}, componentKey, textSectionConfig = {}) {
+  const normalized = normalizeTeamPortfolioConfig(config)
+  const form = buildTextSectionForm(textSectionConfig)
+  return Object.assign({}, normalized, {
+    components: normalized.components.map((component) => component.componentKey === componentKey && component.componentType === 'TEXT_SECTION'
+      ? Object.assign({}, component, { config: Object.assign({}, component.config, form) })
+      : component)
+  })
+}
 function isUncertainFailure(error) { return !error || !Number(error.statusCode) || Number(error.statusCode) >= 500 }
 function resolvePortfolioListBackDelta() {
   const pages = typeof getCurrentPages === 'function' ? getCurrentPages() : []
@@ -78,7 +154,7 @@ function buckets(components) {
 }
 
 Page({
-  data: { portfolioId: 0, teamId: 0, teamSnapshot: {}, loading: false, errorMessage: '', canMaintain: false, publicationStatus: 'DRAFT_ONLY', draftRevision: 0, publishedRevision: 0, statusText: '草稿', statusTone: 'draft', showPublishAction: false, config: { schemaVersion: 'standard-team-v1', share: {}, components: [] }, componentList: [], componentBuckets: buckets([]), componentOptions: buildComponentOptions(), componentValidation: {}, componentSources: {}, hasInvalidComponents: false, saving: false, publishing: false, openingLibrary: false, shareCoverUploading: false, teamProfileRefreshing: false, pendingDraftKey: '', pendingPublishKey: '', pendingPublishRevision: 0, shareTitleCounter: '0 / 50', componentSheetVisible: false, componentEditorVisible: false, activeComponentKey: '', activeComponentType: '', activeComponentName: '', activeComponent: { config: {} }, activeComponentSource: {}, activeComponentNeedsPortfolio: false, revealedComponentKey: '', componentTouchStart: null, draggingIndex: -1, dragTargetIndex: -1, componentDragStartY: 0, componentDragStyle: '', shareCoverCropVisible: false, shareCoverCropPath: '' },
+  data: { portfolioId: 0, teamId: 0, teamSnapshot: {}, loading: false, errorMessage: '', canMaintain: false, publicationStatus: 'DRAFT_ONLY', draftRevision: 0, publishedRevision: 0, statusText: '草稿', statusTone: 'draft', showPublishAction: false, config: { schemaVersion: 'standard-team-v1', share: {}, components: [] }, componentList: [], componentBuckets: buckets([]), componentOptions: buildComponentOptions(), componentValidation: {}, componentSources: {}, hasInvalidComponents: false, saving: false, publishing: false, openingLibrary: false, shareCoverUploading: false, teamProfileRefreshing: false, pendingDraftKey: '', pendingPublishKey: '', pendingPublishRevision: 0, shareTitleCounter: '0 / 50', componentSheetVisible: false, textSectionSheetVisible: false, textSectionEditingComponentKey: '', textSectionAlignmentOptions: TEXT_SECTION_ALIGNMENT_OPTIONS, textSectionMaxLength: TEXT_SECTION_MAX_LENGTH, textSectionForm: buildTextSectionForm(), textSectionFieldCounters: buildTextSectionFieldCounters(buildTextSectionForm()), contactFormSheetVisible: false, contactFormEditingComponentKey: '', contactFormDisplayModeOptions: CONTACT_FORM_DISPLAY_MODE_OPTIONS, contactFormConfigForm: buildContactFormConfigForm(), scheduleQuerySheetVisible: false, scheduleQueryEditingComponentKey: '', scheduleQueryDisplayModeOptions: SCHEDULE_QUERY_DISPLAY_MODE_OPTIONS, scheduleQueryForm: buildScheduleQueryForm(), dividerSheetVisible: false, dividerEditingComponentKey: '', dividerColorOptions: DIVIDER_COLOR_OPTIONS, dividerForm: buildDividerForm(), componentEditorVisible: false, activeComponentKey: '', activeComponentType: '', activeComponentName: '', activeComponent: { config: {} }, activeComponentSource: {}, activeComponentNeedsPortfolio: false, revealedComponentKey: '', componentTouchStart: null, draggingIndex: -1, dragTargetIndex: -1, componentDragStartY: 0, componentDragStyle: '', shareCoverCropVisible: false, shareCoverCropPath: '' },
   onLoad(options = {}) {
     const portfolioId = Number(options.portfolioId) || 0
     const teamId = Number(options.teamId) || 0
@@ -126,8 +202,98 @@ Page({
   handleOpenComponentSheet() { if (!this.data.canMaintain) return; this.setData({ componentSheetVisible: true, revealedComponentKey: '', componentOptions: buildComponentOptions(this.data.config.components) }) },
   handleCloseComponentSheet() { this.setData({ componentSheetVisible: false }) },
   handleSelectComponent(event) { if (event.currentTarget.dataset.disabled) return; const componentType = event.currentTarget.dataset.type; if (!componentType) return; this.addComponent(componentType); this.setData({ componentSheetVisible: false }) },
-  handleComponentTap(event) { const componentKey = event.currentTarget.dataset.key || ''; const componentType = event.currentTarget.dataset.type || ''; if (this.data.revealedComponentKey === componentKey) return this.setData({ revealedComponentKey: '' }); const activeComponent = (this.data.config.components || []).find((item) => item.componentKey === componentKey); if (!activeComponent) return; this.setData({ componentEditorVisible: true, activeComponentKey: componentKey, activeComponentType: componentType, activeComponentName: COMPONENT_NAMES[componentType] || '页面组件', activeComponent, activeComponentSource: this.data.componentSources[componentKey] || {}, activeComponentNeedsPortfolio: PORTFOLIO_REQUIRED_COMPONENT_TYPES.includes(componentType) }) },
+  handleComponentTap(event) { const componentKey = event.currentTarget.dataset.key || ''; const componentType = event.currentTarget.dataset.type || ''; if (this.data.revealedComponentKey === componentKey) return this.setData({ revealedComponentKey: '' }); const activeComponent = (this.data.config.components || []).find((item) => item.componentKey === componentKey); if (!activeComponent) return; if (componentType === 'TEXT_SECTION') return this.openTextSectionSheet(componentKey); if (componentType === 'CONTACT_FORM') return this.openContactFormSheet(componentKey); if (componentType === 'SCHEDULE_QUERY') return this.openScheduleQuerySheet(componentKey); if (componentType === 'DIVIDER') return this.openDividerSheet(componentKey); this.setData({ componentEditorVisible: true, activeComponentKey: componentKey, activeComponentType: componentType, activeComponentName: COMPONENT_NAMES[componentType] || '页面组件', activeComponent, activeComponentSource: this.data.componentSources[componentKey] || {}, activeComponentNeedsPortfolio: PORTFOLIO_REQUIRED_COMPONENT_TYPES.includes(componentType) }) },
   handleCloseComponentEditor() { this.setData({ componentEditorVisible: false, activeComponentKey: '', activeComponentType: '', activeComponentName: '', activeComponent: { config: {} }, activeComponentSource: {}, activeComponentNeedsPortfolio: false }) },
+  openTextSectionSheet(componentKey) {
+    const component = this.data.config.components.find((item) => item.componentKey === componentKey)
+    if (!component || component.componentType !== 'TEXT_SECTION') return
+    const textSectionForm = buildTextSectionForm(component.config)
+    this.setData({ textSectionSheetVisible: true, textSectionEditingComponentKey: componentKey, textSectionForm, textSectionFieldCounters: buildTextSectionFieldCounters(textSectionForm) })
+  },
+  handleCloseTextSectionSheet() {
+    const textSectionForm = buildTextSectionForm()
+    this.setData({ textSectionSheetVisible: false, textSectionEditingComponentKey: '', textSectionForm, textSectionFieldCounters: buildTextSectionFieldCounters(textSectionForm) })
+  },
+  handleTextSectionInput(event) {
+    const textSectionForm = Object.assign({}, this.data.textSectionForm, { content: event.detail.value || '' })
+    this.setData({ textSectionForm, textSectionFieldCounters: buildTextSectionFieldCounters(textSectionForm) })
+  },
+  handleTextSectionAlignmentTap(event) {
+    const alignment = event.currentTarget.dataset.value
+    if (!TEXT_SECTION_ALIGNMENT_OPTIONS.some((item) => item.value === alignment)) return
+    this.setData({ textSectionForm: Object.assign({}, this.data.textSectionForm, { alignment }) })
+  },
+  handleConfirmTextSectionConfig() {
+    const form = buildTextSectionForm(this.data.textSectionForm)
+    if (!form.content) return wx.showToast({ title: TEXT_SECTION_REQUIRED_MESSAGE, icon: 'none' })
+    const componentKey = this.data.textSectionEditingComponentKey
+    const config = updateTextSectionConfig(this.data.config, componentKey, form)
+    const componentValidation = Object.assign({}, this.data.componentValidation, { [componentKey]: true })
+    this.clearPending()
+    this.updateConfig(config)
+    this.setData({ componentValidation, hasInvalidComponents: Object.keys(componentValidation).some((key) => componentValidation[key] === false) })
+    this.handleCloseTextSectionSheet()
+  },
+  openContactFormSheet(componentKey) {
+    const component = this.data.config.components.find((item) => item.componentKey === componentKey)
+    if (!component || component.componentType !== 'CONTACT_FORM') return
+    this.setData({ contactFormSheetVisible: true, contactFormEditingComponentKey: componentKey, contactFormConfigForm: buildContactFormConfigForm(component.config) })
+  },
+  handleCloseContactFormSheet() {
+    this.setData({ contactFormSheetVisible: false, contactFormEditingComponentKey: '', contactFormConfigForm: buildContactFormConfigForm() })
+  },
+  handleContactFormDisplayModeTap(event) {
+    const displayMode = event.currentTarget.dataset.value
+    if (!CONTACT_FORM_DISPLAY_MODE_OPTIONS.some((item) => item.value === displayMode)) return
+    this.setData({ contactFormConfigForm: { displayMode } })
+  },
+  handleConfirmContactFormConfig() {
+    const componentKey = this.data.contactFormEditingComponentKey
+    const config = updateContactFormConfig(this.data.config, componentKey, this.data.contactFormConfigForm)
+    const componentValidation = Object.assign({}, this.data.componentValidation, { [componentKey]: true })
+    this.clearPending()
+    this.updateConfig(config)
+    this.setData({ componentValidation, hasInvalidComponents: Object.keys(componentValidation).some((key) => componentValidation[key] === false) })
+    this.handleCloseContactFormSheet()
+  },
+  openScheduleQuerySheet(componentKey) {
+    const component = this.data.config.components.find((item) => item.componentKey === componentKey)
+    if (!component || component.componentType !== 'SCHEDULE_QUERY') return
+    this.setData({ scheduleQuerySheetVisible: true, scheduleQueryEditingComponentKey: componentKey, scheduleQueryForm: buildScheduleQueryForm(component.config) })
+  },
+  handleCloseScheduleQuerySheet() { this.setData({ scheduleQuerySheetVisible: false, scheduleQueryEditingComponentKey: '', scheduleQueryForm: buildScheduleQueryForm() }) },
+  handleScheduleQueryDisplayModeTap(event) {
+    const displayMode = event.currentTarget.dataset.value
+    if (SCHEDULE_QUERY_DISPLAY_MODE_OPTIONS.some((item) => item.value === displayMode)) this.setData({ scheduleQueryForm: { displayMode } })
+  },
+  handleConfirmScheduleQueryConfig() {
+    const componentKey = this.data.scheduleQueryEditingComponentKey
+    const config = updateScheduleQueryConfig(this.data.config, componentKey, this.data.scheduleQueryForm)
+    const componentValidation = Object.assign({}, this.data.componentValidation, { [componentKey]: true })
+    this.clearPending(); this.updateConfig(config)
+    this.setData({ componentValidation, hasInvalidComponents: Object.keys(componentValidation).some((key) => componentValidation[key] === false) })
+    this.handleCloseScheduleQuerySheet()
+  },
+  openDividerSheet(componentKey) {
+    const component = this.data.config.components.find((item) => item.componentKey === componentKey)
+    if (!component || component.componentType !== 'DIVIDER') return
+    this.setData({ dividerSheetVisible: true, dividerEditingComponentKey: componentKey, dividerForm: buildDividerForm(component.config) })
+  },
+  handleCloseDividerSheet() { this.setData({ dividerSheetVisible: false, dividerEditingComponentKey: '', dividerForm: buildDividerForm() }) },
+  handleDividerColorTap(event) {
+    const color = event.currentTarget.dataset.value
+    if (DIVIDER_COLOR_OPTIONS.some((item) => item.value === color)) this.setData({ dividerForm: Object.assign({}, this.data.dividerForm, { color }) })
+  },
+  handleDividerHeightInput(event) { this.setData({ dividerForm: Object.assign({}, this.data.dividerForm, { heightPx: event.detail.value }) }) },
+  handleConfirmDividerConfig() {
+    const form = buildDividerForm(this.data.dividerForm)
+    const componentKey = this.data.dividerEditingComponentKey
+    const config = updateDividerConfig(this.data.config, componentKey, form)
+    const componentValidation = Object.assign({}, this.data.componentValidation, { [componentKey]: true })
+    this.clearPending(); this.updateConfig(config)
+    this.setData({ componentValidation, hasInvalidComponents: Object.keys(componentValidation).some((key) => componentValidation[key] === false) })
+    this.handleCloseDividerSheet()
+  },
   handleComponentTouchStart(event) { const point = touchPoint(event); this.setData({ componentTouchStart: { key: event.currentTarget.dataset.key || '', index: Number(event.currentTarget.dataset.index), x: point.x, y: point.y } }) },
   handleComponentDragStart(event) { const index = Number(event.currentTarget.dataset.index); if (!Number.isFinite(index)) return; const point = touchPoint(event); this.componentDragRows = []; if (wx.createSelectorQuery) wx.createSelectorQuery().in(this).selectAll('.component-row').boundingClientRect((rows = []) => { this.componentDragRows = rows }).exec(); this.setData({ draggingIndex: index, dragTargetIndex: index, componentDragStartY: point.y, componentDragStyle: dragStyle(0), revealedComponentKey: '' }) },
   handleComponentTouchMove(event) { if (this.data.draggingIndex < 0) return; const point = touchPoint(event); const rows = this.componentDragRows || []; let targetIndex; if (rows.length) { targetIndex = rows.findIndex((row) => point.y < row.top + row.height / 2); if (targetIndex < 0) targetIndex = rows.length - 1 } else { const delta = point.y - this.data.componentDragStartY; targetIndex = Math.max(0, Math.min(this.data.config.components.length - 1, this.data.draggingIndex + Math.round(delta / DRAG_ROW_FALLBACK_HEIGHT))) } this.setData({ dragTargetIndex: targetIndex, componentDragStyle: dragStyle(point.y - this.data.componentDragStartY) }) },
@@ -145,6 +311,7 @@ Page({
   },
   handleComponentValidationChange(event) { const detail = event.detail || {}; const componentValidation = Object.assign({}, this.data.componentValidation, { [detail.componentKey]: detail.valid !== false }); this.setData({ componentValidation, hasInvalidComponents: Object.keys(componentValidation).some((key) => componentValidation[key] === false) }) },
   handleComponentSave(event) { const key = event.currentTarget.dataset.key; this.handleComponentConfigChange(event); const componentValidation = Object.assign({}, this.data.componentValidation, { [key]: true }); this.setData({ componentValidation, hasInvalidComponents: Object.keys(componentValidation).some((name) => componentValidation[name] === false) }); if (this.data.activeComponentKey === key) this.handleCloseComponentEditor() },
+  handleConfirmComponentEditor() { const component = this.selectComponent('#active-component-editor'); if (component && typeof component.saveEdit === 'function') component.saveEdit() },
   handleComponentDelete(event) { const key = event.currentTarget.dataset.key; this.clearPending(); const validation = Object.assign({}, this.data.componentValidation); delete validation[key]; this.setData({ componentValidation: validation, hasInvalidComponents: Object.keys(validation).some((name) => validation[name] === false) }); this.updateConfig(Object.assign({}, this.data.config, { components: this.data.config.components.filter((item) => item.componentKey !== key) })) },
   handleMove(event) { const key = event.currentTarget.dataset.key; const direction = Number(event.currentTarget.dataset.direction); const components = this.data.config.components.slice(); const index = components.findIndex((item) => item.componentKey === key); const target = index + direction; if (index < 0 || target < 0 || target >= components.length) return; this.clearPending(); [components[index], components[target]] = [components[target], components[index]]; this.updateConfig(Object.assign({}, this.data.config, { components: components.map((item, sortOrder) => Object.assign({}, item, { sortOrder })) })) },
   handleMaintainTeam(event) { const teamId = Number(event.currentTarget.dataset.teamId || this.data.teamId); if (teamId) wx.navigateTo({ url: `/pages/team-maintenance/team-maintenance?teamId=${teamId}` }) },
@@ -154,7 +321,7 @@ Page({
       const media = await new Promise((resolve, reject) => wx.chooseMedia({ count: 1, mediaType: ['image'], success: resolve, fail: reject }))
       const file = media && Array.isArray(media.tempFiles) && media.tempFiles[0]
       if (!file || !file.tempFilePath) throw new Error('未选择有效图片')
-      const child = this.selectComponent('#team-profile-editor')
+      const child = this.selectComponent('#active-component-editor')
       if (child && child.applyAvatar) child.applyAvatar({ detail: { avatarUrl: file.tempFilePath } })
     } catch (error) {
       if (!/cancel/i.test(String(error && error.errMsg || error && error.message || ''))) wx.showToast({ title: '图片选择失败，请重试', icon: 'none' })
@@ -163,7 +330,7 @@ Page({
   async handleTeamProfileRefresh() {
     if (this.data.teamProfileRefreshing || !this.data.teamId) return
     this.setData({ teamProfileRefreshing: true })
-    const child = this.selectComponent('#team-profile-editor')
+    const child = this.selectComponent('#active-component-editor')
     try {
       const detail = await request({ url: `/api/mine/teams/${this.data.teamId}` })
       const team = normalizeTeamSnapshot(this.data.teamId, detail && detail.team)
@@ -227,7 +394,7 @@ Page({
     if (!wx.chooseMedia) return
     this.setData({ shareCoverUploading: true })
     try {
-      await this.chooseAsset('QR_CONTACT', (qrUrl) => { const current = this.data.config.components.find((item) => item.componentKey === componentKey); this.handleComponentConfigChange({ currentTarget: { dataset: { key: componentKey } }, detail: { config: Object.assign({}, current && current.config, { qrUrlSource: 'CUSTOM', qrUrl }) } }); const child = this.selectComponent(`#${componentKey}`); if (child && child.applyUploadedImage) child.applyUploadedImage({ detail: { qrUrl } }) })
+      await this.chooseAsset('QR_CONTACT', (qrUrl) => { const current = this.data.config.components.find((item) => item.componentKey === componentKey); this.handleComponentConfigChange({ currentTarget: { dataset: { key: componentKey } }, detail: { config: Object.assign({}, current && current.config, { qrUrlSource: 'CUSTOM', qrUrl }) } }); const child = this.selectComponent('#active-component-editor'); if (child && child.applyUploadedImage) child.applyUploadedImage({ detail: { qrUrl } }) })
     } catch (error) { if (handleTeamMaintainerAuthError(error)) return; if (showTeamPortfolioUnavailableToast(error)) return; if (!/cancel/i.test(String(error && error.errMsg || error && error.message || ''))) wx.showToast({ title: '上传失败，请重试', icon: 'none' }) } finally { this.setData({ shareCoverUploading: false }) }
   },
   hasInvalidComponents() { return Object.keys(this.data.componentValidation).some((key) => this.data.componentValidation[key] === false) },
