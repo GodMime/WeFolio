@@ -10,6 +10,17 @@ const PAGE_NAMES = [
   'contact-leads/team-contact-leads', 'visitor-portfolio/team-visitor-portfolio'
 ]
 const NINE_COMPONENTS = ['team-profile', 'team-carousel', 'team-divider', 'team-member-portfolio-grid', 'team-member-portfolio-list', 'team-text-section', 'team-schedule-query', 'team-contact-form', 'team-qr-contact']
+const EDITOR_COMPONENT_PATHS = [
+  'team-profile/team-profile',
+  'carousel/carousel',
+  'divider/divider',
+  'member-portfolio-grid/member-portfolio-grid',
+  'member-portfolio-list/member-portfolio-list',
+  'text-section/text-section',
+  'schedule-query/schedule-query',
+  'contact-form/contact-form',
+  'qr-contact/qr-contact'
+]
 
 function read(relativePath) {
   return fs.readFileSync(path.join(ROOT, relativePath), 'utf8')
@@ -147,4 +158,60 @@ test('standard team editor uses the personal editor core visual measurements', (
     assert.equal(readCssRule(teamCss, selector), readCssRule(personalCss, selector), selector)
   }
   assert.doesNotMatch(teamCss, /\binset\s*:/)
+})
+
+test('all team component edit branches use the shared personal-editor visual contract', () => {
+  for (const componentPath of EDITOR_COMPONENT_PATHS) {
+    const wxml = read(`components/${componentPath}.wxml`)
+    const wxss = read(`components/${componentPath}.wxss`)
+    assert.match(wxml, /class="editor-form"/, `${componentPath} provides an editor form surface`)
+    assert.match(wxml, /class="editor-actions"/, `${componentPath} provides semantic editor actions`)
+    assert.match(wxml, /class="editor-cancel"[^>]*bindtap="cancelEdit"/, `${componentPath} styles cancel consistently`)
+    assert.match(wxml, /class="editor-confirm"[^>]*bindtap="saveEdit"/, `${componentPath} styles confirm consistently`)
+    assert.match(wxss, /\.editor-form\s*\{/, `${componentPath} styles the editor form`)
+    assert.match(wxss, /\.editor-actions\s*\{/, `${componentPath} styles the editor actions`)
+    assert.match(wxss, /\.editor-cancel,\s*\.editor-confirm\s*\{[^}]*display:\s*flex;[^}]*align-items:\s*center;[^}]*justify-content:\s*center;/, `${componentPath} centers action labels without default button layout`)
+    assert.match(wxss, /\.editor-cancel\s*\{/, `${componentPath} styles the cancel action`)
+    assert.match(wxss, /\.editor-confirm\s*\{/, `${componentPath} styles the confirm action`)
+  }
+})
+
+test('team component editors expose styled choices, selectable assets and previews', () => {
+  for (const componentPath of ['divider/divider', 'text-section/text-section', 'schedule-query/schedule-query', 'contact-form/contact-form']) {
+    const wxml = read(`components/${componentPath}.wxml`)
+    const wxss = read(`components/${componentPath}.wxss`)
+    assert.match(wxml, /editor-choice/, `${componentPath} renders choice cards`)
+    assert.match(wxss, /\.editor-choice\s*\{/, `${componentPath} styles choice cards`)
+    assert.match(wxss, /\.editor-choice\.active\s*\{/, `${componentPath} styles active choices`)
+  }
+  for (const componentPath of ['carousel/carousel', 'member-portfolio-grid/member-portfolio-grid', 'member-portfolio-list/member-portfolio-list']) {
+    const wxml = read(`components/${componentPath}.wxml`)
+    const wxss = read(`components/${componentPath}.wxss`)
+    assert.match(wxml, /editor-option/, `${componentPath} renders selectable content cards`)
+    assert.match(wxss, /\.editor-option\s*\{/, `${componentPath} styles selectable content cards`)
+    assert.match(wxss, /\.editor-option\.selected\s*\{/, `${componentPath} styles selected content cards`)
+  }
+  assert.match(read('components/team-profile/team-profile.wxml'), /class="editor-profile-card"/)
+  assert.match(read('components/qr-contact/qr-contact.wxml'), /class="editor-qr-preview"/)
+})
+
+test('team profile display switches flow through editing, preview and visitor rendering', () => {
+  const editor = read('standard-edit/team-portfolio-standard-edit.wxml')
+  const profile = read('components/team-profile/team-profile.wxml')
+  const preview = read('standard-preview/team-portfolio-standard-preview.wxml')
+  const visitor = read('visitor-portfolio/team-visitor-portfolio.wxml')
+
+  assert.match(editor, /visible-fields="\{\{activeComponent\.config\.visibleFields\}\}"/)
+  assert.match(profile, /bindchange="handleVisibleFieldChange"/)
+  assert.match(profile, /draft\.visibleFields\.avatar/)
+  assert.match(profile, /draft\.visibleFields\.teamName/)
+  assert.match(profile, /draft\.visibleFields\.intro/)
+  assert.match(preview, /team="\{\{item\.data\.team\}\}"/)
+  assert.match(visitor, /team="\{\{item\.data\.team\}\}"/)
+})
+
+test('team profile avatar stays horizontally centered in preview and visitor display mode', () => {
+  const profileStyles = read('components/team-profile/team-profile.wxss')
+
+  assert.match(profileStyles, /\.avatar\s*\{[^}]*display:\s*block;[^}]*margin:\s*0 auto;/)
 })

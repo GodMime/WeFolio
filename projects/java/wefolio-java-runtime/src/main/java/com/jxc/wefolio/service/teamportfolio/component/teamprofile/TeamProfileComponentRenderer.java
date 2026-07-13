@@ -20,6 +20,30 @@ public class TeamProfileComponentRenderer {
     /** 团队 ID 配置键。 */
     private static final String CONFIG_KEY_TEAM_ID = "teamId";
 
+    /** 展示字段配置键。 */
+    private static final String CONFIG_KEY_VISIBLE_FIELDS = "visibleFields";
+
+    /** 团队头像展示字段。 */
+    private static final String VISIBLE_FIELD_AVATAR = "avatar";
+
+    /** 团队名称展示字段。 */
+    private static final String VISIBLE_FIELD_TEAM_NAME = "teamName";
+
+    /** 团队简介展示字段。 */
+    private static final String VISIBLE_FIELD_INTRO = "intro";
+
+    /** 团队头像字段。 */
+    private static final String TEAM_KEY_AVATAR_URL = "avatarUrl";
+
+    /** 团队名称字段。 */
+    private static final String TEAM_KEY_TEAM_NAME = "teamName";
+
+    /** 团队简介字段。 */
+    private static final String TEAM_KEY_INTRO = "intro";
+
+    /** 隐藏字段在渲染结果中的空值。 */
+    private static final String HIDDEN_FIELD_VALUE = "";
+
     /** 团队资料不匹配提示。 */
     private static final String TEAM_MISMATCH_MESSAGE = "团队资料与当前作品集不匹配";
 
@@ -42,9 +66,43 @@ public class TeamProfileComponentRenderer {
                 throw new BusinessException(TEAM_MISMATCH_MESSAGE);
             }
             componentConfig.getTeam().setTeamId(teamId);
-            return componentConfig.toJsonObject();
+            JSONObject rendered = componentConfig.toJsonObject();
+            applyVisibleFields(rendered);
+            return rendered;
         } catch (RuntimeException exception) {
             throw new BusinessException(TEAM_MISMATCH_MESSAGE);
+        }
+    }
+
+    /**
+     * 按展示字段开关清空不应出现在预览页和访客页的团队资料。
+     *
+     * @param rendered 已脱离配置输入的渲染数据
+     */
+    private void applyVisibleFields(JSONObject rendered) {
+        JSONObject team = rendered.getJSONObject(CONFIG_KEY_TEAM);
+        JSONObject visibleFields = rendered.getJSONObject(CONFIG_KEY_VISIBLE_FIELDS);
+        hideFieldWhenDisabled(team, visibleFields, VISIBLE_FIELD_AVATAR, TEAM_KEY_AVATAR_URL);
+        hideFieldWhenDisabled(team, visibleFields, VISIBLE_FIELD_TEAM_NAME, TEAM_KEY_TEAM_NAME);
+        hideFieldWhenDisabled(team, visibleFields, VISIBLE_FIELD_INTRO, TEAM_KEY_INTRO);
+    }
+
+    /**
+     * 在展示开关关闭时清空对应团队资料字段。
+     *
+     * @param team 团队资料渲染数据
+     * @param visibleFields 展示字段配置
+     * @param visibleField 展示开关键
+     * @param teamField 团队资料字段键
+     */
+    private void hideFieldWhenDisabled(
+            JSONObject team,
+            JSONObject visibleFields,
+            String visibleField,
+            String teamField
+    ) {
+        if (!visibleFields.getBooleanValue(visibleField)) {
+            team.put(teamField, HIDDEN_FIELD_VALUE);
         }
     }
 

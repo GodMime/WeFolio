@@ -82,7 +82,7 @@ test('new editor creates only on first save and then uses draft save', async () 
   const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
     requests.push(clone(options))
     if (options.url === '/api/mine/teams/3') {
-      return { team: { teamId: 3, teamName: '甲团队', avatarUrl: 'team.png', intro: '团队简介' } }
+      return { team: { teamId: 3, teamName: '甲团队', avatarUrl: 'https://cdn.example/team.png', intro: '团队简介' } }
     }
     if (options.url === '/api/mine/teams/3/portfolios/standard') {
       return {
@@ -110,7 +110,7 @@ test('new editor creates only on first save and then uses draft save', async () 
     assert.deepEqual(page.data.config.components[0].config.team, {
       teamId: 3,
       teamName: '甲团队',
-      avatarUrl: 'team.png',
+      avatarUrl: 'https://cdn.example/team.png',
       intro: '团队简介'
     })
     assert.equal(page.data.componentValidation[page.data.config.components[0].componentKey], true)
@@ -314,6 +314,151 @@ test('new editor keeps a selected cover local until create, upload, and draft sa
     assert.equal(page.data.config.share.coverUrl, 'https://cdn.example/team-cover.jpg')
     assert.deepEqual(uploads, [{ url: 'https://cos.example/upload', filePath: 'http://tmp/team-cover.jpg', name: 'file', formData: { key: 'team-cover' } }])
   } finally { page.cleanup() }
+})
+
+test('team profile avatar selection stays local until create, upload, and draft save', async () => {
+  const requests = []
+  const appliedAvatars = []
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
+    requests.push(clone(options))
+    if (options.url === '/api/mine/teams/3/portfolios/standard') {
+      return { portfolioId: 71, ownerId: 3, draftRevision: 1, publicationStatus: 'DRAFT_ONLY', config: options.data.config }
+    }
+    if (options.url === '/api/mine/team-portfolios/71/asset/upload-ticket') {
+      return { uploadUrl: 'https://cos.example/profile-avatar', publicUrl: 'https://cdn.example/team-profile-avatar.jpg', formData: {} }
+    }
+    if (options.url === '/api/mine/team-portfolios/71/draft') {
+      return { portfolioId: 71, draftRevision: 2, publicationStatus: 'DRAFT_ONLY' }
+    }
+    throw new Error(`unexpected request: ${options.url}`)
+  }, {
+    chooseMedia({ success }) { success({ tempFiles: [{ tempFilePath: 'wxfile://tmp/team-profile-avatar.jpg' }] }) },
+    getFileSystemManager() { return { statSync() { return { size: 128 } } } },
+    uploadFile({ success }) { success({ statusCode: 204 }) }
+  })
+  page.selectComponent = () => ({ applyAvatar(event) { appliedAvatars.push(event.detail.avatarUrl) } })
+  page.setData({
+    teamId: 3,
+    canMaintain: true,
+    activeComponentKey: 'profile-1',
+    config: {
+      schemaVersion: 'standard-team-v1',
+      share: {},
+      components: [{
+        componentKey: 'profile-1',
+        componentType: 'TEAM_PROFILE',
+        sortOrder: 0,
+        enabled: true,
+        config: { team: { teamId: 3, avatarUrl: 'team.png', teamName: '甲团队', intro: '简介' } }
+      }]
+    },
+    componentValidation: { 'profile-1': true }
+  })
+  try {
+    await page.handleTeamProfileChooseAvatar({ currentTarget: { dataset: { key: 'profile-1' } } })
+    assert.deepEqual(appliedAvatars, ['wxfile://tmp/team-profile-avatar.jpg'])
+    assert.deepEqual(requests, [])
+
+    page.handleComponentSave({
+      currentTarget: { dataset: { key: 'profile-1' } },
+      detail: { config: { team: { teamId: 3, avatarUrl: 'wxfile://tmp/team-profile-avatar.jpg', teamName: '作品集团队', intro: '作品集简介' } } }
+    })
+    await page.handleSaveTap()
+
+    assert.deepEqual(requests.map((item) => item.url), [
+      '/api/mine/teams/3/portfolios/standard',
+      '/api/mine/team-portfolios/71/asset/upload-ticket',
+      '/api/mine/team-portfolios/71/draft'
+    ])
+    assert.equal(requests[0].data.config.components[0].config.team.avatarUrl, '')
+    assert.equal(requests[1].data.assetType, 'TEAM_PROFILE_AVATAR')
+    assert.equal(requests[2].data.config.components[0].config.team.avatarUrl, 'https://cdn.example/team-profile-avatar.jpg')
+    assert.equal(page.data.config.components[0].config.team.avatarUrl, 'https://cdn.example/team-profile-avatar.jpg')
+  } finally { page.cleanup() }
+})
+
+test('team profile refresh updates only the child draft and preserves it on failure', async () => {
+  let shouldFail = false
+  const snapshots = []
+  const errors = []
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
+    if (options.url !== '/api/mine/teams/3') throw new Error(`unexpected request: ${options.url}`)
+    if (shouldFail) throw new Error('network')
+    return { team: { teamId: 3, name: '最新团队', avatarUrl: 'latest.png', intro: '最新简介' } }
+  })
+  page.selectComponent = () => ({
+    applyTeamSnapshot(event) { snapshots.push(event.detail.team) },
+    applyRefreshError(event) { errors.push(event.detail.message) }
+  })
+  page.setData({ teamId: 3, activeComponentKey: 'profile-1' })
+  try {
+    await page.handleTeamProfileRefresh({ currentTarget: { dataset: { key: 'profile-1' } } })
+    assert.deepEqual(snapshots, [{ teamId: 3, teamName: '最新团队', avatarUrl: 'latest.png', intro: '最新简介' }])
+    assert.equal(page.data.config.components.length, 0)
+
+    shouldFail = true
+    await page.handleTeamProfileRefresh({ currentTarget: { dataset: { key: 'profile-1' } } })
+    assert.deepEqual(snapshots, [{ teamId: 3, teamName: '最新团队', avatarUrl: 'latest.png', intro: '最新简介' }])
+    assert.deepEqual(errors, ['团队资料刷新失败，请重试'])
+  } finally { page.cleanup() }
+})
+
+test('existing editor uploads a local team profile avatar on save and skips a remote avatar', async () => {
+  const localRequests = []
+  const localPage = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
+    localRequests.push(clone(options))
+    if (options.url.endsWith('/asset/upload-ticket')) {
+      return { uploadUrl: 'https://cos.example/existing-profile', publicUrl: 'https://cdn.example/existing-profile.jpg', formData: {} }
+    }
+    if (options.url.endsWith('/draft')) return { portfolioId: 72, draftRevision: 4, publicationStatus: 'DRAFT_ONLY' }
+    throw new Error(`unexpected request: ${options.url}`)
+  }, {
+    getFileSystemManager() { return { statSync() { return { size: 128 } } } },
+    uploadFile({ success }) { success({ statusCode: 204 }) }
+  })
+  localPage.setData({
+    portfolioId: 72,
+    teamId: 3,
+    canMaintain: true,
+    draftRevision: 3,
+    config: {
+      schemaVersion: 'standard-team-v1',
+      share: {},
+      components: [{ componentKey: 'profile-1', componentType: 'TEAM_PROFILE', sortOrder: 0, enabled: true, config: { team: { teamId: 3, avatarUrl: 'wxfile://tmp/existing-profile.jpg', teamName: '作品集团队', intro: '' } } }]
+    },
+    componentValidation: { 'profile-1': true }
+  })
+  try {
+    await localPage.handleSaveTap()
+    assert.deepEqual(localRequests.map((item) => item.url), [
+      '/api/mine/team-portfolios/72/asset/upload-ticket',
+      '/api/mine/team-portfolios/72/draft'
+    ])
+    assert.equal(localRequests[0].data.assetType, 'TEAM_PROFILE_AVATAR')
+    assert.equal(localRequests[1].data.config.components[0].config.team.avatarUrl, 'https://cdn.example/existing-profile.jpg')
+  } finally { localPage.cleanup() }
+
+  const remoteRequests = []
+  const remotePage = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
+    remoteRequests.push(clone(options))
+    return { portfolioId: 73, draftRevision: 5, publicationStatus: 'DRAFT_ONLY' }
+  })
+  remotePage.setData({
+    portfolioId: 73,
+    teamId: 3,
+    canMaintain: true,
+    draftRevision: 4,
+    config: {
+      schemaVersion: 'standard-team-v1',
+      share: {},
+      components: [{ componentKey: 'profile-1', componentType: 'TEAM_PROFILE', sortOrder: 0, enabled: true, config: { team: { teamId: 3, avatarUrl: 'https://cdn.example/remote-profile.jpg', teamName: '作品集团队', intro: '' } } }]
+    },
+    componentValidation: { 'profile-1': true }
+  })
+  try {
+    await remotePage.handleSaveTap()
+    assert.deepEqual(remoteRequests.map((item) => item.url), ['/api/mine/team-portfolios/73/draft'])
+  } finally { remotePage.cleanup() }
 })
 
 test('team cover crop resolves a renderable image path before opening the sheet', async () => {

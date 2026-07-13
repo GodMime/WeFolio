@@ -1,9 +1,22 @@
-<view class="divider-component">
+<view class="divider-component {{editMode ? 'editor-mode' : ''}}">
   <block wx:if="{{editMode}}">
-    <view class="color-row"><button wx:for="{{colorOptions}}" wx:key="*this" class="swatch {{draft.color === item ? 'active' : ''}}" data-color="{{item}}" style="background: {{item === 'BLACK' ? '#17202a' : item === 'WHITE' ? '#ffffff' : item === 'GRAY' ? '#d7dfe1' : 'transparent'}}" bindtap="selectColor" aria-label="{{item}}"></button></view>
-    <label class="height-field">高度<input type="number" value="{{draft.heightPx}}" bindinput="changeHeight" /></label>
-    <text wx:if="{{errorMessage}}" class="error">{{errorMessage}}</text>
-    <view class="actions"><button bindtap="cancelEdit">取消</button><button class="primary" bindtap="saveEdit">确认</button></view>
+    <view class="editor-form">
+      <view class="editor-field">
+        <view class="editor-label">颜色</view>
+        <view class="editor-choice-row">
+          <button wx:for="{{colorOptions}}" wx:key="*this" class="editor-choice {{draft.color === item ? 'active' : ''}}" data-color="{{item}}" bindtap="selectColor" aria-label="{{item}}">
+            <view class="editor-swatch" style="background: {{item === 'BLACK' ? '#17202a' : item === 'WHITE' ? '#ffffff' : item === 'GRAY' ? '#d7dfe1' : 'linear-gradient(135deg, #ffffff 46%, #a9354f 48%, #a9354f 52%, #ffffff 54%)'}}"></view>
+            <view class="editor-choice-label">{{item === 'BLACK' ? '黑色' : item === 'WHITE' ? '白色' : item === 'GRAY' ? '灰色' : '透明'}}</view>
+          </button>
+        </view>
+      </view>
+      <view class="editor-field">
+        <view class="editor-label">高度（像素）</view>
+        <input class="editor-input" type="number" value="{{draft.heightPx}}" bindinput="changeHeight" />
+      </view>
+      <view wx:if="{{errorMessage}}" class="editor-error">{{errorMessage}}</view>
+    </view>
+    <view class="editor-actions"><button class="editor-cancel" bindtap="cancelEdit">取消</button><button class="editor-confirm" bindtap="saveEdit">完成</button></view>
   </block>
   <view wx:else class="line" style="height: {{config.heightPx || 16}}px; background: {{config.color === 'BLACK' ? '#17202a' : config.color === 'WHITE' ? '#ffffff' : config.color === 'TRANSPARENT' ? 'transparent' : '#d7dfe1'}};"></view>
 </view>

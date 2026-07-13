@@ -205,10 +205,70 @@ test('team profile owns safe defaults and validates a team snapshot', () => {
   assert.equal(propertyDefault(definition, 'editMode'), false)
   assert.equal(exports.validateTeamProfile({ teamId: 1, teamName: '映期团队' }).valid, true)
   assert.equal(exports.validateTeamProfile({ teamId: null, teamName: '' }).valid, false)
-  assert.deepEqual(exports.createDefaultTeamProfileConfig(), { team: {} })
-  assert.deepEqual(exports.buildTeamProfileConfig({ teamId: 3, teamName: '只读快照', avatarUrl: 'avatar' }), { team: { teamId: 3 } })
+  assert.deepEqual(exports.createDefaultTeamProfileConfig(), {
+    team: {},
+    visibleFields: { avatar: true, teamName: true, intro: true }
+  })
+  assert.deepEqual(
+    exports.buildTeamProfileConfig({ teamId: 3, teamName: '作品集团队', avatarUrl: 'avatar', intro: '作品集简介' }),
+    {
+      team: { teamId: 3, avatarUrl: 'avatar', teamName: '作品集团队', intro: '作品集简介' },
+      visibleFields: { avatar: true, teamName: true, intro: true }
+    }
+  )
   const wxml = fs.readFileSync(path.join(ROOT, 'team-profile/team-profile.wxml'), 'utf8')
-  assert.doesNotMatch(wxml, /bindinput|chooseAvatar/)
+  assert.match(wxml, /bindinput="handleInput"/)
+  assert.match(wxml, /bindtap="chooseAvatar"/)
+  assert.match(wxml, /bindtap="refreshFromTeam"/)
+  assert.match(wxml, /bindchange="handleVisibleFieldChange"/)
+  assert.match(wxml, /draft\.visibleFields\.avatar/)
+  assert.match(wxml, /draft\.visibleFields\.teamName/)
+  assert.match(wxml, /draft\.visibleFields\.intro/)
+})
+
+test('team profile edits an isolated draft and emits avatar and refresh intents', () => {
+  const { definition } = loadComponent('team-profile')
+  const team = { teamId: 3, teamName: '初始团队', avatarUrl: 'initial.png', intro: '初始简介' }
+  const harness = createComponentHarness(definition, { team, editMode: true, refreshing: false })
+
+  harness.instance.handleInput({ currentTarget: { dataset: { field: 'teamName' } }, detail: { value: '作品集团队' } })
+  harness.instance.handleInput({ currentTarget: { dataset: { field: 'intro' } }, detail: { value: '作品集简介' } })
+  harness.instance.chooseAvatar()
+  harness.instance.refreshFromTeam()
+  harness.instance.applyAvatar({ detail: { avatarUrl: 'wxfile://tmp/team-profile.jpg' } })
+  harness.instance.handleVisibleFieldChange({ currentTarget: { dataset: { field: 'intro' } }, detail: { value: false } })
+  harness.instance.saveEdit()
+
+  assert.deepEqual(team, { teamId: 3, teamName: '初始团队', avatarUrl: 'initial.png', intro: '初始简介' })
+  assert.equal(harness.eventsByName('chooseavatar').length, 1)
+  assert.equal(harness.eventsByName('refresh').length, 1)
+  assert.deepEqual(harness.eventsByName('save')[0].detail.config, {
+    team: {
+      teamId: 3,
+      avatarUrl: 'wxfile://tmp/team-profile.jpg',
+      teamName: '作品集团队',
+      intro: '作品集简介'
+    },
+    visibleFields: { avatar: true, teamName: true, intro: false }
+  })
+})
+
+test('team profile keeps display switches when refreshing the team snapshot', () => {
+  const { definition } = loadComponent('team-profile')
+  const harness = createComponentHarness(definition, {
+    team: { teamId: 3, teamName: '初始团队', avatarUrl: 'initial.png', intro: '初始简介' },
+    visibleFields: { avatar: false, teamName: true, intro: false },
+    editMode: true
+  })
+
+  harness.instance.applyTeamSnapshot({
+    detail: { team: { teamId: 3, teamName: '最新团队', avatarUrl: 'latest.png', intro: '最新简介' } }
+  })
+
+  assert.deepEqual(harness.instance.data.draft, {
+    team: { teamId: 3, avatarUrl: 'latest.png', teamName: '最新团队', intro: '最新简介' },
+    visibleFields: { avatar: false, teamName: true, intro: false }
+  })
 })
 
 test('carousel loads members before approved image works and preserves selection order', async () => {

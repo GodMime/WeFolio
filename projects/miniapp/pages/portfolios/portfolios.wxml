@@ -11,14 +11,7 @@
 
   <view class="portfolio-switch-viewport">
     <view class="portfolio-switch-track {{ownerType === 'TEAM' ? 'team-active' : ''}}">
-      <scroll-view
-        class="portfolio-switch-panel portfolio-scroll"
-        scroll-y
-        type="list"
-        refresher-enabled="{{true}}"
-        refresher-triggered="{{pullDownRefreshing}}"
-        bindrefresherrefresh="handlePullDownRefresh"
-      >
+      <view class="portfolio-switch-panel">
         <view class="portfolio-content personal-portfolio-content">
           <view class="portfolio-list-panel">
             <view class="list-heading">
@@ -29,6 +22,14 @@
               </view>
             </view>
 
+            <scroll-view
+              class="portfolio-list-scroll personal-portfolio-list-scroll"
+              scroll-y
+              type="list"
+              refresher-enabled="{{true}}"
+              refresher-triggered="{{pullDownRefreshing}}"
+              bindrefresherrefresh="handlePullDownRefresh"
+            >
             <view wx:if="{{loading}}" class="inline-state">作品集加载中</view>
             <view wx:elif="{{errorMessage}}" class="inline-state error">
               <text>{{errorMessage}}</text>
@@ -87,6 +88,7 @@
                 </view>
               </view>
             </view>
+            </scroll-view>
           </view>
 
           <view class="create-actions">
@@ -94,16 +96,9 @@
             <button class="create-action advanced" data-type="advanced-personal" bindtap="handleUnavailableTap">新建高级个人作品集</button>
           </view>
         </view>
-      </scroll-view>
+      </view>
 
-      <scroll-view
-        class="portfolio-switch-panel portfolio-scroll"
-        scroll-y
-        type="list"
-        refresher-enabled="{{true}}"
-        refresher-triggered="{{teamPullDownRefreshing}}"
-        bindrefresherrefresh="handleTeamPullDownRefresh"
-      >
+      <view class="portfolio-switch-panel">
         <view class="portfolio-content team-portfolio-content">
           <view class="portfolio-list-panel">
             <view class="list-heading">
@@ -114,6 +109,14 @@
               </view>
             </view>
 
+            <scroll-view
+              class="portfolio-list-scroll team-portfolio-list-scroll"
+              scroll-y
+              type="list"
+              refresher-enabled="{{true}}"
+              refresher-triggered="{{teamPullDownRefreshing}}"
+              bindrefresherrefresh="handleTeamPullDownRefresh"
+            >
             <view wx:if="{{teamLoading}}" class="inline-state">作品集加载中</view>
             <view wx:elif="{{teamErrorMessage}}" class="inline-state error">
               <text>{{teamErrorMessage}}</text>
@@ -145,6 +148,7 @@
                   >删除</button>
                 </view>
                 <view class="portfolio-item-card team-portfolio-card" data-item="{{item}}" bindtap="handleTeamPortfolioCardTap">
+                  <view class="team-portfolio-affiliation">{{item.teamName}} · {{item.currentRole}}</view>
                   <view class="portfolio-cover">
                     <image class="portfolio-cover-image" src="{{item.coverUrl}}" mode="aspectFill" aria-label="{{item.coverAlt}}"></image>
                   </view>
@@ -155,7 +159,6 @@
                         <text wx:if="{{item.titleScrollable}}" class="portfolio-title-text duplicate" aria-hidden="true">{{item.title}}</text>
                       </view>
                     </view>
-                    <view class="portfolio-meta">{{item.teamName}} · {{item.currentRole}}</view>
                     <view class="portfolio-meta">{{item.updatedText}}</view>
                     <view class="portfolio-badges"><view class="status-badge {{item.statusTone}}">{{item.statusText}}</view></view>
                   </view>
@@ -171,15 +174,18 @@
                 </view>
               </view>
             </view>
+            </scroll-view>
           </view>
 
-          <view wx:if="{{noMaintainableTeam}}" class="inline-hint">先创建团队或联系拥有者、管理者授权</view>
+          <view wx:if="{{noMaintainableTeam}}" class="team-action-hint-slot">
+            <view class="inline-hint">先创建团队或联系拥有者、管理者授权</view>
+          </view>
           <view class="create-actions">
             <button class="create-action standard" bindtap="handleCreateStandardTeam" loading="{{creatingTeamPortfolio}}" disabled="{{!maintainableTeamsLoaded || noMaintainableTeam || creatingTeamPortfolio}}">新建标准团队作品集</button>
             <button class="create-action advanced" data-type="advanced-team" bindtap="handleUnavailableTap">新建高级团队作品集</button>
           </view>
         </view>
-      </scroll-view>
+      </view>
     </view>
   </view>
 

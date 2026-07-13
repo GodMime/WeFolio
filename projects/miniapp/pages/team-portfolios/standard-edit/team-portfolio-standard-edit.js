@@ -14,6 +14,7 @@ const SWIPE_VERTICAL_TOLERANCE = 48
 const DRAG_ROW_FALLBACK_HEIGHT = 96
 const COMPONENT_DRAG_SCALE = 1.015
 const TEAM_PORTFOLIO_COVER_ASSET_TYPE = 'COVER'
+const TEAM_PROFILE_AVATAR_ASSET_TYPE = 'TEAM_PROFILE_AVATAR'
 const PORTFOLIO_LIST_ROUTE_SUFFIX = '/portfolios/portfolios'
 const TEAM_PORTFOLIOS_COMPAT_PAGE_URL = '/pages/team-portfolios/portfolios'
 
@@ -33,8 +34,18 @@ function normalizeSortOrders(components = []) { return components.map((item, sor
 function buildServerSafeTeamPortfolioConfig(config = {}) {
   const normalized = normalizeTeamPortfolioConfig(config)
   const coverUrl = normalized.share && normalized.share.coverUrl
+  const components = normalized.components.map((component) => {
+    if (component.componentType !== 'TEAM_PROFILE') return component
+    const team = component.config && component.config.team ? component.config.team : {}
+    return Object.assign({}, component, {
+      config: Object.assign({}, component.config, {
+        team: Object.assign({}, team, { avatarUrl: isRemoteUrl(team.avatarUrl) ? team.avatarUrl : '' })
+      })
+    })
+  })
   return normalizeTeamPortfolioConfig(Object.assign({}, normalized, {
-    share: Object.assign({}, normalized.share, { coverUrl: isRemoteUrl(coverUrl) ? coverUrl : '' })
+    share: Object.assign({}, normalized.share, { coverUrl: isRemoteUrl(coverUrl) ? coverUrl : '' }),
+    components
   }))
 }
 
@@ -67,7 +78,7 @@ function buckets(components) {
 }
 
 Page({
-  data: { portfolioId: 0, teamId: 0, teamSnapshot: {}, loading: false, errorMessage: '', canMaintain: false, publicationStatus: 'DRAFT_ONLY', draftRevision: 0, publishedRevision: 0, statusText: '草稿', statusTone: 'draft', showPublishAction: false, config: { schemaVersion: 'standard-team-v1', share: {}, components: [] }, componentList: [], componentBuckets: buckets([]), componentOptions: buildComponentOptions(), componentValidation: {}, componentSources: {}, hasInvalidComponents: false, saving: false, publishing: false, openingLibrary: false, shareCoverUploading: false, pendingDraftKey: '', pendingPublishKey: '', pendingPublishRevision: 0, shareTitleCounter: '0 / 50', componentSheetVisible: false, componentEditorVisible: false, activeComponentKey: '', activeComponentType: '', activeComponentName: '', activeComponent: { config: {} }, activeComponentSource: {}, activeComponentNeedsPortfolio: false, revealedComponentKey: '', componentTouchStart: null, draggingIndex: -1, dragTargetIndex: -1, componentDragStartY: 0, componentDragStyle: '', shareCoverCropVisible: false, shareCoverCropPath: '' },
+  data: { portfolioId: 0, teamId: 0, teamSnapshot: {}, loading: false, errorMessage: '', canMaintain: false, publicationStatus: 'DRAFT_ONLY', draftRevision: 0, publishedRevision: 0, statusText: '草稿', statusTone: 'draft', showPublishAction: false, config: { schemaVersion: 'standard-team-v1', share: {}, components: [] }, componentList: [], componentBuckets: buckets([]), componentOptions: buildComponentOptions(), componentValidation: {}, componentSources: {}, hasInvalidComponents: false, saving: false, publishing: false, openingLibrary: false, shareCoverUploading: false, teamProfileRefreshing: false, pendingDraftKey: '', pendingPublishKey: '', pendingPublishRevision: 0, shareTitleCounter: '0 / 50', componentSheetVisible: false, componentEditorVisible: false, activeComponentKey: '', activeComponentType: '', activeComponentName: '', activeComponent: { config: {} }, activeComponentSource: {}, activeComponentNeedsPortfolio: false, revealedComponentKey: '', componentTouchStart: null, draggingIndex: -1, dragTargetIndex: -1, componentDragStartY: 0, componentDragStyle: '', shareCoverCropVisible: false, shareCoverCropPath: '' },
   onLoad(options = {}) {
     const portfolioId = Number(options.portfolioId) || 0
     const teamId = Number(options.teamId) || 0
@@ -137,6 +148,32 @@ Page({
   handleComponentDelete(event) { const key = event.currentTarget.dataset.key; this.clearPending(); const validation = Object.assign({}, this.data.componentValidation); delete validation[key]; this.setData({ componentValidation: validation, hasInvalidComponents: Object.keys(validation).some((name) => validation[name] === false) }); this.updateConfig(Object.assign({}, this.data.config, { components: this.data.config.components.filter((item) => item.componentKey !== key) })) },
   handleMove(event) { const key = event.currentTarget.dataset.key; const direction = Number(event.currentTarget.dataset.direction); const components = this.data.config.components.slice(); const index = components.findIndex((item) => item.componentKey === key); const target = index + direction; if (index < 0 || target < 0 || target >= components.length) return; this.clearPending(); [components[index], components[target]] = [components[target], components[index]]; this.updateConfig(Object.assign({}, this.data.config, { components: components.map((item, sortOrder) => Object.assign({}, item, { sortOrder })) })) },
   handleMaintainTeam(event) { const teamId = Number(event.currentTarget.dataset.teamId || this.data.teamId); if (teamId) wx.navigateTo({ url: `/pages/team-maintenance/team-maintenance?teamId=${teamId}` }) },
+  async handleTeamProfileChooseAvatar() {
+    if (!wx.chooseMedia) return
+    try {
+      const media = await new Promise((resolve, reject) => wx.chooseMedia({ count: 1, mediaType: ['image'], success: resolve, fail: reject }))
+      const file = media && Array.isArray(media.tempFiles) && media.tempFiles[0]
+      if (!file || !file.tempFilePath) throw new Error('未选择有效图片')
+      const child = this.selectComponent('#team-profile-editor')
+      if (child && child.applyAvatar) child.applyAvatar({ detail: { avatarUrl: file.tempFilePath } })
+    } catch (error) {
+      if (!/cancel/i.test(String(error && error.errMsg || error && error.message || ''))) wx.showToast({ title: '图片选择失败，请重试', icon: 'none' })
+    }
+  },
+  async handleTeamProfileRefresh() {
+    if (this.data.teamProfileRefreshing || !this.data.teamId) return
+    this.setData({ teamProfileRefreshing: true })
+    const child = this.selectComponent('#team-profile-editor')
+    try {
+      const detail = await request({ url: `/api/mine/teams/${this.data.teamId}` })
+      const team = normalizeTeamSnapshot(this.data.teamId, detail && detail.team)
+      if (child && child.applyTeamSnapshot) child.applyTeamSnapshot({ detail: { team } })
+    } catch (error) {
+      if (handleTeamMaintainerAuthError(error)) return
+      if (showTeamPortfolioUnavailableToast(error)) return
+      if (child && child.applyRefreshError) child.applyRefreshError({ detail: { message: '团队资料刷新失败，请重试' } })
+    } finally { this.setData({ teamProfileRefreshing: false }) }
+  },
   handleOpenLibrary() { this.setData({ openingLibrary: false }); this.handleOpenComponentSheet() },
   addComponent(componentType) { if (!componentType) return this.setData({ openingLibrary: false }); this.clearPending(); const componentKey = makeKey(); const componentConfig = componentType === 'TEAM_PROFILE' ? { team: Object.assign({}, this.data.teamSnapshot) } : {}; const components = this.data.config.components.concat({ componentKey, componentType, sortOrder: this.data.config.components.length, enabled: true, config: componentConfig }); this.updateConfig(Object.assign({}, this.data.config, { components })); this.setData({ componentValidation: Object.assign({}, this.data.componentValidation, { [componentKey]: false }), hasInvalidComponents: true, openingLibrary: false }) },
   updateSource(componentKey, patch) { const componentSources = Object.assign({}, this.data.componentSources, { [componentKey]: Object.assign({}, this.data.componentSources[componentKey], patch) }); const state = { componentSources }; if (componentKey === this.data.activeComponentKey) state.activeComponentSource = componentSources[componentKey]; this.setData(state) },
@@ -204,6 +241,28 @@ Page({
       return normalizeTeamPortfolioConfig(Object.assign({}, normalized, { share: Object.assign({}, normalized.share, { coverUrl: uploadedUrl }) }))
     } finally { this.setData({ shareCoverUploading: false }) }
   },
+  async uploadLocalTeamProfileAvatars(portfolioId, config = this.data.config) {
+    const normalized = normalizeTeamPortfolioConfig(config)
+    const components = []
+    for (const component of normalized.components) {
+      const team = component.config && component.config.team ? component.config.team : {}
+      if (component.componentType !== 'TEAM_PROFILE' || !team.avatarUrl || isRemoteUrl(team.avatarUrl)) {
+        components.push(component)
+        continue
+      }
+      const avatarUrl = await uploadTeamPortfolioAsset({
+        portfolioId,
+        assetType: TEAM_PROFILE_AVATAR_ASSET_TYPE,
+        clientId: makeKey(),
+        filePath: team.avatarUrl,
+        requestFn: request
+      })
+      components.push(Object.assign({}, component, {
+        config: Object.assign({}, component.config, { team: Object.assign({}, team, { avatarUrl }) })
+      }))
+    }
+    return normalizeTeamPortfolioConfig(Object.assign({}, normalized, { components }))
+  },
   async saveDraft(forPublish = false) {
     if (this.data.saving || (this.data.publishing && !forPublish) || !this.data.canMaintain || this.hasInvalidComponents()) return null
     this.setData({ saving: true })
@@ -223,7 +282,8 @@ Page({
       }
       if (!portfolioId) throw new Error('团队作品集创建失败')
       failureStage = 'upload'
-      const uploadedConfig = await this.uploadLocalShareCover(portfolioId, this.data.config)
+      const coverUploadedConfig = await this.uploadLocalShareCover(portfolioId, this.data.config)
+      const uploadedConfig = await this.uploadLocalTeamProfileAvatars(portfolioId, coverUploadedConfig)
       this.updateConfig(uploadedConfig)
       failureStage = 'save'
       const idempotencyKey = this.data.pendingDraftKey || makeIdempotencyKey('team-draft')

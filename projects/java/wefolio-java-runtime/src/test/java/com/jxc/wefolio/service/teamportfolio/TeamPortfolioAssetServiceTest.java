@@ -49,13 +49,18 @@ class TeamPortfolioAssetServiceTest {
                 PORTFOLIO_ID, request("COVER", "image/jpeg", 1024L), USER_ID);
         var qrResponse = context.service.createUploadTicket(
                 PORTFOLIO_ID, request("QR_CONTACT", "image/png", 1024L), USER_ID);
+        var profileAvatarResponse = context.service.createUploadTicket(
+                PORTFOLIO_ID, request("TEAM_PROFILE_AVATAR", "image/jpeg", 1024L), USER_ID);
 
-        verify(context.access, org.mockito.Mockito.times(2)).requireMaintainablePortfolio(PORTFOLIO_ID, USER_ID);
+        verify(context.access, org.mockito.Mockito.times(3)).requireMaintainablePortfolio(PORTFOLIO_ID, USER_ID);
         assertThat(coverResponse.getObjectKey())
                 .matches("TM2048/protfolio/cover-13-\\d{14}-[0-9a-f]{8}\\.jpg");
         assertThat(qrResponse.getObjectKey())
                 .matches("TM2048/protfolio/qr-contact-13-\\d{14}-[0-9a-f]{8}\\.png");
         assertThat(qrResponse.getAssetType()).isEqualTo("QR_CONTACT");
+        assertThat(profileAvatarResponse.getObjectKey())
+                .matches("TM2048/protfolio/team-profile-avatar-13-\\d{14}-[0-9a-f]{8}\\.jpg");
+        assertThat(profileAvatarResponse.getAssetType()).isEqualTo("TEAM_PROFILE_AVATAR");
     }
 
     @Test

@@ -6,6 +6,9 @@ import com.alibaba.fastjson2.JSONWriter;
 import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioConfigDto;
 import lombok.Data;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 /**
  * 团队资料组件配置。
  */
@@ -14,6 +17,9 @@ public class TeamProfileComponentConfig {
 
     /** 团队配置键。 */
     private static final String CONFIG_KEY_TEAM = "team";
+
+    /** 展示字段配置键。 */
+    private static final String CONFIG_KEY_VISIBLE_FIELDS = "visibleFields";
 
     /** 团队 ID 配置键。 */
     private static final String CONFIG_KEY_TEAM_ID = "teamId";
@@ -27,6 +33,15 @@ public class TeamProfileComponentConfig {
     /** 团队简介配置键。 */
     private static final String CONFIG_KEY_INTRO = "intro";
 
+    /** 团队头像展示字段。 */
+    private static final String VISIBLE_FIELD_AVATAR = "avatar";
+
+    /** 团队名称展示字段。 */
+    private static final String VISIBLE_FIELD_TEAM_NAME = "teamName";
+
+    /** 团队简介展示字段。 */
+    private static final String VISIBLE_FIELD_INTRO = "intro";
+
     /** 默认组件实例键。 */
     private static final String DEFAULT_COMPONENT_KEY = "team-profile";
 
@@ -38,6 +53,9 @@ public class TeamProfileComponentConfig {
 
     /** 团队资料快照。 */
     private TeamSnapshot team;
+
+    /** 团队资料展示字段开关。 */
+    private Map<String, Boolean> visibleFields;
 
     /**
      * 创建团队资料组件的默认私有配置。
@@ -71,7 +89,45 @@ public class TeamProfileComponentConfig {
     public JSONObject toJsonObject() {
         JSONObject config = new JSONObject();
         config.put(CONFIG_KEY_TEAM, team.toJsonObject());
+        config.put(CONFIG_KEY_VISIBLE_FIELDS, visibleFieldsToJsonObject());
         return config;
+    }
+
+    /**
+     * 构建补齐默认值的展示字段配置。
+     *
+     * @return 独立的展示字段 JSON
+     */
+    private JSONObject visibleFieldsToJsonObject() {
+        Map<String, Boolean> normalized = normalizeVisibleFields(visibleFields);
+        JSONObject fields = new JSONObject();
+        normalized.forEach(fields::put);
+        return fields;
+    }
+
+    /**
+     * 规范化展示字段配置，兼容未保存开关的历史团队作品集。
+     *
+     * @param source 原始展示字段配置
+     * @return 包含全部团队资料字段的开关
+     */
+    static Map<String, Boolean> normalizeVisibleFields(Map<String, Boolean> source) {
+        Map<String, Boolean> normalized = new LinkedHashMap<>();
+        normalized.put(VISIBLE_FIELD_AVATAR, visibleFieldValue(source, VISIBLE_FIELD_AVATAR));
+        normalized.put(VISIBLE_FIELD_TEAM_NAME, visibleFieldValue(source, VISIBLE_FIELD_TEAM_NAME));
+        normalized.put(VISIBLE_FIELD_INTRO, visibleFieldValue(source, VISIBLE_FIELD_INTRO));
+        return normalized;
+    }
+
+    /**
+     * 获取单个展示字段开关，缺失时默认展示。
+     *
+     * @param source 原始展示字段配置
+     * @param field 字段名
+     * @return 是否展示
+     */
+    private static boolean visibleFieldValue(Map<String, Boolean> source, String field) {
+        return source == null || !source.containsKey(field) || Boolean.TRUE.equals(source.get(field));
     }
 
     /**

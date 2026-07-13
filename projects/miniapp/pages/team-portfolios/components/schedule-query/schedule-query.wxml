@@ -1,25 +1,30 @@
-<view class="schedule-query">
+<view class="schedule-query {{editMode ? 'editor-mode' : ''}}">
   <block wx:if="{{editMode}}">
-    <input class="config-field" data-field="title" value="{{draft.title}}" bindinput="handleConfigInput" placeholder="档期标题" />
-    <textarea class="config-field description-input" data-field="description" value="{{draft.description}}" bindinput="handleConfigInput" placeholder="档期说明" />
-    <text class="section-title">档期展示方式</text>
-    <view class="mode-row">
-      <button class="mode {{draft.displayMode === 'MODAL_CALENDAR' ? 'active' : ''}}" data-mode="MODAL_CALENDAR" bindtap="selectDisplayMode">弹层日历</button>
-      <button class="mode {{draft.displayMode === 'INLINE_CALENDAR' ? 'active' : ''}}" data-mode="INLINE_CALENDAR" bindtap="selectDisplayMode">页面内日历</button>
+    <view class="editor-form">
+      <view class="editor-card">
+        <view class="editor-field"><view class="editor-label">标题</view><input class="editor-input" data-field="title" value="{{draft.title}}" bindinput="handleConfigInput" placeholder="档期标题" /></view>
+        <view class="editor-field"><view class="editor-label">说明</view><textarea class="editor-input editor-textarea" data-field="description" value="{{draft.description}}" bindinput="handleConfigInput" placeholder="档期说明" /></view>
+      </view>
+      <view class="editor-card">
+        <view class="editor-label">档期展示方式</view>
+        <view class="editor-choice-list">
+          <button class="editor-choice {{draft.displayMode === 'MODAL_CALENDAR' ? 'active' : ''}}" data-mode="MODAL_CALENDAR" bindtap="selectDisplayMode"><view class="editor-choice-radio"></view><view>弹层日历</view></button>
+          <button class="editor-choice {{draft.displayMode === 'INLINE_CALENDAR' ? 'active' : ''}}" data-mode="INLINE_CALENDAR" bindtap="selectDisplayMode"><view class="editor-choice-radio"></view><view>页面内日历</view></button>
+        </view>
+      </view>
+      <view class="editor-card">
+        <view class="editor-label">查询日期范围</view>
+        <view class="editor-choice-list compact">
+          <button class="editor-choice {{draft.queryRange.type === 'UNLIMITED' ? 'active' : ''}}" data-type="UNLIMITED" bindtap="selectRangeType"><view class="editor-choice-radio"></view><view>不限</view></button>
+          <button class="editor-choice {{draft.queryRange.type === 'FUTURE_DAYS' ? 'active' : ''}}" data-type="FUTURE_DAYS" bindtap="selectRangeType"><view class="editor-choice-radio"></view><view>未来天数</view></button>
+          <button class="editor-choice {{draft.queryRange.type === 'DATE_RANGE' ? 'active' : ''}}" data-type="DATE_RANGE" bindtap="selectRangeType"><view class="editor-choice-radio"></view><view>固定日期</view></button>
+        </view>
+        <view wx:if="{{draft.queryRange.type === 'FUTURE_DAYS'}}" class="editor-subfield"><view class="editor-label">可查询未来天数</view><input class="editor-input" type="number" value="{{draft.queryRange.futureDays}}" bindinput="changeFutureDays" /></view>
+        <view wx:if="{{draft.queryRange.type === 'DATE_RANGE'}}" class="editor-date-range"><picker mode="date" value="{{draft.queryRange.startDate}}" bindchange="changeRangeDate" data-field="startDate"><view class="editor-date-field">{{draft.queryRange.startDate || '开始日期'}}</view></picker><picker mode="date" value="{{draft.queryRange.endDate}}" bindchange="changeRangeDate" data-field="endDate"><view class="editor-date-field">{{draft.queryRange.endDate || '结束日期'}}</view></picker></view>
+      </view>
+      <view wx:if="{{errorMessage}}" class="editor-error">{{errorMessage}}</view>
     </view>
-    <text class="section-title range-title">查询日期范围</text>
-    <view class="range-row">
-      <button class="range {{draft.queryRange.type === 'UNLIMITED' ? 'active' : ''}}" data-type="UNLIMITED" bindtap="selectRangeType">不限</button>
-      <button class="range {{draft.queryRange.type === 'FUTURE_DAYS' ? 'active' : ''}}" data-type="FUTURE_DAYS" bindtap="selectRangeType">未来天数</button>
-      <button class="range {{draft.queryRange.type === 'DATE_RANGE' ? 'active' : ''}}" data-type="DATE_RANGE" bindtap="selectRangeType">固定日期</button>
-    </view>
-    <label wx:if="{{draft.queryRange.type === 'FUTURE_DAYS'}}" class="future-days">未来天数<input type="number" value="{{draft.queryRange.futureDays}}" bindinput="changeFutureDays" /></label>
-    <view wx:if="{{draft.queryRange.type === 'DATE_RANGE'}}" class="date-range">
-      <picker mode="date" value="{{draft.queryRange.startDate}}" bindchange="changeRangeDate" data-field="startDate"><view class="date-field">{{draft.queryRange.startDate || '开始日期'}}</view></picker>
-      <picker mode="date" value="{{draft.queryRange.endDate}}" bindchange="changeRangeDate" data-field="endDate"><view class="date-field">{{draft.queryRange.endDate || '结束日期'}}</view></picker>
-    </view>
-    <text wx:if="{{errorMessage}}" class="error">{{errorMessage}}</text>
-    <view class="actions"><button bindtap="cancelEdit">取消</button><button class="primary" bindtap="saveEdit">确认</button></view>
+    <view class="editor-actions"><button class="editor-cancel" bindtap="cancelEdit">取消</button><button class="editor-confirm" bindtap="saveEdit">完成</button></view>
   </block>
   <block wx:else>
     <text wx:if="{{config.title}}" class="title">{{config.title}}</text>

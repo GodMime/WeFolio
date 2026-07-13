@@ -1,11 +1,27 @@
-<view class="carousel">
+<wxs module="selection" src="../editor-selection.wxs"></wxs>
+
+<view class="carousel {{editMode ? 'editor-mode' : ''}}">
   <block wx:if="{{editMode}}">
-    <scroll-view class="member-strip" scroll-x><button wx:for="{{members}}" wx:key="memberUserId" class="member {{selectedMemberId === item.memberUserId ? 'active' : ''}}" data-id="{{item.memberUserId}}" bindtap="selectMember">{{item.displayName}}</button></scroll-view>
-    <view wx:if="{{selectedMemberId}}" class="work-grid"><button wx:for="{{works}}" wx:key="workId" class="work-option" data-item="{{item}}" bindtap="toggleWork"><image src="{{item.coverUrl || item.mediaUrl}}" mode="aspectFill" /><text>{{item.title}}</text></button></view>
-    <text wx:else class="empty">请先选择团队成员</text>
-    <text wx:if="{{selectedMemberId && !works.length}}" class="empty">该成员暂无审核通过的图片作品</text>
-    <text wx:if="{{errorMessage}}" class="error">{{errorMessage}}</text>
-    <view class="actions"><button bindtap="cancelEdit">取消</button><button class="primary" bindtap="saveEdit">确认</button></view>
+    <view class="editor-form">
+      <view class="editor-field">
+        <view class="editor-field-heading"><view class="editor-label">选择团队成员</view><view class="editor-limit">已选 {{draftItems.length}} / 9</view></view>
+        <scroll-view class="editor-member-scroll" scroll-x type="list"><view class="editor-member-row"><button wx:for="{{members}}" wx:key="memberUserId" class="editor-member-choice {{selectedMemberId === item.memberUserId ? 'active' : ''}}" data-id="{{item.memberUserId}}" bindtap="selectMember">{{item.displayName}}</button></view></scroll-view>
+      </view>
+      <view class="editor-field editor-content-field">
+        <view class="editor-label">图片作品</view>
+        <view wx:if="{{selectedMemberId && works.length}}" class="editor-option-grid">
+          <button wx:for="{{works}}" wx:key="workId" class="editor-option {{selection.order(draftItems, 'workId', item.workId) ? 'selected' : ''}}" data-item="{{item}}" bindtap="toggleWork">
+            <image src="{{item.coverUrl || item.mediaUrl}}" mode="aspectFill" />
+            <view class="editor-option-copy"><text class="editor-option-title">{{item.title}}</text></view>
+            <view class="editor-option-order">{{selection.order(draftItems, 'workId', item.workId) || ''}}</view>
+          </button>
+        </view>
+        <view wx:elif="{{selectedMemberId}}" class="editor-empty">该成员暂无审核通过的图片作品</view>
+        <view wx:else class="editor-empty">请先选择团队成员</view>
+      </view>
+      <view wx:if="{{errorMessage}}" class="editor-error">{{errorMessage}}</view>
+    </view>
+    <view class="editor-actions"><button class="editor-cancel" bindtap="cancelEdit">取消</button><button class="editor-confirm" bindtap="saveEdit">完成</button></view>
   </block>
   <block wx:else>
     <swiper wx:if="{{items.length}}" class="swiper" style="aspect-ratio: {{frameAspectRatio}};" current="{{current}}" interval="{{interval}}" autoplay="{{autoplay}}" circular="{{circular}}" bindchange="handleChange">

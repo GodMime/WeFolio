@@ -40,11 +40,17 @@ public class TeamPortfolioAssetService {
     /** 二维码联系素材类型。 */
     private static final String ASSET_TYPE_QR_CONTACT = "QR_CONTACT";
 
+    /** 团队资料头像素材类型。 */
+    private static final String ASSET_TYPE_TEAM_PROFILE_AVATAR = "TEAM_PROFILE_AVATAR";
+
     /** 封面文件名前缀。 */
     private static final String COVER_FILE_PREFIX = "cover";
 
     /** 二维码联系文件名前缀。 */
     private static final String QR_CONTACT_FILE_PREFIX = "qr-contact";
+
+    /** 团队资料头像文件名前缀。 */
+    private static final String TEAM_PROFILE_AVATAR_FILE_PREFIX = "team-profile-avatar";
 
     /** 素材文件名时间格式。 */
     private static final DateTimeFormatter ASSET_FILE_TIME_FORMATTER =
@@ -94,7 +100,7 @@ public class TeamPortfolioAssetService {
 
     /** 素材文件名表达式。 */
     private static final String ASSET_FILE_PATTERN =
-            "(?:cover|qr-contact)-%d-[0-9]{14}-[0-9a-f]{8}\\.(?:jpg|png)";
+            "(?:cover|qr-contact|team-profile-avatar)-%d-[0-9]{14}-[0-9a-f]{8}\\.(?:jpg|png)";
 
     /** 团队作品集访问控制服务。 */
     private final TeamPortfolioAccessService accessService;
@@ -242,7 +248,8 @@ public class TeamPortfolioAssetService {
         String assetType = request == null || request.getAssetType() == null
                 ? "" : request.getAssetType().strip().toUpperCase(Locale.ROOT);
         if (ASSET_TYPE_COVER.equals(assetType)
-                || ASSET_TYPE_QR_CONTACT.equals(assetType)) {
+                || ASSET_TYPE_QR_CONTACT.equals(assetType)
+                || ASSET_TYPE_TEAM_PROFILE_AVATAR.equals(assetType)) {
             return assetType;
         }
         throw new BusinessException(ASSET_TYPE_UNSUPPORTED_MESSAGE);
@@ -281,8 +288,11 @@ public class TeamPortfolioAssetService {
     ) {
         String extension = MIME_IMAGE_PNG.equals(contentType) ? EXTENSION_PNG : EXTENSION_JPG;
         String random = UUID.randomUUID().toString().replace("-", "").substring(0, ASSET_RANDOM_LENGTH);
-        String filePrefix = ASSET_TYPE_QR_CONTACT.equals(assetType)
-                ? QR_CONTACT_FILE_PREFIX : COVER_FILE_PREFIX;
+        String filePrefix = switch (assetType) {
+            case ASSET_TYPE_QR_CONTACT -> QR_CONTACT_FILE_PREFIX;
+            case ASSET_TYPE_TEAM_PROFILE_AVATAR -> TEAM_PROFILE_AVATAR_FILE_PREFIX;
+            default -> COVER_FILE_PREFIX;
+        };
         return teamUniqueCode + "/" + PORTFOLIO_ASSET_FOLDER
                 + "/" + filePrefix
                 + "-" + portfolioId

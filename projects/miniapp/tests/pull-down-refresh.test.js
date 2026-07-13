@@ -106,7 +106,7 @@ test('works and portfolio list scroll containers bind refresher refresh', () => 
   const worksWxml = readText('pages/works/works.wxml')
   const workListScroll = worksWxml.match(/<scroll-view[\s\S]*?class="work-list-scroll"[\s\S]*?>/)[0]
   const portfoliosWxml = readText('pages/portfolios/portfolios.wxml')
-  const portfolioScrolls = Array.from(portfoliosWxml.matchAll(/<scroll-view[\s\S]*?class="portfolio-switch-panel portfolio-scroll"[\s\S]*?>/g), (match) => match[0])
+  const portfolioScrolls = Array.from(portfoliosWxml.matchAll(/<scroll-view[\s\S]*?class="portfolio-list-scroll (?:personal|team)-portfolio-list-scroll"[\s\S]*?>/g), (match) => match[0])
 
   assert.equal(portfolioScrolls.length, 2)
   ;[workListScroll, portfolioScrolls[0]].forEach((scrollView) => {

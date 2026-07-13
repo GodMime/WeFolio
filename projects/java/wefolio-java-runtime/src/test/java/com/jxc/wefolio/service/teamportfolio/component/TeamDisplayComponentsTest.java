@@ -8,6 +8,7 @@ import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioConfigDto;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.TeamEntityMapper;
 import com.jxc.wefolio.service.teamportfolio.TeamPortfolioComponentContext;
+import com.jxc.wefolio.service.teamportfolio.TeamPortfolioAssetService;
 import com.jxc.wefolio.service.teamportfolio.component.divider.TeamDividerComponentConfig;
 import com.jxc.wefolio.service.teamportfolio.component.divider.TeamDividerComponentReferenceExtractor;
 import com.jxc.wefolio.service.teamportfolio.component.divider.TeamDividerComponentRenderer;
@@ -70,18 +71,23 @@ class TeamDisplayComponentsTest {
     @Mock
     private TeamEntityMapper teamEntityMapper;
 
+    /** 团队作品集素材服务。 */
+    @Mock
+    private TeamPortfolioAssetService teamPortfolioAssetService;
+
     /**
-     * 团队资料应以当前团队记录覆盖客户端快照，并构建精确引用。
+     * 团队资料应校验当前团队后保留作品集私有快照，并构建精确引用。
      */
     @Test
-    void teamProfileShouldReplaceClientSnapshotAndExtractExactReference() {
+    void teamProfileShouldPreservePortfolioSnapshotAndExtractExactReference() {
         TeamEntity team = activeTeam(11L, "当前头像", "当前团队", "当前简介");
         when(teamEntityMapper.selectById(11L)).thenReturn(team);
         TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 21L, 3);
         JSONObject input = JSON.parseObject("""
-                {"team":{"teamId":11,"avatarUrl":"伪造头像","teamName":"伪造名称","intro":"伪造简介"}}
+                {"team":{"teamId":11,"avatarUrl":"作品集头像","teamName":"作品集团队","intro":"作品集简介"}}
                 """);
-        TeamProfileComponentValidator validator = new TeamProfileComponentValidator(teamEntityMapper);
+        TeamProfileComponentValidator validator = new TeamProfileComponentValidator(
+                teamEntityMapper, teamPortfolioAssetService);
 
         JSONObject normalized = validator.normalizeAndValidate(input, context);
         JSONObject rendered = new TeamProfileComponentRenderer().render(normalized, context);
@@ -89,19 +95,27 @@ class TeamDisplayComponentsTest {
                 .extract(COMPONENT_KEY, COMPONENT_PATH, normalized, context);
 
         assertThat(normalized.getJSONObject("team"))
-                .containsEntry("avatarUrl", "当前头像")
-                .containsEntry("teamName", "当前团队")
-                .containsEntry("intro", "当前简介");
+                .containsEntry("avatarUrl", "作品集头像")
+                .containsEntry("teamName", "作品集团队")
+                .containsEntry("intro", "作品集简介");
         assertThat(normalized.getJSONObject("team").keySet())
                 .containsExactlyInAnyOrder("teamId", "avatarUrl", "teamName", "intro");
         assertThat(normalized.getJSONObject("team").getLong("teamId")).isEqualTo(11L);
+        assertThat(normalized.getJSONObject("visibleFields"))
+                .containsEntry("avatar", true)
+                .containsEntry("teamName", true)
+                .containsEntry("intro", true);
         assertThat(rendered).isNotSameAs(normalized);
         assertThat(rendered.getJSONObject("team").keySet())
                 .containsExactlyInAnyOrder("teamId", "avatarUrl", "teamName", "intro");
         assertThat(rendered.getJSONObject("team").getLong("teamId")).isEqualTo(11L);
-        assertThat(rendered.getJSONObject("team").getString("avatarUrl")).isEqualTo("当前头像");
-        assertThat(rendered.getJSONObject("team").getString("teamName")).isEqualTo("当前团队");
-        assertThat(rendered.getJSONObject("team").getString("intro")).isEqualTo("当前简介");
+        assertThat(rendered.getJSONObject("team").getString("avatarUrl")).isEqualTo("作品集头像");
+        assertThat(rendered.getJSONObject("team").getString("teamName")).isEqualTo("作品集团队");
+        assertThat(rendered.getJSONObject("team").getString("intro")).isEqualTo("作品集简介");
+        assertThat(rendered.getJSONObject("visibleFields"))
+                .containsEntry("avatar", true)
+                .containsEntry("teamName", true)
+                .containsEntry("intro", true);
         assertThat(references).hasSize(1);
         PortfolioReferenceEntity reference = references.getFirst();
         assertThat(reference.getPortfolioId()).isEqualTo(21L);
@@ -123,6 +137,66 @@ class TeamDisplayComponentsTest {
         assertThat(referenceSnapshot.getString("intro"))
                 .isEqualTo(normalized.getJSONObject("team").getString("intro"));
         verify(teamEntityMapper, times(1)).selectById(11L);
+    }
+
+    /**
+     * 团队资料作品集快照应裁剪文本并拒绝空名称或超长字段。
+     */
+    @Test
+    void teamProfileShouldNormalizeAndValidatePortfolioSnapshotFields() {
+        TeamEntity team = activeTeam(11L, "当前头像", "当前团队", "当前简介");
+        when(teamEntityMapper.selectById(11L)).thenReturn(team);
+        TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 21L, 3);
+        TeamProfileComponentValidator validator = new TeamProfileComponentValidator(
+                teamEntityMapper, teamPortfolioAssetService);
+
+        JSONObject normalized = validator.normalizeAndValidate(JSON.parseObject("""
+                {"team":{"teamId":11,"avatarUrl":"","teamName":"  作品集团队  ","intro":"  作品集简介  "}}
+                """), context);
+        assertThat(normalized.getJSONObject("team"))
+                .containsEntry("avatarUrl", "")
+                .containsEntry("teamName", "作品集团队")
+                .containsEntry("intro", "作品集简介");
+
+        assertThatThrownBy(() -> validator.normalizeAndValidate(
+                JSON.parseObject("{\"team\":{\"teamId\":11,\"teamName\":\"   \"}}"), context))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("请填写团队名称");
+        assertThatThrownBy(() -> validator.normalizeAndValidate(
+                JSON.parseObject("{\"team\":{\"teamId\":11,\"teamName\":\"%s\"}}"
+                        .formatted("名".repeat(101))), context))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("团队名称不能超过100字");
+        assertThatThrownBy(() -> validator.normalizeAndValidate(
+                JSON.parseObject("{\"team\":{\"teamId\":11,\"teamName\":\"团队\",\"intro\":\"%s\"}}"
+                        .formatted("介".repeat(1001))), context))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("团队简介不能超过1000字");
+    }
+
+    /**
+     * 团队当前头像可直接复用，自定义头像必须通过当前作品集素材校验。
+     */
+    @Test
+    void teamProfileShouldValidateOnlyCustomPortfolioAvatar() {
+        TeamEntity team = activeTeam(11L, "https://cdn.example.com/current-team.png", "当前团队", "当前简介");
+        when(teamEntityMapper.selectById(11L)).thenReturn(team);
+        TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 21L, 3);
+        TeamProfileComponentValidator validator = new TeamProfileComponentValidator(
+                teamEntityMapper, teamPortfolioAssetService);
+
+        validator.normalizeAndValidate(JSON.parseObject("""
+                {"team":{"teamId":11,"avatarUrl":"https://cdn.example.com/current-team.png","teamName":"作品集团队"}}
+                """), context);
+        validator.normalizeAndValidate(JSON.parseObject("""
+                {"team":{"teamId":11,"avatarUrl":"","teamName":"作品集团队"}}
+                """), context);
+        validator.normalizeAndValidate(JSON.parseObject("""
+                {"team":{"teamId":11,"avatarUrl":"https://cdn.example.com/custom-portfolio.png","teamName":"作品集团队"}}
+                """), context);
+
+        verify(teamPortfolioAssetService, times(1)).validateUploadedImageUrl(
+                11L, 21L, "https://cdn.example.com/custom-portfolio.png");
     }
 
     /**
@@ -149,7 +223,8 @@ class TeamDisplayComponentsTest {
         TeamEntity team = activeTeam(11L, "当前头像", "当前团队", "当前简介");
         when(teamEntityMapper.selectById(11L)).thenReturn(team);
         TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 21L, 3);
-        TeamProfileComponentValidator validator = new TeamProfileComponentValidator(teamEntityMapper);
+        TeamProfileComponentValidator validator = new TeamProfileComponentValidator(
+                teamEntityMapper, teamPortfolioAssetService);
         List<JSONObject> inputs = List.of(
                 JSON.parseObject("{\"team\":{}}"),
                 JSON.parseObject("{\"team\":{\"avatarUrl\":\"伪造头像\",\"teamName\":\"伪造名称\",\"intro\":\"伪造简介\"}}"),
@@ -175,7 +250,8 @@ class TeamDisplayComponentsTest {
      */
     @Test
     void teamProfileShouldRejectMalformedClientTeamSnapshot() {
-        TeamProfileComponentValidator validator = new TeamProfileComponentValidator(teamEntityMapper);
+        TeamProfileComponentValidator validator = new TeamProfileComponentValidator(
+                teamEntityMapper, teamPortfolioAssetService);
         TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 21L, 3);
         List<JSONObject> malformedInputs = List.of(
                 JSON.parseObject("{\"team\":\"invalid\"}"),
@@ -198,7 +274,8 @@ class TeamDisplayComponentsTest {
      */
     @Test
     void teamProfileShouldRejectLossyOrOutOfRangeTeamIdBeforeBeanConversion() {
-        TeamProfileComponentValidator validator = new TeamProfileComponentValidator(teamEntityMapper);
+        TeamProfileComponentValidator validator = new TeamProfileComponentValidator(
+                teamEntityMapper, teamPortfolioAssetService);
         TeamProfileComponentRenderer renderer = new TeamProfileComponentRenderer();
         TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 21L, 3);
         List<Object> invalidTeamIds = List.of(
@@ -228,7 +305,8 @@ class TeamDisplayComponentsTest {
      */
     @Test
     void teamProfileShouldRejectMismatchedTeamIdBeforeLoadingTeam() {
-        TeamProfileComponentValidator validator = new TeamProfileComponentValidator(teamEntityMapper);
+        TeamProfileComponentValidator validator = new TeamProfileComponentValidator(
+                teamEntityMapper, teamPortfolioAssetService);
         JSONObject input = JSON.parseObject("{\"team\":{\"teamId\":12}}");
 
         assertThatThrownBy(() -> validator.normalizeAndValidate(
@@ -244,7 +322,8 @@ class TeamDisplayComponentsTest {
      */
     @Test
     void teamProfileShouldRejectMissingOrInactiveTeam() {
-        TeamProfileComponentValidator validator = new TeamProfileComponentValidator(teamEntityMapper);
+        TeamProfileComponentValidator validator = new TeamProfileComponentValidator(
+                teamEntityMapper, teamPortfolioAssetService);
         TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 21L, 3);
         when(teamEntityMapper.selectById(11L)).thenReturn(null);
 
@@ -275,6 +354,52 @@ class TeamDisplayComponentsTest {
     }
 
     /**
+     * 团队资料展示开关应保留到配置，并在预览和访客共用的渲染结果中清空隐藏字段。
+     */
+    @Test
+    void teamProfileShouldApplyVisibleFieldsToRenderedSnapshot() {
+        TeamEntity team = activeTeam(11L, "当前头像", "当前团队", "当前简介");
+        when(teamEntityMapper.selectById(11L)).thenReturn(team);
+        TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 21L, 3);
+        JSONObject normalized = new TeamProfileComponentValidator(
+                teamEntityMapper, teamPortfolioAssetService)
+                .normalizeAndValidate(JSON.parseObject("""
+                        {
+                          "team": {
+                            "teamId": 11,
+                            "avatarUrl": "当前头像",
+                            "teamName": "作品集团队",
+                            "intro": "作品集简介"
+                          },
+                          "visibleFields": {
+                            "avatar": false,
+                            "teamName": true,
+                            "intro": false
+                          }
+                        }
+                        """), context);
+
+        JSONObject rendered = new TeamProfileComponentRenderer().render(normalized, context);
+
+        assertThat(normalized.getJSONObject("visibleFields"))
+                .containsEntry("avatar", false)
+                .containsEntry("teamName", true)
+                .containsEntry("intro", false);
+        assertThat(normalized.getJSONObject("team"))
+                .containsEntry("avatarUrl", "当前头像")
+                .containsEntry("teamName", "作品集团队")
+                .containsEntry("intro", "作品集简介");
+        assertThat(rendered.getJSONObject("visibleFields"))
+                .containsEntry("avatar", false)
+                .containsEntry("teamName", true)
+                .containsEntry("intro", false);
+        assertThat(rendered.getJSONObject("team"))
+                .containsEntry("avatarUrl", "")
+                .containsEntry("teamName", "作品集团队")
+                .containsEntry("intro", "");
+    }
+
+    /**
      * 团队快照中的空头像和简介必须作为显式 null 保留到渲染和引用快照。
      */
     @Test
@@ -283,7 +408,8 @@ class TeamDisplayComponentsTest {
         when(teamEntityMapper.selectById(11L)).thenReturn(team);
         TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 21L, 3);
 
-        JSONObject normalized = new TeamProfileComponentValidator(teamEntityMapper)
+        JSONObject normalized = new TeamProfileComponentValidator(
+                teamEntityMapper, teamPortfolioAssetService)
                 .normalizeAndValidate(new JSONObject(), context);
         JSONObject rendered = new TeamProfileComponentRenderer().render(normalized, context);
         PortfolioReferenceEntity reference = new TeamProfileComponentReferenceExtractor()
@@ -403,7 +529,7 @@ class TeamDisplayComponentsTest {
      */
     @Test
     void configModelsShouldExposeOnlyComponentContractFields() {
-        assertFields(TeamProfileComponentConfig.class, "team");
+        assertFields(TeamProfileComponentConfig.class, "team", "visibleFields");
         assertFields(TeamProfileComponentConfig.TeamSnapshot.class, "teamId", "avatarUrl", "teamName", "intro");
         assertFields(TeamDividerComponentConfig.class, "color", "heightPx");
         assertFields(TeamTextSectionComponentConfig.class, "content", "alignment");

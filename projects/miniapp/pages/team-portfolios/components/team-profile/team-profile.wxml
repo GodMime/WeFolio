@@ -1,15 +1,46 @@
-<view class="team-profile">
+<view class="team-profile {{editMode ? 'editor-mode' : ''}}">
   <block wx:if="{{editMode}}">
-    <image wx:if="{{draft.team.avatarUrl}}" class="avatar" src="{{draft.team.avatarUrl}}" mode="aspectFill" />
-    <text class="name">{{draft.team.teamName}}</text>
-    <text wx:if="{{draft.team.intro}}" class="intro">{{draft.team.intro}}</text>
-    <button class="maintain-button" bindtap="openTeamMaintenance">团队资料维护</button>
-    <text wx:if="{{errorMessage}}" class="error">{{errorMessage}}</text>
-    <view class="actions"><button bindtap="cancelEdit">取消</button><button class="primary" bindtap="saveEdit">确认</button></view>
+    <view class="editor-form">
+      <view class="editor-profile-card">
+        <view class="editor-avatar-wrap" bindtap="chooseAvatar">
+          <image wx:if="{{draft.team.avatarUrl}}" class="editor-avatar" src="{{draft.team.avatarUrl}}" mode="aspectFill" />
+          <view wx:else class="editor-avatar editor-avatar-empty">团队</view>
+        </view>
+        <view class="editor-profile-copy">
+          <text class="editor-profile-name">团队头像</text>
+          <text class="editor-profile-intro">仅用于当前作品集展示</text>
+        </view>
+        <button class="editor-assist" bindtap="chooseAvatar">更换头像</button>
+      </view>
+      <view class="editor-field">
+        <view class="editor-field-heading"><text>团队名称</text><text class="editor-counter">{{teamNameCounter}}</text></view>
+        <input class="editor-input" value="{{draft.team.teamName}}" maxlength="100" data-field="teamName" bindinput="handleInput" />
+      </view>
+      <view class="editor-field">
+        <view class="editor-field-heading"><text>团队简介</text><text class="editor-counter">{{introCounter}}</text></view>
+        <textarea class="editor-textarea" value="{{draft.team.intro}}" maxlength="1000" data-field="intro" bindinput="handleInput"></textarea>
+      </view>
+      <view class="editor-visibility-section">
+        <view class="editor-visibility-title">展示字段</view>
+        <view class="editor-visibility-list">
+          <view wx:for="{{visibleFieldOptions}}" wx:key="field" class="editor-visibility-option">
+            <text class="editor-visibility-label">{{item.label}}</text>
+            <switch checked="{{item.checked}}" color="#17202a" data-field="{{item.field}}" bindchange="handleVisibleFieldChange" />
+          </view>
+        </view>
+      </view>
+      <view class="editor-tip">初始内容来自团队资料，修改只保存在当前作品集内。</view>
+      <button class="editor-refresh" loading="{{refreshing}}" disabled="{{refreshing}}" bindtap="refreshFromTeam">从团队资料刷新</button>
+      <view wx:if="{{errorMessage}}" class="editor-error">{{errorMessage}}</view>
+    </view>
+    <view class="editor-actions">
+      <button class="editor-cancel" bindtap="cancelEdit">取消</button>
+      <button class="editor-confirm" bindtap="saveEdit">完成</button>
+    </view>
   </block>
   <block wx:else>
-    <image wx:if="{{team.avatarUrl}}" class="avatar" src="{{team.avatarUrl}}" mode="aspectFill" />
-    <text wx:if="{{team.teamName}}" class="name">{{team.teamName}}</text>
-    <text wx:if="{{team.intro}}" class="intro">{{team.intro}}</text>
+    <image wx:if="{{draft.visibleFields.avatar && draft.team.avatarUrl}}" class="avatar" src="{{draft.team.avatarUrl}}" mode="aspectFill" />
+    <text wx:if="{{draft.visibleFields.teamName && draft.team.teamName}}" class="name">{{draft.team.teamName}}</text>
+    <text wx:if="{{draft.visibleFields.intro && draft.team.intro}}" class="intro">{{draft.team.intro}}</text>
   </block>
 </view>

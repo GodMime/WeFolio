@@ -1,12 +1,19 @@
-<view class="list-component">
+<wxs module="selection" src="../editor-selection.wxs"></wxs>
+
+<view class="list-component {{editMode ? 'editor-mode' : ''}}">
   <block wx:if="{{editMode}}">
-    <scroll-view class="member-strip" scroll-x><button wx:for="{{members}}" wx:key="memberUserId" class="member {{selectedMemberId === item.memberUserId ? 'active' : ''}}" data-id="{{item.memberUserId}}" bindtap="selectMember">{{item.displayName}}</button></scroll-view>
-    <text wx:if="{{!sourceAvailable}}" class="empty">成员授权已关闭，原引用已移除</text>
-    <view wx:elif="{{selectedMemberId && portfolios.length}}" class="portfolio-options"><button wx:for="{{portfolios}}" wx:key="portfolioId" class="option" data-item="{{item}}" bindtap="togglePortfolio"><image src="{{item.coverUrl}}" mode="aspectFill" /><view><text class="title">{{item.title}}</text><text class="description">已发布版本 {{item.publishedRevision}}</text></view></button></view>
-    <text wx:elif="{{selectedMemberId}}" class="empty">该成员暂无已发布个人作品集</text>
-    <text wx:else class="empty">请先选择团队成员</text>
-    <text wx:if="{{errorMessage}}" class="error">{{errorMessage}}</text>
-    <view class="actions"><button bindtap="cancelEdit">取消</button><button class="primary" bindtap="saveEdit">确认</button></view>
+    <view class="editor-form">
+      <view class="editor-field"><view class="editor-label">选择团队成员</view><scroll-view class="editor-member-scroll" scroll-x type="list"><view class="editor-member-row"><button wx:for="{{members}}" wx:key="memberUserId" class="editor-member-choice {{selectedMemberId === item.memberUserId ? 'active' : ''}}" data-id="{{item.memberUserId}}" bindtap="selectMember">{{item.displayName}}</button></view></scroll-view></view>
+      <view class="editor-field editor-content-field">
+        <view class="editor-field-heading"><view class="editor-label">已发布个人作品集</view><view class="editor-limit">已选 {{draftItems.length}}</view></view>
+        <view wx:if="{{!sourceAvailable}}" class="editor-empty">成员授权已关闭，原引用已移除</view>
+        <view wx:elif="{{selectedMemberId && portfolios.length}}" class="editor-option-list"><button wx:for="{{portfolios}}" wx:key="portfolioId" class="editor-option {{selection.order(draftItems, 'portfolioId', item.portfolioId) ? 'selected' : ''}}" data-item="{{item}}" bindtap="togglePortfolio"><image src="{{item.coverUrl}}" mode="aspectFill" /><view class="editor-option-copy"><text class="editor-option-title">{{item.title}}</text><text class="editor-option-meta">已发布版本 {{item.publishedRevision}}</text></view><view class="editor-option-order">{{selection.order(draftItems, 'portfolioId', item.portfolioId) || ''}}</view></button></view>
+        <view wx:elif="{{selectedMemberId}}" class="editor-empty">该成员暂无已发布个人作品集</view>
+        <view wx:else class="editor-empty">请先选择团队成员</view>
+      </view>
+      <view wx:if="{{errorMessage}}" class="editor-error">{{errorMessage}}</view>
+    </view>
+    <view class="editor-actions"><button class="editor-cancel" bindtap="cancelEdit">取消</button><button class="editor-confirm" bindtap="saveEdit">完成</button></view>
   </block>
   <view wx:else class="portfolio-list"><button wx:for="{{items}}" wx:key="portfolioId" class="portfolio-row" data-id="{{item.portfolioId}}" data-share-code="{{item.shareCode}}" bindtap="previewPortfolio"><image src="{{item.coverUrl}}" mode="aspectFill" /><view class="meta"><text class="title">{{item.title}}</text><text class="description">{{item.description}}</text><text class="member-name">{{item.memberDisplayName}}</text></view></button></view>
 </view>

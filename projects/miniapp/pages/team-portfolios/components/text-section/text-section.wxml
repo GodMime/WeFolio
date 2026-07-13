@@ -1,10 +1,17 @@
-<view class="text-section align-{{editMode ? draft.alignment : config.alignment || 'LEFT'}}">
+<view class="text-section {{editMode ? 'editor-mode' : ''}} align-{{editMode ? draft.alignment : config.alignment || 'LEFT'}}">
   <block wx:if="{{editMode}}">
-    <textarea class="field content-input" data-field="content" value="{{draft.content}}" maxlength="200" bindinput="handleInput" placeholder="正文" />
-    <text class="count">{{count}} / 200</text>
-    <view class="alignment-row"><button wx:for="{{alignments}}" wx:key="*this" class="alignment {{draft.alignment === item ? 'active' : ''}}" data-alignment="{{item}}" bindtap="selectAlignment">{{item}}</button></view>
-    <text wx:if="{{errorMessage}}" class="error">{{errorMessage}}</text>
-    <view class="actions"><button bindtap="cancelEdit">取消</button><button class="primary" bindtap="saveEdit">确认</button></view>
+    <view class="editor-form">
+      <view class="editor-field">
+        <view class="editor-field-heading"><view class="editor-label">说明</view><view class="editor-limit">{{count}} / 200</view></view>
+        <textarea class="editor-input editor-textarea" data-field="content" value="{{draft.content}}" maxlength="200" bindinput="handleInput" placeholder="请输入给访客看的说明文字" />
+      </view>
+      <view class="editor-field">
+        <view class="editor-label">对齐方式</view>
+        <view class="editor-choice-list"><button wx:for="{{alignments}}" wx:key="*this" class="editor-choice {{draft.alignment === item ? 'active' : ''}}" data-alignment="{{item}}" bindtap="selectAlignment"><view class="editor-choice-radio"></view><view>{{item === 'LEFT' ? '左对齐' : item === 'CENTER' ? '居中' : '右对齐'}}</view></button></view>
+      </view>
+      <view wx:if="{{errorMessage}}" class="editor-error">{{errorMessage}}</view>
+    </view>
+    <view class="editor-actions"><button class="editor-cancel" bindtap="cancelEdit">取消</button><button class="editor-confirm" bindtap="saveEdit">完成</button></view>
   </block>
   <block wx:else><text class="content">{{config.content}}</text></block>
 </view>

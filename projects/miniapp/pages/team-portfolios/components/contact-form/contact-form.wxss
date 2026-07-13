@@ -1,5 +1,24 @@
 :host { display: block; }
 .contact-form { padding: 24rpx; color: #17202a; overflow-wrap: anywhere; }
+.contact-form.editor-mode { padding: 0; }
+.editor-form { display: flex; flex-direction: column; gap: 20rpx; padding: 4rpx 0 8rpx; }
+.editor-card { display: flex; flex-direction: column; gap: 20rpx; padding: 22rpx; border: 1rpx solid rgba(23, 32, 42, .06); border-radius: 16rpx; background: rgba(255, 255, 255, .94); box-sizing: border-box; }
+.editor-field { width: 100%; }
+.editor-label { color: #5f6b7a; font-size: 24rpx; font-weight: 800; }
+.editor-input { width: 100%; min-height: 84rpx; margin-top: 12rpx; padding: 0 22rpx; color: #17202a; font-size: 28rpx; line-height: 84rpx; border-radius: 16rpx; background: #f6f8fb; box-sizing: border-box; }
+.editor-textarea { height: 160rpx; padding-top: 20rpx; padding-bottom: 20rpx; line-height: 1.55; }
+.editor-choice-list { display: flex; flex-direction: column; gap: 12rpx; margin-top: 16rpx; }
+.editor-choice { width: 100%; min-height: 88rpx; display: flex; align-items: center; gap: 16rpx; margin: 0; padding: 0 20rpx; color: #17202a; font-size: 28rpx; font-weight: 800; text-align: left; border: 1rpx solid #e1e8ef; border-radius: 14rpx; background: #f8fafc; box-sizing: border-box; }
+.editor-choice.active { border-color: #2d5f9a; background: #edf5fb; }
+.editor-choice-radio, .editor-choice-check { width: 28rpx; height: 28rpx; flex: none; border: 3rpx solid #b6c4d2; border-radius: 50%; background: #fff; box-sizing: border-box; }
+.editor-choice.active .editor-choice-radio { border-color: #2d5f9a; background: #2d5f9a; box-shadow: inset 0 0 0 7rpx #edf5fb; }
+.editor-choice-check { display: flex; align-items: center; justify-content: center; color: #fff; font-size: 19rpx; border-radius: 8rpx; }
+.editor-choice.active .editor-choice-check { border-color: #2d5f9a; background: #2d5f9a; }
+.editor-error { padding: 16rpx 18rpx; color: #a9354f; font-size: 22rpx; border-radius: 14rpx; background: #fff1f2; }
+.editor-actions { display: flex; justify-content: flex-end; gap: 16rpx; margin-top: 20rpx; }
+.editor-cancel, .editor-confirm { width: 148rpx; height: 64rpx; display: flex; align-items: center; justify-content: center; margin: 0; padding: 0; font-size: 24rpx; font-weight: 900; line-height: 1; border-radius: 999rpx; box-sizing: border-box; }
+.editor-cancel { color: #536b82; border: 1rpx solid #cbd6df; background: #eef3f7; }
+.editor-confirm { color: #fff; background: #17202a; }
 .form-panel { position: relative; padding: 28rpx; border: 1rpx solid #d7dfe1; border-radius: 8px; background: #fff; }
 .title, .section-title { display: block; margin-bottom: 18rpx; font-weight: 600; }
 .description { display: block; margin-bottom: 18rpx; color: #5e6b73; line-height: 1.6; white-space: pre-wrap; }
@@ -9,13 +28,5 @@
 .submit { margin-top: 20rpx; }
 .close { position: absolute; top: 8rpx; right: 8rpx; width: 64rpx; height: 64rpx; padding: 0; background: transparent; font-size: 40rpx; }
 .close::after { border: 0; }
-.mode-row, .actions { display: flex; gap: 16rpx; }
-.field-toggles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12rpx; }
-.field-toggle { border-radius: 6px; font-size: 24rpx; }
-.field-toggle.active { background: #0f766e; color: #fff; }
-.fields-title { margin-top: 24rpx; }
-.mode, .actions button { flex: 1; border-radius: 6px; }
-.mode.active { background: #0f766e; color: #fff; }
-.actions { margin-top: 24rpx; }
 .error, .success { display: block; margin-top: 16rpx; color: #b42318; }
 .success { color: #0f766e; }
