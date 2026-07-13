@@ -234,6 +234,7 @@ public class PortfolioConfigValidator {
         if (enabledComponents.isEmpty()) {
             throw new BusinessException(PortfolioMessage.ENABLED_COMPONENT_REQUIRED_MESSAGE);
         }
+        validateProfileComponentLimit(enabledComponents);
 
         List<PortfolioConfigDto.Component> normalizedComponents = new ArrayList<>();
         Set<String> componentKeys = new LinkedHashSet<>();
@@ -258,6 +259,20 @@ public class PortfolioConfigValidator {
         normalized.setShare(copyShare(config.getShare()));
         normalized.setComponents(normalizedComponents);
         return normalized;
+    }
+
+    /**
+     * 校验个人资料组件的单例限制。
+     *
+     * @param enabledComponents 已启用组件
+     */
+    private void validateProfileComponentLimit(List<PortfolioConfigDto.Component> enabledComponents) {
+        long profileComponentCount = enabledComponents.stream()
+                .filter(component -> PortfolioComponentTypeDict.PROFILE.getCode().equals(component.getComponentType()))
+                .count();
+        if (profileComponentCount > 1) {
+            throw new BusinessException(PortfolioMessage.PROFILE_COMPONENT_LIMIT_MESSAGE);
+        }
     }
 
     /**

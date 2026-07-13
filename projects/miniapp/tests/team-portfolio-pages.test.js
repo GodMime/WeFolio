@@ -138,6 +138,23 @@ test('standard team editor independently matches the personal editor interaction
   assert.doesNotMatch(js, /portfolio-standard-edit/)
 })
 
+test('standard team portfolio picker shows disabled team profile as an auto-width added pill', () => {
+  const wxml = read('standard-edit/team-portfolio-standard-edit.wxml')
+  const wxss = read('standard-edit/team-portfolio-standard-edit.wxss')
+  const plusRule = readCssRule(wxss, '.component-option-plus')
+  const addedRule = readCssRule(wxss, '.component-option-added')
+
+  assert.match(wxml, /data-disabled="\{\{item\.disabled\}\}"/)
+  assert.match(wxml, /class="\{\{item\.disabled \? 'component-option-added' : 'component-option-plus'\}\}">\{\{item\.disabled \? '已添加' : '\+'\}\}<\/view>/)
+  assert.match(plusRule, /width:44rpx/)
+  assert.match(plusRule, /border-radius:50%/)
+  assert.match(addedRule, /width:auto/)
+  assert.match(addedRule, /min-width:104rpx/)
+  assert.match(addedRule, /padding:018rpx/)
+  assert.match(addedRule, /border-radius:999rpx/)
+  assert.match(addedRule, /white-space:nowrap/)
+})
+
 test('standard team editor uses the personal editor core visual measurements', () => {
   const teamCss = read('standard-edit/team-portfolio-standard-edit.wxss')
   const personalCss = fs.readFileSync(path.resolve(ROOT, '../portfolios/standard-edit/portfolio-standard-edit.wxss'), 'utf8')
@@ -150,7 +167,7 @@ test('standard team editor uses the personal editor core visual measurements', (
     '.component-row-arrow-icon', '.component-picker-mask', '.component-picker-panel',
     '.component-picker-grabber', '.component-picker-title', '.component-picker-count',
     '.component-option-scroll', '.component-option', '.component-option-name',
-    '.component-option-desc', '.component-option-plus', '.bottom-actions',
+    '.component-option-desc', '.component-option-plus', '.component-option-added', '.bottom-actions',
     '.action-button', '.preview-action-stack', '.preview-action-title',
     '.preview-action-note', '.primary-button', '.secondary-button', '.publish-button'
   ]

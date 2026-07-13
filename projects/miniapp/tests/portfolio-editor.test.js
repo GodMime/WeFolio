@@ -402,6 +402,58 @@ function touchEvent(dataset, point) {
   }
 }
 
+test('standard portfolio disables profile option when profile component already exists', () => {
+  const page = loadPortfolioEditorPage(() => Promise.resolve({}))
+
+  page.handleOpenComponentSheet()
+
+  const profileOption = page.data.componentOptions.find((item) => item.componentType === COMPONENT_TYPES.PROFILE)
+  assert.equal(profileOption.disabled, true)
+})
+
+test('standard portfolio keeps profile option disabled after component library loads', async () => {
+  const page = loadPortfolioEditorPage((options) => {
+    if (options.url === '/api/mine/portfolios/component-library') {
+      return Promise.resolve({
+        components: [
+          { componentType: COMPONENT_TYPES.PROFILE, name: '个人资料', description: '展示个人资料' },
+          { componentType: COMPONENT_TYPES.CAROUSEL, name: '轮播图', description: '展示图片作品' }
+        ]
+      })
+    }
+    return Promise.resolve({})
+  })
+
+  page.handleOpenComponentSheet()
+  await flushPromises()
+
+  const profileOption = page.data.componentOptions.find((item) => item.componentType === COMPONENT_TYPES.PROFILE)
+  assert.equal(profileOption.disabled, true)
+})
+
+test('standard portfolio ignores selection of disabled profile option', () => {
+  const page = loadPortfolioEditorPage(() => Promise.resolve({}))
+  const originalComponentCount = page.data.config.components.length
+
+  page.handleSelectComponent({
+    currentTarget: { dataset: { type: COMPONENT_TYPES.PROFILE, disabled: true } }
+  })
+
+  assert.equal(page.data.config.components.length, originalComponentCount)
+  assert.equal(page.data.componentSheetVisible, false)
+})
+
+test('standard portfolio enables profile option again after profile component is removed', () => {
+  const page = loadPortfolioEditorPage(() => Promise.resolve({}))
+  const profileComponent = page.data.config.components.find((item) => item.componentType === COMPONENT_TYPES.PROFILE)
+
+  page.handleRemoveComponent({ currentTarget: { dataset: { key: profileComponent.componentKey } } })
+  page.handleOpenComponentSheet()
+
+  const profileOption = page.data.componentOptions.find((item) => item.componentType === COMPONENT_TYPES.PROFILE)
+  assert.equal(profileOption.disabled, false)
+})
+
 test('standard portfolio component row reveals delete only after left swipe', () => {
   const page = loadPortfolioEditorPage(() => Promise.resolve({}))
 

@@ -935,3 +935,21 @@ test('standard personal portfolio editor keeps add button compact and delete hid
   assert.match(editWxss, /\.component-remove-button\s*\{[\s\S]*width:\s*108rpx;[\s\S]*min-width:\s*108rpx;[\s\S]*height:\s*64rpx;/)
   assert.doesNotMatch(editWxss, /\.component-actions\s*\{/)
 })
+
+test('standard personal portfolio picker shows disabled profile as an auto-width added pill', () => {
+  const editWxml = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxml')
+  const editWxss = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxss')
+  const plusRule = readRule(editWxss, '.component-option-plus')
+  const addedRule = readRule(editWxss, '.component-option-added')
+
+  assert.match(editWxml, /class="component-option \{\{item\.disabled \? 'disabled' : ''\}\}"/)
+  assert.match(editWxml, /data-disabled="\{\{item\.disabled\}\}"/)
+  assert.match(editWxml, /class="\{\{item\.disabled \? 'component-option-added' : 'component-option-plus'\}\}">\{\{item\.disabled \? '已添加' : '\+'\}\}<\/view>/)
+  assert.match(plusRule, /width:\s*44rpx/)
+  assert.match(plusRule, /border-radius:\s*50%/)
+  assert.match(addedRule, /width:\s*auto/)
+  assert.match(addedRule, /min-width:\s*104rpx/)
+  assert.match(addedRule, /padding:\s*0 18rpx/)
+  assert.match(addedRule, /border-radius:\s*999rpx/)
+  assert.match(addedRule, /white-space:\s*nowrap/)
+})

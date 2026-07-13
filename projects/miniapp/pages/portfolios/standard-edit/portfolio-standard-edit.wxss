@@ -49,6 +49,7 @@
 .component-picker-cancel,
 .component-option,
 .component-option-plus,
+.component-option-added,
 .component-work-option,
 .component-work-check,
 .component-work-actions,
@@ -517,6 +518,10 @@
   box-sizing: border-box;
 }
 
+.component-option.disabled {
+  opacity: 0.5;
+}
+
 .component-option-copy {
   min-width: 0;
   flex: 1 1 auto;
@@ -552,6 +557,24 @@
   line-height: 1;
   border-radius: 50%;
   background: #17202a;
+}
+
+.component-option-added {
+  width: auto;
+  min-width: 104rpx;
+  height: 44rpx;
+  flex: none;
+  justify-content: center;
+  margin-left: 18rpx;
+  padding: 0 18rpx;
+  color: #ffffff;
+  font-size: 22rpx;
+  font-weight: 800;
+  line-height: 1;
+  border-radius: 999rpx;
+  background: #17202a;
+  box-sizing: border-box;
+  white-space: nowrap;
 }
 
 .component-picker-actions {

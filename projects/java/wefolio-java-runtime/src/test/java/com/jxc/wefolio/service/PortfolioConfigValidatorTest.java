@@ -70,6 +70,37 @@ class PortfolioConfigValidatorTest {
         assertThat(JSON.toJSONString(normalized)).doesNotContain("\"intro\"");
     }
 
+    /**
+     * 标准个人作品集不允许同时启用多个个人资料组件。
+     */
+    @Test
+    void normalizeShouldRejectMultipleEnabledProfileComponents() {
+        PortfolioConfigDto config = config(
+                component("c_profile_1", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, true, Map.of()),
+                component("c_profile_2", PortfolioComponentTypeDict.PROFILE.getCode(), 2000, true, Map.of())
+        );
+
+        assertThatThrownBy(() -> validator().normalize(7L, config))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("个人作品集最多只能包含一个个人资料组件");
+    }
+
+    /**
+     * 禁用的个人资料组件不计入单例限制，并在归一化时被过滤。
+     */
+    @Test
+    void normalizeShouldIgnoreDisabledProfileForSingletonLimit() {
+        PortfolioConfigDto config = config(
+                component("c_profile_enabled", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, true, Map.of()),
+                component("c_profile_disabled", PortfolioComponentTypeDict.PROFILE.getCode(), 2000, false, Map.of())
+        );
+
+        PortfolioConfigDto normalized = validator().normalize(7L, config);
+
+        assertThat(normalized.getComponents()).extracting(PortfolioConfigDto.Component::getComponentKey)
+                .containsExactly("c_profile_enabled");
+    }
+
     @Test
     void carouselShouldRejectVideoWorks() {
         when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(

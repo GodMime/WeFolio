@@ -98,6 +98,9 @@ public interface PortfolioMessage {
     /** 启用组件为空提示 */
     String ENABLED_COMPONENT_REQUIRED_MESSAGE = "作品集至少需要 1 个启用组件";
 
+    /** 个人资料组件数量超限提示 */
+    String PROFILE_COMPONENT_LIMIT_MESSAGE = "个人作品集最多只能包含一个个人资料组件";
+
     /** 组件标识重复提示 */
     String COMPONENT_KEY_DUPLICATE_MESSAGE = "作品集组件标识重复，请刷新后重试";
 

@@ -113,7 +113,7 @@
               <view class="component-option-name">{{item.name}}</view>
               <view class="component-option-desc">{{item.description}}</view>
             </view>
-            <view class="component-option-plus">{{item.disabled ? '已添加' : '+'}}</view>
+            <view class="{{item.disabled ? 'component-option-added' : 'component-option-plus'}}">{{item.disabled ? '已添加' : '+'}}</view>
           </view>
         </view>
       </scroll-view>

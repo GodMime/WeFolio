@@ -148,8 +148,15 @@ function buildPublicationStatusState(publicationStatus) {
 
 const DEFAULT_PUBLICATION_STATUS_STATE = buildPublicationStatusState()
 
-function buildDefaultComponentOptions() {
-  return Object.keys(COMPONENT_TYPES).map((key) => {
+function buildComponentOptions(options = [], components = []) {
+  const profileAdded = components.some((component) => component.componentType === COMPONENT_TYPES.PROFILE)
+  return options.map((item) => Object.assign({}, item, {
+    disabled: item.componentType === COMPONENT_TYPES.PROFILE && profileAdded
+  }))
+}
+
+function buildDefaultComponentOptions(components = []) {
+  const options = Object.keys(COMPONENT_TYPES).map((key) => {
     const componentType = COMPONENT_TYPES[key]
     return {
       componentType,
@@ -157,6 +164,7 @@ function buildDefaultComponentOptions() {
       description: DEFAULT_COMPONENT_DESCRIPTIONS[componentType] || '标准个人作品集可选组件'
     }
   })
+  return buildComponentOptions(options, components)
 }
 
 function getTouchClientY(event = {}) {
@@ -1036,7 +1044,10 @@ Page({
   },
 
   handleOpenComponentSheet() {
-    this.setData({ componentSheetVisible: true })
+    this.setData({
+      componentSheetVisible: true,
+      componentOptions: buildComponentOptions(this.data.componentOptions, this.data.config.components)
+    })
     this.loadComponentOptions()
   },
 
@@ -1044,7 +1055,9 @@ Page({
     request({ url: COMPONENT_LIBRARY_API_URL })
       .then((response) => {
         if (response && Array.isArray(response.components) && response.components.length > 0) {
-          this.setData({ componentOptions: response.components })
+          this.setData({
+            componentOptions: buildComponentOptions(response.components, this.data.config.components)
+          })
         }
       })
       .catch(() => {})
@@ -1058,7 +1071,10 @@ Page({
 
   handleSelectComponent(event) {
     const componentType = event.currentTarget.dataset.type
-    if (!componentType) {
+    const disabled = event.currentTarget.dataset.disabled
+    const profileAdded = componentType === COMPONENT_TYPES.PROFILE &&
+      this.data.config.components.some((component) => component.componentType === COMPONENT_TYPES.PROFILE)
+    if (!componentType || disabled || profileAdded) {
       return
     }
     this.setData({
