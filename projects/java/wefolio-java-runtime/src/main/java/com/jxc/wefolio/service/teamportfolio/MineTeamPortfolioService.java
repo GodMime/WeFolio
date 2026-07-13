@@ -412,6 +412,8 @@ public class MineTeamPortfolioService {
         if (request.getClientRevision() != safeInt(portfolio.getDraftRevision())) {
             throw new BusinessException(DRAFT_REVISION_CHANGED_MESSAGE);
         }
+        String oldDraftConfigJson = portfolio.getDraftConfigJson();
+        String publishedConfigJson = portfolio.getPublishedConfigJson();
         int nextDraftRevision = safeInt(portfolio.getDraftRevision()) + 1;
         TeamPortfolioConfigDto normalized = configValidator.normalizeAndValidate(
                 JSON.toJSONString(request.getConfig()), access.team().getId(), portfolioId, nextDraftRevision);
@@ -438,6 +440,11 @@ public class MineTeamPortfolioService {
         insertHistory(portfolio, nextHistoryRevision, normalized, contentHash, userId, now,
                 HISTORY_ACTION_DRAFT_SAVE, idempotencyKey, requestFingerprint,
                 nextDraftRevision, null);
+        assetService.deleteUnreferencedAssetsAfterCommit(
+                access.team().getId(),
+                portfolioId,
+                assetStateJson(oldDraftConfigJson, publishedConfigJson),
+                assetStateJson(configJson, publishedConfigJson));
         return buildDetail(portfolio, normalized);
     }
 
@@ -495,9 +502,34 @@ public class MineTeamPortfolioService {
         insertHistory(portfolio, nextHistoryRevision, normalized, contentHash, userId, now,
                 HISTORY_ACTION_PUBLISH, idempotencyKey, requestFingerprint,
                 null, nextPublishedRevision);
-        assetService.deleteReplacedPublishedAssetsAfterCommit(
-                access.team().getId(), portfolioId, oldPublishedConfigJson, configJson);
+        assetService.deleteUnreferencedAssetsAfterCommit(
+                access.team().getId(),
+                portfolioId,
+                assetStateJson(portfolio.getDraftConfigJson(), oldPublishedConfigJson),
+                assetStateJson(portfolio.getDraftConfigJson(), configJson));
         return buildDetail(portfolio, normalized);
+    }
+
+    /**
+     * 组装素材清理所需的当前草稿态与发布态配置包。
+     *
+     * @param draftConfigJson 草稿配置 JSON
+     * @param publishedConfigJson 发布配置 JSON
+     * @return 状态配置包 JSON
+     */
+    private String assetStateJson(String draftConfigJson, String publishedConfigJson) {
+        JSONObject state = new JSONObject();
+        state.put("draft", parseAssetStateConfig(draftConfigJson));
+        state.put("published", parseAssetStateConfig(publishedConfigJson));
+        return state.toJSONString();
+    }
+
+    /**
+     * 解析素材状态配置，空配置使用空对象占位。
+     */
+    private JSONObject parseAssetStateConfig(String configJson) {
+        return configJson == null || configJson.isBlank()
+                ? new JSONObject() : JSON.parseObject(configJson);
     }
 
     /**

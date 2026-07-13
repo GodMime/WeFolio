@@ -5,10 +5,8 @@ import com.alibaba.fastjson2.JSONObject;
 import com.jxc.wefolio.dict.ReferenceTypeDict;
 import com.jxc.wefolio.entity.PortfolioReferenceEntity;
 import com.jxc.wefolio.entity.TeamEntity;
-import com.jxc.wefolio.entity.UserEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.TeamEntityMapper;
-import com.jxc.wefolio.mapper.UserEntityMapper;
 import com.jxc.wefolio.service.CosService;
 import com.jxc.wefolio.service.teamportfolio.TeamPortfolioAccessService;
 import com.jxc.wefolio.service.teamportfolio.TeamPortfolioAssetService;
@@ -224,28 +222,23 @@ class TeamQrContactComponentTest {
     }
 
     /**
-     * 二维码组件必须通过真实团队素材边界验证当前 owner、作品集路径和 COS 对象头。
+     * 二维码组件必须通过真实团队素材边界验证当前团队、作品集路径和 COS 对象头。
      */
     @Test
     void validatorShouldCollaborateWithRealTeamAssetBoundary() {
         TeamPortfolioAccessService accessService = mock(TeamPortfolioAccessService.class);
         TeamEntityMapper teamMapper = mock(TeamEntityMapper.class);
-        UserEntityMapper userMapper = mock(UserEntityMapper.class);
         CosService cosService = mock(CosService.class);
         TeamEntity team = new TeamEntity();
         team.setId(TEAM_ID);
-        team.setOwnerUserId(31L);
-        UserEntity owner = new UserEntity();
-        owner.setId(31L);
-        owner.setUniqueCode("WFOWNER");
-        String objectKey = "WFOWNER/protfolio/team-11/portfolio-21/123e4567-e89b-12d3-a456-426614174000.png";
+        team.setUniqueCode("TM2048");
+        String objectKey = "TM2048/protfolio/qr-contact-21-20260712153120-b2c3d4e5.png";
         String publicUrl = "https://cdn.example.com/" + objectKey;
         when(teamMapper.selectById(TEAM_ID)).thenReturn(team);
-        when(userMapper.selectById(31L)).thenReturn(owner);
         when(cosService.publicUrl(objectKey)).thenReturn(publicUrl);
         when(cosService.headObject(objectKey)).thenReturn(new CosService.ObjectHead("image/png", 1024L));
         TeamPortfolioAssetService assetService = new TeamPortfolioAssetService(
-                accessService, teamMapper, userMapper, cosService);
+                accessService, teamMapper, cosService);
         TeamQrContactComponentValidator validator = new TeamQrContactComponentValidator(assetService);
         JSONObject config = JSON.parseObject(
                 "{\"qrUrlSource\":\"CUSTOM\",\"qrUrl\":\"" + publicUrl + "\"}");

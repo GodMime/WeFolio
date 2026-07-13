@@ -1,28 +1,183 @@
-<navigation-bar title="编辑团队作品集" back="{{true}}" />
-<view class="page-shell">
-  <view wx:if="{{loading}}" class="state">加载中...</view>
-  <view wx:elif="{{errorMessage}}" class="state"><text>{{errorMessage}}</text><button bindtap="handleRetry">重试</button></view>
-  <block wx:else>
-    <view class="panel">
-      <input data-field="title" value="{{config.share.title}}" bindinput="handleShareInput" placeholder="分享标题" disabled="{{!canMaintain}}" />
-      <textarea data-field="description" value="{{config.share.description}}" bindinput="handleShareInput" placeholder="分享说明" disabled="{{!canMaintain}}" />
-      <image wx:if="{{config.share.coverUrl}}" src="{{config.share.coverUrl}}" mode="aspectFill" class="cover" />
-      <button class="primary" bindtap="handleCoverChoose" loading="{{shareCoverUploading}}" disabled="{{!canMaintain || !portfolioId || shareCoverUploading}}">选择分享封面</button>
-    </view>
-    <view class="panel">
-      <view class="component-header"><view class="panel-title">页面组件</view><button class="primary" bindtap="handleOpenLibrary" loading="{{openingLibrary}}" disabled="{{!canMaintain || openingLibrary}}">添加组件</button></view>
-      <view class="component-stack">
-        <view wx:for="{{componentBuckets.teamProfile}}" wx:key="componentKey" class="component-wrapper" style="order:{{item.sortOrder}}"><view class="component-heading">团队资料</view><team-profile data-key="{{item.componentKey}}" team="{{item.config.team}}" edit-mode="{{canMaintain}}" bindmaintainteam="handleMaintainTeam" bindsave="handleComponentSave" /><view class="arrange"><button data-key="{{item.componentKey}}" data-direction="-1" bindtap="handleMove" disabled="{{!canMaintain}}">上移</button><button data-key="{{item.componentKey}}" data-direction="1" bindtap="handleMove" disabled="{{!canMaintain}}">下移</button><button data-key="{{item.componentKey}}" bindtap="handleComponentDelete" disabled="{{!canMaintain}}">删除</button></view></view>
-        <view wx:for="{{componentBuckets.carousel}}" wx:key="componentKey" class="component-wrapper" style="order:{{item.sortOrder}}"><view class="component-heading">轮播图</view><view wx:if="{{componentSources[item.componentKey].loadingFingerprint}}" class="source-state">正在加载成员来源...</view><view wx:if="{{componentSources[item.componentKey].errorMessage}}" class="source-state source-error"><text>{{componentSources[item.componentKey].errorMessage}}</text><button data-key="{{item.componentKey}}" bindtap="handleCarouselRetrySource">重试成员来源</button></view><team-carousel data-key="{{item.componentKey}}" portfolio-id="{{portfolioId}}" items="{{item.config.items}}" members="{{componentSources[item.componentKey].members}}" works="{{componentSources[item.componentKey].works}}" edit-mode="{{canMaintain}}" bindloadmembers="handleCarouselLoadMembers" bindmemberchange="handleCarouselMemberChange" bindsave="handleComponentSave" /><view class="arrange"><button data-key="{{item.componentKey}}" data-direction="-1" bindtap="handleMove" disabled="{{!canMaintain}}">上移</button><button data-key="{{item.componentKey}}" data-direction="1" bindtap="handleMove" disabled="{{!canMaintain}}">下移</button><button data-key="{{item.componentKey}}" bindtap="handleComponentDelete" disabled="{{!canMaintain}}">删除</button></view></view>
-        <view wx:for="{{componentBuckets.divider}}" wx:key="componentKey" class="component-wrapper" style="order:{{item.sortOrder}}"><view class="component-heading">分割线</view><team-divider data-key="{{item.componentKey}}" config="{{item.config}}" edit-mode="{{canMaintain}}" bindsave="handleComponentSave" /><view class="arrange"><button data-key="{{item.componentKey}}" data-direction="-1" bindtap="handleMove" disabled="{{!canMaintain}}">上移</button><button data-key="{{item.componentKey}}" data-direction="1" bindtap="handleMove" disabled="{{!canMaintain}}">下移</button><button data-key="{{item.componentKey}}" bindtap="handleComponentDelete" disabled="{{!canMaintain}}">删除</button></view></view>
-        <view wx:for="{{componentBuckets.grid}}" wx:key="componentKey" class="component-wrapper" style="order:{{item.sortOrder}}"><view class="component-heading">双列作品集</view><view wx:if="{{componentSources[item.componentKey].loadingFingerprint}}" class="source-state">正在加载成员来源...</view><view wx:if="{{componentSources[item.componentKey].errorMessage}}" class="source-state source-error"><text>{{componentSources[item.componentKey].errorMessage}}</text><button data-key="{{item.componentKey}}" bindtap="handleGridRetrySource">重试成员来源</button></view><team-member-portfolio-grid data-key="{{item.componentKey}}" portfolio-id="{{portfolioId}}" items="{{item.config.items}}" members="{{componentSources[item.componentKey].members}}" portfolios="{{componentSources[item.componentKey].portfolios}}" edit-mode="{{canMaintain}}" bindloadmembers="handleGridLoadMembers" bindmemberchange="handleGridMemberChange" bindsave="handleComponentSave" /><view class="arrange"><button data-key="{{item.componentKey}}" data-direction="-1" bindtap="handleMove" disabled="{{!canMaintain}}">上移</button><button data-key="{{item.componentKey}}" data-direction="1" bindtap="handleMove" disabled="{{!canMaintain}}">下移</button><button data-key="{{item.componentKey}}" bindtap="handleComponentDelete" disabled="{{!canMaintain}}">删除</button></view></view>
-        <view wx:for="{{componentBuckets.list}}" wx:key="componentKey" class="component-wrapper" style="order:{{item.sortOrder}}"><view class="component-heading">单列作品集</view><view wx:if="{{componentSources[item.componentKey].loadingFingerprint}}" class="source-state">正在加载成员来源...</view><view wx:if="{{componentSources[item.componentKey].errorMessage}}" class="source-state source-error"><text>{{componentSources[item.componentKey].errorMessage}}</text><button data-key="{{item.componentKey}}" bindtap="handleListRetrySource">重试成员来源</button></view><team-member-portfolio-list data-key="{{item.componentKey}}" portfolio-id="{{portfolioId}}" items="{{item.config.items}}" members="{{componentSources[item.componentKey].members}}" portfolios="{{componentSources[item.componentKey].portfolios}}" edit-mode="{{canMaintain}}" bindloadmembers="handleListLoadMembers" bindmemberchange="handleListMemberChange" bindsave="handleComponentSave" /><view class="arrange"><button data-key="{{item.componentKey}}" data-direction="-1" bindtap="handleMove" disabled="{{!canMaintain}}">上移</button><button data-key="{{item.componentKey}}" data-direction="1" bindtap="handleMove" disabled="{{!canMaintain}}">下移</button><button data-key="{{item.componentKey}}" bindtap="handleComponentDelete" disabled="{{!canMaintain}}">删除</button></view></view>
-        <view wx:for="{{componentBuckets.text}}" wx:key="componentKey" class="component-wrapper" style="order:{{item.sortOrder}}"><view class="component-heading">文字说明</view><team-text-section data-key="{{item.componentKey}}" config="{{item.config}}" edit-mode="{{canMaintain}}" bindsave="handleComponentSave" /><view class="arrange"><button data-key="{{item.componentKey}}" data-direction="-1" bindtap="handleMove" disabled="{{!canMaintain}}">上移</button><button data-key="{{item.componentKey}}" data-direction="1" bindtap="handleMove" disabled="{{!canMaintain}}">下移</button><button data-key="{{item.componentKey}}" bindtap="handleComponentDelete" disabled="{{!canMaintain}}">删除</button></view></view>
-        <view wx:for="{{componentBuckets.schedule}}" wx:key="componentKey" class="component-wrapper" style="order:{{item.sortOrder}}"><view class="component-heading">档期查询</view><team-schedule-query data-key="{{item.componentKey}}" component-key="{{item.componentKey}}" config="{{item.config}}" edit-mode="{{canMaintain}}" bindsave="handleComponentSave" /><view class="arrange"><button data-key="{{item.componentKey}}" data-direction="-1" bindtap="handleMove" disabled="{{!canMaintain}}">上移</button><button data-key="{{item.componentKey}}" data-direction="1" bindtap="handleMove" disabled="{{!canMaintain}}">下移</button><button data-key="{{item.componentKey}}" bindtap="handleComponentDelete" disabled="{{!canMaintain}}">删除</button></view></view>
-        <view wx:for="{{componentBuckets.contact}}" wx:key="componentKey" class="component-wrapper" style="order:{{item.sortOrder}}"><view class="component-heading">预留联系信息</view><team-contact-form data-key="{{item.componentKey}}" config="{{item.config}}" edit-mode="{{canMaintain}}" bindsave="handleComponentSave" /><view class="arrange"><button data-key="{{item.componentKey}}" data-direction="-1" bindtap="handleMove" disabled="{{!canMaintain}}">上移</button><button data-key="{{item.componentKey}}" data-direction="1" bindtap="handleMove" disabled="{{!canMaintain}}">下移</button><button data-key="{{item.componentKey}}" bindtap="handleComponentDelete" disabled="{{!canMaintain}}">删除</button></view></view>
-        <view wx:for="{{componentBuckets.qr}}" wx:key="componentKey" class="component-wrapper" style="order:{{item.sortOrder}}"><view class="component-heading">二维码联系</view><team-qr-contact id="{{item.componentKey}}" data-key="{{item.componentKey}}" config="{{item.config}}" edit-mode="{{canMaintain}}" uploading="{{shareCoverUploading}}" bindchoose="handleQrChoose" bindsave="handleComponentSave" /><view class="arrange"><button data-key="{{item.componentKey}}" data-direction="-1" bindtap="handleMove" disabled="{{!canMaintain}}">上移</button><button data-key="{{item.componentKey}}" data-direction="1" bindtap="handleMove" disabled="{{!canMaintain}}">下移</button><button data-key="{{item.componentKey}}" bindtap="handleComponentDelete" disabled="{{!canMaintain}}">删除</button></view></view>
+<wxs module="componentRows" src="./component-rows.wxs"></wxs>
+
+<view class="page-shell portfolio-edit-page team-portfolio-edit-page">
+  <navigation-bar title="标准团队作品集" color="#17202a" background="rgba(245, 247, 251, 0.94)" back="{{true}}"></navigation-bar>
+
+  <view wx:if="{{loading}}" class="page-state">加载中...</view>
+  <view wx:elif="{{errorMessage}}" class="page-state error-state">
+    <view>{{errorMessage}}</view>
+    <button class="state-retry" bindtap="handleRetry">重试</button>
+  </view>
+
+  <scroll-view wx:else class="edit-scroll" scroll-y type="list">
+    <view class="edit-content">
+      <view class="panel share-panel">
+        <view class="panel-heading">
+          <view class="heading-copy">
+            <view class="section-title">分享信息</view>
+            <view class="section-desc">用于微信分享卡片说明</view>
+          </view>
+          <view class="status-pill {{statusTone}}">{{statusText}}</view>
+        </view>
+
+        <view class="form-row cover-form-row">
+          <view class="field-heading">
+            <view class="field-label">分享封面</view>
+          </view>
+          <view class="cover-row">
+            <view class="cover-preview {{!canMaintain || shareCoverUploading ? 'disabled' : ''}}" bindtap="handleCoverChoose" aria-role="button" aria-label="选择分享封面">
+              <image wx:if="{{config.share.coverUrl}}" src="{{config.share.coverUrl}}" mode="aspectFill"></image>
+              <view wx:else class="cover-empty">封面</view>
+            </view>
+          </view>
+        </view>
+
+        <view class="form-row">
+          <view class="field-heading">
+            <view class="field-label">作品集标题</view>
+            <view class="field-limit">{{shareTitleCounter}}</view>
+          </view>
+          <input class="input" placeholder="未命名团队作品集" value="{{config.share.title}}" data-field="title" bindinput="handleShareInput" maxlength="50" disabled="{{!canMaintain}}" />
+        </view>
+      </view>
+
+      <view class="panel component-panel">
+        <view class="panel-heading">
+          <view class="heading-copy">
+            <view class="section-title">组件编排</view>
+            <view class="section-desc">访客将按当前顺序浏览作品集内容</view>
+          </view>
+          <button class="link-button" bindtap="handleOpenComponentSheet" disabled="{{!canMaintain}}">添加组件</button>
+        </view>
+
+        <view wx:if="{{!componentList.length}}" class="component-empty">暂未添加组件</view>
+        <view wx:else class="component-list">
+          <view
+            wx:for="{{componentList}}"
+            wx:key="componentKey"
+            class="component-swipe-row {{revealedComponentKey === item.componentKey ? 'revealed' : ''}} {{draggingIndex === index ? 'dragging' : ''}}"
+            data-index="{{index}}"
+            data-key="{{item.componentKey}}"
+            data-type="{{item.componentType}}"
+            bindtouchstart="handleComponentTouchStart"
+            bindlongpress="handleComponentDragStart"
+            bindtouchmove="handleComponentTouchMove"
+            bindtouchend="handleComponentTouchEnd"
+            bindtouchcancel="handleComponentTouchCancel"
+          >
+            <view class="component-remove-pane" catchtap="noop">
+              <button class="component-remove-button" data-key="{{item.componentKey}}" catchtap="handleRemoveComponent">删除</button>
+            </view>
+            <view
+              class="component-row editable {{draggingIndex === index ? 'dragging' : ''}} {{dragTargetIndex === index && draggingIndex !== -1 ? 'drag-target' : ''}}"
+              style="{{draggingIndex === index ? componentDragStyle : ''}}"
+              data-key="{{item.componentKey}}"
+              data-type="{{item.componentType}}"
+              catchtap="handleComponentTap"
+              aria-role="button"
+              aria-label="编辑{{item.displayName}}"
+            >
+              <view class="component-order">{{index + 1}}</view>
+              <view class="component-copy">
+                <view class="component-title">{{item.displayName}}</view>
+              </view>
+              <view class="component-drag-handle"></view>
+              <view class="component-row-arrow"><view class="component-row-arrow-icon"></view></view>
+            </view>
+          </view>
+        </view>
       </view>
     </view>
-    <view class="bottom-actions"><button bindtap="handleSaveTap" loading="{{saving}}" disabled="{{!canMaintain || saving || publishing || hasInvalidComponents}}">保存草稿</button><button bindtap="handlePreviewTap" disabled="{{!canMaintain || !portfolioId || saving || publishing}}">预览草稿</button><button class="primary" bindtap="handlePublishTap" loading="{{publishing}}" disabled="{{!canMaintain || saving || publishing || hasInvalidComponents}}">发布</button></view>
-  </block>
+  </scroll-view>
+
+  <view class="component-picker-mask {{componentSheetVisible ? 'visible' : ''}}" catchtap="handleCloseComponentSheet">
+    <view class="component-picker-panel" catchtap="noop">
+      <view class="component-picker-grabber"></view>
+      <view class="component-picker-heading">
+        <view class="component-picker-title">选择组件</view>
+        <view class="component-picker-count">{{componentOptions.length}} 个可选</view>
+      </view>
+      <scroll-view class="component-option-scroll" scroll-y type="list">
+        <view class="component-option-list-content">
+          <view
+            wx:for="{{componentOptions}}"
+            wx:key="componentType"
+            class="component-option {{item.disabled ? 'disabled' : ''}}"
+            data-type="{{item.componentType}}"
+            data-disabled="{{item.disabled}}"
+            catchtap="handleSelectComponent"
+            aria-role="button"
+            aria-label="添加{{item.name}}组件"
+          >
+            <view class="component-option-copy">
+              <view class="component-option-name">{{item.name}}</view>
+              <view class="component-option-desc">{{item.description}}</view>
+            </view>
+            <view class="component-option-plus">{{item.disabled ? '已添加' : '+'}}</view>
+          </view>
+        </view>
+      </scroll-view>
+      <view class="component-picker-actions"><button class="component-picker-cancel" catchtap="handleCloseComponentSheet">取消</button></view>
+    </view>
+  </view>
+
+  <view class="component-editor-mask {{componentEditorVisible ? 'visible' : ''}}" catchtap="handleCloseComponentEditor">
+    <view class="component-editor-panel" catchtap="noop">
+      <view class="component-picker-grabber"></view>
+      <view class="component-picker-heading editor-heading">
+        <view class="component-picker-title">编辑{{activeComponentName}}</view>
+        <button class="editor-close" catchtap="handleCloseComponentEditor">关闭</button>
+      </view>
+      <view wx:if="{{!portfolioId && activeComponentNeedsPortfolio}}" class="editor-notice">请先保存草稿，再选择团队成员内容</view>
+      <view wx:if="{{activeComponentSource.loadingFingerprint}}" class="source-state">正在加载团队内容...</view>
+      <view wx:if="{{activeComponentSource.errorMessage}}" class="source-state source-error">
+        <view>{{activeComponentSource.errorMessage}}</view>
+        <button wx:if="{{activeComponentType === 'CAROUSEL'}}" data-key="{{activeComponentKey}}" bindtap="handleCarouselRetrySource">重试</button>
+        <button wx:if="{{activeComponentType === 'MEMBER_PORTFOLIO_GRID'}}" data-key="{{activeComponentKey}}" bindtap="handleGridRetrySource">重试</button>
+        <button wx:if="{{activeComponentType === 'MEMBER_PORTFOLIO_LIST'}}" data-key="{{activeComponentKey}}" bindtap="handleListRetrySource">重试</button>
+      </view>
+      <scroll-view class="component-editor-scroll" scroll-y type="list">
+        <view class="component-editor-content">
+          <team-profile wx:if="{{activeComponentType === 'TEAM_PROFILE'}}" data-key="{{activeComponentKey}}" team="{{activeComponent.config.team}}" edit-mode="{{true}}" bindmaintainteam="handleMaintainTeam" bindcancel="handleCloseComponentEditor" bindsave="handleComponentSave" />
+          <team-carousel wx:if="{{activeComponentType === 'CAROUSEL'}}" data-key="{{activeComponentKey}}" portfolio-id="{{portfolioId}}" items="{{activeComponent.config.items}}" members="{{activeComponentSource.members}}" works="{{activeComponentSource.works}}" edit-mode="{{true}}" bindloadmembers="handleCarouselLoadMembers" bindmemberchange="handleCarouselMemberChange" bindcancel="handleCloseComponentEditor" bindsave="handleComponentSave" />
+          <team-divider wx:if="{{activeComponentType === 'DIVIDER'}}" data-key="{{activeComponentKey}}" config="{{activeComponent.config}}" edit-mode="{{true}}" bindcancel="handleCloseComponentEditor" bindsave="handleComponentSave" />
+          <team-member-portfolio-grid wx:if="{{activeComponentType === 'MEMBER_PORTFOLIO_GRID'}}" data-key="{{activeComponentKey}}" portfolio-id="{{portfolioId}}" items="{{activeComponent.config.items}}" members="{{activeComponentSource.members}}" portfolios="{{activeComponentSource.portfolios}}" edit-mode="{{true}}" bindloadmembers="handleGridLoadMembers" bindmemberchange="handleGridMemberChange" bindcancel="handleCloseComponentEditor" bindsave="handleComponentSave" />
+          <team-member-portfolio-list wx:if="{{activeComponentType === 'MEMBER_PORTFOLIO_LIST'}}" data-key="{{activeComponentKey}}" portfolio-id="{{portfolioId}}" items="{{activeComponent.config.items}}" members="{{activeComponentSource.members}}" portfolios="{{activeComponentSource.portfolios}}" edit-mode="{{true}}" bindloadmembers="handleListLoadMembers" bindmemberchange="handleListMemberChange" bindcancel="handleCloseComponentEditor" bindsave="handleComponentSave" />
+          <team-text-section wx:if="{{activeComponentType === 'TEXT_SECTION'}}" data-key="{{activeComponentKey}}" config="{{activeComponent.config}}" edit-mode="{{true}}" bindcancel="handleCloseComponentEditor" bindsave="handleComponentSave" />
+          <team-schedule-query wx:if="{{activeComponentType === 'SCHEDULE_QUERY'}}" data-key="{{activeComponentKey}}" component-key="{{activeComponentKey}}" config="{{activeComponent.config}}" edit-mode="{{true}}" bindcancel="handleCloseComponentEditor" bindsave="handleComponentSave" />
+          <team-contact-form wx:if="{{activeComponentType === 'CONTACT_FORM'}}" data-key="{{activeComponentKey}}" config="{{activeComponent.config}}" edit-mode="{{true}}" bindcancel="handleCloseComponentEditor" bindsave="handleComponentSave" />
+          <team-qr-contact wx:if="{{activeComponentType === 'QR_CONTACT'}}" id="{{activeComponentKey}}" data-key="{{activeComponentKey}}" config="{{activeComponent.config}}" edit-mode="{{true}}" uploading="{{shareCoverUploading}}" bindchoose="handleQrChoose" bindcancel="handleCloseComponentEditor" bindsave="handleComponentSave" />
+        </view>
+      </scroll-view>
+    </view>
+  </view>
+
+  <view class="share-cover-crop-mask {{shareCoverCropVisible ? 'visible' : ''}}" catchtap="handleCloseShareCoverCrop">
+    <view class="share-cover-crop-panel" catchtap="noop">
+      <view class="component-picker-grabber"></view>
+      <view class="component-picker-heading">
+        <view class="component-picker-title">裁剪分享封面</view>
+        <view class="component-picker-count">5:4</view>
+      </view>
+      <view class="share-cover-crop-stage">
+        <image wx:if="{{shareCoverCropPath}}" class="share-cover-crop-image" src="{{shareCoverCropPath}}" mode="aspectFill"></image>
+        <view class="share-cover-crop-frame"></view>
+      </view>
+      <view class="sheet-actions split">
+        <button class="sheet-cancel" catchtap="handleCloseShareCoverCrop">取消</button>
+        <button class="sheet-confirm" catchtap="handleConfirmShareCoverCrop" loading="{{shareCoverUploading}}" disabled="{{shareCoverUploading}}">完成</button>
+      </view>
+    </view>
+  </view>
+
+  <view class="bottom-actions">
+    <button class="action-button primary-button" bindtap="handleSaveTap" loading="{{saving}}" disabled="{{!canMaintain || saving || publishing || hasInvalidComponents}}">保存草稿</button>
+    <view class="preview-action-stack">
+      <button class="action-button secondary-button preview-draft-button" bindtap="handlePreviewTap" disabled="{{!canMaintain || !portfolioId || saving || publishing}}">
+        <view class="preview-action-title">预览草稿</view>
+        <view class="preview-action-note">请保存后预览</view>
+      </button>
+    </view>
+    <button wx:if="{{showPublishAction}}" class="action-button publish-button" bindtap="handlePublishTap" loading="{{publishing}}" disabled="{{!canMaintain || saving || publishing || hasInvalidComponents}}">发布</button>
+  </view>
 </view>

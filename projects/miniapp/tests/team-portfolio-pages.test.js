@@ -15,6 +15,12 @@ function read(relativePath) {
   return fs.readFileSync(path.join(ROOT, relativePath), 'utf8')
 }
 
+function readCssRule(content, selector) {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const match = content.match(new RegExp(`${escaped}\\s*\\{([^}]*)\\}`))
+  return match ? match[1].replace(/\s+/g, '') : ''
+}
+
 function loadPage(relativePath, requestFn, wxOverrides = {}) {
   const pagePath = path.join(ROOT, relativePath)
   const requestPath = path.resolve(ROOT, '../../utils/request.js')
@@ -87,4 +93,58 @@ test('legacy team list keeps only a lightweight loading surface', () => {
   assert.match(wxss, /\.compat-loading/)
   assert.doesNotMatch(wxml, /portfolio-item-card|create-actions|tabbar/)
   assert.doesNotMatch(js, /fetchTeamPortfolioList|handleCreateTap|onShareAppMessage/)
+})
+
+test('standard team editor independently matches the personal editor interaction shell', () => {
+  const wxml = read('standard-edit/team-portfolio-standard-edit.wxml')
+  const wxss = read('standard-edit/team-portfolio-standard-edit.wxss')
+  const js = read('standard-edit/team-portfolio-standard-edit.js')
+
+  assert.match(wxml, /class="page-shell portfolio-edit-page team-portfolio-edit-page"/)
+  assert.match(wxml, /class="panel share-panel"/)
+  assert.match(wxml, /class="status-pill \{\{statusTone\}\}"/)
+  assert.match(wxml, /class="component-list"/)
+  assert.match(wxml, /bindlongpress="handleComponentDragStart"/)
+  assert.match(wxml, /bindtouchmove="handleComponentTouchMove"/)
+  assert.match(wxml, /class="component-remove-pane"[\s\S]*handleRemoveComponent/)
+  assert.match(wxml, /component-picker-mask \{\{componentSheetVisible \? 'visible' : ''\}\}/)
+  assert.match(wxml, /component-editor-mask \{\{componentEditorVisible \? 'visible' : ''\}\}/)
+  assert.equal(Array.from(wxml.matchAll(/bindcancel="handleCloseComponentEditor"/g)).length, 9)
+  assert.match(wxml, /share-cover-crop-mask \{\{shareCoverCropVisible \? 'visible' : ''\}\}/)
+  assert.match(wxml, /wx:if="\{\{shareCoverCropPath\}\}" class="share-cover-crop-image" src="\{\{shareCoverCropPath\}\}"/)
+  assert.match(wxss, /\.share-cover-crop-panel\s*\{[^}]*overflow-y:\s*auto;/)
+  assert.match(wxss, /\.share-cover-crop-image\s*\{[^}]*width:\s*100%;[^}]*height:\s*100%;/)
+  assert.match(wxss, /\.sheet-actions button\s*\{[^}]*display:\s*flex;[^}]*align-items:\s*center;[^}]*justify-content:\s*center;[^}]*padding:\s*0;[^}]*line-height:\s*1;/)
+  assert.match(wxml, /class="preview-action-note">请保存后预览/)
+  assert.match(wxml, /wx:if="\{\{showPublishAction\}\}"/)
+  assert.match(wxss, /\.component-swipe-row\.revealed \.component-row/)
+  assert.match(wxss, /\.component-picker-mask\.visible/)
+  assert.match(wxss, /\.bottom-actions/)
+  assert.match(js, /handleOpenComponentSheet/)
+  assert.match(js, /handleComponentDragStart/)
+  assert.match(js, /handleComponentTouchMove/)
+  assert.match(js, /handleRemoveComponent/)
+  assert.doesNotMatch(js, /portfolio-standard-edit/)
+})
+
+test('standard team editor uses the personal editor core visual measurements', () => {
+  const teamCss = read('standard-edit/team-portfolio-standard-edit.wxss')
+  const personalCss = fs.readFileSync(path.resolve(ROOT, '../portfolios/standard-edit/portfolio-standard-edit.wxss'), 'utf8')
+  const sharedSelectors = [
+    '.edit-content', '.panel', '.section-title', '.section-desc', '.status-pill',
+    '.field-label', '.field-limit', '.input', '.cover-preview', '.cover-empty',
+    '.link-button', '.component-list', '.component-swipe-row', '.component-row',
+    '.component-remove-pane', '.component-remove-button', '.component-order',
+    '.component-drag-handle', '.component-title', '.component-row-arrow',
+    '.component-row-arrow-icon', '.component-picker-mask', '.component-picker-panel',
+    '.component-picker-grabber', '.component-picker-title', '.component-picker-count',
+    '.component-option-scroll', '.component-option', '.component-option-name',
+    '.component-option-desc', '.component-option-plus', '.bottom-actions',
+    '.action-button', '.preview-action-stack', '.preview-action-title',
+    '.preview-action-note', '.primary-button', '.secondary-button', '.publish-button'
+  ]
+  for (const selector of sharedSelectors) {
+    assert.equal(readCssRule(teamCss, selector), readCssRule(personalCss, selector), selector)
+  }
+  assert.doesNotMatch(teamCss, /\binset\s*:/)
 })

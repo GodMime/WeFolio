@@ -28,7 +28,7 @@ wefolio:
   mybatis:
     sql-log-enabled: ${WEFOLIO_MYBATIS_SQL_LOG_ENABLED:false}
   team-portfolio:
-    enabled: ${WEFOLIO_TEAM_PORTFOLIO_ENABLED:false}
+    enabled: ${WEFOLIO_TEAM_PORTFOLIO_ENABLED:true}
 
 server:
   address: 127.0.0.1

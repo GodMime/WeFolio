@@ -305,13 +305,16 @@ class MineTeamPortfolioServiceTest {
         PortfolioEntity portfolio = portfolio(TEAM_ID);
         portfolio.setDraftRevision(2);
         portfolio.setCurrentRevision(4);
+        portfolio.setDraftConfigJson(JSON.toJSONString(configWithTitle("旧草稿")));
+        portfolio.setPublishedConfigJson(JSON.toJSONString(configWithTitle("当前发布")));
+        TeamPortfolioConfigDto newDraft = configWithTitle("新草稿");
         when(context.access.requireMaintainablePortfolio(PORTFOLIO_ID, USER_ID))
                 .thenReturn(access(portfolio, TeamRoleDict.OWNER.getCode()));
-        when(context.validator.normalizeAndValidate(any(), eq(TEAM_ID), eq(PORTFOLIO_ID), eq(3))).thenReturn(config());
+        when(context.validator.normalizeAndValidate(any(), eq(TEAM_ID), eq(PORTFOLIO_ID), eq(3))).thenReturn(newDraft);
         when(context.portfolioMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
         when(context.historyMapper.insert(any(PortfolioHistoryEntity.class))).thenReturn(1);
         TeamPortfolioDraftSaveRequest request = new TeamPortfolioDraftSaveRequest();
-        request.setConfig(config());
+        request.setConfig(newDraft);
         request.setClientRevision(2);
         request.setIdempotencyKey("draft-1");
 
@@ -329,9 +332,10 @@ class MineTeamPortfolioServiceTest {
         assertThat(snapshot.getString("idempotencyKey")).isEqualTo("draft-1");
         assertThat(snapshot.getString("requestFingerprint")).isNotBlank();
         assertThat(snapshot.getInteger("resultDraftRevision")).isEqualTo(3);
-        assertThat(snapshot.getJSONObject("config")).isEqualTo(JSON.parseObject(JSON.toJSONString(config())));
+        assertThat(snapshot.getJSONObject("config")).isEqualTo(JSON.parseObject(JSON.toJSONString(newDraft)));
         verify(context.assetService).validateUploadedImageUrl(
-                TEAM_ID, PORTFOLIO_ID, config().getShare().getCoverUrl());
+                TEAM_ID, PORTFOLIO_ID, newDraft.getShare().getCoverUrl());
+        assertCleanupStates(context, "旧草稿", "当前发布", "新草稿", "当前发布");
     }
 
     @Test
@@ -430,10 +434,12 @@ class MineTeamPortfolioServiceTest {
         PortfolioEntity portfolio = portfolio(TEAM_ID);
         portfolio.setDraftRevision(3);
         portfolio.setCurrentRevision(5);
-        portfolio.setDraftConfigJson(JSON.toJSONString(config()));
+        TeamPortfolioConfigDto currentDraft = configWithTitle("当前草稿");
+        portfolio.setDraftConfigJson(JSON.toJSONString(currentDraft));
+        portfolio.setPublishedConfigJson(JSON.toJSONString(configWithTitle("旧发布")));
         when(context.access.requireMaintainablePortfolio(PORTFOLIO_ID, USER_ID))
                 .thenReturn(access(portfolio, TeamRoleDict.MANAGER.getCode()));
-        when(context.validator.normalizeAndValidate(any(), eq(TEAM_ID), eq(PORTFOLIO_ID), eq(1))).thenReturn(config());
+        when(context.validator.normalizeAndValidate(any(), eq(TEAM_ID), eq(PORTFOLIO_ID), eq(1))).thenReturn(currentDraft);
         when(context.portfolioMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
         when(context.historyMapper.insert(any(PortfolioHistoryEntity.class))).thenReturn(1);
         TeamPortfolioPublishRequest request = new TeamPortfolioPublishRequest();
@@ -444,7 +450,7 @@ class MineTeamPortfolioServiceTest {
 
         assertThat(portfolio.getPublishedRevision()).isEqualTo(1);
         assertThat(portfolio.getPublicationStatus()).isEqualTo(PortfolioPublicationStatusDict.PUBLISHED.getCode());
-        assertThat(portfolio.getPublishedConfigJson()).isEqualTo(JSON.toJSONString(config()));
+        assertThat(portfolio.getPublishedConfigJson()).isEqualTo(JSON.toJSONString(currentDraft));
         verify(context.referenceService).rebuild(eq(PORTFOLIO_ID), eq(PortfolioConfigScopeDict.PUBLISHED.getCode()),
                 any(), eq(new TeamPortfolioComponentContext(TEAM_ID, PORTFOLIO_ID, 1)));
         ArgumentCaptor<PortfolioHistoryEntity> history = ArgumentCaptor.forClass(PortfolioHistoryEntity.class);
@@ -454,9 +460,10 @@ class MineTeamPortfolioServiceTest {
         assertThat(snapshot.getString("idempotencyKey")).isEqualTo("publish-1");
         assertThat(snapshot.getString("requestFingerprint")).isNotBlank();
         assertThat(snapshot.getInteger("resultPublishedRevision")).isEqualTo(1);
-        assertThat(snapshot.getJSONObject("config")).isEqualTo(JSON.parseObject(JSON.toJSONString(config())));
+        assertThat(snapshot.getJSONObject("config")).isEqualTo(JSON.parseObject(JSON.toJSONString(currentDraft)));
         verify(context.assetService).validateUploadedImageUrl(
-                TEAM_ID, PORTFOLIO_ID, config().getShare().getCoverUrl());
+                TEAM_ID, PORTFOLIO_ID, currentDraft.getShare().getCoverUrl());
+        assertCleanupStates(context, "当前草稿", "旧发布", "当前草稿", "当前草稿");
     }
 
     @Test
@@ -956,6 +963,29 @@ class MineTeamPortfolioServiceTest {
                 + "\"qrUrl\":\"https://example.com/qr.png\"}"));
         config.setComponents(List.of(qr));
         return config;
+    }
+
+    private static void assertCleanupStates(
+            TestContext context,
+            String beforeDraftTitle,
+            String beforePublishedTitle,
+            String afterDraftTitle,
+            String afterPublishedTitle
+    ) {
+        ArgumentCaptor<String> beforeStateCaptor = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<String> afterStateCaptor = ArgumentCaptor.forClass(String.class);
+        verify(context.assetService).deleteUnreferencedAssetsAfterCommit(
+                eq(TEAM_ID), eq(PORTFOLIO_ID), beforeStateCaptor.capture(), afterStateCaptor.capture());
+        JSONObject beforeState = JSON.parseObject(beforeStateCaptor.getValue());
+        JSONObject afterState = JSON.parseObject(afterStateCaptor.getValue());
+        assertThat(beforeState.getJSONObject("draft").getJSONObject("share").getString("title"))
+                .isEqualTo(beforeDraftTitle);
+        assertThat(beforeState.getJSONObject("published").getJSONObject("share").getString("title"))
+                .isEqualTo(beforePublishedTitle);
+        assertThat(afterState.getJSONObject("draft").getJSONObject("share").getString("title"))
+                .isEqualTo(afterDraftTitle);
+        assertThat(afterState.getJSONObject("published").getJSONObject("share").getString("title"))
+                .isEqualTo(afterPublishedTitle);
     }
 
     private static TeamPortfolioDraftSaveRequest draftRequest(

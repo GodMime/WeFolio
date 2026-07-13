@@ -6,10 +6,8 @@ import com.alibaba.fastjson2.JSONObject;
 import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioAssetUploadTicketRequest;
 import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioAssetUploadTicketResponse;
 import com.jxc.wefolio.entity.TeamEntity;
-import com.jxc.wefolio.entity.UserEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.TeamEntityMapper;
-import com.jxc.wefolio.mapper.UserEntityMapper;
 import com.jxc.wefolio.service.CosService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,6 +16,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Set;
@@ -38,11 +37,21 @@ public class TeamPortfolioAssetService {
     /** 封面素材类型。 */
     private static final String ASSET_TYPE_COVER = "COVER";
 
-    /** 团队展示图素材类型。 */
-    private static final String ASSET_TYPE_TEAM_IMAGE = "TEAM_IMAGE";
-
     /** 二维码联系素材类型。 */
     private static final String ASSET_TYPE_QR_CONTACT = "QR_CONTACT";
+
+    /** 封面文件名前缀。 */
+    private static final String COVER_FILE_PREFIX = "cover";
+
+    /** 二维码联系文件名前缀。 */
+    private static final String QR_CONTACT_FILE_PREFIX = "qr-contact";
+
+    /** 素材文件名时间格式。 */
+    private static final DateTimeFormatter ASSET_FILE_TIME_FORMATTER =
+            DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+
+    /** 素材文件名随机后缀长度。 */
+    private static final int ASSET_RANDOM_LENGTH = 8;
 
     /** JPEG MIME 类型。 */
     private static final String MIME_IMAGE_JPEG = "image/jpeg";
@@ -77,24 +86,21 @@ public class TeamPortfolioAssetService {
     /** 素材格式不支持提示。 */
     private static final String ASSET_FORMAT_UNSUPPORTED_MESSAGE = "团队作品集图片仅支持 JPG 或 PNG";
 
-    /** 团队拥有者存储信息异常提示。 */
-    private static final String TEAM_OWNER_STORAGE_INVALID_MESSAGE = "团队素材存储信息不可用";
+    /** 团队存储信息异常提示。 */
+    private static final String TEAM_STORAGE_INVALID_MESSAGE = "团队素材存储信息不可用";
 
     /** 已上传图片不可用统一提示，不透传 COS 底层异常。 */
     private static final String UPLOADED_IMAGE_INVALID_MESSAGE = "团队作品集图片未完成上传或不可用";
 
-    /** UUID 文件名表达式。 */
-    private static final String UUID_FILE_PATTERN =
-            "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.(?:jpg|png)";
+    /** 素材文件名表达式。 */
+    private static final String ASSET_FILE_PATTERN =
+            "(?:cover|qr-contact)-%d-[0-9]{14}-[0-9a-f]{8}\\.(?:jpg|png)";
 
     /** 团队作品集访问控制服务。 */
     private final TeamPortfolioAccessService accessService;
 
     /** 团队数据访问器。 */
     private final TeamEntityMapper teamEntityMapper;
-
-    /** 用户数据访问器。 */
-    private final UserEntityMapper userEntityMapper;
 
     /** COS 基础服务。 */
     private final CosService cosService;
@@ -117,12 +123,11 @@ public class TeamPortfolioAssetService {
         String assetType = normalizeAssetType(request);
         String contentType = normalizeContentType(request);
         TeamEntity team = teamEntityMapper.selectById(access.team().getId());
-        UserEntity owner = team == null || team.getOwnerUserId() == null
-                ? null : userEntityMapper.selectById(team.getOwnerUserId());
-        if (owner == null || owner.getUniqueCode() == null || owner.getUniqueCode().isBlank()) {
-            throw new BusinessException(TEAM_OWNER_STORAGE_INVALID_MESSAGE);
+        if (team == null || team.getUniqueCode() == null || team.getUniqueCode().isBlank()) {
+            throw new BusinessException(TEAM_STORAGE_INVALID_MESSAGE);
         }
-        String objectKey = buildObjectKey(owner.getUniqueCode(), team.getId(), portfolioId, contentType);
+        String objectKey = buildObjectKey(
+                team.getUniqueCode(), portfolioId, assetType, contentType, LocalDateTime.now());
         LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(TICKET_EXPIRE_MINUTES);
         CosService.PostUploadTicket ticket = cosService.createPostUploadTicket(
                 objectKey, contentType, IMAGE_MAX_BYTES, expiresAt);
@@ -137,8 +142,8 @@ public class TeamPortfolioAssetService {
      * @param url 待校验图片公开地址
      */
     public void validateUploadedImageUrl(long teamId, long portfolioId, String url) {
-        String ownerUniqueCode = requireOwnerUniqueCode(teamId);
-        String objectKey = resolveExactOwnedObjectKey(ownerUniqueCode, teamId, portfolioId, url, false);
+        String teamUniqueCode = requireTeamUniqueCode(teamId);
+        String objectKey = resolveExactOwnedObjectKey(teamUniqueCode, portfolioId, url, false);
         if (objectKey == null) {
             throw new BusinessException(UPLOADED_IMAGE_INVALID_MESSAGE);
         }
@@ -168,13 +173,13 @@ public class TeamPortfolioAssetService {
             String draftConfigJson,
             String publishedConfigJson
     ) {
-        String ownerUniqueCode = resolveOwnerUniqueCodeForCleanup(teamId);
-        if (ownerUniqueCode == null) {
+        String teamUniqueCode = resolveTeamUniqueCodeForCleanup(teamId);
+        if (teamUniqueCode == null) {
             return;
         }
         Set<String> objectKeys = new LinkedHashSet<>();
-        collectOwnedObjectKeys(draftConfigJson, ownerUniqueCode, teamId, portfolioId, objectKeys);
-        collectOwnedObjectKeys(publishedConfigJson, ownerUniqueCode, teamId, portfolioId, objectKeys);
+        collectOwnedObjectKeys(draftConfigJson, teamUniqueCode, teamId, portfolioId, objectKeys);
+        collectOwnedObjectKeys(publishedConfigJson, teamUniqueCode, teamId, portfolioId, objectKeys);
         if (objectKeys.isEmpty()) {
             return;
         }
@@ -192,32 +197,32 @@ public class TeamPortfolioAssetService {
     }
 
     /**
-     * 在事务提交后清理已被新正式配置替换的自有素材。
+     * 在事务提交后清理更新前存在、更新后不再被当前草稿态或发布态引用的自有素材。
      *
      * @param teamId 团队 ID
      * @param portfolioId 作品集 ID
-     * @param oldPublishedConfigJson 旧正式配置
-     * @param newPublishedConfigJson 新正式配置
+     * @param beforeStateJson 更新前草稿态与发布态配置包
+     * @param afterStateJson 更新后草稿态与发布态配置包
      */
-    public void deleteReplacedPublishedAssetsAfterCommit(
+    public void deleteUnreferencedAssetsAfterCommit(
             long teamId,
             long portfolioId,
-            String oldPublishedConfigJson,
-            String newPublishedConfigJson
+            String beforeStateJson,
+            String afterStateJson
     ) {
-        String ownerUniqueCode = resolveOwnerUniqueCodeForCleanup(teamId);
-        if (ownerUniqueCode == null) {
+        String teamUniqueCode = resolveTeamUniqueCodeForCleanup(teamId);
+        if (teamUniqueCode == null) {
             return;
         }
-        Set<String> oldObjectKeys = new LinkedHashSet<>();
-        Set<String> newObjectKeys = new LinkedHashSet<>();
-        collectOwnedObjectKeys(oldPublishedConfigJson, ownerUniqueCode, teamId, portfolioId, oldObjectKeys);
-        collectOwnedObjectKeys(newPublishedConfigJson, ownerUniqueCode, teamId, portfolioId, newObjectKeys);
-        oldObjectKeys.removeAll(newObjectKeys);
-        if (oldObjectKeys.isEmpty()) {
+        Set<String> beforeObjectKeys = new LinkedHashSet<>();
+        Set<String> afterObjectKeys = new LinkedHashSet<>();
+        collectOwnedObjectKeys(beforeStateJson, teamUniqueCode, teamId, portfolioId, beforeObjectKeys);
+        collectOwnedObjectKeys(afterStateJson, teamUniqueCode, teamId, portfolioId, afterObjectKeys);
+        beforeObjectKeys.removeAll(afterObjectKeys);
+        if (beforeObjectKeys.isEmpty()) {
             return;
         }
-        Runnable deleteTask = () -> oldObjectKeys.forEach(objectKey -> deleteQuietly(portfolioId, objectKey));
+        Runnable deleteTask = () -> beforeObjectKeys.forEach(objectKey -> deleteQuietly(portfolioId, objectKey));
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
@@ -237,7 +242,6 @@ public class TeamPortfolioAssetService {
         String assetType = request == null || request.getAssetType() == null
                 ? "" : request.getAssetType().strip().toUpperCase(Locale.ROOT);
         if (ASSET_TYPE_COVER.equals(assetType)
-                || ASSET_TYPE_TEAM_IMAGE.equals(assetType)
                 || ASSET_TYPE_QR_CONTACT.equals(assetType)) {
             return assetType;
         }
@@ -266,19 +270,25 @@ public class TeamPortfolioAssetService {
     }
 
     /**
-     * 按团队拥有者唯一码构建对象键。
+     * 按团队唯一码和个人作品集命名规则构建对象键。
      */
     private String buildObjectKey(
-            String ownerUniqueCode,
-            long teamId,
+            String teamUniqueCode,
             long portfolioId,
-            String contentType
+            String assetType,
+            String contentType,
+            LocalDateTime now
     ) {
         String extension = MIME_IMAGE_PNG.equals(contentType) ? EXTENSION_PNG : EXTENSION_JPG;
-        return ownerUniqueCode + "/" + PORTFOLIO_ASSET_FOLDER
-                + "/team-" + teamId
-                + "/portfolio-" + portfolioId
-                + "/" + UUID.randomUUID() + "." + extension;
+        String random = UUID.randomUUID().toString().replace("-", "").substring(0, ASSET_RANDOM_LENGTH);
+        String filePrefix = ASSET_TYPE_QR_CONTACT.equals(assetType)
+                ? QR_CONTACT_FILE_PREFIX : COVER_FILE_PREFIX;
+        return teamUniqueCode + "/" + PORTFOLIO_ASSET_FOLDER
+                + "/" + filePrefix
+                + "-" + portfolioId
+                + "-" + now.format(ASSET_FILE_TIME_FORMATTER)
+                + "-" + random
+                + "." + extension;
     }
 
     /**
@@ -307,7 +317,7 @@ public class TeamPortfolioAssetService {
      */
     private void collectOwnedObjectKeys(
             String configJson,
-            String ownerUniqueCode,
+            String teamUniqueCode,
             long teamId,
             long portfolioId,
             Set<String> objectKeys
@@ -316,7 +326,7 @@ public class TeamPortfolioAssetService {
             return;
         }
         try {
-            collectValue(JSON.parse(configJson), ownerUniqueCode, teamId, portfolioId, objectKeys);
+            collectValue(JSON.parse(configJson), teamUniqueCode, portfolioId, objectKeys);
         } catch (RuntimeException exception) {
             log.warn("团队作品集素材清理跳过无效配置: teamId={}, portfolioId={}", teamId, portfolioId);
         }
@@ -327,24 +337,23 @@ public class TeamPortfolioAssetService {
      */
     private void collectValue(
             Object value,
-            String ownerUniqueCode,
-            long teamId,
+            String teamUniqueCode,
             long portfolioId,
             Set<String> objectKeys
     ) {
         if (value instanceof JSONObject object) {
             object.values().forEach(child -> collectValue(
-                    child, ownerUniqueCode, teamId, portfolioId, objectKeys));
+                    child, teamUniqueCode, portfolioId, objectKeys));
             return;
         }
         if (value instanceof JSONArray array) {
             array.forEach(child -> collectValue(
-                    child, ownerUniqueCode, teamId, portfolioId, objectKeys));
+                    child, teamUniqueCode, portfolioId, objectKeys));
             return;
         }
         if (value instanceof String text) {
             String objectKey = resolveExactOwnedObjectKey(
-                    ownerUniqueCode, teamId, portfolioId, text, true);
+                    teamUniqueCode, portfolioId, text, true);
             if (objectKey != null) {
                 objectKeys.add(objectKey);
             }
@@ -352,11 +361,10 @@ public class TeamPortfolioAssetService {
     }
 
     /**
-     * 从公开地址或对象键中解析锚定当前 owner 的精确对象键。
+     * 从公开地址或对象键中解析锚定当前团队和作品集的精确对象键。
      */
     private String resolveExactOwnedObjectKey(
-            String ownerUniqueCode,
-            long teamId,
+            String teamUniqueCode,
             long portfolioId,
             String value,
             boolean allowRawObjectKey
@@ -364,14 +372,14 @@ public class TeamPortfolioAssetService {
         if (value == null || value.isBlank()) {
             return null;
         }
-        String objectPrefix = ownerUniqueCode + "/" + PORTFOLIO_ASSET_FOLDER
-                + "/team-" + teamId + "/portfolio-" + portfolioId + "/";
+        String objectPrefix = teamUniqueCode + "/" + PORTFOLIO_ASSET_FOLDER + "/";
         int prefixIndex = value.indexOf(objectPrefix);
         if (prefixIndex < 0) {
             return null;
         }
         String objectKey = value.substring(prefixIndex);
-        Pattern exactPattern = Pattern.compile("^" + Pattern.quote(objectPrefix) + UUID_FILE_PATTERN + "$");
+        Pattern exactPattern = Pattern.compile("^" + Pattern.quote(objectPrefix)
+                + ASSET_FILE_PATTERN.formatted(portfolioId) + "$");
         if (!exactPattern.matcher(objectKey).matches()) {
             return null;
         }
@@ -396,36 +404,34 @@ public class TeamPortfolioAssetService {
     }
 
     /**
-     * 读取团队当前拥有者唯一码，业务校验失败时使用固定提示。
+     * 读取团队唯一码，业务校验失败时使用固定提示。
      */
-    private String requireOwnerUniqueCode(long teamId) {
-        String uniqueCode = resolveOwnerUniqueCode(teamId);
+    private String requireTeamUniqueCode(long teamId) {
+        String uniqueCode = resolveTeamUniqueCode(teamId);
         if (uniqueCode == null) {
-            throw new BusinessException(TEAM_OWNER_STORAGE_INVALID_MESSAGE);
+            throw new BusinessException(TEAM_STORAGE_INVALID_MESSAGE);
         }
         return uniqueCode;
     }
 
     /**
-     * 清理时读取团队当前拥有者唯一码，无法证明归属时安全跳过。
+     * 清理时读取团队唯一码，无法证明归属时安全跳过。
      */
-    private String resolveOwnerUniqueCodeForCleanup(long teamId) {
-        String uniqueCode = resolveOwnerUniqueCode(teamId);
+    private String resolveTeamUniqueCodeForCleanup(long teamId) {
+        String uniqueCode = resolveTeamUniqueCode(teamId);
         if (uniqueCode == null) {
-            log.warn("团队作品集素材清理跳过无拥有者存储信息: teamId={}", teamId);
+            log.warn("团队作品集素材清理跳过无团队存储信息: teamId={}", teamId);
         }
         return uniqueCode;
     }
 
     /**
-     * 解析团队当前拥有者唯一码。
+     * 解析团队唯一码。
      */
-    private String resolveOwnerUniqueCode(long teamId) {
+    private String resolveTeamUniqueCode(long teamId) {
         TeamEntity team = teamEntityMapper.selectById(teamId);
-        UserEntity owner = team == null || team.getOwnerUserId() == null
-                ? null : userEntityMapper.selectById(team.getOwnerUserId());
-        return owner == null || owner.getUniqueCode() == null || owner.getUniqueCode().isBlank()
-                ? null : owner.getUniqueCode();
+        return team == null || team.getUniqueCode() == null || team.getUniqueCode().isBlank()
+                ? null : team.getUniqueCode();
     }
 
     /**

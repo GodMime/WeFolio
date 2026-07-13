@@ -218,6 +218,40 @@ test('team asset ticket follows compressed file stat and MIME', async () => {
   assert.equal(uploads[0].filePath, '/tmp/compressed.jpg')
 })
 
+test('team asset compresses an http tmp image when its original stat is unavailable', async () => {
+  const requests = []
+  const uploads = []
+  const wxApi = {
+    getFileSystemManager() {
+      return {
+        statSync(filePath) {
+          if (filePath === 'http://tmp/cover.png') throw new Error('stat:fail no such file')
+          if (filePath === 'http://tmp/compressed.jpg') return { size: 120 * 1024 }
+          throw new Error(`unexpected stat: ${filePath}`)
+        }
+      }
+    },
+    compressImage({ success }) { success({ tempFilePath: 'http://tmp/compressed.jpg' }) }
+  }
+  const { uploadTeamPortfolioAsset } = loadUtility('team-portfolio-assets.js')
+  const url = await uploadTeamPortfolioAsset({
+    portfolioId: 13,
+    filePath: 'http://tmp/cover.png',
+    assetType: 'COVER',
+    clientId: 'cover-http-tmp',
+    wxApi,
+    requestFn: async (options) => {
+      requests.push(options)
+      return { uploadUrl: 'https://cos/upload', publicUrl: 'https://cdn/cover.jpg', formData: {} }
+    },
+    uploadFn: async (options) => uploads.push(options)
+  })
+  assert.equal(url, 'https://cdn/cover.jpg')
+  assert.equal(requests[0].data.fileSize, 120 * 1024)
+  assert.equal(requests[0].data.mimeType, 'image/jpeg')
+  assert.equal(uploads[0].filePath, 'http://tmp/compressed.jpg')
+})
+
 test('team asset rejects a compressed file still over 300KB before signing', async () => {
   const { uploadTeamPortfolioAsset } = loadUtility('team-portfolio-assets.js')
   let requestCount = 0

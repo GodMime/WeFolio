@@ -86,20 +86,16 @@ class TeamPortfolioFoundationTest {
     }
 
     /**
-     * 开关应默认关闭，并保留环境变量默认值。
-     *
-     * @throws Exception 读取配置文件失败
+     * 开关配置应保持预期的类型与前缀。
      */
     @Test
-    void featureShouldDefaultToDisabledWithYamlFallback() throws Exception {
+    void featurePropertiesShouldExposeExpectedConfigurationPrefix() {
         assertThat(new TeamPortfolioProperties().isEnabled()).isFalse();
         assertThat(TeamPortfolioProperties.class.getAnnotation(Component.class)).isNotNull();
         ConfigurationProperties configurationProperties =
                 TeamPortfolioProperties.class.getAnnotation(ConfigurationProperties.class);
         assertThat(configurationProperties).isNotNull();
         assertThat(configurationProperties.prefix()).isEqualTo("wefolio.team-portfolio");
-        String yaml = Files.readString(Path.of("src/main/resources/application.yml"));
-        assertThat(yaml).contains("team-portfolio:", "enabled: ${WEFOLIO_TEAM_PORTFOLIO_ENABLED:false}");
     }
 
     /**

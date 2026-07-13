@@ -392,7 +392,17 @@ public class MinePortfolioService {
         if (request.getClientRevision() != null && !request.getClientRevision().equals(safeInt(portfolio.getDraftRevision()))) {
             throw new BusinessException(PortfolioMessage.DRAFT_REVISION_CHANGED_SAVE_MESSAGE);
         }
+        PortfolioConfigDto oldDraftConfig = parseConfig(portfolio.getDraftConfigJson());
+        PortfolioConfigDto publishedConfig = parseConfig(portfolio.getPublishedConfigJson());
         PortfolioConfigDto normalized = portfolioConfigValidator.normalize(userId, request.getConfig());
+        List<String> deletedObjectKeys = resolveUnreferencedAssetObjectKeys(
+                userId,
+                portfolio.getId(),
+                oldDraftConfig,
+                publishedConfig,
+                normalized,
+                publishedConfig
+        );
         int nextDraftRevision = safeInt(portfolio.getDraftRevision()) + 1;
         int nextHistoryRevision = nextHistoryRevision(portfolio);
         String configJson = toJson(normalized);
@@ -418,6 +428,7 @@ public class MinePortfolioService {
         rebuildReferences(portfolio.getId(), PortfolioConfigScopeDict.DRAFT.getCode(),
                 portfolioConfigValidator.buildReferences(portfolio.getId(), userId, PortfolioConfigScopeDict.DRAFT.getCode(), normalized));
         insertHistory(portfolio, nextHistoryRevision, normalized, hash, userId, now, HISTORY_ACTION_DRAFT_SAVE);
+        deleteUnreferencedAssetsAfterCommit(portfolio.getId(), deletedObjectKeys);
         return buildDetail(portfolio, normalized);
     }
 
@@ -517,11 +528,15 @@ public class MinePortfolioService {
         if (!hasText(draftConfigJson)) {
             throw new BusinessException(PortfolioMessage.DRAFT_SAVE_REQUIRED_MESSAGE);
         }
-        PortfolioConfigDto normalized = portfolioConfigValidator.normalize(userId, parseConfig(draftConfigJson));
-        List<String> deletedObjectKeys = resolveDeletedPublishedAssetObjectKeys(
+        PortfolioConfigDto currentDraftConfig = parseConfig(draftConfigJson);
+        PortfolioConfigDto oldPublishedConfig = parseConfig(portfolio.getPublishedConfigJson());
+        PortfolioConfigDto normalized = portfolioConfigValidator.normalize(userId, currentDraftConfig);
+        List<String> deletedObjectKeys = resolveUnreferencedAssetObjectKeys(
                 userId,
                 portfolio.getId(),
-                parseConfig(portfolio.getPublishedConfigJson()),
+                currentDraftConfig,
+                oldPublishedConfig,
+                currentDraftConfig,
                 normalized
         );
         String idempotencyKey = normalizeRequiredString(
@@ -559,7 +574,7 @@ public class MinePortfolioService {
                 idempotencyKey,
                 PUBLISH_POINT_REMARK
         );
-        deletePublishedAssetsAfterCommit(portfolio.getId(), deletedObjectKeys);
+        deleteUnreferencedAssetsAfterCommit(portfolio.getId(), deletedObjectKeys);
         return buildDetail(portfolio, normalized);
     }
 
@@ -961,62 +976,35 @@ public class MinePortfolioService {
     }
 
     /**
-     * 解析发布后需要删除的旧正式作品集图片素材对象键。
+     * 解析更新后不再被当前草稿态或发布态引用的作品集图片素材对象键。
      *
      * @param userId 用户 ID
      * @param portfolioId 作品集 ID
-     * @param oldConfig 旧正式配置
-     * @param newConfig 即将发布的新配置
+     * @param beforeDraftConfig 更新前草稿配置
+     * @param beforePublishedConfig 更新前发布配置
+     * @param afterDraftConfig 更新后草稿配置
+     * @param afterPublishedConfig 更新后发布配置
      * @return 需要删除的 COS 对象键列表
      */
-    private List<String> resolveDeletedPublishedAssetObjectKeys(
+    private List<String> resolveUnreferencedAssetObjectKeys(
             Long userId,
             Long portfolioId,
-            PortfolioConfigDto oldConfig,
-            PortfolioConfigDto newConfig
+            PortfolioConfigDto beforeDraftConfig,
+            PortfolioConfigDto beforePublishedConfig,
+            PortfolioConfigDto afterDraftConfig,
+            PortfolioConfigDto afterPublishedConfig
     ) {
-        if (!hasPortfolioAssetValue(oldConfig)) {
-            return List.of();
-        }
         String uniqueCode = miniappAuthService.getUniqueCodeByUserId(userId);
-        Set<String> oldObjectKeys = collectOwnedPortfolioAssetObjectKeys(oldConfig, uniqueCode, portfolioId);
-        Set<String> newObjectKeys = collectOwnedPortfolioAssetObjectKeys(newConfig, uniqueCode, portfolioId);
-        oldObjectKeys.removeAll(newObjectKeys);
-        return new ArrayList<>(oldObjectKeys);
-    }
-
-    /**
-     * 判断配置中是否包含可能需要清理的作品集图片素材值。
-     *
-     * @param config 作品集配置
-     * @return true 表示至少有一个图片素材字段存在
-     */
-    private boolean hasPortfolioAssetValue(PortfolioConfigDto config) {
-        if (config == null) {
-            return false;
-        }
-        if (config.getShare() != null
-                && (hasText(config.getShare().getCoverUrl()) || hasText(config.getShare().getAvatarUrl()))) {
-            return true;
-        }
-        for (PortfolioConfigDto.Component component : safeList(config.getComponents())) {
-            if (component == null) {
-                continue;
-            }
-            Map<String, Object> componentConfig = component.getConfig() == null ? Map.of() : component.getConfig();
-            if (PortfolioComponentTypeDict.PROFILE.getCode().equals(component.getComponentType())) {
-                Map<String, Object> profileConfig = asObjectMap(componentConfig.get(CONFIG_KEY_PROFILE));
-                if (hasText(asString(profileConfig.get(CONFIG_KEY_AVATAR_URL)))
-                        || hasText(asString(profileConfig.get(CONFIG_KEY_WECHAT_QR_URL)))) {
-                    return true;
-                }
-            }
-            if (PortfolioComponentTypeDict.QR_CONTACT.getCode().equals(component.getComponentType())
-                    && hasText(asString(componentConfig.get(CONFIG_KEY_QR_URL)))) {
-                return true;
-            }
-        }
-        return false;
+        Set<String> beforeObjectKeys = collectOwnedPortfolioAssetObjectKeys(
+                beforeDraftConfig, uniqueCode, portfolioId);
+        beforeObjectKeys.addAll(collectOwnedPortfolioAssetObjectKeys(
+                beforePublishedConfig, uniqueCode, portfolioId));
+        Set<String> afterObjectKeys = collectOwnedPortfolioAssetObjectKeys(
+                afterDraftConfig, uniqueCode, portfolioId);
+        afterObjectKeys.addAll(collectOwnedPortfolioAssetObjectKeys(
+                afterPublishedConfig, uniqueCode, portfolioId));
+        beforeObjectKeys.removeAll(afterObjectKeys);
+        return new ArrayList<>(beforeObjectKeys);
     }
 
     /**
@@ -1095,16 +1083,23 @@ public class MinePortfolioService {
                 portfolioId
         );
         Matcher matcher = Pattern.compile(patternText).matcher(value);
-        return matcher.find() ? matcher.group() : "";
+        if (!matcher.find()) {
+            return "";
+        }
+        String objectKey = matcher.group();
+        if (value.equals(objectKey) || value.equals(cosService.publicUrl(objectKey))) {
+            return objectKey;
+        }
+        return "";
     }
 
     /**
-     * 发布事务提交后删除旧正式作品集图片素材。
+     * 更新事务提交后删除不再被当前草稿态或发布态引用的图片素材。
      *
      * @param portfolioId 作品集 ID
      * @param objectKeys COS 对象键列表
      */
-    private void deletePublishedAssetsAfterCommit(Long portfolioId, List<String> objectKeys) {
+    private void deleteUnreferencedAssetsAfterCommit(Long portfolioId, List<String> objectKeys) {
         if (objectKeys == null || objectKeys.isEmpty()) {
             return;
         }
@@ -1113,7 +1108,7 @@ public class MinePortfolioService {
                 try {
                     cosService.delete(objectKey);
                 } catch (Exception e) {
-                    log.warn("作品集旧图片素材删除失败: portfolioId={}, objectKey={}", portfolioId, objectKey, e);
+                    log.warn("作品集无引用图片素材删除失败: portfolioId={}, objectKey={}", portfolioId, objectKey, e);
                 }
             }
         };

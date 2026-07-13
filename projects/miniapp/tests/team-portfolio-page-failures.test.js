@@ -63,10 +63,11 @@ test('editor QR picker cancellation is silent and preserves the existing configu
   } finally { page.cleanup() }
 })
 
-test('editor WXML presents all component wrappers in Chinese and binds member source states', () => {
+test('editor WXML presents all component options in Chinese and binds member source states', () => {
   const wxml = fs.readFileSync(path.join(ROOT, 'standard-edit/team-portfolio-standard-edit.wxml'), 'utf8')
-  for (const label of ['团队资料', '轮播图', '分割线', '双列作品集', '单列作品集', '文字说明', '档期查询', '预留联系信息', '二维码联系']) assert.match(wxml, new RegExp(`component-heading[^>]*>${label}<`))
-  assert.doesNotMatch(wxml, /component-heading[^>]*>(?:TEAM_PROFILE|CAROUSEL|DIVIDER|MEMBER_PORTFOLIO_GRID|MEMBER_PORTFOLIO_LIST|TEXT_SECTION|SCHEDULE_QUERY|CONTACT_FORM|QR_CONTACT)</)
+  const source = fs.readFileSync(path.join(ROOT, 'standard-edit/team-portfolio-standard-edit.js'), 'utf8')
+  for (const label of ['团队资料', '轮播图', '分割线', '双列作品集', '单列作品集', '文字说明', '档期查询', '预留联系信息', '二维码联系']) assert.match(source, new RegExp(label))
+  assert.match(wxml, /class="component-title">\{\{item\.displayName\}\}/)
   for (const handler of ['handleCarouselLoadMembers', 'handleGridLoadMembers', 'handleListLoadMembers']) assert.match(wxml, new RegExp(`bindloadmembers="${handler}"`))
   for (const handler of ['handleCarouselRetrySource', 'handleGridRetrySource', 'handleListRetrySource']) assert.match(wxml, new RegExp(`bindtap="${handler}"`))
   assert.match(wxml, /class="source-state"/)
@@ -76,8 +77,8 @@ test('editor WXML presents all component wrappers in Chinese and binds member so
 
 test('team pages protect long text and editor styles its source and component controls', () => {
   const editorCss = fs.readFileSync(path.join(ROOT, 'standard-edit/team-portfolio-standard-edit.wxss'), 'utf8')
-  for (const selector of ['.source-state', '.component-header', '.arrange', '.cover']) assert.match(editorCss, new RegExp(`\\${selector}\\{`))
-  assert.match(editorCss, /\.cover\{[^}]*height:260rpx[^}]*aspect-ratio:/)
+  for (const selector of ['.source-state', '.component-list', '.component-row', '.cover-preview']) assert.match(editorCss, new RegExp(`\\${selector}\\s*\\{`))
+  assert.match(editorCss, /\.cover-preview\s*\{[^}]*width:\s*360rpx[^}]*height:\s*288rpx/)
   for (const relativePath of ['team-select/team-select.wxss', 'component-library/team-portfolio-component-library.wxss', 'standard-preview/team-portfolio-standard-preview.wxss', 'contact-leads/team-contact-leads.wxss', 'visitor-portfolio/team-visitor-portfolio.wxss']) {
     const css = fs.readFileSync(path.join(ROOT, relativePath), 'utf8')
     assert.match(css, /min-width:\s*0/)
@@ -216,7 +217,7 @@ test('editor component save clears draft and publish retry state', () => {
   try { seedPending(page); page.handleComponentSave({ currentTarget: { dataset: { key: 'text-1' } }, detail: { config: { content: '新内容' } } }); assertPendingCleared(page) } finally { page.cleanup() }
 })
 
-test('editor cover upload updates the cover and clears draft and publish retry state', async () => {
+test('editor cover selection updates the local preview and clears draft and publish retry state', async () => {
   const page = editablePage()
   page.cleanup()
   const uploadPage = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => ({}), { chooseMedia({ success }) { success({ tempFiles: [{ tempFilePath: 'https://cdn.example/new-cover.png' }] }) } })
@@ -234,11 +235,11 @@ test('editor QR upload preserves text fields, notifies its child, and clears ret
   try { seedPending(uploadPage); await uploadPage.handleQrChoose({ currentTarget: { dataset: { key: 'qr-1' } } }); const config = uploadPage.data.config.components.find((item) => item.componentKey === 'qr-1').config; assert.deepEqual(config, { title: '联系我', description: '请扫码', qrUrl: 'https://cdn.example/new-qr.png', qrUrlSource: 'CUSTOM' }); assert.deepEqual(applied, [{ detail: { qrUrl: 'https://cdn.example/new-qr.png' } }]); assertPendingCleared(uploadPage) } finally { uploadPage.cleanup() }
 })
 
-test('editor cover upload keeps the prior cover on a non-cancel failure and handles empty media safely', async () => {
+test('editor cover selection keeps the prior cover on a non-cancel failure and handles empty media safely', async () => {
   const toasts = []
   const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => ({}), { chooseMedia({ fail }) { fail({ errMsg: 'chooseMedia:fail network' }) }, showToast(value) { toasts.push(value) } })
   page.setData({ portfolioId: 7, canMaintain: true, config: { share: { coverUrl: 'https://old.example/cover.png' }, components: [] } })
-  try { await page.handleCoverChoose(); assert.equal(page.data.config.share.coverUrl, 'https://old.example/cover.png'); assert.match(toasts[0].title, /封面上传失败/); global.wx.chooseMedia = ({ success }) => success({ tempFiles: [] }); await page.handleCoverChoose(); assert.equal(page.data.config.share.coverUrl, 'https://old.example/cover.png') } finally { page.cleanup() }
+  try { await page.handleCoverChoose(); assert.equal(page.data.config.share.coverUrl, 'https://old.example/cover.png'); assert.match(toasts[0].title, /图片选择失败/); global.wx.chooseMedia = ({ success }) => success({ tempFiles: [] }); await page.handleCoverChoose(); assert.equal(page.data.config.share.coverUrl, 'https://old.example/cover.png') } finally { page.cleanup() }
 })
 
 test('editor cover picker cancellation is silent', async () => {

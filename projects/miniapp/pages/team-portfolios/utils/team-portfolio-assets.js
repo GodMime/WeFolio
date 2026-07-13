@@ -1,12 +1,17 @@
 const { request } = require('../../../utils/request.js')
-const { isRemoteUrl, prepareLocalUploadFilePath } = require('../../../utils/upload-file.js')
+const { isRemoteUrl } = require('../../../utils/upload-file.js')
 const { normalizeId } = require('../../../utils/id.js')
 
 const IMAGE_MAX_SIZE_BYTES = 300 * 1024
-const IMAGE_COMPRESS_QUALITY = 90
-const IMAGE_COMPRESS_SIZE = 2048
 const MIME_IMAGE_JPEG = 'image/jpeg'
 const MIME_IMAGE_PNG = 'image/png'
+const IMAGE_COMPRESS_ATTEMPTS = Object.freeze([
+  Object.freeze({ quality: 85, compressedSize: 1080 }),
+  Object.freeze({ quality: 78, compressedSize: 900 }),
+  Object.freeze({ quality: 70, compressedSize: 720 }),
+  Object.freeze({ quality: 62, compressedSize: 560 }),
+  Object.freeze({ quality: 54, compressedSize: 420 })
+])
 
 function getRuntimeWx(wxApi) {
   const runtimeWx = wxApi || (typeof wx !== 'undefined' ? wx : null)
@@ -15,10 +20,39 @@ function getRuntimeWx(wxApi) {
 }
 
 function getLocalFileSize(filePath, wxApi) {
-  const stats = getRuntimeWx(wxApi).getFileSystemManager().statSync(filePath)
-  const size = stats && Number(stats.size)
-  if (!Number.isFinite(size) || size <= 0) throw new Error('无法读取团队素材文件大小')
-  return size
+  try {
+    const stats = getRuntimeWx(wxApi).getFileSystemManager().statSync(filePath)
+    const size = stats && Number(stats.size)
+    return Number.isFinite(size) && size > 0 ? size : 0
+  } catch (error) {
+    return 0
+  }
+}
+
+function compressTeamPortfolioImage(filePath, attempt, wxApi) {
+  const runtimeWx = getRuntimeWx(wxApi)
+  if (!runtimeWx.compressImage) return Promise.reject(new Error('当前微信版本不支持图片压缩'))
+  return new Promise((resolve, reject) => runtimeWx.compressImage({
+    src: filePath,
+    quality: attempt.quality,
+    compressedWidth: attempt.compressedSize,
+    success(response) {
+      if (response && response.tempFilePath) return resolve(response.tempFilePath)
+      reject(new Error('团队素材压缩失败'))
+    },
+    fail(error) { reject(new Error(error && error.errMsg ? error.errMsg : '团队素材压缩失败')) }
+  }))
+}
+
+async function prepareTeamPortfolioImageFilePath(filePath, wxApi) {
+  const originalSize = getLocalFileSize(filePath, wxApi)
+  if (originalSize > 0 && originalSize <= IMAGE_MAX_SIZE_BYTES) return filePath
+  for (const attempt of IMAGE_COMPRESS_ATTEMPTS) {
+    const compressedPath = await compressTeamPortfolioImage(filePath, attempt, wxApi)
+    const compressedSize = getLocalFileSize(compressedPath, wxApi)
+    if (compressedSize > 0 && compressedSize <= IMAGE_MAX_SIZE_BYTES) return compressedPath
+  }
+  throw new Error('团队素材不能超过 300KB')
 }
 
 function normalizeImageMimeType(value) {
@@ -81,14 +115,9 @@ function createTeamAssetUploadTicket(requestFn = request, portfolioId, payload) 
 
 async function uploadTeamPortfolioAsset(options = {}) {
   if (isRemoteUrl(options.filePath)) return options.filePath
-  const preparedPath = await prepareLocalUploadFilePath(options.filePath, {
-    wxApi: options.wxApi,
-    maxSizeBytes: IMAGE_MAX_SIZE_BYTES,
-    compressQuality: IMAGE_COMPRESS_QUALITY,
-    compressedSize: IMAGE_COMPRESS_SIZE,
-    messages: { tooLarge: '团队素材不能超过 300KB' }
-  })
+  const preparedPath = await prepareTeamPortfolioImageFilePath(options.filePath, options.wxApi)
   const finalFileSize = getLocalFileSize(preparedPath, options.wxApi)
+  if (!finalFileSize) throw new Error('无法读取团队素材文件大小')
   if (finalFileSize > IMAGE_MAX_SIZE_BYTES) throw new Error('团队素材不能超过 300KB')
   const finalMimeType = await resolveFinalImageMimeType(preparedPath, options.wxApi)
   const payload = {

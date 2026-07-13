@@ -64,6 +64,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -136,6 +137,8 @@ class MinePortfolioServiceTest {
     @BeforeEach
     void setUp() {
         AuthContextHolder.set(new AuthContext(7L, "wf-user-7"));
+        lenient().when(cosService.publicUrl(any())).thenAnswer(
+                invocation -> "https://cos.we-folio.dingchenyong.top/" + invocation.getArgument(0));
     }
 
     @AfterEach
@@ -441,6 +444,41 @@ class MinePortfolioServiceTest {
     }
 
     @Test
+    void saveDraftShouldDeleteOnlyOldDraftAssetsNoLongerReferencedByEitherCurrentState() {
+        String oldDraftCover = "WFA3B1E7A2/protfolio/cover-88-20260701110000-a1b2c3d4.jpg";
+        String publishedQr = "WFA3B1E7A2/protfolio/qr-contact-88-20260701120000-b2c3d4e5.png";
+        PortfolioEntity portfolio = ownedPortfolio();
+        portfolio.setDraftRevision(3);
+        portfolio.setPublishedRevision(1);
+        portfolio.setPublicationStatus(PortfolioPublicationStatusDict.PUBLISHED.getCode());
+        portfolio.setDraftConfigJson("""
+                {"schemaVersion":"standard-personal-v1","share":{"coverUrl":"%s"},"components":[]}
+                """.formatted(cosUrl(oldDraftCover)));
+        portfolio.setPublishedConfigJson("""
+                {"schemaVersion":"standard-personal-v1","components":[
+                  {"componentKey":"qr","componentType":"QR_CONTACT","sortOrder":1000,"enabled":true,
+                   "config":{"qrUrl":"%s"}}
+                ]}
+                """.formatted(cosUrl(publishedQr)));
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+        PortfolioConfigDto normalized = configWithPortfolioAssets("", "", "");
+        when(portfolioConfigValidator.normalize(7L, normalized)).thenReturn(normalized);
+        when(portfolioConfigValidator.buildReferences(
+                88L, 7L, PortfolioConfigScopeDict.DRAFT.getCode(), normalized)).thenReturn(List.of());
+        when(miniappAuthService.getUniqueCodeByUserId(7L)).thenReturn("WFA3B1E7A2");
+        when(portfolioEntityMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
+        MinePortfolioDraftSaveRequest request = new MinePortfolioDraftSaveRequest();
+        request.setConfig(normalized);
+        request.setClientRevision(3);
+        request.setIdempotencyKey("draft-cleanup");
+
+        service().saveDraft(88L, request);
+
+        verify(cosService).delete(oldDraftCover);
+        verify(cosService, never()).delete(publishedQr);
+    }
+
+    @Test
     void saveDraftShouldRejectConcurrentUpdateBeforeWritingReferencesAndHistory() {
         PortfolioEntity portfolio = ownedPortfolio();
         portfolio.setDraftRevision(3);
@@ -665,6 +703,35 @@ class MinePortfolioServiceTest {
         service().publish(88L, request);
 
         verify(cosService).delete("WFA3B1E7A2/protfolio/cover-88-20260701110000-a1b2c3d4.jpg");
+    }
+
+    @Test
+    void publishShouldNotDeleteOwnedKeyEmbeddedInForeignUrl() {
+        String objectKey = "WFA3B1E7A2/protfolio/cover-88-20260701110000-a1b2c3d4.jpg";
+        PortfolioEntity portfolio = ownedPortfolio();
+        portfolio.setDraftRevision(4);
+        portfolio.setPublishedRevision(1);
+        portfolio.setPublicationStatus(PortfolioPublicationStatusDict.PUBLISHED.getCode());
+        portfolio.setPublishedConfigJson("""
+                {"schemaVersion":"standard-personal-v1","share":{"coverUrl":"https://external.example.com/%s"},"components":[]}
+                """.formatted(objectKey));
+        portfolio.setDraftConfigJson("""
+                {"schemaVersion":"standard-personal-v1","components":[]}
+                """);
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+        PortfolioConfigDto normalized = configWithPortfolioAssets("", "", "");
+        when(portfolioConfigValidator.normalize(eq(7L), any(PortfolioConfigDto.class))).thenReturn(normalized);
+        when(portfolioConfigValidator.buildReferences(
+                88L, 7L, PortfolioConfigScopeDict.PUBLISHED.getCode(), normalized)).thenReturn(List.of());
+        when(miniappAuthService.getUniqueCodeByUserId(7L)).thenReturn("WFA3B1E7A2");
+        when(portfolioEntityMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
+        MinePortfolioPublishRequest request = new MinePortfolioPublishRequest();
+        request.setDraftRevision(4);
+        request.setIdempotencyKey("publish-foreign-url");
+
+        service().publish(88L, request);
+
+        verify(cosService, never()).delete(objectKey);
     }
 
     @Test
@@ -912,6 +979,10 @@ class MinePortfolioServiceTest {
         )));
         config.setComponents(List.of(profile, qrContact));
         return config;
+    }
+
+    private String cosUrl(String objectKey) {
+        return "https://cos.we-folio.dingchenyong.top/" + objectKey;
     }
 
     private String scheduleComponentConfigJson() {

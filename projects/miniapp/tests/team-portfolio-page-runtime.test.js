@@ -94,7 +94,7 @@ test('new editor creates only on first save and then uses draft save', async () 
       }
     }
     if (options.url === '/api/mine/team-portfolios/41/draft') {
-      return { portfolioId: 41, draftRevision: 2, publicationStatus: 'DRAFT_ONLY' }
+      return { portfolioId: 41, draftRevision: requests.filter((item) => item.url === options.url).length + 1, publicationStatus: 'DRAFT_ONLY' }
     }
     throw new Error(`unexpected request: ${options.url}`)
   })
@@ -105,22 +105,126 @@ test('new editor creates only on first save and then uses draft save', async () 
     assert.deepEqual(requests.map((item) => item.url), ['/api/mine/teams/3'])
     assert.equal(page.data.portfolioId, 0)
     assert.equal(page.data.canMaintain, true)
-
-    const firstConfig = clone(page.data.config)
-    await page.handleSaveTap()
-    assert.deepEqual(requests[1], {
-      url: '/api/mine/teams/3/portfolios/standard',
-      method: 'POST',
-      data: { config: firstConfig }
+    assert.equal(page.data.config.components.length, 1)
+    assert.equal(page.data.config.components[0].componentType, 'TEAM_PROFILE')
+    assert.deepEqual(page.data.config.components[0].config.team, {
+      teamId: 3,
+      teamName: '甲团队',
+      avatarUrl: 'team.png',
+      intro: '团队简介'
     })
-    assert.equal(page.data.portfolioId, 41)
-    assert.equal(page.data.draftRevision, 1)
+    assert.equal(page.data.componentValidation[page.data.config.components[0].componentKey], true)
 
     await page.handleSaveTap()
+    assert.equal(requests[1].url, '/api/mine/teams/3/portfolios/standard')
+    assert.equal(requests[1].method, 'POST')
+    assert.equal(requests[1].data.config.schemaVersion, 'standard-team-v1')
+    assert.equal(requests[1].data.config.share.coverUrl, '')
     assert.equal(requests[2].url, '/api/mine/team-portfolios/41/draft')
-    assert.equal(requests[2].method, 'POST')
     assert.equal(requests[2].data.clientRevision, 1)
+    assert.equal(page.data.portfolioId, 41)
     assert.equal(page.data.draftRevision, 2)
+
+    await page.handleSaveTap()
+    assert.equal(requests[3].url, '/api/mine/team-portfolios/41/draft')
+    assert.equal(requests[3].method, 'POST')
+    assert.equal(requests[3].data.clientRevision, 2)
+    assert.equal(page.data.draftRevision, 3)
+  } finally { page.cleanup() }
+})
+
+test('save draft returns to the portfolio list after a new portfolio is created', async () => {
+  const navigations = []
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
+    if (options.url === '/api/mine/teams/3/portfolios/standard') {
+      return { portfolioId: 41, ownerId: 3, draftRevision: 1, publicationStatus: 'DRAFT_ONLY', config: options.data.config }
+    }
+    if (options.url === '/api/mine/team-portfolios/41/draft') {
+      return { portfolioId: 41, draftRevision: 2, publicationStatus: 'DRAFT_ONLY' }
+    }
+    throw new Error(`unexpected request: ${options.url}`)
+  }, {
+    navigateBack(options) { navigations.push({ type: 'back', options }) },
+    redirectTo(options) { navigations.push({ type: 'redirect', options }) }
+  }, {
+    getCurrentPages: () => [
+      { route: 'pages/portfolios/portfolios' },
+      { route: 'pages/team-portfolios/team-select/team-select' },
+      { route: 'pages/team-portfolios/standard-edit/team-portfolio-standard-edit' }
+    ]
+  })
+  page.setData({ teamId: 3, canMaintain: true })
+  try {
+    await page.handleSaveTap()
+    assert.deepEqual(navigations, [{ type: 'back', options: { delta: 2 } }])
+  } finally { page.cleanup() }
+})
+
+test('save draft returns to the portfolio list after an existing portfolio is updated', async () => {
+  const navigations = []
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
+    if (options.url === '/api/mine/team-portfolios/41/draft') {
+      return { portfolioId: 41, draftRevision: 3, publicationStatus: 'DRAFT_ONLY' }
+    }
+    throw new Error(`unexpected request: ${options.url}`)
+  }, {
+    navigateBack(options) { navigations.push({ type: 'back', options }) },
+    redirectTo(options) { navigations.push({ type: 'redirect', options }) }
+  }, {
+    getCurrentPages: () => [
+      { route: 'pages/portfolios/portfolios' },
+      { route: 'pages/team-portfolios/standard-edit/team-portfolio-standard-edit' }
+    ]
+  })
+  page.setData({ portfolioId: 41, teamId: 3, draftRevision: 2, canMaintain: true })
+  try {
+    await page.handleSaveTap()
+    assert.deepEqual(navigations, [{ type: 'back', options: { delta: 1 } }])
+  } finally { page.cleanup() }
+})
+
+test('save draft redirects to the team portfolio list when no list page exists in the stack', async () => {
+  const navigations = []
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
+    if (options.url === '/api/mine/team-portfolios/41/draft') {
+      return { portfolioId: 41, draftRevision: 3, publicationStatus: 'DRAFT_ONLY' }
+    }
+    throw new Error(`unexpected request: ${options.url}`)
+  }, {
+    navigateBack(options) { navigations.push({ type: 'back', options }) },
+    redirectTo(options) { navigations.push({ type: 'redirect', options }) }
+  }, {
+    getCurrentPages: () => [
+      { route: 'pages/team-portfolios/standard-edit/team-portfolio-standard-edit' }
+    ]
+  })
+  page.setData({ portfolioId: 41, teamId: 3, draftRevision: 2, canMaintain: true })
+  try {
+    await page.handleSaveTap()
+    assert.deepEqual(navigations, [{
+      type: 'redirect',
+      options: { url: '/pages/team-portfolios/portfolios' }
+    }])
+  } finally { page.cleanup() }
+})
+
+test('save draft remains in the editor when the request fails', async () => {
+  const navigations = []
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => {
+    throw new Error('network')
+  }, {
+    navigateBack(options) { navigations.push({ type: 'back', options }) },
+    redirectTo(options) { navigations.push({ type: 'redirect', options }) }
+  }, {
+    getCurrentPages: () => [
+      { route: 'pages/portfolios/portfolios' },
+      { route: 'pages/team-portfolios/standard-edit/team-portfolio-standard-edit' }
+    ]
+  })
+  page.setData({ portfolioId: 41, teamId: 3, draftRevision: 2, canMaintain: true })
+  try {
+    await page.handleSaveTap()
+    assert.deepEqual(navigations, [])
   } finally { page.cleanup() }
 })
 
@@ -130,6 +234,9 @@ test('new editor publish creates before publishing', async () => {
     requests.push(clone(options))
     if (options.url === '/api/mine/teams/3/portfolios/standard') {
       return { portfolioId: 41, ownerId: 3, draftRevision: 1, publicationStatus: 'DRAFT_ONLY', config: options.data.config }
+    }
+    if (options.url === '/api/mine/team-portfolios/41/draft') {
+      return { portfolioId: 41, draftRevision: 2, publicationStatus: 'DRAFT_ONLY' }
     }
     if (options.url === '/api/mine/team-portfolios/41/publish') {
       return { publicationStatus: 'PUBLISHED', publishedRevision: 1 }
@@ -141,9 +248,10 @@ test('new editor publish creates before publishing', async () => {
     await page.handlePublishTap()
     assert.deepEqual(requests.map((item) => item.url), [
       '/api/mine/teams/3/portfolios/standard',
+      '/api/mine/team-portfolios/41/draft',
       '/api/mine/team-portfolios/41/publish'
     ])
-    assert.equal(requests[1].data.draftRevision, 1)
+    assert.equal(requests[2].data.draftRevision, 2)
     assert.equal(page.data.portfolioId, 41)
     assert.equal(page.data.publicationStatus, 'PUBLISHED')
   } finally { page.cleanup() }
@@ -164,8 +272,162 @@ test('unsaved editor blocks preview and member-source requests that need a portf
     assert.deepEqual(requests, [])
 
     const wxml = fs.readFileSync(path.join(ROOT, 'standard-edit/team-portfolio-standard-edit.wxml'), 'utf8')
-    assert.match(wxml, /handleCoverChoose[^>]*disabled="\{\{!canMaintain \|\| !portfolioId \|\| shareCoverUploading\}\}"/)
+    assert.match(wxml, /class="cover-preview \{\{!canMaintain \|\| shareCoverUploading \? 'disabled' : ''\}\}"[^>]*bindtap="handleCoverChoose"/)
     assert.match(wxml, /handlePreviewTap[^>]*disabled="\{\{!canMaintain \|\| !portfolioId \|\| saving \|\| publishing\}\}"/)
+  } finally { page.cleanup() }
+})
+
+test('new editor keeps a selected cover local until create, upload, and draft save', async () => {
+  const requests = []
+  const uploads = []
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
+    requests.push(clone(options))
+    if (options.url === '/api/mine/teams/3/portfolios/standard') {
+      return { portfolioId: 51, ownerId: 3, draftRevision: 1, publicationStatus: 'DRAFT_ONLY', config: options.data.config }
+    }
+    if (options.url === '/api/mine/team-portfolios/51/asset/upload-ticket') {
+      return { uploadUrl: 'https://cos.example/upload', publicUrl: 'https://cdn.example/team-cover.jpg', formData: { key: 'team-cover' } }
+    }
+    if (options.url === '/api/mine/team-portfolios/51/draft') {
+      return { portfolioId: 51, draftRevision: 2, publicationStatus: 'DRAFT_ONLY' }
+    }
+    throw new Error(`unexpected request: ${options.url}`)
+  }, {
+    chooseMedia({ success }) { success({ tempFiles: [{ tempFilePath: 'http://tmp/team-cover.jpg' }] }) },
+    getFileSystemManager() { return { statSync() { return { size: 128 } } } },
+    uploadFile(options) { uploads.push(clone({ url: options.url, filePath: options.filePath, name: options.name, formData: options.formData })); options.success({ statusCode: 204 }) }
+  })
+  page.setData({ teamId: 3, canMaintain: true })
+  try {
+    await page.handleCoverChoose()
+    assert.equal(page.data.config.share.coverUrl, 'http://tmp/team-cover.jpg')
+    assert.deepEqual(requests, [])
+
+    await page.handleSaveTap()
+    assert.deepEqual(requests.map((item) => item.url), [
+      '/api/mine/teams/3/portfolios/standard',
+      '/api/mine/team-portfolios/51/asset/upload-ticket',
+      '/api/mine/team-portfolios/51/draft'
+    ])
+    assert.equal(requests[0].data.config.share.coverUrl, '')
+    assert.equal(requests[2].data.config.share.coverUrl, 'https://cdn.example/team-cover.jpg')
+    assert.equal(page.data.config.share.coverUrl, 'https://cdn.example/team-cover.jpg')
+    assert.deepEqual(uploads, [{ url: 'https://cos.example/upload', filePath: 'http://tmp/team-cover.jpg', name: 'file', formData: { key: 'team-cover' } }])
+  } finally { page.cleanup() }
+})
+
+test('team cover crop resolves a renderable image path before opening the sheet', async () => {
+  const imageInfoSources = []
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => ({}), {
+    chooseMedia({ success }) { success({ tempFiles: [{ tempFilePath: 'http://tmp/raw-cover.png' }] }) },
+    getImageInfo({ src, success }) {
+      imageInfoSources.push(src)
+      success({ path: 'wxfile://resolved-cover.png', width: 1200, height: 900 })
+    },
+    cropImage() {}
+  })
+  page.setData({ teamId: 3, canMaintain: true })
+  try {
+    await page.handleCoverChoose()
+    assert.deepEqual(imageInfoSources, ['http://tmp/raw-cover.png'])
+    assert.equal(page.data.shareCoverCropVisible, true)
+    assert.equal(page.data.shareCoverCropPath, 'wxfile://resolved-cover.png')
+  } finally { page.cleanup() }
+})
+
+test('new editor preserves a local cover and reuses the created portfolio when upload retries', async () => {
+  const requests = []
+  let ticketAttempts = 0
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
+    requests.push(clone(options))
+    if (options.url === '/api/mine/teams/3/portfolios/standard') {
+      return { portfolioId: 52, ownerId: 3, draftRevision: 1, publicationStatus: 'DRAFT_ONLY', config: options.data.config }
+    }
+    if (options.url === '/api/mine/team-portfolios/52/asset/upload-ticket') {
+      ticketAttempts += 1
+      if (ticketAttempts === 1) throw new Error('network')
+      return { uploadUrl: 'https://cos.example/retry', publicUrl: 'https://cdn.example/retry.jpg', formData: {} }
+    }
+    if (options.url === '/api/mine/team-portfolios/52/draft') {
+      return { portfolioId: 52, draftRevision: 2, publicationStatus: 'DRAFT_ONLY' }
+    }
+    throw new Error(`unexpected request: ${options.url}`)
+  }, {
+    getFileSystemManager() { return { statSync() { return { size: 128 } } } },
+    uploadFile({ success }) { success({ statusCode: 204 }) }
+  })
+  page.setData({ teamId: 3, canMaintain: true, config: { schemaVersion: 'standard-team-v1', share: { coverUrl: 'wxfile://tmp/retry.jpg' }, components: [] } })
+  try {
+    await page.handleSaveTap()
+    assert.equal(page.data.portfolioId, 52)
+    assert.equal(page.data.config.share.coverUrl, 'wxfile://tmp/retry.jpg')
+    assert.equal(requests.filter((item) => item.url.endsWith('/draft')).length, 0)
+
+    await page.handleSaveTap()
+    assert.equal(requests.filter((item) => item.url === '/api/mine/teams/3/portfolios/standard').length, 1)
+    assert.equal(requests.filter((item) => item.url.endsWith('/asset/upload-ticket')).length, 2)
+    assert.equal(requests.filter((item) => item.url.endsWith('/draft')).length, 1)
+    assert.equal(page.data.config.share.coverUrl, 'https://cdn.example/retry.jpg')
+  } finally { page.cleanup() }
+})
+
+test('editor skips remote cover upload and publishes only after local cover upload and draft save', async () => {
+  const remoteRequests = []
+  const remotePage = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
+    remoteRequests.push(clone(options))
+    return { portfolioId: 61, draftRevision: 4, publicationStatus: 'DRAFT_ONLY' }
+  })
+  remotePage.setData({ portfolioId: 61, teamId: 3, canMaintain: true, draftRevision: 3, config: { schemaVersion: 'standard-team-v1', share: { coverUrl: 'https://cdn.example/existing.jpg' }, components: [] } })
+  try {
+    await remotePage.handleSaveTap()
+    assert.deepEqual(remoteRequests.map((item) => item.url), ['/api/mine/team-portfolios/61/draft'])
+  } finally { remotePage.cleanup() }
+
+  const publishRequests = []
+  const publishPage = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
+    publishRequests.push(clone(options))
+    if (options.url.endsWith('/asset/upload-ticket')) return { uploadUrl: 'https://cos.example/publish', publicUrl: 'https://cdn.example/publish.jpg', formData: {} }
+    if (options.url.endsWith('/draft')) return { portfolioId: 62, draftRevision: 5, publicationStatus: 'DRAFT_ONLY' }
+    if (options.url.endsWith('/publish')) return { portfolioId: 62, draftRevision: 5, publishedRevision: 5, publicationStatus: 'PUBLISHED' }
+    throw new Error(`unexpected request: ${options.url}`)
+  }, {
+    getFileSystemManager() { return { statSync() { return { size: 128 } } } },
+    uploadFile({ success }) { success({ statusCode: 204 }) }
+  })
+  publishPage.setData({ portfolioId: 62, teamId: 3, canMaintain: true, draftRevision: 4, config: { schemaVersion: 'standard-team-v1', share: { coverUrl: 'wxfile://tmp/publish.jpg' }, components: [] } })
+  try {
+    await publishPage.handlePublishTap()
+    assert.deepEqual(publishRequests.map((item) => item.url), [
+      '/api/mine/team-portfolios/62/asset/upload-ticket',
+      '/api/mine/team-portfolios/62/draft',
+      '/api/mine/team-portfolios/62/publish'
+    ])
+  } finally { publishPage.cleanup() }
+})
+
+test('editor keeps the remote cover after draft save fails and does not upload it again', async () => {
+  const requests = []
+  let draftAttempts = 0
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
+    requests.push(clone(options))
+    if (options.url.endsWith('/asset/upload-ticket')) return { uploadUrl: 'https://cos.example/once', publicUrl: 'https://cdn.example/once.jpg', formData: {} }
+    if (options.url.endsWith('/draft')) {
+      draftAttempts += 1
+      if (draftAttempts === 1) throw new Error('network')
+      return { portfolioId: 63, draftRevision: 6, publicationStatus: 'DRAFT_ONLY' }
+    }
+    throw new Error(`unexpected request: ${options.url}`)
+  }, {
+    getFileSystemManager() { return { statSync() { return { size: 128 } } } },
+    uploadFile({ success }) { success({ statusCode: 204 }) }
+  })
+  page.setData({ portfolioId: 63, teamId: 3, canMaintain: true, draftRevision: 5, config: { schemaVersion: 'standard-team-v1', share: { coverUrl: 'wxfile://tmp/once.jpg' }, components: [] } })
+  try {
+    await page.handleSaveTap()
+    assert.equal(page.data.config.share.coverUrl, 'https://cdn.example/once.jpg')
+    await page.handleSaveTap()
+    assert.equal(requests.filter((item) => item.url.endsWith('/asset/upload-ticket')).length, 1)
+    assert.equal(requests.filter((item) => item.url.endsWith('/draft')).length, 2)
   } finally { page.cleanup() }
 })
 
@@ -397,4 +659,60 @@ test('editor preserves a draft team snapshot and reloads a trusted snapshot befo
     try { profileExports = require(componentPath) } finally { if (previous === undefined) delete global.Component; else global.Component = previous }
     assert.equal(profileExports.validateTeamProfile(snapshot).valid, true)
   } finally { remotePage.cleanup() }
+})
+
+test('team editor picker, component sheet, swipe delete, and drag reorder use isolated page state', () => {
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => ({}))
+  page.setData({
+    canMaintain: true,
+    config: {
+      schemaVersion: 'standard-team-v1',
+      share: {},
+      components: [
+        { componentKey: 'profile-1', componentType: 'TEAM_PROFILE', sortOrder: 0, config: { team: { teamId: 3, teamName: '甲团队' } } },
+        { componentKey: 'text-1', componentType: 'TEXT_SECTION', sortOrder: 1, config: { content: '说明', alignment: 'LEFT' } }
+      ]
+    },
+    componentValidation: { 'profile-1': true, 'text-1': true }
+  })
+  try {
+    page.handleOpenComponentSheet()
+    assert.equal(page.data.componentSheetVisible, true)
+    page.handleSelectComponent({ currentTarget: { dataset: { type: 'DIVIDER' } } })
+    assert.equal(page.data.componentSheetVisible, false)
+    assert.equal(page.data.config.components[2].componentType, 'DIVIDER')
+
+    page.handleComponentTap({ currentTarget: { dataset: { key: 'text-1', type: 'TEXT_SECTION' } } })
+    assert.equal(page.data.componentEditorVisible, true)
+    assert.equal(page.data.activeComponentKey, 'text-1')
+    page.handleCloseComponentEditor()
+    assert.equal(page.data.componentEditorVisible, false)
+
+    page.handleComponentDragStart({ currentTarget: { dataset: { index: 0, key: 'profile-1' } }, touches: [{ clientY: 100 }] })
+    page.handleComponentTouchMove({ currentTarget: { dataset: { index: 0, key: 'profile-1' } }, touches: [{ clientX: 30, clientY: 220 }] })
+    page.handleComponentTouchEnd({ currentTarget: { dataset: { index: 0, key: 'profile-1' } }, changedTouches: [{ clientX: 30, clientY: 220 }] })
+    assert.equal(page.data.config.components[1].componentKey, 'profile-1')
+
+    page.setData({ revealedComponentKey: 'text-1' })
+    page.handleRemoveComponent({ currentTarget: { dataset: { key: 'text-1' } } })
+    assert.equal(page.data.config.components.some((item) => item.componentKey === 'text-1'), false)
+    assert.equal(page.data.revealedComponentKey, '')
+  } finally { page.cleanup() }
+})
+
+test('team editor hides publish for a draft-only portfolio and shows it after publication', async () => {
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
+    if (options.url === '/api/mine/team-portfolios/7') return { portfolioId: 7, ownerId: 3, publicationStatus: 'DRAFT_ONLY', config: { share: {}, components: [] } }
+    if (options.url === '/api/mine/teams/3') return { team: { teamId: 3, teamName: '甲团队' } }
+    if (options.url === '/api/mine/team-portfolios/7/draft') return { portfolioId: 7, draftRevision: 2, publicationStatus: 'DRAFT_ONLY' }
+    if (options.url === '/api/mine/team-portfolios/7/publish') return { publicationStatus: 'PUBLISHED', publishedRevision: 2 }
+    throw new Error(`unexpected request: ${options.url}`)
+  })
+  try {
+    page.setData({ portfolioId: 7 })
+    await page.bootstrap()
+    assert.equal(page.data.showPublishAction, false)
+    await page.handlePublishTap()
+    assert.equal(page.data.showPublishAction, true)
+  } finally { page.cleanup() }
 })

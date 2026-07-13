@@ -2,10 +2,8 @@ package com.jxc.wefolio.service.teamportfolio;
 
 import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioAssetUploadTicketRequest;
 import com.jxc.wefolio.entity.TeamEntity;
-import com.jxc.wefolio.entity.UserEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.TeamEntityMapper;
-import com.jxc.wefolio.mapper.UserEntityMapper;
 import com.jxc.wefolio.service.CosService;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -30,35 +28,39 @@ import static org.mockito.Mockito.when;
 class TeamPortfolioAssetServiceTest {
 
     private static final long USER_ID = 7L;
-    private static final long OWNER_USER_ID = 8L;
     private static final long TEAM_ID = 11L;
     private static final long PORTFOLIO_ID = 13L;
     private static final String OWNER_UNIQUE_CODE = "WFOWNER";
+    private static final String TEAM_UNIQUE_CODE = "TM2048";
     private static final String IMAGE_INVALID_MESSAGE = "团队作品集图片未完成上传或不可用";
-    private static final String UUID_FILE = "123e4567-e89b-12d3-a456-426614174000.jpg";
+    private static final String COVER_FILE = "cover-13-20260712153020-a1b2c3d4.jpg";
+    private static final String QR_CONTACT_FILE = "qr-contact-13-20260712153120-b2c3d4e5.png";
 
     @Test
-    void managerUploadUsesTeamOwnerStableUniqueCodeAndExactPortfolioPrefix() {
-        TestContext context = contextWithOwner();
-        when(context.cosService.createPostUploadTicket(any(), eq("image/png"), eq(300L * 1024L), any()))
+    void managerUploadUsesTeamUniqueCodeAndPersonalPortfolioFilenameConvention() {
+        TestContext context = contextWithTeam();
+        when(context.cosService.createPostUploadTicket(any(), any(), eq(300L * 1024L), any()))
                 .thenAnswer(invocation -> new CosService.PostUploadTicket(
-                        "https://upload.example.com", invocation.getArgument(0), "image/png", 300L * 1024L,
+                        "https://upload.example.com", invocation.getArgument(0), invocation.getArgument(1), 300L * 1024L,
                         invocation.getArgument(3), Map.of("key", invocation.getArgument(0))));
         when(context.cosService.publicUrl(any())).thenAnswer(invocation -> cdnUrl(invocation.getArgument(0)));
 
-        var response = context.service.createUploadTicket(
+        var coverResponse = context.service.createUploadTicket(
+                PORTFOLIO_ID, request("COVER", "image/jpeg", 1024L), USER_ID);
+        var qrResponse = context.service.createUploadTicket(
                 PORTFOLIO_ID, request("QR_CONTACT", "image/png", 1024L), USER_ID);
 
-        verify(context.access).requireMaintainablePortfolio(PORTFOLIO_ID, USER_ID);
-        assertThat(response.getObjectKey())
-                .startsWith("WFOWNER/protfolio/team-11/portfolio-13/")
-                .matches("WFOWNER/protfolio/team-11/portfolio-13/[0-9a-f-]{36}\\.png");
-        assertThat(response.getAssetType()).isEqualTo("QR_CONTACT");
+        verify(context.access, org.mockito.Mockito.times(2)).requireMaintainablePortfolio(PORTFOLIO_ID, USER_ID);
+        assertThat(coverResponse.getObjectKey())
+                .matches("TM2048/protfolio/cover-13-\\d{14}-[0-9a-f]{8}\\.jpg");
+        assertThat(qrResponse.getObjectKey())
+                .matches("TM2048/protfolio/qr-contact-13-\\d{14}-[0-9a-f]{8}\\.png");
+        assertThat(qrResponse.getAssetType()).isEqualTo("QR_CONTACT");
     }
 
     @Test
     void uploadedImageValidationAcceptsOnlyExactOwnedPublicUrlAndVerifiedObjectHead() {
-        TestContext context = contextWithOwner();
+        TestContext context = contextWithTeam();
         String objectKey = ownedObjectKey();
         String publicUrl = cdnUrl(objectKey);
         when(context.cosService.publicUrl(objectKey)).thenReturn(publicUrl);
@@ -72,16 +74,18 @@ class TeamPortfolioAssetServiceTest {
 
     @Test
     void uploadedImageValidationRejectsExternalCrossScopeQueryAndPseudoPrefixBeforeHead() {
-        TestContext context = contextWithOwner();
+        TestContext context = contextWithTeam();
         List<String> invalidUrls = List.of(
                 "https://external.example.com/" + ownedObjectKey(),
-                cdnUrl("WFMEMBER/work/image/" + UUID_FILE),
-                cdnUrl("WFOTHER/protfolio/team-11/portfolio-13/" + UUID_FILE),
-                cdnUrl("WFOWNER/protfolio/team-12/portfolio-13/" + UUID_FILE),
-                cdnUrl("WFOWNER/protfolio/team-11/portfolio-14/" + UUID_FILE),
+                cdnUrl("WFOWNER/protfolio/" + COVER_FILE),
+                cdnUrl("TMOTHER/protfolio/" + COVER_FILE),
+                cdnUrl("TM2048/protfolio/cover-14-20260712153020-a1b2c3d4.jpg"),
+                cdnUrl("TM2048/protfolio/team-image-13-20260712153020-a1b2c3d4.jpg"),
+                cdnUrl("TM2048/protfolio/cover-13-2026071215302-a1b2c3d4.jpg"),
+                cdnUrl("TM2048/protfolio/cover-13-20260712153020-a1b2c3d.jpg"),
                 cdnUrl(ownedObjectKey()) + "?download=1",
                 cdnUrl("prefix-" + ownedObjectKey()),
-                cdnUrl("WFOWNER/protfolio/team-11/portfolio-13/not-a-uuid.jpg"));
+                cdnUrl("TM2048/protfolio/not-an-asset.jpg"));
 
         for (String invalidUrl : invalidUrls) {
             assertThatThrownBy(() -> context.service.validateUploadedImageUrl(TEAM_ID, PORTFOLIO_ID, invalidUrl))
@@ -94,7 +98,7 @@ class TeamPortfolioAssetServiceTest {
 
     @Test
     void uploadedImageValidationConvertsRemoteFailureAndRejectsBadMetadataWithoutLeakingMessage() {
-        TestContext context = contextWithOwner();
+        TestContext context = contextWithTeam();
         String objectKey = ownedObjectKey();
         String publicUrl = cdnUrl(objectKey);
         when(context.cosService.publicUrl(objectKey)).thenReturn(publicUrl);
@@ -117,10 +121,12 @@ class TeamPortfolioAssetServiceTest {
 
     @Test
     void invalidTicketTypeMimeAndSizeHaveZeroCosSideEffects() {
-        TestContext context = contextWithOwner();
+        TestContext context = contextWithTeam();
 
         assertThatThrownBy(() -> context.service.createUploadTicket(
                 PORTFOLIO_ID, request("VIDEO", "video/mp4", 10L), USER_ID)).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> context.service.createUploadTicket(
+                PORTFOLIO_ID, request("TEAM_IMAGE", "image/jpeg", 10L), USER_ID)).isInstanceOf(BusinessException.class);
         assertThatThrownBy(() -> context.service.createUploadTicket(
                 PORTFOLIO_ID, request("COVER", "image/gif", 10L), USER_ID)).isInstanceOf(BusinessException.class);
         assertThatThrownBy(() -> context.service.createUploadTicket(
@@ -132,7 +138,7 @@ class TeamPortfolioAssetServiceTest {
     }
 
     @Test
-    void failedAccessStopsOwnerLookupAndCosCalls() {
+    void failedAccessStopsTeamLookupAndCosCalls() {
         TestContext context = context();
         when(context.access.requireMaintainablePortfolio(PORTFOLIO_ID, USER_ID))
                 .thenThrow(new BusinessException("无权限"));
@@ -140,19 +146,19 @@ class TeamPortfolioAssetServiceTest {
         assertThatThrownBy(() -> context.service.createUploadTicket(
                 PORTFOLIO_ID, request("COVER", "image/jpeg", 10L), USER_ID)).isInstanceOf(BusinessException.class);
 
-        verifyNoInteractions(context.teamMapper, context.userMapper, context.cosService);
+        verifyNoInteractions(context.teamMapper, context.cosService);
     }
 
     @Test
-    void conservativeDeleteOnlyRemovesCurrentOwnerExactTeamPortfolioObjects() {
-        TestContext context = contextWithOwner();
+    void conservativeDeleteOnlyRemovesCurrentTeamExactPortfolioObjects() {
+        TestContext context = contextWithTeam();
         String owned = ownedObjectKey();
         when(context.cosService.publicUrl(any())).thenAnswer(invocation -> cdnUrl(invocation.getArgument(0)));
         String draft = JSON_STRING.formatted(
                 cdnUrl(owned),
-                cdnUrl("WFOTHER/protfolio/team-11/portfolio-13/" + UUID_FILE),
-                cdnUrl("WFOWNER/protfolio/team-11/portfolio-14/" + UUID_FILE),
-                cdnUrl("WFMEMBER/work/image/" + UUID_FILE));
+                cdnUrl("TMOTHER/protfolio/" + COVER_FILE),
+                cdnUrl("TM2048/protfolio/cover-14-20260712153020-a1b2c3d4.jpg"),
+                cdnUrl("WFMEMBER/work/image/" + COVER_FILE));
 
         context.service.deletePortfolioAssetsAfterCommit(TEAM_ID, PORTFOLIO_ID, draft, null);
 
@@ -162,11 +168,11 @@ class TeamPortfolioAssetServiceTest {
     }
 
     @Test
-    void ownerTransferSafelyIgnoresOldOwnerRootInsteadOfTrustingArbitraryPrefix() {
-        TestContext context = contextWithOwner();
+    void cleanupIgnoresHistoricalPersonalUniqueCodeRoot() {
+        TestContext context = contextWithTeam();
         when(context.cosService.publicUrl(any())).thenAnswer(invocation -> cdnUrl(invocation.getArgument(0)));
-        String oldOwnerObject = "WFOLDOWNER/protfolio/team-11/portfolio-13/" + UUID_FILE;
-        String config = "{\"share\":{\"coverUrl\":\"" + cdnUrl(oldOwnerObject) + "\"}}";
+        String personalRootObject = OWNER_UNIQUE_CODE + "/protfolio/" + COVER_FILE;
+        String config = "{\"share\":{\"coverUrl\":\"" + cdnUrl(personalRootObject) + "\"}}";
 
         context.service.deletePortfolioAssetsAfterCommit(TEAM_ID, PORTFOLIO_ID, config, null);
 
@@ -174,35 +180,49 @@ class TeamPortfolioAssetServiceTest {
     }
 
     @Test
-    void replacedPublishedCleanupUsesTheSameCurrentOwnerAnchor() {
-        TestContext context = contextWithOwner();
+    void replacedPublishedCleanupUsesTheSameCurrentTeamAnchor() {
+        TestContext context = contextWithTeam();
         when(context.cosService.publicUrl(any())).thenAnswer(invocation -> cdnUrl(invocation.getArgument(0)));
         String owned = ownedObjectKey();
-        String otherOwner = "WFOLDOWNER/protfolio/team-11/portfolio-13/" + UUID_FILE;
+        String otherTeam = "TMOTHER/protfolio/" + COVER_FILE;
         String oldConfig = "{\"owned\":\"" + cdnUrl(owned) + "\","
-                + "\"oldOwner\":\"" + cdnUrl(otherOwner) + "\"}";
+                + "\"otherTeam\":\"" + cdnUrl(otherTeam) + "\"}";
 
-        context.service.deleteReplacedPublishedAssetsAfterCommit(
+        context.service.deleteUnreferencedAssetsAfterCommit(
                 TEAM_ID, PORTFOLIO_ID, oldConfig, "{}");
 
         verify(context.cosService).delete(owned);
-        verify(context.cosService, never()).delete(otherOwner);
+        verify(context.cosService, never()).delete(otherTeam);
+    }
+
+    @Test
+    void stateDifferenceCleanupDeletesOnlyAssetsMissingFromBothCurrentStates() {
+        TestContext context = contextWithTeam();
+        when(context.cosService.publicUrl(any())).thenAnswer(invocation -> cdnUrl(invocation.getArgument(0)));
+        String cover = TEAM_UNIQUE_CODE + "/protfolio/" + COVER_FILE;
+        String qrContact = TEAM_UNIQUE_CODE + "/protfolio/" + QR_CONTACT_FILE;
+        String beforeState = "{\"draft\":{\"cover\":\"" + cdnUrl(cover) + "\"},"
+                + "\"published\":{\"qr\":\"" + cdnUrl(qrContact) + "\"}}";
+        String afterState = "{\"draft\":{},\"published\":{\"cover\":\""
+                + cdnUrl(cover) + "\"}}";
+
+        context.service.deleteUnreferencedAssetsAfterCommit(
+                TEAM_ID, PORTFOLIO_ID, beforeState, afterState);
+
+        verify(context.cosService).delete(qrContact);
+        verify(context.cosService, never()).delete(cover);
     }
 
     private static final String JSON_STRING = """
-            {"owned":"%s","otherOwner":"%s","otherPortfolio":"%s","memberWork":"%s"}
+            {"owned":"%s","otherTeam":"%s","otherPortfolio":"%s","memberWork":"%s"}
             """;
 
-    private static TestContext contextWithOwner() {
+    private static TestContext contextWithTeam() {
         TestContext context = context();
         TeamEntity team = new TeamEntity();
         team.setId(TEAM_ID);
-        team.setOwnerUserId(OWNER_USER_ID);
-        UserEntity owner = new UserEntity();
-        owner.setId(OWNER_USER_ID);
-        owner.setUniqueCode(OWNER_UNIQUE_CODE);
+        team.setUniqueCode(TEAM_UNIQUE_CODE);
         when(context.teamMapper.selectById(TEAM_ID)).thenReturn(team);
-        when(context.userMapper.selectById(OWNER_USER_ID)).thenReturn(owner);
         return context;
     }
 
@@ -213,10 +233,9 @@ class TeamPortfolioAssetServiceTest {
         when(access.requireMaintainablePortfolio(PORTFOLIO_ID, USER_ID)).thenReturn(
                 new TeamPortfolioAccessService.TeamPortfolioAccess(null, accessTeam, null, true, true));
         TeamEntityMapper teamMapper = mock(TeamEntityMapper.class);
-        UserEntityMapper userMapper = mock(UserEntityMapper.class);
         CosService cosService = mock(CosService.class);
-        return new TestContext(new TeamPortfolioAssetService(access, teamMapper, userMapper, cosService),
-                access, teamMapper, userMapper, cosService);
+        return new TestContext(new TeamPortfolioAssetService(access, teamMapper, cosService),
+                access, teamMapper, cosService);
     }
 
     private static TeamPortfolioAssetUploadTicketRequest request(String type, String mime, long size) {
@@ -229,7 +248,7 @@ class TeamPortfolioAssetServiceTest {
     }
 
     private static String ownedObjectKey() {
-        return OWNER_UNIQUE_CODE + "/protfolio/team-" + TEAM_ID + "/portfolio-" + PORTFOLIO_ID + "/" + UUID_FILE;
+        return TEAM_UNIQUE_CODE + "/protfolio/" + COVER_FILE;
     }
 
     private static String cdnUrl(String objectKey) {
@@ -252,7 +271,6 @@ class TeamPortfolioAssetServiceTest {
             TeamPortfolioAssetService service,
             TeamPortfolioAccessService access,
             TeamEntityMapper teamMapper,
-            UserEntityMapper userMapper,
             CosService cosService
     ) {
     }
