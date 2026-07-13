@@ -5,6 +5,9 @@ package com.jxc.wefolio.message;
  */
 public interface PortfolioMessage {
 
+    /** 个人作品集数量超限提示模板 */
+    String PERSONAL_PORTFOLIO_COUNT_LIMIT_TEMPLATE = "个人作品集数量已达上限（%d个），请删除部分个人作品集后再新建";
+
     /** 作品集不可访问提示 */
     String PORTFOLIO_UNAVAILABLE_MESSAGE = "作品集暂不可访问";
 

@@ -274,6 +274,9 @@ public class MineWorkService {
     /** 上传确认事务服务 */
     private final WorkUploadTransactionService workUploadTransactionService;
 
+    /** 内容数量上限服务 */
+    private final ContentLimitService contentLimitService;
+
     /**
      * 分页查询我的作品。
      *
@@ -513,6 +516,7 @@ public class MineWorkService {
         response.setVideoMaxBytes(VIDEO_MAX_BYTES);
         response.setVideoMaxDurationMs(VIDEO_MAX_DURATION_MS);
         List<PreparedUploadFile> preparedFiles = prepareUploadFiles(userId, user.getUniqueCode(), batchId, files);
+        ensureBatchWorkCapacity(userId, preparedFiles);
         for (PreparedUploadFile preparedFile : preparedFiles) {
             MineWorkUploadTicketRequest.UploadFileItem file = preparedFile.file();
             WorkUploadTaskEntity task = buildUploadTask(
@@ -534,6 +538,41 @@ public class MineWorkService {
             response.getItems().add(buildTicketItem(persistedTask, file.getClientId(), ticket));
         }
         return response;
+    }
+
+    /**
+     * 按媒体类型校验当前批次主作品的新增容量。
+     *
+     * <p>带来源任务的图片是缩略图或封面图，不会创建独立作品，因此不计入作品数量。</p>
+     *
+     * @param userId 当前用户 ID
+     * @param preparedFiles 已完成合法性预处理的上传文件
+     */
+    private void ensureBatchWorkCapacity(Long userId, List<PreparedUploadFile> preparedFiles) {
+        long imageCount = preparedFiles.stream()
+                .filter(this::isMainWorkUpload)
+                .filter(item -> MediaTypeDict.IMAGE.getCode().equals(item.mediaType()))
+                .count();
+        long videoCount = preparedFiles.stream()
+                .filter(this::isMainWorkUpload)
+                .filter(item -> MediaTypeDict.VIDEO.getCode().equals(item.mediaType()))
+                .count();
+        if (imageCount > 0L) {
+            contentLimitService.ensureWorkCapacity(userId, MediaTypeDict.IMAGE.getCode(), imageCount);
+        }
+        if (videoCount > 0L) {
+            contentLimitService.ensureWorkCapacity(userId, MediaTypeDict.VIDEO.getCode(), videoCount);
+        }
+    }
+
+    /**
+     * 判断上传文件是否会创建独立作品。
+     *
+     * @param preparedFile 已完成合法性预处理的上传文件
+     * @return 是否为主作品文件
+     */
+    private boolean isMainWorkUpload(PreparedUploadFile preparedFile) {
+        return preparedFile.file().getSourceTaskId() == null;
     }
 
     /**

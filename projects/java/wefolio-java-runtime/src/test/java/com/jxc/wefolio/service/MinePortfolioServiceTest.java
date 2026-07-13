@@ -134,6 +134,10 @@ class MinePortfolioServiceTest {
     @Mock
     private TeamPortfolioReferenceGuardService teamPortfolioReferenceGuardService;
 
+    /** 内容数量上限服务模拟 */
+    @Mock
+    private ContentLimitService contentLimitService;
+
     @BeforeEach
     void setUp() {
         AuthContextHolder.set(new AuthContext(7L, "wf-user-7"));
@@ -181,7 +185,20 @@ class MinePortfolioServiceTest {
         assertThat(inserted.getPublishedRevision()).isZero();
         assertThat(response.getPortfolioId()).isEqualTo(88L);
         assertThat(response.getPublicationStatus()).isEqualTo(PortfolioPublicationStatusDict.DRAFT_ONLY.getCode());
+        verify(contentLimitService).ensurePersonalPortfolioCapacity(7L);
         verify(pointService, never()).consume(any(), any(), any(), any(), any(Integer.class), any(), any());
+    }
+
+    @Test
+    void createStandardPersonalShouldRejectWhenPortfolioCountReachesLimit() {
+        doThrow(new BusinessException("个人作品集数量已达上限（10个），请删除部分个人作品集后再新建"))
+                .when(contentLimitService).ensurePersonalPortfolioCapacity(7L);
+
+        assertThatThrownBy(() -> service().createStandardPersonal(new MinePortfolioCreateRequest()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("个人作品集数量已达上限（10个），请删除部分个人作品集后再新建");
+
+        verify(portfolioEntityMapper, never()).insert(any(PortfolioEntity.class));
     }
 
     @Test
@@ -926,7 +943,8 @@ class MinePortfolioServiceTest {
                 portfolioRenderService,
                 miniappAuthService,
                 cosService,
-                teamPortfolioReferenceGuardService
+                teamPortfolioReferenceGuardService,
+                contentLimitService
         );
     }
 

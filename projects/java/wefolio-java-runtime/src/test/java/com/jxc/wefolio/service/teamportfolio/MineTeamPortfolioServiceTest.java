@@ -42,6 +42,7 @@ import com.jxc.wefolio.mapper.TeamMemberEntityMapper;
 import com.jxc.wefolio.mapper.TeamScheduleQueryRecordEntityMapper;
 import com.jxc.wefolio.mapper.VisitRecordEntityMapper;
 import com.jxc.wefolio.message.TeamPortfolioMessage;
+import com.jxc.wefolio.service.ContentLimitService;
 import com.jxc.wefolio.service.teamportfolio.component.schedulequery.TeamScheduleQueryComponentService;
 import com.jxc.wefolio.service.teamportfolio.component.contactform.TeamContactFormComponentService;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
@@ -204,8 +205,26 @@ class MineTeamPortfolioServiceTest {
         JSONObject snapshot = JSON.parseObject(historyCaptor.getValue().getSnapshotJson());
         assertThat(snapshot.getString("actionType")).isEqualTo("CREATE");
         assertThat(snapshot.getJSONObject("config")).isEqualTo(JSON.parseObject(JSON.toJSONString(configured)));
+        verify(context.contentLimitService).ensureTeamPortfolioCapacity(TEAM_ID);
         assertThat(MineTeamPortfolioService.class.getDeclaredFields())
                 .noneMatch(field -> field.getType().getSimpleName().contains("PointService"));
+    }
+
+    @Test
+    void createStopsBeforeWritesWhenTeamPortfolioCountReachesLimit() {
+        TestContext context = context(true);
+        when(context.access.requireTeamRole(eq(TEAM_ID), eq(USER_ID), any()))
+                .thenReturn(access(null, TeamRoleDict.OWNER.getCode()));
+        doThrow(new BusinessException("当前团队作品集数量已达上限（10个），请删除部分团队作品集后再新建"))
+                .when(context.contentLimitService).ensureTeamPortfolioCapacity(TEAM_ID);
+
+        assertThatThrownBy(() -> context.service.createStandard(
+                TEAM_ID, new TeamPortfolioCreateRequest(), USER_ID))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("当前团队作品集数量已达上限（10个），请删除部分团队作品集后再新建");
+
+        verify(context.portfolioMapper, never()).insert(any(PortfolioEntity.class));
+        verifyNoInteractions(context.validator, context.historyMapper, context.referenceService, context.assetService);
     }
 
     @Test
@@ -855,13 +874,14 @@ class MineTeamPortfolioServiceTest {
         VisitRecordEntityMapper visitRecordMapper = mock(VisitRecordEntityMapper.class);
         TeamScheduleQueryRecordEntityMapper scheduleRecordMapper = mock(TeamScheduleQueryRecordEntityMapper.class);
         TeamContactFormComponentService contactService = mock(TeamContactFormComponentService.class);
+        ContentLimitService contentLimitService = mock(ContentLimitService.class);
         MineTeamPortfolioService service = new MineTeamPortfolioService(properties, portfolioMapper, historyMapper,
                 referenceMapper, shareMapper, teamMapper, memberMapper, access, validator, renderService,
                 referenceService, assetService, scheduleService,
-                visitRecordMapper, scheduleRecordMapper, contactService);
+                visitRecordMapper, scheduleRecordMapper, contactService, contentLimitService);
         return new TestContext(service, portfolioMapper, historyMapper, referenceMapper, shareMapper, teamMapper,
                 memberMapper, access, validator, renderService, referenceService, assetService, scheduleService,
-                visitRecordMapper, scheduleRecordMapper, contactService);
+                visitRecordMapper, scheduleRecordMapper, contactService, contentLimitService);
     }
 
     /** 创建带标题、分享信息和组件的渲染结果。 */
@@ -1079,7 +1099,8 @@ class MineTeamPortfolioServiceTest {
             TeamScheduleQueryComponentService scheduleService,
             VisitRecordEntityMapper visitRecordMapper,
             TeamScheduleQueryRecordEntityMapper scheduleRecordMapper,
-            TeamContactFormComponentService contactService
+            TeamContactFormComponentService contactService,
+            ContentLimitService contentLimitService
     ) {
     }
 }

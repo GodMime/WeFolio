@@ -47,6 +47,7 @@ import com.jxc.wefolio.mapper.TeamMemberEntityMapper;
 import com.jxc.wefolio.mapper.TeamScheduleQueryRecordEntityMapper;
 import com.jxc.wefolio.mapper.VisitRecordEntityMapper;
 import com.jxc.wefolio.message.TeamPortfolioMessage;
+import com.jxc.wefolio.service.ContentLimitService;
 import com.jxc.wefolio.service.teamportfolio.component.contactform.TeamContactFormComponentService;
 import com.jxc.wefolio.service.teamportfolio.component.schedulequery.TeamScheduleQueryComponentService;
 import com.jxc.wefolio.service.teamportfolio.component.teamprofile.TeamProfileComponentConfig;
@@ -239,6 +240,9 @@ public class MineTeamPortfolioService {
     /** 团队预留联系信息组件服务。 */
     private final TeamContactFormComponentService teamContactFormComponentService;
 
+    /** 内容数量上限服务。 */
+    private final ContentLimitService contentLimitService;
+
     /**
      * 查询当前用户所有有效已加入团队中的标准团队作品集。
      *
@@ -329,6 +333,7 @@ public class MineTeamPortfolioService {
             long userId
     ) {
         accessService.requireTeamRole(teamId, userId, MAINTAINABLE_ROLES);
+        contentLimitService.ensureTeamPortfolioCapacity(teamId);
         TeamPortfolioConfigDto initialConfig = request == null || request.getConfig() == null
                 ? defaultConfig() : request.getConfig();
         String initialJson = JSON.toJSONString(initialConfig);

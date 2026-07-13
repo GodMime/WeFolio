@@ -5,6 +5,9 @@ package com.jxc.wefolio.message;
  */
 public interface TeamPortfolioMessage {
 
+    /** 团队作品集数量超限提示模板。 */
+    String PORTFOLIO_COUNT_LIMIT_TEMPLATE = "当前团队作品集数量已达上限（%d个），请删除部分团队作品集后再新建";
+
     /** 团队作品集功能尚未开放 */
     String FEATURE_DISABLED = "团队作品集功能暂未开放";
 

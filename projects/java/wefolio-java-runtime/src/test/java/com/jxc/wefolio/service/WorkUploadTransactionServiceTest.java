@@ -69,6 +69,10 @@ class WorkUploadTransactionServiceTest {
     @Mock
     private PointService pointService;
 
+    /** 内容数量上限服务模拟 */
+    @Mock
+    private ContentLimitService contentLimitService;
+
     @Test
     void confirmUploadedTaskShouldBeTransactional() throws NoSuchMethodException {
         Method method = WorkUploadTransactionService.class.getMethod(
@@ -102,7 +106,9 @@ class WorkUploadTransactionServiceTest {
 
         MineWorkUploadCompleteResponse.Item response = service().confirmUploadedTask(7L, task, item);
 
-        InOrder inOrder = inOrder(pointService, workEntityMapper, wfTagEntityMapper, workTagEntityMapper, workUploadTaskEntityMapper);
+        InOrder inOrder = inOrder(contentLimitService, pointService, workEntityMapper,
+                wfTagEntityMapper, workTagEntityMapper, workUploadTaskEntityMapper);
+        inOrder.verify(contentLimitService).ensureWorkCapacity(7L, MediaTypeDict.IMAGE.getCode(), 1L);
         inOrder.verify(pointService).consume(
                 eq(7L),
                 eq(PointSceneCodeDict.UPLOAD_IMAGE.getCode()),
@@ -137,6 +143,22 @@ class WorkUploadTransactionServiceTest {
         assertThat(response.isSuccess()).isTrue();
         assertThat(response.getWorkId()).isEqualTo(120L);
         verify(workUploadTaskEntityMapper, never()).selectById(anyLong());
+    }
+
+    @Test
+    void confirmUploadedTaskShouldRejectBeforePointsAndInsertWhenLimitReached() {
+        WorkUploadTaskEntity task = createdImageTask();
+        org.mockito.Mockito.doThrow(
+                        new BusinessException("图片作品数量已达上限（500个），请删除部分图片作品后再上传"))
+                .when(contentLimitService)
+                .ensureWorkCapacity(7L, MediaTypeDict.IMAGE.getCode(), 1L);
+
+        assertThatThrownBy(() -> service().confirmUploadedTask(7L, task, completeItem()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("图片作品数量已达上限（500个），请删除部分图片作品后再上传");
+
+        verify(pointService, never()).consume(any(), any(), any(), any(), any(Integer.class), any(), any());
+        verify(workEntityMapper, never()).insert(any(WorkEntity.class));
     }
 
     @Test
@@ -447,7 +469,8 @@ class WorkUploadTransactionServiceTest {
                 workEntityMapper,
                 wfTagEntityMapper,
                 workTagEntityMapper,
-                pointService);
+                pointService,
+                contentLimitService);
     }
 
     private WorkUploadTaskEntity createdImageTask() {

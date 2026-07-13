@@ -247,6 +247,9 @@ public class MinePortfolioService {
     /** 团队作品集引用保护服务 */
     private final TeamPortfolioReferenceGuardService teamPortfolioReferenceGuardService;
 
+    /** 内容数量上限服务 */
+    private final ContentLimitService contentLimitService;
+
     /**
      * 查询作品集列表。
      *
@@ -305,6 +308,7 @@ public class MinePortfolioService {
     @Transactional(rollbackFor = Exception.class)
     public MinePortfolioDetailResponse createStandardPersonal(MinePortfolioCreateRequest request) {
         Long userId = AuthContextHolder.requireUserId();
+        contentLimitService.ensurePersonalPortfolioCapacity(userId);
         PortfolioConfigDto initialConfig = defaultConfig();
         String configJson = toJson(initialConfig);
         LocalDateTime now = LocalDateTime.now();

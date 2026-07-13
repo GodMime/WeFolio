@@ -76,6 +76,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -115,6 +116,10 @@ class MineWorkServiceTest {
     /** 上传完成事务服务模拟 */
     @Mock
     private WorkUploadTransactionService workUploadTransactionService;
+
+    /** 内容数量上限服务模拟 */
+    @Mock
+    private ContentLimitService contentLimitService;
 
     @BeforeEach
     void setUp() {
@@ -459,6 +464,29 @@ class MineWorkServiceTest {
         assertThat(response.getItems().get(0).getObjectKey()).isEqualTo(firstTask.getObjectKey());
         assertThat(response.getItems().get(1).getObjectKey()).isEqualTo(secondTask.getObjectKey());
         assertThat(response.getItems().get(0).getUploadUrl()).contains("myqcloud.com");
+        verify(contentLimitService).ensureWorkCapacity(7L, MediaTypeDict.IMAGE.getCode(), 1L);
+        verify(contentLimitService).ensureWorkCapacity(7L, MediaTypeDict.VIDEO.getCode(), 1L);
+    }
+
+    @Test
+    void createUploadTicketsShouldRejectWholeBatchBeforeTaskCreationWhenImageLimitExceeded() {
+        when(userEntityMapper.selectById(7L)).thenReturn(activeUser());
+        MineWorkUploadTicketRequest.UploadFileItem first = ticketFile(
+                "client-1", MediaTypeDict.IMAGE.getCode(), "photo-1.jpg", "image/jpeg", 1024L);
+        MineWorkUploadTicketRequest.UploadFileItem second = ticketFile(
+                "client-2", MediaTypeDict.IMAGE.getCode(), "photo-2.jpg", "image/jpeg", 2048L);
+        MineWorkUploadTicketRequest request = new MineWorkUploadTicketRequest();
+        request.setFiles(List.of(first, second));
+        doThrow(new BusinessException("图片作品数量已达上限（500个），请删除部分图片作品后再上传"))
+                .when(contentLimitService)
+                .ensureWorkCapacity(7L, MediaTypeDict.IMAGE.getCode(), 2L);
+
+        assertThatThrownBy(() -> service().createUploadTickets(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("图片作品数量已达上限（500个），请删除部分图片作品后再上传");
+
+        verify(workUploadTaskEntityMapper, never()).insert(any(WorkUploadTaskEntity.class));
+        verify(cosService, never()).createPostUploadTicket(any(), any(), anyLong(), any());
     }
 
     @Test
@@ -578,6 +606,7 @@ class MineWorkServiceTest {
                 .isEqualTo("WFA3B1E7A2/work/image/WFA3B1E7A2-P-1782807167829-1-thumb.jpg");
         assertThat(response.getItems().get(1).getObjectKey())
                 .isEqualTo("WFA3B1E7A2/work/video/WFA3B1E7A2-V-1782807167829-3-thumb.jpg");
+        verifyNoInteractions(contentLimitService);
     }
 
     @Test
@@ -2153,7 +2182,8 @@ class MineWorkServiceTest {
                 workUploadTaskEntityMapper,
                 portfolioReferenceEntityMapper,
                 cosService,
-                workUploadTransactionService);
+                workUploadTransactionService,
+                contentLimitService);
     }
 
     private UserEntity activeUser() {
