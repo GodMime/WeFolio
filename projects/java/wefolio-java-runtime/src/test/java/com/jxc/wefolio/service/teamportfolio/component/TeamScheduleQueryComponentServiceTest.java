@@ -638,7 +638,7 @@ class TeamScheduleQueryComponentServiceTest {
     }
 
     /**
-     * 非空成员的持久化快照必须字段完整，并分别统计空闲、部分空闲和已满成员。
+     * 非空成员的持久化快照必须字段完整，并将无生效档位定义成员计入空闲人数。
      */
     @Test
     void publishedQueryShouldPersistCompleteMemberSnapshotAndThreeCounts() {
@@ -662,9 +662,9 @@ class TeamScheduleQueryComponentServiceTest {
                 ArgumentCaptor.forClass(TeamScheduleQueryRecordEntity.class);
         verify(teamScheduleQueryRecordEntityMapper).insert(captor.capture());
         TeamScheduleQueryRecordEntity record = captor.getValue();
-        assertThat(record.getAvailableMemberCount()).isEqualTo(1);
+        assertThat(record.getAvailableMemberCount()).isEqualTo(2);
         assertThat(record.getPartialAvailableMemberCount()).isEqualTo(1);
-        assertThat(record.getFullMemberCount()).isEqualTo(1);
+        assertThat(record.getFullMemberCount()).isZero();
         assertThat(record.getTeamResultJson())
                 .contains("\"displayName\":null", "\"avatarUrl\":null");
         JSONArray members = JSON.parseArray(record.getTeamResultJson());
@@ -678,6 +678,25 @@ class TeamScheduleQueryComponentServiceTest {
         assertThat(members.getJSONObject(2).get("displayName")).isNull();
         assertThat(members.getJSONObject(2).containsKey("avatarUrl")).isTrue();
         assertThat(members.getJSONObject(2).get("avatarUrl")).isNull();
+    }
+
+    /**
+     * 成员没有生效档位定义时应按空闲处理，同时保留空档位定义标识。
+     */
+    @Test
+    void previewShouldTreatMemberWithoutActiveSlotDefinitionAsAvailable() {
+        when(teamMemberEntityMapper.selectList(any())).thenReturn(List.of(membership(1L, 1L, "JOINED")));
+        when(userEntityMapper.selectBatchIds(Set.of(1L))).thenReturn(List.of(user(1L, "甲", "a1", "ACTIVE")));
+        when(slotDefinitionEntityMapper.selectActiveByUserIds(Set.of(1L))).thenReturn(List.of());
+        when(scheduleEntityMapper.selectByUserIdsAndDate(Set.of(1L), QUERY_DATE)).thenReturn(List.of());
+
+        TeamPortfolioScheduleQueryResponse response = service().queryPreview(
+                context(), unlimitedConfig(), request(QUERY_DATE));
+
+        assertThat(response.getStatus()).isEqualTo("TEAM_AVAILABLE");
+        assertThat(response.isAvailable()).isTrue();
+        assertMember(response.getMembers().getFirst(), 1L, "甲", "a1",
+                "AVAILABLE", "空闲", 0, 0, true);
     }
 
     /**
@@ -700,7 +719,7 @@ class TeamScheduleQueryComponentServiceTest {
         assertThat(response.getStatus()).isEqualTo("TEAM_PARTIAL_AVAILABLE");
         assertMember(response.getMembers().get(0), 1L, "甲", "a1", "AVAILABLE", "空闲", 1, 1, false);
         assertMember(response.getMembers().get(1), 2L, "乙", "a2", "PARTIAL_AVAILABLE", "部分档期空闲", 2, 1, false);
-        assertMember(response.getMembers().get(2), 3L, "丙", "a3", "FULL", "已满", 0, 0, true);
+        assertMember(response.getMembers().get(2), 3L, "丙", "a3", "AVAILABLE", "空闲", 0, 0, true);
     }
 
     /**
@@ -727,7 +746,7 @@ class TeamScheduleQueryComponentServiceTest {
     }
 
     /**
-     * 两个批量 Mapper 都返回 null 时仍应稳定产生无档位已满成员。
+     * 两个批量 Mapper 都返回 null 时仍应稳定产生无档位空闲成员。
      */
     @Test
     void previewShouldHandleNullBatchMapperResults() {
@@ -739,8 +758,9 @@ class TeamScheduleQueryComponentServiceTest {
         TeamPortfolioScheduleQueryResponse response = service().queryPreview(
                 context(), unlimitedConfig(), request(QUERY_DATE));
 
-        assertThat(response.getStatus()).isEqualTo("TEAM_FULL");
-        assertMember(response.getMembers().getFirst(), 1L, "甲", "a1", "FULL", "已满", 0, 0, true);
+        assertThat(response.getStatus()).isEqualTo("TEAM_AVAILABLE");
+        assertThat(response.isAvailable()).isTrue();
+        assertMember(response.getMembers().getFirst(), 1L, "甲", "a1", "AVAILABLE", "空闲", 0, 0, true);
         verify(slotDefinitionEntityMapper, times(1)).selectActiveByUserIds(Set.of(1L));
         verify(scheduleEntityMapper, times(1)).selectByUserIdsAndDate(Set.of(1L), QUERY_DATE);
     }

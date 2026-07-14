@@ -193,6 +193,7 @@ Component({
     changeRangeDate(event) { const field = event.currentTarget.dataset.field; const range = Object.assign({}, this.data.draft.queryRange, { [field]: event.detail.value }); const draft = updateDraftField(this.data.draft, 'queryRange', normalizeQueryRange(range)); this.setData({ draft }); this.triggerEvent('change', { config: draft }) },
     cancelEdit() { syncScheduleDraft(this); this.triggerEvent('cancel') },
     saveEdit() { const validation = validateScheduleQueryConfig(this.data.draft); if (!validation.valid) return this.setData({ errorMessage: validation.message }); this.triggerEvent('save', { config: createDefaultScheduleQueryConfig(this.data.draft) }) },
+    noop() {},
     openModal() { const bounds = resolveScheduleDateBounds(this.properties.config); this.setData({ modalVisible: true, dateStart: bounds.startDate, dateEnd: bounds.endDate }); this.triggerEvent('open') },
     closeModal() { this.setData({ modalVisible: false }); this.triggerEvent('close') },
     selectDate(event) { const selectedDate = event.currentTarget.dataset.date || event.detail.value || ''; this.setData({ selectedDate, pendingIdempotencyKey: selectedDate === this.data.selectedDate ? this.data.pendingIdempotencyKey : '' }); this.triggerEvent('datechange', { queriedDate: selectedDate }) },

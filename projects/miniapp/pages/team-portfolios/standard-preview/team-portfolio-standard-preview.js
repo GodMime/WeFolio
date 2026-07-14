@@ -6,7 +6,7 @@ const PERSONAL_VISITOR_URL = '/pages' + '/portfolios/visitor-portfolio/visitor-p
 function buckets(items) { const value = { teamProfile: [], carousel: [], divider: [], grid: [], list: [], text: [], schedule: [], contact: [], qr: [] }; (Array.isArray(items) ? items : []).forEach((item) => { const key = TYPE_BUCKETS[item.componentType]; if (key) value[key].push(item) }); return value }
 
 Page({
-  data: { portfolioId: 0, scope: 'draft', loading: false, errorMessage: '', render: {}, componentBuckets: buckets([]), empty: true, previewMode: true, scheduleResults: {} },
+  data: { portfolioId: 0, scope: 'draft', loading: false, errorMessage: '', render: {}, componentBuckets: buckets([]), empty: true, previewMode: true, scheduleResults: {}, contactForms: {}, contactModalVisible: {} },
   onLoad(options = {}) { const portfolioId = Number(options.portfolioId); const scope = options.scope === 'published' ? 'published' : 'draft'; if (!portfolioId) { this.setData({ errorMessage: '作品集参数无效' }); return }; this.setData({ portfolioId, scope }); this.bootstrap() },
   async bootstrap() { if (this.data.loading) return; this.setData({ loading: true, errorMessage: '' }); try { const detail = await previewTeamPortfolio(request, this.data.portfolioId, this.data.scope === 'published'); const render = detail.renderData || {}; const components = Array.isArray(render.components) ? render.components : []; this.setData({ render, componentBuckets: buckets(components), empty: components.length === 0 }) } catch (error) { if (handleTeamMaintainerAuthError(error)) return; if (showTeamPortfolioUnavailableToast(error)) return; this.setData({ errorMessage: '预览加载失败，请重试' }) } finally { this.setData({ loading: false }) } },
   handleRetry() { this.bootstrap() },
@@ -14,5 +14,8 @@ Page({
   handleQrPreview() {},
   handleMemberPortfolio(event) { const shareCode = event.detail && event.detail.shareCode; if (shareCode) wx.navigateTo({ url: `${PERSONAL_VISITOR_URL}?shareCode=${encodeURIComponent(shareCode)}` }) },
   async handleScheduleQuery(event) { const detail = event.detail || {}; const child = this.selectComponent(`#schedule-${detail.componentKey}`); try { const result = await request({ url: `/api/mine/team-portfolios/${this.data.portfolioId}/schedule-query-preview?scope=${this.data.scope}`, method: 'POST', data: { componentKey: detail.componentKey, queriedDate: detail.queriedDate, idempotencyKey: detail.idempotencyKey } }); this.setData({ scheduleResults: Object.assign({}, this.data.scheduleResults, { [detail.componentKey]: result }) }); if (child && child.resolveQuery) child.resolveQuery({ detail: result }) } catch (error) { if (handleTeamMaintainerAuthError(error)) return; if (showTeamPortfolioUnavailableToast(error)) { if (child && child.rejectQuery) child.rejectQuery({ detail: { message: '当前团队作品集不可用' } }); return }; if (child && child.rejectQuery) child.rejectQuery({ detail: { message: '档期查询失败，请重试' } }); wx.showToast({ title: '档期查询失败，请重试', icon: 'none' }) } },
-  handleContact() { wx.showToast({ title: '预览模式不提交', icon: 'none' }) }
+  handleContactInput(event) { const componentKey = event.currentTarget.dataset.key; this.setData({ contactForms: Object.assign({}, this.data.contactForms, { [componentKey]: event.detail.form }) }) },
+  handleContactOpen(event) { const componentKey = event.currentTarget.dataset.key; this.setData({ contactModalVisible: Object.assign({}, this.data.contactModalVisible, { [componentKey]: true }) }) },
+  handleContactClose(event) { const componentKey = event.currentTarget.dataset.key; this.setData({ contactModalVisible: Object.assign({}, this.data.contactModalVisible, { [componentKey]: false }) }) },
+  handleContactSubmit() { wx.showToast({ title: '预览模式不提交', icon: 'none' }) }
 })

@@ -7,12 +7,13 @@ function text(value) {
 }
 
 function createDefaultContactForm(source = {}) {
+  const form = source || {}
   return {
-    contactName: text(source.contactName),
-    phone: text(source.phone),
-    wechat: text(source.wechat),
-    desiredSchedule: text(source.desiredSchedule),
-    needs: text(source.needs)
+    contactName: text(form.contactName),
+    phone: text(form.phone),
+    wechat: text(form.wechat),
+    desiredSchedule: text(form.desiredSchedule),
+    needs: text(form.needs)
   }
 }
 
@@ -124,6 +125,7 @@ Component({
     },
     cancelEdit() { const draftConfig = createDefaultContactConfig(this.properties.config); this.setData({ draftConfig, draftFieldVisibility: createFieldVisibility(draftConfig.fields), errorMessage: '' }); this.triggerEvent('cancel') },
     saveEdit() { const validation = validateContactConfig(this.data.draftConfig); if (!validation.valid) return this.setData({ errorMessage: validation.message }); this.triggerEvent('save', { config: createDefaultContactConfig(this.data.draftConfig) }) },
+    noop() {},
     openModal() { this.triggerEvent('openmodal') },
     closeModal() { this.triggerEvent('closemodal') },
     handleInput(event) { const field = event.currentTarget.dataset.field; const localForm = Object.assign({}, this.data.localForm, { [field]: event.detail.value }); this.setData({ localForm, errorMessage: '' }); this.triggerEvent('contactinput', { field, value: event.detail.value, form: localForm }) },

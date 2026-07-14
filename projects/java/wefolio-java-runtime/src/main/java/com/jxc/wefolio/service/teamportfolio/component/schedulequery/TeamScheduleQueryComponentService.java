@@ -583,7 +583,9 @@ public class TeamScheduleQueryComponentService {
             int totalSlotCount,
             int availableSlotCount
     ) {
-        TeamScheduleMemberStatusDict status = totalSlotCount == 0 || availableSlotCount == 0
+        TeamScheduleMemberStatusDict status = totalSlotCount == 0
+                ? TeamScheduleMemberStatusDict.AVAILABLE
+                : availableSlotCount == 0
                 ? TeamScheduleMemberStatusDict.FULL
                 : availableSlotCount == totalSlotCount
                 ? TeamScheduleMemberStatusDict.AVAILABLE : TeamScheduleMemberStatusDict.PARTIAL_AVAILABLE;

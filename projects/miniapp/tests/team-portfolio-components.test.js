@@ -538,6 +538,18 @@ test('contact form validates plaintext input and clears only after success', () 
   assert.doesNotMatch(wxml, /submitText/)
 })
 
+test('contact form treats a null form binding as an empty form', () => {
+  const { definition, exports } = loadComponent('contact-form')
+  const emptyForm = exports.createDefaultContactForm()
+  const harness = createComponentHarness(definition, { form: null })
+
+  assert.deepEqual(exports.createDefaultContactForm(null), emptyForm)
+  assert.deepEqual(harness.instance.data.localForm, emptyForm)
+
+  harness.setProperties({ form: null })
+  assert.deepEqual(harness.instance.data.localForm, emptyForm)
+})
+
 test('QR is CUSTOM-only and distinguishes maintainer preview from visitor interaction', () => {
   const { definition, exports } = loadComponent('qr-contact')
   assert.deepEqual(exports.createDefaultQrContactConfig(), { title: '', description: '', qrUrlSource: 'CUSTOM', qrUrl: '' })
