@@ -316,15 +316,15 @@
 .component-remove-button {
   width: 108rpx;
   min-width: 108rpx;
-  height: 64rpx;
-  min-height: 64rpx;
+  height: 100%;
+  min-height: 100%;
   justify-content: center;
   margin: 0;
   padding: 0;
   color: #a9354f;
   font-size: 22rpx;
   font-weight: 800;
-  line-height: 64rpx;
+  line-height: 1;
   border-radius: 14rpx;
   background: #feecef;
   box-sizing: border-box;

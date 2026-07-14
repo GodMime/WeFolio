@@ -84,6 +84,21 @@ test('team preview and visitor pages share the team carousel component', () => {
   }
 })
 
+test('team preview and visitor pages render the personal-style brand footer', () => {
+  const logoUrl = '/assets/system/folio-logo-stack-bold-small-50kb.png'
+  const logoPath = path.resolve(__dirname, `..${logoUrl}`)
+
+  for (const name of ['standard-preview/team-portfolio-standard-preview', 'visitor-portfolio/team-visitor-portfolio']) {
+    const wxml = read(`${name}.wxml`)
+    const wxss = read(`${name}.wxss`)
+    assert.match(wxml, /class="folio-brand-footer"/)
+    assert.match(wxml, new RegExp(`class="folio-brand-logo" src="${logoUrl.replace(/\./g, '\\.')}" mode="aspectFit"`))
+    assert.match(wxml, /class="folio-brand-name">映期Folio<\/view>/)
+    assert.match(readCssRule(wxss, '.folio-brand-footer'), /padding:56rpx0calc\(160rpx\+env\(safe-area-inset-bottom\)\);/)
+  }
+  assert.equal(fs.existsSync(logoPath), true)
+})
+
 test('legacy team list is a request-free compatibility redirect', () => {
   const source = read('portfolios.js')
   assert.match(source, /UNIFIED_TEAM_PORTFOLIO_LIST_URL\s*=\s*'\/pages\/portfolios\/portfolios\?ownerType=TEAM'/)
