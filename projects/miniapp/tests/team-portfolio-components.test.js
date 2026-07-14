@@ -513,7 +513,7 @@ test('schedule component discards its idempotency key only for a confirmed rejec
 })
 
 test('contact form validates plaintext input and clears only after success', () => {
-  const { exports } = loadComponent('contact-form')
+  const { definition, exports } = loadComponent('contact-form')
   assert.deepEqual(exports.createDefaultContactConfig(), {
     title: '', description: '', displayMode: 'MODAL_FORM', fields: ['contactName', 'phone', 'wechat', 'needs']
   })
@@ -535,7 +535,24 @@ test('contact form validates plaintext input and clears only after success', () 
   const wxml = fs.readFileSync(path.join(ROOT, 'contact-form/contact-form.wxml'), 'utf8')
   assert.match(wxml, /displayConfig\.description/)
   assert.match(wxml, /fieldVisibility\.phone/)
+  assert.match(wxml, /<picker mode="date"[^>]*value="\{\{localForm\.desiredSchedule\}\}"[^>]*data-field="desiredSchedule"[^>]*bindchange="handleDateChange"/)
+  assert.match(wxml, /请选择档期（选填）/)
   assert.doesNotMatch(wxml, /submitText/)
+
+  const harness = createComponentHarness(definition, {
+    form: { contactName: '客户', phone: '13800138000', wechat: '', desiredSchedule: '', needs: '' },
+    config: exports.createDefaultContactConfig({ displayMode: 'INLINE_FORM' })
+  })
+  harness.instance.handleDateChange({
+    currentTarget: { dataset: { field: 'desiredSchedule' } },
+    detail: { value: '2026-08-01' }
+  })
+  assert.equal(harness.instance.data.localForm.desiredSchedule, '2026-08-01')
+  assert.deepEqual(harness.eventsByName('contactinput')[0].detail, {
+    field: 'desiredSchedule',
+    value: '2026-08-01',
+    form: { contactName: '客户', phone: '13800138000', wechat: '', desiredSchedule: '2026-08-01', needs: '' }
+  })
 })
 
 test('contact form treats a null form binding as an empty form', () => {

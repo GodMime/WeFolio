@@ -45,6 +45,13 @@ Component({
       })
     },
 
+    handleDateChange(event) {
+      this.triggerEvent('contactinput', {
+        field: event.currentTarget.dataset.field || '',
+        value: event.detail.value
+      })
+    },
+
     handleSubmit() {
       this.triggerEvent('submitcontact')
     },

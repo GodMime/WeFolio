@@ -129,6 +129,7 @@ Component({
     openModal() { this.triggerEvent('openmodal') },
     closeModal() { this.triggerEvent('closemodal') },
     handleInput(event) { const field = event.currentTarget.dataset.field; const localForm = Object.assign({}, this.data.localForm, { [field]: event.detail.value }); this.setData({ localForm, errorMessage: '' }); this.triggerEvent('contactinput', { field, value: event.detail.value, form: localForm }) },
+    handleDateChange(event) { this.handleInput(event) },
     submitContact() { const form = buildVisibleContactForm(this.data.localForm, this.data.displayConfig.fields); const validation = validateContactForm(form, this.data.displayConfig.fields); if (!validation.valid) return this.setData({ errorMessage: validation.message }); this.triggerEvent('submit', { form }) },
     completeSubmit(event) { const success = event.detail && event.detail.success === true; this.setData({ localForm: reduceContactSubmit(this.data.localForm, success), errorMessage: success ? '' : text(event.detail && event.detail.message) }); if (success) this.triggerEvent('submitsuccess', { message: CONTACT_SUCCESS_TEXT }) }
   },

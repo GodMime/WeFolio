@@ -329,6 +329,10 @@ test('visitor portfolio pages expose maintenance, QR, contact and schedule surfa
   assert.match(contactFormJs, /DEFAULT_CONTACT_FORM_TITLE\s*=\s*'预留联系信息'/)
   assert.match(contactFormWxml, /contactComponent\.contactForm\.title \|\| defaultTitle/)
   assert.match(contactFormWxml, /\{\{submitText\}\}/)
+  assert.equal((contactFormWxml.match(/<picker mode="date"/g) || []).length, 2)
+  assert.match(contactFormWxml, /value="\{\{contactForm\.desiredSchedule\}\}"[^>]*data-field="desiredSchedule"[^>]*bindchange="handleDateChange"/)
+  assert.match(contactFormWxml, /请选择档期（选填）/)
+  assert.match(contactFormJs, /handleDateChange\(event\)[\s\S]*contactinput/)
   ;[
     'CAROUSEL',
     'PROFILE',

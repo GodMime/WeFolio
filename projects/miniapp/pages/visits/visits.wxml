@@ -255,9 +255,24 @@
                       </view>
                     </view>
                   </view>
-                  <view class="visit-detail-secondary">{{item.desiredSchedule}}</view>
-                  <view class="visit-detail-secondary">{{item.needs}}</view>
-                  <view class="visit-detail-meta">{{item.portfolioTitle}} · {{item.submittedTimeText}}</view>
+                  <view class="contact-detail-list">
+                    <view class="contact-detail-row">
+                      <text class="contact-detail-label">档期</text>
+                      <text class="contact-detail-value">{{item.desiredScheduleText}}</text>
+                    </view>
+                    <view class="contact-detail-row">
+                      <text class="contact-detail-label">需求</text>
+                      <text class="contact-detail-value">{{item.needsText}}</text>
+                    </view>
+                    <view class="contact-detail-row contact-portfolio-row">
+                      <text class="contact-detail-label">来源作品集</text>
+                      <view class="contact-portfolio-value">
+                        <text class="contact-detail-value">{{item.portfolioTitle}}</text>
+                        <text wx:if="{{item.portfolioTypeText}}" class="portfolio-type-tag">{{item.portfolioTypeText}}</text>
+                      </view>
+                    </view>
+                  </view>
+                  <view class="visit-detail-meta">{{item.submittedTimeText}}</view>
                 </view>
                 <view wx:if="{{item.canMarkFollowed}}" class="contact-lead-action-column">
                   <button

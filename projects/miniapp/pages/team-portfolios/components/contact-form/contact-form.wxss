@@ -26,6 +26,7 @@
 .primary-button { width: 260rpx; height: 72rpx; margin: 24rpx auto 0; padding: 0; color: #fff; font-size: 26rpx; line-height: 72rpx; border-radius: 8rpx; background: #17202a; }
 .contact-form-entry-button { width: 320rpx; }
 .field { width: 100%; min-height: 78rpx; margin-top: 16rpx; padding: 0 20rpx; color: #17202a; font-size: 26rpx; line-height: 78rpx; text-align: left; border: 1rpx solid #e4e8ee; border-radius: 8rpx; background: #fff; box-sizing: border-box; }
+.date-field.placeholder { color: #8b95a1; }
 .needs { height: 156rpx; padding-top: 18rpx; line-height: 1.6; }
 .contact-form-mask { position: fixed; left: 0; right: 0; top: 0; bottom: 0; z-index: 82; display: flex; align-items: flex-end; justify-content: center; padding: 28rpx; opacity: 0; pointer-events: none; background: rgba(17, 24, 39, .42); box-sizing: border-box; transition: opacity 180ms ease; }
 .contact-form-mask.visible { opacity: 1; pointer-events: auto; }

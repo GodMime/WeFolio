@@ -2,7 +2,9 @@
   <input wx:if="{{fieldVisibility.contactName}}" class="field" data-field="contactName" value="{{localForm.contactName}}" bindinput="handleInput" placeholder="称呼（必填）" />
   <input wx:if="{{fieldVisibility.phone}}" class="field" data-field="phone" value="{{localForm.phone}}" type="number" bindinput="handleInput" placeholder="手机号" />
   <input wx:if="{{fieldVisibility.wechat}}" class="field" data-field="wechat" value="{{localForm.wechat}}" bindinput="handleInput" placeholder="微信号" />
-  <input class="field" data-field="desiredSchedule" value="{{localForm.desiredSchedule}}" bindinput="handleInput" placeholder="意向档期（可选）" />
+  <picker mode="date" value="{{localForm.desiredSchedule}}" data-field="desiredSchedule" bindchange="handleDateChange">
+    <view class="field date-field {{localForm.desiredSchedule ? '' : 'placeholder'}}">{{localForm.desiredSchedule || '请选择档期（选填）'}}</view>
+  </picker>
   <textarea wx:if="{{fieldVisibility.needs}}" class="field needs" data-field="needs" value="{{localForm.needs}}" bindinput="handleInput" placeholder="需求描述"></textarea>
   <text wx:if="{{errorMessage}}" class="error">{{errorMessage}}</text>
   <text wx:if="{{success}}" class="success">已提交给团队</text>

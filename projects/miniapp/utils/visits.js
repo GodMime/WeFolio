@@ -12,6 +12,10 @@ const FOLLOW_TONE_BLUE = 'blue'
 const FOLLOW_TONE_MUTED = 'muted'
 const DETAIL_TYPE_SCHEDULE_QUERIES = 'scheduleQueries'
 const DETAIL_TYPE_CONTACT_LEADS = 'contactLeads'
+const PORTFOLIO_TYPE_PERSONAL = 'PERSONAL'
+const PORTFOLIO_TYPE_TEAM = 'TEAM'
+const PORTFOLIO_TYPE_TEXT_PERSONAL = '个人作品集'
+const PORTFOLIO_TYPE_TEXT_TEAM = '团队作品集'
 const TREND_CHART_WIDTH = 646
 const TREND_CHART_HEIGHT = 156
 const TREND_CHART_PADDING_TOP = 30
@@ -275,6 +279,13 @@ function normalizeContactLeadItem(item = {}) {
   const phoneLast4 = item.phoneLast4 || ''
   const wechat = item.wechat || ''
   const wechatMaskHint = item.wechatMaskHint || ''
+  const desiredSchedule = item.desiredSchedule || ''
+  const portfolioType = item.portfolioType || ''
+  const portfolioTypeText = item.portfolioTypeText || (
+    portfolioType === PORTFOLIO_TYPE_TEAM
+      ? PORTFOLIO_TYPE_TEXT_TEAM
+      : portfolioType === PORTFOLIO_TYPE_PERSONAL ? PORTFOLIO_TYPE_TEXT_PERSONAL : ''
+  )
   return {
     id: item.id || '',
     contactName: item.contactName || '未留姓名',
@@ -289,14 +300,18 @@ function normalizeContactLeadItem(item = {}) {
     wechatText: wechat || '未留微信',
     wechatCopyText: wechat,
     wechatCanCopy: Boolean(wechat),
-    desiredSchedule: item.desiredSchedule || '',
+    desiredSchedule,
+    desiredScheduleText: desiredSchedule || '未填写',
     needs: item.needs || '',
+    needsText: item.needs || '未填写',
     portfolioTitle: item.portfolioTitle || '',
+    portfolioType,
+    portfolioTypeText,
     sourceText: item.sourceText || '来自未知来源',
     followStatus,
     followStatusText: buildFollowStatusText(followStatus, item.followStatusText),
     followToneClass: `follow-pill ${buildFollowTone(followStatus, item.followTone)}`,
-    canMarkFollowed: followStatus === FOLLOW_STATUS_NOT_FOLLOWED_UP,
+    canMarkFollowed: Boolean(item.canMarkFollowed) && followStatus === FOLLOW_STATUS_NOT_FOLLOWED_UP,
     submittedTimeText: item.submittedTimeText || ''
   }
 }

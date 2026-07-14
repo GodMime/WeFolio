@@ -58,6 +58,8 @@ test('visit records page files match prototype structure and backend endpoint', 
   assert.match(visitsWxml, /class="contact-lead-status"[\s\S]*class="\{\{item\.followToneClass\}\}">[\s\S]*\{\{item\.followStatusText\}\}/)
   assert.match(visitsWxml, /手机[\s\S]*class="contact-value-copy"[\s\S]*\{\{item\.phoneText\}\}[\s\S]*class="contact-copy-icon-button"[\s\S]*data-copy-text="\{\{item\.phoneCopyText\}\}"[\s\S]*handleCopyContactValueTap[\s\S]*src="\/assets\/system\/copy-line\.svg"/)
   assert.match(visitsWxml, /微信[\s\S]*class="contact-value-copy"[\s\S]*\{\{item\.wechatText\}\}[\s\S]*class="contact-copy-icon-button"[\s\S]*data-copy-text="\{\{item\.wechatCopyText\}\}"[\s\S]*handleCopyContactValueTap[\s\S]*src="\/assets\/system\/copy-line\.svg"/)
+  assert.match(visitsWxml, /档期[\s\S]*\{\{item\.desiredScheduleText\}\}/)
+  assert.match(visitsWxml, /来源作品集[\s\S]*\{\{item\.portfolioTitle\}\}[\s\S]*\{\{item\.portfolioTypeText\}\}/)
   assert.match(visitsWxml, /class="contact-lead-layout"[\s\S]*class="contact-lead-status"[\s\S]*class="\{\{item\.followToneClass\}\}"[\s\S]*class="contact-lead-main"[\s\S]*class="contact-lead-title-row"[\s\S]*wx:if="\{\{item\.canMarkFollowed\}\}"[\s\S]*class="contact-lead-action-column"[\s\S]*class="contact-lead-follow-button"/)
   assert.doesNotMatch(visitsWxml, /class="contact-lead-main"[\s\S]*class="contact-lead-status"/)
   assert.doesNotMatch(visitsWxml, /class="contact-lead-action-column"[\s\S]*class="contact-lead-status"/)

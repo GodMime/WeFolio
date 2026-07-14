@@ -295,6 +295,12 @@ public class MineVisitRecordsResponse {
         /** 来源作品集标题 */
         private String portfolioTitle;
 
+        /** 作品集类型：PERSONAL 或 TEAM */
+        private String portfolioType;
+
+        /** 作品集类型文案 */
+        private String portfolioTypeText;
+
         /** 来源文案 */
         private String sourceText;
 
@@ -303,6 +309,9 @@ public class MineVisitRecordsResponse {
 
         /** 跟进状态文案 */
         private String followStatusText;
+
+        /** 当前用户是否可以标记已跟进 */
+        private Boolean canMarkFollowed;
 
         /** 提交时间文案 */
         private String submittedTimeText;

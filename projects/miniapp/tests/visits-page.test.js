@@ -249,7 +249,10 @@ test('contact lead metric opens contact lead detail endpoint', async () => {
           desiredSchedule: '2026-10-03 午宴',
           needs: '想了解主持和摄影套餐',
           portfolioTitle: '林安婚礼司仪',
+          portfolioType: 'PERSONAL',
+          portfolioTypeText: '个人作品集',
           sourceText: '来自分享卡片',
+          canMarkFollowed: true,
           followStatusText: '未跟进',
           submittedTimeText: '07-05 13:30'
         }
@@ -268,6 +271,9 @@ test('contact lead metric opens contact lead detail endpoint', async () => {
   assert.equal(page.data.detailSheet.items[0].contactName, '王小姐')
   assert.equal(page.data.detailSheet.items[0].phoneText, '13800108899')
   assert.equal(page.data.detailSheet.items[0].wechatText, 'wx-full-99')
+  assert.equal(page.data.detailSheet.items[0].desiredScheduleText, '2026-10-03 午宴')
+  assert.equal(page.data.detailSheet.items[0].portfolioTypeText, '个人作品集')
+  assert.equal(page.data.detailSheet.items[0].canMarkFollowed, true)
 })
 
 test('contact lead detail button marks lead followed', async () => {

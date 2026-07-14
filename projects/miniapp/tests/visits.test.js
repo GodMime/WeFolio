@@ -279,7 +279,10 @@ test('normalizes and appends contact lead detail pages without ciphertext fields
         desiredSchedule: '2026-10-03 午宴',
         needs: '想了解主持和摄影套餐',
         portfolioTitle: '林安婚礼司仪',
+        portfolioType: 'PERSONAL',
+        portfolioTypeText: '个人作品集',
         sourceText: '来自分享卡片',
+        canMarkFollowed: true,
         followStatusText: '未跟进',
         submittedTimeText: '07-05 13:30'
       }
@@ -297,8 +300,11 @@ test('normalizes and appends contact lead detail pages without ciphertext fields
         wechatMaskHint: '',
         desiredSchedule: '',
         needs: '',
-        portfolioTitle: '',
+        portfolioTitle: '星曜司仪团',
+        portfolioType: 'TEAM',
+        portfolioTypeText: '团队作品集',
         sourceText: '',
+        canMarkFollowed: false,
         followStatusText: '已跟进',
         submittedTimeText: '07-05 12:00',
         phoneCiphertext: 'secret-phone',
@@ -317,8 +323,15 @@ test('normalizes and appends contact lead detail pages without ciphertext fields
   assert.equal(result.items[0].wechatText, 'wx-full-99')
   assert.equal(result.items[0].wechatCanCopy, true)
   assert.equal(result.items[0].wechatCopyText, 'wx-full-99')
+  assert.equal(result.items[0].desiredScheduleText, '2026-10-03 午宴')
+  assert.equal(result.items[0].portfolioTypeText, '个人作品集')
+  assert.equal(result.items[0].canMarkFollowed, true)
   assert.equal(result.items[1].phoneText, '未留手机')
   assert.equal(result.items[1].wechatText, '未留微信')
+  assert.equal(result.items[1].desiredScheduleText, '未填写')
+  assert.equal(result.items[1].portfolioTitle, '星曜司仪团')
+  assert.equal(result.items[1].portfolioTypeText, '团队作品集')
+  assert.equal(result.items[1].canMarkFollowed, false)
   assert.equal(Object.prototype.hasOwnProperty.call(result.items[1], 'phoneCiphertext'), false)
   assert.equal(Object.prototype.hasOwnProperty.call(result.items[1], 'wechatCiphertext'), false)
   assert.equal(result.hasMore, false)

@@ -31,6 +31,7 @@ import com.jxc.wefolio.mapper.VisitRecordEntityMapper;
 import com.jxc.wefolio.service.EncryptedAuthTokenService;
 import com.jxc.wefolio.service.teamportfolio.TeamPortfolioAccessService;
 import com.jxc.wefolio.service.teamportfolio.TeamPortfolioComponentContext;
+import com.jxc.wefolio.service.teamportfolio.component.contactform.TeamContactLeadCryptoService;
 import com.jxc.wefolio.service.teamportfolio.component.contactform.TeamContactFormComponentReferenceExtractor;
 import com.jxc.wefolio.service.teamportfolio.component.contactform.TeamContactFormComponentRenderer;
 import com.jxc.wefolio.service.teamportfolio.component.contactform.TeamContactFormComponentService;
@@ -894,7 +895,7 @@ class TeamContactFormComponentServiceTest {
     }
 
     /**
-     * 组件生产目录必须恰好包含五个 Java 文件。
+     * 组件生产目录必须恰好包含六个 Java 文件。
      *
      * @throws Exception 读取目录失败
      */
@@ -909,7 +910,8 @@ class TeamContactFormComponentServiceTest {
                             "TeamContactFormComponentReferenceExtractor.java",
                             "TeamContactFormComponentRenderer.java",
                             "TeamContactFormComponentService.java",
-                            "TeamContactFormComponentValidator.java");
+                            "TeamContactFormComponentValidator.java",
+                            "TeamContactLeadCryptoService.java");
         }
     }
 
@@ -1133,7 +1135,7 @@ class TeamContactFormComponentServiceTest {
                 visitRecordEntityMapper,
                 contactLeadEntityMapper,
                 teamPortfolioAccessService,
-                crypto,
+                new TeamContactLeadCryptoService(crypto),
                 validator());
     }
 

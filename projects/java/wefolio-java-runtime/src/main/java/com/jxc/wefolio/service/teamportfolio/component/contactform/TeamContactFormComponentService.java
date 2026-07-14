@@ -26,7 +26,6 @@ import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.ContactLeadEntityMapper;
 import com.jxc.wefolio.mapper.PortfolioEntityMapper;
 import com.jxc.wefolio.mapper.VisitRecordEntityMapper;
-import com.jxc.wefolio.service.EncryptedAuthTokenService;
 import com.jxc.wefolio.service.teamportfolio.TeamPortfolioAccessService;
 import com.jxc.wefolio.service.teamportfolio.TeamPortfolioComponentContext;
 import org.springframework.dao.DuplicateKeyException;
@@ -101,9 +100,6 @@ public class TeamContactFormComponentService {
     /** 联系方式明文最大长度。 */
     private static final int CONTACT_VALUE_MAX_LENGTH = 256;
 
-    /** 联系方式密文最大长度。 */
-    private static final int CONTACT_CIPHERTEXT_MAX_LENGTH = 512;
-
     /** 最大分页大小。 */
     private static final int MAX_PAGE_SIZE = 100;
 
@@ -112,26 +108,6 @@ public class TeamContactFormComponentService {
 
     /** 唯一键竞争后查询当前已提交线索并加锁。 */
     private static final String QUERY_LIMIT_ONE_FOR_UPDATE = "LIMIT 1 FOR UPDATE";
-
-    /** 团队手机号加密前缀。 */
-    private static final String TEAM_PHONE_TOKEN_PREFIX = "wf-team-contact-phone:";
-
-    /** 团队微信号加密前缀。 */
-    private static final String TEAM_WECHAT_TOKEN_PREFIX = "wf-team-contact-wechat:";
-
-    /**
-     * 认证 payload 版本；v1 依赖 AUTH_TOKEN_SECRET，密文迁移或 keyring 落地前不得直接轮换该密钥。
-     */
-    private static final String ENCRYPTION_PAYLOAD_VERSION = "v1";
-
-    /** 认证 payload 字段分隔符。 */
-    private static final String ENCRYPTION_PAYLOAD_SEPARATOR = "|";
-
-    /** 手机号密文用途。 */
-    private static final String ENCRYPTION_PURPOSE_PHONE = "PHONE";
-
-    /** 微信号密文用途。 */
-    private static final String ENCRYPTION_PURPOSE_WECHAT = "WECHAT";
 
     /** 作品集不可访问提示。 */
     private static final String PORTFOLIO_UNAVAILABLE_MESSAGE = "当前团队作品集暂未开放访问";
@@ -169,9 +145,6 @@ public class TeamContactFormComponentService {
     /** 写入失败提示。 */
     private static final String PERSISTENCE_FAILED_MESSAGE = "预留联系信息保存失败";
 
-    /** 解密失败固定提示，不携带密文或联系方式。 */
-    private static final String DECRYPTION_FAILED_MESSAGE = "团队预留联系信息解密失败";
-
     /** 团队可读取线索的角色。 */
     private static final Set<String> READABLE_ROLES = Set.of(
             TeamRoleDict.OWNER.getCode(), TeamRoleDict.MANAGER.getCode(), TeamRoleDict.MEMBER.getCode());
@@ -192,8 +165,8 @@ public class TeamContactFormComponentService {
     /** 团队访问控制服务。 */
     private final TeamPortfolioAccessService teamPortfolioAccessService;
 
-    /** AES-GCM 加密服务。 */
-    private final EncryptedAuthTokenService encryptedAuthTokenService;
+    /** 团队联系方式加解密服务。 */
+    private final TeamContactLeadCryptoService contactLeadCryptoService;
 
     /** 团队预留联系信息组件配置校验器。 */
     private final TeamContactFormComponentValidator validator;
@@ -205,7 +178,7 @@ public class TeamContactFormComponentService {
      * @param visitRecordEntityMapper 访问记录数据访问器
      * @param contactLeadEntityMapper 联系线索数据访问器
      * @param teamPortfolioAccessService 团队访问控制服务
-     * @param encryptedAuthTokenService AES-GCM 加密服务
+     * @param contactLeadCryptoService 团队联系方式加解密服务
      * @param validator 团队预留联系信息组件配置校验器
      */
     public TeamContactFormComponentService(
@@ -213,14 +186,14 @@ public class TeamContactFormComponentService {
             VisitRecordEntityMapper visitRecordEntityMapper,
             ContactLeadEntityMapper contactLeadEntityMapper,
             TeamPortfolioAccessService teamPortfolioAccessService,
-            EncryptedAuthTokenService encryptedAuthTokenService,
+            TeamContactLeadCryptoService contactLeadCryptoService,
             TeamContactFormComponentValidator validator
     ) {
         this.portfolioEntityMapper = portfolioEntityMapper;
         this.visitRecordEntityMapper = visitRecordEntityMapper;
         this.contactLeadEntityMapper = contactLeadEntityMapper;
         this.teamPortfolioAccessService = teamPortfolioAccessService;
-        this.encryptedAuthTokenService = encryptedAuthTokenService;
+        this.contactLeadCryptoService = contactLeadCryptoService;
         this.validator = validator;
     }
 
@@ -266,10 +239,8 @@ public class TeamContactFormComponentService {
         lead.setOwnerType(PortfolioOwnerTypeDict.TEAM.getCode());
         lead.setOwnerId(portfolio.getOwnerId());
         lead.setContactName(normalizedRequest.contactName());
-        lead.setPhoneCiphertext(encrypt(
-                TEAM_PHONE_TOKEN_PREFIX, ENCRYPTION_PURPOSE_PHONE, normalizedRequest.phone()));
-        lead.setWechatCiphertext(encrypt(
-                TEAM_WECHAT_TOKEN_PREFIX, ENCRYPTION_PURPOSE_WECHAT, normalizedRequest.wechat()));
+        lead.setPhoneCiphertext(contactLeadCryptoService.encryptPhone(normalizedRequest.phone()));
+        lead.setWechatCiphertext(contactLeadCryptoService.encryptWechat(normalizedRequest.wechat()));
         lead.setDesiredSchedule(normalizedRequest.desiredSchedule());
         lead.setNeeds(normalizedRequest.needs());
         lead.setSourceType(resolveSourceType(visitRecord.getSourceType()));
@@ -551,26 +522,6 @@ public class TeamContactFormComponentService {
     }
 
     /**
-     * 以组件私有前缀加密可选联系方式。
-     *
-     * @param prefix 加密前缀
-     * @param purpose 密文用途
-     * @param value 明文联系方式
-     * @return 密文，空值时为 null
-     */
-    private String encrypt(String prefix, String purpose, String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        String ciphertext = encryptedAuthTokenService.encryptPayload(
-                prefix, authenticatedPayloadPrefix(purpose) + value);
-        if (ciphertext == null || ciphertext.length() > CONTACT_CIPHERTEXT_MAX_LENGTH) {
-            throw new BusinessException(PERSISTENCE_FAILED_MESSAGE);
-        }
-        return ciphertext;
-    }
-
-    /**
      * 查询同团队同作品集同幂等键的已有线索。
      *
      * @param portfolio 团队作品集
@@ -652,10 +603,8 @@ public class TeamContactFormComponentService {
         item.setPortfolioRevision(lead.getPortfolioRevision());
         item.setVisitRecordId(lead.getVisitRecordId());
         item.setContactName(normalizeString(lead.getContactName()));
-        item.setPhone(decrypt(
-                TEAM_PHONE_TOKEN_PREFIX, ENCRYPTION_PURPOSE_PHONE, lead.getPhoneCiphertext()));
-        item.setWechat(decrypt(
-                TEAM_WECHAT_TOKEN_PREFIX, ENCRYPTION_PURPOSE_WECHAT, lead.getWechatCiphertext()));
+        item.setPhone(contactLeadCryptoService.decryptPhone(lead.getPhoneCiphertext()));
+        item.setWechat(contactLeadCryptoService.decryptWechat(lead.getWechatCiphertext()));
         item.setDesiredSchedule(normalizeString(lead.getDesiredSchedule()));
         item.setNeeds(normalizeString(lead.getNeeds()));
         String sourceType = resolveSourceType(lead.getSourceType());
@@ -670,43 +619,6 @@ public class TeamContactFormComponentService {
         item.setFollowNote(normalizeString(lead.getFollowNote()));
         item.setSubmittedAt(lead.getSubmittedAt());
         return item;
-    }
-
-    /**
-     * 解密可选联系方式。
-     *
-     * @param prefix 加密前缀
-     * @param purpose 期望密文用途
-     * @param ciphertext 密文
-     * @return 完整明文联系方式，空值时为空字符串
-     */
-    private String decrypt(String prefix, String purpose, String ciphertext) {
-        if (ciphertext == null || ciphertext.isBlank()) {
-            return "";
-        }
-        try {
-            String payload = encryptedAuthTokenService.decryptPayload(prefix, ciphertext);
-            String expectedPrefix = authenticatedPayloadPrefix(purpose);
-            if (payload == null || !payload.startsWith(expectedPrefix)) {
-                throw new BusinessException(DECRYPTION_FAILED_MESSAGE);
-            }
-            return payload.substring(expectedPrefix.length());
-        } catch (RuntimeException exception) {
-            throw new BusinessException(DECRYPTION_FAILED_MESSAGE);
-        }
-    }
-
-    /**
-     * 构建受认证的版本与用途前缀，防止不同联系方式密文互换。
-     *
-     * @param purpose 密文用途
-     * @return 认证 payload 前缀
-     */
-    private String authenticatedPayloadPrefix(String purpose) {
-        return ENCRYPTION_PAYLOAD_VERSION
-                + ENCRYPTION_PAYLOAD_SEPARATOR
-                + purpose
-                + ENCRYPTION_PAYLOAD_SEPARATOR;
     }
 
     /**
