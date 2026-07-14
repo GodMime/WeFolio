@@ -420,6 +420,75 @@ test('text section trims required body, limits 200 chars and owns alignment', ()
   assert.deepEqual(definition.data, {})
 })
 
+test('schedule calendar builds six stable weeks and applies query range bounds', () => {
+  const { exports } = loadComponent('schedule-query')
+  const days = exports.buildCalendarDays('2026-08', {
+    startDate: '2026-08-03',
+    endDate: '2026-08-31'
+  })
+
+  assert.equal(days.length, 42)
+  assert.equal(days[0].date, '2026-07-26')
+  assert.equal(days[41].date, '2026-09-05')
+  assert.equal(new Set(days.map((item) => item.key)).size, 42)
+  assert.equal(days.find((item) => item.date === '2026-08-02').disabled, true)
+  assert.equal(days.find((item) => item.date === '2026-08-03').disabled, false)
+  assert.match(days.find((item) => item.date === '2026-07-31').dayClass, /muted/)
+  assert.match(days.find((item) => item.date === '2026-08-02').dayClass, /disabled/)
+  assert.equal(exports.formatYearMonthTitle('2026-08'), '2026 年 8 月')
+  assert.equal(exports.shiftMonth('2026-01', -1), '2025-12')
+  assert.equal(exports.shiftMonth('2026-12', 1), '2027-01')
+  assert.equal(
+    exports.resolveInitialMonth({ startDate: '2026-10-01', endDate: '2026-10-31' }, '2026-08-01'),
+    '2026-10'
+  )
+  assert.equal(
+    exports.resolveInitialMonth({ startDate: '2026-06-01', endDate: '2026-06-30' }, '2026-08-01'),
+    '2026-06'
+  )
+})
+
+test('schedule calendar changes months and selects only enabled dates', () => {
+  const { definition } = loadComponent('schedule-query')
+  const harness = createComponentHarness(definition, {
+    config: {
+      displayMode: 'INLINE_CALENDAR',
+      queryRange: { type: 'DATE_RANGE', startDate: '2026-08-03', endDate: '2026-09-10' }
+    },
+    editMode: false
+  })
+
+  assert.equal(harness.instance.data.selectedMonth, '2026-08')
+  assert.equal(harness.instance.data.selectedMonthText, '2026 年 8 月')
+  assert.equal(harness.instance.data.calendarDays.length, 42)
+
+  harness.instance.setData({ selectedDate: '2026-08-04', pendingIdempotencyKey: 'retry-key', result: { status: 'TEAM_AVAILABLE' } })
+  harness.instance.handleDayTap({ currentTarget: { dataset: { date: '2026-08-02', disabled: true } } })
+  assert.equal(harness.instance.data.selectedDate, '2026-08-04')
+  assert.equal(harness.instance.data.pendingIdempotencyKey, 'retry-key')
+
+  harness.instance.handleDayTap({ currentTarget: { dataset: { date: '2026-08-03', disabled: false } } })
+  assert.equal(harness.instance.data.selectedDate, '2026-08-03')
+  assert.equal(harness.instance.data.pendingIdempotencyKey, '')
+  assert.equal(harness.instance.data.result, null)
+
+  harness.instance.setData({ pendingIdempotencyKey: 'august-key', result: { status: 'TEAM_AVAILABLE' } })
+  harness.instance.handleNextMonth()
+  assert.equal(harness.instance.data.selectedMonth, '2026-09')
+  assert.equal(harness.instance.data.selectedMonthText, '2026 年 9 月')
+  assert.equal(harness.instance.data.calendarDays.find((item) => item.date === '2026-09-11').disabled, true)
+  assert.equal(harness.instance.data.selectedDate, '')
+  assert.equal(harness.instance.data.pendingIdempotencyKey, '')
+  assert.equal(harness.instance.data.result, null)
+
+  harness.instance.handlePrevMonth()
+  assert.equal(harness.instance.data.selectedMonth, '2026-08')
+  harness.instance.handleMonthPickerChange({ detail: { value: 'invalid' } })
+  assert.equal(harness.instance.data.selectedMonth, '2026-08')
+  harness.instance.handleMonthPickerChange({ detail: { value: '2026-09' } })
+  assert.equal(harness.instance.data.selectedMonth, '2026-09')
+})
+
 test('schedule maps members to three display states and deduplicates loading', async () => {
   const { exports } = loadComponent('schedule-query')
   assert.deepEqual(exports.createDefaultScheduleQueryConfig(), {

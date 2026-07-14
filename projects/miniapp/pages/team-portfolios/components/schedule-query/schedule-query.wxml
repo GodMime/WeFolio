@@ -1,11 +1,41 @@
 <template name="scheduleQueryContent">
-  <view class="schedule-query-content">
-    <picker mode="date" value="{{selectedDate}}" start="{{dateStart}}" end="{{dateEnd}}" bindchange="selectDate">
-      <view class="date-field">{{selectedDate || '选择查询日期'}}</view>
-    </picker>
-    <button class="schedule-query-submit" loading="{{loading}}" disabled="{{loading}}" catchtap="submitQuery">{{loading ? '查询中' : '查询'}}</button>
+  <view class="schedule-query-calendar">
+    <view class="schedule-query-month-bar">
+      <view class="schedule-query-month-button" catchtap="handlePrevMonth" aria-role="button" aria-label="上个月">‹</view>
+      <view class="schedule-query-month-text">{{selectedMonthText || selectedMonth}}</view>
+      <picker class="schedule-query-month-picker" mode="date" fields="month" value="{{selectedMonth}}" bindchange="handleMonthPickerChange">
+        <view class="schedule-query-month-picker-button">切换年月</view>
+      </picker>
+      <view class="schedule-query-month-button" catchtap="handleNextMonth" aria-role="button" aria-label="下个月">›</view>
+    </view>
+    <view class="schedule-query-weekdays">
+      <view>日</view>
+      <view>一</view>
+      <view>二</view>
+      <view>三</view>
+      <view>四</view>
+      <view>五</view>
+      <view>六</view>
+    </view>
+    <view class="schedule-query-days">
+      <view
+        wx:for="{{calendarDays}}"
+        wx:key="key"
+        class="{{item.dayClass}} {{selectedDate === item.date ? 'selected' : ''}}"
+        data-date="{{item.date}}"
+        data-disabled="{{item.disabled}}"
+        catchtap="handleDayTap"
+        aria-role="button"
+        aria-disabled="{{item.disabled}}"
+        aria-label="{{item.disabled ? '不可选择' : '选择'}}{{item.date}}"
+      >
+        <view class="schedule-query-day-number">{{item.dayNumber}}</view>
+      </view>
+    </view>
+    <view class="schedule-query-selected-date">{{selectedDate || '请选择查询日期'}}</view>
+    <button class="schedule-query-submit" loading="{{loading}}" disabled="{{!selectedDate || loading}}" catchtap="submitQuery">{{loading ? '查询中' : '查询'}}</button>
     <text wx:if="{{errorMessage}}" class="error">{{errorMessage}}</text>
-    <view wx:if="{{result.members.length}}" class="member-results">
+    <view wx:if="{{result && result.members.length}}" class="member-results">
       <view wx:for="{{result.members}}" wx:key="memberUserId" class="member-result">
         <image src="{{item.avatarUrl}}" mode="aspectFill" />
         <text class="member-name">{{item.displayName}}</text>
@@ -47,7 +77,7 @@
       <view class="schedule-query-inline-shell">
         <view class="component-title">{{config.title || '查询团队档期'}}</view>
         <view wx:if="{{config.description}}" class="section-desc">{{config.description}}</view>
-        <template is="scheduleQueryContent" data="{{selectedDate: selectedDate, dateStart: dateStart, dateEnd: dateEnd, loading: loading, errorMessage: errorMessage, result: result}}" />
+        <template is="scheduleQueryContent" data="{{selectedDate: selectedDate, selectedMonth: selectedMonth, selectedMonthText: selectedMonthText, calendarDays: calendarDays, loading: loading, errorMessage: errorMessage, result: result}}" />
       </view>
     </block>
     <block wx:else>
@@ -62,7 +92,7 @@
             <view class="schedule-query-modal-title">{{config.title || '查询团队档期'}}</view>
             <view class="schedule-query-close" catchtap="closeModal" aria-role="button" aria-label="关闭团队档期查询">×</view>
           </view>
-          <template is="scheduleQueryContent" data="{{selectedDate: selectedDate, dateStart: dateStart, dateEnd: dateEnd, loading: loading, errorMessage: errorMessage, result: result}}" />
+          <template is="scheduleQueryContent" data="{{selectedDate: selectedDate, selectedMonth: selectedMonth, selectedMonthText: selectedMonthText, calendarDays: calendarDays, loading: loading, errorMessage: errorMessage, result: result}}" />
         </view>
       </view>
     </block>

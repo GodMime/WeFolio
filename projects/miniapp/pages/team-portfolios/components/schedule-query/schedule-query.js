@@ -4,6 +4,11 @@ const MEMBER_STATE_AVAILABLE = 'AVAILABLE'
 const MEMBER_STATE_PARTIAL = 'PARTIAL_AVAILABLE'
 const MEMBER_STATE_FULL = 'FULL'
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+const MONTH_PATTERN = /^(\d{4})-(\d{2})$/
+const CALENDAR_DAY_COUNT = 42
+const CALENDAR_DAY_BASE_CLASS = 'schedule-calendar-day'
+const CALENDAR_DAY_MUTED_CLASS = 'muted'
+const CALENDAR_DAY_DISABLED_CLASS = 'disabled'
 const IDEMPOTENCY_KEY_MAX_LENGTH = 64
 const IDEMPOTENCY_KEY_PREFIX = 'team-schedule-'
 let idempotencySequence = 0
@@ -51,6 +56,69 @@ function isValidIsoDate(value) {
   if (!DATE_PATTERN.test(text(value))) return false
   const date = new Date(`${value}T00:00:00Z`)
   return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
+}
+
+function pad2(value) {
+  return String(value).padStart(2, '0')
+}
+
+function formatIsoDate(date) {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`
+}
+
+function formatYearMonth(date) {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}`
+}
+
+function formatYearMonthTitle(yearMonth) {
+  const match = text(yearMonth).match(MONTH_PATTERN)
+  return match ? `${match[1]} 年 ${Number(match[2])} 月` : text(yearMonth)
+}
+
+function isValidMonth(value) {
+  const match = text(value).match(MONTH_PATTERN)
+  if (!match) return false
+  const month = Number(match[2])
+  return month >= 1 && month <= 12
+}
+
+function shiftMonth(yearMonth, offset) {
+  const targetMonth = isValidMonth(yearMonth) ? yearMonth : formatYearMonth(new Date())
+  const [year, month] = targetMonth.split('-').map(Number)
+  return formatYearMonth(new Date(year, month - 1 + Number(offset || 0), 1))
+}
+
+function resolveInitialMonth(bounds = {}, todayText) {
+  let targetDate = isValidIsoDate(todayText) ? todayText : localDateText()
+  if (isValidIsoDate(bounds.startDate) && targetDate < bounds.startDate) targetDate = bounds.startDate
+  if (isValidIsoDate(bounds.endDate) && targetDate > bounds.endDate) targetDate = bounds.endDate
+  return targetDate.slice(0, 7)
+}
+
+function buildCalendarDays(yearMonth, bounds = {}) {
+  const targetMonth = isValidMonth(yearMonth) ? yearMonth : formatYearMonth(new Date())
+  const [year, month] = targetMonth.split('-').map(Number)
+  const firstDay = new Date(year, month - 1, 1)
+  const calendarStart = new Date(year, month - 1, 1 - firstDay.getDay())
+  const startDate = isValidIsoDate(bounds.startDate) ? bounds.startDate : ''
+  const endDate = isValidIsoDate(bounds.endDate) ? bounds.endDate : ''
+  return Array.from({ length: CALENDAR_DAY_COUNT }, (_, index) => {
+    const dateValue = new Date(calendarStart.getFullYear(), calendarStart.getMonth(), calendarStart.getDate() + index)
+    const date = formatIsoDate(dateValue)
+    const currentMonth = date.startsWith(targetMonth)
+    const disabled = Boolean(startDate && date < startDate || endDate && date > endDate)
+    const classes = [CALENDAR_DAY_BASE_CLASS]
+    if (!currentMonth) classes.push(CALENDAR_DAY_MUTED_CLASS)
+    if (disabled) classes.push(CALENDAR_DAY_DISABLED_CLASS)
+    return {
+      key: date,
+      date,
+      dayNumber: dateValue.getDate(),
+      currentMonth,
+      disabled,
+      dayClass: classes.join(' ')
+    }
+  })
 }
 
 function validateScheduleQueryConfig(config = {}) {
@@ -154,10 +222,44 @@ function updateDraftField(draft, field, value) {
   return Object.assign({}, draft, { [field]: value })
 }
 
+function setCalendarMonth(component, yearMonth) {
+  if (!isValidMonth(yearMonth)) return false
+  const monthChanged = yearMonth !== component.data.selectedMonth
+  const selectedDate = !monthChanged || text(component.data.selectedDate).startsWith(yearMonth)
+    ? component.data.selectedDate : ''
+  component.setData({
+    selectedMonth: yearMonth,
+    selectedMonthText: formatYearMonthTitle(yearMonth),
+    calendarDays: buildCalendarDays(yearMonth, {
+      startDate: component.data.dateStart,
+      endDate: component.data.dateEnd
+    }),
+    selectedDate,
+    pendingIdempotencyKey: monthChanged ? '' : component.data.pendingIdempotencyKey,
+    result: monthChanged ? null : component.data.result
+  })
+  return true
+}
+
 function syncScheduleDraft(component) {
   const draft = createDefaultScheduleQueryConfig(component.properties.config)
   const bounds = resolveScheduleDateBounds(component.properties.config)
-  component.setData({ draft, dateStart: bounds.startDate, dateEnd: bounds.endDate, pendingIdempotencyKey: '', errorMessage: '' })
+  const selectedDate = isValidIsoDate(component.data.selectedDate)
+    && (!bounds.startDate || component.data.selectedDate >= bounds.startDate)
+    && (!bounds.endDate || component.data.selectedDate <= bounds.endDate)
+    ? component.data.selectedDate : ''
+  const selectedMonth = selectedDate ? selectedDate.slice(0, 7) : resolveInitialMonth(bounds)
+  component.setData({
+    draft,
+    dateStart: bounds.startDate,
+    dateEnd: bounds.endDate,
+    selectedDate,
+    selectedMonth,
+    selectedMonthText: formatYearMonthTitle(selectedMonth),
+    calendarDays: buildCalendarDays(selectedMonth, bounds),
+    pendingIdempotencyKey: '',
+    errorMessage: ''
+  })
 }
 
 Component({
@@ -176,6 +278,9 @@ Component({
     modalVisible: false,
     loading: false,
     selectedDate: '',
+    selectedMonth: '',
+    selectedMonthText: '',
+    calendarDays: [],
     pendingIdempotencyKey: '',
     dateStart: '',
     dateEnd: '',
@@ -194,9 +299,25 @@ Component({
     cancelEdit() { syncScheduleDraft(this); this.triggerEvent('cancel') },
     saveEdit() { const validation = validateScheduleQueryConfig(this.data.draft); if (!validation.valid) return this.setData({ errorMessage: validation.message }); this.triggerEvent('save', { config: createDefaultScheduleQueryConfig(this.data.draft) }) },
     noop() {},
-    openModal() { const bounds = resolveScheduleDateBounds(this.properties.config); this.setData({ modalVisible: true, dateStart: bounds.startDate, dateEnd: bounds.endDate }); this.triggerEvent('open') },
+    openModal() { const bounds = resolveScheduleDateBounds(this.properties.config); this.setData({ modalVisible: true, dateStart: bounds.startDate, dateEnd: bounds.endDate }); setCalendarMonth(this, this.data.selectedMonth || resolveInitialMonth(bounds)); this.triggerEvent('open') },
     closeModal() { this.setData({ modalVisible: false }); this.triggerEvent('close') },
     selectDate(event) { const selectedDate = event.currentTarget.dataset.date || event.detail.value || ''; this.setData({ selectedDate, pendingIdempotencyKey: selectedDate === this.data.selectedDate ? this.data.pendingIdempotencyKey : '' }); this.triggerEvent('datechange', { queriedDate: selectedDate }) },
+    handlePrevMonth() { setCalendarMonth(this, shiftMonth(this.data.selectedMonth, -1)) },
+    handleNextMonth() { setCalendarMonth(this, shiftMonth(this.data.selectedMonth, 1)) },
+    handleMonthPickerChange(event) { setCalendarMonth(this, event && event.detail ? event.detail.value : '') },
+    handleDayTap(event) {
+      const dataset = event && event.currentTarget ? event.currentTarget.dataset || {} : {}
+      const selectedDate = text(dataset.date)
+      if (!selectedDate || dataset.disabled === true || dataset.disabled === 'true') return
+      const sameDate = selectedDate === this.data.selectedDate
+      this.setData({
+        selectedDate,
+        pendingIdempotencyKey: sameDate ? this.data.pendingIdempotencyKey : '',
+        errorMessage: '',
+        result: sameDate ? this.data.result : null
+      })
+      this.triggerEvent('datechange', { queriedDate: selectedDate })
+    },
     changeMonth(event) { if (this.data.loading) return; this.setData({ loading: true }); this.triggerEvent('monthchange', { month: event.currentTarget.dataset.month }) },
     completeMonth(event) { this.setData({ loading: false, errorMessage: event && event.detail ? text(event.detail.errorMessage) : '' }) },
     submitQuery() { if (this.data.loading) return; if (!this.data.selectedDate) return this.setData({ errorMessage: '请选择查询日期' }); const idempotencyKey = this.data.pendingIdempotencyKey || createScheduleIdempotencyKey(); this.setData({ loading: true, pendingIdempotencyKey: idempotencyKey, errorMessage: '' }); this.triggerEvent('schedulequery', { shareCode: this.properties.shareCode, portfolioId: this.properties.portfolioId, componentKey: this.properties.componentKey, queriedDate: this.data.selectedDate, idempotencyKey, preview: this.properties.preview, previewScope: this.properties.previewScope }) },
@@ -208,4 +329,4 @@ Component({
   }
 })
 
-module.exports = { DISPLAY_MODES, IDEMPOTENCY_KEY_MAX_LENGTH, QUERY_RANGE_TYPES, createDefaultScheduleQueryConfig, createScheduleIdempotencyKey, createTeamScheduleQueryRunner, mapMemberScheduleState, normalizeTeamScheduleResult, resolveScheduleDateBounds, validateScheduleQueryConfig }
+module.exports = { DISPLAY_MODES, IDEMPOTENCY_KEY_MAX_LENGTH, QUERY_RANGE_TYPES, buildCalendarDays, createDefaultScheduleQueryConfig, createScheduleIdempotencyKey, createTeamScheduleQueryRunner, formatYearMonthTitle, mapMemberScheduleState, normalizeTeamScheduleResult, resolveInitialMonth, resolveScheduleDateBounds, shiftMonth, validateScheduleQueryConfig }
