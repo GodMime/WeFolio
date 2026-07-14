@@ -1,5 +1,15 @@
 const { request } = require('../../../utils/request.js')
 const { isRemoteUrl } = require('../../../utils/upload-file.js')
+const {
+  WECHAT_QR_CROP_FILE_TYPE,
+  WECHAT_QR_CROP_OUTPUT_WIDTH,
+  WECHAT_QR_CROP_QUALITY,
+  buildWechatQrCropFrame,
+  buildWechatQrCropState,
+  cropWechatQrToTempFilePath,
+  getWechatQrImageInfo,
+  moveWechatQrCropState
+} = require('../../../utils/profile-assets.js')
 const { uploadTeamPortfolioAsset } = require('../utils/team-portfolio-assets.js')
 const { createStandardTeamPortfolio, fetchTeamPortfolioDetail, handleTeamMaintainerAuthError, normalizeTeamPortfolioConfig, publishTeamPortfolio, saveTeamPortfolioDraft, showTeamPortfolioUnavailableToast } = require('../utils/team-portfolios.js')
 
@@ -15,6 +25,13 @@ const DRAG_ROW_FALLBACK_HEIGHT = 96
 const COMPONENT_DRAG_SCALE = 1.015
 const TEAM_PORTFOLIO_COVER_ASSET_TYPE = 'COVER'
 const TEAM_PROFILE_AVATAR_ASSET_TYPE = 'TEAM_PROFILE_AVATAR'
+const TEAM_QR_CONTACT_ASSET_TYPE = 'QR_CONTACT'
+const TEAM_QR_CONTACT_SOURCE_CUSTOM = 'CUSTOM'
+const DESIGN_VIEWPORT_RPX = 750
+const QR_CONTACT_CROP_MAX_WIDTH_RPX = 560
+const QR_CONTACT_CROP_HORIZONTAL_GUTTER_RPX = 116
+const QR_CONTACT_CROP_CANVAS_ID = 'teamQrContactCropCanvas'
+const QR_CONTACT_CROP_FAILED_MESSAGE = '二维码裁剪失败，请重试'
 const PORTFOLIO_LIST_ROUTE_SUFFIX = '/portfolios/portfolios'
 const TEAM_PORTFOLIOS_COMPAT_PAGE_URL = '/pages/team-portfolios/portfolios'
 const TEXT_SECTION_MAX_LENGTH = 200
@@ -59,14 +76,26 @@ function buildServerSafeTeamPortfolioConfig(config = {}) {
   const normalized = normalizeTeamPortfolioConfig(config)
   const coverUrl = normalized.share && normalized.share.coverUrl
   const components = normalized.components.map((component) => {
-    if (component.componentType !== 'TEAM_PROFILE') return component
-    const team = component.config && component.config.team ? component.config.team : {}
-    return Object.assign({}, component, {
-      config: Object.assign({}, component.config, {
-        team: Object.assign({}, team, { avatarUrl: isRemoteUrl(team.avatarUrl) ? team.avatarUrl : '' })
+    if (component.componentType === 'QR_CONTACT') {
+      const qrUrl = component.config && component.config.qrUrl
+      if (!isRemoteUrl(qrUrl)) return null
+      return Object.assign({}, component, {
+        config: {
+          qrUrlSource: TEAM_QR_CONTACT_SOURCE_CUSTOM,
+          qrUrl
+        }
       })
-    })
-  })
+    }
+    if (component.componentType === 'TEAM_PROFILE') {
+      const team = component.config && component.config.team ? component.config.team : {}
+      return Object.assign({}, component, {
+        config: Object.assign({}, component.config, {
+          team: Object.assign({}, team, { avatarUrl: isRemoteUrl(team.avatarUrl) ? team.avatarUrl : '' })
+        })
+      })
+    }
+    return component
+  }).filter(Boolean)
   return normalizeTeamPortfolioConfig(Object.assign({}, normalized, {
     share: Object.assign({}, normalized.share, { coverUrl: isRemoteUrl(coverUrl) ? coverUrl : '' }),
     components
@@ -75,6 +104,24 @@ function buildServerSafeTeamPortfolioConfig(config = {}) {
 
 function makeKey() { return `component-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}` }
 function makeIdempotencyKey(prefix) { return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}` }
+function getQrContactCropBoxWidth(wxApi = wx) {
+  const systemInfo = wxApi && wxApi.getSystemInfoSync ? wxApi.getSystemInfoSync() : {}
+  const windowWidth = Number(systemInfo.windowWidth) || 375
+  const rpxScale = windowWidth / DESIGN_VIEWPORT_RPX
+  return Math.floor(Math.min(
+    QR_CONTACT_CROP_MAX_WIDTH_RPX * rpxScale,
+    windowWidth - QR_CONTACT_CROP_HORIZONTAL_GUTTER_RPX * rpxScale
+  ))
+}
+function resetQrContactCropState() {
+  return {
+    qrContactCropVisible: false,
+    qrContactCropSaving: false,
+    qrContactCropErrorText: '',
+    qrContactCropState: null,
+    qrContactCropTouchStart: null
+  }
+}
 function countTextCodePoints(value) { return Array.from(String(value || '')).length }
 function buildTextSectionForm(config = {}) {
   const alignment = String(config.alignment || '').trim()
@@ -154,7 +201,7 @@ function buckets(components) {
 }
 
 Page({
-  data: { portfolioId: 0, teamId: 0, teamSnapshot: {}, loading: false, errorMessage: '', canMaintain: false, publicationStatus: 'DRAFT_ONLY', draftRevision: 0, publishedRevision: 0, statusText: '草稿', statusTone: 'draft', showPublishAction: false, config: { schemaVersion: 'standard-team-v1', share: {}, components: [] }, componentList: [], componentBuckets: buckets([]), componentOptions: buildComponentOptions(), componentValidation: {}, componentSources: {}, hasInvalidComponents: false, saving: false, publishing: false, openingLibrary: false, shareCoverUploading: false, teamProfileRefreshing: false, pendingDraftKey: '', pendingPublishKey: '', pendingPublishRevision: 0, shareTitleCounter: '0 / 50', componentSheetVisible: false, textSectionSheetVisible: false, textSectionEditingComponentKey: '', textSectionAlignmentOptions: TEXT_SECTION_ALIGNMENT_OPTIONS, textSectionMaxLength: TEXT_SECTION_MAX_LENGTH, textSectionForm: buildTextSectionForm(), textSectionFieldCounters: buildTextSectionFieldCounters(buildTextSectionForm()), contactFormSheetVisible: false, contactFormEditingComponentKey: '', contactFormDisplayModeOptions: CONTACT_FORM_DISPLAY_MODE_OPTIONS, contactFormConfigForm: buildContactFormConfigForm(), scheduleQuerySheetVisible: false, scheduleQueryEditingComponentKey: '', scheduleQueryDisplayModeOptions: SCHEDULE_QUERY_DISPLAY_MODE_OPTIONS, scheduleQueryForm: buildScheduleQueryForm(), dividerSheetVisible: false, dividerEditingComponentKey: '', dividerColorOptions: DIVIDER_COLOR_OPTIONS, dividerForm: buildDividerForm(), componentEditorVisible: false, activeComponentKey: '', activeComponentType: '', activeComponentName: '', activeComponent: { config: {} }, activeComponentSource: {}, activeComponentNeedsPortfolio: false, revealedComponentKey: '', componentTouchStart: null, draggingIndex: -1, dragTargetIndex: -1, componentDragStartY: 0, componentDragStyle: '', shareCoverCropVisible: false, shareCoverCropPath: '' },
+  data: { portfolioId: 0, teamId: 0, teamSnapshot: {}, loading: false, errorMessage: '', canMaintain: false, publicationStatus: 'DRAFT_ONLY', draftRevision: 0, publishedRevision: 0, statusText: '草稿', statusTone: 'draft', showPublishAction: false, config: { schemaVersion: 'standard-team-v1', share: {}, components: [] }, componentList: [], componentBuckets: buckets([]), componentOptions: buildComponentOptions(), componentValidation: {}, componentSources: {}, hasInvalidComponents: false, saving: false, publishing: false, openingLibrary: false, shareCoverUploading: false, qrContactChoosing: false, qrContactCropVisible: false, qrContactCropSaving: false, qrContactCropErrorText: '', qrContactCropState: null, qrContactCropTouchStart: null, qrContactCropCanvasWidth: WECHAT_QR_CROP_OUTPUT_WIDTH, qrContactCropCanvasHeight: WECHAT_QR_CROP_OUTPUT_WIDTH, teamProfileRefreshing: false, pendingDraftKey: '', pendingPublishKey: '', pendingPublishRevision: 0, shareTitleCounter: '0 / 50', componentSheetVisible: false, textSectionSheetVisible: false, textSectionEditingComponentKey: '', textSectionAlignmentOptions: TEXT_SECTION_ALIGNMENT_OPTIONS, textSectionMaxLength: TEXT_SECTION_MAX_LENGTH, textSectionForm: buildTextSectionForm(), textSectionFieldCounters: buildTextSectionFieldCounters(buildTextSectionForm()), contactFormSheetVisible: false, contactFormEditingComponentKey: '', contactFormDisplayModeOptions: CONTACT_FORM_DISPLAY_MODE_OPTIONS, contactFormConfigForm: buildContactFormConfigForm(), scheduleQuerySheetVisible: false, scheduleQueryEditingComponentKey: '', scheduleQueryDisplayModeOptions: SCHEDULE_QUERY_DISPLAY_MODE_OPTIONS, scheduleQueryForm: buildScheduleQueryForm(), dividerSheetVisible: false, dividerEditingComponentKey: '', dividerColorOptions: DIVIDER_COLOR_OPTIONS, dividerForm: buildDividerForm(), componentEditorVisible: false, activeComponentKey: '', activeComponentType: '', activeComponentName: '', activeComponent: { config: {} }, activeComponentSource: {}, activeComponentNeedsPortfolio: false, revealedComponentKey: '', componentTouchStart: null, draggingIndex: -1, dragTargetIndex: -1, componentDragStartY: 0, componentDragStyle: '', shareCoverCropVisible: false, shareCoverCropPath: '' },
   onLoad(options = {}) {
     const portfolioId = Number(options.portfolioId) || 0
     const teamId = Number(options.teamId) || 0
@@ -354,8 +401,6 @@ Page({
   async handleListLoadMembers(event) { const key = event.currentTarget.dataset.key; return this.loadSource(key, 'list-members', `/api/mine/team-portfolios/${this.data.portfolioId}/components/member-portfolio-list/members`, (members) => ({ members, portfolios: [] }), { failedStage: 'members', memberUserId: 0 }) },
   async handleListMemberChange(event) { const key = event.currentTarget.dataset.key; const memberUserId = event.detail.memberUserId; this.updateSource(key, { portfolios: [], memberUserId, failedStage: '' }); return this.loadSource(key, `list-portfolios-${memberUserId}`, `/api/mine/team-portfolios/${this.data.portfolioId}/components/member-portfolio-list/members/${memberUserId}/portfolios`, (portfolios) => ({ portfolios }), { failedStage: 'member-items', memberUserId }) },
   handleListRetrySource(event) { const source = this.data.componentSources[event.currentTarget.dataset.key] || {}; return source.failedStage === 'member-items' && source.memberUserId ? this.handleListMemberChange({ currentTarget: event.currentTarget, detail: { memberUserId: source.memberUserId } }) : this.handleListLoadMembers(event) },
-  async uploadAssetPath(assetType, filePath, onSuccess) { const url = await uploadTeamPortfolioAsset({ portfolioId: this.data.portfolioId, assetType, clientId: makeKey(), filePath, requestFn: request }); onSuccess(url) },
-  async chooseAsset(assetType, onSuccess) { if (!this.data.portfolioId || !wx.chooseMedia) return; const media = await new Promise((resolve, reject) => wx.chooseMedia({ count: 1, mediaType: ['image'], success: resolve, fail: reject })); const file = media && Array.isArray(media.tempFiles) && media.tempFiles[0]; if (!file || !file.tempFilePath) throw new Error('未选择有效图片'); await this.uploadAssetPath(assetType, file.tempFilePath, onSuccess) },
   applyShareCover(coverUrl) { this.clearPending(); this.updateConfig(Object.assign({}, this.data.config, { share: Object.assign({}, this.data.config.share, { coverUrl }) })) },
   async handleCoverChoose() {
     if (this.data.shareCoverUploading || !this.data.canMaintain || !wx.chooseMedia) return
@@ -388,14 +433,83 @@ Page({
       this.setData({ shareCoverCropVisible: false, shareCoverCropPath: '' })
     } catch (error) { if (!/cancel/i.test(String(error && error.errMsg || error && error.message || ''))) wx.showToast({ title: '封面裁剪失败，请重试', icon: 'none' }) } finally { this.setData({ shareCoverUploading: false }) }
   },
-  async handleQrChoose(event) {
-    if (this.data.shareCoverUploading || !this.data.canMaintain) return
-    const componentKey = event.currentTarget.dataset.key
-    if (!wx.chooseMedia) return
-    this.setData({ shareCoverUploading: true })
+  async handleQrChoose() {
+    if (this.data.qrContactChoosing || this.data.shareCoverUploading || !this.data.canMaintain || !wx.chooseMedia) return
+    this.setData({ qrContactChoosing: true })
     try {
-      await this.chooseAsset('QR_CONTACT', (qrUrl) => { const current = this.data.config.components.find((item) => item.componentKey === componentKey); this.handleComponentConfigChange({ currentTarget: { dataset: { key: componentKey } }, detail: { config: Object.assign({}, current && current.config, { qrUrlSource: 'CUSTOM', qrUrl }) } }); const child = this.selectComponent('#active-component-editor'); if (child && child.applyUploadedImage) child.applyUploadedImage({ detail: { qrUrl } }) })
-    } catch (error) { if (handleTeamMaintainerAuthError(error)) return; if (showTeamPortfolioUnavailableToast(error)) return; if (!/cancel/i.test(String(error && error.errMsg || error && error.message || ''))) wx.showToast({ title: '上传失败，请重试', icon: 'none' }) } finally { this.setData({ shareCoverUploading: false }) }
+      const media = await new Promise((resolve, reject) => wx.chooseMedia({ count: 1, mediaType: ['image'], success: resolve, fail: reject }))
+      const file = media && Array.isArray(media.tempFiles) && media.tempFiles[0]
+      if (!file || !file.tempFilePath) throw new Error('未选择有效图片')
+      const imageInfo = await getWechatQrImageInfo(file, { wxApi: wx })
+      const qrContactCropState = buildWechatQrCropState(imageInfo, {
+        cropBoxWidth: getQrContactCropBoxWidth(wx)
+      })
+      this.setData({
+        qrContactCropVisible: true,
+        qrContactCropSaving: false,
+        qrContactCropErrorText: '',
+        qrContactCropState,
+        qrContactCropTouchStart: null
+      })
+    } catch (error) { if (!/cancel/i.test(String(error && error.errMsg || error && error.message || ''))) wx.showToast({ title: '图片选择失败，请重试', icon: 'none' }) } finally { this.setData({ qrContactChoosing: false }) }
+  },
+  handleCloseQrContactCrop() {
+    if (this.data.qrContactCropSaving) return
+    this.setData(resetQrContactCropState())
+  },
+  handleQrContactCropTouchStart(event) {
+    const point = touchPoint(event)
+    const cropState = this.data.qrContactCropState || {}
+    this.setData({
+      qrContactCropTouchStart: {
+        x: point.x,
+        y: point.y,
+        offsetX: Number(cropState.offsetX) || 0,
+        offsetY: Number(cropState.offsetY) || 0
+      }
+    })
+  },
+  handleQrContactCropTouchMove(event) {
+    const start = this.data.qrContactCropTouchStart
+    const cropState = this.data.qrContactCropState
+    if (!start || !cropState) return
+    const point = touchPoint(event)
+    this.setData({
+      qrContactCropState: moveWechatQrCropState(Object.assign({}, cropState, {
+        offsetX: start.offsetX,
+        offsetY: start.offsetY
+      }), {
+        deltaX: point.x - start.x,
+        deltaY: point.y - start.y
+      })
+    })
+  },
+  handleQrContactCropTouchEnd() { this.setData({ qrContactCropTouchStart: null }) },
+  handleQrContactCropTouchCancel() { this.setData({ qrContactCropTouchStart: null }) },
+  async handleConfirmQrContactCrop() {
+    if (this.data.qrContactCropSaving || !this.data.qrContactCropState) return
+    const cropState = this.data.qrContactCropState
+    this.setData({ qrContactCropSaving: true, qrContactCropErrorText: '' })
+    try {
+      const croppedPath = await cropWechatQrToTempFilePath({
+        page: this,
+        wxApi: wx,
+        canvasId: QR_CONTACT_CROP_CANVAS_ID,
+        imagePath: cropState.imagePath,
+        cropFrame: buildWechatQrCropFrame(cropState, { outputWidth: WECHAT_QR_CROP_OUTPUT_WIDTH }),
+        fileType: WECHAT_QR_CROP_FILE_TYPE,
+        quality: WECHAT_QR_CROP_QUALITY
+      })
+      const child = this.selectComponent('#active-component-editor')
+      if (child && child.applySelectedImage) child.applySelectedImage({ detail: { qrUrl: croppedPath } })
+      this.setData(resetQrContactCropState())
+    } catch (error) {
+      if (/cancel/i.test(String(error && error.errMsg || error && error.message || ''))) return
+      this.setData({ qrContactCropSaving: false, qrContactCropErrorText: QR_CONTACT_CROP_FAILED_MESSAGE })
+      wx.showToast({ title: QR_CONTACT_CROP_FAILED_MESSAGE, icon: 'none' })
+    } finally {
+      this.setData({ qrContactCropSaving: false })
+    }
   },
   hasInvalidComponents() { return Object.keys(this.data.componentValidation).some((key) => this.data.componentValidation[key] === false) },
   async uploadLocalShareCover(portfolioId, config = this.data.config) {
@@ -430,6 +544,28 @@ Page({
     }
     return normalizeTeamPortfolioConfig(Object.assign({}, normalized, { components }))
   },
+  async uploadLocalQrContacts(portfolioId, config = this.data.config) {
+    let normalized = normalizeTeamPortfolioConfig(config)
+    for (let index = 0; index < normalized.components.length; index += 1) {
+      const component = normalized.components[index]
+      const qrUrl = component.config && component.config.qrUrl
+      if (component.componentType !== 'QR_CONTACT' || !qrUrl || isRemoteUrl(qrUrl)) continue
+      const uploadedUrl = await uploadTeamPortfolioAsset({
+        portfolioId,
+        assetType: TEAM_QR_CONTACT_ASSET_TYPE,
+        clientId: makeKey(),
+        filePath: qrUrl,
+        requestFn: request
+      })
+      const components = normalized.components.slice()
+      components[index] = Object.assign({}, component, {
+        config: { qrUrlSource: TEAM_QR_CONTACT_SOURCE_CUSTOM, qrUrl: uploadedUrl }
+      })
+      normalized = normalizeTeamPortfolioConfig(Object.assign({}, normalized, { components }))
+      this.updateConfig(normalized)
+    }
+    return normalized
+  },
   async saveDraft(forPublish = false) {
     if (this.data.saving || (this.data.publishing && !forPublish) || !this.data.canMaintain || this.hasInvalidComponents()) return null
     this.setData({ saving: true })
@@ -450,7 +586,10 @@ Page({
       if (!portfolioId) throw new Error('团队作品集创建失败')
       failureStage = 'upload'
       const coverUploadedConfig = await this.uploadLocalShareCover(portfolioId, this.data.config)
-      const uploadedConfig = await this.uploadLocalTeamProfileAvatars(portfolioId, coverUploadedConfig)
+      this.updateConfig(coverUploadedConfig)
+      const profileUploadedConfig = await this.uploadLocalTeamProfileAvatars(portfolioId, coverUploadedConfig)
+      this.updateConfig(profileUploadedConfig)
+      const uploadedConfig = await this.uploadLocalQrContacts(portfolioId, profileUploadedConfig)
       this.updateConfig(uploadedConfig)
       failureStage = 'save'
       const idempotencyKey = this.data.pendingDraftKey || makeIdempotencyKey('team-draft')
@@ -468,7 +607,7 @@ Page({
         return null
       }
       if (!isUncertainFailure(error)) this.setData({ pendingDraftKey: '' })
-      wx.showToast({ title: failureStage === 'upload' ? '封面上传失败，请重试' : '保存失败，请检查组件配置', icon: 'none' })
+      wx.showToast({ title: failureStage === 'upload' ? '素材上传失败，请重试' : '保存失败，请检查组件配置', icon: 'none' })
       return null
     } finally { this.setData({ saving: false }) }
   },

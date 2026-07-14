@@ -75,6 +75,26 @@ test('editor WXML presents all component options in Chinese and binds member sou
   assert.doesNotMatch(wxml, /<team-(?:carousel|member-portfolio-grid|member-portfolio-list)[^>]*\s(?:loading|error-message)=/)
 })
 
+test('editor renders the personal-style 1:1 QR crop overlay above the component editor', () => {
+  const wxml = fs.readFileSync(path.join(ROOT, 'standard-edit/team-portfolio-standard-edit.wxml'), 'utf8')
+  const css = fs.readFileSync(path.join(ROOT, 'standard-edit/team-portfolio-standard-edit.wxss'), 'utf8')
+  assert.match(wxml, /class="qr-contact-crop-mask \{\{qrContactCropVisible \? 'visible' : ''\}\}"/)
+  assert.match(wxml, />1:1</)
+  for (const handler of [
+    'handleQrContactCropTouchStart',
+    'handleQrContactCropTouchMove',
+    'handleQrContactCropTouchEnd',
+    'handleQrContactCropTouchCancel',
+    'handleCloseQrContactCrop',
+    'handleConfirmQrContactCrop'
+  ]) assert.match(wxml, new RegExp(handler))
+  assert.match(wxml, /id="teamQrContactCropCanvas"/)
+  assert.match(wxml, /type="2d"/)
+  assert.match(css, /\.qr-contact-crop-mask\s*\{[^}]*position:\s*fixed[^}]*z-index:\s*45/)
+  assert.match(css, /\.qr-contact-crop-stage\s*\{[^}]*overflow:\s*hidden/)
+  assert.match(css, /\.qr-contact-crop-canvas\s*\{[^}]*left:\s*-9999px/)
+})
+
 test('team pages protect long text and editor styles its source and component controls', () => {
   const editorCss = fs.readFileSync(path.join(ROOT, 'standard-edit/team-portfolio-standard-edit.wxss'), 'utf8')
   for (const selector of ['.source-state', '.component-list', '.component-row', '.cover-preview']) assert.match(editorCss, new RegExp(`\\${selector}\\s*\\{`))
@@ -185,7 +205,7 @@ test('editor source requests coalesce by fingerprint, expose ordinary failures, 
 
 function editablePage() {
   const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => ({}))
-  page.setData({ portfolioId: 7, teamId: 3, canMaintain: true, config: { share: { coverUrl: 'https://old.example/cover.png' }, components: [{ componentKey: 'text-1', componentType: 'TEXT_SECTION', sortOrder: 0, config: { content: '旧内容' } }, { componentKey: 'qr-1', componentType: 'QR_CONTACT', sortOrder: 1, config: { title: '联系我', description: '请扫码', qrUrl: 'https://old.example/qr.png' } }] }, componentValidation: { 'text-1': true, 'qr-1': true }, hasInvalidComponents: false })
+  page.setData({ portfolioId: 7, teamId: 3, canMaintain: true, config: { share: { coverUrl: 'https://old.example/cover.png' }, components: [{ componentKey: 'text-1', componentType: 'TEXT_SECTION', sortOrder: 0, config: { content: '旧内容' } }, { componentKey: 'qr-1', componentType: 'QR_CONTACT', sortOrder: 1, config: { qrUrlSource: 'CUSTOM', qrUrl: 'https://old.example/qr.png' } }] }, componentValidation: { 'text-1': true, 'qr-1': true }, hasInvalidComponents: false })
   return page
 }
 
@@ -225,14 +245,144 @@ test('editor cover selection updates the local preview and clears draft and publ
   try { seedPending(uploadPage); await uploadPage.handleCoverChoose(); assert.equal(uploadPage.data.config.share.coverUrl, 'https://cdn.example/new-cover.png'); assertPendingCleared(uploadPage) } finally { uploadPage.cleanup() }
 })
 
-test('editor QR upload preserves text fields, notifies its child, and clears retry state', async () => {
+test('editor QR selection opens a square crop without uploading or changing the child draft', async () => {
+  const requests = []
   const applied = []
   const page = editablePage()
   page.cleanup()
-  const uploadPage = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => ({}), { chooseMedia({ success }) { success({ tempFiles: [{ tempFilePath: 'https://cdn.example/new-qr.png' }] }) } })
+  const uploadPage = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
+    requests.push(options)
+    return { uploadUrl: 'https://cos.example/upload', publicUrl: 'https://cdn.example/new-qr.png', formData: {} }
+  }, {
+    chooseMedia({ success }) { success({ tempFiles: [{ tempFilePath: 'wxfile://tmp/new-qr.png', width: 1200, height: 800 }] }) },
+    getSystemInfoSync() { return { windowWidth: 375 } },
+    getFileSystemManager() { return { statSync() { return { size: 128 } } } },
+    uploadFile({ success }) { success({ statusCode: 204 }) }
+  })
   uploadPage.setData(page.data)
-  uploadPage.selectComponent = () => ({ applyUploadedImage(value) { applied.push(value) } })
-  try { seedPending(uploadPage); await uploadPage.handleQrChoose({ currentTarget: { dataset: { key: 'qr-1' } } }); const config = uploadPage.data.config.components.find((item) => item.componentKey === 'qr-1').config; assert.deepEqual(config, { title: '联系我', description: '请扫码', qrUrl: 'https://cdn.example/new-qr.png', qrUrlSource: 'CUSTOM' }); assert.deepEqual(applied, [{ detail: { qrUrl: 'https://cdn.example/new-qr.png' } }]); assertPendingCleared(uploadPage) } finally { uploadPage.cleanup() }
+  uploadPage.selectComponent = () => ({ applySelectedImage(value) { applied.push(value) } })
+  try {
+    seedPending(uploadPage)
+    await uploadPage.handleQrChoose({ currentTarget: { dataset: { key: 'qr-1' } } })
+    const config = uploadPage.data.config.components.find((item) => item.componentKey === 'qr-1').config
+    assert.deepEqual(config, { qrUrlSource: 'CUSTOM', qrUrl: 'https://old.example/qr.png' })
+    assert.equal(uploadPage.data.qrContactCropVisible, true)
+    assert.equal(uploadPage.data.qrContactCropState.imagePath, 'wxfile://tmp/new-qr.png')
+    assert.equal(uploadPage.data.qrContactCropState.cropBoxWidth, 280)
+    assert.deepEqual(applied, [])
+    assert.deepEqual(requests, [])
+    assert.equal(uploadPage.data.pendingDraftKey, 'draft-key')
+    assert.equal(uploadPage.data.pendingPublishKey, 'publish-key')
+    assert.equal(uploadPage.data.pendingPublishRevision, 5)
+    uploadPage.handleCloseQrContactCrop()
+    assert.equal(uploadPage.data.qrContactCropVisible, false)
+    assert.equal(uploadPage.data.qrContactCropState, null)
+    assert.deepEqual(applied, [])
+  } finally { uploadPage.cleanup() }
+})
+
+test('editor QR crop drags the image and exports a 720px JPG before updating the child draft', async () => {
+  const applied = []
+  let canvasOptions
+  const canvas = {
+    createImage() {
+      return {
+        set src(value) {
+          this.path = value
+          this.onload()
+        }
+      }
+    },
+    getContext() {
+      return { clearRect() {}, drawImage() {} }
+    }
+  }
+  let page
+  page = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => ({}), {
+    chooseMedia({ success }) { success({ tempFiles: [{ tempFilePath: 'wxfile://tmp/new-qr.png', width: 1200, height: 800 }] }) },
+    getSystemInfoSync() { return { windowWidth: 375 } },
+    createSelectorQuery() {
+      return {
+        in(target) { assert.equal(target, page); return this },
+        select(selector) { assert.equal(selector, '#teamQrContactCropCanvas'); return this },
+        fields(options) { assert.deepEqual(options, { node: true, size: true }); return this },
+        exec(callback) { callback([{ node: canvas }]) }
+      }
+    },
+    canvasToTempFilePath(options) {
+      canvasOptions = options
+      options.success({ tempFilePath: 'wxfile://tmp/team-qr-cropped.jpg' })
+    }
+  })
+  page.setData({ portfolioId: 7, canMaintain: true })
+  page.selectComponent = () => ({ applySelectedImage(value) { applied.push(value) } })
+  try {
+    await page.handleQrChoose()
+    const initialOffsetX = page.data.qrContactCropState.offsetX
+    page.handleQrContactCropTouchStart({ touches: [{ clientX: 100, clientY: 100 }] })
+    page.handleQrContactCropTouchMove({ touches: [{ clientX: 50, clientY: 100 }] })
+    assert.ok(page.data.qrContactCropState.offsetX < initialOffsetX)
+    page.handleQrContactCropTouchEnd()
+    assert.equal(page.data.qrContactCropTouchStart, null)
+
+    await page.handleConfirmQrContactCrop()
+
+    assert.equal(canvasOptions.destWidth, 720)
+    assert.equal(canvasOptions.destHeight, 720)
+    assert.equal(canvasOptions.fileType, 'jpg')
+    assert.equal(canvasOptions.quality, 0.92)
+    assert.deepEqual(applied, [{ detail: { qrUrl: 'wxfile://tmp/team-qr-cropped.jpg' } }])
+    assert.equal(page.data.qrContactCropVisible, false)
+    assert.equal(page.data.qrContactCropState, null)
+  } finally { page.cleanup() }
+})
+
+test('editor QR crop export failure keeps the crop state and original child draft', async () => {
+  const applied = []
+  const toasts = []
+  const canvas = {
+    createImage() {
+      return {
+        set src(value) {
+          this.path = value
+          this.onload()
+        }
+      }
+    },
+    getContext() {
+      return { clearRect() {}, drawImage() {} }
+    }
+  }
+  let page
+  page = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => ({}), {
+    chooseMedia({ success }) { success({ tempFiles: [{ tempFilePath: 'wxfile://tmp/new-qr.png', width: 1200, height: 800 }] }) },
+    getSystemInfoSync() { return { windowWidth: 375 } },
+    createSelectorQuery() {
+      return {
+        in(target) { assert.equal(target, page); return this },
+        select() { return this },
+        fields() { return this },
+        exec(callback) { callback([{ node: canvas }]) }
+      }
+    },
+    canvasToTempFilePath({ fail }) { fail({ errMsg: 'canvasToTempFilePath:fail export' }) },
+    showToast(value) { toasts.push(value) }
+  })
+  page.setData({ portfolioId: 7, canMaintain: true })
+  page.selectComponent = () => ({ applySelectedImage(value) { applied.push(value) } })
+  try {
+    await page.handleQrChoose()
+    const cropState = clone(page.data.qrContactCropState)
+
+    await page.handleConfirmQrContactCrop()
+
+    assert.equal(page.data.qrContactCropVisible, true)
+    assert.deepEqual(page.data.qrContactCropState, cropState)
+    assert.equal(page.data.qrContactCropSaving, false)
+    assert.equal(page.data.qrContactCropErrorText, '二维码裁剪失败，请重试')
+    assert.deepEqual(applied, [])
+    assert.deepEqual(toasts, [{ title: '二维码裁剪失败，请重试', icon: 'none' }])
+  } finally { page.cleanup() }
 })
 
 test('editor cover selection keeps the prior cover on a non-cancel failure and handles empty media safely', async () => {

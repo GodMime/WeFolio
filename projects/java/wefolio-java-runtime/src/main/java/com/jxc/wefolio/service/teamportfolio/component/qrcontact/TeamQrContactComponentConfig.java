@@ -11,12 +11,6 @@ public class TeamQrContactComponentConfig {
     /** 自定义二维码来源编码。 */
     private static final String CUSTOM = "CUSTOM";
 
-    /** 组件标题。 */
-    private String title;
-
-    /** 组件说明。 */
-    private String description;
-
     /** 二维码来源。 */
     private String qrUrlSource = CUSTOM;
 

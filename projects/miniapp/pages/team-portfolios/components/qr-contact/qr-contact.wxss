@@ -4,8 +4,6 @@
 .editor-form { display: flex; flex-direction: column; gap: 20rpx; padding: 4rpx 0 8rpx; text-align: left; }
 .editor-field { padding: 22rpx; border: 1rpx solid rgba(23, 32, 42, .06); border-radius: 16rpx; background: rgba(255, 255, 255, .94); }
 .editor-label { color: #5f6b7a; font-size: 24rpx; font-weight: 800; }
-.editor-input { width: 100%; min-height: 84rpx; margin-top: 12rpx; padding: 0 22rpx; color: #17202a; font-size: 28rpx; line-height: 84rpx; border-radius: 16rpx; background: #f6f8fb; box-sizing: border-box; }
-.editor-textarea { height: 160rpx; padding-top: 20rpx; padding-bottom: 20rpx; line-height: 1.55; }
 .editor-qr-row { display: flex; align-items: center; gap: 18rpx; margin-top: 14rpx; }
 .editor-qr-preview { width: 160rpx; height: 160rpx; flex: none; overflow: hidden; border: 1rpx solid #dbe5ef; border-radius: 16rpx; background: #f6f8fb; box-sizing: border-box; }
 .editor-qr-preview image { width: 100%; height: 100%; }
@@ -18,7 +16,5 @@
 .editor-cancel, .editor-confirm { width: 148rpx; height: 64rpx; display: flex; align-items: center; justify-content: center; margin: 0; padding: 0; font-size: 24rpx; font-weight: 900; line-height: 1; border-radius: 999rpx; box-sizing: border-box; }
 .editor-cancel { color: #536b82; border: 1rpx solid #cbd6df; background: #eef3f7; }
 .editor-confirm { color: #fff; background: #17202a; }
-.title { display: block; margin-bottom: 20rpx; font-weight: 600; }
-.description { display: block; margin-bottom: 20rpx; color: #5e6b73; line-height: 1.6; white-space: pre-wrap; }
-.qr-image { width: min(520rpx, 100%); height: 520rpx; margin: 0 auto; border-radius: 8px; background: #fff; }
+.qr-image { display: block; width: 280rpx; height: 280rpx; margin: 24rpx auto 0; background: #fff; }
 .empty { display: block; padding: 60rpx 0; color: #708087; word-break: break-word; }

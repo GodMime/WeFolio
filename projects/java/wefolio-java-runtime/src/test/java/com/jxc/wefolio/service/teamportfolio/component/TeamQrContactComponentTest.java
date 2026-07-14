@@ -83,12 +83,6 @@ class TeamQrContactComponentTest {
     /** 个人资料二维码来源，仅用于验证团队组件拒绝该值。 */
     private static final String PROFILE_QR_SOURCE = "PROFILE";
 
-    /** 配置标题键。 */
-    private static final String TITLE_KEY = "title";
-
-    /** 配置说明键。 */
-    private static final String DESCRIPTION_KEY = "description";
-
     /** 二维码来源键。 */
     private static final String QR_URL_SOURCE_KEY = "qrUrlSource";
 
@@ -96,8 +90,7 @@ class TeamQrContactComponentTest {
     private static final String QR_URL_KEY = "qrUrl";
 
     /** 配置字段顺序。 */
-    private static final List<String> CONFIG_KEYS = List.of(
-            TITLE_KEY, DESCRIPTION_KEY, QR_URL_SOURCE_KEY, QR_URL_KEY);
+    private static final List<String> CONFIG_KEYS = List.of(QR_URL_SOURCE_KEY, QR_URL_KEY);
 
     /** 配置模型只能拥有的字段。 */
     private static final Set<String> CONFIG_FIELDS = Set.copyOf(CONFIG_KEYS);
@@ -147,10 +140,10 @@ class TeamQrContactComponentTest {
             "wechatqrurl|contactqrurl", Pattern.CASE_INSENSITIVE);
 
     /**
-     * 配置模型仅表达四个展示字段，三个运行时类必须由 Spring 管理。
+     * 配置模型仅表达二维码来源和地址，三个运行时类必须由 Spring 管理。
      */
     @Test
-    void configShouldOwnOnlyFourFieldsAndRuntimeClassesShouldBeComponents() {
+    void configShouldOwnOnlyQrFieldsAndRuntimeClassesShouldBeComponents() {
         assertThat(fieldNames(loadClass(CONFIG_CLASS_NAME))).containsExactlyInAnyOrderElementsOf(CONFIG_FIELDS);
         assertThat(loadClass(VALIDATOR_CLASS_NAME).isAnnotationPresent(Component.class)).isTrue();
         assertThat(loadClass(RENDERER_CLASS_NAME).isAnnotationPresent(Component.class)).isTrue();
@@ -183,10 +176,10 @@ class TeamQrContactComponentTest {
                 + "\"qrUrlSource\":\" CUSTOM \",\"qrUrl\":\" " + QR_URL + " \"}");
 
         JSONObject normalized = normalize(input, context());
-        input.put(TITLE_KEY, "已修改");
+        input.put(QR_URL_KEY, "https://changed.example.com/qr.png");
 
-        assertThat(normalized.toJSONString()).isEqualTo("{\"title\":\"联系我们\",\"description\":\"17\","
-                + "\"qrUrlSource\":\"CUSTOM\",\"qrUrl\":\"" + QR_URL + "\"}");
+        assertThat(normalized.toJSONString()).isEqualTo("{\"qrUrlSource\":\"CUSTOM\",\"qrUrl\":\""
+                + QR_URL + "\"}");
         assertThat(normalized.keySet()).containsExactlyElementsOf(CONFIG_KEYS);
     }
 
@@ -263,18 +256,18 @@ class TeamQrContactComponentTest {
     }
 
     /**
-     * 二维码地址必须显式为非空字符串，标题和说明遵循个人展示字段的转换语义。
+     * 二维码地址必须显式为非空字符串，遗留标题和说明字段必须丢弃。
      */
     @Test
-    void validatorShouldRequireQrUrlAndNormalizeOptionalDisplayText() {
+    void validatorShouldRequireQrUrlAndDiscardLegacyDisplayText() {
         for (JSONObject invalidConfig : invalidQrUrlConfigs()) {
             assertBusinessException(() -> normalize(invalidConfig, context()), QR_URL_REQUIRED_MESSAGE);
         }
 
         JSONObject normalized = normalize(JSON.parseObject("{\"title\":null,\"description\":\"  说明  \","
                 + "\"qrUrlSource\":\"CUSTOM\",\"qrUrl\":\"" + QR_URL + "\"}"), context());
-        assertThat(normalized.toJSONString()).isEqualTo("{\"title\":\"\",\"description\":\"说明\","
-                + "\"qrUrlSource\":\"CUSTOM\",\"qrUrl\":\"" + QR_URL + "\"}");
+        assertThat(normalized.toJSONString()).isEqualTo("{\"qrUrlSource\":\"CUSTOM\",\"qrUrl\":\""
+                + QR_URL + "\"}");
     }
 
     /**
@@ -295,7 +288,7 @@ class TeamQrContactComponentTest {
      * 渲染器必须对所有原始坏配置重新校验，而不是信任调用方已归一化。
      */
     @Test
-    void rendererShouldRevalidateEveryInvalidInputAndReturnDetachedFourFieldSnapshot() {
+    void rendererShouldRevalidateEveryInvalidInputAndReturnDetachedQrSnapshot() {
         for (JSONObject invalidConfig : invalidSourceConfigs()) {
             assertBusinessException(() -> render(invalidConfig, context()), QR_URL_SOURCE_INVALID_MESSAGE);
         }
@@ -307,8 +300,8 @@ class TeamQrContactComponentTest {
         JSONObject rendered = render(normalized, context());
         normalized.put(QR_URL_KEY, "https://changed.example.com/qr.png");
 
-        assertThat(rendered.toJSONString()).isEqualTo("{\"title\":\"\",\"description\":\"\","
-                + "\"qrUrlSource\":\"CUSTOM\",\"qrUrl\":\"" + QR_URL + "\"}");
+        assertThat(rendered.toJSONString()).isEqualTo("{\"qrUrlSource\":\"CUSTOM\",\"qrUrl\":\""
+                + QR_URL + "\"}");
         assertThat(rendered.keySet()).containsExactlyElementsOf(CONFIG_KEYS);
     }
 

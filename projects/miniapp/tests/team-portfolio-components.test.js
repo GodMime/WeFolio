@@ -141,8 +141,8 @@ const EDIT_LIFECYCLE_CASES = [
   },
   {
     name: 'qr-contact', sourceProperty: 'config', draftKey: 'draft',
-    initial: { title: '初始', description: '初始说明', qrUrlSource: 'CUSTOM', qrUrl: 'https://cdn/initial.png' },
-    latest: { title: '联系我们', description: '长按识别', qrUrlSource: 'CUSTOM', qrUrl: 'https://cdn/latest.png' },
+    initial: { qrUrlSource: 'CUSTOM', qrUrl: 'https://cdn/initial.png' },
+    latest: { qrUrlSource: 'CUSTOM', qrUrl: 'https://cdn/latest.png' },
     expectedDraft(exports, source) { return exports.createDefaultQrContactConfig(source) },
     expectedConfig(exports, source) { return exports.createDefaultQrContactConfig(source) }
   }
@@ -638,12 +638,19 @@ test('contact form treats a null form binding as an empty form', () => {
 
 test('QR is CUSTOM-only and distinguishes maintainer preview from visitor interaction', () => {
   const { definition, exports } = loadComponent('qr-contact')
-  assert.deepEqual(exports.createDefaultQrContactConfig(), { title: '', description: '', qrUrlSource: 'CUSTOM', qrUrl: '' })
-  assert.deepEqual(exports.createDefaultQrContactConfig({ title: '联系我们', description: '长按识别', qrUrlSource: 'CUSTOM', qrUrl: 'https://cdn/qr.png' }), {
-    title: '联系我们', description: '长按识别', qrUrlSource: 'CUSTOM', qrUrl: 'https://cdn/qr.png'
+  assert.deepEqual(exports.createDefaultQrContactConfig(), { qrUrlSource: 'CUSTOM', qrUrl: '' })
+  assert.deepEqual(exports.createDefaultQrContactConfig({ title: '移除', description: '移除', qrUrlSource: 'CUSTOM', qrUrl: 'wxfile://tmp/qr.png' }), {
+    qrUrlSource: 'CUSTOM', qrUrl: 'wxfile://tmp/qr.png'
   })
   assert.equal(exports.validateQrContactConfig({ qrUrlSource: 'CUSTOM', qrUrl: 'https://cdn/qr.png' }).valid, true)
+  assert.equal(exports.validateQrContactConfig({ qrUrlSource: 'CUSTOM', qrUrl: 'wxfile://tmp/qr.png' }).valid, true)
+  assert.equal(exports.validateQrContactConfig({ qrUrlSource: 'CUSTOM', qrUrl: '' }).valid, false)
   assert.equal(exports.validateQrContactConfig({ qrUrlSource: 'PROFILE', qrUrl: 'https://cdn/qr.png' }).valid, false)
+  const wxml = fs.readFileSync(path.join(ROOT, 'qr-contact/qr-contact.wxml'), 'utf8')
+  const css = fs.readFileSync(path.join(ROOT, 'qr-contact/qr-contact.wxss'), 'utf8')
+  assert.doesNotMatch(wxml, /draft\.title|draft\.description|config\.title|config\.description/)
+  assert.doesNotMatch(wxml, /二维码标题|二维码说明/)
+  assert.match(css, /\.qr-image\s*\{[^}]*width:\s*280rpx[^}]*height:\s*280rpx/)
   assert.equal(propertyDefault(definition, 'visitorMode'), false)
   const events = []
   const previews = []

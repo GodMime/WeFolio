@@ -10,12 +10,6 @@ import org.springframework.stereotype.Component;
 @Component
 public class TeamQrContactComponentRenderer {
 
-    /** 标题配置键。 */
-    private static final String CONFIG_KEY_TITLE = "title";
-
-    /** 说明配置键。 */
-    private static final String CONFIG_KEY_DESCRIPTION = "description";
-
     /** 二维码来源配置键。 */
     private static final String CONFIG_KEY_QR_URL_SOURCE = "qrUrlSource";
 
@@ -55,8 +49,6 @@ public class TeamQrContactComponentRenderer {
      */
     private JSONObject toJson(TeamQrContactComponentConfig config) {
         JSONObject result = new JSONObject();
-        result.put(CONFIG_KEY_TITLE, config.getTitle());
-        result.put(CONFIG_KEY_DESCRIPTION, config.getDescription());
         result.put(CONFIG_KEY_QR_URL_SOURCE, config.getQrUrlSource());
         result.put(CONFIG_KEY_QR_URL, config.getQrUrl());
         return result;

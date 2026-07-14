@@ -316,6 +316,99 @@ test('new editor keeps a selected cover local until create, upload, and draft sa
   } finally { page.cleanup() }
 })
 
+test('new editor keeps a QR local until create, COS upload, and draft save', async () => {
+  const requests = []
+  const uploads = []
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
+    requests.push(clone(options))
+    if (options.url === '/api/mine/teams/3/portfolios/standard') {
+      return { portfolioId: 81, ownerId: 3, draftRevision: 1, publicationStatus: 'DRAFT_ONLY', config: options.data.config }
+    }
+    if (options.url === '/api/mine/team-portfolios/81/asset/upload-ticket') {
+      return { uploadUrl: 'https://cos.example/team-qr', publicUrl: 'https://cdn.example/team-qr.png', formData: { key: 'team-qr' } }
+    }
+    if (options.url === '/api/mine/team-portfolios/81/draft') {
+      return { portfolioId: 81, draftRevision: 2, publicationStatus: 'DRAFT_ONLY' }
+    }
+    throw new Error(`unexpected request: ${options.url}`)
+  }, {
+    getFileSystemManager() { return { statSync() { return { size: 128 } } } },
+    uploadFile(options) { uploads.push(clone({ url: options.url, filePath: options.filePath, name: options.name, formData: options.formData })); options.success({ statusCode: 204 }) }
+  })
+  page.setData({
+    teamId: 3,
+    canMaintain: true,
+    config: {
+      schemaVersion: 'standard-team-v1',
+      share: {},
+      components: [{ componentKey: 'qr-1', componentType: 'QR_CONTACT', sortOrder: 0, enabled: true, config: { qrUrlSource: 'CUSTOM', qrUrl: 'wxfile://tmp/team-qr.png' } }]
+    },
+    componentValidation: { 'qr-1': true }
+  })
+  try {
+    await page.handleSaveTap()
+    assert.deepEqual(requests.map((item) => item.url), [
+      '/api/mine/teams/3/portfolios/standard',
+      '/api/mine/team-portfolios/81/asset/upload-ticket',
+      '/api/mine/team-portfolios/81/draft'
+    ])
+    assert.deepEqual(requests[0].data.config.components, [])
+    assert.equal(requests[1].data.assetType, 'QR_CONTACT')
+    assert.equal(requests[2].data.config.components[0].config.qrUrl, 'https://cdn.example/team-qr.png')
+    assert.equal(page.data.config.components[0].config.qrUrl, 'https://cdn.example/team-qr.png')
+    assert.deepEqual(uploads, [{ url: 'https://cos.example/team-qr', filePath: 'wxfile://tmp/team-qr.png', name: 'file', formData: { key: 'team-qr' } }])
+  } finally { page.cleanup() }
+})
+
+test('existing editor skips a remote QR when saving', async () => {
+  const requests = []
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
+    requests.push(clone(options))
+    if (options.url === '/api/mine/team-portfolios/82/draft') return { portfolioId: 82, draftRevision: 3, publicationStatus: 'DRAFT_ONLY' }
+    throw new Error(`unexpected request: ${options.url}`)
+  })
+  page.setData({
+    portfolioId: 82,
+    teamId: 3,
+    canMaintain: true,
+    draftRevision: 2,
+    config: { schemaVersion: 'standard-team-v1', share: {}, components: [{ componentKey: 'qr-1', componentType: 'QR_CONTACT', sortOrder: 0, enabled: true, config: { qrUrlSource: 'CUSTOM', qrUrl: 'https://cdn.example/remote-qr.png' } }] },
+    componentValidation: { 'qr-1': true }
+  })
+  try {
+    await page.handleSaveTap()
+    assert.deepEqual(requests.map((item) => item.url), ['/api/mine/team-portfolios/82/draft'])
+  } finally { page.cleanup() }
+})
+
+test('QR upload failure keeps the local image and does not save the draft', async () => {
+  const requests = []
+  const toasts = []
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
+    requests.push(clone(options))
+    if (options.url.endsWith('/asset/upload-ticket')) throw new Error('network')
+    if (options.url.endsWith('/draft')) return { portfolioId: 83, draftRevision: 3, publicationStatus: 'DRAFT_ONLY' }
+    throw new Error(`unexpected request: ${options.url}`)
+  }, {
+    getFileSystemManager() { return { statSync() { return { size: 128 } } } },
+    showToast(value) { toasts.push(value) }
+  })
+  page.setData({
+    portfolioId: 83,
+    teamId: 3,
+    canMaintain: true,
+    draftRevision: 2,
+    config: { schemaVersion: 'standard-team-v1', share: {}, components: [{ componentKey: 'qr-1', componentType: 'QR_CONTACT', sortOrder: 0, enabled: true, config: { qrUrlSource: 'CUSTOM', qrUrl: 'wxfile://tmp/retry-qr.png' } }] },
+    componentValidation: { 'qr-1': true }
+  })
+  try {
+    await page.handleSaveTap()
+    assert.deepEqual(requests.map((item) => item.url), ['/api/mine/team-portfolios/83/asset/upload-ticket'])
+    assert.equal(page.data.config.components[0].config.qrUrl, 'wxfile://tmp/retry-qr.png')
+    assert.equal(toasts.at(-1).title, '素材上传失败，请重试')
+  } finally { page.cleanup() }
+})
+
 test('team profile avatar selection stays local until create, upload, and draft save', async () => {
   const requests = []
   const appliedAvatars = []

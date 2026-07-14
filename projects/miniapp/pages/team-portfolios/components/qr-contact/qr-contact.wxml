@@ -1,22 +1,18 @@
 <view class="qr-contact {{editMode ? 'editor-mode' : ''}}">
   <block wx:if="{{editMode}}">
     <view class="editor-form">
-      <view class="editor-field"><view class="editor-label">标题</view><input class="editor-input" data-field="title" value="{{draft.title}}" bindinput="handleConfigInput" placeholder="二维码标题" /></view>
-      <view class="editor-field"><view class="editor-label">说明</view><textarea class="editor-input editor-textarea" data-field="description" value="{{draft.description}}" bindinput="handleConfigInput" placeholder="二维码说明" /></view>
       <view class="editor-field">
         <view class="editor-label">二维码图片</view>
         <view class="editor-qr-row">
           <view class="editor-qr-preview" bindtap="previewDraft" aria-role="button" aria-label="预览二维码"><image wx:if="{{draft.qrUrl}}" src="{{draft.qrUrl}}" mode="aspectFit" /><view wx:else class="editor-qr-empty">二维码</view></view>
           <view class="editor-qr-copy"><view class="editor-qr-state">{{draft.qrUrl ? '已选择' : '未选择'}}</view></view>
-          <button class="editor-assist" loading="{{uploading}}" disabled="{{uploading}}" bindtap="chooseImage">{{draft.qrUrl ? '更换图片' : '选择图片'}}</button>
+          <button class="editor-assist" loading="{{choosing}}" disabled="{{choosing}}" bindtap="chooseImage">{{draft.qrUrl ? '更换图片' : '选择图片'}}</button>
         </view>
       </view>
       <view wx:if="{{errorMessage}}" class="editor-error">{{errorMessage}}</view>
     </view>
   </block>
   <block wx:else>
-    <text wx:if="{{config.title}}" class="title">{{config.title}}</text>
-    <text wx:if="{{config.description}}" class="description">{{config.description}}</text>
     <image wx:if="{{config.qrUrlSource === 'CUSTOM' && config.qrUrl}}" class="qr-image" src="{{config.qrUrl}}" mode="aspectFit" bindtap="handleTap" bindlongpress="handleLongPress" />
     <text wx:else class="empty">暂未设置团队联系二维码</text>
   </block>

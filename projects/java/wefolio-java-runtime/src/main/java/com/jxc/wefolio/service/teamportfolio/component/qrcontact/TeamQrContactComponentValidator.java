@@ -14,12 +14,6 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class TeamQrContactComponentValidator {
 
-    /** 标题配置键。 */
-    private static final String CONFIG_KEY_TITLE = "title";
-
-    /** 说明配置键。 */
-    private static final String CONFIG_KEY_DESCRIPTION = "description";
-
     /** 二维码来源配置键。 */
     private static final String CONFIG_KEY_QR_URL_SOURCE = "qrUrlSource";
 
@@ -40,9 +34,6 @@ public class TeamQrContactComponentValidator {
 
     /** 二维码地址不能为空提示。 */
     private static final String QR_URL_REQUIRED_MESSAGE = "二维码联系二维码不能为空";
-
-    /** 缺省展示文本。 */
-    private static final String EMPTY_DISPLAY_TEXT = "";
 
     /** 合法业务标识的最小值。 */
     private static final long MINIMUM_VALID_ID = 0L;
@@ -72,7 +63,7 @@ public class TeamQrContactComponentValidator {
      *
      * @param config 原始配置
      * @param context 团队作品集组件上下文
-     * @return 稳定四字段配置
+     * @return 稳定二维码配置
      */
     JSONObject normalizeStructure(JSONObject config, TeamPortfolioComponentContext context) {
         validateContext(context);
@@ -80,22 +71,10 @@ public class TeamQrContactComponentValidator {
             throw new BusinessException(CONFIG_REQUIRED_MESSAGE);
         }
         TeamQrContactComponentConfig normalizedConfig = new TeamQrContactComponentConfig();
-        normalizedConfig.setTitle(normalizeDisplayText(config.get(CONFIG_KEY_TITLE)));
-        normalizedConfig.setDescription(normalizeDisplayText(config.get(CONFIG_KEY_DESCRIPTION)));
         normalizedConfig.setQrUrlSource(normalizeQrUrlSource(config));
         String qrUrl = normalizeQrUrl(config);
         normalizedConfig.setQrUrl(qrUrl);
         return toJson(normalizedConfig);
-    }
-
-    /**
-     * 归一化展示文本。
-     *
-     * @param value 原始值
-     * @return 清理后的文本
-     */
-    private String normalizeDisplayText(Object value) {
-        return value == null ? EMPTY_DISPLAY_TEXT : String.valueOf(value).strip();
     }
 
     /**
@@ -154,8 +133,6 @@ public class TeamQrContactComponentValidator {
      */
     private JSONObject toJson(TeamQrContactComponentConfig config) {
         JSONObject result = new JSONObject();
-        result.put(CONFIG_KEY_TITLE, config.getTitle());
-        result.put(CONFIG_KEY_DESCRIPTION, config.getDescription());
         result.put(CONFIG_KEY_QR_URL_SOURCE, config.getQrUrlSource());
         result.put(CONFIG_KEY_QR_URL, config.getQrUrl());
         return result;

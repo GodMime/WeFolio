@@ -219,7 +219,7 @@
           <team-carousel wx:if="{{activeComponentType === 'CAROUSEL'}}" id="active-component-editor" data-key="{{activeComponentKey}}" portfolio-id="{{portfolioId}}" items="{{activeComponent.config.items}}" members="{{activeComponentSource.members}}" works="{{activeComponentSource.works}}" edit-mode="{{true}}" bindloadmembers="handleCarouselLoadMembers" bindmemberchange="handleCarouselMemberChange" bindsave="handleComponentSave" />
           <team-member-portfolio-grid wx:if="{{activeComponentType === 'MEMBER_PORTFOLIO_GRID'}}" id="active-component-editor" data-key="{{activeComponentKey}}" portfolio-id="{{portfolioId}}" items="{{activeComponent.config.items}}" members="{{activeComponentSource.members}}" portfolios="{{activeComponentSource.portfolios}}" edit-mode="{{true}}" bindloadmembers="handleGridLoadMembers" bindmemberchange="handleGridMemberChange" bindsave="handleComponentSave" />
           <team-member-portfolio-list wx:if="{{activeComponentType === 'MEMBER_PORTFOLIO_LIST'}}" id="active-component-editor" data-key="{{activeComponentKey}}" portfolio-id="{{portfolioId}}" items="{{activeComponent.config.items}}" members="{{activeComponentSource.members}}" portfolios="{{activeComponentSource.portfolios}}" edit-mode="{{true}}" bindloadmembers="handleListLoadMembers" bindmemberchange="handleListMemberChange" bindsave="handleComponentSave" />
-          <team-qr-contact wx:if="{{activeComponentType === 'QR_CONTACT'}}" id="active-component-editor" data-key="{{activeComponentKey}}" config="{{activeComponent.config}}" edit-mode="{{true}}" uploading="{{shareCoverUploading}}" bindchoose="handleQrChoose" bindsave="handleComponentSave" />
+          <team-qr-contact wx:if="{{activeComponentType === 'QR_CONTACT'}}" id="active-component-editor" data-key="{{activeComponentKey}}" config="{{activeComponent.config}}" edit-mode="{{true}}" choosing="{{qrContactChoosing}}" bindchoose="handleQrChoose" bindsave="handleComponentSave" />
         </view>
       </scroll-view>
       <view class="component-editor-actions">
@@ -246,6 +246,41 @@
       </view>
     </view>
   </view>
+
+  <view class="qr-contact-crop-mask {{qrContactCropVisible ? 'visible' : ''}}">
+    <view class="qr-contact-crop-backdrop" bindtap="handleCloseQrContactCrop"></view>
+    <view class="qr-contact-crop-panel" catchtap="noop">
+      <view class="component-picker-grabber"></view>
+      <view class="component-picker-heading">
+        <view class="component-picker-title">裁剪二维码</view>
+        <view class="component-picker-count">1:1</view>
+      </view>
+      <view
+        wx:if="{{qrContactCropState}}"
+        class="qr-contact-crop-stage"
+        style="{{qrContactCropState.cropBoxStyle}}"
+        catchtouchstart="handleQrContactCropTouchStart"
+        catchtouchmove="handleQrContactCropTouchMove"
+        catchtouchend="handleQrContactCropTouchEnd"
+        catchtouchcancel="handleQrContactCropTouchCancel"
+      >
+        <image class="qr-contact-crop-image" src="{{qrContactCropState.imagePath}}" mode="scaleToFill" style="{{qrContactCropState.imageStyle}}"></image>
+        <view class="qr-contact-crop-frame"></view>
+      </view>
+      <view wx:if="{{qrContactCropErrorText}}" class="qr-contact-crop-error">{{qrContactCropErrorText}}</view>
+      <view class="sheet-actions split">
+        <button class="sheet-cancel" catchtap="handleCloseQrContactCrop" disabled="{{qrContactCropSaving}}">取消</button>
+        <button class="sheet-confirm" catchtap="handleConfirmQrContactCrop" loading="{{qrContactCropSaving}}" disabled="{{qrContactCropSaving}}">完成</button>
+      </view>
+    </view>
+  </view>
+
+  <canvas
+    id="teamQrContactCropCanvas"
+    type="2d"
+    class="qr-contact-crop-canvas"
+    style="width: {{qrContactCropCanvasWidth}}px; height: {{qrContactCropCanvasHeight}}px;"
+  ></canvas>
 
   <view class="bottom-actions">
     <button class="action-button primary-button" bindtap="handleSaveTap" loading="{{saving}}" disabled="{{!canMaintain || saving || publishing || hasInvalidComponents}}">保存草稿</button>
