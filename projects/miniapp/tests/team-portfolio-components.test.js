@@ -311,7 +311,7 @@ test('carousel uses the personal-style progress indicator and only rotates multi
   assert.match(wxss, /\.carousel\.editor-mode\s*\{[^}]*width:\s*100%;[^}]*margin-left:\s*0;/)
 })
 
-test('shared WXS selection order avoids unavailable String and preserves numeric ID matching', () => {
+test('shared WXS selection helpers avoid unavailable String and preserve numeric ID matching', () => {
   const wxsSource = fs.readFileSync(path.join(ROOT, 'editor-selection.wxs'), 'utf8')
   const selectionModule = { exports: {} }
 
@@ -320,6 +320,23 @@ test('shared WXS selection order avoids unavailable String and preserves numeric
 
   assert.equal(selectionModule.exports.order([{ workId: 9 }], 'workId', '9'), 1)
   assert.equal(selectionModule.exports.order([{ workId: 9 }], 'workId', 10), 0)
+  assert.equal(selectionModule.exports.count([
+    { memberUserId: 2, workId: 9 },
+    { memberUserId: 2, workId: 10 },
+    { memberUserId: 3, workId: 11 }
+  ], 'memberUserId', '2'), 2)
+  assert.equal(selectionModule.exports.count([], 'memberUserId', 2), 0)
+})
+
+test('carousel member buttons hug their content and show every selected work count', () => {
+  const wxml = fs.readFileSync(path.join(ROOT, 'carousel/carousel.wxml'), 'utf8')
+  const wxss = fs.readFileSync(path.join(ROOT, 'carousel/carousel.wxss'), 'utf8')
+
+  assert.match(wxml, /class="editor-member-name">\{\{item\.displayName\}\}<\/view>/)
+  assert.match(wxml, /class="editor-member-count">\{\{selection\.count\(draftItems, 'memberUserId', item\.memberUserId\)\}\}<\/view>/)
+  assert.match(wxss, /\.editor-member-choice\s*\{[^}]*display:\s*inline-flex;[^}]*width:\s*fit-content;/)
+  assert.match(wxss, /\.editor-member-name\s*\{[^}]*max-width:\s*180rpx;[^}]*text-overflow:\s*ellipsis;/)
+  assert.match(wxss, /\.editor-member-count\s*\{[^}]*flex:\s*none;/)
 })
 
 test('carousel work picker matches the personal vertical work list visual language', () => {

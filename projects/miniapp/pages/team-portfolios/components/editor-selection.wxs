@@ -6,6 +6,16 @@ function order(items, field, value) {
   return 0
 }
 
+function count(items, field, value) {
+  var source = items || []
+  var total = 0
+  for (var index = 0; index < source.length; index += 1) {
+    if (source[index][field] == value) total += 1
+  }
+  return total
+}
+
 module.exports = {
+  count: count,
   order: order
 }
