@@ -13,7 +13,8 @@ public enum PointCalcModeDict {
     FIXED_PER_ACTION("FIXED_PER_ACTION", "单次固定"),
     ACCUMULATED_THRESHOLD("ACCUMULATED_THRESHOLD", "累计阶梯"),
     RECHARGE_PACKAGE("RECHARGE_PACKAGE", "充值档位"),
-    MANUAL_ADJUSTMENT("MANUAL_ADJUSTMENT", "人工调整");
+    MANUAL_ADJUSTMENT("MANUAL_ADJUSTMENT", "人工调整"),
+    MONTHLY_STORAGE_SIZE("MONTHLY_STORAGE_SIZE", "月度存储大小");
 
     private final String code;
     private final String displayName;

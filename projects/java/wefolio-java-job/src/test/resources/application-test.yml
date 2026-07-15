@@ -44,3 +44,13 @@ work-audit:
   video-snapshot-interval-seconds: 60
   max-video-snapshot-count: 120
   remote-call-timeout-seconds: 30
+
+admin:
+  point:
+    secret: test-admin-point-secret
+
+work-storage-billing:
+  enabled: false
+  cron: "0 0 2 1 * ?"
+  zone: Asia/Shanghai
+  batch-size: 100

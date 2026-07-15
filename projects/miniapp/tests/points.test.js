@@ -130,3 +130,24 @@ test('builds point transaction query with safe page defaults', () => {
     pageSize: 20
   })
 })
+
+test('formats monthly work storage rule with MB billing copy', () => {
+  const overview = normalizePointOverview({
+    rules: [{
+      ruleId: 32,
+      ruleName: '作品存储月费',
+      sceneCode: 'MONTHLY_WORK_STORAGE',
+      sceneText: '作品存储月费',
+      groupCode: 'MAINTENANCE',
+      groupText: '维护',
+      calcMode: 'MONTHLY_STORAGE_SIZE',
+      transactionType: 'CONSUMPTION',
+      unitCount: 10,
+      pointsValue: 1
+    }]
+  })
+
+  const rule = overview.ruleGroups[0].rules[0]
+  assert.equal(`${rule.sceneText} ${rule.costText}`, '作品存储月费 每10MB扣1积分')
+  assert.equal(rule.desc, '每月月初扣除')
+})

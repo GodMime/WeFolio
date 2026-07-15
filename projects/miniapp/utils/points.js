@@ -5,7 +5,8 @@ const POINT_TRANSACTION_TYPE = {
 }
 
 const POINT_CALC_MODE = {
-  ACCUMULATED_THRESHOLD: 'ACCUMULATED_THRESHOLD'
+  ACCUMULATED_THRESHOLD: 'ACCUMULATED_THRESHOLD',
+  MONTHLY_STORAGE_SIZE: 'MONTHLY_STORAGE_SIZE'
 }
 
 const RULE_GROUP_ORDER = {
@@ -51,6 +52,9 @@ function defaultGroupText(groupCode) {
 function buildRuleDesc(rule) {
   const unitCount = toPositiveNumber(rule.unitCount, 1)
   const pointsValue = toNumber(rule.pointsValue)
+  if (rule.calcMode === POINT_CALC_MODE.MONTHLY_STORAGE_SIZE) {
+    return '每月月初扣除'
+  }
   if (pointsValue === 0) {
     return '当前规则免费'
   }
@@ -66,6 +70,9 @@ function buildRuleDesc(rule) {
 function buildCostText(rule) {
   const unitCount = toPositiveNumber(rule.unitCount, 1)
   const pointsValue = toNumber(rule.pointsValue)
+  if (rule.calcMode === POINT_CALC_MODE.MONTHLY_STORAGE_SIZE) {
+    return `每${unitCount}MB扣${pointsValue}积分`
+  }
   if (unitCount > 1) {
     return `每 ${unitCount} 次 ${pointsValue} 分`
   }

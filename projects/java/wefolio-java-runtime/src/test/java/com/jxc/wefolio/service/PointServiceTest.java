@@ -598,6 +598,29 @@ class PointServiceTest {
     }
 
     @Test
+    void listTransactionsShouldExposeMonthlyWorkStorageRemark() {
+        activeUser(7L);
+        PointTransactionEntity transaction = transaction(91L, 10L, 7L, -8L, 8L, 0L);
+        transaction.setTransactionType(PointTransactionTypeDict.CONSUMPTION.getCode());
+        transaction.setSceneCode(PointSceneCodeDict.MONTHLY_WORK_STORAGE.getCode());
+        transaction.setRemark("2026-07 作品总大小 205.00 MB，应扣 20 积分，积分不足，实际扣除 8 积分");
+        Page<PointTransactionEntity> page = new Page<>(1, 20);
+        page.setTotal(1);
+        page.setRecords(List.of(transaction));
+        when(pointTransactionEntityMapper.selectPage(any(), any())).thenReturn(page);
+
+        MinePointTransactionsResponse response = service().listTransactions(
+                7L, PointTransactionTypeDict.CONSUMPTION.getCode(),
+                PointSceneCodeDict.MONTHLY_WORK_STORAGE.getCode(), 1, 20);
+
+        assertThat(response.getRecords()).singleElement().satisfies(item -> {
+            assertThat(item.getSceneText()).isEqualTo("作品存储月费");
+            assertThat(item.getRemark()).isEqualTo(
+                    "2026-07 作品总大小 205.00 MB，应扣 20 积分，积分不足，实际扣除 8 积分");
+        });
+    }
+
+    @Test
     void getOverviewKeepsOnlyLatestActiveRulePerScene() {
         activeUser(7L);
         when(pointAccountEntityMapper.selectOne(any())).thenReturn(account(10L, 7L, 30L));
@@ -645,6 +668,39 @@ class PointServiceTest {
         assertThat(response.getRules()).hasSize(1);
         assertThat(response.getRules().get(0).getGroupCode()).isEqualTo("MAINTENANCE");
         assertThat(response.getRules().get(0).getGroupText()).isEqualTo("维护");
+    }
+
+    @Test
+    void getOverviewShouldReturnMonthlyWorkStorageRuleAndCountMaintenanceConsumption() {
+        activeUser(7L);
+        when(pointAccountEntityMapper.selectOne(any())).thenReturn(account(10L, 7L, 30L));
+        PointTransactionEntity monthlyStorageTransaction = transaction(91L, 10L, 7L, -8L, 8L, 0L);
+        monthlyStorageTransaction.setSceneCode("MONTHLY_WORK_STORAGE");
+        when(pointTransactionEntityMapper.selectList(any())).thenReturn(
+                List.of(),
+                List.of(),
+                List.of(monthlyStorageTransaction)
+        );
+        PointRuleEntity rule = rule(
+                32L,
+                PointSceneCodeDict.MONTHLY_WORK_STORAGE,
+                PointCalcModeDict.MONTHLY_STORAGE_SIZE,
+                10,
+                1L
+        );
+        rule.setGroupCode("MAINTENANCE");
+        when(pointRuleEntityMapper.selectList(any())).thenReturn(List.of(rule));
+
+        MinePointOverviewResponse response = service().getOverview(7L);
+
+        assertThat(response.getMaintenanceConsumed()).isEqualTo(8L);
+        assertThat(response.getRules()).singleElement().satisfies(item -> {
+            assertThat(item.getSceneCode()).isEqualTo("MONTHLY_WORK_STORAGE");
+            assertThat(item.getSceneText()).isEqualTo("作品存储月费");
+            assertThat(item.getCalcMode()).isEqualTo("MONTHLY_STORAGE_SIZE");
+            assertThat(item.getUnitCount()).isEqualTo(10);
+            assertThat(item.getPointsValue()).isEqualTo(1L);
+        });
     }
 
     /**

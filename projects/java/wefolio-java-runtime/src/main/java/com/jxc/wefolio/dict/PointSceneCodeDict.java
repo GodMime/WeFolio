@@ -25,6 +25,10 @@ public class PointSceneCodeDict {
     public static final DictValue MAINTAIN_ADVANCED_PORTFOLIO =
             new DictValue("MAINTAIN_ADVANCED_PORTFOLIO", "维护高级作品集");
 
+    /** 作品存储月费 */
+    public static final DictValue MONTHLY_WORK_STORAGE =
+            new DictValue("MONTHLY_WORK_STORAGE", "作品存储月费");
+
     /** 访问个人作品集 */
     public static final DictValue VISIT_PERSONAL_PORTFOLIO =
             new DictValue("VISIT_PERSONAL_PORTFOLIO", "访客访问个人作品集");
@@ -56,6 +60,7 @@ public class PointSceneCodeDict {
             Map.entry(CREATE_TEAM.getCode(), CREATE_TEAM),
             Map.entry(MAINTAIN_STANDARD_PORTFOLIO.getCode(), MAINTAIN_STANDARD_PORTFOLIO),
             Map.entry(MAINTAIN_ADVANCED_PORTFOLIO.getCode(), MAINTAIN_ADVANCED_PORTFOLIO),
+            Map.entry(MONTHLY_WORK_STORAGE.getCode(), MONTHLY_WORK_STORAGE),
             Map.entry(VISIT_PERSONAL_PORTFOLIO.getCode(), VISIT_PERSONAL_PORTFOLIO),
             Map.entry(VIEW_PORTFOLIO_IMAGES.getCode(), VIEW_PORTFOLIO_IMAGES),
             Map.entry(VIEW_PORTFOLIO_VIDEO.getCode(), VIEW_PORTFOLIO_VIDEO),

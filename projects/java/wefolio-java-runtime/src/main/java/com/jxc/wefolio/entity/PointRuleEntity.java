@@ -37,10 +37,10 @@ public class PointRuleEntity extends BaseEntity {
      */
     private String groupCode;
 
-    /** 计算模式：FIXED_PER_ACTION 单次固定 / ACCUMULATED_THRESHOLD 累计阶梯 / RECHARGE_PACKAGE 充值档位 / MANUAL_ADJUSTMENT 人工调整 */
+    /** 计算模式：单次固定、累计阶梯、充值档位、人工调整或月度存储大小 */
     private String calcMode;
 
-    /** 一个计费单位需要累计的业务次数 */
+    /** 一个计费单位包含的操作次数或存储 MB 数 */
     private Integer unitCount;
 
     /** 每个计费单位增加或扣除的积分绝对值，0 表示免费 */

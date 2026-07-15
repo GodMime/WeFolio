@@ -96,7 +96,8 @@ public class PointService {
             PointSceneCodeDict.UPLOAD_VIDEO.getCode(),
             PointSceneCodeDict.CREATE_TEAM.getCode(),
             PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode(),
-            PointSceneCodeDict.MAINTAIN_ADVANCED_PORTFOLIO.getCode()
+            PointSceneCodeDict.MAINTAIN_ADVANCED_PORTFOLIO.getCode(),
+            PointSceneCodeDict.MONTHLY_WORK_STORAGE.getCode()
     );
 
     /** 访客类消耗场景 */

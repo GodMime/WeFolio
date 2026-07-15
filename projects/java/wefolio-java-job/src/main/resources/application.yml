@@ -72,3 +72,18 @@ work-audit:
   max-video-snapshot-count: 120
   # 腾讯云远端接口调用超时时间，单位秒。
   remote-call-timeout-seconds: 30
+
+admin:
+  point:
+    # 复用 Runtime 人工加分接口的后台积分密钥。
+    secret: ${POINT_ADMIN_SECRET:}
+
+work-storage-billing:
+  # 是否启用每月作品存储结算调度。
+  enabled: ${WORK_STORAGE_BILLING_ENABLED:true}
+  # 每月 1 日凌晨 2 点执行。
+  cron: "${WORK_STORAGE_BILLING_CRON:0 0 2 1 * ?}"
+  # 账期和调度统一采用上海时区。
+  zone: ${WORK_STORAGE_BILLING_ZONE:Asia/Shanghai}
+  # 单次游标扫描用户数。
+  batch-size: ${WORK_STORAGE_BILLING_BATCH_SIZE:500}
