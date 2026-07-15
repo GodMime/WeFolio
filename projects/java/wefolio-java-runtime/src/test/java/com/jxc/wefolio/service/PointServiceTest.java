@@ -48,6 +48,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -415,6 +416,91 @@ class PointServiceTest {
         verify(pointAccountEntityMapper, never()).deductConsumedPoints(any(), any(), any());
         verify(pointAccountEntityMapper, never()).updateById(any(PointAccountEntity.class));
         verify(pointTransactionEntityMapper, never()).insert(any(PointTransactionEntity.class));
+    }
+
+    @Test
+    void assertCanConsumeAllowsMatchingExistingBusinessWithoutCheckingBalance() {
+        activeUser(7L);
+        PointTransactionEntity existing = transaction(90L, 10L, 7L, -1L, 10L, 9L);
+        existing.setSceneCode(PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode());
+        existing.setBusinessType("PORTFOLIO");
+        existing.setBusinessId("88");
+        when(pointTransactionEntityMapper.selectOne(any())).thenReturn(existing);
+
+        service().assertCanConsume(
+                7L,
+                PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode(),
+                "PORTFOLIO",
+                "88",
+                1,
+                "publish-1"
+        );
+
+        verifyNoInteractions(pointRuleEntityMapper, pointAccountEntityMapper);
+    }
+
+    @Test
+    void assertCanConsumeRejectsExistingIdempotencyKeyOwnedByAnotherUser() {
+        activeUser(7L);
+        PointTransactionEntity existing = transaction(90L, 10L, 8L, -1L, 10L, 9L);
+        existing.setSceneCode(PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode());
+        existing.setBusinessType("PORTFOLIO");
+        existing.setBusinessId("88");
+        when(pointTransactionEntityMapper.selectOne(any())).thenReturn(existing);
+
+        assertThatThrownBy(() -> service().assertCanConsume(
+                7L,
+                PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode(),
+                "PORTFOLIO",
+                "88",
+                1,
+                "publish-1"
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("幂等键已被其他用户使用");
+    }
+
+    @Test
+    void assertCanConsumeRejectsExistingIdempotencyKeyForAnotherBusiness() {
+        activeUser(7L);
+        PointTransactionEntity existing = transaction(90L, 10L, 7L, -1L, 10L, 9L);
+        existing.setSceneCode(PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode());
+        existing.setBusinessType("PORTFOLIO");
+        existing.setBusinessId("89");
+        when(pointTransactionEntityMapper.selectOne(any())).thenReturn(existing);
+
+        assertThatThrownBy(() -> service().assertCanConsume(
+                7L,
+                PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode(),
+                "PORTFOLIO",
+                "88",
+                1,
+                "publish-1"
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("幂等键已用于其他积分业务");
+    }
+
+    @Test
+    void consumeRejectsExistingIdempotencyKeyForAnotherBusiness() {
+        activeUser(7L);
+        PointTransactionEntity existing = transaction(90L, 10L, 7L, -1L, 10L, 9L);
+        existing.setSceneCode(PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode());
+        existing.setBusinessType("PORTFOLIO");
+        existing.setBusinessId("89");
+        when(pointTransactionEntityMapper.selectOne(any())).thenReturn(existing);
+
+        assertThatThrownBy(() -> service().consume(
+                7L,
+                PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode(),
+                "PORTFOLIO",
+                "88",
+                1,
+                "publish-1",
+                "发布标准个人作品集"
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("幂等键已用于其他积分业务");
     }
 
     @Test

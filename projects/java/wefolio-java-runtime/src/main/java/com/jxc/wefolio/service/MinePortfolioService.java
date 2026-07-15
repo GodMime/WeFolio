@@ -232,6 +232,9 @@ public class MinePortfolioService {
     /** 积分服务 */
     private final PointService pointService;
 
+    /** 标准作品集发布事务服务 */
+    private final PortfolioPublishTransactionService portfolioPublishTransactionService;
+
     /** 配置校验器 */
     private final PortfolioConfigValidator portfolioConfigValidator;
 
@@ -518,20 +521,39 @@ public class MinePortfolioService {
      * @param request 发布请求
      * @return 作品集详情
      */
-    @Transactional(rollbackFor = Exception.class)
     public MinePortfolioDetailResponse publish(Long portfolioId, MinePortfolioPublishRequest request) {
         Long userId = AuthContextHolder.requireUserId();
         PortfolioEntity portfolio = requireOwnedStandardPersonal(portfolioId);
-        if (request == null || request.getDraftRevision() == null) {
-            throw new BusinessException(PortfolioMessage.PUBLISH_DRAFT_REVISION_REQUIRED_MESSAGE);
-        }
-        if (!request.getDraftRevision().equals(safeInt(portfolio.getDraftRevision()))) {
-            throw new BusinessException(PortfolioMessage.DRAFT_REVISION_CHANGED_PUBLISH_MESSAGE);
-        }
+        String idempotencyKey = validatePublishRequest(portfolio, request);
+        pointService.assertCanConsume(
+                userId,
+                PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode(),
+                POINT_BUSINESS_TYPE_PORTFOLIO,
+                String.valueOf(portfolio.getId()),
+                1,
+                idempotencyKey
+        );
+        return portfolioPublishTransactionService.execute(
+                () -> publishInTransaction(portfolioId, request, userId)
+        );
+    }
+
+    /**
+     * 在事务内重新校验并发布标准个人作品集。
+     *
+     * @param portfolioId 作品集 ID
+     * @param request 发布请求
+     * @param userId 当前发布者 ID
+     * @return 作品集详情
+     */
+    private MinePortfolioDetailResponse publishInTransaction(
+            Long portfolioId,
+            MinePortfolioPublishRequest request,
+            Long userId
+    ) {
+        PortfolioEntity portfolio = requireOwnedStandardPersonal(portfolioId);
+        String idempotencyKey = validatePublishRequest(portfolio, request);
         String draftConfigJson = portfolio.getDraftConfigJson();
-        if (!hasText(draftConfigJson)) {
-            throw new BusinessException(PortfolioMessage.DRAFT_SAVE_REQUIRED_MESSAGE);
-        }
         PortfolioConfigDto currentDraftConfig = parseConfig(draftConfigJson);
         PortfolioConfigDto oldPublishedConfig = parseConfig(portfolio.getPublishedConfigJson());
         PortfolioConfigDto normalized = portfolioConfigValidator.normalize(userId, currentDraftConfig);
@@ -542,10 +564,6 @@ public class MinePortfolioService {
                 oldPublishedConfig,
                 currentDraftConfig,
                 normalized
-        );
-        String idempotencyKey = normalizeRequiredString(
-                request.getIdempotencyKey(),
-                PortfolioMessage.PUBLISH_IDEMPOTENCY_REQUIRED_MESSAGE
         );
         int nextPublishedRevision = safeInt(portfolio.getPublishedRevision()) + 1;
         int nextHistoryRevision = nextHistoryRevision(portfolio);
@@ -580,6 +598,31 @@ public class MinePortfolioService {
         );
         deleteUnreferencedAssetsAfterCommit(portfolio.getId(), deletedObjectKeys);
         return buildDetail(portfolio, normalized);
+    }
+
+    /**
+     * 校验个人作品集发布请求并返回规范化幂等键。
+     *
+     * @param portfolio 作品集
+     * @param request 发布请求
+     * @return 规范化幂等键
+     */
+    private String validatePublishRequest(PortfolioEntity portfolio, MinePortfolioPublishRequest request) {
+        if (request == null || request.getDraftRevision() == null) {
+            throw new BusinessException(PortfolioMessage.PUBLISH_DRAFT_REVISION_REQUIRED_MESSAGE);
+        }
+        if (!request.getDraftRevision().equals(safeInt(portfolio.getDraftRevision()))) {
+            throw new BusinessException(PortfolioMessage.DRAFT_REVISION_CHANGED_PUBLISH_MESSAGE);
+        }
+        String draftConfigJson = portfolio.getDraftConfigJson();
+        if (!hasText(draftConfigJson)) {
+            throw new BusinessException(PortfolioMessage.DRAFT_SAVE_REQUIRED_MESSAGE);
+        }
+        parseConfig(draftConfigJson);
+        return normalizeRequiredString(
+                request.getIdempotencyKey(),
+                PortfolioMessage.PUBLISH_IDEMPOTENCY_REQUIRED_MESSAGE
+        );
     }
 
     /**

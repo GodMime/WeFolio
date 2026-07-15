@@ -14,6 +14,7 @@ import com.jxc.wefolio.dict.PortfolioPublicationStatusDict;
 import com.jxc.wefolio.dict.PortfolioStatusDict;
 import com.jxc.wefolio.dict.PortfolioTemplateTypeDict;
 import com.jxc.wefolio.dict.PortfolioTypeDict;
+import com.jxc.wefolio.dict.PointSceneCodeDict;
 import com.jxc.wefolio.dict.TeamPortfolioComponentTypeDict;
 import com.jxc.wefolio.dict.TeamRoleDict;
 import com.jxc.wefolio.dict.TeamStatusDict;
@@ -48,6 +49,8 @@ import com.jxc.wefolio.mapper.TeamScheduleQueryRecordEntityMapper;
 import com.jxc.wefolio.mapper.VisitRecordEntityMapper;
 import com.jxc.wefolio.message.TeamPortfolioMessage;
 import com.jxc.wefolio.service.ContentLimitService;
+import com.jxc.wefolio.service.PointService;
+import com.jxc.wefolio.service.PortfolioPublishTransactionService;
 import com.jxc.wefolio.service.teamportfolio.component.contactform.TeamContactFormComponentService;
 import com.jxc.wefolio.service.teamportfolio.component.schedulequery.TeamScheduleQueryComponentService;
 import com.jxc.wefolio.service.teamportfolio.component.teamprofile.TeamProfileComponentConfig;
@@ -78,6 +81,12 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class MineTeamPortfolioService {
+
+    /** 作品集积分业务类型。 */
+    private static final String POINT_BUSINESS_TYPE_PORTFOLIO = "PORTFOLIO";
+
+    /** 发布标准团队作品集积分备注。 */
+    private static final String PUBLISH_POINT_REMARK = "发布标准团队作品集";
 
     /** 团队作品集分享码前缀。 */
     private static final String SHARE_CODE_PREFIX = "TPF";
@@ -242,6 +251,12 @@ public class MineTeamPortfolioService {
 
     /** 内容数量上限服务。 */
     private final ContentLimitService contentLimitService;
+
+    /** 积分服务。 */
+    private final PointService pointService;
+
+    /** 标准作品集发布事务服务。 */
+    private final PortfolioPublishTransactionService portfolioPublishTransactionService;
 
     /**
      * 查询当前用户所有有效已加入团队中的标准团队作品集。
@@ -456,7 +471,6 @@ public class MineTeamPortfolioService {
     /**
      * 发布团队作品集并重建正式引用。
      */
-    @Transactional(rollbackFor = Exception.class)
     public TeamPortfolioDetailResponse publish(
             long portfolioId,
             TeamPortfolioPublishRequest request,
@@ -476,12 +490,48 @@ public class MineTeamPortfolioService {
         if (idempotencyHistory != null) {
             return restoreIdempotentPublish(portfolio, idempotencyHistory, requestFingerprint);
         }
-        if (request.getDraftRevision() != safeInt(portfolio.getDraftRevision())) {
-            throw new BusinessException(DRAFT_REVISION_CHANGED_MESSAGE);
+        validatePublishDraft(portfolio, request);
+        pointService.assertCanConsume(
+                userId,
+                PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode(),
+                POINT_BUSINESS_TYPE_PORTFOLIO,
+                String.valueOf(portfolioId),
+                1,
+                idempotencyKey
+        );
+        return portfolioPublishTransactionService.execute(
+                () -> publishInTransaction(portfolioId, request, userId)
+        );
+    }
+
+    /**
+     * 在事务内重新校验并发布标准团队作品集。
+     *
+     * @param portfolioId 作品集 ID
+     * @param request 发布请求
+     * @param userId 当前发布者 ID
+     * @return 团队作品集详情
+     */
+    private TeamPortfolioDetailResponse publishInTransaction(
+            long portfolioId,
+            TeamPortfolioPublishRequest request,
+            long userId
+    ) {
+        TeamPortfolioAccessService.TeamPortfolioAccess access =
+                accessService.requireMaintainablePortfolio(portfolioId, userId);
+        PortfolioEntity portfolio = access.portfolio();
+        if (request == null || request.getDraftRevision() == null) {
+            throw new BusinessException(PUBLISH_REVISION_REQUIRED_MESSAGE);
         }
-        if (portfolio.getDraftConfigJson() == null || portfolio.getDraftConfigJson().isBlank()) {
-            throw new BusinessException(DRAFT_CONFIG_REQUIRED_MESSAGE);
+        String idempotencyKey = requireText(
+                request.getIdempotencyKey(), IDEMPOTENCY_KEY_REQUIRED_MESSAGE);
+        String requestFingerprint = publishRequestFingerprint(request);
+        PortfolioHistoryEntity idempotencyHistory = findIdempotencyHistory(
+                portfolioId, HISTORY_ACTION_PUBLISH, idempotencyKey);
+        if (idempotencyHistory != null) {
+            return restoreIdempotentPublish(portfolio, idempotencyHistory, requestFingerprint);
         }
+        validatePublishDraft(portfolio, request);
         int nextPublishedRevision = safeInt(portfolio.getPublishedRevision()) + 1;
         TeamPortfolioConfigDto normalized = configValidator.normalizeAndValidate(
                 portfolio.getDraftConfigJson(), access.team().getId(), portfolioId, nextPublishedRevision);
@@ -507,12 +557,36 @@ public class MineTeamPortfolioService {
         insertHistory(portfolio, nextHistoryRevision, normalized, contentHash, userId, now,
                 HISTORY_ACTION_PUBLISH, idempotencyKey, requestFingerprint,
                 null, nextPublishedRevision);
+        pointService.consume(
+                userId,
+                PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode(),
+                POINT_BUSINESS_TYPE_PORTFOLIO,
+                String.valueOf(portfolioId),
+                1,
+                idempotencyKey,
+                PUBLISH_POINT_REMARK
+        );
         assetService.deleteUnreferencedAssetsAfterCommit(
                 access.team().getId(),
                 portfolioId,
                 assetStateJson(portfolio.getDraftConfigJson(), oldPublishedConfigJson),
                 assetStateJson(portfolio.getDraftConfigJson(), configJson));
         return buildDetail(portfolio, normalized);
+    }
+
+    /**
+     * 校验团队作品集待发布草稿状态。
+     *
+     * @param portfolio 作品集
+     * @param request 发布请求
+     */
+    private void validatePublishDraft(PortfolioEntity portfolio, TeamPortfolioPublishRequest request) {
+        if (request.getDraftRevision() != safeInt(portfolio.getDraftRevision())) {
+            throw new BusinessException(DRAFT_REVISION_CHANGED_MESSAGE);
+        }
+        if (portfolio.getDraftConfigJson() == null || portfolio.getDraftConfigJson().isBlank()) {
+            throw new BusinessException(DRAFT_CONFIG_REQUIRED_MESSAGE);
+        }
     }
 
     /**

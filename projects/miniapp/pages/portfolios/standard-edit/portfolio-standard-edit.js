@@ -4,7 +4,7 @@ const { noop } = require('../../../utils/noop')
 const { isRemoteUrl } = require('../../../utils/upload-file')
 const { normalizeProfile: normalizeBasicProfile } = require('../../../utils/profile')
 const { normalizeWorkList, normalizeWorkTags } = require('../utils/works')
-const { confirmPortfolioPublishDisclaimer } = require('../utils/portfolio-publish-disclaimer')
+const { confirmPortfolioPublishDisclaimer } = require('../../../utils/portfolio-publish-disclaimer')
 const {
   PORTFOLIO_ASSET_TYPES,
   PORTFOLIO_COVER_CROP_FILE_TYPE,

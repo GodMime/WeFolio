@@ -32,6 +32,7 @@ import com.jxc.wefolio.mapper.PointRuleEntityMapper;
 import com.jxc.wefolio.mapper.PointTransactionEntityMapper;
 import com.jxc.wefolio.mapper.SystemMessageEntityMapper;
 import com.jxc.wefolio.mapper.UserEntityMapper;
+import com.jxc.wefolio.message.PointMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
@@ -276,6 +277,46 @@ public class PointService {
     }
 
     /**
+     * 只读校验指定积分业务是否可扣除，并兼容已经成功写入的幂等流水。
+     *
+     * <p>幂等流水命中时必须校验用户、场景、业务类型和业务 ID 全部一致；
+     * 身份一致表示该请求已经完成扣费，因此不再检查当前余额。</p>
+     *
+     * @param userId 当前用户 ID
+     * @param sceneCode 场景编码
+     * @param businessType 业务类型
+     * @param businessId 业务 ID
+     * @param actionCount 动作次数
+     * @param idempotencyKey 幂等键
+     */
+    public void assertCanConsume(
+            Long userId,
+            String sceneCode,
+            String businessType,
+            String businessId,
+            int actionCount,
+            String idempotencyKey
+    ) {
+        requireActiveUser(userId);
+        String normalizedSceneCode = normalizeRequiredString(sceneCode, "积分场景不能为空");
+        String normalizedBusinessType = normalizeRequiredString(businessType, "业务类型不能为空");
+        String normalizedBusinessId = normalizeRequiredString(businessId, "业务 ID 不能为空");
+        String normalizedIdempotencyKey = normalizeRequiredString(idempotencyKey, "幂等键不能为空");
+        PointTransactionEntity existing = findTransaction(normalizedIdempotencyKey);
+        if (existing != null) {
+            assertSamePointBusiness(
+                    existing,
+                    userId,
+                    normalizedSceneCode,
+                    normalizedBusinessType,
+                    normalizedBusinessId
+            );
+            return;
+        }
+        assertCanConsume(userId, normalizedSceneCode, actionCount);
+    }
+
+    /**
      * 后台人工加分。
      *
      * @param userId 用户 ID
@@ -446,7 +487,13 @@ public class PointService {
         String normalizedIdempotencyKey = normalizeRequiredString(idempotencyKey, "幂等键不能为空");
         PointTransactionEntity existing = findTransaction(normalizedIdempotencyKey);
         if (existing != null) {
-            assertSameUser(existing, userId);
+            assertSamePointBusiness(
+                    existing,
+                    userId,
+                    normalizedSceneCode,
+                    normalizedBusinessType,
+                    normalizedBusinessId
+            );
             return buildMutationFromTransaction(existing, true, true);
         }
 
@@ -647,7 +694,31 @@ public class PointService {
      */
     private void assertSameUser(PointTransactionEntity transaction, Long userId) {
         if (!Objects.equals(transaction.getUserId(), userId)) {
-            throw new BusinessException("幂等键已被其他用户使用");
+            throw new BusinessException(PointMessage.IDEMPOTENCY_USER_CONFLICT_MESSAGE);
+        }
+    }
+
+    /**
+     * 校验幂等流水是否属于同一积分业务。
+     *
+     * @param transaction 已有流水
+     * @param userId 当前用户 ID
+     * @param sceneCode 场景编码
+     * @param businessType 业务类型
+     * @param businessId 业务 ID
+     */
+    private void assertSamePointBusiness(
+            PointTransactionEntity transaction,
+            Long userId,
+            String sceneCode,
+            String businessType,
+            String businessId
+    ) {
+        assertSameUser(transaction, userId);
+        if (!Objects.equals(transaction.getSceneCode(), sceneCode)
+                || !Objects.equals(transaction.getBusinessType(), businessType)
+                || !Objects.equals(transaction.getBusinessId(), businessId)) {
+            throw new BusinessException(PointMessage.IDEMPOTENCY_BUSINESS_CONFLICT_MESSAGE);
         }
     }
 

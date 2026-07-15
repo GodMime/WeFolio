@@ -14,6 +14,7 @@ import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
 import com.jxc.wefolio.dict.PortfolioPublicationStatusDict;
 import com.jxc.wefolio.dict.PortfolioStatusDict;
 import com.jxc.wefolio.dict.PortfolioTemplateTypeDict;
+import com.jxc.wefolio.dict.PointSceneCodeDict;
 import com.jxc.wefolio.dict.TeamRoleDict;
 import com.jxc.wefolio.dict.TeamStatusDict;
 import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioConfigDto;
@@ -43,6 +44,8 @@ import com.jxc.wefolio.mapper.TeamScheduleQueryRecordEntityMapper;
 import com.jxc.wefolio.mapper.VisitRecordEntityMapper;
 import com.jxc.wefolio.message.TeamPortfolioMessage;
 import com.jxc.wefolio.service.ContentLimitService;
+import com.jxc.wefolio.service.PointService;
+import com.jxc.wefolio.service.PortfolioPublishTransactionService;
 import com.jxc.wefolio.service.teamportfolio.component.schedulequery.TeamScheduleQueryComponentService;
 import com.jxc.wefolio.service.teamportfolio.component.contactform.TeamContactFormComponentService;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
@@ -57,6 +60,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.Locale;
+import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -207,7 +211,7 @@ class MineTeamPortfolioServiceTest {
         assertThat(snapshot.getJSONObject("config")).isEqualTo(JSON.parseObject(JSON.toJSONString(configured)));
         verify(context.contentLimitService).ensureTeamPortfolioCapacity(TEAM_ID);
         assertThat(MineTeamPortfolioService.class.getDeclaredFields())
-                .noneMatch(field -> field.getType().getSimpleName().contains("PointService"));
+                .anyMatch(field -> field.getType().equals(PointService.class));
     }
 
     @Test
@@ -467,6 +471,24 @@ class MineTeamPortfolioServiceTest {
 
         context.service.publish(PORTFOLIO_ID, request, USER_ID);
 
+        verify(context.pointService).assertCanConsume(
+                USER_ID,
+                PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode(),
+                "PORTFOLIO",
+                String.valueOf(PORTFOLIO_ID),
+                1,
+                "publish-1"
+        );
+        verify(context.publishTransactionService).execute(any());
+        verify(context.pointService).consume(
+                USER_ID,
+                PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode(),
+                "PORTFOLIO",
+                String.valueOf(PORTFOLIO_ID),
+                1,
+                "publish-1",
+                "发布标准团队作品集"
+        );
         assertThat(portfolio.getPublishedRevision()).isEqualTo(1);
         assertThat(portfolio.getPublicationStatus()).isEqualTo(PortfolioPublicationStatusDict.PUBLISHED.getCode());
         assertThat(portfolio.getPublishedConfigJson()).isEqualTo(JSON.toJSONString(currentDraft));
@@ -483,6 +505,71 @@ class MineTeamPortfolioServiceTest {
         verify(context.assetService).validateUploadedImageUrl(
                 TEAM_ID, PORTFOLIO_ID, currentDraft.getShare().getCoverUrl());
         assertCleanupStates(context, "当前草稿", "旧发布", "当前草稿", "当前草稿");
+    }
+
+    @Test
+    void ownerPublishShouldConsumeCurrentPublisherPoints() {
+        TestContext context = maintainableContext();
+        PortfolioEntity portfolio = portfolio(TEAM_ID);
+        portfolio.setDraftRevision(2);
+        when(context.access.requireMaintainablePortfolio(PORTFOLIO_ID, USER_ID))
+                .thenReturn(access(portfolio, TeamRoleDict.OWNER.getCode()));
+        when(context.validator.normalizeAndValidate(any(), eq(TEAM_ID), eq(PORTFOLIO_ID), eq(1)))
+                .thenReturn(config());
+        when(context.portfolioMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
+        when(context.historyMapper.insert(any(PortfolioHistoryEntity.class))).thenReturn(1);
+
+        context.service.publish(PORTFOLIO_ID, publishRequest(2, "owner-publish"), USER_ID);
+
+        verify(context.pointService).assertCanConsume(
+                USER_ID,
+                PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode(),
+                "PORTFOLIO",
+                String.valueOf(PORTFOLIO_ID),
+                1,
+                "owner-publish"
+        );
+        verify(context.pointService).consume(
+                USER_ID,
+                PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode(),
+                "PORTFOLIO",
+                String.valueOf(PORTFOLIO_ID),
+                1,
+                "owner-publish",
+                "发布标准团队作品集"
+        );
+    }
+
+    @Test
+    void publishShouldStopBeforeTransactionAndWritesWhenPointsAreInsufficient() {
+        TestContext context = maintainableContext();
+        PortfolioEntity portfolio = portfolio(TEAM_ID);
+        portfolio.setDraftRevision(2);
+        when(context.access.requireMaintainablePortfolio(PORTFOLIO_ID, USER_ID))
+                .thenReturn(access(portfolio, TeamRoleDict.MANAGER.getCode()));
+        doThrow(new BusinessException("积分余额不足，请充值后再试"))
+                .when(context.pointService).assertCanConsume(
+                        USER_ID,
+                        PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode(),
+                        "PORTFOLIO",
+                        String.valueOf(PORTFOLIO_ID),
+                        1,
+                        "team-publish-insufficient"
+                );
+
+        assertThatThrownBy(() -> context.service.publish(
+                PORTFOLIO_ID,
+                publishRequest(2, "team-publish-insufficient"),
+                USER_ID
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("积分余额不足，请充值后再试");
+
+        verifyNoInteractions(context.publishTransactionService);
+        verify(context.portfolioMapper, never()).updateById(any(PortfolioEntity.class));
+        verify(context.referenceService, never()).rebuild(anyLong(), any(), any(), any());
+        verify(context.historyMapper, never()).insert(any(PortfolioHistoryEntity.class));
+        verify(context.pointService, never()).consume(any(), any(), any(), any(), anyInt(), any(), any());
     }
 
     @Test
@@ -512,7 +599,8 @@ class MineTeamPortfolioServiceTest {
         portfolio.setDraftConfigJson(JSON.toJSONString(changedDraft));
         portfolio.setDraftRevision(4);
         clearInvocations(context.portfolioMapper, context.historyMapper, context.validator,
-                context.assetService, context.referenceService);
+                context.assetService, context.referenceService, context.pointService,
+                context.publishTransactionService);
         when(context.historyMapper.selectList(any())).thenReturn(List.of(persistedHistory));
         when(context.validator.normalizeAndValidate(any(), anyLong(), anyLong(), anyInt()))
                 .thenThrow(new AssertionError("幂等命中不得读取当前草稿重验"));
@@ -528,7 +616,8 @@ class MineTeamPortfolioServiceTest {
         verify(context.historyMapper).selectList(any());
         verify(context.historyMapper, never()).insert(any(PortfolioHistoryEntity.class));
         verifyNoInteractions(context.portfolioMapper, context.validator,
-                context.assetService, context.referenceService);
+                context.assetService, context.referenceService, context.pointService,
+                context.publishTransactionService);
     }
 
     @Test
@@ -725,7 +814,9 @@ class MineTeamPortfolioServiceTest {
     void mutationMethodsRollbackForEveryException() throws NoSuchMethodException {
         assertRollbackFor("createStandard", long.class, TeamPortfolioCreateRequest.class, long.class);
         assertRollbackFor("saveDraft", long.class, TeamPortfolioDraftSaveRequest.class, long.class);
-        assertRollbackFor("publish", long.class, TeamPortfolioPublishRequest.class, long.class);
+        assertThat(MineTeamPortfolioService.class
+                .getDeclaredMethod("publish", long.class, TeamPortfolioPublishRequest.class, long.class)
+                .getAnnotation(Transactional.class)).isNull();
         assertRollbackFor("deletePortfolio", long.class, long.class);
         assertRollbackFor("updateContactLeadFollowStatus", long.class, long.class,
                 String.class, String.class, long.class);
@@ -875,13 +966,21 @@ class MineTeamPortfolioServiceTest {
         TeamScheduleQueryRecordEntityMapper scheduleRecordMapper = mock(TeamScheduleQueryRecordEntityMapper.class);
         TeamContactFormComponentService contactService = mock(TeamContactFormComponentService.class);
         ContentLimitService contentLimitService = mock(ContentLimitService.class);
+        PointService pointService = mock(PointService.class);
+        PortfolioPublishTransactionService publishTransactionService = mock(PortfolioPublishTransactionService.class);
+        when(publishTransactionService.execute(any())).thenAnswer(invocation -> {
+            Supplier<?> publishAction = invocation.getArgument(0);
+            return publishAction.get();
+        });
         MineTeamPortfolioService service = new MineTeamPortfolioService(properties, portfolioMapper, historyMapper,
                 referenceMapper, shareMapper, teamMapper, memberMapper, access, validator, renderService,
                 referenceService, assetService, scheduleService,
-                visitRecordMapper, scheduleRecordMapper, contactService, contentLimitService);
+                visitRecordMapper, scheduleRecordMapper, contactService, contentLimitService,
+                pointService, publishTransactionService);
         return new TestContext(service, portfolioMapper, historyMapper, referenceMapper, shareMapper, teamMapper,
                 memberMapper, access, validator, renderService, referenceService, assetService, scheduleService,
-                visitRecordMapper, scheduleRecordMapper, contactService, contentLimitService);
+                visitRecordMapper, scheduleRecordMapper, contactService, contentLimitService,
+                pointService, publishTransactionService);
     }
 
     /** 创建带标题、分享信息和组件的渲染结果。 */
@@ -1100,7 +1199,9 @@ class MineTeamPortfolioServiceTest {
             VisitRecordEntityMapper visitRecordMapper,
             TeamScheduleQueryRecordEntityMapper scheduleRecordMapper,
             TeamContactFormComponentService contactService,
-            ContentLimitService contentLimitService
+            ContentLimitService contentLimitService,
+            PointService pointService,
+            PortfolioPublishTransactionService publishTransactionService
     ) {
     }
 }

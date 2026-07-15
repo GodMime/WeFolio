@@ -17,13 +17,13 @@ public class PointSceneCodeDict {
     /** 新建团队 */
     public static final DictValue CREATE_TEAM = new DictValue("CREATE_TEAM", "新建团队");
 
-    /** 维护标准作品集 */
+    /** 发布标准作品集 */
     public static final DictValue MAINTAIN_STANDARD_PORTFOLIO =
-            new DictValue("MAINTAIN_STANDARD_PORTFOLIO", "维护标准作品集");
+            new DictValue("MAINTAIN_STANDARD_PORTFOLIO", "发布标准作品集");
 
-    /** 维护高级作品集 */
+    /** 发布高级作品集 */
     public static final DictValue MAINTAIN_ADVANCED_PORTFOLIO =
-            new DictValue("MAINTAIN_ADVANCED_PORTFOLIO", "维护高级作品集");
+            new DictValue("MAINTAIN_ADVANCED_PORTFOLIO", "发布高级作品集");
 
     /** 作品存储月费 */
     public static final DictValue MONTHLY_WORK_STORAGE =

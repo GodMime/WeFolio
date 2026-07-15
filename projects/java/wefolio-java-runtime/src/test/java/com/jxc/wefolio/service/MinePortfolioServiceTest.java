@@ -57,6 +57,7 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -114,6 +115,10 @@ class MinePortfolioServiceTest {
     @Mock
     private PointService pointService;
 
+    /** 标准作品集发布事务服务模拟 */
+    @Mock
+    private PortfolioPublishTransactionService portfolioPublishTransactionService;
+
     /** 配置校验器模拟 */
     @Mock
     private PortfolioConfigValidator portfolioConfigValidator;
@@ -143,6 +148,10 @@ class MinePortfolioServiceTest {
         AuthContextHolder.set(new AuthContext(7L, "wf-user-7"));
         lenient().when(cosService.publicUrl(any())).thenAnswer(
                 invocation -> "https://cos.we-folio.dingchenyong.top/" + invocation.getArgument(0));
+        lenient().when(portfolioPublishTransactionService.execute(any())).thenAnswer(invocation -> {
+            Supplier<?> publishAction = invocation.getArgument(0);
+            return publishAction.get();
+        });
     }
 
     @AfterEach
@@ -151,12 +160,12 @@ class MinePortfolioServiceTest {
     }
 
     @Test
-    void saveDraftAndPublishShouldBeTransactional() throws NoSuchMethodException {
+    void saveDraftShouldBeTransactionalAndPublishShouldUseIndependentBoundary() throws NoSuchMethodException {
         Method saveDraft = MinePortfolioService.class.getMethod("saveDraft", Long.class, MinePortfolioDraftSaveRequest.class);
         Method publish = MinePortfolioService.class.getMethod("publish", Long.class, MinePortfolioPublishRequest.class);
 
         assertThat(saveDraft.getAnnotation(Transactional.class).rollbackFor()).contains(Exception.class);
-        assertThat(publish.getAnnotation(Transactional.class).rollbackFor()).contains(Exception.class);
+        assertThat(publish.getAnnotation(Transactional.class)).isNull();
         assertThat(Arrays.stream(MinePortfolioService.class.getMethods()).map(method -> method.getName()))
                 .doesNotContain("createCoverUploadTicket");
     }
@@ -626,6 +635,15 @@ class MinePortfolioServiceTest {
 
         MinePortfolioDetailResponse response = service().publish(88L, request);
 
+        verify(pointService).assertCanConsume(
+                7L,
+                PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode(),
+                "PORTFOLIO",
+                "88",
+                1,
+                "publish-1"
+        );
+        verify(portfolioPublishTransactionService).execute(any());
         verify(pointService).consume(
                 7L,
                 PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode(),
@@ -646,6 +664,39 @@ class MinePortfolioServiceTest {
         verify(portfolioHistoryEntityMapper).insert(any(PortfolioHistoryEntity.class));
         assertThat(response.getPublishedRevision()).isEqualTo(2);
         assertThat(response.getPublicationStatus()).isEqualTo(PortfolioPublicationStatusDict.PUBLISHED.getCode());
+    }
+
+    @Test
+    void publishShouldStopBeforeTransactionAndWritesWhenPointsAreInsufficient() {
+        PortfolioEntity portfolio = ownedPortfolio();
+        portfolio.setDraftRevision(4);
+        portfolio.setDraftConfigJson(
+                "{\"schemaVersion\":\"standard-personal-v1\",\"share\":{\"title\":\"林安婚礼司仪\"},\"components\":[]}"
+        );
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+        doThrow(new BusinessException("积分余额不足，请充值后再试"))
+                .when(pointService).assertCanConsume(
+                        7L,
+                        PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode(),
+                        "PORTFOLIO",
+                        "88",
+                        1,
+                        "publish-insufficient"
+                );
+        MinePortfolioPublishRequest request = new MinePortfolioPublishRequest();
+        request.setDraftRevision(4);
+        request.setIdempotencyKey("publish-insufficient");
+
+        assertThatThrownBy(() -> service().publish(88L, request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("积分余额不足，请充值后再试");
+
+        verifyNoInteractions(portfolioPublishTransactionService);
+        verify(portfolioEntityMapper, never()).updateById(any(PortfolioEntity.class));
+        verify(portfolioReferenceEntityMapper, never()).delete(any());
+        verify(portfolioReferenceEntityMapper, never()).insert(any(PortfolioReferenceEntity.class));
+        verify(portfolioHistoryEntityMapper, never()).insert(any(PortfolioHistoryEntity.class));
+        verify(pointService, never()).consume(any(), any(), any(), any(), any(Integer.class), any(), any());
     }
 
     @Test
@@ -946,6 +997,7 @@ class MinePortfolioServiceTest {
                 scheduleEntityMapper,
                 slotDefinitionEntityMapper,
                 pointService,
+                portfolioPublishTransactionService,
                 portfolioConfigValidator,
                 portfolioRenderService,
                 miniappAuthService,

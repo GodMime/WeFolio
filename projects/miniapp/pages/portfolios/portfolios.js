@@ -12,7 +12,7 @@ const {
   resolveTeamCreateRoute,
   showTeamPortfolioUnavailableToast
 } = require('./utils/team-portfolio-list.js')
-const { confirmPortfolioPublishDisclaimer } = require('./utils/portfolio-publish-disclaimer')
+const { confirmPortfolioPublishDisclaimer } = require('../../utils/portfolio-publish-disclaimer')
 
 const PORTFOLIOS_API_URL = '/api/mine/portfolios'
 const PORTFOLIO_DELETE_API_PREFIX = '/api/mine/portfolios/delete'
@@ -450,6 +450,10 @@ Page({
     }
     if (this.data.revealedTeamPortfolioId === item.portfolioId) {
       this.setData({ revealedTeamPortfolioId: null })
+      return
+    }
+    const confirmed = await confirmPortfolioPublishDisclaimer()
+    if (!confirmed) {
       return
     }
     this.setData({ publishingTeamPortfolioId: item.portfolioId })

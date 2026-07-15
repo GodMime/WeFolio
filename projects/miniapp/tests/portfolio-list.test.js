@@ -60,7 +60,10 @@ function loadPortfolioListPage(fakeRequest, wxOverrides = {}) {
   global.wx = Object.assign({
     navigateTo() {},
     redirectTo() {},
-    showToast() {}
+    showToast() {},
+    showModal(options) {
+      options.success({ confirm: true })
+    }
   }, wxOverrides)
 
   try {
@@ -401,6 +404,7 @@ test('tapping preview on a revealed team card closes delete before navigating', 
 test('publishing a draft team portfolio from the list refreshes only team data', async () => {
   const requests = []
   const toasts = []
+  const modals = []
   const page = loadPortfolioListPage(async (options) => {
     requests.push(options)
     if (options.url.endsWith('/publish')) {
@@ -408,6 +412,10 @@ test('publishing a draft team portfolio from the list refreshes only team data',
     }
     return []
   }, {
+    showModal(options) {
+      modals.push(options)
+      options.success({ confirm: true })
+    },
     showToast(options) {
       toasts.push(options)
     }
@@ -429,7 +437,40 @@ test('publishing a draft team portfolio from the list refreshes only team data',
     ])
     assert.equal(requests[0].data.draftRevision, 4)
     assert.match(requests[0].data.idempotencyKey, /^team-publish-/)
+    assert.equal(modals.length, 1)
+    assert.equal(modals[0].title, '发布免责声明')
     assert.deepEqual(toasts, [{ title: '已发布', icon: 'success' }])
+    assert.equal(page.data.publishingTeamPortfolioId, null)
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('canceling team publish disclaimer from the list does not call publish api', async () => {
+  const requests = []
+  const modals = []
+  const page = loadPortfolioListPage(async (options) => {
+    requests.push(options)
+    return {}
+  }, {
+    showModal(options) {
+      modals.push(options)
+      options.success({ confirm: false })
+    }
+  })
+  const item = {
+    portfolioId: 33,
+    canMaintain: true,
+    publicationStatus: 'DRAFT_ONLY',
+    draftRevision: 4
+  }
+
+  try {
+    await page.handleTeamPublishTap({ currentTarget: { dataset: { item } } })
+
+    assert.equal(modals.length, 1)
+    assert.equal(modals[0].title, '发布免责声明')
+    assert.equal(requests.some((entry) => entry.url.endsWith('/publish')), false)
     assert.equal(page.data.publishingTeamPortfolioId, null)
   } finally {
     page.cleanup()

@@ -38,6 +38,8 @@ import com.jxc.wefolio.mapper.TeamScheduleQueryRecordEntityMapper;
 import com.jxc.wefolio.mapper.VisitRecordEntityMapper;
 import com.jxc.wefolio.message.TeamPortfolioMessage;
 import com.jxc.wefolio.service.ContentLimitService;
+import com.jxc.wefolio.service.PointService;
+import com.jxc.wefolio.service.PortfolioPublishTransactionService;
 import com.jxc.wefolio.service.VisitorAuthTokenService;
 import com.jxc.wefolio.service.VisitorService;
 import com.jxc.wefolio.service.teamportfolio.component.contactform.TeamContactFormComponentService;
@@ -533,7 +535,9 @@ class VisitorTeamPortfolioServiceTest {
                 recordMapper,
                 scheduleRecordMapper,
                 contactService,
-                mock(ContentLimitService.class));
+                mock(ContentLimitService.class),
+                mock(PointService.class),
+                mock(PortfolioPublishTransactionService.class));
         assertThat(MineTeamPortfolioService.class.getDeclaredFields())
                 .filteredOn(field -> List.of(
                         "visitRecordEntityMapper",

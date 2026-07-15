@@ -230,6 +230,7 @@ test('save draft remains in the editor when the request fails', async () => {
 
 test('new editor publish creates before publishing', async () => {
   const requests = []
+  const modals = []
   const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
     requests.push(clone(options))
     if (options.url === '/api/mine/teams/3/portfolios/standard') {
@@ -242,6 +243,11 @@ test('new editor publish creates before publishing', async () => {
       return { publicationStatus: 'PUBLISHED', publishedRevision: 1 }
     }
     throw new Error(`unexpected request: ${options.url}`)
+  }, {
+    showModal(options) {
+      modals.push(options)
+      options.success({ confirm: true })
+    }
   })
   page.setData({ teamId: 3, canMaintain: true })
   try {
@@ -252,8 +258,34 @@ test('new editor publish creates before publishing', async () => {
       '/api/mine/team-portfolios/41/publish'
     ])
     assert.equal(requests[2].data.draftRevision, 2)
+    assert.equal(modals.length, 1)
+    assert.equal(modals[0].title, '发布免责声明')
     assert.equal(page.data.portfolioId, 41)
     assert.equal(page.data.publicationStatus, 'PUBLISHED')
+  } finally { page.cleanup() }
+})
+
+test('canceling editor publish disclaimer does not create save or publish', async () => {
+  const requests = []
+  const modals = []
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
+    requests.push(options)
+    return {}
+  }, {
+    showModal(options) {
+      modals.push(options)
+      options.success({ confirm: false })
+    }
+  })
+  page.setData({ teamId: 3, canMaintain: true })
+
+  try {
+    await page.handlePublishTap()
+
+    assert.equal(modals.length, 1)
+    assert.equal(modals[0].title, '发布免责声明')
+    assert.deepEqual(requests, [])
+    assert.equal(page.data.publishing, false)
   } finally { page.cleanup() }
 })
 

@@ -5,7 +5,7 @@ const {
   PUBLISH_DISCLAIMER_CONTENT,
   PUBLISH_DISCLAIMER_TITLE,
   confirmPortfolioPublishDisclaimer
-} = require('../pages/portfolios/utils/portfolio-publish-disclaimer')
+} = require('../utils/portfolio-publish-disclaimer')
 
 test('portfolio publish disclaimer confirms only when maintainer agrees', async () => {
   let modalOptions = null

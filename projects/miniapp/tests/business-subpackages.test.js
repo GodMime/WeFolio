@@ -29,7 +29,6 @@ const PACKAGE_LOCAL_UTILS = {
     'display-switching.js',
     'portfolio-assets.js',
     'portfolio-contact-form.js',
-    'portfolio-publish-disclaimer.js',
     'team-portfolio-list.js',
     'visitor-profile.js',
     'works.js'
