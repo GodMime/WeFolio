@@ -1668,3 +1668,51 @@ test('portfolio schedule query component uses preview endpoints and scope', asyn
   assert.equal(Object.hasOwn(requests[1].data, 'visitorKey'), false)
   assert.equal(component.data.result.available, false)
 })
+
+test('portfolio schedule query component uses nested team member preview endpoints', async () => {
+  const requests = []
+  const component = loadScheduleQueryComponent((options) => {
+    requests.push(options)
+    if (options.method === 'POST') {
+      return Promise.resolve({
+        queriedDate: '2026-07-18',
+        slotDefinitionId: 12,
+        slotName: '午宴',
+        startTime: '10:00',
+        endTime: '14:00',
+        available: true,
+        message: '档期空闲'
+      })
+    }
+    return Promise.resolve({
+      yearMonth: '2026-07',
+      slotDefinitions: [{ id: 12, name: '午宴', startTime: '10:00', endTime: '14:00' }],
+      days: [],
+      schedules: []
+    })
+  })
+  component.setData({
+    preview: true,
+    portfolioId: 88,
+    teamPortfolioId: 13,
+    teamPreviewScope: 'draft',
+    componentKey: 'c_schedule',
+    scheduleQuery: { displayMode: 'INLINE_CALENDAR' }
+  })
+
+  await component.loadScheduleOptions('2026-07')
+  component.setData({ selectedDate: '2026-07-18', selectedSlotDefinitionId: 12 })
+  await component.handleSubmitQuery()
+
+  assert.equal(requests[0].url, '/api/mine/team-portfolios/13/member-portfolios/88/schedule-options')
+  assert.deepEqual(requests[0].data, {
+    month: '2026-07',
+    componentKey: 'c_schedule',
+    scope: 'draft'
+  })
+  assert.equal(requests[0].authMode, undefined)
+  assert.equal(requests[1].url, '/api/mine/team-portfolios/13/member-portfolios/88/schedule-query-preview?scope=draft')
+  assert.equal(requests[1].method, 'POST')
+  assert.equal(requests[1].authMode, undefined)
+  assert.equal(Object.hasOwn(requests[1].data, 'visitorKey'), false)
+})

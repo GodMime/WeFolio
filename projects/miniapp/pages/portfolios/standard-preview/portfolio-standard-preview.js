@@ -8,7 +8,9 @@ const { clearDisplaySwitchingTimer, markDisplaySwitching } = require('../utils/d
 const { normalizeVisitorPortfolio, switchDisplayGroup } = require('../../../utils/visitor-portfolio')
 
 const PORTFOLIO_API_PREFIX = '/api/mine/portfolios'
+const TEAM_PORTFOLIO_API_PREFIX = '/api/mine/team-portfolios'
 const PUBLISHED_PREVIEW_SCOPE = 'published'
+const DRAFT_PREVIEW_SCOPE = 'draft'
 const MEDIA_TYPE_VIDEO = 'VIDEO'
 const IMAGE_MISSING_MESSAGE = '图片地址缺失'
 const VIDEO_MISSING_MESSAGE = '视频地址缺失'
@@ -18,6 +20,8 @@ Page({
   data: {
     portfolioId: null,
     previewScope: '',
+    teamPortfolioId: 0,
+    teamPreviewScope: '',
     loading: false,
     errorMessage: '',
     portfolio: normalizeVisitorPortfolio({ renderData: { preview: true } }),
@@ -30,9 +34,15 @@ Page({
   },
 
   onLoad(options = {}) {
+    const teamPortfolioId = Number(options.teamPortfolioId) || 0
+    const teamPreviewScope = teamPortfolioId && options.teamScope === PUBLISHED_PREVIEW_SCOPE
+      ? PUBLISHED_PREVIEW_SCOPE
+      : teamPortfolioId ? DRAFT_PREVIEW_SCOPE : ''
     this.setData({
       portfolioId: options.portfolioId || null,
-      previewScope: options.scope || ''
+      previewScope: teamPortfolioId ? PUBLISHED_PREVIEW_SCOPE : options.scope || '',
+      teamPortfolioId,
+      teamPreviewScope
     })
     return this.bootstrap()
   },
@@ -43,6 +53,23 @@ Page({
       return Promise.resolve()
     }
     this.setData({ loading: true, errorMessage: '' })
+    if (this.data.teamPortfolioId) {
+      return request({
+        url: `${TEAM_PORTFOLIO_API_PREFIX}/${this.data.teamPortfolioId}/member-portfolios/${this.data.portfolioId}/published-preview`,
+        data: { scope: this.data.teamPreviewScope }
+      }).then((response) => {
+        this.setData({
+          portfolio: normalizeVisitorPortfolio(response),
+          loading: false,
+          errorMessage: ''
+        })
+      }).catch((error) => {
+        this.setData({
+          loading: false,
+          errorMessage: error.message || '预览加载失败'
+        })
+      })
+    }
     const previewPath = this.data.previewScope === PUBLISHED_PREVIEW_SCOPE ? 'published-preview' : 'preview'
     return request({ url: `${PORTFOLIO_API_PREFIX}/${this.data.portfolioId}/${previewPath}` })
       .then((response) => {

@@ -583,6 +583,31 @@ class MinePortfolioServiceTest {
     }
 
     @Test
+    void referencedPreviewShouldUsePublishedConfigWithoutOwnerOrWriteSideEffects() {
+        PortfolioEntity portfolio = ownedPortfolio();
+        portfolio.setOwnerId(99L);
+        portfolio.setSchemaVersion(PortfolioConfigDto.SCHEMA_VERSION_STANDARD_PERSONAL_V1);
+        portfolio.setPublicationStatus(PortfolioPublicationStatusDict.PUBLISHED.getCode());
+        portfolio.setDraftConfigJson("{\"schemaVersion\":\"standard-personal-v1\",\"share\":{\"title\":\"草稿标题\"},\"components\":[]}");
+        portfolio.setPublishedConfigJson("{\"schemaVersion\":\"standard-personal-v1\",\"share\":{\"title\":\"发布标题\"},\"components\":[]}");
+        portfolio.setPublishedRevision(4);
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+        PortfolioRenderDto renderData = new PortfolioRenderDto();
+        renderData.setPreview(true);
+        when(portfolioRenderService.render(eq(portfolio), any(PortfolioConfigDto.class), eq(true), eq(false), isNull(), isNull()))
+                .thenReturn(renderData);
+
+        MinePortfolioDetailResponse response = service().previewPublishedReferencedPortfolio(88L);
+
+        assertThat(response.getConfig().getShare().getTitle()).isEqualTo("发布标题");
+        assertThat(response.getPublishedRevision()).isEqualTo(4);
+        assertThat(response.getRenderData()).isSameAs(renderData);
+        verify(pointService, never()).consume(any(), any(), any(), any(), any(Integer.class), any(), any());
+        verify(portfolioReferenceEntityMapper, never()).insert(any(PortfolioReferenceEntity.class));
+        verify(portfolioHistoryEntityMapper, never()).insert(any(PortfolioHistoryEntity.class));
+    }
+
+    @Test
     void queryPreviewScheduleOptionsShouldReturnEmptyStringsForNullableScheduleFields() {
         PortfolioEntity portfolio = ownedPortfolio();
         portfolio.setDraftConfigJson(scheduleComponentConfigJson());

@@ -16,7 +16,12 @@ import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioScheduleQueryRequest;
 import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioScheduleQueryResponse;
 import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioShareRecordRequest;
 import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioSummaryResponse;
+import com.jxc.wefolio.dto.MinePortfolioDetailResponse;
+import com.jxc.wefolio.dto.PortfolioScheduleOptionsResponse;
+import com.jxc.wefolio.dto.PortfolioScheduleQueryRequest;
+import com.jxc.wefolio.dto.PortfolioScheduleQueryResponse;
 import com.jxc.wefolio.service.teamportfolio.MineTeamPortfolioService;
+import com.jxc.wefolio.service.teamportfolio.TeamMemberPortfolioPreviewService;
 import com.jxc.wefolio.service.teamportfolio.TeamPortfolioAssetService;
 import com.jxc.wefolio.service.teamportfolio.component.carousel.TeamCarouselComponentService;
 import com.jxc.wefolio.service.teamportfolio.component.memberportfoliogrid.TeamMemberPortfolioGridComponentService;
@@ -53,6 +58,9 @@ public class MineTeamPortfolioController {
 
     /** 单列成员作品集来源服务。 */
     private final TeamMemberPortfolioListComponentService listComponentService;
+
+    /** 团队预览下钻成员个人作品集服务。 */
+    private final TeamMemberPortfolioPreviewService memberPortfolioPreviewService;
 
     /**
      * 查询当前用户所属团队的标准团队作品集。
@@ -142,6 +150,42 @@ public class MineTeamPortfolioController {
     @GetMapping("/api/mine/team-portfolios/{portfolioId}/published-preview")
     public Response<TeamPortfolioDetailResponse> publishedPreview(@PathVariable Long portfolioId) {
         return Response.success(mineTeamPortfolioService.previewPublished(portfolioId, currentUserId()));
+    }
+
+    /** 预览团队配置引用的成员个人作品集发布版本。 */
+    @GetMapping("/api/mine/team-portfolios/{teamPortfolioId}/member-portfolios/{memberPortfolioId}/published-preview")
+    public Response<MinePortfolioDetailResponse> memberPortfolioPreview(
+            @PathVariable Long teamPortfolioId,
+            @PathVariable Long memberPortfolioId,
+            @RequestParam(value = "scope", required = false) String scope
+    ) {
+        return Response.success(memberPortfolioPreviewService.preview(
+                teamPortfolioId, memberPortfolioId, scope, currentUserId()));
+    }
+
+    /** 查询成员个人作品集发布版预览档期。 */
+    @GetMapping("/api/mine/team-portfolios/{teamPortfolioId}/member-portfolios/{memberPortfolioId}/schedule-options")
+    public Response<PortfolioScheduleOptionsResponse> memberPortfolioScheduleOptions(
+            @PathVariable Long teamPortfolioId,
+            @PathVariable Long memberPortfolioId,
+            @RequestParam("month") String month,
+            @RequestParam("componentKey") String componentKey,
+            @RequestParam(value = "scope", required = false) String scope
+    ) {
+        return Response.success(memberPortfolioPreviewService.scheduleOptions(
+                teamPortfolioId, memberPortfolioId, month, componentKey, scope, currentUserId()));
+    }
+
+    /** 执行成员个人作品集发布版预览查档。 */
+    @PostMapping("/api/mine/team-portfolios/{teamPortfolioId}/member-portfolios/{memberPortfolioId}/schedule-query-preview")
+    public Response<PortfolioScheduleQueryResponse> memberPortfolioScheduleQueryPreview(
+            @PathVariable Long teamPortfolioId,
+            @PathVariable Long memberPortfolioId,
+            @RequestBody PortfolioScheduleQueryRequest request,
+            @RequestParam(value = "scope", required = false) String scope
+    ) {
+        return Response.success(memberPortfolioPreviewService.scheduleQueryPreview(
+                teamPortfolioId, memberPortfolioId, request, scope, currentUserId()));
     }
 
     /**

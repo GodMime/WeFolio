@@ -1,6 +1,8 @@
 <navigation-bar title="团队作品集预览" back="{{true}}" />
 <scroll-view scroll-y class="page-shell">
-  <view class="preview-tip">{{scope === 'draft' ? '草稿预览' : '正式预览'}}</view>
+  <view class="preview-toolbar">
+    <view class="preview-note">预览模式：禁用真实提交，不统计访问，不扣积分。</view>
+  </view>
   <view wx:if="{{loading}}" class="state">加载中...</view>
   <view wx:elif="{{errorMessage}}" class="state"><text>{{errorMessage}}</text><button bindtap="handleRetry">重试</button></view>
   <view wx:elif="{{empty}}" class="state">暂无可预览内容</view>

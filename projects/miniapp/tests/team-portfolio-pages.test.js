@@ -435,3 +435,17 @@ test('team preview and visitor use the personal portfolio content baseline witho
   assert.match(readCssRule(gridWxss, '.grid-component'), /padding:0/)
   assert.match(readCssRule(listWxss, '.list-component'), /padding:0/)
 })
+
+test('team preview shows the same side-effect-free notice as personal preview', () => {
+  const teamWxml = read('standard-preview/team-portfolio-standard-preview.wxml')
+  const teamWxss = read('standard-preview/team-portfolio-standard-preview.wxss')
+  const personalWxml = fs.readFileSync(path.join(ROOT, '../portfolios/standard-preview/portfolio-standard-preview.wxml'), 'utf8')
+  const notice = '预览模式：禁用真实提交，不统计访问，不扣积分。'
+
+  assert.match(personalWxml, new RegExp(notice))
+  assert.match(teamWxml, /class="preview-toolbar"/)
+  assert.match(teamWxml, new RegExp(`<view class="preview-note">${notice}</view>`))
+  assert.doesNotMatch(teamWxml, /草稿预览|正式预览/)
+  assert.match(teamWxss, /\.preview-toolbar\s*\{[^}]*padding:\s*20rpx 24rpx;[^}]*border-bottom:\s*1rpx solid #eef1f4;/)
+  assert.match(teamWxss, /\.preview-note\s*\{[^}]*color:\s*#7a8490;[^}]*font-size:\s*22rpx;[^}]*line-height:\s*1\.4;/)
+})

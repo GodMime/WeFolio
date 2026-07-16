@@ -472,6 +472,20 @@ public class MinePortfolioService {
     }
 
     /**
+     * 预览已由调用方完成团队引用鉴权的个人作品集发布版本。
+     *
+     * @param portfolioId 个人作品集 ID
+     * @return 作品集发布版本预览
+     */
+    public MinePortfolioDetailResponse previewPublishedReferencedPortfolio(Long portfolioId) {
+        PortfolioEntity portfolio = requirePublishedStandardPersonal(portfolioId);
+        PortfolioConfigDto config = parseConfig(portfolio.getPublishedConfigJson());
+        MinePortfolioDetailResponse response = buildDetail(portfolio, config);
+        response.setRenderData(portfolioRenderService.render(portfolio, config, true, false, null, null));
+        return response;
+    }
+
+    /**
      * 查询预览页档期组件月历选项。
      *
      * @param portfolioId 作品集 ID
@@ -510,6 +524,36 @@ public class MinePortfolioService {
         }
         PortfolioEntity portfolio = requireOwnedStandardPersonal(portfolioId);
         PortfolioConfigDto config = resolvePreviewConfig(portfolio, scope);
+        requireScheduleComponentConfig(config, request.getComponentKey());
+        return buildScheduleQueryResponse(portfolio.getOwnerId(), request);
+    }
+
+    /**
+     * 查询已由调用方完成团队引用鉴权的个人作品集发布版预览档期。
+     */
+    public PortfolioScheduleOptionsResponse queryPublishedReferencedPreviewScheduleOptions(
+            Long portfolioId,
+            String month,
+            String componentKey
+    ) {
+        PortfolioEntity portfolio = requirePublishedStandardPersonal(portfolioId);
+        PortfolioConfigDto config = parseConfig(portfolio.getPublishedConfigJson());
+        requireScheduleComponentConfig(config, componentKey);
+        return buildScheduleOptions(portfolio.getOwnerId(), parseMonth(month));
+    }
+
+    /**
+     * 执行已由调用方完成团队引用鉴权的个人作品集发布版预览查档。
+     */
+    public PortfolioScheduleQueryResponse submitPublishedReferencedPreviewScheduleQuery(
+            Long portfolioId,
+            PortfolioScheduleQueryRequest request
+    ) {
+        if (request == null) {
+            throw new BusinessException(PortfolioMessage.SCHEDULE_QUERY_REQUEST_REQUIRED_MESSAGE);
+        }
+        PortfolioEntity portfolio = requirePublishedStandardPersonal(portfolioId);
+        PortfolioConfigDto config = parseConfig(portfolio.getPublishedConfigJson());
         requireScheduleComponentConfig(config, request.getComponentKey());
         return buildScheduleQueryResponse(portfolio.getOwnerId(), request);
     }
@@ -695,6 +739,21 @@ public class MinePortfolioService {
         }
         if (!PortfolioTemplateTypeDict.STANDARD.getCode().equals(portfolio.getTemplateType())) {
             throw new BusinessException(PortfolioMessage.PORTFOLIO_MAINTENANCE_UNAVAILABLE_MESSAGE);
+        }
+        return portfolio;
+    }
+
+    /** 校验团队引用预览目标仍为有效的标准个人作品集发布版本。 */
+    private PortfolioEntity requirePublishedStandardPersonal(Long portfolioId) {
+        PortfolioEntity portfolio = portfolioEntityMapper.selectById(portfolioId);
+        if (portfolio == null
+                || !PortfolioOwnerTypeDict.USER.getCode().equals(portfolio.getOwnerType())
+                || !PortfolioTemplateTypeDict.STANDARD.getCode().equals(portfolio.getTemplateType())
+                || !PortfolioConfigDto.SCHEMA_VERSION_STANDARD_PERSONAL_V1.equals(portfolio.getSchemaVersion())
+                || !PortfolioStatusDict.ACTIVE.getCode().equals(portfolio.getStatus())
+                || !PortfolioPublicationStatusDict.PUBLISHED.getCode().equals(portfolio.getPublicationStatus())
+                || !hasText(portfolio.getPublishedConfigJson())) {
+            throw new BusinessException(PortfolioMessage.PORTFOLIO_UNAVAILABLE_MESSAGE);
         }
         return portfolio;
     }

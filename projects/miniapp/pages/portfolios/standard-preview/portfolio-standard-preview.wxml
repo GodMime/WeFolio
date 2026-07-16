@@ -128,6 +128,8 @@
         <block wx:elif="{{item.componentType === 'SCHEDULE_QUERY'}}">
           <portfolio-schedule-query
             portfolio-id="{{portfolioId}}"
+            team-portfolio-id="{{teamPortfolioId}}"
+            team-preview-scope="{{teamPreviewScope}}"
             preview="{{true}}"
             preview-scope="{{previewScope}}"
             component-key="{{item.componentKey}}"

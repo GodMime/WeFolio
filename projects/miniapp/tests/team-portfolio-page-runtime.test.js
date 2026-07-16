@@ -1072,16 +1072,17 @@ test('team editor hides publish for a draft-only portfolio and shows it after pu
   } finally { page.cleanup() }
 })
 
-test('team preview opens a member portfolio with the team source flag', () => {
+test('team preview opens a member published portfolio through personal preview', () => {
   const navigations = []
   const page = loadPage('standard-preview/team-portfolio-standard-preview.js', async () => ({}), {
     navigateTo(options) { navigations.push(options) }
   })
 
   try {
-    page.handleMemberPortfolio({ detail: { shareCode: 'PF 001' } })
+    page.setData({ portfolioId: 13, scope: 'draft' })
+    page.handleMemberPortfolio({ detail: { portfolioId: 88, shareCode: 'PF 001' } })
     assert.deepEqual(navigations, [{
-      url: '/pages/portfolios/visitor-portfolio/visitor-portfolio?shareCode=PF%20001&fromTeamPortfolio=1'
+      url: '/pages/portfolios/standard-preview/portfolio-standard-preview?portfolioId=88&teamPortfolioId=13&teamScope=draft'
     }])
   } finally { page.cleanup() }
 })

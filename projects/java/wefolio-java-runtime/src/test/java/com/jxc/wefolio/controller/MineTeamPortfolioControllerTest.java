@@ -5,6 +5,7 @@ import com.jxc.wefolio.common.auth.AuthContext;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
 import com.jxc.wefolio.service.teamportfolio.MineTeamPortfolioService;
 import com.jxc.wefolio.service.teamportfolio.TeamPortfolioAssetService;
+import com.jxc.wefolio.service.teamportfolio.TeamMemberPortfolioPreviewService;
 import com.jxc.wefolio.service.teamportfolio.component.carousel.TeamCarouselComponentService;
 import com.jxc.wefolio.service.teamportfolio.component.memberportfoliogrid.TeamMemberPortfolioGridComponentService;
 import com.jxc.wefolio.service.teamportfolio.component.memberportfoliolist.TeamMemberPortfolioListComponentService;
@@ -62,6 +63,9 @@ class MineTeamPortfolioControllerTest {
         expected.put("POST /api/mine/team-portfolios/{portfolioId}/delete", "deletePortfolio");
         expected.put("GET /api/mine/team-portfolios/{portfolioId}/preview", "preview");
         expected.put("GET /api/mine/team-portfolios/{portfolioId}/published-preview", "publishedPreview");
+        expected.put("GET /api/mine/team-portfolios/{teamPortfolioId}/member-portfolios/{memberPortfolioId}/published-preview", "memberPortfolioPreview");
+        expected.put("GET /api/mine/team-portfolios/{teamPortfolioId}/member-portfolios/{memberPortfolioId}/schedule-options", "memberPortfolioScheduleOptions");
+        expected.put("POST /api/mine/team-portfolios/{teamPortfolioId}/member-portfolios/{memberPortfolioId}/schedule-query-preview", "memberPortfolioScheduleQueryPreview");
         expected.put("POST /api/mine/team-portfolios/{portfolioId}/asset/upload-ticket", "assetUploadTicket");
         expected.put("GET /api/mine/team-portfolios/{portfolioId}/schedule-options", "scheduleOptions");
         expected.put("POST /api/mine/team-portfolios/{portfolioId}/schedule-query-preview", "scheduleQueryPreview");
@@ -134,7 +138,8 @@ class MineTeamPortfolioControllerTest {
         TeamCarouselComponentService carousel = mock(TeamCarouselComponentService.class);
         TeamMemberPortfolioGridComponentService grid = mock(TeamMemberPortfolioGridComponentService.class);
         TeamMemberPortfolioListComponentService list = mock(TeamMemberPortfolioListComponentService.class);
-        MineTeamPortfolioController controller = new MineTeamPortfolioController(mineService, assetService, carousel, grid, list);
+        MineTeamPortfolioController controller = new MineTeamPortfolioController(
+                mineService, assetService, carousel, grid, list, mock(TeamMemberPortfolioPreviewService.class));
 
         controller.carouselMembers(13L);
         controller.carouselWorks(13L, 17L);
@@ -162,7 +167,8 @@ class MineTeamPortfolioControllerTest {
                 mock(TeamPortfolioAssetService.class),
                 mock(TeamCarouselComponentService.class),
                 mock(TeamMemberPortfolioGridComponentService.class),
-                mock(TeamMemberPortfolioListComponentService.class));
+                mock(TeamMemberPortfolioListComponentService.class),
+                mock(TeamMemberPortfolioPreviewService.class));
         MineTeamPortfolioService.TeamVisitRecordsResponse visits =
                 new MineTeamPortfolioService.TeamVisitRecordsResponse(1, 20, false, java.util.List.of());
         MineTeamPortfolioService.TeamScheduleQueryRecordsResponse schedules =

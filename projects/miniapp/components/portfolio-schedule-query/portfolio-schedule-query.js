@@ -6,8 +6,10 @@ const { requestWithVisitorSessionRefresh } = require('../../utils/visitor-sessio
 
 const VISITOR_PORTFOLIO_API_PREFIX = '/api/visitor/portfolios'
 const MINE_PORTFOLIO_API_PREFIX = '/api/mine/portfolios'
+const MINE_TEAM_PORTFOLIO_API_PREFIX = '/api/mine/team-portfolios'
 const DISPLAY_MODE_INLINE_CALENDAR = 'INLINE_CALENDAR'
 const PUBLISHED_PREVIEW_SCOPE = 'published'
+const DRAFT_PREVIEW_SCOPE = 'draft'
 const DATE_REQUIRED_MESSAGE = '请选择日期'
 const SLOT_REQUIRED_MESSAGE = '请选择档位'
 const LOAD_FAILED_MESSAGE = '月历加载失败'
@@ -80,6 +82,10 @@ function isPublishedScope(scope) {
   return String(scope || '') === PUBLISHED_PREVIEW_SCOPE
 }
 
+function normalizeTeamPreviewScope(scope) {
+  return isPublishedScope(scope) ? PUBLISHED_PREVIEW_SCOPE : DRAFT_PREVIEW_SCOPE
+}
+
 function canLoadOptions(data = {}) {
   return data.preview ? Boolean(data.portfolioId) : Boolean(data.shareCode)
 }
@@ -89,6 +95,13 @@ function buildOptionsRequest(data = {}, month) {
     const requestData = {
       month,
       componentKey: data.componentKey || ''
+    }
+    if (data.teamPortfolioId) {
+      requestData.scope = normalizeTeamPreviewScope(data.teamPreviewScope)
+      return {
+        url: `${MINE_TEAM_PORTFOLIO_API_PREFIX}/${data.teamPortfolioId}/member-portfolios/${data.portfolioId}/schedule-options`,
+        data: requestData
+      }
     }
     if (isPublishedScope(data.previewScope)) {
       requestData.scope = PUBLISHED_PREVIEW_SCOPE
@@ -116,6 +129,14 @@ function buildQueryRequest(data = {}) {
     idempotencyKey: createIdempotencyKey(data)
   }
   if (data.preview) {
+    if (data.teamPortfolioId) {
+      const teamScope = normalizeTeamPreviewScope(data.teamPreviewScope)
+      return {
+        url: `${MINE_TEAM_PORTFOLIO_API_PREFIX}/${data.teamPortfolioId}/member-portfolios/${data.portfolioId}/schedule-query-preview?scope=${teamScope}`,
+        method: 'POST',
+        data: payload
+      }
+    }
     const scopeQuery = isPublishedScope(data.previewScope) ? '?scope=published' : ''
     return {
       url: `${MINE_PORTFOLIO_API_PREFIX}/${data.portfolioId}/schedule-query-preview${scopeQuery}`,
@@ -177,6 +198,14 @@ Component({
       type: Number,
       value: 0
     },
+    teamPortfolioId: {
+      type: Number,
+      value: 0
+    },
+    teamPreviewScope: {
+      type: String,
+      value: ''
+    },
     visitorKey: {
       type: String,
       value: ''
@@ -214,7 +243,7 @@ Component({
   },
 
   observers: {
-    'scheduleQuery.displayMode, shareCode, portfolioId, preview': function() {
+    'scheduleQuery.displayMode, shareCode, portfolioId, teamPortfolioId, teamPreviewScope, preview': function() {
       this.ensureInlineOptionsLoaded()
     }
   },

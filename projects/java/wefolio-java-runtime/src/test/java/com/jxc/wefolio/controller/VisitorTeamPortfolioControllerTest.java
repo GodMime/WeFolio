@@ -19,6 +19,7 @@ import com.jxc.wefolio.dto.teamportfolio.VisitorTeamPortfolioOpenRequest;
 import com.jxc.wefolio.dto.teamportfolio.VisitorTeamPortfolioResponse;
 import com.jxc.wefolio.service.teamportfolio.MineTeamPortfolioService;
 import com.jxc.wefolio.service.teamportfolio.TeamPortfolioAssetService;
+import com.jxc.wefolio.service.teamportfolio.TeamMemberPortfolioPreviewService;
 import com.jxc.wefolio.service.teamportfolio.VisitorTeamPortfolioService;
 import com.jxc.wefolio.service.teamportfolio.component.carousel.TeamCarouselComponentService;
 import com.jxc.wefolio.service.teamportfolio.component.contactform.TeamContactFormComponentService;
@@ -265,7 +266,8 @@ class VisitorTeamPortfolioControllerTest {
                 mock(TeamPortfolioAssetService.class),
                 mock(TeamCarouselComponentService.class),
                 mock(TeamMemberPortfolioGridComponentService.class),
-                mock(TeamMemberPortfolioListComponentService.class));
+                mock(TeamMemberPortfolioListComponentService.class),
+                mock(TeamMemberPortfolioPreviewService.class));
     }
 
     /** 断言 path + body 参数。 */

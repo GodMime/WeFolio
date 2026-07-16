@@ -180,6 +180,43 @@ test('preview page requests published preview endpoint for published scope', asy
   assert.equal(page.data.portfolio.preview, true)
 })
 
+test('preview page loads a team-referenced member portfolio through the nested published endpoint', async () => {
+  const requests = []
+  const page = loadPreviewPage((options) => {
+    requests.push(options)
+    return Promise.resolve({
+      portfolioId: 88,
+      publishedRevision: 4,
+      renderData: {
+        preview: true,
+        title: '成员发布作品集',
+        components: []
+      }
+    })
+  })
+
+  page.onLoad({
+    portfolioId: '88',
+    teamPortfolioId: '13',
+    teamScope: 'draft'
+  })
+  await flushPromises()
+
+  assert.equal(requests[0].url, '/api/mine/team-portfolios/13/member-portfolios/88/published-preview')
+  assert.deepEqual(requests[0].data, { scope: 'draft' })
+  assert.equal(page.data.teamPortfolioId, 13)
+  assert.equal(page.data.teamPreviewScope, 'draft')
+  assert.equal(page.data.previewScope, 'published')
+  assert.equal(page.data.portfolio.title, '成员发布作品集')
+
+  const wxml = fs.readFileSync(
+    path.join(__dirname, '../pages/portfolios/standard-preview/portfolio-standard-preview.wxml'),
+    'utf8'
+  )
+  assert.match(wxml, /team-portfolio-id="\{\{teamPortfolioId\}\}"/)
+  assert.match(wxml, /team-preview-scope="\{\{teamPreviewScope\}\}"/)
+})
+
 test('preview display group switch tolerates unnormalized component arrays', () => {
   const page = loadPreviewPage(() => Promise.resolve({}))
   page.data.portfolio = {
