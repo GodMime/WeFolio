@@ -3,6 +3,7 @@ const { handleTeamMaintainerAuthError, previewTeamPortfolio, showTeamPortfolioUn
 
 const TYPE_BUCKETS = Object.freeze({ TEAM_PROFILE: 'teamProfile', CAROUSEL: 'carousel', DIVIDER: 'divider', MEMBER_PORTFOLIO_GRID: 'grid', MEMBER_PORTFOLIO_LIST: 'list', TEXT_SECTION: 'text', SCHEDULE_QUERY: 'schedule', CONTACT_FORM: 'contact', QR_CONTACT: 'qr' })
 const PERSONAL_VISITOR_URL = '/pages' + '/portfolios/visitor-portfolio/visitor-portfolio'
+const PERSONAL_VISITOR_TEAM_SOURCE_QUERY = 'fromTeamPortfolio=1'
 function buckets(items) { const value = { teamProfile: [], carousel: [], divider: [], grid: [], list: [], text: [], schedule: [], contact: [], qr: [] }; (Array.isArray(items) ? items : []).forEach((item) => { const key = TYPE_BUCKETS[item.componentType]; if (key) value[key].push(item) }); return value }
 
 Page({
@@ -12,7 +13,7 @@ Page({
   handleRetry() { this.bootstrap() },
   handleImagePreview(event) { const item = event.detail && event.detail.item; if (item && (item.mediaUrl || item.coverUrl)) wx.previewImage({ current: item.mediaUrl || item.coverUrl, urls: [item.mediaUrl || item.coverUrl] }) },
   handleQrPreview() {},
-  handleMemberPortfolio(event) { const shareCode = event.detail && event.detail.shareCode; if (shareCode) wx.navigateTo({ url: `${PERSONAL_VISITOR_URL}?shareCode=${encodeURIComponent(shareCode)}` }) },
+  handleMemberPortfolio(event) { const shareCode = event.detail && event.detail.shareCode; if (shareCode) wx.navigateTo({ url: `${PERSONAL_VISITOR_URL}?shareCode=${encodeURIComponent(shareCode)}&${PERSONAL_VISITOR_TEAM_SOURCE_QUERY}` }) },
   async handleScheduleQuery(event) { const detail = event.detail || {}; const child = this.selectComponent(`#schedule-${detail.componentKey}`); try { const result = await request({ url: `/api/mine/team-portfolios/${this.data.portfolioId}/schedule-query-preview?scope=${this.data.scope}`, method: 'POST', data: { componentKey: detail.componentKey, queriedDate: detail.queriedDate, idempotencyKey: detail.idempotencyKey } }); this.setData({ scheduleResults: Object.assign({}, this.data.scheduleResults, { [detail.componentKey]: result }) }); if (child && child.resolveQuery) child.resolveQuery({ detail: result }) } catch (error) { if (handleTeamMaintainerAuthError(error)) return; if (showTeamPortfolioUnavailableToast(error)) { if (child && child.rejectQuery) child.rejectQuery({ detail: { message: '当前团队作品集不可用' } }); return }; if (child && child.rejectQuery) child.rejectQuery({ detail: { message: '档期查询失败，请重试' } }); wx.showToast({ title: '档期查询失败，请重试', icon: 'none' }) } },
   handleContactInput(event) { const componentKey = event.currentTarget.dataset.key; this.setData({ contactForms: Object.assign({}, this.data.contactForms, { [componentKey]: event.detail.form }) }) },
   handleContactOpen(event) { const componentKey = event.currentTarget.dataset.key; this.setData({ contactModalVisible: Object.assign({}, this.data.contactModalVisible, { [componentKey]: true }) }) },

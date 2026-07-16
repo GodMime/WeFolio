@@ -23,6 +23,7 @@ const IMAGE_MISSING_MESSAGE = '图片地址缺失'
 const VIDEO_MISSING_MESSAGE = '视频地址缺失'
 const DEFAULT_VIDEO_TITLE = '视频作品'
 const VISITOR_PROFILE_REQUIRED_MESSAGE = '请授权头像和昵称'
+const TEAM_PORTFOLIO_SOURCE_VALUE = '1'
 
 function idempotencyKey(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
@@ -36,6 +37,7 @@ function buildWorkEventMetadata(work) {
 Page({
   data: {
     shareCode: '',
+    showNavigationBack: false,
     visitorKey: '',
     portfolio: normalizeVisitorPortfolio({}),
     contactForm: createContactLeadForm({}),
@@ -55,7 +57,8 @@ Page({
 
   onLoad(options = {}) {
     const shareCode = options.shareCode || options.scene || ''
-    this.setData({ shareCode, visitorKey: '' })
+    const showNavigationBack = options.fromTeamPortfolio === TEAM_PORTFOLIO_SOURCE_VALUE
+    this.setData({ shareCode, showNavigationBack, visitorKey: '' })
     return this.bootstrap()
   },
 

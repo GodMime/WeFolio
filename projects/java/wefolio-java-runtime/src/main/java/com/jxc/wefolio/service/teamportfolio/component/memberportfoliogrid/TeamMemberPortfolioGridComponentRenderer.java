@@ -48,6 +48,9 @@ public class TeamMemberPortfolioGridComponentRenderer {
     /** 个人作品集 ID 字段。 */
     private static final String PORTFOLIO_ID_FIELD = "portfolioId";
 
+    /** 成员姓名展示开关字段。 */
+    private static final String SHOW_MEMBER_NAME_FIELD = "showMemberName";
+
     /** 分享信息字段。 */
     private static final String SHARE_FIELD = "share";
 
@@ -98,7 +101,8 @@ public class TeamMemberPortfolioGridComponentRenderer {
      * @return 脱离输入对象的渲染数据
      */
     public JSONObject render(JSONObject normalizedConfig, TeamPortfolioComponentContext context) {
-        List<Pair> items = parseConfig(normalizedConfig);
+        RenderConfig renderConfig = parseConfig(normalizedConfig);
+        List<Pair> items = renderConfig.items();
         if (context == null) {
             throw new BusinessException(INVALID_CONFIG_MESSAGE);
         }
@@ -144,6 +148,7 @@ public class TeamMemberPortfolioGridComponentRenderer {
             renderedItems.add(renderedItem);
         }
         JSONObject result = new JSONObject();
+        result.put(SHOW_MEMBER_NAME_FIELD, renderConfig.showMemberName());
         result.put(ITEMS_FIELD, renderedItems);
         return result;
     }
@@ -152,9 +157,9 @@ public class TeamMemberPortfolioGridComponentRenderer {
      * 在所有 Mapper 查询前严格解析配置。
      *
      * @param config 原始配置
-     * @return 成员和作品集 ID 对
+     * @return 展示开关、成员和作品集 ID 对
      */
-    private List<Pair> parseConfig(JSONObject config) {
+    private RenderConfig parseConfig(JSONObject config) {
         if (config == null || !(config.get(ITEMS_FIELD) instanceof JSONArray rawItems)) {
             throw new BusinessException(INVALID_CONFIG_MESSAGE);
         }
@@ -177,7 +182,19 @@ public class TeamMemberPortfolioGridComponentRenderer {
             }
             items.add(new Pair(memberUserId, portfolioId));
         }
-        return items;
+        return new RenderConfig(items, showMemberName(config));
+    }
+
+    /** 解析成员姓名展示开关，兼容历史缺省配置。 */
+    private boolean showMemberName(JSONObject config) {
+        if (!config.containsKey(SHOW_MEMBER_NAME_FIELD)) {
+            return true;
+        }
+        Object rawValue = config.get(SHOW_MEMBER_NAME_FIELD);
+        if (!(rawValue instanceof Boolean value)) {
+            throw new BusinessException(INVALID_CONFIG_MESSAGE);
+        }
+        return value;
     }
 
     /** 将无损正整数原值转为 Long。 */
@@ -280,6 +297,10 @@ public class TeamMemberPortfolioGridComponentRenderer {
 
     /** 成员用户和作品集 ID 对。 */
     private record Pair(long memberUserId, long portfolioId) {
+    }
+
+    /** 双列组件的完整渲染配置。 */
+    private record RenderConfig(List<Pair> items, boolean showMemberName) {
     }
 
     /** 分享元数据。 */

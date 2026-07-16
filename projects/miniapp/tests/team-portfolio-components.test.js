@@ -372,8 +372,9 @@ test('divider owns color and positive height validation', () => {
 })
 
 test('grid independently loads a member before that member published portfolios', async () => {
-  const { exports } = loadComponent('member-portfolio-grid')
-  assert.deepEqual(exports.createDefaultGridConfig(), { items: [] })
+  const { definition, exports } = loadComponent('member-portfolio-grid')
+  assert.equal(propertyDefault(definition, 'showMemberName'), true)
+  assert.deepEqual(exports.createDefaultGridConfig(), { items: [], showMemberName: true })
   const calls = []
   const requestFn = async (options) => { calls.push(options); return [] }
   await exports.fetchGridMembers(requestFn, 6)
@@ -385,12 +386,16 @@ test('grid independently loads a member before that member published portfolios'
   const selected = [{ memberUserId: 2, portfolioId: 8 }]
   assert.deepEqual(exports.changeGridMember(selected, 3), selected)
   assert.deepEqual(exports.pruneGridItemsByMember(selected, 2), [])
-  assert.deepEqual(exports.buildGridConfig([{ memberUserId: 2, portfolioId: 8, title: '仅展示' }]), { items: selected })
+  assert.deepEqual(exports.buildGridConfig([{ memberUserId: 2, portfolioId: 8, title: '仅展示' }], false), {
+    items: selected,
+    showMemberName: false
+  })
 })
 
 test('list independently loads a member before published portfolios and keeps list metadata', async () => {
-  const { exports } = loadComponent('member-portfolio-list')
-  assert.deepEqual(exports.createDefaultListConfig(), { items: [] })
+  const { definition, exports } = loadComponent('member-portfolio-list')
+  assert.equal(propertyDefault(definition, 'showMemberName'), true)
+  assert.deepEqual(exports.createDefaultListConfig(), { items: [], showMemberName: true })
   const calls = []
   const requestFn = async (options) => { calls.push(options); return [] }
   await exports.fetchListMembers(requestFn, 6)
@@ -402,9 +407,34 @@ test('list independently loads a member before published portfolios and keeps li
   const selected = [{ memberUserId: 2, portfolioId: 8 }]
   assert.deepEqual(exports.changeListMember(selected, 4), selected)
   assert.deepEqual(exports.pruneListItemsByMember(selected, 2), [])
-  assert.deepEqual(exports.buildListConfig([{ memberUserId: 2, portfolioId: 8, coverUrl: '仅展示' }]), { items: selected })
+  assert.deepEqual(exports.buildListConfig([{ memberUserId: 2, portfolioId: 8, coverUrl: '仅展示' }], false), {
+    items: selected,
+    showMemberName: false
+  })
   const wxml = fs.readFileSync(path.join(ROOT, 'member-portfolio-list/member-portfolio-list.wxml'), 'utf8')
   assert.match(wxml, /description|memberDisplayName/)
+})
+
+test('member portfolio editors preserve selected items while toggling member names', () => {
+  for (const name of ['member-portfolio-grid', 'member-portfolio-list']) {
+    const { definition } = loadComponent(name)
+    const harness = createComponentHarness(definition, {
+      editMode: true,
+      items: [{ memberUserId: 2, portfolioId: 8, title: '婚礼纪实' }],
+      showMemberName: false,
+      portfolioId: 9
+    })
+
+    assert.equal(harness.instance.data.draftShowMemberName, false)
+    harness.instance.handleShowMemberNameChange({ detail: { value: true } })
+    assert.equal(harness.instance.data.draftShowMemberName, true)
+    assert.equal(harness.instance.data.draftItems.length, 1)
+
+    harness.instance.saveEdit()
+    const saved = harness.eventsByName('save')[0].detail.config
+    assert.equal(saved.showMemberName, true)
+    assert.deepEqual(saved.items, [{ memberUserId: 2, portfolioId: 8 }])
+  }
 })
 
 test('text section trims required body, limits 200 chars and owns alignment', () => {

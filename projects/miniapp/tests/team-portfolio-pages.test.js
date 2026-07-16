@@ -337,3 +337,101 @@ test('team profile avatar stays horizontally centered in preview and visitor dis
 
   assert.match(profileStyles, /\.avatar\s*\{[^}]*display:\s*block;[^}]*margin:\s*0 auto;/)
 })
+
+test('member portfolio components expose a default-on member name switch through editor, preview, and visitor pages', () => {
+  const editor = read('standard-edit/team-portfolio-standard-edit.wxml')
+  const preview = read('standard-preview/team-portfolio-standard-preview.wxml')
+  const visitor = read('visitor-portfolio/team-visitor-portfolio.wxml')
+
+  assert.equal(Array.from(editor.matchAll(/show-member-name="\{\{activeComponent\.config\.showMemberName\}\}"/g)).length, 2)
+  assert.equal(Array.from(preview.matchAll(/show-member-name="\{\{item\.data\.showMemberName\}\}"/g)).length, 2)
+  assert.equal(Array.from(visitor.matchAll(/show-member-name="\{\{item\.data\.showMemberName\}\}"/g)).length, 2)
+
+  for (const componentPath of ['member-portfolio-grid/member-portfolio-grid', 'member-portfolio-list/member-portfolio-list']) {
+    const wxml = read(`components/${componentPath}.wxml`)
+    assert.match(wxml, /显示成员姓名/)
+    assert.match(wxml, /checked="\{\{draftShowMemberName\}\}"[^>]*bindchange="handleShowMemberNameChange"/)
+    assert.match(wxml, /wx:if="\{\{showMemberName && item\.memberDisplayName\}\}"/)
+    assert.doesNotMatch(wxml, /display-tag|标签筛选/)
+  }
+})
+
+test('team member portfolio display aligns with personal list and grid without tag filtering', () => {
+  const gridWxml = read('components/member-portfolio-grid/member-portfolio-grid.wxml')
+  const gridWxss = read('components/member-portfolio-grid/member-portfolio-grid.wxss')
+  const listWxml = read('components/member-portfolio-list/member-portfolio-list.wxml')
+  const listWxss = read('components/member-portfolio-list/member-portfolio-list.wxss')
+
+  assert.match(gridWxml, /class="work-section-title">作品集<\/view>/)
+  assert.match(listWxml, /class="work-section-title">作品集<\/view>/)
+  assert.doesNotMatch(gridWxml, /作品集列表/)
+  assert.doesNotMatch(listWxml, /作品集列表/)
+  assert.match(listWxml, /wx:if="\{\{item\.description\}\}" class="portfolio-description"/)
+  assert.match(gridWxml, /class="portfolio-cover"[^>]*mode="widthFix"/)
+  assert.match(listWxml, /class="portfolio-cover"[^>]*mode="widthFix"/)
+
+  const gridHostRule = readCssRule(gridWxss, ':host')
+  const gridRootRule = readCssRule(gridWxss, '.grid-component')
+  const gridDisplayRule = readCssRule(gridWxss, '.portfolio-display')
+  const gridRule = readCssRule(gridWxss, '.portfolio-grid')
+  const gridCardRule = readCssRule(gridWxss, '.portfolio-card')
+  const gridCoverRule = readCssRule(gridWxss, '.portfolio-cover')
+  const listHostRule = readCssRule(listWxss, ':host')
+  const listRootRule = readCssRule(listWxss, '.list-component')
+  const listDisplayRule = readCssRule(listWxss, '.portfolio-display')
+  const listRule = readCssRule(listWxss, '.portfolio-list')
+  const listCardRule = readCssRule(listWxss, '.portfolio-card')
+  const listCoverRule = readCssRule(listWxss, '.portfolio-cover')
+  assert.match(gridHostRule, /width:100%/)
+  assert.match(gridRootRule, /width:100%/)
+  assert.match(gridDisplayRule, /width:100%/)
+  assert.match(gridRule, /width:100%/)
+  assert.match(gridRule, /display:flex/)
+  assert.match(gridRule, /flex-wrap:wrap/)
+  assert.doesNotMatch(gridRule, /grid-template-columns/)
+  assert.match(gridCardRule, /width:50%/)
+  assert.match(gridCardRule, /flex:0050%/)
+  assert.match(gridCoverRule, /width:100%/)
+  assert.doesNotMatch(gridCoverRule, /height:/)
+  assert.match(listHostRule, /width:100%/)
+  assert.match(listRootRule, /width:100%/)
+  assert.match(listDisplayRule, /width:100%/)
+  assert.match(listRule, /width:100%/)
+  assert.match(listRule, /display:flex/)
+  assert.match(listRule, /flex-direction:column/)
+  assert.match(listCardRule, /width:100%/)
+  assert.match(listCardRule, /flex:00100%/)
+  assert.match(listCoverRule, /width:100%/)
+  assert.doesNotMatch(listCoverRule, /height:/)
+})
+
+test('team preview and visitor use the personal portfolio content baseline without native card buttons', () => {
+  const previewWxml = read('standard-preview/team-portfolio-standard-preview.wxml')
+  const previewWxss = read('standard-preview/team-portfolio-standard-preview.wxss')
+  const visitorWxml = read('visitor-portfolio/team-visitor-portfolio.wxml')
+  const visitorWxss = read('visitor-portfolio/team-visitor-portfolio.wxss')
+  const gridWxml = read('components/member-portfolio-grid/member-portfolio-grid.wxml')
+  const gridWxss = read('components/member-portfolio-grid/member-portfolio-grid.wxss')
+  const listWxml = read('components/member-portfolio-list/member-portfolio-list.wxml')
+  const listWxss = read('components/member-portfolio-list/member-portfolio-list.wxss')
+
+  for (const page of [previewWxml, visitorWxml]) {
+    assert.equal(Array.from(page.matchAll(/class="folio-component"/g)).length, 9)
+  }
+
+  for (const pageStyles of [previewWxss, visitorWxss]) {
+    const contentRule = readCssRule(pageStyles, '.content')
+    const folioRule = readCssRule(pageStyles, '.folio-component')
+    assert.doesNotMatch(contentRule, /padding:/)
+    assert.doesNotMatch(contentRule, /gap:/)
+    assert.match(folioRule, /width:100%/)
+    assert.match(folioRule, /margin-top:34rpx/)
+  }
+
+  assert.match(gridWxml, /<view[^>]*class="portfolio-card"[^>]*aria-role="button"/)
+  assert.match(listWxml, /<view[^>]*class="portfolio-card"[^>]*aria-role="button"/)
+  assert.doesNotMatch(gridWxml, /<button[^>]*class="portfolio-card"/)
+  assert.doesNotMatch(listWxml, /<button[^>]*class="portfolio-card"/)
+  assert.match(readCssRule(gridWxss, '.grid-component'), /padding:0/)
+  assert.match(readCssRule(listWxss, '.list-component'), /padding:0/)
+})

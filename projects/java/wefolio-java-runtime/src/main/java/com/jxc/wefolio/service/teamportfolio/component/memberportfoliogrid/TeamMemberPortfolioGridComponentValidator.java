@@ -48,6 +48,9 @@ public class TeamMemberPortfolioGridComponentValidator {
     /** 个人作品集 ID 字段。 */
     private static final String PORTFOLIO_ID_FIELD = "portfolioId";
 
+    /** 成员姓名展示开关字段。 */
+    private static final String SHOW_MEMBER_NAME_FIELD = "showMemberName";
+
     /** 发布配置分享信息字段。 */
     private static final String SHARE_FIELD = "share";
 
@@ -115,7 +118,7 @@ public class TeamMemberPortfolioGridComponentValidator {
                 throw new BusinessException(UNAVAILABLE_PORTFOLIO_MESSAGE);
             }
         }
-        return normalized(items);
+        return normalized(items, parsedConfig.getShowMemberName());
     }
 
     /**
@@ -152,7 +155,25 @@ public class TeamMemberPortfolioGridComponentValidator {
             item.setMemberUserId(positiveLong(rawItem.get(MEMBER_USER_ID_FIELD)));
             item.setPortfolioId(positiveLong(rawItem.get(PORTFOLIO_ID_FIELD)));
         }
+        parsedConfig.setShowMemberName(showMemberName(config));
         return parsedConfig;
+    }
+
+    /**
+     * 解析成员姓名展示开关，兼容历史缺省配置。
+     *
+     * @param config 原始组件配置
+     * @return 是否显示成员姓名
+     */
+    private boolean showMemberName(JSONObject config) {
+        if (!config.containsKey(SHOW_MEMBER_NAME_FIELD)) {
+            return true;
+        }
+        Object rawValue = config.get(SHOW_MEMBER_NAME_FIELD);
+        if (!(rawValue instanceof Boolean value)) {
+            throw new BusinessException(INVALID_CONFIG_MESSAGE);
+        }
+        return value;
     }
 
     /**
@@ -292,9 +313,10 @@ public class TeamMemberPortfolioGridComponentValidator {
      * 组装只含 ID 的规范化配置。
      *
      * @param items 配置条目
+     * @param showMemberName 是否显示成员姓名
      * @return 规范化 JSON
      */
-    private JSONObject normalized(List<TeamMemberPortfolioGridComponentConfig.Item> items) {
+    private JSONObject normalized(List<TeamMemberPortfolioGridComponentConfig.Item> items, boolean showMemberName) {
         JSONArray normalizedItems = new JSONArray();
         for (TeamMemberPortfolioGridComponentConfig.Item item : items) {
             JSONObject normalizedItem = new JSONObject();
@@ -304,6 +326,7 @@ public class TeamMemberPortfolioGridComponentValidator {
         }
         JSONObject result = new JSONObject();
         result.put(ITEMS_FIELD, normalizedItems);
+        result.put(SHOW_MEMBER_NAME_FIELD, showMemberName);
         return result;
     }
 

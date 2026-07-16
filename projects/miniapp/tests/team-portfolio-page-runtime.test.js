@@ -725,6 +725,16 @@ test('editor loads member-first sources, blocks a new component until save, and 
   } finally { page.cleanup() }
 })
 
+test('new member portfolio components enable member names by default', () => {
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => ({}))
+  try {
+    page.addComponent('MEMBER_PORTFOLIO_GRID')
+    page.addComponent('MEMBER_PORTFOLIO_LIST')
+    assert.equal(page.data.config.components[0].config.showMemberName, true)
+    assert.equal(page.data.config.components[1].config.showMemberName, true)
+  } finally { page.cleanup() }
+})
+
 test('visitor modal contact opens, completes child submission, and schedule success resolves the child', async () => {
   const calls = []
   const page = loadPage('visitor-portfolio/team-visitor-portfolio.js', async (options) => { calls.push(options); if (options.url.endsWith('/contact-leads')) return { leadId: 1 }; if (options.url.endsWith('/schedule-query')) return { status: 'TEAM_AVAILABLE' }; return {} })
@@ -1059,5 +1069,37 @@ test('team editor hides publish for a draft-only portfolio and shows it after pu
     assert.equal(page.data.showPublishAction, false)
     await page.handlePublishTap()
     assert.equal(page.data.showPublishAction, true)
+  } finally { page.cleanup() }
+})
+
+test('team preview opens a member portfolio with the team source flag', () => {
+  const navigations = []
+  const page = loadPage('standard-preview/team-portfolio-standard-preview.js', async () => ({}), {
+    navigateTo(options) { navigations.push(options) }
+  })
+
+  try {
+    page.handleMemberPortfolio({ detail: { shareCode: 'PF 001' } })
+    assert.deepEqual(navigations, [{
+      url: '/pages/portfolios/visitor-portfolio/visitor-portfolio?shareCode=PF%20001&fromTeamPortfolio=1'
+    }])
+  } finally { page.cleanup() }
+})
+
+test('team visitor opens a member portfolio with the team source flag', () => {
+  const navigations = []
+  const page = loadPage('visitor-portfolio/team-visitor-portfolio.js', async () => ({}), {
+    navigateTo(options) { navigations.push(options) }
+  })
+  page.sendEvent = () => Promise.resolve()
+
+  try {
+    page.handleMemberPortfolio({
+      currentTarget: { dataset: { key: 'member-grid-1' } },
+      detail: { portfolioId: 7, shareCode: 'PF 001' }
+    })
+    assert.deepEqual(navigations, [{
+      url: '/pages/portfolios/visitor-portfolio/visitor-portfolio?shareCode=PF%20001&fromTeamPortfolio=1'
+    }])
   } finally { page.cleanup() }
 })

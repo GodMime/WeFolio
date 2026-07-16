@@ -13,6 +13,9 @@ public class TeamMemberPortfolioListComponentConfig {
     /** 有序的成员作品集条目。 */
     private List<Item> items;
 
+    /** 是否显示成员姓名，缺省时开启。 */
+    private Boolean showMemberName;
+
     /**
      * 成员与个人作品集的关联条目。
      */

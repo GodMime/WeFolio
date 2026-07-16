@@ -825,6 +825,23 @@ test('visitor page secondary share keeps the new visitor subpackage path', () =>
   )
 })
 
+test('visitor page shows navigation back only when opened from a team portfolio', async () => {
+  const directPage = loadVisitorPage(() => Promise.resolve({}))
+  directPage.bootstrap = () => Promise.resolve()
+  await directPage.onLoad({ shareCode: 'PF001' })
+  assert.equal(directPage.data.showNavigationBack, false)
+
+  const teamPage = loadVisitorPage(() => Promise.resolve({}))
+  teamPage.bootstrap = () => Promise.resolve()
+  await teamPage.onLoad({ shareCode: 'PF001', fromTeamPortfolio: '1' })
+  assert.equal(teamPage.data.showNavigationBack, true)
+
+  const unrelatedValuePage = loadVisitorPage(() => Promise.resolve({}))
+  unrelatedValuePage.bootstrap = () => Promise.resolve()
+  await unrelatedValuePage.onLoad({ shareCode: 'PF001', fromTeamPortfolio: 'true' })
+  assert.equal(unrelatedValuePage.data.showNavigationBack, false)
+})
+
 test('visitor page records image view before opening original image', async () => {
   const requests = []
   const previews = []

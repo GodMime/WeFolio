@@ -11,8 +11,9 @@
         <view wx:elif="{{selectedMemberId}}" class="editor-empty">该成员暂无已发布个人作品集</view>
         <view wx:else class="editor-empty">请先选择团队成员</view>
       </view>
+      <view class="editor-field editor-switch-field"><view class="editor-switch-copy"><view class="editor-label">显示成员姓名</view><view class="editor-switch-desc">在作品集标题下展示所属成员</view></view><switch checked="{{draftShowMemberName}}" color="#17202a" bindchange="handleShowMemberNameChange" /></view>
       <view wx:if="{{errorMessage}}" class="editor-error">{{errorMessage}}</view>
     </view>
   </block>
-  <view wx:else class="portfolio-grid"><button wx:for="{{items}}" wx:key="portfolioId" class="portfolio-card" data-id="{{item.portfolioId}}" data-share-code="{{item.shareCode}}" bindtap="previewPortfolio"><image src="{{item.coverUrl}}" mode="aspectFill" /><text class="title">{{item.title}}</text><text class="member-name">{{item.memberDisplayName}}</text></button></view>
+  <view wx:else class="portfolio-display"><view class="work-section-title">作品集</view><view class="portfolio-grid"><view wx:for="{{items}}" wx:key="portfolioId" class="portfolio-card" data-id="{{item.portfolioId}}" data-share-code="{{item.shareCode}}" bindtap="previewPortfolio" aria-role="button"><image class="portfolio-cover" src="{{item.coverUrl}}" mode="widthFix" /><text class="portfolio-title">{{item.title}}</text><text wx:if="{{showMemberName && item.memberDisplayName}}" class="member-name">{{item.memberDisplayName}}</text></view></view></view>
 </view>

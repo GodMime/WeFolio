@@ -1,5 +1,5 @@
-:host { display: block; }
-.list-component { padding: 24rpx; color: #17202a; overflow-wrap: anywhere; }
+:host { display: block; width: 100%; min-width: 0; }
+.list-component { width: 100%; padding: 0; color: #17202a; overflow-wrap: anywhere; box-sizing: border-box; }
 .list-component.editor-mode { padding: 0; }
 .editor-form { display: flex; flex-direction: column; gap: 20rpx; padding: 4rpx 0 8rpx; }
 .editor-field { padding: 22rpx; border: 1rpx solid rgba(23, 32, 42, .06); border-radius: 16rpx; background: rgba(255, 255, 255, .94); box-sizing: border-box; }
@@ -11,6 +11,9 @@
 .editor-member-choice { width: auto; height: 56rpx; flex: none; margin: 0; padding: 0 20rpx; color: #536b82; font-size: 22rpx; font-weight: 800; line-height: 56rpx; border: 1rpx solid #d4dee8; border-radius: 999rpx; background: #fff; box-sizing: border-box; }
 .editor-member-choice.active { color: #fff; border-color: #17202a; background: #17202a; }
 .editor-content-field { min-height: 220rpx; }
+.editor-switch-field { display: flex; align-items: center; justify-content: space-between; gap: 20rpx; }
+.editor-switch-copy { min-width: 0; flex: 1 1 0; }
+.editor-switch-desc { margin-top: 8rpx; color: #8b96a3; font-size: 22rpx; line-height: 1.5; }
 .editor-option-list { display: flex; flex-direction: column; gap: 12rpx; margin-top: 16rpx; }
 .editor-option { position: relative; width: 100%; min-height: 112rpx; display: flex; align-items: center; gap: 16rpx; margin: 0; padding: 12rpx 60rpx 12rpx 12rpx; overflow: hidden; text-align: left; border: 1rpx solid #d9e2eb; border-radius: 14rpx; background: #f8fafc; box-sizing: border-box; }
 .editor-option.selected { border-color: #17202a; background: #fff; }
@@ -27,12 +30,17 @@
 .editor-cancel, .editor-confirm { width: 148rpx; height: 64rpx; display: flex; align-items: center; justify-content: center; margin: 0; padding: 0; font-size: 24rpx; font-weight: 900; line-height: 1; border-radius: 999rpx; box-sizing: border-box; }
 .editor-cancel { color: #536b82; border: 1rpx solid #cbd6df; background: #eef3f7; }
 .editor-confirm { color: #fff; background: #17202a; }
-.portfolio-list, .portfolio-options { display: flex; flex-direction: column; gap: 16rpx; }
-.portfolio-row, .option { display: grid; grid-template-columns: 220rpx minmax(0, 1fr); gap: 18rpx; min-width: 0; padding: 0; border-radius: 6px; background: #fff; overflow: hidden; text-align: left; }
-.portfolio-row image, .option image { width: 220rpx; height: 164rpx; background: #e8eeef; }
-.meta, .option view { min-width: 0; padding: 18rpx 18rpx 18rpx 0; }
-.title, .description, .member-name { display: block; overflow: hidden; text-overflow: ellipsis; }
-.title { font-weight: 600; white-space: nowrap; }
-.description { margin-top: 10rpx; color: #5e6b73; font-size: 24rpx; line-height: 1.5; }
-.member-name { margin-top: 10rpx; color: #0f766e; font-size: 22rpx; white-space: nowrap; }
+.portfolio-display { width: 100%; min-width: 0; }
+.work-section-title { padding: 0 24rpx; color: #000; font-size: 34rpx; font-weight: 900; line-height: 1.35; box-sizing: border-box; }
+.portfolio-list { width: 100%; display: flex; flex-direction: column; gap: 24rpx; padding: 22rpx 20rpx 0; box-sizing: border-box; }
+.portfolio-options { display: flex; flex-direction: column; gap: 16rpx; }
+.portfolio-card { width: 100%; min-width: 0; flex: 0 0 100%; margin: 0; padding: 0; color: #17202a; border-radius: 0; background: transparent; overflow: hidden; text-align: left; line-height: normal; box-sizing: border-box; }
+.portfolio-cover { display: block; width: 100%; background: #f3f4f6; }
+.portfolio-title, .portfolio-description, .member-name { display: block; overflow: hidden; text-overflow: ellipsis; }
+.portfolio-title { margin-top: 10rpx; color: #17202a; font-size: 24rpx; font-weight: 700; line-height: 1.35; white-space: nowrap; }
+.portfolio-description { margin-top: 6rpx; color: #59636f; font-size: 26rpx; line-height: 1.75; white-space: pre-wrap; }
+.member-name { margin-top: 6rpx; color: #8a8f98; font-size: 22rpx; line-height: 1.45; white-space: nowrap; }
+.option { display: grid; grid-template-columns: 220rpx minmax(0, 1fr); gap: 18rpx; min-width: 0; padding: 0; border-radius: 6px; background: #fff; overflow: hidden; text-align: left; }
+.option image { width: 220rpx; height: 164rpx; background: #e8eeef; }
+.option view { min-width: 0; padding: 18rpx 18rpx 18rpx 0; }
 .empty { display: block; padding: 28rpx 0; text-align: center; color: #708087; }

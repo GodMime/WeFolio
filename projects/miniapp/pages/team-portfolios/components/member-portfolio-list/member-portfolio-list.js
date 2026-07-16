@@ -3,8 +3,12 @@ function positiveId(value) {
   return Number.isFinite(id) && id > 0 ? id : null
 }
 
+function normalizeShowMemberName(value) {
+  return value !== false
+}
+
 function createDefaultListConfig() {
-  return { items: [] }
+  return { items: [], showMemberName: true }
 }
 
 function normalizeListItem(item = {}) {
@@ -55,17 +59,23 @@ function toggleListPortfolio(items, selected, memberUserId) {
     : source.concat(item)
 }
 
-function buildListConfig(items) {
+function buildListConfig(items, showMemberName = true) {
   return {
     items: (Array.isArray(items) ? items : []).map((item) => ({
       memberUserId: positiveId(item.memberUserId),
       portfolioId: positiveId(item.portfolioId)
-    })).filter((item) => item.memberUserId && item.portfolioId)
+    })).filter((item) => item.memberUserId && item.portfolioId),
+    showMemberName: normalizeShowMemberName(showMemberName)
   }
 }
 
 function syncListDraft(component, requestSources) {
-  component.setData({ selectedMemberId: null, draftItems: (component.properties.items || []).map(normalizeListItem), errorMessage: '' })
+  component.setData({
+    selectedMemberId: null,
+    draftItems: (component.properties.items || []).map(normalizeListItem),
+    draftShowMemberName: normalizeShowMemberName(component.properties.showMemberName),
+    errorMessage: ''
+  })
   if (requestSources) component.triggerEvent('loadmembers', { portfolioId: component.properties.portfolioId })
 }
 
@@ -76,16 +86,18 @@ Component({
     members: { type: Array, value: [] },
     portfolios: { type: Array, value: [] },
     editMode: { type: Boolean, value: false, observer(value, oldValue) { if (value !== oldValue) syncListDraft(this, value === true) } },
+    showMemberName: { type: Boolean, value: true },
     sourceAvailable: { type: Boolean, value: true }
   },
-  data: { selectedMemberId: null, draftItems: [], errorMessage: '' },
+  data: { selectedMemberId: null, draftItems: [], draftShowMemberName: true, errorMessage: '' },
   methods: {
     beginEdit() { syncListDraft(this, true) },
     selectMember(event) { const memberUserId = positiveId(event.currentTarget.dataset.id); this.setData({ selectedMemberId: memberUserId, draftItems: changeListMember(this.data.draftItems, memberUserId) }); this.triggerEvent('memberchange', { portfolioId: this.properties.portfolioId, memberUserId }) },
     pruneInvalidMember(event) { const memberUserId = positiveId(event.detail && event.detail.memberUserId); const draftItems = pruneListItemsByMember(this.data.draftItems, memberUserId); this.setData({ draftItems }); this.triggerEvent('sourceinvalid', { memberUserId, items: draftItems }) },
     togglePortfolio(event) { const draftItems = toggleListPortfolio(this.data.draftItems, event.currentTarget.dataset.item, this.data.selectedMemberId); this.setData({ draftItems }); this.triggerEvent('change', { items: draftItems }) },
+    handleShowMemberNameChange(event) { this.setData({ draftShowMemberName: event.detail.value === true }) },
     cancelEdit() { syncListDraft(this, false); this.triggerEvent('cancel') },
-    saveEdit() { const validation = validateListConfig({ items: this.data.draftItems }); if (!validation.valid) return this.setData({ errorMessage: validation.message }); this.triggerEvent('save', { config: buildListConfig(this.data.draftItems) }) },
+    saveEdit() { const validation = validateListConfig({ items: this.data.draftItems }); if (!validation.valid) return this.setData({ errorMessage: validation.message }); this.triggerEvent('save', { config: buildListConfig(this.data.draftItems, this.data.draftShowMemberName) }) },
     previewPortfolio(event) { this.triggerEvent('preview', { portfolioId: event.currentTarget.dataset.id, shareCode: event.currentTarget.dataset.shareCode }) }
   },
   lifetimes: {
@@ -93,4 +105,4 @@ Component({
   }
 })
 
-module.exports = { buildListConfig, changeListMember, createDefaultListConfig, fetchListMembers, fetchListPortfolios, normalizeListItem, pruneListItemsByMember, toggleListPortfolio, validateListConfig }
+module.exports = { buildListConfig, changeListMember, createDefaultListConfig, fetchListMembers, fetchListPortfolios, normalizeListItem, normalizeShowMemberName, pruneListItemsByMember, toggleListPortfolio, validateListConfig }

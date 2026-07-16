@@ -325,7 +325,7 @@ test('visitor portfolio pages expose maintenance, QR, contact and schedule surfa
   )
 
   assert.match(visitorWxml, /UNDER MAINTENANCE/)
-  assert.match(visitorWxml, /<navigation-bar[^>]*back="\{\{false\}\}"/)
+  assert.match(visitorWxml, /<navigation-bar[^>]*back="\{\{showNavigationBack\}\}"/)
   assert.match(contactFormJs, /DEFAULT_CONTACT_FORM_TITLE\s*=\s*'预留联系信息'/)
   assert.match(contactFormWxml, /contactComponent\.contactForm\.title \|\| defaultTitle/)
   assert.match(contactFormWxml, /\{\{submitText\}\}/)

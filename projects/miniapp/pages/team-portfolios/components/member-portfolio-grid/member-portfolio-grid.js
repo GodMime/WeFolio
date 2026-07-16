@@ -3,8 +3,12 @@ function positiveId(value) {
   return Number.isFinite(id) && id > 0 ? id : null
 }
 
+function normalizeShowMemberName(value) {
+  return value !== false
+}
+
 function createDefaultGridConfig() {
-  return { items: [] }
+  return { items: [], showMemberName: true }
 }
 
 function normalizeGridItem(item = {}) {
@@ -53,17 +57,23 @@ function toggleGridPortfolio(items, selected, memberUserId) {
     : source.concat(item)
 }
 
-function buildGridConfig(items) {
+function buildGridConfig(items, showMemberName = true) {
   return {
     items: (Array.isArray(items) ? items : []).map((item) => ({
       memberUserId: positiveId(item.memberUserId),
       portfolioId: positiveId(item.portfolioId)
-    })).filter((item) => item.memberUserId && item.portfolioId)
+    })).filter((item) => item.memberUserId && item.portfolioId),
+    showMemberName: normalizeShowMemberName(showMemberName)
   }
 }
 
 function syncGridDraft(component, requestSources) {
-  component.setData({ selectedMemberId: null, draftItems: (component.properties.items || []).map(normalizeGridItem), errorMessage: '' })
+  component.setData({
+    selectedMemberId: null,
+    draftItems: (component.properties.items || []).map(normalizeGridItem),
+    draftShowMemberName: normalizeShowMemberName(component.properties.showMemberName),
+    errorMessage: ''
+  })
   if (requestSources) component.triggerEvent('loadmembers', { portfolioId: component.properties.portfolioId })
 }
 
@@ -74,16 +84,18 @@ Component({
     members: { type: Array, value: [] },
     portfolios: { type: Array, value: [] },
     editMode: { type: Boolean, value: false, observer(value, oldValue) { if (value !== oldValue) syncGridDraft(this, value === true) } },
+    showMemberName: { type: Boolean, value: true },
     sourceAvailable: { type: Boolean, value: true }
   },
-  data: { selectedMemberId: null, draftItems: [], errorMessage: '' },
+  data: { selectedMemberId: null, draftItems: [], draftShowMemberName: true, errorMessage: '' },
   methods: {
     beginEdit() { syncGridDraft(this, true) },
     selectMember(event) { const memberUserId = positiveId(event.currentTarget.dataset.id); this.setData({ selectedMemberId: memberUserId, draftItems: changeGridMember(this.data.draftItems, memberUserId) }); this.triggerEvent('memberchange', { portfolioId: this.properties.portfolioId, memberUserId }) },
     pruneInvalidMember(event) { const memberUserId = positiveId(event.detail && event.detail.memberUserId); const draftItems = pruneGridItemsByMember(this.data.draftItems, memberUserId); this.setData({ draftItems }); this.triggerEvent('sourceinvalid', { memberUserId, items: draftItems }) },
     togglePortfolio(event) { const draftItems = toggleGridPortfolio(this.data.draftItems, event.currentTarget.dataset.item, this.data.selectedMemberId); this.setData({ draftItems }); this.triggerEvent('change', { items: draftItems }) },
+    handleShowMemberNameChange(event) { this.setData({ draftShowMemberName: event.detail.value === true }) },
     cancelEdit() { syncGridDraft(this, false); this.triggerEvent('cancel') },
-    saveEdit() { const validation = validateGridConfig({ items: this.data.draftItems }); if (!validation.valid) return this.setData({ errorMessage: validation.message }); this.triggerEvent('save', { config: buildGridConfig(this.data.draftItems) }) },
+    saveEdit() { const validation = validateGridConfig({ items: this.data.draftItems }); if (!validation.valid) return this.setData({ errorMessage: validation.message }); this.triggerEvent('save', { config: buildGridConfig(this.data.draftItems, this.data.draftShowMemberName) }) },
     previewPortfolio(event) { this.triggerEvent('preview', { portfolioId: event.currentTarget.dataset.id, shareCode: event.currentTarget.dataset.shareCode }) }
   },
   lifetimes: {
@@ -91,4 +103,4 @@ Component({
   }
 })
 
-module.exports = { buildGridConfig, changeGridMember, createDefaultGridConfig, fetchGridMembers, fetchGridPortfolios, normalizeGridItem, pruneGridItemsByMember, toggleGridPortfolio, validateGridConfig }
+module.exports = { buildGridConfig, changeGridMember, createDefaultGridConfig, fetchGridMembers, fetchGridPortfolios, normalizeGridItem, normalizeShowMemberName, pruneGridItemsByMember, toggleGridPortfolio, validateGridConfig }

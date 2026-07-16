@@ -122,10 +122,10 @@ class TeamMemberPortfolioGridComponentTest {
         TableInfoHelper.initTableInfo(assistant, PortfolioEntity.class);
     }
 
-    /** 配置模型只能包含有序的成员和个人作品集 ID。 */
+    /** 配置模型只能包含展示开关、有序成员和个人作品集 ID。 */
     @Test
     void configShouldOwnOnlyItemsAndIds() {
-        assertFields(TeamMemberPortfolioGridComponentConfig.class, "items");
+        assertFields(TeamMemberPortfolioGridComponentConfig.class, "items", "showMemberName");
         assertFields(TeamMemberPortfolioGridComponentConfig.Item.class, "memberUserId", "portfolioId");
     }
 
@@ -146,7 +146,7 @@ class TeamMemberPortfolioGridComponentTest {
                 itemsConfig(item(new BigDecimal("1.5"), 101L)), itemsConfig(item(1L, new BigDecimal("101.5"))),
                 itemsConfig(item(new BigInteger("9223372036854775808"), 101L)),
                 itemsConfig(item(1L, new BigDecimal("9223372036854775808"))), itemsConfig(item(0L, 101L)),
-                itemsConfig(item(1L, -1L)));
+                itemsConfig(item(1L, -1L)), memberNameConfig("false", item(1L, 101L)));
 
         for (JSONObject config : invalidConfigs) {
             assertInvalid(() -> validator().normalizeAndValidate(config, context()), "双列作品集配置不正确");
@@ -162,10 +162,22 @@ class TeamMemberPortfolioGridComponentTest {
         JSONObject normalized = validator().normalizeAndValidate(
                 itemsConfig(item(new BigDecimal("1.0"), new BigDecimal("101.00"))), context());
 
-        assertThat(normalized.toJSONString()).isEqualTo("{\"items\":[{\"memberUserId\":1,\"portfolioId\":101}]}");
+        assertThat(normalized.toJSONString()).isEqualTo(
+                "{\"items\":[{\"memberUserId\":1,\"portfolioId\":101}],\"showMemberName\":true}");
         assertMembershipQuery(captureMembershipListQuery(), true, TEAM_ID, 1L);
         verify(userEntityMapper).selectBatchIds(Set.of(1L));
         assertPortfolioIdsQuery(capturePortfolioListQuery(), 101L);
+    }
+
+    /** 校验器应保留显式关闭的成员姓名展示开关。 */
+    @Test
+    void validatorShouldPreserveDisabledMemberNameDisplay() {
+        stubValidPair(1L, 101L);
+
+        JSONObject normalized = validator().normalizeAndValidate(
+                memberNameConfig(false, item(1L, 101L)), context());
+
+        assertThat(normalized).containsEntry("showMemberName", false);
     }
 
     /** 校验器应保留顺序、拒绝空配置和重复作品集，且成员失败严格短路。 */
@@ -184,7 +196,7 @@ class TeamMemberPortfolioGridComponentTest {
         stubValidPairs(List.of(pair(1L, 101L), pair(2L, 102L)));
         JSONObject normalized = validator().normalizeAndValidate(itemsConfig(item(2L, 102L), item(1L, 101L)), context());
         assertThat(normalized.toJSONString()).isEqualTo(
-                "{\"items\":[{\"memberUserId\":2,\"portfolioId\":102},{\"memberUserId\":1,\"portfolioId\":101}]}");
+                "{\"items\":[{\"memberUserId\":2,\"portfolioId\":102},{\"memberUserId\":1,\"portfolioId\":101}],\"showMemberName\":true}");
     }
 
     /** 校验器必须拒绝成员、用户与作品集任一重校验谓词不满足及坏发布 JSON。 */
@@ -304,10 +316,11 @@ class TeamMemberPortfolioGridComponentTest {
         when(userEntityMapper.selectBatchIds(Set.of(1L, 2L))).thenReturn(List.of(firstUser, secondUser));
         when(portfolioEntityMapper.selectList(any())).thenReturn(List.of(firstPortfolio, secondPortfolio));
 
-        JSONObject config = itemsConfig(item(2L, 102L), item(1L, 101L));
+        JSONObject config = memberNameConfig(false, item(2L, 102L), item(1L, 101L));
         JSONObject rendered = renderer().render(config, context());
         config.getJSONArray("items").getJSONObject(0).put("portfolioId", 999L);
 
+        assertThat(rendered).containsEntry("showMemberName", false);
         assertThat(rendered.getJSONArray("items")).hasSize(2);
         JSONObject first = rendered.getJSONArray("items").getJSONObject(0);
         assertThat(first.keySet()).containsExactly("memberUserId", "memberDisplayName", "memberAvatarUrl", "portfolioId",
@@ -535,6 +548,13 @@ class TeamMemberPortfolioGridComponentTest {
     private JSONObject itemsConfig(JSONObject... items) {
         JSONObject config = new JSONObject();
         config.put("items", new JSONArray(List.of(items)));
+        return config;
+    }
+
+    /** 构造带成员姓名展示开关的配置。 */
+    private JSONObject memberNameConfig(Object showMemberName, JSONObject... items) {
+        JSONObject config = itemsConfig(items);
+        config.put("showMemberName", showMemberName);
         return config;
     }
 
