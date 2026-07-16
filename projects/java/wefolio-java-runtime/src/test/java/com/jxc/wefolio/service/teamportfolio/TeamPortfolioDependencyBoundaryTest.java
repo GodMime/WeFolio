@@ -40,6 +40,7 @@ class TeamPortfolioDependencyBoundaryTest {
             "com.jxc.wefolio.entity.PortfolioReferenceEntity",
             "com.jxc.wefolio.exception.BusinessException",
             "com.jxc.wefolio.mapper.PortfolioReferenceEntityMapper",
+            "com.jxc.wefolio.message.TeamPortfolioMessage",
             "com.jxc.wefolio.service.teamportfolio");
 
     /**

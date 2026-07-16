@@ -29,6 +29,7 @@ const PACKAGE_LOCAL_UTILS = {
     'display-switching.js',
     'portfolio-assets.js',
     'portfolio-contact-form.js',
+    'portfolio-publish-disclaimer.js',
     'team-portfolio-list.js',
     'visitor-profile.js',
     'works.js'
@@ -39,6 +40,7 @@ const PACKAGE_LOCAL_UTILS = {
     'team-portfolio-assets.js',
     'team-portfolio-registry.js',
     'team-portfolio-list.js',
+    'portfolio-publish-disclaimer.js',
     'team-portfolios.js',
     'team-visitor-portfolio.js',
     'team-visitor-profile.js',
@@ -165,6 +167,11 @@ test('subpackage pages keep business-only JavaScript out of the main package', (
     false,
     'team portfolio list utility should not be shipped in the main package'
   )
+  assert.equal(
+    fs.existsSync(path.join(mainUtilsRoot, 'portfolio-publish-disclaimer.js')),
+    false,
+    'portfolio publish disclaimer should not be shipped in the main package'
+  )
 
   for (const [packageName, utilNames] of Object.entries(PACKAGE_LOCAL_UTILS)) {
     const packageRoot = path.join(MINIAPP_ROOT, packagesByName[packageName].root)
@@ -256,6 +263,19 @@ test('works utility copies stay byte-for-byte aligned across business subpackage
 test('team portfolio list utility copies stay byte-for-byte aligned across business subpackages', () => {
   const portfolioSource = fs.readFileSync(path.join(MINIAPP_ROOT, 'pages/portfolios/utils/team-portfolio-list.js'), 'utf8')
   const teamPortfolioSource = fs.readFileSync(path.join(MINIAPP_ROOT, 'pages/team-portfolios/utils/team-portfolio-list.js'), 'utf8')
+
+  assert.equal(teamPortfolioSource, portfolioSource)
+})
+
+test('portfolio publish disclaimer copies stay byte-for-byte aligned across business subpackages', () => {
+  const portfolioSource = fs.readFileSync(
+    path.join(MINIAPP_ROOT, 'pages/portfolios/utils/portfolio-publish-disclaimer.js'),
+    'utf8'
+  )
+  const teamPortfolioSource = fs.readFileSync(
+    path.join(MINIAPP_ROOT, 'pages/team-portfolios/utils/portfolio-publish-disclaimer.js'),
+    'utf8'
+  )
 
   assert.equal(teamPortfolioSource, portfolioSource)
 })

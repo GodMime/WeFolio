@@ -412,7 +412,7 @@ test('editor publish retries only publish with one draft revision and clears rej
     }
     return {}
   })
-  page.setData({ portfolioId: 7, teamId: 3, canMaintain: true, draftRevision: 7, config: { share: {}, components: [] }, componentValidation: {}, hasInvalidComponents: false })
+  page.setData({ portfolioId: 7, teamId: 3, canMaintain: true, draftRevision: 7, config: { share: { title: '测试团队作品集' }, components: [] }, componentValidation: {}, hasInvalidComponents: false })
   try {
     await page.handlePublishTap(); await page.handlePublishTap()
     const drafts = requests.filter((item) => item.url.endsWith('/draft'))
@@ -508,7 +508,7 @@ test('maintainer main loads and representative save operations redirect to login
   const saveRemoved = []
   const saveRedirects = []
   const editor = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => { throw authRequiredError() }, { removeStorageSync(value) { saveRemoved.push(value) }, redirectTo(value) { saveRedirects.push(value) } })
-  editor.setData({ portfolioId: 7, canMaintain: true, draftRevision: 1, config: { share: {}, components: [] }, componentValidation: {} })
+  editor.setData({ portfolioId: 7, canMaintain: true, draftRevision: 1, config: { share: { title: '测试团队作品集' }, components: [] }, componentValidation: {} })
   try { await editor.saveDraft(); assert.equal(saveRemoved.length, 1); assert.equal(saveRedirects[0].url, '/pages/login/login') } finally { editor.cleanup() }
 
   const followRemoved = []
@@ -532,7 +532,7 @@ test('operation-level unavailable errors toast without redirecting for save, pub
   const wxOverrides = { redirectTo(value) { redirects.push(value) }, showToast(value) { toasts.push(value) } }
 
   const editor = loadPage('standard-edit/team-portfolio-standard-edit.js', unavailable, wxOverrides)
-  editor.setData({ portfolioId: 8, canMaintain: true, draftRevision: 1, config: { share: {}, components: [] }, componentValidation: {} })
+  editor.setData({ portfolioId: 8, canMaintain: true, draftRevision: 1, config: { share: { title: '测试团队作品集' }, components: [] }, componentValidation: {} })
   try {
     await editor.saveDraft()
     assert.deepEqual(toasts.shift(), { title: '团队作品集功能暂未开放', icon: 'none' })

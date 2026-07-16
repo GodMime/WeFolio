@@ -8,6 +8,7 @@ import com.jxc.wefolio.dict.MessageActionTypeDict;
 import com.jxc.wefolio.dict.MessageCategoryDict;
 import com.jxc.wefolio.dict.MessageReadStatusDict;
 import com.jxc.wefolio.dict.MessageTypeDict;
+import com.jxc.wefolio.dict.BillingWindowScopeDict;
 import com.jxc.wefolio.dict.PointCalcModeDict;
 import com.jxc.wefolio.dict.PointRuleGroupDict;
 import com.jxc.wefolio.dict.PointRuleStatusDict;
@@ -90,6 +91,12 @@ public class PointService {
     /** 流水时间展示格式 */
     private static final DateTimeFormatter TRANSACTION_TIME_FORMATTER =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+    /** 规则扩展配置中的免重复扣费窗口键 */
+    private static final String RULE_CONFIG_DEDUPE_WINDOW_HOURS = "dedupeWindowHours";
+
+    /** 规则扩展配置中的免重复扣费作用域键 */
+    private static final String RULE_CONFIG_DEDUPE_SCOPE = "dedupeScope";
 
     /** 维护类消耗场景 */
     private static final Set<String> MAINTENANCE_SCENES = Set.of(
@@ -1118,7 +1125,41 @@ public class PointService {
         item.setTransactionType(defaultString(rule.getTransactionType()));
         item.setUnitCount(rule.getUnitCount());
         item.setPointsValue(safeLong(rule.getPointsValue()));
+        fillBillingWindowDisplayConfig(item, rule);
         return item;
+    }
+
+    /**
+     * 安全读取规则扩展配置中的滚动扣费窗口展示字段。
+     *
+     * @param item 规则展示项
+     * @param rule 积分规则
+     */
+    private void fillBillingWindowDisplayConfig(
+            MinePointOverviewResponse.RuleItem item,
+            PointRuleEntity rule
+    ) {
+        if (!hasText(rule.getConfigJson())) {
+            return;
+        }
+        try {
+            var config = JSON.parseObject(rule.getConfigJson());
+            if (config == null) {
+                return;
+            }
+            Integer windowHours = config.getInteger(RULE_CONFIG_DEDUPE_WINDOW_HOURS);
+            if (windowHours != null && windowHours > 0) {
+                item.setDedupeWindowHours(windowHours);
+            }
+            BillingWindowScopeDict.fromCode(config.getString(RULE_CONFIG_DEDUPE_SCOPE))
+                    .ifPresent(scope -> item.setDedupeScope(scope.getCode()));
+        } catch (Exception e) {
+            log.warn(
+                    "积分规则窗口展示配置解析失败: ruleId={}, sceneCode={}",
+                    rule.getId(),
+                    rule.getSceneCode()
+            );
+        }
     }
 
     /**

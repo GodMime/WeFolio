@@ -57,6 +57,30 @@ class TeamPortfolioConfigValidatorTest {
     private TeamQrContactComponentValidator qrValidator;
 
     /**
+     * 缺失、空值或纯空白的团队作品集标题必须在组件分发前被拒绝。
+     */
+    @Test
+    void normalizeAndValidateShouldRequireShareTitleBeforeComponentDispatch() {
+        TeamPortfolioConfigDto missingShare = config(List.of(
+                component("divider-1", TeamPortfolioComponentTypeDict.DIVIDER.getCode(), 1000, true)));
+        missingShare.setShare(null);
+        TeamPortfolioConfigDto missingTitle = config(List.of(
+                component("divider-1", TeamPortfolioComponentTypeDict.DIVIDER.getCode(), 1000, true)));
+        missingTitle.getShare().setTitle(null);
+        TeamPortfolioConfigDto blankTitle = config(List.of(
+                component("divider-1", TeamPortfolioComponentTypeDict.DIVIDER.getCode(), 1000, true)));
+        blankTitle.getShare().setTitle("  ");
+
+        for (TeamPortfolioConfigDto invalid : List.of(missingShare, missingTitle, blankTitle)) {
+            assertThatThrownBy(() -> service().normalizeAndValidate(
+                    JSON.toJSONString(invalid), 11L, 22L, 3))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("请填写团队作品集标题");
+        }
+        verifyNoComponentValidatorInteractions();
+    }
+
+    /**
      * 顶层应只按类型分发，并以稳定排序输出九种受支持组件。
      */
     @Test

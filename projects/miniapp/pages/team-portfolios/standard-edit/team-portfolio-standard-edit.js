@@ -12,7 +12,7 @@ const {
 } = require('../../../utils/profile-assets.js')
 const { uploadTeamPortfolioAsset } = require('../utils/team-portfolio-assets.js')
 const { createStandardTeamPortfolio, fetchTeamPortfolioDetail, handleTeamMaintainerAuthError, normalizeTeamPortfolioConfig, publishTeamPortfolio, saveTeamPortfolioDraft, showTeamPortfolioUnavailableToast } = require('../utils/team-portfolios.js')
-const { confirmPortfolioPublishDisclaimer } = require('../../../utils/portfolio-publish-disclaimer.js')
+const { confirmPortfolioPublishDisclaimer } = require('../utils/portfolio-publish-disclaimer.js')
 
 const TYPE_BUCKETS = Object.freeze({ TEAM_PROFILE: 'teamProfile', CAROUSEL: 'carousel', DIVIDER: 'divider', MEMBER_PORTFOLIO_GRID: 'grid', MEMBER_PORTFOLIO_LIST: 'list', TEXT_SECTION: 'text', SCHEDULE_QUERY: 'schedule', CONTACT_FORM: 'contact', QR_CONTACT: 'qr' })
 const COMPONENT_NAMES = Object.freeze({ TEAM_PROFILE: '团队资料', CAROUSEL: '轮播图', DIVIDER: '分割线', MEMBER_PORTFOLIO_GRID: '双列作品集', MEMBER_PORTFOLIO_LIST: '单列作品集', TEXT_SECTION: '文字说明', SCHEDULE_QUERY: '档期查询', CONTACT_FORM: '预留联系信息', QR_CONTACT: '二维码联系' })
@@ -38,6 +38,7 @@ const PORTFOLIO_LIST_ROUTE_SUFFIX = '/portfolios/portfolios'
 const TEAM_PORTFOLIOS_COMPAT_PAGE_URL = '/pages/team-portfolios/portfolios'
 const TEXT_SECTION_MAX_LENGTH = 200
 const TEXT_SECTION_REQUIRED_MESSAGE = '请填写文字说明'
+const TEAM_PORTFOLIO_TITLE_REQUIRED_MESSAGE = '请填写团队作品集标题'
 const TEXT_SECTION_ALIGNMENTS = Object.freeze({ LEFT: 'LEFT', CENTER: 'CENTER', RIGHT: 'RIGHT' })
 const CONTACT_FORM_DISPLAY_MODES = Object.freeze({ MODAL_FORM: 'MODAL_FORM', INLINE_FORM: 'INLINE_FORM' })
 const CONTACT_FORM_DISPLAY_MODE_OPTIONS = Object.freeze([
@@ -570,6 +571,11 @@ Page({
   },
   async saveDraft(forPublish = false) {
     if (this.data.saving || (this.data.publishing && !forPublish) || !this.data.canMaintain || this.hasInvalidComponents()) return null
+    const title = this.data.config && this.data.config.share && this.data.config.share.title
+    if (!String(title || '').trim()) {
+      wx.showToast({ title: TEAM_PORTFOLIO_TITLE_REQUIRED_MESSAGE, icon: 'none' })
+      return null
+    }
     this.setData({ saving: true })
     let failureStage = 'create'
     try {

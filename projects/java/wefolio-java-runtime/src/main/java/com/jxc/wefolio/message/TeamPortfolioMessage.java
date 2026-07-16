@@ -22,4 +22,7 @@ public interface TeamPortfolioMessage {
 
     /** 当前 Schema 暂不支持访问 */
     String INVALID_SCHEMA = "当前作品集暂未开放访问";
+
+    /** 团队作品集标题不能为空 */
+    String TITLE_REQUIRED = "请填写团队作品集标题";
 }

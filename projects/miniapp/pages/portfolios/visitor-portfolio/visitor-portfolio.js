@@ -22,7 +22,7 @@ const WORK_TITLE_METADATA_KEY = 'workTitle'
 const IMAGE_MISSING_MESSAGE = '图片地址缺失'
 const VIDEO_MISSING_MESSAGE = '视频地址缺失'
 const DEFAULT_VIDEO_TITLE = '视频作品'
-const VISITOR_PROFILE_REQUIRED_MESSAGE = '请授权头像和昵称'
+const VISITOR_PROFILE_REQUIRED_MESSAGE = '请完善头像和昵称'
 const TEAM_PORTFOLIO_SOURCE_VALUE = '1'
 
 function idempotencyKey(prefix) {
@@ -51,6 +51,9 @@ Page({
       avatarUrl: '',
       nickname: ''
     },
+    visitorProfileAvatarError: false,
+    visitorProfileNicknameError: false,
+    visitorProfileValidationShaking: false,
     visitorProfileSaving: false,
     displaySwitchingComponentKey: ''
   },
@@ -282,7 +285,8 @@ Page({
       return
     }
     this.setData({
-      'visitorProfileForm.avatarUrl': avatarUrl
+      'visitorProfileForm.avatarUrl': avatarUrl,
+      visitorProfileAvatarError: false
     })
   },
 
@@ -290,8 +294,24 @@ Page({
     const value = event.detail && Object.prototype.hasOwnProperty.call(event.detail, 'value')
       ? event.detail.value
       : ''
-    this.setData({
+    const patch = {
       'visitorProfileForm.nickname': value
+    }
+    if (String(value).trim()) {
+      patch.visitorProfileNicknameError = false
+    }
+    this.setData(patch)
+  },
+
+  applyVisitorProfileValidation(avatarError, nicknameError) {
+    this.setData({
+      visitorProfileAvatarError: avatarError,
+      visitorProfileNicknameError: nicknameError,
+      visitorProfileValidationShaking: false
+    }, () => {
+      if (avatarError || nicknameError) {
+        this.setData({ visitorProfileValidationShaking: true })
+      }
     })
   },
 
@@ -303,7 +323,10 @@ Page({
 
   async handleVisitorProfileSubmit() {
     const form = this.data.visitorProfileForm || {}
-    if (!form.avatarUrl || !String(form.nickname || '').trim()) {
+    const avatarError = !form.avatarUrl
+    const nicknameError = !String(form.nickname || '').trim()
+    if (avatarError || nicknameError) {
+      this.applyVisitorProfileValidation(avatarError, nicknameError)
       wx.showToast({ title: VISITOR_PROFILE_REQUIRED_MESSAGE, icon: 'none' })
       return
     }

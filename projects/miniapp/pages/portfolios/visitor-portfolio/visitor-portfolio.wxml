@@ -179,30 +179,32 @@
     <view class="visitor-profile-mask" catchtap="handleVisitorProfileMaskTap" catchtouchmove="handleVisitorProfileMaskTouchMove">
       <view class="visitor-profile-panel" catchtap="handleVisitorProfilePanelTap">
         <view class="visitor-profile-title">完善访客资料</view>
-        <view class="visitor-profile-desc">授权头像和昵称，维护者查看访客记录时能识别你。</view>
+        <view class="visitor-profile-desc">选择头像并填写昵称，维护者查看访客记录时能识别你。</view>
         <view class="visitor-profile-form">
-          <view class="visitor-avatar-field">
+          <view class="visitor-avatar-field {{visitorProfileAvatarError && visitorProfileValidationShaking ? 'shake' : ''}}">
             <view class="visitor-avatar-control">
-              <view class="visitor-avatar-visual">
+              <view class="visitor-avatar-visual {{visitorProfileAvatarError ? 'invalid' : ''}}">
                 <image wx:if="{{visitorProfileForm.avatarUrl}}" class="visitor-avatar-preview" src="{{visitorProfileForm.avatarUrl}}" mode="aspectFill"></image>
                 <view wx:else class="visitor-avatar-placeholder">
                   <view class="visitor-avatar-placeholder-head"></view>
                   <view class="visitor-avatar-placeholder-body"></view>
                 </view>
               </view>
-              <button class="visitor-avatar-picker" open-type="chooseAvatar" bindchooseavatar="handleVisitorAvatarChoose" aria-label="点击授权头像"></button>
+              <button class="visitor-avatar-picker" open-type="chooseAvatar" bindchooseavatar="handleVisitorAvatarChoose" aria-label="点击选择头像"></button>
             </view>
-            <view class="visitor-avatar-label">点击授权头像</view>
+            <view class="visitor-avatar-label {{visitorProfileAvatarError ? 'invalid' : ''}}">点击选择头像</view>
+            <view wx:if="{{visitorProfileAvatarError}}" class="visitor-profile-error visitor-avatar-error">请点击选择头像</view>
           </view>
-          <view class="visitor-nickname-field">
+          <view class="visitor-nickname-field {{visitorProfileNicknameError && visitorProfileValidationShaking ? 'shake' : ''}}">
             <input
-              class="visitor-nickname-input"
+              class="visitor-nickname-input {{visitorProfileNicknameError ? 'invalid' : ''}}"
               type="nickname"
               value="{{visitorProfileForm.nickname}}"
-              placeholder="点击授权昵称"
+              placeholder="输入昵称或选择微信昵称"
               placeholder-class="visitor-nickname-placeholder"
               bindinput="handleVisitorNicknameInput"
             />
+            <view wx:if="{{visitorProfileNicknameError}}" class="visitor-profile-error visitor-nickname-error">请点击输入或选择昵称</view>
           </view>
         </view>
         <view class="visitor-profile-actions">

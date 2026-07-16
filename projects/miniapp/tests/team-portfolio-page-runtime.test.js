@@ -7,6 +7,7 @@ const ROOT = path.resolve(__dirname, '../pages/team-portfolios')
 const REQUEST_PATH = path.resolve(ROOT, '../../utils/request.js')
 const TEAM_LIST_UTILITY_PATH = path.resolve(ROOT, 'utils/team-portfolio-list.js')
 const TEAM_UTILITY_PATH = path.resolve(ROOT, 'utils/team-portfolios.js')
+const TEST_TEAM_PORTFOLIO_TITLE = '测试团队作品集'
 
 function flush() { return new Promise((resolve) => setImmediate(resolve)) }
 function clone(value) { return JSON.parse(JSON.stringify(value)) }
@@ -45,6 +46,9 @@ function loadPage(relativePath, requestFn, wxOverrides = {}, globals = {}) {
     selectComponent() { return null },
     cleanup() { global.wx = oldWx; global.getCurrentPages = oldGetCurrentPages }
   })
+  if (relativePath === 'standard-edit/team-portfolio-standard-edit.js') {
+    page.data.config.share.title = TEST_TEAM_PORTFOLIO_TITLE
+  }
   return page
 }
 
@@ -74,6 +78,32 @@ test('team picker confirms an unsaved editor without creating a portfolio', asyn
     assert.deepEqual(navigations, [{
       url: '/pages/team-portfolios/standard-edit/team-portfolio-standard-edit?teamId=7'
     }])
+  } finally { page.cleanup() }
+})
+
+test('team editor rejects a blank title before creating or saving', async () => {
+  const requests = []
+  const toasts = []
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
+    requests.push(clone(options))
+    if (options.url === '/api/mine/teams/3/portfolios/standard') {
+      return { portfolioId: 41, draftRevision: 1, publicationStatus: 'DRAFT_ONLY', config: options.data.config }
+    }
+    if (options.url === '/api/mine/team-portfolios/41/draft') {
+      return { portfolioId: 41, draftRevision: 2, publicationStatus: 'DRAFT_ONLY' }
+    }
+    throw new Error(`unexpected request: ${options.url}`)
+  }, { showToast(value) { toasts.push(value) } })
+  page.setData({
+    teamId: 3,
+    canMaintain: true,
+    config: { schemaVersion: 'standard-team-v1', share: { title: '  ' }, components: [] }
+  })
+  try {
+    await page.handleSaveTap()
+    assert.deepEqual(requests, [])
+    assert.deepEqual(toasts, [{ title: '请填写团队作品集标题', icon: 'none' }])
+    assert.equal(page.data.saving, false)
   } finally { page.cleanup() }
 })
 
@@ -372,7 +402,7 @@ test('new editor keeps a QR local until create, COS upload, and draft save', asy
     canMaintain: true,
     config: {
       schemaVersion: 'standard-team-v1',
-      share: {},
+      share: { title: TEST_TEAM_PORTFOLIO_TITLE },
       components: [{ componentKey: 'qr-1', componentType: 'QR_CONTACT', sortOrder: 0, enabled: true, config: { qrUrlSource: 'CUSTOM', qrUrl: 'wxfile://tmp/team-qr.png' } }]
     },
     componentValidation: { 'qr-1': true }
@@ -404,7 +434,7 @@ test('existing editor skips a remote QR when saving', async () => {
     teamId: 3,
     canMaintain: true,
     draftRevision: 2,
-    config: { schemaVersion: 'standard-team-v1', share: {}, components: [{ componentKey: 'qr-1', componentType: 'QR_CONTACT', sortOrder: 0, enabled: true, config: { qrUrlSource: 'CUSTOM', qrUrl: 'https://cdn.example/remote-qr.png' } }] },
+    config: { schemaVersion: 'standard-team-v1', share: { title: TEST_TEAM_PORTFOLIO_TITLE }, components: [{ componentKey: 'qr-1', componentType: 'QR_CONTACT', sortOrder: 0, enabled: true, config: { qrUrlSource: 'CUSTOM', qrUrl: 'https://cdn.example/remote-qr.png' } }] },
     componentValidation: { 'qr-1': true }
   })
   try {
@@ -430,7 +460,7 @@ test('QR upload failure keeps the local image and does not save the draft', asyn
     teamId: 3,
     canMaintain: true,
     draftRevision: 2,
-    config: { schemaVersion: 'standard-team-v1', share: {}, components: [{ componentKey: 'qr-1', componentType: 'QR_CONTACT', sortOrder: 0, enabled: true, config: { qrUrlSource: 'CUSTOM', qrUrl: 'wxfile://tmp/retry-qr.png' } }] },
+    config: { schemaVersion: 'standard-team-v1', share: { title: TEST_TEAM_PORTFOLIO_TITLE }, components: [{ componentKey: 'qr-1', componentType: 'QR_CONTACT', sortOrder: 0, enabled: true, config: { qrUrlSource: 'CUSTOM', qrUrl: 'wxfile://tmp/retry-qr.png' } }] },
     componentValidation: { 'qr-1': true }
   })
   try {
@@ -468,7 +498,7 @@ test('team profile avatar selection stays local until create, upload, and draft 
     activeComponentKey: 'profile-1',
     config: {
       schemaVersion: 'standard-team-v1',
-      share: {},
+      share: { title: TEST_TEAM_PORTFOLIO_TITLE },
       components: [{
         componentKey: 'profile-1',
         componentType: 'TEAM_PROFILE',
@@ -548,7 +578,7 @@ test('existing editor uploads a local team profile avatar on save and skips a re
     draftRevision: 3,
     config: {
       schemaVersion: 'standard-team-v1',
-      share: {},
+      share: { title: TEST_TEAM_PORTFOLIO_TITLE },
       components: [{ componentKey: 'profile-1', componentType: 'TEAM_PROFILE', sortOrder: 0, enabled: true, config: { team: { teamId: 3, avatarUrl: 'wxfile://tmp/existing-profile.jpg', teamName: '作品集团队', intro: '' } } }]
     },
     componentValidation: { 'profile-1': true }
@@ -575,7 +605,7 @@ test('existing editor uploads a local team profile avatar on save and skips a re
     draftRevision: 4,
     config: {
       schemaVersion: 'standard-team-v1',
-      share: {},
+      share: { title: TEST_TEAM_PORTFOLIO_TITLE },
       components: [{ componentKey: 'profile-1', componentType: 'TEAM_PROFILE', sortOrder: 0, enabled: true, config: { team: { teamId: 3, avatarUrl: 'https://cdn.example/remote-profile.jpg', teamName: '作品集团队', intro: '' } } }]
     },
     componentValidation: { 'profile-1': true }
@@ -626,7 +656,7 @@ test('new editor preserves a local cover and reuses the created portfolio when u
     getFileSystemManager() { return { statSync() { return { size: 128 } } } },
     uploadFile({ success }) { success({ statusCode: 204 }) }
   })
-  page.setData({ teamId: 3, canMaintain: true, config: { schemaVersion: 'standard-team-v1', share: { coverUrl: 'wxfile://tmp/retry.jpg' }, components: [] } })
+  page.setData({ teamId: 3, canMaintain: true, config: { schemaVersion: 'standard-team-v1', share: { title: TEST_TEAM_PORTFOLIO_TITLE, coverUrl: 'wxfile://tmp/retry.jpg' }, components: [] } })
   try {
     await page.handleSaveTap()
     assert.equal(page.data.portfolioId, 52)
@@ -647,7 +677,7 @@ test('editor skips remote cover upload and publishes only after local cover uplo
     remoteRequests.push(clone(options))
     return { portfolioId: 61, draftRevision: 4, publicationStatus: 'DRAFT_ONLY' }
   })
-  remotePage.setData({ portfolioId: 61, teamId: 3, canMaintain: true, draftRevision: 3, config: { schemaVersion: 'standard-team-v1', share: { coverUrl: 'https://cdn.example/existing.jpg' }, components: [] } })
+  remotePage.setData({ portfolioId: 61, teamId: 3, canMaintain: true, draftRevision: 3, config: { schemaVersion: 'standard-team-v1', share: { title: TEST_TEAM_PORTFOLIO_TITLE, coverUrl: 'https://cdn.example/existing.jpg' }, components: [] } })
   try {
     await remotePage.handleSaveTap()
     assert.deepEqual(remoteRequests.map((item) => item.url), ['/api/mine/team-portfolios/61/draft'])
@@ -664,7 +694,7 @@ test('editor skips remote cover upload and publishes only after local cover uplo
     getFileSystemManager() { return { statSync() { return { size: 128 } } } },
     uploadFile({ success }) { success({ statusCode: 204 }) }
   })
-  publishPage.setData({ portfolioId: 62, teamId: 3, canMaintain: true, draftRevision: 4, config: { schemaVersion: 'standard-team-v1', share: { coverUrl: 'wxfile://tmp/publish.jpg' }, components: [] } })
+  publishPage.setData({ portfolioId: 62, teamId: 3, canMaintain: true, draftRevision: 4, config: { schemaVersion: 'standard-team-v1', share: { title: TEST_TEAM_PORTFOLIO_TITLE, coverUrl: 'wxfile://tmp/publish.jpg' }, components: [] } })
   try {
     await publishPage.handlePublishTap()
     assert.deepEqual(publishRequests.map((item) => item.url), [
@@ -691,7 +721,7 @@ test('editor keeps the remote cover after draft save fails and does not upload i
     getFileSystemManager() { return { statSync() { return { size: 128 } } } },
     uploadFile({ success }) { success({ statusCode: 204 }) }
   })
-  page.setData({ portfolioId: 63, teamId: 3, canMaintain: true, draftRevision: 5, config: { schemaVersion: 'standard-team-v1', share: { coverUrl: 'wxfile://tmp/once.jpg' }, components: [] } })
+  page.setData({ portfolioId: 63, teamId: 3, canMaintain: true, draftRevision: 5, config: { schemaVersion: 'standard-team-v1', share: { title: TEST_TEAM_PORTFOLIO_TITLE, coverUrl: 'wxfile://tmp/once.jpg' }, components: [] } })
   try {
     await page.handleSaveTap()
     assert.equal(page.data.config.share.coverUrl, 'https://cdn.example/once.jpg')
@@ -838,7 +868,7 @@ test('editor invalidates text changes, routes TEAM_PROFILE maintenance, and keep
     if (options.url.endsWith('/publish')) { publishAttempts += 1; if (publishAttempts === 1) throw new Error('network'); return { publicationStatus: 'PUBLISHED', publishedRevision: 8 } }
     return {}
   }, { navigateTo(value) { navigations.push(value) } })
-  page.setData({ portfolioId: 7, teamId: 5, canMaintain: true, draftRevision: 7, config: { share: {}, components: [{ componentKey: 'text-1', componentType: 'TEXT_SECTION', sortOrder: 0, config: { content: 'ok' } }] }, componentValidation: { 'text-1': true }, hasInvalidComponents: false })
+  page.setData({ portfolioId: 7, teamId: 5, canMaintain: true, draftRevision: 7, config: { share: { title: TEST_TEAM_PORTFOLIO_TITLE }, components: [{ componentKey: 'text-1', componentType: 'TEXT_SECTION', sortOrder: 0, config: { content: 'ok' } }] }, componentValidation: { 'text-1': true }, hasInvalidComponents: false })
   try {
     page.handleComponentConfigChange({ currentTarget: { dataset: { key: 'text-1' } }, detail: { field: 'content', value: '' } })
     assert.equal(page.data.componentValidation['text-1'], false)
@@ -947,7 +977,7 @@ test('team editor picker, component sheet, swipe delete, and drag reorder use is
     canMaintain: true,
     config: {
       schemaVersion: 'standard-team-v1',
-      share: {},
+      share: { title: TEST_TEAM_PORTFOLIO_TITLE },
       components: [
         { componentKey: 'profile-1', componentType: 'TEAM_PROFILE', sortOrder: 0, config: { team: { teamId: 3, teamName: '甲团队' } } },
         { componentKey: 'text-1', componentType: 'TEXT_SECTION', sortOrder: 1, config: { content: '说明', alignment: 'LEFT' } }
@@ -998,7 +1028,7 @@ test('team contact form sheet edits display mode without replacing team-only con
   const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => ({}))
   page.data.config = {
     schemaVersion: 'standard-team-v1',
-    share: {},
+    share: { title: TEST_TEAM_PORTFOLIO_TITLE },
     components: [{
       componentKey: 'contact-1',
       componentType: 'CONTACT_FORM',
@@ -1032,7 +1062,7 @@ test('team schedule and divider sheets mark their components valid after confirm
   const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => ({}))
   page.data.config = {
     schemaVersion: 'standard-team-v1',
-    share: {},
+    share: { title: TEST_TEAM_PORTFOLIO_TITLE },
     components: [
       { componentKey: 'schedule-1', componentType: 'SCHEDULE_QUERY', sortOrder: 0, enabled: true, config: {} },
       { componentKey: 'divider-1', componentType: 'DIVIDER', sortOrder: 1, enabled: true, config: {} }
@@ -1057,7 +1087,7 @@ test('team schedule and divider sheets mark their components valid after confirm
 
 test('team editor hides publish for a draft-only portfolio and shows it after publication', async () => {
   const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
-    if (options.url === '/api/mine/team-portfolios/7') return { portfolioId: 7, ownerId: 3, publicationStatus: 'DRAFT_ONLY', config: { share: {}, components: [] } }
+    if (options.url === '/api/mine/team-portfolios/7') return { portfolioId: 7, ownerId: 3, publicationStatus: 'DRAFT_ONLY', config: { share: { title: TEST_TEAM_PORTFOLIO_TITLE }, components: [] } }
     if (options.url === '/api/mine/teams/3') return { team: { teamId: 3, teamName: '甲团队' } }
     if (options.url === '/api/mine/team-portfolios/7/draft') return { portfolioId: 7, draftRevision: 2, publicationStatus: 'DRAFT_ONLY' }
     if (options.url === '/api/mine/team-portfolios/7/publish') return { publicationStatus: 'PUBLISHED', publishedRevision: 2 }

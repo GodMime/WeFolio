@@ -1139,16 +1139,26 @@ test('visitor profile prompt keeps skip and save copy in bottom sheet', () => {
   assert.match(wxml, /<root-portal wx:if="\{\{visitorProfileAuthVisible\}\}">/)
   assert.match(wxml, /class="visitor-profile-mask"[^>]*catchtap="handleVisitorProfileMaskTap"[^>]*catchtouchmove="handleVisitorProfileMaskTouchMove"/)
   assert.match(wxml, /class="visitor-profile-panel"[^>]*catchtap="handleVisitorProfilePanelTap"/)
-  assert.match(wxml, /class="visitor-profile-desc"[^>]*>授权头像和昵称，维护者查看访客记录时能识别你。<\/view>/)
-  assert.match(wxml, /class="visitor-avatar-visual"/)
-  assert.match(wxml, /class="visitor-avatar-label">点击授权头像<\/view>/)
-  assert.match(wxml, /placeholder="点击授权昵称"/)
+  assert.match(wxml, /class="visitor-profile-desc"[^>]*>选择头像并填写昵称，维护者查看访客记录时能识别你。<\/view>/)
+  assert.match(wxml, /class="visitor-avatar-visual/)
+  assert.match(wxml, /class="visitor-avatar-label[^>]*>点击选择头像<\/view>/)
+  assert.match(wxml, /type="nickname"/)
+  assert.match(wxml, /placeholder="输入昵称或选择微信昵称"/)
+  assert.match(wxml, /visitorProfileAvatarError[^>]*visitorProfileValidationShaking/)
+  assert.match(wxml, /visitorProfileNicknameError[^>]*visitorProfileValidationShaking/)
+  assert.match(wxml, /wx:if="\{\{visitorProfileAvatarError\}\}"[^>]*>请点击选择头像<\/view>/)
+  assert.match(wxml, /wx:if="\{\{visitorProfileNicknameError\}\}"[^>]*>请点击输入或选择昵称<\/view>/)
   assert.match(wxml, /class="visitor-profile-secondary"[^>]*>跳过<\/button>/)
   assert.match(wxml, /class="visitor-profile-primary"[^>]*>保存<\/button>/)
   assert.match(wxss, /\.visitor-profile-mask\s*\{[\s\S]*left:\s*0;[\s\S]*right:\s*0;[\s\S]*top:\s*0;[\s\S]*bottom:\s*0;[\s\S]*z-index:\s*120;/)
   assert.match(wxss, /\.visitor-profile-panel\s*\{[\s\S]*position:\s*absolute;[\s\S]*left:\s*0;[\s\S]*right:\s*0;[\s\S]*bottom:\s*0;[\s\S]*border-radius:\s*28rpx 28rpx 0 0;/)
   assert.match(wxss, /\.visitor-avatar-picker\s*\{[\s\S]*position:\s*absolute;[\s\S]*left:\s*0;[\s\S]*top:\s*0;[\s\S]*width:\s*116rpx;[\s\S]*height:\s*116rpx;[\s\S]*opacity:\s*0;/)
   assert.match(wxss, /\.visitor-avatar-visual\s*\{[\s\S]*width:\s*116rpx;[\s\S]*height:\s*116rpx;[\s\S]*border-radius:\s*50%;[\s\S]*overflow:\s*hidden;/)
+  assert.match(wxss, /\.visitor-avatar-visual\.invalid/)
+  assert.match(wxss, /\.visitor-nickname-input\.invalid/)
+  assert.match(wxss, /\.visitor-profile-error\s*\{/)
+  assert.match(wxss, /\.visitor-avatar-field\.shake[\s\S]*\.visitor-nickname-field\.shake/)
+  assert.match(wxss, /@keyframes visitor-profile-shake/)
 })
 
 test('visitor profile submit requires both avatar and nickname before upload', async () => {
@@ -1170,19 +1180,70 @@ test('visitor profile submit requires both avatar and nickname before upload', a
       nickname: ''
     }
     await page.handleVisitorProfileSubmit()
-    assert.equal(toasts.at(-1).title, '请授权头像和昵称')
+    assert.equal(toasts.at(-1).title, '请完善头像和昵称')
 
     page.data.visitorProfileForm = {
       avatarUrl: 'wxfile://avatar.jpg',
       nickname: ''
     }
     await page.handleVisitorProfileSubmit()
-    assert.equal(toasts.at(-1).title, '请授权头像和昵称')
+    assert.equal(toasts.at(-1).title, '请完善头像和昵称')
   } finally {
     delete global.wx
   }
 
   assert.equal(requests.length, 0)
+})
+
+test('visitor profile submit marks each missing field and restarts validation shake', async () => {
+  const page = loadVisitorPage(() => Promise.resolve({}))
+  const shakeValues = []
+  const originalSetData = page.setData.bind(page)
+  page.setData = (patch, callback) => {
+    if (Object.prototype.hasOwnProperty.call(patch, 'visitorProfileValidationShaking')) {
+      shakeValues.push(patch.visitorProfileValidationShaking)
+    }
+    originalSetData(patch, callback)
+  }
+  global.wx = { showToast() {} }
+
+  try {
+    page.data.visitorProfileForm = { avatarUrl: '', nickname: '' }
+    await page.handleVisitorProfileSubmit()
+    assert.equal(page.data.visitorProfileAvatarError, true)
+    assert.equal(page.data.visitorProfileNicknameError, true)
+
+    await page.handleVisitorProfileSubmit()
+    assert.deepEqual(shakeValues, [false, true, false, true])
+
+    page.data.visitorProfileForm = { avatarUrl: 'wxfile://avatar.jpg', nickname: '' }
+    await page.handleVisitorProfileSubmit()
+    assert.equal(page.data.visitorProfileAvatarError, false)
+    assert.equal(page.data.visitorProfileNicknameError, true)
+
+    page.data.visitorProfileForm = { avatarUrl: '', nickname: '访客' }
+    await page.handleVisitorProfileSubmit()
+    assert.equal(page.data.visitorProfileAvatarError, true)
+    assert.equal(page.data.visitorProfileNicknameError, false)
+  } finally {
+    delete global.wx
+  }
+})
+
+test('visitor profile fields clear only their resolved validation error', () => {
+  const page = loadVisitorPage(() => Promise.resolve({}))
+  page.data.visitorProfileAvatarError = true
+  page.data.visitorProfileNicknameError = true
+
+  page.handleVisitorAvatarChoose({ detail: { avatarUrl: 'wxfile://avatar.jpg' } })
+  assert.equal(page.data.visitorProfileAvatarError, false)
+  assert.equal(page.data.visitorProfileNicknameError, true)
+
+  page.handleVisitorNicknameInput({ detail: { value: '   ' } })
+  assert.equal(page.data.visitorProfileNicknameError, true)
+
+  page.handleVisitorNicknameInput({ detail: { value: ' 访客 ' } })
+  assert.equal(page.data.visitorProfileNicknameError, false)
 })
 
 test('visitor video preview uses root portal so native video overlay covers viewport', () => {

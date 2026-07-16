@@ -84,6 +84,12 @@ test('team preview and visitor pages share the team carousel component', () => {
   }
 })
 
+test('team visitor page hides the navigation back button', () => {
+  const wxml = read('visitor-portfolio/team-visitor-portfolio.wxml')
+
+  assert.match(wxml, /<navigation-bar title="团队作品集" back="\{\{false\}\}" \/>/)
+})
+
 test('team preview and visitor pages render the personal-style brand footer', () => {
   const logoUrl = '/assets/system/folio-logo-stack-bold-small-50kb.png'
   const logoPath = path.resolve(__dirname, `..${logoUrl}`)

@@ -9,6 +9,11 @@ const POINT_CALC_MODE = {
   MONTHLY_STORAGE_SIZE: 'MONTHLY_STORAGE_SIZE'
 }
 
+const BILLING_WINDOW_SCOPE = {
+  PORTFOLIO: 'PORTFOLIO',
+  WORK: 'WORK'
+}
+
 const RULE_GROUP_ORDER = {
   MAINTENANCE: 1,
   VISITOR: 2,
@@ -58,6 +63,13 @@ function buildRuleDesc(rule) {
   if (pointsValue === 0) {
     return '当前规则免费'
   }
+  const dedupeWindowHours = toPositiveNumber(rule.dedupeWindowHours, 0)
+  if (dedupeWindowHours > 0 && rule.dedupeScope === BILLING_WINDOW_SCOPE.PORTFOLIO) {
+    return `同访客同作品集 ${dedupeWindowHours} 小时内不重复扣`
+  }
+  if (dedupeWindowHours > 0 && rule.dedupeScope === BILLING_WINDOW_SCOPE.WORK) {
+    return `同访客同作品 ${dedupeWindowHours} 小时内不重复扣`
+  }
   if (rule.calcMode === POINT_CALC_MODE.ACCUMULATED_THRESHOLD && unitCount > 1) {
     return `累计 ${unitCount} 次计费一次`
   }
@@ -95,6 +107,8 @@ function normalizeRule(rule = {}) {
     transactionType: rule.transactionType || '',
     unitCount: toPositiveNumber(rule.unitCount, 1),
     pointsValue: toNumber(rule.pointsValue),
+    dedupeWindowHours: toPositiveNumber(rule.dedupeWindowHours, 0),
+    dedupeScope: String(rule.dedupeScope || '').trim(),
     costText: buildCostText(rule),
     desc: buildRuleDesc(rule)
   }

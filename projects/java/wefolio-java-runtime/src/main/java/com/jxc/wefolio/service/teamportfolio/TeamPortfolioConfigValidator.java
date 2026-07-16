@@ -6,6 +6,7 @@ import com.jxc.wefolio.constant.TeamPortfolioConstants;
 import com.jxc.wefolio.dict.TeamPortfolioComponentTypeDict;
 import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioConfigDto;
 import com.jxc.wefolio.exception.BusinessException;
+import com.jxc.wefolio.message.TeamPortfolioMessage;
 import com.jxc.wefolio.service.teamportfolio.component.carousel.TeamCarouselComponentValidator;
 import com.jxc.wefolio.service.teamportfolio.component.contactform.TeamContactFormComponentValidator;
 import com.jxc.wefolio.service.teamportfolio.component.divider.TeamDividerComponentValidator;
@@ -105,6 +106,7 @@ public class TeamPortfolioConfigValidator {
         validateContext(context);
         TeamPortfolioConfigDto config = parseConfig(json);
         validateSchema(config);
+        TeamPortfolioConfigDto.Share normalizedShare = normalizeShare(config.getShare());
 
         List<TeamPortfolioConfigDto.ComponentEnvelope> allComponents = nonNullComponents(config.getComponents());
         validateComponentTypes(allComponents);
@@ -130,7 +132,7 @@ public class TeamPortfolioConfigValidator {
 
         TeamPortfolioConfigDto normalized = new TeamPortfolioConfigDto();
         normalized.setSchemaVersion(TeamPortfolioConstants.SCHEMA_VERSION_STANDARD_TEAM_V1);
-        normalized.setShare(copyShare(config.getShare()));
+        normalized.setShare(normalizedShare);
         normalized.setComponents(normalizedComponents);
         return normalized;
     }
@@ -254,11 +256,11 @@ public class TeamPortfolioConfigValidator {
     }
 
     /**
-     * 复制分享信息，避免复用输入对象。
+     * 校验并复制分享信息，避免复用输入对象。
      */
-    private TeamPortfolioConfigDto.Share copyShare(TeamPortfolioConfigDto.Share source) {
-        if (source == null) {
-            return null;
+    private TeamPortfolioConfigDto.Share normalizeShare(TeamPortfolioConfigDto.Share source) {
+        if (source == null || source.getTitle() == null || source.getTitle().isBlank()) {
+            throw new BusinessException(TeamPortfolioMessage.TITLE_REQUIRED);
         }
         TeamPortfolioConfigDto.Share copy = new TeamPortfolioConfigDto.Share();
         copy.setTitle(source.getTitle());

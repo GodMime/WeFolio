@@ -85,5 +85,15 @@ public class MinePointOverviewResponse {
 
         /** 单位积分值 */
         private Long pointsValue;
+
+        /** 同一访客与作用域免重复扣费窗口小时数 */
+        private Integer dedupeWindowHours;
+
+        /**
+         * 免重复扣费作用域编码。
+         *
+         * @see com.jxc.wefolio.dict.BillingWindowScopeDict
+         */
+        private String dedupeScope;
     }
 }

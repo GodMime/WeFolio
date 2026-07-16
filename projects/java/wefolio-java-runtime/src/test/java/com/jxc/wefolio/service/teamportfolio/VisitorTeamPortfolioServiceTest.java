@@ -233,7 +233,7 @@ class VisitorTeamPortfolioServiceTest {
     void openUsesSharedVisitorInfrastructureAndIndependentTeamVisitWithoutPoints() {
         VisitorServiceContext context = publishedContext();
         VisitorEntity visitor = visitor();
-        VisitorService.VisitorSession session = new VisitorService.VisitorSession(visitor, true, "billing-not-used");
+        VisitorService.VisitorSession session = new VisitorService.VisitorSession(visitor, true);
         VisitorTeamPortfolioOpenRequest request = new VisitorTeamPortfolioOpenRequest();
         request.setLoginCode("wx-code");
         request.setSourceType("WECHAT_SHARE_CARD");

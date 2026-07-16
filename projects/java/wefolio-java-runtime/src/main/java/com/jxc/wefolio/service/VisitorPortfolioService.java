@@ -6,7 +6,6 @@ import com.jxc.wefolio.common.auth.VisitorContextHolder;
 import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
 import com.jxc.wefolio.dict.PortfolioPublicationStatusDict;
 import com.jxc.wefolio.dict.PortfolioTypeDict;
-import com.jxc.wefolio.dict.PointSceneCodeDict;
 import com.jxc.wefolio.dict.ScheduleStatusDict;
 import com.jxc.wefolio.dict.SlotDefinitionStatusDict;
 import com.jxc.wefolio.dict.VisitEventTypeDict;
@@ -100,9 +99,6 @@ public class VisitorPortfolioService {
     /** 档位定义 Mapper */
     private final SlotDefinitionEntityMapper slotDefinitionEntityMapper;
 
-    /** 积分服务 */
-    private final PointService pointService;
-
     /** 访问服务 */
     private final PortfolioVisitService portfolioVisitService;
 
@@ -142,13 +138,6 @@ public class VisitorPortfolioService {
                 visitor == null ? null : visitor.getId(),
                 VisitEventTypeDict.PORTFOLIO_OPENED.getCode()
         );
-        try {
-            pointService.assertCanConsume(portfolio.getOwnerId(), PointSceneCodeDict.VISIT_PERSONAL_PORTFOLIO.getCode(), 1);
-        } catch (BusinessException e) {
-            VisitorPortfolioResponse maintenanceResponse = buildMaintenanceResponse(portfolio, config);
-            fillVisitorProfileOpenFields(maintenanceResponse, visitorSession, null, portfolio.getId(), ownerSelfVisitor);
-            return maintenanceResponse;
-        }
         if (ownerSelfVisitor) {
             VisitorPortfolioResponse response = buildNormalResponse(portfolio, config);
             response.setVisitRecordId(null);
@@ -169,7 +158,6 @@ public class VisitorPortfolioService {
                     portfolio,
                     visitor.getId(),
                     visitor.getVisitorKey(),
-                    visitorSession.billingVisitorKey(),
                     request == null ? null : request.getSourceType(),
                     request == null ? null : request.getIdempotencyKey()
             );
@@ -379,7 +367,7 @@ public class VisitorPortfolioService {
         )) {
             return;
         }
-        portfolioVisitService.recordEvent(portfolio, request);
+        portfolioVisitService.recordEvent(portfolio, visitorId, request);
     }
 
     /**

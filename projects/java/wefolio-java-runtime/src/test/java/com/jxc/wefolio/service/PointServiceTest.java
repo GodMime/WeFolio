@@ -2,6 +2,7 @@ package com.jxc.wefolio.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.jxc.wefolio.dict.PointCalcModeDict;
+import com.jxc.wefolio.dict.BillingWindowScopeDict;
 import com.jxc.wefolio.dict.MessageActionTypeDict;
 import com.jxc.wefolio.dict.MessageCategoryDict;
 import com.jxc.wefolio.dict.MessageReadStatusDict;
@@ -754,6 +755,55 @@ class PointServiceTest {
         assertThat(response.getRules()).hasSize(1);
         assertThat(response.getRules().get(0).getGroupCode()).isEqualTo("MAINTENANCE");
         assertThat(response.getRules().get(0).getGroupText()).isEqualTo("维护");
+    }
+
+    /** 积分概览必须安全返回滚动窗口小时数和统一作用域编码。 */
+    @Test
+    void getOverviewReturnsStructuredBillingWindowConfig() {
+        activeUser(7L);
+        when(pointAccountEntityMapper.selectOne(any())).thenReturn(account(10L, 7L, 30L));
+        PointRuleEntity rule = rule(
+                36L,
+                PointSceneCodeDict.VIEW_PORTFOLIO_IMAGES,
+                PointCalcModeDict.FIXED_PER_ACTION,
+                1,
+                1L
+        );
+        rule.setGroupCode("VISITOR");
+        rule.setConfigJson("{\"dedupeWindowHours\":2,\"dedupeScope\":\"WORK\"}");
+        when(pointRuleEntityMapper.selectList(any())).thenReturn(List.of(rule));
+
+        MinePointOverviewResponse response = service().getOverview(7L);
+
+        assertThat(response.getRules()).singleElement().satisfies(item -> {
+            assertThat(item.getDedupeWindowHours()).isEqualTo(2);
+            assertThat(item.getDedupeScope()).isEqualTo(BillingWindowScopeDict.WORK.getCode());
+        });
+    }
+
+    /** 非法窗口展示配置不得影响积分规则金额返回。 */
+    @Test
+    void getOverviewIgnoresMalformedBillingWindowConfig() {
+        activeUser(7L);
+        when(pointAccountEntityMapper.selectOne(any())).thenReturn(account(10L, 7L, 30L));
+        PointRuleEntity rule = rule(
+                36L,
+                PointSceneCodeDict.VIEW_PORTFOLIO_VIDEO,
+                PointCalcModeDict.FIXED_PER_ACTION,
+                1,
+                5L
+        );
+        rule.setGroupCode("VISITOR");
+        rule.setConfigJson("{invalid-json");
+        when(pointRuleEntityMapper.selectList(any())).thenReturn(List.of(rule));
+
+        MinePointOverviewResponse response = service().getOverview(7L);
+
+        assertThat(response.getRules()).singleElement().satisfies(item -> {
+            assertThat(item.getPointsValue()).isEqualTo(5L);
+            assertThat(item.getDedupeWindowHours()).isNull();
+            assertThat(item.getDedupeScope()).isNull();
+        });
     }
 
     @Test

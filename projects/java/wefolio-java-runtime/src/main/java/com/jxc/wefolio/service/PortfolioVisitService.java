@@ -4,6 +4,7 @@ import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
 import com.jxc.wefolio.dict.PortfolioTypeDict;
+import com.jxc.wefolio.dict.BillingWindowScopeDict;
 import com.jxc.wefolio.dict.PointSceneCodeDict;
 import com.jxc.wefolio.dict.VisitEventTypeDict;
 import com.jxc.wefolio.dict.VisitSourceTypeDict;
@@ -22,7 +23,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.Map;
 
 /**
@@ -56,9 +56,6 @@ public class PortfolioVisitService {
     /** 业务 ID 分隔符 */
     private static final String BUSINESS_ID_SEPARATOR = ":";
 
-    /** 日期时间窗口格式 */
-    private static final DateTimeFormatter OPEN_WINDOW_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHH");
-
     /** MySQL 单条限制片段 */
     private static final String SQL_SINGLE_LIMIT_CLAUSE = "LIMIT 1";
 
@@ -74,29 +71,8 @@ public class PortfolioVisitService {
     /** 访问事件 Mapper */
     private final VisitEventEntityMapper visitEventEntityMapper;
 
-    /** 积分服务 */
-    private final PointService pointService;
-
-    /**
-     * 记录作品集打开。
-     *
-     * @param portfolio 作品集
-     * @param visitorKey 访客摘要
-     * @param billingVisitorKey 计费访客摘要
-     * @param sourceType 来源
-     * @param idempotencyKey 事件幂等键
-     * @return 访问汇总
-     */
-    @Transactional(rollbackFor = Exception.class)
-    public VisitRecordEntity recordOpen(
-            PortfolioEntity portfolio,
-            String visitorKey,
-            String billingVisitorKey,
-            String sourceType,
-            String idempotencyKey
-    ) {
-        return recordOpenInternal(portfolio, null, visitorKey, billingVisitorKey, sourceType, idempotencyKey);
-    }
+    /** 积分滚动扣费窗口服务 */
+    private final PointBillingWindowService pointBillingWindowService;
 
     /**
      * 记录作品集打开。
@@ -104,7 +80,6 @@ public class PortfolioVisitService {
      * @param portfolio 作品集
      * @param visitorId 全局访客 ID
      * @param visitorKey 访客摘要
-     * @param billingVisitorKey 计费访客摘要
      * @param sourceType 来源
      * @param idempotencyKey 事件幂等键
      * @return 访问汇总
@@ -114,29 +89,6 @@ public class PortfolioVisitService {
             PortfolioEntity portfolio,
             Long visitorId,
             String visitorKey,
-            String billingVisitorKey,
-            String sourceType,
-            String idempotencyKey
-    ) {
-        return recordOpenInternal(portfolio, visitorId, visitorKey, billingVisitorKey, sourceType, idempotencyKey);
-    }
-
-    /**
-     * 记录作品集打开内部实现。
-     *
-     * @param portfolio 作品集
-     * @param visitorId 全局访客 ID
-     * @param visitorKey 访客摘要
-     * @param billingVisitorKey 计费访客摘要
-     * @param sourceType 来源
-     * @param idempotencyKey 事件幂等键
-     * @return 访问汇总
-     */
-    private VisitRecordEntity recordOpenInternal(
-            PortfolioEntity portfolio,
-            Long visitorId,
-            String visitorKey,
-            String billingVisitorKey,
             String sourceType,
             String idempotencyKey
     ) {
@@ -173,7 +125,7 @@ public class PortfolioVisitService {
             record.setLastVisitedAt(now);
             visitRecordEntityMapper.updateById(record);
         }
-        consumePortfolioOpen(portfolio, billingVisitorKey, now);
+        consumePortfolioOpen(portfolio, visitorId, idempotencyKey);
         insertEvent(record, portfolio, VisitEventTypeDict.PORTFOLIO_OPENED.getCode(), null, null, null,
                 idempotencyKey, null, now);
         return record;
@@ -230,10 +182,15 @@ public class PortfolioVisitService {
      * 记录普通访客事件。
      *
      * @param portfolio 作品集
+     * @param visitorId 全局访客 ID
      * @param request 事件请求
      */
     @Transactional(rollbackFor = Exception.class)
-    public void recordEvent(PortfolioEntity portfolio, VisitorPortfolioEventRequest request) {
+    public void recordEvent(
+            PortfolioEntity portfolio,
+            Long visitorId,
+            VisitorPortfolioEventRequest request
+    ) {
         if (hasRecordedEvent(request.getIdempotencyKey())) {
             return;
         }
@@ -247,24 +204,27 @@ public class PortfolioVisitService {
         }
         if (VisitEventTypeDict.WORK_VIEWED.getCode().equals(eventType)) {
             record.setViewWorkCount(safeInt(record.getViewWorkCount()) + 1);
-            pointService.consumeWithMeterBusinessId(
+            pointBillingWindowService.consumeIfEligible(
                     portfolio.getOwnerId(),
+                    visitorId,
                     PointSceneCodeDict.VIEW_PORTFOLIO_IMAGES.getCode(),
+                    BillingWindowScopeDict.WORK.getCode(),
+                    request.getWorkId(),
                     BUSINESS_TYPE_PORTFOLIO_IMAGE,
                     buildWorkBillingBusinessId(portfolio.getId(), request.getWorkId(), request.getVisitorKey()),
-                    buildImageMeterBusinessId(portfolio.getId(), request.getVisitorKey()),
-                    1,
                     request.getIdempotencyKey(),
                     REMARK_IMAGE_VIEW
             );
         } else if (VisitEventTypeDict.VIDEO_PLAYED.getCode().equals(eventType)) {
             record.setPlayVideoCount(safeInt(record.getPlayVideoCount()) + 1);
-            pointService.consume(
+            pointBillingWindowService.consumeIfEligible(
                     portfolio.getOwnerId(),
+                    visitorId,
                     PointSceneCodeDict.VIEW_PORTFOLIO_VIDEO.getCode(),
+                    BillingWindowScopeDict.WORK.getCode(),
+                    request.getWorkId(),
                     BUSINESS_TYPE_PORTFOLIO_VIDEO,
                     buildWorkBillingBusinessId(portfolio.getId(), request.getWorkId(), request.getVisitorKey()),
-                    1,
                     request.getIdempotencyKey(),
                     REMARK_VIDEO_PLAY
             );
@@ -304,17 +264,6 @@ public class PortfolioVisitService {
      */
     private String buildWorkBillingBusinessId(Long portfolioId, Long workId, String visitorKey) {
         return portfolioId + BUSINESS_ID_SEPARATOR + workId + BUSINESS_ID_SEPARATOR + visitorKey;
-    }
-
-    /**
-     * 构建图片查看累计计量业务 ID。
-     *
-     * @param portfolioId 作品集 ID
-     * @param visitorKey 访客摘要
-     * @return 计量业务 ID
-     */
-    private String buildImageMeterBusinessId(Long portfolioId, String visitorKey) {
-        return portfolioId + BUSINESS_ID_SEPARATOR + visitorKey;
     }
 
     /**
@@ -459,21 +408,23 @@ public class PortfolioVisitService {
      * 消费打开个人作品集积分。
      *
      * @param portfolio 作品集
-     * @param billingVisitorKey 计费访客摘要
-     * @param now 当前时间
+     * @param visitorId 全局访客 ID
+     * @param idempotencyKey 打开事件幂等键
      */
-    private void consumePortfolioOpen(PortfolioEntity portfolio, String billingVisitorKey, LocalDateTime now) {
-        String window = now.withMinute(0).withSecond(0).withNano(0)
-                .minusHours(now.getHour() % 2L)
-                .format(OPEN_WINDOW_FORMATTER);
-        String businessId = portfolio.getId() + ":" + billingVisitorKey + ":" + window;
-        pointService.consume(
+    private void consumePortfolioOpen(PortfolioEntity portfolio, Long visitorId, String idempotencyKey) {
+        String businessId = portfolio.getId() + BUSINESS_ID_SEPARATOR + visitorId;
+        String pointIdempotencyKey = idempotencyKey == null || idempotencyKey.isBlank()
+                ? null
+                : OPEN_IDEMPOTENCY_PREFIX + idempotencyKey.strip();
+        pointBillingWindowService.consumeIfEligible(
                 portfolio.getOwnerId(),
+                visitorId,
                 PointSceneCodeDict.VISIT_PERSONAL_PORTFOLIO.getCode(),
+                BillingWindowScopeDict.PORTFOLIO.getCode(),
+                portfolio.getId(),
                 BUSINESS_TYPE_PORTFOLIO_OPEN,
                 businessId,
-                1,
-                OPEN_IDEMPOTENCY_PREFIX + businessId,
+                pointIdempotencyKey,
                 REMARK_PORTFOLIO_OPEN
         );
     }
