@@ -223,6 +223,37 @@ class VisitorPortfolioServiceTest {
         assertThat(response.getRenderData()).isSameAs(renderData);
     }
 
+    /** 计费窗口异常属于服务错误，不得伪装成维护态。 */
+    @Test
+    void openPortfolioShouldPropagateBillingWindowFailure() {
+        PortfolioEntity portfolio = publishedPortfolio();
+        VisitorEntity visitor = new VisitorEntity();
+        visitor.setId(1024L);
+        visitor.setOpenid("openid-123");
+        visitor.setVisitorKey("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
+        when(visitorService.resolveByLoginCode("wx-code"))
+                .thenReturn(new VisitorService.VisitorSession(visitor, true));
+        when(portfolioVisitService.recordOpen(
+                eq(portfolio),
+                eq(1024L),
+                eq(visitor.getVisitorKey()),
+                eq("WECHAT_SHARE_CARD"),
+                eq("open-1")))
+                .thenThrow(new BusinessException("积分扣费窗口异常，请重试"));
+        VisitorPortfolioOpenRequest request = new VisitorPortfolioOpenRequest();
+        request.setLoginCode("wx-code");
+        request.setSourceType("WECHAT_SHARE_CARD");
+        request.setIdempotencyKey("open-1");
+
+        assertThatThrownBy(() -> service().openPortfolio("PF001", request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("积分扣费窗口异常，请重试");
+
+        verify(portfolioRenderService, never()).render(any(), any(), any(Boolean.class),
+                any(Boolean.class), any(), any());
+    }
+
     @Test
     void openPortfolioShouldPromptExistingVisitorWhenProfileIsMissing() {
         PortfolioEntity portfolio = publishedPortfolio();

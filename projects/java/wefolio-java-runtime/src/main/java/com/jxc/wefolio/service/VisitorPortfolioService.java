@@ -32,6 +32,7 @@ import com.jxc.wefolio.mapper.PortfolioEntityMapper;
 import com.jxc.wefolio.mapper.ScheduleEntityMapper;
 import com.jxc.wefolio.mapper.ScheduleQueryRecordEntityMapper;
 import com.jxc.wefolio.mapper.SlotDefinitionEntityMapper;
+import com.jxc.wefolio.message.PointMessage;
 import com.jxc.wefolio.message.PortfolioMessage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -162,6 +163,9 @@ public class VisitorPortfolioService {
                     request == null ? null : request.getIdempotencyKey()
             );
         } catch (BusinessException e) {
+            if (!PointMessage.INSUFFICIENT_BALANCE_MESSAGE.equals(e.getMessage())) {
+                throw e;
+            }
             VisitorPortfolioResponse maintenanceResponse = buildMaintenanceResponse(portfolio, config);
             fillVisitorProfileOpenFields(maintenanceResponse, visitorSession, null, portfolio.getId());
             return maintenanceResponse;

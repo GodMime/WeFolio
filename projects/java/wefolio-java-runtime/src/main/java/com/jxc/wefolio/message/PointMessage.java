@@ -5,6 +5,9 @@ package com.jxc.wefolio.message;
  */
 public interface PointMessage {
 
+    /** 积分余额不足提示 */
+    String INSUFFICIENT_BALANCE_MESSAGE = "积分余额不足，请充值后再试";
+
     /** 幂等键已归属其他用户提示 */
     String IDEMPOTENCY_USER_CONFLICT_MESSAGE = "幂等键已被其他用户使用";
 

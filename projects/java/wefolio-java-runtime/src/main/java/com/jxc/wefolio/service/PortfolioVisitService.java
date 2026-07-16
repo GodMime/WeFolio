@@ -13,6 +13,7 @@ import com.jxc.wefolio.dto.VisitorPortfolioEventRequest;
 import com.jxc.wefolio.entity.PortfolioEntity;
 import com.jxc.wefolio.entity.VisitEventEntity;
 import com.jxc.wefolio.entity.VisitRecordEntity;
+import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.VisitEventEntityMapper;
 import com.jxc.wefolio.mapper.VisitRecordEntityMapper;
 import lombok.Getter;
@@ -23,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Map;
 
 /**
@@ -53,6 +55,9 @@ public class PortfolioVisitService {
     /** 打开计费幂等前缀，需给业务 ID 预留数据库长度 */
     private static final String OPEN_IDEMPOTENCY_PREFIX = "PF_OPEN:";
 
+    /** 打开计费服务端兜底键的双小时窗口格式 */
+    private static final DateTimeFormatter OPEN_WINDOW_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHH");
+
     /** 业务 ID 分隔符 */
     private static final String BUSINESS_ID_SEPARATOR = ":";
 
@@ -61,6 +66,9 @@ public class PortfolioVisitService {
 
     /** 作品集标题快照兜底 */
     private static final String DEFAULT_PORTFOLIO_TITLE_SNAPSHOT = "个人作品集";
+
+    /** 访问记录写入失败提示 */
+    private static final String RECORD_PERSISTENCE_FAILED_MESSAGE = "个人作品集访问记录保存失败";
 
     /** 分享编码快照兜底 */
     private static final String DEFAULT_PORTFOLIO_SHARE_CODE_SNAPSHOT = "";
@@ -123,7 +131,9 @@ public class PortfolioVisitService {
             fillPortfolioSnapshot(record, portfolio);
             record.setLastPortfolioRevision(portfolio.getPublishedRevision());
             record.setLastVisitedAt(now);
-            visitRecordEntityMapper.updateById(record);
+            if (visitRecordEntityMapper.updateById(record) != 1) {
+                throw new BusinessException(RECORD_PERSISTENCE_FAILED_MESSAGE);
+            }
         }
         consumePortfolioOpen(portfolio, visitorId, idempotencyKey);
         insertEvent(record, portfolio, VisitEventTypeDict.PORTFOLIO_OPENED.getCode(), null, null, null,
@@ -233,7 +243,9 @@ public class PortfolioVisitService {
         } else if (VisitEventTypeDict.CONTACT_FORM_EXPOSED.getCode().equals(eventType)) {
             record.setLastVisitedAt(now);
         }
-        visitRecordEntityMapper.updateById(record);
+        if (visitRecordEntityMapper.updateById(record) != 1) {
+            throw new BusinessException(RECORD_PERSISTENCE_FAILED_MESSAGE);
+        }
     }
 
     /**
@@ -414,7 +426,7 @@ public class PortfolioVisitService {
     private void consumePortfolioOpen(PortfolioEntity portfolio, Long visitorId, String idempotencyKey) {
         String businessId = portfolio.getId() + BUSINESS_ID_SEPARATOR + visitorId;
         String pointIdempotencyKey = idempotencyKey == null || idempotencyKey.isBlank()
-                ? null
+                ? buildOpenWindowIdempotencyKey(businessId, LocalDateTime.now())
                 : OPEN_IDEMPOTENCY_PREFIX + idempotencyKey.strip();
         pointBillingWindowService.consumeIfEligible(
                 portfolio.getOwnerId(),
@@ -427,6 +439,20 @@ public class PortfolioVisitService {
                 pointIdempotencyKey,
                 REMARK_PORTFOLIO_OPEN
         );
+    }
+
+    /**
+     * 构建客户端未提供幂等键时的打开扣费窗口键。
+     *
+     * @param businessId 打开扣费业务 ID
+     * @param now 当前时间
+     * @return 服务端生成的积分流水幂等键
+     */
+    private String buildOpenWindowIdempotencyKey(String businessId, LocalDateTime now) {
+        String window = now.withMinute(0).withSecond(0).withNano(0)
+                .minusHours(now.getHour() % 2L)
+                .format(OPEN_WINDOW_FORMATTER);
+        return OPEN_IDEMPOTENCY_PREFIX + businessId + BUSINESS_ID_SEPARATOR + window;
     }
 
     /**

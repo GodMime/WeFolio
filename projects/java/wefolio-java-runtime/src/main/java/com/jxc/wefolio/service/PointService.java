@@ -279,7 +279,7 @@ public class PointService {
         long balanceAfter = calculateBalanceAfter(balanceBefore, signedPoints);
         if (PointTransactionTypeDict.CONSUMPTION.getCode().equals(rule.getTransactionType())
                 && balanceAfter < 0L) {
-            throw new BusinessException("积分余额不足，请充值后再试");
+            throw new BusinessException(PointMessage.INSUFFICIENT_BALANCE_MESSAGE);
         }
     }
 
@@ -644,7 +644,7 @@ public class PointService {
     private PointAccountEntity deductConsumedPoints(PointAccountEntity account, Long userId, long points) {
         int updated = pointAccountEntityMapper.deductConsumedPoints(account.getId(), userId, points);
         if (updated <= 0) {
-            throw new BusinessException("积分余额不足，请充值后再试");
+            throw new BusinessException(PointMessage.INSUFFICIENT_BALANCE_MESSAGE);
         }
         PointAccountEntity updatedAccount = findAccount(userId);
         if (updatedAccount == null) {

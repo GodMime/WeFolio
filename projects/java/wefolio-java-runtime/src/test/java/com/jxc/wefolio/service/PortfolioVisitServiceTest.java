@@ -10,9 +10,11 @@ import com.jxc.wefolio.dto.VisitorPortfolioEventRequest;
 import com.jxc.wefolio.entity.PortfolioEntity;
 import com.jxc.wefolio.entity.VisitEventEntity;
 import com.jxc.wefolio.entity.VisitRecordEntity;
+import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.VisitEventEntityMapper;
 import com.jxc.wefolio.mapper.VisitRecordEntityMapper;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
@@ -24,10 +26,10 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -53,6 +55,11 @@ class PortfolioVisitServiceTest {
     /** 积分滚动扣费窗口服务模拟 */
     @Mock
     private PointBillingWindowService pointBillingWindowService;
+
+    @BeforeEach
+    void setUp() {
+        lenient().when(visitRecordEntityMapper.updateById(any(VisitRecordEntity.class))).thenReturn(1);
+    }
 
     @Test
     void recordOpenShouldCreateVisitRecordAndConsumeByRollingWindow() {
@@ -117,9 +124,9 @@ class PortfolioVisitServiceTest {
         assertThat(eventCaptor.getValue().getVisitorKey()).isEqualTo("visitor-stable-key");
     }
 
-    /** 打开事件缺少幂等键时不得拼接成可绕过必填校验的字符串。 */
+    /** 打开事件缺少客户端幂等键时必须生成服务端窗口幂等键。 */
     @Test
-    void recordOpenShouldKeepMissingIdempotencyKeyInvalidForBillingWindow() {
+    void recordOpenShouldGenerateWindowIdempotencyKeyWhenClientKeyIsMissing() {
         when(visitRecordEntityMapper.insert(any(VisitRecordEntity.class))).thenAnswer(invocation -> {
             VisitRecordEntity record = invocation.getArgument(0);
             record.setId(33L);
@@ -136,7 +143,7 @@ class PortfolioVisitServiceTest {
                 eq(88L),
                 eq("PORTFOLIO_OPEN"),
                 eq("88:1024"),
-                isNull(),
+                startsWith("PF_OPEN:88:1024:"),
                 eq("访客打开个人作品集")
         );
     }
@@ -191,6 +198,31 @@ class PortfolioVisitServiceTest {
         assertThat(recordCaptor.getValue().getVisitCount()).isEqualTo(2);
     }
 
+    /** 乐观锁竞争失败时不得静默丢失打开次数。 */
+    @Test
+    void recordOpenShouldRejectOptimisticLockConflict() {
+        VisitRecordEntity record = new VisitRecordEntity();
+        record.setId(33L);
+        record.setVisitorKey("visitor-a");
+        record.setPortfolioId(88L);
+        record.setVisitCount(1);
+        when(visitRecordEntityMapper.selectOne(any())).thenReturn(record);
+        when(visitRecordEntityMapper.updateById(record)).thenReturn(0);
+
+        assertThatThrownBy(() -> service().recordOpen(
+                portfolio(),
+                1024L,
+                "visitor-a",
+                "WECHAT_SHARE_CARD",
+                "open-conflict-1"
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("个人作品集访问记录保存失败");
+
+        verifyNoInteractions(pointBillingWindowService);
+        verify(visitEventEntityMapper, never()).insert(any(VisitEventEntity.class));
+    }
+
     @Test
     void recordEventShouldUpdateCountersAndConsumeVideoPlayback() {
         VisitRecordEntity record = new VisitRecordEntity();
@@ -224,6 +256,27 @@ class PortfolioVisitServiceTest {
                 "访客播放作品集视频"
         );
         verify(visitEventEntityMapper).insert(any(VisitEventEntity.class));
+    }
+
+    /** 乐观锁竞争失败时必须抛错，使事件与扣费事务一并回滚。 */
+    @Test
+    void recordEventShouldRejectOptimisticLockConflict() {
+        VisitRecordEntity record = new VisitRecordEntity();
+        record.setId(33L);
+        record.setVisitorKey("visitor-a");
+        record.setPortfolioId(88L);
+        record.setViewWorkCount(0);
+        when(visitRecordEntityMapper.selectOne(any())).thenReturn(record);
+        when(visitRecordEntityMapper.updateById(record)).thenReturn(0);
+        VisitorPortfolioEventRequest request = new VisitorPortfolioEventRequest();
+        request.setVisitorKey("visitor-a");
+        request.setEventType(VisitEventTypeDict.WORK_VIEWED.getCode());
+        request.setWorkId(11L);
+        request.setIdempotencyKey("image-conflict-1");
+
+        assertThatThrownBy(() -> service().recordEvent(portfolio(), 1024L, request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("个人作品集访问记录保存失败");
     }
 
     @Test
