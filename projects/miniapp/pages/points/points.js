@@ -11,6 +11,7 @@ const { buildLedgerMarquee } = require('./points-marquee')
 const POINT_OVERVIEW_URL = '/api/mine/points'
 const POINT_TRANSACTIONS_URL = '/api/mine/points/transactions'
 const POINT_RULES_PAGE_URL = '/pages/points-rules/points-rules'
+const RECHARGE_PAGE_URL = '/pages/recharge/recharge'
 const LOGIN_PAGE_URL = '/pages/login/login'
 const FIRST_PAGE = 1
 const PAGE_SIZE = 20
@@ -193,9 +194,8 @@ Page({
   },
 
   handleRechargeTap() {
-    wx.showToast({
-      title: '体验版暂时只支持后台加积分',
-      icon: 'none'
+    wx.navigateTo({
+      url: RECHARGE_PAGE_URL
     })
   },
 

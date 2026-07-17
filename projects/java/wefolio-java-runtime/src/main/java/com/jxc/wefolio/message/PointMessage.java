@@ -16,4 +16,16 @@ public interface PointMessage {
 
     /** 访客积分滚动扣费窗口异常提示 */
     String BILLING_WINDOW_ABNORMAL_MESSAGE = "积分扣费窗口异常，请重试";
+
+    /** 积分账户原子更新失败提示 */
+    String ACCOUNT_UPDATE_FAILED_MESSAGE = "积分账户更新失败，请重试";
+
+    /** 充值积分非法提示 */
+    String RECHARGE_POINTS_INVALID_MESSAGE = "充值积分必须大于 0";
+
+    /** 充值商户订单号为空提示 */
+    String RECHARGE_ORDER_NO_REQUIRED_MESSAGE = "商户订单号不能为空";
+
+    /** 充值套餐快照为空提示 */
+    String RECHARGE_SNAPSHOT_REQUIRED_MESSAGE = "充值套餐快照不能为空";
 }

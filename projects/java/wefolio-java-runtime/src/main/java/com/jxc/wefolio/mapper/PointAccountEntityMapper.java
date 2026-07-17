@@ -14,6 +14,30 @@ import org.apache.ibatis.annotations.Update;
 public interface PointAccountEntityMapper extends BaseMapper<PointAccountEntity> {
 
     /**
+     * 原子增加充值积分，并同步累计充值和版本号。
+     *
+     * @param accountId 积分账户 ID
+     * @param userId 用户 ID
+     * @param points 充值到账积分
+     * @return 更新行数
+     */
+    @Update("""
+            UPDATE wf_point_account
+               SET balance = balance + #{points},
+                   total_recharged = total_recharged + #{points},
+                   version = version + 1,
+                   updated_at = CURRENT_TIMESTAMP(3)
+             WHERE id = #{accountId}
+               AND user_id = #{userId}
+               AND deleted = 0
+            """)
+    int addRechargedPoints(
+            @Param("accountId") Long accountId,
+            @Param("userId") Long userId,
+            @Param("points") Long points
+    );
+
+    /**
      * 原子扣减消费积分，并同步累计消耗和版本号。
      *
      * @param accountId 积分账户 ID

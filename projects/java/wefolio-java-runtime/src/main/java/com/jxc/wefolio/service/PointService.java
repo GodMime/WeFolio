@@ -88,6 +88,9 @@ public class PointService {
     /** 后台人工加分业务类型 */
     private static final String BUSINESS_TYPE_ADMIN_GRANT = "ADMIN_GRANT";
 
+    /** 充值订单业务类型 */
+    private static final String BUSINESS_TYPE_RECHARGE_ORDER = "RECHARGE_ORDER";
+
     /** 流水时间展示格式 */
     private static final DateTimeFormatter TRANSACTION_TIME_FORMATTER =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -147,6 +150,79 @@ public class PointService {
             return fillAccountDefaults(existing);
         }
         return createZeroAccount(userId);
+    }
+
+    /**
+     * 将微信支付充值积分原子计入账户并写入幂等流水。
+     *
+     * @param userId 用户 ID
+     * @param points 到账积分
+     * @param businessId 商户订单号
+     * @param calculationSnapshot 套餐计算快照 JSON
+     * @param idempotencyKey 积分流水幂等键
+     * @param remark 套餐名称
+     * @return 积分变动结果
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public PointMutationResponse recharge(
+            Long userId,
+            long points,
+            String businessId,
+            String calculationSnapshot,
+            String idempotencyKey,
+            String remark
+    ) {
+        requireActiveUser(userId);
+        if (points <= 0L) {
+            throw new BusinessException(PointMessage.RECHARGE_POINTS_INVALID_MESSAGE);
+        }
+        String normalizedBusinessId = normalizeRequiredString(
+                businessId, PointMessage.RECHARGE_ORDER_NO_REQUIRED_MESSAGE);
+        String normalizedSnapshot = normalizeRequiredString(
+                calculationSnapshot, PointMessage.RECHARGE_SNAPSHOT_REQUIRED_MESSAGE);
+        String normalizedIdempotencyKey = normalizeRequiredString(idempotencyKey, "幂等键不能为空");
+        String sceneCode = PointSceneCodeDict.RECHARGE_PACKAGE.getCode();
+        PointTransactionEntity existing = findTransaction(normalizedIdempotencyKey);
+        if (existing != null) {
+            assertSamePointBusiness(
+                    existing,
+                    userId,
+                    sceneCode,
+                    BUSINESS_TYPE_RECHARGE_ORDER,
+                    normalizedBusinessId
+            );
+            return buildMutationFromTransaction(existing, true, true);
+        }
+
+        PointAccountEntity account = requireAccount(userId);
+        int updated = pointAccountEntityMapper.addRechargedPoints(account.getId(), userId, points);
+        if (updated != 1) {
+            throw new BusinessException(PointMessage.ACCOUNT_UPDATE_FAILED_MESSAGE);
+        }
+        PointAccountEntity updatedAccount = findAccount(userId);
+        if (updatedAccount == null) {
+            throw new BusinessException(PointMessage.ACCOUNT_UPDATE_FAILED_MESSAGE);
+        }
+        long balanceAfter = safeLong(updatedAccount.getBalance());
+        long balanceBefore = Math.subtractExact(balanceAfter, points);
+
+        PointTransactionEntity transaction = new PointTransactionEntity();
+        transaction.setAccountId(updatedAccount.getId());
+        transaction.setUserId(userId);
+        transaction.setRuleId(null);
+        transaction.setTransactionType(PointTransactionTypeDict.RECHARGE.getCode());
+        transaction.setSceneCode(sceneCode);
+        transaction.setPointsChange(points);
+        transaction.setBalanceBefore(balanceBefore);
+        transaction.setBalanceAfter(balanceAfter);
+        transaction.setBusinessType(BUSINESS_TYPE_RECHARGE_ORDER);
+        transaction.setBusinessId(normalizedBusinessId);
+        transaction.setCalculationSnapshot(normalizedSnapshot);
+        transaction.setIdempotencyKey(normalizedIdempotencyKey);
+        transaction.setRemark(normalizeOptionalString(remark));
+        transaction.setOccurredAt(LocalDateTime.now());
+        pointTransactionEntityMapper.insert(transaction);
+        return buildMutationFromTransaction(transaction, false, true);
     }
 
     /**
@@ -648,7 +724,7 @@ public class PointService {
         }
         PointAccountEntity updatedAccount = findAccount(userId);
         if (updatedAccount == null) {
-            throw new BusinessException("积分账户更新失败，请重试");
+            throw new BusinessException(PointMessage.ACCOUNT_UPDATE_FAILED_MESSAGE);
         }
         return fillAccountDefaults(updatedAccount);
     }
@@ -661,7 +737,7 @@ public class PointService {
     private void updateAccount(PointAccountEntity account) {
         int updated = pointAccountEntityMapper.updateById(account);
         if (updated <= 0) {
-            throw new BusinessException("积分账户更新失败，请重试");
+            throw new BusinessException(PointMessage.ACCOUNT_UPDATE_FAILED_MESSAGE);
         }
     }
 

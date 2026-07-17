@@ -98,7 +98,8 @@ test('app registers business pages in named subpackages without duplicate routes
 test('team portfolio subpackage is appended without changing existing route baselines', () => {
   const appJson = readJson('app.json')
   const expectedMainPages = [
-    'pages/index/index', 'pages/points/points', 'pages/points-rules/points-rules', 'pages/teams/teams',
+    'pages/index/index', 'pages/points/points', 'pages/points-rules/points-rules',
+    'pages/recharge/recharge', 'pages/recharge-records/recharge-records', 'pages/teams/teams',
     'pages/team-maintenance/team-maintenance', 'pages/team-member-add/team-member-add', 'pages/team-invitations/team-invitations',
     'pages/team-member-change/team-member-change', 'pages/messages/messages', 'pages/visits/visits', 'pages/profile/profile',
     'pages/login/login', 'pages/visitor-portfolio/visitor-portfolio', 'pages/visitor-schedule/visitor-schedule'

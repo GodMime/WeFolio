@@ -8,6 +8,7 @@ const MESSAGE_ICON_URL = '/assets/system/wefolio-message-icon.png'
 const MESSAGE_UNREAD_COUNT_URL = '/api/mine/messages/unread-count'
 const MESSAGES_PAGE_URL = '/pages/messages/messages'
 const POINTS_PAGE_URL = '/pages/points/points'
+const RECHARGE_PAGE_URL = '/pages/recharge/recharge'
 const SCHEDULE_PAGE_URL = '/pages/schedule/schedule'
 const WORKS_PAGE_URL = '/pages/works/works'
 const PORTFOLIOS_PAGE_URL = '/pages/portfolios/portfolios'
@@ -173,9 +174,8 @@ Page({
   },
 
   handleRechargeTap() {
-    wx.showToast({
-      title: '体验版暂时只支持后台加积分',
-      icon: 'none'
+    wx.navigateTo({
+      url: RECHARGE_PAGE_URL
     })
   },
 

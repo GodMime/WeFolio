@@ -87,3 +87,15 @@ work-storage-billing:
   zone: ${WORK_STORAGE_BILLING_ZONE:Asia/Shanghai}
   # 单次游标扫描用户数。
   batch-size: ${WORK_STORAGE_BILLING_BATCH_SIZE:500}
+
+recharge-order-close:
+  # 是否启用过期充值订单关闭任务。
+  enabled: ${RECHARGE_ORDER_CLOSE_ENABLED:true}
+  # 与整分钟任务错开，默认每分钟第 30 秒执行。
+  cron: "${RECHARGE_ORDER_CLOSE_CRON:30 * * * * ?}"
+  # 订单过期判断与调度统一采用上海时区。
+  zone: ${RECHARGE_ORDER_CLOSE_ZONE:Asia/Shanghai}
+  # 单批最多关闭的订单数。
+  batch-size: ${RECHARGE_ORDER_CLOSE_BATCH_SIZE:200}
+  # 单轮最多执行的批次数，防止长期占用任务线程。
+  max-batches: ${RECHARGE_ORDER_CLOSE_MAX_BATCHES:10}

@@ -1,0 +1,79 @@
+<view class="page-shell recharge-page">
+  <navigation-bar title="充值积分" back="{{true}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+
+  <scroll-view class="recharge-scroll" scroll-y type="list">
+    <view class="recharge-content">
+      <block wx:if="{{loading}}">
+        <view class="balance-panel skeleton-panel"></view>
+        <view class="package-grid">
+          <view class="package-card skeleton-panel" wx:for="{{packageSkeletons}}" wx:key="*this"></view>
+        </view>
+      </block>
+
+      <view wx:elif="{{errorMessage}}" class="empty-state">
+        <view class="empty-title">加载失败</view>
+        <view class="empty-desc">{{errorMessage}}</view>
+        <button class="retry-button" bindtap="handleRetry">重试</button>
+      </view>
+
+      <block wx:else>
+        <view class="balance-panel">
+          <view class="balance-copy">
+            <view class="balance-label">当前余额</view>
+            <view class="balance-value">{{rechargeData.balanceText}}<text> 积分</text></view>
+            <view wx:if="{{rechargeData.warningText}}" class="balance-warning">{{rechargeData.warningText}}</view>
+          </view>
+          <view class="records-link" bindtap="handleRecordsTap" aria-role="button">充值记录</view>
+        </view>
+
+        <view class="section-heading">选择充值套餐</view>
+        <view class="package-grid">
+          <view
+            class="package-card {{item.selected ? 'selected' : ''}}"
+            wx:for="{{rechargeData.packages}}"
+            wx:key="packageId"
+            data-package-id="{{item.packageId}}"
+            bindtap="handlePackageTap"
+            aria-role="button"
+          >
+            <view class="package-amount">{{item.amountText}}</view>
+            <view class="package-points">到账 {{item.totalPoints}} 积分</view>
+            <view class="package-bonus {{item.bonusPoints > 0 ? 'has-bonus' : ''}}">{{item.bonusText}}</view>
+          </view>
+        </view>
+
+        <view wx:if="{{rechargeData.selectedPackage}}" class="payment-panel">
+          <view class="panel-heading">
+            <view class="section-title">本次充值</view>
+            <view class="selected-pill">已选择 {{rechargeData.selectedPackage.amountText}}</view>
+          </view>
+          <view class="summary-row">
+            <view>
+              <view class="summary-title">支付金额</view>
+              <view class="summary-desc">微信支付</view>
+            </view>
+            <view class="summary-value">{{rechargeData.selectedPackage.amountText}}</view>
+          </view>
+          <view class="summary-row">
+            <view>
+              <view class="summary-title">到账积分</view>
+              <view class="summary-desc">基础 {{rechargeData.selectedPackage.basePoints}} + 赠送 {{rechargeData.selectedPackage.bonusPoints}}</view>
+            </view>
+            <view class="summary-value">{{rechargeData.selectedPackage.totalPoints}}</view>
+          </view>
+        </view>
+
+        <button
+          class="pay-button"
+          disabled="{{paying || syncing || !rechargeData.selectedPackageId}}"
+          bindtap="handlePay"
+        >{{syncing ? '正在确认支付结果...' : (paying ? '正在调起微信支付...' : '微信支付')}}</button>
+
+        <view class="notice-panel">
+          <view>充值后不可提现，仅用于小程序内功能消耗</view>
+          <view class="rule-link" bindtap="handleRuleTap" aria-role="button">规则</view>
+        </view>
+      </block>
+    </view>
+  </scroll-view>
+</view>

@@ -1,0 +1,67 @@
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
+const test = require('node:test')
+
+function read(filePath) {
+  return fs.readFileSync(path.join(__dirname, '..', filePath), 'utf8')
+}
+
+test('registers recharge pages and existing recharge buttons navigate to recharge page', () => {
+  const appJson = JSON.parse(read('app.json'))
+  const indexJs = read('pages/index/index.js')
+  const pointsJs = read('pages/points/points.js')
+
+  assert.ok(appJson.pages.includes('pages/recharge/recharge'))
+  assert.ok(appJson.pages.includes('pages/recharge-records/recharge-records'))
+  assert.match(indexJs, /const RECHARGE_PAGE_URL = '\/pages\/recharge\/recharge'/)
+  assert.match(indexJs, /handleRechargeTap\(\)[\s\S]*navigateTo\([\s\S]*url:\s*RECHARGE_PAGE_URL/)
+  assert.match(pointsJs, /const RECHARGE_PAGE_URL = '\/pages\/recharge\/recharge'/)
+  assert.match(pointsJs, /handleRechargeTap\(\)[\s\S]*navigateTo\([\s\S]*url:\s*RECHARGE_PAGE_URL/)
+})
+
+test('recharge page exposes balance, package selection, records, payment and rule entry', () => {
+  const js = read('pages/recharge/recharge.js')
+  const wxml = read('pages/recharge/recharge.wxml')
+  const wxss = read('pages/recharge/recharge.wxss')
+
+  assert.match(js, /const RECHARGE_PAGE_URL = '\/api\/mine\/recharges'/)
+  assert.match(js, /const CREATE_ORDER_URL = '\/api\/mine\/recharges\/orders'/)
+  assert.match(js, /wx\.requestPayment/)
+  assert.match(wxml, /navigation-bar title="充值积分" back="\{\{true\}\}"/)
+  assert.match(wxml, /当前余额/)
+  assert.match(wxml, /bindtap="handleRecordsTap"[\s\S]*充值记录/)
+  assert.match(wxml, /wx:for="\{\{rechargeData\.packages\}\}"/)
+  assert.match(wxml, /bindtap="handlePackageTap"/)
+  assert.match(wxml, /paying \? '正在调起微信支付\.\.\.' : '微信支付'/)
+  assert.doesNotMatch(wxml, /微信支付并充值/)
+  assert.match(wxml, /充值后不可提现，仅用于小程序内功能消耗/)
+  assert.match(wxml, /bindtap="handleRuleTap"[\s\S]*规则/)
+  assert.match(wxss, /\.package-grid\s*\{[\s\S]*display:\s*flex/)
+  assert.match(wxss, /\.package-grid\s*\{[^}]*flex-wrap:\s*wrap[^}]*gap:\s*16rpx\s+0[^}]*justify-content:\s*space-between/)
+  assert.match(wxss, /\.package-card\s*\{[^}]*width:\s*calc\(50%\s*-\s*8rpx\)/)
+  assert.match(wxss, /\.pay-button\s*\{[^}]*width:\s*100%[^}]*min-width:\s*100%[^}]*max-width:\s*100%/)
+  assert.doesNotMatch(wxss, /\.package-grid\s*\{[^}]*display:\s*grid/)
+  assert.doesNotMatch(`${js}\n${wxml}`, /后台加积分|APIv3|private[_-]?key|openid|prepay_id/i)
+})
+
+test('recharge records page supports status list, pagination and omits sensitive payment fields', () => {
+  const js = read('pages/recharge-records/recharge-records.js')
+  const wxml = read('pages/recharge-records/recharge-records.wxml')
+  const wxss = read('pages/recharge-records/recharge-records.wxss')
+
+  assert.match(js, /const RECHARGE_ORDERS_URL = '\/api\/mine\/recharges\/orders'/)
+  assert.match(js, /handleLoadMore/)
+  assert.match(js, /\/sync`/)
+  assert.match(wxml, /navigation-bar title="充值记录" back="\{\{true\}\}"/)
+  assert.match(wxml, /bindscrolltolower="handleLoadMore"/)
+  assert.match(wxml, /wx:for="\{\{orderData\.records\}\}"/)
+  assert.match(wxml, /item\.merchantOrderNo/)
+  assert.match(wxml, /item\.amountText/)
+  assert.match(wxml, /item\.pointsText/)
+  assert.match(wxml, /item\.statusText/)
+  assert.match(wxss, /\.order-status\.success/)
+  assert.match(wxss, /\.order-status\.pending/)
+  assert.match(wxss, /\.order-status\.muted/)
+  assert.doesNotMatch(`${js}\n${wxml}`, /transactionId|openid|paySign|prepay_id|signature/i)
+})

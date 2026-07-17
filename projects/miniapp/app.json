@@ -3,6 +3,8 @@
     "pages/index/index",
     "pages/points/points",
     "pages/points-rules/points-rules",
+    "pages/recharge/recharge",
+    "pages/recharge-records/recharge-records",
     "pages/teams/teams",
     "pages/team-maintenance/team-maintenance",
     "pages/team-member-add/team-member-add",

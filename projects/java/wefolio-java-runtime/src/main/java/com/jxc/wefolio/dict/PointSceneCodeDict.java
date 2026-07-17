@@ -45,6 +45,10 @@ public class PointSceneCodeDict {
     public static final DictValue MANUAL_ADMIN_GRANT =
             new DictValue("MANUAL_ADMIN_GRANT", "后台人工加分");
 
+    /** 固定套餐充值到账 */
+    public static final DictValue RECHARGE_PACKAGE =
+            new DictValue("RECHARGE_PACKAGE", "充值到账");
+
     /** 新用户注册赠送 */
     public static final DictValue NEW_USER_REGISTRATION_GIFT =
             new DictValue("NEW_USER_REGISTRATION_GIFT", "新用户注册赠送");
@@ -65,6 +69,7 @@ public class PointSceneCodeDict {
             Map.entry(VIEW_PORTFOLIO_IMAGES.getCode(), VIEW_PORTFOLIO_IMAGES),
             Map.entry(VIEW_PORTFOLIO_VIDEO.getCode(), VIEW_PORTFOLIO_VIDEO),
             Map.entry(MANUAL_ADMIN_GRANT.getCode(), MANUAL_ADMIN_GRANT),
+            Map.entry(RECHARGE_PACKAGE.getCode(), RECHARGE_PACKAGE),
             Map.entry(NEW_USER_REGISTRATION_GIFT.getCode(), NEW_USER_REGISTRATION_GIFT),
             Map.entry(REFERRAL_USER_GIFT.getCode(), REFERRAL_USER_GIFT)
     );

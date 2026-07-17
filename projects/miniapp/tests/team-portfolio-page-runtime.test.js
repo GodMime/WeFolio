@@ -261,6 +261,7 @@ test('save draft remains in the editor when the request fails', async () => {
 test('new editor publish creates before publishing', async () => {
   const requests = []
   const modals = []
+  const navigations = []
   const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
     requests.push(clone(options))
     if (options.url === '/api/mine/teams/3/portfolios/standard') {
@@ -277,7 +278,15 @@ test('new editor publish creates before publishing', async () => {
     showModal(options) {
       modals.push(options)
       options.success({ confirm: true })
+    },
+    navigateBack(options) {
+      navigations.push(options)
     }
+  }, {
+    getCurrentPages: () => [
+      { route: 'pages/portfolios/portfolios' },
+      { route: 'pages/team-portfolios/standard-edit/team-portfolio-standard-edit' }
+    ]
   })
   page.setData({ teamId: 3, canMaintain: true })
   try {
@@ -292,6 +301,42 @@ test('new editor publish creates before publishing', async () => {
     assert.equal(modals[0].title, '发布免责声明')
     assert.equal(page.data.portfolioId, 41)
     assert.equal(page.data.publicationStatus, 'PUBLISHED')
+    assert.deepEqual(navigations, [{ delta: 1 }])
+  } finally { page.cleanup() }
+})
+
+test('editor returns to the portfolio list after an idempotent publish retry succeeds', async () => {
+  const navigations = []
+  let publishAttempts = 0
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
+    if (options.url.endsWith('/draft')) return { draftRevision: 8 }
+    if (options.url.endsWith('/publish')) {
+      publishAttempts += 1
+      if (publishAttempts === 1) throw new Error('network')
+      return { publicationStatus: 'PUBLISHED', publishedRevision: 8 }
+    }
+    throw new Error(`unexpected request: ${options.url}`)
+  }, {
+    navigateBack(options) { navigations.push(options) }
+  }, {
+    getCurrentPages: () => [
+      { route: 'pages/portfolios/portfolios' },
+      { route: 'pages/team-portfolios/standard-edit/team-portfolio-standard-edit' }
+    ]
+  })
+  page.setData({
+    portfolioId: 7,
+    teamId: 5,
+    canMaintain: true,
+    draftRevision: 7,
+    config: { share: { title: TEST_TEAM_PORTFOLIO_TITLE }, components: [] }
+  })
+
+  try {
+    await page.handlePublishTap()
+    assert.deepEqual(navigations, [])
+    await page.handlePublishTap()
+    assert.deepEqual(navigations, [{ delta: 1 }])
   } finally { page.cleanup() }
 })
 

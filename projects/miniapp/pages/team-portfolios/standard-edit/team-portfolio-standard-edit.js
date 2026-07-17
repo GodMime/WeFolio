@@ -634,7 +634,26 @@ Page({
     const confirmed = await confirmPortfolioPublishDisclaimer()
     if (!confirmed) return
     this.setData({ publishing: true })
-    try { if (this.data.pendingPublishKey) { const result = await publishTeamPortfolio(request, this.data.portfolioId, this.data.pendingPublishRevision, this.data.pendingPublishKey); const publicationStatus = result.publicationStatus || 'PUBLISHED'; this.setData(Object.assign({ publicationStatus, publishedRevision: Number(result.publishedRevision) || this.data.publishedRevision, pendingPublishKey: '', pendingPublishRevision: 0 }, buildPublicationState(publicationStatus))); return wx.showToast({ title: '已发布', icon: 'success' }) }; const saved = await this.saveDraft(true); if (!saved) return; const revision = Number(saved.draftRevision) || this.data.draftRevision; const key = makeIdempotencyKey('team-publish'); this.setData({ pendingPublishKey: key, pendingPublishRevision: revision }); const result = await publishTeamPortfolio(request, this.data.portfolioId, revision, key); const publicationStatus = result.publicationStatus || 'PUBLISHED'; this.setData(Object.assign({ publicationStatus, publishedRevision: Number(result.publishedRevision) || this.data.publishedRevision, pendingPublishKey: '', pendingPublishRevision: 0 }, buildPublicationState(publicationStatus))); wx.showToast({ title: '已发布', icon: 'success' }) } catch (error) {
+    try {
+      if (this.data.pendingPublishKey) {
+        const result = await publishTeamPortfolio(request, this.data.portfolioId, this.data.pendingPublishRevision, this.data.pendingPublishKey)
+        const publicationStatus = result.publicationStatus || 'PUBLISHED'
+        this.setData(Object.assign({ publicationStatus, publishedRevision: Number(result.publishedRevision) || this.data.publishedRevision, pendingPublishKey: '', pendingPublishRevision: 0 }, buildPublicationState(publicationStatus)))
+        wx.showToast({ title: '已发布', icon: 'success' })
+        this.returnToPortfolioList()
+        return
+      }
+      const saved = await this.saveDraft(true)
+      if (!saved) return
+      const revision = Number(saved.draftRevision) || this.data.draftRevision
+      const key = makeIdempotencyKey('team-publish')
+      this.setData({ pendingPublishKey: key, pendingPublishRevision: revision })
+      const result = await publishTeamPortfolio(request, this.data.portfolioId, revision, key)
+      const publicationStatus = result.publicationStatus || 'PUBLISHED'
+      this.setData(Object.assign({ publicationStatus, publishedRevision: Number(result.publishedRevision) || this.data.publishedRevision, pendingPublishKey: '', pendingPublishRevision: 0 }, buildPublicationState(publicationStatus)))
+      wx.showToast({ title: '已发布', icon: 'success' })
+      this.returnToPortfolioList()
+    } catch (error) {
       if (handleTeamMaintainerAuthError(error)) return
       if (showTeamPortfolioUnavailableToast(error)) {
         this.setData({ pendingPublishKey: '', pendingPublishRevision: 0 })
