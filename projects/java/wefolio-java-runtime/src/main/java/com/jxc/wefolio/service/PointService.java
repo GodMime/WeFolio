@@ -24,6 +24,7 @@ import com.jxc.wefolio.entity.PointAccountEntity;
 import com.jxc.wefolio.entity.PointMeterEntity;
 import com.jxc.wefolio.entity.PointRuleEntity;
 import com.jxc.wefolio.entity.PointTransactionEntity;
+import com.jxc.wefolio.entity.PointPendingDebitEntity;
 import com.jxc.wefolio.entity.SystemMessageEntity;
 import com.jxc.wefolio.entity.UserEntity;
 import com.jxc.wefolio.exception.BusinessException;
@@ -31,11 +32,17 @@ import com.jxc.wefolio.mapper.PointAccountEntityMapper;
 import com.jxc.wefolio.mapper.PointMeterEntityMapper;
 import com.jxc.wefolio.mapper.PointRuleEntityMapper;
 import com.jxc.wefolio.mapper.PointTransactionEntityMapper;
+import com.jxc.wefolio.mapper.PointPendingDebitEntityMapper;
 import com.jxc.wefolio.mapper.SystemMessageEntityMapper;
 import com.jxc.wefolio.mapper.UserEntityMapper;
 import com.jxc.wefolio.message.PointMessage;
-import lombok.RequiredArgsConstructor;
+import com.jxc.wefolio.service.point.DebitCommand;
+import com.jxc.wefolio.service.point.GiftCommand;
+import com.jxc.wefolio.service.point.GiftOrderResult;
+import com.jxc.wefolio.service.point.PointCommandService;
+import com.jxc.wefolio.service.point.PointMutationResult;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -55,7 +62,6 @@ import java.util.Set;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class PointService {
 
     /** 低余额消息幂等键前缀 */
@@ -135,6 +141,52 @@ public class PointService {
 
     /** 系统消息 Mapper */
     private final SystemMessageEntityMapper systemMessageEntityMapper;
+
+    /** 统一积分命令入口；兼容构造器中为空时仅供旧单元测试覆盖遗留实现。 */
+    private final PointCommandService pointCommandService;
+
+    /** 待扣来源 Mapper；旧单元测试兼容构造器中为空。 */
+    private final PointPendingDebitEntityMapper pointPendingDebitEntityMapper;
+
+    /** Spring 生产构造器。 */
+    @Autowired
+    public PointService(
+            UserEntityMapper userEntityMapper,
+            PointAccountEntityMapper pointAccountEntityMapper,
+            PointRuleEntityMapper pointRuleEntityMapper,
+            PointMeterEntityMapper pointMeterEntityMapper,
+            PointTransactionEntityMapper pointTransactionEntityMapper,
+            SystemMessageEntityMapper systemMessageEntityMapper,
+            PointCommandService pointCommandService,
+            PointPendingDebitEntityMapper pointPendingDebitEntityMapper
+    ) {
+        this.userEntityMapper = userEntityMapper;
+        this.pointAccountEntityMapper = pointAccountEntityMapper;
+        this.pointRuleEntityMapper = pointRuleEntityMapper;
+        this.pointMeterEntityMapper = pointMeterEntityMapper;
+        this.pointTransactionEntityMapper = pointTransactionEntityMapper;
+        this.systemMessageEntityMapper = systemMessageEntityMapper;
+        this.pointCommandService = pointCommandService;
+        this.pointPendingDebitEntityMapper = pointPendingDebitEntityMapper;
+    }
+
+    /**
+     * 旧单元测试兼容构造器。
+     *
+     * @deprecated 仅用于尚未迁移到统一积分命令服务的旧单元测试，后续随旧本地赠送实现一并删除
+     */
+    @Deprecated(forRemoval = true)
+    PointService(
+            UserEntityMapper userEntityMapper,
+            PointAccountEntityMapper pointAccountEntityMapper,
+            PointRuleEntityMapper pointRuleEntityMapper,
+            PointMeterEntityMapper pointMeterEntityMapper,
+            PointTransactionEntityMapper pointTransactionEntityMapper,
+            SystemMessageEntityMapper systemMessageEntityMapper
+    ) {
+        this(userEntityMapper, pointAccountEntityMapper, pointRuleEntityMapper,
+                pointMeterEntityMapper, pointTransactionEntityMapper, systemMessageEntityMapper, null, null);
+    }
 
     /**
      * 确保用户积分账户存在。
@@ -238,6 +290,13 @@ public class PointService {
         response.setAccountId(account.getId());
         response.setUserId(userId);
         response.setBalance(safeLong(account.getBalance()));
+        response.setWechatBalance(safeLong(account.getWechatBalance()));
+        response.setWechatPresentBalance(safeLong(account.getWechatPresentBalance()));
+        response.setWechatPaidBalance(Math.max(0L,
+                safeLong(account.getWechatBalance()) - safeLong(account.getWechatPresentBalance())));
+        response.setPendingDebit(safeLong(account.getPendingDebit()));
+        response.setWechatBalanceSyncedAt(account.getWechatBalanceSyncedAt() == null
+                ? null : account.getWechatBalanceSyncedAt().format(TRANSACTION_TIME_FORMATTER));
         response.setTotalRecharged(safeLong(account.getTotalRecharged()));
         response.setTotalGifted(safeLong(account.getTotalGifted()));
         response.setTotalConsumed(safeLong(account.getTotalConsumed()));
@@ -449,6 +508,29 @@ public class PointService {
         String normalizedBusinessType = normalizeRequiredString(businessType, "业务类型不能为空");
         String normalizedBusinessId = normalizeRequiredString(businessId, "业务 ID 不能为空");
         String normalizedIdempotencyKey = normalizeRequiredString(idempotencyKey, "幂等键不能为空");
+        if (pointCommandService != null) {
+            GiftOrderResult giftResult = pointCommandService.createGiftOrders(List.of(new GiftCommand(
+                    userId,
+                    normalizedSceneCode,
+                    normalizedPoints,
+                    normalizedBusinessType,
+                    normalizedBusinessId,
+                    toJson(Map.of("points", normalizedPoints, "remark", normalizeOptionalString(remark))),
+                    normalizedIdempotencyKey
+            )));
+            GiftOrderResult.GiftOrderItem item = giftResult.orders().getFirst();
+            PointAccountEntity account = requireAccount(userId);
+            PointMutationResponse response = new PointMutationResponse();
+            response.setAccountId(account.getId());
+            response.setUserId(userId);
+            response.setSceneCode(normalizedSceneCode);
+            response.setPointsChange(0L);
+            response.setBalanceBefore(safeLong(account.getBalance()));
+            response.setBalanceAfter(safeLong(account.getBalance()));
+            response.setCharged(false);
+            response.setMessage("赠送订单已创建：" + item.orderNo());
+            return response;
+        }
         PointTransactionEntity existing = findTransaction(normalizedIdempotencyKey);
         if (existing != null) {
             assertSameUser(existing, userId);
@@ -482,6 +564,24 @@ public class PointService {
         log.info("赠送积分成功: userId={}, sceneCode={}, points={}, balanceAfter={}, idempotencyKey={}",
                 userId, normalizedSceneCode, normalizedPoints, balanceAfter, normalizedIdempotencyKey);
         return buildMutationFromTransaction(transaction, false, true);
+    }
+
+    /**
+     * 在同一来源业务事务内批量创建赠送订单。
+     *
+     * <p>注册和推荐赠送使用此入口，由统一命令服务按用户 ID 排序加锁。</p>
+     *
+     * @param commands 赠送命令
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void createGiftOrders(List<GiftCommand> commands) {
+        if (commands == null || commands.isEmpty()) {
+            return;
+        }
+        if (pointCommandService == null) {
+            throw new IllegalStateException("统一积分命令服务未注入，禁止绕过微信赠送订单");
+        }
+        pointCommandService.createGiftOrders(commands);
     }
 
     /**
@@ -602,6 +702,27 @@ public class PointService {
             return response;
         }
 
+        if (pointCommandService != null
+                && PointTransactionTypeDict.CONSUMPTION.getCode().equals(rule.getTransactionType())) {
+            String calculationSnapshot = toJson(snapshot(
+                    rule.getCalcMode(), calculation.points(), calculation.billedUnits(), rule));
+            DebitCommand command = new DebitCommand(
+                    userId,
+                    rule.getId(),
+                    rule.getSceneCode(),
+                    normalizedBusinessType,
+                    normalizedBusinessId,
+                    calculationSnapshot,
+                    normalizedIdempotencyKey,
+                    normalizeOptionalString(remark),
+                    calculation.points()
+            );
+            PointMutationResult mutation = VISITOR_SCENES.contains(rule.getSceneCode())
+                    ? pointCommandService.deductForVisitor(command)
+                    : pointCommandService.deductForMaintainer(command);
+            return buildMutationFromCommand(userId, rule, calculation, mutation);
+        }
+
         long signedPoints = signedPoints(rule.getTransactionType(), calculation.points());
         long balanceBefore;
         long balanceAfter;
@@ -660,6 +781,10 @@ public class PointService {
         PointAccountEntity account = new PointAccountEntity();
         account.setUserId(userId);
         account.setBalance(0L);
+        account.setWechatBalance(0L);
+        account.setWechatPresentBalance(0L);
+        account.setPendingDebit(0L);
+        account.setWechatBalanceSyncedAt(null);
         account.setTotalRecharged(0L);
         account.setTotalGifted(0L);
         account.setTotalConsumed(0L);
@@ -749,6 +874,9 @@ public class PointService {
      */
     private PointAccountEntity fillAccountDefaults(PointAccountEntity account) {
         account.setBalance(safeLong(account.getBalance()));
+        account.setWechatBalance(safeLong(account.getWechatBalance()));
+        account.setWechatPresentBalance(safeLong(account.getWechatPresentBalance()));
+        account.setPendingDebit(safeLong(account.getPendingDebit()));
         account.setTotalRecharged(safeLong(account.getTotalRecharged()));
         account.setTotalGifted(safeLong(account.getTotalGifted()));
         account.setTotalConsumed(safeLong(account.getTotalConsumed()));
@@ -1112,6 +1240,29 @@ public class PointService {
         return response;
     }
 
+    /** 将统一扣除命令结果转换为既有接口响应。 */
+    private PointMutationResponse buildMutationFromCommand(
+            Long userId,
+            PointRuleEntity rule,
+            PointCalculation calculation,
+            PointMutationResult mutation
+    ) {
+        PointMutationResponse response = new PointMutationResponse();
+        response.setTransactionId(mutation.transactionId());
+        response.setAccountId(mutation.accountId());
+        response.setUserId(userId);
+        response.setSceneCode(rule.getSceneCode());
+        response.setSceneText(sceneText(rule.getSceneCode()));
+        response.setPointsChange(Math.negateExact(mutation.points()));
+        response.setBalanceBefore(mutation.balanceBefore());
+        response.setBalanceAfter(mutation.balanceAfter());
+        response.setIdempotent(mutation.idempotent());
+        response.setCharged(true);
+        response.setBilledUnits(calculation.billedUnits());
+        response.setMessage(mutation.idempotent() ? "已处理过相同积分请求" : "积分变动成功");
+        return response;
+    }
+
     /**
      * 从计算快照读取计费单位数。
      *
@@ -1261,7 +1412,32 @@ public class PointService {
         item.setOccurredAt(transaction.getOccurredAt() == null
                 ? ""
                 : TRANSACTION_TIME_FORMATTER.format(transaction.getOccurredAt()));
+        fillWechatSettlement(item, transaction);
         return item;
+    }
+
+    /** 填充消费流水对应的微信待结算状态。 */
+    private void fillWechatSettlement(
+            MinePointTransactionsResponse.TransactionItem item,
+            PointTransactionEntity transaction
+    ) {
+        if (!PointTransactionTypeDict.CONSUMPTION.getCode().equals(transaction.getTransactionType())
+                || pointPendingDebitEntityMapper == null) {
+            return;
+        }
+        PointPendingDebitEntity pending = pointPendingDebitEntityMapper.selectOne(
+                Wrappers.lambdaQuery(PointPendingDebitEntity.class)
+                        .eq(PointPendingDebitEntity::getPointTransactionId, transaction.getId())
+                        .last("LIMIT 1"));
+        long remaining = pending == null ? 0L : safeLong(pending.getRemainingAmount());
+        item.setPendingSettlementPoints(remaining);
+        if (remaining == 0L) {
+            item.setWechatSettlementStatus("SETTLED");
+        } else if (pending != null && remaining < safeLong(pending.getOriginalAmount())) {
+            item.setWechatSettlementStatus("PARTIAL");
+        } else {
+            item.setWechatSettlementStatus("PENDING");
+        }
     }
 
     /**

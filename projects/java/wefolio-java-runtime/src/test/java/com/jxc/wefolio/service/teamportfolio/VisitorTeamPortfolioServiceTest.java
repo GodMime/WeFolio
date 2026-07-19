@@ -505,7 +505,8 @@ class VisitorTeamPortfolioServiceTest {
         VisitorAuthTokenService tokenService = mock(VisitorAuthTokenService.class);
         VisitorTeamPortfolioService service = new VisitorTeamPortfolioService(
                 properties, portfolioMapper, teamMapper, renderService, scheduleService,
-                contactService, visitService, visitorService, tokenService);
+                contactService, visitService, visitorService, tokenService,
+                mock(com.jxc.wefolio.service.PointBalanceGateService.class));
         return new VisitorServiceContext(service, portfolioMapper, teamMapper, renderService,
                 scheduleService, contactService, visitService, visitorService, tokenService);
     }

@@ -14,10 +14,13 @@ import java.util.Locale;
 
 /**
  * 微信支付配置 — 从部署环境注入 APIv3 商户参数和通知地址。
+ *
+ * @deprecated 普通微信支付已由微信虚拟支付替代，待兼容观察期结束后删除
  */
 @Data
 @Component
 @ConfigurationProperties(prefix = "wechat.pay")
+@Deprecated(forRemoval = true)
 public class WechatPayProperties {
 
     /** 支付通知固定路径。 */
@@ -55,7 +58,10 @@ public class WechatPayProperties {
 
     /**
      * 校验启用状态下的必填配置。
+     *
+     * @deprecated 仅供待移除的普通微信支付客户端配置使用
      */
+    @Deprecated(forRemoval = true)
     public void validateEnabledConfiguration() {
         if (!enabled) {
             return;

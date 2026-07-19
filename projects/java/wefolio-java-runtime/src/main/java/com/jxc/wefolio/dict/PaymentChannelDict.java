@@ -9,8 +9,16 @@ import java.util.stream.Collectors;
  */
 public enum PaymentChannelDict {
 
-    /** 微信支付。 */
-    WECHAT_PAY("WECHAT_PAY", "微信支付");
+    /**
+     * 微信支付。
+     *
+     * @deprecated 普通微信支付渠道已由微信虚拟支付替代
+     */
+    @Deprecated(forRemoval = true)
+    WECHAT_PAY("WECHAT_PAY", "微信支付"),
+
+    /** 微信虚拟支付。 */
+    WECHAT_VIRTUAL_PAYMENT("WECHAT_VIRTUAL_PAYMENT", "微信虚拟支付");
 
     /** 渠道编码。 */
     private final String code;

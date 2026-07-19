@@ -1,8 +1,12 @@
 const { request } = require('../../utils/request')
-const { handleMaintainerAuthRequired, hasLocalToken } = require('../../utils/session')
+const {
+  handleMaintainerAuthRequired,
+  hasLocalToken,
+  refreshMaintainerWechatSession
+} = require('../../utils/session')
 const {
   applyRechargeBalance,
-  buildRequestPaymentOptions,
+  buildRequestVirtualPaymentOptions,
   isPaymentCancelled,
   normalizeRechargePage,
   selectRechargePackage
@@ -18,13 +22,32 @@ function emptyRechargeData() {
   return normalizeRechargePage({})
 }
 
-function requestWechatPayment(paymentOptions) {
+function requestWechatVirtualPayment(paymentOptions) {
   return new Promise((resolve, reject) => {
-    wx.requestPayment(Object.assign({}, paymentOptions, {
+    wx.requestVirtualPayment(Object.assign({}, paymentOptions, {
       success: resolve,
       fail: reject
     }))
   })
+}
+
+function refreshWechatSessionNow() {
+  return new Promise((resolve, reject) => {
+    wx.login({
+      success(result) {
+        if (!result || !result.code) {
+          reject(new Error('微信登录未返回有效 code'))
+          return
+        }
+        Promise.resolve(refreshMaintainerWechatSession(result.code)).then(resolve, reject)
+      },
+      fail: reject
+    })
+  })
+}
+
+function isVirtualPaymentSessionInvalid(error) {
+  return Number(error && (error.errCode || error.err_code)) === -15007
 }
 
 Page({
@@ -91,7 +114,7 @@ Page({
     })
   },
 
-  async handlePay() {
+  async handlePay(options = {}) {
     if (this.data.paying || this.data.syncing) {
       return
     }
@@ -109,7 +132,7 @@ Page({
         method: 'POST',
         data: { packageId }
       })
-      await requestWechatPayment(buildRequestPaymentOptions(order))
+      await requestWechatVirtualPayment(buildRequestVirtualPaymentOptions(order))
       paymentCompleted = true
       this.setData({ paying: false, syncing: true })
 
@@ -148,6 +171,11 @@ Page({
       if (!paymentCompleted && isPaymentCancelled(error)) {
         wx.showToast({ title: '已取消支付', icon: 'none' })
         return
+      }
+      if (!paymentCompleted && !options.sessionRetried && isVirtualPaymentSessionInvalid(error)) {
+        await refreshWechatSessionNow()
+        this.setData({ paying: false, syncing: false })
+        return this.handlePay({ sessionRetried: true })
       }
       wx.showToast({
         title: error && error.message ? error.message : '支付调起失败，请稍后重试',

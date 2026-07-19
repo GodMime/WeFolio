@@ -25,4 +25,7 @@ public interface TeamPortfolioMessage {
 
     /** 团队作品集标题不能为空 */
     String TITLE_REQUIRED = "请填写团队作品集标题";
+
+    /** 分享渠道不支持 */
+    String SHARE_CHANNEL_UNSUPPORTED = "分享渠道不支持";
 }

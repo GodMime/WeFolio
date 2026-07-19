@@ -68,6 +68,9 @@ public interface PortfolioMessage {
     /** 分享渠道为空提示 */
     String SHARE_CHANNEL_REQUIRED_MESSAGE = "分享渠道不能为空";
 
+    /** 分享渠道不支持提示 */
+    String SHARE_CHANNEL_UNSUPPORTED_MESSAGE = "分享渠道不支持";
+
     /** 作品集不存在提示 */
     String PORTFOLIO_NOT_FOUND_MESSAGE = "作品集不存在";
 

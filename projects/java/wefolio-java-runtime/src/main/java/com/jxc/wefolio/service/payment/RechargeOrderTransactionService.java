@@ -6,6 +6,7 @@ import com.jxc.wefolio.config.WechatMiniappProperties;
 import com.jxc.wefolio.config.WechatPayProperties;
 import com.jxc.wefolio.dict.PaymentChannelDict;
 import com.jxc.wefolio.dict.RechargeOrderStatusDict;
+import com.jxc.wefolio.dict.PointSceneCodeDict;
 import com.jxc.wefolio.dto.PointMutationResponse;
 import com.jxc.wefolio.entity.PointAccountEntity;
 import com.jxc.wefolio.entity.RechargeOrderEntity;
@@ -15,6 +16,10 @@ import com.jxc.wefolio.mapper.RechargeOrderEntityMapper;
 import com.jxc.wefolio.message.RechargeMessage;
 import com.jxc.wefolio.service.MerchantOrderNoGenerator;
 import com.jxc.wefolio.service.PointService;
+import com.jxc.wefolio.service.point.GiftCommand;
+import com.jxc.wefolio.service.point.GiftOrderResult;
+import com.jxc.wefolio.service.point.PointCommandService;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
@@ -59,6 +64,12 @@ public class RechargeOrderTransactionService {
     /** 微信小程序配置。 */
     private final WechatMiniappProperties miniappProperties;
 
+    /** 统一积分命令入口，用于创建充值赠送订单。 */
+    private final PointCommandService pointCommandService;
+
+    /** 充值成功后恢复剩余待扣的活动任务。 */
+    private final PointDebitTaskService pointDebitTaskService;
+
     /**
      * 创建待支付本地订单，商户订单号唯一冲突时最多重试三次。
      *
@@ -95,8 +106,10 @@ public class RechargeOrderTransactionService {
      *
      * @param merchantOrderNo 商户订单号
      * @param prepayId 微信预支付标识
+     * @deprecated 普通微信支付预下单已下线，虚拟支付不生成 prepayId
      */
     @Transactional(rollbackFor = Exception.class)
+    @Deprecated(forRemoval = true)
     public void markPrepayReady(String merchantOrderNo, String prepayId) {
         RechargeOrderEntity order = requireLockedOrder(merchantOrderNo);
         if (!RechargeOrderStatusDict.PENDING_PAYMENT.getCode().equals(order.getStatus())) {
@@ -110,8 +123,10 @@ public class RechargeOrderTransactionService {
      * 将微信预下单失败的待支付订单标记为支付失败。
      *
      * @param merchantOrderNo 商户订单号
+     * @deprecated 普通微信支付预下单已下线
      */
     @Transactional(rollbackFor = Exception.class)
+    @Deprecated(forRemoval = true)
     public void markPrepayFailed(String merchantOrderNo) {
         RechargeOrderEntity order = requireLockedOrder(merchantOrderNo);
         if (!RechargeOrderStatusDict.PENDING_PAYMENT.getCode().equals(order.getStatus())) {
@@ -155,8 +170,10 @@ public class RechargeOrderTransactionService {
      *
      * @param transaction 标准化微信交易
      * @return 结算结果
+     * @deprecated 普通微信支付结算已由虚拟支付权威结算替代
      */
     @Transactional(rollbackFor = Exception.class)
+    @Deprecated(forRemoval = true)
     public RechargeSettlementResult settle(WechatPayClient.Transaction transaction) {
         requireSuccessfulTransaction(transaction);
         RechargeOrderEntity order = rechargeOrderEntityMapper.selectForUpdateByMerchantOrderNo(
@@ -186,6 +203,59 @@ public class RechargeOrderTransactionService {
         order.setPaidAt(transaction.successTime() == null ? LocalDateTime.now() : transaction.successTime());
         order.setClosedAt(null);
         updateOrder(order);
+        return new RechargeSettlementResult(order, mutation.getBalanceAfter(), false);
+    }
+
+    /** 根据微信虚拟支付权威查单结果完成基础代币充值和套餐赠送。 */
+    @Transactional(rollbackFor = Exception.class)
+    public RechargeSettlementResult settleVirtual(
+            String merchantOrderNo,
+            WechatVirtualPaymentResult result
+    ) {
+        if (result == null || !result.isSuccessful()) {
+            throw new BusinessException(RechargeMessage.TRADE_STATE_INVALID_MESSAGE);
+        }
+        RechargeOrderEntity order = requireLockedOrder(merchantOrderNo);
+        if (RechargeOrderStatusDict.PAID.getCode().equals(order.getStatus())) {
+            return new RechargeSettlementResult(order, null, true);
+        }
+        if (result.buyQuantity() > 0L && !Objects.equals(order.getBuyQuantity(), result.buyQuantity())) {
+            throw new BusinessException(RechargeMessage.AMOUNT_MISMATCH_MESSAGE);
+        }
+        if (result.payAmount() > 0L && result.payAmount() != order.getAmountFen()) {
+            throw new BusinessException(RechargeMessage.AMOUNT_MISMATCH_MESSAGE);
+        }
+        String packageName = JSONObject.parseObject(order.getPackageSnapshot()).getString("packageName");
+        PointMutationResponse mutation = pointService.recharge(
+                order.getUserId(),
+                order.getBasePoints().longValue(),
+                order.getMerchantOrderNo(),
+                order.getPackageSnapshot(),
+                POINT_IDEMPOTENCY_PREFIX + order.getMerchantOrderNo(),
+                packageName
+        );
+        order.setPointTransactionId(mutation.getTransactionId());
+        if (order.getBonusPoints() != null && order.getBonusPoints() > 0 && order.getBonusGiftOrderId() == null) {
+            GiftOrderResult gifts = pointCommandService.createGiftOrders(List.of(new GiftCommand(
+                    order.getUserId(),
+                    PointSceneCodeDict.RECHARGE_BONUS_GIFT.getCode(),
+                    order.getBonusPoints(),
+                    "RECHARGE_BONUS",
+                    order.getMerchantOrderNo(),
+                    order.getPackageSnapshot(),
+                    "RECHARGE_BONUS:" + order.getMerchantOrderNo()
+            )));
+            order.setBonusGiftOrderId(gifts.orders().getFirst().orderId());
+        }
+        order.setStatus(RechargeOrderStatusDict.PAID.getCode());
+        order.setWechatOrderId(result.remoteOrderId() == null || result.remoteOrderId().isBlank()
+                ? order.getMerchantOrderNo()
+                : result.remoteOrderId());
+        order.setPaidFee(result.payAmount());
+        order.setPaidAt(LocalDateTime.now());
+        order.setClosedAt(null);
+        updateOrder(order);
+        pointDebitTaskService.ensureActiveTask(order.getUserId());
         return new RechargeSettlementResult(order, mutation.getBalanceAfter(), false);
     }
 
@@ -230,8 +300,9 @@ public class RechargeOrderTransactionService {
         order.setBasePoints(rechargePackage.getBasePoints());
         order.setBonusPoints(rechargePackage.getBonusPoints());
         order.setTotalPoints(rechargePackage.getTotalPoints());
+        order.setBuyQuantity(rechargePackage.getBasePoints().longValue());
         order.setStatus(RechargeOrderStatusDict.PENDING_PAYMENT.getCode());
-        order.setPayChannel(PaymentChannelDict.WECHAT_PAY.getCode());
+        order.setPayChannel(PaymentChannelDict.WECHAT_VIRTUAL_PAYMENT.getCode());
         order.setExpireAt(expireAt);
         return order;
     }

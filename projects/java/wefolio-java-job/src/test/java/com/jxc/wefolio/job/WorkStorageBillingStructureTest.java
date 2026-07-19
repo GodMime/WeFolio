@@ -36,6 +36,12 @@ class WorkStorageBillingStructureTest {
                         "WorkStorageBillingUnavailableException.java",
                         "WorkStorageBillingModels.java"
                 );
+        String runtimeClient = Files.readString(Path.of(
+                "src/main/java/com/jxc/wefolio/job/service/RuntimeWorkStorageBillingClient.java"));
+        assertThat(runtimeClient)
+                .contains("private final RestClient restClient")
+                .contains("this.restClient = RestClient.create()")
+                .doesNotContain("RestClient.create().post()");
         for (Path sourceFile : sourceFiles) {
             String source = Files.readString(sourceFile);
             assertThat(source)

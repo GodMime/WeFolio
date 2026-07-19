@@ -24,7 +24,7 @@ const WORKS_PAGE_URL = '/pages/works/works'
 const MINE_PAGE_URL = '/pages/index/index'
 const DEFAULT_COVER_URL = '/assets/system/work-logo-100kb.jpg'
 const UNAVAILABLE_TOAST_TITLE = '暂未开放，即将发布'
-const SHARE_CHANNEL_WECHAT_MINIAPP = 'WECHAT_MINIAPP'
+const SHARE_CHANNEL_WECHAT_CARD = 'WECHAT_CARD'
 const SHARE_SCENE_PORTFOLIO_LIST = 'PORTFOLIO_LIST'
 const SWIPE_REVEAL_THRESHOLD = -32
 const SWIPE_CLOSE_THRESHOLD = 24
@@ -44,7 +44,6 @@ const TEAM_SELECT_URL = '/pages/team-portfolios/team-select/team-select'
 const TEAM_EDIT_URL = '/pages/team-portfolios/standard-edit/team-portfolio-standard-edit'
 const TEAM_PREVIEW_URL = '/pages/team-portfolios/standard-preview/team-portfolio-standard-preview'
 const TEAM_VISITOR_SHARE_PATH_PREFIX = '/pages/team-portfolios/visitor-portfolio/team-visitor-portfolio?shareCode='
-const SHARE_CHANNEL_WECHAT_CARD = 'WECHAT_CARD'
 const SHARE_SCENE_TEAM_PORTFOLIO_LIST = 'TEAM_PORTFOLIO_LIST'
 const IDEMPOTENCY_PREFIX_TEAM_PUBLISH = 'team-publish'
 
@@ -753,7 +752,7 @@ Page({
       url: `${PORTFOLIOS_API_URL}/${portfolio.portfolioId}/share-records`,
       method: 'POST',
       data: {
-        shareChannel: SHARE_CHANNEL_WECHAT_MINIAPP,
+        shareChannel: SHARE_CHANNEL_WECHAT_CARD,
         shareScene: SHARE_SCENE_PORTFOLIO_LIST
       }
     }).catch(() => {})

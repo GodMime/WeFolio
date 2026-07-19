@@ -22,8 +22,11 @@ import java.time.format.DateTimeFormatter;
 
 /**
  * 基于官方 wechatpay-java 的微信支付适配器。
+ *
+ * @deprecated 普通微信支付已由微信虚拟支付替代，后续删除官方 SDK 适配器
  */
 @Slf4j
+@Deprecated(forRemoval = true)
 public class SdkWechatPayClient implements WechatPayClient {
 
     /** 人民币币种编码。 */
@@ -69,6 +72,7 @@ public class SdkWechatPayClient implements WechatPayClient {
     }
 
     @Override
+    @Deprecated(forRemoval = true)
     public PrepayResult prepay(PrepayCommand command) {
         PrepayRequest request = new PrepayRequest();
         request.setAppid(command.appId());
@@ -101,6 +105,7 @@ public class SdkWechatPayClient implements WechatPayClient {
     }
 
     @Override
+    @Deprecated(forRemoval = true)
     public WechatPayClient.Transaction queryByMerchantOrderNo(String merchantOrderNo) {
         QueryOrderByOutTradeNoRequest request = new QueryOrderByOutTradeNoRequest();
         request.setMchid(merchantId);
@@ -115,6 +120,7 @@ public class SdkWechatPayClient implements WechatPayClient {
     }
 
     @Override
+    @Deprecated(forRemoval = true)
     public WechatPayClient.Transaction parseNotification(NotificationRequest request) {
         RequestParam requestParam = new RequestParam.Builder()
                 .serialNumber(request.serialNumber())

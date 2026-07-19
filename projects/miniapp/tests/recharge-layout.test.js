@@ -27,7 +27,7 @@ test('recharge page exposes balance, package selection, records, payment and rul
 
   assert.match(js, /const RECHARGE_PAGE_URL = '\/api\/mine\/recharges'/)
   assert.match(js, /const CREATE_ORDER_URL = '\/api\/mine\/recharges\/orders'/)
-  assert.match(js, /wx\.requestPayment/)
+  assert.match(js, /wx\.requestVirtualPayment/)
   assert.match(wxml, /navigation-bar title="充值积分" back="\{\{true\}\}"/)
   assert.match(wxml, /当前余额/)
   assert.match(wxml, /bindtap="handleRecordsTap"[\s\S]*充值记录/)

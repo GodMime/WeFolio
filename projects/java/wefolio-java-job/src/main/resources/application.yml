@@ -25,6 +25,9 @@ wefolio:
   mybatis:
     # MyBatis SQL 日志开关，默认关闭。
     sql-log-enabled: ${WEFOLIO_MYBATIS_SQL_LOG_ENABLED:false}
+  runtime:
+    # runtime 单用户月费结算 HTTPS 根地址。
+    base-url: ${WEFOLIO_RUNTIME_BASE_URL:}
 
 server:
   # 默认只监听本机地址，和 runtime 保持一致。
@@ -76,7 +79,7 @@ work-audit:
 admin:
   point:
     # 复用 Runtime 人工加分接口的后台积分密钥。
-    secret: ${POINT_ADMIN_SECRET:}
+    secret: ${ADMIN_POINT_SECRET:}
 
 work-storage-billing:
   # 是否启用每月作品存储结算调度。

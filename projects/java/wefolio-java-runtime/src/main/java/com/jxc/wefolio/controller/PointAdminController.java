@@ -3,7 +3,8 @@ package com.jxc.wefolio.controller;
 import com.jxc.wefolio.annotation.SystemAccess;
 import com.jxc.wefolio.common.Response;
 import com.jxc.wefolio.dto.AdminPointGrantRequest;
-import com.jxc.wefolio.dto.PointMutationResponse;
+import com.jxc.wefolio.service.point.GiftOrderResult;
+import org.springframework.web.bind.annotation.PathVariable;
 import com.jxc.wefolio.service.PointAdminService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -30,10 +31,28 @@ public class PointAdminController {
      * @return 积分变动结果
      */
     @PostMapping("/api/admin/points/grants")
-    public Response<PointMutationResponse> grantPoints(
+    public Response<GiftOrderResult> grantPoints(
             @RequestHeader(value = "X-Admin-Point-Secret", required = false) String secret,
             @RequestBody AdminPointGrantRequest request
     ) {
         return Response.success(pointAdminService.grantPoints(secret, request));
+    }
+
+    /** 人工重试原赠送订单。 */
+    @PostMapping("/api/admin/points/gift-orders/{orderNo}/retry")
+    public Response<Boolean> retryGiftOrder(
+            @RequestHeader(value = "X-Admin-Point-Secret", required = false) String secret,
+            @PathVariable String orderNo
+    ) {
+        return Response.success(pointAdminService.retryGiftOrder(secret, orderNo));
+    }
+
+    /** 人工重试原扣币任务。 */
+    @PostMapping("/api/admin/points/debit-tasks/{taskId}/retry")
+    public Response<Boolean> retryDebitTask(
+            @RequestHeader(value = "X-Admin-Point-Secret", required = false) String secret,
+            @PathVariable Long taskId
+    ) {
+        return Response.success(pointAdminService.retryDebitTask(secret, taskId));
     }
 }

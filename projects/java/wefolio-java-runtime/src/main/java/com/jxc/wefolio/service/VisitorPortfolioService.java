@@ -58,6 +58,9 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class VisitorPortfolioService {
 
+    /** 积分非正维护原因。 */
+    private static final String POINT_BALANCE_NON_POSITIVE = "POINT_BALANCE_NON_POSITIVE";
+
     /** 维护中英文主文案 */
     private static final String MAINTENANCE_PRIMARY = "UNDER MAINTENANCE";
 
@@ -118,6 +121,9 @@ public class VisitorPortfolioService {
     /** 维护者本人访问识别服务 */
     private final OwnerSelfVisitService ownerSelfVisitService;
 
+    /** 维护者实际可用积分门禁。 */
+    private final PointBalanceGateService pointBalanceGateService;
+
     /**
      * 打开访客作品集，使用微信 openid 创建或复用全局访客。
      *
@@ -152,6 +158,12 @@ public class VisitorPortfolioService {
                     null
             ));
             return response;
+        }
+        if (pointBalanceGateService.isNonPositive(portfolio.getOwnerId())) {
+            VisitorPortfolioResponse maintenanceResponse = buildMaintenanceResponse(portfolio, config);
+            maintenanceResponse.setMaintenanceReason(POINT_BALANCE_NON_POSITIVE);
+            fillVisitorProfileOpenFields(maintenanceResponse, visitorSession, null, portfolio.getId());
+            return maintenanceResponse;
         }
         VisitRecordEntity record;
         try {

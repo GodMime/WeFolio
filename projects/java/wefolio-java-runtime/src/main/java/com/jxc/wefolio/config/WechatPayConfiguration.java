@@ -13,8 +13,11 @@ import org.springframework.context.annotation.Configuration;
 
 /**
  * 微信支付官方 SDK 客户端配置。
+ *
+ * @deprecated 普通微信支付已由微信虚拟支付替代，待删除官方 SDK Bean
  */
 @Configuration
+@Deprecated(forRemoval = true)
 public class WechatPayConfiguration {
 
     /**
@@ -22,8 +25,10 @@ public class WechatPayConfiguration {
      *
      * @param properties 微信支付配置
      * @return 微信支付客户端
+     * @deprecated 仅保留普通微信支付兼容代码，后续删除
      */
     @Bean
+    @Deprecated(forRemoval = true)
     public WechatPayClient wechatPayClient(WechatPayProperties properties) {
         if (!properties.isEnabled()) {
             return new DisabledWechatPayClient();
@@ -51,16 +56,19 @@ public class WechatPayConfiguration {
     private static final class DisabledWechatPayClient implements WechatPayClient {
 
         @Override
+        @Deprecated(forRemoval = true)
         public PrepayResult prepay(PrepayCommand command) {
             throw unavailable();
         }
 
         @Override
+        @Deprecated(forRemoval = true)
         public Transaction queryByMerchantOrderNo(String merchantOrderNo) {
             throw unavailable();
         }
 
         @Override
+        @Deprecated(forRemoval = true)
         public Transaction parseNotification(NotificationRequest request) {
             throw unavailable();
         }

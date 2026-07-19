@@ -4,7 +4,10 @@ import java.time.LocalDateTime;
 
 /**
  * 微信支付边界接口 — 隔离官方 SDK 的请求模型和异常类型。
+ *
+ * @deprecated 普通微信支付已由 {@link WechatVirtualPaymentClient} 替代
  */
+@Deprecated(forRemoval = true)
 public interface WechatPayClient {
 
     /**
@@ -12,7 +15,9 @@ public interface WechatPayClient {
      *
      * @param command 预支付命令
      * @return 小程序调起支付参数
+     * @deprecated 小程序已改用 requestVirtualPayment
      */
+    @Deprecated(forRemoval = true)
     PrepayResult prepay(PrepayCommand command);
 
     /**
@@ -20,7 +25,9 @@ public interface WechatPayClient {
      *
      * @param merchantOrderNo 商户订单号
      * @return 标准化交易
+     * @deprecated 已改用微信虚拟支付权威查单
      */
+    @Deprecated(forRemoval = true)
     Transaction queryByMerchantOrderNo(String merchantOrderNo);
 
     /**
@@ -28,7 +35,9 @@ public interface WechatPayClient {
      *
      * @param request 原始通知
      * @return 标准化交易
+     * @deprecated 普通支付通知入口已下线
      */
+    @Deprecated(forRemoval = true)
     Transaction parseNotification(NotificationRequest request);
 
     /**

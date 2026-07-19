@@ -5,7 +5,7 @@ const {
   appendRechargeOrders,
   applyRechargeBalance,
   applyRechargeOrderSyncs,
-  buildRequestPaymentOptions,
+  buildRequestVirtualPaymentOptions,
   isPaymentCancelled,
   normalizeRechargeOrders,
   normalizeRechargePage,
@@ -46,19 +46,17 @@ test('falls back to first package and changes package selection', () => {
   assert.deepEqual(selected.packages.map((item) => item.selected), [false, true])
 })
 
-test('maps backend payment fields to wx.requestPayment options', () => {
-  assert.deepEqual(buildRequestPaymentOptions({
-    timeStamp: '1752721200',
-    nonceStr: 'nonce-value',
-    packageValue: 'prepay_id=wx123',
-    signType: 'RSA',
-    paySign: 'signature'
+test('maps backend payment fields to wx.requestVirtualPayment options', () => {
+  assert.deepEqual(buildRequestVirtualPaymentOptions({
+    mode: 'short_series_coin',
+    signData: '{"env":0}',
+    paySig: 'pay-signature',
+    signature: 'user-signature'
   }), {
-    timeStamp: '1752721200',
-    nonceStr: 'nonce-value',
-    package: 'prepay_id=wx123',
-    signType: 'RSA',
-    paySign: 'signature'
+    mode: 'short_series_coin',
+    signData: '{"env":0}',
+    paySig: 'pay-signature',
+    signature: 'user-signature'
   })
 })
 

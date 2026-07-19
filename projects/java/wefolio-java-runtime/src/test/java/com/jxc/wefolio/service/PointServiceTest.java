@@ -85,7 +85,7 @@ class PointServiceTest {
     @Test
     void pointAccountMapperShouldDeductConsumptionWithAtomicUpdateSql() throws NoSuchMethodException {
         Method method = PointAccountEntityMapper.class.getMethod(
-                "deductConsumedPoints",
+                "deductForMaintainer",
                 Long.class,
                 Long.class,
                 Long.class
@@ -96,6 +96,7 @@ class PointServiceTest {
         String sql = String.join("\n", update.value());
         assertThat(sql)
                 .contains("UPDATE wf_point_account")
+                .contains("pending_debit = pending_debit + #{points}")
                 .contains("balance = balance - #{points}")
                 .contains("total_consumed = total_consumed + #{points}")
                 .contains("version = version + 1")

@@ -63,6 +63,24 @@ wechat:
     public-key-path: ${WECHAT_PAY_PUBLIC_KEY_PATH:}
     notify-url: ${WECHAT_PAY_NOTIFY_URL:https://api.we-folio.dingchenyong.top/api/payment/wechat/recharge/notify}
     order-expire-minutes: ${WECHAT_PAY_ORDER_EXPIRE_MINUTES:15}
+  virtual-payment:
+    enabled: ${WECHAT_VIRTUAL_PAYMENT_ENABLED:false}
+    offer-id: ${WECHAT_VIRTUAL_PAYMENT_OFFER_ID:}
+    app-key: ${WECHAT_VIRTUAL_PAYMENT_APP_KEY:}
+    session-encryption-secret: ${WECHAT_SESSION_ENCRYPTION_SECRET:}
+    message-token: ${WECHAT_MESSAGE_TOKEN:}
+    message-encoding-aes-key: ${WECHAT_MESSAGE_ENCODING_AES_KEY:}
+    request-timeout: ${WECHAT_VIRTUAL_PAYMENT_REQUEST_TIMEOUT:5s}
+    session-check-interval: ${WECHAT_SESSION_CHECK_INTERVAL:300s}
+    settlement:
+      delay: ${WECHAT_VIRTUAL_PAYMENT_SETTLEMENT_DELAY:10s}
+      max-retries: ${WECHAT_VIRTUAL_PAYMENT_MAX_RETRIES:3}
+      scan-interval: ${WECHAT_VIRTUAL_PAYMENT_SCAN_INTERVAL:10s}
+      lease-duration: ${WECHAT_VIRTUAL_PAYMENT_LEASE_DURATION:60s}
+
+point:
+  lock:
+    provider: ${POINT_LOCK_PROVIDER:local}
 
 # --- Auth Token Configuration ---
 auth:
@@ -73,7 +91,7 @@ auth:
 # --- Admin Point Configuration ---
 admin:
   point:
-    secret: ${POINT_ADMIN_SECRET:}
+    secret: ${ADMIN_POINT_SECRET:}
 
 # --- Registration Point Configuration ---
 registration:

@@ -85,13 +85,12 @@ function applyRechargeBalance(rechargeData = {}, balance) {
   })
 }
 
-function buildRequestPaymentOptions(order = {}) {
+function buildRequestVirtualPaymentOptions(order = {}) {
   return {
-    timeStamp: order.timeStamp || '',
-    nonceStr: order.nonceStr || '',
-    package: order.packageValue || '',
-    signType: order.signType || 'RSA',
-    paySign: order.paySign || ''
+    mode: order.mode || 'short_series_coin',
+    signData: order.signData || '',
+    paySig: order.paySig || '',
+    signature: order.signature || ''
   }
 }
 
@@ -194,7 +193,7 @@ module.exports = {
   applyRechargeBalance,
   applyRechargeOrderSyncs,
   buildRechargeOrderQuery,
-  buildRequestPaymentOptions,
+  buildRequestVirtualPaymentOptions,
   isPaymentCancelled,
   normalizeRechargeOrders,
   normalizeRechargePage,

@@ -4,7 +4,7 @@ import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.jxc.wefolio.config.WechatMiniappProperties;
-import com.jxc.wefolio.config.WechatPayProperties;
+import com.jxc.wefolio.config.WechatVirtualPaymentProperties;
 import com.jxc.wefolio.constant.PointConstants;
 import com.jxc.wefolio.dict.AuthTypeDict;
 import com.jxc.wefolio.dict.RechargeOrderStatusDict;
@@ -35,6 +35,10 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import com.alibaba.fastjson2.JSON;
+import java.time.Instant;
 
 /**
  * 充值应用服务 — 编排套餐查询、本地建单、微信预下单、记录与主动查单。
@@ -53,8 +57,23 @@ public class RechargeService {
     /** 最大每页条数。 */
     private static final int MAX_PAGE_SIZE = 100;
 
-    /** 微信支付商品描述前缀。 */
-    private static final String PAYMENT_DESCRIPTION_PREFIX = "映期Folio-";
+    /** 小程序虚拟支付模式。 */
+    private static final String VIRTUAL_PAYMENT_MODE = "short_series_coin";
+
+    /** 小程序端签名 URI。 */
+    private static final String CLIENT_PAYMENT_URI = "requestVirtualPayment";
+
+    /** 正式环境。 */
+    private static final int FORMAL_ENVIRONMENT = 0;
+
+    /** 默认分区。 */
+    private static final String DEFAULT_ZONE_ID = "1";
+
+    /** 币种。 */
+    private static final String CURRENCY_TYPE = "CNY";
+
+    /** 本地待支付订单有效分钟数。 */
+    private static final long ORDER_EXPIRE_MINUTES = 30L;
 
     /** 充值业务统一使用的上海时区。 */
     private static final ZoneId SHANGHAI_ZONE = ZoneId.of("Asia/Shanghai");
@@ -63,8 +82,8 @@ public class RechargeService {
     private static final DateTimeFormatter TIME_FORMATTER =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-    /** 微信支付配置。 */
-    private final WechatPayProperties payProperties;
+    /** 微信虚拟支付配置。 */
+    private final WechatVirtualPaymentProperties virtualPaymentProperties;
 
     /** 微信小程序配置。 */
     private final WechatMiniappProperties miniappProperties;
@@ -87,8 +106,14 @@ public class RechargeService {
     /** 充值订单事务服务。 */
     private final RechargeOrderTransactionService transactionService;
 
-    /** 微信支付客户端。 */
-    private final WechatPayClient wechatPayClient;
+    /** 微信虚拟支付客户端。 */
+    private final WechatVirtualPaymentClient wechatVirtualPaymentClient;
+
+    /** 微信虚拟支付签名器。 */
+    private final WechatVirtualPaymentSigner virtualPaymentSigner;
+
+    /** 维护者微信会话服务。 */
+    private final MaintainerWechatSessionService maintainerWechatSessionService;
 
     /**
      * 获取充值页数据。
@@ -116,6 +141,8 @@ public class RechargeService {
      * @return 支付参数
      */
     public CreateRechargeOrderResponse createOrder(Long userId, CreateRechargeOrderRequest request) {
+        log.info("微信虚拟支付业务开始 operation=创建充值订单 referenceNo=null userId={} packageId={}",
+                userId, request == null ? null : request.getPackageId());
         requirePaymentEnabled();
         if (request == null || request.getPackageId() == null) {
             throw new BusinessException(RechargeMessage.PACKAGE_ID_REQUIRED_MESSAGE);
@@ -125,34 +152,18 @@ public class RechargeService {
         RechargePackageEntity rechargePackage = requireActivePackage(
                 request.getPackageId(), LocalDateTime.now());
         PointAccountEntity account = pointService.ensureAccount(userId);
+        MaintainerWechatSession session = requireWechatSession(userId);
         LocalDateTime expireAt = LocalDateTime.now(SHANGHAI_ZONE)
-                .plusMinutes(payProperties.getOrderExpireMinutes());
+                .plusMinutes(ORDER_EXPIRE_MINUTES);
         RechargeOrderEntity order = transactionService.createPendingOrder(
                 userId, account, rechargePackage, expireAt);
-        try {
-            WechatPayClient.PrepayResult prepay = wechatPayClient.prepay(new WechatPayClient.PrepayCommand(
-                    miniappProperties.getAppId(),
-                    payProperties.getMerchantId(),
-                    PAYMENT_DESCRIPTION_PREFIX + rechargePackage.getPackageName(),
-                    order.getMerchantOrderNo(),
-                    order.getAmountFen(),
-                    openId,
-                    expireAt,
-                    payProperties.getNotifyUrl()
-            ));
-            transactionService.markPrepayReady(order.getMerchantOrderNo(), prepay.prepayId());
-            return buildCreateResponse(order, prepay);
-        } catch (RuntimeException exception) {
-            try {
-                transactionService.markPrepayFailed(order.getMerchantOrderNo());
-            } catch (RuntimeException markException) {
-                log.error("微信支付预下单失败且本地订单状态回写失败: merchantOrderNo={}, exceptionType={}",
-                        order.getMerchantOrderNo(), markException.getClass().getSimpleName());
-            }
-            log.warn("微信支付预下单失败: merchantOrderNo={}, exceptionType={}",
-                    order.getMerchantOrderNo(), exception.getClass().getSimpleName());
-            throw new BusinessException(RechargeMessage.PREPAY_FAILED_MESSAGE, exception);
-        }
+        String signData = buildSignData(order);
+        CreateRechargeOrderResponse response = buildCreateResponse(order, signData, session.sessionKey());
+        log.info("微信虚拟支付业务完成 operation=创建充值订单 referenceNo={} userId={} "
+                        + "localStatus={} amountFen={} points={}",
+                order.getMerchantOrderNo(), userId, order.getStatus(), order.getAmountFen(),
+                order.getTotalPoints());
+        return response;
     }
 
     /**
@@ -183,6 +194,8 @@ public class RechargeService {
      * 主动查询并同步当前用户的一笔充值订单。
      */
     public RechargeOrderSyncResponse syncOrder(Long userId, String merchantOrderNo) {
+        log.info("微信虚拟支付业务开始 operation=同步充值订单 referenceNo={} userId={}",
+                merchantOrderNo, userId);
         requirePaymentEnabled();
         if (merchantOrderNo == null || merchantOrderNo.isBlank()) {
             throw new BusinessException(RechargeMessage.MERCHANT_ORDER_NO_REQUIRED_MESSAGE);
@@ -191,39 +204,89 @@ public class RechargeService {
         RechargeOrderEntity order = findUserOrder(userId, normalizedOrderNo);
         if (RechargeOrderStatusDict.PAID.getCode().equals(order.getStatus())) {
             PointAccountEntity account = pointService.ensureAccount(userId);
-            return buildSyncResponse(order, account.getBalance(), true);
+            return completeSync(order, userId, account.getBalance(), true);
         }
-        WechatPayClient.Transaction transaction;
-        try {
-            transaction = wechatPayClient.queryByMerchantOrderNo(order.getMerchantOrderNo());
-        } catch (RuntimeException exception) {
-            log.warn("微信支付主动查单失败: merchantOrderNo={}, exceptionType={}",
-                    order.getMerchantOrderNo(), exception.getClass().getSimpleName());
-            throw new BusinessException(RechargeMessage.ORDER_QUERY_FAILED_MESSAGE, exception);
-        }
-        if (transaction == null || transaction.tradeState() == null) {
+        MaintainerWechatSession session = requireWechatSession(userId);
+        String openId = requireWechatOpenId(userId);
+        WechatVirtualPaymentResult transaction = wechatVirtualPaymentClient.queryOrder(
+                new WechatQueryOrderRequest(
+                        userId, order.getMerchantOrderNo(), openId,
+                        session.sessionKey(), session.clientIp(),
+                        order.getMerchantOrderNo(), Instant.now().getEpochSecond()));
+        log.info("微信虚拟支付业务微信结果 operation=同步充值订单 referenceNo={} userId={} "
+                        + "errcode={} orderStatus={} payAmount={} remoteOrderId={}",
+                order.getMerchantOrderNo(), userId, transaction.errorCode(), transaction.orderStatus(),
+                transaction.payAmount(), transaction.remoteOrderId());
+        if (!transaction.isSuccessful()) {
             throw new BusinessException(RechargeMessage.ORDER_QUERY_FAILED_MESSAGE);
         }
-        if (!order.getMerchantOrderNo().equals(transaction.merchantOrderNo())) {
-            throw new BusinessException(RechargeMessage.MERCHANT_ORDER_NO_MISMATCH_MESSAGE);
+        validateAuthorityIdentity(order, openId, transaction);
+        if ("SUCCESS".equals(transaction.orderStatus()) || "PAID".equals(transaction.orderStatus())) {
+            RechargeSettlementResult result = transactionService.settleVirtual(
+                    order.getMerchantOrderNo(), transaction);
+            return completeSync(result.order(), userId, result.balance(), true);
         }
-        if (transaction.tradeState() == WechatPayClient.TradeState.SUCCESS) {
-            RechargeSettlementResult result = transactionService.settle(transaction);
-            return buildSyncResponse(result.order(), result.balance(), true);
-        }
-        if (transaction.tradeState() == WechatPayClient.TradeState.CLOSED
-                || transaction.tradeState() == WechatPayClient.TradeState.REVOKED) {
+        if ("CLOSED".equals(transaction.orderStatus())) {
             RechargeOrderEntity closed = transactionService.markTerminalState(
                     userId, normalizedOrderNo, RechargeOrderStatusDict.CLOSED);
-            return buildSyncResponse(closed, null, true);
+            return completeSync(closed, userId, null, true);
         }
-        if (transaction.tradeState() == WechatPayClient.TradeState.PAYERROR
-                || transaction.tradeState() == WechatPayClient.TradeState.REFUND) {
+        if ("PAYERROR".equals(transaction.orderStatus()) || "REFUND".equals(transaction.orderStatus())) {
             RechargeOrderEntity failed = transactionService.markTerminalState(
                     userId, normalizedOrderNo, RechargeOrderStatusDict.PAYMENT_FAILED);
-            return buildSyncResponse(failed, null, true);
+            return completeSync(failed, userId, null, true);
         }
-        return buildSyncResponse(order, null, false);
+        return completeSync(order, userId, null, false);
+    }
+
+    /** 记录充值同步完成状态并构造响应。 */
+    private RechargeOrderSyncResponse completeSync(
+            RechargeOrderEntity order,
+            Long userId,
+            Long balance,
+            boolean confirmed
+    ) {
+        log.info("微信虚拟支付业务完成 operation=同步充值订单 referenceNo={} userId={} "
+                        + "localStatus={} balance={} confirmed={}",
+                order.getMerchantOrderNo(), userId, order.getStatus(), balance, confirmed);
+        return buildSyncResponse(order, balance, confirmed);
+    }
+
+    /** 校验权威查单结果属于当前用户、正式环境和本地订单。 */
+    private void validateAuthorityIdentity(
+            RechargeOrderEntity order,
+            String openId,
+            WechatVirtualPaymentResult result
+    ) {
+        if (result.openid() != null && !result.openid().isBlank()
+                && !openId.equals(result.openid())) {
+            throw new BusinessException(RechargeMessage.WECHAT_IDENTITY_MISSING_MESSAGE);
+        }
+        if (result.environment() != null && result.environment() != FORMAL_ENVIRONMENT) {
+            throw new BusinessException(RechargeMessage.ORDER_QUERY_FAILED_MESSAGE);
+        }
+        if (result.remoteOrderId() != null && !result.remoteOrderId().isBlank()
+                && !order.getMerchantOrderNo().equals(result.remoteOrderId())) {
+            throw new BusinessException(RechargeMessage.ORDER_QUERY_FAILED_MESSAGE);
+        }
+    }
+
+    /**
+     * 由已验签的微信通知触发权威查单，不信任通知中的支付结论。
+     *
+     * @param merchantOrderNo 商户订单号
+     * @return 同步结果
+     */
+    public RechargeOrderSyncResponse syncOrderFromNotification(String merchantOrderNo) {
+        RechargeOrderEntity order = rechargeOrderEntityMapper.selectOne(
+                Wrappers.lambdaQuery(RechargeOrderEntity.class)
+                        .eq(RechargeOrderEntity::getMerchantOrderNo, merchantOrderNo)
+                        .last("LIMIT 1")
+        );
+        if (order == null) {
+            throw new BusinessException(RechargeMessage.ORDER_NOT_FOUND_MESSAGE);
+        }
+        return syncOrder(order.getUserId(), merchantOrderNo);
     }
 
     /**
@@ -310,7 +373,7 @@ public class RechargeService {
      * 校验微信支付已启用。
      */
     private void requirePaymentEnabled() {
-        if (!payProperties.isEnabled()) {
+        if (!virtualPaymentProperties.isEnabled()) {
             throw new BusinessException(RechargeMessage.PAYMENT_NOT_CONFIGURED_MESSAGE);
         }
     }
@@ -335,17 +398,39 @@ public class RechargeService {
      */
     private CreateRechargeOrderResponse buildCreateResponse(
             RechargeOrderEntity order,
-            WechatPayClient.PrepayResult prepay
+            String signData,
+            String sessionKey
     ) {
         CreateRechargeOrderResponse response = new CreateRechargeOrderResponse();
         response.setMerchantOrderNo(order.getMerchantOrderNo());
         response.setStatus(order.getStatus());
-        response.setTimeStamp(prepay.timeStamp());
-        response.setNonceStr(prepay.nonceStr());
-        response.setPackageValue(prepay.packageValue());
-        response.setSignType(prepay.signType());
-        response.setPaySign(prepay.paySign());
+        response.setMode(VIRTUAL_PAYMENT_MODE);
+        response.setSignData(signData);
+        response.setPaySig(virtualPaymentSigner.paySignature(
+                virtualPaymentProperties.getAppKey(), CLIENT_PAYMENT_URI, signData));
+        response.setSignature(virtualPaymentSigner.userSignature(sessionKey, signData));
         return response;
+    }
+
+    /** 构造一次且只构造一次的小程序虚拟支付签名正文。 */
+    private String buildSignData(RechargeOrderEntity order) {
+        Map<String, Object> signData = new LinkedHashMap<>();
+        signData.put("offerId", virtualPaymentProperties.getOfferId());
+        signData.put("buyQuantity", order.getBuyQuantity());
+        signData.put("env", FORMAL_ENVIRONMENT);
+        signData.put("currencyType", CURRENCY_TYPE);
+        signData.put("outTradeNo", order.getMerchantOrderNo());
+        signData.put("zoneId", DEFAULT_ZONE_ID);
+        return JSON.toJSONString(signData);
+    }
+
+    /** 获取当前有效维护者微信会话。 */
+    private MaintainerWechatSession requireWechatSession(Long userId) {
+        MaintainerWechatSession session = maintainerWechatSessionService.findAvailableSession(userId);
+        if (session == null) {
+            throw new BusinessException("微信会话已失效，请刷新后重试");
+        }
+        return session;
     }
 
     /**

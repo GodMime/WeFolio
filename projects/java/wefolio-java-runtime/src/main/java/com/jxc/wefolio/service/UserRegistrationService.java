@@ -17,8 +17,13 @@ import com.jxc.wefolio.mapper.UserEntityMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.alibaba.fastjson2.JSON;
+import com.jxc.wefolio.service.point.GiftCommand;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 /**
  * 用户注册服务，集中维护用户与登录身份绑定的事务写入。
@@ -107,8 +112,13 @@ public class UserRegistrationService {
 
         createWechatAuth(user, openidHash, openId, unionidHash, now);
         pointService.ensureAccount(user.getId());
-        grantNewUserRegistrationGift(user.getId());
-        bindReferralAndGrantGift(user, request.getReferralCode(), now);
+        List<GiftCommand> giftCommands = new ArrayList<>();
+        giftCommands.add(newUserRegistrationGift(user.getId()));
+        GiftCommand referralGift = bindReferralAndBuildGift(user, request.getReferralCode(), now);
+        if (referralGift != null) {
+            giftCommands.add(referralGift);
+        }
+        pointService.createGiftOrders(giftCommands);
         return user;
     }
 
@@ -117,15 +127,15 @@ public class UserRegistrationService {
      *
      * @param userId 新用户 ID
      */
-    private void grantNewUserRegistrationGift(Long userId) {
-        pointService.grantGift(
+    private GiftCommand newUserRegistrationGift(Long userId) {
+        return new GiftCommand(
                 userId,
-                registrationPointProperties.getNewUserGiftPoints(),
                 PointSceneCodeDict.NEW_USER_REGISTRATION_GIFT.getCode(),
+                registrationPointProperties.getNewUserGiftPoints(),
                 BUSINESS_TYPE_USER_REGISTRATION,
                 String.valueOf(userId),
-                NEW_USER_REGISTRATION_GIFT_IDEMPOTENCY_PREFIX + userId,
-                NEW_USER_REGISTRATION_GIFT_REMARK
+                giftSnapshot(NEW_USER_REGISTRATION_GIFT_REMARK),
+                NEW_USER_REGISTRATION_GIFT_IDEMPOTENCY_PREFIX + userId
         );
     }
 
@@ -136,14 +146,18 @@ public class UserRegistrationService {
      * @param referralCode 注册时填写的推荐码
      * @param now 当前时间
      */
-    private void bindReferralAndGrantGift(UserEntity referredUser, String referralCode, LocalDateTime now) {
+    private GiftCommand bindReferralAndBuildGift(
+            UserEntity referredUser,
+            String referralCode,
+            LocalDateTime now
+    ) {
         String normalizedReferralCode = normalizeOptionalString(referralCode);
         if (normalizedReferralCode.isBlank()) {
-            return;
+            return null;
         }
         UserEntity referrer = findActiveReferrer(normalizedReferralCode, referredUser.getId());
         if (referrer == null) {
-            return;
+            return null;
         }
 
         ReferralRelationEntity relation = new ReferralRelationEntity();
@@ -153,15 +167,20 @@ public class UserRegistrationService {
         relation.setBoundAt(now);
         referralRelationEntityMapper.insert(relation);
 
-        pointService.grantGift(
+        return new GiftCommand(
                 referrer.getId(),
-                registrationPointProperties.getReferralGiftPoints(),
                 PointSceneCodeDict.REFERRAL_USER_GIFT.getCode(),
+                registrationPointProperties.getReferralGiftPoints(),
                 BUSINESS_TYPE_REFERRAL_REGISTRATION,
                 String.valueOf(referredUser.getId()),
-                REFERRAL_USER_GIFT_IDEMPOTENCY_PREFIX + referredUser.getId(),
-                REFERRAL_USER_GIFT_REMARK
+                giftSnapshot(REFERRAL_USER_GIFT_REMARK),
+                REFERRAL_USER_GIFT_IDEMPOTENCY_PREFIX + referredUser.getId()
         );
+    }
+
+    /** 构造不可变赠送来源快照。 */
+    private String giftSnapshot(String remark) {
+        return JSON.toJSONString(Map.of("remark", remark));
     }
 
     /**

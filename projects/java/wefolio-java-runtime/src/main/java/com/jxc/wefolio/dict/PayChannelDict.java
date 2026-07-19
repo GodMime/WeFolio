@@ -7,7 +7,10 @@ import java.util.stream.Collectors;
 
 /**
  * 支付渠道字典
+ *
+ * @deprecated 仅包含旧普通微信支付渠道，请使用 {@link PaymentChannelDict}
  */
+@Deprecated(forRemoval = true)
 public enum PayChannelDict {
 
     WECHAT_PAY("WECHAT_PAY", "微信支付");

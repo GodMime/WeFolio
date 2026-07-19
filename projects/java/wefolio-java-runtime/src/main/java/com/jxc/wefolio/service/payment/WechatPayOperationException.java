@@ -2,7 +2,10 @@ package com.jxc.wefolio.service.payment;
 
 /**
  * 微信支付远端操作或响应异常。
+ *
+ * @deprecated 仅由待移除的普通微信支付客户端使用
  */
+@Deprecated(forRemoval = true)
 public class WechatPayOperationException extends RuntimeException {
 
     /**

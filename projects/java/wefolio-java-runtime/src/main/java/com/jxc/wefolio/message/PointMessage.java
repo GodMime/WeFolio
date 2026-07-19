@@ -28,4 +28,22 @@ public interface PointMessage {
 
     /** 充值套餐快照为空提示 */
     String RECHARGE_SNAPSHOT_REQUIRED_MESSAGE = "充值套餐快照不能为空";
+
+    /** 本地扣除积分非法提示 */
+    String DEBIT_POINTS_INVALID_MESSAGE = "扣除积分必须为正整数";
+
+    /** 微信代币赠送积分非法提示 */
+    String GIFT_POINTS_INVALID_MESSAGE = "赠送积分必须为正整数";
+
+    /** 赠送命令列表为空提示 */
+    String GIFT_COMMAND_REQUIRED_MESSAGE = "赠送命令不能为空";
+
+    /** 赠送来源快照为空提示 */
+    String GIFT_SNAPSHOT_REQUIRED_MESSAGE = "赠送来源快照不能为空";
+
+    /** 积分命令业务身份缺失提示 */
+    String POINT_COMMAND_IDENTITY_INVALID_MESSAGE = "积分命令业务身份不完整";
+
+    /** 幂等冲突回滚后没有找到既有结果提示 */
+    String IDEMPOTENCY_RECOVERY_FAILED_MESSAGE = "积分幂等结果恢复失败，请重试";
 }

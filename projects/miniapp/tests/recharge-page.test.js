@@ -86,11 +86,10 @@ test('creates order, invokes WeChat payment, syncs paid result and refreshes bal
     if (options.method === 'POST' && options.url === '/api/mine/recharges/orders') {
       return Promise.resolve({
         merchantOrderNo: 'WFR20260717120000123456789012',
-        timeStamp: '1752721200',
-        nonceStr: 'nonce',
-        packageValue: 'prepay_id=wx123',
-        signType: 'RSA',
-        paySign: 'sign'
+        mode: 'short_series_coin',
+        signData: '{"env":0}',
+        paySig: 'pay-sign',
+        signature: 'user-sign'
       })
     }
     if (options.url.endsWith('/sync')) {
@@ -98,8 +97,8 @@ test('creates order, invokes WeChat payment, syncs paid result and refreshes bal
     }
     return Promise.resolve({ balance: 806, packages: [] })
   }, {
-    requestPayment(options) {
-      assert.equal(options.package, 'prepay_id=wx123')
+    requestVirtualPayment(options) {
+      assert.equal(options.signData, '{"env":0}')
       options.success()
     },
     showToast(options) {
@@ -129,15 +128,14 @@ test('keeps order pending and does not sync when user cancels payment', async ()
     requests.push(options)
     return Promise.resolve({
       merchantOrderNo: 'WFR20260717120000123456789012',
-      timeStamp: '1752721200',
-      nonceStr: 'nonce',
-      packageValue: 'prepay_id=wx123',
-      signType: 'RSA',
-      paySign: 'sign'
+      mode: 'short_series_coin',
+      signData: '{"env":0}',
+      paySig: 'pay-sign',
+      signature: 'user-sign'
     })
   }, {
-    requestPayment(options) {
-      options.fail({ errMsg: 'requestPayment:fail cancel' })
+    requestVirtualPayment(options) {
+      options.fail({ errMsg: 'requestVirtualPayment:fail cancel' })
     },
     showToast(options) {
       toasts.push(options.title)
@@ -159,11 +157,10 @@ test('keeps confirmed balance visible when post-payment package refresh fails', 
     if (options.url === '/api/mine/recharges/orders') {
       return Promise.resolve({
         merchantOrderNo: 'WFR20260717120000123456789012',
-        timeStamp: '1752721200',
-        nonceStr: 'nonce',
-        packageValue: 'prepay_id=wx123',
-        signType: 'RSA',
-        paySign: 'sign'
+        mode: 'short_series_coin',
+        signData: '{"env":0}',
+        paySig: 'pay-sign',
+        signature: 'user-sign'
       })
     }
     if (options.url.endsWith('/sync')) {
@@ -171,7 +168,7 @@ test('keeps confirmed balance visible when post-payment package refresh fails', 
     }
     return Promise.reject(new Error('套餐刷新暂时失败'))
   }, {
-    requestPayment(options) {
+    requestVirtualPayment(options) {
       options.success()
     },
     showToast(options) {

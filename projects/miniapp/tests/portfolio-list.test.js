@@ -568,8 +568,12 @@ test('team pull-down refresh reloads only team data and clears its indicator', a
   }
 })
 
-test('published portfolio share opens the new visitor subpackage page', () => {
-  const page = loadPortfolioListPage(() => Promise.resolve({}))
+test('published portfolio share opens the new visitor subpackage page and records a WeChat card share', () => {
+  const requests = []
+  const page = loadPortfolioListPage((options) => {
+    requests.push(options)
+    return Promise.resolve({})
+  })
   page.data.displayPortfolios = [{
     portfolioId: 88,
     title: '林安婚礼司仪',
@@ -586,6 +590,15 @@ test('published portfolio share opens the new visitor subpackage page', () => {
       share.path,
       '/pages/portfolios/visitor-portfolio/visitor-portfolio?shareCode=PF001'
     )
+    assert.equal(requests.length, 1)
+    assert.deepEqual(requests[0], {
+      url: '/api/mine/portfolios/88/share-records',
+      method: 'POST',
+      data: {
+        shareChannel: 'WECHAT_CARD',
+        shareScene: 'PORTFOLIO_LIST'
+      }
+    })
   } finally {
     page.cleanup()
   }

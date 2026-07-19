@@ -22,12 +22,14 @@ import com.jxc.wefolio.dto.MinePortfolioDetailResponse;
 import com.jxc.wefolio.dto.MinePortfolioDraftSaveRequest;
 import com.jxc.wefolio.dto.MinePortfolioListResponse;
 import com.jxc.wefolio.dto.MinePortfolioPublishRequest;
+import com.jxc.wefolio.dto.MinePortfolioShareRecordRequest;
 import com.jxc.wefolio.dto.PortfolioConfigDto;
 import com.jxc.wefolio.dto.PortfolioRenderDto;
 import com.jxc.wefolio.dto.PortfolioScheduleOptionsResponse;
 import com.jxc.wefolio.entity.PortfolioEntity;
 import com.jxc.wefolio.entity.PortfolioHistoryEntity;
 import com.jxc.wefolio.entity.PortfolioReferenceEntity;
+import com.jxc.wefolio.entity.PortfolioShareRecordEntity;
 import com.jxc.wefolio.entity.ScheduleEntity;
 import com.jxc.wefolio.entity.SlotDefinitionEntity;
 import com.jxc.wefolio.exception.BusinessException;
@@ -1011,6 +1013,37 @@ class MinePortfolioServiceTest {
         verify(portfolioReferenceEntityMapper, never()).delete(any());
         verify(portfolioEntityMapper, never()).update(any(PortfolioEntity.class), any());
         verifyNoInteractions(miniappAuthService, cosService);
+    }
+
+    @Test
+    void createShareRecordShouldRejectUnsupportedChannelBeforeInsert() {
+        PortfolioEntity portfolio = ownedPortfolio();
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+        MinePortfolioShareRecordRequest request = new MinePortfolioShareRecordRequest();
+        request.setShareChannel("UNKNOWN");
+        request.setShareScene("PORTFOLIO_LIST");
+
+        assertThatThrownBy(() -> service().createShareRecord(88L, request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("分享渠道不支持");
+
+        verify(portfolioShareRecordEntityMapper, never()).insert(any(PortfolioShareRecordEntity.class));
+    }
+
+    @Test
+    void createShareRecordShouldNormalizeLegacyWechatMiniappChannel() {
+        PortfolioEntity portfolio = ownedPortfolio();
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+        MinePortfolioShareRecordRequest request = new MinePortfolioShareRecordRequest();
+        request.setShareChannel("WECHAT_MINIAPP");
+        request.setShareScene("PORTFOLIO_LIST");
+
+        service().createShareRecord(88L, request);
+
+        ArgumentCaptor<PortfolioShareRecordEntity> captor =
+                ArgumentCaptor.forClass(PortfolioShareRecordEntity.class);
+        verify(portfolioShareRecordEntityMapper).insert(captor.capture());
+        assertThat(captor.getValue().getShareChannel()).isEqualTo("WECHAT_CARD");
     }
 
     private MinePortfolioService service() {

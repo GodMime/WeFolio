@@ -17,6 +17,10 @@ class RechargePackageMigrationTest {
     private static final Path MIGRATION = Path.of(
             "src/main/resources/db/migration/V37__seed_recharge_packages.sql");
 
+    /** V40 代币兑换比例对齐 migration 路径。 */
+    private static final Path TOKEN_RATIO_MIGRATION = Path.of(
+            "src/main/resources/db/migration/V40__align_recharge_packages_with_token_ratio.sql");
+
     @Test
     void migrationShouldSeedFourVersionOnePackages() throws IOException {
         assertThat(MIGRATION).exists();
@@ -41,5 +45,35 @@ class RechargePackageMigrationTest {
                 .doesNotContainIgnoringCase("INSERT IGNORE")
                 .doesNotContainIgnoringCase("REPLACE INTO")
                 .doesNotContainIgnoringCase("ON DUPLICATE KEY UPDATE");
+    }
+
+    @Test
+    void tokenRatioMigrationShouldUpdateExistingPackagesInPlace() throws IOException {
+        assertThat(TOKEN_RATIO_MIGRATION).exists();
+
+        String sql = Files.readString(TOKEN_RATIO_MIGRATION);
+        assertThat(sql)
+                .contains("UPDATE `wf_recharge_package`")
+                .containsSubsequence(
+                        "`base_points` = CASE `package_code`",
+                        "WHEN 'RECHARGE_1_YUAN' THEN 100",
+                        "WHEN 'RECHARGE_10_YUAN' THEN 1000",
+                        "WHEN 'RECHARGE_50_YUAN' THEN 5000",
+                        "WHEN 'RECHARGE_100_YUAN' THEN 10000",
+                        "`bonus_points` = CASE `package_code`",
+                        "WHEN 'RECHARGE_1_YUAN' THEN 0",
+                        "WHEN 'RECHARGE_10_YUAN' THEN 0",
+                        "WHEN 'RECHARGE_50_YUAN' THEN 200",
+                        "WHEN 'RECHARGE_100_YUAN' THEN 1000",
+                        "`total_points` = CASE `package_code`",
+                        "WHEN 'RECHARGE_1_YUAN' THEN 100",
+                        "WHEN 'RECHARGE_10_YUAN' THEN 1000",
+                        "WHEN 'RECHARGE_50_YUAN' THEN 5200",
+                        "WHEN 'RECHARGE_100_YUAN' THEN 11000")
+                .contains("`package_version` = 1")
+                .contains("`status` = 'ACTIVE'")
+                .contains("`deleted` = 0")
+                .doesNotContain("`amount_fen` =")
+                .doesNotContain("wf_point_rule");
     }
 }

@@ -10,6 +10,7 @@ import com.jxc.wefolio.service.AccountCancellationService;
 import com.jxc.wefolio.service.AuthTokenService;
 import com.jxc.wefolio.service.CosService;
 import com.jxc.wefolio.service.MiniappAuthService;
+import com.jxc.wefolio.service.TrustedClientIpResolver;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -44,6 +45,9 @@ class MiniappAuthControllerTest {
     @Mock
     private CosService cosService;
 
+    @Mock
+    private TrustedClientIpResolver trustedClientIpResolver;
+
     @AfterEach
     void tearDown() {
         AuthContextHolder.clear();
@@ -77,7 +81,8 @@ class MiniappAuthControllerTest {
                 miniappAuthService,
                 authTokenService,
                 accountCancellationService,
-                cosService
+                cosService,
+                trustedClientIpResolver
         );
 
         Response<FileUploadResponse> response = controller.uploadAvatar(file);
@@ -100,7 +105,8 @@ class MiniappAuthControllerTest {
                 miniappAuthService,
                 authTokenService,
                 accountCancellationService,
-                cosService
+                cosService,
+                trustedClientIpResolver
         );
 
         Response<FileUploadResponse> response = controller.uploadAvatar(file);
@@ -116,7 +122,8 @@ class MiniappAuthControllerTest {
                 miniappAuthService,
                 authTokenService,
                 accountCancellationService,
-                cosService
+                cosService,
+                trustedClientIpResolver
         );
 
         Response<Void> response = controller.cancelAccount();

@@ -20,6 +20,21 @@ public class MinePointOverviewResponse {
     /** 当前可用积分 */
     private Long balance;
 
+    /** 微信总代币余额快照。 */
+    private Long wechatBalance;
+
+    /** 微信有价充值代币余额。 */
+    private Long wechatPaidBalance;
+
+    /** 微信赠送代币余额快照。 */
+    private Long wechatPresentBalance;
+
+    /** 本地尚未同步至微信的待扣总额。 */
+    private Long pendingDebit;
+
+    /** 最近微信权威余额同步时间。 */
+    private String wechatBalanceSyncedAt;
+
     /** 累计充值积分 */
     private Long totalRecharged;
 

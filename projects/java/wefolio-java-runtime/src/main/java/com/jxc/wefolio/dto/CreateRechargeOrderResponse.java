@@ -3,7 +3,7 @@ package com.jxc.wefolio.dto;
 import lombok.Data;
 
 /**
- * 创建充值订单响应 — 可直接映射到小程序 requestPayment。
+ * 创建充值订单响应 — 可直接映射到小程序 requestVirtualPayment。
  */
 @Data
 public class CreateRechargeOrderResponse {
@@ -14,18 +14,15 @@ public class CreateRechargeOrderResponse {
     /** 本地订单状态。 */
     private String status;
 
-    /** 支付时间戳。 */
-    private String timeStamp;
+    /** 虚拟支付模式。 */
+    private String mode;
 
-    /** 支付随机串。 */
-    private String nonceStr;
+    /** 一次序列化并原样签名的请求正文。 */
+    private String signData;
 
-    /** 小程序支付 package 参数。 */
-    private String packageValue;
+    /** AppKey 支付签名。 */
+    private String paySig;
 
-    /** 签名类型。 */
-    private String signType;
-
-    /** 支付签名。 */
-    private String paySign;
+    /** 维护者 session_key 用户签名。 */
+    private String signature;
 }

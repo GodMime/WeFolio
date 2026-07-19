@@ -9,10 +9,12 @@ import com.jxc.wefolio.dto.AuthSessionResponse;
 import com.jxc.wefolio.dto.FileUploadResponse;
 import com.jxc.wefolio.dto.MaintainerWechatLoginRequest;
 import com.jxc.wefolio.dto.MaintainerWechatLoginResponse;
+import com.jxc.wefolio.dto.MaintainerWechatSessionRefreshRequest;
 import com.jxc.wefolio.service.AccountCancellationService;
 import com.jxc.wefolio.service.AuthTokenService;
 import com.jxc.wefolio.service.CosService;
 import com.jxc.wefolio.service.MiniappAuthService;
+import com.jxc.wefolio.service.TrustedClientIpResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -51,6 +53,9 @@ public class MiniappAuthController {
     /** COS 文件服务 */
     private final CosService cosService;
 
+    /** 可信客户端 IP 解析器。 */
+    private final TrustedClientIpResolver trustedClientIpResolver;
+
     /**
      * 维护者微信授权登录。
      *
@@ -62,7 +67,27 @@ public class MiniappAuthController {
     public Response<MaintainerWechatLoginResponse> maintainerWechatLogin(
             @RequestBody MaintainerWechatLoginRequest request
     ) {
-        return Response.success(miniappAuthService.loginMaintainerByWechat(request));
+        return Response.success(miniappAuthService.loginMaintainerByWechat(
+                request, trustedClientIpResolver.resolveCurrentRequest()));
+    }
+
+    /**
+     * 使用维护者当前身份刷新微信 session_key，不返回会话密钥。
+     *
+     * @param request 微信登录 code
+     * @return 空成功响应
+     */
+    @MaintainerAccess
+    @PostMapping("/maintainer/wechat-session/refresh")
+    public Response<Void> refreshMaintainerWechatSession(
+            @RequestBody MaintainerWechatSessionRefreshRequest request
+    ) {
+        miniappAuthService.refreshMaintainerWechatSession(
+                AuthContextHolder.requireUserId(),
+                request,
+                trustedClientIpResolver.resolveCurrentRequest()
+        );
+        return Response.success();
     }
 
     /**

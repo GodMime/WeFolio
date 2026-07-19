@@ -35,6 +35,7 @@ import com.jxc.wefolio.mapper.TeamEntityMapper;
 import com.jxc.wefolio.message.TeamPortfolioMessage;
 import com.jxc.wefolio.service.VisitorAuthTokenService;
 import com.jxc.wefolio.service.VisitorService;
+import com.jxc.wefolio.service.PointBalanceGateService;
 import com.jxc.wefolio.service.teamportfolio.component.contactform.TeamContactFormComponentService;
 import com.jxc.wefolio.service.teamportfolio.component.schedulequery.TeamScheduleQueryComponentService;
 import lombok.RequiredArgsConstructor;
@@ -49,6 +50,9 @@ import java.util.Objects;
 @Service
 @RequiredArgsConstructor
 public class VisitorTeamPortfolioService {
+
+    /** 积分非正维护原因。 */
+    private static final String POINT_BALANCE_NON_POSITIVE = "POINT_BALANCE_NON_POSITIVE";
 
     /** 查询单条作品集限制。 */
     private static final String QUERY_LIMIT_ONE = "LIMIT 1";
@@ -86,6 +90,9 @@ public class VisitorTeamPortfolioService {
     /** 共享访客登录令牌服务。 */
     private final VisitorAuthTokenService visitorAuthTokenService;
 
+    /** 团队拥有者实际可用积分门禁。 */
+    private final PointBalanceGateService pointBalanceGateService;
+
     /**
      * 打开已发布标准团队作品集。
      *
@@ -99,6 +106,9 @@ public class VisitorTeamPortfolioService {
             VisitorTeamPortfolioOpenRequest request
     ) {
         PublishedPortfolio published = requirePublishedTeamPortfolio(shareCode);
+        if (pointBalanceGateService.isNonPositive(published.team().getOwnerUserId())) {
+            return buildMaintenanceResponse(published);
+        }
         VisitorService.VisitorSession session = visitorService.resolveByLoginCode(
                 request == null ? null : request.getLoginCode());
         VisitorEntity visitor = session == null ? null : session.visitor();
@@ -301,6 +311,30 @@ public class VisitorTeamPortfolioService {
         response.setVisitorKey(visitor.getVisitorKey());
         response.setNewVisitor(session.newVisitor());
         response.setNeedVisitorProfile(!hasText(visitor.getNickname()) || !hasText(visitor.getAvatarUrl()));
+        return response;
+    }
+
+    /** 构建不创建访客会话、不记录打开事件的维护遮罩响应。 */
+    private VisitorTeamPortfolioResponse buildMaintenanceResponse(PublishedPortfolio published) {
+        TeamPortfolioRenderDto render = teamPortfolioRenderService.render(
+                published.portfolio().getPublishedConfigJson(), published.componentContext());
+        render.setShareCode(published.portfolio().getShareCode());
+        render.setPortfolioId(published.portfolio().getId());
+        render.setTeamId(published.team().getId());
+        render.setTeamName(published.team().getName());
+        render.setPreview(false);
+        render.setUnderMaintenance(true);
+        render.setVisitRecordId(null);
+        VisitorTeamPortfolioResponse response = new VisitorTeamPortfolioResponse();
+        response.setShareCode(published.portfolio().getShareCode());
+        response.setPortfolioId(published.portfolio().getId());
+        response.setTeamId(published.team().getId());
+        response.setTeamName(published.team().getName());
+        response.setPublishedRevision(published.portfolio().getPublishedRevision());
+        response.setTitle(resolveTitle(published.config()));
+        response.setUnderMaintenance(true);
+        response.setMaintenanceReason(POINT_BALANCE_NON_POSITIVE);
+        response.setRenderData(render);
         return response;
     }
 

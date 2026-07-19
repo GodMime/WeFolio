@@ -771,7 +771,8 @@ class VisitorPortfolioServiceTest {
                 visitorService,
                 visitorAuthTokenService,
                 scheduleQueryRecordEntityMapper,
-                ownerSelfVisitService
+                ownerSelfVisitService,
+                org.mockito.Mockito.mock(PointBalanceGateService.class)
         );
     }
 

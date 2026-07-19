@@ -27,6 +27,12 @@ public class VisitorTeamPortfolioResponse {
     /** 页面标题。 */
     private String title;
 
+    /** 是否维护中。 */
+    private boolean underMaintenance;
+
+    /** 维护原因编码。 */
+    private String maintenanceReason;
+
     /** 正式发布配置。 */
     private TeamPortfolioConfigDto config;
 

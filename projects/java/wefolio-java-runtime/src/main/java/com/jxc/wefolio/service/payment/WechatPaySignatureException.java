@@ -2,7 +2,10 @@ package com.jxc.wefolio.service.payment;
 
 /**
  * 微信支付通知验签异常。
+ *
+ * @deprecated 仅由待移除的普通微信支付通知链路使用
  */
+@Deprecated(forRemoval = true)
 public class WechatPaySignatureException extends RuntimeException {
 
     /**

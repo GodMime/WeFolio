@@ -730,6 +730,47 @@ class MineTeamPortfolioServiceTest {
     }
 
     @Test
+    void createShareRecordRejectsUnsupportedChannelBeforeInsert() {
+        TestContext context = context(true);
+        PortfolioEntity published = portfolio(TEAM_ID);
+        published.setPublishedRevision(2);
+        published.setPublicationStatus(PortfolioPublicationStatusDict.PUBLISHED.getCode());
+        published.setPublishedConfigJson(JSON.toJSONString(config()));
+        when(context.access.requireVisiblePortfolio(PORTFOLIO_ID, USER_ID))
+                .thenReturn(access(published, TeamRoleDict.MEMBER.getCode()));
+        TeamPortfolioShareRecordRequest request = new TeamPortfolioShareRecordRequest();
+        request.setShareChannel("UNKNOWN");
+        request.setShareScene("TEAM_PORTFOLIO_LIST");
+
+        assertThatThrownBy(() -> context.service.createShareRecord(PORTFOLIO_ID, request, USER_ID))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("分享渠道不支持");
+
+        verify(context.shareMapper, never()).insert(any(PortfolioShareRecordEntity.class));
+    }
+
+    @Test
+    void createShareRecordNormalizesLegacyWechatMiniappChannel() {
+        TestContext context = context(true);
+        PortfolioEntity published = portfolio(TEAM_ID);
+        published.setPublishedRevision(2);
+        published.setPublicationStatus(PortfolioPublicationStatusDict.PUBLISHED.getCode());
+        published.setPublishedConfigJson(JSON.toJSONString(config()));
+        when(context.access.requireVisiblePortfolio(PORTFOLIO_ID, USER_ID))
+                .thenReturn(access(published, TeamRoleDict.MEMBER.getCode()));
+        TeamPortfolioShareRecordRequest request = new TeamPortfolioShareRecordRequest();
+        request.setShareChannel("WECHAT_MINIAPP");
+        request.setShareScene("TEAM_PORTFOLIO_LIST");
+
+        context.service.createShareRecord(PORTFOLIO_ID, request, USER_ID);
+
+        ArgumentCaptor<PortfolioShareRecordEntity> captor =
+                ArgumentCaptor.forClass(PortfolioShareRecordEntity.class);
+        verify(context.shareMapper).insert(captor.capture());
+        assertThat(captor.getValue().getShareChannel()).isEqualTo("WECHAT_CARD");
+    }
+
+    @Test
     void deleteScopesReferencesAndDelegatesConservativeAssetCleanupOnlyAfterSuccessfulUpdate() {
         TestContext context = maintainableContext();
         PortfolioEntity portfolio = portfolio(TEAM_ID);

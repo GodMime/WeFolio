@@ -55,6 +55,9 @@ class RechargeOrderTransactionServiceTest {
     @Mock
     private MerchantOrderNoGenerator merchantOrderNoGenerator;
 
+    @Mock
+    private PointDebitTaskService pointDebitTaskService;
+
     /** 微信支付配置。 */
     private WechatPayProperties payProperties;
 
@@ -94,7 +97,8 @@ class RechargeOrderTransactionServiceTest {
             assertThat(order.getBonusPoints()).isEqualTo(20);
             assertThat(order.getTotalPoints()).isEqualTo(520);
             assertThat(order.getStatus()).isEqualTo(RechargeOrderStatusDict.PENDING_PAYMENT.getCode());
-            assertThat(order.getPayChannel()).isEqualTo("WECHAT_PAY");
+            assertThat(order.getPayChannel()).isEqualTo("WECHAT_VIRTUAL_PAYMENT");
+            assertThat(order.getBuyQuantity()).isEqualTo(500L);
             assertThat(order.getExpireAt()).isEqualTo(expireAt);
             assertThat(order.getPackageSnapshot())
                     .contains("RECHARGE_50_YUAN")
@@ -270,7 +274,9 @@ class RechargeOrderTransactionServiceTest {
                 pointService,
                 merchantOrderNoGenerator,
                 payProperties,
-                miniappProperties
+                miniappProperties,
+                null,
+                pointDebitTaskService
         );
     }
 

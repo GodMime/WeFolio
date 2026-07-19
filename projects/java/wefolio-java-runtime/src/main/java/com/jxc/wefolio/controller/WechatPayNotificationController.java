@@ -16,11 +16,13 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * 微信支付通知控制器 — 公开接收原始报文，但仅信任官方 SDK 验签后的交易。
+ *
+ * @deprecated 普通微信支付通知路由已停止注册，待观察期结束后删除
  */
 @Slf4j
 @SystemAccess
-@RestController
 @RequiredArgsConstructor
+@Deprecated(forRemoval = true)
 public class WechatPayNotificationController {
 
     /** 微信支付通知服务。 */
@@ -36,7 +38,9 @@ public class WechatPayNotificationController {
      * @param signType 微信支付签名类型
      * @param body 未经重新序列化的原始请求体
      * @return 空 HTTP 响应
+     * @deprecated 普通微信支付通知不再对外提供服务
      */
+    @Deprecated(forRemoval = true)
     @PostMapping("/api/payment/wechat/recharge/notify")
     public ResponseEntity<Void> notifyRecharge(
             @RequestHeader("Wechatpay-Serial") String serialNumber,

@@ -13,4 +13,7 @@ public class AuthSessionResponse {
 
     /** 当前登录用户 ID，未登录时为空 */
     private Long userId;
+
+    /** 小程序前台维护微信会话的节流检查间隔秒数 */
+    private Long wechatSessionCheckIntervalSeconds;
 }

@@ -12,6 +12,7 @@ import com.jxc.wefolio.dict.PortfolioStatusDict;
 import com.jxc.wefolio.dict.PortfolioTemplateTypeDict;
 import com.jxc.wefolio.dict.PointSceneCodeDict;
 import com.jxc.wefolio.dict.ScheduleStatusDict;
+import com.jxc.wefolio.dict.ShareChannelDict;
 import com.jxc.wefolio.dict.SlotDefinitionStatusDict;
 import com.jxc.wefolio.dto.MinePortfolioAssetUploadTicketRequest;
 import com.jxc.wefolio.dto.MinePortfolioAssetUploadTicketResponse;
@@ -684,10 +685,14 @@ public class MinePortfolioService {
         record.setSharedByUserId(userId);
         record.setOwnerType(portfolio.getOwnerType());
         record.setOwnerId(portfolio.getOwnerId());
-        record.setShareChannel(normalizeRequiredString(
+        String shareChannel = ShareChannelDict.normalizeCode(normalizeRequiredString(
                 request == null ? null : request.getShareChannel(),
                 PortfolioMessage.SHARE_CHANNEL_REQUIRED_MESSAGE
         ));
+        if (ShareChannelDict.fromCode(shareChannel) == null) {
+            throw new BusinessException(PortfolioMessage.SHARE_CHANNEL_UNSUPPORTED_MESSAGE);
+        }
+        record.setShareChannel(shareChannel);
         record.setShareScene(defaultString(request == null ? null : request.getShareScene()));
         portfolioShareRecordEntityMapper.insert(record);
     }

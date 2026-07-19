@@ -36,6 +36,10 @@ class PointAccountConcurrentMutationIntegrationTest {
                   id BIGINT AUTO_INCREMENT PRIMARY KEY,
                   user_id BIGINT NOT NULL,
                   balance BIGINT NOT NULL,
+                  wechat_balance BIGINT NOT NULL,
+                  wechat_present_balance BIGINT NOT NULL,
+                  pending_debit BIGINT NOT NULL,
+                  wechat_balance_synced_at TIMESTAMP NULL,
                   total_recharged BIGINT NOT NULL,
                   total_gifted BIGINT NOT NULL,
                   total_consumed BIGINT NOT NULL,
@@ -48,9 +52,10 @@ class PointAccountConcurrentMutationIntegrationTest {
                 """);
         jdbcTemplate.update("""
                 INSERT INTO wf_point_account (
-                  id, user_id, balance, total_recharged, total_gifted,
+                  id, user_id, balance, wechat_balance, wechat_present_balance,
+                  pending_debit, wechat_balance_synced_at, total_recharged, total_gifted,
                   total_consumed, version, created_at, updated_at, deleted
-                ) VALUES (10, 7, 100, 0, 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
+                ) VALUES (10, 7, 100, 100, 0, 0, NULL, 0, 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
                 """);
     }
 
@@ -81,6 +86,8 @@ class PointAccountConcurrentMutationIntegrationTest {
         }
 
         assertThat(longValue("balance")).isEqualTo(600L);
+        assertThat(longValue("wechat_balance")).isEqualTo(620L);
+        assertThat(longValue("pending_debit")).isEqualTo(20L);
         assertThat(longValue("total_recharged")).isEqualTo(520L);
         assertThat(longValue("total_consumed")).isEqualTo(20L);
         assertThat(longValue("version")).isEqualTo(2L);

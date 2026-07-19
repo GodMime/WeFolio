@@ -15,6 +15,7 @@ import com.jxc.wefolio.dict.PortfolioStatusDict;
 import com.jxc.wefolio.dict.PortfolioTemplateTypeDict;
 import com.jxc.wefolio.dict.PortfolioTypeDict;
 import com.jxc.wefolio.dict.PointSceneCodeDict;
+import com.jxc.wefolio.dict.ShareChannelDict;
 import com.jxc.wefolio.dict.TeamPortfolioComponentTypeDict;
 import com.jxc.wefolio.dict.TeamRoleDict;
 import com.jxc.wefolio.dict.TeamStatusDict;
@@ -702,8 +703,12 @@ public class MineTeamPortfolioService {
         record.setSharedByUserId(userId);
         record.setOwnerType(PortfolioOwnerTypeDict.TEAM.getCode());
         record.setOwnerId(portfolio.getOwnerId());
-        record.setShareChannel(requireText(
+        String shareChannel = ShareChannelDict.normalizeCode(requireText(
                 request == null ? null : request.getShareChannel(), SHARE_CHANNEL_REQUIRED_MESSAGE));
+        if (ShareChannelDict.fromCode(shareChannel) == null) {
+            throw new BusinessException(TeamPortfolioMessage.SHARE_CHANNEL_UNSUPPORTED);
+        }
+        record.setShareChannel(shareChannel);
         record.setShareScene(request == null || request.getShareScene() == null ? "" : request.getShareScene().strip());
         portfolioShareRecordEntityMapper.insert(record);
     }
