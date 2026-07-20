@@ -779,6 +779,94 @@ class PointServiceTest {
     }
 
     @Test
+    void listTransactionsShouldUseAdminGrantRemarkAsTitle() {
+        activeUser(7L);
+        PointTransactionEntity transaction = transaction(92L, 10L, 7L, 100L, 0L, 100L);
+        transaction.setTransactionType(PointTransactionTypeDict.GIFT.getCode());
+        transaction.setSceneCode(PointSceneCodeDict.MANUAL_ADMIN_GRANT.getCode());
+        transaction.setBusinessType("ADMIN_GRANT");
+        transaction.setCalculationSnapshot("{\"remark\":\"活动补偿\"}");
+        transaction.setRemark("微信代币赠送成功");
+        Page<PointTransactionEntity> page = new Page<>(1, 20);
+        page.setTotal(1);
+        page.setRecords(List.of(transaction));
+        when(pointTransactionEntityMapper.selectPage(any(), any())).thenReturn(page);
+
+        MinePointTransactionsResponse response = service().listTransactions(7L, null, null, 1, 20);
+
+        assertThat(response.getRecords()).singleElement().satisfies(item -> {
+            assertThat(item.getSceneText()).isEqualTo("活动补偿");
+            assertThat(item.getRemark()).isEqualTo("后台人工赠送");
+        });
+    }
+
+    @Test
+    void listTransactionsShouldKeepAdminGrantDescriptionWhenRemarkIsEmpty() {
+        activeUser(7L);
+        PointTransactionEntity transaction = transaction(93L, 10L, 7L, 100L, 0L, 100L);
+        transaction.setTransactionType(PointTransactionTypeDict.GIFT.getCode());
+        transaction.setSceneCode(PointSceneCodeDict.MANUAL_ADMIN_GRANT.getCode());
+        transaction.setBusinessType("ADMIN_GRANT");
+        transaction.setCalculationSnapshot("{\"remark\":\"   \"}");
+        transaction.setRemark("微信代币赠送成功");
+        Page<PointTransactionEntity> page = new Page<>(1, 20);
+        page.setTotal(1);
+        page.setRecords(List.of(transaction));
+        when(pointTransactionEntityMapper.selectPage(any(), any())).thenReturn(page);
+
+        MinePointTransactionsResponse response = service().listTransactions(7L, null, null, 1, 20);
+
+        assertThat(response.getRecords()).singleElement().satisfies(item -> {
+            assertThat(item.getSceneText()).isEqualTo("后台人工赠送");
+            assertThat(item.getRemark()).isEqualTo("微信代币赠送成功");
+        });
+    }
+
+    @Test
+    void listTransactionsShouldFallbackWhenAdminGrantSnapshotIsInvalid() {
+        activeUser(7L);
+        PointTransactionEntity transaction = transaction(94L, 10L, 7L, 100L, 0L, 100L);
+        transaction.setTransactionType(PointTransactionTypeDict.GIFT.getCode());
+        transaction.setSceneCode(PointSceneCodeDict.MANUAL_ADMIN_GRANT.getCode());
+        transaction.setBusinessType("ADMIN_GRANT");
+        transaction.setCalculationSnapshot("invalid-json");
+        transaction.setRemark("微信代币赠送成功");
+        Page<PointTransactionEntity> page = new Page<>(1, 20);
+        page.setTotal(1);
+        page.setRecords(List.of(transaction));
+        when(pointTransactionEntityMapper.selectPage(any(), any())).thenReturn(page);
+
+        MinePointTransactionsResponse response = service().listTransactions(7L, null, null, 1, 20);
+
+        assertThat(response.getRecords()).singleElement().satisfies(item -> {
+            assertThat(item.getSceneText()).isEqualTo("后台人工赠送");
+            assertThat(item.getRemark()).isEqualTo("微信代币赠送成功");
+        });
+    }
+
+    @Test
+    void listTransactionsShouldNotProjectNonAdminGrantBusiness() {
+        activeUser(7L);
+        PointTransactionEntity transaction = transaction(95L, 10L, 7L, 100L, 0L, 100L);
+        transaction.setTransactionType(PointTransactionTypeDict.GIFT.getCode());
+        transaction.setSceneCode(PointSceneCodeDict.MANUAL_ADMIN_GRANT.getCode());
+        transaction.setBusinessType("OTHER_GIFT");
+        transaction.setCalculationSnapshot("{\"remark\":\"活动补偿\"}");
+        transaction.setRemark("原流水备注");
+        Page<PointTransactionEntity> page = new Page<>(1, 20);
+        page.setTotal(1);
+        page.setRecords(List.of(transaction));
+        when(pointTransactionEntityMapper.selectPage(any(), any())).thenReturn(page);
+
+        MinePointTransactionsResponse response = service().listTransactions(7L, null, null, 1, 20);
+
+        assertThat(response.getRecords()).singleElement().satisfies(item -> {
+            assertThat(item.getSceneText()).isEqualTo("后台人工加分");
+            assertThat(item.getRemark()).isEqualTo("原流水备注");
+        });
+    }
+
+    @Test
     void listTransactionsShouldExposeMonthlyWorkStorageRemark() {
         activeUser(7L);
         PointTransactionEntity transaction = transaction(91L, 10L, 7L, -8L, 8L, 0L);

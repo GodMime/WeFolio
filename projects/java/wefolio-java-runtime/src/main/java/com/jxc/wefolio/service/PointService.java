@@ -95,6 +95,12 @@ public class PointService {
     /** 后台人工加分业务类型 */
     private static final String BUSINESS_TYPE_ADMIN_GRANT = "ADMIN_GRANT";
 
+    /** 后台人工赠送展示文案 */
+    private static final String ADMIN_GRANT_DISPLAY_TEXT = "后台人工赠送";
+
+    /** 积分来源快照中的备注键 */
+    private static final String POINT_SNAPSHOT_REMARK = "remark";
+
     /** 充值订单业务类型 */
     private static final String BUSINESS_TYPE_RECHARGE_ORDER = "RECHARGE_ORDER";
 
@@ -1500,11 +1506,45 @@ public class PointService {
         item.setBusinessType(defaultString(transaction.getBusinessType()));
         item.setBusinessId(defaultString(transaction.getBusinessId()));
         item.setRemark(defaultString(transaction.getRemark()));
+        fillAdminGrantDisplay(item, transaction);
         item.setOccurredAt(transaction.getOccurredAt() == null
                 ? ""
                 : TRANSACTION_TIME_FORMATTER.format(transaction.getOccurredAt()));
         fillWechatSettlement(item, transaction);
         return item;
+    }
+
+    /**
+     * 填充后台人工赠送流水的展示文案。
+     *
+     * @param item 流水展示项
+     * @param transaction 积分流水
+     */
+    private void fillAdminGrantDisplay(
+            MinePointTransactionsResponse.TransactionItem item,
+            PointTransactionEntity transaction
+    ) {
+        if (!PointSceneCodeDict.MANUAL_ADMIN_GRANT.getCode().equals(transaction.getSceneCode())
+                || !BUSINESS_TYPE_ADMIN_GRANT.equals(transaction.getBusinessType())) {
+            return;
+        }
+        item.setSceneText(ADMIN_GRANT_DISPLAY_TEXT);
+        if (!hasText(transaction.getCalculationSnapshot())) {
+            return;
+        }
+        try {
+            var snapshot = JSON.parseObject(transaction.getCalculationSnapshot());
+            if (snapshot == null) {
+                return;
+            }
+            String adminRemark = normalizeOptionalString(snapshot.getString(POINT_SNAPSHOT_REMARK));
+            if (hasText(adminRemark)) {
+                item.setSceneText(adminRemark);
+                item.setRemark(ADMIN_GRANT_DISPLAY_TEXT);
+            }
+        } catch (Exception e) {
+            log.warn("后台人工赠送流水快照解析失败: transactionId={}", transaction.getId());
+        }
     }
 
     /** 填充消费流水对应的微信待结算状态。 */
