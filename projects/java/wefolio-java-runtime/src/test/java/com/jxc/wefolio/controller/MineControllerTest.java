@@ -4,7 +4,9 @@ import com.jxc.wefolio.common.Response;
 import com.jxc.wefolio.annotation.MaintainerAccess;
 import com.jxc.wefolio.dto.MineProfileAssetUploadTicketRequest;
 import com.jxc.wefolio.dto.MineProfileAssetUploadTicketResponse;
+import com.jxc.wefolio.dto.MineVisitRecordPageResponse;
 import com.jxc.wefolio.dto.MineVisitRecordsResponse;
+import com.jxc.wefolio.dto.MineVisitStatisticsResponse;
 import com.jxc.wefolio.service.MineDashboardService;
 import com.jxc.wefolio.service.MineProfileService;
 import com.jxc.wefolio.service.MineVisitService;
@@ -53,11 +55,54 @@ class MineControllerTest {
         Response<MineVisitRecordsResponse> response = controller.visits();
 
         assertThat(MineController.class.isAnnotationPresent(MaintainerAccess.class)).isTrue();
+        assertThat(method.isAnnotationPresent(Deprecated.class)).isTrue();
         assertThat(getMapping).isNotNull();
         assertThat(getMapping.value()).containsExactly("/api/mine/visits");
         assertThat(response.isSuccess()).isTrue();
         assertThat(response.getData()).isSameAs(serviceResponse);
         verify(mineVisitService).getVisitRecords();
+    }
+
+    @Test
+    void visitStatisticsEndpointDelegatesToService() throws NoSuchMethodException {
+        Method method = MineController.class.getMethod("visitStatistics");
+        GetMapping getMapping = method.getAnnotation(GetMapping.class);
+        MineVisitStatisticsResponse serviceResponse = new MineVisitStatisticsResponse();
+        when(mineVisitService.getVisitStatistics()).thenReturn(serviceResponse);
+        MineController controller = new MineController(
+                mineDashboardService, mineProfileService, mineVisitService);
+
+        Response<MineVisitStatisticsResponse> response = controller.visitStatistics();
+
+        assertThat(getMapping).isNotNull();
+        assertThat(getMapping.value()).containsExactly("/api/mine/visits/statistics");
+        assertThat(response.isSuccess()).isTrue();
+        assertThat(response.getData()).isSameAs(serviceResponse);
+        verify(mineVisitService).getVisitStatistics();
+    }
+
+    @Test
+    void visitRecordsEndpointDelegatesToServiceWithPagination() throws NoSuchMethodException {
+        Method method = MineController.class.getMethod("visitRecords", Integer.class, Integer.class);
+        GetMapping getMapping = method.getAnnotation(GetMapping.class);
+        Annotation[][] parameterAnnotations = method.getParameterAnnotations();
+        RequestParam pageNoParam = findRequestParam(parameterAnnotations[0]);
+        RequestParam pageSizeParam = findRequestParam(parameterAnnotations[1]);
+        MineVisitRecordPageResponse serviceResponse = new MineVisitRecordPageResponse();
+        serviceResponse.setPageNo(2);
+        when(mineVisitService.getVisitRecordPage(2, 10)).thenReturn(serviceResponse);
+        MineController controller = new MineController(
+                mineDashboardService, mineProfileService, mineVisitService);
+
+        Response<MineVisitRecordPageResponse> response = controller.visitRecords(2, 10);
+
+        assertThat(getMapping).isNotNull();
+        assertThat(getMapping.value()).containsExactly("/api/mine/visits/records");
+        assertThat(pageNoParam.required()).isFalse();
+        assertThat(pageSizeParam.required()).isFalse();
+        assertThat(response.isSuccess()).isTrue();
+        assertThat(response.getData()).isSameAs(serviceResponse);
+        verify(mineVisitService).getVisitRecordPage(2, 10);
     }
 
     @Test

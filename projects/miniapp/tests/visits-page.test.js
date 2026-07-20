@@ -97,6 +97,155 @@ async function flushPromises() {
   await new Promise((resolve) => setImmediate(resolve))
 }
 
+test('visit page loads statistics and first record page from split endpoints', async () => {
+  const requests = []
+  const page = loadVisitsPage((options) => {
+    requests.push(options)
+    if (options.url === '/api/mine/visits/statistics') {
+      return Promise.resolve({
+        summary: {
+          totalVisitCount: 8,
+          todayVisitCount: 2,
+          scheduleQueryCount: 1,
+          contactLeadCount: 3
+        },
+        trend: {
+          changeText: '持平',
+          points: [{ label: '周日', value: 2 }]
+        }
+      })
+    }
+    return Promise.resolve({
+      pageNo: 1,
+      pageSize: 20,
+      hasMore: true,
+      records: [
+        {
+          id: 102,
+          visitorLabel: '微信访客 C19F',
+          followStatus: 'NOT_FOLLOWED_UP'
+        }
+      ]
+    })
+  })
+
+  await page.loadVisits()
+
+  assert.deepEqual(requests.map((item) => item.url), [
+    '/api/mine/visits/statistics',
+    '/api/mine/visits/records'
+  ])
+  assert.deepEqual(requests[1].data, { pageNo: 1, pageSize: 20 })
+  assert.equal(page.data.visitData.metrics[0].value, '8')
+  assert.equal(page.data.visitData.trend.changeText, '持平')
+  assert.deepEqual(page.data.visitData.records.map((item) => item.id), [102])
+  assert.equal(page.data.visitRecordPageNo, 1)
+  assert.equal(page.data.visitRecordHasMore, true)
+  assert.equal(page.data.loading, false)
+})
+
+test('visit page appends next record page when main scroller reaches bottom', async () => {
+  const requests = []
+  const page = loadVisitsPage((options) => {
+    requests.push(options)
+    return Promise.resolve({
+      pageNo: 2,
+      pageSize: 20,
+      hasMore: false,
+      records: [
+        { id: 102, visitorLabel: '重复访客 C19F' },
+        { id: 101, visitorLabel: '微信访客 8A21' }
+      ]
+    })
+  })
+  page.setData({
+    loading: false,
+    visitData: normalizeVisitRecords({
+      records: [{ id: 102, visitorLabel: '微信访客 C19F' }]
+    }),
+    visitRecordPageNo: 1,
+    visitRecordPageSize: 20,
+    visitRecordHasMore: true,
+    visitRecordLoadingMore: false
+  })
+
+  await page.handleVisitRecordScrollToLower()
+
+  assert.deepEqual(requests.map((item) => item.url), ['/api/mine/visits/records'])
+  assert.deepEqual(requests[0].data, { pageNo: 2, pageSize: 20 })
+  assert.deepEqual(page.data.visitData.records.map((item) => item.id), [102, 101])
+  assert.equal(page.data.visitData.records[0].visitorLabel, '微信访客 C19F')
+  assert.equal(page.data.visitRecordPageNo, 2)
+  assert.equal(page.data.visitRecordHasMore, false)
+  assert.equal(page.data.visitRecordLoadingMore, false)
+})
+
+test('visit page does not load more records without next page or during request', async () => {
+  const requests = []
+  const page = loadVisitsPage((options) => {
+    requests.push(options)
+    return Promise.resolve({})
+  })
+
+  page.setData({ visitRecordHasMore: false, visitRecordLoadingMore: false })
+  await page.handleVisitRecordScrollToLower()
+  page.setData({ visitRecordHasMore: true, visitRecordLoadingMore: true })
+  await page.handleVisitRecordScrollToLower()
+
+  assert.equal(requests.length, 0)
+})
+
+test('visit page keeps loaded records and retries same page after load-more failure', async () => {
+  let attempt = 0
+  const page = loadVisitsPage(() => {
+    attempt += 1
+    if (attempt === 1) {
+      return Promise.reject(new Error('网络繁忙'))
+    }
+    return Promise.resolve({
+      pageNo: 2,
+      pageSize: 20,
+      hasMore: false,
+      records: [{ id: 101, visitorLabel: '微信访客 8A21' }]
+    })
+  })
+  page.setData({
+    loading: false,
+    visitData: normalizeVisitRecords({
+      records: [{ id: 102, visitorLabel: '微信访客 C19F' }]
+    }),
+    visitRecordPageNo: 1,
+    visitRecordPageSize: 20,
+    visitRecordHasMore: true,
+    visitRecordLoadingMore: false
+  })
+  const toastTitles = []
+  const originalWx = global.wx
+  global.wx = {
+    showToast(options) {
+      toastTitles.push(options.title)
+    }
+  }
+
+  try {
+    await page.handleVisitRecordScrollToLower()
+    assert.deepEqual(page.data.visitData.records.map((item) => item.id), [102])
+    assert.equal(page.data.visitRecordPageNo, 1)
+    assert.equal(page.data.visitRecordHasMore, true)
+    assert.equal(page.data.visitRecordLoadingMore, false)
+
+    await page.handleVisitRecordScrollToLower()
+  } finally {
+    global.wx = originalWx
+  }
+
+  assert.equal(attempt, 2)
+  assert.deepEqual(toastTitles, ['网络繁忙'])
+  assert.deepEqual(page.data.visitData.records.map((item) => item.id), [102, 101])
+  assert.equal(page.data.visitRecordPageNo, 2)
+  assert.equal(page.data.visitRecordHasMore, false)
+})
+
 test('visit event sheet loads first page and appends next page when scrolled to bottom', async () => {
   const requests = []
   const page = loadVisitsPage((options) => {

@@ -4,10 +4,12 @@ const test = require('node:test')
 const {
   appendVisitDetailPage,
   appendVisitEventTimeline,
+  appendVisitRecordPage,
   markContactLeadFollowed,
   markVisitRecordFollowed,
   normalizeVisitDetailPage,
   normalizeVisitEventTimeline,
+  normalizeVisitRecordPage,
   normalizeVisitRecords
 } = require('../utils/visits')
 
@@ -77,6 +79,58 @@ test('normalizes visit records response for page rendering', () => {
   assert.equal(result.records[0].canMarkFollowed, true)
   assert.equal(result.records[0].eventCountText, '1 个事件')
   assert.equal(result.records[0].events[0].toneClass, 'visit-event-dot teal')
+})
+
+test('normalizes visit record page with safe pagination defaults', () => {
+  const result = normalizeVisitRecordPage({
+    pageNo: 2,
+    pageSize: 10,
+    hasMore: true,
+    records: [
+      {
+        id: 101,
+        visitorLabel: '微信访客 8A21',
+        followStatus: 'NOT_FOLLOWED_UP'
+      }
+    ]
+  })
+
+  assert.equal(result.pageNo, 2)
+  assert.equal(result.pageSize, 10)
+  assert.equal(result.hasMore, true)
+  assert.equal(result.nextPage, 3)
+  assert.equal(result.records[0].id, 101)
+  assert.equal(result.records[0].visitorInitial, '8')
+  assert.equal(result.records[0].followStatusText, '未跟进')
+})
+
+test('appends visit record pages and removes duplicate records by id', () => {
+  const firstPage = normalizeVisitRecordPage({
+    pageNo: 1,
+    pageSize: 2,
+    hasMore: true,
+    records: [
+      { id: 103, visitorLabel: '访客 103' },
+      { id: 102, visitorLabel: '访客 102' }
+    ]
+  })
+
+  const result = appendVisitRecordPage(firstPage, {
+    pageNo: 2,
+    pageSize: 2,
+    hasMore: false,
+    records: [
+      { id: 102, visitorLabel: '重复访客 102' },
+      { id: 101, visitorLabel: '访客 101' }
+    ]
+  })
+
+  assert.deepEqual(result.records.map((item) => item.id), [103, 102, 101])
+  assert.equal(result.records[1].visitorLabel, '访客 102')
+  assert.equal(result.pageNo, 2)
+  assert.equal(result.pageSize, 2)
+  assert.equal(result.hasMore, false)
+  assert.equal(result.nextPage, null)
 })
 
 test('marks one visit record followed without changing summary and trend data', () => {

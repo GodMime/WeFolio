@@ -1,12 +1,15 @@
 package com.jxc.wefolio.service;
 
+import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.jxc.wefolio.common.auth.AuthContext;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
+import com.jxc.wefolio.dto.MineVisitRecordPageResponse;
 import com.jxc.wefolio.dto.MineVisitRecordsResponse;
+import com.jxc.wefolio.dto.MineVisitStatisticsResponse;
 import com.jxc.wefolio.entity.ContactLeadEntity;
 import com.jxc.wefolio.entity.ScheduleQueryRecordEntity;
 import com.jxc.wefolio.entity.TeamMemberEntity;
@@ -57,6 +60,8 @@ class MineVisitServiceTest {
                 ContactLeadEntity.class);
         TableInfoHelper.initTableInfo(new MapperBuilderAssistant(configuration, "mine-visit-team-member"),
                 TeamMemberEntity.class);
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(configuration, "mine-visit-record"),
+                VisitRecordEntity.class);
     }
 
     @Mock
@@ -156,6 +161,96 @@ class MineVisitServiceTest {
         assertThat(response.getRecords().get(1).getSourceText()).isEqualTo("来自团队作品集「星曜司仪团」跳转");
         assertThat(response.getRecords().get(1).getSummaryText()).contains("播放视频 2 次").contains("未点二维码");
         assertThat(response.getRecords().get(1).getFollowTone()).isEqualTo("teal");
+    }
+
+    @Test
+    void visitStatisticsAggregateSummaryAndTrendWithoutVisitRecords() {
+        AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
+        LocalDate today = LocalDate.now();
+        LocalDateTime now = today.atTime(12, 0);
+        VisitRecordEntity record = buildRecord(
+                101L,
+                "anonymous-visitor-key-8A21",
+                "WECHAT_SHARE_CARD",
+                "PERSONAL",
+                "林安婚礼司仪",
+                3,
+                0,
+                0,
+                0,
+                0,
+                null,
+                "NOT_FOLLOWED_UP",
+                now
+        );
+        when(visitRecordEntityMapper.selectList(any())).thenReturn(List.of(record));
+        when(visitEventEntityMapper.selectList(any())).thenReturn(List.of(
+                buildOpenedEvent(now),
+                buildOpenedEvent(now.minusDays(1))
+        ));
+        when(scheduleQueryRecordEntityMapper.selectCount(any())).thenReturn(4L);
+        when(contactLeadEntityMapper.selectCount(any())).thenReturn(2L);
+        when(teamMemberEntityMapper.selectList(any())).thenReturn(List.of());
+
+        MineVisitStatisticsResponse response = service().getVisitStatistics();
+
+        assertThat(response.getSummary().getTotalVisitCount()).isEqualTo(3L);
+        assertThat(response.getSummary().getTodayVisitCount()).isEqualTo(1L);
+        assertThat(response.getSummary().getScheduleQueryCount()).isEqualTo(4L);
+        assertThat(response.getSummary().getContactLeadCount()).isEqualTo(2L);
+        assertThat(response.getTrend().getPoints()).hasSize(7);
+        assertThat(response.getTrend().getPoints().get(6).getValue()).isEqualTo(1L);
+        verify(visitorEntityMapper, never()).selectBatchIds(any());
+    }
+
+    @Test
+    void visitRecordPageReturnsStableReverseTimePageAndHasMore() {
+        AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
+        LocalDateTime now = LocalDateTime.of(2026, 7, 20, 17, 30);
+        VisitRecordEntity firstRecord = buildRecord(
+                102L, "visitor-C19F", "WECHAT_SHARE_CARD", "PERSONAL", "作品集 B",
+                2, 0, 0, 0, 0, null, "CONTACTED", now
+        );
+        VisitRecordEntity secondRecord = buildRecord(
+                101L, "visitor-8A21", "WECHAT_SHARE_CARD", "PERSONAL", "作品集 A",
+                1, 0, 0, 0, 0, null, "NOT_FOLLOWED_UP", now
+        );
+        Page<VisitRecordEntity> resultPage = new Page<>(1, 2, 3);
+        resultPage.setRecords(List.of(firstRecord, secondRecord));
+        when(visitRecordEntityMapper.selectPage(any(Page.class), any())).thenReturn(resultPage);
+
+        MineVisitRecordPageResponse response = service().getVisitRecordPage(1, 2);
+
+        assertThat(response.getPageNo()).isEqualTo(1);
+        assertThat(response.getPageSize()).isEqualTo(2);
+        assertThat(response.getHasMore()).isTrue();
+        assertThat(response.getRecords()).extracting(MineVisitRecordsResponse.Record::getId)
+                .containsExactly(102L, 101L);
+        ArgumentCaptor<Wrapper<VisitRecordEntity>> wrapperCaptor = ArgumentCaptor.captor();
+        verify(visitRecordEntityMapper).selectPage(any(Page.class), wrapperCaptor.capture());
+        assertThat(wrapperCaptor.getValue().getSqlSegment())
+                .contains("ORDER BY last_visited_at DESC,id DESC");
+    }
+
+    @Test
+    void visitRecordPageNormalizesInvalidAndOversizedParameters() {
+        AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
+        when(visitRecordEntityMapper.selectPage(any(Page.class), any())).thenAnswer(invocation -> {
+            Page<VisitRecordEntity> requestedPage = invocation.getArgument(0);
+            requestedPage.setRecords(List.of());
+            requestedPage.setTotal(0);
+            return requestedPage;
+        });
+
+        MineVisitRecordPageResponse defaultPage = service().getVisitRecordPage(null, 0);
+        MineVisitRecordPageResponse cappedPage = service().getVisitRecordPage(0, 100);
+
+        assertThat(defaultPage.getPageNo()).isEqualTo(1);
+        assertThat(defaultPage.getPageSize()).isEqualTo(20);
+        assertThat(defaultPage.getHasMore()).isFalse();
+        assertThat(cappedPage.getPageNo()).isEqualTo(1);
+        assertThat(cappedPage.getPageSize()).isEqualTo(50);
+        assertThat(cappedPage.getHasMore()).isFalse();
     }
 
     @Test

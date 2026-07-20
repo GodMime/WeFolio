@@ -227,6 +227,38 @@ function normalizeRecord(record = {}) {
   }
 }
 
+function normalizeVisitRecordPage(raw = {}, fallbackPage = {}) {
+  const pageNo = toPositiveNumber(raw.pageNo, toPositiveNumber(fallbackPage.pageNo, 1))
+  const pageSize = toPositiveNumber(raw.pageSize, toPositiveNumber(fallbackPage.pageSize, 20))
+  const hasMore = Boolean(raw.hasMore)
+  return {
+    pageNo,
+    pageSize,
+    hasMore,
+    nextPage: hasMore ? pageNo + 1 : null,
+    records: Array.isArray(raw.records) ? raw.records.map(normalizeRecord) : []
+  }
+}
+
+function appendVisitRecordPage(current = {}, nextPage = {}) {
+  const normalizedCurrent = normalizeVisitRecordPage(current)
+  const normalizedNext = normalizeVisitRecordPage(nextPage, normalizedCurrent)
+  const seenRecordIds = new Set()
+  const records = normalizedCurrent.records.concat(normalizedNext.records).filter((record) => {
+    const recordId = record.id || record.recordId
+    if (!recordId) {
+      return true
+    }
+    const recordKey = String(recordId)
+    if (seenRecordIds.has(recordKey)) {
+      return false
+    }
+    seenRecordIds.add(recordKey)
+    return true
+  })
+  return Object.assign({}, normalizedNext, { records })
+}
+
 function normalizeVisitEventTimeline(raw = {}, fallbackRecord = {}) {
   const merged = Object.assign({}, fallbackRecord, raw, {
     id: raw.recordId || fallbackRecord.id,
@@ -412,9 +444,11 @@ function markContactLeadFollowed(detailPage = {}, leadId, followedLead = {}) {
 module.exports = {
   appendVisitDetailPage,
   appendVisitEventTimeline,
+  appendVisitRecordPage,
   markContactLeadFollowed,
   markVisitRecordFollowed,
   normalizeVisitDetailPage,
   normalizeVisitEventTimeline,
+  normalizeVisitRecordPage,
   normalizeVisitRecords
 }

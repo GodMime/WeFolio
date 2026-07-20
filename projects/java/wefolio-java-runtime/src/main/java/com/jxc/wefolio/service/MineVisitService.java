@@ -13,7 +13,9 @@ import com.jxc.wefolio.dict.PortfolioTypeDict;
 import com.jxc.wefolio.dict.TeamRoleDict;
 import com.jxc.wefolio.dict.VisitEventTypeDict;
 import com.jxc.wefolio.dict.VisitSourceTypeDict;
+import com.jxc.wefolio.dto.MineVisitRecordPageResponse;
 import com.jxc.wefolio.dto.MineVisitRecordsResponse;
+import com.jxc.wefolio.dto.MineVisitStatisticsResponse;
 import com.jxc.wefolio.entity.ContactLeadEntity;
 import com.jxc.wefolio.entity.ScheduleQueryRecordEntity;
 import com.jxc.wefolio.entity.TeamMemberEntity;
@@ -55,6 +57,15 @@ public class MineVisitService {
 
     /** 明细列表最多返回条数 */
     private static final int RECORD_LIMIT = 20;
+
+    /** 访问明细默认页码 */
+    private static final int FIRST_RECORD_PAGE_NO = 1;
+
+    /** 访问明细默认页大小 */
+    private static final int DEFAULT_RECORD_PAGE_SIZE = 20;
+
+    /** 访问明细最大页大小 */
+    private static final int MAX_RECORD_PAGE_SIZE = 50;
 
     /** 事件明细默认页码 */
     private static final int FIRST_EVENT_PAGE_NO = 1;
@@ -198,6 +209,55 @@ public class MineVisitService {
         response.setSummary(buildSummary(records, openedEvents, scheduleQueryCount, contactLeadCount));
         response.setTrend(buildTrend(openedEvents));
         response.setRecords(buildRecords(records, visitorsById));
+        return response;
+    }
+
+    /**
+     * 获取当前维护者访问记录统计数据。
+     *
+     * @return 访问记录统计响应
+     */
+    public MineVisitStatisticsResponse getVisitStatistics() {
+        Long userId = AuthContextHolder.requireUserId();
+        List<VisitRecordEntity> records = selectOwnerVisitRecords(userId);
+        List<VisitEventEntity> openedEvents = selectRecentOpenedEvents(userId);
+        long scheduleQueryCount = countOwnerScheduleQueries(userId);
+        Map<Long, String> joinedTeamRoles = selectJoinedTeamRoles(userId);
+        long contactLeadCount = countVisibleContactLeads(userId, joinedTeamRoles.keySet());
+
+        MineVisitStatisticsResponse response = new MineVisitStatisticsResponse();
+        response.setSummary(buildSummary(records, openedEvents, scheduleQueryCount, contactLeadCount));
+        response.setTrend(buildTrend(openedEvents));
+        return response;
+    }
+
+    /**
+     * 获取当前维护者访问明细分页数据。
+     *
+     * @param pageNo 页码，从 1 开始
+     * @param pageSize 每页数量
+     * @return 访问明细分页响应
+     */
+    public MineVisitRecordPageResponse getVisitRecordPage(Integer pageNo, Integer pageSize) {
+        Long userId = AuthContextHolder.requireUserId();
+        int normalizedPageNo = normalizeRecordPageNo(pageNo);
+        int normalizedPageSize = normalizeRecordPageSize(pageSize);
+        Page<VisitRecordEntity> resultPage = visitRecordEntityMapper.selectPage(
+                new Page<>(normalizedPageNo, normalizedPageSize),
+                Wrappers.lambdaQuery(VisitRecordEntity.class)
+                        .eq(VisitRecordEntity::getOwnerType, PortfolioOwnerTypeDict.USER.getCode())
+                        .eq(VisitRecordEntity::getOwnerId, userId)
+                        .orderByDesc(VisitRecordEntity::getLastVisitedAt)
+                        .orderByDesc(VisitRecordEntity::getId)
+        );
+        List<VisitRecordEntity> records = resultPage.getRecords();
+        Map<Long, VisitorEntity> visitorsById = selectVisitorsById(records);
+
+        MineVisitRecordPageResponse response = new MineVisitRecordPageResponse();
+        response.setPageNo(normalizedPageNo);
+        response.setPageSize(normalizedPageSize);
+        response.setHasMore(resultPage.getCurrent() < resultPage.getPages());
+        response.setRecords(buildRecordPage(records, visitorsById));
         return response;
     }
 
@@ -565,6 +625,32 @@ public class MineVisitService {
     }
 
     /**
+     * 规范化访问明细页码。
+     *
+     * @param pageNo 原始页码
+     * @return 可用页码
+     */
+    private int normalizeRecordPageNo(Integer pageNo) {
+        if (pageNo == null || pageNo <= 0) {
+            return FIRST_RECORD_PAGE_NO;
+        }
+        return pageNo;
+    }
+
+    /**
+     * 规范化访问明细页大小。
+     *
+     * @param pageSize 原始页大小
+     * @return 可用页大小
+     */
+    private int normalizeRecordPageSize(Integer pageSize) {
+        if (pageSize == null || pageSize <= 0) {
+            return DEFAULT_RECORD_PAGE_SIZE;
+        }
+        return Math.min(pageSize, MAX_RECORD_PAGE_SIZE);
+    }
+
+    /**
      * 查询近 7 日作品集打开事件。
      *
      * @param userId 当前用户 ID
@@ -660,6 +746,23 @@ public class MineVisitService {
                         Comparator.nullsLast(Comparator.reverseOrder())))
                 .limit(RECORD_LIMIT)
                 .map(record -> buildRecord(record, record.getVisitorId() == null ? null : visitorsById.get(record.getVisitorId())))
+                .toList();
+    }
+
+    /**
+     * 按数据库分页顺序构建访问明细。
+     *
+     * @param records 当前页访问汇总
+     * @param visitorsById 访客 ID 到访客资料的映射
+     * @return 当前页访问明细
+     */
+    private List<MineVisitRecordsResponse.Record> buildRecordPage(
+            List<VisitRecordEntity> records,
+            Map<Long, VisitorEntity> visitorsById
+    ) {
+        return records.stream()
+                .map(record -> buildRecord(record,
+                        record.getVisitorId() == null ? null : visitorsById.get(record.getVisitorId())))
                 .toList();
     }
 

@@ -154,6 +154,14 @@
   margin-top: 10rpx;
 }
 
+.visit-record-load-more {
+  padding: 22rpx 0 8rpx;
+  color: #8b96a3;
+  font-size: 22rpx;
+  line-height: 1.4;
+  text-align: center;
+}
+
 .visit-swipe-row {
   position: relative;
   overflow: hidden;
