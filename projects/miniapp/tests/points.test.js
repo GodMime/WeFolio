@@ -142,25 +142,27 @@ test('formats monthly work storage rule with MB billing copy', () => {
       groupText: '维护',
       calcMode: 'MONTHLY_STORAGE_SIZE',
       transactionType: 'CONSUMPTION',
-      unitCount: 10,
+      unitCount: 2,
       pointsValue: 1
     }]
   })
 
   const rule = overview.ruleGroups[0].rules[0]
-  assert.equal(`${rule.sceneText} ${rule.costText}`, '作品存储月费 每10MB扣1积分')
+  assert.equal(`${rule.sceneText} ${rule.costText}`, '作品存储月费 每2MB扣1积分')
   assert.equal(rule.desc, '每月月初扣除')
 })
 
 test('formats revised maintenance and rolling visitor billing rules', () => {
   const overview = normalizePointOverview({
     rules: [
-      ['MAINTAIN_STANDARD_PORTFOLIO', '发布标准作品集', 'MAINTENANCE', 5],
+      ['CREATE_TEAM', '新建团队', 'MAINTENANCE', 2000],
+      ['MAINTAIN_ADVANCED_PORTFOLIO', '发布高级作品集', 'MAINTENANCE', 20],
+      ['MAINTAIN_STANDARD_PORTFOLIO', '发布标准作品集', 'MAINTENANCE', 10],
       ['UPLOAD_IMAGE', '上传图片作品', 'MAINTENANCE', 5],
       ['UPLOAD_VIDEO', '上传视频作品', 'MAINTENANCE', 10],
-      ['VISIT_PERSONAL_PORTFOLIO', '访问个人作品集', 'VISITOR', 1, 'PORTFOLIO'],
+      ['VISIT_PERSONAL_PORTFOLIO', '访问个人作品集', 'VISITOR', 10, 'PORTFOLIO'],
       ['VIEW_PORTFOLIO_IMAGES', '查看作品集图片', 'VISITOR', 1, 'WORK'],
-      ['VIEW_PORTFOLIO_VIDEO', '查看作品集视频', 'VISITOR', 5, 'WORK']
+      ['VIEW_PORTFOLIO_VIDEO', '查看作品集视频', 'VISITOR', 10, 'WORK']
     ].map(([sceneCode, ruleName, groupCode, pointsValue, dedupeScope], index) => ({
       ruleId: index + 1,
       ruleName,
@@ -179,8 +181,8 @@ test('formats revised maintenance and rolling visitor billing rules', () => {
 
   const maintenanceRules = overview.ruleGroups[0].rules
   const visitorRules = overview.ruleGroups[1].rules
-  assert.deepEqual(maintenanceRules.map((rule) => rule.costText), ['5 分', '5 分', '10 分'])
-  assert.deepEqual(visitorRules.map((rule) => rule.costText), ['1 分', '1 分', '5 分'])
+  assert.deepEqual(maintenanceRules.map((rule) => rule.costText), ['2000 分', '20 分', '10 分', '5 分', '10 分'])
+  assert.deepEqual(visitorRules.map((rule) => rule.costText), ['10 分', '1 分', '10 分'])
   assert.equal(visitorRules[0].desc, '同访客同作品集 2 小时内不重复扣')
   assert.equal(visitorRules[1].desc, '同访客同作品 2 小时内不重复扣')
   assert.equal(visitorRules[2].desc, '同访客同作品 2 小时内不重复扣')
