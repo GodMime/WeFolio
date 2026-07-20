@@ -6,6 +6,7 @@ const {
 const { clearDisplaySwitchingTimer, markDisplaySwitching } = require('../utils/display-switching')
 const { buildVisitorEventPayload, normalizeVisitorPortfolio, switchDisplayGroup } = require('../../../utils/visitor-portfolio')
 const { uploadVisitorAvatarProfile } = require('../utils/visitor-profile')
+const { request } = require('../../../utils/request')
 const {
   SOURCE_TYPE_WECHAT_SHARE_CARD,
   openVisitorSession,
@@ -23,10 +24,24 @@ const IMAGE_MISSING_MESSAGE = '图片地址缺失'
 const VIDEO_MISSING_MESSAGE = '视频地址缺失'
 const DEFAULT_VIDEO_TITLE = '视频作品'
 const VISITOR_PROFILE_REQUIRED_MESSAGE = '请完善头像和昵称'
-const TEAM_PORTFOLIO_SOURCE_VALUE = '1'
+const TIMELINE_SHARE_GUIDE_VALUE = 'timeline'
+const SHARE_MENU_ITEMS = Object.freeze(['shareAppMessage', 'shareTimeline'])
+const PORTFOLIOS_API_URL = '/api/mine/portfolios'
+const SHARE_CHANNEL_WECHAT_TIMELINE = 'WECHAT_TIMELINE'
+const SHARE_SCENE_PORTFOLIO_LIST = 'PORTFOLIO_LIST'
+
+function positiveId(value) {
+  const id = Number(value)
+  return Number.isInteger(id) && id > 0 ? id : 0
+}
 
 function idempotencyKey(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
+}
+
+function hasPreviousPage() {
+  const pages = typeof getCurrentPages === 'function' ? getCurrentPages() : []
+  return Array.isArray(pages) && pages.length > 1
 }
 
 function buildWorkEventMetadata(work) {
@@ -38,6 +53,10 @@ Page({
   data: {
     shareCode: '',
     showNavigationBack: false,
+    timelineGuideRequested: false,
+    timelineGuideVisible: false,
+    timelineSharePortfolioId: 0,
+    timelineShareRecordEnabled: false,
     visitorKey: '',
     portfolio: normalizeVisitorPortfolio({}),
     contactForm: createContactLeadForm({}),
@@ -63,8 +82,20 @@ Page({
     this.singleWorkPageVisible = true
     this.singleWorkInteractionRevision = 0
     const shareCode = options.shareCode || options.scene || ''
-    const showNavigationBack = options.fromTeamPortfolio === TEAM_PORTFOLIO_SOURCE_VALUE
-    this.setData({ shareCode, showNavigationBack, visitorKey: '' })
+    const showNavigationBack = hasPreviousPage()
+    const timelineGuideRequested = options.shareGuide === TIMELINE_SHARE_GUIDE_VALUE
+    this.setData({
+      shareCode,
+      showNavigationBack,
+      timelineGuideRequested,
+      timelineGuideVisible: false,
+      timelineSharePortfolioId: timelineGuideRequested ? positiveId(options.sharePortfolioId) : 0,
+      timelineShareRecordEnabled: false,
+      visitorKey: ''
+    })
+    if (typeof wx !== 'undefined' && wx.showShareMenu) {
+      wx.showShareMenu({ menus: SHARE_MENU_ITEMS })
+    }
     return this.bootstrap()
   },
 
@@ -78,16 +109,20 @@ Page({
       })
       this.applyVisitorOpenResponse(response)
     } catch (error) {
+      this.setData({ timelineGuideVisible: false, timelineShareRecordEnabled: false })
       wx.showToast({ title: error.message || '作品集加载失败', icon: 'none' })
     }
   },
 
   applyVisitorOpenResponse(response) {
     const portfolio = normalizeVisitorPortfolio(response)
+    const displayable = !portfolio.underMaintenance && portfolio.components.length > 0
     this.setData({
       portfolio,
       visitorKey: portfolio.visitorKey || '',
       visitorProfileToken: portfolio.visitorProfileToken || '',
+      timelineGuideVisible: Boolean(this.data.timelineGuideRequested && displayable),
+      timelineShareRecordEnabled: Boolean(this.data.timelineSharePortfolioId && displayable),
       visitorProfileAuthVisible: Boolean(
         portfolio.needVisitorProfile && portfolio.visitorProfileToken && !portfolio.underMaintenance
       )
@@ -219,8 +254,51 @@ Page({
   onShareAppMessage() {
     return {
       title: this.data.portfolio.share.title || this.data.portfolio.title || '个人作品集',
-      path: `/pages/portfolios/visitor-portfolio/visitor-portfolio?shareCode=${this.data.shareCode}`,
+      path: `/pages/portfolios/visitor-portfolio/visitor-portfolio?shareCode=${encodeURIComponent(this.data.shareCode)}`,
       imageUrl: this.data.portfolio.share.coverUrl
+    }
+  },
+
+  onShareTimeline() {
+    this.recordTimelineShare()
+    return {
+      title: this.data.portfolio.share.title || this.data.portfolio.title || '个人作品集',
+      query: `shareCode=${encodeURIComponent(this.data.shareCode)}`,
+      imageUrl: this.data.portfolio.share.coverUrl
+    }
+  },
+
+  recordTimelineShare() {
+    const portfolioId = this.data.timelineShareRecordEnabled
+      ? positiveId(this.data.timelineSharePortfolioId)
+      : 0
+    if (!portfolioId) {
+      return
+    }
+    this.setData({
+      timelineSharePortfolioId: 0,
+      timelineShareRecordEnabled: false
+    })
+    request({
+      url: `${PORTFOLIOS_API_URL}/${portfolioId}/share-records`,
+      method: 'POST',
+      data: {
+        shareChannel: SHARE_CHANNEL_WECHAT_TIMELINE,
+        shareScene: SHARE_SCENE_PORTFOLIO_LIST
+      }
+    }).catch(() => {})
+  },
+
+  handleCloseTimelineGuide() {
+    this.setData({
+      timelineGuideRequested: false,
+      timelineGuideVisible: false
+    })
+  },
+
+  handleTimelineGuideBack() {
+    if (hasPreviousPage()) {
+      wx.navigateBack({ delta: 1 })
     }
   },
 

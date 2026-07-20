@@ -46,6 +46,7 @@ const TEAM_PREVIEW_URL = '/pages/team-portfolios/standard-preview/team-portfolio
 const TEAM_VISITOR_SHARE_PATH_PREFIX = '/pages/team-portfolios/visitor-portfolio/team-visitor-portfolio?shareCode='
 const SHARE_SCENE_TEAM_PORTFOLIO_LIST = 'TEAM_PORTFOLIO_LIST'
 const IDEMPOTENCY_PREFIX_TEAM_PUBLISH = 'team-publish'
+const SHARE_UNAVAILABLE_MESSAGE = '当前作品集暂不可分享'
 
 function makeIdempotencyKey(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`
@@ -131,6 +132,13 @@ function buildTeamSharePath(shareCode) {
   return `${TEAM_VISITOR_SHARE_PATH_PREFIX}${encodeURIComponent(defaultString(shareCode))}`
 }
 
+function buildTimelineGuidePath(ownerType, portfolioId, shareCode) {
+  const sharePath = ownerType === OWNER_TYPE_TEAM
+    ? buildTeamSharePath(shareCode)
+    : buildSharePath(shareCode)
+  return `${sharePath}&shareGuide=timeline&sharePortfolioId=${encodeURIComponent(normalizeId(portfolioId))}`
+}
+
 Page({
   data: {
     ownerType: OWNER_TYPE_USER,
@@ -161,6 +169,9 @@ Page({
     deletingTeamPortfolioId: null,
     publishingTeamPortfolioId: null,
     sharingTeamPortfolioId: null,
+    shareSheetVisible: false,
+    shareActionPending: false,
+    shareTarget: null,
     tabs: [
       { key: 'schedule', label: '档期', icon: 'schedule' },
       { key: 'work', label: '作品', icon: 'work' },
@@ -237,6 +248,7 @@ Page({
   },
 
   bootstrap() {
+    this.resetShareSheetState()
     if (!hasLocalToken()) {
       wx.navigateTo({ url: '/pages/login/login' })
       return
@@ -266,6 +278,7 @@ Page({
     if (onlyIfNeeded && (this.data.teamLoaded || this.data.teamLoading)) {
       return
     }
+    this.resetShareSheetState()
     this.setData({
       teamLoading: true,
       teamErrorMessage: '',
@@ -306,6 +319,9 @@ Page({
       ownerType,
       ownerTitle: ownerType === OWNER_TYPE_TEAM ? '团队作品集' : '个人作品集',
       switching: true,
+      shareSheetVisible: false,
+      shareActionPending: false,
+      shareTarget: null,
       revealedPortfolioId: null,
       portfolioTouchStart: null,
       revealedTeamPortfolioId: null,
@@ -433,13 +449,6 @@ Page({
 
   handleTeamPortfolioTouchCancel() {
     this.setData({ teamPortfolioTouchStart: null })
-  },
-
-  handleTeamShareTap(event) {
-    const item = event.currentTarget.dataset.item
-    if (item && this.data.revealedTeamPortfolioId === item.portfolioId) {
-      this.setData({ revealedTeamPortfolioId: null })
-    }
   },
 
   async handleTeamPublishTap(event) {
@@ -595,13 +604,109 @@ Page({
       this.setData({ revealedPortfolioId: null })
       return
     }
-    if (actionType === ACTION_TYPE_SHARE) {
-      return
-    }
     if (actionType === ACTION_TYPE_PUBLISH) {
       return this.publishPortfolioFromList(portfolioId)
     }
     wx.navigateTo({ url: `${EDIT_PAGE_URL}?portfolioId=${portfolioId}` })
+  },
+
+  resolveShareTarget(target = this.data.shareTarget) {
+    const ownerType = target && target.ownerType
+    const portfolioId = normalizeId(target && target.portfolioId)
+    if (!portfolioId) {
+      return null
+    }
+    if (ownerType === OWNER_TYPE_TEAM) {
+      const portfolio = this.findTeamPortfolioById(portfolioId)
+      if (!portfolio || portfolio.publicationStatus !== PUBLICATION_STATUS_PUBLISHED || !portfolio.canShare || !defaultString(portfolio.shareCode)) {
+        return null
+      }
+      return { ownerType, portfolio }
+    }
+    if (ownerType === OWNER_TYPE_USER) {
+      const portfolio = this.findPortfolioById(portfolioId)
+      if (!portfolio || portfolio.publicationStatus !== PUBLICATION_STATUS_PUBLISHED || !defaultString(portfolio.shareCode)) {
+        return null
+      }
+      return { ownerType, portfolio }
+    }
+    return null
+  },
+
+  resetShareSheetState() {
+    this.setData({
+      shareSheetVisible: false,
+      shareActionPending: false,
+      shareTarget: null
+    })
+  },
+
+  handleShareTap(event) {
+    if (this.data.shareActionPending) {
+      return
+    }
+    const dataset = event.currentTarget && event.currentTarget.dataset ? event.currentTarget.dataset : {}
+    const ownerType = dataset.ownerType === OWNER_TYPE_TEAM ? OWNER_TYPE_TEAM : dataset.ownerType === OWNER_TYPE_USER ? OWNER_TYPE_USER : ''
+    const portfolioId = normalizeId(dataset.id)
+    if (ownerType === OWNER_TYPE_TEAM && this.data.revealedTeamPortfolioId === portfolioId) {
+      this.setData({ revealedTeamPortfolioId: null })
+      return
+    }
+    if (ownerType === OWNER_TYPE_USER && this.data.revealedPortfolioId === portfolioId) {
+      this.setData({ revealedPortfolioId: null })
+      return
+    }
+    const shareTarget = { ownerType, portfolioId }
+    if (!this.resolveShareTarget(shareTarget)) {
+      wx.showToast({ title: SHARE_UNAVAILABLE_MESSAGE, icon: 'none' })
+      return
+    }
+    this.setData({
+      shareSheetVisible: true,
+      shareActionPending: false,
+      shareTarget
+    })
+  },
+
+  handleCloseShareSheet() {
+    if (this.data.shareActionPending) {
+      return
+    }
+    this.resetShareSheetState()
+  },
+
+  handleTimelineShare() {
+    if (this.data.shareActionPending) {
+      return
+    }
+    const resolved = this.resolveShareTarget()
+    if (!resolved) {
+      const hadTarget = Boolean(this.data.shareTarget)
+      this.resetShareSheetState()
+      if (hadTarget) {
+        wx.showToast({ title: SHARE_UNAVAILABLE_MESSAGE, icon: 'none' })
+      }
+      return
+    }
+    const url = buildTimelineGuidePath(
+      resolved.ownerType,
+      resolved.portfolio.portfolioId,
+      resolved.portfolio.shareCode
+    )
+    this.setData({
+      shareSheetVisible: false,
+      shareActionPending: true,
+      shareTarget: null
+    })
+    wx.navigateTo({
+      url,
+      fail: () => {
+        wx.showToast({ title: '页面打开失败，请重试', icon: 'none' })
+      },
+      complete: () => {
+        this.setData({ shareActionPending: false })
+      }
+    })
   },
 
   handlePublishedPreviewTap(event) {
@@ -708,18 +813,25 @@ Page({
     })
   },
 
-  onShareAppMessage(event = {}) {
-    const dataset = event.target && event.target.dataset ? event.target.dataset : {}
-    if (dataset.ownerType === OWNER_TYPE_TEAM) {
-      const item = dataset.item
-      if (!item || item.publicationStatus !== PUBLICATION_STATUS_PUBLISHED || !item.canShare || !item.shareCode) {
-        return undefined
+  onShareAppMessage() {
+    const resolved = this.resolveShareTarget()
+    if (!resolved) {
+      this.resetShareSheetState()
+      return undefined
+    }
+    const portfolio = resolved.portfolio
+    let shareConfig
+    if (resolved.ownerType === OWNER_TYPE_TEAM) {
+      shareConfig = {
+        title: portfolio.title || portfolio.teamName,
+        path: buildTeamSharePath(portfolio.shareCode),
+        imageUrl: portfolio.coverUrl || DEFAULT_COVER_URL
       }
-      if (this.data.sharingTeamPortfolioId !== item.portfolioId) {
-        this.setData({ sharingTeamPortfolioId: item.portfolioId })
+      if (this.data.sharingTeamPortfolioId !== portfolio.portfolioId) {
+        this.setData({ sharingTeamPortfolioId: portfolio.portfolioId })
         recordTeamPortfolioShare(
           request,
-          item.portfolioId,
+          portfolio.portfolioId,
           SHARE_CHANNEL_WECHAT_CARD,
           SHARE_SCENE_TEAM_PORTFOLIO_LIST
         ).catch((error) => {
@@ -728,39 +840,28 @@ Page({
           }
           showTeamPortfolioUnavailableToast(error)
         }).finally(() => {
-          if (this.data.sharingTeamPortfolioId === item.portfolioId) {
+          if (this.data.sharingTeamPortfolioId === portfolio.portfolioId) {
             this.setData({ sharingTeamPortfolioId: null })
           }
         })
       }
-      return {
-        title: item.title || item.teamName,
-        path: buildTeamSharePath(item.shareCode),
-        imageUrl: item.coverUrl || DEFAULT_COVER_URL
+    } else {
+      shareConfig = {
+        title: portfolio.title,
+        path: buildSharePath(portfolio.shareCode),
+        imageUrl: portfolio.coverUrl
       }
+      request({
+        url: `${PORTFOLIOS_API_URL}/${portfolio.portfolioId}/share-records`,
+        method: 'POST',
+        data: {
+          shareChannel: SHARE_CHANNEL_WECHAT_CARD,
+          shareScene: SHARE_SCENE_PORTFOLIO_LIST
+        }
+      }).catch(() => {})
     }
-    const portfolioId = dataset.id || ''
-    const portfolio = this.data.displayPortfolios.find((item) => String(item.portfolioId) === String(portfolioId))
-    if (!portfolio) {
-      return {
-        title: '作品集',
-        path: '/pages/portfolios/portfolios',
-        imageUrl: DEFAULT_COVER_URL
-      }
-    }
-    request({
-      url: `${PORTFOLIOS_API_URL}/${portfolio.portfolioId}/share-records`,
-      method: 'POST',
-      data: {
-        shareChannel: SHARE_CHANNEL_WECHAT_CARD,
-        shareScene: SHARE_SCENE_PORTFOLIO_LIST
-      }
-    }).catch(() => {})
-    return {
-      title: portfolio.title,
-      path: buildSharePath(portfolio.shareCode),
-      imageUrl: portfolio.coverUrl
-    }
+    this.resetShareSheetState()
+    return shareConfig
   },
 
   handleTabTap(event) {

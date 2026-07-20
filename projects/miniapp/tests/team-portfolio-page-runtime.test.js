@@ -827,6 +827,125 @@ test('visitor modal contact opens, completes child submission, and schedule succ
   } finally { page.cleanup() }
 })
 
+test('team visitor shows timeline guide after displayable content loads and cleans share queries', async () => {
+  const shareMenus = []
+  const requests = []
+  const page = loadPage('visitor-portfolio/team-visitor-portfolio.js', async (options) => {
+    requests.push(options)
+    return {
+      shareCode: 'TEAM 1',
+      visitorKey: 'visitor-team',
+      renderData: {
+        title: '甲团队作品集',
+        share: {
+          title: '甲团队分享标题',
+          coverUrl: 'https://example.test/team-cover.jpg'
+        },
+        components: [{
+          componentKey: 'profile-1',
+          componentType: 'TEAM_PROFILE',
+          sortOrder: 1000,
+          data: { team: { teamName: '甲团队' } }
+        }]
+      }
+    }
+  }, {
+    showShareMenu(options) { shareMenus.push(options) }
+  })
+
+  try {
+    page.onLoad({ shareCode: 'TEAM 1', shareGuide: 'timeline', sharePortfolioId: '33' })
+    assert.equal(page.data.timelineGuideRequested, true)
+    assert.equal(page.data.timelineGuideVisible, false)
+    await flush()
+    await flush()
+    assert.equal(page.data.timelineGuideVisible, true)
+    assert.deepEqual(shareMenus, [{ menus: ['shareAppMessage', 'shareTimeline'] }])
+    requests.length = 0
+    assert.deepEqual(page.onShareTimeline(), {
+      title: '甲团队分享标题',
+      query: 'shareCode=TEAM%201',
+      imageUrl: 'https://example.test/team-cover.jpg'
+    })
+    page.onShareTimeline()
+    assert.deepEqual(requests, [{
+      url: '/api/mine/team-portfolios/33/share-records',
+      method: 'POST',
+      data: {
+        shareChannel: 'WECHAT_TIMELINE',
+        shareScene: 'TEAM_PORTFOLIO_LIST'
+      }
+    }])
+    assert.deepEqual(page.onShareAppMessage(), {
+      title: '甲团队分享标题',
+      path: '/pages/team-portfolios/visitor-portfolio/team-visitor-portfolio?shareCode=TEAM%201',
+      imageUrl: 'https://example.test/team-cover.jpg'
+    })
+    page.handleCloseTimelineGuide()
+    assert.equal(page.data.timelineGuideRequested, false)
+    assert.equal(page.data.timelineGuideVisible, false)
+  } finally { page.cleanup() }
+})
+
+test('team visitor shows navigation back only when the page stack has a previous page', () => {
+  const internalPage = loadPage(
+    'visitor-portfolio/team-visitor-portfolio.js',
+    async () => ({}),
+    {},
+    { getCurrentPages: () => [{ route: 'pages/portfolios/portfolios' }, { route: 'pages/team-portfolios/visitor-portfolio/team-visitor-portfolio' }] }
+  )
+  internalPage.open = () => Promise.resolve()
+  try {
+    internalPage.onLoad({ shareCode: 'TEAM1' })
+    assert.equal(internalPage.data.showNavigationBack, true)
+  } finally { internalPage.cleanup() }
+
+  const directSharePage = loadPage(
+    'visitor-portfolio/team-visitor-portfolio.js',
+    async () => ({}),
+    {},
+    { getCurrentPages: () => [{ route: 'pages/team-portfolios/visitor-portfolio/team-visitor-portfolio' }] }
+  )
+  directSharePage.open = () => Promise.resolve()
+  try {
+    directSharePage.onLoad({ shareCode: 'TEAM1' })
+    assert.equal(directSharePage.data.showNavigationBack, false)
+  } finally { directSharePage.cleanup() }
+})
+
+test('team visitor share titles fall back from share title to portfolio title and default copy', () => {
+  const page = loadPage('visitor-portfolio/team-visitor-portfolio.js', async () => ({}))
+
+  try {
+    page.setData({ shareCode: 'TEAM1', render: { title: '作品集标题', share: {} } })
+    assert.equal(page.onShareAppMessage().title, '作品集标题')
+    assert.equal(page.onShareTimeline().title, '作品集标题')
+
+    page.setData({ render: { share: {} } })
+    assert.equal(page.onShareAppMessage().title, '团队作品集')
+    assert.equal(page.onShareTimeline().title, '团队作品集')
+  } finally { page.cleanup() }
+})
+
+test('team visitor hides timeline guide for empty, maintenance, and unknown guide states', () => {
+  const page = loadPage('visitor-portfolio/team-visitor-portfolio.js', async () => ({}))
+
+  try {
+    page.setData({ timelineGuideRequested: true, timelineGuideVisible: false })
+    page.applySession({ renderData: { title: '空作品集', components: [] } })
+    assert.equal(page.data.timelineGuideVisible, false)
+
+    page.applySession({
+      renderData: {
+        title: '维护中',
+        underMaintenance: true,
+        components: [{ componentKey: 'profile-1', componentType: 'TEAM_PROFILE' }]
+      }
+    })
+    assert.equal(page.data.timelineGuideVisible, false)
+  } finally { page.cleanup() }
+})
+
 test('visitor schedule failure performs a request and rejects the child', async () => {
   const requests = []
   const rejected = []

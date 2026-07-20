@@ -80,8 +80,10 @@ test('bottom portfolio tabs navigate to portfolio list page', () => {
 
 test('maintainer portfolio pages expose expected controls', () => {
   const listWxml = read('pages/portfolios/portfolios.wxml')
+  const listJson = JSON.parse(read('pages/portfolios/portfolios.json'))
   const listWxss = read('pages/portfolios/portfolios.wxss')
   const listJs = read('pages/portfolios/portfolios.js')
+  const shareChannelSheetWxml = read('components/share-channel-sheet/share-channel-sheet.wxml')
   const mockListWxml = read('pages/mock/portfolios/portfolios.wxml')
   const portfolioActionButtonRule = readRule(listWxss, '.portfolio-action-button')
   const portfolioActionButtonPublishRule = readRule(listWxss, '.portfolio-action-button.publish')
@@ -106,6 +108,10 @@ test('maintainer portfolio pages expose expected controls', () => {
     editWxml.indexOf('<view class="qr-contact-sheet-mask'),
     editWxml.indexOf('<view class="schedule-query-sheet-mask')
   )
+  const primaryActionHandler = listJs.slice(
+    listJs.indexOf('handlePrimaryActionTap(event)'),
+    listJs.indexOf('resolveShareTarget(')
+  )
   const libraryWxml = read('pages/portfolios/component-library/portfolio-component-library.wxml')
   const previewWxml = read('pages/portfolios/standard-preview/portfolio-standard-preview.wxml')
   const unavailableWxml = read('pages/portfolios/unavailable/portfolio-unavailable.wxml')
@@ -125,7 +131,7 @@ test('maintainer portfolio pages expose expected controls', () => {
   assert.match(listWxml, /wx:if="\{\{item\.showPublishedPreview\}\}"[\s\S]*data-action="PREVIEW_PUBLISHED"[\s\S]*预览/)
   assert.match(listWxml, /wx:if="\{\{item\.showDraftPreview\}\}"[\s\S]*data-action="PREVIEW_DRAFT"[\s\S]*catchtap="handleDraftPreviewTap"[\s\S]*预览/)
   assert.match(listWxml, /class="portfolio-action-button/)
-  assert.match(listWxml, /wx:if="\{\{item\.actionType === 'SHARE'\}\}"[\s\S]*class="portfolio-action-button share"[\s\S]*open-type="share"[\s\S]*data-id="\{\{item\.portfolioId\}\}"[\s\S]*分享/)
+  assert.match(listWxml, /wx:if="\{\{item\.actionType === 'SHARE'\}\}"[^>]*class="portfolio-action-button share"[^>]*data-id="\{\{item\.portfolioId\}\}"[^>]*data-owner-type="USER"[^>]*catchtap="handleShareTap"[^>]*>分享<\/button>/)
   assert.doesNotMatch(listWxml, /class="portfolio-icon-button share"/)
   assert.doesNotMatch(listWxml, /class="portfolio-share-hit"/)
   assert.doesNotMatch(listWxml, /class="portfolio-share-icon"/)
@@ -141,7 +147,11 @@ test('maintainer portfolio pages expose expected controls', () => {
   assert.doesNotMatch(listWxml, /<view class="portfolio-meta">\{\{item\.teamName\}\} · \{\{item\.currentRole\}\}<\/view>/)
   assert.match(listWxml, /catchtap="handleTeamPreviewTap"[\s\S]*>预览<\/button>/)
   assert.match(listWxml, /catchtap="handleTeamPublishTap"[\s\S]*>发布<\/button>/)
-  assert.match(listWxml, /open-type="share"[^>]*data-owner-type="TEAM"[^>]*catchtap="handleTeamShareTap"/)
+  assert.match(listWxml, /wx:elif="\{\{item\.canShare\}\}"[^>]*class="portfolio-action-button share"[^>]*data-id="\{\{item\.portfolioId\}\}"[^>]*data-owner-type="TEAM"[^>]*catchtap="handleShareTap"[^>]*>分享<\/button>/)
+  assert.equal(listJson.usingComponents['share-channel-sheet'], '/components/share-channel-sheet/share-channel-sheet')
+  assert.match(listWxml, /<share-channel-sheet[\s\S]*bindclose="handleCloseShareSheet"[\s\S]*bindtimeline="handleTimelineShare"/)
+  assert.match(shareChannelSheetWxml, /open-type="share"/)
+  assert.doesNotMatch(primaryActionHandler, /ACTION_TYPE_SHARE/)
   assert.doesNotMatch(listWxml, />编辑<\/button>/)
   assert.doesNotMatch(listWxml, />线索<\/button>/)
   assert.doesNotMatch(listWxml, /class="team-card-actions"/)
@@ -325,7 +335,7 @@ test('visitor portfolio pages expose maintenance, QR, contact and schedule surfa
   )
 
   assert.match(visitorWxml, /UNDER MAINTENANCE/)
-  assert.match(visitorWxml, /<navigation-bar[^>]*back="\{\{showNavigationBack\}\}"/)
+  assert.match(visitorWxml, /<navigation-bar[^>]*back="\{\{showNavigationBack && !timelineGuideVisible\}\}"/)
   assert.match(contactFormJs, /DEFAULT_CONTACT_FORM_TITLE\s*=\s*'预留联系信息'/)
   assert.match(contactFormWxml, /contactComponent\.contactForm\.title \|\| defaultTitle/)
   assert.match(contactFormWxml, /\{\{submitText\}\}/)

@@ -8,7 +8,7 @@ import lombok.Data;
 @Data
 public class TeamPortfolioShareRecordRequest {
 
-    /** 分享渠道。 */
+    /** 分享渠道：WECHAT_CARD / WECHAT_TIMELINE / QR_CODE / COPIED_PATH。 */
     private String shareChannel;
 
     /** 分享场景。 */

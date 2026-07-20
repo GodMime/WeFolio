@@ -507,7 +507,7 @@ test('publishing a draft team portfolio reports an ordinary failure without refr
   }
 })
 
-test('team sharing from the unified page returns the team visitor path and deduplicates records', async () => {
+test('team sharing from the unified sheet uses shareTarget and consumes it once', async () => {
   const requests = []
   let resolveRecord
   const recordPending = new Promise((resolve) => {
@@ -525,19 +525,22 @@ test('team sharing from the unified page returns the team visitor path and dedup
     title: '甲团队作品集',
     teamName: '甲团队'
   }
-  const event = { target: { dataset: { ownerType: 'TEAM', item } } }
+  page.data.teamDisplayPortfolios = [item]
 
   try {
-    const first = page.onShareAppMessage(event)
-    const second = page.onShareAppMessage(event)
-    assert.deepEqual(first, second)
+    page.handleShareTap({ currentTarget: { dataset: { ownerType: 'TEAM', id: 33 } } })
+    const first = page.onShareAppMessage({ target: { dataset: { ownerType: 'USER', id: 999 } } })
+    const second = page.onShareAppMessage({ target: { dataset: { ownerType: 'TEAM', item } } })
     assert.equal(first.path, '/pages/team-portfolios/visitor-portfolio/team-visitor-portfolio?shareCode=team-share')
+    assert.equal(second, undefined)
     assert.equal(requests.length, 1)
     assert.deepEqual(requests[0].data, {
       shareChannel: 'WECHAT_CARD',
       shareScene: 'TEAM_PORTFOLIO_LIST'
     })
     assert.equal(page.data.sharingTeamPortfolioId, 33)
+    assert.equal(page.data.shareSheetVisible, false)
+    assert.equal(page.data.shareTarget, null)
     resolveRecord({})
     await flushPromises()
     assert.equal(page.data.sharingTeamPortfolioId, null)
@@ -568,7 +571,7 @@ test('team pull-down refresh reloads only team data and clears its indicator', a
   }
 })
 
-test('published portfolio share opens the new visitor subpackage page and records a WeChat card share', () => {
+test('published portfolio share uses shareTarget, ignores event dataset, and closes the sheet', () => {
   const requests = []
   const page = loadPortfolioListPage((options) => {
     requests.push(options)
@@ -577,19 +580,25 @@ test('published portfolio share opens the new visitor subpackage page and record
   page.data.displayPortfolios = [{
     portfolioId: 88,
     title: '林安婚礼司仪',
-    shareCode: 'PF001',
+    publicationStatus: 'PUBLISHED',
+    shareCode: 'PF 001',
     coverUrl: 'https://example.test/cover.jpg'
   }]
 
   try {
+    page.handleShareTap({
+      currentTarget: { dataset: { id: 88, ownerType: 'USER' } }
+    })
     const share = page.onShareAppMessage({
-      target: { dataset: { id: 88 } }
+      target: { dataset: { id: 999, ownerType: 'TEAM' } }
     })
 
     assert.equal(
       share.path,
-      '/pages/portfolios/visitor-portfolio/visitor-portfolio?shareCode=PF001'
+      '/pages/portfolios/visitor-portfolio/visitor-portfolio?shareCode=PF%20001'
     )
+    assert.equal(page.data.shareSheetVisible, false)
+    assert.equal(page.data.shareTarget, null)
     assert.equal(requests.length, 1)
     assert.deepEqual(requests[0], {
       url: '/api/mine/portfolios/88/share-records',
@@ -602,6 +611,121 @@ test('published portfolio share opens the new visitor subpackage page and record
   } finally {
     page.cleanup()
   }
+})
+
+test('share callback without a valid shareTarget returns undefined and does not record', () => {
+  const requests = []
+  const page = loadPortfolioListPage((options) => {
+    requests.push(options)
+    return Promise.resolve({})
+  })
+
+  try {
+    const share = page.onShareAppMessage({
+      target: { dataset: { id: 88, ownerType: 'USER' } }
+    })
+
+    assert.equal(share, undefined)
+    assert.deepEqual(requests, [])
+    assert.equal(page.data.shareSheetVisible, false)
+    assert.equal(page.data.shareTarget, null)
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('timeline share hides the sheet and navigates only once with encoded shareCode', () => {
+  const navigations = []
+  const page = loadPortfolioListPage(() => Promise.resolve({}), {
+    navigateTo(options) {
+      navigations.push(options)
+    }
+  })
+  page.data.displayPortfolios = [{
+    portfolioId: 88,
+    publicationStatus: 'PUBLISHED',
+    shareCode: 'PF 001',
+    title: '林安婚礼司仪'
+  }]
+
+  try {
+    page.handleShareTap({ currentTarget: { dataset: { id: 88, ownerType: 'USER' } } })
+    page.handleTimelineShare()
+    page.handleTimelineShare()
+
+    assert.equal(navigations.length, 1)
+    assert.equal(
+      navigations[0].url,
+      '/pages/portfolios/visitor-portfolio/visitor-portfolio?shareCode=PF%20001&shareGuide=timeline&sharePortfolioId=88'
+    )
+    assert.equal(page.data.shareSheetVisible, false)
+    assert.equal(page.data.shareTarget, null)
+    assert.equal(page.data.shareActionPending, true)
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('team timeline share carries only the current portfolio id into the guide page', () => {
+  const navigations = []
+  const page = loadPortfolioListPage(() => Promise.resolve({}), {
+    navigateTo(options) {
+      navigations.push(options)
+    }
+  })
+  page.data.teamDisplayPortfolios = [{
+    portfolioId: 33,
+    publicationStatus: 'PUBLISHED',
+    canShare: true,
+    shareCode: 'TEAM 1',
+    title: '甲团队作品集'
+  }]
+
+  try {
+    page.handleShareTap({ currentTarget: { dataset: { id: 33, ownerType: 'TEAM' } } })
+    page.handleTimelineShare()
+
+    assert.equal(
+      navigations[0].url,
+      '/pages/team-portfolios/visitor-portfolio/team-visitor-portfolio?shareCode=TEAM%201&shareGuide=timeline&sharePortfolioId=33'
+    )
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('list refresh clears an open share sheet before replacing data', async () => {
+  const page = loadPortfolioListPage(() => Promise.resolve({ portfolios: [] }))
+  page.setData({
+    shareSheetVisible: true,
+    shareActionPending: true,
+    shareTarget: { ownerType: 'USER', portfolioId: 88 }
+  })
+
+  try {
+    await page.handlePullDownRefresh()
+    assert.equal(page.data.shareSheetVisible, false)
+    assert.equal(page.data.shareActionPending, false)
+    assert.equal(page.data.shareTarget, null)
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('unified portfolio page registers one share sheet for personal and team actions', () => {
+  const fs = require('node:fs')
+  const pageRoot = path.join(__dirname, '../pages/portfolios')
+  const json = JSON.parse(fs.readFileSync(path.join(pageRoot, 'portfolios.json'), 'utf8'))
+  const wxml = fs.readFileSync(path.join(pageRoot, 'portfolios.wxml'), 'utf8')
+
+  assert.equal(
+    json.usingComponents['share-channel-sheet'],
+    '/components/share-channel-sheet/share-channel-sheet'
+  )
+  assert.match(wxml, /data-owner-type="USER"[^>]*catchtap="handleShareTap"/)
+  assert.match(wxml, /data-owner-type="TEAM"[^>]*catchtap="handleShareTap"/)
+  assert.doesNotMatch(wxml, /class="portfolio-action-button share"[^>]*data-item="\{\{item\}\}"/)
+  assert.match(wxml, /<share-channel-sheet[^>]*bindtimeline="handleTimelineShare"/)
 })
 
 test('normalizes long portfolio titles for marquee display', async () => {

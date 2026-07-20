@@ -1054,6 +1054,23 @@ class MinePortfolioServiceTest {
         assertThat(captor.getValue().getShareChannel()).isEqualTo("WECHAT_CARD");
     }
 
+    @Test
+    void createShareRecordShouldAcceptWechatTimelineChannel() {
+        PortfolioEntity portfolio = ownedPortfolio();
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+        MinePortfolioShareRecordRequest request = new MinePortfolioShareRecordRequest();
+        request.setShareChannel("WECHAT_TIMELINE");
+        request.setShareScene("PORTFOLIO_LIST");
+
+        service().createShareRecord(88L, request);
+
+        ArgumentCaptor<PortfolioShareRecordEntity> captor =
+                ArgumentCaptor.forClass(PortfolioShareRecordEntity.class);
+        verify(portfolioShareRecordEntityMapper).insert(captor.capture());
+        assertThat(captor.getValue().getShareChannel()).isEqualTo("WECHAT_TIMELINE");
+        assertThat(captor.getValue().getShareScene()).isEqualTo("PORTFOLIO_LIST");
+    }
+
     private MinePortfolioService service() {
         return new MinePortfolioService(
                 portfolioEntityMapper,

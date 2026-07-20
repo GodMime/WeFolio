@@ -80,7 +80,7 @@
                     <view class="portfolio-action-row">
                       <button wx:if="{{item.showPublishedPreview}}" class="portfolio-action-button preview" data-id="{{item.portfolioId}}" data-action="PREVIEW_PUBLISHED" catchtap="handlePublishedPreviewTap">预览</button>
                       <button wx:if="{{item.showDraftPreview}}" class="portfolio-action-button preview" data-id="{{item.portfolioId}}" data-action="PREVIEW_DRAFT" catchtap="handleDraftPreviewTap">预览</button>
-                      <button wx:if="{{item.actionType === 'SHARE'}}" class="portfolio-action-button share" open-type="share" data-id="{{item.portfolioId}}" data-action="{{item.actionType}}" catchtap="handlePrimaryActionTap" aria-label="分享作品集">分享</button>
+                      <button wx:if="{{item.actionType === 'SHARE'}}" class="portfolio-action-button share" data-id="{{item.portfolioId}}" data-owner-type="USER" data-action="{{item.actionType}}" catchtap="handleShareTap" aria-label="分享作品集">分享</button>
                       <button wx:else class="portfolio-action-button {{item.actionType === 'PUBLISH' ? 'publish' : ''}} {{item.actionType === 'EDIT' ? 'edit' : ''}}" data-id="{{item.portfolioId}}" data-action="{{item.actionType}}" catchtap="handlePrimaryActionTap">{{item.actionText}}</button>
                     </view>
                     <view class="portfolio-arrow"></view>
@@ -167,7 +167,7 @@
                       <button wx:if="{{item.canPreviewDraft}}" class="portfolio-action-button preview" data-item="{{item}}" data-scope="draft" catchtap="handleTeamPreviewTap">预览</button>
                       <button wx:elif="{{item.canPublishedPreview}}" class="portfolio-action-button preview" data-item="{{item}}" data-scope="published" catchtap="handleTeamPreviewTap">预览</button>
                       <button wx:if="{{item.actionType === 'PUBLISH' && item.canMaintain}}" class="portfolio-action-button publish" data-item="{{item}}" catchtap="handleTeamPublishTap" loading="{{publishingTeamPortfolioId === item.portfolioId}}" disabled="{{publishingTeamPortfolioId === item.portfolioId}}">发布</button>
-                      <button wx:elif="{{item.canShare}}" class="portfolio-action-button share" open-type="share" data-owner-type="TEAM" data-item="{{item}}" catchtap="handleTeamShareTap" loading="{{sharingTeamPortfolioId === item.portfolioId}}">分享</button>
+                      <button wx:elif="{{item.canShare}}" class="portfolio-action-button share" data-id="{{item.portfolioId}}" data-owner-type="TEAM" catchtap="handleShareTap">分享</button>
                     </view>
                     <view wx:if="{{item.canMaintain}}" class="portfolio-arrow"></view>
                   </view>
@@ -195,4 +195,11 @@
       <view class="tab-label">{{item.label}}</view>
     </button>
   </view>
+
+  <share-channel-sheet
+    visible="{{shareSheetVisible}}"
+    disabled="{{shareActionPending}}"
+    bindclose="handleCloseShareSheet"
+    bindtimeline="handleTimelineShare"
+  ></share-channel-sheet>
 </view>

@@ -84,10 +84,13 @@ test('team preview and visitor pages share the team carousel component', () => {
   }
 })
 
-test('team visitor page hides the navigation back button', () => {
+test('team visitor page binds navigation and guide back buttons to page-stack state', () => {
   const wxml = read('visitor-portfolio/team-visitor-portfolio.wxml')
+  const json = JSON.parse(read('visitor-portfolio/team-visitor-portfolio.json'))
 
-  assert.match(wxml, /<navigation-bar title="团队作品集" back="\{\{false\}\}" \/>/)
+  assert.match(wxml, /<navigation-bar title="团队作品集" back="\{\{showNavigationBack && !timelineGuideVisible\}\}" \/>/)
+  assert.equal(json.usingComponents['timeline-share-guide'], '/components/timeline-share-guide/timeline-share-guide')
+  assert.match(wxml, /<timeline-share-guide[^>]*back="\{\{showNavigationBack\}\}"[^>]*bindback="handleTimelineGuideBack"[^>]*bindclose="handleCloseTimelineGuide"/)
 })
 
 test('team preview and visitor pages render the personal-style brand footer', () => {

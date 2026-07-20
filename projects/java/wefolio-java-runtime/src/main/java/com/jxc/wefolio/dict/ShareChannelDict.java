@@ -11,8 +11,9 @@ import java.util.stream.Collectors;
 public enum ShareChannelDict {
 
     WECHAT_CARD("WECHAT_CARD", "微信卡片"),
-        QR_CODE("QR_CODE", "二维码"),
-        COPIED_PATH("COPIED_PATH", "复制链接");
+    WECHAT_TIMELINE("WECHAT_TIMELINE", "微信朋友圈"),
+    QR_CODE("QR_CODE", "二维码"),
+    COPIED_PATH("COPIED_PATH", "复制链接");
 
     private final String code;
     private final String displayName;

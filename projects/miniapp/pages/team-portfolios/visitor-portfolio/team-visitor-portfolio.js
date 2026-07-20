@@ -8,19 +8,61 @@ const { showTeamPortfolioUnavailableToast } = require('../utils/team-portfolios.
 const TYPE_BUCKETS = Object.freeze({ TEAM_PROFILE: 'teamProfile', CAROUSEL: 'carousel', DIVIDER: 'divider', MEMBER_PORTFOLIO_GRID: 'grid', MEMBER_PORTFOLIO_LIST: 'list', TEXT_SECTION: 'text', SCHEDULE_QUERY: 'schedule', CONTACT_FORM: 'contact', QR_CONTACT: 'qr' })
 const PERSONAL_VISITOR_URL = '/pages' + '/portfolios/visitor-portfolio/visitor-portfolio'
 const PERSONAL_VISITOR_TEAM_SOURCE_QUERY = 'fromTeamPortfolio=1'
+const TIMELINE_SHARE_GUIDE_VALUE = 'timeline'
+const SHARE_MENU_ITEMS = Object.freeze(['shareAppMessage', 'shareTimeline'])
+const SHARE_CHANNEL_WECHAT_TIMELINE = 'WECHAT_TIMELINE'
+const SHARE_SCENE_TEAM_PORTFOLIO_LIST = 'TEAM_PORTFOLIO_LIST'
 function buckets(items) { const value = { teamProfile: [], carousel: [], divider: [], grid: [], list: [], text: [], schedule: [], contact: [], qr: [] }; (Array.isArray(items) ? items : []).forEach((item) => { const key = TYPE_BUCKETS[item.componentType]; if (key) value[key].push(item) }); return value }
 function isUncertainFailure(error) { return !error || !Number(error.statusCode) || Number(error.statusCode) >= 500 }
+function positiveId(value) { const id = Number(value); return Number.isInteger(id) && id > 0 ? id : 0 }
+function shareTitle(render = {}) { return render.share && render.share.title || render.title || '团队作品集' }
+function hasPreviousPage() { const pages = typeof getCurrentPages === 'function' ? getCurrentPages() : []; return Array.isArray(pages) && pages.length > 1 }
 
 Page({
-  data: { shareCode: '', sourceType: 'WECHAT_SHARE_CARD', loading: false, errorMessage: '', render: {}, componentBuckets: buckets([]), visitorKey: '', visitRecordId: 0, visitorProfileToken: '', visitorProfileAuthVisible: false, visitorProfileForm: { nickname: '', avatarPath: '' }, visitorProfileSaving: false, empty: true, underMaintenance: false, scheduleResults: {}, contactForms: {}, contactSubmitting: {}, contactModalVisible: {}, pendingOpenKey: '', pendingContactKeys: {} },
-  onLoad(options = {}) { const shareCode = resolveTeamShareCode(options); if (!shareCode) { wx.showToast({ title: '暂无权限访问该团队作品集', icon: 'none' }); return }; this.setData({ shareCode, sourceType: options.scene && !options.shareCode ? 'QR_CODE' : 'WECHAT_SHARE_CARD' }); this.open() },
+  data: { shareCode: '', sourceType: 'WECHAT_SHARE_CARD', loading: false, errorMessage: '', render: {}, componentBuckets: buckets([]), visitorKey: '', visitRecordId: 0, visitorProfileToken: '', visitorProfileAuthVisible: false, visitorProfileForm: { nickname: '', avatarPath: '' }, visitorProfileSaving: false, empty: true, underMaintenance: false, showNavigationBack: false, timelineGuideRequested: false, timelineGuideVisible: false, timelineSharePortfolioId: 0, timelineShareRecordEnabled: false, scheduleResults: {}, contactForms: {}, contactSubmitting: {}, contactModalVisible: {}, pendingOpenKey: '', pendingContactKeys: {} },
+  onLoad(options = {}) {
+    const shareCode = resolveTeamShareCode(options)
+    if (!shareCode) {
+      wx.showToast({ title: '暂无权限访问该团队作品集', icon: 'none' })
+      return
+    }
+    const timelineGuideRequested = options.shareGuide === TIMELINE_SHARE_GUIDE_VALUE
+    this.setData({
+      shareCode,
+      sourceType: options.scene && !options.shareCode ? 'QR_CODE' : 'WECHAT_SHARE_CARD',
+      showNavigationBack: hasPreviousPage(),
+      timelineGuideRequested,
+      timelineGuideVisible: false,
+      timelineSharePortfolioId: timelineGuideRequested ? positiveId(options.sharePortfolioId) : 0,
+      timelineShareRecordEnabled: false
+    })
+    if (wx.showShareMenu) {
+      wx.showShareMenu({ menus: SHARE_MENU_ITEMS })
+    }
+    return this.open()
+  },
   async open() {
     if (this.data.loading || !this.data.shareCode) return
     this.setData({ loading: true, errorMessage: '' })
     const idempotencyKey = this.data.pendingOpenKey || createIdempotencyKey(); if (!this.data.pendingOpenKey) this.setData({ pendingOpenKey: idempotencyKey })
-    try { const session = await openTeamVisitorSession({ shareCode: this.data.shareCode, sourceType: this.data.sourceType, idempotencyKey, requestFn: request }); this.applySession(session); this.setData({ pendingOpenKey: '' }) } catch (error) { if (this.handleUnavailableError(error)) return; this.setData({ errorMessage: '团队作品集暂不可访问' }) } finally { this.setData({ loading: false }) }
+    try { const session = await openTeamVisitorSession({ shareCode: this.data.shareCode, sourceType: this.data.sourceType, idempotencyKey, requestFn: request }); this.applySession(session); this.setData({ pendingOpenKey: '' }) } catch (error) { this.setData({ timelineGuideVisible: false, timelineShareRecordEnabled: false }); if (this.handleUnavailableError(error)) return; this.setData({ errorMessage: '团队作品集暂不可访问' }) } finally { this.setData({ loading: false }) }
   },
-  applySession(session) { const render = normalizeTeamVisitorPortfolio(session); this.setData({ render, componentBuckets: buckets(render.components), visitorKey: render.visitorKey, visitRecordId: render.visitRecordId, visitorProfileToken: render.visitorProfileToken, visitorProfileAuthVisible: render.needVisitorProfile, empty: render.components.length === 0, underMaintenance: render.underMaintenance }) },
+  applySession(session) {
+    const render = normalizeTeamVisitorPortfolio(session)
+    const displayable = !render.underMaintenance && render.components.length > 0
+    this.setData({
+      render,
+      componentBuckets: buckets(render.components),
+      visitorKey: render.visitorKey,
+      visitRecordId: render.visitRecordId,
+      visitorProfileToken: render.visitorProfileToken,
+      visitorProfileAuthVisible: render.needVisitorProfile,
+      empty: render.components.length === 0,
+      underMaintenance: render.underMaintenance,
+      timelineGuideVisible: Boolean(this.data.timelineGuideRequested && displayable),
+      timelineShareRecordEnabled: Boolean(this.data.timelineSharePortfolioId && displayable)
+    })
+  },
   handleRetry() { this.open() },
   visitorRequest(options) { return requestWithTeamVisitorSessionRefresh({ shareCode: this.data.shareCode, sourceType: this.data.sourceType, requestFn: request, requestOptions: options, onRefresh: async (session) => this.applySession(session), refreshRequestOptions: (session, original) => Object.assign({}, original, { data: Object.assign({}, original.data, original.data && original.data.visitorProfileToken ? { visitorProfileToken: session.visitorProfileToken } : {}) }) }) },
   profileRequest(options) { const data = Object.assign({}, options.data, { visitorProfileToken: this.data.visitorProfileToken }); return this.visitorRequest(Object.assign({}, options, { data })) },
@@ -38,5 +80,9 @@ Page({
   async handleChooseAvatar() { if (!wx.chooseMedia) return; try { const media = await new Promise((resolve, reject) => wx.chooseMedia({ count: 1, mediaType: ['image'], success: resolve, fail: reject })); this.setData({ visitorProfileForm: Object.assign({}, this.data.visitorProfileForm, { avatarPath: media.tempFiles[0].tempFilePath }) }) } catch (error) {} },
   handleProfileSkip() { this.setData({ visitorProfileAuthVisible: false }) },
   async handleProfileSave() { if (this.data.visitorProfileSaving) return; const form = this.data.visitorProfileForm; if (!form.nickname || !form.avatarPath) return wx.showToast({ title: '请完善头像和昵称', icon: 'none' }); this.setData({ visitorProfileSaving: true }); try { await uploadTeamVisitorProfile({ shareCode: this.data.shareCode, avatarPath: form.avatarPath, nickname: form.nickname, visitorProfileToken: this.data.visitorProfileToken, requestFn: (options) => this.profileRequest(options) }); this.setData({ visitorProfileAuthVisible: false }) } catch (error) { if (this.handleUnavailableError(error)) return; wx.showToast({ title: '资料保存失败，请重试', icon: 'none' }) } finally { this.setData({ visitorProfileSaving: false }) } },
-  onShareAppMessage() { return { title: this.data.render.title, path: `/pages/team-portfolios/visitor-portfolio/team-visitor-portfolio?shareCode=${encodeURIComponent(this.data.shareCode)}` } }
+  handleCloseTimelineGuide() { this.setData({ timelineGuideRequested: false, timelineGuideVisible: false }) },
+  handleTimelineGuideBack() { if (hasPreviousPage()) wx.navigateBack({ delta: 1 }) },
+  onShareAppMessage() { return { title: shareTitle(this.data.render), path: `/pages/team-portfolios/visitor-portfolio/team-visitor-portfolio?shareCode=${encodeURIComponent(this.data.shareCode)}`, imageUrl: this.data.render.share && this.data.render.share.coverUrl } },
+  recordTimelineShare() { const portfolioId = this.data.timelineShareRecordEnabled ? positiveId(this.data.timelineSharePortfolioId) : 0; if (!portfolioId) return; this.setData({ timelineSharePortfolioId: 0, timelineShareRecordEnabled: false }); request({ url: `/api/mine/team-portfolios/${portfolioId}/share-records`, method: 'POST', data: { shareChannel: SHARE_CHANNEL_WECHAT_TIMELINE, shareScene: SHARE_SCENE_TEAM_PORTFOLIO_LIST } }).catch(() => {}) },
+  onShareTimeline() { this.recordTimelineShare(); return { title: shareTitle(this.data.render), query: `shareCode=${encodeURIComponent(this.data.shareCode)}`, imageUrl: this.data.render.share && this.data.render.share.coverUrl } }
 })

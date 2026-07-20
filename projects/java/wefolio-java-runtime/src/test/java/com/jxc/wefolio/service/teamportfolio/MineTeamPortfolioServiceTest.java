@@ -771,6 +771,28 @@ class MineTeamPortfolioServiceTest {
     }
 
     @Test
+    void createShareRecordAcceptsWechatTimelineChannel() {
+        TestContext context = context(true);
+        PortfolioEntity published = portfolio(TEAM_ID);
+        published.setPublishedRevision(2);
+        published.setPublicationStatus(PortfolioPublicationStatusDict.PUBLISHED.getCode());
+        published.setPublishedConfigJson(JSON.toJSONString(config()));
+        when(context.access.requireVisiblePortfolio(PORTFOLIO_ID, USER_ID))
+                .thenReturn(access(published, TeamRoleDict.MEMBER.getCode()));
+        TeamPortfolioShareRecordRequest request = new TeamPortfolioShareRecordRequest();
+        request.setShareChannel("WECHAT_TIMELINE");
+        request.setShareScene("TEAM_PORTFOLIO_LIST");
+
+        context.service.createShareRecord(PORTFOLIO_ID, request, USER_ID);
+
+        ArgumentCaptor<PortfolioShareRecordEntity> captor =
+                ArgumentCaptor.forClass(PortfolioShareRecordEntity.class);
+        verify(context.shareMapper).insert(captor.capture());
+        assertThat(captor.getValue().getShareChannel()).isEqualTo("WECHAT_TIMELINE");
+        assertThat(captor.getValue().getShareScene()).isEqualTo("TEAM_PORTFOLIO_LIST");
+    }
+
+    @Test
     void deleteScopesReferencesAndDelegatesConservativeAssetCleanupOnlyAfterSuccessfulUpdate() {
         TestContext context = maintainableContext();
         PortfolioEntity portfolio = portfolio(TEAM_ID);

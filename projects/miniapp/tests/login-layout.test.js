@@ -37,6 +37,9 @@ const REMOTE_STATIC_ASSET_ROOT = 'https://cdn2.we-folio.dingchenyong.top/system'
 const STATIC_ASSET_DIR = path.join(__dirname, '../assets/system')
 const MAX_LOCAL_STATIC_ASSET_BYTES = 200 * 1024
 const MAX_LOCAL_STATIC_ASSET_TOTAL_BYTES = 200 * 1024
+const LOCAL_STATIC_MEDIA_EXTENSIONS = new Set([
+  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.mp3', '.wav', '.aac', '.m4a'
+])
 const COS_SYSTEM_STATIC_ASSET_PATTERN = /https:\/\/cos\.we-folio\.dingchenyong\.top\/system/
 const BACKGROUND_IMAGE_URL = `${REMOTE_STATIC_ASSET_ROOT}/backgroud.jpeg`
 const LOGO_IMAGE_URL = `${REMOTE_STATIC_ASSET_ROOT}/folio-logo.png`
@@ -69,6 +72,14 @@ function readRule(selector) {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const match = loginWxss.match(new RegExp(`${escapedSelector}\\s*\\{([^}]*)\\}`))
   return match ? match[1] : ''
+}
+
+function listLocalStaticMediaFiles(directory) {
+  return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const entryPath = path.join(directory, entry.name)
+    if (entry.isDirectory()) return listLocalStaticMediaFiles(entryPath)
+    return LOCAL_STATIC_MEDIA_EXTENSIONS.has(path.extname(entry.name).toLowerCase()) ? [entryPath] : []
+  })
 }
 
 test('login segmented tabs use flex columns for skyline compatibility', () => {
@@ -139,11 +150,8 @@ test('miniapp pages use system static asset urls', () => {
 })
 
 test('local system static assets stay within code quality package budget', () => {
-  let totalBytes = 0
-
-  for (const systemAsset of LOCAL_SYSTEM_STATIC_ASSETS) {
-    totalBytes += fs.statSync(path.join(STATIC_ASSET_DIR, systemAsset.fileName)).size
-  }
+  const totalBytes = listLocalStaticMediaFiles(STATIC_ASSET_DIR)
+    .reduce((total, assetPath) => total + fs.statSync(assetPath).size, 0)
 
   assert.ok(
     totalBytes <= MAX_LOCAL_STATIC_ASSET_TOTAL_BYTES,

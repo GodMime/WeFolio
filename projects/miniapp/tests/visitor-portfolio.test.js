@@ -903,8 +903,12 @@ test('visitor page uses source type constant for WeChat share card', () => {
 })
 
 test('visitor page secondary share keeps the new visitor subpackage path', () => {
-  const page = loadVisitorPage(() => Promise.resolve({}))
-  page.data.shareCode = 'PF001'
+  const requests = []
+  const page = loadVisitorPage((options) => {
+    requests.push(options)
+    return Promise.resolve({})
+  })
+  page.data.shareCode = 'PF 001'
   page.data.portfolio = {
     title: '林安婚礼司仪',
     share: {
@@ -917,25 +921,139 @@ test('visitor page secondary share keeps the new visitor subpackage path', () =>
 
   assert.equal(
     share.path,
-    '/pages/portfolios/visitor-portfolio/visitor-portfolio?shareCode=PF001'
+    '/pages/portfolios/visitor-portfolio/visitor-portfolio?shareCode=PF%20001'
   )
+  assert.doesNotMatch(share.path, /shareGuide/)
+  page.onShareTimeline()
+  assert.deepEqual(requests, [])
 })
 
-test('visitor page shows navigation back only when opened from a team portfolio', async () => {
-  const directPage = loadVisitorPage(() => Promise.resolve({}))
-  directPage.bootstrap = () => Promise.resolve()
-  await directPage.onLoad({ shareCode: 'PF001' })
-  assert.equal(directPage.data.showNavigationBack, false)
+test('personal visitor shows timeline guide only after displayable content loads', async () => {
+  const shareMenus = []
+  const requests = []
+  const page = loadVisitorPage((options) => {
+    requests.push(options)
+    return Promise.resolve({
+      visitorKey: 'visitor-a',
+      renderData: {
+        shareCode: 'PF 001',
+        title: '林安个人作品集',
+        share: {
+          title: '个人分享标题',
+          coverUrl: 'https://example.test/cover.jpg'
+        },
+        components: [{
+          componentKey: 'profile-1',
+          componentType: 'PROFILE',
+          sortOrder: 1000,
+          profile: { displayName: '林安' }
+        }]
+      }
+    })
+  })
+  global.wx = {
+    login(options) { options.success({ code: 'wx-code' }) },
+    setStorageSync() {},
+    showShareMenu(options) { shareMenus.push(options) },
+    showToast() {}
+  }
 
-  const teamPage = loadVisitorPage(() => Promise.resolve({}))
-  teamPage.bootstrap = () => Promise.resolve()
-  await teamPage.onLoad({ shareCode: 'PF001', fromTeamPortfolio: '1' })
-  assert.equal(teamPage.data.showNavigationBack, true)
+  try {
+    const opening = page.onLoad({ shareCode: 'PF 001', shareGuide: 'timeline', sharePortfolioId: '88' })
+    assert.equal(page.data.timelineGuideRequested, true)
+    assert.equal(page.data.timelineGuideVisible, false)
+    await opening
+    assert.deepEqual(shareMenus, [{ menus: ['shareAppMessage', 'shareTimeline'] }])
+    assert.equal(page.data.timelineGuideVisible, true)
+    requests.length = 0
+    assert.deepEqual(page.onShareTimeline(), {
+      title: '个人分享标题',
+      query: 'shareCode=PF%20001',
+      imageUrl: 'https://example.test/cover.jpg'
+    })
+    page.onShareTimeline()
+    assert.deepEqual(requests, [{
+      url: '/api/mine/portfolios/88/share-records',
+      method: 'POST',
+      data: {
+        shareChannel: 'WECHAT_TIMELINE',
+        shareScene: 'PORTFOLIO_LIST'
+      }
+    }])
+    page.handleCloseTimelineGuide()
+    assert.equal(page.data.timelineGuideRequested, false)
+    assert.equal(page.data.timelineGuideVisible, false)
+  } finally {
+    delete global.wx
+  }
+})
 
-  const unrelatedValuePage = loadVisitorPage(() => Promise.resolve({}))
-  unrelatedValuePage.bootstrap = () => Promise.resolve()
-  await unrelatedValuePage.onLoad({ shareCode: 'PF001', fromTeamPortfolio: 'true' })
-  assert.equal(unrelatedValuePage.data.showNavigationBack, false)
+test('personal visitor keeps timeline guide hidden for empty, maintenance, and failed responses', async () => {
+  const page = loadVisitorPage(() => Promise.reject(new Error('network')))
+  global.wx = {
+    login(options) { options.success({ code: 'wx-code' }) },
+    setStorageSync() {},
+    showToast() {}
+  }
+
+  try {
+    await page.onLoad({ shareCode: 'PF001', shareGuide: 'timeline' })
+    assert.equal(page.data.timelineGuideRequested, true)
+    assert.equal(page.data.timelineGuideVisible, false)
+
+    page.applyVisitorOpenResponse({
+      renderData: {
+        shareCode: 'PF001',
+        components: []
+      }
+    })
+    assert.equal(page.data.timelineGuideVisible, false)
+
+    page.applyVisitorOpenResponse({
+      renderData: {
+        shareCode: 'PF001',
+        underMaintenance: true,
+        components: [{ componentKey: 'profile-1', componentType: 'PROFILE' }]
+      }
+    })
+    assert.equal(page.data.timelineGuideVisible, false)
+  } finally {
+    delete global.wx
+  }
+})
+
+test('personal visitor ignores unknown timeline guide values and registers the shared guide', async () => {
+  const page = loadVisitorPage(() => Promise.resolve({}))
+  page.bootstrap = () => Promise.resolve()
+  await page.onLoad({ shareCode: 'PF001', shareGuide: 'true' })
+
+  const pageRoot = path.join(__dirname, '../pages/portfolios/visitor-portfolio')
+  const json = JSON.parse(fs.readFileSync(path.join(pageRoot, 'visitor-portfolio.json'), 'utf8'))
+  const wxml = fs.readFileSync(path.join(pageRoot, 'visitor-portfolio.wxml'), 'utf8')
+
+  assert.equal(page.data.timelineGuideRequested, false)
+  assert.equal(json.usingComponents['timeline-share-guide'], '/components/timeline-share-guide/timeline-share-guide')
+  assert.match(wxml, /<timeline-share-guide[^>]*back="\{\{showNavigationBack\}\}"[^>]*bindback="handleTimelineGuideBack"[^>]*bindclose="handleCloseTimelineGuide"/)
+})
+
+test('visitor page shows navigation back only when the page stack has a previous page', async () => {
+  const previousGetCurrentPages = global.getCurrentPages
+  try {
+    global.getCurrentPages = () => [{ route: 'pages/portfolios/portfolios' }, { route: 'pages/portfolios/visitor-portfolio/visitor-portfolio' }]
+    const internalPage = loadVisitorPage(() => Promise.resolve({}))
+    internalPage.bootstrap = () => Promise.resolve()
+    await internalPage.onLoad({ shareCode: 'PF001' })
+    assert.equal(internalPage.data.showNavigationBack, true)
+
+    global.getCurrentPages = () => [{ route: 'pages/portfolios/visitor-portfolio/visitor-portfolio' }]
+    const directSharePage = loadVisitorPage(() => Promise.resolve({}))
+    directSharePage.bootstrap = () => Promise.resolve()
+    await directSharePage.onLoad({ shareCode: 'PF001', fromTeamPortfolio: '1' })
+    assert.equal(directSharePage.data.showNavigationBack, false)
+  } finally {
+    if (previousGetCurrentPages === undefined) delete global.getCurrentPages
+    else global.getCurrentPages = previousGetCurrentPages
+  }
 })
 
 test('visitor page records image view before opening original image', async () => {

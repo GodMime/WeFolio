@@ -26,7 +26,7 @@ public class PortfolioShareRecordEntity extends BaseEntity {
     /** 分享归属用户 ID 或团队 ID */
     private Long ownerId;
 
-    /** 分享渠道：WECHAT_CARD 微信卡片 / QR_CODE 二维码 / COPIED_PATH 复制链接 */
+    /** 分享渠道：WECHAT_CARD 微信卡片 / WECHAT_TIMELINE 微信朋友圈 / QR_CODE 二维码 / COPIED_PATH 复制链接 */
     private String shareChannel;
 
     /** 页面入口或业务场景编码 */

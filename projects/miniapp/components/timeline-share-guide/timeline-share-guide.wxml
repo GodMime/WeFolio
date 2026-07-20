@@ -1,0 +1,26 @@
+<root-portal wx:if="{{visible}}">
+  <view class="timeline-guide-mask" catchtap="noop" catchtouchmove="noop">
+    <view
+      wx:if="{{back}}"
+      class="timeline-guide-back"
+      style="{{navigationBackStyle}}"
+      bindtap="handleBack"
+      aria-role="button"
+      aria-label="返回"
+    >
+      <view class="timeline-guide-back-icon"></view>
+    </view>
+    <view class="timeline-guide-menu-arrow" style="{{menuArrowStyle}}" aria-hidden="true"></view>
+    <view class="timeline-guide-panel" catchtap="noop">
+      <view class="timeline-guide-grabber"></view>
+      <view class="timeline-guide-kicker">WECHAT MOMENTS</view>
+      <view class="timeline-guide-title">分享到朋友圈</view>
+      <view class="timeline-guide-desc">点击右上角“…”后，选择“分享到朋友圈”</view>
+      <view class="timeline-guide-steps">
+        <view class="timeline-guide-step"><text>1</text><view>打开右上角菜单</view></view>
+        <view class="timeline-guide-step"><text>2</text><view>选择分享到朋友圈</view></view>
+      </view>
+      <button class="timeline-guide-confirm" bindtap="handleClose">我知道了</button>
+    </view>
+  </view>
+</root-portal>

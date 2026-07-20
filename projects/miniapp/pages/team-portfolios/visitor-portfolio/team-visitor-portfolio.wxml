@@ -1,4 +1,4 @@
-<navigation-bar title="团队作品集" back="{{false}}" />
+<navigation-bar title="团队作品集" back="{{showNavigationBack && !timelineGuideVisible}}" />
 <scroll-view scroll-y class="page-shell">
   <view wx:if="{{loading}}" class="state">加载中...</view>
   <view wx:elif="{{errorMessage}}" class="state"><text>{{errorMessage}}</text><button bindtap="handleRetry">重新打开</button></view>
@@ -29,3 +29,4 @@
     <button bindtap="handleProfileSkip">暂不填写</button>
   </view>
 </view>
+<timeline-share-guide visible="{{timelineGuideVisible}}" back="{{showNavigationBack}}" bindback="handleTimelineGuideBack" bindclose="handleCloseTimelineGuide"></timeline-share-guide>
