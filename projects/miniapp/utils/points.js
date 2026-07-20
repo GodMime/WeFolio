@@ -141,6 +141,24 @@ function normalizeRuleGroups(rules) {
     .map((groupCode) => groups[groupCode])
 }
 
+function normalizeAcquisitionRules(rules) {
+  if (!Array.isArray(rules)) {
+    return []
+  }
+  return rules.map((rule = {}, index) => {
+    const code = String(rule.code || '').trim()
+    const pointsValue = toNumber(rule.pointsValue)
+    return {
+      id: code || `acquisition-rule-${index + 1}`,
+      code,
+      title: rule.title || '积分获取',
+      desc: rule.description || '满足条件后赠送',
+      pointsValue,
+      pointsText: `${pointsValue} 分`
+    }
+  })
+}
+
 function normalizePointOverview(raw = {}) {
   return {
     accountId: raw.accountId || null,
@@ -159,6 +177,7 @@ function normalizePointOverview(raw = {}) {
       { label: '访客消耗', value: toDisplayText(raw.visitorConsumed) },
       { label: '维护消耗', value: toDisplayText(raw.maintenanceConsumed) }
     ],
+    acquisitionRules: normalizeAcquisitionRules(raw.acquisitionRules),
     ruleGroups: normalizeRuleGroups(raw.rules)
   }
 }

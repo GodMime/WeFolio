@@ -1,6 +1,7 @@
 package com.jxc.wefolio.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.jxc.wefolio.config.RegistrationPointProperties;
 import com.jxc.wefolio.dict.PointCalcModeDict;
 import com.jxc.wefolio.dict.BillingWindowScopeDict;
 import com.jxc.wefolio.dict.MessageActionTypeDict;
@@ -44,6 +45,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
@@ -849,6 +851,36 @@ class PointServiceTest {
         assertThat(response.getRules().get(0).getGroupText()).isEqualTo("维护");
     }
 
+    /** 积分概览应按注册积分配置返回两条积分获取规则。 */
+    @Test
+    void getOverviewReturnsConfiguredAcquisitionRules() {
+        activeUser(7L);
+        when(pointAccountEntityMapper.selectOne(any())).thenReturn(account(10L, 7L, 30L));
+        when(pointRuleEntityMapper.selectList(any())).thenReturn(List.of());
+        RegistrationPointProperties properties = new RegistrationPointProperties();
+        properties.setNewUserGiftPoints(300L);
+        properties.setReferralGiftPoints(700L);
+
+        MinePointOverviewResponse response = service(properties).getOverview(7L);
+
+        assertThat(response.getAcquisitionRules())
+                .extracting("code", "title", "description", "pointsValue")
+                .containsExactly(
+                        tuple(
+                                PointSceneCodeDict.NEW_USER_REGISTRATION_GIFT.getCode(),
+                                "新用户注册",
+                                "首次注册成功后赠送",
+                                300L
+                        ),
+                        tuple(
+                                PointSceneCodeDict.REFERRAL_USER_GIFT.getCode(),
+                                "推荐好友注册",
+                                "好友填写您的有效推荐码并注册成功后赠送",
+                                700L
+                        )
+                );
+    }
+
     /** 积分概览必须安全返回滚动窗口小时数和统一作用域编码。 */
     @Test
     void getOverviewReturnsStructuredBillingWindowConfig() {
@@ -944,6 +976,24 @@ class PointServiceTest {
                 pointMeterEntityMapper,
                 pointTransactionEntityMapper,
                 systemMessageEntityMapper
+        );
+    }
+
+    /**
+     * 使用指定注册积分配置构造被测服务。
+     *
+     * @param properties 注册积分配置
+     * @return 积分服务
+     */
+    private PointService service(RegistrationPointProperties properties) {
+        return new PointService(
+                userEntityMapper,
+                pointAccountEntityMapper,
+                pointRuleEntityMapper,
+                pointMeterEntityMapper,
+                pointTransactionEntityMapper,
+                systemMessageEntityMapper,
+                properties
         );
     }
 

@@ -17,6 +17,20 @@ test('normalizes point overview with grouped consumption rules', () => {
     visitorConsumed: 42,
     maintenanceConsumed: 8,
     lowBalance: false,
+    acquisitionRules: [
+      {
+        code: 'NEW_USER_REGISTRATION_GIFT',
+        title: '新用户注册',
+        description: '首次注册成功后赠送',
+        pointsValue: 500
+      },
+      {
+        code: 'REFERRAL_USER_GIFT',
+        title: '推荐好友注册',
+        description: '好友填写您的有效推荐码并注册成功后赠送',
+        pointsValue: 500
+      }
+    ],
     rules: [
       {
         ruleId: 1,
@@ -64,6 +78,24 @@ test('normalizes point overview with grouped consumption rules', () => {
     { label: '今日消耗', value: '14' },
     { label: '访客消耗', value: '42' },
     { label: '维护消耗', value: '8' }
+  ])
+  assert.deepEqual(overview.acquisitionRules, [
+    {
+      id: 'NEW_USER_REGISTRATION_GIFT',
+      code: 'NEW_USER_REGISTRATION_GIFT',
+      title: '新用户注册',
+      desc: '首次注册成功后赠送',
+      pointsValue: 500,
+      pointsText: '500 分'
+    },
+    {
+      id: 'REFERRAL_USER_GIFT',
+      code: 'REFERRAL_USER_GIFT',
+      title: '推荐好友注册',
+      desc: '好友填写您的有效推荐码并注册成功后赠送',
+      pointsValue: 500,
+      pointsText: '500 分'
+    }
   ])
   assert.deepEqual(overview.ruleGroups.map((group) => group.groupCode), ['MAINTENANCE', 'VISITOR'])
   assert.equal(overview.ruleGroups[0].rules[0].costText, '1 分')

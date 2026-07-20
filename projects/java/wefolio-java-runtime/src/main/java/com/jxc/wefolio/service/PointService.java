@@ -3,6 +3,7 @@ package com.jxc.wefolio.service;
 import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.jxc.wefolio.config.RegistrationPointProperties;
 import com.jxc.wefolio.constant.PointConstants;
 import com.jxc.wefolio.dict.MessageActionTypeDict;
 import com.jxc.wefolio.dict.MessageCategoryDict;
@@ -107,6 +108,18 @@ public class PointService {
     /** 规则扩展配置中的免重复扣费作用域键 */
     private static final String RULE_CONFIG_DEDUPE_SCOPE = "dedupeScope";
 
+    /** 新用户注册获取规则标题 */
+    private static final String NEW_USER_ACQUISITION_TITLE = "新用户注册";
+
+    /** 新用户注册获取规则说明 */
+    private static final String NEW_USER_ACQUISITION_DESCRIPTION = "首次注册成功后赠送";
+
+    /** 推荐好友注册获取规则标题 */
+    private static final String REFERRAL_ACQUISITION_TITLE = "推荐好友注册";
+
+    /** 推荐好友注册获取规则说明 */
+    private static final String REFERRAL_ACQUISITION_DESCRIPTION = "好友填写您的有效推荐码并注册成功后赠送";
+
     /** 维护类消耗场景 */
     private static final Set<String> MAINTENANCE_SCENES = Set.of(
             PointSceneCodeDict.UPLOAD_IMAGE.getCode(),
@@ -148,6 +161,9 @@ public class PointService {
     /** 待扣来源 Mapper；旧单元测试兼容构造器中为空。 */
     private final PointPendingDebitEntityMapper pointPendingDebitEntityMapper;
 
+    /** 注册积分赠送配置 */
+    private final RegistrationPointProperties registrationPointProperties;
+
     /** Spring 生产构造器。 */
     @Autowired
     public PointService(
@@ -158,7 +174,8 @@ public class PointService {
             PointTransactionEntityMapper pointTransactionEntityMapper,
             SystemMessageEntityMapper systemMessageEntityMapper,
             PointCommandService pointCommandService,
-            PointPendingDebitEntityMapper pointPendingDebitEntityMapper
+            PointPendingDebitEntityMapper pointPendingDebitEntityMapper,
+            RegistrationPointProperties registrationPointProperties
     ) {
         this.userEntityMapper = userEntityMapper;
         this.pointAccountEntityMapper = pointAccountEntityMapper;
@@ -168,6 +185,7 @@ public class PointService {
         this.systemMessageEntityMapper = systemMessageEntityMapper;
         this.pointCommandService = pointCommandService;
         this.pointPendingDebitEntityMapper = pointPendingDebitEntityMapper;
+        this.registrationPointProperties = registrationPointProperties;
     }
 
     /**
@@ -185,7 +203,33 @@ public class PointService {
             SystemMessageEntityMapper systemMessageEntityMapper
     ) {
         this(userEntityMapper, pointAccountEntityMapper, pointRuleEntityMapper,
-                pointMeterEntityMapper, pointTransactionEntityMapper, systemMessageEntityMapper, null, null);
+                pointMeterEntityMapper, pointTransactionEntityMapper, systemMessageEntityMapper,
+                null, null, new RegistrationPointProperties());
+    }
+
+    /**
+     * 使用指定注册积分配置的单元测试构造器。
+     *
+     * @param userEntityMapper 用户 Mapper
+     * @param pointAccountEntityMapper 积分账户 Mapper
+     * @param pointRuleEntityMapper 积分规则 Mapper
+     * @param pointMeterEntityMapper 积分计量器 Mapper
+     * @param pointTransactionEntityMapper 积分流水 Mapper
+     * @param systemMessageEntityMapper 系统消息 Mapper
+     * @param registrationPointProperties 注册积分配置
+     */
+    PointService(
+            UserEntityMapper userEntityMapper,
+            PointAccountEntityMapper pointAccountEntityMapper,
+            PointRuleEntityMapper pointRuleEntityMapper,
+            PointMeterEntityMapper pointMeterEntityMapper,
+            PointTransactionEntityMapper pointTransactionEntityMapper,
+            SystemMessageEntityMapper systemMessageEntityMapper,
+            RegistrationPointProperties registrationPointProperties
+    ) {
+        this(userEntityMapper, pointAccountEntityMapper, pointRuleEntityMapper,
+                pointMeterEntityMapper, pointTransactionEntityMapper, systemMessageEntityMapper,
+                null, null, registrationPointProperties);
     }
 
     /**
@@ -308,6 +352,7 @@ public class PointService {
         response.setRules(loadActiveRules(LocalDateTime.now()).stream()
                 .map(this::buildRuleItem)
                 .toList());
+        response.setAcquisitionRules(buildAcquisitionRules());
         return response;
     }
 
@@ -1353,6 +1398,52 @@ public class PointService {
         item.setUnitCount(rule.getUnitCount());
         item.setPointsValue(safeLong(rule.getPointsValue()));
         fillBillingWindowDisplayConfig(item, rule);
+        return item;
+    }
+
+    /**
+     * 构建注册与推荐两条积分获取规则。
+     *
+     * @return 积分获取规则列表
+     */
+    private List<MinePointOverviewResponse.AcquisitionRuleItem> buildAcquisitionRules() {
+        return List.of(
+                buildAcquisitionRule(
+                        PointSceneCodeDict.NEW_USER_REGISTRATION_GIFT.getCode(),
+                        NEW_USER_ACQUISITION_TITLE,
+                        NEW_USER_ACQUISITION_DESCRIPTION,
+                        registrationPointProperties.getNewUserGiftPoints()
+                ),
+                buildAcquisitionRule(
+                        PointSceneCodeDict.REFERRAL_USER_GIFT.getCode(),
+                        REFERRAL_ACQUISITION_TITLE,
+                        REFERRAL_ACQUISITION_DESCRIPTION,
+                        registrationPointProperties.getReferralGiftPoints()
+                )
+        );
+    }
+
+    /**
+     * 构建单条积分获取规则。
+     *
+     * @param code 稳定规则编码
+     * @param title 规则标题
+     * @param description 规则说明
+     * @param pointsValue 赠送积分值
+     * @return 积分获取规则
+     */
+    private MinePointOverviewResponse.AcquisitionRuleItem buildAcquisitionRule(
+            String code,
+            String title,
+            String description,
+            Long pointsValue
+    ) {
+        MinePointOverviewResponse.AcquisitionRuleItem item =
+                new MinePointOverviewResponse.AcquisitionRuleItem();
+        item.setCode(code);
+        item.setTitle(title);
+        item.setDescription(description);
+        item.setPointsValue(safeLong(pointsValue));
         return item;
     }
 
