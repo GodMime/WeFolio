@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.jxc.wefolio.common.UniqueCodeGenerator;
 import com.jxc.wefolio.common.auth.AuthContext;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
+import com.jxc.wefolio.common.upload.AvatarUploadResult;
 import com.jxc.wefolio.dict.JoinStatusDict;
 import com.jxc.wefolio.dict.MessageActionTypeDict;
 import com.jxc.wefolio.dict.MessageCategoryDict;
@@ -44,6 +45,7 @@ import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
@@ -358,6 +360,38 @@ class MineTeamServiceTest {
         assertThatThrownBy(() -> service.updateTeam(100L, request))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("团队资料已被其他管理员更新，请刷新后重试");
+    }
+
+    /** 超限团队图标必须在权限查询和 COS 上传前返回原有失败消息。 */
+    @Test
+    void oversizedTeamAvatarShouldReturnOriginalValidationMessageBeforeUpload() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "team.png", "image/png", new byte[200 * 1024 + 1]);
+
+        AvatarUploadResult result = service().uploadTeamAvatar(100L, file);
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.message()).isEqualTo("团队图标不能超过 200KB");
+        assertThat(result.data()).isNull();
+        verify(teamEntityMapper, never()).selectById(any());
+        verify(cosService, never()).upload(any(), anyString());
+    }
+
+    /** 团队业务操作日志必须由 Service 统一记录。 */
+    @Test
+    void serviceShouldOwnTeamOperationLogs() throws IOException {
+        String source = Files.readString(Path.of(
+                "src/main/java/com/jxc/wefolio/service/MineTeamService.java"));
+
+        assertThat(source)
+                .contains("创建团队: name={}, intro={}, avatarUrl={}")
+                .contains("保存团队资料: teamId={}, name={}, intro={}, avatarUrl={}")
+                .contains("邀请团队成员: teamId={}, uniqueCode={}, role={}")
+                .contains("发起团队成员信息变更: teamId={}, memberId={}, role={}")
+                .contains("转让团队拥有者: teamId={}, memberId={}")
+                .contains("移除团队成员: teamId={}, memberId={}")
+                .contains("团队图标上传开始: teamId={}, originalFilename={}, size={}")
+                .contains("团队图标上传成功: teamId={}, key={}, url={}");
     }
 
     @Test

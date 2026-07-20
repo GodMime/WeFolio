@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.jxc.wefolio.common.UniqueCodeGenerator;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
+import com.jxc.wefolio.common.upload.AvatarFileValidator;
+import com.jxc.wefolio.common.upload.AvatarUploadResult;
 import com.jxc.wefolio.dict.JoinStatusDict;
 import com.jxc.wefolio.dict.MessageActionTypeDict;
 import com.jxc.wefolio.dict.MessageCategoryDict;
@@ -72,6 +74,9 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class MineTeamService {
+
+    /** 团队图标提示名称 */
+    private static final String TEAM_AVATAR_FILE_LABEL = "团队图标";
 
     /** 团队名称最大长度 */
     private static final int NAME_MAX_LENGTH = 100;
@@ -334,6 +339,8 @@ public class MineTeamService {
         if (request == null) {
             throw new BusinessException("团队内容不能为空");
         }
+        log.info("创建团队: name={}, intro={}, avatarUrl={}",
+                request.getName(), request.getIntro(), request.getAvatarUrl());
         Long userId = AuthContextHolder.requireUserId();
         String name = normalizeRequiredString(request.getName(), NAME_MAX_LENGTH, "团队名称");
         String intro = normalizeOptionalString(request.getIntro(), INTRO_MAX_LENGTH, "团队简介");
@@ -378,6 +385,8 @@ public class MineTeamService {
         if (request == null) {
             throw new BusinessException("团队内容不能为空");
         }
+        log.info("保存团队资料: teamId={}, name={}, intro={}, avatarUrl={}",
+                teamId, request.getName(), request.getIntro(), request.getAvatarUrl());
         Long userId = AuthContextHolder.requireUserId();
         TeamEntity team = requireActiveTeam(teamId);
         TeamMemberEntity membership = requireJoinedMembership(teamId, userId, "团队不存在或无访问权限");
@@ -411,9 +420,15 @@ public class MineTeamService {
      *
      * @param teamId 团队 ID
      * @param file 图标文件
-     * @return 文件上传响应
+     * @return 团队图标上传结果
      */
-    public FileUploadResponse uploadTeamAvatar(Long teamId, MultipartFile file) {
+    public AvatarUploadResult uploadTeamAvatar(Long teamId, MultipartFile file) {
+        String validationMessage = AvatarFileValidator.validate(file, TEAM_AVATAR_FILE_LABEL);
+        if (validationMessage != null) {
+            return AvatarUploadResult.failure(validationMessage);
+        }
+        log.info("团队图标上传开始: teamId={}, originalFilename={}, size={}",
+                teamId, file.getOriginalFilename(), file.getSize());
         Long userId = AuthContextHolder.requireUserId();
         TeamEntity team = requireActiveTeam(teamId);
         TeamMemberEntity membership = requireJoinedMembership(teamId, userId, "团队不存在或无访问权限");
@@ -422,10 +437,12 @@ public class MineTeamService {
         }
         // 团队图标属于团队杂项素材，固定写入 {teamCode}/others 目录。
         String key = cosService.upload(file, team.getUniqueCode() + "/others");
+        String url = cosService.publicUrl(key);
+        log.info("团队图标上传成功: teamId={}, key={}, url={}", teamId, key, url);
         FileUploadResponse response = new FileUploadResponse();
         response.setKey(key);
-        response.setUrl(cosService.publicUrl(key));
-        return response;
+        response.setUrl(url);
+        return AvatarUploadResult.succeeded(response);
     }
 
     /**
@@ -469,6 +486,8 @@ public class MineTeamService {
         if (request == null) {
             throw new BusinessException("成员邀请内容不能为空");
         }
+        log.info("邀请团队成员: teamId={}, uniqueCode={}, role={}",
+                teamId, request.getUniqueCode(), request.getRole());
         Long userId = AuthContextHolder.requireUserId();
         TeamEntity team = requireActiveTeam(teamId);
         TeamMemberEntity ownerMembership = requireOwnerMembership(teamId, userId);
@@ -574,6 +593,8 @@ public class MineTeamService {
         if (request == null) {
             throw new BusinessException("成员信息变更内容不能为空");
         }
+        log.info("发起团队成员信息变更: teamId={}, memberId={}, role={}",
+                request.getTeamId(), request.getMemberId(), request.getRole());
         Long userId = AuthContextHolder.requireUserId();
         TeamEntity team = requireActiveTeam(request.getTeamId());
         TeamMemberEntity ownerMembership = requireOwnerMembership(team.getId(), userId);
@@ -727,6 +748,8 @@ public class MineTeamService {
         if (request == null) {
             throw new BusinessException("团队转让内容不能为空");
         }
+        log.info("转让团队拥有者: teamId={}, memberId={}",
+                request.getTeamId(), request.getMemberId());
         Long userId = AuthContextHolder.requireUserId();
         TeamEntity team = requireActiveTeam(request.getTeamId());
         TeamMemberEntity ownerMembership = requireOwnerMembership(team.getId(), userId);
@@ -780,6 +803,8 @@ public class MineTeamService {
         if (request == null) {
             throw new BusinessException("成员移除内容不能为空");
         }
+        log.info("移除团队成员: teamId={}, memberId={}",
+                request.getTeamId(), request.getMemberId());
         Long userId = AuthContextHolder.requireUserId();
         TeamEntity team = requireActiveTeam(request.getTeamId());
         TeamMemberEntity ownerMembership = requireOwnerMembership(team.getId(), userId);

@@ -1,12 +1,15 @@
 package com.jxc.wefolio.service;
 
 import com.alibaba.fastjson2.JSON;
+import com.jxc.wefolio.common.upload.AvatarImageFormat;
 import com.jxc.wefolio.config.CosProperties;
+import com.jxc.wefolio.message.CosMessage;
+import com.qcloud.cos.auth.COSSigner;
 import com.qcloud.cos.model.CannedAccessControlList;
 import com.qcloud.cos.model.COSObject;
 import com.qcloud.cos.model.GetObjectRequest;
 import com.qcloud.cos.model.ObjectMetadata;
-import com.qcloud.cos.auth.COSSigner;
+import com.qcloud.cos.model.PutObjectRequest;
 import com.qcloud.cos.model.ciModel.snapshot.CosSnapshotRequest;
 import com.qcloud.cos.transfer.TransferManager;
 import com.qcloud.cos.transfer.Upload;
@@ -14,8 +17,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
-
-import com.qcloud.cos.model.PutObjectRequest;
 
 import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
@@ -146,6 +147,9 @@ public class CosService {
     /** SHA-256 摘要算法名称 */
     private static final String SHA_256_ALGORITHM = "SHA-256";
 
+    /** 未识别文件类型的默认 MIME */
+    private static final String DEFAULT_CONTENT_TYPE = "application/octet-stream";
+
     /** 毫秒转秒的除数 */
     private static final double MILLIS_PER_SECOND = 1000D;
 
@@ -244,6 +248,23 @@ public class CosService {
         String extension = extractExtension(originalFilename);
         String fileName = UUID.randomUUID().toString().replace("-", "") + extension;
         String key = buildKey(folderPrefix, fileName);
+        return uploadToObjectKey(file, key);
+    }
+
+    /**
+     * 上传文件到指定 COS 对象键。
+     *
+     * @param file 上传文件
+     * @param objectKey 完整 COS 对象键
+     * @return 实际上传的 COS 对象键
+     */
+    public String uploadToObjectKey(MultipartFile file, String objectKey) {
+        if (objectKey == null || objectKey.isBlank()) {
+            throw new IllegalArgumentException(CosMessage.OBJECT_KEY_REQUIRED_MESSAGE);
+        }
+        String key = objectKey.strip();
+        String originalFilename = file.getOriginalFilename();
+        String extension = extractExtension(originalFilename);
 
         Path tempFile = null;
         try {
@@ -251,7 +272,7 @@ public class CosService {
             file.transferTo(tempFile.toFile());
 
             ObjectMetadata metadata = new ObjectMetadata();
-            metadata.setContentType(file.getContentType());
+            metadata.setContentType(resolveUploadContentType(file, key));
             metadata.setContentLength(file.getSize());
 
             PutObjectRequest putObjectRequest = new PutObjectRequest(
@@ -806,6 +827,22 @@ public class CosService {
             return filename.substring(filename.lastIndexOf("."));
         }
         return "";
+    }
+
+    /** 根据请求元数据或对象键解析上传文件 MIME。 */
+    private String resolveUploadContentType(MultipartFile file, String objectKey) {
+        String avatarContentType = AvatarImageFormat.fromFileName(objectKey)
+                .map(AvatarImageFormat::contentType)
+                .orElse(null);
+        if (avatarContentType != null) {
+            return avatarContentType;
+        }
+        String suppliedContentType = file.getContentType();
+        if (suppliedContentType != null && !suppliedContentType.isBlank()) {
+            return suppliedContentType.strip();
+        }
+        String inferredContentType = URLConnection.guessContentTypeFromName(objectKey);
+        return inferredContentType == null ? DEFAULT_CONTENT_TYPE : inferredContentType;
     }
 
     /**

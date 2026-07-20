@@ -2,6 +2,7 @@ package com.jxc.wefolio.controller;
 
 import com.jxc.wefolio.annotation.MaintainerAccess;
 import com.jxc.wefolio.common.Response;
+import com.jxc.wefolio.common.upload.AvatarUploadResult;
 import com.jxc.wefolio.dto.FileUploadResponse;
 import com.jxc.wefolio.dto.MineTeamCreateRequest;
 import com.jxc.wefolio.dto.MineTeamDetailResponse;
@@ -28,6 +29,10 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -42,6 +47,15 @@ class MineTeamControllerTest {
     /** 我的团队服务模拟 */
     @Mock
     private MineTeamService mineTeamService;
+
+    /** 团队 Controller 不得持有业务操作日志。 */
+    @Test
+    void controllerShouldOnlyDelegateWithoutBusinessLogs() throws IOException {
+        String source = Files.readString(Path.of(
+                "src/main/java/com/jxc/wefolio/controller/MineTeamController.java"));
+
+        assertThat(source).doesNotContain("@Slf4j", "log.info(");
+    }
 
     @Test
     void teamEndpointsUseMaintainerAccessAndDelegateToService() throws NoSuchMethodException {
@@ -75,7 +89,8 @@ class MineTeamControllerTest {
         when(mineTeamService.rejectMemberChangeRequest(changeDetailRequest)).thenReturn(changeDetailResponse);
         when(mineTeamService.transferOwner(transferRequest)).thenReturn(detailResponse);
         when(mineTeamService.removeMember(removeRequest)).thenReturn(detailResponse);
-        when(mineTeamService.uploadTeamAvatar(100L, file)).thenReturn(uploadResponse);
+        when(mineTeamService.uploadTeamAvatar(100L, file))
+                .thenReturn(AvatarUploadResult.succeeded(uploadResponse));
 
         Response<MineTeamListResponse> teams = controller.teams();
         Response<MineTeamDetailResponse> created = controller.createTeam(createRequest);
@@ -162,33 +177,37 @@ class MineTeamControllerTest {
     }
 
     @Test
-    void uploadTeamAvatarRejectsFilesLargerThanTwoHundredKilobytes() {
+    void uploadTeamAvatarMapsFileSizeValidationFailure() {
         byte[] content = new byte[200 * 1024 + 1];
         MockMultipartFile file = new MockMultipartFile("file", "team.png", "image/png", content);
+        when(mineTeamService.uploadTeamAvatar(100L, file))
+                .thenReturn(AvatarUploadResult.failure("团队图标不能超过 200KB"));
         MineTeamController controller = new MineTeamController(mineTeamService);
 
         Response<FileUploadResponse> response = controller.uploadTeamAvatar(100L, file);
 
         assertThat(response.isSuccess()).isFalse();
         assertThat(response.getMessage()).isEqualTo("团队图标不能超过 200KB");
-        verify(mineTeamService, never()).uploadTeamAvatar(100L, file);
+        verify(mineTeamService).uploadTeamAvatar(100L, file);
     }
 
     @Test
-    void uploadTeamAvatarRejectsUnsupportedImageType() {
+    void uploadTeamAvatarMapsImageTypeValidationFailure() {
         MockMultipartFile file = new MockMultipartFile(
                 "file",
                 "team.png",
                 "image/png",
                 "not an image".getBytes()
         );
+        when(mineTeamService.uploadTeamAvatar(100L, file))
+                .thenReturn(AvatarUploadResult.failure("团队图标仅支持 JPG、PNG、GIF、WebP 格式"));
         MineTeamController controller = new MineTeamController(mineTeamService);
 
         Response<FileUploadResponse> response = controller.uploadTeamAvatar(100L, file);
 
         assertThat(response.isSuccess()).isFalse();
         assertThat(response.getMessage()).isEqualTo("团队图标仅支持 JPG、PNG、GIF、WebP 格式");
-        verify(mineTeamService, never()).uploadTeamAvatar(100L, file);
+        verify(mineTeamService).uploadTeamAvatar(100L, file);
     }
 
     /**

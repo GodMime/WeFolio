@@ -688,6 +688,25 @@ class MineProfileServiceTest {
     }
 
     @Test
+    void avatarAcceptsJpegObjectKeyExtension() {
+        UserEntity user = activeUser();
+        String objectKey = "WF8392/others/avatar-20260703141600-a1b2c3d4.jpeg";
+        String avatarUrl = "https://cos.example.com/" + objectKey;
+        when(userEntityMapper.selectById(7L)).thenReturn(user);
+        when(userEntityMapper.update(any(UserEntity.class), any(Wrapper.class))).thenReturn(1);
+        when(cosService.headObject(objectKey))
+                .thenReturn(new CosService.ObjectHead("image/jpeg", 1024L));
+        MineProfileUpdateRequest request = new MineProfileUpdateRequest();
+        request.setAvatarUrl(avatarUrl);
+
+        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        service.updateProfile(request);
+
+        assertThat(user.getAvatarUrl()).isEqualTo(avatarUrl);
+        verify(cosService).headObject(objectKey);
+    }
+
+    @Test
     void avatarRejectsObjectKeyOutsideCurrentUserFolder() {
         when(userEntityMapper.selectById(7L)).thenReturn(activeUser());
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();

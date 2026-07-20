@@ -3,12 +3,13 @@ package com.jxc.wefolio.controller;
 import com.jxc.wefolio.common.Response;
 import com.jxc.wefolio.common.auth.AuthContext;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
+import com.jxc.wefolio.common.upload.AvatarUploadResult;
 import com.jxc.wefolio.annotation.LoginAccess;
 import com.jxc.wefolio.dto.FileUploadResponse;
 import com.jxc.wefolio.dto.MaintainerWechatLoginRequest;
 import com.jxc.wefolio.service.AccountCancellationService;
 import com.jxc.wefolio.service.AuthTokenService;
-import com.jxc.wefolio.service.CosService;
+import com.jxc.wefolio.service.MaintainerAvatarService;
 import com.jxc.wefolio.service.MiniappAuthService;
 import com.jxc.wefolio.service.TrustedClientIpResolver;
 import org.junit.jupiter.api.AfterEach;
@@ -22,10 +23,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import java.lang.reflect.Method;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * 小程序认证控制器接口与入参校验测试。
@@ -43,7 +42,7 @@ class MiniappAuthControllerTest {
     private AccountCancellationService accountCancellationService;
 
     @Mock
-    private CosService cosService;
+    private MaintainerAvatarService maintainerAvatarService;
 
     @Mock
     private TrustedClientIpResolver trustedClientIpResolver;
@@ -68,7 +67,7 @@ class MiniappAuthControllerTest {
     }
 
     @Test
-    void uploadAvatarRejectsFilesLargerThanTwoHundredKilobytes() {
+    void uploadAvatarShouldMapServiceValidationFailureWithoutChangingResponseContract() {
         byte[] content = new byte[200 * 1024 + 1];
         MockMultipartFile file = new MockMultipartFile(
                 "file",
@@ -77,11 +76,13 @@ class MiniappAuthControllerTest {
                 content
         );
         AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
+        when(maintainerAvatarService.uploadAvatar(7L, file))
+                .thenReturn(AvatarUploadResult.failure("头像文件不能超过 200KB"));
         MiniappAuthController controller = new MiniappAuthController(
                 miniappAuthService,
                 authTokenService,
                 accountCancellationService,
-                cosService,
+                maintainerAvatarService,
                 trustedClientIpResolver
         );
 
@@ -89,31 +90,36 @@ class MiniappAuthControllerTest {
 
         assertThat(response.isSuccess()).isFalse();
         assertThat(response.getMessage()).isEqualTo("头像文件不能超过 200KB");
-        verify(cosService, never()).upload(file, "WF8392/others");
+        verify(maintainerAvatarService).uploadAvatar(7L, file);
     }
 
     @Test
-    void uploadAvatarRejectsUnsupportedImageType() {
+    void uploadAvatarShouldMapServiceSuccessResponse() {
         MockMultipartFile file = new MockMultipartFile(
                 "file",
-                "avatar.jpg",
+                "avatar.jpeg",
                 "image/jpeg",
-                "<script>alert(1)</script>".getBytes()
+                new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 0x00}
         );
         AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
+        FileUploadResponse uploadResponse = new FileUploadResponse();
+        uploadResponse.setKey("WF8392/others/avatar-20260720111252-a1b2c3d4.jpg");
+        uploadResponse.setUrl("https://cos.example.com/" + uploadResponse.getKey());
+        when(maintainerAvatarService.uploadAvatar(7L, file))
+                .thenReturn(AvatarUploadResult.succeeded(uploadResponse));
         MiniappAuthController controller = new MiniappAuthController(
                 miniappAuthService,
                 authTokenService,
                 accountCancellationService,
-                cosService,
+                maintainerAvatarService,
                 trustedClientIpResolver
         );
 
         Response<FileUploadResponse> response = controller.uploadAvatar(file);
 
-        assertThat(response.isSuccess()).isFalse();
-        assertThat(response.getMessage()).isEqualTo("头像文件仅支持 JPG、PNG、GIF、WebP 格式");
-        verify(cosService, never()).upload(eq(file), anyString());
+        assertThat(response.isSuccess()).isTrue();
+        assertThat(response.getData()).isSameAs(uploadResponse);
+        verify(maintainerAvatarService).uploadAvatar(7L, file);
     }
 
     @Test
@@ -122,7 +128,7 @@ class MiniappAuthControllerTest {
                 miniappAuthService,
                 authTokenService,
                 accountCancellationService,
-                cosService,
+                maintainerAvatarService,
                 trustedClientIpResolver
         );
 

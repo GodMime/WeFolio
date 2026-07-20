@@ -4,7 +4,7 @@ import com.jxc.wefolio.common.Response;
 import com.jxc.wefolio.annotation.LoginAccess;
 import com.jxc.wefolio.annotation.MaintainerAccess;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
-import com.jxc.wefolio.common.upload.AvatarFileValidator;
+import com.jxc.wefolio.common.upload.AvatarUploadResult;
 import com.jxc.wefolio.dto.AuthSessionResponse;
 import com.jxc.wefolio.dto.FileUploadResponse;
 import com.jxc.wefolio.dto.MaintainerWechatLoginRequest;
@@ -12,11 +12,10 @@ import com.jxc.wefolio.dto.MaintainerWechatLoginResponse;
 import com.jxc.wefolio.dto.MaintainerWechatSessionRefreshRequest;
 import com.jxc.wefolio.service.AccountCancellationService;
 import com.jxc.wefolio.service.AuthTokenService;
-import com.jxc.wefolio.service.CosService;
+import com.jxc.wefolio.service.MaintainerAvatarService;
 import com.jxc.wefolio.service.MiniappAuthService;
 import com.jxc.wefolio.service.TrustedClientIpResolver;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -32,14 +31,10 @@ import org.springframework.web.multipart.MultipartFile;
 /**
  * 小程序认证控制器 — 提供登录、登录态校验和维护者信息管理接口。
  */
-@Slf4j
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/auth")
 public class MiniappAuthController {
-
-    /** 头像文件提示名称 */
-    private static final String AVATAR_FILE_LABEL = "头像文件";
 
     /** 小程序登录服务 */
     private final MiniappAuthService miniappAuthService;
@@ -50,8 +45,8 @@ public class MiniappAuthController {
     /** 账号注销服务 */
     private final AccountCancellationService accountCancellationService;
 
-    /** COS 文件服务 */
-    private final CosService cosService;
+    /** 维护者头像上传服务 */
+    private final MaintainerAvatarService maintainerAvatarService;
 
     /** 可信客户端 IP 解析器。 */
     private final TrustedClientIpResolver trustedClientIpResolver;
@@ -117,21 +112,9 @@ public class MiniappAuthController {
     @MaintainerAccess
     @PostMapping(value = "/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Response<FileUploadResponse> uploadAvatar(@RequestParam("file") MultipartFile file) {
-        Long userId = AuthContextHolder.requireUserId();
-        String validationMessage = AvatarFileValidator.validate(file, AVATAR_FILE_LABEL);
-        if (validationMessage != null) {
-            return Response.fail(validationMessage);
-        }
-        String uniqueCode = miniappAuthService.getUniqueCodeByUserId(userId);
-        log.info("头像上传开始: userId={}, uniqueCode={}, originalFilename={}, size={}",
-                userId, uniqueCode, file.getOriginalFilename(), file.getSize());
-        String key = cosService.upload(file, uniqueCode + "/others");
-        String url = cosService.publicUrl(key);
-        log.info("头像上传成功: userId={}, uniqueCode={}, key={}, url={}", userId, uniqueCode, key, url);
-        FileUploadResponse response = new FileUploadResponse();
-        response.setKey(key);
-        response.setUrl(url);
-        return Response.success(response);
+        AvatarUploadResult result = maintainerAvatarService.uploadAvatar(
+                AuthContextHolder.requireUserId(), file);
+        return result.success() ? Response.success(result.data()) : Response.fail(result.message());
     }
 
     /**

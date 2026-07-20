@@ -46,4 +46,10 @@ public interface PointMessage {
 
     /** 幂等冲突回滚后没有找到既有结果提示 */
     String IDEMPOTENCY_RECOVERY_FAILED_MESSAGE = "积分幂等结果恢复失败，请重试";
+
+    /** 月度存储结算请求为空提示 */
+    String STORAGE_SETTLEMENT_REQUEST_REQUIRED_MESSAGE = "结算请求不能为空";
+
+    /** 月度存储结算账期格式提示 */
+    String STORAGE_SETTLEMENT_MONTH_INVALID_MESSAGE = "账期格式必须为 yyyy-MM";
 }

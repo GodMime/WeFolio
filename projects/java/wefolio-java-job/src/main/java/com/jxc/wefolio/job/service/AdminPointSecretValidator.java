@@ -14,27 +14,32 @@ import java.security.MessageDigest;
 @RequiredArgsConstructor
 public class AdminPointSecretValidator {
 
-    /** 对外统一失败消息，禁止回显密钥 */
-    private static final String INVALID_SECRET_MESSAGE = "后台积分密钥无效";
-
     /** 后台积分配置 */
     private final AdminPointProperties properties;
 
     /**
-     * 校验请求头密钥。
+     * 判断请求头密钥是否有效。
      *
      * @param requestedSecret 请求密钥
+     * @return 是否与服务端配置密钥一致
      */
-    public void validate(String requestedSecret) {
+    public boolean isValid(String requestedSecret) {
         String configuredSecret = properties.getSecret();
         if (!hasText(configuredSecret) || !hasText(requestedSecret)
                 || !MessageDigest.isEqual(
                         configuredSecret.getBytes(StandardCharsets.UTF_8),
                         requestedSecret.getBytes(StandardCharsets.UTF_8))) {
-            throw new IllegalArgumentException(INVALID_SECRET_MESSAGE);
+            return false;
         }
+        return true;
     }
 
+    /**
+     * 判断字符串是否包含非空白字符。
+     *
+     * @param value 待判断字符串
+     * @return 是否包含非空白字符
+     */
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
     }
