@@ -99,6 +99,54 @@
         </view>
       </block>
 
+      <block wx:elif="{{item.componentType === 'SINGLE_WORK'}}">
+        <view wx:if="{{item.work}}" class="single-work">
+          <video
+            wx:if="{{item.work.isVideo && activeSingleWorkVideoKey === item.componentKey}}"
+            id="singleWorkVideo-{{item.componentKey}}"
+            class="single-work-video"
+            style="{{item.work.aspectRatioStyle}}"
+            src="{{item.work.previewUrl}}"
+            poster="{{item.work.thumbnailUrl}}"
+            controls="{{true}}"
+            autoplay="{{true}}"
+            show-fullscreen-btn="{{true}}"
+            show-center-play-btn="{{true}}"
+            enable-progress-gesture="{{true}}"
+            object-fit="cover"
+            binderror="handleSingleWorkVideoError"
+          ></video>
+          <view
+            wx:elif="{{item.work.isVideo}}"
+            class="single-work-video-poster"
+            style="{{item.work.aspectRatioStyle}}"
+            data-component-key="{{item.componentKey}}"
+            data-media-type="{{item.work.mediaType}}"
+            data-media-url="{{item.work.previewUrl}}"
+            bindtap="handleSingleWorkTap"
+            aria-role="button"
+            aria-label="播放视频{{item.work.title}}"
+          >
+            <image wx:if="{{item.work.thumbnailUrl}}" class="single-work-video-cover" src="{{item.work.thumbnailUrl}}" mode="aspectFill"></image>
+            <view wx:else class="single-work-media-placeholder">暂无视频封面</view>
+            <view class="single-work-play-badge" aria-hidden="true"><view class="work-play-icon"></view></view>
+          </view>
+          <image
+            wx:elif="{{item.work.previewUrl}}"
+            class="single-work-image"
+            src="{{item.work.previewUrl}}"
+            mode="widthFix"
+            data-component-key="{{item.componentKey}}"
+            data-media-type="{{item.work.mediaType}}"
+            data-media-url="{{item.work.previewUrl}}"
+            bindtap="handleSingleWorkTap"
+            aria-role="button"
+            aria-label="查看原图{{item.work.title}}"
+          ></image>
+          <view wx:if="{{item.showTitle}}" class="single-work-title">{{item.work.title}}</view>
+        </view>
+      </block>
+
       <block wx:elif="{{item.componentType === 'SCHEDULE_QUERY'}}">
         <view class="simple-section">
           <view class="component-title">档期查询</view>

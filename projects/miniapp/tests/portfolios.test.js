@@ -11,16 +11,19 @@ const {
   createComponent,
   importWorksIntoDisplayGroup,
   normalizePortfolioConfig,
+  normalizeSingleWorkConfig,
   reorderComponent,
   reorderDisplayGroup,
   removeComponent,
   removeDisplayGroup,
   updateComponentProfileConfig,
+  updateSingleWorkConfig,
   updateDisplayGroupName,
   updateDisplayGroupWorkIds,
   updateComponentWorkIds,
   validateDisplayGroupName,
   validateCarouselComponent,
+  validateSingleWorkComponent,
   validateWorkGridComponent
 } = require('../utils/portfolios')
 
@@ -58,6 +61,55 @@ test('supports single-column work list component type', () => {
   assert.equal(COMPONENT_TYPES.WORK_LIST, 'WORK_LIST')
   assert.equal(result.components[1].name, '单列作品列表')
   assert.equal(result.components[1].componentType, COMPONENT_TYPES.WORK_LIST)
+})
+
+test('single work component defaults title on and keeps only singular config', () => {
+  const component = createComponent(COMPONENT_TYPES.SINGLE_WORK, {
+    componentKey: 'c_single',
+    config: {
+      workId: '12',
+      workIds: [13],
+      showTitle: 'false',
+      unsupported: true
+    }
+  })
+
+  assert.equal(COMPONENT_TYPES.SINGLE_WORK, 'SINGLE_WORK')
+  assert.equal(component.name, '单个作品')
+  assert.deepEqual(component.config, { workId: 12, showTitle: true })
+  assert.deepEqual(normalizeSingleWorkConfig({ workId: 13, showTitle: false }), {
+    workId: 13,
+    showTitle: false
+  })
+  assert.deepEqual(normalizeSingleWorkConfig({ workId: 13.9, showTitle: true }), {
+    workId: 0,
+    showTitle: true
+  })
+})
+
+test('single work update replaces one work and preserves explicit title switch', () => {
+  const config = normalizePortfolioConfig({
+    components: [createComponent(COMPONENT_TYPES.SINGLE_WORK, {
+      componentKey: 'c_single',
+      config: { workId: 11 }
+    })]
+  })
+
+  const updated = updateSingleWorkConfig(config, 'c_single', { workId: 12, showTitle: false })
+
+  assert.deepEqual(updated.components[0].config, { workId: 12, showTitle: false })
+})
+
+test('single work validation requires one valid image or video work', () => {
+  const works = [
+    { id: 11, mediaType: 'IMAGE' },
+    { id: 12, mediaType: 'VIDEO' }
+  ]
+
+  assert.equal(validateSingleWorkComponent({ config: {} }, works).message, '请选择一个作品')
+  assert.equal(validateSingleWorkComponent({ config: { workId: 99 } }, works).message, '请选择有效作品')
+  assert.equal(validateSingleWorkComponent({ config: { workId: 11 } }, works).valid, true)
+  assert.equal(validateSingleWorkComponent({ config: { workId: 12 } }, works).valid, true)
 })
 
 test('contact form component defaults to visitor input fields', () => {

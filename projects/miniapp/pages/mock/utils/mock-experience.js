@@ -18,6 +18,7 @@ const COMPONENT_TYPES = {
   SCHEDULE_QUERY: 'SCHEDULE_QUERY',
   WORK_GRID: 'WORK_GRID',
   WORK_LIST: 'WORK_LIST',
+  SINGLE_WORK: 'SINGLE_WORK',
   QR_CONTACT: 'QR_CONTACT',
   CONTACT_FORM: 'CONTACT_FORM',
   TEXT_SECTION: 'TEXT_SECTION',
@@ -29,6 +30,7 @@ const COMPONENT_NAMES = {
   SCHEDULE_QUERY: '档期查询',
   WORK_GRID: '双列作品列表',
   WORK_LIST: '单列作品列表',
+  SINGLE_WORK: '单个作品',
   QR_CONTACT: '二维码联系',
   CONTACT_FORM: '预留联系信息',
   TEXT_SECTION: '文字说明',
@@ -40,12 +42,14 @@ const MOCK_COMPONENT_DESCRIPTIONS = {
   SCHEDULE_QUERY: '开放访客查询档期',
   WORK_GRID: '双列展示图片和视频作品',
   WORK_LIST: '单列展示重点图片和视频作品',
+  SINGLE_WORK: '突出展示一个图片或视频作品',
   QR_CONTACT: '展示二维码联系方式',
   CONTACT_FORM: '收集访客预留联系信息',
   TEXT_SECTION: '添加服务说明文字',
   DIVIDER: '分隔不同内容区块'
 }
 const MOCK_COMPONENT_SORT_ORDER_STEP = 1000
+const MOCK_SINGLE_WORK_MEDIA_WIDTH_RPX = 710
 const MOCK_COMPONENT_OPTIONS = Object.keys(COMPONENT_TYPES).map((key) => {
   const componentType = COMPONENT_TYPES[key]
   return {
@@ -60,6 +64,7 @@ const MOCK_COMPONENT_KEY_PREFIXES = {
   SCHEDULE_QUERY: 'mock_schedule_query',
   WORK_GRID: 'mock_work_grid',
   WORK_LIST: 'mock_work_list',
+  SINGLE_WORK: 'mock_single_work',
   QR_CONTACT: 'mock_qr_contact',
   CONTACT_FORM: 'mock_contact_form',
   TEXT_SECTION: 'mock_text_section',
@@ -87,6 +92,10 @@ const MOCK_COMPONENT_DEFAULT_CONFIGS = {
       sortOrder: 1000,
       workIds: [101, 102, 103, 104, 105, 106, 107]
     }]
+  },
+  SINGLE_WORK: {
+    workId: 0,
+    showTitle: true
   },
   SCHEDULE_QUERY: {
     displayMode: 'MODAL_CALENDAR',
@@ -644,6 +653,7 @@ function findWorksByIds(workIds = []) {
       mediaUrl: work.mediaUrl,
       thumbnailUrl: work.coverUrl || work.mediaUrl,
       previewUrl: work.mediaUrl || work.coverUrl,
+      aspectRatioStyle: buildMockWorkAspectRatioStyle(work),
       aspectRatio: work.aspectRatio,
       aspectRatioText: work.aspectRatioText,
       width: work.width,
@@ -651,6 +661,21 @@ function findWorksByIds(workIds = []) {
       durationMs: work.durationMs || 0,
       description: work.description || ''
     }))
+}
+
+function buildMockWorkAspectRatioStyle(work = {}) {
+  const ratioMatch = trimText(work.aspectRatio || work.aspectRatioText).match(/^(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)$/)
+  const width = ratioMatch && Number(ratioMatch[1]) > 0 ? Number(ratioMatch[1]) : 16
+  const height = ratioMatch && Number(ratioMatch[2]) > 0 ? Number(ratioMatch[2]) : 9
+  const heightRpx = Math.round(MOCK_SINGLE_WORK_MEDIA_WIDTH_RPX * height / width)
+  return `height: ${heightRpx}rpx; aspect-ratio: ${width} / ${height};`
+}
+
+function normalizeMockSingleWorkConfig(config = {}) {
+  return {
+    workId: toPositiveId(config.workId),
+    showTitle: typeof config.showTitle === 'boolean' ? config.showTitle : true
+  }
 }
 
 function normalizeComponentConfig(component = {}) {
@@ -777,6 +802,17 @@ function buildMockPortfolioRenderData(config = MOCK_PORTFOLIO_CONFIG) {
           activeGroup: renderGroups[0] || { groupKey: '', name: '', works: [] },
           displayTags: buildMockDisplayTags(renderGroups),
           layout: component.componentType === COMPONENT_TYPES.WORK_LIST ? 'single' : 'grid'
+        }
+      }
+      if (component.componentType === COMPONENT_TYPES.SINGLE_WORK) {
+        const singleWorkConfig = normalizeMockSingleWorkConfig(componentConfig)
+        return {
+          componentKey: component.componentKey,
+          componentType: component.componentType,
+          name: component.name,
+          sortOrder: component.sortOrder,
+          work: findWorksByIds([singleWorkConfig.workId])[0] || null,
+          showTitle: singleWorkConfig.showTitle
         }
       }
       if (component.componentType === COMPONENT_TYPES.SCHEDULE_QUERY) {
@@ -1018,8 +1054,16 @@ function updateComponentConfig(portfolioDraft, componentKey, updater) {
   return nextDraft
 }
 
+function updateMockSingleWorkConfig(portfolioDraft, componentKey, config) {
+  return updateComponentConfig(portfolioDraft, componentKey, () => normalizeMockSingleWorkConfig(config))
+}
+
 function getWorkIdsFromComponent(component = {}) {
   const config = component.config || {}
+  if (component.componentType === COMPONENT_TYPES.SINGLE_WORK) {
+    const workId = toPositiveId(config.workId)
+    return workId ? [workId] : []
+  }
   const groups = Array.isArray(config.groups) ? config.groups : []
   if (groups.length) {
     return groups[0].workIds || []
@@ -1054,6 +1098,7 @@ module.exports = {
   removeMockComponent,
   reorderMockComponent,
   updateComponentConfig,
+  updateMockSingleWorkConfig,
   getWorkIdsFromComponent,
   trimText
 }

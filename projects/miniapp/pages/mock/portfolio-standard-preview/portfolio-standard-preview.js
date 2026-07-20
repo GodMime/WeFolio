@@ -34,13 +34,23 @@ Page({
       title: '',
       src: '',
       poster: ''
-    }
+    },
+    activeSingleWorkVideoKey: ''
   },
 
   onShow() {
+    this.stopActiveSingleWorkVideo()
     this.setData({
       portfolio: getMockPortfolioDraft().renderData
     })
+  },
+
+  onHide() {
+    this.stopActiveSingleWorkVideo()
+  },
+
+  onUnload() {
+    this.stopActiveSingleWorkVideo()
   },
 
   handleWorkTap(event) {
@@ -66,6 +76,42 @@ Page({
       current: mediaUrl,
       urls: collectImageUrls(this.data.portfolio)
     })
+  },
+
+  handleSingleWorkTap(event) {
+    const componentKey = event.currentTarget.dataset.componentKey || ''
+    const mediaType = event.currentTarget.dataset.mediaType
+    const mediaUrl = event.currentTarget.dataset.mediaUrl
+    if (!mediaUrl) {
+      return false
+    }
+    if (mediaType === 'VIDEO') {
+      this.stopActiveSingleWorkVideo()
+      this.setData({ activeSingleWorkVideoKey: componentKey })
+      return true
+    }
+    wx.previewImage({
+      current: mediaUrl,
+      urls: [mediaUrl]
+    })
+    return true
+  },
+
+  stopActiveSingleWorkVideo() {
+    const componentKey = this.data.activeSingleWorkVideoKey
+    if (!componentKey) {
+      return
+    }
+    const videoContext = wx.createVideoContext && wx.createVideoContext(`singleWorkVideo-${componentKey}`, this)
+    if (videoContext && videoContext.pause) {
+      videoContext.pause()
+    }
+    this.setData({ activeSingleWorkVideoKey: '' })
+  },
+
+  handleSingleWorkVideoError() {
+    this.stopActiveSingleWorkVideo()
+    wx.showToast({ title: '视频播放失败，请稍后重试', icon: 'none' })
   },
 
   handleCloseVideoPreview() {

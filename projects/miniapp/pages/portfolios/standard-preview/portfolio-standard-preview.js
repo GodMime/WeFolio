@@ -30,6 +30,7 @@ Page({
     activeContactFormComponent: createActiveContactFormComponent(),
     videoPreviewVisible: false,
     videoPreview: null,
+    activeSingleWorkVideoKey: '',
     displaySwitchingComponentKey: ''
   },
 
@@ -114,6 +115,11 @@ Page({
 
   onUnload() {
     clearDisplaySwitchingTimer(this)
+    this.stopActiveSingleWorkVideo()
+  },
+
+  onHide() {
+    this.stopActiveSingleWorkVideo()
   },
 
   handleContactInput(event) {
@@ -155,6 +161,47 @@ Page({
   handleWorkTap(event) {
     const work = normalizeWorkTapDataset(event.currentTarget.dataset)
     return this.openWorkMedia(work)
+  },
+
+  handleSingleWorkTap(event) {
+    const work = normalizeSingleWorkTapDataset(event.currentTarget.dataset)
+    const componentKey = event.currentTarget.dataset.componentKey || ''
+    if (work.mediaType !== MEDIA_TYPE_VIDEO) {
+      return this.openSingleWorkImage(work)
+    }
+    if (!work.previewUrl) {
+      wx.showToast({ title: VIDEO_MISSING_MESSAGE, icon: 'none' })
+      return false
+    }
+    this.stopActiveSingleWorkVideo()
+    this.setData({ activeSingleWorkVideoKey: componentKey })
+    return true
+  },
+
+  openSingleWorkImage(work) {
+    if (!work.previewUrl) {
+      wx.showToast({ title: IMAGE_MISSING_MESSAGE, icon: 'none' })
+      return false
+    }
+    wx.previewImage({ current: work.previewUrl, urls: [work.previewUrl] })
+    return true
+  },
+
+  stopActiveSingleWorkVideo() {
+    const componentKey = this.data.activeSingleWorkVideoKey
+    if (!componentKey) {
+      return
+    }
+    const videoContext = wx.createVideoContext && wx.createVideoContext(`singleWorkVideo-${componentKey}`, this)
+    if (videoContext && videoContext.pause) {
+      videoContext.pause()
+    }
+    this.setData({ activeSingleWorkVideoKey: '' })
+  },
+
+  handleSingleWorkVideoError() {
+    this.stopActiveSingleWorkVideo()
+    wx.showToast({ title: '视频播放失败，请稍后重试', icon: 'none' })
   },
 
   openWorkMedia(work) {
@@ -201,4 +248,10 @@ function normalizeWorkTapDataset(dataset = {}) {
     coverUrl: dataset.coverUrl || '',
     title: dataset.title || ''
   }
+}
+
+function normalizeSingleWorkTapDataset(dataset = {}) {
+  return Object.assign({}, normalizeWorkTapDataset(dataset), {
+    previewUrl: dataset.mediaUrl || ''
+  })
 }

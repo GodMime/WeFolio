@@ -71,8 +71,9 @@
               aria-label="{{componentRows.resolveAriaLabel(item.componentType, item.name)}}"
             >
               <view class="component-order">{{index + 1}}</view>
-              <view class="component-copy">
+              <view class="component-copy {{item.componentType === 'SINGLE_WORK' ? 'with-summary' : ''}}">
                 <view class="component-title">{{item.name || item.componentType}}</view>
+                <view wx:if="{{item.componentType === 'SINGLE_WORK'}}" class="component-summary">{{componentRows.resolveSingleWorkSummary(item, singleWorkSummaries)}}</view>
               </view>
               <view class="component-drag-handle"></view>
               <view class="component-row-arrow {{componentRows.isEditable(item.componentType) ? '' : 'placeholder'}}">
@@ -177,7 +178,7 @@
             class="component-work-option {{item.selected ? 'selected' : ''}}"
             data-id="{{item.id}}"
             catchtap="handleToggleComponentWork"
-            aria-role="checkbox"
+            aria-role="{{componentWorkSelectionMode === 'single' ? 'radio' : 'checkbox'}}"
             aria-checked="{{item.selected}}"
             aria-label="选择{{item.title}}"
           >
@@ -198,6 +199,14 @@
           <view wx:if="{{!componentWorkHasMore && componentWorkOptions.length > 0}}" class="component-work-footer">已显示全部作品</view>
         </view>
       </scroll-view>
+
+      <view wx:if="{{componentWorkSelectionMode === 'single'}}" class="single-work-title-setting">
+        <view class="single-work-title-setting-copy">
+          <view class="single-work-title-setting-label">展示作品名</view>
+          <view class="single-work-title-setting-note">关闭后不保留标题间距</view>
+        </view>
+        <switch checked="{{componentWorkShowTitle}}" color="#c28b37" bindchange="handleSingleWorkShowTitleChange"></switch>
+      </view>
 
       <view class="component-work-actions">
         <button class="component-work-cancel" catchtap="handleCloseComponentWorkSheet">取消</button>

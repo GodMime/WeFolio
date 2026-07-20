@@ -10,7 +10,8 @@ const {
   saveMockPortfolioDraft,
   showMockLoginRequiredToast,
   trimText,
-  updateComponentConfig
+  updateComponentConfig,
+  updateMockSingleWorkConfig
 } = require('../utils/mock-experience')
 
 const PREVIEW_URL = '/pages/mock/portfolio-standard-preview/portfolio-standard-preview'
@@ -51,7 +52,7 @@ function buildComponentDragStyle(offsetY) {
 }
 
 function isWorkSelectionComponent(componentType) {
-  return componentType === 'CAROUSEL' || componentType === 'WORK_GRID' || componentType === 'WORK_LIST'
+  return componentType === 'CAROUSEL' || componentType === 'WORK_GRID' || componentType === 'WORK_LIST' || componentType === 'SINGLE_WORK'
 }
 
 function findComponent(draft, componentKey) {
@@ -74,6 +75,10 @@ function getComponentSummary(component, workIds) {
     return trimText(component.config && component.config.profile && component.config.profile.displayName) || '个人资料'
   }
   if (isWorkSelectionComponent(component.componentType)) {
+    if (component.componentType === 'SINGLE_WORK') {
+      const work = MOCK_WORK_LIBRARY.works.find((item) => item.id === workIds[0])
+      return work ? work.title : '请选择作品'
+    }
     return workIds.length ? `已选 ${workIds.length} 个作品` : '请选择作品'
   }
   if (component.componentType === 'QR_CONTACT') {
@@ -131,6 +136,9 @@ function buildState(draft, selectedComponentKey = DEFAULT_SELECTED_COMPONENT_KEY
     textSectionAlignmentOptions: TEXT_SECTION_ALIGNMENT_OPTIONS,
     dividerColorOptions: DIVIDER_COLOR_OPTIONS,
     selectedWorkIds,
+    singleWorkShowTitle: selectedComponent.componentType === 'SINGLE_WORK'
+      ? typeof selectedComponent.config.showTitle === 'boolean' ? selectedComponent.config.showTitle : true
+      : true,
     componentOptions: MOCK_COMPONENT_OPTIONS,
     workOptions: buildWorkOptions(
       isWorkSelectionComponent(selectedComponent.componentType) ? selectedWorkIds : [],
@@ -343,6 +351,17 @@ Page({
     }
     const componentKey = this.data.selectedComponentKey
     const currentIds = this.data.selectedWorkIds || []
+    if (this.data.selectedComponentType === 'SINGLE_WORK') {
+      if (currentIds[0] === workId) {
+        return
+      }
+      const selectedWorkIds = [workId]
+      this.setData({
+        selectedWorkIds,
+        workOptions: buildWorkOptions(selectedWorkIds, false)
+      })
+      return
+    }
     const selected = currentIds.includes(workId)
     const nextIds = selected
       ? currentIds.filter((id) => id !== workId)
@@ -364,6 +383,13 @@ Page({
       })
     })
     this.setDraftState(draft, componentKey)
+  },
+
+  handleSingleWorkShowTitleChange(event) {
+    if (this.data.selectedComponentType !== 'SINGLE_WORK') {
+      return
+    }
+    this.setData({ singleWorkShowTitle: Boolean(event.detail && event.detail.value) })
   },
 
   handleOpenComponentSheet() {
@@ -531,6 +557,21 @@ Page({
   },
 
   handleConfirmComponentEditSheet() {
+    if (this.data.selectedComponentType === 'SINGLE_WORK') {
+      const workId = Number((this.data.selectedWorkIds || [])[0]) || 0
+      if (!workId) {
+        wx.showToast({ title: '请选择一个作品', icon: 'none' })
+        return
+      }
+      const draft = updateMockSingleWorkConfig(this.data.draft, this.data.selectedComponentKey, {
+        workId,
+        showTitle: this.data.singleWorkShowTitle
+      })
+      this.setDraftState(draft, this.data.selectedComponentKey, {
+        componentEditSheetVisible: false
+      })
+      return
+    }
     this.setData({ componentEditSheetVisible: false })
   },
 

@@ -411,10 +411,18 @@ class MinePortfolioServiceTest {
                         PortfolioComponentTypeDict.DIVIDER.getCode(),
                         PortfolioComponentTypeDict.WORK_GRID.getCode(),
                         PortfolioComponentTypeDict.WORK_LIST.getCode(),
+                        "SINGLE_WORK",
                         PortfolioComponentTypeDict.SCHEDULE_QUERY.getCode(),
                         PortfolioComponentTypeDict.CONTACT_FORM.getCode(),
                         PortfolioComponentTypeDict.QR_CONTACT.getCode()
                 );
+        assertThat(service().getComponentLibrary().getComponents())
+                .filteredOn(item -> "SINGLE_WORK".equals(item.getComponentType()))
+                .singleElement()
+                .satisfies(item -> {
+                    assertThat(item.getName()).isEqualTo("单个作品");
+                    assertThat(item.getDescription()).isEqualTo("突出展示一个图片或视频作品");
+                });
     }
 
     @Test

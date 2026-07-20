@@ -313,6 +313,102 @@ test('normalizes carousel work ratio fields for render pages', () => {
   assert.equal(work.height, 1080)
 })
 
+test('normalizes singular work render data with title switch and safe video ratio', () => {
+  const portfolio = normalizeVisitorPortfolio({
+    renderData: {
+      preview: true,
+      components: [
+        {
+          componentKey: 'c_single',
+          componentType: 'SINGLE_WORK',
+          sortOrder: 1000,
+          showTitle: false,
+          work: {
+            workId: 12,
+            title: '婚礼快剪',
+            mediaType: 'VIDEO',
+            coverUrl: 'cover.jpg',
+            mediaUrl: 'movie.mp4',
+            aspectRatio: '9:16'
+          }
+        },
+        {
+          componentKey: 'c_fallback',
+          componentType: 'SINGLE_WORK',
+          sortOrder: 2000,
+          work: {
+            workId: 13,
+            mediaType: 'VIDEO',
+            mediaUrl: 'fallback.mp4',
+            aspectRatio: 'invalid'
+          }
+        }
+      ]
+    }
+  })
+
+  assert.equal(portfolio.components[0].showTitle, false)
+  assert.equal(portfolio.components[0].work.previewUrl, 'movie.mp4')
+  assert.equal(portfolio.components[0].work.aspectRatioStyle, 'height: 1262rpx; aspect-ratio: 9 / 16;')
+  assert.equal(portfolio.components[1].showTitle, true)
+  assert.equal(portfolio.components[1].work.aspectRatioStyle, 'height: 399rpx; aspect-ratio: 16 / 9;')
+})
+
+test('singular work keeps video media and poster urls independent', () => {
+  const portfolio = normalizeVisitorPortfolio({
+    renderData: {
+      preview: true,
+      components: [
+        {
+          componentKey: 'c_cover_only',
+          componentType: 'SINGLE_WORK',
+          work: { workId: 21, mediaType: 'VIDEO', coverUrl: 'cover.jpg', mediaUrl: '' }
+        },
+        {
+          componentKey: 'c_media_only',
+          componentType: 'SINGLE_WORK',
+          work: { workId: 22, mediaType: 'VIDEO', coverUrl: '', mediaUrl: 'movie.mp4' }
+        },
+        {
+          componentKey: 'c_image_cover_only',
+          componentType: 'SINGLE_WORK',
+          work: { workId: 23, mediaType: 'IMAGE', coverUrl: 'thumb.jpg', mediaUrl: '' }
+        }
+      ]
+    }
+  })
+
+  const componentMap = Object.fromEntries(portfolio.components.map((component) => [component.componentKey, component]))
+  assert.equal(componentMap.c_cover_only.work.previewUrl, '')
+  assert.equal(componentMap.c_cover_only.work.thumbnailUrl, 'cover.jpg')
+  assert.equal(componentMap.c_media_only.work.previewUrl, 'movie.mp4')
+  assert.equal(componentMap.c_media_only.work.thumbnailUrl, '')
+  assert.equal(componentMap.c_image_cover_only.work.previewUrl, '')
+})
+
+test('visitor render skips unavailable singular work while preview keeps repair context', () => {
+  const components = [
+    {
+      componentKey: 'c_missing',
+      componentType: 'SINGLE_WORK',
+      sortOrder: 1000,
+      work: null
+    },
+    {
+      componentKey: 'c_text',
+      componentType: 'TEXT_SECTION',
+      sortOrder: 2000,
+      textSection: { content: '保留内容' }
+    }
+  ]
+
+  const visitor = normalizeVisitorPortfolio({ renderData: { preview: false, components } })
+  const preview = normalizeVisitorPortfolio({ renderData: { preview: true, components } })
+
+  assert.deepEqual(visitor.components.map((item) => item.componentKey), ['c_text'])
+  assert.deepEqual(preview.components.map((item) => item.componentKey), ['c_missing', 'c_text'])
+})
+
 test('normalizes contact form display mode for render and config pages', () => {
   const renderResult = normalizeVisitorPortfolio({
     renderData: {
@@ -1308,6 +1404,221 @@ test('visitor page records video play before showing video overlay', async () =>
   page.handleCloseVideoPreview()
   assert.equal(page.data.videoPreviewVisible, false)
   assert.equal(page.data.videoPreview, null)
+})
+
+test('visitor singular work records event before opening image or starting inline video', async () => {
+  const requests = []
+  const previews = []
+  const deferred = createDeferred()
+  const page = loadVisitorPage((options) => {
+    requests.push(options)
+    return deferred.promise
+  }, {
+    previewImage(options) {
+      previews.push(options)
+    },
+    createVideoContext() {
+      return { pause() {} }
+    }
+  })
+  page.data.shareCode = 'PF001'
+  page.data.visitorKey = 'visitor-a'
+  global.wx = {
+    previewImage(options) {
+      previews.push(options)
+    },
+    showToast() {},
+    createVideoContext() {
+      return { pause() {} }
+    }
+  }
+
+  try {
+    const videoPromise = page.handleSingleWorkTap({
+      currentTarget: {
+        dataset: {
+          componentKey: 'c_video',
+          workId: '18',
+          mediaType: 'VIDEO',
+          mediaUrl: 'https://cdn.example.com/movie.mp4',
+          coverUrl: 'https://cdn.example.com/movie.jpg',
+          title: '婚礼快剪'
+        }
+      }
+    })
+
+    assert.equal(page.data.activeSingleWorkVideoKey, '')
+    assert.equal(page.data.videoPreviewVisible, false)
+    assert.equal(requests[0].data.eventType, 'VIDEO_PLAYED')
+
+    deferred.resolve({})
+    assert.equal(await videoPromise, true)
+    assert.equal(page.data.activeSingleWorkVideoKey, 'c_video')
+    assert.equal(page.data.videoPreviewVisible, false)
+
+    page.requestWithVisitorRefresh = (options) => {
+      requests.push(options)
+      return Promise.resolve({})
+    }
+    assert.equal(await page.handleSingleWorkTap({
+      currentTarget: {
+        dataset: {
+          componentKey: 'c_image',
+          workId: '19',
+          mediaType: 'IMAGE',
+          mediaUrl: 'https://cdn.example.com/original.jpg',
+          title: '迎宾图'
+        }
+      }
+    }), true)
+  } finally {
+    delete global.wx
+  }
+
+  assert.equal(requests[1].data.eventType, 'WORK_VIEWED')
+  assert.deepEqual(previews[0], {
+    current: 'https://cdn.example.com/original.jpg',
+    urls: ['https://cdn.example.com/original.jpg']
+  })
+})
+
+test('visitor singular work keeps poster state when event recording fails', async () => {
+  const toasts = []
+  const page = loadVisitorPage(() => Promise.reject(new Error('埋点失败')))
+  page.data.shareCode = 'PF001'
+  page.data.visitorKey = 'visitor-a'
+  global.wx = {
+    showToast(options) {
+      toasts.push(options)
+    }
+  }
+
+  try {
+    assert.equal(await page.handleSingleWorkTap({
+      currentTarget: {
+        dataset: {
+          componentKey: 'c_video',
+          workId: '18',
+          mediaType: 'VIDEO',
+          mediaUrl: 'movie.mp4'
+        }
+      }
+    }), false)
+  } finally {
+    delete global.wx
+  }
+
+  assert.equal(page.data.activeSingleWorkVideoKey, '')
+  assert.equal(toasts[0].title, '埋点失败')
+})
+
+test('visitor singular work blocks missing original media before recording events', async () => {
+  const requests = []
+  const previews = []
+  const toasts = []
+  const page = loadVisitorPage((options) => {
+    requests.push(options)
+    return Promise.resolve({})
+  })
+  page.data.shareCode = 'PF001'
+  page.data.visitorKey = 'visitor-a'
+  global.wx = {
+    previewImage(options) {
+      previews.push(options)
+    },
+    showToast(options) {
+      toasts.push(options)
+    }
+  }
+
+  try {
+    assert.equal(await page.handleSingleWorkTap({
+      currentTarget: { dataset: {
+        componentKey: 'c_video',
+        mediaType: 'VIDEO',
+        mediaUrl: '',
+        coverUrl: 'video-cover.jpg'
+      } }
+    }), false)
+    assert.equal(await page.handleSingleWorkTap({
+      currentTarget: { dataset: {
+        componentKey: 'c_image',
+        mediaType: 'IMAGE',
+        mediaUrl: '',
+        coverUrl: 'image-thumb.jpg'
+      } }
+    }), false)
+  } finally {
+    delete global.wx
+  }
+
+  assert.deepEqual(toasts.map((item) => item.title), ['视频地址缺失', '图片地址缺失'])
+  assert.equal(requests.length, 0)
+  assert.equal(previews.length, 0)
+})
+
+test('visitor singular work ignores stale or hidden event completions', async () => {
+  const deferredA = createDeferred()
+  const deferredB = createDeferred()
+  const deferredHidden = createDeferred()
+  const requests = [deferredA, deferredB, deferredHidden]
+  const paused = []
+  const page = loadVisitorPage(() => requests.shift().promise)
+  page.data.shareCode = 'PF001'
+  page.data.visitorKey = 'visitor-a'
+  global.wx = {
+    showToast() {},
+    createVideoContext(id) {
+      return {
+        pause() {
+          paused.push(id)
+        }
+      }
+    }
+  }
+
+  const tapVideo = (componentKey, workId) => page.handleSingleWorkTap({
+    currentTarget: {
+      dataset: {
+        componentKey,
+        workId,
+        mediaType: 'VIDEO',
+        mediaUrl: `${componentKey}.mp4`
+      }
+    }
+  })
+
+  try {
+    const promiseA = tapVideo('c_a', 31)
+    const promiseB = tapVideo('c_b', 32)
+    deferredB.resolve({})
+    assert.equal(await promiseB, true)
+    assert.equal(page.data.activeSingleWorkVideoKey, 'c_b')
+
+    deferredA.resolve({})
+    assert.equal(await promiseA, false)
+    assert.equal(page.data.activeSingleWorkVideoKey, 'c_b')
+
+    const hiddenPromise = tapVideo('c_hidden', 33)
+    page.onHide()
+    deferredHidden.resolve({})
+    assert.equal(await hiddenPromise, false)
+    assert.equal(page.data.activeSingleWorkVideoKey, '')
+  } finally {
+    delete global.wx
+  }
+
+  assert.deepEqual(paused, ['singleWorkVideo-c_b'])
+})
+
+test('visitor singular work renders original image and inline video without changing list overlay', () => {
+  const wxml = fs.readFileSync(path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.wxml'), 'utf8')
+
+  assert.match(wxml, /item\.componentType === 'SINGLE_WORK'/)
+  assert.match(wxml, /class="single-work-image"[\s\S]*mode="widthFix"/)
+  assert.match(wxml, /id="singleWorkVideo-\{\{item\.componentKey\}\}"/)
+  assert.match(wxml, /activeSingleWorkVideoKey === item\.componentKey/)
+  assert.match(wxml, /<root-portal wx:if="\{\{videoPreviewVisible\}\}">/)
 })
 
 test('normalizes visitor schedule without internal fields', () => {

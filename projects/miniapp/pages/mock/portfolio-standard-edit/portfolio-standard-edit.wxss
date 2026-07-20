@@ -73,3 +73,21 @@
   width: 100%;
   height: 100%;
 }
+
+.mock-single-work-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24rpx;
+  margin-top: 24rpx;
+  padding: 22rpx;
+  border: 1rpx solid #e1e8ef;
+  border-radius: 14rpx;
+  background: #f8fafc;
+  box-sizing: border-box;
+}
+
+.mock-single-work-title-copy {
+  flex: 1;
+  min-width: 0;
+}

@@ -45,6 +45,7 @@ Page({
     activeContactFormComponent: createActiveContactFormComponent(),
     videoPreviewVisible: false,
     videoPreview: null,
+    activeSingleWorkVideoKey: '',
     visitorProfileAuthVisible: false,
     visitorProfileToken: '',
     visitorProfileForm: {
@@ -59,6 +60,8 @@ Page({
   },
 
   onLoad(options = {}) {
+    this.singleWorkPageVisible = true
+    this.singleWorkInteractionRevision = 0
     const shareCode = options.shareCode || options.scene || ''
     const showNavigationBack = options.fromTeamPortfolio === TEAM_PORTFOLIO_SOURCE_VALUE
     this.setData({ shareCode, showNavigationBack, visitorKey: '' })
@@ -197,7 +200,20 @@ Page({
   },
 
   onUnload() {
+    this.singleWorkPageVisible = false
+    this.invalidateSingleWorkInteraction()
     clearDisplaySwitchingTimer(this)
+    this.stopActiveSingleWorkVideo()
+  },
+
+  onHide() {
+    this.singleWorkPageVisible = false
+    this.invalidateSingleWorkInteraction()
+    this.stopActiveSingleWorkVideo()
+  },
+
+  onShow() {
+    this.singleWorkPageVisible = true
   },
 
   onShareAppMessage() {
@@ -223,6 +239,76 @@ Page({
         wx.showToast({ title: error.message || '作品打开失败', icon: 'none' })
         return false
       })
+  },
+
+  handleSingleWorkTap(event) {
+    const interactionRevision = this.beginSingleWorkInteraction()
+    const work = normalizeSingleWorkTapDataset(event.currentTarget.dataset)
+    const componentKey = event.currentTarget.dataset.componentKey || ''
+    if (!work.previewUrl) {
+      wx.showToast({
+        title: work.mediaType === MEDIA_TYPE_VIDEO ? VIDEO_MISSING_MESSAGE : IMAGE_MISSING_MESSAGE,
+        icon: 'none'
+      })
+      return Promise.resolve(false)
+    }
+    return this.recordWorkEvent(work)
+      .then(() => {
+        if (!this.isCurrentSingleWorkInteraction(interactionRevision)) {
+          return false
+        }
+        return this.openSingleWorkMedia(work, componentKey)
+      })
+      .catch((error) => {
+        if (!this.isCurrentSingleWorkInteraction(interactionRevision)) {
+          return false
+        }
+        wx.showToast({ title: error.message || '作品打开失败', icon: 'none' })
+        return false
+      })
+  },
+
+  beginSingleWorkInteraction() {
+    if (typeof this.singleWorkPageVisible !== 'boolean') {
+      this.singleWorkPageVisible = true
+    }
+    this.singleWorkInteractionRevision = Number(this.singleWorkInteractionRevision || 0) + 1
+    return this.singleWorkInteractionRevision
+  },
+
+  invalidateSingleWorkInteraction() {
+    this.singleWorkInteractionRevision = Number(this.singleWorkInteractionRevision || 0) + 1
+  },
+
+  isCurrentSingleWorkInteraction(interactionRevision) {
+    return this.singleWorkPageVisible !== false && interactionRevision === this.singleWorkInteractionRevision
+  },
+
+  openSingleWorkMedia(work, componentKey) {
+    if (work.mediaType === MEDIA_TYPE_VIDEO) {
+      this.stopActiveSingleWorkVideo()
+      this.setData({ activeSingleWorkVideoKey: componentKey })
+      return true
+    }
+    wx.previewImage({ current: work.previewUrl, urls: [work.previewUrl] })
+    return true
+  },
+
+  stopActiveSingleWorkVideo() {
+    const componentKey = this.data.activeSingleWorkVideoKey
+    if (!componentKey) {
+      return
+    }
+    const videoContext = wx.createVideoContext && wx.createVideoContext(`singleWorkVideo-${componentKey}`, this)
+    if (videoContext && videoContext.pause) {
+      videoContext.pause()
+    }
+    this.setData({ activeSingleWorkVideoKey: '' })
+  },
+
+  handleSingleWorkVideoError() {
+    this.stopActiveSingleWorkVideo()
+    wx.showToast({ title: '视频播放失败，请稍后重试', icon: 'none' })
   },
 
   recordWorkEvent(work) {
@@ -362,4 +448,10 @@ function normalizeWorkTapDataset(dataset = {}) {
     coverUrl: dataset.coverUrl || '',
     title: dataset.title || ''
   }
+}
+
+function normalizeSingleWorkTapDataset(dataset = {}) {
+  return Object.assign({}, normalizeWorkTapDataset(dataset), {
+    previewUrl: dataset.mediaUrl || ''
+  })
 }

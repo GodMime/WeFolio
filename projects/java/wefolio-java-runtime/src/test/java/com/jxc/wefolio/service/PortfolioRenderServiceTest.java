@@ -85,6 +85,57 @@ class PortfolioRenderServiceTest {
     }
 
     /**
+     * 单个作品组件应输出单数作品、标题开关和作品原始比例。
+     */
+    @Test
+    void renderShouldExposeSingleWorkWithTitleSwitchAndAspectRatio() {
+        WorkEntity video = work(12L, MediaTypeDict.VIDEO.getCode(), "video/12.mp4", "cover/12.jpg", 6800);
+        video.setAspectRatio("9:16");
+        when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(video));
+        when(cosService.publicUrl("video/12.mp4")).thenReturn("https://cdn.example.com/video/12.mp4");
+        when(cosService.publicUrl("cover/12.jpg")).thenReturn("https://cdn.example.com/cover/12.jpg");
+        PortfolioConfigDto config = config(component(
+                "c_single",
+                "SINGLE_WORK",
+                1000,
+                Map.of("workId", 12L, "showTitle", false)
+        ));
+
+        PortfolioRenderDto render = service().render(portfolio(), config, false, false, null, null);
+
+        PortfolioRenderDto.Component component = render.getComponents().get(0);
+        assertThat(component.getShowTitle()).isFalse();
+        assertThat(component.getWork()).isNotNull();
+        assertThat(component.getWork().getWorkId()).isEqualTo(12L);
+        assertThat(component.getWork().getMediaUrl()).isEqualTo("https://cdn.example.com/video/12.mp4");
+        assertThat(component.getWork().getCoverUrl()).isEqualTo("https://cdn.example.com/cover/12.jpg");
+        assertThat(component.getWork().getAspectRatio()).isEqualTo("9:16");
+        assertThat(component.getWorks()).isEmpty();
+    }
+
+    /**
+     * 历史异常配置找不到作品时应保留组件信封并返回空单作品。
+     */
+    @Test
+    void renderShouldKeepSingleWorkEnvelopeWhenWorkIsMissing() {
+        when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of());
+        PortfolioConfigDto config = config(component(
+                "c_single",
+                "SINGLE_WORK",
+                1000,
+                Map.of("workId", 99L)
+        ));
+
+        PortfolioRenderDto render = service().render(portfolio(), config, true, false, null, null);
+
+        assertThat(render.getComponents()).singleElement().satisfies(component -> {
+            assertThat(component.getComponentKey()).isEqualTo("c_single");
+            assertThat(component.getShowTitle()).isTrue();
+            assertThat(component.getWork()).isNull();
+        });
+    }
+
+    /**
      * 维护中状态应清空组件并保留维护提示文案。
      */
     @Test

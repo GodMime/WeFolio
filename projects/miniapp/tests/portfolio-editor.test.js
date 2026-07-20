@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
 const path = require('node:path')
 const test = require('node:test')
 
@@ -760,6 +761,150 @@ test('tapping carousel component edits selected image works', async () => {
 
   assert.deepEqual(page.data.config.components[0].config.workIds, [13, 11])
   assert.equal(page.data.componentWorkSheetVisible, false)
+})
+
+test('single work editor replaces one selection and commits title switch atomically', async () => {
+  const page = loadPortfolioEditorPage((options) => {
+    if (options.url === '/api/mine/works') {
+      return Promise.resolve({
+        works: [
+          { id: 11, mediaType: 'IMAGE', title: '仪式合影', coverUrl: 'https://example.com/11.jpg' },
+          { id: 12, mediaType: 'VIDEO', title: '婚礼快剪', coverUrl: 'https://example.com/12.jpg' }
+        ]
+      })
+    }
+    return Promise.resolve({})
+  })
+  page.data.config = normalizePortfolioConfig({
+    components: [createComponent(COMPONENT_TYPES.SINGLE_WORK, {
+      componentKey: 'c_single',
+      sortOrder: 1000,
+      config: { workId: 11, showTitle: true }
+    })]
+  })
+
+  await page.handleComponentTap({
+    currentTarget: { dataset: { key: 'c_single', type: COMPONENT_TYPES.SINGLE_WORK } }
+  })
+  await flushPromises()
+
+  assert.equal(page.data.componentWorkSheetTitle, '编辑单个作品')
+  assert.equal(page.data.componentWorkSelectionMode, 'single')
+  assert.deepEqual(page.data.componentWorkSelectedIds, [11])
+
+  page.handleToggleComponentWork({ currentTarget: { dataset: { id: 12 } } })
+  page.handleToggleComponentWork({ currentTarget: { dataset: { id: 12 } } })
+  page.handleSingleWorkShowTitleChange({ detail: { value: false } })
+
+  assert.deepEqual(page.data.componentWorkSelectedIds, [12])
+  assert.deepEqual(page.data.config.components[0].config, { workId: 11, showTitle: true })
+
+  page.handleConfirmComponentWorks()
+
+  assert.deepEqual(page.data.config.components[0].config, { workId: 12, showTitle: false })
+  assert.equal(page.data.singleWorkSummaries[0].id, 12)
+  assert.equal(page.data.singleWorkSummaries[0].title, '婚礼快剪')
+  assert.equal(page.data.componentWorkSheetVisible, false)
+})
+
+test('single work editor blocks completion without a work and cancel preserves config', async () => {
+  const toastCalls = []
+  const page = loadPortfolioEditorPage(() => Promise.resolve({ works: [] }), {
+    showToast(options) {
+      toastCalls.push(options)
+    }
+  })
+  page.data.config = normalizePortfolioConfig({
+    components: [createComponent(COMPONENT_TYPES.SINGLE_WORK, {
+      componentKey: 'c_single',
+      sortOrder: 1000
+    })]
+  })
+
+  await page.handleComponentTap({
+    currentTarget: { dataset: { key: 'c_single', type: COMPONENT_TYPES.SINGLE_WORK } }
+  })
+  page.handleSingleWorkShowTitleChange({ detail: { value: false } })
+  page.handleConfirmComponentWorks()
+
+  assert.equal(toastCalls.at(-1).title, '请选择一个作品')
+  assert.equal(page.data.componentWorkSheetVisible, true)
+  assert.deepEqual(page.data.config.components[0].config, { workId: 0, showTitle: true })
+
+  page.handleCloseComponentWorkSheet()
+  assert.deepEqual(page.data.config.components[0].config, { workId: 0, showTitle: true })
+})
+
+test('single work row summaries resolve selected work titles from formal work details', async () => {
+  const requests = []
+  let resolveDetail
+  const page = loadPortfolioEditorPage((options) => {
+    requests.push(options)
+    return new Promise((resolve) => {
+      resolveDetail = resolve
+    })
+  })
+  const config = normalizePortfolioConfig({
+    components: [createComponent(COMPONENT_TYPES.SINGLE_WORK, {
+      componentKey: 'c_single',
+      config: { workId: 11 }
+    })]
+  })
+
+  const loading = page.loadSingleWorkSummaries(config)
+
+  assert.equal(requests[0].url, '/api/mine/works/11')
+  assert.equal(page.data.singleWorkSummaryMap[11].status, 'LOADING')
+  assert.equal(page.data.singleWorkSummaries[0].status, 'LOADING')
+
+  resolveDetail({
+    work: { id: 11, mediaType: 'IMAGE', title: '草坪仪式', coverUrl: 'https://example.com/11.jpg' }
+  })
+  await loading
+
+  assert.equal(page.data.singleWorkSummaryMap[11].title, '草坪仪式')
+  assert.equal(page.data.singleWorkSummaries[0].title, '草坪仪式')
+})
+
+test('single work row summaries distinguish detail failures from unavailable works', async () => {
+  const responses = [Promise.reject(new Error('network failed')), Promise.resolve({})]
+  const page = loadPortfolioEditorPage(() => responses.shift())
+  const config = normalizePortfolioConfig({
+    components: [
+      createComponent(COMPONENT_TYPES.SINGLE_WORK, {
+        componentKey: 'c_failed',
+        config: { workId: 11 }
+      }),
+      createComponent(COMPONENT_TYPES.SINGLE_WORK, {
+        componentKey: 'c_unavailable',
+        config: { workId: 12 }
+      })
+    ]
+  })
+
+  await page.loadSingleWorkSummaries(config)
+
+  assert.equal(page.data.singleWorkSummaryMap[11].status, 'FAILED')
+  assert.equal(page.data.singleWorkSummaryMap[12].status, 'UNAVAILABLE')
+  assert.deepEqual(page.data.singleWorkSummaries.map((item) => item.status), ['FAILED', 'UNAVAILABLE'])
+})
+
+test('single work component rows avoid unsupported Number calls in WXS', () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, '../pages/portfolios/standard-edit/component-rows.wxs'),
+    'utf8'
+  )
+  const wxml = fs.readFileSync(
+    path.join(__dirname, '../pages/portfolios/standard-edit/portfolio-standard-edit.wxml'),
+    'utf8'
+  )
+
+  assert.doesNotMatch(source, /\bNumber\s*\(/)
+  assert.match(source, /作品信息加载中/)
+  assert.match(source, /作品信息加载失败/)
+  assert.match(source, /for \(var index = 0; index < summaries\.length; index \+= 1\)/)
+  assert.match(source, /summaries\[index\]\.id == workId/)
+  assert.match(wxml, /resolveSingleWorkSummary\(item, singleWorkSummaries\)/)
 })
 
 test('component work picker searches filters by tag and appends next page', async () => {

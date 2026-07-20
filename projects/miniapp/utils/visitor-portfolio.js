@@ -21,6 +21,9 @@ const ALL_DISPLAY_GROUP_NAME = '全部'
 const DEFAULT_ALL_GROUP_KEY = 'g_all'
 const DEFAULT_ALL_GROUP_NAME = '全部作品'
 const MEDIA_TYPE_VIDEO = 'VIDEO'
+const DEFAULT_VIDEO_RATIO_WIDTH = 16
+const DEFAULT_VIDEO_RATIO_HEIGHT = 9
+const SINGLE_WORK_MEDIA_WIDTH_RPX = 710
 const DEFAULT_SCHEDULE_DISPLAY_MODE = 'MODAL_CALENDAR'
 const VALID_SCHEDULE_DISPLAY_MODES = ['MODAL_CALENDAR', 'INLINE_CALENDAR']
 const DEFAULT_CONTACT_FORM_DISPLAY_MODE = 'MODAL_FORM'
@@ -60,11 +63,19 @@ function normalizeShare(raw = {}) {
   }
 }
 
+function buildWorkAspectRatioStyle(ratioWidth, ratioHeight) {
+  const heightRpx = Math.round(SINGLE_WORK_MEDIA_WIDTH_RPX * ratioHeight / ratioWidth)
+  return `height: ${heightRpx}rpx; aspect-ratio: ${ratioWidth} / ${ratioHeight};`
+}
+
 function normalizeRenderWork(raw = {}) {
   const mediaType = trimText(raw.mediaType) || 'IMAGE'
   const coverUrl = trimText(raw.coverUrl)
   const mediaUrl = trimText(raw.mediaUrl)
   const aspectRatio = trimText(raw.aspectRatio || raw.aspectRatioText)
+  const ratioParts = aspectRatio.match(/^(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)$/)
+  const ratioWidth = ratioParts && Number(ratioParts[1]) > 0 ? Number(ratioParts[1]) : DEFAULT_VIDEO_RATIO_WIDTH
+  const ratioHeight = ratioParts && Number(ratioParts[2]) > 0 ? Number(ratioParts[2]) : DEFAULT_VIDEO_RATIO_HEIGHT
   return {
     workId: toNumber(raw.workId || raw.id),
     title: trimText(raw.title) || '未命名作品',
@@ -76,11 +87,19 @@ function normalizeRenderWork(raw = {}) {
     previewUrl: mediaUrl || coverUrl,
     aspectRatio,
     aspectRatioText: trimText(raw.aspectRatioText || aspectRatio),
+    aspectRatioStyle: buildWorkAspectRatioStyle(ratioWidth, ratioHeight),
     width: toNumber(raw.width),
     height: toNumber(raw.height || raw.length),
     durationMs: toNumber(raw.durationMs),
     description: trimText(raw.description)
   }
+}
+
+function normalizeSingleRenderWork(raw = {}) {
+  return Object.assign({}, normalizeRenderWork(raw), {
+    thumbnailUrl: trimText(raw.coverUrl),
+    previewUrl: trimText(raw.mediaUrl)
+  })
 }
 
 function normalizeDisplayGroups(rawGroups = []) {
@@ -242,6 +261,8 @@ function normalizeRenderComponent(raw = {}) {
     config: Object.assign({}, config),
     carouselIntervalMs: normalizeCarouselIntervalMs(raw, config),
     works: Array.isArray(raw.works) ? raw.works.map(normalizeRenderWork) : [],
+    work: raw.work ? normalizeSingleRenderWork(raw.work) : null,
+    showTitle: typeof raw.showTitle === 'boolean' ? raw.showTitle : true,
     groups,
     displayTags: groups.map((group, index) => ({
       groupKey: group.groupKey,
@@ -265,9 +286,11 @@ function normalizeRenderComponent(raw = {}) {
 function normalizePortfolioRender(raw = {}) {
   const share = normalizeShare(raw.share || {})
   const underMaintenance = Boolean(raw.underMaintenance)
+  const preview = Boolean(raw.preview)
   const components = underMaintenance
     ? []
     : (Array.isArray(raw.components) ? raw.components.map(normalizeRenderComponent) : [])
+        .filter((component) => preview || component.componentType !== 'SINGLE_WORK' || component.work)
         .sort((left, right) => {
           const orderDiff = left.sortOrder - right.sortOrder
           return orderDiff || left.componentKey.localeCompare(right.componentKey)
@@ -277,7 +300,7 @@ function normalizePortfolioRender(raw = {}) {
     portfolioId: toNumber(raw.portfolioId),
     title: trimText(raw.title) || share.title || '个人作品集',
     share,
-    preview: Boolean(raw.preview),
+    preview,
     underMaintenance,
     maintenanceText: {
       primary: trimText(raw.maintenanceText && raw.maintenanceText.primary) || 'UNDER MAINTENANCE',
