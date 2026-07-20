@@ -202,7 +202,11 @@ test('mock mine return login button uses the regular full-width primary button s
   const wxss = read('pages/mock/index/index.wxss')
   const buttonRule = readRule(wxss, '.return-login-button')
 
-  assert.match(wxml, /class="primary-button return-login-button"/)
+  assert.match(
+    wxml,
+    /<view\b[^>]*class="primary-button return-login-button"[^>]*aria-role="button"[^>]*bindtap="handleReturnLoginTap"[^>]*>/
+  )
+  assert.doesNotMatch(wxml, /<button\b[^>]*class="primary-button return-login-button"/)
   assert.match(buttonRule, /width:\s*100%/)
   assert.match(buttonRule, /min-height:\s*88rpx/)
   assert.match(buttonRule, /display:\s*flex/)
@@ -210,6 +214,30 @@ test('mock mine return login button uses the regular full-width primary button s
   assert.match(buttonRule, /justify-content:\s*center/)
   assert.match(buttonRule, /border-radius:\s*16rpx/)
   assert.doesNotMatch(buttonRule, /border-radius:\s*999rpx/)
+})
+
+test('mock mine return button matches the action panel outer width', () => {
+  const wxss = read('pages/mock/index/index.wxss')
+  const actionPanelRule = readRule(wxss, '.mock-mine-page .action-panel')
+  const returnButtonRule = readRule(wxss, '.return-login-button')
+
+  assert.match(actionPanelRule, /width:\s*100%/)
+  assert.match(actionPanelRule, /box-sizing:\s*border-box/)
+  assert.match(returnButtonRule, /width:\s*100%/)
+  assert.match(returnButtonRule, /box-sizing:\s*border-box/)
+})
+
+test('mock mine recharge button defines production-aligned visual dimensions independently', () => {
+  const wxml = read('pages/mock/index/index.wxml')
+  const wxss = read('pages/mock/index/index.wxss')
+  const buttonRule = readRule(wxss, '.mock-mine-page .light-button')
+
+  assert.match(wxml, /<button\b[^>]*class="light-button"[^>]*>充值<\/button>/)
+  assert.match(buttonRule, /min-width:\s*112rpx/)
+  assert.match(buttonRule, /height:\s*88rpx/)
+  assert.match(buttonRule, /padding:\s*0\s+28rpx/)
+  assert.match(buttonRule, /border-radius:\s*16rpx/)
+  assert.match(buttonRule, /box-sizing:\s*border-box/)
 })
 
 test('mock schedule data contains lunch and dinner slots only', () => {
