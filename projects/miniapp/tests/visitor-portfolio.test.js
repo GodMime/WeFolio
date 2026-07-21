@@ -313,6 +313,102 @@ test('normalizes carousel work ratio fields for render pages', () => {
   assert.equal(work.height, 1080)
 })
 
+test('normalizes singular work render data with title switch and safe video ratio', () => {
+  const portfolio = normalizeVisitorPortfolio({
+    renderData: {
+      preview: true,
+      components: [
+        {
+          componentKey: 'c_single',
+          componentType: 'SINGLE_WORK',
+          sortOrder: 1000,
+          showTitle: false,
+          work: {
+            workId: 12,
+            title: '婚礼快剪',
+            mediaType: 'VIDEO',
+            coverUrl: 'cover.jpg',
+            mediaUrl: 'movie.mp4',
+            aspectRatio: '9:16'
+          }
+        },
+        {
+          componentKey: 'c_fallback',
+          componentType: 'SINGLE_WORK',
+          sortOrder: 2000,
+          work: {
+            workId: 13,
+            mediaType: 'VIDEO',
+            mediaUrl: 'fallback.mp4',
+            aspectRatio: 'invalid'
+          }
+        }
+      ]
+    }
+  })
+
+  assert.equal(portfolio.components[0].showTitle, false)
+  assert.equal(portfolio.components[0].work.previewUrl, 'movie.mp4')
+  assert.equal(portfolio.components[0].work.aspectRatioStyle, 'height: 1262rpx; aspect-ratio: 9 / 16;')
+  assert.equal(portfolio.components[1].showTitle, true)
+  assert.equal(portfolio.components[1].work.aspectRatioStyle, 'height: 399rpx; aspect-ratio: 16 / 9;')
+})
+
+test('singular work keeps video media and poster urls independent', () => {
+  const portfolio = normalizeVisitorPortfolio({
+    renderData: {
+      preview: true,
+      components: [
+        {
+          componentKey: 'c_cover_only',
+          componentType: 'SINGLE_WORK',
+          work: { workId: 21, mediaType: 'VIDEO', coverUrl: 'cover.jpg', mediaUrl: '' }
+        },
+        {
+          componentKey: 'c_media_only',
+          componentType: 'SINGLE_WORK',
+          work: { workId: 22, mediaType: 'VIDEO', coverUrl: '', mediaUrl: 'movie.mp4' }
+        },
+        {
+          componentKey: 'c_image_cover_only',
+          componentType: 'SINGLE_WORK',
+          work: { workId: 23, mediaType: 'IMAGE', coverUrl: 'thumb.jpg', mediaUrl: '' }
+        }
+      ]
+    }
+  })
+
+  const componentMap = Object.fromEntries(portfolio.components.map((component) => [component.componentKey, component]))
+  assert.equal(componentMap.c_cover_only.work.previewUrl, '')
+  assert.equal(componentMap.c_cover_only.work.thumbnailUrl, 'cover.jpg')
+  assert.equal(componentMap.c_media_only.work.previewUrl, 'movie.mp4')
+  assert.equal(componentMap.c_media_only.work.thumbnailUrl, '')
+  assert.equal(componentMap.c_image_cover_only.work.previewUrl, '')
+})
+
+test('visitor render skips unavailable singular work while preview keeps repair context', () => {
+  const components = [
+    {
+      componentKey: 'c_missing',
+      componentType: 'SINGLE_WORK',
+      sortOrder: 1000,
+      work: null
+    },
+    {
+      componentKey: 'c_text',
+      componentType: 'TEXT_SECTION',
+      sortOrder: 2000,
+      textSection: { content: '保留内容' }
+    }
+  ]
+
+  const visitor = normalizeVisitorPortfolio({ renderData: { preview: false, components } })
+  const preview = normalizeVisitorPortfolio({ renderData: { preview: true, components } })
+
+  assert.deepEqual(visitor.components.map((item) => item.componentKey), ['c_text'])
+  assert.deepEqual(preview.components.map((item) => item.componentKey), ['c_missing', 'c_text'])
+})
+
 test('normalizes contact form display mode for render and config pages', () => {
   const renderResult = normalizeVisitorPortfolio({
     renderData: {
@@ -807,8 +903,12 @@ test('visitor page uses source type constant for WeChat share card', () => {
 })
 
 test('visitor page secondary share keeps the new visitor subpackage path', () => {
-  const page = loadVisitorPage(() => Promise.resolve({}))
-  page.data.shareCode = 'PF001'
+  const requests = []
+  const page = loadVisitorPage((options) => {
+    requests.push(options)
+    return Promise.resolve({})
+  })
+  page.data.shareCode = 'PF 001'
   page.data.portfolio = {
     title: '林安婚礼司仪',
     share: {
@@ -821,8 +921,139 @@ test('visitor page secondary share keeps the new visitor subpackage path', () =>
 
   assert.equal(
     share.path,
-    '/pages/portfolios/visitor-portfolio/visitor-portfolio?shareCode=PF001'
+    '/pages/portfolios/visitor-portfolio/visitor-portfolio?shareCode=PF%20001'
   )
+  assert.doesNotMatch(share.path, /shareGuide/)
+  page.onShareTimeline()
+  assert.deepEqual(requests, [])
+})
+
+test('personal visitor shows timeline guide only after displayable content loads', async () => {
+  const shareMenus = []
+  const requests = []
+  const page = loadVisitorPage((options) => {
+    requests.push(options)
+    return Promise.resolve({
+      visitorKey: 'visitor-a',
+      renderData: {
+        shareCode: 'PF 001',
+        title: '林安个人作品集',
+        share: {
+          title: '个人分享标题',
+          coverUrl: 'https://example.test/cover.jpg'
+        },
+        components: [{
+          componentKey: 'profile-1',
+          componentType: 'PROFILE',
+          sortOrder: 1000,
+          profile: { displayName: '林安' }
+        }]
+      }
+    })
+  })
+  global.wx = {
+    login(options) { options.success({ code: 'wx-code' }) },
+    setStorageSync() {},
+    showShareMenu(options) { shareMenus.push(options) },
+    showToast() {}
+  }
+
+  try {
+    const opening = page.onLoad({ shareCode: 'PF 001', shareGuide: 'timeline', sharePortfolioId: '88' })
+    assert.equal(page.data.timelineGuideRequested, true)
+    assert.equal(page.data.timelineGuideVisible, false)
+    await opening
+    assert.deepEqual(shareMenus, [{ menus: ['shareAppMessage', 'shareTimeline'] }])
+    assert.equal(page.data.timelineGuideVisible, true)
+    requests.length = 0
+    assert.deepEqual(page.onShareTimeline(), {
+      title: '个人分享标题',
+      query: 'shareCode=PF%20001',
+      imageUrl: 'https://example.test/cover.jpg'
+    })
+    page.onShareTimeline()
+    assert.deepEqual(requests, [{
+      url: '/api/mine/portfolios/88/share-records',
+      method: 'POST',
+      data: {
+        shareChannel: 'WECHAT_TIMELINE',
+        shareScene: 'PORTFOLIO_LIST'
+      }
+    }])
+    page.handleCloseTimelineGuide()
+    assert.equal(page.data.timelineGuideRequested, false)
+    assert.equal(page.data.timelineGuideVisible, false)
+  } finally {
+    delete global.wx
+  }
+})
+
+test('personal visitor keeps timeline guide hidden for empty, maintenance, and failed responses', async () => {
+  const page = loadVisitorPage(() => Promise.reject(new Error('network')))
+  global.wx = {
+    login(options) { options.success({ code: 'wx-code' }) },
+    setStorageSync() {},
+    showToast() {}
+  }
+
+  try {
+    await page.onLoad({ shareCode: 'PF001', shareGuide: 'timeline' })
+    assert.equal(page.data.timelineGuideRequested, true)
+    assert.equal(page.data.timelineGuideVisible, false)
+
+    page.applyVisitorOpenResponse({
+      renderData: {
+        shareCode: 'PF001',
+        components: []
+      }
+    })
+    assert.equal(page.data.timelineGuideVisible, false)
+
+    page.applyVisitorOpenResponse({
+      renderData: {
+        shareCode: 'PF001',
+        underMaintenance: true,
+        components: [{ componentKey: 'profile-1', componentType: 'PROFILE' }]
+      }
+    })
+    assert.equal(page.data.timelineGuideVisible, false)
+  } finally {
+    delete global.wx
+  }
+})
+
+test('personal visitor ignores unknown timeline guide values and registers the shared guide', async () => {
+  const page = loadVisitorPage(() => Promise.resolve({}))
+  page.bootstrap = () => Promise.resolve()
+  await page.onLoad({ shareCode: 'PF001', shareGuide: 'true' })
+
+  const pageRoot = path.join(__dirname, '../pages/portfolios/visitor-portfolio')
+  const json = JSON.parse(fs.readFileSync(path.join(pageRoot, 'visitor-portfolio.json'), 'utf8'))
+  const wxml = fs.readFileSync(path.join(pageRoot, 'visitor-portfolio.wxml'), 'utf8')
+
+  assert.equal(page.data.timelineGuideRequested, false)
+  assert.equal(json.usingComponents['timeline-share-guide'], '/components/timeline-share-guide/timeline-share-guide')
+  assert.match(wxml, /<timeline-share-guide[^>]*back="\{\{showNavigationBack\}\}"[^>]*bindback="handleTimelineGuideBack"[^>]*bindclose="handleCloseTimelineGuide"/)
+})
+
+test('visitor page shows navigation back only when the page stack has a previous page', async () => {
+  const previousGetCurrentPages = global.getCurrentPages
+  try {
+    global.getCurrentPages = () => [{ route: 'pages/portfolios/portfolios' }, { route: 'pages/portfolios/visitor-portfolio/visitor-portfolio' }]
+    const internalPage = loadVisitorPage(() => Promise.resolve({}))
+    internalPage.bootstrap = () => Promise.resolve()
+    await internalPage.onLoad({ shareCode: 'PF001' })
+    assert.equal(internalPage.data.showNavigationBack, true)
+
+    global.getCurrentPages = () => [{ route: 'pages/portfolios/visitor-portfolio/visitor-portfolio' }]
+    const directSharePage = loadVisitorPage(() => Promise.resolve({}))
+    directSharePage.bootstrap = () => Promise.resolve()
+    await directSharePage.onLoad({ shareCode: 'PF001', fromTeamPortfolio: '1' })
+    assert.equal(directSharePage.data.showNavigationBack, false)
+  } finally {
+    if (previousGetCurrentPages === undefined) delete global.getCurrentPages
+    else global.getCurrentPages = previousGetCurrentPages
+  }
 })
 
 test('visitor page records image view before opening original image', async () => {
@@ -1122,16 +1353,26 @@ test('visitor profile prompt keeps skip and save copy in bottom sheet', () => {
   assert.match(wxml, /<root-portal wx:if="\{\{visitorProfileAuthVisible\}\}">/)
   assert.match(wxml, /class="visitor-profile-mask"[^>]*catchtap="handleVisitorProfileMaskTap"[^>]*catchtouchmove="handleVisitorProfileMaskTouchMove"/)
   assert.match(wxml, /class="visitor-profile-panel"[^>]*catchtap="handleVisitorProfilePanelTap"/)
-  assert.match(wxml, /class="visitor-profile-desc"[^>]*>授权头像和昵称，维护者查看访客记录时能识别你。<\/view>/)
-  assert.match(wxml, /class="visitor-avatar-visual"/)
-  assert.match(wxml, /class="visitor-avatar-label">点击授权头像<\/view>/)
-  assert.match(wxml, /placeholder="点击授权昵称"/)
+  assert.match(wxml, /class="visitor-profile-desc"[^>]*>选择头像并填写昵称，维护者查看访客记录时能识别你。<\/view>/)
+  assert.match(wxml, /class="visitor-avatar-visual/)
+  assert.match(wxml, /class="visitor-avatar-label[^>]*>点击选择头像<\/view>/)
+  assert.match(wxml, /type="nickname"/)
+  assert.match(wxml, /placeholder="输入昵称或选择微信昵称"/)
+  assert.match(wxml, /visitorProfileAvatarError[^>]*visitorProfileValidationShaking/)
+  assert.match(wxml, /visitorProfileNicknameError[^>]*visitorProfileValidationShaking/)
+  assert.match(wxml, /wx:if="\{\{visitorProfileAvatarError\}\}"[^>]*>请点击选择头像<\/view>/)
+  assert.match(wxml, /wx:if="\{\{visitorProfileNicknameError\}\}"[^>]*>请点击输入或选择昵称<\/view>/)
   assert.match(wxml, /class="visitor-profile-secondary"[^>]*>跳过<\/button>/)
   assert.match(wxml, /class="visitor-profile-primary"[^>]*>保存<\/button>/)
   assert.match(wxss, /\.visitor-profile-mask\s*\{[\s\S]*left:\s*0;[\s\S]*right:\s*0;[\s\S]*top:\s*0;[\s\S]*bottom:\s*0;[\s\S]*z-index:\s*120;/)
   assert.match(wxss, /\.visitor-profile-panel\s*\{[\s\S]*position:\s*absolute;[\s\S]*left:\s*0;[\s\S]*right:\s*0;[\s\S]*bottom:\s*0;[\s\S]*border-radius:\s*28rpx 28rpx 0 0;/)
   assert.match(wxss, /\.visitor-avatar-picker\s*\{[\s\S]*position:\s*absolute;[\s\S]*left:\s*0;[\s\S]*top:\s*0;[\s\S]*width:\s*116rpx;[\s\S]*height:\s*116rpx;[\s\S]*opacity:\s*0;/)
   assert.match(wxss, /\.visitor-avatar-visual\s*\{[\s\S]*width:\s*116rpx;[\s\S]*height:\s*116rpx;[\s\S]*border-radius:\s*50%;[\s\S]*overflow:\s*hidden;/)
+  assert.match(wxss, /\.visitor-avatar-visual\.invalid/)
+  assert.match(wxss, /\.visitor-nickname-input\.invalid/)
+  assert.match(wxss, /\.visitor-profile-error\s*\{/)
+  assert.match(wxss, /\.visitor-avatar-field\.shake[\s\S]*\.visitor-nickname-field\.shake/)
+  assert.match(wxss, /@keyframes visitor-profile-shake/)
 })
 
 test('visitor profile submit requires both avatar and nickname before upload', async () => {
@@ -1153,19 +1394,70 @@ test('visitor profile submit requires both avatar and nickname before upload', a
       nickname: ''
     }
     await page.handleVisitorProfileSubmit()
-    assert.equal(toasts.at(-1).title, '请授权头像和昵称')
+    assert.equal(toasts.at(-1).title, '请完善头像和昵称')
 
     page.data.visitorProfileForm = {
       avatarUrl: 'wxfile://avatar.jpg',
       nickname: ''
     }
     await page.handleVisitorProfileSubmit()
-    assert.equal(toasts.at(-1).title, '请授权头像和昵称')
+    assert.equal(toasts.at(-1).title, '请完善头像和昵称')
   } finally {
     delete global.wx
   }
 
   assert.equal(requests.length, 0)
+})
+
+test('visitor profile submit marks each missing field and restarts validation shake', async () => {
+  const page = loadVisitorPage(() => Promise.resolve({}))
+  const shakeValues = []
+  const originalSetData = page.setData.bind(page)
+  page.setData = (patch, callback) => {
+    if (Object.prototype.hasOwnProperty.call(patch, 'visitorProfileValidationShaking')) {
+      shakeValues.push(patch.visitorProfileValidationShaking)
+    }
+    originalSetData(patch, callback)
+  }
+  global.wx = { showToast() {} }
+
+  try {
+    page.data.visitorProfileForm = { avatarUrl: '', nickname: '' }
+    await page.handleVisitorProfileSubmit()
+    assert.equal(page.data.visitorProfileAvatarError, true)
+    assert.equal(page.data.visitorProfileNicknameError, true)
+
+    await page.handleVisitorProfileSubmit()
+    assert.deepEqual(shakeValues, [false, true, false, true])
+
+    page.data.visitorProfileForm = { avatarUrl: 'wxfile://avatar.jpg', nickname: '' }
+    await page.handleVisitorProfileSubmit()
+    assert.equal(page.data.visitorProfileAvatarError, false)
+    assert.equal(page.data.visitorProfileNicknameError, true)
+
+    page.data.visitorProfileForm = { avatarUrl: '', nickname: '访客' }
+    await page.handleVisitorProfileSubmit()
+    assert.equal(page.data.visitorProfileAvatarError, true)
+    assert.equal(page.data.visitorProfileNicknameError, false)
+  } finally {
+    delete global.wx
+  }
+})
+
+test('visitor profile fields clear only their resolved validation error', () => {
+  const page = loadVisitorPage(() => Promise.resolve({}))
+  page.data.visitorProfileAvatarError = true
+  page.data.visitorProfileNicknameError = true
+
+  page.handleVisitorAvatarChoose({ detail: { avatarUrl: 'wxfile://avatar.jpg' } })
+  assert.equal(page.data.visitorProfileAvatarError, false)
+  assert.equal(page.data.visitorProfileNicknameError, true)
+
+  page.handleVisitorNicknameInput({ detail: { value: '   ' } })
+  assert.equal(page.data.visitorProfileNicknameError, true)
+
+  page.handleVisitorNicknameInput({ detail: { value: ' 访客 ' } })
+  assert.equal(page.data.visitorProfileNicknameError, false)
 })
 
 test('visitor video preview uses root portal so native video overlay covers viewport', () => {
@@ -1230,6 +1522,221 @@ test('visitor page records video play before showing video overlay', async () =>
   page.handleCloseVideoPreview()
   assert.equal(page.data.videoPreviewVisible, false)
   assert.equal(page.data.videoPreview, null)
+})
+
+test('visitor singular work records event before opening image or starting inline video', async () => {
+  const requests = []
+  const previews = []
+  const deferred = createDeferred()
+  const page = loadVisitorPage((options) => {
+    requests.push(options)
+    return deferred.promise
+  }, {
+    previewImage(options) {
+      previews.push(options)
+    },
+    createVideoContext() {
+      return { pause() {} }
+    }
+  })
+  page.data.shareCode = 'PF001'
+  page.data.visitorKey = 'visitor-a'
+  global.wx = {
+    previewImage(options) {
+      previews.push(options)
+    },
+    showToast() {},
+    createVideoContext() {
+      return { pause() {} }
+    }
+  }
+
+  try {
+    const videoPromise = page.handleSingleWorkTap({
+      currentTarget: {
+        dataset: {
+          componentKey: 'c_video',
+          workId: '18',
+          mediaType: 'VIDEO',
+          mediaUrl: 'https://cdn.example.com/movie.mp4',
+          coverUrl: 'https://cdn.example.com/movie.jpg',
+          title: '婚礼快剪'
+        }
+      }
+    })
+
+    assert.equal(page.data.activeSingleWorkVideoKey, '')
+    assert.equal(page.data.videoPreviewVisible, false)
+    assert.equal(requests[0].data.eventType, 'VIDEO_PLAYED')
+
+    deferred.resolve({})
+    assert.equal(await videoPromise, true)
+    assert.equal(page.data.activeSingleWorkVideoKey, 'c_video')
+    assert.equal(page.data.videoPreviewVisible, false)
+
+    page.requestWithVisitorRefresh = (options) => {
+      requests.push(options)
+      return Promise.resolve({})
+    }
+    assert.equal(await page.handleSingleWorkTap({
+      currentTarget: {
+        dataset: {
+          componentKey: 'c_image',
+          workId: '19',
+          mediaType: 'IMAGE',
+          mediaUrl: 'https://cdn.example.com/original.jpg',
+          title: '迎宾图'
+        }
+      }
+    }), true)
+  } finally {
+    delete global.wx
+  }
+
+  assert.equal(requests[1].data.eventType, 'WORK_VIEWED')
+  assert.deepEqual(previews[0], {
+    current: 'https://cdn.example.com/original.jpg',
+    urls: ['https://cdn.example.com/original.jpg']
+  })
+})
+
+test('visitor singular work keeps poster state when event recording fails', async () => {
+  const toasts = []
+  const page = loadVisitorPage(() => Promise.reject(new Error('埋点失败')))
+  page.data.shareCode = 'PF001'
+  page.data.visitorKey = 'visitor-a'
+  global.wx = {
+    showToast(options) {
+      toasts.push(options)
+    }
+  }
+
+  try {
+    assert.equal(await page.handleSingleWorkTap({
+      currentTarget: {
+        dataset: {
+          componentKey: 'c_video',
+          workId: '18',
+          mediaType: 'VIDEO',
+          mediaUrl: 'movie.mp4'
+        }
+      }
+    }), false)
+  } finally {
+    delete global.wx
+  }
+
+  assert.equal(page.data.activeSingleWorkVideoKey, '')
+  assert.equal(toasts[0].title, '埋点失败')
+})
+
+test('visitor singular work blocks missing original media before recording events', async () => {
+  const requests = []
+  const previews = []
+  const toasts = []
+  const page = loadVisitorPage((options) => {
+    requests.push(options)
+    return Promise.resolve({})
+  })
+  page.data.shareCode = 'PF001'
+  page.data.visitorKey = 'visitor-a'
+  global.wx = {
+    previewImage(options) {
+      previews.push(options)
+    },
+    showToast(options) {
+      toasts.push(options)
+    }
+  }
+
+  try {
+    assert.equal(await page.handleSingleWorkTap({
+      currentTarget: { dataset: {
+        componentKey: 'c_video',
+        mediaType: 'VIDEO',
+        mediaUrl: '',
+        coverUrl: 'video-cover.jpg'
+      } }
+    }), false)
+    assert.equal(await page.handleSingleWorkTap({
+      currentTarget: { dataset: {
+        componentKey: 'c_image',
+        mediaType: 'IMAGE',
+        mediaUrl: '',
+        coverUrl: 'image-thumb.jpg'
+      } }
+    }), false)
+  } finally {
+    delete global.wx
+  }
+
+  assert.deepEqual(toasts.map((item) => item.title), ['视频地址缺失', '图片地址缺失'])
+  assert.equal(requests.length, 0)
+  assert.equal(previews.length, 0)
+})
+
+test('visitor singular work ignores stale or hidden event completions', async () => {
+  const deferredA = createDeferred()
+  const deferredB = createDeferred()
+  const deferredHidden = createDeferred()
+  const requests = [deferredA, deferredB, deferredHidden]
+  const paused = []
+  const page = loadVisitorPage(() => requests.shift().promise)
+  page.data.shareCode = 'PF001'
+  page.data.visitorKey = 'visitor-a'
+  global.wx = {
+    showToast() {},
+    createVideoContext(id) {
+      return {
+        pause() {
+          paused.push(id)
+        }
+      }
+    }
+  }
+
+  const tapVideo = (componentKey, workId) => page.handleSingleWorkTap({
+    currentTarget: {
+      dataset: {
+        componentKey,
+        workId,
+        mediaType: 'VIDEO',
+        mediaUrl: `${componentKey}.mp4`
+      }
+    }
+  })
+
+  try {
+    const promiseA = tapVideo('c_a', 31)
+    const promiseB = tapVideo('c_b', 32)
+    deferredB.resolve({})
+    assert.equal(await promiseB, true)
+    assert.equal(page.data.activeSingleWorkVideoKey, 'c_b')
+
+    deferredA.resolve({})
+    assert.equal(await promiseA, false)
+    assert.equal(page.data.activeSingleWorkVideoKey, 'c_b')
+
+    const hiddenPromise = tapVideo('c_hidden', 33)
+    page.onHide()
+    deferredHidden.resolve({})
+    assert.equal(await hiddenPromise, false)
+    assert.equal(page.data.activeSingleWorkVideoKey, '')
+  } finally {
+    delete global.wx
+  }
+
+  assert.deepEqual(paused, ['singleWorkVideo-c_b'])
+})
+
+test('visitor singular work renders original image and inline video without changing list overlay', () => {
+  const wxml = fs.readFileSync(path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.wxml'), 'utf8')
+
+  assert.match(wxml, /item\.componentType === 'SINGLE_WORK'/)
+  assert.match(wxml, /class="single-work-image"[\s\S]*mode="widthFix"/)
+  assert.match(wxml, /id="singleWorkVideo-\{\{item\.componentKey\}\}"/)
+  assert.match(wxml, /activeSingleWorkVideoKey === item\.componentKey/)
+  assert.match(wxml, /<root-portal wx:if="\{\{videoPreviewVisible\}\}">/)
 })
 
 test('normalizes visitor schedule without internal fields', () => {
@@ -1650,4 +2157,52 @@ test('portfolio schedule query component uses preview endpoints and scope', asyn
   assert.equal(requests[1].data.slotDefinitionId, 12)
   assert.equal(Object.hasOwn(requests[1].data, 'visitorKey'), false)
   assert.equal(component.data.result.available, false)
+})
+
+test('portfolio schedule query component uses nested team member preview endpoints', async () => {
+  const requests = []
+  const component = loadScheduleQueryComponent((options) => {
+    requests.push(options)
+    if (options.method === 'POST') {
+      return Promise.resolve({
+        queriedDate: '2026-07-18',
+        slotDefinitionId: 12,
+        slotName: '午宴',
+        startTime: '10:00',
+        endTime: '14:00',
+        available: true,
+        message: '档期空闲'
+      })
+    }
+    return Promise.resolve({
+      yearMonth: '2026-07',
+      slotDefinitions: [{ id: 12, name: '午宴', startTime: '10:00', endTime: '14:00' }],
+      days: [],
+      schedules: []
+    })
+  })
+  component.setData({
+    preview: true,
+    portfolioId: 88,
+    teamPortfolioId: 13,
+    teamPreviewScope: 'draft',
+    componentKey: 'c_schedule',
+    scheduleQuery: { displayMode: 'INLINE_CALENDAR' }
+  })
+
+  await component.loadScheduleOptions('2026-07')
+  component.setData({ selectedDate: '2026-07-18', selectedSlotDefinitionId: 12 })
+  await component.handleSubmitQuery()
+
+  assert.equal(requests[0].url, '/api/mine/team-portfolios/13/member-portfolios/88/schedule-options')
+  assert.deepEqual(requests[0].data, {
+    month: '2026-07',
+    componentKey: 'c_schedule',
+    scope: 'draft'
+  })
+  assert.equal(requests[0].authMode, undefined)
+  assert.equal(requests[1].url, '/api/mine/team-portfolios/13/member-portfolios/88/schedule-query-preview?scope=draft')
+  assert.equal(requests[1].method, 'POST')
+  assert.equal(requests[1].authMode, undefined)
+  assert.equal(Object.hasOwn(requests[1].data, 'visitorKey'), false)
 })

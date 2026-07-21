@@ -63,6 +63,12 @@ public class PortfolioRenderDto {
         /** 轮播或扁平作品列表 */
         private List<WorkItem> works = new ArrayList<>();
 
+        /** 单个作品 */
+        private WorkItem work;
+
+        /** 是否展示作品名 */
+        private Boolean showTitle;
+
         /** 作品集展示标签 */
         private List<DisplayGroup> groups = new ArrayList<>();
 
@@ -130,6 +136,9 @@ public class PortfolioRenderDto {
 
         /** 作品说明 */
         private String description;
+
+        /** 作品原始长宽比 */
+        private String aspectRatio;
     }
 
     /**

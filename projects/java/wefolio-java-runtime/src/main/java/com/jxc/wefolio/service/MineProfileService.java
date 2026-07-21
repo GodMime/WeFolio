@@ -548,7 +548,7 @@ public class MineProfileService {
         String objectKey = normalizedUrl.substring(index);
         String extensionPattern = WECHAT_QR_FILE_PREFIX.equals(filePrefix)
                 ? "\\.(jpg|png)"
-                : "\\.(jpg|png|gif|webp)";
+                : "\\.(jpg|jpeg|png|gif|webp)";
         String objectKeyPattern = uniqueCode
                 + "/" + PROFILE_ASSET_FOLDER
                 + "/" + filePrefix

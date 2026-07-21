@@ -27,6 +27,13 @@ mybatis-plus:
 wefolio:
   mybatis:
     sql-log-enabled: ${WEFOLIO_MYBATIS_SQL_LOG_ENABLED:false}
+  content-limit:
+    work-image-max-count: ${WEFOLIO_WORK_IMAGE_MAX_COUNT:500}
+    work-video-max-count: ${WEFOLIO_WORK_VIDEO_MAX_COUNT:100}
+    personal-portfolio-max-count: ${WEFOLIO_PERSONAL_PORTFOLIO_MAX_COUNT:10}
+    team-portfolio-max-count: ${WEFOLIO_TEAM_PORTFOLIO_MAX_COUNT:10}
+  team-portfolio:
+    enabled: ${WEFOLIO_TEAM_PORTFOLIO_ENABLED:true}
 
 server:
   address: 127.0.0.1
@@ -46,6 +53,34 @@ wechat:
   miniapp:
     app-id: ${WECHAT_MINIAPP_APP_ID}
     app-secret: ${WECHAT_MINIAPP_APP_SECRET}
+  pay:
+    enabled: ${WECHAT_PAY_ENABLED:false}
+    merchant-id: ${WECHAT_PAY_MERCHANT_ID:}
+    merchant-serial-number: ${WECHAT_PAY_MERCHANT_SERIAL_NUMBER:}
+    private-key-path: ${WECHAT_PAY_PRIVATE_KEY_PATH:}
+    api-v3-key: ${WECHAT_PAY_API_V3_KEY:}
+    public-key-id: ${WECHAT_PAY_PUBLIC_KEY_ID:}
+    public-key-path: ${WECHAT_PAY_PUBLIC_KEY_PATH:}
+    notify-url: ${WECHAT_PAY_NOTIFY_URL:https://api.we-folio.dingchenyong.top/api/payment/wechat/recharge/notify}
+    order-expire-minutes: ${WECHAT_PAY_ORDER_EXPIRE_MINUTES:15}
+  virtual-payment:
+    enabled: ${WECHAT_VIRTUAL_PAYMENT_ENABLED:false}
+    offer-id: ${WECHAT_VIRTUAL_PAYMENT_OFFER_ID:}
+    app-key: ${WECHAT_VIRTUAL_PAYMENT_APP_KEY:}
+    session-encryption-secret: ${WECHAT_SESSION_ENCRYPTION_SECRET:}
+    message-token: ${WECHAT_MESSAGE_TOKEN:}
+    message-encoding-aes-key: ${WECHAT_MESSAGE_ENCODING_AES_KEY:}
+    request-timeout: ${WECHAT_VIRTUAL_PAYMENT_REQUEST_TIMEOUT:5s}
+    session-check-interval: ${WECHAT_SESSION_CHECK_INTERVAL:300s}
+    settlement:
+      delay: ${WECHAT_VIRTUAL_PAYMENT_SETTLEMENT_DELAY:10s}
+      max-retries: ${WECHAT_VIRTUAL_PAYMENT_MAX_RETRIES:3}
+      scan-interval: ${WECHAT_VIRTUAL_PAYMENT_SCAN_INTERVAL:10s}
+      lease-duration: ${WECHAT_VIRTUAL_PAYMENT_LEASE_DURATION:60s}
+
+point:
+  lock:
+    provider: ${POINT_LOCK_PROVIDER:local}
 
 # --- Auth Token Configuration ---
 auth:
@@ -56,7 +91,7 @@ auth:
 # --- Admin Point Configuration ---
 admin:
   point:
-    secret: ${POINT_ADMIN_SECRET:}
+    secret: ${ADMIN_POINT_SECRET:}
 
 # --- Registration Point Configuration ---
 registration:

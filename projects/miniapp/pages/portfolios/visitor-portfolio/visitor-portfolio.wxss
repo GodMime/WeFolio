@@ -435,6 +435,10 @@
   white-space: nowrap;
 }
 
+.visitor-avatar-label.invalid {
+  color: #d92d20;
+}
+
 .visitor-nickname-field {
   flex: 1 1 auto;
   min-width: 0;
@@ -457,6 +461,49 @@
 
 .visitor-nickname-placeholder {
   color: #98a2b3;
+}
+
+.visitor-avatar-visual.invalid,
+.visitor-nickname-input.invalid {
+  border-color: #d92d20;
+  background: #fff7f7;
+}
+
+.visitor-profile-error {
+  margin-top: 8rpx;
+  color: #d92d20;
+  font-size: 20rpx;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.visitor-avatar-error {
+  text-align: center;
+  white-space: nowrap;
+}
+
+.visitor-nickname-error {
+  text-align: left;
+}
+
+.visitor-avatar-field.shake,
+.visitor-nickname-field.shake {
+  animation: visitor-profile-shake 320ms ease-in-out;
+}
+
+@keyframes visitor-profile-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  25% {
+    transform: translateX(-8rpx);
+  }
+
+  75% {
+    transform: translateX(8rpx);
+  }
 }
 
 .visitor-profile-actions {

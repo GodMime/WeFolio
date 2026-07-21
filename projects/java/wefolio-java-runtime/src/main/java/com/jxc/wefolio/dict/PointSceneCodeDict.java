@@ -17,13 +17,17 @@ public class PointSceneCodeDict {
     /** 新建团队 */
     public static final DictValue CREATE_TEAM = new DictValue("CREATE_TEAM", "新建团队");
 
-    /** 维护标准作品集 */
+    /** 发布标准作品集 */
     public static final DictValue MAINTAIN_STANDARD_PORTFOLIO =
-            new DictValue("MAINTAIN_STANDARD_PORTFOLIO", "维护标准作品集");
+            new DictValue("MAINTAIN_STANDARD_PORTFOLIO", "发布标准作品集");
 
-    /** 维护高级作品集 */
+    /** 发布高级作品集 */
     public static final DictValue MAINTAIN_ADVANCED_PORTFOLIO =
-            new DictValue("MAINTAIN_ADVANCED_PORTFOLIO", "维护高级作品集");
+            new DictValue("MAINTAIN_ADVANCED_PORTFOLIO", "发布高级作品集");
+
+    /** 作品存储月费 */
+    public static final DictValue MONTHLY_WORK_STORAGE =
+            new DictValue("MONTHLY_WORK_STORAGE", "作品存储月费");
 
     /** 访问个人作品集 */
     public static final DictValue VISIT_PERSONAL_PORTFOLIO =
@@ -41,6 +45,14 @@ public class PointSceneCodeDict {
     public static final DictValue MANUAL_ADMIN_GRANT =
             new DictValue("MANUAL_ADMIN_GRANT", "后台人工加分");
 
+    /** 固定套餐充值到账 */
+    public static final DictValue RECHARGE_PACKAGE =
+            new DictValue("RECHARGE_PACKAGE", "充值到账");
+
+    /** 充值套餐额外赠送。 */
+    public static final DictValue RECHARGE_BONUS_GIFT =
+            new DictValue("RECHARGE_BONUS_GIFT", "充值套餐赠送");
+
     /** 新用户注册赠送 */
     public static final DictValue NEW_USER_REGISTRATION_GIFT =
             new DictValue("NEW_USER_REGISTRATION_GIFT", "新用户注册赠送");
@@ -56,10 +68,13 @@ public class PointSceneCodeDict {
             Map.entry(CREATE_TEAM.getCode(), CREATE_TEAM),
             Map.entry(MAINTAIN_STANDARD_PORTFOLIO.getCode(), MAINTAIN_STANDARD_PORTFOLIO),
             Map.entry(MAINTAIN_ADVANCED_PORTFOLIO.getCode(), MAINTAIN_ADVANCED_PORTFOLIO),
+            Map.entry(MONTHLY_WORK_STORAGE.getCode(), MONTHLY_WORK_STORAGE),
             Map.entry(VISIT_PERSONAL_PORTFOLIO.getCode(), VISIT_PERSONAL_PORTFOLIO),
             Map.entry(VIEW_PORTFOLIO_IMAGES.getCode(), VIEW_PORTFOLIO_IMAGES),
             Map.entry(VIEW_PORTFOLIO_VIDEO.getCode(), VIEW_PORTFOLIO_VIDEO),
             Map.entry(MANUAL_ADMIN_GRANT.getCode(), MANUAL_ADMIN_GRANT),
+            Map.entry(RECHARGE_PACKAGE.getCode(), RECHARGE_PACKAGE),
+            Map.entry(RECHARGE_BONUS_GIFT.getCode(), RECHARGE_BONUS_GIFT),
             Map.entry(NEW_USER_REGISTRATION_GIFT.getCode(), NEW_USER_REGISTRATION_GIFT),
             Map.entry(REFERRAL_USER_GIFT.getCode(), REFERRAL_USER_GIFT)
     );

@@ -17,8 +17,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -35,15 +33,6 @@ import java.util.Objects;
 @RequiredArgsConstructor
 @Slf4j
 public class VisitorService {
-
-    /** 微信 openid 计费主体前缀 */
-    private static final String WECHAT_OPENID_BILLING_PREFIX = "WX_OPENID:";
-
-    /** SHA-256 算法名 */
-    private static final String SHA_256_ALGORITHM = "SHA-256";
-
-    /** openid 摘要截断长度，兼容积分流水 64 字符幂等键 */
-    private static final int OPENID_BILLING_DIGEST_LENGTH = 19;
 
     /** 访客资料 token 缓存前缀 */
     private static final String PROFILE_TOKEN_CACHE_PREFIX = "visitor:profile-token:";
@@ -153,7 +142,7 @@ public class VisitorService {
             }
             visitorEntityMapper.updateById(visitor);
         }
-        return new VisitorSession(visitor, newVisitor, WECHAT_OPENID_BILLING_PREFIX + digestOpenid(openid));
+        return new VisitorSession(visitor, newVisitor);
     }
 
     /**
@@ -440,22 +429,6 @@ public class VisitorService {
     }
 
     /**
-     * 对 openid 做摘要，避免原始 openid 写入积分流水幂等键。
-     *
-     * @param openid 微信 openid
-     * @return 十六进制摘要
-     */
-    private String digestOpenid(String openid) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance(SHA_256_ALGORITHM);
-            String fullDigest = HexFormat.of().formatHex(digest.digest(openid.getBytes(StandardCharsets.UTF_8)));
-            return fullDigest.substring(0, OPENID_BILLING_DIGEST_LENGTH);
-        } catch (Exception e) {
-            throw new BusinessException(PortfolioMessage.OPENID_DIGEST_FAILED_MESSAGE, e);
-        }
-    }
-
-    /**
      * 生成随机十六进制字符串。
      *
      * @param byteLength 随机字节数
@@ -576,9 +549,8 @@ public class VisitorService {
      *
      * @param visitor 访客实体
      * @param newVisitor 是否本次新建
-     * @param billingVisitorKey 计费访客摘要
      */
-    public record VisitorSession(VisitorEntity visitor, boolean newVisitor, String billingVisitorKey) {
+    public record VisitorSession(VisitorEntity visitor, boolean newVisitor) {
     }
 
     /**

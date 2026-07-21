@@ -11,6 +11,7 @@ import com.jxc.wefolio.entity.UserEntity;
 import com.jxc.wefolio.mapper.ReferralRelationEntityMapper;
 import com.jxc.wefolio.mapper.UserAuthEntityMapper;
 import com.jxc.wefolio.mapper.UserEntityMapper;
+import com.jxc.wefolio.service.point.GiftCommand;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -24,6 +25,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import java.util.List;
 
 /**
  * 用户注册服务测试 — 覆盖注册积分赠送和推荐关系绑定。
@@ -72,15 +74,14 @@ class UserRegistrationServiceTest {
         verify(userAuthEntityMapper).insert(authCaptor.capture());
         assertThat(authCaptor.getValue().getOpenId()).isEqualTo("openid-123");
         verify(pointService).ensureAccount(21L);
-        verify(pointService).grantGift(
-                eq(21L),
-                eq(500L),
-                eq(PointSceneCodeDict.NEW_USER_REGISTRATION_GIFT.getCode()),
-                eq("USER_REGISTRATION"),
-                eq("21"),
-                eq("NEW_USER_REGISTRATION_GIFT:21"),
-                eq("新用户注册赠送")
-        );
+        ArgumentCaptor<List<GiftCommand>> gifts = giftCommandsCaptor();
+        verify(pointService).createGiftOrders(gifts.capture());
+        assertThat(gifts.getValue()).singleElement().satisfies(command -> {
+            assertThat(command.userId()).isEqualTo(21L);
+            assertThat(command.amount()).isEqualTo(500L);
+            assertThat(command.sceneCode()).isEqualTo(PointSceneCodeDict.NEW_USER_REGISTRATION_GIFT.getCode());
+            assertThat(command.idempotencyKey()).isEqualTo("NEW_USER_REGISTRATION_GIFT:21");
+        });
         verify(referralRelationEntityMapper, never()).insert(any(ReferralRelationEntity.class));
     }
 
@@ -114,15 +115,15 @@ class UserRegistrationServiceTest {
         assertThat(relationCaptor.getValue().getReferredUserId()).isEqualTo(21L);
         assertThat(relationCaptor.getValue().getReferralCodeSnapshot()).isEqualTo("WFREF0001");
         assertThat(relationCaptor.getValue().getBoundAt()).isNotNull();
-        verify(pointService).grantGift(
-                eq(7L),
-                eq(500L),
-                eq(PointSceneCodeDict.REFERRAL_USER_GIFT.getCode()),
-                eq("REFERRAL_REGISTRATION"),
-                eq("21"),
-                eq("REFERRAL_USER_GIFT:21"),
-                eq("推荐用户注册赠送")
-        );
+        ArgumentCaptor<List<GiftCommand>> gifts = giftCommandsCaptor();
+        verify(pointService).createGiftOrders(gifts.capture());
+        assertThat(gifts.getValue()).hasSize(2);
+        assertThat(gifts.getValue()).anySatisfy(command -> {
+            assertThat(command.userId()).isEqualTo(7L);
+            assertThat(command.amount()).isEqualTo(500L);
+            assertThat(command.sceneCode()).isEqualTo(PointSceneCodeDict.REFERRAL_USER_GIFT.getCode());
+            assertThat(command.idempotencyKey()).isEqualTo("REFERRAL_USER_GIFT:21");
+        });
     }
 
     @Test
@@ -145,15 +146,10 @@ class UserRegistrationServiceTest {
         );
 
         verify(referralRelationEntityMapper, never()).insert(any(ReferralRelationEntity.class));
-        verify(pointService, never()).grantGift(
-                eq(7L),
-                any(),
-                eq(PointSceneCodeDict.REFERRAL_USER_GIFT.getCode()),
-                any(),
-                any(),
-                any(),
-                any()
-        );
+        ArgumentCaptor<List<GiftCommand>> gifts = giftCommandsCaptor();
+        verify(pointService).createGiftOrders(gifts.capture());
+        assertThat(gifts.getValue()).noneSatisfy(command ->
+                assertThat(command.sceneCode()).isEqualTo(PointSceneCodeDict.REFERRAL_USER_GIFT.getCode()));
     }
 
     /**
@@ -174,6 +170,12 @@ class UserRegistrationServiceTest {
                 pointService,
                 properties
         );
+    }
+
+    /** 创建泛型赠送命令列表捕获器。 */
+    @SuppressWarnings("unchecked")
+    private ArgumentCaptor<List<GiftCommand>> giftCommandsCaptor() {
+        return ArgumentCaptor.forClass((Class) List.class);
     }
 
     /**

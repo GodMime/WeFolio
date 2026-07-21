@@ -1,0 +1,7 @@
+{
+  "usingComponents": {
+    "navigation-bar": "/components/navigation-bar/navigation-bar",
+    "timeline-share-guide": "/components/timeline-share-guide/timeline-share-guide",
+    "team-profile": "../components/team-profile/team-profile", "team-carousel": "../components/carousel/carousel", "team-divider": "../components/divider/divider", "team-member-portfolio-grid": "../components/member-portfolio-grid/member-portfolio-grid", "team-member-portfolio-list": "../components/member-portfolio-list/member-portfolio-list", "team-text-section": "../components/text-section/text-section", "team-schedule-query": "../components/schedule-query/schedule-query", "team-contact-form": "../components/contact-form/contact-form", "team-qr-contact": "../components/qr-contact/qr-contact"
+  }
+}

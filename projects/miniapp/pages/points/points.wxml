@@ -56,7 +56,12 @@
             <view class="ledger-row" wx:for="{{transactionData.records}}" wx:key="id">
               <view class="ledger-copy">
                 <view class="ledger-title">{{item.title}}</view>
-                <view class="ledger-desc">{{item.desc}}</view>
+                <view class="ledger-desc-viewport">
+                  <view
+                    class="ledger-desc-text {{item.marqueeEnabled ? 'is-auto-scrolling' : ''}}"
+                    style="--ledger-marquee-distance: -{{item.marqueeDistance}}px; --ledger-marquee-duration: {{item.marqueeDuration}}s;"
+                  >{{item.desc}}</view>
+                </view>
               </view>
               <view class="points-change {{item.pointsTone}}">{{item.pointsText}}</view>
             </view>

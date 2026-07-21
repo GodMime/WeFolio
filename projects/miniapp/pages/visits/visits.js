@@ -3,14 +3,20 @@ const { handleMaintainerAuthRequired, hasLocalToken } = require('../../utils/ses
 const {
   appendVisitDetailPage,
   appendVisitEventTimeline,
+  appendVisitRecordPage,
   markContactLeadFollowed,
   markVisitRecordFollowed,
   normalizeVisitDetailPage,
   normalizeVisitEventTimeline,
+  normalizeVisitRecordPage,
   normalizeVisitRecords
 } = require('../../utils/visits')
 
 const MINE_VISITS_URL = '/api/mine/visits'
+const MINE_VISIT_STATISTICS_URL = '/api/mine/visits/statistics'
+const MINE_VISIT_RECORDS_URL = '/api/mine/visits/records'
+const FIRST_VISIT_RECORD_PAGE = 1
+const VISIT_RECORD_PAGE_SIZE = 20
 const FIRST_VISIT_EVENT_PAGE = 1
 const VISIT_EVENT_PAGE_SIZE = 20
 const FIRST_VISIT_DETAIL_PAGE = 1
@@ -34,6 +40,10 @@ Page({
     loading: true,
     errorMessage: '',
     visitData: normalizeVisitRecords({}),
+    visitRecordLoadingMore: false,
+    visitRecordPageNo: FIRST_VISIT_RECORD_PAGE,
+    visitRecordPageSize: VISIT_RECORD_PAGE_SIZE,
+    visitRecordHasMore: false,
     eventSheetVisible: false,
     eventSheetLoading: false,
     eventSheetLoadingMore: false,
@@ -73,16 +83,32 @@ Page({
   async loadVisits() {
     this.setData({
       loading: true,
-      errorMessage: ''
+      errorMessage: '',
+      visitRecordLoadingMore: false
     })
 
     try {
-      const response = await request({
-        url: MINE_VISITS_URL
-      })
+      const [statistics, recordPageResponse] = await Promise.all([
+        request({
+          url: MINE_VISIT_STATISTICS_URL
+        }),
+        request({
+          url: MINE_VISIT_RECORDS_URL,
+          data: {
+            pageNo: FIRST_VISIT_RECORD_PAGE,
+            pageSize: VISIT_RECORD_PAGE_SIZE
+          }
+        })
+      ])
+      const recordPage = normalizeVisitRecordPage(recordPageResponse)
       this.setData({
-        visitData: normalizeVisitRecords(response),
+        visitData: normalizeVisitRecords(Object.assign({}, statistics, {
+          records: recordPage.records
+        })),
         loading: false,
+        visitRecordPageNo: recordPage.pageNo,
+        visitRecordPageSize: recordPage.pageSize,
+        visitRecordHasMore: recordPage.hasMore,
         revealedVisitRecordId: null,
         followingVisitRecordId: null,
         followingContactLeadId: null,
@@ -98,6 +124,60 @@ Page({
         errorMessage: error && error.message ? error.message : '访问记录加载失败'
       })
     }
+  },
+
+  async loadMoreVisitRecords() {
+    const pageNo = (this.data.visitRecordPageNo || FIRST_VISIT_RECORD_PAGE) + 1
+    const pageSize = this.data.visitRecordPageSize || VISIT_RECORD_PAGE_SIZE
+    this.setData({ visitRecordLoadingMore: true })
+    try {
+      const response = await request({
+        url: MINE_VISIT_RECORDS_URL,
+        data: {
+          pageNo,
+          pageSize
+        }
+      })
+      const currentPage = {
+        pageNo: this.data.visitRecordPageNo,
+        pageSize: this.data.visitRecordPageSize,
+        hasMore: this.data.visitRecordHasMore,
+        records: this.data.visitData.records
+      }
+      const mergedPage = appendVisitRecordPage(currentPage, response)
+      this.setData({
+        visitData: Object.assign({}, this.data.visitData, {
+          records: mergedPage.records
+        }),
+        visitRecordLoadingMore: false,
+        visitRecordPageNo: mergedPage.pageNo,
+        visitRecordPageSize: mergedPage.pageSize,
+        visitRecordHasMore: mergedPage.hasMore
+      })
+    } catch (error) {
+      this.setData({ visitRecordLoadingMore: false })
+      if (error && error.authRequired) {
+        handleMaintainerAuthRequired(error.message)
+        return
+      }
+      if (typeof wx !== 'undefined' && wx.showToast) {
+        wx.showToast({
+          title: error && error.message ? error.message : '更多访问记录加载失败',
+          icon: 'none'
+        })
+      }
+    }
+  },
+
+  handleVisitRecordScrollToLower() {
+    if (
+      this.data.loading ||
+      this.data.visitRecordLoadingMore ||
+      !this.data.visitRecordHasMore
+    ) {
+      return
+    }
+    return this.loadMoreVisitRecords()
   },
 
   redirectToLogin() {

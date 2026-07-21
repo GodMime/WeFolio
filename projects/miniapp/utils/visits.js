@@ -12,6 +12,10 @@ const FOLLOW_TONE_BLUE = 'blue'
 const FOLLOW_TONE_MUTED = 'muted'
 const DETAIL_TYPE_SCHEDULE_QUERIES = 'scheduleQueries'
 const DETAIL_TYPE_CONTACT_LEADS = 'contactLeads'
+const PORTFOLIO_TYPE_PERSONAL = 'PERSONAL'
+const PORTFOLIO_TYPE_TEAM = 'TEAM'
+const PORTFOLIO_TYPE_TEXT_PERSONAL = '个人作品集'
+const PORTFOLIO_TYPE_TEXT_TEAM = '团队作品集'
 const TREND_CHART_WIDTH = 646
 const TREND_CHART_HEIGHT = 156
 const TREND_CHART_PADDING_TOP = 30
@@ -223,6 +227,38 @@ function normalizeRecord(record = {}) {
   }
 }
 
+function normalizeVisitRecordPage(raw = {}, fallbackPage = {}) {
+  const pageNo = toPositiveNumber(raw.pageNo, toPositiveNumber(fallbackPage.pageNo, 1))
+  const pageSize = toPositiveNumber(raw.pageSize, toPositiveNumber(fallbackPage.pageSize, 20))
+  const hasMore = Boolean(raw.hasMore)
+  return {
+    pageNo,
+    pageSize,
+    hasMore,
+    nextPage: hasMore ? pageNo + 1 : null,
+    records: Array.isArray(raw.records) ? raw.records.map(normalizeRecord) : []
+  }
+}
+
+function appendVisitRecordPage(current = {}, nextPage = {}) {
+  const normalizedCurrent = normalizeVisitRecordPage(current)
+  const normalizedNext = normalizeVisitRecordPage(nextPage, normalizedCurrent)
+  const seenRecordIds = new Set()
+  const records = normalizedCurrent.records.concat(normalizedNext.records).filter((record) => {
+    const recordId = record.id || record.recordId
+    if (!recordId) {
+      return true
+    }
+    const recordKey = String(recordId)
+    if (seenRecordIds.has(recordKey)) {
+      return false
+    }
+    seenRecordIds.add(recordKey)
+    return true
+  })
+  return Object.assign({}, normalizedNext, { records })
+}
+
 function normalizeVisitEventTimeline(raw = {}, fallbackRecord = {}) {
   const merged = Object.assign({}, fallbackRecord, raw, {
     id: raw.recordId || fallbackRecord.id,
@@ -275,6 +311,13 @@ function normalizeContactLeadItem(item = {}) {
   const phoneLast4 = item.phoneLast4 || ''
   const wechat = item.wechat || ''
   const wechatMaskHint = item.wechatMaskHint || ''
+  const desiredSchedule = item.desiredSchedule || ''
+  const portfolioType = item.portfolioType || ''
+  const portfolioTypeText = item.portfolioTypeText || (
+    portfolioType === PORTFOLIO_TYPE_TEAM
+      ? PORTFOLIO_TYPE_TEXT_TEAM
+      : portfolioType === PORTFOLIO_TYPE_PERSONAL ? PORTFOLIO_TYPE_TEXT_PERSONAL : ''
+  )
   return {
     id: item.id || '',
     contactName: item.contactName || '未留姓名',
@@ -289,14 +332,18 @@ function normalizeContactLeadItem(item = {}) {
     wechatText: wechat || '未留微信',
     wechatCopyText: wechat,
     wechatCanCopy: Boolean(wechat),
-    desiredSchedule: item.desiredSchedule || '',
+    desiredSchedule,
+    desiredScheduleText: desiredSchedule || '未填写',
     needs: item.needs || '',
+    needsText: item.needs || '未填写',
     portfolioTitle: item.portfolioTitle || '',
+    portfolioType,
+    portfolioTypeText,
     sourceText: item.sourceText || '来自未知来源',
     followStatus,
     followStatusText: buildFollowStatusText(followStatus, item.followStatusText),
     followToneClass: `follow-pill ${buildFollowTone(followStatus, item.followTone)}`,
-    canMarkFollowed: followStatus === FOLLOW_STATUS_NOT_FOLLOWED_UP,
+    canMarkFollowed: Boolean(item.canMarkFollowed) && followStatus === FOLLOW_STATUS_NOT_FOLLOWED_UP,
     submittedTimeText: item.submittedTimeText || ''
   }
 }
@@ -397,9 +444,11 @@ function markContactLeadFollowed(detailPage = {}, leadId, followedLead = {}) {
 module.exports = {
   appendVisitDetailPage,
   appendVisitEventTimeline,
+  appendVisitRecordPage,
   markContactLeadFollowed,
   markVisitRecordFollowed,
   normalizeVisitDetailPage,
   normalizeVisitEventTimeline,
+  normalizeVisitRecordPage,
   normalizeVisitRecords
 }

@@ -1,0 +1,24 @@
+<navigation-bar title="团队作品集预览" back="{{true}}" />
+<scroll-view scroll-y class="page-shell">
+  <view class="preview-toolbar">
+    <view class="preview-note">预览模式：禁用真实提交，不统计访问，不扣积分。</view>
+  </view>
+  <view wx:if="{{loading}}" class="state">加载中...</view>
+  <view wx:elif="{{errorMessage}}" class="state"><text>{{errorMessage}}</text><button bindtap="handleRetry">重试</button></view>
+  <view wx:elif="{{empty}}" class="state">暂无可预览内容</view>
+  <view wx:else class="content">
+    <team-profile class="folio-component" wx:for="{{componentBuckets.teamProfile}}" wx:key="componentKey" style="order:{{item.sortOrder}}" team="{{item.data.team}}" />
+    <team-carousel class="folio-component" wx:for="{{componentBuckets.carousel}}" wx:key="componentKey" style="order:{{item.sortOrder}}" items="{{item.data.items}}" bindpreview="handleImagePreview" />
+    <team-divider class="folio-component" wx:for="{{componentBuckets.divider}}" wx:key="componentKey" style="order:{{item.sortOrder}}" config="{{item.data}}" />
+    <team-member-portfolio-grid class="folio-component" wx:for="{{componentBuckets.grid}}" wx:key="componentKey" style="order:{{item.sortOrder}}" items="{{item.data.items}}" show-member-name="{{item.data.showMemberName}}" bindpreview="handleMemberPortfolio" />
+    <team-member-portfolio-list class="folio-component" wx:for="{{componentBuckets.list}}" wx:key="componentKey" style="order:{{item.sortOrder}}" items="{{item.data.items}}" show-member-name="{{item.data.showMemberName}}" bindpreview="handleMemberPortfolio" />
+    <team-text-section class="folio-component" wx:for="{{componentBuckets.text}}" wx:key="componentKey" style="order:{{item.sortOrder}}" config="{{item.data}}" />
+    <team-schedule-query class="folio-component" wx:for="{{componentBuckets.schedule}}" wx:key="componentKey" id="schedule-{{item.componentKey}}" style="order:{{item.sortOrder}}" portfolio-id="{{portfolioId}}" component-key="{{item.componentKey}}" preview="{{true}}" preview-scope="{{scope}}" config="{{item.data}}" result="{{scheduleResults[item.componentKey]}}" bindschedulequery="handleScheduleQuery" />
+    <team-contact-form class="folio-component" wx:for="{{componentBuckets.contact}}" wx:key="componentKey" style="order:{{item.sortOrder}}" data-key="{{item.componentKey}}" config="{{item.data}}" form="{{contactForms[item.componentKey]}}" modal-visible="{{contactModalVisible[item.componentKey]}}" bindcontactinput="handleContactInput" bindopenmodal="handleContactOpen" bindclosemodal="handleContactClose" bindsubmit="handleContactSubmit" />
+    <team-qr-contact class="folio-component" wx:for="{{componentBuckets.qr}}" wx:key="componentKey" style="order:{{item.sortOrder}}" component-key="{{item.componentKey}}" config="{{item.data}}" bindpreview="handleQrPreview" />
+  </view>
+  <view class="folio-brand-footer">
+    <image class="folio-brand-logo" src="/assets/system/folio-logo-stack-bold-small-50kb.png" mode="aspectFit"></image>
+    <view class="folio-brand-name">映期Folio</view>
+  </view>
+</scroll-view>

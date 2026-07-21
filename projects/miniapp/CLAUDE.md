@@ -161,7 +161,9 @@ tests/
 | 账号注销 | `POST /api/auth/account/cancel` | `MiniappAuthController` |
 | 我的工作台 | `GET /api/mine/dashboard` | `MineController` |
 | 基础信息读取/保存 | `GET/PUT /api/mine/profile` | `MineController` |
-| 访问记录 | `GET /api/mine/visits` | `MineController` |
+| 访问记录兼容聚合（已弃用，保留旧客户端） | `GET /api/mine/visits` | `MineController` |
+| 访问记录统计 | `GET /api/mine/visits/statistics` | `MineController` |
+| 访问明细分页 | `GET /api/mine/visits/records?pageNo=&pageSize=` | `MineController` |
 | 团队列表/创建 | `GET/POST /api/mine/teams` | `MineTeamController` |
 | 团队详情/保存 | `GET/PUT /api/mine/teams/{teamId}` | `MineTeamController` |
 | 团队成员候选查询 | `GET /api/mine/teams/{teamId}/member-candidate?uniqueCode=` | `MineTeamController` |
@@ -293,6 +295,9 @@ if (!hasLocalToken()) {
 
 ### 访问记录
 
+- 页面首次并行请求统计接口和访问明细第一页，不再依赖兼容聚合接口。
+- 访问明细按最近访问时间倒序分页，页面主滚动区域触底后加载下一页。
+- `GET /api/mine/visits` 保留原请求与响应语义，用于兼容尚未发布升级的旧版小程序。
 - 指标字段来自 `summary.totalVisitCount`、`summary.todayVisitCount`、`summary.scheduleQueryCount`。
 - 趋势点来自 `trend.points`，canvas 只在 `onReady` 或数据更新后绘制。
 - 跟进状态色调使用后端 `followTone`，前端只拼 `follow-pill ${tone}`。

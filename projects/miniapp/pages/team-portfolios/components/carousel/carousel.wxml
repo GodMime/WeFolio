@@ -1,0 +1,51 @@
+<wxs module="selection" src="../editor-selection.wxs"></wxs>
+
+<view class="carousel {{editMode ? 'editor-mode' : ''}}">
+  <block wx:if="{{editMode}}">
+    <view class="editor-form">
+      <view class="editor-field">
+        <view class="editor-field-heading"><view class="editor-label">选择团队成员</view><view class="editor-limit">已选 {{draftItems.length}} / 9</view></view>
+        <scroll-view class="editor-member-scroll" scroll-x type="list">
+          <view class="editor-member-row">
+            <button wx:for="{{members}}" wx:key="memberUserId" class="editor-member-choice {{selectedMemberId === item.memberUserId ? 'active' : ''}}" data-id="{{item.memberUserId}}" bindtap="selectMember">
+              <view class="editor-member-name">{{item.displayName}}</view>
+              <view class="editor-member-count">{{selection.count(draftItems, 'memberUserId', item.memberUserId)}}</view>
+            </button>
+          </view>
+        </scroll-view>
+      </view>
+      <view class="editor-field editor-content-field">
+        <view class="editor-label">图片作品</view>
+        <view wx:if="{{selectedMemberId && works.length}}" class="editor-option-list">
+          <view wx:for="{{works}}" wx:key="workId" class="editor-option {{selection.order(draftItems, 'workId', item.workId) ? 'selected' : ''}}" data-item="{{item}}" catchtap="toggleWork" aria-role="checkbox" aria-checked="{{selection.order(draftItems, 'workId', item.workId) ? true : false}}">
+            <view class="editor-option-thumb">
+              <image src="{{item.coverUrl || item.mediaUrl}}" mode="aspectFill" />
+            </view>
+            <view class="editor-option-copy">
+              <view class="editor-option-title">{{item.title}}</view>
+              <view class="editor-option-meta-row">
+                <view class="editor-option-meta">图片作品</view>
+                <view wx:if="{{item.aspectRatio}}" class="editor-option-ratio">{{item.aspectRatio}}</view>
+              </view>
+            </view>
+            <view class="editor-option-check">{{selection.order(draftItems, 'workId', item.workId) || ''}}</view>
+          </view>
+        </view>
+        <view wx:elif="{{selectedMemberId}}" class="editor-empty">该成员暂无审核通过的图片作品</view>
+        <view wx:else class="editor-empty">请先选择团队成员</view>
+      </view>
+      <view wx:if="{{errorMessage}}" class="editor-error">{{errorMessage}}</view>
+    </view>
+  </block>
+  <block wx:else>
+    <swiper wx:if="{{items.length}}" class="swiper" current="{{current}}" interval="{{safeInterval}}" autoplay="{{autoplay}}" circular="{{circular}}" bindchange="handleChange">
+      <swiper-item wx:for="{{items}}" wx:key="workId"><image class="slide" src="{{item.mediaUrl || item.coverUrl}}" mode="aspectFill" data-item="{{item}}" data-index="{{index}}" bindtap="previewItem" /></swiper-item>
+    </swiper>
+    <text wx:else class="empty">暂无轮播图片</text>
+    <view wx:if="{{progressSegments.length > 1}}" class="carousel-progress-bar" aria-hidden="true">
+      <view wx:for="{{progressSegments}}" wx:key="key" class="carousel-progress-segment {{item.state}}">
+        <view class="carousel-progress-fill" style="{{item.state === 'current' ? progressStyle : ''}}"></view>
+      </view>
+    </view>
+  </block>
+</view>

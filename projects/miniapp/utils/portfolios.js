@@ -19,6 +19,7 @@ const COMPONENT_TYPES = {
   SCHEDULE_QUERY: 'SCHEDULE_QUERY',
   WORK_GRID: 'WORK_GRID',
   WORK_LIST: 'WORK_LIST',
+  SINGLE_WORK: 'SINGLE_WORK',
   QR_CONTACT: 'QR_CONTACT',
   CONTACT_FORM: 'CONTACT_FORM',
   TEXT_SECTION: 'TEXT_SECTION',
@@ -31,6 +32,7 @@ const COMPONENT_NAMES = {
   SCHEDULE_QUERY: '档期查询',
   WORK_GRID: '双列作品列表',
   WORK_LIST: '单列作品列表',
+  SINGLE_WORK: '单个作品',
   QR_CONTACT: '二维码联系',
   CONTACT_FORM: '预留联系信息',
   TEXT_SECTION: '文字说明',
@@ -113,6 +115,14 @@ function normalizeWorkIds(workIds) {
     }
     return result
   }, [])
+}
+
+function normalizeSingleWorkConfig(raw = {}) {
+  const workId = toNumber(raw && raw.workId)
+  return {
+    workId: Number.isInteger(workId) && workId > 0 ? workId : 0,
+    showTitle: typeof raw.showTitle === 'boolean' ? raw.showTitle : true
+  }
 }
 
 function normalizeDisplayGroup(raw = {}, index = 0) {
@@ -256,6 +266,9 @@ function normalizeDividerConfig(raw = {}) {
 
 function collectComponentWorkIds(component = {}) {
   const config = component.config || {}
+  if (component.componentType === COMPONENT_TYPES.SINGLE_WORK) {
+    return normalizeWorkIds([config.workId])
+  }
   const groups = normalizeDisplayGroups(config.groups, config.workIds)
   if (groups.length > 0) {
     return normalizeWorkIds(groups.flatMap((group) => group.workIds))
@@ -270,6 +283,11 @@ function createComponent(componentType, options = {}) {
   }
   if (isWorkListComponent(componentType)) {
     config.groups = normalizeDisplayGroups(config.groups, config.workIds)
+  }
+  if (componentType === COMPONENT_TYPES.SINGLE_WORK) {
+    const singleWorkConfig = normalizeSingleWorkConfig(config)
+    Object.keys(config).forEach((key) => delete config[key])
+    Object.assign(config, singleWorkConfig)
   }
   if (componentType === COMPONENT_TYPES.CONTACT_FORM) {
     Object.assign(config, normalizeContactFormConfig(config))
@@ -302,24 +320,8 @@ function normalizeComponent(raw = {}, index = 0) {
   const component = createComponent(trimText(raw.componentType) || COMPONENT_TYPES.TEXT_SECTION, raw)
   component.sortOrder = toNumber(raw.sortOrder, (index + 1) * SORT_ORDER_STEP)
   component.enabled = raw.enabled !== false
-  component.config = Object.assign({}, raw.config || {})
-  if (Array.isArray(component.config.workIds)) {
-    component.config.workIds = normalizeWorkIds(component.config.workIds)
-  }
-  if (isWorkListComponent(component.componentType)) {
-    component.config.groups = normalizeDisplayGroups(component.config.groups, component.config.workIds)
-  }
   if (component.componentType === COMPONENT_TYPES.SCHEDULE_QUERY) {
     component.config = normalizeScheduleQueryConfig(component.config)
-  }
-  if (component.componentType === COMPONENT_TYPES.CONTACT_FORM) {
-    component.config = normalizeContactFormConfig(component.config)
-  }
-  if (component.componentType === COMPONENT_TYPES.TEXT_SECTION) {
-    component.config = normalizeTextSectionConfig(component.config)
-  }
-  if (component.componentType === COMPONENT_TYPES.DIVIDER) {
-    component.config = normalizeDividerConfig(component.config)
   }
   return component
 }
@@ -384,6 +386,18 @@ function validateWorkGridComponent(component = {}, works = []) {
   return { valid: true, message: '' }
 }
 
+function validateSingleWorkComponent(component = {}, works = []) {
+  const workId = normalizeSingleWorkConfig(component.config || {}).workId
+  if (!workId) {
+    return { valid: false, message: '请选择一个作品' }
+  }
+  const selected = works.find((work) => toNumber(work && work.id) === workId)
+  if (!selected || !['IMAGE', 'VIDEO'].includes(trimText(selected.mediaType))) {
+    return { valid: false, message: '请选择有效作品' }
+  }
+  return { valid: true, message: '' }
+}
+
 function addComponent(config, componentType) {
   const normalized = normalizePortfolioConfig(config)
   const components = normalized.components.slice()
@@ -413,6 +427,20 @@ function updateComponentWorkIds(config, componentKey, workIds) {
         workIds: normalizeWorkIds(workIds)
       })
     })
+  })
+  return normalizePortfolioConfig(Object.assign({}, normalized, { components }))
+}
+
+function updateSingleWorkConfig(config, componentKey, singleWorkConfig = {}) {
+  const normalized = normalizePortfolioConfig(config)
+  const targetKey = trimText(componentKey)
+  const nextSingleWorkConfig = normalizeSingleWorkConfig(singleWorkConfig)
+  const components = normalized.components.map((component) => {
+    if (component.componentKey !== targetKey || component.componentType !== COMPONENT_TYPES.SINGLE_WORK) {
+      return component
+    }
+    // SINGLE_WORK 配置采用严格白名单，整体替换可避免遗留或未来未知字段进入保存载荷。
+    return Object.assign({}, component, { config: nextSingleWorkConfig })
   })
   return normalizePortfolioConfig(Object.assign({}, normalized, { components }))
 }
@@ -682,6 +710,7 @@ module.exports = {
   normalizeDisplayGroups,
   normalizeProfileComponentConfig,
   normalizeScheduleQueryConfig,
+  normalizeSingleWorkConfig,
   normalizeTextSectionConfig,
   normalizeWorkIds,
   reorderComponent,
@@ -694,9 +723,11 @@ module.exports = {
   updateComponentDividerConfig,
   updateComponentProfileConfig,
   updateComponentScheduleQueryConfig,
+  updateSingleWorkConfig,
   updateComponentTextSectionConfig,
   updateComponentWorkIds,
   validateDisplayGroupName,
   validateCarouselComponent,
+  validateSingleWorkComponent,
   validateWorkGridComponent
 }

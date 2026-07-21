@@ -5,6 +5,9 @@
     <input class="field" placeholder="联系人" value="{{contactForm.contactName}}" data-field="contactName" bindinput="handleInput" />
     <input class="field" placeholder="手机号" value="{{contactForm.phone}}" data-field="phone" bindinput="handleInput" />
     <input class="field" placeholder="微信号" value="{{contactForm.wechat}}" data-field="wechat" bindinput="handleInput" />
+    <picker mode="date" value="{{contactForm.desiredSchedule}}" data-field="desiredSchedule" bindchange="handleDateChange">
+      <view class="field date-field {{contactForm.desiredSchedule ? '' : 'placeholder'}}">{{contactForm.desiredSchedule || '请选择档期（选填）'}}</view>
+    </picker>
     <textarea class="field textarea" placeholder="需求描述" value="{{contactForm.needs}}" data-field="needs" bindinput="handleInput"></textarea>
     <button class="primary-button" bindtap="handleSubmit">{{submitText}}</button>
   </view>
@@ -23,6 +26,9 @@
     <input class="field" placeholder="联系人" value="{{contactForm.contactName}}" data-field="contactName" bindinput="handleInput" />
     <input class="field" placeholder="手机号" value="{{contactForm.phone}}" data-field="phone" bindinput="handleInput" />
     <input class="field" placeholder="微信号" value="{{contactForm.wechat}}" data-field="wechat" bindinput="handleInput" />
+    <picker mode="date" value="{{contactForm.desiredSchedule}}" data-field="desiredSchedule" bindchange="handleDateChange">
+      <view class="field date-field {{contactForm.desiredSchedule ? '' : 'placeholder'}}">{{contactForm.desiredSchedule || '请选择档期（选填）'}}</view>
+    </picker>
     <textarea class="field textarea" placeholder="需求描述" value="{{contactForm.needs}}" data-field="needs" bindinput="handleInput"></textarea>
     <button class="primary-button" bindtap="handleSubmit">{{submitText}}</button>
   </view>

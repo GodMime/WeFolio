@@ -154,6 +154,14 @@
   margin-top: 10rpx;
 }
 
+.visit-record-load-more {
+  padding: 22rpx 0 8rpx;
+  color: #8b96a3;
+  font-size: 22rpx;
+  line-height: 1.4;
+  text-align: center;
+}
+
 .visit-swipe-row {
   position: relative;
   overflow: hidden;
@@ -680,6 +688,57 @@
   width: 30rpx;
   height: 30rpx;
   display: block;
+}
+
+.contact-detail-list {
+  margin-top: 14rpx;
+}
+
+.contact-detail-row {
+  min-height: 42rpx;
+  display: flex;
+  align-items: flex-start;
+  gap: 12rpx;
+}
+
+.contact-detail-row + .contact-detail-row {
+  margin-top: 6rpx;
+}
+
+.contact-detail-label {
+  flex: none;
+  width: 112rpx;
+  color: #758190;
+  font-size: 22rpx;
+  line-height: 1.45;
+}
+
+.contact-detail-value {
+  min-width: 0;
+  color: #4b5868;
+  font-size: 22rpx;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.contact-portfolio-value {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8rpx;
+}
+
+.portfolio-type-tag {
+  flex: none;
+  padding: 5rpx 10rpx;
+  color: #2d5f9a;
+  font-size: 19rpx;
+  font-weight: 800;
+  line-height: 1;
+  border-radius: 999rpx;
+  background: #edf5fb;
 }
 
 .visit-detail-meta-row {

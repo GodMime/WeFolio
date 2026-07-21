@@ -1,6 +1,9 @@
 package com.jxc.wefolio.service;
 
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
+import com.baomidou.mybatisplus.core.conditions.AbstractWrapper;
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.jxc.wefolio.common.auth.AuthContext;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
 import com.jxc.wefolio.dict.PortfolioConfigScopeDict;
@@ -19,12 +22,14 @@ import com.jxc.wefolio.dto.MinePortfolioDetailResponse;
 import com.jxc.wefolio.dto.MinePortfolioDraftSaveRequest;
 import com.jxc.wefolio.dto.MinePortfolioListResponse;
 import com.jxc.wefolio.dto.MinePortfolioPublishRequest;
+import com.jxc.wefolio.dto.MinePortfolioShareRecordRequest;
 import com.jxc.wefolio.dto.PortfolioConfigDto;
 import com.jxc.wefolio.dto.PortfolioRenderDto;
 import com.jxc.wefolio.dto.PortfolioScheduleOptionsResponse;
 import com.jxc.wefolio.entity.PortfolioEntity;
 import com.jxc.wefolio.entity.PortfolioHistoryEntity;
 import com.jxc.wefolio.entity.PortfolioReferenceEntity;
+import com.jxc.wefolio.entity.PortfolioShareRecordEntity;
 import com.jxc.wefolio.entity.ScheduleEntity;
 import com.jxc.wefolio.entity.SlotDefinitionEntity;
 import com.jxc.wefolio.exception.BusinessException;
@@ -34,13 +39,16 @@ import com.jxc.wefolio.mapper.PortfolioReferenceEntityMapper;
 import com.jxc.wefolio.mapper.PortfolioShareRecordEntityMapper;
 import com.jxc.wefolio.mapper.ScheduleEntityMapper;
 import com.jxc.wefolio.mapper.SlotDefinitionEntityMapper;
+import com.jxc.wefolio.service.teamportfolio.TeamPortfolioReferenceGuardService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.lang.reflect.Method;
@@ -51,6 +59,7 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -58,9 +67,11 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -68,6 +79,15 @@ import static org.mockito.Mockito.when;
  */
 @ExtendWith(MockitoExtension.class)
 class MinePortfolioServiceTest {
+
+    /** 初始化 Lambda 查询列缓存。 */
+    @BeforeAll
+    static void initTableInfo() {
+        TableInfoHelper.initTableInfo(
+                new MapperBuilderAssistant(new MybatisConfiguration(), ""),
+                PortfolioEntity.class
+        );
+    }
 
     /** 作品集 Mapper 模拟 */
     @Mock
@@ -97,6 +117,10 @@ class MinePortfolioServiceTest {
     @Mock
     private PointService pointService;
 
+    /** 标准作品集发布事务服务模拟 */
+    @Mock
+    private PortfolioPublishTransactionService portfolioPublishTransactionService;
+
     /** 配置校验器模拟 */
     @Mock
     private PortfolioConfigValidator portfolioConfigValidator;
@@ -113,9 +137,23 @@ class MinePortfolioServiceTest {
     @Mock
     private CosService cosService;
 
+    /** 团队作品集引用保护服务模拟 */
+    @Mock
+    private TeamPortfolioReferenceGuardService teamPortfolioReferenceGuardService;
+
+    /** 内容数量上限服务模拟 */
+    @Mock
+    private ContentLimitService contentLimitService;
+
     @BeforeEach
     void setUp() {
         AuthContextHolder.set(new AuthContext(7L, "wf-user-7"));
+        lenient().when(cosService.publicUrl(any())).thenAnswer(
+                invocation -> "https://cos.we-folio.dingchenyong.top/" + invocation.getArgument(0));
+        lenient().when(portfolioPublishTransactionService.execute(any())).thenAnswer(invocation -> {
+            Supplier<?> publishAction = invocation.getArgument(0);
+            return publishAction.get();
+        });
     }
 
     @AfterEach
@@ -124,12 +162,12 @@ class MinePortfolioServiceTest {
     }
 
     @Test
-    void saveDraftAndPublishShouldBeTransactional() throws NoSuchMethodException {
+    void saveDraftShouldBeTransactionalAndPublishShouldUseIndependentBoundary() throws NoSuchMethodException {
         Method saveDraft = MinePortfolioService.class.getMethod("saveDraft", Long.class, MinePortfolioDraftSaveRequest.class);
         Method publish = MinePortfolioService.class.getMethod("publish", Long.class, MinePortfolioPublishRequest.class);
 
         assertThat(saveDraft.getAnnotation(Transactional.class).rollbackFor()).contains(Exception.class);
-        assertThat(publish.getAnnotation(Transactional.class).rollbackFor()).contains(Exception.class);
+        assertThat(publish.getAnnotation(Transactional.class)).isNull();
         assertThat(Arrays.stream(MinePortfolioService.class.getMethods()).map(method -> method.getName()))
                 .doesNotContain("createCoverUploadTicket");
     }
@@ -158,7 +196,20 @@ class MinePortfolioServiceTest {
         assertThat(inserted.getPublishedRevision()).isZero();
         assertThat(response.getPortfolioId()).isEqualTo(88L);
         assertThat(response.getPublicationStatus()).isEqualTo(PortfolioPublicationStatusDict.DRAFT_ONLY.getCode());
+        verify(contentLimitService).ensurePersonalPortfolioCapacity(7L);
         verify(pointService, never()).consume(any(), any(), any(), any(), any(Integer.class), any(), any());
+    }
+
+    @Test
+    void createStandardPersonalShouldRejectWhenPortfolioCountReachesLimit() {
+        doThrow(new BusinessException("个人作品集数量已达上限（10个），请删除部分个人作品集后再新建"))
+                .when(contentLimitService).ensurePersonalPortfolioCapacity(7L);
+
+        assertThatThrownBy(() -> service().createStandardPersonal(new MinePortfolioCreateRequest()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("个人作品集数量已达上限（10个），请删除部分个人作品集后再新建");
+
+        verify(portfolioEntityMapper, never()).insert(any(PortfolioEntity.class));
     }
 
     @Test
@@ -304,13 +355,74 @@ class MinePortfolioServiceTest {
     }
 
     @Test
-    void componentLibraryShouldExposeSingleColumnWorkList() {
+    void listPortfoliosShouldKeepPersonalOwnerFiltersForBlankOwnerType() {
+        when(portfolioEntityMapper.selectList(any())).thenReturn(List.of());
+
+        MinePortfolioListResponse response = service().listPortfolios(" \t ");
+
+        assertThat(response.getPortfolios()).isEmpty();
+        ArgumentCaptor<com.baomidou.mybatisplus.core.conditions.Wrapper<PortfolioEntity>> captor =
+                ArgumentCaptor.forClass(com.baomidou.mybatisplus.core.conditions.Wrapper.class);
+        verify(portfolioEntityMapper).selectList(captor.capture());
+        assertThat(captor.getValue().getSqlSegment()).contains("owner_type", "owner_id");
+        assertThat(((AbstractWrapper<?, ?, ?>) captor.getValue()).getParamNameValuePairs().values())
+                .contains(PortfolioOwnerTypeDict.USER.getCode(), 7L);
+    }
+
+    @Test
+    void listPortfoliosShouldKeepPersonalOwnerFiltersForExplicitUserOwnerType() {
+        when(portfolioEntityMapper.selectList(any())).thenReturn(List.of());
+
+        MinePortfolioListResponse response = service().listPortfolios(" USER ");
+
+        assertThat(response.getPortfolios()).isEmpty();
+        ArgumentCaptor<com.baomidou.mybatisplus.core.conditions.Wrapper<PortfolioEntity>> captor =
+                ArgumentCaptor.forClass(com.baomidou.mybatisplus.core.conditions.Wrapper.class);
+        verify(portfolioEntityMapper).selectList(captor.capture());
+        assertThat(captor.getValue().getSqlSegment()).contains("owner_type", "owner_id");
+        assertThat(((AbstractWrapper<?, ?, ?>) captor.getValue()).getParamNameValuePairs().values())
+                .contains(PortfolioOwnerTypeDict.USER.getCode(), 7L);
+    }
+
+    @Test
+    void listPortfoliosShouldReturnEmptyWithoutMapperCallForTeamOwnerType() {
+        MinePortfolioListResponse response = service().listPortfolios(" TEAM ");
+
+        assertThat(response.getPortfolios()).isEmpty();
+        verifyNoInteractions(portfolioEntityMapper);
+    }
+
+    @Test
+    void listPortfoliosShouldRejectStrippedInvalidOwnerTypeWithoutMapperCall() {
+        assertThatThrownBy(() -> service().listPortfolios(" UNKNOWN "))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("作品集归属类型不正确");
+        verifyNoInteractions(portfolioEntityMapper);
+    }
+
+    @Test
+    void componentLibraryShouldReturnConfiguredDisplayOrder() {
         assertThat(service().getComponentLibrary().getComponents())
                 .extracting("componentType")
-                .contains(
+                .containsExactly(
+                        PortfolioComponentTypeDict.PROFILE.getCode(),
+                        PortfolioComponentTypeDict.CAROUSEL.getCode(),
+                        PortfolioComponentTypeDict.TEXT_SECTION.getCode(),
+                        PortfolioComponentTypeDict.DIVIDER.getCode(),
+                        PortfolioComponentTypeDict.WORK_GRID.getCode(),
                         PortfolioComponentTypeDict.WORK_LIST.getCode(),
-                        PortfolioComponentTypeDict.DIVIDER.getCode()
+                        "SINGLE_WORK",
+                        PortfolioComponentTypeDict.SCHEDULE_QUERY.getCode(),
+                        PortfolioComponentTypeDict.CONTACT_FORM.getCode(),
+                        PortfolioComponentTypeDict.QR_CONTACT.getCode()
                 );
+        assertThat(service().getComponentLibrary().getComponents())
+                .filteredOn(item -> "SINGLE_WORK".equals(item.getComponentType()))
+                .singleElement()
+                .satisfies(item -> {
+                    assertThat(item.getName()).isEqualTo("单个作品");
+                    assertThat(item.getDescription()).isEqualTo("突出展示一个图片或视频作品");
+                });
     }
 
     @Test
@@ -372,6 +484,41 @@ class MinePortfolioServiceTest {
         ArgumentCaptor<PortfolioHistoryEntity> historyCaptor = ArgumentCaptor.forClass(PortfolioHistoryEntity.class);
         verify(portfolioHistoryEntityMapper).insert(historyCaptor.capture());
         assertThat(historyCaptor.getValue().getRevisionNo()).isEqualTo(3);
+    }
+
+    @Test
+    void saveDraftShouldDeleteOnlyOldDraftAssetsNoLongerReferencedByEitherCurrentState() {
+        String oldDraftCover = "WFA3B1E7A2/protfolio/cover-88-20260701110000-a1b2c3d4.jpg";
+        String publishedQr = "WFA3B1E7A2/protfolio/qr-contact-88-20260701120000-b2c3d4e5.png";
+        PortfolioEntity portfolio = ownedPortfolio();
+        portfolio.setDraftRevision(3);
+        portfolio.setPublishedRevision(1);
+        portfolio.setPublicationStatus(PortfolioPublicationStatusDict.PUBLISHED.getCode());
+        portfolio.setDraftConfigJson("""
+                {"schemaVersion":"standard-personal-v1","share":{"coverUrl":"%s"},"components":[]}
+                """.formatted(cosUrl(oldDraftCover)));
+        portfolio.setPublishedConfigJson("""
+                {"schemaVersion":"standard-personal-v1","components":[
+                  {"componentKey":"qr","componentType":"QR_CONTACT","sortOrder":1000,"enabled":true,
+                   "config":{"qrUrl":"%s"}}
+                ]}
+                """.formatted(cosUrl(publishedQr)));
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+        PortfolioConfigDto normalized = configWithPortfolioAssets("", "", "");
+        when(portfolioConfigValidator.normalize(7L, normalized)).thenReturn(normalized);
+        when(portfolioConfigValidator.buildReferences(
+                88L, 7L, PortfolioConfigScopeDict.DRAFT.getCode(), normalized)).thenReturn(List.of());
+        when(miniappAuthService.getUniqueCodeByUserId(7L)).thenReturn("WFA3B1E7A2");
+        when(portfolioEntityMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
+        MinePortfolioDraftSaveRequest request = new MinePortfolioDraftSaveRequest();
+        request.setConfig(normalized);
+        request.setClientRevision(3);
+        request.setIdempotencyKey("draft-cleanup");
+
+        service().saveDraft(88L, request);
+
+        verify(cosService).delete(oldDraftCover);
+        verify(cosService, never()).delete(publishedQr);
     }
 
     @Test
@@ -446,6 +593,31 @@ class MinePortfolioServiceTest {
     }
 
     @Test
+    void referencedPreviewShouldUsePublishedConfigWithoutOwnerOrWriteSideEffects() {
+        PortfolioEntity portfolio = ownedPortfolio();
+        portfolio.setOwnerId(99L);
+        portfolio.setSchemaVersion(PortfolioConfigDto.SCHEMA_VERSION_STANDARD_PERSONAL_V1);
+        portfolio.setPublicationStatus(PortfolioPublicationStatusDict.PUBLISHED.getCode());
+        portfolio.setDraftConfigJson("{\"schemaVersion\":\"standard-personal-v1\",\"share\":{\"title\":\"草稿标题\"},\"components\":[]}");
+        portfolio.setPublishedConfigJson("{\"schemaVersion\":\"standard-personal-v1\",\"share\":{\"title\":\"发布标题\"},\"components\":[]}");
+        portfolio.setPublishedRevision(4);
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+        PortfolioRenderDto renderData = new PortfolioRenderDto();
+        renderData.setPreview(true);
+        when(portfolioRenderService.render(eq(portfolio), any(PortfolioConfigDto.class), eq(true), eq(false), isNull(), isNull()))
+                .thenReturn(renderData);
+
+        MinePortfolioDetailResponse response = service().previewPublishedReferencedPortfolio(88L);
+
+        assertThat(response.getConfig().getShare().getTitle()).isEqualTo("发布标题");
+        assertThat(response.getPublishedRevision()).isEqualTo(4);
+        assertThat(response.getRenderData()).isSameAs(renderData);
+        verify(pointService, never()).consume(any(), any(), any(), any(), any(Integer.class), any(), any());
+        verify(portfolioReferenceEntityMapper, never()).insert(any(PortfolioReferenceEntity.class));
+        verify(portfolioHistoryEntityMapper, never()).insert(any(PortfolioHistoryEntity.class));
+    }
+
+    @Test
     void queryPreviewScheduleOptionsShouldReturnEmptyStringsForNullableScheduleFields() {
         PortfolioEntity portfolio = ownedPortfolio();
         portfolio.setDraftConfigJson(scheduleComponentConfigJson());
@@ -498,6 +670,15 @@ class MinePortfolioServiceTest {
 
         MinePortfolioDetailResponse response = service().publish(88L, request);
 
+        verify(pointService).assertCanConsume(
+                7L,
+                PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode(),
+                "PORTFOLIO",
+                "88",
+                1,
+                "publish-1"
+        );
+        verify(portfolioPublishTransactionService).execute(any());
         verify(pointService).consume(
                 7L,
                 PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode(),
@@ -518,6 +699,39 @@ class MinePortfolioServiceTest {
         verify(portfolioHistoryEntityMapper).insert(any(PortfolioHistoryEntity.class));
         assertThat(response.getPublishedRevision()).isEqualTo(2);
         assertThat(response.getPublicationStatus()).isEqualTo(PortfolioPublicationStatusDict.PUBLISHED.getCode());
+    }
+
+    @Test
+    void publishShouldStopBeforeTransactionAndWritesWhenPointsAreInsufficient() {
+        PortfolioEntity portfolio = ownedPortfolio();
+        portfolio.setDraftRevision(4);
+        portfolio.setDraftConfigJson(
+                "{\"schemaVersion\":\"standard-personal-v1\",\"share\":{\"title\":\"林安婚礼司仪\"},\"components\":[]}"
+        );
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+        doThrow(new BusinessException("积分余额不足，请充值后再试"))
+                .when(pointService).assertCanConsume(
+                        7L,
+                        PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode(),
+                        "PORTFOLIO",
+                        "88",
+                        1,
+                        "publish-insufficient"
+                );
+        MinePortfolioPublishRequest request = new MinePortfolioPublishRequest();
+        request.setDraftRevision(4);
+        request.setIdempotencyKey("publish-insufficient");
+
+        assertThatThrownBy(() -> service().publish(88L, request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("积分余额不足，请充值后再试");
+
+        verifyNoInteractions(portfolioPublishTransactionService);
+        verify(portfolioEntityMapper, never()).updateById(any(PortfolioEntity.class));
+        verify(portfolioReferenceEntityMapper, never()).delete(any());
+        verify(portfolioReferenceEntityMapper, never()).insert(any(PortfolioReferenceEntity.class));
+        verify(portfolioHistoryEntityMapper, never()).insert(any(PortfolioHistoryEntity.class));
+        verify(pointService, never()).consume(any(), any(), any(), any(), any(Integer.class), any(), any());
     }
 
     @Test
@@ -599,6 +813,35 @@ class MinePortfolioServiceTest {
         service().publish(88L, request);
 
         verify(cosService).delete("WFA3B1E7A2/protfolio/cover-88-20260701110000-a1b2c3d4.jpg");
+    }
+
+    @Test
+    void publishShouldNotDeleteOwnedKeyEmbeddedInForeignUrl() {
+        String objectKey = "WFA3B1E7A2/protfolio/cover-88-20260701110000-a1b2c3d4.jpg";
+        PortfolioEntity portfolio = ownedPortfolio();
+        portfolio.setDraftRevision(4);
+        portfolio.setPublishedRevision(1);
+        portfolio.setPublicationStatus(PortfolioPublicationStatusDict.PUBLISHED.getCode());
+        portfolio.setPublishedConfigJson("""
+                {"schemaVersion":"standard-personal-v1","share":{"coverUrl":"https://external.example.com/%s"},"components":[]}
+                """.formatted(objectKey));
+        portfolio.setDraftConfigJson("""
+                {"schemaVersion":"standard-personal-v1","components":[]}
+                """);
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+        PortfolioConfigDto normalized = configWithPortfolioAssets("", "", "");
+        when(portfolioConfigValidator.normalize(eq(7L), any(PortfolioConfigDto.class))).thenReturn(normalized);
+        when(portfolioConfigValidator.buildReferences(
+                88L, 7L, PortfolioConfigScopeDict.PUBLISHED.getCode(), normalized)).thenReturn(List.of());
+        when(miniappAuthService.getUniqueCodeByUserId(7L)).thenReturn("WFA3B1E7A2");
+        when(portfolioEntityMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
+        MinePortfolioPublishRequest request = new MinePortfolioPublishRequest();
+        request.setDraftRevision(4);
+        request.setIdempotencyKey("publish-foreign-url");
+
+        service().publish(88L, request);
+
+        verify(cosService, never()).delete(objectKey);
     }
 
     @Test
@@ -763,6 +1006,71 @@ class MinePortfolioServiceTest {
         verify(cosService).delete("WFA3B1E7A2/protfolio/cover-88-20260703120000-d4c3b2a1.png");
     }
 
+    @Test
+    void deletePortfolioShouldStopBeforeWritesAndCosWhenTeamReferenceGuardBlocks() {
+        PortfolioEntity portfolio = ownedPortfolio();
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+        doThrow(new BusinessException("作品集正在被团队作品集使用，请先移除引用。"))
+                .when(teamPortfolioReferenceGuardService).assertPersonalPortfolioNotReferenced(88L);
+
+        assertThatThrownBy(() -> service().deletePortfolio(88L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("作品集正在被团队作品集使用，请先移除引用。");
+
+        verify(teamPortfolioReferenceGuardService).assertPersonalPortfolioNotReferenced(88L);
+        verify(portfolioReferenceEntityMapper, never()).delete(any());
+        verify(portfolioEntityMapper, never()).update(any(PortfolioEntity.class), any());
+        verifyNoInteractions(miniappAuthService, cosService);
+    }
+
+    @Test
+    void createShareRecordShouldRejectUnsupportedChannelBeforeInsert() {
+        PortfolioEntity portfolio = ownedPortfolio();
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+        MinePortfolioShareRecordRequest request = new MinePortfolioShareRecordRequest();
+        request.setShareChannel("UNKNOWN");
+        request.setShareScene("PORTFOLIO_LIST");
+
+        assertThatThrownBy(() -> service().createShareRecord(88L, request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("分享渠道不支持");
+
+        verify(portfolioShareRecordEntityMapper, never()).insert(any(PortfolioShareRecordEntity.class));
+    }
+
+    @Test
+    void createShareRecordShouldNormalizeLegacyWechatMiniappChannel() {
+        PortfolioEntity portfolio = ownedPortfolio();
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+        MinePortfolioShareRecordRequest request = new MinePortfolioShareRecordRequest();
+        request.setShareChannel("WECHAT_MINIAPP");
+        request.setShareScene("PORTFOLIO_LIST");
+
+        service().createShareRecord(88L, request);
+
+        ArgumentCaptor<PortfolioShareRecordEntity> captor =
+                ArgumentCaptor.forClass(PortfolioShareRecordEntity.class);
+        verify(portfolioShareRecordEntityMapper).insert(captor.capture());
+        assertThat(captor.getValue().getShareChannel()).isEqualTo("WECHAT_CARD");
+    }
+
+    @Test
+    void createShareRecordShouldAcceptWechatTimelineChannel() {
+        PortfolioEntity portfolio = ownedPortfolio();
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+        MinePortfolioShareRecordRequest request = new MinePortfolioShareRecordRequest();
+        request.setShareChannel("WECHAT_TIMELINE");
+        request.setShareScene("PORTFOLIO_LIST");
+
+        service().createShareRecord(88L, request);
+
+        ArgumentCaptor<PortfolioShareRecordEntity> captor =
+                ArgumentCaptor.forClass(PortfolioShareRecordEntity.class);
+        verify(portfolioShareRecordEntityMapper).insert(captor.capture());
+        assertThat(captor.getValue().getShareChannel()).isEqualTo("WECHAT_TIMELINE");
+        assertThat(captor.getValue().getShareScene()).isEqualTo("PORTFOLIO_LIST");
+    }
+
     private MinePortfolioService service() {
         return new MinePortfolioService(
                 portfolioEntityMapper,
@@ -772,10 +1080,13 @@ class MinePortfolioServiceTest {
                 scheduleEntityMapper,
                 slotDefinitionEntityMapper,
                 pointService,
+                portfolioPublishTransactionService,
                 portfolioConfigValidator,
                 portfolioRenderService,
                 miniappAuthService,
-                cosService
+                cosService,
+                teamPortfolioReferenceGuardService,
+                contentLimitService
         );
     }
 
@@ -828,6 +1139,10 @@ class MinePortfolioServiceTest {
         )));
         config.setComponents(List.of(profile, qrContact));
         return config;
+    }
+
+    private String cosUrl(String objectKey) {
+        return "https://cos.we-folio.dingchenyong.top/" + objectKey;
     }
 
     private String scheduleComponentConfigJson() {

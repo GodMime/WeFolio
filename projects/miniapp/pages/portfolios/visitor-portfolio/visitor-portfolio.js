@@ -6,6 +6,7 @@ const {
 const { clearDisplaySwitchingTimer, markDisplaySwitching } = require('../utils/display-switching')
 const { buildVisitorEventPayload, normalizeVisitorPortfolio, switchDisplayGroup } = require('../../../utils/visitor-portfolio')
 const { uploadVisitorAvatarProfile } = require('../utils/visitor-profile')
+const { request } = require('../../../utils/request')
 const {
   SOURCE_TYPE_WECHAT_SHARE_CARD,
   openVisitorSession,
@@ -22,10 +23,25 @@ const WORK_TITLE_METADATA_KEY = 'workTitle'
 const IMAGE_MISSING_MESSAGE = '图片地址缺失'
 const VIDEO_MISSING_MESSAGE = '视频地址缺失'
 const DEFAULT_VIDEO_TITLE = '视频作品'
-const VISITOR_PROFILE_REQUIRED_MESSAGE = '请授权头像和昵称'
+const VISITOR_PROFILE_REQUIRED_MESSAGE = '请完善头像和昵称'
+const TIMELINE_SHARE_GUIDE_VALUE = 'timeline'
+const SHARE_MENU_ITEMS = Object.freeze(['shareAppMessage', 'shareTimeline'])
+const PORTFOLIOS_API_URL = '/api/mine/portfolios'
+const SHARE_CHANNEL_WECHAT_TIMELINE = 'WECHAT_TIMELINE'
+const SHARE_SCENE_PORTFOLIO_LIST = 'PORTFOLIO_LIST'
+
+function positiveId(value) {
+  const id = Number(value)
+  return Number.isInteger(id) && id > 0 ? id : 0
+}
 
 function idempotencyKey(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
+}
+
+function hasPreviousPage() {
+  const pages = typeof getCurrentPages === 'function' ? getCurrentPages() : []
+  return Array.isArray(pages) && pages.length > 1
 }
 
 function buildWorkEventMetadata(work) {
@@ -36,6 +52,11 @@ function buildWorkEventMetadata(work) {
 Page({
   data: {
     shareCode: '',
+    showNavigationBack: false,
+    timelineGuideRequested: false,
+    timelineGuideVisible: false,
+    timelineSharePortfolioId: 0,
+    timelineShareRecordEnabled: false,
     visitorKey: '',
     portfolio: normalizeVisitorPortfolio({}),
     contactForm: createContactLeadForm({}),
@@ -43,19 +64,38 @@ Page({
     activeContactFormComponent: createActiveContactFormComponent(),
     videoPreviewVisible: false,
     videoPreview: null,
+    activeSingleWorkVideoKey: '',
     visitorProfileAuthVisible: false,
     visitorProfileToken: '',
     visitorProfileForm: {
       avatarUrl: '',
       nickname: ''
     },
+    visitorProfileAvatarError: false,
+    visitorProfileNicknameError: false,
+    visitorProfileValidationShaking: false,
     visitorProfileSaving: false,
     displaySwitchingComponentKey: ''
   },
 
   onLoad(options = {}) {
+    this.singleWorkPageVisible = true
+    this.singleWorkInteractionRevision = 0
     const shareCode = options.shareCode || options.scene || ''
-    this.setData({ shareCode, visitorKey: '' })
+    const showNavigationBack = hasPreviousPage()
+    const timelineGuideRequested = options.shareGuide === TIMELINE_SHARE_GUIDE_VALUE
+    this.setData({
+      shareCode,
+      showNavigationBack,
+      timelineGuideRequested,
+      timelineGuideVisible: false,
+      timelineSharePortfolioId: timelineGuideRequested ? positiveId(options.sharePortfolioId) : 0,
+      timelineShareRecordEnabled: false,
+      visitorKey: ''
+    })
+    if (typeof wx !== 'undefined' && wx.showShareMenu) {
+      wx.showShareMenu({ menus: SHARE_MENU_ITEMS })
+    }
     return this.bootstrap()
   },
 
@@ -69,16 +109,20 @@ Page({
       })
       this.applyVisitorOpenResponse(response)
     } catch (error) {
+      this.setData({ timelineGuideVisible: false, timelineShareRecordEnabled: false })
       wx.showToast({ title: error.message || '作品集加载失败', icon: 'none' })
     }
   },
 
   applyVisitorOpenResponse(response) {
     const portfolio = normalizeVisitorPortfolio(response)
+    const displayable = !portfolio.underMaintenance && portfolio.components.length > 0
     this.setData({
       portfolio,
       visitorKey: portfolio.visitorKey || '',
       visitorProfileToken: portfolio.visitorProfileToken || '',
+      timelineGuideVisible: Boolean(this.data.timelineGuideRequested && displayable),
+      timelineShareRecordEnabled: Boolean(this.data.timelineSharePortfolioId && displayable),
       visitorProfileAuthVisible: Boolean(
         portfolio.needVisitorProfile && portfolio.visitorProfileToken && !portfolio.underMaintenance
       )
@@ -191,14 +235,70 @@ Page({
   },
 
   onUnload() {
+    this.singleWorkPageVisible = false
+    this.invalidateSingleWorkInteraction()
     clearDisplaySwitchingTimer(this)
+    this.stopActiveSingleWorkVideo()
+  },
+
+  onHide() {
+    this.singleWorkPageVisible = false
+    this.invalidateSingleWorkInteraction()
+    this.stopActiveSingleWorkVideo()
+  },
+
+  onShow() {
+    this.singleWorkPageVisible = true
   },
 
   onShareAppMessage() {
     return {
       title: this.data.portfolio.share.title || this.data.portfolio.title || '个人作品集',
-      path: `/pages/portfolios/visitor-portfolio/visitor-portfolio?shareCode=${this.data.shareCode}`,
+      path: `/pages/portfolios/visitor-portfolio/visitor-portfolio?shareCode=${encodeURIComponent(this.data.shareCode)}`,
       imageUrl: this.data.portfolio.share.coverUrl
+    }
+  },
+
+  onShareTimeline() {
+    this.recordTimelineShare()
+    return {
+      title: this.data.portfolio.share.title || this.data.portfolio.title || '个人作品集',
+      query: `shareCode=${encodeURIComponent(this.data.shareCode)}`,
+      imageUrl: this.data.portfolio.share.coverUrl
+    }
+  },
+
+  recordTimelineShare() {
+    const portfolioId = this.data.timelineShareRecordEnabled
+      ? positiveId(this.data.timelineSharePortfolioId)
+      : 0
+    if (!portfolioId) {
+      return
+    }
+    this.setData({
+      timelineSharePortfolioId: 0,
+      timelineShareRecordEnabled: false
+    })
+    request({
+      url: `${PORTFOLIOS_API_URL}/${portfolioId}/share-records`,
+      method: 'POST',
+      data: {
+        shareChannel: SHARE_CHANNEL_WECHAT_TIMELINE,
+        shareScene: SHARE_SCENE_PORTFOLIO_LIST
+      }
+    }).catch(() => {})
+  },
+
+  handleCloseTimelineGuide() {
+    this.setData({
+      timelineGuideRequested: false,
+      timelineGuideVisible: false
+    })
+  },
+
+  handleTimelineGuideBack() {
+    if (hasPreviousPage()) {
+      wx.navigateBack({ delta: 1 })
     }
   },
 
@@ -217,6 +317,76 @@ Page({
         wx.showToast({ title: error.message || '作品打开失败', icon: 'none' })
         return false
       })
+  },
+
+  handleSingleWorkTap(event) {
+    const interactionRevision = this.beginSingleWorkInteraction()
+    const work = normalizeSingleWorkTapDataset(event.currentTarget.dataset)
+    const componentKey = event.currentTarget.dataset.componentKey || ''
+    if (!work.previewUrl) {
+      wx.showToast({
+        title: work.mediaType === MEDIA_TYPE_VIDEO ? VIDEO_MISSING_MESSAGE : IMAGE_MISSING_MESSAGE,
+        icon: 'none'
+      })
+      return Promise.resolve(false)
+    }
+    return this.recordWorkEvent(work)
+      .then(() => {
+        if (!this.isCurrentSingleWorkInteraction(interactionRevision)) {
+          return false
+        }
+        return this.openSingleWorkMedia(work, componentKey)
+      })
+      .catch((error) => {
+        if (!this.isCurrentSingleWorkInteraction(interactionRevision)) {
+          return false
+        }
+        wx.showToast({ title: error.message || '作品打开失败', icon: 'none' })
+        return false
+      })
+  },
+
+  beginSingleWorkInteraction() {
+    if (typeof this.singleWorkPageVisible !== 'boolean') {
+      this.singleWorkPageVisible = true
+    }
+    this.singleWorkInteractionRevision = Number(this.singleWorkInteractionRevision || 0) + 1
+    return this.singleWorkInteractionRevision
+  },
+
+  invalidateSingleWorkInteraction() {
+    this.singleWorkInteractionRevision = Number(this.singleWorkInteractionRevision || 0) + 1
+  },
+
+  isCurrentSingleWorkInteraction(interactionRevision) {
+    return this.singleWorkPageVisible !== false && interactionRevision === this.singleWorkInteractionRevision
+  },
+
+  openSingleWorkMedia(work, componentKey) {
+    if (work.mediaType === MEDIA_TYPE_VIDEO) {
+      this.stopActiveSingleWorkVideo()
+      this.setData({ activeSingleWorkVideoKey: componentKey })
+      return true
+    }
+    wx.previewImage({ current: work.previewUrl, urls: [work.previewUrl] })
+    return true
+  },
+
+  stopActiveSingleWorkVideo() {
+    const componentKey = this.data.activeSingleWorkVideoKey
+    if (!componentKey) {
+      return
+    }
+    const videoContext = wx.createVideoContext && wx.createVideoContext(`singleWorkVideo-${componentKey}`, this)
+    if (videoContext && videoContext.pause) {
+      videoContext.pause()
+    }
+    this.setData({ activeSingleWorkVideoKey: '' })
+  },
+
+  handleSingleWorkVideoError() {
+    this.stopActiveSingleWorkVideo()
+    wx.showToast({ title: '视频播放失败，请稍后重试', icon: 'none' })
   },
 
   recordWorkEvent(work) {
@@ -279,7 +449,8 @@ Page({
       return
     }
     this.setData({
-      'visitorProfileForm.avatarUrl': avatarUrl
+      'visitorProfileForm.avatarUrl': avatarUrl,
+      visitorProfileAvatarError: false
     })
   },
 
@@ -287,8 +458,24 @@ Page({
     const value = event.detail && Object.prototype.hasOwnProperty.call(event.detail, 'value')
       ? event.detail.value
       : ''
-    this.setData({
+    const patch = {
       'visitorProfileForm.nickname': value
+    }
+    if (String(value).trim()) {
+      patch.visitorProfileNicknameError = false
+    }
+    this.setData(patch)
+  },
+
+  applyVisitorProfileValidation(avatarError, nicknameError) {
+    this.setData({
+      visitorProfileAvatarError: avatarError,
+      visitorProfileNicknameError: nicknameError,
+      visitorProfileValidationShaking: false
+    }, () => {
+      if (avatarError || nicknameError) {
+        this.setData({ visitorProfileValidationShaking: true })
+      }
     })
   },
 
@@ -300,7 +487,10 @@ Page({
 
   async handleVisitorProfileSubmit() {
     const form = this.data.visitorProfileForm || {}
-    if (!form.avatarUrl || !String(form.nickname || '').trim()) {
+    const avatarError = !form.avatarUrl
+    const nicknameError = !String(form.nickname || '').trim()
+    if (avatarError || nicknameError) {
+      this.applyVisitorProfileValidation(avatarError, nicknameError)
       wx.showToast({ title: VISITOR_PROFILE_REQUIRED_MESSAGE, icon: 'none' })
       return
     }
@@ -336,4 +526,10 @@ function normalizeWorkTapDataset(dataset = {}) {
     coverUrl: dataset.coverUrl || '',
     title: dataset.title || ''
   }
+}
+
+function normalizeSingleWorkTapDataset(dataset = {}) {
+  return Object.assign({}, normalizeWorkTapDataset(dataset), {
+    previewUrl: dataset.mediaUrl || ''
+  })
 }

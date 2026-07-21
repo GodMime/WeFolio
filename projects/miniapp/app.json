@@ -3,6 +3,8 @@
     "pages/index/index",
     "pages/points/points",
     "pages/points-rules/points-rules",
+    "pages/recharge/recharge",
+    "pages/recharge-records/recharge-records",
     "pages/teams/teams",
     "pages/team-maintenance/team-maintenance",
     "pages/team-member-add/team-member-add",
@@ -56,6 +58,19 @@
       "root": "pages/schedule",
       "pages": [
         "schedule"
+      ]
+    },
+    {
+      "name": "teamPortfolio",
+      "root": "pages/team-portfolios",
+      "pages": [
+        "portfolios",
+        "team-select/team-select",
+        "standard-edit/team-portfolio-standard-edit",
+        "component-library/team-portfolio-component-library",
+        "standard-preview/team-portfolio-standard-preview",
+        "contact-leads/team-contact-leads",
+        "visitor-portfolio/team-visitor-portfolio"
       ]
     }
   ],

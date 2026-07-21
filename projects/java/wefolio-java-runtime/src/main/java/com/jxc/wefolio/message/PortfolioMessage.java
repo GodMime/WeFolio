@@ -5,6 +5,9 @@ package com.jxc.wefolio.message;
  */
 public interface PortfolioMessage {
 
+    /** 个人作品集数量超限提示模板 */
+    String PERSONAL_PORTFOLIO_COUNT_LIMIT_TEMPLATE = "个人作品集数量已达上限（%d个），请删除部分个人作品集后再新建";
+
     /** 作品集不可访问提示 */
     String PORTFOLIO_UNAVAILABLE_MESSAGE = "作品集暂不可访问";
 
@@ -13,9 +16,6 @@ public interface PortfolioMessage {
 
     /** 微信 openid 缺失提示 */
     String WECHAT_OPENID_MISSING_MESSAGE = "微信登录未返回 openid";
-
-    /** 微信身份摘要生成失败提示 */
-    String OPENID_DIGEST_FAILED_MESSAGE = "微信身份摘要生成失败";
 
     /** 联系人必填提示 */
     String CONTACT_NAME_REQUIRED_MESSAGE = "请填写联系人";
@@ -68,6 +68,9 @@ public interface PortfolioMessage {
     /** 分享渠道为空提示 */
     String SHARE_CHANNEL_REQUIRED_MESSAGE = "分享渠道不能为空";
 
+    /** 分享渠道不支持提示 */
+    String SHARE_CHANNEL_UNSUPPORTED_MESSAGE = "分享渠道不支持";
+
     /** 作品集不存在提示 */
     String PORTFOLIO_NOT_FOUND_MESSAGE = "作品集不存在";
 
@@ -94,6 +97,9 @@ public interface PortfolioMessage {
 
     /** 启用组件为空提示 */
     String ENABLED_COMPONENT_REQUIRED_MESSAGE = "作品集至少需要 1 个启用组件";
+
+    /** 个人资料组件数量超限提示 */
+    String PROFILE_COMPONENT_LIMIT_MESSAGE = "个人作品集最多只能包含一个个人资料组件";
 
     /** 组件标识重复提示 */
     String COMPONENT_KEY_DUPLICATE_MESSAGE = "作品集组件标识重复，请刷新后重试";

@@ -34,6 +34,12 @@ public class PortfolioRenderService {
     /** 作品 ID 配置键 */
     private static final String CONFIG_KEY_WORK_IDS = "workIds";
 
+    /** 单个作品 ID 配置键 */
+    private static final String CONFIG_KEY_WORK_ID = "workId";
+
+    /** 是否展示作品名配置键 */
+    private static final String CONFIG_KEY_SHOW_TITLE = "showTitle";
+
     /** 作品集展示标签配置键 */
     private static final String CONFIG_KEY_GROUPS = "groups";
 
@@ -223,6 +229,7 @@ public class PortfolioRenderService {
             case CAROUSEL -> render.setWorks(buildWorks(ownerId, asLongList(componentConfig.get(CONFIG_KEY_WORK_IDS))));
             case PROFILE -> render.setProfile(buildProfile(componentConfig));
             case WORK_GRID, WORK_LIST -> render.setGroups(buildDisplayGroups(ownerId, componentConfig));
+            case SINGLE_WORK -> buildSingleWork(render, ownerId, componentConfig);
             case SCHEDULE_QUERY -> render.setScheduleQuery(buildScheduleQuery(componentConfig));
             case QR_CONTACT -> render.setQrContact(buildQrContact(componentConfig));
             case CONTACT_FORM -> render.setContactForm(buildContactForm(componentConfig));
@@ -230,6 +237,28 @@ public class PortfolioRenderService {
             case DIVIDER -> render.setDivider(buildDivider(componentConfig));
         }
         return render;
+    }
+
+    /**
+     * 构建单个作品渲染数据。
+     *
+     * @param render 渲染组件
+     * @param ownerId 作品集归属用户 ID
+     * @param componentConfig 组件配置
+     */
+    private void buildSingleWork(
+            PortfolioRenderDto.Component render,
+            Long ownerId,
+            Map<String, Object> componentConfig
+    ) {
+        Object showTitle = componentConfig.get(CONFIG_KEY_SHOW_TITLE);
+        render.setShowTitle(showTitle instanceof Boolean value ? value : Boolean.TRUE);
+        Long workId = asLong(componentConfig.get(CONFIG_KEY_WORK_ID));
+        if (workId == null || workId <= 0L) {
+            return;
+        }
+        List<PortfolioRenderDto.WorkItem> works = buildWorks(ownerId, List.of(workId));
+        render.setWork(works.isEmpty() ? null : works.get(0));
     }
 
     /**
@@ -324,6 +353,7 @@ public class PortfolioRenderService {
         item.setCoverUrl(hasText(work.getCoverObjectKey()) ? publicUrl(work.getCoverObjectKey()) : item.getMediaUrl());
         item.setDurationMs(work.getDurationMs());
         item.setDescription(defaultString(work.getDescription()));
+        item.setAspectRatio(defaultString(work.getAspectRatio()));
         return item;
     }
 

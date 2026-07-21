@@ -13,7 +13,8 @@ public enum PointTransactionTypeDict {
     RECHARGE("RECHARGE", "充值"),
     CONSUMPTION("CONSUMPTION", "消耗"),
     REFUND("REFUND", "回退"),
-    GIFT("GIFT", "赠送");
+    GIFT("GIFT", "赠送"),
+    WECHAT_SYNC("WECHAT_SYNC", "微信余额同步");
 
     private final String code;
     private final String displayName;

@@ -80,8 +80,9 @@ class VisitorServiceTest {
         assertThat(inserted.getLastSeenAt()).isNotNull();
         assertThat(result.newVisitor()).isTrue();
         assertThat(result.visitor().getId()).isEqualTo(1024L);
-        assertThat(result.billingVisitorKey()).startsWith("WX_OPENID:");
-        assertThat(result.billingVisitorKey()).doesNotContain("openid-plain-123");
+        assertThat(VisitorService.VisitorSession.class.getRecordComponents())
+                .extracting(java.lang.reflect.RecordComponent::getName)
+                .containsExactly("visitor", "newVisitor");
     }
 
     @Test

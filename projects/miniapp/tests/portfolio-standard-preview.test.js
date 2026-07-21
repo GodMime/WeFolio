@@ -180,6 +180,43 @@ test('preview page requests published preview endpoint for published scope', asy
   assert.equal(page.data.portfolio.preview, true)
 })
 
+test('preview page loads a team-referenced member portfolio through the nested published endpoint', async () => {
+  const requests = []
+  const page = loadPreviewPage((options) => {
+    requests.push(options)
+    return Promise.resolve({
+      portfolioId: 88,
+      publishedRevision: 4,
+      renderData: {
+        preview: true,
+        title: '成员发布作品集',
+        components: []
+      }
+    })
+  })
+
+  page.onLoad({
+    portfolioId: '88',
+    teamPortfolioId: '13',
+    teamScope: 'draft'
+  })
+  await flushPromises()
+
+  assert.equal(requests[0].url, '/api/mine/team-portfolios/13/member-portfolios/88/published-preview')
+  assert.deepEqual(requests[0].data, { scope: 'draft' })
+  assert.equal(page.data.teamPortfolioId, 13)
+  assert.equal(page.data.teamPreviewScope, 'draft')
+  assert.equal(page.data.previewScope, 'published')
+  assert.equal(page.data.portfolio.title, '成员发布作品集')
+
+  const wxml = fs.readFileSync(
+    path.join(__dirname, '../pages/portfolios/standard-preview/portfolio-standard-preview.wxml'),
+    'utf8'
+  )
+  assert.match(wxml, /team-portfolio-id="\{\{teamPortfolioId\}\}"/)
+  assert.match(wxml, /team-preview-scope="\{\{teamPreviewScope\}\}"/)
+})
+
 test('preview display group switch tolerates unnormalized component arrays', () => {
   const page = loadPreviewPage(() => Promise.resolve({}))
   page.data.portfolio = {
@@ -330,6 +367,125 @@ test('preview page opens image and video work media without visitor event reques
   })
 })
 
+test('preview single work images open originals and videos play inline one at a time', () => {
+  const previews = []
+  const videoContexts = []
+  const wxMock = {
+    previewImage(options) {
+      previews.push(options)
+    },
+    createVideoContext(id) {
+      const context = { id, pauseCalls: 0, pause() { this.pauseCalls += 1 } }
+      videoContexts.push(context)
+      return context
+    },
+    showToast() {}
+  }
+  const page = loadPreviewPage(() => Promise.resolve({}), wxMock)
+  global.wx = wxMock
+
+  try {
+    page.handleSingleWorkTap({
+      currentTarget: {
+        dataset: {
+          componentKey: 'c_image',
+          workId: '11',
+          mediaType: 'IMAGE',
+          mediaUrl: 'https://cdn.example.com/original.jpg',
+          coverUrl: 'https://cdn.example.com/thumb.jpg',
+          title: '迎宾图'
+        }
+      }
+    })
+    page.handleSingleWorkTap({
+      currentTarget: {
+        dataset: {
+          componentKey: 'c_video_a',
+          workId: '12',
+          mediaType: 'VIDEO',
+          mediaUrl: 'https://cdn.example.com/a.mp4',
+          coverUrl: 'https://cdn.example.com/a.jpg',
+          title: '视频 A'
+        }
+      }
+    })
+    page.handleSingleWorkTap({
+      currentTarget: {
+        dataset: {
+          componentKey: 'c_video_b',
+          workId: '13',
+          mediaType: 'VIDEO',
+          mediaUrl: 'https://cdn.example.com/b.mp4',
+          coverUrl: 'https://cdn.example.com/b.jpg',
+          title: '视频 B'
+        }
+      }
+    })
+  } finally {
+    delete global.wx
+  }
+
+  assert.deepEqual(previews[0], {
+    current: 'https://cdn.example.com/original.jpg',
+    urls: ['https://cdn.example.com/original.jpg']
+  })
+  assert.equal(page.data.activeSingleWorkVideoKey, 'c_video_b')
+  assert.equal(videoContexts[0].id, 'singleWorkVideo-c_video_a')
+  assert.equal(videoContexts[0].pauseCalls, 1)
+  assert.equal(page.data.videoPreviewVisible, false)
+})
+
+test('preview single work does not use cover as missing original or video media', () => {
+  const previews = []
+  const toasts = []
+  const wxMock = {
+    previewImage(options) {
+      previews.push(options)
+    },
+    showToast(options) {
+      toasts.push(options)
+    }
+  }
+  const page = loadPreviewPage(() => Promise.resolve({}), wxMock)
+  global.wx = wxMock
+
+  try {
+    assert.equal(page.handleSingleWorkTap({
+      currentTarget: { dataset: {
+        componentKey: 'c_video',
+        mediaType: 'VIDEO',
+        mediaUrl: '',
+        coverUrl: 'video-cover.jpg'
+      } }
+    }), false)
+    assert.equal(page.handleSingleWorkTap({
+      currentTarget: { dataset: {
+        componentKey: 'c_image',
+        mediaType: 'IMAGE',
+        mediaUrl: '',
+        coverUrl: 'image-thumb.jpg'
+      } }
+    }), false)
+  } finally {
+    delete global.wx
+  }
+
+  assert.deepEqual(toasts.map((item) => item.title), ['视频地址缺失', '图片地址缺失'])
+  assert.equal(previews.length, 0)
+  assert.equal(page.data.activeSingleWorkVideoKey, '')
+})
+
+test('single work markup uses width-fix images and inline autoplay video without changing list overlay', () => {
+  const wxml = readExisting('pages/portfolios/standard-preview/portfolio-standard-preview.wxml')
+
+  assert.match(wxml, /item\.componentType === 'SINGLE_WORK'/)
+  assert.match(wxml, /class="single-work-image"[\s\S]*mode="widthFix"/)
+  assert.match(wxml, /activeSingleWorkVideoKey === item\.componentKey[\s\S]*<video[\s\S]*autoplay="\{\{true\}\}"/)
+  assert.match(wxml, /class="single-work-play-badge"/)
+  assert.match(wxml, /wx:if="\{\{item\.showTitle\}\}" class="single-work-title"/)
+  assert.match(wxml, /<root-portal wx:if="\{\{videoPreviewVisible\}\}">/)
+})
+
 test('preview markup exposes loading skeleton and retryable error state', () => {
   const wxml = fs.readFileSync(
     path.join(__dirname, '../pages/portfolios/standard-preview/portfolio-standard-preview.wxml'),
@@ -397,6 +553,17 @@ test('portfolio work sections render fixed title, all tags, play badge, and vide
   ;[sharedWxss].forEach((wxss) => {
     assert.match(wxss, /\.display-tag\s*\{[\s\S]*color:\s*#8a8f98;[\s\S]*font-size:\s*28rpx;/)
     assert.match(wxss, /\.display-tag\.active\s*\{[\s\S]*color:\s*#000000;/)
+  })
+})
+
+test('single work inline videos fill their frame across production and mock previews', () => {
+  const previewWxml = readExisting('pages/portfolios/standard-preview/portfolio-standard-preview.wxml')
+  const visitorWxml = readExisting('pages/portfolios/visitor-portfolio/visitor-portfolio.wxml')
+  const mockPreviewWxml = readExisting('pages/mock/portfolio-standard-preview/portfolio-standard-preview.wxml')
+  const inlineVideoPattern = /<video[\s\S]*?class="single-work-video"[\s\S]*?object-fit="cover"[\s\S]*?<\/video>/
+
+  ;[previewWxml, visitorWxml, mockPreviewWxml].forEach((wxml) => {
+    assert.match(wxml, inlineVideoPattern)
   })
 })
 

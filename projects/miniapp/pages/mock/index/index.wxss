@@ -1,6 +1,19 @@
 @import "../styles/index.wxss";
 @import "../common.wxss";
 
+.mock-mine-page .action-panel {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.mock-mine-page .light-button {
+  min-width: 112rpx;
+  height: 88rpx;
+  padding: 0 28rpx;
+  border-radius: 16rpx;
+  box-sizing: border-box;
+}
+
 .return-login-button {
   display: flex;
   width: 100%;

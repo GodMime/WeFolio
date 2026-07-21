@@ -52,6 +52,10 @@
   box-sizing: border-box;
 }
 
+.date-field.placeholder {
+  color: #8b95a1;
+}
+
 .textarea {
   height: 156rpx;
   padding-top: 18rpx;

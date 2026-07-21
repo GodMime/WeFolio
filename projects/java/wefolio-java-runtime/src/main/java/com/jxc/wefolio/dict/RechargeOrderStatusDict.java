@@ -13,7 +13,8 @@ public enum RechargeOrderStatusDict {
     PENDING_PAYMENT("PENDING_PAYMENT", "待支付"),
         PAID("PAID", "已支付"),
         PAYMENT_FAILED("PAYMENT_FAILED", "支付失败"),
-        CLOSED("CLOSED", "已关闭");
+        CLOSED("CLOSED", "已关闭"),
+        REFUNDED("REFUNDED", "已退款");
 
     private final String code;
     private final String displayName;

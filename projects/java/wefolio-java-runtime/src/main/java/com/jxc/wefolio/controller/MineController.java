@@ -7,7 +7,9 @@ import com.jxc.wefolio.dto.MineProfileAssetUploadTicketRequest;
 import com.jxc.wefolio.dto.MineProfileAssetUploadTicketResponse;
 import com.jxc.wefolio.dto.MineProfileResponse;
 import com.jxc.wefolio.dto.MineProfileUpdateRequest;
+import com.jxc.wefolio.dto.MineVisitRecordPageResponse;
 import com.jxc.wefolio.dto.MineVisitRecordsResponse;
+import com.jxc.wefolio.dto.MineVisitStatisticsResponse;
 import com.jxc.wefolio.service.MineDashboardService;
 import com.jxc.wefolio.service.MineProfileService;
 import com.jxc.wefolio.service.MineVisitService;
@@ -29,6 +31,15 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequiredArgsConstructor
 public class MineController {
+
+    /** 已弃用访问记录聚合接口路径 */
+    private static final String LEGACY_MINE_VISITS_PATH = "/api/mine/visits";
+
+    /** 访问记录统计接口路径 */
+    private static final String MINE_VISIT_STATISTICS_PATH = "/api/mine/visits/statistics";
+
+    /** 访问明细分页接口路径 */
+    private static final String MINE_VISIT_RECORDS_PATH = "/api/mine/visits/records";
 
     /** 我的首页服务 */
     private final MineDashboardService mineDashboardService;
@@ -80,10 +91,38 @@ public class MineController {
      * 获取访问记录页数据。
      *
      * @return 访问记录页响应
+     * @deprecated 请分别使用访问记录统计接口和访问明细分页接口
      */
-    @GetMapping("/api/mine/visits")
+    @Deprecated
+    @GetMapping(LEGACY_MINE_VISITS_PATH)
     public Response<MineVisitRecordsResponse> visits() {
+        log.warn("调用已弃用访问记录接口: path={}", LEGACY_MINE_VISITS_PATH);
         return Response.success(mineVisitService.getVisitRecords());
+    }
+
+    /**
+     * 获取访问记录统计数据。
+     *
+     * @return 访问记录统计响应
+     */
+    @GetMapping(MINE_VISIT_STATISTICS_PATH)
+    public Response<MineVisitStatisticsResponse> visitStatistics() {
+        return Response.success(mineVisitService.getVisitStatistics());
+    }
+
+    /**
+     * 获取访问明细分页数据。
+     *
+     * @param pageNo 页码，从 1 开始
+     * @param pageSize 每页数量
+     * @return 访问明细分页响应
+     */
+    @GetMapping(MINE_VISIT_RECORDS_PATH)
+    public Response<MineVisitRecordPageResponse> visitRecords(
+            @RequestParam(required = false) Integer pageNo,
+            @RequestParam(required = false) Integer pageSize
+    ) {
+        return Response.success(mineVisitService.getVisitRecordPage(pageNo, pageSize));
     }
 
     /**

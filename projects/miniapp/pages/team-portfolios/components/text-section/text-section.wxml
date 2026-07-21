@@ -1,0 +1,3 @@
+<view class="text-section align-{{config.alignment || 'LEFT'}}">
+  <text class="content">{{config.content}}</text>
+</view>

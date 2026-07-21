@@ -5,6 +5,12 @@ package com.jxc.wefolio.message;
  */
 public interface MineWorkMessage {
 
+    /** 图片作品数量超限提示模板 */
+    String IMAGE_WORK_COUNT_LIMIT_TEMPLATE = "图片作品数量已达上限（%d个），请删除部分图片作品后再上传";
+
+    /** 视频作品数量超限提示模板 */
+    String VIDEO_WORK_COUNT_LIMIT_TEMPLATE = "视频作品数量已达上限（%d个），请删除部分视频作品后再上传";
+
     /** 上传任务保存失败提示 */
     String UPLOAD_TASK_SAVE_FAILED_MESSAGE = "上传任务创建失败，请刷新后重试";
 

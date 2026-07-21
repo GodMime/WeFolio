@@ -1,0 +1,100 @@
+<template name="scheduleQueryContent">
+  <view class="schedule-query-calendar">
+    <view class="schedule-query-month-bar">
+      <view class="schedule-query-month-button" catchtap="handlePrevMonth" aria-role="button" aria-label="上个月">‹</view>
+      <view class="schedule-query-month-text">{{selectedMonthText || selectedMonth}}</view>
+      <picker class="schedule-query-month-picker" mode="date" fields="month" value="{{selectedMonth}}" bindchange="handleMonthPickerChange">
+        <view class="schedule-query-month-picker-button">切换年月</view>
+      </picker>
+      <view class="schedule-query-month-button" catchtap="handleNextMonth" aria-role="button" aria-label="下个月">›</view>
+    </view>
+    <view class="schedule-query-weekdays">
+      <view>日</view>
+      <view>一</view>
+      <view>二</view>
+      <view>三</view>
+      <view>四</view>
+      <view>五</view>
+      <view>六</view>
+    </view>
+    <view class="schedule-query-days">
+      <view
+        wx:for="{{calendarDays}}"
+        wx:key="key"
+        class="{{item.dayClass}} {{selectedDate === item.date ? 'selected' : ''}}"
+        data-date="{{item.date}}"
+        data-disabled="{{item.disabled}}"
+        catchtap="handleDayTap"
+        aria-role="button"
+        aria-disabled="{{item.disabled}}"
+        aria-label="{{item.disabled ? '不可选择' : '选择'}}{{item.date}}"
+      >
+        <view class="schedule-query-day-number">{{item.dayNumber}}</view>
+      </view>
+    </view>
+    <view class="schedule-query-selected-date">{{selectedDate || '请选择查询日期'}}</view>
+    <button class="schedule-query-submit" loading="{{loading}}" disabled="{{!selectedDate || loading}}" catchtap="submitQuery">{{loading ? '查询中' : '查询'}}</button>
+    <text wx:if="{{errorMessage}}" class="error">{{errorMessage}}</text>
+    <view wx:if="{{result && result.members.length}}" class="member-results">
+      <view wx:for="{{result.members}}" wx:key="memberUserId" class="member-result">
+        <image src="{{item.avatarUrl}}" mode="aspectFill" />
+        <text class="member-name">{{item.displayName}}</text>
+        <text class="state {{item.displayState.tone}}">{{item.displayState.text}}</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<view class="schedule-query {{editMode ? 'editor-mode' : ''}}">
+  <block wx:if="{{editMode}}">
+    <view class="editor-form">
+      <view class="editor-card">
+        <view class="editor-field"><view class="editor-label">标题</view><input class="editor-input" data-field="title" value="{{draft.title}}" bindinput="handleConfigInput" placeholder="档期标题" /></view>
+        <view class="editor-field"><view class="editor-label">说明</view><textarea class="editor-input editor-textarea" data-field="description" value="{{draft.description}}" bindinput="handleConfigInput" placeholder="档期说明" /></view>
+      </view>
+      <view class="editor-card">
+        <view class="editor-label">档期展示方式</view>
+        <view class="editor-choice-list">
+          <button class="editor-choice {{draft.displayMode === 'MODAL_CALENDAR' ? 'active' : ''}}" data-mode="MODAL_CALENDAR" bindtap="selectDisplayMode"><view class="editor-choice-radio"></view><view>弹层日历</view></button>
+          <button class="editor-choice {{draft.displayMode === 'INLINE_CALENDAR' ? 'active' : ''}}" data-mode="INLINE_CALENDAR" bindtap="selectDisplayMode"><view class="editor-choice-radio"></view><view>页面内日历</view></button>
+        </view>
+      </view>
+      <view class="editor-card">
+        <view class="editor-label">查询日期范围</view>
+        <view class="editor-choice-list compact">
+          <button class="editor-choice {{draft.queryRange.type === 'UNLIMITED' ? 'active' : ''}}" data-type="UNLIMITED" bindtap="selectRangeType"><view class="editor-choice-radio"></view><view>不限</view></button>
+          <button class="editor-choice {{draft.queryRange.type === 'FUTURE_DAYS' ? 'active' : ''}}" data-type="FUTURE_DAYS" bindtap="selectRangeType"><view class="editor-choice-radio"></view><view>未来天数</view></button>
+          <button class="editor-choice {{draft.queryRange.type === 'DATE_RANGE' ? 'active' : ''}}" data-type="DATE_RANGE" bindtap="selectRangeType"><view class="editor-choice-radio"></view><view>固定日期</view></button>
+        </view>
+        <view wx:if="{{draft.queryRange.type === 'FUTURE_DAYS'}}" class="editor-subfield"><view class="editor-label">可查询未来天数</view><input class="editor-input" type="number" value="{{draft.queryRange.futureDays}}" bindinput="changeFutureDays" /></view>
+        <view wx:if="{{draft.queryRange.type === 'DATE_RANGE'}}" class="editor-date-range"><picker mode="date" value="{{draft.queryRange.startDate}}" bindchange="changeRangeDate" data-field="startDate"><view class="editor-date-field">{{draft.queryRange.startDate || '开始日期'}}</view></picker><picker mode="date" value="{{draft.queryRange.endDate}}" bindchange="changeRangeDate" data-field="endDate"><view class="editor-date-field">{{draft.queryRange.endDate || '结束日期'}}</view></picker></view>
+      </view>
+      <view wx:if="{{errorMessage}}" class="editor-error">{{errorMessage}}</view>
+    </view>
+  </block>
+  <block wx:else>
+    <block wx:if="{{config.displayMode === 'INLINE_CALENDAR'}}">
+      <view class="schedule-query-inline-shell">
+        <view class="component-title">{{config.title || '查询团队档期'}}</view>
+        <view wx:if="{{config.description}}" class="section-desc">{{config.description}}</view>
+        <template is="scheduleQueryContent" data="{{selectedDate: selectedDate, selectedMonth: selectedMonth, selectedMonthText: selectedMonthText, calendarDays: calendarDays, loading: loading, errorMessage: errorMessage, result: result}}" />
+      </view>
+    </block>
+    <block wx:else>
+      <view class="schedule-query-entry">
+        <view class="schedule-query-entry-spacer" aria-hidden="true"></view>
+        <view wx:if="{{config.description}}" class="section-desc">{{config.description}}</view>
+        <button class="schedule-query-open-button" catchtap="openModal">查询团队档期</button>
+      </view>
+      <view class="schedule-query-modal-mask {{modalVisible ? 'visible' : ''}}" catchtap="closeModal">
+        <view class="schedule-query-modal-panel" catchtap="noop">
+          <view class="schedule-query-modal-heading">
+            <view class="schedule-query-modal-title">{{config.title || '查询团队档期'}}</view>
+            <view class="schedule-query-close" catchtap="closeModal" aria-role="button" aria-label="关闭团队档期查询">×</view>
+          </view>
+          <template is="scheduleQueryContent" data="{{selectedDate: selectedDate, selectedMonth: selectedMonth, selectedMonthText: selectedMonthText, calendarDays: calendarDays, loading: loading, errorMessage: errorMessage, result: result}}" />
+        </view>
+      </view>
+    </block>
+  </block>
+</view>

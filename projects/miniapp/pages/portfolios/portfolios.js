@@ -2,6 +2,16 @@ const { request } = require('../../utils/request')
 const { normalizeId } = require('../../utils/id')
 const { handleMaintainerAuthRequired, hasLocalToken } = require('../../utils/session')
 const { buildPublishPayload } = require('../../utils/portfolios')
+const {
+  deleteTeamPortfolio,
+  fetchMaintainableTeams,
+  fetchTeamPortfolioList,
+  handleTeamMaintainerAuthError,
+  publishTeamPortfolio,
+  recordTeamPortfolioShare,
+  resolveTeamCreateRoute,
+  showTeamPortfolioUnavailableToast
+} = require('./utils/team-portfolio-list.js')
 const { confirmPortfolioPublishDisclaimer } = require('./utils/portfolio-publish-disclaimer')
 
 const PORTFOLIOS_API_URL = '/api/mine/portfolios'
@@ -14,7 +24,7 @@ const WORKS_PAGE_URL = '/pages/works/works'
 const MINE_PAGE_URL = '/pages/index/index'
 const DEFAULT_COVER_URL = '/assets/system/work-logo-100kb.jpg'
 const UNAVAILABLE_TOAST_TITLE = '暂未开放，即将发布'
-const SHARE_CHANNEL_WECHAT_MINIAPP = 'WECHAT_MINIAPP'
+const SHARE_CHANNEL_WECHAT_CARD = 'WECHAT_CARD'
 const SHARE_SCENE_PORTFOLIO_LIST = 'PORTFOLIO_LIST'
 const SWIPE_REVEAL_THRESHOLD = -32
 const SWIPE_CLOSE_THRESHOLD = 24
@@ -27,6 +37,16 @@ const ACTION_TYPE_EDIT = 'EDIT'
 const ACTION_TYPE_PUBLISH = 'PUBLISH'
 const IDEMPOTENCY_PREFIX_PUBLISH = 'publish'
 const PORTFOLIO_TITLE_SCROLL_MIN_LENGTH = 7
+const OWNER_TYPE_USER = 'USER'
+const OWNER_TYPE_TEAM = 'TEAM'
+const OWNER_SWITCH_DURATION_MS = 240
+const TEAM_SELECT_URL = '/pages/team-portfolios/team-select/team-select'
+const TEAM_EDIT_URL = '/pages/team-portfolios/standard-edit/team-portfolio-standard-edit'
+const TEAM_PREVIEW_URL = '/pages/team-portfolios/standard-preview/team-portfolio-standard-preview'
+const TEAM_VISITOR_SHARE_PATH_PREFIX = '/pages/team-portfolios/visitor-portfolio/team-visitor-portfolio?shareCode='
+const SHARE_SCENE_TEAM_PORTFOLIO_LIST = 'TEAM_PORTFOLIO_LIST'
+const IDEMPOTENCY_PREFIX_TEAM_PUBLISH = 'team-publish'
+const SHARE_UNAVAILABLE_MESSAGE = '当前作品集暂不可分享'
 
 function makeIdempotencyKey(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`
@@ -81,6 +101,20 @@ function normalizePortfolioItem(item = {}) {
   })
 }
 
+function normalizeTeamPortfolioItem(item = {}) {
+  const normalized = normalizePortfolioItem(item)
+  const isPublished = item.publicationStatus === PUBLICATION_STATUS_PUBLISHED
+  const canShare = isPublished && item.canShare === true
+  return Object.assign({}, normalized, {
+    title: defaultString(item.title || item.teamName, '未命名团队作品集'),
+    teamName: defaultString(item.teamName, '团队'),
+    canShare,
+    canPreviewDraft: !isPublished && item.canMaintain === true,
+    canPublishedPreview: canShare,
+    canDelete: item.canMaintain === true
+  })
+}
+
 function buildSummary(portfolios = []) {
   const publishedCount = portfolios.filter((item) => item.publicationStatus === PUBLICATION_STATUS_PUBLISHED).length
   const draftCount = portfolios.filter((item) => item.publicationStatus !== PUBLICATION_STATUS_PUBLISHED).length
@@ -94,9 +128,20 @@ function buildSharePath(shareCode) {
   return `${VISITOR_PORTFOLIO_SHARE_PATH_PREFIX}${encodeURIComponent(defaultString(shareCode))}`
 }
 
+function buildTeamSharePath(shareCode) {
+  return `${TEAM_VISITOR_SHARE_PATH_PREFIX}${encodeURIComponent(defaultString(shareCode))}`
+}
+
+function buildTimelineGuidePath(ownerType, portfolioId, shareCode) {
+  const sharePath = ownerType === OWNER_TYPE_TEAM
+    ? buildTeamSharePath(shareCode)
+    : buildSharePath(shareCode)
+  return `${sharePath}&shareGuide=timeline&sharePortfolioId=${encodeURIComponent(normalizeId(portfolioId))}`
+}
+
 Page({
   data: {
-    ownerType: 'USER',
+    ownerType: OWNER_TYPE_USER,
     ownerTitle: '个人作品集',
     loading: false,
     pullDownRefreshing: false,
@@ -107,6 +152,26 @@ Page({
     revealedPortfolioId: null,
     portfolioTouchStart: null,
     deletingPortfolioId: null,
+    switching: false,
+    teamLoading: false,
+    teamLoaded: false,
+    teamErrorMessage: '',
+    teamPullDownRefreshing: false,
+    teamPortfolios: [],
+    teamDisplayPortfolios: [],
+    teamSummary: buildSummary([]),
+    revealedTeamPortfolioId: null,
+    teamPortfolioTouchStart: null,
+    maintainableTeams: [],
+    maintainableTeamsLoaded: false,
+    noMaintainableTeam: false,
+    creatingTeamPortfolio: false,
+    deletingTeamPortfolioId: null,
+    publishingTeamPortfolioId: null,
+    sharingTeamPortfolioId: null,
+    shareSheetVisible: false,
+    shareActionPending: false,
+    shareTarget: null,
     tabs: [
       { key: 'schedule', label: '档期', icon: 'schedule' },
       { key: 'work', label: '作品', icon: 'work' },
@@ -115,11 +180,34 @@ Page({
     ]
   },
 
+  onLoad(options = {}) {
+    if (options.ownerType === OWNER_TYPE_TEAM) {
+      this.setData({
+        ownerType: OWNER_TYPE_TEAM,
+        ownerTitle: '团队作品集',
+        switching: false
+      })
+    }
+  },
+
   onShow() {
-    this.bootstrap()
+    if (this.data.ownerType === OWNER_TYPE_TEAM) {
+      return this.bootstrapTeam()
+    }
+    return this.bootstrap()
+  },
+
+  onUnload() {
+    if (this.ownerSwitchTimer) {
+      clearTimeout(this.ownerSwitchTimer)
+      this.ownerSwitchTimer = null
+    }
   },
 
   onPullDownRefresh() {
+    if (this.data.ownerType === OWNER_TYPE_TEAM) {
+      return this.handleTeamPullDownRefresh()
+    }
     return this.handlePullDownRefresh()
   },
 
@@ -141,7 +229,26 @@ Page({
       })
   },
 
+  handleTeamPullDownRefresh() {
+    if (this.data.teamPullDownRefreshing) {
+      if (wx.stopPullDownRefresh) {
+        wx.stopPullDownRefresh()
+      }
+      return Promise.resolve()
+    }
+    this.setData({ teamPullDownRefreshing: true })
+    return Promise.resolve()
+      .then(() => this.bootstrapTeam())
+      .finally(() => {
+        this.setData({ teamPullDownRefreshing: false })
+        if (wx.stopPullDownRefresh) {
+          wx.stopPullDownRefresh()
+        }
+      })
+  },
+
   bootstrap() {
+    this.resetShareSheetState()
     if (!hasLocalToken()) {
       wx.navigateTo({ url: '/pages/login/login' })
       return
@@ -167,19 +274,248 @@ Page({
     })
   },
 
+  async bootstrapTeam({ onlyIfNeeded = false } = {}) {
+    if (onlyIfNeeded && (this.data.teamLoaded || this.data.teamLoading)) {
+      return
+    }
+    this.resetShareSheetState()
+    this.setData({
+      teamLoading: true,
+      teamErrorMessage: '',
+      noMaintainableTeam: false,
+      revealedTeamPortfolioId: null,
+      teamPortfolioTouchStart: null
+    })
+    try {
+      const [portfolios, maintainableTeams] = await Promise.all([
+        fetchTeamPortfolioList(request),
+        fetchMaintainableTeams(request)
+      ])
+      this.setData({
+        teamPortfolios: portfolios,
+        teamDisplayPortfolios: portfolios.map(normalizeTeamPortfolioItem),
+        teamSummary: buildSummary(portfolios),
+        maintainableTeams,
+        maintainableTeamsLoaded: true,
+        noMaintainableTeam: maintainableTeams.length === 0,
+        teamLoaded: true
+      })
+    } catch (error) {
+      if (handleTeamMaintainerAuthError(error) || showTeamPortfolioUnavailableToast(error)) {
+        return
+      }
+      this.setData({ teamErrorMessage: '团队作品集加载失败，请重试' })
+    } finally {
+      this.setData({ teamLoading: false, teamPullDownRefreshing: false })
+    }
+  },
+
   handleOwnerTypeTap(event) {
-    const ownerType = event.currentTarget.dataset.type || 'USER'
+    const ownerType = event.currentTarget.dataset.type === OWNER_TYPE_TEAM ? OWNER_TYPE_TEAM : OWNER_TYPE_USER
+    if (ownerType === this.data.ownerType || this.data.switching) {
+      return
+    }
     this.setData({
       ownerType,
-      ownerTitle: ownerType === 'TEAM' ? '团队作品集' : '个人作品集',
+      ownerTitle: ownerType === OWNER_TYPE_TEAM ? '团队作品集' : '个人作品集',
+      switching: true,
+      shareSheetVisible: false,
+      shareActionPending: false,
+      shareTarget: null,
       revealedPortfolioId: null,
-      portfolioTouchStart: null
+      portfolioTouchStart: null,
+      revealedTeamPortfolioId: null,
+      teamPortfolioTouchStart: null
     })
-    this.bootstrap()
+    if (ownerType === OWNER_TYPE_TEAM) {
+      this.bootstrapTeam({ onlyIfNeeded: true })
+    }
+    if (this.ownerSwitchTimer) {
+      clearTimeout(this.ownerSwitchTimer)
+    }
+    this.ownerSwitchTimer = setTimeout(() => {
+      this.setData({ switching: false })
+      this.ownerSwitchTimer = null
+    }, OWNER_SWITCH_DURATION_MS)
   },
 
   handleCreateStandardPersonal() {
     wx.navigateTo({ url: EDIT_PAGE_URL })
+  },
+
+  handleCreateStandardTeam() {
+    if (this.data.creatingTeamPortfolio) {
+      return
+    }
+    const route = resolveTeamCreateRoute(this.data.maintainableTeams)
+    if (route.action === 'UNAVAILABLE') {
+      this.setData({ noMaintainableTeam: true })
+      return
+    }
+    if (route.action === 'SELECT') {
+      wx.navigateTo({
+        url: TEAM_SELECT_URL,
+        success: (result) => {
+          const channel = result && result.eventChannel
+          if (channel && typeof channel.emit === 'function') {
+            channel.emit('maintainableTeams', this.data.maintainableTeams)
+          }
+        }
+      })
+      return
+    }
+    wx.navigateTo({ url: `${TEAM_EDIT_URL}?teamId=${route.teamId}` })
+  },
+
+  handleTeamPortfolioCardTap(event) {
+    const item = event.currentTarget.dataset.item
+    if (!item) {
+      return
+    }
+    if (this.data.revealedTeamPortfolioId === item.portfolioId) {
+      this.setData({ revealedTeamPortfolioId: null })
+      return
+    }
+    if (item.canMaintain) {
+      wx.navigateTo({ url: `${TEAM_EDIT_URL}?portfolioId=${item.portfolioId}` })
+    }
+  },
+
+  handleTeamPreviewTap(event) {
+    const item = event.currentTarget.dataset.item
+    const scope = event.currentTarget.dataset.scope || 'published'
+    if (!item || (scope === 'published' && !item.canShare)) {
+      return
+    }
+    if (this.data.revealedTeamPortfolioId === item.portfolioId) {
+      this.setData({ revealedTeamPortfolioId: null })
+      return
+    }
+    wx.navigateTo({ url: `${TEAM_PREVIEW_URL}?portfolioId=${item.portfolioId}&scope=${scope}` })
+  },
+
+  findTeamPortfolioById(portfolioId) {
+    return (this.data.teamDisplayPortfolios || []).find((item) => normalizeId(item.portfolioId) === portfolioId) || null
+  },
+
+  handleTeamPortfolioTouchStart(event) {
+    if (this.data.deletingTeamPortfolioId || this.data.ownerType !== OWNER_TYPE_TEAM) {
+      this.setData({ teamPortfolioTouchStart: null })
+      return
+    }
+    const portfolioId = normalizeId(event.currentTarget.dataset.id)
+    const portfolio = this.findTeamPortfolioById(portfolioId)
+    if (!portfolio || !portfolio.canDelete) {
+      this.setData({ teamPortfolioTouchStart: null })
+      return
+    }
+    const touch = (event.touches && event.touches[0]) || {}
+    this.setData({
+      teamPortfolioTouchStart: {
+        portfolioId,
+        x: touch.clientX || 0,
+        y: touch.clientY || 0
+      }
+    })
+  },
+
+  handleTeamPortfolioTouchMove() {
+  },
+
+  handleTeamPortfolioTouchEnd(event) {
+    const start = this.data.teamPortfolioTouchStart
+    if (!start || !start.portfolioId) {
+      return
+    }
+    const touch = (event.changedTouches && event.changedTouches[0]) || {}
+    const deltaX = (touch.clientX || start.x) - start.x
+    const deltaY = Math.abs((touch.clientY || start.y) - start.y)
+    if (deltaY <= SWIPE_VERTICAL_TOLERANCE && deltaX < SWIPE_REVEAL_THRESHOLD) {
+      this.setData({
+        revealedTeamPortfolioId: start.portfolioId,
+        teamPortfolioTouchStart: null
+      })
+      return
+    }
+    if (deltaX > SWIPE_CLOSE_THRESHOLD || Math.abs(deltaX) < 8) {
+      this.setData({
+        revealedTeamPortfolioId: null,
+        teamPortfolioTouchStart: null
+      })
+      return
+    }
+    this.setData({ teamPortfolioTouchStart: null })
+  },
+
+  handleTeamPortfolioTouchCancel() {
+    this.setData({ teamPortfolioTouchStart: null })
+  },
+
+  async handleTeamPublishTap(event) {
+    const item = event.currentTarget.dataset.item
+    if (!item || !item.canMaintain || this.data.publishingTeamPortfolioId) {
+      return
+    }
+    if (this.data.revealedTeamPortfolioId === item.portfolioId) {
+      this.setData({ revealedTeamPortfolioId: null })
+      return
+    }
+    const confirmed = await confirmPortfolioPublishDisclaimer()
+    if (!confirmed) {
+      return
+    }
+    this.setData({ publishingTeamPortfolioId: item.portfolioId })
+    try {
+      await publishTeamPortfolio(
+        request,
+        item.portfolioId,
+        item.draftRevision,
+        makeIdempotencyKey(IDEMPOTENCY_PREFIX_TEAM_PUBLISH)
+      )
+      wx.showToast({ title: '已发布', icon: 'success' })
+      await this.bootstrapTeam()
+    } catch (error) {
+      if (handleTeamMaintainerAuthError(error) || showTeamPortfolioUnavailableToast(error)) {
+        return
+      }
+      wx.showToast({ title: '发布失败，请重试', icon: 'none' })
+    } finally {
+      this.setData({ publishingTeamPortfolioId: null })
+    }
+  },
+
+  async handleTeamDeleteTap(event) {
+    const item = event.currentTarget.dataset.item
+    if (!item || !item.canMaintain || this.data.deletingTeamPortfolioId) {
+      return
+    }
+    const confirmed = await new Promise((resolve) => {
+      wx.showModal({
+        title: '删除团队作品集',
+        content: '删除后不可恢复，确认继续吗？',
+        success: (result) => resolve(result.confirm === true),
+        fail: () => resolve(false)
+      })
+    })
+    if (!confirmed) {
+      return
+    }
+    this.setData({ deletingTeamPortfolioId: item.portfolioId })
+    try {
+      await deleteTeamPortfolio(request, item.portfolioId)
+      await this.bootstrapTeam()
+    } catch (error) {
+      if (handleTeamMaintainerAuthError(error) || showTeamPortfolioUnavailableToast(error)) {
+        return
+      }
+      wx.showToast({ title: '删除失败，请重试', icon: 'none' })
+    } finally {
+      this.setData({
+        deletingTeamPortfolioId: null,
+        revealedTeamPortfolioId: null,
+        teamPortfolioTouchStart: null
+      })
+    }
   },
 
   handleUnavailableTap() {
@@ -268,13 +604,109 @@ Page({
       this.setData({ revealedPortfolioId: null })
       return
     }
-    if (actionType === ACTION_TYPE_SHARE) {
-      return
-    }
     if (actionType === ACTION_TYPE_PUBLISH) {
       return this.publishPortfolioFromList(portfolioId)
     }
     wx.navigateTo({ url: `${EDIT_PAGE_URL}?portfolioId=${portfolioId}` })
+  },
+
+  resolveShareTarget(target = this.data.shareTarget) {
+    const ownerType = target && target.ownerType
+    const portfolioId = normalizeId(target && target.portfolioId)
+    if (!portfolioId) {
+      return null
+    }
+    if (ownerType === OWNER_TYPE_TEAM) {
+      const portfolio = this.findTeamPortfolioById(portfolioId)
+      if (!portfolio || portfolio.publicationStatus !== PUBLICATION_STATUS_PUBLISHED || !portfolio.canShare || !defaultString(portfolio.shareCode)) {
+        return null
+      }
+      return { ownerType, portfolio }
+    }
+    if (ownerType === OWNER_TYPE_USER) {
+      const portfolio = this.findPortfolioById(portfolioId)
+      if (!portfolio || portfolio.publicationStatus !== PUBLICATION_STATUS_PUBLISHED || !defaultString(portfolio.shareCode)) {
+        return null
+      }
+      return { ownerType, portfolio }
+    }
+    return null
+  },
+
+  resetShareSheetState() {
+    this.setData({
+      shareSheetVisible: false,
+      shareActionPending: false,
+      shareTarget: null
+    })
+  },
+
+  handleShareTap(event) {
+    if (this.data.shareActionPending) {
+      return
+    }
+    const dataset = event.currentTarget && event.currentTarget.dataset ? event.currentTarget.dataset : {}
+    const ownerType = dataset.ownerType === OWNER_TYPE_TEAM ? OWNER_TYPE_TEAM : dataset.ownerType === OWNER_TYPE_USER ? OWNER_TYPE_USER : ''
+    const portfolioId = normalizeId(dataset.id)
+    if (ownerType === OWNER_TYPE_TEAM && this.data.revealedTeamPortfolioId === portfolioId) {
+      this.setData({ revealedTeamPortfolioId: null })
+      return
+    }
+    if (ownerType === OWNER_TYPE_USER && this.data.revealedPortfolioId === portfolioId) {
+      this.setData({ revealedPortfolioId: null })
+      return
+    }
+    const shareTarget = { ownerType, portfolioId }
+    if (!this.resolveShareTarget(shareTarget)) {
+      wx.showToast({ title: SHARE_UNAVAILABLE_MESSAGE, icon: 'none' })
+      return
+    }
+    this.setData({
+      shareSheetVisible: true,
+      shareActionPending: false,
+      shareTarget
+    })
+  },
+
+  handleCloseShareSheet() {
+    if (this.data.shareActionPending) {
+      return
+    }
+    this.resetShareSheetState()
+  },
+
+  handleTimelineShare() {
+    if (this.data.shareActionPending) {
+      return
+    }
+    const resolved = this.resolveShareTarget()
+    if (!resolved) {
+      const hadTarget = Boolean(this.data.shareTarget)
+      this.resetShareSheetState()
+      if (hadTarget) {
+        wx.showToast({ title: SHARE_UNAVAILABLE_MESSAGE, icon: 'none' })
+      }
+      return
+    }
+    const url = buildTimelineGuidePath(
+      resolved.ownerType,
+      resolved.portfolio.portfolioId,
+      resolved.portfolio.shareCode
+    )
+    this.setData({
+      shareSheetVisible: false,
+      shareActionPending: true,
+      shareTarget: null
+    })
+    wx.navigateTo({
+      url,
+      fail: () => {
+        wx.showToast({ title: '页面打开失败，请重试', icon: 'none' })
+      },
+      complete: () => {
+        this.setData({ shareActionPending: false })
+      }
+    })
   },
 
   handlePublishedPreviewTap(event) {
@@ -381,29 +813,55 @@ Page({
     })
   },
 
-  onShareAppMessage(event = {}) {
-    const portfolioId = event.target && event.target.dataset ? event.target.dataset.id : ''
-    const portfolio = this.data.displayPortfolios.find((item) => String(item.portfolioId) === String(portfolioId))
-    if (!portfolio) {
-      return {
-        title: '作品集',
-        path: '/pages/portfolios/portfolios',
-        imageUrl: DEFAULT_COVER_URL
-      }
+  onShareAppMessage() {
+    const resolved = this.resolveShareTarget()
+    if (!resolved) {
+      this.resetShareSheetState()
+      return undefined
     }
-    request({
-      url: `${PORTFOLIOS_API_URL}/${portfolio.portfolioId}/share-records`,
-      method: 'POST',
-      data: {
-        shareChannel: SHARE_CHANNEL_WECHAT_MINIAPP,
-        shareScene: SHARE_SCENE_PORTFOLIO_LIST
+    const portfolio = resolved.portfolio
+    let shareConfig
+    if (resolved.ownerType === OWNER_TYPE_TEAM) {
+      shareConfig = {
+        title: portfolio.title || portfolio.teamName,
+        path: buildTeamSharePath(portfolio.shareCode),
+        imageUrl: portfolio.coverUrl || DEFAULT_COVER_URL
       }
-    }).catch(() => {})
-    return {
-      title: portfolio.title,
-      path: buildSharePath(portfolio.shareCode),
-      imageUrl: portfolio.coverUrl
+      if (this.data.sharingTeamPortfolioId !== portfolio.portfolioId) {
+        this.setData({ sharingTeamPortfolioId: portfolio.portfolioId })
+        recordTeamPortfolioShare(
+          request,
+          portfolio.portfolioId,
+          SHARE_CHANNEL_WECHAT_CARD,
+          SHARE_SCENE_TEAM_PORTFOLIO_LIST
+        ).catch((error) => {
+          if (handleTeamMaintainerAuthError(error)) {
+            return
+          }
+          showTeamPortfolioUnavailableToast(error)
+        }).finally(() => {
+          if (this.data.sharingTeamPortfolioId === portfolio.portfolioId) {
+            this.setData({ sharingTeamPortfolioId: null })
+          }
+        })
+      }
+    } else {
+      shareConfig = {
+        title: portfolio.title,
+        path: buildSharePath(portfolio.shareCode),
+        imageUrl: portfolio.coverUrl
+      }
+      request({
+        url: `${PORTFOLIOS_API_URL}/${portfolio.portfolioId}/share-records`,
+        method: 'POST',
+        data: {
+          shareChannel: SHARE_CHANNEL_WECHAT_CARD,
+          shareScene: SHARE_SCENE_PORTFOLIO_LIST
+        }
+      }).catch(() => {})
     }
+    this.resetShareSheetState()
+    return shareConfig
   },
 
   handleTabTap(event) {

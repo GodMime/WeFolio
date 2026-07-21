@@ -3,11 +3,13 @@ package com.jxc.wefolio.service;
 import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.jxc.wefolio.config.RegistrationPointProperties;
 import com.jxc.wefolio.constant.PointConstants;
 import com.jxc.wefolio.dict.MessageActionTypeDict;
 import com.jxc.wefolio.dict.MessageCategoryDict;
 import com.jxc.wefolio.dict.MessageReadStatusDict;
 import com.jxc.wefolio.dict.MessageTypeDict;
+import com.jxc.wefolio.dict.BillingWindowScopeDict;
 import com.jxc.wefolio.dict.PointCalcModeDict;
 import com.jxc.wefolio.dict.PointRuleGroupDict;
 import com.jxc.wefolio.dict.PointRuleStatusDict;
@@ -23,6 +25,7 @@ import com.jxc.wefolio.entity.PointAccountEntity;
 import com.jxc.wefolio.entity.PointMeterEntity;
 import com.jxc.wefolio.entity.PointRuleEntity;
 import com.jxc.wefolio.entity.PointTransactionEntity;
+import com.jxc.wefolio.entity.PointPendingDebitEntity;
 import com.jxc.wefolio.entity.SystemMessageEntity;
 import com.jxc.wefolio.entity.UserEntity;
 import com.jxc.wefolio.exception.BusinessException;
@@ -30,10 +33,17 @@ import com.jxc.wefolio.mapper.PointAccountEntityMapper;
 import com.jxc.wefolio.mapper.PointMeterEntityMapper;
 import com.jxc.wefolio.mapper.PointRuleEntityMapper;
 import com.jxc.wefolio.mapper.PointTransactionEntityMapper;
+import com.jxc.wefolio.mapper.PointPendingDebitEntityMapper;
 import com.jxc.wefolio.mapper.SystemMessageEntityMapper;
 import com.jxc.wefolio.mapper.UserEntityMapper;
-import lombok.RequiredArgsConstructor;
+import com.jxc.wefolio.message.PointMessage;
+import com.jxc.wefolio.service.point.DebitCommand;
+import com.jxc.wefolio.service.point.GiftCommand;
+import com.jxc.wefolio.service.point.GiftOrderResult;
+import com.jxc.wefolio.service.point.PointCommandService;
+import com.jxc.wefolio.service.point.PointMutationResult;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -53,7 +63,6 @@ import java.util.Set;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class PointService {
 
     /** 低余额消息幂等键前缀 */
@@ -86,9 +95,36 @@ public class PointService {
     /** 后台人工加分业务类型 */
     private static final String BUSINESS_TYPE_ADMIN_GRANT = "ADMIN_GRANT";
 
+    /** 后台人工赠送展示文案 */
+    private static final String ADMIN_GRANT_DISPLAY_TEXT = "后台人工赠送";
+
+    /** 积分来源快照中的备注键 */
+    private static final String POINT_SNAPSHOT_REMARK = "remark";
+
+    /** 充值订单业务类型 */
+    private static final String BUSINESS_TYPE_RECHARGE_ORDER = "RECHARGE_ORDER";
+
     /** 流水时间展示格式 */
     private static final DateTimeFormatter TRANSACTION_TIME_FORMATTER =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+    /** 规则扩展配置中的免重复扣费窗口键 */
+    private static final String RULE_CONFIG_DEDUPE_WINDOW_HOURS = "dedupeWindowHours";
+
+    /** 规则扩展配置中的免重复扣费作用域键 */
+    private static final String RULE_CONFIG_DEDUPE_SCOPE = "dedupeScope";
+
+    /** 新用户注册获取规则标题 */
+    private static final String NEW_USER_ACQUISITION_TITLE = "新用户注册";
+
+    /** 新用户注册获取规则说明 */
+    private static final String NEW_USER_ACQUISITION_DESCRIPTION = "首次注册成功后赠送";
+
+    /** 推荐好友注册获取规则标题 */
+    private static final String REFERRAL_ACQUISITION_TITLE = "推荐好友注册";
+
+    /** 推荐好友注册获取规则说明 */
+    private static final String REFERRAL_ACQUISITION_DESCRIPTION = "好友填写您的有效推荐码并注册成功后赠送";
 
     /** 维护类消耗场景 */
     private static final Set<String> MAINTENANCE_SCENES = Set.of(
@@ -96,7 +132,8 @@ public class PointService {
             PointSceneCodeDict.UPLOAD_VIDEO.getCode(),
             PointSceneCodeDict.CREATE_TEAM.getCode(),
             PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode(),
-            PointSceneCodeDict.MAINTAIN_ADVANCED_PORTFOLIO.getCode()
+            PointSceneCodeDict.MAINTAIN_ADVANCED_PORTFOLIO.getCode(),
+            PointSceneCodeDict.MONTHLY_WORK_STORAGE.getCode()
     );
 
     /** 访客类消耗场景 */
@@ -124,6 +161,83 @@ public class PointService {
     /** 系统消息 Mapper */
     private final SystemMessageEntityMapper systemMessageEntityMapper;
 
+    /** 统一积分命令入口；兼容构造器中为空时仅供旧单元测试覆盖遗留实现。 */
+    private final PointCommandService pointCommandService;
+
+    /** 待扣来源 Mapper；旧单元测试兼容构造器中为空。 */
+    private final PointPendingDebitEntityMapper pointPendingDebitEntityMapper;
+
+    /** 注册积分赠送配置 */
+    private final RegistrationPointProperties registrationPointProperties;
+
+    /** Spring 生产构造器。 */
+    @Autowired
+    public PointService(
+            UserEntityMapper userEntityMapper,
+            PointAccountEntityMapper pointAccountEntityMapper,
+            PointRuleEntityMapper pointRuleEntityMapper,
+            PointMeterEntityMapper pointMeterEntityMapper,
+            PointTransactionEntityMapper pointTransactionEntityMapper,
+            SystemMessageEntityMapper systemMessageEntityMapper,
+            PointCommandService pointCommandService,
+            PointPendingDebitEntityMapper pointPendingDebitEntityMapper,
+            RegistrationPointProperties registrationPointProperties
+    ) {
+        this.userEntityMapper = userEntityMapper;
+        this.pointAccountEntityMapper = pointAccountEntityMapper;
+        this.pointRuleEntityMapper = pointRuleEntityMapper;
+        this.pointMeterEntityMapper = pointMeterEntityMapper;
+        this.pointTransactionEntityMapper = pointTransactionEntityMapper;
+        this.systemMessageEntityMapper = systemMessageEntityMapper;
+        this.pointCommandService = pointCommandService;
+        this.pointPendingDebitEntityMapper = pointPendingDebitEntityMapper;
+        this.registrationPointProperties = registrationPointProperties;
+    }
+
+    /**
+     * 旧单元测试兼容构造器。
+     *
+     * @deprecated 仅用于尚未迁移到统一积分命令服务的旧单元测试，后续随旧本地赠送实现一并删除
+     */
+    @Deprecated(forRemoval = true)
+    PointService(
+            UserEntityMapper userEntityMapper,
+            PointAccountEntityMapper pointAccountEntityMapper,
+            PointRuleEntityMapper pointRuleEntityMapper,
+            PointMeterEntityMapper pointMeterEntityMapper,
+            PointTransactionEntityMapper pointTransactionEntityMapper,
+            SystemMessageEntityMapper systemMessageEntityMapper
+    ) {
+        this(userEntityMapper, pointAccountEntityMapper, pointRuleEntityMapper,
+                pointMeterEntityMapper, pointTransactionEntityMapper, systemMessageEntityMapper,
+                null, null, new RegistrationPointProperties());
+    }
+
+    /**
+     * 使用指定注册积分配置的单元测试构造器。
+     *
+     * @param userEntityMapper 用户 Mapper
+     * @param pointAccountEntityMapper 积分账户 Mapper
+     * @param pointRuleEntityMapper 积分规则 Mapper
+     * @param pointMeterEntityMapper 积分计量器 Mapper
+     * @param pointTransactionEntityMapper 积分流水 Mapper
+     * @param systemMessageEntityMapper 系统消息 Mapper
+     * @param registrationPointProperties 注册积分配置
+     */
+    PointService(
+            UserEntityMapper userEntityMapper,
+            PointAccountEntityMapper pointAccountEntityMapper,
+            PointRuleEntityMapper pointRuleEntityMapper,
+            PointMeterEntityMapper pointMeterEntityMapper,
+            PointTransactionEntityMapper pointTransactionEntityMapper,
+            SystemMessageEntityMapper systemMessageEntityMapper,
+            RegistrationPointProperties registrationPointProperties
+    ) {
+        this(userEntityMapper, pointAccountEntityMapper, pointRuleEntityMapper,
+                pointMeterEntityMapper, pointTransactionEntityMapper, systemMessageEntityMapper,
+                null, null, registrationPointProperties);
+    }
+
     /**
      * 确保用户积分账户存在。
      *
@@ -141,6 +255,79 @@ public class PointService {
     }
 
     /**
+     * 将微信支付充值积分原子计入账户并写入幂等流水。
+     *
+     * @param userId 用户 ID
+     * @param points 到账积分
+     * @param businessId 商户订单号
+     * @param calculationSnapshot 套餐计算快照 JSON
+     * @param idempotencyKey 积分流水幂等键
+     * @param remark 套餐名称
+     * @return 积分变动结果
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public PointMutationResponse recharge(
+            Long userId,
+            long points,
+            String businessId,
+            String calculationSnapshot,
+            String idempotencyKey,
+            String remark
+    ) {
+        requireActiveUser(userId);
+        if (points <= 0L) {
+            throw new BusinessException(PointMessage.RECHARGE_POINTS_INVALID_MESSAGE);
+        }
+        String normalizedBusinessId = normalizeRequiredString(
+                businessId, PointMessage.RECHARGE_ORDER_NO_REQUIRED_MESSAGE);
+        String normalizedSnapshot = normalizeRequiredString(
+                calculationSnapshot, PointMessage.RECHARGE_SNAPSHOT_REQUIRED_MESSAGE);
+        String normalizedIdempotencyKey = normalizeRequiredString(idempotencyKey, "幂等键不能为空");
+        String sceneCode = PointSceneCodeDict.RECHARGE_PACKAGE.getCode();
+        PointTransactionEntity existing = findTransaction(normalizedIdempotencyKey);
+        if (existing != null) {
+            assertSamePointBusiness(
+                    existing,
+                    userId,
+                    sceneCode,
+                    BUSINESS_TYPE_RECHARGE_ORDER,
+                    normalizedBusinessId
+            );
+            return buildMutationFromTransaction(existing, true, true);
+        }
+
+        PointAccountEntity account = requireAccount(userId);
+        int updated = pointAccountEntityMapper.addRechargedPoints(account.getId(), userId, points);
+        if (updated != 1) {
+            throw new BusinessException(PointMessage.ACCOUNT_UPDATE_FAILED_MESSAGE);
+        }
+        PointAccountEntity updatedAccount = findAccount(userId);
+        if (updatedAccount == null) {
+            throw new BusinessException(PointMessage.ACCOUNT_UPDATE_FAILED_MESSAGE);
+        }
+        long balanceAfter = safeLong(updatedAccount.getBalance());
+        long balanceBefore = Math.subtractExact(balanceAfter, points);
+
+        PointTransactionEntity transaction = new PointTransactionEntity();
+        transaction.setAccountId(updatedAccount.getId());
+        transaction.setUserId(userId);
+        transaction.setRuleId(null);
+        transaction.setTransactionType(PointTransactionTypeDict.RECHARGE.getCode());
+        transaction.setSceneCode(sceneCode);
+        transaction.setPointsChange(points);
+        transaction.setBalanceBefore(balanceBefore);
+        transaction.setBalanceAfter(balanceAfter);
+        transaction.setBusinessType(BUSINESS_TYPE_RECHARGE_ORDER);
+        transaction.setBusinessId(normalizedBusinessId);
+        transaction.setCalculationSnapshot(normalizedSnapshot);
+        transaction.setIdempotencyKey(normalizedIdempotencyKey);
+        transaction.setRemark(normalizeOptionalString(remark));
+        transaction.setOccurredAt(LocalDateTime.now());
+        pointTransactionEntityMapper.insert(transaction);
+        return buildMutationFromTransaction(transaction, false, true);
+    }
+
+    /**
      * 获取我的积分概览。
      *
      * @param userId 当前用户 ID
@@ -153,6 +340,13 @@ public class PointService {
         response.setAccountId(account.getId());
         response.setUserId(userId);
         response.setBalance(safeLong(account.getBalance()));
+        response.setWechatBalance(safeLong(account.getWechatBalance()));
+        response.setWechatPresentBalance(safeLong(account.getWechatPresentBalance()));
+        response.setWechatPaidBalance(Math.max(0L,
+                safeLong(account.getWechatBalance()) - safeLong(account.getWechatPresentBalance())));
+        response.setPendingDebit(safeLong(account.getPendingDebit()));
+        response.setWechatBalanceSyncedAt(account.getWechatBalanceSyncedAt() == null
+                ? null : account.getWechatBalanceSyncedAt().format(TRANSACTION_TIME_FORMATTER));
         response.setTotalRecharged(safeLong(account.getTotalRecharged()));
         response.setTotalGifted(safeLong(account.getTotalGifted()));
         response.setTotalConsumed(safeLong(account.getTotalConsumed()));
@@ -164,6 +358,7 @@ public class PointService {
         response.setRules(loadActiveRules(LocalDateTime.now()).stream()
                 .map(this::buildRuleItem)
                 .toList());
+        response.setAcquisitionRules(buildAcquisitionRules());
         return response;
     }
 
@@ -270,8 +465,48 @@ public class PointService {
         long balanceAfter = calculateBalanceAfter(balanceBefore, signedPoints);
         if (PointTransactionTypeDict.CONSUMPTION.getCode().equals(rule.getTransactionType())
                 && balanceAfter < 0L) {
-            throw new BusinessException("积分余额不足，请充值后再试");
+            throw new BusinessException(PointMessage.INSUFFICIENT_BALANCE_MESSAGE);
         }
+    }
+
+    /**
+     * 只读校验指定积分业务是否可扣除，并兼容已经成功写入的幂等流水。
+     *
+     * <p>幂等流水命中时必须校验用户、场景、业务类型和业务 ID 全部一致；
+     * 身份一致表示该请求已经完成扣费，因此不再检查当前余额。</p>
+     *
+     * @param userId 当前用户 ID
+     * @param sceneCode 场景编码
+     * @param businessType 业务类型
+     * @param businessId 业务 ID
+     * @param actionCount 动作次数
+     * @param idempotencyKey 幂等键
+     */
+    public void assertCanConsume(
+            Long userId,
+            String sceneCode,
+            String businessType,
+            String businessId,
+            int actionCount,
+            String idempotencyKey
+    ) {
+        requireActiveUser(userId);
+        String normalizedSceneCode = normalizeRequiredString(sceneCode, "积分场景不能为空");
+        String normalizedBusinessType = normalizeRequiredString(businessType, "业务类型不能为空");
+        String normalizedBusinessId = normalizeRequiredString(businessId, "业务 ID 不能为空");
+        String normalizedIdempotencyKey = normalizeRequiredString(idempotencyKey, "幂等键不能为空");
+        PointTransactionEntity existing = findTransaction(normalizedIdempotencyKey);
+        if (existing != null) {
+            assertSamePointBusiness(
+                    existing,
+                    userId,
+                    normalizedSceneCode,
+                    normalizedBusinessType,
+                    normalizedBusinessId
+            );
+            return;
+        }
+        assertCanConsume(userId, normalizedSceneCode, actionCount);
     }
 
     /**
@@ -324,6 +559,29 @@ public class PointService {
         String normalizedBusinessType = normalizeRequiredString(businessType, "业务类型不能为空");
         String normalizedBusinessId = normalizeRequiredString(businessId, "业务 ID 不能为空");
         String normalizedIdempotencyKey = normalizeRequiredString(idempotencyKey, "幂等键不能为空");
+        if (pointCommandService != null) {
+            GiftOrderResult giftResult = pointCommandService.createGiftOrders(List.of(new GiftCommand(
+                    userId,
+                    normalizedSceneCode,
+                    normalizedPoints,
+                    normalizedBusinessType,
+                    normalizedBusinessId,
+                    toJson(Map.of("points", normalizedPoints, "remark", normalizeOptionalString(remark))),
+                    normalizedIdempotencyKey
+            )));
+            GiftOrderResult.GiftOrderItem item = giftResult.orders().getFirst();
+            PointAccountEntity account = requireAccount(userId);
+            PointMutationResponse response = new PointMutationResponse();
+            response.setAccountId(account.getId());
+            response.setUserId(userId);
+            response.setSceneCode(normalizedSceneCode);
+            response.setPointsChange(0L);
+            response.setBalanceBefore(safeLong(account.getBalance()));
+            response.setBalanceAfter(safeLong(account.getBalance()));
+            response.setCharged(false);
+            response.setMessage("赠送订单已创建：" + item.orderNo());
+            return response;
+        }
         PointTransactionEntity existing = findTransaction(normalizedIdempotencyKey);
         if (existing != null) {
             assertSameUser(existing, userId);
@@ -357,6 +615,24 @@ public class PointService {
         log.info("赠送积分成功: userId={}, sceneCode={}, points={}, balanceAfter={}, idempotencyKey={}",
                 userId, normalizedSceneCode, normalizedPoints, balanceAfter, normalizedIdempotencyKey);
         return buildMutationFromTransaction(transaction, false, true);
+    }
+
+    /**
+     * 在同一来源业务事务内批量创建赠送订单。
+     *
+     * <p>注册和推荐赠送使用此入口，由统一命令服务按用户 ID 排序加锁。</p>
+     *
+     * @param commands 赠送命令
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void createGiftOrders(List<GiftCommand> commands) {
+        if (commands == null || commands.isEmpty()) {
+            return;
+        }
+        if (pointCommandService == null) {
+            throw new IllegalStateException("统一积分命令服务未注入，禁止绕过微信赠送订单");
+        }
+        pointCommandService.createGiftOrders(commands);
     }
 
     /**
@@ -445,7 +721,13 @@ public class PointService {
         String normalizedIdempotencyKey = normalizeRequiredString(idempotencyKey, "幂等键不能为空");
         PointTransactionEntity existing = findTransaction(normalizedIdempotencyKey);
         if (existing != null) {
-            assertSameUser(existing, userId);
+            assertSamePointBusiness(
+                    existing,
+                    userId,
+                    normalizedSceneCode,
+                    normalizedBusinessType,
+                    normalizedBusinessId
+            );
             return buildMutationFromTransaction(existing, true, true);
         }
 
@@ -469,6 +751,27 @@ public class PointService {
             response.setCharged(false);
             response.setMessage("累计次数未达到扣费阈值");
             return response;
+        }
+
+        if (pointCommandService != null
+                && PointTransactionTypeDict.CONSUMPTION.getCode().equals(rule.getTransactionType())) {
+            String calculationSnapshot = toJson(snapshot(
+                    rule.getCalcMode(), calculation.points(), calculation.billedUnits(), rule));
+            DebitCommand command = new DebitCommand(
+                    userId,
+                    rule.getId(),
+                    rule.getSceneCode(),
+                    normalizedBusinessType,
+                    normalizedBusinessId,
+                    calculationSnapshot,
+                    normalizedIdempotencyKey,
+                    normalizeOptionalString(remark),
+                    calculation.points()
+            );
+            PointMutationResult mutation = VISITOR_SCENES.contains(rule.getSceneCode())
+                    ? pointCommandService.deductForVisitor(command)
+                    : pointCommandService.deductForMaintainer(command);
+            return buildMutationFromCommand(userId, rule, calculation, mutation);
         }
 
         long signedPoints = signedPoints(rule.getTransactionType(), calculation.points());
@@ -529,6 +832,10 @@ public class PointService {
         PointAccountEntity account = new PointAccountEntity();
         account.setUserId(userId);
         account.setBalance(0L);
+        account.setWechatBalance(0L);
+        account.setWechatPresentBalance(0L);
+        account.setPendingDebit(0L);
+        account.setWechatBalanceSyncedAt(null);
         account.setTotalRecharged(0L);
         account.setTotalGifted(0L);
         account.setTotalConsumed(0L);
@@ -589,11 +896,11 @@ public class PointService {
     private PointAccountEntity deductConsumedPoints(PointAccountEntity account, Long userId, long points) {
         int updated = pointAccountEntityMapper.deductConsumedPoints(account.getId(), userId, points);
         if (updated <= 0) {
-            throw new BusinessException("积分余额不足，请充值后再试");
+            throw new BusinessException(PointMessage.INSUFFICIENT_BALANCE_MESSAGE);
         }
         PointAccountEntity updatedAccount = findAccount(userId);
         if (updatedAccount == null) {
-            throw new BusinessException("积分账户更新失败，请重试");
+            throw new BusinessException(PointMessage.ACCOUNT_UPDATE_FAILED_MESSAGE);
         }
         return fillAccountDefaults(updatedAccount);
     }
@@ -606,7 +913,7 @@ public class PointService {
     private void updateAccount(PointAccountEntity account) {
         int updated = pointAccountEntityMapper.updateById(account);
         if (updated <= 0) {
-            throw new BusinessException("积分账户更新失败，请重试");
+            throw new BusinessException(PointMessage.ACCOUNT_UPDATE_FAILED_MESSAGE);
         }
     }
 
@@ -618,6 +925,9 @@ public class PointService {
      */
     private PointAccountEntity fillAccountDefaults(PointAccountEntity account) {
         account.setBalance(safeLong(account.getBalance()));
+        account.setWechatBalance(safeLong(account.getWechatBalance()));
+        account.setWechatPresentBalance(safeLong(account.getWechatPresentBalance()));
+        account.setPendingDebit(safeLong(account.getPendingDebit()));
         account.setTotalRecharged(safeLong(account.getTotalRecharged()));
         account.setTotalGifted(safeLong(account.getTotalGifted()));
         account.setTotalConsumed(safeLong(account.getTotalConsumed()));
@@ -646,7 +956,31 @@ public class PointService {
      */
     private void assertSameUser(PointTransactionEntity transaction, Long userId) {
         if (!Objects.equals(transaction.getUserId(), userId)) {
-            throw new BusinessException("幂等键已被其他用户使用");
+            throw new BusinessException(PointMessage.IDEMPOTENCY_USER_CONFLICT_MESSAGE);
+        }
+    }
+
+    /**
+     * 校验幂等流水是否属于同一积分业务。
+     *
+     * @param transaction 已有流水
+     * @param userId 当前用户 ID
+     * @param sceneCode 场景编码
+     * @param businessType 业务类型
+     * @param businessId 业务 ID
+     */
+    private void assertSamePointBusiness(
+            PointTransactionEntity transaction,
+            Long userId,
+            String sceneCode,
+            String businessType,
+            String businessId
+    ) {
+        assertSameUser(transaction, userId);
+        if (!Objects.equals(transaction.getSceneCode(), sceneCode)
+                || !Objects.equals(transaction.getBusinessType(), businessType)
+                || !Objects.equals(transaction.getBusinessId(), businessId)) {
+            throw new BusinessException(PointMessage.IDEMPOTENCY_BUSINESS_CONFLICT_MESSAGE);
         }
     }
 
@@ -957,6 +1291,29 @@ public class PointService {
         return response;
     }
 
+    /** 将统一扣除命令结果转换为既有接口响应。 */
+    private PointMutationResponse buildMutationFromCommand(
+            Long userId,
+            PointRuleEntity rule,
+            PointCalculation calculation,
+            PointMutationResult mutation
+    ) {
+        PointMutationResponse response = new PointMutationResponse();
+        response.setTransactionId(mutation.transactionId());
+        response.setAccountId(mutation.accountId());
+        response.setUserId(userId);
+        response.setSceneCode(rule.getSceneCode());
+        response.setSceneText(sceneText(rule.getSceneCode()));
+        response.setPointsChange(Math.negateExact(mutation.points()));
+        response.setBalanceBefore(mutation.balanceBefore());
+        response.setBalanceAfter(mutation.balanceAfter());
+        response.setIdempotent(mutation.idempotent());
+        response.setCharged(true);
+        response.setBilledUnits(calculation.billedUnits());
+        response.setMessage(mutation.idempotent() ? "已处理过相同积分请求" : "积分变动成功");
+        return response;
+    }
+
     /**
      * 从计算快照读取计费单位数。
      *
@@ -1046,7 +1403,87 @@ public class PointService {
         item.setTransactionType(defaultString(rule.getTransactionType()));
         item.setUnitCount(rule.getUnitCount());
         item.setPointsValue(safeLong(rule.getPointsValue()));
+        fillBillingWindowDisplayConfig(item, rule);
         return item;
+    }
+
+    /**
+     * 构建注册与推荐两条积分获取规则。
+     *
+     * @return 积分获取规则列表
+     */
+    private List<MinePointOverviewResponse.AcquisitionRuleItem> buildAcquisitionRules() {
+        return List.of(
+                buildAcquisitionRule(
+                        PointSceneCodeDict.NEW_USER_REGISTRATION_GIFT.getCode(),
+                        NEW_USER_ACQUISITION_TITLE,
+                        NEW_USER_ACQUISITION_DESCRIPTION,
+                        registrationPointProperties.getNewUserGiftPoints()
+                ),
+                buildAcquisitionRule(
+                        PointSceneCodeDict.REFERRAL_USER_GIFT.getCode(),
+                        REFERRAL_ACQUISITION_TITLE,
+                        REFERRAL_ACQUISITION_DESCRIPTION,
+                        registrationPointProperties.getReferralGiftPoints()
+                )
+        );
+    }
+
+    /**
+     * 构建单条积分获取规则。
+     *
+     * @param code 稳定规则编码
+     * @param title 规则标题
+     * @param description 规则说明
+     * @param pointsValue 赠送积分值
+     * @return 积分获取规则
+     */
+    private MinePointOverviewResponse.AcquisitionRuleItem buildAcquisitionRule(
+            String code,
+            String title,
+            String description,
+            Long pointsValue
+    ) {
+        MinePointOverviewResponse.AcquisitionRuleItem item =
+                new MinePointOverviewResponse.AcquisitionRuleItem();
+        item.setCode(code);
+        item.setTitle(title);
+        item.setDescription(description);
+        item.setPointsValue(safeLong(pointsValue));
+        return item;
+    }
+
+    /**
+     * 安全读取规则扩展配置中的滚动扣费窗口展示字段。
+     *
+     * @param item 规则展示项
+     * @param rule 积分规则
+     */
+    private void fillBillingWindowDisplayConfig(
+            MinePointOverviewResponse.RuleItem item,
+            PointRuleEntity rule
+    ) {
+        if (!hasText(rule.getConfigJson())) {
+            return;
+        }
+        try {
+            var config = JSON.parseObject(rule.getConfigJson());
+            if (config == null) {
+                return;
+            }
+            Integer windowHours = config.getInteger(RULE_CONFIG_DEDUPE_WINDOW_HOURS);
+            if (windowHours != null && windowHours > 0) {
+                item.setDedupeWindowHours(windowHours);
+            }
+            BillingWindowScopeDict.fromCode(config.getString(RULE_CONFIG_DEDUPE_SCOPE))
+                    .ifPresent(scope -> item.setDedupeScope(scope.getCode()));
+        } catch (Exception e) {
+            log.warn(
+                    "积分规则窗口展示配置解析失败: ruleId={}, sceneCode={}",
+                    rule.getId(),
+                    rule.getSceneCode()
+            );
+        }
     }
 
     /**
@@ -1069,10 +1506,69 @@ public class PointService {
         item.setBusinessType(defaultString(transaction.getBusinessType()));
         item.setBusinessId(defaultString(transaction.getBusinessId()));
         item.setRemark(defaultString(transaction.getRemark()));
+        fillAdminGrantDisplay(item, transaction);
         item.setOccurredAt(transaction.getOccurredAt() == null
                 ? ""
                 : TRANSACTION_TIME_FORMATTER.format(transaction.getOccurredAt()));
+        fillWechatSettlement(item, transaction);
         return item;
+    }
+
+    /**
+     * 填充后台人工赠送流水的展示文案。
+     *
+     * @param item 流水展示项
+     * @param transaction 积分流水
+     */
+    private void fillAdminGrantDisplay(
+            MinePointTransactionsResponse.TransactionItem item,
+            PointTransactionEntity transaction
+    ) {
+        if (!PointSceneCodeDict.MANUAL_ADMIN_GRANT.getCode().equals(transaction.getSceneCode())
+                || !BUSINESS_TYPE_ADMIN_GRANT.equals(transaction.getBusinessType())) {
+            return;
+        }
+        item.setSceneText(ADMIN_GRANT_DISPLAY_TEXT);
+        if (!hasText(transaction.getCalculationSnapshot())) {
+            return;
+        }
+        try {
+            var snapshot = JSON.parseObject(transaction.getCalculationSnapshot());
+            if (snapshot == null) {
+                return;
+            }
+            String adminRemark = normalizeOptionalString(snapshot.getString(POINT_SNAPSHOT_REMARK));
+            if (hasText(adminRemark)) {
+                item.setSceneText(adminRemark);
+                item.setRemark(ADMIN_GRANT_DISPLAY_TEXT);
+            }
+        } catch (Exception e) {
+            log.warn("后台人工赠送流水快照解析失败: transactionId={}", transaction.getId());
+        }
+    }
+
+    /** 填充消费流水对应的微信待结算状态。 */
+    private void fillWechatSettlement(
+            MinePointTransactionsResponse.TransactionItem item,
+            PointTransactionEntity transaction
+    ) {
+        if (!PointTransactionTypeDict.CONSUMPTION.getCode().equals(transaction.getTransactionType())
+                || pointPendingDebitEntityMapper == null) {
+            return;
+        }
+        PointPendingDebitEntity pending = pointPendingDebitEntityMapper.selectOne(
+                Wrappers.lambdaQuery(PointPendingDebitEntity.class)
+                        .eq(PointPendingDebitEntity::getPointTransactionId, transaction.getId())
+                        .last("LIMIT 1"));
+        long remaining = pending == null ? 0L : safeLong(pending.getRemainingAmount());
+        item.setPendingSettlementPoints(remaining);
+        if (remaining == 0L) {
+            item.setWechatSettlementStatus("SETTLED");
+        } else if (pending != null && remaining < safeLong(pending.getOriginalAmount())) {
+            item.setWechatSettlementStatus("PARTIAL");
+        } else {
+            item.setWechatSettlementStatus("PENDING");
+        }
     }
 
     /**

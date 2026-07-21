@@ -15,6 +15,7 @@ import com.jxc.wefolio.config.AuthTokenProperties;
 import com.jxc.wefolio.config.WechatMiniappProperties;
 import com.jxc.wefolio.config.CosProperties;
 import com.jxc.wefolio.config.RegistrationPointProperties;
+import com.jxc.wefolio.config.WechatVirtualPaymentProperties;
 import com.jxc.wefolio.exception.BusinessException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -423,7 +424,9 @@ class MiniappAuthServiceTest {
                         pointService,
                         registrationPointProperties()
                 ),
-                uniqueCodeGenerator
+                uniqueCodeGenerator,
+                null,
+                new WechatVirtualPaymentProperties()
         );
     }
 

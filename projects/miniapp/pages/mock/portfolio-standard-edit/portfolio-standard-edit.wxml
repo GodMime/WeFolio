@@ -179,6 +179,37 @@
             </view>
           </block>
 
+          <block wx:elif="{{selectedComponentType === 'SINGLE_WORK'}}">
+            <view class="section-desc mock-editor-desc">单个作品支持一张图片或一个视频，点击当前作品不会取消选择。</view>
+            <view class="component-work-list-content mock-work-list">
+              <view
+                wx:for="{{workOptions}}"
+                wx:key="id"
+                class="component-work-option {{item.selected ? 'selected' : ''}}"
+                data-id="{{item.id}}"
+                bindtap="handleWorkToggle"
+                aria-role="radio"
+                aria-checked="{{item.selected}}"
+              >
+                <view class="component-work-thumb">
+                  <image src="{{item.coverUrl}}" mode="aspectFill"></image>
+                </view>
+                <view class="component-work-copy">
+                  <view class="component-work-title">{{item.title}}</view>
+                  <view class="component-work-meta">{{item.mediaType === 'VIDEO' ? '视频' : '图片'}} / 风景作品</view>
+                </view>
+                <view class="component-work-check">{{item.selected ? '✓' : ''}}</view>
+              </view>
+            </view>
+            <view class="mock-single-work-title-row">
+              <view class="mock-single-work-title-copy">
+                <view class="field-label">展示作品名</view>
+                <view class="section-desc">关闭后预览不显示标题及占位。</view>
+              </view>
+              <switch checked="{{singleWorkShowTitle}}" bindchange="handleSingleWorkShowTitleChange" color="#17202a"></switch>
+            </view>
+          </block>
+
           <block wx:elif="{{selectedComponentType === 'PROFILE'}}">
             <view class="profile-avatar-editor mock-profile-editor">
               <view class="profile-avatar-preview" catchtap="handleLockedAction" aria-role="button" aria-label="上传头像">

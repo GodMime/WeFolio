@@ -1,136 +1,205 @@
 <view class="page-shell portfolios-page">
   <navigation-bar title="作品集" back="{{false}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
 
-  <scroll-view
-    class="portfolio-scroll"
-    scroll-y
-    type="list"
-    refresher-enabled="{{true}}"
-    refresher-triggered="{{pullDownRefreshing}}"
-    bindrefresherrefresh="handlePullDownRefresh"
-  >
-    <view class="portfolio-content">
-      <view class="segment">
-        <button class="segment-item {{ownerType === 'USER' ? 'active' : ''}}" data-type="USER" bindtap="handleOwnerTypeTap">个人</button>
-        <button class="segment-item {{ownerType === 'TEAM' ? 'active' : ''}}" data-type="TEAM" bindtap="handleOwnerTypeTap">团队</button>
-      </view>
+  <view class="portfolio-segment-shell {{switching ? 'switching' : ''}}">
+    <view class="segment">
+      <view class="segment-indicator {{ownerType === 'TEAM' ? 'team-active' : ''}}"></view>
+      <button class="segment-item {{ownerType === 'USER' ? 'active' : ''}}" data-type="USER" bindtap="handleOwnerTypeTap">个人</button>
+      <button class="segment-item {{ownerType === 'TEAM' ? 'active' : ''}}" data-type="TEAM" bindtap="handleOwnerTypeTap">团队</button>
+    </view>
+  </view>
 
-      <view class="portfolio-list-panel">
-        <view class="list-heading">
-          <view class="list-title">{{ownerTitle}}</view>
-          <view class="summary-pills">
-            <view class="summary-pill published">{{summary.publishedText}}</view>
-            <view class="summary-pill draft">{{summary.draftText}}</view>
-          </view>
-        </view>
-
-        <view wx:if="{{loading}}" class="inline-state">作品集加载中</view>
-        <view wx:elif="{{errorMessage}}" class="inline-state error">
-          <text>{{errorMessage}}</text>
-          <button class="small-button" bindtap="bootstrap">重试</button>
-        </view>
-        <view wx:elif="{{displayPortfolios.length === 0}}" class="empty-state">
-          <view class="empty-title">暂无作品集</view>
-          <view class="empty-desc">新建标准个人作品集后，可选择组件并发布给访客查看。</view>
-        </view>
-
-        <view wx:else class="portfolio-list">
-          <view
-            wx:for="{{displayPortfolios}}"
-            wx:key="portfolioId"
-            class="portfolio-swipe-row {{revealedPortfolioId === item.portfolioId ? 'revealed' : ''}}"
-            data-id="{{item.portfolioId}}"
-            bindtouchstart="handlePortfolioTouchStart"
-            bindtouchmove="handlePortfolioTouchMove"
-            bindtouchend="handlePortfolioTouchEnd"
-            bindtouchcancel="handlePortfolioTouchCancel"
-          >
-            <view class="portfolio-delete-pane" wx:if="{{ownerType === 'USER'}}">
-              <button
-                class="portfolio-delete-button"
-                loading="{{deletingPortfolioId === item.portfolioId}}"
-                disabled="{{deletingPortfolioId === item.portfolioId}}"
-                data-id="{{item.portfolioId}}"
-                catchtap="handleDeletePortfolioTap"
-              >删除</button>
-            </view>
-            <view class="portfolio-item-card" data-id="{{item.portfolioId}}" bindtap="handlePortfolioCardTap">
-              <view class="portfolio-cover">
-                <image class="portfolio-cover-image" src="{{item.coverUrl}}" mode="aspectFill" aria-label="{{item.coverAlt}}"></image>
+  <view class="portfolio-switch-viewport">
+    <view class="portfolio-switch-track {{ownerType === 'TEAM' ? 'team-active' : ''}}">
+      <view class="portfolio-switch-panel">
+        <view class="portfolio-content personal-portfolio-content">
+          <view class="portfolio-list-panel">
+            <view class="list-heading">
+              <view class="list-title">个人作品集</view>
+              <view class="summary-pills">
+                <view class="summary-pill published">{{summary.publishedText}}</view>
+                <view class="summary-pill draft">{{summary.draftText}}</view>
               </view>
-              <view class="portfolio-copy">
-                <view class="portfolio-title {{item.titleScrollable ? 'scrolling' : ''}}">
-                  <view class="portfolio-title-track">
-                    <text class="portfolio-title-text">{{item.title}}</text>
-                    <text wx:if="{{item.titleScrollable}}" class="portfolio-title-text duplicate" aria-hidden="true">{{item.title}}</text>
+            </view>
+
+            <scroll-view
+              class="portfolio-list-scroll personal-portfolio-list-scroll"
+              scroll-y
+              type="list"
+              refresher-enabled="{{true}}"
+              refresher-triggered="{{pullDownRefreshing}}"
+              bindrefresherrefresh="handlePullDownRefresh"
+            >
+            <view wx:if="{{loading}}" class="inline-state">作品集加载中</view>
+            <view wx:elif="{{errorMessage}}" class="inline-state error">
+              <text>{{errorMessage}}</text>
+              <button class="small-button" bindtap="bootstrap">重试</button>
+            </view>
+            <view wx:elif="{{displayPortfolios.length === 0}}" class="empty-state">
+              <view class="empty-title">暂无作品集</view>
+              <view class="empty-desc">新建标准个人作品集后，可选择组件并发布给访客查看。</view>
+            </view>
+
+            <view wx:else class="portfolio-list">
+              <view
+                wx:for="{{displayPortfolios}}"
+                wx:key="portfolioId"
+                class="portfolio-swipe-row {{revealedPortfolioId === item.portfolioId ? 'revealed' : ''}}"
+                data-id="{{item.portfolioId}}"
+                bindtouchstart="handlePortfolioTouchStart"
+                bindtouchmove="handlePortfolioTouchMove"
+                bindtouchend="handlePortfolioTouchEnd"
+                bindtouchcancel="handlePortfolioTouchCancel"
+              >
+                <view class="portfolio-delete-pane">
+                  <button
+                    class="portfolio-delete-button"
+                    loading="{{deletingPortfolioId === item.portfolioId}}"
+                    disabled="{{deletingPortfolioId === item.portfolioId}}"
+                    data-id="{{item.portfolioId}}"
+                    catchtap="handleDeletePortfolioTap"
+                  >删除</button>
+                </view>
+                <view class="portfolio-item-card" data-id="{{item.portfolioId}}" bindtap="handlePortfolioCardTap">
+                  <view class="portfolio-cover">
+                    <image class="portfolio-cover-image" src="{{item.coverUrl}}" mode="aspectFill" aria-label="{{item.coverAlt}}"></image>
+                  </view>
+                  <view class="portfolio-copy">
+                    <view class="portfolio-title {{item.titleScrollable ? 'scrolling' : ''}}">
+                      <view class="portfolio-title-track">
+                        <text class="portfolio-title-text">{{item.title}}</text>
+                        <text wx:if="{{item.titleScrollable}}" class="portfolio-title-text duplicate" aria-hidden="true">{{item.title}}</text>
+                      </view>
+                    </view>
+                    <view class="portfolio-meta">{{item.updatedText}}</view>
+                    <view class="portfolio-badges">
+                      <view class="status-badge {{item.statusTone}}">{{item.statusText}}</view>
+                    </view>
+                  </view>
+                  <view class="portfolio-side">
+                    <view class="portfolio-action-row">
+                      <button wx:if="{{item.showPublishedPreview}}" class="portfolio-action-button preview" data-id="{{item.portfolioId}}" data-action="PREVIEW_PUBLISHED" catchtap="handlePublishedPreviewTap">预览</button>
+                      <button wx:if="{{item.showDraftPreview}}" class="portfolio-action-button preview" data-id="{{item.portfolioId}}" data-action="PREVIEW_DRAFT" catchtap="handleDraftPreviewTap">预览</button>
+                      <button wx:if="{{item.actionType === 'SHARE'}}" class="portfolio-action-button share" data-id="{{item.portfolioId}}" data-owner-type="USER" data-action="{{item.actionType}}" catchtap="handleShareTap" aria-label="分享作品集">分享</button>
+                      <button wx:else class="portfolio-action-button {{item.actionType === 'PUBLISH' ? 'publish' : ''}} {{item.actionType === 'EDIT' ? 'edit' : ''}}" data-id="{{item.portfolioId}}" data-action="{{item.actionType}}" catchtap="handlePrimaryActionTap">{{item.actionText}}</button>
+                    </view>
+                    <view class="portfolio-arrow"></view>
                   </view>
                 </view>
-                <view class="portfolio-meta">{{item.updatedText}}</view>
-                <view class="portfolio-badges">
-                  <view class="status-badge {{item.statusTone}}">{{item.statusText}}</view>
-                </view>
-              </view>
-              <view class="portfolio-side">
-                <view class="portfolio-action-row">
-                  <button
-                    wx:if="{{item.showPublishedPreview}}"
-                    class="portfolio-action-button preview"
-                    data-id="{{item.portfolioId}}"
-                    data-action="PREVIEW_PUBLISHED"
-                    catchtap="handlePublishedPreviewTap"
-                  >预览</button>
-                  <button
-                    wx:if="{{item.showDraftPreview}}"
-                    class="portfolio-action-button preview"
-                    data-id="{{item.portfolioId}}"
-                    data-action="PREVIEW_DRAFT"
-                    catchtap="handleDraftPreviewTap"
-                  >预览</button>
-                  <button
-                    wx:if="{{item.actionType === 'SHARE'}}"
-                    class="portfolio-action-button share"
-                    open-type="share"
-                    data-id="{{item.portfolioId}}"
-                    data-action="{{item.actionType}}"
-                    catchtap="handlePrimaryActionTap"
-                    aria-label="分享作品集"
-                  >分享</button>
-                  <button
-                    wx:else
-                    class="portfolio-action-button {{item.actionType === 'PUBLISH' ? 'publish' : ''}} {{item.actionType === 'EDIT' ? 'edit' : ''}}"
-                    data-id="{{item.portfolioId}}"
-                    data-action="{{item.actionType}}"
-                    catchtap="handlePrimaryActionTap"
-                  >{{item.actionText}}</button>
-                </view>
-                <view class="portfolio-arrow"></view>
               </view>
             </view>
+            </scroll-view>
+          </view>
+
+          <view class="create-actions">
+            <button class="create-action standard" bindtap="handleCreateStandardPersonal">新建标准个人作品集</button>
+            <button class="create-action advanced" data-type="advanced-personal" bindtap="handleUnavailableTap">新建高级个人作品集</button>
           </view>
         </view>
       </view>
 
-      <view class="create-actions" wx:if="{{ownerType === 'USER'}}">
-        <button class="create-action standard" bindtap="handleCreateStandardPersonal">新建标准个人作品集</button>
-        <button class="create-action advanced" data-type="advanced-personal" bindtap="handleUnavailableTap">新建高级个人作品集</button>
-      </view>
-      <view class="create-actions" wx:else>
-        <button class="create-action standard" data-type="standard-team" bindtap="handleUnavailableTap">新建标准团队作品集</button>
-        <button class="create-action advanced" data-type="advanced-team" bindtap="handleUnavailableTap">新建高级团队作品集</button>
+      <view class="portfolio-switch-panel">
+        <view class="portfolio-content team-portfolio-content">
+          <view class="portfolio-list-panel">
+            <view class="list-heading">
+              <view class="list-title">团队作品集</view>
+              <view class="summary-pills">
+                <view class="summary-pill published">{{teamSummary.publishedText}}</view>
+                <view class="summary-pill draft">{{teamSummary.draftText}}</view>
+              </view>
+            </view>
+
+            <scroll-view
+              class="portfolio-list-scroll team-portfolio-list-scroll"
+              scroll-y
+              type="list"
+              refresher-enabled="{{true}}"
+              refresher-triggered="{{teamPullDownRefreshing}}"
+              bindrefresherrefresh="handleTeamPullDownRefresh"
+            >
+            <view wx:if="{{teamLoading}}" class="inline-state">作品集加载中</view>
+            <view wx:elif="{{teamErrorMessage}}" class="inline-state error">
+              <text>{{teamErrorMessage}}</text>
+              <button class="small-button" bindtap="bootstrapTeam">重试</button>
+            </view>
+            <view wx:elif="{{teamDisplayPortfolios.length === 0}}" class="empty-state">
+              <view class="empty-title">暂无团队作品集</view>
+              <view class="empty-desc">新建标准团队作品集后，可选择团队内容并发布给访客查看。</view>
+            </view>
+
+            <view wx:else class="portfolio-list">
+              <view
+                wx:for="{{teamDisplayPortfolios}}"
+                wx:key="portfolioId"
+                class="portfolio-swipe-row {{revealedTeamPortfolioId === item.portfolioId ? 'revealed' : ''}}"
+                data-id="{{item.portfolioId}}"
+                bindtouchstart="handleTeamPortfolioTouchStart"
+                bindtouchmove="handleTeamPortfolioTouchMove"
+                bindtouchend="handleTeamPortfolioTouchEnd"
+                bindtouchcancel="handleTeamPortfolioTouchCancel"
+              >
+                <view class="portfolio-delete-pane">
+                  <button
+                    class="portfolio-delete-button"
+                    loading="{{deletingTeamPortfolioId === item.portfolioId}}"
+                    disabled="{{deletingTeamPortfolioId === item.portfolioId}}"
+                    data-item="{{item}}"
+                    catchtap="handleTeamDeleteTap"
+                  >删除</button>
+                </view>
+                <view class="portfolio-item-card team-portfolio-card" data-item="{{item}}" bindtap="handleTeamPortfolioCardTap">
+                  <view class="team-portfolio-affiliation">{{item.teamName}} · {{item.currentRole}}</view>
+                  <view class="portfolio-cover">
+                    <image class="portfolio-cover-image" src="{{item.coverUrl}}" mode="aspectFill" aria-label="{{item.coverAlt}}"></image>
+                  </view>
+                  <view class="portfolio-copy">
+                    <view class="portfolio-title {{item.titleScrollable ? 'scrolling' : ''}}">
+                      <view class="portfolio-title-track">
+                        <text class="portfolio-title-text">{{item.title}}</text>
+                        <text wx:if="{{item.titleScrollable}}" class="portfolio-title-text duplicate" aria-hidden="true">{{item.title}}</text>
+                      </view>
+                    </view>
+                    <view class="portfolio-meta">{{item.updatedText}}</view>
+                    <view class="portfolio-badges"><view class="status-badge {{item.statusTone}}">{{item.statusText}}</view></view>
+                  </view>
+                  <view class="portfolio-side">
+                    <view class="portfolio-action-row">
+                      <button wx:if="{{item.canPreviewDraft}}" class="portfolio-action-button preview" data-item="{{item}}" data-scope="draft" catchtap="handleTeamPreviewTap">预览</button>
+                      <button wx:elif="{{item.canPublishedPreview}}" class="portfolio-action-button preview" data-item="{{item}}" data-scope="published" catchtap="handleTeamPreviewTap">预览</button>
+                      <button wx:if="{{item.actionType === 'PUBLISH' && item.canMaintain}}" class="portfolio-action-button publish" data-item="{{item}}" catchtap="handleTeamPublishTap" loading="{{publishingTeamPortfolioId === item.portfolioId}}" disabled="{{publishingTeamPortfolioId === item.portfolioId}}">发布</button>
+                      <button wx:elif="{{item.canShare}}" class="portfolio-action-button share" data-id="{{item.portfolioId}}" data-owner-type="TEAM" catchtap="handleShareTap">分享</button>
+                    </view>
+                    <view wx:if="{{item.canMaintain}}" class="portfolio-arrow"></view>
+                  </view>
+                </view>
+              </view>
+            </view>
+            </scroll-view>
+          </view>
+
+          <view wx:if="{{noMaintainableTeam}}" class="team-action-hint-slot">
+            <view class="inline-hint">先创建团队或联系拥有者、管理者授权</view>
+          </view>
+          <view class="create-actions">
+            <button class="create-action standard" bindtap="handleCreateStandardTeam" loading="{{creatingTeamPortfolio}}" disabled="{{!maintainableTeamsLoaded || noMaintainableTeam || creatingTeamPortfolio}}">新建标准团队作品集</button>
+            <button class="create-action advanced" data-type="advanced-team" bindtap="handleUnavailableTap">新建高级团队作品集</button>
+          </view>
+        </view>
       </view>
     </view>
-  </scroll-view>
+  </view>
 
   <view class="tabbar">
-    <button
-      class="tab {{item.active ? 'active' : ''}}"
-      wx:for="{{tabs}}"
-      wx:key="key"
-      data-label="{{item.label}}"
-      bindtap="handleTabTap"
-    >
+    <button class="tab {{item.active ? 'active' : ''}}" wx:for="{{tabs}}" wx:key="key" data-label="{{item.label}}" bindtap="handleTabTap">
       <view class="tab-icon {{item.icon}}-tab-icon"></view>
       <view class="tab-label">{{item.label}}</view>
     </button>
   </view>
+
+  <share-channel-sheet
+    visible="{{shareSheetVisible}}"
+    disabled="{{shareActionPending}}"
+    bindclose="handleCloseShareSheet"
+    bindtimeline="handleTimelineShare"
+  ></share-channel-sheet>
 </view>

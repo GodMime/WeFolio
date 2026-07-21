@@ -17,6 +17,20 @@ test('normalizes point overview with grouped consumption rules', () => {
     visitorConsumed: 42,
     maintenanceConsumed: 8,
     lowBalance: false,
+    acquisitionRules: [
+      {
+        code: 'NEW_USER_REGISTRATION_GIFT',
+        title: '新用户注册',
+        description: '首次注册成功后赠送',
+        pointsValue: 500
+      },
+      {
+        code: 'REFERRAL_USER_GIFT',
+        title: '推荐好友注册',
+        description: '好友填写您的有效推荐码并注册成功后赠送',
+        pointsValue: 500
+      }
+    ],
     rules: [
       {
         ruleId: 1,
@@ -64,6 +78,24 @@ test('normalizes point overview with grouped consumption rules', () => {
     { label: '今日消耗', value: '14' },
     { label: '访客消耗', value: '42' },
     { label: '维护消耗', value: '8' }
+  ])
+  assert.deepEqual(overview.acquisitionRules, [
+    {
+      id: 'NEW_USER_REGISTRATION_GIFT',
+      code: 'NEW_USER_REGISTRATION_GIFT',
+      title: '新用户注册',
+      desc: '首次注册成功后赠送',
+      pointsValue: 500,
+      pointsText: '500 分'
+    },
+    {
+      id: 'REFERRAL_USER_GIFT',
+      code: 'REFERRAL_USER_GIFT',
+      title: '推荐好友注册',
+      desc: '好友填写您的有效推荐码并注册成功后赠送',
+      pointsValue: 500,
+      pointsText: '500 分'
+    }
   ])
   assert.deepEqual(overview.ruleGroups.map((group) => group.groupCode), ['MAINTENANCE', 'VISITOR'])
   assert.equal(overview.ruleGroups[0].rules[0].costText, '1 分')
@@ -129,4 +161,62 @@ test('builds point transaction query with safe page defaults', () => {
     page: 1,
     pageSize: 20
   })
+})
+
+test('formats monthly work storage rule with MB billing copy', () => {
+  const overview = normalizePointOverview({
+    rules: [{
+      ruleId: 32,
+      ruleName: '作品存储月费',
+      sceneCode: 'MONTHLY_WORK_STORAGE',
+      sceneText: '作品存储月费',
+      groupCode: 'MAINTENANCE',
+      groupText: '维护',
+      calcMode: 'MONTHLY_STORAGE_SIZE',
+      transactionType: 'CONSUMPTION',
+      unitCount: 2,
+      pointsValue: 1
+    }]
+  })
+
+  const rule = overview.ruleGroups[0].rules[0]
+  assert.equal(`${rule.sceneText} ${rule.costText}`, '作品存储月费 每2MB扣1积分')
+  assert.equal(rule.desc, '每月月初扣除')
+})
+
+test('formats revised maintenance and rolling visitor billing rules', () => {
+  const overview = normalizePointOverview({
+    rules: [
+      ['CREATE_TEAM', '新建团队', 'MAINTENANCE', 2000],
+      ['MAINTAIN_ADVANCED_PORTFOLIO', '发布高级作品集', 'MAINTENANCE', 20],
+      ['MAINTAIN_STANDARD_PORTFOLIO', '发布标准作品集', 'MAINTENANCE', 10],
+      ['UPLOAD_IMAGE', '上传图片作品', 'MAINTENANCE', 5],
+      ['UPLOAD_VIDEO', '上传视频作品', 'MAINTENANCE', 10],
+      ['VISIT_PERSONAL_PORTFOLIO', '访问个人作品集', 'VISITOR', 10, 'PORTFOLIO'],
+      ['VIEW_PORTFOLIO_IMAGES', '查看作品集图片', 'VISITOR', 1, 'WORK'],
+      ['VIEW_PORTFOLIO_VIDEO', '查看作品集视频', 'VISITOR', 10, 'WORK']
+    ].map(([sceneCode, ruleName, groupCode, pointsValue, dedupeScope], index) => ({
+      ruleId: index + 1,
+      ruleName,
+      sceneCode,
+      sceneText: ruleName,
+      groupCode,
+      groupText: groupCode === 'MAINTENANCE' ? '维护' : '访客',
+      calcMode: 'FIXED_PER_ACTION',
+      transactionType: 'CONSUMPTION',
+      unitCount: 1,
+      pointsValue,
+      dedupeWindowHours: dedupeScope ? 2 : null,
+      dedupeScope: dedupeScope || null
+    }))
+  })
+
+  const maintenanceRules = overview.ruleGroups[0].rules
+  const visitorRules = overview.ruleGroups[1].rules
+  assert.deepEqual(maintenanceRules.map((rule) => rule.costText), ['2000 分', '20 分', '10 分', '5 分', '10 分'])
+  assert.deepEqual(visitorRules.map((rule) => rule.costText), ['10 分', '1 分', '10 分'])
+  assert.equal(visitorRules[0].desc, '同访客同作品集 2 小时内不重复扣')
+  assert.equal(visitorRules[1].desc, '同访客同作品 2 小时内不重复扣')
+  assert.equal(visitorRules[2].desc, '同访客同作品 2 小时内不重复扣')
+  assert.ok(visitorRules.every((rule) => !rule.desc.includes('累计 10 次')))
 })

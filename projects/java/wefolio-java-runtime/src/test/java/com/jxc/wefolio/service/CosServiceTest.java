@@ -330,6 +330,56 @@ class CosServiceTest {
     }
 
     @Test
+    void uploadToObjectKeyShouldUseExactKey() throws Exception {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "avatar.jpeg", "image/jpeg", "hello".getBytes());
+        String objectKey = "WF8392/others/avatar-20260720111252-a1b2c3d4.jpg";
+        Upload upload = mock(Upload.class);
+        when(transferManager.upload(any(PutObjectRequest.class))).thenReturn(upload);
+
+        String result = cosService.uploadToObjectKey(file, objectKey);
+
+        ArgumentCaptor<PutObjectRequest> captor = ArgumentCaptor.forClass(PutObjectRequest.class);
+        verify(transferManager).upload(captor.capture());
+        verify(upload).waitForUploadResult();
+        assertThat(captor.getValue().getKey()).isEqualTo(objectKey);
+        assertThat(result).isEqualTo(objectKey);
+    }
+
+    /** 未提供 Content-Type 时必须根据对象键扩展名补齐 COS 元数据。 */
+    @Test
+    void uploadToObjectKeyShouldInferContentTypeFromObjectKeyWhenHeaderMissing() throws Exception {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "avatar", null, new byte[]{(byte) 0x89, 'P', 'N', 'G'});
+        String objectKey = "WF8392/others/avatar-20260720111252-a1b2c3d4.png";
+        Upload upload = mock(Upload.class);
+        when(transferManager.upload(any(PutObjectRequest.class))).thenReturn(upload);
+
+        cosService.uploadToObjectKey(file, objectKey);
+
+        ArgumentCaptor<PutObjectRequest> captor = ArgumentCaptor.forClass(PutObjectRequest.class);
+        verify(transferManager).upload(captor.capture());
+        assertThat(captor.getValue().getMetadata().getContentType()).isEqualTo("image/png");
+    }
+
+    /** 通用二进制 Content-Type 不得覆盖头像对象键对应的真实 MIME。 */
+    @Test
+    void uploadToObjectKeyShouldPreferAvatarObjectKeyTypeOverGenericHeader() throws Exception {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "avatar.bin", "application/octet-stream",
+                new byte[]{'R', 'I', 'F', 'F', 0, 0, 0, 0, 'W', 'E', 'B', 'P'});
+        String objectKey = "WF8392/others/avatar-20260720111252-a1b2c3d4.webp";
+        Upload upload = mock(Upload.class);
+        when(transferManager.upload(any(PutObjectRequest.class))).thenReturn(upload);
+
+        cosService.uploadToObjectKey(file, objectKey);
+
+        ArgumentCaptor<PutObjectRequest> captor = ArgumentCaptor.forClass(PutObjectRequest.class);
+        verify(transferManager).upload(captor.capture());
+        assertThat(captor.getValue().getMetadata().getContentType()).isEqualTo("image/webp");
+    }
+
+    @Test
     void uploadShouldHandleFileWithoutExtension() throws Exception {
         MockMultipartFile file = new MockMultipartFile(
                 "file", "README", "text/plain", "hello".getBytes());

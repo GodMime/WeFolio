@@ -2,14 +2,11 @@ package com.jxc.wefolio.service;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONException;
-import com.jxc.wefolio.common.cache.CacheService;
 import com.jxc.wefolio.config.WechatMiniappProperties;
 import com.jxc.wefolio.exception.BusinessException;
-import com.jxc.wefolio.dto.WechatAccessTokenResponse;
 import com.jxc.wefolio.dto.WechatSessionResponse;
 import com.jxc.wefolio.dto.WechatPhoneNumberResponse;
 import com.jxc.wefolio.dto.WechatPluginOpenpidResponse;
-import com.jxc.wefolio.message.WechatMiniappMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -22,13 +19,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 import java.io.IOException;
 import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
-import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Optional;
-import java.util.function.Supplier;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * REST 微信小程序客户端 — 统一封装微信小程序服务端接口调用、原始入参出参日志和响应解析
@@ -41,47 +32,20 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
     /** 微信 jscode2session 地址 */
     private static final String CODE_SESSION_URL = "https://api.weixin.qq.com/sns/jscode2session";
 
-    /** 微信 access_token 地址 */
-    private static final String ACCESS_TOKEN_URL = "https://api.weixin.qq.com/cgi-bin/token";
-
     /** 微信手机号快速验证地址 */
     private static final String PHONE_NUMBER_URL = "https://api.weixin.qq.com/wxa/business/getuserphonenumber";
 
     /** 微信插件 openpid 地址 */
     private static final String PLUGIN_OPENPID_URL = "https://api.weixin.qq.com/wxa/getpluginopenpid";
 
-    /** 微信 access_token 缓存键前缀 */
-    private static final String ACCESS_TOKEN_CACHE_KEY_PREFIX = "wechat:miniapp:access-token:";
-
-    /** access_token 过期前刷新缓冲秒数 */
-    private static final long ACCESS_TOKEN_REFRESH_BUFFER_SECONDS = 5L * 60L;
-
-    /** 日志脱敏占位符 */
-    private static final String MASKED_VALUE = "***";
-
-    /** 敏感值头部保留字符数 */
-    private static final int MASK_VISIBLE_HEAD_LENGTH = 3;
-
-    /** 敏感值尾部保留字符数 */
-    private static final int MASK_VISIBLE_TAIL_LENGTH = 4;
-
-    /** JSON 脱敏字段正则分组 */
-    private static final String SENSITIVE_JSON_FIELD_GROUP =
-            "access_token|phoneNumber|purePhoneNumber|countryCode|openid|unionid|session_key|code";
-
-    /** URL 敏感查询参数正则 */
-    private static final Pattern SENSITIVE_URL_PARAMETER_PATTERN =
-            Pattern.compile("([&?](?:secret|access_token|js_code)=)([^&]+)");
-
-    /** JSON 敏感字段正则 */
-    private static final Pattern SENSITIVE_JSON_FIELD_PATTERN =
-            Pattern.compile("\"(" + SENSITIVE_JSON_FIELD_GROUP + ")\"\\s*:\\s*\"([^\"]*)\"");
-
     /** 微信小程序配置 */
     private final WechatMiniappProperties properties;
 
-    /** 缓存服务 */
-    private final CacheService cacheService;
+    /** 共享的微信接口调用凭证服务。 */
+    private final WechatAccessTokenService wechatAccessTokenService;
+
+    /** 微信交互日志脱敏组件。 */
+    private final WechatInteractionLogSanitizer logSanitizer;
 
     /**
      * REST 客户端 — 强制 HTTP/1.1。
@@ -142,7 +106,7 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
             throw new BusinessException("手机号授权凭证不能为空");
         }
         String url = UriComponentsBuilder.fromUriString(PHONE_NUMBER_URL)
-                .queryParam("access_token", accessToken())
+                .queryParam("access_token", wechatAccessTokenService.getAccessToken())
                 .build()
                 .toUriString();
 
@@ -177,7 +141,7 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
             throw new BusinessException("微信插件登录凭证不能为空");
         }
         String url = UriComponentsBuilder.fromUriString(PLUGIN_OPENPID_URL)
-                .queryParam("access_token", accessToken())
+                .queryParam("access_token", wechatAccessTokenService.getAccessToken())
                 .build()
                 .toUriString();
 
@@ -201,64 +165,6 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
     }
 
     /**
-     * 获取并缓存微信接口调用凭证
-     *
-     * @return access_token
-     */
-    private synchronized String accessToken() {
-        if (isBlank(properties.getAppId()) || isBlank(properties.getAppSecret())) {
-            throw new BusinessException("微信小程序配置缺失");
-        }
-        String cacheKey = accessTokenCacheKey();
-        Optional<String> cachedAccessToken = cacheService.get(cacheKey, String.class);
-        if (cachedAccessToken.isPresent() && !isBlank(cachedAccessToken.get())) {
-            return cachedAccessToken.get();
-        }
-
-        String url = UriComponentsBuilder.fromUriString(ACCESS_TOKEN_URL)
-                .queryParam("grant_type", "client_credential")
-                .queryParam("appid", properties.getAppId())
-                .queryParam("secret", properties.getAppSecret())
-                .build()
-                .toUriString();
-
-        WechatAccessTokenResponse response = getWechatResponse(url, WechatAccessTokenResponse.class, "微信 access_token 服务");
-
-        if (response == null) {
-            throw new BusinessException("微信 access_token 服务无响应");
-        }
-        if (response.getErrcode() != null && response.getErrcode() != 0) {
-            throw new BusinessException("微信 access_token 获取失败：" + defaultString(response.getErrmsg(), "未知错误"));
-        }
-        if (isBlank(response.getAccessToken())) {
-            throw new BusinessException("微信 access_token 服务未返回凭证");
-        }
-        cacheService.put(cacheKey, response.getAccessToken(), accessTokenCacheTtl(response));
-        return response.getAccessToken();
-    }
-
-    /**
-     * 构建微信 access_token 缓存键
-     *
-     * @return 缓存键
-     */
-    private String accessTokenCacheKey() {
-        return ACCESS_TOKEN_CACHE_KEY_PREFIX + properties.getAppId();
-    }
-
-    /**
-     * 计算微信 access_token 缓存有效期。为避免临界过期，缓存时间会短于微信返回的 expires_in。
-     *
-     * @param response 微信 access_token 响应
-     * @return 缓存有效期
-     */
-    private Duration accessTokenCacheTtl(WechatAccessTokenResponse response) {
-        long expiresInSeconds = Math.max(60L, response.getExpiresIn() == null ? 7200L : response.getExpiresIn());
-        long refreshBufferSeconds = Math.min(ACCESS_TOKEN_REFRESH_BUFFER_SECONDS, expiresInSeconds / 2);
-        return Duration.ofSeconds(expiresInSeconds - refreshBufferSeconds);
-    }
-
-    /**
      * 读取微信 GET 响应。微信部分接口会返回 JSON body 但声明 text/plain，
      * 因此先按字符串接收，再统一反序列化。
      *
@@ -269,11 +175,18 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
      * @param <T> 响应类型
      */
     private <T> T getWechatResponse(String url, Class<T> responseType, String serviceName) {
+        long startedAt = System.nanoTime();
         logWechatRequest(serviceName, "GET", url, "");
-        String body = restClient.get()
-                .uri(url)
-                .exchange((request, response) -> readWechatHttpBody(response, serviceName));
-        return parseWechatResponse(body, responseType);
+        try {
+            String body = restClient.get()
+                    .uri(url)
+                    .exchange((request, response) -> readWechatHttpBody(
+                            response, serviceName, startedAt));
+            return parseWechatResponse(body, responseType);
+        } catch (RuntimeException exception) {
+            logWechatException(serviceName, startedAt, exception);
+            throw exception;
+        }
     }
 
     /**
@@ -293,20 +206,26 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
             Class<T> responseType,
             String serviceName
     ) {
+        long startedAt = System.nanoTime();
         String requestBodyText = serializeRequestBody(requestBody);
         logWechatRequest(serviceName, "POST", url, requestBodyText);
         // 手动序列化为 String 传入 body()，避免 RestClient 消息转换器对 Map 的序列化
         // 行为与 ObjectMapper 不一致（如字段排序、null 处理等），导致微信网关 412。
-        String body = restClient.post()
-                .uri(url)
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(requestBodyText)
-                .exchange((request, response) -> {
-                    // 打印实际发出的请求头，方便与 curl 比对差异
-                    log.info("微信远端请求头 headers={}", request.getHeaders());
-                    return readWechatHttpBody(response, serviceName);
-                });
-        return parseWechatResponse(body, responseType);
+        try {
+            String body = restClient.post()
+                    .uri(url)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(requestBodyText)
+                    .exchange((request, response) -> {
+                        log.info("微信交互请求头 operation={} headers={}", serviceName,
+                                logSanitizer.sanitizeText(String.valueOf(request.getHeaders())));
+                        return readWechatHttpBody(response, serviceName, startedAt);
+                    });
+            return parseWechatResponse(body, responseType);
+        } catch (RuntimeException exception) {
+            logWechatException(serviceName, startedAt, exception);
+            throw exception;
+        }
     }
 
     /**
@@ -314,15 +233,20 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
      *
      * @param response HTTP 响应
      * @param serviceName 服务名称
+     * @param startedAt 调用开始时间
      * @return 响应体文本
      * @throws IOException 响应体读取失败
      */
-    private String readWechatHttpBody(ClientHttpResponse response, String serviceName) throws IOException {
+    private String readWechatHttpBody(
+            ClientHttpResponse response,
+            String serviceName,
+            long startedAt
+    ) throws IOException {
         String body = new String(response.getBody().readAllBytes(), StandardCharsets.UTF_8);
-        logWechatResponse(serviceName, response.getStatusCode().value(), body);
+        logWechatResponse(serviceName, response.getStatusCode().value(), body, startedAt);
         if (response.getStatusCode().isError()) {
-            // 错误时打印响应头，帮助定位网关/CDN/代理层面的问题
-            log.warn("微信远端响应异常 headers={}", response.getHeaders());
+            log.warn("微信交互响应头异常 operation={} headers={}", serviceName,
+                    logSanitizer.sanitizeText(String.valueOf(response.getHeaders())));
             throw new BusinessException(buildWechatHttpErrorMessage(response, serviceName, body));
         }
         return body;
@@ -337,13 +261,9 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
      * @param requestBody 请求体文本
      */
     private void logWechatRequest(String serviceName, String method, String url, String requestBody) {
-        log.info(
-                "微信远端请求入参 serviceName={} method={} url={} requestBody={}",
-                serviceName,
-                method,
-                maskUrl(url),
-                maskRequestBody(requestBody)
-        );
+        log.info("微信交互请求 operation={} referenceNo=null userId=null method={} path={} request={} retryCount=0",
+                serviceName, method, logSanitizer.sanitizeUrl(url),
+                isBlank(requestBody) ? "{}" : logSanitizer.sanitizeJson(requestBody));
     }
 
     /**
@@ -352,175 +272,25 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
      * @param serviceName 服务名称
      * @param status HTTP 状态码
      * @param responseBody 响应体文本
+     * @param startedAt 调用开始时间
      */
-    private void logWechatResponse(String serviceName, int status, String responseBody) {
-        log.info(
-                "微信远端响应出参 serviceName={} status={} responseBody={}",
-                serviceName,
-                status,
-                maskResponseBody(responseBody)
-        );
+    private void logWechatResponse(
+            String serviceName,
+            int status,
+            String responseBody,
+            long startedAt
+    ) {
+        log.info("微信交互响应 operation={} referenceNo=null userId=null httpStatus={} response={} "
+                        + "elapsedMs={} retryCount=0",
+                serviceName, status, logSanitizer.sanitizeJson(responseBody), elapsedMillis(startedAt));
     }
 
-    /**
-     * 脱敏 URL 中的敏感查询参数。
-     *
-     * <p>secret、access_token、js_code 等凭证类参数永不打明文日志。</p>
-     *
-     * @param url 原始 URL
-     * @return 脱敏后的 URL
-     */
-    private String maskUrl(String url) {
-        if (url == null) {
-            return "";
-        }
-        return maskLogTextSafely(() -> maskUrlParameters(url));
-    }
-
-    /**
-     * 脱敏微信请求体中的敏感字段。
-     *
-     * @param body 原始请求体
-     * @return 脱敏后的请求体
-     */
-    private String maskRequestBody(String body) {
-        return maskLogTextSafely(() -> maskJsonBody(body));
-    }
-
-    /**
-     * 脱敏微信响应体中的手机号、access_token 等敏感字段。
-     *
-     * @param body 原始响应体
-     * @return 脱敏后的响应体
-     */
-    private String maskResponseBody(String body) {
-        return maskLogTextSafely(() -> maskJsonBody(body));
-    }
-
-    /**
-     * 安全执行日志脱敏。脱敏失败时打印异常堆栈并返回安全占位文本，不阻断业务流程。
-     *
-     * @param maskOperation 脱敏操作
-     * @return 脱敏文本或安全占位文本
-     */
-    String maskLogTextSafely(Supplier<String> maskOperation) {
-        try {
-            return maskOperation.get();
-        } catch (RuntimeException e) {
-            log.error("微信日志脱敏失败", e);
-            return WechatMiniappMessage.MASK_FAILED_MESSAGE;
-        }
-    }
-
-    /**
-     * 脱敏 JSON 文本中的敏感字段。
-     * <p>优先递归遍历 JSON 替换敏感字段值为 {@code ***}；JSON 解析失败时回退为正则替换，保证日志不丢失。</p>
-     *
-     * @param body 原始 JSON 文本
-     * @return 脱敏后的 JSON 文本
-     */
-    private String maskJsonBody(String body) {
-        if (isBlank(body)) {
-            return body;
-        }
-        try {
-            Map<?, ?> map = JSON.parseObject(body, Map.class);
-            return JSON.toJSONString(maskSensitiveFields(map));
-        } catch (JSONException e) {
-            // JSON 解析失败时回退为正则脱敏，保证日志不丢失
-            return maskJsonFieldsByPattern(body);
-        }
-    }
-
-    /**
-     * 递归脱敏 Map 中的手机号等敏感字段。
-     *
-     * @param map 原始 Map
-     * @return 脱敏后的 Map
-     */
-    @SuppressWarnings("unchecked")
-    private Map<Object, Object> maskSensitiveFields(Map<?, ?> map) {
-        Map<Object, Object> result = new LinkedHashMap<>();
-        for (Map.Entry<?, ?> entry : map.entrySet()) {
-            String key = String.valueOf(entry.getKey());
-            Object value = entry.getValue();
-            if (isSensitiveField(key) && value instanceof String) {
-                result.put(key, maskSensitiveValue((String) value));
-            } else if (value instanceof Map) {
-                result.put(key, maskSensitiveFields((Map<?, ?>) value));
-            } else {
-                result.put(key, value);
-            }
-        }
-        return result;
-    }
-
-    /**
-     * 判断是否为需要脱敏的敏感字段。
-     *
-     * @param key JSON 键名
-     * @return 是否为敏感字段
-     */
-    private boolean isSensitiveField(String key) {
-        return "access_token".equals(key)
-                || "phoneNumber".equals(key)
-                || "purePhoneNumber".equals(key)
-                || "countryCode".equals(key)
-                || "openid".equals(key)
-                || "unionid".equals(key)
-                || "session_key".equals(key)
-                || "code".equals(key);
-    }
-
-    /**
-     * 脱敏 URL 中的敏感查询参数值。
-     *
-     * @param url 原始 URL
-     * @return 脱敏后的 URL
-     */
-    private String maskUrlParameters(String url) {
-        Matcher matcher = SENSITIVE_URL_PARAMETER_PATTERN.matcher(url);
-        StringBuilder result = new StringBuilder();
-        while (matcher.find()) {
-            matcher.appendReplacement(
-                    result,
-                    Matcher.quoteReplacement(matcher.group(1) + maskSensitiveValue(matcher.group(2)))
-            );
-        }
-        matcher.appendTail(result);
-        return result.toString();
-    }
-
-    /**
-     * 使用正则兜底脱敏 JSON 文本中的敏感字段值。
-     *
-     * @param body 原始 JSON 文本
-     * @return 脱敏后的 JSON 文本
-     */
-    private String maskJsonFieldsByPattern(String body) {
-        Matcher matcher = SENSITIVE_JSON_FIELD_PATTERN.matcher(body);
-        StringBuilder result = new StringBuilder();
-        while (matcher.find()) {
-            String replacement = "\"" + matcher.group(1) + "\":\"" + maskSensitiveValue(matcher.group(2)) + "\"";
-            matcher.appendReplacement(result, Matcher.quoteReplacement(replacement));
-        }
-        matcher.appendTail(result);
-        return result.toString();
-    }
-
-    /**
-     * 脱敏敏感值，保留头尾少量字符用于日志比对。
-     *
-     * @param value 原始敏感值
-     * @return 脱敏后的敏感值
-     */
-    private String maskSensitiveValue(String value) {
-        if (value == null || value.length() <= MASK_VISIBLE_HEAD_LENGTH + MASK_VISIBLE_TAIL_LENGTH) {
-            return MASKED_VALUE;
-        }
-        return value.substring(0, MASK_VISIBLE_HEAD_LENGTH)
-                + MASKED_VALUE
-                + value.substring(value.length() - MASK_VISIBLE_TAIL_LENGTH);
+    /** 记录经过脱敏的微信交互异常。 */
+    private void logWechatException(String serviceName, long startedAt, RuntimeException exception) {
+        log.warn("微信交互异常 operation={} referenceNo=null userId=null elapsedMs={} retryCount=0 "
+                        + "exceptionType={} message={}",
+                serviceName, elapsedMillis(startedAt), exception.getClass().getSimpleName(),
+                logSanitizer.sanitizeText(exception.getMessage()));
     }
 
     /**
@@ -606,7 +376,9 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
             return JSON.parseObject(body, responseType);
         } catch (JSONException e) {
             // 打印原始 body 和 Fastjson 具体原因，方便定位字段不匹配问题（body 已脱敏）
-            log.error("微信接口响应解析失败 body={} targetType={}", maskResponseBody(body), responseType.getSimpleName(), e);
+            log.error("微信接口响应解析失败 body={} targetType={} exceptionType={}",
+                    logSanitizer.sanitizeJson(body), responseType.getSimpleName(),
+                    e.getClass().getSimpleName());
             throw new BusinessException("微信接口响应解析失败：" + e.getMessage());
         }
     }
@@ -630,5 +402,10 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
      */
     private String defaultString(String value, String fallback) {
         return isBlank(value) ? fallback : value;
+    }
+
+    /** 计算调用耗时毫秒数。 */
+    private long elapsedMillis(long startedAt) {
+        return (System.nanoTime() - startedAt) / 1_000_000L;
     }
 }

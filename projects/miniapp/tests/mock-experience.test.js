@@ -64,6 +64,41 @@ function loadMockExperience() {
   return require(modulePath)
 }
 
+function loadMockPage(relativePath, wxMock) {
+  const modulePath = path.join(ROOT, relativePath)
+  const previousPage = global.Page
+  const previousWx = global.wx
+  let definition
+  delete require.cache[require.resolve(modulePath)]
+  try {
+    global.Page = (pageDefinition) => {
+      definition = pageDefinition
+    }
+    global.wx = wxMock
+    require(modulePath)
+  } finally {
+    if (previousPage === undefined) {
+      delete global.Page
+    } else {
+      global.Page = previousPage
+    }
+    if (previousWx === undefined) {
+      delete global.wx
+    } else {
+      global.wx = previousWx
+    }
+  }
+  return Object.assign({}, definition, {
+    data: JSON.parse(JSON.stringify(definition.data)),
+    setData(patch, callback) {
+      Object.assign(this.data, patch)
+      if (callback) {
+        callback()
+      }
+    }
+  })
+}
+
 test('app registers mock experience pages in the mock subpackage', () => {
   const appJson = readJson('app.json')
   const registeredPageRoutes = getRegisteredPageRoutes(appJson)
@@ -167,7 +202,11 @@ test('mock mine return login button uses the regular full-width primary button s
   const wxss = read('pages/mock/index/index.wxss')
   const buttonRule = readRule(wxss, '.return-login-button')
 
-  assert.match(wxml, /class="primary-button return-login-button"/)
+  assert.match(
+    wxml,
+    /<view\b[^>]*class="primary-button return-login-button"[^>]*aria-role="button"[^>]*bindtap="handleReturnLoginTap"[^>]*>/
+  )
+  assert.doesNotMatch(wxml, /<button\b[^>]*class="primary-button return-login-button"/)
   assert.match(buttonRule, /width:\s*100%/)
   assert.match(buttonRule, /min-height:\s*88rpx/)
   assert.match(buttonRule, /display:\s*flex/)
@@ -175,6 +214,30 @@ test('mock mine return login button uses the regular full-width primary button s
   assert.match(buttonRule, /justify-content:\s*center/)
   assert.match(buttonRule, /border-radius:\s*16rpx/)
   assert.doesNotMatch(buttonRule, /border-radius:\s*999rpx/)
+})
+
+test('mock mine return button matches the action panel outer width', () => {
+  const wxss = read('pages/mock/index/index.wxss')
+  const actionPanelRule = readRule(wxss, '.mock-mine-page .action-panel')
+  const returnButtonRule = readRule(wxss, '.return-login-button')
+
+  assert.match(actionPanelRule, /width:\s*100%/)
+  assert.match(actionPanelRule, /box-sizing:\s*border-box/)
+  assert.match(returnButtonRule, /width:\s*100%/)
+  assert.match(returnButtonRule, /box-sizing:\s*border-box/)
+})
+
+test('mock mine recharge button defines production-aligned visual dimensions independently', () => {
+  const wxml = read('pages/mock/index/index.wxml')
+  const wxss = read('pages/mock/index/index.wxss')
+  const buttonRule = readRule(wxss, '.mock-mine-page .light-button')
+
+  assert.match(wxml, /<button\b[^>]*class="light-button"[^>]*>充值<\/button>/)
+  assert.match(buttonRule, /min-width:\s*112rpx/)
+  assert.match(buttonRule, /height:\s*88rpx/)
+  assert.match(buttonRule, /padding:\s*0\s+28rpx/)
+  assert.match(buttonRule, /border-radius:\s*16rpx/)
+  assert.match(buttonRule, /box-sizing:\s*border-box/)
 })
 
 test('mock schedule data contains lunch and dinner slots only', () => {
@@ -355,6 +418,7 @@ test('mock portfolio add component sheet exposes every production standard compo
     'SCHEDULE_QUERY',
     'WORK_GRID',
     'WORK_LIST',
+    'SINGLE_WORK',
     'QR_CONTACT',
     'CONTACT_FORM',
     'TEXT_SECTION',
@@ -374,6 +438,117 @@ test('mock portfolio add component sheet exposes every production standard compo
     assert.equal(addedComponent.componentType, componentType)
     assert.equal(renderComponent.componentType, componentType)
   })
+})
+
+test('mock singular work uses local single selection, strict config, and render envelope', () => {
+  const mock = loadMockExperience()
+  const added = mock.addMockComponent(mock.MOCK_STANDARD_PORTFOLIO, mock.COMPONENT_TYPES.SINGLE_WORK)
+  const component = added.config.components[added.config.components.length - 1]
+
+  assert.deepEqual(component.config, { workId: 0, showTitle: true })
+
+  const configured = mock.updateMockSingleWorkConfig(added, component.componentKey, {
+    workId: 107,
+    showTitle: false,
+    workIds: [101],
+    unsupported: true
+  })
+  const configuredComponent = configured.config.components[configured.config.components.length - 1]
+  const renderComponent = configured.renderData.components[configured.renderData.components.length - 1]
+
+  assert.deepEqual(configuredComponent.config, { workId: 107, showTitle: false })
+  assert.equal(renderComponent.componentType, 'SINGLE_WORK')
+  assert.equal(renderComponent.showTitle, false)
+  assert.equal(renderComponent.work.workId, 107)
+  assert.equal(renderComponent.work.isVideo, true)
+  assert.equal(renderComponent.work.aspectRatioStyle, 'height: 399rpx; aspect-ratio: 16 / 9;')
+})
+
+test('mock singular work persists through local draft and preview without network calls', () => {
+  const mock = loadMockExperience()
+  let storedDraft = null
+  let networkCalls = 0
+  const previews = []
+  const navigations = []
+  const wxMock = {
+    getStorageSync() {
+      return storedDraft
+    },
+    setStorageSync(key, value) {
+      assert.equal(key, mock.MOCK_PORTFOLIO_DRAFT_STORAGE_KEY)
+      storedDraft = value
+    },
+    navigateTo(options) {
+      navigations.push(options)
+    },
+    previewImage(options) {
+      previews.push(options)
+    },
+    showToast() {},
+    createVideoContext() {
+      return { pause() {} }
+    },
+    request() {
+      networkCalls += 1
+    }
+  }
+  global.wx = wxMock
+
+  try {
+    const editor = loadMockPage('pages/mock/portfolio-standard-edit/portfolio-standard-edit.js', wxMock)
+    editor.handleSelectComponent({ currentTarget: { dataset: { type: 'SINGLE_WORK' } } })
+    const componentKey = editor.data.selectedComponentKey
+    editor.handleWorkToggle({ currentTarget: { dataset: { id: 107 } } })
+    editor.handleWorkToggle({ currentTarget: { dataset: { id: 107 } } })
+    editor.handleSingleWorkShowTitleChange({ detail: { value: false } })
+    editor.handleConfirmComponentEditSheet()
+    editor.handlePreview()
+
+    assert.equal(editor.data.selectedWorkIds.length, 1)
+    assert.equal(navigations.length, 1)
+    assert.equal(storedDraft.config.components.find((item) => item.componentKey === componentKey).config.workId, 107)
+    assert.equal(storedDraft.config.components.find((item) => item.componentKey === componentKey).config.showTitle, false)
+
+    const preview = loadMockPage('pages/mock/portfolio-standard-preview/portfolio-standard-preview.js', wxMock)
+    preview.onShow()
+    preview.handleSingleWorkTap({
+      currentTarget: {
+        dataset: {
+          componentKey,
+          mediaType: 'VIDEO',
+          mediaUrl: mock.MOCK_WORK_LIBRARY.works[6].mediaUrl
+        }
+      }
+    })
+    assert.equal(preview.data.activeSingleWorkVideoKey, componentKey)
+
+    preview.handleSingleWorkTap({
+      currentTarget: {
+        dataset: {
+          componentKey: `${componentKey}-image`,
+          mediaType: 'IMAGE',
+          mediaUrl: mock.MOCK_WORK_LIBRARY.works[0].mediaUrl
+        }
+      }
+    })
+  } finally {
+    delete global.wx
+  }
+
+  assert.equal(previews.length, 1)
+  assert.equal(networkCalls, 0)
+})
+
+test('mock singular work editor and preview expose title switch, width-fix image, and inline video', () => {
+  const editWxml = read('pages/mock/portfolio-standard-edit/portfolio-standard-edit.wxml')
+  const previewWxml = read('pages/mock/portfolio-standard-preview/portfolio-standard-preview.wxml')
+
+  assert.match(editWxml, /selectedComponentType === 'SINGLE_WORK'/)
+  assert.match(editWxml, /bindchange="handleSingleWorkShowTitleChange"/)
+  assert.match(previewWxml, /item\.componentType === 'SINGLE_WORK'/)
+  assert.match(previewWxml, /class="single-work-image"[\s\S]*mode="widthFix"/)
+  assert.match(previewWxml, /id="singleWorkVideo-\{\{item\.componentKey\}\}"/)
+  assert.match(previewWxml, /activeSingleWorkVideoKey === item\.componentKey/)
 })
 
 test('mock standard portfolio renders complete component json in fixed order', () => {

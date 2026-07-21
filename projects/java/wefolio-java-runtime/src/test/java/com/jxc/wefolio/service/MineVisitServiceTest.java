@@ -1,32 +1,46 @@
 package com.jxc.wefolio.service;
 
+import com.baomidou.mybatisplus.core.conditions.Wrapper;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.jxc.wefolio.common.auth.AuthContext;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
+import com.jxc.wefolio.dto.MineVisitRecordPageResponse;
 import com.jxc.wefolio.dto.MineVisitRecordsResponse;
+import com.jxc.wefolio.dto.MineVisitStatisticsResponse;
 import com.jxc.wefolio.entity.ContactLeadEntity;
 import com.jxc.wefolio.entity.ScheduleQueryRecordEntity;
+import com.jxc.wefolio.entity.TeamMemberEntity;
 import com.jxc.wefolio.entity.VisitEventEntity;
 import com.jxc.wefolio.entity.VisitRecordEntity;
 import com.jxc.wefolio.entity.VisitorEntity;
 import com.jxc.wefolio.mapper.ContactLeadEntityMapper;
 import com.jxc.wefolio.mapper.ScheduleQueryRecordEntityMapper;
+import com.jxc.wefolio.mapper.TeamMemberEntityMapper;
 import com.jxc.wefolio.mapper.VisitEventEntityMapper;
 import com.jxc.wefolio.mapper.VisitRecordEntityMapper;
 import com.jxc.wefolio.mapper.VisitorEntityMapper;
+import com.jxc.wefolio.service.teamportfolio.component.contactform.TeamContactLeadCryptoService;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.lang.reflect.Method;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -38,6 +52,17 @@ import static org.mockito.Mockito.when;
  */
 @ExtendWith(MockitoExtension.class)
 class MineVisitServiceTest {
+
+    @BeforeAll
+    static void initializeTableMetadata() {
+        MybatisConfiguration configuration = new MybatisConfiguration();
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(configuration, "mine-visit-contact-lead"),
+                ContactLeadEntity.class);
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(configuration, "mine-visit-team-member"),
+                TeamMemberEntity.class);
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(configuration, "mine-visit-record"),
+                VisitRecordEntity.class);
+    }
 
     @Mock
     private VisitRecordEntityMapper visitRecordEntityMapper;
@@ -53,6 +78,12 @@ class MineVisitServiceTest {
 
     @Mock
     private ContactLeadEntityMapper contactLeadEntityMapper;
+
+    @Mock
+    private TeamMemberEntityMapper teamMemberEntityMapper;
+
+    @Mock
+    private TeamContactLeadCryptoService teamContactLeadCryptoService;
 
     @AfterEach
     void tearDown() {
@@ -130,6 +161,96 @@ class MineVisitServiceTest {
         assertThat(response.getRecords().get(1).getSourceText()).isEqualTo("来自团队作品集「星曜司仪团」跳转");
         assertThat(response.getRecords().get(1).getSummaryText()).contains("播放视频 2 次").contains("未点二维码");
         assertThat(response.getRecords().get(1).getFollowTone()).isEqualTo("teal");
+    }
+
+    @Test
+    void visitStatisticsAggregateSummaryAndTrendWithoutVisitRecords() {
+        AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
+        LocalDate today = LocalDate.now();
+        LocalDateTime now = today.atTime(12, 0);
+        VisitRecordEntity record = buildRecord(
+                101L,
+                "anonymous-visitor-key-8A21",
+                "WECHAT_SHARE_CARD",
+                "PERSONAL",
+                "林安婚礼司仪",
+                3,
+                0,
+                0,
+                0,
+                0,
+                null,
+                "NOT_FOLLOWED_UP",
+                now
+        );
+        when(visitRecordEntityMapper.selectList(any())).thenReturn(List.of(record));
+        when(visitEventEntityMapper.selectList(any())).thenReturn(List.of(
+                buildOpenedEvent(now),
+                buildOpenedEvent(now.minusDays(1))
+        ));
+        when(scheduleQueryRecordEntityMapper.selectCount(any())).thenReturn(4L);
+        when(contactLeadEntityMapper.selectCount(any())).thenReturn(2L);
+        when(teamMemberEntityMapper.selectList(any())).thenReturn(List.of());
+
+        MineVisitStatisticsResponse response = service().getVisitStatistics();
+
+        assertThat(response.getSummary().getTotalVisitCount()).isEqualTo(3L);
+        assertThat(response.getSummary().getTodayVisitCount()).isEqualTo(1L);
+        assertThat(response.getSummary().getScheduleQueryCount()).isEqualTo(4L);
+        assertThat(response.getSummary().getContactLeadCount()).isEqualTo(2L);
+        assertThat(response.getTrend().getPoints()).hasSize(7);
+        assertThat(response.getTrend().getPoints().get(6).getValue()).isEqualTo(1L);
+        verify(visitorEntityMapper, never()).selectBatchIds(any());
+    }
+
+    @Test
+    void visitRecordPageReturnsStableReverseTimePageAndHasMore() {
+        AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
+        LocalDateTime now = LocalDateTime.of(2026, 7, 20, 17, 30);
+        VisitRecordEntity firstRecord = buildRecord(
+                102L, "visitor-C19F", "WECHAT_SHARE_CARD", "PERSONAL", "作品集 B",
+                2, 0, 0, 0, 0, null, "CONTACTED", now
+        );
+        VisitRecordEntity secondRecord = buildRecord(
+                101L, "visitor-8A21", "WECHAT_SHARE_CARD", "PERSONAL", "作品集 A",
+                1, 0, 0, 0, 0, null, "NOT_FOLLOWED_UP", now
+        );
+        Page<VisitRecordEntity> resultPage = new Page<>(1, 2, 3);
+        resultPage.setRecords(List.of(firstRecord, secondRecord));
+        when(visitRecordEntityMapper.selectPage(any(Page.class), any())).thenReturn(resultPage);
+
+        MineVisitRecordPageResponse response = service().getVisitRecordPage(1, 2);
+
+        assertThat(response.getPageNo()).isEqualTo(1);
+        assertThat(response.getPageSize()).isEqualTo(2);
+        assertThat(response.getHasMore()).isTrue();
+        assertThat(response.getRecords()).extracting(MineVisitRecordsResponse.Record::getId)
+                .containsExactly(102L, 101L);
+        ArgumentCaptor<Wrapper<VisitRecordEntity>> wrapperCaptor = ArgumentCaptor.captor();
+        verify(visitRecordEntityMapper).selectPage(any(Page.class), wrapperCaptor.capture());
+        assertThat(wrapperCaptor.getValue().getSqlSegment())
+                .contains("ORDER BY last_visited_at DESC,id DESC");
+    }
+
+    @Test
+    void visitRecordPageNormalizesInvalidAndOversizedParameters() {
+        AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
+        when(visitRecordEntityMapper.selectPage(any(Page.class), any())).thenAnswer(invocation -> {
+            Page<VisitRecordEntity> requestedPage = invocation.getArgument(0);
+            requestedPage.setRecords(List.of());
+            requestedPage.setTotal(0);
+            return requestedPage;
+        });
+
+        MineVisitRecordPageResponse defaultPage = service().getVisitRecordPage(null, 0);
+        MineVisitRecordPageResponse cappedPage = service().getVisitRecordPage(0, 100);
+
+        assertThat(defaultPage.getPageNo()).isEqualTo(1);
+        assertThat(defaultPage.getPageSize()).isEqualTo(20);
+        assertThat(defaultPage.getHasMore()).isFalse();
+        assertThat(cappedPage.getPageNo()).isEqualTo(1);
+        assertThat(cappedPage.getPageSize()).isEqualTo(50);
+        assertThat(cappedPage.getHasMore()).isFalse();
     }
 
     @Test
@@ -376,11 +497,126 @@ class MineVisitServiceTest {
         assertThat(item.getPortfolioTitle()).isEqualTo("林安婚礼司仪");
         assertThat(item.getSourceText()).isEqualTo("来自分享卡片");
         assertThat(item.getFollowStatusText()).isEqualTo("未跟进");
+        assertThat(item.getPortfolioType()).isEqualTo("PERSONAL");
+        assertThat(item.getPortfolioTypeText()).isEqualTo("个人作品集");
+        assertThat(item.getCanMarkFollowed()).isTrue();
         assertThat(item.getSubmittedTimeText()).isEqualTo("07-05 13:30");
         assertThat(MineVisitRecordsResponse.ContactLeadItem.class.getDeclaredFields())
                 .extracting(java.lang.reflect.Field::getName)
                 .contains("phone", "wechat")
                 .doesNotContain("phoneCiphertext", "wechatCiphertext");
+    }
+
+    @Test
+    void contactLeadsShouldMergeJoinedTeamRecordsAndDecryptTeamContacts() {
+        AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
+        TeamMemberEntity managerMembership = buildMembership(201L, "MANAGER", "JOINED");
+        TeamMemberEntity memberMembership = buildMembership(202L, "MEMBER", "JOINED");
+        TeamMemberEntity rejectedMembership = buildMembership(203L, "OWNER", "REJECTED");
+        when(teamMemberEntityMapper.selectList(any()))
+                .thenReturn(List.of(managerMembership, memberMembership, rejectedMembership));
+
+        ContactLeadEntity managerLead = buildContactLead(501L, "TEAM", 201L, "星曜司仪团");
+        managerLead.setPhoneCiphertext("manager-phone-ciphertext");
+        managerLead.setWechatCiphertext("manager-wechat-ciphertext");
+        ContactLeadEntity memberLead = buildContactLead(502L, "TEAM", 202L, "远山摄影团队");
+        memberLead.setPhoneCiphertext("member-phone-ciphertext");
+        memberLead.setWechatCiphertext("member-wechat-ciphertext");
+        when(teamContactLeadCryptoService.decryptPhone("manager-phone-ciphertext")).thenReturn("13800138001");
+        when(teamContactLeadCryptoService.decryptWechat("manager-wechat-ciphertext")).thenReturn("manager-wx");
+        when(teamContactLeadCryptoService.decryptPhone("member-phone-ciphertext")).thenReturn("13800138002");
+        when(teamContactLeadCryptoService.decryptWechat("member-wechat-ciphertext")).thenReturn("member-wx");
+        Page<ContactLeadEntity> resultPage = new Page<>(1, 20, 2);
+        resultPage.setRecords(List.of(managerLead, memberLead));
+        when(contactLeadEntityMapper.selectPage(any(Page.class), any())).thenReturn(resultPage);
+
+        MineVisitRecordsResponse.ContactLeadPage response = service().getContactLeads(1, 20);
+
+        assertThat(response.getItems()).extracting(MineVisitRecordsResponse.ContactLeadItem::getPortfolioTitle)
+                .containsExactly("星曜司仪团", "远山摄影团队");
+        assertThat(response.getItems()).extracting(MineVisitRecordsResponse.ContactLeadItem::getPortfolioType)
+                .containsOnly("TEAM");
+        assertThat(response.getItems()).extracting(MineVisitRecordsResponse.ContactLeadItem::getPortfolioTypeText)
+                .containsOnly("团队作品集");
+        assertThat(response.getItems()).extracting(MineVisitRecordsResponse.ContactLeadItem::getCanMarkFollowed)
+                .containsExactly(true, false);
+        assertThat(response.getItems()).extracting(MineVisitRecordsResponse.ContactLeadItem::getPhone)
+                .containsExactly("13800138001", "13800138002");
+        assertThat(response.getItems()).extracting(MineVisitRecordsResponse.ContactLeadItem::getWechat)
+                .containsExactly("manager-wx", "member-wx");
+
+        ArgumentCaptor<LambdaQueryWrapper<TeamMemberEntity>> membershipQueryCaptor = ArgumentCaptor.captor();
+        verify(teamMemberEntityMapper).selectList(membershipQueryCaptor.capture());
+        assertThat(membershipQueryCaptor.getValue().getSqlSegment())
+                .contains("user_id", "join_status");
+        assertThat(membershipQueryCaptor.getValue().getParamNameValuePairs().values())
+                .contains(7L, "JOINED");
+
+        ArgumentCaptor<LambdaQueryWrapper<ContactLeadEntity>> leadQueryCaptor = ArgumentCaptor.captor();
+        verify(contactLeadEntityMapper).selectPage(any(Page.class), leadQueryCaptor.capture());
+        assertThat(leadQueryCaptor.getValue().getSqlSegment())
+                .contains("owner_type", "owner_id", "submitted_at", "ORDER BY");
+        assertThat(leadQueryCaptor.getValue().getParamNameValuePairs().values())
+                .contains("USER", 7L, "TEAM", 201L, 202L)
+                .doesNotContain(203L);
+    }
+
+    @Test
+    void visitSummaryShouldCountPersonalAndJoinedTeamLeadsWithSameScope() {
+        AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
+        when(teamMemberEntityMapper.selectList(any())).thenReturn(List.of(
+                buildMembership(201L, "OWNER", "JOINED"),
+                buildMembership(203L, "OWNER", "REMOVED")
+        ));
+        when(contactLeadEntityMapper.selectCount(any())).thenReturn(9L);
+
+        MineVisitRecordsResponse response = service().getVisitRecords();
+
+        assertThat(response.getSummary().getContactLeadCount()).isEqualTo(9L);
+        ArgumentCaptor<LambdaQueryWrapper<ContactLeadEntity>> countQueryCaptor = ArgumentCaptor.captor();
+        verify(contactLeadEntityMapper).selectCount(countQueryCaptor.capture());
+        assertThat(countQueryCaptor.getValue().getSqlSegment()).contains("owner_type", "owner_id");
+        assertThat(countQueryCaptor.getValue().getParamNameValuePairs().values())
+                .contains("USER", 7L, "TEAM", 201L)
+                .doesNotContain(203L);
+    }
+
+    @Test
+    void markContactLeadFollowedShouldRollbackForAnyException() throws NoSuchMethodException {
+        Method method = MineVisitService.class.getMethod("markContactLeadFollowed", Long.class);
+
+        Transactional transactional = method.getAnnotation(Transactional.class);
+
+        assertThat(transactional).isNotNull();
+        assertThat(transactional.rollbackFor()).contains(Exception.class);
+    }
+
+    @Test
+    void markContactLeadFollowedShouldAllowJoinedTeamManager() {
+        AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
+        ContactLeadEntity lead = buildContactLead(501L, "TEAM", 201L, "星曜司仪团");
+        when(teamMemberEntityMapper.selectList(any())).thenReturn(List.of(buildMembership(201L, "MANAGER", "JOINED")));
+        when(contactLeadEntityMapper.selectOne(any())).thenReturn(lead);
+        when(contactLeadEntityMapper.updateById(lead)).thenReturn(1);
+
+        MineVisitRecordsResponse.ContactLeadItem response = service().markContactLeadFollowed(501L);
+
+        assertThat(lead.getFollowStatus()).isEqualTo("CONTACTED");
+        assertThat(response.getPortfolioType()).isEqualTo("TEAM");
+        assertThat(response.getCanMarkFollowed()).isTrue();
+        verify(contactLeadEntityMapper).updateById(lead);
+    }
+
+    @Test
+    void markContactLeadFollowedShouldRejectJoinedTeamMember() {
+        AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
+        ContactLeadEntity lead = buildContactLead(501L, "TEAM", 201L, "星曜司仪团");
+        when(teamMemberEntityMapper.selectList(any())).thenReturn(List.of(buildMembership(201L, "MEMBER", "JOINED")));
+        when(contactLeadEntityMapper.selectOne(any())).thenReturn(lead);
+
+        assertThatThrownBy(() -> service().markContactLeadFollowed(501L))
+                .hasMessage("预留信息不存在或无访问权限");
+        verify(contactLeadEntityMapper, never()).updateById((ContactLeadEntity) any());
     }
 
     @Test
@@ -453,8 +689,34 @@ class MineVisitServiceTest {
                 visitEventEntityMapper,
                 visitorEntityMapper,
                 scheduleQueryRecordEntityMapper,
-                contactLeadEntityMapper
+                contactLeadEntityMapper,
+                teamMemberEntityMapper,
+                teamContactLeadCryptoService
         );
+    }
+
+    private TeamMemberEntity buildMembership(Long teamId, String role, String joinStatus) {
+        TeamMemberEntity membership = new TeamMemberEntity();
+        membership.setTeamId(teamId);
+        membership.setUserId(7L);
+        membership.setRole(role);
+        membership.setJoinStatus(joinStatus);
+        return membership;
+    }
+
+    private ContactLeadEntity buildContactLead(Long id, String ownerType, Long ownerId, String portfolioTitle) {
+        ContactLeadEntity lead = new ContactLeadEntity();
+        lead.setId(id);
+        lead.setOwnerType(ownerType);
+        lead.setOwnerId(ownerId);
+        lead.setContactName("客户" + id);
+        lead.setDesiredSchedule("2026-10-03");
+        lead.setNeeds("婚礼服务");
+        lead.setPortfolioTitleSnapshot(portfolioTitle);
+        lead.setSourceType("WECHAT_SHARE_CARD");
+        lead.setFollowStatus("NOT_FOLLOWED_UP");
+        lead.setSubmittedAt(LocalDateTime.of(2026, 7, 5, 13, 30));
+        return lead;
     }
 
     private VisitRecordEntity buildRecord(

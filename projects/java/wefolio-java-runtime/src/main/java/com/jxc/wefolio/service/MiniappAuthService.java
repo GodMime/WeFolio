@@ -5,9 +5,11 @@ import com.jxc.wefolio.common.UniqueCodeGenerator;
 import com.jxc.wefolio.common.auth.AuthorizationHeaderUtils;
 import com.jxc.wefolio.config.CosProperties;
 import com.jxc.wefolio.config.WechatMiniappProperties;
+import com.jxc.wefolio.config.WechatVirtualPaymentProperties;
 import com.jxc.wefolio.dto.AuthSessionResponse;
 import com.jxc.wefolio.dto.MaintainerWechatLoginRequest;
 import com.jxc.wefolio.dto.MaintainerWechatLoginResponse;
+import com.jxc.wefolio.dto.MaintainerWechatSessionRefreshRequest;
 import com.jxc.wefolio.dto.WechatPhoneNumberResponse;
 import com.jxc.wefolio.dto.WechatSessionResponse;
 import com.jxc.wefolio.dict.AuthTypeDict;
@@ -19,6 +21,7 @@ import com.jxc.wefolio.exception.InvalidAuthTokenException;
 import com.jxc.wefolio.mapper.UserAuthEntityMapper;
 import com.jxc.wefolio.mapper.UserEntityMapper;
 import com.jxc.wefolio.message.MiniappAuthMessage;
+import com.jxc.wefolio.service.payment.MaintainerWechatSessionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
@@ -31,6 +34,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.HexFormat;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -94,6 +98,12 @@ public class MiniappAuthService {
 
     /** 唯一码生成器 */
     private final UniqueCodeGenerator uniqueCodeGenerator;
+
+    /** 维护者微信会话服务。 */
+    private final MaintainerWechatSessionService maintainerWechatSessionService;
+
+    /** 微信虚拟支付配置。 */
+    private final WechatVirtualPaymentProperties wechatVirtualPaymentProperties;
 
     /**
      * 已解析的维护者登录令牌。
@@ -205,6 +215,10 @@ public class MiniappAuthService {
         AuthSessionResponse response = new AuthSessionResponse();
         response.setAuthenticated(userId != null);
         response.setUserId(userId);
+        long intervalSeconds = wechatVirtualPaymentProperties == null
+                ? 300L
+                : wechatVirtualPaymentProperties.sessionCheckIntervalSeconds();
+        response.setWechatSessionCheckIntervalSeconds(intervalSeconds);
         return response;
     }
 
@@ -215,6 +229,20 @@ public class MiniappAuthService {
      * @return 维护者登录响应
      */
     public MaintainerWechatLoginResponse loginMaintainerByWechat(MaintainerWechatLoginRequest request) {
+        return loginMaintainerByWechat(request, null);
+    }
+
+    /**
+     * 维护者微信授权登录并保存虚拟支付所需会话。
+     *
+     * @param request 维护者微信登录请求
+     * @param clientIp 容器可信代理配置解析后的客户端 IP
+     * @return 维护者登录响应
+     */
+    public MaintainerWechatLoginResponse loginMaintainerByWechat(
+            MaintainerWechatLoginRequest request,
+            String clientIp
+    ) {
         if (request == null || request.getCode() == null || request.getCode().isBlank()) {
             throw new BusinessException("微信登录凭证不能为空");
         }
@@ -274,7 +302,63 @@ public class MiniappAuthService {
             ensureUserStorage(user);
         }
 
+        saveMaintainerWechatSessionIfEnabled(user.getId(), openidHash, session, clientIp);
         return buildMaintainerLoginResponse(user.getId());
+    }
+
+    /**
+     * 使用当前维护者身份刷新微信 session_key，openid 不一致时拒绝覆盖绑定关系。
+     *
+     * @param userId 当前维护者用户 ID
+     * @param request 微信登录 code
+     * @param clientIp 容器可信代理配置解析后的客户端 IP
+     */
+    public void refreshMaintainerWechatSession(
+            Long userId,
+            MaintainerWechatSessionRefreshRequest request,
+            String clientIp
+    ) {
+        if (userId == null || request == null || request.getCode() == null || request.getCode().isBlank()) {
+            throw new BusinessException("微信登录凭证不能为空");
+        }
+        WechatSessionResponse session = wechatMiniappClient.exchangeCode(request.getCode());
+        String openId = normalizeRequiredOpenId(session.getOpenid());
+        String openidHash = digestIdentifier(openId);
+        UserAuthEntity auth = findActiveAuth(WECHAT_AUTH_TYPE, openidHash);
+        if (auth == null || !Objects.equals(auth.getUserId(), userId)) {
+            throw new BusinessException("微信身份与当前维护者不一致，请重新登录");
+        }
+        if (maintainerWechatSessionService == null) {
+            throw new BusinessException("微信虚拟支付会话服务不可用");
+        }
+        maintainerWechatSessionService.saveAvailableSession(
+                userId, auth.getId(), session.getSessionKey(), requireClientIp(clientIp));
+    }
+
+    /** 登录成功后在虚拟支付启用时保存维护者微信会话。 */
+    private void saveMaintainerWechatSessionIfEnabled(
+            Long userId,
+            String openidHash,
+            WechatSessionResponse session,
+            String clientIp
+    ) {
+        if (maintainerWechatSessionService == null) {
+            return;
+        }
+        UserAuthEntity auth = findActiveAuth(WECHAT_AUTH_TYPE, openidHash);
+        if (auth == null || !Objects.equals(auth.getUserId(), userId)) {
+            throw new BusinessException("微信身份保存失败，请重新登录");
+        }
+        maintainerWechatSessionService.saveAvailableSession(
+                userId, auth.getId(), session.getSessionKey(), requireClientIp(clientIp));
+    }
+
+    /** 校验服务端解析得到的客户端 IP。 */
+    private String requireClientIp(String clientIp) {
+        if (clientIp == null || clientIp.isBlank()) {
+            throw new BusinessException("无法确认客户端网络地址，请重新登录");
+        }
+        return clientIp.strip();
     }
 
     /**

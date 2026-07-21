@@ -1,0 +1,25 @@
+<root-portal wx:if="{{visible}}">
+  <view class="share-sheet-mask" catchtap="handleClose" catchtouchmove="noop">
+    <view class="share-sheet-panel" catchtap="noop">
+      <view class="share-sheet-grabber"></view>
+      <view class="share-sheet-title">分享作品集</view>
+      <view class="share-sheet-actions">
+        <button class="share-sheet-action" open-type="share" disabled="{{disabled}}" aria-label="分享给好友">
+          <image class="share-sheet-icon" src="/assets/system/share-friend-gold.png" mode="aspectFit" aria-hidden="true"></image>
+          <view class="share-sheet-action-copy">
+            <view class="share-sheet-action-title">分享给好友</view>
+            <view class="share-sheet-action-desc">发送给微信好友</view>
+          </view>
+        </button>
+        <button class="share-sheet-action" disabled="{{disabled}}" bindtap="handleTimeline" aria-label="分享到朋友圈">
+          <image class="share-sheet-icon" src="/assets/system/share-timeline-gold.png" mode="aspectFit" aria-hidden="true"></image>
+          <view class="share-sheet-action-copy">
+            <view class="share-sheet-action-title">分享到朋友圈</view>
+            <view class="share-sheet-action-desc">进入作品集后分享</view>
+          </view>
+        </button>
+      </view>
+      <button class="share-sheet-cancel" disabled="{{disabled}}" bindtap="handleClose">取消</button>
+    </view>
+  </view>
+</root-portal>

@@ -2,7 +2,7 @@ package com.jxc.wefolio.controller;
 
 import com.jxc.wefolio.annotation.MaintainerAccess;
 import com.jxc.wefolio.common.Response;
-import com.jxc.wefolio.common.upload.AvatarFileValidator;
+import com.jxc.wefolio.common.upload.AvatarUploadResult;
 import com.jxc.wefolio.dto.FileUploadResponse;
 import com.jxc.wefolio.dto.MineTeamCreateRequest;
 import com.jxc.wefolio.dto.MineTeamDetailResponse;
@@ -18,7 +18,6 @@ import com.jxc.wefolio.dto.MineTeamUpdateRequest;
 import com.jxc.wefolio.dto.MineTeamOwnerTransferRequest;
 import com.jxc.wefolio.service.MineTeamService;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -35,14 +34,10 @@ import org.springframework.web.multipart.MultipartFile;
  * <p>团队相关接口独立放在这里，避免“我的”首页控制器继续膨胀；
  * 对外路径仍保持 {@code /api/mine/teams}，小程序侧无需感知控制器拆分。</p>
  */
-@Slf4j
 @MaintainerAccess
 @RestController
 @RequiredArgsConstructor
 public class MineTeamController {
-
-    /** 团队图标提示名称 */
-    private static final String TEAM_AVATAR_FILE_LABEL = "团队图标";
 
     /** 我的团队业务服务，负责权限、团队唯一码、COS 目录和成员关系等核心逻辑 */
     private final MineTeamService mineTeamService;
@@ -65,8 +60,6 @@ public class MineTeamController {
      */
     @PostMapping("/api/mine/teams")
     public Response<MineTeamDetailResponse> createTeam(@RequestBody MineTeamCreateRequest request) {
-        log.info("创建团队: name={}, intro={}, avatarUrl={}",
-                request.getName(), request.getIntro(), request.getAvatarUrl());
         return Response.success(mineTeamService.createTeam(request));
     }
 
@@ -93,8 +86,6 @@ public class MineTeamController {
             @PathVariable Long teamId,
             @RequestBody MineTeamUpdateRequest request
     ) {
-        log.info("保存团队资料: teamId={}, name={}, intro={}, avatarUrl={}",
-                teamId, request.getName(), request.getIntro(), request.getAvatarUrl());
         return Response.success(mineTeamService.updateTeam(teamId, request));
     }
 
@@ -125,8 +116,6 @@ public class MineTeamController {
             @PathVariable Long teamId,
             @RequestBody MineTeamMemberInviteRequest request
     ) {
-        log.info("邀请团队成员: teamId={}, uniqueCode={}, role={}",
-                teamId, request.getUniqueCode(), request.getRole());
         return Response.success(mineTeamService.inviteMember(teamId, request));
     }
 
@@ -173,8 +162,6 @@ public class MineTeamController {
     public Response<MineTeamDetailResponse> createMemberChangeRequest(
             @RequestBody MineTeamMemberChangeCreateRequest request
     ) {
-        log.info("发起团队成员信息变更: teamId={}, memberId={}, role={}",
-                request.getTeamId(), request.getMemberId(), request.getRole());
         return Response.success(mineTeamService.createMemberChangeRequest(request));
     }
 
@@ -225,7 +212,6 @@ public class MineTeamController {
      */
     @PostMapping("/api/mine/teams/transfer-owner")
     public Response<MineTeamDetailResponse> transferOwner(@RequestBody MineTeamOwnerTransferRequest request) {
-        log.info("转让团队拥有者: teamId={}, memberId={}", request.getTeamId(), request.getMemberId());
         return Response.success(mineTeamService.transferOwner(request));
     }
 
@@ -237,7 +223,6 @@ public class MineTeamController {
      */
     @PostMapping("/api/mine/teams/remove-member")
     public Response<MineTeamDetailResponse> removeMember(@RequestBody MineTeamMemberRemoveRequest request) {
-        log.info("移除团队成员: teamId={}, memberId={}", request.getTeamId(), request.getMemberId());
         return Response.success(mineTeamService.removeMember(request));
     }
 
@@ -253,13 +238,7 @@ public class MineTeamController {
             @PathVariable Long teamId,
             @RequestParam("file") MultipartFile file
     ) {
-        // 头像类文件格式在 Controller 层先拦截，权限与 COS 目录归属由 Service 统一判断。
-        String validationMessage = AvatarFileValidator.validate(file, TEAM_AVATAR_FILE_LABEL);
-        if (validationMessage != null) {
-            return Response.fail(validationMessage);
-        }
-        log.info("团队图标上传开始: teamId={}, originalFilename={}, size={}",
-                teamId, file.getOriginalFilename(), file.getSize());
-        return Response.success(mineTeamService.uploadTeamAvatar(teamId, file));
+        AvatarUploadResult result = mineTeamService.uploadTeamAvatar(teamId, file);
+        return result.success() ? Response.success(result.data()) : Response.fail(result.message());
     }
 }

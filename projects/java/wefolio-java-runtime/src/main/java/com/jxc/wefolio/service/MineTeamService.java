@@ -1,24 +1,21 @@
 package com.jxc.wefolio.service;
 
-import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.jxc.wefolio.common.UniqueCodeGenerator;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
+import com.jxc.wefolio.common.upload.AvatarFileValidator;
+import com.jxc.wefolio.common.upload.AvatarUploadResult;
 import com.jxc.wefolio.dict.JoinStatusDict;
 import com.jxc.wefolio.dict.MessageActionTypeDict;
 import com.jxc.wefolio.dict.MessageCategoryDict;
 import com.jxc.wefolio.dict.MessageReadStatusDict;
 import com.jxc.wefolio.dict.MessageTypeDict;
-import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
-import com.jxc.wefolio.dict.PortfolioStatusDict;
 import com.jxc.wefolio.dict.PointSceneCodeDict;
-import com.jxc.wefolio.dict.ReferenceTypeDict;
 import com.jxc.wefolio.dict.TeamMemberChangeStatusDict;
 import com.jxc.wefolio.dict.TeamRoleDict;
 import com.jxc.wefolio.dict.TeamStatusDict;
 import com.jxc.wefolio.dict.UserStatusDict;
-import com.jxc.wefolio.dict.WorkStatusDict;
 import com.jxc.wefolio.dto.FileUploadResponse;
 import com.jxc.wefolio.dto.MineTeamInvitationResponse;
 import com.jxc.wefolio.dto.MineTeamMemberChangeCreateRequest;
@@ -32,25 +29,19 @@ import com.jxc.wefolio.dto.MineTeamDetailResponse;
 import com.jxc.wefolio.dto.MineTeamListResponse;
 import com.jxc.wefolio.dto.MineTeamUpdateRequest;
 import com.jxc.wefolio.dto.MineTeamOwnerTransferRequest;
-import com.jxc.wefolio.dto.PortfolioConfigDto;
-import com.jxc.wefolio.entity.PortfolioEntity;
-import com.jxc.wefolio.entity.PortfolioReferenceEntity;
 import com.jxc.wefolio.entity.SystemMessageEntity;
 import com.jxc.wefolio.entity.TeamEntity;
 import com.jxc.wefolio.entity.TeamMemberChangeRequestEntity;
 import com.jxc.wefolio.entity.TeamMemberEntity;
 import com.jxc.wefolio.entity.UserEntity;
-import com.jxc.wefolio.entity.WorkEntity;
 import com.jxc.wefolio.exception.BusinessException;
-import com.jxc.wefolio.mapper.PortfolioEntityMapper;
-import com.jxc.wefolio.mapper.PortfolioReferenceEntityMapper;
 import com.jxc.wefolio.mapper.SystemMessageEntityMapper;
 import com.jxc.wefolio.mapper.TeamEntityMapper;
 import com.jxc.wefolio.mapper.TeamMemberChangeRequestEntityMapper;
 import com.jxc.wefolio.mapper.TeamMemberEntityMapper;
 import com.jxc.wefolio.mapper.UserEntityMapper;
-import com.jxc.wefolio.mapper.WorkEntityMapper;
 import com.jxc.wefolio.message.MineTeamMessage;
+import com.jxc.wefolio.service.teamportfolio.TeamPortfolioReferenceGuardService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
@@ -66,7 +57,6 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -84,6 +74,9 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class MineTeamService {
+
+    /** 团队图标提示名称 */
+    private static final String TEAM_AVATAR_FILE_LABEL = "团队图标";
 
     /** 团队名称最大长度 */
     private static final int NAME_MAX_LENGTH = 100;
@@ -269,15 +262,6 @@ public class MineTeamService {
     /** 团队成员信息变更事务辅助服务 */
     private final TeamMemberChangeRequestTransactionService teamMemberChangeRequestTransactionService;
 
-    /** 作品集 Mapper */
-    private final PortfolioEntityMapper portfolioEntityMapper;
-
-    /** 作品集引用 Mapper */
-    private final PortfolioReferenceEntityMapper portfolioReferenceEntityMapper;
-
-    /** 作品 Mapper */
-    private final WorkEntityMapper workEntityMapper;
-
     /** COS 文件服务 */
     private final CosService cosService;
 
@@ -289,6 +273,9 @@ public class MineTeamService {
 
     /** 唯一码生成器 */
     private final UniqueCodeGenerator uniqueCodeGenerator;
+
+    /** 团队作品集引用保护服务 */
+    private final TeamPortfolioReferenceGuardService teamPortfolioReferenceGuardService;
 
     /**
      * 获取当前用户加入的团队列表。
@@ -352,6 +339,8 @@ public class MineTeamService {
         if (request == null) {
             throw new BusinessException("团队内容不能为空");
         }
+        log.info("创建团队: name={}, intro={}, avatarUrl={}",
+                request.getName(), request.getIntro(), request.getAvatarUrl());
         Long userId = AuthContextHolder.requireUserId();
         String name = normalizeRequiredString(request.getName(), NAME_MAX_LENGTH, "团队名称");
         String intro = normalizeOptionalString(request.getIntro(), INTRO_MAX_LENGTH, "团队简介");
@@ -396,6 +385,8 @@ public class MineTeamService {
         if (request == null) {
             throw new BusinessException("团队内容不能为空");
         }
+        log.info("保存团队资料: teamId={}, name={}, intro={}, avatarUrl={}",
+                teamId, request.getName(), request.getIntro(), request.getAvatarUrl());
         Long userId = AuthContextHolder.requireUserId();
         TeamEntity team = requireActiveTeam(teamId);
         TeamMemberEntity membership = requireJoinedMembership(teamId, userId, "团队不存在或无访问权限");
@@ -429,9 +420,15 @@ public class MineTeamService {
      *
      * @param teamId 团队 ID
      * @param file 图标文件
-     * @return 文件上传响应
+     * @return 团队图标上传结果
      */
-    public FileUploadResponse uploadTeamAvatar(Long teamId, MultipartFile file) {
+    public AvatarUploadResult uploadTeamAvatar(Long teamId, MultipartFile file) {
+        String validationMessage = AvatarFileValidator.validate(file, TEAM_AVATAR_FILE_LABEL);
+        if (validationMessage != null) {
+            return AvatarUploadResult.failure(validationMessage);
+        }
+        log.info("团队图标上传开始: teamId={}, originalFilename={}, size={}",
+                teamId, file.getOriginalFilename(), file.getSize());
         Long userId = AuthContextHolder.requireUserId();
         TeamEntity team = requireActiveTeam(teamId);
         TeamMemberEntity membership = requireJoinedMembership(teamId, userId, "团队不存在或无访问权限");
@@ -440,10 +437,12 @@ public class MineTeamService {
         }
         // 团队图标属于团队杂项素材，固定写入 {teamCode}/others 目录。
         String key = cosService.upload(file, team.getUniqueCode() + "/others");
+        String url = cosService.publicUrl(key);
+        log.info("团队图标上传成功: teamId={}, key={}, url={}", teamId, key, url);
         FileUploadResponse response = new FileUploadResponse();
         response.setKey(key);
-        response.setUrl(cosService.publicUrl(key));
-        return response;
+        response.setUrl(url);
+        return AvatarUploadResult.succeeded(response);
     }
 
     /**
@@ -487,6 +486,8 @@ public class MineTeamService {
         if (request == null) {
             throw new BusinessException("成员邀请内容不能为空");
         }
+        log.info("邀请团队成员: teamId={}, uniqueCode={}, role={}",
+                teamId, request.getUniqueCode(), request.getRole());
         Long userId = AuthContextHolder.requireUserId();
         TeamEntity team = requireActiveTeam(teamId);
         TeamMemberEntity ownerMembership = requireOwnerMembership(teamId, userId);
@@ -592,6 +593,8 @@ public class MineTeamService {
         if (request == null) {
             throw new BusinessException("成员信息变更内容不能为空");
         }
+        log.info("发起团队成员信息变更: teamId={}, memberId={}, role={}",
+                request.getTeamId(), request.getMemberId(), request.getRole());
         Long userId = AuthContextHolder.requireUserId();
         TeamEntity team = requireActiveTeam(request.getTeamId());
         TeamMemberEntity ownerMembership = requireOwnerMembership(team.getId(), userId);
@@ -674,6 +677,19 @@ public class MineTeamService {
             throw new BusinessException("成员信息已变化，请联系团队拥有者重新发起。");
         }
 
+        boolean worksPermissionClosed = flagOrZero(member.getAllowWorks()) == 1
+                && flagOrZero(changeRequest.getAllowWorksAfter()) == 0;
+        boolean portfolioPermissionClosed = flagOrZero(member.getAllowPortfolio()) == 1
+                && flagOrZero(changeRequest.getAllowPortfolioAfter()) == 0;
+        if (worksPermissionClosed || portfolioPermissionClosed) {
+            teamPortfolioReferenceGuardService.assertMemberPermissionsCanChange(
+                    team.getId(),
+                    member.getUserId(),
+                    !worksPermissionClosed,
+                    !portfolioPermissionClosed
+            );
+        }
+
         LocalDateTime now = LocalDateTime.now();
         UpdateWrapper<TeamMemberEntity> memberUpdate = new UpdateWrapper<>();
         memberUpdate.eq(COLUMN_ID, changeRequest.getMemberId())
@@ -732,6 +748,8 @@ public class MineTeamService {
         if (request == null) {
             throw new BusinessException("团队转让内容不能为空");
         }
+        log.info("转让团队拥有者: teamId={}, memberId={}",
+                request.getTeamId(), request.getMemberId());
         Long userId = AuthContextHolder.requireUserId();
         TeamEntity team = requireActiveTeam(request.getTeamId());
         TeamMemberEntity ownerMembership = requireOwnerMembership(team.getId(), userId);
@@ -785,6 +803,8 @@ public class MineTeamService {
         if (request == null) {
             throw new BusinessException("成员移除内容不能为空");
         }
+        log.info("移除团队成员: teamId={}, memberId={}",
+                request.getTeamId(), request.getMemberId());
         Long userId = AuthContextHolder.requireUserId();
         TeamEntity team = requireActiveTeam(request.getTeamId());
         TeamMemberEntity ownerMembership = requireOwnerMembership(team.getId(), userId);
@@ -795,7 +815,7 @@ public class MineTeamService {
         if (TeamRoleDict.OWNER.getCode().equals(target.getRole())) {
             throw new BusinessException("不能移除团队拥有者");
         }
-        assertMemberContentNotReferenced(team.getId(), target.getUserId());
+        teamPortfolioReferenceGuardService.assertMemberCanLeave(team.getId(), target.getUserId());
 
         LocalDateTime now = LocalDateTime.now();
         String noticeIdempotencyKey = buildMemberRemovedIdempotencyKey(target);
@@ -1843,163 +1863,6 @@ public class MineTeamService {
                     .set(COLUMN_BIZ_ID, teamId);
             systemMessageEntityMapper.update(new SystemMessageEntity(), updateWrapper);
         }
-    }
-
-    /**
-     * 校验成员内容是否仍被团队作品集引用。
-     *
-     * @param teamId 团队 ID
-     * @param memberUserId 成员用户 ID
-     */
-    private void assertMemberContentNotReferenced(Long teamId, Long memberUserId) {
-        List<WorkEntity> works = safeList(workEntityMapper.selectList(
-                Wrappers.lambdaQuery(WorkEntity.class)
-                        .eq(WorkEntity::getUserId, memberUserId)
-                        .eq(WorkEntity::getStatus, WorkStatusDict.ACTIVE.getCode())
-        ));
-        List<PortfolioEntity> memberPortfolios = safeList(portfolioEntityMapper.selectList(
-                Wrappers.lambdaQuery(PortfolioEntity.class)
-                        .eq(PortfolioEntity::getOwnerType, PortfolioOwnerTypeDict.USER.getCode())
-                        .eq(PortfolioEntity::getOwnerId, memberUserId)
-                        .eq(PortfolioEntity::getStatus, PortfolioStatusDict.ACTIVE.getCode())
-        ));
-        List<PortfolioEntity> teamPortfolios = safeList(portfolioEntityMapper.selectList(
-                Wrappers.lambdaQuery(PortfolioEntity.class)
-                        .eq(PortfolioEntity::getOwnerType, PortfolioOwnerTypeDict.TEAM.getCode())
-                        .eq(PortfolioEntity::getOwnerId, teamId)
-                        .eq(PortfolioEntity::getStatus, PortfolioStatusDict.ACTIVE.getCode())
-        ));
-        if (teamPortfolios.isEmpty()) {
-            return;
-        }
-        Set<Long> workIds = works.stream().map(WorkEntity::getId).filter(Objects::nonNull).collect(Collectors.toSet());
-        Set<Long> memberPortfolioIds = memberPortfolios.stream()
-                .map(PortfolioEntity::getId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-        Set<Long> teamPortfolioIds = teamPortfolios.stream()
-                .map(PortfolioEntity::getId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-        if (teamPortfolioIds.isEmpty()) {
-            return;
-        }
-        List<PortfolioReferenceEntity> references = safeList(portfolioReferenceEntityMapper.selectList(
-                Wrappers.lambdaQuery(PortfolioReferenceEntity.class)
-                        .in(PortfolioReferenceEntity::getPortfolioId, teamPortfolioIds)
-                        .eq(PortfolioReferenceEntity::getIsValid, 1)
-        ));
-        Set<Long> referencedPortfolioIds = collectReferencedTeamPortfolioIds(
-                references, workIds, memberPortfolioIds, memberUserId);
-        if (referencedPortfolioIds.isEmpty()) {
-            return;
-        }
-        Map<Long, String> titleMap = teamPortfolios.stream().collect(Collectors.toMap(
-                PortfolioEntity::getId,
-                portfolio -> resolvePortfolioShareTitle(portfolio),
-                (left, right) -> left,
-                LinkedHashMap::new
-        ));
-        List<String> names = referencedPortfolioIds.stream()
-                .map(id -> titleMap.getOrDefault(id, "未命名作品集"))
-                .toList();
-        throw new BusinessException(formatRemoveBlockedMessage(names));
-    }
-
-    /**
-     * 从作品集草稿或正式配置中解析分享标题。
-     *
-     * @param portfolio 作品集实体
-     * @return 分享标题
-     */
-    private String resolvePortfolioShareTitle(PortfolioEntity portfolio) {
-        if (portfolio == null) {
-            return "未命名作品集";
-        }
-        String title = extractShareTitle(portfolio.getPublishedConfigJson());
-        if (hasText(title)) {
-            return title;
-        }
-        title = extractShareTitle(portfolio.getDraftConfigJson());
-        return hasText(title) ? title : "未命名作品集";
-    }
-
-    /**
-     * 从配置 JSON 中提取 share.title。
-     *
-     * @param configJson 配置 JSON
-     * @return 分享标题
-     */
-    private String extractShareTitle(String configJson) {
-        if (!hasText(configJson)) {
-            return "";
-        }
-        try {
-            PortfolioConfigDto config = JSON.parseObject(configJson, PortfolioConfigDto.class);
-            return config == null || config.getShare() == null ? "" : defaultString(config.getShare().getTitle());
-        } catch (Exception e) {
-            return "";
-        }
-    }
-
-    /**
-     * 收集团队作品集中引用了成员内容的作品集 ID。
-     *
-     * @param references 引用记录
-     * @param workIds 成员作品 ID
-     * @param memberPortfolioIds 成员个人作品集 ID
-     * @param memberUserId 成员用户 ID
-     * @return 被阻塞的团队作品集 ID
-     */
-    private Set<Long> collectReferencedTeamPortfolioIds(
-            List<PortfolioReferenceEntity> references,
-            Set<Long> workIds,
-            Set<Long> memberPortfolioIds,
-            Long memberUserId
-    ) {
-        Set<Long> ids = new LinkedHashSet<>();
-        for (PortfolioReferenceEntity reference : references) {
-            if (reference == null || reference.getPortfolioId() == null) {
-                continue;
-            }
-            String type = reference.getReferenceType();
-            Long referenceId = reference.getReferenceId();
-            boolean referenced = (ReferenceTypeDict.WORK.getCode().equals(type) && workIds.contains(referenceId))
-                    || (ReferenceTypeDict.MEMBER_PORTFOLIO.getCode().equals(type) && memberPortfolioIds.contains(referenceId))
-                    || (ReferenceTypeDict.USER_PROFILE.getCode().equals(type) && Objects.equals(memberUserId, referenceId));
-            if (referenced) {
-                ids.add(reference.getPortfolioId());
-            }
-        }
-        return ids;
-    }
-
-    /**
-     * 构建移除受阻提示。
-     *
-     * @param portfolioNames 作品集名称
-     * @return 提示文案
-     */
-    private String formatRemoveBlockedMessage(List<String> portfolioNames) {
-        List<String> names = portfolioNames.stream()
-                .filter(name -> name != null && !name.isBlank())
-                .distinct()
-                .toList();
-        if (names.size() <= 2) {
-            return "无法移除，成员内容仍被" + quotePortfolioNames(names) + "使用，请先移除引用。";
-        }
-        return "无法移除，成员内容仍被" + quotePortfolioNames(names.subList(0, 2))
-                + "等 " + names.size() + " 个作品集使用，请先移除引用。";
-    }
-
-    /**
-     * 拼接作品集名称。
-     *
-     * @param names 作品集名称
-     * @return 带书名号的名称串
-     */
-    private String quotePortfolioNames(List<String> names) {
-        return names.stream().map(name -> "《" + name + "》").collect(Collectors.joining());
     }
 
     /**

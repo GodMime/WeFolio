@@ -41,6 +41,7 @@ const {
   normalizeContactFormConfig,
   normalizeDividerConfig,
   normalizeScheduleQueryConfig,
+  normalizeSingleWorkConfig,
   normalizeProfileComponentConfig,
   normalizePortfolioConfig,
   normalizeTextSectionConfig,
@@ -50,6 +51,7 @@ const {
   updateComponentContactFormConfig,
   updateComponentDividerConfig,
   updateComponentScheduleQueryConfig,
+  updateSingleWorkConfig,
   updateComponentProfileConfig,
   updateComponentTextSectionConfig,
   updateComponentWorkIds
@@ -117,6 +119,9 @@ const BASIC_PROFILE_LOAD_ERROR_MESSAGE = '基础资料加载失败'
 const TEXT_SECTION_REQUIRED_MESSAGE = '请填写文字说明'
 const DIVIDER_HEIGHT_REQUIRED_MESSAGE = '请输入大于 0 的高度'
 const WORK_ASPECT_RATIO_FALLBACK_TEXT = '--'
+const SINGLE_WORK_SUMMARY_STATUS_LOADING = 'LOADING'
+const SINGLE_WORK_SUMMARY_STATUS_FAILED = 'FAILED'
+const SINGLE_WORK_SUMMARY_STATUS_UNAVAILABLE = 'UNAVAILABLE'
 
 const DEFAULT_COMPONENT_DESCRIPTIONS = {
   CAROUSEL: '展示已选择的图片作品',
@@ -124,6 +129,7 @@ const DEFAULT_COMPONENT_DESCRIPTIONS = {
   SCHEDULE_QUERY: '开放访客查询档期',
   WORK_GRID: '双列展示图片和视频作品',
   WORK_LIST: '单列展示重点图片和视频作品',
+  SINGLE_WORK: '突出展示一个图片或视频作品',
   QR_CONTACT: '展示二维码联系方式',
   CONTACT_FORM: '收集访客预留联系信息',
   TEXT_SECTION: '添加服务说明文字',
@@ -148,8 +154,15 @@ function buildPublicationStatusState(publicationStatus) {
 
 const DEFAULT_PUBLICATION_STATUS_STATE = buildPublicationStatusState()
 
-function buildDefaultComponentOptions() {
-  return Object.keys(COMPONENT_TYPES).map((key) => {
+function buildComponentOptions(options = [], components = []) {
+  const profileAdded = components.some((component) => component.componentType === COMPONENT_TYPES.PROFILE)
+  return options.map((item) => Object.assign({}, item, {
+    disabled: item.componentType === COMPONENT_TYPES.PROFILE && profileAdded
+  }))
+}
+
+function buildDefaultComponentOptions(components = []) {
+  const options = Object.keys(COMPONENT_TYPES).map((key) => {
     const componentType = COMPONENT_TYPES[key]
     return {
       componentType,
@@ -157,6 +170,7 @@ function buildDefaultComponentOptions() {
       description: DEFAULT_COMPONENT_DESCRIPTIONS[componentType] || '标准个人作品集可选组件'
     }
   })
+  return buildComponentOptions(options, components)
 }
 
 function getTouchClientY(event = {}) {
@@ -186,6 +200,7 @@ function isDisplayGroupComponent(componentType) {
 
 function isEditableComponentType(componentType) {
   return componentType === COMPONENT_TYPES.CAROUSEL ||
+    componentType === COMPONENT_TYPES.SINGLE_WORK ||
     componentType === COMPONENT_TYPES.PROFILE ||
     componentType === COMPONENT_TYPES.QR_CONTACT ||
     componentType === COMPONENT_TYPES.SCHEDULE_QUERY ||
@@ -327,6 +342,25 @@ function mergeDisplayGroupWorkMap(currentMap = {}, works = []) {
     result[workId] = normalizeDisplayGroupWorkPreview(work, workId)
     return result
   }, Object.assign({}, currentMap))
+}
+
+function buildSingleWorkSummaryStatusMap(workIds = [], status) {
+  return normalizeWorkIds(workIds).reduce((result, workId) => {
+    result[workId] = { id: workId, status }
+    return result
+  }, {})
+}
+
+function buildSingleWorkSummaryList(workIds = [], summaryMap = {}) {
+  return normalizeWorkIds(workIds)
+    .map((workId) => summaryMap[workId])
+    .filter(Boolean)
+}
+
+function findSingleWorkIds(config = {}) {
+  return normalizeWorkIds((config.components || [])
+    .filter((component) => component.componentType === COMPONENT_TYPES.SINGLE_WORK)
+    .map((component) => component.config && component.config.workId))
 }
 
 function workHasTag(work = {}, tagId) {
@@ -771,6 +805,8 @@ Page({
     componentWorkHasMore: false,
     componentWorkSelectedIds: [],
     componentWorkSelectedCountText: '0 已选',
+    componentWorkSelectionMode: 'multiple',
+    componentWorkShowTitle: true,
     editingComponentKey: '',
     editingComponentType: '',
     displayGroupSheetVisible: false,
@@ -782,6 +818,8 @@ Page({
     displayGroupWorkOptions: [],
     displayGroupAllWorks: [],
     displayGroupWorkMap: {},
+    singleWorkSummaryMap: {},
+    singleWorkSummaries: [],
     displayGroupOriginalConfig: null,
     workTagOptions: [],
     displayGroupLoading: false,
@@ -852,6 +890,7 @@ Page({
           config,
           shareFieldCounters: buildShareFieldCounters(config.share)
         }, buildPublicationStatusState(response.publicationStatus)))
+        this.loadSingleWorkSummaries(config)
         return this.loadBasicProfileDefaults(config)
       })
       .catch((error) => {
@@ -860,6 +899,49 @@ Page({
           return
         }
         wx.showToast({ title: error.message || '加载失败', icon: 'none' })
+      })
+  },
+
+  loadSingleWorkSummaries(config = this.data.config) {
+    const workIds = findSingleWorkIds(config)
+    if (workIds.length === 0) {
+      this.setData({ singleWorkSummaryMap: {}, singleWorkSummaries: [] })
+      return Promise.resolve({})
+    }
+    const loadingSummaryMap = buildSingleWorkSummaryStatusMap(workIds, SINGLE_WORK_SUMMARY_STATUS_LOADING)
+    this.setData({
+      singleWorkSummaryMap: loadingSummaryMap,
+      singleWorkSummaries: buildSingleWorkSummaryList(workIds, loadingSummaryMap)
+    })
+    return Promise.all(workIds.map((workId) => request({ url: `${WORKS_API_URL}/${workId}` })
+      .then((response = {}) => ({
+        workId,
+        work: response.work || null,
+        status: response.work ? '' : SINGLE_WORK_SUMMARY_STATUS_UNAVAILABLE
+      }))
+      .catch(() => ({
+        workId,
+        work: null,
+        status: SINGLE_WORK_SUMMARY_STATUS_FAILED
+      }))))
+      .then((results) => {
+        const singleWorkSummaryMap = mergeDisplayGroupWorkMap(
+          {},
+          results.map((result) => result.work).filter(Boolean)
+        )
+        results.forEach((result) => {
+          if (!result.work) {
+            singleWorkSummaryMap[result.workId] = {
+              id: result.workId,
+              status: result.status
+            }
+          }
+        })
+        this.setData({
+          singleWorkSummaryMap,
+          singleWorkSummaries: buildSingleWorkSummaryList(workIds, singleWorkSummaryMap)
+        })
+        return singleWorkSummaryMap
       })
   },
 
@@ -1036,7 +1118,10 @@ Page({
   },
 
   handleOpenComponentSheet() {
-    this.setData({ componentSheetVisible: true })
+    this.setData({
+      componentSheetVisible: true,
+      componentOptions: buildComponentOptions(this.data.componentOptions, this.data.config.components)
+    })
     this.loadComponentOptions()
   },
 
@@ -1044,7 +1129,9 @@ Page({
     request({ url: COMPONENT_LIBRARY_API_URL })
       .then((response) => {
         if (response && Array.isArray(response.components) && response.components.length > 0) {
-          this.setData({ componentOptions: response.components })
+          this.setData({
+            componentOptions: buildComponentOptions(response.components, this.data.config.components)
+          })
         }
       })
       .catch(() => {})
@@ -1058,7 +1145,10 @@ Page({
 
   handleSelectComponent(event) {
     const componentType = event.currentTarget.dataset.type
-    if (!componentType) {
+    const disabled = event.currentTarget.dataset.disabled
+    const profileAdded = componentType === COMPONENT_TYPES.PROFILE &&
+      this.data.config.components.some((component) => component.componentType === COMPONENT_TYPES.PROFILE)
+    if (!componentType || disabled || profileAdded) {
       return
     }
     this.setData({
@@ -1188,6 +1278,9 @@ Page({
       return undefined
     }
     if (componentType === COMPONENT_TYPES.CAROUSEL) {
+      return this.openComponentWorkSheet(componentKey, componentType)
+    }
+    if (componentType === COMPONENT_TYPES.SINGLE_WORK) {
       return this.openComponentWorkSheet(componentKey, componentType)
     }
     if (componentType === COMPONENT_TYPES.PROFILE) {
@@ -1914,14 +2007,19 @@ Page({
     if (!component) {
       return Promise.resolve()
     }
-    const selectedIds = normalizeWorkIds(
-      Object.prototype.hasOwnProperty.call(options, 'selectedIds')
-        ? options.selectedIds
-        : component.config && component.config.workIds
-    )
+    const singleWorkConfig = componentType === COMPONENT_TYPES.SINGLE_WORK
+      ? normalizeSingleWorkConfig(component.config || {})
+      : null
+    const selectedIds = normalizeWorkIds(Object.prototype.hasOwnProperty.call(options, 'selectedIds')
+      ? options.selectedIds
+      : singleWorkConfig
+        ? [singleWorkConfig.workId]
+        : component.config && component.config.workIds)
     this.setData({
       componentWorkSheetVisible: true,
-      componentWorkSheetTitle: options.title || (componentType === COMPONENT_TYPES.CAROUSEL ? '编辑轮播作品' : '编辑展示作品'),
+      componentWorkSheetTitle: options.title || (componentType === COMPONENT_TYPES.CAROUSEL
+        ? '编辑轮播作品'
+        : componentType === COMPONENT_TYPES.SINGLE_WORK ? '编辑单个作品' : '编辑展示作品'),
       componentWorkLoading: true,
       componentWorkLoadingMore: false,
       componentWorkErrorText: '',
@@ -1935,6 +2033,8 @@ Page({
       componentWorkHasMore: false,
       componentWorkSelectedIds: selectedIds,
       componentWorkSelectedCountText: buildSelectedCountText(selectedIds),
+      componentWorkSelectionMode: componentType === COMPONENT_TYPES.SINGLE_WORK ? 'single' : 'multiple',
+      componentWorkShowTitle: singleWorkConfig ? singleWorkConfig.showTitle : true,
       editingComponentKey: componentKey,
       editingComponentType: componentType
     })
@@ -2060,8 +2160,14 @@ Page({
       editingComponentKey: '',
       editingComponentType: '',
       componentWorkErrorText: '',
-      componentWorkLoadingMore: false
+      componentWorkLoadingMore: false,
+      componentWorkSelectionMode: 'multiple',
+      componentWorkShowTitle: true
     })
+  },
+
+  handleSingleWorkShowTitleChange(event) {
+    this.setData({ componentWorkShowTitle: Boolean(event.detail && event.detail.value) })
   },
 
   handleToggleComponentWork(event) {
@@ -2070,6 +2176,22 @@ Page({
       return
     }
     const selectedIds = normalizeWorkIds(this.data.componentWorkSelectedIds)
+    if (this.data.editingComponentType === COMPONENT_TYPES.SINGLE_WORK) {
+      if (selectedIds.includes(workId)) {
+        return
+      }
+      const nextSelectedIds = [workId]
+      this.setData({
+        componentWorkSelectedIds: nextSelectedIds,
+        componentWorkSelectedCountText: buildSelectedCountText(nextSelectedIds),
+        componentWorkOptions: buildComponentWorkOptions(
+          this.data.componentWorkOptions,
+          nextSelectedIds,
+          this.data.editingComponentType
+        )
+      })
+      return
+    }
     const nextSelectedIds = selectedIds.includes(workId)
       ? selectedIds.filter((id) => id !== workId)
       : selectedIds.concat(workId)
@@ -2085,14 +2207,28 @@ Page({
       return
     }
     const componentKey = this.data.editingComponentKey
-    const config = updateComponentWorkIds(this.data.config, componentKey, this.data.componentWorkSelectedIds)
+    if (this.data.editingComponentType === COMPONENT_TYPES.SINGLE_WORK && !this.data.componentWorkSelectedIds[0]) {
+      wx.showToast({ title: '请选择一个作品', icon: 'none' })
+      return
+    }
+    const config = this.data.editingComponentType === COMPONENT_TYPES.SINGLE_WORK
+      ? updateSingleWorkConfig(this.data.config, componentKey, {
+          workId: this.data.componentWorkSelectedIds[0],
+          showTitle: this.data.componentWorkShowTitle
+        })
+      : updateComponentWorkIds(this.data.config, componentKey, this.data.componentWorkSelectedIds)
     const displayGroupWorkMap = mergeDisplayGroupWorkMap(this.data.displayGroupWorkMap, this.data.componentWorkOptions)
+    const singleWorkSummaryMap = mergeDisplayGroupWorkMap(this.data.singleWorkSummaryMap, this.data.componentWorkOptions)
     this.setData({
       config,
       displayGroupWorkMap,
+      singleWorkSummaryMap,
+      singleWorkSummaries: buildSingleWorkSummaryList(findSingleWorkIds(config), singleWorkSummaryMap),
       componentWorkSheetVisible: false,
       editingComponentKey: '',
-      editingComponentType: ''
+      editingComponentType: '',
+      componentWorkSelectionMode: 'multiple',
+      componentWorkShowTitle: true
     })
   },
 

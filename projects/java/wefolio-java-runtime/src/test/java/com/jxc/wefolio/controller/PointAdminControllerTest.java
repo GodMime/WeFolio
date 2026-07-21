@@ -3,7 +3,8 @@ package com.jxc.wefolio.controller;
 import com.jxc.wefolio.annotation.SystemAccess;
 import com.jxc.wefolio.common.Response;
 import com.jxc.wefolio.dto.AdminPointGrantRequest;
-import com.jxc.wefolio.dto.PointMutationResponse;
+import com.jxc.wefolio.service.point.GiftOrderResult;
+import java.util.List;
 import com.jxc.wefolio.service.PointAdminService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,13 +33,13 @@ class PointAdminControllerTest {
         request.setPoints(1000L);
         request.setIdempotencyKey("manual-20260626-WFA3B1E7A2");
         request.setRemark("一期初始化积分");
-        PointMutationResponse serviceResponse = new PointMutationResponse();
-        serviceResponse.setBalanceAfter(1000L);
+        GiftOrderResult serviceResponse = new GiftOrderResult(List.of(
+                new GiftOrderResult.GiftOrderItem(1L, "WFG001", 7L, "READY", false)));
         when(pointAdminService.grantPoints("admin-secret", request))
                 .thenReturn(serviceResponse);
 
         PointAdminController controller = new PointAdminController(pointAdminService);
-        Response<PointMutationResponse> response = controller.grantPoints("admin-secret", request);
+        Response<GiftOrderResult> response = controller.grantPoints("admin-secret", request);
 
         assertThat(PointAdminController.class.isAnnotationPresent(SystemAccess.class)).isTrue();
         PostMapping mapping = PointAdminController.class

@@ -6,13 +6,17 @@ const {
   normalizePointOverview,
   normalizePointTransactions
 } = require('../../utils/points')
+const { buildLedgerMarquee } = require('./points-marquee')
 
 const POINT_OVERVIEW_URL = '/api/mine/points'
 const POINT_TRANSACTIONS_URL = '/api/mine/points/transactions'
 const POINT_RULES_PAGE_URL = '/pages/points-rules/points-rules'
+const RECHARGE_PAGE_URL = '/pages/recharge/recharge'
 const LOGIN_PAGE_URL = '/pages/login/login'
 const FIRST_PAGE = 1
 const PAGE_SIZE = 20
+const LEDGER_DESC_VIEWPORT_SELECTOR = '.ledger-desc-viewport'
+const LEDGER_DESC_TEXT_SELECTOR = '.ledger-desc-text'
 
 function emptyPointData() {
   return normalizePointOverview({})
@@ -66,6 +70,8 @@ Page({
         pointData: normalizePointOverview(overview),
         transactionData: normalizePointTransactions(transactions),
         loading: false
+      }, () => {
+        this.refreshLedgerMarquee(requestContext.requestId)
       })
     } catch (error) {
       if (!this.isCurrentPointRequest(requestContext)) {
@@ -124,6 +130,8 @@ Page({
       this.setData({
         transactionData: appendPointTransactions(this.data.transactionData, response),
         loadingMore: false
+      }, () => {
+        this.refreshLedgerMarquee(requestContext.requestId)
       })
     } catch (error) {
       if (!this.isCurrentPointRequest(requestContext)) {
@@ -156,10 +164,38 @@ Page({
     this.bootstrap()
   },
 
+  refreshLedgerMarquee(requestId) {
+    if (this.pointRequestId !== requestId || typeof this.createSelectorQuery !== 'function') {
+      return
+    }
+    const query = this.createSelectorQuery()
+    query.selectAll(LEDGER_DESC_VIEWPORT_SELECTOR).boundingClientRect()
+    query.selectAll(LEDGER_DESC_TEXT_SELECTOR).boundingClientRect()
+    query.exec((results = []) => {
+      if (this.pointRequestId !== requestId) {
+        return
+      }
+      const viewports = Array.isArray(results[0]) ? results[0] : []
+      const texts = Array.isArray(results[1]) ? results[1] : []
+      const transactionData = this.data.transactionData || emptyTransactionData()
+      const records = Array.isArray(transactionData.records) ? transactionData.records : []
+      const measuredRecords = records.map((record, index) => Object.assign(
+        {},
+        record,
+        buildLedgerMarquee(
+          viewports[index] && viewports[index].width,
+          texts[index] && texts[index].width
+        )
+      ))
+      this.setData({
+        'transactionData.records': measuredRecords
+      })
+    })
+  },
+
   handleRechargeTap() {
-    wx.showToast({
-      title: '体验版暂时只支持后台加积分',
-      icon: 'none'
+    wx.navigateTo({
+      url: RECHARGE_PAGE_URL
     })
   },
 

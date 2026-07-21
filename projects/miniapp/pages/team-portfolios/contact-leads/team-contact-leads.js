@@ -1,0 +1,20 @@
+const { fetchTeamContactLeads, updateTeamContactLeadFollowStatus } = require('../utils/team-contact-leads.js')
+const { fetchTeamPortfolioList, handleTeamMaintainerAuthError, showTeamPortfolioUnavailableToast } = require('../utils/team-portfolios.js')
+const { request } = require('../../../utils/request.js')
+
+const FOLLOW_STATUSES = ['NOT_FOLLOWED_UP', 'CONTACTED', 'DEAL_WON', 'INVALID']
+
+Page({
+  data: { teamId: 0, teamName: '', currentRole: '', canUpdateFollow: false, page: 1, pageSize: 20, items: [], loading: false, loadingMore: false, errorMessage: '', hasMore: false, updatingLeadId: null, followEditor: null, followStatuses: FOLLOW_STATUSES },
+  onLoad(options = {}) { const teamId = Number(options.teamId); if (!teamId) { this.setData({ errorMessage: '团队参数无效' }); return }; let teamName = ''; try { teamName = decodeURIComponent(options.teamName || '') } catch (error) { teamName = String(options.teamName || '') }; this.setData({ teamId, teamName, currentRole: options.currentRole || '', canUpdateFollow: false }); this.loadPermissions(); this.loadPage(1) },
+  async loadPermissions() { try { const portfolios = await fetchTeamPortfolioList(request); const item = portfolios.find((portfolio) => portfolio.teamId === this.data.teamId); this.setData({ currentRole: item ? item.currentRole : this.data.currentRole, canUpdateFollow: Boolean(item && item.canMaintain) }) } catch (error) { if (handleTeamMaintainerAuthError(error)) return; showTeamPortfolioUnavailableToast(error) } },
+  async loadPage(page) { if (this.data.loading || this.data.loadingMore || !this.data.teamId) return; this.setData(page === 1 ? { loading: true, errorMessage: '' } : { loadingMore: true }); try { const result = await fetchTeamContactLeads(request, this.data.teamId, { page, pageSize: this.data.pageSize }); const keys = new Set(this.data.items.map((item) => item.leadId)); const items = page === 1 ? result.items : this.data.items.concat(result.items.filter((item) => !keys.has(item.leadId))); this.setData({ items, page: result.page, hasMore: result.hasMore }) } catch (error) { if (handleTeamMaintainerAuthError(error)) return; if (showTeamPortfolioUnavailableToast(error)) return; this.setData({ errorMessage: '线索加载失败，请重试' }) } finally { this.setData({ loading: false, loadingMore: false }) } },
+  handleRetry() { this.loadPage(1) },
+  handleReachBottom() { if (this.data.hasMore) this.loadPage(this.data.page + 1) },
+  handleEditFollow(event) { if (!this.data.canUpdateFollow) return; const item = event.currentTarget.dataset.item; this.setData({ followEditor: item ? { leadId: item.leadId, followStatus: item.followStatus, followNote: item.followNote } : null }) },
+  handleFollowInput(event) { const field = event.currentTarget.dataset.field; this.setData({ followEditor: Object.assign({}, this.data.followEditor, { [field]: event.detail.value }) }) },
+  handleFollowStatus(event) { this.setData({ followEditor: Object.assign({}, this.data.followEditor, { followStatus: event.currentTarget.dataset.status }) }) },
+  async handleFollowSave() { const editor = this.data.followEditor; if (!editor || !this.data.canUpdateFollow || this.data.updatingLeadId) return; this.setData({ updatingLeadId: editor.leadId }); try { const updated = await updateTeamContactLeadFollowStatus(request, this.data.teamId, editor.leadId, editor.followStatus, editor.followNote); const items = this.data.items.map((item) => item.leadId === editor.leadId ? Object.assign({}, item, updated, { followStatus: editor.followStatus, followNote: editor.followNote }) : item); this.setData({ items, followEditor: null }) } catch (error) { if (handleTeamMaintainerAuthError(error)) return; if (showTeamPortfolioUnavailableToast(error)) return; wx.showToast({ title: '跟进更新失败，请重试', icon: 'none' }) } finally { this.setData({ updatingLeadId: null }) } },
+  handleCall(event) { const phone = event.currentTarget.dataset.phone; if (phone) wx.makePhoneCall({ phoneNumber: phone }) },
+  handleCopyWechat(event) { const wechat = event.currentTarget.dataset.wechat; if (wechat) wx.setClipboardData({ data: wechat }) }
+})

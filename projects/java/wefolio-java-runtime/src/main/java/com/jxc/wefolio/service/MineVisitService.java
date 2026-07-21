@@ -3,27 +3,36 @@ package com.jxc.wefolio.service;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
 import com.jxc.wefolio.dict.FollowStatusDict;
+import com.jxc.wefolio.dict.JoinStatusDict;
 import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
 import com.jxc.wefolio.dict.PortfolioTypeDict;
+import com.jxc.wefolio.dict.TeamRoleDict;
 import com.jxc.wefolio.dict.VisitEventTypeDict;
 import com.jxc.wefolio.dict.VisitSourceTypeDict;
+import com.jxc.wefolio.dto.MineVisitRecordPageResponse;
 import com.jxc.wefolio.dto.MineVisitRecordsResponse;
+import com.jxc.wefolio.dto.MineVisitStatisticsResponse;
 import com.jxc.wefolio.entity.ContactLeadEntity;
 import com.jxc.wefolio.entity.ScheduleQueryRecordEntity;
+import com.jxc.wefolio.entity.TeamMemberEntity;
 import com.jxc.wefolio.entity.VisitEventEntity;
 import com.jxc.wefolio.entity.VisitRecordEntity;
 import com.jxc.wefolio.entity.VisitorEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.ContactLeadEntityMapper;
 import com.jxc.wefolio.mapper.ScheduleQueryRecordEntityMapper;
+import com.jxc.wefolio.mapper.TeamMemberEntityMapper;
 import com.jxc.wefolio.mapper.VisitEventEntityMapper;
 import com.jxc.wefolio.mapper.VisitRecordEntityMapper;
 import com.jxc.wefolio.mapper.VisitorEntityMapper;
+import com.jxc.wefolio.service.teamportfolio.component.contactform.TeamContactLeadCryptoService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
@@ -34,6 +43,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -47,6 +57,15 @@ public class MineVisitService {
 
     /** 明细列表最多返回条数 */
     private static final int RECORD_LIMIT = 20;
+
+    /** 访问明细默认页码 */
+    private static final int FIRST_RECORD_PAGE_NO = 1;
+
+    /** 访问明细默认页大小 */
+    private static final int DEFAULT_RECORD_PAGE_SIZE = 20;
+
+    /** 访问明细最大页大小 */
+    private static final int MAX_RECORD_PAGE_SIZE = 50;
 
     /** 事件明细默认页码 */
     private static final int FIRST_EVENT_PAGE_NO = 1;
@@ -95,6 +114,16 @@ public class MineVisitService {
 
     /** 预留信息跟进状态保存失败提示 */
     private static final String CONTACT_LEAD_FOLLOW_SAVE_FAILED_MESSAGE = "预留信息跟进状态保存失败";
+
+    /** 个人作品集类型文案 */
+    private static final String PERSONAL_PORTFOLIO_TYPE_TEXT = "个人作品集";
+
+    /** 团队作品集类型文案 */
+    private static final String TEAM_PORTFOLIO_TYPE_TEXT = "团队作品集";
+
+    /** 可更新团队预留信息跟进状态的角色 */
+    private static final Set<String> TEAM_FOLLOW_UPDATABLE_ROLES = Set.of(
+            TeamRoleDict.OWNER.getCode(), TeamRoleDict.MANAGER.getCode());
 
     /** 默认事件补充说明 */
     private static final String DEFAULT_EVENT_DETAIL_TEXT = "暂无补充信息";
@@ -156,6 +185,12 @@ public class MineVisitService {
     /** 联系线索 Mapper */
     private final ContactLeadEntityMapper contactLeadEntityMapper;
 
+    /** 团队成员 Mapper */
+    private final TeamMemberEntityMapper teamMemberEntityMapper;
+
+    /** 团队联系方式加解密服务 */
+    private final TeamContactLeadCryptoService teamContactLeadCryptoService;
+
     /**
      * 获取当前维护者访问记录页数据。
      *
@@ -167,12 +202,62 @@ public class MineVisitService {
         List<VisitEventEntity> openedEvents = selectRecentOpenedEvents(userId);
         Map<Long, VisitorEntity> visitorsById = selectVisitorsById(records);
         long scheduleQueryCount = countOwnerScheduleQueries(userId);
-        long contactLeadCount = countOwnerContactLeads(userId);
+        Map<Long, String> joinedTeamRoles = selectJoinedTeamRoles(userId);
+        long contactLeadCount = countVisibleContactLeads(userId, joinedTeamRoles.keySet());
 
         MineVisitRecordsResponse response = new MineVisitRecordsResponse();
         response.setSummary(buildSummary(records, openedEvents, scheduleQueryCount, contactLeadCount));
         response.setTrend(buildTrend(openedEvents));
         response.setRecords(buildRecords(records, visitorsById));
+        return response;
+    }
+
+    /**
+     * 获取当前维护者访问记录统计数据。
+     *
+     * @return 访问记录统计响应
+     */
+    public MineVisitStatisticsResponse getVisitStatistics() {
+        Long userId = AuthContextHolder.requireUserId();
+        List<VisitRecordEntity> records = selectOwnerVisitRecords(userId);
+        List<VisitEventEntity> openedEvents = selectRecentOpenedEvents(userId);
+        long scheduleQueryCount = countOwnerScheduleQueries(userId);
+        Map<Long, String> joinedTeamRoles = selectJoinedTeamRoles(userId);
+        long contactLeadCount = countVisibleContactLeads(userId, joinedTeamRoles.keySet());
+
+        MineVisitStatisticsResponse response = new MineVisitStatisticsResponse();
+        response.setSummary(buildSummary(records, openedEvents, scheduleQueryCount, contactLeadCount));
+        response.setTrend(buildTrend(openedEvents));
+        return response;
+    }
+
+    /**
+     * 获取当前维护者访问明细分页数据。
+     *
+     * @param pageNo 页码，从 1 开始
+     * @param pageSize 每页数量
+     * @return 访问明细分页响应
+     */
+    public MineVisitRecordPageResponse getVisitRecordPage(Integer pageNo, Integer pageSize) {
+        Long userId = AuthContextHolder.requireUserId();
+        int normalizedPageNo = normalizeRecordPageNo(pageNo);
+        int normalizedPageSize = normalizeRecordPageSize(pageSize);
+        Page<VisitRecordEntity> resultPage = visitRecordEntityMapper.selectPage(
+                new Page<>(normalizedPageNo, normalizedPageSize),
+                Wrappers.lambdaQuery(VisitRecordEntity.class)
+                        .eq(VisitRecordEntity::getOwnerType, PortfolioOwnerTypeDict.USER.getCode())
+                        .eq(VisitRecordEntity::getOwnerId, userId)
+                        .orderByDesc(VisitRecordEntity::getLastVisitedAt)
+                        .orderByDesc(VisitRecordEntity::getId)
+        );
+        List<VisitRecordEntity> records = resultPage.getRecords();
+        Map<Long, VisitorEntity> visitorsById = selectVisitorsById(records);
+
+        MineVisitRecordPageResponse response = new MineVisitRecordPageResponse();
+        response.setPageNo(normalizedPageNo);
+        response.setPageSize(normalizedPageSize);
+        response.setHasMore(resultPage.getCurrent() < resultPage.getPages());
+        response.setRecords(buildRecordPage(records, visitorsById));
         return response;
     }
 
@@ -298,13 +383,12 @@ public class MineVisitService {
      */
     public MineVisitRecordsResponse.ContactLeadPage getContactLeads(Integer pageNo, Integer pageSize) {
         Long userId = AuthContextHolder.requireUserId();
+        Map<Long, String> joinedTeamRoles = selectJoinedTeamRoles(userId);
         int normalizedPageNo = normalizeDetailPageNo(pageNo);
         int normalizedPageSize = normalizeDetailPageSize(pageSize);
         Page<ContactLeadEntity> resultPage = contactLeadEntityMapper.selectPage(
                 new Page<>(normalizedPageNo, normalizedPageSize),
-                Wrappers.lambdaQuery(ContactLeadEntity.class)
-                        .eq(ContactLeadEntity::getOwnerType, PortfolioOwnerTypeDict.USER.getCode())
-                        .eq(ContactLeadEntity::getOwnerId, userId)
+                buildVisibleContactLeadQuery(userId, joinedTeamRoles.keySet())
                         .orderByDesc(ContactLeadEntity::getSubmittedAt)
                         .orderByDesc(ContactLeadEntity::getId)
         );
@@ -314,7 +398,7 @@ public class MineVisitService {
         response.setPageSize(normalizedPageSize);
         response.setHasMore(resultPage.getCurrent() < resultPage.getPages());
         response.setItems(resultPage.getRecords().stream()
-                .map(this::buildContactLeadItem)
+                .map(lead -> buildContactLeadItem(lead, joinedTeamRoles))
                 .toList());
         return response;
     }
@@ -325,10 +409,12 @@ public class MineVisitService {
      * @param leadId 预留信息 ID
      * @return 更新后的预留信息明细
      */
+    @Transactional(rollbackFor = Exception.class)
     public MineVisitRecordsResponse.ContactLeadItem markContactLeadFollowed(Long leadId) {
         Long userId = AuthContextHolder.requireUserId();
-        ContactLeadEntity lead = selectOwnerContactLead(userId, leadId);
-        if (lead == null) {
+        Map<Long, String> joinedTeamRoles = selectJoinedTeamRoles(userId);
+        ContactLeadEntity lead = selectVisibleContactLead(userId, leadId, joinedTeamRoles.keySet());
+        if (lead == null || !canMarkContactLeadFollowed(lead, userId, joinedTeamRoles)) {
             throw new BusinessException(CONTACT_LEAD_NOT_FOUND_MESSAGE);
         }
         lead.setFollowStatus(FollowStatusDict.CONTACTED.getCode());
@@ -336,7 +422,7 @@ public class MineVisitService {
         if (updated <= 0) {
             throw new BusinessException(CONTACT_LEAD_FOLLOW_SAVE_FAILED_MESSAGE);
         }
-        return buildContactLeadItem(lead);
+        return buildContactLeadItem(lead, joinedTeamRoles);
     }
 
     /**
@@ -375,12 +461,56 @@ public class MineVisitService {
      * @param userId 当前用户 ID
      * @return 预留信息次数
      */
-    private long countOwnerContactLeads(Long userId) {
+    private long countVisibleContactLeads(Long userId, Set<Long> teamIds) {
         return safeLong(contactLeadEntityMapper.selectCount(
-                Wrappers.lambdaQuery(ContactLeadEntity.class)
-                        .eq(ContactLeadEntity::getOwnerType, PortfolioOwnerTypeDict.USER.getCode())
-                        .eq(ContactLeadEntity::getOwnerId, userId)
+                buildVisibleContactLeadQuery(userId, teamIds)
         ));
+    }
+
+    /**
+     * 查询当前用户已加入团队及其角色。
+     *
+     * @param userId 当前用户 ID
+     * @return 团队 ID 到角色编码的映射
+     */
+    private Map<Long, String> selectJoinedTeamRoles(Long userId) {
+        List<TeamMemberEntity> memberships = teamMemberEntityMapper.selectList(
+                Wrappers.lambdaQuery(TeamMemberEntity.class)
+                        .eq(TeamMemberEntity::getUserId, userId)
+                        .eq(TeamMemberEntity::getJoinStatus, JoinStatusDict.JOINED.getCode())
+        );
+        if (memberships == null || memberships.isEmpty()) {
+            return Map.of();
+        }
+        return memberships.stream()
+                .filter(Objects::nonNull)
+                .filter(membership -> membership.getTeamId() != null)
+                .filter(membership -> JoinStatusDict.JOINED.getCode().equals(membership.getJoinStatus()))
+                .collect(Collectors.toMap(
+                        TeamMemberEntity::getTeamId,
+                        membership -> defaultString(membership.getRole(), ""),
+                        (firstRole, ignoredRole) -> firstRole
+                ));
+    }
+
+    /**
+     * 构建本人及已加入团队的预留信息查询范围。
+     *
+     * @param userId 当前用户 ID
+     * @param teamIds 已加入团队 ID
+     * @return 联系线索查询条件
+     */
+    private LambdaQueryWrapper<ContactLeadEntity> buildVisibleContactLeadQuery(Long userId, Set<Long> teamIds) {
+        LambdaQueryWrapper<ContactLeadEntity> query = Wrappers.lambdaQuery(ContactLeadEntity.class);
+        return query.and(scope -> {
+            scope.eq(ContactLeadEntity::getOwnerType, PortfolioOwnerTypeDict.USER.getCode())
+                    .eq(ContactLeadEntity::getOwnerId, userId);
+            if (teamIds != null && !teamIds.isEmpty()) {
+                scope.or(teamScope -> teamScope
+                        .eq(ContactLeadEntity::getOwnerType, PortfolioOwnerTypeDict.TEAM.getCode())
+                        .in(ContactLeadEntity::getOwnerId, teamIds));
+            }
+        });
     }
 
     /**
@@ -410,15 +540,13 @@ public class MineVisitService {
      * @param leadId 预留信息 ID
      * @return 预留信息
      */
-    private ContactLeadEntity selectOwnerContactLead(Long userId, Long leadId) {
+    private ContactLeadEntity selectVisibleContactLead(Long userId, Long leadId, Set<Long> teamIds) {
         if (leadId == null) {
             return null;
         }
         return contactLeadEntityMapper.selectOne(
-                Wrappers.lambdaQuery(ContactLeadEntity.class)
+                buildVisibleContactLeadQuery(userId, teamIds)
                         .eq(ContactLeadEntity::getId, leadId)
-                        .eq(ContactLeadEntity::getOwnerType, PortfolioOwnerTypeDict.USER.getCode())
-                        .eq(ContactLeadEntity::getOwnerId, userId)
                         .last(SQL_SINGLE_LIMIT_CLAUSE)
         );
     }
@@ -494,6 +622,32 @@ public class MineVisitService {
             return DEFAULT_DETAIL_PAGE_SIZE;
         }
         return Math.min(pageSize, MAX_DETAIL_PAGE_SIZE);
+    }
+
+    /**
+     * 规范化访问明细页码。
+     *
+     * @param pageNo 原始页码
+     * @return 可用页码
+     */
+    private int normalizeRecordPageNo(Integer pageNo) {
+        if (pageNo == null || pageNo <= 0) {
+            return FIRST_RECORD_PAGE_NO;
+        }
+        return pageNo;
+    }
+
+    /**
+     * 规范化访问明细页大小。
+     *
+     * @param pageSize 原始页大小
+     * @return 可用页大小
+     */
+    private int normalizeRecordPageSize(Integer pageSize) {
+        if (pageSize == null || pageSize <= 0) {
+            return DEFAULT_RECORD_PAGE_SIZE;
+        }
+        return Math.min(pageSize, MAX_RECORD_PAGE_SIZE);
     }
 
     /**
@@ -596,6 +750,23 @@ public class MineVisitService {
     }
 
     /**
+     * 按数据库分页顺序构建访问明细。
+     *
+     * @param records 当前页访问汇总
+     * @param visitorsById 访客 ID 到访客资料的映射
+     * @return 当前页访问明细
+     */
+    private List<MineVisitRecordsResponse.Record> buildRecordPage(
+            List<VisitRecordEntity> records,
+            Map<Long, VisitorEntity> visitorsById
+    ) {
+        return records.stream()
+                .map(record -> buildRecord(record,
+                        record.getVisitorId() == null ? null : visitorsById.get(record.getVisitorId())))
+                .toList();
+    }
+
+    /**
      * 构建单条访问明细。
      *
      * @param record 访问汇总实体
@@ -673,23 +844,62 @@ public class MineVisitService {
      * @param lead 联系线索
      * @return 预留信息明细项
      */
-    private MineVisitRecordsResponse.ContactLeadItem buildContactLeadItem(ContactLeadEntity lead) {
+    private MineVisitRecordsResponse.ContactLeadItem buildContactLeadItem(
+            ContactLeadEntity lead,
+            Map<Long, String> joinedTeamRoles
+    ) {
         String followStatus = defaultString(lead.getFollowStatus(), FollowStatusDict.NOT_FOLLOWED_UP.getCode());
+        boolean teamPortfolio = PortfolioOwnerTypeDict.TEAM.getCode().equals(lead.getOwnerType());
         MineVisitRecordsResponse.ContactLeadItem item = new MineVisitRecordsResponse.ContactLeadItem();
         item.setId(lead.getId());
         item.setContactName(defaultString(lead.getContactName(), ""));
-        item.setPhone(defaultString(lead.getPhoneCiphertext(), ""));
+        item.setPhone(teamPortfolio
+                ? teamContactLeadCryptoService.decryptPhone(lead.getPhoneCiphertext())
+                : defaultString(lead.getPhoneCiphertext(), ""));
         item.setPhoneLast4(defaultString(lead.getPhoneLast4(), ""));
-        item.setWechat(defaultString(lead.getWechatCiphertext(), ""));
+        item.setWechat(teamPortfolio
+                ? teamContactLeadCryptoService.decryptWechat(lead.getWechatCiphertext())
+                : defaultString(lead.getWechatCiphertext(), ""));
         item.setWechatMaskHint(defaultString(lead.getWechatMaskHint(), ""));
         item.setDesiredSchedule(defaultString(lead.getDesiredSchedule(), ""));
         item.setNeeds(defaultString(lead.getNeeds(), ""));
         item.setPortfolioTitle(defaultString(lead.getPortfolioTitleSnapshot(), ""));
+        item.setPortfolioType(teamPortfolio
+                ? PortfolioTypeDict.TEAM.getCode()
+                : PortfolioTypeDict.PERSONAL.getCode());
+        item.setPortfolioTypeText(teamPortfolio
+                ? TEAM_PORTFOLIO_TYPE_TEXT
+                : PERSONAL_PORTFOLIO_TYPE_TEXT);
         item.setSourceText(buildSourceText(lead.getSourceType(), ""));
         item.setFollowStatus(followStatus);
         item.setFollowStatusText(buildFollowStatusText(followStatus));
+        item.setCanMarkFollowed(teamPortfolio
+                && TEAM_FOLLOW_UPDATABLE_ROLES.contains(joinedTeamRoles.get(lead.getOwnerId()))
+                || !teamPortfolio);
         item.setSubmittedTimeText(formatDetailTime(lead.getSubmittedAt()));
         return item;
+    }
+
+    /**
+     * 判断当前用户是否可以更新预留信息跟进状态。
+     *
+     * @param lead 联系线索
+     * @param userId 当前用户 ID
+     * @param joinedTeamRoles 已加入团队角色映射
+     * @return 是否允许更新
+     */
+    private boolean canMarkContactLeadFollowed(
+            ContactLeadEntity lead,
+            Long userId,
+            Map<Long, String> joinedTeamRoles
+    ) {
+        if (PortfolioOwnerTypeDict.USER.getCode().equals(lead.getOwnerType())) {
+            return userId.equals(lead.getOwnerId());
+        }
+        if (!PortfolioOwnerTypeDict.TEAM.getCode().equals(lead.getOwnerType())) {
+            return false;
+        }
+        return TEAM_FOLLOW_UPDATABLE_ROLES.contains(joinedTeamRoles.get(lead.getOwnerId()));
     }
 
     /**

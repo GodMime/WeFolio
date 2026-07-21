@@ -1,7 +1,13 @@
 <view class="page-shell visits-page">
   <navigation-bar title="访问记录" back="{{true}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
 
-  <scroll-view class="visits-scroll" scroll-y type="list">
+  <scroll-view
+    class="visits-scroll"
+    scroll-y
+    type="list"
+    bindscrolltolower="handleVisitRecordScrollToLower"
+    lower-threshold="160"
+  >
     <view class="visits-content">
       <block wx:if="{{loading}}">
         <view class="metric-grid">
@@ -104,6 +110,7 @@
                 <view class="{{item.followToneClass}}">{{item.followStatusText}}</view>
               </view>
             </view>
+            <view wx:if="{{visitRecordLoadingMore}}" class="visit-record-load-more">更多访问记录加载中...</view>
           </view>
           <view wx:else class="visit-empty">
             <view class="empty-title small">暂无访问记录</view>
@@ -255,9 +262,24 @@
                       </view>
                     </view>
                   </view>
-                  <view class="visit-detail-secondary">{{item.desiredSchedule}}</view>
-                  <view class="visit-detail-secondary">{{item.needs}}</view>
-                  <view class="visit-detail-meta">{{item.portfolioTitle}} · {{item.submittedTimeText}}</view>
+                  <view class="contact-detail-list">
+                    <view class="contact-detail-row">
+                      <text class="contact-detail-label">档期</text>
+                      <text class="contact-detail-value">{{item.desiredScheduleText}}</text>
+                    </view>
+                    <view class="contact-detail-row">
+                      <text class="contact-detail-label">需求</text>
+                      <text class="contact-detail-value">{{item.needsText}}</text>
+                    </view>
+                    <view class="contact-detail-row contact-portfolio-row">
+                      <text class="contact-detail-label">来源作品集</text>
+                      <view class="contact-portfolio-value">
+                        <text class="contact-detail-value">{{item.portfolioTitle}}</text>
+                        <text wx:if="{{item.portfolioTypeText}}" class="portfolio-type-tag">{{item.portfolioTypeText}}</text>
+                      </view>
+                    </view>
+                  </view>
+                  <view class="visit-detail-meta">{{item.submittedTimeText}}</view>
                 </view>
                 <view wx:if="{{item.canMarkFollowed}}" class="contact-lead-action-column">
                   <button

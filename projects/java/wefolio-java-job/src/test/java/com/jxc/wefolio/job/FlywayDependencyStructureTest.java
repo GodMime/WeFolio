@@ -43,4 +43,12 @@ class FlywayDependencyStructureTest {
         assertThat(mainConfiguration).doesNotContain(FLYWAY_CONFIGURATION_PREFIX);
         assertThat(testConfiguration).doesNotContain(FLYWAY_CONFIGURATION_PREFIX);
     }
+
+    /**
+     * Job 工程不得维护 migration 目录，所有数据库变更统一由 Runtime 执行。
+     */
+    @Test
+    void jobDoesNotContainMigrationDirectory() {
+        assertThat(Path.of("src/main/resources/db/migration")).doesNotExist();
+    }
 }

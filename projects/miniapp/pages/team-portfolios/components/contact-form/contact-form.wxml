@@ -1,0 +1,61 @@
+<template name="contactFormFields">
+  <input wx:if="{{fieldVisibility.contactName}}" class="field" data-field="contactName" value="{{localForm.contactName}}" bindinput="handleInput" placeholder="称呼（必填）" />
+  <input wx:if="{{fieldVisibility.phone}}" class="field" data-field="phone" value="{{localForm.phone}}" type="number" bindinput="handleInput" placeholder="手机号" />
+  <input wx:if="{{fieldVisibility.wechat}}" class="field" data-field="wechat" value="{{localForm.wechat}}" bindinput="handleInput" placeholder="微信号" />
+  <picker mode="date" value="{{localForm.desiredSchedule}}" data-field="desiredSchedule" bindchange="handleDateChange">
+    <view class="field date-field {{localForm.desiredSchedule ? '' : 'placeholder'}}">{{localForm.desiredSchedule || '请选择档期（选填）'}}</view>
+  </picker>
+  <textarea wx:if="{{fieldVisibility.needs}}" class="field needs" data-field="needs" value="{{localForm.needs}}" bindinput="handleInput" placeholder="需求描述"></textarea>
+  <text wx:if="{{errorMessage}}" class="error">{{errorMessage}}</text>
+  <text wx:if="{{success}}" class="success">已提交给团队</text>
+  <button class="primary-button" loading="{{submitting}}" disabled="{{submitting}}" catchtap="submitContact">提交给团队</button>
+</template>
+
+<view class="contact-form {{editMode ? 'editor-mode' : ''}}">
+  <block wx:if="{{editMode}}">
+    <view class="editor-form">
+      <view class="editor-card">
+        <view class="editor-field"><view class="editor-label">标题</view><input class="editor-input" data-field="title" value="{{draftConfig.title}}" bindinput="handleConfigInput" placeholder="表单标题" /></view>
+        <view class="editor-field"><view class="editor-label">说明</view><textarea class="editor-input editor-textarea" data-field="description" value="{{draftConfig.description}}" bindinput="handleConfigInput" placeholder="表单说明" /></view>
+      </view>
+      <view class="editor-card">
+        <view class="editor-label">表单展示方式</view>
+        <view class="editor-choice-list"><button class="editor-choice {{draftConfig.displayMode === 'MODAL_FORM' ? 'active' : ''}}" data-mode="MODAL_FORM" bindtap="selectDisplayMode"><view class="editor-choice-radio"></view><view>弹窗展示</view></button><button class="editor-choice {{draftConfig.displayMode === 'INLINE_FORM' ? 'active' : ''}}" data-mode="INLINE_FORM" bindtap="selectDisplayMode"><view class="editor-choice-radio"></view><view>页面内展示</view></button></view>
+      </view>
+      <view class="editor-card">
+        <view class="editor-label">展示字段</view>
+        <view class="editor-choice-list compact">
+          <button class="editor-choice checkbox {{draftFieldVisibility.contactName ? 'active' : ''}}" data-field="contactName" bindtap="toggleField"><view class="editor-choice-check">{{draftFieldVisibility.contactName ? '✓' : ''}}</view><view>称呼</view></button>
+          <button class="editor-choice checkbox {{draftFieldVisibility.phone ? 'active' : ''}}" data-field="phone" bindtap="toggleField"><view class="editor-choice-check">{{draftFieldVisibility.phone ? '✓' : ''}}</view><view>手机号</view></button>
+          <button class="editor-choice checkbox {{draftFieldVisibility.wechat ? 'active' : ''}}" data-field="wechat" bindtap="toggleField"><view class="editor-choice-check">{{draftFieldVisibility.wechat ? '✓' : ''}}</view><view>微信号</view></button>
+          <button class="editor-choice checkbox {{draftFieldVisibility.needs ? 'active' : ''}}" data-field="needs" bindtap="toggleField"><view class="editor-choice-check">{{draftFieldVisibility.needs ? '✓' : ''}}</view><view>需求描述</view></button>
+        </view>
+      </view>
+      <view wx:if="{{errorMessage}}" class="editor-error">{{errorMessage}}</view>
+    </view>
+  </block>
+  <block wx:else>
+    <block wx:if="{{displayConfig.displayMode === 'INLINE_FORM'}}">
+      <view class="form-section">
+        <view class="component-title">{{displayConfig.title || '预留联系信息'}}</view>
+        <view wx:if="{{displayConfig.description}}" class="section-desc">{{displayConfig.description}}</view>
+        <template is="contactFormFields" data="{{fieldVisibility: fieldVisibility, localForm: localForm, errorMessage: errorMessage, success: success, submitting: submitting}}" />
+      </view>
+    </block>
+    <block wx:else>
+      <view class="form-entry-section">
+        <button class="primary-button contact-form-entry-button" catchtap="openModal">{{displayConfig.title || '预留联系信息'}}</button>
+      </view>
+      <view class="contact-form-mask {{modalVisible ? 'visible' : ''}}" catchtap="closeModal">
+        <view class="contact-form-panel" catchtap="noop">
+          <view class="contact-form-heading">
+            <view class="component-title">{{displayConfig.title || '预留联系信息'}}</view>
+            <view class="contact-form-close" catchtap="closeModal" aria-role="button" aria-label="关闭团队联系表单">×</view>
+          </view>
+          <view wx:if="{{displayConfig.description}}" class="section-desc">{{displayConfig.description}}</view>
+          <template is="contactFormFields" data="{{fieldVisibility: fieldVisibility, localForm: localForm, errorMessage: errorMessage, success: success, submitting: submitting}}" />
+        </view>
+      </view>
+    </block>
+  </block>
+</view>

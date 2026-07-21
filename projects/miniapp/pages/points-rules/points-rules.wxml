@@ -21,11 +21,11 @@
       <block wx:else>
         <view class="panel intro-panel">
           <view class="panel-heading">
-            <view class="section-title">积分消耗具体规则</view>
+            <view class="section-title">积分具体规则</view>
           </view>
         </view>
 
-        <view wx:if="{{pointData.ruleGroups.length}}" class="cost-board">
+        <view wx:if="{{pointData.ruleGroups.length || pointData.acquisitionRules.length}}" class="cost-board">
           <view class="cost-group" wx:for="{{pointData.ruleGroups}}" wx:key="groupCode">
             <view class="cost-mark {{item.groupTone}}">{{item.groupText}}</view>
             <view class="cost-lines">
@@ -35,6 +35,18 @@
                   <view class="cost-desc">{{rule.desc}}</view>
                 </view>
                 <view class="cost-chip">{{rule.costText}}</view>
+              </view>
+            </view>
+          </view>
+          <view wx:if="{{pointData.acquisitionRules.length}}" class="cost-group gift-group">
+            <view class="cost-mark gift">赠送</view>
+            <view class="cost-lines">
+              <view class="cost-line" wx:for="{{pointData.acquisitionRules}}" wx:for-item="rule" wx:key="id">
+                <view class="cost-copy">
+                  <view class="cost-title">{{rule.title}}</view>
+                  <view class="cost-desc gift-desc">{{rule.desc}}</view>
+                </view>
+                <view class="cost-chip gift">{{rule.pointsText}}</view>
               </view>
             </view>
           </view>

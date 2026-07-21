@@ -22,7 +22,7 @@
             <view class="balance-label">当前积分余额</view>
             <view class="balance-value">{{dashboard.point.balance}}</view>
           </view>
-          <view class="light-button">充值</view>
+          <button class="light-button">充值</button>
         </view>
         <view class="balance-bottom">
           <text>今日已消耗 {{dashboard.point.todayConsumed}}</text>
@@ -65,7 +65,7 @@
         </view>
       </view>
 
-      <button class="primary-button return-login-button" bindtap="handleReturnLoginTap">返回登录页</button>
+      <view class="primary-button return-login-button" aria-role="button" bindtap="handleReturnLoginTap">返回登录页</view>
     </view>
   </scroll-view>
 

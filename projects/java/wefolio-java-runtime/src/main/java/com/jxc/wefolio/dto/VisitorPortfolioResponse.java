@@ -24,6 +24,9 @@ public class VisitorPortfolioResponse {
     /** 是否维护中 */
     private boolean underMaintenance;
 
+    /** 维护原因编码。 */
+    private String maintenanceReason;
+
     /** 维护中文案 */
     private MaintenanceText maintenanceText;
 

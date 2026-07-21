@@ -70,6 +70,37 @@ class PortfolioConfigValidatorTest {
         assertThat(JSON.toJSONString(normalized)).doesNotContain("\"intro\"");
     }
 
+    /**
+     * 标准个人作品集不允许同时启用多个个人资料组件。
+     */
+    @Test
+    void normalizeShouldRejectMultipleEnabledProfileComponents() {
+        PortfolioConfigDto config = config(
+                component("c_profile_1", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, true, Map.of()),
+                component("c_profile_2", PortfolioComponentTypeDict.PROFILE.getCode(), 2000, true, Map.of())
+        );
+
+        assertThatThrownBy(() -> validator().normalize(7L, config))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("个人作品集最多只能包含一个个人资料组件");
+    }
+
+    /**
+     * 禁用的个人资料组件不计入单例限制，并在归一化时被过滤。
+     */
+    @Test
+    void normalizeShouldIgnoreDisabledProfileForSingletonLimit() {
+        PortfolioConfigDto config = config(
+                component("c_profile_enabled", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, true, Map.of()),
+                component("c_profile_disabled", PortfolioComponentTypeDict.PROFILE.getCode(), 2000, false, Map.of())
+        );
+
+        PortfolioConfigDto normalized = validator().normalize(7L, config);
+
+        assertThat(normalized.getComponents()).extracting(PortfolioConfigDto.Component::getComponentKey)
+                .containsExactly("c_profile_enabled");
+    }
+
     @Test
     void carouselShouldRejectVideoWorks() {
         when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(
@@ -106,6 +137,75 @@ class PortfolioConfigValidatorTest {
         PortfolioConfigDto normalized = validator().normalize(7L, config);
 
         assertThat(normalized.getComponents().get(0).getConfig().get("workIds")).isEqualTo(List.of(11L, 12L));
+    }
+
+    /**
+     * 单个作品组件应同时支持图片和视频，并只保留规范化后的单作品配置。
+     */
+    @Test
+    void singleWorkShouldAcceptImageAndVideoAndNormalizeSupportedConfig() {
+        when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(
+                work(11L, 7L, MediaTypeDict.IMAGE.getCode(), WorkStatusDict.ACTIVE.getCode()),
+                work(12L, 7L, MediaTypeDict.VIDEO.getCode(), WorkStatusDict.ACTIVE.getCode())
+        ));
+        PortfolioConfigDto imageConfig = config(component(
+                "c_image", "SINGLE_WORK", 1000, true,
+                Map.of("workId", "11", "unsupported", "discard")
+        ));
+        PortfolioConfigDto videoConfig = config(component(
+                "c_video", "SINGLE_WORK", 1000, true,
+                Map.of("workId", 12L, "showTitle", false)
+        ));
+
+        PortfolioConfigDto normalizedImage = validator().normalize(7L, imageConfig);
+        PortfolioConfigDto normalizedVideo = validator().normalize(7L, videoConfig);
+
+        assertThat(normalizedImage.getComponents().get(0).getConfig())
+                .containsExactly(
+                        Map.entry("workId", 11L),
+                        Map.entry("showTitle", true)
+                );
+        assertThat(normalizedVideo.getComponents().get(0).getConfig())
+                .containsExactly(
+                        Map.entry("workId", 12L),
+                        Map.entry("showTitle", false)
+                );
+    }
+
+    /**
+     * 单个作品组件必须提供可用的正整数单作品 ID，不能把复数作品 ID 当作有效配置。
+     */
+    @Test
+    void singleWorkShouldRejectMissingInvalidOrUnavailableWork() {
+        PortfolioConfigDto missingConfig = config(component(
+                "c_missing", "SINGLE_WORK", 1000, true, Map.of("workIds", List.of(11L))
+        ));
+        PortfolioConfigDto invalidConfig = config(component(
+                "c_invalid", "SINGLE_WORK", 1000, true, Map.of("workId", 0)
+        ));
+        PortfolioConfigDto fractionalConfig = config(component(
+                "c_fractional", "SINGLE_WORK", 1000, true, Map.of("workId", 11.9D)
+        ));
+        PortfolioConfigDto unavailableConfig = config(component(
+                "c_unavailable", "SINGLE_WORK", 1000, true, Map.of("workId", 12L)
+        ));
+        when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(
+                work(11L, 7L, MediaTypeDict.IMAGE.getCode(), WorkStatusDict.ACTIVE.getCode()),
+                work(12L, 8L, MediaTypeDict.IMAGE.getCode(), WorkStatusDict.ACTIVE.getCode())
+        ));
+
+        assertThatThrownBy(() -> validator().normalize(7L, missingConfig))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("作品集引用了不可用作品，请刷新作品列表后重试");
+        assertThatThrownBy(() -> validator().normalize(7L, invalidConfig))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("作品集引用了不可用作品，请刷新作品列表后重试");
+        assertThatThrownBy(() -> validator().normalize(7L, fractionalConfig))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("作品集引用了不可用作品，请刷新作品列表后重试");
+        assertThatThrownBy(() -> validator().normalize(7L, unavailableConfig))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("作品集引用了不可用作品，请刷新作品列表后重试");
     }
 
     @Test
@@ -456,6 +556,8 @@ class PortfolioConfigValidatorTest {
                                 group("g_a", "全部案例", 1000, List.of(11L)),
                                 group("g_b", "精选案例", 2000, List.of(11L))
                         ))),
+                component("c_single", "SINGLE_WORK", 3750, true,
+                        Map.of("workId", 12L, "showTitle", true)),
                 component("c_qr", PortfolioComponentTypeDict.QR_CONTACT.getCode(), 4000, true,
                         Map.of("qrUrlSource", "PROFILE"))
         );
@@ -489,11 +591,14 @@ class PortfolioConfigValidatorTest {
                         "components[2].groups[0].workIds[0]",
                         "components[2].groups[0].workIds[1]",
                         "components[3].groups[0].workIds[0]",
-                        "components[3].groups[1].workIds[0]"
+                        "components[3].groups[1].workIds[0]",
+                        "components[4].config.workId"
                 );
         assertThat(workReferences.stream()
                 .map(PortfolioReferenceEntity::getReferenceId))
-                .containsExactly(11L, 12L, 11L, 11L);
+                .containsExactly(11L, 12L, 11L, 11L, 12L);
+        assertThat(workReferences.get(4).getComponentKey()).isEqualTo("c_single");
+        assertThat(workReferences.get(4).getSortOrder()).isZero();
     }
 
     private PortfolioConfigValidator validator() {

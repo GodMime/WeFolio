@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.jxc.wefolio.common.UniqueCodeGenerator;
 import com.jxc.wefolio.common.auth.AuthContext;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
+import com.jxc.wefolio.common.upload.AvatarUploadResult;
 import com.jxc.wefolio.dict.JoinStatusDict;
 import com.jxc.wefolio.dict.MessageActionTypeDict;
 import com.jxc.wefolio.dict.MessageCategoryDict;
@@ -34,6 +35,7 @@ import com.jxc.wefolio.mapper.UserEntityMapper;
 import com.jxc.wefolio.mapper.PortfolioEntityMapper;
 import com.jxc.wefolio.mapper.PortfolioReferenceEntityMapper;
 import com.jxc.wefolio.mapper.WorkEntityMapper;
+import com.jxc.wefolio.service.teamportfolio.TeamPortfolioReferenceGuardService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -43,6 +45,7 @@ import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
@@ -121,6 +124,10 @@ class MineTeamServiceTest {
     /** 唯一码生成器模拟 */
     @Mock
     private UniqueCodeGenerator uniqueCodeGenerator;
+
+    /** 团队作品集引用保护服务模拟 */
+    @Mock
+    private TeamPortfolioReferenceGuardService teamPortfolioReferenceGuardService;
 
     @BeforeEach
     void setUp() {
@@ -355,6 +362,38 @@ class MineTeamServiceTest {
                 .hasMessage("团队资料已被其他管理员更新，请刷新后重试");
     }
 
+    /** 超限团队图标必须在权限查询和 COS 上传前返回原有失败消息。 */
+    @Test
+    void oversizedTeamAvatarShouldReturnOriginalValidationMessageBeforeUpload() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "team.png", "image/png", new byte[200 * 1024 + 1]);
+
+        AvatarUploadResult result = service().uploadTeamAvatar(100L, file);
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.message()).isEqualTo("团队图标不能超过 200KB");
+        assertThat(result.data()).isNull();
+        verify(teamEntityMapper, never()).selectById(any());
+        verify(cosService, never()).upload(any(), anyString());
+    }
+
+    /** 团队业务操作日志必须由 Service 统一记录。 */
+    @Test
+    void serviceShouldOwnTeamOperationLogs() throws IOException {
+        String source = Files.readString(Path.of(
+                "src/main/java/com/jxc/wefolio/service/MineTeamService.java"));
+
+        assertThat(source)
+                .contains("创建团队: name={}, intro={}, avatarUrl={}")
+                .contains("保存团队资料: teamId={}, name={}, intro={}, avatarUrl={}")
+                .contains("邀请团队成员: teamId={}, uniqueCode={}, role={}")
+                .contains("发起团队成员信息变更: teamId={}, memberId={}, role={}")
+                .contains("转让团队拥有者: teamId={}, memberId={}")
+                .contains("移除团队成员: teamId={}, memberId={}")
+                .contains("团队图标上传开始: teamId={}, originalFilename={}, size={}")
+                .contains("团队图标上传成功: teamId={}, key={}, url={}");
+    }
+
     @Test
     void updateTeamReturnsRealMemberCountAfterSave() {
         TeamEntity team = team(100L, "TM2048", "星曜司仪团", "");
@@ -400,20 +439,18 @@ class MineTeamServiceTest {
                 .contains("JoinStatusDict.PENDING_CONFIRMATION.getCode()");
     }
 
-    /**
-     * 团队作品集标题解析复用标准作品集配置 DTO，避免手动维护 JSON 路径。
-     */
+    /** 团队成员引用保护不得继续解析个人作品集 DTO 或团队 JSON。 */
     @Test
-    void portfolioShareTitleParsingUsesStandardConfigDto() throws IOException {
+    void memberReferenceProtectionShouldDelegateWithoutSchemaParsingDependencies() throws IOException {
         String source = Files.readString(Path.of("src/main/java/com/jxc/wefolio/service/MineTeamService.java"));
-        int methodIndex = source.indexOf("private String extractShareTitle(String configJson)");
-        int nextMethodIndex = source.indexOf("/**\n     * 收集团队作品集中引用了成员内容的作品集 ID。", methodIndex);
 
-        String methodSource = source.substring(methodIndex, nextMethodIndex);
-
-        assertThat(source).contains("import com.jxc.wefolio.dto.PortfolioConfigDto;");
-        assertThat(methodSource).contains("JSON.parseObject(configJson, PortfolioConfigDto.class)");
-        assertThat(methodSource).doesNotContain("getJSONObject(\"share\")");
+        assertThat(source)
+                .contains("teamPortfolioReferenceGuardService.assertMemberCanLeave(")
+                .doesNotContain("assertMemberContentNotReferenced")
+                .doesNotContain("PortfolioConfigDto")
+                .doesNotContain("JSON.parseObject")
+                .doesNotContain("getSnapshotJson()")
+                .doesNotContain("getComponentPath()");
     }
 
     @Test
@@ -866,13 +903,11 @@ class MineTeamServiceTest {
                 systemMessageEntityMapper,
                 teamMemberChangeRequestEntityMapper,
                 teamMemberChangeRequestTransactionService,
-                portfolioEntityMapper,
-                portfolioReferenceEntityMapper,
-                workEntityMapper,
                 cosService,
                 teamRegistrationService,
                 pointService,
-                uniqueCodeGenerator
+                uniqueCodeGenerator,
+                teamPortfolioReferenceGuardService
         );
     }
 }

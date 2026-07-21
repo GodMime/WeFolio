@@ -22,15 +22,19 @@ function loadPortfolioListPage(fakeRequest, wxOverrides = {}) {
   const pagePath = path.join(__dirname, '../pages/portfolios/portfolios.js')
   const requestPath = path.join(__dirname, '../utils/request.js')
   const sessionPath = path.join(__dirname, '../utils/session.js')
+  const teamPortfolioListPath = path.join(__dirname, '../pages/portfolios/utils/team-portfolio-list.js')
   const requestCacheKey = require.resolve(requestPath)
   const sessionCacheKey = require.resolve(sessionPath)
+  const teamPortfolioListCacheKey = require.resolve(teamPortfolioListPath)
   const originalRequestCache = require.cache[requestCacheKey]
   const originalSessionCache = require.cache[sessionCacheKey]
+  const originalTeamPortfolioListCache = require.cache[teamPortfolioListCacheKey]
   const originalPage = global.Page
   const originalWx = global.wx
   let pageDefinition
 
   delete require.cache[require.resolve(pagePath)]
+  delete require.cache[teamPortfolioListCacheKey]
   require.cache[requestCacheKey] = {
     id: requestPath,
     filename: requestPath,
@@ -56,7 +60,10 @@ function loadPortfolioListPage(fakeRequest, wxOverrides = {}) {
   global.wx = Object.assign({
     navigateTo() {},
     redirectTo() {},
-    showToast() {}
+    showToast() {},
+    showModal(options) {
+      options.success({ confirm: true })
+    }
   }, wxOverrides)
 
   try {
@@ -73,6 +80,11 @@ function loadPortfolioListPage(fakeRequest, wxOverrides = {}) {
     } else {
       delete require.cache[sessionCacheKey]
     }
+    if (originalTeamPortfolioListCache) {
+      require.cache[teamPortfolioListCacheKey] = originalTeamPortfolioListCache
+    } else {
+      delete require.cache[teamPortfolioListCacheKey]
+    }
   }
 
   return Object.assign({}, pageDefinition, {
@@ -81,6 +93,9 @@ function loadPortfolioListPage(fakeRequest, wxOverrides = {}) {
       applyData(this.data, patch)
     },
     cleanup() {
+      if (typeof this.onUnload === 'function') {
+        this.onUnload()
+      }
       global.wx = originalWx
     }
   })
@@ -111,27 +126,606 @@ test('creating a standard personal portfolio opens an unsaved editor draft', asy
   }
 })
 
-test('published portfolio share opens the new visitor subpackage page', () => {
+test('TEAM entry switches in place, loads once, and keeps cached team state', async () => {
+  const requests = []
+  const navigations = []
+  const page = loadPortfolioListPage(async (options) => {
+    requests.push(options)
+    if (options.url === '/api/mine/team-portfolios') {
+      return [{ portfolioId: 9, teamId: 7, title: '团队作品集' }]
+    }
+    if (options.url.endsWith('/maintainable-teams')) {
+      return [{ teamId: 7, currentRole: 'OWNER' }]
+    }
+    return { portfolios: [] }
+  }, {
+    navigateTo(options) { navigations.push(options) },
+    navigateBack(options) { navigations.push(options) },
+    redirectTo(options) { navigations.push(options) }
+  })
+
+  try {
+    page.handleOwnerTypeTap({ currentTarget: { dataset: { type: 'TEAM' } } })
+    await flushPromises()
+
+    assert.equal(page.data.ownerType, 'TEAM')
+    assert.equal(page.data.teamLoaded, true)
+    assert.equal(page.data.teamDisplayPortfolios[0].title, '团队作品集')
+    assert.deepEqual(navigations, [])
+
+    page.setData({
+      switching: false,
+      revealedTeamPortfolioId: 9,
+      teamPortfolioTouchStart: { portfolioId: 9, x: 100, y: 20 }
+    })
+    page.handleOwnerTypeTap({ currentTarget: { dataset: { type: 'USER' } } })
+    assert.equal(page.data.revealedTeamPortfolioId, null)
+    assert.equal(page.data.teamPortfolioTouchStart, null)
+    page.setData({ switching: false })
+    page.handleOwnerTypeTap({ currentTarget: { dataset: { type: 'TEAM' } } })
+    await flushPromises()
+
+    assert.equal(requests.filter((item) => item.url === '/api/mine/team-portfolios').length, 1)
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('TEAM route opens the team panel directly and onShow only refreshes team data', async () => {
+  const requests = []
+  const page = loadPortfolioListPage(async (options) => {
+    requests.push(options)
+    if (options.url.endsWith('/maintainable-teams')) {
+      return []
+    }
+    return []
+  })
+
+  try {
+    assert.equal(typeof page.onLoad, 'function')
+    page.onLoad({ ownerType: 'TEAM' })
+    await page.onShow()
+    assert.equal(page.data.ownerType, 'TEAM')
+    assert.equal(page.data.switching, false)
+    assert.deepEqual(requests.map((item) => item.url), [
+      '/api/mine/team-portfolios',
+      '/api/mine/team-portfolios/maintainable-teams'
+    ])
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('team cards choose draft or published preview from publication status', async () => {
+  const page = loadPortfolioListPage(async (options) => {
+    if (options.url.endsWith('/maintainable-teams')) {
+      return [{ teamId: 7, currentRole: 'OWNER' }]
+    }
+    return [
+      {
+        portfolioId: 33,
+        teamId: 7,
+        publicationStatus: 'DRAFT_ONLY',
+        canMaintain: true,
+        canShare: false
+      },
+      {
+        portfolioId: 34,
+        teamId: 7,
+        publicationStatus: 'PUBLISHED',
+        canMaintain: true,
+        canShare: true
+      }
+    ]
+  })
+
+  try {
+    await page.bootstrapTeam()
+    assert.equal(page.data.teamDisplayPortfolios[0].canPreviewDraft, true)
+    assert.equal(page.data.teamDisplayPortfolios[0].canPublishedPreview, false)
+    assert.equal(page.data.teamDisplayPortfolios[1].canPreviewDraft, false)
+    assert.equal(page.data.teamDisplayPortfolios[1].canPublishedPreview, true)
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('creating a standard team portfolio opens an unsaved team editor', async () => {
+  const requests = []
+  const navigations = []
+  const page = loadPortfolioListPage(async (options) => {
+    requests.push(options)
+    return { portfolioId: 33 }
+  }, {
+    navigateTo(options) {
+      navigations.push(options)
+    }
+  })
+  page.setData({
+    maintainableTeams: [{ teamId: 7, teamName: '甲', currentRole: 'OWNER' }],
+    maintainableTeamsLoaded: true
+  })
+
+  try {
+    assert.equal(typeof page.handleCreateStandardTeam, 'function')
+    await page.handleCreateStandardTeam()
+    assert.deepEqual(requests, [])
+    assert.deepEqual(navigations, [{
+      url: '/pages/team-portfolios/standard-edit/team-portfolio-standard-edit?teamId=7'
+    }])
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('unified team cards keep edit and preview routes in the team subpackage', () => {
+  const navigations = []
+  const page = loadPortfolioListPage(() => Promise.resolve({}), {
+    navigateTo(options) {
+      navigations.push(options)
+    }
+  })
+  const draftItem = {
+    portfolioId: 33,
+    teamId: 7,
+    teamName: '甲团队',
+    currentRole: 'OWNER',
+    canMaintain: true,
+    canShare: false
+  }
+  const publishedItem = {
+    portfolioId: 34,
+    teamId: 7,
+    teamName: '甲团队',
+    currentRole: 'OWNER',
+    canMaintain: true,
+    canShare: true
+  }
+
+  try {
+    assert.equal(typeof page.handleTeamPortfolioCardTap, 'function')
+    page.handleTeamPortfolioCardTap({ currentTarget: { dataset: { item: draftItem } } })
+    page.handleTeamPreviewTap({ currentTarget: { dataset: { item: draftItem, scope: 'draft' } } })
+    page.handleTeamPreviewTap({ currentTarget: { dataset: { item: publishedItem, scope: 'published' } } })
+    assert.deepEqual(navigations.map((entry) => entry.url), [
+      '/pages/team-portfolios/standard-edit/team-portfolio-standard-edit?portfolioId=33',
+      '/pages/team-portfolios/standard-preview/team-portfolio-standard-preview?portfolioId=33&scope=draft',
+      '/pages/team-portfolios/standard-preview/team-portfolio-standard-preview?portfolioId=34&scope=published'
+    ])
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('deleting a team portfolio from the unified page refreshes only team data', async () => {
+  const requests = []
+  const page = loadPortfolioListPage(async (options) => {
+    requests.push(options)
+    if (options.url === '/api/mine/team-portfolios/33/delete') return {}
+    if (options.url === '/api/mine/team-portfolios') return []
+    if (options.url.endsWith('/maintainable-teams')) return []
+    throw new Error(`unexpected request: ${options.url}`)
+  }, {
+    showModal(options) {
+      options.success({ confirm: true })
+    }
+  })
+
+  try {
+    assert.equal(typeof page.handleTeamDeleteTap, 'function')
+    page.setData({ revealedTeamPortfolioId: 33 })
+    await page.handleTeamDeleteTap({
+      currentTarget: { dataset: { item: { portfolioId: 33, canMaintain: true } } }
+    })
+    assert.deepEqual(requests.map((item) => item.url), [
+      '/api/mine/team-portfolios/33/delete',
+      '/api/mine/team-portfolios',
+      '/api/mine/team-portfolios/maintainable-teams'
+    ])
+    assert.equal(page.data.deletingTeamPortfolioId, null)
+    assert.equal(page.data.revealedTeamPortfolioId, null)
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('left swiping a team portfolio reveals its own delete action', () => {
   const page = loadPortfolioListPage(() => Promise.resolve({}))
+  page.setData({
+    ownerType: 'TEAM',
+    revealedPortfolioId: 88,
+    teamDisplayPortfolios: [{ portfolioId: 33, canDelete: true }]
+  })
+
+  try {
+    page.handleTeamPortfolioTouchStart({
+      currentTarget: { dataset: { id: 33 } },
+      touches: [{ clientX: 180, clientY: 20 }]
+    })
+    page.handleTeamPortfolioTouchEnd({
+      changedTouches: [{ clientX: 120, clientY: 22 }]
+    })
+
+    assert.equal(page.data.revealedTeamPortfolioId, 33)
+    assert.equal(page.data.revealedPortfolioId, 88)
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('tapping a revealed team card closes delete before opening the editor', () => {
+  const navigations = []
+  const page = loadPortfolioListPage(() => Promise.resolve({}), {
+    navigateTo(options) {
+      navigations.push(options)
+    }
+  })
+  const item = { portfolioId: 33, canMaintain: true }
+  page.setData({ revealedTeamPortfolioId: 33 })
+
+  try {
+    page.handleTeamPortfolioCardTap({ currentTarget: { dataset: { item } } })
+    assert.equal(page.data.revealedTeamPortfolioId, null)
+    assert.deepEqual(navigations, [])
+
+    page.handleTeamPortfolioCardTap({ currentTarget: { dataset: { item } } })
+    assert.deepEqual(navigations, [{
+      url: '/pages/team-portfolios/standard-edit/team-portfolio-standard-edit?portfolioId=33'
+    }])
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('tapping preview on a revealed team card closes delete before navigating', () => {
+  const navigations = []
+  const page = loadPortfolioListPage(() => Promise.resolve({}), {
+    navigateTo(options) {
+      navigations.push(options)
+    }
+  })
+  const item = { portfolioId: 33, canMaintain: true }
+  page.setData({ revealedTeamPortfolioId: 33 })
+
+  try {
+    page.handleTeamPreviewTap({ currentTarget: { dataset: { item, scope: 'draft' } } })
+    assert.equal(page.data.revealedTeamPortfolioId, null)
+    assert.deepEqual(navigations, [])
+
+    page.handleTeamPreviewTap({ currentTarget: { dataset: { item, scope: 'draft' } } })
+    assert.deepEqual(navigations, [{
+      url: '/pages/team-portfolios/standard-preview/team-portfolio-standard-preview?portfolioId=33&scope=draft'
+    }])
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('publishing a draft team portfolio from the list refreshes only team data', async () => {
+  const requests = []
+  const toasts = []
+  const modals = []
+  const page = loadPortfolioListPage(async (options) => {
+    requests.push(options)
+    if (options.url.endsWith('/publish')) {
+      return { publicationStatus: 'PUBLISHED', publishedRevision: 4 }
+    }
+    return []
+  }, {
+    showModal(options) {
+      modals.push(options)
+      options.success({ confirm: true })
+    },
+    showToast(options) {
+      toasts.push(options)
+    }
+  })
+  const item = {
+    portfolioId: 33,
+    canMaintain: true,
+    publicationStatus: 'DRAFT_ONLY',
+    draftRevision: 4
+  }
+
+  try {
+    await page.handleTeamPublishTap({ currentTarget: { dataset: { item } } })
+
+    assert.deepEqual(requests.map((entry) => entry.url), [
+      '/api/mine/team-portfolios/33/publish',
+      '/api/mine/team-portfolios',
+      '/api/mine/team-portfolios/maintainable-teams'
+    ])
+    assert.equal(requests[0].data.draftRevision, 4)
+    assert.match(requests[0].data.idempotencyKey, /^team-publish-/)
+    assert.equal(modals.length, 1)
+    assert.equal(modals[0].title, '发布免责声明')
+    assert.deepEqual(toasts, [{ title: '已发布', icon: 'success' }])
+    assert.equal(page.data.publishingTeamPortfolioId, null)
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('canceling team publish disclaimer from the list does not call publish api', async () => {
+  const requests = []
+  const modals = []
+  const page = loadPortfolioListPage(async (options) => {
+    requests.push(options)
+    return {}
+  }, {
+    showModal(options) {
+      modals.push(options)
+      options.success({ confirm: false })
+    }
+  })
+  const item = {
+    portfolioId: 33,
+    canMaintain: true,
+    publicationStatus: 'DRAFT_ONLY',
+    draftRevision: 4
+  }
+
+  try {
+    await page.handleTeamPublishTap({ currentTarget: { dataset: { item } } })
+
+    assert.equal(modals.length, 1)
+    assert.equal(modals[0].title, '发布免责声明')
+    assert.equal(requests.some((entry) => entry.url.endsWith('/publish')), false)
+    assert.equal(page.data.publishingTeamPortfolioId, null)
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('publishing a draft team portfolio reports an ordinary failure without refreshing', async () => {
+  const requests = []
+  const toasts = []
+  const page = loadPortfolioListPage(async (options) => {
+    requests.push(options)
+    throw new Error('network failed')
+  }, {
+    showToast(options) {
+      toasts.push(options)
+    }
+  })
+  const item = {
+    portfolioId: 33,
+    canMaintain: true,
+    publicationStatus: 'DRAFT_ONLY',
+    draftRevision: 4
+  }
+
+  try {
+    await page.handleTeamPublishTap({ currentTarget: { dataset: { item } } })
+    assert.deepEqual(requests.map((entry) => entry.url), [
+      '/api/mine/team-portfolios/33/publish'
+    ])
+    assert.deepEqual(toasts, [{ title: '发布失败，请重试', icon: 'none' }])
+    assert.equal(page.data.publishingTeamPortfolioId, null)
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('team sharing from the unified sheet uses shareTarget and consumes it once', async () => {
+  const requests = []
+  let resolveRecord
+  const recordPending = new Promise((resolve) => {
+    resolveRecord = resolve
+  })
+  const page = loadPortfolioListPage((options) => {
+    requests.push(options)
+    return recordPending
+  })
+  const item = {
+    portfolioId: 33,
+    publicationStatus: 'PUBLISHED',
+    canShare: true,
+    shareCode: 'team-share',
+    title: '甲团队作品集',
+    teamName: '甲团队'
+  }
+  page.data.teamDisplayPortfolios = [item]
+
+  try {
+    page.handleShareTap({ currentTarget: { dataset: { ownerType: 'TEAM', id: 33 } } })
+    const first = page.onShareAppMessage({ target: { dataset: { ownerType: 'USER', id: 999 } } })
+    const second = page.onShareAppMessage({ target: { dataset: { ownerType: 'TEAM', item } } })
+    assert.equal(first.path, '/pages/team-portfolios/visitor-portfolio/team-visitor-portfolio?shareCode=team-share')
+    assert.equal(second, undefined)
+    assert.equal(requests.length, 1)
+    assert.deepEqual(requests[0].data, {
+      shareChannel: 'WECHAT_CARD',
+      shareScene: 'TEAM_PORTFOLIO_LIST'
+    })
+    assert.equal(page.data.sharingTeamPortfolioId, 33)
+    assert.equal(page.data.shareSheetVisible, false)
+    assert.equal(page.data.shareTarget, null)
+    resolveRecord({})
+    await flushPromises()
+    assert.equal(page.data.sharingTeamPortfolioId, null)
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('team pull-down refresh reloads only team data and clears its indicator', async () => {
+  const requests = []
+  const page = loadPortfolioListPage(async (options) => {
+    requests.push(options)
+    return []
+  })
+
+  try {
+    assert.equal(typeof page.handleTeamPullDownRefresh, 'function')
+    page.setData({ revealedTeamPortfolioId: 33 })
+    await page.handleTeamPullDownRefresh()
+    assert.deepEqual(requests.map((item) => item.url), [
+      '/api/mine/team-portfolios',
+      '/api/mine/team-portfolios/maintainable-teams'
+    ])
+    assert.equal(page.data.teamPullDownRefreshing, false)
+    assert.equal(page.data.revealedTeamPortfolioId, null)
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('published portfolio share uses shareTarget, ignores event dataset, and closes the sheet', () => {
+  const requests = []
+  const page = loadPortfolioListPage((options) => {
+    requests.push(options)
+    return Promise.resolve({})
+  })
   page.data.displayPortfolios = [{
     portfolioId: 88,
     title: '林安婚礼司仪',
-    shareCode: 'PF001',
+    publicationStatus: 'PUBLISHED',
+    shareCode: 'PF 001',
     coverUrl: 'https://example.test/cover.jpg'
   }]
 
   try {
+    page.handleShareTap({
+      currentTarget: { dataset: { id: 88, ownerType: 'USER' } }
+    })
     const share = page.onShareAppMessage({
-      target: { dataset: { id: 88 } }
+      target: { dataset: { id: 999, ownerType: 'TEAM' } }
     })
 
     assert.equal(
       share.path,
-      '/pages/portfolios/visitor-portfolio/visitor-portfolio?shareCode=PF001'
+      '/pages/portfolios/visitor-portfolio/visitor-portfolio?shareCode=PF%20001'
+    )
+    assert.equal(page.data.shareSheetVisible, false)
+    assert.equal(page.data.shareTarget, null)
+    assert.equal(requests.length, 1)
+    assert.deepEqual(requests[0], {
+      url: '/api/mine/portfolios/88/share-records',
+      method: 'POST',
+      data: {
+        shareChannel: 'WECHAT_CARD',
+        shareScene: 'PORTFOLIO_LIST'
+      }
+    })
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('share callback without a valid shareTarget returns undefined and does not record', () => {
+  const requests = []
+  const page = loadPortfolioListPage((options) => {
+    requests.push(options)
+    return Promise.resolve({})
+  })
+
+  try {
+    const share = page.onShareAppMessage({
+      target: { dataset: { id: 88, ownerType: 'USER' } }
+    })
+
+    assert.equal(share, undefined)
+    assert.deepEqual(requests, [])
+    assert.equal(page.data.shareSheetVisible, false)
+    assert.equal(page.data.shareTarget, null)
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('timeline share hides the sheet and navigates only once with encoded shareCode', () => {
+  const navigations = []
+  const page = loadPortfolioListPage(() => Promise.resolve({}), {
+    navigateTo(options) {
+      navigations.push(options)
+    }
+  })
+  page.data.displayPortfolios = [{
+    portfolioId: 88,
+    publicationStatus: 'PUBLISHED',
+    shareCode: 'PF 001',
+    title: '林安婚礼司仪'
+  }]
+
+  try {
+    page.handleShareTap({ currentTarget: { dataset: { id: 88, ownerType: 'USER' } } })
+    page.handleTimelineShare()
+    page.handleTimelineShare()
+
+    assert.equal(navigations.length, 1)
+    assert.equal(
+      navigations[0].url,
+      '/pages/portfolios/visitor-portfolio/visitor-portfolio?shareCode=PF%20001&shareGuide=timeline&sharePortfolioId=88'
+    )
+    assert.equal(page.data.shareSheetVisible, false)
+    assert.equal(page.data.shareTarget, null)
+    assert.equal(page.data.shareActionPending, true)
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('team timeline share carries only the current portfolio id into the guide page', () => {
+  const navigations = []
+  const page = loadPortfolioListPage(() => Promise.resolve({}), {
+    navigateTo(options) {
+      navigations.push(options)
+    }
+  })
+  page.data.teamDisplayPortfolios = [{
+    portfolioId: 33,
+    publicationStatus: 'PUBLISHED',
+    canShare: true,
+    shareCode: 'TEAM 1',
+    title: '甲团队作品集'
+  }]
+
+  try {
+    page.handleShareTap({ currentTarget: { dataset: { id: 33, ownerType: 'TEAM' } } })
+    page.handleTimelineShare()
+
+    assert.equal(
+      navigations[0].url,
+      '/pages/team-portfolios/visitor-portfolio/team-visitor-portfolio?shareCode=TEAM%201&shareGuide=timeline&sharePortfolioId=33'
     )
   } finally {
     page.cleanup()
   }
+})
+
+test('list refresh clears an open share sheet before replacing data', async () => {
+  const page = loadPortfolioListPage(() => Promise.resolve({ portfolios: [] }))
+  page.setData({
+    shareSheetVisible: true,
+    shareActionPending: true,
+    shareTarget: { ownerType: 'USER', portfolioId: 88 }
+  })
+
+  try {
+    await page.handlePullDownRefresh()
+    assert.equal(page.data.shareSheetVisible, false)
+    assert.equal(page.data.shareActionPending, false)
+    assert.equal(page.data.shareTarget, null)
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('unified portfolio page registers one share sheet for personal and team actions', () => {
+  const fs = require('node:fs')
+  const pageRoot = path.join(__dirname, '../pages/portfolios')
+  const json = JSON.parse(fs.readFileSync(path.join(pageRoot, 'portfolios.json'), 'utf8'))
+  const wxml = fs.readFileSync(path.join(pageRoot, 'portfolios.wxml'), 'utf8')
+
+  assert.equal(
+    json.usingComponents['share-channel-sheet'],
+    '/components/share-channel-sheet/share-channel-sheet'
+  )
+  assert.match(wxml, /data-owner-type="USER"[^>]*catchtap="handleShareTap"/)
+  assert.match(wxml, /data-owner-type="TEAM"[^>]*catchtap="handleShareTap"/)
+  assert.doesNotMatch(wxml, /class="portfolio-action-button share"[^>]*data-item="\{\{item\}\}"/)
+  assert.match(wxml, /<share-channel-sheet[^>]*bindtimeline="handleTimelineShare"/)
 })
 
 test('normalizes long portfolio titles for marquee display', async () => {

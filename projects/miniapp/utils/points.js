@@ -5,7 +5,13 @@ const POINT_TRANSACTION_TYPE = {
 }
 
 const POINT_CALC_MODE = {
-  ACCUMULATED_THRESHOLD: 'ACCUMULATED_THRESHOLD'
+  ACCUMULATED_THRESHOLD: 'ACCUMULATED_THRESHOLD',
+  MONTHLY_STORAGE_SIZE: 'MONTHLY_STORAGE_SIZE'
+}
+
+const BILLING_WINDOW_SCOPE = {
+  PORTFOLIO: 'PORTFOLIO',
+  WORK: 'WORK'
 }
 
 const RULE_GROUP_ORDER = {
@@ -51,8 +57,18 @@ function defaultGroupText(groupCode) {
 function buildRuleDesc(rule) {
   const unitCount = toPositiveNumber(rule.unitCount, 1)
   const pointsValue = toNumber(rule.pointsValue)
+  if (rule.calcMode === POINT_CALC_MODE.MONTHLY_STORAGE_SIZE) {
+    return '每月月初扣除'
+  }
   if (pointsValue === 0) {
     return '当前规则免费'
+  }
+  const dedupeWindowHours = toPositiveNumber(rule.dedupeWindowHours, 0)
+  if (dedupeWindowHours > 0 && rule.dedupeScope === BILLING_WINDOW_SCOPE.PORTFOLIO) {
+    return `同访客同作品集 ${dedupeWindowHours} 小时内不重复扣`
+  }
+  if (dedupeWindowHours > 0 && rule.dedupeScope === BILLING_WINDOW_SCOPE.WORK) {
+    return `同访客同作品 ${dedupeWindowHours} 小时内不重复扣`
   }
   if (rule.calcMode === POINT_CALC_MODE.ACCUMULATED_THRESHOLD && unitCount > 1) {
     return `累计 ${unitCount} 次计费一次`
@@ -66,6 +82,9 @@ function buildRuleDesc(rule) {
 function buildCostText(rule) {
   const unitCount = toPositiveNumber(rule.unitCount, 1)
   const pointsValue = toNumber(rule.pointsValue)
+  if (rule.calcMode === POINT_CALC_MODE.MONTHLY_STORAGE_SIZE) {
+    return `每${unitCount}MB扣${pointsValue}积分`
+  }
   if (unitCount > 1) {
     return `每 ${unitCount} 次 ${pointsValue} 分`
   }
@@ -88,6 +107,8 @@ function normalizeRule(rule = {}) {
     transactionType: rule.transactionType || '',
     unitCount: toPositiveNumber(rule.unitCount, 1),
     pointsValue: toNumber(rule.pointsValue),
+    dedupeWindowHours: toPositiveNumber(rule.dedupeWindowHours, 0),
+    dedupeScope: String(rule.dedupeScope || '').trim(),
     costText: buildCostText(rule),
     desc: buildRuleDesc(rule)
   }
@@ -120,6 +141,24 @@ function normalizeRuleGroups(rules) {
     .map((groupCode) => groups[groupCode])
 }
 
+function normalizeAcquisitionRules(rules) {
+  if (!Array.isArray(rules)) {
+    return []
+  }
+  return rules.map((rule = {}, index) => {
+    const code = String(rule.code || '').trim()
+    const pointsValue = toNumber(rule.pointsValue)
+    return {
+      id: code || `acquisition-rule-${index + 1}`,
+      code,
+      title: rule.title || '积分获取',
+      desc: rule.description || '满足条件后赠送',
+      pointsValue,
+      pointsText: `${pointsValue} 分`
+    }
+  })
+}
+
 function normalizePointOverview(raw = {}) {
   return {
     accountId: raw.accountId || null,
@@ -138,6 +177,7 @@ function normalizePointOverview(raw = {}) {
       { label: '访客消耗', value: toDisplayText(raw.visitorConsumed) },
       { label: '维护消耗', value: toDisplayText(raw.maintenanceConsumed) }
     ],
+    acquisitionRules: normalizeAcquisitionRules(raw.acquisitionRules),
     ruleGroups: normalizeRuleGroups(raw.rules)
   }
 }

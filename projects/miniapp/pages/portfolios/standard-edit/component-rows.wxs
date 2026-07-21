@@ -7,8 +7,12 @@ var EDIT_LABELS = {
   TEXT_SECTION: '编辑文字说明',
   DIVIDER: '编辑分割线',
   WORK_GRID: '编辑作品集展示标签',
-  WORK_LIST: '编辑作品集展示标签'
+  WORK_LIST: '编辑作品集展示标签',
+  SINGLE_WORK: '编辑单个作品'
 }
+var SINGLE_WORK_SUMMARY_STATUS_LOADING = 'LOADING'
+var SINGLE_WORK_SUMMARY_STATUS_FAILED = 'FAILED'
+var SINGLE_WORK_SUMMARY_STATUS_UNAVAILABLE = 'UNAVAILABLE'
 
 function isEditable(componentType) {
   return !!EDIT_LABELS[componentType]
@@ -22,8 +26,38 @@ function resolveAriaLabel(componentType, fallbackName) {
   return EDIT_LABELS[componentType] || fallbackName || ''
 }
 
+function findSingleWorkSummary(workId, summaries) {
+  summaries = summaries || []
+  for (var index = 0; index < summaries.length; index += 1) {
+    if (summaries[index] && summaries[index].id == workId) {
+      return summaries[index]
+    }
+  }
+  return null
+}
+
+function resolveSingleWorkSummary(component, summaries) {
+  var config = component && component.config ? component.config : {}
+  var workId = config.workId || 0
+  if (!(workId > 0)) {
+    return '请选择作品'
+  }
+  var work = findSingleWorkSummary(workId, summaries)
+  if (!work || work.status == SINGLE_WORK_SUMMARY_STATUS_LOADING) {
+    return '作品信息加载中'
+  }
+  if (work.status == SINGLE_WORK_SUMMARY_STATUS_FAILED) {
+    return '作品信息加载失败'
+  }
+  if (work.status == SINGLE_WORK_SUMMARY_STATUS_UNAVAILABLE) {
+    return '作品不可用，请重新选择'
+  }
+  return work.title || '作品不可用，请重新选择'
+}
+
 module.exports = {
   isEditable: isEditable,
   resolveAriaRole: resolveAriaRole,
-  resolveAriaLabel: resolveAriaLabel
+  resolveAriaLabel: resolveAriaLabel,
+  resolveSingleWorkSummary: resolveSingleWorkSummary
 }

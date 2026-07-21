@@ -70,5 +70,11 @@ public class MinePointTransactionsResponse {
 
         /** 发生时间 */
         private String occurredAt;
+
+        /** 当前仍待微信结算的积分。 */
+        private Long pendingSettlementPoints;
+
+        /** 微信结算状态：PENDING、PARTIAL 或 SETTLED。 */
+        private String wechatSettlementStatus;
     }
 }

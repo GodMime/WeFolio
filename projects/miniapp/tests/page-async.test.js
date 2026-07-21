@@ -212,6 +212,58 @@ test('points page ignores stale load-more response after reloading first page', 
   assert.equal(page.data.loadingMore, false)
 })
 
+test('points page enables automatic marquee only for overflowing ledger descriptions', async () => {
+  const page = loadPage('pages/points/points.js', (options) => {
+    if (options.url === '/api/mine/points') {
+      return Promise.resolve({ balance: 100 })
+    }
+    return Promise.resolve({
+      page: 1,
+      pageSize: 20,
+      hasMore: false,
+      records: [
+        { transactionId: 1, sceneText: '超长流水', remark: '超长说明' },
+        { transactionId: 2, sceneText: '短流水', remark: '短说明' }
+      ]
+    })
+  })
+  page.createSelectorQuery = () => {
+    const selectors = []
+    const query = {
+      selectAll(selector) {
+        selectors.push(selector)
+        return {
+          boundingClientRect() {
+            return query
+          }
+        }
+      },
+      exec(callback) {
+        assert.deepEqual(selectors, ['.ledger-desc-viewport', '.ledger-desc-text'])
+        callback([
+          [{ width: 200 }, { width: 200 }],
+          [{ width: 280 }, { width: 180 }]
+        ])
+      }
+    }
+    return query
+  }
+
+  await page.loadPoints()
+
+  assert.deepEqual(
+    page.data.transactionData.records.map((item) => ({
+      marqueeEnabled: item.marqueeEnabled,
+      marqueeDistance: item.marqueeDistance,
+      marqueeDuration: item.marqueeDuration
+    })),
+    [
+      { marqueeEnabled: true, marqueeDistance: 80, marqueeDuration: 6 },
+      { marqueeEnabled: false, marqueeDistance: 0, marqueeDuration: 0 }
+    ]
+  )
+})
+
 test('visitor portfolio sends wx login code when opening share', async () => {
   const requests = []
   let loginCalled = false

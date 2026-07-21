@@ -1,0 +1,19 @@
+<wxs module="selection" src="../editor-selection.wxs"></wxs>
+
+<view class="grid-component {{editMode ? 'editor-mode' : ''}}">
+  <block wx:if="{{editMode}}">
+    <view class="editor-form">
+      <view class="editor-field"><view class="editor-label">选择团队成员</view><scroll-view class="editor-member-scroll" scroll-x type="list"><view class="editor-member-row"><button wx:for="{{members}}" wx:key="memberUserId" class="editor-member-choice {{selectedMemberId === item.memberUserId ? 'active' : ''}}" data-id="{{item.memberUserId}}" bindtap="selectMember">{{item.displayName}}</button></view></scroll-view></view>
+      <view class="editor-field editor-content-field">
+        <view class="editor-field-heading"><view class="editor-label">已发布个人作品集</view><view class="editor-limit">已选 {{draftItems.length}}</view></view>
+        <view wx:if="{{!sourceAvailable}}" class="editor-empty">成员授权已关闭，原引用已移除</view>
+        <view wx:elif="{{selectedMemberId && portfolios.length}}" class="editor-option-grid"><button wx:for="{{portfolios}}" wx:key="portfolioId" class="editor-option {{selection.order(draftItems, 'portfolioId', item.portfolioId) ? 'selected' : ''}}" data-item="{{item}}" bindtap="togglePortfolio"><image src="{{item.coverUrl}}" mode="aspectFill" /><view class="editor-option-copy"><text class="editor-option-title">{{item.title}}</text></view><view class="editor-option-order">{{selection.order(draftItems, 'portfolioId', item.portfolioId) || ''}}</view></button></view>
+        <view wx:elif="{{selectedMemberId}}" class="editor-empty">该成员暂无已发布个人作品集</view>
+        <view wx:else class="editor-empty">请先选择团队成员</view>
+      </view>
+      <view class="editor-field editor-switch-field"><view class="editor-switch-copy"><view class="editor-label">显示成员姓名</view><view class="editor-switch-desc">在作品集标题下展示所属成员</view></view><switch checked="{{draftShowMemberName}}" color="#17202a" bindchange="handleShowMemberNameChange" /></view>
+      <view wx:if="{{errorMessage}}" class="editor-error">{{errorMessage}}</view>
+    </view>
+  </block>
+  <view wx:else class="portfolio-display"><view class="work-section-title">作品集</view><view class="portfolio-grid"><view wx:for="{{items}}" wx:key="portfolioId" class="portfolio-card" data-id="{{item.portfolioId}}" data-share-code="{{item.shareCode}}" bindtap="previewPortfolio" aria-role="button"><image class="portfolio-cover" src="{{item.coverUrl}}" mode="widthFix" /><text class="portfolio-title">{{item.title}}</text><text wx:if="{{showMemberName && item.memberDisplayName}}" class="member-name">{{item.memberDisplayName}}</text></view></view></view>
+</view>

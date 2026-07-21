@@ -157,7 +157,7 @@ class AuthAspectTest {
     }
 
     @Test
-    void visitorAccessWritesSuccessLogWithVisitorKeyAndNoTemporaryDebugLogs() throws Throwable {
+    void visitorAccessSuccessLogContainsOnlyVisitorIdAndRequestWithoutSensitiveIdentity() throws Throwable {
         ListAppender<ILoggingEvent> appender = attachLogAppender();
         setRequest("Bearer wf-visitor-v1.token");
         setJoinPointMethod("visitorEndpoint");
@@ -174,9 +174,12 @@ class AuthAspectTest {
                     .toList();
             assertThat(messages).anySatisfy(message -> assertThat(message)
                     .contains("访客认证通过: visitorId=1024")
-                    .contains("visitorKey=visitor-key")
                     .contains("request=GET /api/test/visitor"));
             assertThat(messages)
+                    .noneMatch(message -> message.contains("visitor-key"))
+                    .noneMatch(message -> message.contains("wf-visitor-v1.token"))
+                    .noneMatch(message -> message.toLowerCase().contains("openid"))
+                    .noneMatch(message -> message.contains("visitorKey="))
                     .noneMatch(message -> message.contains("开始访客认证"))
                     .noneMatch(message -> message.contains("访客令牌解析结果"))
                     .noneMatch(message -> message.contains("写入访客上下文"))

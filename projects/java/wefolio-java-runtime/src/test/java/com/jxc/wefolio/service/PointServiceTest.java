@@ -1,7 +1,9 @@
 package com.jxc.wefolio.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.jxc.wefolio.config.RegistrationPointProperties;
 import com.jxc.wefolio.dict.PointCalcModeDict;
+import com.jxc.wefolio.dict.BillingWindowScopeDict;
 import com.jxc.wefolio.dict.MessageActionTypeDict;
 import com.jxc.wefolio.dict.MessageCategoryDict;
 import com.jxc.wefolio.dict.MessageReadStatusDict;
@@ -43,11 +45,13 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -83,7 +87,7 @@ class PointServiceTest {
     @Test
     void pointAccountMapperShouldDeductConsumptionWithAtomicUpdateSql() throws NoSuchMethodException {
         Method method = PointAccountEntityMapper.class.getMethod(
-                "deductConsumedPoints",
+                "deductForMaintainer",
                 Long.class,
                 Long.class,
                 Long.class
@@ -94,6 +98,7 @@ class PointServiceTest {
         String sql = String.join("\n", update.value());
         assertThat(sql)
                 .contains("UPDATE wf_point_account")
+                .contains("pending_debit = pending_debit + #{points}")
                 .contains("balance = balance - #{points}")
                 .contains("total_consumed = total_consumed + #{points}")
                 .contains("version = version + 1")
@@ -117,6 +122,97 @@ class PointServiceTest {
         assertThat(sql)
                 .contains("FROM wf_point_meter")
                 .doesNotContain("FOR UPDATE");
+    }
+
+    @Test
+    void rechargeShouldAtomicallyIncreaseBalanceAndWriteRechargeTransaction() {
+        activeUser(7L);
+        PointAccountEntity balanceBefore = account(10L, 7L, 20L);
+        PointAccountEntity balanceAfter = account(10L, 7L, 540L);
+        balanceAfter.setTotalRecharged(520L);
+        when(pointTransactionEntityMapper.selectOne(any())).thenReturn(null);
+        when(pointAccountEntityMapper.selectOne(any())).thenReturn(balanceBefore, balanceAfter);
+        when(pointAccountEntityMapper.addRechargedPoints(10L, 7L, 520L)).thenReturn(1);
+        doAnswer(invocation -> {
+            PointTransactionEntity transaction = invocation.getArgument(0);
+            transaction.setId(98L);
+            return 1;
+        }).when(pointTransactionEntityMapper).insert(any(PointTransactionEntity.class));
+
+        PointMutationResponse response = service().recharge(
+                7L,
+                520L,
+                "WFR20260717153000123A3B7K9M2Q5R",
+                "{\"packageCode\":\"RECHARGE_50_YUAN\"}",
+                "POINT_RECHARGE:WFR20260717153000123A3B7K9M2Q5R",
+                "50 元档"
+        );
+
+        ArgumentCaptor<PointTransactionEntity> transactionCaptor =
+                ArgumentCaptor.forClass(PointTransactionEntity.class);
+        verify(pointAccountEntityMapper).addRechargedPoints(10L, 7L, 520L);
+        verify(pointAccountEntityMapper, never()).updateById(any(PointAccountEntity.class));
+        verify(pointTransactionEntityMapper).insert(transactionCaptor.capture());
+        assertThat(transactionCaptor.getValue()).satisfies(transaction -> {
+            assertThat(transaction.getTransactionType()).isEqualTo(PointTransactionTypeDict.RECHARGE.getCode());
+            assertThat(transaction.getSceneCode()).isEqualTo(PointSceneCodeDict.RECHARGE_PACKAGE.getCode());
+            assertThat(transaction.getPointsChange()).isEqualTo(520L);
+            assertThat(transaction.getBalanceBefore()).isEqualTo(20L);
+            assertThat(transaction.getBalanceAfter()).isEqualTo(540L);
+            assertThat(transaction.getBusinessType()).isEqualTo("RECHARGE_ORDER");
+            assertThat(transaction.getBusinessId()).isEqualTo("WFR20260717153000123A3B7K9M2Q5R");
+            assertThat(transaction.getCalculationSnapshot())
+                    .isEqualTo("{\"packageCode\":\"RECHARGE_50_YUAN\"}");
+        });
+        assertThat(response.getTransactionId()).isEqualTo(98L);
+        assertThat(response.getBalanceAfter()).isEqualTo(540L);
+        assertThat(response.isIdempotent()).isFalse();
+    }
+
+    @Test
+    void rechargeShouldReturnExistingTransactionWithoutAddingPointsAgain() {
+        activeUser(7L);
+        PointTransactionEntity existing = transaction(98L, 10L, 7L, 520L, 20L, 540L);
+        existing.setTransactionType(PointTransactionTypeDict.RECHARGE.getCode());
+        existing.setSceneCode("RECHARGE_PACKAGE");
+        existing.setBusinessType("RECHARGE_ORDER");
+        existing.setBusinessId("WFR20260717153000123A3B7K9M2Q5R");
+        existing.setIdempotencyKey("POINT_RECHARGE:WFR20260717153000123A3B7K9M2Q5R");
+        when(pointTransactionEntityMapper.selectOne(any())).thenReturn(existing);
+
+        PointMutationResponse response = service().recharge(
+                7L,
+                520L,
+                "WFR20260717153000123A3B7K9M2Q5R",
+                "{}",
+                "POINT_RECHARGE:WFR20260717153000123A3B7K9M2Q5R",
+                "50 元档"
+        );
+
+        assertThat(response.isIdempotent()).isTrue();
+        assertThat(response.getBalanceAfter()).isEqualTo(540L);
+        verify(pointAccountEntityMapper, never()).addRechargedPoints(any(), any(), any());
+        verify(pointTransactionEntityMapper, never()).insert(any(PointTransactionEntity.class));
+    }
+
+    @Test
+    void rechargeShouldFailWhenAtomicAccountUpdateDoesNotMatchOneRow() {
+        activeUser(7L);
+        when(pointTransactionEntityMapper.selectOne(any())).thenReturn(null);
+        when(pointAccountEntityMapper.selectOne(any())).thenReturn(account(10L, 7L, 20L));
+        when(pointAccountEntityMapper.addRechargedPoints(10L, 7L, 520L)).thenReturn(0);
+
+        assertThatThrownBy(() -> service().recharge(
+                7L,
+                520L,
+                "WFR20260717153000123A3B7K9M2Q5R",
+                "{}",
+                "POINT_RECHARGE:WFR20260717153000123A3B7K9M2Q5R",
+                "50 元档"
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("积分账户更新失败，请重试");
+        verify(pointTransactionEntityMapper, never()).insert(any(PointTransactionEntity.class));
     }
 
     @Test
@@ -418,6 +514,91 @@ class PointServiceTest {
     }
 
     @Test
+    void assertCanConsumeAllowsMatchingExistingBusinessWithoutCheckingBalance() {
+        activeUser(7L);
+        PointTransactionEntity existing = transaction(90L, 10L, 7L, -1L, 10L, 9L);
+        existing.setSceneCode(PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode());
+        existing.setBusinessType("PORTFOLIO");
+        existing.setBusinessId("88");
+        when(pointTransactionEntityMapper.selectOne(any())).thenReturn(existing);
+
+        service().assertCanConsume(
+                7L,
+                PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode(),
+                "PORTFOLIO",
+                "88",
+                1,
+                "publish-1"
+        );
+
+        verifyNoInteractions(pointRuleEntityMapper, pointAccountEntityMapper);
+    }
+
+    @Test
+    void assertCanConsumeRejectsExistingIdempotencyKeyOwnedByAnotherUser() {
+        activeUser(7L);
+        PointTransactionEntity existing = transaction(90L, 10L, 8L, -1L, 10L, 9L);
+        existing.setSceneCode(PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode());
+        existing.setBusinessType("PORTFOLIO");
+        existing.setBusinessId("88");
+        when(pointTransactionEntityMapper.selectOne(any())).thenReturn(existing);
+
+        assertThatThrownBy(() -> service().assertCanConsume(
+                7L,
+                PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode(),
+                "PORTFOLIO",
+                "88",
+                1,
+                "publish-1"
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("幂等键已被其他用户使用");
+    }
+
+    @Test
+    void assertCanConsumeRejectsExistingIdempotencyKeyForAnotherBusiness() {
+        activeUser(7L);
+        PointTransactionEntity existing = transaction(90L, 10L, 7L, -1L, 10L, 9L);
+        existing.setSceneCode(PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode());
+        existing.setBusinessType("PORTFOLIO");
+        existing.setBusinessId("89");
+        when(pointTransactionEntityMapper.selectOne(any())).thenReturn(existing);
+
+        assertThatThrownBy(() -> service().assertCanConsume(
+                7L,
+                PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode(),
+                "PORTFOLIO",
+                "88",
+                1,
+                "publish-1"
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("幂等键已用于其他积分业务");
+    }
+
+    @Test
+    void consumeRejectsExistingIdempotencyKeyForAnotherBusiness() {
+        activeUser(7L);
+        PointTransactionEntity existing = transaction(90L, 10L, 7L, -1L, 10L, 9L);
+        existing.setSceneCode(PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode());
+        existing.setBusinessType("PORTFOLIO");
+        existing.setBusinessId("89");
+        when(pointTransactionEntityMapper.selectOne(any())).thenReturn(existing);
+
+        assertThatThrownBy(() -> service().consume(
+                7L,
+                PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode(),
+                "PORTFOLIO",
+                "88",
+                1,
+                "publish-1",
+                "发布标准个人作品集"
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("幂等键已用于其他积分业务");
+    }
+
+    @Test
     void calculateAccumulatedThresholdUsesExistingPendingCount() {
         activeUser(7L);
         PointCalculationRequest request = new PointCalculationRequest();
@@ -598,6 +779,117 @@ class PointServiceTest {
     }
 
     @Test
+    void listTransactionsShouldUseAdminGrantRemarkAsTitle() {
+        activeUser(7L);
+        PointTransactionEntity transaction = transaction(92L, 10L, 7L, 100L, 0L, 100L);
+        transaction.setTransactionType(PointTransactionTypeDict.GIFT.getCode());
+        transaction.setSceneCode(PointSceneCodeDict.MANUAL_ADMIN_GRANT.getCode());
+        transaction.setBusinessType("ADMIN_GRANT");
+        transaction.setCalculationSnapshot("{\"remark\":\"活动补偿\"}");
+        transaction.setRemark("微信代币赠送成功");
+        Page<PointTransactionEntity> page = new Page<>(1, 20);
+        page.setTotal(1);
+        page.setRecords(List.of(transaction));
+        when(pointTransactionEntityMapper.selectPage(any(), any())).thenReturn(page);
+
+        MinePointTransactionsResponse response = service().listTransactions(7L, null, null, 1, 20);
+
+        assertThat(response.getRecords()).singleElement().satisfies(item -> {
+            assertThat(item.getSceneText()).isEqualTo("活动补偿");
+            assertThat(item.getRemark()).isEqualTo("后台人工赠送");
+        });
+    }
+
+    @Test
+    void listTransactionsShouldKeepAdminGrantDescriptionWhenRemarkIsEmpty() {
+        activeUser(7L);
+        PointTransactionEntity transaction = transaction(93L, 10L, 7L, 100L, 0L, 100L);
+        transaction.setTransactionType(PointTransactionTypeDict.GIFT.getCode());
+        transaction.setSceneCode(PointSceneCodeDict.MANUAL_ADMIN_GRANT.getCode());
+        transaction.setBusinessType("ADMIN_GRANT");
+        transaction.setCalculationSnapshot("{\"remark\":\"   \"}");
+        transaction.setRemark("微信代币赠送成功");
+        Page<PointTransactionEntity> page = new Page<>(1, 20);
+        page.setTotal(1);
+        page.setRecords(List.of(transaction));
+        when(pointTransactionEntityMapper.selectPage(any(), any())).thenReturn(page);
+
+        MinePointTransactionsResponse response = service().listTransactions(7L, null, null, 1, 20);
+
+        assertThat(response.getRecords()).singleElement().satisfies(item -> {
+            assertThat(item.getSceneText()).isEqualTo("后台人工赠送");
+            assertThat(item.getRemark()).isEqualTo("微信代币赠送成功");
+        });
+    }
+
+    @Test
+    void listTransactionsShouldFallbackWhenAdminGrantSnapshotIsInvalid() {
+        activeUser(7L);
+        PointTransactionEntity transaction = transaction(94L, 10L, 7L, 100L, 0L, 100L);
+        transaction.setTransactionType(PointTransactionTypeDict.GIFT.getCode());
+        transaction.setSceneCode(PointSceneCodeDict.MANUAL_ADMIN_GRANT.getCode());
+        transaction.setBusinessType("ADMIN_GRANT");
+        transaction.setCalculationSnapshot("invalid-json");
+        transaction.setRemark("微信代币赠送成功");
+        Page<PointTransactionEntity> page = new Page<>(1, 20);
+        page.setTotal(1);
+        page.setRecords(List.of(transaction));
+        when(pointTransactionEntityMapper.selectPage(any(), any())).thenReturn(page);
+
+        MinePointTransactionsResponse response = service().listTransactions(7L, null, null, 1, 20);
+
+        assertThat(response.getRecords()).singleElement().satisfies(item -> {
+            assertThat(item.getSceneText()).isEqualTo("后台人工赠送");
+            assertThat(item.getRemark()).isEqualTo("微信代币赠送成功");
+        });
+    }
+
+    @Test
+    void listTransactionsShouldNotProjectNonAdminGrantBusiness() {
+        activeUser(7L);
+        PointTransactionEntity transaction = transaction(95L, 10L, 7L, 100L, 0L, 100L);
+        transaction.setTransactionType(PointTransactionTypeDict.GIFT.getCode());
+        transaction.setSceneCode(PointSceneCodeDict.MANUAL_ADMIN_GRANT.getCode());
+        transaction.setBusinessType("OTHER_GIFT");
+        transaction.setCalculationSnapshot("{\"remark\":\"活动补偿\"}");
+        transaction.setRemark("原流水备注");
+        Page<PointTransactionEntity> page = new Page<>(1, 20);
+        page.setTotal(1);
+        page.setRecords(List.of(transaction));
+        when(pointTransactionEntityMapper.selectPage(any(), any())).thenReturn(page);
+
+        MinePointTransactionsResponse response = service().listTransactions(7L, null, null, 1, 20);
+
+        assertThat(response.getRecords()).singleElement().satisfies(item -> {
+            assertThat(item.getSceneText()).isEqualTo("后台人工加分");
+            assertThat(item.getRemark()).isEqualTo("原流水备注");
+        });
+    }
+
+    @Test
+    void listTransactionsShouldExposeMonthlyWorkStorageRemark() {
+        activeUser(7L);
+        PointTransactionEntity transaction = transaction(91L, 10L, 7L, -8L, 8L, 0L);
+        transaction.setTransactionType(PointTransactionTypeDict.CONSUMPTION.getCode());
+        transaction.setSceneCode(PointSceneCodeDict.MONTHLY_WORK_STORAGE.getCode());
+        transaction.setRemark("2026-07 作品总大小 205.00 MB，应扣 20 积分，积分不足，实际扣除 8 积分");
+        Page<PointTransactionEntity> page = new Page<>(1, 20);
+        page.setTotal(1);
+        page.setRecords(List.of(transaction));
+        when(pointTransactionEntityMapper.selectPage(any(), any())).thenReturn(page);
+
+        MinePointTransactionsResponse response = service().listTransactions(
+                7L, PointTransactionTypeDict.CONSUMPTION.getCode(),
+                PointSceneCodeDict.MONTHLY_WORK_STORAGE.getCode(), 1, 20);
+
+        assertThat(response.getRecords()).singleElement().satisfies(item -> {
+            assertThat(item.getSceneText()).isEqualTo("作品存储月费");
+            assertThat(item.getRemark()).isEqualTo(
+                    "2026-07 作品总大小 205.00 MB，应扣 20 积分，积分不足，实际扣除 8 积分");
+        });
+    }
+
+    @Test
     void getOverviewKeepsOnlyLatestActiveRulePerScene() {
         activeUser(7L);
         when(pointAccountEntityMapper.selectOne(any())).thenReturn(account(10L, 7L, 30L));
@@ -647,6 +939,118 @@ class PointServiceTest {
         assertThat(response.getRules().get(0).getGroupText()).isEqualTo("维护");
     }
 
+    /** 积分概览应按注册积分配置返回两条积分获取规则。 */
+    @Test
+    void getOverviewReturnsConfiguredAcquisitionRules() {
+        activeUser(7L);
+        when(pointAccountEntityMapper.selectOne(any())).thenReturn(account(10L, 7L, 30L));
+        when(pointRuleEntityMapper.selectList(any())).thenReturn(List.of());
+        RegistrationPointProperties properties = new RegistrationPointProperties();
+        properties.setNewUserGiftPoints(300L);
+        properties.setReferralGiftPoints(700L);
+
+        MinePointOverviewResponse response = service(properties).getOverview(7L);
+
+        assertThat(response.getAcquisitionRules())
+                .extracting("code", "title", "description", "pointsValue")
+                .containsExactly(
+                        tuple(
+                                PointSceneCodeDict.NEW_USER_REGISTRATION_GIFT.getCode(),
+                                "新用户注册",
+                                "首次注册成功后赠送",
+                                300L
+                        ),
+                        tuple(
+                                PointSceneCodeDict.REFERRAL_USER_GIFT.getCode(),
+                                "推荐好友注册",
+                                "好友填写您的有效推荐码并注册成功后赠送",
+                                700L
+                        )
+                );
+    }
+
+    /** 积分概览必须安全返回滚动窗口小时数和统一作用域编码。 */
+    @Test
+    void getOverviewReturnsStructuredBillingWindowConfig() {
+        activeUser(7L);
+        when(pointAccountEntityMapper.selectOne(any())).thenReturn(account(10L, 7L, 30L));
+        PointRuleEntity rule = rule(
+                36L,
+                PointSceneCodeDict.VIEW_PORTFOLIO_IMAGES,
+                PointCalcModeDict.FIXED_PER_ACTION,
+                1,
+                1L
+        );
+        rule.setGroupCode("VISITOR");
+        rule.setConfigJson("{\"dedupeWindowHours\":2,\"dedupeScope\":\"WORK\"}");
+        when(pointRuleEntityMapper.selectList(any())).thenReturn(List.of(rule));
+
+        MinePointOverviewResponse response = service().getOverview(7L);
+
+        assertThat(response.getRules()).singleElement().satisfies(item -> {
+            assertThat(item.getDedupeWindowHours()).isEqualTo(2);
+            assertThat(item.getDedupeScope()).isEqualTo(BillingWindowScopeDict.WORK.getCode());
+        });
+    }
+
+    /** 非法窗口展示配置不得影响积分规则金额返回。 */
+    @Test
+    void getOverviewIgnoresMalformedBillingWindowConfig() {
+        activeUser(7L);
+        when(pointAccountEntityMapper.selectOne(any())).thenReturn(account(10L, 7L, 30L));
+        PointRuleEntity rule = rule(
+                36L,
+                PointSceneCodeDict.VIEW_PORTFOLIO_VIDEO,
+                PointCalcModeDict.FIXED_PER_ACTION,
+                1,
+                5L
+        );
+        rule.setGroupCode("VISITOR");
+        rule.setConfigJson("{invalid-json");
+        when(pointRuleEntityMapper.selectList(any())).thenReturn(List.of(rule));
+
+        MinePointOverviewResponse response = service().getOverview(7L);
+
+        assertThat(response.getRules()).singleElement().satisfies(item -> {
+            assertThat(item.getPointsValue()).isEqualTo(5L);
+            assertThat(item.getDedupeWindowHours()).isNull();
+            assertThat(item.getDedupeScope()).isNull();
+        });
+    }
+
+    @Test
+    void getOverviewShouldReturnMonthlyWorkStorageRuleAndCountMaintenanceConsumption() {
+        activeUser(7L);
+        when(pointAccountEntityMapper.selectOne(any())).thenReturn(account(10L, 7L, 30L));
+        PointTransactionEntity monthlyStorageTransaction = transaction(91L, 10L, 7L, -8L, 8L, 0L);
+        monthlyStorageTransaction.setSceneCode("MONTHLY_WORK_STORAGE");
+        when(pointTransactionEntityMapper.selectList(any())).thenReturn(
+                List.of(),
+                List.of(),
+                List.of(monthlyStorageTransaction)
+        );
+        PointRuleEntity rule = rule(
+                32L,
+                PointSceneCodeDict.MONTHLY_WORK_STORAGE,
+                PointCalcModeDict.MONTHLY_STORAGE_SIZE,
+                10,
+                1L
+        );
+        rule.setGroupCode("MAINTENANCE");
+        when(pointRuleEntityMapper.selectList(any())).thenReturn(List.of(rule));
+
+        MinePointOverviewResponse response = service().getOverview(7L);
+
+        assertThat(response.getMaintenanceConsumed()).isEqualTo(8L);
+        assertThat(response.getRules()).singleElement().satisfies(item -> {
+            assertThat(item.getSceneCode()).isEqualTo("MONTHLY_WORK_STORAGE");
+            assertThat(item.getSceneText()).isEqualTo("作品存储月费");
+            assertThat(item.getCalcMode()).isEqualTo("MONTHLY_STORAGE_SIZE");
+            assertThat(item.getUnitCount()).isEqualTo(10);
+            assertThat(item.getPointsValue()).isEqualTo(1L);
+        });
+    }
+
     /**
      * 构造被测积分服务。
      *
@@ -660,6 +1064,24 @@ class PointServiceTest {
                 pointMeterEntityMapper,
                 pointTransactionEntityMapper,
                 systemMessageEntityMapper
+        );
+    }
+
+    /**
+     * 使用指定注册积分配置构造被测服务。
+     *
+     * @param properties 注册积分配置
+     * @return 积分服务
+     */
+    private PointService service(RegistrationPointProperties properties) {
+        return new PointService(
+                userEntityMapper,
+                pointAccountEntityMapper,
+                pointRuleEntityMapper,
+                pointMeterEntityMapper,
+                pointTransactionEntityMapper,
+                systemMessageEntityMapper,
+                properties
         );
     }
 

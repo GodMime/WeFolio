@@ -79,6 +79,9 @@ public class WorkUploadTransactionService {
     /** 积分服务 */
     private final PointService pointService;
 
+    /** 内容数量上限服务 */
+    private final ContentLimitService contentLimitService;
+
     /**
      * 确认单个上传任务并创建作品。
      *
@@ -125,6 +128,7 @@ public class WorkUploadTransactionService {
             idempotencyKey = CONFIRM_IDEMPOTENCY_PREFIX + task.getId();
         }
         ensureNoDuplicateWork(userId, task.getFileSha256());
+        contentLimitService.ensureWorkCapacity(userId, task.getMediaType(), 1L);
 
         pointService.consume(
                 userId,

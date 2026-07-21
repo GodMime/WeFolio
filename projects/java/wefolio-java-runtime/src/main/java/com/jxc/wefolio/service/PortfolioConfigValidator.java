@@ -14,6 +14,7 @@ import com.jxc.wefolio.message.PortfolioMessage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -67,6 +68,12 @@ public class PortfolioConfigValidator {
 
     /** 作品 ID 配置键 */
     private static final String CONFIG_KEY_WORK_IDS = "workIds";
+
+    /** 单个作品 ID 配置键 */
+    private static final String CONFIG_KEY_WORK_ID = "workId";
+
+    /** 是否展示作品名配置键 */
+    private static final String CONFIG_KEY_SHOW_TITLE = "showTitle";
 
     /** 作品集展示标签配置键 */
     private static final String CONFIG_KEY_GROUPS = "groups";
@@ -234,6 +241,7 @@ public class PortfolioConfigValidator {
         if (enabledComponents.isEmpty()) {
             throw new BusinessException(PortfolioMessage.ENABLED_COMPONENT_REQUIRED_MESSAGE);
         }
+        validateProfileComponentLimit(enabledComponents);
 
         List<PortfolioConfigDto.Component> normalizedComponents = new ArrayList<>();
         Set<String> componentKeys = new LinkedHashSet<>();
@@ -258,6 +266,20 @@ public class PortfolioConfigValidator {
         normalized.setShare(copyShare(config.getShare()));
         normalized.setComponents(normalizedComponents);
         return normalized;
+    }
+
+    /**
+     * 校验个人资料组件的单例限制。
+     *
+     * @param enabledComponents 已启用组件
+     */
+    private void validateProfileComponentLimit(List<PortfolioConfigDto.Component> enabledComponents) {
+        long profileComponentCount = enabledComponents.stream()
+                .filter(component -> PortfolioComponentTypeDict.PROFILE.getCode().equals(component.getComponentType()))
+                .count();
+        if (profileComponentCount > 1) {
+            throw new BusinessException(PortfolioMessage.PROFILE_COMPONENT_LIMIT_MESSAGE);
+        }
     }
 
     /**
@@ -314,6 +336,13 @@ public class PortfolioConfigValidator {
                 ));
                 case CAROUSEL -> addFlatWorkReferences(references, portfolioId, configScope, component, componentPath);
                 case WORK_GRID, WORK_LIST -> addGroupedWorkReferences(references, portfolioId, configScope, component, componentPath);
+                case SINGLE_WORK -> addSingleWorkReference(
+                        references,
+                        portfolioId,
+                        configScope,
+                        component,
+                        componentPath
+                );
                 default -> {
                 }
             }
@@ -358,6 +387,7 @@ public class PortfolioConfigValidator {
             case CAROUSEL -> validateCarousel(userId, component);
             case WORK_GRID -> validateWorkDisplayGroups(userId, component, WORK_GRID_MAX_COUNT, 2);
             case WORK_LIST -> validateWorkDisplayGroups(userId, component, WORK_LIST_MAX_COUNT, 1);
+            case SINGLE_WORK -> validateSingleWork(userId, component);
             case SCHEDULE_QUERY -> validateScheduleQuery(component);
             case QR_CONTACT -> validateQrContact(component);
             case CONTACT_FORM -> validateContactForm(component);
@@ -413,6 +443,29 @@ public class PortfolioConfigValidator {
         }
         component.getConfig().put(CONFIG_KEY_GROUPS, groups);
         component.getConfig().put(CONFIG_KEY_COLUMNS, columns);
+    }
+
+    /**
+     * 校验并规范化单个作品组件。
+     *
+     * @param userId 当前用户 ID
+     * @param component 组件
+     */
+    private void validateSingleWork(Long userId, PortfolioConfigDto.Component component) {
+        Long workId = asExactLong(component.getConfig().get(CONFIG_KEY_WORK_ID));
+        if (workId == null || workId <= 0L) {
+            throw new BusinessException(PortfolioMessage.WORK_REFERENCE_INVALID_MESSAGE);
+        }
+        Map<Long, WorkEntity> workMap = loadUsableWorks(userId, List.of(workId));
+        WorkEntity work = workMap.get(workId);
+        if (work == null || MediaTypeDict.fromCode(work.getMediaType()) == null) {
+            throw new BusinessException(PortfolioMessage.WORK_REFERENCE_INVALID_MESSAGE);
+        }
+        Map<String, Object> normalizedConfig = new LinkedHashMap<>();
+        normalizedConfig.put(CONFIG_KEY_WORK_ID, workId);
+        Object showTitle = component.getConfig().get(CONFIG_KEY_SHOW_TITLE);
+        normalizedConfig.put(CONFIG_KEY_SHOW_TITLE, showTitle instanceof Boolean value ? value : Boolean.TRUE);
+        component.setConfig(normalizedConfig);
     }
 
     /**
@@ -746,6 +799,37 @@ public class PortfolioConfigValidator {
     }
 
     /**
+     * 添加单个作品引用。
+     *
+     * @param references 引用列表
+     * @param portfolioId 作品集 ID
+     * @param configScope 配置作用域
+     * @param component 组件
+     * @param componentPath 组件路径
+     */
+    private void addSingleWorkReference(
+            List<PortfolioReferenceEntity> references,
+            Long portfolioId,
+            String configScope,
+            PortfolioConfigDto.Component component,
+            String componentPath
+    ) {
+        Long workId = asLong(component.getConfig().get(CONFIG_KEY_WORK_ID));
+        if (workId == null || workId <= 0L) {
+            return;
+        }
+        references.add(reference(
+                portfolioId,
+                configScope,
+                ReferenceTypeDict.WORK.getCode(),
+                workId,
+                component,
+                componentPath + ".config." + CONFIG_KEY_WORK_ID,
+                0
+        ));
+    }
+
+    /**
      * 创建引用实体。
      *
      * @param portfolioId 作品集 ID
@@ -923,6 +1007,30 @@ public class PortfolioConfigValidator {
     private Long asLong(Object value) {
         if (value instanceof Number number) {
             return number.longValue();
+        }
+        if (value instanceof String text && hasText(text)) {
+            try {
+                return Long.parseLong(text.strip());
+            } catch (NumberFormatException e) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 精确转换为 Long，拒绝小数和超出 Long 范围的数值。
+     *
+     * @param value 原值
+     * @return 精确 Long 值
+     */
+    private Long asExactLong(Object value) {
+        if (value instanceof Number number) {
+            try {
+                return new BigDecimal(number.toString()).longValueExact();
+            } catch (NumberFormatException | ArithmeticException e) {
+                return null;
+            }
         }
         if (value instanceof String text && hasText(text)) {
             try {
