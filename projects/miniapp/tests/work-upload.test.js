@@ -516,6 +516,8 @@ test('prepares cover uploads by skipping small images, compressing large images,
   assert.equal(files[2].coverFileName, undefined)
   assert.equal(compressCalls.length, 1)
   assert.equal(compressCalls[0].src, 'wxfile://tmp/photo.jpg')
+  assert.equal(compressCalls[0].compressedWidth, 960)
+  assert.equal(Object.prototype.hasOwnProperty.call(compressCalls[0], 'compressedHeight'), false)
 })
 
 test('prepares local edited cover only when finish triggers upload', async () => {

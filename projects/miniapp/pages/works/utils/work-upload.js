@@ -108,7 +108,6 @@ function compressImageFile(filePath, attempt, options = {}) {
       src: filePath,
       quality: attempt.quality,
       compressedWidth: attempt.compressedSize,
-      compressedHeight: attempt.compressedSize,
       success(response) {
         if (response && response.tempFilePath) {
           resolve(response.tempFilePath)
