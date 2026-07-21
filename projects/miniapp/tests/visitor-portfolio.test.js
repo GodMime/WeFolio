@@ -1202,6 +1202,49 @@ test('visitor page opens portfolio with wx login code and stores backend visitor
   assert.equal(typeof storageWrites[1].value, 'number')
 })
 
+test('visitor page opens timeline single-page mode anonymously without wx login', async () => {
+  const requests = []
+  let loginCalls = 0
+  const page = loadVisitorPage((options) => {
+    requests.push(options)
+    return Promise.resolve({
+      visitorKey: 'timeline-visitor-key',
+      token: 'wf-visitor-v1.timeline',
+      expiresInSeconds: 60,
+      needVisitorProfile: false,
+      renderData: {
+        shareCode: 'PF001',
+        title: '朋友圈作品集',
+        components: []
+      }
+    })
+  })
+  global.wx = {
+    getEnterOptionsSync() {
+      return { scene: 1154 }
+    },
+    login() {
+      loginCalls += 1
+    },
+    setStorageSync() {},
+    showShareMenu() {},
+    showToast() {}
+  }
+
+  try {
+    await page.onLoad({ shareCode: 'PF001' })
+  } finally {
+    delete global.wx
+  }
+
+  assert.equal(loginCalls, 0)
+  assert.equal(requests.length, 1)
+  assert.equal(requests[0].url, '/api/visitor/portfolios/PF001/open')
+  assert.equal(Object.hasOwn(requests[0].data, 'loginCode'), false)
+  assert.match(requests[0].data.anonymousSessionId, /^timeline-/)
+  assert.equal(page.data.visitorKey, 'timeline-visitor-key')
+})
+
 test('visitor page ignores visitor token storage failure while opening portfolio', async () => {
   const requests = []
   const toastMessages = []
@@ -1311,6 +1354,53 @@ test('visitor page refreshes visitor session with open endpoint and retries visi
   assert.equal(page.data.visitorKey, 'visitor-refreshed')
   assert.equal(storageWrites.at(-2).key, 'wefolio_visitor_token')
   assert.equal(storageWrites.at(-2).value, 'wf-visitor-v1.refreshed')
+})
+
+test('timeline single-page refresh reuses anonymous session id without wx login', async () => {
+  const requests = []
+  let loginCalls = 0
+  const page = loadVisitorPage((options) => {
+    requests.push(options)
+    if (options.url.endsWith('/open')) {
+      return Promise.resolve({
+        visitorKey: 'timeline-visitor',
+        token: 'wf-visitor-timeline-v1.test',
+        expiresInSeconds: 60,
+        needVisitorProfile: false,
+        renderData: { shareCode: 'PF001', title: '朋友圈作品集', components: [] }
+      })
+    }
+    if (options.url.endsWith('/events')) {
+      const eventCalls = requests.filter((item) => item.url.endsWith('/events')).length
+      if (eventCalls === 1) {
+        return Promise.reject(Object.assign(new Error('访客未登录'), {
+          authRequired: true,
+          authMode: 'visitor'
+        }))
+      }
+      return Promise.resolve({ ok: true })
+    }
+    return Promise.reject(new Error(`unexpected request: ${options.url}`))
+  })
+  global.wx = {
+    getEnterOptionsSync() { return { scene: 1154 } },
+    login() { loginCalls += 1 },
+    setStorageSync() {},
+    showToast() {}
+  }
+
+  try {
+    await page.onLoad({ shareCode: 'PF001' })
+    await page.recordWorkEvent({ mediaType: 'IMAGE', workId: 301, title: '迎宾照' })
+  } finally {
+    delete global.wx
+  }
+
+  const openRequests = requests.filter((item) => item.url.endsWith('/open'))
+  assert.equal(openRequests.length, 2)
+  assert.equal(loginCalls, 0)
+  assert.equal(openRequests[0].data.anonymousSessionId, openRequests[1].data.anonymousSessionId)
+  assert.equal(Object.hasOwn(openRequests[1].data, 'loginCode'), false)
 })
 
 test('visitor page shows profile authorization panel when profile is missing', async () => {

@@ -16,6 +16,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -25,6 +28,7 @@ import java.util.HexFormat;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.function.Supplier;
+import java.util.regex.Pattern;
 
 /**
  * 访客身份服务 — 负责按微信 openid 维护全局访客资料和资料授权 token。
@@ -36,6 +40,23 @@ public class VisitorService {
 
     /** 访客资料 token 缓存前缀 */
     private static final String PROFILE_TOKEN_CACHE_PREFIX = "visitor:profile-token:";
+
+    /** 朋友圈单页匿名会话格式 */
+    private static final Pattern TIMELINE_ANONYMOUS_SESSION_PATTERN =
+            Pattern.compile("^timeline-[a-z0-9-]{32,119}$");
+
+    /** 朋友圈单页匿名身份命名空间 */
+    private static final String TIMELINE_ANONYMOUS_IDENTITY_PREFIX = "timeline:";
+
+    /** 服务端匿名身份作用域格式 */
+    private static final Pattern ANONYMOUS_IDENTITY_SCOPE_PATTERN =
+            Pattern.compile("^(PERSONAL|TEAM):[1-9][0-9]{0,18}$");
+
+    /** 匿名身份摘要算法 */
+    private static final String ANONYMOUS_IDENTITY_DIGEST_ALGORITHM = "SHA-256";
+
+    /** 摘要算法不可用提示 */
+    private static final String DIGEST_ALGORITHM_UNAVAILABLE_MESSAGE = "匿名访客身份摘要算法不可用";
 
     /** 访客资料 token 有效期 */
     private static final Duration PROFILE_TOKEN_TTL = Duration.ofMinutes(30);
@@ -145,7 +166,57 @@ public class VisitorService {
                 () -> visitorIdentityPersistenceService
                         .tryResolveOrCreate(openid, unionid)
                         .orElseGet(() -> visitorIdentityPersistenceService.recoverIgnoredInsert(openid, unionid)));
-        return new VisitorSession(identity.visitor(), identity.newVisitor());
+        return new VisitorSession(identity.visitor(), identity.newVisitor(), false);
+    }
+
+    /**
+     * 解析作品集打开身份；普通场景优先使用微信登录码，朋友圈单页模式使用匿名会话。
+     *
+     * @param loginCode wx.login 返回的临时登录凭证
+     * @param anonymousSessionId 朋友圈单页匿名会话标识
+     * @param anonymousIdentityScope 服务端生成的作品集匿名身份作用域
+     * @param trace 作品集打开链路追踪器
+     * @return 访客会话
+     */
+    public VisitorSession resolveForOpen(
+            String loginCode,
+            String anonymousSessionId,
+            String anonymousIdentityScope,
+            PortfolioOpenPerformanceLogger.Trace trace
+    ) {
+        if (hasText(loginCode)) {
+            return resolveByLoginCode(loginCode, trace);
+        }
+        String normalizedAnonymousSessionId = normalizeNullable(anonymousSessionId);
+        if (normalizedAnonymousSessionId == null
+                || !TIMELINE_ANONYMOUS_SESSION_PATTERN.matcher(normalizedAnonymousSessionId).matches()) {
+            throw new BusinessException(PortfolioMessage.WECHAT_LOGIN_CODE_REQUIRED_MESSAGE);
+        }
+        String normalizedAnonymousIdentityScope = normalizeNullable(anonymousIdentityScope);
+        if (normalizedAnonymousIdentityScope == null
+                || !ANONYMOUS_IDENTITY_SCOPE_PATTERN.matcher(normalizedAnonymousIdentityScope).matches()) {
+            throw new BusinessException(PortfolioMessage.WECHAT_LOGIN_CODE_REQUIRED_MESSAGE);
+        }
+        String anonymousIdentity = TIMELINE_ANONYMOUS_IDENTITY_PREFIX
+                + sha256Hex(normalizedAnonymousIdentityScope);
+        VisitorIdentityPersistenceService.VisitorIdentity identity = measure(
+                trace,
+                PortfolioOpenPerformanceLogger.Phase.VISITOR_PERSIST,
+                () -> visitorIdentityPersistenceService
+                        .tryResolveOrCreate(anonymousIdentity, null)
+                        .orElseGet(() -> visitorIdentityPersistenceService
+                                .recoverIgnoredInsert(anonymousIdentity, null)));
+        return new VisitorSession(identity.visitor(), identity.newVisitor(), true);
+    }
+
+    /** 计算匿名身份作用域的 SHA-256 十六进制摘要。 */
+    private String sha256Hex(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance(ANONYMOUS_IDENTITY_DIGEST_ALGORITHM);
+            return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException(DIGEST_ALGORITHM_UNAVAILABLE_MESSAGE, exception);
+        }
     }
 
     /** 在存在追踪器时计量指定阶段。 */
@@ -561,8 +632,14 @@ public class VisitorService {
      *
      * @param visitor 访客实体
      * @param newVisitor 是否本次新建
+     * @param anonymous 是否朋友圈单页匿名会话
      */
-    public record VisitorSession(VisitorEntity visitor, boolean newVisitor) {
+    public record VisitorSession(VisitorEntity visitor, boolean newVisitor, boolean anonymous) {
+
+        /** 兼容既有普通微信访客会话构造方式。 */
+        public VisitorSession(VisitorEntity visitor, boolean newVisitor) {
+            this(visitor, newVisitor, false);
+        }
     }
 
     /**

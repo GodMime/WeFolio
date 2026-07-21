@@ -1,6 +1,7 @@
 package com.jxc.wefolio.controller;
 
 import com.jxc.wefolio.annotation.LoginAccess;
+import com.jxc.wefolio.annotation.TimelineAnonymousAccess;
 import com.jxc.wefolio.annotation.VisitorAccess;
 import com.jxc.wefolio.common.Response;
 import com.jxc.wefolio.dto.ContactLeadSubmitRequest;
@@ -101,6 +102,7 @@ public class VisitorPortfolioController {
      * @return 档期响应
      */
     @GetMapping("/api/visitor/portfolios/{shareCode}/schedule")
+    @TimelineAnonymousAccess
     public Response<VisitorPortfolioScheduleResponse> schedule(
             @PathVariable String shareCode,
             @RequestParam("startDate") String startDate,
@@ -129,6 +131,7 @@ public class VisitorPortfolioController {
      * @return 月历选项响应
      */
     @GetMapping("/api/visitor/portfolios/{shareCode}/schedule-options")
+    @TimelineAnonymousAccess
     public Response<PortfolioScheduleOptionsResponse> scheduleOptions(
             @PathVariable String shareCode,
             @RequestParam("month") String month,
@@ -145,6 +148,7 @@ public class VisitorPortfolioController {
      * @return 查询结果
      */
     @PostMapping("/api/visitor/portfolios/{shareCode}/schedule-query")
+    @TimelineAnonymousAccess
     public Response<PortfolioScheduleQueryResponse> scheduleQuery(
             @PathVariable String shareCode,
             @RequestBody PortfolioScheduleQueryRequest request
@@ -160,6 +164,7 @@ public class VisitorPortfolioController {
      * @return 空响应
      */
     @PostMapping("/api/visitor/portfolios/{shareCode}/events")
+    @TimelineAnonymousAccess
     public Response<Void> event(
             @PathVariable String shareCode,
             @RequestBody VisitorPortfolioEventRequest request
@@ -176,6 +181,7 @@ public class VisitorPortfolioController {
      * @return 提交响应
      */
     @PostMapping("/api/visitor/portfolios/{shareCode}/contact-leads")
+    @TimelineAnonymousAccess
     public Response<ContactLeadSubmitResponse> contactLead(
             @PathVariable String shareCode,
             @RequestBody ContactLeadSubmitRequest request

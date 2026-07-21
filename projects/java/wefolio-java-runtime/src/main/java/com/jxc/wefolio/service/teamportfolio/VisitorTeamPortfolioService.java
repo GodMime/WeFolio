@@ -64,6 +64,9 @@ public class VisitorTeamPortfolioService {
     /** 默认团队作品集标题。 */
     private static final String DEFAULT_TITLE = "团队作品集";
 
+    /** 朋友圈单页匿名身份作用域前缀。 */
+    private static final String TIMELINE_ANONYMOUS_SCOPE_PREFIX = "TEAM:";
+
     /** 功能开关配置。 */
     private final TeamPortfolioProperties teamPortfolioProperties;
 
@@ -125,8 +128,12 @@ public class VisitorTeamPortfolioService {
                 trace.outcome(PortfolioOpenPerformanceLogger.Outcome.MAINTENANCE);
                 return maintenanceResponse;
             }
-            VisitorService.VisitorSession session = visitorService.resolveByLoginCode(
-                    request == null ? null : request.getLoginCode(), trace);
+            // 匿名身份按数据库 ID 聚合，避免分享码变更后产生新的访客身份记录。
+            VisitorService.VisitorSession session = visitorService.resolveForOpen(
+                    request == null ? null : request.getLoginCode(),
+                    request == null ? null : request.getAnonymousSessionId(),
+                    TIMELINE_ANONYMOUS_SCOPE_PREFIX + published.portfolio().getId(),
+                    trace);
             VisitorEntity visitor = session == null ? null : session.visitor();
             if (visitor == null || visitor.getId() == null || visitor.getId() <= 0
                     || !hasText(visitor.getVisitorKey())) {
@@ -144,8 +151,13 @@ public class VisitorTeamPortfolioService {
                             request == null ? null : request.getIdempotencyKey()));
             fillRenderContext(render, published, visitRecord);
             VisitorTeamPortfolioResponse response = buildOpenResponse(published, session, visitRecord, render);
-            VisitorAuthTokenService.VisitorLoginToken loginToken =
-                    visitorAuthTokenService.issueToken(visitor.getId(), visitor.getVisitorKey());
+            // 匿名令牌按分享码绑定，可由鉴权切面直接与当前 URL 比对，无需再次查询作品集。
+            VisitorAuthTokenService.VisitorLoginToken loginToken = session.anonymous()
+                    ? visitorAuthTokenService.issueTimelineAnonymousToken(
+                            visitor.getId(),
+                            visitor.getVisitorKey(),
+                            TIMELINE_ANONYMOUS_SCOPE_PREFIX + published.portfolio().getShareCode())
+                    : visitorAuthTokenService.issueToken(visitor.getId(), visitor.getVisitorKey());
             response.setTokenType(loginToken.tokenType());
             response.setToken(loginToken.token());
             response.setExpiresInSeconds(loginToken.expiresInSeconds());
@@ -338,7 +350,8 @@ public class VisitorTeamPortfolioService {
         response.setVisitRecordId(visitRecord.getId());
         response.setVisitorKey(visitor.getVisitorKey());
         response.setNewVisitor(session.newVisitor());
-        response.setNeedVisitorProfile(!hasText(visitor.getNickname()) || !hasText(visitor.getAvatarUrl()));
+        response.setNeedVisitorProfile(!session.anonymous()
+                && (!hasText(visitor.getNickname()) || !hasText(visitor.getAvatarUrl())));
         return response;
     }
 

@@ -49,25 +49,31 @@ function wxLogin(wxApi) {
 function saveTeamVisitorToken(session = {}, wxApi) {
   const runtimeWx = wxApi || (typeof wx !== 'undefined' ? wx : null)
   if (!runtimeWx || !runtimeWx.setStorageSync || !session.token) return
-  runtimeWx.setStorageSync(VISITOR_TOKEN_STORAGE_KEY, session.token)
-  const expiresIn = Math.max(0, Number(session.expiresInSeconds) || 0)
-  runtimeWx.setStorageSync(VISITOR_TOKEN_EXPIRES_AT_STORAGE_KEY, expiresIn ? Date.now() + expiresIn * 1000 : '')
+  try {
+    runtimeWx.setStorageSync(VISITOR_TOKEN_STORAGE_KEY, session.token)
+    const expiresIn = Math.max(0, Number(session.expiresInSeconds) || 0)
+    runtimeWx.setStorageSync(VISITOR_TOKEN_EXPIRES_AT_STORAGE_KEY, expiresIn ? Date.now() + expiresIn * 1000 : '')
+  } catch (error) {
+    // 朋友圈单页模式本地存储不可用时不阻断作品集打开。
+  }
 }
 
 async function openTeamVisitorSession(options = {}) {
   const shareCode = text(options.shareCode)
   if (!shareCode) throw new Error('分享码无效')
   const idempotencyKey = resolveOpenIdempotencyKey(options)
-  const loginCode = await wxLogin(options.wxApi)
+  const anonymousSessionId = text(options.anonymousSessionId)
+  const identityData = anonymousSessionId
+    ? { anonymousSessionId }
+    : { loginCode: await wxLogin(options.wxApi) }
   const session = await (options.requestFn || request)({
     url: `${TEAM_VISITOR_PREFIX}/${encodeURIComponent(shareCode)}/open`,
     method: 'POST',
     authMode: 'none',
-    data: {
-      loginCode,
+    data: Object.assign({}, identityData, {
       sourceType: text(options.sourceType) || SOURCE_TYPE_WECHAT_SHARE_CARD,
       idempotencyKey
-    }
+    })
   })
   saveTeamVisitorToken(session, options.wxApi)
   return session

@@ -79,16 +79,18 @@ async function openVisitorSession(shareCode, options = {}) {
     throw new Error('作品集分享码缺失')
   }
   const runtimeWx = getRuntimeWx(options.wxApi)
-  const loginCode = await wxLogin(runtimeWx)
+  const anonymousSessionId = String(options.anonymousSessionId || '').trim()
+  const identityData = anonymousSessionId
+    ? { anonymousSessionId }
+    : { loginCode: await wxLogin(runtimeWx) }
   const response = await request({
     url: `${VISITOR_PORTFOLIO_API_PREFIX}/${shareCode}/open`,
     method: 'POST',
     authMode: 'none',
-    data: {
-      loginCode,
+    data: Object.assign({}, identityData, {
       sourceType: options.sourceType || SOURCE_TYPE_WECHAT_SHARE_CARD,
       idempotencyKey: createIdempotencyKey(options.idempotencyPrefix || 'open')
-    }
+    })
   })
   saveVisitorToken(response, runtimeWx)
   return response

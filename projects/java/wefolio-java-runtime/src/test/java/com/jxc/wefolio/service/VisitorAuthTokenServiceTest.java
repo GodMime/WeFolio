@@ -31,6 +31,9 @@ class VisitorAuthTokenServiceTest {
     /** 访客令牌前缀 */
     private static final String VISITOR_TOKEN_PREFIX = "wf-visitor-v1.";
 
+    /** 朋友圈单页匿名访客令牌前缀 */
+    private static final String TIMELINE_ANONYMOUS_TOKEN_PREFIX = "wf-visitor-timeline-v1.";
+
     /** 测试令牌密钥 */
     private static final String TOKEN_SECRET = "visitor-token-secret-for-test";
 
@@ -57,6 +60,29 @@ class VisitorAuthTokenServiceTest {
                 )
                 .containsExactly(1024L, "visitor-key");
         assertThat(resolved.get().expiresAt()).isAfter(java.time.Instant.now().plusSeconds(VISITOR_EXPIRES_IN_SECONDS - 60));
+        assertThat(resolved.get().anonymousScope()).isNull();
+    }
+
+    @Test
+    void issuesAndResolvesPortfolioScopedTimelineAnonymousToken() {
+        VisitorAuthTokenService service = buildService();
+        VisitorEntity visitor = visitor(2048L, "timeline-visitor-key");
+        when(visitorEntityMapper.selectById(2048L)).thenReturn(visitor);
+
+        VisitorAuthTokenService.VisitorLoginToken issued = service.issueTimelineAnonymousToken(
+                2048L,
+                "timeline-visitor-key",
+                "PERSONAL:PF001"
+        );
+        Optional<VisitorAuthTokenService.ResolvedVisitorToken> resolved =
+                service.resolveAuthenticatedVisitor("Bearer " + issued.token());
+
+        assertThat(issued.token()).startsWith(TIMELINE_ANONYMOUS_TOKEN_PREFIX);
+        assertThat(resolved).get().satisfies(token -> {
+            assertThat(token.visitorId()).isEqualTo(2048L);
+            assertThat(token.visitorKey()).isEqualTo("timeline-visitor-key");
+            assertThat(token.anonymousScope()).isEqualTo("PERSONAL:PF001");
+        });
     }
 
     /**

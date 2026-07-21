@@ -3,6 +3,7 @@ package com.jxc.wefolio.aspect;
 import com.jxc.wefolio.annotation.LoginAccess;
 import com.jxc.wefolio.annotation.MaintainerAccess;
 import com.jxc.wefolio.annotation.SystemAccess;
+import com.jxc.wefolio.annotation.TimelineAnonymousAccess;
 import com.jxc.wefolio.annotation.VisitorAccess;
 import com.jxc.wefolio.common.auth.AuthContext;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
@@ -22,9 +23,12 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
+import org.springframework.web.servlet.HandlerMapping;
 
 import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.Method;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -42,6 +46,21 @@ import java.util.Optional;
 @Component
 @RequiredArgsConstructor
 public class AuthAspect {
+
+    /** 个人作品集匿名令牌作用域前缀 */
+    private static final String PERSONAL_TIMELINE_SCOPE_PREFIX = "PERSONAL:";
+
+    /** 团队作品集匿名令牌作用域前缀 */
+    private static final String TEAM_TIMELINE_SCOPE_PREFIX = "TEAM:";
+
+    /** 个人作品集访客接口路径前缀 */
+    private static final String PERSONAL_VISITOR_PATH_PREFIX = "/api/visitor/portfolios/";
+
+    /** 团队作品集访客接口路径前缀 */
+    private static final String TEAM_VISITOR_PATH_PREFIX = "/api/visitor/team-portfolios/";
+
+    /** 分享码路径变量名 */
+    private static final String SHARE_CODE_PATH_VARIABLE = "shareCode";
 
     /** 登录令牌认证服务 */
     private final AuthTokenService authTokenService;
@@ -84,7 +103,7 @@ public class AuthAspect {
             return authenticateMaintainer(joinPoint, request, requestInfo);
         }
         if (accessType == AccessType.VISITOR) {
-            return authenticateVisitor(joinPoint, request, requestInfo);
+            return authenticateVisitor(joinPoint, method, request, requestInfo);
         }
 
         log.info("放行请求: {}", requestInfo);
@@ -126,12 +145,18 @@ public class AuthAspect {
      * 访客认证 — 校验 Authorization 令牌并注入访客上下文。
      *
      * @param joinPoint   切点
+     * @param method      当前控制器方法
      * @param request     HTTP 请求
      * @param requestInfo 请求信息（方法 + URI），用于日志
      * @return 控制器执行结果
      * @throws Throwable 控制器执行异常
      */
-    private Object authenticateVisitor(ProceedingJoinPoint joinPoint, HttpServletRequest request, String requestInfo) throws Throwable {
+    private Object authenticateVisitor(
+            ProceedingJoinPoint joinPoint,
+            Method method,
+            HttpServletRequest request,
+            String requestInfo
+    ) throws Throwable {
         if (request == null) {
             log.warn("访客认证失败：无法获取 HTTP 请求");
             throw new AuthenticationRequiredException();
@@ -146,6 +171,10 @@ public class AuthAspect {
         }
 
         VisitorAuthTokenService.ResolvedVisitorToken resolvedToken = visitorToken.get();
+        if (resolvedToken.anonymous() && !isTimelineAnonymousRequestAllowed(method, request, resolvedToken)) {
+            log.warn("朋友圈匿名访客认证失败：接口或作品集作用域不匹配, request={}", requestInfo);
+            throw new AuthenticationRequiredException();
+        }
         log.info("访客认证通过: visitorId={}, request={}",
                 resolvedToken.visitorId(), requestInfo);
         VisitorContextHolder.set(new VisitorContext(
@@ -158,6 +187,46 @@ public class AuthAspect {
         } finally {
             VisitorContextHolder.clear();
         }
+    }
+
+    /** 判断朋友圈单页匿名令牌是否允许访问当前作品集接口。 */
+    private boolean isTimelineAnonymousRequestAllowed(
+            Method method,
+            HttpServletRequest request,
+            VisitorAuthTokenService.ResolvedVisitorToken resolvedToken
+    ) {
+        if (!method.isAnnotationPresent(TimelineAnonymousAccess.class)) {
+            return false;
+        }
+        String scopePrefix = resolveTimelineScopePrefix(request.getRequestURI());
+        String shareCode = resolveShareCode(request);
+        return scopePrefix != null
+                && shareCode != null
+                && Objects.equals(resolvedToken.anonymousScope(), scopePrefix + shareCode);
+    }
+
+    /** 按访客接口路径解析朋友圈匿名令牌作用域类型。 */
+    private String resolveTimelineScopePrefix(String requestUri) {
+        if (requestUri != null && requestUri.startsWith(TEAM_VISITOR_PATH_PREFIX)) {
+            return TEAM_TIMELINE_SCOPE_PREFIX;
+        }
+        if (requestUri != null && requestUri.startsWith(PERSONAL_VISITOR_PATH_PREFIX)) {
+            return PERSONAL_TIMELINE_SCOPE_PREFIX;
+        }
+        return null;
+    }
+
+    /** 从 Spring MVC 已解析的路径变量中读取作品集分享码。 */
+    private String resolveShareCode(HttpServletRequest request) {
+        Object pathVariables = request.getAttribute(HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE);
+        if (!(pathVariables instanceof Map<?, ?> variables)) {
+            return null;
+        }
+        Object shareCode = variables.get(SHARE_CODE_PATH_VARIABLE);
+        if (!(shareCode instanceof String text) || text.isBlank()) {
+            return null;
+        }
+        return text;
     }
 
     /**

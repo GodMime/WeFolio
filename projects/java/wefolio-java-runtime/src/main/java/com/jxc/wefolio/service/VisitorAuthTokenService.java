@@ -16,9 +16,11 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Base64;
 import java.util.HexFormat;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 /**
  * 访客登录令牌服务 — 负责签发、解析并缓存访客身份。
@@ -30,6 +32,9 @@ public class VisitorAuthTokenService {
 
     /** 访客登录令牌前缀 */
     private static final String VISITOR_TOKEN_PREFIX = "wf-visitor-v1.";
+
+    /** 朋友圈单页匿名访客令牌前缀 */
+    private static final String TIMELINE_ANONYMOUS_TOKEN_PREFIX = "wf-visitor-timeline-v1.";
 
     /** 访客登录令牌缓存 key 前缀 */
     private static final String CACHE_KEY_PREFIX = "visitor:auth-token:";
@@ -43,6 +48,9 @@ public class VisitorAuthTokenService {
     /** 访客令牌 payload 字段数量 */
     private static final int TOKEN_PAYLOAD_PART_COUNT = 3;
 
+    /** 朋友圈单页匿名访客令牌 payload 字段数量 */
+    private static final int TIMELINE_ANONYMOUS_TOKEN_PAYLOAD_PART_COUNT = 4;
+
     /** 访客令牌 payload 访客 ID 下标 */
     private static final int TOKEN_PAYLOAD_VISITOR_ID_INDEX = 0;
 
@@ -51,6 +59,13 @@ public class VisitorAuthTokenService {
 
     /** 访客令牌 payload 签发时间下标 */
     private static final int TOKEN_PAYLOAD_ISSUED_AT_INDEX = 2;
+
+    /** 朋友圈单页匿名访客令牌 payload 作用域下标 */
+    private static final int TIMELINE_ANONYMOUS_TOKEN_SCOPE_INDEX = 3;
+
+    /** 朋友圈单页匿名访客令牌作用域格式 */
+    private static final Pattern TIMELINE_ANONYMOUS_SCOPE_PATTERN =
+            Pattern.compile("^(PERSONAL|TEAM):[A-Za-z0-9_-]{1,128}$");
 
     /** 登录态解析缓存有效期 */
     private static final Duration AUTH_CACHE_TTL = Duration.ofMinutes(10);
@@ -86,8 +101,24 @@ public class VisitorAuthTokenService {
      * @param visitorId 访客 ID
      * @param visitorKey 访客稳定 key
      * @param expiresAt 令牌服务端过期时间
+     * @param anonymousScope 朋友圈单页匿名访客作用域；普通访客为空
      */
-    public record ResolvedVisitorToken(Long visitorId, String visitorKey, Instant expiresAt) {
+    public record ResolvedVisitorToken(
+            Long visitorId,
+            String visitorKey,
+            Instant expiresAt,
+            String anonymousScope
+    ) {
+
+        /** 兼容既有普通访客令牌构造方式。 */
+        public ResolvedVisitorToken(Long visitorId, String visitorKey, Instant expiresAt) {
+            this(visitorId, visitorKey, expiresAt, null);
+        }
+
+        /** 判断是否为朋友圈单页匿名访客令牌。 */
+        public boolean anonymous() {
+            return anonymousScope != null && !anonymousScope.isBlank();
+        }
     }
 
     /**
@@ -99,13 +130,45 @@ public class VisitorAuthTokenService {
      */
     public VisitorLoginToken issueToken(Long visitorId, String visitorKey) {
         validateVisitorIdentity(visitorId, visitorKey);
-        String payload = visitorId
+        String payload = buildBasePayload(visitorId, visitorKey);
+        String token = encryptedAuthTokenService.encryptPayload(VISITOR_TOKEN_PREFIX, payload);
+        return new VisitorLoginToken(TOKEN_TYPE, token, visitorExpiresInSeconds());
+    }
+
+    /**
+     * 签发绑定到单个作品集的朋友圈单页匿名访客令牌。
+     *
+     * @param visitorId 访客 ID
+     * @param visitorKey 访客稳定 key
+     * @param anonymousScope 匿名作用域，格式为 PERSONAL:分享码 或 TEAM:分享码
+     * @return 访客登录令牌
+     */
+    public VisitorLoginToken issueTimelineAnonymousToken(
+            Long visitorId,
+            String visitorKey,
+            String anonymousScope
+    ) {
+        validateVisitorIdentity(visitorId, visitorKey);
+        String normalizedScope = anonymousScope == null ? "" : anonymousScope.strip();
+        if (!TIMELINE_ANONYMOUS_SCOPE_PATTERN.matcher(normalizedScope).matches()) {
+            throw new BusinessException("朋友圈匿名访客令牌作用域异常");
+        }
+        String encodedScope = Base64.getUrlEncoder().withoutPadding().encodeToString(
+                normalizedScope.getBytes(StandardCharsets.UTF_8));
+        String payload = buildBasePayload(visitorId, visitorKey)
+                + TOKEN_PAYLOAD_SEPARATOR
+                + encodedScope;
+        String token = encryptedAuthTokenService.encryptPayload(TIMELINE_ANONYMOUS_TOKEN_PREFIX, payload);
+        return new VisitorLoginToken(TOKEN_TYPE, token, visitorExpiresInSeconds());
+    }
+
+    /** 构建普通访客与匿名访客令牌共用的基础 payload。 */
+    private String buildBasePayload(Long visitorId, String visitorKey) {
+        return visitorId
                 + TOKEN_PAYLOAD_SEPARATOR
                 + visitorKey
                 + TOKEN_PAYLOAD_SEPARATOR
                 + Instant.now().getEpochSecond();
-        String token = encryptedAuthTokenService.encryptPayload(VISITOR_TOKEN_PREFIX, payload);
-        return new VisitorLoginToken(TOKEN_TYPE, token, visitorExpiresInSeconds());
     }
 
     /**
@@ -116,7 +179,8 @@ public class VisitorAuthTokenService {
      */
     public Optional<ResolvedVisitorToken> resolveAuthenticatedVisitor(String authorization) {
         String token = AuthorizationHeaderUtils.normalizeBearerToken(authorization);
-        if (token.isBlank() || !token.startsWith(VISITOR_TOKEN_PREFIX)) {
+        if (token.isBlank() || (!token.startsWith(VISITOR_TOKEN_PREFIX)
+                && !token.startsWith(TIMELINE_ANONYMOUS_TOKEN_PREFIX))) {
             return Optional.empty();
         }
 
@@ -153,8 +217,10 @@ public class VisitorAuthTokenService {
      */
     private ResolvedVisitorToken decryptVisitorToken(String token) {
         try {
-            String payload = encryptedAuthTokenService.decryptPayload(VISITOR_TOKEN_PREFIX, token);
-            return parseTokenPayload(payload);
+            boolean timelineAnonymous = token.startsWith(TIMELINE_ANONYMOUS_TOKEN_PREFIX);
+            String tokenPrefix = timelineAnonymous ? TIMELINE_ANONYMOUS_TOKEN_PREFIX : VISITOR_TOKEN_PREFIX;
+            String payload = encryptedAuthTokenService.decryptPayload(tokenPrefix, token);
+            return parseTokenPayload(payload, timelineAnonymous);
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
@@ -168,9 +234,12 @@ public class VisitorAuthTokenService {
      * @param payload 解密后的 payload
      * @return 登录态信息
      */
-    private ResolvedVisitorToken parseTokenPayload(String payload) {
+    private ResolvedVisitorToken parseTokenPayload(String payload, boolean timelineAnonymous) {
         String[] parts = payload.split(TOKEN_PAYLOAD_SEPARATOR, -1);
-        if (parts.length != TOKEN_PAYLOAD_PART_COUNT) {
+        int expectedPartCount = timelineAnonymous
+                ? TIMELINE_ANONYMOUS_TOKEN_PAYLOAD_PART_COUNT
+                : TOKEN_PAYLOAD_PART_COUNT;
+        if (parts.length != expectedPartCount) {
             throw new InvalidAuthTokenException(MiniappAuthMessage.TOKEN_PARSE_FAILED_MESSAGE);
         }
         long visitorId;
@@ -189,7 +258,20 @@ public class VisitorAuthTokenService {
         if (!expiresAt.isAfter(Instant.now())) {
             throw new InvalidAuthTokenException(MiniappAuthMessage.TOKEN_EXPIRED_MESSAGE);
         }
-        return new ResolvedVisitorToken(visitorId, visitorKey, expiresAt);
+        String anonymousScope = timelineAnonymous ? decodeAnonymousScope(parts) : null;
+        return new ResolvedVisitorToken(visitorId, visitorKey, expiresAt, anonymousScope);
+    }
+
+    /** 解码并校验朋友圈单页匿名访客作用域。 */
+    private String decodeAnonymousScope(String[] parts) {
+        String anonymousScope = new String(
+                Base64.getUrlDecoder().decode(parts[TIMELINE_ANONYMOUS_TOKEN_SCOPE_INDEX]),
+                StandardCharsets.UTF_8
+        );
+        if (!TIMELINE_ANONYMOUS_SCOPE_PATTERN.matcher(anonymousScope).matches()) {
+            throw new InvalidAuthTokenException(MiniappAuthMessage.TOKEN_PARSE_FAILED_MESSAGE);
+        }
+        return anonymousScope;
     }
 
     /**

@@ -62,6 +62,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
@@ -242,7 +243,8 @@ class VisitorTeamPortfolioServiceTest {
         request.setIdempotencyKey("open-1");
         VisitRecordEntity record = ownedRecord();
         TeamPortfolioRenderDto render = new TeamPortfolioRenderDto();
-        when(context.visitorService.resolveByLoginCode(eq("wx-code"), any())).thenReturn(session);
+        when(context.visitorService.resolveForOpen(
+                eq("wx-code"), isNull(), eq("TEAM:41"), any())).thenReturn(session);
         when(context.visitService.recordOpen(portfolio(), VISITOR_ID, VISITOR_KEY,
                 "WECHAT_SHARE_CARD", "open-1")).thenReturn(record);
         when(context.tokenService.issueToken(VISITOR_ID, VISITOR_KEY))
@@ -264,10 +266,42 @@ class VisitorTeamPortfolioServiceTest {
         assertThat(VisitorTeamPortfolioService.class.getDeclaredFields())
                 .noneMatch(field -> field.getType().getSimpleName().contains("PointService"));
         InOrder order = inOrder(context.visitorService, context.renderService, context.visitService);
-        order.verify(context.visitorService).resolveByLoginCode(eq("wx-code"), any());
+        order.verify(context.visitorService).resolveForOpen(
+                eq("wx-code"), isNull(), eq("TEAM:41"), any());
         order.verify(context.renderService).render(any(), any());
         order.verify(context.visitService).recordOpen(
                 portfolio(), VISITOR_ID, VISITOR_KEY, "WECHAT_SHARE_CARD", "open-1");
+    }
+
+    @Test
+    void anonymousTimelineOpenRecordsTeamVisitWithoutProfilePrompt() {
+        VisitorServiceContext context = publishedContext();
+        VisitorEntity visitor = visitor();
+        String anonymousSessionId = "timeline-abc123def456ghi789jkl012mno345pqr678";
+        VisitorTeamPortfolioOpenRequest request = new VisitorTeamPortfolioOpenRequest();
+        request.setAnonymousSessionId(anonymousSessionId);
+        request.setSourceType("WECHAT_SHARE_CARD");
+        request.setIdempotencyKey("timeline-open-1");
+        VisitRecordEntity record = ownedRecord();
+        TeamPortfolioRenderDto render = new TeamPortfolioRenderDto();
+        when(context.visitorService.resolveForOpen(
+                isNull(), eq(anonymousSessionId), eq("TEAM:41"), any()))
+                .thenReturn(new VisitorService.VisitorSession(visitor, true, true));
+        when(context.visitService.recordOpen(portfolio(), VISITOR_ID, VISITOR_KEY,
+                "WECHAT_SHARE_CARD", "timeline-open-1")).thenReturn(record);
+        when(context.tokenService.issueTimelineAnonymousToken(
+                VISITOR_ID, VISITOR_KEY, "TEAM:TPF-TASK8"))
+                .thenReturn(new VisitorAuthTokenService.VisitorLoginToken("Bearer", "timeline-token", 7200L));
+        when(context.renderService.render(any(), any())).thenReturn(render);
+
+        var response = context.service.openPortfolio("TPF-TASK8", request);
+
+        assertThat(response.getVisitRecordId()).isEqualTo(record.getId());
+        assertThat(response.getToken()).isEqualTo("timeline-token");
+        assertThat(response.isNeedVisitorProfile()).isFalse();
+        assertThat(response.getVisitorProfileToken()).isNull();
+        verify(context.visitorService, never()).createProfileToken(any(), any(), any());
+        verify(context.tokenService, never()).issueToken(any(), any());
     }
 
     /** 渲染失败时不得提前写入访问记录。 */
@@ -277,7 +311,8 @@ class VisitorTeamPortfolioServiceTest {
         VisitorEntity visitor = visitor();
         VisitorTeamPortfolioOpenRequest request = new VisitorTeamPortfolioOpenRequest();
         request.setLoginCode("wx-code");
-        when(context.visitorService.resolveByLoginCode(eq("wx-code"), any()))
+        when(context.visitorService.resolveForOpen(
+                eq("wx-code"), isNull(), eq("TEAM:41"), any()))
                 .thenReturn(new VisitorService.VisitorSession(visitor, false));
         when(context.renderService.render(any(), any()))
                 .thenThrow(new BusinessException("渲染失败"));
