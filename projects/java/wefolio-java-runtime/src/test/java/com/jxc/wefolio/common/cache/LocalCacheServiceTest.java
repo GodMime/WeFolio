@@ -12,6 +12,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 class LocalCacheServiceTest {
 
     @Test
+    void productionServiceShouldNotExposeNoArgumentConstructor() {
+        assertThat(LocalCacheService.class.getDeclaredConstructors())
+                .noneMatch(constructor -> constructor.getParameterCount() == 0);
+    }
+
+    @Test
     void returnsCachedValueBeforeTtlExpires() {
         MutableClock clock = new MutableClock(Instant.parse("2026-06-24T12:00:00Z"));
         LocalCacheService cacheService = new LocalCacheService(clock);
@@ -40,6 +46,32 @@ class LocalCacheServiceTest {
         cacheService.put("count", 1L, Duration.ofMinutes(5));
 
         assertThat(cacheService.get("count", String.class)).isEmpty();
+    }
+
+    @Test
+    void expiresEachEntryUsingItsOwnTtl() {
+        MutableClock clock = new MutableClock(Instant.parse("2026-06-24T12:00:00Z"));
+        LocalCacheService cacheService = new LocalCacheService(clock);
+        cacheService.put("short", "short-value", Duration.ofSeconds(1));
+        cacheService.put("long", "long-value", Duration.ofMinutes(5));
+
+        clock.advance(Duration.ofSeconds(2));
+
+        assertThat(cacheService.get("short", String.class)).isEmpty();
+        assertThat(cacheService.get("long", String.class)).contains("long-value");
+    }
+
+    @Test
+    void boundsEntryCountByConfiguredMaximumSize() {
+        MutableClock clock = new MutableClock(Instant.parse("2026-06-24T12:00:00Z"));
+        LocalCacheService cacheService = new LocalCacheService(2L, clock);
+
+        cacheService.put("one", "1", Duration.ofMinutes(5));
+        cacheService.put("two", "2", Duration.ofMinutes(5));
+        cacheService.put("three", "3", Duration.ofMinutes(5));
+        cacheService.cleanUp();
+
+        assertThat(cacheService.estimatedSize()).isLessThanOrEqualTo(2L);
     }
 
     /**

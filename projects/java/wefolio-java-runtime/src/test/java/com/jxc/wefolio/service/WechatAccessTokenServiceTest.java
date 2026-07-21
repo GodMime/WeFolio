@@ -1,6 +1,7 @@
 package com.jxc.wefolio.service;
 
 import com.jxc.wefolio.common.cache.LocalCacheService;
+import com.jxc.wefolio.config.LocalCacheProperties;
 import com.jxc.wefolio.config.WechatMiniappProperties;
 import com.jxc.wefolio.dto.WechatAccessTokenResponse;
 import org.junit.jupiter.api.Test;
@@ -31,7 +32,7 @@ class WechatAccessTokenServiceTest {
         WechatAccessTokenService service = service(() -> {
             fetchCount.incrementAndGet();
             return response("token-one");
-        }, new LocalCacheService());
+        }, new LocalCacheService(new LocalCacheProperties()));
         ExecutorService executor = Executors.newFixedThreadPool(12);
         CountDownLatch ready = new CountDownLatch(12);
         CountDownLatch start = new CountDownLatch(1);
@@ -60,7 +61,7 @@ class WechatAccessTokenServiceTest {
      */
     @Test
     void rejectedRefreshShouldReuseAlreadyRefreshedToken() {
-        LocalCacheService cacheService = new LocalCacheService();
+        LocalCacheService cacheService = new LocalCacheService(new LocalCacheProperties());
         cacheService.put("wechat:miniapp:access-token:wxa-test", "token-new", Duration.ofMinutes(5));
         AtomicInteger fetchCount = new AtomicInteger();
         WechatAccessTokenService service = service(() -> {

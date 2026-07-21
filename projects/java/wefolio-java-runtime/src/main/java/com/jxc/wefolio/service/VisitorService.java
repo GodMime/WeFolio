@@ -1,6 +1,5 @@
 package com.jxc.wefolio.service;
 
-import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.jxc.wefolio.common.auth.VisitorContextHolder;
 import com.jxc.wefolio.common.cache.CacheService;
 import com.jxc.wefolio.dto.VisitorAvatarUploadTicketRequest;
@@ -25,6 +24,7 @@ import java.util.Base64;
 import java.util.HexFormat;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.function.Supplier;
 
 /**
  * 访客身份服务 — 负责按微信 openid 维护全局访客资料和资料授权 token。
@@ -42,9 +42,6 @@ public class VisitorService {
 
     /** 访客资料 token 随机字节数 */
     private static final int PROFILE_TOKEN_RANDOM_BYTES = 32;
-
-    /** 访客 key 随机字节数 */
-    private static final int VISITOR_KEY_RANDOM_BYTES = 16;
 
     /** 访客头像 COS 目录 */
     private static final String VISITOR_AVATAR_FOLDER = "visit";
@@ -106,43 +103,58 @@ public class VisitorService {
     /** COS 服务 */
     private final CosService cosService;
 
+    /** 访客身份短事务持久化服务。 */
+    private final VisitorIdentityPersistenceService visitorIdentityPersistenceService;
+
     /**
      * 按 wx.login code 解析或创建全局访客。
      *
      * @param loginCode wx.login 返回的临时登录凭证
      * @return 访客会话
      */
-    @Transactional(rollbackFor = Exception.class)
     public VisitorSession resolveByLoginCode(String loginCode) {
-        String normalizedCode = normalizeRequired(loginCode, PortfolioMessage.WECHAT_LOGIN_CODE_REQUIRED_MESSAGE);
-        WechatSessionResponse session = wechatMiniappClient.exchangeCode(normalizedCode);
-        if (session == null || session.getOpenid() == null || session.getOpenid().isBlank()) {
-            throw new BusinessException(PortfolioMessage.WECHAT_OPENID_MISSING_MESSAGE);
-        }
-        String openid = session.getOpenid().strip();
-        VisitorEntity visitor = visitorEntityMapper.selectOne(
-                Wrappers.lambdaQuery(VisitorEntity.class)
-                        .eq(VisitorEntity::getOpenid, openid)
-                        .last("LIMIT 1")
-        );
-        LocalDateTime now = LocalDateTime.now();
-        boolean newVisitor = visitor == null;
-        if (newVisitor) {
-            visitor = new VisitorEntity();
-            visitor.setOpenid(openid);
-            visitor.setUnionid(normalizeNullable(session.getUnionid()));
-            visitor.setVisitorKey(randomHex(VISITOR_KEY_RANDOM_BYTES));
-            visitor.setLastSeenAt(now);
-            visitorEntityMapper.insert(visitor);
-        } else {
-            visitor.setLastSeenAt(now);
-            String unionid = normalizeNullable(session.getUnionid());
-            if (hasText(unionid) && !hasText(visitor.getUnionid())) {
-                visitor.setUnionid(unionid);
+        return resolveByLoginCode(loginCode, null);
+    }
+
+    /**
+     * 按 wx.login code 解析或创建全局访客，并把远端调用与身份持久化分别计时。
+     *
+     * @param loginCode wx.login 返回的临时登录凭证
+     * @param trace 作品集打开链路追踪器；非打开链路可传 null
+     * @return 访客会话
+     */
+    public VisitorSession resolveByLoginCode(
+            String loginCode,
+            PortfolioOpenPerformanceLogger.Trace trace
+    ) {
+        WechatSessionResponse session = measure(trace, PortfolioOpenPerformanceLogger.Phase.WECHAT_LOGIN, () -> {
+            String normalizedCode = normalizeRequired(
+                    loginCode, PortfolioMessage.WECHAT_LOGIN_CODE_REQUIRED_MESSAGE);
+            WechatSessionResponse exchangedSession = wechatMiniappClient.exchangeCode(normalizedCode);
+            if (exchangedSession == null || exchangedSession.getOpenid() == null
+                    || exchangedSession.getOpenid().isBlank()) {
+                throw new BusinessException(PortfolioMessage.WECHAT_OPENID_MISSING_MESSAGE);
             }
-            visitorEntityMapper.updateById(visitor);
-        }
-        return new VisitorSession(visitor, newVisitor);
+            return exchangedSession;
+        });
+        String openid = session.getOpenid().strip();
+        String unionid = normalizeNullable(session.getUnionid());
+        VisitorIdentityPersistenceService.VisitorIdentity identity = measure(
+                trace,
+                PortfolioOpenPerformanceLogger.Phase.VISITOR_PERSIST,
+                () -> visitorIdentityPersistenceService
+                        .tryResolveOrCreate(openid, unionid)
+                        .orElseGet(() -> visitorIdentityPersistenceService.recoverIgnoredInsert(openid, unionid)));
+        return new VisitorSession(identity.visitor(), identity.newVisitor());
+    }
+
+    /** 在存在追踪器时计量指定阶段。 */
+    private <T> T measure(
+            PortfolioOpenPerformanceLogger.Trace trace,
+            PortfolioOpenPerformanceLogger.Phase phase,
+            Supplier<T> action
+    ) {
+        return trace == null ? action.get() : trace.measure(phase, action);
     }
 
     /**

@@ -36,6 +36,7 @@ import com.jxc.wefolio.message.TeamPortfolioMessage;
 import com.jxc.wefolio.service.VisitorAuthTokenService;
 import com.jxc.wefolio.service.VisitorService;
 import com.jxc.wefolio.service.PointBalanceGateService;
+import com.jxc.wefolio.service.PortfolioOpenPerformanceLogger;
 import com.jxc.wefolio.service.teamportfolio.component.contactform.TeamContactFormComponentService;
 import com.jxc.wefolio.service.teamportfolio.component.schedulequery.TeamScheduleQueryComponentService;
 import lombok.RequiredArgsConstructor;
@@ -93,6 +94,9 @@ public class VisitorTeamPortfolioService {
     /** 团队拥有者实际可用积分门禁。 */
     private final PointBalanceGateService pointBalanceGateService;
 
+    /** 作品集打开分段耗时日志器。 */
+    private final PortfolioOpenPerformanceLogger portfolioOpenPerformanceLogger;
+
     /**
      * 打开已发布标准团队作品集。
      *
@@ -100,39 +104,63 @@ public class VisitorTeamPortfolioService {
      * @param request 打开请求
      * @return 团队访客响应
      */
-    @Transactional(rollbackFor = Exception.class)
     public VisitorTeamPortfolioResponse openPortfolio(
             String shareCode,
             VisitorTeamPortfolioOpenRequest request
     ) {
-        PublishedPortfolio published = requirePublishedTeamPortfolio(shareCode);
-        if (pointBalanceGateService.isNonPositive(published.team().getOwnerUserId())) {
-            return buildMaintenanceResponse(published);
+        PortfolioOpenPerformanceLogger.Trace trace = portfolioOpenPerformanceLogger.start(
+                PortfolioOpenPerformanceLogger.PortfolioType.TEAM);
+        Throwable failure = null;
+        try {
+            PublishedPortfolio published = trace.measure(
+                    PortfolioOpenPerformanceLogger.Phase.PORTFOLIO_LOOKUP,
+                    () -> requirePublishedTeamPortfolio(shareCode));
+            boolean nonPositive = trace.measure(
+                    PortfolioOpenPerformanceLogger.Phase.POINT_GATE,
+                    () -> pointBalanceGateService.isNonPositive(published.team().getOwnerUserId()));
+            if (nonPositive) {
+                VisitorTeamPortfolioResponse maintenanceResponse = trace.measure(
+                        PortfolioOpenPerformanceLogger.Phase.RENDER,
+                        () -> buildMaintenanceResponse(published));
+                trace.outcome(PortfolioOpenPerformanceLogger.Outcome.MAINTENANCE);
+                return maintenanceResponse;
+            }
+            VisitorService.VisitorSession session = visitorService.resolveByLoginCode(
+                    request == null ? null : request.getLoginCode(), trace);
+            VisitorEntity visitor = session == null ? null : session.visitor();
+            if (visitor == null || visitor.getId() == null || visitor.getId() <= 0
+                    || !hasText(visitor.getVisitorKey())) {
+                throw new BusinessException(PORTFOLIO_UNAVAILABLE_MESSAGE);
+            }
+            TeamPortfolioRenderDto render = trace.measure(
+                    PortfolioOpenPerformanceLogger.Phase.RENDER,
+                    () -> teamPortfolioRenderService.render(
+                            published.portfolio().getPublishedConfigJson(), published.componentContext()));
+            VisitRecordEntity visitRecord = trace.measure(
+                    PortfolioOpenPerformanceLogger.Phase.VISIT_WRITE,
+                    () -> teamPortfolioVisitService.recordOpen(
+                            published.portfolio(), visitor.getId(), visitor.getVisitorKey(),
+                            request == null ? null : request.getSourceType(),
+                            request == null ? null : request.getIdempotencyKey()));
+            fillRenderContext(render, published, visitRecord);
+            VisitorTeamPortfolioResponse response = buildOpenResponse(published, session, visitRecord, render);
+            VisitorAuthTokenService.VisitorLoginToken loginToken =
+                    visitorAuthTokenService.issueToken(visitor.getId(), visitor.getVisitorKey());
+            response.setTokenType(loginToken.tokenType());
+            response.setToken(loginToken.token());
+            response.setExpiresInSeconds(loginToken.expiresInSeconds());
+            if (response.isNeedVisitorProfile()) {
+                response.setVisitorProfileToken(visitorService.createProfileToken(
+                        visitor.getId(), published.portfolio().getId(), visitRecord.getId()));
+            }
+            trace.outcome(PortfolioOpenPerformanceLogger.Outcome.SUCCESS);
+            return response;
+        } catch (RuntimeException | Error exception) {
+            failure = exception;
+            throw exception;
+        } finally {
+            trace.finish(failure);
         }
-        VisitorService.VisitorSession session = visitorService.resolveByLoginCode(
-                request == null ? null : request.getLoginCode());
-        VisitorEntity visitor = session == null ? null : session.visitor();
-        if (visitor == null || visitor.getId() == null || visitor.getId() <= 0 || !hasText(visitor.getVisitorKey())) {
-            throw new BusinessException(PORTFOLIO_UNAVAILABLE_MESSAGE);
-        }
-        VisitRecordEntity visitRecord = teamPortfolioVisitService.recordOpen(
-                published.portfolio(), visitor.getId(), visitor.getVisitorKey(),
-                request == null ? null : request.getSourceType(),
-                request == null ? null : request.getIdempotencyKey());
-        TeamPortfolioRenderDto render = teamPortfolioRenderService.render(
-                published.portfolio().getPublishedConfigJson(), published.componentContext());
-        fillRenderContext(render, published, visitRecord);
-        VisitorTeamPortfolioResponse response = buildOpenResponse(published, session, visitRecord, render);
-        VisitorAuthTokenService.VisitorLoginToken loginToken =
-                visitorAuthTokenService.issueToken(visitor.getId(), visitor.getVisitorKey());
-        response.setTokenType(loginToken.tokenType());
-        response.setToken(loginToken.token());
-        response.setExpiresInSeconds(loginToken.expiresInSeconds());
-        if (response.isNeedVisitorProfile()) {
-            response.setVisitorProfileToken(visitorService.createProfileToken(
-                    visitor.getId(), published.portfolio().getId(), visitRecord.getId()));
-        }
-        return response;
     }
 
     /**
