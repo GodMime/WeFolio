@@ -21,6 +21,8 @@ class VisitorProfileMigrationTest {
         assertThat(sql).contains("`openid` VARCHAR(128) NOT NULL COMMENT '微信 openid 明文'");
         assertThat(sql).contains("UNIQUE KEY `uk_visitor_openid` (`openid`, `deleted`)");
         assertThat(sql).contains("UNIQUE KEY `uk_visitor_key` (`visitor_key`, `deleted`)");
+        assertThat(sql).contains("`created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)");
+        assertThat(sql).contains("`updated_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)");
         assertThat(sql).contains("ALTER TABLE `wf_visit_record`");
         assertThat(sql).contains("ADD COLUMN `visitor_id` BIGINT UNSIGNED NULL COMMENT '全局访客 ID'");
         assertThat(sql).contains("DROP INDEX `uk_visit_visitor_portfolio`");

@@ -11,6 +11,7 @@ import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
@@ -19,6 +20,14 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 /** 微信 AccessToken 获取日志测试。 */
 @ExtendWith(OutputCaptureExtension.class)
 class RestWechatAccessTokenFetcherTest {
+
+    /** REST 客户端应保持构造后不可重新赋值。 */
+    @Test
+    void restClientShouldBeFinal() throws NoSuchFieldException {
+        Field field = RestWechatAccessTokenFetcher.class.getDeclaredField("restClient");
+
+        assertThat(Modifier.isFinal(field.getModifiers())).isTrue();
+    }
 
     /** 获取凭证时应记录完整脱敏交互日志，且不得泄漏密钥和凭证。 */
     @Test

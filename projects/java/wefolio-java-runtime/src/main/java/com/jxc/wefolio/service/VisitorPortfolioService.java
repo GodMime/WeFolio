@@ -124,6 +124,9 @@ public class VisitorPortfolioService {
     /** 维护者实际可用积分门禁。 */
     private final PointBalanceGateService pointBalanceGateService;
 
+    /** 作品集打开分段耗时日志器。 */
+    private final PortfolioOpenPerformanceLogger portfolioOpenPerformanceLogger;
+
     /**
      * 打开访客作品集，使用微信 openid 创建或复用全局访客。
      *
@@ -132,68 +135,85 @@ public class VisitorPortfolioService {
      * @return 访客作品集响应
      */
     public VisitorPortfolioResponse openPortfolio(String shareCode, VisitorPortfolioOpenRequest request) {
-        PortfolioEntity portfolio = requirePublishedPortfolio(shareCode);
-        PortfolioConfigDto config = parseConfig(portfolio.getPublishedConfigJson());
-        VisitorService.VisitorSession visitorSession = visitorService.resolveByLoginCode(
-                request == null ? null : request.getLoginCode()
-        );
-        VisitorEntity visitor = visitorSession.visitor();
-        boolean ownerSelfVisitor = ownerSelfVisitService.isOwnerSelfVisitor(
-                portfolio.getOwnerId(),
-                visitor == null ? null : visitor.getOpenid(),
-                portfolio.getId(),
-                visitor == null ? null : visitor.getId(),
-                VisitEventTypeDict.PORTFOLIO_OPENED.getCode()
-        );
-        if (ownerSelfVisitor) {
-            VisitorPortfolioResponse response = buildNormalResponse(portfolio, config);
-            response.setVisitRecordId(null);
-            fillVisitorProfileOpenFields(response, visitorSession, null, portfolio.getId(), true);
-            response.setRenderData(portfolioRenderService.render(
-                    portfolio,
-                    config,
-                    false,
-                    false,
-                    null,
-                    null
-            ));
-            return response;
-        }
-        if (pointBalanceGateService.isNonPositive(portfolio.getOwnerId())) {
-            VisitorPortfolioResponse maintenanceResponse = buildMaintenanceResponse(portfolio, config);
-            maintenanceResponse.setMaintenanceReason(POINT_BALANCE_NON_POSITIVE);
-            fillVisitorProfileOpenFields(maintenanceResponse, visitorSession, null, portfolio.getId());
-            return maintenanceResponse;
-        }
-        VisitRecordEntity record;
+        PortfolioOpenPerformanceLogger.Trace trace = portfolioOpenPerformanceLogger.start(
+                PortfolioOpenPerformanceLogger.PortfolioType.PERSONAL);
+        Throwable failure = null;
         try {
-            record = portfolioVisitService.recordOpen(
-                    portfolio,
-                    visitor.getId(),
-                    visitor.getVisitorKey(),
-                    request == null ? null : request.getSourceType(),
-                    request == null ? null : request.getIdempotencyKey()
+            PortfolioEntity portfolio = trace.measure(
+                    PortfolioOpenPerformanceLogger.Phase.PORTFOLIO_LOOKUP,
+                    () -> requirePublishedPortfolio(shareCode));
+            PortfolioConfigDto config = trace.measure(
+                    PortfolioOpenPerformanceLogger.Phase.PORTFOLIO_LOOKUP,
+                    () -> parseConfig(portfolio.getPublishedConfigJson()));
+            VisitorService.VisitorSession visitorSession = visitorService.resolveByLoginCode(
+                    request == null ? null : request.getLoginCode(), trace);
+            VisitorEntity visitor = visitorSession.visitor();
+            boolean ownerSelfVisitor = ownerSelfVisitService.isOwnerSelfVisitor(
+                    portfolio.getOwnerId(),
+                    visitor == null ? null : visitor.getOpenid(),
+                    portfolio.getId(),
+                    visitor == null ? null : visitor.getId(),
+                    VisitEventTypeDict.PORTFOLIO_OPENED.getCode()
             );
-        } catch (BusinessException e) {
-            if (!PointMessage.INSUFFICIENT_BALANCE_MESSAGE.equals(e.getMessage())) {
-                throw e;
+            if (ownerSelfVisitor) {
+                VisitorPortfolioResponse response = buildNormalResponse(portfolio, config);
+                response.setVisitRecordId(null);
+                fillVisitorProfileOpenFields(response, visitorSession, null, portfolio.getId(), true);
+                response.setRenderData(trace.measure(
+                        PortfolioOpenPerformanceLogger.Phase.RENDER,
+                        () -> portfolioRenderService.render(
+                                portfolio, config, false, false, null, null)));
+                trace.outcome(PortfolioOpenPerformanceLogger.Outcome.OWNER_SELF);
+                return response;
             }
-            VisitorPortfolioResponse maintenanceResponse = buildMaintenanceResponse(portfolio, config);
-            fillVisitorProfileOpenFields(maintenanceResponse, visitorSession, null, portfolio.getId());
-            return maintenanceResponse;
+            boolean nonPositive = trace.measure(
+                    PortfolioOpenPerformanceLogger.Phase.POINT_GATE,
+                    () -> pointBalanceGateService.isNonPositive(portfolio.getOwnerId()));
+            if (nonPositive) {
+                VisitorPortfolioResponse maintenanceResponse = trace.measure(
+                        PortfolioOpenPerformanceLogger.Phase.RENDER,
+                        () -> buildMaintenanceResponse(portfolio, config));
+                maintenanceResponse.setMaintenanceReason(POINT_BALANCE_NON_POSITIVE);
+                fillVisitorProfileOpenFields(maintenanceResponse, visitorSession, null, portfolio.getId());
+                trace.outcome(PortfolioOpenPerformanceLogger.Outcome.MAINTENANCE);
+                return maintenanceResponse;
+            }
+            VisitRecordEntity record;
+            try {
+                record = trace.measure(
+                        PortfolioOpenPerformanceLogger.Phase.VISIT_WRITE,
+                        () -> portfolioVisitService.recordOpen(
+                                portfolio,
+                                visitor.getId(),
+                                visitor.getVisitorKey(),
+                                request == null ? null : request.getSourceType(),
+                                request == null ? null : request.getIdempotencyKey()));
+            } catch (BusinessException exception) {
+                if (!PointMessage.INSUFFICIENT_BALANCE_MESSAGE.equals(exception.getMessage())) {
+                    throw exception;
+                }
+                VisitorPortfolioResponse maintenanceResponse = trace.measure(
+                        PortfolioOpenPerformanceLogger.Phase.RENDER,
+                        () -> buildMaintenanceResponse(portfolio, config));
+                fillVisitorProfileOpenFields(maintenanceResponse, visitorSession, null, portfolio.getId());
+                trace.outcome(PortfolioOpenPerformanceLogger.Outcome.MAINTENANCE);
+                return maintenanceResponse;
+            }
+            VisitorPortfolioResponse response = buildNormalResponse(portfolio, config);
+            response.setVisitRecordId(record == null ? null : record.getId());
+            fillVisitorProfileOpenFields(response, visitorSession, response.getVisitRecordId(), portfolio.getId());
+            response.setRenderData(trace.measure(
+                    PortfolioOpenPerformanceLogger.Phase.RENDER,
+                    () -> portfolioRenderService.render(
+                            portfolio, config, false, false, null, response.getVisitRecordId())));
+            trace.outcome(PortfolioOpenPerformanceLogger.Outcome.SUCCESS);
+            return response;
+        } catch (RuntimeException | Error exception) {
+            failure = exception;
+            throw exception;
+        } finally {
+            trace.finish(failure);
         }
-        VisitorPortfolioResponse response = buildNormalResponse(portfolio, config);
-        response.setVisitRecordId(record == null ? null : record.getId());
-        fillVisitorProfileOpenFields(response, visitorSession, response.getVisitRecordId(), portfolio.getId());
-        response.setRenderData(portfolioRenderService.render(
-                portfolio,
-                config,
-                false,
-                false,
-                null,
-                response.getVisitRecordId()
-        ));
-        return response;
     }
 
     /**

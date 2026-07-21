@@ -2,6 +2,7 @@ package com.jxc.wefolio.service;
 
 import com.jxc.wefolio.common.cache.LocalCacheService;
 import com.jxc.wefolio.config.AuthTokenProperties;
+import com.jxc.wefolio.config.LocalCacheProperties;
 import com.jxc.wefolio.entity.VisitorEntity;
 import com.jxc.wefolio.mapper.VisitorEntityMapper;
 import org.junit.jupiter.api.Test;
@@ -172,7 +173,7 @@ class VisitorAuthTokenServiceTest {
         return new VisitorAuthTokenService(
                 properties,
                 visitorEntityMapper,
-                new LocalCacheService(),
+                new LocalCacheService(new LocalCacheProperties()),
                 new EncryptedAuthTokenService(properties)
         );
     }

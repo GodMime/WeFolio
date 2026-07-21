@@ -7,12 +7,10 @@ import com.jxc.wefolio.dto.WechatAccessTokenResponse;
 import com.jxc.wefolio.exception.BusinessException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
-import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.util.UriComponentsBuilder;
 
-import java.net.http.HttpClient;
 
 /**
  * 微信接口调用凭证 REST 获取器。
@@ -31,7 +29,7 @@ public class RestWechatAccessTokenFetcher implements WechatAccessTokenFetcher {
     private final WechatInteractionLogSanitizer logSanitizer;
 
     /** 强制使用 HTTP/1.1 的 REST 客户端。 */
-    private RestClient restClient;
+    private final RestClient restClient;
 
     /**
      * 创建凭证获取器。
@@ -45,10 +43,7 @@ public class RestWechatAccessTokenFetcher implements WechatAccessTokenFetcher {
     ) {
         this.properties = properties;
         this.logSanitizer = logSanitizer;
-        this.restClient = RestClient.builder()
-                .requestFactory(new JdkClientHttpRequestFactory(
-                        HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build()))
-                .build();
+        this.restClient = WechatRestClientFactory.create(properties);
     }
 
     /**

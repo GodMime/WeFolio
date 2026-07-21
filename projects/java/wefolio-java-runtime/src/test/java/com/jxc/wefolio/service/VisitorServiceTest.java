@@ -3,6 +3,7 @@ package com.jxc.wefolio.service;
 import com.jxc.wefolio.common.auth.VisitorContext;
 import com.jxc.wefolio.common.auth.VisitorContextHolder;
 import com.jxc.wefolio.common.cache.LocalCacheService;
+import com.jxc.wefolio.config.LocalCacheProperties;
 import com.jxc.wefolio.dto.VisitorAvatarUploadTicketRequest;
 import com.jxc.wefolio.dto.VisitorAvatarUploadTicketResponse;
 import com.jxc.wefolio.dto.VisitorProfileUpdateRequest;
@@ -63,7 +64,7 @@ class VisitorServiceTest {
         session.setOpenid("openid-plain-123");
         session.setUnionid("union-1");
         when(wechatMiniappClient.exchangeCode("wx-code")).thenReturn(session);
-        when(visitorEntityMapper.insert(any(VisitorEntity.class))).thenAnswer(invocation -> {
+        when(visitorEntityMapper.insertIgnore(any(VisitorEntity.class))).thenAnswer(invocation -> {
             VisitorEntity entity = invocation.getArgument(0);
             entity.setId(1024L);
             return 1;
@@ -72,7 +73,7 @@ class VisitorServiceTest {
         VisitorService.VisitorSession result = service().resolveByLoginCode(" wx-code ");
 
         ArgumentCaptor<VisitorEntity> visitorCaptor = ArgumentCaptor.forClass(VisitorEntity.class);
-        verify(visitorEntityMapper).insert(visitorCaptor.capture());
+        verify(visitorEntityMapper).insertIgnore(visitorCaptor.capture());
         VisitorEntity inserted = visitorCaptor.getValue();
         assertThat(inserted.getOpenid()).isEqualTo("openid-plain-123");
         assertThat(inserted.getUnionid()).isEqualTo("union-1");
@@ -200,6 +201,11 @@ class VisitorServiceTest {
     }
 
     private VisitorService service() {
-        return new VisitorService(visitorEntityMapper, wechatMiniappClient, new LocalCacheService(), cosService);
+        return new VisitorService(
+                visitorEntityMapper,
+                wechatMiniappClient,
+                new LocalCacheService(new LocalCacheProperties()),
+                cosService,
+                new VisitorIdentityPersistenceService(visitorEntityMapper));
     }
 }

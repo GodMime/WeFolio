@@ -2,6 +2,7 @@ package com.jxc.wefolio.service;
 
 import com.jxc.wefolio.common.cache.CacheService;
 import com.jxc.wefolio.common.cache.LocalCacheService;
+import com.jxc.wefolio.config.LocalCacheProperties;
 import com.jxc.wefolio.dict.UserStatusDict;
 import com.jxc.wefolio.entity.UserEntity;
 import com.jxc.wefolio.exception.InvalidAuthTokenException;
@@ -43,7 +44,7 @@ class AuthTokenServiceTest {
 
     @Test
     void resolvesUserIdFromCacheWithoutQueryingDatabase() {
-        LocalCacheService cacheService = new LocalCacheService();
+        LocalCacheService cacheService = new LocalCacheService(new LocalCacheProperties());
         cacheService.put("auth:token:wf-dev-user-7", 7L, Duration.ofMinutes(10));
         AuthTokenService service = new AuthTokenService(miniappAuthService, userEntityMapper, cacheService);
 
@@ -55,7 +56,7 @@ class AuthTokenServiceTest {
 
     @Test
     void resolvesCachedTokenWrappedByUnicodeWhitespace() {
-        LocalCacheService cacheService = new LocalCacheService();
+        LocalCacheService cacheService = new LocalCacheService(new LocalCacheProperties());
         cacheService.put("auth:token:wf-dev-user-7", 7L, Duration.ofMinutes(10));
         AuthTokenService service = new AuthTokenService(miniappAuthService, userEntityMapper, cacheService);
 
@@ -76,7 +77,7 @@ class AuthTokenServiceTest {
         user.setId(7L);
         user.setStatus(UserStatusDict.ACTIVE.getCode());
         when(userEntityMapper.selectById(7L)).thenReturn(user);
-        LocalCacheService cacheService = new LocalCacheService();
+        LocalCacheService cacheService = new LocalCacheService(new LocalCacheProperties());
         AuthTokenService service = new AuthTokenService(miniappAuthService, userEntityMapper, cacheService);
 
         Optional<Long> userId = service.resolveAuthenticatedUserId("Bearer wf-dev-user-7");
@@ -88,7 +89,7 @@ class AuthTokenServiceTest {
     @Test
     void rejectsInvalidTokenWithoutWritingCache() {
         when(miniappAuthService.resolveAuthToken("Bearer invalid")).thenReturn(null);
-        LocalCacheService cacheService = new LocalCacheService();
+        LocalCacheService cacheService = new LocalCacheService(new LocalCacheProperties());
         AuthTokenService service = new AuthTokenService(miniappAuthService, userEntityMapper, cacheService);
 
         Optional<Long> userId = service.resolveAuthenticatedUserId("Bearer invalid");
@@ -101,7 +102,7 @@ class AuthTokenServiceTest {
     void treatsBrokenMaintainerTokenAsUnauthenticatedWithoutWritingCache() {
         when(miniappAuthService.resolveAuthToken("Bearer broken"))
                 .thenThrow(new InvalidAuthTokenException("登录令牌解析失败，请重新登录"));
-        LocalCacheService cacheService = new LocalCacheService();
+        LocalCacheService cacheService = new LocalCacheService(new LocalCacheProperties());
         AuthTokenService service = new AuthTokenService(miniappAuthService, userEntityMapper, cacheService);
 
         Optional<Long> userId = service.resolveAuthenticatedUserId("Bearer broken");
@@ -117,7 +118,7 @@ class AuthTokenServiceTest {
         user.setId(7L);
         user.setStatus(UserStatusDict.DISABLED.getCode());
         when(userEntityMapper.selectById(7L)).thenReturn(user);
-        LocalCacheService cacheService = new LocalCacheService();
+        LocalCacheService cacheService = new LocalCacheService(new LocalCacheProperties());
         AuthTokenService service = new AuthTokenService(miniappAuthService, userEntityMapper, cacheService);
 
         Optional<Long> userId = service.resolveAuthenticatedUserId("Bearer wf-dev-user-7");
@@ -136,7 +137,7 @@ class AuthTokenServiceTest {
         disabledUser.setId(7L);
         disabledUser.setStatus(UserStatusDict.DISABLED.getCode());
         when(userEntityMapper.selectById(7L)).thenReturn(activeUser, disabledUser);
-        LocalCacheService cacheService = new LocalCacheService();
+        LocalCacheService cacheService = new LocalCacheService(new LocalCacheProperties());
         AuthTokenService service = new AuthTokenService(miniappAuthService, userEntityMapper, cacheService);
 
         Optional<Long> cachedUserId = service.resolveAuthenticatedUserId("Bearer wf-dev-user-7");

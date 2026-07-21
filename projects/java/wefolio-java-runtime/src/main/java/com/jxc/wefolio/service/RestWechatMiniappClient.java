@@ -7,17 +7,14 @@ import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.dto.WechatSessionResponse;
 import com.jxc.wefolio.dto.WechatPhoneNumberResponse;
 import com.jxc.wefolio.dto.WechatPluginOpenpidResponse;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.ClientHttpResponse;
-import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.IOException;
-import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
@@ -26,7 +23,6 @@ import java.util.Map;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class RestWechatMiniappClient implements WechatMiniappClient {
 
     /** 微信 jscode2session 地址 */
@@ -52,11 +48,25 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
      * JDK HttpClient 默认通过 ALPN 协商 HTTP/2，但部分中间 CDN/网关对
      * HTTP/2 POST 处理异常（直接返回 412 且 body 为空），curl 走 HTTP/1.1 则正常。
      */
-    private final RestClient restClient = RestClient.builder()
-            .requestFactory(new JdkClientHttpRequestFactory(
-                    HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build()
-            ))
-            .build();
+    private final RestClient restClient;
+
+    /**
+     * 创建微信小程序 REST 客户端。
+     *
+     * @param properties 微信小程序配置
+     * @param wechatAccessTokenService 微信接口调用凭证服务
+     * @param logSanitizer 微信交互日志脱敏组件
+     */
+    public RestWechatMiniappClient(
+            WechatMiniappProperties properties,
+            WechatAccessTokenService wechatAccessTokenService,
+            WechatInteractionLogSanitizer logSanitizer
+    ) {
+        this.properties = properties;
+        this.wechatAccessTokenService = wechatAccessTokenService;
+        this.logSanitizer = logSanitizer;
+        this.restClient = WechatRestClientFactory.create(properties);
+    }
 
     /** JSON 解析 — 使用 Fastjson2 统一 JSON 处理 */
 

@@ -48,6 +48,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -62,6 +63,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -240,7 +242,7 @@ class VisitorTeamPortfolioServiceTest {
         request.setIdempotencyKey("open-1");
         VisitRecordEntity record = ownedRecord();
         TeamPortfolioRenderDto render = new TeamPortfolioRenderDto();
-        when(context.visitorService.resolveByLoginCode("wx-code")).thenReturn(session);
+        when(context.visitorService.resolveByLoginCode(eq("wx-code"), any())).thenReturn(session);
         when(context.visitService.recordOpen(portfolio(), VISITOR_ID, VISITOR_KEY,
                 "WECHAT_SHARE_CARD", "open-1")).thenReturn(record);
         when(context.tokenService.issueToken(VISITOR_ID, VISITOR_KEY))
@@ -255,11 +257,36 @@ class VisitorTeamPortfolioServiceTest {
         assertThat(response.getTeamId()).isEqualTo(TEAM_ID);
         assertThat(response.getVisitRecordId()).isEqualTo(record.getId());
         assertThat(response.getRenderData()).isSameAs(render);
+        assertThat(response.getRenderData().getVisitRecordId()).isEqualTo(record.getId());
         assertThat(response.getToken()).isEqualTo("login-token");
         assertThat(response.getVisitorProfileToken()).isEqualTo("profile-token");
         assertThat(response.isNeedVisitorProfile()).isTrue();
         assertThat(VisitorTeamPortfolioService.class.getDeclaredFields())
                 .noneMatch(field -> field.getType().getSimpleName().contains("PointService"));
+        InOrder order = inOrder(context.visitorService, context.renderService, context.visitService);
+        order.verify(context.visitorService).resolveByLoginCode(eq("wx-code"), any());
+        order.verify(context.renderService).render(any(), any());
+        order.verify(context.visitService).recordOpen(
+                portfolio(), VISITOR_ID, VISITOR_KEY, "WECHAT_SHARE_CARD", "open-1");
+    }
+
+    /** 渲染失败时不得提前写入访问记录。 */
+    @Test
+    void renderFailureShouldNotWriteVisit() {
+        VisitorServiceContext context = publishedContext();
+        VisitorEntity visitor = visitor();
+        VisitorTeamPortfolioOpenRequest request = new VisitorTeamPortfolioOpenRequest();
+        request.setLoginCode("wx-code");
+        when(context.visitorService.resolveByLoginCode(eq("wx-code"), any()))
+                .thenReturn(new VisitorService.VisitorSession(visitor, false));
+        when(context.renderService.render(any(), any()))
+                .thenThrow(new BusinessException("渲染失败"));
+
+        assertThatThrownBy(() -> context.service.openPortfolio("TPF-TASK8", request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("渲染失败");
+
+        verify(context.visitService, never()).recordOpen(any(), anyLong(), any(), any(), any());
     }
 
     /**
@@ -506,9 +533,18 @@ class VisitorTeamPortfolioServiceTest {
         VisitorTeamPortfolioService service = new VisitorTeamPortfolioService(
                 properties, portfolioMapper, teamMapper, renderService, scheduleService,
                 contactService, visitService, visitorService, tokenService,
-                mock(com.jxc.wefolio.service.PointBalanceGateService.class));
+                mock(com.jxc.wefolio.service.PointBalanceGateService.class),
+                performanceLogger());
         return new VisitorServiceContext(service, portfolioMapper, teamMapper, renderService,
                 scheduleService, contactService, visitService, visitorService, tokenService);
+    }
+
+    /** 创建关闭正常采样的测试耗时日志器。 */
+    private static com.jxc.wefolio.service.PortfolioOpenPerformanceLogger performanceLogger() {
+        com.jxc.wefolio.config.PortfolioOpenPerformanceProperties properties =
+                new com.jxc.wefolio.config.PortfolioOpenPerformanceProperties();
+        properties.setNormalSampleRate(0D);
+        return new com.jxc.wefolio.service.PortfolioOpenPerformanceLogger(properties);
     }
 
     /** 创建维护端服务并通过构造器注入全部依赖。 */

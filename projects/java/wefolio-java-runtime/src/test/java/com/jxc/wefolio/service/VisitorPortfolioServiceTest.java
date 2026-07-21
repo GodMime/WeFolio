@@ -124,7 +124,7 @@ class VisitorPortfolioServiceTest {
         assertThatThrownBy(() -> service().openPortfolio("PF001", request))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("作品集暂不可访问");
-        verify(visitorService, never()).resolveByLoginCode(any());
+        verify(visitorService, never()).resolveByLoginCode(any(), any());
     }
 
     @Test
@@ -138,7 +138,7 @@ class VisitorPortfolioServiceTest {
         assertThatThrownBy(() -> service().openPortfolio("PF001", request))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage(PortfolioMessage.PORTFOLIO_UNAVAILABLE_MESSAGE);
-        verify(visitorService, never()).resolveByLoginCode(any());
+        verify(visitorService, never()).resolveByLoginCode(any(), any());
         verify(portfolioVisitService, never()).recordOpen(any(), any(Long.class), any(), any(), any());
     }
 
@@ -152,7 +152,7 @@ class VisitorPortfolioServiceTest {
         visitor.setOpenid("openid-123");
         visitor.setVisitorKey("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
         when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
-        when(visitorService.resolveByLoginCode("wx-code"))
+        when(visitorService.resolveByLoginCode(eq("wx-code"), any()))
                 .thenReturn(new VisitorService.VisitorSession(visitor, true));
         when(portfolioVisitService.recordOpen(
                 eq(portfolio),
@@ -195,7 +195,7 @@ class VisitorPortfolioServiceTest {
         visitor.setOpenid("openid-123");
         visitor.setVisitorKey("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
         when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
-        when(visitorService.resolveByLoginCode("wx-code"))
+        when(visitorService.resolveByLoginCode(eq("wx-code"), any()))
                 .thenReturn(new VisitorService.VisitorSession(visitor, true));
         when(portfolioVisitService.recordOpen(
                 eq(portfolio),
@@ -232,7 +232,7 @@ class VisitorPortfolioServiceTest {
         visitor.setOpenid("openid-123");
         visitor.setVisitorKey("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
         when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
-        when(visitorService.resolveByLoginCode("wx-code"))
+        when(visitorService.resolveByLoginCode(eq("wx-code"), any()))
                 .thenReturn(new VisitorService.VisitorSession(visitor, true));
         when(portfolioVisitService.recordOpen(
                 eq(portfolio),
@@ -264,7 +264,7 @@ class VisitorPortfolioServiceTest {
         visitor.setOpenid("openid-123");
         visitor.setVisitorKey("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
         when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
-        when(visitorService.resolveByLoginCode("wx-code"))
+        when(visitorService.resolveByLoginCode(eq("wx-code"), any()))
                 .thenReturn(new VisitorService.VisitorSession(visitor, false));
         when(portfolioVisitService.recordOpen(
                 eq(portfolio),
@@ -300,7 +300,7 @@ class VisitorPortfolioServiceTest {
         visitor.setNickname("小陈");
         visitor.setAvatarUrl("https://cdn.example.com/visit/visitor-avatar-1024-20260705093000-a1b2c3d4.jpg");
         when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
-        when(visitorService.resolveByLoginCode("wx-code"))
+        when(visitorService.resolveByLoginCode(eq("wx-code"), any()))
                 .thenReturn(new VisitorService.VisitorSession(visitor, false));
         when(portfolioVisitService.recordOpen(
                 eq(portfolio),
@@ -331,7 +331,7 @@ class VisitorPortfolioServiceTest {
         visitor.setOpenid("openid-owner");
         visitor.setVisitorKey("owner-visitor-key");
         when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
-        when(visitorService.resolveByLoginCode("wx-code"))
+        when(visitorService.resolveByLoginCode(eq("wx-code"), any()))
                 .thenReturn(new VisitorService.VisitorSession(visitor, false));
         when(ownerSelfVisitService.isOwnerSelfVisitor(
                 eq(7L),
@@ -772,8 +772,17 @@ class VisitorPortfolioServiceTest {
                 visitorAuthTokenService,
                 scheduleQueryRecordEntityMapper,
                 ownerSelfVisitService,
-                org.mockito.Mockito.mock(PointBalanceGateService.class)
+                org.mockito.Mockito.mock(PointBalanceGateService.class),
+                performanceLogger()
         );
+    }
+
+    /** 创建关闭正常采样的测试耗时日志器。 */
+    private PortfolioOpenPerformanceLogger performanceLogger() {
+        com.jxc.wefolio.config.PortfolioOpenPerformanceProperties properties =
+                new com.jxc.wefolio.config.PortfolioOpenPerformanceProperties();
+        properties.setNormalSampleRate(0D);
+        return new PortfolioOpenPerformanceLogger(properties);
     }
 
     private PortfolioEntity publishedPortfolio() {
