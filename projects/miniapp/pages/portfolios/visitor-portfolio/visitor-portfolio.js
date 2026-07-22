@@ -15,7 +15,7 @@ const {
 const {
   createAnonymousSessionId,
   isWechatTimelineSinglePage
-} = require('../../../utils/single-page-mode')
+} = require('../utils/single-page-mode')
 
 const VISITOR_PORTFOLIO_API_PREFIX = '/api/visitor/portfolios'
 const MEDIA_TYPE_VIDEO = 'VIDEO'

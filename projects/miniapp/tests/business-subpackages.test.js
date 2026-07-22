@@ -30,6 +30,7 @@ const PACKAGE_LOCAL_UTILS = {
     'portfolio-assets.js',
     'portfolio-contact-form.js',
     'portfolio-publish-disclaimer.js',
+    'single-page-mode.js',
     'team-portfolio-list.js',
     'visitor-profile.js',
     'works.js'
@@ -41,6 +42,7 @@ const PACKAGE_LOCAL_UTILS = {
     'team-portfolio-registry.js',
     'team-portfolio-list.js',
     'portfolio-publish-disclaimer.js',
+    'single-page-mode.js',
     'team-portfolios.js',
     'team-visitor-portfolio.js',
     'team-visitor-profile.js',
@@ -275,6 +277,19 @@ test('portfolio publish disclaimer copies stay byte-for-byte aligned across busi
   )
   const teamPortfolioSource = fs.readFileSync(
     path.join(MINIAPP_ROOT, 'pages/team-portfolios/utils/portfolio-publish-disclaimer.js'),
+    'utf8'
+  )
+
+  assert.equal(teamPortfolioSource, portfolioSource)
+})
+
+test('single-page mode utility copies stay byte-for-byte aligned across business subpackages', () => {
+  const portfolioSource = fs.readFileSync(
+    path.join(MINIAPP_ROOT, 'pages/portfolios/utils/single-page-mode.js'),
+    'utf8'
+  )
+  const teamPortfolioSource = fs.readFileSync(
+    path.join(MINIAPP_ROOT, 'pages/team-portfolios/utils/single-page-mode.js'),
     'utf8'
   )
 

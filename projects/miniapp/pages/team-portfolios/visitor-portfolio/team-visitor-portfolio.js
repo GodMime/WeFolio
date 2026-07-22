@@ -4,7 +4,7 @@ const { normalizeTeamVisitorPortfolio, queryTeamVisitorSchedule, submitTeamVisit
 const { createIdempotencyKey, openTeamVisitorSession, requestWithTeamVisitorSessionRefresh, resolveTeamShareCode } = require('../utils/team-visitor-session.js')
 const { uploadTeamVisitorProfile } = require('../utils/team-visitor-profile.js')
 const { showTeamPortfolioUnavailableToast } = require('../utils/team-portfolios.js')
-const { createAnonymousSessionId, isWechatTimelineSinglePage } = require('../../../utils/single-page-mode.js')
+const { createAnonymousSessionId, isWechatTimelineSinglePage } = require('../utils/single-page-mode.js')
 
 const TYPE_BUCKETS = Object.freeze({ TEAM_PROFILE: 'teamProfile', CAROUSEL: 'carousel', DIVIDER: 'divider', MEMBER_PORTFOLIO_GRID: 'grid', MEMBER_PORTFOLIO_LIST: 'list', TEXT_SECTION: 'text', SCHEDULE_QUERY: 'schedule', CONTACT_FORM: 'contact', QR_CONTACT: 'qr' })
 const PERSONAL_VISITOR_URL = '/pages' + '/portfolios/visitor-portfolio/visitor-portfolio'
