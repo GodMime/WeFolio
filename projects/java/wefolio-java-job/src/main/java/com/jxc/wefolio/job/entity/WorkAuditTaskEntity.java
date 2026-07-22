@@ -29,6 +29,9 @@ public class WorkAuditTaskEntity extends BaseEntity {
     /** 媒体文件 SHA-256 */
     private String mediaSha256;
 
+    /** 任务所属作品审核轮次 */
+    private Integer auditRound;
+
     /** 审核服务提供方 */
     private String provider;
 

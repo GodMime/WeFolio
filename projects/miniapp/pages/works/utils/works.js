@@ -15,6 +15,7 @@ const WORK_TAG_PICKER_MIN_HEIGHT = 80
 const WORK_TAG_PICKER_ROW_STEP = 72
 const WORK_TAG_PICKER_MAX_HEIGHT = 520
 const DEFAULT_AUDIT_STATUS = 'PENDING'
+const MAX_AUDIT_REASON_COUNT = 20
 
 const MEDIA_TYPE_TEXT = {
   IMAGE: '图片',
@@ -79,12 +80,56 @@ function normalizeWorkTagColor(color) {
 function normalizeAuditStatus(raw = {}) {
   const auditStatus = trimText(raw.auditStatus) || DEFAULT_AUDIT_STATUS
   const auditRejectReason = trimText(raw.auditRejectReason)
+  const canShowReason = Boolean(AUDIT_REJECT_REASON_STATUS_MAP[auditStatus])
+  const auditReasons = canShowReason
+    ? normalizeAuditReasons(raw.auditReasons, auditRejectReason)
+    : []
   return {
     auditStatus,
     auditStatusText: trimText(raw.auditStatusText) || AUDIT_STATUS_TEXT[auditStatus] || auditStatus,
     auditStatusTone: AUDIT_STATUS_TONE[auditStatus] || AUDIT_STATUS_TONE[DEFAULT_AUDIT_STATUS],
     auditRejectReason,
-    showAuditRejectReason: Boolean(AUDIT_REJECT_REASON_STATUS_MAP[auditStatus] && auditRejectReason)
+    auditReasons,
+    showAuditRejectReason: auditReasons.length > 0
+  }
+}
+
+function normalizeAuditReasons(rawReasons, auditRejectReason) {
+  const reasons = []
+  const seen = {}
+  const source = Array.isArray(rawReasons) ? rawReasons : []
+  source.some((rawReason) => {
+    if (!rawReason || typeof rawReason !== 'object') {
+      return false
+    }
+    const code = trimText(rawReason.code)
+    const message = trimText(rawReason.message)
+    const deduplicateKey = code || message
+    if (!message || seen[deduplicateKey]) {
+      return false
+    }
+    seen[deduplicateKey] = true
+    reasons.push({ code, message })
+    return reasons.length >= MAX_AUDIT_REASON_COUNT
+  })
+  if (reasons.length === 0 && auditRejectReason) {
+    reasons.push({ code: 'LEGACY_PRIMARY', message: auditRejectReason })
+  }
+  return reasons
+}
+
+function normalizeAuditRound(raw = {}) {
+  const auditRound = Math.max(1, Math.floor(toNumber(raw.auditRound, 1)))
+  const maxAuditRounds = Math.max(auditRound, Math.floor(toNumber(raw.maxAuditRounds, auditRound)))
+  const remainingAuditResubmitCount = Math.max(0, Math.floor(toNumber(raw.remainingAuditResubmitCount)))
+  return {
+    auditRound,
+    maxAuditRounds,
+    remainingAuditResubmitCount,
+    canResubmitAudit: raw.canResubmitAudit === true,
+    auditRoundText: remainingAuditResubmitCount > 0
+      ? `第 ${auditRound}/${maxAuditRounds} 轮 · 还可重审 ${remainingAuditResubmitCount} 次`
+      : `第 ${auditRound}/${maxAuditRounds} 轮 · 已无重审次数`
   }
 }
 
@@ -161,6 +206,7 @@ function normalizeWork(raw = {}) {
   const referenceCount = toNumber(raw.referenceCount)
   const aspectRatio = trimText(raw.aspectRatio)
   const auditStatus = normalizeAuditStatus(raw)
+  const auditRound = normalizeAuditRound(raw)
   return {
     id: normalizeId(raw.id),
     mediaType,
@@ -187,7 +233,13 @@ function normalizeWork(raw = {}) {
     auditStatusText: auditStatus.auditStatusText,
     auditStatusTone: auditStatus.auditStatusTone,
     auditRejectReason: auditStatus.auditRejectReason,
+    auditReasons: auditStatus.auditReasons,
     showAuditRejectReason: auditStatus.showAuditRejectReason,
+    auditRound: auditRound.auditRound,
+    maxAuditRounds: auditRound.maxAuditRounds,
+    remainingAuditResubmitCount: auditRound.remainingAuditResubmitCount,
+    canResubmitAudit: auditRound.canResubmitAudit,
+    auditRoundText: auditRound.auditRoundText,
     referenceCount,
     referenceText: referenceCount > 0 ? `引用 ${referenceCount} 次` : '未引用',
     tags,

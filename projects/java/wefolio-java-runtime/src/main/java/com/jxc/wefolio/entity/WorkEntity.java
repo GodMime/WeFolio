@@ -71,6 +71,15 @@ public class WorkEntity extends BaseEntity {
     /** 审核状态：PENDING 未审核 / AUDITING 审核中 / PASSED 通过 / REJECTED 违规 / REVIEW_REQUIRED 疑似 / FAILED 失败 */
     private String auditStatus;
 
+    /** 当前已经进入或即将进入的审核轮次 */
+    private Integer auditRound;
+
+    /** 与审核供应商解耦的稳定风险类型 */
+    private String auditReasonCode;
+
+    /** 当前轮次全部稳定风险类型 JSON 数组，最多 20 个 */
+    private String auditReasonCodes;
+
     /** 审核拒绝原因 */
     private String auditRejectReason;
 

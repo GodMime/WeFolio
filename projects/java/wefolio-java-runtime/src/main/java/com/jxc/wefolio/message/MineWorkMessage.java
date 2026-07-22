@@ -125,6 +125,18 @@ public interface MineWorkMessage {
     /** 作品不存在提示 */
     String WORK_NOT_FOUND_MESSAGE = "作品不存在或无访问权限";
 
+    /** 作品已经处于审核流程中的提示 */
+    String AUDIT_RESUBMIT_IN_PROGRESS_MESSAGE = "作品已在审核流程中，请勿重复提交";
+
+    /** 已通过作品无需重审提示 */
+    String AUDIT_RESUBMIT_PASSED_MESSAGE = "作品已通过审核，无需再次提交";
+
+    /** 作品达到审核总轮次提示 */
+    String AUDIT_RESUBMIT_LIMIT_REACHED_MESSAGE = "作品已达到审核次数上限，无法再次提交";
+
+    /** 并发状态变化提示 */
+    String AUDIT_RESUBMIT_STATE_CHANGED_MESSAGE = "作品审核状态已变化，请刷新后重试";
+
     /** 作品删除失败提示 */
     String WORK_DELETE_FAILED_MESSAGE = "作品删除失败，请刷新后重试";
 

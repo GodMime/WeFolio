@@ -30,6 +30,15 @@ public class WorkAuditWorkEntity extends BaseEntity {
     /** 作品审核状态 */
     private String auditStatus;
 
+    /** 作品当前审核轮次 */
+    private Integer auditRound;
+
+    /** 与审核供应商解耦的稳定风险类型 */
+    private String auditReasonCode;
+
+    /** 当前轮次全部稳定风险类型 JSON 数组，最多 20 个 */
+    private String auditReasonCodes;
+
     /** 审核拒绝原因 */
     private String auditRejectReason;
 }

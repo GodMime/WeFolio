@@ -4,15 +4,19 @@ import com.alibaba.fastjson2.JSON;
 import com.jxc.wefolio.job.config.CosProperties;
 import com.jxc.wefolio.job.dict.AuditResultDict;
 import com.qcloud.cos.COSClient;
+import com.qcloud.cos.model.ciModel.auditing.AudtingCommonInfo;
 import com.qcloud.cos.model.ciModel.auditing.AuditingJobsDetail;
 import com.qcloud.cos.model.ciModel.auditing.ImageAuditingRequest;
 import com.qcloud.cos.model.ciModel.auditing.ImageAuditingResponse;
+import com.qcloud.cos.model.ciModel.auditing.SnapshotInfo;
 import com.qcloud.cos.model.ciModel.auditing.VideoAuditingRequest;
 import com.qcloud.cos.model.ciModel.auditing.VideoAuditingResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -26,11 +30,11 @@ public class CosTencentCiAuditClient implements TencentCiAuditClient {
     /** 腾讯云审核结果：正常 */
     private static final String TENCENT_RESULT_PASS = "0";
 
-    /** 腾讯云审核结果：疑似 */
-    private static final String TENCENT_RESULT_REVIEW = "1";
-
     /** 腾讯云审核结果：违规 */
-    private static final String TENCENT_RESULT_BLOCK = "2";
+    private static final String TENCENT_RESULT_BLOCK = "1";
+
+    /** 腾讯云审核结果：疑似 */
+    private static final String TENCENT_RESULT_REVIEW = "2";
 
     /** 启用大图检测 */
     private static final String LARGE_IMAGE_DETECT_ENABLED = "1";
@@ -105,7 +109,8 @@ public class CosTencentCiAuditClient implements TencentCiAuditClient {
                 parseInteger(response.getScore()),
                 true,
                 false,
-                JSON.toJSONString(response)
+                JSON.toJSONString(response),
+                collectImageRisks(response)
         );
         logAuditSummary("腾讯云图片审核简洁结果", objectKey, result);
         return result;
@@ -175,8 +180,55 @@ public class CosTencentCiAuditClient implements TencentCiAuditClient {
                 null,
                 terminal,
                 failed,
-                JSON.toJSONString(response)
+                JSON.toJSONString(response),
+                collectVideoRisks(detail)
         );
+    }
+
+    private List<TencentCiAuditRisk> collectImageRisks(ImageAuditingResponse response) {
+        List<TencentCiAuditRisk> risks = new ArrayList<>();
+        addRisk(risks, "Porn", response.getPornInfo());
+        addRisk(risks, "Ads", response.getAdsInfo());
+        addRisk(risks, "Politics", response.getPoliticsInfo());
+        addRisk(risks, "Terrorism", response.getTerroristInfo());
+        addRisk(risks, "Teenager", response.getTeenagerInfo());
+        return List.copyOf(risks);
+    }
+
+    private List<TencentCiAuditRisk> collectVideoRisks(AuditingJobsDetail detail) {
+        List<TencentCiAuditRisk> risks = new ArrayList<>();
+        addRisk(risks, "Porn", detail.getPornInfo());
+        addRisk(risks, "Ads", detail.getAdsInfo());
+        addRisk(risks, "Politics", detail.getPoliticsInfo());
+        addRisk(risks, "Terrorism", detail.getTerroristInfo());
+        addRisk(risks, "Teenager", detail.getTeenagerInfo());
+        addRisk(risks, "Meaningless", detail.getMeaninglessInfo());
+        addRisk(risks, "Abuse", detail.getAbuseInfo());
+        addRisk(risks, "Illegal", detail.getIllegalInfo());
+        if (detail.getSnapshotList() != null) {
+            for (SnapshotInfo snapshot : detail.getSnapshotList()) {
+                if (snapshot == null) {
+                    continue;
+                }
+                addRisk(risks, "Porn", snapshot.getPornInfo());
+                addRisk(risks, "Ads", snapshot.getAdsInfo());
+                addRisk(risks, "Politics", snapshot.getPoliticsInfo());
+                addRisk(risks, "Terrorism", snapshot.getTerroristInfo());
+                addRisk(risks, "Teenager", snapshot.getTeenagerInfo());
+            }
+        }
+        return List.copyOf(risks);
+    }
+
+    private void addRisk(List<TencentCiAuditRisk> risks, String ciLabel, AudtingCommonInfo info) {
+        if (info == null) {
+            return;
+        }
+        AuditResultDict result = mapAuditResult(info.getHitFlag());
+        if (result != AuditResultDict.BLOCK && result != AuditResultDict.REVIEW) {
+            return;
+        }
+        risks.add(new TencentCiAuditRisk(ciLabel, result, parseInteger(info.getScore())));
     }
 
     private AuditResultDict mapAuditResult(String result) {

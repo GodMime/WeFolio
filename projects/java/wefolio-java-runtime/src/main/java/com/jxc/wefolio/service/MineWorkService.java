@@ -277,6 +277,9 @@ public class MineWorkService {
     /** 内容数量上限服务 */
     private final ContentLimitService contentLimitService;
 
+    /** 作品审核资格和展示服务 */
+    private final MineWorkAuditService mineWorkAuditService;
+
     /**
      * 分页查询我的作品。
      *
@@ -1929,11 +1932,34 @@ public class MineWorkService {
         item.setStatus(work.getStatus());
         item.setAuditStatus(work.getAuditStatus());
         item.setAuditStatusText(resolveAuditStatusText(work.getAuditStatus()));
-        item.setAuditRejectReason(work.getAuditRejectReason());
+        MineWorkAuditService.AuditView auditView = mineWorkAuditService.buildAuditView(work);
+        item.setAuditRound(auditView.auditRound());
+        item.setMaxAuditRounds(auditView.maxAuditRounds());
+        item.setRemainingAuditResubmitCount(auditView.remainingAuditResubmitCount());
+        item.setCanResubmitAudit(auditView.canResubmitAudit());
+        item.setAuditRejectReason(auditView.auditRejectReason());
+        item.setAuditReasons(auditView.auditReasons().stream()
+                .map(this::buildAuditReasonItem)
+                .toList());
         item.setReferenceCount(referenceCounts.getOrDefault(work.getId(), 0L));
         item.setTags(workTags.getOrDefault(work.getId(), List.of()));
         item.setCreatedAt(work.getCreatedAt());
         item.setUpdatedAt(work.getUpdatedAt());
+        return item;
+    }
+
+    /**
+     * 构造用户可读审核原因响应项。
+     *
+     * @param reason 审核原因
+     * @return 响应项
+     */
+    private MineWorkListResponse.AuditReasonItem buildAuditReasonItem(
+            WorkAuditUserReasonResolver.AuditReason reason
+    ) {
+        MineWorkListResponse.AuditReasonItem item = new MineWorkListResponse.AuditReasonItem();
+        item.setCode(reason.code());
+        item.setMessage(reason.message());
         return item;
     }
 

@@ -4,12 +4,19 @@ import com.jxc.wefolio.job.config.CosProperties;
 import com.jxc.wefolio.job.dict.AuditResultDict;
 import com.qcloud.cos.COSClient;
 import com.qcloud.cos.model.ciModel.auditing.AuditingJobsDetail;
+import com.qcloud.cos.model.ciModel.auditing.AdsInfo;
 import com.qcloud.cos.model.ciModel.auditing.ImageAuditingRequest;
 import com.qcloud.cos.model.ciModel.auditing.ImageAuditingResponse;
+import com.qcloud.cos.model.ciModel.auditing.PornInfo;
+import com.qcloud.cos.model.ciModel.auditing.SnapshotInfo;
 import com.qcloud.cos.model.ciModel.auditing.VideoAuditingRequest;
 import com.qcloud.cos.model.ciModel.auditing.VideoAuditingResponse;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
+
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -28,7 +35,7 @@ class CosTencentCiAuditClientTest {
     private static final String OBJECT_KEY = "WFA3B1E7A2/work/video/demo.mp4";
 
     @Test
-    void auditImageShouldEnableLargeImageAndMapReviewResult() {
+    void auditImageShouldEnableLargeImageAndMapConfirmedViolationToBlock() {
         COSClient cosClient = mock(COSClient.class);
         ImageAuditingResponse response = new ImageAuditingResponse();
         response.setJobId("image-job-id");
@@ -48,12 +55,57 @@ class CosTencentCiAuditClientTest {
         assertThat(request.getBucketName()).isEqualTo(BUCKET_NAME);
         assertThat(request.getObjectKey()).isEqualTo(OBJECT_KEY);
         assertThat(request.getLargeImageDetect()).isEqualTo("1");
-        assertThat(result.auditResult()).isEqualTo(AuditResultDict.REVIEW);
+        assertThat(result.auditResult()).isEqualTo(AuditResultDict.BLOCK);
         assertThat(result.ciJobId()).isEqualTo("image-job-id");
         assertThat(result.ciResult()).isEqualTo(1);
         assertThat(result.ciLabel()).isEqualTo("Porn");
         assertThat(result.ciScore()).isEqualTo(88);
         assertThat(result.terminal()).isTrue();
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "0,PASS",
+            "1,BLOCK",
+            "2,REVIEW"
+    })
+    void auditImageShouldMapAllOfficialResultValues(String ciResult, AuditResultDict expectedResult) {
+        COSClient cosClient = mock(COSClient.class);
+        ImageAuditingResponse response = new ImageAuditingResponse();
+        response.setResult(ciResult);
+        when(cosClient.imageAuditing(org.mockito.ArgumentMatchers.any(ImageAuditingRequest.class)))
+                .thenReturn(response);
+
+        TencentCiAuditResult result = new CosTencentCiAuditClient(cosClient, testCosProperties())
+                .auditImage(OBJECT_KEY);
+
+        assertThat(result.auditResult()).isEqualTo(expectedResult);
+        assertThat(result.ciResult()).isEqualTo(Integer.valueOf(ciResult));
+    }
+
+    @Test
+    void auditImageShouldReturnEveryHitAuditScene() {
+        COSClient cosClient = mock(COSClient.class);
+        ImageAuditingResponse response = new ImageAuditingResponse();
+        response.setResult("1");
+        response.setLabel("Porn");
+        PornInfo pornInfo = new PornInfo();
+        pornInfo.setHitFlag("1");
+        pornInfo.setScore("95");
+        response.setPornInfo(pornInfo);
+        AdsInfo adsInfo = new AdsInfo();
+        adsInfo.setHitFlag("2");
+        adsInfo.setScore("80");
+        response.setAdsInfo(adsInfo);
+        when(cosClient.imageAuditing(org.mockito.ArgumentMatchers.any(ImageAuditingRequest.class)))
+                .thenReturn(response);
+
+        TencentCiAuditResult result = new CosTencentCiAuditClient(cosClient, testCosProperties())
+                .auditImage(OBJECT_KEY);
+
+        assertThat(result.risks()).containsExactly(
+                new TencentCiAuditRisk("Porn", AuditResultDict.BLOCK, 95),
+                new TencentCiAuditRisk("Ads", AuditResultDict.REVIEW, 80));
     }
 
     @Test
@@ -88,7 +140,7 @@ class CosTencentCiAuditClientTest {
     }
 
     @Test
-    void queryVideoShouldMapSuccessBlockResult() {
+    void queryVideoShouldMapSuspectedViolationToReview() {
         COSClient cosClient = mock(COSClient.class);
         VideoAuditingResponse response = new VideoAuditingResponse();
         AuditingJobsDetail detail = new AuditingJobsDetail();
@@ -109,11 +161,65 @@ class CosTencentCiAuditClientTest {
 
         assertThat(request.getBucketName()).isEqualTo(BUCKET_NAME);
         assertThat(request.getJobId()).isEqualTo("video-job-id");
-        assertThat(result.auditResult()).isEqualTo(AuditResultDict.BLOCK);
+        assertThat(result.auditResult()).isEqualTo(AuditResultDict.REVIEW);
         assertThat(result.ciState()).isEqualTo("Success");
         assertThat(result.ciResult()).isEqualTo(2);
         assertThat(result.ciLabel()).isEqualTo("Ads");
         assertThat(result.terminal()).isTrue();
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "0,PASS",
+            "1,BLOCK",
+            "2,REVIEW"
+    })
+    void queryVideoShouldMapAllOfficialResultValues(String ciResult, AuditResultDict expectedResult) {
+        COSClient cosClient = mock(COSClient.class);
+        VideoAuditingResponse response = new VideoAuditingResponse();
+        AuditingJobsDetail detail = new AuditingJobsDetail();
+        detail.setState("Success");
+        detail.setResult(ciResult);
+        response.setJobsDetail(detail);
+        when(cosClient.describeAuditingJob(org.mockito.ArgumentMatchers.any(VideoAuditingRequest.class)))
+                .thenReturn(response);
+
+        TencentCiAuditResult result = new CosTencentCiAuditClient(cosClient, testCosProperties())
+                .queryVideo("video-job-id");
+
+        assertThat(result.auditResult()).isEqualTo(expectedResult);
+        assertThat(result.ciResult()).isEqualTo(Integer.valueOf(ciResult));
+    }
+
+    @Test
+    void queryVideoShouldReturnRisksAcrossSnapshots() {
+        COSClient cosClient = mock(COSClient.class);
+        VideoAuditingResponse response = new VideoAuditingResponse();
+        AuditingJobsDetail detail = new AuditingJobsDetail();
+        detail.setState("Success");
+        detail.setResult("1");
+        detail.setLabel("Porn");
+        SnapshotInfo first = new SnapshotInfo();
+        PornInfo pornInfo = new PornInfo();
+        pornInfo.setHitFlag("2");
+        pornInfo.setScore("70");
+        first.setPornInfo(pornInfo);
+        SnapshotInfo second = new SnapshotInfo();
+        AdsInfo adsInfo = new AdsInfo();
+        adsInfo.setHitFlag("1");
+        adsInfo.setScore("91");
+        second.setAdsInfo(adsInfo);
+        detail.setSnapshotList(List.of(first, second));
+        response.setJobsDetail(detail);
+        when(cosClient.describeAuditingJob(org.mockito.ArgumentMatchers.any(VideoAuditingRequest.class)))
+                .thenReturn(response);
+
+        TencentCiAuditResult result = new CosTencentCiAuditClient(cosClient, testCosProperties())
+                .queryVideo("video-job-id");
+
+        assertThat(result.risks()).containsExactly(
+                new TencentCiAuditRisk("Porn", AuditResultDict.REVIEW, 70),
+                new TencentCiAuditRisk("Ads", AuditResultDict.BLOCK, 91));
     }
 
     @Test

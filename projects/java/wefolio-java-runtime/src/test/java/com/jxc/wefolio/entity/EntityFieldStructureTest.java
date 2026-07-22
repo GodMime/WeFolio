@@ -86,10 +86,10 @@ class EntityFieldStructureTest {
     }
 
     @Test
-    void workEntityShouldDeclareAuditStatusAndRejectReason() {
+    void workEntityShouldDeclareAuditStatusAndReasons() {
         assertThat(WorkEntity.class.getDeclaredFields())
                 .extracting(Field::getName)
-                .contains("auditStatus", "auditRejectReason");
+                .contains("auditStatus", "auditReasonCode", "auditReasonCodes", "auditRejectReason");
     }
 
     @Test

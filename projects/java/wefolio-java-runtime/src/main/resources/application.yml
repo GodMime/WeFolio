@@ -32,6 +32,8 @@ wefolio:
     work-video-max-count: ${WEFOLIO_WORK_VIDEO_MAX_COUNT:100}
     personal-portfolio-max-count: ${WEFOLIO_PERSONAL_PORTFOLIO_MAX_COUNT:10}
     team-portfolio-max-count: ${WEFOLIO_TEAM_PORTFOLIO_MAX_COUNT:10}
+  work-audit:
+    max-rounds: ${WEFOLIO_WORK_AUDIT_MAX_ROUNDS:3}
   team-portfolio:
     enabled: ${WEFOLIO_TEAM_PORTFOLIO_ENABLED:true}
   performance:

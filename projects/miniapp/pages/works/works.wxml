@@ -155,7 +155,25 @@
                     </view>
                     <view wx:if="{{item.showAuditRejectReason}}" class="audit-reject-row">
                       <view class="audit-reject-icon">!</view>
-                      <view class="audit-reject-text">{{item.auditRejectReason}}</view>
+                      <view class="audit-reject-content">
+                        <view
+                          wx:for="{{item.auditReasons}}"
+                          wx:for-item="reason"
+                          wx:key="code"
+                          class="audit-reject-text"
+                        >{{reason.message}}</view>
+                        <view class="audit-resubmit-row">
+                          <view class="audit-round-text">{{item.auditRoundText}}</view>
+                          <button
+                            wx:if="{{item.canResubmitAudit}}"
+                            class="audit-resubmit-button"
+                            loading="{{resubmittingWorkId === item.id}}"
+                            disabled="{{resubmittingWorkId === item.id}}"
+                            data-id="{{item.id}}"
+                            catchtap="handleAuditResubmitTap"
+                          >重新审核</button>
+                        </view>
+                      </view>
                     </view>
                   </view>
                   <view class="card-arrow"></view>

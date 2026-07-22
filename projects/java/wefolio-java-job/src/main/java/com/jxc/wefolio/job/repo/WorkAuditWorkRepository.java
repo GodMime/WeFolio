@@ -77,6 +77,8 @@ public class WorkAuditWorkRepository {
         LocalDateTime now = LocalDateTime.now();
         int updated = workMapper.update(null, Wrappers.<WorkAuditWorkEntity>lambdaUpdate()
                 .set(WorkAuditWorkEntity::getAuditStatus, WorkAuditStatusDict.AUDITING.getCode())
+                .set(WorkAuditWorkEntity::getAuditReasonCode, null)
+                .set(WorkAuditWorkEntity::getAuditReasonCodes, null)
                 .set(WorkAuditWorkEntity::getAuditRejectReason, null)
                 .set(WorkAuditWorkEntity::getUpdatedAt, now)
                 .setSql(VERSION_INCREMENT_SQL)
@@ -109,9 +111,27 @@ public class WorkAuditWorkRepository {
      */
     public boolean updateAuditStatusAndRejectReason(Long workId, WorkAuditStatusDict auditStatus,
                                                     String auditRejectReason) {
+        return updateAuditStatusAndReasons(workId, auditStatus, null, null, auditRejectReason);
+    }
+
+    /**
+     * 同时更新作品审核状态、稳定风险类型和内部原因摘要。
+     *
+     * @param workId 作品 ID
+     * @param auditStatus 目标审核状态
+     * @param auditReasonCode 稳定风险类型，审核通过或处理中时为空
+     * @param auditReasonCodes 当前轮次全部稳定风险类型 JSON 数组，审核通过或处理中时为空
+     * @param auditRejectReason 内部审核原因摘要，审核通过或处理中时为空
+     * @return 是否更新成功
+     */
+    public boolean updateAuditStatusAndReasons(Long workId, WorkAuditStatusDict auditStatus,
+                                               String auditReasonCode, String auditReasonCodes,
+                                               String auditRejectReason) {
         LocalDateTime now = LocalDateTime.now();
         int updated = workMapper.update(null, Wrappers.<WorkAuditWorkEntity>lambdaUpdate()
                 .set(WorkAuditWorkEntity::getAuditStatus, auditStatus.getCode())
+                .set(WorkAuditWorkEntity::getAuditReasonCode, auditReasonCode)
+                .set(WorkAuditWorkEntity::getAuditReasonCodes, auditReasonCodes)
                 .set(WorkAuditWorkEntity::getAuditRejectReason, auditRejectReason)
                 .set(WorkAuditWorkEntity::getUpdatedAt, now)
                 .setSql(VERSION_INCREMENT_SQL)
