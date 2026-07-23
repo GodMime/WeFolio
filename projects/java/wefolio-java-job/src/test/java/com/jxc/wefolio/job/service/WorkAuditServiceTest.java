@@ -188,6 +188,27 @@ class WorkAuditServiceTest {
     }
 
     @Test
+    void newAuditTaskShouldInheritCurrentWorkAuditRound() {
+        WorkAuditWorkEntity work = work(19L, MediaTypeDict.IMAGE, "round-two.jpg", null);
+        work.setAuditRound(2);
+        WorkAuditWorkRepository workRepository = mock(WorkAuditWorkRepository.class);
+        WorkAuditTaskRepository taskRepository = mock(WorkAuditTaskRepository.class);
+        WorkAuditClaimTransactionService claimTransactionService = mock(WorkAuditClaimTransactionService.class);
+        TencentCiAuditClient auditClient = mock(TencentCiAuditClient.class);
+        when(workRepository.findPendingImages(1)).thenReturn(List.of(work));
+        when(claimTransactionService.claimAndCreateSubmittingTask(eq(19L), any(WorkAuditTaskEntity.class)))
+                .thenReturn(null);
+        WorkAuditService service =
+                new WorkAuditService(workRepository, taskRepository, claimTransactionService, auditClient, properties());
+
+        service.auditPendingImages(1);
+
+        ArgumentCaptor<WorkAuditTaskEntity> taskCaptor = ArgumentCaptor.forClass(WorkAuditTaskEntity.class);
+        verify(claimTransactionService).claimAndCreateSubmittingTask(eq(19L), taskCaptor.capture());
+        assertThat(taskCaptor.getValue().getAuditRound()).isEqualTo(2);
+    }
+
+    @Test
     void imageReviewResultShouldSetWorkReviewRequired() {
         WorkAuditWorkEntity work = work(12L, MediaTypeDict.IMAGE, "image.jpg", null);
         WorkAuditWorkRepository workRepository = mock(WorkAuditWorkRepository.class);
@@ -209,7 +230,8 @@ class WorkAuditServiceTest {
 
         ArgumentCaptor<String> reasonCaptor = ArgumentCaptor.forClass(String.class);
         verify(claimTransactionService).markTaskSuccessAndUpdateWork(
-                eq(102L), eq(12L), eq(AuditResultDict.REVIEW), any(), eq(1), eq("Porn"), eq(90), eq("{}"),
+                eq(102L), eq(12L), eq(AuditResultDict.REVIEW), any(), eq(1), eq("Porn"), eq(90),
+                eq(List.<TencentCiAuditRisk>of()), eq("{}"),
                 eq(WorkAuditStatusDict.REVIEW_REQUIRED), reasonCaptor.capture());
         assertThat(reasonCaptor.getValue()).contains("疑似违规", "需人工复核", "Porn", "90");
     }
@@ -235,7 +257,8 @@ class WorkAuditServiceTest {
         service.auditPendingImages(500);
 
         verify(claimTransactionService).markTaskSuccessAndUpdateWork(
-                eq(106L), eq(16L), eq(AuditResultDict.PASS), any(), eq(0), eq("Normal"), eq(0), eq("{}"),
+                eq(106L), eq(16L), eq(AuditResultDict.PASS), any(), eq(0), eq("Normal"), eq(0),
+                eq(List.<TencentCiAuditRisk>of()), eq("{}"),
                 eq(WorkAuditStatusDict.PASSED), eq(null));
     }
 
@@ -277,7 +300,8 @@ class WorkAuditServiceTest {
         service.queryPendingVideoResults(1000);
 
         verify(claimTransactionService).markTaskSuccessAndUpdateWork(
-                eq(108L), eq(18L), eq(AuditResultDict.PASS), eq("Success"), eq(0), eq("Normal"), eq(0), eq("{}"),
+                eq(108L), eq(18L), eq(AuditResultDict.PASS), eq("Success"), eq(0), eq("Normal"), eq(0),
+                eq(List.<TencentCiAuditRisk>of()), eq("{}"),
                 eq(WorkAuditStatusDict.PASSED), eq(null));
     }
 
@@ -382,6 +406,7 @@ class WorkAuditServiceTest {
         work.setMediaType(mediaType.getCode());
         work.setMediaObjectKey(objectKey);
         work.setMediaSha256("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
+        work.setAuditRound(1);
         work.setDurationMs(durationMs);
         return work;
     }

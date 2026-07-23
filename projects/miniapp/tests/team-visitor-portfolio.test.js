@@ -62,6 +62,54 @@ test('opens and refreshes only the team visitor session endpoint', async () => {
   assert.ok(calls.every((item) => item.url.startsWith('/api/visitor/team-portfolios/')))
 })
 
+test('team timeline refresh reuses anonymous session id without wx login', async () => {
+  const { openTeamVisitorSession, requestWithTeamVisitorSessionRefresh } = load('team-visitor-session.js')
+  const calls = []
+  let loginCalls = 0
+  const anonymousSessionId = 'timeline-abc123def456ghi789jkl012mno345pqr678'
+  const requestFn = async (options) => {
+    calls.push(options)
+    if (options.url.endsWith('/schedule-options') && calls.filter((item) => item.url.endsWith('/schedule-options')).length === 1) {
+      throw Object.assign(new Error('expired'), { authRequired: true })
+    }
+    if (options.url.endsWith('/open')) return { token: 'timeline-token', expiresInSeconds: 3600 }
+    return { ok: true }
+  }
+  const wxApi = { login() { loginCalls += 1 }, setStorageSync() {} }
+
+  await openTeamVisitorSession({ shareCode: 'TEAM-4', anonymousSessionId, requestFn, wxApi })
+  await requestWithTeamVisitorSessionRefresh({
+    shareCode: 'TEAM-4',
+    anonymousSessionId,
+    requestFn,
+    wxApi,
+    requestOptions: { url: '/api/visitor/team-portfolios/TEAM-4/schedule-options' }
+  })
+
+  const openCalls = calls.filter((item) => item.url.endsWith('/open'))
+  assert.equal(openCalls.length, 2)
+  assert.equal(loginCalls, 0)
+  assert.ok(openCalls.every((item) => item.data.anonymousSessionId === anonymousSessionId))
+  assert.ok(openCalls.every((item) => !Object.hasOwn(item.data, 'loginCode')))
+})
+
+test('team timeline open ignores unavailable local storage', async () => {
+  const { openTeamVisitorSession } = load('team-visitor-session.js')
+
+  const session = await openTeamVisitorSession({
+    shareCode: 'TEAM-4',
+    anonymousSessionId: 'timeline-abc123def456ghi789jkl012mno345pqr678',
+    requestFn: async () => ({ token: 'timeline-token', expiresInSeconds: 3600 }),
+    wxApi: {
+      setStorageSync() {
+        throw new Error('single-page storage unavailable')
+      }
+    }
+  })
+
+  assert.equal(session.token, 'timeline-token')
+})
+
 test('refresh hook rebuilds visitor request options with a new profile token', async () => {
   const { requestWithTeamVisitorSessionRefresh } = load('team-visitor-session.js')
   const calls = []

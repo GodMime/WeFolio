@@ -4,12 +4,14 @@ import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.jxc.wefolio.common.auth.AuthContext;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
+import com.jxc.wefolio.config.WorkAuditProperties;
 import com.jxc.wefolio.dict.MediaTypeDict;
 import com.jxc.wefolio.dict.PortfolioConfigScopeDict;
 import com.jxc.wefolio.dict.ReferenceTypeDict;
 import com.jxc.wefolio.dict.UserStatusDict;
 import com.jxc.wefolio.dict.WfTagStatusDict;
 import com.jxc.wefolio.dict.WorkAuditStatusDict;
+import com.jxc.wefolio.dict.WorkAuditReasonCodeDict;
 import com.jxc.wefolio.dict.WorkUploadTaskStatusDict;
 import com.jxc.wefolio.dto.MineWorkBatchDeleteCheckResponse;
 import com.jxc.wefolio.dto.MineWorkBatchDeleteRequest;
@@ -259,6 +261,7 @@ class MineWorkServiceTest {
         first.setMediaObjectKey("WFA3B1E7A2/work/image/photo.jpg");
         first.setCoverObjectKey("WFA3B1E7A2/work/image/photo.jpg");
         first.setAuditStatus(WorkAuditStatusDict.PASSED.getCode());
+        first.setAuditRound(1);
         setField(first, "aspectRatio", "3:2");
         WorkEntity second = ownedWork(12L);
         second.setMediaType(MediaTypeDict.VIDEO.getCode());
@@ -266,7 +269,10 @@ class MineWorkServiceTest {
         second.setOriginalFileName("film.mp4");
         second.setMediaObjectKey("WFA3B1E7A2/work/video/film.mp4");
         second.setAuditStatus(WorkAuditStatusDict.REVIEW_REQUIRED.getCode());
-        second.setAuditRejectReason("腾讯云判定疑似违规，需人工复核");
+        second.setAuditRound(2);
+        second.setAuditReasonCode(WorkAuditReasonCodeDict.PORN_CONTENT.getCode());
+        second.setAuditReasonCodes("[\"PORN_CONTENT\",\"ADVERTISING_CONTENT\"]");
+        second.setAuditRejectReason("腾讯云判定违规：label=Porn，result=2，score=88");
         Page<WorkEntity> page = new Page<>(1, 20);
         page.setRecords(List.of(first, second));
         page.setTotal(2L);
@@ -300,13 +306,30 @@ class MineWorkServiceTest {
         assertThat(response.getWorks().get(0).getReferenceCount()).isEqualTo(1L);
         assertThat(response.getWorks().get(0).getAuditStatus()).isEqualTo("PASSED");
         assertThat(response.getWorks().get(0).getAuditStatusText()).isEqualTo("审核通过");
+        assertThat(response.getWorks().get(0).getAuditRound()).isEqualTo(1);
+        assertThat(response.getWorks().get(0).getMaxAuditRounds()).isEqualTo(3);
+        assertThat(response.getWorks().get(0).getRemainingAuditResubmitCount()).isEqualTo(2);
+        assertThat(response.getWorks().get(0).isCanResubmitAudit()).isFalse();
+        assertThat(response.getWorks().get(0).getAuditRejectReason()).isNull();
         assertThat(readField(response.getWorks().get(0), "aspectRatio")).isEqualTo("3:2");
         assertThat(response.getWorks().get(0).getTags()).extracting(MineWorkListResponse.TagItem::getName)
                 .containsExactly("户外仪式");
         assertThat(response.getWorks().get(1).getReferenceCount()).isEqualTo(2L);
         assertThat(response.getWorks().get(1).getAuditStatus()).isEqualTo("REVIEW_REQUIRED");
         assertThat(response.getWorks().get(1).getAuditStatusText()).isEqualTo("疑似违规");
-        assertThat(response.getWorks().get(1).getAuditRejectReason()).isEqualTo("腾讯云判定疑似违规，需人工复核");
+        assertThat(response.getWorks().get(1).getAuditRound()).isEqualTo(2);
+        assertThat(response.getWorks().get(1).getMaxAuditRounds()).isEqualTo(3);
+        assertThat(response.getWorks().get(1).getRemainingAuditResubmitCount()).isEqualTo(1);
+        assertThat(response.getWorks().get(1).isCanResubmitAudit()).isTrue();
+        assertThat(response.getWorks().get(1).getAuditRejectReason())
+                .isEqualTo("作品可能包含色情或低俗内容，需要进一步确认，建议调整后重新提交")
+                .doesNotContain("腾讯云", "Porn", "result=", "score=");
+        assertThat(response.getWorks().get(1).getAuditReasons())
+                .extracting(MineWorkListResponse.AuditReasonItem::getCode)
+                .containsExactly("PORN_CONTENT", "ADVERTISING_CONTENT");
+        assertThat(response.getWorks().get(1).getAuditReasons())
+                .extracting(MineWorkListResponse.AuditReasonItem::getMessage)
+                .allMatch(message -> message.contains("需要进一步确认"));
         assertThat(response.getWorks().get(1).getTags()).extracting(MineWorkListResponse.TagItem::getName)
                 .containsExactly("快剪");
         verify(workEntityMapper, never()).selectCount(any());
@@ -2174,6 +2197,11 @@ class MineWorkServiceTest {
     }
 
     private MineWorkService service() {
+        WorkAuditProperties workAuditProperties = new WorkAuditProperties();
+        MineWorkAuditService mineWorkAuditService = new MineWorkAuditService(
+                workEntityMapper,
+                workAuditProperties,
+                new WorkAuditUserReasonResolver());
         return new MineWorkService(
                 userEntityMapper,
                 workEntityMapper,
@@ -2183,7 +2211,8 @@ class MineWorkServiceTest {
                 portfolioReferenceEntityMapper,
                 cosService,
                 workUploadTransactionService,
-                contentLimitService);
+                contentLimitService,
+                mineWorkAuditService);
     }
 
     private UserEntity activeUser() {

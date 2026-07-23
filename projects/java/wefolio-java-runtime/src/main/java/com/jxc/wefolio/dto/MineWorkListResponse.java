@@ -132,8 +132,23 @@ public class MineWorkListResponse {
         /** 审核状态展示文案 */
         private String auditStatusText;
 
+        /** 当前审核轮次 */
+        private int auditRound;
+
+        /** 配置的审核总轮次 */
+        private int maxAuditRounds;
+
+        /** 剩余可主动重审次数 */
+        private int remainingAuditResubmitCount;
+
+        /** 当前是否允许主动重审 */
+        private boolean canResubmitAudit;
+
         /** 审核拒绝原因，违规、疑似违规或审核失败时可能存在 */
         private String auditRejectReason;
+
+        /** 当前轮次全部用户可读审核原因，最多 20 个 */
+        private List<AuditReasonItem> auditReasons = new ArrayList<>();
 
         /** 引用次数 */
         private long referenceCount;
@@ -146,5 +161,18 @@ public class MineWorkListResponse {
 
         /** 更新时间 */
         private LocalDateTime updatedAt;
+    }
+
+    /**
+     * 用户可读审核原因。
+     */
+    @Data
+    public static class AuditReasonItem {
+
+        /** 稳定风险代码 */
+        private String code;
+
+        /** 用户可直接理解的中文原因 */
+        private String message;
     }
 }

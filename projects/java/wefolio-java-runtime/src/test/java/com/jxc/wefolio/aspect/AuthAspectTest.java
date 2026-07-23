@@ -6,6 +6,7 @@ import ch.qos.logback.core.read.ListAppender;
 import com.jxc.wefolio.annotation.LoginAccess;
 import com.jxc.wefolio.annotation.MaintainerAccess;
 import com.jxc.wefolio.annotation.SystemAccess;
+import com.jxc.wefolio.annotation.TimelineAnonymousAccess;
 import com.jxc.wefolio.annotation.VisitorAccess;
 import com.jxc.wefolio.common.Response;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
@@ -22,12 +23,14 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.slf4j.LoggerFactory;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.web.servlet.HandlerMapping;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.lang.reflect.Method;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -154,6 +157,40 @@ class AuthAspectTest {
         assertThat(VisitorContextHolder.getVisitorId()).isEmpty();
         assertThat(VisitorContextHolder.getVisitorKey()).isEmpty();
         verify(authTokenService, never()).resolveAuthenticatedUserId("Bearer wf-visitor-v1.token");
+    }
+
+    @Test
+    void timelineAnonymousTokenAllowsOnlyAnnotatedEndpointWithinIssuedPortfolio() throws Throwable {
+        setPortfolioRequest("Bearer wf-visitor-timeline-v1.token", "PF001");
+        setJoinPointMethod(TimelineVisitorFixtureController.class, "scheduleEndpoint");
+        when(visitorAuthTokenService.resolveAuthenticatedVisitor("Bearer wf-visitor-timeline-v1.token"))
+                .thenReturn(Optional.of(timelineAnonymousVisitorToken("PERSONAL:PF001")));
+        when(joinPoint.proceed()).thenReturn(Response.success("schedule"));
+
+        Object result = aspect().authenticate(joinPoint);
+
+        assertThat(result).isInstanceOf(Response.class);
+        assertThat(VisitorContextHolder.current()).isEmpty();
+    }
+
+    @Test
+    void timelineAnonymousTokenRejectsProfileEndpointAndDifferentPortfolio() throws Throwable {
+        setPortfolioRequest("Bearer wf-visitor-timeline-v1.token", "PF001");
+        setJoinPointMethod(TimelineVisitorFixtureController.class, "profileEndpoint");
+        when(visitorAuthTokenService.resolveAuthenticatedVisitor("Bearer wf-visitor-timeline-v1.token"))
+                .thenReturn(Optional.of(timelineAnonymousVisitorToken("PERSONAL:PF001")));
+
+        assertThatThrownBy(() -> aspect().authenticate(joinPoint))
+                .isInstanceOf(AuthenticationRequiredException.class);
+        verify(joinPoint, never()).proceed();
+
+        setJoinPointMethod(TimelineVisitorFixtureController.class, "scheduleEndpoint");
+        when(visitorAuthTokenService.resolveAuthenticatedVisitor("Bearer wf-visitor-timeline-v1.token"))
+                .thenReturn(Optional.of(timelineAnonymousVisitorToken("PERSONAL:PF999")));
+
+        assertThatThrownBy(() -> aspect().authenticate(joinPoint))
+                .isInstanceOf(AuthenticationRequiredException.class);
+        verify(joinPoint, never()).proceed();
     }
 
     @Test
@@ -288,6 +325,16 @@ class AuthAspectTest {
         );
     }
 
+    /** 构造朋友圈单页匿名访客令牌。 */
+    private VisitorAuthTokenService.ResolvedVisitorToken timelineAnonymousVisitorToken(String scope) {
+        return new VisitorAuthTokenService.ResolvedVisitorToken(
+                2048L,
+                "timeline-visitor-key",
+                Instant.now().plusSeconds(3600),
+                scope
+        );
+    }
+
     /**
      * 挂载日志捕获器。
      *
@@ -318,6 +365,16 @@ class AuthAspectTest {
         if (authorization != null) {
             request.addHeader("Authorization", authorization);
         }
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+    }
+
+    /** 设置带分享码路径变量的个人作品集请求。 */
+    private void setPortfolioRequest(String authorization, String shareCode) {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setMethod("GET");
+        request.setRequestURI("/api/visitor/portfolios/" + shareCode + "/schedule");
+        request.addHeader("Authorization", authorization);
+        request.setAttribute(HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE, Map.of("shareCode", shareCode));
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
     }
 
@@ -405,6 +462,20 @@ class AuthAspectTest {
         @LoginAccess
         public Response<String> loginEndpoint() {
             return Response.success("public");
+        }
+    }
+
+    /** 朋友圈单页匿名访客访问测试夹具。 */
+    @VisitorAccess
+    private static class TimelineVisitorFixtureController {
+
+        @TimelineAnonymousAccess
+        public Response<String> scheduleEndpoint() {
+            return Response.success("schedule");
+        }
+
+        public Response<String> profileEndpoint() {
+            return Response.success("profile");
         }
     }
 

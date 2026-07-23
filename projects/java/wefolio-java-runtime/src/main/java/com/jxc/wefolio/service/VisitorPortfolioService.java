@@ -70,6 +70,9 @@ public class VisitorPortfolioService {
     /** 默认标题 */
     private static final String DEFAULT_TITLE = "个人作品集";
 
+    /** 朋友圈单页匿名身份作用域前缀 */
+    private static final String TIMELINE_ANONYMOUS_SCOPE_PREFIX = "PERSONAL:";
+
     /** 时间展示格式 */
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
 
@@ -145,8 +148,12 @@ public class VisitorPortfolioService {
             PortfolioConfigDto config = trace.measure(
                     PortfolioOpenPerformanceLogger.Phase.PORTFOLIO_LOOKUP,
                     () -> parseConfig(portfolio.getPublishedConfigJson()));
-            VisitorService.VisitorSession visitorSession = visitorService.resolveByLoginCode(
-                    request == null ? null : request.getLoginCode(), trace);
+            // 匿名身份按数据库 ID 聚合，避免分享码变更后产生新的计费访客身份。
+            VisitorService.VisitorSession visitorSession = visitorService.resolveForOpen(
+                    request == null ? null : request.getLoginCode(),
+                    request == null ? null : request.getAnonymousSessionId(),
+                    TIMELINE_ANONYMOUS_SCOPE_PREFIX + portfolio.getId(),
+                    trace);
             VisitorEntity visitor = visitorSession.visitor();
             boolean ownerSelfVisitor = ownerSelfVisitService.isOwnerSelfVisitor(
                     portfolio.getOwnerId(),
@@ -277,13 +284,20 @@ public class VisitorPortfolioService {
     ) {
         VisitorEntity visitor = visitorSession.visitor();
         response.setVisitorKey(visitor.getVisitorKey());
-        VisitorAuthTokenService.VisitorLoginToken loginToken =
-                visitorAuthTokenService.issueToken(visitor.getId(), visitor.getVisitorKey());
+        // 匿名令牌按分享码绑定，可由鉴权切面直接与当前 URL 比对，无需再次查询作品集。
+        VisitorAuthTokenService.VisitorLoginToken loginToken = visitorSession.anonymous()
+                ? visitorAuthTokenService.issueTimelineAnonymousToken(
+                        visitor.getId(),
+                        visitor.getVisitorKey(),
+                        TIMELINE_ANONYMOUS_SCOPE_PREFIX + response.getShareCode())
+                : visitorAuthTokenService.issueToken(visitor.getId(), visitor.getVisitorKey());
         response.setTokenType(loginToken.tokenType());
         response.setToken(loginToken.token());
         response.setExpiresInSeconds(loginToken.expiresInSeconds());
         response.setNewVisitor(visitorSession.newVisitor());
-        boolean needVisitorProfile = !suppressVisitorProfile && needVisitorProfile(visitor);
+        boolean needVisitorProfile = !suppressVisitorProfile
+                && !visitorSession.anonymous()
+                && needVisitorProfile(visitor);
         response.setNeedVisitorProfile(needVisitorProfile);
         if (needVisitorProfile) {
             response.setVisitorProfileToken(visitorService.createProfileToken(visitor.getId(), portfolioId, visitRecordId));

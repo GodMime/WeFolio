@@ -1489,6 +1489,115 @@ test('works page confirms delete then refreshes work list', async () => {
   assert.equal(page.data.list.empty, true)
 })
 
+test('works page confirms audit resubmit, prevents duplicate requests, and refreshes list', async () => {
+  const requests = []
+  const modals = []
+  const toasts = []
+  const resubmit = deferred()
+  const fakeRequest = (options) => {
+    requests.push(options)
+    if (options.url === '/api/mine/works/18/audit-resubmit') {
+      return resubmit.promise
+    }
+    return Promise.resolve({
+      works: [],
+      tags: [],
+      summary: {},
+      page: 1,
+      pageSize: 20,
+      hasMore: false
+    })
+  }
+  const page = loadPage('pages/works/works.js', fakeRequest, {
+    showModal(options) {
+      modals.push(options)
+    },
+    showToast(options) {
+      toasts.push(options)
+    }
+  })
+  page.data.list.works = [{
+    id: 18,
+    mediaType: 'IMAGE',
+    title: '海边仪式',
+    auditStatus: 'REJECTED',
+    canResubmitAudit: true,
+    remainingAuditResubmitCount: 2
+  }]
+
+  page.handleAuditResubmitTap({ currentTarget: { dataset: { id: '18' } } })
+
+  assert.equal(modals[0].title, '重新提交审核')
+  assert.equal(modals[0].confirmText, '重新审核')
+  const submitPromise = modals[0].success({ confirm: true })
+  await flushPromises()
+  assert.equal(page.data.resubmittingWorkId, 18)
+  assert.deepEqual(requests.map((item) => `${item.method || 'GET'} ${item.url}`), [
+    'POST /api/mine/works/18/audit-resubmit'
+  ])
+
+  page.handleAuditResubmitTap({ currentTarget: { dataset: { id: '18' } } })
+  assert.equal(modals.length, 1)
+
+  resubmit.resolve({ auditStatus: 'PENDING', auditRound: 2 })
+  await submitPromise
+  await flushPromises()
+
+  assert.deepEqual(requests.map((item) => `${item.method || 'GET'} ${item.url}`), [
+    'POST /api/mine/works/18/audit-resubmit',
+    'GET /api/mine/works'
+  ])
+  assert.equal(toasts[0].title, '已重新提交审核')
+  assert.equal(page.data.resubmittingWorkId, null)
+  assert.equal(page.data.list.empty, true)
+})
+
+test('works page cancels audit resubmit and refreshes after backend rejection', async () => {
+  const requests = []
+  const modals = []
+  const toasts = []
+  let rejectResubmit = false
+  const fakeRequest = (options) => {
+    requests.push(options)
+    if (options.url === '/api/mine/works/19/audit-resubmit' && rejectResubmit) {
+      return Promise.reject(new Error('作品审核状态已变化，请刷新后重试'))
+    }
+    return Promise.resolve({ works: [], tags: [], summary: {}, page: 1, pageSize: 20, hasMore: false })
+  }
+  const page = loadPage('pages/works/works.js', fakeRequest, {
+    showModal(options) {
+      modals.push(options)
+    },
+    showToast(options) {
+      toasts.push(options)
+    }
+  })
+  page.data.list.works = [{
+    id: 19,
+    mediaType: 'VIDEO',
+    title: '晚宴快剪',
+    auditStatus: 'FAILED',
+    canResubmitAudit: true,
+    remainingAuditResubmitCount: 1
+  }]
+
+  page.handleAuditResubmitTap({ currentTarget: { dataset: { id: '19' } } })
+  await modals[0].success({ confirm: false })
+  assert.equal(requests.length, 0)
+
+  rejectResubmit = true
+  page.handleAuditResubmitTap({ currentTarget: { dataset: { id: '19' } } })
+  await modals[1].success({ confirm: true })
+  await flushPromises()
+
+  assert.deepEqual(requests.map((item) => `${item.method || 'GET'} ${item.url}`), [
+    'POST /api/mine/works/19/audit-resubmit',
+    'GET /api/mine/works'
+  ])
+  assert.equal(toasts[0].title, '作品审核状态已变化，请刷新后重试')
+  assert.equal(page.data.resubmittingWorkId, null)
+})
+
 test('works page batch mode toggles selection instead of opening editors', async () => {
   const fakeRequest = () => Promise.resolve({})
   const page = loadPage('pages/works/works.js', fakeRequest)

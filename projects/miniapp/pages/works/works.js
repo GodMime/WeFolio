@@ -47,6 +47,7 @@ const PORTFOLIOS_PAGE_URL = '/pages/portfolios/portfolios'
 const WORK_TAGS_API_URL = '/api/mine/works/tags'
 const WORK_TAG_DELETE_API_PREFIX = '/api/mine/works/tags/delete'
 const WORKS_API_PREFIX = '/api/mine/works'
+const WORK_AUDIT_RESUBMIT_API_SUFFIX = '/audit-resubmit'
 const WORK_DELETE_API_PREFIX = '/api/mine/works/delete'
 const WORK_BATCH_DELETE_CHECK_API_URL = '/api/mine/works/delete-check'
 const WORK_BATCH_DELETE_API_URL = '/api/mine/works/delete'
@@ -408,6 +409,7 @@ Page({
     revealedWorkId: null,
     workTouchStart: null,
     deletingWorkId: null,
+    resubmittingWorkId: null,
     tagManageMode: false,
     tagDialogVisible: false,
     tagDialogMode: 'create',
@@ -945,6 +947,50 @@ Page({
         duration: 2600
       })
     }
+  },
+
+  handleAuditResubmitTap(event) {
+    const workId = normalizeId(event.currentTarget.dataset.id)
+    const work = this.findWorkById(workId)
+    if (!work || !work.canResubmitAudit || this.data.resubmittingWorkId) {
+      return
+    }
+    const remainingCount = Math.max(0, Number(work.remainingAuditResubmitCount || 0))
+    wx.showModal({
+      title: '重新提交审核',
+      content: `确认将“${work.title || '该作品'}”重新提交审核？本次将使用 1 次审核机会，当前还可重新提交 ${remainingCount} 次。`,
+      confirmText: '重新审核',
+      success: async (result) => {
+        if (!result.confirm || this.data.resubmittingWorkId) {
+          return
+        }
+        this.setData({ resubmittingWorkId: workId })
+        try {
+          await request({
+            url: `${WORKS_API_PREFIX}/${workId}${WORK_AUDIT_RESUBMIT_API_SUFFIX}`,
+            method: 'POST'
+          })
+          this.setData({ resubmittingWorkId: null })
+          wx.showToast({
+            title: '已重新提交审核',
+            icon: 'success'
+          })
+          await this.loadWorks(true, { showLoading: false })
+        } catch (error) {
+          this.setData({ resubmittingWorkId: null })
+          if (error && error.authRequired) {
+            handleMaintainerAuthRequired(error.message)
+            return
+          }
+          wx.showToast({
+            title: error && error.message ? error.message : '重新提交审核失败',
+            icon: 'none',
+            duration: 2600
+          })
+          await this.loadWorks(true, { showLoading: false })
+        }
+      }
+    })
   },
 
   openImageEditSheet(work) {

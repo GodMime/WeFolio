@@ -887,6 +887,47 @@ test('team visitor shows timeline guide after displayable content loads and clea
   } finally { page.cleanup() }
 })
 
+test('team visitor opens timeline single-page mode anonymously without wx login', async () => {
+  const requests = []
+  let loginCalls = 0
+  const page = loadPage('visitor-portfolio/team-visitor-portfolio.js', async (options) => {
+    requests.push(options)
+    return {
+      shareCode: 'TEAM1',
+      visitorKey: 'timeline-team-visitor',
+      token: 'wf-visitor-v1.timeline-team',
+      expiresInSeconds: 60,
+      needVisitorProfile: false,
+      renderData: {
+        title: '朋友圈团队作品集',
+        components: []
+      }
+    }
+  }, {
+    getEnterOptionsSync() {
+      return { scene: 1154 }
+    },
+    login() {
+      loginCalls += 1
+    }
+  })
+
+  try {
+    await page.onLoad({ shareCode: 'TEAM1' })
+    await flush()
+    await flush()
+
+    assert.equal(loginCalls, 0)
+    assert.equal(requests.length, 1)
+    assert.equal(requests[0].url, '/api/visitor/team-portfolios/TEAM1/open')
+    assert.equal(Object.hasOwn(requests[0].data, 'loginCode'), false)
+    assert.match(requests[0].data.anonymousSessionId, /^timeline-/)
+    assert.equal(page.data.visitorKey, 'timeline-team-visitor')
+  } finally {
+    page.cleanup()
+  }
+})
+
 test('team visitor shows navigation back only when the page stack has a previous page', () => {
   const internalPage = loadPage(
     'visitor-portfolio/team-visitor-portfolio.js',

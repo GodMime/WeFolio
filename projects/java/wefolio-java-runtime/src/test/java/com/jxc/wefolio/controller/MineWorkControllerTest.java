@@ -6,6 +6,7 @@ import com.jxc.wefolio.common.Response;
 import com.jxc.wefolio.dto.MineWorkBatchDeleteCheckResponse;
 import com.jxc.wefolio.dto.MineWorkBatchDeleteRequest;
 import com.jxc.wefolio.dto.MineWorkBatchDeleteResponse;
+import com.jxc.wefolio.dto.MineWorkAuditResubmitResponse;
 import com.jxc.wefolio.dto.MineWorkCoverUploadTicketRequest;
 import com.jxc.wefolio.dto.MineWorkCoverUploadTicketResponse;
 import com.jxc.wefolio.dto.MineWorkDeleteCheckResponse;
@@ -24,6 +25,7 @@ import com.jxc.wefolio.dto.MineWorkUploadTicketRequest;
 import com.jxc.wefolio.dto.MineWorkUploadTicketResponse;
 import com.jxc.wefolio.dict.WorkAuditStatusDict;
 import com.jxc.wefolio.service.MineWorkService;
+import com.jxc.wefolio.service.MineWorkAuditService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -51,9 +53,13 @@ class MineWorkControllerTest {
     @Mock
     private MineWorkService mineWorkService;
 
+    /** 我的作品审核服务模拟 */
+    @Mock
+    private MineWorkAuditService mineWorkAuditService;
+
     @Test
     void workEndpointsUseMaintainerAccessAndDelegateToService() throws NoSuchMethodException {
-        MineWorkController controller = new MineWorkController(mineWorkService);
+        MineWorkController controller = new MineWorkController(mineWorkService, mineWorkAuditService);
         MineWorkListResponse listResponse = new MineWorkListResponse();
         MineWorkTagResponse tagResponse = new MineWorkTagResponse();
         MineWorkDetailResponse detailResponse = new MineWorkDetailResponse();
@@ -72,6 +78,7 @@ class MineWorkControllerTest {
         MineWorkBatchDeleteRequest batchDeleteRequest = new MineWorkBatchDeleteRequest();
         MineWorkBatchDeleteCheckResponse batchDeleteCheckResponse = new MineWorkBatchDeleteCheckResponse();
         MineWorkBatchDeleteResponse batchDeleteResponse = new MineWorkBatchDeleteResponse();
+        MineWorkAuditResubmitResponse auditResubmitResponse = new MineWorkAuditResubmitResponse();
         MineWorkTagUpsertRequest createTagRequest = new MineWorkTagUpsertRequest();
         MineWorkTagUpsertRequest updateTagRequest = new MineWorkTagUpsertRequest();
         MineWorkListResponse.TagItem createdTag = new MineWorkListResponse.TagItem();
@@ -102,6 +109,7 @@ class MineWorkControllerTest {
         when(mineWorkService.checkDeleteWork(99L)).thenReturn(deleteCheckResponse);
         when(mineWorkService.checkDeleteWorks(batchDeleteRequest)).thenReturn(batchDeleteCheckResponse);
         when(mineWorkService.deleteWorks(batchDeleteRequest)).thenReturn(batchDeleteResponse);
+        when(mineWorkAuditService.resubmit(99L)).thenReturn(auditResubmitResponse);
 
         Response<MineWorkListResponse> listed = controller.works(
                 "草坪",
@@ -127,6 +135,7 @@ class MineWorkControllerTest {
         Response<MineWorkBatchDeleteCheckResponse> batchDeleteCheck = controller.checkDeleteWorks(batchDeleteRequest);
         Response<Void> deleted = controller.deleteWork(99L);
         Response<MineWorkBatchDeleteResponse> batchDeleted = controller.deleteWorks(batchDeleteRequest);
+        Response<MineWorkAuditResubmitResponse> auditResubmitted = controller.resubmitAudit(99L);
 
         assertThat(MineWorkController.class.isAnnotationPresent(MaintainerAccess.class)).isTrue();
         assertGetMapping("works",
@@ -166,6 +175,7 @@ class MineWorkControllerTest {
                 new Class<?>[] {MineWorkBatchDeleteRequest.class},
                 "/api/mine/works/delete");
         assertPostMapping("deleteTag", new Class<?>[] {Long.class}, "/api/mine/works/tags/delete/{tagId}");
+        assertPostMapping("resubmitAudit", new Class<?>[] {Long.class}, "/api/mine/works/{workId}/audit-resubmit");
         assertThat(MineWorkController.class.getMethod("works",
                         String.class, Long.class, String.class, String.class, int.class, int.class)
                 .getParameters()[0].isAnnotationPresent(RequestParam.class)).isTrue();
@@ -188,12 +198,14 @@ class MineWorkControllerTest {
         assertThat(batchDeleteCheck.getData()).isSameAs(batchDeleteCheckResponse);
         assertThat(deleted.isSuccess()).isTrue();
         assertThat(batchDeleted.getData()).isSameAs(batchDeleteResponse);
+        assertThat(auditResubmitted.getData()).isSameAs(auditResubmitResponse);
         verify(mineWorkService).listSortItems("TAG", 12L);
         verify(mineWorkService).sortWorks(sortRequest);
         verify(mineWorkService).checkDeleteWorks(batchDeleteRequest);
         verify(mineWorkService).deleteWork(99L);
         verify(mineWorkService).deleteWorks(batchDeleteRequest);
         verify(mineWorkService).deleteTag(31L);
+        verify(mineWorkAuditService).resubmit(99L);
     }
 
     @Test

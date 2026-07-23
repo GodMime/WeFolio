@@ -11,6 +11,7 @@ import com.jxc.wefolio.dto.WechatSessionResponse;
 import com.jxc.wefolio.entity.VisitorEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.VisitorEntityMapper;
+import com.jxc.wefolio.message.PortfolioMessage;
 import com.jxc.wefolio.message.VisitorMessage;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,6 +29,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -83,7 +85,71 @@ class VisitorServiceTest {
         assertThat(result.visitor().getId()).isEqualTo(1024L);
         assertThat(VisitorService.VisitorSession.class.getRecordComponents())
                 .extracting(java.lang.reflect.RecordComponent::getName)
-                .containsExactly("visitor", "newVisitor");
+                .containsExactly("visitor", "newVisitor", "anonymous");
+    }
+
+    @Test
+    void resolveForOpenShouldHashAnonymousSessionWithoutWechatExchange() {
+        String anonymousSessionId = "timeline-abc123def456ghi789jkl012mno345pqr678";
+        when(visitorEntityMapper.insertIgnore(any(VisitorEntity.class))).thenAnswer(invocation -> {
+            VisitorEntity entity = invocation.getArgument(0);
+            entity.setId(2048L);
+            return 1;
+        });
+
+        VisitorService.VisitorSession result = service().resolveForOpen(
+                null, anonymousSessionId, "PERSONAL:88", null);
+
+        ArgumentCaptor<VisitorEntity> visitorCaptor = ArgumentCaptor.forClass(VisitorEntity.class);
+        verify(visitorEntityMapper).insertIgnore(visitorCaptor.capture());
+        assertThat(visitorCaptor.getValue().getOpenid())
+                .matches("timeline:[a-f0-9]{64}")
+                .doesNotContain(anonymousSessionId)
+                .doesNotContain("PERSONAL:88");
+        assertThat(visitorCaptor.getValue().getUnionid()).isNull();
+        assertThat(result.newVisitor()).isTrue();
+        assertThat(result.anonymous()).isTrue();
+        verifyNoInteractions(wechatMiniappClient);
+    }
+
+    @Test
+    void resolveForOpenShouldPreferWechatLoginCodeOverAnonymousSession() {
+        WechatSessionResponse session = new WechatSessionResponse();
+        session.setOpenid("openid-priority");
+        when(wechatMiniappClient.exchangeCode("wx-code")).thenReturn(session);
+        when(visitorEntityMapper.insertIgnore(any(VisitorEntity.class))).thenAnswer(invocation -> {
+            VisitorEntity entity = invocation.getArgument(0);
+            entity.setId(2048L);
+            return 1;
+        });
+
+        VisitorService.VisitorSession result = service().resolveForOpen(
+                " wx-code ",
+                "timeline-abc123def456ghi789jkl012mno345pqr678",
+                null,
+                null
+        );
+
+        assertThat(result.visitor().getOpenid()).isEqualTo("openid-priority");
+        assertThat(result.anonymous()).isFalse();
+        verify(wechatMiniappClient).exchangeCode("wx-code");
+    }
+
+    @Test
+    void resolveForOpenShouldKeepLegacyMissingLoginCodeErrorForInvalidAnonymousSession() {
+        assertThatThrownBy(() -> service().resolveForOpen(null, null, "PERSONAL:88", null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage(PortfolioMessage.WECHAT_LOGIN_CODE_REQUIRED_MESSAGE);
+        assertThatThrownBy(() -> service().resolveForOpen(null, "timeline-short", "PERSONAL:88", null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage(PortfolioMessage.WECHAT_LOGIN_CODE_REQUIRED_MESSAGE);
+        assertThatThrownBy(() -> service().resolveForOpen(
+                null,
+                "timeline-abc123def456ghi789jkl012mno345pqr678",
+                "PERSONAL:invalid",
+                null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage(PortfolioMessage.WECHAT_LOGIN_CODE_REQUIRED_MESSAGE);
     }
 
     @Test

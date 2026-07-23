@@ -191,8 +191,8 @@ public class WorkAuditService {
             WorkAuditStatusDict auditStatus = mapWorkAuditStatus(result.auditResult());
             String auditRejectReason = auditRejectReason(result);
             claimTransactionService.markTaskSuccessAndUpdateWork(task.getId(), work.getId(), result.auditResult(),
-                    result.ciState(), result.ciResult(), result.ciLabel(), result.ciScore(), result.rawPayload(),
-                    auditStatus, auditRejectReason);
+                    result.ciState(), result.ciResult(), result.ciLabel(), result.ciScore(), result.risks(),
+                    result.rawPayload(), auditStatus, auditRejectReason);
             log.info("图片作品审核简洁结果: workId={}, taskId={}, objectKey={}, ciJobId={}, ciState={}, "
                             + "auditResult={}, ciResult={}, ciLabel={}, ciScore={}, auditStatus={}, "
                             + "auditRejectReason={}",
@@ -286,8 +286,8 @@ public class WorkAuditService {
             WorkAuditStatusDict auditStatus = mapWorkAuditStatus(result.auditResult());
             String auditRejectReason = auditRejectReason(result);
             claimTransactionService.markTaskSuccessAndUpdateWork(task.getId(), task.getWorkId(), result.auditResult(),
-                    result.ciState(), result.ciResult(), result.ciLabel(), result.ciScore(), result.rawPayload(),
-                    auditStatus, auditRejectReason);
+                    result.ciState(), result.ciResult(), result.ciLabel(), result.ciScore(), result.risks(),
+                    result.rawPayload(), auditStatus, auditRejectReason);
             log.info("视频作品审核简洁结果: workId={}, taskId={}, objectKey={}, ciJobId={}, ciState={}, auditResult={}, "
                             + "ciResult={}, ciLabel={}, ciScore={}, auditStatus={}, queryCount={}, maxQueryCount={}, "
                             + "auditRejectReason={}",
@@ -423,6 +423,7 @@ public class WorkAuditService {
         task.setMediaType(mediaType.getCode());
         task.setMediaObjectKey(work.getMediaObjectKey());
         task.setMediaSha256(work.getMediaSha256());
+        task.setAuditRound(work.getAuditRound() == null ? 1 : work.getAuditRound());
         task.setProvider(AuditProviderDict.TENCENT_CI.getCode());
         task.setTaskStatus(WorkAuditTaskStatusDict.SUBMITTING.getCode());
         task.setAuditResult(AuditResultDict.UNKNOWN.getCode());

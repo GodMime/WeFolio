@@ -572,13 +572,64 @@
 }
 
 .audit-reject-text {
-  flex: 1;
-  min-width: 0;
   color: #7a4f0f;
   font-size: 23rpx;
   font-weight: 700;
   line-height: 1.38;
   word-break: break-all;
+}
+
+.audit-reject-text + .audit-reject-text {
+  margin-top: 6rpx;
+}
+
+.audit-reject-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.audit-resubmit-row {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10rpx;
+  margin-top: 12rpx;
+}
+
+.audit-round-text {
+  width: 100%;
+  flex: none;
+  min-width: 0;
+  color: #8b661f;
+  font-size: 21rpx;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.audit-resubmit-button {
+  width: 136rpx;
+  min-width: 136rpx;
+  max-width: 100%;
+  height: 50rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  align-self: flex-end;
+  margin: 0;
+  padding: 0 20rpx;
+  color: #ffffff;
+  font-size: 22rpx;
+  font-weight: 800;
+  line-height: 1;
+  border: 0;
+  border-radius: 999rpx;
+  background: #3d6fad;
+  box-sizing: border-box;
+}
+
+.audit-resubmit-button::after {
+  border: 0;
 }
 
 .reference-pill {

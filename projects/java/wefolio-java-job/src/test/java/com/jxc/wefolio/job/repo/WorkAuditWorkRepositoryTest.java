@@ -71,7 +71,9 @@ class WorkAuditWorkRepositoryTest {
 
         LambdaUpdateWrapper<WorkAuditWorkEntity> wrapper = captureUpdateWrapper(workMapper);
         assertThat(wrapper.getSqlSegment()).contains("id", "audit_status", "deleted");
-        assertThat(wrapper.getSqlSet()).contains("audit_status", "updated_at", "version = version + 1");
+        assertThat(wrapper.getSqlSet())
+                .contains("audit_status", "audit_reason_code", "audit_reason_codes", "audit_reject_reason", "updated_at",
+                        "version = version + 1");
         assertThat(wrapper.getParamNameValuePairs().values())
                 .contains(11L, WorkAuditStatusDict.PENDING.getCode(), WorkAuditStatusDict.AUDITING.getCode(), 0L);
     }
@@ -104,6 +106,29 @@ class WorkAuditWorkRepositoryTest {
                 .contains("audit_status", "audit_reject_reason", "updated_at", "version = version + 1");
         assertThat(wrapper.getParamNameValuePairs().values())
                 .contains(11L, WorkAuditStatusDict.REVIEW_REQUIRED.getCode(), "疑似违规", 0L);
+    }
+
+    @Test
+    void updateAuditStatusAndReasonsShouldPersistStableReasonCodeAndInternalSummaryTogether() {
+        WorkAuditWorkMapper workMapper = mock(WorkAuditWorkMapper.class);
+        WorkAuditWorkRepository repository = new WorkAuditWorkRepository(workMapper);
+
+        repository.updateAuditStatusAndReasons(
+                11L,
+                WorkAuditStatusDict.REJECTED,
+                "PORN_CONTENT",
+                "[\"PORN_CONTENT\",\"ADVERTISING_CONTENT\"]",
+                "腾讯云判定违规：label=Porn，result=1，score=88");
+
+        LambdaUpdateWrapper<WorkAuditWorkEntity> wrapper = captureUpdateWrapper(workMapper);
+        assertThat(wrapper.getSqlSegment()).contains("id", "deleted");
+        assertThat(wrapper.getSqlSet())
+                .contains("audit_status", "audit_reason_code", "audit_reason_codes", "audit_reject_reason", "updated_at",
+                        "version = version + 1");
+        assertThat(wrapper.getParamNameValuePairs().values())
+                .contains(11L, WorkAuditStatusDict.REJECTED.getCode(), "PORN_CONTENT",
+                        "[\"PORN_CONTENT\",\"ADVERTISING_CONTENT\"]",
+                        "腾讯云判定违规：label=Porn，result=1，score=88", 0L);
     }
 
     @SuppressWarnings("unchecked")

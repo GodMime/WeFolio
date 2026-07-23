@@ -2,6 +2,7 @@ package com.jxc.wefolio.controller;
 
 import com.alibaba.fastjson2.JSONObject;
 import com.jxc.wefolio.annotation.LoginAccess;
+import com.jxc.wefolio.annotation.TimelineAnonymousAccess;
 import com.jxc.wefolio.annotation.VisitorAccess;
 import com.jxc.wefolio.common.Response;
 import com.jxc.wefolio.dto.VisitorAvatarUploadTicketRequest;
@@ -67,6 +68,7 @@ public class VisitorTeamPortfolioController {
 
     /** 上报团队作品集访客事件。 */
     @PostMapping("/api/visitor/team-portfolios/{shareCode}/events")
+    @TimelineAnonymousAccess
     public Response<Void> event(
             @PathVariable String shareCode,
             @RequestBody VisitorTeamPortfolioEventRequest request
@@ -77,6 +79,7 @@ public class VisitorTeamPortfolioController {
 
     /** 查询已发布团队档期组件选项。 */
     @GetMapping("/api/visitor/team-portfolios/{shareCode}/schedule-options")
+    @TimelineAnonymousAccess
     public Response<JSONObject> scheduleOptions(
             @PathVariable String shareCode,
             @RequestParam("componentKey") String componentKey
@@ -86,6 +89,7 @@ public class VisitorTeamPortfolioController {
 
     /** 提交团队档期查询。 */
     @PostMapping("/api/visitor/team-portfolios/{shareCode}/schedule-query")
+    @TimelineAnonymousAccess
     public Response<TeamPortfolioScheduleQueryResponse> scheduleQuery(
             @PathVariable String shareCode,
             @RequestBody TeamPortfolioScheduleQueryRequest request
@@ -95,6 +99,7 @@ public class VisitorTeamPortfolioController {
 
     /** 提交团队预留联系信息。 */
     @PostMapping("/api/visitor/team-portfolios/{shareCode}/contact-leads")
+    @TimelineAnonymousAccess
     public Response<TeamContactFormComponentService.SubmitResult> contactLead(
             @PathVariable String shareCode,
             @RequestBody TeamContactLeadSubmitRequest request

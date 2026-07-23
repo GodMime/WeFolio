@@ -103,6 +103,82 @@ test('normalizes work audit status for list badges', () => {
   )
 })
 
+test('normalizes all audit reasons with legacy fallback and a maximum of twenty', () => {
+  const extraReasons = Array.from({ length: 22 }, (_, index) => ({
+    code: `RISK_${index}`,
+    message: ` 风险原因 ${index} `
+  }))
+  const result = normalizeWorkList({
+    works: [
+      {
+        id: 21,
+        auditStatus: 'REJECTED',
+        auditRejectReason: '旧版主原因',
+        auditReasons: [
+          { code: 'PORN_CONTENT', message: ' 色情或低俗内容 ' },
+          { code: 'ADVERTISING_CONTENT', message: '广告或引流信息' },
+          { code: 'PORN_CONTENT', message: '重复原因应忽略' },
+          { code: 'EMPTY', message: '   ' },
+          null,
+          ...extraReasons
+        ]
+      },
+      {
+        id: 22,
+        auditStatus: 'FAILED',
+        auditRejectReason: ' 旧客户端审核失败原因 '
+      },
+      {
+        id: 23,
+        auditStatus: 'PASSED',
+        auditRejectReason: '不应展示',
+        auditReasons: [{ code: 'PORN_CONTENT', message: '不应展示' }]
+      }
+    ]
+  })
+
+  assert.equal(result.works[0].auditReasons.length, 20)
+  assert.deepEqual(result.works[0].auditReasons.slice(0, 2), [
+    { code: 'PORN_CONTENT', message: '色情或低俗内容' },
+    { code: 'ADVERTISING_CONTENT', message: '广告或引流信息' }
+  ])
+  assert.deepEqual(result.works[1].auditReasons, [
+    { code: 'LEGACY_PRIMARY', message: '旧客户端审核失败原因' }
+  ])
+  assert.equal(result.works[1].showAuditRejectReason, true)
+  assert.deepEqual(result.works[2].auditReasons, [])
+  assert.equal(result.works[2].showAuditRejectReason, false)
+})
+
+test('normalizes backend audit rounds and resubmit eligibility without client-side inference', () => {
+  const result = normalizeWorkList({
+    works: [{
+      id: 6,
+      title: '可重新审核作品',
+      auditStatus: 'REJECTED',
+      auditRejectReason: '作品内容需要调整',
+      auditRound: 1,
+      maxAuditRounds: 3,
+      remainingAuditResubmitCount: 2,
+      canResubmitAudit: true
+    }]
+  })
+
+  assert.deepEqual({
+    auditRound: result.works[0].auditRound,
+    maxAuditRounds: result.works[0].maxAuditRounds,
+    remainingAuditResubmitCount: result.works[0].remainingAuditResubmitCount,
+    canResubmitAudit: result.works[0].canResubmitAudit,
+    auditRoundText: result.works[0].auditRoundText
+  }, {
+    auditRound: 1,
+    maxAuditRounds: 3,
+    remainingAuditResubmitCount: 2,
+    canResubmitAudit: true,
+    auditRoundText: '第 1/3 轮 · 还可重审 2 次'
+  })
+})
+
 test('normalizes missing work aspect ratio as empty display text', () => {
   const result = normalizeWorkList({
     works: [

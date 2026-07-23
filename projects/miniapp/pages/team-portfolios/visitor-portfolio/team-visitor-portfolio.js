@@ -4,6 +4,7 @@ const { normalizeTeamVisitorPortfolio, queryTeamVisitorSchedule, submitTeamVisit
 const { createIdempotencyKey, openTeamVisitorSession, requestWithTeamVisitorSessionRefresh, resolveTeamShareCode } = require('../utils/team-visitor-session.js')
 const { uploadTeamVisitorProfile } = require('../utils/team-visitor-profile.js')
 const { showTeamPortfolioUnavailableToast } = require('../utils/team-portfolios.js')
+const { createAnonymousSessionId, isWechatTimelineSinglePage } = require('../utils/single-page-mode.js')
 
 const TYPE_BUCKETS = Object.freeze({ TEAM_PROFILE: 'teamProfile', CAROUSEL: 'carousel', DIVIDER: 'divider', MEMBER_PORTFOLIO_GRID: 'grid', MEMBER_PORTFOLIO_LIST: 'list', TEXT_SECTION: 'text', SCHEDULE_QUERY: 'schedule', CONTACT_FORM: 'contact', QR_CONTACT: 'qr' })
 const PERSONAL_VISITOR_URL = '/pages' + '/portfolios/visitor-portfolio/visitor-portfolio'
@@ -27,6 +28,9 @@ Page({
       return
     }
     const timelineGuideRequested = options.shareGuide === TIMELINE_SHARE_GUIDE_VALUE
+    this.anonymousSessionId = isWechatTimelineSinglePage()
+      ? createAnonymousSessionId()
+      : ''
     this.setData({
       shareCode,
       sourceType: options.scene && !options.shareCode ? 'QR_CODE' : 'WECHAT_SHARE_CARD',
@@ -45,7 +49,7 @@ Page({
     if (this.data.loading || !this.data.shareCode) return
     this.setData({ loading: true, errorMessage: '' })
     const idempotencyKey = this.data.pendingOpenKey || createIdempotencyKey(); if (!this.data.pendingOpenKey) this.setData({ pendingOpenKey: idempotencyKey })
-    try { const session = await openTeamVisitorSession({ shareCode: this.data.shareCode, sourceType: this.data.sourceType, idempotencyKey, requestFn: request }); this.applySession(session); this.setData({ pendingOpenKey: '' }) } catch (error) { this.setData({ timelineGuideVisible: false, timelineShareRecordEnabled: false }); if (this.handleUnavailableError(error)) return; this.setData({ errorMessage: '团队作品集暂不可访问' }) } finally { this.setData({ loading: false }) }
+    try { const session = await openTeamVisitorSession({ shareCode: this.data.shareCode, sourceType: this.data.sourceType, idempotencyKey, anonymousSessionId: this.anonymousSessionId, requestFn: request, wxApi: wx }); this.applySession(session); this.setData({ pendingOpenKey: '' }) } catch (error) { this.setData({ timelineGuideVisible: false, timelineShareRecordEnabled: false }); if (this.handleUnavailableError(error)) return; this.setData({ errorMessage: '团队作品集暂不可访问' }) } finally { this.setData({ loading: false }) }
   },
   applySession(session) {
     const render = normalizeTeamVisitorPortfolio(session)
@@ -64,7 +68,7 @@ Page({
     })
   },
   handleRetry() { this.open() },
-  visitorRequest(options) { return requestWithTeamVisitorSessionRefresh({ shareCode: this.data.shareCode, sourceType: this.data.sourceType, requestFn: request, requestOptions: options, onRefresh: async (session) => this.applySession(session), refreshRequestOptions: (session, original) => Object.assign({}, original, { data: Object.assign({}, original.data, original.data && original.data.visitorProfileToken ? { visitorProfileToken: session.visitorProfileToken } : {}) }) }) },
+  visitorRequest(options) { return requestWithTeamVisitorSessionRefresh({ shareCode: this.data.shareCode, sourceType: this.data.sourceType, anonymousSessionId: this.anonymousSessionId, requestFn: request, wxApi: wx, requestOptions: options, onRefresh: async (session) => this.applySession(session), refreshRequestOptions: (session, original) => Object.assign({}, original, { data: Object.assign({}, original.data, original.data && original.data.visitorProfileToken ? { visitorProfileToken: session.visitorProfileToken } : {}) }) }) },
   profileRequest(options) { const data = Object.assign({}, options.data, { visitorProfileToken: this.data.visitorProfileToken }); return this.visitorRequest(Object.assign({}, options, { data })) },
   handleUnavailableError(error) { return showTeamPortfolioUnavailableToast(error) },
   sendEvent(payload) { return submitTeamVisitorEvent((options) => this.visitorRequest(options), this.data.shareCode, Object.assign({}, payload, { idempotencyKey: createIdempotencyKey() })).catch((error) => { this.handleUnavailableError(error); return null }) },

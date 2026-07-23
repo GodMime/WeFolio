@@ -21,6 +21,10 @@ class WorkAuditMigrationTest {
     private static final Path REJECT_REASON_MIGRATION_PATH =
             Path.of("src/main/resources/db/migration/V28__add_work_audit_reject_reason.sql");
 
+    /** 作品审核轮次和稳定原因迁移脚本路径 */
+    private static final Path AUDIT_ROUND_MIGRATION_PATH =
+            Path.of("src/main/resources/db/migration/V45__add_work_audit_round.sql");
+
     /**
      * 迁移应为作品表补充审核状态字段和扫描索引。
      *
@@ -98,5 +102,39 @@ class WorkAuditMigrationTest {
         assertThat(sql).contains("'SUBMITTING'", "'SUBMITTED'", "'RUNNING'", "'QUERYING'", "'SUCCESS'", "'FAILED'");
         assertThat(sql).contains("CONSTRAINT `chk_work_audit_task_result` CHECK");
         assertThat(sql).contains("'PASS'", "'BLOCK'", "'REVIEW'", "'UNKNOWN'");
+    }
+
+    /**
+     * 新迁移只调整审核轮次、稳定原因和任务唯一键结构，风险代码不做数据库枚举约束。
+     *
+     * @throws IOException 读取脚本失败时抛出
+     */
+    @Test
+    void auditRoundMigrationShouldBeSchemaOnly() throws IOException {
+        assertThat(AUDIT_ROUND_MIGRATION_PATH).exists();
+
+        String sql = Files.readString(AUDIT_ROUND_MIGRATION_PATH);
+        String upperSql = sql.toUpperCase();
+
+        assertThat(sql)
+                .contains("`audit_round` INT UNSIGNED NOT NULL DEFAULT 1")
+                .contains("`audit_reason_code` VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NULL")
+                .contains("`audit_reason_codes` JSON NULL")
+                .contains("CONSTRAINT `chk_work_audit_round` CHECK (`audit_round` >= 1)")
+                .contains("CONSTRAINT `chk_work_audit_reason_codes` CHECK")
+                .contains("JSON_TYPE(`audit_reason_codes`) = 'ARRAY'")
+                .contains("JSON_LENGTH(`audit_reason_codes`) <= 20")
+                .contains("MODIFY COLUMN `media_sha256` CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL")
+                .contains("DROP INDEX `uk_work_audit_task_media`")
+                .contains("UNIQUE KEY `uk_work_audit_task_media_round` "
+                        + "(`work_id`, `media_sha256`, `audit_round`, `deleted`)");
+        assertThat(sql)
+                .doesNotContain("CONSTRAINT `chk_work_audit_reason_code`")
+                .doesNotContain("`audit_reason_code` IS NULL OR `audit_reason_code` IN");
+        assertThat(upperSql)
+                .doesNotContain("UPDATE WF_WORK")
+                .doesNotContain("UPDATE WF_WORK_AUDIT_TASK")
+                .doesNotContain("INSERT INTO WF_WORK")
+                .doesNotContain("DELETE FROM WF_WORK");
     }
 }

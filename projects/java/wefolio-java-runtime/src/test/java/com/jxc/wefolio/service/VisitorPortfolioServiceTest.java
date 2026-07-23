@@ -50,6 +50,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -124,7 +125,7 @@ class VisitorPortfolioServiceTest {
         assertThatThrownBy(() -> service().openPortfolio("PF001", request))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("作品集暂不可访问");
-        verify(visitorService, never()).resolveByLoginCode(any(), any());
+        verify(visitorService, never()).resolveForOpen(any(), any(), any(), any());
     }
 
     @Test
@@ -138,7 +139,7 @@ class VisitorPortfolioServiceTest {
         assertThatThrownBy(() -> service().openPortfolio("PF001", request))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage(PortfolioMessage.PORTFOLIO_UNAVAILABLE_MESSAGE);
-        verify(visitorService, never()).resolveByLoginCode(any(), any());
+        verify(visitorService, never()).resolveForOpen(any(), any(), any(), any());
         verify(portfolioVisitService, never()).recordOpen(any(), any(Long.class), any(), any(), any());
     }
 
@@ -152,7 +153,7 @@ class VisitorPortfolioServiceTest {
         visitor.setOpenid("openid-123");
         visitor.setVisitorKey("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
         when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
-        when(visitorService.resolveByLoginCode(eq("wx-code"), any()))
+        when(visitorService.resolveForOpen(eq("wx-code"), isNull(), eq("PERSONAL:88"), any()))
                 .thenReturn(new VisitorService.VisitorSession(visitor, true));
         when(portfolioVisitService.recordOpen(
                 eq(portfolio),
@@ -188,6 +189,49 @@ class VisitorPortfolioServiceTest {
     }
 
     @Test
+    void openPortfolioShouldRecordAnonymousTimelineVisitWithoutProfilePrompt() {
+        PortfolioEntity portfolio = publishedPortfolio();
+        VisitRecordEntity record = new VisitRecordEntity();
+        record.setId(44L);
+        VisitorEntity visitor = new VisitorEntity();
+        visitor.setId(2048L);
+        visitor.setOpenid("timeline:hashed");
+        visitor.setVisitorKey("timeline-visitor-key");
+        String anonymousSessionId = "timeline-abc123def456ghi789jkl012mno345pqr678";
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
+        when(visitorService.resolveForOpen(
+                isNull(), eq(anonymousSessionId), eq("PERSONAL:88"), any()))
+                .thenReturn(new VisitorService.VisitorSession(visitor, true, true));
+        when(portfolioVisitService.recordOpen(
+                eq(portfolio),
+                eq(2048L),
+                eq("timeline-visitor-key"),
+                eq("WECHAT_SHARE_CARD"),
+                eq("timeline-open-1")))
+                .thenReturn(record);
+        when(portfolioRenderService.render(eq(portfolio), any(), eq(false), eq(false), eq(null), eq(44L)))
+                .thenReturn(new PortfolioRenderDto());
+        when(visitorAuthTokenService.issueTimelineAnonymousToken(
+                2048L, "timeline-visitor-key", "PERSONAL:PF001"))
+                .thenReturn(new VisitorAuthTokenService.VisitorLoginToken(
+                        "Bearer", "wf-visitor-timeline-v1.test", 7200L));
+        VisitorPortfolioOpenRequest request = new VisitorPortfolioOpenRequest();
+        request.setAnonymousSessionId(anonymousSessionId);
+        request.setSourceType("WECHAT_SHARE_CARD");
+        request.setIdempotencyKey("timeline-open-1");
+
+        VisitorPortfolioResponse response = service().openPortfolio("PF001", request);
+
+        assertThat(response.getVisitRecordId()).isEqualTo(44L);
+        assertThat(response.getVisitorKey()).isEqualTo("timeline-visitor-key");
+        assertThat(response.getToken()).isEqualTo("wf-visitor-timeline-v1.test");
+        assertThat(response.isNeedVisitorProfile()).isFalse();
+        assertThat(response.getVisitorProfileToken()).isNull();
+        verify(visitorService, never()).createProfileToken(any(), any(), any());
+        verify(visitorAuthTokenService, never()).issueToken(any(), any());
+    }
+
+    @Test
     void openPortfolioShouldReturnMaintenanceWhenRecordOpenFails() {
         PortfolioEntity portfolio = publishedPortfolio();
         VisitorEntity visitor = new VisitorEntity();
@@ -195,7 +239,7 @@ class VisitorPortfolioServiceTest {
         visitor.setOpenid("openid-123");
         visitor.setVisitorKey("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
         when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
-        when(visitorService.resolveByLoginCode(eq("wx-code"), any()))
+        when(visitorService.resolveForOpen(eq("wx-code"), isNull(), eq("PERSONAL:88"), any()))
                 .thenReturn(new VisitorService.VisitorSession(visitor, true));
         when(portfolioVisitService.recordOpen(
                 eq(portfolio),
@@ -232,7 +276,7 @@ class VisitorPortfolioServiceTest {
         visitor.setOpenid("openid-123");
         visitor.setVisitorKey("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
         when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
-        when(visitorService.resolveByLoginCode(eq("wx-code"), any()))
+        when(visitorService.resolveForOpen(eq("wx-code"), isNull(), eq("PERSONAL:88"), any()))
                 .thenReturn(new VisitorService.VisitorSession(visitor, true));
         when(portfolioVisitService.recordOpen(
                 eq(portfolio),
@@ -264,7 +308,7 @@ class VisitorPortfolioServiceTest {
         visitor.setOpenid("openid-123");
         visitor.setVisitorKey("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
         when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
-        when(visitorService.resolveByLoginCode(eq("wx-code"), any()))
+        when(visitorService.resolveForOpen(eq("wx-code"), isNull(), eq("PERSONAL:88"), any()))
                 .thenReturn(new VisitorService.VisitorSession(visitor, false));
         when(portfolioVisitService.recordOpen(
                 eq(portfolio),
@@ -300,7 +344,7 @@ class VisitorPortfolioServiceTest {
         visitor.setNickname("小陈");
         visitor.setAvatarUrl("https://cdn.example.com/visit/visitor-avatar-1024-20260705093000-a1b2c3d4.jpg");
         when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
-        when(visitorService.resolveByLoginCode(eq("wx-code"), any()))
+        when(visitorService.resolveForOpen(eq("wx-code"), isNull(), eq("PERSONAL:88"), any()))
                 .thenReturn(new VisitorService.VisitorSession(visitor, false));
         when(portfolioVisitService.recordOpen(
                 eq(portfolio),
@@ -331,7 +375,7 @@ class VisitorPortfolioServiceTest {
         visitor.setOpenid("openid-owner");
         visitor.setVisitorKey("owner-visitor-key");
         when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
-        when(visitorService.resolveByLoginCode(eq("wx-code"), any()))
+        when(visitorService.resolveForOpen(eq("wx-code"), isNull(), eq("PERSONAL:88"), any()))
                 .thenReturn(new VisitorService.VisitorSession(visitor, false));
         when(ownerSelfVisitService.isOwnerSelfVisitor(
                 eq(7L),

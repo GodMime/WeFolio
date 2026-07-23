@@ -12,6 +12,10 @@ const {
   openVisitorSession,
   requestWithVisitorSessionRefresh
 } = require('../../../utils/visitor-session')
+const {
+  createAnonymousSessionId,
+  isWechatTimelineSinglePage
+} = require('../utils/single-page-mode')
 
 const VISITOR_PORTFOLIO_API_PREFIX = '/api/visitor/portfolios'
 const MEDIA_TYPE_VIDEO = 'VIDEO'
@@ -84,6 +88,9 @@ Page({
     const shareCode = options.shareCode || options.scene || ''
     const showNavigationBack = hasPreviousPage()
     const timelineGuideRequested = options.shareGuide === TIMELINE_SHARE_GUIDE_VALUE
+    this.anonymousSessionId = isWechatTimelineSinglePage()
+      ? createAnonymousSessionId()
+      : ''
     this.setData({
       shareCode,
       showNavigationBack,
@@ -105,7 +112,8 @@ Page({
     }
     try {
       const response = await openVisitorSession(this.data.shareCode, {
-        sourceType: SOURCE_TYPE_WECHAT_SHARE_CARD
+        sourceType: SOURCE_TYPE_WECHAT_SHARE_CARD,
+        anonymousSessionId: this.anonymousSessionId
       })
       this.applyVisitorOpenResponse(response)
     } catch (error) {
@@ -133,6 +141,7 @@ Page({
     return requestWithVisitorSessionRefresh(requestOptions, {
       shareCode: this.data.shareCode,
       sourceType: SOURCE_TYPE_WECHAT_SHARE_CARD,
+      anonymousSessionId: this.anonymousSessionId,
       onRefresh: (response) => this.applyVisitorOpenResponse(response)
     })
   },
