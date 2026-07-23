@@ -59,6 +59,14 @@ function maintainerWechatLogin(payload) {
   })
 }
 
+function precheckMaintainerWechatLogin(code) {
+  return request({
+    url: '/api/auth/maintainer/wechat-login/precheck',
+    method: 'POST',
+    data: { code }
+  })
+}
+
 function refreshMaintainerWechatSession(code) {
   return request({
     url: '/api/auth/maintainer/wechat-session/refresh',
@@ -75,6 +83,7 @@ module.exports = {
   hasLocalToken,
   handleMaintainerAuthRequired,
   ensureSession,
+  precheckMaintainerWechatLogin,
   maintainerWechatLogin,
   refreshMaintainerWechatSession
 }

@@ -5,6 +5,9 @@ package com.jxc.wefolio.message;
  */
 public interface MiniappAuthMessage {
 
+    /** 微信登录凭证为空提示 */
+    String WECHAT_LOGIN_CODE_REQUIRED_MESSAGE = "微信登录凭证不能为空";
+
     /** 令牌解析失败提示 */
     String TOKEN_PARSE_FAILED_MESSAGE = "登录令牌解析失败，请重新登录";
 

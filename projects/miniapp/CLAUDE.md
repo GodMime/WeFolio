@@ -74,7 +74,7 @@ components/
 
 pages/
   index/                       "我的"工作台（主入口页）
-  login/                       登录/注册页（注册 + 微信授权登录）
+  login/                       登录/注册页（微信身份预检 + 单按钮登录/注册）
   profile/                     基础信息维护页
   messages/                    我的消息列表（筛选、单条/批量/全量已读）
   visits/                      访问记录页（指标卡片、7 日趋势 canvas）
@@ -103,7 +103,7 @@ tests/
 | 页面 | 路径 | 功能说明 |
 |------|------|----------|
 | 我的工作台 | `pages/index/index` | 个人摘要卡片、唯一码复制、积分余额、三项指标（作品数/发布作品集数/近7天访客数）、入口卡片（访客记录/团队/消息）、底部四栏导航占位 |
-| 登录/注册 | `pages/login/login` | 注册 Tab（选择头像 + 昵称 + 手机号 + 可选推荐码）和微信授权登录 Tab |
+| 登录/注册 | `pages/login/login` | 体验入口与单一维护者登录/注册入口；老用户直接登录，仅新用户授权手机号，可选推荐码；后端为新注册用户写入系统默认头像 |
 | 基础信息 | `pages/profile/profile` | 头像编辑、姓名/艺名/职业/城市/简介（含字数统计）、标签编辑器（最多 10 个，9 色调色板）、退出登录、注销账号 |
 | 我的消息 | `pages/messages/messages` | 消息列表、四种筛选（全部/未读/团队/积分）、单条已读、选中未读批量已读、当前分类全量已读、按 actionUrl 跳转 |
 | 访问记录 | `pages/visits/visits` | 三项指标卡片（总访问/今日访问/档期查询）、7 日趋势 canvas 折线图、访客明细列表（含跟进状态标签） |
@@ -155,6 +155,7 @@ tests/
 
 | 小程序能力 | 方法与路径 | 后端位置 |
 |---|---|---|
+| 微信登录预检 | `POST /api/auth/maintainer/wechat-login/precheck` | `MiniappAuthController` |
 | 微信授权登录/注册 | `POST /api/auth/maintainer/wechat-login` | `MiniappAuthController` |
 | 登录态校验 | `GET /api/auth/session` | `MiniappAuthController` |
 | 个人头像上传 | `POST /api/auth/avatar` | `MiniappAuthController` |
@@ -188,6 +189,7 @@ tests/
 | `hasLocalToken()` | 本地预检是否有 token |
 | `handleMaintainerAuthRequired(message)` | 处理维护者 401：清维护者 token、toast 提示并跳转登录页 |
 | `ensureSession()` | 校验当前登录态是否有效 |
+| `precheckMaintainerWechatLogin(code)` | 预检当前微信身份下一步是否需要手机号授权 |
 | `maintainerWechatLogin(payload)` | 调用维护者微信登录接口 |
 
 ### 标准页面请求流程
@@ -202,13 +204,14 @@ if (!hasLocalToken()) {
 // 访客接口使用 utils/visitor-session.js 的 /open 刷新与重试流程
 ```
 
-### 注册流程注意点
+### 登录与注册流程注意点
 
-- `wx.login()` 的 `code` 必传。
-- 首次注册需要手机号组件返回的 `phoneCode`。
+- 页面加载时用一次 `wx.login()` code 调预检接口，真正登录或注册时必须重新调用 `wx.login()`，不能复用已消费的临时码。
+- 已绑定微信身份的用户点击同一个正式主按钮直接登录，不调用手机号能力；仅预检判定为新用户时启用 `getPhoneNumber`。
+- 首次注册需要手机号组件返回的 `phoneCode`，推荐码选填。
 - `wx.pluginLogin()` 可能不存在或失败，当前策略是失败时传空 `pluginLoginCode`，不阻断注册。
-- 头像和昵称必须由微信能力授权；不要回退到 `getUserProfile`。
-- 小程序本地临时头像路径服务端无法直接读取。注册成功后必须先 `setToken(response.token)`，再用 `/api/auth/avatar` 上传头像，最后 `PUT /api/mine/profile` 回写公开 URL。
+- 首次注册不要求头像和昵称，页面提交空值，后端使用“微信用户”和系统默认头像；默认头像固定为 `https://cdn2.we-folio.dingchenyong.top/system/wefolio-default-avatar-512.jpg`，仅用于今后新注册用户，不回填已有用户；用户可在注册后到基础信息页补充。
+- 预检失败时保持手机号能力关闭，正式主按钮用于重新识别，不得默认要求老用户授权手机号。
 
 ## 上传与 COS
 

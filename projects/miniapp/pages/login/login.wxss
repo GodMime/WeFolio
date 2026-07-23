@@ -37,12 +37,8 @@
   min-height: 500rpx;
 }
 
-.login-hero.register-mode {
-  min-height: 320rpx;
-}
-
-.login-hero.wechat-mode {
-  min-height: 500rpx;
+.login-hero.maintainer-mode {
+  min-height: 380rpx;
 }
 
 .hero-image,
@@ -64,14 +60,9 @@
   filter: brightness(1.04);
 }
 
-.login-hero.register-mode .hero-image {
-  transform: scale(1.04) translateY(0);
-  filter: brightness(1);
-}
-
-.login-hero.wechat-mode .hero-image {
-  transform: scale(1.12) translateY(-20rpx);
-  filter: brightness(1.06);
+.login-hero.maintainer-mode .hero-image {
+  transform: scale(1.08) translateY(-8rpx);
+  filter: brightness(1.03);
 }
 
 .hero-shade {
@@ -80,7 +71,7 @@
 }
 
 .login-hero.experience-mode .hero-shade,
-.login-hero.wechat-mode .hero-shade {
+.login-hero.maintainer-mode .hero-shade {
   background: linear-gradient(180deg, rgba(23, 32, 42, 0.03) 0%, rgba(23, 32, 42, 0.66) 100%);
 }
 
@@ -205,7 +196,7 @@
 
 .tab-indicator {
   position: absolute;
-  left: 16.6667%;
+  left: 25%;
   bottom: -1rpx;
   width: 108rpx;
   height: 4rpx;
@@ -216,15 +207,11 @@
 }
 
 .tab-indicator.experience {
-  left: 16.6667%;
+  left: 25%;
 }
 
-.tab-indicator.register {
-  left: 50%;
-}
-
-.tab-indicator.wechat {
-  left: 83.3333%;
+.tab-indicator.maintainer {
+  left: 75%;
 }
 
 .login-form {
@@ -243,7 +230,7 @@
 }
 
 .auth-body {
-  max-height: 430rpx;
+  max-height: 240rpx;
   overflow: hidden;
   transition: max-height 0.62s cubic-bezier(0.22, 0.61, 0.36, 1);
 }
@@ -252,12 +239,8 @@
   max-height: 142rpx;
 }
 
-.auth-body.wechat-mode {
-  max-height: 84rpx;
-}
-
-.auth-body.register-mode {
-  max-height: 430rpx;
+.auth-body.maintainer-mode {
+  max-height: 240rpx;
 }
 
 .login-form.active {
@@ -273,16 +256,12 @@
   transform: translateY(12rpx);
 }
 
-.register-form.active {
-  max-height: 430rpx;
-}
-
 .experience-form.active {
   max-height: 142rpx;
 }
 
-.wechat-form.active {
-  max-height: 84rpx;
+.maintainer-form.active {
+  max-height: 240rpx;
 }
 
 .experience-hint {
@@ -293,113 +272,7 @@
   text-align: center;
 }
 
-.profile-row {
-  gap: 8rpx;
-}
-
-.profile-auth-row {
-  display: flex;
-  align-items: center;
-  gap: 16rpx;
-}
-
-.avatar-picker {
-  display: flex;
-  width: 68rpx;
-  min-width: 68rpx;
-  max-width: 68rpx;
-  height: 68rpx;
-  min-height: 68rpx;
-  flex: none;
-  margin: 0;
-  padding: 0 !important;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  border: 2rpx solid transparent;
-  border-radius: 999rpx;
-  background: #eef6f4;
-  box-sizing: border-box;
-  box-shadow: none;
-  color: #66727f;
-  font-size: 19rpx;
-  font-weight: 800;
-  line-height: 1;
-}
-
-.avatar-picker::after {
-  border: 0;
-}
-
-.avatar-picker.invalid {
-  border-color: #d92d20;
-  background: #fff7f7;
-}
-
-.picked-avatar {
-  display: block;
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-}
-
-.avatar-placeholder {
-  line-height: 1;
-}
-
-.nickname-auth-field {
-  position: relative;
-  display: flex;
-  flex: 1;
-  min-width: 0;
-  height: 84rpx;
-  padding: 0 22rpx;
-  align-items: center;
-  overflow: hidden;
-  border: 1rpx solid #e4ebef;
-  border-radius: 16rpx;
-  background: #f8fafb;
-  box-sizing: border-box;
-}
-
-.nickname-auth-field.invalid {
-  border-color: #d92d20;
-  background: #fff7f7;
-}
-
-.nickname-auth-text,
-.nickname-auth-placeholder {
-  position: relative;
-  z-index: 1;
-  max-width: 100%;
-  overflow: hidden;
-  font-size: 26rpx;
-  line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.nickname-auth-text {
-  color: #17202a;
-}
-
-.nickname-auth-placeholder {
-  color: #8b96a3;
-}
-
-.nickname-native-input {
-  position: absolute;
-  left: 0;
-  top: 0;
-  z-index: 2;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  color: transparent;
-  caret-color: transparent;
-}
-
-.field-error {
+.precheck-error {
   color: #d92d20;
   font-size: 21rpx;
   font-weight: 700;
@@ -452,7 +325,11 @@
 .primary-button {
   display: flex;
   width: 100%;
+  min-width: 100%;
+  max-width: 100%;
   height: 84rpx;
+  margin-left: 0;
+  margin-right: 0;
   align-items: center;
   justify-content: center;
   color: #fff;
@@ -462,4 +339,11 @@
   border-radius: 16rpx;
   background: linear-gradient(180deg, #263445, #111827);
   box-shadow: 0 20rpx 44rpx rgba(17, 24, 39, 0.2);
+  box-sizing: border-box;
+}
+
+.primary-button[disabled] {
+  color: rgba(255, 255, 255, 0.78);
+  background: linear-gradient(180deg, #66727f, #475569);
+  box-shadow: none;
 }

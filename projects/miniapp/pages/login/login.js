@@ -1,6 +1,8 @@
-const { request } = require('../../utils/request')
-const { prepareAvatarFilePath, uploadAvatar } = require('../../utils/avatar')
-const { setToken, maintainerWechatLogin } = require('../../utils/session')
+const {
+  setToken,
+  precheckMaintainerWechatLogin,
+  maintainerWechatLogin
+} = require('../../utils/session')
 
 function wxLogin() {
   return new Promise((resolve, reject) => {
@@ -36,33 +38,20 @@ function tryWxPluginLogin() {
   })
 }
 
-function getProfileErrorText(avatarError, nicknameError) {
-  if (avatarError && nicknameError) {
-    return '请先授权微信头像和昵称'
-  }
-  if (avatarError) {
-    return '请先授权微信头像'
-  }
-  if (nicknameError) {
-    return '请先授权微信昵称'
-  }
-  return ''
-}
-
-function trimText(value) {
-  return (value || '').trim()
-}
-
 Page({
   data: {
     activeTab: 'experience',
+    prechecking: false,
+    precheckReady: false,
+    phoneAuthorizationRequired: false,
+    precheckErrorMessage: '',
+    maintainerButtonText: '重新识别',
     loading: false,
-    referralCode: '',
-    nickname: '',
-    avatarUrl: '',
-    avatarError: false,
-    nicknameError: false,
-    profileErrorText: ''
+    referralCode: ''
+  },
+
+  onLoad() {
+    this.runWechatLoginPrecheck()
   },
 
   handleTabTap(event) {
@@ -81,69 +70,73 @@ Page({
     })
   },
 
-  handleChooseAvatar(event) {
-    const avatarUrl = event.detail && event.detail.avatarUrl ? event.detail.avatarUrl : ''
-    if (!avatarUrl) {
-      return
-    }
-    this.setProfileData({
-      avatarUrl
-    })
-  },
-
-  handleNicknameInput(event) {
-    this.setProfileData({
-      nickname: event.detail.value || ''
-    })
-  },
-
   handleReferralInput(event) {
     this.setData({
       referralCode: event.detail.value || ''
     })
   },
 
-  setProfileData(fields) {
-    const nextData = Object.assign({}, this.data, fields)
-    const avatarError = this.data.avatarError && !nextData.avatarUrl
-    const nicknameError = this.data.nicknameError && !trimText(nextData.nickname)
-    this.setData(Object.assign({}, fields, {
-      avatarError,
-      nicknameError,
-      profileErrorText: getProfileErrorText(avatarError, nicknameError)
-    }))
-  },
-
-  validateProfile() {
-    const avatarError = !this.data.avatarUrl
-    const nicknameError = !trimText(this.data.nickname)
-    const profileErrorText = getProfileErrorText(avatarError, nicknameError)
+  async runWechatLoginPrecheck() {
+    if (this.data.prechecking || this.data.loading) {
+      return
+    }
     this.setData({
-      avatarError,
-      nicknameError,
-      profileErrorText
+      prechecking: true,
+      precheckReady: false,
+      phoneAuthorizationRequired: false,
+      precheckErrorMessage: '',
+      maintainerButtonText: '识别账号中'
     })
-    return {
-      valid: !profileErrorText,
-      message: profileErrorText
+
+    try {
+      const code = await wxLogin()
+      const response = await precheckMaintainerWechatLogin(code)
+      const phoneAuthorizationRequired = Boolean(
+        response && response.phoneAuthorizationRequired
+      )
+      this.setData({
+        prechecking: false,
+        precheckReady: true,
+        phoneAuthorizationRequired,
+        precheckErrorMessage: '',
+        maintainerButtonText: phoneAuthorizationRequired ? '手机号快捷注册' : '登录'
+      })
+    } catch (error) {
+      this.setData({
+        prechecking: false,
+        precheckReady: false,
+        phoneAuthorizationRequired: false,
+        precheckErrorMessage: '账号识别失败，请重试',
+        maintainerButtonText: '重新识别'
+      })
+      wx.showToast({
+        title: '账号识别失败，请重试',
+        icon: 'none'
+      })
     }
   },
 
-  handleIncompleteRegisterTap() {
-    const result = this.validateProfile()
-    wx.showToast({
-      title: result.message || '请先授权头像和昵称',
-      icon: 'none'
-    })
+  handleMaintainerAuthTap() {
+    if (this.data.prechecking || this.data.loading) {
+      return
+    }
+    if (!this.data.precheckReady) {
+      this.runWechatLoginPrecheck()
+      return
+    }
+    if (this.data.phoneAuthorizationRequired) {
+      return
+    }
+    this.authorizeByWechat()
   },
 
   handleRegisterPhone(event) {
-    const profileValidation = this.validateProfile()
-    if (!profileValidation.valid) {
-      wx.showToast({
-        title: profileValidation.message || '请先授权头像和昵称',
-        icon: 'none'
-      })
+    if (
+      this.data.prechecking
+      || this.data.loading
+      || !this.data.precheckReady
+      || !this.data.phoneAuthorizationRequired
+    ) {
       return
     }
     const detail = event.detail || {}
@@ -162,13 +155,8 @@ Page({
       return
     }
     this.authorizeByWechat({
-      phoneCode: detail.code,
-      usePluginOpenpid: true
+      phoneCode: detail.code
     })
-  },
-
-  handleMaintainerWechatLogin() {
-    this.authorizeByWechat({})
   },
 
   async authorizeByWechat(options = {}) {
@@ -176,62 +164,40 @@ Page({
       return
     }
     this.setData({
-      loading: true
+      loading: true,
+      maintainerButtonText: options.phoneCode ? '注册中' : '登录中'
     })
 
     try {
-      const preparedAvatarFilePath = options.phoneCode && this.data.avatarUrl
-        ? await prepareAvatarFilePath(this.data.avatarUrl)
-        : ''
       const code = await wxLogin()
-      const pluginLoginCode = options.usePluginOpenpid ? await tryWxPluginLogin() : ''
-      const nickname = this.data.nickname.trim()
-      const response = await maintainerWechatLogin({
-        code,
-        phoneCode: options.phoneCode || '',
-        pluginLoginCode,
-        nickname,
-        avatarUrl: '',
-        referralCode: options.phoneCode ? this.data.referralCode.trim() : ''
-      })
-      setToken(response.token)
-      if (preparedAvatarFilePath) {
-        try {
-          const avatarUrl = await uploadAvatar(preparedAvatarFilePath, {
-            skipPrepare: true
-          })
-          if (avatarUrl) {
-            await request({
-              url: '/api/mine/profile',
-              method: 'PUT',
-              data: {
-                nickname,
-                avatarUrl
-              }
-            })
-            this.setData({
-              avatarUrl
-            })
-          }
-        } catch (uploadError) {
-          // 头像上传失败不阻断登录，仅提示用户后续可在基础信息中重新设置
-          wx.showToast({
-            title: '头像上传失败，可在基础信息中重新设置',
-            icon: 'none'
-          })
-        }
+      const payload = { code }
+      if (options.phoneCode) {
+        const pluginLoginCode = await tryWxPluginLogin()
+        Object.assign(payload, {
+          phoneCode: options.phoneCode,
+          pluginLoginCode,
+          nickname: '',
+          avatarUrl: '',
+          referralCode: this.data.referralCode.trim()
+        })
       }
+      const response = await maintainerWechatLogin(payload)
+      setToken(response.token)
       wx.redirectTo({
         url: '/pages/index/index'
       })
     } catch (error) {
       this.setData({
-        loading: false
+        loading: false,
+        maintainerButtonText: options.phoneCode ? '手机号快捷注册' : '登录'
       })
       wx.showToast({
         title: error && error.message ? error.message : '登录失败',
         icon: 'none'
       })
+      if (!options.phoneCode) {
+        this.runWechatLoginPrecheck()
+      }
     }
   }
 })

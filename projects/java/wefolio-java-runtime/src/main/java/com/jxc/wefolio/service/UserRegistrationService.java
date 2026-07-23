@@ -35,6 +35,13 @@ public class UserRegistrationService {
     /** 微信小程序登录类型 */
     private static final String WECHAT_AUTH_TYPE = AuthTypeDict.WECHAT_MINI_APP.getCode();
 
+    /** 维护者新用户默认昵称 */
+    private static final String DEFAULT_WECHAT_NICKNAME = "微信用户";
+
+    /** 维护者新用户默认头像 */
+    private static final String DEFAULT_WECHAT_AVATAR_URL =
+            "https://cdn2.we-folio.dingchenyong.top/system/wefolio-default-avatar-512.jpg";
+
     /** 新用户注册赠送描述 */
     private static final String NEW_USER_REGISTRATION_GIFT_REMARK = "新用户注册赠送";
 
@@ -93,8 +100,8 @@ public class UserRegistrationService {
         LocalDateTime now = LocalDateTime.now();
         UserEntity user = new UserEntity();
         user.setUniqueCode(uniqueCode);
-        user.setNickname(defaultString(request.getNickname(), "微信用户"));
-        user.setAvatarUrl(defaultString(request.getAvatarUrl(), ""));
+        user.setNickname(defaultString(request.getNickname(), DEFAULT_WECHAT_NICKNAME));
+        user.setAvatarUrl(defaultString(request.getAvatarUrl(), DEFAULT_WECHAT_AVATAR_URL));
         user.setPhoneNumber(phoneInfo.getPhoneNumber());
         user.setPhoneCountryCode(defaultString(phoneInfo.getCountryCode(), ""));
         user.setPhoneLast4(last4(phoneInfo.getPhoneNumber()));

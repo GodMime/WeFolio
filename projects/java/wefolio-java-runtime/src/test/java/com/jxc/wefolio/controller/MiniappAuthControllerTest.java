@@ -7,6 +7,8 @@ import com.jxc.wefolio.common.upload.AvatarUploadResult;
 import com.jxc.wefolio.annotation.LoginAccess;
 import com.jxc.wefolio.dto.FileUploadResponse;
 import com.jxc.wefolio.dto.MaintainerWechatLoginRequest;
+import com.jxc.wefolio.dto.MaintainerWechatLoginPrecheckRequest;
+import com.jxc.wefolio.dto.MaintainerWechatLoginPrecheckResponse;
 import com.jxc.wefolio.service.AccountCancellationService;
 import com.jxc.wefolio.service.AuthTokenService;
 import com.jxc.wefolio.service.MaintainerAvatarService;
@@ -64,6 +66,43 @@ class MiniappAuthControllerTest {
         assertThat(method.isAnnotationPresent(LoginAccess.class)).isTrue();
         assertThat(postMapping).isNotNull();
         assertThat(postMapping.value()).containsExactly("/maintainer/wechat-login");
+    }
+
+    @Test
+    void maintainerWechatLoginPrecheckUsesDedicatedLoginAccessPath() throws NoSuchMethodException {
+        Method method = MiniappAuthController.class.getMethod(
+                "precheckMaintainerWechatLogin",
+                MaintainerWechatLoginPrecheckRequest.class
+        );
+
+        PostMapping postMapping = method.getAnnotation(PostMapping.class);
+
+        assertThat(method.isAnnotationPresent(LoginAccess.class)).isTrue();
+        assertThat(postMapping).isNotNull();
+        assertThat(postMapping.value()).containsExactly("/maintainer/wechat-login/precheck");
+    }
+
+    @Test
+    void maintainerWechatLoginPrecheckDelegatesToService() {
+        MaintainerWechatLoginPrecheckRequest request = new MaintainerWechatLoginPrecheckRequest();
+        request.setCode("precheck-code");
+        MaintainerWechatLoginPrecheckResponse serviceResponse = new MaintainerWechatLoginPrecheckResponse();
+        serviceResponse.setPhoneAuthorizationRequired(true);
+        when(miniappAuthService.precheckMaintainerWechatLogin(request)).thenReturn(serviceResponse);
+        MiniappAuthController controller = new MiniappAuthController(
+                miniappAuthService,
+                authTokenService,
+                accountCancellationService,
+                maintainerAvatarService,
+                trustedClientIpResolver
+        );
+
+        Response<MaintainerWechatLoginPrecheckResponse> response =
+                controller.precheckMaintainerWechatLogin(request);
+
+        assertThat(response.isSuccess()).isTrue();
+        assertThat(response.getData()).isSameAs(serviceResponse);
+        verify(miniappAuthService).precheckMaintainerWechatLogin(request);
     }
 
     @Test

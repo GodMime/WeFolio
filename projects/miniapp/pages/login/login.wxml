@@ -3,7 +3,7 @@
 
   <scroll-view class="login-scroll" scroll-y type="list">
     <view class="login-layout">
-      <view class="login-hero {{activeTab === 'experience' ? 'experience-mode' : activeTab === 'register' ? 'register-mode' : 'wechat-mode'}}">
+      <view class="login-hero {{activeTab === 'experience' ? 'experience-mode' : 'maintainer-mode'}}">
         <image class="hero-image" src="https://cdn2.we-folio.dingchenyong.top/system/backgroud.jpeg" mode="aspectFill"></image>
         <view class="hero-shade"></view>
         <view class="hero-copy">
@@ -23,40 +23,18 @@
         <view class="panel auth-panel">
           <view class="login-tabs">
             <button class="login-tab {{activeTab === 'experience' ? 'active' : ''}}" data-tab="experience" bindtap="handleTabTap">体验</button>
-            <button class="login-tab {{activeTab === 'register' ? 'active' : ''}}" data-tab="register" bindtap="handleTabTap">注册</button>
-            <button class="login-tab {{activeTab === 'wechat' ? 'active' : ''}}" data-tab="wechat" bindtap="handleTabTap">微信授权</button>
+            <button class="login-tab {{activeTab === 'maintainer' ? 'active' : ''}}" data-tab="maintainer" bindtap="handleTabTap">登录 / 注册</button>
             <view class="tab-indicator {{activeTab}}"></view>
           </view>
 
-          <view class="auth-body {{activeTab === 'experience' ? 'experience-mode' : activeTab === 'register' ? 'register-mode' : 'wechat-mode'}}">
+          <view class="auth-body {{activeTab === 'experience' ? 'experience-mode' : 'maintainer-mode'}}">
             <view class="login-form experience-form {{activeTab === 'experience' ? 'active' : 'inactive'}}">
               <button class="primary-button" bindtap="handleExperienceTap">先体验</button>
               <view class="experience-hint">支持先体验基础功能再授权注册</view>
             </view>
 
-            <view class="login-form register-form {{activeTab === 'register' ? 'active' : 'inactive'}}">
-              <view class="form-row profile-row">
-                <view class="field-label">头像昵称</view>
-                <view class="profile-auth-row">
-                  <button class="avatar-picker {{avatarError ? 'invalid' : ''}}" open-type="chooseAvatar" bindchooseavatar="handleChooseAvatar">
-                    <image wx:if="{{avatarUrl}}" class="picked-avatar" src="{{avatarUrl}}" mode="aspectFill"></image>
-                    <text wx:else class="avatar-placeholder">头像</text>
-                  </button>
-                  <view class="nickname-auth-field {{nicknameError ? 'invalid' : ''}}">
-                    <text wx:if="{{nickname}}" class="nickname-auth-text">{{nickname}}</text>
-                    <text wx:else class="nickname-auth-placeholder">点击授权微信昵称</text>
-                    <input
-                      class="nickname-native-input"
-                      type="nickname"
-                      value="{{nickname}}"
-                      maxlength="24"
-                      bindinput="handleNicknameInput"
-                    />
-                  </view>
-                </view>
-                <view wx:if="{{profileErrorText}}" class="field-error">{{profileErrorText}}</view>
-              </view>
-              <view class="form-row">
+            <view class="login-form maintainer-form {{activeTab === 'maintainer' ? 'active' : 'inactive'}}">
+              <view wx:if="{{precheckReady && phoneAuthorizationRequired}}" class="form-row">
                 <view class="field-label">推荐码</view>
                 <view class="input-shell">
                   <input
@@ -70,28 +48,16 @@
                   <text class="optional-text">选填</text>
                 </view>
               </view>
+              <view wx:if="{{precheckErrorMessage}}" class="precheck-error">{{precheckErrorMessage}}</view>
               <button
-                wx:if="{{avatarUrl && nickname}}"
-                class="primary-button"
-                loading="{{loading}}"
-                open-type="getPhoneNumber"
+                class="primary-button maintainer-auth-button"
+                loading="{{prechecking || loading}}"
+                disabled="{{prechecking || loading}}"
+                open-type="{{phoneAuthorizationRequired ? 'getPhoneNumber' : ''}}"
+                bindtap="handleMaintainerAuthTap"
                 bindgetphonenumber="handleRegisterPhone"
               >
-                {{loading ? '注册中' : '注册'}}
-              </button>
-              <button
-                wx:else
-                class="primary-button"
-                loading="{{loading}}"
-                bindtap="handleIncompleteRegisterTap"
-              >
-                {{loading ? '注册中' : '注册'}}
-              </button>
-            </view>
-
-            <view class="login-form wechat-form {{activeTab === 'wechat' ? 'active' : 'inactive'}}">
-              <button class="primary-button" loading="{{loading}}" bindtap="handleMaintainerWechatLogin">
-                {{loading ? '登录中' : '微信授权登录'}}
+                {{maintainerButtonText}}
               </button>
             </view>
           </view>

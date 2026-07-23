@@ -33,6 +33,10 @@ import java.util.List;
 @ExtendWith(MockitoExtension.class)
 class UserRegistrationServiceTest {
 
+    /** 维护者新用户默认头像 */
+    private static final String DEFAULT_WECHAT_AVATAR_URL =
+            "https://cdn2.we-folio.dingchenyong.top/system/wefolio-default-avatar-512.jpg";
+
     /** 用户资料 Mapper 模拟 */
     @Mock
     private UserEntityMapper userEntityMapper;
@@ -83,6 +87,29 @@ class UserRegistrationServiceTest {
             assertThat(command.idempotencyKey()).isEqualTo("NEW_USER_REGISTRATION_GIFT:21");
         });
         verify(referralRelationEntityMapper, never()).insert(any(ReferralRelationEntity.class));
+    }
+
+    @Test
+    void createWechatMaintainerUserUsesDefaultProfileWhenFieldsAreMissing() {
+        doAnswer(invocation -> {
+            UserEntity user = invocation.getArgument(0);
+            user.setId(21L);
+            return 1;
+        }).when(userEntityMapper).insert(any(UserEntity.class));
+        MaintainerWechatLoginRequest request = new MaintainerWechatLoginRequest();
+
+        UserEntity user = service(500L, 500L).createWechatMaintainerUser(
+                "WFNEW0001",
+                request,
+                phoneInfo(),
+                null,
+                "openid-hash",
+                "openid-123",
+                null
+        );
+
+        assertThat(user.getNickname()).isEqualTo("微信用户");
+        assertThat(user.getAvatarUrl()).isEqualTo(DEFAULT_WECHAT_AVATAR_URL);
     }
 
     @Test
