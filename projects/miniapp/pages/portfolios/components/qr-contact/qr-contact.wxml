@@ -1,0 +1,9 @@
+<view class="qr-section">
+  <image
+    wx:if="{{qrContact.qrUrl}}"
+    class="qr-image"
+    src="{{qrContact.qrUrl}}"
+    mode="aspectFit"
+    bindtap="handlePreviewQr"
+  ></image>
+</view>

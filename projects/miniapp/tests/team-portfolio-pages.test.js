@@ -6,8 +6,8 @@ const test = require('node:test')
 const ROOT = path.resolve(__dirname, '../pages/team-portfolios')
 const PAGE_NAMES = [
   'portfolios', 'team-select/team-select', 'standard-edit/team-portfolio-standard-edit',
-  'component-library/team-portfolio-component-library', 'standard-preview/team-portfolio-standard-preview',
-  'contact-leads/team-contact-leads', 'visitor-portfolio/team-visitor-portfolio'
+  'standard-preview/team-portfolio-standard-preview', 'contact-leads/team-contact-leads',
+  'visitor-portfolio/team-visitor-portfolio'
 ]
 const NINE_COMPONENTS = ['team-profile', 'team-carousel', 'team-divider', 'team-member-portfolio-grid', 'team-member-portfolio-list', 'team-text-section', 'team-schedule-query', 'team-contact-form', 'team-qr-contact']
 const STANDARD_EDITOR_RENDERED_COMPONENTS = NINE_COMPONENTS.filter((component) => !['team-divider', 'team-text-section', 'team-schedule-query', 'team-contact-form'].includes(component))

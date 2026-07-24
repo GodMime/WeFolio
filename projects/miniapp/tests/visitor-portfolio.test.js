@@ -1690,6 +1690,34 @@ test('visitor singular work records event before opening image or starting inlin
   })
 })
 
+test('visitor page clears active single work state through the matching child component', () => {
+  const page = loadVisitorPage(() => Promise.resolve({}))
+  const calls = []
+  page.data.activeSingleWorkVideoKey = 'single/active'
+  page.selectAllComponents = (selector) => {
+    assert.equal(selector, '.portfolio-single-work-instance')
+    return [
+      {
+        data: { componentKey: 'single/active' },
+        pauseVideo() {
+          calls.push('active')
+        }
+      },
+      {
+        data: { componentKey: 'single/other' },
+        pauseVideo() {
+          calls.push('other')
+        }
+      }
+    ]
+  }
+
+  page.stopActiveSingleWorkVideo()
+
+  assert.deepEqual(calls, ['active'])
+  assert.equal(page.data.activeSingleWorkVideoKey, '')
+})
+
 test('visitor singular work keeps poster state when event recording fails', async () => {
   const toasts = []
   const page = loadVisitorPage(() => Promise.reject(new Error('埋点失败')))
@@ -1774,15 +1802,16 @@ test('visitor singular work ignores stale or hidden event completions', async ()
   const page = loadVisitorPage(() => requests.shift().promise)
   page.data.shareCode = 'PF001'
   page.data.visitorKey = 'visitor-a'
-  global.wx = {
-    showToast() {},
-    createVideoContext(id) {
-      return {
-        pause() {
-          paused.push(id)
-        }
+  page.selectAllComponents = () => [
+    {
+      data: { componentKey: 'c_b' },
+      pauseVideo() {
+        paused.push('c_b')
       }
     }
+  ]
+  global.wx = {
+    showToast() {}
   }
 
   const tapVideo = (componentKey, workId) => page.handleSingleWorkTap({
@@ -1816,17 +1845,19 @@ test('visitor singular work ignores stale or hidden event completions', async ()
     delete global.wx
   }
 
-  assert.deepEqual(paused, ['singleWorkVideo-c_b'])
+  assert.deepEqual(paused, ['c_b'])
 })
 
 test('visitor singular work renders original image and inline video without changing list overlay', () => {
-  const wxml = fs.readFileSync(path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.wxml'), 'utf8')
+  const pageWxml = fs.readFileSync(path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.wxml'), 'utf8')
+  const componentWxml = fs.readFileSync(path.join(__dirname, '../pages/portfolios/components/single-work/single-work.wxml'), 'utf8')
 
-  assert.match(wxml, /item\.componentType === 'SINGLE_WORK'/)
-  assert.match(wxml, /class="single-work-image"[\s\S]*mode="widthFix"/)
-  assert.match(wxml, /id="singleWorkVideo-\{\{item\.componentKey\}\}"/)
-  assert.match(wxml, /activeSingleWorkVideoKey === item\.componentKey/)
-  assert.match(wxml, /<root-portal wx:if="\{\{videoPreviewVisible\}\}">/)
+  assert.match(pageWxml, /item\.componentType === 'SINGLE_WORK'/)
+  assert.match(pageWxml, /<portfolio-single-work[\s\S]*active-video-key="\{\{activeSingleWorkVideoKey\}\}"/)
+  assert.match(componentWxml, /class="single-work-image"[\s\S]*mode="widthFix"/)
+  assert.match(componentWxml, /id="singleWorkVideo-\{\{componentKey\}\}"/)
+  assert.match(componentWxml, /activeVideoKey === componentKey/)
+  assert.match(pageWxml, /<root-portal wx:if="\{\{videoPreviewVisible\}\}">/)
 })
 
 test('normalizes visitor schedule without internal fields', () => {

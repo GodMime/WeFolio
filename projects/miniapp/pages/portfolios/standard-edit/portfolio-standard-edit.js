@@ -70,6 +70,7 @@ const SWIPE_CLOSE_THRESHOLD = 24
 const SWIPE_VERTICAL_TOLERANCE = 48
 const COMPONENT_DRAG_SCALE = 1.015
 const COMPONENT_WORK_PAGE_SIZE = 20
+const MAX_PERSONAL_CAROUSEL_ITEMS = 9
 const DISPLAY_GROUP_WORK_PAGE_SIZE = 100
 const DISPLAY_GROUP_TAG_KEY_PREFIX = 'tag_'
 const DISPLAY_GROUP_SORT_ORDER_STEP = 1000
@@ -308,11 +309,19 @@ function normalizeWorkAspectRatioText(work = {}) {
 }
 
 function buildComponentWorkOptions(works = [], selectedIds = [], componentType = '') {
-  const selectedSet = new Set(normalizeWorkIds(selectedIds))
+  const normalizedSelectedIds = normalizeWorkIds(selectedIds)
+  const selectedSet = new Set(normalizedSelectedIds)
+  const selectionOrderMap = componentType === COMPONENT_TYPES.CAROUSEL
+    ? normalizedSelectedIds.reduce((result, workId, index) => {
+        result[workId] = index + 1
+        return result
+      }, {})
+    : {}
   return works
     .filter((work) => componentType !== COMPONENT_TYPES.CAROUSEL || work.mediaType === 'IMAGE')
     .map((work) => Object.assign({}, work, {
       selected: selectedSet.has(work.id),
+      selectionOrder: componentType === COMPONENT_TYPES.CAROUSEL ? (selectionOrderMap[work.id] || 0) : 0,
       thumbUrl: work.coverUrl || work.mediaUrl || '',
       metaText: work.tagText && work.tagText !== '未设置标签' ? `${work.typeText} · ${work.tagText}` : work.typeText,
       aspectRatioText: normalizeWorkAspectRatioText(work)
@@ -2192,7 +2201,16 @@ Page({
       })
       return
     }
-    const nextSelectedIds = selectedIds.includes(workId)
+    const isSelected = selectedIds.includes(workId)
+    if (
+      this.data.editingComponentType === COMPONENT_TYPES.CAROUSEL
+      && !isSelected
+      && selectedIds.length >= MAX_PERSONAL_CAROUSEL_ITEMS
+    ) {
+      wx.showToast({ title: '轮播图最多选择9张图片', icon: 'none' })
+      return
+    }
+    const nextSelectedIds = isSelected
       ? selectedIds.filter((id) => id !== workId)
       : selectedIds.concat(workId)
     this.setData({

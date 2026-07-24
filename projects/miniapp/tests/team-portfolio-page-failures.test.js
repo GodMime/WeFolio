@@ -99,7 +99,7 @@ test('team pages protect long text and editor styles its source and component co
   const editorCss = fs.readFileSync(path.join(ROOT, 'standard-edit/team-portfolio-standard-edit.wxss'), 'utf8')
   for (const selector of ['.source-state', '.component-list', '.component-row', '.cover-preview']) assert.match(editorCss, new RegExp(`\\${selector}\\s*\\{`))
   assert.match(editorCss, /\.cover-preview\s*\{[^}]*width:\s*360rpx[^}]*height:\s*288rpx/)
-  for (const relativePath of ['team-select/team-select.wxss', 'component-library/team-portfolio-component-library.wxss', 'standard-preview/team-portfolio-standard-preview.wxss', 'contact-leads/team-contact-leads.wxss', 'visitor-portfolio/team-visitor-portfolio.wxss']) {
+  for (const relativePath of ['team-select/team-select.wxss', 'standard-preview/team-portfolio-standard-preview.wxss', 'contact-leads/team-contact-leads.wxss', 'visitor-portfolio/team-visitor-portfolio.wxss']) {
     const css = fs.readFileSync(path.join(ROOT, relativePath), 'utf8')
     assert.match(css, /min-width:\s*0/)
     assert.match(css, /overflow-wrap:\s*anywhere|overflow:\s*hidden|white-space:\s*nowrap/)
@@ -455,7 +455,6 @@ test('contact leads shows a toast for feature-disabled permission failures', asy
 test('secondary team pages toast recognized unavailable failures', async () => {
   const cases = [
     ['team-select/team-select.js', (page) => page.bootstrap()],
-    ['component-library/team-portfolio-component-library.js', (page) => page.bootstrap()],
     ['standard-preview/team-portfolio-standard-preview.js', (page) => { page.setData({ portfolioId: 7, scope: 'draft' }); return page.bootstrap() }]
   ]
   for (const [relativePath, run] of cases) {
@@ -474,12 +473,10 @@ test('event-channel success callbacks accept direct opens that omit eventChannel
   safeEditor.setData({ portfolioId: 7, canMaintain: true, config: { share: {}, components: [] } })
   try { safeEditor.handleOpenLibrary(); assert.equal(safeEditor.data.openingLibrary, false) } finally { safeEditor.cleanup() }
 
-  const library = loadPage('component-library/team-portfolio-component-library.js', async () => ({}), { navigateBack() { navigations.push('back') } })
-  try { library.handleSelect({ currentTarget: { dataset: { type: 'TEXT_SECTION', disabled: false } } }); assert.equal(navigations.at(-1), 'back') } finally { library.cleanup() }
 })
 
 test('team WXML handlers exist and templates do not call methods', () => {
-  const pageFiles = ['portfolios', 'team-select/team-select', 'standard-edit/team-portfolio-standard-edit', 'component-library/team-portfolio-component-library', 'standard-preview/team-portfolio-standard-preview', 'contact-leads/team-contact-leads', 'visitor-portfolio/team-visitor-portfolio']
+  const pageFiles = ['portfolios', 'team-select/team-select', 'standard-edit/team-portfolio-standard-edit', 'standard-preview/team-portfolio-standard-preview', 'contact-leads/team-contact-leads', 'visitor-portfolio/team-visitor-portfolio']
   for (const base of pageFiles) {
     const wxml = fs.readFileSync(path.join(ROOT, `${base}.wxml`), 'utf8')
     const source = fs.readFileSync(path.join(ROOT, `${base}.js`), 'utf8')
@@ -493,7 +490,6 @@ function authRequiredError() { const error = new Error('登录已过期'); error
 test('maintainer main loads and representative save operations redirect to login on authRequired', async () => {
   const cases = [
     ['team-select/team-select.js', (page) => page.bootstrap()],
-    ['component-library/team-portfolio-component-library.js', (page) => page.bootstrap()],
     ['standard-edit/team-portfolio-standard-edit.js', (page) => { page.setData({ portfolioId: 7 }); return page.bootstrap() }],
     ['standard-preview/team-portfolio-standard-preview.js', (page) => { page.setData({ portfolioId: 7 }); return page.bootstrap() }],
     ['contact-leads/team-contact-leads.js', (page) => { page.setData({ teamId: 7 }); return page.loadPage(1) }]

@@ -52,18 +52,6 @@ function loadPage(relativePath, requestFn, wxOverrides = {}, globals = {}) {
   return page
 }
 
-test('component library precomputes disabled state and its WXML contains no method invocation', async () => {
-  const page = loadPage('component-library/team-portfolio-component-library.js', async () => [{ componentType: 'TEAM_PROFILE', name: '团队资料' }, { componentType: 'TEXT_SECTION', name: '文字' }])
-  const channel = { on(name, callback) { if (name === 'existingTypes') callback(['TEAM_PROFILE']) } }
-  page.getOpenerEventChannel = () => channel
-  try {
-    page.onLoad()
-    await flush()
-    assert.deepEqual(page.data.components.map((item) => item.disabled), [true, false])
-    assert.doesNotMatch(fs.readFileSync(path.join(ROOT, 'component-library/team-portfolio-component-library.wxml'), 'utf8'), /\{\{[^}]*\.[A-Za-z]+\(/)
-  } finally { page.cleanup() }
-})
-
 test('team picker confirms an unsaved editor without creating a portfolio', async () => {
   const requests = []
   const navigations = []

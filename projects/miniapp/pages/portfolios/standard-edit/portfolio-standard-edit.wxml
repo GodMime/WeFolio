@@ -193,7 +193,7 @@
                 <view class="component-work-ratio">{{item.aspectRatioText}}</view>
               </view>
             </view>
-            <view class="component-work-check">{{item.selected ? '✓' : ''}}</view>
+            <view class="component-work-check {{editingComponentType === 'CAROUSEL' ? 'carousel-order' : ''}}">{{editingComponentType === 'CAROUSEL' ? (item.selectionOrder || '') : (item.selected ? '✓' : '')}}</view>
           </view>
           <view wx:if="{{componentWorkLoadingMore}}" class="component-work-footer">加载更多作品</view>
           <view wx:if="{{!componentWorkHasMore && componentWorkOptions.length > 0}}" class="component-work-footer">已显示全部作品</view>

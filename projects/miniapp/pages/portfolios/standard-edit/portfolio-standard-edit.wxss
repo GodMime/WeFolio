@@ -881,6 +881,10 @@
   background: #d9e2eb;
 }
 
+.component-work-check.carousel-order {
+  font-size: 22rpx;
+}
+
 .component-work-option.selected .component-work-check {
   background: #c28b37;
 }

@@ -1,0 +1,12 @@
+.qr-section {
+  padding: 8rpx 34rpx;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.qr-image {
+  display: block;
+  width: 280rpx;
+  height: 280rpx;
+  margin: 24rpx auto 0;
+}

@@ -30,6 +30,7 @@ const PACKAGE_LOCAL_UTILS = {
     'portfolio-assets.js',
     'portfolio-contact-form.js',
     'portfolio-publish-disclaimer.js',
+    'portfolio-render-events.js',
     'single-page-mode.js',
     'team-portfolio-list.js',
     'visitor-profile.js',
@@ -39,7 +40,6 @@ const PACKAGE_LOCAL_UTILS = {
   teamPortfolio: [
     'team-contact-leads.js',
     'team-portfolio-assets.js',
-    'team-portfolio-registry.js',
     'team-portfolio-list.js',
     'portfolio-publish-disclaimer.js',
     'single-page-mode.js',
@@ -108,14 +108,34 @@ test('team portfolio subpackage is appended without changing existing route base
   ]
   const expectedTeamPages = [
     'portfolios', 'team-select/team-select', 'standard-edit/team-portfolio-standard-edit',
-    'component-library/team-portfolio-component-library', 'standard-preview/team-portfolio-standard-preview',
-    'contact-leads/team-contact-leads', 'visitor-portfolio/team-visitor-portfolio'
+    'standard-preview/team-portfolio-standard-preview', 'contact-leads/team-contact-leads',
+    'visitor-portfolio/team-visitor-portfolio'
   ]
   assert.deepEqual(appJson.pages, expectedMainPages)
   assert.deepEqual(appJson.subPackages.slice(0, 4).map((pkg) => pkg.name), ['mock', 'works', 'portfolio', 'schedule'])
   assert.deepEqual(appJson.subPackages[4], { name: 'teamPortfolio', root: 'pages/team-portfolios', pages: expectedTeamPages })
   assert.equal(appJson.subPackages[4].independent, undefined)
   assert.equal(appJson.preloadRule, undefined)
+})
+
+test('unused personal and team component library artifacts stay removed from packages', () => {
+  const appJson = readJson('app.json')
+  const routes = getRegisteredPageRoutes(appJson)
+  const removedBases = [
+    'pages/portfolios/component-library/portfolio-component-library',
+    'pages/team-portfolios/component-library/team-portfolio-component-library'
+  ]
+
+  for (const removedBase of removedBases) {
+    assert.equal(routes.includes(removedBase), false)
+    for (const extension of PAGE_EXTENSIONS) {
+      assert.equal(fs.existsSync(path.join(MINIAPP_ROOT, `${removedBase}${extension}`)), false)
+    }
+  }
+  assert.equal(
+    fs.existsSync(path.join(MINIAPP_ROOT, 'pages/team-portfolios/utils/team-portfolio-registry.js')),
+    false
+  )
 })
 
 test('tests stay excluded from the uploaded package', () => {

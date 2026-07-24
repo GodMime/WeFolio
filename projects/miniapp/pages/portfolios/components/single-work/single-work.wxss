@@ -1,0 +1,73 @@
+.single-work {
+  width: 100%;
+  padding: 0 20rpx;
+  box-sizing: border-box;
+}
+
+.single-work-image,
+.single-work-video,
+.single-work-video-poster {
+  width: 100%;
+  display: block;
+  background: #f3f4f6;
+}
+
+.single-work-video-poster {
+  position: relative;
+  overflow: hidden;
+}
+
+.single-work-video-cover {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.single-work-play-badge {
+  position: absolute;
+  right: 20rpx;
+  bottom: 20rpx;
+  width: 58rpx;
+  height: 58rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2rpx solid rgba(255, 255, 255, 0.88);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.56);
+  box-sizing: border-box;
+}
+
+.work-play-icon {
+  width: 0;
+  height: 0;
+  margin-left: 5rpx;
+  border-top: 10rpx solid transparent;
+  border-bottom: 10rpx solid transparent;
+  border-left: 16rpx solid #ffffff;
+}
+
+.single-work-title {
+  padding-top: 16rpx;
+  color: #17202a;
+  font-size: 28rpx;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.single-work-media-placeholder,
+.single-work-repair {
+  min-height: 220rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #8a98a8;
+  font-size: 24rpx;
+  background: #f3f4f6;
+}
+
+.single-work-repair {
+  margin: 0 20rpx;
+  color: #a56f22;
+  background: #fff7e8;
+}

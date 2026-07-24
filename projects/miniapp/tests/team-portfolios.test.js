@@ -134,21 +134,6 @@ test('maps exact team portfolio backend messages to unavailable reasons', () => 
   assert.deepEqual(toasts, [{ title: '当前团队不可用', icon: 'none' }])
 })
 
-test('registry contains exactly nine metadata entries and registration paths only', () => {
-  const registry = loadUtility('team-portfolio-registry.js')
-  assert.equal(registry.TEAM_COMPONENTS.length, 9)
-  assert.deepEqual(registry.TEAM_COMPONENTS.map((item) => item.type), [
-    'TEAM_PROFILE', 'CAROUSEL', 'DIVIDER', 'MEMBER_PORTFOLIO_GRID', 'MEMBER_PORTFOLIO_LIST',
-    'TEXT_SECTION', 'SCHEDULE_QUERY', 'CONTACT_FORM', 'QR_CONTACT'
-  ])
-  for (const item of registry.TEAM_COMPONENTS) {
-    assert.deepEqual(Object.keys(item).sort(), ['name', 'type'])
-    assert.match(registry.TEAM_COMPONENT_REGISTRATION[item.type], /^\.\.\/components\//)
-  }
-  const source = fs.readFileSync(path.join(TEAM_UTILS_ROOT, 'team-portfolio-registry.js'), 'utf8')
-  assert.doesNotMatch(source, /default|validate|request|endpoint/i)
-})
-
 test('team asset helper requests a team ticket and uploads directly to that ticket', async () => {
   const { uploadTeamPortfolioAsset } = loadUtility('team-portfolio-assets.js')
   const requests = []

@@ -46,7 +46,6 @@
       "pages": [
         "portfolios",
         "standard-edit/portfolio-standard-edit",
-        "component-library/portfolio-component-library",
         "standard-preview/portfolio-standard-preview",
         "visitor-portfolio/visitor-portfolio",
         "visitor-schedule/visitor-schedule",
@@ -67,7 +66,6 @@
         "portfolios",
         "team-select/team-select",
         "standard-edit/team-portfolio-standard-edit",
-        "component-library/team-portfolio-component-library",
         "standard-preview/team-portfolio-standard-preview",
         "contact-leads/team-contact-leads",
         "visitor-portfolio/team-visitor-portfolio"

@@ -44,7 +44,6 @@ test('app registers portfolio pages', () => {
   [
     'pages/portfolios/portfolios',
     'pages/portfolios/standard-edit/portfolio-standard-edit',
-    'pages/portfolios/component-library/portfolio-component-library',
     'pages/portfolios/standard-preview/portfolio-standard-preview',
     'pages/portfolios/visitor-portfolio/visitor-portfolio',
     'pages/portfolios/visitor-schedule/visitor-schedule',
@@ -56,7 +55,6 @@ test('portfolio pages use custom navigation bar', () => {
   [
     'pages/portfolios/portfolios',
     'pages/portfolios/standard-edit/portfolio-standard-edit',
-    'pages/portfolios/component-library/portfolio-component-library',
     'pages/portfolios/standard-preview/portfolio-standard-preview',
     'pages/portfolios/visitor-portfolio/visitor-portfolio',
     'pages/portfolios/visitor-schedule/visitor-schedule',
@@ -112,7 +110,6 @@ test('maintainer portfolio pages expose expected controls', () => {
     listJs.indexOf('handlePrimaryActionTap(event)'),
     listJs.indexOf('resolveShareTarget(')
   )
-  const libraryWxml = read('pages/portfolios/component-library/portfolio-component-library.wxml')
   const previewWxml = read('pages/portfolios/standard-preview/portfolio-standard-preview.wxml')
   const unavailableWxml = read('pages/portfolios/unavailable/portfolio-unavailable.wxml')
 
@@ -291,10 +288,6 @@ test('maintainer portfolio pages expose expected controls', () => {
   assert.match(editWxss, /\.divider-color-option\s*\{/)
   assert.doesNotMatch(editWxml, /class="component-hints"/)
   assert.doesNotMatch(editWxml, /class="hint-chip"/)
-  assert.match(libraryWxml, /轮播图/)
-  assert.match(libraryWxml, /双列作品列表/)
-  assert.match(libraryWxml, /二维码联系/)
-  assert.match(libraryWxml, /预留联系信息/)
   assert.match(previewWxml, /预览/)
   assert.match(previewWxml, /禁用真实提交/)
   assert.match(previewWxml, /<navigation-bar[^>]*back="\{\{true\}\}"/)
@@ -324,6 +317,9 @@ test('visitor portfolio pages expose maintenance, QR, contact and schedule surfa
   const previewJson = JSON.parse(read('pages/portfolios/standard-preview/portfolio-standard-preview.json'))
   const contactFormWxml = readExisting('components/portfolio-contact-form/portfolio-contact-form.wxml')
   const contactFormJs = readExisting('components/portfolio-contact-form/portfolio-contact-form.js')
+  const qrContactWxml = readExisting('pages/portfolios/components/qr-contact/qr-contact.wxml')
+  const textSectionWxml = readExisting('pages/portfolios/components/text-section/text-section.wxml')
+  const dividerWxml = readExisting('pages/portfolios/components/divider/divider.wxml')
   const scheduleWxml = read('pages/portfolios/visitor-schedule/visitor-schedule.wxml')
   const visitorQrMarkup = visitorWxml.slice(
     visitorWxml.indexOf(`<block wx:elif="{{item.componentType === 'QR_CONTACT'}}">`),
@@ -356,9 +352,10 @@ test('visitor portfolio pages expose maintenance, QR, contact and schedule surfa
   ].forEach((componentType) => {
     assert.match(visitorWxml, new RegExp(`item\\.componentType === '${componentType}'`))
   })
-  assert.match(visitorWxml, /bindtap="handlePreviewQr"/)
-  assert.match(visitorQrMarkup, /class="qr-image"/)
-  assert.match(previewQrMarkup, /class="qr-image"/)
+  assert.match(visitorWxml, /bindpreviewqr="handlePreviewQr"/)
+  assert.match(visitorQrMarkup, /<portfolio-qr-contact/)
+  assert.match(previewQrMarkup, /<portfolio-qr-contact/)
+  assert.match(qrContactWxml, /class="qr-image"[\s\S]*bindtap="handlePreviewQr"/)
   assert.doesNotMatch(visitorQrMarkup, /qrContact\.title|qrContact\.description|component-title|section-desc/)
   assert.doesNotMatch(previewQrMarkup, /qrContact\.title|qrContact\.description|component-title|section-desc/)
   assert.equal(visitorJson.usingComponents['portfolio-schedule-query'], '/components/portfolio-schedule-query/portfolio-schedule-query')
@@ -373,12 +370,13 @@ test('visitor portfolio pages expose maintenance, QR, contact and schedule surfa
   assert.match(previewWxml, /<portfolio-contact-form[\s\S]*view-mode="modal"[\s\S]*modal-visible="\{\{contactFormModalVisible\}\}"[\s\S]*contact-component="\{\{activeContactFormComponent\}\}"[\s\S]*bindclosemodal="handleCloseContactFormModal"/)
   assert.doesNotMatch(visitorWxml, /class="contact-form-mask/)
   assert.doesNotMatch(previewWxml, /class="contact-form-mask/)
-  assert.match(visitorWxml, /class="text-section \{\{item\.textSection\.alignmentClass\}\}"/)
-  assert.match(previewWxml, /class="text-section \{\{item\.textSection\.alignmentClass\}\}"/)
-  assert.match(visitorWxml, /<text class="text-content" space="nbsp">\{\{item\.textSection\.content\}\}<\/text>/)
-  assert.match(previewWxml, /<text class="text-content" space="nbsp">\{\{item\.textSection\.content\}\}<\/text>/)
-  assert.match(visitorWxml, /class="divider-section"[\s\S]*style="\{\{item\.divider\.style\}\}"/)
-  assert.match(previewWxml, /class="divider-section"[\s\S]*style="\{\{item\.divider\.style\}\}"/)
+  assert.match(visitorWxml, /<portfolio-text-section text-section="\{\{item\.textSection\}\}"/)
+  assert.match(previewWxml, /<portfolio-text-section text-section="\{\{item\.textSection\}\}"/)
+  assert.match(textSectionWxml, /class="text-section \{\{textSection\.alignmentClass\}\}"/)
+  assert.match(textSectionWxml, /<text class="text-content" space="nbsp">\{\{textSection\.content\}\}<\/text>/)
+  assert.match(visitorWxml, /<portfolio-divider divider="\{\{item\.divider\}\}"/)
+  assert.match(previewWxml, /<portfolio-divider divider="\{\{item\.divider\}\}"/)
+  assert.match(dividerWxml, /class="divider-section"[\s\S]*style="\{\{divider\.style\}\}"/)
   assert.doesNotMatch(visitorWxml, /<button class="secondary-action">档期查询<\/button>/)
   assert.doesNotMatch(previewWxml, /<button class="secondary-action">档期查询<\/button>/)
   assert.match(scheduleWxml, /档期查询/)
@@ -388,24 +386,14 @@ test('visitor portfolio pages expose maintenance, QR, contact and schedule surfa
 })
 
 test('visitor work list components keep tags visible and grid cards in two columns', () => {
-  const sharedWxss = readExisting('styles/portfolio-render-shared.wxss')
-  const pages = [
-    ['visitor', read('pages/portfolios/visitor-portfolio/visitor-portfolio.wxss')],
-    ['preview', read('pages/portfolios/standard-preview/portfolio-standard-preview.wxss')]
+  const components = [
+    ['grid', readExisting('pages/portfolios/components/work-grid/work-grid.wxss')],
+    ['list', readExisting('pages/portfolios/components/work-list/work-list.wxss')]
   ]
 
-  pages.forEach(([pageName, wxss]) => {
-    assert.match(wxss, /@import "\.\.\/\.\.\/\.\.\/styles\/portfolio-render-shared\.wxss";/, `${pageName} should import shared render styles`)
-  })
-
-  ;[
-    ['shared', sharedWxss]
-  ].forEach(([pageName, wxss]) => {
+  components.forEach(([pageName, wxss]) => {
     const displayTagScrollRule = readRule(wxss, '.display-tag-scroll')
     const displayTagsRule = readRules(wxss, '.display-tags')
-    const workGridRule = readRule(wxss, '.work-grid')
-    const gridCardRule = readRule(wxss, '.grid-card')
-    const workListRule = readRule(wxss, '.work-list')
 
     assert.match(displayTagScrollRule, /height:\s*56rpx/, `${pageName} display tag scroll should reserve row height`)
     assert.match(displayTagScrollRule, /overflow:\s*hidden/, `${pageName} display tag scroll should clip within its row`)
@@ -418,19 +406,26 @@ test('visitor work list components keep tags visible and grid cards in two colum
     const displayTagRule = readRule(wxss, '.display-tag')
     assert.match(displayTagRule, /flex:\s*0\s+0\s+auto/, `${pageName} display tag should not shrink`)
     assert.match(displayTagRule, /transition:\s*color\s+160ms\s+ease,\s*opacity\s+160ms\s+ease/, `${pageName} display tag state should animate subtly`)
-    assert.match(readRule(wxss, '.work-list.display-switching'), /animation:\s*work-list-switch-in\s+180ms\s+ease-out\s+both/, `${pageName} work content should animate after tag switches`)
+    assert.match(readRule(wxss, `.${pageName === 'grid' ? 'work-grid' : 'work-list'}.display-switching`), /animation:\s*work-list-switch-in\s+180ms\s+ease-out\s+both/, `${pageName} work content should animate after tag switches`)
     assert.match(wxss, /@keyframes\s+work-list-switch-in[\s\S]*opacity:\s*0\.2;[\s\S]*transform:\s*translateY\(8rpx\);[\s\S]*opacity:\s*1;[\s\S]*transform:\s*translateY\(0\);/, `${pageName} work switch animation should fade and lift content`)
-    assert.match(workGridRule, /display:\s*flex/, `${pageName} work grid should use Skyline-safe flex layout`)
-    assert.match(workGridRule, /flex-wrap:\s*wrap/, `${pageName} work grid should wrap into rows`)
-    assert.doesNotMatch(workGridRule, /display:\s*grid/, `${pageName} work grid should avoid CSS grid`)
-    assert.doesNotMatch(workGridRule, /grid-template-columns/, `${pageName} work grid should avoid grid columns`)
-    assert.match(gridCardRule, /width:\s*50%/, `${pageName} grid card should occupy half the row`)
-    assert.match(gridCardRule, /padding:\s*0\s+6rpx\s+18rpx/, `${pageName} grid card should create stable gutters`)
-    assert.match(gridCardRule, /box-sizing:\s*border-box/, `${pageName} grid card should keep gutters inside half width`)
-    assert.match(workListRule, /display:\s*flex/, `${pageName} work list should remain a vertical flex list`)
-    assert.match(workListRule, /flex-direction:\s*column/, `${pageName} work list should remain single column`)
-    assert.doesNotMatch(workListRule, /display:\s*grid/, `${pageName} work list should avoid CSS grid`)
   })
+
+  const gridWxss = components[0][1]
+  const listWxss = components[1][1]
+  const workGridRule = readRule(gridWxss, '.work-grid')
+  const gridCardRule = readRule(gridWxss, '.grid-card')
+  const workListRule = readRule(listWxss, '.work-list')
+
+  assert.match(workGridRule, /display:\s*flex/, 'work grid should use Skyline-safe flex layout')
+  assert.match(workGridRule, /flex-wrap:\s*wrap/, 'work grid should wrap into rows')
+  assert.doesNotMatch(workGridRule, /display:\s*grid/, 'work grid should avoid CSS grid')
+  assert.doesNotMatch(workGridRule, /grid-template-columns/, 'work grid should avoid grid columns')
+  assert.match(gridCardRule, /width:\s*50%/, 'grid card should occupy half the row')
+  assert.match(gridCardRule, /padding:\s*0\s+6rpx\s+18rpx/, 'grid card should create stable gutters')
+  assert.match(gridCardRule, /box-sizing:\s*border-box/, 'grid card should keep gutters inside half width')
+  assert.match(workListRule, /display:\s*flex/, 'work list should remain a vertical flex list')
+  assert.match(workListRule, /flex-direction:\s*column/, 'work list should remain single column')
+  assert.doesNotMatch(workListRule, /display:\s*grid/, 'work list should avoid CSS grid')
 })
 
 test('contact form modal uses full-screen fixed bottom sheet layout', () => {
@@ -460,19 +455,13 @@ test('contact form modal uses full-screen fixed bottom sheet layout', () => {
 })
 
 test('visitor qr contact images are centered in portfolio pages', () => {
-  const pages = [
-    ['visitor', read('pages/portfolios/visitor-portfolio/visitor-portfolio.wxss')],
-    ['preview', read('pages/portfolios/standard-preview/portfolio-standard-preview.wxss')]
-  ]
+  const wxss = readExisting('pages/portfolios/components/qr-contact/qr-contact.wxss')
+  const qrImageRule = readRule(wxss, '.qr-image')
 
-  pages.forEach(([pageName, wxss]) => {
-    const qrImageRule = readRule(wxss, '.qr-image')
-
-    assert.match(qrImageRule, /display:\s*block/, `${pageName} QR image should not rely on inline text alignment`)
-    assert.match(qrImageRule, /width:\s*280rpx/, `${pageName} QR image should keep fixed scan size`)
-    assert.match(qrImageRule, /height:\s*280rpx/, `${pageName} QR image should keep fixed scan size`)
-    assert.match(qrImageRule, /margin:\s*24rpx auto 0/, `${pageName} QR image should center horizontally`)
-  })
+  assert.match(qrImageRule, /display:\s*block/, 'QR image should not rely on inline text alignment')
+  assert.match(qrImageRule, /width:\s*280rpx/, 'QR image should keep fixed scan size')
+  assert.match(qrImageRule, /height:\s*280rpx/, 'QR image should keep fixed scan size')
+  assert.match(qrImageRule, /margin:\s*24rpx auto 0/, 'QR image should center horizontally')
 })
 
 test('schedule query modal entry matches contact form button style', () => {

@@ -755,12 +755,111 @@ test('tapping carousel component edits selected image works', async () => {
   assert.equal(page.data.componentWorkSheetVisible, true)
   assert.deepEqual(page.data.componentWorkOptions.map((item) => item.id), [11, 13])
   assert.deepEqual(page.data.componentWorkOptions.map((item) => item.selected), [false, true])
+  assert.deepEqual(page.data.componentWorkOptions.map((item) => item.selectionOrder), [0, 1])
 
   page.handleToggleComponentWork({ currentTarget: { dataset: { id: 11 } } })
+  assert.deepEqual(page.data.componentWorkOptions.map((item) => item.selectionOrder), [2, 1])
   page.handleConfirmComponentWorks()
 
   assert.deepEqual(page.data.config.components[0].config.workIds, [13, 11])
   assert.equal(page.data.componentWorkSheetVisible, false)
+})
+
+test('personal carousel compacts selection order and restarts from one after clearing', () => {
+  const page = loadPortfolioEditorPage(() => Promise.resolve({ works: [] }))
+  page.data.editingComponentType = COMPONENT_TYPES.CAROUSEL
+  page.data.componentWorkSelectedIds = []
+  page.data.componentWorkOptions = [11, 12, 13].map((id) => ({
+    id,
+    mediaType: 'IMAGE'
+  }))
+
+  page.handleToggleComponentWork({ currentTarget: { dataset: { id: 11 } } })
+  page.handleToggleComponentWork({ currentTarget: { dataset: { id: 12 } } })
+  page.handleToggleComponentWork({ currentTarget: { dataset: { id: 13 } } })
+
+  assert.deepEqual(page.data.componentWorkSelectedIds, [11, 12, 13])
+  assert.deepEqual(page.data.componentWorkOptions.map((item) => item.selectionOrder), [1, 2, 3])
+
+  page.handleToggleComponentWork({ currentTarget: { dataset: { id: 12 } } })
+
+  assert.deepEqual(page.data.componentWorkSelectedIds, [11, 13])
+  assert.deepEqual(page.data.componentWorkOptions.map((item) => item.selectionOrder), [1, 0, 2])
+
+  page.handleToggleComponentWork({ currentTarget: { dataset: { id: 11 } } })
+  page.handleToggleComponentWork({ currentTarget: { dataset: { id: 13 } } })
+  page.handleToggleComponentWork({ currentTarget: { dataset: { id: 12 } } })
+
+  assert.deepEqual(page.data.componentWorkSelectedIds, [12])
+  assert.deepEqual(page.data.componentWorkOptions.map((item) => item.selectionOrder), [0, 1, 0])
+})
+
+test('personal carousel limits new selections to nine and allows replacement after removal', () => {
+  const toastCalls = []
+  const page = loadPortfolioEditorPage(() => Promise.resolve({ works: [] }), {
+    showToast(options) {
+      toastCalls.push(options)
+    }
+  })
+  page.data.editingComponentType = COMPONENT_TYPES.CAROUSEL
+  page.data.componentWorkSelectedIds = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+  page.data.componentWorkOptions = Array.from({ length: 10 }, (_, index) => ({
+    id: index + 1,
+    mediaType: 'IMAGE'
+  }))
+
+  page.handleToggleComponentWork({ currentTarget: { dataset: { id: 10 } } })
+
+  assert.deepEqual(page.data.componentWorkSelectedIds, [1, 2, 3, 4, 5, 6, 7, 8, 9])
+  assert.equal(toastCalls.at(-1).title, '轮播图最多选择9张图片')
+
+  page.handleToggleComponentWork({ currentTarget: { dataset: { id: 5 } } })
+  page.handleToggleComponentWork({ currentTarget: { dataset: { id: 10 } } })
+
+  assert.deepEqual(page.data.componentWorkSelectedIds, [1, 2, 3, 4, 6, 7, 8, 9, 10])
+})
+
+test('personal carousel preserves historical selections above nine while blocking additions', async () => {
+  const toastCalls = []
+  const historicalIds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+  const page = loadPortfolioEditorPage(() => Promise.resolve({
+    works: Array.from({ length: 11 }, (_, index) => ({
+      id: index + 1,
+      mediaType: 'IMAGE',
+      title: `作品${index + 1}`
+    }))
+  }), {
+    showToast(options) {
+      toastCalls.push(options)
+    }
+  })
+  page.data.config = normalizePortfolioConfig({
+    components: [
+      createComponent(COMPONENT_TYPES.CAROUSEL, {
+        componentKey: 'c_historical_carousel',
+        config: { workIds: historicalIds }
+      })
+    ]
+  })
+
+  await page.handleComponentTap({
+    currentTarget: {
+      dataset: { key: 'c_historical_carousel', type: COMPONENT_TYPES.CAROUSEL }
+    }
+  })
+
+  assert.deepEqual(page.data.componentWorkSelectedIds, historicalIds)
+  assert.equal(page.data.componentWorkOptions.find((item) => item.id === 10).selectionOrder, 10)
+
+  page.handleToggleComponentWork({ currentTarget: { dataset: { id: 11 } } })
+
+  assert.deepEqual(page.data.componentWorkSelectedIds, historicalIds)
+  assert.equal(toastCalls.at(-1).title, '轮播图最多选择9张图片')
+
+  page.handleToggleComponentWork({ currentTarget: { dataset: { id: 5 } } })
+
+  assert.deepEqual(page.data.componentWorkSelectedIds, [1, 2, 3, 4, 6, 7, 8, 9, 10])
+  assert.equal(page.data.componentWorkOptions.find((item) => item.id === 10).selectionOrder, 9)
 })
 
 test('single work editor replaces one selection and commits title switch atomically', async () => {
@@ -791,6 +890,7 @@ test('single work editor replaces one selection and commits title switch atomica
   assert.equal(page.data.componentWorkSheetTitle, '编辑单个作品')
   assert.equal(page.data.componentWorkSelectionMode, 'single')
   assert.deepEqual(page.data.componentWorkSelectedIds, [11])
+  assert.deepEqual(page.data.componentWorkOptions.map((item) => item.selectionOrder), [0, 0])
 
   page.handleToggleComponentWork({ currentTarget: { dataset: { id: 12 } } })
   page.handleToggleComponentWork({ currentTarget: { dataset: { id: 12 } } })
@@ -907,6 +1007,25 @@ test('single work component rows avoid unsupported Number calls in WXS', () => {
   assert.match(wxml, /resolveSingleWorkSummary\(item, singleWorkSummaries\)/)
 })
 
+test('component work picker renders carousel order without changing selection accessibility', () => {
+  const wxml = fs.readFileSync(
+    path.join(__dirname, '../pages/portfolios/standard-edit/portfolio-standard-edit.wxml'),
+    'utf8'
+  )
+  const wxss = fs.readFileSync(
+    path.join(__dirname, '../pages/portfolios/standard-edit/portfolio-standard-edit.wxss'),
+    'utf8'
+  )
+
+  assert.match(wxml, /editingComponentType === 'CAROUSEL'/)
+  assert.match(wxml, /item\.selectionOrder/)
+  assert.match(wxml, /item\.selected \? '✓' : ''/)
+  assert.match(wxml, /aria-role="\{\{componentWorkSelectionMode === 'single' \? 'radio' : 'checkbox'\}\}"/)
+  assert.match(wxml, /aria-checked="\{\{item\.selected\}\}"/)
+  assert.match(wxss, /\.component-work-check\.carousel-order\s*\{[^}]*font-size:\s*22rpx;/)
+  assert.match(wxss, /\.component-work-option\.selected \.component-work-check\s*\{[^}]*background:\s*#c28b37;/)
+})
+
 test('component work picker searches filters by tag and appends next page', async () => {
   const requests = []
   const fakeRequest = (options) => {
@@ -969,7 +1088,7 @@ test('component work picker searches filters by tag and appends next page', asyn
       createComponent(COMPONENT_TYPES.CAROUSEL, {
         componentKey: 'c_carousel',
         sortOrder: 1000,
-        config: { workIds: [32] }
+        config: { workIds: [11, 32] }
       })
     ]
   })
@@ -1039,6 +1158,7 @@ test('component work picker searches filters by tag and appends next page', asyn
   })
   assert.deepEqual(page.data.componentWorkOptions.map((item) => item.id), [31, 32])
   assert.deepEqual(page.data.componentWorkOptions.map((item) => item.selected), [false, true])
+  assert.deepEqual(page.data.componentWorkOptions.map((item) => item.selectionOrder), [0, 2])
   assert.equal(page.data.componentWorkHasMore, false)
 })
 

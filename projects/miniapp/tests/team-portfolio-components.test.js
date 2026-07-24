@@ -328,6 +328,38 @@ test('shared WXS selection helpers avoid unavailable String and preserve numeric
   assert.equal(selectionModule.exports.count([], 'memberUserId', 2), 0)
 })
 
+test('carousel removal compacts draft order and visible WXS order', () => {
+  const { exports } = loadComponent('carousel')
+  const wxsSource = fs.readFileSync(path.join(ROOT, 'editor-selection.wxs'), 'utf8')
+  const selectionModule = { exports: {} }
+  new Function('module', wxsSource)(selectionModule)
+  const original = [
+    { memberUserId: 2, workId: 9 },
+    { memberUserId: 2, workId: 10 },
+    { memberUserId: 3, workId: 11 }
+  ]
+
+  const remaining = exports.toggleCarouselWork(original, original[1])
+
+  assert.deepEqual(remaining.map((item) => item.workId), [9, 11])
+  assert.equal(selectionModule.exports.order(remaining, 'workId', 9), 1)
+  assert.equal(selectionModule.exports.order(remaining, 'workId', 11), 2)
+})
+
+test('carousel selection restarts at one after every work is removed', () => {
+  const { exports } = loadComponent('carousel')
+  const wxsSource = fs.readFileSync(path.join(ROOT, 'editor-selection.wxs'), 'utf8')
+  const selectionModule = { exports: {} }
+  new Function('module', wxsSource)(selectionModule)
+  const first = { memberUserId: 2, workId: 9 }
+  const cleared = exports.toggleCarouselWork([first], first)
+  const reselected = exports.toggleCarouselWork(cleared, { memberUserId: 3, workId: 11 })
+
+  assert.deepEqual(cleared, [])
+  assert.deepEqual(reselected, [{ memberUserId: 3, workId: 11 }])
+  assert.equal(selectionModule.exports.order(reselected, 'workId', 11), 1)
+})
+
 test('carousel member buttons hug their content and show every selected work count', () => {
   const wxml = fs.readFileSync(path.join(ROOT, 'carousel/carousel.wxml'), 'utf8')
   const wxss = fs.readFileSync(path.join(ROOT, 'carousel/carousel.wxss'), 'utf8')

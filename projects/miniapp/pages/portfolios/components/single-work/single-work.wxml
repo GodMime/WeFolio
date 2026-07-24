@@ -1,0 +1,58 @@
+<!-- 预览页保留可修复提示；访客页遇到空作品时维持不渲染的既有契约。 -->
+<view wx:if="{{repairMode && !work}}" class="single-work-repair">作品不可用，请重新选择</view>
+<view wx:elif="{{work}}" class="single-work">
+  <video
+    wx:if="{{work.isVideo && activeVideoKey === componentKey}}"
+    id="singleWorkVideo-{{componentKey}}"
+    class="single-work-video"
+    style="{{work.aspectRatioStyle}}"
+    src="{{work.previewUrl}}"
+    poster="{{work.thumbnailUrl}}"
+    controls="{{true}}"
+    autoplay="{{true}}"
+    show-fullscreen-btn="{{true}}"
+    show-center-play-btn="{{true}}"
+    enable-progress-gesture="{{true}}"
+    object-fit="cover"
+    binderror="handleVideoError"
+  ></video>
+  <view
+    wx:elif="{{work.isVideo}}"
+    class="single-work-video-poster"
+    style="{{work.aspectRatioStyle}}"
+    data-work-id="{{work.workId}}"
+    data-media-type="{{work.mediaType}}"
+    data-media-url="{{work.previewUrl}}"
+    data-cover-url="{{work.thumbnailUrl}}"
+    data-title="{{work.title}}"
+    bindtap="handleSingleWorkTap"
+    aria-role="button"
+    aria-label="播放视频{{work.title}}"
+  >
+    <image wx:if="{{work.thumbnailUrl}}" class="single-work-video-cover" src="{{work.thumbnailUrl}}" mode="aspectFill"></image>
+    <view wx:else class="single-work-media-placeholder">暂无视频封面</view>
+    <view class="single-work-play-badge" aria-hidden="true"><view class="work-play-icon"></view></view>
+  </view>
+  <image
+    wx:elif="{{work.previewUrl}}"
+    class="single-work-image"
+    src="{{work.previewUrl}}"
+    mode="widthFix"
+    data-work-id="{{work.workId}}"
+    data-media-type="{{work.mediaType}}"
+    data-media-url="{{work.previewUrl}}"
+    data-cover-url="{{work.thumbnailUrl}}"
+    data-title="{{work.title}}"
+    bindtap="handleSingleWorkTap"
+    aria-role="button"
+    aria-label="查看原图{{work.title}}"
+  ></image>
+  <view
+    wx:else
+    class="single-work-media-placeholder image"
+    data-work-id="{{work.workId}}"
+    data-media-type="{{work.mediaType}}"
+    bindtap="handleSingleWorkTap"
+  >{{repairMode ? '图片地址缺失' : '图片不可用'}}</view>
+  <view wx:if="{{showTitle}}" class="single-work-title">{{work.title}}</view>
+</view>

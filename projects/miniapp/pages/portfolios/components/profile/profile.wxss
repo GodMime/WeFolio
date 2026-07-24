@@ -1,0 +1,64 @@
+.profile-section {
+  padding: 8rpx 34rpx;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.profile-avatar {
+  display: block;
+  margin: 0 auto;
+  width: 132rpx;
+  height: 132rpx;
+  border-radius: 50%;
+}
+
+.profile-name {
+  margin-top: 18rpx;
+  color: #17202a;
+  font-size: 36rpx;
+  font-weight: 900;
+  line-height: 1.25;
+}
+
+.profile-line,
+.profile-bio {
+  color: #59636f;
+  font-size: 26rpx;
+  line-height: 1.75;
+  white-space: pre-wrap;
+}
+
+.profile-line {
+  margin-top: 8rpx;
+}
+
+/* 简介的换行行为由上方与 .profile-line 的组合规则统一保证。 */
+.profile-bio {
+  display: block;
+  margin: 22rpx auto 0;
+  max-width: 620rpx;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+.profile-tags {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 22rpx;
+  margin-top: 22rpx;
+}
+
+.profile-tag {
+  color: #6b7280;
+  font-size: 24rpx;
+  line-height: 1.4;
+}
+
+.qr-image {
+  display: block;
+  width: 280rpx;
+  height: 280rpx;
+  margin: 24rpx auto 0;
+}

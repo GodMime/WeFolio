@@ -369,19 +369,28 @@ test('preview page opens image and video work media without visitor event reques
 
 test('preview single work images open originals and videos play inline one at a time', () => {
   const previews = []
-  const videoContexts = []
+  const paused = []
   const wxMock = {
     previewImage(options) {
       previews.push(options)
     },
-    createVideoContext(id) {
-      const context = { id, pauseCalls: 0, pause() { this.pauseCalls += 1 } }
-      videoContexts.push(context)
-      return context
-    },
     showToast() {}
   }
   const page = loadPreviewPage(() => Promise.resolve({}), wxMock)
+  page.selectAllComponents = () => [
+    {
+      data: { componentKey: 'c_video_a' },
+      pauseVideo() {
+        paused.push('c_video_a')
+      }
+    },
+    {
+      data: { componentKey: 'c_video_b' },
+      pauseVideo() {
+        paused.push('c_video_b')
+      }
+    }
+  ]
   global.wx = wxMock
 
   try {
@@ -430,9 +439,36 @@ test('preview single work images open originals and videos play inline one at a 
     urls: ['https://cdn.example.com/original.jpg']
   })
   assert.equal(page.data.activeSingleWorkVideoKey, 'c_video_b')
-  assert.equal(videoContexts[0].id, 'singleWorkVideo-c_video_a')
-  assert.equal(videoContexts[0].pauseCalls, 1)
+  assert.deepEqual(paused, ['c_video_a'])
   assert.equal(page.data.videoPreviewVisible, false)
+})
+
+test('preview page pauses only the active single work child component', () => {
+  const page = loadPreviewPage(() => Promise.resolve({}))
+  const calls = []
+  page.data.activeSingleWorkVideoKey = 'single:active'
+  page.selectAllComponents = (selector) => {
+    assert.equal(selector, '.portfolio-single-work-instance')
+    return [
+      {
+        data: { componentKey: 'single:other' },
+        pauseVideo() {
+          calls.push('other')
+        }
+      },
+      {
+        data: { componentKey: 'single:active' },
+        pauseVideo() {
+          calls.push('active')
+        }
+      }
+    ]
+  }
+
+  page.stopActiveSingleWorkVideo()
+
+  assert.deepEqual(calls, ['active'])
+  assert.equal(page.data.activeSingleWorkVideoKey, '')
 })
 
 test('preview single work does not use cover as missing original or video media', () => {
@@ -476,14 +512,16 @@ test('preview single work does not use cover as missing original or video media'
 })
 
 test('single work markup uses width-fix images and inline autoplay video without changing list overlay', () => {
-  const wxml = readExisting('pages/portfolios/standard-preview/portfolio-standard-preview.wxml')
+  const pageWxml = readExisting('pages/portfolios/standard-preview/portfolio-standard-preview.wxml')
+  const componentWxml = readExisting('pages/portfolios/components/single-work/single-work.wxml')
 
-  assert.match(wxml, /item\.componentType === 'SINGLE_WORK'/)
-  assert.match(wxml, /class="single-work-image"[\s\S]*mode="widthFix"/)
-  assert.match(wxml, /activeSingleWorkVideoKey === item\.componentKey[\s\S]*<video[\s\S]*autoplay="\{\{true\}\}"/)
-  assert.match(wxml, /class="single-work-play-badge"/)
-  assert.match(wxml, /wx:if="\{\{item\.showTitle\}\}" class="single-work-title"/)
-  assert.match(wxml, /<root-portal wx:if="\{\{videoPreviewVisible\}\}">/)
+  assert.match(pageWxml, /item\.componentType === 'SINGLE_WORK'/)
+  assert.match(pageWxml, /<portfolio-single-work[\s\S]*active-video-key="\{\{activeSingleWorkVideoKey\}\}"/)
+  assert.match(componentWxml, /class="single-work-image"[\s\S]*mode="widthFix"/)
+  assert.match(componentWxml, /<video[\s\S]*activeVideoKey === componentKey[\s\S]*autoplay="\{\{true\}\}"/)
+  assert.match(componentWxml, /class="single-work-play-badge"/)
+  assert.match(componentWxml, /wx:if="\{\{showTitle\}\}" class="single-work-title"/)
+  assert.match(pageWxml, /<root-portal wx:if="\{\{videoPreviewVisible\}\}">/)
 })
 
 test('preview markup exposes loading skeleton and retryable error state', () => {
@@ -522,47 +560,43 @@ test('portfolio work sections render fixed title, all tags, play badge, and vide
     path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.wxml'),
     'utf8'
   )
-  const previewWxss = fs.readFileSync(
-    path.join(__dirname, '../pages/portfolios/standard-preview/portfolio-standard-preview.wxss'),
-    'utf8'
-  )
-  const visitorWxss = fs.readFileSync(
-    path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.wxss'),
-    'utf8'
-  )
-  const sharedWxss = readExisting('styles/portfolio-render-shared.wxss')
+  const gridWxml = readExisting('pages/portfolios/components/work-grid/work-grid.wxml')
+  const listWxml = readExisting('pages/portfolios/components/work-list/work-list.wxml')
+  const gridWxss = readExisting('pages/portfolios/components/work-grid/work-grid.wxss')
+  const listWxss = readExisting('pages/portfolios/components/work-list/work-list.wxss')
+  const mockSharedWxss = readExisting('styles/portfolio-render-shared.wxss')
 
   ;[previewWxml, visitorWxml].forEach((wxml) => {
-    assert.match(wxml, /class="work-section-title">作品列表<\/view>/)
-    assert.doesNotMatch(wxml, /class="work-section-title">作品 &gt;<\/view>/)
-    assert.match(wxml, /wx:for="\{\{item\.displayTags\}\}"[\s\S]*>\{\{tag\.name\}\}<\/view>/)
-    assert.match(wxml, /class="work-grid \{\{displaySwitchingComponentKey === item\.componentKey \? 'display-switching' : ''\}\}"/)
-    assert.match(wxml, /class="work-list \{\{displaySwitchingComponentKey === item\.componentKey \? 'display-switching' : ''\}\}"/)
-    assert.match(wxml, /class="work-cover-wrap"[\s\S]*bindtap="handleWorkTap"/)
-    assert.match(wxml, /data-media-url="\{\{work\.previewUrl\}\}"/)
-    assert.match(wxml, /wx:if="\{\{work\.isVideo\}\}"[\s\S]*class="work-play-badge"/)
+    assert.match(wxml, /<portfolio-work-grid[\s\S]*switching="\{\{displaySwitchingComponentKey === item\.componentKey\}\}"/)
+    assert.match(wxml, /<portfolio-work-list[\s\S]*switching="\{\{displaySwitchingComponentKey === item\.componentKey\}\}"/)
     assert.match(wxml, /class="work-video-mask \{\{videoPreviewVisible \? 'visible' : ''\}\}"/)
     assert.match(wxml, /id="portfolioWorkVideo"[\s\S]*src="\{\{videoPreview\.src\}\}"[\s\S]*poster="\{\{videoPreview\.poster\}\}"[\s\S]*controls="\{\{true\}\}"[\s\S]*show-fullscreen-btn="\{\{true\}\}"/)
   })
-  ;[previewWxss, visitorWxss].forEach((wxss) => {
-    assert.match(wxss, /@import "\.\.\/\.\.\/\.\.\/styles\/portfolio-render-shared\.wxss";/)
+  ;[gridWxml, listWxml].forEach((wxml) => {
+    assert.match(wxml, /class="work-section-title">作品列表<\/view>/)
+    assert.doesNotMatch(wxml, /class="work-section-title">作品 &gt;<\/view>/)
+    assert.match(wxml, /wx:for="\{\{displayTags\}\}"[\s\S]*>\{\{tag\.name\}\}<\/view>/)
+    assert.match(wxml, /class="work-cover-wrap"[\s\S]*bindtap="handleWorkTap"/)
+    assert.match(wxml, /data-media-url="\{\{work\.previewUrl\}\}"/)
+    assert.match(wxml, /wx:if="\{\{work\.isVideo\}\}"[\s\S]*class="work-play-badge"/)
+  })
+  ;[gridWxss, listWxss].forEach((wxss) => {
     assert.match(wxss, /\.work-section-title\s*\{[\s\S]*color:\s*#000000;[\s\S]*font-size:\s*34rpx;/)
     assert.match(wxss, /\.work-play-badge\s*\{[\s\S]*position:\s*absolute;[\s\S]*right:\s*16rpx;[\s\S]*bottom:\s*16rpx;/)
     assert.doesNotMatch(wxss, /\.work-play-badge\s*\{[\s\S]*top:\s*50%;[\s\S]*left:\s*50%;/)
   })
-  ;[sharedWxss].forEach((wxss) => {
+  ;[mockSharedWxss].forEach((wxss) => {
     assert.match(wxss, /\.display-tag\s*\{[\s\S]*color:\s*#8a8f98;[\s\S]*font-size:\s*28rpx;/)
     assert.match(wxss, /\.display-tag\.active\s*\{[\s\S]*color:\s*#000000;/)
   })
 })
 
 test('single work inline videos fill their frame across production and mock previews', () => {
-  const previewWxml = readExisting('pages/portfolios/standard-preview/portfolio-standard-preview.wxml')
-  const visitorWxml = readExisting('pages/portfolios/visitor-portfolio/visitor-portfolio.wxml')
+  const productionWxml = readExisting('pages/portfolios/components/single-work/single-work.wxml')
   const mockPreviewWxml = readExisting('pages/mock/portfolio-standard-preview/portfolio-standard-preview.wxml')
   const inlineVideoPattern = /<video[\s\S]*?class="single-work-video"[\s\S]*?object-fit="cover"[\s\S]*?<\/video>/
 
-  ;[previewWxml, visitorWxml, mockPreviewWxml].forEach((wxml) => {
+  ;[productionWxml, mockPreviewWxml].forEach((wxml) => {
     assert.match(wxml, inlineVideoPattern)
   })
 })
@@ -603,9 +637,11 @@ test('profile component can render selected wechat qr in actual pages', () => {
     path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.wxml'),
     'utf8'
   )
+  const profileWxml = readExisting('pages/portfolios/components/profile/profile.wxml')
 
-  assert.match(previewWxml, /wx:if="\{\{item\.profile\.wechatQrUrl\}\}"[\s\S]*src="\{\{item\.profile\.wechatQrUrl\}\}"[\s\S]*bindtap="handlePreviewQr"/)
-  assert.match(visitorWxml, /wx:if="\{\{item\.profile\.wechatQrUrl\}\}"[\s\S]*src="\{\{item\.profile\.wechatQrUrl\}\}"[\s\S]*bindtap="handlePreviewQr"/)
+  assert.match(previewWxml, /<portfolio-profile[\s\S]*profile="\{\{item\.profile\}\}"[\s\S]*bindpreviewqr="handlePreviewQr"/)
+  assert.match(visitorWxml, /<portfolio-profile[\s\S]*profile="\{\{item\.profile\}\}"[\s\S]*bindpreviewqr="handlePreviewQr"/)
+  assert.match(profileWxml, /wx:if="\{\{profile\.wechatQrUrl\}\}"[\s\S]*src="\{\{profile\.wechatQrUrl\}\}"[\s\S]*bindtap="handlePreviewQr"/)
 })
 
 test('contact form components support modal entry and inline form in actual pages', () => {
@@ -657,51 +693,32 @@ test('actual portfolio pages do not render share intro as page content', () => {
 })
 
 test('portfolio user-authored text preserves line breaks in actual pages', () => {
-  const previewWxml = fs.readFileSync(
-    path.join(__dirname, '../pages/portfolios/standard-preview/portfolio-standard-preview.wxml'),
-    'utf8'
-  )
-  const visitorWxml = fs.readFileSync(
-    path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.wxml'),
-    'utf8'
-  )
+  const profileWxml = readExisting('pages/portfolios/components/profile/profile.wxml')
+  const profileWxss = readExisting('pages/portfolios/components/profile/profile.wxss')
+  const textWxss = readExisting('pages/portfolios/components/text-section/text-section.wxss')
+  const listWxss = readExisting('pages/portfolios/components/work-list/work-list.wxss')
   const appWxss = fs.readFileSync(
     path.join(__dirname, '../app.wxss'),
     'utf8'
   )
-  const previewWxss = fs.readFileSync(
-    path.join(__dirname, '../pages/portfolios/standard-preview/portfolio-standard-preview.wxss'),
-    'utf8'
-  )
-  const visitorWxss = fs.readFileSync(
-    path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.wxss'),
-    'utf8'
-  )
-
-  ;[previewWxml, visitorWxml].forEach((wxml) => {
-    assert.match(wxml, /<text wx:if="\{\{item\.profile\.bio\}\}" class="profile-bio" space="nbsp">\{\{item\.profile\.bio\}\}<\/text>/)
-    assert.doesNotMatch(wxml, /<view wx:if="\{\{item\.profile\.bio\}\}" class="profile-bio">/)
-  })
-  ;[previewWxss, visitorWxss].forEach((wxss) => {
-    assert.match(wxss, /\.profile-bio,\s*\.section-desc,\s*\.text-content,\s*\.work-desc\s*\{[^}]*white-space:\s*pre-wrap;/)
-    assert.match(readRule(wxss, '.profile-bio'), /display:\s*block;/)
+  assert.match(profileWxml, /<text wx:if="\{\{profile\.bio\}\}" class="profile-bio" space="nbsp">\{\{profile\.bio\}\}<\/text>/)
+  assert.match(profileWxss, /\.profile-bio\s*\{[\s\S]*display:\s*block;/)
+  ;[
+    profileWxss,
+    readRule(textWxss, '.text-content'),
+    readRule(listWxss, '.work-desc')
+  ].forEach((rule) => {
+    assert.match(rule, /white-space:\s*pre-wrap;/)
+    assert.match(rule, /overflow-wrap:\s*break-word;/)
+    assert.match(rule, /word-break:\s*break-word;/)
   })
   assert.match(appWxss, /\.user-authored-text,[\s\S]*\.message-content,[\s\S]*\.team-summary,[\s\S]*\.member-summary,[\s\S]*\.candidate-summary,[\s\S]*\.visit-summary\s*\{[^}]*white-space:\s*pre-wrap;/)
 })
 
 test('portfolio profile avatar is centered in actual pages', () => {
-  const previewWxss = fs.readFileSync(
-    path.join(__dirname, '../pages/portfolios/standard-preview/portfolio-standard-preview.wxss'),
-    'utf8'
-  )
-  const visitorWxss = fs.readFileSync(
-    path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.wxss'),
-    'utf8'
-  )
+  const profileWxss = readExisting('pages/portfolios/components/profile/profile.wxss')
+  const profileAvatarRule = readRule(profileWxss, '.profile-avatar')
 
-  ;[previewWxss, visitorWxss].forEach((wxss) => {
-    const profileAvatarRule = readRule(wxss, '.profile-avatar')
-    assert.match(profileAvatarRule, /display:\s*block;/)
-    assert.match(profileAvatarRule, /margin:\s*0 auto;/)
-  })
+  assert.match(profileAvatarRule, /display:\s*block;/)
+  assert.match(profileAvatarRule, /margin:\s*0 auto;/)
 })
