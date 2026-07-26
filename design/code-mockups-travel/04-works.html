@@ -193,10 +193,18 @@
   }
   .reference-pill { color: #868e96; }
   .reference-pill.used { color: #212529; font-weight: 600; }
-  .audit-pill.pending { color: #868e96; }
-  .audit-pill.auditing { color: #868e96; }
-  .audit-pill.passed { color: #5c9e6e; }
-  .audit-pill.rejected { color: #b55656; }
+  /* 状态徽章(纯展示):无边框无底色,仅 6px 彩点 + 彩色文字 */
+  .status-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; font-weight: 500; line-height: 1;
+  }
+  .status-badge .dot { width: 6px; height: 6px; flex: none; border-radius: 50%; }
+  .status-badge.passed { color: #5c9e6e; }
+  .status-badge.passed .dot { background: #5c9e6e; }
+  .status-badge.auditing, .status-badge.pending { color: #868e96; }
+  .status-badge.auditing .dot, .status-badge.pending .dot { background: #868e96; }
+  .status-badge.rejected { color: #b55656; }
+  .status-badge.rejected .dot { background: #b55656; }
   .card-arrow {
     width: 7px; height: 7px; flex: none; margin-right: 6px;
     border-top: 2px solid #ced4da; border-right: 2px solid #ced4da;
@@ -710,7 +718,7 @@
                 <div class="work-meta">图片 / 婚礼跟拍 / 长宽比 4:3</div>
                 <div class="work-status-row">
                   <div class="pill reference-pill used">引用 2 次</div>
-                  <div class="pill audit-pill passed">审核通过</div>
+                  <div class="status-badge passed"><span class="dot"></span>审核通过</div>
                 </div>
               </div>
               <div class="card-arrow"></div>
@@ -722,7 +730,7 @@
                 <div class="work-meta">视频 · 01:32 / 现场快剪 / 长宽比 16:9</div>
                 <div class="work-status-row">
                   <div class="pill reference-pill used">引用 1 次</div>
-                  <div class="pill audit-pill auditing">审核中</div>
+                  <div class="status-badge auditing"><span class="dot"></span>审核中</div>
                 </div>
               </div>
               <div class="card-arrow"></div>
@@ -734,7 +742,7 @@
                 <div class="work-meta">图片 / 婚纱写真 / 长宽比 3:4</div>
                 <div class="work-status-row">
                   <div class="pill reference-pill">未引用</div>
-                  <div class="pill audit-pill pending">未审核</div>
+                  <div class="status-badge pending"><span class="dot"></span>未审核</div>
                 </div>
               </div>
               <div class="card-arrow"></div>
@@ -746,7 +754,7 @@
                 <div class="work-meta">视频 · 00:45 / 未设置标签 / 长宽比 9:16</div>
                 <div class="work-status-row">
                   <div class="pill reference-pill">未引用</div>
-                  <div class="pill audit-pill rejected">确认违规</div>
+                  <div class="status-badge rejected"><span class="dot"></span>确认违规</div>
                 </div>
                 <div class="audit-reject-row">
                   <div class="audit-reject-icon">!</div>
@@ -811,7 +819,7 @@
                 <div class="work-meta">图片 / 婚礼跟拍 / 长宽比 4:3</div>
                 <div class="work-status-row">
                   <div class="pill reference-pill used">引用 2 次</div>
-                  <div class="pill audit-pill passed">审核通过</div>
+                  <div class="status-badge passed"><span class="dot"></span>审核通过</div>
                 </div>
               </div>
             </div>
@@ -823,7 +831,7 @@
                 <div class="work-meta">视频 · 01:32 / 现场快剪 / 长宽比 16:9</div>
                 <div class="work-status-row">
                   <div class="pill reference-pill used">引用 1 次</div>
-                  <div class="pill audit-pill auditing">审核中</div>
+                  <div class="status-badge auditing"><span class="dot"></span>审核中</div>
                 </div>
               </div>
             </div>
@@ -835,7 +843,7 @@
                 <div class="work-meta">图片 / 婚纱写真 / 长宽比 3:4</div>
                 <div class="work-status-row">
                   <div class="pill reference-pill">未引用</div>
-                  <div class="pill audit-pill pending">未审核</div>
+                  <div class="status-badge pending"><span class="dot"></span>未审核</div>
                 </div>
               </div>
             </div>

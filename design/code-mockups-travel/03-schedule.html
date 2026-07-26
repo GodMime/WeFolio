@@ -172,18 +172,22 @@
   .mini-action {
     min-width: 56px; height: 28px; flex: none; padding: 0 14px;
     display: flex; align-items: center; justify-content: center;
-    color: #868e96; font-size: 11px; font-weight: 600;
-    border: 1px solid #e9ecef; border-radius: 999px; background: #ffffff;
+    color: #212529; font-size: 11px; font-weight: 600;
+    border-radius: 999px; background: #f5f6f7;
   }
-  .mini-action.warn { color: #c08a3e; border-color: #ecdcc2; }
-  .mini-action.danger { color: #b55656; border-color: #ecd7d7; }
+  .mini-action.warn { color: #212529; }
+  .mini-action.danger { color: #b55656; }
+  /* 状态徽章（纯展示）：无边框无底色，6px 圆点 + 彩色小字 */
   .schedule-status {
-    flex: none; padding: 4px 11px; font-size: 11px; font-weight: 600; line-height: 1.4; border-radius: 999px;
-    border: 1px solid; background: #ffffff;
+    flex: none; display: flex; align-items: center; gap: 4px;
+    font-size: 11px; font-weight: 500; line-height: 1.4;
   }
-  .schedule-status.rose { color: #ffffff; background: #212529; border-color: #212529; }
-  .schedule-status.amber { color: #c08a3e; border-color: #ecdcc2; }
-  .schedule-status.muted { color: #868e96; border-color: #e9ecef; }
+  .schedule-status::before {
+    content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor;
+  }
+  .schedule-status.rose { color: #212529; }
+  .schedule-status.amber { color: #c08a3e; }
+  .schedule-status.muted { color: #868e96; }
   /* 按钮 */
   .primary-button {
     width: 100%; height: 46px; margin-top: 14px;
@@ -193,25 +197,25 @@
   /* 底部 Tab：悬浮黑胶囊 */
   .tabbar {
     position: absolute; left: 16px; right: 16px; bottom: 16px; z-index: 10;
-    height: 60px; display: flex; align-items: center; justify-content: space-around;
-    padding: 0 8px;
+    height: 64px; display: flex; align-items: center; justify-content: space-around;
+    padding: 6px 8px;
     border-radius: 999px;
     background: #212529;
   }
   .tab {
-    position: relative; width: 25%; height: 100%;
+    position: relative; width: 25%; height: 52px;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    color: #868e96;
+    color: #adb5bd;
   }
-  .tab.active { color: #212529; }
+  .tab.active { color: #fff; }
   .tab-icon-wrap {
-    width: 38px; height: 38px; border-radius: 50%;
+    width: 34px; height: 26px; border-radius: 999px;
     display: flex; align-items: center; justify-content: center;
   }
   .tab.active .tab-icon-wrap { background: #ffffff; }
-  .tab img { width: 19px; height: 19px; display: block; filter: brightness(0) invert(1); }
+  .tab img { width: 20px; height: 20px; display: block; filter: brightness(0) invert(1); }
   .tab.active img { filter: brightness(0); }
-  .tab-label { display: none; }
+  .tab-label { margin-top: 2px; font-size: 10px; line-height: 1.2; }
   /* 弹层 */
   .sheet-overlay {
     position: absolute; left: 0; right: 0; top: 0; bottom: 0; z-index: 20;

@@ -125,14 +125,28 @@
   .ed-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .ed-section-title { font-size: 17px; font-weight: 700; line-height: 1.3; letter-spacing: -0.01em; }
   .ed-section-desc { margin-top: 4px; color: #868e96; font-size: 12px; line-height: 1.5; }
+  /* 状态徽章（纯展示）：无边框无底色，6px 彩色圆点 + 彩色小字 */
   .ed-status-pill {
-    flex: none; min-width: 54px; height: 24px; display: flex; align-items: center; justify-content: center;
-    padding: 0 12px; font-size: 11px; font-weight: 600; border-radius: 999px;
-    color: #868e96; border: 1px solid #e9ecef; background: #fff;
+    flex: none; display: inline-flex; align-items: center; gap: 4px;
+    padding: 0 2px; font-size: 11px; font-weight: 500; line-height: 1.4;
+    color: #868e96; border: none; background: none; border-radius: 0;
   }
+  .ed-status-pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #868e96; }
   .ed-status-pill.published { color: #5c9e6e; }
+  .ed-status-pill.published::before { background: #5c9e6e; }
   .ed-status-pill.draft { color: #868e96; }
+  .ed-status-pill.draft::before { background: #868e96; }
   .ed-status-pill.offline { color: #b55656; }
+  .ed-status-pill.offline::before { background: #b55656; }
+  /* 线索卡跟进状态徽章，同规则 */
+  .follow-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; font-weight: 500; line-height: 1.4;
+  }
+  .follow-badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .follow-badge.pending { color: #868e96; }
+  .follow-badge.contacted { color: #c08a3e; }
+  .follow-badge.won { color: #5c9e6e; }
   .ed-form-row { margin-top: 16px; }
   .ed-field-heading { display: flex; align-items: center; justify-content: space-between; }
   .ed-field-label { color: #868e96; font-size: 12px; font-weight: 600; }
@@ -159,7 +173,7 @@
   }
   .ed-comp-order {
     width: 26px; height: 26px; flex: none; display: flex; align-items: center; justify-content: center;
-    color: #fff; font-size: 11px; font-weight: 700; border-radius: 50%; background: #adb5bd;
+    color: #fff; font-size: 11px; font-weight: 700; border-radius: 50%; background: #212529;
   }
   .ed-comp-title { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; }
   .ed-drag-handle {
@@ -236,6 +250,12 @@
     display: flex; align-items: center; justify-content: center;
     color: #868e96; font-size: 12px; font-weight: 600;
     border-radius: 999px; background: #f5f6f7;
+  }
+  .sheet-close {
+    width: 28px; height: 28px; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    color: #868e96; font-size: 16px; font-weight: 500; line-height: 1;
+    border-radius: 50%; background: #f5f6f7;
   }
 
   /* 单选选项 */
@@ -475,7 +495,7 @@
 
 <header class="doc-header">
   <h1>08 团队作品集 · TripGlide 风重设计稿</h1>
-  <span class="module-tag">模块：团队作品集 projects/miniapp/pages/team-portfolios（纯 UI 重设计，结构与文案不变）</span>
+  <span class="module-tag">模块：团队作品集 projects/miniapp/pages/team-portfolios（纯 UI 重设计，结构与文案不变 · 共 13 个手机框）</span>
   <ul>
     <li><code>portfolios</code> 历史团队作品集列表兼容入口（仅跳转， loading 态）</li>
     <li><code>team-select/team-select</code> 选择团队（创建团队作品集的入口）</li>
@@ -912,7 +932,7 @@
           <span><span class="lbl">需求：</span>婚礼双机位跟拍 + 当日快剪</span>
           <span><span class="lbl">团队来源：</span>拾光婚礼影像团队</span>
           <span><span class="lbl">作品集来源：</span>拾光婚礼影像·2026精选 微信分享</span>
-          <span><span class="lbl">跟进：</span>待跟进 首次咨询报价</span>
+          <span><span class="lbl">跟进：</span><span class="follow-badge pending">待跟进</span> 首次咨询报价</span>
           <div class="cl-actions">
             <div class="btn">拨号</div>
             <div class="btn">复制微信</div>
@@ -927,7 +947,7 @@
           <span><span class="lbl">需求：</span>草坪婚礼，需要航拍机位</span>
           <span><span class="lbl">团队来源：</span>拾光婚礼影像团队</span>
           <span><span class="lbl">作品集来源：</span>拾光婚礼影像·2026精选 朋友圈</span>
-          <span><span class="lbl">跟进：</span>已联系 已发送报价单，等待回复</span>
+          <span><span class="lbl">跟进：</span><span class="follow-badge contacted">已联系</span> 已发送报价单，等待回复</span>
           <div class="cl-actions">
             <div class="btn">拨号</div>
             <div class="btn">复制微信</div>
@@ -942,7 +962,7 @@
           <span><span class="lbl">需求：</span>订婚宴 + 婚礼两天连拍</span>
           <span><span class="lbl">团队来源：</span>拾光婚礼影像团队</span>
           <span><span class="lbl">作品集来源：</span>阿灿 · 婚礼纪实精选 微信分享</span>
-          <span><span class="lbl">跟进：</span>已成交 定金已收</span>
+          <span><span class="lbl">跟进：</span><span class="follow-badge won">已成交</span> 定金已收</span>
           <div class="cl-actions">
             <div class="btn">拨号</div>
             <div class="btn">复制微信</div>
@@ -968,7 +988,7 @@
           <span class="name">王女士</span>
           <span><span class="lbl">手机：</span>138****6688</span>
           <span><span class="lbl">意向档期：</span>2026-10-03</span>
-          <span><span class="lbl">跟进：</span>待跟进 首次咨询报价</span>
+          <span><span class="lbl">跟进：</span><span class="follow-badge pending">待跟进</span> 首次咨询报价</span>
           <div class="cl-actions">
             <div class="btn">拨号</div>
             <div class="btn">复制微信</div>
@@ -1048,9 +1068,108 @@
     </div>
   </div>
 
-  <!-- ============ 11 访客资料补全弹层 ============ -->
+  <!-- ============ 11 访客页弹层 · 档期查询 ============ -->
   <div class="frame-item">
-    <div class="frame-label">11 访客页 · 资料补全弹层<span class="path">team-visitor-portfolio（visitorProfileAuthVisible）</span></div>
+    <div class="frame-label">11 访客页弹层 · 档期查询<span class="path">team-visitor-portfolio（schedule-query 弹层模式 modalVisible）</span></div>
+    <div class="phone">
+      <div class="statusbar"><span>9:41</span><span class="icons"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="battery"></span></span></div>
+      <div class="navbar">
+        <div class="back"></div>
+        <div class="title">团队作品集</div>
+      </div>
+      <!-- 背景：访客浏览页简化内容 -->
+      <div class="folio-comp tp-profile">
+        <div class="avatar-ph tp-avatar">拾</div>
+        <span class="tp-name">拾光婚礼影像团队</span>
+      </div>
+      <div class="folio-comp carousel-wrap">
+        <div class="carousel-box">
+          <div class="img-ph"><span class="img-icon"></span><span>轮播图 563rpx（aspectFill）</span></div>
+        </div>
+      </div>
+      <!-- 底部弹层：档期查询 -->
+      <div class="sheet-mask">
+        <div class="sheet-panel" style="max-height: 88%;">
+          <div class="sheet-grabber"></div>
+          <div class="sheet-heading">
+            <div class="sheet-title">档期查询</div>
+            <div class="sheet-close">×</div>
+          </div>
+          <div class="sheet-options" style="overflow: hidden;">
+            <div class="sq-calendar" style="margin-top: 0;">
+              <div class="sq-month-bar">
+                <div class="sq-month-btn">‹</div>
+                <div class="sq-month-text">2026年7月</div>
+                <div class="sq-month-picker">切换年月</div>
+                <div class="sq-month-btn">›</div>
+              </div>
+              <div class="sq-weekdays"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
+              <div class="sq-days">
+                <div class="sq-day muted">28</div><div class="sq-day muted">29</div><div class="sq-day muted">30</div>
+                <div class="sq-day">1</div><div class="sq-day">2</div><div class="sq-day">3</div><div class="sq-day">4</div>
+                <div class="sq-day">5</div><div class="sq-day">6</div><div class="sq-day">7</div><div class="sq-day">8</div><div class="sq-day">9</div><div class="sq-day">10</div><div class="sq-day">11</div>
+                <div class="sq-day">12</div><div class="sq-day">13</div><div class="sq-day">14</div><div class="sq-day">15</div><div class="sq-day">16</div><div class="sq-day">17</div><div class="sq-day selected">18</div>
+                <div class="sq-day">19</div><div class="sq-day">20</div><div class="sq-day">21</div><div class="sq-day">22</div><div class="sq-day">23</div><div class="sq-day">24</div><div class="sq-day">25</div>
+                <div class="sq-day">26</div><div class="sq-day">27</div><div class="sq-day">28</div><div class="sq-day">29</div><div class="sq-day">30</div><div class="sq-day">31</div><div class="sq-day muted">1</div>
+              </div>
+              <div class="sq-selected-date">2026-07-18</div>
+              <div class="sq-submit">查询</div>
+              <div class="sq-results">
+                <div class="sq-member"><div class="avatar-ph">灿</div><span class="mname">阿灿</span><span class="sq-state available">空闲</span></div>
+                <div class="sq-member"><div class="avatar-ph">林</div><span class="mname">林一</span><span class="sq-state partial">部分档期空闲</span></div>
+                <div class="sq-member"><div class="avatar-ph">满</div><span class="mname">小满</span><span class="sq-state full">已满</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 12 访客页弹层 · 预留信息 ============ -->
+  <div class="frame-item">
+    <div class="frame-label">12 访客页弹层 · 预留信息<span class="path">team-visitor-portfolio（contact-form 弹窗模式 modalVisible）</span></div>
+    <div class="phone">
+      <div class="statusbar"><span>9:41</span><span class="icons"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="battery"></span></span></div>
+      <div class="navbar">
+        <div class="back"></div>
+        <div class="title">团队作品集</div>
+      </div>
+      <!-- 背景：访客浏览页简化内容 -->
+      <div class="folio-comp tp-profile">
+        <div class="avatar-ph tp-avatar">拾</div>
+        <span class="tp-name">拾光婚礼影像团队</span>
+      </div>
+      <div class="folio-comp carousel-wrap">
+        <div class="carousel-box">
+          <div class="img-ph"><span class="img-icon"></span><span>轮播图 563rpx（aspectFill）</span></div>
+        </div>
+      </div>
+      <!-- 底部弹层：预留信息 -->
+      <div class="sheet-mask">
+        <div class="sheet-panel" style="max-height: 88%;">
+          <div class="sheet-grabber"></div>
+          <div class="sheet-heading">
+            <div class="sheet-title">预留信息</div>
+            <div class="sheet-close">×</div>
+          </div>
+          <div class="comp-desc" style="text-align: left; margin-top: 0;">留下联系方式，团队会尽快与您沟通档期</div>
+          <div class="sheet-options" style="gap: 0;">
+            <div class="cf-field">称呼（必填）</div>
+            <div class="cf-field">手机号</div>
+            <div class="cf-field">微信号</div>
+            <div class="cf-field">请选择档期（选填）</div>
+            <div class="cf-field needs">需求描述</div>
+            <div class="dark-btn">提交给团队</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 13 访客资料补全弹层 ============ -->
+  <div class="frame-item">
+    <div class="frame-label">13 访客页 · 资料补全弹层<span class="path">team-visitor-portfolio（visitorProfileAuthVisible）</span></div>
     <div class="phone">
       <div class="statusbar"><span>9:41</span><span class="icons"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="battery"></span></span></div>
       <div class="navbar">

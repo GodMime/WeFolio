@@ -103,12 +103,14 @@
   .pl-heading { display: flex; align-items: center; justify-content: space-between; gap: 9px; }
   .pl-title { color: #212529; font-size: 18px; font-weight: 700; }
   .pl-pills { display: flex; gap: 6px; }
+  /* 状态徽章（纯展示）：6px 彩点 + 彩色文字，无边框无底色 */
   .pill {
-    display: inline-flex; align-items: center; justify-content: center;
-    min-width: 54px; height: 24px; padding: 0 10px;
-    font-size: 11px; font-weight: 600; white-space: nowrap;
-    border: 1px solid #e9ecef; border-radius: 999px; background: #ffffff; color: #868e96;
+    display: inline-flex; align-items: center; gap: 4px;
+    height: 24px; padding: 0 4px;
+    font-size: 11px; font-weight: 500; white-space: nowrap;
+    color: #868e96;
   }
+  .pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
   .pill.pub { color: #5c9e6e; }
   .pl-list { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
   .swipe-row { position: relative; overflow: hidden; border-radius: 24px; }
@@ -129,10 +131,10 @@
   .ptitle { color: #212529; font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .pmeta { margin-top: 4px; color: #adb5bd; font-size: 11px; }
   .pbadge {
-    display: inline-flex; align-items: center; margin-top: 7px; height: 20px; padding: 0 9px;
-    font-size: 10.5px; font-weight: 600; border: 1px solid #e9ecef; border-radius: 999px;
-    background: #ffffff; color: #868e96;
+    display: inline-flex; align-items: center; gap: 4px; margin-top: 7px;
+    font-size: 10.5px; font-weight: 500; color: #868e96;
   }
+  .pbadge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
   .pbadge.pub { color: #5c9e6e; }
   .pbadge.mut { color: #b55656; }
   .pside { flex: none; display: flex; align-items: center; gap: 6px; }
@@ -193,6 +195,12 @@
     color: #868e96; font-size: 11px; font-weight: 600; white-space: nowrap;
     border: 1px solid #e9ecef; border-radius: 999px; background: #ffffff;
   }
+  .sheet-close {
+    width: 28px; height: 28px; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    color: #868e96; font-size: 16px; font-weight: 500; line-height: 1;
+    border-radius: 50%; background: #f5f6f7;
+  }
   .sheet-actions { display: flex; justify-content: flex-end; gap: 8px; }
   .btn-cancel, .btn-confirm {
     min-width: 74px; height: 34px; padding: 0 16px;
@@ -211,10 +219,10 @@
   .sec-title { color: #212529; font-size: 16px; font-weight: 700; }
   .sec-desc { margin-top: 4px; color: #adb5bd; font-size: 11px; line-height: 1.45; }
   .status-pill {
-    flex: none; min-width: 44px; height: 24px; display: flex; align-items: center; justify-content: center;
-    padding: 0 10px; color: #868e96; font-size: 11px; font-weight: 600;
-    border: 1px solid #e9ecef; border-radius: 999px; background: #ffffff;
+    flex: none; display: inline-flex; align-items: center; gap: 4px;
+    color: #868e96; font-size: 11px; font-weight: 500;
   }
+  .status-pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
   .form-row { margin-top: 12px; }
   .field-heading { display: flex; align-items: center; justify-content: space-between; }
   .field-label { color: #868e96; font-size: 12px; font-weight: 600; }
@@ -245,8 +253,8 @@
   }
   .comp-order {
     width: 24px; height: 24px; flex: none; display: flex; align-items: center; justify-content: center;
-    color: #868e96; font-size: 11px; font-weight: 700; border-radius: 50%;
-    background: #f5f6f7;
+    color: #ffffff; font-size: 11px; font-weight: 700; border-radius: 50%;
+    background: #212529;
   }
   .comp-title { flex: 1; min-width: 0; color: #212529; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .drag-handle { width: 20px; height: 24px; flex: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
@@ -441,8 +449,17 @@
     min-height: 28px; display: flex; align-items: center; justify-content: space-between;
     padding: 0 12px; color: #868e96; font-size: 11px; border-radius: 999px; background: #f5f6f7;
   }
-  .sq-result { margin-top: 10px; padding: 10px 14px; border-radius: 20px; background: #f5f6f7; }
-  .sq-result-title { font-size: 13px; font-weight: 700; color: #5c9e6e; }
+  /* 摘要/结果中的状态文字：彩点 + 彩色文字 */
+  .st { display: inline-flex; align-items: center; gap: 4px; font-weight: 500; }
+  .st::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .st-ok { color: #5c9e6e; }
+  .st-busy { color: #b55656; }
+  .sq-result { margin-top: 10px; }
+  .sq-result-title {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 12px; font-weight: 500; color: #5c9e6e;
+  }
+  .sq-result-title::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
   .sq-result-desc { margin-top: 3px; font-size: 11px; color: #868e96; }
   .sq-submit {
     width: 100%; height: 44px; margin-top: 12px;
@@ -510,8 +527,12 @@
   .vs-date { font-weight: 700; font-size: 14px; color: #212529; }
   .vs-time, .vs-status { margin-top: 4px; font-size: 12px; }
   .vs-time { color: #868e96; }
-  .vs-status { color: #5c9e6e; font-weight: 600; }
-  .vs-status.busy { color: #868e96; }
+  .vs-status {
+    display: inline-flex; align-items: center; gap: 4px;
+    color: #5c9e6e; font-weight: 500;
+  }
+  .vs-status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .vs-status.busy { color: #b55656; }
 
   /* 功能预留页 */
   .ua-page { flex: 1; background: #f5f6f7; }
@@ -532,9 +553,10 @@
     <span class="chip">standard-edit 标准个人作品集编辑</span>
     <span class="chip">standard-preview 标准预览</span>
     <span class="chip">visitor-portfolio 访客作品集</span>
-    <span class="chip">visitor-schedule 访客档期查询</span>
     <span class="chip">unavailable 功能预留</span>
+    <span class="chip">弹层：档期查询月历（MODAL_CALENDAR）/ 预留信息表单（MODAL_FORM）</span>
     <span class="chip">组件：share-channel-sheet / portfolio-* 渲染组件</span>
+    <span class="chip">visitor-schedule 孤立路由（代码中无入口）</span>
   </div>
 </div>
 
@@ -1306,8 +1328,8 @@
                 </div>
               </div>
               <div class="sq-summary">
-                <div class="sq-summary-item"><span>午宴</span><span>可预约</span></div>
-                <div class="sq-summary-item"><span>晚宴</span><span>已订满</span></div>
+                <div class="sq-summary-item"><span>午宴</span><span class="st st-ok">可预约</span></div>
+                <div class="sq-summary-item"><span>晚宴</span><span class="st st-busy">已订满</span></div>
               </div>
               <div class="sq-result">
                 <div class="sq-result-title">当前档位可预约</div>
@@ -1386,10 +1408,10 @@
     </div>
   </div>
 
-  <!-- ============ 10 访客档期查询页 ============ -->
+  <!-- ============ 10 访客页弹层 · 档期查询月历 ============ -->
   <div class="phone-slot">
-    <div class="phone-label">10 访客档期查询<span class="path">pages/portfolios/visitor-schedule/visitor-schedule</span></div>
-    <div class="frame">
+    <div class="phone-label">10 访客页弹层 · 档期查询月历<span class="path">portfolio-schedule-query MODAL_CALENDAR（当前页底部弹层，非跳转页面）</span></div>
+    <div class="frame fixed-h">
       <div class="statusbar">
         <span>9:41</span>
         <span class="sicons">
@@ -1398,35 +1420,148 @@
           <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0.5" y="0.5" width="21" height="11" rx="3" fill="none" stroke="#212529" opacity=".4"/><rect x="2" y="2" width="16" height="8" rx="1.6" fill="#212529"/><path d="M23 4v4c1-.3 1.6-1 1.6-2S24 4.3 23 4z" fill="#212529" opacity=".4"/></svg>
         </span>
       </div>
-      <div class="navbar"><span class="back"></span>档期查询</div>
-      <div class="vs-page">
-        <div class="vs-panel">
-          <div class="vs-field">开始日期 YYYY-MM-DD</div>
-          <div class="vs-field">结束日期 YYYY-MM-DD</div>
-          <div class="vs-query-btn">查询</div>
+      <div class="navbar">个人作品集</div>
+      <div class="pv-page dimmed">
+        <div class="folio-carousel ph ph-b" style="height:281px; margin-top:16px;">轮播作品 1 / 3</div>
+        <div class="profile-section" style="margin-top:20px;">
+          <div class="profile-avatar ph">头像</div>
+          <div class="profile-name">林晚</div>
+          <div class="profile-line">婚礼主持人</div>
         </div>
-        <div class="vs-card">
-          <div class="vs-date">2026-07-18 午宴</div>
-          <div class="vs-time">10:00 - 14:00</div>
-          <div class="vs-status">可预约</div>
+        <div class="folio-component" style="text-align:center;">
+          <div class="form-submit" style="width:160px;">档期查询</div>
         </div>
-        <div class="vs-card">
-          <div class="vs-date">2026-07-18 晚宴</div>
-          <div class="vs-time">17:00 - 21:30</div>
-          <div class="vs-status busy">已订满</div>
+      </div>
+      <div class="mask"></div>
+      <div class="sheet" style="max-height:736px; overflow:hidden;">
+        <div class="grabber"></div>
+        <div class="sheet-heading">
+          <div class="sheet-title">档期查询</div>
+          <div class="sheet-close">×</div>
         </div>
-        <div class="vs-card">
-          <div class="vs-date">2026-07-25 全天</div>
-          <div class="vs-time">09:00 - 21:00</div>
-          <div class="vs-status busy">已订满</div>
+        <div class="sq-calendar" style="margin-top:0;">
+          <div class="sq-month-bar">
+            <div class="sq-month-btn">‹</div>
+            <div class="sq-month-text">2026年7月</div>
+            <div class="sq-month-picker">切换年月</div>
+            <div class="sq-month-btn">›</div>
+          </div>
+          <div class="sq-weekdays"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
+          <div class="sq-days">
+            <div class="sq-day muted"><span class="sq-num">28</span></div>
+            <div class="sq-day muted"><span class="sq-num">29</span></div>
+            <div class="sq-day muted"><span class="sq-num">30</span></div>
+            <div class="sq-day"><span class="sq-num">1</span></div>
+            <div class="sq-day"><span class="sq-num">2</span></div>
+            <div class="sq-day"><span class="sq-num">3</span></div>
+            <div class="sq-day filled"><span class="sq-num">4</span><span class="sq-dots"><i class="sq-dot" style="background:#212529;"></i></span></div>
+            <div class="sq-day"><span class="sq-num">5</span></div>
+            <div class="sq-day"><span class="sq-num">6</span></div>
+            <div class="sq-day"><span class="sq-num">7</span></div>
+            <div class="sq-day"><span class="sq-num">8</span></div>
+            <div class="sq-day"><span class="sq-num">9</span></div>
+            <div class="sq-day"><span class="sq-num">10</span></div>
+            <div class="sq-day filled"><span class="sq-num">11</span><span class="sq-meta">满</span><span class="sq-dots"><i class="sq-dot" style="background:#212529;"></i><i class="sq-dot" style="background:#adb5bd;"></i></span></div>
+            <div class="sq-day"><span class="sq-num">12</span></div>
+            <div class="sq-day"><span class="sq-num">13</span></div>
+            <div class="sq-day"><span class="sq-num">14</span></div>
+            <div class="sq-day"><span class="sq-num">15</span></div>
+            <div class="sq-day"><span class="sq-num">16</span></div>
+            <div class="sq-day"><span class="sq-num">17</span></div>
+            <div class="sq-day sel"><span class="sq-num">18</span><span class="sq-dots"><i class="sq-dot" style="background:#ffffff;"></i></span></div>
+            <div class="sq-day"><span class="sq-num">19</span></div>
+            <div class="sq-day"><span class="sq-num">20</span></div>
+            <div class="sq-day"><span class="sq-num">21</span></div>
+            <div class="sq-day"><span class="sq-num">22</span></div>
+            <div class="sq-day"><span class="sq-num">23</span></div>
+            <div class="sq-day"><span class="sq-num">24</span></div>
+            <div class="sq-day filled"><span class="sq-num">25</span><span class="sq-dots"><i class="sq-dot" style="background:#adb5bd;"></i></span></div>
+            <div class="sq-day"><span class="sq-num">26</span></div>
+            <div class="sq-day"><span class="sq-num">27</span></div>
+            <div class="sq-day"><span class="sq-num">28</span></div>
+            <div class="sq-day"><span class="sq-num">29</span></div>
+            <div class="sq-day"><span class="sq-num">30</span></div>
+            <div class="sq-day"><span class="sq-num">31</span></div>
+            <div class="sq-day muted"><span class="sq-num">1</span></div>
+          </div>
+          <div class="sq-slot-section">
+            <div class="sq-slot-heading">2026-07-18</div>
+            <div class="sq-slot-list">
+              <div class="sq-slot sel">
+                <div class="sq-slot-color" style="background:#212529;"></div>
+                <div>
+                  <div class="sq-slot-name">午宴</div>
+                  <div class="sq-slot-time">10:00-14:00</div>
+                </div>
+                <div class="sq-slot-check">✓</div>
+              </div>
+              <div class="sq-slot">
+                <div class="sq-slot-color" style="background:#adb5bd;"></div>
+                <div>
+                  <div class="sq-slot-name">晚宴</div>
+                  <div class="sq-slot-time">17:00-21:30</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="sq-summary">
+            <div class="sq-summary-item"><span>午宴</span><span class="st st-ok">可预约</span></div>
+            <div class="sq-summary-item"><span>晚宴</span><span class="st st-busy">已订满</span></div>
+          </div>
+          <div class="sq-result">
+            <div class="sq-result-title">当前档位可预约</div>
+            <div class="sq-result-desc">2026-07-18 午宴 10:00-14:00</div>
+          </div>
+          <div class="sq-submit">提交查询</div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- ============ 11 功能预留页 ============ -->
+  <!-- ============ 11 访客页弹层 · 预留信息表单 ============ -->
   <div class="phone-slot">
-    <div class="phone-label">11 功能预留页<span class="path">pages/portfolios/unavailable/portfolio-unavailable</span></div>
+    <div class="phone-label">11 访客页弹层 · 预留信息表单<span class="path">portfolio-contact-form MODAL_FORM（当前页遮罩弹层，非跳转页面）</span></div>
+    <div class="frame fixed-h">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="sicons">
+          <svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="#212529"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="#212529"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="#212529"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="#212529"/></svg>
+          <svg width="16" height="11" viewBox="0 0 16 11"><path d="M8 10.2 5.4 7.6a3.7 3.7 0 0 1 5.2 0L8 10.2zM3 5.2a7.1 7.1 0 0 1 10 0l-1.5 1.5a5.1 5.1 0 0 0-7 0L3 5.2zM.6 2.8a10.6 10.6 0 0 1 14.8 0L13.9 4.3a8.6 8.6 0 0 0-11.8 0L.6 2.8z" fill="#212529"/></svg>
+          <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0.5" y="0.5" width="21" height="11" rx="3" fill="none" stroke="#212529" opacity=".4"/><rect x="2" y="2" width="16" height="8" rx="1.6" fill="#212529"/><path d="M23 4v4c1-.3 1.6-1 1.6-2S24 4.3 23 4z" fill="#212529" opacity=".4"/></svg>
+        </span>
+      </div>
+      <div class="navbar">个人作品集</div>
+      <div class="pv-page dimmed">
+        <div class="folio-carousel ph ph-b" style="height:281px; margin-top:16px;">轮播作品 1 / 3</div>
+        <div class="profile-section" style="margin-top:20px;">
+          <div class="profile-avatar ph">头像</div>
+          <div class="profile-name">林晚</div>
+          <div class="profile-line">婚礼主持人</div>
+        </div>
+        <div class="folio-component" style="text-align:center;">
+          <div class="form-submit" style="width:160px;">预留联系信息</div>
+        </div>
+      </div>
+      <div class="mask"></div>
+      <div class="sheet">
+        <div class="grabber"></div>
+        <div class="sheet-heading">
+          <div class="sheet-title">预留信息</div>
+          <div class="sheet-close">×</div>
+        </div>
+        <div class="form-field">联系人</div>
+        <div class="form-field">手机号</div>
+        <div class="form-field">微信号</div>
+        <div class="form-field">请选择档期（选填）</div>
+        <div class="form-field area">需求描述</div>
+        <div class="form-submit">提交</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 12 功能预留页 ============ -->
+  <div class="phone-slot">
+    <div class="phone-label">12 功能预留页<span class="path">pages/portfolios/unavailable/portfolio-unavailable</span></div>
     <div class="frame">
       <div class="statusbar">
         <span>9:41</span>
@@ -1446,6 +1581,12 @@
     </div>
   </div>
 
+</div>
+
+<div class="doc-header" style="margin-top:32px;">
+  <div class="sub">
+    说明：<code>pages/portfolios/visitor-schedule</code> 在代码中为无入口的孤立路由（全工程无任何 navigateTo 指向它），故本稿不再单独出框；档期查询与预留联系信息在访客作品集中的弹层模式（MODAL_CALENDAR / MODAL_FORM）实际是「当前页底部弹层」，见上方 10 / 11 框。
+  </div>
 </div>
 
 </body>

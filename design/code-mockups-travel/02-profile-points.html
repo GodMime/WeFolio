@@ -157,15 +157,18 @@
     border: 1px solid #e9ecef;
   }
 
-  /* ---- 低饱和状态胶囊 ---- */
+  /* ---- 状态徽章(纯展示):无边框无底色,彩色圆点 + 彩色小字 ---- */
   .status-pill {
     flex: none;
-    display: inline-flex; align-items: center; justify-content: center;
-    padding: 5px 12px;
-    font-size: 11px; font-weight: 600;
-    border-radius: 999px;
-    background: #fff;
-    border: 1px solid #e9ecef;
+    display: inline-flex; align-items: center;
+    gap: 4px;
+    font-size: 11px; font-weight: 500;
+  }
+  .status-pill::before {
+    content: "";
+    width: 6px; height: 6px; flex: none;
+    border-radius: 50%;
+    background: currentColor;
   }
   .status-pill.success { color: #5c9e6e; }
   .status-pill.pending { color: #c08a3e; }
@@ -329,6 +332,21 @@
     background: #f5f6f7;
     border-right: 1px solid #e9ecef;
   }
+  /* 组标属于信息标注:圆点 + 彩色小字,不加底色;三组用不同降饱和色区分 */
+  .cost-mark.gift, .cost-mark.maintain, .cost-mark.visitor {
+    gap: 4px;
+    font-size: 11px; font-weight: 500;
+    background: #fff;
+  }
+  .cost-mark.gift::before, .cost-mark.maintain::before, .cost-mark.visitor::before {
+    content: "";
+    width: 6px; height: 6px; flex: none;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .cost-mark.maintain { color: #7a97bd; }
+  .cost-mark.visitor { color: #c08a3e; }
+  .cost-mark.gift { color: #5c9e6e; }
   .cost-lines { flex: 1; min-width: 0; }
   .cost-line {
     display: flex; align-items: center; gap: 10px;
@@ -380,7 +398,17 @@
   .recharge-balance-label { color: #868e96; font-size: 12px; }
   .recharge-balance-value { margin-top: 5px; color: #212529; font-size: 26px; font-weight: 700; }
   .recharge-balance-value .unit { font-size: 12px; font-weight: 500; color: #868e96; }
-  .balance-warning { margin-top: 6px; color: #c08a3e; font-size: 11px; }
+  .balance-warning {
+    display: inline-flex; align-items: center; gap: 4px;
+    margin-top: 6px;
+    color: #c08a3e; font-size: 11px; font-weight: 500;
+  }
+  .balance-warning::before {
+    content: "";
+    width: 6px; height: 6px; flex: none;
+    border-radius: 50%;
+    background: #c08a3e;
+  }
   .section-heading { margin: 20px 0 12px; color: #212529; font-size: 18px; font-weight: 700; }
   .package-grid { display: flex; flex-wrap: wrap; gap: 10px 0; justify-content: space-between; }
   .package-card {
@@ -417,7 +445,19 @@
     border-radius: 999px;
     background: #f5f6f7;
   }
-  .package-bonus.has-bonus { color: #fff; background: #212529; }
+  .package-bonus.has-bonus {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 0;
+    color: #5c9e6e; font-size: 11px; font-weight: 500;
+    border-radius: 0;
+    background: none;
+  }
+  .package-bonus.has-bonus::before {
+    content: "";
+    width: 6px; height: 6px; flex: none;
+    border-radius: 50%;
+    background: #5c9e6e;
+  }
   .payment-panel { margin-top: 14px; padding: 18px; }
   .summary-row {
     display: flex; align-items: center; justify-content: space-between;
@@ -715,7 +755,7 @@
 
         <div class="cost-board">
           <div class="cost-group">
-            <div class="cost-mark">维护</div>
+            <div class="cost-mark maintain">维护</div>
             <div class="cost-lines">
               <div class="cost-line">
                 <div class="cost-copy">
@@ -734,7 +774,7 @@
             </div>
           </div>
           <div class="cost-group">
-            <div class="cost-mark">访客</div>
+            <div class="cost-mark visitor">访客</div>
             <div class="cost-lines">
               <div class="cost-line">
                 <div class="cost-copy">
@@ -753,7 +793,7 @@
             </div>
           </div>
           <div class="cost-group">
-            <div class="cost-mark">赠送</div>
+            <div class="cost-mark gift">赠送</div>
             <div class="cost-lines">
               <div class="cost-line">
                 <div class="cost-copy">

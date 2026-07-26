@@ -189,9 +189,14 @@
     border-top: 1px solid #f1f3f5;
     color: #868e96; font-size: 12px;
   }
+  /* 状态徽章（纯展示）：6px 彩点 + 彩色小字，无边框无底色 */
   .warning-pill {
-    padding: 4px 9px; color: #c08a3e; font-size: 11px; font-weight: 500;
-    border: 1px solid #e9ecef; border-radius: 999px; background: #fff;
+    display: inline-flex; align-items: center; gap: 4px;
+    color: #c08a3e; font-size: 11px; font-weight: 500;
+  }
+  .warning-pill::before {
+    content: ""; width: 6px; height: 6px; border-radius: 50%;
+    background: #c08a3e; flex: none;
   }
 
   .metric-grid { display: flex; gap: 10px; margin-top: 12px; }

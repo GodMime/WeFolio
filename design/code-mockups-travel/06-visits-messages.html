@@ -113,7 +113,7 @@
   .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .panel-desc { color: #adb5bd; font-size: 11px; }
 
-  /* 状态/趋势胶囊:白底 + 1px #e9ecef 细边 + 小字 */
+  /* 趋势标注胶囊:白底 + 1px #e9ecef 细边 + 小字 */
   .pill {
     flex: none; padding: 4px 10px;
     font-size: 10px; font-weight: 500; line-height: 1.4;
@@ -121,10 +121,21 @@
     white-space: nowrap; background: #fff; color: #868e96;
   }
   .trend-pill { color: #212529; }
-  .follow-pill { max-width: 58px; text-align: center; overflow: hidden; text-overflow: ellipsis; }
-  .follow-pill.rose { color: #b55656; }
-  .follow-pill.teal { color: #5c9e6e; }
-  .follow-pill.blue { color: #212529; }
+
+  /* 状态徽章/分类标注(纯展示):无边框无底色,6px 彩色圆点 + 彩色小字 */
+  .badge {
+    flex: none; display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; font-weight: 500; line-height: 1.4; white-space: nowrap;
+  }
+  .badge::before {
+    content: ''; width: 6px; height: 6px; flex: none;
+    border-radius: 50%; background: currentColor;
+  }
+  .badge.green { color: #5c9e6e; }
+  .badge.red { color: #b55656; }
+  .badge.ink { color: #212529; }
+  .badge.gray { color: #868e96; }
+  .badge.gold { color: #c08a3e; }
 
   .trend-chart { margin-top: 14px; }
   .trend-chart svg { display: block; width: 100%; height: auto; }
@@ -210,8 +221,6 @@
   .detail-item-row { display: flex; align-items: center; justify-content: space-between; gap: 9px; }
   .detail-person { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
   .detail-person .visitor-icon { width: 32px; height: 32px; font-size: 12px; }
-  .detail-status.teal { color: #5c9e6e; }
-  .detail-status.rose { color: #b55656; }
   .detail-primary { margin-top: 8px; color: #212529; font-size: 13px; font-weight: 600; line-height: 1.4; }
   .detail-secondary { margin-top: 3px; color: #868e96; font-size: 11px; line-height: 1.5; }
   .detail-meta { margin-top: 4px; color: #adb5bd; font-size: 11px; line-height: 1.5; }
@@ -220,7 +229,6 @@
   .contact-lead-layout { position: relative; padding: 14px 96px 14px 0; border-bottom: 1px solid #f1f3f5; }
   .contact-lead-layout:last-child { border-bottom: 0; }
   .contact-lead-status { position: absolute; top: 14px; right: 0; }
-  .contact-lead-status .pill { font-size: 10px; padding: 4px 10px; max-width: none; }
   .contact-method-list { margin-top: 8px; }
   .contact-method-row { display: flex; align-items: center; gap: 7px; min-height: 22px; }
   .contact-method-row + .contact-method-row { margin-top: 4px; }
@@ -259,7 +267,6 @@
   }
   .summary-label { color: #868e96; font-size: 11px; }
   .summary-value { margin-top: 6px; color: #212529; font-size: 26px; font-weight: 700; line-height: 1; }
-  .invite-pill { color: #212529; }
 
   .filter-tabs {
     display: flex; gap: 4px; margin-top: 14px; padding: 4px;
@@ -303,10 +310,6 @@
   .unread-dot.muted { background: #dee2e6; }
   .message-copy { flex: 1; min-width: 0; }
   .message-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  .category-pill { padding: 3px 9px; font-size: 10px; }
-  .category-pill.team { color: #5c9e6e; }
-  .category-pill.point { color: #212529; }
-  .category-pill.system { color: #868e96; }
   .message-time { flex: none; color: #adb5bd; font-size: 11px; }
   .message-title { margin-top: 6px; color: #212529; font-size: 13px; font-weight: 600; line-height: 1.35; }
   .message-content { margin-top: 4px; color: #495057; font-size: 12px; line-height: 1.55; }
@@ -421,7 +424,7 @@
                   <div class="visit-source">来自微信会话分享</div>
                   <div class="visit-summary">浏览 3 个作品 · 查询 1 次档期</div>
                 </div>
-                <div class="pill follow-pill rose">未跟进</div>
+                <div class="badge red">未跟进</div>
               </div>
             </div>
             <div class="visit-swipe-row">
@@ -432,7 +435,7 @@
                   <div class="visit-source">来自朋友圈</div>
                   <div class="visit-summary">浏览作品集 · 预留联系方式</div>
                 </div>
-                <div class="pill follow-pill teal">已跟进</div>
+                <div class="badge green">已跟进</div>
               </div>
             </div>
             <div class="visit-swipe-row">
@@ -443,7 +446,7 @@
                   <div class="visit-source">来自二维码扫码</div>
                   <div class="visit-summary">浏览 12 个作品</div>
                 </div>
-                <div class="pill follow-pill blue">已成交</div>
+                <div class="badge ink">已成交</div>
               </div>
             </div>
           </div>
@@ -486,7 +489,7 @@
             <div class="sheet-close">×</div>
           </div>
           <div class="event-summary-row">
-            <div class="pill follow-pill rose" style="max-width:none;">未跟进</div>
+            <div class="badge red">未跟进</div>
             <div class="event-meta">最近访问 今天 14:32</div>
           </div>
           <div class="event-list">
@@ -566,7 +569,7 @@
                     <div class="visit-source">来自微信会话分享</div>
                   </div>
                 </div>
-                <div class="pill detail-status teal">档期可约</div>
+                <div class="badge green">档期可约</div>
               </div>
               <div class="detail-primary">2026-10-02 · 晚档</div>
               <div class="detail-secondary">该日期晚档仍可预约</div>
@@ -581,7 +584,7 @@
                     <div class="visit-source">来自朋友圈</div>
                   </div>
                 </div>
-                <div class="pill detail-status rose">已被预订</div>
+                <div class="badge red">已被预订</div>
               </div>
               <div class="detail-primary">2026-10-18 · 全天</div>
               <div class="detail-secondary">该日期档期已被预订</div>
@@ -623,7 +626,7 @@
           </div>
           <div class="event-list">
             <div class="contact-lead-layout">
-              <div class="contact-lead-status"><div class="pill follow-pill rose">未跟进</div></div>
+              <div class="contact-lead-status"><div class="badge red">未跟进</div></div>
               <div class="contact-lead-title-row"><div class="visitor-name">陈小姐</div></div>
               <div class="visit-source">来自微信会话分享</div>
               <div class="contact-method-list">
@@ -647,7 +650,7 @@
               <div class="contact-lead-follow-btn">标记为已跟进</div>
             </div>
             <div class="contact-lead-layout" style="padding-right:0;">
-              <div class="contact-lead-status"><div class="pill follow-pill teal">已跟进</div></div>
+              <div class="contact-lead-status"><div class="badge green">已跟进</div></div>
               <div class="contact-lead-title-row"><div class="visitor-name">李先生</div></div>
               <div class="visit-source">来自朋友圈</div>
               <div class="contact-method-list">
@@ -696,7 +699,7 @@
             <div class="summary-label">未读消息</div>
             <div class="summary-value">3 条未读</div>
           </div>
-          <div class="pill invite-pill">含 1 条邀请</div>
+          <div class="badge gold">含 1 条邀请</div>
         </div>
 
         <!-- 筛选 tabs -->
@@ -721,7 +724,7 @@
               <div class="unread-dot amber"></div>
               <div class="message-copy">
                 <div class="message-meta">
-                  <div class="pill category-pill team">团队</div>
+                  <div class="badge green">团队</div>
                   <div class="message-time">10:24</div>
                 </div>
                 <div class="message-title">团队邀请</div>
@@ -737,7 +740,7 @@
               <div class="unread-dot amber"></div>
               <div class="message-copy">
                 <div class="message-meta">
-                  <div class="pill category-pill point">积分</div>
+                  <div class="badge ink">积分</div>
                   <div class="message-time">昨天 18:02</div>
                 </div>
                 <div class="message-title">积分到账提醒</div>
@@ -753,7 +756,7 @@
               <div class="unread-dot muted"></div>
               <div class="message-copy">
                 <div class="message-meta">
-                  <div class="pill category-pill system">系统</div>
+                  <div class="badge gray">系统</div>
                   <div class="message-time">07-22 09:15</div>
                 </div>
                 <div class="message-title">系统维护通知</div>
@@ -774,7 +777,7 @@
   <h2>走查说明(TripGlide 黑白灰版)</h2>
   <p>
     · 本版为纯视觉重设计:页面清单、5 个手机框、结构、文案、交互逻辑与 mock 数据与 design/code-mockups/06-visits-messages.html 完全一致;趋势折线图数据(4,7,5,9,6,11,8)与形态不变,仅配色改为墨色 #212529 + 浅灰面积渐变,最大值点为黑色。<br>
-    · 视觉规范:字体 Instrument Sans;展厅背景 #f1f3f5,手机框内 #fff/#f5f6f7;纯黑白灰体系(墨色 #212529、次要 #868e96、辅助 #adb5bd);状态色低饱和(可约/已跟进 #5c9e6e、已订/未跟进 #b55656),统一白底 1px #e9ecef 细边胶囊小字。<br>
+    · 视觉规范:字体 Instrument Sans;展厅背景 #f1f3f5,手机框内 #fff/#f5f6f7;纯黑白灰体系(墨色 #212529、次要 #868e96、辅助 #adb5bd);状态色低饱和(可约/已跟进 #5c9e6e、已订/未跟进 #b55656),状态徽章/分类标注(纯展示)统一为「6px 彩色圆点 + 小字」,无边框无底色,与实底胶囊按钮(纯黑 / #f5f6f7)形成视觉分层。<br>
     · 卡片 24px 圆角,按钮/芯片全部胶囊形(999px);主按钮纯黑胶囊白字,次按钮 #f5f6f7 胶囊;弹层白 sheet 顶部圆角 28px、遮罩 rgba(0,0,0,0.4);头像为 #e9ecef 灰圆 + 墨色首字占位。<br>
     · 骨架屏/加载失败/空态未单独出框,结构与文案与原稿一致。
   </p>

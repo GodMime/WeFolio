@@ -100,8 +100,8 @@
   .section-title { color: #212529; font-size: 16px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.3; }
   .desc { color: #868e96; font-size: 12px; line-height: 1.5; }
 
-  /* ===== 状态胶囊：白底 + 1px 细边 + 低饱和状态色小字 ===== */
-  .pill {
+  /* ===== 唯一码胶囊：等宽 + 浅灰底（可点击复制，属交互控件） ===== */
+  .pill.code {
     flex: none;
     display: inline-flex;
     align-items: center;
@@ -112,20 +112,30 @@
     line-height: 1;
     border-radius: 999px;
     white-space: nowrap;
-    background: #fff;
-    border: 1px solid #e9ecef;
-    color: #868e96;
-  }
-  .pill.joined { color: #5c9e6e; border-color: rgba(92, 158, 110, 0.35); }
-  .pill.pending { color: #c08a3e; border-color: rgba(192, 138, 62, 0.35); }
-  /* 角色 / 黑色强调胶囊 */
-  .pill.dark { color: #fff; background: #212529; border-color: #212529; }
-  /* 唯一码：等宽 + 浅灰胶囊底 */
-  .pill.code {
-    color: #495057; background: #f5f6f7; border-color: #f5f6f7;
+    color: #495057; background: #f5f6f7;
     font-family: ui-monospace, "SF Mono", Menlo, monospace;
     letter-spacing: 0.04em;
   }
+
+  /* ===== 状态徽章（纯展示）：无边框无底色，6px 圆点 + 彩色小字 ===== */
+  .badge {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+  .badge.green { color: #5c9e6e; }
+  .badge.amber { color: #c08a3e; }
+  .badge.gray { color: #868e96; }
+  .badge.ink { color: #212529; }
+
+  /* ===== 计数标注：灰色纯文本 ===== */
+  .count-text { flex: none; color: #868e96; font-size: 11px; font-weight: 500; white-space: nowrap; }
 
   /* ===== 按钮：胶囊形 ===== */
   .btn-primary, .btn-secondary {
@@ -200,7 +210,7 @@
   }
   .team-card:first-child { margin-top: 0; }
   .team-copy { flex: 1; min-width: 0; }
-  .team-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 5px; }
+  .team-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 5px; }
   .team-name { color: #212529; font-size: 15px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .team-subtitle { margin-top: 3px; color: #868e96; font-size: 12px; line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .entry-arrow { width: 8px; height: 8px; border-top: 2px solid #adb5bd; border-right: 2px solid #adb5bd; transform: rotate(45deg); flex: none; margin-right: 4px; }
@@ -251,7 +261,7 @@
   .member-copy { flex: 1; min-width: 0; }
   .member-name { color: #212529; font-size: 14px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .member-summary { margin-top: 3px; color: #868e96; font-size: 12px; line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .member-status { max-width: 104px; flex: none; align-self: stretch; display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 5px; }
+  .member-status { max-width: 110px; flex: none; align-self: stretch; display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 6px; }
   /* 滑动展开态 */
   .member-row.actions-open .member-row-main { transform: translateX(-176px); }
   .member-actions { position: absolute; right: 0; top: 0; bottom: 0; z-index: 1; width: 170px; display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding-right: 10px; }
@@ -316,7 +326,8 @@
   .change-after { flex: 1 1 0; min-width: 0; color: #212529; font-size: 13px; font-weight: 700; line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .change-actions { display: flex; gap: 10px; margin-top: 12px; }
   .change-actions .btn-primary, .change-actions .btn-secondary, .change-actions .btn-danger { flex: 1 1 0; min-width: 0; }
-  .processed-note { min-height: 50px; display: flex; align-items: center; justify-content: center; margin-top: 12px; border-radius: 999px; background: #fff; border: 1px solid #e9ecef; color: #868e96; font-size: 13px; font-weight: 600; }
+  .processed-note { min-height: 50px; display: flex; align-items: center; justify-content: center; gap: 4px; margin-top: 12px; color: #868e96; font-size: 11px; font-weight: 500; }
+  .processed-note::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #868e96; flex: none; }
 </style>
 </head>
 <body>
@@ -325,7 +336,7 @@
   <h1>07 · 团队模块（TripGlide 风格重设计）</h1>
   <div class="sub">
     包含页面：<code>pages/teams</code>（我的团队）、<code>pages/team-maintenance</code>（团队维护 + 成员信息 / 添加成员弹层）、<code>pages/team-member-add</code>（添加成员）、<code>pages/team-member-change</code>（信息变更）、<code>pages/team-invitations</code>（团队邀请）。<br>
-    纯 UI 重设计：结构、文案、交互逻辑与 mock 数据与原稿一致，视觉参考 Dribbble「TripGlide 旅行 App」纯黑白灰体系。
+    纯 UI 重设计：结构、文案、交互逻辑与 mock 数据与原稿一致，视觉参考 Dribbble「TripGlide 旅行 App」纯黑白灰体系；状态徽章统一为「彩色圆点 + 彩色小字」纯展示样式。
   </div>
 </div>
 
@@ -343,7 +354,7 @@
             <div class="section-title">我的团队</div>
             <div class="desc summary-desc">已加入 3 个团队，其中 1 个为拥有者。</div>
           </div>
-          <div class="pill dark">2 个可维护</div>
+          <div class="count-text">2 个可维护</div>
         </div>
 
         <div class="panel list-panel">
@@ -355,7 +366,7 @@
             <div class="team-card">
               <div class="team-logo"><div class="fb">TM</div></div>
               <div class="team-copy">
-                <div class="team-tags"><span class="pill dark">拥有者</span><span class="pill joined">可维护</span></div>
+                <div class="team-tags"><span class="badge ink">拥有者</span><span class="badge green">可维护</span></div>
                 <div class="team-name">星野婚礼影像团队</div>
                 <div class="team-subtitle">WFT8K2M4X1 · 6 名成员 · 最近更新 07-20</div>
               </div>
@@ -364,7 +375,7 @@
             <div class="team-card">
               <div class="team-logo"><div class="fb">TM</div></div>
               <div class="team-copy">
-                <div class="team-tags"><span class="pill dark">管理者</span><span class="pill joined">可维护</span></div>
+                <div class="team-tags"><span class="badge ink">管理者</span><span class="badge green">可维护</span></div>
                 <div class="team-name">沐光演艺工作室</div>
                 <div class="team-subtitle">WFA3B1E7A2 · 12 名成员 · 最近更新 07-18</div>
               </div>
@@ -373,7 +384,7 @@
             <div class="team-card">
               <div class="team-logo"><div class="fb">TM</div></div>
               <div class="team-copy">
-                <div class="team-tags"><span class="pill">普通成员</span><span class="pill">仅查看</span></div>
+                <div class="team-tags"><span class="badge ink">普通成员</span><span class="badge gray">仅查看</span></div>
                 <div class="team-name">南屿影像联盟</div>
                 <div class="team-subtitle">WFQ9L3P5D8 · 4 名成员 · 最近更新 07-02</div>
               </div>
@@ -399,7 +410,7 @@
             <div class="section-title">我的团队</div>
             <div class="desc summary-desc">已加入 3 个团队，其中 1 个为拥有者。</div>
           </div>
-          <div class="pill dark">2 个可维护</div>
+          <div class="count-text">2 个可维护</div>
         </div>
 
         <div class="panel list-panel">
@@ -411,7 +422,7 @@
             <div class="team-card">
               <div class="team-logo"><div class="fb">TM</div></div>
               <div class="team-copy">
-                <div class="team-tags"><span class="pill dark">拥有者</span><span class="pill joined">可维护</span></div>
+                <div class="team-tags"><span class="badge ink">拥有者</span><span class="badge green">可维护</span></div>
                 <div class="team-name">星野婚礼影像团队</div>
                 <div class="team-subtitle">WFT8K2M4X1 · 6 名成员 · 最近更新 07-20</div>
               </div>
@@ -477,8 +488,8 @@
             <div class="team-heading">
               <div class="team-name">星野婚礼影像团队</div>
               <div class="team-tags">
-                <span class="pill">6 名成员</span>
-                <span class="pill dark">拥有者</span>
+                <span class="count-text">6 名成员</span>
+                <span class="badge ink">拥有者</span>
                 <span class="pill code team-code">WFT8K2M4X1</span>
               </div>
             </div>
@@ -515,7 +526,7 @@
                   <div class="member-name">林晚</div>
                   <div class="member-summary">化妆师 · WFA3B1E7A2 · 拥有者</div>
                 </div>
-                <div class="member-status"><span class="pill joined">已加入</span></div>
+                <div class="member-status"><span class="badge green">已加入</span></div>
               </div>
             </div>
             <div class="member-row">
@@ -526,8 +537,8 @@
                   <div class="member-summary">摄影师 · WFB7C2D9E4 · 管理者</div>
                 </div>
                 <div class="member-status">
-                  <span class="pill joined">已加入</span>
-                  <span class="pill pending">信息变更待同意</span>
+                  <span class="badge green">已加入</span>
+                  <span class="badge amber">信息变更待同意</span>
                 </div>
               </div>
             </div>
@@ -542,7 +553,7 @@
                   <div class="member-name">陈果</div>
                   <div class="member-summary">摄像师 · WFC5D8E1F6 · 普通成员</div>
                 </div>
-                <div class="member-status"><span class="pill joined">已加入</span></div>
+                <div class="member-status"><span class="badge green">已加入</span></div>
               </div>
             </div>
             <div class="member-row">
@@ -553,8 +564,8 @@
                   <div class="member-summary">司仪 · WFD2E6F8A1 · 普通成员</div>
                 </div>
                 <div class="member-status">
-                  <span class="pill pending">待确认</span>
-                  <span class="pill">已停用</span>
+                  <span class="badge amber">待确认</span>
+                  <span class="badge gray">已停用</span>
                 </div>
               </div>
             </div>
@@ -579,7 +590,7 @@
                 <div class="team-logo lg"><div class="fb">TM</div></div>
                 <div class="team-heading">
                   <div class="team-name">星野婚礼影像团队</div>
-                  <div class="team-tags"><span class="pill">6 名成员</span><span class="pill dark">拥有者</span></div>
+                  <div class="team-tags"><span class="count-text">6 名成员</span><span class="badge ink">拥有者</span></div>
                 </div>
               </div>
             </div>
@@ -616,7 +627,7 @@
               </div>
               <div class="confirm-row">
                 <div class="row-title">生效方式</div>
-                <span class="pill pending">需本人同意</span>
+                <span class="badge amber">需本人同意</span>
                 <div class="confirm-desc">保存后将发送站内信，成员同意后修改才会生效。</div>
               </div>
               <div class="button-row">
@@ -644,7 +655,7 @@
                 <div class="team-logo lg"><div class="fb">TM</div></div>
                 <div class="team-heading">
                   <div class="team-name">星野婚礼影像团队</div>
-                  <div class="team-tags"><span class="pill">6 名成员</span><span class="pill dark">拥有者</span></div>
+                  <div class="team-tags"><span class="count-text">6 名成员</span><span class="badge ink">拥有者</span></div>
                 </div>
               </div>
             </div>
@@ -672,7 +683,7 @@
                     <div class="candidate-name">周子昂</div>
                     <div class="candidate-summary">杭州 · 摄影师</div>
                   </div>
-                  <span class="pill joined">可添加</span>
+                  <span class="badge green">可添加</span>
                 </div>
               </div>
               <div class="sheet-section" style="border-bottom:0;">
@@ -698,7 +709,7 @@
               </div>
               <div class="confirm-row">
                 <div class="row-title">加入确认</div>
-                <span class="pill pending">需本人确认</span>
+                <span class="badge amber">需本人确认</span>
                 <div class="confirm-desc">发送邀请后，成员会在小程序内收到加入确认。确认前仅在管理端展示。</div>
               </div>
               <div class="button-row">
@@ -733,7 +744,7 @@
               <div class="candidate-name">周子昂</div>
               <div class="candidate-summary">杭州 · 摄影师</div>
             </div>
-            <span class="pill joined">可添加</span>
+            <span class="badge green">可添加</span>
           </div>
         </div>
 
@@ -761,7 +772,7 @@
 
         <div class="panel-card confirm-panel">
           <div class="row-title">加入确认</div>
-          <span class="pill pending">需本人确认</span>
+          <span class="badge amber">需本人确认</span>
           <div class="confirm-desc">发送邀请后，成员会在小程序内收到加入确认。确认前仅在管理端展示。</div>
         </div>
 
@@ -787,7 +798,7 @@
               <div class="team-name" style="font-size:16px;">星野婚礼影像团队</div>
               <div class="team-summary">林晚发起成员信息变更</div>
             </div>
-            <span class="pill pending">待同意</span>
+            <span class="badge amber">待同意</span>
           </div>
           <div class="info-list">
             <div class="info-row"><div class="info-label">成员</div><div class="info-value">周子昂</div></div>
@@ -830,7 +841,7 @@
               <div class="team-name" style="font-size:16px;">星野婚礼影像团队</div>
               <div class="team-summary">林晚发起成员信息变更</div>
             </div>
-            <span class="pill joined">已同意</span>
+            <span class="badge green">已同意</span>
           </div>
           <div class="info-list">
             <div class="info-row"><div class="info-label">成员</div><div class="info-value">周子昂</div></div>
@@ -870,7 +881,7 @@
               <div class="team-name" style="font-size:16px;">星野婚礼影像团队</div>
               <div class="team-summary">林晚邀请你以管理者加入</div>
             </div>
-            <span class="pill pending">待确认</span>
+            <span class="badge amber">待确认</span>
           </div>
           <div class="info-list">
             <div class="info-row"><div class="info-label">团队角色</div><div class="info-value">管理者</div></div>
@@ -900,7 +911,7 @@
               <div class="team-name" style="font-size:16px;">星野婚礼影像团队</div>
               <div class="team-summary">林晚邀请你以管理者加入</div>
             </div>
-            <span class="pill joined">已加入</span>
+            <span class="badge green">已加入</span>
           </div>
           <div class="info-list">
             <div class="info-row"><div class="info-label">团队角色</div><div class="info-value">管理者</div></div>
