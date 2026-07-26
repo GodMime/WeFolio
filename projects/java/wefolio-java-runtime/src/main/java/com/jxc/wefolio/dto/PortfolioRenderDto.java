@@ -69,6 +69,9 @@ public class PortfolioRenderDto {
         /** 是否展示作品名 */
         private Boolean showTitle;
 
+        /** 是否展示作品说明 */
+        private Boolean showDescription;
+
         /** 作品集展示标签 */
         private List<DisplayGroup> groups = new ArrayList<>();
 

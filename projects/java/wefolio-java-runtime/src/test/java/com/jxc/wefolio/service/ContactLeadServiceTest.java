@@ -4,12 +4,15 @@ import com.jxc.wefolio.common.auth.VisitorContext;
 import com.jxc.wefolio.common.auth.VisitorContextHolder;
 import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
 import com.jxc.wefolio.dict.PortfolioPublicationStatusDict;
+import com.jxc.wefolio.dict.PortfolioTypeDict;
 import com.jxc.wefolio.dto.ContactLeadSubmitRequest;
 import com.jxc.wefolio.dto.ContactLeadSubmitResponse;
 import com.jxc.wefolio.entity.ContactLeadEntity;
 import com.jxc.wefolio.entity.PortfolioEntity;
+import com.jxc.wefolio.entity.VisitRecordEntity;
 import com.jxc.wefolio.mapper.ContactLeadEntityMapper;
 import com.jxc.wefolio.mapper.PortfolioEntityMapper;
+import com.jxc.wefolio.mapper.VisitRecordEntityMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -41,6 +44,10 @@ class ContactLeadServiceTest {
     /** 作品集 Mapper 模拟 */
     @Mock
     private PortfolioEntityMapper portfolioEntityMapper;
+
+    /** 访问汇总 Mapper 模拟 */
+    @Mock
+    private VisitRecordEntityMapper visitRecordEntityMapper;
 
     /** 访问服务模拟 */
     @Mock
@@ -141,8 +148,124 @@ class ContactLeadServiceTest {
         verify(portfolioVisitService, never()).recordContactLeadSubmitted(any(), any(), any(), any());
     }
 
+    @Test
+    void submitV2ShouldValidateVisitIdentityAndUseTrustedSourceType() {
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolioWithContactForm());
+        when(visitRecordEntityMapper.selectOne(any())).thenReturn(visitRecord());
+        when(contactLeadEntityMapper.insert(any(ContactLeadEntity.class))).thenAnswer(invocation -> {
+            ContactLeadEntity lead = invocation.getArgument(0);
+            lead.setId(66L);
+            return 1;
+        });
+        ContactLeadSubmitRequest request = request();
+        request.setSourceType("QR_CODE");
+
+        ContactLeadSubmitResponse response = service().submitV2("PF001", request);
+
+        ArgumentCaptor<ContactLeadEntity> captor = ArgumentCaptor.forClass(ContactLeadEntity.class);
+        verify(contactLeadEntityMapper).insert(captor.capture());
+        assertThat(response.getLeadId()).isEqualTo(66L);
+        assertThat(captor.getValue().getSourceType()).isEqualTo("WECHAT_SHARE_CARD");
+        assertThat(captor.getValue().getVisitRecordId()).isEqualTo(33L);
+        verify(contactLeadEntityMapper).selectCount(any());
+    }
+
+    @Test
+    void submitV2ShouldRejectVisitRecordFromAnotherVisitor() {
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolioWithContactForm());
+        VisitRecordEntity record = visitRecord();
+        record.setVisitorKey("another-visitor");
+        when(visitRecordEntityMapper.selectOne(any())).thenReturn(record);
+
+        assertThatThrownBy(() -> service().submitV2("PF001", request()))
+                .isInstanceOf(com.jxc.wefolio.exception.BusinessException.class)
+                .hasMessage("访问记录无效");
+
+        verify(contactLeadEntityMapper, never()).insert(any(ContactLeadEntity.class));
+    }
+
+    @Test
+    void submitV2ShouldReturnIdempotentResultBeforeCheckingSubmissionLimit() {
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolioWithContactForm());
+        when(visitRecordEntityMapper.selectOne(any())).thenReturn(visitRecord());
+        ContactLeadEntity existingLead = new ContactLeadEntity();
+        existingLead.setId(77L);
+        existingLead.setSubmittedAt(LocalDateTime.of(2026, 7, 18, 12, 30));
+        when(contactLeadEntityMapper.selectOne(any())).thenReturn(existingLead);
+
+        ContactLeadSubmitResponse response = service().submitV2("PF001", request());
+
+        assertThat(response.getLeadId()).isEqualTo(77L);
+        verify(contactLeadEntityMapper, never()).selectCount(any());
+        verify(contactLeadEntityMapper, never()).insert(any(ContactLeadEntity.class));
+    }
+
+    @Test
+    void submitV2ShouldLimitOrdinaryVisitorToThreeSubmissions() {
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolioWithContactForm());
+        when(visitRecordEntityMapper.selectOne(any())).thenReturn(visitRecord());
+        when(contactLeadEntityMapper.selectCount(any())).thenReturn(3L);
+
+        assertThatThrownBy(() -> service().submitV2("PF001", request()))
+                .isInstanceOf(com.jxc.wefolio.exception.BusinessException.class)
+                .hasMessage("同一访客对同一作品集最多可提交3次联系方式");
+
+        verify(contactLeadEntityMapper, never()).insert(any(ContactLeadEntity.class));
+    }
+
+    @Test
+    void submitV2ShouldSkipSubmissionLimitForTimelineAnonymousVisitor() {
+        VisitorContextHolder.set(new VisitorContext(
+                1024L,
+                "visitor-a",
+                "Bearer wf-visitor-timeline-v1.test",
+                true
+        ));
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolioWithContactForm());
+        when(visitRecordEntityMapper.selectOne(any())).thenReturn(visitRecord());
+        when(contactLeadEntityMapper.insert(any(ContactLeadEntity.class))).thenAnswer(invocation -> {
+            ContactLeadEntity lead = invocation.getArgument(0);
+            lead.setId(66L);
+            return 1;
+        });
+
+        ContactLeadSubmitResponse response = service().submitV2("PF001", request());
+
+        assertThat(response.getLeadId()).isEqualTo(66L);
+        verify(contactLeadEntityMapper, never()).selectCount(any());
+    }
+
+    @Test
+    void submitShouldRejectFieldsLongerThanDatabaseColumns() {
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio());
+        ContactLeadSubmitRequest tooLong = request();
+        tooLong.setContactName("名".repeat(51));
+
+        assertThatThrownBy(() -> service().submit("PF001", tooLong))
+                .isInstanceOf(com.jxc.wefolio.exception.BusinessException.class)
+                .hasMessage("预留联系信息字段长度不合法");
+
+        verify(contactLeadEntityMapper, never()).insert(any(ContactLeadEntity.class));
+    }
+
+    @Test
+    void submitV2ShouldRequireEnabledPublishedContactForm() {
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio());
+
+        assertThatThrownBy(() -> service().submitV2("PF001", request()))
+                .isInstanceOf(com.jxc.wefolio.exception.BusinessException.class)
+                .hasMessage("联系表单组件不存在");
+
+        verify(visitRecordEntityMapper, never()).selectOne(any());
+    }
+
     private ContactLeadService service() {
-        return new ContactLeadService(contactLeadEntityMapper, portfolioEntityMapper, portfolioVisitService);
+        return new ContactLeadService(
+                contactLeadEntityMapper,
+                portfolioEntityMapper,
+                visitRecordEntityMapper,
+                portfolioVisitService
+        );
     }
 
     private ContactLeadSubmitRequest request() {
@@ -172,5 +295,28 @@ class ContactLeadServiceTest {
                 {"schemaVersion":"standard-personal-v1","share":{"title":"林安婚礼司仪"},"components":[]}
                 """);
         return portfolio;
+    }
+
+    private PortfolioEntity portfolioWithContactForm() {
+        PortfolioEntity portfolio = portfolio();
+        portfolio.setPublishedConfigJson("""
+                {"schemaVersion":"standard-personal-v1","share":{"title":"林安婚礼司仪"},"components":[
+                  {"componentKey":"contact-1","componentType":"CONTACT_FORM","enabled":true,"config":{}}
+                ]}
+                """);
+        return portfolio;
+    }
+
+    private VisitRecordEntity visitRecord() {
+        VisitRecordEntity record = new VisitRecordEntity();
+        record.setId(33L);
+        record.setVisitorId(1024L);
+        record.setVisitorKey("visitor-a");
+        record.setPortfolioId(88L);
+        record.setPortfolioType(PortfolioTypeDict.PERSONAL.getCode());
+        record.setOwnerType(PortfolioOwnerTypeDict.USER.getCode());
+        record.setOwnerId(7L);
+        record.setSourceType("WECHAT_SHARE_CARD");
+        return record;
     }
 }

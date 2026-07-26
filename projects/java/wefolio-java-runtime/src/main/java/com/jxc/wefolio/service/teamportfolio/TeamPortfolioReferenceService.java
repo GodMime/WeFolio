@@ -16,6 +16,7 @@ import com.jxc.wefolio.service.teamportfolio.component.memberportfoliogrid.TeamM
 import com.jxc.wefolio.service.teamportfolio.component.memberportfoliolist.TeamMemberPortfolioListComponentReferenceExtractor;
 import com.jxc.wefolio.service.teamportfolio.component.qrcontact.TeamQrContactComponentReferenceExtractor;
 import com.jxc.wefolio.service.teamportfolio.component.schedulequery.TeamScheduleQueryComponentReferenceExtractor;
+import com.jxc.wefolio.service.teamportfolio.component.singlework.TeamSingleWorkComponentReferenceExtractor;
 import com.jxc.wefolio.service.teamportfolio.component.teamprofile.TeamProfileComponentReferenceExtractor;
 import com.jxc.wefolio.service.teamportfolio.component.textsection.TeamTextSectionComponentReferenceExtractor;
 import org.springframework.stereotype.Service;
@@ -49,6 +50,7 @@ public class TeamPortfolioReferenceService {
     private final PortfolioReferenceEntityMapper referenceMapper;
     private final TeamProfileComponentReferenceExtractor teamProfileExtractor;
     private final TeamCarouselComponentReferenceExtractor carouselExtractor;
+    private final TeamSingleWorkComponentReferenceExtractor singleWorkExtractor;
     private final TeamDividerComponentReferenceExtractor dividerExtractor;
     private final TeamMemberPortfolioGridComponentReferenceExtractor gridExtractor;
     private final TeamMemberPortfolioListComponentReferenceExtractor listExtractor;
@@ -64,6 +66,7 @@ public class TeamPortfolioReferenceService {
             PortfolioReferenceEntityMapper referenceMapper,
             TeamProfileComponentReferenceExtractor teamProfileExtractor,
             TeamCarouselComponentReferenceExtractor carouselExtractor,
+            TeamSingleWorkComponentReferenceExtractor singleWorkExtractor,
             TeamDividerComponentReferenceExtractor dividerExtractor,
             TeamMemberPortfolioGridComponentReferenceExtractor gridExtractor,
             TeamMemberPortfolioListComponentReferenceExtractor listExtractor,
@@ -75,6 +78,7 @@ public class TeamPortfolioReferenceService {
         this.referenceMapper = referenceMapper;
         this.teamProfileExtractor = teamProfileExtractor;
         this.carouselExtractor = carouselExtractor;
+        this.singleWorkExtractor = singleWorkExtractor;
         this.dividerExtractor = dividerExtractor;
         this.gridExtractor = gridExtractor;
         this.listExtractor = listExtractor;
@@ -163,6 +167,7 @@ public class TeamPortfolioReferenceService {
         return switch (componentType) {
             case TEAM_PROFILE -> teamProfileExtractor.extract(componentKey, componentPath, normalizedConfig, context);
             case CAROUSEL -> carouselExtractor.extract(componentKey, componentPath, normalizedConfig, context);
+            case SINGLE_WORK -> singleWorkExtractor.extract(componentKey, componentPath, normalizedConfig, context);
             case DIVIDER -> dividerExtractor.extract(componentKey, componentPath, normalizedConfig, context);
             case MEMBER_PORTFOLIO_GRID -> gridExtractor.extract(componentKey, componentPath, normalizedConfig, context);
             case MEMBER_PORTFOLIO_LIST -> listExtractor.extract(componentKey, componentPath, normalizedConfig, context);

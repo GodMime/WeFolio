@@ -902,6 +902,16 @@ test('visitor page uses source type constant for WeChat share card', () => {
   assert.equal((pageSource.match(/sourceType: 'WECHAT_SHARE_CARD'/g) || []).length, 0)
 })
 
+test('visitor page submits contact leads through strict v2 endpoint', () => {
+  const pageSource = fs.readFileSync(
+    path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.js'),
+    'utf8'
+  )
+
+  assert.match(pageSource, /\/contact-leads\/v2/)
+  assert.doesNotMatch(pageSource, /\/contact-leads`/)
+})
+
 test('visitor page secondary share keeps the new visitor subpackage path', () => {
   const requests = []
   const page = loadVisitorPage((options) => {

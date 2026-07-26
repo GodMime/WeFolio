@@ -372,6 +372,67 @@ test('unsaved editor blocks preview and member-source requests that need a portf
   } finally { page.cleanup() }
 })
 
+test('new editor configures single work through team-scoped sources before creating the portfolio', async () => {
+  const requests = []
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
+    requests.push(options.url)
+    if (options.url === '/api/mine/teams/3/portfolio-components/single-work/members') {
+      return [{ memberUserId: 8, displayName: '甲' }]
+    }
+    if (options.url === '/api/mine/teams/3/portfolio-components/single-work/members/8/works') {
+      return [{ workId: 9, mediaType: 'IMAGE', title: '图片' }]
+    }
+    if (options.url === '/api/mine/teams/3/portfolios/standard') {
+      return {
+        portfolioId: 51,
+        ownerId: 3,
+        draftRevision: 1,
+        publicationStatus: 'DRAFT_ONLY',
+        config: options.data.config
+      }
+    }
+    if (options.url === '/api/mine/team-portfolios/51/draft') {
+      return {
+        portfolioId: 51,
+        ownerId: 3,
+        draftRevision: 2,
+        publicationStatus: 'DRAFT_ONLY',
+        config: options.data.config
+      }
+    }
+    throw new Error(`unexpected request: ${options.url}`)
+  })
+  page.setData({
+    teamId: 3,
+    canMaintain: true,
+    portfolioId: 0,
+    config: { schemaVersion: 'standard-team-v1', share: { title: TEST_TEAM_PORTFOLIO_TITLE }, components: [] }
+  })
+  try {
+    page.addComponent('SINGLE_WORK')
+    const componentKey = page.data.config.components[0].componentKey
+    const event = { currentTarget: { dataset: { key: componentKey } } }
+
+    await page.handleSingleWorkLoadMembers(event)
+    await page.handleSingleWorkMemberChange(Object.assign({}, event, { detail: { memberUserId: 8 } }))
+    page.handleComponentSave(Object.assign({}, event, {
+      detail: {
+        config: { memberUserId: 8, workId: 9, showTitle: true, showDescription: false }
+      }
+    }))
+    await page.saveDraft()
+
+    assert.equal(page.data.portfolioId, 51)
+    assert.equal(page.data.hasInvalidComponents, false)
+    assert.deepEqual(requests, [
+      '/api/mine/teams/3/portfolio-components/single-work/members',
+      '/api/mine/teams/3/portfolio-components/single-work/members/8/works',
+      '/api/mine/teams/3/portfolios/standard',
+      '/api/mine/team-portfolios/51/draft'
+    ])
+  } finally { page.cleanup() }
+})
+
 test('new editor keeps a selected cover local until create, upload, and draft save', async () => {
   const requests = []
   const uploads = []
@@ -785,6 +846,40 @@ test('editor loads member-first sources, blocks a new component until save, and 
     page.handleComponentSave({ currentTarget: { dataset: { key: newKey } }, detail: { config: { content: '可保存', alignment: 'LEFT' } } })
     assert.equal(page.data.componentValidation[newKey], true)
     page.setData({ openingLibrary: true }); page.onShow(); assert.equal(page.data.openingLibrary, false)
+  } finally { page.cleanup() }
+})
+
+test('team single work loads members before image and video works and retries the failed stage', async () => {
+  const requests = []
+  let workAttempts = 0
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
+    requests.push(options.url)
+    if (options.url.endsWith('/single-work/members')) {
+      return [{ memberUserId: 8, displayName: '甲' }]
+    }
+    if (options.url.endsWith('/single-work/members/8/works')) {
+      workAttempts += 1
+      if (workAttempts === 1) throw new Error('network')
+      return [
+        { workId: 9, mediaType: 'IMAGE', title: '图片' },
+        { workId: 10, mediaType: 'VIDEO', title: '视频' }
+      ]
+    }
+    throw new Error(`unexpected request: ${options.url}`)
+  })
+  page.setData({ portfolioId: 7, teamId: 3 })
+  const event = { currentTarget: { dataset: { key: 'single-1' } } }
+  try {
+    await page.handleSingleWorkLoadMembers(event)
+    await page.handleSingleWorkMemberChange(Object.assign({}, event, { detail: { memberUserId: 8 } }))
+    assert.equal(page.data.componentSources['single-1'].errorMessage, '来源加载失败，请重试')
+    await page.handleSingleWorkRetrySource(event)
+    assert.deepEqual(page.data.componentSources['single-1'].works.map((item) => item.mediaType), ['IMAGE', 'VIDEO'])
+    assert.deepEqual(requests, [
+      '/api/mine/teams/3/portfolio-components/single-work/members',
+      '/api/mine/teams/3/portfolio-components/single-work/members/8/works',
+      '/api/mine/teams/3/portfolio-components/single-work/members/8/works'
+    ])
   } finally { page.cleanup() }
 })
 
@@ -1308,6 +1403,88 @@ test('team preview opens a member published portfolio through personal preview',
       url: '/pages/portfolios/standard-preview/portfolio-standard-preview?portfolioId=88&teamPortfolioId=13&teamScope=draft'
     }])
   } finally { page.cleanup() }
+})
+
+test('team single work preview stays side-effect free while visitor records image and video events', () => {
+  const previewImages = []
+  const preview = loadPage('standard-preview/team-portfolio-standard-preview.js', async () => ({}), {
+    previewImage(options) { previewImages.push(options) }
+  })
+  preview.selectAllComponents = () => []
+  let visitor
+  try {
+    const imageDetail = {
+      componentKey: 'single-image',
+      work: { workId: 9, mediaType: 'IMAGE', mediaUrl: 'https://cdn/image.jpg' }
+    }
+    preview.handleSingleWorkPreview({ detail: imageDetail })
+    assert.deepEqual(previewImages[0].urls, ['https://cdn/image.jpg'])
+
+    const visitorImages = []
+    visitor = loadPage('visitor-portfolio/team-visitor-portfolio.js', async () => ({}), {
+      previewImage(options) { visitorImages.push(options) }
+    })
+    const events = []
+    visitor.sendEvent = (payload) => { events.push(payload); return Promise.resolve() }
+    visitor.selectAllComponents = () => []
+    assert.equal(events.length, 0)
+
+    visitor.handleSingleWorkPreview({ detail: imageDetail })
+    visitor.handleSingleWorkActivate({
+      detail: {
+        componentKey: 'single-video',
+        work: { workId: 10, mediaType: 'VIDEO', mediaUrl: 'https://cdn/video.mp4' }
+      }
+    })
+    assert.deepEqual(visitorImages[0].urls, ['https://cdn/image.jpg'])
+    assert.deepEqual(events, [
+      { eventType: 'WORK_VIEWED', componentKey: 'single-image', workId: 9, mediaType: 'IMAGE' },
+      { eventType: 'VIDEO_PLAYED', componentKey: 'single-video', workId: 10, mediaType: 'VIDEO', durationSeconds: 0 }
+    ])
+    assert.equal(visitor.data.activeSingleWorkVideoKey, 'single-video')
+
+    preview.handleSingleWorkActivate({
+      detail: { componentKey: 'single-preview', work: { workId: 11, mediaType: 'VIDEO' } }
+    })
+    assert.equal(preview.data.activeSingleWorkVideoKey, 'single-preview')
+    assert.equal(events.length, 2)
+  } finally {
+    if (visitor) visitor.cleanup()
+    preview.cleanup()
+  }
+})
+
+test('team preview and visitor pages stop every single work video when hidden or unloaded', () => {
+  const pagePaths = [
+    'standard-preview/team-portfolio-standard-preview.js',
+    'visitor-portfolio/team-visitor-portfolio.js'
+  ]
+
+  for (const pagePath of pagePaths) {
+    const page = loadPage(pagePath, async () => ({}))
+    const pausedKeys = []
+    page.selectAllComponents = () => [
+      { properties: { componentKey: 'single-a' }, pauseVideo() { pausedKeys.push('single-a') } },
+      { properties: { componentKey: 'single-b' }, pauseVideo() { pausedKeys.push('single-b') } }
+    ]
+    try {
+      assert.equal(typeof page.onHide, 'function')
+      assert.equal(typeof page.onUnload, 'function')
+
+      page.setData({ activeSingleWorkVideoKey: 'single-a' })
+      page.onHide()
+      assert.deepEqual(pausedKeys, ['single-a', 'single-b'])
+      assert.equal(page.data.activeSingleWorkVideoKey, '')
+
+      pausedKeys.length = 0
+      page.setData({ activeSingleWorkVideoKey: 'single-b' })
+      page.onUnload()
+      assert.deepEqual(pausedKeys, ['single-a', 'single-b'])
+      assert.equal(page.data.activeSingleWorkVideoKey, '')
+    } finally {
+      page.cleanup()
+    }
+  }
 })
 
 test('team visitor opens a member portfolio with the team source flag', () => {

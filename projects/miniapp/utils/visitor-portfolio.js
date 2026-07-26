@@ -262,7 +262,12 @@ function normalizeRenderComponent(raw = {}) {
     carouselIntervalMs: normalizeCarouselIntervalMs(raw, config),
     works: Array.isArray(raw.works) ? raw.works.map(normalizeRenderWork) : [],
     work: raw.work ? normalizeSingleRenderWork(raw.work) : null,
-    showTitle: typeof raw.showTitle === 'boolean' ? raw.showTitle : true,
+    showTitle: typeof raw.showTitle === 'boolean'
+      ? raw.showTitle
+      : typeof config.showTitle === 'boolean' ? config.showTitle : true,
+    showDescription: typeof raw.showDescription === 'boolean'
+      ? raw.showDescription
+      : typeof config.showDescription === 'boolean' ? config.showDescription : false,
     groups,
     displayTags: groups.map((group, index) => ({
       groupKey: group.groupKey,
@@ -322,6 +327,8 @@ function normalizeComponents(components = []) {
           name: item.name,
           title: item.config && item.config.title,
           config: item.config || {},
+          showTitle: item.config && item.config.showTitle,
+          showDescription: item.config && item.config.showDescription,
           works: item.config && Array.isArray(item.config.works) ? item.config.works : [],
           groups: item.config && Array.isArray(item.config.groups) ? item.config.groups : []
         }))

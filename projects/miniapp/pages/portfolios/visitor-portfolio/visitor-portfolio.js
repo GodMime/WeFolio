@@ -170,7 +170,7 @@ Page({
       return
     }
     this.requestWithVisitorRefresh({
-      url: `${VISITOR_PORTFOLIO_API_PREFIX}/${this.data.shareCode}/contact-leads`,
+      url: `${VISITOR_PORTFOLIO_API_PREFIX}/${this.data.shareCode}/contact-leads/v2`,
       method: 'POST',
       authMode: 'visitor',
       data: buildContactLeadPayload(this.data.contactForm, {

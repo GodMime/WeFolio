@@ -21,6 +21,7 @@ import com.jxc.wefolio.service.teamportfolio.component.memberportfoliogrid.TeamM
 import com.jxc.wefolio.service.teamportfolio.component.memberportfoliolist.TeamMemberPortfolioListComponentReferenceExtractor;
 import com.jxc.wefolio.service.teamportfolio.component.qrcontact.TeamQrContactComponentReferenceExtractor;
 import com.jxc.wefolio.service.teamportfolio.component.schedulequery.TeamScheduleQueryComponentReferenceExtractor;
+import com.jxc.wefolio.service.teamportfolio.component.singlework.TeamSingleWorkComponentReferenceExtractor;
 import com.jxc.wefolio.service.teamportfolio.component.teamprofile.TeamProfileComponentReferenceExtractor;
 import com.jxc.wefolio.service.teamportfolio.component.textsection.TeamTextSectionComponentReferenceExtractor;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
@@ -59,6 +60,7 @@ class TeamPortfolioReferenceServiceTest {
     @Mock private PortfolioReferenceEntityMapper referenceMapper;
     @Mock private TeamProfileComponentReferenceExtractor teamProfileExtractor;
     @Mock private TeamCarouselComponentReferenceExtractor carouselExtractor;
+    @Mock private TeamSingleWorkComponentReferenceExtractor singleWorkExtractor;
     @Mock private TeamDividerComponentReferenceExtractor dividerExtractor;
     @Mock private TeamMemberPortfolioGridComponentReferenceExtractor gridExtractor;
     @Mock private TeamMemberPortfolioListComponentReferenceExtractor listExtractor;
@@ -91,7 +93,7 @@ class TeamPortfolioReferenceServiceTest {
         verify(referenceMapper).delete(deleteCaptor.capture());
         assertDeleteScope(deleteCaptor.getValue(), context.portfolioId(), PortfolioConfigScopeDict.DRAFT.getCode());
         ArgumentCaptor<PortfolioReferenceEntity> insertCaptor = ArgumentCaptor.forClass(PortfolioReferenceEntity.class);
-        verify(referenceMapper, times(9)).insert(insertCaptor.capture());
+        verify(referenceMapper, times(10)).insert(insertCaptor.capture());
         assertThat(insertCaptor.getAllValues()).allSatisfy(reference -> {
             assertThat(reference.getPortfolioId()).isEqualTo(context.portfolioId());
             assertThat(reference.getConfigScope()).isEqualTo(PortfolioConfigScopeDict.DRAFT.getCode());
@@ -99,13 +101,14 @@ class TeamPortfolioReferenceServiceTest {
         });
         verify(teamProfileExtractor).extract(eq("team_profile"), eq("components[0]"), any(JSONObject.class), eq(context));
         verify(carouselExtractor).extract(eq("carousel"), eq("components[1]"), any(JSONObject.class), eq(context));
-        verify(dividerExtractor).extract(eq("divider"), eq("components[2]"), any(JSONObject.class), eq(context));
-        verify(gridExtractor).extract(eq("member_portfolio_grid"), eq("components[3]"), any(JSONObject.class), eq(context));
-        verify(listExtractor).extract(eq("member_portfolio_list"), eq("components[4]"), any(JSONObject.class), eq(context));
-        verify(textExtractor).extract(eq("text_section"), eq("components[5]"), any(JSONObject.class), eq(context));
-        verify(scheduleExtractor).extract(eq("schedule_query"), eq("components[6]"), any(JSONObject.class), eq(context));
-        verify(contactExtractor).extract(eq("contact_form"), eq("components[7]"), any(JSONObject.class), eq(context));
-        verify(qrExtractor).extract(eq("qr_contact"), eq("components[8]"), any(JSONObject.class), eq(context));
+        verify(singleWorkExtractor).extract(eq("single_work"), eq("components[2]"), any(JSONObject.class), eq(context));
+        verify(dividerExtractor).extract(eq("divider"), eq("components[3]"), any(JSONObject.class), eq(context));
+        verify(gridExtractor).extract(eq("member_portfolio_grid"), eq("components[4]"), any(JSONObject.class), eq(context));
+        verify(listExtractor).extract(eq("member_portfolio_list"), eq("components[5]"), any(JSONObject.class), eq(context));
+        verify(textExtractor).extract(eq("text_section"), eq("components[6]"), any(JSONObject.class), eq(context));
+        verify(scheduleExtractor).extract(eq("schedule_query"), eq("components[7]"), any(JSONObject.class), eq(context));
+        verify(contactExtractor).extract(eq("contact_form"), eq("components[8]"), any(JSONObject.class), eq(context));
+        verify(qrExtractor).extract(eq("qr_contact"), eq("components[9]"), any(JSONObject.class), eq(context));
     }
 
     /**
@@ -254,6 +257,7 @@ class TeamPortfolioReferenceServiceTest {
             switch (type) {
                 case TEAM_PROFILE -> when(teamProfileExtractor.extract(anyString(), anyString(), any(JSONObject.class), eq(context))).thenReturn(references);
                 case CAROUSEL -> when(carouselExtractor.extract(anyString(), anyString(), any(JSONObject.class), eq(context))).thenReturn(references);
+                case SINGLE_WORK -> when(singleWorkExtractor.extract(anyString(), anyString(), any(JSONObject.class), eq(context))).thenReturn(references);
                 case DIVIDER -> when(dividerExtractor.extract(anyString(), anyString(), any(JSONObject.class), eq(context))).thenReturn(references);
                 case MEMBER_PORTFOLIO_GRID -> when(gridExtractor.extract(anyString(), anyString(), any(JSONObject.class), eq(context))).thenReturn(references);
                 case MEMBER_PORTFOLIO_LIST -> when(listExtractor.extract(anyString(), anyString(), any(JSONObject.class), eq(context))).thenReturn(references);
@@ -280,12 +284,12 @@ class TeamPortfolioReferenceServiceTest {
     }
 
     private void verifyNoReferenceCollaboratorInteractions() {
-        verifyNoInteractions(referenceMapper, teamProfileExtractor, carouselExtractor, dividerExtractor, gridExtractor,
+        verifyNoInteractions(referenceMapper, teamProfileExtractor, carouselExtractor, singleWorkExtractor, dividerExtractor, gridExtractor,
                 listExtractor, textExtractor, scheduleExtractor, contactExtractor, qrExtractor);
     }
 
     private TeamPortfolioReferenceService service() {
-        return new TeamPortfolioReferenceService(referenceMapper, teamProfileExtractor, carouselExtractor, dividerExtractor,
+        return new TeamPortfolioReferenceService(referenceMapper, teamProfileExtractor, carouselExtractor, singleWorkExtractor, dividerExtractor,
                 gridExtractor, listExtractor, textExtractor, scheduleExtractor, contactExtractor, qrExtractor);
     }
 

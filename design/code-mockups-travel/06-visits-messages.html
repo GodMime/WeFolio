@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>设计稿走查 · 访问记录与消息(TripGlide 风)· WeFolio 映期Folio</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Instrument Sans", -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #f1f3f5;
+    color: #212529;
+    padding: 48px 48px 80px;
+  }
+
+  /* ===== 顶部标题区 ===== */
+  .doc-header { max-width: 1400px; margin: 0 auto 40px; }
+  .doc-header .module-tag {
+    display: inline-block; margin-bottom: 12px; padding: 4px 12px;
+    font-size: 11px; font-weight: 500; color: #868e96;
+    border: 1px solid #dee2e6; border-radius: 999px; letter-spacing: 1px;
+    background: #fff;
+  }
+  .doc-header h1 { font-size: 20px; font-weight: 700; letter-spacing: 0.2px; }
+  .doc-header h1 span { color: #adb5bd; }
+  .doc-header .page-list { margin-top: 12px; font-size: 12px; color: #868e96; line-height: 2; }
+  .doc-header .page-list code {
+    background: #fff; border: 1px solid #e9ecef; border-radius: 999px;
+    padding: 2px 10px; font-size: 11px; color: #212529;
+  }
+
+  /* ===== 手机框排布 ===== */
+  .frame-row {
+    display: flex; flex-wrap: wrap; gap: 32px;
+    max-width: 1400px; margin: 0 auto; align-items: flex-start;
+  }
+  .frame-item { flex: none; }
+  .frame-label { margin-bottom: 10px; font-size: 13px; font-weight: 600; color: #212529; }
+  .frame-label small { display: block; margin-top: 3px; font-size: 11px; font-weight: 400; color: #868e96; }
+  .frame-note { margin-top: 10px; max-width: 375px; font-size: 11px; color: #adb5bd; line-height: 1.7; }
+
+  .phone {
+    width: 375px; min-height: 812px;
+    background: #ffffff;
+    border: 1px solid #e9ecef;
+    border-radius: 36px;
+    overflow: hidden;
+    position: relative;
+    display: flex; flex-direction: column;
+  }
+
+  /* 状态栏 */
+  .status-bar {
+    height: 44px; flex: none;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 26px 0 30px;
+    background: #ffffff;
+    font-size: 14px; font-weight: 600; color: #212529;
+  }
+  .status-bar .s-icons { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 400; }
+  .signal { display: flex; align-items: flex-end; gap: 1.5px; height: 11px; }
+  .signal i { width: 3px; background: #212529; border-radius: 1px; }
+  .signal i:nth-child(1){height:4px}.signal i:nth-child(2){height:6px}.signal i:nth-child(3){height:8px}.signal i:nth-child(4){height:10px}
+  .battery { width: 22px; height: 11px; border: 1px solid #212529; border-radius: 3px; position: relative; }
+  .battery::before { content:''; position: absolute; left: 1.5px; top: 1.5px; bottom: 1.5px; width: 12px; background: #212529; border-radius: 1px; }
+  .battery::after { content:''; position: absolute; right: -4px; top: 2.5px; width: 2px; height: 5px; background: #212529; border-radius: 0 1px 1px 0; }
+
+  /* 导航栏(components/navigation-bar) */
+  .nav-bar {
+    height: 44px; flex: none;
+    display: flex; align-items: center;
+    background: #ffffff; color: #212529;
+  }
+  .nav-back { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; }
+  .nav-back::before {
+    content: ''; width: 9px; height: 9px;
+    border-left: 2px solid #212529; border-bottom: 2px solid #212529;
+    transform: rotate(45deg); margin-left: 4px;
+  }
+  .nav-title { flex: 1; text-align: center; font-size: 17px; font-weight: 600; padding-right: 44px; }
+
+  .page-body { flex: 1; padding: 16px 14px; background: #f5f6f7; }
+
+  /* ===== 通用卡片(白卡 24px 圆角) ===== */
+  .panel {
+    background: #ffffff;
+    border: 1px solid #e9ecef;
+    border-radius: 24px;
+  }
+  .section-title { color: #212529; font-size: 15px; font-weight: 700; line-height: 1.35; }
+
+  /* ===== 访问记录页 ===== */
+  .metric-grid { display: flex; flex-wrap: wrap; margin: -5px -5px 0; }
+  .metric-cell { flex: 0 0 50%; width: 50%; padding: 5px; position: relative; }
+  .metric {
+    min-height: 84px; padding: 16px 10px 14px; text-align: center;
+    border: 1px solid #e9ecef; border-radius: 24px;
+    background: #ffffff;
+  }
+  .metric.interactive { position: relative; }
+  .metric.interactive::after {
+    content: ''; position: absolute; right: 14px; top: 50%;
+    width: 6px; height: 6px; margin-top: -4px;
+    border-right: 1.5px solid #ced4da; border-top: 1.5px solid #ced4da;
+    transform: rotate(45deg);
+  }
+  .metric-value { color: #212529; font-size: 26px; font-weight: 700; line-height: 1.1; letter-spacing: 0.2px; }
+  .metric-label { margin-top: 6px; color: #868e96; font-size: 11px; line-height: 1.25; }
+
+  .trend-panel, .visit-detail-panel { margin-top: 14px; padding: 16px; }
+  .visit-detail-panel { padding-bottom: 8px; }
+  .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .panel-desc { color: #adb5bd; font-size: 11px; }
+
+  /* 状态/趋势胶囊:白底 + 1px #e9ecef 细边 + 小字 */
+  .pill {
+    flex: none; padding: 4px 10px;
+    font-size: 10px; font-weight: 500; line-height: 1.4;
+    border-radius: 999px; border: 1px solid #e9ecef;
+    white-space: nowrap; background: #fff; color: #868e96;
+  }
+  .trend-pill { color: #212529; }
+  .follow-pill { max-width: 58px; text-align: center; overflow: hidden; text-overflow: ellipsis; }
+  .follow-pill.rose { color: #b55656; }
+  .follow-pill.teal { color: #5c9e6e; }
+  .follow-pill.blue { color: #212529; }
+
+  .trend-chart { margin-top: 14px; }
+  .trend-chart svg { display: block; width: 100%; height: auto; }
+  .trend-label-row { display: flex; gap: 4px; margin-top: 6px; }
+  .trend-label { flex: 1; color: #adb5bd; font-size: 10px; text-align: center; }
+
+  .visit-list { margin-top: 6px; }
+  .visit-swipe-row { position: relative; overflow: hidden; }
+  .visit-follow-pane {
+    position: absolute; right: 0; top: 0; bottom: 0; width: 84px;
+    display: flex; align-items: center; justify-content: center;
+    background: #212529; color: #fff; font-size: 11px; font-weight: 500; line-height: 1.3;
+  }
+  .visit-row {
+    position: relative; display: flex; gap: 10px; align-items: center;
+    min-height: 64px; padding: 13px 0;
+    border-bottom: 1px solid #f1f3f5; background: #fff;
+  }
+  .visit-swipe-row:last-child .visit-row { border-bottom: 0; }
+  .visit-swipe-row.revealed .visit-row { transform: translateX(-84px); }
+  .visitor-icon {
+    width: 38px; height: 38px; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    color: #212529; font-size: 14px; font-weight: 600;
+    border-radius: 50%; background: #e9ecef;
+  }
+  .visit-copy { flex: 1; min-width: 0; }
+  .visitor-name { color: #212529; font-size: 13px; font-weight: 600; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .visit-source { margin-top: 3px; color: #868e96; font-size: 11px; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .visit-summary { margin-top: 2px; color: #868e96; font-size: 11px; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* ===== 底部弹层 ===== */
+  .sheet-mask {
+    position: absolute; inset: 0; z-index: 10;
+    display: flex; align-items: flex-end; justify-content: center;
+    background: rgba(0,0,0,0.4);
+  }
+  .sheet-panel {
+    width: 100%; height: 682px; /* 约 84vh */
+    display: flex; flex-direction: column;
+    padding: 10px 14px 14px; overflow: hidden;
+    border-radius: 28px 28px 0 0; background: #ffffff;
+  }
+  .sheet-grabber { width: 32px; height: 4px; flex: none; margin: 0 auto 12px; border-radius: 999px; background: #dee2e6; }
+  .sheet-heading { display: flex; align-items: center; gap: 10px; }
+  .sheet-heading-copy { flex: 1; min-width: 0; }
+  .sheet-close {
+    width: 28px; height: 28px; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    color: #868e96; font-size: 17px; font-weight: 400;
+    border-radius: 50%; background: #f5f6f7;
+  }
+  .sheet-title-heading {
+    display: flex; align-items: center; justify-content: space-between; gap: 9px;
+    padding-bottom: 12px; border-bottom: 1px solid #f1f3f5;
+  }
+  .event-summary-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    margin-top: 10px; padding: 8px 0 12px; border-bottom: 1px solid #f1f3f5;
+  }
+  .event-meta { flex: 1; color: #adb5bd; font-size: 11px; text-align: right; }
+  .event-list { flex: 1; overflow: hidden; }
+  .event-item { display: flex; gap: 10px; padding: 13px 0; border-bottom: 1px solid #f1f3f5; }
+  .event-item:last-child { border-bottom: 0; }
+  .event-dot {
+    width: 7px; height: 7px; flex: none; margin-top: 5px;
+    border-radius: 50%; background: #ced4da;
+  }
+  .event-dot.rose { background: #b55656; }
+  .event-dot.teal { background: #212529; }
+  .event-dot.blue { background: #868e96; }
+  .event-content { flex: 1; min-width: 0; }
+  .event-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .event-title { flex: 1; color: #212529; font-size: 13px; font-weight: 600; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .event-time { flex: none; color: #868e96; font-size: 11px; font-weight: 500; }
+  .event-detail { margin-top: 3px; color: #868e96; font-size: 11px; line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .event-date { margin-top: 1px; color: #adb5bd; font-size: 11px; line-height: 1.5; }
+  .sheet-load-end { padding: 12px 0 4px; color: #adb5bd; font-size: 11px; text-align: center; }
+
+  /* 明细弹层:查询档期 */
+  .detail-item { padding: 14px 0; border-bottom: 1px solid #f1f3f5; }
+  .detail-item:last-child { border-bottom: 0; }
+  .detail-item-row { display: flex; align-items: center; justify-content: space-between; gap: 9px; }
+  .detail-person { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
+  .detail-person .visitor-icon { width: 32px; height: 32px; font-size: 12px; }
+  .detail-status.teal { color: #5c9e6e; }
+  .detail-status.rose { color: #b55656; }
+  .detail-primary { margin-top: 8px; color: #212529; font-size: 13px; font-weight: 600; line-height: 1.4; }
+  .detail-secondary { margin-top: 3px; color: #868e96; font-size: 11px; line-height: 1.5; }
+  .detail-meta { margin-top: 4px; color: #adb5bd; font-size: 11px; line-height: 1.5; }
+
+  /* 明细弹层:预留信息(联系线索) */
+  .contact-lead-layout { position: relative; padding: 14px 96px 14px 0; border-bottom: 1px solid #f1f3f5; }
+  .contact-lead-layout:last-child { border-bottom: 0; }
+  .contact-lead-status { position: absolute; top: 14px; right: 0; }
+  .contact-lead-status .pill { font-size: 10px; padding: 4px 10px; max-width: none; }
+  .contact-method-list { margin-top: 8px; }
+  .contact-method-row { display: flex; align-items: center; gap: 7px; min-height: 22px; }
+  .contact-method-row + .contact-method-row { margin-top: 4px; }
+  .contact-method-label { flex: none; width: 22px; color: #adb5bd; font-size: 11px; }
+  .contact-method-value { color: #212529; font-size: 13px; font-weight: 600; }
+  /* contact-copy-icon-button:38rpx 透明底,内嵌 contact-copy-icon 30rpx */
+  .copy-icon-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 19px; height: 19px; margin-left: 2px; border-radius: 999px;
+    background: transparent;
+  }
+  .copy-icon-btn img { width: 15px; height: 15px; display: block; }
+  .contact-detail-list { margin-top: 8px; }
+  .contact-detail-row { display: flex; align-items: flex-start; gap: 6px; }
+  .contact-detail-row + .contact-detail-row { margin-top: 3px; }
+  .contact-detail-label { flex: none; width: 56px; color: #adb5bd; font-size: 11px; line-height: 1.5; }
+  .contact-detail-value { color: #495057; font-size: 11px; line-height: 1.5; }
+  .portfolio-type-tag {
+    display: inline-block; margin-left: 4px; padding: 2px 8px;
+    color: #868e96; font-size: 9px; font-weight: 500; line-height: 1.4;
+    border-radius: 999px; border: 1px solid #e9ecef; background: #fff; vertical-align: 1px;
+  }
+  .contact-lead-follow-btn {
+    position: absolute; top: 50%; right: 0; transform: translateY(-50%);
+    width: 88px; height: 28px;
+    display: flex; align-items: center; justify-content: center;
+    color: #5c9e6e; font-size: 11px; font-weight: 500;
+    border: 1px solid #e9ecef; border-radius: 999px;
+    background: #ffffff;
+  }
+
+  /* ===== 我的消息页 ===== */
+  .summary-panel {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    min-height: 88px; padding: 18px;
+  }
+  .summary-label { color: #868e96; font-size: 11px; }
+  .summary-value { margin-top: 6px; color: #212529; font-size: 26px; font-weight: 700; line-height: 1; }
+  .invite-pill { color: #212529; }
+
+  .filter-tabs {
+    display: flex; gap: 4px; margin-top: 14px; padding: 4px;
+    border: 1px solid #e9ecef; border-radius: 999px;
+    background: #ffffff;
+  }
+  .filter-tab {
+    flex: 1; min-height: 32px;
+    display: flex; align-items: center; justify-content: center;
+    color: #868e96; font-size: 12px; font-weight: 500; border-radius: 999px;
+  }
+  .filter-tab.active { color: #fff; background: #212529; }
+
+  .action-row { display: flex; gap: 8px; margin-top: 14px; }
+  .outline-btn, .solid-btn {
+    flex: 1; min-height: 40px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 500; border-radius: 999px;
+  }
+  .outline-btn { color: #212529; background: #ffffff; border: 1px solid #e9ecef; }
+  .solid-btn { color: #fff; background: #212529; }
+
+  .list-panel { margin-top: 14px; overflow: hidden; }
+  .message-list { padding: 0 16px; }
+  .message-row { display: flex; align-items: flex-start; gap: 8px; padding: 14px 0; border-top: 1px solid #f1f3f5; }
+  .message-row:first-child { border-top: 0; }
+  .select-dot {
+    width: 16px; height: 16px; flex: none; margin-top: 3px;
+    border: 1px solid #ced4da; border-radius: 50%; background: #fff;
+    position: relative;
+  }
+  .select-dot.selected { border-color: #212529; background: #212529; }
+  .select-dot.selected::after {
+    content: ''; position: absolute; left: 5px; top: 2.5px;
+    width: 3.5px; height: 7px;
+    border-right: 1.5px solid #fff; border-bottom: 1.5px solid #fff;
+    transform: rotate(40deg);
+  }
+  .unread-dot { width: 5px; height: 5px; flex: none; margin-top: 8px; border-radius: 50%; }
+  .unread-dot.amber { background: #212529; }
+  .unread-dot.muted { background: #dee2e6; }
+  .message-copy { flex: 1; min-width: 0; }
+  .message-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .category-pill { padding: 3px 9px; font-size: 10px; }
+  .category-pill.team { color: #5c9e6e; }
+  .category-pill.point { color: #212529; }
+  .category-pill.system { color: #868e96; }
+  .message-time { flex: none; color: #adb5bd; font-size: 11px; }
+  .message-title { margin-top: 6px; color: #212529; font-size: 13px; font-weight: 600; line-height: 1.35; }
+  .message-content { margin-top: 4px; color: #495057; font-size: 12px; line-height: 1.55; }
+  .message-actions { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  .message-action {
+    min-width: 60px; min-height: 28px; padding: 0 14px;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 11px; font-weight: 500;
+    border-radius: 999px; background: #212529;
+  }
+  .message-action.ghost { color: #495057; background: #f5f6f7; }
+
+  /* 图例 */
+  .legend { max-width: 1400px; margin: 44px auto 0; padding: 24px 28px; background: #fff; border-radius: 24px; border: 1px solid #e9ecef; }
+  .legend h2 { font-size: 14px; font-weight: 700; margin-bottom: 10px; }
+  .legend p { font-size: 12px; color: #868e96; line-height: 2; }
+</style>
+</head>
+<body>
+
+<header class="doc-header">
+  <span class="module-tag">模块 06 · 访问记录与消息 · TripGlide 黑白灰风</span>
+  <h1>WeFolio 映期Folio <span>·</span> 静态设计稿(旅行 App 风 UI 版,结构/文案/数据与原稿一致)</h1>
+  <div class="page-list">
+    包含页面:<code>pages/visits/visits</code> 访问记录(含左滑「标记已跟进」、访客事件明细弹层、查询档期明细弹层、预留信息明细弹层)
+    &nbsp;/&nbsp;<code>pages/messages/messages</code> 我的消息<br>
+    公共组件:<code>components/navigation-bar</code>(返回箭头 + 居中标题)已内联渲染。列表数据为按代码中字段结构填充的 mock 示例,与原设计稿完全一致。
+  </div>
+</header>
+
+<div class="frame-row">
+
+  <!-- ============ 01 访问记录 主页面 ============ -->
+  <div class="frame-item">
+    <div class="frame-label">01 访问记录 · 主页面<small>pages/visits/visits(含左滑露出「标记已跟进」状态)</small></div>
+    <div class="phone">
+      <div class="status-bar">
+        <span>9:41</span>
+        <span class="s-icons"><span class="signal"><i></i><i></i><i></i><i></i></span><span>5G</span><span class="battery"></span></span>
+      </div>
+      <div class="nav-bar">
+        <div class="nav-back"></div>
+        <div class="nav-title">访问记录</div>
+      </div>
+      <div class="page-body">
+
+        <!-- 指标卡 2x2 -->
+        <div class="metric-grid">
+          <div class="metric-cell"><div class="metric"><div class="metric-value">128</div><div class="metric-label">累计访问次数</div></div></div>
+          <div class="metric-cell"><div class="metric"><div class="metric-value">6</div><div class="metric-label">今日访问</div></div></div>
+          <div class="metric-cell"><div class="metric interactive"><div class="metric-value">12</div><div class="metric-label">查询档期</div></div></div>
+          <div class="metric-cell"><div class="metric interactive"><div class="metric-value">3</div><div class="metric-label">预留信息</div></div></div>
+        </div>
+
+        <!-- 趋势面板 -->
+        <div class="panel trend-panel">
+          <div class="panel-heading">
+            <div class="section-title">近 7 日访问趋势</div>
+            <div class="pill trend-pill">较上周 +18%</div>
+          </div>
+          <!-- 复刻 utils/visits.js buildTrendChartSvg 的折线图(值:4,7,5,9,6,11,8),仅改配色 -->
+          <div class="trend-chart">
+            <svg viewBox="0 0 646 156" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stop-color="#212529" stop-opacity="0.12"/>
+                  <stop offset="1" stop-color="#212529" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <path d="M46.14 30H599.86" stroke="#f1f3f5" stroke-width="1"/>
+              <path d="M46.14 81H599.86" stroke="#f1f3f5" stroke-width="1"/>
+              <path d="M46.14 132H599.86" stroke="#f1f3f5" stroke-width="1"/>
+              <path d="M46.14 94.91L138.43 67.09L230.71 85.64L323 48.55L415.29 76.36L507.57 30L599.86 57.82L599.86 132L46.14 132Z" fill="url(#areaGrad)"/>
+              <path d="M46.14 94.91L138.43 67.09L230.71 85.64L323 48.55L415.29 76.36L507.57 30L599.86 57.82" fill="none" stroke="#212529" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <circle cx="46.14" cy="94.91" r="3.5" fill="#ffffff" stroke="#212529" stroke-width="1.5"/>
+              <circle cx="138.43" cy="67.09" r="3.5" fill="#ffffff" stroke="#212529" stroke-width="1.5"/>
+              <circle cx="230.71" cy="85.64" r="3.5" fill="#ffffff" stroke="#212529" stroke-width="1.5"/>
+              <circle cx="323" cy="48.55" r="3.5" fill="#ffffff" stroke="#212529" stroke-width="1.5"/>
+              <circle cx="415.29" cy="76.36" r="3.5" fill="#ffffff" stroke="#212529" stroke-width="1.5"/>
+              <circle cx="507.57" cy="30" r="4.5" fill="#212529" stroke="#212529" stroke-width="1.5"/>
+              <circle cx="599.86" cy="57.82" r="3.5" fill="#ffffff" stroke="#212529" stroke-width="1.5"/>
+              <text x="46.14" y="85.91" fill="#868e96" font-size="11" font-family="sans-serif" text-anchor="middle">4</text>
+              <text x="138.43" y="58.09" fill="#868e96" font-size="11" font-family="sans-serif" text-anchor="middle">7</text>
+              <text x="230.71" y="76.64" fill="#868e96" font-size="11" font-family="sans-serif" text-anchor="middle">5</text>
+              <text x="323" y="39.55" fill="#868e96" font-size="11" font-family="sans-serif" text-anchor="middle">9</text>
+              <text x="415.29" y="67.36" fill="#868e96" font-size="11" font-family="sans-serif" text-anchor="middle">6</text>
+              <text x="507.57" y="21" fill="#868e96" font-size="11" font-family="sans-serif" text-anchor="middle">11</text>
+              <text x="599.86" y="48.82" fill="#868e96" font-size="11" font-family="sans-serif" text-anchor="middle">8</text>
+            </svg>
+          </div>
+          <div class="trend-label-row">
+            <div class="trend-label">周一</div><div class="trend-label">周二</div><div class="trend-label">周三</div>
+            <div class="trend-label">周四</div><div class="trend-label">周五</div><div class="trend-label">周六</div>
+            <div class="trend-label">周日</div>
+          </div>
+        </div>
+
+        <!-- 访问明细 -->
+        <div class="panel visit-detail-panel">
+          <div class="panel-heading">
+            <div class="section-title">访问明细</div>
+            <div class="panel-desc">来源与行为摘要</div>
+          </div>
+          <div class="visit-list">
+            <!-- 第一行展示左滑露出的「标记已跟进」 -->
+            <div class="visit-swipe-row revealed">
+              <div class="visit-follow-pane">标记<br>已跟进</div>
+              <div class="visit-row">
+                <div class="visitor-icon">W</div>
+                <div class="visit-copy">
+                  <div class="visitor-name">微信访客 W8K2</div>
+                  <div class="visit-source">来自微信会话分享</div>
+                  <div class="visit-summary">浏览 3 个作品 · 查询 1 次档期</div>
+                </div>
+                <div class="pill follow-pill rose">未跟进</div>
+              </div>
+            </div>
+            <div class="visit-swipe-row">
+              <div class="visit-row">
+                <div class="visitor-icon">L</div>
+                <div class="visit-copy">
+                  <div class="visitor-name">微信访客 L3M9</div>
+                  <div class="visit-source">来自朋友圈</div>
+                  <div class="visit-summary">浏览作品集 · 预留联系方式</div>
+                </div>
+                <div class="pill follow-pill teal">已跟进</div>
+              </div>
+            </div>
+            <div class="visit-swipe-row">
+              <div class="visit-row">
+                <div class="visitor-icon">9</div>
+                <div class="visit-copy">
+                  <div class="visitor-name">微信访客 9QTA</div>
+                  <div class="visit-source">来自二维码扫码</div>
+                  <div class="visit-summary">浏览 12 个作品</div>
+                </div>
+                <div class="pill follow-pill blue">已成交</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+    <div class="frame-note">「查询档期」「预留信息」指标卡可点击(右侧有箭头提示),打开对应明细弹层;「未跟进」记录左滑露出纯黑「标记已跟进」操作(上图第一行为滑开状态)。</div>
+  </div>
+
+  <!-- ============ 02 访客事件明细弹层 ============ -->
+  <div class="frame-item">
+    <div class="frame-label">02 访客事件明细弹层<small>pages/visits/visits · 点击访问记录行弹出(eventSheet)</small></div>
+    <div class="phone">
+      <div class="status-bar">
+        <span>9:41</span>
+        <span class="s-icons"><span class="signal"><i></i><i></i><i></i><i></i></span><span>5G</span><span class="battery"></span></span>
+      </div>
+      <div class="nav-bar">
+        <div class="nav-back"></div>
+        <div class="nav-title">访问记录</div>
+      </div>
+      <div class="page-body">
+        <div class="metric-grid">
+          <div class="metric-cell"><div class="metric"><div class="metric-value">128</div><div class="metric-label">累计访问次数</div></div></div>
+          <div class="metric-cell"><div class="metric"><div class="metric-value">6</div><div class="metric-label">今日访问</div></div></div>
+        </div>
+        <div class="panel trend-panel"><div class="panel-heading"><div class="section-title">近 7 日访问趋势</div><div class="pill trend-pill">较上周 +18%</div></div></div>
+      </div>
+
+      <div class="sheet-mask">
+        <div class="sheet-panel">
+          <div class="sheet-grabber"></div>
+          <div class="sheet-heading">
+            <div class="visitor-icon">W</div>
+            <div class="sheet-heading-copy">
+              <div class="visitor-name">微信访客 W8K2</div>
+              <div class="visit-source">来自微信会话分享</div>
+            </div>
+            <div class="sheet-close">×</div>
+          </div>
+          <div class="event-summary-row">
+            <div class="pill follow-pill rose" style="max-width:none;">未跟进</div>
+            <div class="event-meta">最近访问 今天 14:32</div>
+          </div>
+          <div class="event-list">
+            <div class="event-item">
+              <div class="event-dot teal"></div>
+              <div class="event-content">
+                <div class="event-row"><div class="event-title">查询档期</div><div class="event-time">14:32</div></div>
+                <div class="event-detail">查询 2026-10-02 晚档 · 档期可约</div>
+                <div class="event-date">2026-07-25</div>
+              </div>
+            </div>
+            <div class="event-item">
+              <div class="event-dot blue"></div>
+              <div class="event-content">
+                <div class="event-row"><div class="event-title">浏览作品</div><div class="event-time">14:28</div></div>
+                <div class="event-detail">查看了作品「金色年华婚礼纪实」</div>
+                <div class="event-date">2026-07-25</div>
+              </div>
+            </div>
+            <div class="event-item">
+              <div class="event-dot"></div>
+              <div class="event-content">
+                <div class="event-row"><div class="event-title">打开作品集</div><div class="event-time">14:25</div></div>
+                <div class="event-detail">通过微信会话分享进入作品集首页</div>
+                <div class="event-date">2026-07-25</div>
+              </div>
+            </div>
+            <div class="event-item">
+              <div class="event-dot"></div>
+              <div class="event-content">
+                <div class="event-row"><div class="event-title">打开作品集</div><div class="event-time">09:12</div></div>
+                <div class="event-detail">暂无补充信息</div>
+                <div class="event-date">2026-07-23</div>
+              </div>
+            </div>
+            <div class="sheet-load-end">已加载全部事件</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="frame-note">弹层占屏高约 84vh,顶部圆角 28px + 灰色 grabber,事件按时间倒序排列,时间线圆点为 7px 墨色/灰色。</div>
+  </div>
+
+  <!-- ============ 03 查询档期明细弹层 ============ -->
+  <div class="frame-item">
+    <div class="frame-label">03 查询档期明细弹层<small>pages/visits/visits · 点击「查询档期」指标卡弹出(detailSheet)</small></div>
+    <div class="phone">
+      <div class="status-bar">
+        <span>9:41</span>
+        <span class="s-icons"><span class="signal"><i></i><i></i><i></i><i></i></span><span>5G</span><span class="battery"></span></span>
+      </div>
+      <div class="nav-bar">
+        <div class="nav-back"></div>
+        <div class="nav-title">访问记录</div>
+      </div>
+      <div class="page-body">
+        <div class="metric-grid">
+          <div class="metric-cell"><div class="metric"><div class="metric-value">128</div><div class="metric-label">累计访问次数</div></div></div>
+          <div class="metric-cell"><div class="metric"><div class="metric-value">6</div><div class="metric-label">今日访问</div></div></div>
+        </div>
+      </div>
+
+      <div class="sheet-mask">
+        <div class="sheet-panel">
+          <div class="sheet-grabber"></div>
+          <div class="sheet-title-heading">
+            <div class="section-title">查询档期</div>
+            <div class="sheet-close">×</div>
+          </div>
+          <div class="event-list">
+            <div class="detail-item">
+              <div class="detail-item-row">
+                <div class="detail-person">
+                  <div class="visitor-icon">W</div>
+                  <div class="visit-copy">
+                    <div class="visitor-name">微信访客 W8K2</div>
+                    <div class="visit-source">来自微信会话分享</div>
+                  </div>
+                </div>
+                <div class="pill detail-status teal">档期可约</div>
+              </div>
+              <div class="detail-primary">2026-10-02 · 晚档</div>
+              <div class="detail-secondary">该日期晚档仍可预约</div>
+              <div class="detail-meta">金色年华婚礼作品 · 今天 14:32</div>
+            </div>
+            <div class="detail-item">
+              <div class="detail-item-row">
+                <div class="detail-person">
+                  <div class="visitor-icon">L</div>
+                  <div class="visit-copy">
+                    <div class="visitor-name">微信访客 L3M9</div>
+                    <div class="visit-source">来自朋友圈</div>
+                  </div>
+                </div>
+                <div class="pill detail-status rose">已被预订</div>
+              </div>
+              <div class="detail-primary">2026-10-18 · 全天</div>
+              <div class="detail-secondary">该日期档期已被预订</div>
+              <div class="detail-meta">户外草坪婚礼精选 · 昨天 20:15</div>
+            </div>
+            <div class="sheet-load-end">已加载全部明细</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="frame-note">查询结果状态:可约为低饱和绿 #5c9e6e,不可约为低饱和红 #b55656,统一为白底细边胶囊小字。</div>
+  </div>
+
+  <!-- ============ 04 预留信息明细弹层 ============ -->
+  <div class="frame-item">
+    <div class="frame-label">04 预留信息明细弹层<small>pages/visits/visits · 点击「预留信息」指标卡弹出(contactLeads)</small></div>
+    <div class="phone">
+      <div class="status-bar">
+        <span>9:41</span>
+        <span class="s-icons"><span class="signal"><i></i><i></i><i></i><i></i></span><span>5G</span><span class="battery"></span></span>
+      </div>
+      <div class="nav-bar">
+        <div class="nav-back"></div>
+        <div class="nav-title">访问记录</div>
+      </div>
+      <div class="page-body">
+        <div class="metric-grid">
+          <div class="metric-cell"><div class="metric"><div class="metric-value">128</div><div class="metric-label">累计访问次数</div></div></div>
+          <div class="metric-cell"><div class="metric"><div class="metric-value">6</div><div class="metric-label">今日访问</div></div></div>
+        </div>
+      </div>
+
+      <div class="sheet-mask">
+        <div class="sheet-panel">
+          <div class="sheet-grabber"></div>
+          <div class="sheet-title-heading">
+            <div class="section-title">预留信息</div>
+            <div class="sheet-close">×</div>
+          </div>
+          <div class="event-list">
+            <div class="contact-lead-layout">
+              <div class="contact-lead-status"><div class="pill follow-pill rose">未跟进</div></div>
+              <div class="contact-lead-title-row"><div class="visitor-name">陈小姐</div></div>
+              <div class="visit-source">来自微信会话分享</div>
+              <div class="contact-method-list">
+                <div class="contact-method-row">
+                  <span class="contact-method-label">手机</span>
+                  <span class="contact-method-value">138****5678</span>
+                  <span class="copy-icon-btn"><img src="assets/system/copy-line.svg" alt="复制"></span>
+                </div>
+                <div class="contact-method-row">
+                  <span class="contact-method-label">微信</span>
+                  <span class="contact-method-value">chen_2026wedding</span>
+                  <span class="copy-icon-btn"><img src="assets/system/copy-line.svg" alt="复制"></span>
+                </div>
+              </div>
+              <div class="contact-detail-list">
+                <div class="contact-detail-row"><span class="contact-detail-label">档期</span><span class="contact-detail-value">2026-10-02 晚档</span></div>
+                <div class="contact-detail-row"><span class="contact-detail-label">需求</span><span class="contact-detail-value">婚礼双机位跟拍</span></div>
+                <div class="contact-detail-row"><span class="contact-detail-label">来源作品集</span><span class="contact-detail-value">金色年华婚礼作品<span class="portfolio-type-tag">个人作品集</span></span></div>
+              </div>
+              <div class="detail-meta">2026-07-24 21:08 提交</div>
+              <div class="contact-lead-follow-btn">标记为已跟进</div>
+            </div>
+            <div class="contact-lead-layout" style="padding-right:0;">
+              <div class="contact-lead-status"><div class="pill follow-pill teal">已跟进</div></div>
+              <div class="contact-lead-title-row"><div class="visitor-name">李先生</div></div>
+              <div class="visit-source">来自朋友圈</div>
+              <div class="contact-method-list">
+                <div class="contact-method-row">
+                  <span class="contact-method-label">手机</span>
+                  <span class="contact-method-value">159****8802</span>
+                  <span class="copy-icon-btn"><img src="assets/system/copy-line.svg" alt="复制"></span>
+                </div>
+                <div class="contact-method-row">
+                  <span class="contact-method-label">微信</span>
+                  <span class="contact-method-value">未留微信</span>
+                </div>
+              </div>
+              <div class="contact-detail-list">
+                <div class="contact-detail-row"><span class="contact-detail-label">档期</span><span class="contact-detail-value">2026-11-08 全天</span></div>
+                <div class="contact-detail-row"><span class="contact-detail-label">需求</span><span class="contact-detail-value">订婚仪式跟拍 + 快剪视频</span></div>
+                <div class="contact-detail-row"><span class="contact-detail-label">来源作品集</span><span class="contact-detail-value">晨光婚礼工作室<span class="portfolio-type-tag">团队作品集</span></span></div>
+              </div>
+              <div class="detail-meta">2026-07-20 16:42 提交</div>
+            </div>
+            <div class="sheet-load-end">已加载全部明细</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="frame-note">「未跟进」线索右侧悬浮「标记为已跟进」白底细边胶囊按钮;手机/微信右侧为复制图标按钮(assets/system/copy-line.svg,aspectFit 等比缩放)。</div>
+  </div>
+
+  <!-- ============ 05 我的消息 ============ -->
+  <div class="frame-item">
+    <div class="frame-label">05 我的消息<small>pages/messages/messages</small></div>
+    <div class="phone">
+      <div class="status-bar">
+        <span>9:41</span>
+        <span class="s-icons"><span class="signal"><i></i><i></i><i></i><i></i></span><span>5G</span><span class="battery"></span></span>
+      </div>
+      <div class="nav-bar">
+        <div class="nav-back"></div>
+        <div class="nav-title">我的消息</div>
+      </div>
+      <div class="page-body">
+
+        <!-- 未读摘要 -->
+        <div class="panel summary-panel">
+          <div>
+            <div class="summary-label">未读消息</div>
+            <div class="summary-value">3 条未读</div>
+          </div>
+          <div class="pill invite-pill">含 1 条邀请</div>
+        </div>
+
+        <!-- 筛选 tabs -->
+        <div class="filter-tabs">
+          <div class="filter-tab active">全部</div>
+          <div class="filter-tab">未读</div>
+          <div class="filter-tab">团队</div>
+          <div class="filter-tab">积分</div>
+        </div>
+
+        <!-- 批量操作 -->
+        <div class="action-row">
+          <div class="outline-btn">批量已读</div>
+          <div class="solid-btn">全部已读</div>
+        </div>
+
+        <!-- 消息列表 -->
+        <div class="panel list-panel">
+          <div class="message-list">
+            <div class="message-row">
+              <div class="select-dot selected"></div>
+              <div class="unread-dot amber"></div>
+              <div class="message-copy">
+                <div class="message-meta">
+                  <div class="pill category-pill team">团队</div>
+                  <div class="message-time">10:24</div>
+                </div>
+                <div class="message-title">团队邀请</div>
+                <div class="message-content">「晨光婚礼工作室」邀请你加入团队,接受后可共同维护团队作品集。</div>
+                <div class="message-actions">
+                  <div class="message-action">去处理</div>
+                  <div class="message-action ghost">标为已读</div>
+                </div>
+              </div>
+            </div>
+            <div class="message-row">
+              <div class="select-dot"></div>
+              <div class="unread-dot amber"></div>
+              <div class="message-copy">
+                <div class="message-meta">
+                  <div class="pill category-pill point">积分</div>
+                  <div class="message-time">昨天 18:02</div>
+                </div>
+                <div class="message-title">积分到账提醒</div>
+                <div class="message-content">你充值的 500 积分已到账,当前余额 1,280 积分。</div>
+                <div class="message-actions">
+                  <div class="message-action">去查看</div>
+                  <div class="message-action ghost">标为已读</div>
+                </div>
+              </div>
+            </div>
+            <div class="message-row">
+              <div class="select-dot"></div>
+              <div class="unread-dot muted"></div>
+              <div class="message-copy">
+                <div class="message-meta">
+                  <div class="pill category-pill system">系统</div>
+                  <div class="message-time">07-22 09:15</div>
+                </div>
+                <div class="message-title">系统维护通知</div>
+                <div class="message-content">平台将于 7 月 28 日凌晨 2:00-4:00 进行系统维护,期间部分功能可能短暂不可用。</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+    <div class="frame-note">未读消息左侧为 5px 墨色圆点,已读为浅灰;未读消息可勾选(第一条为选中态)后「批量已读」。操作按钮文案:团队类为「去处理」,积分/跳转类为「去查看」。</div>
+  </div>
+
+</div>
+
+<div class="legend">
+  <h2>走查说明(TripGlide 黑白灰版)</h2>
+  <p>
+    · 本版为纯视觉重设计:页面清单、5 个手机框、结构、文案、交互逻辑与 mock 数据与 design/code-mockups/06-visits-messages.html 完全一致;趋势折线图数据(4,7,5,9,6,11,8)与形态不变,仅配色改为墨色 #212529 + 浅灰面积渐变,最大值点为黑色。<br>
+    · 视觉规范:字体 Instrument Sans;展厅背景 #f1f3f5,手机框内 #fff/#f5f6f7;纯黑白灰体系(墨色 #212529、次要 #868e96、辅助 #adb5bd);状态色低饱和(可约/已跟进 #5c9e6e、已订/未跟进 #b55656),统一白底 1px #e9ecef 细边胶囊小字。<br>
+    · 卡片 24px 圆角,按钮/芯片全部胶囊形(999px);主按钮纯黑胶囊白字,次按钮 #f5f6f7 胶囊;弹层白 sheet 顶部圆角 28px、遮罩 rgba(0,0,0,0.4);头像为 #e9ecef 灰圆 + 墨色首字占位。<br>
+    · 骨架屏/加载失败/空态未单独出框,结构与文案与原稿一致。
+  </p>
+</div>
+
+</body>
+</html>

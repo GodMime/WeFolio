@@ -29,7 +29,9 @@
         <view class="work-play-icon"></view>
       </view>
     </view>
-    <view class="work-title">{{work.title}}</view>
-    <view wx:if="{{work.description}}" class="work-desc">{{work.description}}</view>
+    <view class="work-copy">
+      <view wx:if="{{showTitle && work.title}}" class="work-title">{{work.title}}</view>
+      <view wx:if="{{showDescription && work.description}}" class="work-desc">{{work.description}}</view>
+    </view>
   </view>
 </view>

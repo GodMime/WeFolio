@@ -520,7 +520,7 @@ test('single work markup uses width-fix images and inline autoplay video without
   assert.match(componentWxml, /class="single-work-image"[\s\S]*mode="widthFix"/)
   assert.match(componentWxml, /<video[\s\S]*activeVideoKey === componentKey[\s\S]*autoplay="\{\{true\}\}"/)
   assert.match(componentWxml, /class="single-work-play-badge"/)
-  assert.match(componentWxml, /wx:if="\{\{showTitle\}\}" class="single-work-title"/)
+  assert.match(componentWxml, /wx:if="\{\{showTitle && work\.title\}\}" class="single-work-title"/)
   assert.match(pageWxml, /<root-portal wx:if="\{\{videoPreviewVisible\}\}">/)
 })
 

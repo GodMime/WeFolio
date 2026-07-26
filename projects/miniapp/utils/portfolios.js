@@ -119,9 +119,15 @@ function normalizeWorkIds(workIds) {
 
 function normalizeSingleWorkConfig(raw = {}) {
   const workId = toNumber(raw && raw.workId)
-  return {
+  return Object.assign({
     workId: Number.isInteger(workId) && workId > 0 ? workId : 0,
-    showTitle: typeof raw.showTitle === 'boolean' ? raw.showTitle : true
+  }, normalizeWorkDisplayOptions(raw))
+}
+
+function normalizeWorkDisplayOptions(raw = {}) {
+  return {
+    showTitle: typeof raw.showTitle === 'boolean' ? raw.showTitle : true,
+    showDescription: typeof raw.showDescription === 'boolean' ? raw.showDescription : false
   }
 }
 
@@ -283,6 +289,7 @@ function createComponent(componentType, options = {}) {
   }
   if (isWorkListComponent(componentType)) {
     config.groups = normalizeDisplayGroups(config.groups, config.workIds)
+    Object.assign(config, normalizeWorkDisplayOptions(config))
   }
   if (componentType === COMPONENT_TYPES.SINGLE_WORK) {
     const singleWorkConfig = normalizeSingleWorkConfig(config)
@@ -441,6 +448,21 @@ function updateSingleWorkConfig(config, componentKey, singleWorkConfig = {}) {
     }
     // SINGLE_WORK 配置采用严格白名单，整体替换可避免遗留或未来未知字段进入保存载荷。
     return Object.assign({}, component, { config: nextSingleWorkConfig })
+  })
+  return normalizePortfolioConfig(Object.assign({}, normalized, { components }))
+}
+
+function updateWorkDisplayOptions(config, componentKey, options = {}) {
+  const normalized = normalizePortfolioConfig(config)
+  const targetKey = trimText(componentKey)
+  const displayOptions = normalizeWorkDisplayOptions(options)
+  const components = normalized.components.map((component) => {
+    if (component.componentKey !== targetKey || !isWorkListComponent(component.componentType)) {
+      return component
+    }
+    return Object.assign({}, component, {
+      config: Object.assign({}, component.config || {}, displayOptions)
+    })
   })
   return normalizePortfolioConfig(Object.assign({}, normalized, { components }))
 }
@@ -711,6 +733,7 @@ module.exports = {
   normalizeProfileComponentConfig,
   normalizeScheduleQueryConfig,
   normalizeSingleWorkConfig,
+  normalizeWorkDisplayOptions,
   normalizeTextSectionConfig,
   normalizeWorkIds,
   reorderComponent,
@@ -724,6 +747,7 @@ module.exports = {
   updateComponentProfileConfig,
   updateComponentScheduleQueryConfig,
   updateSingleWorkConfig,
+  updateWorkDisplayOptions,
   updateComponentTextSectionConfig,
   updateComponentWorkIds,
   validateDisplayGroupName,

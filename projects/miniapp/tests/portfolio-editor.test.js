@@ -862,7 +862,7 @@ test('personal carousel preserves historical selections above nine while blockin
   assert.equal(page.data.componentWorkOptions.find((item) => item.id === 10).selectionOrder, 9)
 })
 
-test('single work editor replaces one selection and commits title switch atomically', async () => {
+test('single work editor replaces one selection and commits display switches atomically', async () => {
   const page = loadPortfolioEditorPage((options) => {
     if (options.url === '/api/mine/works') {
       return Promise.resolve({
@@ -878,7 +878,7 @@ test('single work editor replaces one selection and commits title switch atomica
     components: [createComponent(COMPONENT_TYPES.SINGLE_WORK, {
       componentKey: 'c_single',
       sortOrder: 1000,
-      config: { workId: 11, showTitle: true }
+      config: { workId: 11, showTitle: true, showDescription: false }
     })]
   })
 
@@ -895,13 +895,22 @@ test('single work editor replaces one selection and commits title switch atomica
   page.handleToggleComponentWork({ currentTarget: { dataset: { id: 12 } } })
   page.handleToggleComponentWork({ currentTarget: { dataset: { id: 12 } } })
   page.handleSingleWorkShowTitleChange({ detail: { value: false } })
+  page.handleWorkShowDescriptionChange({ detail: { value: true } })
 
   assert.deepEqual(page.data.componentWorkSelectedIds, [12])
-  assert.deepEqual(page.data.config.components[0].config, { workId: 11, showTitle: true })
+  assert.deepEqual(page.data.config.components[0].config, {
+    workId: 11,
+    showTitle: true,
+    showDescription: false
+  })
 
   page.handleConfirmComponentWorks()
 
-  assert.deepEqual(page.data.config.components[0].config, { workId: 12, showTitle: false })
+  assert.deepEqual(page.data.config.components[0].config, {
+    workId: 12,
+    showTitle: false,
+    showDescription: true
+  })
   assert.equal(page.data.singleWorkSummaries[0].id, 12)
   assert.equal(page.data.singleWorkSummaries[0].title, '婚礼快剪')
   assert.equal(page.data.componentWorkSheetVisible, false)
@@ -929,10 +938,18 @@ test('single work editor blocks completion without a work and cancel preserves c
 
   assert.equal(toastCalls.at(-1).title, '请选择一个作品')
   assert.equal(page.data.componentWorkSheetVisible, true)
-  assert.deepEqual(page.data.config.components[0].config, { workId: 0, showTitle: true })
+  assert.deepEqual(page.data.config.components[0].config, {
+    workId: 0,
+    showTitle: true,
+    showDescription: false
+  })
 
   page.handleCloseComponentWorkSheet()
-  assert.deepEqual(page.data.config.components[0].config, { workId: 0, showTitle: true })
+  assert.deepEqual(page.data.config.components[0].config, {
+    workId: 0,
+    showTitle: true,
+    showDescription: false
+  })
 })
 
 test('single work row summaries resolve selected work titles from formal work details', async () => {

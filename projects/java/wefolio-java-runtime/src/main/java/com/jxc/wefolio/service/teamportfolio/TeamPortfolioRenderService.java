@@ -14,6 +14,7 @@ import com.jxc.wefolio.service.teamportfolio.component.memberportfoliogrid.TeamM
 import com.jxc.wefolio.service.teamportfolio.component.memberportfoliolist.TeamMemberPortfolioListComponentRenderer;
 import com.jxc.wefolio.service.teamportfolio.component.qrcontact.TeamQrContactComponentRenderer;
 import com.jxc.wefolio.service.teamportfolio.component.schedulequery.TeamScheduleQueryComponentRenderer;
+import com.jxc.wefolio.service.teamportfolio.component.singlework.TeamSingleWorkComponentRenderer;
 import com.jxc.wefolio.service.teamportfolio.component.teamprofile.TeamProfileComponentRenderer;
 import com.jxc.wefolio.service.teamportfolio.component.textsection.TeamTextSectionComponentRenderer;
 import org.springframework.stereotype.Service;
@@ -44,6 +45,7 @@ public class TeamPortfolioRenderService {
 
     private final TeamProfileComponentRenderer teamProfileRenderer;
     private final TeamCarouselComponentRenderer carouselRenderer;
+    private final TeamSingleWorkComponentRenderer singleWorkRenderer;
     private final TeamDividerComponentRenderer dividerRenderer;
     private final TeamMemberPortfolioGridComponentRenderer gridRenderer;
     private final TeamMemberPortfolioListComponentRenderer listRenderer;
@@ -58,6 +60,7 @@ public class TeamPortfolioRenderService {
     public TeamPortfolioRenderService(
             TeamProfileComponentRenderer teamProfileRenderer,
             TeamCarouselComponentRenderer carouselRenderer,
+            TeamSingleWorkComponentRenderer singleWorkRenderer,
             TeamDividerComponentRenderer dividerRenderer,
             TeamMemberPortfolioGridComponentRenderer gridRenderer,
             TeamMemberPortfolioListComponentRenderer listRenderer,
@@ -68,6 +71,7 @@ public class TeamPortfolioRenderService {
     ) {
         this.teamProfileRenderer = teamProfileRenderer;
         this.carouselRenderer = carouselRenderer;
+        this.singleWorkRenderer = singleWorkRenderer;
         this.dividerRenderer = dividerRenderer;
         this.gridRenderer = gridRenderer;
         this.listRenderer = listRenderer;
@@ -168,6 +172,7 @@ public class TeamPortfolioRenderService {
         return switch (componentType) {
             case TEAM_PROFILE -> teamProfileRenderer.render(config, context);
             case CAROUSEL -> carouselRenderer.render(config, context);
+            case SINGLE_WORK -> singleWorkRenderer.render(config, context);
             case DIVIDER -> dividerRenderer.render(config, context);
             case MEMBER_PORTFOLIO_GRID -> gridRenderer.render(config, context);
             case MEMBER_PORTFOLIO_LIST -> listRenderer.render(config, context);

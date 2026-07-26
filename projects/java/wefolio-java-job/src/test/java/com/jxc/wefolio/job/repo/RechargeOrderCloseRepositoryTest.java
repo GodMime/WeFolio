@@ -32,13 +32,19 @@ class RechargeOrderCloseRepositoryTest {
         verify(jdbcTemplate).update(sqlCaptor.capture(), argsCaptor.capture());
         assertThat(affected).isEqualTo(2);
         assertThat(sqlCaptor.getValue())
-                .contains("status = 'CLOSED'")
-                .contains("status = 'PENDING_PAYMENT'")
+                .contains("status = ?")
+                .doesNotContain("'CLOSED'", "'PENDING_PAYMENT'")
                 .contains("deleted = 0")
                 .contains("expire_at < ?")
                 .contains("ORDER BY expire_at ASC, id ASC")
                 .contains("LIMIT ?")
                 .contains("version = version + 1");
-        assertThat(argsCaptor.getValue()).containsExactly(now, now, now, 200);
+        assertThat(argsCaptor.getValue()).containsExactly(
+                "CLOSED",
+                now,
+                now,
+                "PENDING_PAYMENT",
+                now,
+                200);
     }
 }

@@ -16,6 +16,7 @@ import com.jxc.wefolio.dict.PortfolioStatusDict;
 import com.jxc.wefolio.dict.PortfolioTemplateTypeDict;
 import com.jxc.wefolio.dict.PointSceneCodeDict;
 import com.jxc.wefolio.dict.TeamRoleDict;
+import com.jxc.wefolio.dict.TeamPortfolioComponentTypeDict;
 import com.jxc.wefolio.dict.TeamStatusDict;
 import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioConfigDto;
 import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioCreateRequest;
@@ -95,6 +96,20 @@ class MineTeamPortfolioServiceTest {
         TableInfoHelper.initTableInfo(new MapperBuilderAssistant(configuration, ""), PortfolioHistoryEntity.class);
         TableInfoHelper.initTableInfo(new MapperBuilderAssistant(configuration, ""), VisitRecordEntity.class);
         TableInfoHelper.initTableInfo(new MapperBuilderAssistant(configuration, ""), TeamScheduleQueryRecordEntity.class);
+    }
+
+    /**
+     * 组件库必须完整公开包含单个作品在内的十类组件。
+     */
+    @Test
+    void componentLibraryShouldExposeTenTypesIncludingSingleWork() {
+        TestContext context = context(true);
+
+        assertThat(context.service.getComponentLibrary())
+                .extracting(MineTeamPortfolioService.ComponentLibraryItem::componentType)
+                .containsExactlyElementsOf(java.util.Arrays.stream(TeamPortfolioComponentTypeDict.values())
+                        .map(TeamPortfolioComponentTypeDict::getCode)
+                        .toList());
     }
 
     @Test

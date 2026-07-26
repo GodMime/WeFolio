@@ -52,11 +52,11 @@ class TeamPortfolioFoundationTest {
     void componentTypesShouldMatchStandardTeamV1Contract() {
         assertThat(TeamPortfolioComponentTypeDict.values())
                 .extracting(TeamPortfolioComponentTypeDict::getCode)
-                .containsExactly("TEAM_PROFILE", "CAROUSEL", "DIVIDER", "MEMBER_PORTFOLIO_GRID",
+                .containsExactly("TEAM_PROFILE", "CAROUSEL", "SINGLE_WORK", "DIVIDER", "MEMBER_PORTFOLIO_GRID",
                         "MEMBER_PORTFOLIO_LIST", "TEXT_SECTION", "SCHEDULE_QUERY", "CONTACT_FORM", "QR_CONTACT");
         assertThat(TeamPortfolioComponentTypeDict.values())
                 .extracting(TeamPortfolioComponentTypeDict::getDisplayName)
-                .containsExactly("团队资料", "轮播图", "分割线", "双列作品集", "单列作品集", "文字说明", "档期查询", "预留联系信息", "二维码联系");
+                .containsExactly("团队资料", "轮播图", "单个作品", "分割线", "双列作品集", "单列作品集", "文字说明", "档期查询", "预留联系信息", "二维码联系");
         assertThat(TeamPortfolioComponentTypeDict.fromCode("TEAM_PROFILE"))
                 .isEqualTo(TeamPortfolioComponentTypeDict.TEAM_PROFILE);
     }
@@ -185,6 +185,40 @@ class TeamPortfolioFoundationTest {
         assertThat(TeamPortfolioMessage.NO_MAINTAIN_PERMISSION).isEqualTo("无团队作品集维护权限");
         assertThat(TeamPortfolioMessage.PORTFOLIO_NOT_FOUND).isEqualTo("团队作品集不存在或无访问权限");
         assertThat(TeamPortfolioMessage.INVALID_SCHEMA).isEqualTo("当前作品集暂未开放访问");
+    }
+
+    /**
+     * 团队单个作品错误文案必须只由消息接口统一维护。
+     *
+     * @throws Exception 读取源码失败
+     */
+    @Test
+    void singleWorkMessagesShouldHaveSingleSource() throws Exception {
+        Path sourceRoot = Path.of("src/main/java/com/jxc/wefolio");
+        String messages = Files.readString(sourceRoot.resolve("message/TeamPortfolioMessage.java"));
+        List<String> singleWorkSources = List.of(
+                "service/teamportfolio/component/singlework/TeamSingleWorkComponentValidator.java",
+                "service/teamportfolio/component/singlework/TeamSingleWorkComponentRenderer.java",
+                "service/teamportfolio/component/singlework/TeamSingleWorkComponentService.java");
+
+        assertThat(messages)
+                .contains("String SINGLE_WORK_CONFIG_INVALID = \"单个作品配置不正确\";")
+                .contains("String SINGLE_WORK_UNAVAILABLE = \"单个作品不存在或不可用\";")
+                .contains("String SINGLE_WORK_MEMBER_UNAVAILABLE = \"团队成员不存在或不可用\";");
+        assertThat(singleWorkSources)
+                .map(sourceRoot::resolve)
+                .map(path -> {
+                    try {
+                        return Files.readString(path);
+                    } catch (Exception exception) {
+                        throw new IllegalStateException(exception);
+                    }
+                })
+                .allSatisfy(source -> assertThat(source)
+                        .contains("TeamPortfolioMessage.")
+                        .doesNotContain("private static final String CONFIG_INVALID_MESSAGE")
+                        .doesNotContain("private static final String WORK_UNAVAILABLE_MESSAGE")
+                        .doesNotContain("private static final String MEMBER_UNAVAILABLE_MESSAGE"));
     }
 
     /**

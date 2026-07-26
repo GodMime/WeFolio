@@ -200,9 +200,6 @@ public class MinePortfolioService {
     /** 上传票据有效分钟数 */
     private static final int TICKET_EXPIRE_MINUTES = 15;
 
-    /** 作品集归属类型错误提示 */
-    private static final String INVALID_OWNER_TYPE_MESSAGE = "作品集归属类型不正确";
-
     /** 草稿保存历史动作 */
     private static final String HISTORY_ACTION_DRAFT_SAVE = "DRAFT_SAVE";
 
@@ -269,7 +266,7 @@ public class MinePortfolioService {
             return response;
         }
         if (!PortfolioOwnerTypeDict.USER.getCode().equals(normalizedOwnerType)) {
-            throw new BusinessException(INVALID_OWNER_TYPE_MESSAGE);
+            throw new BusinessException(PortfolioMessage.PORTFOLIO_OWNER_TYPE_INVALID_MESSAGE);
         }
         List<PortfolioEntity> portfolios = portfolioEntityMapper.selectList(
                 Wrappers.lambdaQuery(PortfolioEntity.class)
@@ -1598,7 +1595,7 @@ public class MinePortfolioService {
             MessageDigest digest = MessageDigest.getInstance(SHA_256_ALGORITHM);
             return HexFormat.of().formatHex(digest.digest(defaultString(text).getBytes(StandardCharsets.UTF_8)));
         } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 算法不可用", e);
+            throw new IllegalStateException(PortfolioMessage.SHA_256_UNAVAILABLE_MESSAGE, e);
         }
     }
 

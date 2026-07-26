@@ -203,9 +203,16 @@
       <view wx:if="{{componentWorkSelectionMode === 'single'}}" class="single-work-title-setting">
         <view class="single-work-title-setting-copy">
           <view class="single-work-title-setting-label">展示作品名</view>
-          <view class="single-work-title-setting-note">关闭后不保留标题间距</view>
+          <view class="single-work-title-setting-note">关闭后隐藏作品标题</view>
         </view>
         <switch checked="{{componentWorkShowTitle}}" color="#c28b37" bindchange="handleSingleWorkShowTitleChange"></switch>
+      </view>
+      <view wx:if="{{componentWorkSelectionMode === 'single'}}" class="single-work-title-setting">
+        <view class="single-work-title-setting-copy">
+          <view class="single-work-title-setting-label">展示作品说明</view>
+          <view class="single-work-title-setting-note">关闭后隐藏作品说明</view>
+        </view>
+        <switch checked="{{componentWorkShowDescription}}" color="#c28b37" bindchange="handleWorkShowDescriptionChange"></switch>
       </view>
 
       <view class="component-work-actions">
@@ -394,6 +401,21 @@
           </view>
         </scroll-view>
         <view wx:else class="display-group-work-empty">该作品标签暂无作品</view>
+      </view>
+
+      <view wx:if="{{!displayGroupLoading && !displayGroupErrorText}}" class="single-work-title-setting">
+        <view class="single-work-title-setting-copy">
+          <view class="single-work-title-setting-label">展示作品标题</view>
+          <view class="single-work-title-setting-note">关闭后隐藏作品标题</view>
+        </view>
+        <switch checked="{{displayGroupShowTitle}}" color="#c28b37" bindchange="handleDisplayGroupShowTitleChange"></switch>
+      </view>
+      <view wx:if="{{!displayGroupLoading && !displayGroupErrorText}}" class="single-work-title-setting">
+        <view class="single-work-title-setting-copy">
+          <view class="single-work-title-setting-label">展示作品说明</view>
+          <view class="single-work-title-setting-note">关闭后隐藏作品说明</view>
+        </view>
+        <switch checked="{{displayGroupShowDescription}}" color="#c28b37" bindchange="handleDisplayGroupShowDescriptionChange"></switch>
       </view>
 
       <view class="component-work-actions">

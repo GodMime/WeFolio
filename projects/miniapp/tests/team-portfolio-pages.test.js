@@ -9,11 +9,12 @@ const PAGE_NAMES = [
   'standard-preview/team-portfolio-standard-preview', 'contact-leads/team-contact-leads',
   'visitor-portfolio/team-visitor-portfolio'
 ]
-const NINE_COMPONENTS = ['team-profile', 'team-carousel', 'team-divider', 'team-member-portfolio-grid', 'team-member-portfolio-list', 'team-text-section', 'team-schedule-query', 'team-contact-form', 'team-qr-contact']
-const STANDARD_EDITOR_RENDERED_COMPONENTS = NINE_COMPONENTS.filter((component) => !['team-divider', 'team-text-section', 'team-schedule-query', 'team-contact-form'].includes(component))
+const TEN_COMPONENTS = ['team-profile', 'team-carousel', 'team-single-work', 'team-divider', 'team-member-portfolio-grid', 'team-member-portfolio-list', 'team-text-section', 'team-schedule-query', 'team-contact-form', 'team-qr-contact']
+const STANDARD_EDITOR_RENDERED_COMPONENTS = TEN_COMPONENTS.filter((component) => !['team-divider', 'team-text-section', 'team-schedule-query', 'team-contact-form'].includes(component))
 const EDITOR_COMPONENT_PATHS = [
   'team-profile/team-profile',
   'carousel/carousel',
+  'single-work/single-work',
   'divider/divider',
   'member-portfolio-grid/member-portfolio-grid',
   'member-portfolio-list/member-portfolio-list',
@@ -55,7 +56,7 @@ function loadPage(relativePath, requestFn, wxOverrides = {}) {
   return page
 }
 
-test('team portfolio pages provide all page artifacts, custom navigation, and explicit nine component composition', () => {
+test('team portfolio pages provide all page artifacts, custom navigation, and explicit ten component composition', () => {
   for (const name of PAGE_NAMES) {
     for (const extension of ['.js', '.json', '.wxml', '.wxss']) assert.equal(fs.existsSync(path.join(ROOT, `${name}${extension}`)), true, `${name}${extension}`)
     const json = JSON.parse(read(`${name}.json`))
@@ -66,7 +67,7 @@ test('team portfolio pages provide all page artifacts, custom navigation, and ex
     const wxml = read(`${name}.wxml`)
     const renderedComponents = name === 'standard-edit/team-portfolio-standard-edit'
       ? STANDARD_EDITOR_RENDERED_COMPONENTS
-      : NINE_COMPONENTS
+      : TEN_COMPONENTS
     for (const component of renderedComponents) {
       assert.ok(json.usingComponents[component], `${name} registers ${component}`)
       assert.match(wxml, new RegExp(`<${component}[\\s>]`), `${name} renders ${component}`)
@@ -181,7 +182,7 @@ test('team page level component editor owns the shared cancel and confirm action
   const wxss = read('standard-edit/team-portfolio-standard-edit.wxss')
   const js = read('standard-edit/team-portfolio-standard-edit.js')
 
-  assert.equal(Array.from(wxml.matchAll(/id="active-component-editor"/g)).length, 5)
+  assert.equal(Array.from(wxml.matchAll(/id="active-component-editor"/g)).length, 6)
   assert.match(wxml, /class="component-editor-actions"/)
   assert.match(wxml, /class="component-editor-cancel" catchtap="handleCloseComponentEditor">取消<\/button>/)
   assert.match(wxml, /class="component-editor-confirm" catchtap="handleConfirmComponentEditor">完成<\/button>/)

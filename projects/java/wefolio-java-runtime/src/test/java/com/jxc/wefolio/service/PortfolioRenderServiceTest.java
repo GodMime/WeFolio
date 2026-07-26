@@ -63,6 +63,8 @@ class PortfolioRenderServiceTest {
                 )),
                 component("c_grid", PortfolioComponentTypeDict.WORK_GRID.getCode(), 2000, Map.of(
                         "title", "作品",
+                        "showTitle", false,
+                        "showDescription", true,
                         "groups", List.of(group("g_all", "全部案例", 1000, List.of(11L)))
                 ))
         );
@@ -76,6 +78,8 @@ class PortfolioRenderServiceTest {
                 .containsExactly("c_profile", "c_grid", "c_carousel");
         assertThat(JSON.toJSONString(render.getShare())).doesNotContain("\"intro\"");
         PortfolioRenderDto.Component grid = render.getComponents().get(1);
+        assertThat(grid.getShowTitle()).isFalse();
+        assertThat(grid.getShowDescription()).isTrue();
         assertThat(grid.getGroups()).hasSize(1);
         assertThat(grid.getGroups().get(0).getName()).isEqualTo("全部案例");
         assertThat(grid.getGroups().get(0).getWorks().get(0).getCoverUrl())
@@ -85,7 +89,7 @@ class PortfolioRenderServiceTest {
     }
 
     /**
-     * 单个作品组件应输出单数作品、标题开关和作品原始比例。
+     * 单个作品组件应输出单数作品、标题说明开关和作品原始比例。
      */
     @Test
     void renderShouldExposeSingleWorkWithTitleSwitchAndAspectRatio() {
@@ -98,13 +102,14 @@ class PortfolioRenderServiceTest {
                 "c_single",
                 "SINGLE_WORK",
                 1000,
-                Map.of("workId", 12L, "showTitle", false)
+                Map.of("workId", 12L, "showTitle", false, "showDescription", true)
         ));
 
         PortfolioRenderDto render = service().render(portfolio(), config, false, false, null, null);
 
         PortfolioRenderDto.Component component = render.getComponents().get(0);
         assertThat(component.getShowTitle()).isFalse();
+        assertThat(component.getShowDescription()).isTrue();
         assertThat(component.getWork()).isNotNull();
         assertThat(component.getWork().getWorkId()).isEqualTo(12L);
         assertThat(component.getWork().getMediaUrl()).isEqualTo("https://cdn.example.com/video/12.mp4");
@@ -131,6 +136,7 @@ class PortfolioRenderServiceTest {
         assertThat(render.getComponents()).singleElement().satisfies(component -> {
             assertThat(component.getComponentKey()).isEqualTo("c_single");
             assertThat(component.getShowTitle()).isTrue();
+            assertThat(component.getShowDescription()).isFalse();
             assertThat(component.getWork()).isNull();
         });
     }

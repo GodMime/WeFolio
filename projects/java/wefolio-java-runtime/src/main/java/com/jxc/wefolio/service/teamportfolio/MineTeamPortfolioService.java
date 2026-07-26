@@ -163,44 +163,8 @@ public class MineTeamPortfolioService {
     private static final Set<String> RECORD_READABLE_ROLES = Set.of(
             TeamRoleDict.OWNER.getCode(), TeamRoleDict.MANAGER.getCode(), TeamRoleDict.MEMBER.getCode());
 
-    /** 维护查询页码非法提示。 */
-    private static final String RECORD_PAGE_INVALID_MESSAGE = "团队记录分页参数不合法";
-
     /** 维护查询最大页大小。 */
     private static final int RECORD_PAGE_SIZE_MAX = 100;
-
-    /** 草稿配置不能为空提示。 */
-    private static final String DRAFT_CONFIG_REQUIRED_MESSAGE = "团队作品集草稿配置不能为空";
-
-    /** 草稿版本冲突提示。 */
-    private static final String DRAFT_REVISION_CHANGED_MESSAGE = "团队作品集草稿已更新，请刷新后重试";
-
-    /** 客户端草稿版本不能为空提示。 */
-    private static final String CLIENT_REVISION_REQUIRED_MESSAGE = "客户端草稿版本不能为空";
-
-    /** 幂等键不能为空提示。 */
-    private static final String IDEMPOTENCY_KEY_REQUIRED_MESSAGE = "团队作品集幂等键不能为空";
-
-    /** 幂等键内容冲突提示。 */
-    private static final String IDEMPOTENCY_CONFLICT_MESSAGE = "团队作品集幂等键已用于其他内容";
-
-    /** 发布版本不能为空提示。 */
-    private static final String PUBLISH_REVISION_REQUIRED_MESSAGE = "请选择要发布的团队作品集草稿版本";
-
-    /** 作品集并发更新提示。 */
-    private static final String CONCURRENT_UPDATE_MESSAGE = "团队作品集已被更新，请刷新后重试";
-
-    /** 作品集不可用提示。 */
-    private static final String PORTFOLIO_UNAVAILABLE_MESSAGE = "已发布团队作品集不可用";
-
-    /** 分享渠道不能为空提示。 */
-    private static final String SHARE_CHANNEL_REQUIRED_MESSAGE = "分享渠道不能为空";
-
-    /** 删除失败提示。 */
-    private static final String DELETE_FAILED_MESSAGE = "团队作品集删除失败";
-
-    /** 历史写入失败提示。 */
-    private static final String HISTORY_INSERT_FAILED_MESSAGE = "团队作品集历史写入失败";
 
     /** 功能开关配置。 */
     private final TeamPortfolioProperties teamPortfolioProperties;
@@ -318,13 +282,14 @@ public class MineTeamPortfolioService {
     /**
      * 获取团队作品集组件库。
      *
-     * @return 九类团队组件
+     * @return 十类团队组件
      */
     public List<ComponentLibraryItem> getComponentLibrary() {
         requireFeatureEnabled();
         return List.of(
                 componentItem(TeamPortfolioComponentTypeDict.TEAM_PROFILE, "展示当前团队资料"),
                 componentItem(TeamPortfolioComponentTypeDict.CAROUSEL, "轮播展示已授权成员作品"),
+                componentItem(TeamPortfolioComponentTypeDict.SINGLE_WORK, "展示一个已授权成员作品"),
                 componentItem(TeamPortfolioComponentTypeDict.DIVIDER, "分隔团队作品集内容"),
                 componentItem(TeamPortfolioComponentTypeDict.MEMBER_PORTFOLIO_GRID, "双列展示成员个人作品集"),
                 componentItem(TeamPortfolioComponentTypeDict.MEMBER_PORTFOLIO_LIST, "单列展示成员个人作品集"),
@@ -374,7 +339,7 @@ public class MineTeamPortfolioService {
         portfolio.setLastSavedBy(userId);
         portfolio.setLastSavedAt(now);
         if (portfolioEntityMapper.insert(portfolio) != 1 || portfolio.getId() == null) {
-            throw new BusinessException(CONCURRENT_UPDATE_MESSAGE);
+            throw new BusinessException(TeamPortfolioMessage.CONCURRENT_UPDATE_MESSAGE);
         }
         TeamPortfolioConfigDto normalized = configValidator.normalizeAndValidate(
                 initialJson, teamId, portfolio.getId(), 1);
@@ -387,7 +352,7 @@ public class MineTeamPortfolioService {
         portfolio.setContentHash(contentHash);
         portfolio.setCurrentRevision(1);
         if (portfolioEntityMapper.updateById(portfolio) != 1) {
-            throw new BusinessException(CONCURRENT_UPDATE_MESSAGE);
+            throw new BusinessException(TeamPortfolioMessage.CONCURRENT_UPDATE_MESSAGE);
         }
         referenceService.rebuild(portfolio.getId(), PortfolioConfigScopeDict.DRAFT.getCode(), normalized,
                 new TeamPortfolioComponentContext(teamId, portfolio.getId(), 1));
@@ -417,13 +382,13 @@ public class MineTeamPortfolioService {
                 accessService.requireMaintainablePortfolio(portfolioId, userId);
         PortfolioEntity portfolio = access.portfolio();
         if (request == null || request.getConfig() == null) {
-            throw new BusinessException(DRAFT_CONFIG_REQUIRED_MESSAGE);
+            throw new BusinessException(TeamPortfolioMessage.DRAFT_CONFIG_REQUIRED_MESSAGE);
         }
         if (request.getClientRevision() == null) {
-            throw new BusinessException(CLIENT_REVISION_REQUIRED_MESSAGE);
+            throw new BusinessException(TeamPortfolioMessage.CLIENT_REVISION_REQUIRED_MESSAGE);
         }
         String idempotencyKey = requireText(
-                request.getIdempotencyKey(), IDEMPOTENCY_KEY_REQUIRED_MESSAGE);
+                request.getIdempotencyKey(), TeamPortfolioMessage.IDEMPOTENCY_KEY_REQUIRED_MESSAGE);
         String requestFingerprint = saveRequestFingerprint(request);
         PortfolioHistoryEntity idempotencyHistory = findIdempotencyHistory(
                 portfolioId, HISTORY_ACTION_DRAFT_SAVE, idempotencyKey);
@@ -431,7 +396,7 @@ public class MineTeamPortfolioService {
             return restoreIdempotentSave(portfolio, idempotencyHistory, requestFingerprint);
         }
         if (request.getClientRevision() != safeInt(portfolio.getDraftRevision())) {
-            throw new BusinessException(DRAFT_REVISION_CHANGED_MESSAGE);
+            throw new BusinessException(TeamPortfolioMessage.DRAFT_REVISION_CHANGED_MESSAGE);
         }
         String oldDraftConfigJson = portfolio.getDraftConfigJson();
         String publishedConfigJson = portfolio.getPublishedConfigJson();
@@ -481,10 +446,10 @@ public class MineTeamPortfolioService {
                 accessService.requireMaintainablePortfolio(portfolioId, userId);
         PortfolioEntity portfolio = access.portfolio();
         if (request == null || request.getDraftRevision() == null) {
-            throw new BusinessException(PUBLISH_REVISION_REQUIRED_MESSAGE);
+            throw new BusinessException(TeamPortfolioMessage.PUBLISH_REVISION_REQUIRED_MESSAGE);
         }
         String idempotencyKey = requireText(
-                request.getIdempotencyKey(), IDEMPOTENCY_KEY_REQUIRED_MESSAGE);
+                request.getIdempotencyKey(), TeamPortfolioMessage.IDEMPOTENCY_KEY_REQUIRED_MESSAGE);
         String requestFingerprint = publishRequestFingerprint(request);
         PortfolioHistoryEntity idempotencyHistory = findIdempotencyHistory(
                 portfolioId, HISTORY_ACTION_PUBLISH, idempotencyKey);
@@ -522,10 +487,10 @@ public class MineTeamPortfolioService {
                 accessService.requireMaintainablePortfolio(portfolioId, userId);
         PortfolioEntity portfolio = access.portfolio();
         if (request == null || request.getDraftRevision() == null) {
-            throw new BusinessException(PUBLISH_REVISION_REQUIRED_MESSAGE);
+            throw new BusinessException(TeamPortfolioMessage.PUBLISH_REVISION_REQUIRED_MESSAGE);
         }
         String idempotencyKey = requireText(
-                request.getIdempotencyKey(), IDEMPOTENCY_KEY_REQUIRED_MESSAGE);
+                request.getIdempotencyKey(), TeamPortfolioMessage.IDEMPOTENCY_KEY_REQUIRED_MESSAGE);
         String requestFingerprint = publishRequestFingerprint(request);
         PortfolioHistoryEntity idempotencyHistory = findIdempotencyHistory(
                 portfolioId, HISTORY_ACTION_PUBLISH, idempotencyKey);
@@ -583,10 +548,10 @@ public class MineTeamPortfolioService {
      */
     private void validatePublishDraft(PortfolioEntity portfolio, TeamPortfolioPublishRequest request) {
         if (request.getDraftRevision() != safeInt(portfolio.getDraftRevision())) {
-            throw new BusinessException(DRAFT_REVISION_CHANGED_MESSAGE);
+            throw new BusinessException(TeamPortfolioMessage.DRAFT_REVISION_CHANGED_MESSAGE);
         }
         if (portfolio.getDraftConfigJson() == null || portfolio.getDraftConfigJson().isBlank()) {
-            throw new BusinessException(DRAFT_CONFIG_REQUIRED_MESSAGE);
+            throw new BusinessException(TeamPortfolioMessage.DRAFT_CONFIG_REQUIRED_MESSAGE);
         }
     }
 
@@ -704,7 +669,8 @@ public class MineTeamPortfolioService {
         record.setOwnerType(PortfolioOwnerTypeDict.TEAM.getCode());
         record.setOwnerId(portfolio.getOwnerId());
         String shareChannel = ShareChannelDict.normalizeCode(requireText(
-                request == null ? null : request.getShareChannel(), SHARE_CHANNEL_REQUIRED_MESSAGE));
+                request == null ? null : request.getShareChannel(),
+                TeamPortfolioMessage.SHARE_CHANNEL_REQUIRED_MESSAGE));
         if (ShareChannelDict.fromCode(shareChannel) == null) {
             throw new BusinessException(TeamPortfolioMessage.SHARE_CHANNEL_UNSUPPORTED);
         }
@@ -829,7 +795,7 @@ public class MineTeamPortfolioService {
                         .eq(PORTFOLIO_COLUMN_OWNER_ID, access.team().getId())
                         .eq(PORTFOLIO_COLUMN_DELETED, 0L));
         if (updated != 1) {
-            throw new BusinessException(DELETE_FAILED_MESSAGE);
+            throw new BusinessException(TeamPortfolioMessage.DELETE_FAILED_MESSAGE);
         }
         assetService.deletePortfolioAssetsAfterCommit(access.team().getId(), portfolioId,
                 portfolio.getDraftConfigJson(), portfolio.getPublishedConfigJson());
@@ -964,7 +930,7 @@ public class MineTeamPortfolioService {
         history.setSavedBy(userId);
         history.setSavedAt(savedAt);
         if (portfolioHistoryEntityMapper.insert(history) != 1) {
-            throw new BusinessException(HISTORY_INSERT_FAILED_MESSAGE);
+            throw new BusinessException(TeamPortfolioMessage.HISTORY_INSERT_FAILED_MESSAGE);
         }
     }
 
@@ -1035,7 +1001,7 @@ public class MineTeamPortfolioService {
         JSONObject snapshot = requireMatchingHistorySnapshot(history, requestFingerprint);
         Integer resultRevision = snapshot.getInteger(HISTORY_FIELD_RESULT_DRAFT_REVISION);
         if (resultRevision == null || resultRevision <= 0) {
-            throw new BusinessException(IDEMPOTENCY_CONFLICT_MESSAGE);
+            throw new BusinessException(TeamPortfolioMessage.IDEMPOTENCY_CONFLICT_MESSAGE);
         }
         TeamPortfolioDetailResponse response = buildDetail(portfolio, parseHistoryConfig(snapshot));
         response.setDraftRevision(resultRevision);
@@ -1053,7 +1019,7 @@ public class MineTeamPortfolioService {
         JSONObject snapshot = requireMatchingHistorySnapshot(history, requestFingerprint);
         Integer resultRevision = snapshot.getInteger(HISTORY_FIELD_RESULT_PUBLISHED_REVISION);
         if (resultRevision == null || resultRevision <= 0) {
-            throw new BusinessException(IDEMPOTENCY_CONFLICT_MESSAGE);
+            throw new BusinessException(TeamPortfolioMessage.IDEMPOTENCY_CONFLICT_MESSAGE);
         }
         TeamPortfolioDetailResponse response = buildDetail(portfolio, parseHistoryConfig(snapshot));
         response.setPublishedRevision(resultRevision);
@@ -1071,7 +1037,7 @@ public class MineTeamPortfolioService {
         String persistedFingerprint = snapshot == null
                 ? null : snapshot.getString(HISTORY_FIELD_REQUEST_FINGERPRINT);
         if (persistedFingerprint == null || !persistedFingerprint.equals(requestFingerprint)) {
-            throw new BusinessException(IDEMPOTENCY_CONFLICT_MESSAGE);
+            throw new BusinessException(TeamPortfolioMessage.IDEMPOTENCY_CONFLICT_MESSAGE);
         }
         return snapshot;
     }
@@ -1091,7 +1057,7 @@ public class MineTeamPortfolioService {
             }
             return parsed;
         } catch (RuntimeException exception) {
-            throw new BusinessException(IDEMPOTENCY_CONFLICT_MESSAGE);
+            throw new BusinessException(TeamPortfolioMessage.IDEMPOTENCY_CONFLICT_MESSAGE);
         }
     }
 
@@ -1159,7 +1125,7 @@ public class MineTeamPortfolioService {
         try {
             return JSON.parseObject(configJson, TeamPortfolioConfigDto.class);
         } catch (RuntimeException exception) {
-            throw new BusinessException(DRAFT_CONFIG_REQUIRED_MESSAGE);
+            throw new BusinessException(TeamPortfolioMessage.DRAFT_CONFIG_REQUIRED_MESSAGE);
         }
     }
 
@@ -1183,7 +1149,7 @@ public class MineTeamPortfolioService {
                 || !PortfolioPublicationStatusDict.PUBLISHED.getCode().equals(portfolio.getPublicationStatus())
                 || portfolio.getPublishedConfigJson() == null
                 || portfolio.getPublishedConfigJson().isBlank()) {
-            throw new BusinessException(PORTFOLIO_UNAVAILABLE_MESSAGE);
+            throw new BusinessException(TeamPortfolioMessage.PORTFOLIO_UNAVAILABLE_MESSAGE);
         }
         return portfolio;
     }
@@ -1201,7 +1167,7 @@ public class MineTeamPortfolioService {
      */
     private void requireUpdated(int updated) {
         if (updated != 1) {
-            throw new BusinessException(CONCURRENT_UPDATE_MESSAGE);
+            throw new BusinessException(TeamPortfolioMessage.CONCURRENT_UPDATE_MESSAGE);
         }
     }
 
@@ -1313,7 +1279,7 @@ public class MineTeamPortfolioService {
     /** 校验团队维护查询分页。 */
     private void validateRecordPage(int page, int pageSize) {
         if (page <= 0 || pageSize <= 0 || pageSize > RECORD_PAGE_SIZE_MAX) {
-            throw new BusinessException(RECORD_PAGE_INVALID_MESSAGE);
+            throw new BusinessException(TeamPortfolioMessage.RECORD_PAGE_INVALID_MESSAGE);
         }
     }
 
@@ -1337,7 +1303,7 @@ public class MineTeamPortfolioService {
             }
             return result.toString();
         } catch (NoSuchAlgorithmException exception) {
-            throw new IllegalStateException(SHA_256_ALGORITHM + " 不可用", exception);
+            throw new IllegalStateException(TeamPortfolioMessage.SHA_256_UNAVAILABLE_MESSAGE, exception);
         }
     }
 

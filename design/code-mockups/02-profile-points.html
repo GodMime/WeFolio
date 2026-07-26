@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>映期Folio 设计稿 · 我的与积分</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #eef2f4;
+    color: #17202a;
+    padding: 40px 48px 80px;
+  }
+  .page-header { max-width: 1400px; margin: 0 auto 32px; }
+  .page-header h1 { font-size: 26px; font-weight: 800; }
+  .page-header .module-desc { margin-top: 8px; font-size: 14px; color: #536579; }
+  .page-header ul { margin-top: 10px; font-size: 13px; color: #6b7785; list-style: none; }
+  .page-header li { margin-top: 4px; }
+  .page-header code { background: #e2e8ee; padding: 1px 6px; border-radius: 4px; font-size: 12px; }
+
+  .phone-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 32px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+  .phone-item { flex: none; }
+  .phone-label {
+    margin-bottom: 12px;
+    font-size: 14px;
+    font-weight: 800;
+    color: #17202a;
+  }
+  .phone-label .path { display: block; margin-top: 4px; font-size: 12px; font-weight: 400; color: #6b7785; }
+  .phone {
+    width: 375px;
+    min-height: 812px;
+    border-radius: 24px;
+    overflow: hidden;
+    background: #f5f7fb;
+    box-shadow: 0 24px 60px rgba(18, 26, 36, 0.18);
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ---- 状态栏 ---- */
+  .status-bar {
+    flex: none;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px 0 28px;
+    background: rgba(245, 247, 251, 0.94);
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .status-icons { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+  .battery {
+    width: 22px; height: 11px;
+    border: 1px solid rgba(23,32,42,0.5);
+    border-radius: 3px;
+    position: relative;
+  }
+  .battery::after {
+    content: ""; position: absolute; left: 1px; top: 1px; bottom: 1px;
+    width: 70%; background: #17202a; border-radius: 1.5px;
+  }
+
+  /* ---- 导航栏（navigation-bar 组件,back=true,color #17202a） ---- */
+  .nav-bar {
+    flex: none;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    background: rgba(245, 247, 251, 0.94);
+    position: relative;
+  }
+  .nav-back {
+    position: absolute; left: 16px;
+    width: 12px; height: 24px;
+  }
+  .nav-back::before {
+    content: "";
+    position: absolute; left: 3px; top: 6px;
+    width: 10px; height: 10px;
+    border-left: 2px solid rgba(0,0,0,0.9);
+    border-bottom: 2px solid rgba(0,0,0,0.9);
+    transform: rotate(45deg);
+  }
+  .nav-title {
+    flex: 1;
+    text-align: center;
+    font-size: 17px;
+    font-weight: 700;
+    color: #17202a;
+  }
+
+  .phone-body { flex: 1; padding: 14px 14px 28px; }
+
+  /* ---- 通用面板 ---- */
+  .panel {
+    background: rgba(255, 255, 255, 0.94);
+    border: 0.5px solid rgba(23, 32, 42, 0.06);
+    border-radius: 8px;
+    box-shadow: 0 9px 24px rgba(23, 32, 42, 0.06);
+  }
+  .section-title { color: #17202a; font-size: 14px; font-weight: 800; line-height: 1.35; }
+  .primary-button {
+    min-height: 44px;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0 14px;
+    color: #fff; font-size: 14px; font-weight: 800;
+    border-radius: 8px; background: #17202a;
+  }
+  .secondary-button {
+    min-height: 44px;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0 14px;
+    color: #17202a; font-size: 14px; font-weight: 800;
+    border-radius: 8px; background: #eef2f6;
+  }
+  .danger-button {
+    min-height: 44px;
+    display: flex; align-items: center; justify-content: center;
+    margin-top: 10px;
+    color: #fff; font-size: 14px; font-weight: 800;
+    border-radius: 8px; background: #d83a3a;
+  }
+  .wide-button { width: 100%; }
+  .full { width: 100%; margin-top: 11px; }
+
+  /* ================= profile ================= */
+  .profile-avatar-card {
+    min-height: 77px;
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px;
+  }
+  .avatar {
+    width: 48px; height: 48px; flex: none;
+    border-radius: 50%;
+    overflow: hidden;
+    background: #dfe8e5;
+    display: flex; align-items: center; justify-content: center;
+    color: #f7fbfa; font-size: 14px; font-weight: 700;
+    background: linear-gradient(135deg, #17202a 0%, #2e7d73 100%);
+  }
+  .profile-summary { flex: 1; min-width: 0; }
+  .profile-name { color: #17202a; font-size: 15px; font-weight: 800; line-height: 1.35; }
+  .profile-code { margin-top: 4px; color: #6b7785; font-size: 12px; }
+  .profile-action-button {
+    flex: none; min-width: 70px; min-height: 36px;
+    font-size: 12px;
+  }
+  .profile-fields-panel, .tag-editor-panel, .danger-panel { margin-top: 11px; padding: 12px; }
+  .form-row + .form-row { margin-top: 11px; }
+  .field-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .label { color: #5f6b7a; font-size: 12px; font-weight: 700; }
+  .field-limit { flex: none; color: #8b96a3; font-size: 11px; font-weight: 700; }
+  .input {
+    width: 100%;
+    min-height: 42px;
+    margin-top: 6px;
+    padding: 0 11px;
+    color: #17202a; font-size: 14px;
+    line-height: 42px;
+    border-radius: 8px;
+    background: #f6f8fb;
+  }
+  .input.textarea { min-height: 80px; padding: 10px 11px; line-height: 1.55; }
+  .qr-heading, .tag-heading { display: flex; align-items: center; justify-content: space-between; }
+  .qr-limit { flex: none; color: #6b7785; font-size: 11px; font-weight: 700; }
+  .qr-body { display: flex; align-items: center; gap: 11px; margin-top: 11px; }
+  .qr-preview {
+    width: 78px; height: 78px; flex: none;
+    border-radius: 8px;
+    background: #eef2f6;
+    display: flex; align-items: center; justify-content: center;
+    color: #6b7785; font-size: 14px; font-weight: 800;
+  }
+  .count-pill {
+    flex: none;
+    padding: 4px 7px;
+    color: #0f766e; font-size: 11px; font-weight: 800; line-height: 1;
+    border-radius: 999px; background: #dcf7f1;
+  }
+  .pill-row { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+  .tag-pill {
+    min-height: 28px;
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 0 9px;
+    font-size: 12px; font-weight: 700; line-height: 1;
+    border: 0.5px solid transparent;
+    border-radius: 999px;
+  }
+  .tag-remove {
+    width: 18px; height: 18px; flex: none;
+    display: inline-flex; align-items: center; justify-content: center;
+    margin-left: 4px;
+    font-size: 12px; font-weight: 800;
+    border-radius: 50%;
+  }
+  .tag-add-trigger {
+    min-height: 28px;
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 0 9px;
+    color: #17202a; font-size: 12px; font-weight: 700;
+    border-radius: 999px; background: #eef2f6;
+    width: 100%;
+    min-height: 36px;
+  }
+  .tag-note, .danger-desc { color: #778392; font-size: 12px; line-height: 1.55; }
+  .tag-note { margin-top: 9px; }
+  .danger-desc { margin-top: 4px; }
+
+  /* ================= points ================= */
+  .points-balance-band {
+    min-height: 112px;
+    padding: 14px;
+    color: #fff;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #17202a 0%, #243241 64%, #326d64 100%);
+    box-shadow: 0 10px 27px rgba(23, 32, 42, 0.16);
+  }
+  .balance-top { display: flex; align-items: center; justify-content: space-between; }
+  .balance-label { color: rgba(255,255,255,0.72); font-size: 12px; }
+  .balance-value { margin-top: 4px; color: #fff; font-size: 32px; font-weight: 900; line-height: 1; }
+  .light-button {
+    min-width: 68px; height: 44px; flex: none;
+    display: inline-flex; align-items: center; justify-content: center;
+    margin-left: 12px; padding: 0 14px;
+    color: #17202a; font-size: 13px; font-weight: 800;
+    border-radius: 8px; background: #fff;
+    box-shadow: 0 10px 22px rgba(17, 24, 39, 0.2);
+  }
+  .balance-bottom {
+    display: flex; align-items: center; gap: 9px;
+    margin-top: 12px;
+    color: rgba(255,255,255,0.72); font-size: 11.5px;
+  }
+  .points-metric-grid { display: flex; gap: 8px; margin-top: 11px; }
+  .points-metric {
+    flex: 1 1 0; min-width: 0; min-height: 68px;
+    padding: 12px 6px;
+    text-align: center;
+    border: 0.5px solid rgba(23,32,42,0.06);
+    border-radius: 8px;
+    background: rgba(255,255,255,0.94);
+  }
+  .metric-value { color: #17202a; font-size: 19px; font-weight: 800; line-height: 1.1; }
+  .metric-label { margin-top: 6px; color: #758190; font-size: 11px; line-height: 1.25; }
+  .ledger-panel { margin-top: 11px; padding: 12px 12px 5px; }
+  .panel-heading { display: flex; align-items: flex-start; justify-content: space-between; }
+  .rule-link-pill {
+    width: 98px; min-height: 26px; flex: none;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #2d5f9a; font-size: 11px; font-weight: 800;
+    border-radius: 999px; background: #e6efff;
+  }
+  .ledger-list { margin-top: 5px; }
+  .ledger-row {
+    display: flex; align-items: center; gap: 10px;
+    min-height: 56px;
+    padding: 10px 0;
+    border-bottom: 0.5px solid #edf1f5;
+  }
+  .ledger-row:last-child { border-bottom: 0; }
+  .ledger-copy { flex: 1; min-width: 0; }
+  .ledger-title {
+    color: #17202a; font-size: 13.5px; font-weight: 800; line-height: 1.35;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .ledger-desc { margin-top: 3px; color: #758190; font-size: 11px; line-height: 1.35; white-space: nowrap; overflow: hidden; }
+  .points-change { flex: none; min-width: 39px; text-align: right; font-size: 15px; font-weight: 900; }
+  .points-change.plus { color: #0f766e; }
+  .points-change.minus { color: #b84a62; }
+  .load-more-text { padding: 9px 0 12px; color: #8b96a3; font-size: 11px; text-align: center; }
+
+  /* ================= points-rules ================= */
+  .intro-panel, .account-panel { padding: 12px; }
+  .cost-board {
+    margin-top: 11px;
+    overflow: hidden;
+    border: 0.5px solid rgba(23,32,42,0.06);
+    border-radius: 8px;
+    background: rgba(255,255,255,0.94);
+    box-shadow: 0 9px 24px rgba(23,32,42,0.06);
+  }
+  .cost-group { display: flex; align-items: stretch; border-bottom: 0.5px solid #edf1f5; }
+  .cost-group:last-child { border-bottom: 0; }
+  .cost-mark {
+    width: 58px; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 900; line-height: 1.2;
+    border-right: 0.5px solid #edf1f5;
+  }
+  .cost-mark.maintenance { color: #0f766e; background: #ecfdf8; }
+  .cost-mark.visitor { color: #b84a62; background: #fff1f4; }
+  .cost-mark.gift { color: #2d5f9a; background: #e6efff; }
+  .cost-lines { flex: 1; min-width: 0; }
+  .cost-line {
+    display: flex; align-items: center; gap: 8px;
+    min-height: 46px; padding: 9px;
+    border-bottom: 0.5px solid #edf1f5;
+  }
+  .cost-line:last-child { border-bottom: 0; }
+  .cost-copy { flex: 1; min-width: 0; }
+  .cost-title {
+    color: #17202a; font-size: 13px; font-weight: 800; line-height: 1.35;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .cost-desc { margin-top: 3px; color: #758190; font-size: 11px; line-height: 1.35; }
+  .cost-chip {
+    min-width: 44px; min-height: 25px; flex: none;
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 0 8px;
+    color: #17202a; font-size: 11px; font-weight: 900;
+    border: 0.5px solid rgba(184, 138, 68, 0.34);
+    border-radius: 999px; background: #fff4d8;
+  }
+  .cost-chip.gift { color: #2d5f9a; border-color: rgba(45,95,154,0.24); background: #e6efff; }
+  .account-panel { margin-top: 11px; }
+  .rule-pill {
+    min-height: 24px; flex: none;
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 0 8px;
+    color: #536579; font-size: 11px; font-weight: 800;
+    border-radius: 999px; background: #eef2f6;
+  }
+  .rule-list { margin-top: 10px; }
+  .rule-item {
+    display: flex; align-items: flex-start; gap: 8px;
+    margin-top: 8px;
+    color: #536579; font-size: 12px; line-height: 1.5;
+  }
+  .rule-item:first-child { margin-top: 0; }
+  .check {
+    width: 21px; height: 21px; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    color: #0f766e; font-size: 11px; font-weight: 900;
+    border-radius: 50%; background: #dcf7f1;
+  }
+
+  /* ================= recharge ================= */
+  .recharge-panel {
+    border: 0.5px solid rgba(23,32,42,0.08);
+    border-radius: 9px;
+    background: rgba(255,255,255,0.96);
+  }
+  .recharge-balance-panel {
+    min-height: 82px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px;
+  }
+  .recharge-balance-label { color: #758190; font-size: 12px; }
+  .recharge-balance-value { margin-top: 4px; color: #17202a; font-size: 24px; font-weight: 900; }
+  .recharge-balance-value .unit { font-size: 12.5px; font-weight: 700; }
+  .balance-warning { margin-top: 5px; color: #8a4b09; font-size: 11px; }
+  .records-link {
+    flex: none; min-height: 29px;
+    display: flex; align-items: center;
+    padding: 0 11px;
+    color: #2d5f9a; font-size: 11.5px; font-weight: 800;
+    border-radius: 999px; background: #e6efff;
+  }
+  .section-heading { margin: 15px 0 9px; color: #17202a; font-size: 15px; font-weight: 900; }
+  .package-grid { display: flex; flex-wrap: wrap; gap: 8px 0; justify-content: space-between; }
+  .package-card {
+    width: calc(50% - 4px);
+    min-height: 95px;
+    padding: 13px 12px;
+    border: 1px solid #dce3ea;
+    border-radius: 9px;
+    background: #fff;
+  }
+  .package-card.selected { border-color: #b98a45; background: #fffaf1; box-shadow: 0 8px 18px rgba(138,75,9,0.08); }
+  .package-amount { color: #17202a; font-size: 19px; font-weight: 900; }
+  .package-points { margin-top: 6px; color: #657283; font-size: 12px; }
+  .package-bonus {
+    display: inline-block;
+    margin-top: 9px; padding: 4px 7px;
+    color: #657283; font-size: 10.5px; font-weight: 800;
+    border-radius: 999px; background: #f0f4f7;
+  }
+  .package-bonus.has-bonus { color: #b84a62; background: #fcecf0; }
+  .payment-panel { margin-top: 13px; padding: 13px; }
+  .selected-pill {
+    flex: none; padding: 5px 9px;
+    color: #2d5f9a; font-size: 11.5px; font-weight: 800;
+    border-radius: 999px; background: #e6efff;
+  }
+  .summary-row {
+    display: flex; align-items: center; justify-content: space-between;
+    min-height: 56px; margin-top: 9px; padding: 0 10px;
+    border: 0.5px solid #e1e7ed; border-radius: 8px;
+  }
+  .summary-title { color: #17202a; font-size: 13.5px; font-weight: 800; }
+  .summary-desc { margin-top: 4px; color: #758190; font-size: 11px; }
+  .summary-value { color: #17202a; font-size: 16px; font-weight: 900; }
+  .pay-button {
+    width: 100%; height: 50px;
+    display: flex; align-items: center; justify-content: center;
+    margin-top: 13px;
+    color: #fff; font-size: 14px; font-weight: 900;
+    border-radius: 9px; background: #17202a;
+  }
+  .notice-panel {
+    min-height: 46px;
+    display: flex; align-items: center; justify-content: space-between;
+    margin-top: 11px; padding: 0 11px;
+    color: #657283; font-size: 11px;
+  }
+  .notice-rule-link {
+    flex: none; padding: 5px 10px;
+    color: #17202a; font-size: 11.5px; font-weight: 800;
+    border-radius: 999px; background: #f0f4f7;
+  }
+
+  /* ================= recharge-records ================= */
+  .order-card {
+    margin-bottom: 9px; padding: 13px;
+    border: 0.5px solid rgba(23,32,42,0.08);
+    border-radius: 9px;
+    background: rgba(255,255,255,0.96);
+  }
+  .order-heading { display: flex; align-items: center; justify-content: space-between; }
+  .package-name { color: #17202a; font-size: 15px; font-weight: 900; }
+  .order-time { margin-top: 4px; color: #758190; font-size: 10.5px; }
+  .order-status {
+    flex: none; padding: 4.5px 9px;
+    font-size: 11px; font-weight: 800;
+    border-radius: 999px;
+  }
+  .order-status.success { color: #0f766e; background: #def4ef; }
+  .order-status.pending { color: #8a4b09; background: #fff1d6; }
+  .order-status.muted { color: #657283; background: #edf1f5; }
+  .order-values {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-top: 12px; padding: 11px 0;
+    border-top: 0.5px solid #edf1f5;
+    border-bottom: 0.5px solid #edf1f5;
+  }
+  .order-values > div:last-child { text-align: right; }
+  .value-label { color: #758190; font-size: 10.5px; }
+  .value-text { margin-top: 4px; color: #17202a; font-size: 14px; font-weight: 900; }
+  .value-text.points { color: #0f766e; }
+  .order-meta { margin-top: 9px; color: #758190; font-size: 10.5px; line-height: 1.5; }
+  .order-no { margin-top: 4px; word-break: break-all; }
+
+  /* ================= 弹层 ================= */
+  .dialog-phone .phone-body { position: relative; padding: 0; display: flex; flex-direction: column; }
+  .dialog-backdrop {
+    position: absolute; inset: 0;
+    background: rgba(23, 32, 42, 0.36);
+  }
+  .dialog-behind {
+    position: absolute; inset: 0;
+    padding: 14px;
+    filter: none;
+  }
+  .tag-dialog-panel {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    padding: 14px 14px 28px;
+    border-radius: 12px 12px 0 0;
+    background: #fff;
+  }
+  .color-grid { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 7px; }
+  .color-choice {
+    width: 31.3%; flex: none;
+    min-height: 32px;
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+    padding: 0 6px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+  }
+  .color-choice.active { box-shadow: inset 0 0 0 1px currentColor; }
+  .color-swatch { width: 11px; height: 11px; flex: none; border-radius: 50%; }
+  .color-name { font-size: 11px; font-weight: 800; line-height: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dialog-actions { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+  .dialog-button { flex: 1; margin-top: 0; }
+  .placeholder-note {
+    position: absolute; left: 0; right: 0; top: 40%;
+    text-align: center; color: rgba(255,255,255,0.85); font-size: 12px;
+  }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>模块:我的与积分</h1>
+  <div class="module-desc">依据 <code>projects/miniapp/pages/</code> 下真实 wxml/wxss/js 还原,视觉走查用。rpx 已按 750rpx = 375px 换算。图片一律以渐变/色块占位。</div>
+  <ul>
+    <li>01 基础信息(我的) — <code>pages/profile/profile</code></li>
+    <li>02 我的积分 — <code>pages/points/points</code></li>
+    <li>03 积分规则 — <code>pages/points-rules/points-rules</code></li>
+    <li>04 充值积分 — <code>pages/recharge/recharge</code></li>
+    <li>05 充值记录 — <code>pages/recharge-records/recharge-records</code></li>
+    <li>06 弹层 · 新增标签 — <code>pages/profile/profile</code> 内 tag-dialog</li>
+  </ul>
+</div>
+
+<div class="phone-row">
+
+  <!-- ============ 01 基础信息 pages/profile/profile ============ -->
+  <div class="phone-item">
+    <div class="phone-label">01 基础信息<span class="path">pages/profile/profile</span></div>
+    <div class="phone">
+      <div class="status-bar">
+        <span>9:41</span>
+        <span class="status-icons">●●●○ 5G <span class="battery"></span></span>
+      </div>
+      <div class="nav-bar">
+        <div class="nav-back"></div>
+        <div class="nav-title">基础信息</div>
+      </div>
+      <div class="phone-body">
+        <!-- 头像卡片 -->
+        <div class="panel profile-avatar-card">
+          <div class="avatar">WF</div>
+          <div class="profile-summary">
+            <div class="profile-name">陈映 · 婚礼摄影师</div>
+            <div class="profile-code">WFA3B1E7A2</div>
+          </div>
+          <button class="secondary-button profile-action-button">更换头像</button>
+        </div>
+
+        <!-- 表单面板 -->
+        <div class="panel profile-fields-panel">
+          <div class="form-row">
+            <div class="field-heading">
+              <div class="label">姓名 / 艺名</div>
+              <div class="field-limit">2 / 50</div>
+            </div>
+            <div class="input">陈映</div>
+          </div>
+          <div class="form-row">
+            <div class="field-heading">
+              <div class="label">职业身份</div>
+              <div class="field-limit">5 / 50</div>
+            </div>
+            <div class="input">婚礼摄影师</div>
+          </div>
+          <div class="form-row">
+            <div class="field-heading">
+              <div class="label">服务城市</div>
+              <div class="field-limit">6 / 50</div>
+            </div>
+            <div class="input">杭州 · 上海</div>
+          </div>
+          <div class="form-row">
+            <div class="field-heading">
+              <div class="label">个人简介</div>
+              <div class="field-limit">42 / 500</div>
+            </div>
+            <div class="input textarea">十年婚礼纪实拍摄经验,擅长自然光人像与现场氛围记录,江浙沪可约档期。</div>
+          </div>
+          <div class="form-row">
+            <div class="qr-heading">
+              <div class="section-title">微信二维码</div>
+              <div class="qr-limit">小于300KB · 每月可修改3次</div>
+            </div>
+            <div class="qr-body">
+              <div class="qr-preview">QR</div>
+              <button class="secondary-button profile-action-button">上传二维码</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 标签面板 -->
+        <div class="panel tag-editor-panel">
+          <div class="tag-heading">
+            <div class="section-title">个人标签</div>
+            <div class="count-pill">3 / 10</div>
+          </div>
+          <div class="pill-row">
+            <div class="tag-pill" style="color:#0f766e;background:#dcf7f1;border-color:#a7eadc;">
+              纪实婚礼
+              <span class="tag-remove" style="color:#0f766e;background:rgba(15,118,110,0.12);">×</span>
+            </div>
+            <div class="tag-pill" style="color:#2d5f9a;background:#e5effb;border-color:#bfd7f4;">
+              自然光人像
+              <span class="tag-remove" style="color:#2d5f9a;background:rgba(45,95,154,0.12);">×</span>
+            </div>
+            <div class="tag-pill" style="color:#8a4b09;background:#fff0d7;border-color:#f5d29b;">
+              江浙沪可约
+              <span class="tag-remove" style="color:#8a4b09;background:rgba(138,75,9,0.12);">×</span>
+            </div>
+            <button class="tag-add-trigger">+ 添加标签</button>
+          </div>
+          <div class="tag-note">标签由维护者自定义,单个不超过 10 个字,最多保留 10 个。</div>
+        </div>
+
+        <button class="primary-button full wide-button">保存修改</button>
+
+        <!-- 账号安全 -->
+        <div class="panel danger-panel">
+          <div class="section-title">账号安全</div>
+          <div class="danger-desc">退出仅清除本机登录态;注销会停用当前账号。</div>
+          <button class="secondary-button full wide-button">退出登录</button>
+          <button class="danger-button full wide-button">注销账号</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 02 我的积分 pages/points/points ============ -->
+  <div class="phone-item">
+    <div class="phone-label">02 我的积分<span class="path">pages/points/points</span></div>
+    <div class="phone">
+      <div class="status-bar">
+        <span>9:41</span>
+        <span class="status-icons">●●●○ 5G <span class="battery"></span></span>
+      </div>
+      <div class="nav-bar">
+        <div class="nav-back"></div>
+        <div class="nav-title">我的积分</div>
+      </div>
+      <div class="phone-body">
+        <!-- 余额横幅 -->
+        <div class="points-balance-band">
+          <div class="balance-top">
+            <div>
+              <div class="balance-label">当前可用积分</div>
+              <div class="balance-value">1280</div>
+            </div>
+            <button class="light-button">去充值</button>
+          </div>
+          <div class="balance-bottom">
+            <span>累计充值 2000 积分</span>
+            <span>累计消耗 720 积分</span>
+          </div>
+        </div>
+
+        <!-- 指标 -->
+        <div class="points-metric-grid">
+          <div class="points-metric">
+            <div class="metric-value">6</div>
+            <div class="metric-label">今日消耗</div>
+          </div>
+          <div class="points-metric">
+            <div class="metric-value">486</div>
+            <div class="metric-label">访客消耗</div>
+          </div>
+          <div class="points-metric">
+            <div class="metric-value">234</div>
+            <div class="metric-label">维护消耗</div>
+          </div>
+        </div>
+
+        <!-- 积分流水 -->
+        <div class="panel ledger-panel">
+          <div class="panel-heading">
+            <div class="section-title">积分流水</div>
+            <div class="rule-link-pill">查看积分规则</div>
+          </div>
+          <div class="ledger-list">
+            <div class="ledger-row">
+              <div class="ledger-copy">
+                <div class="ledger-title">充值到账</div>
+                <div class="ledger-desc">2026-07-24 18:32 · 微信支付 50 元</div>
+              </div>
+              <div class="points-change plus">+500</div>
+            </div>
+            <div class="ledger-row">
+              <div class="ledger-copy">
+                <div class="ledger-title">访客访问作品集</div>
+                <div class="ledger-desc">2026-07-24 16:08 · 「夏日海边婚礼」访客浏览</div>
+              </div>
+              <div class="points-change minus">-2</div>
+            </div>
+            <div class="ledger-row">
+              <div class="ledger-copy">
+                <div class="ledger-title">作品存储维护</div>
+                <div class="ledger-desc">2026-07-01 00:05 · 每月月初扣除</div>
+              </div>
+              <div class="points-change minus">-12</div>
+            </div>
+            <div class="ledger-row">
+              <div class="ledger-copy">
+                <div class="ledger-title">首次完善资料赠送</div>
+                <div class="ledger-desc">2026-06-28 10:21 · 完善头像与简介奖励</div>
+              </div>
+              <div class="points-change plus">+100</div>
+            </div>
+            <div class="load-more-text">已加载全部流水</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 03 积分规则 pages/points-rules/points-rules ============ -->
+  <div class="phone-item">
+    <div class="phone-label">03 积分规则<span class="path">pages/points-rules/points-rules</span></div>
+    <div class="phone">
+      <div class="status-bar">
+        <span>9:41</span>
+        <span class="status-icons">●●●○ 5G <span class="battery"></span></span>
+      </div>
+      <div class="nav-bar">
+        <div class="nav-back"></div>
+        <div class="nav-title">积分规则</div>
+      </div>
+      <div class="phone-body">
+        <div class="panel intro-panel">
+          <div class="section-title">积分具体规则</div>
+        </div>
+
+        <!-- 规则板 -->
+        <div class="cost-board">
+          <div class="cost-group">
+            <div class="cost-mark maintenance">维护</div>
+            <div class="cost-lines">
+              <div class="cost-line">
+                <div class="cost-copy">
+                  <div class="cost-title">作品存储</div>
+                  <div class="cost-desc">每月月初扣除</div>
+                </div>
+                <div class="cost-chip">每1MB扣2积分</div>
+              </div>
+              <div class="cost-line">
+                <div class="cost-copy">
+                  <div class="cost-title">作品上架维护</div>
+                  <div class="cost-desc">当前规则免费</div>
+                </div>
+                <div class="cost-chip">0 分</div>
+              </div>
+            </div>
+          </div>
+          <div class="cost-group">
+            <div class="cost-mark visitor">访客</div>
+            <div class="cost-lines">
+              <div class="cost-line">
+                <div class="cost-copy">
+                  <div class="cost-title">访客访问作品集</div>
+                  <div class="cost-desc">同访客同作品集 24 小时内不重复扣</div>
+                </div>
+                <div class="cost-chip">2 分</div>
+              </div>
+              <div class="cost-line">
+                <div class="cost-copy">
+                  <div class="cost-title">访客查看作品详情</div>
+                  <div class="cost-desc">累计 5 次计费一次</div>
+                </div>
+                <div class="cost-chip">每 5 次 1 分</div>
+              </div>
+            </div>
+          </div>
+          <div class="cost-group">
+            <div class="cost-mark gift">赠送</div>
+            <div class="cost-lines">
+              <div class="cost-line">
+                <div class="cost-copy">
+                  <div class="cost-title">注册有礼</div>
+                  <div class="cost-desc">完成注册并首次登录后赠送</div>
+                </div>
+                <div class="cost-chip gift">200 分</div>
+              </div>
+              <div class="cost-line">
+                <div class="cost-copy">
+                  <div class="cost-title">首次完善资料</div>
+                  <div class="cost-desc">完善头像、姓名与简介后赠送</div>
+                </div>
+                <div class="cost-chip gift">100 分</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 扣费归属 -->
+        <div class="panel account-panel">
+          <div class="panel-heading" style="align-items:center;">
+            <div class="section-title">扣费归属</div>
+            <div class="rule-pill">账户</div>
+          </div>
+          <div class="rule-list">
+            <div class="rule-item">
+              <div class="check">1</div>
+              <div>团队无积分账户,团队作品集访问无消耗。</div>
+            </div>
+            <div class="rule-item">
+              <div class="check">2</div>
+              <div>从团队跳转到个人作品集后,扣个人作品集所属维护者积分。</div>
+            </div>
+            <div class="rule-item">
+              <div class="check">3</div>
+              <div>个人余额不足时,访客端内容区遮罩提示“UNDER MAINTENANCE / 维护中”。</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 04 充值积分 pages/recharge/recharge ============ -->
+  <div class="phone-item">
+    <div class="phone-label">04 充值积分<span class="path">pages/recharge/recharge</span></div>
+    <div class="phone">
+      <div class="status-bar">
+        <span>9:41</span>
+        <span class="status-icons">●●●○ 5G <span class="battery"></span></span>
+      </div>
+      <div class="nav-bar">
+        <div class="nav-back"></div>
+        <div class="nav-title">充值积分</div>
+      </div>
+      <div class="phone-body">
+        <!-- 余额面板 -->
+        <div class="recharge-panel recharge-balance-panel">
+          <div>
+            <div class="recharge-balance-label">当前余额</div>
+            <div class="recharge-balance-value">1280<span class="unit"> 积分</span></div>
+            <div class="balance-warning">余额低于 1500 积分,建议及时充值</div>
+          </div>
+          <div class="records-link">充值记录</div>
+        </div>
+
+        <div class="section-heading">选择充值套餐</div>
+        <div class="package-grid">
+          <div class="package-card">
+            <div class="package-amount">20 元</div>
+            <div class="package-points">到账 200 积分</div>
+            <div class="package-bonus">基础套餐</div>
+          </div>
+          <div class="package-card selected">
+            <div class="package-amount">50 元</div>
+            <div class="package-points">到账 550 积分</div>
+            <div class="package-bonus has-bonus">多送 50 积分</div>
+          </div>
+          <div class="package-card">
+            <div class="package-amount">100 元</div>
+            <div class="package-points">到账 1200 积分</div>
+            <div class="package-bonus has-bonus">多送 200 积分</div>
+          </div>
+          <div class="package-card">
+            <div class="package-amount">200 元</div>
+            <div class="package-points">到账 2600 积分</div>
+            <div class="package-bonus has-bonus">多送 600 积分</div>
+          </div>
+        </div>
+
+        <!-- 本次充值 -->
+        <div class="recharge-panel payment-panel">
+          <div class="panel-heading" style="align-items:center;">
+            <div class="section-title" style="font-size:15px;font-weight:900;">本次充值</div>
+            <div class="selected-pill">已选择 50 元</div>
+          </div>
+          <div class="summary-row">
+            <div>
+              <div class="summary-title">支付金额</div>
+              <div class="summary-desc">微信支付</div>
+            </div>
+            <div class="summary-value">50 元</div>
+          </div>
+          <div class="summary-row">
+            <div>
+              <div class="summary-title">到账积分</div>
+              <div class="summary-desc">基础 500 + 赠送 50</div>
+            </div>
+            <div class="summary-value">550</div>
+          </div>
+        </div>
+
+        <button class="pay-button">微信支付</button>
+
+        <div class="recharge-panel notice-panel">
+          <div>充值后不可提现,仅用于小程序内功能消耗</div>
+          <div class="notice-rule-link">规则</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 05 充值记录 pages/recharge-records/recharge-records ============ -->
+  <div class="phone-item">
+    <div class="phone-label">05 充值记录<span class="path">pages/recharge-records/recharge-records</span></div>
+    <div class="phone">
+      <div class="status-bar">
+        <span>9:41</span>
+        <span class="status-icons">●●●○ 5G <span class="battery"></span></span>
+      </div>
+      <div class="nav-bar">
+        <div class="nav-back"></div>
+        <div class="nav-title">充值记录</div>
+      </div>
+      <div class="phone-body">
+        <div class="order-card">
+          <div class="order-heading">
+            <div>
+              <div class="package-name">50 元充值套餐</div>
+              <div class="order-time">2026-07-24 18:32</div>
+            </div>
+            <div class="order-status success">已到账</div>
+          </div>
+          <div class="order-values">
+            <div>
+              <div class="value-label">支付金额</div>
+              <div class="value-text">50 元</div>
+            </div>
+            <div>
+              <div class="value-label">到账积分</div>
+              <div class="value-text points">到账 550 积分</div>
+            </div>
+          </div>
+          <div class="order-meta">
+            <div>赠送 50 积分</div>
+            <div class="order-no">订单号 WF20260724183200A3B1E7</div>
+          </div>
+        </div>
+
+        <div class="order-card">
+          <div class="order-heading">
+            <div>
+              <div class="package-name">100 元充值套餐</div>
+              <div class="order-time">2026-07-20 09:15</div>
+            </div>
+            <div class="order-status pending">状态确认中</div>
+          </div>
+          <div class="order-values">
+            <div>
+              <div class="value-label">支付金额</div>
+              <div class="value-text">100 元</div>
+            </div>
+            <div>
+              <div class="value-label">到账积分</div>
+              <div class="value-text points">到账 1200 积分</div>
+            </div>
+          </div>
+          <div class="order-meta">
+            <div>赠送 200 积分</div>
+            <div class="order-no">订单号 WF20260720091500C8D2F4</div>
+          </div>
+        </div>
+
+        <div class="order-card">
+          <div class="order-heading">
+            <div>
+              <div class="package-name">20 元充值套餐</div>
+              <div class="order-time">2026-07-02 21:47</div>
+            </div>
+            <div class="order-status success">已到账</div>
+          </div>
+          <div class="order-values">
+            <div>
+              <div class="value-label">支付金额</div>
+              <div class="value-text">20 元</div>
+            </div>
+            <div>
+              <div class="value-label">到账积分</div>
+              <div class="value-text points">到账 200 积分</div>
+            </div>
+          </div>
+          <div class="order-meta">
+            <div>无赠送积分</div>
+            <div class="order-no">订单号 WF20260702214700E6A9B1</div>
+          </div>
+        </div>
+
+        <div class="load-more-text">已加载全部记录</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 06 弹层 · 新增标签(profile 内 tag-dialog) ============ -->
+  <div class="phone-item">
+    <div class="phone-label">06 弹层 · 新增标签<span class="path">pages/profile/profile 内 tag-dialog</span></div>
+    <div class="phone dialog-phone">
+      <div class="status-bar">
+        <span>9:41</span>
+        <span class="status-icons">●●●○ 5G <span class="battery"></span></span>
+      </div>
+      <div class="nav-bar">
+        <div class="nav-back"></div>
+        <div class="nav-title">基础信息</div>
+      </div>
+      <div class="phone-body">
+        <!-- 弹层背后的页面(示意) -->
+        <div class="dialog-behind">
+          <div class="panel profile-avatar-card">
+            <div class="avatar">WF</div>
+            <div class="profile-summary">
+              <div class="profile-name">陈映 · 婚礼摄影师</div>
+              <div class="profile-code">WFA3B1E7A2</div>
+            </div>
+            <button class="secondary-button profile-action-button">更换头像</button>
+          </div>
+          <div class="panel tag-editor-panel">
+            <div class="tag-heading">
+              <div class="section-title">个人标签</div>
+              <div class="count-pill">3 / 10</div>
+            </div>
+          </div>
+        </div>
+        <div class="dialog-backdrop"></div>
+
+        <!-- 底部弹层 -->
+        <div class="tag-dialog-panel">
+          <div class="tag-heading">
+            <div class="section-title">新增标签</div>
+            <div class="count-pill">3 / 10</div>
+          </div>
+          <div class="form-row" style="margin-top:11px;">
+            <div class="label">标签文字</div>
+            <div class="input" style="color:#8b96a3;">10 个字以内</div>
+          </div>
+          <div class="form-row">
+            <div class="label">标签颜色</div>
+            <div class="color-grid">
+              <div class="color-choice active" style="color:#0f766e;background:#dcf7f1;border-color:#a7eadc;">
+                <span class="color-swatch" style="background:#0f766e;"></span><span class="color-name">青绿</span>
+              </div>
+              <div class="color-choice" style="color:#2d5f9a;background:#e5effb;border-color:#bfd7f4;">
+                <span class="color-swatch" style="background:#2d5f9a;"></span><span class="color-name">湖蓝</span>
+              </div>
+              <div class="color-choice" style="color:#8a4b09;background:#fff0d7;border-color:#f5d29b;">
+                <span class="color-swatch" style="background:#8a4b09;"></span><span class="color-name">琥珀</span>
+              </div>
+              <div class="color-choice" style="color:#a9354f;background:#fde7ed;border-color:#f5bfcc;">
+                <span class="color-swatch" style="background:#a9354f;"></span><span class="color-name">玫红</span>
+              </div>
+              <div class="color-choice" style="color:#6d5bd0;background:#eeeafd;border-color:#d2c9fa;">
+                <span class="color-swatch" style="background:#6d5bd0;"></span><span class="color-name">紫藤</span>
+              </div>
+              <div class="color-choice" style="color:#3f6f45;background:#e6f3e8;border-color:#bfdcc4;">
+                <span class="color-swatch" style="background:#3f6f45;"></span><span class="color-name">森绿</span>
+              </div>
+              <div class="color-choice" style="color:#36516e;background:#e7edf4;border-color:#c6d3e2;">
+                <span class="color-swatch" style="background:#36516e;"></span><span class="color-name">墨蓝</span>
+              </div>
+              <div class="color-choice" style="color:#9a4a35;background:#f8e8e2;border-color:#e9c2b5;">
+                <span class="color-swatch" style="background:#9a4a35;"></span><span class="color-name">砖红</span>
+              </div>
+              <div class="color-choice" style="color:#4b5563;background:#eef2f6;border-color:#d5dce5;">
+                <span class="color-swatch" style="background:#4b5563;"></span><span class="color-name">石墨</span>
+              </div>
+            </div>
+          </div>
+          <div class="dialog-actions">
+            <button class="secondary-button dialog-button">取消</button>
+            <button class="primary-button dialog-button">添加</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

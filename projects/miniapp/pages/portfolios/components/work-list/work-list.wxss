@@ -106,9 +106,14 @@
   border-left: 16rpx solid #ffffff;
 }
 
+.work-copy {
+  min-height: 10rpx;
+  padding-top: 10rpx;
+  box-sizing: border-box;
+}
+
 .work-title {
   overflow: hidden;
-  margin-top: 10rpx;
   color: #17202a;
   font-size: 24rpx;
   font-weight: 700;

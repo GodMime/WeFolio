@@ -14,6 +14,7 @@ import com.jxc.wefolio.service.teamportfolio.component.memberportfoliogrid.TeamM
 import com.jxc.wefolio.service.teamportfolio.component.memberportfoliolist.TeamMemberPortfolioListComponentRenderer;
 import com.jxc.wefolio.service.teamportfolio.component.qrcontact.TeamQrContactComponentRenderer;
 import com.jxc.wefolio.service.teamportfolio.component.schedulequery.TeamScheduleQueryComponentRenderer;
+import com.jxc.wefolio.service.teamportfolio.component.singlework.TeamSingleWorkComponentRenderer;
 import com.jxc.wefolio.service.teamportfolio.component.teamprofile.TeamProfileComponentRenderer;
 import com.jxc.wefolio.service.teamportfolio.component.textsection.TeamTextSectionComponentRenderer;
 import org.junit.jupiter.api.Test;
@@ -41,6 +42,7 @@ class TeamPortfolioRenderServiceTest {
 
     @Mock private TeamProfileComponentRenderer teamProfileRenderer;
     @Mock private TeamCarouselComponentRenderer carouselRenderer;
+    @Mock private TeamSingleWorkComponentRenderer singleWorkRenderer;
     @Mock private TeamDividerComponentRenderer dividerRenderer;
     @Mock private TeamMemberPortfolioGridComponentRenderer gridRenderer;
     @Mock private TeamMemberPortfolioListComponentRenderer listRenderer;
@@ -78,12 +80,14 @@ class TeamPortfolioRenderServiceTest {
                         TeamPortfolioComponentTypeDict.MEMBER_PORTFOLIO_LIST.getCode(),
                         TeamPortfolioComponentTypeDict.MEMBER_PORTFOLIO_GRID.getCode(),
                         TeamPortfolioComponentTypeDict.DIVIDER.getCode(),
+                        TeamPortfolioComponentTypeDict.SINGLE_WORK.getCode(),
                         TeamPortfolioComponentTypeDict.CAROUSEL.getCode(),
                         TeamPortfolioComponentTypeDict.TEAM_PROFILE.getCode());
         assertThat(render.getComponents()).allSatisfy(component ->
                 assertThat(component.getData().getString("renderer")).isEqualTo(component.getComponentType()));
         verify(teamProfileRenderer).render(any(JSONObject.class), eq(context));
         verify(carouselRenderer).render(any(JSONObject.class), eq(context));
+        verify(singleWorkRenderer).render(any(JSONObject.class), eq(context));
         verify(dividerRenderer).render(any(JSONObject.class), eq(context));
         verify(gridRenderer).render(any(JSONObject.class), eq(context));
         verify(listRenderer).render(any(JSONObject.class), eq(context));
@@ -165,6 +169,7 @@ class TeamPortfolioRenderServiceTest {
             switch (type) {
                 case TEAM_PROFILE -> when(teamProfileRenderer.render(any(JSONObject.class), eq(context))).thenReturn(rendered);
                 case CAROUSEL -> when(carouselRenderer.render(any(JSONObject.class), eq(context))).thenReturn(rendered);
+                case SINGLE_WORK -> when(singleWorkRenderer.render(any(JSONObject.class), eq(context))).thenReturn(rendered);
                 case DIVIDER -> when(dividerRenderer.render(any(JSONObject.class), eq(context))).thenReturn(rendered);
                 case MEMBER_PORTFOLIO_GRID -> when(gridRenderer.render(any(JSONObject.class), eq(context))).thenReturn(rendered);
                 case MEMBER_PORTFOLIO_LIST -> when(listRenderer.render(any(JSONObject.class), eq(context))).thenReturn(rendered);
@@ -177,12 +182,12 @@ class TeamPortfolioRenderServiceTest {
     }
 
     private TeamPortfolioRenderService service() {
-        return new TeamPortfolioRenderService(teamProfileRenderer, carouselRenderer, dividerRenderer, gridRenderer,
+        return new TeamPortfolioRenderService(teamProfileRenderer, carouselRenderer, singleWorkRenderer, dividerRenderer, gridRenderer,
                 listRenderer, textRenderer, scheduleRenderer, contactRenderer, qrRenderer);
     }
 
     private void verifyNoRendererInteractions() {
-        verifyNoInteractions(teamProfileRenderer, carouselRenderer, dividerRenderer, gridRenderer, listRenderer,
+        verifyNoInteractions(teamProfileRenderer, carouselRenderer, singleWorkRenderer, dividerRenderer, gridRenderer, listRenderer,
                 textRenderer, scheduleRenderer, contactRenderer, qrRenderer);
     }
 

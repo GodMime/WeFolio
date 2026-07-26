@@ -1,5 +1,9 @@
 package com.jxc.wefolio.controller;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.jxc.wefolio.annotation.MaintainerAccess;
 import com.jxc.wefolio.common.auth.AuthContext;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
@@ -9,10 +13,12 @@ import com.jxc.wefolio.service.teamportfolio.TeamMemberPortfolioPreviewService;
 import com.jxc.wefolio.service.teamportfolio.component.carousel.TeamCarouselComponentService;
 import com.jxc.wefolio.service.teamportfolio.component.memberportfoliogrid.TeamMemberPortfolioGridComponentService;
 import com.jxc.wefolio.service.teamportfolio.component.memberportfoliolist.TeamMemberPortfolioListComponentService;
+import com.jxc.wefolio.service.teamportfolio.component.singlework.TeamSingleWorkComponentService;
 import com.jxc.wefolio.dto.teamportfolio.TeamContactLeadResponse;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -72,6 +78,10 @@ class MineTeamPortfolioControllerTest {
         expected.put("POST /api/mine/team-portfolios/{portfolioId}/share-records", "shareRecord");
         expected.put("GET /api/mine/team-portfolios/{portfolioId}/components/carousel/members", "carouselMembers");
         expected.put("GET /api/mine/team-portfolios/{portfolioId}/components/carousel/members/{memberUserId}/works", "carouselWorks");
+        expected.put("GET /api/mine/team-portfolios/{portfolioId}/components/single-work/members", "singleWorkMembers");
+        expected.put("GET /api/mine/team-portfolios/{portfolioId}/components/single-work/members/{memberUserId}/works", "singleWorkWorks");
+        expected.put("GET /api/mine/teams/{teamId}/portfolio-components/single-work/members", "teamSingleWorkMembers");
+        expected.put("GET /api/mine/teams/{teamId}/portfolio-components/single-work/members/{memberUserId}/works", "teamSingleWorkWorks");
         expected.put("GET /api/mine/team-portfolios/{portfolioId}/components/member-portfolio-grid/members", "gridMembers");
         expected.put("GET /api/mine/team-portfolios/{portfolioId}/components/member-portfolio-grid/members/{memberUserId}/portfolios", "gridPortfolios");
         expected.put("GET /api/mine/team-portfolios/{portfolioId}/components/member-portfolio-list/members", "listMembers");
@@ -115,6 +125,8 @@ class MineTeamPortfolioControllerTest {
         Method carouselWorks = method("carouselWorks");
         assertThat(carouselWorks.getParameters()[0].getAnnotation(PathVariable.class)).isNotNull();
         assertThat(carouselWorks.getParameters()[1].getAnnotation(PathVariable.class)).isNotNull();
+        assertThat(method("singleWorkMembers").getAnnotation(Deprecated.class)).isNotNull();
+        assertThat(method("singleWorkWorks").getAnnotation(Deprecated.class)).isNotNull();
 
         Method visits = method("visitRecords");
         assertTask8PageParameters(visits);
@@ -136,13 +148,18 @@ class MineTeamPortfolioControllerTest {
         MineTeamPortfolioService mineService = mock(MineTeamPortfolioService.class);
         TeamPortfolioAssetService assetService = mock(TeamPortfolioAssetService.class);
         TeamCarouselComponentService carousel = mock(TeamCarouselComponentService.class);
+        TeamSingleWorkComponentService singleWork = mock(TeamSingleWorkComponentService.class);
         TeamMemberPortfolioGridComponentService grid = mock(TeamMemberPortfolioGridComponentService.class);
         TeamMemberPortfolioListComponentService list = mock(TeamMemberPortfolioListComponentService.class);
         MineTeamPortfolioController controller = new MineTeamPortfolioController(
-                mineService, assetService, carousel, grid, list, mock(TeamMemberPortfolioPreviewService.class));
+                mineService, assetService, carousel, singleWork, grid, list, mock(TeamMemberPortfolioPreviewService.class));
 
         controller.carouselMembers(13L);
         controller.carouselWorks(13L, 17L);
+        controller.singleWorkMembers(13L);
+        controller.singleWorkWorks(13L, 17L);
+        controller.teamSingleWorkMembers(23L);
+        controller.teamSingleWorkWorks(23L, 17L);
         controller.gridMembers(13L);
         controller.gridPortfolios(13L, 17L);
         controller.listMembers(13L);
@@ -150,6 +167,10 @@ class MineTeamPortfolioControllerTest {
 
         verify(carousel).listMembers(13L, USER_ID);
         verify(carousel).listWorks(13L, 17L, USER_ID);
+        verify(singleWork).listMembers(13L, USER_ID);
+        verify(singleWork).listWorks(13L, 17L, USER_ID);
+        verify(singleWork).listTeamMembers(23L, USER_ID);
+        verify(singleWork).listTeamWorks(23L, 17L, USER_ID);
         verify(grid).listMembers(13L, USER_ID);
         verify(grid).listPortfolios(13L, 17L, USER_ID);
         verify(list).listMembers(13L, USER_ID);
@@ -166,6 +187,7 @@ class MineTeamPortfolioControllerTest {
                 mineService,
                 mock(TeamPortfolioAssetService.class),
                 mock(TeamCarouselComponentService.class),
+                mock(TeamSingleWorkComponentService.class),
                 mock(TeamMemberPortfolioGridComponentService.class),
                 mock(TeamMemberPortfolioListComponentService.class),
                 mock(TeamMemberPortfolioPreviewService.class));
@@ -191,6 +213,51 @@ class MineTeamPortfolioControllerTest {
             assertThat(method(methodName).getDeclaringClass()).isEqualTo(MineTeamPortfolioController.class);
         }
         assertThat(MineTeamPortfolioController.class.getSuperclass()).isEqualTo(Object.class);
+    }
+
+    @Test
+    void unwiredEndpointsDeclareNonRemovalDeprecation() {
+        for (String methodName : java.util.List.of("scheduleOptions", "visitRecords", "scheduleQueries")) {
+            Deprecated deprecated = method(methodName).getAnnotation(Deprecated.class);
+
+            assertThat(deprecated).as(methodName + " 弃用标记").isNotNull();
+            assertThat(deprecated.since()).as(methodName + " 弃用版本").isEqualTo("2026-07");
+            assertThat(deprecated.forRemoval()).as(methodName + " 暂不删除").isFalse();
+        }
+    }
+
+    @Test
+    void unwiredEndpointsWriteDeprecationWarnings() {
+        MineTeamPortfolioController controller = new MineTeamPortfolioController(
+                mock(MineTeamPortfolioService.class),
+                mock(TeamPortfolioAssetService.class),
+                mock(TeamCarouselComponentService.class),
+                mock(TeamSingleWorkComponentService.class),
+                mock(TeamMemberPortfolioGridComponentService.class),
+                mock(TeamMemberPortfolioListComponentService.class),
+                mock(TeamMemberPortfolioPreviewService.class));
+        Logger logger = (Logger) LoggerFactory.getLogger(MineTeamPortfolioController.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            controller.scheduleOptions(13L, "schedule-1", "draft");
+            controller.visitRecords(31L, 1, 20);
+            controller.scheduleQueries(31L, 2, 10);
+
+            assertThat(appender.list)
+                    .extracting(ILoggingEvent::getLevel)
+                    .containsExactly(Level.WARN, Level.WARN, Level.WARN);
+            assertThat(appender.list)
+                    .extracting(ILoggingEvent::getFormattedMessage)
+                    .containsExactly(
+                            "调用已弃用团队作品集档期配置接口: portfolioId=13, componentKey=schedule-1, scope=draft",
+                            "调用已弃用团队作品集访问记录接口: teamId=31, page=1, pageSize=20",
+                            "调用已弃用团队作品集查档历史接口: teamId=31, page=2, pageSize=10");
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
     }
 
     /** 断言分页接口的直接声明、GET 映射及默认参数。 */

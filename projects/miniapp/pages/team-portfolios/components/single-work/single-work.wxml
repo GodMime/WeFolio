@@ -1,0 +1,45 @@
+<view class="single-work {{editMode ? 'editor-mode' : ''}}">
+  <block wx:if="{{editMode}}">
+    <view class="editor-form">
+      <view class="editor-field">
+        <view class="editor-label">选择团队成员</view>
+        <scroll-view class="editor-member-scroll" scroll-x type="list">
+          <view class="editor-member-row">
+            <button wx:for="{{members}}" wx:key="memberUserId" class="editor-member-choice {{draft.memberUserId === item.memberUserId ? 'active' : ''}}" data-id="{{item.memberUserId}}" bindtap="selectMember">{{item.displayName}}</button>
+          </view>
+        </scroll-view>
+      </view>
+      <view class="editor-field editor-content-field">
+        <view class="editor-label">选择作品</view>
+        <view wx:if="{{draft.memberUserId && works.length}}" class="editor-option-list">
+          <view wx:for="{{works}}" wx:key="workId" class="editor-option {{draft.workId === item.workId ? 'selected' : ''}}" data-item="{{item}}" catchtap="selectWork" aria-role="radio" aria-checked="{{draft.workId === item.workId}}">
+            <view class="editor-option-thumb"><image src="{{item.coverUrl || item.mediaUrl}}" mode="aspectFill" /></view>
+            <view class="editor-option-copy">
+              <view class="editor-option-title">{{item.title || '未命名作品'}}</view>
+              <view class="editor-option-meta">{{item.mediaType === 'VIDEO' ? '视频作品' : '图片作品'}} {{item.aspectRatio || ''}}</view>
+            </view>
+            <view class="editor-option-check">{{draft.workId === item.workId ? '✓' : ''}}</view>
+          </view>
+        </view>
+        <view wx:elif="{{draft.memberUserId}}" class="editor-empty">该成员暂无可展示作品</view>
+        <view wx:else class="editor-empty">请先选择团队成员</view>
+      </view>
+      <view class="editor-switch-row"><view><view class="editor-switch-label">展示作品标题</view><view class="editor-switch-note">关闭后隐藏标题</view></view><switch checked="{{draft.showTitle}}" color="#c28b37" bindchange="handleShowTitleChange" /></view>
+      <view class="editor-switch-row"><view><view class="editor-switch-label">展示作品说明</view><view class="editor-switch-note">关闭后隐藏说明</view></view><switch checked="{{draft.showDescription}}" color="#c28b37" bindchange="handleShowDescriptionChange" /></view>
+      <view wx:if="{{errorMessage}}" class="editor-error">{{errorMessage}}</view>
+    </view>
+  </block>
+  <block wx:else>
+    <video wx:if="{{work.mediaType === 'VIDEO' && activeVideoKey === componentKey}}" id="teamSingleWorkVideo-{{componentKey}}" class="single-work-video" src="{{work.mediaUrl}}" poster="{{work.coverUrl}}" controls="{{true}}" autoplay="{{true}}" object-fit="contain" binderror="handleVideoError"></video>
+    <view wx:elif="{{work.mediaType === 'VIDEO'}}" class="single-work-video-poster" bindtap="handleMediaTap" aria-role="button" aria-label="播放视频{{work.title}}">
+      <image class="single-work-video-cover" src="{{work.coverUrl}}" mode="aspectFit"></image>
+      <view class="single-work-play">▶</view>
+    </view>
+    <image wx:elif="{{work.mediaUrl}}" class="single-work-image" src="{{work.mediaUrl}}" mode="widthFix" bindtap="handleMediaTap" aria-role="button" aria-label="查看原图{{work.title}}"></image>
+    <view wx:else class="single-work-empty">作品不可用</view>
+    <view class="single-work-copy">
+      <view wx:if="{{showTitle && work.title}}" class="single-work-title">{{work.title}}</view>
+      <view wx:if="{{showDescription && work.description}}" class="single-work-description">{{work.description}}</view>
+    </view>
+  </block>
+</view>

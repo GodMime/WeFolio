@@ -63,31 +63,58 @@ test('supports single-column work list component type', () => {
   assert.equal(result.components[1].componentType, COMPONENT_TYPES.WORK_LIST)
 })
 
-test('single work component defaults title on and keeps only singular config', () => {
+test('work display components default title on and description off', () => {
+  const grid = createComponent(COMPONENT_TYPES.WORK_GRID, {
+    componentKey: 'c_grid',
+    config: {
+      workIds: [11],
+      showTitle: 'false',
+      showDescription: true
+    }
+  })
+  const list = createComponent(COMPONENT_TYPES.WORK_LIST, {
+    componentKey: 'c_list',
+    config: {
+      workIds: [12],
+      showTitle: false,
+      showDescription: 'true'
+    }
+  })
+
+  assert.equal(grid.config.showTitle, true)
+  assert.equal(grid.config.showDescription, true)
+  assert.equal(list.config.showTitle, false)
+  assert.equal(list.config.showDescription, false)
+})
+
+test('single work component defaults title on and description off while keeping only singular config', () => {
   const component = createComponent(COMPONENT_TYPES.SINGLE_WORK, {
     componentKey: 'c_single',
     config: {
       workId: '12',
       workIds: [13],
       showTitle: 'false',
+      showDescription: true,
       unsupported: true
     }
   })
 
   assert.equal(COMPONENT_TYPES.SINGLE_WORK, 'SINGLE_WORK')
   assert.equal(component.name, '单个作品')
-  assert.deepEqual(component.config, { workId: 12, showTitle: true })
-  assert.deepEqual(normalizeSingleWorkConfig({ workId: 13, showTitle: false }), {
+  assert.deepEqual(component.config, { workId: 12, showTitle: true, showDescription: true })
+  assert.deepEqual(normalizeSingleWorkConfig({ workId: 13, showTitle: false, showDescription: false }), {
     workId: 13,
-    showTitle: false
+    showTitle: false,
+    showDescription: false
   })
   assert.deepEqual(normalizeSingleWorkConfig({ workId: 13.9, showTitle: true }), {
     workId: 0,
-    showTitle: true
+    showTitle: true,
+    showDescription: false
   })
 })
 
-test('single work update replaces one work and preserves explicit title switch', () => {
+test('single work update replaces one work and preserves explicit display switches', () => {
   const config = normalizePortfolioConfig({
     components: [createComponent(COMPONENT_TYPES.SINGLE_WORK, {
       componentKey: 'c_single',
@@ -95,9 +122,17 @@ test('single work update replaces one work and preserves explicit title switch',
     })]
   })
 
-  const updated = updateSingleWorkConfig(config, 'c_single', { workId: 12, showTitle: false })
+  const updated = updateSingleWorkConfig(config, 'c_single', {
+    workId: 12,
+    showTitle: false,
+    showDescription: true
+  })
 
-  assert.deepEqual(updated.components[0].config, { workId: 12, showTitle: false })
+  assert.deepEqual(updated.components[0].config, {
+    workId: 12,
+    showTitle: false,
+    showDescription: true
+  })
 })
 
 test('single work validation requires one valid image or video work', () => {

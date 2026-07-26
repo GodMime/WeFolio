@@ -1,0 +1,1263 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>04 作品模块 · WeFolio 设计稿</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #eef2f4;
+    color: #17202a;
+    padding: 40px;
+  }
+
+  /* ===== 顶部标题区 ===== */
+  .doc-header { max-width: 1280px; margin: 0 auto 36px; }
+  .doc-header h1 { font-size: 26px; font-weight: 900; color: #121a24; }
+  .doc-header .sub { margin-top: 8px; font-size: 14px; color: #66727f; line-height: 1.7; }
+  .doc-header .pages { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .doc-header .pages span {
+    font-size: 12px; font-weight: 700; color: #40546a;
+    background: #ffffff; border: 1px solid #d8e0e8; border-radius: 999px;
+    padding: 5px 12px;
+  }
+
+  /* ===== 手机框布局 ===== */
+  .frames { display: flex; flex-wrap: wrap; gap: 32px; max-width: 1280px; margin: 0 auto; }
+  .frame-item { flex: none; }
+  .frame-label {
+    font-size: 13px; font-weight: 800; color: #40546a;
+    margin-bottom: 10px; line-height: 1.5;
+  }
+  .frame-label .path { display: block; font-size: 11px; font-weight: 600; color: #8b96a3; }
+  .phone {
+    width: 375px; height: 812px;
+    border-radius: 24px;
+    background: #f5f7fb;
+    box-shadow: 0 18px 48px rgba(18, 26, 36, 0.18);
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+  .phone.tall { height: auto; min-height: 812px; }
+
+  /* ===== 状态栏 + 导航栏 ===== */
+  .statusbar {
+    height: 44px; flex: none;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px;
+    font-size: 14px; font-weight: 700; color: #17202a;
+  }
+  .statusbar .icons { display: flex; gap: 6px; align-items: center; font-size: 11px; }
+  .navbar {
+    height: 44px; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+    font-size: 17px; font-weight: 700; color: #17202a;
+  }
+  .navbar .back {
+    position: absolute; left: 16px; top: 50%;
+    width: 10px; height: 10px;
+    border-left: 2px solid #17202a; border-bottom: 2px solid #17202a;
+    transform: translateY(-50%) rotate(45deg);
+  }
+  .navbar-bg-works { background: rgba(245, 247, 251, 0.94); }
+  .navbar-bg-add { background: rgba(252, 253, 253, 0.96); }
+
+  /* ===== 通用 ===== */
+  .scroll { flex: 1; overflow: hidden; padding: 14px; display: flex; flex-direction: column; }
+  .panel {
+    border: 1px solid #d8e0e8; border-radius: 8px;
+    background: rgba(255, 255, 255, 0.96);
+  }
+  .grabber { width: 36px; height: 4px; border-radius: 999px; background: #d8e0e8; margin: 0 auto; }
+  .thumb-ph {
+    width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+    color: #66727f; font-size: 12px; font-weight: 800;
+    background: linear-gradient(135deg, #edf3f7, #dce7e4);
+  }
+  /* 未上传封面时小程序展示默认封面 work-logo-100kb.jpg,裁剪方式与原 image mode="aspectFill" 一致 */
+  .thumb-cover-img {
+    width: 100%; height: 100%;
+    object-fit: cover; display: block;
+    background: #e7edf4;
+  }
+
+  /* ===== 作品页: 搜索 ===== */
+  .search-box { height: 43px; display: flex; align-items: center; gap: 7px; padding: 0 13px; }
+  .search-icon {
+    width: 11px; height: 11px; flex: none;
+    border: 2px solid #6f7b89; border-radius: 50%; position: relative;
+  }
+  .search-icon::after {
+    content: ""; position: absolute; width: 5px; height: 2px;
+    right: -4px; bottom: -2px; background: #6f7b89; transform: rotate(45deg);
+  }
+  .search-input { flex: 1; color: #6f7b89; font-size: 14px; font-weight: 600; }
+
+  /* ===== 作品页: 标签筛选 ===== */
+  .filter-panel { margin-top: 12px; padding: 6px 9px; }
+  .filter-shell { display: flex; align-items: center; gap: 7px; min-height: 32px; }
+  .tag-row-scroll { flex: 1; display: flex; gap: 6px; overflow: hidden; }
+  .tag-pill {
+    height: 25px; flex: none;
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 0 10px;
+    font-size: 12px; font-weight: 800; line-height: 1;
+    border: 1px solid #d4dee8; border-radius: 999px;
+    background: #ffffff; color: #17202a;
+  }
+  .tag-pill.active {
+    color: #40546a; border-color: #cbd8e5; background: #eef4f7;
+    box-shadow: 0 4px 9px rgba(15, 118, 110, 0.18);
+  }
+  .tag-pill.active::before {
+    content: ""; width: 5px; height: 5px; border-radius: 50%; background: #ffffff;
+  }
+  .tag-add-btn {
+    width: 28px; height: 28px; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    color: #17202a; font-size: 17px; font-weight: 800; line-height: 1;
+    border: 1px solid #cbd8e5; border-radius: 50%;
+    background: linear-gradient(180deg, #ffffff, #f3f7fb);
+    box-shadow: 0 4px 9px rgba(23, 32, 42, 0.08);
+  }
+
+  /* ===== 作品页: 素材库 ===== */
+  .library-panel {
+    margin-top: 13px; padding: 14px;
+    box-shadow: 0 9px 24px rgba(23, 32, 42, 0.06);
+    flex: 1; display: flex; flex-direction: column; overflow: hidden;
+  }
+  .list-heading { display: flex; align-items: center; justify-content: space-between; }
+  .section-title { font-size: 17px; font-weight: 900; color: #17202a; }
+  .list-actions { display: flex; align-items: center; gap: 7px; }
+  .text-action {
+    width: 64px; height: 30px;
+    display: flex; align-items: center; justify-content: center;
+    color: #2f66aa; font-size: 12px; font-weight: 800;
+    border: 1px solid #bdd6ff; border-radius: 999px; background: #f2f7ff;
+  }
+  .text-action.active { color: #ffffff; border-color: #3d6fad; background: #3d6fad; }
+  .work-list { margin-top: 9px; display: flex; flex-direction: column; gap: 9px; }
+  .work-card {
+    position: relative;
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px;
+    border: 1px solid #d8e0e8; border-radius: 8px;
+    background: #ffffff;
+  }
+  .work-card.selected { border-color: #3d6fad; background: #f4f8ff; }
+  .work-thumb {
+    position: relative; width: 74px; height: 64px; flex: none;
+    border-radius: 6px; overflow: hidden; background: #e7edf4;
+  }
+  .play-badge {
+    position: absolute; left: 50%; top: 50%;
+    width: 29px; height: 29px; z-index: 3;
+    border-radius: 50%; background: rgba(255, 255, 255, 0.94);
+    transform: translate(-50%, -50%);
+  }
+  .play-badge::before {
+    content: ""; position: absolute; left: 11px; top: 8.5px;
+    border-top: 6px solid transparent; border-bottom: 6px solid transparent;
+    border-left: 9px solid #17202a;
+  }
+  .work-copy { flex: 1; min-width: 0; }
+  .work-title {
+    font-size: 15px; font-weight: 900; color: #17202a; line-height: 1.32;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .work-meta {
+    margin-top: 4px; font-size: 12.5px; font-weight: 600; color: #66727f;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .work-status-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .pill {
+    display: inline-flex; align-items: center; height: 24px; padding: 0 9px;
+    font-size: 12px; font-weight: 900; line-height: 1;
+    border-radius: 999px; border: 1px solid #d8e0e8;
+  }
+  .reference-pill { color: #17202a; background: #f8fafc; }
+  .reference-pill.used { border-color: #d3e1ec; background: #f5f9fc; }
+  .audit-pill.pending { color: #66727f; background: #f8fafc; }
+  .audit-pill.auditing { color: #2f66aa; border-color: #c6dbf5; background: #f2f7ff; }
+  .audit-pill.passed { color: #0f766e; border-color: #b9e6dc; background: #edf9f5; }
+  .audit-pill.rejected { color: #a9354f; border-color: #f0c6d0; background: #fff2f5; }
+  .card-arrow {
+    width: 8px; height: 8px; flex: none; margin-right: 4px;
+    border-top: 2px solid #17202a; border-right: 2px solid #17202a;
+    transform: rotate(45deg);
+  }
+  .audit-reject-row {
+    display: flex; align-items: flex-start; gap: 5px;
+    margin-top: 6px; padding: 6px 7px;
+    border: 1px solid #f1d38a; border-radius: 6px; background: #fff8e7;
+  }
+  .audit-reject-icon {
+    width: 14px; height: 14px; flex: none; margin-top: 1px;
+    display: flex; align-items: center; justify-content: center;
+    color: #17202a; font-size: 10px; font-weight: 900; line-height: 1;
+    border-radius: 50%; background: #f6c343;
+  }
+  .audit-reject-text { color: #7a4f0f; font-size: 11.5px; font-weight: 700; line-height: 1.38; }
+  .audit-round-text { margin-top: 6px; color: #8b661f; font-size: 10.5px; font-weight: 700; line-height: 1.3; }
+  .audit-resubmit-row { display: flex; justify-content: flex-end; margin-top: 5px; }
+  .audit-resubmit-button {
+    width: 68px; height: 25px;
+    display: flex; align-items: center; justify-content: center;
+    color: #ffffff; font-size: 11px; font-weight: 800;
+    border-radius: 999px; background: #3d6fad;
+  }
+  .list-end { padding: 14px 0 0; text-align: center; color: #66727f; font-size: 12.5px; }
+
+  /* ===== 批量管理 ===== */
+  .work-select {
+    width: 22px; height: 22px; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid #c7d4e1; border-radius: 50%; background: #ffffff;
+  }
+  .work-select.selected { border-color: #3d6fad; background: #3d6fad; }
+  .work-select-dot { width: 9px; height: 9px; border-radius: 50%; background: transparent; }
+  .work-select.selected .work-select-dot { background: #ffffff; }
+  .batch-panel {
+    margin-top: 13px; padding: 14px;
+    box-shadow: 0 9px 24px rgba(23, 32, 42, 0.06);
+  }
+  .batch-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .batch-title { font-size: 17px; font-weight: 900; color: #17202a; }
+  .batch-desc { margin-top: 2px; color: #66727f; font-size: 12.5px; line-height: 1.45; }
+  .batch-heading-actions { display: flex; align-items: center; gap: 6px; flex: none; }
+  .batch-count {
+    min-width: 52px; height: 25px;
+    display: flex; align-items: center; justify-content: center;
+    color: #9a6512; font-size: 12px; font-weight: 900;
+    border: 1px solid #f0c45d; border-radius: 999px; background: #fff8e7;
+  }
+  .batch-select-all {
+    min-width: 44px; height: 25px; padding: 0 8px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #2f66aa; font-size: 12px; font-weight: 900;
+    border: 1px solid #bdd6ff; border-radius: 999px; background: #f2f7ff;
+  }
+  .batch-actions { display: flex; gap: 8px; margin-top: 12px; }
+  .batch-action {
+    flex: 1; height: 43px;
+    display: flex; align-items: center; justify-content: center;
+    color: #17202a; font-size: 14px; font-weight: 900;
+    border: 1px solid #d8e0e8; border-radius: 7px; background: #ffffff;
+  }
+  .batch-action.danger { color: #a9354f; border-color: #efc9d3; background: #fff5f7; }
+  .batch-action.muted { color: #6f7b89; background: #f4f6f8; }
+
+  /* ===== Tabbar ===== */
+  .tabbar {
+    flex: none; height: 58px;
+    display: flex; align-items: center; justify-content: space-around;
+    border-top: 1px solid rgba(23, 32, 42, 0.08);
+    background: rgba(255, 255, 255, 0.96);
+    padding: 5px 10px 8px;
+  }
+  .tab {
+    position: relative; width: 25%; height: 48px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    color: #8b96a3;
+  }
+  .tab.active { color: #b88a44; }
+  .tab.active::before {
+    content: ""; position: absolute; top: 2px; left: 50%;
+    width: 21px; height: 3px; border-radius: 999px;
+    background: #b88a44; transform: translateX(-50%);
+  }
+  .tab-icon { font-size: 19px; line-height: 1; margin-bottom: 4px; }
+  .tab-label { font-size: 10.5px; font-weight: 700; }
+
+  /* ===== 底部弹层通用 ===== */
+  .sheet-mask {
+    position: absolute; left: 0; right: 0; top: 0; bottom: 0; z-index: 30;
+    display: flex; align-items: flex-end; padding: 14px;
+    background: rgba(23, 32, 42, 0.38);
+  }
+  .sheet-panel {
+    width: 100%;
+    display: flex; flex-direction: column; gap: 10px;
+    padding: 9px 12px 12px;
+    border: 1px solid #d8e0e8; border-radius: 12px 12px 9px 9px;
+    background: #ffffff;
+    box-shadow: 0 -10px 24px rgba(23, 32, 42, 0.18);
+  }
+  .sheet-heading { display: flex; align-items: center; justify-content: space-between; gap: 9px; }
+  .sheet-title { font-size: 15px; font-weight: 900; color: #17202a; line-height: 1.25; }
+  .sheet-desc { margin-top: 3px; color: #66727f; font-size: 12px; font-weight: 700; }
+  .sheet-type { flex: none; color: #40546a; font-size: 11px; font-weight: 800; }
+  .sheet-count {
+    min-width: 43px; height: 24px; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    color: #40546a; font-size: 11px; font-weight: 900;
+    border: 1px solid #d8e0e8; border-radius: 999px; background: #f8fafc;
+  }
+  .sheet-actions { display: flex; justify-content: space-between; gap: 8px; }
+  .btn-cancel, .btn-confirm {
+    min-width: 78px; height: 36px; padding: 0 14px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 900; border-radius: 7px;
+  }
+  .btn-cancel { color: #40546a; border: 1px solid #d8e0e8; background: #f8fafc; }
+  .btn-confirm { color: #ffffff; background: #17202a; box-shadow: 0 6px 14px rgba(23, 32, 42, 0.16); }
+
+  /* ===== 排序弹层 ===== */
+  .sort-work-list { display: flex; flex-direction: column; gap: 8px; }
+  .sort-work-row {
+    display: flex; align-items: center; gap: 8px;
+    min-height: 64px; padding: 8px;
+    border: 1px solid #d8e0e8; border-radius: 8px; background: #ffffff;
+  }
+  .sort-work-row.dragging { border-color: #3d6fad; background: #f4f8ff; box-shadow: 0 8px 17px rgba(61, 111, 173, 0.16); }
+  .sort-work-order {
+    width: 23px; height: 23px; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    color: #40546a; font-size: 11px; font-weight: 900;
+    border-radius: 50%; background: #eef4f7;
+  }
+  .sort-work-thumb { width: 52px; height: 45px; flex: none; border-radius: 6px; overflow: hidden; background: #e7edf4; }
+  .sort-work-copy { flex: 1; min-width: 0; }
+  .sort-work-title {
+    font-size: 13.5px; font-weight: 900; color: #17202a; line-height: 1.32;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .sort-work-meta { margin-top: 4px; color: #66727f; font-size: 11.5px; font-weight: 700; }
+  .sort-drag-handle {
+    width: 28px; height: 32px; flex: none;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+    border-radius: 7px; background: #f5f9ff;
+  }
+  .sort-drag-line { width: 14px; height: 2px; border-radius: 999px; background: #8b96a3; }
+
+  /* ===== 标签弹窗 ===== */
+  .tag-field { margin-top: 15px; }
+  .tag-field-label, .field-label { color: #40546a; font-size: 12px; font-weight: 800; }
+  .tag-input-box {
+    width: 100%; height: 44px; margin-top: 7px; padding: 0 12px;
+    display: flex; align-items: center;
+    color: #17202a; font-size: 15px; font-weight: 800;
+    border: 1px solid #d8e0e8; border-radius: 8px; background: #f8fafc;
+  }
+  .tag-input-box.placeholder { color: #6f7b89; font-weight: 600; }
+  .color-grid { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 8px; }
+  .color-choice {
+    width: calc((100% - 14px) / 3); height: 34px;
+    display: flex; align-items: center; justify-content: center; gap: 5px;
+    font-size: 12px; font-weight: 900; border-radius: 8px;
+    border: 1px solid transparent;
+  }
+  .color-choice.active { box-shadow: inset 0 0 0 1.5px currentColor; }
+  .color-swatch { width: 11px; height: 11px; flex: none; border-radius: 50%; }
+  .dialog-actions { display: flex; gap: 8px; margin-top: 16px; }
+  .btn-secondary, .btn-dialog {
+    flex: 1; height: 43px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 900; border-radius: 8px;
+  }
+  .btn-secondary { color: #17202a; border: 1px solid #d8e0e8; background: #ffffff; }
+  .btn-dialog { color: #ffffff; background: #17202a; }
+
+  /* ===== 编辑作品弹层表单 ===== */
+  .edit-content { display: flex; flex-direction: column; gap: 9px; }
+  .field-heading { display: flex; align-items: center; justify-content: space-between; }
+  .field-limit { flex: none; color: #8b96a3; font-size: 11px; font-weight: 700; }
+  .text-field {
+    width: 100%; height: 38px; padding: 0 10px; margin-top: 6px;
+    display: flex; align-items: center;
+    color: #17202a; font-size: 13px; font-weight: 600;
+    border: 1px solid #d8e0e8; border-radius: 8px; background: #f8fafc;
+  }
+  .textarea-field {
+    width: 100%; height: 92px; padding: 9px 10px; margin-top: 6px;
+    color: #17202a; font-size: 13px; line-height: 1.5;
+    border: 1px solid #d8e0e8; border-radius: 8px; background: #f8fafc;
+  }
+  .textarea-field.placeholder, .text-field.placeholder { color: #6f7b89; }
+  .edit-tag-list { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 7px; }
+  .edit-tag-option {
+    min-height: 29px; display: inline-flex; align-items: center; padding: 0 9px;
+    color: #40546a; font-size: 12px; font-weight: 800;
+    border: 1px solid #cbd8e5; border-radius: 4px; background: #ffffff;
+  }
+  .edit-tag-option.is-selected { color: #2d5f9a; border-color: #2d5f9a; background: #e5effb; }
+  .edit-tag-checkbox {
+    width: 14px; height: 14px; flex: none; margin-right: 5px;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid rgba(64, 84, 106, 0.42); border-radius: 3px;
+  }
+  .edit-tag-checkbox.is-checked { border-color: #2d5f9a; background: #2d5f9a; }
+  .edit-tag-checkmark { color: #ffffff; font-size: 10px; font-weight: 900; line-height: 1; }
+  .cover-state { flex: none; color: #40546a; font-size: 11px; font-weight: 800; }
+  .local-cover-preview {
+    width: 100%; height: 150px; margin-top: 6px;
+    border: 1px solid #d8e0e8; border-radius: 8px;
+    background: linear-gradient(135deg, #dfe9f2, #c9d8e6);
+    display: flex; align-items: center; justify-content: center;
+    color: #66727f; font-size: 13px; font-weight: 800;
+  }
+  .local-cover-actions {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    margin-top: 7px; padding: 7px 8px;
+    border: 1px solid #d8e0e8; border-radius: 7px; background: #f8fafc;
+  }
+  .local-cover-title { color: #17202a; font-size: 12px; font-weight: 900; }
+  .local-cover-desc { margin-top: 2px; color: #66727f; font-size: 11px; font-weight: 700; }
+  .cover-upload-compact {
+    min-width: 75px; height: 31px; flex: none; padding: 0 9px;
+    display: flex; align-items: center; justify-content: center;
+    color: #17202a; font-size: 11.5px; font-weight: 800;
+    border: 1px solid #cbd8e5; border-radius: 7px; background: #ffffff;
+  }
+  .work-preview {
+    width: 100%; height: 150px;
+    border: 1px solid #d8e0e8; border-radius: 8px; background: #eef3f7;
+    display: flex; align-items: center; justify-content: center;
+    color: #66727f; font-size: 13px; font-weight: 800;
+    background-image: linear-gradient(135deg, #2b3644, #17202a);
+    color: rgba(255,255,255,0.75);
+    position: relative;
+  }
+  .cover-standby { display: flex; gap: 7px; margin-top: 7px; }
+  .cover-btn {
+    flex: 1; height: 38px;
+    display: flex; align-items: center; justify-content: center;
+    color: #17202a; font-size: 12.5px; font-weight: 800;
+    border: 1px solid #cbd8e5; border-radius: 7px;
+  }
+  .cover-btn.gray { background: #eef3f7; }
+  .cover-btn.white { background: #ffffff; }
+
+  /* ===== 添加作品页 ===== */
+  .add-page { background: #f6f8f9; }
+  .add-content { flex: 1; overflow: hidden; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+  .upload-box {
+    min-height: 142px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px;
+    padding: 16px;
+    border: 1px dashed #aab8c4; border-radius: 8px;
+    background: linear-gradient(180deg, #ffffff, #f7faf9);
+    box-shadow: 0 3px 12px rgba(17, 24, 39, 0.05);
+  }
+  .upload-plus {
+    width: 42px; height: 42px;
+    display: flex; align-items: center; justify-content: center;
+    color: #536b82; font-size: 26px; font-weight: 900; line-height: 1;
+    border-radius: 50%; background: #eef3f7;
+  }
+  .upload-title { color: #111827; font-size: 15.5px; font-weight: 800; }
+  .upload-desc { color: #66727f; font-size: 12px; line-height: 1.55; }
+  .selected-panel {
+    display: flex; flex-direction: column; gap: 10px;
+    padding: 14px;
+    border: 1px solid #d7dee5; border-radius: 8px; background: #fcfdfd;
+    box-shadow: 0 3px 12px rgba(17, 24, 39, 0.05);
+  }
+  .panel-heading { display: flex; align-items: center; justify-content: space-between; }
+  .panel-title { color: #111827; font-size: 17px; font-weight: 800; }
+  .selected-count {
+    min-height: 25px; padding: 0 10px;
+    display: inline-flex; align-items: center;
+    color: #536b82; font-size: 12px; font-weight: 800;
+    border: 1px solid #cbd6df; border-radius: 999px; background: #eef3f7;
+  }
+  .selected-list { display: flex; flex-direction: column; gap: 8px; }
+  .selected-row {
+    display: flex; align-items: center; gap: 10px;
+    min-height: 64px; padding: 8px;
+    border: 1px solid #d7dee5; border-radius: 8px; background: #fcfdfd;
+    box-shadow: 0 3px 12px rgba(17, 24, 39, 0.05);
+  }
+  .selected-thumb {
+    position: relative; width: 56px; height: 46px; flex: none;
+    border: 1px solid rgba(17, 24, 39, 0.06); border-radius: 7px; overflow: hidden;
+    background: linear-gradient(135deg, #dfe9f2, #c9d8e6);
+  }
+  .selected-thumb.video { background: #eef3f7; }
+  .video-thumb-text {
+    width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+    color: #66727f; font-size: 12px; font-weight: 800;
+  }
+  .thumb-play-badge {
+    position: absolute; right: 5px; bottom: 5px;
+    width: 22px; height: 22px;
+    display: flex; align-items: center; justify-content: center;
+    color: #111827; font-size: 9px; font-weight: 900;
+    border-radius: 50%; background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+  }
+  .selected-copy { flex: 1; min-width: 0; }
+  .selected-title {
+    color: #111827; font-size: 15.5px; font-weight: 800; line-height: 1.25;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .selected-meta {
+    margin-top: 2px; color: #66727f; font-size: 12px; line-height: 1.55;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .selected-arrow { width: 14px; flex: none; color: #111827; font-size: 20px; font-weight: 800; text-align: right; }
+  .tag-panel {
+    display: flex; flex-direction: column;
+    padding: 14px;
+    border: 1px solid #d7dee5; border-radius: 8px; background: #fcfdfd;
+    box-shadow: 0 3px 12px rgba(17, 24, 39, 0.05);
+  }
+  .tag-panel-label { color: #66727f; font-size: 12px; font-weight: 800; }
+  .tag-chip-row { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .tag-chip {
+    height: 25px; padding: 0 9px;
+    display: inline-flex; align-items: center;
+    color: #111827; font-size: 11px; font-weight: 800;
+    border: 1px solid #d7dee5; border-radius: 999px; background: #f4f7f8;
+  }
+  .tag-chip.teal { color: #536b82; border-color: #cbd6df; background: #eef3f7; }
+  .tag-chip.blue { color: #315f9d; border-color: #bdd5ff; background: #e8effa; }
+  .tag-add-trigger {
+    height: 25px; padding: 0 11px;
+    display: inline-flex; align-items: center;
+    color: #111827; font-size: 11px; font-weight: 800;
+    border: 1px solid #d7dee5; border-radius: 999px; background: #f8fafb;
+  }
+  .tag-note {
+    margin-top: 8px; padding: 9px 10px;
+    color: #66727f; font-size: 12px; line-height: 1.55;
+    border: 1px solid #d7dee5; border-radius: 8px; background: #f8fafb;
+  }
+  .primary-btn {
+    width: 100%; height: 44px;
+    display: flex; align-items: center; justify-content: center;
+    color: #ffffff; font-size: 14px; font-weight: 800;
+    border-radius: 8px;
+    background: linear-gradient(180deg, #263445, #111827);
+    box-shadow: 0 10px 22px rgba(17, 24, 39, 0.2);
+  }
+  .primary-btn.empty-disabled {
+    color: #5f6b78; border: 1px solid #d7dee5; background: #e6ebf0; box-shadow: none;
+  }
+  .empty-state-add {
+    padding: 32px 16px; text-align: center;
+    border: 1px solid #d7dee5; border-radius: 8px; background: #fcfdfd;
+    box-shadow: 0 3px 12px rgba(17, 24, 39, 0.05);
+  }
+  .empty-title-add { color: #111827; font-size: 15.5px; font-weight: 800; }
+  .empty-desc-add { margin-top: 6px; color: #66727f; font-size: 12px; line-height: 1.55; }
+
+  /* ===== 标签选择弹层(work-add) ===== */
+  .picker-panel { background: #fcfdfd; border-color: #d7dee5; }
+  .picker-title { color: #111827; font-size: 15px; font-weight: 800; }
+  .picker-count {
+    min-height: 24px; padding: 0 9px;
+    display: inline-flex; align-items: center;
+    color: #536b82; font-size: 11px; font-weight: 800;
+    border: 1px solid #cbd6df; border-radius: 999px; background: #eef3f7;
+  }
+  .picker-options { display: flex; flex-wrap: wrap; gap: 7px; }
+  .tag-option {
+    min-height: 29px; display: inline-flex; align-items: center; gap: 6px; padding: 0 9px;
+    font-size: 12px; font-weight: 800;
+    border: 1px solid #d7dee5; border-radius: 999px; background: #f4f7f8;
+  }
+  .tag-option.selected { box-shadow: 0 0 0 1px rgba(17, 24, 39, 0.08); }
+  .tag-option-check { width: 15px; font-size: 12px; font-weight: 900; text-align: center; }
+  .picker-actions { display: flex; justify-content: flex-end; gap: 8px; }
+  .picker-clear, .picker-confirm {
+    min-width: 78px; height: 36px; padding: 0 14px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 800; border-radius: 7px;
+  }
+  .picker-clear { color: #536b82; border: 1px solid #d7dee5; background: #f8fafb; }
+  .picker-confirm {
+    color: #ffffff;
+    background: linear-gradient(180deg, #263445, #111827);
+    box-shadow: 0 6px 14px rgba(17, 24, 39, 0.16);
+  }
+
+  /* ===== 编辑作品页 work-edit ===== */
+  .edit-page-content { flex: 1; overflow: hidden; padding: 14px 14px 90px; }
+  .we-panel {
+    padding: 11px;
+    border: 1px solid #e2e8ee; border-radius: 8px; background: #ffffff;
+  }
+  .preview-panel { display: flex; align-items: center; gap: 10px; }
+  .preview-media {
+    position: relative; width: 84px; height: 84px; flex: none;
+    border-radius: 8px; overflow: hidden;
+    background: linear-gradient(135deg, #dfe9f2, #c9d8e6);
+    display: flex; align-items: center; justify-content: center;
+    color: #66727f; font-size: 13px; font-weight: 800;
+  }
+  .media-badge {
+    position: absolute; left: 5px; bottom: 5px;
+    height: 18px; padding: 0 6px;
+    display: flex; align-items: center;
+    color: #ffffff; font-size: 9.5px;
+    border-radius: 999px; background: rgba(23, 32, 42, 0.76);
+  }
+  .preview-copy { flex: 1; min-width: 0; }
+  .preview-title { color: #17202a; font-size: 16px; font-weight: 800; line-height: 1.35; }
+  .preview-meta { margin-top: 3px; color: #758190; font-size: 11.5px; line-height: 1.45; }
+  .form-panel, .reference-panel { margin-top: 10px; }
+  .we-field-label { margin-top: 11px; color: #17202a; font-size: 12.5px; font-weight: 800; }
+  .we-field-label:first-child { margin-top: 0; }
+  .we-field-label .counter { color: #758190; font-size: 11.5px; font-weight: 400; }
+  .we-text-input {
+    height: 36px; margin-top: 4px; padding: 0 9px;
+    display: flex; align-items: center;
+    color: #17202a; font-size: 13.5px;
+    border-radius: 7px; background: #f5f8fb;
+  }
+  .tag-editor { display: flex; align-items: center; gap: 6px; margin-top: 5px; }
+  .tag-editor .we-text-input { flex: 1; margin-top: 0; color: #758190; }
+  .tag-add-btn2 {
+    height: 29px; padding: 0 10px;
+    display: flex; align-items: center;
+    color: #0f766e; font-size: 12px; font-weight: 800;
+    border-radius: 999px; background: #dcf7f1;
+  }
+  .we-tag-list { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+  .we-tag-pill {
+    height: 29px; padding: 0 10px;
+    display: flex; align-items: center;
+    color: #0f766e; font-size: 12px; font-weight: 800;
+    border-radius: 999px; background: #dcf7f1;
+  }
+  .we-desc-input {
+    width: 100%; height: 95px; margin-top: 5px; padding: 9px;
+    color: #41505f; font-size: 12.5px; line-height: 1.45;
+    border-radius: 7px; background: #f5f8fb;
+  }
+  .reference-title { color: #17202a; font-size: 14px; font-weight: 800; }
+  .reference-meta { margin-top: 2px; color: #758190; font-size: 11.5px; }
+  .reference-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    min-height: 41px; border-top: 1px solid #edf1f5; margin-top: 4px;
+  }
+  .reference-row-title { color: #17202a; font-size: 12.5px; font-weight: 800; }
+  .reference-path { color: #758190; font-size: 11.5px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .danger-btn {
+    width: 100%; height: 44px; margin-top: 10px;
+    display: flex; align-items: center; justify-content: center;
+    color: #a9354f; font-size: 14px; font-weight: 800;
+    border: 1px solid #f3c5cf; border-radius: 9px; background: #fff3f6;
+  }
+  .bottom-action {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    padding: 9px 14px 12px;
+    border-top: 1px solid rgba(23, 32, 42, 0.08);
+    background: rgba(255, 255, 255, 0.96);
+  }
+  .bottom-action .save-btn {
+    width: 100%; height: 44px;
+    display: flex; align-items: center; justify-content: center;
+    color: #ffffff; font-size: 14px; font-weight: 800;
+    border-radius: 9px; background: #17202a;
+  }
+
+  .note {
+    max-width: 1280px; margin: 36px auto 0;
+    font-size: 12px; color: #8b96a3; line-height: 1.8;
+  }
+</style>
+</head>
+<body>
+
+<div class="doc-header">
+  <h1>04 作品模块 · 静态设计稿</h1>
+  <div class="sub">依据 projects/miniapp/pages/works 下的 wxml / wxss / js 提取真实文案、颜色与间距(rpx 按 1/2 换算为 px)。未上传封面的作品展示代码中真实默认封面 assets/system/work-logo-100kb.jpg;用户上传的图片/视频缩略图属动态内容,以渐变占位。</div>
+  <div class="pages">
+    <span>pages/works/works 作品列表</span>
+    <span>pages/works/works 批量管理 / 排序 / 标签 / 编辑弹层</span>
+    <span>pages/works/work-add/work-add 添加作品</span>
+    <span>pages/works/work-edit/work-edit 编辑作品</span>
+  </div>
+</div>
+
+<div class="frames">
+
+  <!-- ========== 01 作品列表页 ========== -->
+  <div class="frame-item">
+    <div class="frame-label">01 作品列表页<span class="path">pages/works/works</span></div>
+    <div class="phone">
+      <div class="statusbar navbar-bg-works"><span>9:41</span><span class="icons">📶 🔋</span></div>
+      <div class="navbar navbar-bg-works">作品</div>
+      <div class="scroll">
+        <!-- 搜索 -->
+        <div class="panel search-box">
+          <div class="search-icon"></div>
+          <div class="search-input">搜索作品标题、标签</div>
+        </div>
+        <!-- 标签筛选 -->
+        <div class="panel filter-panel">
+          <div class="filter-shell">
+            <div class="tag-row-scroll">
+              <div class="tag-pill active">全部 12</div>
+              <div class="tag-pill" style="color:#0f766e;background:#dcf7f1;border-color:#a7eadc;">婚礼跟拍 5</div>
+              <div class="tag-pill" style="color:#2d5f9a;background:#e5effb;border-color:#bfd7f4;">婚纱写真 3</div>
+              <div class="tag-pill" style="color:#8a4b09;background:#fff0d7;border-color:#f5d29b;">现场快剪 2</div>
+            </div>
+            <div class="tag-add-btn">+</div>
+          </div>
+        </div>
+        <!-- 素材库 -->
+        <div class="panel library-panel">
+          <div class="list-heading">
+            <div class="section-title">素材库</div>
+            <div class="list-actions">
+              <div class="text-action">批量管理</div>
+              <div class="tag-add-btn">+</div>
+            </div>
+          </div>
+          <div class="work-list">
+            <div class="work-card">
+              <div class="work-thumb" style="background:linear-gradient(135deg,#dfe9f2,#c9d8e6);"></div>
+              <div class="work-copy">
+                <div class="work-title">户外草坪婚礼仪式跟拍</div>
+                <div class="work-meta">图片 / 婚礼跟拍 / 长宽比 4:3</div>
+                <div class="work-status-row">
+                  <div class="pill reference-pill used">引用 2 次</div>
+                  <div class="pill audit-pill passed">审核通过</div>
+                </div>
+              </div>
+              <div class="card-arrow"></div>
+            </div>
+            <div class="work-card">
+              <div class="work-thumb" style="background:linear-gradient(135deg,#2b3644,#17202a);"><div class="play-badge"></div></div>
+              <div class="work-copy">
+                <div class="work-title">酒店晚宴 First Dance</div>
+                <div class="work-meta">视频 · 01:32 / 现场快剪 / 长宽比 16:9</div>
+                <div class="work-status-row">
+                  <div class="pill reference-pill used">引用 1 次</div>
+                  <div class="pill audit-pill auditing">审核中</div>
+                </div>
+              </div>
+              <div class="card-arrow"></div>
+            </div>
+            <div class="work-card">
+              <div class="work-thumb"><img class="thumb-cover-img" src="assets/system/work-logo-100kb.jpg" alt="默认封面"></div>
+              <div class="work-copy">
+                <div class="work-title">白纱内景肖像</div>
+                <div class="work-meta">图片 / 婚纱写真 / 长宽比 3:4</div>
+                <div class="work-status-row">
+                  <div class="pill reference-pill">未引用</div>
+                  <div class="pill audit-pill pending">未审核</div>
+                </div>
+              </div>
+              <div class="card-arrow"></div>
+            </div>
+            <div class="work-card">
+              <div class="work-thumb" style="background:linear-gradient(135deg,#3a4654,#232c38);"><div class="play-badge"></div></div>
+              <div class="work-copy">
+                <div class="work-title">接亲游戏花絮</div>
+                <div class="work-meta">视频 · 00:45 / 未设置标签 / 长宽比 9:16</div>
+                <div class="work-status-row">
+                  <div class="pill reference-pill">未引用</div>
+                  <div class="pill audit-pill rejected">确认违规</div>
+                </div>
+                <div class="audit-reject-row">
+                  <div class="audit-reject-icon">!</div>
+                  <div style="flex:1;min-width:0;">
+                    <div class="audit-reject-text">画面包含平台限制展示的内容</div>
+                    <div class="audit-round-text">第 1/3 轮 · 还可重审 2 次</div>
+                    <div class="audit-resubmit-row"><div class="audit-resubmit-button">重新审核</div></div>
+                  </div>
+                </div>
+              </div>
+              <div class="card-arrow"></div>
+            </div>
+          </div>
+          <div class="list-end">已显示全部作品</div>
+        </div>
+      </div>
+      <!-- Tabbar -->
+      <div class="tabbar">
+        <div class="tab"><div class="tab-icon">📅</div><div class="tab-label">档期</div></div>
+        <div class="tab active"><div class="tab-icon">🖼</div><div class="tab-label">作品</div></div>
+        <div class="tab"><div class="tab-icon">🗂</div><div class="tab-label">作品集</div></div>
+        <div class="tab"><div class="tab-icon">👤</div><div class="tab-label">我的</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 02 批量管理模式 ========== -->
+  <div class="frame-item">
+    <div class="frame-label">02 作品列表 · 批量管理模式<span class="path">pages/works/works(batchMode)</span></div>
+    <div class="phone">
+      <div class="statusbar navbar-bg-works"><span>9:41</span><span class="icons">📶 🔋</span></div>
+      <div class="navbar navbar-bg-works">作品</div>
+      <div class="scroll">
+        <div class="panel search-box">
+          <div class="search-icon"></div>
+          <div class="search-input">搜索作品标题、标签</div>
+        </div>
+        <div class="panel filter-panel">
+          <div class="filter-shell">
+            <div class="tag-row-scroll">
+              <div class="tag-pill active">全部 12</div>
+              <div class="tag-pill" style="color:#0f766e;background:#dcf7f1;border-color:#a7eadc;">婚礼跟拍 5</div>
+              <div class="tag-pill" style="color:#2d5f9a;background:#e5effb;border-color:#bfd7f4;">婚纱写真 3</div>
+            </div>
+            <div class="tag-add-btn">+</div>
+          </div>
+        </div>
+        <div class="panel library-panel">
+          <div class="list-heading">
+            <div class="section-title">素材库</div>
+            <div class="list-actions">
+              <div class="text-action active">完成</div>
+              <div class="tag-add-btn">+</div>
+            </div>
+          </div>
+          <div class="work-list">
+            <div class="work-card selected">
+              <div class="work-select selected"><div class="work-select-dot"></div></div>
+              <div class="work-thumb" style="background:linear-gradient(135deg,#dfe9f2,#c9d8e6);"></div>
+              <div class="work-copy">
+                <div class="work-title">户外草坪婚礼仪式跟拍</div>
+                <div class="work-meta">图片 / 婚礼跟拍 / 长宽比 4:3</div>
+                <div class="work-status-row">
+                  <div class="pill reference-pill used">引用 2 次</div>
+                  <div class="pill audit-pill passed">审核通过</div>
+                </div>
+              </div>
+            </div>
+            <div class="work-card selected">
+              <div class="work-select selected"><div class="work-select-dot"></div></div>
+              <div class="work-thumb" style="background:linear-gradient(135deg,#2b3644,#17202a);"><div class="play-badge"></div></div>
+              <div class="work-copy">
+                <div class="work-title">酒店晚宴 First Dance</div>
+                <div class="work-meta">视频 · 01:32 / 现场快剪 / 长宽比 16:9</div>
+                <div class="work-status-row">
+                  <div class="pill reference-pill used">引用 1 次</div>
+                  <div class="pill audit-pill auditing">审核中</div>
+                </div>
+              </div>
+            </div>
+            <div class="work-card">
+              <div class="work-select"><div class="work-select-dot"></div></div>
+              <div class="work-thumb"><img class="thumb-cover-img" src="assets/system/work-logo-100kb.jpg" alt="默认封面"></div>
+              <div class="work-copy">
+                <div class="work-title">白纱内景肖像</div>
+                <div class="work-meta">图片 / 婚纱写真 / 长宽比 3:4</div>
+                <div class="work-status-row">
+                  <div class="pill reference-pill">未引用</div>
+                  <div class="pill audit-pill pending">未审核</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- 批量动作面板 -->
+        <div class="panel batch-panel">
+          <div class="batch-heading">
+            <div>
+              <div class="batch-title">批量动作</div>
+              <div class="batch-desc">选择多个作品后可统一删除,作品集入口先保留位置</div>
+            </div>
+            <div class="batch-heading-actions">
+              <div class="batch-count">2 已选</div>
+              <div class="batch-select-all">全选</div>
+            </div>
+          </div>
+          <div class="batch-actions">
+            <div class="batch-action danger">删除</div>
+            <div class="batch-action muted">加入作品集</div>
+            <div class="batch-action">调整排序</div>
+          </div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <div class="tab"><div class="tab-icon">📅</div><div class="tab-label">档期</div></div>
+        <div class="tab active"><div class="tab-icon">🖼</div><div class="tab-label">作品</div></div>
+        <div class="tab"><div class="tab-icon">🗂</div><div class="tab-label">作品集</div></div>
+        <div class="tab"><div class="tab-icon">👤</div><div class="tab-label">我的</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 03 调整排序弹层 ========== -->
+  <div class="frame-item">
+    <div class="frame-label">03 调整排序弹层<span class="path">pages/works/works(sortMode)</span></div>
+    <div class="phone">
+      <div class="statusbar navbar-bg-works"><span>9:41</span><span class="icons">📶 🔋</span></div>
+      <div class="navbar navbar-bg-works">作品</div>
+      <div class="scroll"></div>
+      <div class="sheet-mask">
+        <div class="sheet-panel">
+          <div class="grabber"></div>
+          <div class="sheet-heading">
+            <div>
+              <div class="sheet-title">调整全部作品顺序</div>
+              <div class="sheet-desc">调整完成后保存生效</div>
+            </div>
+            <div class="sheet-count">4 个</div>
+          </div>
+          <div class="sort-work-list">
+            <div class="sort-work-row">
+              <div class="sort-work-order">1</div>
+              <div class="sort-work-thumb" style="background:linear-gradient(135deg,#dfe9f2,#c9d8e6);"></div>
+              <div class="sort-work-copy">
+                <div class="sort-work-title">户外草坪婚礼仪式跟拍</div>
+                <div class="sort-work-meta">图片</div>
+              </div>
+              <div class="sort-drag-handle"><div class="sort-drag-line"></div><div class="sort-drag-line"></div><div class="sort-drag-line"></div></div>
+            </div>
+            <div class="sort-work-row dragging">
+              <div class="sort-work-order">2</div>
+              <div class="sort-work-thumb" style="background:linear-gradient(135deg,#2b3644,#17202a);"></div>
+              <div class="sort-work-copy">
+                <div class="sort-work-title">酒店晚宴 First Dance</div>
+                <div class="sort-work-meta">视频</div>
+              </div>
+              <div class="sort-drag-handle"><div class="sort-drag-line"></div><div class="sort-drag-line"></div><div class="sort-drag-line"></div></div>
+            </div>
+            <div class="sort-work-row">
+              <div class="sort-work-order">3</div>
+              <div class="sort-work-thumb"><img class="thumb-cover-img" src="assets/system/work-logo-100kb.jpg" alt="默认封面"></div>
+              <div class="sort-work-copy">
+                <div class="sort-work-title">白纱内景肖像</div>
+                <div class="sort-work-meta">图片</div>
+              </div>
+              <div class="sort-drag-handle"><div class="sort-drag-line"></div><div class="sort-drag-line"></div><div class="sort-drag-line"></div></div>
+            </div>
+            <div class="sort-work-row">
+              <div class="sort-work-order">4</div>
+              <div class="sort-work-thumb" style="background:linear-gradient(135deg,#3a4654,#232c38);"></div>
+              <div class="sort-work-copy">
+                <div class="sort-work-title">接亲游戏花絮</div>
+                <div class="sort-work-meta">视频</div>
+              </div>
+              <div class="sort-drag-handle"><div class="sort-drag-line"></div><div class="sort-drag-line"></div><div class="sort-drag-line"></div></div>
+            </div>
+          </div>
+          <div class="sheet-actions">
+            <div class="btn-cancel">取消</div>
+            <div class="btn-confirm">保存排序</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 04 新增标签弹窗 ========== -->
+  <div class="frame-item">
+    <div class="frame-label">04 新增标签弹窗<span class="path">pages/works/works(tagDialog)</span></div>
+    <div class="phone">
+      <div class="statusbar navbar-bg-works"><span>9:41</span><span class="icons">📶 🔋</span></div>
+      <div class="navbar navbar-bg-works">作品</div>
+      <div class="scroll"></div>
+      <div class="sheet-mask">
+        <div class="sheet-panel">
+          <div class="grabber"></div>
+          <div class="sheet-heading">
+            <div class="sheet-title">新增标签</div>
+          </div>
+          <div class="tag-field">
+            <div class="tag-field-label">标签文字</div>
+            <div class="tag-input-box">婚礼跟拍</div>
+          </div>
+          <div class="tag-field">
+            <div class="tag-field-label">标签颜色</div>
+            <div class="color-grid">
+              <div class="color-choice active" style="color:#0f766e;background:#dcf7f1;border-color:#a7eadc;"><div class="color-swatch" style="background:#0f766e;"></div>青绿</div>
+              <div class="color-choice" style="color:#2d5f9a;background:#e5effb;border-color:#bfd7f4;"><div class="color-swatch" style="background:#2d5f9a;"></div>湖蓝</div>
+              <div class="color-choice" style="color:#8a4b09;background:#fff0d7;border-color:#f5d29b;"><div class="color-swatch" style="background:#8a4b09;"></div>琥珀</div>
+              <div class="color-choice" style="color:#a9354f;background:#fde7ed;border-color:#f5bfcc;"><div class="color-swatch" style="background:#a9354f;"></div>玫红</div>
+              <div class="color-choice" style="color:#6d5bd0;background:#eeeafd;border-color:#d2c9fa;"><div class="color-swatch" style="background:#6d5bd0;"></div>紫藤</div>
+              <div class="color-choice" style="color:#3f6f45;background:#e6f3e8;border-color:#bfdcc4;"><div class="color-swatch" style="background:#3f6f45;"></div>森绿</div>
+              <div class="color-choice" style="color:#36516e;background:#e7edf4;border-color:#c6d3e2;"><div class="color-swatch" style="background:#36516e;"></div>墨蓝</div>
+              <div class="color-choice" style="color:#9a4a35;background:#f8e8e2;border-color:#e9c2b5;"><div class="color-swatch" style="background:#9a4a35;"></div>砖红</div>
+              <div class="color-choice" style="color:#4b5563;background:#eef2f6;border-color:#d5dce5;"><div class="color-swatch" style="background:#4b5563;"></div>石墨</div>
+            </div>
+          </div>
+          <div class="dialog-actions">
+            <div class="btn-secondary">取消</div>
+            <div class="btn-dialog">保存</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 05 编辑图片作品弹层 ========== -->
+  <div class="frame-item">
+    <div class="frame-label">05 编辑图片作品弹层<span class="path">pages/works/works(imageEditSheet)</span></div>
+    <div class="phone">
+      <div class="statusbar navbar-bg-works"><span>9:41</span><span class="icons">📶 🔋</span></div>
+      <div class="navbar navbar-bg-works">作品</div>
+      <div class="scroll"></div>
+      <div class="sheet-mask">
+        <div class="sheet-panel">
+          <div class="grabber"></div>
+          <div class="sheet-heading">
+            <div class="sheet-title">编辑图片作品</div>
+            <div class="sheet-type">图片</div>
+          </div>
+          <div class="edit-content">
+            <!-- 缩略图 -->
+            <div>
+              <div class="field-heading">
+                <div class="field-label">缩略图</div>
+                <div class="cover-state">当前缩略图</div>
+              </div>
+              <div class="local-cover-preview">缩略图预览</div>
+              <div class="local-cover-actions">
+                <div>
+                  <div class="local-cover-title">列表缩略图</div>
+                  <div class="local-cover-desc">可裁剪原图生成新缩略图</div>
+                </div>
+                <div class="cover-upload-compact">编辑</div>
+              </div>
+            </div>
+            <!-- 标题 -->
+            <div>
+              <div class="field-heading">
+                <div class="field-label">作品标题</div>
+                <div class="field-limit">12/30</div>
+              </div>
+              <div class="text-field">户外草坪婚礼仪式跟拍</div>
+            </div>
+            <!-- 说明 -->
+            <div>
+              <div class="field-heading">
+                <div class="field-label">作品说明</div>
+                <div class="field-limit">0/1000</div>
+              </div>
+              <div class="textarea-field placeholder">填写作品说明</div>
+            </div>
+            <!-- 标签 -->
+            <div>
+              <div class="field-label">作品标签</div>
+              <div class="edit-tag-list">
+                <div class="edit-tag-option is-selected"><div class="edit-tag-checkbox is-checked"><span class="edit-tag-checkmark">✓</span></div>婚礼跟拍</div>
+                <div class="edit-tag-option"><div class="edit-tag-checkbox"></div>婚纱写真</div>
+                <div class="edit-tag-option"><div class="edit-tag-checkbox"></div>现场快剪</div>
+              </div>
+            </div>
+          </div>
+          <div class="sheet-actions">
+            <div class="btn-cancel">取消</div>
+            <div class="btn-confirm">完成</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 06 编辑视频作品弹层 ========== -->
+  <div class="frame-item">
+    <div class="frame-label">06 编辑视频作品弹层<span class="path">pages/works/works(videoEditSheet)</span></div>
+    <div class="phone">
+      <div class="statusbar navbar-bg-works"><span>9:41</span><span class="icons">📶 🔋</span></div>
+      <div class="navbar navbar-bg-works">作品</div>
+      <div class="scroll"></div>
+      <div class="sheet-mask">
+        <div class="sheet-panel">
+          <div class="grabber"></div>
+          <div class="sheet-heading">
+            <div class="sheet-title">编辑视频作品</div>
+            <div class="sheet-type">视频</div>
+          </div>
+          <div class="edit-content">
+            <div class="work-preview">视频封面预览</div>
+            <div>
+              <div class="field-heading">
+                <div class="field-label">作品标题</div>
+                <div class="field-limit">15/30</div>
+              </div>
+              <div class="text-field">酒店晚宴 First Dance</div>
+            </div>
+            <div>
+              <div class="field-heading">
+                <div class="field-label">作品说明</div>
+                <div class="field-limit">0/1000</div>
+              </div>
+              <div class="textarea-field placeholder">填写作品说明</div>
+            </div>
+            <div>
+              <div class="field-label">作品标签</div>
+              <div class="edit-tag-list">
+                <div class="edit-tag-option"><div class="edit-tag-checkbox"></div>婚礼跟拍</div>
+                <div class="edit-tag-option"><div class="edit-tag-checkbox"></div>婚纱写真</div>
+                <div class="edit-tag-option is-selected"><div class="edit-tag-checkbox is-checked"><span class="edit-tag-checkmark">✓</span></div>现场快剪</div>
+              </div>
+            </div>
+            <div>
+              <div class="field-heading">
+                <div class="field-label">视频封面</div>
+              </div>
+              <div class="cover-standby">
+                <div class="cover-btn gray">选帧修改封面</div>
+                <div class="cover-btn white">上传封面</div>
+              </div>
+            </div>
+          </div>
+          <div class="sheet-actions">
+            <div class="btn-cancel">取消</div>
+            <div class="btn-confirm">完成</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 07 添加作品页 ========== -->
+  <div class="frame-item">
+    <div class="frame-label">07 添加作品页<span class="path">pages/works/work-add/work-add</span></div>
+    <div class="phone add-page">
+      <div class="statusbar navbar-bg-add"><span>9:41</span><span class="icons">📶 🔋</span></div>
+      <div class="navbar navbar-bg-add"><div class="back"></div>添加作品</div>
+      <div class="add-content">
+        <div class="upload-box">
+          <div class="upload-plus">+</div>
+          <div class="upload-title">选择图片或视频</div>
+          <div class="upload-desc">一次最多勾选 9 个,标题默认使用文件名。</div>
+        </div>
+        <div class="selected-panel">
+          <div class="panel-heading">
+            <div class="panel-title">已选作品</div>
+            <div class="selected-count">3 / 9</div>
+          </div>
+          <div class="selected-list">
+            <div class="selected-row">
+              <div class="selected-thumb"></div>
+              <div class="selected-copy">
+                <div class="selected-title">草坪仪式全景</div>
+                <div class="selected-meta">默认标题 · 图片</div>
+              </div>
+              <div class="selected-arrow">›</div>
+            </div>
+            <div class="selected-row">
+              <div class="selected-thumb video"><div class="video-thumb-text">视频</div><div class="thumb-play-badge">▶</div></div>
+              <div class="selected-copy">
+                <div class="selected-title">晚宴快剪 30s</div>
+                <div class="selected-meta">默认标题 · 视频 00:32</div>
+              </div>
+              <div class="selected-arrow">›</div>
+            </div>
+            <div class="selected-row">
+              <div class="selected-thumb"></div>
+              <div class="selected-copy">
+                <div class="selected-title">新人合影特写</div>
+                <div class="selected-meta">默认标题 · 图片</div>
+              </div>
+              <div class="selected-arrow">›</div>
+            </div>
+          </div>
+        </div>
+        <div class="tag-panel">
+          <div class="tag-panel-label">统一标签(可选)</div>
+          <div class="tag-chip-row">
+            <div class="tag-chip teal">婚礼跟拍</div>
+            <div class="tag-chip blue">婚纱写真</div>
+            <div class="tag-add-trigger">+添加</div>
+          </div>
+          <div class="tag-note">选中的标签会同时应用到本次 3 个作品;作品说明可保存后补充。</div>
+        </div>
+        <div class="primary-btn">保存作品</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 08 添加作品 · 标签选择弹层 ========== -->
+  <div class="frame-item">
+    <div class="frame-label">08 添加作品 · 选择作品标签弹层<span class="path">pages/works/work-add/work-add(tagPicker)</span></div>
+    <div class="phone add-page">
+      <div class="statusbar navbar-bg-add"><span>9:41</span><span class="icons">📶 🔋</span></div>
+      <div class="navbar navbar-bg-add"><div class="back"></div>添加作品</div>
+      <div class="add-content"></div>
+      <div class="sheet-mask" style="background:rgba(17,24,39,0.35);">
+        <div class="sheet-panel picker-panel">
+          <div class="grabber" style="background:#cbd6df;"></div>
+          <div class="sheet-heading">
+            <div class="picker-title">选择作品标签</div>
+            <div class="picker-count">2 个已选</div>
+          </div>
+          <div class="picker-options">
+            <div class="tag-option selected" style="color:#0f766e;background:#dcf7f1;border-color:#a7eadc;"><div class="tag-option-name">婚礼跟拍</div><div class="tag-option-check">✓</div></div>
+            <div class="tag-option selected" style="color:#2d5f9a;background:#e5effb;border-color:#bfd7f4;"><div class="tag-option-name">婚纱写真</div><div class="tag-option-check">✓</div></div>
+            <div class="tag-option" style="color:#8a4b09;background:#fff0d7;border-color:#f5d29b;"><div class="tag-option-name">现场快剪</div><div class="tag-option-check"></div></div>
+            <div class="tag-option" style="color:#a9354f;background:#fde7ed;border-color:#f5bfcc;"><div class="tag-option-name">宝宝宴</div><div class="tag-option-check"></div></div>
+            <div class="tag-option" style="color:#36516e;background:#e7edf4;border-color:#c6d3e2;"><div class="tag-option-name">商业活动</div><div class="tag-option-check"></div></div>
+          </div>
+          <div class="picker-actions">
+            <div class="picker-clear">清空</div>
+            <div class="picker-confirm">完成</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 09 编辑作品页 ========== -->
+  <div class="frame-item">
+    <div class="frame-label">09 编辑作品页<span class="path">pages/works/work-edit/work-edit</span></div>
+    <div class="phone">
+      <div class="statusbar navbar-bg-works"><span>9:41</span><span class="icons">📶 🔋</span></div>
+      <div class="navbar navbar-bg-works"><div class="back"></div>编辑作品</div>
+      <div class="edit-page-content">
+        <!-- 预览 -->
+        <div class="we-panel preview-panel">
+          <div class="preview-media">
+            <div class="media-badge">图片</div>
+          </div>
+          <div class="preview-copy">
+            <div class="preview-title">户外草坪婚礼仪式跟拍</div>
+            <div class="preview-meta">3.2MB</div>
+          </div>
+        </div>
+        <!-- 表单 -->
+        <div class="we-panel form-panel">
+          <div class="we-field-label">标题 <span class="counter">12/30</span></div>
+          <div class="we-text-input">户外草坪婚礼仪式跟拍</div>
+          <div class="we-field-label">标签</div>
+          <div class="tag-editor">
+            <div class="we-text-input">输入标签</div>
+            <div class="tag-add-btn2">添加</div>
+          </div>
+          <div class="we-tag-list">
+            <div class="we-tag-pill">婚礼跟拍 ×</div>
+            <div class="we-tag-pill">户外婚礼 ×</div>
+          </div>
+          <div class="we-field-label">说明 <span class="counter">0/1000</span></div>
+          <div class="we-desc-input"></div>
+        </div>
+        <!-- 引用 -->
+        <div class="we-panel reference-panel">
+          <div class="panel-heading">
+            <div>
+              <div class="reference-title">引用</div>
+              <div class="reference-meta">已被 2 个作品集引用</div>
+            </div>
+          </div>
+          <div class="reference-row">
+            <div class="reference-row-title">2026 草坪婚礼精选</div>
+            <div class="reference-path">pages/portfolio-detail</div>
+          </div>
+          <div class="reference-row">
+            <div class="reference-row-title">户外仪式作品集</div>
+            <div class="reference-path">pages/portfolio-detail</div>
+          </div>
+        </div>
+        <div class="danger-btn">删除作品</div>
+      </div>
+      <div class="bottom-action"><div class="save-btn">保存</div></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="note">
+  说明:作品列表页空态为「暂无作品 / 从相册选择图片或视频,整理为可复用的作品素材」;左滑作品卡片出现红色「删除」按钮(底色 #a9354f);
+  编辑图片作品弹层另有「编辑缩略图」裁剪模式,比例选项为 原图比例 / 1:1 / 4:3 / 3:4 / 16:9 / 9:16;视频封面编辑支持「选帧修改封面」(视频 + 滑杆)与「上传封面」两种模式,此处展示默认待机态。
+</div>
+
+</body>
+</html>

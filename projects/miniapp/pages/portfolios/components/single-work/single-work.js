@@ -10,6 +10,10 @@ Component({
     },
     showTitle: {
       type: Boolean,
+      value: true
+    },
+    showDescription: {
+      type: Boolean,
       value: false
     },
     activeVideoKey: {

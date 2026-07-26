@@ -131,12 +131,16 @@ class PortfolioConfigValidatorTest {
                 PortfolioComponentTypeDict.WORK_GRID.getCode(),
                 1000,
                 true,
-                Map.of("title", "更多案例", "workIds", List.of(11L, 12L), "columns", 2)
+                Map.of("title", "更多案例", "workIds", List.of(11L, 12L), "columns", 2,
+                        "showTitle", false, "showDescription", true)
         ));
 
         PortfolioConfigDto normalized = validator().normalize(7L, config);
 
         assertThat(normalized.getComponents().get(0).getConfig().get("workIds")).isEqualTo(List.of(11L, 12L));
+        assertThat(normalized.getComponents().get(0).getConfig())
+                .containsEntry("showTitle", false)
+                .containsEntry("showDescription", true);
     }
 
     /**
@@ -154,7 +158,7 @@ class PortfolioConfigValidatorTest {
         ));
         PortfolioConfigDto videoConfig = config(component(
                 "c_video", "SINGLE_WORK", 1000, true,
-                Map.of("workId", 12L, "showTitle", false)
+                Map.of("workId", 12L, "showTitle", false, "showDescription", true)
         ));
 
         PortfolioConfigDto normalizedImage = validator().normalize(7L, imageConfig);
@@ -163,12 +167,14 @@ class PortfolioConfigValidatorTest {
         assertThat(normalizedImage.getComponents().get(0).getConfig())
                 .containsExactly(
                         Map.entry("workId", 11L),
-                        Map.entry("showTitle", true)
+                        Map.entry("showTitle", true),
+                        Map.entry("showDescription", false)
                 );
         assertThat(normalizedVideo.getComponents().get(0).getConfig())
                 .containsExactly(
                         Map.entry("workId", 12L),
-                        Map.entry("showTitle", false)
+                        Map.entry("showTitle", false),
+                        Map.entry("showDescription", true)
                 );
     }
 

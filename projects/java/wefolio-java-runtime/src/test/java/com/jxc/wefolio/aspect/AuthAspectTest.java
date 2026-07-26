@@ -147,6 +147,7 @@ class AuthAspectTest {
         doAnswer(invocation -> {
             assertThat(VisitorContextHolder.requireVisitorId()).isEqualTo(1024L);
             assertThat(VisitorContextHolder.requireVisitorKey()).isEqualTo("visitor-key");
+            assertThat(VisitorContextHolder.current().orElseThrow().isTimelineAnonymous()).isFalse();
             return Response.success("public portfolio");
         }).when(joinPoint).proceed();
         AuthAspect aspect = aspect();
@@ -165,7 +166,10 @@ class AuthAspectTest {
         setJoinPointMethod(TimelineVisitorFixtureController.class, "scheduleEndpoint");
         when(visitorAuthTokenService.resolveAuthenticatedVisitor("Bearer wf-visitor-timeline-v1.token"))
                 .thenReturn(Optional.of(timelineAnonymousVisitorToken("PERSONAL:PF001")));
-        when(joinPoint.proceed()).thenReturn(Response.success("schedule"));
+        doAnswer(invocation -> {
+            assertThat(VisitorContextHolder.current().orElseThrow().isTimelineAnonymous()).isTrue();
+            return Response.success("schedule");
+        }).when(joinPoint).proceed();
 
         Object result = aspect().authenticate(joinPoint);
 

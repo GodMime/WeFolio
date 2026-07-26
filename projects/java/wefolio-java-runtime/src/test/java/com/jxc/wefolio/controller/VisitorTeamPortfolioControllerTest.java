@@ -25,6 +25,7 @@ import com.jxc.wefolio.service.teamportfolio.component.carousel.TeamCarouselComp
 import com.jxc.wefolio.service.teamportfolio.component.contactform.TeamContactFormComponentService;
 import com.jxc.wefolio.service.teamportfolio.component.memberportfoliogrid.TeamMemberPortfolioGridComponentService;
 import com.jxc.wefolio.service.teamportfolio.component.memberportfoliolist.TeamMemberPortfolioListComponentService;
+import com.jxc.wefolio.service.teamportfolio.component.singlework.TeamSingleWorkComponentService;
 import com.jxc.wefolio.service.AuthTokenService;
 import com.jxc.wefolio.service.VisitorAuthTokenService;
 import org.aspectj.lang.ProceedingJoinPoint;
@@ -265,6 +266,7 @@ class VisitorTeamPortfolioControllerTest {
                 service,
                 mock(TeamPortfolioAssetService.class),
                 mock(TeamCarouselComponentService.class),
+                mock(TeamSingleWorkComponentService.class),
                 mock(TeamMemberPortfolioGridComponentService.class),
                 mock(TeamMemberPortfolioListComponentService.class),
                 mock(TeamMemberPortfolioPreviewService.class));

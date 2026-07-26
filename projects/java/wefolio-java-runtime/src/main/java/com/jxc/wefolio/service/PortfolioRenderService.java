@@ -40,6 +40,9 @@ public class PortfolioRenderService {
     /** 是否展示作品名配置键 */
     private static final String CONFIG_KEY_SHOW_TITLE = "showTitle";
 
+    /** 是否展示作品说明配置键 */
+    private static final String CONFIG_KEY_SHOW_DESCRIPTION = "showDescription";
+
     /** 作品集展示标签配置键 */
     private static final String CONFIG_KEY_GROUPS = "groups";
 
@@ -228,7 +231,10 @@ public class PortfolioRenderService {
         switch (componentType) {
             case CAROUSEL -> render.setWorks(buildWorks(ownerId, asLongList(componentConfig.get(CONFIG_KEY_WORK_IDS))));
             case PROFILE -> render.setProfile(buildProfile(componentConfig));
-            case WORK_GRID, WORK_LIST -> render.setGroups(buildDisplayGroups(ownerId, componentConfig));
+            case WORK_GRID, WORK_LIST -> {
+                applyWorkDisplayOptions(render, componentConfig);
+                render.setGroups(buildDisplayGroups(ownerId, componentConfig));
+            }
             case SINGLE_WORK -> buildSingleWork(render, ownerId, componentConfig);
             case SCHEDULE_QUERY -> render.setScheduleQuery(buildScheduleQuery(componentConfig));
             case QR_CONTACT -> render.setQrContact(buildQrContact(componentConfig));
@@ -251,14 +257,29 @@ public class PortfolioRenderService {
             Long ownerId,
             Map<String, Object> componentConfig
     ) {
-        Object showTitle = componentConfig.get(CONFIG_KEY_SHOW_TITLE);
-        render.setShowTitle(showTitle instanceof Boolean value ? value : Boolean.TRUE);
+        applyWorkDisplayOptions(render, componentConfig);
         Long workId = asLong(componentConfig.get(CONFIG_KEY_WORK_ID));
         if (workId == null || workId <= 0L) {
             return;
         }
         List<PortfolioRenderDto.WorkItem> works = buildWorks(ownerId, List.of(workId));
         render.setWork(works.isEmpty() ? null : works.get(0));
+    }
+
+    /**
+     * 应用作品标题和说明展示开关。
+     *
+     * @param render 渲染组件
+     * @param componentConfig 组件配置
+     */
+    private void applyWorkDisplayOptions(
+            PortfolioRenderDto.Component render,
+            Map<String, Object> componentConfig
+    ) {
+        Object showTitle = componentConfig.get(CONFIG_KEY_SHOW_TITLE);
+        render.setShowTitle(showTitle instanceof Boolean value ? value : Boolean.TRUE);
+        Object showDescription = componentConfig.get(CONFIG_KEY_SHOW_DESCRIPTION);
+        render.setShowDescription(showDescription instanceof Boolean value ? value : Boolean.FALSE);
     }
 
     /**

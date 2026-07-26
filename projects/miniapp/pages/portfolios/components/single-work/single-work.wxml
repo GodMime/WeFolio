@@ -54,5 +54,8 @@
     data-media-type="{{work.mediaType}}"
     bindtap="handleSingleWorkTap"
   >{{repairMode ? '图片地址缺失' : '图片不可用'}}</view>
-  <view wx:if="{{showTitle}}" class="single-work-title">{{work.title}}</view>
+  <view class="single-work-copy">
+    <view wx:if="{{showTitle && work.title}}" class="single-work-title">{{work.title}}</view>
+    <view wx:if="{{showDescription && work.description}}" class="single-work-description">{{work.description}}</view>
+  </view>
 </view>

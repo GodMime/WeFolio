@@ -13,6 +13,7 @@ import com.jxc.wefolio.service.teamportfolio.component.memberportfoliogrid.TeamM
 import com.jxc.wefolio.service.teamportfolio.component.memberportfoliolist.TeamMemberPortfolioListComponentValidator;
 import com.jxc.wefolio.service.teamportfolio.component.qrcontact.TeamQrContactComponentValidator;
 import com.jxc.wefolio.service.teamportfolio.component.schedulequery.TeamScheduleQueryComponentValidator;
+import com.jxc.wefolio.service.teamportfolio.component.singlework.TeamSingleWorkComponentValidator;
 import com.jxc.wefolio.service.teamportfolio.component.teamprofile.TeamProfileComponentValidator;
 import com.jxc.wefolio.service.teamportfolio.component.textsection.TeamTextSectionComponentValidator;
 import org.junit.jupiter.api.Test;
@@ -41,6 +42,8 @@ class TeamPortfolioConfigValidatorTest {
     private TeamProfileComponentValidator teamProfileValidator;
     @Mock
     private TeamCarouselComponentValidator carouselValidator;
+    @Mock
+    private TeamSingleWorkComponentValidator singleWorkValidator;
     @Mock
     private TeamDividerComponentValidator dividerValidator;
     @Mock
@@ -81,10 +84,10 @@ class TeamPortfolioConfigValidatorTest {
     }
 
     /**
-     * 顶层应只按类型分发，并以稳定排序输出九种受支持组件。
+     * 顶层应只按类型分发，并以稳定排序输出十种受支持组件。
      */
     @Test
-    void normalizeAndValidateShouldDispatchExactlyNineTypesAndSortStably() {
+    void normalizeAndValidateShouldDispatchExactlyTenTypesAndSortStably() {
         TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 22L, 3);
         configureNormalizers(context);
 
@@ -107,12 +110,14 @@ class TeamPortfolioConfigValidatorTest {
                         TeamPortfolioComponentTypeDict.MEMBER_PORTFOLIO_LIST.getCode(),
                         TeamPortfolioComponentTypeDict.MEMBER_PORTFOLIO_GRID.getCode(),
                         TeamPortfolioComponentTypeDict.DIVIDER.getCode(),
+                        TeamPortfolioComponentTypeDict.SINGLE_WORK.getCode(),
                         TeamPortfolioComponentTypeDict.CAROUSEL.getCode(),
                         TeamPortfolioComponentTypeDict.TEAM_PROFILE.getCode());
         assertThat(normalized.getComponents()).allSatisfy(component ->
                 assertThat(component.getConfig().getString("dispatcher")).isEqualTo(component.getComponentType()));
         verify(teamProfileValidator).normalizeAndValidate(any(JSONObject.class), eq(context));
         verify(carouselValidator).normalizeAndValidate(any(JSONObject.class), eq(context));
+        verify(singleWorkValidator).normalizeAndValidate(any(JSONObject.class), eq(context));
         verify(dividerValidator).normalizeAndValidate(any(JSONObject.class), eq(context));
         verify(gridValidator).normalizeAndValidate(any(JSONObject.class), eq(context));
         verify(listValidator).normalizeAndValidate(any(JSONObject.class), eq(context));
@@ -224,6 +229,7 @@ class TeamPortfolioConfigValidatorTest {
             switch (type) {
                 case TEAM_PROFILE -> when(teamProfileValidator.normalizeAndValidate(any(JSONObject.class), eq(context))).thenReturn(normalized);
                 case CAROUSEL -> when(carouselValidator.normalizeAndValidate(any(JSONObject.class), eq(context))).thenReturn(normalized);
+                case SINGLE_WORK -> when(singleWorkValidator.normalizeAndValidate(any(JSONObject.class), eq(context))).thenReturn(normalized);
                 case DIVIDER -> when(dividerValidator.normalizeAndValidate(any(JSONObject.class), eq(context))).thenReturn(normalized);
                 case MEMBER_PORTFOLIO_GRID -> when(gridValidator.normalizeAndValidate(any(JSONObject.class), eq(context))).thenReturn(normalized);
                 case MEMBER_PORTFOLIO_LIST -> when(listValidator.normalizeAndValidate(any(JSONObject.class), eq(context))).thenReturn(normalized);
@@ -236,12 +242,12 @@ class TeamPortfolioConfigValidatorTest {
     }
 
     private TeamPortfolioConfigValidator service() {
-        return new TeamPortfolioConfigValidator(teamProfileValidator, carouselValidator, dividerValidator, gridValidator,
+        return new TeamPortfolioConfigValidator(teamProfileValidator, carouselValidator, singleWorkValidator, dividerValidator, gridValidator,
                 listValidator, textValidator, scheduleValidator, contactValidator, qrValidator);
     }
 
     private void verifyNoComponentValidatorInteractions() {
-        verifyNoInteractions(teamProfileValidator, carouselValidator, dividerValidator, gridValidator, listValidator,
+        verifyNoInteractions(teamProfileValidator, carouselValidator, singleWorkValidator, dividerValidator, gridValidator, listValidator,
                 textValidator, scheduleValidator, contactValidator, qrValidator);
     }
 

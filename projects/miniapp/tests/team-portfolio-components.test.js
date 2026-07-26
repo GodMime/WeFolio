@@ -5,7 +5,7 @@ const path = require('node:path')
 
 const ROOT = path.resolve(__dirname, '../pages/team-portfolios/components')
 const COMPONENTS = [
-  'team-profile', 'carousel', 'divider', 'member-portfolio-grid', 'member-portfolio-list',
+  'team-profile', 'carousel', 'single-work', 'divider', 'member-portfolio-grid', 'member-portfolio-list',
   'text-section', 'schedule-query', 'contact-form', 'qr-contact'
 ]
 
@@ -106,6 +106,13 @@ const EDIT_LIFECYCLE_CASES = [
     expectedConfig(exports, source) { return exports.buildCarouselConfig(source) }
   },
   {
+    name: 'single-work', sourceProperty: 'config', draftKey: 'draft', entryEvent: 'loadmembers', extraProperties: { portfolioId: 9 },
+    initial: { memberUserId: 1, workId: 10, showTitle: true, showDescription: false },
+    latest: { memberUserId: 2, workId: 20, showTitle: false, showDescription: true },
+    expectedDraft(exports, source) { return exports.normalizeSingleWorkConfig(source) },
+    expectedConfig(exports, source) { return exports.normalizeSingleWorkConfig(source) }
+  },
+  {
     name: 'divider', sourceProperty: 'config', draftKey: 'draft',
     initial: { color: 'GRAY', heightPx: 16 }, latest: { color: 'BLACK', heightPx: 32 },
     expectedDraft(exports, source) { return exports.normalizeDividerConfig(source) },
@@ -178,7 +185,7 @@ for (const lifecycleCase of EDIT_LIFECYCLE_CASES) {
   })
 }
 
-test('all nine components are independent four-file Component packages', () => {
+test('all ten components are independent four-file Component packages', () => {
   for (const name of COMPONENTS) {
     const directory = path.join(ROOT, name)
     for (const extension of ['js', 'json', 'wxml', 'wxss']) {
@@ -191,6 +198,64 @@ test('all nine components are independent four-file Component packages', () => {
     assert.doesNotMatch(source, /require\([^)]*components\//)
     assert.doesNotMatch(source, /switch\s*\([^)]*componentType/)
   }
+})
+
+test('single work selects member before work and keeps one 16rpx copy gap', () => {
+  const { definition, exports } = loadComponent('single-work')
+  const harness = createComponentHarness(definition, {
+    portfolioId: 9,
+    config: { memberUserId: 1, workId: 10, showTitle: true, showDescription: false },
+    editMode: true
+  })
+
+  harness.instance.selectMember({ currentTarget: { dataset: { id: 2 } } })
+  assert.deepEqual(harness.instance.data.draft, {
+    memberUserId: 2, workId: null, showTitle: true, showDescription: false
+  })
+  harness.instance.selectWork({ currentTarget: { dataset: { item: { workId: 20, mediaType: 'VIDEO' } } } })
+  harness.instance.handleShowDescriptionChange({ detail: { value: true } })
+  harness.instance.saveEdit()
+  assert.deepEqual(harness.eventsByName('save')[0].detail.config, {
+    memberUserId: 2, workId: 20, showTitle: true, showDescription: true
+  })
+  assert.equal(exports.validateSingleWorkConfig(harness.eventsByName('save')[0].detail.config).valid, true)
+
+  const wxml = fs.readFileSync(path.join(ROOT, 'single-work/single-work.wxml'), 'utf8')
+  const wxss = fs.readFileSync(path.join(ROOT, 'single-work/single-work.wxss'), 'utf8')
+  assert.match(wxml, /mode="widthFix"/)
+  assert.match(wxml, /autoplay="\{\{true\}\}"/)
+  assert.match(wxml, /showTitle && work\.title/)
+  assert.match(wxml, /showDescription && work\.description/)
+  assert.match(wxss, /single-work-copy[\s\S]*min-height:\s*16rpx[\s\S]*padding-top:\s*16rpx/)
+  assert.match(wxss, /#59636f/)
+})
+
+test('single work restores a saved member only once when sources are rebound', () => {
+  const { definition } = loadComponent('single-work')
+  const harness = createComponentHarness(definition, {
+    portfolioId: 9,
+    config: { memberUserId: 1, workId: 10, showTitle: true, showDescription: false },
+    editMode: true
+  })
+  const members = [{ memberUserId: 1, displayName: '成员一' }]
+
+  harness.setProperties({ members })
+  assert.equal(harness.eventsByName('memberchange').length, 1)
+
+  harness.setProperties({
+    members,
+    works: [{ workId: 10, title: '作品一', mediaType: 'IMAGE' }]
+  })
+  assert.equal(harness.eventsByName('memberchange').length, 1)
+})
+
+test('single work keeps the complete video and cover inside a black player', () => {
+  const wxml = fs.readFileSync(path.join(ROOT, 'single-work/single-work.wxml'), 'utf8')
+  const wxss = fs.readFileSync(path.join(ROOT, 'single-work/single-work.wxss'), 'utf8')
+
+  assert.match(wxml, /<video[^>]*class="single-work-video"[^>]*object-fit="contain"/)
+  assert.match(wxml, /<image[^>]*class="single-work-video-cover"[^>]*mode="aspectFit"/)
+  assert.match(wxss, /\.single-work-video,\s*\.single-work-video-poster\s*\{[^}]*background:\s*#000;/)
 })
 
 test('team profile owns safe defaults and validates a team snapshot', () => {

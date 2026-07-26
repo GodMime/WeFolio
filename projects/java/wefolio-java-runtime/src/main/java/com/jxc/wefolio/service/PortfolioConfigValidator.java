@@ -75,6 +75,9 @@ public class PortfolioConfigValidator {
     /** 是否展示作品名配置键 */
     private static final String CONFIG_KEY_SHOW_TITLE = "showTitle";
 
+    /** 是否展示作品说明配置键 */
+    private static final String CONFIG_KEY_SHOW_DESCRIPTION = "showDescription";
+
     /** 作品集展示标签配置键 */
     private static final String CONFIG_KEY_GROUPS = "groups";
 
@@ -443,6 +446,7 @@ public class PortfolioConfigValidator {
         }
         component.getConfig().put(CONFIG_KEY_GROUPS, groups);
         component.getConfig().put(CONFIG_KEY_COLUMNS, columns);
+        normalizeWorkDisplayOptions(component.getConfig());
     }
 
     /**
@@ -465,7 +469,27 @@ public class PortfolioConfigValidator {
         normalizedConfig.put(CONFIG_KEY_WORK_ID, workId);
         Object showTitle = component.getConfig().get(CONFIG_KEY_SHOW_TITLE);
         normalizedConfig.put(CONFIG_KEY_SHOW_TITLE, showTitle instanceof Boolean value ? value : Boolean.TRUE);
+        Object showDescription = component.getConfig().get(CONFIG_KEY_SHOW_DESCRIPTION);
+        normalizedConfig.put(
+                CONFIG_KEY_SHOW_DESCRIPTION,
+                showDescription instanceof Boolean value ? value : Boolean.FALSE
+        );
         component.setConfig(normalizedConfig);
+    }
+
+    /**
+     * 规范化作品标题和说明展示开关。
+     *
+     * @param config 组件配置
+     */
+    private void normalizeWorkDisplayOptions(Map<String, Object> config) {
+        Object showTitle = config.get(CONFIG_KEY_SHOW_TITLE);
+        config.put(CONFIG_KEY_SHOW_TITLE, showTitle instanceof Boolean value ? value : Boolean.TRUE);
+        Object showDescription = config.get(CONFIG_KEY_SHOW_DESCRIPTION);
+        config.put(
+                CONFIG_KEY_SHOW_DESCRIPTION,
+                showDescription instanceof Boolean value ? value : Boolean.FALSE
+        );
     }
 
     /**

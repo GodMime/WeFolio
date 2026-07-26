@@ -14,6 +14,7 @@ import com.jxc.wefolio.service.teamportfolio.component.memberportfoliogrid.TeamM
 import com.jxc.wefolio.service.teamportfolio.component.memberportfoliolist.TeamMemberPortfolioListComponentValidator;
 import com.jxc.wefolio.service.teamportfolio.component.qrcontact.TeamQrContactComponentValidator;
 import com.jxc.wefolio.service.teamportfolio.component.schedulequery.TeamScheduleQueryComponentValidator;
+import com.jxc.wefolio.service.teamportfolio.component.singlework.TeamSingleWorkComponentValidator;
 import com.jxc.wefolio.service.teamportfolio.component.teamprofile.TeamProfileComponentValidator;
 import com.jxc.wefolio.service.teamportfolio.component.textsection.TeamTextSectionComponentValidator;
 import org.springframework.stereotype.Service;
@@ -59,6 +60,7 @@ public class TeamPortfolioConfigValidator {
 
     private final TeamProfileComponentValidator teamProfileValidator;
     private final TeamCarouselComponentValidator carouselValidator;
+    private final TeamSingleWorkComponentValidator singleWorkValidator;
     private final TeamDividerComponentValidator dividerValidator;
     private final TeamMemberPortfolioGridComponentValidator gridValidator;
     private final TeamMemberPortfolioListComponentValidator listValidator;
@@ -73,6 +75,7 @@ public class TeamPortfolioConfigValidator {
     public TeamPortfolioConfigValidator(
             TeamProfileComponentValidator teamProfileValidator,
             TeamCarouselComponentValidator carouselValidator,
+            TeamSingleWorkComponentValidator singleWorkValidator,
             TeamDividerComponentValidator dividerValidator,
             TeamMemberPortfolioGridComponentValidator gridValidator,
             TeamMemberPortfolioListComponentValidator listValidator,
@@ -83,6 +86,7 @@ public class TeamPortfolioConfigValidator {
     ) {
         this.teamProfileValidator = teamProfileValidator;
         this.carouselValidator = carouselValidator;
+        this.singleWorkValidator = singleWorkValidator;
         this.dividerValidator = dividerValidator;
         this.gridValidator = gridValidator;
         this.listValidator = listValidator;
@@ -234,6 +238,7 @@ public class TeamPortfolioConfigValidator {
         return switch (componentType) {
             case TEAM_PROFILE -> teamProfileValidator.normalizeAndValidate(config, context);
             case CAROUSEL -> carouselValidator.normalizeAndValidate(config, context);
+            case SINGLE_WORK -> singleWorkValidator.normalizeAndValidate(config, context);
             case DIVIDER -> dividerValidator.normalizeAndValidate(config, context);
             case MEMBER_PORTFOLIO_GRID -> gridValidator.normalizeAndValidate(config, context);
             case MEMBER_PORTFOLIO_LIST -> listValidator.normalizeAndValidate(config, context);

@@ -194,7 +194,6 @@ class MiniappAuthServiceTest {
         assertThat(response.getTokenType()).isEqualTo("Bearer");
         verify(cosService).initUserStorage(any());
         verify(pointService).ensureAccount(11L);
-        verify(cosService, never()).uploadFromUrl(any(), any());
         verify(userEntityMapper).insert(org.mockito.ArgumentMatchers.<UserEntity>argThat(user ->
                 "林安".equals(user.getNickname())
                         && DEFAULT_WECHAT_AVATAR_URL.equals(user.getAvatarUrl())
@@ -240,7 +239,6 @@ class MiniappAuthServiceTest {
         verify(wechatMiniappClient, never()).exchangePluginOpenpid(any());
         verify(cosService).initUserStorage(any());
         verify(pointService).ensureAccount(11L);
-        verify(cosService, never()).uploadFromUrl(any(), any());
         verify(userEntityMapper).insert(org.mockito.ArgumentMatchers.<UserEntity>argThat(user ->
                 "林安".equals(user.getNickname())
                         && DEFAULT_WECHAT_AVATAR_URL.equals(user.getAvatarUrl())
@@ -281,7 +279,6 @@ class MiniappAuthServiceTest {
         assertThat(response.getToken()).isNotEqualTo("wf-dev-user-11");
         assertThat(service.resolveUserId("Bearer " + response.getToken())).isEqualTo(11L);
         verify(cosService).initUserStorage(any());
-        verify(cosService, never()).uploadFromUrl(any(), any());
         verify(pointService).ensureAccount(11L);
         verify(userEntityMapper).insert(org.mockito.ArgumentMatchers.<UserEntity>argThat(user ->
                 "林安".equals(user.getNickname())
@@ -494,7 +491,6 @@ class MiniappAuthServiceTest {
         verify(userAuthEntityMapper, never()).insert(any(UserAuthEntity.class));
         verify(cosService, never()).initUserStorage(any());
         verify(cosService, never()).isUserStorageInitialized(any());
-        verify(cosService, never()).uploadFromUrl(any(), any());
         verify(pointService, never()).ensureAccount(any());
     }
 

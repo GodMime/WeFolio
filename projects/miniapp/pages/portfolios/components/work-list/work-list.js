@@ -12,6 +12,14 @@ Component({
       type: Object,
       value: {}
     },
+    showTitle: {
+      type: Boolean,
+      value: true
+    },
+    showDescription: {
+      type: Boolean,
+      value: false
+    },
     switching: {
       type: Boolean,
       value: false

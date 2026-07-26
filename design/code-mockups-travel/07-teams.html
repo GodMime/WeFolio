@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>07 团队模块 · TripGlide 风格重设计</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Instrument Sans", -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #f1f3f5;
+    color: #212529;
+    padding: 48px 40px 72px;
+  }
+
+  /* ===== 展厅标题区 ===== */
+  .page-header { max-width: 1400px; margin: 0 auto 36px; }
+  .page-header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
+  .page-header .sub { margin-top: 10px; font-size: 12px; color: #868e96; line-height: 1.8; }
+  .page-header .sub code { background: #fff; border: 1px solid #e9ecef; border-radius: 999px; padding: 1px 8px; font-size: 11px; color: #495057; }
+
+  .frames { display: flex; flex-wrap: wrap; gap: 40px; max-width: 1400px; margin: 0 auto; }
+  .frame-item { flex: none; }
+  .frame-label { font-size: 12px; font-weight: 600; color: #868e96; margin-bottom: 10px; }
+  .frame-label .path { display: block; font-weight: 400; color: #adb5bd; font-size: 11px; margin-top: 3px; }
+
+  /* ===== 手机框：36px 圆角、1px 细边框、无阴影 ===== */
+  .phone {
+    width: 375px;
+    border: 1px solid #dee2e6;
+    border-radius: 36px;
+    background: #fff;
+    overflow: hidden;
+    position: relative;
+  }
+  .status-bar {
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 26px 0 30px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #212529;
+    background: #fff;
+  }
+  .status-icons { display: flex; align-items: center; gap: 5px; }
+  .sig { display: flex; align-items: flex-end; gap: 2px; }
+  .sig i { display: block; width: 3px; background: #212529; border-radius: 1px; }
+  .sig i:nth-child(1) { height: 4px; }
+  .sig i:nth-child(2) { height: 6px; }
+  .sig i:nth-child(3) { height: 8px; }
+  .sig i:nth-child(4) { height: 10px; }
+  .wifi { width: 14px; height: 10px; border: 1.5px solid #212529; border-top-left-radius: 11px; border-top-right-radius: 11px; border-bottom: 0; border-left-color: transparent; border-right-color: transparent; }
+  .batt { width: 21px; height: 10px; border: 1px solid #212529; border-radius: 3px; position: relative; }
+  .batt::after { content: ""; position: absolute; left: 1.5px; top: 1.5px; bottom: 1.5px; width: 11px; background: #212529; border-radius: 1px; }
+
+  /* ===== 导航栏 ===== */
+  .navbar {
+    height: 48px;
+    display: flex;
+    align-items: center;
+    background: #fff;
+    color: #212529;
+    position: relative;
+  }
+  .nav-back {
+    width: 34px; height: 34px;
+    margin-left: 14px;
+    display: flex; align-items: center; justify-content: center;
+    flex: none;
+    background: #f5f6f7;
+    border-radius: 50%;
+  }
+  .nav-back i {
+    width: 8px; height: 8px;
+    border-left: 2px solid #212529;
+    border-bottom: 2px solid #212529;
+    transform: rotate(45deg);
+    display: block;
+    margin-left: 3px;
+  }
+  .nav-title {
+    position: absolute; left: 70px; right: 70px;
+    text-align: center;
+    font-size: 17px; font-weight: 700; letter-spacing: -0.01em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  .content { padding: 16px 14px 22px; background: #f5f6f7; min-height: 200px; }
+  .content.white { background: #fff; }
+
+  /* ===== 卡片：24px 圆角白卡 ===== */
+  .panel, .panel-card {
+    background: #fff;
+    border: 1px solid #e9ecef;
+    border-radius: 24px;
+  }
+  .section-title { color: #212529; font-size: 16px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.3; }
+  .desc { color: #868e96; font-size: 12px; line-height: 1.5; }
+
+  /* ===== 状态胶囊：白底 + 1px 细边 + 低饱和状态色小字 ===== */
+  .pill {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 5px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1;
+    border-radius: 999px;
+    white-space: nowrap;
+    background: #fff;
+    border: 1px solid #e9ecef;
+    color: #868e96;
+  }
+  .pill.joined { color: #5c9e6e; border-color: rgba(92, 158, 110, 0.35); }
+  .pill.pending { color: #c08a3e; border-color: rgba(192, 138, 62, 0.35); }
+  /* 角色 / 黑色强调胶囊 */
+  .pill.dark { color: #fff; background: #212529; border-color: #212529; }
+  /* 唯一码：等宽 + 浅灰胶囊底 */
+  .pill.code {
+    color: #495057; background: #f5f6f7; border-color: #f5f6f7;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    letter-spacing: 0.04em;
+  }
+
+  /* ===== 按钮：胶囊形 ===== */
+  .btn-primary, .btn-secondary {
+    min-height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 20px;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 999px;
+  }
+  .btn-primary { color: #fff; background: #212529; }
+  .btn-secondary { color: #212529; background: #f5f6f7; }
+  .btn-danger { color: #b55656; background: #f5f6f7; }
+  .btn-full { width: 100%; margin-top: 12px; }
+
+  /* ===== 表单：胶囊输入框 ===== */
+  .input-mock {
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    padding: 0 18px;
+    color: #212529;
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: 999px;
+    background: #f5f6f7;
+  }
+  .input-mock.placeholder { color: #adb5bd; font-weight: 400; }
+  .input-mock.code-font { font-family: ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: 0.04em; }
+  .textarea-mock { min-height: 88px; align-items: flex-start; padding-top: 14px; line-height: 1.6; border-radius: 20px; }
+  .label { color: #868e96; font-size: 12px; font-weight: 600; }
+  .field-limit { color: #adb5bd; font-size: 11px; font-weight: 400; }
+  .field-heading { display: flex; align-items: center; justify-content: space-between; }
+  .form-row { margin-top: 14px; }
+  .form-row .input-mock { margin-top: 6px; }
+
+  /* ===== 头像 / 团队图标 fallback：灰底 + 墨色字 ===== */
+  .team-logo {
+    width: 52px; height: 52px; flex: none; overflow: hidden;
+    border-radius: 16px; background: #f1f3f5;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .team-logo.lg { width: 64px; height: 64px; border-radius: 18px; }
+  .team-logo .fb {
+    width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+    color: #212529; font-size: 14px; font-weight: 700; letter-spacing: 0.05em;
+  }
+  .avatar { width: 44px; height: 44px; flex: none; overflow: hidden; border-radius: 50%; background: #f1f3f5; }
+  .avatar .fb {
+    width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+    color: #212529; font-size: 14px; font-weight: 700;
+  }
+
+  /* ===== teams 页 ===== */
+  .summary-panel { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 72px; padding: 16px 18px; }
+  .summary-desc { margin-top: 4px; }
+  .list-panel { margin-top: 12px; padding: 16px 14px; }
+  .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px; }
+  .team-list { margin-top: 10px; }
+  .team-card {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px;
+    margin-top: 8px;
+    min-height: 88px;
+    background: #fff;
+    border: 1px solid #e9ecef;
+    border-radius: 20px;
+  }
+  .team-card:first-child { margin-top: 0; }
+  .team-copy { flex: 1; min-width: 0; }
+  .team-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 5px; }
+  .team-name { color: #212529; font-size: 15px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .team-subtitle { margin-top: 3px; color: #868e96; font-size: 12px; line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .entry-arrow { width: 8px; height: 8px; border-top: 2px solid #adb5bd; border-right: 2px solid #adb5bd; transform: rotate(45deg); flex: none; margin-right: 4px; }
+  .create-section { margin-top: 12px; }
+  .create-form-panel { padding: 16px 18px; }
+  .avatar-field { display: flex; align-items: flex-start; gap: 12px; margin-top: 14px; }
+  .avatar-picker { width: 48px; height: 48px; margin-top: 22px; flex: none; }
+  .create-note { margin-top: 12px; color: #868e96; font-size: 12px; line-height: 1.5; }
+
+  /* 空态 / 错误态 */
+  .empty-state { min-height: 180px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; text-align: center; }
+  .empty-icon { width: 52px; height: 52px; border-radius: 50%; background: #f1f3f5; position: relative; }
+  .empty-icon::after { content: ""; position: absolute; left: 50%; top: 50%; width: 16px; height: 2px; border-radius: 1px; background: #adb5bd; transform: translate(-50%, -50%); }
+  .empty-title { margin-top: 14px; color: #212529; font-size: 16px; font-weight: 700; }
+  .empty-title.small { margin-top: 0; font-size: 14px; }
+  .empty-desc { margin-top: 6px; color: #868e96; font-size: 12px; line-height: 1.5; }
+  .btn-compact { width: 110px; min-height: 40px; margin-top: 14px; font-size: 13px; }
+
+  /* ===== team-maintenance 页 ===== */
+  .profile-panel { padding: 16px 18px; }
+  .team-identity { display: flex; align-items: flex-start; gap: 12px; }
+  .team-heading { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; padding-top: 2px; }
+  .team-heading .team-name { font-size: 17px; }
+  .team-heading .team-tags { width: 100%; margin-top: 8px; margin-bottom: 0; }
+  .team-code { margin-left: auto; }
+  .search-row { margin-top: 12px; }
+  /* 筛选：选中黑胶囊白字，未选透明灰字 */
+  .segmented { display: flex; margin-top: 12px; padding: 4px; border-radius: 999px; background: #fff; border: 1px solid #e9ecef; }
+  .segment { flex: 1 1 0; min-height: 38px; display: flex; align-items: center; justify-content: center; color: #868e96; font-size: 13px; font-weight: 600; border-radius: 999px; background: transparent; }
+  .segment.active { color: #fff; background: #212529; }
+  .team-members-panel { margin-top: 12px; padding: 16px 14px; }
+  .add-member-button {
+    flex: none; min-width: 68px; min-height: 30px; padding: 0 14px;
+    display: flex; align-items: center; justify-content: center;
+    color: #212529; font-size: 12px; font-weight: 600;
+    border-radius: 999px; background: #f5f6f7;
+  }
+  .member-list { margin-top: 10px; }
+  .member-row {
+    position: relative; min-height: 68px; overflow: hidden;
+    margin-top: 8px;
+    border: 1px solid #e9ecef;
+    border-radius: 20px;
+    background: #fff;
+  }
+  .member-row:first-child { margin-top: 0; }
+  .member-row-main { position: relative; z-index: 2; min-height: 68px; display: flex; align-items: center; gap: 12px; padding: 12px; background: #fff; border-radius: 20px; }
+  .member-copy { flex: 1; min-width: 0; }
+  .member-name { color: #212529; font-size: 14px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .member-summary { margin-top: 3px; color: #868e96; font-size: 12px; line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .member-status { max-width: 104px; flex: none; align-self: stretch; display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 5px; }
+  /* 滑动展开态 */
+  .member-row.actions-open .member-row-main { transform: translateX(-176px); }
+  .member-actions { position: absolute; right: 0; top: 0; bottom: 0; z-index: 1; width: 170px; display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding-right: 10px; }
+  .member-action-btn { height: 34px; padding: 0 14px; display: flex; align-items: center; justify-content: center; color: #212529; font-size: 12px; font-weight: 600; border-radius: 999px; background: #f5f6f7; white-space: nowrap; }
+  .member-action-btn.remove { color: #b55656; }
+  .hint { margin-top: 12px; font-size: 11px; color: #adb5bd; text-align: center; }
+
+  /* ===== 底部弹层 ===== */
+  .sheet-zone { position: relative; height: 812px; display: flex; flex-direction: column; }
+  .sheet-page-dim { flex: 1; background: rgba(0, 0, 0, 0.4); display: flex; flex-direction: column; }
+  .sheet-overlay { flex: 1; display: flex; align-items: flex-end; padding: 12px; }
+  .sheet { width: 100%; padding: 16px 18px 18px; border-radius: 28px; background: #fff; }
+  .sheet-grabber { width: 40px; height: 4px; margin: 0 auto 14px; border-radius: 999px; background: #dee2e6; }
+  .sheet-meta { margin-top: 4px; color: #868e96; font-size: 12px; line-height: 1.5; }
+  .sheet-section { padding: 14px 0; border-bottom: 1px solid #f1f3f5; }
+  .sheet-section > .form-row:first-child { margin-top: 0; }
+  .lookup-row { display: flex; align-items: flex-end; gap: 8px; }
+  .lookup-row .input-mock { flex: 1; min-width: 0; }
+  .lookup-btn { flex: none; width: 68px; min-height: 48px; margin-top: 6px; padding: 0; }
+  .candidate-card { min-height: 68px; display: flex; align-items: center; gap: 12px; margin-top: 14px; padding: 12px; border: 1px solid #e9ecef; border-radius: 20px; }
+  .candidate-copy { flex: 1; min-width: 0; }
+  .candidate-name { color: #212529; font-size: 14px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.3; }
+  .candidate-summary { margin-top: 3px; color: #868e96; font-size: 12px; line-height: 1.5; }
+  .permission-list { margin-top: 8px; }
+  .permission-row { display: flex; align-items: center; min-height: 40px; gap: 10px; padding: 0 2px; border-bottom: 1px solid #f1f3f5; color: #868e96; font-size: 13px; font-weight: 600; }
+  .permission-row:last-child { border-bottom: 0; }
+  .permission-row.active { color: #212529; }
+  .permission-check { width: 20px; height: 20px; flex: none; border: 1.5px solid #dee2e6; border-radius: 50%; background: #fff; position: relative; }
+  .permission-row.active .permission-check { border-color: #212529; background: #212529; }
+  .permission-row.active .permission-check::after {
+    content: ""; position: absolute; left: 50%; top: 46%;
+    width: 8px; height: 4.5px;
+    border-left: 1.6px solid #fff; border-bottom: 1.6px solid #fff;
+    transform: translate(-50%, -50%) rotate(-45deg);
+  }
+  .confirm-row { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 8px; padding-top: 14px; }
+  .row-title { color: #212529; font-size: 14px; font-weight: 700; }
+  .confirm-desc { width: 100%; color: #868e96; font-size: 12px; line-height: 1.6; }
+  .button-row { display: flex; gap: 10px; margin-top: 14px; }
+  .button-row .btn-primary, .button-row .btn-secondary, .button-row .btn-danger { flex: 1 1 0; min-width: 0; }
+
+  /* ===== 独立页（member-add / change / invitations） ===== */
+  .stack-panel { margin-top: 12px; padding: 16px 18px; }
+  .stack-panel:first-of-type { margin-top: 0; }
+  .stack-panel .form-row + .form-row { margin-top: 14px; }
+  .confirm-panel { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 12px; padding: 16px 18px; }
+  .team-row { min-height: 60px; display: flex; align-items: flex-start; gap: 12px; }
+  .team-logo.sm { width: 48px; height: 48px; border-radius: 16px; }
+  .team-summary { margin-top: 4px; color: #868e96; font-size: 12px; line-height: 1.5; }
+  .info-list { margin-top: 14px; border-top: 1px solid #f1f3f5; }
+  .info-row { min-height: 42px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #f1f3f5; }
+  .info-row:last-child { border-bottom: 0; }
+  .info-label { width: 66px; flex: none; color: #868e96; font-size: 12px; line-height: 1.5; }
+  .info-value { flex: 1; min-width: 0; color: #212529; font-size: 13px; font-weight: 600; line-height: 1.5; }
+  .change-list { margin-top: 14px; border-top: 1px solid #f1f3f5; }
+  .change-row { min-height: 42px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #f1f3f5; }
+  .change-row:last-child { border-bottom: 0; }
+  .change-label { width: 66px; flex: none; color: #212529; font-size: 13px; font-weight: 600; line-height: 1.5; }
+  .change-values { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; }
+  .change-before { flex: 1 1 0; min-width: 0; color: #868e96; font-size: 12px; line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .change-arrow { flex: none; color: #adb5bd; font-size: 12px; }
+  .change-after { flex: 1 1 0; min-width: 0; color: #212529; font-size: 13px; font-weight: 700; line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .change-actions { display: flex; gap: 10px; margin-top: 12px; }
+  .change-actions .btn-primary, .change-actions .btn-secondary, .change-actions .btn-danger { flex: 1 1 0; min-width: 0; }
+  .processed-note { min-height: 50px; display: flex; align-items: center; justify-content: center; margin-top: 12px; border-radius: 999px; background: #fff; border: 1px solid #e9ecef; color: #868e96; font-size: 13px; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>07 · 团队模块（TripGlide 风格重设计）</h1>
+  <div class="sub">
+    包含页面：<code>pages/teams</code>（我的团队）、<code>pages/team-maintenance</code>（团队维护 + 成员信息 / 添加成员弹层）、<code>pages/team-member-add</code>（添加成员）、<code>pages/team-member-change</code>（信息变更）、<code>pages/team-invitations</code>（团队邀请）。<br>
+    纯 UI 重设计：结构、文案、交互逻辑与 mock 数据与原稿一致，视觉参考 Dribbble「TripGlide 旅行 App」纯黑白灰体系。
+  </div>
+</div>
+
+<div class="frames">
+
+  <!-- ================= 01 我的团队（列表态） ================= -->
+  <div class="frame-item">
+    <div class="frame-label">01 我的团队（列表态）<span class="path">pages/teams/teams</span></div>
+    <div class="phone">
+      <div class="status-bar"><span>9:41</span><span class="status-icons"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="wifi"></span><span class="batt"></span></span></div>
+      <div class="navbar"><div class="nav-back"><i></i></div><div class="nav-title">我的团队</div></div>
+      <div class="content">
+        <div class="panel summary-panel">
+          <div>
+            <div class="section-title">我的团队</div>
+            <div class="desc summary-desc">已加入 3 个团队，其中 1 个为拥有者。</div>
+          </div>
+          <div class="pill dark">2 个可维护</div>
+        </div>
+
+        <div class="panel list-panel">
+          <div class="panel-heading">
+            <div class="section-title">团队列表</div>
+            <div class="desc">点击团队进入维护页</div>
+          </div>
+          <div class="team-list">
+            <div class="team-card">
+              <div class="team-logo"><div class="fb">TM</div></div>
+              <div class="team-copy">
+                <div class="team-tags"><span class="pill dark">拥有者</span><span class="pill joined">可维护</span></div>
+                <div class="team-name">星野婚礼影像团队</div>
+                <div class="team-subtitle">WFT8K2M4X1 · 6 名成员 · 最近更新 07-20</div>
+              </div>
+              <div class="entry-arrow"></div>
+            </div>
+            <div class="team-card">
+              <div class="team-logo"><div class="fb">TM</div></div>
+              <div class="team-copy">
+                <div class="team-tags"><span class="pill dark">管理者</span><span class="pill joined">可维护</span></div>
+                <div class="team-name">沐光演艺工作室</div>
+                <div class="team-subtitle">WFA3B1E7A2 · 12 名成员 · 最近更新 07-18</div>
+              </div>
+              <div class="entry-arrow"></div>
+            </div>
+            <div class="team-card">
+              <div class="team-logo"><div class="fb">TM</div></div>
+              <div class="team-copy">
+                <div class="team-tags"><span class="pill">普通成员</span><span class="pill">仅查看</span></div>
+                <div class="team-name">南屿影像联盟</div>
+                <div class="team-subtitle">WFQ9L3P5D8 · 4 名成员 · 最近更新 07-02</div>
+              </div>
+              <div class="entry-arrow"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="btn-primary btn-full">创建团队</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 02 我的团队（创建团队展开态） ================= -->
+  <div class="frame-item">
+    <div class="frame-label">02 我的团队（创建团队展开态）<span class="path">pages/teams/teams · createFormVisible = true</span></div>
+    <div class="phone">
+      <div class="status-bar"><span>9:41</span><span class="status-icons"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="wifi"></span><span class="batt"></span></span></div>
+      <div class="navbar"><div class="nav-back"><i></i></div><div class="nav-title">我的团队</div></div>
+      <div class="content">
+        <div class="panel summary-panel">
+          <div>
+            <div class="section-title">我的团队</div>
+            <div class="desc summary-desc">已加入 3 个团队，其中 1 个为拥有者。</div>
+          </div>
+          <div class="pill dark">2 个可维护</div>
+        </div>
+
+        <div class="panel list-panel">
+          <div class="panel-heading">
+            <div class="section-title">团队列表</div>
+            <div class="desc">点击团队进入维护页</div>
+          </div>
+          <div class="team-list">
+            <div class="team-card">
+              <div class="team-logo"><div class="fb">TM</div></div>
+              <div class="team-copy">
+                <div class="team-tags"><span class="pill dark">拥有者</span><span class="pill joined">可维护</span></div>
+                <div class="team-name">星野婚礼影像团队</div>
+                <div class="team-subtitle">WFT8K2M4X1 · 6 名成员 · 最近更新 07-20</div>
+              </div>
+              <div class="entry-arrow"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="btn-primary btn-full">收起创建团队</div>
+
+        <div class="create-section">
+          <div class="panel create-form-panel">
+            <div class="panel-heading" style="padding:0;">
+              <div class="section-title">创建团队</div>
+              <div class="desc">生成团队唯一码</div>
+            </div>
+            <div class="avatar-field">
+              <div class="team-logo lg avatar-picker"><div class="fb">TM</div></div>
+              <div style="flex:1; min-width:0;">
+                <div class="field-heading"><div class="label">团队名称</div><div class="field-limit">0 / 100</div></div>
+                <div class="input-mock placeholder" style="margin-top:6px;">请输入团队名称</div>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="field-heading"><div class="label">团队简介</div><div class="field-limit">0 / 1000</div></div>
+              <div class="input-mock textarea-mock placeholder">介绍团队服务风格、城市或成员特色</div>
+            </div>
+            <div class="create-note">创建团队会生成团队唯一码，后续可通过个人唯一码邀请成员加入。</div>
+          </div>
+          <div class="btn-primary btn-full">保存创建</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 03 我的团队（加载失败态） ================= -->
+  <div class="frame-item">
+    <div class="frame-label">03 我的团队（加载失败态）<span class="path">pages/teams/teams · errorMessage</span></div>
+    <div class="phone">
+      <div class="status-bar"><span>9:41</span><span class="status-icons"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="wifi"></span><span class="batt"></span></span></div>
+      <div class="navbar"><div class="nav-back"><i></i></div><div class="nav-title">我的团队</div></div>
+      <div class="content white">
+        <div class="empty-state" style="min-height:560px;">
+          <div class="empty-icon"></div>
+          <div class="empty-title">加载失败</div>
+          <div class="empty-desc">团队列表加载失败</div>
+          <div class="btn-primary btn-compact">重试</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 04 团队维护（主态） ================= -->
+  <div class="frame-item">
+    <div class="frame-label">04 团队维护（资料 + 成员列表）<span class="path">pages/team-maintenance/team-maintenance</span></div>
+    <div class="phone">
+      <div class="status-bar"><span>9:41</span><span class="status-icons"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="wifi"></span><span class="batt"></span></span></div>
+      <div class="navbar"><div class="nav-back"><i></i></div><div class="nav-title">团队维护</div></div>
+      <div class="content">
+        <div class="panel profile-panel">
+          <div class="team-identity">
+            <div class="team-logo lg"><div class="fb">TM</div></div>
+            <div class="team-heading">
+              <div class="team-name">星野婚礼影像团队</div>
+              <div class="team-tags">
+                <span class="pill">6 名成员</span>
+                <span class="pill dark">拥有者</span>
+                <span class="pill code team-code">WFT8K2M4X1</span>
+              </div>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="field-heading"><div class="label">团队名称</div><div class="field-limit">8 / 100</div></div>
+            <div class="input-mock">星野婚礼影像团队</div>
+          </div>
+          <div class="form-row">
+            <div class="field-heading"><div class="label">团队简介</div><div class="field-limit">22 / 1000</div></div>
+            <div class="input-mock textarea-mock">杭州婚礼影像团队，擅长纪实风格跟拍与电影感快剪。</div>
+          </div>
+          <div class="btn-primary btn-full">保存修改</div>
+        </div>
+
+        <div class="search-row"><div class="input-mock placeholder" style="margin-top:0;">输入姓名、团队身份或个人唯一码</div></div>
+
+        <div class="segmented">
+          <div class="segment active">全部</div>
+          <div class="segment">待确认</div>
+          <div class="segment">已加入</div>
+        </div>
+
+        <div class="panel team-members-panel">
+          <div class="panel-heading">
+            <div class="section-title">团队成员</div>
+            <div class="add-member-button">添加成员</div>
+          </div>
+          <div class="member-list">
+            <div class="member-row">
+              <div class="member-row-main">
+                <div class="avatar"><div class="fb">拥</div></div>
+                <div class="member-copy">
+                  <div class="member-name">林晚</div>
+                  <div class="member-summary">化妆师 · WFA3B1E7A2 · 拥有者</div>
+                </div>
+                <div class="member-status"><span class="pill joined">已加入</span></div>
+              </div>
+            </div>
+            <div class="member-row">
+              <div class="member-row-main">
+                <div class="avatar"><div class="fb">管</div></div>
+                <div class="member-copy">
+                  <div class="member-name">周子昂</div>
+                  <div class="member-summary">摄影师 · WFB7C2D9E4 · 管理者</div>
+                </div>
+                <div class="member-status">
+                  <span class="pill joined">已加入</span>
+                  <span class="pill pending">信息变更待同意</span>
+                </div>
+              </div>
+            </div>
+            <div class="member-row actions-open">
+              <div class="member-actions">
+                <div class="member-action-btn">转让团队</div>
+                <div class="member-action-btn remove">移除成员</div>
+              </div>
+              <div class="member-row-main">
+                <div class="avatar"><div class="fb">普</div></div>
+                <div class="member-copy">
+                  <div class="member-name">陈果</div>
+                  <div class="member-summary">摄像师 · WFC5D8E1F6 · 普通成员</div>
+                </div>
+                <div class="member-status"><span class="pill joined">已加入</span></div>
+              </div>
+            </div>
+            <div class="member-row">
+              <div class="member-row-main">
+                <div class="avatar"><div class="fb">普</div></div>
+                <div class="member-copy">
+                  <div class="member-name">苏念</div>
+                  <div class="member-summary">司仪 · WFD2E6F8A1 · 普通成员</div>
+                </div>
+                <div class="member-status">
+                  <span class="pill pending">待确认</span>
+                  <span class="pill">已停用</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="hint">第三行为左滑展开「转让团队 / 移除成员」操作态</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 05 团队维护 · 成员信息弹层 ================= -->
+  <div class="frame-item">
+    <div class="frame-label">05 团队维护 · 成员信息弹层<span class="path">pages/team-maintenance · member-change-sheet</span></div>
+    <div class="phone">
+      <div class="sheet-zone">
+        <div class="status-bar"><span>9:41</span><span class="status-icons"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="wifi"></span><span class="batt"></span></span></div>
+        <div class="navbar"><div class="nav-back"><i></i></div><div class="nav-title">团队维护</div></div>
+        <div class="sheet-page-dim">
+          <div class="content" style="flex:1; opacity:.92; background:transparent;">
+            <div class="panel profile-panel">
+              <div class="team-identity">
+                <div class="team-logo lg"><div class="fb">TM</div></div>
+                <div class="team-heading">
+                  <div class="team-name">星野婚礼影像团队</div>
+                  <div class="team-tags"><span class="pill">6 名成员</span><span class="pill dark">拥有者</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="sheet-overlay" style="flex:none; padding-top:0;">
+            <div class="sheet">
+              <div class="sheet-grabber"></div>
+              <div class="panel-heading" style="align-items:flex-start; padding:0;">
+                <div>
+                  <div class="section-title">成员信息</div>
+                  <div class="sheet-meta">周子昂</div>
+                </div>
+              </div>
+              <div class="sheet-section">
+                <div class="form-row">
+                  <div class="label">团队角色</div>
+                  <div class="segmented" style="margin-top:8px;">
+                    <div class="segment active">管理者</div>
+                    <div class="segment">普通成员</div>
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="label">团队身份</div>
+                  <div class="input-mock">摄影总监</div>
+                </div>
+                <div class="form-row">
+                  <div class="label">可被团队作品集引用</div>
+                  <div class="permission-list">
+                    <div class="permission-row active"><span class="permission-check"></span><span>个人作品集</span></div>
+                    <div class="permission-row active"><span class="permission-check"></span><span>头像资料</span></div>
+                    <div class="permission-row"><span class="permission-check"></span><span>个人作品素材</span></div>
+                  </div>
+                </div>
+              </div>
+              <div class="confirm-row">
+                <div class="row-title">生效方式</div>
+                <span class="pill pending">需本人同意</span>
+                <div class="confirm-desc">保存后将发送站内信，成员同意后修改才会生效。</div>
+              </div>
+              <div class="button-row">
+                <div class="btn-secondary">取消</div>
+                <div class="btn-primary">发送确认</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 06 团队维护 · 添加成员弹层 ================= -->
+  <div class="frame-item">
+    <div class="frame-label">06 团队维护 · 添加成员弹层<span class="path">pages/team-maintenance · member-add-sheet</span></div>
+    <div class="phone">
+      <div class="sheet-zone">
+        <div class="status-bar"><span>9:41</span><span class="status-icons"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="wifi"></span><span class="batt"></span></span></div>
+        <div class="navbar"><div class="nav-back"><i></i></div><div class="nav-title">团队维护</div></div>
+        <div class="sheet-page-dim">
+          <div class="content" style="flex:1; opacity:.92; background:transparent;">
+            <div class="panel profile-panel">
+              <div class="team-identity">
+                <div class="team-logo lg"><div class="fb">TM</div></div>
+                <div class="team-heading">
+                  <div class="team-name">星野婚礼影像团队</div>
+                  <div class="team-tags"><span class="pill">6 名成员</span><span class="pill dark">拥有者</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="sheet-overlay" style="flex:none; padding-top:0;">
+            <div class="sheet">
+              <div class="sheet-grabber"></div>
+              <div class="panel-heading" style="align-items:flex-start; padding:0;">
+                <div>
+                  <div class="section-title">添加成员</div>
+                  <div class="sheet-meta">按个人唯一码匹配成员并发送团队邀请</div>
+                </div>
+              </div>
+              <div class="sheet-section">
+                <div class="form-row">
+                  <div class="label">个人唯一码</div>
+                  <div class="lookup-row">
+                    <div class="input-mock code-font" style="margin-top:6px;">WFB7C2D9E4</div>
+                    <div class="btn-secondary lookup-btn">匹配</div>
+                  </div>
+                </div>
+                <div class="candidate-card">
+                  <div class="avatar"><div class="fb">管</div></div>
+                  <div class="candidate-copy">
+                    <div class="candidate-name">周子昂</div>
+                    <div class="candidate-summary">杭州 · 摄影师</div>
+                  </div>
+                  <span class="pill joined">可添加</span>
+                </div>
+              </div>
+              <div class="sheet-section" style="border-bottom:0;">
+                <div class="form-row">
+                  <div class="label">团队角色</div>
+                  <div class="segmented" style="margin-top:8px;">
+                    <div class="segment">管理者</div>
+                    <div class="segment active">普通成员</div>
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="label">团队身份</div>
+                  <div class="input-mock placeholder">用于团队内展示</div>
+                </div>
+                <div class="form-row">
+                  <div class="label">可被团队作品集引用</div>
+                  <div class="permission-list">
+                    <div class="permission-row active"><span class="permission-check"></span><span>个人作品集</span></div>
+                    <div class="permission-row"><span class="permission-check"></span><span>头像资料</span></div>
+                    <div class="permission-row"><span class="permission-check"></span><span>个人作品素材</span></div>
+                  </div>
+                </div>
+              </div>
+              <div class="confirm-row">
+                <div class="row-title">加入确认</div>
+                <span class="pill pending">需本人确认</span>
+                <div class="confirm-desc">发送邀请后，成员会在小程序内收到加入确认。确认前仅在管理端展示。</div>
+              </div>
+              <div class="button-row">
+                <div class="btn-secondary">取消</div>
+                <div class="btn-primary">发送邀请</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 07 添加成员（独立页） ================= -->
+  <div class="frame-item">
+    <div class="frame-label">07 添加成员<span class="path">pages/team-member-add/team-member-add</span></div>
+    <div class="phone">
+      <div class="status-bar"><span>9:41</span><span class="status-icons"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="wifi"></span><span class="batt"></span></span></div>
+      <div class="navbar"><div class="nav-back"><i></i></div><div class="nav-title">添加成员</div></div>
+      <div class="content" style="padding-top:24px;">
+        <div class="panel-card stack-panel">
+          <div class="form-row" style="margin-top:0;">
+            <div class="label">个人唯一码</div>
+            <div class="lookup-row">
+              <div class="input-mock code-font" style="margin-top:6px;">WFB7C2D9E4</div>
+              <div class="btn-secondary lookup-btn">匹配</div>
+            </div>
+          </div>
+          <div class="candidate-card">
+            <div class="avatar"><div class="fb">管</div></div>
+            <div class="candidate-copy">
+              <div class="candidate-name">周子昂</div>
+              <div class="candidate-summary">杭州 · 摄影师</div>
+            </div>
+            <span class="pill joined">可添加</span>
+          </div>
+        </div>
+
+        <div class="panel-card stack-panel">
+          <div class="form-row" style="margin-top:0;">
+            <div class="label">团队角色</div>
+            <div class="segmented">
+              <div class="segment active">管理者</div>
+              <div class="segment">普通成员</div>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="label">团队身份</div>
+            <div class="input-mock placeholder">用于团队内展示</div>
+          </div>
+          <div class="form-row">
+            <div class="label">可被团队作品集引用</div>
+            <div class="permission-list">
+              <div class="permission-row active"><span class="permission-check"></span><span style="flex:1;">个人作品集</span></div>
+              <div class="permission-row active"><span class="permission-check"></span><span style="flex:1;">头像资料</span></div>
+              <div class="permission-row"><span class="permission-check"></span><span style="flex:1;">个人作品素材</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-card confirm-panel">
+          <div class="row-title">加入确认</div>
+          <span class="pill pending">需本人确认</span>
+          <div class="confirm-desc">发送邀请后，成员会在小程序内收到加入确认。确认前仅在管理端展示。</div>
+        </div>
+
+        <div class="button-row">
+          <div class="btn-secondary">取消</div>
+          <div class="btn-primary">发送邀请</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 08 信息变更（可响应态） ================= -->
+  <div class="frame-item">
+    <div class="frame-label">08 信息变更（待同意，可响应）<span class="path">pages/team-member-change/team-member-change</span></div>
+    <div class="phone">
+      <div class="status-bar"><span>9:41</span><span class="status-icons"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="wifi"></span><span class="batt"></span></span></div>
+      <div class="navbar"><div class="nav-back"><i></i></div><div class="nav-title">信息变更</div></div>
+      <div class="content" style="padding-top:24px;">
+        <div class="panel-card" style="padding:16px 18px;">
+          <div class="team-row">
+            <div class="team-logo sm"><div class="fb">TM</div></div>
+            <div class="team-copy">
+              <div class="team-name" style="font-size:16px;">星野婚礼影像团队</div>
+              <div class="team-summary">林晚发起成员信息变更</div>
+            </div>
+            <span class="pill pending">待同意</span>
+          </div>
+          <div class="info-list">
+            <div class="info-row"><div class="info-label">成员</div><div class="info-value">周子昂</div></div>
+            <div class="info-row"><div class="info-label">发起时间</div><div class="info-value">2026-07-22 14:30</div></div>
+          </div>
+          <div class="change-list">
+            <div class="change-row">
+              <div class="change-label">团队角色</div>
+              <div class="change-values"><span class="change-before">普通成员</span><span class="change-arrow">→</span><span class="change-after">管理者</span></div>
+            </div>
+            <div class="change-row">
+              <div class="change-label">团队身份</div>
+              <div class="change-values"><span class="change-before">摄像师</span><span class="change-arrow">→</span><span class="change-after">摄影总监</span></div>
+            </div>
+            <div class="change-row">
+              <div class="change-label">引用权限</div>
+              <div class="change-values"><span class="change-before">未开放</span><span class="change-arrow">→</span><span class="change-after">个人作品集、头像资料</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="change-actions">
+          <div class="btn-danger">拒绝</div>
+          <div class="btn-primary">同意</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 09 信息变更（已处理态） ================= -->
+  <div class="frame-item">
+    <div class="frame-label">09 信息变更（已处理态）<span class="path">pages/team-member-change · canRespond = false</span></div>
+    <div class="phone">
+      <div class="status-bar"><span>9:41</span><span class="status-icons"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="wifi"></span><span class="batt"></span></span></div>
+      <div class="navbar"><div class="nav-back"><i></i></div><div class="nav-title">信息变更</div></div>
+      <div class="content" style="padding-top:24px;">
+        <div class="panel-card" style="padding:16px 18px;">
+          <div class="team-row">
+            <div class="team-logo sm"><div class="fb">TM</div></div>
+            <div class="team-copy">
+              <div class="team-name" style="font-size:16px;">星野婚礼影像团队</div>
+              <div class="team-summary">林晚发起成员信息变更</div>
+            </div>
+            <span class="pill joined">已同意</span>
+          </div>
+          <div class="info-list">
+            <div class="info-row"><div class="info-label">成员</div><div class="info-value">周子昂</div></div>
+            <div class="info-row"><div class="info-label">发起时间</div><div class="info-value">2026-07-22 14:30</div></div>
+          </div>
+          <div class="change-list">
+            <div class="change-row">
+              <div class="change-label">团队角色</div>
+              <div class="change-values"><span class="change-before">普通成员</span><span class="change-arrow">→</span><span class="change-after">管理者</span></div>
+            </div>
+            <div class="change-row">
+              <div class="change-label">团队身份</div>
+              <div class="change-values"><span class="change-before">摄像师</span><span class="change-arrow">→</span><span class="change-after">摄影总监</span></div>
+            </div>
+            <div class="change-row">
+              <div class="change-label">引用权限</div>
+              <div class="change-values"><span class="change-before">未开放</span><span class="change-arrow">→</span><span class="change-after">个人作品集、头像资料</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="processed-note">信息变更已处理</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 10 团队邀请（可响应态） ================= -->
+  <div class="frame-item">
+    <div class="frame-label">10 团队邀请（待确认，可响应）<span class="path">pages/team-invitations/team-invitations</span></div>
+    <div class="phone">
+      <div class="status-bar"><span>9:41</span><span class="status-icons"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="wifi"></span><span class="batt"></span></span></div>
+      <div class="navbar"><div class="nav-back"><i></i></div><div class="nav-title">团队邀请</div></div>
+      <div class="content" style="padding-top:24px;">
+        <div class="panel-card" style="padding:16px 18px;">
+          <div class="team-row">
+            <div class="team-logo sm"><div class="fb">TM</div></div>
+            <div class="team-copy">
+              <div class="team-name" style="font-size:16px;">星野婚礼影像团队</div>
+              <div class="team-summary">林晚邀请你以管理者加入</div>
+            </div>
+            <span class="pill pending">待确认</span>
+          </div>
+          <div class="info-list">
+            <div class="info-row"><div class="info-label">团队角色</div><div class="info-value">管理者</div></div>
+            <div class="info-row"><div class="info-label">团队身份</div><div class="info-value">摄影师</div></div>
+            <div class="info-row"><div class="info-label">引用权限</div><div class="info-value">个人作品集、头像资料</div></div>
+          </div>
+        </div>
+        <div class="change-actions">
+          <div class="btn-danger">拒绝</div>
+          <div class="btn-primary">接受</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 11 团队邀请（已处理态） ================= -->
+  <div class="frame-item">
+    <div class="frame-label">11 团队邀请（已处理态）<span class="path">pages/team-invitations · canRespond = false</span></div>
+    <div class="phone">
+      <div class="status-bar"><span>9:41</span><span class="status-icons"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="wifi"></span><span class="batt"></span></span></div>
+      <div class="navbar"><div class="nav-back"><i></i></div><div class="nav-title">团队邀请</div></div>
+      <div class="content" style="padding-top:24px;">
+        <div class="panel-card" style="padding:16px 18px;">
+          <div class="team-row">
+            <div class="team-logo sm"><div class="fb">TM</div></div>
+            <div class="team-copy">
+              <div class="team-name" style="font-size:16px;">星野婚礼影像团队</div>
+              <div class="team-summary">林晚邀请你以管理者加入</div>
+            </div>
+            <span class="pill joined">已加入</span>
+          </div>
+          <div class="info-list">
+            <div class="info-row"><div class="info-label">团队角色</div><div class="info-value">管理者</div></div>
+            <div class="info-row"><div class="info-label">团队身份</div><div class="info-value">摄影师</div></div>
+            <div class="info-row"><div class="info-label">引用权限</div><div class="info-value">个人作品集、头像资料</div></div>
+          </div>
+        </div>
+        <div class="processed-note">邀请已处理</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

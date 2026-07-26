@@ -111,13 +111,27 @@
   border-left: 16rpx solid #ffffff;
 }
 
+.work-copy {
+  min-height: 10rpx;
+  padding-top: 10rpx;
+  box-sizing: border-box;
+}
+
 .work-title {
   overflow: hidden;
-  margin-top: 10rpx;
   color: #17202a;
   font-size: 24rpx;
   font-weight: 700;
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.work-desc {
+  color: #59636f;
+  font-size: 22rpx;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }

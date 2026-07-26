@@ -47,12 +47,26 @@
   border-left: 16rpx solid #ffffff;
 }
 
-.single-work-title {
+.single-work-copy {
+  min-height: 16rpx;
   padding-top: 16rpx;
+  box-sizing: border-box;
+}
+
+.single-work-title {
   color: #17202a;
   font-size: 28rpx;
   font-weight: 800;
   line-height: 1.45;
+}
+
+.single-work-description {
+  color: #59636f;
+  font-size: 26rpx;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .single-work-media-placeholder,

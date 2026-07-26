@@ -19,19 +19,19 @@ const COMPONENT_CASES = [
   },
   {
     name: 'work-grid',
-    properties: { componentKey: String, displayTags: Array, activeGroup: Object, switching: Boolean },
-    wxml: [/class="work-grid/, /bindtap="handleDisplayTagTap"/, /bindtap="handleWorkTap"/],
-    wxss: [/\.work-grid\.display-switching/, /@keyframes work-list-switch-in/]
+    properties: { componentKey: String, displayTags: Array, activeGroup: Object, switching: Boolean, showTitle: Boolean, showDescription: Boolean },
+    wxml: [/class="work-grid/, /bindtap="handleDisplayTagTap"/, /bindtap="handleWorkTap"/, /wx:if="\{\{showTitle && work\.title\}\}"/, /wx:if="\{\{showDescription && work\.description\}\}"/],
+    wxss: [/\.work-grid\.display-switching/, /@keyframes work-list-switch-in/, /\.work-copy\s*\{[\s\S]*min-height:\s*10rpx;[\s\S]*padding-top:\s*10rpx;/, /\.work-desc\s*\{[\s\S]*color:\s*#59636f;/]
   },
   {
     name: 'work-list',
-    properties: { componentKey: String, displayTags: Array, activeGroup: Object, switching: Boolean },
-    wxml: [/class="work-list/, /bindtap="handleDisplayTagTap"/, /bindtap="handleWorkTap"/],
-    wxss: [/\.work-list\.display-switching/, /\.work-desc\s*\{[\s\S]*white-space:\s*pre-wrap;/]
+    properties: { componentKey: String, displayTags: Array, activeGroup: Object, switching: Boolean, showTitle: Boolean, showDescription: Boolean },
+    wxml: [/class="work-list/, /bindtap="handleDisplayTagTap"/, /bindtap="handleWorkTap"/, /wx:if="\{\{showTitle && work\.title\}\}"/, /wx:if="\{\{showDescription && work\.description\}\}"/],
+    wxss: [/\.work-list\.display-switching/, /\.work-copy\s*\{[\s\S]*min-height:\s*10rpx;[\s\S]*padding-top:\s*10rpx;/, /\.work-desc\s*\{[\s\S]*color:\s*#59636f;[\s\S]*white-space:\s*pre-wrap;/]
   },
   {
     name: 'single-work',
-    properties: { componentKey: String, work: Object, showTitle: Boolean, activeVideoKey: String, repairMode: Boolean },
+    properties: { componentKey: String, work: Object, showTitle: Boolean, showDescription: Boolean, activeVideoKey: String, repairMode: Boolean },
     wxml: [
       /wx:if="\{\{repairMode && !work\}\}"/,
       /wx:elif="\{\{work\}\}"/,
@@ -40,9 +40,11 @@ const COMPONENT_CASES = [
       /图片不可用/,
       /aria-role="button"/,
       /aria-label="查看原图\{\{work\.title\}\}"/,
-      /binderror="handleVideoError"/
+      /binderror="handleVideoError"/,
+      /wx:if="\{\{showTitle && work\.title\}\}"/,
+      /wx:if="\{\{showDescription && work\.description\}\}"/
     ],
-    wxss: [/\.single-work-repair/, /\.single-work-play-badge/]
+    wxss: [/\.single-work-repair/, /\.single-work-play-badge/, /\.single-work-copy\s*\{[\s\S]*min-height:\s*16rpx;[\s\S]*padding-top:\s*16rpx;/, /\.single-work-description\s*\{[\s\S]*color:\s*#59636f;/]
   },
   {
     name: 'qr-contact',
@@ -352,6 +354,8 @@ test('preview and visitor pages register and compose the same seven personal ren
       wxml,
       new RegExp(`<portfolio-single-work[\\s\\S]*repair-mode="\\{\\{${page.repairMode}\\}\\}"[\\s\\S]*class="portfolio-single-work-instance"`)
     )
+    assert.match(wxml, /show-title="\{\{item\.showTitle\}\}"/)
+    assert.match(wxml, /show-description="\{\{item\.showDescription\}\}"/)
     assert.doesNotMatch(wxss, /@import\s+"[^"]*portfolio-render-shared\.wxss"/)
     assert.doesNotMatch(wxml, /class="profile-section"/)
     assert.doesNotMatch(wxml, /class="work-grid/)

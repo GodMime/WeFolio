@@ -66,6 +66,13 @@ class CosServiceTest {
         lenient().when(cosProperties.getBucketName()).thenReturn("test-bucket");
     }
 
+    /** COS 服务不得暴露可对任意远程 URL 发起请求的上传入口。 */
+    @Test
+    void cosServiceShouldNotExposeRemoteUrlUpload() {
+        assertThat(CosService.class.getDeclaredMethods())
+                .noneMatch(method -> "uploadFromUrl".equals(method.getName()));
+    }
+
     // ── upload ──────────────────────────────────────────────
 
     @Test

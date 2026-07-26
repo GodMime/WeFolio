@@ -6,21 +6,21 @@ const { uploadTeamVisitorProfile } = require('../utils/team-visitor-profile.js')
 const { showTeamPortfolioUnavailableToast } = require('../utils/team-portfolios.js')
 const { createAnonymousSessionId, isWechatTimelineSinglePage } = require('../utils/single-page-mode.js')
 
-const TYPE_BUCKETS = Object.freeze({ TEAM_PROFILE: 'teamProfile', CAROUSEL: 'carousel', DIVIDER: 'divider', MEMBER_PORTFOLIO_GRID: 'grid', MEMBER_PORTFOLIO_LIST: 'list', TEXT_SECTION: 'text', SCHEDULE_QUERY: 'schedule', CONTACT_FORM: 'contact', QR_CONTACT: 'qr' })
+const TYPE_BUCKETS = Object.freeze({ TEAM_PROFILE: 'teamProfile', CAROUSEL: 'carousel', SINGLE_WORK: 'singleWork', DIVIDER: 'divider', MEMBER_PORTFOLIO_GRID: 'grid', MEMBER_PORTFOLIO_LIST: 'list', TEXT_SECTION: 'text', SCHEDULE_QUERY: 'schedule', CONTACT_FORM: 'contact', QR_CONTACT: 'qr' })
 const PERSONAL_VISITOR_URL = '/pages' + '/portfolios/visitor-portfolio/visitor-portfolio'
 const PERSONAL_VISITOR_TEAM_SOURCE_QUERY = 'fromTeamPortfolio=1'
 const TIMELINE_SHARE_GUIDE_VALUE = 'timeline'
 const SHARE_MENU_ITEMS = Object.freeze(['shareAppMessage', 'shareTimeline'])
 const SHARE_CHANNEL_WECHAT_TIMELINE = 'WECHAT_TIMELINE'
 const SHARE_SCENE_TEAM_PORTFOLIO_LIST = 'TEAM_PORTFOLIO_LIST'
-function buckets(items) { const value = { teamProfile: [], carousel: [], divider: [], grid: [], list: [], text: [], schedule: [], contact: [], qr: [] }; (Array.isArray(items) ? items : []).forEach((item) => { const key = TYPE_BUCKETS[item.componentType]; if (key) value[key].push(item) }); return value }
+function buckets(items) { const value = { teamProfile: [], carousel: [], singleWork: [], divider: [], grid: [], list: [], text: [], schedule: [], contact: [], qr: [] }; (Array.isArray(items) ? items : []).forEach((item) => { const key = TYPE_BUCKETS[item.componentType]; if (key) value[key].push(item) }); return value }
 function isUncertainFailure(error) { return !error || !Number(error.statusCode) || Number(error.statusCode) >= 500 }
 function positiveId(value) { const id = Number(value); return Number.isInteger(id) && id > 0 ? id : 0 }
 function shareTitle(render = {}) { return render.share && render.share.title || render.title || '团队作品集' }
 function hasPreviousPage() { const pages = typeof getCurrentPages === 'function' ? getCurrentPages() : []; return Array.isArray(pages) && pages.length > 1 }
 
 Page({
-  data: { shareCode: '', sourceType: 'WECHAT_SHARE_CARD', loading: false, errorMessage: '', render: {}, componentBuckets: buckets([]), visitorKey: '', visitRecordId: 0, visitorProfileToken: '', visitorProfileAuthVisible: false, visitorProfileForm: { nickname: '', avatarPath: '' }, visitorProfileSaving: false, empty: true, underMaintenance: false, showNavigationBack: false, timelineGuideRequested: false, timelineGuideVisible: false, timelineSharePortfolioId: 0, timelineShareRecordEnabled: false, scheduleResults: {}, contactForms: {}, contactSubmitting: {}, contactModalVisible: {}, pendingOpenKey: '', pendingContactKeys: {} },
+  data: { shareCode: '', sourceType: 'WECHAT_SHARE_CARD', loading: false, errorMessage: '', render: {}, componentBuckets: buckets([]), activeSingleWorkVideoKey: '', visitorKey: '', visitRecordId: 0, visitorProfileToken: '', visitorProfileAuthVisible: false, visitorProfileForm: { nickname: '', avatarPath: '' }, visitorProfileSaving: false, empty: true, underMaintenance: false, showNavigationBack: false, timelineGuideRequested: false, timelineGuideVisible: false, timelineSharePortfolioId: 0, timelineShareRecordEnabled: false, scheduleResults: {}, contactForms: {}, contactSubmitting: {}, contactModalVisible: {}, pendingOpenKey: '', pendingContactKeys: {} },
   onLoad(options = {}) {
     const shareCode = resolveTeamShareCode(options)
     if (!shareCode) {
@@ -73,6 +73,13 @@ Page({
   handleUnavailableError(error) { return showTeamPortfolioUnavailableToast(error) },
   sendEvent(payload) { return submitTeamVisitorEvent((options) => this.visitorRequest(options), this.data.shareCode, Object.assign({}, payload, { idempotencyKey: createIdempotencyKey() })).catch((error) => { this.handleUnavailableError(error); return null }) },
   handleImagePreview(event) { const item = event.detail && event.detail.item; const componentKey = event.currentTarget.dataset.key; if (!item) return; this.sendEvent({ eventType: 'WORK_VIEWED', componentKey, workId: item.workId, mediaType: 'IMAGE' }); const url = item.mediaUrl || item.coverUrl; if (url) wx.previewImage({ current: url, urls: [url] }) },
+  handleSingleWorkPreview(event) { const detail = event.detail || {}; const work = detail.work; if (!work || !work.mediaUrl) return; this.sendEvent({ eventType: 'WORK_VIEWED', componentKey: detail.componentKey, workId: work.workId, mediaType: 'IMAGE' }); wx.previewImage({ current: work.mediaUrl, urls: [work.mediaUrl] }) },
+  handleSingleWorkActivate(event) { const detail = event.detail || {}; const work = detail.work; if (!detail.componentKey || !work) return; this.pauseSingleWorkVideos(detail.componentKey); this.setData({ activeSingleWorkVideoKey: detail.componentKey }); this.sendEvent({ eventType: 'VIDEO_PLAYED', componentKey: detail.componentKey, workId: work.workId, mediaType: 'VIDEO', durationSeconds: 0 }) },
+  handleSingleWorkVideoError() { this.stopSingleWorkVideos(); wx.showToast({ title: '视频播放失败，请重试', icon: 'none' }) },
+  pauseSingleWorkVideos(exceptKey) { const children = this.selectAllComponents ? this.selectAllComponents('.team-single-work-instance') : []; (children || []).forEach((child) => { if (!exceptKey || child.properties.componentKey !== exceptKey) child.pauseVideo && child.pauseVideo() }) },
+  stopSingleWorkVideos() { this.pauseSingleWorkVideos(''); this.setData({ activeSingleWorkVideoKey: '' }) },
+  onHide() { this.stopSingleWorkVideos() },
+  onUnload() { this.stopSingleWorkVideos() },
   handleMemberPortfolio(event) { const detail = event.detail || {}; const componentKey = event.currentTarget.dataset.key; this.sendEvent({ eventType: 'MEMBER_PORTFOLIO_OPENED', componentKey, memberPortfolioId: detail.portfolioId }); if (detail.shareCode) wx.navigateTo({ url: `${PERSONAL_VISITOR_URL}?shareCode=${encodeURIComponent(detail.shareCode)}&${PERSONAL_VISITOR_TEAM_SOURCE_QUERY}` }) },
   async handleScheduleQuery(event) { const detail = event.detail || {}; const child = this.selectComponent(`#schedule-${detail.componentKey}`); try { const result = await queryTeamVisitorSchedule((options) => this.visitorRequest(options), this.data.shareCode, { componentKey: detail.componentKey, queriedDate: detail.queriedDate, idempotencyKey: detail.idempotencyKey }); this.setData({ scheduleResults: Object.assign({}, this.data.scheduleResults, { [detail.componentKey]: result }) }); if (child && child.resolveQuery) child.resolveQuery({ detail: result }) } catch (error) { if (this.handleUnavailableError(error)) { if (child && child.rejectQuery) child.rejectQuery({ detail: { message: '当前团队作品集不可用', clearPendingIdempotencyKey: true } }); return }; if (child && child.rejectQuery) child.rejectQuery({ detail: { message: '档期查询失败，请重试', clearPendingIdempotencyKey: !isUncertainFailure(error) } }); wx.showToast({ title: '档期查询失败，请重试', icon: 'none' }) } },
   handleContactInput(event) { const detail = event.detail || {}; const componentKey = event.currentTarget.dataset.key; const pendingContactKeys = Object.assign({}, this.data.pendingContactKeys); delete pendingContactKeys[componentKey]; this.setData({ contactForms: Object.assign({}, this.data.contactForms, { [componentKey]: detail.form || {} }), pendingContactKeys }) },

@@ -42,6 +42,7 @@ const {
   normalizeDividerConfig,
   normalizeScheduleQueryConfig,
   normalizeSingleWorkConfig,
+  normalizeWorkDisplayOptions,
   normalizeProfileComponentConfig,
   normalizePortfolioConfig,
   normalizeTextSectionConfig,
@@ -52,6 +53,7 @@ const {
   updateComponentDividerConfig,
   updateComponentScheduleQueryConfig,
   updateSingleWorkConfig,
+  updateWorkDisplayOptions,
   updateComponentProfileConfig,
   updateComponentTextSectionConfig,
   updateComponentWorkIds
@@ -816,6 +818,7 @@ Page({
     componentWorkSelectedCountText: '0 已选',
     componentWorkSelectionMode: 'multiple',
     componentWorkShowTitle: true,
+    componentWorkShowDescription: false,
     editingComponentKey: '',
     editingComponentType: '',
     displayGroupSheetVisible: false,
@@ -830,6 +833,8 @@ Page({
     singleWorkSummaryMap: {},
     singleWorkSummaries: [],
     displayGroupOriginalConfig: null,
+    displayGroupShowTitle: true,
+    displayGroupShowDescription: false,
     workTagOptions: [],
     displayGroupLoading: false,
     displayGroupErrorText: '',
@@ -1520,6 +1525,7 @@ Page({
     if (!component) {
       return Promise.resolve()
     }
+    const displayOptions = normalizeWorkDisplayOptions(component.config || {})
     this.setData({
       displayGroupSheetVisible: true,
       editingDisplayComponentKey: componentKey,
@@ -1530,6 +1536,8 @@ Page({
       displayGroupWorkOptions: [],
       displayGroupAllWorks: [],
       displayGroupOriginalConfig: clonePlainObject(this.data.config),
+      displayGroupShowTitle: displayOptions.showTitle,
+      displayGroupShowDescription: displayOptions.showDescription,
       displayGroupErrorText: '',
       displayGroupLoading: true
     })
@@ -1846,6 +1854,8 @@ Page({
       displayGroupWorkOptions: [],
       displayGroupAllWorks: [],
       displayGroupOriginalConfig: null,
+      displayGroupShowTitle: true,
+      displayGroupShowDescription: false,
       displayGroupErrorText: '',
       displayGroupLoading: false
     }, originalConfig ? { config: originalConfig } : {}))
@@ -1865,8 +1875,32 @@ Page({
       displayGroupWorkOptions: [],
       displayGroupAllWorks: [],
       displayGroupOriginalConfig: null,
+      displayGroupShowTitle: true,
+      displayGroupShowDescription: false,
       displayGroupErrorText: '',
       displayGroupLoading: false
+    })
+  },
+
+  handleDisplayGroupShowTitleChange(event) {
+    const showTitle = Boolean(event.detail && event.detail.value)
+    this.setData({
+      config: updateWorkDisplayOptions(this.data.config, this.data.editingDisplayComponentKey, {
+        showTitle,
+        showDescription: this.data.displayGroupShowDescription
+      }),
+      displayGroupShowTitle: showTitle
+    })
+  },
+
+  handleDisplayGroupShowDescriptionChange(event) {
+    const showDescription = Boolean(event.detail && event.detail.value)
+    this.setData({
+      config: updateWorkDisplayOptions(this.data.config, this.data.editingDisplayComponentKey, {
+        showTitle: this.data.displayGroupShowTitle,
+        showDescription
+      }),
+      displayGroupShowDescription: showDescription
     })
   },
 
@@ -2044,6 +2078,7 @@ Page({
       componentWorkSelectedCountText: buildSelectedCountText(selectedIds),
       componentWorkSelectionMode: componentType === COMPONENT_TYPES.SINGLE_WORK ? 'single' : 'multiple',
       componentWorkShowTitle: singleWorkConfig ? singleWorkConfig.showTitle : true,
+      componentWorkShowDescription: singleWorkConfig ? singleWorkConfig.showDescription : false,
       editingComponentKey: componentKey,
       editingComponentType: componentType
     })
@@ -2171,12 +2206,17 @@ Page({
       componentWorkErrorText: '',
       componentWorkLoadingMore: false,
       componentWorkSelectionMode: 'multiple',
-      componentWorkShowTitle: true
+      componentWorkShowTitle: true,
+      componentWorkShowDescription: false
     })
   },
 
   handleSingleWorkShowTitleChange(event) {
     this.setData({ componentWorkShowTitle: Boolean(event.detail && event.detail.value) })
+  },
+
+  handleWorkShowDescriptionChange(event) {
+    this.setData({ componentWorkShowDescription: Boolean(event.detail && event.detail.value) })
   },
 
   handleToggleComponentWork(event) {
@@ -2232,7 +2272,8 @@ Page({
     const config = this.data.editingComponentType === COMPONENT_TYPES.SINGLE_WORK
       ? updateSingleWorkConfig(this.data.config, componentKey, {
           workId: this.data.componentWorkSelectedIds[0],
-          showTitle: this.data.componentWorkShowTitle
+          showTitle: this.data.componentWorkShowTitle,
+          showDescription: this.data.componentWorkShowDescription
         })
       : updateComponentWorkIds(this.data.config, componentKey, this.data.componentWorkSelectedIds)
     const displayGroupWorkMap = mergeDisplayGroupWorkMap(this.data.displayGroupWorkMap, this.data.componentWorkOptions)
@@ -2246,7 +2287,8 @@ Page({
       editingComponentKey: '',
       editingComponentType: '',
       componentWorkSelectionMode: 'multiple',
-      componentWorkShowTitle: true
+      componentWorkShowTitle: true,
+      componentWorkShowDescription: false
     })
   },
 

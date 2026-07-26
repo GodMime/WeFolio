@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>映期Folio · 作品集分享页色系适配与作品组件改造 v3</title>
+<style>
+  :root {
+    --doc-gold: #b88a44;
+    --doc-ink: #17202a;
+    --doc-muted: #66727f;
+    --doc-line: #e5e1da;
+    --doc-card: #ffffff;
+    --sans: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "PingFang SC", sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #eceae6; font-family: var(--sans); color: var(--doc-ink); }
+  .doc { max-width: 1080px; margin: 0 auto; padding: 48px 32px 96px; }
+  .doc-eyebrow { color: var(--doc-gold); font-weight: 700; font-size: 13px; letter-spacing: .12em; margin-bottom: 10px; }
+  .doc h1 { font-size: 30px; font-weight: 900; line-height: 1.25; }
+  .doc-sub { margin-top: 12px; color: var(--doc-muted); font-size: 15px; line-height: 1.8; max-width: 880px; }
+  .doc h2 { font-size: 20px; font-weight: 800; margin: 52px 0 8px; padding-left: 12px; border-left: 4px solid var(--doc-gold); }
+  .doc h2 + p { color: var(--doc-muted); font-size: 14px; line-height: 1.8; margin-bottom: 20px; max-width: 900px; }
+
+  code { font-family: ui-monospace, monospace; font-size: 12.5px; background: #f4f0e8; color: #9a7236; padding: 1px 6px; border-radius: 4px; }
+
+  .principles { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-top: 20px; }
+  .principle { background: var(--doc-card); border: 1px solid var(--doc-line); border-radius: 8px; padding: 14px 16px; font-size: 13px; line-height: 1.7; color: var(--doc-muted); }
+  .principle b { display: block; color: var(--doc-ink); font-size: 14px; margin-bottom: 4px; }
+
+  /* 色系 */
+  .t-gold { --t-accent: #b88a44; --t-accent-deep: #9a7236; --t-accent-soft: #f7efdf; --t-paper: #faf8f5; --t-line: #ece6dd; }
+  .t-rose { --t-accent: #a2455c; --t-accent-deep: #84374a; --t-accent-soft: #f9edef; --t-paper: #fbf7f6; --t-line: #f0e3e1; }
+  .t-blue { --t-accent: #3a5f8a; --t-accent-deep: #2d4c70; --t-accent-soft: #ebf1f8; --t-paper: #f7f9fb; --t-line: #e1e8f0; }
+  .t-pine { --t-accent: #33705a; --t-accent-deep: #285a48; --t-accent-soft: #eaf4ef; --t-paper: #f6faf8; --t-line: #dfebe4; }
+
+  .theme-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
+  .theme-card { background: var(--t-paper); border: 1px solid var(--t-line); border-radius: 10px; overflow: hidden; }
+  .theme-card-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px 10px; }
+  .theme-card-name { font-size: 14px; font-weight: 800; }
+  .theme-card-name small { display: block; font-size: 11px; color: var(--doc-muted); font-weight: 500; margin-top: 2px; font-family: ui-monospace, monospace; }
+  .theme-default-tag { font-size: 10.5px; color: var(--t-accent-deep); background: var(--t-accent-soft); border-radius: 99px; padding: 3px 8px; }
+  .theme-sws { display: flex; gap: 6px; padding: 0 14px 12px; }
+  .theme-sws i { flex: 1; height: 26px; border-radius: 5px; border: 1px solid rgba(0,0,0,.05); }
+  .theme-frag { border-top: 1px dashed var(--t-line); padding: 12px 14px 14px; display: flex; gap: 8px; align-items: center; }
+  .tf-btn { font-size: 11px; font-weight: 700; color: #fff; background: var(--t-accent); border-radius: 99px; padding: 6px 14px; }
+  .tf-sel { font-size: 11px; font-weight: 700; color: var(--t-accent-deep); background: var(--t-accent-soft); border: 1px solid var(--t-accent); border-radius: 6px; padding: 5px 10px; }
+  .tf-tag { font-size: 11px; color: var(--t-accent-deep); font-weight: 900; }
+
+  /* 编辑器色系选择器示意 */
+  .editor-mock { background: var(--doc-card); border: 1px solid var(--doc-line); border-radius: 10px; padding: 18px; max-width: 560px; }
+  .editor-mock-title { font-size: 13px; font-weight: 700; margin-bottom: 12px; }
+  .editor-theme-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .editor-theme { border: 2px solid var(--doc-line); border-radius: 8px; padding: 8px; text-align: center; font-size: 11.5px; color: var(--doc-muted); }
+  .editor-theme.on { border-color: var(--doc-gold); color: var(--doc-ink); font-weight: 700; }
+  .editor-theme .et-bar { height: 22px; border-radius: 4px; margin-bottom: 6px; }
+  .editor-toggles { margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--doc-line); display: grid; gap: 8px; }
+  .editor-toggle { display: flex; align-items: center; justify-content: space-between; font-size: 12.5px; color: var(--doc-ink); }
+  .switch { width: 38px; height: 22px; border-radius: 99px; background: var(--doc-gold); position: relative; }
+  .switch::after { content: ""; position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; }
+  .switch.off { background: #d3d7dc; }
+  .switch.off::after { right: auto; left: 2px; }
+
+  table.cmp { width: 100%; border-collapse: collapse; background: var(--doc-card); border-radius: 8px; overflow: hidden; font-size: 13px; }
+  table.cmp th, table.cmp td { padding: 11px 14px; text-align: left; border-bottom: 1px solid var(--doc-line); line-height: 1.65; vertical-align: top; }
+  table.cmp th { background: #f5f2ec; font-size: 12.5px; }
+  table.cmp tr:last-child td { border-bottom: 0; }
+  .sw-inline { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 5px; border: 1px solid rgba(0,0,0,.08); }
+
+  /* 作品组件 before/after 示意 */
+  .ba-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .ba-card { background: #fff; border: 1px solid var(--doc-line); border-radius: 10px; overflow: hidden; }
+  .ba-head { padding: 10px 14px; font-size: 12.5px; font-weight: 800; background: #f5f2ec; display: flex; justify-content: space-between; align-items: center; }
+  .ba-head small { font-weight: 500; color: var(--doc-muted); font-family: ui-monospace, monospace; font-size: 11px; }
+  .ba-body { padding: 14px; }
+  .mock-page { background: #fff; border: 1px solid var(--doc-line); border-radius: 6px; padding: 10px; }
+  .mock-tags { display: flex; gap: 14px; font-size: 11px; color: #8a8f98; margin-bottom: 10px; }
+  .mock-tags b { color: var(--doc-gold); font-weight: 900; }
+  .mock-row { display: flex; }
+  .mock-work { flex: 1; min-width: 0; }
+  .mock-cover { position: relative; height: 84px; background: linear-gradient(150deg, #cfd6dd, #9aa7b4); border-radius: 2px; }
+  .mock-cover.p2 { background: linear-gradient(150deg, #e3d5bd, #b8a078); }
+  .mock-play { position: absolute; right: 5px; bottom: 5px; width: 14px; height: 14px; border-radius: 50%; background: rgba(0,0,0,.48); border: 1px solid rgba(255,255,255,.8); }
+  .mock-title { font-size: 10.5px; font-weight: 700; color: #17202a; margin-top: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mock-desc { font-size: 9.5px; color: #8a8f98; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .gap-old { gap: 6px; } .gap-old .mock-work { margin-bottom: 9px; }
+  .gap-new { gap: 8px; } .gap-new .mock-work { margin-bottom: 12px; }
+  .ba-note { padding: 0 14px 12px; font-size: 11.5px; color: var(--doc-muted); line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="doc">
+
+  <div class="doc-eyebrow">映期FOLIO · 设计稿 v3.0</div>
+  <h1>分享页色系适配 + 作品组件间距与显隐开关</h1>
+  <p class="doc-sub">
+    本版收敛范围：<b>除作品组件外，所有组件视觉完全维持项目现状，仅把既有强调色替换为主题色</b>；
+    WORK_GRID / WORK_LIST 做间距微调；WORK_GRID / WORK_LIST / SINGLE_WORK 统一提供作品标题、作品说明两个显隐开关。
+    色系通过新增作品集级配置 <code>theme</code> 选择，向前兼容。
+  </p>
+
+  <div class="principles">
+    <div class="principle"><b>组件维持现状</b>布局、字号、间距、圆角、进度条、月历、表单等一律不动；唯一变化是"强调色"从硬编码色值改为主题变量。</div>
+    <div class="principle"><b>向前兼容</b>theme 与两个显隐开关均为可选新增键，缺省值 = 当前线上渲染效果；旧 schema_json 零迁移，旧版小程序忽略新字段不报错。</div>
+    <div class="principle"><b>作品组件微调</b>仅 WORK_GRID / WORK_LIST 调整卡片间距；WORK_GRID / WORK_LIST / SINGLE_WORK 均提供 <code>showTitle</code> / <code>showDescription</code> 开关，缺省值统一为 true / false。</div>
+    <div class="principle"><b>配置色优先</b>tags[].color、档位 slot color、divider color 等用户可配色一律保留，不被主题色覆盖。</div>
+  </div>
+
+  <h2>新增配置：页面色系 theme</h2>
+  <p>
+    <code>schema_json</code> 根级（与 <code>share</code>、<code>components</code> 平级）新增可选键 <code>theme</code>，白名单
+    <code>GOLD / ROSE / BLUE / PINE</code>。后端 Validator 校验白名单、非法值回落 <code>GOLD</code>；RenderService 透传；
+    前端 normalize 缺省 <code>GOLD</code>，页面根节点挂 <code>theme-xxx</code> class，组件内既有强调色改为主题变量。
+    旧作品集无此键 → 默认 GOLD；旧版小程序忽略此字段 → 按原硬编码色渲染（<b>注意：此时旧小程序看到的一定是 GOLD 色系的硬编码值，所以 GOLD 必须与现状视觉一致或最接近</b>，见下表说明）。
+  </p>
+
+  <div class="theme-grid">
+    <div class="theme-card t-gold">
+      <div class="theme-card-head"><div class="theme-card-name">墨金<small>GOLD · 默认</small></div><span class="theme-default-tag">默认色系</span></div>
+      <div class="theme-sws"><i style="background:#b88a44"></i><i style="background:#9a7236"></i><i style="background:#f7efdf"></i><i style="background:#faf8f5"></i></div>
+      <div class="theme-frag"><span class="tf-btn">提交查询</span><span class="tf-sel">26</span><span class="tf-tag">全部</span></div>
+    </div>
+    <div class="theme-card t-rose">
+      <div class="theme-card-head"><div class="theme-card-name">绛红<small>ROSE</small></div></div>
+      <div class="theme-sws"><i style="background:#a2455c"></i><i style="background:#84374a"></i><i style="background:#f9edef"></i><i style="background:#fbf7f6"></i></div>
+      <div class="theme-frag"><span class="tf-btn">提交查询</span><span class="tf-sel">26</span><span class="tf-tag">全部</span></div>
+    </div>
+    <div class="theme-card t-blue">
+      <div class="theme-card-head"><div class="theme-card-name">黛蓝<small>BLUE</small></div></div>
+      <div class="theme-sws"><i style="background:#3a5f8a"></i><i style="background:#2d4c70"></i><i style="background:#ebf1f8"></i><i style="background:#f7f9fb"></i></div>
+      <div class="theme-frag"><span class="tf-btn">提交查询</span><span class="tf-sel">26</span><span class="tf-tag">全部</span></div>
+    </div>
+    <div class="theme-card t-pine">
+      <div class="theme-card-head"><div class="theme-card-name">松绿<small>PINE</small></div></div>
+      <div class="theme-sws"><i style="background:#33705a"></i><i style="background:#285a48"></i><i style="background:#eaf4ef"></i><i style="background:#f6faf8"></i></div>
+      <div class="theme-frag"><span class="tf-btn">提交查询</span><span class="tf-sel">26</span><span class="tf-tag">全部</span></div>
+    </div>
+  </div>
+
+  <h2 style="margin-top:32px">编辑器：色系选择器（新增项）</h2>
+  <p>个人 / 团队编辑页顶部新增"页面色系"，即选即预览；不改动任何既有组件编辑表单。</p>
+  <div class="editor-mock">
+    <div class="editor-mock-title">页面色系</div>
+    <div class="editor-theme-row">
+      <div class="editor-theme on"><div class="et-bar" style="background:linear-gradient(90deg,#b88a44,#f7efdf)"></div>墨金（默认）</div>
+      <div class="editor-theme"><div class="et-bar" style="background:linear-gradient(90deg,#a2455c,#f9edef)"></div>绛红</div>
+      <div class="editor-theme"><div class="et-bar" style="background:linear-gradient(90deg,#3a5f8a,#ebf1f8)"></div>黛蓝</div>
+      <div class="editor-theme"><div class="et-bar" style="background:linear-gradient(90deg,#33705a,#eaf4ef)"></div>松绿</div>
+    </div>
+  </div>
+
+  <h2>主题色应用点（仅以下颜色替换，其余一律不动）</h2>
+  <table class="cmp">
+    <tr><th>组件 / 元素</th><th>现状色值</th><th>改为</th></tr>
+    <tr><td>档期查询 · 提交 / 打开按钮</td><td><span class="sw-inline" style="background:#17202a"></span>#17202a（个人 & 团队弹层/内联）</td><td>主题色 --t-accent</td></tr>
+    <tr><td>档期查询 · 月历选中日期</td><td><span class="sw-inline" style="background:#17202a"></span>#17202a 底 + 白字</td><td>主题色底 + 白字</td></tr>
+    <tr><td>档期查询 · 档位选中态</td><td><span class="sw-inline" style="background:#c7d8ea"></span>描边 #c7d8ea / <span class="sw-inline" style="background:#f3f8fc"></span>浅底 #f3f8fc</td><td>主题色描边 / --t-accent-soft 浅底</td></tr>
+    <tr><td>联系表单 · 提交按钮</td><td><span class="sw-inline" style="background:#17202a"></span>#17202a</td><td>主题色 --t-accent</td></tr>
+    <tr><td>团队访客页 · 主按钮（现状不统一）</td><td><span class="sw-inline" style="background:#0f766e"></span>#0f766e 青绿</td><td>主题色 --t-accent（顺带统一）</td></tr>
+    <tr><td>作品组件 · 分组标签选中态</td><td><span class="sw-inline" style="background:#000"></span>#000 加粗</td><td>主题色 --t-accent-deep 加粗</td></tr>
+    <tr><td>页面底色 / 分隔线</td><td>白底、灰线</td><td>--t-paper / --t-line（差异极轻微，近白）</td></tr>
+    <tr><td><b>不动的颜色</b></td><td colspan="2">正文/辅助文字色、灰底占位、disabled 灰、错误红 #9f2d45、轮播进度条（白色，保持现状）、tags[].color、档位 slot color、divider color/heightPx —— 配置色与语义色一律保留</td></tr>
+  </table>
+
+  <h2>作品组件改造（WORK_GRID / WORK_LIST / SINGLE_WORK）</h2>
+  <p>1) 仅 WORK_GRID / WORK_LIST 微调间距，让卡片呼吸感稍好，不动卡片结构与封面尺寸；2) 三种作品组件统一提供两个显隐开关，缺省值保持线上现状。</p>
+
+  <table class="cmp">
+    <tr><th>间距项</th><th>现状</th><th>调整后</th></tr>
+    <tr><td>卡片列间距（grid）</td><td>12rpx（卡片 padding 0 6rpx）</td><td>16rpx（padding 0 8rpx）</td></tr>
+    <tr><td>卡片行间距（grid）</td><td>18rpx（padding-bottom）</td><td>24rpx</td></tr>
+    <tr><td>网格容器上边距</td><td>padding-top 22rpx</td><td>24rpx</td></tr>
+    <tr><td>封面 → 标题间距</td><td>margin-top 10rpx</td><td>12rpx</td></tr>
+    <tr><td>标题 → 说明间距（list / 开关开启时）</td><td>4rpx</td><td>6rpx</td></tr>
+  </table>
+
+  <table class="cmp" style="margin-top:16px">
+    <tr><th>新增配置键</th><th>适用组件</th><th>默认值（= 线上现状）</th><th>说明</th></tr>
+    <tr><td><code>showTitle</code></td><td>WORK_GRID / WORK_LIST / SINGLE_WORK</td><td>true</td><td>关闭后不渲染作品标题行（wx:if），封面变为纯图墙</td></tr>
+    <tr><td><code>showDescription</code></td><td>WORK_GRID / WORK_LIST / SINGLE_WORK</td><td>false</td><td>开启后显示作品说明；缺省关闭以保持历史行为，旧数据渲染不变</td></tr>
+  </table>
+
+  <div class="ba-grid" style="margin-top:20px">
+    <div class="ba-card">
+      <div class="ba-head">现状 GRID<small>间距 12/18rpx · 标题必显 · 无说明</small></div>
+      <div class="ba-body"><div class="mock-page">
+        <div class="mock-tags"><b>全部</b><span>婚礼</span><span>旅拍</span></div>
+        <div class="mock-row gap-old">
+          <div class="mock-work"><div class="mock-cover"><i class="mock-play"></i></div><div class="mock-title">西湖边的誓言</div></div>
+          <div class="mock-work"><div class="mock-cover p2"></div><div class="mock-title">晨袍时刻</div></div>
+          <div class="mock-work"><div class="mock-cover"></div><div class="mock-title">山野目的地婚礼</div></div>
+        </div>
+      </div></div>
+    </div>
+    <div class="ba-card">
+      <div class="ba-head">开启说明的 GRID<small>间距 16/24rpx · showTitle=true · showDescription=true</small></div>
+      <div class="ba-body"><div class="mock-page">
+        <div class="mock-tags"><b>全部</b><span>婚礼</span><span>旅拍</span></div>
+        <div class="mock-row gap-new">
+          <div class="mock-work"><div class="mock-cover"><i class="mock-play"></i></div><div class="mock-title">西湖边的誓言</div><div class="mock-desc">纪实婚礼 · 2026 春</div></div>
+          <div class="mock-work"><div class="mock-cover p2"></div><div class="mock-title">晨袍时刻</div><div class="mock-desc">胶片感 · 室内</div></div>
+          <div class="mock-work"><div class="mock-cover"></div><div class="mock-title">山野目的地婚礼</div><div class="mock-desc">旅拍 · 大理</div></div>
+        </div>
+      </div></div>
+    </div>
+    <div class="ba-card">
+      <div class="ba-head">开关全关 GRID<small>showTitle=false · 纯图墙</small></div>
+      <div class="ba-body"><div class="mock-page">
+        <div class="mock-tags"><b>全部</b><span>婚礼</span><span>旅拍</span></div>
+        <div class="mock-row gap-new">
+          <div class="mock-work"><div class="mock-cover"><i class="mock-play"></i></div></div>
+          <div class="mock-work"><div class="mock-cover p2"></div></div>
+          <div class="mock-work"><div class="mock-cover"></div></div>
+        </div>
+      </div></div>
+      <div class="ba-note">showTitle=false 时标题行整行不渲染，卡片只剩封面，适合纯展示型作品集。</div>
+    </div>
+    <div class="ba-card">
+      <div class="ba-head">编辑器 · 作品组件新增开关</div>
+      <div class="ba-body">
+        <div class="editor-toggles" style="margin-top:0;padding-top:0;border-top:0">
+          <div class="editor-toggle">显示作品标题<span class="switch"></span></div>
+          <div class="editor-toggle">显示作品说明<span class="switch off"></span></div>
+        </div>
+      </div>
+      <div class="ba-note">WORK_GRID、WORK_LIST、SINGLE_WORK 的"显示作品标题"默认开，"显示作品说明"默认关。编辑即预览。</div>
+    </div>
+  </div>
+
+  <h2>兼容性与落地范围</h2>
+  <table class="cmp">
+    <tr><th>层</th><th>改动</th></tr>
+    <tr><td>后端 runtime</td><td>Validator 放开 theme（白名单 + 非法回落 GOLD）与 showTitle / showDescription（布尔、缺省统一为 true / false）；RenderService 透传。接口仅新增可选字段，旧小程序可正常解析</td></tr>
+    <tr><td>小程序 · 分享页</td><td>normalize 读取 theme / 两个开关（缺省值同现状）→ 页面根节点挂 theme class；上表所列强调色改主题变量；作品组件 wxss 调 5 处间距 + wxml 加 2 个 wx:if。预览页/访客页共用组件自动同时生效</td></tr>
+    <tr><td>小程序 · 编辑器</td><td>个人/团队编辑页加"页面色系"选择；作品组件表单加两个开关；编辑态即时预览</td></tr>
+    <tr><td>完全不动</td><td>组件顺序与启停、renderData 既有字段、所有组件布局与排版、轮播进度条、档期查询单日查询逻辑、分享卡片、访问统计、配置色（tags / slot / divider）、mock 体验版</td></tr>
+    <tr><td>GOLD 色值注意</td><td>旧版小程序无 theme 概念，看到的是 wxss 里原有的硬编码色；本次把硬编码色换成主题变量时，GOLD 主题下的变量值应尽量贴近现状（按钮等深色块从 #17202a 墨变为 #b88a44 金是色系适配的预期差异，需确认接受；若要求 GOLD 与现状完全一致，则 GOLD 的 accent 应取 #17202a 墨、点缀取金）</td></tr>
+  </table>
+
+</div>
+</body>
+</html>

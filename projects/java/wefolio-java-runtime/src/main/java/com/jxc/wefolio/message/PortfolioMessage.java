@@ -11,6 +11,12 @@ public interface PortfolioMessage {
     /** 作品集不可访问提示 */
     String PORTFOLIO_UNAVAILABLE_MESSAGE = "作品集暂不可访问";
 
+    /** 作品集归属类型错误提示 */
+    String PORTFOLIO_OWNER_TYPE_INVALID_MESSAGE = "作品集归属类型不正确";
+
+    /** SHA-256 算法不可用提示 */
+    String SHA_256_UNAVAILABLE_MESSAGE = "SHA-256 算法不可用";
+
     /** 微信登录凭证为空提示 */
     String WECHAT_LOGIN_CODE_REQUIRED_MESSAGE = "微信登录凭证不能为空";
 
@@ -106,6 +112,15 @@ public interface PortfolioMessage {
 
     /** 联系表单组件不存在提示 */
     String CONTACT_FORM_COMPONENT_NOT_FOUND_MESSAGE = "联系表单组件不存在";
+
+    /** 联系线索访问记录无效提示 */
+    String CONTACT_LEAD_VISIT_RECORD_INVALID_MESSAGE = "访问记录无效";
+
+    /** 联系线索字段长度无效提示 */
+    String CONTACT_LEAD_FIELD_LENGTH_INVALID_MESSAGE = "预留联系信息字段长度不合法";
+
+    /** 同一访客同一作品集联系线索数量上限提示 */
+    String CONTACT_LEAD_SUBMISSION_LIMIT_MESSAGE = "同一访客对同一作品集最多可提交3次联系方式";
 
     /** 暂不支持组件提示模板 */
     String COMPONENT_UNSUPPORTED_TEMPLATE = "暂不支持的作品集组件：%s";

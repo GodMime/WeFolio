@@ -22,13 +22,23 @@ class VisitorContextHolderTest {
         VisitorContext first = new VisitorContext(1024L, "visitor-key", "Bearer wf-visitor-v1.token");
         VisitorContext same = new VisitorContext(1024L, "visitor-key", "Bearer wf-visitor-v1.token");
         VisitorContext other = new VisitorContext(2048L, "visitor-b", "Bearer wf-visitor-v1.other");
+        VisitorContext timelineAnonymous = new VisitorContext(
+                1024L,
+                "visitor-key",
+                "Bearer wf-visitor-v1.token",
+                true
+        );
 
         assertThat(first).isEqualTo(same);
         assertThat(first.hashCode()).isEqualTo(same.hashCode());
         assertThat(first).isNotEqualTo(other);
+        assertThat(first).isNotEqualTo(timelineAnonymous);
+        assertThat(first.isTimelineAnonymous()).isFalse();
+        assertThat(timelineAnonymous.isTimelineAnonymous()).isTrue();
         assertThat(first.toString())
                 .contains("visitorId=1024")
                 .contains("visitorKey=visitor-key")
+                .contains("timelineAnonymous=false")
                 .contains("token=***")
                 .doesNotContain("Bearer wf-visitor-v1.token");
     }
