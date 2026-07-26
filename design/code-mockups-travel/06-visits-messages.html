@@ -80,7 +80,7 @@
   }
   .nav-title { flex: 1; text-align: center; font-size: 17px; font-weight: 600; padding-right: 44px; }
 
-  .page-body { flex: 1; padding: 16px 14px; background: #f5f6f7; }
+  .page-body { flex: 1; padding: 12px 16px; background: #f5f6f7; }
 
   /* ===== 通用卡片(白卡 24px 圆角) ===== */
   .panel {
@@ -91,13 +91,16 @@
   .section-title { color: #212529; font-size: 15px; font-weight: 700; line-height: 1.35; }
 
   /* ===== 访问记录页 ===== */
-  .metric-grid { display: flex; flex-wrap: wrap; margin: -5px -5px 0; }
-  .metric-cell { flex: 0 0 50%; width: 50%; padding: 5px; position: relative; }
-  .metric {
-    min-height: 84px; padding: 16px 10px 14px; text-align: center;
+  /* 四项指标拆为两张卡:每卡一行两个指标,发丝竖线分隔 */
+  .metric-grid {
+    display: flex; overflow: hidden;
     border: 1px solid #e9ecef; border-radius: 24px;
     background: #ffffff;
   }
+  .metric-grid + .metric-grid { margin-top: 10px; }
+  .metric-cell { flex: 0 0 50%; width: 50%; position: relative; }
+  .metric-cell:nth-child(2n) { border-left: 1px solid #f1f3f5; }
+  .metric { padding: 12px 8px; text-align: center; }
   .metric.interactive { position: relative; }
   .metric.interactive::after {
     content: ''; position: absolute; right: 14px; top: 50%;
@@ -105,11 +108,11 @@
     border-right: 1.5px solid #ced4da; border-top: 1.5px solid #ced4da;
     transform: rotate(45deg);
   }
-  .metric-value { color: #212529; font-size: 26px; font-weight: 700; line-height: 1.1; letter-spacing: 0.2px; }
-  .metric-label { margin-top: 6px; color: #868e96; font-size: 11px; line-height: 1.25; }
+  .metric-value { color: #212529; font-size: 23px; font-weight: 700; line-height: 1.1; letter-spacing: 0.2px; }
+  .metric-label { margin-top: 3px; color: #868e96; font-size: 11px; line-height: 1.25; }
 
-  .trend-panel, .visit-detail-panel { margin-top: 14px; padding: 16px; }
-  .visit-detail-panel { padding-bottom: 8px; }
+  .trend-panel, .visit-detail-panel { margin-top: 10px; padding: 14px; }
+  .visit-detail-panel { padding-bottom: 6px; }
   .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .panel-desc { color: #adb5bd; font-size: 11px; }
 
@@ -137,12 +140,12 @@
   .badge.gray { color: #868e96; }
   .badge.gold { color: #c08a3e; }
 
-  .trend-chart { margin-top: 14px; }
-  .trend-chart svg { display: block; width: 100%; height: auto; }
-  .trend-label-row { display: flex; gap: 4px; margin-top: 6px; }
+  .trend-chart { margin-top: 10px; }
+  .trend-chart svg { display: block; width: 100%; height: 120px; }
+  .trend-label-row { display: flex; gap: 4px; margin-top: 4px; }
   .trend-label { flex: 1; color: #adb5bd; font-size: 10px; text-align: center; }
 
-  .visit-list { margin-top: 6px; }
+  .visit-list { margin-top: 4px; }
   .visit-swipe-row { position: relative; overflow: hidden; }
   .visit-follow-pane {
     position: absolute; right: 0; top: 0; bottom: 0; width: 84px;
@@ -151,7 +154,7 @@
   }
   .visit-row {
     position: relative; display: flex; gap: 10px; align-items: center;
-    min-height: 64px; padding: 13px 0;
+    min-height: 56px; padding: 9px 0;
     border-bottom: 1px solid #f1f3f5; background: #fff;
   }
   .visit-swipe-row:last-child .visit-row { border-bottom: 0; }
@@ -164,7 +167,7 @@
   }
   .visit-copy { flex: 1; min-width: 0; }
   .visitor-name { color: #212529; font-size: 13px; font-weight: 600; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .visit-source { margin-top: 3px; color: #868e96; font-size: 11px; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .visit-source { margin-top: 2px; color: #868e96; font-size: 11px; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .visit-summary { margin-top: 2px; color: #868e96; font-size: 11px; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   /* ===== 底部弹层 ===== */
@@ -179,7 +182,7 @@
     padding: 10px 14px 14px; overflow: hidden;
     border-radius: 28px 28px 0 0; background: #ffffff;
   }
-  .sheet-grabber { width: 32px; height: 4px; flex: none; margin: 0 auto 12px; border-radius: 999px; background: #dee2e6; }
+  .sheet-grabber { width: 32px; height: 4px; flex: none; margin: 0 auto 10px; border-radius: 999px; background: #dee2e6; }
   .sheet-heading { display: flex; align-items: center; gap: 10px; }
   .sheet-heading-copy { flex: 1; min-width: 0; }
   .sheet-close {
@@ -190,15 +193,15 @@
   }
   .sheet-title-heading {
     display: flex; align-items: center; justify-content: space-between; gap: 9px;
-    padding-bottom: 12px; border-bottom: 1px solid #f1f3f5;
+    padding-bottom: 10px; border-bottom: 1px solid #f1f3f5;
   }
   .event-summary-row {
     display: flex; align-items: center; justify-content: space-between; gap: 8px;
-    margin-top: 10px; padding: 8px 0 12px; border-bottom: 1px solid #f1f3f5;
+    margin-top: 8px; padding: 6px 0 10px; border-bottom: 1px solid #f1f3f5;
   }
   .event-meta { flex: 1; color: #adb5bd; font-size: 11px; text-align: right; }
   .event-list { flex: 1; overflow: hidden; }
-  .event-item { display: flex; gap: 10px; padding: 13px 0; border-bottom: 1px solid #f1f3f5; }
+  .event-item { display: flex; gap: 10px; padding: 11px 0; border-bottom: 1px solid #f1f3f5; }
   .event-item:last-child { border-bottom: 0; }
   .event-dot {
     width: 7px; height: 7px; flex: none; margin-top: 5px;
@@ -211,12 +214,12 @@
   .event-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .event-title { flex: 1; color: #212529; font-size: 13px; font-weight: 600; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .event-time { flex: none; color: #868e96; font-size: 11px; font-weight: 500; }
-  .event-detail { margin-top: 3px; color: #868e96; font-size: 11px; line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .event-detail { margin-top: 2px; color: #868e96; font-size: 11px; line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .event-date { margin-top: 1px; color: #adb5bd; font-size: 11px; line-height: 1.5; }
-  .sheet-load-end { padding: 12px 0 4px; color: #adb5bd; font-size: 11px; text-align: center; }
+  .sheet-load-end { padding: 10px 0 2px; color: #adb5bd; font-size: 11px; text-align: center; }
 
   /* 明细弹层:查询档期 */
-  .detail-item { padding: 14px 0; border-bottom: 1px solid #f1f3f5; }
+  .detail-item { padding: 12px 0; border-bottom: 1px solid #f1f3f5; }
   .detail-item:last-child { border-bottom: 0; }
   .detail-item-row { display: flex; align-items: center; justify-content: space-between; gap: 9px; }
   .detail-person { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
@@ -226,9 +229,9 @@
   .detail-meta { margin-top: 4px; color: #adb5bd; font-size: 11px; line-height: 1.5; }
 
   /* 明细弹层:预留信息(联系线索) */
-  .contact-lead-layout { position: relative; padding: 14px 96px 14px 0; border-bottom: 1px solid #f1f3f5; }
+  .contact-lead-layout { position: relative; padding: 12px 96px 12px 0; border-bottom: 1px solid #f1f3f5; }
   .contact-lead-layout:last-child { border-bottom: 0; }
-  .contact-lead-status { position: absolute; top: 14px; right: 0; }
+  .contact-lead-status { position: absolute; top: 12px; right: 0; }
   .contact-method-list { margin-top: 8px; }
   .contact-method-row { display: flex; align-items: center; gap: 7px; min-height: 22px; }
   .contact-method-row + .contact-method-row { margin-top: 4px; }
@@ -263,13 +266,13 @@
   /* ===== 我的消息页 ===== */
   .summary-panel {
     display: flex; align-items: center; justify-content: space-between; gap: 10px;
-    min-height: 88px; padding: 18px;
+    padding: 14px;
   }
   .summary-label { color: #868e96; font-size: 11px; }
-  .summary-value { margin-top: 6px; color: #212529; font-size: 26px; font-weight: 700; line-height: 1; }
+  .summary-value { margin-top: 8px; color: #212529; font-size: 26px; font-weight: 700; line-height: 1; }
 
   .filter-tabs {
-    display: flex; gap: 4px; margin-top: 14px; padding: 4px;
+    display: flex; gap: 4px; margin-top: 10px; padding: 4px;
     border: 1px solid #e9ecef; border-radius: 999px;
     background: #ffffff;
   }
@@ -280,18 +283,18 @@
   }
   .filter-tab.active { color: #fff; background: #212529; }
 
-  .action-row { display: flex; gap: 8px; margin-top: 14px; }
+  .action-row { display: flex; gap: 8px; margin-top: 10px; }
   .outline-btn, .solid-btn {
-    flex: 1; min-height: 40px;
+    flex: 1; min-height: 44px;
     display: flex; align-items: center; justify-content: center;
     font-size: 13px; font-weight: 500; border-radius: 999px;
   }
   .outline-btn { color: #212529; background: #ffffff; border: 1px solid #e9ecef; }
   .solid-btn { color: #fff; background: #212529; }
 
-  .list-panel { margin-top: 14px; overflow: hidden; }
-  .message-list { padding: 0 16px; }
-  .message-row { display: flex; align-items: flex-start; gap: 8px; padding: 14px 0; border-top: 1px solid #f1f3f5; }
+  .list-panel { margin-top: 10px; overflow: hidden; }
+  .message-list { padding: 0 14px; }
+  .message-row { display: flex; align-items: flex-start; gap: 8px; padding: 10px 0; border-top: 1px solid #f1f3f5; }
   .message-row:first-child { border-top: 0; }
   .select-dot {
     width: 16px; height: 16px; flex: none; margin-top: 3px;
@@ -311,9 +314,9 @@
   .message-copy { flex: 1; min-width: 0; }
   .message-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .message-time { flex: none; color: #adb5bd; font-size: 11px; }
-  .message-title { margin-top: 6px; color: #212529; font-size: 13px; font-weight: 600; line-height: 1.35; }
-  .message-content { margin-top: 4px; color: #495057; font-size: 12px; line-height: 1.55; }
-  .message-actions { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  .message-title { margin-top: 4px; color: #212529; font-size: 13px; font-weight: 600; line-height: 1.35; }
+  .message-content { margin-top: 2px; color: #495057; font-size: 12px; line-height: 1.55; }
+  .message-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
   .message-action {
     min-width: 60px; min-height: 28px; padding: 0 14px;
     display: flex; align-items: center; justify-content: center;
@@ -356,10 +359,12 @@
       </div>
       <div class="page-body">
 
-        <!-- 指标卡 2x2 -->
+        <!-- 指标卡:每卡一行两个指标 -->
         <div class="metric-grid">
           <div class="metric-cell"><div class="metric"><div class="metric-value">128</div><div class="metric-label">累计访问次数</div></div></div>
           <div class="metric-cell"><div class="metric"><div class="metric-value">6</div><div class="metric-label">今日访问</div></div></div>
+        </div>
+        <div class="metric-grid">
           <div class="metric-cell"><div class="metric interactive"><div class="metric-value">12</div><div class="metric-label">查询档期</div></div></div>
           <div class="metric-cell"><div class="metric interactive"><div class="metric-value">3</div><div class="metric-label">预留信息</div></div></div>
         </div>

@@ -75,7 +75,7 @@
 
   .login-hero {
     position: relative; flex: 1 1 0; min-height: 240px;
-    margin: 8px 12px 0; overflow: hidden; border-radius: 24px;
+    margin: 8px 16px 0; overflow: hidden; border-radius: 24px;
     background: #dee2e6;
   }
   .login-hero.small { min-height: 180px; }
@@ -87,10 +87,10 @@
     position: absolute; inset: 0;
     background: linear-gradient(180deg, rgba(0, 0, 0, 0) 35%, rgba(0, 0, 0, 0.5) 100%);
   }
-  .hero-copy { position: absolute; left: 20px; right: 20px; bottom: 18px; color: #fff; }
+  .hero-copy { position: absolute; left: 20px; right: 20px; bottom: 16px; color: #fff; }
   .hero-title { max-width: 270px; font-size: 20px; font-weight: 700; line-height: 1.3; }
 
-  .login-content { display: flex; flex-direction: column; gap: 12px; padding: 12px 12px 16px; }
+  .login-content { display: flex; flex-direction: column; gap: 10px; padding: 10px 16px 16px; }
 
   .card {
     border: 1px solid #e9ecef; border-radius: 24px;
@@ -98,7 +98,7 @@
   }
 
   .welcome-panel {
-    display: flex; min-height: 80px; padding: 16px;
+    display: flex; padding: 14px;
     align-items: center; justify-content: space-between; gap: 10px;
   }
   .welcome-title { color: #212529; font-size: 17px; font-weight: 700; line-height: 1.3; }
@@ -109,7 +109,7 @@
     object-fit: cover;
   }
 
-  .auth-panel { display: flex; flex-direction: column; gap: 12px; padding: 14px; }
+  .auth-panel { display: flex; flex-direction: column; gap: 10px; padding: 14px; }
 
   /* 分段控件：选中黑胶囊白字，未选透明灰字 */
   .login-tabs {
@@ -123,10 +123,10 @@
   }
   .login-tab.active { color: #fff; font-weight: 600; background: #212529; }
 
-  .login-form { display: flex; flex-direction: column; gap: 10px; }
+  .login-form { display: flex; flex-direction: column; gap: 8px; }
 
   .primary-button {
-    display: flex; width: 100%; height: 48px;
+    display: flex; width: 100%; height: 46px;
     align-items: center; justify-content: center;
     color: #fff; font-size: 14px; font-weight: 600;
     border-radius: 999px;
@@ -136,10 +136,12 @@
     color: #868e96; font-size: 11px; font-weight: 400; line-height: 1.4; text-align: center;
   }
 
-  .form-row { display: flex; flex-direction: column; gap: 6px; }
+  .form-row { display: flex; flex-direction: column; gap: 8px; }
+  .field-label-row { display: flex; align-items: center; justify-content: space-between; }
   .field-label { color: #212529; font-size: 12px; font-weight: 600; }
+  .char-counter { color: #adb5bd; font-size: 11px; font-weight: 400; }
   .input-shell {
-    display: flex; height: 46px; padding: 0 18px; align-items: center;
+    display: flex; height: 42px; padding: 0 18px; align-items: center;
     border-radius: 999px; background: #f5f6f7;
   }
   .input-placeholder { flex: 1; color: #adb5bd; font-size: 13px; }
@@ -147,11 +149,11 @@
 
   /* ================= 首页（我的） ================= */
   .mine-scroll { flex: 1; overflow: hidden; }
-  .mine-content { padding: 12px 12px 110px; }
+  .mine-content { padding: 10px 16px 110px; }
 
   .profile-panel {
     display: flex; align-items: center; justify-content: space-between;
-    gap: 10px; min-height: 84px; padding: 16px;
+    gap: 10px; padding: 14px;
   }
   .profile-main { display: flex; align-items: center; gap: 12px; min-width: 0; }
   .avatar {
@@ -172,19 +174,19 @@
   }
 
   .balance-band {
-    margin-top: 12px; padding: 18px; border-radius: 24px;
+    margin-top: 10px; padding: 14px; border-radius: 24px;
     background: #ffffff; border: 1px solid #e9ecef;
   }
   .balance-top { display: flex; align-items: center; justify-content: space-between; }
   .balance-label { color: #868e96; font-size: 12px; font-weight: 500; }
-  .balance-value { margin-top: 6px; font-size: 34px; font-weight: 700; line-height: 1; color: #212529; }
+  .balance-value { margin-top: 4px; font-size: 34px; font-weight: 700; line-height: 1; color: #212529; }
   .recharge-button {
     min-width: 64px; height: 38px; display: flex; align-items: center; justify-content: center;
     padding: 0 18px; color: #fff; font-size: 13px; font-weight: 600;
     border-radius: 999px; background: #212529;
   }
   .balance-bottom {
-    margin-top: 14px; padding-top: 14px;
+    margin-top: 10px; padding-top: 10px;
     display: flex; align-items: center; justify-content: space-between;
     border-top: 1px solid #f1f3f5;
     color: #868e96; font-size: 12px;
@@ -199,28 +201,30 @@
     background: #c08a3e; flex: none;
   }
 
-  .metric-grid { display: flex; gap: 10px; margin-top: 12px; }
-  .metric {
-    flex: 1 1 0; min-width: 0; min-height: 74px; padding: 14px 6px; text-align: center;
+  /* 三项指标合并为一张卡:列间用发丝竖线分隔 */
+  .metric-grid {
+    display: flex; margin-top: 10px; padding: 12px 0;
     border: 1px solid #e9ecef; border-radius: 24px;
     background: #ffffff;
   }
-  .metric-value { color: #212529; font-size: 21px; font-weight: 700; line-height: 1.1; }
-  .metric-label { margin-top: 5px; color: #868e96; font-size: 11px; line-height: 1.25; }
+  .metric { flex: 1 1 0; min-width: 0; padding: 0 8px; text-align: center; }
+  .metric + .metric { border-left: 1px solid #f1f3f5; }
+  .metric-value { color: #212529; font-size: 22px; font-weight: 700; line-height: 1.1; }
+  .metric-label { margin-top: 3px; color: #868e96; font-size: 11px; line-height: 1.25; }
 
-  .action-panel { margin-top: 12px; padding: 16px; }
+  .action-panel { margin-top: 10px; padding: 14px; }
   .panel-heading { display: flex; align-items: center; justify-content: space-between; }
   .panel-title { color: #212529; font-size: 18px; font-weight: 700; }
   .panel-meta { color: #868e96; font-size: 12px; }
 
-  .entry-list { margin-top: 8px; }
+  .entry-list { margin-top: 10px; }
   .entry-row {
-    display: flex; align-items: center; width: 100%; min-height: 62px;
-    padding: 10px 0; border-top: 1px solid #f1f3f5;
+    display: flex; align-items: center; width: 100%;
+    padding: 9px 0; border-top: 1px solid #f1f3f5;
   }
   .entry-row:first-child { border-top: 0; }
   .entry-icon {
-    display: block; width: 46px; height: 46px; flex: none;
+    display: block; width: 44px; height: 44px; flex: none;
     margin-right: 12px; border-radius: 16px;
     border: 1px solid #f1f3f5;
     object-fit: contain;
@@ -245,7 +249,7 @@
   }
 
   /* ===== 空态 / 加载失败 ===== */
-  .empty-state { min-height: 400px; padding: 48px 18px; text-align: center; }
+  .empty-state { min-height: 380px; padding: 48px 18px; text-align: center; }
   .empty-icon {
     width: 52px; height: 52px; margin: 0 auto 14px; border-radius: 50%;
     background: #fff; border: 1px solid #e9ecef;
@@ -391,7 +395,10 @@
             </div>
             <div class="login-form">
               <div class="form-row">
-                <div class="field-label">推荐码</div>
+                <div class="field-label-row">
+                  <div class="field-label">推荐码</div>
+                  <div class="char-counter">0/16</div>
+                </div>
                 <div class="input-shell">
                   <span class="input-placeholder">填写他人的个人唯一码</span>
                   <span class="optional-text">选填</span>

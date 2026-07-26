@@ -74,7 +74,7 @@
   }
 
   /* ===== 通用 ===== */
-  .scroll { flex: 1; overflow: hidden; padding: 12px 16px 96px; display: flex; flex-direction: column; }
+  .scroll { flex: 1; overflow: hidden; padding: 10px 16px 96px; display: flex; flex-direction: column; }
   .panel {
     border: 1px solid #e9ecef; border-radius: 24px;
     background: #ffffff;
@@ -111,11 +111,11 @@
   .search-input { flex: 1; color: #adb5bd; font-size: 13px; font-weight: 400; }
 
   /* ===== 作品页: 标签筛选(选中黑胶囊,未选透明灰字) ===== */
-  .filter-panel { margin-top: 10px; padding: 6px 10px; border: 0; background: transparent; }
-  .filter-shell { display: flex; align-items: center; gap: 6px; min-height: 32px; }
-  .tag-row-scroll { flex: 1; display: flex; gap: 4px; overflow: hidden; }
+  .filter-panel { margin-top: 10px; padding: 4px 8px; border: 0; background: transparent; }
+  .filter-shell { display: flex; align-items: center; gap: 6px; min-height: 30px; }
+  .tag-row-scroll { flex: 1; display: flex; gap: 6px; overflow: hidden; }
   .tag-pill {
-    height: 32px; flex: none;
+    height: 28px; flex: none;
     display: inline-flex; align-items: center; gap: 5px;
     padding: 0 12px;
     font-size: 12px; font-weight: 500; line-height: 1;
@@ -138,7 +138,7 @@
 
   /* ===== 作品页: 素材库 ===== */
   .library-panel {
-    margin-top: 10px; padding: 16px;
+    margin-top: 10px; padding: 14px;
     flex: 1; display: flex; flex-direction: column; overflow: hidden;
   }
   .list-heading { display: flex; align-items: center; justify-content: space-between; }
@@ -151,11 +151,11 @@
     border: 1px solid #e9ecef; border-radius: 999px; background: #ffffff;
   }
   .text-action.active { color: #ffffff; border-color: #212529; background: #212529; }
-  .work-list { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+  .work-list { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
   .work-card {
     position: relative;
-    display: flex; align-items: center; gap: 12px;
-    padding: 12px;
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px;
     border: 1px solid #e9ecef; border-radius: 24px;
     background: #ffffff;
   }
@@ -184,7 +184,7 @@
     margin-top: 3px; font-size: 11px; font-weight: 400; color: #868e96;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .work-status-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+  .work-status-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
   .pill {
     display: inline-flex; align-items: center; height: 21px; padding: 0 9px;
     font-size: 10px; font-weight: 500; line-height: 1;
@@ -241,7 +241,7 @@
   .work-select.selected { border-color: #212529; background: #212529; }
   .work-select-dot { width: 8px; height: 8px; border-radius: 50%; background: transparent; }
   .work-select.selected .work-select-dot { background: #ffffff; }
-  .batch-panel { margin-top: 10px; padding: 16px; }
+  .batch-panel { margin-top: 10px; padding: 14px; }
   .batch-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .batch-title { font-size: 16px; font-weight: 700; color: #212529; }
   .batch-desc { margin-top: 3px; color: #868e96; font-size: 11px; line-height: 1.5; }
@@ -258,7 +258,7 @@
     color: #212529; font-size: 11px; font-weight: 600;
     border: 1px solid #e9ecef; border-radius: 999px; background: #ffffff;
   }
-  .batch-actions { display: flex; gap: 8px; margin-top: 12px; }
+  .batch-actions { display: flex; gap: 8px; margin-top: 10px; }
   .batch-action {
     flex: 1; height: 42px;
     display: flex; align-items: center; justify-content: center;
@@ -301,7 +301,7 @@
   }
   .sheet-panel {
     width: 100%;
-    display: flex; flex-direction: column; gap: 12px;
+    display: flex; flex-direction: column; gap: 10px;
     padding: 12px 18px 20px;
     border-radius: 28px 28px 0 0;
     background: #ffffff;
@@ -329,7 +329,7 @@
   .sort-work-list { display: flex; flex-direction: column; gap: 8px; }
   .sort-work-row {
     display: flex; align-items: center; gap: 10px;
-    min-height: 64px; padding: 10px 12px;
+    min-height: 58px; padding: 8px 10px;
     border: 1px solid #e9ecef; border-radius: 24px; background: #ffffff;
   }
   .sort-work-row.dragging { border-color: #212529; }
@@ -354,7 +354,8 @@
   .sort-drag-line { width: 12px; height: 1.5px; border-radius: 999px; background: #adb5bd; }
 
   /* ===== 标签弹窗 ===== */
-  .tag-field { margin-top: 14px; }
+  .tag-field { margin-top: 10px; }
+  .sheet-heading + .tag-field { margin-top: 12px; }
   .tag-field-label, .field-label { color: #868e96; font-size: 11px; font-weight: 500; }
   .tag-input-box {
     width: 100%; height: 44px; margin-top: 6px; padding: 0 16px;
@@ -365,14 +366,14 @@
   .tag-input-box.placeholder { color: #adb5bd; font-weight: 400; }
   .color-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
   .color-choice {
-    width: calc((100% - 12px) / 3); height: 36px;
+    width: calc((100% - 12px) / 3); height: 32px;
     display: flex; align-items: center; justify-content: center; gap: 5px;
     font-size: 11px; font-weight: 500; color: #495057; border-radius: 999px;
     border: 1px solid #e9ecef; background: #ffffff;
   }
   .color-choice.active { border-color: #212529; color: #212529; font-weight: 600; }
   .color-swatch { width: 6px; height: 6px; flex: none; border-radius: 50%; }
-  .dialog-actions { display: flex; gap: 10px; margin-top: 16px; }
+  .dialog-actions { display: flex; gap: 10px; margin-top: 12px; }
   .btn-secondary, .btn-dialog {
     flex: 1; height: 46px;
     display: flex; align-items: center; justify-content: center;
@@ -382,9 +383,9 @@
   .btn-dialog { color: #ffffff; background: #212529; }
 
   /* ===== 编辑作品弹层表单 ===== */
-  .edit-content { display: flex; flex-direction: column; gap: 10px; }
+  .edit-content { display: flex; flex-direction: column; gap: 8px; }
   .field-heading { display: flex; align-items: center; justify-content: space-between; }
-  .field-limit { flex: none; color: #adb5bd; font-size: 10px; font-weight: 400; }
+  .field-limit { flex: none; color: #adb5bd; font-size: 11px; font-weight: 400; }
   .text-field {
     width: 100%; height: 40px; padding: 0 16px; margin-top: 6px;
     display: flex; align-items: center;
@@ -448,11 +449,11 @@
   }
 
   /* ===== 添加作品页 ===== */
-  .add-content { flex: 1; overflow: hidden; padding: 12px 16px 16px; display: flex; flex-direction: column; gap: 12px; }
+  .add-content { flex: 1; overflow: hidden; padding: 10px 16px 14px; display: flex; flex-direction: column; gap: 12px; }
   .upload-box {
-    min-height: 140px;
+    min-height: 136px;
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
-    padding: 16px;
+    padding: 14px;
     border: 1.5px dashed #ced4da; border-radius: 24px;
     background: #ffffff;
   }
@@ -466,7 +467,7 @@
   .upload-desc { color: #868e96; font-size: 11px; line-height: 1.6; }
   .selected-panel {
     display: flex; flex-direction: column; gap: 10px;
-    padding: 16px;
+    padding: 14px;
     border: 1px solid #e9ecef; border-radius: 24px; background: #ffffff;
   }
   .panel-heading { display: flex; align-items: center; justify-content: space-between; }
@@ -480,7 +481,7 @@
   .selected-list { display: flex; flex-direction: column; gap: 8px; }
   .selected-row {
     display: flex; align-items: center; gap: 10px;
-    min-height: 62px; padding: 9px 12px;
+    min-height: 56px; padding: 8px 10px;
     border: 1px solid #e9ecef; border-radius: 24px; background: #ffffff;
   }
   .selected-thumb {
@@ -521,7 +522,7 @@
   }
   .tag-panel {
     display: flex; flex-direction: column;
-    padding: 16px;
+    padding: 14px;
     border: 1px solid #e9ecef; border-radius: 24px; background: #ffffff;
   }
   .tag-panel-label { color: #868e96; font-size: 11px; font-weight: 500; }
@@ -581,7 +582,7 @@
   /* ===== 编辑作品页 work-edit ===== */
   .edit-page-content { flex: 1; overflow: hidden; padding: 10px 16px 84px; }
   .we-panel {
-    padding: 12px 14px;
+    padding: 14px;
     border: 1px solid #e9ecef; border-radius: 24px; background: #ffffff;
   }
   .preview-panel { display: flex; align-items: center; gap: 12px; }
@@ -600,10 +601,10 @@
   .preview-copy { flex: 1; min-width: 0; }
   .preview-title { color: #212529; font-size: 15px; font-weight: 700; line-height: 1.4; }
   .preview-meta { margin-top: 3px; color: #868e96; font-size: 11px; line-height: 1.5; }
-  .form-panel, .reference-panel { margin-top: 8px; }
-  .we-field-label { margin-top: 9px; color: #212529; font-size: 12px; font-weight: 700; }
+  .form-panel, .reference-panel { margin-top: 10px; }
+  .we-field-label { margin-top: 8px; color: #212529; font-size: 12px; font-weight: 700; }
   .we-field-label:first-child { margin-top: 0; }
-  .we-field-label .counter { color: #adb5bd; font-size: 10px; font-weight: 400; }
+  .we-field-label .counter { color: #adb5bd; font-size: 11px; font-weight: 400; }
   .we-text-input {
     height: 36px; margin-top: 5px; padding: 0 16px;
     display: flex; align-items: center;
@@ -955,7 +956,10 @@
             <div class="sheet-title">新增标签</div>
           </div>
           <div class="tag-field">
-            <div class="tag-field-label">标签文字</div>
+            <div class="field-heading">
+              <div class="tag-field-label">标签文字</div>
+              <div class="field-limit">4/10</div>
+            </div>
             <div class="tag-input-box">婚礼跟拍</div>
           </div>
           <div class="tag-field">
@@ -1015,7 +1019,7 @@
             <div>
               <div class="field-heading">
                 <div class="field-label">作品标题</div>
-                <div class="field-limit">12/30</div>
+                <div class="field-limit">10/30</div>
               </div>
               <div class="text-field">户外草坪婚礼仪式跟拍</div>
             </div>
@@ -1065,7 +1069,7 @@
             <div>
               <div class="field-heading">
                 <div class="field-label">作品标题</div>
-                <div class="field-limit">15/30</div>
+                <div class="field-limit">16/30</div>
               </div>
               <div class="text-field">酒店晚宴 First Dance</div>
             </div>
@@ -1210,7 +1214,7 @@
         </div>
         <!-- 表单 -->
         <div class="we-panel form-panel">
-          <div class="we-field-label">标题 <span class="counter">12/30</span></div>
+          <div class="we-field-label">标题 <span class="counter">10/30</span></div>
           <div class="we-text-input">户外草坪婚礼仪式跟拍</div>
           <div class="we-field-label">标签</div>
           <div class="tag-editor">
