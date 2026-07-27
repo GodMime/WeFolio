@@ -407,10 +407,13 @@
   /* 联系表单 */
   .cf-field {
     width: 100%; min-height: 42px; margin-top: 8px; padding: 0 16px;
-    font-size: 13px; line-height: 42px; text-align: left;
+    display: flex; align-items: center; text-align: left;
+    font-size: 13px;
     border-radius: 999px; background: #f5f6f7; color: #adb5bd; font-weight: 500;
   }
-  .cf-field.needs { height: 78px; line-height: 1.6; padding-top: 11px; border-radius: 20px; }
+  .cf-field.needs { height: 78px; align-items: flex-start; padding-top: 11px; border-radius: 20px; line-height: 1.6; }
+  /* 预留信息表单字数计数(设计建议,contact-form 代码当前无 maxlength) */
+  .cf-field .field-count { margin-left: auto; flex: none; padding-left: 8px; font-size: 11px; font-weight: 400; }
   .qr-img {
     width: 148px; height: 148px; margin: 12px auto 0; background: #fff;
     border: 1px solid #eceef1; border-radius: 20px;
@@ -893,11 +896,11 @@
       <div class="folio-comp comp-block" style="text-align: center;">
         <div class="comp-title">预留联系信息</div>
         <div class="comp-desc">留下联系方式，团队会尽快与您沟通档期</div>
-        <div class="cf-field">称呼（必填）</div>
-        <div class="cf-field">手机号</div>
-        <div class="cf-field">微信号</div>
+        <div class="cf-field"><span>称呼（必填）</span><span class="field-count">0/20</span></div>
+        <div class="cf-field"><span>手机号</span><span class="field-count">0/11</span></div>
+        <div class="cf-field"><span>微信号</span><span class="field-count">0/20</span></div>
         <div class="cf-field">请选择档期（选填）</div>
-        <div class="cf-field needs">需求描述</div>
+        <div class="cf-field needs"><span>需求描述</span><span class="field-count">0/200</span></div>
         <div class="dark-btn">提交给团队</div>
       </div>
 
@@ -1154,11 +1157,11 @@
           </div>
           <div class="comp-desc" style="text-align: left; margin-top: 0;">留下联系方式，团队会尽快与您沟通档期</div>
           <div class="sheet-options" style="gap: 0;">
-            <div class="cf-field">称呼（必填）</div>
-            <div class="cf-field">手机号</div>
-            <div class="cf-field">微信号</div>
+            <div class="cf-field"><span>称呼（必填）</span><span class="field-count">0/20</span></div>
+            <div class="cf-field"><span>手机号</span><span class="field-count">0/11</span></div>
+            <div class="cf-field"><span>微信号</span><span class="field-count">0/20</span></div>
             <div class="cf-field">请选择档期（选填）</div>
-            <div class="cf-field needs">需求描述</div>
+            <div class="cf-field needs"><span>需求描述</span><span class="field-count">0/200</span></div>
             <div class="dark-btn">提交给团队</div>
           </div>
         </div>
@@ -1189,6 +1192,10 @@
       </div>
     </div>
   </div>
+
+  <p style="max-width: 960px; margin: 24px 8px 0; color: #868e96; font-size: 12px; line-height: 1.8;">
+    说明：预留信息表单的字数计数（0/20、0/11、0/200 等）为设计建议——<code>components/contact-form</code> 当前代码无 maxlength 限制，如需生效需小程序与后端同步加限制。
+  </p>
 
 </div>
 

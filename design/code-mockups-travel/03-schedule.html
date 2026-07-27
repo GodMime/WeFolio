@@ -65,18 +65,18 @@
   }
   /* 页面内容 */
   .content { padding: 8px 16px 108px; }
-  /* 分段选择（chips 风格：选中黑胶囊白字） */
-  .segmented {
-    display: flex; gap: 6px; padding: 5px;
-    border-radius: 999px;
-    background: #eceef0;
-  }
+  /* 页签:下划线指示式,与胶囊按钮形态区分 */
+  .segmented { display: flex; border-bottom: 1px solid #e9ecef; }
   .segment {
-    flex: 1; height: 38px;
+    position: relative; flex: 1; height: 38px;
     display: flex; align-items: center; justify-content: center;
-    color: #868e96; font-size: 13px; font-weight: 600; border-radius: 999px;
+    color: #868e96; font-size: 13px; font-weight: 500;
   }
-  .segment.active { color: #ffffff; background: #212529; }
+  .segment.active { color: #212529; font-weight: 600; }
+  .segment.active::after {
+    content: ""; position: absolute; bottom: -1px; left: 50%; transform: translateX(-50%);
+    width: 24px; height: 2.5px; border-radius: 2px; background: #212529;
+  }
   /* 面板卡片 */
   .panel {
     margin-top: 10px; padding: 14px;
@@ -283,12 +283,38 @@
   }
   .btn.primary { color: #fff; background: #212529; }
   .btn.secondary { color: #212529; background: #f1f3f5; }
+  /* 停用状态的头部状态芯片 */
+  .slot-status-chip.muted { color: #868e96; border-color: #e9ecef; }
+  /* 系统反馈：toast（icon:none） */
+  .wx-toast {
+    position: absolute; left: 50%; top: 20%; z-index: 40;
+    transform: translateX(-50%);
+    padding: 10px 18px;
+    color: #ffffff; font-size: 13px; font-weight: 500; white-space: nowrap;
+    border-radius: 10px; background: rgba(33, 37, 41, 0.88);
+  }
+  /* 系统反馈：showModal */
+  .wx-modal-wrap {
+    position: absolute; left: 0; right: 0; top: 0; bottom: 0; z-index: 30;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0, 0, 0, 0.4);
+  }
+  .wx-modal {
+    width: 270px; border-radius: 16px; background: #ffffff; overflow: hidden;
+  }
+  .wx-modal-title { padding: 20px 16px 8px; color: #212529; font-size: 16px; font-weight: 700; text-align: center; }
+  .wx-modal-content { padding: 0 20px 18px; color: #868e96; font-size: 13px; line-height: 1.6; text-align: center; }
+  .wx-modal-btn {
+    height: 46px; display: flex; align-items: center; justify-content: center;
+    color: #212529; font-size: 14px; font-weight: 600;
+    border-top: 1px solid #f1f3f5;
+  }
 </style>
 </head>
 <body>
 <div class="doc-header">
   <h1>模块：档期（TripGlide 旅行风）</h1>
-  <p>包含页面：<code>projects/miniapp/pages/schedule/schedule</code>（档期维护 / 档位定义 双模式）＋ 弹层「新增档期」「新增档位定义」。<br>
+  <p>包含页面：<code>projects/miniapp/pages/schedule/schedule</code>（档期维护 / 档位定义 双模式）＋ 弹层「新增档期」「编辑档期」「新增档位定义」「编辑档位定义」＋ 状态提示「toast / showModal」。<br>
   结构与文案同 code-mockups/03-schedule.html，仅视觉重设计：纯黑白灰 + 低饱和状态色，唯一小面积彩色为档位圆点。</p>
 </div>
 
@@ -656,6 +682,229 @@
             <div class="btn secondary">取消</div>
             <div class="btn primary">保存定义</div>
           </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 05 编辑档期弹层 ============ -->
+  <div class="frame-wrap">
+    <div class="frame-label">05 弹层 · 编辑档期<small>schedule-sheet-overlay · scheduleSheetTitle=编辑档期 · 点已有档期行进入</small></div>
+    <div class="phone" style="height:812px">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="sb-right">
+          <span class="sb-signal"><i></i><i></i><i></i><i></i></span>
+          <span class="sb-battery"></span>
+        </span>
+      </div>
+      <div class="navbar">档期</div>
+      <div class="content" style="flex:1"></div>
+      <div class="sheet-overlay">
+        <div class="sheet">
+          <div class="sheet-grabber"></div>
+          <div class="panel-heading">
+            <div>
+              <div class="panel-title">编辑档期</div>
+              <div class="panel-meta">7月25日</div>
+            </div>
+          </div>
+
+          <div class="field-label standalone">选择档位定义</div>
+          <div class="schedule-slot-grid">
+            <div class="schedule-slot-card active">
+              <div class="schedule-slot-card-top"><div class="slot-name">午宴档</div><span class="dot lg" style="background:#c99a55"></span></div>
+              <div class="slot-desc">07:30-13:30</div>
+            </div>
+            <div class="schedule-slot-card">
+              <div class="schedule-slot-card-top"><div class="slot-name">晚宴档</div><span class="dot lg" style="background:#7a97bd"></span></div>
+              <div class="slot-desc">16:00-21:30</div>
+            </div>
+            <div class="schedule-slot-card">
+              <div class="schedule-slot-card-top"><div class="slot-name">全天档</div><span class="dot lg" style="background:#6aa3a5"></span></div>
+              <div class="slot-desc">09:00-21:00</div>
+            </div>
+            <div class="schedule-slot-card disabled">
+              <div class="schedule-slot-card-top"><div class="slot-name">试妆档</div><span class="dot lg" style="background:#b87f8d"></span></div>
+              <div class="slot-desc">14:00-16:00</div>
+            </div>
+          </div>
+
+          <div class="field-label standalone">档期状态</div>
+          <div class="schedule-status-row">
+            <div class="schedule-status-choice">待定</div>
+            <div class="schedule-status-choice active">已约</div>
+            <div class="schedule-status-choice">休息</div>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-row">
+              <div class="field-heading"><div class="field-label">联系人姓名</div><div class="field-limit">3/50</div></div>
+              <div class="field-input">陈女士</div>
+            </div>
+            <div class="form-row">
+              <div class="field-heading"><div class="field-label">联系电话</div><div class="field-limit">11/50</div></div>
+              <div class="field-input">138****6688</div>
+            </div>
+          </div>
+
+          <div class="form-row full">
+            <div class="field-heading"><div class="field-label">档期备注</div><div class="field-limit">18/1000</div></div>
+            <div class="field-input textarea">午宴在金陵饭店，需提前一天确认桌数</div>
+          </div>
+
+          <div class="button-row">
+            <div class="btn secondary">取消</div>
+            <div class="btn primary">保存档期</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 06 编辑档位定义弹层 ============ -->
+  <div class="frame-wrap">
+    <div class="frame-label">06 弹层 · 编辑档位定义<small>definition-sheet-overlay · 仅「停用」中的档位可编辑（schedule.js:487）</small></div>
+    <div class="phone" style="height:812px">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="sb-right">
+          <span class="sb-signal"><i></i><i></i><i></i><i></i></span>
+          <span class="sb-battery"></span>
+        </span>
+      </div>
+      <div class="navbar">档期</div>
+      <div class="content" style="flex:1"></div>
+      <div class="sheet-overlay">
+        <div class="sheet">
+          <div class="sheet-grabber"></div>
+          <div class="panel-heading">
+            <div class="panel-title">编辑档位定义</div>
+            <div class="slot-status-chip muted">停用</div>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-row">
+              <div class="field-heading"><div class="field-label">档位名称</div><div class="field-limit">3/30</div></div>
+              <div class="field-input">试妆档</div>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-row">
+              <div class="field-label">开始时间</div>
+              <div class="field-input">14:00</div>
+            </div>
+            <div class="form-row">
+              <div class="field-label">结束时间</div>
+              <div class="field-input">16:00</div>
+            </div>
+            <div class="form-row status-form-row">
+              <div class="field-label">启用状态</div>
+              <div class="inline-choice-row">
+                <div class="slot-status-choice">启用</div>
+                <div class="slot-status-choice active">停用</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="field-label standalone">档位颜色</div>
+          <div class="slot-color-grid">
+            <div class="slot-color-choice"><span class="slot-color-swatch" style="background:#c99a55"></span><span class="slot-color-name">琥珀</span></div>
+            <div class="slot-color-choice"><span class="slot-color-swatch" style="background:#7a97bd"></span><span class="slot-color-name">湖蓝</span></div>
+            <div class="slot-color-choice"><span class="slot-color-swatch" style="background:#6aa3a5"></span><span class="slot-color-name">青绿</span></div>
+            <div class="slot-color-choice active"><span class="slot-color-swatch" style="background:#b87f8d"></span><span class="slot-color-name">玫红</span></div>
+            <div class="slot-color-choice"><span class="slot-color-swatch" style="background:#7e997c"></span><span class="slot-color-name">森绿</span></div>
+            <div class="slot-color-choice"><span class="slot-color-swatch" style="background:#9488c4"></span><span class="slot-color-name">紫藤</span></div>
+            <div class="slot-color-choice"><span class="slot-color-swatch" style="background:#cf8570"></span><span class="slot-color-name">珊瑚</span></div>
+            <div class="slot-color-choice"><span class="slot-color-swatch" style="background:#7186a0"></span><span class="slot-color-name">墨蓝</span></div>
+          </div>
+
+          <div class="button-row">
+            <div class="btn secondary">取消</div>
+            <div class="btn primary">保存定义</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 07 状态提示 ============ -->
+  <div class="frame-wrap">
+    <div class="frame-label">07 状态提示 · 停用才可编辑 / 删除受阻<small>wx.showToast「停用后才可编辑」+ showModal「无法删除」（同框并置展示两种反馈）</small></div>
+    <div class="phone" style="height:812px">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="sb-right">
+          <span class="sb-signal"><i></i><i></i><i></i><i></i></span>
+          <span class="sb-battery"></span>
+        </span>
+      </div>
+      <div class="navbar">档期</div>
+      <div class="content">
+        <div class="segmented">
+          <div class="segment">档期维护</div>
+          <div class="segment active">档位定义</div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <div class="panel-title">所有定义</div>
+              <div class="panel-meta">启用 / 停用可切换</div>
+            </div>
+          </div>
+
+          <div class="swipe-row">
+            <div class="line">
+              <div class="slot-main">
+                <span class="dot lg" style="background:#c99a55"></span>
+                <div>
+                  <div class="slot-name">午宴档</div>
+                  <div class="slot-desc">07:30-13:30 · 启用</div>
+                </div>
+              </div>
+              <div class="mini-action warn">停用</div>
+            </div>
+          </div>
+          <div class="swipe-row">
+            <div class="line">
+              <div class="slot-main">
+                <span class="dot lg" style="background:#7a97bd"></span>
+                <div>
+                  <div class="slot-name">晚宴档</div>
+                  <div class="slot-desc">16:00-21:30 · 启用</div>
+                </div>
+              </div>
+              <div class="mini-action warn">停用</div>
+            </div>
+          </div>
+          <div class="swipe-row">
+            <div class="line">
+              <div class="slot-main">
+                <span class="dot lg" style="background:#b87f8d"></span>
+                <div>
+                  <div class="slot-name">试妆档</div>
+                  <div class="slot-desc">14:00-16:00 · 停用</div>
+                </div>
+              </div>
+              <div class="mini-action">启用</div>
+            </div>
+          </div>
+
+          <div class="primary-button">新增定义</div>
+        </div>
+      </div>
+
+      <!-- toast：点击启用中的档位（schedule.js:487） -->
+      <div class="wx-toast">停用后才可编辑</div>
+
+      <!-- showModal：删除档位被后端拒绝（schedule.js:875-880） -->
+      <div class="wx-modal-wrap">
+        <div class="wx-modal">
+          <div class="wx-modal-title">无法删除</div>
+          <div class="wx-modal-content">该档位定义下存在档期，无法删除</div>
+          <div class="wx-modal-btn">知道了</div>
         </div>
       </div>
     </div>

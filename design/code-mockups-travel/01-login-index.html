@@ -111,17 +111,18 @@
 
   .auth-panel { display: flex; flex-direction: column; gap: 10px; padding: 14px; }
 
-  /* 分段控件：选中黑胶囊白字，未选透明灰字 */
-  .login-tabs {
-    display: flex; padding: 4px;
-    border-radius: 999px; background: #f5f6f7;
-  }
+  /* 页签:下划线指示式,与胶囊按钮在形态上区分,黑白灰体系内保持和谐 */
+  .login-tabs { display: flex; border-bottom: 1px solid #e9ecef; }
   .login-tab {
-    flex: 1; display: flex; align-items: center; justify-content: center;
-    height: 34px; border-radius: 999px;
+    position: relative; flex: 1; height: 36px;
+    display: flex; align-items: center; justify-content: center;
     color: #868e96; font-size: 13px; font-weight: 500;
   }
-  .login-tab.active { color: #fff; font-weight: 600; background: #212529; }
+  .login-tab.active { color: #212529; font-weight: 600; }
+  .login-tab.active::after {
+    content: ""; position: absolute; bottom: -1px; left: 50%; transform: translateX(-50%);
+    width: 24px; height: 2.5px; border-radius: 2px; background: #212529;
+  }
 
   .login-form { display: flex; flex-direction: column; gap: 8px; }
 

@@ -657,6 +657,134 @@
     border-radius: 999px; background: #212529;
   }
 
+  /* ===== 10 缩略图裁剪编辑器 ===== */
+  .ratio-list { display: flex; flex-wrap: wrap; gap: 6px; }
+  .ratio-btn {
+    flex: 0 0 calc((100% - 6px) / 2); max-width: calc((100% - 6px) / 2);
+    height: 30px;
+    display: flex; align-items: center; justify-content: center;
+    color: #495057; font-size: 11px; font-weight: 600;
+    border: 1px solid #e9ecef; border-radius: 999px; background: #ffffff;
+  }
+  .ratio-btn.active { color: #ffffff; border-color: #212529; background: #212529; }
+  .crop-stage {
+    position: relative; align-self: center;
+    width: 200px; height: 267px; /* 3:4 */
+    border-radius: 20px; overflow: hidden;
+    background: linear-gradient(135deg, #e9ecef, #dee2e6);
+  }
+  .crop-stage-label {
+    position: absolute; left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    color: #adb5bd; font-size: 12px; font-weight: 500;
+  }
+  .crop-frame {
+    position: absolute; left: 0; right: 0; top: 0; bottom: 0;
+    border: 1.5px solid rgba(255, 255, 255, 0.95);
+    box-sizing: border-box; pointer-events: none;
+  }
+  .crop-corner {
+    position: absolute; width: 16px; height: 16px;
+    border-color: #ffffff; border-style: solid; border-width: 0;
+  }
+  .crop-corner.tl { left: 6px; top: 6px; border-left-width: 2.5px; border-top-width: 2.5px; border-top-left-radius: 4px; }
+  .crop-corner.tr { right: 6px; top: 6px; border-right-width: 2.5px; border-top-width: 2.5px; border-top-right-radius: 4px; }
+  .crop-corner.bl { left: 6px; bottom: 6px; border-left-width: 2.5px; border-bottom-width: 2.5px; border-bottom-left-radius: 4px; }
+  .crop-corner.br { right: 6px; bottom: 6px; border-right-width: 2.5px; border-bottom-width: 2.5px; border-bottom-right-radius: 4px; }
+  .btn-confirm.loading { opacity: 0.55; }
+
+  /* ===== 11 选帧修改封面 ===== */
+  .cover-toolbar {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid #e9ecef; border-radius: 16px; background: #ffffff;
+  }
+  .cover-time-text { color: #495057; font-size: 11px; font-weight: 600; }
+  .cover-use-frame {
+    height: 30px; padding: 0 14px; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    color: #ffffff; font-size: 11px; font-weight: 600;
+    border-radius: 999px; background: #212529;
+  }
+  .cover-video-box {
+    position: relative; width: 100%; height: 150px;
+    border-radius: 20px; overflow: hidden;
+    background: linear-gradient(135deg, #ced4da, #adb5bd);
+  }
+  .cover-slider { position: relative; height: 24px; display: flex; align-items: center; }
+  .slider-track {
+    position: relative; width: 100%; height: 4px;
+    border-radius: 999px; background: #e9ecef;
+  }
+  .slider-fill {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 37%;
+    border-radius: 999px; background: #212529;
+  }
+  .slider-handle {
+    position: absolute; left: 37%; top: 50%;
+    width: 18px; height: 18px;
+    border-radius: 50%; background: #ffffff;
+    border: 2px solid #212529;
+    transform: translate(-50%, -50%);
+    box-sizing: border-box;
+  }
+
+  /* ===== 12 上传进度与失败 ===== */
+  .row-progress { margin-top: 6px; }
+  .row-progress-head {
+    display: flex; align-items: center; justify-content: space-between;
+    color: #868e96; font-size: 10px; font-weight: 500; line-height: 1.2;
+  }
+  .row-progress-track {
+    width: 100%; height: 4px; margin-top: 4px;
+    overflow: hidden; border-radius: 999px; background: #e9ecef;
+  }
+  .row-progress-fill { height: 100%; border-radius: 999px; background: #212529; }
+  .row-error-text { margin-top: 5px; color: #b55656; font-size: 10px; font-weight: 500; line-height: 1.4; }
+  .error-copy-line { color: #b55656; font-size: 11px; line-height: 1.5; }
+  .primary-btn.has-progress { position: relative; overflow: hidden; }
+  .primary-btn .btn-fill {
+    position: absolute; left: 0; top: 0; bottom: 0;
+    background: rgba(255, 255, 255, 0.22);
+  }
+  .primary-btn .btn-label { position: relative; z-index: 1; }
+
+  /* ===== 13/14 微信 showModal 风格弹窗 ===== */
+  .modal-mask {
+    position: absolute; left: 0; right: 0; top: 0; bottom: 0; z-index: 40;
+    display: flex; align-items: center; justify-content: center;
+    padding: 32px;
+    background: rgba(0, 0, 0, 0.4);
+  }
+  .modal-card {
+    width: 100%;
+    border-radius: 24px; background: #ffffff;
+    padding: 20px 18px 0;
+    overflow: hidden;
+  }
+  .modal-title {
+    text-align: center;
+    color: #212529; font-size: 16px; font-weight: 700; line-height: 1.35;
+  }
+  .modal-content {
+    margin-top: 10px;
+    text-align: center;
+    color: #495057; font-size: 13px; line-height: 1.6;
+  }
+  .modal-actions {
+    display: flex; margin: 18px -18px 0;
+    border-top: 1px solid #e9ecef;
+  }
+  .modal-btn {
+    flex: 1; height: 48px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 600;
+  }
+  .modal-btn + .modal-btn { border-left: 1px solid #e9ecef; }
+  .modal-btn.confirm { color: #212529; }
+  .modal-btn.cancel { color: #868e96; font-weight: 500; }
+  .modal-btn.danger { color: #b55656; }
+
   .note {
     max-width: 1280px; margin: 40px auto 0;
     font-size: 11px; color: #adb5bd; line-height: 1.9;
@@ -673,6 +801,7 @@
     <span>pages/works/works 批量管理 / 排序 / 标签 / 编辑弹层</span>
     <span>pages/works/work-add/work-add 添加作品</span>
     <span>pages/works/work-edit/work-edit 编辑作品</span>
+    <span>works 编辑缩略图裁剪 / 选帧封面 / 上传进度 / 删除确认</span>
   </div>
 </div>
 
@@ -1251,11 +1380,193 @@
     </div>
   </div>
 
+  <!-- ========== 10 编辑缩略图 · 裁剪编辑器 ========== -->
+  <div class="frame-item">
+    <div class="frame-label">10 编辑缩略图 · 裁剪编辑器<span class="path">pages/works/works(thumbnailCrop)</span></div>
+    <div class="phone">
+      <div class="statusbar"><span>9:41</span><span class="icons"><i></i></span></div>
+      <div class="navbar">作品</div>
+      <div class="scroll"></div>
+      <div class="sheet-mask">
+        <div class="sheet-panel">
+          <div class="grabber"></div>
+          <div class="sheet-heading">
+            <div class="sheet-title">编辑缩略图</div>
+            <div class="sheet-type">3:4</div>
+          </div>
+          <div class="ratio-list">
+            <div class="ratio-btn">原图比例</div>
+            <div class="ratio-btn">1:1</div>
+            <div class="ratio-btn">4:3</div>
+            <div class="ratio-btn active">3:4</div>
+            <div class="ratio-btn">16:9</div>
+            <div class="ratio-btn">9:16</div>
+          </div>
+          <div class="crop-stage">
+            <div class="crop-stage-label">原图预览</div>
+            <div class="crop-frame">
+              <div class="crop-corner tl"></div>
+              <div class="crop-corner tr"></div>
+              <div class="crop-corner bl"></div>
+              <div class="crop-corner br"></div>
+            </div>
+          </div>
+          <div class="sheet-actions">
+            <div class="btn-cancel">取消</div>
+            <div class="btn-confirm loading">应用中…</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 11 编辑视频作品 · 选帧修改封面 ========== -->
+  <div class="frame-item">
+    <div class="frame-label">11 编辑视频作品 · 选帧修改封面<span class="path">pages/works/works(coverEditMode=frame)</span></div>
+    <div class="phone">
+      <div class="statusbar"><span>9:41</span><span class="icons"><i></i></span></div>
+      <div class="navbar">作品</div>
+      <div class="scroll"></div>
+      <div class="sheet-mask">
+        <div class="sheet-panel">
+          <div class="grabber"></div>
+          <div class="sheet-heading">
+            <div class="sheet-title">编辑视频作品</div>
+            <div class="sheet-type">视频</div>
+          </div>
+          <div class="edit-content">
+            <div>
+              <div class="field-heading">
+                <div class="field-label">作品标题</div>
+                <div class="field-limit">15/30</div>
+              </div>
+              <div class="text-field">酒店晚宴 First Dance</div>
+            </div>
+            <div>
+              <div class="field-heading">
+                <div class="field-label">视频封面</div>
+                <div class="cover-state">00:12 / 00:32</div>
+              </div>
+              <div class="cover-toolbar" style="margin-top:6px;">
+                <div class="cover-time-text">00:12 / 00:32</div>
+                <div class="cover-use-frame">使用当前帧</div>
+              </div>
+              <div class="cover-video-box" style="margin-top:8px;">
+                <div class="play-badge"></div>
+              </div>
+              <div class="cover-slider" style="margin-top:4px;">
+                <div class="slider-track">
+                  <div class="slider-fill"></div>
+                  <div class="slider-handle"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="sheet-actions">
+            <div class="btn-cancel">取消</div>
+            <div class="btn-confirm">完成</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 12 添加作品 · 上传中进度与失败 ========== -->
+  <div class="frame-item">
+    <div class="frame-label">12 添加作品 · 上传进度与失败<span class="path">pages/works/work-add/work-add(saving)</span></div>
+    <div class="phone">
+      <div class="statusbar"><span>9:41</span><span class="icons"><i></i></span></div>
+      <div class="navbar"><div class="back"></div>添加作品</div>
+      <div class="add-content">
+        <div class="selected-panel">
+          <div class="panel-heading">
+            <div class="panel-title">已选作品</div>
+            <div class="selected-count">3 / 9</div>
+          </div>
+          <div class="selected-list">
+            <div class="selected-row">
+              <div class="selected-thumb"></div>
+              <div class="selected-copy">
+                <div class="selected-title">草坪仪式全景</div>
+                <div class="row-progress">
+                  <div class="row-progress-head"><span>文件已上传</span><span>100%</span></div>
+                  <div class="row-progress-track"><div class="row-progress-fill" style="width:100%;"></div></div>
+                </div>
+              </div>
+            </div>
+            <div class="selected-row">
+              <div class="selected-thumb video"><div class="video-thumb-text">视频</div><div class="thumb-play-badge"></div></div>
+              <div class="selected-copy">
+                <div class="selected-title">晚宴快剪 30s</div>
+                <div class="row-progress">
+                  <div class="row-progress-head"><span>上传中</span><span>45%</span></div>
+                  <div class="row-progress-track"><div class="row-progress-fill" style="width:45%;"></div></div>
+                </div>
+              </div>
+            </div>
+            <div class="selected-row">
+              <div class="selected-thumb"></div>
+              <div class="selected-copy">
+                <div class="selected-title">新人合影特写</div>
+                <div class="selected-meta">默认标题 · 图片</div>
+                <div class="row-error-text">上传失败，请重试</div>
+              </div>
+            </div>
+          </div>
+          <div class="error-copy-line">部分作品未上传成功：上传失败，请重试</div>
+        </div>
+        <div class="primary-btn has-progress">
+          <div class="btn-fill" style="width:67%;"></div>
+          <div class="btn-label">保存作品</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 13 作品删除受阻 · 单个删除 ========== -->
+  <div class="frame-item">
+    <div class="frame-label">13 作品删除 · 单个删除受阻(showModal)<span class="path">pages/works/works(handleDeleteWorkTap)</span></div>
+    <div class="phone">
+      <div class="statusbar"><span>9:41</span><span class="icons"><i></i></span></div>
+      <div class="navbar">作品</div>
+      <div class="scroll"></div>
+      <div class="modal-mask">
+        <div class="modal-card">
+          <div class="modal-title">无法删除</div>
+          <div class="modal-content">作品已被 2 个作品集引用，请先从作品集中移除</div>
+          <div class="modal-actions">
+            <div class="modal-btn confirm">知道了</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 14 作品删除 · 批量部分可删 ========== -->
+  <div class="frame-item">
+    <div class="frame-label">14 作品删除 · 批量部分可删(showModal)<span class="path">pages/works/works(handleBatchDeleteTap)</span></div>
+    <div class="phone">
+      <div class="statusbar"><span>9:41</span><span class="icons"><i></i></span></div>
+      <div class="navbar">作品</div>
+      <div class="scroll"></div>
+      <div class="modal-mask">
+        <div class="modal-card">
+          <div class="modal-title">部分作品无法删除</div>
+          <div class="modal-content">可删除 2 个，1 个已被作品集引用，将保留。</div>
+          <div class="modal-actions">
+            <div class="modal-btn cancel">取消</div>
+            <div class="modal-btn danger">删除可删项</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <div class="note">
   说明:作品列表页空态为「暂无作品 / 从相册选择图片或视频,整理为可复用的作品素材」;左滑作品卡片出现「删除」操作区(旅行风建议白底胶囊 + #b55656 文字,不用实色红块);
-  编辑图片作品弹层另有「编辑缩略图」裁剪模式,比例选项为 原图比例 / 1:1 / 4:3 / 3:4 / 16:9 / 9:16;视频封面编辑支持「选帧修改封面」(视频 + 滑杆)与「上传封面」两种模式,此处展示默认待机态。
+  作品编辑页删除受阻时弹窗为「无法删除 / 作品已被引用」(work-edit.js:189-190);单个删除与批量删除受阻弹窗确认按钮真实文案分别为「知道了」「删除可删项」(works.js:885/1948-1962),确认色为红色。
 </div>
 
 </body>

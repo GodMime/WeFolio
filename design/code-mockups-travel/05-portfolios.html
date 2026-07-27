@@ -81,21 +81,19 @@
 
   /* ===== portfolios 列表页 ===== */
   .pl-page { flex: 1; background: #f5f6f7; display: flex; flex-direction: column; padding: 12px 16px 0; }
-  .segment {
-    position: relative; display: flex; min-height: 44px; padding: 4px; gap: 4px;
-    background: #e9ecef; border-radius: 999px;
-  }
-  .seg-ind {
-    position: absolute; left: 4px; top: 4px; bottom: 4px;
-    width: calc((100% - 12px) / 2); border-radius: 999px; background: #212529;
-  }
-  .seg-ind.right { transform: translateX(calc(100% + 4px)); }
+  /* 页签:下划线指示式,与胶囊按钮形态区分(seg-ind 为旧胶囊指示块,隐藏) */
+  .segment { display: flex; border-bottom: 1px solid #e9ecef; }
+  .seg-ind { display: none; }
   .seg-item {
-    position: relative; z-index: 1; flex: 1; height: 36px;
+    position: relative; flex: 1; height: 36px;
     display: flex; align-items: center; justify-content: center;
-    color: #868e96; font-size: 14px; font-weight: 600; border-radius: 999px;
+    color: #868e96; font-size: 13px; font-weight: 500;
   }
-  .seg-item.on { color: #ffffff; }
+  .seg-item.on { color: #212529; font-weight: 600; }
+  .seg-item.on::after {
+    content: ""; position: absolute; bottom: -1px; left: 50%; transform: translateX(-50%);
+    width: 24px; height: 2.5px; border-radius: 2px; background: #212529;
+  }
   .pl-panel {
     margin-top: 10px; padding: 14px; border-radius: 24px;
     background: #ffffff; border: 1px solid #e9ecef;
@@ -387,6 +385,8 @@
     border-radius: 999px; background: #f5f6f7;
   }
   .form-field.area { height: 84px; align-items: flex-start; padding-top: 12px; border-radius: 20px; }
+  /* 预留信息表单字数计数(设计建议,代码当前无 maxlength) */
+  .form-field .field-count { margin-left: auto; flex: none; padding-left: 8px; color: #adb5bd; font-size: 11px; font-weight: 400; }
   .form-submit {
     width: 140px; height: 42px; margin: 10px auto 0;
     display: flex; align-items: center; justify-content: center;
@@ -1184,11 +1184,11 @@
         <div class="folio-component">
           <div class="form-section">
             <div class="form-title">预留联系信息</div>
-            <div class="form-field">联系人</div>
-            <div class="form-field">手机号</div>
-            <div class="form-field">微信号</div>
+            <div class="form-field"><span>联系人</span><span class="field-count">0/20</span></div>
+            <div class="form-field"><span>手机号</span><span class="field-count">0/11</span></div>
+            <div class="form-field"><span>微信号</span><span class="field-count">0/20</span></div>
             <div class="form-field">请选择档期（选填）</div>
-            <div class="form-field area">需求描述</div>
+            <div class="form-field area"><span>需求描述</span><span class="field-count">0/200</span></div>
             <div class="form-submit">预览提交</div>
           </div>
         </div>
@@ -1277,14 +1277,14 @@
                 <div class="sq-day"><span class="sq-num">1</span></div>
                 <div class="sq-day"><span class="sq-num">2</span></div>
                 <div class="sq-day"><span class="sq-num">3</span></div>
-                <div class="sq-day filled"><span class="sq-num">4</span><span class="sq-dots"><i class="sq-dot" style="background:#212529;"></i></span></div>
+                <div class="sq-day filled"><span class="sq-num">4</span><span class="sq-dots"><i class="sq-dot" style="background:#c99a55;"></i></span></div>
                 <div class="sq-day"><span class="sq-num">5</span></div>
                 <div class="sq-day"><span class="sq-num">6</span></div>
                 <div class="sq-day"><span class="sq-num">7</span></div>
                 <div class="sq-day"><span class="sq-num">8</span></div>
                 <div class="sq-day"><span class="sq-num">9</span></div>
                 <div class="sq-day"><span class="sq-num">10</span></div>
-                <div class="sq-day filled"><span class="sq-num">11</span><span class="sq-meta">满</span><span class="sq-dots"><i class="sq-dot" style="background:#212529;"></i><i class="sq-dot" style="background:#adb5bd;"></i></span></div>
+                <div class="sq-day filled"><span class="sq-num">11</span><span class="sq-meta">满</span><span class="sq-dots"><i class="sq-dot" style="background:#c99a55;"></i><i class="sq-dot" style="background:#7a97bd;"></i></span></div>
                 <div class="sq-day"><span class="sq-num">12</span></div>
                 <div class="sq-day"><span class="sq-num">13</span></div>
                 <div class="sq-day"><span class="sq-num">14</span></div>
@@ -1298,7 +1298,7 @@
                 <div class="sq-day"><span class="sq-num">22</span></div>
                 <div class="sq-day"><span class="sq-num">23</span></div>
                 <div class="sq-day"><span class="sq-num">24</span></div>
-                <div class="sq-day filled"><span class="sq-num">25</span><span class="sq-dots"><i class="sq-dot" style="background:#adb5bd;"></i></span></div>
+                <div class="sq-day filled"><span class="sq-num">25</span><span class="sq-dots"><i class="sq-dot" style="background:#7a97bd;"></i></span></div>
                 <div class="sq-day"><span class="sq-num">26</span></div>
                 <div class="sq-day"><span class="sq-num">27</span></div>
                 <div class="sq-day"><span class="sq-num">28</span></div>
@@ -1311,7 +1311,7 @@
                 <div class="sq-slot-heading">2026-07-18</div>
                 <div class="sq-slot-list">
                   <div class="sq-slot sel">
-                    <div class="sq-slot-color" style="background:#212529;"></div>
+                    <div class="sq-slot-color" style="background:#c99a55;"></div>
                     <div>
                       <div class="sq-slot-name">午宴</div>
                       <div class="sq-slot-time">10:00-14:00</div>
@@ -1319,7 +1319,7 @@
                     <div class="sq-slot-check">✓</div>
                   </div>
                   <div class="sq-slot">
-                    <div class="sq-slot-color" style="background:#adb5bd;"></div>
+                    <div class="sq-slot-color" style="background:#7a97bd;"></div>
                     <div>
                       <div class="sq-slot-name">晚宴</div>
                       <div class="sq-slot-time">17:00-21:30</div>
@@ -1454,14 +1454,14 @@
             <div class="sq-day"><span class="sq-num">1</span></div>
             <div class="sq-day"><span class="sq-num">2</span></div>
             <div class="sq-day"><span class="sq-num">3</span></div>
-            <div class="sq-day filled"><span class="sq-num">4</span><span class="sq-dots"><i class="sq-dot" style="background:#212529;"></i></span></div>
+            <div class="sq-day filled"><span class="sq-num">4</span><span class="sq-dots"><i class="sq-dot" style="background:#c99a55;"></i></span></div>
             <div class="sq-day"><span class="sq-num">5</span></div>
             <div class="sq-day"><span class="sq-num">6</span></div>
             <div class="sq-day"><span class="sq-num">7</span></div>
             <div class="sq-day"><span class="sq-num">8</span></div>
             <div class="sq-day"><span class="sq-num">9</span></div>
             <div class="sq-day"><span class="sq-num">10</span></div>
-            <div class="sq-day filled"><span class="sq-num">11</span><span class="sq-meta">满</span><span class="sq-dots"><i class="sq-dot" style="background:#212529;"></i><i class="sq-dot" style="background:#adb5bd;"></i></span></div>
+            <div class="sq-day filled"><span class="sq-num">11</span><span class="sq-meta">满</span><span class="sq-dots"><i class="sq-dot" style="background:#c99a55;"></i><i class="sq-dot" style="background:#7a97bd;"></i></span></div>
             <div class="sq-day"><span class="sq-num">12</span></div>
             <div class="sq-day"><span class="sq-num">13</span></div>
             <div class="sq-day"><span class="sq-num">14</span></div>
@@ -1475,7 +1475,7 @@
             <div class="sq-day"><span class="sq-num">22</span></div>
             <div class="sq-day"><span class="sq-num">23</span></div>
             <div class="sq-day"><span class="sq-num">24</span></div>
-            <div class="sq-day filled"><span class="sq-num">25</span><span class="sq-dots"><i class="sq-dot" style="background:#adb5bd;"></i></span></div>
+            <div class="sq-day filled"><span class="sq-num">25</span><span class="sq-dots"><i class="sq-dot" style="background:#7a97bd;"></i></span></div>
             <div class="sq-day"><span class="sq-num">26</span></div>
             <div class="sq-day"><span class="sq-num">27</span></div>
             <div class="sq-day"><span class="sq-num">28</span></div>
@@ -1488,7 +1488,7 @@
             <div class="sq-slot-heading">2026-07-18</div>
             <div class="sq-slot-list">
               <div class="sq-slot sel">
-                <div class="sq-slot-color" style="background:#212529;"></div>
+                <div class="sq-slot-color" style="background:#c99a55;"></div>
                 <div>
                   <div class="sq-slot-name">午宴</div>
                   <div class="sq-slot-time">10:00-14:00</div>
@@ -1496,7 +1496,7 @@
                 <div class="sq-slot-check">✓</div>
               </div>
               <div class="sq-slot">
-                <div class="sq-slot-color" style="background:#adb5bd;"></div>
+                <div class="sq-slot-color" style="background:#7a97bd;"></div>
                 <div>
                   <div class="sq-slot-name">晚宴</div>
                   <div class="sq-slot-time">17:00-21:30</div>
@@ -1549,11 +1549,11 @@
           <div class="sheet-title">预留信息</div>
           <div class="sheet-close">×</div>
         </div>
-        <div class="form-field">联系人</div>
-        <div class="form-field">手机号</div>
-        <div class="form-field">微信号</div>
+        <div class="form-field"><span>联系人</span><span class="field-count">0/20</span></div>
+        <div class="form-field"><span>手机号</span><span class="field-count">0/11</span></div>
+        <div class="form-field"><span>微信号</span><span class="field-count">0/20</span></div>
         <div class="form-field">请选择档期（选填）</div>
-        <div class="form-field area">需求描述</div>
+        <div class="form-field area"><span>需求描述</span><span class="field-count">0/200</span></div>
         <div class="form-submit">提交</div>
       </div>
     </div>
@@ -1585,7 +1585,7 @@
 
 <div class="doc-header" style="margin-top:32px;">
   <div class="sub">
-    说明：<code>pages/portfolios/visitor-schedule</code> 在代码中为无入口的孤立路由（全工程无任何 navigateTo 指向它），故本稿不再单独出框；档期查询与预留联系信息在访客作品集中的弹层模式（MODAL_CALENDAR / MODAL_FORM）实际是「当前页底部弹层」，见上方 10 / 11 框。
+    说明：<code>pages/portfolios/visitor-schedule</code> 在代码中为无入口的孤立路由（全工程无任何 navigateTo 指向它），故本稿不再单独出框；档期查询与预留联系信息在访客作品集中的弹层模式（MODAL_CALENDAR / MODAL_FORM）实际是「当前页底部弹层」，见上方 10 / 11 框。预留信息表单的字数计数（0/20、0/11、0/200 等）为设计建议——<code>components/portfolio-contact-form</code> 当前代码无 maxlength 限制，如需生效需小程序与后端同步加限制。
   </div>
 </div>
 

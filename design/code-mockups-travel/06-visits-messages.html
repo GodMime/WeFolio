@@ -271,17 +271,21 @@
   .summary-label { color: #868e96; font-size: 11px; }
   .summary-value { margin-top: 8px; color: #212529; font-size: 26px; font-weight: 700; line-height: 1; }
 
+  /* 筛选页签:下划线指示式,与胶囊按钮形态区分 */
   .filter-tabs {
-    display: flex; gap: 4px; margin-top: 10px; padding: 4px;
-    border: 1px solid #e9ecef; border-radius: 999px;
-    background: #ffffff;
+    display: flex; margin-top: 10px;
+    border-bottom: 1px solid #e9ecef;
   }
   .filter-tab {
-    flex: 1; min-height: 32px;
+    position: relative; flex: 1; height: 34px;
     display: flex; align-items: center; justify-content: center;
-    color: #868e96; font-size: 12px; font-weight: 500; border-radius: 999px;
+    color: #868e96; font-size: 12px; font-weight: 500;
   }
-  .filter-tab.active { color: #fff; background: #212529; }
+  .filter-tab.active { color: #212529; font-weight: 600; }
+  .filter-tab.active::after {
+    content: ""; position: absolute; bottom: -1px; left: 50%; transform: translateX(-50%);
+    width: 20px; height: 2.5px; border-radius: 2px; background: #212529;
+  }
 
   .action-row { display: flex; gap: 8px; margin-top: 10px; }
   .outline-btn, .solid-btn {
