@@ -1,12 +1,12 @@
 .text-section {
-  padding: 8rpx 34rpx;
+  padding: 12rpx 32rpx;
   text-align: center;
   box-sizing: border-box;
 }
 
 .component-title {
   padding: 0 24rpx;
-  color: #17202a;
+  color: #212529;
   font-size: 32rpx;
   font-weight: 900;
   line-height: 1.35;
@@ -16,7 +16,7 @@
 .text-content {
   display: block;
   margin-top: 12rpx;
-  color: #59636f;
+  color: #868e96;
   font-size: 26rpx;
   line-height: 1.75;
   text-align: left;

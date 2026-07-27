@@ -124,8 +124,9 @@ function createProfileTag(content, color) {
     content: trimText(content),
     color: option.color,
     colorName: option.name,
-    style: `color: ${option.color}; background: ${option.background}; border-color: ${option.border};`,
-    removeStyle: `color: ${option.color}; background: ${option.removeBackground};`
+    style: `color: ${option.color}; background: #ffffff; border-color: ${option.color};`,
+    dotStyle: `background: ${option.color};`,
+    removeStyle: 'color: #adb5bd; background: #ffffff; border-color: #e9ecef;'
   }
 }
 

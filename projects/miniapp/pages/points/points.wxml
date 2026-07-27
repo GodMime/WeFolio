@@ -1,5 +1,5 @@
 <view class="page-shell points-page">
-  <navigation-bar title="我的积分" back="{{true}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+  <navigation-bar title="我的积分" back="{{true}}" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
 
   <scroll-view class="points-scroll" scroll-y type="list" bindscrolltolower="handleLoadMore" lower-threshold="120">
     <view class="points-content">

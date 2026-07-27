@@ -1,7 +1,7 @@
 <wxs module="componentRows" src="./component-rows.wxs"></wxs>
 
 <view class="page-shell portfolio-edit-page team-portfolio-edit-page">
-  <navigation-bar title="标准团队作品集" color="#17202a" background="rgba(245, 247, 251, 0.94)" back="{{true}}"></navigation-bar>
+  <navigation-bar title="标准团队作品集" color="#212529" background="rgba(245, 246, 247, 0.94)" back="{{true}}"></navigation-bar>
 
   <view wx:if="{{loading}}" class="page-state">加载中...</view>
   <view wx:elif="{{errorMessage}}" class="page-state error-state">

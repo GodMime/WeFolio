@@ -1,5 +1,5 @@
 <view class="page-shell visits-page">
-  <navigation-bar title="访问记录" back="{{true}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+  <navigation-bar title="访问记录" back="{{true}}" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
 
   <scroll-view
     class="visits-scroll"
@@ -11,17 +11,16 @@
     <view class="visits-content">
       <block wx:if="{{loading}}">
         <view class="metric-grid">
-          <view class="metric-cell">
-            <view class="metric skeleton-panel"></view>
-          </view>
-          <view class="metric-cell">
-            <view class="metric skeleton-panel"></view>
-          </view>
-          <view class="metric-cell">
-            <view class="metric skeleton-panel"></view>
-          </view>
-          <view class="metric-cell">
-            <view class="metric skeleton-panel"></view>
+          <view
+            class="metric-row"
+            wx:for="{{visitData.metricRows}}"
+            wx:for-item="metricRow"
+            wx:key="*this"
+          >
+            <view class="metric-cell" wx:for="{{metricRow}}" wx:key="label">
+              <view class="metric-divider" wx:if="{{index > 0}}"></view>
+              <view class="metric skeleton-panel"></view>
+            </view>
           </view>
         </view>
         <view class="panel trend-panel skeleton-panel"></view>
@@ -40,17 +39,26 @@
       <block wx:else>
         <view class="metric-grid">
           <view
-            class="metric-cell {{item.interactive ? 'interactive' : ''}}"
-            wx:for="{{visitData.metrics}}"
-            wx:key="label"
-            data-action="{{item.action}}"
-            bindtap="handleMetricTap"
-            aria-role="{{item.interactive ? 'button' : 'text'}}"
-            aria-label="{{item.label}} {{item.value}}"
+            class="metric-row"
+            wx:for="{{visitData.metricRows}}"
+            wx:for-item="metricRow"
+            wx:key="*this"
           >
-            <view class="{{item.className}}">
-              <view class="metric-value">{{item.value}}</view>
-              <view class="metric-label">{{item.label}}</view>
+            <view
+              class="metric-cell {{item.interactive ? 'interactive' : ''}}"
+              wx:for="{{metricRow}}"
+              wx:key="label"
+              data-action="{{item.action}}"
+              bindtap="handleMetricTap"
+              aria-role="{{item.interactive ? 'button' : 'text'}}"
+              aria-label="{{item.label}} {{item.value}}"
+            >
+              <view class="metric-divider" wx:if="{{index > 0}}"></view>
+              <view class="{{item.className}}">
+                <view class="metric-value">{{item.value}}</view>
+                <view class="metric-label">{{item.label}}</view>
+              </view>
+              <view wx:if="{{item.interactive}}" class="metric-arrow"></view>
             </view>
           </view>
         </view>
@@ -91,7 +99,12 @@
                   disabled="{{followingVisitRecordId === item.id}}"
                   data-record-id="{{item.id}}"
                   catchtap="handleMarkVisitFollowedTap"
-                >标记已跟进</button>
+                >
+                  <view class="visit-follow-button-label">
+                    <text>标记</text>
+                    <text>已跟进</text>
+                  </view>
+                </button>
               </view>
               <view
                 class="visit-row"
@@ -107,7 +120,10 @@
                   <view class="visit-source">{{item.sourceText}}</view>
                   <view class="visit-summary">{{item.summaryText}}</view>
                 </view>
-                <view class="{{item.followToneClass}}">{{item.followStatusText}}</view>
+                <view class="{{item.followToneClass}}">
+                  <view class="visit-follow-status-dot"></view>
+                  <text>{{item.followStatusText}}</text>
+                </view>
               </view>
             </view>
             <view wx:if="{{visitRecordLoadingMore}}" class="visit-record-load-more">更多访问记录加载中...</view>
@@ -208,7 +224,10 @@
                     <view class="visit-source">{{item.sourceText}}</view>
                   </view>
                 </view>
-                <view class="{{item.resultToneClass}}">{{item.resultStatusText}}</view>
+                <view class="{{item.resultToneClass}}">
+                  <view class="detail-status-dot"></view>
+                  <text>{{item.resultStatusText}}</text>
+                </view>
               </view>
               <view class="visit-detail-primary">{{item.queriedDateText}} · {{item.slotText}}</view>
               <view class="visit-detail-secondary">{{item.resultMessage}}</view>
@@ -217,7 +236,10 @@
             <block wx:else>
               <view class="contact-lead-layout">
                 <view class="contact-lead-status">
-                  <view class="{{item.followToneClass}}">{{item.followStatusText}}</view>
+                  <view class="{{item.followToneClass}}">
+                    <view class="contact-lead-status-dot"></view>
+                    <text>{{item.followStatusText}}</text>
+                  </view>
                 </view>
                 <view class="contact-lead-main">
                   <view class="visit-detail-main-copy">

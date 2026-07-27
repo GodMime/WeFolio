@@ -60,13 +60,26 @@ test('normalizes visit records response for page rendering', () => {
     { label: '查询档期', value: '19', action: 'scheduleQueries', interactive: true, className: 'metric interactive' },
     { label: '预留信息', value: '7', action: 'contactLeads', interactive: true, className: 'metric interactive' }
   ])
+  assert.deepEqual(result.metricRows, [
+    [
+      { label: '累计访问次数', value: '428', action: '', interactive: false, className: 'metric' },
+      { label: '今日访问', value: '36', action: '', interactive: false, className: 'metric' }
+    ],
+    [
+      { label: '查询档期', value: '19', action: 'scheduleQueries', interactive: true, className: 'metric interactive' },
+      { label: '预留信息', value: '7', action: 'contactLeads', interactive: true, className: 'metric interactive' }
+    ]
+  ])
   assert.equal(result.trend.changeText, '上升 24%')
   assert.match(result.trend.chartSvg, /^data:image\/svg\+xml;charset=UTF-8,/)
   const trendSvg = decodeURIComponent(result.trend.chartSvg)
   assert.match(trendSvg, /<svg[^>]*viewBox="0 0 646 156"/)
-  assert.match(trendSvg, /<path[^>]*stroke="#0f766e"/)
+  assert.match(trendSvg, /<path[^>]*stroke="#212529"/)
+  assert.match(trendSvg, /fill="#212529" opacity="0\.08"/)
   assert.match(trendSvg, /<path d="M46\.14 93\.14L138\.43 93\.14L230\.71 30/)
-  assert.match(trendSvg, /L599\.86 64" fill="none" stroke="#0f766e"/)
+  assert.match(trendSvg, /L599\.86 64" fill="none" stroke="#212529"/)
+  assert.match(trendSvg, /fill="#868e96" font-size="11"/)
+  assert.doesNotMatch(trendSvg, /#0f766e|#c9963f/)
   assert.match(trendSvg, /<text x="599\.86"[^>]*>14<\/text>/)
   assert.deepEqual(result.trend.points.map((item) => item.height), [38, 38, 100, 18, 18, 29, 67])
   assert.equal(result.records[0].visitorInitial, '8')

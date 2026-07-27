@@ -130,6 +130,7 @@ test('portfolio carousel component keeps native swipe, isolated styles, and prog
   assert.doesNotMatch(componentWxml, /disable-touch/)
   assert.doesNotMatch(componentWxml, /indicator-dots/)
   assert.match(componentWxss, /\.portfolio-carousel\s*\{[\s\S]*height:\s*563rpx;/)
+  assert.match(componentWxss, /\.portfolio-carousel\s*\{[\s\S]*border-radius:\s*40rpx;/)
   assert.doesNotMatch(componentWxss, /aspect-ratio/)
   assert.doesNotMatch(componentWxss, /\.folio-carousel/)
   assert.doesNotMatch(componentWxss, /\.carousel-image/)

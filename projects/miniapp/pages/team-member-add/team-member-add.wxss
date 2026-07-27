@@ -1,6 +1,6 @@
 .member-add-page {
   min-height: 100vh;
-  background: #f5f7fb;
+  background: #f5f6f7;
 }
 
 .member-add-scroll {
@@ -8,15 +8,15 @@
 }
 
 .member-add-content {
-  padding: 176rpx 28rpx 56rpx;
+  padding: 176rpx 32rpx 56rpx;
   box-sizing: border-box;
 }
 
 .panel {
-  border: 1rpx solid #e5ebf2;
-  border-radius: 24rpx;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 18rpx 48rpx rgba(23, 32, 42, 0.08);
+  border: 1rpx solid #e9ecef;
+  border-radius: 48rpx;
+  background: #ffffff;
+  box-shadow: 0 18rpx 48rpx rgba(33, 37, 41, 0.06);
   box-sizing: border-box;
 }
 
@@ -34,7 +34,7 @@
 }
 
 .label {
-  color: #667085;
+  color: #6c757d;
   font-size: 24rpx;
   font-weight: 700;
 }
@@ -44,11 +44,12 @@
   min-height: 84rpx;
   margin-top: 12rpx;
   padding: 0 24rpx;
-  color: #17202a;
+  color: #212529;
   font-size: 28rpx;
   line-height: 84rpx;
-  border-radius: 16rpx;
-  background: #f6f8fb;
+  border: 1rpx solid #e9ecef;
+  border-radius: 40rpx;
+  background: #ffffff;
   box-sizing: border-box;
 }
 
@@ -87,17 +88,17 @@
   font-size: 28rpx;
   font-weight: 800;
   line-height: 1;
-  border-radius: 16rpx;
+  border-radius: 999rpx;
 }
 
 .primary-button {
   color: #fff;
-  background: #17202a;
+  background: #212529;
 }
 
 .secondary-button {
-  color: #17202a;
-  background: #eef2f6;
+  color: #212529;
+  background: #f1f3f5;
 }
 
 .candidate-card {
@@ -107,7 +108,7 @@
   gap: 18rpx;
   margin-top: 24rpx;
   padding-top: 22rpx;
-  border-top: 1rpx solid #edf1f5;
+  border-top: 1rpx solid #e9ecef;
 }
 
 .member-avatar {
@@ -116,7 +117,7 @@
   flex: none;
   overflow: hidden;
   border-radius: 50%;
-  background: #dfe8e5;
+  background: #e9ecef;
 }
 
 .member-avatar-image,
@@ -129,7 +130,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #0f766e;
+  color: #212529;
   font-size: 26rpx;
   font-weight: 900;
 }
@@ -141,7 +142,7 @@
 
 .candidate-name {
   overflow: hidden;
-  color: #17202a;
+  color: #212529;
   font-size: 28rpx;
   font-weight: 800;
   line-height: 1.3;
@@ -152,7 +153,7 @@
 .candidate-summary,
 .confirm-desc,
 .error-banner {
-  color: #667085;
+  color: #6c757d;
   font-size: 24rpx;
   line-height: 1.5;
 }
@@ -168,9 +169,9 @@
   display: flex;
   margin-top: 12rpx;
   padding: 8rpx;
-  border: 1rpx solid #d8e0e8;
-  border-radius: 18rpx;
-  background: rgba(255, 255, 255, 0.94);
+  border: 1rpx solid #e9ecef;
+  border-radius: 999rpx;
+  background: #ffffff;
   box-sizing: border-box;
 }
 
@@ -179,16 +180,16 @@
   min-width: 0;
   min-height: 68rpx;
   margin: 0;
-  color: #667085;
+  color: #6c757d;
   font-size: 24rpx;
   font-weight: 800;
-  border-radius: 14rpx;
+  border-radius: 999rpx;
   background: transparent;
 }
 
 .segment.active {
-  color: #fff;
-  background: #17202a;
+  color: #ffffff;
+  background: #212529;
 }
 
 .permission-list {
@@ -200,8 +201,8 @@
   min-height: 72rpx;
   gap: 16rpx;
   padding: 0 18rpx;
-  border-bottom: 1rpx solid #edf1f5;
-  color: #667085;
+  border-bottom: 1rpx solid #e9ecef;
+  color: #6c757d;
   font-size: 26rpx;
   font-weight: 700;
 }
@@ -211,21 +212,21 @@
 }
 
 .permission-row.active {
-  color: #0f766e;
+  color: #5c9e6e;
 }
 
 .permission-check {
   width: 28rpx;
   height: 28rpx;
-  border: 2rpx solid #cbd6e2;
+  border: 2rpx solid #ced4da;
   border-radius: 50%;
   background: #fff;
   box-sizing: border-box;
 }
 
 .permission-row.active .permission-check {
-  border-color: #0f766e;
-  background: #0f766e;
+  border-color: #5c9e6e;
+  background: #5c9e6e;
 }
 
 .permission-label {
@@ -242,7 +243,7 @@
 }
 
 .row-title {
-  color: #17202a;
+  color: #212529;
   font-size: 28rpx;
   font-weight: 800;
 }
@@ -266,18 +267,18 @@
 }
 
 .role-pill.teal {
-  color: #0f766e;
-  background: #dcf7f1;
+  color: #5c9e6e;
+  background: #eef6f0;
 }
 
 .role-pill.amber {
-  color: #8a4b09;
-  background: #fff1d6;
+  color: #c08a3e;
+  background: #fbf3e7;
 }
 
 .role-pill.muted {
-  color: #667085;
-  background: #edf1f5;
+  color: #868e96;
+  background: #f1f3f5;
 }
 
 .button-row {
@@ -294,8 +295,8 @@
 .error-banner {
   margin-bottom: 18rpx;
   padding: 18rpx 22rpx;
-  border-radius: 16rpx;
-  background: #fff1d6;
-  color: #8a4b09;
+  border-radius: 40rpx;
+  background: #fbf3e7;
+  color: #c08a3e;
   box-sizing: border-box;
 }

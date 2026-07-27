@@ -1,5 +1,5 @@
 <view class="page-shell recharge-page">
-  <navigation-bar title="充值积分" back="{{true}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+  <navigation-bar title="充值积分" back="{{true}}" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
 
   <scroll-view class="recharge-scroll" scroll-y type="list">
     <view class="recharge-content">

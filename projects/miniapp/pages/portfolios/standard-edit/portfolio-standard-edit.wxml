@@ -1,7 +1,7 @@
 <wxs module="componentRows" src="./component-rows.wxs"></wxs>
 
 <view class="page-shell portfolio-edit-page">
-  <navigation-bar title="标准个人作品集" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+  <navigation-bar title="标准个人作品集" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
 
   <scroll-view class="edit-scroll" scroll-y type="list">
     <view class="edit-content">
@@ -152,12 +152,16 @@
               wx:for="{{componentWorkFilterTags}}"
               wx:key="id"
               class="component-work-filter-pill {{(!componentWorkSelectedTagId && !item.id) || componentWorkSelectedTagId === item.id ? 'active' : ''}}"
-              style="{{((!componentWorkSelectedTagId && !item.id) || componentWorkSelectedTagId === item.id) ? item.activeStyle : item.style}}"
+              style="{{((!componentWorkSelectedTagId && !item.id) || componentWorkSelectedTagId === item.id) ? item.activeStyle : item.filterStyle}}"
               data-tag-id="{{item.id}}"
               catchtap="handleComponentWorkTagTap"
               aria-role="button"
               aria-label="筛选{{item.name}}"
             >
+              <view
+                class="component-work-filter-dot"
+                style="background: {{((!componentWorkSelectedTagId && !item.id) || componentWorkSelectedTagId === item.id) ? '#ffffff' : (item.color || '#212529')}};"
+              ></view>
               <text>{{item.labelText}}</text>
             </view>
           </view>
@@ -340,12 +344,14 @@
             wx:for="{{displayGroupOptions}}"
             wx:key="groupKey"
             class="display-group-pill {{item.active ? 'active' : ''}} {{item.selected ? 'selected' : ''}}"
+            style="{{item.active ? item.activeStyle : item.filterStyle}}"
             data-group-key="{{item.groupKey}}"
             catchtap="handleSelectDisplayGroup"
             aria-role="button"
             aria-label="选择{{item.name}}"
           >
             <view class="display-group-main">
+              <view class="display-group-dot" style="background: {{item.active ? '#ffffff' : item.color}};"></view>
               <view class="display-group-name">{{item.name}}</view>
               <view class="display-group-count">{{item.countText}}</view>
             </view>

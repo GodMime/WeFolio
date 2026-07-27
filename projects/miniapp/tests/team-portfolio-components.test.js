@@ -371,9 +371,15 @@ test('carousel uses the personal-style progress indicator and only rotates multi
   assert.match(wxml, /src="\{\{item\.mediaUrl \|\| item\.coverUrl\}\}"/)
   assert.match(wxml, /class="carousel-progress-bar"/)
   assert.doesNotMatch(wxml, /class="progress"/)
-  assert.match(wxss, /\.carousel\s*\{[^}]*width:\s*calc\(100% \+ 56rpx\);[^}]*margin-left:\s*-28rpx;[^}]*height:\s*563rpx;/)
   assert.match(wxss, /\.carousel\.editor-mode\s*\{[^}]*height:\s*auto;[^}]*overflow:\s*visible;/)
   assert.match(wxss, /\.carousel\.editor-mode\s*\{[^}]*width:\s*100%;[^}]*margin-left:\s*0;/)
+})
+
+test('carousel spans preview and visitor pages without losing its rounded frame', () => {
+  const wxss = fs.readFileSync(path.join(ROOT, 'carousel/carousel.wxss'), 'utf8')
+
+  assert.match(wxss, /\.carousel\s*\{[^}]*width:\s*100%;[^}]*margin-left:\s*0;[^}]*height:\s*563rpx;/)
+  assert.match(wxss, /\.carousel\s*\{[^}]*overflow:\s*hidden;[^}]*border-radius:\s*40rpx;/)
 })
 
 test('shared WXS selection helpers avoid unavailable String and preserve numeric ID matching', () => {
@@ -451,9 +457,9 @@ test('carousel work picker matches the personal vertical work list visual langua
   assert.match(wxss, /\.editor-option-list\s*\{[^}]*width:\s*100%;[^}]*flex-direction:\s*column;[^}]*align-self:\s*stretch;/)
   assert.match(wxss, /\.editor-option\s*\{[^}]*width:\s*100%;[^}]*min-height:\s*112rpx;/)
   assert.match(wxss, /\.editor-option-thumb\s*\{[^}]*width:\s*92rpx;[^}]*height:\s*76rpx;/)
-  assert.match(wxss, /\.editor-option\.selected\s*\{[^}]*border-color:\s*#c28b37;[^}]*background:\s*#fff9ed;/)
+  assert.match(wxss, /\.editor-option\.selected\s*\{[^}]*border-color:\s*#212529;[^}]*background:\s*#fff;/)
   assert.match(wxss, /\.editor-option-check\s*\{[^}]*width:\s*44rpx;[^}]*height:\s*44rpx;/)
-  assert.match(wxss, /\.editor-option\.selected \.editor-option-check\s*\{[^}]*background:\s*#c28b37;/)
+  assert.match(wxss, /\.editor-option\.selected \.editor-option-check\s*\{[^}]*background:\s*#212529;/)
   assert.doesNotMatch(wxss, /width:\s*calc\(33\.333%/)
 })
 

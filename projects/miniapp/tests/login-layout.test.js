@@ -175,6 +175,7 @@ test('login layout keeps content at the bottom while hero resizes', () => {
   assert.match(layoutRule, /flex-direction:\s*column/)
   assert.match(heroRule, /flex:\s*1\s+1\s+0/)
   assert.match(contentRule, /flex:\s*none/)
+  assert.match(contentRule, /padding:\s*20rpx 32rpx/)
 })
 
 test('login tab switch animates hero height and image crop', () => {
@@ -233,15 +234,16 @@ test('login tabs match design underline style', () => {
     loginWxml,
     /class="tab-indicator \{\{activeTab\}\}"/
   )
-  assert.match(tabsRule, /border-bottom:\s*1rpx\s+solid\s+#d7dee5/)
+  assert.match(tabsRule, /border-bottom:\s*1rpx\s+solid\s+#e9ecef/)
   assert.match(tabsRule, /background:\s*transparent/)
   assert.match(tabsRule, /padding:\s*0/)
   assert.match(tabsRule, /position:\s*relative/)
   assert.match(activeTabRule, /background:\s*transparent/)
   assert.match(activeTabRule, /box-shadow:\s*none/)
   assert.match(indicatorRule, /position:\s*absolute/)
-  assert.match(indicatorRule, /height:\s*4rpx/)
-  assert.match(indicatorRule, /background:\s*#315f9d/)
+  assert.match(indicatorRule, /width:\s*48rpx/)
+  assert.match(indicatorRule, /height:\s*5rpx/)
+  assert.match(indicatorRule, /background:\s*#212529/)
   assert.match(indicatorRule, /transition:\s*left/)
   assert.match(experienceIndicatorRule, /left:\s*25%/)
   assert.match(maintainerIndicatorRule, /left:\s*75%/)
@@ -262,9 +264,9 @@ test('login buttons match first-login design copy and shape', () => {
   assert.match(buttonRule, /margin-left:\s*0/)
   assert.match(buttonRule, /margin-right:\s*0/)
   assert.match(buttonRule, /box-sizing:\s*border-box/)
-  assert.match(buttonRule, /height:\s*84rpx/)
-  assert.match(buttonRule, /border-radius:\s*16rpx/)
-  assert.match(buttonRule, /background:\s*linear-gradient\(180deg,\s*#263445,\s*#111827\)/)
+  assert.match(buttonRule, /height:\s*92rpx/)
+  assert.match(buttonRule, /border-radius:\s*999rpx/)
+  assert.match(buttonRule, /background:\s*#212529/)
 })
 
 test('experience login tab redirects to independent mock pages', () => {
@@ -287,7 +289,7 @@ test('experience login tab explains trial before registration', () => {
   assert.match(authExperienceRule, /max-height:\s*142rpx/)
   assert.match(experienceFormRule, /max-height:\s*142rpx/)
   assert.match(experienceHintRule, /text-align:\s*center/)
-  assert.match(experienceHintRule, /color:\s*#6b7785/)
+  assert.match(experienceHintRule, /color:\s*#868e96/)
 })
 
 test('maintainer area uses one button and only enables phone capability for new users', () => {
@@ -324,9 +326,44 @@ test('precheck failure keeps phone authorization disabled and supports retry', (
   assert.match(loginWxml, /disabled="\{\{prechecking \|\| loading\}\}"/)
 })
 
-test('referral code is shown and submitted only for new-user registration', () => {
-  assert.match(loginWxml, /wx:if="\{\{precheckReady && phoneAuthorizationRequired\}\}"[\s\S]*bindinput="handleReferralInput"/)
+test('referral code is always shown in maintainer mode with a new-user-only hint', () => {
+  assert.match(
+    loginWxml,
+    /class="login-form maintainer-form[\s\S]*<view class="form-row">[\s\S]*bindinput="handleReferralInput"/
+  )
+  assert.doesNotMatch(
+    loginWxml,
+    /wx:if="\{\{precheckReady && phoneAuthorizationRequired\}\}"[^>]*class="form-row"/
+  )
+  assert.match(
+    loginWxml,
+    /class="field-heading"[\s\S]*推荐码[\s\S]*\{\{referralCode\.length\}\}\/16[\s\S]*maxlength="16"[\s\S]*class="referral-hint">推荐码仅新用户注册时有效/
+  )
+})
+
+test('referral code is submitted only from the phone registration branch', () => {
+  assert.match(loginWxml, /class="field-heading"[\s\S]*推荐码[\s\S]*\{\{referralCode\.length\}\}\/16[\s\S]*maxlength="16"/)
   assert.match(loginJs, /if \(options\.phoneCode\) \{[\s\S]*referralCode:\s*this\.data\.referralCode\.trim\(\)/)
+})
+
+test('maintainer form height accommodates referral input hint and auth feedback', () => {
+  const authMaintainerRule = readRule('.auth-body.maintainer-mode')
+  const maintainerFormRule = readRule('.maintainer-form.active')
+  const referralHintRule = readRule('.referral-hint')
+
+  assert.match(authMaintainerRule, /max-height:\s*340rpx/)
+  assert.match(maintainerFormRule, /max-height:\s*340rpx/)
+  assert.match(referralHintRule, /font-size:\s*21rpx/)
+  assert.match(referralHintRule, /color:\s*#868e96/)
+})
+
+test('login cards and referral field use the neutral TripGlide contract', () => {
+  const panelRule = readRule('.panel')
+  const inputRule = readRule('.input-shell')
+
+  assert.match(panelRule, /border:\s*1rpx solid #e9ecef/)
+  assert.match(panelRule, /border-radius:\s*48rpx/)
+  assert.match(inputRule, /min-height:\s*84rpx/)
 })
 
 test('new-user registration sends phone and optional plugin codes while old-user login omits them', () => {

@@ -11,7 +11,7 @@
         <view wx:elif="{{selectedMemberId}}" class="editor-empty">该成员暂无已发布个人作品集</view>
         <view wx:else class="editor-empty">请先选择团队成员</view>
       </view>
-      <view class="editor-field editor-switch-field"><view class="editor-switch-copy"><view class="editor-label">显示成员姓名</view><view class="editor-switch-desc">在作品集标题下展示所属成员</view></view><switch checked="{{draftShowMemberName}}" color="#17202a" bindchange="handleShowMemberNameChange" /></view>
+      <view class="editor-field editor-switch-field"><view class="editor-switch-copy"><view class="editor-label">显示成员姓名</view><view class="editor-switch-desc">在作品集标题下展示所属成员</view></view><switch checked="{{draftShowMemberName}}" color="#212529" bindchange="handleShowMemberNameChange" /></view>
       <view wx:if="{{errorMessage}}" class="editor-error">{{errorMessage}}</view>
     </view>
   </block>

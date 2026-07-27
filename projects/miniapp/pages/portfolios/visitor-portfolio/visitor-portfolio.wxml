@@ -1,5 +1,5 @@
 <view class="page-shell visitor-portfolio-page">
-  <navigation-bar title="{{portfolio.title || '个人作品集'}}" back="{{showNavigationBack && !timelineGuideVisible}}" color="#17202a" background="rgba(255, 255, 255, 0.94)"></navigation-bar>
+  <navigation-bar title="{{portfolio.title || '个人作品集'}}" back="{{showNavigationBack && !timelineGuideVisible}}" color="#212529" background="#ffffff"></navigation-bar>
 
   <scroll-view scroll-y class="visitor-scroll">
     <view wx:for="{{portfolio.components}}" wx:key="componentKey" class="folio-component">

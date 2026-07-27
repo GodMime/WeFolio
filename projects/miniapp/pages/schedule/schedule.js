@@ -140,6 +140,7 @@ Page({
     slotSheetTitle: '新增档位定义',
     editingSlotId: null,
     deletingSlotId: null,
+    togglingSlotId: null,
     revealedSlotId: null,
     slotTouchStart: null,
     slotForm: INITIAL_SLOT_FORM,
@@ -740,11 +741,15 @@ Page({
   },
 
   async handleToggleSlotStatus(event) {
+    if (this.data.togglingSlotId !== null) {
+      return
+    }
     const slotId = normalizeId(event.currentTarget.dataset.id)
     const slot = this.data.overview.slotDefinitions.find((item) => item.id === slotId)
     if (!slot) {
       return
     }
+    this.setData({ togglingSlotId: slotId })
     try {
       await request({
         url: `/api/mine/schedule/slot-definitions/status/${slotId}`,
@@ -754,7 +759,7 @@ Page({
         }
       })
       this.setData({ revealedSlotId: null })
-      this.loadSlotDefinitions()
+      await this.loadSlotDefinitions(false)
     } catch (error) {
       if (error && error.authRequired) {
         handleMaintainerAuthRequired(error.message)
@@ -764,6 +769,8 @@ Page({
         title: error && error.message ? error.message : '状态更新失败',
         icon: 'none'
       })
+    } finally {
+      this.setData({ togglingSlotId: null })
     }
   },
 

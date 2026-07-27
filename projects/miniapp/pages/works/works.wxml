@@ -1,5 +1,5 @@
 <view class="page-shell works-page">
-  <navigation-bar title="作品" back="{{false}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+  <navigation-bar title="作品" back="{{false}}" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
 
   <view class="works-scroll">
     <view class="works-content" bindtap="handleCloseTagManageMode">
@@ -29,18 +29,24 @@
                 wx:for="{{list.filterTags}}"
                 wx:key="id"
                 class="tag-pill {{(!selectedTagId && !item.id) || selectedTagId === item.id ? 'active' : ''}} {{tagManageMode && item.id ? 'manage' : ''}}"
-                style="{{((!selectedTagId && !item.id) || selectedTagId === item.id) ? item.activeStyle : item.style}}"
+                style="{{tagManageMode && item.id ? '' : (((!selectedTagId && !item.id) || selectedTagId === item.id) ? item.activeStyle : item.filterStyle)}}"
                 data-id="{{item.id}}"
                 bindtap="handleTagTap"
                 bindlongpress="handleTagLongPress"
               >
+                <view
+                  wx:if="{{item.id && (tagManageMode || selectedTagId !== item.id)}}"
+                  class="tag-color-dot"
+                  style="background: {{item.color}};"
+                ></view>
                 <text class="tag-text">{{item.labelText}}</text>
                 <view
                   wx:if="{{tagManageMode && item.id}}"
                   class="tag-delete"
-                  style="{{item.deleteStyle}}"
                   data-id="{{item.id}}"
                   catchtap="handleTagDeleteTap"
+                  aria-role="button"
+                  aria-label="删除标签{{item.name}}"
                 >
                   <text class="tag-delete-mark">×</text>
                 </view>
@@ -151,7 +157,10 @@
                     </view>
                     <view class="work-status-row">
                       <view class="reference-pill {{item.referenceCount > 0 ? 'used' : ''}}">{{item.referenceText}}</view>
-                      <view class="audit-pill {{item.auditStatusTone}}">{{item.auditStatusText}}</view>
+                      <view class="status-badge {{item.auditStatusTone}}">
+                        <view class="status-dot"></view>
+                        <text>{{item.auditStatusText}}</text>
+                      </view>
                     </view>
                     <view wx:if="{{item.showAuditRejectReason}}" class="audit-reject-row">
                       <view class="audit-reject-icon">!</view>
@@ -319,7 +328,7 @@
           value="{{tagForm.name}}"
           maxlength="10"
           placeholder="输入标签名称"
-          placeholder-class="search-placeholder"
+          placeholder-class="tag-input-placeholder"
           bindinput="handleTagNameInput"
         />
       </view>
@@ -331,7 +340,6 @@
             wx:for="{{tagColorOptions}}"
             wx:key="color"
             class="color-choice {{tagForm.color === item.color ? 'active' : ''}}"
-            style="{{item.choiceStyle}}"
             data-color="{{item.color}}"
             bindtap="handleSelectTagColor"
           >
@@ -661,7 +669,9 @@
       data-label="{{item.label}}"
       bindtap="handleTabTap"
     >
-      <view class="tab-icon {{item.icon}}-tab-icon"></view>
+      <view class="tab-icon-wrap">
+        <image class="tab-icon-image" src="/assets/system/tabbar/{{item.icon}}{{item.active ? '-active' : ''}}.svg" mode="aspectFit"></image>
+      </view>
       <view class="tab-label">{{item.label}}</view>
     </button>
   </view>

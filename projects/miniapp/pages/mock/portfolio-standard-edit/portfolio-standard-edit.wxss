@@ -18,13 +18,13 @@
 }
 
 .component-swipe-row.active .component-row {
-  border-color: #c28b37;
-  background: #fff9ed;
+  border-color: #212529;
+  background: #ffffff;
 }
 
 .component-swipe-row.active.revealed .component-row,
 .component-swipe-row.active.dragging .component-row {
-  background: #fff9ed;
+  background: #ffffff;
 }
 
 .mock-component-empty {
@@ -32,9 +32,9 @@
   align-items: center;
   justify-content: center;
   padding: 24rpx;
-  border: 1rpx dashed #cbd6df;
-  border-radius: 14rpx;
-  background: #f8fafc;
+  border: 1rpx dashed #ced4da;
+  border-radius: 28rpx;
+  background: #f5f6f7;
   box-sizing: border-box;
 }
 
@@ -63,9 +63,9 @@
 .mock-profile-editor {
   margin-top: 24rpx;
   padding: 18rpx;
-  border: 1rpx solid #e1e8ef;
-  border-radius: 14rpx;
-  background: #f8fafc;
+  border: 1rpx solid #e9ecef;
+  border-radius: 48rpx;
+  background: #ffffff;
   box-sizing: border-box;
 }
 
@@ -81,9 +81,9 @@
   gap: 24rpx;
   margin-top: 24rpx;
   padding: 22rpx;
-  border: 1rpx solid #e1e8ef;
-  border-radius: 14rpx;
-  background: #f8fafc;
+  border: 1rpx solid #e9ecef;
+  border-radius: 48rpx;
+  background: #ffffff;
   box-sizing: border-box;
 }
 

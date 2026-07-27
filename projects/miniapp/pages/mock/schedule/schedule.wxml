@@ -1,9 +1,10 @@
 <view class="page-shell schedule-page mock-schedule-page">
-  <navigation-bar title="档期" back="{{false}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+  <navigation-bar title="档期" back="{{false}}" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
 
   <scroll-view class="schedule-scroll" scroll-y type="list">
     <view class="schedule-content">
       <view class="schedule-segmented">
+        <view class="segment-indicator {{activeMode === 'definitions' ? 'second-active' : ''}}"></view>
         <button class="segment {{activeMode === 'maintenance' ? 'active' : ''}}" data-mode="maintenance" bindtap="handleModeTap">档期维护</button>
         <button class="segment {{activeMode === 'definitions' ? 'active' : ''}}" data-mode="definitions" bindtap="handleModeTap">档位定义</button>
       </view>
@@ -88,7 +89,7 @@
               </view>
               <view class="slot-actions">
                 <button class="mini-action" catchtap="handleLockedAction">编辑</button>
-                <button class="mini-action warn" catchtap="handleLockedAction">停用</button>
+                <button class="mini-action warn slot-toggle-action" catchtap="handleLockedAction">停用</button>
               </view>
             </view>
           </view>

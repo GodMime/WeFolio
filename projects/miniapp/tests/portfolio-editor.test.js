@@ -688,6 +688,12 @@ test('share cover chooser uses native 5:4 image without crop sheet', async () =>
 test('share cover chooser opens manual crop sheet for non 5:4 image', async () => {
   const cropCalls = []
   const page = loadPortfolioEditorPage(() => Promise.resolve({}), {
+    getWindowInfo() {
+      return { windowWidth: 375 }
+    },
+    getSystemInfoSync() {
+      throw new Error('不应调用已废弃的 wx.getSystemInfoSync')
+    },
     chooseMedia(options) {
       options.success({
         tempFiles: [

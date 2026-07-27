@@ -3,7 +3,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background-color: #f6f8f9;
+  background-color: #f5f6f7;
 }
 
 .work-add-scroll {
@@ -16,7 +16,7 @@
   display: flex;
   flex-direction: column;
   gap: 24rpx;
-  padding: 28rpx 28rpx calc(28rpx + env(safe-area-inset-bottom));
+  padding: 20rpx 32rpx calc(32rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
 }
 
@@ -33,10 +33,10 @@
   gap: 14rpx;
   margin: 0;
   padding: 32rpx;
-  border: 2rpx dashed #aab8c4;
-  border-radius: 16rpx;
-  background: linear-gradient(180deg, #ffffff, #f7faf9);
-  box-shadow: 0 6rpx 24rpx rgba(17, 24, 39, 0.05);
+  border: 2rpx dashed #ced4da;
+  border-radius: 48rpx;
+  background: #ffffff;
+  box-shadow: 0 12rpx 36rpx rgba(33, 37, 41, 0.05);
   box-sizing: border-box;
 }
 
@@ -46,18 +46,18 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #536b82;
+  color: #212529;
   font-size: 52rpx;
   line-height: 1;
   font-weight: 900;
   border-radius: 50%;
-  background: #eef3f7;
+  background: #f1f3f5;
   box-shadow: 0 6rpx 24rpx rgba(17, 24, 39, 0.05);
 }
 
 .upload-title,
 .empty-title {
-  color: #111827;
+  color: #212529;
   font-size: 31rpx;
   line-height: 1.24;
   font-weight: 800;
@@ -66,9 +66,8 @@
 .upload-desc,
 .empty-desc,
 .selected-work-meta,
-.tag-note,
-.error-copy {
-  color: #66727f;
+.tag-note {
+  color: #868e96;
   font-size: 24rpx;
   line-height: 1.55;
 }
@@ -82,10 +81,10 @@
   flex-direction: column;
   gap: 20rpx;
   padding: 28rpx;
-  border: 1rpx solid #d7dee5;
-  border-radius: 16rpx;
-  background: #fcfdfd;
-  box-shadow: 0 6rpx 24rpx rgba(17, 24, 39, 0.05);
+  border: 1rpx solid rgba(33, 37, 41, 0.05);
+  border-radius: 48rpx;
+  background: #ffffff;
+  box-shadow: 0 12rpx 36rpx rgba(33, 37, 41, 0.05);
   box-sizing: border-box;
   overflow: hidden;
 }
@@ -300,7 +299,7 @@
 .selected-work-progress-fill {
   height: 100%;
   border-radius: 999rpx;
-  background: linear-gradient(90deg, #536b82, #17202a);
+  background: #212529;
   transition: width 160ms ease;
 }
 
@@ -321,9 +320,9 @@
   display: flex;
   flex-direction: column;
   padding: 28rpx;
-  border: 1rpx solid #d7dee5;
-  border-radius: 16rpx;
-  background: #fcfdfd;
+  border: 1rpx solid rgba(33, 37, 41, 0.05);
+  border-radius: 48rpx;
+  background: #ffffff;
   box-shadow: 0 6rpx 24rpx rgba(17, 24, 39, 0.05);
   box-sizing: border-box;
 }
@@ -407,9 +406,9 @@
   min-width: 100%;
   max-width: 100%;
   padding: 64rpx 32rpx;
-  border: 1rpx solid #d7dee5;
-  border-radius: 16rpx;
-  background: #fcfdfd;
+  border: 1rpx solid rgba(33, 37, 41, 0.05);
+  border-radius: 48rpx;
+  background: #ffffff;
   text-align: center;
   box-shadow: 0 6rpx 24rpx rgba(17, 24, 39, 0.05);
   box-sizing: border-box;
@@ -420,7 +419,9 @@
 }
 
 .error-copy {
-  color: #b84762;
+  color: #b55656;
+  font-size: 24rpx;
+  line-height: 1.55;
 }
 
 .primary-button {
@@ -428,7 +429,7 @@
   min-width: 100%;
   max-width: 100%;
   align-self: stretch;
-  height: 88rpx;
+  height: 96rpx;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -436,15 +437,15 @@
   color: #ffffff;
   font-size: 28rpx;
   font-weight: 800;
-  border-radius: 16rpx;
-  background: linear-gradient(180deg, #263445, #111827);
-  box-shadow: 0 20rpx 44rpx rgba(17, 24, 39, 0.2);
+  border-radius: 999rpx;
+  background: #212529;
+  box-shadow: 0 16rpx 32rpx rgba(33, 37, 41, 0.16);
   box-sizing: border-box;
 }
 
 .primary-button[disabled] {
   color: rgba(255, 255, 255, 0.62);
-  background: linear-gradient(180deg, #5f6b78, #2d3745);
+  background: #6c757d;
   box-shadow: 0 12rpx 28rpx rgba(17, 24, 39, 0.12);
 }
 
@@ -493,7 +494,7 @@
   z-index: 20;
   display: flex;
   align-items: flex-end;
-  padding: 28rpx;
+  padding: 0;
   opacity: 0;
   pointer-events: none;
   background: rgba(17, 24, 39, 0.35);
@@ -512,10 +513,10 @@
   display: flex;
   flex-direction: column;
   gap: 20rpx;
-  padding: 18rpx 24rpx 24rpx;
-  border: 1rpx solid #d7dee5;
-  border-radius: 24rpx 24rpx 18rpx 18rpx;
-  background: #fcfdfd;
+  padding: 24rpx 32rpx calc(32rpx + env(safe-area-inset-bottom));
+  border: 0;
+  border-radius: 56rpx 56rpx 0 0;
+  background: #ffffff;
   box-shadow: 0 -20rpx 48rpx rgba(17, 24, 39, 0.18);
   box-sizing: border-box;
   transform: translateY(36rpx);
@@ -598,7 +599,8 @@
 
 .tag-option-list {
   max-height: 520rpx;
-  flex: none;
+  min-height: 0;
+  flex: 0 1 auto;
   overflow: hidden;
 }
 
@@ -610,24 +612,32 @@
 }
 
 .tag-option {
-  min-height: 58rpx;
+  width: auto;
+  min-width: 0;
   max-width: 100%;
-  display: flex;
+  height: 50rpx;
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12rpx;
-  padding: 0 18rpx;
-  border: 1rpx solid #d7dee5;
+  justify-content: center;
+  flex: 0 0 auto;
+  gap: 8rpx;
+  padding: 0 20rpx;
+  overflow: hidden;
+  border: 1rpx solid #d4dee8;
   border-radius: 999rpx;
-  background: #f4f7f8;
+  background: #ffffff;
   box-sizing: border-box;
 }
 
-.tag-option.selected {
-  box-shadow: 0 0 0 2rpx rgba(17, 24, 39, 0.08);
+.tag-option-dot {
+  width: 12rpx;
+  height: 12rpx;
+  flex: none;
+  border-radius: 50%;
 }
 
 .tag-option-name {
+  min-width: 0;
   max-width: 360rpx;
   overflow: hidden;
   color: inherit;
@@ -638,19 +648,18 @@
 }
 
 .tag-option-check {
-  width: 30rpx;
-  min-width: 30rpx;
+  flex: none;
   color: inherit;
   font-size: 24rpx;
   font-weight: 900;
   line-height: 1;
-  text-align: center;
 }
 
 .tag-picker-actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  flex: none;
   gap: 16rpx;
 }
 
@@ -690,7 +699,7 @@
   z-index: 30;
   display: flex;
   align-items: flex-end;
-  padding: 28rpx;
+  padding: 0;
   opacity: 0;
   pointer-events: none;
   background: rgba(17, 24, 39, 0.38);
@@ -710,10 +719,10 @@
   display: flex;
   flex-direction: column;
   gap: 20rpx;
-  padding: 18rpx 24rpx 24rpx;
-  border: 1rpx solid #d7dee5;
-  border-radius: 24rpx 24rpx 18rpx 18rpx;
-  background: #fcfdfd;
+  padding: 24rpx 32rpx calc(32rpx + env(safe-area-inset-bottom));
+  border: 0;
+  border-radius: 56rpx 56rpx 0 0;
+  background: #ffffff;
   box-shadow: 0 -20rpx 48rpx rgba(17, 24, 39, 0.18);
   box-sizing: border-box;
   transform: translateY(46rpx);

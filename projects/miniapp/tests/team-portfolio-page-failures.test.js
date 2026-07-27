@@ -255,7 +255,8 @@ test('editor QR selection opens a square crop without uploading or changing the 
     return { uploadUrl: 'https://cos.example/upload', publicUrl: 'https://cdn.example/new-qr.png', formData: {} }
   }, {
     chooseMedia({ success }) { success({ tempFiles: [{ tempFilePath: 'wxfile://tmp/new-qr.png', width: 1200, height: 800 }] }) },
-    getSystemInfoSync() { return { windowWidth: 375 } },
+    getWindowInfo() { return { windowWidth: 375 } },
+    getSystemInfoSync() { throw new Error('不应调用已废弃的 wx.getSystemInfoSync') },
     getFileSystemManager() { return { statSync() { return { size: 128 } } } },
     uploadFile({ success }) { success({ statusCode: 204 }) }
   })

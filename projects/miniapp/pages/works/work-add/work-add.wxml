@@ -1,5 +1,5 @@
 <view class="page-shell work-add-page">
-  <navigation-bar title="添加作品" color="#17202a" background="rgba(252, 253, 253, 0.96)"></navigation-bar>
+  <navigation-bar title="添加作品" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
 
   <scroll-view class="work-add-scroll" scroll-y type="list">
     <view class="work-add-content">
@@ -100,21 +100,25 @@
         <view class="tag-picker-retry" catchtap="handleRetryLoadTags" aria-role="button" aria-label="重新加载作品标签">重试</view>
       </view>
       <view wx:elif="{{tagPickerTags.length === 0}}" class="tag-picker-state">暂无作品标签</view>
-      <scroll-view wx:else class="tag-option-list" style="height: {{tagOptionListHeight}}rpx;" scroll-y type="list">
+      <scroll-view wx:else class="tag-option-list" scroll-y type="list">
         <view class="tag-option-list-content">
           <view
             wx:for="{{tagPickerTags}}"
             wx:key="id"
             class="tag-option {{item.selected ? 'selected' : ''}}"
-            style="{{item.style}}"
+            style="{{item.selected ? item.activeStyle : item.filterStyle}}"
             data-id="{{item.id}}"
             catchtap="handleToggleUnifiedTag"
             aria-role="checkbox"
             aria-checked="{{item.selected}}"
             aria-label="选择{{item.name}}标签"
           >
+            <view
+              class="tag-option-dot"
+              style="background: {{item.selected ? '#ffffff' : item.color}};"
+            ></view>
             <view class="tag-option-name">{{item.name}}</view>
-            <view class="tag-option-check">{{item.selected ? '✓' : ''}}</view>
+            <view wx:if="{{item.selected}}" class="tag-option-check">✓</view>
           </view>
         </view>
       </scroll-view>

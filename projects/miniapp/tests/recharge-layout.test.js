@@ -7,6 +7,12 @@ function read(filePath) {
   return fs.readFileSync(path.join(__dirname, '..', filePath), 'utf8')
 }
 
+function readRule(content, selector) {
+  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const match = content.match(new RegExp(`${escapedSelector}\\s*\\{([^}]*)\\}`))
+  return match ? match[1] : ''
+}
+
 test('registers recharge pages and existing recharge buttons navigate to recharge page', () => {
   const appJson = JSON.parse(read('app.json'))
   const indexJs = read('pages/index/index.js')
@@ -24,6 +30,11 @@ test('recharge page exposes balance, package selection, records, payment and rul
   const js = read('pages/recharge/recharge.js')
   const wxml = read('pages/recharge/recharge.wxml')
   const wxss = read('pages/recharge/recharge.wxss')
+  const contentRule = readRule(wxss, '.recharge-content')
+  const packageCardRule = readRule(wxss, '.package-card')
+  const selectedPackageRule = readRule(wxss, '.package-card.selected')
+  const summaryRowRule = readRule(wxss, '.summary-row')
+  const payButtonRule = readRule(wxss, '.pay-button')
 
   assert.match(js, /const RECHARGE_PAGE_URL = '\/api\/mine\/recharges'/)
   assert.match(js, /const CREATE_ORDER_URL = '\/api\/mine\/recharges\/orders'/)
@@ -42,6 +53,14 @@ test('recharge page exposes balance, package selection, records, payment and rul
   assert.match(wxss, /\.package-card\s*\{[^}]*width:\s*calc\(50%\s*-\s*8rpx\)/)
   assert.match(wxss, /\.pay-button\s*\{[^}]*width:\s*100%[^}]*min-width:\s*100%[^}]*max-width:\s*100%/)
   assert.doesNotMatch(wxss, /\.package-grid\s*\{[^}]*display:\s*grid/)
+  assert.match(contentRule, /padding:\s*20rpx 32rpx/)
+  assert.match(packageCardRule, /border-radius:\s*48rpx/)
+  assert.match(packageCardRule, /border:\s*1rpx solid #e9ecef/)
+  assert.match(selectedPackageRule, /border-color:\s*#212529/)
+  assert.match(summaryRowRule, /min-height:\s*84rpx/)
+  assert.match(payButtonRule, /height:\s*96rpx/)
+  assert.match(payButtonRule, /border-radius:\s*999rpx/)
+  assert.match(payButtonRule, /background:\s*#212529/)
   assert.doesNotMatch(`${js}\n${wxml}`, /后台加积分|APIv3|private[_-]?key|openid|prepay_id/i)
 })
 
@@ -49,6 +68,12 @@ test('recharge records page supports status list, pagination and omits sensitive
   const js = read('pages/recharge-records/recharge-records.js')
   const wxml = read('pages/recharge-records/recharge-records.wxml')
   const wxss = read('pages/recharge-records/recharge-records.wxss')
+  const contentRule = readRule(wxss, '.records-content')
+  const cardRule = readRule(wxss, '.order-card')
+  const statusRule = readRule(wxss, '.order-status')
+  const successRule = readRule(wxss, '.order-status.success')
+  const pendingRule = readRule(wxss, '.order-status.pending')
+  const mutedRule = readRule(wxss, '.order-status.muted')
 
   assert.match(js, /const RECHARGE_ORDERS_URL = '\/api\/mine\/recharges\/orders'/)
   assert.match(js, /handleLoadMore/)
@@ -63,5 +88,13 @@ test('recharge records page supports status list, pagination and omits sensitive
   assert.match(wxss, /\.order-status\.success/)
   assert.match(wxss, /\.order-status\.pending/)
   assert.match(wxss, /\.order-status\.muted/)
+  assert.match(contentRule, /padding:\s*20rpx 32rpx/)
+  assert.match(cardRule, /border:\s*1rpx solid #e9ecef/)
+  assert.match(cardRule, /border-radius:\s*48rpx/)
+  assert.match(statusRule, /background:\s*transparent/)
+  assert.match(statusRule, /gap:\s*8rpx/)
+  assert.match(successRule, /color:\s*#5c9e6e/)
+  assert.match(pendingRule, /color:\s*#c08a3e/)
+  assert.match(mutedRule, /color:\s*#868e96/)
   assert.doesNotMatch(`${js}\n${wxml}`, /transactionId|openid|paySign|prepay_id|signature/i)
 })

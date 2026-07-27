@@ -5,21 +5,20 @@ const {
   toLunarDate
 } = require('../../../utils/lunar')
 
-const DEFAULT_SLOT_COLOR = '#d98200'
+const DEFAULT_SLOT_COLOR = '#c28f4b'
 
 const SLOT_COLOR_OPTIONS = [
-  { name: '琥珀', color: '#d98200', background: '#fff0d7', border: '#f5d29b' },
-  { name: '湖蓝', color: '#1677ff', background: '#e5effb', border: '#bfd7f4' },
-  { name: '青绿', color: '#0f8ea8', background: '#dcf7f1', border: '#a7eadc' },
-  { name: '玫红', color: '#a9354f', background: '#fde7ed', border: '#f5bfcc' },
-  { name: '森绿', color: '#3f6f45', background: '#e6f3e8', border: '#bfdcc4' },
-  { name: '紫藤', color: '#6d5bd0', background: '#eeeafd', border: '#d2c9fa' },
-  { name: '珊瑚', color: '#e2553d', background: '#ffebe6', border: '#f5c2b7' },
-  { name: '墨蓝', color: '#36516e', background: '#e7edf4', border: '#c6d3e2' }
+  { name: '琥珀', color: '#c28f4b' },
+  { name: '湖蓝', color: '#6f8cb5' },
+  { name: '青绿', color: '#5f999b' },
+  { name: '玫红', color: '#af7482' },
+  { name: '森绿', color: '#738e71' },
+  { name: '紫藤', color: '#897dbc' },
+  { name: '珊瑚', color: '#c87a65' },
+  { name: '墨蓝', color: '#667b96' }
 ].map((item) => Object.assign({}, item, {
   style: `background: ${item.color};`,
-  swatchStyle: `background: ${item.color};`,
-  choiceStyle: `color: ${item.color}; background: ${item.background}; border-color: ${item.border};`
+  swatchStyle: `background: ${item.color};`
 }))
 
 const SLOT_STATUS_TEXT = {

@@ -1,5 +1,5 @@
 <view class="page-shell portfolio-edit-page mock-portfolio-edit-page">
-  <navigation-bar title="编辑作品集" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+  <navigation-bar title="编辑作品集" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
 
   <scroll-view class="edit-scroll" scroll-y type="list" scroll-top="{{editScrollTop}}">
     <view class="edit-content">
@@ -206,7 +206,7 @@
                 <view class="field-label">展示作品名</view>
                 <view class="section-desc">关闭后预览不显示标题及占位。</view>
               </view>
-              <switch checked="{{singleWorkShowTitle}}" bindchange="handleSingleWorkShowTitleChange" color="#17202a"></switch>
+              <switch checked="{{singleWorkShowTitle}}" bindchange="handleSingleWorkShowTitleChange" color="#212529"></switch>
             </view>
           </block>
 

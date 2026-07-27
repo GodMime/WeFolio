@@ -49,6 +49,8 @@ test('messages page files match approved page A structure and backend endpoints'
   const filterTabsRule = readRule(messagesWxss, '.filter-tabs')
   const messageRowRule = readRule(messagesWxss, '.message-row')
   const messageCopyRule = readRule(messagesWxss, '.message-copy')
+  const unreadAmberRule = readRule(messagesWxss, '.unread-dot.amber')
+  const unreadMutedRule = readRule(messagesWxss, '.unread-dot.muted')
 
   assert.match(messagesJs, /const MESSAGE_LIST_URL = '\/api\/mine\/messages'/)
   assert.match(messagesJs, /const MESSAGE_MARK_READ_URL = '\/api\/mine\/messages\/read'/)
@@ -80,4 +82,6 @@ test('messages page files match approved page A structure and backend endpoints'
   assert.match(messageRowRule, /align-items:\s*flex-start/)
   assert.match(messageCopyRule, /flex:\s*1/)
   assert.match(messageCopyRule, /min-width:\s*0/)
+  assert.match(unreadAmberRule, /background:\s*#212529/)
+  assert.match(unreadMutedRule, /background:\s*#adb5bd/)
 })

@@ -1,5 +1,5 @@
 <view class="page-shell login-page">
-  <navigation-bar title="映期Folio" back="{{false}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+  <navigation-bar title="映期Folio" back="{{false}}" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
 
   <scroll-view class="login-scroll" scroll-y type="list">
     <view class="login-layout">
@@ -34,8 +34,11 @@
             </view>
 
             <view class="login-form maintainer-form {{activeTab === 'maintainer' ? 'active' : 'inactive'}}">
-              <view wx:if="{{precheckReady && phoneAuthorizationRequired}}" class="form-row">
-                <view class="field-label">推荐码</view>
+              <view class="form-row">
+                <view class="field-heading">
+                  <view class="field-label">推荐码</view>
+                  <view class="field-limit">{{referralCode.length}}/16</view>
+                </view>
                 <view class="input-shell">
                   <input
                     class="referral-input"
@@ -47,6 +50,7 @@
                   />
                   <text class="optional-text">选填</text>
                 </view>
+                <view class="referral-hint">推荐码仅新用户注册时有效</view>
               </view>
               <view wx:if="{{precheckErrorMessage}}" class="precheck-error">{{precheckErrorMessage}}</view>
               <button

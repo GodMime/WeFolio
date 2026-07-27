@@ -3,7 +3,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background-color: #f5f7fb;
+  background-color: #f5f6f7;
 }
 
 .teams-scroll {
@@ -12,15 +12,15 @@
 }
 
 .teams-content {
-  padding: 28rpx;
+  padding: 20rpx 32rpx calc(56rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
 }
 
 .panel {
-  background: rgba(255, 255, 255, 0.94);
-  border: 1rpx solid rgba(23, 32, 42, 0.06);
-  border-radius: 16rpx;
-  box-shadow: 0 18rpx 48rpx rgba(23, 32, 42, 0.06);
+  background: #ffffff;
+  border: 1rpx solid #e9ecef;
+  border-radius: 48rpx;
+  box-shadow: 0 18rpx 48rpx rgba(33, 37, 41, 0.06);
   box-sizing: border-box;
 }
 
@@ -36,8 +36,8 @@
 .summary-panel {
   justify-content: space-between;
   gap: 20rpx;
-  min-height: 132rpx;
-  padding: 24rpx;
+  min-height: 128rpx;
+  padding: 28rpx;
 }
 
 .summary-copy,
@@ -47,10 +47,10 @@
 }
 
 .section-title {
-  color: #17202a;
-  font-size: 28rpx;
-  font-weight: 800;
-  line-height: 1.35;
+  color: #212529;
+  font-size: 32rpx;
+  font-weight: 700;
+  line-height: 1.3;
 }
 
 .summary-desc,
@@ -58,7 +58,7 @@
 .team-subtitle,
 .create-note,
 .empty-desc {
-  color: #778392;
+  color: #868e96;
   font-size: 24rpx;
   line-height: 1.45;
 }
@@ -67,42 +67,61 @@
   margin-top: 8rpx;
 }
 
-.count-pill,
-.role-pill {
+.count-text {
   flex: none;
-  padding: 8rpx 14rpx;
+  color: #868e96;
   font-size: 22rpx;
-  font-weight: 800;
+  font-weight: 500;
   line-height: 1;
-  border-radius: 999rpx;
-  box-sizing: border-box;
+  white-space: nowrap;
 }
 
-.count-pill,
+.role-pill {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8rpx;
+  font-size: 22rpx;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.role-pill::before {
+  width: 12rpx;
+  height: 12rpx;
+  flex: none;
+  content: "";
+  border-radius: 50%;
+  background: currentColor;
+}
+
 .role-pill.teal {
-  color: #0f766e;
-  background: #dcf7f1;
+  color: #5c9e6e;
 }
 
 .role-pill.blue {
-  color: #2d5f9a;
-  background: #e6efff;
+  color: #212529;
+}
+
+.role-pill.amber {
+  color: #c08a3e;
 }
 
 .role-pill.muted {
-  color: #667085;
-  background: #eef2f6;
+  color: #868e96;
 }
 
 .list-panel,
 .create-form-panel {
-  margin-top: 22rpx;
-  padding: 24rpx;
+  margin-top: 20rpx;
+  padding: 28rpx;
 }
 
 .panel-heading {
   justify-content: space-between;
   gap: 16rpx;
+  padding: 0 4rpx;
 }
 
 .team-list {
@@ -110,23 +129,27 @@
 }
 
 .team-card {
-  min-height: 168rpx;
+  min-height: 152rpx;
   gap: 20rpx;
-  padding: 20rpx 0;
-  border-top: 1rpx solid #edf1f5;
+  margin-top: 16rpx;
+  padding: 20rpx 24rpx;
+  border: 1rpx solid #e9ecef;
+  border-radius: 40rpx;
+  background: #ffffff;
+  box-sizing: border-box;
 }
 
 .team-card:first-child {
-  border-top: 0;
+  margin-top: 0;
 }
 
 .team-logo {
-  width: 92rpx;
-  height: 92rpx;
+  width: 104rpx;
+  height: 104rpx;
   flex: none;
   overflow: hidden;
-  border-radius: 22rpx;
-  background: #dfe8e5;
+  border-radius: 32rpx;
+  background: #f1f3f5;
 }
 
 .team-logo.large {
@@ -135,59 +158,56 @@
   border-radius: 28rpx;
 }
 
-.team-logo-image,
-.team-logo-fallback {
+.team-logo-image {
   width: 100%;
   height: 100%;
 }
 
 .team-logo-fallback {
+  width: 100%;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #f7fbfa;
+  color: #212529;
   font-size: 28rpx;
-  font-weight: 900;
-  background: linear-gradient(135deg, #17202a 0%, #2e7d73 100%);
+  font-weight: 700;
+  letter-spacing: 0.05em;
 }
 
 .team-name {
   overflow: hidden;
-  color: #17202a;
+  color: #212529;
   font-size: 30rpx;
-  font-weight: 800;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .team-subtitle {
-  margin-top: 7rpx;
+  margin-top: 6rpx;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.pill-row {
+.team-tags {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 10rpx;
-  margin-top: 12rpx;
-}
-
-.team-actions {
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 12rpx;
+  margin-bottom: 12rpx;
 }
 
 .entry-arrow {
-  width: 24rpx;
-  height: 24rpx;
-  border-top: 3rpx solid #a7b0ba;
-  border-right: 3rpx solid #a7b0ba;
+  width: 16rpx;
+  height: 16rpx;
+  flex: none;
+  margin-right: 8rpx;
+  border-top: 4rpx solid #adb5bd;
+  border-right: 4rpx solid #adb5bd;
   transform: rotate(45deg);
 }
 
@@ -201,18 +221,18 @@
   font-size: 28rpx;
   font-weight: 800;
   line-height: 1;
-  border-radius: 16rpx;
+  border-radius: 999rpx;
   box-sizing: border-box;
 }
 
 .primary-button {
   color: #fff;
-  background: #17202a;
+  background: #212529;
 }
 
 .secondary-button {
-  color: #17202a;
-  background: #eef2f6;
+  color: #212529;
+  background: #f1f3f5;
 }
 
 .full {
@@ -289,13 +309,13 @@
 }
 
 .label {
-  color: #5f6b7a;
+  color: #6c757d;
   font-size: 24rpx;
   font-weight: 700;
 }
 
 .field-limit {
-  color: #8b96a3;
+  color: #868e96;
   font-size: 22rpx;
   font-weight: 700;
 }
@@ -305,11 +325,12 @@
   min-height: 84rpx;
   margin-top: 12rpx;
   padding: 0 22rpx;
-  color: #17202a;
+  color: #212529;
   font-size: 28rpx;
   line-height: 84rpx;
-  border-radius: 16rpx;
-  background: #f6f8fb;
+  border: 1rpx solid #e9ecef;
+  border-radius: 40rpx;
+  background: #ffffff;
   box-sizing: border-box;
 }
 
@@ -340,12 +361,12 @@
   width: 88rpx;
   height: 88rpx;
   border-radius: 50%;
-  background: #dfe8e5;
+  background: #e9ecef;
 }
 
 .empty-title {
   margin-top: 24rpx;
-  color: #17202a;
+  color: #212529;
   font-size: 30rpx;
   font-weight: 800;
 }

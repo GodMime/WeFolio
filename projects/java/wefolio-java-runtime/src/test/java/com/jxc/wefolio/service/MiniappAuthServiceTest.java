@@ -6,6 +6,7 @@ import com.jxc.wefolio.dto.MaintainerWechatLoginPrecheckRequest;
 import com.jxc.wefolio.dto.MaintainerWechatLoginPrecheckResponse;
 import com.jxc.wefolio.dto.WechatPhoneNumberResponse;
 import com.jxc.wefolio.dto.WechatSessionResponse;
+import com.jxc.wefolio.entity.ReferralRelationEntity;
 import com.jxc.wefolio.entity.UserEntity;
 import com.jxc.wefolio.entity.UserAuthEntity;
 import com.jxc.wefolio.dict.UserStatusDict;
@@ -348,6 +349,7 @@ class MiniappAuthServiceTest {
         request.setNickname("林安");
         request.setAvatarUrl("wxfile://tmp_avatar.jpg");
         request.setPhoneCode("phone-code");
+        request.setReferralCode("WFREF0001");
 
         MaintainerWechatLoginResponse response = service.loginMaintainerByWechat(request);
 
@@ -362,6 +364,39 @@ class MiniappAuthServiceTest {
         ArgumentCaptor<UserAuthEntity> authCaptor = ArgumentCaptor.forClass(UserAuthEntity.class);
         verify(userAuthEntityMapper).insert(authCaptor.capture());
         assertThat(authCaptor.getValue().getOpenId()).isEqualTo("openid-new");
+        verify(referralRelationEntityMapper, never()).insert(any(ReferralRelationEntity.class));
+    }
+
+    @Test
+    void existingPhoneUserWechatBindingIgnoresReferralCode() {
+        WechatSessionResponse session = new WechatSessionResponse();
+        session.setOpenid("openid-new");
+        when(wechatMiniappClient.exchangeCode("wx-code")).thenReturn(session);
+        WechatPhoneNumberResponse.PhoneInfo phoneInfo = new WechatPhoneNumberResponse.PhoneInfo();
+        phoneInfo.setPhoneNumber("+8613812348000");
+        phoneInfo.setPurePhoneNumber("13812348000");
+        phoneInfo.setCountryCode("86");
+        when(wechatMiniappClient.exchangePhoneCode("phone-code")).thenReturn(phoneInfo);
+        when(userAuthEntityMapper.selectOne(any())).thenReturn(null);
+
+        UserEntity existingUser = new UserEntity();
+        existingUser.setId(22L);
+        existingUser.setUniqueCode("WFOLD0001");
+        existingUser.setNickname("旧用户");
+        existingUser.setAvatarUrl("");
+        existingUser.setStatus(UserStatusDict.ACTIVE.getCode());
+        when(userEntityMapper.selectOne(any())).thenReturn(existingUser);
+
+        MaintainerWechatLoginRequest request = new MaintainerWechatLoginRequest();
+        request.setCode("wx-code");
+        request.setPhoneCode("phone-code");
+        request.setReferralCode("WFREF0001");
+
+        MaintainerWechatLoginResponse response = buildService().loginMaintainerByWechat(request);
+
+        assertThat(response.getUserId()).isEqualTo(22L);
+        verify(userEntityMapper, never()).insert(any(UserEntity.class));
+        verify(referralRelationEntityMapper, never()).insert(any(ReferralRelationEntity.class));
     }
 
     @Test
@@ -384,6 +419,7 @@ class MiniappAuthServiceTest {
         MiniappAuthService service = buildService();
         MaintainerWechatLoginRequest request = new MaintainerWechatLoginRequest();
         request.setCode("wx-code");
+        request.setReferralCode("WFREF0001");
 
         MaintainerWechatLoginResponse response = service.loginMaintainerByWechat(request);
 
@@ -393,6 +429,7 @@ class MiniappAuthServiceTest {
         verify(wechatMiniappClient, never()).exchangePhoneCode(any());
         verify(wechatMiniappClient, never()).exchangePluginOpenpid(any());
         verify(userEntityMapper, never()).insert(any(UserEntity.class));
+        verify(referralRelationEntityMapper, never()).insert(any(ReferralRelationEntity.class));
     }
 
     @Test

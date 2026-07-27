@@ -21,13 +21,13 @@ const COMPONENT_CASES = [
     name: 'work-grid',
     properties: { componentKey: String, displayTags: Array, activeGroup: Object, switching: Boolean, showTitle: Boolean, showDescription: Boolean },
     wxml: [/class="work-grid/, /bindtap="handleDisplayTagTap"/, /bindtap="handleWorkTap"/, /wx:if="\{\{showTitle && work\.title\}\}"/, /wx:if="\{\{showDescription && work\.description\}\}"/],
-    wxss: [/\.work-grid\.display-switching/, /@keyframes work-list-switch-in/, /\.work-copy\s*\{[\s\S]*min-height:\s*10rpx;[\s\S]*padding-top:\s*10rpx;/, /\.work-desc\s*\{[\s\S]*color:\s*#59636f;/]
+    wxss: [/\.work-grid\.display-switching/, /@keyframes work-list-switch-in/, /\.work-copy\s*\{[\s\S]*min-height:\s*10rpx;[\s\S]*padding-top:\s*10rpx;/, /\.work-desc\s*\{[\s\S]*color:\s*#868e96;/]
   },
   {
     name: 'work-list',
     properties: { componentKey: String, displayTags: Array, activeGroup: Object, switching: Boolean, showTitle: Boolean, showDescription: Boolean },
     wxml: [/class="work-list/, /bindtap="handleDisplayTagTap"/, /bindtap="handleWorkTap"/, /wx:if="\{\{showTitle && work\.title\}\}"/, /wx:if="\{\{showDescription && work\.description\}\}"/],
-    wxss: [/\.work-list\.display-switching/, /\.work-copy\s*\{[\s\S]*min-height:\s*10rpx;[\s\S]*padding-top:\s*10rpx;/, /\.work-desc\s*\{[\s\S]*color:\s*#59636f;[\s\S]*white-space:\s*pre-wrap;/]
+    wxss: [/\.work-list\.display-switching/, /\.work-copy\s*\{[\s\S]*min-height:\s*10rpx;[\s\S]*padding-top:\s*10rpx;/, /\.work-desc\s*\{[\s\S]*color:\s*#868e96;[\s\S]*white-space:\s*pre-wrap;/]
   },
   {
     name: 'single-work',
@@ -44,7 +44,7 @@ const COMPONENT_CASES = [
       /wx:if="\{\{showTitle && work\.title\}\}"/,
       /wx:if="\{\{showDescription && work\.description\}\}"/
     ],
-    wxss: [/\.single-work-repair/, /\.single-work-play-badge/, /\.single-work-copy\s*\{[\s\S]*min-height:\s*16rpx;[\s\S]*padding-top:\s*16rpx;/, /\.single-work-description\s*\{[\s\S]*color:\s*#59636f;/]
+    wxss: [/\.single-work-repair/, /\.single-work-play-badge/, /\.single-work-copy\s*\{[\s\S]*min-height:\s*16rpx;[\s\S]*padding-top:\s*16rpx;/, /\.single-work-description\s*\{[\s\S]*color:\s*#868e96;/]
   },
   {
     name: 'qr-contact',

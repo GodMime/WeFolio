@@ -316,9 +316,16 @@ test('exposes schedule form options', () => {
   assert.deepEqual(SCHEDULE_STATUS_OPTIONS.map((item) => item.value), ['TENTATIVE', 'BOOKED', 'REST'])
   assert.deepEqual(SCHEDULE_STATUS_OPTIONS.map((item) => item.text), ['待定', '已约', '休息'])
   assert.equal(SLOT_COLOR_OPTIONS.length, 8)
-  assert.equal(SLOT_COLOR_OPTIONS[0].color, '#d98200')
-  assert.equal(SLOT_COLOR_OPTIONS[0].name, '琥珀')
-  assert.match(SLOT_COLOR_OPTIONS[0].swatchStyle, /#d98200/)
-  assert.match(SLOT_COLOR_OPTIONS[0].choiceStyle, /border-color:/)
-  assert.match(SLOT_COLOR_OPTIONS[0].choiceStyle, /background:/)
+  assert.deepEqual(SLOT_COLOR_OPTIONS.map(({ name, color }) => ({ name, color })), [
+    { name: '琥珀', color: '#c28f4b' },
+    { name: '湖蓝', color: '#6f8cb5' },
+    { name: '青绿', color: '#5f999b' },
+    { name: '玫红', color: '#af7482' },
+    { name: '森绿', color: '#738e71' },
+    { name: '紫藤', color: '#897dbc' },
+    { name: '珊瑚', color: '#c87a65' },
+    { name: '墨蓝', color: '#667b96' }
+  ])
+  assert.equal(SLOT_COLOR_OPTIONS[0].swatchStyle, 'background: #c28f4b;')
+  assert.equal('choiceStyle' in SLOT_COLOR_OPTIONS[0], false)
 })

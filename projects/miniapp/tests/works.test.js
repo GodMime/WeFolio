@@ -9,7 +9,6 @@ const {
   applyUnifiedWorkTags,
   buildUnifiedWorkTagItems,
   buildUnifiedWorkTagNames,
-  buildWorkTagOptionListHeight,
   buildWorkUpdatePayload,
   buildWorkTagDeleteBlockedMessage,
   buildWorkTagPickerOptions,
@@ -57,10 +56,11 @@ test('normalizes work list for page rendering', () => {
   assert.equal(result.summary.videoText, '视频 6')
   assert.equal(result.tags[1].labelText, '高端婚礼 8')
   assert.equal(result.tags[1].style, 'color: #2d5f9a; background: #e5effb; border-color: #bfd7f4;')
+  assert.equal(result.tags[1].filterStyle, 'color: #2d5f9a; background: #ffffff; border-color: #2d5f9a;')
   assert.equal(result.tags[1].activeStyle, 'color: #ffffff; background: #2d5f9a; border-color: #2d5f9a;')
   assert.equal(result.tags[1].deleteStyle, 'color: #ffffff; background: #2d5f9a;')
   assert.deepEqual(result.filterTags.map((item) => item.labelText), ['全部 36', '高端婚礼 8'])
-  assert.equal(result.filterTags[0].activeStyle, 'color: #40546a; background: #eef4f7; border-color: #cbd8e5;')
+  assert.equal(result.filterTags[0].activeStyle, 'color: #ffffff; background: #212529; border-color: #212529;')
   assert.equal(result.works[0].typeText, '视频')
   assert.equal(result.works[0].durationText, '02:05')
   assert.equal(result.works[0].fileSizeText, '10.0MB')
@@ -246,6 +246,7 @@ test('normalizes work tag response for add-page picker', () => {
   assert.deepEqual(tags.map((item) => item.name), ['高端婚礼', '户外仪式'])
   assert.equal(tags[0].color, '#2d5f9a')
   assert.equal(tags[0].style, 'color: #2d5f9a; background: #e5effb; border-color: #bfd7f4;')
+  assert.equal(tags[0].filterStyle, 'color: #2d5f9a; background: #ffffff; border-color: #2d5f9a;')
   assert.equal(tags[1].color, '')
 })
 
@@ -287,20 +288,6 @@ test('builds picker selection and applies unified tags to chosen files', () => {
       { id: 'b', tags: ['高端婚礼', '户外仪式'] }
     ]
   )
-})
-
-test('builds adaptive work tag picker list height from tag count', () => {
-  assert.equal(buildWorkTagOptionListHeight([]), 0)
-  assert.equal(buildWorkTagOptionListHeight([{ id: 1, name: '户外仪式' }]), 80)
-  assert.equal(buildWorkTagOptionListHeight([
-    { id: 1, name: '户外仪式' },
-    { id: 2, name: '室内迎宾' },
-    { id: 3, name: '晚宴快剪' }
-  ]), 224)
-  assert.equal(buildWorkTagOptionListHeight(Array.from({ length: 10 }, (_, index) => ({
-    id: index + 1,
-    name: `标签${index + 1}`
-  }))), 520)
 })
 
 test('builds editable work tag options from all tags and current bindings', () => {

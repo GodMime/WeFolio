@@ -83,8 +83,10 @@ function resolveChosenImageFile(response = {}) {
 
 function getWechatQrCropBoxWidth() {
   const fallbackWindowWidth = 375
-  const systemInfo = typeof wx !== 'undefined' && wx.getSystemInfoSync ? wx.getSystemInfoSync() : {}
-  const windowWidth = Number(systemInfo.windowWidth) || fallbackWindowWidth
+  const windowInfo = typeof wx !== 'undefined' && wx.getWindowInfo
+    ? wx.getWindowInfo()
+    : (typeof wx !== 'undefined' && wx.getSystemInfoSync ? wx.getSystemInfoSync() : {})
+  const windowWidth = Number(windowInfo.windowWidth) || fallbackWindowWidth
   const rpxScale = windowWidth / DESIGN_VIEWPORT_RPX
   return Math.floor(Math.min(
     WECHAT_QR_CROP_MAX_WIDTH_RPX * rpxScale,

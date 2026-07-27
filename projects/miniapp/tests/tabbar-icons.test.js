@@ -3,60 +3,79 @@ const fs = require('node:fs')
 const path = require('node:path')
 const test = require('node:test')
 
-const tabbarPageStyles = [
-  ['mine', 'pages/index/index.wxss'],
-  ['schedule', 'pages/schedule/schedule.wxss'],
-  ['works', 'pages/works/works.wxss'],
-  ['portfolios', 'pages/portfolios/portfolios.wxss']
-].map(([name, filePath]) => [
+const tabbarPages = [
+  ['mine', 'pages/index/index'],
+  ['schedule', 'pages/schedule/schedule'],
+  ['works', 'pages/works/works'],
+  ['portfolios', 'pages/portfolios/portfolios']
+].map(([name, basePath]) => ({
   name,
-  fs.readFileSync(path.join(__dirname, '..', filePath), 'utf8')
-])
+  wxml: fs.readFileSync(path.join(__dirname, '..', `${basePath}.wxml`), 'utf8'),
+  wxss: fs.readFileSync(path.join(__dirname, '..', `${basePath}.wxss`), 'utf8')
+}))
+
+const mockTabbar = {
+  name: 'mock',
+  wxml: fs.readFileSync(
+    path.join(__dirname, '../components/mock/tabbar/tabbar.wxml'),
+    'utf8'
+  ),
+  wxss: fs.readFileSync(
+    path.join(__dirname, '../components/mock/tabbar/tabbar.wxss'),
+    'utf8'
+  )
+}
 
 function readRule(content, selector) {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const matches = Array.from(content.matchAll(new RegExp(`${escapedSelector}\\s*\\{([^}]*)\\}`, 'g')))
+  const matches = Array.from(content.matchAll(
+    new RegExp(`(?:^|\\n)\\s*${escapedSelector}\\s*\\{([^}]*)\\}`, 'g')
+  ))
   const match = matches[matches.length - 1]
   return match ? match[1] : ''
 }
 
-test('bottom tabs use design draft composite icons', () => {
-  tabbarPageStyles.forEach(([pageName, pageWxss]) => {
+test('bottom tabs keep the selected icon pill separate from its label', () => {
+  ;[...tabbarPages, mockTabbar].forEach(({ name: pageName, wxml, wxss: pageWxss }) => {
+    const tabbarRule = readRule(pageWxss, '.tabbar')
+    const tabRule = readRule(pageWxss, '.tab')
     const activeTabRule = readRule(pageWxss, '.tab.active')
-    const scheduleBeforeRule = readRule(pageWxss, '.schedule-tab-icon::before')
-    const scheduleAfterRule = readRule(pageWxss, '.schedule-tab-icon::after')
-    const workAfterRule = readRule(pageWxss, '.work-tab-icon::after')
-    const portfolioBeforeRule = readRule(pageWxss, '.portfolio-tab-icon::before')
-    const portfolioAfterRule = readRule(pageWxss, '.portfolio-tab-icon::after')
-    const mineBeforeRule = readRule(pageWxss, '.mine-tab-icon::before')
-    const mineAfterRule = readRule(pageWxss, '.mine-tab-icon::after')
+    const iconWrapRule = readRule(pageWxss, '.tab-icon-wrap')
+    const activeIconWrapRule = readRule(pageWxss, '.tab.active .tab-icon-wrap')
+    const iconImageRule = readRule(pageWxss, '.tab-icon-image')
+    const tabLabelRule = readRule(pageWxss, '.tab-label')
 
-    assert.match(activeTabRule, /color:\s*#b88a44/, `${pageName} active tab should use gold tone`)
-
-    assert.match(scheduleBeforeRule, /border:\s*4rpx\s+solid\s+currentColor/, `${pageName} schedule icon should draw the calendar frame`)
-    assert.doesNotMatch(scheduleBeforeRule, /background/, `${pageName} schedule icon should avoid real-device unstable background drawing`)
-    assert.doesNotMatch(scheduleBeforeRule, /linear-gradient/, `${pageName} schedule icon should avoid gradient shorthand`)
-    assert.doesNotMatch(scheduleBeforeRule, /calc\(/, `${pageName} schedule icon should avoid calc in icon drawing`)
-    assert.match(scheduleAfterRule, /left:\s*12rpx/, `${pageName} schedule icon line should stay inside the frame`)
-    assert.match(scheduleAfterRule, /top:\s*18rpx/, `${pageName} schedule icon line should stay vertically stable`)
-    assert.match(scheduleAfterRule, /width:\s*18rpx/, `${pageName} schedule icon line should not overflow the frame`)
-    assert.match(scheduleAfterRule, /height:\s*4rpx/, `${pageName} schedule icon line should be a fixed stroke`)
-    assert.match(scheduleAfterRule, /border-radius:\s*999rpx/, `${pageName} schedule icon line should have rounded caps`)
-    assert.match(scheduleAfterRule, /background:\s*currentColor/, `${pageName} schedule icon line should inherit tab color`)
-
-    assert.match(workAfterRule, /border-left:\s*4rpx\s+solid\s+currentColor/, `${pageName} work icon should keep check stroke`)
-    assert.match(workAfterRule, /border-bottom:\s*4rpx\s+solid\s+currentColor/, `${pageName} work icon should keep check stroke`)
-    assert.match(workAfterRule, /transform:\s*rotate\(-45deg\)/, `${pageName} work icon should keep rotation`)
-
-    assert.match(portfolioBeforeRule, /z-index:\s*2/, `${pageName} portfolio icon foreground should stay above`)
-    assert.match(portfolioAfterRule, /z-index:\s*1/, `${pageName} portfolio icon background should stay behind`)
-
-    assert.match(mineBeforeRule, /border-radius:\s*50%/, `${pageName} mine icon head should stay circular`)
+    assert.match(tabbarRule, /left:\s*28rpx/)
+    assert.match(tabbarRule, /right:\s*28rpx/)
     assert.match(
-      mineAfterRule,
-      /border-radius:\s*20rpx\s+20rpx\s+8rpx\s+8rpx|border-top-left-radius:\s*18rpx/,
-      `${pageName} mine icon body should keep shape`
+      tabbarRule,
+      /bottom:\s*calc\(28rpx \+ env\(safe-area-inset-bottom\)\)/
     )
-    assert.match(mineAfterRule, /border-bottom-width:\s*3rpx/, `${pageName} mine icon body should keep lighter base`)
+    assert.match(tabbarRule, /height:\s*116rpx/)
+    assert.match(tabbarRule, /padding:\s*0/)
+    assert.match(tabbarRule, /border-radius:\s*999rpx/)
+    assert.match(tabbarRule, /background:\s*#ffffff/)
+    assert.match(tabbarRule, /border:\s*2rpx solid #e9ecef/)
+    assert.match(tabbarRule, /box-shadow:\s*0 24rpx 56rpx rgba\(33,\s*37,\s*41,\s*0\.1\)/)
+    assert.match(
+      wxml,
+      /class="tab-icon-wrap"[\s\S]*class="tab-icon-image"[^>]*src="\/assets\/system\/tabbar\/\{\{item\.icon\}\}\{\{item\.active \? '-active' : ''\}\}\.svg"/,
+      `${pageName} should isolate the icon background from the label`
+    )
+    assert.match(tabRule, /height:\s*116rpx/)
+    assert.match(tabRule, /color:\s*#868e96/)
+    assert.match(activeTabRule, /color:\s*#212529/)
+    assert.match(iconWrapRule, /width:\s*68rpx/)
+    assert.match(iconWrapRule, /height:\s*52rpx/)
+    assert.match(iconWrapRule, /border-radius:\s*999rpx/)
+    assert.match(activeIconWrapRule, /background:\s*#212529/)
+    assert.match(iconImageRule, /width:\s*38rpx/)
+    assert.match(iconImageRule, /height:\s*38rpx/)
+    assert.match(tabLabelRule, /margin-top:\s*4rpx/)
+    assert.match(tabLabelRule, /font-size:\s*18rpx/)
+    assert.match(tabLabelRule, /font-weight:\s*500/)
+    assert.match(tabLabelRule, /line-height:\s*1\.2/)
+    assert.doesNotMatch(pageWxss, /\.tab\.active::before/)
+    assert.doesNotMatch(pageWxss, /#b88a44/)
   })
 })

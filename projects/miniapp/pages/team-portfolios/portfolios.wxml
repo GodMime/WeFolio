@@ -1,4 +1,4 @@
 <view class="page-shell team-portfolio-compat-page">
-  <navigation-bar title="作品集" back="{{false}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+  <navigation-bar title="作品集" back="{{false}}" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
   <view class="compat-loading">团队作品集加载中</view>
 </view>

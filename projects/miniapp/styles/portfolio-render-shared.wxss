@@ -17,13 +17,13 @@
 }
 
 .display-tag.active {
-  color: #000000;
+  color: #212529;
   font-weight: 900;
 }
 
 .display-tag {
   flex: 0 0 auto;
-  color: #8a8f98;
+  color: #868e96;
   font-size: 28rpx;
   line-height: 56rpx;
   transition: color 160ms ease, opacity 160ms ease;

@@ -3,7 +3,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background-color: #f5f7fb;
+  background-color: #f5f6f7;
 }
 
 .profile-scroll {
@@ -12,15 +12,15 @@
 }
 
 .profile-content {
-  padding: 28rpx;
+  padding: 20rpx 32rpx;
   box-sizing: border-box;
 }
 
 .panel {
-  background: rgba(255, 255, 255, 0.94);
-  border: 1rpx solid rgba(23, 32, 42, 0.06);
-  border-radius: 16rpx;
-  box-shadow: 0 18rpx 48rpx rgba(23, 32, 42, 0.06);
+  background: #ffffff;
+  border: 1rpx solid #e9ecef;
+  border-radius: 48rpx;
+  box-shadow: none;
 }
 
 .profile-avatar-card {
@@ -28,7 +28,7 @@
   display: flex;
   align-items: center;
   gap: 20rpx;
-  padding: 24rpx;
+  padding: 28rpx;
   box-sizing: border-box;
 }
 
@@ -38,7 +38,7 @@
   flex: none;
   overflow: hidden;
   border-radius: 50%;
-  background: #dfe8e5;
+  background: #e9ecef;
 }
 
 .avatar-image,
@@ -54,7 +54,7 @@
   color: #f7fbfa;
   font-size: 28rpx;
   font-weight: 700;
-  background: linear-gradient(135deg, #17202a 0%, #2e7d73 100%);
+  background: #868e96;
 }
 
 .profile-summary {
@@ -64,7 +64,7 @@
 
 .profile-name {
   overflow: hidden;
-  color: #17202a;
+  color: #212529;
   font-size: 30rpx;
   font-weight: 800;
   line-height: 1.35;
@@ -74,7 +74,7 @@
 
 .profile-code {
   margin-top: 8rpx;
-  color: #6b7785;
+  color: #868e96;
   font-size: 24rpx;
   line-height: 1.3;
 }
@@ -82,8 +82,8 @@
 .profile-fields-panel,
 .tag-editor-panel,
 .danger-panel {
-  margin-top: 22rpx;
-  padding: 24rpx;
+  margin-top: 20rpx;
+  padding: 28rpx;
   box-sizing: border-box;
 }
 
@@ -99,7 +99,7 @@
 }
 
 .label {
-  color: #5f6b7a;
+  color: #868e96;
   font-size: 24rpx;
   font-weight: 700;
   line-height: 1.3;
@@ -107,7 +107,7 @@
 
 .field-limit {
   flex: none;
-  color: #8b96a3;
+  color: #adb5bd;
   font-size: 22rpx;
   font-weight: 700;
   line-height: 1.3;
@@ -118,16 +118,16 @@
   min-height: 84rpx;
   margin-top: 12rpx;
   padding: 0 22rpx;
-  color: #17202a;
+  color: #212529;
   font-size: 28rpx;
   line-height: 84rpx;
-  border-radius: 16rpx;
-  background: #f6f8fb;
+  border-radius: 32rpx;
+  background: #f5f6f7;
   box-sizing: border-box;
 }
 
-.textarea {
-  min-height: 160rpx;
+.input.textarea {
+  min-height: 144rpx;
   padding-top: 20rpx;
   padding-bottom: 20rpx;
   line-height: 1.55;
@@ -148,7 +148,7 @@
 
 .qr-limit {
   flex: none;
-  color: #6b7785;
+  color: #868e96;
   font-size: 22rpx;
   font-weight: 700;
   line-height: 1.3;
@@ -166,8 +166,9 @@
   height: 156rpx;
   flex: none;
   overflow: hidden;
-  border-radius: 16rpx;
-  background: #f6f8fb;
+  border: 1rpx solid #e9ecef;
+  border-radius: 40rpx;
+  background: #f5f6f7;
 }
 
 .qr-image,
@@ -180,10 +181,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #6b7785;
+  color: #adb5bd;
   font-size: 28rpx;
   font-weight: 800;
-  background: #eef2f6;
+  background: #f5f6f7;
 }
 
 .qr-actions {
@@ -195,7 +196,7 @@
 }
 
 .section-title {
-  color: #17202a;
+  color: #212529;
   font-size: 28rpx;
   font-weight: 800;
   line-height: 1.35;
@@ -204,12 +205,12 @@
 .count-pill {
   flex: none;
   padding: 8rpx 14rpx;
-  color: #0f766e;
+  color: #868e96;
   font-size: 22rpx;
   font-weight: 800;
   line-height: 1;
   border-radius: 999rpx;
-  background: #dcf7f1;
+  background: #f5f6f7;
 }
 
 .pill-row {
@@ -232,8 +233,16 @@
   line-height: 1;
   border: 1rpx solid transparent;
   border-radius: 999rpx;
-  background: #dcf7f1;
+  background: #ffffff;
   box-sizing: border-box;
+}
+
+.tag-dot {
+  width: 12rpx;
+  height: 12rpx;
+  flex: none;
+  margin-right: 14rpx;
+  border-radius: 50%;
 }
 
 .tag-remove {
@@ -250,7 +259,8 @@
   font-weight: 800;
   line-height: 1;
   border-radius: 50%;
-  background: rgba(15, 118, 110, 0.1);
+  border: 1rpx solid #e9ecef;
+  background: #ffffff;
   box-sizing: border-box;
   overflow: hidden;
 }
@@ -260,14 +270,14 @@
 }
 
 .tag-add-trigger {
-  color: #17202a;
-  background: #eef2f6;
+  color: #212529;
+  background: #f5f6f7;
 }
 
 .tag-note,
 .danger-desc,
 .empty-desc {
-  color: #778392;
+  color: #868e96;
   font-size: 24rpx;
   line-height: 1.55;
 }
@@ -283,7 +293,7 @@
 .primary-button,
 .secondary-button,
 .danger-button {
-  min-height: 88rpx;
+  min-height: 92rpx;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -291,24 +301,26 @@
   font-size: 28rpx;
   font-weight: 800;
   line-height: 1;
-  border-radius: 16rpx;
+  border-radius: 999rpx;
   box-sizing: border-box;
 }
 
 .primary-button {
   color: #fff;
-  background: #17202a;
+  border-radius: 999rpx;
+  background: #212529;
 }
 
 .secondary-button {
-  color: #17202a;
-  background: #eef2f6;
+  color: #212529;
+  background: #f5f6f7;
 }
 
 .danger-button {
   margin-top: 20rpx;
-  color: #fff;
-  background: #d83a3a;
+  color: #b55656;
+  border: 1rpx solid #e9c9c9;
+  background: #ffffff;
 }
 
 .profile-action-button {
@@ -549,20 +561,28 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8rpx;
-  padding: 0 12rpx;
-  border: 2rpx solid transparent;
+  gap: 10rpx;
+  padding: 0 14rpx;
+  overflow: hidden;
+  color: #495057;
+  font-size: 22rpx;
+  font-weight: 500;
+  line-height: 1;
+  border: 1rpx solid #e9ecef;
   border-radius: 999rpx;
+  background: #ffffff;
   box-sizing: border-box;
 }
 
 .color-choice.active {
-  box-shadow: inset 0 0 0 2rpx currentColor;
+  color: #212529;
+  font-weight: 600;
+  border-color: #212529;
 }
 
 .color-swatch {
-  width: 22rpx;
-  height: 22rpx;
+  width: 12rpx;
+  height: 12rpx;
   flex: none;
   border-radius: 50%;
 }
@@ -570,7 +590,7 @@
 .color-name {
   overflow: hidden;
   font-size: 22rpx;
-  font-weight: 800;
+  font-weight: inherit;
   line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;

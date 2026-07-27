@@ -1,5 +1,5 @@
 .profile-section {
-  padding: 8rpx 34rpx;
+  padding: 12rpx 32rpx;
   text-align: center;
   box-sizing: border-box;
 }
@@ -14,7 +14,7 @@
 
 .profile-name {
   margin-top: 18rpx;
-  color: #17202a;
+  color: #212529;
   font-size: 36rpx;
   font-weight: 900;
   line-height: 1.25;
@@ -22,7 +22,7 @@
 
 .profile-line,
 .profile-bio {
-  color: #59636f;
+  color: #868e96;
   font-size: 26rpx;
   line-height: 1.75;
   white-space: pre-wrap;
@@ -51,9 +51,25 @@
 }
 
 .profile-tag {
-  color: #6b7280;
+  min-height: 48rpx;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 20rpx;
+  color: #0f766e;
   font-size: 24rpx;
   line-height: 1.4;
+  border: 1rpx solid #0f766e;
+  border-radius: 999rpx;
+  background: #ffffff;
+  box-sizing: border-box;
+}
+
+.profile-tag-dot {
+  width: 12rpx;
+  height: 12rpx;
+  flex: none;
+  margin-right: 12rpx;
+  border-radius: 50%;
 }
 
 .qr-image {
@@ -61,4 +77,5 @@
   width: 280rpx;
   height: 280rpx;
   margin: 24rpx auto 0;
+  border-radius: 32rpx;
 }

@@ -89,7 +89,7 @@ test('team visitor page binds navigation and guide back buttons to page-stack st
   const wxml = read('visitor-portfolio/team-visitor-portfolio.wxml')
   const json = JSON.parse(read('visitor-portfolio/team-visitor-portfolio.json'))
 
-  assert.match(wxml, /<navigation-bar title="团队作品集" back="\{\{showNavigationBack && !timelineGuideVisible\}\}" \/>/)
+  assert.match(wxml, /<navigation-bar title="团队作品集" back="\{\{showNavigationBack && !timelineGuideVisible\}\}" color="#212529" background="#ffffff" \/>/)
   assert.equal(json.usingComponents['timeline-share-guide'], '/components/timeline-share-guide/timeline-share-guide')
   assert.match(wxml, /<timeline-share-guide[^>]*back="\{\{showNavigationBack\}\}"[^>]*bindback="handleTimelineGuideBack"[^>]*bindclose="handleCloseTimelineGuide"/)
 })
@@ -142,6 +142,20 @@ test('legacy team list keeps only a lightweight loading surface', () => {
   assert.match(wxss, /\.compat-loading/)
   assert.doesNotMatch(wxml, /portfolio-item-card|create-actions|tabbar/)
   assert.doesNotMatch(js, /fetchTeamPortfolioList|handleCreateTap|onShareAppMessage/)
+})
+
+test('team portfolio selection and editor use the approved neutral surfaces', () => {
+  const teamSelectCss = read('team-select/team-select.wxss')
+  const editorCss = read('standard-edit/team-portfolio-standard-edit.wxss')
+  const teamSelectCardRule = readCssRule(teamSelectCss, '.team')
+  const editorPanelRule = readCssRule(editorCss, '.panel')
+  const editorPanelContentRule = readCssRule(editorCss, '.component-panel')
+  const sheetRule = readCssRule(editorCss, '.component-picker-panel')
+
+  assert.match(teamSelectCardRule, /border-radius:48rpx/)
+  assert.match(editorPanelContentRule, /padding:28rpx/)
+  assert.match(editorPanelRule, /border-radius:48rpx/)
+  assert.match(sheetRule, /border-radius:56rpx56rpx00/)
 })
 
 test('standard team editor independently matches the personal editor interaction shell', () => {
@@ -456,6 +470,6 @@ test('team preview shows the same side-effect-free notice as personal preview', 
   assert.match(teamWxml, /class="preview-toolbar"/)
   assert.match(teamWxml, new RegExp(`<view class="preview-note">${notice}</view>`))
   assert.doesNotMatch(teamWxml, /草稿预览|正式预览/)
-  assert.match(teamWxss, /\.preview-toolbar\s*\{[^}]*padding:\s*20rpx 24rpx;[^}]*border-bottom:\s*1rpx solid #eef1f4;/)
-  assert.match(teamWxss, /\.preview-note\s*\{[^}]*color:\s*#7a8490;[^}]*font-size:\s*22rpx;[^}]*line-height:\s*1\.4;/)
+  assert.match(teamWxss, /\.preview-toolbar\s*\{[^}]*padding:\s*20rpx 32rpx;[^}]*border-bottom:\s*1rpx solid #e9ecef;/)
+  assert.match(teamWxss, /\.preview-note\s*\{[^}]*color:\s*#868e96;[^}]*font-size:\s*22rpx;[^}]*line-height:\s*1\.4;/)
 })

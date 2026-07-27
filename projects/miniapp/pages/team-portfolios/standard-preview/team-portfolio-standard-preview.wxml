@@ -1,4 +1,4 @@
-<navigation-bar title="团队作品集预览" back="{{true}}" />
+<navigation-bar title="团队作品集预览" back="{{true}}" color="#212529" background="#ffffff" />
 <scroll-view scroll-y class="page-shell">
   <view class="preview-toolbar">
     <view class="preview-note">预览模式：禁用真实提交，不统计访问，不扣积分。</view>

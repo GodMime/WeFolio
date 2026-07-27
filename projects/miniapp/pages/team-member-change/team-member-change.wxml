@@ -1,5 +1,5 @@
 <view class="page-shell team-member-change-page">
-  <navigation-bar title="信息变更" back="{{true}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+  <navigation-bar title="信息变更" back="{{true}}" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
 
   <scroll-view class="change-scroll" scroll-y type="list">
     <view class="change-content">

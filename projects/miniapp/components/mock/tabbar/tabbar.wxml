@@ -10,7 +10,9 @@
     aria-role="button"
     aria-label="{{item.label}}"
   >
-    <view class="tab-icon {{item.icon}}-tab-icon"></view>
+    <view class="tab-icon-wrap">
+      <image class="tab-icon-image" src="/assets/system/tabbar/{{item.icon}}{{item.active ? '-active' : ''}}.svg" mode="aspectFit"></image>
+    </view>
     <view class="tab-label">{{item.label}}</view>
   </button>
 </view>

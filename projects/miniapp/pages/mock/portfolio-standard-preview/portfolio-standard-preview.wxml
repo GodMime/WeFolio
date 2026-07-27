@@ -1,5 +1,5 @@
 <view class="page-shell portfolio-preview-page mock-preview-page">
-  <navigation-bar title="{{portfolio.title || '预览'}}" color="#17202a" background="rgba(255, 255, 255, 0.94)"></navigation-bar>
+  <navigation-bar title="{{portfolio.title || '预览'}}" color="#212529" background="#ffffff"></navigation-bar>
 
   <scroll-view scroll-y class="preview-scroll">
     <view class="preview-toolbar">
@@ -21,7 +21,16 @@
           <view wx:if="{{item.profile.city}}" class="profile-line">{{item.profile.city}}</view>
           <text wx:if="{{item.profile.bio}}" class="profile-bio" space="nbsp">{{item.profile.bio}}</text>
           <view class="profile-tags">
-            <view wx:for="{{item.profile.tags}}" wx:key="name" wx:for-item="tag" class="profile-tag">{{tag.name}}</view>
+            <view
+              wx:for="{{item.profile.tags}}"
+              wx:key="name"
+              wx:for-item="tag"
+              class="profile-tag"
+              style="color: {{tag.color || '#0f766e'}}; border-color: {{tag.color || '#0f766e'}};"
+            >
+              <view class="profile-tag-dot" style="background: {{tag.color || '#0f766e'}};"></view>
+              <text>{{tag.name}}</text>
+            </view>
           </view>
         </view>
       </block>

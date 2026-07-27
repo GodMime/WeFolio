@@ -1,5 +1,5 @@
 .qr-section {
-  padding: 8rpx 34rpx;
+  padding: 12rpx 32rpx;
   text-align: center;
   box-sizing: border-box;
 }
@@ -9,4 +9,5 @@
   width: 280rpx;
   height: 280rpx;
   margin: 24rpx auto 0;
+  border-radius: 32rpx;
 }

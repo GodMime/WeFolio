@@ -1,5 +1,5 @@
 <view class="page-shell portfolios-page">
-  <navigation-bar title="作品集" back="{{false}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+  <navigation-bar title="作品集" back="{{false}}" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
 
   <view class="portfolio-segment-shell {{switching ? 'switching' : ''}}">
     <view class="segment">
@@ -191,7 +191,9 @@
 
   <view class="tabbar">
     <button class="tab {{item.active ? 'active' : ''}}" wx:for="{{tabs}}" wx:key="key" data-label="{{item.label}}" bindtap="handleTabTap">
-      <view class="tab-icon {{item.icon}}-tab-icon"></view>
+      <view class="tab-icon-wrap">
+        <image class="tab-icon-image" src="/assets/system/tabbar/{{item.icon}}{{item.active ? '-active' : ''}}.svg" mode="aspectFit"></image>
+      </view>
       <view class="tab-label">{{item.label}}</view>
     </button>
   </view>

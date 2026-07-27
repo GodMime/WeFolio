@@ -1465,7 +1465,7 @@ test('visitor profile prompt keeps skip and save copy in bottom sheet', () => {
   assert.match(wxml, /class="visitor-profile-secondary"[^>]*>跳过<\/button>/)
   assert.match(wxml, /class="visitor-profile-primary"[^>]*>保存<\/button>/)
   assert.match(wxss, /\.visitor-profile-mask\s*\{[\s\S]*left:\s*0;[\s\S]*right:\s*0;[\s\S]*top:\s*0;[\s\S]*bottom:\s*0;[\s\S]*z-index:\s*120;/)
-  assert.match(wxss, /\.visitor-profile-panel\s*\{[\s\S]*position:\s*absolute;[\s\S]*left:\s*0;[\s\S]*right:\s*0;[\s\S]*bottom:\s*0;[\s\S]*border-radius:\s*28rpx 28rpx 0 0;/)
+  assert.match(wxss, /\.visitor-profile-panel\s*\{[\s\S]*position:\s*absolute;[\s\S]*left:\s*0;[\s\S]*right:\s*0;[\s\S]*bottom:\s*0;[\s\S]*border-radius:\s*56rpx 56rpx 0 0;/)
   assert.match(wxss, /\.visitor-avatar-picker\s*\{[\s\S]*position:\s*absolute;[\s\S]*left:\s*0;[\s\S]*top:\s*0;[\s\S]*width:\s*116rpx;[\s\S]*height:\s*116rpx;[\s\S]*opacity:\s*0;/)
   assert.match(wxss, /\.visitor-avatar-visual\s*\{[\s\S]*width:\s*116rpx;[\s\S]*height:\s*116rpx;[\s\S]*border-radius:\s*50%;[\s\S]*overflow:\s*hidden;/)
   assert.match(wxss, /\.visitor-avatar-visual\.invalid/)

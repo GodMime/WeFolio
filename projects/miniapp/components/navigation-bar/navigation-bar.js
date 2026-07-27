@@ -61,7 +61,8 @@ Component({
   },
   lifetimes: {
     attached() {
-      const systemInfo = wx.getSystemInfoSync()
+      const needsLegacySystemInfo = !wx.getWindowInfo || !wx.getDeviceInfo
+      const systemInfo = needsLegacySystemInfo && wx.getSystemInfoSync ? wx.getSystemInfoSync() : {}
       const windowInfo = wx.getWindowInfo ? wx.getWindowInfo() : systemInfo
       const deviceInfo = wx.getDeviceInfo ? wx.getDeviceInfo() : systemInfo
       const menuButtonRect = wx.getMenuButtonBoundingClientRect()

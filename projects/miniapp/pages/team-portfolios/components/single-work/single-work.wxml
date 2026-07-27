@@ -24,8 +24,8 @@
         <view wx:elif="{{draft.memberUserId}}" class="editor-empty">该成员暂无可展示作品</view>
         <view wx:else class="editor-empty">请先选择团队成员</view>
       </view>
-      <view class="editor-switch-row"><view><view class="editor-switch-label">展示作品标题</view><view class="editor-switch-note">关闭后隐藏标题</view></view><switch checked="{{draft.showTitle}}" color="#c28b37" bindchange="handleShowTitleChange" /></view>
-      <view class="editor-switch-row"><view><view class="editor-switch-label">展示作品说明</view><view class="editor-switch-note">关闭后隐藏说明</view></view><switch checked="{{draft.showDescription}}" color="#c28b37" bindchange="handleShowDescriptionChange" /></view>
+      <view class="editor-switch-row"><view><view class="editor-switch-label">展示作品标题</view><view class="editor-switch-note">关闭后隐藏标题</view></view><switch checked="{{draft.showTitle}}" color="#212529" bindchange="handleShowTitleChange" /></view>
+      <view class="editor-switch-row"><view><view class="editor-switch-label">展示作品说明</view><view class="editor-switch-note">关闭后隐藏说明</view></view><switch checked="{{draft.showDescription}}" color="#212529" bindchange="handleShowDescriptionChange" /></view>
       <view wx:if="{{errorMessage}}" class="editor-error">{{errorMessage}}</view>
     </view>
   </block>

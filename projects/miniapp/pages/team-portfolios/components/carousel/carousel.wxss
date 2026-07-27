@@ -1,37 +1,37 @@
 :host { display: block; }
-.carousel { position: relative; width: calc(100% + 56rpx); margin-left: -28rpx; height: 563rpx; color: #17202a; overflow: hidden; overflow-wrap: anywhere; background: #f3f4f6; }
+.carousel { position: relative; width: 100%; margin-left: 0; height: 563rpx; color: #212529; overflow: hidden; overflow-wrap: anywhere; border-radius: 40rpx; background: #f1f3f5; }
 .carousel.editor-mode { width: 100%; margin-left: 0; height: auto; padding: 0; overflow: visible; background: transparent; }
 .editor-form { display: flex; flex-direction: column; gap: 20rpx; padding: 4rpx 0 8rpx; }
-.editor-field { padding: 22rpx; border: 1rpx solid rgba(23, 32, 42, .06); border-radius: 16rpx; background: rgba(255, 255, 255, .94); box-sizing: border-box; }
+.editor-field { padding: 28rpx; border: 1rpx solid #e9ecef; border-radius: 48rpx; background: #fff; box-sizing: border-box; }
 .editor-field-heading { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; }
-.editor-label { color: #5f6b7a; font-size: 24rpx; font-weight: 800; }
+.editor-label { color: #6c757d; font-size: 24rpx; font-weight: 800; }
 .editor-limit { color: #8b96a3; font-size: 22rpx; font-weight: 700; }
 .editor-member-scroll { width: 100%; margin-top: 16rpx; white-space: nowrap; }
 .editor-member-row { display: inline-flex; gap: 12rpx; padding-right: 2rpx; }
-.editor-member-choice { display: inline-flex; width: fit-content; max-width: 280rpx; height: 56rpx; align-items: center; justify-content: center; gap: 10rpx; flex: none; margin: 0; padding: 0 12rpx 0 18rpx; color: #536b82; font-size: 22rpx; font-weight: 800; line-height: 1; border: 1rpx solid #d4dee8; border-radius: 999rpx; background: #fff; box-sizing: border-box; }
-.editor-member-choice.active { color: #fff; border-color: #17202a; background: #17202a; }
+.editor-member-choice { display: inline-flex; width: fit-content; max-width: 280rpx; height: 56rpx; align-items: center; justify-content: center; gap: 10rpx; flex: none; margin: 0; padding: 0 12rpx 0 18rpx; color: #6c757d; font-size: 22rpx; font-weight: 800; line-height: 1; border: 1rpx solid #dee2e6; border-radius: 999rpx; background: #fff; box-sizing: border-box; }
+.editor-member-choice.active { color: #fff; border-color: #212529; background: #212529; }
 .editor-member-name { max-width: 180rpx; min-width: 0; overflow: hidden; line-height: 1; text-overflow: ellipsis; white-space: nowrap; }
 .editor-member-count { min-width: 32rpx; height: 32rpx; display: flex; align-items: center; justify-content: center; flex: none; padding: 0 7rpx; color: #536b82; font-size: 20rpx; font-weight: 900; line-height: 1; border-radius: 999rpx; background: #eef3f7; box-sizing: border-box; }
-.editor-member-choice.active .editor-member-count { color: #17202a; background: rgba(255, 255, 255, .9); }
+.editor-member-choice.active .editor-member-count { color: #212529; background: rgba(255, 255, 255, .9); }
 .editor-content-field { min-height: 220rpx; }
 .editor-option-list { width: 100%; display: flex; flex-direction: column; align-self: stretch; gap: 14rpx; margin-top: 16rpx; box-sizing: border-box; }
-.editor-option { width: 100%; min-height: 112rpx; display: flex; align-items: center; gap: 18rpx; margin: 0; padding: 14rpx; text-align: left; border: 1rpx solid #d9e2eb; border-radius: 14rpx; background: #f8fafc; box-sizing: border-box; }
-.editor-option.selected { border-color: #c28b37; background: #fff9ed; }
+.editor-option { width: 100%; min-height: 112rpx; display: flex; align-items: center; gap: 18rpx; margin: 0; padding: 14rpx; text-align: left; border: 1rpx solid #e9ecef; border-radius: 28rpx; background: #f5f6f7; box-sizing: border-box; }
+.editor-option.selected { border-color: #212529; background: #fff; }
 .editor-option-thumb { width: 92rpx; height: 76rpx; flex: none; overflow: hidden; border-radius: 12rpx; background: #eef3f7; }
 .editor-option-thumb image { width: 100%; height: 100%; display: block; }
 .editor-option-copy { min-width: 0; flex: 1 1 0; }
-.editor-option-title { display: block; overflow: hidden; color: #17202a; font-size: 26rpx; font-weight: 900; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
+.editor-option-title { display: block; overflow: hidden; color: #212529; font-size: 26rpx; font-weight: 900; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
 .editor-option-meta-row { min-width: 0; display: flex; align-items: center; gap: 10rpx; margin-top: 8rpx; }
 .editor-option-meta { min-width: 0; flex: 0 1 auto; overflow: hidden; color: #697786; font-size: 22rpx; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
 .editor-option-ratio { min-height: 32rpx; display: flex; align-items: center; justify-content: center; flex: none; padding: 0 10rpx; color: #536b82; font-size: 20rpx; font-weight: 900; line-height: 1; border: 1rpx solid #d4dee8; border-radius: 999rpx; background: #fff; box-sizing: border-box; }
 .editor-option-check { width: 44rpx; height: 44rpx; display: flex; align-items: center; justify-content: center; flex: none; color: #fff; font-size: 22rpx; font-weight: 900; line-height: 1; border-radius: 50%; background: #d9e2eb; }
-.editor-option.selected .editor-option-check { background: #c28b37; }
+.editor-option.selected .editor-option-check { background: #212529; }
 .editor-empty { min-height: 150rpx; display: flex; align-items: center; justify-content: center; color: #8a98a8; font-size: 22rpx; text-align: center; }
-.editor-error { padding: 16rpx 18rpx; color: #a9354f; font-size: 22rpx; border-radius: 14rpx; background: #fff1f2; }
+.editor-error { padding: 16rpx 18rpx; color: #b55656; font-size: 22rpx; border-radius: 28rpx; background: #fbefef; }
 .editor-actions { display: flex; justify-content: flex-end; gap: 16rpx; margin-top: 20rpx; }
 .editor-cancel, .editor-confirm { width: 148rpx; height: 64rpx; display: flex; align-items: center; justify-content: center; margin: 0; padding: 0; font-size: 24rpx; font-weight: 900; line-height: 1; border-radius: 999rpx; box-sizing: border-box; }
 .editor-cancel { color: #536b82; border: 1rpx solid #cbd6df; background: #eef3f7; }
-.editor-confirm { color: #fff; background: #17202a; }
+.editor-confirm { color: #fff; background: #212529; }
 .swiper, .slide { width: 100%; height: 100%; }
 .carousel-progress-bar { position: absolute; left: 50%; bottom: 28rpx; z-index: 2; display: flex; align-items: center; gap: 12rpx; transform: translateX(-50%); pointer-events: none; }
 .carousel-progress-segment { width: 32rpx; height: 6rpx; flex: none; min-width: 0; overflow: hidden; border-radius: 999rpx; background: rgba(255, 255, 255, .34); box-shadow: inset 0 0 0 1rpx rgba(255, 255, 255, .18); }

@@ -3,7 +3,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background-color: #f5f7fb;
+  background-color: #f5f6f7;
 }
 
 .maintenance-scroll {
@@ -12,15 +12,15 @@
 }
 
 .maintenance-content {
-  padding: 28rpx;
+  padding: 20rpx 32rpx calc(56rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
 }
 
 .panel {
-  background: rgba(255, 255, 255, 0.94);
-  border: 1rpx solid rgba(23, 32, 42, 0.06);
-  border-radius: 16rpx;
-  box-shadow: 0 18rpx 48rpx rgba(23, 32, 42, 0.06);
+  background: #ffffff;
+  border: 1rpx solid #e9ecef;
+  border-radius: 48rpx;
+  box-shadow: 0 18rpx 48rpx rgba(33, 37, 41, 0.06);
   box-sizing: border-box;
 }
 
@@ -61,7 +61,7 @@
   flex: none;
   overflow: hidden;
   border-radius: 22rpx;
-  background: #dfe8e5;
+  background: #e9ecef;
 }
 
 .team-logo.large {
@@ -95,7 +95,7 @@
   justify-content: center;
   color: #f7fbfa;
   font-weight: 900;
-  background: linear-gradient(135deg, #17202a 0%, #2e7d73 100%);
+  background: #212529;
 }
 
 .team-logo-fallback {
@@ -104,7 +104,7 @@
 
 .team-name {
   overflow: hidden;
-  color: #17202a;
+  color: #212529;
   font-size: 32rpx;
   font-weight: 800;
   line-height: 1.3;
@@ -114,7 +114,7 @@
 
 .member-summary,
 .empty-desc {
-  color: #778392;
+  color: #868e96;
   font-size: 24rpx;
   line-height: 1.45;
 }
@@ -146,13 +146,13 @@
 }
 
 .role-pill.blue {
-  color: #2d5f9a;
-  background: #e6efff;
+  color: #212529;
+  background: #f1f3f5;
 }
 
 .role-pill.teal {
-  color: #0f766e;
-  background: #dcf7f1;
+  color: #5c9e6e;
+  background: #eef6f0;
 }
 
 .role-pill.team-code-button {
@@ -161,16 +161,19 @@
   max-width: 200rpx;
   margin-left: auto;
   text-align: center;
+  color: #212529;
+  border: 1rpx solid #e9ecef;
+  background: #ffffff;
 }
 
 .role-pill.amber {
-  color: #8a4b09;
-  background: #fff2cf;
+  color: #c08a3e;
+  background: #fbf3e7;
 }
 
 .role-pill.muted {
-  color: #667085;
-  background: #eef2f6;
+  color: #868e96;
+  background: #f1f3f5;
 }
 
 .form-row {
@@ -184,13 +187,13 @@
 }
 
 .label {
-  color: #5f6b7a;
+  color: #6c757d;
   font-size: 24rpx;
   font-weight: 700;
 }
 
 .field-limit {
-  color: #8b96a3;
+  color: #868e96;
   font-size: 22rpx;
   font-weight: 700;
 }
@@ -200,11 +203,12 @@
   width: 100%;
   min-height: 84rpx;
   padding: 0 22rpx;
-  color: #17202a;
+  color: #212529;
   font-size: 28rpx;
   line-height: 84rpx;
-  border-radius: 16rpx;
-  background: #f6f8fb;
+  border: 1rpx solid #e9ecef;
+  border-radius: 40rpx;
+  background: #ffffff;
   box-sizing: border-box;
 }
 
@@ -236,17 +240,17 @@
   font-size: 28rpx;
   font-weight: 800;
   line-height: 1;
-  border-radius: 16rpx;
+  border-radius: 999rpx;
 }
 
 .primary-button {
   color: #fff;
-  background: #17202a;
+  background: #212529;
 }
 
 .secondary-button {
-  color: #17202a;
-  background: #eef2f6;
+  color: #212529;
+  background: #f1f3f5;
 }
 
 .full {
@@ -271,9 +275,9 @@
 .segmented {
   display: flex;
   padding: 8rpx;
-  border: 1rpx solid #d8e0e8;
-  border-radius: 18rpx;
-  background: rgba(255, 255, 255, 0.94);
+  border: 1rpx solid #e9ecef;
+  border-radius: 999rpx;
+  background: #ffffff;
   box-sizing: border-box;
 }
 
@@ -287,20 +291,20 @@
 .segment {
   min-height: 68rpx;
   margin: 0;
-  color: #667085;
+  color: #6c757d;
   font-size: 24rpx;
   font-weight: 800;
-  border-radius: 14rpx;
+  border-radius: 999rpx;
   background: transparent;
 }
 
 .segment.active {
-  color: #fff;
-  background: #17202a;
+  color: #ffffff;
+  background: #212529;
 }
 
 .section-title {
-  color: #17202a;
+  color: #212529;
   font-size: 28rpx;
   font-weight: 800;
 }
@@ -313,12 +317,12 @@
   margin-left: auto;
   margin-right: 0;
   padding: 0 12rpx;
-  color: #536579;
+  color: #212529;
   font-size: 23rpx;
   font-weight: 800;
-  border: 1rpx solid #cbd6e2;
+  border: 1rpx solid #e9ecef;
   border-radius: 999rpx;
-  background: #f7fafc;
+  background: #ffffff;
 }
 
 .member-list {
@@ -329,7 +333,7 @@
   position: relative;
   min-height: 118rpx;
   overflow: hidden;
-  border-bottom: 1rpx solid #edf1f5;
+  border-bottom: 1rpx solid #e9ecef;
 }
 
 .member-row:last-child {
@@ -359,7 +363,7 @@
   flex: none;
   overflow: hidden;
   border-radius: 50%;
-  background: #dfe8e5;
+  background: #e9ecef;
 }
 
 .member-avatar-fallback {
@@ -368,7 +372,7 @@
 
 .member-name {
   overflow: hidden;
-  color: #17202a;
+  color: #212529;
   font-size: 28rpx;
   font-weight: 800;
   line-height: 1.3;
@@ -440,18 +444,18 @@
   justify-content: center;
   margin: 0;
   padding: 0;
-  color: #17202a;
+  color: #212529;
   font-size: 21rpx;
   font-weight: 800;
   line-height: 60rpx;
-  border-radius: 12rpx;
-  background: #eef2f6;
+  border-radius: 999rpx;
+  background: #f1f3f5;
   box-sizing: border-box;
 }
 
 .member-action-button.remove {
-  color: #b42318;
-  background: #fee4e2;
+  color: #b55656;
+  background: #fbefef;
 }
 
 .member-empty,
@@ -470,12 +474,12 @@
   width: 88rpx;
   height: 88rpx;
   border-radius: 50%;
-  background: #dfe8e5;
+  background: #e9ecef;
 }
 
 .empty-title {
   margin-top: 24rpx;
-  color: #17202a;
+  color: #212529;
   font-size: 30rpx;
   font-weight: 800;
 }
@@ -513,10 +517,10 @@
   z-index: 30;
   display: flex;
   align-items: flex-end;
-  padding: 28rpx;
+  padding: 0;
   opacity: 0;
   pointer-events: none;
-  background: rgba(23, 32, 42, 0.36);
+  background: rgba(33, 37, 41, 0.42);
   transition: opacity 180ms ease;
   box-sizing: border-box;
 }
@@ -530,10 +534,10 @@
   z-index: 30;
   display: flex;
   align-items: flex-end;
-  padding: 28rpx;
+  padding: 0;
   opacity: 0;
   pointer-events: none;
-  background: rgba(23, 32, 42, 0.36);
+  background: rgba(33, 37, 41, 0.42);
   transition: opacity 180ms ease;
   box-sizing: border-box;
 }
@@ -551,9 +555,9 @@
 .member-add-sheet {
   width: 100%;
   max-height: calc(90vh - env(safe-area-inset-bottom));
-  padding: 24rpx;
+  padding: 24rpx 32rpx calc(32rpx + env(safe-area-inset-bottom));
   overflow-y: auto;
-  border-radius: 24rpx 24rpx 18rpx 18rpx;
+  border-radius: 56rpx 56rpx 0 0;
   background: #ffffff;
   box-sizing: border-box;
   transform: translateY(32rpx);
@@ -563,9 +567,9 @@
 .member-change-sheet {
   width: 100%;
   max-height: calc(90vh - env(safe-area-inset-bottom));
-  padding: 24rpx;
+  padding: 24rpx 32rpx calc(32rpx + env(safe-area-inset-bottom));
   overflow-y: auto;
-  border-radius: 24rpx 24rpx 18rpx 18rpx;
+  border-radius: 56rpx 56rpx 0 0;
   background: #ffffff;
   box-sizing: border-box;
   transform: translateY(32rpx);
@@ -585,7 +589,7 @@
   height: 8rpx;
   margin: 0 auto 22rpx;
   border-radius: 999rpx;
-  background: #d8e0e8;
+  background: #dee2e6;
 }
 
 .member-sheet-heading {
@@ -596,7 +600,7 @@
 .candidate-summary,
 .confirm-desc,
 .error-banner {
-  color: #667085;
+  color: #6c757d;
   font-size: 24rpx;
   line-height: 1.5;
 }
@@ -607,7 +611,7 @@
 
 .member-sheet-section {
   padding: 22rpx 0;
-  border-bottom: 1rpx solid #edf1f5;
+  border-bottom: 1rpx solid #e9ecef;
 }
 
 .member-sheet-section > .form-row:first-child {
@@ -654,7 +658,7 @@
   gap: 18rpx;
   margin-top: 24rpx;
   padding-top: 22rpx;
-  border-top: 1rpx solid #edf1f5;
+  border-top: 1rpx solid #e9ecef;
 }
 
 .candidate-copy {
@@ -664,7 +668,7 @@
 
 .candidate-name {
   overflow: hidden;
-  color: #17202a;
+  color: #212529;
   font-size: 28rpx;
   font-weight: 800;
   line-height: 1.3;
@@ -698,8 +702,8 @@
   min-height: 72rpx;
   gap: 16rpx;
   padding: 0 18rpx;
-  border-bottom: 1rpx solid #edf1f5;
-  color: #667085;
+  border-bottom: 1rpx solid #e9ecef;
+  color: #6c757d;
   font-size: 26rpx;
   font-weight: 700;
 }
@@ -709,22 +713,22 @@
 }
 
 .permission-row.active {
-  color: #0f766e;
+  color: #5c9e6e;
 }
 
 .permission-check {
   width: 28rpx;
   height: 28rpx;
   flex: none;
-  border: 2rpx solid #cbd6e2;
+  border: 2rpx solid #ced4da;
   border-radius: 50%;
   background: #fff;
   box-sizing: border-box;
 }
 
 .permission-row.active .permission-check {
-  border-color: #0f766e;
-  background: #0f766e;
+  border-color: #5c9e6e;
+  background: #5c9e6e;
 }
 
 .permission-label {
@@ -740,7 +744,7 @@
 }
 
 .row-title {
-  color: #17202a;
+  color: #212529;
   font-size: 28rpx;
   font-weight: 800;
 }
@@ -752,9 +756,9 @@
 .error-banner {
   margin-top: 18rpx;
   padding: 18rpx 22rpx;
-  border-radius: 16rpx;
-  color: #8a4b09;
-  background: #fff1d6;
+  border-radius: 40rpx;
+  color: #c08a3e;
+  background: #fbf3e7;
   box-sizing: border-box;
 }
 

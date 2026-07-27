@@ -83,13 +83,12 @@ test('share channel sheet keeps the floating panel and uses full-width branded a
   assert.match(wxml, /进入作品集后分享/)
   assert.doesNotMatch(wxml, /friend-bubble|timeline-ring|timeline-dot|share-sheet-action-arrow/)
 
-  assert.match(wxss, /\.share-sheet-mask\s*\{[^}]*padding:\s*28rpx/s)
-  assert.match(wxss, /\.share-sheet-panel\s*\{[^}]*border-radius:\s*24rpx 24rpx 18rpx 18rpx/s)
+  assert.match(wxss, /\.share-sheet-mask\s*\{[^}]*padding:\s*0/s)
+  assert.match(wxss, /\.share-sheet-panel\s*\{[^}]*border-radius:\s*56rpx 56rpx 0 0/s)
   assert.match(wxss, /\.share-sheet-action\s*\{[^}]*width:\s*100%[^}]*min-width:\s*100%[^}]*max-width:\s*100%/s)
   assert.match(wxss, /\.share-sheet-action\s*\{[^}]*height:\s*136rpx/s)
   assert.match(wxss, /\.share-sheet-icon\s*\{[^}]*width:\s*88rpx[^}]*height:\s*88rpx/s)
-  assert.match(wxss, /#b88a44/i)
-  assert.doesNotMatch(wxss, /#15945f|#e8f7ef/i)
+  assert.doesNotMatch(wxss, /#d9a84a|#b88a44|#15945f|#e8f7ef/i)
 })
 
 test('share channel icons stay within the WeChat static asset size limit', () => {
@@ -142,6 +141,9 @@ test('timeline share guide emits close and back while using a clear menu arrow',
   assert.match(maskRule, /top:\s*0/)
   assert.match(maskRule, /bottom:\s*0/)
   assert.doesNotMatch(maskRule, /inset:/)
+  assert.match(wxss, /\.timeline-guide-mask\s*\{[^}]*padding:\s*0/s)
+  assert.match(wxss, /\.timeline-guide-panel\s*\{[^}]*border-radius:\s*56rpx 56rpx 0 0/s)
+  assert.doesNotMatch(wxss, /#d9a84a|#b88a44/i)
 
   const component = loadComponent('timeline-share-guide/timeline-share-guide', { back: true })
   component.handleBack()
@@ -152,7 +154,7 @@ test('timeline share guide emits close and back while using a clear menu arrow',
 test('timeline share guide aligns overlay controls to the native menu in simulator coordinates', () => {
   const previousWx = global.wx
   global.wx = {
-    getSystemInfoSync() { return { windowWidth: 375 } },
+    getSystemInfoSync() { throw new Error('不应调用已废弃的 wx.getSystemInfoSync') },
     getWindowInfo() { return { windowWidth: 375 } },
     getMenuButtonBoundingClientRect() {
       return { top: 50, bottom: 82, right: 363, height: 32 }

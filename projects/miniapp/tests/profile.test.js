@@ -37,7 +37,9 @@ test('normalizes basic profile response for page rendering', () => {
     { content: '高端婚礼', color: '#0f766e' },
     { content: '双语主持', color: '#2d5f9a' }
   ])
-  assert.match(profile.tags[0].style, /#dcf7f1/)
+  assert.equal(profile.tags[0].style, 'color: #0f766e; background: #ffffff; border-color: #0f766e;')
+  assert.equal(profile.tags[0].dotStyle, 'background: #0f766e;')
+  assert.equal(profile.tags[0].removeStyle, 'color: #adb5bd; background: #ffffff; border-color: #e9ecef;')
 })
 
 test('normalizes legacy string profile tags with default color', () => {

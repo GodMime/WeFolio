@@ -9,7 +9,9 @@
 .single-work-video-poster {
   width: 100%;
   display: block;
-  background: #f3f4f6;
+  overflow: hidden;
+  border-radius: 40rpx;
+  background: #f1f3f5;
 }
 
 .single-work-video-poster {
@@ -54,14 +56,14 @@
 }
 
 .single-work-title {
-  color: #17202a;
+  color: #212529;
   font-size: 28rpx;
   font-weight: 800;
   line-height: 1.45;
 }
 
 .single-work-description {
-  color: #59636f;
+  color: #868e96;
   font-size: 26rpx;
   line-height: 1.75;
   white-space: pre-wrap;
@@ -77,11 +79,12 @@
   justify-content: center;
   color: #8a98a8;
   font-size: 24rpx;
-  background: #f3f4f6;
+  border-radius: 40rpx;
+  background: #f1f3f5;
 }
 
 .single-work-repair {
   margin: 0 20rpx;
-  color: #a56f22;
-  background: #fff7e8;
+  color: #c08a3e;
+  background: #fbf6ed;
 }

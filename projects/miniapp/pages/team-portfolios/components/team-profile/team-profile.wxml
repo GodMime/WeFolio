@@ -25,7 +25,7 @@
         <view class="editor-visibility-list">
           <view wx:for="{{visibleFieldOptions}}" wx:key="field" class="editor-visibility-option">
             <text class="editor-visibility-label">{{item.label}}</text>
-            <switch checked="{{item.checked}}" color="#17202a" data-field="{{item.field}}" bindchange="handleVisibleFieldChange" />
+            <switch checked="{{item.checked}}" color="#212529" data-field="{{item.field}}" bindchange="handleVisibleFieldChange" />
           </view>
         </view>
       </view>

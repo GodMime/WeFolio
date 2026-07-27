@@ -1,5 +1,5 @@
 <view class="page-shell points-rules-page">
-  <navigation-bar title="积分规则" back="{{true}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+  <navigation-bar title="积分规则" back="{{true}}" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
 
   <scroll-view class="points-rules-scroll" scroll-y type="list">
     <view class="points-rules-content">

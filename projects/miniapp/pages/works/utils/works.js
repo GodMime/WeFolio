@@ -10,10 +10,7 @@ const TITLE_LIMIT = 30
 const DESCRIPTION_LIMIT = 1000
 const FILTER_TAG_LABEL_LIMIT = 10
 const WORK_TAG_DELETE_BLOCKED_SUFFIX = '先移除这些作品的标签后再删除。'
-const FILTER_ALL_ACTIVE_STYLE = 'color: #40546a; background: #eef4f7; border-color: #cbd8e5;'
-const WORK_TAG_PICKER_MIN_HEIGHT = 80
-const WORK_TAG_PICKER_ROW_STEP = 72
-const WORK_TAG_PICKER_MAX_HEIGHT = 520
+const FILTER_ALL_ACTIVE_STYLE = 'color: #ffffff; background: #212529; border-color: #212529;'
 const DEFAULT_AUDIT_STATUS = 'PENDING'
 const MAX_AUDIT_REASON_COUNT = 20
 
@@ -145,6 +142,14 @@ function buildTagStyle(color) {
   return `color: ${option.color}; background: ${option.background}; border-color: ${option.border};`
 }
 
+function buildFilterTagStyle(color) {
+  if (!color) {
+    return ''
+  }
+  const option = getWorkTagColorOption(color)
+  return `color: ${option.color}; background: #ffffff; border-color: ${option.color};`
+}
+
 function buildTagActiveStyle(color) {
   if (!color) {
     return FILTER_ALL_ACTIVE_STYLE
@@ -194,6 +199,7 @@ function normalizeTag(raw = {}) {
     active: Boolean(raw.active),
     labelText: formatFilterTagLabel(name, count),
     style: buildTagStyle(color),
+    filterStyle: buildFilterTagStyle(color),
     activeStyle: buildTagActiveStyle(color),
     deleteStyle: buildTagDeleteStyle(color)
   }
@@ -354,14 +360,6 @@ function buildWorkEditSelectedTagIds(tagOptions = []) {
     selectedIds.push(tagId)
   })
   return selectedIds
-}
-
-function buildWorkTagOptionListHeight(tags = []) {
-  const count = Array.isArray(tags) ? tags.length : Math.max(0, Math.round(toNumber(tags)))
-  if (count <= 0) {
-    return 0
-  }
-  return Math.min(WORK_TAG_PICKER_MAX_HEIGHT, WORK_TAG_PICKER_MIN_HEIGHT + (count - 1) * WORK_TAG_PICKER_ROW_STEP)
 }
 
 function buildUnifiedWorkTagNames(tags = []) {
@@ -560,7 +558,6 @@ module.exports = {
   buildUnifiedWorkTagItems,
   buildUnifiedWorkTagNames,
   buildWorkTagDeleteBlockedMessage,
-  buildWorkTagOptionListHeight,
   buildWorkTagPickerOptions,
   buildWorkTagPayload,
   buildWorkUpdatePayload,

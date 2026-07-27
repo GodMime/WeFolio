@@ -581,13 +581,13 @@ test('portfolio work sections render fixed title, all tags, play badge, and vide
     assert.match(wxml, /wx:if="\{\{work\.isVideo\}\}"[\s\S]*class="work-play-badge"/)
   })
   ;[gridWxss, listWxss].forEach((wxss) => {
-    assert.match(wxss, /\.work-section-title\s*\{[\s\S]*color:\s*#000000;[\s\S]*font-size:\s*34rpx;/)
+    assert.match(wxss, /\.work-section-title\s*\{[\s\S]*color:\s*#212529;[\s\S]*font-size:\s*34rpx;/)
     assert.match(wxss, /\.work-play-badge\s*\{[\s\S]*position:\s*absolute;[\s\S]*right:\s*16rpx;[\s\S]*bottom:\s*16rpx;/)
     assert.doesNotMatch(wxss, /\.work-play-badge\s*\{[\s\S]*top:\s*50%;[\s\S]*left:\s*50%;/)
   })
   ;[mockSharedWxss].forEach((wxss) => {
-    assert.match(wxss, /\.display-tag\s*\{[\s\S]*color:\s*#8a8f98;[\s\S]*font-size:\s*28rpx;/)
-    assert.match(wxss, /\.display-tag\.active\s*\{[\s\S]*color:\s*#000000;/)
+    assert.match(wxss, /\.display-tag\s*\{[\s\S]*color:\s*#868e96;[\s\S]*font-size:\s*28rpx;/)
+    assert.match(wxss, /\.display-tag\.active\s*\{[\s\S]*color:\s*#212529;/)
   })
 })
 
@@ -642,6 +642,26 @@ test('profile component can render selected wechat qr in actual pages', () => {
   assert.match(previewWxml, /<portfolio-profile[\s\S]*profile="\{\{item\.profile\}\}"[\s\S]*bindpreviewqr="handlePreviewQr"/)
   assert.match(visitorWxml, /<portfolio-profile[\s\S]*profile="\{\{item\.profile\}\}"[\s\S]*bindpreviewqr="handlePreviewQr"/)
   assert.match(profileWxml, /wx:if="\{\{profile\.wechatQrUrl\}\}"[\s\S]*src="\{\{profile\.wechatQrUrl\}\}"[\s\S]*bindtap="handlePreviewQr"/)
+})
+
+test('profile component renders personal tags as chromatic outlined pills', () => {
+  const profileWxml = readExisting('pages/portfolios/components/profile/profile.wxml')
+  const profileWxss = readExisting('pages/portfolios/components/profile/profile.wxss')
+  const tagRule = readRule(profileWxss, '.profile-tag')
+  const dotRule = readRule(profileWxss, '.profile-tag-dot')
+
+  assert.match(
+    profileWxml,
+    /class="profile-tag"[\s\S]*color: \{\{tag\.color \|\| '#0f766e'\}\};[\s\S]*border-color: \{\{tag\.color \|\| '#0f766e'\}\};/
+  )
+  assert.match(
+    profileWxml,
+    /class="profile-tag-dot"[\s\S]*background: \{\{tag\.color \|\| '#0f766e'\}\};/
+  )
+  assert.match(tagRule, /background:\s*#ffffff/)
+  assert.match(dotRule, /width:\s*12rpx/)
+  assert.match(dotRule, /height:\s*12rpx/)
+  assert.match(dotRule, /border-radius:\s*50%/)
 })
 
 test('contact form components support modal entry and inline form in actual pages', () => {

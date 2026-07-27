@@ -1,6 +1,6 @@
 .team-invitations-page {
   min-height: 100vh;
-  background: #f5f7fb;
+  background: #f5f6f7;
 }
 
 .invitation-scroll {
@@ -8,15 +8,15 @@
 }
 
 .invitation-content {
-  padding: 176rpx 28rpx 56rpx;
+  padding: 176rpx 32rpx 56rpx;
   box-sizing: border-box;
 }
 
 .panel {
-  border: 1rpx solid #e5ebf2;
-  border-radius: 24rpx;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 18rpx 48rpx rgba(23, 32, 42, 0.08);
+  border: 1rpx solid #e9ecef;
+  border-radius: 48rpx;
+  background: #ffffff;
+  box-shadow: 0 18rpx 48rpx rgba(33, 37, 41, 0.06);
   box-sizing: border-box;
 }
 
@@ -37,7 +37,7 @@
   flex: none;
   overflow: hidden;
   border-radius: 22rpx;
-  background: #dfe8e5;
+  background: #e9ecef;
 }
 
 .team-logo-image,
@@ -50,7 +50,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #0f766e;
+  color: #212529;
   font-size: 26rpx;
   font-weight: 900;
 }
@@ -62,7 +62,7 @@
 
 .team-name {
   overflow: hidden;
-  color: #17202a;
+  color: #212529;
   font-size: 32rpx;
   font-weight: 900;
   line-height: 1.3;
@@ -74,7 +74,7 @@
 .info-label,
 .empty-desc,
 .processed-note {
-  color: #667085;
+  color: #6c757d;
   font-size: 24rpx;
   line-height: 1.5;
 }
@@ -98,23 +98,23 @@
 }
 
 .role-pill.teal {
-  color: #0f766e;
-  background: #dcf7f1;
+  color: #5c9e6e;
+  background: #eef6f0;
 }
 
 .role-pill.amber {
-  color: #8a4b09;
-  background: #fff1d6;
+  color: #c08a3e;
+  background: #fbf3e7;
 }
 
 .role-pill.muted {
-  color: #667085;
-  background: #edf1f5;
+  color: #868e96;
+  background: #f1f3f5;
 }
 
 .info-list {
   margin-top: 24rpx;
-  border-top: 1rpx solid #edf1f5;
+  border-top: 1rpx solid #e9ecef;
 }
 
 .info-row {
@@ -122,7 +122,7 @@
   display: flex;
   align-items: center;
   gap: 20rpx;
-  border-bottom: 1rpx solid #edf1f5;
+  border-bottom: 1rpx solid #e9ecef;
 }
 
 .info-row:last-child {
@@ -137,7 +137,7 @@
 .info-value {
   flex: 1;
   min-width: 0;
-  color: #17202a;
+  color: #212529;
   font-size: 26rpx;
   font-weight: 800;
   line-height: 1.5;
@@ -153,18 +153,18 @@
   font-size: 28rpx;
   font-weight: 800;
   line-height: 1;
-  border-radius: 16rpx;
+  border-radius: 999rpx;
   box-sizing: border-box;
 }
 
 .primary-button {
   color: #fff;
-  background: #17202a;
+  background: #212529;
 }
 
 .secondary-button {
-  color: #17202a;
-  background: #eef2f6;
+  color: #212529;
+  background: #f1f3f5;
 }
 
 .invitation-actions {
@@ -184,8 +184,8 @@
   align-items: center;
   justify-content: center;
   margin-top: 24rpx;
-  border-radius: 16rpx;
-  background: #edf1f5;
+  border-radius: 40rpx;
+  background: #f1f3f5;
   font-weight: 800;
 }
 
@@ -204,12 +204,12 @@
   width: 88rpx;
   height: 88rpx;
   border-radius: 50%;
-  background: #dfe8e5;
+  background: #e9ecef;
 }
 
 .empty-title {
   margin-top: 24rpx;
-  color: #17202a;
+  color: #212529;
   font-size: 30rpx;
   font-weight: 800;
 }

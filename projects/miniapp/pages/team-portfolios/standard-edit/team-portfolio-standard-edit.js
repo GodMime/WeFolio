@@ -108,8 +108,10 @@ function buildServerSafeTeamPortfolioConfig(config = {}) {
 function makeKey() { return `component-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}` }
 function makeIdempotencyKey(prefix) { return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}` }
 function getQrContactCropBoxWidth(wxApi = wx) {
-  const systemInfo = wxApi && wxApi.getSystemInfoSync ? wxApi.getSystemInfoSync() : {}
-  const windowWidth = Number(systemInfo.windowWidth) || 375
+  const windowInfo = wxApi && wxApi.getWindowInfo
+    ? wxApi.getWindowInfo()
+    : (wxApi && wxApi.getSystemInfoSync ? wxApi.getSystemInfoSync() : {})
+  const windowWidth = Number(windowInfo.windowWidth) || 375
   const rpxScale = windowWidth / DESIGN_VIEWPORT_RPX
   return Math.floor(Math.min(
     QR_CONTACT_CROP_MAX_WIDTH_RPX * rpxScale,
