@@ -268,29 +268,31 @@
   .batch-action.danger { color: #b55656; }
   .batch-action.muted { color: #868e96; }
 
-  /* ===== Tabbar: 悬浮纯黑胶囊 ===== */
+  /* ===== Tabbar: 悬浮白色胶囊，与黑色主按钮形态区分 ===== */
   .tabbar {
     position: absolute; left: 16px; right: 16px; bottom: 16px; z-index: 10;
     height: 64px;
     display: flex; align-items: center; justify-content: space-around;
     border-radius: 999px;
-    background: #212529;
+    background: #ffffff;
+    border: 1px solid #e9ecef;
+    box-shadow: 0 12px 28px rgba(33, 37, 41, 0.10);
     padding: 6px 8px;
   }
   .tab {
     position: relative; flex: 1; height: 52px;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    color: #adb5bd;
+    color: #868e96;
   }
-  .tab.active { color: #ffffff; }
+  .tab.active { color: #212529; }
   .tab-icon {
     width: 30px; height: 30px;
     display: flex; align-items: center; justify-content: center;
     border-radius: 50%;
   }
-  .tab-icon img { width: 19px; height: 19px; display: block; filter: brightness(0) invert(1); }
-  .tab.active .tab-icon { background: #ffffff; }
-  .tab.active .tab-icon img { filter: brightness(0); }
+  .tab-icon img { width: 19px; height: 19px; display: block; filter: brightness(0); opacity: 0.5; }
+  .tab.active .tab-icon { background: #212529; }
+  .tab.active .tab-icon img { filter: brightness(0) invert(1); opacity: 1; }
   .tab-label { font-size: 9px; font-weight: 500; margin-top: 1px; }
 
   /* ===== 底部弹层通用 ===== */

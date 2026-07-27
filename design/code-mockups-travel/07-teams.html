@@ -43,7 +43,7 @@
     font-size: 13px;
     font-weight: 600;
     color: #212529;
-    background: #fff;
+    background: #f5f6f7;
   }
   .status-icons { display: flex; align-items: center; gap: 5px; }
   .sig { display: flex; align-items: flex-end; gap: 2px; }
@@ -56,12 +56,12 @@
   .batt { width: 21px; height: 10px; border: 1px solid #212529; border-radius: 3px; position: relative; }
   .batt::after { content: ""; position: absolute; left: 1.5px; top: 1.5px; bottom: 1.5px; width: 11px; background: #212529; border-radius: 1px; }
 
-  /* ===== 导航栏 ===== */
+  /* ===== 导航栏：与页面底色一致，标题浮于背景，避免与白色卡片/按钮雷同 ===== */
   .navbar {
     height: 48px;
     display: flex;
     align-items: center;
-    background: #fff;
+    background: #f5f6f7;
     color: #212529;
     position: relative;
   }
@@ -70,7 +70,8 @@
     margin-left: 14px;
     display: flex; align-items: center; justify-content: center;
     flex: none;
-    background: #f5f6f7;
+    background: #ffffff;
+    border: 1px solid #e9ecef;
     border-radius: 50%;
   }
   .nav-back i {

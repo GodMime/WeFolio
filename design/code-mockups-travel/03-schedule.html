@@ -194,27 +194,29 @@
     display: flex; align-items: center; justify-content: center;
     color: #fff; font-size: 14px; font-weight: 600; border-radius: 999px; background: #212529;
   }
-  /* 底部 Tab：悬浮黑胶囊 */
+  /* 底部 Tab：悬浮白色胶囊，与黑色主按钮形态区分 */
   .tabbar {
     position: absolute; left: 16px; right: 16px; bottom: 16px; z-index: 10;
     height: 64px; display: flex; align-items: center; justify-content: space-around;
     padding: 6px 8px;
     border-radius: 999px;
-    background: #212529;
+    background: #ffffff;
+    border: 1px solid #e9ecef;
+    box-shadow: 0 12px 28px rgba(33, 37, 41, 0.10);
   }
   .tab {
     position: relative; width: 25%; height: 52px;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    color: #adb5bd;
+    color: #868e96;
   }
-  .tab.active { color: #fff; }
+  .tab.active { color: #212529; }
   .tab-icon-wrap {
     width: 34px; height: 26px; border-radius: 999px;
     display: flex; align-items: center; justify-content: center;
   }
-  .tab.active .tab-icon-wrap { background: #ffffff; }
-  .tab img { width: 20px; height: 20px; display: block; filter: brightness(0) invert(1); }
-  .tab.active img { filter: brightness(0); }
+  .tab.active .tab-icon-wrap { background: #212529; }
+  .tab img { width: 20px; height: 20px; display: block; filter: brightness(0); opacity: 0.5; }
+  .tab.active img { filter: brightness(0) invert(1); opacity: 1; }
   .tab-label { margin-top: 2px; font-size: 10px; line-height: 1.2; }
   /* 弹层 */
   .sheet-overlay {

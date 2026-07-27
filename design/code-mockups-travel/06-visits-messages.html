@@ -55,7 +55,7 @@
     height: 44px; flex: none;
     display: flex; align-items: center; justify-content: space-between;
     padding: 0 26px 0 30px;
-    background: #ffffff;
+    background: #f5f6f7;
     font-size: 14px; font-weight: 600; color: #212529;
   }
   .status-bar .s-icons { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 400; }
@@ -66,11 +66,11 @@
   .battery::before { content:''; position: absolute; left: 1.5px; top: 1.5px; bottom: 1.5px; width: 12px; background: #212529; border-radius: 1px; }
   .battery::after { content:''; position: absolute; right: -4px; top: 2.5px; width: 2px; height: 5px; background: #212529; border-radius: 0 1px 1px 0; }
 
-  /* 导航栏(components/navigation-bar) */
+  /* 导航栏(components/navigation-bar)：与页面底色一致，避免与白色卡片/按钮雷同 */
   .nav-bar {
     height: 44px; flex: none;
     display: flex; align-items: center;
-    background: #ffffff; color: #212529;
+    background: #f5f6f7; color: #212529;
   }
   .nav-back { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; }
   .nav-back::before {

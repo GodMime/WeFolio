@@ -38,16 +38,16 @@
   .statusbar {
     flex: none; height: 44px; display: flex; align-items: center;
     justify-content: space-between; padding: 8px 26px 0;
-    font-size: 13px; font-weight: 600; color: #212529; background: #ffffff;
+    font-size: 13px; font-weight: 600; color: #212529; background: #f5f6f7;
   }
   .statusbar .sicons { display: flex; align-items: center; gap: 6px; }
 
-  /* 导航栏 */
+  /* 导航栏：与页面底色一致，标题浮于背景，避免与白色卡片/按钮雷同 */
   .navbar {
     flex: none; height: 46px; position: relative;
     display: flex; align-items: center; justify-content: center;
     font-size: 17px; font-weight: 600; color: #212529;
-    background: #ffffff;
+    background: #f5f6f7;
   }
   .navbar .back {
     position: absolute; left: 22px; top: 50%;
@@ -157,25 +157,27 @@
   .create-action.primary { color: #ffffff; background: #212529; }
   .create-action.secondary { color: #212529; background: #e9ecef; }
 
-  /* 悬浮黑色胶囊 tabbar */
+  /* 悬浮白色胶囊 tabbar，与黑色主按钮形态区分 */
   .tabbar-wrap { flex: none; padding: 0 14px 14px; background: #f5f6f7; }
   .tabbar {
     height: 58px; display: flex; align-items: stretch;
-    border-radius: 999px; background: #212529;
+    border-radius: 999px; background: #ffffff;
+    border: 1px solid #e9ecef;
+    box-shadow: 0 12px 28px rgba(33, 37, 41, 0.10);
   }
   .tab {
     flex: 1; display: flex; flex-direction: column;
     align-items: center; justify-content: center; gap: 2px;
-    color: rgba(255,255,255,.5); font-size: 9px; font-weight: 500;
+    color: #868e96; font-size: 9px; font-weight: 500;
   }
-  .tab img { width: 19px; height: 19px; display: block; filter: brightness(0) invert(1); }
+  .tab img { width: 19px; height: 19px; display: block; filter: brightness(0); opacity: 0.5; }
   .tab .tab-ic {
     width: 34px; height: 26px; display: flex; align-items: center; justify-content: center;
     border-radius: 999px;
   }
-  .tab.on { color: #ffffff; }
-  .tab.on .tab-ic { background: #ffffff; }
-  .tab.on .tab-ic img { filter: brightness(0); }
+  .tab.on { color: #212529; }
+  .tab.on .tab-ic { background: #212529; }
+  .tab.on .tab-ic img { filter: brightness(0) invert(1); opacity: 1; }
 
   /* 底部弹层通用 */
   .mask { position: absolute; inset: 0; z-index: 5; background: rgba(0,0,0,.4); }
