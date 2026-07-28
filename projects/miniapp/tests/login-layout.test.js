@@ -110,6 +110,14 @@ test('login hero uses configured background image', () => {
   assert.match(loginWxml, /class="hero-image"/)
 })
 
+test('login hero title uses available width before wrapping', () => {
+  const heroTitleRule = readRule('.hero-title')
+
+  assert.match(heroTitleRule, /max-width:\s*100%/)
+  assert.match(heroTitleRule, /white-space:\s*normal/)
+  assert.doesNotMatch(heroTitleRule, /max-width:\s*520rpx/)
+})
+
 test('miniapp pages use system static asset urls', () => {
   const staticAssetConsumers = [loginWxml, indexJs, worksWxml, visitsWxml, indexWxss]
   const combinedStaticAssetConsumers = staticAssetConsumers.join('\n')
