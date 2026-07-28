@@ -6,6 +6,7 @@ const {
   DEFAULT_SLOT_COLOR,
   SCHEDULE_STATUS_OPTIONS,
   SLOT_COLOR_OPTIONS,
+  buildDefaultSlotEndTime,
   buildScheduleFieldCounters,
   buildScheduleItemPayload,
   buildSlotDefinitionFieldCounters,
@@ -607,9 +608,17 @@ Page({
 
   handleSlotTimeChange(event) {
     const field = event.currentTarget.dataset.field
-    this.setData({
-      [`slotForm.${field}`]: event.detail.value
-    })
+    const value = event.detail.value
+    const shouldAdjustEndTime = this.data.editingSlotId === null &&
+      field === 'startTime' &&
+      value > this.data.slotForm.endTime
+    const patch = {
+      [`slotForm.${field}`]: value
+    }
+    if (shouldAdjustEndTime) {
+      patch['slotForm.endTime'] = buildDefaultSlotEndTime(value)
+    }
+    this.setData(patch)
   },
 
   handleSlotColorTap(event) {

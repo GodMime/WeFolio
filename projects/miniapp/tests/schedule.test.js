@@ -4,6 +4,7 @@ const test = require('node:test')
 const {
   SCHEDULE_STATUS_OPTIONS,
   SLOT_COLOR_OPTIONS,
+  buildDefaultSlotEndTime,
   buildScheduleFieldCounters,
   buildScheduleItemPayload,
   buildSlotDefinitionFieldCounters,
@@ -249,6 +250,11 @@ test('builds and validates slot definition payloads', () => {
     endTime: '07:30',
     color: '#d98200'
   }).message, '开始时间必须早于结束时间')
+})
+
+test('builds slot end time two hours after start and caps it at the end of day', () => {
+  assert.equal(buildDefaultSlotEndTime('10:15'), '12:15')
+  assert.equal(buildDefaultSlotEndTime('22:30'), '23:59')
 })
 
 test('builds and validates schedule item payloads', () => {

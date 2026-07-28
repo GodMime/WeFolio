@@ -128,6 +128,63 @@ function createToggleEvent(id) {
   }
 }
 
+function createSlotTimeChangeEvent(field, value) {
+  return {
+    currentTarget: {
+      dataset: { field }
+    },
+    detail: { value }
+  }
+}
+
+test('new slot moves end time two hours after a later start time', (context) => {
+  const harness = loadSchedulePage(() => Promise.resolve({}))
+  context.after(harness.restore)
+  const { page } = harness
+  page.data.editingSlotId = null
+  page.data.slotForm = {
+    startTime: '07:30',
+    endTime: '09:30'
+  }
+
+  page.handleSlotTimeChange(createSlotTimeChangeEvent('startTime', '10:00'))
+
+  assert.equal(page.data.slotForm.startTime, '10:00')
+  assert.equal(page.data.slotForm.endTime, '12:00')
+})
+
+test('new slot keeps end time when start time is not later', (context) => {
+  const harness = loadSchedulePage(() => Promise.resolve({}))
+  context.after(harness.restore)
+  const { page } = harness
+  page.data.editingSlotId = null
+  page.data.slotForm = {
+    startTime: '07:30',
+    endTime: '09:30'
+  }
+
+  page.handleSlotTimeChange(createSlotTimeChangeEvent('startTime', '09:30'))
+
+  assert.equal(page.data.slotForm.startTime, '09:30')
+  assert.equal(page.data.slotForm.endTime, '09:30')
+})
+
+test('editing slot does not move end time after a later start time', (context) => {
+  const harness = loadSchedulePage(() => Promise.resolve({}))
+  context.after(harness.restore)
+  const { page } = harness
+  page.data.editingSlotId = 7
+  page.data.slotForm = {
+    startTime: '07:30',
+    endTime: '09:30'
+  }
+
+  page.handleSlotTimeChange(createSlotTimeChangeEvent('startTime', '10:00'))
+
+  assert.equal(page.data.slotForm.startTime, '10:00')
+  assert.equal(page.data.slotForm.endTime, '09:30')
+})
+
 test('slot toggle keeps button loading until the silent definition refresh completes', async (context) => {
   const requests = []
   const fakeRequest = (requestOptions) => {

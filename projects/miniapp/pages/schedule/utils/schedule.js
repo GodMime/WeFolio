@@ -52,6 +52,9 @@ const SCHEDULE_FIELD_LIMITS = {
 const COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const TIME_PATTERN = /^\d{2}:\d{2}$/
+const SLOT_DURATION_MINUTES = 2 * 60
+const MINUTES_PER_HOUR = 60
+const LAST_MINUTE_OF_DAY = 23 * MINUTES_PER_HOUR + 59
 const DAY_META_FIELDS = ['holidayText', 'festivalText', 'noteText', 'lunarText', 'metaText']
 
 function trimText(value) {
@@ -75,6 +78,15 @@ function normalizeColor(value) {
 function normalizeTime(value) {
   const time = trimText(value)
   return TIME_PATTERN.test(time) ? time : ''
+}
+
+function buildDefaultSlotEndTime(startTime) {
+  const [hour, minute] = normalizeTime(startTime).split(':').map(Number)
+  const endMinutes = Math.min(
+    hour * MINUTES_PER_HOUR + minute + SLOT_DURATION_MINUTES,
+    LAST_MINUTE_OF_DAY
+  )
+  return `${String(Math.floor(endMinutes / MINUTES_PER_HOUR)).padStart(2, '0')}:${String(endMinutes % MINUTES_PER_HOUR).padStart(2, '0')}`
 }
 
 function buildTimeRangeText(startTime, endTime) {
@@ -354,6 +366,7 @@ module.exports = {
   DEFAULT_SLOT_COLOR,
   SCHEDULE_STATUS_OPTIONS,
   SLOT_COLOR_OPTIONS,
+  buildDefaultSlotEndTime,
   buildScheduleFieldCounters,
   buildScheduleItemPayload,
   buildSlotDefinitionFieldCounters,
