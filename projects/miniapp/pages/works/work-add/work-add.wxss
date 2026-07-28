@@ -599,8 +599,7 @@
 
 .tag-option-list {
   max-height: 520rpx;
-  min-height: 0;
-  flex: 0 1 auto;
+  flex: none;
   overflow: hidden;
 }
 
@@ -637,7 +636,7 @@
 }
 
 .tag-option-name {
-  min-width: 0;
+  flex: none;
   max-width: 360rpx;
   overflow: hidden;
   color: inherit;

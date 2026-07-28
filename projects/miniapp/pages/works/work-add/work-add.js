@@ -4,6 +4,7 @@ const {
   applyUnifiedWorkTags,
   buildUnifiedWorkTagItems,
   buildUnifiedWorkTagNames,
+  buildWorkTagOptionListHeight,
   buildWorkTagPickerOptions,
   normalizeWorkTags
 } = require('../utils/works')
@@ -77,6 +78,7 @@ Page({
     tagLoading: false,
     tagErrorText: '',
     tagPickerTags: [],
+    tagOptionListHeight: 0,
     selectedUnifiedTagCount: 0,
     uploadOverallProgress: 0,
     uploadOverallText: '保存作品',
@@ -301,7 +303,8 @@ Page({
   async loadTagPickerTags() {
     this.setData({
       tagLoading: true,
-      tagErrorText: ''
+      tagErrorText: '',
+      tagOptionListHeight: 0
     })
     try {
       const response = await request({
@@ -310,6 +313,7 @@ Page({
       const tagPickerTags = buildWorkTagPickerOptions(normalizeWorkTags(response), this.data.unifiedTags)
       this.setData({
         tagPickerTags,
+        tagOptionListHeight: buildWorkTagOptionListHeight(tagPickerTags),
         selectedUnifiedTagCount: buildUnifiedWorkTagNames(tagPickerTags).length,
         tagLoading: false,
         tagErrorText: ''
@@ -318,13 +322,15 @@ Page({
       if (error && error.authRequired) {
         this.setData({
           tagLoading: false,
-          tagPickerVisible: false
+          tagPickerVisible: false,
+          tagOptionListHeight: 0
         })
         handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({
         tagLoading: false,
+        tagOptionListHeight: 0,
         tagErrorText: error && error.message ? error.message : '标签加载失败'
       })
     }

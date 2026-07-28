@@ -551,7 +551,7 @@ test('work add retry skips upload tickets for already ticketed files', async () 
   assert.equal(page.data.files[1].confirmedWorkId, 220)
 })
 
-test('work add loads tag picker options without count-based height state', async () => {
+test('work add gives loaded tag options an explicit Skyline list height', async () => {
   const fakeRequest = () => Promise.resolve({
     tags: [
       { id: 1, name: '户外仪式' },
@@ -564,6 +564,7 @@ test('work add loads tag picker options without count-based height state', async
   await page.loadTagPickerTags()
 
   assert.deepEqual(page.data.tagPickerTags.map((tag) => tag.name), ['户外仪式', '室内迎宾', '晚宴快剪'])
+  assert.equal(page.data.tagOptionListHeight, 224)
 })
 
 test('work add keeps video cover generation on backend first frame', async () => {

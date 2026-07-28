@@ -11,6 +11,7 @@ const {
   buildUnifiedWorkTagNames,
   buildWorkUpdatePayload,
   buildWorkTagDeleteBlockedMessage,
+  buildWorkTagOptionListHeight,
   buildWorkTagPickerOptions,
   createWorkTagForm,
   normalizeWorkDetail,
@@ -288,6 +289,20 @@ test('builds picker selection and applies unified tags to chosen files', () => {
       { id: 'b', tags: ['高端婚礼', '户外仪式'] }
     ]
   )
+})
+
+test('builds a non-zero bounded tag picker height for Skyline scroll view', () => {
+  assert.equal(buildWorkTagOptionListHeight([]), 0)
+  assert.equal(buildWorkTagOptionListHeight([{ id: 1, name: '户外仪式' }]), 80)
+  assert.equal(buildWorkTagOptionListHeight([
+    { id: 1, name: '户外仪式' },
+    { id: 2, name: '室内迎宾' },
+    { id: 3, name: '晚宴快剪' }
+  ]), 224)
+  assert.equal(buildWorkTagOptionListHeight(Array.from({ length: 10 }, (_, index) => ({
+    id: index + 1,
+    name: `标签${index + 1}`
+  }))), 520)
 })
 
 test('builds editable work tag options from all tags and current bindings', () => {

@@ -100,7 +100,7 @@
         <view class="tag-picker-retry" catchtap="handleRetryLoadTags" aria-role="button" aria-label="重新加载作品标签">重试</view>
       </view>
       <view wx:elif="{{tagPickerTags.length === 0}}" class="tag-picker-state">暂无作品标签</view>
-      <scroll-view wx:else class="tag-option-list" scroll-y type="list">
+      <scroll-view wx:else class="tag-option-list" style="height: {{tagOptionListHeight}}rpx;" scroll-y type="list">
         <view class="tag-option-list-content">
           <view
             wx:for="{{tagPickerTags}}"
