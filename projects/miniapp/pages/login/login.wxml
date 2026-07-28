@@ -34,7 +34,7 @@
             </view>
 
             <view class="login-form maintainer-form {{activeTab === 'maintainer' ? 'active' : 'inactive'}}">
-              <view class="form-row">
+              <view wx:if="{{precheckReady && phoneAuthorizationRequired}}" class="form-row">
                 <view class="field-heading">
                   <view class="field-label">推荐码</view>
                   <view class="field-limit">{{referralCode.length}}/16</view>

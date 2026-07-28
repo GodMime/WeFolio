@@ -334,14 +334,10 @@ test('precheck failure keeps phone authorization disabled and supports retry', (
   assert.match(loginWxml, /disabled="\{\{prechecking \|\| loading\}\}"/)
 })
 
-test('referral code is always shown in maintainer mode with a new-user-only hint', () => {
+test('referral code is shown only for an unbound WeChat identity after precheck', () => {
   assert.match(
     loginWxml,
-    /class="login-form maintainer-form[\s\S]*<view class="form-row">[\s\S]*bindinput="handleReferralInput"/
-  )
-  assert.doesNotMatch(
-    loginWxml,
-    /wx:if="\{\{precheckReady && phoneAuthorizationRequired\}\}"[^>]*class="form-row"/
+    /wx:if="\{\{precheckReady && phoneAuthorizationRequired\}\}"[^>]*class="form-row"[\s\S]*bindinput="handleReferralInput"/
   )
   assert.match(
     loginWxml,
