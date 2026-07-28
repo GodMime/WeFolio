@@ -22,6 +22,14 @@ const styleFiles = [
 ]
 const FORMAL_PORTFOLIO_STYLE_FILE = 'pages/portfolios/portfolios.wxss'
 
+test('mock portfolio scroll viewport occupies the remaining page height on device', () => {
+  const wxss = read('pages/mock/styles/portfolios.wxss')
+  const scrollRule = readRule(wxss, '.portfolio-scroll')
+
+  assert.match(scrollRule, /flex:\s*1(?:\s+1\s+0)?/)
+  assert.match(scrollRule, /min-height:\s*0/)
+})
+
 test('portfolio list matches the Travel design hierarchy and measurements', () => {
   styleFiles.forEach((styleFile) => {
     const wxss = read(styleFile)

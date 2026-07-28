@@ -6,6 +6,11 @@
   background: #f5f6f7;
 }
 
+.portfolio-scroll {
+  flex: 1;
+  min-height: 0;
+}
+
 .portfolio-content {
   height: 100%;
   padding: 24rpx 32rpx calc(140rpx + env(safe-area-inset-bottom));
