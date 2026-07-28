@@ -75,6 +75,23 @@ function normalizeColor(value) {
   return COLOR_PATTERN.test(color) ? color : DEFAULT_SLOT_COLOR
 }
 
+function buildSlotColorOptions(slotDefinitions = [], editingSlotId = null) {
+  const normalizedEditingId = normalizeId(editingSlotId)
+  const usedColors = new Set(
+    slotDefinitions
+      .filter((item) => !normalizedEditingId || normalizeId(item.id) !== normalizedEditingId)
+      .map((item) => trimText(item.color).toLowerCase())
+  )
+  return SLOT_COLOR_OPTIONS.map((item) => Object.assign({}, item, {
+    disabled: usedColors.has(item.color)
+  }))
+}
+
+function findFirstAvailableSlotColor(options = []) {
+  const available = options.find((item) => !item.disabled)
+  return available ? available.color : ''
+}
+
 function normalizeTime(value) {
   const time = trimText(value)
   return TIME_PATTERN.test(time) ? time : ''
@@ -369,8 +386,10 @@ module.exports = {
   buildDefaultSlotEndTime,
   buildScheduleFieldCounters,
   buildScheduleItemPayload,
+  buildSlotColorOptions,
   buildSlotDefinitionFieldCounters,
   buildSlotDefinitionPayload,
+  findFirstAvailableSlotColor,
   markMonthSelectedDate,
   normalizeMonthOverview,
   normalizeScheduleOverview,

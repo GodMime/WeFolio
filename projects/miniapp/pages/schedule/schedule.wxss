@@ -1110,6 +1110,10 @@
   background: #ffffff;
 }
 
+.slot-color-choice.disabled {
+  opacity: 0.36;
+}
+
 .slot-color-swatch {
   width: 20rpx;
   height: 20rpx;

@@ -127,10 +127,11 @@ public class MineScheduleService {
         applySlotDefinitionRequest(entity, request, true);
         entity.setUserId(userId);
         entity.setIsSystemDefault(0);
+        ensureSlotColorAvailable(entity);
         try {
             slotDefinitionEntityMapper.insert(entity);
         } catch (DuplicateKeyException e) {
-            throw new BusinessException("档位名称已存在", e);
+            throw mapSlotDefinitionDuplicateKey(e);
         }
         if (entity.getId() == null) {
             throw new BusinessException("档位定义保存失败，请重试");
@@ -155,13 +156,14 @@ public class MineScheduleService {
             throw new BusinessException("该档位启用中，请先停用后再编辑");
         }
         applySlotDefinitionRequest(entity, request, false);
+        ensureSlotColorAvailable(entity);
         try {
             int updated = slotDefinitionEntityMapper.updateById(entity);
             if (updated <= 0) {
                 throw new BusinessException("档位定义保存失败，请重试");
             }
         } catch (DuplicateKeyException e) {
-            throw new BusinessException("档位名称已存在", e);
+            throw mapSlotDefinitionDuplicateKey(e);
         }
         syncFutureUnlockedScheduleSnapshots(entity);
         return buildSlotDefinitionItem(entity);
@@ -358,6 +360,40 @@ public class MineScheduleService {
             return;
         }
         entity.setStatus(parseSlotStatus(request.getStatus()).getCode());
+    }
+
+    /**
+     * 校验同一用户的未删除档位是否已占用目标颜色。
+     *
+     * @param entity 待保存档位定义
+     */
+    private void ensureSlotColorAvailable(SlotDefinitionEntity entity) {
+        long conflicts = slotDefinitionEntityMapper.countColorConflicts(
+                entity.getUserId(),
+                entity.getColor(),
+                entity.getId()
+        );
+        if (conflicts > 0) {
+            throw new BusinessException(MineScheduleMessage.SLOT_COLOR_DUPLICATE_MESSAGE);
+        }
+    }
+
+    /**
+     * 将档位定义唯一键冲突转换为稳定业务提示。
+     *
+     * @param exception 数据库唯一键异常
+     * @return 业务异常
+     */
+    private BusinessException mapSlotDefinitionDuplicateKey(DuplicateKeyException exception) {
+        Throwable current = exception;
+        while (current != null) {
+            String message = current.getMessage();
+            if (message != null && message.contains(MineScheduleMessage.SLOT_COLOR_UNIQUE_INDEX)) {
+                return new BusinessException(MineScheduleMessage.SLOT_COLOR_DUPLICATE_MESSAGE, exception);
+            }
+            current = current.getCause();
+        }
+        return new BusinessException(MineScheduleMessage.SLOT_NAME_DUPLICATE_MESSAGE, exception);
     }
 
     /**

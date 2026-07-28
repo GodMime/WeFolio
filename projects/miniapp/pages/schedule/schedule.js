@@ -5,12 +5,13 @@ const {
   DEFAULT_SCHEDULE_STATUS,
   DEFAULT_SLOT_COLOR,
   SCHEDULE_STATUS_OPTIONS,
-  SLOT_COLOR_OPTIONS,
   buildDefaultSlotEndTime,
   buildScheduleFieldCounters,
   buildScheduleItemPayload,
+  buildSlotColorOptions,
   buildSlotDefinitionFieldCounters,
   buildSlotDefinitionPayload,
+  findFirstAvailableSlotColor,
   markMonthSelectedDate,
   normalizeMonthOverview,
   normalizeScheduleOverview,
@@ -70,12 +71,12 @@ function todayState() {
   }
 }
 
-function buildDefaultSlotForm() {
+function buildDefaultSlotForm(color = DEFAULT_SLOT_COLOR) {
   return {
     name: '',
     startTime: '07:30',
     endTime: '09:30',
-    color: DEFAULT_SLOT_COLOR,
+    color,
     status: 'ACTIVE'
   }
 }
@@ -131,7 +132,7 @@ Page({
       selectedDate: { date: INITIAL_TODAY_STATE.selectedDate }
     }),
     weekdays: ['日', '一', '二', '三', '四', '五', '六'],
-    slotColorOptions: SLOT_COLOR_OPTIONS,
+    slotColorOptions: buildSlotColorOptions(),
     statusOptions: SCHEDULE_STATUS_OPTIONS,
     slotStatusOptions: [
       { value: 'ACTIVE', text: '启用', tone: 'teal' },
@@ -468,11 +469,21 @@ Page({
   },
 
   handleSlotAdd() {
-    const slotForm = buildDefaultSlotForm()
+    const slotColorOptions = buildSlotColorOptions(this.data.overview.slotDefinitions)
+    const availableColor = findFirstAvailableSlotColor(slotColorOptions)
+    if (!availableColor) {
+      wx.showToast({
+        title: '档位颜色已全部使用',
+        icon: 'none'
+      })
+      return
+    }
+    const slotForm = buildDefaultSlotForm(availableColor)
     this.setData({
       slotFormVisible: true,
       slotSheetTitle: '新增档位定义',
       editingSlotId: null,
+      slotColorOptions,
       slotForm,
       slotFieldCounters: buildSlotDefinitionFieldCounters(slotForm)
     })
@@ -498,10 +509,12 @@ Page({
       color: slot.color,
       status: slot.status
     }
+    const slotColorOptions = buildSlotColorOptions(this.data.overview.slotDefinitions, slot.id)
     this.setData({
       slotFormVisible: true,
       slotSheetTitle: '编辑档位定义',
       editingSlotId: slot.id,
+      slotColorOptions,
       slotForm,
       slotFieldCounters: buildSlotDefinitionFieldCounters(slotForm)
     })
@@ -622,6 +635,9 @@ Page({
   },
 
   handleSlotColorTap(event) {
+    if (event.currentTarget.dataset.disabled) {
+      return
+    }
     this.setData({
       'slotForm.color': event.currentTarget.dataset.color
     })

@@ -7,8 +7,10 @@ const {
   buildDefaultSlotEndTime,
   buildScheduleFieldCounters,
   buildScheduleItemPayload,
+  buildSlotColorOptions,
   buildSlotDefinitionFieldCounters,
   buildSlotDefinitionPayload,
+  findFirstAvailableSlotColor,
   markMonthSelectedDate,
   normalizeMonthOverview,
   normalizeScheduleOverview,
@@ -334,4 +336,29 @@ test('exposes schedule form options', () => {
   ])
   assert.equal(SLOT_COLOR_OPTIONS[0].swatchStyle, 'background: #c28f4b;')
   assert.equal('choiceStyle' in SLOT_COLOR_OPTIONS[0], false)
+})
+
+test('marks used slot colors unavailable and excludes the edited slot itself', () => {
+  const definitions = [
+    { id: 1, color: '#C28F4B', status: 'DISABLED' },
+    { id: 2, color: '#6f8cb5', status: 'ACTIVE' }
+  ]
+
+  const createOptions = buildSlotColorOptions(definitions)
+  assert.equal(createOptions.find((item) => item.color === '#c28f4b').disabled, true)
+  assert.equal(createOptions.find((item) => item.color === '#6f8cb5').disabled, true)
+  assert.equal(findFirstAvailableSlotColor(createOptions), '#5f999b')
+
+  const editOptions = buildSlotColorOptions(definitions, 1)
+  assert.equal(editOptions.find((item) => item.color === '#c28f4b').disabled, false)
+  assert.equal(editOptions.find((item) => item.color === '#6f8cb5').disabled, true)
+})
+
+test('returns no default color when all slot colors are used', () => {
+  const definitions = SLOT_COLOR_OPTIONS.map((item, index) => ({
+    id: index + 1,
+    color: item.color
+  }))
+
+  assert.equal(findFirstAvailableSlotColor(buildSlotColorOptions(definitions)), '')
 })

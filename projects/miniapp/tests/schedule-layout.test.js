@@ -94,6 +94,7 @@ test('schedule page contains definition and maintenance views wired to backend A
   const slotColorGridRule = readRule(pageWxss, '.slot-color-grid')
   const slotColorChoiceRule = readRule(pageWxss, '.slot-color-choice')
   const slotColorChoiceActiveRule = readRule(pageWxss, '.slot-color-choice.active')
+  const slotColorChoiceDisabledRule = readRule(pageWxss, '.slot-color-choice.disabled')
   const segmentedMarkup = pageWxml.match(/<view class="schedule-segmented">([\s\S]*?)<\/view>\s*<block wx:if=/)[1]
   const definitionListMarkup = pageWxml.match(/<view class="panel definition-list-panel">([\s\S]*?)<\/view>\s*<\/block>\s*<block wx:else>/)[1]
   const scheduleColorCardMarkup = pageWxml.match(/<view class="panel schedule-color-card">([\s\S]*?)<view class="calendar-group">/)[1]
@@ -115,7 +116,7 @@ test('schedule page contains definition and maintenance views wired to backend A
   assert.doesNotMatch(pageWxml, /class="choice \{\{slotForm\.status === item\.value \? 'active' : ''\}\}"/)
   assert.doesNotMatch(pageWxml, /<view class="field-label standalone">启用状态<\/view>/)
   assert.match(pageWxml, /class="slot-color-grid"/)
-  assert.match(pageWxml, /class="slot-color-choice \{\{slotForm\.color === item\.color \? 'active' : ''\}\}"/)
+  assert.match(pageWxml, /class="slot-color-choice \{\{item\.disabled \? 'disabled' : ''\}\} \{\{slotForm\.color === item\.color \? 'active' : ''\}\}"/)
   assert.doesNotMatch(pageWxml, /style="\{\{item\.choiceStyle\}\}"/)
   assert.match(pageWxml, /style="\{\{item\.swatchStyle\}\}"/)
   assert.match(pageWxml, /class="slot-color-name">\{\{item\.name\}\}<\/text>/)
@@ -176,6 +177,13 @@ test('schedule page contains definition and maintenance views wired to backend A
   assert.match(pageJs, /scheduleFieldCounters:\s*buildScheduleFieldCounters/)
   assert.match(pageJs, /togglingSlotId:\s*null/)
   assert.match(pageJs, /handleSlotEdit\(event\)[\s\S]*if\s*\(slot\.enabled\)[\s\S]*title:\s*'停用后才可编辑'[\s\S]*return[\s\S]*slotFormVisible:\s*true/)
+  assert.match(pageJs, /handleSlotAdd\(\)[\s\S]*buildSlotColorOptions\(this\.data\.overview\.slotDefinitions\)/)
+  assert.match(pageJs, /title:\s*'档位颜色已全部使用'/)
+  assert.match(pageJs, /handleSlotEdit\(event\)[\s\S]*buildSlotColorOptions\(this\.data\.overview\.slotDefinitions,\s*slot\.id\)/)
+  assert.match(pageJs, /handleSlotColorTap\(event\)[\s\S]*dataset\.disabled[\s\S]*return/)
+  assert.match(pageWxml, /item\.disabled \? 'disabled' : ''/)
+  assert.match(pageWxml, /data-disabled="\{\{item\.disabled\}\}"/)
+  assert.match(pageWxml, /aria-disabled="\{\{item\.disabled\}\}"/)
   assert.match(pageJs, /title:\s*'无法删除'/)
   assert.match(pageJs, /handleMaintainDate\(\)[\s\S]*scheduleFormVisible:\s*true/)
   assert.match(pageJs, /handleScheduleTap\(event\)[\s\S]*scheduleFormVisible:\s*true/)
@@ -325,6 +333,7 @@ test('schedule page contains definition and maintenance views wired to backend A
   assert.match(slotColorChoiceRule, /background:\s*#f3f5f6/)
   assert.match(slotColorChoiceActiveRule, /color:\s*#1e2125/)
   assert.match(slotColorChoiceActiveRule, /border-color:\s*#1e2125/)
+  assert.match(slotColorChoiceDisabledRule, /opacity:/)
   assert.match(slotColorChoiceActiveRule, /background:\s*#ffffff/)
   assert.doesNotMatch(slotColorChoiceActiveRule, /box-shadow:/)
   assert.match(sheetOverlayRule, /position:\s*fixed/)

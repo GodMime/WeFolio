@@ -290,11 +290,13 @@
         <view
           wx:for="{{slotColorOptions}}"
           wx:key="color"
-          class="slot-color-choice {{slotForm.color === item.color ? 'active' : ''}}"
+          class="slot-color-choice {{item.disabled ? 'disabled' : ''}} {{slotForm.color === item.color ? 'active' : ''}}"
           data-color="{{item.color}}"
+          data-disabled="{{item.disabled}}"
           bindtap="handleSlotColorTap"
           aria-role="button"
           aria-label="选择{{item.name}}档位颜色"
+          aria-disabled="{{item.disabled}}"
         >
           <view class="slot-color-swatch" style="{{item.swatchStyle}}"></view>
           <text class="slot-color-name">{{item.name}}</text>

@@ -21,6 +21,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DuplicateKeyException;
 
 import java.lang.reflect.Field;
 import java.nio.file.Files;
@@ -175,6 +176,50 @@ class MineScheduleServiceTest {
         assertThat(item.getStatusText()).isEqualTo("启用");
     }
 
+    /**
+     * 档位定义新增 — 停用档位仍占用颜色，且颜色需按标准化值校验。
+     */
+    @Test
+    void createSlotDefinitionRejectsColorUsedByDisabledDefinition() {
+        ScheduleSlotDefinitionRequest request = slotDefinitionRequest("午宴档", "#C28F4B");
+        when(slotDefinitionEntityMapper.countColorConflicts(7L, "#c28f4b", null)).thenReturn(1L);
+
+        assertThatThrownBy(() -> service().createSlotDefinition(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("档位颜色已被使用，请选择其他颜色");
+        verify(slotDefinitionEntityMapper, never()).insert(any(SlotDefinitionEntity.class));
+    }
+
+    /**
+     * 档位定义新增 — 并发写入触发颜色唯一索引时保持颜色冲突文案。
+     */
+    @Test
+    void createSlotDefinitionMapsColorUniqueIndexConflict() {
+        ScheduleSlotDefinitionRequest request = slotDefinitionRequest("午宴档", "#c28f4b");
+        when(slotDefinitionEntityMapper.insert(any(SlotDefinitionEntity.class)))
+                .thenThrow(new DuplicateKeyException(
+                        "Duplicate entry for key 'uk_slot_user_color_deleted'"));
+
+        assertThatThrownBy(() -> service().createSlotDefinition(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("档位颜色已被使用，请选择其他颜色");
+    }
+
+    /**
+     * 档位定义新增 — 其他唯一索引冲突继续保持原名称重复文案。
+     */
+    @Test
+    void createSlotDefinitionKeepsNameDuplicateMessageForOtherUniqueIndex() {
+        ScheduleSlotDefinitionRequest request = slotDefinitionRequest("午宴档", "#c28f4b");
+        when(slotDefinitionEntityMapper.insert(any(SlotDefinitionEntity.class)))
+                .thenThrow(new DuplicateKeyException(
+                        "Duplicate entry for key 'uk_slot_user_name_deleted'"));
+
+        assertThatThrownBy(() -> service().createSlotDefinition(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("档位名称已存在");
+    }
+
     @Test
     void updateSlotDefinitionRejectsDefinitionsOutsideCurrentUser() {
         when(slotDefinitionEntityMapper.selectById(44L)).thenReturn(slotDefinition(44L, 8L, "迎亲档"));
@@ -232,6 +277,45 @@ class MineScheduleServiceTest {
         assertThat(captor.getValue().getEndTimeSnapshot()).isEqualTo(LocalTime.of(8, 30));
         assertThat(captor.getValue().getColorSnapshot()).isEqualTo("#0f8ea8");
         assertThat(item.getName()).isEqualTo("早妆档");
+    }
+
+    /**
+     * 档位定义编辑 — 保留当前档位自身颜色时允许保存。
+     */
+    @Test
+    void updateSlotDefinitionAllowsKeepingItsOwnColor() {
+        SlotDefinitionEntity definition = slotDefinition(1L, 7L, "迎亲档");
+        definition.setStatus(SlotDefinitionStatusDict.DISABLED.getCode());
+        definition.setColor("#c28f4b");
+        when(slotDefinitionEntityMapper.selectById(1L)).thenReturn(definition);
+        when(slotDefinitionEntityMapper.countColorConflicts(7L, "#c28f4b", 1L)).thenReturn(0L);
+        when(slotDefinitionEntityMapper.updateById(any(SlotDefinitionEntity.class))).thenReturn(1);
+
+        ScheduleSlotDefinitionRequest request = slotDefinitionRequest("迎亲档", "#C28F4B");
+        request.setStatus(SlotDefinitionStatusDict.DISABLED.getCode());
+        MineScheduleResponse.SlotDefinitionItem item = service().updateSlotDefinition(1L, request);
+
+        assertThat(item.getColor()).isEqualTo("#c28f4b");
+        verify(slotDefinitionEntityMapper).updateById(definition);
+    }
+
+    /**
+     * 档位定义编辑 — 其他未删除档位已占用目标颜色时拒绝保存。
+     */
+    @Test
+    void updateSlotDefinitionRejectsColorUsedByAnotherDefinition() {
+        SlotDefinitionEntity definition = slotDefinition(1L, 7L, "迎亲档");
+        definition.setStatus(SlotDefinitionStatusDict.DISABLED.getCode());
+        when(slotDefinitionEntityMapper.selectById(1L)).thenReturn(definition);
+        when(slotDefinitionEntityMapper.countColorConflicts(7L, "#c28f4b", 1L)).thenReturn(1L);
+
+        ScheduleSlotDefinitionRequest request = slotDefinitionRequest("迎亲档", "#C28F4B");
+        request.setStatus(SlotDefinitionStatusDict.DISABLED.getCode());
+        assertThatThrownBy(() -> service().updateSlotDefinition(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("档位颜色已被使用，请选择其他颜色");
+        verify(slotDefinitionEntityMapper, never()).updateById(any(SlotDefinitionEntity.class));
+        verify(scheduleEntityMapper, never()).update(any(ScheduleEntity.class), any(Wrapper.class));
     }
 
     @Test
@@ -598,6 +682,22 @@ class MineScheduleServiceTest {
         request.setScheduleDate("2026-06-24");
         request.setSlotDefinitionId(slotDefinitionId);
         request.setStatus(ScheduleStatusDict.TENTATIVE.getCode());
+        return request;
+    }
+
+    /**
+     * 构建档位定义保存请求。
+     *
+     * @param name 档位名称
+     * @param color 档位颜色
+     * @return 档位定义保存请求
+     */
+    private ScheduleSlotDefinitionRequest slotDefinitionRequest(String name, String color) {
+        ScheduleSlotDefinitionRequest request = new ScheduleSlotDefinitionRequest();
+        request.setName(name);
+        request.setStartTime("10:00");
+        request.setEndTime("12:00");
+        request.setColor(color);
         return request;
     }
 }

@@ -258,7 +258,7 @@ erDiagram
 
 业务字段：`user_id`、`name`、`start_time`、`end_time`、`color`、`is_system_default`、`status`。
 
-索引与约束：`uk_slot_user_name_deleted(user_id, name, deleted)`、`idx_slot_user_status_start_time(user_id, status, start_time, id)`；`start_time < end_time`。
+索引与约束：`uk_slot_user_name_deleted(user_id, name, deleted)`、`uk_slot_user_color_deleted(user_id, color, deleted)`、`idx_slot_user_status_start_time(user_id, status, start_time, id)`；`start_time < end_time`。颜色唯一索引用于约束同一用户所有未删除档位定义的展示颜色唯一，并允许逻辑删除后复用颜色。
 
 ### 7.10 `wf_schedule`
 
