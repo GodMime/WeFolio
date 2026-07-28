@@ -594,11 +594,12 @@ test('portfolio work sections render fixed title, all tags, play badge, and vide
 test('single work inline videos fill their frame across production and mock previews', () => {
   const productionWxml = readExisting('pages/portfolios/components/single-work/single-work.wxml')
   const mockPreviewWxml = readExisting('pages/mock/portfolio-standard-preview/portfolio-standard-preview.wxml')
+  const mockRendererWxml = readExisting('components/mock/portfolio-renderer/portfolio-renderer.wxml')
   const inlineVideoPattern = /<video[\s\S]*?class="single-work-video"[\s\S]*?object-fit="cover"[\s\S]*?<\/video>/
 
-  ;[productionWxml, mockPreviewWxml].forEach((wxml) => {
-    assert.match(wxml, inlineVideoPattern)
-  })
+  assert.match(productionWxml, inlineVideoPattern)
+  assert.match(mockPreviewWxml, /<mock-portfolio-renderer[\s\S]*active-single-work-video-key="\{\{activeSingleWorkVideoKey\}\}"/)
+  assert.match(mockRendererWxml, inlineVideoPattern)
 })
 
 test('preview video overlay renders in root portal like visitor page', () => {

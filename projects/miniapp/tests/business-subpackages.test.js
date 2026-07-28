@@ -177,6 +177,32 @@ test('mock style imports resolve without crossing into another business subpacka
   }
 })
 
+test('mock custom components stay in the main package or mock subpackage', () => {
+  const mockRoot = path.join(MINIAPP_ROOT, 'pages/mock')
+
+  for (const jsonPath of listFiles(mockRoot, '.json')) {
+    const pageConfig = JSON.parse(fs.readFileSync(jsonPath, 'utf8'))
+    const componentPaths = Object.values(pageConfig.usingComponents || {})
+
+    for (const componentPath of componentPaths) {
+      const resolvedPath = componentPath.startsWith('/')
+        ? path.join(MINIAPP_ROOT, componentPath.slice(1))
+        : path.resolve(path.dirname(jsonPath), componentPath)
+      for (const businessRoot of BUSINESS_SUBPACKAGE_ROOTS) {
+        const relativeToBusinessRoot = path.relative(businessRoot, resolvedPath)
+        const isInsideBusinessRoot = relativeToBusinessRoot === '' || (
+          !relativeToBusinessRoot.startsWith('..') && !path.isAbsolute(relativeToBusinessRoot)
+        )
+        assert.equal(
+          isInsideBusinessRoot,
+          false,
+          `${path.relative(MINIAPP_ROOT, jsonPath)} crosses into ${path.relative(MINIAPP_ROOT, businessRoot)}`
+        )
+      }
+    }
+  }
+})
+
 test('subpackage pages keep business-only JavaScript out of the main package', () => {
   const appJson = readJson('app.json')
   const packagesByName = Object.fromEntries(

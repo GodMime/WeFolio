@@ -19,7 +19,11 @@ const MOCK_PAGE_PATHS = [
 const MOCK_PAGE_SOURCE_FILES = MOCK_PAGE_PATHS.flatMap((pagePath) => [
   `${pagePath}.js`,
   `${pagePath}.wxml`
-]).concat('pages/mock/utils/mock-experience.js')
+]).concat([
+  'pages/mock/utils/mock-experience.js',
+  'components/mock/portfolio-renderer/portfolio-renderer.js',
+  'components/mock/portfolio-renderer/portfolio-renderer.wxml'
+])
 const MOCK_STYLE_FILES = [
   'pages/mock/common.wxss',
   'pages/mock/styles/index.wxss',
@@ -624,13 +628,15 @@ test('mock singular work persists through local draft and preview without networ
 test('mock singular work editor and preview expose title switch, width-fix image, and inline video', () => {
   const editWxml = read('pages/mock/portfolio-standard-edit/portfolio-standard-edit.wxml')
   const previewWxml = read('pages/mock/portfolio-standard-preview/portfolio-standard-preview.wxml')
+  const rendererWxml = read('components/mock/portfolio-renderer/portfolio-renderer.wxml')
 
   assert.match(editWxml, /selectedComponentType === 'SINGLE_WORK'/)
   assert.match(editWxml, /bindchange="handleSingleWorkShowTitleChange"/)
-  assert.match(previewWxml, /item\.componentType === 'SINGLE_WORK'/)
-  assert.match(previewWxml, /class="single-work-image"[\s\S]*mode="widthFix"/)
-  assert.match(previewWxml, /id="singleWorkVideo-\{\{item\.componentKey\}\}"/)
-  assert.match(previewWxml, /activeSingleWorkVideoKey === item\.componentKey/)
+  assert.match(previewWxml, /<mock-portfolio-renderer[\s\S]*active-single-work-video-key="\{\{activeSingleWorkVideoKey\}\}"/)
+  assert.match(rendererWxml, /component\.componentType === 'SINGLE_WORK'/)
+  assert.match(rendererWxml, /class="single-work-image"[\s\S]*mode="widthFix"/)
+  assert.match(rendererWxml, /id="singleWorkVideo-\{\{component\.componentKey\}\}"/)
+  assert.match(rendererWxml, /activeSingleWorkVideoKey === component\.componentKey/)
 })
 
 test('mock standard portfolio renders complete component json in fixed order', () => {
@@ -652,6 +658,76 @@ test('mock standard portfolio renders complete component json in fixed order', (
   assert.equal(portfolio.renderData.components[2].groups[0].works.length, 7)
 })
 
+test('mock personal portfolio preview uses its own isolated renderer without editor labels', () => {
+  const previewJson = readJson('pages/mock/portfolio-standard-preview/portfolio-standard-preview.json')
+  const previewWxml = read('pages/mock/portfolio-standard-preview/portfolio-standard-preview.wxml')
+  const rendererWxml = read('components/mock/portfolio-renderer/portfolio-renderer.wxml')
+  const rendererWxss = read('components/mock/portfolio-renderer/portfolio-renderer.wxss')
+
+  assert.equal(previewJson.usingComponents['mock-portfolio-renderer'], '/components/mock/portfolio-renderer/portfolio-renderer')
+  assert.equal(Object.values(previewJson.usingComponents).some((componentPath) => componentPath.startsWith('/pages/portfolios/')), false)
+  assert.match(previewWxml, /<mock-portfolio-renderer[\s\S]*component="\{\{item\}\}"[\s\S]*bindworktap="handleWorkTap"/)
+  assert.match(rendererWxml, /class="profile-avatar"[\s\S]*src="\{\{component\.profile\.avatarUrl\}\}"/)
+  assert.match(rendererWxml, /class="work-grid"[\s\S]*wx:for="\{\{component\.activeGroup\.works\}\}"/)
+  assert.match(rendererWxml, /class="[^"]*contact-entry-button[^"]*"[\s\S]*component\.contactForm\.title/)
+  assert.doesNotMatch(rendererWxml, />个人资料</)
+  assert.doesNotMatch(rendererWxml, />双列作品列表</)
+  assert.match(rendererWxss, /\.profile-avatar\s*\{[\s\S]*width:\s*132rpx;[\s\S]*height:\s*132rpx;[\s\S]*border-radius:\s*50%;/)
+  assert.match(rendererWxss, /\.grid-card\s*\{[\s\S]*width:\s*50%;/)
+  assert.match(rendererWxss, /\.contact-entry-button\s*\{[\s\S]*border-radius:\s*999rpx;/)
+})
+
+test('mock preview handles display component events locally without network calls', () => {
+  let networkCalls = 0
+  const previews = []
+  const toasts = []
+  const wxMock = {
+    getStorageSync() {
+      return null
+    },
+    previewImage(options) {
+      previews.push(options)
+    },
+    showToast(options) {
+      toasts.push(options)
+    },
+    createVideoContext() {
+      return { pause() {} }
+    },
+    request() {
+      networkCalls += 1
+    }
+  }
+  global.wx = wxMock
+  try {
+    const page = loadMockPage('pages/mock/portfolio-standard-preview/portfolio-standard-preview.js', wxMock)
+    const grid = page.data.portfolio.components.find((item) => item.componentType === 'WORK_GRID')
+    const work = grid.activeGroup.works[0]
+
+    page.handleDisplayTagTap({
+      detail: {
+        componentKey: grid.componentKey,
+        groupKey: grid.displayTags[0].groupKey
+      }
+    })
+    page.handleWorkTap({
+      detail: {
+        mediaType: 'IMAGE',
+        mediaUrl: work.previewUrl,
+        coverUrl: work.thumbnailUrl,
+        title: work.title
+      }
+    })
+    page.handleSubmitContact()
+  } finally {
+    delete global.wx
+  }
+
+  assert.equal(previews.length, 1)
+  assert.deepEqual(toasts.at(-1), { title: MOCK_LOGIN_REQUIRED_MESSAGE, icon: 'none' })
+  assert.equal(networkCalls, 0)
+})
+
 test('mock page markup exposes required registration prompts and navigation actions', () => {
   const mineWxml = read('pages/mock/index/index.wxml')
   const mineJs = read('pages/mock/index/index.js')
@@ -663,6 +739,7 @@ test('mock page markup exposes required registration prompts and navigation acti
   const editWxml = read('pages/mock/portfolio-standard-edit/portfolio-standard-edit.wxml')
   const editJs = read('pages/mock/portfolio-standard-edit/portfolio-standard-edit.js')
   const previewWxml = read('pages/mock/portfolio-standard-preview/portfolio-standard-preview.wxml')
+  const rendererWxml = read('components/mock/portfolio-renderer/portfolio-renderer.wxml')
 
   assert.match(mineWxml, /返回登录页/)
   assert.match(mineJs, /url:\s*'\/pages\/login\/login'/)
@@ -680,11 +757,12 @@ test('mock page markup exposes required registration prompts and navigation acti
   assert.match(editWxml, /发布/)
   assert.match(editWxml, /预览/)
   assert.match(editJs, /saveMockPortfolioDraft/)
-  assert.match(previewWxml, /轮播图/)
-  assert.match(previewWxml, /个人资料/)
-  assert.match(previewWxml, /双列作品列表/)
-  assert.match(previewWxml, /档期查询/)
-  assert.match(previewWxml, /预留联系信息/)
+  assert.match(previewWxml, /<portfolio-carousel/)
+  assert.match(previewWxml, /<mock-portfolio-renderer/)
+  assert.match(rendererWxml, /component\.componentType === 'PROFILE'/)
+  assert.match(rendererWxml, /component\.componentType === 'WORK_GRID'/)
+  assert.match(rendererWxml, /档期查询/)
+  assert.match(rendererWxml, /component\.componentType === 'CONTACT_FORM'/)
 })
 
 test('mock preview video overlay renders in root portal like production preview', () => {
@@ -701,15 +779,17 @@ test('mock preview video overlay renders in root portal like production preview'
 
 test('mock portfolio preview keeps personal tags in the shared chromatic pill language', () => {
   const previewWxml = read('pages/mock/portfolio-standard-preview/portfolio-standard-preview.wxml')
-  const previewWxss = read('pages/mock/portfolio-standard-preview/portfolio-standard-preview.wxss')
+  const rendererWxml = read('components/mock/portfolio-renderer/portfolio-renderer.wxml')
+  const rendererWxss = read('components/mock/portfolio-renderer/portfolio-renderer.wxss')
 
+  assert.match(previewWxml, /<mock-portfolio-renderer[\s\S]*component="\{\{item\}\}"/)
   assert.match(
-    previewWxml,
+    rendererWxml,
     /class="profile-tag"[\s\S]*color: \{\{tag\.color \|\| '#0f766e'\}\};[\s\S]*border-color: \{\{tag\.color \|\| '#0f766e'\}\};/
   )
-  assert.match(previewWxml, /class="profile-tag-dot"[\s\S]*background: \{\{tag\.color \|\| '#0f766e'\}\};/)
-  assert.match(previewWxss, /\.profile-tag\s*\{[\s\S]*background:\s*#ffffff;/)
-  assert.match(previewWxss, /\.profile-tag-dot\s*\{[\s\S]*width:\s*12rpx;[\s\S]*height:\s*12rpx;/)
+  assert.match(rendererWxml, /class="profile-tag-dot"[\s\S]*background: \{\{tag\.color \|\| '#0f766e'\}\};/)
+  assert.match(rendererWxss, /\.profile-tag\s*\{[\s\S]*background:\s*#ffffff;/)
+  assert.match(rendererWxss, /\.profile-tag-dot\s*\{[\s\S]*width:\s*12rpx;[\s\S]*height:\s*12rpx;/)
 })
 
 test('mock pages borrow the corresponding production page visual structure', () => {
@@ -780,9 +860,7 @@ test('mock pages borrow the corresponding production page visual structure', () 
         'page-shell portfolio-preview-page',
         'preview-scroll',
         'folio-component',
-        'profile-section',
-        'work-section-title',
-        'work-grid'
+        'mock-portfolio-renderer'
       ]
     }
   ]

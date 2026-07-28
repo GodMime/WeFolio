@@ -3,6 +3,16 @@ const {
   showMockLoginRequiredToast
 } = require('../utils/mock-experience')
 
+function readMockComponentEventData(event = {}) {
+  const dataset = event.currentTarget && event.currentTarget.dataset
+  const detail = event.detail
+  return Object.assign(
+    {},
+    dataset && typeof dataset === 'object' ? dataset : {},
+    detail && typeof detail === 'object' ? detail : {}
+  )
+}
+
 function collectImageUrls(portfolio) {
   const components = portfolio && Array.isArray(portfolio.components) ? portfolio.components : []
   return components.reduce((result, component) => {
@@ -54,10 +64,11 @@ Page({
   },
 
   handleWorkTap(event) {
-    const mediaType = event.currentTarget.dataset.mediaType
-    const mediaUrl = event.currentTarget.dataset.mediaUrl
-    const coverUrl = event.currentTarget.dataset.coverUrl
-    const title = event.currentTarget.dataset.title || ''
+    const eventData = readMockComponentEventData(event)
+    const mediaType = eventData.mediaType
+    const mediaUrl = eventData.mediaUrl
+    const coverUrl = eventData.coverUrl
+    const title = eventData.title || ''
     if (!mediaUrl) {
       return
     }
@@ -79,9 +90,10 @@ Page({
   },
 
   handleSingleWorkTap(event) {
-    const componentKey = event.currentTarget.dataset.componentKey || ''
-    const mediaType = event.currentTarget.dataset.mediaType
-    const mediaUrl = event.currentTarget.dataset.mediaUrl
+    const eventData = readMockComponentEventData(event)
+    const componentKey = eventData.componentKey || ''
+    const mediaType = eventData.mediaType
+    const mediaUrl = eventData.mediaUrl
     if (!mediaUrl) {
       return false
     }
@@ -126,8 +138,9 @@ Page({
   },
 
   handleDisplayTagTap(event) {
-    const componentKey = event.currentTarget.dataset.componentKey
-    const groupKey = event.currentTarget.dataset.groupKey
+    const eventData = readMockComponentEventData(event)
+    const componentKey = eventData.componentKey
+    const groupKey = eventData.groupKey
     const components = this.data.portfolio.components.map((component) => {
       if (component.componentKey !== componentKey || !Array.isArray(component.groups)) {
         return component
@@ -154,7 +167,8 @@ Page({
   },
 
   handlePreviewQr(event) {
-    const url = event.currentTarget.dataset.url
+    const eventData = readMockComponentEventData(event)
+    const url = eventData.qrUrl || eventData.url
     if (!url) {
       return
     }
