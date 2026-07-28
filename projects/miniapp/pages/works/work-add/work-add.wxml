@@ -117,7 +117,7 @@
               class="tag-option-dot"
               style="background: {{item.selected ? '#ffffff' : item.color}};"
             ></view>
-            <view class="tag-option-name">{{item.name}}</view>
+            <view class="tag-option-name" style="color: {{item.selected ? '#ffffff' : item.color}};">{{item.name}}</view>
             <view wx:if="{{item.selected}}" class="tag-option-check">✓</view>
           </view>
         </view>

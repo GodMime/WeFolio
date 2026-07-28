@@ -417,6 +417,10 @@ test('works pages expose expected upload and edit structure', () => {
   )
   assert.match(
     tagPickerTemplate,
+    /class="tag-option-name"\s+style="color:\s*\{\{item\.selected \? '#ffffff' : item\.color\}\};"[\s\S]*\{\{item\.name\}\}/
+  )
+  assert.match(
+    tagPickerTemplate,
     /wx:if="\{\{item\.selected\}\}" class="tag-option-check">✓<\/view>/
   )
   assert.match(addWxml, /class="tag-picker-confirm"[\s\S]*catchtap="handleConfirmTagPicker"[\s\S]*完成/)
