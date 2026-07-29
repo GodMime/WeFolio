@@ -41,6 +41,9 @@ public interface PortfolioMessage {
     /** 发布草稿版本为空提示 */
     String PUBLISH_DRAFT_REVISION_REQUIRED_MESSAGE = "请选择要发布的草稿版本";
 
+    /** 新版编辑器保存必须携带客户端草稿版本 */
+    String DRAFT_CLIENT_REVISION_REQUIRED_MESSAGE = "请刷新作品集后再保存";
+
     /** 发布草稿版本冲突提示 */
     String DRAFT_REVISION_CHANGED_PUBLISH_MESSAGE = "草稿已更新，请刷新后再发布";
 
@@ -101,8 +104,44 @@ public interface PortfolioMessage {
     /** 作品集配置版本不支持提示 */
     String PORTFOLIO_CONFIG_VERSION_UNSUPPORTED_MESSAGE = "作品集配置版本不支持";
 
+    /** 服务端不支持更高编辑器能力版本提示 */
+    String EDITOR_SCHEMA_REVISION_UNSUPPORTED_MESSAGE = "当前服务暂不支持此作品集配置，请稍后重试";
+
     /** 启用组件为空提示 */
     String ENABLED_COMPONENT_REQUIRED_MESSAGE = "作品集至少需要 1 个启用组件";
+
+    /** 底部导航菜单数量无效提示 */
+    String BOTTOM_NAV_ITEM_COUNT_INVALID_MESSAGE = "底部导航菜单数量必须为2到4个";
+
+    /** 菜单名称为空提示 */
+    String BOTTOM_NAV_TITLE_REQUIRED_MESSAGE = "菜单名称不能为空";
+
+    /** 菜单名称过长提示 */
+    String BOTTOM_NAV_TITLE_TOO_LONG_MESSAGE = "菜单名称不能超过5个字";
+
+    /** 菜单名称重复提示 */
+    String BOTTOM_NAV_TITLE_DUPLICATE_MESSAGE = "菜单名称不能重复";
+
+    /** 菜单标识格式无效提示 */
+    String BOTTOM_NAV_KEY_INVALID_MESSAGE = "菜单标识格式不正确";
+
+    /** 菜单标识重复提示 */
+    String BOTTOM_NAV_KEY_DUPLICATE_MESSAGE = "菜单标识不能重复";
+
+    /** 第一菜单重复携带组件提示 */
+    String FIRST_BOTTOM_NAV_COMPONENTS_DUPLICATE_MESSAGE = "第一个菜单不能重复保存组件";
+
+    /** 跨菜单组件标识重复提示 */
+    String COMPONENT_KEY_CROSS_MENU_DUPLICATE_MESSAGE = "组件标识不能重复";
+
+    /** 菜单至少需要一个组件提示模板 */
+    String MENU_COMPONENT_REQUIRED_TEMPLATE = "【%s】至少添加一个组件";
+
+    /** 菜单业务错误前缀模板 */
+    String MENU_ERROR_PREFIX_TEMPLATE = "【%s】%s";
+
+    /** 同一菜单个人资料组件数量超限提示 */
+    String MENU_PROFILE_COMPONENT_LIMIT_MESSAGE = "同一菜单只能添加一个个人资料组件";
 
     /** 个人资料组件数量超限提示 */
     String PROFILE_COMPONENT_LIMIT_MESSAGE = "个人作品集最多只能包含一个个人资料组件";

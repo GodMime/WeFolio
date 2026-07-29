@@ -1,4 +1,4 @@
-<view class="qr-section">
+<view class="qr-section portfolio-theme-{{themeMode}}">
   <image
     wx:if="{{qrContact.qrUrl}}"
     class="qr-image"

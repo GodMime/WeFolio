@@ -1,0 +1,13 @@
+<view wx:if="{{navigation.enabled}}" class="portfolio-bottom-nav portfolio-theme-{{themeMode}}">
+  <view class="portfolio-bottom-nav-inner">
+    <view
+      wx:for="{{navigation.items}}"
+      wx:key="key"
+      class="portfolio-bottom-nav-item {{activeMenuKey === item.key ? 'active' : ''}}"
+      data-key="{{item.key}}"
+      bindtap="handleMenuTap"
+      aria-role="button"
+      aria-label="切换到{{item.title}}"
+    >{{item.title}}</view>
+  </view>
+</view>

@@ -117,6 +117,72 @@ test('portfolio preview and visitor pages render miniapp brand footer', () => {
   assert.equal(fs.existsSync(logoPath), true)
 })
 
+test('personal portfolio scroll regions stay within the viewport below custom navigation', () => {
+  const pageStyles = [
+    {
+      wxss: readExisting('pages/portfolios/standard-preview/portfolio-standard-preview.wxss'),
+      rootSelector: '.portfolio-preview-page',
+      scrollSelector: '.preview-scroll'
+    },
+    {
+      wxss: readExisting('pages/portfolios/visitor-portfolio/visitor-portfolio.wxss'),
+      rootSelector: '.visitor-portfolio-page',
+      scrollSelector: '.visitor-scroll'
+    },
+    {
+      wxss: readExisting('pages/mock/styles/portfolio-standard-preview.wxss'),
+      rootSelector: '.portfolio-preview-page',
+      scrollSelector: '.preview-scroll'
+    }
+  ]
+
+  pageStyles.forEach(({ wxss, rootSelector, scrollSelector }) => {
+    const rootRule = readRule(wxss, rootSelector)
+    const scrollRule = readRule(wxss, scrollSelector)
+
+    assert.match(rootRule, /height:\s*100vh;/)
+    assert.match(rootRule, /display:\s*flex;/)
+    assert.match(rootRule, /flex-direction:\s*column;/)
+    assert.match(rootRule, /overflow:\s*hidden;/)
+    assert.match(scrollRule, /flex:\s*1;/)
+    assert.match(scrollRule, /min-height:\s*0;/)
+    assert.doesNotMatch(scrollRule, /height:\s*100vh;/)
+  })
+})
+
+test('dark preview and visitor footers use the transparent white logo without filters', () => {
+  const darkLogoUrl = '/assets/system/folio-logo-stack-bold-dark-50kb.png'
+  const darkLogoPath = path.join(__dirname, `..${darkLogoUrl}`)
+  const pagePaths = [
+    'pages/portfolios/standard-preview/portfolio-standard-preview',
+    'pages/portfolios/visitor-portfolio/visitor-portfolio',
+    'pages/mock/portfolio-standard-preview/portfolio-standard-preview'
+  ]
+
+  pagePaths.forEach((pagePath) => {
+    const wxml = readExisting(`${pagePath}.wxml`)
+    const wxss = readExisting(`${pagePath}.wxss`)
+    assert.match(
+      wxml,
+      new RegExp(`wx:if="\\{\\{portfolio\\.themeMode === 'dark'\\}\\}"[\\s\\S]*src="${darkLogoUrl.replace(/\./g, '\\.')}"`),
+      pagePath
+    )
+    assert.equal(
+      readRule(
+        wxss,
+        '.portfolio-theme-dark .folio-brand-logo'
+      ),
+      '',
+      pagePath
+    )
+  })
+
+  assert.equal(fs.existsSync(darkLogoPath), true)
+  const darkLogo = fs.readFileSync(darkLogoPath)
+  assert.equal(darkLogo.readUInt8(25), 6)
+  assert.ok(darkLogo.byteLength < 50 * 1024)
+})
+
 test('preview page keeps recoverable loading and error states when request fails', async () => {
   const requests = []
   const fakeRequest = (options) => {
@@ -581,7 +647,7 @@ test('portfolio work sections render fixed title, all tags, play badge, and vide
     assert.match(wxml, /wx:if="\{\{work\.isVideo\}\}"[\s\S]*class="work-play-badge"/)
   })
   ;[gridWxss, listWxss].forEach((wxss) => {
-    assert.match(wxss, /\.work-section-title\s*\{[\s\S]*color:\s*#212529;[\s\S]*font-size:\s*34rpx;/)
+    assert.match(wxss, /\.work-section-title\s*\{[\s\S]*color:\s*var\(--portfolio-text-primary\);[\s\S]*font-size:\s*34rpx;/)
     assert.match(wxss, /\.work-play-badge\s*\{[\s\S]*position:\s*absolute;[\s\S]*right:\s*16rpx;[\s\S]*bottom:\s*16rpx;/)
     assert.doesNotMatch(wxss, /\.work-play-badge\s*\{[\s\S]*top:\s*50%;[\s\S]*left:\s*50%;/)
   })
@@ -693,8 +759,38 @@ test('contact form components support modal entry and inline form in actual page
   })
   assert.match(componentWxml, /contactComponent\.contactForm\.displayMode === inlineMode[\s\S]*class="form-section"/)
   assert.match(componentWxml, /class="form-entry-section"[\s\S]*bindtap="handleOpenModal"/)
-  assert.match(componentWxml, /class="contact-form-mask \{\{modalVisible \? 'visible' : ''\}\}"/)
+  assert.match(componentWxml, /class="contact-form-mask portfolio-theme-\{\{themeMode\}\} \{\{modalVisible \? 'visible' : ''\}\}"/)
   assert.match(componentWxml, /class="contact-form-panel"[\s\S]*contactComponent\.contactForm\.title/)
+})
+
+test('preview opens a modal contact form from the active secondary menu', () => {
+  const page = loadPreviewPage(() => Promise.resolve({}))
+  const component = {
+    componentKey: 'c_secondary_contact',
+    componentType: 'CONTACT_FORM',
+    contactForm: {
+      displayMode: 'MODAL_FORM',
+      fields: ['contactName']
+    }
+  }
+  page.data.portfolio = {
+    components: [],
+    activeComponents: [component],
+    bottomNav: {
+      enabled: true,
+      items: [
+        { key: 'nav_home', title: '主页' },
+        { key: 'nav_contact', title: '联系', components: [component] }
+      ]
+    }
+  }
+
+  page.handleOpenContactFormModal({
+    detail: { componentKey: 'c_secondary_contact' }
+  })
+
+  assert.equal(page.data.contactFormModalVisible, true)
+  assert.equal(page.data.activeContactFormComponent.componentKey, 'c_secondary_contact')
 })
 
 test('actual portfolio pages do not render share intro as page content', () => {
@@ -742,4 +838,70 @@ test('portfolio profile avatar is centered in actual pages', () => {
 
   assert.match(profileAvatarRule, /display:\s*block;/)
   assert.match(profileAvatarRule, /margin:\s*0 auto;/)
+})
+
+test('portfolio bottom navigation derives distinct light and dark selected states', () => {
+  const wxss = readExisting('components/portfolio-bottom-nav/portfolio-bottom-nav.wxss')
+
+  assert.match(wxss, /\.portfolio-bottom-nav-inner\s*\{[\s\S]*background:\s*#ffffff;/)
+  assert.match(wxss, /\.portfolio-bottom-nav-item\.active\s*\{[\s\S]*color:\s*#ffffff;[\s\S]*background:\s*#212529;/)
+  assert.match(wxss, /\.portfolio-bottom-nav\.portfolio-theme-dark \.portfolio-bottom-nav-inner\s*\{[\s\S]*background:\s*#1e1e1e;/)
+  assert.match(wxss, /\.portfolio-bottom-nav\.portfolio-theme-dark \.portfolio-bottom-nav-item\.active\s*\{[\s\S]*color:\s*#151515;[\s\S]*background:\s*#ffffff;/)
+})
+
+test('preview bottom navigation exits old content before entering the target menu', () => {
+  const originalSetTimeout = global.setTimeout
+  const originalClearTimeout = global.clearTimeout
+  const timers = []
+  global.setTimeout = (handler, delay) => {
+    const timer = { handler, delay, id: `timer-${timers.length + 1}` }
+    timers.push(timer)
+    return timer.id
+  }
+  global.clearTimeout = () => {}
+
+  try {
+    const page = loadPreviewPage(() => Promise.resolve({}))
+    const homeComponents = [{ componentKey: 'c_home', componentType: 'PROFILE' }]
+    const worksComponents = [{ componentKey: 'c_works', componentType: 'WORK_GRID' }]
+    page.data.portfolio = {
+      components: homeComponents,
+      activeComponents: homeComponents,
+      activeMenuKey: 'home',
+      bottomNav: {
+        enabled: true,
+        items: [
+          { key: 'home', title: '主页' },
+          { key: 'works', title: '作品', components: worksComponents }
+        ]
+      }
+    }
+
+    const started = page.handleBottomNavChange({
+      detail: { menuKey: 'works' }
+    })
+
+    assert.equal(started, true)
+    assert.equal(page.data.portfolio.activeMenuKey, 'home')
+    assert.deepEqual(page.data.portfolio.activeComponents, homeComponents)
+    assert.equal(page.data.portfolioMenuSwitching, true)
+    assert.equal(page.data.portfolioMenuTransitionClass, 'portfolio-menu-exit-forward')
+    assert.equal(timers[0].delay, 120)
+
+    timers[0].handler()
+
+    assert.equal(page.data.portfolio.activeMenuKey, 'works')
+    assert.deepEqual(page.data.portfolio.activeComponents, worksComponents)
+    assert.equal(page.data.portfolioMenuTransitionClass, 'portfolio-menu-enter-forward')
+    assert.equal(page.data.portfolioScrollTop, 0)
+    assert.equal(timers[1].delay, 220)
+
+    timers[1].handler()
+
+    assert.equal(page.data.portfolioMenuSwitching, false)
+    assert.equal(page.data.portfolioMenuTransitionClass, '')
+  } finally {
+    global.setTimeout = originalSetTimeout
+    global.clearTimeout = originalClearTimeout
+  }
 })

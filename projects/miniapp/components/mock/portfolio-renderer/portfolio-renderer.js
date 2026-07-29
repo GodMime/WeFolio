@@ -7,6 +7,10 @@ Component({
     activeSingleWorkVideoKey: {
       type: String,
       value: ''
+    },
+    themeMode: {
+      type: String,
+      value: 'light'
     }
   },
 

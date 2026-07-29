@@ -2,7 +2,13 @@ const { request } = require('../../../utils/request')
 const { handleMaintainerAuthRequired, hasLocalToken } = require('../../../utils/session')
 const { noop } = require('../../../utils/noop')
 const { isRemoteUrl } = require('../../../utils/upload-file')
-const { normalizeProfile: normalizeBasicProfile } = require('../../../utils/profile')
+const {
+  DEFAULT_TAG_COLOR,
+  TAG_COLOR_OPTIONS,
+  createProfileTag,
+  normalizeProfile: normalizeBasicProfile,
+  validateProfileForm: validateBasicProfileForm
+} = require('../../../utils/profile')
 const { normalizeWorkList, normalizeWorkTags } = require('../utils/works')
 const { confirmPortfolioPublishDisclaimer } = require('../utils/portfolio-publish-disclaimer')
 const {
@@ -37,7 +43,10 @@ const {
   addComponent,
   buildDraftPayload,
   buildPublishPayload,
+  countUnicodeCodePoints,
   createComponent,
+  findPortfolioComponent,
+  getMenuComponentList,
   normalizeContactFormConfig,
   normalizeDividerConfig,
   normalizeScheduleQueryConfig,
@@ -47,8 +56,12 @@ const {
   normalizePortfolioConfig,
   normalizeTextSectionConfig,
   normalizeWorkIds,
+  removeNavigationItem,
+  renameNavigationItem,
   reorderComponent,
+  replaceMenuComponentList,
   removeComponent,
+  setBottomNavigationCount,
   updateComponentContactFormConfig,
   updateComponentDividerConfig,
   updateComponentScheduleQueryConfig,
@@ -56,8 +69,11 @@ const {
   updateWorkDisplayOptions,
   updateComponentProfileConfig,
   updateComponentTextSectionConfig,
-  updateComponentWorkIds
+  updateComponentWorkIds,
+  validatePortfolioForPublish,
+  visitPortfolioComponents
 } = require('../../../utils/portfolios')
+const { hexToHsv, hsvToHex, normalizeHexColor } = require('../../../utils/portfolio-color')
 
 const PORTFOLIO_API_PREFIX = '/api/mine/portfolios'
 const STANDARD_PERSONAL_API_URL = '/api/mine/portfolios/standard-personal'
@@ -80,7 +96,6 @@ const DESIGN_VIEWPORT_RPX = 750
 const SHARE_COVER_CROP_CANVAS_ID = 'portfolioCoverCropCanvas'
 const SHARE_COVER_CROP_MAX_WIDTH_RPX = 640
 const SHARE_COVER_CROP_HORIZONTAL_GUTTER_RPX = 112
-const PROFILE_TAG_SPLIT_REGEXP = /[,\n，、]/
 const PROFILE_VISIBLE_FIELD_OPTIONS = [
   { field: 'avatar', label: '头像' },
   { field: 'displayName', label: '姓名 / 艺名' },
@@ -100,8 +115,7 @@ const PROFILE_FIELD_LIMITS = {
   displayName: 50,
   profession: 50,
   city: 50,
-  bio: 500,
-  tagsText: 100
+  bio: 500
 }
 const PUBLICATION_STATUS_DRAFT = 'DRAFT'
 const PUBLICATION_STATUS_PUBLISHED = 'PUBLISHED'
@@ -125,6 +139,8 @@ const WORK_ASPECT_RATIO_FALLBACK_TEXT = '--'
 const SINGLE_WORK_SUMMARY_STATUS_LOADING = 'LOADING'
 const SINGLE_WORK_SUMMARY_STATUS_FAILED = 'FAILED'
 const SINGLE_WORK_SUMMARY_STATUS_UNAVAILABLE = 'UNAVAILABLE'
+const BACKGROUND_COLOR_OPTIONS = ['#151515', '#FFFFFF', '#F5F6F8']
+const BOTTOM_NAV_COUNT_OPTIONS = [1, 2, 3, 4]
 
 const DEFAULT_COMPONENT_DESCRIPTIONS = {
   CAROUSEL: '展示已选择的图片作品',
@@ -152,6 +168,46 @@ function buildPublicationStatusState(publicationStatus) {
     statusText: PUBLICATION_STATUS_TEXT_MAP[normalizedStatus],
     statusTone: PUBLICATION_STATUS_TONE_MAP[normalizedStatus],
     showPublishAction: normalizedStatus === PUBLICATION_STATUS_PUBLISHED
+  }
+}
+
+function buildEditorMenuState(config = {}, requestedMenuKey = '') {
+  const normalized = normalizePortfolioConfig(config)
+  const items = normalized.bottomNav.enabled ? normalized.bottomNav.items : []
+  const firstMenuKey = items[0] ? items[0].key : ''
+  const activeMenuKey = items.some((item) => item.key === requestedMenuKey)
+    ? requestedMenuKey
+    : firstMenuKey
+  return {
+    config: normalized,
+    activeMenuKey,
+    activeMenuTitle: (items.find((item) => item.key === activeMenuKey) || {}).title || '',
+    activeMenuTitleCount: countUnicodeCodePoints(
+      (items.find((item) => item.key === activeMenuKey) || {}).title || ''
+    ),
+    activeComponents: getMenuComponentList(normalized, activeMenuKey),
+    bottomNavCount: items.length || 1
+  }
+}
+
+function buildBackgroundColorPickerState(backgroundColorHsv = {}) {
+  const normalizedHsv = {
+    hue: Math.min(359, Math.max(0, Number(backgroundColorHsv.hue) || 0)),
+    saturation: Math.min(1, Math.max(0, Number(backgroundColorHsv.saturation) || 0)),
+    value: Math.min(1, Math.max(0, Number(backgroundColorHsv.value) || 0))
+  }
+  return {
+    backgroundColorHsv: normalizedHsv,
+    backgroundColorDraft: hsvToHex(normalizedHsv),
+    backgroundHueColor: hsvToHex({
+      hue: normalizedHsv.hue,
+      saturation: 1,
+      value: 1
+    }),
+    backgroundColorPadDotStyle: [
+      `left: ${Math.round(normalizedHsv.saturation * 100)}%`,
+      `top: ${Math.round((1 - normalizedHsv.value) * 100)}%`
+    ].join('; ')
   }
 }
 
@@ -194,7 +250,8 @@ function buildComponentDragStyle(offsetY = 0) {
 }
 
 function findComponentByKey(config = {}, componentKey) {
-  return (config.components || []).find((component) => component.componentKey === componentKey) || null
+  const location = findPortfolioComponent(config, componentKey)
+  return location ? location.component : null
 }
 
 function isDisplayGroupComponent(componentType) {
@@ -369,7 +426,15 @@ function buildSingleWorkSummaryList(workIds = [], summaryMap = {}) {
 }
 
 function findSingleWorkIds(config = {}) {
-  return normalizeWorkIds((config.components || [])
+  const locations = []
+  const normalized = normalizePortfolioConfig(config)
+  const menuKeys = normalized.bottomNav.enabled
+    ? normalized.bottomNav.items.map((item) => item.key)
+    : ['']
+  menuKeys.forEach((menuKey) => {
+    locations.push(...getMenuComponentList(normalized, menuKey))
+  })
+  return normalizeWorkIds(locations
     .filter((component) => component.componentType === COMPONENT_TYPES.SINGLE_WORK)
     .map((component) => component.config && component.config.workId))
 }
@@ -426,7 +491,7 @@ function resolveActiveDisplayGroupKey(component = {}, tags = [], preferredGroupK
   return tags[0] ? buildDisplayGroupTagKey(tags[0].id) : ''
 }
 
-function replaceDisplayComponentGroups(config = {}, componentKey = '', groups = []) {
+function replaceDisplayComponentGroups(config = {}, componentKey = '', groups = [], menuKey = '') {
   const targetKey = String(componentKey || '')
   const normalized = normalizePortfolioConfig(config)
   const normalizedGroups = groups.map((group, index) => ({
@@ -435,7 +500,7 @@ function replaceDisplayComponentGroups(config = {}, componentKey = '', groups = 
     sortOrder: (index + 1) * DISPLAY_GROUP_SORT_ORDER_STEP,
     workIds: normalizeWorkIds(group.workIds)
   })).filter((group) => group.groupKey && group.name)
-  const components = normalized.components.map((component) => {
+  const components = getMenuComponentList(normalized, menuKey).map((component) => {
     if (component.componentKey !== targetKey || !isDisplayGroupComponent(component.componentType)) {
       return component
     }
@@ -446,7 +511,7 @@ function replaceDisplayComponentGroups(config = {}, componentKey = '', groups = 
       })
     })
   })
-  return normalizePortfolioConfig(Object.assign({}, normalized, { components }))
+  return replaceMenuComponentList(normalized, menuKey, components)
 }
 
 function normalizeComponentWorkTagId(value) {
@@ -467,14 +532,25 @@ function mergeComponentWorks(currentWorks = [], nextWorks = []) {
 }
 
 function buildProfileForm(profile = {}) {
+  const normalized = normalizeProfileComponentConfig({ profile }).profile
+  const tags = normalizeBasicProfile({ tags: normalized.tags }).tags
   return {
-    avatarUrl: profile.avatarUrl || '',
-    displayName: profile.displayName || '',
-    profession: profile.profession || '',
-    city: profile.city || '',
-    bio: profile.bio || '',
-    tagsText: Array.isArray(profile.tags) ? profile.tags.map((tag) => tag.name).filter(Boolean).join('，') : '',
-    wechatQrUrl: profile.wechatQrUrl || ''
+    avatarUrl: normalized.avatarUrl,
+    displayName: normalized.displayName,
+    profession: normalized.profession,
+    city: normalized.city,
+    bio: normalized.bio,
+    tags,
+    wechatQrUrl: normalized.wechatQrUrl
+  }
+}
+
+function buildProfileTagDialogState() {
+  return {
+    profileTagDialogVisible: false,
+    profileSelectedTagColor: DEFAULT_TAG_COLOR,
+    profileNewTag: '',
+    profileTagErrorText: ''
   }
 }
 
@@ -575,21 +651,6 @@ function buildVisibleFieldsFromOptions(options = []) {
   }, {})
 }
 
-function parseProfileTagsText(tagsText = '') {
-  const seen = new Set()
-  return String(tagsText || '')
-    .split(PROFILE_TAG_SPLIT_REGEXP)
-    .map((item) => item.trim())
-    .filter((item) => {
-      if (!item || seen.has(item)) {
-        return false
-      }
-      seen.add(item)
-      return true
-    })
-    .map((name) => ({ name }))
-}
-
 function buildProfileConfigFromForm(form = {}, visibleOptions = []) {
   return normalizeProfileComponentConfig({
     profile: {
@@ -598,7 +659,7 @@ function buildProfileConfigFromForm(form = {}, visibleOptions = []) {
       profession: form.profession,
       city: form.city,
       bio: form.bio,
-      tags: parseProfileTagsText(form.tagsText),
+      tags: form.tags,
       wechatQrUrl: form.wechatQrUrl
     },
     visibleFields: buildVisibleFieldsFromOptions(visibleOptions)
@@ -609,12 +670,12 @@ function resolveBasicProfileQrContactQrUrl(raw = {}) {
   return normalizeBasicProfile(raw).wechatQrUrl || ''
 }
 
-function updateComponentQrContactConfig(config, componentKey, qrContactForm = {}) {
+function updateComponentQrContactConfig(config, componentKey, qrContactForm = {}, menuKey = '') {
   const normalizedConfig = normalizePortfolioConfig(config)
   const targetKey = componentKey || ''
   const form = buildQrContactForm(qrContactForm)
   const qrUrl = form.qrUrlSource === QR_CONTACT_SOURCE_CUSTOM ? form.qrUrl : String(qrContactForm.qrUrl || '')
-  const components = (normalizedConfig.components || []).map((component) => {
+  const components = getMenuComponentList(normalizedConfig, menuKey).map((component) => {
     if (component.componentKey !== targetKey || component.componentType !== COMPONENT_TYPES.QR_CONTACT) {
       return component
     }
@@ -629,7 +690,7 @@ function updateComponentQrContactConfig(config, componentKey, qrContactForm = {}
       config: nextComponentConfig
     })
   })
-  return normalizePortfolioConfig(Object.assign({}, normalizedConfig, { components }))
+  return replaceMenuComponentList(normalizedConfig, menuKey, components)
 }
 
 function buildProfileFormFromBasicProfile(raw = {}, currentForm = {}) {
@@ -641,7 +702,7 @@ function buildProfileFormFromBasicProfile(raw = {}, currentForm = {}) {
     profession: profile.profession,
     city: profile.city,
     bio: profile.intro,
-    tagsText: profile.tags.map((tag) => tag.content).filter(Boolean).join('，'),
+    tags: profile.tags.slice(),
     wechatQrUrl: currentForm.wechatQrUrl || ''
   }
 }
@@ -657,7 +718,7 @@ function hasProfileCopyValue(profile = {}) {
 }
 
 function shouldApplyBasicProfileDefaults(config = {}) {
-  return (config.components || []).some((component) => {
+  return visitPortfolioComponents(config).some(({ component }) => {
     if (component.componentType !== COMPONENT_TYPES.PROFILE) {
       return false
     }
@@ -675,7 +736,12 @@ function buildProfileConfigFromBasicProfile(raw = {}, currentConfig = {}) {
 function applyBasicProfileDefaultsToConfig(config = {}, raw = {}) {
   const normalizedConfig = normalizePortfolioConfig(config)
   let changed = false
-  const components = (normalizedConfig.components || []).map((component) => {
+  let nextConfig = normalizedConfig
+  const menuKeys = normalizedConfig.bottomNav.enabled
+    ? normalizedConfig.bottomNav.items.map((item) => item.key)
+    : ['']
+  menuKeys.forEach((menuKey) => {
+    const components = getMenuComponentList(nextConfig, menuKey).map((component) => {
     if (component.componentType !== COMPONENT_TYPES.PROFILE) {
       return component
     }
@@ -691,11 +757,13 @@ function applyBasicProfileDefaultsToConfig(config = {}, raw = {}) {
     return Object.assign({}, component, {
       config: nextProfileConfig
     })
+    })
+    nextConfig = replaceMenuComponentList(nextConfig, menuKey, components)
   })
   if (!changed) {
     return normalizedConfig
   }
-  return normalizePortfolioConfig(Object.assign({}, normalizedConfig, { components }))
+  return nextConfig
 }
 
 function resolvePortfolioListBackDelta() {
@@ -754,27 +822,34 @@ function buildServerSafePortfolioConfig(config = {}) {
     coverUrl: resolveServerSafeAssetUrl(normalizedConfig.share && normalizedConfig.share.coverUrl),
     avatarUrl: resolveServerSafeAssetUrl(normalizedConfig.share && normalizedConfig.share.avatarUrl)
   })
-  const components = (normalizedConfig.components || []).map((component) => {
-    if (component.componentType === COMPONENT_TYPES.PROFILE) {
-      const profileConfig = normalizeProfileComponentConfig(component.config || {})
-      const profile = Object.assign({}, profileConfig.profile, {
-        avatarUrl: resolveServerSafeAssetUrl(profileConfig.profile.avatarUrl),
-        wechatQrUrl: resolveServerSafeAssetUrl(profileConfig.profile.wechatQrUrl)
-      })
-      return Object.assign({}, component, {
-        config: Object.assign({}, component.config || {}, profileConfig, { profile })
-      })
-    }
-    if (component.componentType === COMPONENT_TYPES.QR_CONTACT) {
-      return Object.assign({}, component, {
-        config: Object.assign({}, component.config || {}, {
-          qrUrl: resolveServerSafeAssetUrl(component.config && component.config.qrUrl)
+  let nextConfig = normalizePortfolioConfig(Object.assign({}, normalizedConfig, { share }))
+  const menuKeys = normalizedConfig.bottomNav.enabled
+    ? normalizedConfig.bottomNav.items.map((item) => item.key)
+    : ['']
+  menuKeys.forEach((menuKey) => {
+    const components = getMenuComponentList(nextConfig, menuKey).map((component) => {
+      if (component.componentType === COMPONENT_TYPES.PROFILE) {
+        const profileConfig = normalizeProfileComponentConfig(component.config || {})
+        const profile = Object.assign({}, profileConfig.profile, {
+          avatarUrl: resolveServerSafeAssetUrl(profileConfig.profile.avatarUrl),
+          wechatQrUrl: resolveServerSafeAssetUrl(profileConfig.profile.wechatQrUrl)
         })
-      })
-    }
-    return component
+        return Object.assign({}, component, {
+          config: Object.assign({}, component.config || {}, profileConfig, { profile })
+        })
+      }
+      if (component.componentType === COMPONENT_TYPES.QR_CONTACT) {
+        return Object.assign({}, component, {
+          config: Object.assign({}, component.config || {}, {
+            qrUrl: resolveServerSafeAssetUrl(component.config && component.config.qrUrl)
+          })
+        })
+      }
+      return component
+    })
+    nextConfig = replaceMenuComponentList(nextConfig, menuKey, components)
   })
-  return normalizePortfolioConfig(Object.assign({}, normalizedConfig, { share, components }))
+  return nextConfig
 }
 
 function updateShareCoverUrlInConfig(config = {}, coverUrl = '') {
@@ -802,6 +877,18 @@ Page({
     revealedComponentKey: '',
     componentTouchStart: null,
     componentSheetVisible: false,
+    backgroundColorOptions: BACKGROUND_COLOR_OPTIONS,
+    bottomNavCountOptions: BOTTOM_NAV_COUNT_OPTIONS,
+    activeMenuKey: '',
+    activeComponents: [],
+    bottomNavCount: 1,
+    backgroundColorSheetVisible: false,
+    ...buildBackgroundColorPickerState(hexToHsv('#FFFFFF')),
+    editScrollTop: 0,
+    validationMenuKey: '',
+    validationComponentKey: '',
+    validationComponentAnchor: '',
+    validationMenuMessage: '',
     componentOptions: buildDefaultComponentOptions(),
     componentWorkSheetVisible: false,
     componentWorkSheetTitle: '编辑轮播作品',
@@ -847,6 +934,8 @@ Page({
     profileForm: buildProfileForm(),
     profileFieldCounters: buildProfileFieldCounters(buildProfileForm()),
     profileVisibleOptions: buildProfileVisibleOptions(),
+    profileTagColorOptions: TAG_COLOR_OPTIONS,
+    ...buildProfileTagDialogState(),
     qrContactSheetVisible: false,
     editingQrContactComponentKey: '',
     qrContactProfileQrUrl: '',
@@ -879,7 +968,7 @@ Page({
     shareCoverCropCanvasHeight: Math.round(
       PORTFOLIO_COVER_CROP_OUTPUT_WIDTH * PORTFOLIO_COVER_RATIO_HEIGHT / PORTFOLIO_COVER_RATIO_WIDTH
     ),
-    config: normalizePortfolioConfig({
+    ...buildEditorMenuState({
       components: [createComponent(COMPONENT_TYPES.PROFILE)]
     })
   },
@@ -903,7 +992,7 @@ Page({
         this.setData(Object.assign({
           draftRevision: response.draftRevision || 0,
           publishedRevision: response.publishedRevision || 0,
-          config,
+          ...buildEditorMenuState(config, this.data.activeMenuKey),
           shareFieldCounters: buildShareFieldCounters(config.share)
         }, buildPublicationStatusState(response.publicationStatus)))
         this.loadSingleWorkSummaries(config)
@@ -916,6 +1005,179 @@ Page({
         }
         wx.showToast({ title: error.message || '加载失败', icon: 'none' })
       })
+  },
+
+  applyEditorConfig(config, requestedMenuKey = this.data.activeMenuKey, extraState = {}) {
+    const menuState = buildEditorMenuState(config, requestedMenuKey)
+    this.setData(Object.assign({}, menuState, {
+      componentOptions: buildComponentOptions(this.data.componentOptions, menuState.activeComponents)
+    }, extraState))
+    return menuState.config
+  },
+
+  handleBackgroundColorTap(event) {
+    const backgroundColor = normalizeHexColor(event.currentTarget.dataset.color)
+    this.applyEditorConfig(Object.assign({}, this.data.config, {
+      style: { backgroundColor }
+    }))
+  },
+
+  handleOpenBackgroundColorSheet() {
+    const backgroundColorDraft = normalizeHexColor(this.data.config.style && this.data.config.style.backgroundColor)
+    this.setData(Object.assign({
+      backgroundColorSheetVisible: true,
+      backgroundColorDraft
+    }, buildBackgroundColorPickerState(hexToHsv(backgroundColorDraft))))
+  },
+
+  handleCloseBackgroundColorSheet() {
+    this.setData({ backgroundColorSheetVisible: false })
+  },
+
+  handleBackgroundHueChange(event) {
+    const backgroundColorHsv = Object.assign({}, this.data.backgroundColorHsv, {
+      hue: Number(event.detail.value) || 0
+    })
+    this.setData(buildBackgroundColorPickerState(backgroundColorHsv))
+  },
+
+  handleBackgroundColorPadTouch(event) {
+    const touch = event && event.touches && event.touches[0]
+    if (!touch) {
+      return
+    }
+    wx.createSelectorQuery()
+      .in(this)
+      .select('.background-color-pad')
+      .boundingClientRect((rect) => {
+        if (!rect || !rect.width || !rect.height) {
+          return
+        }
+        const saturation = Math.min(1, Math.max(0, (Number(touch.clientX) - rect.left) / rect.width))
+        const value = 1 - Math.min(1, Math.max(0, (Number(touch.clientY) - rect.top) / rect.height))
+        this.setData(buildBackgroundColorPickerState(Object.assign({}, this.data.backgroundColorHsv, {
+          saturation,
+          value
+        })))
+      })
+      .exec()
+  },
+
+  handleBackgroundHexInput(event) {
+    const backgroundColorDraft = String(event.detail.value || '').trim().toUpperCase()
+    if (/^#[0-9A-F]{6}$/.test(backgroundColorDraft)) {
+      this.setData(buildBackgroundColorPickerState(hexToHsv(backgroundColorDraft)))
+      return
+    }
+    this.setData({ backgroundColorDraft })
+  },
+
+  handleBackgroundHexBlur() {
+    if (!/^#[0-9A-F]{6}$/.test(this.data.backgroundColorDraft)) {
+      wx.showToast({ title: '请输入正确的颜色值', icon: 'none' })
+    }
+  },
+
+  handleConfirmBackgroundColor() {
+    if (!/^#[0-9A-F]{6}$/.test(this.data.backgroundColorDraft)) {
+      wx.showToast({ title: '请输入正确的颜色值', icon: 'none' })
+      return
+    }
+    this.applyEditorConfig(Object.assign({}, this.data.config, {
+      style: { backgroundColor: this.data.backgroundColorDraft }
+    }), this.data.activeMenuKey, {
+      backgroundColorSheetVisible: false
+    })
+  },
+
+  handleBottomNavCountTap(event) {
+    const count = Number(event.currentTarget.dataset.count) || 1
+    const items = this.data.config.bottomNav.enabled ? this.data.config.bottomNav.items : []
+    const activeMenuIndex = items.findIndex((item) => item.key === this.data.activeMenuKey)
+    const applyCount = () => {
+      const nextConfig = setBottomNavigationCount(this.data.config, count)
+      const nextItems = nextConfig.bottomNav.enabled ? nextConfig.bottomNav.items : []
+      const nextMenuKey = nextItems.some((item) => item.key === this.data.activeMenuKey)
+        ? this.data.activeMenuKey
+        : ((nextItems[Math.min(Math.max(activeMenuIndex - 1, 0), nextItems.length - 1)] || {}).key || '')
+      this.applyEditorConfig(nextConfig, nextMenuKey, {
+        revealedComponentKey: ''
+      })
+    }
+    if (!this.data.config.bottomNav.enabled || count >= items.length) {
+      applyCount()
+      return
+    }
+    const removedItems = count < 2 ? items.slice(1) : items.slice(count)
+    const removalMessages = removedItems
+      .map((item) => ({
+        item,
+        componentCount: getMenuComponentList(this.data.config, item.key).length
+      }))
+      .filter(({ componentCount }) => componentCount > 0)
+      .map(({ item, componentCount }) => `删除菜单「${item.title}」将同时删除其下 ${componentCount} 个组件`)
+    if (removalMessages.length === 0) {
+      applyCount()
+      return
+    }
+    wx.showModal({
+      title: count < 2 ? '关闭底部导航？' : '减少底部菜单？',
+      content: removalMessages.join('\n'),
+      confirmText: '确认',
+      confirmColor: '#b55656',
+      success: (result) => {
+        if (result.confirm) {
+          applyCount()
+        }
+      }
+    })
+  },
+
+  handleEditorMenuTap(event) {
+    const menuKey = event.currentTarget.dataset.key || ''
+    this.applyEditorConfig(this.data.config, menuKey, {
+      revealedComponentKey: ''
+    })
+  },
+
+  handleEditorMenuTitleInput(event) {
+    const menuKey = event.currentTarget.dataset.key || ''
+    this.applyEditorConfig(renameNavigationItem(this.data.config, menuKey, event.detail.value), menuKey)
+  },
+
+  handleRemoveEditorMenu(event) {
+    const menuKey = event.currentTarget.dataset.key || ''
+    const items = this.data.config.bottomNav.enabled ? this.data.config.bottomNav.items : []
+    const menuIndex = items.findIndex((item) => item.key === menuKey)
+    if (menuIndex < 0) {
+      return
+    }
+    const menu = items[menuIndex]
+    const componentCount = getMenuComponentList(this.data.config, menuKey).length
+    const removeMenu = () => {
+      const previousMenuKey = ((items[menuIndex - 1] || items[menuIndex + 1]) || {}).key || ''
+      this.applyEditorConfig(removeNavigationItem(this.data.config, menuKey), previousMenuKey, {
+        revealedComponentKey: ''
+      })
+    }
+    if (menuIndex > 0 && componentCount === 0) {
+      removeMenu()
+      return
+    }
+    const content = menuIndex === 0 && items[1]
+      ? `删除菜单「${menu.title}」${componentCount > 0 ? `将同时删除其下 ${componentCount} 个组件，` : '，'}「${items[1].title}」将成为第一个菜单，旧版本小程序将展示「${items[1].title}」的内容`
+      : `删除菜单「${menu.title}」将同时删除其下 ${componentCount} 个组件`
+    wx.showModal({
+      title: `删除菜单「${menu.title}」？`,
+      content,
+      confirmText: '删除',
+      confirmColor: '#b55656',
+      success: (result) => {
+        if (result.confirm) {
+          removeMenu()
+        }
+      }
+    })
   },
 
   loadSingleWorkSummaries(config = this.data.config) {
@@ -969,8 +1231,7 @@ Page({
     return request({ url: BASIC_PROFILE_API_URL })
       .then((response) => {
         const nextConfig = applyBasicProfileDefaultsToConfig(normalizedConfig, response)
-        this.setData({
-          config: nextConfig,
+        this.applyEditorConfig(nextConfig, this.data.activeMenuKey, {
           shareFieldCounters: buildShareFieldCounters(nextConfig.share)
         })
         return nextConfig
@@ -1136,7 +1397,7 @@ Page({
   handleOpenComponentSheet() {
     this.setData({
       componentSheetVisible: true,
-      componentOptions: buildComponentOptions(this.data.componentOptions, this.data.config.components)
+      componentOptions: buildComponentOptions(this.data.componentOptions, this.data.activeComponents)
     })
     this.loadComponentOptions()
   },
@@ -1146,7 +1407,7 @@ Page({
       .then((response) => {
         if (response && Array.isArray(response.components) && response.components.length > 0) {
           this.setData({
-            componentOptions: buildComponentOptions(response.components, this.data.config.components)
+            componentOptions: buildComponentOptions(response.components, this.data.activeComponents)
           })
         }
       })
@@ -1163,12 +1424,11 @@ Page({
     const componentType = event.currentTarget.dataset.type
     const disabled = event.currentTarget.dataset.disabled
     const profileAdded = componentType === COMPONENT_TYPES.PROFILE &&
-      this.data.config.components.some((component) => component.componentType === COMPONENT_TYPES.PROFILE)
+      this.data.activeComponents.some((component) => component.componentType === COMPONENT_TYPES.PROFILE)
     if (!componentType || disabled || profileAdded) {
       return
     }
-    this.setData({
-      config: addComponent(this.data.config, componentType),
+    this.applyEditorConfig(addComponent(this.data.config, componentType, this.data.activeMenuKey), this.data.activeMenuKey, {
       componentSheetVisible: false
     })
   },
@@ -1277,7 +1537,15 @@ Page({
       componentTouchStart: null
     }
     if (draggingIndex >= 0 && dragTargetIndex >= 0 && draggingIndex !== dragTargetIndex) {
-      nextState.config = reorderComponent(this.data.config, draggingIndex, dragTargetIndex)
+      const config = reorderComponent(
+        this.data.config,
+        draggingIndex,
+        dragTargetIndex,
+        this.data.activeMenuKey
+      )
+      this.componentDragRows = []
+      this.applyEditorConfig(config, this.data.activeMenuKey, nextState)
+      return
     }
     this.componentDragRows = []
     this.setData(nextState)
@@ -1355,10 +1623,10 @@ Page({
     const config = updateComponentScheduleQueryConfig(
       this.data.config,
       this.data.scheduleQueryEditingComponentKey,
-      this.data.scheduleQueryForm
+      this.data.scheduleQueryForm,
+      this.data.activeMenuKey
     )
-    this.setData({
-      config,
+    this.applyEditorConfig(config, this.data.activeMenuKey, {
       scheduleQuerySheetVisible: false,
       scheduleQueryEditingComponentKey: '',
       scheduleQueryForm: buildScheduleQueryForm()
@@ -1397,10 +1665,10 @@ Page({
     const config = updateComponentContactFormConfig(
       this.data.config,
       this.data.contactFormEditingComponentKey,
-      this.data.contactFormConfigForm
+      this.data.contactFormConfigForm,
+      this.data.activeMenuKey
     )
-    this.setData({
-      config,
+    this.applyEditorConfig(config, this.data.activeMenuKey, {
       contactFormSheetVisible: false,
       contactFormEditingComponentKey: '',
       contactFormConfigForm: buildContactFormConfigForm()
@@ -1457,11 +1725,11 @@ Page({
     const config = updateComponentTextSectionConfig(
       this.data.config,
       this.data.textSectionEditingComponentKey,
-      form
+      form,
+      this.data.activeMenuKey
     )
     const textSectionForm = buildTextSectionForm()
-    this.setData({
-      config,
+    this.applyEditorConfig(config, this.data.activeMenuKey, {
       textSectionSheetVisible: false,
       textSectionEditingComponentKey: '',
       textSectionForm,
@@ -1512,10 +1780,10 @@ Page({
     const config = updateComponentDividerConfig(
       this.data.config,
       this.data.dividerEditingComponentKey,
-      Object.assign({}, this.data.dividerForm, { heightPx })
+      Object.assign({}, this.data.dividerForm, { heightPx }),
+      this.data.activeMenuKey
     )
-    this.setData({
-      config,
+    this.applyEditorConfig(config, this.data.activeMenuKey, {
       dividerSheetVisible: false,
       dividerEditingComponentKey: '',
       dividerForm: buildDividerForm()
@@ -1571,7 +1839,8 @@ Page({
       editingProfileComponentKey: componentKey,
       profileForm: buildProfileForm(profileConfig.profile),
       profileFieldCounters: buildProfileFieldCounters(buildProfileForm(profileConfig.profile)),
-      profileVisibleOptions: buildProfileVisibleOptions(profileConfig.visibleFields)
+      profileVisibleOptions: buildProfileVisibleOptions(profileConfig.visibleFields),
+      ...buildProfileTagDialogState()
     })
   },
 
@@ -1580,7 +1849,8 @@ Page({
       profileSheetVisible: false,
       profileSheetLoading: false,
       profileSheetErrorText: '',
-      editingProfileComponentKey: ''
+      editingProfileComponentKey: '',
+      ...buildProfileTagDialogState()
     })
   },
 
@@ -1611,6 +1881,69 @@ Page({
     this.setData({
       'profileForm.wechatQrUrl': wechatQrUrl,
       profileFieldCounters: buildProfileFieldCounters(nextForm)
+    })
+  },
+
+  handleOpenProfileTagDialog() {
+    if (this.data.profileForm.tags.length >= 10) {
+      wx.showToast({
+        title: '标签最多保留 10 个',
+        icon: 'none'
+      })
+      return
+    }
+    this.setData({
+      profileTagDialogVisible: true,
+      profileSelectedTagColor: DEFAULT_TAG_COLOR,
+      profileNewTag: '',
+      profileTagErrorText: ''
+    })
+  },
+
+  handleCloseProfileTagDialog() {
+    this.setData(buildProfileTagDialogState())
+  },
+
+  handleProfileNewTagInput(event) {
+    this.setData({
+      profileNewTag: event.detail.value || '',
+      profileTagErrorText: ''
+    })
+  },
+
+  handleSelectProfileTagColor(event) {
+    this.setData({
+      profileSelectedTagColor: event.currentTarget.dataset.color || DEFAULT_TAG_COLOR,
+      profileTagErrorText: ''
+    })
+  },
+
+  handleAddProfileTag() {
+    const nextTags = this.data.profileForm.tags.concat(
+      createProfileTag(this.data.profileNewTag, this.data.profileSelectedTagColor)
+    )
+    const validation = validateBasicProfileForm({ tags: nextTags })
+    if (!validation.valid) {
+      this.setData({
+        profileTagErrorText: validation.message
+      })
+      return
+    }
+    this.setData({
+      'profileForm.tags': nextTags,
+      ...buildProfileTagDialogState()
+    })
+  },
+
+  handleRemoveProfileTag(event) {
+    const index = Number(event.currentTarget.dataset.index)
+    if (!Number.isInteger(index) || index < 0) {
+      return
+    }
+    this.setData({
+      'profileForm.tags': this.data.profileForm.tags.filter(
+        (_, currentIndex) => currentIndex !== index
+      )
     })
   },
 
@@ -1711,12 +2044,18 @@ Page({
       return
     }
     const profileConfig = buildProfileConfigFromForm(this.data.profileForm, this.data.profileVisibleOptions)
-    this.setData({
-      config: updateComponentProfileConfig(this.data.config, this.data.editingProfileComponentKey, profileConfig),
+    const config = updateComponentProfileConfig(
+      this.data.config,
+      this.data.editingProfileComponentKey,
+      profileConfig,
+      this.data.activeMenuKey
+    )
+    this.applyEditorConfig(config, this.data.activeMenuKey, {
       profileSheetVisible: false,
       profileSheetLoading: false,
       profileSheetErrorText: '',
-      editingProfileComponentKey: ''
+      editingProfileComponentKey: '',
+      ...buildProfileTagDialogState()
     })
   },
 
@@ -1785,7 +2124,7 @@ Page({
 
   loadQrContactProfileQrUrlForSaving(config = this.data.config) {
     const normalizedConfig = normalizePortfolioConfig(config)
-    const shouldLoadProfileQr = (normalizedConfig.components || []).some((component) => {
+    const shouldLoadProfileQr = visitPortfolioComponents(normalizedConfig).some(({ component }) => {
       if (!component || component.componentType !== COMPONENT_TYPES.QR_CONTACT) {
         return false
       }
@@ -1832,12 +2171,13 @@ Page({
     if (!this.data.editingQrContactComponentKey) {
       return
     }
-    this.setData({
-      config: updateComponentQrContactConfig(
-        this.data.config,
-        this.data.editingQrContactComponentKey,
-        this.data.qrContactForm
-      ),
+    const config = updateComponentQrContactConfig(
+      this.data.config,
+      this.data.editingQrContactComponentKey,
+      this.data.qrContactForm,
+      this.data.activeMenuKey
+    )
+    this.applyEditorConfig(config, this.data.activeMenuKey, {
       qrContactSheetVisible: false,
       editingQrContactComponentKey: '',
       qrContactProfileQrUrl: '',
@@ -1847,7 +2187,7 @@ Page({
 
   handleCloseDisplayGroupSheet() {
     const originalConfig = this.data.displayGroupOriginalConfig
-    this.setData(Object.assign({
+    const resetState = {
       displayGroupSheetVisible: false,
       editingDisplayComponentKey: '',
       editingDisplayComponentType: '',
@@ -1860,7 +2200,12 @@ Page({
       displayGroupShowDescription: false,
       displayGroupErrorText: '',
       displayGroupLoading: false
-    }, originalConfig ? { config: originalConfig } : {}))
+    }
+    if (originalConfig) {
+      this.applyEditorConfig(originalConfig, this.data.activeMenuKey, resetState)
+      return
+    }
+    this.setData(resetState)
   },
 
   handleCancelDisplayGroupSheet() {
@@ -1886,22 +2231,22 @@ Page({
 
   handleDisplayGroupShowTitleChange(event) {
     const showTitle = Boolean(event.detail && event.detail.value)
-    this.setData({
-      config: updateWorkDisplayOptions(this.data.config, this.data.editingDisplayComponentKey, {
-        showTitle,
-        showDescription: this.data.displayGroupShowDescription
-      }),
+    const config = updateWorkDisplayOptions(this.data.config, this.data.editingDisplayComponentKey, {
+      showTitle,
+      showDescription: this.data.displayGroupShowDescription
+    }, this.data.activeMenuKey)
+    this.applyEditorConfig(config, this.data.activeMenuKey, {
       displayGroupShowTitle: showTitle
     })
   },
 
   handleDisplayGroupShowDescriptionChange(event) {
     const showDescription = Boolean(event.detail && event.detail.value)
-    this.setData({
-      config: updateWorkDisplayOptions(this.data.config, this.data.editingDisplayComponentKey, {
-        showTitle: this.data.displayGroupShowTitle,
-        showDescription
-      }),
+    const config = updateWorkDisplayOptions(this.data.config, this.data.editingDisplayComponentKey, {
+      showTitle: this.data.displayGroupShowTitle,
+      showDescription
+    }, this.data.activeMenuKey)
+    this.applyEditorConfig(config, this.data.activeMenuKey, {
       displayGroupShowDescription: showDescription
     })
   },
@@ -1941,12 +2286,16 @@ Page({
       const works = await this.loadAllDisplayGroupWorks()
       const currentComponent = findComponentByKey(this.data.config, componentKey)
       const selectedGroups = buildSelectedDisplayGroups(currentComponent || {}, tags)
-      const config = replaceDisplayComponentGroups(this.data.config, componentKey, selectedGroups)
+      const config = replaceDisplayComponentGroups(
+        this.data.config,
+        componentKey,
+        selectedGroups,
+        this.data.activeMenuKey
+      )
       const component = findComponentByKey(config, componentKey)
       const activeGroupKey = resolveActiveDisplayGroupKey(component || {}, tags, this.data.activeDisplayGroupKey)
       const displayGroupWorkMap = mergeDisplayGroupWorkMap(this.data.displayGroupWorkMap, works)
-      this.setData({
-        config,
+      this.applyEditorConfig(config, this.data.activeMenuKey, {
         workTagOptions: tags,
         displayGroupAllWorks: works,
         displayGroupWorkMap,
@@ -1998,9 +2347,13 @@ Page({
           sortOrder: (selectedGroups.length + 1) * DISPLAY_GROUP_SORT_ORDER_STEP,
           workIds: []
         })
-    const config = replaceDisplayComponentGroups(this.data.config, componentKey, nextGroups)
-    this.setData({
-      config,
+    const config = replaceDisplayComponentGroups(
+      this.data.config,
+      componentKey,
+      nextGroups,
+      this.data.activeMenuKey
+    )
+    this.applyEditorConfig(config, this.data.activeMenuKey, {
       activeDisplayGroupKey: groupKey,
       displayGroupErrorText: ''
     })
@@ -2031,9 +2384,13 @@ Page({
     const nextGroups = existingGroup
       ? selectedGroups.map((group) => group.groupKey === groupKey ? nextGroup : group)
       : selectedGroups.concat(nextGroup)
-    const config = replaceDisplayComponentGroups(this.data.config, componentKey, nextGroups)
-    this.setData({
-      config,
+    const config = replaceDisplayComponentGroups(
+      this.data.config,
+      componentKey,
+      nextGroups,
+      this.data.activeMenuKey
+    )
+    this.applyEditorConfig(config, this.data.activeMenuKey, {
       activeDisplayGroupKey: groupKey,
       displayGroupErrorText: ''
     })
@@ -2041,8 +2398,11 @@ Page({
   },
 
   handleRemoveComponent(event) {
-    this.setData({
-      config: removeComponent(this.data.config, event.currentTarget.dataset.key),
+    this.applyEditorConfig(removeComponent(
+      this.data.config,
+      event.currentTarget.dataset.key,
+      this.data.activeMenuKey
+    ), this.data.activeMenuKey, {
       revealedComponentKey: ''
     })
   },
@@ -2276,12 +2636,16 @@ Page({
           workId: this.data.componentWorkSelectedIds[0],
           showTitle: this.data.componentWorkShowTitle,
           showDescription: this.data.componentWorkShowDescription
-        })
-      : updateComponentWorkIds(this.data.config, componentKey, this.data.componentWorkSelectedIds)
+        }, this.data.activeMenuKey)
+      : updateComponentWorkIds(
+          this.data.config,
+          componentKey,
+          this.data.componentWorkSelectedIds,
+          this.data.activeMenuKey
+        )
     const displayGroupWorkMap = mergeDisplayGroupWorkMap(this.data.displayGroupWorkMap, this.data.componentWorkOptions)
     const singleWorkSummaryMap = mergeDisplayGroupWorkMap(this.data.singleWorkSummaryMap, this.data.componentWorkOptions)
-    this.setData({
-      config,
+    this.applyEditorConfig(config, this.data.activeMenuKey, {
       displayGroupWorkMap,
       singleWorkSummaryMap,
       singleWorkSummaries: buildSingleWorkSummaryList(findSingleWorkIds(config), singleWorkSummaryMap),
@@ -2359,11 +2723,12 @@ Page({
 
   uploadLocalProfileImages(portfolioId, config = this.data.config) {
     let nextConfig = normalizePortfolioConfig(config)
-    const profileComponents = (nextConfig.components || [])
-      .filter((component) => component.componentType === COMPONENT_TYPES.PROFILE)
+    const profileComponents = visitPortfolioComponents(nextConfig)
+      .filter(({ component }) => component.componentType === COMPONENT_TYPES.PROFILE)
 
-    return profileComponents.reduce((chain, component) => {
+    return profileComponents.reduce((chain, location) => {
       return chain.then(() => {
+        const component = location.component
         const currentComponent = findComponentByKey(nextConfig, component.componentKey) || component
         let profileConfig = normalizeProfileComponentConfig(currentComponent.config || {})
         const avatarUrl = profileConfig.profile.avatarUrl
@@ -2378,7 +2743,12 @@ Page({
               profileConfig = normalizeProfileComponentConfig(Object.assign({}, profileConfig, {
                 profile: Object.assign({}, profileConfig.profile, { avatarUrl: uploadedUrl })
               }))
-              nextConfig = updateComponentProfileConfig(nextConfig, component.componentKey, profileConfig)
+              nextConfig = updateComponentProfileConfig(
+                nextConfig,
+                component.componentKey,
+                profileConfig,
+                location.menuKey
+              )
             }
             return uploadedUrl || avatarUrl
           })
@@ -2398,7 +2768,12 @@ Page({
               const nextProfileConfig = normalizeProfileComponentConfig(Object.assign({}, profileConfig, {
                 profile: Object.assign({}, profileConfig.profile, { wechatQrUrl: uploadedUrl })
               }))
-              nextConfig = updateComponentProfileConfig(nextConfig, component.componentKey, nextProfileConfig)
+              nextConfig = updateComponentProfileConfig(
+                nextConfig,
+                component.componentKey,
+                nextProfileConfig,
+                location.menuKey
+              )
             }
             return uploadedUrl || wechatQrUrl
           })
@@ -2409,21 +2784,27 @@ Page({
 
   uploadLocalQrContactImages(portfolioId, config = this.data.config) {
     let nextConfig = normalizePortfolioConfig(config)
-    const qrContactComponents = (nextConfig.components || [])
-      .filter((component) => component.componentType === COMPONENT_TYPES.QR_CONTACT)
+    const qrContactComponents = visitPortfolioComponents(nextConfig)
+      .filter(({ component }) => component.componentType === COMPONENT_TYPES.QR_CONTACT)
 
     return this.loadQrContactProfileQrUrlForSaving(nextConfig).then((profileQrUrl) => {
-      return qrContactComponents.reduce((chain, component) => {
+      return qrContactComponents.reduce((chain, location) => {
         return chain.then(() => {
+          const component = location.component
           const currentComponent = findComponentByKey(nextConfig, component.componentKey) || component
           const componentConfig = currentComponent.config || {}
           const qrUrlSource = componentConfig.qrUrlSource || QR_CONTACT_SOURCE_PROFILE
           const qrUrl = componentConfig.qrUrl || ''
           if (qrUrlSource !== QR_CONTACT_SOURCE_CUSTOM) {
-            nextConfig = updateComponentQrContactConfig(nextConfig, component.componentKey, Object.assign({}, componentConfig, {
-              qrUrl: profileQrUrl,
-              qrUrlSource: QR_CONTACT_SOURCE_PROFILE
-            }))
+            nextConfig = updateComponentQrContactConfig(
+              nextConfig,
+              component.componentKey,
+              Object.assign({}, componentConfig, {
+                qrUrl: profileQrUrl,
+                qrUrlSource: QR_CONTACT_SOURCE_PROFILE
+              }),
+              location.menuKey
+            )
             return profileQrUrl
           }
           if (!qrUrl) {
@@ -2435,10 +2816,15 @@ Page({
             clientIdPrefix: 'qr-contact'
           }).then((uploadedUrl) => {
             if (uploadedUrl && uploadedUrl !== qrUrl) {
-              nextConfig = updateComponentQrContactConfig(nextConfig, component.componentKey, Object.assign({}, componentConfig, {
-                qrUrl: uploadedUrl,
-                qrUrlSource: QR_CONTACT_SOURCE_CUSTOM
-              }))
+              nextConfig = updateComponentQrContactConfig(
+                nextConfig,
+                component.componentKey,
+                Object.assign({}, componentConfig, {
+                  qrUrl: uploadedUrl,
+                  qrUrlSource: QR_CONTACT_SOURCE_CUSTOM
+                }),
+                location.menuKey
+              )
             }
             return uploadedUrl || qrUrl
           })
@@ -2452,8 +2838,7 @@ Page({
       .then((config) => this.uploadLocalProfileImages(portfolioId, config))
       .then((config) => this.uploadLocalQrContactImages(portfolioId, config))
       .then((config) => {
-        this.setData({
-          config,
+        this.applyEditorConfig(config, this.data.activeMenuKey, {
           shareFieldCounters: buildShareFieldCounters(config.share)
         })
         return config
@@ -2470,6 +2855,26 @@ Page({
   },
 
   handlePublish() {
+    this.setData({
+      validationMenuKey: '',
+      validationComponentKey: '',
+      validationComponentAnchor: '',
+      validationMenuMessage: ''
+    })
+    const validation = validatePortfolioForPublish(this.data.config)
+    if (!validation.valid) {
+      this.applyEditorConfig(this.data.config, validation.menuKey, {
+        validationMenuKey: validation.menuKey,
+        validationComponentKey: validation.componentKey,
+        validationComponentAnchor: validation.componentKey
+          ? `component-row-${validation.componentKey}`
+          : '',
+        validationMenuMessage: validation.message,
+        editScrollTop: validation.componentKey ? this.data.editScrollTop : 1
+      })
+      wx.showToast({ title: validation.message, icon: 'none' })
+      return Promise.resolve()
+    }
     return confirmPortfolioPublishDisclaimer().then((confirmed) => {
       if (!confirmed) {
         return
@@ -2500,7 +2905,21 @@ Page({
         handleMaintainerAuthRequired(error.message)
         return
       }
-      wx.showToast({ title: error && error.message ? error.message : '发布失败', icon: 'none' })
+      const message = error && error.message ? error.message : '发布失败'
+      const matchedMenu = message.match(/^【(.+?)】/)
+      if (matchedMenu && this.data.config.bottomNav.enabled) {
+        const targetMenu = this.data.config.bottomNav.items.find((item) => item.title === matchedMenu[1])
+        if (targetMenu) {
+          this.applyEditorConfig(this.data.config, targetMenu.key, {
+            validationMenuKey: targetMenu.key,
+            validationComponentKey: '',
+            validationComponentAnchor: '',
+            validationMenuMessage: message,
+            editScrollTop: 1
+          })
+        }
+      }
+      wx.showToast({ title: message, icon: 'none' })
     })
   },
 

@@ -1,3 +1,5 @@
+@import "../../styles/portfolio-theme.wxss";
+
 .schedule-query {
   padding: 8rpx 34rpx;
   text-align: center;
@@ -489,4 +491,26 @@
 .schedule-query-open-button::after,
 .schedule-query-submit::after {
   border: 0;
+}
+.schedule-query {
+  color: var(--portfolio-text-primary);
+}
+
+.schedule-query > .schedule-query-inline-shell .component-title,
+.schedule-query > .schedule-query-entry .component-title {
+  color: var(--portfolio-text-primary);
+}
+
+.schedule-query > .schedule-query-inline-shell .section-desc,
+.schedule-query > .schedule-query-entry .section-desc {
+  color: var(--portfolio-text-secondary);
+}
+
+.schedule-query.portfolio-theme-dark .schedule-query-open-button {
+  color: var(--portfolio-text-primary);
+  background: var(--portfolio-surface-muted);
+}
+
+.schedule-query-modal-panel {
+  color: #212529;
 }

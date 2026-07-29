@@ -1,3 +1,5 @@
+@import "../../../../styles/portfolio-theme.wxss";
+
 .profile-section {
   padding: 12rpx 32rpx;
   text-align: center;
@@ -14,7 +16,7 @@
 
 .profile-name {
   margin-top: 18rpx;
-  color: #212529;
+  color: var(--portfolio-text-primary);
   font-size: 36rpx;
   font-weight: 900;
   line-height: 1.25;
@@ -22,7 +24,7 @@
 
 .profile-line,
 .profile-bio {
-  color: #868e96;
+  color: var(--portfolio-text-secondary);
   font-size: 26rpx;
   line-height: 1.75;
   white-space: pre-wrap;
@@ -78,4 +80,7 @@
   height: 280rpx;
   margin: 24rpx auto 0;
   border-radius: 32rpx;
+}
+.profile-section {
+  color: var(--portfolio-text-primary);
 }

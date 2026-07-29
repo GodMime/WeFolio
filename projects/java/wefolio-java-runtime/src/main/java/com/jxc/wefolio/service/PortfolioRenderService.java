@@ -148,6 +148,15 @@ public class PortfolioRenderService {
     /** 分割线默认高度 */
     private static final int DEFAULT_DIVIDER_HEIGHT_PX = 16;
 
+    /** 浅色主题 */
+    private static final String THEME_MODE_LIGHT = "light";
+
+    /** 深色主题 */
+    private static final String THEME_MODE_DARK = "dark";
+
+    /** YIQ 明暗模式阈值 */
+    private static final int YIQ_THEME_THRESHOLD = 128;
+
     /** 作品 Mapper */
     private final WorkEntityMapper workEntityMapper;
 
@@ -183,29 +192,126 @@ public class PortfolioRenderService {
         render.setMaintenanceText(maintenanceText);
         render.setVisitRecordId(visitRecordId);
         if (underMaintenance) {
+            render.setStyle(buildStyle(PortfolioConfigDto.DEFAULT_BACKGROUND_COLOR));
             render.setComponents(List.of());
+            render.setBottomNav(buildDisabledBottomNav());
             return render;
         }
-        render.setComponents(buildComponents(portfolio, config));
+        Long ownerId = portfolio == null ? null : portfolio.getOwnerId();
+        render.setStyle(buildStyle(config == null || config.getStyle() == null
+                ? null
+                : config.getStyle().getBackgroundColor()));
+        render.setComponents(buildComponents(ownerId, config == null ? null : config.getComponents()));
+        render.setBottomNav(buildBottomNav(ownerId, config == null ? null : config.getBottomNav()));
         return render;
     }
 
     /**
      * 构建渲染组件列表。
      *
-     * @param portfolio 作品集实体
-     * @param config 配置
+     * @param ownerId 作品集归属用户 ID
+     * @param components 配置组件
      * @return 渲染组件列表
      */
-    private List<PortfolioRenderDto.Component> buildComponents(PortfolioEntity portfolio, PortfolioConfigDto config) {
-        Long ownerId = portfolio == null ? null : portfolio.getOwnerId();
-        return safeList(config == null ? null : config.getComponents()).stream()
+    private List<PortfolioRenderDto.Component> buildComponents(
+            Long ownerId,
+            List<PortfolioConfigDto.Component> components
+    ) {
+        return safeList(components).stream()
                 .filter(component -> component != null && !Boolean.FALSE.equals(component.getEnabled()))
                 .sorted(Comparator
                         .comparing(this::safeComponentSortOrder)
                         .thenComparing(component -> defaultString(component.getComponentKey())))
                 .map(component -> buildComponent(ownerId, component))
                 .toList();
+    }
+
+    /**
+     * 构建页面样式。
+     *
+     * @param configuredBackgroundColor 配置背景色
+     * @return 页面渲染样式
+     */
+    private PortfolioRenderDto.Style buildStyle(String configuredBackgroundColor) {
+        String backgroundColor = normalizeBackgroundColor(configuredBackgroundColor);
+        PortfolioRenderDto.Style style = new PortfolioRenderDto.Style();
+        style.setBackgroundColor(backgroundColor);
+        style.setThemeMode(resolveThemeMode(backgroundColor));
+        return style;
+    }
+
+    /**
+     * 构建底部导航渲染数据。
+     *
+     * @param ownerId 作品集归属用户 ID
+     * @param configuredBottomNav 底部导航配置
+     * @return 底部导航渲染数据
+     */
+    private PortfolioRenderDto.BottomNav buildBottomNav(
+            Long ownerId,
+            PortfolioConfigDto.BottomNav configuredBottomNav
+    ) {
+        if (configuredBottomNav == null || !Boolean.TRUE.equals(configuredBottomNav.getEnabled())) {
+            return buildDisabledBottomNav();
+        }
+        List<PortfolioConfigDto.BottomNavItem> configuredItems = safeList(configuredBottomNav.getItems());
+        PortfolioRenderDto.BottomNav bottomNav = new PortfolioRenderDto.BottomNav();
+        bottomNav.setEnabled(true);
+        List<PortfolioRenderDto.BottomNavItem> items = new ArrayList<>();
+        for (int index = 0; index < configuredItems.size(); index++) {
+            PortfolioConfigDto.BottomNavItem configuredItem = configuredItems.get(index);
+            if (configuredItem == null) {
+                continue;
+            }
+            PortfolioRenderDto.BottomNavItem item = new PortfolioRenderDto.BottomNavItem();
+            item.setKey(defaultString(configuredItem.getKey()));
+            item.setTitle(defaultString(configuredItem.getTitle()));
+            if (index > 0) {
+                item.setComponents(buildComponents(ownerId, configuredItem.getComponents()));
+            }
+            items.add(item);
+        }
+        bottomNav.setItems(items);
+        return bottomNav;
+    }
+
+    /**
+     * 构建关闭状态的底部导航。
+     *
+     * @return 关闭状态导航
+     */
+    private PortfolioRenderDto.BottomNav buildDisabledBottomNav() {
+        PortfolioRenderDto.BottomNav bottomNav = new PortfolioRenderDto.BottomNav();
+        bottomNav.setEnabled(false);
+        bottomNav.setItems(List.of());
+        return bottomNav;
+    }
+
+    /**
+     * 规范化背景色。
+     *
+     * @param backgroundColor 背景色
+     * @return 大写十六进制背景色
+     */
+    private String normalizeBackgroundColor(String backgroundColor) {
+        if (backgroundColor == null || !backgroundColor.matches("^#[0-9A-Fa-f]{6}$")) {
+            return PortfolioConfigDto.DEFAULT_BACKGROUND_COLOR;
+        }
+        return backgroundColor.toUpperCase();
+    }
+
+    /**
+     * 按 YIQ 亮度推导明暗模式。
+     *
+     * @param backgroundColor 规范化背景色
+     * @return light 或 dark
+     */
+    private String resolveThemeMode(String backgroundColor) {
+        int red = Integer.parseInt(backgroundColor.substring(1, 3), 16);
+        int green = Integer.parseInt(backgroundColor.substring(3, 5), 16);
+        int blue = Integer.parseInt(backgroundColor.substring(5, 7), 16);
+        int yiq = (red * 299 + green * 587 + blue * 114) / 1000;
+        return yiq < YIQ_THEME_THRESHOLD ? THEME_MODE_DARK : THEME_MODE_LIGHT;
     }
 
     /**

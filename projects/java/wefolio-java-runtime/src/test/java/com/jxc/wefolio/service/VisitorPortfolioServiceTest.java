@@ -483,6 +483,24 @@ class VisitorPortfolioServiceTest {
     }
 
     @Test
+    void queryScheduleOptionsShouldFindScheduleComponentInSecondaryMenu() {
+        PortfolioEntity portfolio = publishedPortfolioWithSecondaryScheduleComponent();
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
+        when(slotDefinitionEntityMapper.selectList(any())).thenReturn(List.of(slotDefinition(12L, "午宴")));
+
+        PortfolioScheduleOptionsResponse response = service().queryScheduleOptions(
+                "PF001",
+                "2026-07",
+                "c_schedule_secondary"
+        );
+
+        assertThat(response.getYearMonth()).isEqualTo("2026-07");
+        assertThat(response.getSlotDefinitions()).singleElement()
+                .extracting(PortfolioScheduleOptionsResponse.SlotDefinitionItem::getId)
+                .isEqualTo(12L);
+    }
+
+    @Test
     void queryScheduleOptionsShouldNotReturnNullableScheduleFieldsToVisitor() {
         PortfolioEntity portfolio = publishedPortfolioWithScheduleComponent();
         when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
@@ -850,6 +868,29 @@ class VisitorPortfolioServiceTest {
                   {"componentKey":"c_schedule","componentType":"SCHEDULE_QUERY","sortOrder":1000,"enabled":true,
                    "config":{"displayMode":"MODAL_CALENDAR","queryRange":{"type":"UNLIMITED"}}}
                 ]}
+                """);
+        return portfolio;
+    }
+
+    private PortfolioEntity publishedPortfolioWithSecondaryScheduleComponent() {
+        PortfolioEntity portfolio = publishedPortfolio();
+        portfolio.setPublishedConfigJson("""
+                {
+                  "schemaVersion":"standard-personal-v1",
+                  "share":{"title":"林安婚礼司仪"},
+                  "components":[],
+                  "bottomNav":{
+                    "enabled":true,
+                    "items":[
+                      {"key":"home","title":"主页"},
+                      {"key":"schedule","title":"档期","components":[
+                        {"componentKey":"c_schedule_secondary","componentType":"SCHEDULE_QUERY",
+                         "sortOrder":1000,"enabled":true,
+                         "config":{"displayMode":"MODAL_CALENDAR","queryRange":{"type":"UNLIMITED"}}}
+                      ]}
+                    ]
+                  }
+                }
                 """);
         return portfolio;
     }

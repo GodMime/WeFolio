@@ -122,7 +122,7 @@ test('portfolio carousel component keeps native swipe, isolated styles, and prog
   assert.equal(componentJson.styleIsolation, 'isolated')
   assert.match(componentJs, /DEFAULT_INTERVAL_MS\s*=\s*3000/)
   assert.match(componentJs, /interval:\s*\{[\s\S]*type:\s*Number,[\s\S]*value:\s*DEFAULT_INTERVAL_MS/)
-  assert.match(componentWxml, /class="portfolio-carousel"[\s\S]*style="\{\{carouselFrameStyle\}\}"/)
+  assert.match(componentWxml, /class="portfolio-carousel portfolio-theme-\{\{themeMode\}\}"[\s\S]*style="\{\{carouselFrameStyle\}\}"/)
   assert.match(componentWxml, /<swiper[\s\S]*autoplay="\{\{canAutoplay\}\}"[\s\S]*circular="\{\{canAutoplay\}\}"[\s\S]*interval="\{\{safeInterval\}\}"[\s\S]*bindchange="handleSwiperChange"/)
   assert.match(componentWxml, /<swiper-item[\s\S]*wx:for="\{\{works\}\}"/)
   assert.match(componentWxml, /class="carousel-progress-bar"[\s\S]*wx:for="\{\{progressSegments\}\}"/)

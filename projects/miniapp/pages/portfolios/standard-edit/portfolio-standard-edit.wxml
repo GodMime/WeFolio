@@ -3,7 +3,13 @@
 <view class="page-shell portfolio-edit-page">
   <navigation-bar title="标准个人作品集" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
 
-  <scroll-view class="edit-scroll" scroll-y type="list">
+  <scroll-view
+    class="edit-scroll"
+    scroll-y
+    type="list"
+    scroll-top="{{editScrollTop}}"
+    scroll-into-view="{{validationComponentAnchor}}"
+  >
     <view class="edit-content">
       <view class="panel share-panel">
         <view class="panel-heading">
@@ -35,18 +41,97 @@
         </view>
       </view>
 
+      <view class="panel page-setting-panel">
+        <view class="panel-heading">
+          <view class="heading-copy">
+            <view class="section-title">页面设置</view>
+            <view class="section-desc">设置作品集背景与底部导航</view>
+          </view>
+        </view>
+
+        <view class="form-row">
+          <view class="field-heading">
+            <view class="field-label">背景色</view>
+            <view class="field-limit">{{config.style.backgroundColor}}</view>
+          </view>
+          <view class="background-color-row">
+            <view class="background-color-current" style="background-color: {{config.style.backgroundColor}};"></view>
+            <view
+              wx:for="{{backgroundColorOptions}}"
+              wx:key="*this"
+              class="background-color-swatch {{config.style.backgroundColor === item ? 'active' : ''}}"
+              style="background-color: {{item}};"
+              data-color="{{item}}"
+              bindtap="handleBackgroundColorTap"
+              aria-role="button"
+              aria-label="选择背景色{{item}}"
+            ></view>
+            <button class="background-custom-button" bindtap="handleOpenBackgroundColorSheet">自定义</button>
+          </view>
+        </view>
+
+        <view class="form-row">
+          <view class="field-heading">
+            <view class="field-label">底部导航</view>
+            <view class="field-limit">2~4 个菜单</view>
+          </view>
+          <view class="bottom-nav-count-row">
+            <view
+              wx:for="{{bottomNavCountOptions}}"
+              wx:key="*this"
+              class="bottom-nav-count-option {{bottomNavCount === item ? 'active' : ''}}"
+              data-count="{{item}}"
+              bindtap="handleBottomNavCountTap"
+              aria-role="button"
+            >{{item === 1 ? '不开启' : item + ' 个'}}</view>
+          </view>
+        </view>
+
+        <view wx:if="{{config.bottomNav.enabled}}" class="editor-menu-bar">
+          <view
+            wx:for="{{config.bottomNav.items}}"
+            wx:key="key"
+            class="editor-menu-item {{activeMenuKey === item.key ? 'active' : ''}}"
+            data-key="{{item.key}}"
+            bindtap="handleEditorMenuTap"
+          >
+            <text>{{item.title}}</text>
+            <view wx:if="{{validationMenuKey === item.key}}" class="editor-menu-error-dot"></view>
+          </view>
+        </view>
+
+        <view wx:if="{{validationMenuMessage}}" class="editor-menu-error-banner">{{validationMenuMessage}}</view>
+
+        <view wx:if="{{config.bottomNav.enabled}}" class="editor-menu-rename">
+          <input
+            class="editor-menu-title-input"
+            value="{{activeMenuTitle}}"
+            data-key="{{activeMenuKey}}"
+            bindinput="handleEditorMenuTitleInput"
+            maxlength="5"
+          />
+          <view class="editor-menu-title-count">{{activeMenuTitleCount}}/5</view>
+          <button
+            wx:if="{{config.bottomNav.items.length > 2}}"
+            class="editor-menu-remove"
+            data-key="{{activeMenuKey}}"
+            bindtap="handleRemoveEditorMenu"
+          >删除菜单</button>
+        </view>
+      </view>
+
       <view class="panel component-panel">
         <view class="panel-heading">
           <view class="heading-copy">
             <view class="section-title">组件编排</view>
-            <view class="section-desc">访客将按当前顺序浏览作品集内容</view>
+            <view class="section-desc">访客将按当前菜单内的顺序浏览内容</view>
           </view>
           <button class="link-button" bindtap="handleOpenComponentSheet">添加组件</button>
         </view>
 
         <view class="component-list">
           <view
-            wx:for="{{config.components}}"
+            wx:for="{{activeComponents}}"
             wx:key="componentKey"
             class="component-swipe-row {{revealedComponentKey === item.componentKey ? 'revealed' : ''}} {{draggingIndex === index ? 'dragging' : ''}}"
             data-index="{{index}}"
@@ -62,7 +147,8 @@
               <button class="component-remove-button" data-key="{{item.componentKey}}" catchtap="handleRemoveComponent">删除</button>
             </view>
             <view
-              class="component-row {{draggingIndex === index ? 'dragging' : ''}} {{dragTargetIndex === index && draggingIndex !== -1 ? 'drag-target' : ''}} {{componentRows.isEditable(item.componentType) ? 'editable' : ''}}"
+              id="component-row-{{item.componentKey}}"
+              class="component-row {{draggingIndex === index ? 'dragging' : ''}} {{dragTargetIndex === index && draggingIndex !== -1 ? 'drag-target' : ''}} {{componentRows.isEditable(item.componentType) ? 'editable' : ''}} {{validationComponentKey === item.componentKey ? 'validation-error' : ''}}"
               style="{{draggingIndex === index ? componentDragStyle : ''}}"
               data-key="{{item.componentKey}}"
               data-type="{{item.componentType}}"
@@ -81,10 +167,66 @@
               </view>
             </view>
           </view>
+          <view wx:if="{{activeComponents.length === 0}}" class="editor-component-empty">
+            <view class="editor-component-empty-text">当前菜单还没有组件</view>
+            <button class="editor-component-empty-action" bindtap="handleOpenComponentSheet">添加组件</button>
+          </view>
         </view>
       </view>
     </view>
   </scroll-view>
+
+  <view class="component-picker-mask {{backgroundColorSheetVisible ? 'visible' : ''}}" catchtap="handleCloseBackgroundColorSheet">
+    <view class="component-picker-panel background-color-panel" catchtap="noop">
+      <view class="component-picker-grabber"></view>
+      <view class="component-picker-heading">
+        <view class="component-picker-title">自定义背景色</view>
+        <view class="component-picker-count">{{backgroundColorDraft}}</view>
+      </view>
+      <view
+        class="background-color-pad"
+        style="background-color: {{backgroundHueColor}};"
+        bindtouchstart="handleBackgroundColorPadTouch"
+        catchtouchmove="handleBackgroundColorPadTouch"
+      >
+        <view class="background-color-pad-white"></view>
+        <view class="background-color-pad-black"></view>
+        <view class="background-color-pad-dot" style="{{backgroundColorPadDotStyle}}"></view>
+      </view>
+      <view class="background-hue-slider">
+        <slider
+          min="0"
+          max="359"
+          value="{{backgroundColorHsv.hue}}"
+          bindchanging="handleBackgroundHueChange"
+          backgroundColor="transparent"
+          activeColor="transparent"
+          block-color="transparent"
+          block-size="22"
+        ></slider>
+        <view
+          class="background-hue-thumb"
+          style="left: {{backgroundColorHsv.hue / 3.59}}%; background-color: {{backgroundHueColor}};"
+        ></view>
+      </view>
+      <input
+        class="background-hex-input"
+        value="{{backgroundColorDraft}}"
+        bindinput="handleBackgroundHexInput"
+        bindblur="handleBackgroundHexBlur"
+        maxlength="7"
+        placeholder="#FFFFFF"
+      />
+      <view class="background-color-preview-bar">
+        <view class="background-color-preview-chip" style="background-color: {{backgroundColorDraft}};"></view>
+        <view class="background-color-preview-text">预览 {{backgroundColorDraft}}</view>
+      </view>
+      <view class="component-picker-actions">
+        <button class="component-picker-cancel" catchtap="handleCloseBackgroundColorSheet">取消</button>
+        <button class="component-picker-confirm" catchtap="handleConfirmBackgroundColor">确定</button>
+      </view>
+    </view>
+  </view>
 
   <view class="component-picker-mask {{componentSheetVisible ? 'visible' : ''}}" catchtap="handleCloseComponentSheet">
     <view class="component-picker-panel" catchtap="noop">
@@ -280,12 +422,29 @@
               </view>
               <textarea class="input textarea profile-sheet-textarea" value="{{profileForm.bio}}" data-field="bio" bindinput="handleProfileInput" maxlength="500"></textarea>
             </view>
-            <view class="form-row">
+            <view class="form-row profile-tag-form-row">
               <view class="field-heading">
                 <view class="field-label">个人标签</view>
-                <view class="profile-field-limit">{{profileFieldCounters.tagsText}}</view>
+                <view class="profile-field-limit">{{profileForm.tags.length}} / 10</view>
               </view>
-              <input class="input profile-sheet-input" placeholder="多个标签用逗号分隔" value="{{profileForm.tagsText}}" data-field="tagsText" bindinput="handleProfileInput" maxlength="100" />
+              <view class="profile-tag-pill-row">
+                <view class="profile-tag-pill" wx:for="{{profileForm.tags}}" wx:key="content" style="{{item.style}}">
+                  <view class="profile-tag-dot" style="{{item.dotStyle}}"></view>
+                  <text>{{item.content}}</text>
+                  <view
+                    class="profile-tag-remove"
+                    style="{{item.removeStyle}}"
+                    data-index="{{index}}"
+                    catchtap="handleRemoveProfileTag"
+                    aria-role="button"
+                    aria-label="删除标签{{item.content}}"
+                  >
+                    <text class="profile-tag-remove-mark">×</text>
+                  </view>
+                </view>
+                <button class="profile-tag-add-trigger" catchtap="handleOpenProfileTagDialog">+ 添加标签</button>
+              </view>
+              <view class="profile-tag-note">标签副本独立于基础资料，单个不超过 10 个字，最多保留 10 个。</view>
             </view>
             <view class="form-row">
               <view class="field-heading">
@@ -323,6 +482,48 @@
       <view class="component-work-actions">
         <button class="component-work-cancel" catchtap="handleCloseProfileSheet">取消</button>
         <button class="component-work-confirm" catchtap="handleConfirmProfileSheet">完成</button>
+      </view>
+    </view>
+  </view>
+
+  <view class="profile-tag-dialog {{profileTagDialogVisible ? 'visible' : ''}}">
+    <view class="profile-tag-dialog-backdrop" catchtap="handleCloseProfileTagDialog"></view>
+    <view class="profile-tag-dialog-panel" catchtap="noop">
+      <view class="field-heading">
+        <view class="component-picker-title">新增标签</view>
+        <view class="profile-field-limit">{{profileForm.tags.length}} / 10</view>
+      </view>
+      <view class="form-row">
+        <view class="field-label">标签文字</view>
+        <input
+          class="input profile-sheet-input"
+          value="{{profileNewTag}}"
+          bindinput="handleProfileNewTagInput"
+          maxlength="10"
+          placeholder="10 个字以内"
+        />
+      </view>
+      <view class="form-row">
+        <view class="field-label">标签颜色</view>
+        <view class="profile-tag-color-grid">
+          <view
+            class="profile-tag-color-choice {{profileSelectedTagColor === item.color ? 'active' : ''}}"
+            wx:for="{{profileTagColorOptions}}"
+            wx:key="color"
+            data-color="{{item.color}}"
+            catchtap="handleSelectProfileTagColor"
+            aria-role="button"
+            aria-label="选择{{item.name}}标签颜色"
+          >
+            <view class="profile-tag-color-swatch" style="{{item.swatchStyle}}"></view>
+            <text class="profile-tag-color-name">{{item.name}}</text>
+          </view>
+        </view>
+      </view>
+      <view wx:if="{{profileTagErrorText}}" class="profile-tag-error">{{profileTagErrorText}}</view>
+      <view class="component-work-actions profile-tag-dialog-actions">
+        <button class="component-work-cancel" catchtap="handleCloseProfileTagDialog">取消</button>
+        <button class="component-work-confirm" catchtap="handleAddProfileTag">添加</button>
       </view>
     </view>
   </view>

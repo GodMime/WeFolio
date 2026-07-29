@@ -1,3 +1,5 @@
+@import "../../styles/portfolio-theme.wxss";
+
 .form-section,
 .form-entry-section {
   padding: 8rpx 34rpx;
@@ -131,4 +133,36 @@
   line-height: 1;
   border-radius: 50%;
   background: #f1f3f5;
+}
+.portfolio-contact-form,
+.contact-form-panel {
+  color: var(--portfolio-text-primary);
+}
+
+.portfolio-contact-form .component-title {
+  color: var(--portfolio-text-primary);
+}
+
+.portfolio-contact-form .section-desc {
+  color: var(--portfolio-text-secondary);
+}
+
+.portfolio-contact-form.portfolio-theme-dark .contact-form-entry-button {
+  color: var(--portfolio-text-primary);
+  background: var(--portfolio-surface-muted);
+}
+
+.portfolio-contact-form.portfolio-theme-dark .field {
+  color: var(--portfolio-text-primary);
+  border-color: var(--portfolio-border);
+  background: var(--portfolio-surface-muted);
+}
+
+.contact-form-panel,
+.contact-form-panel .component-title {
+  color: #212529;
+}
+
+.contact-form-panel .section-desc {
+  color: #868e96;
 }

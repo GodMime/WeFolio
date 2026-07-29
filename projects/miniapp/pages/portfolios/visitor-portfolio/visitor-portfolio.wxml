@@ -1,15 +1,17 @@
-<view class="page-shell visitor-portfolio-page">
-  <navigation-bar title="{{portfolio.title || '个人作品集'}}" back="{{showNavigationBack && !timelineGuideVisible}}" color="#212529" background="#ffffff"></navigation-bar>
+<view class="page-shell visitor-portfolio-page portfolio-theme-{{portfolio.themeMode}}" style="background-color: {{portfolio.style.backgroundColor}};">
+  <navigation-bar title="{{portfolio.title || '个人作品集'}}" back="{{showNavigationBack && !timelineGuideVisible}}" color="{{portfolio.themeMode === 'dark' ? '#f8f9fa' : '#212529'}}" background="{{portfolio.style.backgroundColor}}"></navigation-bar>
 
-  <scroll-view scroll-y class="visitor-scroll">
-    <view wx:for="{{portfolio.components}}" wx:key="componentKey" class="folio-component">
+  <scroll-view scroll-y scroll-top="{{portfolioScrollTop}}" class="visitor-scroll">
+    <view class="portfolio-menu-transition-content {{portfolioMenuTransitionClass}}">
+    <view wx:for="{{portfolio.activeComponents}}" wx:key="componentKey" class="folio-component">
       <block wx:if="{{item.componentType === 'CAROUSEL'}}">
-        <portfolio-carousel works="{{item.works}}" interval="{{item.carouselIntervalMs}}"></portfolio-carousel>
+        <portfolio-carousel works="{{item.works}}" interval="{{item.carouselIntervalMs}}" theme-mode="{{portfolio.themeMode}}"></portfolio-carousel>
       </block>
 
       <block wx:elif="{{item.componentType === 'PROFILE'}}">
         <portfolio-profile
           profile="{{item.profile}}"
+          theme-mode="{{portfolio.themeMode}}"
           bindpreviewqr="handlePreviewQr"
         ></portfolio-profile>
       </block>
@@ -22,6 +24,7 @@
           show-title="{{item.showTitle}}"
           show-description="{{item.showDescription}}"
           switching="{{displaySwitchingComponentKey === item.componentKey}}"
+          theme-mode="{{portfolio.themeMode}}"
           binddisplaytagtap="handleDisplayTagTap"
           bindworktap="handleWorkTap"
         ></portfolio-work-grid>
@@ -35,6 +38,7 @@
           show-title="{{item.showTitle}}"
           show-description="{{item.showDescription}}"
           switching="{{displaySwitchingComponentKey === item.componentKey}}"
+          theme-mode="{{portfolio.themeMode}}"
           binddisplaytagtap="handleDisplayTagTap"
           bindworktap="handleWorkTap"
         ></portfolio-work-list>
@@ -48,6 +52,7 @@
           show-description="{{item.showDescription}}"
           active-video-key="{{activeSingleWorkVideoKey}}"
           repair-mode="{{false}}"
+          theme-mode="{{portfolio.themeMode}}"
           class="portfolio-single-work-instance"
           bindsingleworktap="handleSingleWorkTap"
           bindvideoerror="handleSingleWorkVideoError"
@@ -61,12 +66,14 @@
           preview="{{false}}"
           component-key="{{item.componentKey}}"
           schedule-query="{{item.scheduleQuery}}"
+          theme-mode="{{portfolio.themeMode}}"
         ></portfolio-schedule-query>
       </block>
 
       <block wx:elif="{{item.componentType === 'QR_CONTACT'}}">
         <portfolio-qr-contact
           qr-contact="{{item.qrContact}}"
+          theme-mode="{{portfolio.themeMode}}"
           bindpreviewqr="handlePreviewQr"
         ></portfolio-qr-contact>
       </block>
@@ -75,6 +82,7 @@
         <portfolio-contact-form
           contact-component="{{item}}"
           contact-form="{{contactForm}}"
+          theme-mode="{{portfolio.themeMode}}"
           bindcontactinput="handleContactInput"
           bindsubmitcontact="handleSubmitContact"
           bindopenmodal="handleOpenContactFormModal"
@@ -82,19 +90,28 @@
       </block>
 
       <block wx:elif="{{item.componentType === 'TEXT_SECTION'}}">
-        <portfolio-text-section text-section="{{item.textSection}}"></portfolio-text-section>
+        <portfolio-text-section text-section="{{item.textSection}}" theme-mode="{{portfolio.themeMode}}"></portfolio-text-section>
       </block>
 
       <block wx:elif="{{item.componentType === 'DIVIDER'}}">
-        <portfolio-divider divider="{{item.divider}}"></portfolio-divider>
+        <portfolio-divider divider="{{item.divider}}" theme-mode="{{portfolio.themeMode}}"></portfolio-divider>
       </block>
     </view>
 
     <view class="folio-brand-footer">
-      <image class="folio-brand-logo" src="/assets/system/folio-logo-stack-bold-small-50kb.png" mode="aspectFit"></image>
+      <image wx:if="{{portfolio.themeMode === 'dark'}}" class="folio-brand-logo" src="/assets/system/folio-logo-stack-bold-dark-50kb.png" mode="aspectFit"></image>
+      <image wx:else class="folio-brand-logo" src="/assets/system/folio-logo-stack-bold-small-50kb.png" mode="aspectFit"></image>
       <view class="folio-brand-name">映期Folio</view>
     </view>
+    </view>
   </scroll-view>
+
+  <portfolio-bottom-nav
+    navigation="{{portfolio.bottomNav}}"
+    active-menu-key="{{portfolio.activeMenuKey}}"
+    theme-mode="{{portfolio.themeMode}}"
+    bindchange="handleBottomNavChange"
+  ></portfolio-bottom-nav>
 
   <root-portal wx:if="{{videoPreviewVisible}}">
     <view class="work-video-mask {{videoPreviewVisible ? 'visible' : ''}}" catchtap="handleCloseVideoPreview">
@@ -124,6 +141,7 @@
     modal-visible="{{contactFormModalVisible}}"
     contact-component="{{activeContactFormComponent}}"
     contact-form="{{contactForm}}"
+    theme-mode="{{portfolio.themeMode}}"
     bindcontactinput="handleContactInput"
     bindsubmitcontact="handleSubmitContact"
     bindclosemodal="handleCloseContactFormModal"

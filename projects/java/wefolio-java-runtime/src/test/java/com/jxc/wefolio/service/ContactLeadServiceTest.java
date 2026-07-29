@@ -171,6 +171,22 @@ class ContactLeadServiceTest {
     }
 
     @Test
+    void submitV2ShouldFindContactFormInSecondaryMenu() {
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolioWithSecondaryContactForm());
+        when(visitRecordEntityMapper.selectOne(any())).thenReturn(visitRecord());
+        when(contactLeadEntityMapper.insert(any(ContactLeadEntity.class))).thenAnswer(invocation -> {
+            ContactLeadEntity lead = invocation.getArgument(0);
+            lead.setId(66L);
+            return 1;
+        });
+
+        ContactLeadSubmitResponse response = service().submitV2("PF001", request());
+
+        assertThat(response.getLeadId()).isEqualTo(66L);
+        verify(contactLeadEntityMapper).insert(any(ContactLeadEntity.class));
+    }
+
+    @Test
     void submitV2ShouldRejectVisitRecordFromAnotherVisitor() {
         when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolioWithContactForm());
         VisitRecordEntity record = visitRecord();
@@ -303,6 +319,28 @@ class ContactLeadServiceTest {
                 {"schemaVersion":"standard-personal-v1","share":{"title":"林安婚礼司仪"},"components":[
                   {"componentKey":"contact-1","componentType":"CONTACT_FORM","enabled":true,"config":{}}
                 ]}
+                """);
+        return portfolio;
+    }
+
+    private PortfolioEntity portfolioWithSecondaryContactForm() {
+        PortfolioEntity portfolio = portfolio();
+        portfolio.setPublishedConfigJson("""
+                {
+                  "schemaVersion":"standard-personal-v1",
+                  "share":{"title":"林安婚礼司仪"},
+                  "components":[],
+                  "bottomNav":{
+                    "enabled":true,
+                    "items":[
+                      {"key":"home","title":"主页"},
+                      {"key":"contact","title":"联系","components":[
+                        {"componentKey":"contact-secondary","componentType":"CONTACT_FORM",
+                         "sortOrder":1000,"enabled":true,"config":{}}
+                      ]}
+                    ]
+                  }
+                }
                 """);
         return portfolio;
     }

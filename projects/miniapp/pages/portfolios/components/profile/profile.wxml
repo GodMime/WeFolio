@@ -1,4 +1,4 @@
-<view class="profile-section">
+<view class="profile-section portfolio-theme-{{themeMode}}">
   <image wx:if="{{profile.avatarUrl}}" class="profile-avatar" src="{{profile.avatarUrl}}" mode="aspectFill"></image>
   <view wx:if="{{profile.displayName}}" class="profile-name">{{profile.displayName}}</view>
   <view wx:if="{{profile.profession}}" class="profile-line">{{profile.profession}}</view>

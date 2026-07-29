@@ -395,12 +395,19 @@ public class MinePortfolioService {
         if (request == null || request.getConfig() == null) {
             throw new BusinessException(PortfolioMessage.DRAFT_CONFIG_REQUIRED_MESSAGE);
         }
+        if (isNewEditorConfig(request.getConfig()) && request.getClientRevision() == null) {
+            throw new BusinessException(PortfolioMessage.DRAFT_CLIENT_REVISION_REQUIRED_MESSAGE);
+        }
         if (request.getClientRevision() != null && !request.getClientRevision().equals(safeInt(portfolio.getDraftRevision()))) {
             throw new BusinessException(PortfolioMessage.DRAFT_REVISION_CHANGED_SAVE_MESSAGE);
         }
         PortfolioConfigDto oldDraftConfig = parseConfig(portfolio.getDraftConfigJson());
         PortfolioConfigDto publishedConfig = parseConfig(portfolio.getPublishedConfigJson());
-        PortfolioConfigDto normalized = portfolioConfigValidator.normalize(userId, request.getConfig());
+        PortfolioConfigDto normalized = portfolioConfigValidator.normalizeForDraft(
+                userId,
+                request.getConfig(),
+                oldDraftConfig
+        );
         List<String> deletedObjectKeys = resolveUnreferencedAssetObjectKeys(
                 userId,
                 portfolio.getId(),
@@ -599,7 +606,8 @@ public class MinePortfolioService {
         String draftConfigJson = portfolio.getDraftConfigJson();
         PortfolioConfigDto currentDraftConfig = parseConfig(draftConfigJson);
         PortfolioConfigDto oldPublishedConfig = parseConfig(portfolio.getPublishedConfigJson());
-        PortfolioConfigDto normalized = portfolioConfigValidator.normalize(userId, currentDraftConfig);
+        PortfolioConfigDto normalized = portfolioConfigValidator.normalizeForDraft(userId, currentDraftConfig, null);
+        portfolioConfigValidator.validateForPublish(userId, normalized);
         List<String> deletedObjectKeys = resolveUnreferencedAssetObjectKeys(
                 userId,
                 portfolio.getId(),
@@ -1137,7 +1145,9 @@ public class MinePortfolioService {
             addOwnedPortfolioAssetObjectKey(objectKeys, config.getShare().getCoverUrl(), uniqueCode, portfolioId);
             addOwnedPortfolioAssetObjectKey(objectKeys, config.getShare().getAvatarUrl(), uniqueCode, portfolioId);
         }
-        for (PortfolioConfigDto.Component component : safeList(config.getComponents())) {
+        for (PortfolioComponentTraversal.ComponentLocation location
+                : PortfolioComponentTraversal.listComponentLocations(config)) {
+            PortfolioConfigDto.Component component = location.component();
             if (component == null) {
                 continue;
             }
@@ -1318,12 +1328,24 @@ public class MinePortfolioService {
      * @param componentKey 组件实例键
      */
     private void requireScheduleComponentConfig(PortfolioConfigDto config, String componentKey) {
-        safeList(config == null ? null : config.getComponents()).stream()
-                .filter(component -> component != null && Boolean.TRUE.equals(component.getEnabled()))
-                .filter(component -> COMPONENT_TYPE_SCHEDULE_QUERY.equals(component.getComponentType()))
-                .filter(component -> Objects.equals(component.getComponentKey(), componentKey))
-                .findFirst()
+        PortfolioComponentTraversal.findEnabledComponent(
+                        config,
+                        componentKey,
+                        COMPONENT_TYPE_SCHEDULE_QUERY
+                )
                 .orElseThrow(() -> new BusinessException(PortfolioMessage.SCHEDULE_QUERY_COMPONENT_NOT_FOUND_MESSAGE));
+    }
+
+    /**
+     * 判断请求是否来自支持背景和底部导航的新版编辑器。
+     *
+     * @param config 请求配置
+     * @return 是否为新版编辑器配置
+     */
+    private boolean isNewEditorConfig(PortfolioConfigDto config) {
+        return config != null
+                && config.getEditorSchemaRevision() != null
+                && config.getEditorSchemaRevision() >= PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT;
     }
 
     /**

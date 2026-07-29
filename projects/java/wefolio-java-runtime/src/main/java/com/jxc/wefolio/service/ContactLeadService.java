@@ -219,9 +219,9 @@ public class ContactLeadService {
     private void requireEnabledContactForm(PortfolioEntity portfolio) {
         try {
             PortfolioConfigDto config = JSON.parseObject(portfolio.getPublishedConfigJson(), PortfolioConfigDto.class);
-            boolean enabled = config != null
-                    && config.getComponents() != null
-                    && config.getComponents().stream().anyMatch(component -> component != null
+            boolean enabled = PortfolioComponentTraversal.listComponentLocations(config).stream()
+                    .map(PortfolioComponentTraversal.ComponentLocation::component)
+                    .anyMatch(component -> component != null
                     && PortfolioComponentTypeDict.CONTACT_FORM.getCode().equals(component.getComponentType())
                     && Boolean.TRUE.equals(component.getEnabled()));
             if (enabled) {

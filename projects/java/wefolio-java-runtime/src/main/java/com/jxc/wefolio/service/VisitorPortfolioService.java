@@ -663,12 +663,15 @@ public class VisitorPortfolioService {
      * @return 组件配置
      */
     private Map<String, Object> requireScheduleComponentConfig(PortfolioConfigDto config, String componentKey) {
-        return safeList(config == null ? null : config.getComponents()).stream()
-                .filter(component -> component != null && Boolean.TRUE.equals(component.getEnabled()))
-                .filter(component -> COMPONENT_TYPE_SCHEDULE_QUERY.equals(component.getComponentType()))
-                .filter(component -> Objects.equals(component.getComponentKey(), componentKey))
-                .findFirst()
-                .map(component -> component.getConfig() == null ? Map.<String, Object>of() : component.getConfig())
+        return PortfolioComponentTraversal.findEnabledComponent(
+                        config,
+                        componentKey,
+                        COMPONENT_TYPE_SCHEDULE_QUERY
+                )
+                .map(PortfolioComponentTraversal.ComponentLocation::component)
+                .map(component -> component.getConfig() == null
+                        ? Map.<String, Object>of()
+                        : component.getConfig())
                 .orElseThrow(() -> new BusinessException(PortfolioMessage.SCHEDULE_QUERY_COMPONENT_NOT_FOUND_MESSAGE));
     }
 

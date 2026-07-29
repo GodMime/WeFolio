@@ -1,6 +1,7 @@
 {
   "usingComponents": {
     "navigation-bar": "/components/navigation-bar/navigation-bar",
+    "portfolio-bottom-nav": "/components/portfolio-bottom-nav/portfolio-bottom-nav",
     "timeline-share-guide": "/components/timeline-share-guide/timeline-share-guide",
     "portfolio-carousel": "/components/portfolio-carousel/portfolio-carousel",
     "portfolio-schedule-query": "/components/portfolio-schedule-query/portfolio-schedule-query",

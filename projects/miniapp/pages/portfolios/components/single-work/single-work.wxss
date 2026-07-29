@@ -1,3 +1,5 @@
+@import "../../../../styles/portfolio-theme.wxss";
+
 .single-work {
   width: 100%;
   padding: 0 20rpx;
@@ -11,7 +13,7 @@
   display: block;
   overflow: hidden;
   border-radius: 40rpx;
-  background: #f1f3f5;
+  background: var(--portfolio-surface-muted);
 }
 
 .single-work-video-poster {
@@ -56,14 +58,14 @@
 }
 
 .single-work-title {
-  color: #212529;
+  color: var(--portfolio-text-primary);
   font-size: 28rpx;
   font-weight: 800;
   line-height: 1.45;
 }
 
 .single-work-description {
-  color: #868e96;
+  color: var(--portfolio-text-secondary);
   font-size: 26rpx;
   line-height: 1.75;
   white-space: pre-wrap;
@@ -77,14 +79,18 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #8a98a8;
+  color: var(--portfolio-text-secondary);
   font-size: 24rpx;
   border-radius: 40rpx;
-  background: #f1f3f5;
+  background: var(--portfolio-surface-muted);
 }
 
 .single-work-repair {
   margin: 0 20rpx;
   color: #c08a3e;
   background: #fbf6ed;
+}
+.single-work,
+.single-work-repair {
+  color: var(--portfolio-text-primary);
 }

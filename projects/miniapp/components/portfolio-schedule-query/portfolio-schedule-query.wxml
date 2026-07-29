@@ -86,7 +86,7 @@
   </view>
 </template>
 
-<view class="schedule-query {{scheduleQuery.displayMode === 'INLINE_CALENDAR' ? 'inline' : 'modal'}}">
+<view class="schedule-query portfolio-theme-{{themeMode}} {{scheduleQuery.displayMode === 'INLINE_CALENDAR' ? 'inline' : 'modal'}}">
   <block wx:if="{{scheduleQuery.displayMode === 'INLINE_CALENDAR'}}">
     <view class="schedule-query-inline-shell">
       <view class="component-title">{{scheduleQuery.title || '档期查询'}}</view>

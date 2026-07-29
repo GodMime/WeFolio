@@ -1,3 +1,5 @@
+@import "../../../../styles/portfolio-theme.wxss";
+
 .qr-section {
   padding: 12rpx 32rpx;
   text-align: center;
@@ -10,4 +12,7 @@
   height: 280rpx;
   margin: 24rpx auto 0;
   border-radius: 32rpx;
+}
+.qr-section {
+  color: var(--portfolio-text-primary);
 }

@@ -1218,7 +1218,10 @@ test('tapping profile component edits independent profile copy', async () => {
   assert.equal(page.data.editingProfileComponentKey, 'c_profile')
   assert.equal(page.data.profileForm.displayName, '林安')
   assert.equal(page.data.profileForm.bio, '温暖沉稳')
-  assert.equal(page.data.profileForm.tagsText, '高端婚礼')
+  assert.deepEqual(
+    page.data.profileForm.tags.map((item) => ({ content: item.content, color: item.color })),
+    [{ content: '高端婚礼', color: '#0f766e' }]
+  )
   assert.deepEqual(
     page.data.profileVisibleOptions.map((item) => ({ field: item.field, checked: item.checked })),
     [
@@ -1232,16 +1235,62 @@ test('tapping profile component edits independent profile copy', async () => {
     ]
   )
 
+  page.handleRemoveProfileTag({ currentTarget: { dataset: { index: 0 } } })
+  assert.deepEqual(page.data.profileForm.tags, [])
+
+  page.handleOpenProfileTagDialog()
+  page.handleProfileNewTagInput({ detail: { value: '主持' } })
+  page.handleSelectProfileTagColor({ currentTarget: { dataset: { color: '#2d5f9a' } } })
+  page.handleAddProfileTag()
+
+  assert.deepEqual(
+    page.data.profileForm.tags.map((item) => ({ content: item.content, color: item.color })),
+    [{ content: '主持', color: '#2d5f9a' }]
+  )
+
   page.handleProfileInput({ currentTarget: { dataset: { field: 'displayName' } }, detail: { value: '沈佳磊' } })
-  page.handleProfileInput({ currentTarget: { dataset: { field: 'tagsText' } }, detail: { value: '主持,双语' } })
   page.handleProfileVisibleFieldChange({ currentTarget: { dataset: { field: 'profession' } }, detail: { value: false } })
   page.handleConfirmProfileSheet()
 
   assert.equal(page.data.profileSheetVisible, false)
   assert.equal(page.data.editingProfileComponentKey, '')
   assert.equal(page.data.config.components[0].config.profile.displayName, '沈佳磊')
-  assert.deepEqual(page.data.config.components[0].config.profile.tags.map((item) => item.name), ['主持', '双语'])
+  assert.deepEqual(page.data.config.components[0].config.profile.tags, [
+    { name: '主持', color: '#2d5f9a' }
+  ])
   assert.equal(page.data.config.components[0].config.visibleFields.profession, false)
+})
+
+test('profile tag changes stay local until the profile sheet is confirmed', async () => {
+  const page = loadPortfolioEditorPage(() => Promise.resolve({}))
+  page.data.config = normalizePortfolioConfig({
+    components: [
+      createComponent(COMPONENT_TYPES.PROFILE, {
+        componentKey: 'c_profile',
+        config: {
+          profile: {
+            tags: [{ name: '主持', color: '#2d5f9a' }]
+          }
+        }
+      })
+    ]
+  })
+
+  await page.handleComponentTap({
+    currentTarget: { dataset: { key: 'c_profile', type: COMPONENT_TYPES.PROFILE } }
+  })
+  page.handleOpenProfileTagDialog()
+  page.handleProfileNewTagInput({ detail: { value: '主持' } })
+  page.handleAddProfileTag()
+
+  assert.equal(page.data.profileTagErrorText, '标签不能重复')
+  page.handleCloseProfileTagDialog()
+  page.handleRemoveProfileTag({ currentTarget: { dataset: { index: 0 } } })
+  page.handleCloseProfileSheet()
+
+  assert.deepEqual(page.data.config.components[0].config.profile.tags, [
+    { name: '主持', color: '#2d5f9a' }
+  ])
 })
 
 test('qr contact source tab switch reloads basic profile image and clears stale image before saving', async () => {
@@ -1344,7 +1393,10 @@ test('create mode defaults profile component from basic profile', async () => {
         profession: '全栈',
         city: '杭州、湖州',
         intro: 'OPC',
-        tags: [{ content: '主持' }]
+        tags: [
+          { content: '主持', color: '#2d5f9a' },
+          { content: '测试', color: '#8a4b09' }
+        ]
       })
     }
     return Promise.resolve({})
@@ -1365,7 +1417,10 @@ test('create mode defaults profile component from basic profile', async () => {
   assert.equal(profile.profession, '全栈')
   assert.equal(profile.city, '杭州、湖州')
   assert.equal(profile.bio, 'OPC')
-  assert.deepEqual(profile.tags.map((item) => item.name), ['主持'])
+  assert.deepEqual(profile.tags, [
+    { name: '主持', color: '#2d5f9a' },
+    { name: '测试', color: '#8a4b09' }
+  ])
 })
 
 test('profile refresh copies nickname without profession suffix', async () => {
@@ -1391,6 +1446,62 @@ test('profile refresh copies nickname without profession suffix', async () => {
   assert.equal(requests[0].url, '/api/mine/profile')
   assert.equal(page.data.profileForm.displayName, '丁Sir')
   assert.equal(page.data.profileForm.profession, '全栈')
+})
+
+test('profile refresh keeps confirmation and overwrites independent tags only after confirm', async () => {
+  const requests = []
+  const modals = []
+  let confirmRefresh = false
+  const fakeRequest = (options) => {
+    requests.push(options)
+    if (options.url === '/api/mine/profile') {
+      return Promise.resolve({
+        tags: [{ content: '基础标签', color: '#2d5f9a' }]
+      })
+    }
+    return Promise.resolve({})
+  }
+  const page = loadPortfolioEditorPage(fakeRequest, {
+    showModal(options) {
+      modals.push(options)
+      options.success({ confirm: confirmRefresh })
+    }
+  })
+  page.data.config = normalizePortfolioConfig({
+    components: [
+      createComponent(COMPONENT_TYPES.PROFILE, {
+        componentKey: 'c_profile',
+        config: {
+          profile: {
+            tags: [{ name: '作品集标签', color: '#8a4b09' }]
+          }
+        }
+      })
+    ]
+  })
+
+  await page.handleComponentTap({
+    currentTarget: { dataset: { key: 'c_profile', type: COMPONENT_TYPES.PROFILE } }
+  })
+  await page.handleRefreshProfileFromBase()
+
+  assert.equal(modals[0].content, '将用当前基础信息覆盖作品集内个人资料副本，是否继续？')
+  assert.equal(modals[0].confirmText, '刷新')
+  assert.equal(requests.length, 0)
+  assert.deepEqual(
+    page.data.profileForm.tags.map((item) => ({ content: item.content, color: item.color })),
+    [{ content: '作品集标签', color: '#8a4b09' }]
+  )
+
+  confirmRefresh = true
+  await page.handleRefreshProfileFromBase()
+
+  assert.equal(requests.length, 1)
+  assert.equal(requests[0].url, '/api/mine/profile')
+  assert.deepEqual(
+    page.data.profileForm.tags.map((item) => ({ content: item.content, color: item.color })),
+    [{ content: '基础标签', color: '#2d5f9a' }]
+  )
 })
 
 test('profile sheet chooses avatar from media picker without url input', async () => {
@@ -2115,6 +2226,65 @@ test('loading a published portfolio shows published status and publish action', 
   assert.equal(page.data.showPublishAction, true)
 })
 
+test('publishing locates an invalid component before disclaimer or network requests', async () => {
+  const requests = []
+  const modals = []
+  const toasts = []
+  const page = loadPortfolioEditorPage((options) => {
+    requests.push(options)
+    return Promise.resolve({
+      portfolioId: 88,
+      draftRevision: 6,
+      publishedRevision: 5,
+      publicationStatus: 'PUBLISHED'
+    })
+  }, {
+    showModal(options) {
+      modals.push(options)
+      options.success({ confirm: true })
+    },
+    showToast(options) {
+      toasts.push(options)
+    },
+    navigateBack() {},
+    redirectTo() {}
+  })
+  page.data.portfolioId = 88
+  page.data.draftRevision = 5
+  page.data.config = normalizePortfolioConfig({
+    components: [
+      createComponent(COMPONENT_TYPES.PROFILE, { componentKey: 'c_home' })
+    ],
+    bottomNav: {
+      enabled: true,
+      items: [
+        { key: 'nav_home', title: '主页' },
+        {
+          key: 'nav_works',
+          title: '作品',
+          components: [
+            createComponent(COMPONENT_TYPES.TEXT_SECTION, {
+              componentKey: 'c_empty_text',
+              config: { content: '' }
+            })
+          ]
+        }
+      ]
+    }
+  })
+
+  await page.handlePublish()
+
+  assert.deepEqual(modals, [])
+  assert.deepEqual(requests, [])
+  assert.equal(page.data.activeMenuKey, 'nav_works')
+  assert.equal(page.data.validationMenuKey, 'nav_works')
+  assert.equal(page.data.validationComponentKey, 'c_empty_text')
+  assert.equal(page.data.validationComponentAnchor, 'component-row-c_empty_text')
+  assert.equal(page.data.validationMenuMessage, '【作品】文字说明内容不能为空')
+  assert.equal(toasts.at(-1).title, '【作品】文字说明内容不能为空')
+})
+
 test('publishing from editor saves current draft before publishing and returns to portfolio list', async (t) => {
   const requests = []
   const navigations = []
@@ -2292,4 +2462,124 @@ test('preview action does not navigate before portfolio is created', () => {
   page.handlePreview()
 
   assert.deepEqual(navigations, [])
+})
+
+test('portfolio page settings match the continuous color picker and guarded menu deletion design', () => {
+  const pageRoot = path.join(__dirname, '../pages/portfolios/standard-edit')
+  const wxml = fs.readFileSync(path.join(pageRoot, 'portfolio-standard-edit.wxml'), 'utf8')
+  const js = fs.readFileSync(path.join(pageRoot, 'portfolio-standard-edit.js'), 'utf8')
+  const wxss = fs.readFileSync(path.join(pageRoot, 'portfolio-standard-edit.wxss'), 'utf8')
+
+  assert.match(wxml, /class="background-color-current"/)
+  assert.match(wxml, /class="background-color-pad"[\s\S]*bindtouchstart="handleBackgroundColorPadTouch"/)
+  assert.match(wxml, /class="background-hue-slider"[\s\S]*bindchanging="handleBackgroundHueChange"/)
+  assert.match(wxml, /class="background-hex-input"[\s\S]*bindinput="handleBackgroundHexInput"/)
+  assert.match(wxml, /class="background-hex-input"[\s\S]*bindblur="handleBackgroundHexBlur"/)
+  assert.match(wxml, /item === 1 \? '不开启' : item \+ ' 个'/)
+  assert.match(wxml, /class="editor-component-empty"/)
+  assert.match(js, /BACKGROUND_COLOR_OPTIONS\s*=\s*\['#151515', '#FFFFFF', '#F5F6F8'\]/)
+  assert.doesNotMatch(js, /请输入 6 位 HEX 色值/)
+  assert.match(js, /请输入正确的颜色值/)
+  assert.match(js, /handleRemoveEditorMenu\(event\)[\s\S]*wx\.showModal\([\s\S]*confirmText:\s*'删除'/)
+  assert.match(js, /message\.match\(\/\^【\(\.\+\?\)】\//)
+  assert.match(wxml, /validationMenuKey === item\.key/)
+  assert.match(wxml, /scroll-into-view="\{\{validationComponentAnchor\}\}"/)
+  assert.match(wxml, /id="component-row-\{\{item\.componentKey\}\}"/)
+  assert.match(wxml, /validationComponentKey === item\.componentKey \? 'validation-error' : ''/)
+  assert.match(wxss, /\.component-row\.validation-error\s*\{[\s\S]*border-color:\s*#b55656;/)
+})
+
+test('production color picker hue thumb matches the centered white-ring design', () => {
+  const pageRoot = path.join(__dirname, '../pages/portfolios/standard-edit')
+  const wxml = fs.readFileSync(path.join(pageRoot, 'portfolio-standard-edit.wxml'), 'utf8')
+  const wxss = fs.readFileSync(path.join(pageRoot, 'portfolio-standard-edit.wxss'), 'utf8')
+
+  assert.match(
+    wxml,
+    /class="background-hue-thumb"\s+style="left: \{\{backgroundColorHsv\.hue \/ 3\.59\}\}%; background-color: \{\{backgroundHueColor\}\};"/
+  )
+  assert.match(wxml, /block-color="transparent"/)
+  assert.match(
+    wxss,
+    /\.background-hue-thumb\s*\{[\s\S]*top:\s*50%;[\s\S]*width:\s*44rpx;[\s\S]*height:\s*44rpx;[\s\S]*border:\s*6rpx solid #ffffff;[\s\S]*transform:\s*translate\(-50%, -50%\);/
+  )
+  assert.doesNotMatch(wxss, /\.background-hue-slider slider\s*\{[^}]*margin:\s*-14rpx/)
+})
+
+test('reducing bottom navigation confirms component loss and keeps the previous menu active', () => {
+  const modals = []
+  const page = loadPortfolioEditorPage(() => Promise.resolve({}), {
+    showModal(options) {
+      modals.push(options)
+    }
+  })
+  page.data.config = normalizePortfolioConfig({
+    components: [createComponent(COMPONENT_TYPES.PROFILE, { componentKey: 'c_home' })],
+    bottomNav: {
+      enabled: true,
+      items: [
+        { key: 'nav_home', title: '主页' },
+        {
+          key: 'nav_works',
+          title: '作品',
+          components: [createComponent(COMPONENT_TYPES.WORK_GRID, { componentKey: 'c_works' })]
+        },
+        {
+          key: 'nav_contact',
+          title: '联系',
+          components: [createComponent(COMPONENT_TYPES.CONTACT_FORM, { componentKey: 'c_contact' })]
+        }
+      ]
+    }
+  })
+  page.data.activeMenuKey = 'nav_contact'
+
+  page.handleBottomNavCountTap({ currentTarget: { dataset: { count: 2 } } })
+
+  assert.equal(modals.length, 1)
+  assert.equal(modals[0].content, '删除菜单「联系」将同时删除其下 1 个组件')
+  assert.equal(page.data.config.bottomNav.items.length, 3)
+
+  modals[0].success({ confirm: true })
+
+  assert.equal(page.data.config.bottomNav.items.length, 2)
+  assert.equal(page.data.activeMenuKey, 'nav_works')
+})
+
+test('removing first navigation menu warns about legacy display and promotes the next menu', () => {
+  const modals = []
+  const page = loadPortfolioEditorPage(() => Promise.resolve({}), {
+    showModal(options) {
+      modals.push(options)
+    }
+  })
+  page.data.config = normalizePortfolioConfig({
+    components: [],
+    bottomNav: {
+      enabled: true,
+      items: [
+        { key: 'nav_home', title: '主页' },
+        {
+          key: 'nav_works',
+          title: '作品',
+          components: [createComponent(COMPONENT_TYPES.WORK_GRID, { componentKey: 'c_works' })]
+        },
+        { key: 'nav_contact', title: '联系', components: [] }
+      ]
+    }
+  })
+  page.data.activeMenuKey = 'nav_home'
+
+  page.handleRemoveEditorMenu({ currentTarget: { dataset: { key: 'nav_home' } } })
+
+  assert.equal(modals.length, 1)
+  assert.equal(
+    modals[0].content,
+    '删除菜单「主页」，「作品」将成为第一个菜单，旧版本小程序将展示「作品」的内容'
+  )
+
+  modals[0].success({ confirm: true })
+
+  assert.equal(page.data.config.bottomNav.items[0].key, 'nav_works')
+  assert.equal(page.data.activeMenuKey, 'nav_works')
 })

@@ -9,8 +9,129 @@ const {
   normalizeVisitorSchedule,
   normalizeVisitorScheduleOptions,
   normalizeVisitorScheduleQueryResult,
+  switchPortfolioMenu,
   switchDisplayGroup
 } = require('../utils/visitor-portfolio')
+
+test('normalizes render theme and secondary bottom navigation components', () => {
+  const result = normalizeVisitorPortfolio({
+    renderData: {
+      shareCode: 'PF001',
+      style: { backgroundColor: '#151515', themeMode: 'dark' },
+      components: [
+        { componentKey: 'c_home', componentType: 'PROFILE', sortOrder: 1000 }
+      ],
+      bottomNav: {
+        enabled: true,
+        items: [
+          { key: 'home', title: '主页' },
+          {
+            key: 'works',
+            title: '作品',
+            components: [
+              { componentKey: 'c_works', componentType: 'WORK_GRID', sortOrder: 1000, groups: [] }
+            ]
+          }
+        ]
+      }
+    }
+  })
+
+  assert.equal(result.style.backgroundColor, '#151515')
+  assert.equal(result.themeMode, 'dark')
+  assert.equal(result.activeMenuKey, 'home')
+  assert.deepEqual(result.activeComponents.map((item) => item.componentKey), ['c_home'])
+  const switched = switchPortfolioMenu(result, 'works')
+  assert.equal(switched.activeMenuKey, 'works')
+  assert.deepEqual(switched.activeComponents.map((item) => item.componentKey), ['c_works'])
+})
+
+test('visitor opens a modal contact form from the active secondary menu', () => {
+  const page = loadVisitorPage(() => Promise.resolve({}))
+  const component = {
+    componentKey: 'c_secondary_contact',
+    componentType: 'CONTACT_FORM',
+    contactForm: {
+      displayMode: 'MODAL_FORM',
+      fields: ['contactName']
+    }
+  }
+  page.data.portfolio = {
+    components: [],
+    activeComponents: [component],
+    bottomNav: {
+      enabled: true,
+      items: [
+        { key: 'nav_home', title: '主页' },
+        { key: 'nav_contact', title: '联系', components: [component] }
+      ]
+    }
+  }
+
+  page.handleOpenContactFormModal({
+    detail: { componentKey: 'c_secondary_contact' }
+  })
+
+  assert.equal(page.data.contactFormModalVisible, true)
+  assert.equal(page.data.activeContactFormComponent.componentKey, 'c_secondary_contact')
+})
+
+test('visitor bottom navigation exits old content before entering the target menu', () => {
+  const originalSetTimeout = global.setTimeout
+  const originalClearTimeout = global.clearTimeout
+  const timers = []
+  global.setTimeout = (handler, delay) => {
+    const timer = { handler, delay, id: `timer-${timers.length + 1}` }
+    timers.push(timer)
+    return timer.id
+  }
+  global.clearTimeout = () => {}
+
+  try {
+    const page = loadVisitorPage(() => Promise.resolve({}))
+    const homeComponents = [{ componentKey: 'c_home', componentType: 'PROFILE' }]
+    const worksComponents = [{ componentKey: 'c_works', componentType: 'WORK_GRID' }]
+    page.data.portfolio = {
+      components: homeComponents,
+      activeComponents: homeComponents,
+      activeMenuKey: 'home',
+      bottomNav: {
+        enabled: true,
+        items: [
+          { key: 'home', title: '主页' },
+          { key: 'works', title: '作品', components: worksComponents }
+        ]
+      }
+    }
+
+    const started = page.handleBottomNavChange({
+      detail: { menuKey: 'works' }
+    })
+
+    assert.equal(started, true)
+    assert.equal(page.data.portfolio.activeMenuKey, 'home')
+    assert.deepEqual(page.data.portfolio.activeComponents, homeComponents)
+    assert.equal(page.data.portfolioMenuSwitching, true)
+    assert.equal(page.data.portfolioMenuTransitionClass, 'portfolio-menu-exit-forward')
+    assert.equal(timers[0].delay, 120)
+
+    timers[0].handler()
+
+    assert.equal(page.data.portfolio.activeMenuKey, 'works')
+    assert.deepEqual(page.data.portfolio.activeComponents, worksComponents)
+    assert.equal(page.data.portfolioMenuTransitionClass, 'portfolio-menu-enter-forward')
+    assert.equal(page.data.portfolioScrollTop, 0)
+    assert.equal(timers[1].delay, 220)
+
+    timers[1].handler()
+
+    assert.equal(page.data.portfolioMenuSwitching, false)
+    assert.equal(page.data.portfolioMenuTransitionClass, '')
+  } finally {
+    global.setTimeout = originalSetTimeout
+    global.clearTimeout = originalClearTimeout
+  }
+})
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value))
@@ -800,6 +921,57 @@ test('display group switch can return from a tag to all works', () => {
   const all = switchDisplayGroup(tagged, 'c_list', '__all')
   assert.equal(all.components[0].activeGroupKey, '__all')
   assert.deepEqual(all.components[0].activeGroup.works.map((work) => work.workId), [1, 2])
+})
+
+test('secondary menu display group selection survives switching away and back', () => {
+  const portfolio = normalizeVisitorPortfolio({
+    renderData: {
+      components: [
+        { componentKey: 'c_home', componentType: 'PROFILE', sortOrder: 1000 }
+      ],
+      bottomNav: {
+        enabled: true,
+        items: [
+          { key: 'nav_home', title: '主页' },
+          {
+            key: 'nav_works',
+            title: '作品',
+            components: [
+              {
+                componentKey: 'c_secondary_list',
+                componentType: 'WORK_LIST',
+                sortOrder: 1000,
+                groups: [
+                  {
+                    groupKey: 'g_a',
+                    name: 'A',
+                    sortOrder: 1000,
+                    works: [{ workId: 1, title: 'A1', mediaType: 'IMAGE', mediaUrl: 'a.jpg' }]
+                  },
+                  {
+                    groupKey: 'g_b',
+                    name: 'B',
+                    sortOrder: 2000,
+                    works: [{ workId: 2, title: 'B1', mediaType: 'IMAGE', mediaUrl: 'b.jpg' }]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  })
+  const worksMenu = switchPortfolioMenu(portfolio, 'nav_works')
+  const selected = switchDisplayGroup(worksMenu, 'c_secondary_list', 'g_b')
+  const homeMenu = switchPortfolioMenu(selected, 'nav_home')
+  const restoredWorksMenu = switchPortfolioMenu(homeMenu, 'nav_works')
+
+  assert.equal(restoredWorksMenu.activeComponents[0].activeGroupKey, 'g_b')
+  assert.deepEqual(
+    restoredWorksMenu.activeComponents[0].activeGroup.works.map((work) => work.workId),
+    [2]
+  )
 })
 
 test('visitor display group switch marks work content as switching briefly', () => {

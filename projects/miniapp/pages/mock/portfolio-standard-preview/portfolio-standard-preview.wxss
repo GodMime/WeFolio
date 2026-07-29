@@ -1,6 +1,22 @@
 @import "../styles/portfolio-standard-preview.wxss";
 @import "../common.wxss";
+@import "../../../styles/portfolio-theme.wxss";
 
 .mock-section-desc {
   margin-top: 8rpx;
+}
+
+.mock-preview-page,
+.preview-scroll {
+  color: var(--portfolio-text-primary);
+  background: transparent;
+}
+
+.portfolio-theme-dark .preview-toolbar {
+  border-bottom-color: var(--portfolio-border);
+}
+
+.portfolio-theme-dark .preview-note,
+.portfolio-theme-dark .folio-brand-name {
+  color: var(--portfolio-text-muted);
 }

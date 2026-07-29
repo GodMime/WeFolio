@@ -18,12 +18,25 @@ function createActiveContactFormComponent() {
 
 function findContactFormComponent(portfolio = {}, componentKey = '') {
   const targetKey = String(componentKey || '')
-  return (Array.isArray(portfolio.components) ? portfolio.components : [])
-    .find((component) => {
+  const navigationItems = portfolio.bottomNav && Array.isArray(portfolio.bottomNav.items)
+    ? portfolio.bottomNav.items
+    : []
+  const componentLists = [
+    portfolio.activeComponents,
+    portfolio.components,
+    ...navigationItems.map((item) => item && item.components)
+  ]
+  for (const components of componentLists) {
+    const matched = (Array.isArray(components) ? components : []).find((component) => {
       return component &&
         component.componentKey === targetKey &&
         component.componentType === COMPONENT_TYPES.CONTACT_FORM
-    }) || null
+    })
+    if (matched) {
+      return matched
+    }
+  }
+  return null
 }
 
 module.exports = {

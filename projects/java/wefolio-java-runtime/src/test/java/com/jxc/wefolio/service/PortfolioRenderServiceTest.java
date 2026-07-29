@@ -1,6 +1,8 @@
 package com.jxc.wefolio.service;
 
 import com.alibaba.fastjson2.JSON;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jxc.wefolio.dict.MediaTypeDict;
 import com.jxc.wefolio.dict.PortfolioComponentTypeDict;
 import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
@@ -157,6 +159,104 @@ class PortfolioRenderServiceTest {
         assertThat(render.isUnderMaintenance()).isTrue();
         assertThat(render.getMaintenanceText().getSecondary()).isEqualTo("维护中");
         assertThat(render.getComponents()).isEmpty();
+        assertThat(render.getStyle().getBackgroundColor()).isEqualTo("#FFFFFF");
+        assertThat(render.getStyle().getThemeMode()).isEqualTo("light");
+        assertThat(render.getBottomNav().isEnabled()).isFalse();
+        assertThat(render.getBottomNav().getItems()).isEmpty();
+    }
+
+    /**
+     * 渲染时应输出背景主题和二级菜单组件，首页菜单不重复输出组件。
+     */
+    @Test
+    void renderShouldExposeStyleAndSecondaryMenuComponents() {
+        PortfolioConfigDto config = config(
+                component("c_profile", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, Map.of())
+        );
+        PortfolioConfigDto.Style style = new PortfolioConfigDto.Style();
+        style.setBackgroundColor("#102030");
+        config.setStyle(style);
+        PortfolioConfigDto.BottomNav bottomNav = new PortfolioConfigDto.BottomNav();
+        bottomNav.setEnabled(true);
+        PortfolioConfigDto.BottomNavItem home = new PortfolioConfigDto.BottomNavItem();
+        home.setKey("home");
+        home.setTitle("主页");
+        PortfolioConfigDto.BottomNavItem contact = new PortfolioConfigDto.BottomNavItem();
+        contact.setKey("contact");
+        contact.setTitle("联系");
+        contact.setComponents(List.of(component(
+                "c_contact",
+                PortfolioComponentTypeDict.CONTACT_FORM.getCode(),
+                1000,
+                Map.of("title", "留下联系方式")
+        )));
+        bottomNav.setItems(List.of(home, contact));
+        config.setBottomNav(bottomNav);
+
+        PortfolioRenderDto render = service().render(portfolio(), config, false, false, null, null);
+
+        assertThat(render.getStyle().getBackgroundColor()).isEqualTo("#102030");
+        assertThat(render.getStyle().getThemeMode()).isEqualTo("dark");
+        assertThat(render.getComponents()).extracting(PortfolioRenderDto.Component::getComponentKey)
+                .containsExactly("c_profile");
+        assertThat(render.getBottomNav().isEnabled()).isTrue();
+        assertThat(render.getBottomNav().getItems()).hasSize(2);
+        assertThat(render.getBottomNav().getItems().get(0).getComponents()).isNull();
+        assertThat(render.getBottomNav().getItems().get(1).getComponents())
+                .extracting(PortfolioRenderDto.Component::getComponentKey)
+                .containsExactly("c_contact");
+    }
+
+    /**
+     * 第一菜单复用顶层组件，渲染 JSON 中不得重复输出 components 字段。
+     */
+    @Test
+    void renderJsonShouldOmitComponentsFromFirstNavigationItem() throws Exception {
+        PortfolioConfigDto config = config(
+                component("c_profile", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, Map.of())
+        );
+        PortfolioConfigDto.BottomNav bottomNav = new PortfolioConfigDto.BottomNav();
+        bottomNav.setEnabled(true);
+        PortfolioConfigDto.BottomNavItem home = new PortfolioConfigDto.BottomNavItem();
+        home.setKey("home");
+        home.setTitle("主页");
+        PortfolioConfigDto.BottomNavItem contact = new PortfolioConfigDto.BottomNavItem();
+        contact.setKey("contact");
+        contact.setTitle("联系");
+        contact.setComponents(List.of(component(
+                "c_contact",
+                PortfolioComponentTypeDict.CONTACT_FORM.getCode(),
+                1000,
+                Map.of()
+        )));
+        bottomNav.setItems(List.of(home, contact));
+        config.setBottomNav(bottomNav);
+
+        PortfolioRenderDto render = service().render(portfolio(), config, false, false, null, null);
+        ObjectMapper objectMapper = new ObjectMapper();
+        JsonNode items = objectMapper.readTree(objectMapper.writeValueAsString(render))
+                .path("bottomNav")
+                .path("items");
+
+        assertThat(items.get(0).has("components")).isFalse();
+        assertThat(items.get(1).path("components").isArray()).isTrue();
+    }
+
+    /**
+     * YIQ 临界值上方的浅色背景应使用深色文字主题。
+     */
+    @Test
+    void renderShouldDeriveLightThemeModeFromBackgroundColor() {
+        PortfolioConfigDto config = config(
+                component("c_profile", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, Map.of())
+        );
+        PortfolioConfigDto.Style style = new PortfolioConfigDto.Style();
+        style.setBackgroundColor("#808080");
+        config.setStyle(style);
+
+        PortfolioRenderDto render = service().render(portfolio(), config, false, false, null, null);
+
+        assertThat(render.getStyle().getThemeMode()).isEqualTo("light");
     }
 
     /**

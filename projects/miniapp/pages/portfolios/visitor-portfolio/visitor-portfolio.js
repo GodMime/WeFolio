@@ -9,7 +9,16 @@ const {
   readPortfolioRenderEventData
 } = require('../utils/portfolio-render-events')
 const { clearDisplaySwitchingTimer, markDisplaySwitching } = require('../utils/display-switching')
-const { buildVisitorEventPayload, normalizeVisitorPortfolio, switchDisplayGroup } = require('../../../utils/visitor-portfolio')
+const {
+  clearPortfolioMenuTransitionTimers,
+  startPortfolioMenuTransition
+} = require('../utils/portfolio-menu-transition')
+const {
+  buildVisitorEventPayload,
+  normalizeVisitorPortfolio,
+  switchDisplayGroup,
+  switchPortfolioMenu
+} = require('../../../utils/visitor-portfolio')
 const { uploadVisitorAvatarProfile } = require('../utils/visitor-profile')
 const { request } = require('../../../utils/request')
 const {
@@ -84,7 +93,10 @@ Page({
     visitorProfileNicknameError: false,
     visitorProfileValidationShaking: false,
     visitorProfileSaving: false,
-    displaySwitchingComponentKey: ''
+    displaySwitchingComponentKey: '',
+    portfolioMenuSwitching: false,
+    portfolioMenuTransitionClass: '',
+    portfolioScrollTop: 0
   },
 
   onLoad(options = {}) {
@@ -250,9 +262,29 @@ Page({
     })
   },
 
+  handleBottomNavChange(event) {
+    const menuKey = event.detail && event.detail.menuKey
+    return startPortfolioMenuTransition(this, menuKey, {
+      onBeforeExit: () => {
+        clearDisplaySwitchingTimer(this)
+        this.invalidateSingleWorkInteraction()
+        this.stopActiveSingleWorkVideo()
+      },
+      exitPatch: {
+        contactFormModalVisible: false,
+        activeContactFormComponent: createActiveContactFormComponent(),
+        videoPreviewVisible: false,
+        videoPreview: null,
+        displaySwitchingComponentKey: ''
+      },
+      switchPortfolio: switchPortfolioMenu
+    })
+  },
+
   onUnload() {
     this.singleWorkPageVisible = false
     this.invalidateSingleWorkInteraction()
+    clearPortfolioMenuTransitionTimers(this)
     clearDisplaySwitchingTimer(this)
     this.stopActiveSingleWorkVideo()
   },

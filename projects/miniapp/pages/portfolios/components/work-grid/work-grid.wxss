@@ -1,6 +1,8 @@
+@import "../../../../styles/portfolio-theme.wxss";
+
 .work-section-title {
   padding: 0 24rpx;
-  color: #212529;
+  color: var(--portfolio-text-primary);
   font-size: 34rpx;
   font-weight: 900;
   line-height: 1.35;
@@ -27,7 +29,7 @@
 
 .display-tag {
   flex: 0 0 auto;
-  color: #8a8f98;
+  color: var(--portfolio-text-secondary);
   font-size: 28rpx;
   line-height: 56rpx;
   transition: color 160ms ease, opacity 160ms ease;
@@ -35,7 +37,7 @@
 }
 
 .display-tag.active {
-  color: #212529;
+  color: var(--portfolio-text-primary);
   font-weight: 900;
 }
 
@@ -79,7 +81,7 @@
   height: 236rpx;
   overflow: hidden;
   border-radius: 32rpx;
-  background: #f1f3f5;
+  background: var(--portfolio-surface-muted);
 }
 
 .work-cover {
@@ -120,7 +122,7 @@
 
 .work-title {
   overflow: hidden;
-  color: #212529;
+  color: var(--portfolio-text-primary);
   font-size: 24rpx;
   font-weight: 700;
   line-height: 1.35;
@@ -129,10 +131,13 @@
 }
 
 .work-desc {
-  color: #868e96;
+  color: var(--portfolio-text-secondary);
   font-size: 22rpx;
   line-height: 1.6;
   white-space: pre-wrap;
   overflow-wrap: break-word;
   word-break: break-word;
+}
+.work-grid-component {
+  color: var(--portfolio-text-primary);
 }

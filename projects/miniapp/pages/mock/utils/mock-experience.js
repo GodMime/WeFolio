@@ -50,6 +50,12 @@ const MOCK_COMPONENT_DESCRIPTIONS = {
 }
 const MOCK_COMPONENT_SORT_ORDER_STEP = 1000
 const MOCK_SINGLE_WORK_MEDIA_WIDTH_RPX = 710
+const MOCK_EDITOR_SCHEMA_REVISION = 2
+const MOCK_NAVIGATION_MIN_COUNT = 2
+const MOCK_NAVIGATION_MAX_COUNT = 4
+const MOCK_NAVIGATION_TITLE_MAX_LENGTH = 5
+const MOCK_DEFAULT_BACKGROUND_COLOR = '#FFFFFF'
+const MOCK_DEFAULT_NAVIGATION_TITLES = ['主页', '作品', '动态', '联系']
 const MOCK_COMPONENT_OPTIONS = Object.keys(COMPONENT_TYPES).map((key) => {
   const componentType = COMPONENT_TYPES[key]
   return {
@@ -434,10 +440,28 @@ const MOCK_PORTFOLIO_LIST = {
 
 const MOCK_PORTFOLIO_CONFIG = {
   schemaVersion: 'standard-personal-v1',
+  editorSchemaRevision: MOCK_EDITOR_SCHEMA_REVISION,
   share: {
     title: '风景标准个人作品集',
     coverUrl: `${MOCK_ASSET_ROOT}/demo-image-1.jpg`,
     avatarUrl: MOCK_AVATAR_URL
+  },
+  style: {
+    backgroundColor: MOCK_DEFAULT_BACKGROUND_COLOR
+  },
+  bottomNav: {
+    enabled: true,
+    items: [
+      {
+        key: 'nav_mock_home',
+        title: '主页'
+      },
+      {
+        key: 'nav_mock_works',
+        title: '作品',
+        components: []
+      }
+    ]
   },
   components: [
     {
@@ -757,10 +781,98 @@ function buildMockDividerConfig(componentConfig = {}) {
   })
 }
 
-function buildMockPortfolioRenderData(config = MOCK_PORTFOLIO_CONFIG) {
-  const sourceConfig = clone(config)
-  const sourceComponents = Array.isArray(sourceConfig.components) ? sourceConfig.components : []
-  const components = sourceComponents
+function normalizeMockBackgroundColor(value) {
+  const color = trimText(value)
+  return /^#[0-9A-Fa-f]{6}$/.test(color) ? color.toUpperCase() : MOCK_DEFAULT_BACKGROUND_COLOR
+}
+
+function getMockThemeMode(backgroundColor) {
+  const color = normalizeMockBackgroundColor(backgroundColor)
+  const red = Number.parseInt(color.slice(1, 3), 16)
+  const green = Number.parseInt(color.slice(3, 5), 16)
+  const blue = Number.parseInt(color.slice(5, 7), 16)
+  return ((red * 299 + green * 587 + blue * 114) / 1000) < 128 ? 'dark' : 'light'
+}
+
+function normalizeMockNavigationItem(item = {}, index = 0) {
+  const title = Array.from(trimText(item.title)).slice(0, MOCK_NAVIGATION_TITLE_MAX_LENGTH).join('')
+  const normalized = {
+    key: trimText(item.key) || `nav_mock_${Date.now()}_${index + 1}`,
+    title: title || MOCK_DEFAULT_NAVIGATION_TITLES[index] || `菜单${index + 1}`
+  }
+  const iconUrl = trimText(item.iconUrl)
+  if (iconUrl) {
+    normalized.iconUrl = iconUrl
+  }
+  if (index > 0) {
+    normalized.components = Array.isArray(item.components) ? item.components : []
+  }
+  return normalized
+}
+
+function normalizeMockPortfolioConfig(config = {}) {
+  const normalized = Object.assign({}, clone(config || {}))
+  normalized.editorSchemaRevision = MOCK_EDITOR_SCHEMA_REVISION
+  normalized.share = Object.assign({}, normalized.share || {})
+  normalized.components = Array.isArray(normalized.components) ? normalized.components : []
+  normalized.style = {
+    backgroundColor: normalizeMockBackgroundColor(
+      normalized.style && normalized.style.backgroundColor
+    )
+  }
+  const rawBottomNav = normalized.bottomNav || {}
+  const rawItems = Array.isArray(rawBottomNav.items) ? rawBottomNav.items : []
+  if (rawBottomNav.enabled === true && rawItems.length >= MOCK_NAVIGATION_MIN_COUNT) {
+    normalized.bottomNav = {
+      enabled: true,
+      items: rawItems
+        .slice(0, MOCK_NAVIGATION_MAX_COUNT)
+        .map((item, index) => normalizeMockNavigationItem(item, index))
+    }
+  } else {
+    normalized.bottomNav = { enabled: false }
+  }
+  return normalized
+}
+
+function getMockMenuComponents(config = {}, menuKey) {
+  const normalized = normalizeMockPortfolioConfig(config)
+  if (!normalized.bottomNav.enabled || !menuKey || normalized.bottomNav.items[0].key === menuKey) {
+    return normalized.components
+  }
+  const target = normalized.bottomNav.items.find((item) => item.key === menuKey)
+  return target && Array.isArray(target.components) ? target.components : normalized.components
+}
+
+function replaceMockMenuComponents(config = {}, menuKey, components = []) {
+  const normalized = normalizeMockPortfolioConfig(config)
+  const nextComponents = Array.isArray(components) ? components : []
+  if (!normalized.bottomNav.enabled || !menuKey || normalized.bottomNav.items[0].key === menuKey) {
+    normalized.components = nextComponents
+    return normalized
+  }
+  normalized.bottomNav.items = normalized.bottomNav.items.map((item, index) => {
+    if (index === 0 || item.key !== menuKey) {
+      return item
+    }
+    return Object.assign({}, item, { components: nextComponents })
+  })
+  return normalized
+}
+
+function listMockPortfolioComponents(config = {}) {
+  const normalized = normalizeMockPortfolioConfig(config)
+  const allComponents = normalized.components.slice()
+  if (normalized.bottomNav.enabled) {
+    normalized.bottomNav.items.slice(1).forEach((item) => {
+      allComponents.push(...(item.components || []))
+    })
+  }
+  return allComponents
+}
+
+function buildMockRenderComponents(sourceComponents = [], allSourceComponents = sourceComponents) {
+  return sourceComponents
     .filter((component) => component.enabled !== false)
     .map(normalizeComponentConfig)
     .sort((left, right) => Number(left.sortOrder || 0) - Number(right.sortOrder || 0))
@@ -830,7 +942,7 @@ function buildMockPortfolioRenderData(config = MOCK_PORTFOLIO_CONFIG) {
           componentType: component.componentType,
           name: component.name,
           sortOrder: component.sortOrder,
-          qrContact: buildMockQrContactConfig(componentConfig, sourceComponents)
+          qrContact: buildMockQrContactConfig(componentConfig, allSourceComponents)
         }
       }
       if (component.componentType === COMPONENT_TYPES.TEXT_SECTION) {
@@ -859,13 +971,42 @@ function buildMockPortfolioRenderData(config = MOCK_PORTFOLIO_CONFIG) {
         contactForm: Object.assign({}, componentConfig)
       }
     })
+}
+
+function buildMockPortfolioRenderData(config = MOCK_PORTFOLIO_CONFIG) {
+  const sourceConfig = normalizeMockPortfolioConfig(config)
+  const sourceComponents = Array.isArray(sourceConfig.components) ? sourceConfig.components : []
+  const allSourceComponents = listMockPortfolioComponents(sourceConfig)
+  const components = buildMockRenderComponents(sourceComponents, allSourceComponents)
+  const backgroundColor = sourceConfig.style.backgroundColor
+  const themeMode = getMockThemeMode(backgroundColor)
+  const bottomNav = sourceConfig.bottomNav.enabled
+    ? {
+        enabled: true,
+        items: sourceConfig.bottomNav.items.map((item, index) => {
+          const renderedItem = {
+            key: item.key,
+            title: item.title
+          }
+          if (index > 0) {
+            renderedItem.components = buildMockRenderComponents(item.components || [], allSourceComponents)
+          }
+          return renderedItem
+        })
+      }
+    : { enabled: false, items: [] }
 
   return {
     preview: true,
     shareCode: 'MOCK9001',
     title: sourceConfig.share && sourceConfig.share.title ? sourceConfig.share.title : '风景标准个人作品集',
     share: Object.assign({}, sourceConfig.share || {}),
-    components
+    style: { backgroundColor },
+    themeMode,
+    components,
+    bottomNav,
+    activeMenuKey: bottomNav.enabled ? bottomNav.items[0].key : '',
+    activeComponents: components
   }
 }
 
@@ -937,11 +1078,7 @@ function buildMockComponent(componentType, existingComponents = []) {
 
 function cloneMockDraft(portfolioDraft) {
   const nextDraft = Object.assign({}, clone(portfolioDraft || MOCK_STANDARD_PORTFOLIO))
-  nextDraft.config = Object.assign({}, nextDraft.config || {})
-  nextDraft.config.share = Object.assign({}, nextDraft.config.share || {})
-  nextDraft.config.components = Array.isArray(nextDraft.config.components)
-    ? nextDraft.config.components
-    : []
+  nextDraft.config = normalizeMockPortfolioConfig(nextDraft.config)
   return nextDraft
 }
 
@@ -951,38 +1088,43 @@ function refreshMockDraftRenderData(draft) {
   return nextDraft
 }
 
-function applyMockComponentOrder(draft, components) {
+function applyMockComponentOrder(draft, components, menuKey) {
   const nextDraft = cloneMockDraft(draft)
-  nextDraft.config.components = (Array.isArray(components) ? components : []).map((component, index) => {
+  const orderedComponents = (Array.isArray(components) ? components : []).map((component, index) => {
     return Object.assign({}, component, {
       sortOrder: (index + 1) * MOCK_COMPONENT_SORT_ORDER_STEP
     })
   })
+  nextDraft.config = replaceMockMenuComponents(nextDraft.config, menuKey, orderedComponents)
   nextDraft.renderData = buildMockPortfolioRenderData(nextDraft.config)
   return nextDraft
 }
 
-function addMockComponent(portfolioDraft, componentType) {
+function addMockComponent(portfolioDraft, componentType, menuKey) {
   const nextDraft = cloneMockDraft(portfolioDraft)
-  const components = nextDraft.config.components.slice()
+  const components = getMockMenuComponents(nextDraft.config, menuKey).slice()
+  const allComponents = listMockPortfolioComponents(nextDraft.config)
   return applyMockComponentOrder(
     nextDraft,
-    components.concat(buildMockComponent(componentType, components))
+    components.concat(buildMockComponent(componentType, allComponents)),
+    menuKey
   )
 }
 
-function removeMockComponent(portfolioDraft, componentKey) {
+function removeMockComponent(portfolioDraft, componentKey, menuKey) {
   const targetKey = trimText(componentKey)
   const nextDraft = cloneMockDraft(portfolioDraft)
   return applyMockComponentOrder(
     nextDraft,
-    nextDraft.config.components.filter((component) => component.componentKey !== targetKey)
+    getMockMenuComponents(nextDraft.config, menuKey)
+      .filter((component) => component.componentKey !== targetKey),
+    menuKey
   )
 }
 
-function reorderMockComponent(portfolioDraft, fromIndex, toIndex) {
+function reorderMockComponent(portfolioDraft, fromIndex, toIndex, menuKey) {
   const nextDraft = cloneMockDraft(portfolioDraft)
-  const components = nextDraft.config.components.slice()
+  const components = getMockMenuComponents(nextDraft.config, menuKey).slice()
   const sourceIndex = Number(fromIndex)
   const targetIndex = Number(toIndex)
   if (
@@ -998,7 +1140,102 @@ function reorderMockComponent(portfolioDraft, fromIndex, toIndex) {
   }
   const moving = components.splice(sourceIndex, 1)[0]
   components.splice(targetIndex, 0, moving)
-  return applyMockComponentOrder(nextDraft, components)
+  return applyMockComponentOrder(nextDraft, components, menuKey)
+}
+
+function updateMockPortfolioStyle(portfolioDraft, backgroundColor) {
+  const nextDraft = cloneMockDraft(portfolioDraft)
+  nextDraft.config.style = {
+    backgroundColor: normalizeMockBackgroundColor(backgroundColor)
+  }
+  nextDraft.renderData = buildMockPortfolioRenderData(nextDraft.config)
+  return nextDraft
+}
+
+function setMockBottomNavigationCount(portfolioDraft, count) {
+  const nextDraft = cloneMockDraft(portfolioDraft)
+  const targetCount = Math.min(
+    MOCK_NAVIGATION_MAX_COUNT,
+    Math.max(1, Math.floor(Number(count) || 1))
+  )
+  if (targetCount < MOCK_NAVIGATION_MIN_COUNT) {
+    nextDraft.config.bottomNav = { enabled: false }
+    nextDraft.renderData = buildMockPortfolioRenderData(nextDraft.config)
+    return nextDraft
+  }
+  const currentItems = nextDraft.config.bottomNav.enabled
+    ? nextDraft.config.bottomNav.items
+    : []
+  const items = Array.from({ length: targetCount }, (_, index) => {
+    if (currentItems[index]) {
+      return normalizeMockNavigationItem(currentItems[index], index)
+    }
+    return normalizeMockNavigationItem({
+      key: `nav_mock_${Date.now()}_${index + 1}`,
+      title: MOCK_DEFAULT_NAVIGATION_TITLES[index],
+      components: []
+    }, index)
+  })
+  nextDraft.config.bottomNav = { enabled: true, items }
+  nextDraft.renderData = buildMockPortfolioRenderData(nextDraft.config)
+  return nextDraft
+}
+
+function renameMockNavigationItem(portfolioDraft, menuKey, title) {
+  const nextDraft = cloneMockDraft(portfolioDraft)
+  if (!nextDraft.config.bottomNav.enabled) {
+    return refreshMockDraftRenderData(nextDraft)
+  }
+  const normalizedTitle = Array.from(trimText(title)).slice(0, MOCK_NAVIGATION_TITLE_MAX_LENGTH).join('')
+  if (!normalizedTitle) {
+    return refreshMockDraftRenderData(nextDraft)
+  }
+  nextDraft.config.bottomNav.items = nextDraft.config.bottomNav.items.map((item) => {
+    return item.key === menuKey ? Object.assign({}, item, { title: normalizedTitle }) : item
+  })
+  nextDraft.renderData = buildMockPortfolioRenderData(nextDraft.config)
+  return nextDraft
+}
+
+function removeMockNavigationItem(portfolioDraft, menuKey) {
+  const nextDraft = cloneMockDraft(portfolioDraft)
+  if (!nextDraft.config.bottomNav.enabled) {
+    return refreshMockDraftRenderData(nextDraft)
+  }
+  const items = nextDraft.config.bottomNav.items.slice()
+  const targetIndex = items.findIndex((item) => item.key === menuKey)
+  if (targetIndex < 0) {
+    return refreshMockDraftRenderData(nextDraft)
+  }
+  if (targetIndex === 0 && items[1]) {
+    nextDraft.config.components = (items[1].components || []).slice()
+  }
+  items.splice(targetIndex, 1)
+  if (items.length < MOCK_NAVIGATION_MIN_COUNT) {
+    nextDraft.config.bottomNav = { enabled: false }
+  } else {
+    nextDraft.config.bottomNav = {
+      enabled: true,
+      items: items.map((item, index) => normalizeMockNavigationItem(item, index))
+    }
+  }
+  nextDraft.renderData = buildMockPortfolioRenderData(nextDraft.config)
+  return nextDraft
+}
+
+function switchMockPortfolioMenu(portfolio, menuKey) {
+  const nextPortfolio = Object.assign({}, clone(portfolio || {}))
+  const bottomNav = nextPortfolio.bottomNav || {}
+  const items = Array.isArray(bottomNav.items) ? bottomNav.items : []
+  const targetIndex = items.findIndex((item) => item.key === menuKey)
+  if (!bottomNav.enabled || targetIndex < 0) {
+    return nextPortfolio
+  }
+  nextPortfolio.activeMenuKey = items[targetIndex].key
+  nextPortfolio.activeComponents = targetIndex === 0
+    ? (nextPortfolio.components || [])
+    : (items[targetIndex].components || [])
+  return nextPortfolio
 }
 
 function getMockPortfolioDraft() {
@@ -1037,9 +1274,9 @@ function resetMockPortfolioDraft() {
   return clone(MOCK_STANDARD_PORTFOLIO)
 }
 
-function updateComponentConfig(portfolioDraft, componentKey, updater) {
-  const nextDraft = Object.assign({}, clone(portfolioDraft || MOCK_STANDARD_PORTFOLIO))
-  nextDraft.config.components = nextDraft.config.components.map((component) => {
+function updateComponentConfig(portfolioDraft, componentKey, updater, menuKey) {
+  const nextDraft = cloneMockDraft(portfolioDraft)
+  const components = getMockMenuComponents(nextDraft.config, menuKey).map((component) => {
     if (component.componentKey !== componentKey) {
       return component
     }
@@ -1050,12 +1287,18 @@ function updateComponentConfig(portfolioDraft, componentKey, updater) {
       config: nextConfig
     })
   })
+  nextDraft.config = replaceMockMenuComponents(nextDraft.config, menuKey, components)
   nextDraft.renderData = buildMockPortfolioRenderData(nextDraft.config)
   return nextDraft
 }
 
-function updateMockSingleWorkConfig(portfolioDraft, componentKey, config) {
-  return updateComponentConfig(portfolioDraft, componentKey, () => normalizeMockSingleWorkConfig(config))
+function updateMockSingleWorkConfig(portfolioDraft, componentKey, config, menuKey) {
+  return updateComponentConfig(
+    portfolioDraft,
+    componentKey,
+    () => normalizeMockSingleWorkConfig(config),
+    menuKey
+  )
 }
 
 function getWorkIdsFromComponent(component = {}) {
@@ -1097,6 +1340,12 @@ module.exports = {
   addMockComponent,
   removeMockComponent,
   reorderMockComponent,
+  updateMockPortfolioStyle,
+  setMockBottomNavigationCount,
+  renameMockNavigationItem,
+  removeMockNavigationItem,
+  switchMockPortfolioMenu,
+  getMockMenuComponents,
   updateComponentConfig,
   updateMockSingleWorkConfig,
   getWorkIdsFromComponent,

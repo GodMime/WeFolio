@@ -1,9 +1,14 @@
 .portfolio-preview-page {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: #ffffff;
 }
 
 .preview-scroll {
-  height: 100vh;
+  flex: 1;
+  min-height: 0;
 }
 
 .preview-toolbar {

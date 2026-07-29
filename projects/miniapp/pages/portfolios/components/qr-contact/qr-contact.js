@@ -1,5 +1,9 @@
 Component({
   properties: {
+    themeMode: {
+      type: String,
+      value: 'light'
+    },
     qrContact: {
       type: Object,
       value: {}

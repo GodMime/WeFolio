@@ -1,5 +1,6 @@
 const {
   getMockPortfolioDraft,
+  switchMockPortfolioMenu,
   showMockLoginRequiredToast
 } = require('../utils/mock-experience')
 
@@ -14,7 +15,9 @@ function readMockComponentEventData(event = {}) {
 }
 
 function collectImageUrls(portfolio) {
-  const components = portfolio && Array.isArray(portfolio.components) ? portfolio.components : []
+  const components = portfolio && Array.isArray(portfolio.activeComponents)
+    ? portfolio.activeComponents
+    : []
   return components.reduce((result, component) => {
     if (component.componentType === 'CAROUSEL') {
       component.works.forEach((work) => {
@@ -46,6 +49,8 @@ Page({
       poster: ''
     },
     activeSingleWorkVideoKey: ''
+    ,
+    portfolioScrollTop: 0
   },
 
   onShow() {
@@ -141,7 +146,7 @@ Page({
     const eventData = readMockComponentEventData(event)
     const componentKey = eventData.componentKey
     const groupKey = eventData.groupKey
-    const components = this.data.portfolio.components.map((component) => {
+    const components = this.data.portfolio.activeComponents.map((component) => {
       if (component.componentKey !== componentKey || !Array.isArray(component.groups)) {
         return component
       }
@@ -153,8 +158,36 @@ Page({
         }))
       })
     })
+    const portfolio = Object.assign({}, this.data.portfolio, { activeComponents: components })
+    if (portfolio.bottomNav.enabled && portfolio.activeMenuKey !== portfolio.bottomNav.items[0].key) {
+      portfolio.bottomNav = Object.assign({}, portfolio.bottomNav, {
+        items: portfolio.bottomNav.items.map((item) => item.key === portfolio.activeMenuKey
+          ? Object.assign({}, item, { components })
+          : item)
+      })
+    } else {
+      portfolio.components = components
+    }
+    this.setData({ portfolio })
+  },
+
+  handlePortfolioMenuChange(event) {
+    const menuKey = event && event.detail && event.detail.menuKey
+    if (!menuKey || menuKey === this.data.portfolio.activeMenuKey) {
+      return
+    }
+    this.stopActiveSingleWorkVideo()
     this.setData({
-      portfolio: Object.assign({}, this.data.portfolio, { components })
+      portfolio: switchMockPortfolioMenu(this.data.portfolio, menuKey),
+      portfolioScrollTop: 1,
+      videoPreviewVisible: false,
+      videoPreview: {
+        title: '',
+        src: '',
+        poster: ''
+      }
+    }, () => {
+      this.setData({ portfolioScrollTop: 0 })
     })
   },
 

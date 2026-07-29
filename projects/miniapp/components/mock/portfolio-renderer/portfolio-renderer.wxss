@@ -1,3 +1,5 @@
+@import "../../../styles/portfolio-theme.wxss";
+
 .profile-section {
   padding: 12rpx 32rpx;
   text-align: center;
@@ -99,14 +101,14 @@
 
 .display-tag {
   flex: 0 0 auto;
-  color: #8a8f98;
+  color: var(--portfolio-text-secondary);
   font-size: 28rpx;
   line-height: 56rpx;
   white-space: nowrap;
 }
 
 .display-tag.active {
-  color: #212529;
+  color: var(--portfolio-text-primary);
   font-weight: 900;
 }
 
@@ -337,4 +339,24 @@
 .divider-section {
   width: 100%;
   box-sizing: border-box;
+}
+.portfolio-theme-dark .profile-name,
+.portfolio-theme-dark .component-title,
+.portfolio-theme-dark .work-section-title,
+.portfolio-theme-dark .work-title,
+.portfolio-theme-dark .single-work-title {
+  color: var(--portfolio-text-primary);
+}
+
+.portfolio-theme-dark .profile-line,
+.portfolio-theme-dark .profile-bio,
+.portfolio-theme-dark .section-desc,
+.portfolio-theme-dark .work-desc,
+.portfolio-theme-dark .text-content {
+  color: var(--portfolio-text-secondary);
+}
+
+.portfolio-theme-dark .primary-button {
+  color: var(--portfolio-text-primary);
+  background: var(--portfolio-surface-muted);
 }

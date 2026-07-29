@@ -32,11 +32,85 @@
         </view>
       </view>
 
+      <view class="panel page-setting-panel">
+        <view class="panel-heading">
+          <view class="heading-copy">
+            <view class="section-title">页面设置</view>
+            <view class="section-desc">背景与菜单只保存在本地体验草稿中。</view>
+          </view>
+        </view>
+
+        <view class="form-row">
+          <view class="field-heading">
+            <view class="field-label">背景色</view>
+            <view class="field-limit">{{draft.config.style.backgroundColor}}</view>
+          </view>
+          <view class="background-color-row">
+            <view class="background-color-current" style="background-color: {{draft.config.style.backgroundColor}};"></view>
+            <view
+              wx:for="{{backgroundColorOptions}}"
+              wx:key="*this"
+              class="background-color-swatch {{draft.config.style.backgroundColor === item ? 'active' : ''}}"
+              style="background-color: {{item}};"
+              data-color="{{item}}"
+              bindtap="handleBackgroundColorTap"
+              aria-role="button"
+              aria-label="选择背景色{{item}}"
+            ></view>
+            <button class="background-custom-button" bindtap="handleOpenBackgroundColorSheet">自定义</button>
+          </view>
+        </view>
+
+        <view class="form-row">
+          <view class="field-heading">
+            <view class="field-label">底部导航</view>
+            <view class="field-limit">2~4 个菜单</view>
+          </view>
+          <view class="bottom-nav-count-row">
+            <view
+              wx:for="{{bottomNavCountOptions}}"
+              wx:key="*this"
+              class="bottom-nav-count-option {{bottomNavCount === item ? 'active' : ''}}"
+              data-count="{{item}}"
+              bindtap="handleBottomNavCountTap"
+              aria-role="button"
+            >{{item === 1 ? '不开启' : item + ' 个'}}</view>
+          </view>
+        </view>
+
+        <view wx:if="{{draft.config.bottomNav.enabled}}" class="editor-menu-bar">
+          <view
+            wx:for="{{draft.config.bottomNav.items}}"
+            wx:key="key"
+            class="editor-menu-item {{activeMenuKey === item.key ? 'active' : ''}}"
+            data-key="{{item.key}}"
+            bindtap="handleEditorMenuTap"
+          >{{item.title}}</view>
+        </view>
+
+        <view wx:if="{{draft.config.bottomNav.enabled}}" class="editor-menu-rename">
+          <input
+            class="editor-menu-title-input"
+            value="{{activeMenuTitle}}"
+            data-key="{{activeMenuKey}}"
+            bindinput="handleEditorMenuTitleInput"
+            maxlength="5"
+          />
+          <view class="editor-menu-title-count">{{activeMenuTitleCount}}/5</view>
+          <button
+            wx:if="{{draft.config.bottomNav.items.length > 2}}"
+            class="editor-menu-remove"
+            data-key="{{activeMenuKey}}"
+            bindtap="handleRemoveEditorMenu"
+          >删除菜单</button>
+        </view>
+      </view>
+
       <view class="panel component-panel">
         <view class="panel-heading">
           <view class="heading-copy">
             <view class="section-title">组件编排</view>
-            <view class="section-desc">已使用的组件按当前顺序展示</view>
+            <view class="section-desc">已使用的组件按当前菜单顺序展示</view>
           </view>
           <button class="link-button" bindtap="handleOpenComponentSheet">添加组件</button>
         </view>
@@ -86,6 +160,58 @@
 
     </view>
   </scroll-view>
+
+  <view class="component-picker-mask {{backgroundColorSheetVisible ? 'visible' : ''}}" catchtap="handleCloseBackgroundColorSheet">
+    <view class="component-picker-panel mock-background-color-panel" catchtap="noop">
+      <view class="component-picker-grabber"></view>
+      <view class="component-picker-heading">
+        <view class="component-picker-title">自定义背景色</view>
+        <view class="component-picker-count">HEX</view>
+      </view>
+      <view
+        class="background-color-pad"
+        style="background-color: {{backgroundHueColor}};"
+        bindtouchstart="handleBackgroundColorPadTouch"
+        catchtouchmove="handleBackgroundColorPadTouch"
+      >
+        <view class="background-color-pad-white"></view>
+        <view class="background-color-pad-black"></view>
+        <view class="background-color-pad-dot" style="{{backgroundColorPadDotStyle}}"></view>
+      </view>
+      <view class="background-hue-slider">
+        <slider
+          min="0"
+          max="359"
+          value="{{backgroundColorHsv.hue}}"
+          bindchanging="handleBackgroundHueChange"
+          backgroundColor="transparent"
+          activeColor="transparent"
+          block-color="transparent"
+          block-size="22"
+        ></slider>
+        <view
+          class="background-hue-thumb"
+          style="left: {{backgroundColorHsv.hue / 3.59}}%; background-color: {{backgroundHueColor}};"
+        ></view>
+      </view>
+      <input
+        class="background-hex-input mock-background-color-input"
+        value="{{customBackgroundColor}}"
+        bindinput="handleCustomBackgroundColorInput"
+        bindblur="handleCustomBackgroundColorBlur"
+        maxlength="7"
+        placeholder="#FFFFFF"
+      />
+      <view class="background-color-preview-bar">
+        <view class="background-color-preview-chip" style="background-color: {{customBackgroundColor}};"></view>
+        <view class="background-color-preview-text">预览 {{customBackgroundColor}}</view>
+      </view>
+      <view class="component-picker-actions">
+        <button class="component-picker-cancel" catchtap="handleCloseBackgroundColorSheet">取消</button>
+        <button class="mock-background-color-confirm" catchtap="handleConfirmBackgroundColor">应用</button>
+      </view>
+    </view>
+  </view>
 
   <view class="component-picker-mask {{componentSheetVisible ? 'visible' : ''}}" catchtap="handleCloseComponentSheet">
     <view class="component-picker-panel" catchtap="noop">

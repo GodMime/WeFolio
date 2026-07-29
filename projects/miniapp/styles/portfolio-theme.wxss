@@ -1,0 +1,17 @@
+.portfolio-theme-light {
+  --portfolio-text-primary: #212529;
+  --portfolio-text-secondary: #868e96;
+  --portfolio-text-muted: #adb5bd;
+  --portfolio-surface: rgba(255, 255, 255, 0.92);
+  --portfolio-surface-muted: #f1f3f5;
+  --portfolio-border: rgba(33, 37, 41, 0.1);
+}
+
+.portfolio-theme-dark {
+  --portfolio-text-primary: #f8f9fa;
+  --portfolio-text-secondary: #c1c7ce;
+  --portfolio-text-muted: #868e96;
+  --portfolio-surface: rgba(42, 45, 49, 0.94);
+  --portfolio-surface-muted: #2a2d31;
+  --portfolio-border: rgba(255, 255, 255, 0.14);
+}

@@ -10,7 +10,15 @@ const {
   readPortfolioRenderEventData
 } = require('../utils/portfolio-render-events')
 const { clearDisplaySwitchingTimer, markDisplaySwitching } = require('../utils/display-switching')
-const { normalizeVisitorPortfolio, switchDisplayGroup } = require('../../../utils/visitor-portfolio')
+const {
+  clearPortfolioMenuTransitionTimers,
+  startPortfolioMenuTransition
+} = require('../utils/portfolio-menu-transition')
+const {
+  normalizeVisitorPortfolio,
+  switchDisplayGroup,
+  switchPortfolioMenu
+} = require('../../../utils/visitor-portfolio')
 
 const PORTFOLIO_API_PREFIX = '/api/mine/portfolios'
 const TEAM_PORTFOLIO_API_PREFIX = '/api/mine/team-portfolios'
@@ -36,7 +44,10 @@ Page({
     videoPreviewVisible: false,
     videoPreview: null,
     activeSingleWorkVideoKey: '',
-    displaySwitchingComponentKey: ''
+    displaySwitchingComponentKey: '',
+    portfolioMenuSwitching: false,
+    portfolioMenuTransitionClass: '',
+    portfolioScrollTop: 0
   },
 
   onLoad(options = {}) {
@@ -120,7 +131,26 @@ Page({
     })
   },
 
+  handleBottomNavChange(event) {
+    const menuKey = event.detail && event.detail.menuKey
+    return startPortfolioMenuTransition(this, menuKey, {
+      onBeforeExit: () => {
+        clearDisplaySwitchingTimer(this)
+        this.stopActiveSingleWorkVideo()
+      },
+      exitPatch: {
+        contactFormModalVisible: false,
+        activeContactFormComponent: createActiveContactFormComponent(),
+        videoPreviewVisible: false,
+        videoPreview: null,
+        displaySwitchingComponentKey: ''
+      },
+      switchPortfolio: switchPortfolioMenu
+    })
+  },
+
   onUnload() {
+    clearPortfolioMenuTransitionTimers(this)
     clearDisplaySwitchingTimer(this)
     this.stopActiveSingleWorkVideo()
   },

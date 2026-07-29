@@ -192,7 +192,7 @@ test('mock pages mirror the neutral formal theme without Skyline grid styles', (
   for (const relativePath of MOCK_WXML_FILES) {
     const wxml = read(relativePath)
     if (!wxml.includes('<navigation-bar')) continue
-    assert.match(wxml, /color="#212529"/)
+    assert.match(wxml, /color=(?:"\#212529"|"[^"]*#212529[^"]*")/)
   }
 })
 
@@ -429,6 +429,13 @@ test('mock portfolio edit page mirrors production component orchestration intera
   const js = read('pages/mock/portfolio-standard-edit/portfolio-standard-edit.js')
 
   assert.match(wxml, /<button class="link-button" bindtap="handleOpenComponentSheet">添加组件<\/button>/)
+  assert.match(wxml, /class="panel page-setting-panel"/)
+  assert.match(wxml, /class="background-color-current"/)
+  assert.match(wxml, /class="background-color-pad"[\s\S]*bindtouchstart="handleBackgroundColorPadTouch"/)
+  assert.match(wxml, /class="background-hue-slider"[\s\S]*bindchanging="handleBackgroundHueChange"/)
+  assert.match(wxml, /bindblur="handleCustomBackgroundColorBlur"/)
+  assert.match(wxml, /handleBottomNavCountTap/)
+  assert.match(wxml, /handleEditorMenuTitleInput/)
   assert.match(wxml, /<scroll-view class="edit-scroll" scroll-y type="list" scroll-top="\{\{editScrollTop\}\}">/)
   assert.match(wxml, /class="component-swipe-row[\s\S]*data-index="\{\{index\}\}"[\s\S]*data-key="\{\{item\.componentKey\}\}"[\s\S]*data-type="\{\{item\.componentType\}\}"/)
   assert.match(wxml, /bindtouchstart="handleComponentTouchStart"/)
@@ -456,7 +463,35 @@ test('mock portfolio edit page mirrors production component orchestration intera
   assert.match(js, /addMockComponent/)
   assert.match(js, /removeMockComponent/)
   assert.match(js, /reorderMockComponent/)
+  assert.match(js, /handleRemoveEditorMenu\(event\)[\s\S]*wx\.showModal/)
+  assert.match(js, /hexToHsv/)
+  assert.match(js, /hsvToHex/)
   assert.match(js, /MOCK_COMPONENT_OPTIONS/)
+})
+
+test('mock color picker hue thumb matches the centered white-ring design', () => {
+  const wxml = read('pages/mock/portfolio-standard-edit/portfolio-standard-edit.wxml')
+  const wxss = read('pages/mock/portfolio-standard-edit/portfolio-standard-edit.wxss')
+
+  assert.match(
+    wxml,
+    /class="background-hue-thumb"\s+style="left: \{\{backgroundColorHsv\.hue \/ 3\.59\}\}%; background-color: \{\{backgroundHueColor\}\};"/
+  )
+  assert.match(wxml, /block-color="transparent"/)
+  assert.match(
+    wxss,
+    /\.background-hue-thumb\s*\{[\s\S]*top:\s*50%;[\s\S]*width:\s*44rpx;[\s\S]*height:\s*44rpx;[\s\S]*border:\s*6rpx solid #ffffff;[\s\S]*transform:\s*translate\(-50%, -50%\);/
+  )
+  assert.doesNotMatch(wxss, /\.background-hue-slider slider\s*\{[^}]*margin:\s*-14rpx/)
+})
+
+test('mock dark portfolio display tags use theme variables', () => {
+  const wxss = read('components/mock/portfolio-renderer/portfolio-renderer.wxss')
+  const tagRule = readRule(wxss, '.display-tag')
+  const activeTagRule = readRule(wxss, '.display-tag.active')
+
+  assert.match(tagRule, /color:\s*var\(--portfolio-text-secondary\)/)
+  assert.match(activeTagRule, /color:\s*var\(--portfolio-text-primary\)/)
 })
 
 test('mock portfolio draft helpers add, remove, and reorder components locally', () => {
@@ -726,6 +761,74 @@ test('mock preview handles display component events locally without network call
   assert.equal(previews.length, 1)
   assert.deepEqual(toasts.at(-1), { title: MOCK_LOGIN_REQUIRED_MESSAGE, icon: 'none' })
   assert.equal(networkCalls, 0)
+})
+
+test('mock portfolio background and bottom navigation stay inside the local draft', () => {
+  const mock = loadMockExperience()
+  const original = mock.clone(mock.MOCK_STANDARD_PORTFOLIO)
+  const styled = mock.updateMockPortfolioStyle(original, '#151515')
+  const expanded = mock.setMockBottomNavigationCount(styled, 3)
+  const renamed = mock.renameMockNavigationItem(
+    expanded,
+    expanded.config.bottomNav.items[1].key,
+    '作品集'
+  )
+  const secondaryKey = renamed.config.bottomNav.items[1].key
+  const withSecondaryComponent = mock.addMockComponent(
+    renamed,
+    mock.COMPONENT_TYPES.TEXT_SECTION,
+    secondaryKey
+  )
+
+  assert.equal(original.config.style.backgroundColor, '#FFFFFF')
+  assert.equal(withSecondaryComponent.config.style.backgroundColor, '#151515')
+  assert.equal(withSecondaryComponent.config.bottomNav.items.length, 3)
+  assert.equal(withSecondaryComponent.config.bottomNav.items[1].title, '作品集')
+  assert.equal(
+    mock.getMockMenuComponents(withSecondaryComponent.config, secondaryKey).at(-1).componentType,
+    mock.COMPONENT_TYPES.TEXT_SECTION
+  )
+  assert.equal(withSecondaryComponent.renderData.themeMode, 'dark')
+  assert.equal(withSecondaryComponent.renderData.bottomNav.items[1].components.at(-1).componentType, 'TEXT_SECTION')
+  assert.deepEqual(withSecondaryComponent.renderData.activeComponents, withSecondaryComponent.renderData.components)
+})
+
+test('mock preview switches navigation menus without any backend request', () => {
+  const mock = loadMockExperience()
+  const previewWxml = read('pages/mock/portfolio-standard-preview/portfolio-standard-preview.wxml')
+  let storedDraft = mock.setMockBottomNavigationCount(mock.clone(mock.MOCK_STANDARD_PORTFOLIO), 2)
+  const secondaryKey = storedDraft.config.bottomNav.items[1].key
+  storedDraft = mock.addMockComponent(storedDraft, mock.COMPONENT_TYPES.TEXT_SECTION, secondaryKey)
+  let networkCalls = 0
+  const wxMock = {
+    getStorageSync() {
+      return storedDraft
+    },
+    previewImage() {},
+    showToast() {},
+    createVideoContext() {
+      return { pause() {} }
+    },
+    request() {
+      networkCalls += 1
+    }
+  }
+  global.wx = wxMock
+  try {
+    const page = loadMockPage('pages/mock/portfolio-standard-preview/portfolio-standard-preview.js', wxMock)
+    page.handlePortfolioMenuChange({ detail: { menuKey: secondaryKey } })
+
+    assert.equal(page.data.portfolio.activeMenuKey, secondaryKey)
+    assert.equal(page.data.portfolio.activeComponents.at(-1).componentType, 'TEXT_SECTION')
+  } finally {
+    delete global.wx
+  }
+
+  assert.equal(networkCalls, 0)
+  assert.match(
+    previewWxml,
+    /<portfolio-bottom-nav[\s\S]*navigation="\{\{portfolio\.bottomNav\}\}"[\s\S]*bindchange="handlePortfolioMenuChange"/
+  )
 })
 
 test('mock page markup exposes required registration prompts and navigation actions', () => {

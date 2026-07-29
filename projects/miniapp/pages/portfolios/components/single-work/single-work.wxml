@@ -1,6 +1,6 @@
 <!-- 预览页保留可修复提示；访客页遇到空作品时维持不渲染的既有契约。 -->
-<view wx:if="{{repairMode && !work}}" class="single-work-repair">作品不可用，请重新选择</view>
-<view wx:elif="{{work}}" class="single-work">
+<view wx:if="{{repairMode && !work}}" class="single-work-repair portfolio-theme-{{themeMode}}">作品不可用，请重新选择</view>
+<view wx:elif="{{work}}" class="single-work portfolio-theme-{{themeMode}}">
   <video
     wx:if="{{work.isVideo && activeVideoKey === componentKey}}"
     id="singleWorkVideo-{{componentKey}}"

@@ -3,22 +3,33 @@ const {
   MOCK_WORK_LIBRARY,
   addMockComponent,
   getMockPortfolioDraft,
+  getMockMenuComponents,
   getWorkIdsFromComponent,
+  removeMockNavigationItem,
   removeMockComponent,
+  renameMockNavigationItem,
   resetMockPortfolioDraft,
   reorderMockComponent,
   saveMockPortfolioDraft,
+  setMockBottomNavigationCount,
   showMockLoginRequiredToast,
   trimText,
   updateComponentConfig,
+  updateMockPortfolioStyle,
   updateMockSingleWorkConfig
 } = require('../utils/mock-experience')
+const {
+  hexToHsv,
+  hsvToHex
+} = require('../../../utils/portfolio-color')
 
 const PREVIEW_URL = '/pages/mock/portfolio-standard-preview/portfolio-standard-preview'
 const DEFAULT_SELECTED_COMPONENT_KEY = 'mock_carousel'
 const SWIPE_REVEAL_THRESHOLD = -48
 const SWIPE_CLOSE_THRESHOLD = 28
 const SWIPE_VERTICAL_TOLERANCE = 26
+const BACKGROUND_COLOR_OPTIONS = ['#151515', '#FFFFFF', '#F5F6F8']
+const BOTTOM_NAV_COUNT_OPTIONS = [1, 2, 3, 4]
 const TEXT_SECTION_ALIGNMENT_OPTIONS = [
   { value: 'LEFT', label: '左对齐' },
   { value: 'CENTER', label: '居中' },
@@ -51,13 +62,31 @@ function buildComponentDragStyle(offsetY) {
   return `transform: translateY(${Math.round(offsetY || 0)}px);`
 }
 
+function buildBackgroundColorPickerState(backgroundColorHsv = {}) {
+  const normalizedHsv = {
+    hue: Math.min(359, Math.max(0, Number(backgroundColorHsv.hue) || 0)),
+    saturation: Math.min(1, Math.max(0, Number(backgroundColorHsv.saturation) || 0)),
+    value: Math.min(1, Math.max(0, Number(backgroundColorHsv.value) || 0))
+  }
+  return {
+    backgroundColorHsv: normalizedHsv,
+    customBackgroundColor: hsvToHex(normalizedHsv),
+    backgroundHueColor: hsvToHex({
+      hue: normalizedHsv.hue,
+      saturation: 1,
+      value: 1
+    }),
+    backgroundColorPadDotStyle: `left: ${normalizedHsv.saturation * 100}%; top: ${(1 - normalizedHsv.value) * 100}%;`
+  }
+}
+
 function isWorkSelectionComponent(componentType) {
   return componentType === 'CAROUSEL' || componentType === 'WORK_GRID' || componentType === 'WORK_LIST' || componentType === 'SINGLE_WORK'
 }
 
-function findComponent(draft, componentKey) {
-  const components = draft && draft.config && Array.isArray(draft.config.components)
-    ? draft.config.components
+function findComponent(draft, componentKey, menuKey) {
+  const components = draft && draft.config
+    ? getMockMenuComponents(draft.config, menuKey)
     : []
   return components.find((component) => component.componentKey === componentKey) || components[0] || {}
 }
@@ -95,10 +124,8 @@ function getComponentSummary(component, workIds) {
   return '可编辑'
 }
 
-function buildComponentRows(draft, selectedComponentKey) {
-  const components = draft.config && Array.isArray(draft.config.components)
-    ? draft.config.components
-    : []
+function buildComponentRows(draft, selectedComponentKey, menuKey) {
+  const components = getMockMenuComponents(draft.config, menuKey)
   return components.map((component) => {
     const workIds = getWorkIdsFromComponent(component)
     return Object.assign({}, component, {
@@ -117,13 +144,43 @@ function buildWorkOptions(workIds, carouselOnly) {
     }))
 }
 
-function buildState(draft, selectedComponentKey = DEFAULT_SELECTED_COMPONENT_KEY) {
-  const safeSelectedKey = findComponent(draft, selectedComponentKey).componentKey || DEFAULT_SELECTED_COMPONENT_KEY
-  const selectedComponent = findComponent(draft, safeSelectedKey)
+function resolveActiveMenuKey(draft, activeMenuKey) {
+  const bottomNav = draft.config && draft.config.bottomNav
+  const items = bottomNav && bottomNav.enabled && Array.isArray(bottomNav.items)
+    ? bottomNav.items
+    : []
+  return items.some((item) => item.key === activeMenuKey)
+    ? activeMenuKey
+    : (items[0] && items[0].key) || ''
+}
+
+function buildState(draft, selectedComponentKey = DEFAULT_SELECTED_COMPONENT_KEY, activeMenuKey) {
+  const safeActiveMenuKey = resolveActiveMenuKey(draft, activeMenuKey)
+  const activeComponents = getMockMenuComponents(draft.config, safeActiveMenuKey)
+  const safeSelectedKey = findComponent(draft, selectedComponentKey, safeActiveMenuKey).componentKey || ''
+  const selectedComponent = findComponent(draft, safeSelectedKey, safeActiveMenuKey)
   const selectedWorkIds = getWorkIdsFromComponent(selectedComponent)
+  const bottomNavItems = draft.config.bottomNav && draft.config.bottomNav.enabled
+    ? draft.config.bottomNav.items
+    : []
+  const activeMenu = bottomNavItems.find((item) => item.key === safeActiveMenuKey) || {}
+  const backgroundColorPickerState = buildBackgroundColorPickerState(
+    hexToHsv(draft.config.style.backgroundColor)
+  )
   return {
     draft,
-    componentRows: buildComponentRows(draft, safeSelectedKey),
+    backgroundColorOptions: BACKGROUND_COLOR_OPTIONS,
+    customBackgroundColor: backgroundColorPickerState.customBackgroundColor,
+    backgroundColorHsv: backgroundColorPickerState.backgroundColorHsv,
+    backgroundHueColor: backgroundColorPickerState.backgroundHueColor,
+    backgroundColorPadDotStyle: backgroundColorPickerState.backgroundColorPadDotStyle,
+    bottomNavCountOptions: BOTTOM_NAV_COUNT_OPTIONS,
+    bottomNavCount: bottomNavItems.length || 1,
+    activeMenuKey: safeActiveMenuKey,
+    activeMenuTitle: activeMenu.title || '',
+    activeMenuTitleCount: Array.from(activeMenu.title || '').length,
+    activeComponents,
+    componentRows: buildComponentRows(draft, safeSelectedKey, safeActiveMenuKey),
     selectedComponentKey: safeSelectedKey,
     selectedComponentType: selectedComponent.componentType || '',
     selectedComponentName: selectedComponent.name || '',
@@ -160,7 +217,8 @@ Page({
     dragTargetIndex: -1,
     componentDragStartY: null,
     componentDragStyle: '',
-    revealedComponentKey: ''
+    revealedComponentKey: '',
+    backgroundColorSheetVisible: false
   }, buildState(getMockPortfolioDraft())),
 
   onLoad() {
@@ -185,7 +243,14 @@ Page({
   loadDraft(options) {
     const nextOptions = options || {}
     this.setData(
-      Object.assign(buildState(getMockPortfolioDraft(), this.data.selectedComponentKey), nextOptions.extraData || {}),
+      Object.assign(
+        buildState(
+          getMockPortfolioDraft(),
+          this.data.selectedComponentKey,
+          this.data.activeMenuKey
+        ),
+        nextOptions.extraData || {}
+      ),
       () => {
         if (nextOptions.resetViewport) {
           this.resetEditViewport()
@@ -195,15 +260,202 @@ Page({
   },
 
   setDraftState(draft, selectedComponentKey, extraData) {
+    const nextExtraData = extraData || {}
     this.setData(Object.assign(
-      buildState(draft, selectedComponentKey || this.data.selectedComponentKey),
-      extraData || {}
+      buildState(
+        draft,
+        selectedComponentKey || this.data.selectedComponentKey,
+        Object.prototype.hasOwnProperty.call(nextExtraData, 'activeMenuKey')
+          ? nextExtraData.activeMenuKey
+          : this.data.activeMenuKey
+      ),
+      nextExtraData
     ))
   },
 
   resetEditViewport() {
     this.setData({ editScrollTop: 1 }, () => {
       this.setData({ editScrollTop: 0 })
+    })
+  },
+
+  handleBackgroundColorTap(event) {
+    const color = event.currentTarget.dataset.color
+    this.setDraftState(updateMockPortfolioStyle(this.data.draft, color))
+  },
+
+  handleOpenBackgroundColorSheet() {
+    this.setData(Object.assign({
+      backgroundColorSheetVisible: true,
+      customBackgroundColor: this.data.draft.config.style.backgroundColor
+    }, buildBackgroundColorPickerState(hexToHsv(this.data.draft.config.style.backgroundColor))))
+  },
+
+  handleCloseBackgroundColorSheet() {
+    this.setData({ backgroundColorSheetVisible: false })
+  },
+
+  handleCustomBackgroundColorInput(event) {
+    const customBackgroundColor = trimText(event.detail.value).toUpperCase()
+    if (/^#[0-9A-F]{6}$/.test(customBackgroundColor)) {
+      this.setData(buildBackgroundColorPickerState(hexToHsv(customBackgroundColor)))
+      return
+    }
+    this.setData({ customBackgroundColor })
+  },
+
+  handleBackgroundHueChange(event) {
+    this.setData(buildBackgroundColorPickerState(Object.assign({}, this.data.backgroundColorHsv, {
+      hue: Number(event.detail.value) || 0
+    })))
+  },
+
+  handleBackgroundColorPadTouch(event) {
+    const touch = event && event.touches && event.touches[0]
+    if (!touch) {
+      return
+    }
+    wx.createSelectorQuery()
+      .in(this)
+      .select('.background-color-pad')
+      .boundingClientRect((rect) => {
+        if (!rect || !rect.width || !rect.height) {
+          return
+        }
+        const saturation = Math.min(1, Math.max(0, (Number(touch.clientX) - rect.left) / rect.width))
+        const value = 1 - Math.min(1, Math.max(0, (Number(touch.clientY) - rect.top) / rect.height))
+        this.setData(buildBackgroundColorPickerState(Object.assign({}, this.data.backgroundColorHsv, {
+          saturation,
+          value
+        })))
+      })
+      .exec()
+  },
+
+  handleCustomBackgroundColorBlur() {
+    const color = trimText(this.data.customBackgroundColor).toUpperCase()
+    if (!/^#[0-9A-F]{6}$/.test(color)) {
+      wx.showToast({ title: '请输入正确的颜色值', icon: 'none' })
+    }
+  },
+
+  handleConfirmBackgroundColor() {
+    const color = trimText(this.data.customBackgroundColor).toUpperCase()
+    if (!/^#[0-9A-F]{6}$/.test(color)) {
+      wx.showToast({ title: '请输入正确的颜色值', icon: 'none' })
+      return
+    }
+    this.setDraftState(updateMockPortfolioStyle(this.data.draft, color), '', {
+      backgroundColorSheetVisible: false
+    })
+  },
+
+  handleBottomNavCountTap(event) {
+    const count = Number(event.currentTarget.dataset.count)
+    const currentItems = this.data.draft.config.bottomNav.enabled
+      ? this.data.draft.config.bottomNav.items
+      : []
+    const activeMenuIndex = currentItems.findIndex((item) => item.key === this.data.activeMenuKey)
+    const applyCount = () => {
+      const draft = setMockBottomNavigationCount(this.data.draft, count)
+      const items = draft.config.bottomNav.enabled ? draft.config.bottomNav.items : []
+      const activeMenuKey = items.some((item) => item.key === this.data.activeMenuKey)
+        ? this.data.activeMenuKey
+        : ((items[Math.min(Math.max(activeMenuIndex - 1, 0), items.length - 1)] || {}).key || '')
+      const selectedComponent = getMockMenuComponents(draft.config, activeMenuKey)[0] || {}
+      this.setDraftState(draft, selectedComponent.componentKey || '', {
+        activeMenuKey,
+        componentEditSheetVisible: false,
+        revealedComponentKey: ''
+      })
+    }
+    if (!this.data.draft.config.bottomNav.enabled || count >= currentItems.length) {
+      applyCount()
+      return
+    }
+    const removedItems = count < 2 ? currentItems.slice(1) : currentItems.slice(count)
+    const removalMessages = removedItems
+      .map((item) => ({
+        item,
+        componentCount: getMockMenuComponents(this.data.draft.config, item.key).length
+      }))
+      .filter(({ componentCount }) => componentCount > 0)
+      .map(({ item, componentCount }) => `删除菜单「${item.title}」将同时删除其下 ${componentCount} 个组件`)
+    if (removalMessages.length === 0) {
+      applyCount()
+      return
+    }
+    wx.showModal({
+      title: count < 2 ? '关闭底部导航？' : '减少底部菜单？',
+      content: removalMessages.join('\n'),
+      confirmText: '确认',
+      confirmColor: '#b55656',
+      success: (result) => {
+        if (result.confirm) {
+          applyCount()
+        }
+      }
+    })
+  },
+
+  handleEditorMenuTap(event) {
+    const activeMenuKey = event.currentTarget.dataset.key
+    if (!activeMenuKey || activeMenuKey === this.data.activeMenuKey) {
+      return
+    }
+    const selectedComponent = getMockMenuComponents(this.data.draft.config, activeMenuKey)[0] || {}
+    this.setDraftState(this.data.draft, selectedComponent.componentKey || '', {
+      activeMenuKey,
+      componentEditSheetVisible: false,
+      revealedComponentKey: ''
+    })
+  },
+
+  handleEditorMenuTitleInput(event) {
+    const menuKey = event.currentTarget.dataset.key
+    const draft = renameMockNavigationItem(this.data.draft, menuKey, event.detail.value)
+    this.setDraftState(draft, this.data.selectedComponentKey, { activeMenuKey: menuKey })
+  },
+
+  handleRemoveEditorMenu(event) {
+    const menuKey = event.currentTarget.dataset.key
+    const currentItems = this.data.draft.config.bottomNav.enabled
+      ? this.data.draft.config.bottomNav.items
+      : []
+    const menuIndex = currentItems.findIndex((item) => item.key === menuKey)
+    if (menuIndex < 0) {
+      return
+    }
+    const menu = currentItems[menuIndex]
+    const componentCount = getMockMenuComponents(this.data.draft.config, menuKey).length
+    const removeMenu = () => {
+      const draft = removeMockNavigationItem(this.data.draft, menuKey)
+      const items = draft.config.bottomNav.enabled ? draft.config.bottomNav.items : []
+      const activeMenuKey = ((currentItems[menuIndex - 1] || currentItems[menuIndex + 1]) || {}).key || ''
+      const selectedComponent = getMockMenuComponents(draft.config, activeMenuKey)[0] || {}
+      this.setDraftState(draft, selectedComponent.componentKey || '', {
+        activeMenuKey,
+        componentEditSheetVisible: false,
+        revealedComponentKey: ''
+      })
+    }
+    if (menuIndex > 0 && componentCount === 0) {
+      removeMenu()
+      return
+    }
+    const content = menuIndex === 0 && currentItems[1]
+      ? `删除菜单「${menu.title}」${componentCount > 0 ? `将同时删除其下 ${componentCount} 个组件，` : '，'}「${currentItems[1].title}」将成为第一个菜单，旧版本小程序将展示「${currentItems[1].title}」的内容`
+      : `删除菜单「${menu.title}」将同时删除其下 ${componentCount} 个组件`
+    wx.showModal({
+      title: `删除菜单「${menu.title}」？`,
+      content,
+      confirmText: '删除',
+      confirmColor: '#b55656',
+      success: (result) => {
+        if (result.confirm) {
+          removeMenu()
+        }
+      }
     })
   },
 
@@ -248,7 +500,7 @@ Page({
       const profile = Object.assign({}, config.profile || {})
       profile[field] = value
       return Object.assign({}, config, { profile })
-    })
+    }, this.data.activeMenuKey)
     this.setDraftState(draft, componentKey)
   },
 
@@ -266,7 +518,7 @@ Page({
       const nextConfig = Object.assign({}, config)
       nextConfig[field] = value
       return nextConfig
-    })
+    }, this.data.activeMenuKey)
     this.setDraftState(draft, componentKey)
   },
 
@@ -284,7 +536,7 @@ Page({
       const nextConfig = Object.assign({}, config)
       nextConfig[field] = value
       return nextConfig
-    })
+    }, this.data.activeMenuKey)
     this.setDraftState(draft, componentKey)
   },
 
@@ -298,7 +550,7 @@ Page({
       return Object.assign({}, config, {
         content: value
       })
-    })
+    }, this.data.activeMenuKey)
     this.setDraftState(draft, componentKey)
   },
 
@@ -312,7 +564,7 @@ Page({
       return Object.assign({}, config, {
         alignment: value
       })
-    })
+    }, this.data.activeMenuKey)
     this.setDraftState(draft, componentKey)
   },
 
@@ -326,7 +578,7 @@ Page({
       return Object.assign({}, config, {
         color: value
       })
-    })
+    }, this.data.activeMenuKey)
     this.setDraftState(draft, componentKey)
   },
 
@@ -340,7 +592,7 @@ Page({
       return Object.assign({}, config, {
         heightPx: value
       })
-    })
+    }, this.data.activeMenuKey)
     this.setDraftState(draft, componentKey)
   },
 
@@ -381,7 +633,7 @@ Page({
       return Object.assign({}, config, {
         workIds: nextIds
       })
-    })
+    }, this.data.activeMenuKey)
     this.setDraftState(draft, componentKey)
   },
 
@@ -407,10 +659,12 @@ Page({
     if (!componentType) {
       return
     }
-    const currentKeys = new Set((this.data.draft.config.components || []).map((component) => component.componentKey))
-    const draft = addMockComponent(this.data.draft, componentType)
-    const addedComponent = (draft.config.components || []).find((component) => !currentKeys.has(component.componentKey)) ||
-      (draft.config.components || [])[draft.config.components.length - 1] ||
+    const currentComponents = getMockMenuComponents(this.data.draft.config, this.data.activeMenuKey)
+    const currentKeys = new Set(currentComponents.map((component) => component.componentKey))
+    const draft = addMockComponent(this.data.draft, componentType, this.data.activeMenuKey)
+    const components = getMockMenuComponents(draft.config, this.data.activeMenuKey)
+    const addedComponent = components.find((component) => !currentKeys.has(component.componentKey)) ||
+      components[components.length - 1] ||
       {}
     this.setDraftState(draft, addedComponent.componentKey, {
       componentSheetVisible: false,
@@ -527,7 +781,12 @@ Page({
     this.componentDragRows = []
     if (draggingIndex >= 0 && dragTargetIndex >= 0 && draggingIndex !== dragTargetIndex) {
       this.setDraftState(
-        reorderMockComponent(this.data.draft, draggingIndex, dragTargetIndex),
+        reorderMockComponent(
+          this.data.draft,
+          draggingIndex,
+          dragTargetIndex,
+          this.data.activeMenuKey
+        ),
         this.data.selectedComponentKey,
         resetDragState
       )
@@ -541,8 +800,8 @@ Page({
     if (!componentKey) {
       return
     }
-    const draft = removeMockComponent(this.data.draft, componentKey)
-    const components = draft.config.components || []
+    const draft = removeMockComponent(this.data.draft, componentKey, this.data.activeMenuKey)
+    const components = getMockMenuComponents(draft.config, this.data.activeMenuKey)
     const selectedComponentKey = this.data.selectedComponentKey === componentKey
       ? (components[0] && components[0].componentKey) || ''
       : this.data.selectedComponentKey
@@ -566,7 +825,7 @@ Page({
       const draft = updateMockSingleWorkConfig(this.data.draft, this.data.selectedComponentKey, {
         workId,
         showTitle: this.data.singleWorkShowTitle
-      })
+      }, this.data.activeMenuKey)
       this.setDraftState(draft, this.data.selectedComponentKey, {
         componentEditSheetVisible: false
       })

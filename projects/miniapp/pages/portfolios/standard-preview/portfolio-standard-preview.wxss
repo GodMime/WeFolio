@@ -1,9 +1,18 @@
+@import "../../../styles/portfolio-theme.wxss";
+@import "../../../styles/portfolio-menu-transition.wxss";
+
 .portfolio-preview-page {
-  background: #ffffff;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--portfolio-text-primary);
 }
 
 .preview-scroll {
-  height: 100vh;
+  flex: 1;
+  min-height: 0;
+  background: transparent;
 }
 
 .preview-toolbar {
@@ -11,14 +20,14 @@
   align-items: center;
   gap: 16rpx;
   padding: 20rpx 32rpx;
-  border-bottom: 1rpx solid #eef1f4;
+  border-bottom: 1rpx solid var(--portfolio-border);
   box-sizing: border-box;
 }
 
 .preview-note {
   flex: 1;
   min-width: 0;
-  color: #7a8490;
+  color: var(--portfolio-text-secondary);
   font-size: 22rpx;
   line-height: 1.4;
 }
@@ -136,7 +145,7 @@
 }
 
 .folio-brand-name {
-  color: #a1a9b3;
+  color: var(--portfolio-text-muted);
   font-size: 24rpx;
   font-weight: 800;
   line-height: 1.4;

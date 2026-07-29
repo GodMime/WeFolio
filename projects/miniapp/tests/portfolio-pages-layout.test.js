@@ -299,8 +299,8 @@ test('maintainer portfolio pages expose expected controls', () => {
   assert.match(previewWxml, /预览/)
   assert.match(previewWxml, /禁用真实提交/)
   assert.match(previewWxml, /<navigation-bar[^>]*back="\{\{true\}\}"/)
-  assert.match(previewWxml, /color="#212529"/)
-  assert.match(previewWxml, /background="#ffffff"/)
+  assert.match(previewWxml, /color="\{\{portfolio\.themeMode === 'dark' \? '#f8f9fa' : '#212529'\}\}"/)
+  assert.match(previewWxml, /background="\{\{portfolio\.style\.backgroundColor\}\}"/)
   assert.doesNotMatch(previewWxml, /返回编辑/)
   assert.doesNotMatch(previewWxml, /bindtap="handleBackToEditor"/)
   assert.doesNotMatch(previewWxml, /maintenance-mask/)
@@ -342,8 +342,8 @@ test('visitor portfolio pages expose maintenance, QR, contact and schedule surfa
 
   assert.match(visitorWxml, /UNDER MAINTENANCE/)
   assert.match(visitorWxml, /<navigation-bar[^>]*back="\{\{showNavigationBack && !timelineGuideVisible\}\}"/)
-  assert.match(visitorWxml, /color="#212529"/)
-  assert.match(visitorWxml, /background="#ffffff"/)
+  assert.match(visitorWxml, /color="\{\{portfolio\.themeMode === 'dark' \? '#f8f9fa' : '#212529'\}\}"/)
+  assert.match(visitorWxml, /background="\{\{portfolio\.style\.backgroundColor\}\}"/)
   assert.doesNotMatch(contactFormWxml, /maxlength=/)
   assert.doesNotMatch(contactFormWxml, /field-count|\/20|\/11|\/200/)
   assert.match(contactFormJs, /DEFAULT_CONTACT_FORM_TITLE\s*=\s*'预留联系信息'/)
@@ -386,11 +386,11 @@ test('visitor portfolio pages expose maintenance, QR, contact and schedule surfa
   assert.doesNotMatch(previewWxml, /class="contact-form-mask/)
   assert.match(visitorWxml, /<portfolio-text-section text-section="\{\{item\.textSection\}\}"/)
   assert.match(previewWxml, /<portfolio-text-section text-section="\{\{item\.textSection\}\}"/)
-  assert.match(textSectionWxml, /class="text-section \{\{textSection\.alignmentClass\}\}"/)
+  assert.match(textSectionWxml, /class="text-section portfolio-theme-\{\{themeMode\}\} \{\{textSection\.alignmentClass\}\}"/)
   assert.match(textSectionWxml, /<text class="text-content" space="nbsp">\{\{textSection\.content\}\}<\/text>/)
   assert.match(visitorWxml, /<portfolio-divider divider="\{\{item\.divider\}\}"/)
   assert.match(previewWxml, /<portfolio-divider divider="\{\{item\.divider\}\}"/)
-  assert.match(dividerWxml, /class="divider-section"[\s\S]*style="\{\{divider\.style\}\}"/)
+  assert.match(dividerWxml, /class="divider-section portfolio-theme-\{\{themeMode\}\}"[\s\S]*style="\{\{divider\.style\}\}"/)
   assert.doesNotMatch(visitorWxml, /<button class="secondary-action">档期查询<\/button>/)
   assert.doesNotMatch(previewWxml, /<button class="secondary-action">档期查询<\/button>/)
   assert.match(scheduleWxml, /档期查询/)
@@ -440,6 +440,39 @@ test('visitor work list components keep tags visible and grid cards in two colum
   assert.match(workListRule, /display:\s*flex/, 'work list should remain a vertical flex list')
   assert.match(workListRule, /flex-direction:\s*column/, 'work list should remain single column')
   assert.doesNotMatch(workListRule, /display:\s*grid/, 'work list should avoid CSS grid')
+})
+
+test('portfolio media placeholders use the theme surface color', () => {
+  const carouselRule = readRule(
+    read('components/portfolio-carousel/portfolio-carousel.wxss'),
+    '.portfolio-carousel'
+  )
+  const singleWorkWxss = read('pages/portfolios/components/single-work/single-work.wxss')
+  const singleWorkRule = singleWorkWxss.match(
+    /\.single-work-image,\s*\.single-work-video,\s*\.single-work-video-poster\s*\{([^}]*)\}/
+  )
+  const workGridRule = readRule(
+    read('pages/portfolios/components/work-grid/work-grid.wxss'),
+    '.work-cover-wrap'
+  )
+  const workListRule = readRule(
+    read('pages/portfolios/components/work-list/work-list.wxss'),
+    '.work-cover-wrap'
+  )
+
+  assert.ok(singleWorkRule, 'single work media placeholder rule should exist')
+  ;[
+    ['carousel', carouselRule],
+    ['single work', singleWorkRule[1]],
+    ['work grid', workGridRule],
+    ['work list', workListRule]
+  ].forEach(([name, rule]) => {
+    assert.match(
+      rule,
+      /background:\s*var\(--portfolio-surface-muted\)/,
+      `${name} placeholder should follow the active portfolio theme`
+    )
+  })
 })
 
 test('contact form modal uses full-screen fixed bottom sheet layout', () => {
@@ -771,6 +804,23 @@ test('portfolio profile editor sheet keeps form content visible in Skyline', () 
   assert.match(scrollRule, /height:\s*0;/)
   assert.match(scrollRule, /min-height:\s*0;/)
   assert.match(scrollRule, /max-height:\s*none;/)
+})
+
+test('portfolio profile editor reuses structured basic profile tag interaction', () => {
+  const editWxml = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxml')
+  const editWxss = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxss')
+
+  assert.doesNotMatch(editWxml, /profileForm\.tagsText/)
+  assert.doesNotMatch(editWxml, /data-field="tagsText"/)
+  assert.match(editWxml, /wx:for="\{\{profileForm\.tags\}\}"/)
+  assert.match(editWxml, /class="profile-tag-pill"[\s\S]*style="\{\{item\.style\}\}"/)
+  assert.match(editWxml, /class="profile-tag-dot"[\s\S]*style="\{\{item\.dotStyle\}\}"/)
+  assert.match(editWxml, /catchtap="handleRemoveProfileTag"/)
+  assert.match(editWxml, /catchtap="handleOpenProfileTagDialog"/)
+  assert.match(editWxml, /wx:for="\{\{profileTagColorOptions\}\}"/)
+  assert.match(editWxml, /catchtap="handleAddProfileTag"/)
+  assert.match(editWxss, /\.profile-tag-pill-row\s*\{[\s\S]*flex-wrap:\s*wrap;/)
+  assert.match(editWxss, /\.profile-tag-dialog\s*\{[\s\S]*position:\s*fixed;/)
 })
 
 test('standard personal portfolio editor follows shared maintainer layout', () => {

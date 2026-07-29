@@ -1,9 +1,18 @@
+@import "../../../styles/portfolio-theme.wxss";
+@import "../../../styles/portfolio-menu-transition.wxss";
+
 .visitor-portfolio-page {
-  background: #ffffff;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--portfolio-text-primary);
 }
 
 .visitor-scroll {
-  height: 100vh;
+  flex: 1;
+  min-height: 0;
+  background: transparent;
 }
 
 .folio-component {
@@ -60,7 +69,7 @@
 }
 
 .folio-brand-name {
-  color: #a1a9b3;
+  color: var(--portfolio-text-muted);
   font-size: 24rpx;
   font-weight: 800;
   line-height: 1.4;

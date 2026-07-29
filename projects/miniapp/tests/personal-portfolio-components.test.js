@@ -14,20 +14,20 @@ const COMPONENT_CASES = [
   {
     name: 'profile',
     properties: { profile: Object },
-    wxml: [/class="profile-section"/, /bindtap="handlePreviewQr"/],
+    wxml: [/class="profile-section portfolio-theme-\{\{themeMode\}\}"/, /bindtap="handlePreviewQr"/],
     wxss: [/\.profile-bio\s*\{[\s\S]*white-space:\s*pre-wrap;/]
   },
   {
     name: 'work-grid',
     properties: { componentKey: String, displayTags: Array, activeGroup: Object, switching: Boolean, showTitle: Boolean, showDescription: Boolean },
     wxml: [/class="work-grid/, /bindtap="handleDisplayTagTap"/, /bindtap="handleWorkTap"/, /wx:if="\{\{showTitle && work\.title\}\}"/, /wx:if="\{\{showDescription && work\.description\}\}"/],
-    wxss: [/\.work-grid\.display-switching/, /@keyframes work-list-switch-in/, /\.work-copy\s*\{[\s\S]*min-height:\s*10rpx;[\s\S]*padding-top:\s*10rpx;/, /\.work-desc\s*\{[\s\S]*color:\s*#868e96;/]
+    wxss: [/\.work-grid\.display-switching/, /@keyframes work-list-switch-in/, /\.work-copy\s*\{[\s\S]*min-height:\s*10rpx;[\s\S]*padding-top:\s*10rpx;/, /\.work-desc\s*\{[\s\S]*color:\s*var\(--portfolio-text-secondary\);/]
   },
   {
     name: 'work-list',
     properties: { componentKey: String, displayTags: Array, activeGroup: Object, switching: Boolean, showTitle: Boolean, showDescription: Boolean },
     wxml: [/class="work-list/, /bindtap="handleDisplayTagTap"/, /bindtap="handleWorkTap"/, /wx:if="\{\{showTitle && work\.title\}\}"/, /wx:if="\{\{showDescription && work\.description\}\}"/],
-    wxss: [/\.work-list\.display-switching/, /\.work-copy\s*\{[\s\S]*min-height:\s*10rpx;[\s\S]*padding-top:\s*10rpx;/, /\.work-desc\s*\{[\s\S]*color:\s*#868e96;[\s\S]*white-space:\s*pre-wrap;/]
+    wxss: [/\.work-list\.display-switching/, /\.work-copy\s*\{[\s\S]*min-height:\s*10rpx;[\s\S]*padding-top:\s*10rpx;/, /\.work-desc\s*\{[\s\S]*color:\s*var\(--portfolio-text-secondary\);[\s\S]*white-space:\s*pre-wrap;/]
   },
   {
     name: 'single-work',
@@ -44,12 +44,12 @@ const COMPONENT_CASES = [
       /wx:if="\{\{showTitle && work\.title\}\}"/,
       /wx:if="\{\{showDescription && work\.description\}\}"/
     ],
-    wxss: [/\.single-work-repair/, /\.single-work-play-badge/, /\.single-work-copy\s*\{[\s\S]*min-height:\s*16rpx;[\s\S]*padding-top:\s*16rpx;/, /\.single-work-description\s*\{[\s\S]*color:\s*#868e96;/]
+    wxss: [/\.single-work-repair/, /\.single-work-play-badge/, /\.single-work-copy\s*\{[\s\S]*min-height:\s*16rpx;[\s\S]*padding-top:\s*16rpx;/, /\.single-work-description\s*\{[\s\S]*color:\s*var\(--portfolio-text-secondary\);/]
   },
   {
     name: 'qr-contact',
     properties: { qrContact: Object },
-    wxml: [/class="qr-section"/, /bindtap="handlePreviewQr"/],
+    wxml: [/class="qr-section portfolio-theme-\{\{themeMode\}\}"/, /bindtap="handlePreviewQr"/],
     wxss: [/\.qr-image/]
   },
   {
@@ -61,7 +61,7 @@ const COMPONENT_CASES = [
   {
     name: 'divider',
     properties: { divider: Object },
-    wxml: [/class="divider-section"/, /style="\{\{divider\.style\}\}"/],
+    wxml: [/class="divider-section portfolio-theme-\{\{themeMode\}\}"/, /style="\{\{divider\.style\}\}"/],
     wxss: [/\.divider-section/]
   }
 ]
@@ -181,6 +181,7 @@ test('personal portfolio renderers are seven isolated four-file components with 
     })
 
     const definition = loadComponent(componentCase.name)
+    assert.equal(definition.properties.themeMode.type, String)
     for (const [propertyName, propertyType] of Object.entries(componentCase.properties)) {
       assert.equal(definition.properties[propertyName].type, propertyType)
     }

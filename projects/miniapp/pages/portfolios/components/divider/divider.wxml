@@ -1,1 +1,1 @@
-<view class="divider-section" style="{{divider.style}}"></view>
+<view class="divider-section portfolio-theme-{{themeMode}}" style="{{divider.style}}"></view>

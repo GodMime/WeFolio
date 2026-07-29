@@ -106,3 +106,11 @@ test('navigation bar back button aligns to the calculated content row', () => {
   assert.match(leftRule, /align-items:\s*center;/)
   assert.doesNotMatch(leftRule, /align-items:\s*flex-start;/)
 })
+
+test('navigation bar back button inherits the configured text color', () => {
+  const navWxss = read('components/navigation-bar/navigation-bar.wxss')
+  const backButtonRule = readRule(navWxss, '.weui-navigation-bar__btn_goback')
+
+  assert.match(backButtonRule, /background-color:\s*currentColor;/)
+  assert.doesNotMatch(backButtonRule, /background-color:\s*var\(--weui-FG-0\);/)
+})
