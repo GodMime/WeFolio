@@ -46,6 +46,7 @@ function syncQrDraft(component) {
 
 Component({
   properties: {
+    themeMode: { type: String, value: 'light' },
     componentKey: { type: String, value: '' },
     config: { type: Object, value: {}, observer() { if (!this.properties.editMode) syncQrDraft(this) } },
     editMode: { type: Boolean, value: false, observer(value, oldValue) { if (value !== oldValue) syncQrDraft(this) } },

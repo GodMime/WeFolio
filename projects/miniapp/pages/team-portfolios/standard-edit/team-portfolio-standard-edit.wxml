@@ -9,7 +9,7 @@
     <button class="state-retry" bindtap="handleRetry">重试</button>
   </view>
 
-  <scroll-view wx:else class="edit-scroll" scroll-y type="list">
+  <scroll-view wx:else class="edit-scroll" scroll-y type="list" scroll-into-view="{{componentScrollTarget}}">
     <view class="edit-content">
       <view class="panel share-panel">
         <view class="panel-heading">
@@ -41,21 +41,99 @@
         </view>
       </view>
 
+      <view class="panel page-setting-panel">
+        <view class="panel-heading">
+          <view class="heading-copy">
+            <view class="section-title">页面设置</view>
+            <view class="section-desc">设置团队作品集背景与底部导航</view>
+          </view>
+        </view>
+
+        <view class="form-row">
+          <view class="field-heading">
+            <view class="field-label">背景色</view>
+            <view class="field-limit">{{config.style.backgroundColor}}</view>
+          </view>
+          <view class="background-color-row">
+            <view class="background-color-current" style="background-color: {{config.style.backgroundColor}};"></view>
+            <view
+              wx:for="{{backgroundColorOptions}}"
+              wx:key="*this"
+              class="background-color-swatch {{config.style.backgroundColor === item ? 'active' : ''}}"
+              style="background-color: {{item}};"
+              data-color="{{item}}"
+              bindtap="handleBackgroundColorTap"
+              aria-role="button"
+              aria-label="选择背景色{{item}}"
+            ></view>
+            <button class="background-custom-button" bindtap="handleOpenBackgroundColorSheet" disabled="{{!canMaintain}}">自定义</button>
+          </view>
+        </view>
+
+        <view class="form-row">
+          <view class="field-heading">
+            <view class="field-label">底部导航</view>
+            <view class="field-limit">2~4 个菜单</view>
+          </view>
+          <view class="bottom-nav-count-row">
+            <view
+              wx:for="{{bottomNavCountOptions}}"
+              wx:key="*this"
+              class="bottom-nav-count-option {{bottomNavCount === item ? 'active' : ''}}"
+              data-count="{{item}}"
+              bindtap="handleBottomNavigationCountTap"
+              aria-role="button"
+            >{{item === 1 ? '不开启' : item + ' 个'}}</view>
+          </view>
+        </view>
+
+        <view wx:if="{{config.bottomNav.enabled}}" class="editor-menu-bar">
+          <view
+            wx:for="{{navigationItems}}"
+            wx:key="key"
+            class="editor-menu-item {{activeMenuKey === item.key ? 'active' : ''}}"
+            data-key="{{item.key}}"
+            bindtap="handleMenuTabTap"
+          >
+            <text>{{item.title}}</text>
+          </view>
+        </view>
+
+        <view wx:if="{{config.bottomNav.enabled}}" class="editor-menu-rename">
+          <input
+            class="editor-menu-title-input"
+            value="{{activeMenuTitle}}"
+            data-key="{{activeMenuKey}}"
+            bindinput="handleNavigationTitleInput"
+            maxlength="5"
+            disabled="{{!canMaintain}}"
+          />
+          <view class="editor-menu-title-count">{{activeMenuTitleCount}}/5</view>
+          <button
+            wx:if="{{navigationItems.length > 2}}"
+            class="editor-menu-remove"
+            data-key="{{activeMenuKey}}"
+            bindtap="handleRemoveNavigationItem"
+            disabled="{{!canMaintain}}"
+          >删除菜单</button>
+        </view>
+      </view>
+
       <view class="panel component-panel">
         <view class="panel-heading">
           <view class="heading-copy">
             <view class="section-title">组件编排</view>
-            <view class="section-desc">访客将按当前顺序浏览作品集内容</view>
+            <view class="section-desc">访客将按当前菜单内的顺序浏览内容</view>
           </view>
           <button class="link-button" bindtap="handleOpenComponentSheet" disabled="{{!canMaintain}}">添加组件</button>
         </view>
 
-        <view wx:if="{{!componentList.length}}" class="component-empty">暂未添加组件</view>
+        <view wx:if="{{!componentList.length}}" class="component-empty">当前菜单还没有组件</view>
         <view wx:else class="component-list">
           <view
             wx:for="{{componentList}}"
             wx:key="componentKey"
-            class="component-swipe-row {{revealedComponentKey === item.componentKey ? 'revealed' : ''}} {{draggingIndex === index ? 'dragging' : ''}}"
+            class="component-swipe-row {{config.bottomNav.enabled ? 'with-move' : ''}} {{revealedComponentKey === item.componentKey ? 'revealed' : ''}} {{draggingIndex === index ? 'dragging' : ''}}"
             data-index="{{index}}"
             data-key="{{item.componentKey}}"
             data-type="{{item.componentType}}"
@@ -66,10 +144,12 @@
             bindtouchcancel="handleComponentTouchCancel"
           >
             <view class="component-remove-pane" catchtap="noop">
+              <button wx:if="{{config.bottomNav.enabled}}" class="component-move-button" data-key="{{item.componentKey}}" catchtap="handleOpenComponentMoveSheet">移动</button>
               <button class="component-remove-button" data-key="{{item.componentKey}}" catchtap="handleRemoveComponent">删除</button>
             </view>
             <view
-              class="component-row editable {{draggingIndex === index ? 'dragging' : ''}} {{dragTargetIndex === index && draggingIndex !== -1 ? 'drag-target' : ''}}"
+              id="team-component-{{item.componentKey}}"
+              class="component-row editable {{draggingIndex === index ? 'dragging' : ''}} {{dragTargetIndex === index && draggingIndex !== -1 ? 'drag-target' : ''}} {{highlightedComponentKey === item.componentKey ? 'highlighted' : ''}}"
               style="{{draggingIndex === index ? componentDragStyle : ''}}"
               data-key="{{item.componentKey}}"
               data-type="{{item.componentType}}"
@@ -89,6 +169,55 @@
       </view>
     </view>
   </scroll-view>
+
+  <view class="background-color-sheet-mask component-picker-mask {{backgroundColorSheetVisible ? 'visible' : ''}}" catchtap="handleCloseBackgroundColorSheet">
+    <view class="background-color-panel component-picker-panel" catchtap="noop">
+      <view class="component-picker-grabber"></view>
+      <view class="component-picker-heading">
+        <view class="component-picker-title">自定义背景色</view>
+        <view class="component-picker-count">{{backgroundColorDraft}}</view>
+      </view>
+      <view
+        class="team-background-color-pad"
+        style="background-color: {{backgroundHueColor}};"
+        bindtouchstart="handleBackgroundColorPadTouch"
+        catchtouchmove="handleBackgroundColorPadTouch"
+      >
+        <view class="background-color-pad-white"></view>
+        <view class="background-color-pad-black"></view>
+        <view class="background-color-pad-dot" style="{{backgroundColorPadDotStyle}}"></view>
+      </view>
+      <view class="background-hue-slider">
+        <slider
+          min="0"
+          max="359"
+          value="{{backgroundColorHsv.hue}}"
+          bindchanging="handleBackgroundHueChange"
+          backgroundColor="transparent"
+          activeColor="transparent"
+          block-color="transparent"
+          block-size="22"
+        ></slider>
+        <view class="background-hue-thumb" style="left: {{backgroundColorHsv.hue / 3.59}}%; background-color: {{backgroundHueColor}};"></view>
+      </view>
+      <input
+        class="background-hex-input"
+        value="{{backgroundColorDraft}}"
+        bindinput="handleBackgroundHexInput"
+        bindblur="handleBackgroundHexBlur"
+        maxlength="7"
+        placeholder="#FFFFFF"
+      />
+      <view class="background-color-preview-bar">
+        <view class="background-color-preview-chip" style="background-color: {{backgroundColorDraft}};"></view>
+        <view class="background-color-preview-text">预览 {{backgroundColorDraft}}</view>
+      </view>
+      <view class="component-picker-actions">
+        <button class="component-picker-cancel" catchtap="handleCloseBackgroundColorSheet">取消</button>
+        <button class="component-picker-confirm" catchtap="handleConfirmBackgroundColor">确定</button>
+      </view>
+    </view>
+  </view>
 
   <view class="component-picker-mask {{componentSheetVisible ? 'visible' : ''}}" catchtap="handleCloseComponentSheet">
     <view class="component-picker-panel" catchtap="noop">
@@ -118,6 +247,35 @@
         </view>
       </scroll-view>
       <view class="component-picker-actions"><button class="component-picker-cancel" catchtap="handleCloseComponentSheet">取消</button></view>
+    </view>
+  </view>
+
+  <view class="component-move-sheet-mask component-picker-mask {{componentMoveSheetVisible ? 'visible' : ''}}" catchtap="handleCloseComponentMoveSheet">
+    <view class="component-move-sheet-panel component-picker-panel" catchtap="noop">
+      <view class="component-picker-grabber"></view>
+      <view class="component-picker-heading">
+        <view class="component-picker-title">移动组件</view>
+        <view class="component-picker-count">保留组件配置</view>
+      </view>
+      <view class="component-move-target-list">
+        <view
+          wx:for="{{componentMoveTargets}}"
+          wx:key="key"
+          class="component-move-target"
+          data-key="{{item.key}}"
+          catchtap="handleMoveTargetTap"
+          aria-role="button"
+        >
+          <view class="component-move-target-copy">
+            <view class="component-move-target-title">{{item.title}}</view>
+            <view class="component-move-target-count">{{item.componentCount}} 个组件</view>
+          </view>
+          <view class="component-row-arrow"><view class="component-row-arrow-icon"></view></view>
+        </view>
+      </view>
+      <view class="component-picker-actions">
+        <button class="component-picker-cancel" catchtap="handleCloseComponentMoveSheet" disabled="{{componentMovePending}}">取消</button>
+      </view>
     </view>
   </view>
 

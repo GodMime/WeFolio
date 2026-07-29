@@ -61,7 +61,7 @@ test('team schedule query uses the personal portfolio entry and bottom sheet int
   const wxml = read('components/schedule-query/schedule-query.wxml')
   const wxss = read('components/schedule-query/schedule-query.wxss')
 
-  assert.match(wxml, /class="schedule-query-modal-mask \{\{modalVisible \? 'visible' : ''\}\}" catchtap="closeModal"/)
+  assert.match(wxml, /class="schedule-query-modal-mask theme-\{\{themeMode\}\} \{\{modalVisible \? 'visible' : ''\}\}" catchtap="closeModal"/)
   assert.match(wxml, /class="schedule-query-modal-panel" catchtap="noop"/)
   assert.match(wxml, /class="schedule-query-open-button" catchtap="openModal">查询团队档期<\/button>/)
   assert.match(wxss, /\.schedule-query-open-button\s*\{[^}]*width:\s*320rpx;[^}]*height:\s*72rpx;[^}]*background:\s*#212529;/s)
@@ -96,7 +96,7 @@ test('team contact form uses the personal portfolio entry and bottom sheet inter
   const wxml = read('components/contact-form/contact-form.wxml')
   const wxss = read('components/contact-form/contact-form.wxss')
 
-  assert.match(wxml, /class="contact-form-mask \{\{modalVisible \? 'visible' : ''\}\}" catchtap="closeModal"/)
+  assert.match(wxml, /class="contact-form-mask theme-\{\{themeMode\}\} \{\{modalVisible \? 'visible' : ''\}\}" catchtap="closeModal"/)
   assert.match(wxml, /class="contact-form-panel" catchtap="noop"/)
   assert.match(wxml, /class="primary-button contact-form-entry-button" catchtap="openModal"/)
   assert.match(wxss, /\.contact-form-entry-button\s*\{[^}]*width:\s*320rpx;/s)

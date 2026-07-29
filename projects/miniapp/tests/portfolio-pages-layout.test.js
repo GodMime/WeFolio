@@ -823,6 +823,24 @@ test('portfolio profile editor reuses structured basic profile tag interaction',
   assert.match(editWxss, /\.profile-tag-dialog\s*\{[\s\S]*position:\s*fixed;/)
 })
 
+test('standard personal portfolio editor renders status as a dot label', () => {
+  const editWxml = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxml')
+  const editWxss = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxss')
+  const statusRule = readRule(editWxss, '.status-pill')
+  const statusDotRule = readRule(editWxss, '.status-pill::before')
+
+  assert.match(editWxml, /class="status-pill \{\{statusTone\}\}"/)
+  assert.match(statusRule, /gap:\s*8rpx;/)
+  assert.match(statusRule, /color:\s*#868e96;/)
+  assert.match(statusRule, /font-size:\s*22rpx;/)
+  assert.match(statusRule, /font-weight:\s*500;/)
+  assert.doesNotMatch(statusRule, /^\s*(?:min-width|height|border|border-radius|background)\s*:/m)
+  assert.match(statusDotRule, /width:\s*12rpx;/)
+  assert.match(statusDotRule, /height:\s*12rpx;/)
+  assert.match(statusDotRule, /border-radius:\s*50%;/)
+  assert.match(statusDotRule, /background:\s*currentColor;/)
+})
+
 test('standard personal portfolio editor follows shared maintainer layout', () => {
   const editWxml = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxml')
   const editWxss = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxss')

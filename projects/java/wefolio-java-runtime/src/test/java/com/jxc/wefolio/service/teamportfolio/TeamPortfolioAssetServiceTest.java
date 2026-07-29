@@ -218,6 +218,30 @@ class TeamPortfolioAssetServiceTest {
         verify(context.cosService, never()).delete(cover);
     }
 
+    @Test
+    void movingAssetFromFirstMenuToSecondaryMenuDoesNotDeleteIt() {
+        TestContext context = contextWithTeam();
+        when(context.cosService.publicUrl(any())).thenAnswer(invocation -> cdnUrl(invocation.getArgument(0)));
+        String qrContact = TEAM_UNIQUE_CODE + "/protfolio/" + QR_CONTACT_FILE;
+        String publicUrl = cdnUrl(qrContact);
+        String beforeState = """
+                {"components":[{"componentKey":"component-qr","componentType":"QR_CONTACT",
+                "config":{"qrUrl":"%s"}}]}
+                """.formatted(publicUrl);
+        String afterState = """
+                {"components":[],"bottomNav":{"enabled":true,"items":[
+                {"key":"nav_home","title":"主页"},
+                {"key":"nav_contact","title":"联系","components":[
+                {"componentKey":"component-qr","componentType":"QR_CONTACT",
+                "config":{"qrUrl":"%s"}}]}]}}
+                """.formatted(publicUrl);
+
+        context.service.deleteUnreferencedAssetsAfterCommit(
+                TEAM_ID, PORTFOLIO_ID, beforeState, afterState);
+
+        verify(context.cosService, never()).delete(any());
+    }
+
     private static final String JSON_STRING = """
             {"owned":"%s","otherTeam":"%s","otherPortfolio":"%s","memberWork":"%s"}
             """;

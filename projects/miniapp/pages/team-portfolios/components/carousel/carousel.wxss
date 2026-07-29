@@ -1,3 +1,5 @@
+@import "../../styles/team-portfolio-theme.wxss";
+
 :host { display: block; }
 .carousel { position: relative; width: 100%; margin-left: 0; height: 563rpx; color: #212529; overflow: hidden; overflow-wrap: anywhere; border-radius: 40rpx; background: #f1f3f5; }
 .carousel.editor-mode { width: 100%; margin-left: 0; height: auto; padding: 0; overflow: visible; background: transparent; }

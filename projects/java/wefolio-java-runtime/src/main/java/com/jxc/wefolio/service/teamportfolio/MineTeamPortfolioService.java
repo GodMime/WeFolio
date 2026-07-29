@@ -341,8 +341,11 @@ public class MineTeamPortfolioService {
         if (portfolioEntityMapper.insert(portfolio) != 1 || portfolio.getId() == null) {
             throw new BusinessException(TeamPortfolioMessage.CONCURRENT_UPDATE_MESSAGE);
         }
-        TeamPortfolioConfigDto normalized = configValidator.normalizeAndValidate(
-                initialJson, teamId, portfolio.getId(), 1);
+        // 首次创建尚无服务端历史草稿，传 null 表示直接按当前请求生成首版规范化草稿。
+        TeamPortfolioConfigDto normalized = configValidator.normalizeForDraft(
+                initialConfig,
+                null,
+                new TeamPortfolioComponentContext(teamId, portfolio.getId(), 1));
         validateCoverIfPresent(teamId, portfolio.getId(), normalized);
         String normalizedJson = JSON.toJSONString(normalized);
         String contentHash = sha256(normalizedJson);
@@ -401,8 +404,10 @@ public class MineTeamPortfolioService {
         String oldDraftConfigJson = portfolio.getDraftConfigJson();
         String publishedConfigJson = portfolio.getPublishedConfigJson();
         int nextDraftRevision = safeInt(portfolio.getDraftRevision()) + 1;
-        TeamPortfolioConfigDto normalized = configValidator.normalizeAndValidate(
-                JSON.toJSONString(request.getConfig()), access.team().getId(), portfolioId, nextDraftRevision);
+        TeamPortfolioConfigDto normalized = configValidator.normalizeForDraft(
+                request.getConfig(),
+                parseConfig(oldDraftConfigJson),
+                new TeamPortfolioComponentContext(access.team().getId(), portfolioId, nextDraftRevision));
         validateCoverIfPresent(access.team().getId(), portfolioId, normalized);
         String configJson = JSON.toJSONString(normalized);
         String contentHash = sha256(configJson);
@@ -499,8 +504,9 @@ public class MineTeamPortfolioService {
         }
         validatePublishDraft(portfolio, request);
         int nextPublishedRevision = safeInt(portfolio.getPublishedRevision()) + 1;
-        TeamPortfolioConfigDto normalized = configValidator.normalizeAndValidate(
-                portfolio.getDraftConfigJson(), access.team().getId(), portfolioId, nextPublishedRevision);
+        TeamPortfolioConfigDto normalized = configValidator.validateForPublish(
+                parseConfig(portfolio.getDraftConfigJson()),
+                new TeamPortfolioComponentContext(access.team().getId(), portfolioId, nextPublishedRevision));
         validateCoverIfPresent(access.team().getId(), portfolioId, normalized);
         String configJson = JSON.toJSONString(normalized);
         String contentHash = sha256(configJson);

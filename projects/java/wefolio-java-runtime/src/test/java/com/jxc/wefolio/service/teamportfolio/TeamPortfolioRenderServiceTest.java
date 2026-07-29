@@ -21,6 +21,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -37,7 +39,7 @@ import static org.mockito.Mockito.when;
 /**
  * 团队作品集顶层渲染分发测试。
  */
-@ExtendWith(MockitoExtension.class)
+@ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 class TeamPortfolioRenderServiceTest {
 
     @Mock private TeamProfileComponentRenderer teamProfileRenderer;
@@ -162,6 +164,164 @@ class TeamPortfolioRenderServiceTest {
         verifyNoRendererInteractions();
     }
 
+    /**
+     * 渲染只消费规范化持久化配置，非法菜单容器和空组件信封必须直接拒绝。
+     */
+    @Test
+    void renderShouldRejectMalformedMenuContainerAndComponentEnvelope() {
+        TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 22L, 0);
+        TeamPortfolioConfigDto nullEnvelope = config(new ArrayList<>(Arrays.asList(
+                component("divider", TeamPortfolioComponentTypeDict.DIVIDER.getCode(), 1000, true),
+                null)));
+        TeamPortfolioConfigDto malformedNavigation = config(List.of(
+                component("divider", TeamPortfolioComponentTypeDict.DIVIDER.getCode(), 1000, true)));
+        TeamPortfolioConfigDto.BottomNav bottomNav = new TeamPortfolioConfigDto.BottomNav();
+        bottomNav.setEnabled(true);
+        bottomNav.setItems(List.of(
+                menu("nav_home", "主页", null),
+                menu("nav_more", "更多", null)));
+        malformedNavigation.setBottomNav(bottomNav);
+
+        assertThatThrownBy(() -> service().render(JSON.toJSONString(nullEnvelope), context))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("团队作品集配置格式不正确");
+        assertThatThrownBy(() -> service().render(JSON.toJSONString(malformedNavigation), context))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("团队作品集配置格式不正确");
+        verifyNoRendererInteractions();
+    }
+
+    /**
+     * 空菜单项必须在拒绝渲染前记录可定位的警告日志，不能静默生成缺项菜单。
+     */
+    @Test
+    void renderShouldWarnBeforeRejectingNullNavigationItem(CapturedOutput output) {
+        TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 22L, 0);
+        TeamPortfolioConfigDto malformedNavigation = config(List.of(
+                component("divider", TeamPortfolioComponentTypeDict.DIVIDER.getCode(), 1000, true)));
+        TeamPortfolioConfigDto.BottomNav bottomNav = new TeamPortfolioConfigDto.BottomNav();
+        bottomNav.setEnabled(true);
+        bottomNav.setItems(new ArrayList<>(Arrays.asList(
+                menu("nav_home", "主页", null),
+                null)));
+        malformedNavigation.setBottomNav(bottomNav);
+
+        assertThatThrownBy(() -> service().render(JSON.toJSONString(malformedNavigation), context))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("团队作品集配置格式不正确");
+        assertThat(output)
+                .contains("团队作品集规范化配置中的底部导航菜单项无效")
+                .contains("teamId=11")
+                .contains("portfolioId=22")
+                .contains("menuIndex=1");
+        verifyNoRendererInteractions();
+    }
+
+    /**
+     * 旧配置必须渲染为默认白色浅色主题，并明确关闭底部导航。
+     */
+    @Test
+    void renderShouldDefaultLegacyConfigToLightThemeAndDisabledNavigation() {
+        TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 22L, 3);
+        when(dividerRenderer.render(any(JSONObject.class), eq(context))).thenReturn(new JSONObject());
+
+        TeamPortfolioRenderDto render = service().render(JSON.toJSONString(config(List.of(
+                component("component-home", TeamPortfolioComponentTypeDict.DIVIDER.getCode(), 1000, true)
+        ))), context);
+
+        assertThat(render.getStyle().getBackgroundColor()).isEqualTo("#FFFFFF");
+        assertThat(render.getStyle().getThemeMode()).isEqualTo("light");
+        assertThat(render.getBottomNav().isEnabled()).isFalse();
+        assertThat(render.getBottomNav().getItems()).isEmpty();
+    }
+
+    /**
+     * 第一菜单和次级菜单必须调用同一个组件分发入口，并保持第一菜单顶层单一数据源。
+     */
+    @Test
+    void renderShouldBuildDarkNavigationAndDispatchSecondaryComponents() {
+        TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 22L, 4);
+        when(dividerRenderer.render(any(JSONObject.class), eq(context)))
+                .thenReturn(JSONObject.of("renderer", "home"));
+        when(contactRenderer.render(any(JSONObject.class), eq(context)))
+                .thenReturn(JSONObject.of("renderer", "secondary"));
+        TeamPortfolioConfigDto config = config(List.of(
+                component("component-home", TeamPortfolioComponentTypeDict.DIVIDER.getCode(), 1000, true)));
+        TeamPortfolioConfigDto.Style style = new TeamPortfolioConfigDto.Style();
+        style.setBackgroundColor("#151515");
+        config.setStyle(style);
+        TeamPortfolioConfigDto.BottomNavItem first = menu("nav_home", "主页", null);
+        TeamPortfolioConfigDto.BottomNavItem second = menu("nav_contact", "联系", List.of(
+                component("component-contact", TeamPortfolioComponentTypeDict.CONTACT_FORM.getCode(), 1000, true)));
+        TeamPortfolioConfigDto.BottomNav bottomNav = new TeamPortfolioConfigDto.BottomNav();
+        bottomNav.setEnabled(true);
+        bottomNav.setItems(List.of(first, second));
+        config.setBottomNav(bottomNav);
+
+        TeamPortfolioRenderDto render = service().render(JSON.toJSONString(config), context);
+
+        assertThat(render.getStyle().getBackgroundColor()).isEqualTo("#151515");
+        assertThat(render.getStyle().getThemeMode()).isEqualTo("dark");
+        assertThat(render.getComponents()).extracting(TeamPortfolioRenderDto.Component::getComponentKey)
+                .containsExactly("component-home");
+        assertThat(render.getBottomNav().isEnabled()).isTrue();
+        assertThat(render.getBottomNav().getItems()).hasSize(2);
+        assertThat(render.getBottomNav().getItems().getFirst().getComponents()).isNull();
+        assertThat(render.getBottomNav().getItems().get(1).getComponents())
+                .singleElement()
+                .satisfies(component -> {
+                    assertThat(component.getComponentKey()).isEqualTo("component-contact");
+                    assertThat(component.getData().getString("renderer")).isEqualTo("secondary");
+                });
+        verify(dividerRenderer).render(any(JSONObject.class), eq(context));
+        verify(contactRenderer).render(any(JSONObject.class), eq(context));
+    }
+
+    /**
+     * 十类组件在第一菜单和次级菜单中必须保持完全相同的渲染数据契约。
+     */
+    @Test
+    void renderShouldKeepEveryComponentContractIdenticalAcrossMenus() {
+        TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 22L, 5);
+        configureRenderers(context);
+        List<TeamPortfolioConfigDto.ComponentEnvelope> firstComponents = new ArrayList<>();
+        List<TeamPortfolioConfigDto.ComponentEnvelope> secondaryComponents = new ArrayList<>();
+        int index = 0;
+        for (TeamPortfolioComponentTypeDict type : TeamPortfolioComponentTypeDict.values()) {
+            firstComponents.add(component(
+                    "first-" + type.getCode().toLowerCase(),
+                    type.getCode(),
+                    (++index) * 1000,
+                    true));
+            secondaryComponents.add(component(
+                    "secondary-" + type.getCode().toLowerCase(),
+                    type.getCode(),
+                    index * 1000,
+                    true));
+        }
+        TeamPortfolioConfigDto config = config(firstComponents);
+        TeamPortfolioConfigDto.BottomNav bottomNav = new TeamPortfolioConfigDto.BottomNav();
+        bottomNav.setEnabled(true);
+        bottomNav.setItems(List.of(
+                menu("nav_home", "主页", null),
+                menu("nav_more", "更多", secondaryComponents)));
+        config.setBottomNav(bottomNav);
+
+        TeamPortfolioRenderDto render = service().render(JSON.toJSONString(config), context);
+        List<TeamPortfolioRenderDto.Component> secondary =
+                render.getBottomNav().getItems().get(1).getComponents();
+
+        assertThat(render.getComponents()).hasSize(TeamPortfolioComponentTypeDict.values().length);
+        assertThat(secondary).hasSameSizeAs(render.getComponents());
+        for (TeamPortfolioRenderDto.Component first : render.getComponents()) {
+            TeamPortfolioRenderDto.Component matching = secondary.stream()
+                    .filter(component -> component.getComponentType().equals(first.getComponentType()))
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(matching.getData()).isEqualTo(first.getData());
+        }
+    }
+
     private void configureRenderers(TeamPortfolioComponentContext context) {
         for (TeamPortfolioComponentTypeDict type : TeamPortfolioComponentTypeDict.values()) {
             JSONObject rendered = new JSONObject();
@@ -214,5 +374,17 @@ class TeamPortfolioRenderServiceTest {
         component.setEnabled(enabled);
         component.setConfig(new JSONObject());
         return component;
+    }
+
+    private TeamPortfolioConfigDto.BottomNavItem menu(
+            String key,
+            String title,
+            List<TeamPortfolioConfigDto.ComponentEnvelope> components
+    ) {
+        TeamPortfolioConfigDto.BottomNavItem item = new TeamPortfolioConfigDto.BottomNavItem();
+        item.setKey(key);
+        item.setTitle(title);
+        item.setComponents(components);
+        return item;
     }
 }

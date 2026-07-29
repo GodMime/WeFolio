@@ -31,6 +31,7 @@ function syncDraft(component, requestSources) {
 
 Component({
   properties: {
+    themeMode: { type: String, value: 'light' },
     portfolioId: { type: Number, value: 0 },
     componentKey: { type: String, value: '' },
     config: {

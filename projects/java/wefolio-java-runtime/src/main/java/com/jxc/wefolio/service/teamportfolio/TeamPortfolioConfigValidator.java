@@ -24,6 +24,7 @@ import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * 团队作品集配置顶层校验与组件分发服务。
@@ -33,6 +34,18 @@ public class TeamPortfolioConfigValidator {
 
     /** 默认组件排序间隔。 */
     private static final int DEFAULT_SORT_ORDER_STEP = 1000;
+
+    /** 底部导航最少菜单数。 */
+    private static final int BOTTOM_NAV_MIN_ITEM_COUNT = 2;
+
+    /** 底部导航最多菜单数。 */
+    private static final int BOTTOM_NAV_MAX_ITEM_COUNT = 4;
+
+    /** 底部导航菜单名称最大 Unicode 字符数。 */
+    private static final int BOTTOM_NAV_TITLE_MAX_CODE_POINTS = 5;
+
+    /** 底部导航菜单标识格式。 */
+    private static final Pattern BOTTOM_NAV_KEY_PATTERN = Pattern.compile("^nav_[A-Za-z0-9_-]{1,64}$");
 
     /** 配置不能为空提示。 */
     private static final String CONFIG_REQUIRED_MESSAGE = "团队作品集配置不能为空";
@@ -46,14 +59,8 @@ public class TeamPortfolioConfigValidator {
     /** 组件不能为空提示。 */
     private static final String COMPONENT_REQUIRED_MESSAGE = "团队作品集至少需要一个启用组件";
 
-    /** 组件键重复提示。 */
-    private static final String COMPONENT_KEY_DUPLICATE_MESSAGE = "团队作品集组件标识不能重复";
-
     /** 组件类型不支持提示。 */
     private static final String COMPONENT_TYPE_UNSUPPORTED_MESSAGE = "团队作品集组件类型不支持";
-
-    /** 团队资料数量超限提示。 */
-    private static final String TEAM_PROFILE_LIMIT_MESSAGE = "团队作品集最多只能包含一个团队资料组件";
 
     /** 组件上下文非法提示。 */
     private static final String CONTEXT_INVALID_MESSAGE = "团队作品集组件上下文不正确";
@@ -97,30 +104,230 @@ public class TeamPortfolioConfigValidator {
     }
 
     /**
-     * 解析、校验并规范化团队作品集顶层配置。
+     * 解析、校验并规范化旧版团队作品集顶层配置。
      *
      * @param json 原始配置 JSON
      * @param teamId 团队 ID
      * @param portfolioId 作品集 ID
      * @param revision 作品集修订号
      * @return 规范化配置
+     * @deprecated 仅为兼容已有调用保留；新代码应按保存或发布场景调用
+     * {@link #normalizeForDraft(TeamPortfolioConfigDto, TeamPortfolioConfigDto, TeamPortfolioComponentContext)}
+     * 或 {@link #validateForPublish(TeamPortfolioConfigDto, TeamPortfolioComponentContext)}
      */
-    public TeamPortfolioConfigDto normalizeAndValidate(String json, long teamId, long portfolioId, int revision) {
+    @Deprecated
+    public TeamPortfolioConfigDto normalizeAndValidate(
+            String json,
+            long teamId,
+            long portfolioId,
+            int revision
+    ) {
         TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(teamId, portfolioId, revision);
-        validateContext(context);
-        TeamPortfolioConfigDto config = parseConfig(json);
-        validateSchema(config);
-        TeamPortfolioConfigDto.Share normalizedShare = normalizeShare(config.getShare());
+        return normalizeForDraft(parseConfig(json), null, context);
+    }
 
-        List<TeamPortfolioConfigDto.ComponentEnvelope> allComponents = nonNullComponents(config.getComponents());
+    /**
+     * 按草稿规则兼容合并、校验并规范化配置。
+     *
+     * @param incomingConfig 本次请求配置
+     * @param existingDraftConfig 服务端当前草稿配置
+     * @param context 团队组件上下文
+     * @return 完整规范化配置
+     */
+    public TeamPortfolioConfigDto normalizeForDraft(
+            TeamPortfolioConfigDto incomingConfig,
+            TeamPortfolioConfigDto existingDraftConfig,
+            TeamPortfolioComponentContext context
+    ) {
+        validateContext(context);
+        if (incomingConfig == null) {
+            throw new BusinessException(CONFIG_REQUIRED_MESSAGE);
+        }
+        validateEditorSchemaRevision(incomingConfig.getEditorSchemaRevision());
+        if (existingDraftConfig != null) {
+            validateEditorSchemaRevision(existingDraftConfig.getEditorSchemaRevision());
+        }
+
+        TeamPortfolioConfigDto config = mergeCompatibleConfig(incomingConfig, existingDraftConfig);
+        validateEditorSchemaRevision(config.getEditorSchemaRevision());
+        validateSchema(config);
+        TeamPortfolioConfigDto normalized = new TeamPortfolioConfigDto();
+        normalized.setSchemaVersion(TeamPortfolioConstants.SCHEMA_VERSION_STANDARD_TEAM_V1);
+        normalized.setEditorSchemaRevision(config.getEditorSchemaRevision());
+        normalized.setShare(normalizeShare(config.getShare()));
+        normalized.setStyle(normalizeStyle(config.getStyle()));
+        normalized.setBottomNav(normalizeBottomNavMetadata(config.getBottomNav()));
+
+        List<TeamPortfolioConfigDto.ComponentEnvelope> allComponents = allSourceComponents(config);
         validateComponentTypes(allComponents);
         validateComponentKeys(allComponents);
         validateTeamProfileCount(allComponents);
-        List<TeamPortfolioConfigDto.ComponentEnvelope> components = sortedEnabledComponents(allComponents);
-        if (components.isEmpty()) {
-            throw new BusinessException(COMPONENT_REQUIRED_MESSAGE);
+
+        boolean navigationEnabled = Boolean.TRUE.equals(normalized.getBottomNav().getEnabled());
+        String firstMenuTitle = navigationEnabled
+                ? normalized.getBottomNav().getItems().getFirst().getTitle()
+                : "";
+        List<TeamPortfolioConfigDto.ComponentEnvelope> topLevel = normalizeComponentList(
+                config.getComponents(), context, firstMenuTitle, navigationEnabled);
+        if (topLevel.isEmpty()) {
+            throw new BusinessException(navigationEnabled
+                    ? TeamPortfolioMessage.MENU_COMPONENT_REQUIRED_TEMPLATE.formatted(firstMenuTitle)
+                    : COMPONENT_REQUIRED_MESSAGE);
+        }
+        normalized.setComponents(topLevel);
+
+        if (navigationEnabled) {
+            List<TeamPortfolioConfigDto.BottomNavItem> sourceItems = config.getBottomNav().getItems();
+            List<TeamPortfolioConfigDto.BottomNavItem> normalizedItems = normalized.getBottomNav().getItems();
+            for (int menuIndex = 1; menuIndex < normalizedItems.size(); menuIndex++) {
+                TeamPortfolioConfigDto.BottomNavItem sourceItem = sourceItems.get(menuIndex);
+                TeamPortfolioConfigDto.BottomNavItem normalizedItem = normalizedItems.get(menuIndex);
+                normalizedItem.setComponents(normalizeComponentList(
+                        sourceItem == null ? null : sourceItem.getComponents(),
+                        context,
+                        normalizedItem.getTitle(),
+                        true
+                ));
+            }
+        }
+        return normalized;
+    }
+
+    /**
+     * 按发布规则重新校验完整草稿。
+     * 即使输入已经过保存阶段规范化，发布前仍执行完整规范化与组件校验，
+     * 用于阻止持久化配置损坏或保存后资源状态变化产生的无效正式配置。
+     *
+     * @param normalizedDraftConfig 已规范化草稿配置
+     * @param context 团队组件上下文
+     * @return 重新校验后的独立正式配置
+     */
+    public TeamPortfolioConfigDto validateForPublish(
+            TeamPortfolioConfigDto normalizedDraftConfig,
+            TeamPortfolioComponentContext context
+    ) {
+        TeamPortfolioConfigDto validated = normalizeForDraft(normalizedDraftConfig, null, context);
+        if (!Boolean.TRUE.equals(validated.getBottomNav().getEnabled())) {
+            return validated;
+        }
+        List<TeamPortfolioConfigDto.BottomNavItem> items = validated.getBottomNav().getItems();
+        for (int menuIndex = 1; menuIndex < items.size(); menuIndex++) {
+            TeamPortfolioConfigDto.BottomNavItem item = items.get(menuIndex);
+            if (item.getComponents() == null || item.getComponents().isEmpty()) {
+                throw new BusinessException(
+                        TeamPortfolioMessage.MENU_COMPONENT_REQUIRED_TEMPLATE.formatted(item.getTitle()));
+            }
+        }
+        return validated;
+    }
+
+    /**
+     * 兼容合并新旧编辑器请求，委托给独立合并器。
+     *
+     * @see TeamPortfolioConfigMerger
+     */
+    private TeamPortfolioConfigDto mergeCompatibleConfig(
+            TeamPortfolioConfigDto incomingConfig,
+            TeamPortfolioConfigDto existingDraftConfig
+    ) {
+        return TeamPortfolioConfigMerger.merge(incomingConfig, existingDraftConfig);
+    }
+
+    /**
+     * 规范化页面样式，委托给共享的样式规范化工具。
+     *
+     * @see TeamPortfolioStyleNormalizer
+     */
+    private TeamPortfolioConfigDto.Style normalizeStyle(TeamPortfolioConfigDto.Style style) {
+        TeamPortfolioConfigDto.Style normalized = new TeamPortfolioConfigDto.Style();
+        normalized.setBackgroundColor(TeamPortfolioStyleNormalizer.normalizeBackgroundColor(
+                style == null ? null : style.getBackgroundColor()));
+        return normalized;
+    }
+
+    /**
+     * 校验并复制底部导航元数据。
+     */
+    private TeamPortfolioConfigDto.BottomNav normalizeBottomNavMetadata(
+            TeamPortfolioConfigDto.BottomNav bottomNav
+    ) {
+        TeamPortfolioConfigDto.BottomNav normalized = new TeamPortfolioConfigDto.BottomNav();
+        boolean enabled = bottomNav != null && Boolean.TRUE.equals(bottomNav.getEnabled());
+        normalized.setEnabled(enabled);
+        if (!enabled) {
+            normalized.setItems(null);
+            return normalized;
+        }
+        List<TeamPortfolioConfigDto.BottomNavItem> items = bottomNav.getItems() == null
+                ? List.of()
+                : bottomNav.getItems();
+        if (items.size() < BOTTOM_NAV_MIN_ITEM_COUNT || items.size() > BOTTOM_NAV_MAX_ITEM_COUNT) {
+            throw new BusinessException(TeamPortfolioMessage.BOTTOM_NAV_ITEM_COUNT_INVALID_MESSAGE);
+        }
+        TeamPortfolioConfigDto.BottomNavItem firstItem = items.getFirst();
+        if (firstItem != null && firstItem.getComponents() != null) {
+            throw new BusinessException(TeamPortfolioMessage.FIRST_BOTTOM_NAV_COMPONENTS_DUPLICATE_MESSAGE);
         }
 
+        Set<String> keys = new LinkedHashSet<>();
+        Set<String> titles = new LinkedHashSet<>();
+        List<TeamPortfolioConfigDto.BottomNavItem> normalizedItems = new ArrayList<>();
+        for (int menuIndex = 0; menuIndex < items.size(); menuIndex++) {
+            TeamPortfolioConfigDto.BottomNavItem item = items.get(menuIndex);
+            String key = item == null ? "" : safeString(item.getKey());
+            if (!BOTTOM_NAV_KEY_PATTERN.matcher(key).matches()) {
+                throw new BusinessException(TeamPortfolioMessage.BOTTOM_NAV_KEY_INVALID_MESSAGE);
+            }
+            if (!keys.add(key)) {
+                throw new BusinessException(TeamPortfolioMessage.BOTTOM_NAV_KEY_DUPLICATE_MESSAGE);
+            }
+            String title = item == null ? "" : safeString(item.getTitle()).trim();
+            int titleLength = title.codePointCount(0, title.length());
+            if (titleLength < 1) {
+                throw new BusinessException(TeamPortfolioMessage.BOTTOM_NAV_TITLE_REQUIRED_MESSAGE);
+            }
+            if (titleLength > BOTTOM_NAV_TITLE_MAX_CODE_POINTS) {
+                throw new BusinessException(TeamPortfolioMessage.BOTTOM_NAV_TITLE_TOO_LONG_MESSAGE);
+            }
+            if (!titles.add(title)) {
+                throw new BusinessException(TeamPortfolioMessage.BOTTOM_NAV_TITLE_DUPLICATE_MESSAGE);
+            }
+            TeamPortfolioConfigDto.BottomNavItem copy = new TeamPortfolioConfigDto.BottomNavItem();
+            copy.setKey(key);
+            copy.setTitle(title);
+            copy.setIconUrl(item == null ? null : item.getIconUrl());
+            copy.setComponents(menuIndex == 0 ? null : new ArrayList<>());
+            normalizedItems.add(copy);
+        }
+        normalized.setItems(normalizedItems);
+        return normalized;
+    }
+
+    /**
+     * 返回完整配置中的全部原始组件。
+     */
+    private List<TeamPortfolioConfigDto.ComponentEnvelope> allSourceComponents(
+            TeamPortfolioConfigDto config
+    ) {
+        List<TeamPortfolioConfigDto.ComponentEnvelope> components = new ArrayList<>();
+        for (TeamPortfolioComponentTraversal.ComponentList componentList
+                : TeamPortfolioComponentTraversal.listComponentLists(config)) {
+            components.addAll(nonNullComponents(componentList.components()));
+        }
+        return components;
+    }
+
+    /**
+     * 规范化单个菜单中的启用组件。
+     */
+    private List<TeamPortfolioConfigDto.ComponentEnvelope> normalizeComponentList(
+            List<TeamPortfolioConfigDto.ComponentEnvelope> source,
+            TeamPortfolioComponentContext context,
+            String menuTitle,
+            boolean menuAware
+    ) {
+        List<TeamPortfolioConfigDto.ComponentEnvelope> components =
+                sortedEnabledComponents(nonNullComponents(source));
         List<TeamPortfolioConfigDto.ComponentEnvelope> normalizedComponents = new ArrayList<>();
         for (int index = 0; index < components.size(); index++) {
             TeamPortfolioConfigDto.ComponentEnvelope component = components.get(index);
@@ -130,15 +337,17 @@ public class TeamPortfolioConfigValidator {
             normalized.setComponentType(componentType.getCode());
             normalized.setEnabled(true);
             normalized.setSortOrder((index + 1) * DEFAULT_SORT_ORDER_STEP);
-            normalized.setConfig(normalizeComponent(componentType, component.getConfig(), context));
+            try {
+                normalized.setConfig(normalizeComponent(componentType, component.getConfig(), context));
+            } catch (BusinessException exception) {
+                if (!menuAware) {
+                    throw exception;
+                }
+                throw new BusinessException("【" + menuTitle + "】" + exception.getMessage());
+            }
             normalizedComponents.add(normalized);
         }
-
-        TeamPortfolioConfigDto normalized = new TeamPortfolioConfigDto();
-        normalized.setSchemaVersion(TeamPortfolioConstants.SCHEMA_VERSION_STANDARD_TEAM_V1);
-        normalized.setShare(normalizedShare);
-        normalized.setComponents(normalizedComponents);
-        return normalized;
+        return normalizedComponents;
     }
 
     /**
@@ -209,7 +418,7 @@ public class TeamPortfolioConfigValidator {
         for (TeamPortfolioConfigDto.ComponentEnvelope component : components) {
             String componentKey = safeString(component.getComponentKey());
             if (componentKey.isBlank() || !componentKeys.add(componentKey)) {
-                throw new BusinessException(COMPONENT_KEY_DUPLICATE_MESSAGE);
+                throw new BusinessException(TeamPortfolioMessage.COMPONENT_KEY_CROSS_MENU_DUPLICATE_MESSAGE);
             }
         }
     }
@@ -222,7 +431,7 @@ public class TeamPortfolioConfigValidator {
                 .filter(component -> TeamPortfolioComponentTypeDict.TEAM_PROFILE.getCode().equals(component.getComponentType()))
                 .count();
         if (count > 1) {
-            throw new BusinessException(TEAM_PROFILE_LIMIT_MESSAGE);
+            throw new BusinessException(TeamPortfolioMessage.TEAM_PROFILE_COMPONENT_LIMIT_MESSAGE);
         }
     }
 
@@ -289,10 +498,20 @@ public class TeamPortfolioConfigValidator {
     }
 
     /**
+     * 拒绝当前服务无法完整理解的未来编辑器配置，避免降级保存时丢失字段。
+     */
+    private void validateEditorSchemaRevision(Integer editorSchemaRevision) {
+        if (editorSchemaRevision != null
+                && editorSchemaRevision > TeamPortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT) {
+            throw new BusinessException(TeamPortfolioMessage.EDITOR_SCHEMA_REVISION_UNSUPPORTED_MESSAGE);
+        }
+    }
+
+    /**
      * 校验组件上下文。
      */
     private void validateContext(TeamPortfolioComponentContext context) {
-        if (context.teamId() <= 0 || context.portfolioId() <= 0 || context.revision() < 0) {
+        if (context == null || context.teamId() <= 0 || context.portfolioId() <= 0 || context.revision() < 0) {
             throw new BusinessException(CONTEXT_INVALID_MESSAGE);
         }
     }

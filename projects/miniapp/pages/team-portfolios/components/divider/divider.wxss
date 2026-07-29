@@ -1,3 +1,5 @@
+@import "../../styles/team-portfolio-theme.wxss";
+
 :host { display: block; }
 .divider-component { box-sizing: border-box; width: calc(100% + 56rpx); margin-left: -28rpx; padding: 16rpx 0; color: #212529; overflow-wrap: anywhere; }
 .divider-component.editor-mode { width: 100%; margin-left: 0; padding: 0; }

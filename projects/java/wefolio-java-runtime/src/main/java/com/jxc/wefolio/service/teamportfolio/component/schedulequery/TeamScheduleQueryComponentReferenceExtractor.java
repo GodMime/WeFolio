@@ -32,6 +32,9 @@ public class TeamScheduleQueryComponentReferenceExtractor {
     /** 查询范围配置键。 */
     private static final String CONFIG_KEY_QUERY_RANGE = "queryRange";
 
+    /** 档期组件真实配置路径后缀。 */
+    private static final String CONFIG_PATH_SUFFIX = ".config";
+
     /** 团队档期查询组件渲染器。 */
     private final TeamScheduleQueryComponentRenderer renderer;
 
@@ -78,7 +81,7 @@ public class TeamScheduleQueryComponentReferenceExtractor {
         reference.setReferenceType(ReferenceTypeDict.SCHEDULE_COMPONENT.getCode());
         reference.setReferenceId(context.teamId());
         reference.setComponentKey(componentKey);
-        reference.setComponentPath(componentPath);
+        reference.setComponentPath(componentPath + CONFIG_PATH_SUFFIX);
         reference.setSortOrder(0);
         reference.setSnapshotJson(JSON.toJSONString(snapshot, JSONWriter.Feature.WriteNulls));
         reference.setIsValid(1);

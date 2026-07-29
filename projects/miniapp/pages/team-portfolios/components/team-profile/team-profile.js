@@ -79,6 +79,7 @@ function syncTeamProfileDraft(component) {
 
 Component({
   properties: {
+    themeMode: { type: String, value: 'light' },
     team: {
       type: Object,
       value: {},

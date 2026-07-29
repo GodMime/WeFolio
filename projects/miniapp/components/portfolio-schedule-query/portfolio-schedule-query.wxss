@@ -511,6 +511,113 @@
   background: var(--portfolio-surface-muted);
 }
 
+.schedule-query.portfolio-theme-dark .schedule-query-inline-shell .schedule-query-calendar {
+  color: var(--portfolio-text-primary);
+  border-color: var(--portfolio-border);
+  background: var(--portfolio-surface);
+}
+
+.schedule-query.portfolio-theme-dark .schedule-query-inline-shell .schedule-query-month-button,
+.schedule-query.portfolio-theme-dark .schedule-query-inline-shell .schedule-query-month-picker-button {
+  color: var(--portfolio-text-primary);
+  border-color: var(--portfolio-border);
+  background: var(--portfolio-surface-muted);
+}
+
+.schedule-query.portfolio-theme-dark .schedule-query-inline-shell .schedule-query-month-text,
+.schedule-query.portfolio-theme-dark .schedule-query-inline-shell .schedule-query-slot-heading,
+.schedule-query.portfolio-theme-dark .schedule-query-inline-shell .schedule-query-slot-name {
+  color: var(--portfolio-text-primary);
+}
+
+.schedule-query.portfolio-theme-dark .schedule-query-inline-shell .schedule-query-state,
+.schedule-query.portfolio-theme-dark .schedule-query-inline-shell .schedule-query-weekdays,
+.schedule-query.portfolio-theme-dark .schedule-query-inline-shell .schedule-query-day-meta,
+.schedule-query.portfolio-theme-dark .schedule-query-inline-shell .schedule-query-slot-time {
+  color: var(--portfolio-text-secondary);
+}
+
+.schedule-query.portfolio-theme-dark .schedule-query-inline-shell .schedule-query-state.error {
+  color: #dc9999;
+}
+
+.schedule-query.portfolio-theme-dark .schedule-query-inline-shell .schedule-query-retry {
+  color: #212529;
+  background: var(--portfolio-text-primary);
+}
+
+.schedule-query.portfolio-theme-dark .schedule-query-inline-shell .schedule-calendar-day {
+  color: var(--portfolio-text-primary);
+  border-color: var(--portfolio-border);
+  background: var(--portfolio-surface-muted);
+}
+
+.schedule-query.portfolio-theme-dark .schedule-query-inline-shell .schedule-calendar-day.muted {
+  color: var(--portfolio-text-muted);
+  background: var(--portfolio-surface);
+}
+
+.schedule-query.portfolio-theme-dark .schedule-query-inline-shell .schedule-calendar-day.filled {
+  border-color: var(--portfolio-border);
+  background: var(--portfolio-surface);
+}
+
+.schedule-query.portfolio-theme-dark .schedule-query-inline-shell .schedule-calendar-day.muted .schedule-query-day-meta {
+  color: var(--portfolio-text-muted);
+}
+
+.schedule-query.portfolio-theme-dark .schedule-query-inline-shell .schedule-calendar-day.selected {
+  color: #212529;
+  border-color: var(--portfolio-text-primary);
+  background: var(--portfolio-text-primary);
+}
+
+.schedule-query.portfolio-theme-dark .schedule-query-inline-shell .schedule-calendar-day.selected .schedule-query-day-meta {
+  color: #212529;
+}
+
+.schedule-query.portfolio-theme-dark .schedule-query-inline-shell .schedule-query-empty,
+.schedule-query.portfolio-theme-dark .schedule-query-inline-shell .schedule-query-slot {
+  color: var(--portfolio-text-secondary);
+  border-color: var(--portfolio-border);
+  background: var(--portfolio-surface-muted);
+}
+
+.schedule-query.portfolio-theme-dark .schedule-query-inline-shell .schedule-query-slot.selected {
+  border-color: var(--portfolio-text-primary);
+  background: var(--portfolio-surface);
+}
+
+.schedule-query.portfolio-theme-dark .schedule-query-inline-shell .schedule-query-slot-check {
+  color: #212529;
+  background: var(--portfolio-text-primary);
+}
+
+.schedule-query.portfolio-theme-dark .schedule-query-inline-shell .schedule-query-summary-item {
+  color: var(--portfolio-text-secondary);
+  background: var(--portfolio-surface-muted);
+}
+
+.schedule-query.portfolio-theme-dark .schedule-query-inline-shell .schedule-query-result.available {
+  color: #8fc99e;
+  background: rgba(92, 158, 110, 0.16);
+}
+
+.schedule-query.portfolio-theme-dark .schedule-query-inline-shell .schedule-query-result.unavailable {
+  color: #dc9999;
+  background: rgba(181, 86, 86, 0.16);
+}
+
+.schedule-query.portfolio-theme-dark .schedule-query-inline-shell .schedule-query-submit {
+  color: #212529;
+  background: var(--portfolio-text-primary);
+}
+
+.schedule-query.portfolio-theme-dark .schedule-query-inline-shell .schedule-query-submit[disabled] {
+  color: var(--portfolio-text-muted);
+  background: var(--portfolio-surface-muted);
+}
+
 .schedule-query-modal-panel {
   color: #212529;
 }

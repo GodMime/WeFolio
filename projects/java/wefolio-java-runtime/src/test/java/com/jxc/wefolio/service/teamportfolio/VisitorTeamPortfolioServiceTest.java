@@ -40,6 +40,7 @@ import com.jxc.wefolio.message.TeamPortfolioMessage;
 import com.jxc.wefolio.service.ContentLimitService;
 import com.jxc.wefolio.service.PointService;
 import com.jxc.wefolio.service.PortfolioPublishTransactionService;
+import com.jxc.wefolio.service.PointBalanceGateService;
 import com.jxc.wefolio.service.VisitorAuthTokenService;
 import com.jxc.wefolio.service.VisitorService;
 import com.jxc.wefolio.service.teamportfolio.component.contactform.TeamContactFormComponentService;
@@ -271,6 +272,42 @@ class VisitorTeamPortfolioServiceTest {
         order.verify(context.renderService).render(any(), any());
         order.verify(context.visitService).recordOpen(
                 portfolio(), VISITOR_ID, VISITOR_KEY, "WECHAT_SHARE_CARD", "open-1");
+    }
+
+    /**
+     * 积分维护遮罩必须清空组件和导航，并固定使用中性浅色主题。
+     */
+    @Test
+    void maintenanceOpenShouldReturnNeutralRenderWithoutVisitorWrites() {
+        VisitorServiceContext context = publishedContext();
+        when(context.pointBalanceGateService.isNonPositive(USER_ID)).thenReturn(true);
+        TeamPortfolioRenderDto render = new TeamPortfolioRenderDto();
+        TeamPortfolioRenderDto.Style style = new TeamPortfolioRenderDto.Style();
+        style.setBackgroundColor("#151515");
+        style.setThemeMode("dark");
+        render.setStyle(style);
+        TeamPortfolioRenderDto.Component component = new TeamPortfolioRenderDto.Component();
+        component.setComponentKey("component-private");
+        render.setComponents(List.of(component));
+        TeamPortfolioRenderDto.BottomNav bottomNav = new TeamPortfolioRenderDto.BottomNav();
+        bottomNav.setEnabled(true);
+        TeamPortfolioRenderDto.BottomNavItem menu = new TeamPortfolioRenderDto.BottomNavItem();
+        menu.setKey("nav_home");
+        menu.setTitle("主页");
+        bottomNav.setItems(List.of(menu));
+        render.setBottomNav(bottomNav);
+        when(context.renderService.render(any(), any())).thenReturn(render);
+
+        var response = context.service.openPortfolio(
+                "TPF-TASK8", new VisitorTeamPortfolioOpenRequest());
+
+        assertThat(response.isUnderMaintenance()).isTrue();
+        assertThat(response.getRenderData().getComponents()).isEmpty();
+        assertThat(response.getRenderData().getStyle().getBackgroundColor()).isEqualTo("#FFFFFF");
+        assertThat(response.getRenderData().getStyle().getThemeMode()).isEqualTo("light");
+        assertThat(response.getRenderData().getBottomNav().isEnabled()).isFalse();
+        assertThat(response.getRenderData().getBottomNav().getItems()).isEmpty();
+        verifyNoInteractions(context.visitorService, context.visitService, context.tokenService);
     }
 
     @Test
@@ -565,13 +602,15 @@ class VisitorTeamPortfolioServiceTest {
         TeamPortfolioVisitService visitService = mock(TeamPortfolioVisitService.class);
         VisitorService visitorService = mock(VisitorService.class);
         VisitorAuthTokenService tokenService = mock(VisitorAuthTokenService.class);
+        PointBalanceGateService pointBalanceGateService = mock(PointBalanceGateService.class);
         VisitorTeamPortfolioService service = new VisitorTeamPortfolioService(
                 properties, portfolioMapper, teamMapper, renderService, scheduleService,
                 contactService, visitService, visitorService, tokenService,
-                mock(com.jxc.wefolio.service.PointBalanceGateService.class),
+                pointBalanceGateService,
                 performanceLogger());
         return new VisitorServiceContext(service, portfolioMapper, teamMapper, renderService,
-                scheduleService, contactService, visitService, visitorService, tokenService);
+                scheduleService, contactService, visitService, visitorService, tokenService,
+                pointBalanceGateService);
     }
 
     /** 创建关闭正常采样的测试耗时日志器。 */
@@ -659,6 +698,7 @@ class VisitorTeamPortfolioServiceTest {
         TeamEntity team = new TeamEntity();
         team.setId(TEAM_ID);
         team.setName("任务八团队");
+        team.setOwnerUserId(USER_ID);
         team.setStatus(status);
         return team;
     }
@@ -695,7 +735,8 @@ class VisitorTeamPortfolioServiceTest {
             TeamContactFormComponentService contactService,
             TeamPortfolioVisitService visitService,
             VisitorService visitorService,
-            VisitorAuthTokenService tokenService
+            VisitorAuthTokenService tokenService,
+            PointBalanceGateService pointBalanceGateService
     ) {
     }
 

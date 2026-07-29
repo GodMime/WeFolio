@@ -1,6 +1,7 @@
 package com.jxc.wefolio.dto.teamportfolio;
 
 import com.alibaba.fastjson2.JSONObject;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.Data;
 
 import java.util.ArrayList;
@@ -39,8 +40,57 @@ public class TeamPortfolioRenderDto {
     /** 访问汇总记录 ID */
     private Long visitRecordId;
 
+    /** 页面渲染样式 */
+    private Style style;
+
     /** 渲染组件 */
     private List<Component> components = new ArrayList<>();
+
+    /** 底部导航渲染数据 */
+    private BottomNav bottomNav;
+
+    /**
+     * 页面渲染样式。
+     */
+    @Data
+    public static class Style {
+
+        /** 页面背景色 */
+        private String backgroundColor;
+
+        /** 页面明暗模式：light / dark */
+        private String themeMode;
+    }
+
+    /**
+     * 底部导航渲染数据。
+     */
+    @Data
+    public static class BottomNav {
+
+        /** 是否启用 */
+        private boolean enabled;
+
+        /** 导航菜单 */
+        private List<BottomNavItem> items = new ArrayList<>();
+    }
+
+    /**
+     * 底部导航渲染菜单。
+     */
+    @Data
+    public static class BottomNavItem {
+
+        /** 菜单实例键 */
+        private String key;
+
+        /** 菜单名称 */
+        private String title;
+
+        /** 次级菜单组件；第一菜单保持 null 以便响应省略 */
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        private List<Component> components;
+    }
 
     /**
      * 渲染组件。

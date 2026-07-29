@@ -129,6 +129,12 @@ public class TeamPortfolioVisitService {
     /** metadata 访问来源键。 */
     private static final String METADATA_SOURCE_TYPE = "sourceType";
 
+    /** 联系表单组件类型。 */
+    private static final String COMPONENT_TYPE_CONTACT_FORM = "CONTACT_FORM";
+
+    /** 档期查询组件类型。 */
+    private static final String COMPONENT_TYPE_SCHEDULE_QUERY = "SCHEDULE_QUERY";
+
     /** 允许由公共事件接口上报的客户端事件类型。 */
     private static final Set<VisitEventTypeDict> CLIENT_EVENT_TYPES = Set.of(
             VisitEventTypeDict.WORK_VIEWED,
@@ -242,6 +248,8 @@ public class TeamPortfolioVisitService {
         validateExactEventRequest(event);
         VisitRecordEntity record = findVisitRecord(portfolio, visitorId, visitorKey);
         validateOwnedRecord(record, portfolio, visitorId, visitorKey);
+        validatePublishedComponent(
+                portfolio, event.getComponentKey(), COMPONENT_TYPE_SCHEDULE_QUERY);
         return persistEventIfAbsent(portfolio, record, visitorKey, event);
     }
 
@@ -421,6 +429,10 @@ public class TeamPortfolioVisitService {
         } else if (type == VisitEventTypeDict.QR_CODE_INTERACTED) {
             referenceType = ReferenceTypeDict.QR_CODE_ASSET;
             referenceId = portfolio.getOwnerId();
+        } else if (type == VisitEventTypeDict.CONTACT_FORM_EXPOSED) {
+            validatePublishedComponent(
+                    portfolio, request.getComponentKey(), COMPONENT_TYPE_CONTACT_FORM);
+            return;
         } else {
             return;
         }
@@ -448,6 +460,31 @@ public class TeamPortfolioVisitService {
         }
         if (type == VisitEventTypeDict.WORK_VIEWED || type == VisitEventTypeDict.VIDEO_PLAYED) {
             validateTrustedWork(request, type);
+        }
+    }
+
+    /**
+     * 从已发布配置的全部菜单确认互动事件目标组件存在且已启用。
+     */
+    private void validatePublishedComponent(
+            PortfolioEntity portfolio,
+            String componentKey,
+            String componentType
+    ) {
+        try {
+            TeamPortfolioConfigDto config = JSON.parseObject(
+                    portfolio.getPublishedConfigJson(), TeamPortfolioConfigDto.class);
+            if (config == null
+                    || !TeamPortfolioConstants.SCHEMA_VERSION_STANDARD_TEAM_V1.equals(
+                            config.getSchemaVersion())
+                    || TeamPortfolioComponentTraversal.findEnabledComponent(
+                            config, componentKey, componentType).isEmpty()) {
+                throw new BusinessException(EVENT_INVALID_MESSAGE);
+            }
+        } catch (BusinessException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            throw new BusinessException(EVENT_INVALID_MESSAGE, exception);
         }
     }
 

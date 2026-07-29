@@ -1,9 +1,9 @@
 <wxs module="selection" src="../editor-selection.wxs"></wxs>
 
-<view class="list-component {{editMode ? 'editor-mode' : ''}}">
+<view class="list-component theme-{{themeMode}} {{editMode ? 'editor-mode' : ''}}">
   <block wx:if="{{editMode}}">
     <view class="editor-form">
-      <view class="editor-field"><view class="editor-label">选择团队成员</view><scroll-view class="editor-member-scroll" scroll-x type="list"><view class="editor-member-row"><button wx:for="{{members}}" wx:key="memberUserId" class="editor-member-choice {{selectedMemberId === item.memberUserId ? 'active' : ''}}" data-id="{{item.memberUserId}}" bindtap="selectMember">{{item.displayName}}</button></view></scroll-view></view>
+      <view class="editor-field"><view class="editor-label">选择团队成员</view><scroll-view class="editor-member-scroll" scroll-x type="list"><view class="editor-member-row"><view wx:for="{{members}}" wx:key="memberUserId" class="editor-member-choice {{selectedMemberId === item.memberUserId ? 'active' : ''}}" data-id="{{item.memberUserId}}" bindtap="selectMember" aria-role="radio" aria-checked="{{selectedMemberId === item.memberUserId}}">{{item.displayName}}</view></view></scroll-view></view>
       <view class="editor-field editor-content-field">
         <view class="editor-field-heading"><view class="editor-label">已发布个人作品集</view><view class="editor-limit">已选 {{draftItems.length}}</view></view>
         <view wx:if="{{!sourceAvailable}}" class="editor-empty">成员授权已关闭，原引用已移除</view>

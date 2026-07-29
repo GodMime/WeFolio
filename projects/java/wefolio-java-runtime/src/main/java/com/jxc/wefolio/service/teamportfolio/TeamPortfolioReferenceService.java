@@ -128,11 +128,10 @@ public class TeamPortfolioReferenceService {
         if (!TeamPortfolioConstants.SCHEMA_VERSION_STANDARD_TEAM_V1.equals(config.getSchemaVersion())) {
             throw new BusinessException(SCHEMA_UNSUPPORTED_MESSAGE);
         }
-        if (config.getComponents() != null) {
-            config.getComponents().stream()
-                    .filter(component -> component != null)
-                    .forEach(component -> componentType(component.getComponentType()));
-        }
+        TeamPortfolioComponentTraversal.listComponentLocations(config).stream()
+                .map(TeamPortfolioComponentTraversal.ComponentLocation::component)
+                .filter(component -> component != null)
+                .forEach(component -> componentType(component.getComponentType()));
     }
 
     /**
@@ -142,13 +141,13 @@ public class TeamPortfolioReferenceService {
             TeamPortfolioConfigDto config,
             TeamPortfolioComponentContext context
     ) {
-        List<TeamPortfolioConfigDto.ComponentEnvelope> components = sortedEnabledComponents(
-                config == null ? null : config.getComponents());
+        List<TeamPortfolioComponentTraversal.ComponentLocation> locations =
+                sortedEnabledComponentLocations(config);
         List<PortfolioReferenceEntity> references = new ArrayList<>();
-        for (int index = 0; index < components.size(); index++) {
-            TeamPortfolioConfigDto.ComponentEnvelope component = components.get(index);
+        for (TeamPortfolioComponentTraversal.ComponentLocation location : locations) {
+            TeamPortfolioConfigDto.ComponentEnvelope component = location.component();
             TeamPortfolioComponentTypeDict componentType = componentType(component.getComponentType());
-            references.addAll(extractComponent(componentType, component.getComponentKey(), "components[" + index + "]",
+            references.addAll(extractComponent(componentType, component.getComponentKey(), location.componentPath(),
                     component.getConfig() == null ? new JSONObject() : component.getConfig(), context));
         }
         return references;
@@ -212,15 +211,15 @@ public class TeamPortfolioReferenceService {
     /**
      * 对启用组件进行稳定排序。
      */
-    private List<TeamPortfolioConfigDto.ComponentEnvelope> sortedEnabledComponents(
-            List<TeamPortfolioConfigDto.ComponentEnvelope> components
+    private List<TeamPortfolioComponentTraversal.ComponentLocation> sortedEnabledComponentLocations(
+            TeamPortfolioConfigDto config
     ) {
-        if (components == null) {
-            return List.of();
-        }
-        return components.stream()
-                .filter(component -> component != null && !Boolean.FALSE.equals(component.getEnabled()))
-                .sorted(Comparator.comparing(this::sortOrder))
+        return TeamPortfolioComponentTraversal.listComponentLocations(config).stream()
+                .filter(location -> location.component() != null
+                        && !Boolean.FALSE.equals(location.component().getEnabled()))
+                .sorted(Comparator
+                        .comparingInt(TeamPortfolioComponentTraversal.ComponentLocation::menuIndex)
+                        .thenComparing(location -> sortOrder(location.component())))
                 .toList();
     }
 

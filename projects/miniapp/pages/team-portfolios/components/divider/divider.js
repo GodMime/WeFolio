@@ -23,6 +23,7 @@ function syncDividerDraft(component) {
 
 Component({
   properties: {
+    themeMode: { type: String, value: 'light' },
     config: { type: Object, value: {}, observer() { if (!this.properties.editMode) syncDividerDraft(this) } },
     editMode: { type: Boolean, value: false, observer(value, oldValue) { if (value !== oldValue) syncDividerDraft(this) } }
   },

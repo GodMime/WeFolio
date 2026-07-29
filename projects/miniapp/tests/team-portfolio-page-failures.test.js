@@ -10,6 +10,20 @@ const TEAM_UTILITY_PATH = path.resolve(ROOT, 'utils/team-portfolios.js')
 
 function clone(value) { return JSON.parse(JSON.stringify(value)) }
 function flush() { return new Promise((resolve) => setImmediate(resolve)) }
+function validTeamEditorConfig() {
+  return {
+    schemaVersion: 'standard-team-v1',
+    editorSchemaRevision: 2,
+    share: { title: '测试团队作品集' },
+    components: [{
+      componentKey: 'valid-divider',
+      componentType: 'DIVIDER',
+      sortOrder: 1000,
+      enabled: true,
+      config: {}
+    }]
+  }
+}
 
 function loadPage(relativePath, requestFn, wxOverrides = {}) {
   const pagePath = path.join(ROOT, relativePath)
@@ -413,7 +427,7 @@ test('editor publish retries only publish with one draft revision and clears rej
     }
     return {}
   })
-  page.setData({ portfolioId: 7, teamId: 3, canMaintain: true, draftRevision: 7, config: { share: { title: '测试团队作品集' }, components: [] }, componentValidation: {}, hasInvalidComponents: false })
+  page.setData({ portfolioId: 7, teamId: 3, canMaintain: true, draftRevision: 7, config: validTeamEditorConfig(), componentValidation: { 'valid-divider': true }, hasInvalidComponents: false })
   try {
     await page.handlePublishTap(); await page.handlePublishTap()
     const drafts = requests.filter((item) => item.url.endsWith('/draft'))
@@ -425,8 +439,59 @@ test('editor publish retries only publish with one draft revision and clears rej
   } finally { page.cleanup() }
 
   const rejected = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => { const error = new Error('invalid'); error.statusCode = 400; throw error })
-  rejected.setData({ portfolioId: 7, canMaintain: true, pendingPublishKey: 'publish-key', pendingPublishRevision: 8 })
+  rejected.setData({ portfolioId: 7, canMaintain: true, pendingPublishKey: 'publish-key', pendingPublishRevision: 8, config: validTeamEditorConfig(), componentValidation: { 'valid-divider': true } })
   try { await rejected.handlePublishTap(); assert.equal(rejected.data.pendingPublishKey, ''); assert.equal(rejected.data.pendingPublishRevision, 0) } finally { rejected.cleanup() }
+})
+
+test('editor displays server-authoritative menu errors for draft save and publish', async () => {
+  const saveToasts = []
+  const saveRejected = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => {
+    const error = new Error('【作品】所选成员作品集不可用')
+    error.statusCode = 400
+    throw error
+  }, {
+    showToast(value) { saveToasts.push(value) }
+  })
+  saveRejected.setData({
+    portfolioId: 7,
+    teamId: 3,
+    canMaintain: true,
+    draftRevision: 7,
+    config: validTeamEditorConfig(),
+    componentValidation: { 'valid-divider': true },
+    hasInvalidComponents: false
+  })
+  try {
+    await saveRejected.saveDraft()
+    assert.deepEqual(saveToasts, [{
+      title: '【作品】所选成员作品集不可用',
+      icon: 'none'
+    }])
+  } finally { saveRejected.cleanup() }
+
+  const publishToasts = []
+  const publishRejected = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => {
+    const error = new Error('【档期】团队档期查询配置不正确')
+    error.statusCode = 400
+    throw error
+  }, {
+    showToast(value) { publishToasts.push(value) }
+  })
+  publishRejected.setData({
+    portfolioId: 7,
+    canMaintain: true,
+    pendingPublishKey: 'publish-key',
+    pendingPublishRevision: 8,
+    config: validTeamEditorConfig(),
+    componentValidation: { 'valid-divider': true }
+  })
+  try {
+    await publishRejected.handlePublishTap()
+    assert.deepEqual(publishToasts, [{
+      title: '【档期】团队档期查询配置不正确',
+      icon: 'none'
+    }])
+  } finally { publishRejected.cleanup() }
 })
 
 test('contact leads ignore a forged route role, accept only trusted canMaintain, and tolerate malformed names', async () => {
@@ -529,7 +594,7 @@ test('operation-level unavailable errors toast without redirecting for save, pub
   const wxOverrides = { redirectTo(value) { redirects.push(value) }, showToast(value) { toasts.push(value) } }
 
   const editor = loadPage('standard-edit/team-portfolio-standard-edit.js', unavailable, wxOverrides)
-  editor.setData({ portfolioId: 8, canMaintain: true, draftRevision: 1, config: { share: { title: '测试团队作品集' }, components: [] }, componentValidation: {} })
+  editor.setData({ portfolioId: 8, canMaintain: true, draftRevision: 1, config: validTeamEditorConfig(), componentValidation: { 'valid-divider': true } })
   try {
     await editor.saveDraft()
     assert.deepEqual(toasts.shift(), { title: '团队作品集功能暂未开放', icon: 'none' })

@@ -157,6 +157,36 @@ class TeamPortfolioReferenceServiceTest {
     }
 
     /**
+     * 次级菜单组件必须参与引用重建，并携带其在原始配置中的真实路径。
+     */
+    @Test
+    void rebuildShouldExtractSecondaryMenuReferencesWithOriginalPaths() {
+        TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 22L, 3);
+        when(singleWorkExtractor.extract(anyString(), anyString(), any(JSONObject.class), eq(context)))
+                .thenReturn(List.of(reference(TeamPortfolioComponentTypeDict.SINGLE_WORK.getCode())));
+        TeamPortfolioConfigDto config = config(List.of(
+                component("home", TeamPortfolioComponentTypeDict.DIVIDER.getCode(), 1000, false)));
+        TeamPortfolioConfigDto.BottomNavItem home = menu("nav_home", "首页", null);
+        TeamPortfolioConfigDto.BottomNavItem works = menu("nav_works", "作品", List.of(
+                component("secondary-disabled", TeamPortfolioComponentTypeDict.SINGLE_WORK.getCode(), 1000, false),
+                component("secondary-work", TeamPortfolioComponentTypeDict.SINGLE_WORK.getCode(), 2000, true)));
+        TeamPortfolioConfigDto.BottomNav bottomNav = new TeamPortfolioConfigDto.BottomNav();
+        bottomNav.setEnabled(true);
+        bottomNav.setItems(List.of(home, works));
+        config.setBottomNav(bottomNav);
+
+        service().rebuild(context.portfolioId(), PortfolioConfigScopeDict.DRAFT.getCode(), config, context);
+
+        verify(singleWorkExtractor).extract(
+                eq("secondary-work"),
+                eq("bottomNav.items[1].components[1]"),
+                any(JSONObject.class),
+                eq(context));
+        verify(referenceMapper).insert(any(PortfolioReferenceEntity.class));
+        verifyNoInteractions(dividerExtractor);
+    }
+
+    /**
      * 重建方法必须声明异常回滚，保证删除和批量插入原子执行。
      */
     @Test
@@ -327,5 +357,17 @@ class TeamPortfolioReferenceServiceTest {
         component.setEnabled(enabled);
         component.setConfig(new JSONObject());
         return component;
+    }
+
+    private TeamPortfolioConfigDto.BottomNavItem menu(
+            String key,
+            String title,
+            List<TeamPortfolioConfigDto.ComponentEnvelope> components
+    ) {
+        TeamPortfolioConfigDto.BottomNavItem item = new TeamPortfolioConfigDto.BottomNavItem();
+        item.setKey(key);
+        item.setTitle(title);
+        item.setComponents(components);
+        return item;
     }
 }

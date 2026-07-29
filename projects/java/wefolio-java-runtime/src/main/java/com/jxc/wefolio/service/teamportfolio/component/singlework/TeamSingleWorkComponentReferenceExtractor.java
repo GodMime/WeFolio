@@ -21,6 +21,9 @@ public class TeamSingleWorkComponentReferenceExtractor {
     /** 有效引用标识。 */
     private static final int REFERENCE_VALID = 1;
 
+    /** 作品 ID 真实配置路径后缀。 */
+    private static final String WORK_ID_CONFIG_PATH_SUFFIX = ".config.workId";
+
     /** 单个作品渲染器。 */
     private final TeamSingleWorkComponentRenderer renderer;
 
@@ -45,7 +48,7 @@ public class TeamSingleWorkComponentReferenceExtractor {
         reference.setReferenceType(ReferenceTypeDict.WORK.getCode());
         reference.setReferenceId(snapshot.getLong("workId"));
         reference.setComponentKey(componentKey);
-        reference.setComponentPath(componentPath + ".work");
+        reference.setComponentPath(componentPath + WORK_ID_CONFIG_PATH_SUFFIX);
         reference.setSortOrder(0);
         reference.setIsValid(REFERENCE_VALID);
         reference.setSnapshotJson(JSON.toJSONString(snapshot, JSONWriter.Feature.WriteNulls));

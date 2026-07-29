@@ -442,6 +442,36 @@ test('carousel member buttons hug their content and show every selected work cou
   assert.match(wxss, /\.editor-member-count\s*\{[^}]*flex:\s*none;/)
 })
 
+test('member-first editors give Skyline horizontal lists an explicit viewport height', () => {
+  for (const name of ['single-work', 'member-portfolio-grid', 'member-portfolio-list']) {
+    const wxss = fs.readFileSync(path.join(ROOT, name, `${name}.wxss`), 'utf8')
+    const memberScrollRule = wxss.match(/\.editor-member-scroll\s*\{([^}]*)\}/)
+    const memberRowRule = wxss.match(/\.editor-member-row\s*\{([^}]*)\}/)
+
+    assert.ok(memberScrollRule, `${name} defines the member scroll viewport`)
+    assert.match(memberScrollRule[1], /height:\s*56rpx;/, `${name} keeps the Skyline viewport visible`)
+    assert.ok(memberRowRule, `${name} defines the member content row`)
+    assert.match(memberRowRule[1], /height:\s*56rpx;/, `${name} keeps the member row measurable`)
+  }
+})
+
+test('member-first editors size view capsules from each nickname', () => {
+  for (const name of ['single-work', 'member-portfolio-grid', 'member-portfolio-list']) {
+    const wxml = fs.readFileSync(path.join(ROOT, name, `${name}.wxml`), 'utf8')
+    const wxss = fs.readFileSync(path.join(ROOT, name, `${name}.wxss`), 'utf8')
+    const memberChoiceRule = wxss.match(/\.editor-member-choice\s*\{([^}]*)\}/)
+
+    assert.match(wxml, /<view wx:for="\{\{members\}\}"[^>]*class="editor-member-choice/)
+    assert.doesNotMatch(wxml, /<button wx:for="\{\{members\}\}"[^>]*class="editor-member-choice/)
+    assert.ok(memberChoiceRule, `${name} defines member choice styles`)
+    assert.match(memberChoiceRule[1], /display:\s*inline-flex;/, `${name} uses a stable inline flex box`)
+    assert.match(memberChoiceRule[1], /width:\s*auto;/, `${name} follows the nickname width`)
+    assert.match(memberChoiceRule[1], /flex:\s*0 0 auto;/, `${name} prevents capsules from growing equally`)
+    assert.match(memberChoiceRule[1], /white-space:\s*nowrap;/, `${name} keeps the nickname on one line`)
+    assert.doesNotMatch(memberChoiceRule[1], /width:\s*fit-content;/, `${name} avoids unsupported fit-content sizing`)
+  }
+})
+
 test('carousel work picker matches the personal vertical work list visual language', () => {
   const wxml = fs.readFileSync(path.join(ROOT, 'carousel/carousel.wxml'), 'utf8')
   const wxss = fs.readFileSync(path.join(ROOT, 'carousel/carousel.wxss'), 'utf8')

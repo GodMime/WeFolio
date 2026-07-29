@@ -84,6 +84,30 @@ class TeamPortfolioConfigValidatorTest {
     }
 
     /**
+     * 草稿和发布入口都必须明确拒绝缺失或非法的团队、作品集和修订上下文。
+     */
+    @Test
+    void draftAndPublishShouldRejectInvalidContextAsBusinessError() {
+        TeamPortfolioConfigDto valid = config(List.of(
+                component("divider-1", TeamPortfolioComponentTypeDict.DIVIDER.getCode(), 1000, true)));
+        List<TeamPortfolioComponentContext> invalidContexts = java.util.Arrays.asList(
+                null,
+                new TeamPortfolioComponentContext(0L, 22L, 0),
+                new TeamPortfolioComponentContext(11L, 0L, 0),
+                new TeamPortfolioComponentContext(11L, 22L, -1));
+
+        for (TeamPortfolioComponentContext context : invalidContexts) {
+            assertThatThrownBy(() -> service().normalizeForDraft(valid, null, context))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("团队作品集组件上下文不正确");
+            assertThatThrownBy(() -> service().validateForPublish(valid, context))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("团队作品集组件上下文不正确");
+        }
+        verifyNoComponentValidatorInteractions();
+    }
+
+    /**
      * 顶层应只按类型分发，并以稳定排序输出十种受支持组件。
      */
     @Test
@@ -222,6 +246,277 @@ class TeamPortfolioConfigValidatorTest {
                 11L, 22L, 0)).isInstanceOf(BusinessException.class);
     }
 
+    /**
+     * 新编辑器草稿必须规范化背景色和全部菜单组件，同时允许空次级菜单。
+     */
+    @Test
+    void normalizeForDraftShouldNormalizeRevisionTwoStyleAndAllMenus() {
+        TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 22L, 3);
+        when(dividerValidator.normalizeAndValidate(any(JSONObject.class), eq(context)))
+                .thenReturn(JSONObject.of("normalized", "divider"));
+        when(textValidator.normalizeAndValidate(any(JSONObject.class), eq(context)))
+                .thenReturn(JSONObject.of("normalized", "text"));
+        TeamPortfolioConfigDto incoming = config(List.of(
+                component("component-home", TeamPortfolioComponentTypeDict.DIVIDER.getCode(), 90, true)));
+        incoming.setEditorSchemaRevision(TeamPortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+        TeamPortfolioConfigDto.Style style = new TeamPortfolioConfigDto.Style();
+        style.setBackgroundColor("#a1b2c3");
+        incoming.setStyle(style);
+        incoming.setBottomNav(bottomNav(
+                menu("nav_home", "主页", null),
+                menu("nav_works", "作品", List.of(
+                        component("component-text", TeamPortfolioComponentTypeDict.TEXT_SECTION.getCode(), 70, true))),
+                menu("nav_empty", "动态", List.of())
+        ));
+
+        TeamPortfolioConfigDto normalized = service().normalizeForDraft(incoming, null, context);
+
+        assertThat(normalized.getEditorSchemaRevision())
+                .isEqualTo(TeamPortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+        assertThat(normalized.getStyle().getBackgroundColor()).isEqualTo("#A1B2C3");
+        assertThat(normalized.getComponents()).extracting(
+                        TeamPortfolioConfigDto.ComponentEnvelope::getComponentKey,
+                        TeamPortfolioConfigDto.ComponentEnvelope::getSortOrder)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("component-home", 1000));
+        assertThat(normalized.getBottomNav().getItems().getFirst().getComponents()).isNull();
+        assertThat(normalized.getBottomNav().getItems().get(1).getComponents()).extracting(
+                        TeamPortfolioConfigDto.ComponentEnvelope::getComponentKey,
+                        TeamPortfolioConfigDto.ComponentEnvelope::getSortOrder)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("component-text", 1000));
+        assertThat(normalized.getBottomNav().getItems().get(2).getComponents()).isEmpty();
+    }
+
+    /**
+     * 发布必须重新校验并拒绝首个空次级菜单。
+     */
+    @Test
+    void validateForPublishShouldRejectEmptySecondaryMenuWithMenuPrefix() {
+        TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 22L, 4);
+        when(dividerValidator.normalizeAndValidate(any(JSONObject.class), eq(context)))
+                .thenReturn(new JSONObject());
+        TeamPortfolioConfigDto draft = config(List.of(
+                component("component-home", TeamPortfolioComponentTypeDict.DIVIDER.getCode(), 1000, true)));
+        draft.setEditorSchemaRevision(TeamPortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+        draft.setBottomNav(bottomNav(
+                menu("nav_home", "主页", null),
+                menu("nav_works", "作品", List.of())
+        ));
+
+        assertThatThrownBy(() -> service().validateForPublish(draft, context))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("【作品】至少添加一个组件");
+    }
+
+    /**
+     * 导航启用时第一菜单为空也必须返回可定位的菜单前缀。
+     */
+    @Test
+    void draftAndPublishShouldPrefixEmptyFirstMenuError() {
+        TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 22L, 4);
+        TeamPortfolioConfigDto draft = config(List.of());
+        draft.setEditorSchemaRevision(TeamPortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+        draft.setBottomNav(bottomNav(
+                menu("nav_home", "主页", null),
+                menu("nav_works", "作品", List.of(
+                        component("component-secondary",
+                                TeamPortfolioComponentTypeDict.DIVIDER.getCode(), 1000, true)))
+        ));
+
+        assertThatThrownBy(() -> service().normalizeForDraft(draft, null, context))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("【主页】至少添加一个组件");
+        assertThatThrownBy(() -> service().validateForPublish(draft, context))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("【主页】至少添加一个组件");
+        verifyNoComponentValidatorInteractions();
+    }
+
+    /**
+     * 顶层组件列表为空引用时必须按空列表处理并返回第一菜单业务文案，不能抛出空指针异常。
+     */
+    @Test
+    void normalizeForDraftShouldTreatNullTopLevelComponentsAsEmptyList() {
+        TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 22L, 4);
+        TeamPortfolioConfigDto draft = revisionTwoConfig();
+        draft.setComponents(null);
+
+        assertThatThrownBy(() -> service().normalizeForDraft(draft, null, context))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("【主页】至少添加一个组件");
+        verifyNoComponentValidatorInteractions();
+    }
+
+    /**
+     * 旧编辑器保存必须以请求顶层组件为准，并保留服务端草稿的新字段和次级菜单。
+     */
+    @Test
+    void normalizeForDraftShouldMergeLegacyRequestWithExistingRevisionTwoFields() {
+        TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 22L, 5);
+        when(dividerValidator.normalizeAndValidate(any(JSONObject.class), eq(context)))
+                .thenReturn(new JSONObject());
+        when(textValidator.normalizeAndValidate(any(JSONObject.class), eq(context)))
+                .thenReturn(new JSONObject());
+        TeamPortfolioConfigDto incoming = config(List.of(
+                component("component-new-home", TeamPortfolioComponentTypeDict.DIVIDER.getCode(), 1000, true)));
+        TeamPortfolioConfigDto existing = config(List.of(
+                component("component-old-home", TeamPortfolioComponentTypeDict.DIVIDER.getCode(), 1000, true)));
+        existing.setEditorSchemaRevision(TeamPortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+        TeamPortfolioConfigDto.Style style = new TeamPortfolioConfigDto.Style();
+        style.setBackgroundColor("#151515");
+        existing.setStyle(style);
+        existing.setBottomNav(bottomNav(
+                menu("nav_home", "主页", null),
+                menu("nav_works", "作品", List.of(
+                        component("component-secondary", TeamPortfolioComponentTypeDict.TEXT_SECTION.getCode(), 1000, true)))
+        ));
+
+        TeamPortfolioConfigDto normalized = service().normalizeForDraft(incoming, existing, context);
+
+        assertThat(normalized.getEditorSchemaRevision())
+                .isEqualTo(TeamPortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+        assertThat(normalized.getStyle().getBackgroundColor()).isEqualTo("#151515");
+        assertThat(normalized.getComponents()).extracting(
+                        TeamPortfolioConfigDto.ComponentEnvelope::getComponentKey)
+                .containsExactly("component-new-home");
+        assertThat(normalized.getBottomNav().getItems().get(1).getComponents()).extracting(
+                        TeamPortfolioConfigDto.ComponentEnvelope::getComponentKey)
+                .containsExactly("component-secondary");
+    }
+
+    /**
+     * 旧编辑器请求不得覆盖由未来版本服务写入的草稿。
+     */
+    @Test
+    void normalizeForDraftShouldRejectLegacyRequestWhenExistingDraftUsesFutureRevision() {
+        TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 22L, 5);
+        TeamPortfolioConfigDto incoming = config(List.of(
+                component("component-new-home", TeamPortfolioComponentTypeDict.DIVIDER.getCode(), 1000, true)));
+        TeamPortfolioConfigDto existing = revisionTwoConfig();
+        existing.setEditorSchemaRevision(TeamPortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT + 1);
+
+        assertThatThrownBy(() -> service().normalizeForDraft(incoming, existing, context))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("当前服务暂不支持此团队作品集配置，请稍后重试");
+        verifyNoComponentValidatorInteractions();
+    }
+
+    /**
+     * 当前编辑器请求也不得将未来版本草稿降级覆盖为当前版本。
+     */
+    @Test
+    void normalizeForDraftShouldRejectCurrentRequestWhenExistingDraftUsesFutureRevision() {
+        TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 22L, 5);
+        TeamPortfolioConfigDto incoming = revisionTwoConfig();
+        TeamPortfolioConfigDto existing = revisionTwoConfig();
+        existing.setEditorSchemaRevision(TeamPortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT + 1);
+
+        assertThatThrownBy(() -> service().normalizeForDraft(incoming, existing, context))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("当前服务暂不支持此团队作品集配置，请稍后重试");
+        verifyNoComponentValidatorInteractions();
+    }
+
+    /**
+     * 组件键和团队资料单例约束必须覆盖全部菜单。
+     */
+    @Test
+    void normalizeForDraftShouldRejectCrossMenuKeyAndProfileConflicts() {
+        TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 22L, 6);
+        TeamPortfolioConfigDto duplicateKey = config(List.of(
+                component("component-duplicate", TeamPortfolioComponentTypeDict.DIVIDER.getCode(), 1000, true)));
+        duplicateKey.setEditorSchemaRevision(TeamPortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+        duplicateKey.setBottomNav(bottomNav(
+                menu("nav_home", "主页", null),
+                menu("nav_works", "作品", List.of(
+                        component("component-duplicate", TeamPortfolioComponentTypeDict.TEXT_SECTION.getCode(), 1000, true)))
+        ));
+        TeamPortfolioConfigDto duplicateProfile = config(List.of(
+                component("component-profile-home", TeamPortfolioComponentTypeDict.TEAM_PROFILE.getCode(), 1000, true)));
+        duplicateProfile.setEditorSchemaRevision(TeamPortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+        duplicateProfile.setBottomNav(bottomNav(
+                menu("nav_home", "主页", null),
+                menu("nav_works", "作品", List.of(
+                        component("component-profile-secondary",
+                                TeamPortfolioComponentTypeDict.TEAM_PROFILE.getCode(), 1000, true)))
+        ));
+
+        assertThatThrownBy(() -> service().normalizeForDraft(duplicateKey, null, context))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("团队作品集组件标识不能重复");
+        assertThatThrownBy(() -> service().normalizeForDraft(duplicateProfile, null, context))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("团队作品集最多只能包含一个团队资料组件");
+        verifyNoComponentValidatorInteractions();
+    }
+
+    /**
+     * 新导航和编辑器版本错误必须使用方案约定的稳定文案。
+     */
+    @Test
+    void normalizeForDraftShouldUseStableNavigationAndEditorRevisionMessages() {
+        TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 22L, 7);
+        TeamPortfolioConfigDto unsupportedRevision = revisionTwoConfig();
+        unsupportedRevision.setEditorSchemaRevision(TeamPortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT + 1);
+        assertThatThrownBy(() -> service().normalizeForDraft(unsupportedRevision, null, context))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("当前服务暂不支持此团队作品集配置，请稍后重试");
+
+        TeamPortfolioConfigDto invalidCount = revisionTwoConfig();
+        invalidCount.setBottomNav(bottomNav(menu("nav_home", "主页", null)));
+        assertThatThrownBy(() -> service().normalizeForDraft(invalidCount, null, context))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("底部导航菜单数量必须为2到4个");
+
+        TeamPortfolioConfigDto blankTitle = revisionTwoConfig();
+        blankTitle.setBottomNav(bottomNav(
+                menu("nav_home", "主页", null),
+                menu("nav_works", " ", List.of())));
+        assertThatThrownBy(() -> service().normalizeForDraft(blankTitle, null, context))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("菜单名称不能为空");
+
+        TeamPortfolioConfigDto longTitle = revisionTwoConfig();
+        longTitle.setBottomNav(bottomNav(
+                menu("nav_home", "主页", null),
+                menu("nav_works", "成员作品展示", List.of())));
+        assertThatThrownBy(() -> service().normalizeForDraft(longTitle, null, context))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("菜单名称不能超过5个字");
+
+        TeamPortfolioConfigDto duplicateTitle = revisionTwoConfig();
+        duplicateTitle.setBottomNav(bottomNav(
+                menu("nav_home", "主页", null),
+                menu("nav_works", "主页", List.of())));
+        assertThatThrownBy(() -> service().normalizeForDraft(duplicateTitle, null, context))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("菜单名称不能重复");
+
+        TeamPortfolioConfigDto invalidKey = revisionTwoConfig();
+        invalidKey.setBottomNav(bottomNav(
+                menu("nav_home", "主页", null),
+                menu("works", "作品", List.of())));
+        assertThatThrownBy(() -> service().normalizeForDraft(invalidKey, null, context))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("菜单标识格式不正确");
+
+        TeamPortfolioConfigDto duplicateMenuKey = revisionTwoConfig();
+        duplicateMenuKey.setBottomNav(bottomNav(
+                menu("nav_home", "主页", null),
+                menu("nav_home", "作品", List.of())));
+        assertThatThrownBy(() -> service().normalizeForDraft(duplicateMenuKey, null, context))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("菜单标识不能重复");
+
+        TeamPortfolioConfigDto duplicatedFirstComponents = revisionTwoConfig();
+        duplicatedFirstComponents.setBottomNav(bottomNav(
+                menu("nav_home", "主页", List.of()),
+                menu("nav_works", "作品", List.of())));
+        assertThatThrownBy(() -> service().normalizeForDraft(duplicatedFirstComponents, null, context))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("第一个菜单不能重复保存组件");
+        verifyNoComponentValidatorInteractions();
+    }
+
     private void configureNormalizers(TeamPortfolioComponentContext context) {
         for (TeamPortfolioComponentTypeDict type : TeamPortfolioComponentTypeDict.values()) {
             JSONObject normalized = new JSONObject();
@@ -261,6 +556,16 @@ class TeamPortfolioConfigValidatorTest {
         return config;
     }
 
+    private TeamPortfolioConfigDto revisionTwoConfig() {
+        TeamPortfolioConfigDto config = config(List.of(
+                component("component-home", TeamPortfolioComponentTypeDict.DIVIDER.getCode(), 1000, true)));
+        config.setEditorSchemaRevision(TeamPortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+        config.setBottomNav(bottomNav(
+                menu("nav_home", "主页", null),
+                menu("nav_works", "作品", List.of())));
+        return config;
+    }
+
     private TeamPortfolioConfigDto.ComponentEnvelope component(
             String key,
             String type,
@@ -274,5 +579,24 @@ class TeamPortfolioConfigValidatorTest {
         component.setEnabled(enabled);
         component.setConfig(new JSONObject());
         return component;
+    }
+
+    private TeamPortfolioConfigDto.BottomNav bottomNav(TeamPortfolioConfigDto.BottomNavItem... items) {
+        TeamPortfolioConfigDto.BottomNav bottomNav = new TeamPortfolioConfigDto.BottomNav();
+        bottomNav.setEnabled(true);
+        bottomNav.setItems(List.of(items));
+        return bottomNav;
+    }
+
+    private TeamPortfolioConfigDto.BottomNavItem menu(
+            String key,
+            String title,
+            List<TeamPortfolioConfigDto.ComponentEnvelope> components
+    ) {
+        TeamPortfolioConfigDto.BottomNavItem item = new TeamPortfolioConfigDto.BottomNavItem();
+        item.setKey(key);
+        item.setTitle(title);
+        item.setComponents(components);
+        return item;
     }
 }

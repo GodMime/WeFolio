@@ -1,6 +1,6 @@
 <wxs module="selection" src="../editor-selection.wxs"></wxs>
 
-<view class="carousel {{editMode ? 'editor-mode' : ''}}">
+<view class="carousel theme-{{themeMode}} {{editMode ? 'editor-mode' : ''}}">
   <block wx:if="{{editMode}}">
     <view class="editor-form">
       <view class="editor-field">

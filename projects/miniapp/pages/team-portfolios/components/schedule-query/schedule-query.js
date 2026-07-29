@@ -264,6 +264,7 @@ function syncScheduleDraft(component) {
 
 Component({
   properties: {
+    themeMode: { type: String, value: 'light' },
     shareCode: { type: String, value: '' },
     portfolioId: { type: Number, value: 0 },
     componentKey: { type: String, value: '' },

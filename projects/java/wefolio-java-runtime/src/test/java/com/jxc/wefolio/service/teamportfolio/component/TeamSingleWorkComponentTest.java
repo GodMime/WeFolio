@@ -107,7 +107,7 @@ class TeamSingleWorkComponentTest {
             assertThat(reference.getReferenceType()).isEqualTo(ReferenceTypeDict.WORK.getCode());
             assertThat(reference.getReferenceId()).isEqualTo(9L);
             assertThat(reference.getComponentKey()).isEqualTo("single-a");
-            assertThat(reference.getComponentPath()).isEqualTo("components[2].work");
+            assertThat(reference.getComponentPath()).isEqualTo("components[2].config.workId");
             assertThat(reference.getSnapshotJson()).contains("\"memberUserId\":7", "\"workId\":9");
         });
     }

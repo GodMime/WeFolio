@@ -158,6 +158,10 @@
   background: var(--portfolio-surface-muted);
 }
 
+.portfolio-contact-form.portfolio-theme-dark .date-field.placeholder {
+  color: var(--portfolio-text-secondary);
+}
+
 .contact-form-panel,
 .contact-form-panel .component-title {
   color: #212529;

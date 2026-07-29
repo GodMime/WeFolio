@@ -17,14 +17,19 @@ import com.jxc.wefolio.service.teamportfolio.component.schedulequery.TeamSchedul
 import com.jxc.wefolio.service.teamportfolio.component.singlework.TeamSingleWorkComponentRenderer;
 import com.jxc.wefolio.service.teamportfolio.component.teamprofile.TeamProfileComponentRenderer;
 import com.jxc.wefolio.service.teamportfolio.component.textsection.TeamTextSectionComponentRenderer;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 团队作品集顶层渲染与组件分发服务。
  */
+@Slf4j
 @Service
 public class TeamPortfolioRenderService {
 
@@ -42,6 +47,12 @@ public class TeamPortfolioRenderService {
 
     /** 组件上下文非法提示。 */
     private static final String CONTEXT_INVALID_MESSAGE = "团队作品集组件上下文不正确";
+
+    /** 底部导航最少菜单数。 */
+    private static final int BOTTOM_NAV_MIN_ITEM_COUNT = 2;
+
+    /** 底部导航最多菜单数。 */
+    private static final int BOTTOM_NAV_MAX_ITEM_COUNT = 4;
 
     private final TeamProfileComponentRenderer teamProfileRenderer;
     private final TeamCarouselComponentRenderer carouselRenderer;
@@ -92,17 +103,93 @@ public class TeamPortfolioRenderService {
         validateContext(context);
         TeamPortfolioConfigDto config = parseConfig(normalizedJson);
         validateSchema(config);
-        List<TeamPortfolioConfigDto.ComponentEnvelope> components = sortedEnabledComponents(config.getComponents());
-        validateComponentTypes(components);
+        validateNormalizedStructure(config, context);
+        validateComponentTypes(TeamPortfolioComponentTraversal.listComponentLocations(config).stream()
+                .map(TeamPortfolioComponentTraversal.ComponentLocation::component)
+                .filter(component -> !Boolean.FALSE.equals(component.getEnabled()))
+                .toList());
         TeamPortfolioRenderDto render = new TeamPortfolioRenderDto();
         render.setPortfolioId(context.portfolioId());
         render.setTeamId(context.teamId());
         render.setShare(copyShare(config.getShare()));
         render.setTitle(resolveTitle(config.getShare()));
-        render.setComponents(components.stream()
-                .map(component -> renderComponent(component, context))
-                .toList());
+        render.setStyle(buildStyle(config.getStyle()));
+        render.setComponents(buildComponents(config.getComponents(), context));
+        render.setBottomNav(buildBottomNav(config.getBottomNav(), context));
         return render;
+    }
+
+    /**
+     * 构建页面样式。
+     */
+    private TeamPortfolioRenderDto.Style buildStyle(TeamPortfolioConfigDto.Style configuredStyle) {
+        String backgroundColor = normalizeBackgroundColor(
+                configuredStyle == null ? null : configuredStyle.getBackgroundColor());
+        TeamPortfolioRenderDto.Style style = new TeamPortfolioRenderDto.Style();
+        style.setBackgroundColor(backgroundColor);
+        style.setThemeMode(resolveThemeMode(backgroundColor));
+        return style;
+    }
+
+    /**
+     * 构建底部导航渲染数据。
+     */
+    private TeamPortfolioRenderDto.BottomNav buildBottomNav(
+            TeamPortfolioConfigDto.BottomNav configuredBottomNav,
+            TeamPortfolioComponentContext context
+    ) {
+        TeamPortfolioRenderDto.BottomNav bottomNav = new TeamPortfolioRenderDto.BottomNav();
+        if (configuredBottomNav == null || !Boolean.TRUE.equals(configuredBottomNav.getEnabled())) {
+            bottomNav.setEnabled(false);
+            bottomNav.setItems(List.of());
+            return bottomNav;
+        }
+        bottomNav.setEnabled(true);
+        List<TeamPortfolioRenderDto.BottomNavItem> items = new ArrayList<>();
+        List<TeamPortfolioConfigDto.BottomNavItem> configuredItems =
+                configuredBottomNav.getItems() == null ? List.of() : configuredBottomNav.getItems();
+        for (int index = 0; index < configuredItems.size(); index++) {
+            TeamPortfolioConfigDto.BottomNavItem configuredItem = configuredItems.get(index);
+            TeamPortfolioRenderDto.BottomNavItem item = new TeamPortfolioRenderDto.BottomNavItem();
+            item.setKey(defaultString(configuredItem.getKey()));
+            item.setTitle(defaultString(configuredItem.getTitle()));
+            if (index > 0) {
+                item.setComponents(buildComponents(configuredItem.getComponents(), context));
+            }
+            items.add(item);
+        }
+        bottomNav.setItems(items);
+        return bottomNav;
+    }
+
+    /**
+     * 使用统一入口渲染一个菜单的全部启用组件。
+     */
+    private List<TeamPortfolioRenderDto.Component> buildComponents(
+            List<TeamPortfolioConfigDto.ComponentEnvelope> components,
+            TeamPortfolioComponentContext context
+    ) {
+        return sortedEnabledComponents(components).stream()
+                .map(component -> renderComponent(component, context))
+                .toList();
+    }
+
+    /**
+     * 规范化背景色，委托给共享的样式规范化工具。
+     *
+     * @see TeamPortfolioStyleNormalizer
+     */
+    private String normalizeBackgroundColor(String backgroundColor) {
+        return TeamPortfolioStyleNormalizer.normalizeBackgroundColor(backgroundColor);
+    }
+
+    /**
+     * 根据 YIQ 亮度推导页面主题，委托给共享的样式规范化工具。
+     *
+     * @see TeamPortfolioStyleNormalizer
+     */
+    private String resolveThemeMode(String backgroundColor) {
+        return TeamPortfolioStyleNormalizer.resolveThemeMode(backgroundColor);
     }
 
     /**
@@ -140,6 +227,60 @@ public class TeamPortfolioRenderService {
     private void validateSchema(TeamPortfolioConfigDto config) {
         if (!TeamPortfolioConstants.SCHEMA_VERSION_STANDARD_TEAM_V1.equals(config.getSchemaVersion())) {
             throw new BusinessException(SCHEMA_UNSUPPORTED_MESSAGE);
+        }
+    }
+
+    /**
+     * 校验持久化配置的菜单容器和组件信封完整性。
+     */
+    private void validateNormalizedStructure(
+            TeamPortfolioConfigDto config,
+            TeamPortfolioComponentContext context
+    ) {
+        if (config.getComponents() == null) {
+            throw new BusinessException(CONFIG_INVALID_MESSAGE);
+        }
+        TeamPortfolioConfigDto.BottomNav bottomNav = config.getBottomNav();
+        if (bottomNav != null && Boolean.TRUE.equals(bottomNav.getEnabled())) {
+            List<TeamPortfolioConfigDto.BottomNavItem> items = bottomNav.getItems();
+            if (items == null || items.size() < BOTTOM_NAV_MIN_ITEM_COUNT
+                    || items.size() > BOTTOM_NAV_MAX_ITEM_COUNT) {
+                throw new BusinessException(CONFIG_INVALID_MESSAGE);
+            }
+            Set<String> menuKeys = new LinkedHashSet<>();
+            Set<String> menuTitles = new LinkedHashSet<>();
+            for (int index = 0; index < items.size(); index++) {
+                TeamPortfolioConfigDto.BottomNavItem item = items.get(index);
+                if (item == null) {
+                    log.warn(
+                            "团队作品集规范化配置中的底部导航菜单项无效，teamId={}，portfolioId={}，menuIndex={}",
+                            context.teamId(),
+                            context.portfolioId(),
+                            index
+                    );
+                    throw new BusinessException(CONFIG_INVALID_MESSAGE);
+                }
+                if (item.getKey() == null || item.getKey().isBlank()
+                        || item.getTitle() == null || item.getTitle().isBlank()
+                        || !menuKeys.add(item.getKey()) || !menuTitles.add(item.getTitle())
+                        || (index == 0 && item.getComponents() != null)
+                        || (index > 0 && item.getComponents() == null)) {
+                    throw new BusinessException(CONFIG_INVALID_MESSAGE);
+                }
+            }
+        }
+        Set<String> componentKeys = new LinkedHashSet<>();
+        for (TeamPortfolioComponentTraversal.ComponentLocation location
+                : TeamPortfolioComponentTraversal.listComponentLocations(config)) {
+            TeamPortfolioConfigDto.ComponentEnvelope component = location.component();
+            if (component == null || component.getComponentKey() == null
+                    || component.getComponentKey().isBlank()
+                    || !componentKeys.add(component.getComponentKey())
+                    || component.getComponentType() == null
+                    || component.getComponentType().isBlank()
+                    || component.getConfig() == null) {
+                throw new BusinessException(CONFIG_INVALID_MESSAGE);
+            }
         }
     }
 
@@ -238,6 +379,13 @@ public class TeamPortfolioRenderService {
             return DEFAULT_TITLE;
         }
         return share.getTitle();
+    }
+
+    /**
+     * 空字符串兜底。
+     */
+    private String defaultString(String value) {
+        return value == null ? "" : value;
     }
 
     /**

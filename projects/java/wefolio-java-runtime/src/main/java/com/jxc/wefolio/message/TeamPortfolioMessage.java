@@ -35,6 +35,40 @@ public interface TeamPortfolioMessage {
     /** 团队作品集草稿配置为空提示 */
     String DRAFT_CONFIG_REQUIRED_MESSAGE = "团队作品集草稿配置不能为空";
 
+    /** 服务端不支持更高团队编辑器能力版本提示 */
+    String EDITOR_SCHEMA_REVISION_UNSUPPORTED_MESSAGE =
+            "当前服务暂不支持此团队作品集配置，请稍后重试";
+
+    /** 底部导航菜单数量无效提示 */
+    String BOTTOM_NAV_ITEM_COUNT_INVALID_MESSAGE = "底部导航菜单数量必须为2到4个";
+
+    /** 菜单名称为空提示 */
+    String BOTTOM_NAV_TITLE_REQUIRED_MESSAGE = "菜单名称不能为空";
+
+    /** 菜单名称过长提示 */
+    String BOTTOM_NAV_TITLE_TOO_LONG_MESSAGE = "菜单名称不能超过5个字";
+
+    /** 菜单名称重复提示 */
+    String BOTTOM_NAV_TITLE_DUPLICATE_MESSAGE = "菜单名称不能重复";
+
+    /** 菜单标识格式无效提示 */
+    String BOTTOM_NAV_KEY_INVALID_MESSAGE = "菜单标识格式不正确";
+
+    /** 菜单标识重复提示 */
+    String BOTTOM_NAV_KEY_DUPLICATE_MESSAGE = "菜单标识不能重复";
+
+    /** 第一菜单重复携带组件提示 */
+    String FIRST_BOTTOM_NAV_COMPONENTS_DUPLICATE_MESSAGE = "第一个菜单不能重复保存组件";
+
+    /** 跨菜单团队组件标识重复提示 */
+    String COMPONENT_KEY_CROSS_MENU_DUPLICATE_MESSAGE = "团队作品集组件标识不能重复";
+
+    /** 团队资料组件数量超限提示 */
+    String TEAM_PROFILE_COMPONENT_LIMIT_MESSAGE = "团队作品集最多只能包含一个团队资料组件";
+
+    /** 菜单至少需要一个组件提示模板 */
+    String MENU_COMPONENT_REQUIRED_TEMPLATE = "【%s】至少添加一个组件";
+
     /** 团队作品集草稿版本冲突提示 */
     String DRAFT_REVISION_CHANGED_MESSAGE = "团队作品集草稿已更新，请刷新后重试";
 

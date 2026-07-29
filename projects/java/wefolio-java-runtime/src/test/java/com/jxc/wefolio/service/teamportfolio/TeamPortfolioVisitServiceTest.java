@@ -605,6 +605,38 @@ class TeamPortfolioVisitServiceTest {
     }
 
     /**
+     * 表单曝光和查档事件必须命中全菜单中的已启用同类型组件。
+     */
+    @Test
+    void interactiveEventsShouldRejectMissingPublishedComponentBeforePersistence() {
+        Context contactContext = successfulEventContext();
+        PortfolioEntity contactPortfolio = portfolio();
+        contactPortfolio.setPublishedConfigJson(
+                contactPortfolio.getPublishedConfigJson().replace("contact-1", "contact-other"));
+
+        assertThatThrownBy(() -> contactContext.service.recordEvent(
+                contactPortfolio, VISITOR_ID, VISITOR_KEY,
+                clientEvent(VisitEventTypeDict.CONTACT_FORM_EXPOSED, "missing-contact")))
+                .isInstanceOf(BusinessException.class);
+        verify(contactContext.eventMapper, never()).insert(any(VisitEventEntity.class));
+        verify(contactContext.recordMapper, never()).updateById(any(VisitRecordEntity.class));
+
+        Context scheduleContext = successfulEventContext();
+        PortfolioEntity schedulePortfolio = portfolio();
+        schedulePortfolio.setPublishedConfigJson(
+                schedulePortfolio.getPublishedConfigJson().replace(
+                        "\"componentType\":\"SCHEDULE_QUERY\"",
+                        "\"componentType\":\"TEXT_SECTION\""));
+
+        assertThatThrownBy(() -> scheduleContext.service.recordScheduleQuery(
+                schedulePortfolio, VISITOR_ID, VISITOR_KEY,
+                scheduleRequest("missing-schedule", "schedule-1", LocalDate.of(2026, 8, 1))))
+                .isInstanceOf(BusinessException.class);
+        verify(scheduleContext.eventMapper, never()).insert(any(VisitEventEntity.class));
+        verify(scheduleContext.recordMapper, never()).updateById(any(VisitRecordEntity.class));
+    }
+
+    /**
      * metadata 未知敏感键、嵌套值、超长 UTF-8 内容必须固定拒绝且零 Mapper 交互。
      */
     @Test
@@ -816,8 +848,16 @@ class TeamPortfolioVisitServiceTest {
         portfolio.setPublishedRevision(3);
         portfolio.setShareCode("TPF-TASK8");
         portfolio.setDeleted(0L);
-        portfolio.setPublishedConfigJson(
-                "{\"schemaVersion\":\"standard-team-v1\",\"share\":{\"title\":\"团队作品集\"}}");
+        portfolio.setPublishedConfigJson("""
+                {"schemaVersion":"standard-team-v1","share":{"title":"团队作品集"},"components":[],
+                 "bottomNav":{"enabled":true,"items":[
+                   {"key":"nav_home","title":"首页"},
+                   {"key":"nav_actions","title":"互动","components":[
+                     {"componentKey":"contact-1","componentType":"CONTACT_FORM","enabled":true,"config":{}},
+                     {"componentKey":"schedule-1","componentType":"SCHEDULE_QUERY","enabled":true,"config":{}}
+                   ]}
+                 ]}}
+                """);
         return portfolio;
     }
 

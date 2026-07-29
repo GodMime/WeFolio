@@ -1,4 +1,4 @@
-<view class="divider-component {{editMode ? 'editor-mode' : ''}}">
+<view class="divider-component theme-{{themeMode}} {{editMode ? 'editor-mode' : ''}}">
   <block wx:if="{{editMode}}">
     <view class="editor-form">
       <view class="editor-field">

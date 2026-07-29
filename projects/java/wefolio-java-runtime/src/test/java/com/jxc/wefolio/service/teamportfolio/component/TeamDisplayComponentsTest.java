@@ -122,7 +122,7 @@ class TeamDisplayComponentsTest {
         assertThat(reference.getReferenceType()).isEqualTo("TEAM_PROFILE");
         assertThat(reference.getReferenceId()).isEqualTo(11L);
         assertThat(reference.getComponentKey()).isEqualTo(COMPONENT_KEY);
-        assertThat(reference.getComponentPath()).isEqualTo(COMPONENT_PATH);
+        assertThat(reference.getComponentPath()).isEqualTo(COMPONENT_PATH + ".config.team");
         assertThat(reference.getSortOrder()).isZero();
         assertThat(reference.getIsValid()).isEqualTo(1);
         assertThat(reference.getConfigScope()).isNull();

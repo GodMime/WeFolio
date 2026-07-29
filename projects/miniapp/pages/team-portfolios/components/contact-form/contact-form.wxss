@@ -1,3 +1,5 @@
+@import "../../styles/team-portfolio-theme.wxss";
+
 :host { display: block; }
 .contact-form { color: #212529; overflow-wrap: anywhere; }
 .contact-form.editor-mode { padding: 0; }

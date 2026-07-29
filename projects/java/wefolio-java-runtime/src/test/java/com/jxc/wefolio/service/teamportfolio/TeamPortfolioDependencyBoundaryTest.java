@@ -76,6 +76,31 @@ class TeamPortfolioDependencyBoundaryTest {
     }
 
     /**
+     * 除规范化、渲染兼容映射和统一遍历器外，团队业务代码不得只读取顶层组件。
+     */
+    @Test
+    void teamServicesShouldTraverseAllMenusInsteadOfReadingTopLevelComponentsDirectly() throws IOException {
+        Set<String> allowedFileNames = Set.of(
+                "TeamPortfolioComponentTraversal.java",
+                "TeamPortfolioConfigValidator.java",
+                "TeamPortfolioConfigMerger.java",
+                "TeamPortfolioRenderService.java");
+
+        try (Stream<Path> paths = Files.walk(TEAM_PORTFOLIO)) {
+            for (Path sourceFile : paths.filter(path -> path.toString().endsWith(".java")).toList()) {
+                if (allowedFileNames.contains(sourceFile.getFileName().toString())) {
+                    continue;
+                }
+                String source = Files.readString(sourceFile);
+                assertThat(source)
+                        .as("团队服务禁止直接读取顶层组件: %s", sourceFile)
+                        .doesNotContain(".getComponents()")
+                        .doesNotContain("getJSONArray(\"components\")");
+            }
+        }
+    }
+
+    /**
      * 扫描器必须识别普通、静态、通配 import 和代码体完整类名绕过。
      */
     @Test

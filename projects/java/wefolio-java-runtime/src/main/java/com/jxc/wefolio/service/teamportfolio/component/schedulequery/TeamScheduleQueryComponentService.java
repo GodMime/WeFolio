@@ -34,6 +34,7 @@ import com.jxc.wefolio.mapper.TeamMemberEntityMapper;
 import com.jxc.wefolio.mapper.TeamScheduleQueryRecordEntityMapper;
 import com.jxc.wefolio.mapper.UserEntityMapper;
 import com.jxc.wefolio.service.teamportfolio.TeamPortfolioComponentContext;
+import com.jxc.wefolio.service.teamportfolio.TeamPortfolioComponentTraversal;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -268,16 +269,13 @@ public class TeamScheduleQueryComponentService {
         if (portfolioConfig == null
                 || !TeamPortfolioConstants.SCHEMA_VERSION_STANDARD_TEAM_V1.equals(
                         portfolioConfig.getSchemaVersion())
-                || !hasText(componentKey) || portfolioConfig.getComponents() == null) {
+                || !hasText(componentKey)) {
             throw new BusinessException(PREVIEW_COMPONENT_UNAVAILABLE_MESSAGE);
         }
-        return portfolioConfig.getComponents().stream()
-                .filter(Objects::nonNull)
-                .filter(component -> componentKey.equals(component.getComponentKey()))
-                .filter(component -> Boolean.TRUE.equals(component.getEnabled()))
-                .filter(component -> COMPONENT_TYPE_SCHEDULE_QUERY.equals(component.getComponentType()))
+        return TeamPortfolioComponentTraversal.findEnabledComponent(
+                        portfolioConfig, componentKey, COMPONENT_TYPE_SCHEDULE_QUERY)
+                .map(TeamPortfolioComponentTraversal.ComponentLocation::component)
                 .filter(component -> component.getConfig() != null)
-                .findFirst()
                 .orElseThrow(() -> new BusinessException(PREVIEW_COMPONENT_UNAVAILABLE_MESSAGE));
     }
 

@@ -1,3 +1,5 @@
+@import "../../styles/team-portfolio-theme.wxss";
+
 :host { display: block; }
 .schedule-query { padding: 8rpx 34rpx; color: #212529; text-align: center; overflow-wrap: anywhere; box-sizing: border-box; }
 .schedule-query.editor-mode { padding: 0; }

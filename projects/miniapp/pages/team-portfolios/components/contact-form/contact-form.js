@@ -86,6 +86,7 @@ function syncContactConfig(component, forceDraft) {
 
 Component({
   properties: {
+    themeMode: { type: String, value: 'light' },
     config: { type: Object, value: {} },
     form: { type: Object, value: {} },
     editMode: { type: Boolean, value: false, observer(value, oldValue) { if (value !== oldValue) syncContactConfig(this, true) } },

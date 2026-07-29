@@ -344,6 +344,30 @@ class TeamContactFormComponentServiceTest {
     }
 
     /**
+     * 联系表单曝光与提交必须能够从次级菜单定位同一个已启用组件。
+     */
+    @Test
+    void contactFormEntryPointsShouldFindEnabledComponentInSecondaryMenu() {
+        PortfolioEntity portfolio = teamPortfolio();
+        portfolio.setPublishedConfigJson("""
+                {"schemaVersion":"standard-team-v1","share":{"title":"团队婚礼作品集"},"components":[],
+                 "bottomNav":{"enabled":true,"items":[
+                   {"key":"nav_home","title":"首页"},
+                   {"key":"nav_contact","title":"联系","components":[
+                     {"componentKey":"contact-1","componentType":"CONTACT_FORM","enabled":true,
+                      "config":{"title":"联系团队","description":"","displayMode":"MODAL_FORM",
+                      "fields":["contactName","phone","wechat","needs"]}}
+                   ]}
+                 ]}}
+                """);
+
+        service().validatePublishedComponent(portfolio, "contact-1");
+
+        verifyNoInteractions(portfolioEntityMapper, visitRecordEntityMapper,
+                contactLeadEntityMapper, teamPortfolioAccessService);
+    }
+
+    /**
      * 联系表单曝光的错 key、停用、错类型和非法配置必须在任何业务写入前拒绝。
      */
     @Test

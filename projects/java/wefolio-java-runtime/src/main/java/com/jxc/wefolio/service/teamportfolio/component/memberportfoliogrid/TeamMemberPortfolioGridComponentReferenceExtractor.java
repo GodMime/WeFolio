@@ -28,8 +28,8 @@ public class TeamMemberPortfolioGridComponentReferenceExtractor {
     /** 成员作品集引用类型。 */
     private static final String MEMBER_PORTFOLIO_REFERENCE_TYPE = "MEMBER_PORTFOLIO";
 
-    /** 条目路径后缀前缀。 */
-    private static final String ITEMS_PATH_PREFIX = ".items[";
+    /** 条目真实配置路径后缀前缀。 */
+    private static final String ITEMS_PATH_PREFIX = ".config.items[";
 
     /** 条目路径后缀。 */
     private static final String ITEMS_PATH_SUFFIX = "]";

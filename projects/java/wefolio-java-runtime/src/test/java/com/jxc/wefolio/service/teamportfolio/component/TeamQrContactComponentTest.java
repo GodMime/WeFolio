@@ -332,7 +332,7 @@ class TeamQrContactComponentTest {
         assertThat(reference.getReferenceType()).isEqualTo(ReferenceTypeDict.QR_CODE_ASSET.getCode());
         assertThat(reference.getReferenceId()).isEqualTo(TEAM_ID);
         assertThat(reference.getComponentKey()).isEqualTo(COMPONENT_KEY);
-        assertThat(reference.getComponentPath()).isEqualTo(COMPONENT_PATH);
+        assertThat(reference.getComponentPath()).isEqualTo(COMPONENT_PATH + ".config.qrUrl");
         assertThat(reference.getSortOrder()).isZero();
         assertThat(reference.getIsValid()).isEqualTo(1);
         assertThat(reference.getConfigScope()).isNull();

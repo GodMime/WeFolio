@@ -67,20 +67,301 @@ test('routes 0, 1 and many maintainable teams without inferring a team', () => {
   assert.deepEqual(resolveTeamCreateRoute([{ teamId: 9 }, { teamId: 10 }]), { action: 'SELECT', teamId: null, url: '/pages/team-portfolios/team-select/team-select' })
 })
 
-test('normalizes only top-level config and keeps component-private data opaque', () => {
+test('normalizes team theme and menu components while keeping private data opaque', () => {
   const { normalizeTeamPortfolioConfig } = loadUtility('team-portfolios.js')
   const privateConfig = { items: [{ workId: 'not-top-level' }] }
   const config = normalizeTeamPortfolioConfig({
     schemaVersion: 'standard-team-v1',
+    editorSchemaRevision: 2,
     share: { title: ' 团队 ', description: ' 简介 ', coverUrl: 'cover' },
+    style: { backgroundColor: '#1a2b3c' },
     components: [
       { componentKey: 'b', componentType: 'CAROUSEL', sortOrder: 20, enabled: true, config: privateConfig },
       { componentKey: 'a', componentType: 'TEAM_PROFILE', sortOrder: 10, enabled: false, config: { team: { teamId: 'opaque' } } }
-    ]
+    ],
+    bottomNav: {
+      enabled: true,
+      items: [
+        { key: 'nav_home', title: ' 首页 ', components: [{ componentKey: 'ignored', componentType: 'DIVIDER' }] },
+        { key: 'nav_works', title: ' 作品 ', iconUrl: ' future-icon ', components: [
+          { componentKey: 'secondary', componentType: 'TEXT_SECTION', sortOrder: 4, config: { content: '保留' } }
+        ] }
+      ]
+    }
   })
   assert.equal(config.share.title, '团队')
+  assert.equal(config.editorSchemaRevision, 2)
+  assert.deepEqual(config.style, { backgroundColor: '#1A2B3C' })
   assert.deepEqual(config.components.map((item) => item.componentKey), ['a', 'b'])
   assert.equal(config.components[1].config, privateConfig)
+  assert.deepEqual(config.bottomNav.items[0], { key: 'nav_home', title: '首页' })
+  assert.equal(config.bottomNav.items[1].iconUrl, 'future-icon')
+  assert.equal(config.bottomNav.items[1].components[0].config.content, '保留')
+})
+
+test('team color conversion stays independent and round-trips custom colors', () => {
+  const { hexToHsv, hsvToHex, normalizeTeamHexColor } = loadUtility('team-portfolio-color.js')
+  assert.equal(normalizeTeamHexColor(' #1a2b3c '), '#1A2B3C')
+  assert.equal(normalizeTeamHexColor('invalid'), '#FFFFFF')
+  assert.equal(hsvToHex(hexToHsv('#1A2B3C')), '#1A2B3C')
+  assert.equal(hsvToHex({ hue: 0, saturation: 1, value: 1 }), '#FF0000')
+})
+
+test('team menu helpers map the first menu to top-level components and move atomically', () => {
+  const {
+    getTeamMenuComponentList,
+    moveTeamComponent,
+    replaceTeamMenuComponentList,
+    visitTeamPortfolioComponents
+  } = loadUtility('team-portfolios.js')
+  const profileConfig = { team: { teamId: 7, teamName: '映期团队' }, localAsset: 'wxfile://avatar' }
+  const config = {
+    schemaVersion: 'standard-team-v1',
+    editorSchemaRevision: 2,
+    components: [
+      { componentKey: 'component-profile', componentType: 'TEAM_PROFILE', enabled: true, config: profileConfig },
+      { componentKey: 'component-divider', componentType: 'DIVIDER', enabled: true, config: {} }
+    ],
+    bottomNav: {
+      enabled: true,
+      items: [
+        { key: 'nav_home', title: '首页' },
+        { key: 'nav_works', title: '作品', components: [
+          { componentKey: 'component-work', componentType: 'SINGLE_WORK', enabled: true, config: { workId: 9 } }
+        ] },
+        { key: 'nav_contact', title: '联系', components: [] }
+      ]
+    }
+  }
+  assert.deepEqual(getTeamMenuComponentList(config, 'nav_home').map((item) => item.componentKey), [
+    'component-profile',
+    'component-divider'
+  ])
+  assert.deepEqual(getTeamMenuComponentList(config, 'nav_works').map((item) => item.componentKey), ['component-work'])
+
+  const moved = moveTeamComponent(config, 'component-profile', 'nav_home', 'nav_contact')
+  assert.deepEqual(moved.components.map((item) => item.componentKey), ['component-divider'])
+  assert.equal(moved.bottomNav.items[2].components[0].componentKey, 'component-profile')
+  assert.equal(moved.bottomNav.items[2].components[0].config, profileConfig)
+  assert.equal(moved.bottomNav.items[2].components[0].sortOrder, 1000)
+  assert.deepEqual(visitTeamPortfolioComponents(moved).map((item) => [item.menuKey, item.component.componentKey]), [
+    ['nav_home', 'component-divider'],
+    ['nav_works', 'component-work'],
+    ['nav_contact', 'component-profile']
+  ])
+
+  const replaced = replaceTeamMenuComponentList(moved, 'nav_works', [])
+  assert.deepEqual(replaced.bottomNav.items[1].components, [])
+
+  const onlyFirstComponent = replaceTeamMenuComponentList(config, 'nav_home', [
+    config.components[0]
+  ])
+  const blocked = moveTeamComponent(
+    onlyFirstComponent,
+    'component-profile',
+    'nav_home',
+    'nav_contact'
+  )
+  assert.deepEqual(
+    getTeamMenuComponentList(blocked, 'nav_home').map((item) => item.componentKey),
+    ['component-profile']
+  )
+  assert.deepEqual(getTeamMenuComponentList(blocked, 'nav_contact'), [])
+})
+
+test('team component mutations target the selected menu and keep team component keys', () => {
+  const {
+    addTeamComponent,
+    getTeamMenuComponentList,
+    removeTeamComponent,
+    reorderTeamComponent,
+    updateTeamComponent
+  } = loadUtility('team-portfolios.js')
+  const config = {
+    components: [{ componentKey: 'home', componentType: 'DIVIDER', enabled: true, config: {} }],
+    bottomNav: {
+      enabled: true,
+      items: [
+        { key: 'nav_home', title: '首页' },
+        { key: 'nav_works', title: '作品', components: [
+          { componentKey: 'first', componentType: 'TEXT_SECTION', enabled: true, config: { content: '一' } },
+          { componentKey: 'second', componentType: 'DIVIDER', enabled: true, config: {} }
+        ] }
+      ]
+    }
+  }
+  const added = addTeamComponent(config, 'QR_CONTACT', 'nav_works')
+  const addedComponents = getTeamMenuComponentList(added, 'nav_works')
+  assert.equal(addedComponents.length, 3)
+  assert.match(addedComponents[2].componentKey, /^component-/)
+  assert.equal(added.components[0].componentKey, 'home')
+
+  const updated = updateTeamComponent(added, 'first', {
+    config: { content: '更新' }
+  }, 'nav_works')
+  assert.equal(getTeamMenuComponentList(updated, 'nav_works')[0].config.content, '更新')
+
+  const reordered = reorderTeamComponent(updated, 0, 2, 'nav_works')
+  assert.deepEqual(getTeamMenuComponentList(reordered, 'nav_works').map((item) => item.componentKey), [
+    'second',
+    addedComponents[2].componentKey,
+    'first'
+  ])
+  assert.deepEqual(getTeamMenuComponentList(reordered, 'nav_works').map((item) => item.sortOrder), [1000, 2000, 3000])
+
+  const removed = removeTeamComponent(reordered, 'second', 'nav_works')
+  assert.deepEqual(getTeamMenuComponentList(removed, 'nav_works').map((item) => item.componentKey), [
+    addedComponents[2].componentKey,
+    'first'
+  ])
+})
+
+test('team navigation helpers add rename and remove menus without losing the promoted first menu', () => {
+  const {
+    removeTeamNavigationItem,
+    renameTeamNavigationItem,
+    setTeamBottomNavigationCount
+  } = loadUtility('team-portfolios.js')
+  const base = {
+    components: [{ componentKey: 'home', componentType: 'DIVIDER', enabled: true }],
+    bottomNav: { enabled: false }
+  }
+  const enabled = setTeamBottomNavigationCount(base, 3)
+  assert.equal(enabled.bottomNav.enabled, true)
+  assert.equal(enabled.bottomNav.items.length, 3)
+  assert.ok(enabled.bottomNav.items.every((item) => item.key.startsWith('nav_')))
+  assert.deepEqual(
+    enabled.bottomNav.items.map((item) => item.title),
+    ['主页', '菜单 2', '菜单 3']
+  )
+  const renamed = renameTeamNavigationItem(enabled, enabled.bottomNav.items[1].key, ' 作品 ')
+  assert.equal(renamed.bottomNav.items[1].title, '作品')
+  const cleared = renameTeamNavigationItem(renamed, renamed.bottomNav.items[1].key, '')
+  assert.equal(cleared.bottomNav.items[1].title, '')
+  const secondComponents = [{ componentKey: 'work', componentType: 'SINGLE_WORK', enabled: true }]
+  const populated = Object.assign({}, renamed, {
+    bottomNav: Object.assign({}, renamed.bottomNav, {
+      items: renamed.bottomNav.items.map((item, index) => index === 1
+        ? Object.assign({}, item, { components: secondComponents })
+        : item)
+    })
+  })
+  const removedFirst = removeTeamNavigationItem(populated, populated.bottomNav.items[0].key)
+  assert.equal(removedFirst.bottomNav.items[0].title, '作品')
+  assert.equal(removedFirst.components[0].componentKey, 'work')
+})
+
+test('team publish validation returns the first local menu and component error', () => {
+  const { validateTeamPortfolioForPublish } = loadUtility('team-portfolios.js')
+  const duplicate = {
+    schemaVersion: 'standard-team-v1',
+    editorSchemaRevision: 2,
+    style: { backgroundColor: '#FFFFFF' },
+    components: [{ componentKey: 'same', componentType: 'DIVIDER', enabled: true, config: {} }],
+    bottomNav: {
+      enabled: true,
+      items: [
+        { key: 'nav_home', title: '首页' },
+        { key: 'nav_works', title: '作品', components: [
+          { componentKey: 'same', componentType: 'TEXT_SECTION', enabled: true, config: { content: '' } }
+        ] }
+      ]
+    }
+  }
+  assert.deepEqual(validateTeamPortfolioForPublish(duplicate), {
+    valid: false,
+    menuKey: 'nav_works',
+    componentKey: 'same',
+    message: '【作品】组件标识不能重复'
+  })
+
+  const emptyMenu = JSON.parse(JSON.stringify(duplicate))
+  emptyMenu.bottomNav.items[1].components = []
+  assert.deepEqual(validateTeamPortfolioForPublish(emptyMenu), {
+    valid: false,
+    menuKey: 'nav_works',
+    componentKey: '',
+    message: '【作品】至少添加一个组件'
+  })
+})
+
+test('team publish validation rejects raw navigation errors before normalization hides them', () => {
+  const {
+    normalizeTeamPortfolioConfig,
+    validateTeamPortfolioForPublish
+  } = loadUtility('team-portfolios.js')
+  const config = {
+    schemaVersion: 'standard-team-v1',
+    editorSchemaRevision: 2,
+    style: { backgroundColor: '#FFFFFF' },
+    components: [{ componentKey: 'home', componentType: 'DIVIDER', enabled: true, config: {} }],
+    bottomNav: {
+      enabled: true,
+      items: [
+        { key: 'nav_home', title: '主页' },
+        { key: 'nav_works', title: '作品', components: [
+          { componentKey: 'works', componentType: 'DIVIDER', enabled: true, config: {} }
+        ] }
+      ]
+    }
+  }
+
+  const blankTitle = JSON.parse(JSON.stringify(config))
+  blankTitle.bottomNav.items[1].title = ' '
+  assert.deepEqual(validateTeamPortfolioForPublish(blankTitle), {
+    valid: false,
+    menuKey: 'nav_works',
+    componentKey: '',
+    message: '菜单名称不能为空'
+  })
+
+  const longTitle = JSON.parse(JSON.stringify(config))
+  longTitle.bottomNav.items[1].title = '成员作品展示'
+  assert.deepEqual(validateTeamPortfolioForPublish(longTitle), {
+    valid: false,
+    menuKey: 'nav_works',
+    componentKey: '',
+    message: '菜单名称不能超过5个字'
+  })
+
+  const invalidKey = JSON.parse(JSON.stringify(config))
+  invalidKey.bottomNav.items[1].key = 'works'
+  assert.deepEqual(validateTeamPortfolioForPublish(invalidKey), {
+    valid: false,
+    menuKey: 'works',
+    componentKey: '',
+    message: '菜单标识格式不正确'
+  })
+
+  const invalidComponent = JSON.parse(JSON.stringify(config))
+  invalidComponent.bottomNav.items[1].components[0].componentKey = ' '
+  assert.deepEqual(validateTeamPortfolioForPublish(invalidComponent), {
+    valid: false,
+    menuKey: 'nav_works',
+    componentKey: '',
+    message: '【作品】组件信息不完整'
+  })
+
+  const unsupportedSchema = JSON.parse(JSON.stringify(config))
+  unsupportedSchema.schemaVersion = 'standard-personal-v1'
+  assert.deepEqual(validateTeamPortfolioForPublish(unsupportedSchema), {
+    valid: false,
+    menuKey: '',
+    componentKey: '',
+    message: '团队作品集配置版本不支持'
+  })
+
+  const unsupportedRevision = JSON.parse(JSON.stringify(config))
+  unsupportedRevision.editorSchemaRevision = 3
+  const normalizedUnsupportedRevision =
+    normalizeTeamPortfolioConfig(unsupportedRevision)
+  assert.equal(normalizedUnsupportedRevision.editorSchemaRevision, 3)
+  assert.deepEqual(validateTeamPortfolioForPublish(normalizedUnsupportedRevision), {
+    valid: false,
+    menuKey: '',
+    componentKey: '',
+    message: '当前客户端暂不支持此团队作品集配置'
+  })
 })
 
 test('creates a standard team portfolio only through the explicit team endpoint', async () => {

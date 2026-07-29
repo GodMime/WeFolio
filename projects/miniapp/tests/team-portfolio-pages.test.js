@@ -85,28 +85,55 @@ test('team preview and visitor pages share the team carousel component', () => {
   }
 })
 
+test('team preview and visitor reuse the personal-style shared bottom navigation', () => {
+  for (const name of [
+    'standard-preview/team-portfolio-standard-preview',
+    'visitor-portfolio/team-visitor-portfolio'
+  ]) {
+    const json = JSON.parse(read(`${name}.json`))
+    const wxml = read(`${name}.wxml`)
+    const wxss = read(`${name}.wxss`)
+
+    assert.equal(
+      json.usingComponents['portfolio-bottom-nav'],
+      '/components/portfolio-bottom-nav/portfolio-bottom-nav'
+    )
+    assert.match(wxml, /<portfolio-bottom-nav/)
+    assert.match(wxml, /navigation="\{\{portfolio\.bottomNav\}\}"/)
+    assert.match(wxml, /active-menu-key="\{\{portfolio\.activeMenuKey\}\}"/)
+    assert.match(wxml, /theme-mode="\{\{themeMode\}\}"/)
+    assert.match(wxml, /bindchange="handleMenuTap"/)
+    assert.doesNotMatch(wxml, /class="team-bottom-nav/)
+    assert.doesNotMatch(wxss, /\.team-bottom-nav/)
+  }
+})
+
 test('team visitor page binds navigation and guide back buttons to page-stack state', () => {
   const wxml = read('visitor-portfolio/team-visitor-portfolio.wxml')
   const json = JSON.parse(read('visitor-portfolio/team-visitor-portfolio.json'))
 
-  assert.match(wxml, /<navigation-bar title="团队作品集" back="\{\{showNavigationBack && !timelineGuideVisible\}\}" color="#212529" background="#ffffff" \/>/)
+  assert.match(wxml, /<navigation-bar title="团队作品集" back="\{\{showNavigationBack && !timelineGuideVisible\}\}" color="\{\{navigationColor\}\}" background="\{\{backgroundColor\}\}" \/>/)
   assert.equal(json.usingComponents['timeline-share-guide'], '/components/timeline-share-guide/timeline-share-guide')
   assert.match(wxml, /<timeline-share-guide[^>]*back="\{\{showNavigationBack\}\}"[^>]*bindback="handleTimelineGuideBack"[^>]*bindclose="handleCloseTimelineGuide"/)
 })
 
 test('team preview and visitor pages render the personal-style brand footer', () => {
   const logoUrl = '/assets/system/folio-logo-stack-bold-small-50kb.png'
+  const darkLogoUrl = '/assets/system/folio-logo-stack-bold-dark-50kb.png'
   const logoPath = path.resolve(__dirname, `..${logoUrl}`)
+  const darkLogoPath = path.resolve(__dirname, `..${darkLogoUrl}`)
 
   for (const name of ['standard-preview/team-portfolio-standard-preview', 'visitor-portfolio/team-visitor-portfolio']) {
     const wxml = read(`${name}.wxml`)
     const wxss = read(`${name}.wxss`)
     assert.match(wxml, /class="folio-brand-footer"/)
     assert.match(wxml, new RegExp(`class="folio-brand-logo" src="${logoUrl.replace(/\./g, '\\.')}" mode="aspectFit"`))
+    assert.match(wxml, new RegExp(`class="folio-brand-logo" src="${darkLogoUrl.replace(/\./g, '\\.')}" mode="aspectFit"`))
     assert.match(wxml, /class="folio-brand-name">映期Folio<\/view>/)
     assert.match(readCssRule(wxss, '.folio-brand-footer'), /padding:56rpx0calc\(160rpx\+env\(safe-area-inset-bottom\)\);/)
   }
   assert.equal(fs.existsSync(logoPath), true)
+  assert.equal(fs.existsSync(darkLogoPath), true)
 })
 
 test('legacy team list is a request-free compatibility redirect', () => {
@@ -162,9 +189,29 @@ test('standard team editor independently matches the personal editor interaction
   const wxml = read('standard-edit/team-portfolio-standard-edit.wxml')
   const wxss = read('standard-edit/team-portfolio-standard-edit.wxss')
   const js = read('standard-edit/team-portfolio-standard-edit.js')
+  const personalRoot = path.resolve(ROOT, '../portfolios/standard-edit')
+  const personalCss = fs.readFileSync(
+    path.join(personalRoot, 'portfolio-standard-edit.wxss'),
+    'utf8'
+  )
 
   assert.match(wxml, /class="page-shell portfolio-edit-page team-portfolio-edit-page"/)
   assert.match(wxml, /class="panel share-panel"/)
+  assert.match(wxml, /class="panel page-setting-panel"/)
+  assert.match(wxml, /<view class="field-label">背景色<\/view>/)
+  assert.match(wxml, /class="background-color-current"/)
+  assert.match(wxml, /class="background-color-swatch \{\{config\.style\.backgroundColor === item \? 'active' : ''\}\}"/)
+  assert.match(wxml, /item === 1 \? '不开启' : item \+ ' 个'/)
+  assert.match(wxml, /class="editor-menu-rename"/)
+  assert.match(wxml, /value="\{\{activeMenuTitle\}\}"/)
+  assert.doesNotMatch(wxml, /bindchange="handleBottomNavigationToggle"/)
+  assert.doesNotMatch(wxml, /class="background-color-option/)
+  assert.doesNotMatch(wxml, /class="navigation-title-list"/)
+  assert.match(wxml, /class="background-color-panel component-picker-panel"/)
+  assert.match(wxml, /bindtouchstart="handleBackgroundColorPadTouch"/)
+  assert.match(wxml, /bindtap="handleMenuTabTap"/)
+  assert.match(wxml, /class="component-move-sheet-panel component-picker-panel"/)
+  assert.match(wxml, /catchtap="handleMoveTargetTap"/)
   assert.match(wxml, /class="status-pill \{\{statusTone\}\}"/)
   assert.match(wxml, /class="component-list"/)
   assert.match(wxml, /bindlongpress="handleComponentDragStart"/)
@@ -188,7 +235,48 @@ test('standard team editor independently matches the personal editor interaction
   assert.match(js, /handleComponentDragStart/)
   assert.match(js, /handleComponentTouchMove/)
   assert.match(js, /handleRemoveComponent/)
+  assert.match(js, /validateTeamPortfolioForPublish/)
+  assert.match(js, /visitTeamPortfolioComponents/)
+  assert.match(js, /moveTeamComponent/)
+  assert.match(js, /TEAM_BACKGROUND_COLORS\s*=\s*Object\.freeze\(\['#151515', '#FFFFFF', '#F5F6F8'\]\)/)
+  assert.match(js, /TEAM_BOTTOM_NAV_COUNTS\s*=\s*Object\.freeze\(\[1, 2, 3, 4\]\)/)
   assert.doesNotMatch(js, /portfolio-standard-edit/)
+  for (const selector of [
+    '.background-color-row',
+    '.background-color-swatch',
+    '.background-color-current',
+    '.background-custom-button',
+    '.bottom-nav-count-row',
+    '.bottom-nav-count-option',
+    '.bottom-nav-count-option.active',
+    '.editor-menu-bar',
+    '.editor-menu-item',
+    '.editor-menu-item.active',
+    '.editor-menu-rename',
+    '.editor-menu-title-input',
+    '.editor-menu-title-count',
+    '.editor-menu-remove'
+  ]) {
+    assert.equal(readCssRule(wxss, selector), readCssRule(personalCss, selector), selector)
+  }
+})
+
+test('team preview and visitor own theme styling without importing personal portfolio code', () => {
+  const theme = read('styles/team-portfolio-theme.wxss')
+  const preview = read('standard-preview/team-portfolio-standard-preview.wxml')
+  const visitor = read('visitor-portfolio/team-visitor-portfolio.wxml')
+  const previewJs = read('standard-preview/team-portfolio-standard-preview.js')
+  const visitorJs = read('visitor-portfolio/team-visitor-portfolio.js')
+
+  assert.match(theme, /\.theme-dark/)
+  assert.match(theme, /--team-portfolio-text-primary/)
+  assert.match(theme, /\.contact-form-panel/)
+  assert.match(theme, /\.schedule-query-modal-panel/)
+  assert.match(preview, /theme-mode="\{\{themeMode\}\}"/)
+  assert.match(visitor, /theme-mode="\{\{themeMode\}\}"/)
+  assert.match(previewJs, /clearTeamPortfolioMenuComponentState/)
+  assert.match(visitorJs, /clearTeamPortfolioMenuComponentState/)
+  assert.doesNotMatch(theme, /portfolios\//)
 })
 
 test('team page level component editor owns the shared cancel and confirm actions for team-specific selectors', () => {
@@ -354,6 +442,12 @@ test('team profile display switches flow through editing, preview and visitor re
   assert.match(profile, /draft\.visibleFields\.intro/)
   assert.match(preview, /team="\{\{item\.data\.team\}\}"/)
   assert.match(visitor, /team="\{\{item\.data\.team\}\}"/)
+})
+
+test('team menu title editor shows a real-time Unicode-aware character counter', () => {
+  const editor = read('standard-edit/team-portfolio-standard-edit.wxml')
+
+  assert.match(editor, /\{\{activeMenuTitleCount\}\}\s*\/\s*5/)
 })
 
 test('team profile avatar stays horizontally centered in preview and visitor display mode', () => {

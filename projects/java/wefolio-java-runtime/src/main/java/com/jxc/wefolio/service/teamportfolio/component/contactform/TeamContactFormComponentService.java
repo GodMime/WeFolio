@@ -1,7 +1,6 @@
 package com.jxc.wefolio.service.teamportfolio.component.contactform;
 
 import com.alibaba.fastjson2.JSON;
-import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -18,6 +17,7 @@ import com.jxc.wefolio.dict.TeamRoleDict;
 import com.jxc.wefolio.dict.VisitSourceTypeDict;
 import com.jxc.wefolio.dto.teamportfolio.TeamContactLeadResponse;
 import com.jxc.wefolio.dto.teamportfolio.TeamContactLeadSubmitRequest;
+import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioConfigDto;
 import com.jxc.wefolio.entity.ContactLeadEntity;
 import com.jxc.wefolio.entity.PortfolioEntity;
 import com.jxc.wefolio.entity.TeamEntity;
@@ -28,6 +28,7 @@ import com.jxc.wefolio.mapper.PortfolioEntityMapper;
 import com.jxc.wefolio.mapper.VisitRecordEntityMapper;
 import com.jxc.wefolio.service.teamportfolio.TeamPortfolioAccessService;
 import com.jxc.wefolio.service.teamportfolio.TeamPortfolioComponentContext;
+import com.jxc.wefolio.service.teamportfolio.TeamPortfolioComponentTraversal;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -414,27 +415,26 @@ public class TeamContactFormComponentService {
      */
     private void requirePublishedContactForm(PortfolioEntity portfolio, String requiredComponentKey) {
         try {
-            JSONObject config = JSON.parseObject(portfolio.getPublishedConfigJson());
+            TeamPortfolioConfigDto config = JSON.parseObject(
+                    portfolio.getPublishedConfigJson(), TeamPortfolioConfigDto.class);
             if (config == null || !TeamPortfolioConstants.SCHEMA_VERSION_STANDARD_TEAM_V1.equals(
-                    normalizeString(config.getString(CONFIG_KEY_SCHEMA_VERSION)))) {
-                throw new BusinessException(PORTFOLIO_UNAVAILABLE_MESSAGE);
-            }
-            JSONArray components = config.getJSONArray(CONFIG_KEY_COMPONENTS);
-            if (components == null) {
+                    normalizeString(config.getSchemaVersion()))) {
                 throw new BusinessException(PORTFOLIO_UNAVAILABLE_MESSAGE);
             }
             TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(
                     portfolio.getOwnerId(), portfolio.getId(), portfolio.getPublishedRevision());
             boolean found = false;
-            for (Object componentObject : components) {
-                if (!(componentObject instanceof JSONObject component)
+            for (TeamPortfolioComponentTraversal.ComponentLocation location
+                    : TeamPortfolioComponentTraversal.listComponentLocations(config)) {
+                TeamPortfolioConfigDto.ComponentEnvelope component = location.component();
+                if (component == null
                         || requiredComponentKey != null && !requiredComponentKey.equals(
-                                normalizeString(component.getString(CONFIG_KEY_COMPONENT_KEY)))
-                        || !Boolean.TRUE.equals(component.getBoolean(CONFIG_KEY_ENABLED))
-                        || !COMPONENT_TYPE_CONTACT_FORM.equals(component.getString(CONFIG_KEY_COMPONENT_TYPE))) {
+                                normalizeString(component.getComponentKey()))
+                        || Boolean.FALSE.equals(component.getEnabled())
+                        || !COMPONENT_TYPE_CONTACT_FORM.equals(component.getComponentType())) {
                     continue;
                 }
-                validator.normalizeAndValidate(component.getJSONObject(CONFIG_KEY_CONFIG), context);
+                validator.normalizeAndValidate(component.getConfig(), context);
                 found = true;
             }
             if (!found) {

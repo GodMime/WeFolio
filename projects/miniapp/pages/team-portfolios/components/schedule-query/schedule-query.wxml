@@ -45,7 +45,7 @@
   </view>
 </template>
 
-<view class="schedule-query {{editMode ? 'editor-mode' : ''}}">
+<view class="schedule-query theme-{{themeMode}} {{editMode ? 'editor-mode' : ''}}">
   <block wx:if="{{editMode}}">
     <view class="editor-form">
       <view class="editor-card">
@@ -86,15 +86,17 @@
         <view wx:if="{{config.description}}" class="section-desc">{{config.description}}</view>
         <button class="schedule-query-open-button" catchtap="openModal">查询团队档期</button>
       </view>
-      <view class="schedule-query-modal-mask {{modalVisible ? 'visible' : ''}}" catchtap="closeModal">
-        <view class="schedule-query-modal-panel" catchtap="noop">
-          <view class="schedule-query-modal-heading">
-            <view class="schedule-query-modal-title">{{config.title || '查询团队档期'}}</view>
-            <view class="schedule-query-close" catchtap="closeModal" aria-role="button" aria-label="关闭团队档期查询">×</view>
+      <root-portal wx:if="{{modalVisible}}">
+        <view class="schedule-query-modal-mask theme-{{themeMode}} {{modalVisible ? 'visible' : ''}}" catchtap="closeModal">
+          <view class="schedule-query-modal-panel" catchtap="noop">
+            <view class="schedule-query-modal-heading">
+              <view class="schedule-query-modal-title">{{config.title || '查询团队档期'}}</view>
+              <view class="schedule-query-close" catchtap="closeModal" aria-role="button" aria-label="关闭团队档期查询">×</view>
+            </view>
+            <template is="scheduleQueryContent" data="{{selectedDate: selectedDate, selectedMonth: selectedMonth, selectedMonthText: selectedMonthText, calendarDays: calendarDays, loading: loading, errorMessage: errorMessage, result: result}}" />
           </view>
-          <template is="scheduleQueryContent" data="{{selectedDate: selectedDate, selectedMonth: selectedMonth, selectedMonthText: selectedMonthText, calendarDays: calendarDays, loading: loading, errorMessage: errorMessage, result: result}}" />
         </view>
-      </view>
+      </root-portal>
     </block>
   </block>
 </view>

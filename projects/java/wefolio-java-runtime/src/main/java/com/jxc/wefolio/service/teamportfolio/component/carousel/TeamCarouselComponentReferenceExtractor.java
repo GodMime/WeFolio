@@ -25,8 +25,8 @@ public class TeamCarouselComponentReferenceExtractor {
     /** 作品 ID 配置键。 */
     private static final String CONFIG_KEY_WORK_ID = "workId";
 
-    /** 条目路径后缀。 */
-    private static final String ITEM_PATH_SUFFIX = ".items[";
+    /** 条目真实配置路径后缀。 */
+    private static final String ITEM_PATH_SUFFIX = ".config.items[";
 
     /** 有效引用标识。 */
     private static final int REFERENCE_VALID = 1;

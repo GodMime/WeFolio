@@ -364,7 +364,7 @@ class TeamMemberPortfolioListComponentTest {
         assertThat(reference.getReferenceType()).isEqualTo("MEMBER_PORTFOLIO");
         assertThat(reference.getReferenceId()).isEqualTo(101L);
         assertThat(reference.getComponentKey()).isEqualTo(COMPONENT_KEY);
-        assertThat(reference.getComponentPath()).isEqualTo("components[3].items[0]");
+        assertThat(reference.getComponentPath()).isEqualTo("components[3].config.items[0]");
         assertThat(reference.getSortOrder()).isZero();
         assertThat(reference.getIsValid()).isEqualTo(1);
         assertThat(reference.getConfigScope()).isNull();

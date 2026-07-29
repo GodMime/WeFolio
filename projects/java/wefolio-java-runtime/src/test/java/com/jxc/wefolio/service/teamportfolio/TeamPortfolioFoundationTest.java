@@ -103,14 +103,34 @@ class TeamPortfolioFoundationTest {
      */
     @Test
     void dtosShouldExposeOnlyTeamPortfolioFields() {
-        assertFields(TeamPortfolioConfigDto.class, "schemaVersion", "share", "components");
+        assertFields(TeamPortfolioConfigDto.class,
+                "schemaVersion", "editorSchemaRevision", "share", "style", "components", "bottomNav");
         assertFieldType(TeamPortfolioConfigDto.class, "schemaVersion", String.class);
+        assertFieldType(TeamPortfolioConfigDto.class, "editorSchemaRevision", Integer.class);
         assertFieldType(TeamPortfolioConfigDto.class, "share", TeamPortfolioConfigDto.Share.class);
+        assertFieldType(TeamPortfolioConfigDto.class, "style", TeamPortfolioConfigDto.Style.class);
         assertListElementType(TeamPortfolioConfigDto.class, "components", TeamPortfolioConfigDto.ComponentEnvelope.class);
+        assertFieldType(TeamPortfolioConfigDto.class, "bottomNav", TeamPortfolioConfigDto.BottomNav.class);
         assertFields(TeamPortfolioConfigDto.Share.class, "title", "description", "coverUrl");
         assertFieldType(TeamPortfolioConfigDto.Share.class, "title", String.class);
         assertFieldType(TeamPortfolioConfigDto.Share.class, "description", String.class);
         assertFieldType(TeamPortfolioConfigDto.Share.class, "coverUrl", String.class);
+        assertFields(TeamPortfolioConfigDto.Style.class, "backgroundColor");
+        assertFieldType(TeamPortfolioConfigDto.Style.class, "backgroundColor", String.class);
+        assertFields(TeamPortfolioConfigDto.BottomNav.class, "enabled", "items");
+        assertFieldType(TeamPortfolioConfigDto.BottomNav.class, "enabled", Boolean.class);
+        assertListElementType(
+                TeamPortfolioConfigDto.BottomNav.class,
+                "items",
+                TeamPortfolioConfigDto.BottomNavItem.class);
+        assertFields(TeamPortfolioConfigDto.BottomNavItem.class, "key", "title", "iconUrl", "components");
+        assertFieldType(TeamPortfolioConfigDto.BottomNavItem.class, "key", String.class);
+        assertFieldType(TeamPortfolioConfigDto.BottomNavItem.class, "title", String.class);
+        assertFieldType(TeamPortfolioConfigDto.BottomNavItem.class, "iconUrl", String.class);
+        assertListElementType(
+                TeamPortfolioConfigDto.BottomNavItem.class,
+                "components",
+                TeamPortfolioConfigDto.ComponentEnvelope.class);
         assertFields(TeamPortfolioConfigDto.ComponentEnvelope.class,
                 "componentKey", "componentType", "sortOrder", "enabled", "config");
         assertFieldType(TeamPortfolioConfigDto.ComponentEnvelope.class, "componentKey", String.class);
@@ -120,7 +140,7 @@ class TeamPortfolioFoundationTest {
         assertFieldType(TeamPortfolioConfigDto.ComponentEnvelope.class, "config", JSONObject.class);
 
         assertFields(TeamPortfolioRenderDto.class, "shareCode", "portfolioId", "teamId", "teamName", "title",
-                "share", "preview", "underMaintenance", "visitRecordId", "components");
+                "share", "preview", "underMaintenance", "visitRecordId", "style", "components", "bottomNav");
         assertFieldType(TeamPortfolioRenderDto.class, "shareCode", String.class);
         assertFieldType(TeamPortfolioRenderDto.class, "portfolioId", Long.class);
         assertFieldType(TeamPortfolioRenderDto.class, "teamId", Long.class);
@@ -130,7 +150,25 @@ class TeamPortfolioFoundationTest {
         assertFieldType(TeamPortfolioRenderDto.class, "preview", boolean.class);
         assertFieldType(TeamPortfolioRenderDto.class, "underMaintenance", boolean.class);
         assertFieldType(TeamPortfolioRenderDto.class, "visitRecordId", Long.class);
+        assertFieldType(TeamPortfolioRenderDto.class, "style", TeamPortfolioRenderDto.Style.class);
         assertListElementType(TeamPortfolioRenderDto.class, "components", TeamPortfolioRenderDto.Component.class);
+        assertFieldType(TeamPortfolioRenderDto.class, "bottomNav", TeamPortfolioRenderDto.BottomNav.class);
+        assertFields(TeamPortfolioRenderDto.Style.class, "backgroundColor", "themeMode");
+        assertFieldType(TeamPortfolioRenderDto.Style.class, "backgroundColor", String.class);
+        assertFieldType(TeamPortfolioRenderDto.Style.class, "themeMode", String.class);
+        assertFields(TeamPortfolioRenderDto.BottomNav.class, "enabled", "items");
+        assertFieldType(TeamPortfolioRenderDto.BottomNav.class, "enabled", boolean.class);
+        assertListElementType(
+                TeamPortfolioRenderDto.BottomNav.class,
+                "items",
+                TeamPortfolioRenderDto.BottomNavItem.class);
+        assertFields(TeamPortfolioRenderDto.BottomNavItem.class, "key", "title", "components");
+        assertFieldType(TeamPortfolioRenderDto.BottomNavItem.class, "key", String.class);
+        assertFieldType(TeamPortfolioRenderDto.BottomNavItem.class, "title", String.class);
+        assertListElementType(
+                TeamPortfolioRenderDto.BottomNavItem.class,
+                "components",
+                TeamPortfolioRenderDto.Component.class);
         assertFields(TeamPortfolioRenderDto.Component.class,
                 "componentKey", "componentType", "name", "sortOrder", "data");
         assertFieldType(TeamPortfolioRenderDto.Component.class, "componentKey", String.class);
