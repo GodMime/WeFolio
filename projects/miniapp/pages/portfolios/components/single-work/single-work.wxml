@@ -34,6 +34,36 @@
     <view class="single-work-play-badge" aria-hidden="true"><view class="work-play-icon"></view></view>
   </view>
   <image
+    wx:elif="{{work.isAnimation && !animationLoadFailed}}"
+    class="single-work-image"
+    src="{{work.previewUrl}}"
+    mode="widthFix"
+    webp="{{true}}"
+    data-work-id="{{work.workId}}"
+    data-media-type="{{work.mediaType}}"
+    data-media-url="{{work.previewUrl}}"
+    data-cover-url="{{work.thumbnailUrl}}"
+    data-title="{{work.title}}"
+    bindtap="handleSingleWorkTap"
+    binderror="handleAnimationLoadError"
+    aria-role="button"
+    aria-label="查看原动图{{work.title}}"
+  ></image>
+  <image
+    wx:elif="{{work.isAnimation}}"
+    class="single-work-image"
+    src="{{work.thumbnailUrl}}"
+    mode="widthFix"
+    data-work-id="{{work.workId}}"
+    data-media-type="{{work.mediaType}}"
+    data-media-url="{{work.thumbnailUrl}}"
+    data-cover-url="{{work.thumbnailUrl}}"
+    data-title="{{work.title}}"
+    bindtap="handleSingleWorkTap"
+    aria-role="button"
+    aria-label="查看动图封面{{work.title}}"
+  ></image>
+  <image
     wx:elif="{{work.previewUrl}}"
     class="single-work-image"
     src="{{work.previewUrl}}"

@@ -62,7 +62,13 @@ Component({
       }
     },
     works: { type: Array, value: [] },
-    work: { type: Object, value: null },
+    work: {
+      type: Object,
+      value: null,
+      observer() {
+        this.setData({ animationLoadFailed: false })
+      }
+    },
     showTitle: { type: Boolean, value: true },
     showDescription: { type: Boolean, value: false },
     activeVideoKey: { type: String, value: '' },
@@ -77,7 +83,8 @@ Component({
   data: {
     draft: normalizeSingleWorkConfig(),
     errorMessage: '',
-    restoredMemberUserId: null
+    restoredMemberUserId: null,
+    animationLoadFailed: false
   },
   methods: {
     beginEdit() {
@@ -139,10 +146,16 @@ Component({
         })
         return
       }
+      if (!['IMAGE', 'ANIMATION'].includes(work.mediaType)) return
       this.triggerEvent('preview', {
         componentKey: this.properties.componentKey,
-        work
+        work: work.mediaType === 'ANIMATION' && this.data.animationLoadFailed
+          ? Object.assign({}, work, { mediaUrl: work.coverUrl || '' })
+          : work
       })
+    },
+    handleAnimationLoadError() {
+      this.setData({ animationLoadFailed: true })
     },
     handleVideoError(event) {
       this.triggerEvent('videoerror', {

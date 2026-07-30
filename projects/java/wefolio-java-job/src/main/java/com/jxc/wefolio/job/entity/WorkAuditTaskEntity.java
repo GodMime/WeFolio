@@ -20,7 +20,7 @@ public class WorkAuditTaskEntity extends BaseEntity {
     /** 用户 ID */
     private Long userId;
 
-    /** 媒体类型：IMAGE 图片 / VIDEO 视频 */
+    /** 媒体类型：IMAGE 图片 / VIDEO 视频 / ANIMATION 动图 */
     private String mediaType;
 
     /** COS 媒体对象键 */
@@ -61,6 +61,9 @@ public class WorkAuditTaskEntity extends BaseEntity {
 
     /** 视频截帧数量 */
     private Integer snapshotCount;
+
+    /** 动图当前审核轮次抽中的两个帧号 JSON 数组 */
+    private String sampledFrameNumbers;
 
     /** 提交或图片审核调用次数 */
     private Integer attemptCount;

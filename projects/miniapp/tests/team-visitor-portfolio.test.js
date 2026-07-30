@@ -179,6 +179,28 @@ test('visitor normalization keeps team theme and menu components independent', (
   assert.deepEqual(contact.activeComponents.map((item) => item.componentKey), ['contact'])
 })
 
+test('team single-work animation uses work-viewed semantics', () => {
+  const { buildTeamSingleWorkViewEvent } = load('team-visitor-portfolio.js')
+
+  assert.deepEqual(buildTeamSingleWorkViewEvent({
+    componentKey: 'single-1',
+    work: { workId: 21, mediaType: 'ANIMATION' }
+  }), {
+    eventType: 'WORK_VIEWED',
+    componentKey: 'single-1',
+    workId: 21,
+    mediaType: 'ANIMATION'
+  })
+  assert.equal(buildTeamSingleWorkViewEvent({
+    componentKey: 'single-1',
+    work: { workId: 21, mediaType: 'VIDEO' }
+  }), null)
+  assert.equal(buildTeamSingleWorkViewEvent({
+    componentKey: 'single-1',
+    work: { workId: 21, mediaType: 'AUDIO' }
+  }), null)
+})
+
 test('event and schedule helpers call team visitor endpoints with visitor auth', async () => {
   const { submitTeamVisitorEvent, queryTeamVisitorSchedule } = load('team-visitor-portfolio.js')
   const calls = []

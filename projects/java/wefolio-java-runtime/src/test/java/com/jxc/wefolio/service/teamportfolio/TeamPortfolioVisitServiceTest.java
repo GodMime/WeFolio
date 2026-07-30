@@ -336,12 +336,26 @@ class TeamPortfolioVisitServiceTest {
     }
 
     /**
-     * 合法 IMAGE/VIDEO 事件必须先命中发布引用，再读取可信作品媒体类型。
+     * 合法 IMAGE/ANIMATION/VIDEO 事件必须先命中发布引用，再读取可信作品媒体类型。
      */
     @Test
     void legalImageAndVideoEventsValidateReferenceBeforeTrustedWork() {
         assertTrustedMediaAccepted(VisitEventTypeDict.WORK_VIEWED, MediaTypeDict.IMAGE.getCode());
+        assertTrustedMediaAccepted(VisitEventTypeDict.WORK_VIEWED, MediaTypeDict.ANIMATION.getCode());
         assertTrustedMediaAccepted(VisitEventTypeDict.VIDEO_PLAYED, MediaTypeDict.VIDEO.getCode());
+    }
+
+    @Test
+    void videoPlayedShouldRejectAnimationMediaTypeBeforeMapperAccess() {
+        Context context = context();
+        VisitorTeamPortfolioEventRequest request =
+                clientEvent(VisitEventTypeDict.VIDEO_PLAYED, "animation-as-video");
+        request.setMediaType(MediaTypeDict.ANIMATION.getCode());
+
+        assertThatThrownBy(() -> context.service.recordEvent(
+                portfolio(), VISITOR_ID, VISITOR_KEY, request))
+                .isInstanceOf(BusinessException.class);
+        verifyNoInteractions(context.recordMapper, context.eventMapper, context.referenceMapper, context.workMapper);
     }
 
     /**
@@ -742,6 +756,7 @@ class TeamPortfolioVisitServiceTest {
     private static void assertTrustedMediaAccepted(VisitEventTypeDict type, String mediaType) {
         Context context = successfulEventContext();
         VisitorTeamPortfolioEventRequest request = clientEvent(type, "trusted-" + type.getCode());
+        request.setMediaType(mediaType);
         when(context.referenceMapper.selectList(any())).thenReturn(
                 List.of(reference(ReferenceTypeDict.WORK.getCode())));
         when(context.workMapper.selectById(request.getWorkId())).thenReturn(

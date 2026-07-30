@@ -422,7 +422,7 @@ class MinePortfolioServiceTest {
                 .singleElement()
                 .satisfies(item -> {
                     assertThat(item.getName()).isEqualTo("单个作品");
-                    assertThat(item.getDescription()).isEqualTo("突出展示一个图片或视频作品");
+                    assertThat(item.getDescription()).isEqualTo("突出展示一个图片、视频或动图作品");
                 });
     }
 

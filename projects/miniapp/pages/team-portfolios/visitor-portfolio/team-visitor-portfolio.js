@@ -1,6 +1,6 @@
 const { request } = require('../../../utils/request.js')
 const { createTeamContactLeadForm, submitTeamContactLead } = require('../utils/team-contact-leads.js')
-const { normalizeTeamVisitorPortfolio, queryTeamVisitorSchedule, submitTeamVisitorEvent, switchTeamPortfolioMenu } = require('../utils/team-visitor-portfolio.js')
+const { buildTeamSingleWorkViewEvent, normalizeTeamVisitorPortfolio, queryTeamVisitorSchedule, submitTeamVisitorEvent, switchTeamPortfolioMenu } = require('../utils/team-visitor-portfolio.js')
 const { captureTeamPortfolioMenuInteraction, clearTeamPortfolioMenuComponentState, clearTeamPortfolioMenuTransitionTimers, isTeamPortfolioMenuInteractionCurrent, startTeamPortfolioMenuTransition } = require('../utils/team-portfolio-menu-transition.js')
 const { createIdempotencyKey, openTeamVisitorSession, requestWithTeamVisitorSessionRefresh, resolveTeamShareCode } = require('../utils/team-visitor-session.js')
 const { uploadTeamVisitorProfile } = require('../utils/team-visitor-profile.js')
@@ -105,7 +105,7 @@ Page({
   handleUnavailableError(error) { return showTeamPortfolioUnavailableToast(error) },
   sendEvent(payload) { return submitTeamVisitorEvent((options) => this.visitorRequest(options), this.data.shareCode, Object.assign({}, payload, { idempotencyKey: createIdempotencyKey() })).catch((error) => { this.handleUnavailableError(error); return null }) },
   handleImagePreview(event) { const item = event.detail && event.detail.item; const componentKey = event.currentTarget.dataset.key; if (!item) return; this.sendEvent({ eventType: 'WORK_VIEWED', componentKey, workId: item.workId, mediaType: 'IMAGE' }); const url = item.mediaUrl || item.coverUrl; if (url) wx.previewImage({ current: url, urls: [url] }) },
-  handleSingleWorkPreview(event) { const detail = event.detail || {}; const work = detail.work; if (!work || !work.mediaUrl) return; this.sendEvent({ eventType: 'WORK_VIEWED', componentKey: detail.componentKey, workId: work.workId, mediaType: 'IMAGE' }); wx.previewImage({ current: work.mediaUrl, urls: [work.mediaUrl] }) },
+  handleSingleWorkPreview(event) { const detail = event.detail || {}; const work = detail.work; const visitorEvent = buildTeamSingleWorkViewEvent(detail); if (!visitorEvent || !work || !work.mediaUrl) return; this.sendEvent(visitorEvent); wx.previewImage({ current: work.mediaUrl, urls: [work.mediaUrl] }) },
   handleSingleWorkActivate(event) { const detail = event.detail || {}; const work = detail.work; if (!detail.componentKey || !work) return; this.pauseSingleWorkVideos(detail.componentKey); this.setData({ activeSingleWorkVideoKey: detail.componentKey }); this.sendEvent({ eventType: 'VIDEO_PLAYED', componentKey: detail.componentKey, workId: work.workId, mediaType: 'VIDEO', durationSeconds: 0 }) },
   handleSingleWorkVideoError() { this.stopSingleWorkVideos(); wx.showToast({ title: '视频播放失败，请重试', icon: 'none' }) },
   pauseSingleWorkVideos(exceptKey) { const children = this.selectAllComponents ? this.selectAllComponents('.team-single-work-instance') : []; (children || []).forEach((child) => { if (!exceptKey || child.properties.componentKey !== exceptKey) child.pauseVideo && child.pauseVideo() }) },

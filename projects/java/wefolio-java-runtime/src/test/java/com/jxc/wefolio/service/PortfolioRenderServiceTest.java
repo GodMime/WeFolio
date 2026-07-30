@@ -8,6 +8,7 @@ import com.jxc.wefolio.dict.PortfolioComponentTypeDict;
 import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
 import com.jxc.wefolio.dict.PortfolioStatusDict;
 import com.jxc.wefolio.dict.PortfolioTemplateTypeDict;
+import com.jxc.wefolio.dict.WorkAuditStatusDict;
 import com.jxc.wefolio.dict.WorkStatusDict;
 import com.jxc.wefolio.dto.PortfolioConfigDto;
 import com.jxc.wefolio.dto.PortfolioRenderDto;
@@ -118,6 +119,54 @@ class PortfolioRenderServiceTest {
         assertThat(component.getWork().getCoverUrl()).isEqualTo("https://cdn.example.com/cover/12.jpg");
         assertThat(component.getWork().getAspectRatio()).isEqualTo("9:16");
         assertThat(component.getWorks()).isEmpty();
+    }
+
+    @Test
+    void renderShouldExposeAnimationOnlyForSingleWorkAndFilterBadBulkConfig() {
+        WorkEntity animation = work(
+                13L,
+                MediaTypeDict.ANIMATION.getCode(),
+                "animation/13.gif",
+                "animation/13-thumb.jpg",
+                null);
+        when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(animation));
+        when(cosService.publicUrl("animation/13.gif")).thenReturn("https://cdn.example.com/animation/13.gif");
+        when(cosService.publicUrl("animation/13-thumb.jpg"))
+                .thenReturn("https://cdn.example.com/animation/13-thumb.jpg");
+        PortfolioConfigDto config = config(
+                component("c_single", PortfolioComponentTypeDict.SINGLE_WORK.getCode(), 1000,
+                        Map.of("workId", 13L)),
+                component("c_grid", PortfolioComponentTypeDict.WORK_GRID.getCode(), 2000,
+                        Map.of("workIds", List.of(13L))));
+
+        PortfolioRenderDto render = service().render(portfolio(), config, false, false, null, null);
+
+        assertThat(render.getComponents().get(0).getWork().getMediaType())
+                .isEqualTo(MediaTypeDict.ANIMATION.getCode());
+        assertThat(render.getComponents().get(1).getGroups())
+                .singleElement()
+                .satisfies(group -> assertThat(group.getWorks()).isEmpty());
+    }
+
+    @Test
+    void renderShouldHideAnimationBeforeAuditPasses() {
+        WorkEntity animation = work(
+                13L,
+                MediaTypeDict.ANIMATION.getCode(),
+                "animation/13.gif",
+                "animation/13-thumb.jpg",
+                null);
+        animation.setAuditStatus(WorkAuditStatusDict.AUDITING.getCode());
+        when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(animation));
+        PortfolioConfigDto config = config(component(
+                "c_single",
+                PortfolioComponentTypeDict.SINGLE_WORK.getCode(),
+                1000,
+                Map.of("workId", 13L)));
+
+        PortfolioRenderDto render = service().render(portfolio(), config, false, false, null, null);
+
+        assertThat(render.getComponents().get(0).getWork()).isNull();
     }
 
     /**
@@ -433,6 +482,9 @@ class PortfolioRenderServiceTest {
         work.setDurationMs(durationMs);
         work.setDescription("说明" + id);
         work.setStatus(WorkStatusDict.ACTIVE.getCode());
+        if (MediaTypeDict.ANIMATION.getCode().equals(mediaType)) {
+            work.setAuditStatus(WorkAuditStatusDict.PASSED.getCode());
+        }
         return work;
     }
 }

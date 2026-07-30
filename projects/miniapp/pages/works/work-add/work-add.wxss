@@ -246,6 +246,19 @@
   box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.18);
 }
 
+.animation-badge {
+  position: absolute;
+  right: 8rpx;
+  bottom: 8rpx;
+  padding: 3rpx 9rpx;
+  color: #ffffff;
+  font-size: 18rpx;
+  font-weight: 800;
+  line-height: 1.4;
+  border-radius: 999rpx;
+  background: rgba(15, 118, 110, 0.9);
+}
+
 .selected-work-copy {
   flex: 1 1 0;
   min-width: 0;

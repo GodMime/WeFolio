@@ -289,7 +289,7 @@ public class MineTeamPortfolioService {
         return List.of(
                 componentItem(TeamPortfolioComponentTypeDict.TEAM_PROFILE, "展示当前团队资料"),
                 componentItem(TeamPortfolioComponentTypeDict.CAROUSEL, "轮播展示已授权成员作品"),
-                componentItem(TeamPortfolioComponentTypeDict.SINGLE_WORK, "展示一个已授权成员作品"),
+                componentItem(TeamPortfolioComponentTypeDict.SINGLE_WORK, "展示一个已授权成员的图片、视频或动图作品"),
                 componentItem(TeamPortfolioComponentTypeDict.DIVIDER, "分隔团队作品集内容"),
                 componentItem(TeamPortfolioComponentTypeDict.MEMBER_PORTFOLIO_GRID, "双列展示成员个人作品集"),
                 componentItem(TeamPortfolioComponentTypeDict.MEMBER_PORTFOLIO_LIST, "单列展示成员个人作品集"),

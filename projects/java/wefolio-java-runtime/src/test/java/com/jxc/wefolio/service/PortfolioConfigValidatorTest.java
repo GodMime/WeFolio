@@ -5,6 +5,7 @@ import com.jxc.wefolio.dict.MediaTypeDict;
 import com.jxc.wefolio.dict.PortfolioConfigScopeDict;
 import com.jxc.wefolio.dict.PortfolioComponentTypeDict;
 import com.jxc.wefolio.dict.ReferenceTypeDict;
+import com.jxc.wefolio.dict.WorkAuditStatusDict;
 import com.jxc.wefolio.dict.WorkStatusDict;
 import com.jxc.wefolio.dto.PortfolioConfigDto;
 import com.jxc.wefolio.entity.PortfolioReferenceEntity;
@@ -12,6 +13,7 @@ import com.jxc.wefolio.entity.WorkEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.UserEntityMapper;
 import com.jxc.wefolio.mapper.WorkEntityMapper;
+import com.jxc.wefolio.message.PortfolioMessage;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -144,7 +146,7 @@ class PortfolioConfigValidatorTest {
     }
 
     /**
-     * 单个作品组件应同时支持图片和视频，并只保留规范化后的单作品配置。
+     * 单个作品组件应同时支持图片、视频和动图，并只保留规范化后的单作品配置。
      */
     @Test
     void singleWorkShouldAcceptImageAndVideoAndNormalizeSupportedConfig() {
@@ -176,6 +178,58 @@ class PortfolioConfigValidatorTest {
                         Map.entry("showTitle", false),
                         Map.entry("showDescription", true)
                 );
+    }
+
+    @Test
+    void singleWorkShouldAcceptAnimationButBulkComponentsShouldRejectIt() {
+        WorkEntity animation = work(
+                13L,
+                7L,
+                MediaTypeDict.ANIMATION.getCode(),
+                WorkStatusDict.ACTIVE.getCode());
+        when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(animation));
+        PortfolioConfigDto singleConfig = config(component(
+                "c_animation",
+                PortfolioComponentTypeDict.SINGLE_WORK.getCode(),
+                1000,
+                true,
+                Map.of("workId", 13L)));
+
+        PortfolioConfigDto normalized = validator().normalize(7L, singleConfig);
+
+        assertThat(normalized.getComponents().get(0).getConfig())
+                .containsEntry("workId", 13L);
+
+        PortfolioConfigDto gridConfig = config(component(
+                "c_grid",
+                PortfolioComponentTypeDict.WORK_GRID.getCode(),
+                1000,
+                true,
+                Map.of("workIds", List.of(13L))));
+        assertThatThrownBy(() -> validator().normalize(7L, gridConfig))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage(PortfolioMessage.WORK_REFERENCE_INVALID_MESSAGE);
+    }
+
+    @Test
+    void singleWorkShouldRejectAnimationBeforeAuditPasses() {
+        WorkEntity animation = work(
+                13L,
+                7L,
+                MediaTypeDict.ANIMATION.getCode(),
+                WorkStatusDict.ACTIVE.getCode());
+        animation.setAuditStatus(WorkAuditStatusDict.AUDITING.getCode());
+        when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(animation));
+        PortfolioConfigDto config = config(component(
+                "c_animation",
+                PortfolioComponentTypeDict.SINGLE_WORK.getCode(),
+                1000,
+                true,
+                Map.of("workId", 13L)));
+
+        assertThatThrownBy(() -> validator().normalize(7L, config))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage(PortfolioMessage.WORK_REFERENCE_INVALID_MESSAGE);
     }
 
     /**
@@ -1098,6 +1152,9 @@ class PortfolioConfigValidatorTest {
         work.setMediaType(mediaType);
         work.setTitle("作品" + id);
         work.setStatus(status);
+        if (MediaTypeDict.ANIMATION.getCode().equals(mediaType)) {
+            work.setAuditStatus(WorkAuditStatusDict.PASSED.getCode());
+        }
         return work;
     }
 }

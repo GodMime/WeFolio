@@ -19,6 +19,7 @@ const {
   updateComponentScheduleQueryConfig,
   updateComponentTextSectionConfig
 } = require('../utils/portfolios')
+const { selectableWorksFor } = require('../pages/portfolios/utils/works')
 
 function flushPromises() {
   return new Promise((resolve) => {
@@ -47,6 +48,34 @@ function applyData(target, patch) {
     parent[lastKey] = patch[key]
   })
 }
+
+test('filters works by component media-type whitelist', () => {
+  const works = [
+    { id: 1, mediaType: 'IMAGE' },
+    { id: 2, mediaType: 'VIDEO' },
+    { id: 3, mediaType: 'ANIMATION' },
+    { id: 4, mediaType: 'AUDIO' },
+    { id: 5, mediaType: '' }
+  ]
+
+  assert.deepEqual(
+    selectableWorksFor('SINGLE_WORK', works).map((item) => item.mediaType),
+    ['IMAGE', 'VIDEO', 'ANIMATION']
+  )
+  assert.deepEqual(
+    selectableWorksFor('WORK_GRID', works).map((item) => item.mediaType),
+    ['IMAGE', 'VIDEO']
+  )
+  assert.deepEqual(
+    selectableWorksFor('WORK_LIST', works).map((item) => item.mediaType),
+    ['IMAGE', 'VIDEO']
+  )
+  assert.deepEqual(
+    selectableWorksFor('CAROUSEL', works).map((item) => item.mediaType),
+    ['IMAGE']
+  )
+  assert.deepEqual(selectableWorksFor('UNKNOWN', works), [])
+})
 
 function createSelectorQuery(rects) {
   const query = {

@@ -107,6 +107,33 @@ class CosServiceTest {
     }
 
     @Test
+    void createPostUploadTicketShouldBindExactAnimationKeyAndMimeInPolicy() {
+        when(cosProperties.getSecretId()).thenReturn("AKID_TEST");
+        when(cosProperties.getSecretKey()).thenReturn("SECRET_TEST");
+        String objectKey = "WFA3B1E7A2/work/animation/WFA3B1E7A2-A-1782807167829-1.gif";
+
+        CosService.PostUploadTicket ticket = cosService.createPostUploadTicket(
+                objectKey,
+                "image/gif",
+                10L * 1024L * 1024L,
+                LocalDateTime.now().plusMinutes(30));
+
+        JSONObject policy = JSON.parseObject(new String(
+                Base64.getDecoder().decode(ticket.formData().get("policy"))));
+        List<JSONObject> equalityConditions = policy.getJSONArray("conditions").stream()
+                .filter(JSONObject.class::isInstance)
+                .map(JSONObject.class::cast)
+                .toList();
+        assertThat(ticket.formData()).containsEntry("key", objectKey);
+        assertThat(equalityConditions)
+                .anySatisfy(condition -> assertThat(condition).containsEntry("key", objectKey))
+                .anySatisfy(condition -> assertThat(condition).containsEntry("Content-Type", "image/gif"));
+        assertThat(equalityConditions)
+                .noneSatisfy(condition -> assertThat(condition.getString("key"))
+                        .isEqualTo("WFA3B1E7A2/work/animation/"));
+    }
+
+    @Test
     void createPostUploadTicketShouldUseUploadBaseUrlForMiniappUploadDomain() {
         when(cosProperties.getSecretId()).thenReturn("AKID_TEST");
         when(cosProperties.getSecretKey()).thenReturn("SECRET_TEST");
@@ -446,6 +473,25 @@ class CosServiceTest {
     }
 
     // ── storage init ───────────────────────────────────────
+
+    @Test
+    void initUserStorageShouldIncludeAnimationFolderWithoutDependingOnFolderCount() {
+        COSClient cosClient = mock(COSClient.class);
+        when(transferManager.getCOSClient()).thenReturn(cosClient);
+
+        cosService.initUserStorage("WFA3B1E7A2");
+
+        ArgumentCaptor<PutObjectRequest> captor = ArgumentCaptor.forClass(PutObjectRequest.class);
+        verify(cosClient, atLeastOnce()).putObject(captor.capture());
+        assertThat(captor.getAllValues())
+                .extracting(PutObjectRequest::getKey)
+                .contains("WFA3B1E7A2/work/animation/");
+        assertThat(captor.getAllValues()).allSatisfy(request -> {
+            assertThat(request.getMetadata().getContentLength()).isZero();
+            assertThat(request.getMetadata().getContentType())
+                    .isEqualTo("application/x-directory");
+        });
+    }
 
     @Test
     void initTeamStorageShouldCreateTeamFolders() {

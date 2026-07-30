@@ -31,6 +31,9 @@ public class WorkAuditTaskRepository {
     /** 主动查询次数递增 SQL */
     private static final String QUERY_COUNT_INCREMENT_SQL = "query_count = query_count + 1";
 
+    /** 审核尝试次数递增 SQL */
+    private static final String ATTEMPT_COUNT_INCREMENT_SQL = "attempt_count = attempt_count + 1";
+
     /** 乐观锁版本递增 SQL */
     private static final String VERSION_INCREMENT_SQL = "version = version + 1";
 
@@ -90,6 +93,111 @@ public class WorkAuditTaskRepository {
                         WorkAuditTaskStatusDict.RUNNING.getCode())
                 .lt(WorkAuditTaskEntity::getQueryCount, maxAttempts)
                 .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED));
+    }
+
+    /**
+     * 查询待执行或锁已过期的动图审核任务。
+     *
+     * @param limit 查询数量上限
+     * @param maxAttempts 最大尝试次数
+     * @param now 当前时间
+     * @return 可执行动图审核任务
+     */
+    public List<WorkAuditTaskEntity> findRunnableAnimationTasks(int limit, int maxAttempts, LocalDateTime now) {
+        return taskMapper.selectList(Wrappers.<WorkAuditTaskEntity>lambdaQuery()
+                .eq(WorkAuditTaskEntity::getMediaType, MediaTypeDict.ANIMATION.getCode())
+                .and(wrapper -> wrapper
+                        .eq(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.PENDING.getCode())
+                        .or(expired -> expired
+                                .eq(WorkAuditTaskEntity::getTaskStatus,
+                                        WorkAuditTaskStatusDict.SUBMITTING.getCode())
+                                .lt(WorkAuditTaskEntity::getLockedUntil, now)))
+                .lt(WorkAuditTaskEntity::getAttemptCount, maxAttempts)
+                .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED)
+                .orderByAsc(WorkAuditTaskEntity::getId)
+                // limit 已归一化为非负整数，拼接 LIMIT 子句不会引入 SQL 注入风险。
+                .last(LIMIT_SQL_PREFIX + normalizedLimit(limit)));
+    }
+
+    /**
+     * 查询达到尝试上限且租约已过期的动图任务，用于进程崩溃后的终态回收。
+     *
+     * @param limit 查询数量上限
+     * @param maxAttempts 最大尝试次数
+     * @param now 当前时间
+     * @return 待回收动图任务
+     */
+    public List<WorkAuditTaskEntity> findExhaustedExpiredAnimationTasks(
+            int limit, int maxAttempts, LocalDateTime now) {
+        return taskMapper.selectList(Wrappers.<WorkAuditTaskEntity>lambdaQuery()
+                .eq(WorkAuditTaskEntity::getMediaType, MediaTypeDict.ANIMATION.getCode())
+                .eq(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.SUBMITTING.getCode())
+                .lt(WorkAuditTaskEntity::getLockedUntil, now)
+                .ge(WorkAuditTaskEntity::getAttemptCount, maxAttempts)
+                .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED)
+                .orderByAsc(WorkAuditTaskEntity::getId)
+                .last(LIMIT_SQL_PREFIX + normalizedLimit(limit)));
+    }
+
+    /**
+     * 原子抢占动图审核任务并递增尝试次数。
+     *
+     * @param taskId 任务 ID
+     * @param lockOwner 锁持有者
+     * @param lockedUntil 锁过期时间
+     * @param maxAttempts 最大尝试次数
+     * @return 是否抢占成功
+     */
+    public boolean claimAnimationTask(Long taskId, String lockOwner,
+                                      LocalDateTime lockedUntil, int maxAttempts) {
+        LocalDateTime now = LocalDateTime.now();
+        int updated = taskMapper.update(null, Wrappers.<WorkAuditTaskEntity>lambdaUpdate()
+                .set(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.SUBMITTING.getCode())
+                .set(WorkAuditTaskEntity::getAuditResult, AuditResultDict.UNKNOWN.getCode())
+                .set(WorkAuditTaskEntity::getLockedBy, lockOwner)
+                .set(WorkAuditTaskEntity::getLockedUntil, lockedUntil)
+                .set(WorkAuditTaskEntity::getStartedAt, now)
+                .set(WorkAuditTaskEntity::getLastErrorMessage, null)
+                .set(WorkAuditTaskEntity::getUpdatedAt, now)
+                .setSql(ATTEMPT_COUNT_INCREMENT_SQL)
+                .setSql(VERSION_INCREMENT_SQL)
+                .eq(WorkAuditTaskEntity::getId, taskId)
+                .eq(WorkAuditTaskEntity::getMediaType, MediaTypeDict.ANIMATION.getCode())
+                .and(wrapper -> wrapper
+                        .eq(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.PENDING.getCode())
+                        .or(expired -> expired
+                                .eq(WorkAuditTaskEntity::getTaskStatus,
+                                        WorkAuditTaskStatusDict.SUBMITTING.getCode())
+                                .lt(WorkAuditTaskEntity::getLockedUntil, now)))
+                .lt(WorkAuditTaskEntity::getAttemptCount, maxAttempts)
+                .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED));
+        return updated == 1;
+    }
+
+    /**
+     * 抢占已达到尝试上限且租约过期的动图任务，以便安全写入失败终态。
+     *
+     * @param taskId 任务 ID
+     * @param lockOwner 新领取 token
+     * @param lockedUntil 新租约截止时间
+     * @param maxAttempts 最大尝试次数
+     * @return 是否抢占成功
+     */
+    public boolean claimExhaustedAnimationTask(
+            Long taskId, String lockOwner, LocalDateTime lockedUntil, int maxAttempts) {
+        LocalDateTime now = LocalDateTime.now();
+        int updated = taskMapper.update(null, Wrappers.<WorkAuditTaskEntity>lambdaUpdate()
+                .set(WorkAuditTaskEntity::getLockedBy, lockOwner)
+                .set(WorkAuditTaskEntity::getLockedUntil, lockedUntil)
+                .set(WorkAuditTaskEntity::getUpdatedAt, now)
+                .setSql(VERSION_INCREMENT_SQL)
+                .eq(WorkAuditTaskEntity::getId, taskId)
+                .eq(WorkAuditTaskEntity::getMediaType, MediaTypeDict.ANIMATION.getCode())
+                .eq(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.SUBMITTING.getCode())
+                .lt(WorkAuditTaskEntity::getLockedUntil, now)
+                .ge(WorkAuditTaskEntity::getAttemptCount, maxAttempts)
+                .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED));
+        return updated == 1;
     }
 
     /**
@@ -209,9 +317,48 @@ public class WorkAuditTaskRepository {
     }
 
     /**
+     * 使用本次领取 token 将动图任务写入成功终态，避免过期 worker 覆盖新领取者。
+     *
+     * @param taskId 任务 ID
+     * @param lockOwner 本次领取 token
+     * @param result 审核结果
+     * @param ciState 腾讯云状态
+     * @param ciResult 腾讯云结果码
+     * @param ciLabel 命中标签
+     * @param ciScore 命中分数
+     * @param responsePayload 响应摘要
+     * @return 是否更新成功
+     */
+    public boolean markAnimationSuccess(
+            Long taskId, String lockOwner, AuditResultDict result, String ciState, Integer ciResult,
+            String ciLabel, Integer ciScore, String responsePayload) {
+        LocalDateTime now = LocalDateTime.now();
+        int updated = taskMapper.update(null, Wrappers.<WorkAuditTaskEntity>lambdaUpdate()
+                .set(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.SUCCESS.getCode())
+                .set(WorkAuditTaskEntity::getAuditResult, result.getCode())
+                .set(WorkAuditTaskEntity::getCiState, ciState)
+                .set(WorkAuditTaskEntity::getCiResult, ciResult)
+                .set(WorkAuditTaskEntity::getCiLabel, ciLabel)
+                .set(WorkAuditTaskEntity::getCiScore, ciScore)
+                .set(WorkAuditTaskEntity::getResponsePayload, responsePayload)
+                .set(WorkAuditTaskEntity::getFinishedAt, now)
+                .set(WorkAuditTaskEntity::getLockedBy, null)
+                .set(WorkAuditTaskEntity::getLockedUntil, null)
+                .set(WorkAuditTaskEntity::getUpdatedAt, now)
+                .setSql(VERSION_INCREMENT_SQL)
+                .eq(WorkAuditTaskEntity::getId, taskId)
+                .eq(WorkAuditTaskEntity::getMediaType, MediaTypeDict.ANIMATION.getCode())
+                .eq(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.SUBMITTING.getCode())
+                .eq(WorkAuditTaskEntity::getLockedBy, lockOwner)
+                .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED));
+        return updated == 1;
+    }
+
+    /**
      * 记录查询失败并回到 RUNNING，等待下一轮查询。
      *
      * @param taskId 任务 ID
+     * @param lockOwner 本次领取 token
      * @param errorMessage 错误摘要
      * @param responsePayload 响应摘要
      * @return 是否更新成功
@@ -229,6 +376,92 @@ public class WorkAuditTaskRepository {
                 .setSql(VERSION_INCREMENT_SQL)
                 .eq(WorkAuditTaskEntity::getId, taskId)
                 .eq(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.QUERYING.getCode())
+                .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED));
+        return updated == 1;
+    }
+
+    /**
+     * 动图临时失败后回到待执行状态，并保留持久化抽样帧。
+     *
+     * @param taskId 任务 ID
+     * @param errorMessage 错误摘要
+     * @param responsePayload 响应摘要
+     * @return 是否更新成功
+     */
+    public boolean markAnimationRetryPending(
+            Long taskId, String lockOwner, String errorMessage, String responsePayload) {
+        LocalDateTime now = LocalDateTime.now();
+        int updated = taskMapper.update(null, Wrappers.<WorkAuditTaskEntity>lambdaUpdate()
+                .set(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.PENDING.getCode())
+                .set(WorkAuditTaskEntity::getAuditResult, AuditResultDict.UNKNOWN.getCode())
+                .set(WorkAuditTaskEntity::getLastErrorMessage, errorMessage)
+                .set(WorkAuditTaskEntity::getResponsePayload, responsePayload)
+                .set(WorkAuditTaskEntity::getLockedBy, null)
+                .set(WorkAuditTaskEntity::getLockedUntil, null)
+                .set(WorkAuditTaskEntity::getUpdatedAt, now)
+                .setSql(VERSION_INCREMENT_SQL)
+                .eq(WorkAuditTaskEntity::getId, taskId)
+                .eq(WorkAuditTaskEntity::getMediaType, MediaTypeDict.ANIMATION.getCode())
+                .eq(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.SUBMITTING.getCode())
+                .eq(WorkAuditTaskEntity::getLockedBy, lockOwner)
+                .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED));
+        return updated == 1;
+    }
+
+    /**
+     * 使用本次领取 token 将动图任务写入失败终态。
+     *
+     * @param taskId 任务 ID
+     * @param lockOwner 本次领取 token
+     * @param errorMessage 错误摘要
+     * @param responsePayload 响应摘要
+     * @return 是否更新成功
+     */
+    public boolean markAnimationFailed(
+            Long taskId, String lockOwner, String errorMessage, String responsePayload) {
+        LocalDateTime now = LocalDateTime.now();
+        int updated = taskMapper.update(null, Wrappers.<WorkAuditTaskEntity>lambdaUpdate()
+                .set(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.FAILED.getCode())
+                .set(WorkAuditTaskEntity::getAuditResult, AuditResultDict.UNKNOWN.getCode())
+                .set(WorkAuditTaskEntity::getLastErrorMessage, errorMessage)
+                .set(WorkAuditTaskEntity::getResponsePayload, responsePayload)
+                .set(WorkAuditTaskEntity::getFinishedAt, now)
+                .set(WorkAuditTaskEntity::getLockedBy, null)
+                .set(WorkAuditTaskEntity::getLockedUntil, null)
+                .set(WorkAuditTaskEntity::getUpdatedAt, now)
+                .setSql(VERSION_INCREMENT_SQL)
+                .eq(WorkAuditTaskEntity::getId, taskId)
+                .eq(WorkAuditTaskEntity::getMediaType, MediaTypeDict.ANIMATION.getCode())
+                .eq(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.SUBMITTING.getCode())
+                .eq(WorkAuditTaskEntity::getLockedBy, lockOwner)
+                .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED));
+        return updated == 1;
+    }
+
+    /**
+     * 同一事务中将刚恢复为待执行、但作品轮次已变化的动图任务终态化。
+     *
+     * @param taskId 任务 ID
+     * @param errorMessage 错误摘要
+     * @param responsePayload 响应摘要
+     * @return 是否更新成功
+     */
+    public boolean markPendingAnimationFailed(
+            Long taskId, String errorMessage, String responsePayload) {
+        LocalDateTime now = LocalDateTime.now();
+        int updated = taskMapper.update(null, Wrappers.<WorkAuditTaskEntity>lambdaUpdate()
+                .set(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.FAILED.getCode())
+                .set(WorkAuditTaskEntity::getAuditResult, AuditResultDict.UNKNOWN.getCode())
+                .set(WorkAuditTaskEntity::getLastErrorMessage, errorMessage)
+                .set(WorkAuditTaskEntity::getResponsePayload, responsePayload)
+                .set(WorkAuditTaskEntity::getFinishedAt, now)
+                .set(WorkAuditTaskEntity::getLockedBy, null)
+                .set(WorkAuditTaskEntity::getLockedUntil, null)
+                .set(WorkAuditTaskEntity::getUpdatedAt, now)
+                .setSql(VERSION_INCREMENT_SQL)
+                .eq(WorkAuditTaskEntity::getId, taskId)
+                .eq(WorkAuditTaskEntity::getMediaType, MediaTypeDict.ANIMATION.getCode())
+                .eq(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.PENDING.getCode())
                 .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED));
         return updated == 1;
     }
@@ -272,6 +505,21 @@ public class WorkAuditTaskRepository {
                 .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED)
                 .last(LIMIT_ONE_SQL));
         return task == null ? null : task.getQueryCount();
+    }
+
+    /**
+     * 查询审核任务当前尝试次数。
+     *
+     * @param taskId 任务 ID
+     * @return 当前尝试次数，任务不存在时返回 null
+     */
+    public Integer findAttemptCountById(Long taskId) {
+        WorkAuditTaskEntity task = taskMapper.selectOne(Wrappers.<WorkAuditTaskEntity>lambdaQuery()
+                .select(WorkAuditTaskEntity::getAttemptCount)
+                .eq(WorkAuditTaskEntity::getId, taskId)
+                .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED)
+                .last(LIMIT_ONE_SQL));
+        return task == null ? null : task.getAttemptCount();
     }
 
     /**

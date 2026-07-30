@@ -5,6 +5,7 @@ const {
   TAG_MAX_COUNT,
   TAG_MAX_LENGTH
 } = require('../../../utils/profile')
+const { selectableWorksFor } = require('./work-media')
 
 const TITLE_LIMIT = 30
 const DESCRIPTION_LIMIT = 1000
@@ -19,7 +20,8 @@ const MAX_AUDIT_REASON_COUNT = 20
 
 const MEDIA_TYPE_TEXT = {
   IMAGE: '图片',
-  VIDEO: '视频'
+  VIDEO: '视频',
+  ANIMATION: '动图'
 }
 
 const AUDIT_STATUS_TEXT = {
@@ -230,6 +232,8 @@ function normalizeWork(raw = {}) {
     fileSizeText: formatFileSize(raw.fileSize),
     durationMs: toNumber(raw.durationMs),
     durationText: mediaType === 'VIDEO' ? formatDuration(raw.durationMs) : '',
+    frameCount: Math.max(0, Math.floor(toNumber(raw.frameCount))),
+    coverFrameNumber: Math.max(0, Math.floor(toNumber(raw.coverFrameNumber))),
     width: toNumber(raw.width),
     height: toNumber(raw.height),
     aspectRatio,
@@ -262,14 +266,26 @@ function normalizeSummary(raw = {}) {
   const totalCount = toNumber(raw.totalCount)
   const imageCount = toNumber(raw.imageCount)
   const videoCount = toNumber(raw.videoCount)
+  const animationCount = toNumber(raw.animationCount)
   return {
     totalCount,
     imageCount,
     videoCount,
+    animationCount,
     totalText: `全部 ${totalCount}`,
     imageText: `图片 ${imageCount}`,
-    videoText: `视频 ${videoCount}`
+    videoText: `视频 ${videoCount}`,
+    animationText: `动图 ${animationCount}`
   }
+}
+
+function buildMediaFilters(summary = {}) {
+  return [
+    { mediaType: '', label: summary.totalText },
+    { mediaType: 'IMAGE', label: summary.imageText },
+    { mediaType: 'VIDEO', label: summary.videoText },
+    { mediaType: 'ANIMATION', label: summary.animationText }
+  ]
 }
 
 function isAllTag(tag = {}) {
@@ -304,6 +320,7 @@ function normalizeWorkList(raw = {}) {
     total: toNumber(raw.total),
     hasMore: Boolean(raw.hasMore),
     summary,
+    mediaFilters: buildMediaFilters(summary),
     tags,
     filterTags: buildFilterTags(summary, tags),
     works,
@@ -453,6 +470,12 @@ function buildWorkUpdatePayload(form = {}) {
     const frameTimeMs = Math.max(0, Math.round(toNumber(form.coverFrameTimeMs)))
     payload.coverFrameTimeMs = frameTimeMs
   }
+  const coverFrameNumber = Math.max(0, Math.round(toNumber(form.coverFrameNumber)))
+  const coverFrameIdempotencyKey = trimText(form.coverFrameIdempotencyKey)
+  if (coverFrameNumber > 0 && coverFrameIdempotencyKey) {
+    payload.coverFrameNumber = coverFrameNumber
+    payload.coverFrameIdempotencyKey = coverFrameIdempotencyKey
+  }
   if (Object.prototype.hasOwnProperty.call(form, 'coverTaskId')) {
     const coverTaskId = normalizeId(form.coverTaskId)
     if (coverTaskId) {
@@ -579,6 +602,7 @@ module.exports = {
   normalizeWorkDetail,
   normalizeWorkList,
   normalizeWorkTags,
+  selectableWorksFor,
   validateWorkTagForm,
   validateWorkForm
 }

@@ -232,6 +232,81 @@ class MineWorkControllerTest {
         assertThat(request.getTagIds()).containsExactly(2L, 3L);
     }
 
+    /**
+     * 历史小程序请求 JSON 不含动图字段时，既有上传与编辑结构仍可正常绑定。
+     */
+    @Test
+    void legacyWorkRequestsShouldRemainCompatibleWithoutAnimationFields() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        MineWorkUploadTicketRequest ticketRequest = objectMapper.readValue("""
+                {
+                  "batchId": "legacy-batch",
+                  "files": [{
+                    "clientId": "legacy-image",
+                    "mediaType": "IMAGE",
+                    "fileName": "photo.jpg",
+                    "mimeType": "image/jpeg",
+                    "fileSize": 1024,
+                    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "width": 1200,
+                    "height": 800,
+                    "idempotencyKey": "legacy-ticket"
+                  }]
+                }
+                """, MineWorkUploadTicketRequest.class);
+        MineWorkUploadCompleteRequest completeRequest = objectMapper.readValue("""
+                {
+                  "items": [{
+                    "taskId": 99,
+                    "title": "旧版图片",
+                    "description": "旧版确认请求",
+                    "aspectRatio": "3:2",
+                    "tagNames": ["婚礼"],
+                    "idempotencyKey": "legacy-confirm"
+                  }]
+                }
+                """, MineWorkUploadCompleteRequest.class);
+        MineWorkUpdateRequest updateRequest = objectMapper.readValue("""
+                {
+                  "title": "旧版标题",
+                  "description": "旧版编辑请求",
+                  "coverFrameTimeMs": 1200,
+                  "coverTaskId": 88,
+                  "tagIds": [2, 3],
+                  "width": 1920,
+                  "height": 1080
+                }
+                """, MineWorkUpdateRequest.class);
+
+        assertThat(ticketRequest.getFiles()).singleElement()
+                .satisfies(item -> {
+                    assertThat(item.getMediaType()).isEqualTo("IMAGE");
+                    assertThat(item.getDurationMs()).isNull();
+                });
+        assertThat(completeRequest.getItems()).singleElement()
+                .satisfies(item -> {
+                    assertThat(item.getTaskId()).isEqualTo(99L);
+                    assertThat(item.getCoverTaskId()).isNull();
+                });
+        assertThat(updateRequest.getCoverFrameTimeMs()).isEqualTo(1200L);
+        assertThat(updateRequest.getCoverFrameNumber()).isNull();
+        assertThat(updateRequest.getCoverFrameIdempotencyKey()).isNull();
+    }
+
+    /**
+     * 旧客户端可忽略确认响应新增的可选错误码，普通成功项保持空值。
+     */
+    @Test
+    void legacyUploadCompleteResponseFieldsShouldRemainUnchangedForSuccess() {
+        MineWorkUploadCompleteResponse.Item item =
+                MineWorkUploadCompleteResponse.Item.success(99L, null, "上传成功");
+
+        assertThat(item.getTaskId()).isEqualTo(99L);
+        assertThat(item.isSuccess()).isTrue();
+        assertThat(item.getErrorCode()).isNull();
+        assertThat(item.getMessage()).isEqualTo("上传成功");
+    }
+
     private void assertGetMapping(String methodName, Class<?>[] parameterTypes, String path)
             throws NoSuchMethodException {
         GetMapping mapping = MineWorkController.class.getMethod(methodName, parameterTypes)

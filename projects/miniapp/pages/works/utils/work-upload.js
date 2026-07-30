@@ -3,12 +3,15 @@ const {
   buildAspectRatio,
   normalizeDimension
 } = require('./media')
+const { calculateFileSha256 } = require('./sha256')
 
 const MAX_BATCH_COUNT = 9
 const IMAGE_MAX_BYTES = 10 * 1024 * 1024
+const ANIMATION_MAX_BYTES = 10 * 1024 * 1024
 const VIDEO_MAX_BYTES = 100 * 1024 * 1024
 const VIDEO_MAX_DURATION_SECONDS = 10 * 60
 const IMAGE_UPLOAD_CONCURRENCY = 2
+const ANIMATION_UPLOAD_CONCURRENCY = 2
 const VIDEO_UPLOAD_CONCURRENCY = 1
 const COS_UPLOAD_TIMEOUT = 10 * 60 * 1000
 const TITLE_MAX_LENGTH = 30
@@ -28,6 +31,14 @@ const THUMB_COMPRESS_ATTEMPTS = [
   { quality: 45, compressedSize: 240 }
 ]
 const THUMB_TOO_LARGE_MESSAGE = '缩略图或封面图不能超过 100KB'
+const STATIC_IMAGE_MAIN_COMPRESS_ATTEMPTS = [
+  { quality: 90, compressedSize: 2048 },
+  { quality: 82, compressedSize: 1600 },
+  { quality: 74, compressedSize: 1280 },
+  { quality: 66, compressedSize: 960 }
+]
+const IMAGE_TOO_LARGE_MESSAGE = '图片作品不能超过 10MB'
+const ANIMATION_TOO_LARGE_MESSAGE = '动图作品不能超过 10MB'
 
 function getRuntimeWx(wxApi) {
   if (wxApi) {
@@ -57,7 +68,8 @@ function createChooseMediaOptions(remainingCount = MAX_BATCH_COUNT) {
   return {
     count,
     mediaType: [CHOOSE_MEDIA_TYPE_MIX],
-    sourceType: [CHOOSE_SOURCE_TYPE_ALBUM]
+    sourceType: [CHOOSE_SOURCE_TYPE_ALBUM],
+    sizeType: ['original']
   }
 }
 
@@ -162,6 +174,9 @@ function buildMediaMetaText(mediaType, durationMs) {
     const durationText = formatDurationText(durationMs)
     return durationText ? `默认标题 · 视频 ${durationText}` : '默认标题 · 视频'
   }
+  if (mediaType === 'ANIMATION') {
+    return '默认标题 · 动图'
+  }
   return '默认标题 · 图片'
 }
 
@@ -190,6 +205,7 @@ function normalizeChosenMediaFile(raw = {}, index = 0) {
     description: '',
     tags: [],
     isVideo: mediaType === 'VIDEO',
+    isAnimation: mediaType === 'ANIMATION',
     metaText: buildMediaMetaText(mediaType, durationMs),
     mediaType,
     fileType: mediaType === 'VIDEO' ? 'video' : 'image',
@@ -206,12 +222,144 @@ function normalizeChosenMediaFile(raw = {}, index = 0) {
     uploadTicket: null,
     coverSha256: trimText(raw.coverSha256),
     customCoverSha256: trimText(raw.customCoverSha256),
+    animationFallbackAttempted: Boolean(raw.animationFallbackAttempted),
     confirmIdempotencyKey: raw.confirmIdempotencyKey || `confirm-${Date.now()}-${index}`
   }
 }
 
 function normalizeChosenMediaFiles(files = []) {
   return Array.isArray(files) ? files.map(normalizeChosenMediaFile) : []
+}
+
+function ascii(bytes, offset, length) {
+  if (!bytes || offset < 0 || length < 0 || offset + length > bytes.length) {
+    return ''
+  }
+  let value = ''
+  for (let index = offset; index < offset + length; index++) {
+    value += String.fromCharCode(bytes[index])
+  }
+  return value
+}
+
+function isGif(bytes) {
+  const header = ascii(bytes, 0, 6)
+  return header === 'GIF87a' || header === 'GIF89a'
+}
+
+function readUint32LittleEndian(bytes, offset) {
+  if (offset + 4 > bytes.length) {
+    return -1
+  }
+  return (
+    bytes[offset]
+    | (bytes[offset + 1] << 8)
+    | (bytes[offset + 2] << 16)
+    | (bytes[offset + 3] << 24)
+  ) >>> 0
+}
+
+function findRiffChunk(bytes, expectedType) {
+  let offset = 12
+  while (offset + 8 <= bytes.length) {
+    const chunkType = ascii(bytes, offset, 4)
+    const chunkSize = readUint32LittleEndian(bytes, offset + 4)
+    if (chunkType === expectedType) {
+      return true
+    }
+    if (chunkSize < 0) {
+      return false
+    }
+    offset += 8 + chunkSize + (chunkSize % 2)
+  }
+  return false
+}
+
+function isWebp(bytes) {
+  return ascii(bytes, 0, 4) === 'RIFF' && ascii(bytes, 8, 4) === 'WEBP'
+}
+
+function isAnimatedWebp(bytes) {
+  if (!isWebp(bytes)) {
+    return false
+  }
+  if (ascii(bytes, 12, 4) === 'VP8X' && bytes.length > 20 && (bytes[20] & 0x02) !== 0) {
+    return true
+  }
+  return findRiffChunk(bytes, 'ANIM') || findRiffChunk(bytes, 'ANMF')
+}
+
+function readLocalMediaBytes(filePath, wxApi) {
+  const runtimeWx = getRuntimeWx(wxApi)
+  return new Promise((resolve, reject) => {
+    runtimeWx.getFileSystemManager().readFile({
+      filePath,
+      success(response) {
+        resolve(new Uint8Array(response.data))
+      },
+      fail(error) {
+        reject(new Error(error && error.errMsg ? error.errMsg : '读取作品文件失败'))
+      }
+    })
+  })
+}
+
+function isGifOrWebpCandidate(file = {}) {
+  const fileName = trimText(file.fileName).toLowerCase()
+  const mimeType = trimText(file.mimeType).toLowerCase()
+  return fileName.endsWith('.gif')
+    || fileName.endsWith('.webp')
+    || mimeType === 'image/gif'
+    || mimeType === 'image/webp'
+}
+
+async function classifyChosenMediaFiles(files = [], options = {}) {
+  const classified = []
+  for (const file of Array.isArray(files) ? files : []) {
+    if (!file || file.mediaType !== 'IMAGE') {
+      classified.push(file)
+      continue
+    }
+    if (normalizeSize(file.size) > ANIMATION_MAX_BYTES && isGifOrWebpCandidate(file)) {
+      throw new Error(ANIMATION_TOO_LARGE_MESSAGE)
+    }
+    if (normalizeSize(file.size) > ANIMATION_MAX_BYTES) {
+      classified.push(file)
+      continue
+    }
+    let bytes
+    try {
+      bytes = await readLocalMediaBytes(file.tempFilePath, options.wxApi)
+    } catch (error) {
+      classified.push(file)
+      continue
+    }
+    if (isGif(bytes)) {
+      classified.push(Object.assign({}, file, {
+        mediaType: 'ANIMATION',
+        mimeType: 'image/gif',
+        fileType: 'image',
+        isVideo: false,
+        isAnimation: true,
+        metaText: buildMediaMetaText('ANIMATION')
+      }))
+      continue
+    }
+    if (isWebp(bytes)) {
+      const animated = isAnimatedWebp(bytes)
+      classified.push(Object.assign({}, file, {
+        mediaType: animated ? 'ANIMATION' : 'IMAGE',
+        mimeType: 'image/webp',
+        fileType: 'image',
+        isVideo: false,
+        isAnimation: animated,
+        metaText: buildMediaMetaText(animated ? 'ANIMATION' : 'IMAGE')
+      }))
+      continue
+    }
+    classified.push(file)
+  }
+  return classified
 }
 
 function getVideoInfo(filePath, wxApi) {
@@ -266,7 +414,7 @@ async function enrichVideoFileMetadata(files = [], options = {}) {
     }
     const currentWidth = normalizeDimension(file.width)
     const currentHeight = normalizeDimension(file.height)
-    if (file.mediaType === 'IMAGE') {
+    if (file.mediaType === 'IMAGE' || file.mediaType === 'ANIMATION') {
       if (currentWidth > 0 && currentHeight > 0) {
         return Object.assign({}, file, {
           aspectRatio: buildAspectRatio(currentWidth, currentHeight)
@@ -311,6 +459,42 @@ async function enrichVideoFileMetadata(files = [], options = {}) {
   }))
 }
 
+async function prepareStaticImageMainFile(file, options = {}) {
+  if (!file || file.mediaType !== 'IMAGE' || normalizeSize(file.size) <= IMAGE_MAX_BYTES) {
+    return file
+  }
+  for (const attempt of STATIC_IMAGE_MAIN_COMPRESS_ATTEMPTS) {
+    const tempFilePath = await compressImageFile(file.tempFilePath, attempt, options)
+    const fileSize = getLocalFileSize(tempFilePath, options.wxApi)
+    if (fileSize <= 0 || fileSize > IMAGE_MAX_BYTES) {
+      continue
+    }
+    const imageInfo = await getImageInfo(tempFilePath, options.wxApi)
+    const calculateSha256 = options.calculateSha256
+      || ((path) => calculateFileSha256(path, { wxApi: options.wxApi }))
+    const nextFile = Object.assign({}, file, {
+      tempFilePath,
+      size: fileSize,
+      sha256: await calculateSha256(tempFilePath)
+    })
+    if (imageInfo) {
+      nextFile.width = normalizeDimension(imageInfo.width)
+      nextFile.height = normalizeDimension(imageInfo.height)
+      nextFile.aspectRatio = buildAspectRatio(nextFile.width, nextFile.height)
+    }
+    return nextFile
+  }
+  throw new Error(IMAGE_TOO_LARGE_MESSAGE)
+}
+
+async function prepareStaticImageMainFiles(files = [], options = {}) {
+  const prepared = []
+  for (const file of Array.isArray(files) ? files : []) {
+    prepared.push(await prepareStaticImageMainFile(file, options))
+  }
+  return prepared
+}
+
 function isConfirmedFile(file = {}) {
   return file.status === 'CONFIRMED' || Boolean(file.confirmedWorkId)
 }
@@ -325,14 +509,17 @@ function shouldUploadMainFile(file = {}) {
 
 function validateChosenMediaFiles(files = []) {
   if (!Array.isArray(files) || files.length === 0) {
-    return { valid: false, message: '请选择图片或视频' }
+    return { valid: false, message: '请选择图片、视频或动图' }
   }
   if (files.length > MAX_BATCH_COUNT) {
     return { valid: false, message: '一次最多上传 9 个作品' }
   }
   for (const file of files) {
     if (file.mediaType === 'IMAGE' && normalizeSize(file.size) > IMAGE_MAX_BYTES) {
-      return { valid: false, message: '图片作品不能超过 10MB' }
+      return { valid: false, message: IMAGE_TOO_LARGE_MESSAGE }
+    }
+    if (file.mediaType === 'ANIMATION' && normalizeSize(file.size) > ANIMATION_MAX_BYTES) {
+      return { valid: false, message: ANIMATION_TOO_LARGE_MESSAGE }
     }
     if (file.mediaType === 'VIDEO' && normalizeSize(file.size) > VIDEO_MAX_BYTES) {
       return { valid: false, message: '视频作品不能超过 100MB' }
@@ -340,7 +527,7 @@ function validateChosenMediaFiles(files = []) {
     if (file.mediaType === 'VIDEO' && normalizeSize(file.durationMs) > VIDEO_MAX_DURATION_SECONDS * 1000) {
       return { valid: false, message: '视频作品不能超过 10 分钟' }
     }
-    if (file.mediaType !== 'IMAGE' && file.mediaType !== 'VIDEO') {
+    if (file.mediaType !== 'IMAGE' && file.mediaType !== 'VIDEO' && file.mediaType !== 'ANIMATION') {
       return { valid: false, message: '作品文件格式不支持' }
     }
   }
@@ -604,7 +791,41 @@ function applyUploadCompleteResults(files = [], items = []) {
       })
     }
     return Object.assign({}, file, {
-      errorMessage: trimText(item.message) || UPLOAD_COMPLETE_FAILURE_FALLBACK
+      errorMessage: trimText(item.message) || UPLOAD_COMPLETE_FAILURE_FALLBACK,
+      errorCode: trimText(item.errorCode)
+    })
+  })
+}
+
+function applyAnimationSingleFrameFallbacks(files = [], timestamp = Date.now()) {
+  return (Array.isArray(files) ? files : []).map((file, index) => {
+    if (!file
+      || file.mediaType !== 'ANIMATION'
+      || file.errorCode !== 'ANIMATION_SINGLE_FRAME'
+      || file.animationFallbackAttempted) {
+      return file
+    }
+    const nextClientId = `fallback-image-${timestamp}-${index}`
+    return Object.assign({}, file, {
+      clientId: nextClientId,
+      mediaType: 'IMAGE',
+      fileType: 'image',
+      isVideo: false,
+      isAnimation: false,
+      metaText: buildMediaMetaText('IMAGE'),
+      taskId: null,
+      uploadTicket: null,
+      status: 'READY',
+      progress: 0,
+      errorMessage: '',
+      errorCode: '',
+      confirmedWorkId: null,
+      customCoverTaskId: null,
+      customCoverUploadTicket: null,
+      customCoverStatus: '',
+      customCoverProgress: 0,
+      animationFallbackAttempted: true,
+      confirmIdempotencyKey: `confirm-${nextClientId}`
     })
   })
 }
@@ -666,18 +887,23 @@ async function runPool(items, concurrency, uploadFn) {
 
 async function runWorkUploadQueue(items = [], uploadFn, options = {}) {
   const imageConcurrency = options.imageConcurrency || IMAGE_UPLOAD_CONCURRENCY
+  const animationConcurrency = options.animationConcurrency || ANIMATION_UPLOAD_CONCURRENCY
   const videoConcurrency = options.videoConcurrency || VIDEO_UPLOAD_CONCURRENCY
   const pendingItems = items.filter(shouldUploadMainFile)
   const images = pendingItems.filter((item) => item.mediaType === 'IMAGE')
+  const animations = pendingItems.filter((item) => item.mediaType === 'ANIMATION')
   const videos = pendingItems.filter((item) => item.mediaType === 'VIDEO')
-  const [imageResults, videoResults] = await Promise.all([
+  const [imageResults, animationResults, videoResults] = await Promise.all([
     runPool(images, imageConcurrency, uploadFn),
+    runPool(animations, animationConcurrency, uploadFn),
     runPool(videos, videoConcurrency, uploadFn)
   ])
-  return imageResults.concat(videoResults)
+  return imageResults.concat(animationResults, videoResults)
 }
 
 module.exports = {
+  ANIMATION_MAX_BYTES,
+  ANIMATION_UPLOAD_CONCURRENCY,
   COS_UPLOAD_TIMEOUT,
   IMAGE_MAX_BYTES,
   IMAGE_UPLOAD_CONCURRENCY,
@@ -686,6 +912,7 @@ module.exports = {
   VIDEO_MAX_BYTES,
   VIDEO_MAX_DURATION_SECONDS,
   VIDEO_UPLOAD_CONCURRENCY,
+  applyAnimationSingleFrameFallbacks,
   applyUploadCompleteResults,
   buildAspectRatio,
   buildThumbFileName,
@@ -696,10 +923,13 @@ module.exports = {
   buildUploadTicketPayload,
   createChooseCoverImageOptions,
   createChooseMediaOptions,
+  classifyChosenMediaFiles,
   enrichVideoFileMetadata,
   normalizeChosenMediaFiles,
   prepareLocalCoverUploadFile,
   prepareCoverUploadFiles,
+  prepareStaticImageMainFiles,
+  readLocalMediaBytes,
   uploadToCos,
   runWorkUploadQueue,
   validateChosenMediaFiles

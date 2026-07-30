@@ -34,4 +34,16 @@ class PointSceneCodeDictTest {
                 .contains(PointSceneCodeDict.MONTHLY_WORK_STORAGE);
         assertThat(PointSceneCodeDict.MONTHLY_WORK_STORAGE.getDisplayName()).isEqualTo("作品存储月费");
     }
+
+    /**
+     * 动图上传应使用独立积分场景。
+     */
+    @Test
+    void animationUploadShouldExposeIndependentScene() {
+        assertThat(PointSceneCodeDict.UPLOAD_ANIMATION.getCode()).isEqualTo("UPLOAD_ANIMATION");
+        assertThat(PointSceneCodeDict.UPLOAD_ANIMATION.getDisplayName()).isEqualTo("上传动图作品");
+        assertThat(PointSceneCodeDict.fromCode("UPLOAD_ANIMATION"))
+                .contains(PointSceneCodeDict.UPLOAD_ANIMATION);
+        assertThat(PointSceneCodeDict.fromCode("UNKNOWN")).isEmpty();
+    }
 }

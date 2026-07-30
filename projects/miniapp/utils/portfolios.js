@@ -584,6 +584,9 @@ function validateWorkGridComponent(component = {}, works = []) {
   if (selected.length !== ids.length) {
     return { valid: false, message: '请选择有效作品' }
   }
+  if (selected.some((work) => !['IMAGE', 'VIDEO'].includes(trimText(work.mediaType)))) {
+    return { valid: false, message: '该组件只能选择图片或视频作品' }
+  }
   return { valid: true, message: '' }
 }
 
@@ -593,7 +596,7 @@ function validateSingleWorkComponent(component = {}, works = []) {
     return { valid: false, message: '请选择一个作品' }
   }
   const selected = works.find((work) => toNumber(work && work.id) === workId)
-  if (!selected || !['IMAGE', 'VIDEO'].includes(trimText(selected.mediaType))) {
+  if (!selected || !['IMAGE', 'VIDEO', 'ANIMATION'].includes(trimText(selected.mediaType))) {
     return { valid: false, message: '请选择有效作品' }
   }
   return { valid: true, message: '' }

@@ -14,6 +14,10 @@ public class PointSceneCodeDict {
     /** 上传视频作品 */
     public static final DictValue UPLOAD_VIDEO = new DictValue("UPLOAD_VIDEO", "上传视频作品");
 
+    /** 上传动图作品 */
+    public static final DictValue UPLOAD_ANIMATION =
+            new DictValue("UPLOAD_ANIMATION", "上传动图作品");
+
     /** 新建团队 */
     public static final DictValue CREATE_TEAM = new DictValue("CREATE_TEAM", "新建团队");
 
@@ -65,6 +69,7 @@ public class PointSceneCodeDict {
     private static final Map<String, DictValue> CODE_MAP = Map.ofEntries(
             Map.entry(UPLOAD_IMAGE.getCode(), UPLOAD_IMAGE),
             Map.entry(UPLOAD_VIDEO.getCode(), UPLOAD_VIDEO),
+            Map.entry(UPLOAD_ANIMATION.getCode(), UPLOAD_ANIMATION),
             Map.entry(CREATE_TEAM.getCode(), CREATE_TEAM),
             Map.entry(MAINTAIN_STANDARD_PORTFOLIO.getCode(), MAINTAIN_STANDARD_PORTFOLIO),
             Map.entry(MAINTAIN_ADVANCED_PORTFOLIO.getCode(), MAINTAIN_ADVANCED_PORTFOLIO),

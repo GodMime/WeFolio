@@ -116,6 +116,109 @@ class WorkAuditTaskRepositoryTest {
                 .contains(101L, WorkAuditTaskStatusDict.SUBMITTING.getCode(), 0L);
     }
 
+    @Test
+    void findRunnableAnimationTasksShouldIncludePendingAndExpiredSubmittingTasks() {
+        WorkAuditTaskMapper taskMapper = mock(WorkAuditTaskMapper.class);
+        WorkAuditTaskRepository repository = new WorkAuditTaskRepository(taskMapper);
+        LocalDateTime now = LocalDateTime.of(2026, 7, 30, 18, 0);
+
+        repository.findRunnableAnimationTasks(30, 3, now);
+
+        LambdaQueryWrapper<WorkAuditTaskEntity> wrapper = captureSelectListWrapper(taskMapper);
+        assertThat(wrapper.getSqlSegment())
+                .contains("media_type", "task_status", "locked_until", "attempt_count", "deleted", "LIMIT 30");
+        assertThat(wrapper.getParamNameValuePairs().values())
+                .contains(MediaTypeDict.ANIMATION.getCode(),
+                        WorkAuditTaskStatusDict.PENDING.getCode(),
+                        WorkAuditTaskStatusDict.SUBMITTING.getCode(),
+                        now,
+                        3,
+                        0L);
+    }
+
+    @Test
+    void claimAnimationTaskShouldIncrementAttemptAndUseExpiredLockGuard() {
+        WorkAuditTaskMapper taskMapper = mock(WorkAuditTaskMapper.class);
+        WorkAuditTaskRepository repository = new WorkAuditTaskRepository(taskMapper);
+        LocalDateTime lockedUntil = LocalDateTime.of(2026, 7, 30, 18, 5);
+
+        repository.claimAnimationTask(101L, "job-1", lockedUntil, 3);
+
+        LambdaUpdateWrapper<WorkAuditTaskEntity> wrapper = captureUpdateWrapper(taskMapper);
+        assertThat(wrapper.getSqlSet())
+                .contains("task_status", "attempt_count = attempt_count + 1", "locked_by", "locked_until",
+                        "started_at", "updated_at", "version = version + 1");
+        assertThat(wrapper.getSqlSegment())
+                .contains("media_type", "task_status", "locked_until", "attempt_count", "deleted");
+        assertThat(wrapper.getParamNameValuePairs().values())
+                .contains(101L, MediaTypeDict.ANIMATION.getCode(), WorkAuditTaskStatusDict.PENDING.getCode(),
+                        WorkAuditTaskStatusDict.SUBMITTING.getCode(), 3, 0L);
+    }
+
+    @Test
+    void markAnimationRetryPendingShouldPreservePersistedSamples() {
+        WorkAuditTaskMapper taskMapper = mock(WorkAuditTaskMapper.class);
+        WorkAuditTaskRepository repository = new WorkAuditTaskRepository(taskMapper);
+
+        repository.markAnimationRetryPending(101L, "claim-token", "远端调用失败", "{}");
+
+        LambdaUpdateWrapper<WorkAuditTaskEntity> wrapper = captureUpdateWrapper(taskMapper);
+        assertThat(wrapper.getSqlSet())
+                .contains("task_status", "last_error_message", "response_payload", "locked_by", "locked_until")
+                .doesNotContain("sampled_frame_numbers");
+        assertThat(wrapper.getSqlSegment()).contains("id", "media_type", "task_status", "locked_by", "deleted");
+        assertThat(wrapper.getParamNameValuePairs().values())
+                .contains(101L, WorkAuditTaskStatusDict.PENDING.getCode(),
+                        WorkAuditTaskStatusDict.SUBMITTING.getCode(), "claim-token", 0L);
+    }
+
+    @Test
+    void markPendingAnimationFailedShouldOnlyMatchPendingAnimationTask() {
+        WorkAuditTaskMapper taskMapper = mock(WorkAuditTaskMapper.class);
+        WorkAuditTaskRepository repository = new WorkAuditTaskRepository(taskMapper);
+
+        repository.markPendingAnimationFailed(101L, "作品审核轮次已变化", "{}");
+
+        LambdaUpdateWrapper<WorkAuditTaskEntity> wrapper = captureUpdateWrapper(taskMapper);
+        assertThat(wrapper.getSqlSegment())
+                .contains("id", "media_type", "task_status", "deleted");
+        assertThat(wrapper.getParamNameValuePairs().values())
+                .contains(101L, MediaTypeDict.ANIMATION.getCode(),
+                        WorkAuditTaskStatusDict.PENDING.getCode(), 0L);
+    }
+
+    @Test
+    void animationTerminalUpdatesShouldRequireCurrentClaimToken() {
+        WorkAuditTaskMapper taskMapper = mock(WorkAuditTaskMapper.class);
+        WorkAuditTaskRepository repository = new WorkAuditTaskRepository(taskMapper);
+
+        repository.markAnimationSuccess(
+                101L, "claim-token", AuditResultDict.PASS, "Success", 0, "Normal", 0, "{}");
+
+        LambdaUpdateWrapper<WorkAuditTaskEntity> wrapper = captureUpdateWrapper(taskMapper);
+        assertThat(wrapper.getSqlSegment())
+                .contains("id", "media_type", "task_status", "locked_by", "deleted");
+        assertThat(wrapper.getParamNameValuePairs().values())
+                .contains(101L, MediaTypeDict.ANIMATION.getCode(),
+                        WorkAuditTaskStatusDict.SUBMITTING.getCode(), "claim-token", 0L);
+    }
+
+    @Test
+    void findExhaustedExpiredAnimationTasksShouldRecoverCrashAtAttemptLimit() {
+        WorkAuditTaskMapper taskMapper = mock(WorkAuditTaskMapper.class);
+        WorkAuditTaskRepository repository = new WorkAuditTaskRepository(taskMapper);
+        LocalDateTime now = LocalDateTime.of(2026, 7, 30, 18, 0);
+
+        repository.findExhaustedExpiredAnimationTasks(20, 3, now);
+
+        LambdaQueryWrapper<WorkAuditTaskEntity> wrapper = captureSelectListWrapper(taskMapper);
+        assertThat(wrapper.getSqlSegment())
+                .contains("media_type", "task_status", "locked_until", "attempt_count", "deleted", "LIMIT 20");
+        assertThat(wrapper.getParamNameValuePairs().values())
+                .contains(MediaTypeDict.ANIMATION.getCode(), WorkAuditTaskStatusDict.SUBMITTING.getCode(),
+                        now, 3, 0L);
+    }
+
     private void assertUpdateRefreshesAuditColumns(Consumer<WorkAuditTaskRepository> repositoryCall) {
         WorkAuditTaskMapper taskMapper = mock(WorkAuditTaskMapper.class);
         WorkAuditTaskRepository repository = new WorkAuditTaskRepository(taskMapper);
@@ -137,6 +240,13 @@ class WorkAuditTaskRepositoryTest {
     private LambdaQueryWrapper<WorkAuditTaskEntity> captureSelectCountWrapper(WorkAuditTaskMapper taskMapper) {
         ArgumentCaptor<Wrapper<WorkAuditTaskEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
         verify(taskMapper).selectCount(captor.capture());
+        return (LambdaQueryWrapper<WorkAuditTaskEntity>) captor.getValue();
+    }
+
+    @SuppressWarnings("unchecked")
+    private LambdaQueryWrapper<WorkAuditTaskEntity> captureSelectListWrapper(WorkAuditTaskMapper taskMapper) {
+        ArgumentCaptor<Wrapper<WorkAuditTaskEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
+        verify(taskMapper).selectList(captor.capture());
         return (LambdaQueryWrapper<WorkAuditTaskEntity>) captor.getValue();
     }
 }

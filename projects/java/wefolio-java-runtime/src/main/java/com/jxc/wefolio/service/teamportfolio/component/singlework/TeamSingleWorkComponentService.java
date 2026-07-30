@@ -110,7 +110,7 @@ public class TeamSingleWorkComponentService {
     }
 
     /**
-     * 查询指定成员可展示的图片和视频作品。
+     * 查询指定成员可展示的图片、视频和动图作品。
      */
     public List<WorkOption> listWorks(long portfolioId, long memberUserId, long userId) {
         TeamEntity team = teamPortfolioAccessService.requireMaintainablePortfolio(portfolioId, userId).team();
@@ -118,7 +118,7 @@ public class TeamSingleWorkComponentService {
     }
 
     /**
-     * 按团队查询指定成员可展示的图片和视频作品。
+     * 按团队查询指定成员可展示的图片、视频和动图作品。
      *
      * @param teamId 团队 ID
      * @param memberUserId 成员用户 ID
@@ -157,7 +157,8 @@ public class TeamSingleWorkComponentService {
                         .eq(WorkEntity::getAuditStatus, WorkAuditStatusDict.PASSED.getCode())
                         .in(WorkEntity::getMediaType, List.of(
                                 MediaTypeDict.IMAGE.getCode(),
-                                MediaTypeDict.VIDEO.getCode()))
+                                MediaTypeDict.VIDEO.getCode(),
+                                MediaTypeDict.ANIMATION.getCode()))
                         .orderByAsc(WorkEntity::getSortOrder)
                         .orderByAsc(WorkEntity::getId)
         );

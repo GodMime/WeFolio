@@ -14,6 +14,7 @@ import java.lang.reflect.Method;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -34,6 +35,12 @@ class WorkAuditClaimTransactionServiceTest {
 
         assertThat(transactional).isNotNull();
         assertThat(transactional.rollbackFor()).contains(Exception.class);
+    }
+
+    @Test
+    void claimAndCreatePendingAnimationTaskShouldUseSpringTransaction() throws NoSuchMethodException {
+        assertTransactional("claimAndCreatePendingAnimationTask",
+                Long.class, WorkAuditTaskEntity.class, List.class);
     }
 
     @Test
@@ -83,6 +90,156 @@ class WorkAuditClaimTransactionServiceTest {
         assertThat(result).isNull();
         verify(workRepository).claimPendingWork(11L);
         verify(taskRepository, never()).insertTask(task);
+    }
+
+    @Test
+    void claimAndCreatePendingAnimationTaskShouldPersistStableIntegerArray() {
+        WorkAuditWorkRepository workRepository = mock(WorkAuditWorkRepository.class);
+        WorkAuditTaskRepository taskRepository = mock(WorkAuditTaskRepository.class);
+        WorkAuditClaimTransactionService service = service(workRepository, taskRepository);
+        WorkAuditTaskEntity task = new WorkAuditTaskEntity();
+        when(workRepository.claimPendingWork(11L)).thenReturn(true);
+        when(taskRepository.insertTask(task)).thenReturn(task);
+
+        WorkAuditTaskEntity result = service.claimAndCreatePendingAnimationTask(
+                11L, task, List.of(5, 23));
+
+        assertThat(result).isSameAs(task);
+        assertThat(task.getSampledFrameNumbers()).isEqualTo("[5,23]");
+        assertThat(task.getTaskStatus()).isEqualTo("PENDING");
+        assertThat(task.getAttemptCount()).isZero();
+        InOrder inOrder = inOrder(workRepository, taskRepository);
+        inOrder.verify(workRepository).claimPendingWork(11L);
+        inOrder.verify(taskRepository).insertTask(task);
+    }
+
+    @Test
+    void retryOrFailAnimationTaskShouldReturnPendingBeforeAttemptLimit() {
+        WorkAuditWorkRepository workRepository = mock(WorkAuditWorkRepository.class);
+        WorkAuditTaskRepository taskRepository = mock(WorkAuditTaskRepository.class);
+        WorkAuditClaimTransactionService service = service(workRepository, taskRepository);
+        when(taskRepository.findAttemptCountById(101L)).thenReturn(2);
+        when(taskRepository.markAnimationRetryPending(101L, "claim-token", "失败", "{}")).thenReturn(true);
+        when(workRepository.updateAuditStatusAndReasonsForRound(
+                11L, 2, WorkAuditStatusDict.AUDITING, null, null, null)).thenReturn(true);
+
+        boolean updated = service.retryOrFailAnimationTask(
+                101L, 11L, 2, "claim-token", "失败", "{}", 3);
+
+        assertThat(updated).isTrue();
+        verify(taskRepository).markAnimationRetryPending(101L, "claim-token", "失败", "{}");
+        verify(workRepository).updateAuditStatusAndReasonsForRound(
+                11L, 2, WorkAuditStatusDict.AUDITING, null, null, null);
+        verify(taskRepository, never()).markAnimationFailed(101L, "claim-token", "失败", "{}");
+    }
+
+    @Test
+    void retryOrFailAnimationTaskShouldFailAtAttemptLimit() {
+        WorkAuditWorkRepository workRepository = mock(WorkAuditWorkRepository.class);
+        WorkAuditTaskRepository taskRepository = mock(WorkAuditTaskRepository.class);
+        WorkAuditClaimTransactionService service = service(workRepository, taskRepository);
+        when(taskRepository.findAttemptCountById(101L)).thenReturn(3);
+        when(taskRepository.markAnimationFailed(101L, "claim-token", "失败", "{}")).thenReturn(true);
+        when(workRepository.updateAuditStatusAndReasonsForRound(
+                11L,
+                2,
+                WorkAuditStatusDict.FAILED,
+                WorkAuditReasonCodeDict.AUDIT_SERVICE_ERROR.getCode(),
+                "[\"AUDIT_SERVICE_ERROR\"]",
+                "动图审核失败且已达到最大重试次数")).thenReturn(true);
+
+        boolean updated = service.retryOrFailAnimationTask(
+                101L, 11L, 2, "claim-token", "失败", "{}", 3);
+
+        assertThat(updated).isTrue();
+        verify(taskRepository).markAnimationFailed(101L, "claim-token", "失败", "{}");
+        verify(workRepository).updateAuditStatusAndReasonsForRound(
+                11L,
+                2,
+                WorkAuditStatusDict.FAILED,
+                WorkAuditReasonCodeDict.AUDIT_SERVICE_ERROR.getCode(),
+                "[\"AUDIT_SERVICE_ERROR\"]",
+                "动图审核失败且已达到最大重试次数");
+        verify(taskRepository, never()).markAnimationRetryPending(101L, "claim-token", "失败", "{}");
+    }
+
+    @Test
+    void staleAnimationWorkerShouldNotUpdateWorkAfterClaimTokenWasLost() {
+        WorkAuditWorkRepository workRepository = mock(WorkAuditWorkRepository.class);
+        WorkAuditTaskRepository taskRepository = mock(WorkAuditTaskRepository.class);
+        WorkAuditClaimTransactionService service = service(workRepository, taskRepository);
+        when(taskRepository.findAttemptCountById(101L)).thenReturn(2);
+        when(taskRepository.markAnimationRetryPending(
+                101L, "stale-token", "失败", "{}")).thenReturn(false);
+
+        boolean updated = service.retryOrFailAnimationTask(
+                101L, 11L, 2, "stale-token", "失败", "{}", 3);
+
+        assertThat(updated).isFalse();
+        verify(workRepository, never()).updateAuditStatusAndReasonsForRound(
+                any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void staleAnimationSuccessShouldNotUpdateWorkAfterClaimTokenWasLost() {
+        WorkAuditWorkRepository workRepository = mock(WorkAuditWorkRepository.class);
+        WorkAuditTaskRepository taskRepository = mock(WorkAuditTaskRepository.class);
+        WorkAuditClaimTransactionService service = service(workRepository, taskRepository);
+        when(taskRepository.markAnimationSuccess(
+                101L, "stale-token", AuditResultDict.PASS,
+                "Success", 0, "Normal", 0, "{}")).thenReturn(false);
+
+        boolean updated = service.markAnimationTaskSuccessAndUpdateWork(
+                101L, 11L, 2, "stale-token",
+                AuditResultDict.PASS, "Success", 0, "Normal", 0,
+                List.of(), "{}", WorkAuditStatusDict.PASSED, null);
+
+        assertThat(updated).isFalse();
+        verify(workRepository, never()).updateAuditStatusAndReasonsForRound(
+                any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void animationTaskShouldCommitTerminalStateWhenWorkAuditRoundChanged() {
+        WorkAuditWorkRepository workRepository = mock(WorkAuditWorkRepository.class);
+        WorkAuditTaskRepository taskRepository = mock(WorkAuditTaskRepository.class);
+        WorkAuditClaimTransactionService service = service(workRepository, taskRepository);
+        when(taskRepository.markAnimationSuccess(
+                101L, "claim-token", AuditResultDict.PASS,
+                "Success", 0, "Normal", 0, "{}")).thenReturn(true);
+        when(workRepository.updateAuditStatusAndReasonsForRound(
+                11L, 2, WorkAuditStatusDict.PASSED, null, null, null)).thenReturn(false);
+
+        boolean updated = service.markAnimationTaskSuccessAndUpdateWork(
+                101L, 11L, 2, "claim-token",
+                AuditResultDict.PASS, "Success", 0, "Normal", 0,
+                List.of(), "{}", WorkAuditStatusDict.PASSED, null);
+
+        assertThat(updated).isFalse();
+        verify(taskRepository).markAnimationSuccess(
+                101L, "claim-token", AuditResultDict.PASS,
+                "Success", 0, "Normal", 0, "{}");
+        verify(workRepository).updateAuditStatusAndReasonsForRound(
+                11L, 2, WorkAuditStatusDict.PASSED, null, null, null);
+    }
+
+    @Test
+    void animationRetryShouldBecomeFailedWhenWorkAuditRoundChanged() {
+        WorkAuditWorkRepository workRepository = mock(WorkAuditWorkRepository.class);
+        WorkAuditTaskRepository taskRepository = mock(WorkAuditTaskRepository.class);
+        WorkAuditClaimTransactionService service = service(workRepository, taskRepository);
+        when(taskRepository.findAttemptCountById(101L)).thenReturn(2);
+        when(taskRepository.markAnimationRetryPending(
+                101L, "claim-token", "失败", "{}")).thenReturn(true);
+        when(workRepository.updateAuditStatusAndReasonsForRound(
+                11L, 2, WorkAuditStatusDict.AUDITING, null, null, null)).thenReturn(false);
+
+        boolean updated = service.retryOrFailAnimationTask(
+                101L, 11L, 2, "claim-token", "失败", "{}", 3);
+
+        assertThat(updated).isFalse();
+        verify(taskRepository).markPendingAnimationFailed(
+                101L, "作品审核轮次已变化", "{}");
     }
 
     @Test

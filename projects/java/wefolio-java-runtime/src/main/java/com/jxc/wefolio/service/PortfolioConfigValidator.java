@@ -3,6 +3,7 @@ package com.jxc.wefolio.service;
 import com.jxc.wefolio.dict.MediaTypeDict;
 import com.jxc.wefolio.dict.PortfolioComponentTypeDict;
 import com.jxc.wefolio.dict.ReferenceTypeDict;
+import com.jxc.wefolio.dict.WorkAuditStatusDict;
 import com.jxc.wefolio.dict.WorkStatusDict;
 import com.jxc.wefolio.dto.PortfolioConfigDto;
 import com.jxc.wefolio.entity.PortfolioReferenceEntity;
@@ -35,6 +36,17 @@ import java.util.regex.Pattern;
 @Service
 @RequiredArgsConstructor
 public class PortfolioConfigValidator {
+
+    /** 单作品组件允许的媒体类型 */
+    private static final Set<String> SINGLE_WORK_MEDIA_TYPES = Set.of(
+            MediaTypeDict.IMAGE.getCode(),
+            MediaTypeDict.VIDEO.getCode(),
+            MediaTypeDict.ANIMATION.getCode());
+
+    /** 批量作品组件允许的媒体类型 */
+    private static final Set<String> BULK_WORK_MEDIA_TYPES = Set.of(
+            MediaTypeDict.IMAGE.getCode(),
+            MediaTypeDict.VIDEO.getCode());
 
     /** 轮播图最大作品数量 */
     private static final int CAROUSEL_WORK_MAX_COUNT = 9;
@@ -751,6 +763,11 @@ public class PortfolioConfigValidator {
         if (workMap.size() != workIds.size()) {
             throw new BusinessException(PortfolioMessage.WORK_REFERENCE_INVALID_MESSAGE);
         }
+        boolean hasUnsupportedMedia = workMap.values().stream()
+                .anyMatch(work -> !BULK_WORK_MEDIA_TYPES.contains(work.getMediaType()));
+        if (hasUnsupportedMedia) {
+            throw new BusinessException(PortfolioMessage.WORK_REFERENCE_INVALID_MESSAGE);
+        }
         component.getConfig().put(CONFIG_KEY_GROUPS, groups);
         component.getConfig().put(CONFIG_KEY_COLUMNS, columns);
         normalizeWorkDisplayOptions(component.getConfig());
@@ -769,7 +786,7 @@ public class PortfolioConfigValidator {
         }
         Map<Long, WorkEntity> workMap = loadUsableWorks(userId, List.of(workId));
         WorkEntity work = workMap.get(workId);
-        if (work == null || MediaTypeDict.fromCode(work.getMediaType()) == null) {
+        if (work == null || !SINGLE_WORK_MEDIA_TYPES.contains(work.getMediaType())) {
             throw new BusinessException(PortfolioMessage.WORK_REFERENCE_INVALID_MESSAGE);
         }
         Map<String, Object> normalizedConfig = new LinkedHashMap<>();
@@ -978,6 +995,10 @@ public class PortfolioConfigValidator {
                 continue;
             }
             if (!WorkStatusDict.ACTIVE.getCode().equals(work.getStatus())) {
+                continue;
+            }
+            if (MediaTypeDict.ANIMATION.getCode().equals(work.getMediaType())
+                    && !WorkAuditStatusDict.PASSED.getCode().equals(work.getAuditStatus())) {
                 continue;
             }
             result.put(work.getId(), work);

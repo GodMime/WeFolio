@@ -139,6 +139,7 @@ test('works pages expose expected upload and edit structure', () => {
   assert.match(worksWxml, /<view class="works-scroll">[\s\S]*class="works-content" bindtap="handleCloseTagManageMode"/)
   assert.doesNotMatch(worksWxml, /<scroll-view class="works-scroll"[\s\S]*bindscrolltolower="handleScrollToLower"/)
   assert.match(worksWxml, /class="filter-panel"/)
+  assert.match(worksWxml, /wx:for="\{\{list\.mediaFilters\}\}"[\s\S]*bindtap="handleMediaTypeTap"/)
   assert.match(worksWxml, /class="filter-shell" catchtap="handleFilterShellTap"/)
   assert.match(worksWxml, /<view[\s\S]*wx:for="\{\{list\.filterTags\}\}"[\s\S]*class="tag-pill/)
   assert.match(tagFilterTemplate, /style="\{\{tagManageMode && item\.id \? '' : \(\(\(!selectedTagId && !item\.id\) \|\| selectedTagId === item\.id\) \? item\.activeStyle : item\.filterStyle\)\}\}"/)
@@ -181,6 +182,11 @@ test('works pages expose expected upload and edit structure', () => {
   assert.match(worksWxml, /wx:if="\{\{videoEditForm\.coverEditMode === 'local'\}\}"[\s\S]*class="local-cover-preview"[\s\S]*src="\{\{videoEditForm\.localCoverPath\}\}"[\s\S]*bindtap="handleChooseVideoCoverUpload"[\s\S]*重新选择/)
   assert.match(worksWxml, /class="cover-edit-toolbar"[\s\S]*\{\{videoFrameTimeText\}\} \/ \{\{videoEditForm\.durationText\}\}/)
   assert.match(worksWxml, /class="work-edit-confirm"[\s\S]*catchtap="handleConfirmVideoEdit"[\s\S]*完成/)
+  assert.match(worksWxml, /class="work-edit-mask animation-edit-mask \{\{animationEditSheetVisible \? 'visible' : ''\}\}"[\s\S]*class="work-edit-panel animation-edit-panel"/)
+  assert.match(worksWxml, /class="work-edit-scroll animation-edit-scroll"[\s\S]*animationEditForm\.coverEdit\.previewUrl/)
+  assert.match(worksWxml, /min="1"[\s\S]*max="\{\{animationEditForm\.coverEdit\.frameCount\}\}"[\s\S]*step="1"/)
+  assert.match(worksWxml, /bindtap="handleUseAnimationCoverFrame"[\s\S]*使用当前帧/)
+  assert.match(worksWxml, /catchtap="handleConfirmAnimationEdit"[\s\S]*完成/)
   assert.doesNotMatch(worksWxml, /editSheetVisible/)
   assert.doesNotMatch(worksWxml, /editForm\./)
   assert.doesNotMatch(worksWxml, /id="workCoverCanvas"/)
@@ -223,7 +229,7 @@ test('works pages expose expected upload and edit structure', () => {
   assert.match(worksWxml, /wx:if="\{\{item\.mediaType === 'VIDEO'\}\}"[\s\S]*class="play-badge"[\s\S]*catchtap="handlePlayVideoTap"[\s\S]*aria-label="播放视频"/)
   assert.doesNotMatch(worksWxml, /class="thumb-order"/)
   assert.doesNotMatch(worksWxss, /\.thumb-order/)
-  assert.match(worksWxml, /class="image-preview-mask \{\{imagePreviewVisible \? 'visible' : ''\}\}"[\s\S]*class="image-preview-title"[\s\S]*\{\{imagePreview\.title\}\}[\s\S]*class="image-preview-close"[\s\S]*catchtap="handleCloseImagePreview"[\s\S]*aria-label="关闭图片"[\s\S]*<image[\s\S]*wx:if="\{\{imagePreviewVisible && imagePreview\.src\}\}"[\s\S]*class="image-preview-media"[\s\S]*src="\{\{imagePreview\.src\}\}"[\s\S]*mode="aspectFit"/)
+  assert.match(worksWxml, /class="image-preview-mask \{\{imagePreviewVisible \? 'visible' : ''\}\}"[\s\S]*class="image-preview-title"[\s\S]*\{\{imagePreview\.title\}\}[\s\S]*class="image-preview-close"[\s\S]*catchtap="handleCloseImagePreview"[\s\S]*aria-label="关闭图片"[\s\S]*<image[\s\S]*wx:if="\{\{imagePreviewVisible && imagePreview\.src\}\}"[\s\S]*class="image-preview-media"[\s\S]*src="\{\{imagePreview\.src\}\}"[\s\S]*webp="\{\{true\}\}"[\s\S]*mode="aspectFit"/)
   assert.match(worksWxml, /class="video-preview-mask \{\{videoPreviewVisible \? 'visible' : ''\}\}"[\s\S]*id="workPreviewVideo"[\s\S]*src="\{\{videoPreview\.src\}\}"[\s\S]*poster="\{\{videoPreview\.poster\}\}"[\s\S]*autoplay="\{\{true\}\}"/)
   assert.match(worksWxml, /bindtouchstart="handleWorkTouchStart"[\s\S]*bindtouchmove="handleWorkTouchMove"[\s\S]*bindtouchend="handleWorkTouchEnd"[\s\S]*bindtouchcancel="handleWorkTouchCancel"/)
   assert.match(worksWxml, /class="work-delete-pane"[\s\S]*class="work-delete-button"[\s\S]*catchtap="handleDeleteWorkTap"[\s\S]*删除/)
@@ -380,7 +386,7 @@ test('works pages expose expected upload and edit structure', () => {
   assert.match(addWxml, /class="selected-work-row"[\s\S]*bindtap="handleOpenFileEditor"[\s\S]*\{\{item\.title \|\| item\.fileName\}\}/)
   assert.match(addWxml, /class="work-edit-mask \{\{editForm\.isVideo \? 'video-edit-mask' : 'image-edit-mask'\}\} \{\{editSheetVisible \? 'visible' : ''\}\}"[\s\S]*class="work-edit-panel"/)
   assert.doesNotMatch(addWxml, /class="work-edit-mask" wx:if="\{\{editSheetVisible\}\}"/)
-  assert.match(addWxml, /<image wx:if="\{\{!editForm\.isVideo\}\}" class="work-preview-media" src="\{\{editForm\.tempFilePath\}\}" mode="aspectFit"><\/image>/)
+  assert.match(addWxml, /<image wx:if="\{\{!editForm\.isVideo\}\}" class="work-preview-media" src="\{\{editForm\.tempFilePath\}\}" webp="\{\{true\}\}" mode="aspectFit"><\/image>/)
   assert.doesNotMatch(addWxml, /<image wx:if="\{\{!editForm\.isVideo\}\}" class="work-preview-media" src="\{\{editForm\.tempFilePath\}\}" mode="aspectFill"><\/image>/)
   assert.match(addWxml, /placeholder="填写作品标题"[\s\S]*bindinput="handleEditInput"/)
   assert.match(addWxml, /placeholder="填写作品说明"[\s\S]*maxlength="1000"[\s\S]*bindinput="handleEditInput"/)
@@ -532,16 +538,24 @@ test('works edit sheets refresh list after successful save', () => {
   const videoConfirmBody = readBetween(
     worksJs,
     /async handleConfirmVideoEdit\(\)/,
+    /async handleConfirmAnimationEdit\(\)/
+  )
+  const animationConfirmBody = readBetween(
+    worksJs,
+    /async handleConfirmAnimationEdit\(\)/,
     /patchWorkInList\(sourceForm/
   )
 
   assert.match(imageConfirmBody, /await this\.loadWorks\(true\)/)
   assert.match(videoConfirmBody, /await this\.loadWorks\(true\)/)
+  assert.match(animationConfirmBody, /await this\.loadWorks\(true\)/)
+  assert.match(animationConfirmBody, /coverFrameNumber:\s*coverEdit\.selectedFrame/)
+  assert.match(animationConfirmBody, /coverFrameIdempotencyKey:\s*coverEdit\.idempotencyKey/)
 })
 
 test('works edit sheet tag options use defined tag color styles', () => {
   const worksWxml = read('pages/works/works.wxml')
   const coloredTagOptions = worksWxml.match(/class="edit-tag-option[\s\S]*?style="\{\{item\.selected \? item\.activeStyle : item\.style\}\}"/g) || []
 
-  assert.equal(coloredTagOptions.length, 2)
+  assert.equal(coloredTagOptions.length, 3)
 })

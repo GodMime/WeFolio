@@ -29,6 +29,7 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -58,6 +59,127 @@ class WorkAuditServiceTest {
     }
 
     @Test
+    void runOneRoundShouldCreateAndExecuteNewAnimationTaskImmediately() {
+        WorkAuditWorkRepository workRepository = mock(WorkAuditWorkRepository.class);
+        WorkAuditTaskRepository taskRepository = mock(WorkAuditTaskRepository.class);
+        WorkAuditClaimTransactionService claimTransactionService = mock(WorkAuditClaimTransactionService.class);
+        TencentCiAuditClient auditClient = mock(TencentCiAuditClient.class);
+        AnimationFrameSampler sampler = mock(AnimationFrameSampler.class);
+        AnimationAuditResultAggregator aggregator = new AnimationAuditResultAggregator();
+        AnimationFrameCosService frameCosService = mock(AnimationFrameCosService.class);
+        WorkAuditWorkEntity work = work(
+                31L,
+                MediaTypeDict.ANIMATION,
+                "WFA3B1E7A2/work/animation/demo.gif",
+                null);
+        work.setFrameCount(2);
+        when(workRepository.findPendingAnimations(500)).thenReturn(List.of(work));
+        when(sampler.sample(2)).thenReturn(List.of(1, 2));
+        when(claimTransactionService.claimAndCreatePendingAnimationTask(
+                eq(31L), any(WorkAuditTaskEntity.class), eq(List.of(1, 2))))
+                .thenAnswer(invocation -> {
+                    WorkAuditTaskEntity task = invocation.getArgument(1);
+                    task.setId(301L);
+                    task.setSampledFrameNumbers("[1,2]");
+                    return task;
+                });
+        when(taskRepository.claimAnimationTask(eq(301L), anyString(), any(), eq(3))).thenReturn(true);
+        when(frameCosService.generate(any(WorkAuditTaskEntity.class), eq(1))).thenReturn(
+                "WFA3B1E7A2/work/animation/demo-audit-301-1-generated.jpg");
+        when(frameCosService.generate(any(WorkAuditTaskEntity.class), eq(2))).thenReturn(
+                "WFA3B1E7A2/work/animation/demo-audit-301-2-generated.jpg");
+        when(auditClient.auditImage(anyString())).thenReturn(
+                imageResult(AuditResultDict.PASS, 0, "Normal", 0));
+        WorkAuditService service = new WorkAuditService(
+                workRepository, taskRepository, claimTransactionService, auditClient, properties(),
+                sampler, aggregator, frameCosService);
+
+        service.runOneRound();
+
+        verify(auditClient).auditImage("WFA3B1E7A2/work/animation/demo-audit-301-1-generated.jpg");
+        verify(auditClient).auditImage("WFA3B1E7A2/work/animation/demo-audit-301-2-generated.jpg");
+        verify(claimTransactionService).markAnimationTaskSuccessAndUpdateWork(
+                eq(301L), eq(31L), eq(1), anyString(),
+                eq(AuditResultDict.PASS), eq("Success"), eq(0), eq("Normal"), eq(0),
+                eq(List.<TencentCiAuditRisk>of()), anyString(), eq(WorkAuditStatusDict.PASSED), eq(null));
+        verify(frameCosService).deleteQuietly(
+                "WFA3B1E7A2/work/animation/demo-audit-301-1-generated.jpg", 301L);
+        verify(frameCosService).deleteQuietly(
+                "WFA3B1E7A2/work/animation/demo-audit-301-2-generated.jpg", 301L);
+    }
+
+    @Test
+    void animationRetryShouldReusePersistedFramesAndUnknownShouldReturnPending() {
+        WorkAuditWorkRepository workRepository = mock(WorkAuditWorkRepository.class);
+        WorkAuditTaskRepository taskRepository = mock(WorkAuditTaskRepository.class);
+        WorkAuditClaimTransactionService claimTransactionService = mock(WorkAuditClaimTransactionService.class);
+        TencentCiAuditClient auditClient = mock(TencentCiAuditClient.class);
+        AnimationFrameSampler sampler = mock(AnimationFrameSampler.class);
+        AnimationFrameCosService frameCosService = mock(AnimationFrameCosService.class);
+        WorkAuditTaskEntity task = new WorkAuditTaskEntity();
+        task.setId(302L);
+        task.setWorkId(32L);
+        task.setMediaType(MediaTypeDict.ANIMATION.getCode());
+        task.setMediaObjectKey("WFA3B1E7A2/work/animation/retry.webp");
+        task.setSampledFrameNumbers("[5,23]");
+        task.setAuditRound(1);
+        when(taskRepository.findRunnableAnimationTasks(eq(500), eq(3), any()))
+                .thenReturn(List.of(task));
+        when(taskRepository.claimAnimationTask(eq(302L), anyString(), any(), eq(3))).thenReturn(true);
+        when(frameCosService.generate(task, 5)).thenReturn(
+                "WFA3B1E7A2/work/animation/retry-audit-302-5.jpg");
+        when(frameCosService.generate(task, 23)).thenReturn(
+                "WFA3B1E7A2/work/animation/retry-audit-302-23.jpg");
+        when(auditClient.auditImage("WFA3B1E7A2/work/animation/retry-audit-302-5.jpg"))
+                .thenReturn(imageResult(AuditResultDict.PASS, 0, "Normal", 0));
+        when(auditClient.auditImage("WFA3B1E7A2/work/animation/retry-audit-302-23.jpg"))
+                .thenReturn(imageResult(AuditResultDict.UNKNOWN, null, null, null));
+        WorkAuditService service = new WorkAuditService(
+                workRepository, taskRepository, claimTransactionService, auditClient, properties(),
+                sampler, new AnimationAuditResultAggregator(), frameCosService);
+
+        service.runOneRound();
+
+        verify(sampler, never()).sample(any(Integer.class));
+        verify(claimTransactionService).retryOrFailAnimationTask(
+                eq(302L), eq(32L), eq(1), anyString(),
+                eq("动图审核结果未知"), anyString(), eq(3));
+        verify(frameCosService).deleteQuietly(
+                "WFA3B1E7A2/work/animation/retry-audit-302-5.jpg", 302L);
+        verify(frameCosService).deleteQuietly(
+                "WFA3B1E7A2/work/animation/retry-audit-302-23.jpg", 302L);
+    }
+
+    @Test
+    void expiredAnimationAtAttemptLimitShouldBeRecoveredToFailed() {
+        WorkAuditWorkRepository workRepository = mock(WorkAuditWorkRepository.class);
+        WorkAuditTaskRepository taskRepository = mock(WorkAuditTaskRepository.class);
+        WorkAuditClaimTransactionService claimTransactionService = mock(WorkAuditClaimTransactionService.class);
+        TencentCiAuditClient auditClient = mock(TencentCiAuditClient.class);
+        WorkAuditTaskEntity task = new WorkAuditTaskEntity();
+        task.setId(303L);
+        task.setWorkId(33L);
+        task.setAuditRound(2);
+        task.setAttemptCount(3);
+        when(taskRepository.findExhaustedExpiredAnimationTasks(eq(10), eq(3), any()))
+                .thenReturn(List.of(task));
+        when(taskRepository.claimExhaustedAnimationTask(eq(303L), anyString(), any(), eq(3)))
+                .thenReturn(true);
+        when(claimTransactionService.retryOrFailAnimationTask(
+                eq(303L), eq(33L), eq(2), anyString(), anyString(), eq(null), eq(3)))
+                .thenReturn(true);
+        WorkAuditService service =
+                new WorkAuditService(workRepository, taskRepository, claimTransactionService, auditClient, properties());
+
+        service.auditPendingAnimations(10);
+
+        verify(claimTransactionService).retryOrFailAnimationTask(
+                eq(303L), eq(33L), eq(2), anyString(),
+                eq("动图审核任务在最后一次尝试中断"), eq(null), eq(3));
+        verifyNoInteractions(auditClient);
+    }
+
+    @Test
     void runOneRoundShouldLogStartConfigWithChineseLabels() {
         WorkAuditWorkRepository workRepository = mock(WorkAuditWorkRepository.class);
         WorkAuditTaskRepository taskRepository = mock(WorkAuditTaskRepository.class);
@@ -80,7 +202,8 @@ class WorkAuditServiceTest {
         assertThat(appender.list)
                 .extracting(ILoggingEvent::getFormattedMessage)
                 .contains("作品审核任务开始: 单轮视频查询任务上限=1000, 单轮视频提交作品上限=500, "
-                        + "单轮图片审核作品上限=500, 视频主动查询最大次数=120");
+                        + "单轮图片审核作品上限=500, 单轮动图审核任务上限=500, "
+                        + "动图最大尝试次数=3, 视频主动查询最大次数=120");
     }
 
     @Test
@@ -116,6 +239,7 @@ class WorkAuditServiceTest {
         TencentCiAuditClient auditClient = mock(TencentCiAuditClient.class);
         when(workRepository.countPendingImages()).thenReturn(1L);
         when(workRepository.countPendingVideos()).thenReturn(2L);
+        when(workRepository.countPendingAnimations()).thenReturn(4L);
         when(taskRepository.countQueryableVideoTasks(120)).thenReturn(3L);
         WorkAuditService service =
                 new WorkAuditService(workRepository, taskRepository, claimTransactionService, auditClient, properties());
@@ -133,8 +257,9 @@ class WorkAuditServiceTest {
 
         assertThat(appender.list)
                 .extracting(ILoggingEvent::getFormattedMessage)
-                .contains("作品审核待处理统计: 待审核图片作品数=1, 待审核视频作品数=2, 待审核作品总数=3, "
-                        + "待查询视频任务数=3, 视频主动查询最大次数=120");
+                .contains("作品审核待处理统计: 待审核图片作品数=1, 待审核视频作品数=2, "
+                        + "待审核动图作品数=4, 待审核作品总数=7, 待查询视频任务数=3, "
+                        + "视频主动查询最大次数=120");
     }
 
     @Test
@@ -419,5 +544,12 @@ class WorkAuditServiceTest {
         task.setCiJobId("video-job-id");
         task.setQueryCount(queryCount);
         return task;
+    }
+
+    private TencentCiAuditResult imageResult(AuditResultDict result, Integer ciResult,
+                                             String label, Integer score) {
+        return new TencentCiAuditResult(
+                null, "Success", result, ciResult, label, score,
+                true, false, "{}", List.of());
     }
 }

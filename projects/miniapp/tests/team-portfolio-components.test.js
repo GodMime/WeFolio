@@ -258,6 +258,37 @@ test('single work keeps the complete video and cover inside a black player', () 
   assert.match(wxss, /\.single-work-video,\s*\.single-work-video-poster\s*\{[^}]*background:\s*#000;/)
 })
 
+test('single work keeps transparent image media transparent', () => {
+  const wxss = fs.readFileSync(path.join(ROOT, 'single-work/single-work.wxss'), 'utf8')
+
+  assert.match(wxss, /\.single-work-image\s*\{[^}]*background:\s*transparent;/)
+  assert.match(wxss, /\.single-work-video,\s*\.single-work-video-poster\s*\{[^}]*background:\s*#000;/)
+})
+
+test('single work renders animation media and falls back to its static cover', () => {
+  const { definition } = loadComponent('single-work')
+  const harness = createComponentHarness(definition, {
+    componentKey: 'single-animation',
+    work: {
+      workId: 21,
+      mediaType: 'ANIMATION',
+      mediaUrl: 'animation.webp',
+      coverUrl: 'animation-cover.jpg'
+    }
+  })
+  const wxml = fs.readFileSync(path.join(ROOT, 'single-work/single-work.wxml'), 'utf8')
+
+  assert.match(wxml, /work\.mediaType === 'ANIMATION' && !animationLoadFailed/)
+  assert.match(wxml, /src="\{\{work\.mediaUrl\}\}"[\s\S]*webp="\{\{true\}\}"[\s\S]*binderror="handleAnimationLoadError"/)
+  assert.match(wxml, /wx:elif="\{\{work\.mediaType === 'ANIMATION'\}\}"[\s\S]*src="\{\{work\.coverUrl\}\}"/)
+
+  harness.instance.handleAnimationLoadError()
+  harness.instance.handleMediaTap()
+  const preview = harness.eventsByName('preview')[0]
+  assert.equal(preview.detail.work.mediaType, 'ANIMATION')
+  assert.equal(preview.detail.work.mediaUrl, 'animation-cover.jpg')
+})
+
 test('team profile owns safe defaults and validates a team snapshot', () => {
   const { definition, exports } = loadComponent('team-profile')
   assert.deepEqual(propertyDefault(definition, 'team'), {})

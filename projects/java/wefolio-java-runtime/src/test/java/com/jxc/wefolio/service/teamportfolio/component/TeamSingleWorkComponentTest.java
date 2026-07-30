@@ -113,7 +113,7 @@ class TeamSingleWorkComponentTest {
     }
 
     /**
-     * 候选接口必须先筛选已授权正常成员，再同时返回图片和视频作品。
+     * 候选接口必须先筛选已授权正常成员，再同时返回图片、视频和动图作品。
      */
     @Test
     void sourceServiceShouldListAuthorizedMembersAndImageVideoWorks() {
@@ -132,6 +132,11 @@ class TeamSingleWorkComponentTest {
         image.setMediaType(MediaTypeDict.IMAGE.getCode());
         image.setMediaObjectKey("media/image.jpg");
         image.setCoverObjectKey(null);
+        WorkEntity animation = work();
+        animation.setId(10L);
+        animation.setMediaType(MediaTypeDict.ANIMATION.getCode());
+        animation.setMediaObjectKey("media/animation.gif");
+        animation.setCoverObjectKey("cover/animation.jpg");
         when(accessService.requireMaintainablePortfolio(22L, 99L))
                 .thenReturn(new TeamPortfolioAccessService.TeamPortfolioAccess(
                         null, team, membership, true, true));
@@ -142,10 +147,12 @@ class TeamSingleWorkComponentTest {
         when(memberMapper.selectOne(any())).thenReturn(membership);
         when(userMapper.selectBatchIds(any())).thenReturn(List.of(user));
         when(userMapper.selectById(7L)).thenReturn(user);
-        when(workMapper.selectList(any())).thenReturn(List.of(image, work()));
+        when(workMapper.selectList(any())).thenReturn(List.of(image, work(), animation));
         when(cosService.publicUrl("media/image.jpg")).thenReturn("https://cdn/image.jpg");
         when(cosService.publicUrl("media/video.mp4")).thenReturn("https://cdn/video.mp4");
         when(cosService.publicUrl("cover/video.jpg")).thenReturn("https://cdn/video.jpg");
+        when(cosService.publicUrl("media/animation.gif")).thenReturn("https://cdn/animation.gif");
+        when(cosService.publicUrl("cover/animation.jpg")).thenReturn("https://cdn/animation.jpg");
         TeamSingleWorkComponentService service = new TeamSingleWorkComponentService(
                 accessService, memberMapper, userMapper, workMapper, cosService);
 
@@ -154,13 +161,19 @@ class TeamSingleWorkComponentTest {
                 .containsExactly(7L);
         assertThat(service.listWorks(22L, 7L, 99L))
                 .extracting(TeamSingleWorkComponentService.WorkOption::mediaType)
-                .containsExactly(MediaTypeDict.IMAGE.getCode(), MediaTypeDict.VIDEO.getCode());
+                .containsExactly(
+                        MediaTypeDict.IMAGE.getCode(),
+                        MediaTypeDict.VIDEO.getCode(),
+                        MediaTypeDict.ANIMATION.getCode());
         assertThat(service.listTeamMembers(11L, 99L))
                 .extracting(TeamSingleWorkComponentService.MemberOption::memberUserId)
                 .containsExactly(7L);
         assertThat(service.listTeamWorks(11L, 7L, 99L))
                 .extracting(TeamSingleWorkComponentService.WorkOption::mediaType)
-                .containsExactly(MediaTypeDict.IMAGE.getCode(), MediaTypeDict.VIDEO.getCode());
+                .containsExactly(
+                        MediaTypeDict.IMAGE.getCode(),
+                        MediaTypeDict.VIDEO.getCode(),
+                        MediaTypeDict.ANIMATION.getCode());
         verify(accessService, times(2)).requireTeamRole(
                 eq(11L),
                 eq(99L),
@@ -234,6 +247,36 @@ class TeamSingleWorkComponentTest {
                     .isInstanceOf(BusinessException.class)
                     .hasMessage(TeamPortfolioMessage.SINGLE_WORK_UNAVAILABLE);
         }
+    }
+
+    @Test
+    void validatorAndRendererShouldAcceptAnimationWork() {
+        TeamMemberEntityMapper memberMapper = mock(TeamMemberEntityMapper.class);
+        UserEntityMapper userMapper = mock(UserEntityMapper.class);
+        WorkEntityMapper workMapper = mock(WorkEntityMapper.class);
+        CosService cosService = mock(CosService.class);
+        WorkEntity animation = work();
+        animation.setMediaType(MediaTypeDict.ANIMATION.getCode());
+        animation.setMediaObjectKey("media/animation.gif");
+        animation.setCoverObjectKey("cover/animation.jpg");
+        when(memberMapper.selectList(any())).thenReturn(List.of(member()));
+        when(userMapper.selectBatchIds(any())).thenReturn(List.of(user()));
+        when(workMapper.selectList(any())).thenReturn(List.of(animation));
+        when(cosService.publicUrl("media/animation.gif")).thenReturn("https://cdn/animation.gif");
+        when(cosService.publicUrl("cover/animation.jpg")).thenReturn("https://cdn/animation.jpg");
+        JSONObject config = new JSONObject();
+        config.put("memberUserId", 7L);
+        config.put("workId", 9L);
+
+        JSONObject normalized = new TeamSingleWorkComponentValidator(
+                memberMapper, userMapper, workMapper).normalizeAndValidate(config, CONTEXT);
+        JSONObject rendered = new TeamSingleWorkComponentRenderer(
+                memberMapper, userMapper, workMapper, cosService).render(normalized, CONTEXT);
+
+        assertThat(rendered.getJSONObject("work").getString("mediaType"))
+                .isEqualTo(MediaTypeDict.ANIMATION.getCode());
+        assertThat(rendered.getJSONObject("work").getString("mediaUrl"))
+                .isEqualTo("https://cdn/animation.gif");
     }
 
     private TeamMemberEntity member() {

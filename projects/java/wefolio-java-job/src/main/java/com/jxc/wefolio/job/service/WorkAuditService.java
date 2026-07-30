@@ -11,12 +11,16 @@ import com.jxc.wefolio.job.entity.WorkAuditTaskEntity;
 import com.jxc.wefolio.job.entity.WorkAuditWorkEntity;
 import com.jxc.wefolio.job.repo.WorkAuditTaskRepository;
 import com.jxc.wefolio.job.repo.WorkAuditWorkRepository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -24,7 +28,6 @@ import java.util.concurrent.TimeUnit;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class WorkAuditService {
 
     /** 毫秒到秒的换算值 */
@@ -39,6 +42,15 @@ public class WorkAuditService {
     /** 审核拒绝原因最大长度 */
     private static final int AUDIT_REJECT_REASON_MAX_LENGTH = 512;
 
+    /** 领取 token 分隔符 */
+    private static final String CLAIM_TOKEN_SEPARATOR = "-";
+
+    /** 锁实例前缀最大长度 */
+    private static final int LOCK_OWNER_PREFIX_MAX_LENGTH = 80;
+
+    /** 锁实例前缀为空时的兜底值 */
+    private static final String DEFAULT_LOCK_OWNER_PREFIX = "local";
+
     private final WorkAuditWorkRepository workRepository;
 
     private final WorkAuditTaskRepository taskRepository;
@@ -49,20 +61,66 @@ public class WorkAuditService {
 
     private final WorkAuditProperties properties;
 
+    private final AnimationFrameSampler animationFrameSampler;
+
+    private final AnimationAuditResultAggregator animationResultAggregator;
+
+    private final AnimationFrameCosService animationFrameCosService;
+
+    /**
+     * 创建完整的作品审核编排服务。
+     */
+    @Autowired
+    public WorkAuditService(
+            WorkAuditWorkRepository workRepository,
+            WorkAuditTaskRepository taskRepository,
+            WorkAuditClaimTransactionService claimTransactionService,
+            TencentCiAuditClient auditClient,
+            WorkAuditProperties properties,
+            AnimationFrameSampler animationFrameSampler,
+            AnimationAuditResultAggregator animationResultAggregator,
+            AnimationFrameCosService animationFrameCosService
+    ) {
+        this.workRepository = workRepository;
+        this.taskRepository = taskRepository;
+        this.claimTransactionService = claimTransactionService;
+        this.auditClient = auditClient;
+        this.properties = properties;
+        this.animationFrameSampler = animationFrameSampler;
+        this.animationResultAggregator = animationResultAggregator;
+        this.animationFrameCosService = animationFrameCosService;
+    }
+
+    /**
+     * 保留原有单元测试和轻量调用方构造方式。
+     */
+    WorkAuditService(
+            WorkAuditWorkRepository workRepository,
+            WorkAuditTaskRepository taskRepository,
+            WorkAuditClaimTransactionService claimTransactionService,
+            TencentCiAuditClient auditClient,
+            WorkAuditProperties properties
+    ) {
+        this(workRepository, taskRepository, claimTransactionService, auditClient, properties,
+                new AnimationFrameSampler(), new AnimationAuditResultAggregator(), null);
+    }
+
     /**
      * 执行一轮作品审核任务。
      */
     public void runOneRound() {
         long startNanos = System.nanoTime();
         log.info("作品审核任务开始: 单轮视频查询任务上限={}, 单轮视频提交作品上限={}, 单轮图片审核作品上限={}, "
-                        + "视频主动查询最大次数={}",
+                        + "单轮动图审核任务上限={}, 动图最大尝试次数={}, 视频主动查询最大次数={}",
                 properties.getMaxQueryVideoPerRun(), properties.getMaxSubmitVideoPerRun(),
-                properties.getMaxAuditImagePerRun(), properties.getVideoQueryMaxAttempts());
+                properties.getMaxAuditImagePerRun(), properties.getMaxAuditAnimationPerRun(),
+                properties.getAnimationMaxAttempts(), properties.getVideoQueryMaxAttempts());
         try {
             logAuditBacklogSummary();
             queryPendingVideoResults(properties.getMaxQueryVideoPerRun());
             submitPendingVideoAudits(properties.getMaxSubmitVideoPerRun());
             auditPendingImages(properties.getMaxAuditImagePerRun());
+            auditPendingAnimations(properties.getMaxAuditAnimationPerRun());
             queryAllPendingVideoResults(properties.getMaxQueryVideoPerRun());
         } finally {
             long durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos);
@@ -99,6 +157,46 @@ public class WorkAuditService {
     }
 
     /**
+     * 先执行历史重试任务，再用剩余容量创建并立即执行新动图任务。
+     *
+     * @param limit 本轮实际尝试任务上限
+     */
+    public void auditPendingAnimations(int limit) {
+        int remainingCapacity = Math.max(limit, 0);
+        int retriedTasks = 0;
+        int newTasks = 0;
+        int recoveredTasks = recoverExhaustedAnimationTasks(remainingCapacity);
+        List<WorkAuditTaskEntity> runnableTasks = taskRepository.findRunnableAnimationTasks(
+                remainingCapacity, properties.getAnimationMaxAttempts(), LocalDateTime.now());
+        for (WorkAuditTaskEntity task : runnableTasks) {
+            if (remainingCapacity == 0) {
+                break;
+            }
+            if (claimAndExecuteAnimationTask(task)) {
+                remainingCapacity--;
+                retriedTasks++;
+            }
+        }
+
+        if (remainingCapacity > 0) {
+            List<WorkAuditWorkEntity> pendingWorks = workRepository.findPendingAnimations(remainingCapacity);
+            for (WorkAuditWorkEntity work : pendingWorks) {
+                if (remainingCapacity == 0) {
+                    break;
+                }
+                WorkAuditTaskEntity task = createPendingAnimationTask(work);
+                if (task != null && claimAndExecuteAnimationTask(task)) {
+                    remainingCapacity--;
+                    newTasks++;
+                }
+            }
+        }
+        log.info("动图审核本轮统计: 崩溃终态回收数={}, 重试任务尝试数={}, 新建并立即执行数={}, "
+                        + "剩余容量={}, 每轮上限={}",
+                recoveredTasks, retriedTasks, newTasks, remainingCapacity, limit);
+    }
+
+    /**
      * 查询所有还没到结束态的视频审核结果。
      *
      * @param limit 查询数量上限
@@ -110,13 +208,163 @@ public class WorkAuditService {
     private void logAuditBacklogSummary() {
         long pendingImageWorks = workRepository.countPendingImages();
         long pendingVideoWorks = workRepository.countPendingVideos();
+        long pendingAnimationWorks = workRepository.countPendingAnimations();
         long queryableVideoTasks = taskRepository.countQueryableVideoTasks(properties.getVideoQueryMaxAttempts());
-        long pendingTotalWorks = pendingImageWorks + pendingVideoWorks;
+        long pendingTotalWorks = pendingImageWorks + pendingVideoWorks + pendingAnimationWorks;
 
-        log.info("作品审核待处理统计: 待审核图片作品数={}, 待审核视频作品数={}, 待审核作品总数={}, "
-                        + "待查询视频任务数={}, 视频主动查询最大次数={}",
-                pendingImageWorks, pendingVideoWorks, pendingTotalWorks, queryableVideoTasks,
-                properties.getVideoQueryMaxAttempts());
+        log.info("作品审核待处理统计: 待审核图片作品数={}, 待审核视频作品数={}, 待审核动图作品数={}, "
+                        + "待审核作品总数={}, 待查询视频任务数={}, 视频主动查询最大次数={}",
+                pendingImageWorks, pendingVideoWorks, pendingAnimationWorks, pendingTotalWorks,
+                queryableVideoTasks, properties.getVideoQueryMaxAttempts());
+        log.info("动图审核配置: 每轮上限={}, 最大尝试次数={}",
+                properties.getMaxAuditAnimationPerRun(), properties.getAnimationMaxAttempts());
+    }
+
+    private WorkAuditTaskEntity createPendingAnimationTask(WorkAuditWorkEntity work) {
+        List<Integer> sampledFrames = animationFrameSampler.sample(work.getFrameCount());
+        WorkAuditTaskEntity task = newSubmittingTask(work, MediaTypeDict.ANIMATION);
+        task = claimTransactionService.claimAndCreatePendingAnimationTask(
+                work.getId(), task, sampledFrames);
+        if (task == null) {
+            log.info("动图作品审核跳过: workId={}, userId={}, objectKey={}, reason=未抢占到作品",
+                    work.getId(), work.getUserId(), work.getMediaObjectKey());
+        }
+        return task;
+    }
+
+    private boolean claimAndExecuteAnimationTask(WorkAuditTaskEntity task) {
+        String claimToken = newAnimationClaimToken();
+        if (!taskRepository.claimAnimationTask(
+                task.getId(),
+                claimToken,
+                lockedUntil(),
+                properties.getAnimationMaxAttempts())) {
+            log.info("动图审核任务跳过: workId={}, taskId={}, objectKey={}, reason=未抢占到任务",
+                    task.getWorkId(), task.getId(), task.getMediaObjectKey());
+            return false;
+        }
+        task.setLockedBy(claimToken);
+        executeAnimationTask(task);
+        return true;
+    }
+
+    private int recoverExhaustedAnimationTasks(int limit) {
+        int recovered = 0;
+        List<WorkAuditTaskEntity> tasks = taskRepository.findExhaustedExpiredAnimationTasks(
+                Math.max(limit, 0), properties.getAnimationMaxAttempts(), LocalDateTime.now());
+        for (WorkAuditTaskEntity task : tasks) {
+            String claimToken = newAnimationClaimToken();
+            if (!taskRepository.claimExhaustedAnimationTask(
+                    task.getId(), claimToken, lockedUntil(), properties.getAnimationMaxAttempts())) {
+                continue;
+            }
+            boolean updated = claimTransactionService.retryOrFailAnimationTask(
+                    task.getId(),
+                    task.getWorkId(),
+                    task.getAuditRound(),
+                    claimToken,
+                    "动图审核任务在最后一次尝试中断",
+                    null,
+                    properties.getAnimationMaxAttempts());
+            if (updated) {
+                recovered++;
+            }
+        }
+        return recovered;
+    }
+
+    private void executeAnimationTask(WorkAuditTaskEntity task) {
+        List<Integer> frames;
+        List<String> tempKeys = new ArrayList<>(2);
+        try {
+            frames = parsePersistedFrames(task.getSampledFrameNumbers());
+            List<TencentCiAuditResult> results = new ArrayList<>(2);
+            for (Integer frame : frames) {
+                String generatedKey = animationFrameCosService.generate(task, frame);
+                tempKeys.add(generatedKey);
+                results.add(auditClient.auditImage(generatedKey));
+            }
+            TencentCiAuditResult outcome = animationResultAggregator.aggregate(frames, results);
+            if (outcome.auditResult() == AuditResultDict.UNKNOWN) {
+                claimTransactionService.retryOrFailAnimationTask(
+                        task.getId(),
+                        task.getWorkId(),
+                        task.getAuditRound(),
+                        task.getLockedBy(),
+                        "动图审核结果未知",
+                        outcome.rawPayload(),
+                        properties.getAnimationMaxAttempts());
+                return;
+            }
+            WorkAuditStatusDict auditStatus = mapWorkAuditStatus(outcome.auditResult());
+            String auditRejectReason = auditRejectReason(outcome);
+            boolean updated = claimTransactionService.markAnimationTaskSuccessAndUpdateWork(
+                    task.getId(),
+                    task.getWorkId(),
+                    task.getAuditRound(),
+                    task.getLockedBy(),
+                    outcome.auditResult(),
+                    outcome.ciState(),
+                    outcome.ciResult(),
+                    outcome.ciLabel(),
+                    outcome.ciScore(),
+                    outcome.risks(),
+                    outcome.rawPayload(),
+                    auditStatus,
+                    auditRejectReason);
+            if (!updated) {
+                log.info("动图审核结果丢弃: workId={}, taskId={}, reason=任务租约已失效或作品审核轮次已变化",
+                        task.getWorkId(), task.getId());
+                return;
+            }
+            log.info("动图作品审核完成: workId={}, taskId={}, objectKey={}, sampledFrames={}, "
+                            + "auditResult={}, auditStatus={}",
+                    task.getWorkId(), task.getId(), task.getMediaObjectKey(), task.getSampledFrameNumbers(),
+                    outcome.auditResult().getCode(), auditStatus.getCode());
+        } catch (RuntimeException exception) {
+            claimTransactionService.retryOrFailAnimationTask(
+                    task.getId(),
+                    task.getWorkId(),
+                    task.getAuditRound(),
+                    task.getLockedBy(),
+                    errorMessage(exception),
+                    errorPayload(exception),
+                    properties.getAnimationMaxAttempts());
+            log.warn("动图审核任务执行失败: workId={}, taskId={}, objectKey={}, sampledFrames={}, error={}",
+                    task.getWorkId(), task.getId(), task.getMediaObjectKey(),
+                    task.getSampledFrameNumbers(), errorMessage(exception));
+        } finally {
+            tempKeys.forEach(key -> animationFrameCosService.deleteQuietly(key, task.getId()));
+        }
+    }
+
+    private String newAnimationClaimToken() {
+        String prefix = properties.getLockOwnerPrefix();
+        String normalizedPrefix = prefix == null ? "" : prefix.strip();
+        if (normalizedPrefix.isEmpty()) {
+            normalizedPrefix = DEFAULT_LOCK_OWNER_PREFIX;
+        }
+        if (normalizedPrefix.length() > LOCK_OWNER_PREFIX_MAX_LENGTH) {
+            normalizedPrefix = normalizedPrefix.substring(0, LOCK_OWNER_PREFIX_MAX_LENGTH);
+        }
+        return normalizedPrefix
+                + CLAIM_TOKEN_SEPARATOR
+                + UUID.randomUUID().toString().replace(CLAIM_TOKEN_SEPARATOR, "");
+    }
+
+    private List<Integer> parsePersistedFrames(String sampledFrameNumbers) {
+        List<Integer> frames;
+        try {
+            frames = JSON.parseArray(sampledFrameNumbers, Integer.class);
+        } catch (RuntimeException exception) {
+            throw new IllegalArgumentException("动图审核抽样帧 JSON 非法", exception);
+        }
+        if (frames == null || frames.size() != 2
+                || frames.stream().anyMatch(frame -> frame == null || frame < 1 || frame > 300)
+                || frames.get(0).equals(frames.get(1))) {
+            throw new IllegalArgumentException("动图审核必须保存两个不同且有效的帧号");
+        }
+        return frames.stream().sorted(Comparator.naturalOrder()).toList();
     }
 
     private void submitOneVideo(WorkAuditWorkEntity work) {

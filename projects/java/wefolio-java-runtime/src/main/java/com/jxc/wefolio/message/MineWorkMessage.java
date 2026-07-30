@@ -11,6 +11,9 @@ public interface MineWorkMessage {
     /** 视频作品数量超限提示模板 */
     String VIDEO_WORK_COUNT_LIMIT_TEMPLATE = "视频作品数量已达上限（%d个），请删除部分视频作品后再上传";
 
+    /** 动图作品数量超限提示模板 */
+    String ANIMATION_WORK_COUNT_LIMIT_TEMPLATE = "动图作品最多保留 %d 个";
+
     /** 上传任务保存失败提示 */
     String UPLOAD_TASK_SAVE_FAILED_MESSAGE = "上传任务创建失败，请刷新后重试";
 
@@ -88,6 +91,21 @@ public interface MineWorkMessage {
 
     /** 视频封面生成失败提示 */
     String VIDEO_COVER_GENERATE_FAILED_MESSAGE = "视频封面生成失败，请稍后重试";
+
+    /** 动图文件权威元数据解析失败提示 */
+    String ANIMATION_METADATA_READ_FAILED_MESSAGE = "动图文件解析失败，请重新上传";
+
+    /** 动图封面生成失败提示 */
+    String ANIMATION_COVER_GENERATE_FAILED_MESSAGE = "动图封面生成失败，请稍后重试";
+
+    /** 动图封面字段必须成对提交提示 */
+    String ANIMATION_COVER_FIELDS_REQUIRED_MESSAGE = "动图封面帧号和幂等键必须同时提交";
+
+    /** 非动图作品修改动图封面提示 */
+    String ANIMATION_COVER_UPDATE_MEDIA_TYPE_MESSAGE = "只有动图作品可以选择封面帧";
+
+    /** 动图封面帧号越界提示 */
+    String ANIMATION_COVER_FRAME_INVALID_MESSAGE = "动图封面帧号超出范围";
 
     /** 单个作品标签数量超限提示 */
     String WORK_TAG_COUNT_LIMIT_MESSAGE = "作品标签最多 10 个";

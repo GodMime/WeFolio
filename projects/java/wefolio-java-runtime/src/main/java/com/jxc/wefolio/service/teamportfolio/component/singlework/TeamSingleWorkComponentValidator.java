@@ -118,7 +118,8 @@ public class TeamSingleWorkComponentValidator {
                 && WorkStatusDict.ACTIVE.getCode().equals(work.getStatus())
                 && WorkAuditStatusDict.PASSED.getCode().equals(work.getAuditStatus())
                 && (MediaTypeDict.IMAGE.getCode().equals(work.getMediaType())
-                || MediaTypeDict.VIDEO.getCode().equals(work.getMediaType()));
+                || MediaTypeDict.VIDEO.getCode().equals(work.getMediaType())
+                || MediaTypeDict.ANIMATION.getCode().equals(work.getMediaType()));
     }
 
     /**

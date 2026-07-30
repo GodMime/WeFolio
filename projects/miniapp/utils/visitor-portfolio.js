@@ -25,6 +25,7 @@ const ALL_DISPLAY_GROUP_NAME = '全部'
 const DEFAULT_ALL_GROUP_KEY = 'g_all'
 const DEFAULT_ALL_GROUP_NAME = '全部作品'
 const MEDIA_TYPE_VIDEO = 'VIDEO'
+const MEDIA_TYPE_ANIMATION = 'ANIMATION'
 const DEFAULT_VIDEO_RATIO_WIDTH = 16
 const DEFAULT_VIDEO_RATIO_HEIGHT = 9
 const SINGLE_WORK_MEDIA_WIDTH_RPX = 710
@@ -85,6 +86,7 @@ function normalizeRenderWork(raw = {}) {
     title: trimText(raw.title) || '未命名作品',
     mediaType,
     isVideo: mediaType === MEDIA_TYPE_VIDEO,
+    isAnimation: mediaType === MEDIA_TYPE_ANIMATION,
     coverUrl,
     mediaUrl,
     thumbnailUrl: coverUrl || mediaUrl,

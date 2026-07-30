@@ -2,6 +2,7 @@ const assert = require('node:assert/strict')
 const test = require('node:test')
 
 const {
+  ANIMATION_MAX_BYTES,
   IMAGE_MAX_BYTES,
   MAX_BATCH_COUNT,
   VIDEO_MAX_BYTES,
@@ -12,14 +13,17 @@ const {
   buildUploadCompletePayload,
   buildAspectRatio,
   applyUploadCompleteResults,
+  applyAnimationSingleFrameFallbacks,
   buildCoverUploadTicketPayload,
   buildUploadTicketPayload,
   createChooseCoverImageOptions,
   createChooseMediaOptions,
+  classifyChosenMediaFiles,
   enrichVideoFileMetadata,
   normalizeChosenMediaFiles,
   prepareLocalCoverUploadFile,
   prepareCoverUploadFiles,
+  prepareStaticImageMainFiles,
   runWorkUploadQueue,
   validateChosenMediaFiles
 } = require('../pages/works/utils/work-upload')
@@ -28,9 +32,134 @@ test('chooseMedia options use mixed album picker and cap count at 9', () => {
   assert.deepEqual(createChooseMediaOptions(20), {
     count: MAX_BATCH_COUNT,
     mediaType: ['mix'],
-    sourceType: ['album']
+    sourceType: ['album'],
+    sizeType: ['original']
   })
   assert.equal(createChooseMediaOptions(3).count, 3)
+})
+
+test('classifies GIF signatures and animated WebP while keeping static WebP as image', async () => {
+  const payloads = {
+    'wxfile://tmp/a.gif': Buffer.from('GIF89a', 'ascii'),
+    'wxfile://tmp/a.webp': Buffer.from([
+      0x52, 0x49, 0x46, 0x46, 0x10, 0, 0, 0,
+      0x57, 0x45, 0x42, 0x50,
+      0x56, 0x50, 0x38, 0x58, 0x0a, 0, 0, 0,
+      0x02
+    ]),
+    'wxfile://tmp/static.webp': Buffer.from([
+      0x52, 0x49, 0x46, 0x46, 0x08, 0, 0, 0,
+      0x57, 0x45, 0x42, 0x50,
+      0x56, 0x50, 0x38, 0x20
+    ])
+  }
+  const readPaths = []
+  const wxApi = {
+    getFileSystemManager() {
+      return {
+        readFile(options) {
+          readPaths.push(options.filePath)
+          const data = payloads[options.filePath]
+          options.success({
+            data: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)
+          })
+        }
+      }
+    }
+  }
+  const files = normalizeChosenMediaFiles([
+    { tempFilePath: 'wxfile://tmp/a.gif', size: 100, fileType: 'image' },
+    { tempFilePath: 'wxfile://tmp/a.webp', size: 100, fileType: 'image' },
+    { tempFilePath: 'wxfile://tmp/static.webp', size: 100, fileType: 'image' }
+  ])
+
+  const classified = await classifyChosenMediaFiles(files, { wxApi })
+
+  assert.deepEqual(readPaths, [
+    'wxfile://tmp/a.gif',
+    'wxfile://tmp/a.webp',
+    'wxfile://tmp/static.webp'
+  ])
+  assert.equal(classified[0].mediaType, 'ANIMATION')
+  assert.equal(classified[0].mimeType, 'image/gif')
+  assert.equal(classified[1].mediaType, 'ANIMATION')
+  assert.equal(classified[1].mimeType, 'image/webp')
+  assert.equal(classified[2].mediaType, 'IMAGE')
+  assert.equal(classified[2].mimeType, 'image/webp')
+})
+
+test('does not read or compress oversized GIF and WebP candidates', async () => {
+  let readCount = 0
+  const wxApi = {
+    getFileSystemManager() {
+      return {
+        readFile() {
+          readCount += 1
+        }
+      }
+    },
+    compressImage() {
+      assert.fail('oversized animation candidate must not be compressed')
+    }
+  }
+  const files = normalizeChosenMediaFiles([
+    {
+      tempFilePath: 'wxfile://tmp/too-large.gif',
+      name: 'too-large.gif',
+      mimeType: 'image/gif',
+      size: ANIMATION_MAX_BYTES + 1,
+      fileType: 'image'
+    }
+  ])
+
+  await assert.rejects(
+    classifyChosenMediaFiles(files, { wxApi }),
+    /动图作品不能超过 10MB/
+  )
+  assert.equal(readCount, 0)
+})
+
+test('compresses oversized static image with independent main-image attempts', async () => {
+  const compressCalls = []
+  const sizes = {
+    'wxfile://tmp/large.jpg': IMAGE_MAX_BYTES + 1,
+    'wxfile://tmp/main-compressed.jpg': IMAGE_MAX_BYTES - 1
+  }
+  const wxApi = {
+    getFileSystemManager() {
+      return {
+        statSync(filePath) {
+          return { size: sizes[filePath] }
+        }
+      }
+    },
+    compressImage(options) {
+      compressCalls.push(options)
+      options.success({ tempFilePath: 'wxfile://tmp/main-compressed.jpg' })
+    },
+    getImageInfo(options) {
+      options.success({ width: 1600, height: 900 })
+    }
+  }
+  const [file] = await prepareStaticImageMainFiles([
+    {
+      tempFilePath: 'wxfile://tmp/large.jpg',
+      mediaType: 'IMAGE',
+      size: IMAGE_MAX_BYTES + 1,
+      sha256: 'old'
+    }
+  ], {
+    wxApi,
+    calculateSha256: async () => 'new-sha'
+  })
+
+  assert.equal(file.tempFilePath, 'wxfile://tmp/main-compressed.jpg')
+  assert.equal(file.size, IMAGE_MAX_BYTES - 1)
+  assert.equal(file.width, 1600)
+  assert.equal(file.height, 900)
+  assert.equal(file.sha256, 'new-sha')
+  assert.equal(compressCalls[0].quality, 90)
+  assert.equal(compressCalls[0].compressedWidth, 2048)
 })
 
 test('cover image picker only allows one album image', () => {
@@ -172,6 +301,7 @@ test('validates upload file count size and duration limits', () => {
   assert.equal(validateChosenMediaFiles([{ mediaType: 'IMAGE', size: IMAGE_MAX_BYTES + 1 }]).message, '图片作品不能超过 10MB')
   assert.equal(validateChosenMediaFiles([{ mediaType: 'VIDEO', size: VIDEO_MAX_BYTES + 1, durationMs: 1000 }]).message, '视频作品不能超过 100MB')
   assert.equal(validateChosenMediaFiles([{ mediaType: 'VIDEO', size: 1, durationMs: (VIDEO_MAX_DURATION_SECONDS + 1) * 1000 }]).message, '视频作品不能超过 10 分钟')
+  assert.equal(validateChosenMediaFiles([{ mediaType: 'ANIMATION', size: ANIMATION_MAX_BYTES + 1 }]).message, '动图作品不能超过 10MB')
 })
 
 test('builds upload complete payload with per-file metadata', () => {
@@ -397,6 +527,41 @@ test('applies partial upload complete success before retrying failures', () => {
   assert.equal(nextFiles[2].status, 'UPLOADED')
   assert.equal(nextFiles[2].errorMessage, '标签名称不能超过 10 个字')
   assert.deepEqual(buildUploadCompletePayload(nextFiles).items.map((item) => item.taskId), [101])
+})
+
+test('preserves item error code and downgrades a single-frame animation only once', () => {
+  const [failed] = applyUploadCompleteResults([
+    {
+      id: 'a',
+      clientId: 'animation-a',
+      taskId: 99,
+      mediaType: 'ANIMATION',
+      mimeType: 'image/gif',
+      tempFilePath: 'wxfile://tmp/a.gif',
+      title: '动图',
+      status: 'UPLOADED',
+      sha256: 'sha'
+    }
+  ], [
+    {
+      taskId: 99,
+      success: false,
+      errorCode: 'ANIMATION_SINGLE_FRAME',
+      message: '单帧文件按图片上传'
+    }
+  ])
+  assert.equal(failed.errorCode, 'ANIMATION_SINGLE_FRAME')
+
+  const [fallback] = applyAnimationSingleFrameFallbacks([failed], 1234)
+  assert.equal(fallback.mediaType, 'IMAGE')
+  assert.equal(fallback.mimeType, 'image/gif')
+  assert.equal(fallback.taskId, null)
+  assert.equal(fallback.status, 'READY')
+  assert.equal(fallback.animationFallbackAttempted, true)
+  assert.notEqual(fallback.clientId, 'animation-a')
+  assert.deepEqual(applyAnimationSingleFrameFallbacks([
+    Object.assign({}, fallback, { errorCode: 'ANIMATION_SINGLE_FRAME' })
+  ], 5678), [Object.assign({}, fallback, { errorCode: 'ANIMATION_SINGLE_FRAME' })])
 })
 
 test('builds upload progress summary from main files and cover uploads', () => {
@@ -741,15 +906,18 @@ test('builds upload complete failure message with every failed item', () => {
 })
 
 test('runs image uploads with concurrency two and video uploads serially', async () => {
-  const activeByType = { IMAGE: 0, VIDEO: 0 }
-  const maxByType = { IMAGE: 0, VIDEO: 0 }
+  const activeByType = { IMAGE: 0, VIDEO: 0, ANIMATION: 0 }
+  const maxByType = { IMAGE: 0, VIDEO: 0, ANIMATION: 0 }
   const order = []
   const items = [
     { id: 'i1', mediaType: 'IMAGE' },
     { id: 'i2', mediaType: 'IMAGE' },
     { id: 'i3', mediaType: 'IMAGE' },
     { id: 'v1', mediaType: 'VIDEO' },
-    { id: 'v2', mediaType: 'VIDEO' }
+    { id: 'v2', mediaType: 'VIDEO' },
+    { id: 'a1', mediaType: 'ANIMATION' },
+    { id: 'a2', mediaType: 'ANIMATION' },
+    { id: 'a3', mediaType: 'ANIMATION' }
   ]
 
   await runWorkUploadQueue(items, async (item) => {
@@ -763,5 +931,6 @@ test('runs image uploads with concurrency two and video uploads serially', async
 
   assert.equal(maxByType.IMAGE, 2)
   assert.equal(maxByType.VIDEO, 1)
+  assert.equal(maxByType.ANIMATION, 2)
   assert.deepEqual(order.filter((id) => id.startsWith('v')), ['v1', 'v2'])
 })

@@ -6,6 +6,7 @@ const QR_EVENT_TYPE = 'QR_CODE_INTERACTED'
 const QR_ACTIONS = Object.freeze(['CLICK', 'LONG_PRESS'])
 const IDEMPOTENCY_KEY_MAX_LENGTH = 64
 const DEFAULT_BACKGROUND_COLOR = '#FFFFFF'
+const SINGLE_WORK_VIEW_MEDIA_TYPES = Object.freeze(['IMAGE', 'ANIMATION'])
 
 function text(value) {
   return String(value || '').trim()
@@ -128,6 +129,26 @@ function submitTeamVisitorEvent(requestFn = request, shareCode, payload = {}) {
   return requestFn({ url: teamVisitorEndpoint(shareCode, '/events'), method: 'POST', authMode: 'visitor', data: Object.assign({}, payload, { idempotencyKey }) })
 }
 
+/**
+ * 构造团队单作品查看事件，动图沿用普通作品查看语义。
+ *
+ * @param {object} detail 单作品组件事件详情
+ * @returns {object|null} 合法的查看事件，非法媒体类型返回空
+ */
+function buildTeamSingleWorkViewEvent(detail = {}) {
+  const work = detail.work || {}
+  const mediaType = text(work.mediaType)
+  if (!SINGLE_WORK_VIEW_MEDIA_TYPES.includes(mediaType)) {
+    return null
+  }
+  return {
+    eventType: 'WORK_VIEWED',
+    componentKey: text(detail.componentKey),
+    workId: normalizeId(work.workId),
+    mediaType
+  }
+}
+
 function fetchTeamVisitorScheduleOptions(requestFn = request, shareCode, componentKey) {
   return requestFn({
     url: teamVisitorEndpoint(shareCode, '/schedule-options'),
@@ -146,6 +167,7 @@ module.exports = {
   QR_ACTIONS,
   QR_EVENT_TYPE,
   TEAM_VISITOR_PREFIX,
+  buildTeamSingleWorkViewEvent,
   fetchTeamVisitorScheduleOptions,
   normalizeTeamVisitorPortfolio,
   queryTeamVisitorSchedule,

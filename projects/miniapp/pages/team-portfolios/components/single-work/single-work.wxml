@@ -16,7 +16,7 @@
             <view class="editor-option-thumb"><image src="{{item.coverUrl || item.mediaUrl}}" mode="aspectFill" /></view>
             <view class="editor-option-copy">
               <view class="editor-option-title">{{item.title || '未命名作品'}}</view>
-              <view class="editor-option-meta">{{item.mediaType === 'VIDEO' ? '视频作品' : '图片作品'}} {{item.aspectRatio || ''}}</view>
+              <view class="editor-option-meta">{{item.mediaType === 'VIDEO' ? '视频作品' : (item.mediaType === 'ANIMATION' ? '动图作品' : '图片作品')}} {{item.aspectRatio || ''}}</view>
             </view>
             <view class="editor-option-check">{{draft.workId === item.workId ? '✓' : ''}}</view>
           </view>
@@ -35,6 +35,26 @@
       <image class="single-work-video-cover" src="{{work.coverUrl}}" mode="aspectFit"></image>
       <view class="single-work-play">▶</view>
     </view>
+    <image
+      wx:elif="{{work.mediaType === 'ANIMATION' && !animationLoadFailed}}"
+      class="single-work-image"
+      src="{{work.mediaUrl}}"
+      mode="widthFix"
+      webp="{{true}}"
+      bindtap="handleMediaTap"
+      binderror="handleAnimationLoadError"
+      aria-role="button"
+      aria-label="查看原动图{{work.title}}"
+    ></image>
+    <image
+      wx:elif="{{work.mediaType === 'ANIMATION'}}"
+      class="single-work-image"
+      src="{{work.coverUrl}}"
+      mode="widthFix"
+      bindtap="handleMediaTap"
+      aria-role="button"
+      aria-label="查看动图封面{{work.title}}"
+    ></image>
     <image wx:elif="{{work.mediaUrl}}" class="single-work-image" src="{{work.mediaUrl}}" mode="widthFix" bindtap="handleMediaTap" aria-role="button" aria-label="查看原图{{work.title}}"></image>
     <view wx:else class="single-work-empty">作品不可用</view>
     <view class="single-work-copy">

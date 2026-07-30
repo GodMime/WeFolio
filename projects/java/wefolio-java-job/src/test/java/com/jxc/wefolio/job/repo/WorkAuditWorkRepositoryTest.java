@@ -63,6 +63,32 @@ class WorkAuditWorkRepositoryTest {
     }
 
     @Test
+    void findPendingAnimationsShouldFilterPendingAnimationAndNotDeleted() {
+        WorkAuditWorkMapper workMapper = mock(WorkAuditWorkMapper.class);
+        WorkAuditWorkRepository repository = new WorkAuditWorkRepository(workMapper);
+
+        repository.findPendingAnimations(25);
+
+        LambdaQueryWrapper<WorkAuditWorkEntity> wrapper = captureSelectListWrapper(workMapper);
+        assertThat(wrapper.getSqlSegment()).contains("audit_status", "media_type", "deleted", "LIMIT 25");
+        assertThat(wrapper.getParamNameValuePairs().values())
+                .contains(WorkAuditStatusDict.PENDING.getCode(), MediaTypeDict.ANIMATION.getCode(), 0L);
+    }
+
+    @Test
+    void countPendingAnimationsShouldFilterPendingAnimationAndNotDeleted() {
+        WorkAuditWorkMapper workMapper = mock(WorkAuditWorkMapper.class);
+        WorkAuditWorkRepository repository = new WorkAuditWorkRepository(workMapper);
+
+        repository.countPendingAnimations();
+
+        LambdaQueryWrapper<WorkAuditWorkEntity> wrapper = captureSelectCountWrapper(workMapper);
+        assertThat(wrapper.getSqlSegment()).contains("audit_status", "media_type", "deleted");
+        assertThat(wrapper.getParamNameValuePairs().values())
+                .contains(WorkAuditStatusDict.PENDING.getCode(), MediaTypeDict.ANIMATION.getCode(), 0L);
+    }
+
+    @Test
     void claimPendingWorkShouldGuardStatusAndRefreshAuditColumns() {
         WorkAuditWorkMapper workMapper = mock(WorkAuditWorkMapper.class);
         WorkAuditWorkRepository repository = new WorkAuditWorkRepository(workMapper);
@@ -131,10 +157,31 @@ class WorkAuditWorkRepositoryTest {
                         "腾讯云判定违规：label=Porn，result=1，score=88", 0L);
     }
 
+    @Test
+    void updateAuditStatusAndReasonsForRoundShouldRejectStaleAuditRound() {
+        WorkAuditWorkMapper workMapper = mock(WorkAuditWorkMapper.class);
+        WorkAuditWorkRepository repository = new WorkAuditWorkRepository(workMapper);
+
+        repository.updateAuditStatusAndReasonsForRound(
+                11L, 2, WorkAuditStatusDict.PASSED, null, null, null);
+
+        LambdaUpdateWrapper<WorkAuditWorkEntity> wrapper = captureUpdateWrapper(workMapper);
+        assertThat(wrapper.getSqlSegment()).contains("id", "audit_round", "deleted");
+        assertThat(wrapper.getParamNameValuePairs().values())
+                .contains(11L, 2, WorkAuditStatusDict.PASSED.getCode(), 0L);
+    }
+
     @SuppressWarnings("unchecked")
     private LambdaQueryWrapper<WorkAuditWorkEntity> captureSelectCountWrapper(WorkAuditWorkMapper workMapper) {
         ArgumentCaptor<Wrapper<WorkAuditWorkEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
         verify(workMapper).selectCount(captor.capture());
+        return (LambdaQueryWrapper<WorkAuditWorkEntity>) captor.getValue();
+    }
+
+    @SuppressWarnings("unchecked")
+    private LambdaQueryWrapper<WorkAuditWorkEntity> captureSelectListWrapper(WorkAuditWorkMapper workMapper) {
+        ArgumentCaptor<Wrapper<WorkAuditWorkEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
+        verify(workMapper).selectList(captor.capture());
         return (LambdaQueryWrapper<WorkAuditWorkEntity>) captor.getValue();
     }
 

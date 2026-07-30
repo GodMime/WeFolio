@@ -115,6 +115,10 @@ class MineWorkServiceTest {
     @Mock
     private CosService cosService;
 
+    /** 动图 COS 服务模拟 */
+    @Mock
+    private AnimationCosService animationCosService;
+
     /** 上传完成事务服务模拟 */
     @Mock
     private WorkUploadTransactionService workUploadTransactionService;
@@ -273,13 +277,25 @@ class MineWorkServiceTest {
         second.setAuditReasonCode(WorkAuditReasonCodeDict.PORN_CONTENT.getCode());
         second.setAuditReasonCodes("[\"PORN_CONTENT\",\"ADVERTISING_CONTENT\"]");
         second.setAuditRejectReason("腾讯云判定违规：label=Porn，result=2，score=88");
+        WorkEntity third = ownedWork(13L);
+        third.setMediaType(MediaTypeDict.ANIMATION.getCode());
+        third.setTitle("动图预告");
+        third.setOriginalFileName("preview.webp");
+        third.setMediaObjectKey("WFA3B1E7A2/work/animation/preview.webp");
+        third.setCoverObjectKey("WFA3B1E7A2/work/animation/preview-thumb.jpg");
+        third.setFrameCount(120);
+        third.setCoverFrameNumber(18);
+        third.setAuditStatus(WorkAuditStatusDict.PENDING.getCode());
+        third.setAuditRound(1);
         Page<WorkEntity> page = new Page<>(1, 20);
-        page.setRecords(List.of(first, second));
-        page.setTotal(2L);
+        page.setRecords(List.of(first, second, third));
+        page.setTotal(3L);
         when(workEntityMapper.selectPage(any(), any())).thenReturn(page);
         when(workEntityMapper.selectMaps(any())).thenReturn(List.of(
                 Map.of("mediaType", MediaTypeDict.IMAGE.getCode(), "itemCount", 1L),
-                Map.of("mediaType", MediaTypeDict.VIDEO.getCode(), "itemCount", 1L)
+                Map.of("mediaType", MediaTypeDict.VIDEO.getCode(), "itemCount", 1L),
+                Map.of("mediaType", MediaTypeDict.ANIMATION.getCode(), "itemCount", 1L),
+                Map.of("mediaType", "UNKNOWN", "itemCount", 2L)
         ));
         WfTagEntity ceremonyTag = ownedTag(31L, "户外仪式", "#0f766e");
         WfTagEntity editTag = ownedTag(32L, "快剪", "#2d5f9a");
@@ -297,12 +313,13 @@ class MineWorkServiceTest {
 
         MineWorkListResponse response = service().listWorks(null, null, 1, 20);
 
-        assertThat(response.getSummary().getTotalCount()).isEqualTo(2L);
+        assertThat(response.getSummary().getTotalCount()).isEqualTo(5L);
         assertThat(response.getSummary().getImageCount()).isEqualTo(1L);
         assertThat(response.getSummary().getVideoCount()).isEqualTo(1L);
+        assertThat(response.getSummary().getAnimationCount()).isEqualTo(1L);
         assertThat(response.getTags()).extracting(MineWorkListResponse.TagItem::getCount)
-                .containsExactly(2L, 1L, 1L);
-        assertThat(response.getWorks()).hasSize(2);
+                .containsExactly(5L, 1L, 1L);
+        assertThat(response.getWorks()).hasSize(3);
         assertThat(response.getWorks().get(0).getReferenceCount()).isEqualTo(1L);
         assertThat(response.getWorks().get(0).getAuditStatus()).isEqualTo("PASSED");
         assertThat(response.getWorks().get(0).getAuditStatusText()).isEqualTo("审核通过");
@@ -332,6 +349,8 @@ class MineWorkServiceTest {
                 .allMatch(message -> message.contains("需要进一步确认"));
         assertThat(response.getWorks().get(1).getTags()).extracting(MineWorkListResponse.TagItem::getName)
                 .containsExactly("快剪");
+        assertThat(response.getWorks().get(2).getFrameCount()).isEqualTo(120);
+        assertThat(response.getWorks().get(2).getCoverFrameNumber()).isEqualTo(18);
         verify(workEntityMapper, never()).selectCount(any());
         verify(workTagEntityMapper, never()).selectCount(any());
         verify(workEntityMapper, times(1)).selectMaps(any());
@@ -487,8 +506,91 @@ class MineWorkServiceTest {
         assertThat(response.getItems().get(0).getObjectKey()).isEqualTo(firstTask.getObjectKey());
         assertThat(response.getItems().get(1).getObjectKey()).isEqualTo(secondTask.getObjectKey());
         assertThat(response.getItems().get(0).getUploadUrl()).contains("myqcloud.com");
+        assertThat(response.getImageMaxBytes()).isEqualTo(10L * 1024L * 1024L);
+        assertThat(response.getVideoMaxBytes()).isEqualTo(100L * 1024L * 1024L);
+        assertThat(response.getAnimationMaxBytes()).isEqualTo(10L * 1024L * 1024L);
         verify(contentLimitService).ensureWorkCapacity(7L, MediaTypeDict.IMAGE.getCode(), 1L);
         verify(contentLimitService).ensureWorkCapacity(7L, MediaTypeDict.VIDEO.getCode(), 1L);
+    }
+
+    @Test
+    void createUploadTicketsShouldAcceptAnimationGifAndWebpWithIndependentCapacity() {
+        when(userEntityMapper.selectById(7L)).thenReturn(activeUser());
+        when(cosService.createPostUploadTicket(any(), any(), anyLong(), any()))
+                .thenAnswer(invocation -> new CosService.PostUploadTicket(
+                        "https://bucket.cos.ap-guangzhou.myqcloud.com",
+                        invocation.getArgument(0),
+                        invocation.getArgument(1),
+                        invocation.getArgument(2),
+                        invocation.getArgument(3),
+                        java.util.Map.of("key", invocation.getArgument(0))));
+        MineWorkUploadTicketRequest request = new MineWorkUploadTicketRequest();
+        request.setFiles(List.of(
+                ticketFile("animation-gif", MediaTypeDict.ANIMATION.getCode(),
+                        "story.gif", "image/gif", 10L * 1024L * 1024L),
+                ticketFile("animation-webp", MediaTypeDict.ANIMATION.getCode(),
+                        "story.webp", "image/webp", 1024L)));
+
+        MineWorkUploadTicketResponse response = service().createUploadTickets(request);
+
+        ArgumentCaptor<WorkUploadTaskEntity> captor = ArgumentCaptor.forClass(WorkUploadTaskEntity.class);
+        verify(workUploadTaskEntityMapper, times(2)).insert(captor.capture());
+        assertThat(captor.getAllValues())
+                .extracting(WorkUploadTaskEntity::getObjectKey)
+                .allMatch(key -> key.matches(
+                        "WFA3B1E7A2/work/animation/WFA3B1E7A2-A-\\d{13}-[12]\\.(gif|webp)"));
+        assertThat(response.getItems()).extracting(MineWorkUploadTicketResponse.Item::getMaxBytes)
+                .containsOnly(10L * 1024L * 1024L);
+        verify(contentLimitService)
+                .ensureWorkCapacity(7L, MediaTypeDict.ANIMATION.getCode(), 2L);
+    }
+
+    @Test
+    void createUploadTicketsShouldKeepGifAndWebpCompatibleWithImageFallback() {
+        when(userEntityMapper.selectById(7L)).thenReturn(activeUser());
+        when(cosService.createPostUploadTicket(any(), any(), anyLong(), any()))
+                .thenAnswer(invocation -> new CosService.PostUploadTicket(
+                        "https://bucket.cos.ap-guangzhou.myqcloud.com",
+                        invocation.getArgument(0),
+                        invocation.getArgument(1),
+                        invocation.getArgument(2),
+                        invocation.getArgument(3),
+                        java.util.Map.of("key", invocation.getArgument(0))));
+        MineWorkUploadTicketRequest request = new MineWorkUploadTicketRequest();
+        request.setFiles(List.of(
+                ticketFile("image-gif", MediaTypeDict.IMAGE.getCode(), "still.gif", "image/gif", 1024L),
+                ticketFile("image-webp", MediaTypeDict.IMAGE.getCode(), "still.webp", "image/webp", 1024L)));
+
+        MineWorkUploadTicketResponse response = service().createUploadTickets(request);
+
+        assertThat(response.getItems()).extracting(MineWorkUploadTicketResponse.Item::getObjectKey)
+                .allMatch(key -> key.contains("/work/image/"));
+        verify(cosService).createPostUploadTicket(
+                any(), eq("image/gif"), eq(MineWorkService.IMAGE_MAX_BYTES), any());
+        verify(cosService).createPostUploadTicket(
+                any(), eq("image/webp"), eq(MineWorkService.IMAGE_MAX_BYTES), any());
+    }
+
+    @Test
+    void createUploadTicketsShouldRejectAnimationMimeMismatchAndEmptyFile() {
+        when(userEntityMapper.selectById(7L)).thenReturn(activeUser());
+        MineWorkUploadTicketRequest.UploadFileItem wrongMime = ticketFile(
+                "wrong-mime", MediaTypeDict.ANIMATION.getCode(), "story.gif", "image/webp", 1024L);
+        MineWorkUploadTicketRequest wrongMimeRequest = new MineWorkUploadTicketRequest();
+        wrongMimeRequest.setFiles(List.of(wrongMime));
+
+        assertThatThrownBy(() -> service().createUploadTickets(wrongMimeRequest))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("动图文件格式不支持");
+
+        MineWorkUploadTicketRequest.UploadFileItem empty = ticketFile(
+                "empty", MediaTypeDict.ANIMATION.getCode(), "story.gif", "image/gif", 0L);
+        MineWorkUploadTicketRequest emptyRequest = new MineWorkUploadTicketRequest();
+        emptyRequest.setFiles(List.of(empty));
+        assertThatThrownBy(() -> service().createUploadTickets(emptyRequest))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("上传文件不能为空");
+        verify(workUploadTaskEntityMapper, never()).insert(any(WorkUploadTaskEntity.class));
     }
 
     @Test
@@ -727,7 +829,7 @@ class MineWorkServiceTest {
         assertThat(task.getBatchId()).isEqualTo("edit-thumbnail-17");
         assertThat(task.getMediaType()).isEqualTo(MediaTypeDict.IMAGE.getCode());
         assertThat(task.getObjectKey())
-                .matches("WFA3B1E7A2/work/image/photo-thumb-\\d+\\.jpg")
+                .matches("WFA3B1E7A2/work/image/photo-thumb-\\d+-[0-9a-f]{32}\\.jpg")
                 .isNotEqualTo("WFA3B1E7A2/work/image/photo-thumb.jpg");
         assertThat(task.getCoverObjectKey()).isEqualTo(task.getObjectKey());
         assertThat(task.getOriginalFileName()).isEqualTo("photo-thumb.jpg");
@@ -786,7 +888,7 @@ class MineWorkServiceTest {
                 anyLong(),
                 any(LocalDateTime.class));
         assertThat(objectKeyCaptor.getValue())
-                .matches("WFA3B1E7A2/work/image/photo-thumb-\\d+\\.jpg")
+                .matches("WFA3B1E7A2/work/image/photo-thumb-\\d+-[0-9a-f]{32}\\.jpg")
                 .isNotEqualTo(mediaObjectKey);
         assertThat(response.getObjectKey()).isEqualTo(objectKeyCaptor.getValue());
     }
@@ -1030,6 +1132,252 @@ class MineWorkServiceTest {
         assertThat(response.getItems()).hasSize(1);
         assertThat(response.getItems().get(0).isSuccess()).isTrue();
         assertThat(response.getItems().get(0).getWorkId()).isEqualTo(120L);
+    }
+
+    @Test
+    void completeUploadShouldPersistAnimationMetadataAndGeneratedCoverBeforeConfirm() {
+        WorkUploadTaskEntity task = animationTask(99L, "story.gif", "image/gif");
+        when(workUploadTaskEntityMapper.selectById(99L)).thenReturn(task);
+        when(workUploadTaskEntityMapper.updateById(task)).thenReturn(1);
+        when(cosService.headObject(task.getObjectKey()))
+                .thenReturn(new CosService.ObjectHead("image/gif", task.getFileSize()));
+        when(animationCosService.inspect(task.getObjectKey()))
+                .thenReturn(new AnimationCosService.AnimationMetadata("GIF", 720, 1280, 24));
+        when(animationCosService.generateCover(eq(task.getObjectKey()), any(String.class), eq(1)))
+                .thenAnswer(invocation -> new AnimationCosService.GeneratedFrame(
+                        invocation.getArgument(1),
+                        "image/jpeg",
+                        8192L,
+                        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
+        WorkEntity work = new WorkEntity();
+        work.setId(120L);
+        when(workUploadTransactionService.confirmUploadedTask(eq(7L), eq(task), any()))
+                .thenReturn(MineWorkUploadCompleteResponse.Item.success(99L, work, "上传成功"));
+        MineWorkUploadCompleteRequest.CompleteItem item = completeItem(99L);
+        MineWorkUploadCompleteRequest request = new MineWorkUploadCompleteRequest();
+        request.setItems(List.of(item));
+
+        MineWorkUploadCompleteResponse response = service().completeUpload(request);
+
+        assertThat(task.getFrameCount()).isEqualTo(24);
+        assertThat(task.getWidth()).isEqualTo(720);
+        assertThat(task.getHeight()).isEqualTo(1280);
+        assertThat(task.getCoverObjectKey())
+                .isEqualTo("WFA3B1E7A2/work/animation/story-thumb.jpg");
+        assertThat(task.getCoverSha256())
+                .isEqualTo("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+        verify(workUploadTaskEntityMapper).updateById(task);
+        verify(workUploadTransactionService).confirmUploadedTask(7L, task, item);
+        assertThat(response.getItems().get(0).isSuccess()).isTrue();
+    }
+
+    @Test
+    void completeUploadShouldReuseWinnerCoverWhenAnimationPreparationLosesRace() {
+        WorkUploadTaskEntity initialTask = animationTask(99L, "story.gif", "image/gif");
+        WorkUploadTaskEntity winnerTask = animationTask(99L, "story.gif", "image/gif");
+        winnerTask.setFrameCount(24);
+        winnerTask.setWidth(720);
+        winnerTask.setHeight(1280);
+        winnerTask.setCoverObjectKey("WFA3B1E7A2/work/animation/story-thumb.jpg");
+        winnerTask.setCoverSha256(
+                "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd");
+        when(workUploadTaskEntityMapper.selectById(99L)).thenReturn(initialTask, winnerTask);
+        when(workUploadTaskEntityMapper.updateById(initialTask)).thenReturn(0);
+        when(cosService.headObject(initialTask.getObjectKey()))
+                .thenReturn(new CosService.ObjectHead("image/gif", initialTask.getFileSize()));
+        when(animationCosService.inspect(initialTask.getObjectKey()))
+                .thenReturn(new AnimationCosService.AnimationMetadata("gif", 720, 1280, 24));
+        AtomicReference<String> generatedCoverKey = new AtomicReference<>();
+        when(animationCosService.generateCover(eq(initialTask.getObjectKey()), any(String.class), eq(1)))
+                .thenAnswer(invocation -> {
+                    generatedCoverKey.set(invocation.getArgument(1));
+                    return new AnimationCosService.GeneratedFrame(
+                            generatedCoverKey.get(),
+                            "image/jpeg",
+                            8192L,
+                            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+                });
+        WorkEntity work = new WorkEntity();
+        work.setId(120L);
+        when(workUploadTransactionService.confirmUploadedTask(eq(7L), eq(initialTask), any()))
+                .thenReturn(MineWorkUploadCompleteResponse.Item.success(99L, work, "上传成功"));
+        MineWorkUploadCompleteRequest request = new MineWorkUploadCompleteRequest();
+        request.setItems(List.of(completeItem(99L)));
+
+        MineWorkUploadCompleteResponse response = service().completeUpload(request);
+
+        assertThat(response.getItems().get(0).isSuccess()).isTrue();
+        assertThat(initialTask.getCoverObjectKey()).isEqualTo(winnerTask.getCoverObjectKey());
+        assertThat(initialTask.getCoverSha256()).isEqualTo(winnerTask.getCoverSha256());
+        verify(animationCosService, never()).deleteQuietly(
+                generatedCoverKey.get(), "persist-animation-cover-race");
+        verify(animationCosService, never()).deleteQuietly(
+                initialTask.getObjectKey(), "confirm-business-failed-source");
+    }
+
+    @Test
+    void completeUploadShouldNeverDeleteConfirmedAnimationObjectsWhenIdempotentRetryFails() {
+        WorkUploadTaskEntity task = animationTask(99L, "story.gif", "image/gif");
+        task.setStatus(WorkUploadTaskStatusDict.CONFIRMED.getCode());
+        task.setConfirmedWorkId(120L);
+        task.setFrameCount(24);
+        task.setCoverObjectKey("WFA3B1E7A2/work/animation/story-thumb.jpg");
+        task.setCoverSha256("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+        when(workUploadTaskEntityMapper.selectById(99L)).thenReturn(task);
+        when(cosService.headObject(task.getObjectKey()))
+                .thenReturn(new CosService.ObjectHead("image/gif", task.getFileSize()));
+        when(workUploadTransactionService.confirmUploadedTask(eq(7L), eq(task), any()))
+                .thenThrow(new BusinessException("确认重试暂时失败"));
+        MineWorkUploadCompleteRequest request = new MineWorkUploadCompleteRequest();
+        request.setItems(List.of(completeItem(99L)));
+
+        MineWorkUploadCompleteResponse response = service().completeUpload(request);
+
+        assertThat(response.getItems().get(0).isSuccess()).isFalse();
+        assertThat(response.getItems().get(0).getMessage()).isEqualTo("确认重试暂时失败");
+        verify(animationCosService, never()).deleteQuietly(any(), any());
+    }
+
+    @Test
+    void completeUploadShouldNotDeleteObjectsWhenConcurrentConfirmationHasCommitted() {
+        WorkUploadTaskEntity initialTask = animationTask(99L, "story.gif", "image/gif");
+        WorkUploadTaskEntity confirmedTask = animationTask(99L, "story.gif", "image/gif");
+        confirmedTask.setStatus(WorkUploadTaskStatusDict.CONFIRMED.getCode());
+        confirmedTask.setConfirmedWorkId(120L);
+        confirmedTask.setFrameCount(24);
+        confirmedTask.setCoverObjectKey("WFA3B1E7A2/work/animation/story-thumb.jpg");
+        confirmedTask.setCoverSha256(
+                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+        when(workUploadTaskEntityMapper.selectById(99L))
+                .thenReturn(initialTask, confirmedTask, confirmedTask);
+        when(workUploadTaskEntityMapper.updateById(initialTask)).thenReturn(1);
+        when(cosService.headObject(initialTask.getObjectKey()))
+                .thenReturn(new CosService.ObjectHead("image/gif", initialTask.getFileSize()));
+        when(animationCosService.inspect(initialTask.getObjectKey()))
+                .thenReturn(new AnimationCosService.AnimationMetadata("gif", 720, 1280, 24));
+        when(animationCosService.generateCover(
+                initialTask.getObjectKey(),
+                "WFA3B1E7A2/work/animation/story-thumb.jpg",
+                1))
+                .thenReturn(new AnimationCosService.GeneratedFrame(
+                        "WFA3B1E7A2/work/animation/story-thumb.jpg",
+                        "image/jpeg",
+                        8192L,
+                        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
+        when(workUploadTransactionService.confirmUploadedTask(eq(7L), eq(initialTask), any()))
+                .thenThrow(new BusinessException("并发确认已由其它请求完成"));
+        MineWorkUploadCompleteRequest request = new MineWorkUploadCompleteRequest();
+        request.setItems(List.of(completeItem(99L)));
+
+        MineWorkUploadCompleteResponse response = service().completeUpload(request);
+
+        assertThat(response.getItems().get(0).isSuccess()).isFalse();
+        verify(animationCosService, never()).deleteQuietly(any(), any());
+    }
+
+    @Test
+    void completeUploadShouldKeepAnimationObjectsWhenFailureDoesNotProveFileInvalid() {
+        WorkUploadTaskEntity task = animationTask(99L, "story.gif", "image/gif");
+        when(workUploadTaskEntityMapper.selectById(99L)).thenReturn(task);
+        when(workUploadTaskEntityMapper.updateById(task)).thenReturn(1);
+        when(cosService.headObject(task.getObjectKey()))
+                .thenReturn(new CosService.ObjectHead("image/gif", task.getFileSize()));
+        when(animationCosService.inspect(task.getObjectKey()))
+                .thenReturn(new AnimationCosService.AnimationMetadata("gif", 720, 1280, 24));
+        when(animationCosService.generateCover(
+                task.getObjectKey(),
+                "WFA3B1E7A2/work/animation/story-thumb.jpg",
+                1))
+                .thenReturn(new AnimationCosService.GeneratedFrame(
+                        "WFA3B1E7A2/work/animation/story-thumb.jpg",
+                        "image/jpeg",
+                        8192L,
+                        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
+        when(workUploadTransactionService.confirmUploadedTask(eq(7L), eq(task), any()))
+                .thenThrow(new BusinessException("动图作品最多保留 100 个"));
+        MineWorkUploadCompleteRequest request = new MineWorkUploadCompleteRequest();
+        request.setItems(List.of(completeItem(99L)));
+
+        MineWorkUploadCompleteResponse response = service().completeUpload(request);
+
+        assertThat(response.getItems().get(0).isSuccess()).isFalse();
+        assertThat(response.getItems().get(0).getMessage()).isEqualTo("动图作品最多保留 100 个");
+        verify(animationCosService, never()).deleteQuietly(any(), any());
+    }
+
+    @Test
+    void completeUploadShouldReturnSingleFrameErrorCodeAndCleanAnimationObject() {
+        WorkUploadTaskEntity task = animationTask(99L, "story.webp", "image/webp");
+        when(workUploadTaskEntityMapper.selectById(99L)).thenReturn(task);
+        when(cosService.headObject(task.getObjectKey()))
+                .thenReturn(new CosService.ObjectHead("image/webp", task.getFileSize()));
+        when(animationCosService.inspect(task.getObjectKey()))
+                .thenReturn(new AnimationCosService.AnimationMetadata("webp", 720, 1280, 1));
+        MineWorkUploadCompleteRequest request = new MineWorkUploadCompleteRequest();
+        request.setItems(List.of(completeItem(99L)));
+
+        MineWorkUploadCompleteResponse response = service().completeUpload(request);
+
+        assertThat(response.getItems().get(0).isSuccess()).isFalse();
+        assertThat(response.getItems().get(0).getErrorCode()).isEqualTo("ANIMATION_SINGLE_FRAME");
+        assertThat(response.getItems().get(0).getMessage()).isEqualTo("该文件只有 1 帧，将按图片重新上传");
+        verify(animationCosService).deleteQuietly(task.getObjectKey(), "single-frame-source");
+        verify(animationCosService, never()).generateCover(any(), any(), eq(1));
+        verifyNoInteractions(workUploadTransactionService);
+    }
+
+    @Test
+    void completeUploadShouldRejectDynamicGifUploadedAsImageAndCleanObject() {
+        WorkUploadTaskEntity task = uploadTask(
+                99L,
+                "batch-a",
+                "WFA3B1E7A2/work/image/story.gif",
+                "ticket-story");
+        task.setOriginalFileName("story.gif");
+        task.setMimeType("image/gif");
+        when(workUploadTaskEntityMapper.selectById(99L)).thenReturn(task);
+        when(cosService.headObject(task.getObjectKey()))
+                .thenReturn(new CosService.ObjectHead("image/gif", task.getFileSize()));
+        when(animationCosService.inspect(task.getObjectKey()))
+                .thenReturn(new AnimationCosService.AnimationMetadata("gif", 640, 480, 2));
+        MineWorkUploadCompleteRequest request = new MineWorkUploadCompleteRequest();
+        request.setItems(List.of(completeItem(99L)));
+
+        MineWorkUploadCompleteResponse response = service().completeUpload(request);
+
+        assertThat(response.getItems().get(0).isSuccess()).isFalse();
+        assertThat(response.getItems().get(0).getErrorCode()).isNull();
+        assertThat(response.getItems().get(0).getMessage()).isEqualTo("检测到动态图片，请使用动图作品上传");
+        verify(animationCosService).deleteQuietly(task.getObjectKey(), "image-animation-type-invalid");
+        verifyNoInteractions(workUploadTransactionService);
+    }
+
+    @Test
+    void completeUploadShouldAcceptLegacySingleFrameWebpImageWithDefaultJpegMime() {
+        WorkUploadTaskEntity task = uploadTask(
+                99L,
+                "batch-a",
+                "WFA3B1E7A2/work/image/story.webp",
+                "ticket-story");
+        task.setOriginalFileName("story.webp");
+        task.setMimeType("image/jpeg");
+        when(workUploadTaskEntityMapper.selectById(99L)).thenReturn(task);
+        when(cosService.headObject(task.getObjectKey()))
+                .thenReturn(new CosService.ObjectHead("image/jpeg", task.getFileSize()));
+        when(animationCosService.inspect(task.getObjectKey()))
+                .thenReturn(new AnimationCosService.AnimationMetadata("webp", 640, 480, 1));
+        WorkEntity work = new WorkEntity();
+        work.setId(120L);
+        when(workUploadTransactionService.confirmUploadedTask(eq(7L), eq(task), any()))
+                .thenReturn(MineWorkUploadCompleteResponse.Item.success(99L, work, "上传成功"));
+        MineWorkUploadCompleteRequest request = new MineWorkUploadCompleteRequest();
+        request.setItems(List.of(completeItem(99L)));
+
+        MineWorkUploadCompleteResponse response = service().completeUpload(request);
+
+        assertThat(response.getItems().get(0).isSuccess()).isTrue();
+        verify(animationCosService, never()).deleteQuietly(any(), any());
+        verify(workUploadTransactionService).confirmUploadedTask(eq(7L), eq(task), any());
     }
 
     @Test
@@ -1813,6 +2161,190 @@ class MineWorkServiceTest {
     }
 
     @Test
+    void updateWorkShouldRequireAnimationCoverFieldsAsPairAndRejectNonAnimationWork() {
+        WorkEntity animation = editableAnimationWork();
+        when(workEntityMapper.selectById(18L)).thenReturn(animation);
+        MineWorkUpdateRequest missingKey = new MineWorkUpdateRequest();
+        missingKey.setTitle("新标题");
+        missingKey.setCoverFrameNumber(5);
+
+        assertThatThrownBy(() -> service().updateWork(18L, missingKey))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage(MineWorkMessage.ANIMATION_COVER_FIELDS_REQUIRED_MESSAGE);
+
+        WorkEntity image = ownedWork(19L);
+        image.setMediaType(MediaTypeDict.IMAGE.getCode());
+        image.setTitle("图片");
+        when(workEntityMapper.selectById(19L)).thenReturn(image);
+        MineWorkUpdateRequest wrongType = new MineWorkUpdateRequest();
+        wrongType.setTitle("图片");
+        wrongType.setCoverFrameNumber(1);
+        wrongType.setCoverFrameIdempotencyKey("session-image");
+
+        assertThatThrownBy(() -> service().updateWork(19L, wrongType))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage(MineWorkMessage.ANIMATION_COVER_UPDATE_MEDIA_TYPE_MESSAGE);
+        verify(animationCosService, never()).generateCover(any(), any(), any(Integer.class));
+    }
+
+    @Test
+    void updateWorkShouldRejectAnimationCoverFrameOutsideKnownRange() {
+        WorkEntity work = editableAnimationWork();
+        when(workEntityMapper.selectById(18L)).thenReturn(work, work);
+        MineWorkUpdateRequest zero = animationCoverUpdateRequest(0, "session-zero");
+        MineWorkUpdateRequest tooLarge = animationCoverUpdateRequest(25, "session-large");
+
+        assertThatThrownBy(() -> service().updateWork(18L, zero))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage(MineWorkMessage.ANIMATION_COVER_FRAME_INVALID_MESSAGE);
+        assertThatThrownBy(() -> service().updateWork(18L, tooLarge))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage(MineWorkMessage.ANIMATION_COVER_FRAME_INVALID_MESSAGE);
+        verify(animationCosService, never()).generateCover(any(), any(), any(Integer.class));
+    }
+
+    @Test
+    void updateWorkShouldGenerateVersionedAnimationCoverAndDeleteOnlyOldCover() {
+        WorkEntity work = editableAnimationWork();
+        when(workEntityMapper.selectById(18L)).thenReturn(work, work);
+        when(animationCosService.generateCover(
+                eq(work.getMediaObjectKey()),
+                any(String.class),
+                eq(5)))
+                .thenAnswer(invocation -> new AnimationCosService.GeneratedFrame(
+                        invocation.getArgument(1),
+                        "image/jpeg",
+                        8192L,
+                        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"));
+        when(workEntityMapper.updateById(any(WorkEntity.class))).thenReturn(1);
+        when(workUploadTaskEntityMapper.updateById(any(WorkUploadTaskEntity.class))).thenReturn(1);
+        when(portfolioReferenceEntityMapper.selectList(any())).thenReturn(List.of());
+        when(workTagEntityMapper.selectList(any())).thenReturn(List.of());
+        when(cosService.publicUrl(any())).thenAnswer(invocation -> "https://cos.example/" + invocation.getArgument(0));
+
+        service().updateWork(18L, animationCoverUpdateRequest(5, "session-a"));
+
+        ArgumentCaptor<WorkEntity> workCaptor = ArgumentCaptor.forClass(WorkEntity.class);
+        verify(workEntityMapper).updateById(workCaptor.capture());
+        assertThat(workCaptor.getValue().getCoverObjectKey())
+                .matches("WFA3B1E7A2/work/animation/story-thumb-\\d{13}-[0-9a-f]{32}\\.jpg");
+        assertThat(workCaptor.getValue().getCoverFrameNumber()).isEqualTo(5);
+        assertThat(workCaptor.getValue().getCoverSha256())
+                .isEqualTo("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc");
+        verify(cosService).delete("WFA3B1E7A2/work/animation/story-thumb.jpg");
+        verify(cosService, never()).delete(work.getMediaObjectKey());
+    }
+
+    @Test
+    void updateWorkShouldReuseAnimationCoverForSameSessionKey() {
+        WorkEntity work = editableAnimationWork();
+        WorkUploadTaskEntity coverTask = uploadTask(
+                501L,
+                "edit-animation-cover-18-5",
+                "WFA3B1E7A2/work/animation/story-thumb-1783651200000.jpg",
+                "WORK_ANIMATION_COVER:18:session-a");
+        coverTask.setStatus(WorkUploadTaskStatusDict.CONFIRMED.getCode());
+        coverTask.setConfirmedWorkId(18L);
+        coverTask.setFileSha256("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc");
+        when(workEntityMapper.selectById(18L)).thenReturn(work, work);
+        when(workUploadTaskEntityMapper.selectOne(any())).thenReturn(coverTask);
+        when(cosService.headObject(coverTask.getObjectKey()))
+                .thenReturn(new CosService.ObjectHead("image/jpeg", 8192L));
+        when(workEntityMapper.updateById(any(WorkEntity.class))).thenReturn(1);
+        when(portfolioReferenceEntityMapper.selectList(any())).thenReturn(List.of());
+        when(workTagEntityMapper.selectList(any())).thenReturn(List.of());
+        when(cosService.publicUrl(any())).thenAnswer(invocation -> "https://cos.example/" + invocation.getArgument(0));
+
+        service().updateWork(18L, animationCoverUpdateRequest(5, "session-a"));
+
+        verify(animationCosService, never()).generateCover(any(), any(), any(Integer.class));
+        verify(workUploadTaskEntityMapper, never()).insert(any(WorkUploadTaskEntity.class));
+        ArgumentCaptor<WorkEntity> captor = ArgumentCaptor.forClass(WorkEntity.class);
+        verify(workEntityMapper).updateById(captor.capture());
+        assertThat(captor.getValue().getCoverObjectKey()).isEqualTo(coverTask.getObjectKey());
+    }
+
+    @Test
+    void updateWorkShouldRejectReusingAnimationCoverSessionKeyForDifferentFrame() {
+        WorkEntity work = editableAnimationWork();
+        WorkUploadTaskEntity coverTask = uploadTask(
+                501L,
+                "edit-animation-cover-18-5",
+                "WFA3B1E7A2/work/animation/story-thumb-1783651200000.jpg",
+                "WORK_ANIMATION_COVER:18:session-a");
+        coverTask.setStatus(WorkUploadTaskStatusDict.CONFIRMED.getCode());
+        coverTask.setConfirmedWorkId(18L);
+        coverTask.setFileSha256("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc");
+        when(workEntityMapper.selectById(18L)).thenReturn(work);
+        when(workUploadTaskEntityMapper.selectOne(any())).thenReturn(coverTask);
+
+        assertThatThrownBy(() -> service().updateWork(
+                18L,
+                animationCoverUpdateRequest(6, "session-a")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage(MineWorkMessage.ANIMATION_COVER_GENERATE_FAILED_MESSAGE);
+
+        verify(workEntityMapper, never()).updateById(any(WorkEntity.class));
+        verify(animationCosService, never()).generateCover(any(), any(), any(Integer.class));
+    }
+
+    @Test
+    void updateWorkShouldGenerateDifferentAnimationCoverKeysForNewSessionsOnSameFrame() {
+        WorkEntity first = editableAnimationWork();
+        WorkEntity second = editableAnimationWork();
+        when(workEntityMapper.selectById(18L)).thenReturn(first, first, second, second);
+        when(animationCosService.generateCover(eq(first.getMediaObjectKey()), any(), eq(5)))
+                .thenAnswer(invocation -> new AnimationCosService.GeneratedFrame(
+                        invocation.getArgument(1),
+                        "image/jpeg",
+                        8192L,
+                        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"));
+        when(workEntityMapper.updateById(any(WorkEntity.class))).thenReturn(1);
+        when(workUploadTaskEntityMapper.updateById(any(WorkUploadTaskEntity.class))).thenReturn(1);
+        when(portfolioReferenceEntityMapper.selectList(any())).thenReturn(List.of());
+        when(workTagEntityMapper.selectList(any())).thenReturn(List.of());
+        when(cosService.publicUrl(any())).thenAnswer(invocation -> "https://cos.example/" + invocation.getArgument(0));
+
+        service().updateWork(18L, animationCoverUpdateRequest(5, "session-a"));
+        service().updateWork(18L, animationCoverUpdateRequest(5, "session-b"));
+
+        ArgumentCaptor<String> keyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(animationCosService, times(2)).generateCover(
+                eq(first.getMediaObjectKey()),
+                keyCaptor.capture(),
+                eq(5));
+        assertThat(keyCaptor.getAllValues()).hasSize(2);
+        assertThat(keyCaptor.getAllValues().get(0)).isNotEqualTo(keyCaptor.getAllValues().get(1));
+    }
+
+    @Test
+    void updateWorkShouldCleanNewAnimationCoverAndKeepOldCoverWhenSaveFails() {
+        WorkEntity work = editableAnimationWork();
+        AtomicReference<String> generatedKey = new AtomicReference<>();
+        when(workEntityMapper.selectById(18L)).thenReturn(work);
+        when(animationCosService.generateCover(eq(work.getMediaObjectKey()), any(), eq(5)))
+                .thenAnswer(invocation -> {
+                    generatedKey.set(invocation.getArgument(1));
+                    return new AnimationCosService.GeneratedFrame(
+                            generatedKey.get(),
+                            "image/jpeg",
+                            8192L,
+                            "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc");
+                });
+        when(workEntityMapper.updateById(any(WorkEntity.class))).thenReturn(0);
+
+        assertThatThrownBy(() -> service().updateWork(
+                18L,
+                animationCoverUpdateRequest(5, "session-failed")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage(MineWorkMessage.WORK_SAVE_FAILED_MESSAGE);
+
+        verify(animationCosService).deleteQuietly(generatedKey.get(), "update-animation-cover-failed");
+        verify(cosService, never()).delete("WFA3B1E7A2/work/animation/story-thumb.jpg");
+        verify(cosService, never()).delete(work.getMediaObjectKey());
+    }
+
+    @Test
     void updateWorkShouldDeleteGeneratedCoverWhenSnapshotExceedsLimit() {
         WorkEntity work = new WorkEntity();
         work.setId(18L);
@@ -2062,6 +2594,19 @@ class MineWorkServiceTest {
     }
 
     @Test
+    void deleteWorkShouldDeleteAnimationSourceAndIndependentCover() {
+        WorkEntity work = editableAnimationWork();
+        when(workEntityMapper.selectById(18L)).thenReturn(work);
+        when(portfolioReferenceEntityMapper.selectList(any())).thenReturn(List.of());
+        when(workEntityMapper.update(any(), any())).thenReturn(1);
+
+        service().deleteWork(18L);
+
+        verify(cosService).delete(work.getMediaObjectKey());
+        verify(cosService).delete("WFA3B1E7A2/work/animation/story-thumb.jpg");
+    }
+
+    @Test
     void deleteWorkShouldDeleteSharedMediaAndCoverKeyOnlyOnce() {
         WorkEntity work = new WorkEntity();
         work.setId(18L);
@@ -2210,9 +2755,32 @@ class MineWorkServiceTest {
                 workUploadTaskEntityMapper,
                 portfolioReferenceEntityMapper,
                 cosService,
+                animationCosService,
                 workUploadTransactionService,
                 contentLimitService,
                 mineWorkAuditService);
+    }
+
+    private MineWorkUploadCompleteRequest.CompleteItem completeItem(Long taskId) {
+        MineWorkUploadCompleteRequest.CompleteItem item = new MineWorkUploadCompleteRequest.CompleteItem();
+        item.setTaskId(taskId);
+        item.setTitle("动图作品");
+        item.setTagNames(List.of());
+        item.setIdempotencyKey("confirm-" + taskId);
+        return item;
+    }
+
+    private WorkUploadTaskEntity animationTask(Long taskId, String fileName, String mimeType) {
+        WorkUploadTaskEntity task = uploadTask(
+                taskId,
+                "batch-animation",
+                "WFA3B1E7A2/work/animation/" + fileName,
+                "ticket-animation-" + taskId);
+        task.setMediaType(MediaTypeDict.ANIMATION.getCode());
+        task.setOriginalFileName(fileName);
+        task.setMimeType(mimeType);
+        task.setFileSize(4096L);
+        return task;
     }
 
     private UserEntity activeUser() {
@@ -2229,6 +2797,33 @@ class MineWorkServiceTest {
         work.setUserId(7L);
         work.setTitle("作品" + workId);
         return work;
+    }
+
+    private WorkEntity editableAnimationWork() {
+        WorkEntity work = ownedWork(18L);
+        work.setTitle("旧动图");
+        work.setDescription("旧说明");
+        work.setMediaType(MediaTypeDict.ANIMATION.getCode());
+        work.setMediaObjectKey("WFA3B1E7A2/work/animation/story.gif");
+        work.setCoverObjectKey("WFA3B1E7A2/work/animation/story-thumb.jpg");
+        work.setCoverSha256("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        work.setOriginalFileName("story.gif");
+        work.setMimeType("image/gif");
+        work.setFileSize(4096L);
+        work.setFrameCount(24);
+        work.setCoverFrameNumber(1);
+        work.setWidth(720);
+        work.setHeight(1280);
+        return work;
+    }
+
+    private MineWorkUpdateRequest animationCoverUpdateRequest(int frameNumber, String idempotencyKey) {
+        MineWorkUpdateRequest request = new MineWorkUpdateRequest();
+        request.setTitle("新动图");
+        request.setDescription("新说明");
+        request.setCoverFrameNumber(frameNumber);
+        request.setCoverFrameIdempotencyKey(idempotencyKey);
+        return request;
     }
 
     private WorkTagEntity workTagRelation(Long workId, Long tagId) {

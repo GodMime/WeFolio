@@ -1872,6 +1872,47 @@ test('visitor singular work records event before opening image or starting inlin
   })
 })
 
+test('visitor singular animation records a work view and never a video event', async () => {
+  const requests = []
+  const previews = []
+  const page = loadVisitorPage((options) => {
+    requests.push(options)
+    return Promise.resolve({})
+  })
+  page.data.shareCode = 'PF001'
+  page.data.visitorKey = 'visitor-a'
+  global.wx = {
+    previewImage(options) {
+      previews.push(options)
+    },
+    showToast() {}
+  }
+
+  try {
+    assert.equal(await page.handleSingleWorkTap({
+      currentTarget: {
+        dataset: {
+          componentKey: 'c_animation',
+          workId: '23',
+          mediaType: 'ANIMATION',
+          mediaUrl: 'https://cdn.example.com/animation.webp',
+          coverUrl: 'https://cdn.example.com/animation-cover.jpg',
+          title: '循环片段'
+        }
+      }
+    }), true)
+  } finally {
+    delete global.wx
+  }
+
+  assert.equal(requests[0].data.eventType, 'WORK_VIEWED')
+  assert.equal(requests[0].data.mediaType, 'ANIMATION')
+  assert.deepEqual(previews[0], {
+    current: 'https://cdn.example.com/animation.webp',
+    urls: ['https://cdn.example.com/animation.webp']
+  })
+})
+
 test('visitor page clears active single work state through the matching child component', () => {
   const page = loadVisitorPage(() => Promise.resolve({}))
   const calls = []

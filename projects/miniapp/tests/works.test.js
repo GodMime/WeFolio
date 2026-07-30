@@ -406,6 +406,33 @@ test('normalizes work detail references and counters', () => {
   assert.equal(result.referenceSummaryText, '已被 1 个作品集引用')
 })
 
+test('normalizes animation metadata and summary counters', () => {
+  const result = normalizeWorkList({
+    summary: {
+      totalCount: 36,
+      imageCount: 30,
+      videoCount: 5,
+      animationCount: 1
+    },
+    works: [{
+      id: 10,
+      mediaType: 'ANIMATION',
+      title: '循环片段',
+      mediaUrl: 'https://cos.example.com/a.webp',
+      coverUrl: 'https://cos.example.com/a-cover-v2.jpg',
+      frameCount: 24,
+      coverFrameNumber: 8
+    }]
+  })
+
+  assert.equal(result.works[0].typeText, '动图')
+  assert.equal(result.works[0].frameCount, 24)
+  assert.equal(result.works[0].coverFrameNumber, 8)
+  assert.equal(result.summary.animationCount, 1)
+  assert.equal(result.summary.animationText, '动图 1')
+  assert.deepEqual(result.mediaFilters.map((item) => item.mediaType), ['', 'IMAGE', 'VIDEO', 'ANIMATION'])
+})
+
 test('builds and validates work update payload', () => {
   const payload = buildWorkUpdatePayload({
     title: ' 海边仪式 ',
@@ -465,6 +492,35 @@ test('builds work update payload with selected cover frame time', () => {
     coverFrameTimeMs: 5200,
     width: 1080,
     height: 1920
+  })
+})
+
+test('builds work update payload with selected animation frame and edit-session key', () => {
+  const payload = buildWorkUpdatePayload({
+    title: ' 循环片段 ',
+    description: ' 动图封面 ',
+    coverFrameNumber: 18,
+    coverFrameIdempotencyKey: ' animation-cover-10-session '
+  })
+
+  assert.deepEqual(payload, {
+    title: '循环片段',
+    description: '动图封面',
+    coverFrameNumber: 18,
+    coverFrameIdempotencyKey: 'animation-cover-10-session'
+  })
+})
+
+test('omits incomplete animation cover fields', () => {
+  const payload = buildWorkUpdatePayload({
+    title: ' 循环片段 ',
+    description: '',
+    coverFrameNumber: 18
+  })
+
+  assert.deepEqual(payload, {
+    title: '循环片段',
+    description: ''
   })
 })
 

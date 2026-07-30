@@ -10,7 +10,10 @@ Component({
     },
     work: {
       type: Object,
-      value: null
+      value: null,
+      observer() {
+        this.setData({ animationLoadFailed: false })
+      }
     },
     showTitle: {
       type: Boolean,
@@ -30,6 +33,10 @@ Component({
     }
   },
 
+  data: {
+    animationLoadFailed: false
+  },
+
   methods: {
     handleSingleWorkTap(event) {
       const dataset = event.currentTarget && event.currentTarget.dataset
@@ -43,6 +50,10 @@ Component({
         componentKey: this.data.componentKey,
         error: event.detail
       })
+    },
+
+    handleAnimationLoadError() {
+      this.setData({ animationLoadFailed: true })
     },
 
     pauseVideo() {

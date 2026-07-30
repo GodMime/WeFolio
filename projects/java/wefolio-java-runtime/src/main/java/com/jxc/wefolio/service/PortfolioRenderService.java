@@ -1,6 +1,8 @@
 package com.jxc.wefolio.service;
 
+import com.jxc.wefolio.dict.MediaTypeDict;
 import com.jxc.wefolio.dict.PortfolioComponentTypeDict;
+import com.jxc.wefolio.dict.WorkAuditStatusDict;
 import com.jxc.wefolio.dict.WorkStatusDict;
 import com.jxc.wefolio.dto.PortfolioConfigDto;
 import com.jxc.wefolio.dto.PortfolioRenderDto;
@@ -27,6 +29,20 @@ import java.util.Set;
 @Service
 @RequiredArgsConstructor
 public class PortfolioRenderService {
+
+    /** 单作品组件允许的媒体类型 */
+    private static final Set<String> SINGLE_WORK_MEDIA_TYPES = Set.of(
+            MediaTypeDict.IMAGE.getCode(),
+            MediaTypeDict.VIDEO.getCode(),
+            MediaTypeDict.ANIMATION.getCode());
+
+    /** 批量作品组件允许的媒体类型 */
+    private static final Set<String> BULK_WORK_MEDIA_TYPES = Set.of(
+            MediaTypeDict.IMAGE.getCode(),
+            MediaTypeDict.VIDEO.getCode());
+
+    /** 轮播组件只允许图片 */
+    private static final Set<String> CAROUSEL_MEDIA_TYPES = Set.of(MediaTypeDict.IMAGE.getCode());
 
     /** 默认页面标题 */
     private static final String DEFAULT_TITLE = "个人作品集";
@@ -335,11 +351,14 @@ public class PortfolioRenderService {
             return render;
         }
         switch (componentType) {
-            case CAROUSEL -> render.setWorks(buildWorks(ownerId, asLongList(componentConfig.get(CONFIG_KEY_WORK_IDS))));
+            case CAROUSEL -> render.setWorks(buildWorks(
+                    ownerId,
+                    asLongList(componentConfig.get(CONFIG_KEY_WORK_IDS)),
+                    CAROUSEL_MEDIA_TYPES));
             case PROFILE -> render.setProfile(buildProfile(componentConfig));
             case WORK_GRID, WORK_LIST -> {
                 applyWorkDisplayOptions(render, componentConfig);
-                render.setGroups(buildDisplayGroups(ownerId, componentConfig));
+                render.setGroups(buildDisplayGroups(ownerId, componentConfig, BULK_WORK_MEDIA_TYPES));
             }
             case SINGLE_WORK -> buildSingleWork(render, ownerId, componentConfig);
             case SCHEDULE_QUERY -> render.setScheduleQuery(buildScheduleQuery(componentConfig));
@@ -368,7 +387,7 @@ public class PortfolioRenderService {
         if (workId == null || workId <= 0L) {
             return;
         }
-        List<PortfolioRenderDto.WorkItem> works = buildWorks(ownerId, List.of(workId));
+        List<PortfolioRenderDto.WorkItem> works = buildWorks(ownerId, List.of(workId), SINGLE_WORK_MEDIA_TYPES);
         render.setWork(works.isEmpty() ? null : works.get(0));
     }
 
@@ -395,7 +414,11 @@ public class PortfolioRenderService {
      * @param componentConfig 组件配置
      * @return 展示标签列表
      */
-    private List<PortfolioRenderDto.DisplayGroup> buildDisplayGroups(Long ownerId, Map<String, Object> componentConfig) {
+    private List<PortfolioRenderDto.DisplayGroup> buildDisplayGroups(
+            Long ownerId,
+            Map<String, Object> componentConfig,
+            Set<String> allowedMediaTypes
+    ) {
         List<Map<String, Object>> groups = asMapList(componentConfig.get(CONFIG_KEY_GROUPS));
         if (groups.isEmpty()) {
             Map<String, Object> group = new LinkedHashMap<>();
@@ -414,7 +437,10 @@ public class PortfolioRenderService {
                     displayGroup.setGroupKey(asString(group.get(CONFIG_KEY_GROUP_KEY)));
                     displayGroup.setName(asString(group.get(CONFIG_KEY_GROUP_NAME)));
                     displayGroup.setSortOrder(asInteger(group.get(CONFIG_KEY_SORT_ORDER)));
-                    displayGroup.setWorks(buildWorks(ownerId, asLongList(group.get(CONFIG_KEY_WORK_IDS))));
+                    displayGroup.setWorks(buildWorks(
+                            ownerId,
+                            asLongList(group.get(CONFIG_KEY_WORK_IDS)),
+                            allowedMediaTypes));
                     return displayGroup;
                 })
                 .toList();
@@ -427,11 +453,16 @@ public class PortfolioRenderService {
      * @param workIds 作品 ID
      * @return 作品展示项
      */
-    private List<PortfolioRenderDto.WorkItem> buildWorks(Long ownerId, List<Long> workIds) {
+    private List<PortfolioRenderDto.WorkItem> buildWorks(
+            Long ownerId,
+            List<Long> workIds,
+            Set<String> allowedMediaTypes
+    ) {
         Map<Long, WorkEntity> workMap = loadWorkMap(ownerId, workIds);
         return workIds.stream()
                 .map(workMap::get)
                 .filter(Objects::nonNull)
+                .filter(work -> allowedMediaTypes.contains(work.getMediaType()))
                 .map(this::buildWorkItem)
                 .toList();
     }
@@ -458,6 +489,10 @@ public class PortfolioRenderService {
                 continue;
             }
             if (!WorkStatusDict.ACTIVE.getCode().equals(work.getStatus())) {
+                continue;
+            }
+            if (MediaTypeDict.ANIMATION.getCode().equals(work.getMediaType())
+                    && !WorkAuditStatusDict.PASSED.getCode().equals(work.getAuditStatus())) {
                 continue;
             }
             result.put(work.getId(), work);

@@ -75,6 +75,9 @@ public class ContentLimitService {
         if (MediaTypeDict.VIDEO.getCode().equals(mediaType)) {
             return contentLimitProperties.getWorkVideoMaxCount();
         }
+        if (MediaTypeDict.ANIMATION.getCode().equals(mediaType)) {
+            return contentLimitProperties.getWorkAnimationMaxCount();
+        }
         throw new BusinessException(MineWorkMessage.WORK_MEDIA_TYPE_UNSUPPORTED_MESSAGE);
     }
 
@@ -82,6 +85,12 @@ public class ContentLimitService {
         if (MediaTypeDict.IMAGE.getCode().equals(mediaType)) {
             return MineWorkMessage.IMAGE_WORK_COUNT_LIMIT_TEMPLATE;
         }
-        return MineWorkMessage.VIDEO_WORK_COUNT_LIMIT_TEMPLATE;
+        if (MediaTypeDict.VIDEO.getCode().equals(mediaType)) {
+            return MineWorkMessage.VIDEO_WORK_COUNT_LIMIT_TEMPLATE;
+        }
+        if (MediaTypeDict.ANIMATION.getCode().equals(mediaType)) {
+            return MineWorkMessage.ANIMATION_WORK_COUNT_LIMIT_TEMPLATE;
+        }
+        throw new BusinessException(MineWorkMessage.WORK_MEDIA_TYPE_UNSUPPORTED_MESSAGE);
     }
 }

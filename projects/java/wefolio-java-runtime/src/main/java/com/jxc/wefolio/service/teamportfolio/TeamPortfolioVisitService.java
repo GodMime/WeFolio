@@ -493,13 +493,11 @@ public class TeamPortfolioVisitService {
             VisitorTeamPortfolioEventRequest request,
             VisitEventTypeDict type
     ) {
-        String expectedMediaType = type == VisitEventTypeDict.WORK_VIEWED
-                ? MediaTypeDict.IMAGE.getCode() : MediaTypeDict.VIDEO.getCode();
         WorkEntity work = workEntityMapper.selectById(request.getWorkId());
         if (work == null
                 || !Objects.equals(work.getId(), request.getWorkId())
                 || !Objects.equals(work.getDeleted(), 0L)
-                || !expectedMediaType.equals(work.getMediaType())) {
+                || !isMediaTypeAllowedForEvent(type, work.getMediaType())) {
             throw new BusinessException(EVENT_INVALID_MESSAGE);
         }
     }
@@ -633,7 +631,7 @@ public class TeamPortfolioVisitService {
             case WORK_VIEWED -> {
                 requirePositive(request.getWorkId());
                 normalizeRequiredText(request.getComponentKey(), COMPONENT_KEY_MAX_BYTES);
-                requireExpectedMediaType(request.getMediaType(), MediaTypeDict.IMAGE);
+                requireWorkViewedMediaType(request.getMediaType());
                 requireAbsent(request.getMemberPortfolioId(), request.getLeadId(), request.getAction(),
                         request.getSourceType(), request.getQueriedDate());
             }
@@ -875,6 +873,28 @@ public class TeamPortfolioVisitService {
             throw new BusinessException(EVENT_INVALID_MESSAGE);
         }
         return normalized;
+    }
+
+    /** WORK_VIEWED 允许图片和动图，视频仍必须使用 VIDEO_PLAYED。 */
+    private String requireWorkViewedMediaType(String mediaType) {
+        String normalized = normalizeRequiredText(mediaType, CODE_VALUE_MAX_BYTES);
+        if (!MediaTypeDict.IMAGE.getCode().equals(normalized)
+                && !MediaTypeDict.ANIMATION.getCode().equals(normalized)) {
+            throw new BusinessException(EVENT_INVALID_MESSAGE);
+        }
+        return normalized;
+    }
+
+    /** 判断可信作品媒体类型是否符合事件语义。 */
+    private boolean isMediaTypeAllowedForEvent(VisitEventTypeDict type, String mediaType) {
+        if (type == VisitEventTypeDict.WORK_VIEWED) {
+            return MediaTypeDict.IMAGE.getCode().equals(mediaType)
+                    || MediaTypeDict.ANIMATION.getCode().equals(mediaType);
+        }
+        if (type == VisitEventTypeDict.VIDEO_PLAYED) {
+            return MediaTypeDict.VIDEO.getCode().equals(mediaType);
+        }
+        return false;
     }
 
     /** 规范化二维码动作。 */

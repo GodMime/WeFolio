@@ -26,7 +26,7 @@ public class MineWorkUploadTicketRequest {
         /** 前端本地临时 ID，用于回写上传进度 */
         private String clientId;
 
-        /** 媒体类型：IMAGE / VIDEO */
+        /** 媒体类型：IMAGE / VIDEO / ANIMATION */
         private String mediaType;
 
         /** 原始文件名 */
@@ -41,7 +41,7 @@ public class MineWorkUploadTicketRequest {
         /** 文件 SHA-256，由小程序端计算提交 */
         private String sha256;
 
-        /** 视频时长毫秒，图片为空 */
+        /** 视频时长毫秒，图片和动图为空 */
         private Integer durationMs;
 
         /** 像素宽度 */

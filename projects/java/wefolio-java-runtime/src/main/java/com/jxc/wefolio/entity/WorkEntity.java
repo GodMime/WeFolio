@@ -47,6 +47,12 @@ public class WorkEntity extends BaseEntity {
     /** 视频时长毫秒，图片为空 */
     private Integer durationMs;
 
+    /** 动图权威帧数，图片和视频为空 */
+    private Integer frameCount;
+
+    /** 动图当前封面帧序号，图片和视频为空 */
+    private Integer coverFrameNumber;
+
     /** 像素宽度 */
     private Integer width;
 

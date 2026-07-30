@@ -668,7 +668,9 @@ test('member switches clear stale second-stage sources and ignore late responses
     const page = loadPage('standard-edit/team-portfolio-standard-edit.js', (options) => {
       requests.push(options)
       if (requests.length < 3) return new Promise((resolve, reject) => pending.push({ resolve, reject }))
-      return Promise.resolve([{ id: 10 }])
+      return Promise.resolve(name === 'Carousel'
+        ? [{ id: 10, mediaType: 'IMAGE' }]
+        : [{ id: 10 }])
     })
     page.setData({ portfolioId: 7, componentSources: { [key]: { [sourceField]: [{ id: 8 }] } } })
     try {
@@ -685,7 +687,9 @@ test('member switches clear stale second-stage sources and ignore late responses
       assert.equal(page.data.componentSources[key].memberUserId, 10)
       await page[`handle${name}RetrySource`]({ currentTarget: { dataset: { key } } })
       assert.match(requests[2].url, /\/members\/10\//)
-      assert.deepEqual(page.data.componentSources[key][sourceField], [{ id: 10 }])
+      assert.deepEqual(page.data.componentSources[key][sourceField], name === 'Carousel'
+        ? [{ id: 10, mediaType: 'IMAGE' }]
+        : [{ id: 10 }])
     } finally { page.cleanup() }
   }
 })

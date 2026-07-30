@@ -13,6 +13,14 @@
   display: block;
   overflow: hidden;
   border-radius: 40rpx;
+}
+
+.single-work-image {
+  background: transparent;
+}
+
+.single-work-video,
+.single-work-video-poster {
   background: var(--portfolio-surface-muted);
 }
 

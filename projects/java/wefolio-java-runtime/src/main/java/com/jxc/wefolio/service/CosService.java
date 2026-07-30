@@ -303,6 +303,7 @@ public class CosService {
      *   work/
      *     image/     ← 图片类作品
      *     video/     ← 视频类作品
+     *     animation/ ← 动图类作品
      *   protfolio/   ← 作品集额外素材
      *   others/      ← 头像等其它素材
      * </pre>
@@ -316,6 +317,7 @@ public class CosService {
                 uniqueCode + "/work/",
                 uniqueCode + "/work/image/",
                 uniqueCode + "/work/video/",
+                uniqueCode + "/work/animation/",
                 uniqueCode + "/protfolio/",
                 uniqueCode + "/others/"
         );

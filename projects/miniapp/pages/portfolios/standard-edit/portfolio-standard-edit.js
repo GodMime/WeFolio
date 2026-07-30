@@ -9,7 +9,11 @@ const {
   normalizeProfile: normalizeBasicProfile,
   validateProfileForm: validateBasicProfileForm
 } = require('../../../utils/profile')
-const { normalizeWorkList, normalizeWorkTags } = require('../utils/works')
+const {
+  normalizeWorkList,
+  normalizeWorkTags,
+  selectableWorksFor
+} = require('../utils/works')
 const { confirmPortfolioPublishDisclaimer } = require('../utils/portfolio-publish-disclaimer')
 const {
   PORTFOLIO_ASSET_TYPES,
@@ -148,7 +152,7 @@ const DEFAULT_COMPONENT_DESCRIPTIONS = {
   SCHEDULE_QUERY: '开放访客查询档期',
   WORK_GRID: '双列展示图片和视频作品',
   WORK_LIST: '单列展示重点图片和视频作品',
-  SINGLE_WORK: '突出展示一个图片或视频作品',
+  SINGLE_WORK: '突出展示一个图片、视频或动图作品',
   QR_CONTACT: '展示二维码联系方式',
   CONTACT_FORM: '收集访客预留联系信息',
   TEXT_SECTION: '添加服务说明文字',
@@ -376,8 +380,7 @@ function buildComponentWorkOptions(works = [], selectedIds = [], componentType =
         return result
       }, {})
     : {}
-  return works
-    .filter((work) => componentType !== COMPONENT_TYPES.CAROUSEL || work.mediaType === 'IMAGE')
+  return selectableWorksFor(componentType, works)
     .map((work) => Object.assign({}, work, {
       selected: selectedSet.has(work.id),
       selectionOrder: componentType === COMPONENT_TYPES.CAROUSEL ? (selectionOrderMap[work.id] || 0) : 0,

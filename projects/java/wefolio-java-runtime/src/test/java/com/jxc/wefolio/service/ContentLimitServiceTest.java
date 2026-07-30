@@ -54,6 +54,7 @@ class ContentLimitServiceTest {
         properties = new ContentLimitProperties();
         properties.setWorkImageMaxCount(2);
         properties.setWorkVideoMaxCount(2);
+        properties.setWorkAnimationMaxCount(2);
         properties.setPersonalPortfolioMaxCount(2);
         properties.setTeamPortfolioMaxCount(2);
         service = new ContentLimitService(properties, workEntityMapper, portfolioEntityMapper);
@@ -91,6 +92,33 @@ class ContentLimitServiceTest {
         assertThatThrownBy(() -> service.ensureWorkCapacity(7L, MediaTypeDict.VIDEO.getCode(), 1L))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("视频作品数量已达上限（2个），请删除部分视频作品后再上传");
+    }
+
+    /**
+     * 动图应使用独立容量和提示，不得落入视频兜底。
+     */
+    @Test
+    void animationCapacityShouldUseIndependentLimit() {
+        properties.setWorkAnimationMaxCount(100);
+        when(workEntityMapper.selectCount(any())).thenReturn(99L, 100L);
+
+        assertThatCode(() -> service.ensureWorkCapacity(7L, MediaTypeDict.ANIMATION.getCode(), 1L))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> service.ensureWorkCapacity(7L, MediaTypeDict.ANIMATION.getCode(), 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("动图作品最多保留 100 个");
+    }
+
+    /**
+     * 未知媒体类型应明确拒绝，不能套用视频容量文案。
+     */
+    @Test
+    void unknownMediaTypeShouldBeRejectedBeforeCounting() {
+        assertThatThrownBy(() -> service.ensureWorkCapacity(7L, "UNKNOWN", 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("作品媒体类型不支持");
+
+        verify(workEntityMapper, never()).selectCount(any());
     }
 
     @Test

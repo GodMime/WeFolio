@@ -18,6 +18,7 @@ class ContentLimitPropertiesTest {
 
         assertThat(properties.getWorkImageMaxCount()).isEqualTo(500);
         assertThat(properties.getWorkVideoMaxCount()).isEqualTo(100);
+        assertThat(properties.getWorkAnimationMaxCount()).isEqualTo(100);
         assertThat(properties.getPersonalPortfolioMaxCount()).isEqualTo(10);
         assertThat(properties.getTeamPortfolioMaxCount()).isEqualTo(10);
     }
@@ -28,11 +29,13 @@ class ContentLimitPropertiesTest {
 
         properties.setWorkImageMaxCount(501);
         properties.setWorkVideoMaxCount(101);
+        properties.setWorkAnimationMaxCount(102);
         properties.setPersonalPortfolioMaxCount(11);
         properties.setTeamPortfolioMaxCount(12);
 
         assertThat(properties.getWorkImageMaxCount()).isEqualTo(501);
         assertThat(properties.getWorkVideoMaxCount()).isEqualTo(101);
+        assertThat(properties.getWorkAnimationMaxCount()).isEqualTo(102);
         assertThat(properties.getPersonalPortfolioMaxCount()).isEqualTo(11);
         assertThat(properties.getTeamPortfolioMaxCount()).isEqualTo(12);
     }
@@ -43,6 +46,7 @@ class ContentLimitPropertiesTest {
 
         assertThatIllegalArgumentException().isThrownBy(() -> properties.setWorkImageMaxCount(0));
         assertThatIllegalArgumentException().isThrownBy(() -> properties.setWorkVideoMaxCount(-1));
+        assertThatIllegalArgumentException().isThrownBy(() -> properties.setWorkAnimationMaxCount(0));
         assertThatIllegalArgumentException().isThrownBy(() -> properties.setPersonalPortfolioMaxCount(0));
         assertThatIllegalArgumentException().isThrownBy(() -> properties.setTeamPortfolioMaxCount(-1));
     }
@@ -54,6 +58,7 @@ class ContentLimitPropertiesTest {
         assertThat(yaml)
                 .contains("work-image-max-count: ${WEFOLIO_WORK_IMAGE_MAX_COUNT:500}")
                 .contains("work-video-max-count: ${WEFOLIO_WORK_VIDEO_MAX_COUNT:100}")
+                .contains("work-animation-max-count: ${WEFOLIO_WORK_ANIMATION_MAX_COUNT:100}")
                 .contains("personal-portfolio-max-count: ${WEFOLIO_PERSONAL_PORTFOLIO_MAX_COUNT:10}")
                 .contains("team-portfolio-max-count: ${WEFOLIO_TEAM_PORTFOLIO_MAX_COUNT:10}");
     }

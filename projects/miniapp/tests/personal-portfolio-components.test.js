@@ -41,10 +41,20 @@ const COMPONENT_CASES = [
       /aria-role="button"/,
       /aria-label="查看原图\{\{work\.title\}\}"/,
       /binderror="handleVideoError"/,
+      /work\.isAnimation && !animationLoadFailed/,
+      /src="\{\{work\.previewUrl\}\}"[\s\S]*webp="\{\{true\}\}"[\s\S]*binderror="handleAnimationLoadError"/,
+      /wx:elif="\{\{work\.isAnimation\}\}"[\s\S]*src="\{\{work\.thumbnailUrl\}\}"/,
       /wx:if="\{\{showTitle && work\.title\}\}"/,
       /wx:if="\{\{showDescription && work\.description\}\}"/
     ],
-    wxss: [/\.single-work-repair/, /\.single-work-play-badge/, /\.single-work-copy\s*\{[\s\S]*min-height:\s*16rpx;[\s\S]*padding-top:\s*16rpx;/, /\.single-work-description\s*\{[\s\S]*color:\s*var\(--portfolio-text-secondary\);/]
+    wxss: [
+      /\.single-work-image\s*\{[^}]*background:\s*transparent;/,
+      /\.single-work-video,\s*\.single-work-video-poster\s*\{[^}]*background:\s*var\(--portfolio-surface-muted\);/,
+      /\.single-work-repair/,
+      /\.single-work-play-badge/,
+      /\.single-work-copy\s*\{[\s\S]*min-height:\s*16rpx;[\s\S]*padding-top:\s*16rpx;/,
+      /\.single-work-description\s*\{[\s\S]*color:\s*var\(--portfolio-text-secondary\);/
+    ]
   },
   {
     name: 'qr-contact',

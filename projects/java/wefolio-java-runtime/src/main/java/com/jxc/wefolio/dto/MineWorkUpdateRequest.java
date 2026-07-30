@@ -25,6 +25,12 @@ public class MineWorkUpdateRequest {
     /** 小程序直传 COS 后得到的缩略图上传任务 ID，仅图片作品可提交 */
     private Long thumbnailTaskId;
 
+    /** 动图封面帧序号，仅动图作品可提交 */
+    private Integer coverFrameNumber;
+
+    /** 动图封面编辑会话幂等键，必须与封面帧序号同时提交 */
+    private String coverFrameIdempotencyKey;
+
     /** 标签 ID 列表；为 null 时不修改标签绑定，空列表表示清空标签绑定 */
     private List<Long> tagIds;
 

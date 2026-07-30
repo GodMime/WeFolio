@@ -935,7 +935,7 @@ test('editor loads member-first sources, blocks a new component until save, and 
     requests.push(options)
     if (options.url === '/api/mine/team-portfolios/7') return { portfolioId: 7, ownerId: 3, draftRevision: 2, config: { components: [{ componentKey: 'carousel-1', componentType: 'CAROUSEL', sortOrder: 0, config: { items: [] } }] } }
     if (options.url.endsWith('/components/carousel/members')) return [{ memberUserId: 8, displayName: '甲' }]
-    if (options.url.endsWith('/components/carousel/members/8/works')) return [{ workId: 9, title: '作品' }]
+    if (options.url.endsWith('/components/carousel/members/8/works')) return [{ workId: 9, mediaType: 'IMAGE', title: '作品' }]
     return { draftRevision: 3 }
   })
   try {

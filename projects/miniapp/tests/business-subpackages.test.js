@@ -22,6 +22,7 @@ const PACKAGE_LOCAL_UTILS = {
     'video-frame-decoder.js',
     'work-thumbnail-crop.js',
     'work-upload.js',
+    'work-media.js',
     'works.js'
   ],
   portfolio: [
@@ -34,6 +35,7 @@ const PACKAGE_LOCAL_UTILS = {
     'single-page-mode.js',
     'team-portfolio-list.js',
     'visitor-profile.js',
+    'work-media.js',
     'works.js'
   ],
   schedule: ['schedule.js'],
@@ -46,7 +48,8 @@ const PACKAGE_LOCAL_UTILS = {
     'team-portfolios.js',
     'team-visitor-portfolio.js',
     'team-visitor-profile.js',
-    'team-visitor-session.js'
+    'team-visitor-session.js',
+    'work-media.js'
   ]
 }
 const BUSINESS_SUBPACKAGE_ROOTS = [
@@ -307,6 +310,22 @@ test('works utility copies stay byte-for-byte aligned across business subpackage
   const portfolioSource = fs.readFileSync(path.join(MINIAPP_ROOT, 'pages/portfolios/utils/works.js'), 'utf8')
 
   assert.equal(portfolioSource, worksSource)
+})
+
+test('work media utilities stay inside their business subpackages', () => {
+  const mainUtilityPath = path.join(MINIAPP_ROOT, 'utils/work-media.js')
+  const packageUtilityPaths = [
+    'pages/works/utils/work-media.js',
+    'pages/portfolios/utils/work-media.js',
+    'pages/team-portfolios/utils/work-media.js'
+  ].map((relativePath) => path.join(MINIAPP_ROOT, relativePath))
+
+  assert.equal(fs.existsSync(mainUtilityPath), false, 'work media utility should not be shipped in the main package')
+  packageUtilityPaths.forEach((utilityPath) => {
+    assert.equal(fs.existsSync(utilityPath), true, `${path.relative(MINIAPP_ROOT, utilityPath)} should exist`)
+  })
+  const packageSources = packageUtilityPaths.map((utilityPath) => fs.readFileSync(utilityPath, 'utf8'))
+  assert.equal(new Set(packageSources).size, 1, 'work media utility copies should stay aligned')
 })
 
 test('team portfolio list utility copies stay byte-for-byte aligned across business subpackages', () => {

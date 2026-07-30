@@ -22,6 +22,11 @@ const {
   prepareWorkThumbnailUploadFile,
   zoomWorkThumbnailCropState
 } = require('./utils/work-thumbnail-crop')
+const {
+  createAnimationCoverEditState,
+  updateAnimationCoverSelection,
+  updateAnimationCoverEditFrame
+} = require('./utils/animation-cover')
 const { calculateFileSha256: calculateLocalFileSha256 } = require('./utils/sha256')
 const {
   DEFAULT_WORK_TAG_COLOR,
@@ -195,6 +200,14 @@ function buildVideoEditForm(work = {}) {
   })
 }
 
+function buildAnimationEditForm(work = {}) {
+  return Object.assign(buildBaseWorkEditForm(work), {
+    isVideo: false,
+    isAnimation: true,
+    coverEdit: createAnimationCoverEditState(work)
+  })
+}
+
 function buildEditTagPayloadFields(form = {}) {
   return Array.isArray(form.tagOptions) && form.tagOptions.length
     ? { tagIds: buildWorkEditSelectedTagIds(form.tagOptions) }
@@ -251,7 +264,7 @@ function choosePublishedCoverUrl(sourceForm = {}, patch = {}, work = {}) {
 function shouldRefreshPublishedCover(sourceForm = {}, patch = {}, work = {}) {
   const thumbnailPreviewPath = String(sourceForm.thumbnailPreviewPath || '').trim()
   return Boolean(
-    sourceForm.thumbnailEdited &&
+    (sourceForm.thumbnailEdited || sourceForm.coverFrameSelected) &&
     (patch.coverUrl || sourceForm.customCoverPath || isRemoteUrl(thumbnailPreviewPath) || work.coverUrl)
   )
 }
@@ -403,6 +416,7 @@ Page({
     errorMessage: '',
     keyword: '',
     selectedTagId: null,
+    selectedMediaType: '',
     batchMode: false,
     selectedWorkIds: [],
     batchSelectedCountText: '0 已选',
@@ -447,6 +461,11 @@ Page({
     videoFrameExporting: false,
     videoCoverUploadProgress: 0,
     videoEditErrorText: '',
+    animationEditSheetVisible: false,
+    animationEditForm: null,
+    animationEditFieldCounters: buildWorkFieldCounters({}),
+    animationEditSaving: false,
+    animationEditErrorText: '',
     imagePreviewVisible: false,
     imagePreview: null,
     videoPreviewVisible: false,
@@ -535,6 +554,9 @@ Page({
         data: {
           keyword: this.data.keyword,
           tagId: this.data.selectedTagId || undefined,
+          ...(this.data.selectedMediaType ? {
+            mediaType: this.data.selectedMediaType
+          } : {}),
           page: nextPage,
           pageSize: currentList.pageSize || 20
         }
@@ -603,6 +625,22 @@ Page({
   },
 
   handleFilterShellTap() {
+  },
+
+  handleMediaTypeTap(event) {
+    if (this.data.sortMode) {
+      return
+    }
+    const mediaType = String(event.currentTarget.dataset.type || '').trim()
+    this.setData({
+      selectedMediaType: mediaType,
+      batchMode: false,
+      selectedWorkIds: [],
+      batchSelectedCountText: '0 已选',
+      batchSelectAllText: '全选',
+      revealedWorkId: null
+    })
+    this.loadWorks(true)
   },
 
   handleCloseTagManageMode() {
@@ -868,6 +906,10 @@ Page({
       this.openVideoEditSheet(work)
       return
     }
+    if (work.mediaType === 'ANIMATION') {
+      this.openAnimationEditSheet(work)
+      return
+    }
     this.openImageEditSheet(work)
   },
 
@@ -1023,6 +1065,11 @@ Page({
       videoFrameExporting: false,
       videoCoverUploadProgress: 0,
       videoEditErrorText: '',
+      animationEditSheetVisible: false,
+      animationEditForm: null,
+      animationEditFieldCounters: buildWorkFieldCounters({}),
+      animationEditSaving: false,
+      animationEditErrorText: '',
       tagManageMode: false
     })
   },
@@ -1048,6 +1095,37 @@ Page({
       videoFrameExporting: false,
       videoCoverUploadProgress: 0,
       videoEditErrorText: '',
+      animationEditSheetVisible: false,
+      animationEditForm: null,
+      animationEditFieldCounters: buildWorkFieldCounters({}),
+      animationEditSaving: false,
+      animationEditErrorText: '',
+      tagManageMode: false
+    })
+  },
+
+  openAnimationEditSheet(work) {
+    const animationEditForm = Object.assign(buildAnimationEditForm(work), {
+      tagOptions: buildWorkEditTagOptions(this.data.list.tags, work.tags, work.referenceCount),
+      tagEditNotice: work.referenceCount > 0 ? WORK_TAG_REFERENCED_NOTICE : '',
+      coverFrameSelected: false
+    })
+    this.setData({
+      imageEditSheetVisible: false,
+      imageEditForm: null,
+      imageEditFieldCounters: buildWorkFieldCounters({}),
+      imageEditSaving: false,
+      imageEditErrorText: '',
+      videoEditSheetVisible: false,
+      videoEditForm: null,
+      videoEditFieldCounters: buildWorkFieldCounters({}),
+      videoEditSaving: false,
+      videoEditErrorText: '',
+      animationEditSheetVisible: true,
+      animationEditForm,
+      animationEditFieldCounters: buildWorkFieldCounters(animationEditForm),
+      animationEditSaving: false,
+      animationEditErrorText: '',
       tagManageMode: false
     })
   },
@@ -1182,6 +1260,19 @@ Page({
     })
   },
 
+  handleCloseAnimationEditor() {
+    if (this.data.animationEditSaving) {
+      return
+    }
+    this.setData({
+      animationEditSheetVisible: false,
+      animationEditForm: null,
+      animationEditFieldCounters: buildWorkFieldCounters({}),
+      animationEditSaving: false,
+      animationEditErrorText: ''
+    })
+  },
+
   handleImageEditInput(event) {
     const field = event.currentTarget.dataset.field
     if (!field || !this.data.imageEditForm) {
@@ -1204,6 +1295,10 @@ Page({
 
   handleVideoEditTagToggle(event) {
     this.toggleEditTagOption('videoEditForm', event)
+  },
+
+  handleAnimationEditTagToggle(event) {
+    this.toggleEditTagOption('animationEditForm', event)
   },
 
   toggleEditTagOption(formKey, event) {
@@ -1453,6 +1548,71 @@ Page({
       [`videoEditForm.${field}`]: value,
       videoEditFieldCounters: buildWorkFieldCounters(videoEditForm),
       videoEditErrorText: ''
+    })
+  },
+
+  handleAnimationEditInput(event) {
+    const field = event.currentTarget.dataset.field
+    if (!field || !this.data.animationEditForm) {
+      return
+    }
+    const value = event.detail.value || ''
+    const animationEditForm = Object.assign({}, this.data.animationEditForm, {
+      [field]: value
+    })
+    this.setData({
+      [`animationEditForm.${field}`]: value,
+      animationEditFieldCounters: buildWorkFieldCounters(animationEditForm),
+      animationEditErrorText: ''
+    })
+  },
+
+  handleAnimationCoverSliderChanging(event) {
+    const animationEditForm = this.data.animationEditForm
+    if (!animationEditForm || !animationEditForm.coverEdit) {
+      return
+    }
+    const coverEdit = updateAnimationCoverSelection(
+      animationEditForm.coverEdit,
+      event.detail.value
+    )
+    this.setData({
+      'animationEditForm.coverEdit': coverEdit,
+      'animationEditForm.coverFrameSelected': false,
+      animationEditErrorText: ''
+    })
+  },
+
+  handleAnimationCoverSliderChange(event) {
+    this.updateAnimationCoverFrame(event.detail.value)
+  },
+
+  updateAnimationCoverFrame(value) {
+    const animationEditForm = this.data.animationEditForm
+    if (!animationEditForm || !animationEditForm.coverEdit) {
+      return
+    }
+    const coverEdit = updateAnimationCoverEditFrame(animationEditForm.coverEdit, value)
+    this.setData({
+      'animationEditForm.coverEdit': coverEdit,
+      'animationEditForm.coverFrameSelected': false,
+      animationEditErrorText: ''
+    })
+  },
+
+  handleUseAnimationCoverFrame() {
+    const animationEditForm = this.data.animationEditForm
+    if (!animationEditForm || !animationEditForm.coverEdit) {
+      return
+    }
+    this.setData({
+      'animationEditForm.coverEdit.confirmed': true,
+      'animationEditForm.coverFrameSelected': true,
+      animationEditErrorText: ''
+    })
+    wx.showToast({
+      title: '已选择当前帧',
+      icon: 'success'
     })
   },
 
@@ -1828,6 +1988,63 @@ Page({
         videoEditSaving: false,
         videoCoverUploadProgress: 0,
         videoEditErrorText: error && error.message ? error.message : '作品保存失败'
+      })
+    }
+  },
+
+  async handleConfirmAnimationEdit() {
+    const animationEditForm = this.data.animationEditForm
+    if (!animationEditForm || this.data.animationEditSaving) {
+      return
+    }
+    const validation = validateWorkForm(animationEditForm)
+    if (!validation.valid) {
+      this.setData({ animationEditErrorText: validation.message })
+      return
+    }
+    this.setData({
+      animationEditSaving: true,
+      animationEditErrorText: ''
+    })
+    try {
+      const coverEdit = animationEditForm.coverEdit || {}
+      const payload = buildWorkUpdatePayload({
+        title: animationEditForm.title,
+        description: animationEditForm.description,
+        ...buildEditTagPayloadFields(animationEditForm),
+        ...(animationEditForm.coverFrameSelected ? {
+          coverFrameNumber: coverEdit.selectedFrame,
+          coverFrameIdempotencyKey: coverEdit.idempotencyKey
+        } : {})
+      })
+      const response = await request({
+        url: `${WORKS_API_PREFIX}/${animationEditForm.id}`,
+        method: 'PUT',
+        data: payload
+      })
+      this.patchWorkInList(animationEditForm, response && response.work ? response.work : payload)
+      wx.showToast({
+        title: '作品已更新',
+        icon: 'success'
+      })
+      this.setData({
+        animationEditSheetVisible: false,
+        animationEditForm: null,
+        animationEditFieldCounters: buildWorkFieldCounters({}),
+        animationEditSaving: false,
+        animationEditErrorText: ''
+      })
+      await this.loadWorks(true)
+      this.patchWorkInList(animationEditForm, response && response.work ? response.work : payload)
+    } catch (error) {
+      if (error && error.authRequired) {
+        this.setData({ animationEditSaving: false })
+        handleMaintainerAuthRequired(error.message)
+        return
+      }
+      this.setData({
+        animationEditSaving: false,
+        animationEditErrorText: error && error.message ? error.message : '作品保存失败'
       })
     }
   },

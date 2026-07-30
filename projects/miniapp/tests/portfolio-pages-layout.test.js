@@ -442,14 +442,19 @@ test('visitor work list components keep tags visible and grid cards in two colum
   assert.doesNotMatch(workListRule, /display:\s*grid/, 'work list should avoid CSS grid')
 })
 
-test('portfolio media placeholders use the theme surface color', () => {
+test('portfolio media keeps images transparent and placeholders on the theme surface', () => {
   const carouselRule = readRule(
     read('components/portfolio-carousel/portfolio-carousel.wxss'),
     '.portfolio-carousel'
   )
   const singleWorkWxss = read('pages/portfolios/components/single-work/single-work.wxss')
-  const singleWorkRule = singleWorkWxss.match(
-    /\.single-work-image,\s*\.single-work-video,\s*\.single-work-video-poster\s*\{([^}]*)\}/
+  const singleWorkImageRule = readRule(singleWorkWxss, '.single-work-image')
+  const singleWorkVideoRules = Array.from(singleWorkWxss.matchAll(
+    /^\.single-work-video,\s*\.single-work-video-poster\s*\{([^}]*)\}/gm
+  ))
+  const singleWorkVideoRule = singleWorkVideoRules.at(-1)
+  const singleWorkPlaceholderRule = singleWorkWxss.match(
+    /^\.single-work-media-placeholder,\s*\.single-work-repair\s*\{([^}]*)\}/m
   )
   const workGridRule = readRule(
     read('pages/portfolios/components/work-grid/work-grid.wxss'),
@@ -460,10 +465,13 @@ test('portfolio media placeholders use the theme surface color', () => {
     '.work-cover-wrap'
   )
 
-  assert.ok(singleWorkRule, 'single work media placeholder rule should exist')
+  assert.match(singleWorkImageRule, /background:\s*transparent/, 'single work image should preserve transparent media')
+  assert.ok(singleWorkVideoRule, 'single work video placeholder rule should exist')
+  assert.ok(singleWorkPlaceholderRule, 'single work missing-media placeholder rule should exist')
   ;[
     ['carousel', carouselRule],
-    ['single work', singleWorkRule[1]],
+    ['single work video', singleWorkVideoRule[1]],
+    ['single work missing media', singleWorkPlaceholderRule[1]],
     ['work grid', workGridRule],
     ['work list', workListRule]
   ].forEach(([name, rule]) => {
