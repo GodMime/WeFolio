@@ -34,6 +34,38 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value))
 }
 
+function resolveClassBackground(sources, ancestorClass, elementClass) {
+  let winner = null
+  let order = 0
+  for (const source of sources) {
+    for (const match of source.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const background = match[2].match(/(?:^|;)\s*background\s*:\s*([^;]+)/)
+      if (!background) continue
+      for (const rawSelector of match[1].split(',')) {
+        const selectorClasses = Array.from(rawSelector.matchAll(/\.([A-Za-z0-9_-]+)/g))
+          .map((classMatch) => classMatch[1])
+        const matchesElement = selectorClasses.includes(elementClass)
+        const matchesContext = selectorClasses.every((className) => {
+          return className === elementClass || className === ancestorClass
+        })
+        if (!matchesElement || !matchesContext) continue
+        const candidate = {
+          value: background[1].trim(),
+          specificity: selectorClasses.length,
+          order
+        }
+        if (!winner ||
+            candidate.specificity > winner.specificity ||
+            (candidate.specificity === winner.specificity && candidate.order > winner.order)) {
+          winner = candidate
+        }
+      }
+      order += 1
+    }
+  }
+  return winner && winner.value
+}
+
 function createComponentHarness(definition, initialProperties = {}) {
   const events = []
   const properties = {}
@@ -263,6 +295,19 @@ test('single work keeps transparent image media transparent', () => {
 
   assert.match(wxss, /\.single-work-image\s*\{[^}]*background:\s*transparent;/)
   assert.match(wxss, /\.single-work-video,\s*\.single-work-video-poster\s*\{[^}]*background:\s*#000;/)
+})
+
+test('single work keeps transparent image media transparent in the dark theme', () => {
+  const themeWxss = fs.readFileSync(
+    path.resolve(ROOT, '../styles/team-portfolio-theme.wxss'),
+    'utf8'
+  )
+  const componentWxss = fs.readFileSync(path.join(ROOT, 'single-work/single-work.wxss'), 'utf8')
+
+  assert.equal(
+    resolveClassBackground([themeWxss, componentWxss], 'theme-dark', 'single-work-image'),
+    'transparent'
+  )
 })
 
 test('single work renders animation media and falls back to its static cover', () => {

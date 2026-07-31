@@ -36,7 +36,6 @@
   color: var(--team-portfolio-text-secondary);
 }
 
-.theme-dark .single-work-image,
 .theme-dark .single-work-video,
 .theme-dark .single-work-video-poster,
 .theme-dark .single-work-empty,
