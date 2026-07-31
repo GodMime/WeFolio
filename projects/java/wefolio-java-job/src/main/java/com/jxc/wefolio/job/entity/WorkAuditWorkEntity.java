@@ -15,7 +15,7 @@ public class WorkAuditWorkEntity extends BaseEntity {
     /** 作品所属用户 ID */
     private Long userId;
 
-    /** 媒体类型：IMAGE 图片 / VIDEO 视频 */
+    /** 媒体类型：IMAGE 图片 / VIDEO 视频 / ANIMATION 动图 */
     private String mediaType;
 
     /** COS 媒体对象键 */
@@ -26,6 +26,9 @@ public class WorkAuditWorkEntity extends BaseEntity {
 
     /** 视频时长毫秒，图片为空 */
     private Integer durationMs;
+
+    /** 动图总帧数，非动图为空 */
+    private Integer frameCount;
 
     /** 作品审核状态 */
     private String auditStatus;

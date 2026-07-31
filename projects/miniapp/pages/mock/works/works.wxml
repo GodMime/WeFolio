@@ -1,5 +1,5 @@
 <view class="page-shell works-page mock-works-page">
-  <navigation-bar title="作品" back="{{false}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+  <navigation-bar title="作品" back="{{false}}" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
 
   <view class="works-scroll">
     <view class="works-content">
@@ -72,8 +72,11 @@
                     <text> / 风景作品</text>
                   </view>
                   <view class="work-status-row">
-                    <view class="reference-pill used">已使用 1 次</view>
-                    <view class="audit-pill {{item.auditStatusTone}}">{{item.auditStatusText}}</view>
+                    <view class="reference-pill {{item.referenceCount > 0 ? 'used' : ''}}">{{item.referenceCount > 0 ? '引用 ' + item.referenceCount + ' 次' : '未引用'}}</view>
+                    <view class="status-badge {{item.auditStatusTone}}">
+                      <view class="status-dot"></view>
+                      <text>{{item.auditStatusText}}</text>
+                    </view>
                   </view>
                 </view>
                 <view class="card-arrow"></view>

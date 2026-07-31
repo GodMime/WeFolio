@@ -1,9 +1,12 @@
+@import "../../styles/portfolio-theme.wxss";
+
 .portfolio-carousel {
   position: relative;
   width: 100%;
   height: 563rpx;
   overflow: hidden;
-  background: #f3f4f6;
+  border-radius: 40rpx;
+  background: var(--portfolio-surface-muted);
 }
 
 .portfolio-carousel-swiper,

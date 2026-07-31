@@ -44,7 +44,6 @@ test('app registers portfolio pages', () => {
   [
     'pages/portfolios/portfolios',
     'pages/portfolios/standard-edit/portfolio-standard-edit',
-    'pages/portfolios/component-library/portfolio-component-library',
     'pages/portfolios/standard-preview/portfolio-standard-preview',
     'pages/portfolios/visitor-portfolio/visitor-portfolio',
     'pages/portfolios/visitor-schedule/visitor-schedule',
@@ -56,7 +55,6 @@ test('portfolio pages use custom navigation bar', () => {
   [
     'pages/portfolios/portfolios',
     'pages/portfolios/standard-edit/portfolio-standard-edit',
-    'pages/portfolios/component-library/portfolio-component-library',
     'pages/portfolios/standard-preview/portfolio-standard-preview',
     'pages/portfolios/visitor-portfolio/visitor-portfolio',
     'pages/portfolios/visitor-schedule/visitor-schedule',
@@ -89,6 +87,7 @@ test('maintainer portfolio pages expose expected controls', () => {
   const portfolioActionButtonPublishRule = readRule(listWxss, '.portfolio-action-button.publish')
   const portfolioContentRule = readRule(listWxss, '.portfolio-content')
   const portfolioListPanelRule = readRules(listWxss, '.portfolio-list-panel')
+  const portfolioItemCardRule = readRule(listWxss, '.portfolio-item-card')
   const portfolioListScrollRule = readRule(listWxss, '.portfolio-list-scroll')
   const createActionsRule = readRule(listWxss, '.create-actions')
   const teamActionHintSlotRule = readRule(listWxss, '.team-action-hint-slot')
@@ -99,6 +98,8 @@ test('maintainer portfolio pages expose expected controls', () => {
   const teamPortfolioSideRule = readRule(listWxss, '.team-portfolio-card .portfolio-side')
   const editWxml = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxml')
   const editWxss = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxss')
+  const componentEditorPanelRule = readRule(editWxss, '.component-picker-panel')
+  const primaryActionRule = readRule(editWxss, '.primary-button')
   const qrSourceTabsRule = readRule(editWxss, '.qr-source-tabs')
   const qrSourceTabRule = readRule(editWxss, '.qr-source-tab')
   const qrSourceTabActiveRule = readRule(editWxss, '.qr-source-tab.active')
@@ -112,7 +113,6 @@ test('maintainer portfolio pages expose expected controls', () => {
     listJs.indexOf('handlePrimaryActionTap(event)'),
     listJs.indexOf('resolveShareTarget(')
   )
-  const libraryWxml = read('pages/portfolios/component-library/portfolio-component-library.wxml')
   const previewWxml = read('pages/portfolios/standard-preview/portfolio-standard-preview.wxml')
   const unavailableWxml = read('pages/portfolios/unavailable/portfolio-unavailable.wxml')
 
@@ -166,7 +166,7 @@ test('maintainer portfolio pages expose expected controls', () => {
   assert.match(listWxml, /item\.active/)
   assert.match(listWxss, /\.portfolios-page\s*\{[\s\S]*height:\s*100vh;[\s\S]*display:\s*flex;[\s\S]*overflow:\s*hidden;/)
   assert.match(portfolioContentRule, /height:\s*100%/)
-  assert.match(portfolioContentRule, /padding:\s*24rpx 28rpx calc\(140rpx \+ env\(safe-area-inset-bottom\)\)/)
+  assert.match(portfolioContentRule, /padding:\s*20rpx 32rpx calc\(140rpx \+ env\(safe-area-inset-bottom\)\)/)
   assert.match(portfolioContentRule, /display:\s*flex/)
   assert.match(portfolioContentRule, /flex-direction:\s*column/)
   assert.match(portfolioListPanelRule, /flex:\s*1/)
@@ -179,16 +179,18 @@ test('maintainer portfolio pages expose expected controls', () => {
   assert.match(createActionsRule, /flex:\s*none/)
   assert.match(teamActionHintSlotRule, /flex:\s*none/)
   assert.doesNotMatch(teamActionHintSlotRule, /min-height:/)
-  assert.match(listWxss, /\.portfolio-list-panel\s*\{[\s\S]*border-radius:\s*16rpx;[\s\S]*box-shadow:/)
+  assert.match(portfolioListPanelRule, /border-radius:\s*48rpx/)
+  assert.match(portfolioItemCardRule, /border-radius:\s*48rpx/)
+  assert.match(portfolioItemCardRule, /border:\s*1rpx solid #e9ecef/)
   assert.match(listWxss, /\.portfolio-swipe-row\.revealed \.portfolio-item-card\s*\{[\s\S]*transform:\s*translateX\(-140rpx\);/)
   assert.match(listWxss, /\.portfolio-delete-pane\s*\{[\s\S]*position:\s*absolute;[\s\S]*right:\s*0;[\s\S]*width:\s*128rpx;/)
   assert.match(listWxss, /\.portfolio-delete-button\s*\{[\s\S]*width:\s*128rpx;[\s\S]*height:\s*100%;[\s\S]*border-radius:\s*0;/)
-  assert.match(listWxss, /\.portfolio-item-card\s*\{[\s\S]*min-height:\s*180rpx;[\s\S]*display:\s*flex;[\s\S]*align-items:\s*center;/)
-  assert.match(listWxss, /\.portfolio-item-card\s*\{[\s\S]*gap:\s*14rpx;/)
-  assert.match(listWxss, /\.portfolio-cover\s*\{[\s\S]*width:\s*112rpx;[\s\S]*height:\s*90rpx;/)
+  assert.match(listWxss, /\.portfolio-item-card\s*\{[\s\S]*min-height:\s*184rpx;[\s\S]*display:\s*flex;[\s\S]*align-items:\s*center;/)
+  assert.match(listWxss, /\.portfolio-item-card\s*\{[\s\S]*gap:\s*20rpx;/)
+  assert.match(listWxss, /\.portfolio-cover\s*\{[\s\S]*width:\s*152rpx;[\s\S]*height:\s*133rpx;/)
   assert.match(teamPortfolioAffiliationRule, /position:\s*absolute/)
   assert.match(teamPortfolioAffiliationRule, /top:\s*26rpx/)
-  assert.match(teamPortfolioAffiliationRule, /right:\s*20rpx/)
+  assert.match(teamPortfolioAffiliationRule, /right:\s*24rpx/)
   assert.match(teamPortfolioAffiliationRule, /width:\s*256rpx/)
   assert.match(teamPortfolioAffiliationRule, /overflow:\s*hidden/)
   assert.match(teamPortfolioAffiliationRule, /text-overflow:\s*ellipsis/)
@@ -201,23 +203,26 @@ test('maintainer portfolio pages expose expected controls', () => {
   assert.match(portfolioTitleTrackRule, /display:\s*inline-flex/)
   assert.match(portfolioTitleScrollingTrackRule, /animation:\s*portfolio-title-marquee/)
   assert.match(listWxss, /@keyframes portfolio-title-marquee/)
-  assert.match(portfolioActionButtonRule, /height:\s*56rpx/)
-  assert.match(portfolioActionButtonRule, /border-radius:\s*14rpx/)
-  assert.match(portfolioActionButtonRule, /color:\s*#425061/)
-  assert.match(portfolioActionButtonRule, /border:\s*1rpx\s+solid\s+#d6dee7/)
-  assert.match(portfolioActionButtonRule, /background:\s*#f3f6f9/)
+  assert.match(portfolioActionButtonRule, /height:\s*60rpx/)
+  assert.match(portfolioActionButtonRule, /border-radius:\s*999rpx/)
+  assert.match(portfolioActionButtonRule, /color:\s*#212529/)
+  assert.match(portfolioActionButtonRule, /border:\s*0/)
+  assert.match(portfolioActionButtonRule, /background:\s*#f5f6f7/)
   assert.doesNotMatch(portfolioActionButtonRule, /box-shadow:/)
-  assert.match(portfolioActionButtonPublishRule, /color:\s*#211a0f/)
-  assert.match(portfolioActionButtonPublishRule, /border-color:\s*#c79035/)
-  assert.match(portfolioActionButtonPublishRule, /background:\s*#d9a84a/)
-  assert.match(listWxss, /\.portfolio-action-button\.share\s*\{[\s\S]*color:\s*#425061;[\s\S]*border-color:\s*#d6dee7;[\s\S]*background:\s*#f3f6f9;/)
+  assert.match(portfolioActionButtonPublishRule, /color:\s*#ffffff/)
+  assert.match(portfolioActionButtonPublishRule, /border-color:\s*#212529/)
+  assert.match(portfolioActionButtonPublishRule, /background:\s*#212529/)
+  assert.match(componentEditorPanelRule, /border-radius:\s*56rpx 56rpx 0 0/)
+  assert.match(primaryActionRule, /background:\s*#212529/)
+  assert.doesNotMatch(listWxss, /#d9a84a|#b88a44/i)
+  assert.match(listWxss, /\.portfolio-action-button\.share\s*\{[\s\S]*color:\s*#212529;[\s\S]*background:\s*#f5f6f7;/)
   assert.match(listWxss, /\.portfolio-action-button\.share:active\s*\{[\s\S]*background:\s*#e9eff5;/)
   assert.doesNotMatch(listWxss, /\.portfolio-icon-button\s*\{/)
   assert.doesNotMatch(listWxss, /\.portfolio-share-icon\s*\{/)
   assert.doesNotMatch(listWxss, /\.portfolio-share-hit\s*\{/)
-  assert.match(listWxss, /\.create-actions\s*\{[\s\S]*display:\s*flex;[\s\S]*gap:\s*16rpx;[\s\S]*margin:\s*24rpx 0 0;/)
+  assert.match(listWxss, /\.create-actions\s*\{[\s\S]*display:\s*flex;[\s\S]*gap:\s*16rpx;[\s\S]*margin:\s*20rpx 0 0;[\s\S]*padding-bottom:\s*28rpx;/)
   assert.doesNotMatch(listWxss, /\.create-actions\s*\{[\s\S]*grid-template-columns:/)
-  assert.match(listWxss, /\.tabbar\s*\{[\s\S]*position:\s*fixed;[\s\S]*bottom:\s*0;/)
+  assert.match(listWxss, /\.tabbar\s*\{[\s\S]*position:\s*fixed;[\s\S]*bottom:\s*calc\(28rpx \+ env\(safe-area-inset-bottom\)\);/)
   assert.match(listJs, /const \{ normalizeId \} = require\('\.\.\/\.\.\/utils\/id'\)/)
   assert.match(listJs, /revealedPortfolioId:\s*null/)
   assert.match(listJs, /handlePortfolioTouchStart/)
@@ -253,15 +258,15 @@ test('maintainer portfolio pages expose expected controls', () => {
   assert.match(qrSourceTabsRule, /min-height:\s*76rpx/)
   assert.match(qrSourceTabsRule, /margin:\s*8rpx 0 12rpx/)
   assert.match(qrSourceTabsRule, /padding:\s*8rpx/)
-  assert.match(qrSourceTabsRule, /border:\s*1rpx solid #d9e2eb/)
-  assert.match(qrSourceTabsRule, /border-radius:\s*16rpx/)
-  assert.match(qrSourceTabsRule, /background:\s*rgba\(255,\s*255,\s*255,\s*0\.96\)/)
+  assert.match(qrSourceTabsRule, /border:\s*1rpx solid #e9ecef/)
+  assert.match(qrSourceTabsRule, /border-radius:\s*24rpx/)
+  assert.match(qrSourceTabsRule, /background:\s*#f5f6f7/)
   assert.match(qrSourceTabRule, /height:\s*60rpx/)
   assert.match(qrSourceTabRule, /font-size:\s*24rpx/)
   assert.match(qrSourceTabRule, /border-radius:\s*10rpx/)
   assert.match(qrSourceTabRule, /background:\s*transparent/)
   assert.match(qrSourceTabActiveRule, /color:\s*#ffffff/)
-  assert.match(qrSourceTabActiveRule, /background:\s*#17202a/)
+  assert.match(qrSourceTabActiveRule, /background:\s*#212529/)
   assert.match(qrContactImageEditorRule, /justify-content:\s*center/)
   assert.match(qrContactImagePreviewRule, /width:\s*220rpx/)
   assert.match(qrContactImagePreviewRule, /height:\s*220rpx/)
@@ -291,13 +296,11 @@ test('maintainer portfolio pages expose expected controls', () => {
   assert.match(editWxss, /\.divider-color-option\s*\{/)
   assert.doesNotMatch(editWxml, /class="component-hints"/)
   assert.doesNotMatch(editWxml, /class="hint-chip"/)
-  assert.match(libraryWxml, /轮播图/)
-  assert.match(libraryWxml, /双列作品列表/)
-  assert.match(libraryWxml, /二维码联系/)
-  assert.match(libraryWxml, /预留联系信息/)
   assert.match(previewWxml, /预览/)
   assert.match(previewWxml, /禁用真实提交/)
   assert.match(previewWxml, /<navigation-bar[^>]*back="\{\{true\}\}"/)
+  assert.match(previewWxml, /color="\{\{portfolio\.themeMode === 'dark' \? '#f8f9fa' : '#212529'\}\}"/)
+  assert.match(previewWxml, /background="\{\{portfolio\.style\.backgroundColor\}\}"/)
   assert.doesNotMatch(previewWxml, /返回编辑/)
   assert.doesNotMatch(previewWxml, /bindtap="handleBackToEditor"/)
   assert.doesNotMatch(previewWxml, /maintenance-mask/)
@@ -324,6 +327,9 @@ test('visitor portfolio pages expose maintenance, QR, contact and schedule surfa
   const previewJson = JSON.parse(read('pages/portfolios/standard-preview/portfolio-standard-preview.json'))
   const contactFormWxml = readExisting('components/portfolio-contact-form/portfolio-contact-form.wxml')
   const contactFormJs = readExisting('components/portfolio-contact-form/portfolio-contact-form.js')
+  const qrContactWxml = readExisting('pages/portfolios/components/qr-contact/qr-contact.wxml')
+  const textSectionWxml = readExisting('pages/portfolios/components/text-section/text-section.wxml')
+  const dividerWxml = readExisting('pages/portfolios/components/divider/divider.wxml')
   const scheduleWxml = read('pages/portfolios/visitor-schedule/visitor-schedule.wxml')
   const visitorQrMarkup = visitorWxml.slice(
     visitorWxml.indexOf(`<block wx:elif="{{item.componentType === 'QR_CONTACT'}}">`),
@@ -336,6 +342,10 @@ test('visitor portfolio pages expose maintenance, QR, contact and schedule surfa
 
   assert.match(visitorWxml, /UNDER MAINTENANCE/)
   assert.match(visitorWxml, /<navigation-bar[^>]*back="\{\{showNavigationBack && !timelineGuideVisible\}\}"/)
+  assert.match(visitorWxml, /color="\{\{portfolio\.themeMode === 'dark' \? '#f8f9fa' : '#212529'\}\}"/)
+  assert.match(visitorWxml, /background="\{\{portfolio\.style\.backgroundColor\}\}"/)
+  assert.doesNotMatch(contactFormWxml, /maxlength=/)
+  assert.doesNotMatch(contactFormWxml, /field-count|\/20|\/11|\/200/)
   assert.match(contactFormJs, /DEFAULT_CONTACT_FORM_TITLE\s*=\s*'预留联系信息'/)
   assert.match(contactFormWxml, /contactComponent\.contactForm\.title \|\| defaultTitle/)
   assert.match(contactFormWxml, /\{\{submitText\}\}/)
@@ -356,9 +366,10 @@ test('visitor portfolio pages expose maintenance, QR, contact and schedule surfa
   ].forEach((componentType) => {
     assert.match(visitorWxml, new RegExp(`item\\.componentType === '${componentType}'`))
   })
-  assert.match(visitorWxml, /bindtap="handlePreviewQr"/)
-  assert.match(visitorQrMarkup, /class="qr-image"/)
-  assert.match(previewQrMarkup, /class="qr-image"/)
+  assert.match(visitorWxml, /bindpreviewqr="handlePreviewQr"/)
+  assert.match(visitorQrMarkup, /<portfolio-qr-contact/)
+  assert.match(previewQrMarkup, /<portfolio-qr-contact/)
+  assert.match(qrContactWxml, /class="qr-image"[\s\S]*bindtap="handlePreviewQr"/)
   assert.doesNotMatch(visitorQrMarkup, /qrContact\.title|qrContact\.description|component-title|section-desc/)
   assert.doesNotMatch(previewQrMarkup, /qrContact\.title|qrContact\.description|component-title|section-desc/)
   assert.equal(visitorJson.usingComponents['portfolio-schedule-query'], '/components/portfolio-schedule-query/portfolio-schedule-query')
@@ -373,12 +384,13 @@ test('visitor portfolio pages expose maintenance, QR, contact and schedule surfa
   assert.match(previewWxml, /<portfolio-contact-form[\s\S]*view-mode="modal"[\s\S]*modal-visible="\{\{contactFormModalVisible\}\}"[\s\S]*contact-component="\{\{activeContactFormComponent\}\}"[\s\S]*bindclosemodal="handleCloseContactFormModal"/)
   assert.doesNotMatch(visitorWxml, /class="contact-form-mask/)
   assert.doesNotMatch(previewWxml, /class="contact-form-mask/)
-  assert.match(visitorWxml, /class="text-section \{\{item\.textSection\.alignmentClass\}\}"/)
-  assert.match(previewWxml, /class="text-section \{\{item\.textSection\.alignmentClass\}\}"/)
-  assert.match(visitorWxml, /<text class="text-content" space="nbsp">\{\{item\.textSection\.content\}\}<\/text>/)
-  assert.match(previewWxml, /<text class="text-content" space="nbsp">\{\{item\.textSection\.content\}\}<\/text>/)
-  assert.match(visitorWxml, /class="divider-section"[\s\S]*style="\{\{item\.divider\.style\}\}"/)
-  assert.match(previewWxml, /class="divider-section"[\s\S]*style="\{\{item\.divider\.style\}\}"/)
+  assert.match(visitorWxml, /<portfolio-text-section text-section="\{\{item\.textSection\}\}"/)
+  assert.match(previewWxml, /<portfolio-text-section text-section="\{\{item\.textSection\}\}"/)
+  assert.match(textSectionWxml, /class="text-section portfolio-theme-\{\{themeMode\}\} \{\{textSection\.alignmentClass\}\}"/)
+  assert.match(textSectionWxml, /<text class="text-content" space="nbsp">\{\{textSection\.content\}\}<\/text>/)
+  assert.match(visitorWxml, /<portfolio-divider divider="\{\{item\.divider\}\}"/)
+  assert.match(previewWxml, /<portfolio-divider divider="\{\{item\.divider\}\}"/)
+  assert.match(dividerWxml, /class="divider-section portfolio-theme-\{\{themeMode\}\}"[\s\S]*style="\{\{divider\.style\}\}"/)
   assert.doesNotMatch(visitorWxml, /<button class="secondary-action">档期查询<\/button>/)
   assert.doesNotMatch(previewWxml, /<button class="secondary-action">档期查询<\/button>/)
   assert.match(scheduleWxml, /档期查询/)
@@ -388,24 +400,14 @@ test('visitor portfolio pages expose maintenance, QR, contact and schedule surfa
 })
 
 test('visitor work list components keep tags visible and grid cards in two columns', () => {
-  const sharedWxss = readExisting('styles/portfolio-render-shared.wxss')
-  const pages = [
-    ['visitor', read('pages/portfolios/visitor-portfolio/visitor-portfolio.wxss')],
-    ['preview', read('pages/portfolios/standard-preview/portfolio-standard-preview.wxss')]
+  const components = [
+    ['grid', readExisting('pages/portfolios/components/work-grid/work-grid.wxss')],
+    ['list', readExisting('pages/portfolios/components/work-list/work-list.wxss')]
   ]
 
-  pages.forEach(([pageName, wxss]) => {
-    assert.match(wxss, /@import "\.\.\/\.\.\/\.\.\/styles\/portfolio-render-shared\.wxss";/, `${pageName} should import shared render styles`)
-  })
-
-  ;[
-    ['shared', sharedWxss]
-  ].forEach(([pageName, wxss]) => {
+  components.forEach(([pageName, wxss]) => {
     const displayTagScrollRule = readRule(wxss, '.display-tag-scroll')
     const displayTagsRule = readRules(wxss, '.display-tags')
-    const workGridRule = readRule(wxss, '.work-grid')
-    const gridCardRule = readRule(wxss, '.grid-card')
-    const workListRule = readRule(wxss, '.work-list')
 
     assert.match(displayTagScrollRule, /height:\s*56rpx/, `${pageName} display tag scroll should reserve row height`)
     assert.match(displayTagScrollRule, /overflow:\s*hidden/, `${pageName} display tag scroll should clip within its row`)
@@ -418,18 +420,66 @@ test('visitor work list components keep tags visible and grid cards in two colum
     const displayTagRule = readRule(wxss, '.display-tag')
     assert.match(displayTagRule, /flex:\s*0\s+0\s+auto/, `${pageName} display tag should not shrink`)
     assert.match(displayTagRule, /transition:\s*color\s+160ms\s+ease,\s*opacity\s+160ms\s+ease/, `${pageName} display tag state should animate subtly`)
-    assert.match(readRule(wxss, '.work-list.display-switching'), /animation:\s*work-list-switch-in\s+180ms\s+ease-out\s+both/, `${pageName} work content should animate after tag switches`)
+    assert.match(readRule(wxss, `.${pageName === 'grid' ? 'work-grid' : 'work-list'}.display-switching`), /animation:\s*work-list-switch-in\s+180ms\s+ease-out\s+both/, `${pageName} work content should animate after tag switches`)
     assert.match(wxss, /@keyframes\s+work-list-switch-in[\s\S]*opacity:\s*0\.2;[\s\S]*transform:\s*translateY\(8rpx\);[\s\S]*opacity:\s*1;[\s\S]*transform:\s*translateY\(0\);/, `${pageName} work switch animation should fade and lift content`)
-    assert.match(workGridRule, /display:\s*flex/, `${pageName} work grid should use Skyline-safe flex layout`)
-    assert.match(workGridRule, /flex-wrap:\s*wrap/, `${pageName} work grid should wrap into rows`)
-    assert.doesNotMatch(workGridRule, /display:\s*grid/, `${pageName} work grid should avoid CSS grid`)
-    assert.doesNotMatch(workGridRule, /grid-template-columns/, `${pageName} work grid should avoid grid columns`)
-    assert.match(gridCardRule, /width:\s*50%/, `${pageName} grid card should occupy half the row`)
-    assert.match(gridCardRule, /padding:\s*0\s+6rpx\s+18rpx/, `${pageName} grid card should create stable gutters`)
-    assert.match(gridCardRule, /box-sizing:\s*border-box/, `${pageName} grid card should keep gutters inside half width`)
-    assert.match(workListRule, /display:\s*flex/, `${pageName} work list should remain a vertical flex list`)
-    assert.match(workListRule, /flex-direction:\s*column/, `${pageName} work list should remain single column`)
-    assert.doesNotMatch(workListRule, /display:\s*grid/, `${pageName} work list should avoid CSS grid`)
+  })
+
+  const gridWxss = components[0][1]
+  const listWxss = components[1][1]
+  const workGridRule = readRule(gridWxss, '.work-grid')
+  const gridCardRule = readRule(gridWxss, '.grid-card')
+  const workListRule = readRule(listWxss, '.work-list')
+
+  assert.match(workGridRule, /display:\s*flex/, 'work grid should use Skyline-safe flex layout')
+  assert.match(workGridRule, /flex-wrap:\s*wrap/, 'work grid should wrap into rows')
+  assert.doesNotMatch(workGridRule, /display:\s*grid/, 'work grid should avoid CSS grid')
+  assert.doesNotMatch(workGridRule, /grid-template-columns/, 'work grid should avoid grid columns')
+  assert.match(gridCardRule, /width:\s*50%/, 'grid card should occupy half the row')
+  assert.match(gridCardRule, /padding:\s*0\s+6rpx\s+18rpx/, 'grid card should create stable gutters')
+  assert.match(gridCardRule, /box-sizing:\s*border-box/, 'grid card should keep gutters inside half width')
+  assert.match(workListRule, /display:\s*flex/, 'work list should remain a vertical flex list')
+  assert.match(workListRule, /flex-direction:\s*column/, 'work list should remain single column')
+  assert.doesNotMatch(workListRule, /display:\s*grid/, 'work list should avoid CSS grid')
+})
+
+test('portfolio media keeps images transparent and placeholders on the theme surface', () => {
+  const carouselRule = readRule(
+    read('components/portfolio-carousel/portfolio-carousel.wxss'),
+    '.portfolio-carousel'
+  )
+  const singleWorkWxss = read('pages/portfolios/components/single-work/single-work.wxss')
+  const singleWorkImageRule = readRule(singleWorkWxss, '.single-work-image')
+  const singleWorkVideoRules = Array.from(singleWorkWxss.matchAll(
+    /^\.single-work-video,\s*\.single-work-video-poster\s*\{([^}]*)\}/gm
+  ))
+  const singleWorkVideoRule = singleWorkVideoRules.at(-1)
+  const singleWorkPlaceholderRule = singleWorkWxss.match(
+    /^\.single-work-media-placeholder,\s*\.single-work-repair\s*\{([^}]*)\}/m
+  )
+  const workGridRule = readRule(
+    read('pages/portfolios/components/work-grid/work-grid.wxss'),
+    '.work-cover-wrap'
+  )
+  const workListRule = readRule(
+    read('pages/portfolios/components/work-list/work-list.wxss'),
+    '.work-cover-wrap'
+  )
+
+  assert.match(singleWorkImageRule, /background:\s*transparent/, 'single work image should preserve transparent media')
+  assert.ok(singleWorkVideoRule, 'single work video placeholder rule should exist')
+  assert.ok(singleWorkPlaceholderRule, 'single work missing-media placeholder rule should exist')
+  ;[
+    ['carousel', carouselRule],
+    ['single work video', singleWorkVideoRule[1]],
+    ['single work missing media', singleWorkPlaceholderRule[1]],
+    ['work grid', workGridRule],
+    ['work list', workListRule]
+  ].forEach(([name, rule]) => {
+    assert.match(
+      rule,
+      /background:\s*var\(--portfolio-surface-muted\)/,
+      `${name} placeholder should follow the active portfolio theme`
+    )
   })
 })
 
@@ -442,6 +492,9 @@ test('contact form modal uses full-screen fixed bottom sheet layout', () => {
     const maskRule = readRule(wxss, '.contact-form-mask')
     const visibleRule = readRule(wxss, '.contact-form-mask.visible')
     const panelRule = readRule(wxss, '.contact-form-panel')
+    const fieldRule = readRule(wxss, '.field')
+    const textareaRule = readRule(wxss, '.textarea')
+    const primaryButtonRule = readRule(wxss, '.primary-button')
 
     assert.match(maskRule, /position:\s*fixed/, `${pageName} contact mask should escape page flow`)
     assert.match(maskRule, /left:\s*0/, `${pageName} contact mask should pin left edge`)
@@ -451,38 +504,44 @@ test('contact form modal uses full-screen fixed bottom sheet layout', () => {
     assert.doesNotMatch(maskRule, /inset:/, `${pageName} contact mask should avoid Skyline-unstable inset shorthand`)
     assert.match(maskRule, /align-items:\s*flex-end/, `${pageName} contact mask should open as bottom sheet`)
     assert.match(maskRule, /justify-content:\s*center/, `${pageName} contact mask should center the sheet horizontally`)
+    assert.match(maskRule, /padding:\s*0/, `${pageName} contact mask should attach to the viewport edge`)
     assert.match(visibleRule, /opacity:\s*1/, `${pageName} contact mask should become visible`)
     assert.match(visibleRule, /pointer-events:\s*auto/, `${pageName} contact mask should accept taps when visible`)
     assert.match(panelRule, /width:\s*100%/, `${pageName} contact panel should fill the mask content width`)
     assert.match(panelRule, /max-height:\s*82vh/, `${pageName} contact panel should stay inside the viewport`)
     assert.match(panelRule, /overflow-y:\s*auto/, `${pageName} contact panel should scroll if content grows`)
+    assert.match(panelRule, /border-radius:\s*56rpx 56rpx 0 0/, `${pageName} contact panel should use the shared sheet radius`)
+    assert.match(fieldRule, /min-height:\s*84rpx/, `${pageName} contact fields should meet the shared touch target`)
+    assert.match(textareaRule, /border-radius:\s*40rpx/, `${pageName} contact textarea should use the shared large radius`)
+    assert.match(primaryButtonRule, /border-radius:\s*999rpx/, `${pageName} contact primary action should be pill shaped`)
+    assert.match(primaryButtonRule, /background:\s*#212529/, `${pageName} contact primary action should use ink`)
   })
 })
 
 test('visitor qr contact images are centered in portfolio pages', () => {
-  const pages = [
-    ['visitor', read('pages/portfolios/visitor-portfolio/visitor-portfolio.wxss')],
-    ['preview', read('pages/portfolios/standard-preview/portfolio-standard-preview.wxss')]
-  ]
+  const wxss = readExisting('pages/portfolios/components/qr-contact/qr-contact.wxss')
+  const qrImageRule = readRule(wxss, '.qr-image')
 
-  pages.forEach(([pageName, wxss]) => {
-    const qrImageRule = readRule(wxss, '.qr-image')
-
-    assert.match(qrImageRule, /display:\s*block/, `${pageName} QR image should not rely on inline text alignment`)
-    assert.match(qrImageRule, /width:\s*280rpx/, `${pageName} QR image should keep fixed scan size`)
-    assert.match(qrImageRule, /height:\s*280rpx/, `${pageName} QR image should keep fixed scan size`)
-    assert.match(qrImageRule, /margin:\s*24rpx auto 0/, `${pageName} QR image should center horizontally`)
-  })
+  assert.match(qrImageRule, /display:\s*block/, 'QR image should not rely on inline text alignment')
+  assert.match(qrImageRule, /width:\s*280rpx/, 'QR image should keep fixed scan size')
+  assert.match(qrImageRule, /height:\s*280rpx/, 'QR image should keep fixed scan size')
+  assert.match(qrImageRule, /margin:\s*24rpx auto 0/, 'QR image should center horizontally')
 })
 
 test('schedule query modal entry matches contact form button style', () => {
   const scheduleQueryWxml = read('components/portfolio-schedule-query/portfolio-schedule-query.wxml')
   const scheduleQueryWxss = read('components/portfolio-schedule-query/portfolio-schedule-query.wxss')
+  const contactFormWxss = read('components/portfolio-contact-form/portfolio-contact-form.wxss')
   const entryStart = scheduleQueryWxml.indexOf('<view class="schedule-query-entry">')
   const entryEnd = scheduleQueryWxml.indexOf('<view class="schedule-query-modal-mask', entryStart)
   const entryMarkup = scheduleQueryWxml.slice(entryStart, entryEnd)
   const spacerRule = readRule(scheduleQueryWxss, '.schedule-query-entry-spacer')
   const openButtonRule = readRule(scheduleQueryWxss, '.schedule-query-open-button')
+  const contactEntryButtonRule = readRule(contactFormWxss, '.contact-form-entry-button')
+  const modalMaskRule = readRule(scheduleQueryWxss, '.schedule-query-modal-mask')
+  const modalPanelRule = readRule(scheduleQueryWxss, '.schedule-query-modal-panel')
+  const calendarRule = readRules(scheduleQueryWxss, '.schedule-query-calendar')
+  const submitRule = readRule(scheduleQueryWxss, '.schedule-query-submit')
 
   assert.notEqual(entryStart, -1)
   assert.notEqual(entryEnd, -1)
@@ -491,16 +550,24 @@ test('schedule query modal entry matches contact form button style', () => {
   assert.match(entryMarkup, /class="schedule-query-entry-spacer"[^>]*aria-hidden="true"/)
   assert.match(spacerRule, /height:\s*44rpx/)
   assert.match(openButtonRule, /width:\s*320rpx/)
+  assert.match(contactEntryButtonRule, /width:\s*320rpx/)
   assert.match(openButtonRule, /height:\s*72rpx/)
+  assert.match(contactEntryButtonRule, /height:\s*72rpx/)
   assert.match(openButtonRule, /margin:\s*24rpx auto 0/)
   assert.match(openButtonRule, /padding:\s*0/)
   assert.match(openButtonRule, /color:\s*#ffffff/)
   assert.match(openButtonRule, /font-size:\s*26rpx/)
   assert.match(openButtonRule, /line-height:\s*72rpx/)
-  assert.match(openButtonRule, /border-radius:\s*8rpx/)
-  assert.match(openButtonRule, /background:\s*#17202a/)
+  assert.match(contactEntryButtonRule, /line-height:\s*72rpx/)
+  assert.match(openButtonRule, /border-radius:\s*999rpx/)
+  assert.match(openButtonRule, /background:\s*#212529/)
   assert.doesNotMatch(openButtonRule, /linear-gradient/)
   assert.doesNotMatch(openButtonRule, /box-shadow/)
+  assert.match(modalMaskRule, /padding:\s*0/)
+  assert.match(modalPanelRule, /border-radius:\s*56rpx 56rpx 0 0/)
+  assert.match(calendarRule, /border-radius:\s*48rpx/)
+  assert.match(submitRule, /border-radius:\s*999rpx/)
+  assert.match(submitRule, /background:\s*#212529/)
 })
 
 test('schedule query calendar exposes lunar meta and quick month picker', () => {
@@ -566,13 +633,20 @@ test('portfolio list keeps both owner panels mounted in one animated viewport', 
 
 test('portfolio list cards keep action buttons from squeezing title copy', () => {
   const listWxss = read('pages/portfolios/portfolios.wxss')
+  const actionButtonRule = readRule(listWxss, '.portfolio-action-button')
 
-  assert.match(listWxss, /\.portfolio-item-card\s*\{[\s\S]*gap:\s*14rpx;/)
-  assert.match(listWxss, /\.portfolio-cover\s*\{[\s\S]*width:\s*112rpx;[\s\S]*height:\s*90rpx;/)
+  assert.match(listWxss, /\.portfolio-item-card\s*\{[\s\S]*gap:\s*20rpx;/)
+  assert.match(listWxss, /\.portfolio-cover\s*\{[\s\S]*width:\s*152rpx;[\s\S]*height:\s*133rpx;/)
   assert.match(listWxss, /\.portfolio-copy\s*\{[\s\S]*min-width:\s*0;[\s\S]*flex:\s*1 1 0;/)
   assert.match(listWxss, /\.portfolio-side\s*\{[\s\S]*flex:\s*0 0 auto;[\s\S]*min-width:\s*0;[\s\S]*gap:\s*12rpx;/)
   assert.match(listWxss, /\.portfolio-action-row\s*\{[\s\S]*flex:\s*0 0 auto;[\s\S]*max-width:\s*226rpx;[\s\S]*display:\s*flex;[\s\S]*align-items:\s*center;[\s\S]*gap:\s*10rpx;/)
-  assert.match(listWxss, /\.portfolio-action-button\s*\{[\s\S]*width:\s*108rpx;[\s\S]*min-width:\s*108rpx;[\s\S]*max-width:\s*108rpx;[\s\S]*flex:\s*none;[\s\S]*box-sizing:\s*border-box;/)
+  assert.match(actionButtonRule, /(?:^|\n)\s*width:\s*108rpx/)
+  assert.match(actionButtonRule, /(?:^|\n)\s*min-width:\s*108rpx/)
+  assert.match(actionButtonRule, /(?:^|\n)\s*max-width:\s*108rpx/)
+  assert.match(actionButtonRule, /height:\s*60rpx/)
+  assert.match(actionButtonRule, /padding:\s*0 26rpx/)
+  assert.match(actionButtonRule, /flex:\s*none/)
+  assert.match(actionButtonRule, /box-sizing:\s*border-box/)
   assert.doesNotMatch(listWxss, /\.portfolio-card-actions\s*\{/)
 })
 
@@ -592,11 +666,12 @@ test('portfolio list cards show cover title update time and status as item infor
   assert.doesNotMatch(listWxml, /item\.revisionText/)
   assert.doesNotMatch(listWxml, /item\.metricText/)
   assert.doesNotMatch(listWxml, /class="metric-badge/)
-  assert.match(listWxss, /\.portfolio-badges\s*\{[\s\S]*margin-top:\s*14rpx;[\s\S]*gap:\s*12rpx;[\s\S]*flex-wrap:\s*wrap;/)
-  assert.match(listWxss, /\.status-badge\s*\{[\s\S]*height:\s*44rpx;[\s\S]*padding:\s*0 18rpx;[\s\S]*font-size:\s*22rpx;[\s\S]*font-weight:\s*800;/)
-  assert.match(listWxss, /\.status-badge\.published\s*\{[\s\S]*background:\s*#edf5fb;/)
-  assert.match(listWxss, /\.status-badge\.draft\s*\{[\s\S]*background:\s*#fff4d7;/)
-  assert.match(listWxss, /\.status-badge\.muted\s*\{[\s\S]*background:\s*#f2f5f8;/)
+  assert.match(listWxss, /\.portfolio-badges\s*\{[\s\S]*margin-top:\s*12rpx;[\s\S]*gap:\s*12rpx;[\s\S]*flex-wrap:\s*wrap;/)
+  assert.match(listWxss, /\.status-badge\s*\{[\s\S]*padding:\s*0;[\s\S]*font-size:\s*21rpx;[\s\S]*font-weight:\s*500;/)
+  assert.match(listWxss, /\.status-badge::before\s*\{[\s\S]*width:\s*12rpx;[\s\S]*height:\s*12rpx;[\s\S]*background:\s*currentColor;/)
+  assert.match(listWxss, /\.status-badge\.published\s*\{[\s\S]*color:\s*#5c9e6e;/)
+  assert.match(listWxss, /\.status-badge\.draft\s*\{[\s\S]*color:\s*#868e96;/)
+  assert.match(listWxss, /\.status-badge\.muted\s*\{[\s\S]*color:\s*#b55656;/)
   assert.doesNotMatch(listJs, /templateText:/)
   assert.doesNotMatch(listJs, /revisionText:/)
   assert.doesNotMatch(listJs, /metricText:/)
@@ -691,6 +766,39 @@ test('portfolio component work picker keeps work list visible in Skyline', () =>
   assert.match(scrollRule, /max-height:\s*none;/)
 })
 
+test('portfolio editor work tags keep chromatic outlined and active states consistent', () => {
+  const editWxml = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxml')
+  const editWxss = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxss')
+  const tagDotRule = readRule(editWxss, '.display-group-dot')
+  const displayPillRule = readRule(editWxss, '.display-group-pill')
+  const displayNameRule = readRule(editWxss, '.display-group-name')
+  const displayCountRule = readRule(editWxss, '.display-group-count')
+
+  assert.match(
+    editWxml,
+    /class="component-work-filter-pill[\s\S]*\? item\.activeStyle : item\.filterStyle/
+  )
+  assert.match(
+    editWxml,
+    /class="component-work-filter-dot"[\s\S]*background: \{\{[^}]*\? '#ffffff' : \(item\.color \|\| '#212529'\)\}\}/
+  )
+  assert.match(
+    editWxml,
+    /class="display-group-pill[\s\S]*style="\{\{item\.active \? item\.activeStyle : item\.filterStyle\}\}"/
+  )
+  assert.match(
+    editWxml,
+    /class="display-group-dot"[\s\S]*background: \{\{item\.active \? '#ffffff' : item\.color\}\}/
+  )
+  assert.match(editWxss, /\.component-work-filter-dot,\s*\.display-group-dot\s*\{/)
+  assert.match(tagDotRule, /width:\s*12rpx/)
+  assert.match(tagDotRule, /height:\s*12rpx/)
+  assert.match(tagDotRule, /border-radius:\s*50%/)
+  assert.match(displayPillRule, /background:\s*#ffffff/)
+  assert.match(displayNameRule, /color:\s*inherit/)
+  assert.match(displayCountRule, /color:\s*inherit/)
+})
+
 test('portfolio profile editor sheet keeps form content visible in Skyline', () => {
   const editWxml = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxml')
   const editWxss = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxss')
@@ -704,6 +812,41 @@ test('portfolio profile editor sheet keeps form content visible in Skyline', () 
   assert.match(scrollRule, /height:\s*0;/)
   assert.match(scrollRule, /min-height:\s*0;/)
   assert.match(scrollRule, /max-height:\s*none;/)
+})
+
+test('portfolio profile editor reuses structured basic profile tag interaction', () => {
+  const editWxml = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxml')
+  const editWxss = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxss')
+
+  assert.doesNotMatch(editWxml, /profileForm\.tagsText/)
+  assert.doesNotMatch(editWxml, /data-field="tagsText"/)
+  assert.match(editWxml, /wx:for="\{\{profileForm\.tags\}\}"/)
+  assert.match(editWxml, /class="profile-tag-pill"[\s\S]*style="\{\{item\.style\}\}"/)
+  assert.match(editWxml, /class="profile-tag-dot"[\s\S]*style="\{\{item\.dotStyle\}\}"/)
+  assert.match(editWxml, /catchtap="handleRemoveProfileTag"/)
+  assert.match(editWxml, /catchtap="handleOpenProfileTagDialog"/)
+  assert.match(editWxml, /wx:for="\{\{profileTagColorOptions\}\}"/)
+  assert.match(editWxml, /catchtap="handleAddProfileTag"/)
+  assert.match(editWxss, /\.profile-tag-pill-row\s*\{[\s\S]*flex-wrap:\s*wrap;/)
+  assert.match(editWxss, /\.profile-tag-dialog\s*\{[\s\S]*position:\s*fixed;/)
+})
+
+test('standard personal portfolio editor renders status as a dot label', () => {
+  const editWxml = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxml')
+  const editWxss = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxss')
+  const statusRule = readRule(editWxss, '.status-pill')
+  const statusDotRule = readRule(editWxss, '.status-pill::before')
+
+  assert.match(editWxml, /class="status-pill \{\{statusTone\}\}"/)
+  assert.match(statusRule, /gap:\s*8rpx;/)
+  assert.match(statusRule, /color:\s*#868e96;/)
+  assert.match(statusRule, /font-size:\s*22rpx;/)
+  assert.match(statusRule, /font-weight:\s*500;/)
+  assert.doesNotMatch(statusRule, /^\s*(?:min-width|height|border|border-radius|background)\s*:/m)
+  assert.match(statusDotRule, /width:\s*12rpx;/)
+  assert.match(statusDotRule, /height:\s*12rpx;/)
+  assert.match(statusDotRule, /border-radius:\s*50%;/)
+  assert.match(statusDotRule, /background:\s*currentColor;/)
 })
 
 test('standard personal portfolio editor follows shared maintainer layout', () => {
@@ -838,10 +981,10 @@ test('standard personal portfolio editor follows shared maintainer layout', () =
 
   assert.match(editWxss, /\.portfolio-edit-page\s*\{[\s\S]*height:\s*100vh;[\s\S]*display:\s*flex;[\s\S]*overflow:\s*hidden;/)
   assert.match(editWxss, /\.edit-scroll\s*\{[\s\S]*flex:\s*1;[\s\S]*min-height:\s*0;/)
-  assert.match(editWxss, /\.edit-content\s*\{[\s\S]*padding:\s*28rpx 28rpx calc\(156rpx \+ env\(safe-area-inset-bottom\)\);[\s\S]*box-sizing:\s*border-box;/)
-  assert.match(editWxss, /\.panel\s*\{[\s\S]*background:\s*rgba\(255,\s*255,\s*255,\s*0\.96\);[\s\S]*border-radius:\s*16rpx;[\s\S]*box-shadow:/)
+  assert.match(editWxss, /\.edit-content\s*\{[\s\S]*padding:\s*20rpx 32rpx calc\(156rpx \+ env\(safe-area-inset-bottom\)\);[\s\S]*box-sizing:\s*border-box;/)
+  assert.match(editWxss, /\.panel\s*\{[\s\S]*background:\s*#ffffff;[\s\S]*border-radius:\s*48rpx;[\s\S]*box-shadow:/)
   assert.match(editWxss, /\.field-limit\s*\{[\s\S]*color:\s*#8b96a3;[\s\S]*font-size:\s*22rpx;/)
-  assert.match(editWxss, /\.input\s*\{[\s\S]*width:\s*100%;[\s\S]*min-height:\s*84rpx;[\s\S]*border-radius:\s*16rpx;[\s\S]*box-sizing:\s*border-box;/)
+  assert.match(editWxss, /\.input\s*\{[\s\S]*width:\s*100%;[\s\S]*min-height:\s*84rpx;[\s\S]*border-radius:\s*24rpx;[\s\S]*box-sizing:\s*border-box;/)
   assert.match(editWxss, /\.cover-row\s*\{[\s\S]*display:\s*flex;[\s\S]*gap:/)
   assert.match(editWxss, /\.cover-preview\s*\{[\s\S]*width:\s*360rpx;[\s\S]*height:\s*288rpx;/)
   assert.doesNotMatch(editWxss, /\.cover-actions\s*\{/)
@@ -859,16 +1002,16 @@ test('standard personal portfolio editor follows shared maintainer layout', () =
   assert.match(editWxss, /\.component-row-arrow\.placeholder\s*\{[\s\S]*visibility:\s*hidden;/)
   assert.match(editWxss, /\.component-picker-mask\s*\{[\s\S]*position:\s*fixed;[\s\S]*align-items:\s*flex-end;[\s\S]*background:\s*rgba\(17,\s*24,\s*39,\s*0\.35\);/)
   assert.match(editWxss, /\.component-picker-mask\.visible\s*\{[\s\S]*opacity:\s*1;[\s\S]*pointer-events:\s*auto;/)
-  assert.match(editWxss, /\.component-picker-panel\s*\{[\s\S]*max-height:\s*72vh;[\s\S]*border-radius:\s*24rpx 24rpx 18rpx 18rpx;[\s\S]*transform:\s*translateY\(36rpx\);/)
+  assert.match(editWxss, /\.component-picker-panel\s*\{[\s\S]*max-height:\s*72vh;[\s\S]*border-radius:\s*56rpx 56rpx 0 0;[\s\S]*transform:\s*translateY\(36rpx\);/)
   assert.match(editWxss, /\.component-picker-mask\.visible \.component-picker-panel\s*\{[\s\S]*transform:\s*translateY\(0\);/)
   assert.match(editWxss, /\.component-picker-grabber\s*\{[\s\S]*width:\s*72rpx;[\s\S]*height:\s*8rpx;/)
   assert.match(editWxss, /\.component-option\s*\{[\s\S]*width:\s*100%;[\s\S]*box-sizing:\s*border-box;/)
   assert.match(editWxss, /\.component-work-picker-mask\s*\{[\s\S]*position:\s*fixed;[\s\S]*align-items:\s*flex-end;/)
   assert.match(editWxss, /\.component-work-option\.selected\s*\{[\s\S]*border-color:/)
   assert.match(editWxss, /\.display-group-order\s*\{[\s\S]*border-radius:\s*50%;/)
-  assert.match(editWxss, /\.display-group-order\.selected\s*\{[\s\S]*background:\s*#17202a;/)
+  assert.match(editWxss, /\.display-group-order\.selected\s*\{[\s\S]*background:\s*#212529;/)
   assert.match(editWxss, /\.display-group-work-order\s*\{[\s\S]*border-radius:\s*50%;/)
-  assert.match(editWxss, /\.display-group-work-order\.selected\s*\{[\s\S]*background:\s*#17202a;/)
+  assert.match(editWxss, /\.display-group-work-order\.selected\s*\{[\s\S]*background:\s*#212529;/)
   assert.doesNotMatch(editWxss, /\.display-group-add-button\s*\{/)
   assert.doesNotMatch(editWxss, /\.display-group-form\s*\{/)
   assert.doesNotMatch(editWxss, /\.display-group-pill\.manage\s*\{/)
@@ -877,7 +1020,7 @@ test('standard personal portfolio editor follows shared maintainer layout', () =
   assert.doesNotMatch(editWxss, /\.display-group-row-actions\s*\{/)
   assert.doesNotMatch(editWxss, /\.display-group-row-button\s*\{/)
   assert.match(editWxss, /\.bottom-actions\s*\{[\s\S]*position:\s*fixed;[\s\S]*display:\s*flex;[\s\S]*gap:\s*12rpx;/)
-  assert.match(editWxss, /\.action-button\s*\{[\s\S]*flex:\s*1 1 0;[\s\S]*min-width:\s*0;[\s\S]*height:\s*88rpx;[\s\S]*border-radius:\s*16rpx;/)
+  assert.match(editWxss, /\.action-button\s*\{[\s\S]*flex:\s*1 1 0;[\s\S]*min-width:\s*0;[\s\S]*height:\s*96rpx;[\s\S]*border-radius:\s*999rpx;/)
 })
 
 test('standard portfolio display tag sheet shows ordered tag and work selections', () => {

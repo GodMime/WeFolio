@@ -11,7 +11,7 @@
   <button class="primary-button" loading="{{submitting}}" disabled="{{submitting}}" catchtap="submitContact">提交给团队</button>
 </template>
 
-<view class="contact-form {{editMode ? 'editor-mode' : ''}}">
+<view class="contact-form theme-{{themeMode}} {{editMode ? 'editor-mode' : ''}}">
   <block wx:if="{{editMode}}">
     <view class="editor-form">
       <view class="editor-card">
@@ -46,16 +46,18 @@
       <view class="form-entry-section">
         <button class="primary-button contact-form-entry-button" catchtap="openModal">{{displayConfig.title || '预留联系信息'}}</button>
       </view>
-      <view class="contact-form-mask {{modalVisible ? 'visible' : ''}}" catchtap="closeModal">
-        <view class="contact-form-panel" catchtap="noop">
-          <view class="contact-form-heading">
-            <view class="component-title">{{displayConfig.title || '预留联系信息'}}</view>
-            <view class="contact-form-close" catchtap="closeModal" aria-role="button" aria-label="关闭团队联系表单">×</view>
+      <root-portal wx:if="{{modalVisible}}">
+        <view class="contact-form-mask theme-{{themeMode}} {{modalVisible ? 'visible' : ''}}" catchtap="closeModal">
+          <view class="contact-form-panel" catchtap="noop">
+            <view class="contact-form-heading">
+              <view class="component-title">{{displayConfig.title || '预留联系信息'}}</view>
+              <view class="contact-form-close" catchtap="closeModal" aria-role="button" aria-label="关闭团队联系表单">×</view>
+            </view>
+            <view wx:if="{{displayConfig.description}}" class="section-desc">{{displayConfig.description}}</view>
+            <template is="contactFormFields" data="{{fieldVisibility: fieldVisibility, localForm: localForm, errorMessage: errorMessage, success: success, submitting: submitting}}" />
           </view>
-          <view wx:if="{{displayConfig.description}}" class="section-desc">{{displayConfig.description}}</view>
-          <template is="contactFormFields" data="{{fieldVisibility: fieldVisibility, localForm: localForm, errorMessage: errorMessage, success: success, submitting: submitting}}" />
         </view>
-      </view>
+      </root-portal>
     </block>
   </block>
 </view>

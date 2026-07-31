@@ -18,6 +18,9 @@ public class ContentLimitProperties {
     /** 视频作品数量上限非法提示。 */
     private static final String WORK_VIDEO_MAX_COUNT_INVALID_MESSAGE = "视频作品数量上限必须大于 0";
 
+    /** 动图作品数量上限非法提示。 */
+    private static final String WORK_ANIMATION_MAX_COUNT_INVALID_MESSAGE = "动图作品数量上限必须大于 0";
+
     /** 个人作品集数量上限非法提示。 */
     private static final String PERSONAL_PORTFOLIO_MAX_COUNT_INVALID_MESSAGE = "个人作品集数量上限必须大于 0";
 
@@ -29,6 +32,9 @@ public class ContentLimitProperties {
 
     /** 单用户视频作品最大数量。 */
     private int workVideoMaxCount = 100;
+
+    /** 单用户动图作品最大数量。 */
+    private int workAnimationMaxCount = 100;
 
     /** 单用户个人作品集最大数量。 */
     private int personalPortfolioMaxCount = 10;
@@ -42,6 +48,12 @@ public class ContentLimitProperties {
 
     public void setWorkVideoMaxCount(int workVideoMaxCount) {
         this.workVideoMaxCount = requirePositive(workVideoMaxCount, WORK_VIDEO_MAX_COUNT_INVALID_MESSAGE);
+    }
+
+    public void setWorkAnimationMaxCount(int workAnimationMaxCount) {
+        this.workAnimationMaxCount = requirePositive(
+                workAnimationMaxCount,
+                WORK_ANIMATION_MAX_COUNT_INVALID_MESSAGE);
     }
 
     public void setPersonalPortfolioMaxCount(int personalPortfolioMaxCount) {

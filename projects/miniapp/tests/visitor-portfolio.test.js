@@ -9,8 +9,129 @@ const {
   normalizeVisitorSchedule,
   normalizeVisitorScheduleOptions,
   normalizeVisitorScheduleQueryResult,
+  switchPortfolioMenu,
   switchDisplayGroup
 } = require('../utils/visitor-portfolio')
+
+test('normalizes render theme and secondary bottom navigation components', () => {
+  const result = normalizeVisitorPortfolio({
+    renderData: {
+      shareCode: 'PF001',
+      style: { backgroundColor: '#151515', themeMode: 'dark' },
+      components: [
+        { componentKey: 'c_home', componentType: 'PROFILE', sortOrder: 1000 }
+      ],
+      bottomNav: {
+        enabled: true,
+        items: [
+          { key: 'home', title: '主页' },
+          {
+            key: 'works',
+            title: '作品',
+            components: [
+              { componentKey: 'c_works', componentType: 'WORK_GRID', sortOrder: 1000, groups: [] }
+            ]
+          }
+        ]
+      }
+    }
+  })
+
+  assert.equal(result.style.backgroundColor, '#151515')
+  assert.equal(result.themeMode, 'dark')
+  assert.equal(result.activeMenuKey, 'home')
+  assert.deepEqual(result.activeComponents.map((item) => item.componentKey), ['c_home'])
+  const switched = switchPortfolioMenu(result, 'works')
+  assert.equal(switched.activeMenuKey, 'works')
+  assert.deepEqual(switched.activeComponents.map((item) => item.componentKey), ['c_works'])
+})
+
+test('visitor opens a modal contact form from the active secondary menu', () => {
+  const page = loadVisitorPage(() => Promise.resolve({}))
+  const component = {
+    componentKey: 'c_secondary_contact',
+    componentType: 'CONTACT_FORM',
+    contactForm: {
+      displayMode: 'MODAL_FORM',
+      fields: ['contactName']
+    }
+  }
+  page.data.portfolio = {
+    components: [],
+    activeComponents: [component],
+    bottomNav: {
+      enabled: true,
+      items: [
+        { key: 'nav_home', title: '主页' },
+        { key: 'nav_contact', title: '联系', components: [component] }
+      ]
+    }
+  }
+
+  page.handleOpenContactFormModal({
+    detail: { componentKey: 'c_secondary_contact' }
+  })
+
+  assert.equal(page.data.contactFormModalVisible, true)
+  assert.equal(page.data.activeContactFormComponent.componentKey, 'c_secondary_contact')
+})
+
+test('visitor bottom navigation exits old content before entering the target menu', () => {
+  const originalSetTimeout = global.setTimeout
+  const originalClearTimeout = global.clearTimeout
+  const timers = []
+  global.setTimeout = (handler, delay) => {
+    const timer = { handler, delay, id: `timer-${timers.length + 1}` }
+    timers.push(timer)
+    return timer.id
+  }
+  global.clearTimeout = () => {}
+
+  try {
+    const page = loadVisitorPage(() => Promise.resolve({}))
+    const homeComponents = [{ componentKey: 'c_home', componentType: 'PROFILE' }]
+    const worksComponents = [{ componentKey: 'c_works', componentType: 'WORK_GRID' }]
+    page.data.portfolio = {
+      components: homeComponents,
+      activeComponents: homeComponents,
+      activeMenuKey: 'home',
+      bottomNav: {
+        enabled: true,
+        items: [
+          { key: 'home', title: '主页' },
+          { key: 'works', title: '作品', components: worksComponents }
+        ]
+      }
+    }
+
+    const started = page.handleBottomNavChange({
+      detail: { menuKey: 'works' }
+    })
+
+    assert.equal(started, true)
+    assert.equal(page.data.portfolio.activeMenuKey, 'home')
+    assert.deepEqual(page.data.portfolio.activeComponents, homeComponents)
+    assert.equal(page.data.portfolioMenuSwitching, true)
+    assert.equal(page.data.portfolioMenuTransitionClass, 'portfolio-menu-exit-forward')
+    assert.equal(timers[0].delay, 120)
+
+    timers[0].handler()
+
+    assert.equal(page.data.portfolio.activeMenuKey, 'works')
+    assert.deepEqual(page.data.portfolio.activeComponents, worksComponents)
+    assert.equal(page.data.portfolioMenuTransitionClass, 'portfolio-menu-enter-forward')
+    assert.equal(page.data.portfolioScrollTop, 0)
+    assert.equal(timers[1].delay, 220)
+
+    timers[1].handler()
+
+    assert.equal(page.data.portfolioMenuSwitching, false)
+    assert.equal(page.data.portfolioMenuTransitionClass, '')
+  } finally {
+    global.setTimeout = originalSetTimeout
+    global.clearTimeout = originalClearTimeout
+  }
+})
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value))
@@ -802,6 +923,57 @@ test('display group switch can return from a tag to all works', () => {
   assert.deepEqual(all.components[0].activeGroup.works.map((work) => work.workId), [1, 2])
 })
 
+test('secondary menu display group selection survives switching away and back', () => {
+  const portfolio = normalizeVisitorPortfolio({
+    renderData: {
+      components: [
+        { componentKey: 'c_home', componentType: 'PROFILE', sortOrder: 1000 }
+      ],
+      bottomNav: {
+        enabled: true,
+        items: [
+          { key: 'nav_home', title: '主页' },
+          {
+            key: 'nav_works',
+            title: '作品',
+            components: [
+              {
+                componentKey: 'c_secondary_list',
+                componentType: 'WORK_LIST',
+                sortOrder: 1000,
+                groups: [
+                  {
+                    groupKey: 'g_a',
+                    name: 'A',
+                    sortOrder: 1000,
+                    works: [{ workId: 1, title: 'A1', mediaType: 'IMAGE', mediaUrl: 'a.jpg' }]
+                  },
+                  {
+                    groupKey: 'g_b',
+                    name: 'B',
+                    sortOrder: 2000,
+                    works: [{ workId: 2, title: 'B1', mediaType: 'IMAGE', mediaUrl: 'b.jpg' }]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  })
+  const worksMenu = switchPortfolioMenu(portfolio, 'nav_works')
+  const selected = switchDisplayGroup(worksMenu, 'c_secondary_list', 'g_b')
+  const homeMenu = switchPortfolioMenu(selected, 'nav_home')
+  const restoredWorksMenu = switchPortfolioMenu(homeMenu, 'nav_works')
+
+  assert.equal(restoredWorksMenu.activeComponents[0].activeGroupKey, 'g_b')
+  assert.deepEqual(
+    restoredWorksMenu.activeComponents[0].activeGroup.works.map((work) => work.workId),
+    [2]
+  )
+})
+
 test('visitor display group switch marks work content as switching briefly', () => {
   const originalSetTimeout = global.setTimeout
   const originalClearTimeout = global.clearTimeout
@@ -900,6 +1072,16 @@ test('visitor page uses source type constant for WeChat share card', () => {
   assert.match(visitorSessionSource, /const SOURCE_TYPE_WECHAT_SHARE_CARD = 'WECHAT_SHARE_CARD'/)
   assert.equal((pageSource.match(/sourceType: SOURCE_TYPE_WECHAT_SHARE_CARD/g) || []).length, 3)
   assert.equal((pageSource.match(/sourceType: 'WECHAT_SHARE_CARD'/g) || []).length, 0)
+})
+
+test('visitor page submits contact leads through strict v2 endpoint', () => {
+  const pageSource = fs.readFileSync(
+    path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.js'),
+    'utf8'
+  )
+
+  assert.match(pageSource, /\/contact-leads\/v2/)
+  assert.doesNotMatch(pageSource, /\/contact-leads`/)
 })
 
 test('visitor page secondary share keeps the new visitor subpackage path', () => {
@@ -1455,7 +1637,7 @@ test('visitor profile prompt keeps skip and save copy in bottom sheet', () => {
   assert.match(wxml, /class="visitor-profile-secondary"[^>]*>跳过<\/button>/)
   assert.match(wxml, /class="visitor-profile-primary"[^>]*>保存<\/button>/)
   assert.match(wxss, /\.visitor-profile-mask\s*\{[\s\S]*left:\s*0;[\s\S]*right:\s*0;[\s\S]*top:\s*0;[\s\S]*bottom:\s*0;[\s\S]*z-index:\s*120;/)
-  assert.match(wxss, /\.visitor-profile-panel\s*\{[\s\S]*position:\s*absolute;[\s\S]*left:\s*0;[\s\S]*right:\s*0;[\s\S]*bottom:\s*0;[\s\S]*border-radius:\s*28rpx 28rpx 0 0;/)
+  assert.match(wxss, /\.visitor-profile-panel\s*\{[\s\S]*position:\s*absolute;[\s\S]*left:\s*0;[\s\S]*right:\s*0;[\s\S]*bottom:\s*0;[\s\S]*border-radius:\s*56rpx 56rpx 0 0;/)
   assert.match(wxss, /\.visitor-avatar-picker\s*\{[\s\S]*position:\s*absolute;[\s\S]*left:\s*0;[\s\S]*top:\s*0;[\s\S]*width:\s*116rpx;[\s\S]*height:\s*116rpx;[\s\S]*opacity:\s*0;/)
   assert.match(wxss, /\.visitor-avatar-visual\s*\{[\s\S]*width:\s*116rpx;[\s\S]*height:\s*116rpx;[\s\S]*border-radius:\s*50%;[\s\S]*overflow:\s*hidden;/)
   assert.match(wxss, /\.visitor-avatar-visual\.invalid/)
@@ -1690,6 +1872,75 @@ test('visitor singular work records event before opening image or starting inlin
   })
 })
 
+test('visitor singular animation records a work view and never a video event', async () => {
+  const requests = []
+  const previews = []
+  const page = loadVisitorPage((options) => {
+    requests.push(options)
+    return Promise.resolve({})
+  })
+  page.data.shareCode = 'PF001'
+  page.data.visitorKey = 'visitor-a'
+  global.wx = {
+    previewImage(options) {
+      previews.push(options)
+    },
+    showToast() {}
+  }
+
+  try {
+    assert.equal(await page.handleSingleWorkTap({
+      currentTarget: {
+        dataset: {
+          componentKey: 'c_animation',
+          workId: '23',
+          mediaType: 'ANIMATION',
+          mediaUrl: 'https://cdn.example.com/animation.webp',
+          coverUrl: 'https://cdn.example.com/animation-cover.jpg',
+          title: '循环片段'
+        }
+      }
+    }), true)
+  } finally {
+    delete global.wx
+  }
+
+  assert.equal(requests[0].data.eventType, 'WORK_VIEWED')
+  assert.equal(requests[0].data.mediaType, 'ANIMATION')
+  assert.deepEqual(previews[0], {
+    current: 'https://cdn.example.com/animation.webp',
+    urls: ['https://cdn.example.com/animation.webp']
+  })
+})
+
+test('visitor page clears active single work state through the matching child component', () => {
+  const page = loadVisitorPage(() => Promise.resolve({}))
+  const calls = []
+  page.data.activeSingleWorkVideoKey = 'single/active'
+  page.selectAllComponents = (selector) => {
+    assert.equal(selector, '.portfolio-single-work-instance')
+    return [
+      {
+        data: { componentKey: 'single/active' },
+        pauseVideo() {
+          calls.push('active')
+        }
+      },
+      {
+        data: { componentKey: 'single/other' },
+        pauseVideo() {
+          calls.push('other')
+        }
+      }
+    ]
+  }
+
+  page.stopActiveSingleWorkVideo()
+
+  assert.deepEqual(calls, ['active'])
+  assert.equal(page.data.activeSingleWorkVideoKey, '')
+})
+
 test('visitor singular work keeps poster state when event recording fails', async () => {
   const toasts = []
   const page = loadVisitorPage(() => Promise.reject(new Error('埋点失败')))
@@ -1774,15 +2025,16 @@ test('visitor singular work ignores stale or hidden event completions', async ()
   const page = loadVisitorPage(() => requests.shift().promise)
   page.data.shareCode = 'PF001'
   page.data.visitorKey = 'visitor-a'
-  global.wx = {
-    showToast() {},
-    createVideoContext(id) {
-      return {
-        pause() {
-          paused.push(id)
-        }
+  page.selectAllComponents = () => [
+    {
+      data: { componentKey: 'c_b' },
+      pauseVideo() {
+        paused.push('c_b')
       }
     }
+  ]
+  global.wx = {
+    showToast() {}
   }
 
   const tapVideo = (componentKey, workId) => page.handleSingleWorkTap({
@@ -1816,17 +2068,19 @@ test('visitor singular work ignores stale or hidden event completions', async ()
     delete global.wx
   }
 
-  assert.deepEqual(paused, ['singleWorkVideo-c_b'])
+  assert.deepEqual(paused, ['c_b'])
 })
 
 test('visitor singular work renders original image and inline video without changing list overlay', () => {
-  const wxml = fs.readFileSync(path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.wxml'), 'utf8')
+  const pageWxml = fs.readFileSync(path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.wxml'), 'utf8')
+  const componentWxml = fs.readFileSync(path.join(__dirname, '../pages/portfolios/components/single-work/single-work.wxml'), 'utf8')
 
-  assert.match(wxml, /item\.componentType === 'SINGLE_WORK'/)
-  assert.match(wxml, /class="single-work-image"[\s\S]*mode="widthFix"/)
-  assert.match(wxml, /id="singleWorkVideo-\{\{item\.componentKey\}\}"/)
-  assert.match(wxml, /activeSingleWorkVideoKey === item\.componentKey/)
-  assert.match(wxml, /<root-portal wx:if="\{\{videoPreviewVisible\}\}">/)
+  assert.match(pageWxml, /item\.componentType === 'SINGLE_WORK'/)
+  assert.match(pageWxml, /<portfolio-single-work[\s\S]*active-video-key="\{\{activeSingleWorkVideoKey\}\}"/)
+  assert.match(componentWxml, /class="single-work-image"[\s\S]*mode="widthFix"/)
+  assert.match(componentWxml, /id="singleWorkVideo-\{\{componentKey\}\}"/)
+  assert.match(componentWxml, /activeVideoKey === componentKey/)
+  assert.match(pageWxml, /<root-portal wx:if="\{\{videoPreviewVisible\}\}">/)
 })
 
 test('normalizes visitor schedule without internal fields', () => {

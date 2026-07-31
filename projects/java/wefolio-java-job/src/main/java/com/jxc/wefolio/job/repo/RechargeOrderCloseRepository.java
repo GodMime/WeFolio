@@ -1,5 +1,6 @@
 package com.jxc.wefolio.job.repo;
 
+import com.jxc.wefolio.job.dict.RechargeOrderStatusDict;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -28,16 +29,23 @@ public class RechargeOrderCloseRepository {
     public int closeExpiredOrders(LocalDateTime now, int limit) {
         String sql = """
                 UPDATE wf_recharge_order
-                SET status = 'CLOSED',
+                SET status = ?,
                     closed_at = ?,
                     updated_at = ?,
                     version = version + 1
-                WHERE status = 'PENDING_PAYMENT'
+                WHERE status = ?
                   AND deleted = 0
                   AND expire_at < ?
                 ORDER BY expire_at ASC, id ASC
                 LIMIT ?
                 """;
-        return jdbcTemplate.update(sql, now, now, now, limit);
+        return jdbcTemplate.update(
+                sql,
+                RechargeOrderStatusDict.CLOSED.getCode(),
+                now,
+                now,
+                RechargeOrderStatusDict.PENDING_PAYMENT.getCode(),
+                now,
+                limit);
     }
 }

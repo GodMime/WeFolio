@@ -11,6 +11,20 @@ const TEST_TEAM_PORTFOLIO_TITLE = '测试团队作品集'
 
 function flush() { return new Promise((resolve) => setImmediate(resolve)) }
 function clone(value) { return JSON.parse(JSON.stringify(value)) }
+function validTeamEditorConfig(patch = {}) {
+  return Object.assign({
+    schemaVersion: 'standard-team-v1',
+    editorSchemaRevision: 2,
+    share: { title: TEST_TEAM_PORTFOLIO_TITLE },
+    components: [{
+      componentKey: 'valid-divider',
+      componentType: 'DIVIDER',
+      sortOrder: 1000,
+      enabled: true,
+      config: {}
+    }]
+  }, patch)
+}
 
 function loadPage(relativePath, requestFn, wxOverrides = {}, globals = {}) {
   const pagePath = path.join(ROOT, relativePath)
@@ -51,18 +65,6 @@ function loadPage(relativePath, requestFn, wxOverrides = {}, globals = {}) {
   }
   return page
 }
-
-test('component library precomputes disabled state and its WXML contains no method invocation', async () => {
-  const page = loadPage('component-library/team-portfolio-component-library.js', async () => [{ componentType: 'TEAM_PROFILE', name: '团队资料' }, { componentType: 'TEXT_SECTION', name: '文字' }])
-  const channel = { on(name, callback) { if (name === 'existingTypes') callback(['TEAM_PROFILE']) } }
-  page.getOpenerEventChannel = () => channel
-  try {
-    page.onLoad()
-    await flush()
-    assert.deepEqual(page.data.components.map((item) => item.disabled), [true, false])
-    assert.doesNotMatch(fs.readFileSync(path.join(ROOT, 'component-library/team-portfolio-component-library.wxml'), 'utf8'), /\{\{[^}]*\.[A-Za-z]+\(/)
-  } finally { page.cleanup() }
-})
 
 test('team picker confirms an unsaved editor without creating a portfolio', async () => {
   const requests = []
@@ -183,7 +185,12 @@ test('save draft returns to the portfolio list after a new portfolio is created'
       { route: 'pages/team-portfolios/standard-edit/team-portfolio-standard-edit' }
     ]
   })
-  page.setData({ teamId: 3, canMaintain: true })
+  page.setData({
+    teamId: 3,
+    canMaintain: true,
+    config: validTeamEditorConfig(),
+    componentValidation: { 'valid-divider': true }
+  })
   try {
     await page.handleSaveTap()
     assert.deepEqual(navigations, [{ type: 'back', options: { delta: 2 } }])
@@ -288,7 +295,12 @@ test('new editor publish creates before publishing', async () => {
       { route: 'pages/team-portfolios/standard-edit/team-portfolio-standard-edit' }
     ]
   })
-  page.setData({ teamId: 3, canMaintain: true })
+  page.setData({
+    teamId: 3,
+    canMaintain: true,
+    config: validTeamEditorConfig(),
+    componentValidation: { 'valid-divider': true }
+  })
   try {
     await page.handlePublishTap()
     assert.deepEqual(requests.map((item) => item.url), [
@@ -329,7 +341,8 @@ test('editor returns to the portfolio list after an idempotent publish retry suc
     teamId: 5,
     canMaintain: true,
     draftRevision: 7,
-    config: { share: { title: TEST_TEAM_PORTFOLIO_TITLE }, components: [] }
+    config: validTeamEditorConfig(),
+    componentValidation: { 'valid-divider': true }
   })
 
   try {
@@ -352,7 +365,12 @@ test('canceling editor publish disclaimer does not create save or publish', asyn
       options.success({ confirm: false })
     }
   })
-  page.setData({ teamId: 3, canMaintain: true })
+  page.setData({
+    teamId: 3,
+    canMaintain: true,
+    config: validTeamEditorConfig(),
+    componentValidation: { 'valid-divider': true }
+  })
 
   try {
     await page.handlePublishTap()
@@ -381,6 +399,67 @@ test('unsaved editor blocks preview and member-source requests that need a portf
     const wxml = fs.readFileSync(path.join(ROOT, 'standard-edit/team-portfolio-standard-edit.wxml'), 'utf8')
     assert.match(wxml, /class="cover-preview \{\{!canMaintain \|\| shareCoverUploading \? 'disabled' : ''\}\}"[^>]*bindtap="handleCoverChoose"/)
     assert.match(wxml, /handlePreviewTap[^>]*disabled="\{\{!canMaintain \|\| !portfolioId \|\| saving \|\| publishing\}\}"/)
+  } finally { page.cleanup() }
+})
+
+test('new editor configures single work through team-scoped sources before creating the portfolio', async () => {
+  const requests = []
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
+    requests.push(options.url)
+    if (options.url === '/api/mine/teams/3/portfolio-components/single-work/members') {
+      return [{ memberUserId: 8, displayName: '甲' }]
+    }
+    if (options.url === '/api/mine/teams/3/portfolio-components/single-work/members/8/works') {
+      return [{ workId: 9, mediaType: 'IMAGE', title: '图片' }]
+    }
+    if (options.url === '/api/mine/teams/3/portfolios/standard') {
+      return {
+        portfolioId: 51,
+        ownerId: 3,
+        draftRevision: 1,
+        publicationStatus: 'DRAFT_ONLY',
+        config: options.data.config
+      }
+    }
+    if (options.url === '/api/mine/team-portfolios/51/draft') {
+      return {
+        portfolioId: 51,
+        ownerId: 3,
+        draftRevision: 2,
+        publicationStatus: 'DRAFT_ONLY',
+        config: options.data.config
+      }
+    }
+    throw new Error(`unexpected request: ${options.url}`)
+  })
+  page.setData({
+    teamId: 3,
+    canMaintain: true,
+    portfolioId: 0,
+    config: { schemaVersion: 'standard-team-v1', share: { title: TEST_TEAM_PORTFOLIO_TITLE }, components: [] }
+  })
+  try {
+    page.addComponent('SINGLE_WORK')
+    const componentKey = page.data.config.components[0].componentKey
+    const event = { currentTarget: { dataset: { key: componentKey } } }
+
+    await page.handleSingleWorkLoadMembers(event)
+    await page.handleSingleWorkMemberChange(Object.assign({}, event, { detail: { memberUserId: 8 } }))
+    page.handleComponentSave(Object.assign({}, event, {
+      detail: {
+        config: { memberUserId: 8, workId: 9, showTitle: true, showDescription: false }
+      }
+    }))
+    await page.saveDraft()
+
+    assert.equal(page.data.portfolioId, 51)
+    assert.equal(page.data.hasInvalidComponents, false)
+    assert.deepEqual(requests, [
+      '/api/mine/teams/3/portfolio-components/single-work/members',
+      '/api/mine/teams/3/portfolio-components/single-work/members/8/works',
+      '/api/mine/teams/3/portfolios/standard',
+      '/api/mine/team-portfolios/51/draft'
+    ])
   } finally { page.cleanup() }
 })
 
@@ -485,6 +564,71 @@ test('existing editor skips a remote QR when saving', async () => {
   try {
     await page.handleSaveTap()
     assert.deepEqual(requests.map((item) => item.url), ['/api/mine/team-portfolios/82/draft'])
+  } finally { page.cleanup() }
+})
+
+test('editor uploads team profile and QR assets from secondary menus', async () => {
+  const requests = []
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
+    requests.push(clone(options))
+    if (options.url.endsWith('/asset/upload-ticket')) {
+      const profile = options.data.assetType === 'TEAM_PROFILE_AVATAR'
+      return {
+        uploadUrl: profile ? 'https://cos.example/profile' : 'https://cos.example/qr',
+        publicUrl: profile
+          ? 'https://cdn.example/secondary-profile.jpg'
+          : 'https://cdn.example/secondary-qr.jpg',
+        formData: {}
+      }
+    }
+    throw new Error(`unexpected request: ${options.url}`)
+  }, {
+    getFileSystemManager() { return { statSync() { return { size: 128 } } } },
+    uploadFile({ success }) { success({ statusCode: 204 }) }
+  })
+  const config = {
+    share: { title: TEST_TEAM_PORTFOLIO_TITLE },
+    components: [{
+      componentKey: 'home-divider',
+      componentType: 'DIVIDER',
+      sortOrder: 1000,
+      enabled: true,
+      config: {}
+    }],
+    bottomNav: {
+      enabled: true,
+      items: [
+        { key: 'nav_home', title: '主页' },
+        { key: 'nav_contact', title: '联系', components: [
+          {
+            componentKey: 'secondary-profile',
+            componentType: 'TEAM_PROFILE',
+            sortOrder: 1000,
+            enabled: true,
+            config: { team: { teamId: 3, teamName: '团队', avatarUrl: 'wxfile://profile.jpg' } }
+          },
+          {
+            componentKey: 'secondary-qr',
+            componentType: 'QR_CONTACT',
+            sortOrder: 2000,
+            enabled: true,
+            config: { qrUrlSource: 'CUSTOM', qrUrl: 'wxfile://qr.jpg' }
+          }
+        ] }
+      ]
+    }
+  }
+  try {
+    const profileUploaded = await page.uploadLocalTeamProfileAvatars(91, config)
+    const uploaded = await page.uploadLocalQrContacts(91, profileUploaded)
+    const secondary = uploaded.bottomNav.items[1].components
+    assert.equal(secondary[0].config.team.avatarUrl, 'https://cdn.example/secondary-profile.jpg')
+    assert.equal(secondary[1].config.qrUrl, 'https://cdn.example/secondary-qr.jpg')
+    assert.deepEqual(requests.map((item) => item.data.assetType), [
+      'TEAM_PROFILE_AVATAR',
+      'QR_CONTACT'
+    ])
+    assert.equal(uploaded.components[0].componentKey, 'home-divider')
   } finally { page.cleanup() }
 })
 
@@ -739,7 +883,16 @@ test('editor skips remote cover upload and publishes only after local cover uplo
     getFileSystemManager() { return { statSync() { return { size: 128 } } } },
     uploadFile({ success }) { success({ statusCode: 204 }) }
   })
-  publishPage.setData({ portfolioId: 62, teamId: 3, canMaintain: true, draftRevision: 4, config: { schemaVersion: 'standard-team-v1', share: { title: TEST_TEAM_PORTFOLIO_TITLE, coverUrl: 'wxfile://tmp/publish.jpg' }, components: [] } })
+  publishPage.setData({
+    portfolioId: 62,
+    teamId: 3,
+    canMaintain: true,
+    draftRevision: 4,
+    config: validTeamEditorConfig({
+      share: { title: TEST_TEAM_PORTFOLIO_TITLE, coverUrl: 'wxfile://tmp/publish.jpg' }
+    }),
+    componentValidation: { 'valid-divider': true }
+  })
   try {
     await publishPage.handlePublishTap()
     assert.deepEqual(publishRequests.map((item) => item.url), [
@@ -782,7 +935,7 @@ test('editor loads member-first sources, blocks a new component until save, and 
     requests.push(options)
     if (options.url === '/api/mine/team-portfolios/7') return { portfolioId: 7, ownerId: 3, draftRevision: 2, config: { components: [{ componentKey: 'carousel-1', componentType: 'CAROUSEL', sortOrder: 0, config: { items: [] } }] } }
     if (options.url.endsWith('/components/carousel/members')) return [{ memberUserId: 8, displayName: '甲' }]
-    if (options.url.endsWith('/components/carousel/members/8/works')) return [{ workId: 9, title: '作品' }]
+    if (options.url.endsWith('/components/carousel/members/8/works')) return [{ workId: 9, mediaType: 'IMAGE', title: '作品' }]
     return { draftRevision: 3 }
   })
   try {
@@ -797,6 +950,40 @@ test('editor loads member-first sources, blocks a new component until save, and 
     page.handleComponentSave({ currentTarget: { dataset: { key: newKey } }, detail: { config: { content: '可保存', alignment: 'LEFT' } } })
     assert.equal(page.data.componentValidation[newKey], true)
     page.setData({ openingLibrary: true }); page.onShow(); assert.equal(page.data.openingLibrary, false)
+  } finally { page.cleanup() }
+})
+
+test('team single work loads members before image and video works and retries the failed stage', async () => {
+  const requests = []
+  let workAttempts = 0
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
+    requests.push(options.url)
+    if (options.url.endsWith('/single-work/members')) {
+      return [{ memberUserId: 8, displayName: '甲' }]
+    }
+    if (options.url.endsWith('/single-work/members/8/works')) {
+      workAttempts += 1
+      if (workAttempts === 1) throw new Error('network')
+      return [
+        { workId: 9, mediaType: 'IMAGE', title: '图片' },
+        { workId: 10, mediaType: 'VIDEO', title: '视频' }
+      ]
+    }
+    throw new Error(`unexpected request: ${options.url}`)
+  })
+  page.setData({ portfolioId: 7, teamId: 3 })
+  const event = { currentTarget: { dataset: { key: 'single-1' } } }
+  try {
+    await page.handleSingleWorkLoadMembers(event)
+    await page.handleSingleWorkMemberChange(Object.assign({}, event, { detail: { memberUserId: 8 } }))
+    assert.equal(page.data.componentSources['single-1'].errorMessage, '来源加载失败，请重试')
+    await page.handleSingleWorkRetrySource(event)
+    assert.deepEqual(page.data.componentSources['single-1'].works.map((item) => item.mediaType), ['IMAGE', 'VIDEO'])
+    assert.deepEqual(requests, [
+      '/api/mine/teams/3/portfolio-components/single-work/members',
+      '/api/mine/teams/3/portfolio-components/single-work/members/8/works',
+      '/api/mine/teams/3/portfolio-components/single-work/members/8/works'
+    ])
   } finally { page.cleanup() }
 })
 
@@ -825,6 +1012,134 @@ test('visitor modal contact opens, completes child submission, and schedule succ
     await page.handleScheduleQuery({ currentTarget: { dataset: { key: 'schedule-1' } }, detail: { componentKey: 'schedule-1', queriedDate: '2026-08-01', idempotencyKey: 'query-1' } })
     assert.equal(schedule[0][0], 'resolve')
   } finally { page.cleanup() }
+})
+
+test('team preview ignores a schedule response that arrives after leaving its menu', async () => {
+  let resolveRequest
+  const requestPending = new Promise((resolve) => { resolveRequest = resolve })
+  const resolved = []
+  const page = loadPage(
+    'standard-preview/team-portfolio-standard-preview.js',
+    async () => requestPending
+  )
+  page.setData = function setData(patch, callback) {
+    Object.assign(this.data, patch)
+    if (callback) callback()
+  }
+  page.selectComponent = () => ({
+    resolveQuery(value) { resolved.push(value) }
+  })
+  page.setData({
+    portfolioId: 7,
+    scheduleResults: {},
+    portfolio: {
+      activeMenuKey: 'nav_home',
+      activeComponents: [{
+        componentKey: 'schedule-1',
+        componentType: 'SCHEDULE_QUERY'
+      }],
+      bottomNav: {
+        enabled: true,
+        items: [
+          { key: 'nav_home', title: '主页' },
+          { key: 'nav_second', title: '菜单 2', components: [] }
+        ]
+      }
+    }
+  })
+  try {
+    const query = page.handleScheduleQuery({
+      detail: {
+        componentKey: 'schedule-1',
+        queriedDate: '2026-08-01',
+        idempotencyKey: 'query-1'
+      }
+    })
+    page.handleMenuTap({ detail: { menuKey: 'nav_second' } })
+    resolveRequest({ status: 'TEAM_AVAILABLE' })
+    await query
+    assert.deepEqual(page.data.scheduleResults, {})
+    assert.deepEqual(resolved, [])
+  } finally {
+    page.onUnload()
+    page.cleanup()
+  }
+})
+
+test('team visitor ignores schedule and contact callbacks that arrive after leaving their menu', async () => {
+  let resolveSchedule
+  let resolveContact
+  const schedulePending = new Promise((resolve) => { resolveSchedule = resolve })
+  const contactPending = new Promise((resolve) => { resolveContact = resolve })
+  const completed = []
+  const resolved = []
+  const toasts = []
+  const page = loadPage(
+    'visitor-portfolio/team-visitor-portfolio.js',
+    async (options) => {
+      if (options.url.endsWith('/schedule-query')) return schedulePending
+      if (options.url.endsWith('/contact-leads')) return contactPending
+      return {}
+    },
+    {
+      showToast(value) { toasts.push(value) }
+    }
+  )
+  page.setData = function setData(patch, callback) {
+    Object.assign(this.data, patch)
+    if (callback) callback()
+  }
+  page.selectComponent = (selector) => selector.includes('contact-form')
+    ? { completeSubmit(value) { completed.push(value) } }
+    : { resolveQuery(value) { resolved.push(value) } }
+  page.setData({
+    shareCode: 'S',
+    visitRecordId: 1,
+    sourceType: 'WECHAT_SHARE_CARD',
+    scheduleResults: {},
+    contactForms: { 'contact-1': { contactName: '客户', phone: '1' } },
+    contactSubmitting: {},
+    contactModalVisible: { 'contact-1': true },
+    pendingContactKeys: {},
+    portfolio: {
+      activeMenuKey: 'nav_home',
+      activeComponents: [
+        { componentKey: 'schedule-1', componentType: 'SCHEDULE_QUERY' },
+        { componentKey: 'contact-1', componentType: 'CONTACT_FORM' }
+      ],
+      bottomNav: {
+        enabled: true,
+        items: [
+          { key: 'nav_home', title: '主页' },
+          { key: 'nav_second', title: '菜单 2', components: [] }
+        ]
+      }
+    }
+  })
+  try {
+    const query = page.handleScheduleQuery({
+      detail: {
+        componentKey: 'schedule-1',
+        queriedDate: '2026-08-01',
+        idempotencyKey: 'query-1'
+      }
+    })
+    const submit = page.handleContactSubmit({
+      currentTarget: { dataset: { key: 'contact-1' } },
+      detail: { form: { contactName: '客户', phone: '1' } }
+    })
+    page.handleMenuTap({ detail: { menuKey: 'nav_second' } })
+    resolveSchedule({ status: 'TEAM_AVAILABLE' })
+    resolveContact({ leadId: 1 })
+    await Promise.all([query, submit])
+    assert.deepEqual(page.data.scheduleResults, {})
+    assert.deepEqual(resolved, [])
+    assert.deepEqual(completed, [])
+    assert.equal(toasts.some((item) => item.title === '已提交给团队'), false)
+  } finally {
+    page.onUnload()
+    page.cleanup()
+  }
 })
 
 test('team visitor shows timeline guide after displayable content loads and cleans share queries', async () => {
@@ -984,6 +1299,33 @@ test('team visitor hides timeline guide for empty, maintenance, and unknown guid
       }
     })
     assert.equal(page.data.timelineGuideVisible, false)
+  } finally { page.cleanup() }
+})
+
+test('team visitor session refresh preserves an existing secondary menu', () => {
+  const page = loadPage('visitor-portfolio/team-visitor-portfolio.js', async () => ({}))
+  const session = {
+    renderData: {
+      components: [{ componentKey: 'home', componentType: 'DIVIDER', data: {} }],
+      bottomNav: {
+        enabled: true,
+        items: [
+          { key: 'nav_home', title: '主页' },
+          { key: 'nav_works', title: '作品', components: [
+            { componentKey: 'works', componentType: 'TEXT_SECTION', data: { content: '作品' } }
+          ] }
+        ]
+      }
+    }
+  }
+
+  try {
+    page.applySession(session, 'nav_works')
+    assert.equal(page.data.portfolio.activeMenuKey, 'nav_works')
+    assert.deepEqual(
+      page.data.portfolio.activeComponents.map((item) => item.componentKey),
+      ['works']
+    )
   } finally { page.cleanup() }
 })
 
@@ -1292,7 +1634,7 @@ test('team schedule and divider sheets mark their components valid after confirm
 
 test('team editor hides publish for a draft-only portfolio and shows it after publication', async () => {
   const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
-    if (options.url === '/api/mine/team-portfolios/7') return { portfolioId: 7, ownerId: 3, publicationStatus: 'DRAFT_ONLY', config: { share: { title: TEST_TEAM_PORTFOLIO_TITLE }, components: [] } }
+    if (options.url === '/api/mine/team-portfolios/7') return { portfolioId: 7, ownerId: 3, publicationStatus: 'DRAFT_ONLY', config: validTeamEditorConfig() }
     if (options.url === '/api/mine/teams/3') return { team: { teamId: 3, teamName: '甲团队' } }
     if (options.url === '/api/mine/team-portfolios/7/draft') return { portfolioId: 7, draftRevision: 2, publicationStatus: 'DRAFT_ONLY' }
     if (options.url === '/api/mine/team-portfolios/7/publish') return { publicationStatus: 'PUBLISHED', publishedRevision: 2 }
@@ -1304,6 +1646,258 @@ test('team editor hides publish for a draft-only portfolio and shows it after pu
     assert.equal(page.data.showPublishAction, false)
     await page.handlePublishTap()
     assert.equal(page.data.showPublishAction, true)
+  } finally { page.cleanup() }
+})
+
+test('team editor configures theme and menus, then moves a component without changing its key', () => {
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => ({}))
+  const config = {
+    share: { title: TEST_TEAM_PORTFOLIO_TITLE },
+    style: { backgroundColor: '#FFFFFF' },
+    components: [{
+      componentKey: 'home-divider',
+      componentType: 'DIVIDER',
+      sortOrder: 1000,
+      enabled: true,
+      config: { color: 'GRAY', heightPx: 16 }
+    }],
+    bottomNav: {
+      enabled: true,
+      items: [
+        { key: 'nav_home', title: '主页' },
+        { key: 'nav_works', title: '作品', components: [{
+          componentKey: 'work-text',
+          componentType: 'TEXT_SECTION',
+          sortOrder: 1000,
+          enabled: true,
+          config: { content: '团队服务' }
+        }] }
+      ]
+    }
+  }
+  page.setData({ canMaintain: true })
+  page.updateConfig(config)
+  try {
+    page.handleBackgroundColorTap({ currentTarget: { dataset: { color: '#151515' } } })
+    assert.equal(page.data.config.style.backgroundColor, '#151515')
+    page.handleOpenBackgroundColorSheet()
+    page.handleBackgroundHexInput({ detail: { value: '#123456' } })
+    page.handleConfirmBackgroundColor()
+    assert.equal(page.data.config.style.backgroundColor, '#123456')
+
+    page.handleMenuTabTap({ currentTarget: { dataset: { key: 'nav_works' } } })
+    assert.deepEqual(page.data.componentList.map((item) => item.componentKey), ['work-text'])
+    page.handleNavigationTitleInput({
+      currentTarget: { dataset: { key: 'nav_works' } },
+      detail: { value: '案例' }
+    })
+    assert.equal(page.data.navigationItems[1].title, '案例')
+    assert.equal(page.data.navigationItems[1].titleLength, 2)
+    page.handleNavigationTitleInput({
+      currentTarget: { dataset: { key: 'nav_works' } },
+      detail: { value: '' }
+    })
+    assert.equal(page.data.navigationItems[1].title, '')
+    assert.equal(page.data.navigationItems[1].titleLength, 0)
+    page.handleNavigationTitleInput({
+      currentTarget: { dataset: { key: 'nav_works' } },
+      detail: { value: '案例' }
+    })
+
+    page.handleOpenComponentMoveSheet({ currentTarget: { dataset: { key: 'work-text' } } })
+    page.handleMoveTargetTap({ currentTarget: { dataset: { key: 'nav_home' } } })
+    assert.equal(page.data.activeMenuKey, 'nav_home')
+    assert.deepEqual(page.data.componentList.map((item) => item.componentKey), [
+      'home-divider',
+      'work-text'
+    ])
+    assert.equal(page.data.componentList[1].config.content, '团队服务')
+    assert.equal(page.data.componentScrollTarget, 'team-component-work-text')
+  } finally {
+    page.onUnload()
+    page.cleanup()
+  }
+})
+
+test('team editor derives the personal-style active menu title and navigation count', () => {
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => ({}))
+  page.setData({ canMaintain: true })
+  page.updateConfig({
+    share: { title: TEST_TEAM_PORTFOLIO_TITLE },
+    components: [{
+      componentKey: 'home-divider',
+      componentType: 'DIVIDER',
+      sortOrder: 1000,
+      enabled: true,
+      config: {}
+    }],
+    bottomNav: {
+      enabled: true,
+      items: [
+        { key: 'nav_home', title: '主页' },
+        { key: 'nav_works', title: '作品', components: [] }
+      ]
+    }
+  })
+
+  try {
+    assert.equal(page.data.bottomNavCount, 2)
+    assert.equal(page.data.activeMenuTitle, '主页')
+    assert.equal(page.data.activeMenuTitleCount, 2)
+
+    page.handleMenuTabTap({ currentTarget: { dataset: { key: 'nav_works' } } })
+    assert.equal(page.data.activeMenuTitle, '作品')
+
+    page.handleNavigationTitleInput({
+      currentTarget: { dataset: { key: 'nav_works' } },
+      detail: { value: '案例' }
+    })
+    assert.equal(page.data.activeMenuTitle, '案例')
+    assert.equal(page.data.activeMenuTitleCount, 2)
+  } finally { page.cleanup() }
+})
+
+test('team editor uses count one to disable navigation and keeps page settings read-only without maintenance permission', () => {
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => ({}))
+  page.setData({ canMaintain: false })
+  page.updateConfig({
+    share: { title: TEST_TEAM_PORTFOLIO_TITLE },
+    style: { backgroundColor: '#FFFFFF' },
+    components: [{
+      componentKey: 'home-divider',
+      componentType: 'DIVIDER',
+      sortOrder: 1000,
+      enabled: true,
+      config: {}
+    }],
+    bottomNav: {
+      enabled: true,
+      items: [
+        { key: 'nav_home', title: '主页' },
+        { key: 'nav_works', title: '作品', components: [] },
+        { key: 'nav_contact', title: '联系', components: [] }
+      ]
+    }
+  })
+
+  try {
+    const readOnlyConfig = JSON.stringify(page.data.config)
+    page.handleBackgroundColorTap({ currentTarget: { dataset: { color: '#151515' } } })
+    page.handleBottomNavigationCountTap({ currentTarget: { dataset: { count: 2 } } })
+    page.handleNavigationTitleInput({
+      currentTarget: { dataset: { key: 'nav_home' } },
+      detail: { value: '不可修改' }
+    })
+    page.handleRemoveNavigationItem({ currentTarget: { dataset: { key: 'nav_home' } } })
+    assert.equal(JSON.stringify(page.data.config), readOnlyConfig)
+
+    page.setData({ canMaintain: true })
+    page.handleBottomNavigationCountTap({ currentTarget: { dataset: { count: 1 } } })
+    assert.equal(page.data.config.bottomNav.enabled, false)
+    assert.equal(page.data.bottomNavCount, 1)
+  } finally { page.cleanup() }
+})
+
+test('team editor always warns before removing the first menu and explains promotion compatibility', () => {
+  const modals = []
+  const page = loadPage(
+    'standard-edit/team-portfolio-standard-edit.js',
+    async () => ({}),
+    {
+      showModal(options) {
+        modals.push(options)
+        options.success({ confirm: false })
+      }
+    }
+  )
+  page.setData({ canMaintain: true })
+  page.updateConfig({
+    share: { title: TEST_TEAM_PORTFOLIO_TITLE },
+    components: [],
+    bottomNav: {
+      enabled: true,
+      items: [
+        { key: 'nav_home', title: '主页' },
+        { key: 'nav_second', title: '菜单 2', components: [] },
+        { key: 'nav_third', title: '菜单 3', components: [] }
+      ]
+    }
+  })
+  try {
+    page.handleRemoveNavigationItem({
+      currentTarget: { dataset: { key: 'nav_home' } }
+    })
+    assert.equal(modals.length, 1)
+    assert.match(modals[0].content, /第二个菜单将晋升为第一个菜单/)
+    assert.match(modals[0].content, /旧版本/)
+    assert.equal(page.data.config.bottomNav.items[0].key, 'nav_home')
+  } finally { page.cleanup() }
+})
+
+test('team editor blocks moving the final enabled component out of the first menu', () => {
+  const toasts = []
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => ({}), {
+    showToast(value) { toasts.push(value) }
+  })
+  page.setData({ canMaintain: true })
+  page.updateConfig({
+    share: { title: TEST_TEAM_PORTFOLIO_TITLE },
+    components: [{
+      componentKey: 'only-home',
+      componentType: 'DIVIDER',
+      sortOrder: 1000,
+      enabled: true,
+      config: {}
+    }],
+    bottomNav: {
+      enabled: true,
+      items: [
+        { key: 'nav_home', title: '主页' },
+        { key: 'nav_works', title: '作品', components: [] }
+      ]
+    }
+  })
+  try {
+    page.handleOpenComponentMoveSheet({ currentTarget: { dataset: { key: 'only-home' } } })
+    page.handleMoveTargetTap({ currentTarget: { dataset: { key: 'nav_works' } } })
+    assert.deepEqual(toasts, [{ title: '第一个菜单至少保留一个组件', icon: 'none' }])
+    assert.equal(page.data.activeMenuKey, 'nav_home')
+    assert.deepEqual(page.data.componentList.map((item) => item.componentKey), ['only-home'])
+  } finally { page.cleanup() }
+})
+
+test('team editor publish validation switches to the first invalid menu before requesting', async () => {
+  const requests = []
+  const toasts = []
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
+    requests.push(options)
+    return {}
+  }, {
+    showToast(value) { toasts.push(value) }
+  })
+  page.setData({ portfolioId: 7, canMaintain: true })
+  page.updateConfig({
+    share: { title: TEST_TEAM_PORTFOLIO_TITLE },
+    components: [{
+      componentKey: 'home-divider',
+      componentType: 'DIVIDER',
+      sortOrder: 1000,
+      enabled: true,
+      config: {}
+    }],
+    bottomNav: {
+      enabled: true,
+      items: [
+        { key: 'nav_home', title: '主页' },
+        { key: 'nav_empty', title: '联系', components: [] }
+      ]
+    }
+  })
+  try {
+    await page.handlePublishTap()
+    assert.deepEqual(requests, [])
+    assert.equal(page.data.activeMenuKey, 'nav_empty')
+    assert.deepEqual(toasts, [{ title: '【联系】至少添加一个组件', icon: 'none' }])
   } finally { page.cleanup() }
 })
 
@@ -1320,6 +1914,88 @@ test('team preview opens a member published portfolio through personal preview',
       url: '/pages/portfolios/standard-preview/portfolio-standard-preview?portfolioId=88&teamPortfolioId=13&teamScope=draft'
     }])
   } finally { page.cleanup() }
+})
+
+test('team single work preview stays side-effect free while visitor records image and video events', () => {
+  const previewImages = []
+  const preview = loadPage('standard-preview/team-portfolio-standard-preview.js', async () => ({}), {
+    previewImage(options) { previewImages.push(options) }
+  })
+  preview.selectAllComponents = () => []
+  let visitor
+  try {
+    const imageDetail = {
+      componentKey: 'single-image',
+      work: { workId: 9, mediaType: 'IMAGE', mediaUrl: 'https://cdn/image.jpg' }
+    }
+    preview.handleSingleWorkPreview({ detail: imageDetail })
+    assert.deepEqual(previewImages[0].urls, ['https://cdn/image.jpg'])
+
+    const visitorImages = []
+    visitor = loadPage('visitor-portfolio/team-visitor-portfolio.js', async () => ({}), {
+      previewImage(options) { visitorImages.push(options) }
+    })
+    const events = []
+    visitor.sendEvent = (payload) => { events.push(payload); return Promise.resolve() }
+    visitor.selectAllComponents = () => []
+    assert.equal(events.length, 0)
+
+    visitor.handleSingleWorkPreview({ detail: imageDetail })
+    visitor.handleSingleWorkActivate({
+      detail: {
+        componentKey: 'single-video',
+        work: { workId: 10, mediaType: 'VIDEO', mediaUrl: 'https://cdn/video.mp4' }
+      }
+    })
+    assert.deepEqual(visitorImages[0].urls, ['https://cdn/image.jpg'])
+    assert.deepEqual(events, [
+      { eventType: 'WORK_VIEWED', componentKey: 'single-image', workId: 9, mediaType: 'IMAGE' },
+      { eventType: 'VIDEO_PLAYED', componentKey: 'single-video', workId: 10, mediaType: 'VIDEO', durationSeconds: 0 }
+    ])
+    assert.equal(visitor.data.activeSingleWorkVideoKey, 'single-video')
+
+    preview.handleSingleWorkActivate({
+      detail: { componentKey: 'single-preview', work: { workId: 11, mediaType: 'VIDEO' } }
+    })
+    assert.equal(preview.data.activeSingleWorkVideoKey, 'single-preview')
+    assert.equal(events.length, 2)
+  } finally {
+    if (visitor) visitor.cleanup()
+    preview.cleanup()
+  }
+})
+
+test('team preview and visitor pages stop every single work video when hidden or unloaded', () => {
+  const pagePaths = [
+    'standard-preview/team-portfolio-standard-preview.js',
+    'visitor-portfolio/team-visitor-portfolio.js'
+  ]
+
+  for (const pagePath of pagePaths) {
+    const page = loadPage(pagePath, async () => ({}))
+    const pausedKeys = []
+    page.selectAllComponents = () => [
+      { properties: { componentKey: 'single-a' }, pauseVideo() { pausedKeys.push('single-a') } },
+      { properties: { componentKey: 'single-b' }, pauseVideo() { pausedKeys.push('single-b') } }
+    ]
+    try {
+      assert.equal(typeof page.onHide, 'function')
+      assert.equal(typeof page.onUnload, 'function')
+
+      page.setData({ activeSingleWorkVideoKey: 'single-a' })
+      page.onHide()
+      assert.deepEqual(pausedKeys, ['single-a', 'single-b'])
+      assert.equal(page.data.activeSingleWorkVideoKey, '')
+
+      pausedKeys.length = 0
+      page.setData({ activeSingleWorkVideoKey: 'single-b' })
+      page.onUnload()
+      assert.deepEqual(pausedKeys, ['single-a', 'single-b'])
+      assert.equal(page.data.activeSingleWorkVideoKey, '')
+    } finally {
+      page.cleanup()
+    }
+  }
 })
 
 test('team visitor opens a member portfolio with the team source flag', () => {

@@ -10,15 +10,18 @@ const {
 } = require('../utils/works')
 const {
   applyUploadCompleteResults,
+  applyAnimationSingleFrameFallbacks,
   buildUploadCompleteFailureMessage,
   buildUploadCompletePayload,
   buildCoverUploadTicketPayload,
   buildUploadTicketPayload,
   buildUploadProgressSummary,
   createChooseMediaOptions,
+  classifyChosenMediaFiles,
   enrichVideoFileMetadata,
   normalizeChosenMediaFiles,
   prepareCoverUploadFiles,
+  prepareStaticImageMainFiles,
   runWorkUploadQueue,
   uploadToCos,
   validateChosenMediaFiles
@@ -49,6 +52,7 @@ function buildEditForm(file, index) {
     fileName: file.fileName,
     mediaType: file.mediaType,
     isVideo: file.mediaType === 'VIDEO',
+    isAnimation: file.mediaType === 'ANIMATION',
     tempFilePath: file.tempFilePath,
     coverPath: file.coverPath || '',
     title: file.title || '',
@@ -122,7 +126,10 @@ Page({
     }
     try {
       const response = await this.chooseMedia(createChooseMediaOptions(remainingCount))
-      const mediaFiles = await enrichVideoFileMetadata(normalizeChosenMediaFiles(response.tempFiles || []))
+      const normalizedFiles = normalizeChosenMediaFiles(response.tempFiles || [])
+      const classifiedFiles = await classifyChosenMediaFiles(normalizedFiles)
+      const preparedFiles = await prepareStaticImageMainFiles(classifiedFiles)
+      const mediaFiles = await enrichVideoFileMetadata(preparedFiles)
       const selectedFiles = applyUnifiedWorkTags(
         mediaFiles,
         this.data.unifiedTags
@@ -425,41 +432,16 @@ Page({
       uploadOverallText: '准备上传'
     })
     try {
-      const filesWithSha256 = await this.ensureFileSha256(this.data.files)
-      this.setUploadFiles(filesWithSha256)
-      const ticketPayload = buildUploadTicketPayload(filesWithSha256)
-      let filesWithTickets = filesWithSha256
-      if (ticketPayload.files.length > 0) {
-        const ticketResponse = await request({
-          url: '/api/mine/works/upload-tickets',
-          method: 'POST',
-          data: ticketPayload
-        })
-        filesWithTickets = this.attachTickets(filesWithSha256, ticketResponse.items || [])
+      let roundResult = await this.uploadAndConfirmRound(this.data.files)
+      const filesWithFallbacks = applyAnimationSingleFrameFallbacks(roundResult.files)
+      const fallbackRequired = filesWithFallbacks.some(
+        (file, index) => file !== roundResult.files[index]
+      )
+      if (fallbackRequired) {
+        this.setUploadFiles(filesWithFallbacks)
+        roundResult = await this.uploadAndConfirmRound(filesWithFallbacks)
       }
-      this.setUploadFiles(filesWithTickets)
-      await runWorkUploadQueue(filesWithTickets, (file) => this.uploadSingleFile(file))
-      await this.uploadCustomCoverFiles()
-      const completePayload = buildUploadCompletePayload(this.data.files)
-      if (completePayload.items.length === 0) {
-        wx.showToast({
-          title: '已保存作品',
-          icon: 'success'
-        })
-        wx.redirectTo({
-          url: WORKS_PAGE_URL
-        })
-        return
-      }
-      const completeResponse = await request({
-        url: '/api/mine/works/upload-complete',
-        method: 'POST',
-        data: completePayload
-      })
-      const completeItems = completeResponse.items || []
-      const filesWithCompleteResults = applyUploadCompleteResults(this.data.files, completeItems)
-      this.setUploadFiles(filesWithCompleteResults)
-      const failedItems = completeItems.filter((item) => !item.success)
+      const failedItems = roundResult.items.filter((item) => !item.success)
       if (failedItems.length > 0) {
         throw new Error(buildUploadCompleteFailureMessage(failedItems))
       }
@@ -486,6 +468,45 @@ Page({
         uploadOverallText: '保存作品',
         errorMessage: error && error.message ? error.message : '上传失败，请重试'
       })
+    }
+  },
+
+  async uploadAndConfirmRound(files) {
+    const filesWithSha256 = await this.ensureFileSha256(files)
+    this.setUploadFiles(filesWithSha256)
+    const ticketPayload = buildUploadTicketPayload(filesWithSha256)
+    let filesWithTickets = filesWithSha256
+    if (ticketPayload.files.length > 0) {
+      const ticketResponse = await request({
+        url: '/api/mine/works/upload-tickets',
+        method: 'POST',
+        data: ticketPayload
+      })
+      filesWithTickets = this.attachTickets(filesWithSha256, ticketResponse.items || [])
+    }
+    this.setUploadFiles(filesWithTickets)
+    await runWorkUploadQueue(filesWithTickets, (file) => this.uploadSingleFile(file))
+    await this.uploadCustomCoverFiles()
+    const completePayload = buildUploadCompletePayload(this.data.files)
+    if (completePayload.items.length === 0) {
+      return {
+        files: this.data.files,
+        items: []
+      }
+    }
+    const completeResponse = await request({
+      url: '/api/mine/works/upload-complete',
+      method: 'POST',
+      data: completePayload
+    })
+    const completeItems = completeResponse.items || []
+    const filesWithCompleteResults = applyUploadCompleteResults(
+      this.data.files, completeItems
+    )
+    this.setUploadFiles(filesWithCompleteResults)
+    return {
+      files: filesWithCompleteResults,
+      items: completeItems
     }
   },
 

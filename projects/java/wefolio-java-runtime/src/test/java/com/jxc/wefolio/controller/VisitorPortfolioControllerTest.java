@@ -59,6 +59,7 @@ class VisitorPortfolioControllerTest {
         VisitorProfileUpdateRequest profileUpdateRequest = new VisitorProfileUpdateRequest();
         ContactLeadSubmitRequest leadRequest = new ContactLeadSubmitRequest();
         ContactLeadSubmitResponse leadResponse = new ContactLeadSubmitResponse();
+        ContactLeadSubmitResponse leadV2Response = new ContactLeadSubmitResponse();
         when(visitorPortfolioService.openPortfolio("PF001", openRequest)).thenReturn(portfolioResponse);
         when(visitorPortfolioService.createVisitorAvatarUploadTicket("PF001", uploadTicketRequest))
                 .thenReturn(uploadTicketResponse);
@@ -73,6 +74,7 @@ class VisitorPortfolioControllerTest {
                 .thenReturn(optionsResponse);
         when(visitorPortfolioService.submitScheduleQuery("PF001", queryRequest)).thenReturn(queryResponse);
         when(contactLeadService.submit("PF001", leadRequest)).thenReturn(leadResponse);
+        when(contactLeadService.submitV2("PF001", leadRequest)).thenReturn(leadV2Response);
 
         Response<VisitorPortfolioResponse> open = controller.open("PF001", openRequest);
         Response<VisitorAvatarUploadTicketResponse> uploadTicket = controller.createVisitorAvatarUploadTicket(
@@ -87,6 +89,7 @@ class VisitorPortfolioControllerTest {
         Response<PortfolioScheduleQueryResponse> scheduleQuery = controller.scheduleQuery("PF001", queryRequest);
         Response<Void> event = controller.event("PF001", eventRequest);
         Response<ContactLeadSubmitResponse> lead = controller.contactLead("PF001", leadRequest);
+        Response<ContactLeadSubmitResponse> leadV2 = controller.contactLeadV2("PF001", leadRequest);
 
         assertThat(VisitorPortfolioController.class.isAnnotationPresent(VisitorAccess.class)).isTrue();
         assertThat(VisitorPortfolioController.class
@@ -116,6 +119,12 @@ class VisitorPortfolioControllerTest {
         assertPostMapping("contactLead",
                 new Class<?>[] {String.class, ContactLeadSubmitRequest.class},
                 "/api/visitor/portfolios/{shareCode}/contact-leads");
+        assertPostMapping("contactLeadV2",
+                new Class<?>[] {String.class, ContactLeadSubmitRequest.class},
+                "/api/visitor/portfolios/{shareCode}/contact-leads/v2");
+        assertThat(VisitorPortfolioController.class
+                .getMethod("contactLead", String.class, ContactLeadSubmitRequest.class)
+                .isAnnotationPresent(Deprecated.class)).isTrue();
         assertThat(open.getData()).isSameAs(portfolioResponse);
         assertThat(uploadTicket.getData()).isSameAs(uploadTicketResponse);
         assertThat(profileUpdate.isSuccess()).isTrue();
@@ -124,6 +133,7 @@ class VisitorPortfolioControllerTest {
         assertThat(scheduleQuery.getData()).isSameAs(queryResponse);
         assertThat(event.isSuccess()).isTrue();
         assertThat(lead.getData()).isSameAs(leadResponse);
+        assertThat(leadV2.getData()).isSameAs(leadV2Response);
         verify(visitorPortfolioService).recordEvent("PF001", eventRequest);
         verify(visitorPortfolioService).updateVisitorProfile("PF001", profileUpdateRequest);
     }

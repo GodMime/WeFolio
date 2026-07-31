@@ -1,5 +1,5 @@
 <view class="page-shell probe-page">
-  <navigation-bar title="视频帧探针" color="#17202a" background="rgba(245, 247, 251, 0.96)"></navigation-bar>
+  <navigation-bar title="视频帧探针" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
 
   <scroll-view class="probe-scroll" scroll-y type="list">
     <view class="probe-content">

@@ -1,18 +1,21 @@
-@import "../../../styles/portfolio-render-shared.wxss";
-
 .portfolio-preview-page {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: #ffffff;
 }
 
 .preview-scroll {
-  height: 100vh;
+  flex: 1;
+  min-height: 0;
 }
 
 .preview-toolbar {
   display: flex;
   align-items: center;
   gap: 16rpx;
-  padding: 20rpx 24rpx;
+  padding: 20rpx 32rpx;
   border-bottom: 1rpx solid #eef1f4;
   box-sizing: border-box;
 }
@@ -52,13 +55,15 @@
 }
 
 .preview-skeleton-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 12rpx;
   margin-top: 34rpx;
 }
 
 .preview-skeleton-tile {
+  width: calc(50% - 6rpx);
+  flex: 0 0 calc(50% - 6rpx);
   height: 236rpx;
 }
 
@@ -69,7 +74,7 @@
 }
 
 .preview-error-title {
-  color: #17202a;
+  color: #212529;
   font-size: 34rpx;
   font-weight: 900;
   line-height: 1.35;
@@ -77,198 +82,48 @@
 
 .preview-error-message {
   margin-top: 18rpx;
-  color: #59636f;
+  color: #868e96;
   font-size: 26rpx;
   line-height: 1.7;
 }
 
 .folio-component {
-  margin-top: 34rpx;
+  margin-top: 32rpx;
 }
 
 .folio-carousel {
   width: 100%;
   height: 760rpx;
-  background: #f3f4f6;
+  border-radius: 40rpx;
+  background: #f1f3f5;
 }
 
-.carousel-image,
-.work-cover {
+.carousel-image {
   display: block;
   width: 100%;
   height: 100%;
 }
 
-.profile-section,
-.simple-section,
-.qr-section,
-.text-section {
-  padding: 8rpx 34rpx;
-  text-align: center;
-  box-sizing: border-box;
-}
-
-.profile-avatar {
-  display: block;
-  margin: 0 auto;
-  width: 132rpx;
-  height: 132rpx;
-  border-radius: 50%;
-}
-
-.profile-name {
-  margin-top: 18rpx;
-  color: #17202a;
-  font-size: 36rpx;
-  font-weight: 900;
-  line-height: 1.25;
-}
-
-.profile-line,
-.profile-bio,
-.section-desc,
-.text-content,
-.work-desc {
-  color: #59636f;
-  font-size: 26rpx;
-  line-height: 1.75;
-  white-space: pre-wrap;
-}
-
-.profile-line {
-  margin-top: 8rpx;
-}
-
-.profile-bio {
-  display: block;
-  margin: 22rpx auto 0;
-  max-width: 620rpx;
-}
-
-.profile-tags {
-  display: flex;
-  align-items: center;
-  gap: 22rpx;
-}
-
-.profile-tags {
-  justify-content: center;
-  flex-wrap: wrap;
-  margin-top: 22rpx;
-}
-
-.profile-tag {
-  color: #6b7280;
-  font-size: 24rpx;
-  line-height: 1.4;
-}
-
-.component-title {
-  padding: 0 24rpx;
-  color: #17202a;
-  font-size: 32rpx;
-  font-weight: 900;
-  line-height: 1.35;
-  box-sizing: border-box;
-}
-
-.work-section-title {
-  padding: 0 24rpx;
-  color: #000000;
-  font-size: 34rpx;
-  font-weight: 900;
-  line-height: 1.35;
-  box-sizing: border-box;
-}
-
-.work-card {
-  min-width: 0;
-  box-sizing: border-box;
-}
-
-.work-cover-wrap {
-  position: relative;
-  width: 100%;
-  overflow: hidden;
-  background: #f3f4f6;
-}
-
-.grid-card .work-cover-wrap {
-  height: 236rpx;
-}
-
-.list-card .work-cover-wrap {
-  height: 430rpx;
-}
-
-.work-play-badge {
-  position: absolute;
-  right: 16rpx;
-  bottom: 16rpx;
-  width: 54rpx;
-  height: 54rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 2rpx solid rgba(255, 255, 255, 0.82);
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.48);
-  box-sizing: border-box;
-}
-
-.work-play-icon {
-  width: 0;
-  height: 0;
-  margin-left: 5rpx;
-  border-top: 10rpx solid transparent;
-  border-bottom: 10rpx solid transparent;
-  border-left: 16rpx solid #ffffff;
-}
-
-.work-title {
-  overflow: hidden;
-  margin-top: 10rpx;
-  color: #17202a;
-  font-size: 24rpx;
-  font-weight: 700;
-  line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .secondary-action,
 .primary-button {
   width: 260rpx;
-  height: 72rpx;
+  height: 96rpx;
   margin: 24rpx auto 0;
   padding: 0;
   font-size: 26rpx;
-  line-height: 72rpx;
-  border-radius: 8rpx;
+  line-height: 96rpx;
+  border-radius: 999rpx;
 }
 
 .secondary-action {
-  color: #17202a;
-  border: 1rpx solid #d8dee5;
-  background: #ffffff;
+  color: #212529;
+  border: 1rpx solid #dee2e6;
+  background: #f5f6f7;
 }
 
 .primary-button {
   color: #ffffff;
-  background: #17202a;
-}
-
-.qr-image {
-  display: block;
-  width: 280rpx;
-  height: 280rpx;
-  margin: 24rpx auto 0;
-}
-
-.text-content {
-  display: block;
-  margin-top: 12rpx;
-  text-align: left;
+  background: #212529;
 }
 
 .folio-brand-footer {
@@ -367,6 +222,6 @@
   height: 62vh;
   max-height: 720rpx;
   overflow: hidden;
-  border-radius: 12rpx;
+  border-radius: 40rpx;
   background: #000000;
 }

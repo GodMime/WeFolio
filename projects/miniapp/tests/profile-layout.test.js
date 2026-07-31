@@ -80,6 +80,20 @@ test('basic profile page files and controls match design draft', () => {
   assert.match(profileWxml, />标签颜色</)
   assert.match(profileWxml, /wx:for="{{tagColorOptions}}"/)
   assert.match(profileWxml, /bindtap="handleSelectTagColor"/)
+
+  const contentRule = readProfileRule('.profile-content')
+  const panelRule = readProfileRule('.panel')
+  const inputRule = readProfileRule('.input')
+  const textareaRule = readProfileRule('.input.textarea')
+  const primaryButtonRule = readProfileRule('.primary-button')
+
+  assert.match(contentRule, /padding:\s*20rpx 32rpx/)
+  assert.match(panelRule, /border:\s*1rpx solid #e9ecef/)
+  assert.match(panelRule, /border-radius:\s*48rpx/)
+  assert.match(inputRule, /min-height:\s*84rpx/)
+  assert.match(textareaRule, /min-height:\s*144rpx/)
+  assert.match(primaryButtonRule, /border-radius:\s*999rpx/)
+  assert.match(primaryButtonRule, /background:\s*#212529/)
 })
 
 test('wechat QR editor sits directly below intro inside profile fields panel', () => {
@@ -171,7 +185,7 @@ test('basic profile fields show character limit counters', () => {
   assert.match(headingRule, /display:\s*flex/)
   assert.match(headingRule, /justify-content:\s*space-between/)
   assert.match(limitRule, /font-size:\s*22rpx/)
-  assert.match(limitRule, /color:\s*#8b96a3/)
+  assert.match(limitRule, /color:\s*#adb5bd/)
 })
 
 test('profile tag remove control renders as a compact icon trigger', () => {
@@ -188,6 +202,24 @@ test('profile tag remove control renders as a compact icon trigger', () => {
   assert.match(tagRemoveRule, /min-width:\s*36rpx/)
   assert.match(tagRemoveRule, /flex:\s*none/)
   assert.match(tagRemoveRule, /overflow:\s*hidden/)
+})
+
+test('profile tags use white outlined pills with their own color dots', () => {
+  const profileWxml = fs.readFileSync(profileWxmlPath, 'utf8')
+  const profileWxss = fs.readFileSync(profileWxssPath, 'utf8')
+  const tagDotRule = readProfileRule('.tag-dot')
+  const tagRemoveRule = readProfileRule('.tag-remove')
+
+  assert.match(
+    profileWxml,
+    /class="tag-pill"[\s\S]*style="\{\{item\.style\}\}"[\s\S]*class="tag-dot"[\s\S]*style="\{\{item\.dotStyle\}\}"/
+  )
+  assert.match(profileWxss, /\.tag-pill,\s*\.tag-add-trigger\s*\{[\s\S]*background:\s*#ffffff;/)
+  assert.match(tagDotRule, /width:\s*12rpx/)
+  assert.match(tagDotRule, /height:\s*12rpx/)
+  assert.match(tagDotRule, /border-radius:\s*50%/)
+  assert.match(tagRemoveRule, /border:\s*1rpx solid #e9ecef/)
+  assert.match(tagRemoveRule, /background:\s*#ffffff/)
 })
 
 test('profile tag dialog uses Skyline compatible bottom sheet positioning', () => {
@@ -216,6 +248,30 @@ test('profile tag dialog uses Skyline compatible bottom sheet positioning', () =
   assert.doesNotMatch(colorChoiceRule, /\/\s*3/)
   assert.match(colorChoiceRule, /width:\s*31\.3%/)
   assert.match(colorChoiceRule, /flex:\s*none/)
+})
+
+test('profile tag color choices match the neutral design with color-only swatches', () => {
+  const profileWxml = fs.readFileSync(profileWxmlPath, 'utf8')
+  const colorChoiceRule = readProfileRule('.color-choice')
+  const activeColorChoiceRule = readProfileRule('.color-choice.active')
+  const colorSwatchRule = readProfileRule('.color-swatch')
+  const colorNameRule = readProfileRule('.color-name')
+
+  assert.doesNotMatch(
+    profileWxml,
+    /class="color-choice[^"]*"[\s\S]*style="\{\{item\.choiceStyle\}\}"/
+  )
+  assert.match(colorChoiceRule, /color:\s*#495057/)
+  assert.match(colorChoiceRule, /font-weight:\s*500/)
+  assert.match(colorChoiceRule, /border:\s*1rpx solid #e9ecef/)
+  assert.match(colorChoiceRule, /background:\s*#ffffff/)
+  assert.match(activeColorChoiceRule, /color:\s*#212529/)
+  assert.match(activeColorChoiceRule, /font-weight:\s*600/)
+  assert.match(activeColorChoiceRule, /border-color:\s*#212529/)
+  assert.doesNotMatch(activeColorChoiceRule, /box-shadow/)
+  assert.match(colorSwatchRule, /width:\s*12rpx/)
+  assert.match(colorSwatchRule, /height:\s*12rpx/)
+  assert.match(colorNameRule, /font-weight:\s*inherit/)
 })
 
 test('single full-width profile buttons follow their container width rule', () => {

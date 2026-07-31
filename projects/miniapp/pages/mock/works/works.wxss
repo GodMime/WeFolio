@@ -26,8 +26,8 @@
 .image-preview-panel,
 .video-preview-panel {
   width: 100%;
-  padding: 24rpx 24rpx calc(28rpx + env(safe-area-inset-bottom));
-  border-radius: 24rpx 24rpx 0 0;
+  padding: 24rpx 32rpx calc(32rpx + env(safe-area-inset-bottom));
+  border-radius: 56rpx 56rpx 0 0;
   background: #111827;
   box-sizing: border-box;
   transform: translateY(100%);
@@ -64,7 +64,7 @@
 .video-player {
   width: 100%;
   height: 420rpx;
-  border-radius: 14rpx;
+  border-radius: 40rpx;
   overflow: hidden;
   background: #000000;
 }
@@ -72,7 +72,7 @@
 .image-player {
   width: 100%;
   height: 560rpx;
-  border-radius: 14rpx;
+  border-radius: 40rpx;
   overflow: hidden;
   background: #000000;
 }

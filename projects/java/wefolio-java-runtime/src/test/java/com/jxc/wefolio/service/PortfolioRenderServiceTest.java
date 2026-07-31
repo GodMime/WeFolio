@@ -1,11 +1,14 @@
 package com.jxc.wefolio.service;
 
 import com.alibaba.fastjson2.JSON;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jxc.wefolio.dict.MediaTypeDict;
 import com.jxc.wefolio.dict.PortfolioComponentTypeDict;
 import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
 import com.jxc.wefolio.dict.PortfolioStatusDict;
 import com.jxc.wefolio.dict.PortfolioTemplateTypeDict;
+import com.jxc.wefolio.dict.WorkAuditStatusDict;
 import com.jxc.wefolio.dict.WorkStatusDict;
 import com.jxc.wefolio.dto.PortfolioConfigDto;
 import com.jxc.wefolio.dto.PortfolioRenderDto;
@@ -63,6 +66,8 @@ class PortfolioRenderServiceTest {
                 )),
                 component("c_grid", PortfolioComponentTypeDict.WORK_GRID.getCode(), 2000, Map.of(
                         "title", "作品",
+                        "showTitle", false,
+                        "showDescription", true,
                         "groups", List.of(group("g_all", "全部案例", 1000, List.of(11L)))
                 ))
         );
@@ -76,6 +81,8 @@ class PortfolioRenderServiceTest {
                 .containsExactly("c_profile", "c_grid", "c_carousel");
         assertThat(JSON.toJSONString(render.getShare())).doesNotContain("\"intro\"");
         PortfolioRenderDto.Component grid = render.getComponents().get(1);
+        assertThat(grid.getShowTitle()).isFalse();
+        assertThat(grid.getShowDescription()).isTrue();
         assertThat(grid.getGroups()).hasSize(1);
         assertThat(grid.getGroups().get(0).getName()).isEqualTo("全部案例");
         assertThat(grid.getGroups().get(0).getWorks().get(0).getCoverUrl())
@@ -85,7 +92,7 @@ class PortfolioRenderServiceTest {
     }
 
     /**
-     * 单个作品组件应输出单数作品、标题开关和作品原始比例。
+     * 单个作品组件应输出单数作品、标题说明开关和作品原始比例。
      */
     @Test
     void renderShouldExposeSingleWorkWithTitleSwitchAndAspectRatio() {
@@ -98,19 +105,68 @@ class PortfolioRenderServiceTest {
                 "c_single",
                 "SINGLE_WORK",
                 1000,
-                Map.of("workId", 12L, "showTitle", false)
+                Map.of("workId", 12L, "showTitle", false, "showDescription", true)
         ));
 
         PortfolioRenderDto render = service().render(portfolio(), config, false, false, null, null);
 
         PortfolioRenderDto.Component component = render.getComponents().get(0);
         assertThat(component.getShowTitle()).isFalse();
+        assertThat(component.getShowDescription()).isTrue();
         assertThat(component.getWork()).isNotNull();
         assertThat(component.getWork().getWorkId()).isEqualTo(12L);
         assertThat(component.getWork().getMediaUrl()).isEqualTo("https://cdn.example.com/video/12.mp4");
         assertThat(component.getWork().getCoverUrl()).isEqualTo("https://cdn.example.com/cover/12.jpg");
         assertThat(component.getWork().getAspectRatio()).isEqualTo("9:16");
         assertThat(component.getWorks()).isEmpty();
+    }
+
+    @Test
+    void renderShouldExposeAnimationOnlyForSingleWorkAndFilterBadBulkConfig() {
+        WorkEntity animation = work(
+                13L,
+                MediaTypeDict.ANIMATION.getCode(),
+                "animation/13.gif",
+                "animation/13-thumb.jpg",
+                null);
+        when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(animation));
+        when(cosService.publicUrl("animation/13.gif")).thenReturn("https://cdn.example.com/animation/13.gif");
+        when(cosService.publicUrl("animation/13-thumb.jpg"))
+                .thenReturn("https://cdn.example.com/animation/13-thumb.jpg");
+        PortfolioConfigDto config = config(
+                component("c_single", PortfolioComponentTypeDict.SINGLE_WORK.getCode(), 1000,
+                        Map.of("workId", 13L)),
+                component("c_grid", PortfolioComponentTypeDict.WORK_GRID.getCode(), 2000,
+                        Map.of("workIds", List.of(13L))));
+
+        PortfolioRenderDto render = service().render(portfolio(), config, false, false, null, null);
+
+        assertThat(render.getComponents().get(0).getWork().getMediaType())
+                .isEqualTo(MediaTypeDict.ANIMATION.getCode());
+        assertThat(render.getComponents().get(1).getGroups())
+                .singleElement()
+                .satisfies(group -> assertThat(group.getWorks()).isEmpty());
+    }
+
+    @Test
+    void renderShouldHideAnimationBeforeAuditPasses() {
+        WorkEntity animation = work(
+                13L,
+                MediaTypeDict.ANIMATION.getCode(),
+                "animation/13.gif",
+                "animation/13-thumb.jpg",
+                null);
+        animation.setAuditStatus(WorkAuditStatusDict.AUDITING.getCode());
+        when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(animation));
+        PortfolioConfigDto config = config(component(
+                "c_single",
+                PortfolioComponentTypeDict.SINGLE_WORK.getCode(),
+                1000,
+                Map.of("workId", 13L)));
+
+        PortfolioRenderDto render = service().render(portfolio(), config, false, false, null, null);
+
+        assertThat(render.getComponents().get(0).getWork()).isNull();
     }
 
     /**
@@ -131,6 +187,7 @@ class PortfolioRenderServiceTest {
         assertThat(render.getComponents()).singleElement().satisfies(component -> {
             assertThat(component.getComponentKey()).isEqualTo("c_single");
             assertThat(component.getShowTitle()).isTrue();
+            assertThat(component.getShowDescription()).isFalse();
             assertThat(component.getWork()).isNull();
         });
     }
@@ -151,6 +208,104 @@ class PortfolioRenderServiceTest {
         assertThat(render.isUnderMaintenance()).isTrue();
         assertThat(render.getMaintenanceText().getSecondary()).isEqualTo("维护中");
         assertThat(render.getComponents()).isEmpty();
+        assertThat(render.getStyle().getBackgroundColor()).isEqualTo("#FFFFFF");
+        assertThat(render.getStyle().getThemeMode()).isEqualTo("light");
+        assertThat(render.getBottomNav().isEnabled()).isFalse();
+        assertThat(render.getBottomNav().getItems()).isEmpty();
+    }
+
+    /**
+     * 渲染时应输出背景主题和二级菜单组件，首页菜单不重复输出组件。
+     */
+    @Test
+    void renderShouldExposeStyleAndSecondaryMenuComponents() {
+        PortfolioConfigDto config = config(
+                component("c_profile", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, Map.of())
+        );
+        PortfolioConfigDto.Style style = new PortfolioConfigDto.Style();
+        style.setBackgroundColor("#102030");
+        config.setStyle(style);
+        PortfolioConfigDto.BottomNav bottomNav = new PortfolioConfigDto.BottomNav();
+        bottomNav.setEnabled(true);
+        PortfolioConfigDto.BottomNavItem home = new PortfolioConfigDto.BottomNavItem();
+        home.setKey("home");
+        home.setTitle("主页");
+        PortfolioConfigDto.BottomNavItem contact = new PortfolioConfigDto.BottomNavItem();
+        contact.setKey("contact");
+        contact.setTitle("联系");
+        contact.setComponents(List.of(component(
+                "c_contact",
+                PortfolioComponentTypeDict.CONTACT_FORM.getCode(),
+                1000,
+                Map.of("title", "留下联系方式")
+        )));
+        bottomNav.setItems(List.of(home, contact));
+        config.setBottomNav(bottomNav);
+
+        PortfolioRenderDto render = service().render(portfolio(), config, false, false, null, null);
+
+        assertThat(render.getStyle().getBackgroundColor()).isEqualTo("#102030");
+        assertThat(render.getStyle().getThemeMode()).isEqualTo("dark");
+        assertThat(render.getComponents()).extracting(PortfolioRenderDto.Component::getComponentKey)
+                .containsExactly("c_profile");
+        assertThat(render.getBottomNav().isEnabled()).isTrue();
+        assertThat(render.getBottomNav().getItems()).hasSize(2);
+        assertThat(render.getBottomNav().getItems().get(0).getComponents()).isNull();
+        assertThat(render.getBottomNav().getItems().get(1).getComponents())
+                .extracting(PortfolioRenderDto.Component::getComponentKey)
+                .containsExactly("c_contact");
+    }
+
+    /**
+     * 第一菜单复用顶层组件，渲染 JSON 中不得重复输出 components 字段。
+     */
+    @Test
+    void renderJsonShouldOmitComponentsFromFirstNavigationItem() throws Exception {
+        PortfolioConfigDto config = config(
+                component("c_profile", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, Map.of())
+        );
+        PortfolioConfigDto.BottomNav bottomNav = new PortfolioConfigDto.BottomNav();
+        bottomNav.setEnabled(true);
+        PortfolioConfigDto.BottomNavItem home = new PortfolioConfigDto.BottomNavItem();
+        home.setKey("home");
+        home.setTitle("主页");
+        PortfolioConfigDto.BottomNavItem contact = new PortfolioConfigDto.BottomNavItem();
+        contact.setKey("contact");
+        contact.setTitle("联系");
+        contact.setComponents(List.of(component(
+                "c_contact",
+                PortfolioComponentTypeDict.CONTACT_FORM.getCode(),
+                1000,
+                Map.of()
+        )));
+        bottomNav.setItems(List.of(home, contact));
+        config.setBottomNav(bottomNav);
+
+        PortfolioRenderDto render = service().render(portfolio(), config, false, false, null, null);
+        ObjectMapper objectMapper = new ObjectMapper();
+        JsonNode items = objectMapper.readTree(objectMapper.writeValueAsString(render))
+                .path("bottomNav")
+                .path("items");
+
+        assertThat(items.get(0).has("components")).isFalse();
+        assertThat(items.get(1).path("components").isArray()).isTrue();
+    }
+
+    /**
+     * YIQ 临界值上方的浅色背景应使用深色文字主题。
+     */
+    @Test
+    void renderShouldDeriveLightThemeModeFromBackgroundColor() {
+        PortfolioConfigDto config = config(
+                component("c_profile", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, Map.of())
+        );
+        PortfolioConfigDto.Style style = new PortfolioConfigDto.Style();
+        style.setBackgroundColor("#808080");
+        config.setStyle(style);
+
+        PortfolioRenderDto render = service().render(portfolio(), config, false, false, null, null);
+
+        assertThat(render.getStyle().getThemeMode()).isEqualTo("light");
     }
 
     /**
@@ -327,6 +482,9 @@ class PortfolioRenderServiceTest {
         work.setDurationMs(durationMs);
         work.setDescription("说明" + id);
         work.setStatus(WorkStatusDict.ACTIVE.getCode());
+        if (MediaTypeDict.ANIMATION.getCode().equals(mediaType)) {
+            work.setAuditStatus(WorkAuditStatusDict.PASSED.getCode());
+        }
         return work;
     }
 }

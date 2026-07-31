@@ -1,0 +1,168 @@
+.theme-light {
+  --team-portfolio-text-primary: #212529;
+  --team-portfolio-text-secondary: #868e96;
+  --team-portfolio-surface-muted: #f1f3f5;
+  --team-portfolio-border: #e9ecef;
+}
+
+.theme-dark {
+  --team-portfolio-text-primary: #f8f9fa;
+  --team-portfolio-text-secondary: #c1c7ce;
+  --team-portfolio-surface-muted: #2a2d31;
+  --team-portfolio-border: #3a3f45;
+  color: var(--team-portfolio-text-primary);
+}
+
+.theme-dark.carousel {
+  background: var(--team-portfolio-surface-muted);
+}
+
+.theme-dark .name,
+.theme-dark .content,
+.theme-dark .hint,
+.theme-dark .single-work-title,
+.theme-dark .work-section-title,
+.theme-dark .portfolio-title,
+.theme-dark .component-title {
+  color: var(--team-portfolio-text-primary);
+}
+
+.theme-dark .intro,
+.theme-dark .single-work-description,
+.theme-dark .portfolio-description,
+.theme-dark .member-name,
+.theme-dark .section-desc,
+.theme-dark .empty {
+  color: var(--team-portfolio-text-secondary);
+}
+
+.theme-dark .single-work-video,
+.theme-dark .single-work-video-poster,
+.theme-dark .single-work-empty,
+.theme-dark .portfolio-cover,
+.theme-dark .qr-image,
+.theme-dark .editor-qr-empty {
+  background: var(--team-portfolio-surface-muted);
+}
+
+.theme-dark .form-section,
+.theme-dark .schedule-query-inline-shell {
+  color: var(--team-portfolio-text-primary);
+  background: #222222;
+  border-color: var(--team-portfolio-border);
+}
+
+.theme-dark .field,
+.theme-dark .date-field,
+.theme-dark .schedule-query-month-picker-button {
+  color: var(--team-portfolio-text-primary);
+  background: var(--team-portfolio-surface-muted);
+  border-color: var(--team-portfolio-border);
+}
+
+.theme-dark .date-field.placeholder {
+  color: var(--team-portfolio-text-secondary);
+}
+
+.theme-dark .schedule-query-inline-shell .schedule-query-calendar,
+.theme-dark .schedule-query-inline-shell .schedule-calendar-day,
+.theme-dark .schedule-query-inline-shell .schedule-query-month-button {
+  color: var(--team-portfolio-text-primary);
+  background: #222222;
+  border-color: var(--team-portfolio-border);
+}
+
+.theme-dark .schedule-query-weekdays,
+.theme-dark .schedule-calendar-day {
+  color: #dee2e6;
+}
+
+.theme-dark .schedule-calendar-day.muted,
+.theme-dark .schedule-calendar-day.disabled {
+  color: #6c757d;
+  background: #24272b;
+  border-color: var(--team-portfolio-border);
+}
+
+.theme-dark .schedule-calendar-day.selected,
+.theme-dark .primary-button,
+.theme-dark .schedule-query-submit {
+  color: #212529;
+  background: #ffffff;
+}
+
+.theme-dark .contact-form-entry-button {
+  color: var(--team-portfolio-text-primary);
+  background: var(--team-portfolio-surface-muted);
+}
+
+.theme-dark .schedule-query-open-button {
+  color: var(--team-portfolio-text-primary);
+  background: var(--team-portfolio-surface-muted);
+}
+
+.theme-dark .form-section .primary-button {
+  color: var(--team-portfolio-text-primary);
+  background: var(--team-portfolio-surface-muted);
+}
+
+.theme-dark .schedule-query-inline-shell .schedule-query-submit {
+  color: var(--team-portfolio-text-primary);
+  background: var(--team-portfolio-surface-muted);
+}
+
+.theme-dark .schedule-query-inline-shell .schedule-query-submit[disabled] {
+  color: var(--team-portfolio-text-secondary);
+  background: var(--team-portfolio-surface-muted);
+}
+
+.theme-dark .contact-form-panel,
+.theme-dark .schedule-query-modal-panel {
+  color: #212529;
+  background: #ffffff;
+}
+
+.theme-dark .contact-form-panel .component-title,
+.theme-dark .schedule-query-modal-panel .schedule-query-modal-title,
+.theme-dark .schedule-query-modal-panel .schedule-query-month-text,
+.theme-dark .schedule-query-modal-panel .schedule-query-selected-date {
+  color: #212529;
+}
+
+.theme-dark .contact-form-panel .section-desc {
+  color: #868e96;
+}
+
+.theme-dark .contact-form-panel .field,
+.theme-dark .contact-form-panel .date-field {
+  color: #212529;
+  background: #f5f6f7;
+  border-color: #e9ecef;
+}
+
+.theme-dark .schedule-query-modal-panel .schedule-query-calendar {
+  background: #ffffff;
+  border-color: #e9ecef;
+}
+
+.theme-dark .schedule-query-modal-panel .schedule-calendar-day {
+  color: #212529;
+  background: #ffffff;
+  border-color: #e9ecef;
+}
+
+.theme-dark .schedule-query-modal-panel .schedule-calendar-day.muted {
+  color: #9aa5b1;
+  background: #f5f7f9;
+}
+
+.theme-dark .schedule-query-modal-panel .schedule-calendar-day.disabled {
+  color: #c1c8d0;
+  background: #f3f5f7;
+}
+
+.theme-dark .schedule-query-modal-panel .schedule-calendar-day.selected,
+.theme-dark .schedule-query-modal-panel .schedule-query-submit {
+  color: #ffffff;
+  background: #212529;
+}

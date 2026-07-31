@@ -1,5 +1,9 @@
+const { normalizeHexColor } = require('./portfolio-color')
+
 const SCHEMA_VERSION = 'standard-personal-v1'
+const EDITOR_SCHEMA_REVISION = 2
 const SORT_ORDER_STEP = 1000
+const NAVIGATION_TITLE_MAX_LENGTH = 5
 const DISPLAY_GROUP_NAME_MAX_LENGTH = 20
 const PROFILE_TAG_DEFAULT_COLOR = '#0f766e'
 const PROFILE_VISIBLE_FIELD_DEFAULTS = {
@@ -70,6 +74,14 @@ const TEXT_SECTION_ALIGNMENT_OPTIONS = [
   { value: TEXT_SECTION_ALIGNMENTS.RIGHT, label: '右对齐' }
 ]
 const DEFAULT_DIVIDER_HEIGHT_PX = 16
+const PUBLISH_COMPONENT_MESSAGES = {
+  CAROUSEL_WORK_REQUIRED: '请选择轮播作品',
+  DISPLAY_WORK_REQUIRED: '请选择要展示的作品',
+  SINGLE_WORK_REQUIRED: '请选择一个作品',
+  CUSTOM_QR_REQUIRED: '请上传自定义联系二维码',
+  TEXT_CONTENT_REQUIRED: '文字说明内容不能为空',
+  TEXT_CONTENT_TOO_LONG: `文字说明不能超过 ${TEXT_SECTION_MAX_LENGTH} 字`
+}
 const DIVIDER_COLORS = {
   BLACK: 'BLACK',
   WHITE: 'WHITE',
@@ -97,6 +109,10 @@ function countText(value) {
   return Array.from(String(value || '')).length
 }
 
+function countUnicodeCodePoints(value) {
+  return Array.from(String(value || '')).length
+}
+
 function toNumber(value, fallback = 0) {
   const numberValue = Number(value)
   return Number.isFinite(numberValue) ? numberValue : fallback
@@ -119,9 +135,15 @@ function normalizeWorkIds(workIds) {
 
 function normalizeSingleWorkConfig(raw = {}) {
   const workId = toNumber(raw && raw.workId)
-  return {
+  return Object.assign({
     workId: Number.isInteger(workId) && workId > 0 ? workId : 0,
-    showTitle: typeof raw.showTitle === 'boolean' ? raw.showTitle : true
+  }, normalizeWorkDisplayOptions(raw))
+}
+
+function normalizeWorkDisplayOptions(raw = {}) {
+  return {
+    showTitle: typeof raw.showTitle === 'boolean' ? raw.showTitle : true,
+    showDescription: typeof raw.showDescription === 'boolean' ? raw.showDescription : false
   }
 }
 
@@ -283,6 +305,7 @@ function createComponent(componentType, options = {}) {
   }
   if (isWorkListComponent(componentType)) {
     config.groups = normalizeDisplayGroups(config.groups, config.workIds)
+    Object.assign(config, normalizeWorkDisplayOptions(config))
   }
   if (componentType === COMPONENT_TYPES.SINGLE_WORK) {
     const singleWorkConfig = normalizeSingleWorkConfig(config)
@@ -326,9 +349,9 @@ function normalizeComponent(raw = {}, index = 0) {
   return component
 }
 
-function normalizePortfolioConfig(raw = {}) {
-  const components = Array.isArray(raw.components)
-    ? raw.components
+function normalizeComponentList(components) {
+  return Array.isArray(components)
+    ? components
         .filter((item) => item && item.enabled !== false)
         .map(normalizeComponent)
         .sort((left, right) => {
@@ -337,12 +360,190 @@ function normalizePortfolioConfig(raw = {}) {
         })
         .map((item, index) => Object.assign({}, item, { sortOrder: (index + 1) * SORT_ORDER_STEP }))
     : []
+}
 
+function normalizeStyleConfig(raw = {}) {
+  return {
+    backgroundColor: normalizeHexColor(raw && raw.backgroundColor)
+  }
+}
+
+function normalizeNavigationItem(raw = {}, index = 0) {
+  const title = Array.from(trimText(raw.title)).slice(0, NAVIGATION_TITLE_MAX_LENGTH).join('')
+  const item = {
+    key: trimText(raw.key) || `nav_${index + 1}`,
+    title: title || `菜单${index + 1}`
+  }
+  const iconUrl = trimText(raw.iconUrl)
+  if (iconUrl) {
+    item.iconUrl = iconUrl
+  }
+  if (index > 0) {
+    item.components = normalizeComponentList(raw.components)
+  }
+  return item
+}
+
+function normalizeBottomNavConfig(raw = {}) {
+  if (!raw || raw.enabled !== true) {
+    return { enabled: false }
+  }
+  const items = Array.isArray(raw.items)
+    ? raw.items.slice(0, 4).map(normalizeNavigationItem)
+    : []
+  if (items.length < 2) {
+    return { enabled: false }
+  }
+  return {
+    enabled: true,
+    items
+  }
+}
+
+function normalizePortfolioConfig(raw = {}) {
   return {
     schemaVersion: trimText(raw.schemaVersion) || SCHEMA_VERSION,
+    editorSchemaRevision: EDITOR_SCHEMA_REVISION,
     share: normalizeShare(raw.share || {}),
-    components
+    style: normalizeStyleConfig(raw.style || {}),
+    components: normalizeComponentList(raw.components),
+    bottomNav: normalizeBottomNavConfig(raw.bottomNav || {})
   }
+}
+
+function getMenuComponentList(config, menuKey = '') {
+  const normalized = normalizePortfolioConfig(config)
+  const bottomNav = normalized.bottomNav
+  if (!bottomNav.enabled || !bottomNav.items.length) {
+    return normalized.components.slice()
+  }
+  const targetKey = trimText(menuKey) || bottomNav.items[0].key
+  const index = bottomNav.items.findIndex((item) => item.key === targetKey)
+  if (index <= 0) {
+    return normalized.components.slice()
+  }
+  return (bottomNav.items[index].components || []).slice()
+}
+
+function replaceMenuComponentList(config, menuKey = '', components = []) {
+  const normalized = normalizePortfolioConfig(config)
+  const nextComponents = normalizeComponentList(components)
+  const bottomNav = normalized.bottomNav
+  if (!bottomNav.enabled || !bottomNav.items.length) {
+    return normalizePortfolioConfig(Object.assign({}, normalized, { components: nextComponents }))
+  }
+  const targetKey = trimText(menuKey) || bottomNav.items[0].key
+  const index = bottomNav.items.findIndex((item) => item.key === targetKey)
+  if (index <= 0) {
+    return normalizePortfolioConfig(Object.assign({}, normalized, { components: nextComponents }))
+  }
+  const items = bottomNav.items.map((item, itemIndex) => itemIndex === index
+    ? Object.assign({}, item, { components: nextComponents })
+    : item)
+  return normalizePortfolioConfig(Object.assign({}, normalized, {
+    bottomNav: Object.assign({}, bottomNav, { items })
+  }))
+}
+
+function visitPortfolioComponents(config, visitor) {
+  const normalized = normalizePortfolioConfig(config)
+  const navigationItems = normalized.bottomNav.enabled ? normalized.bottomNav.items : []
+  const menuKeys = navigationItems.length ? navigationItems.map((item) => item.key) : ['']
+  const locations = []
+  menuKeys.forEach((menuKey, menuIndex) => {
+    getMenuComponentList(normalized, menuKey).forEach((component, componentIndex) => {
+      const location = {
+        menuKey,
+        menuIndex,
+        componentIndex,
+        component
+      }
+      locations.push(location)
+      if (typeof visitor === 'function') {
+        visitor(location)
+      }
+    })
+  })
+  return locations
+}
+
+function findPortfolioComponent(config, componentKey, componentType = '') {
+  const targetKey = trimText(componentKey)
+  const targetType = trimText(componentType)
+  return visitPortfolioComponents(config).find((location) => {
+    return location.component.componentKey === targetKey
+      && (!targetType || location.component.componentType === targetType)
+  }) || null
+}
+
+function removeNavigationItem(config, menuKey) {
+  const normalized = normalizePortfolioConfig(config)
+  if (!normalized.bottomNav.enabled) {
+    return normalized
+  }
+  const targetIndex = normalized.bottomNav.items.findIndex((item) => item.key === trimText(menuKey))
+  if (targetIndex < 0) {
+    return normalized
+  }
+  const items = normalized.bottomNav.items.slice()
+  let components = normalized.components
+  if (targetIndex === 0 && items.length > 1) {
+    components = (items[1].components || []).slice()
+  }
+  items.splice(targetIndex, 1)
+  if (items.length < 2) {
+    return normalizePortfolioConfig(Object.assign({}, normalized, {
+      components,
+      bottomNav: { enabled: false }
+    }))
+  }
+  const nextItems = items.map((item, index) => normalizeNavigationItem(item, index))
+  return normalizePortfolioConfig(Object.assign({}, normalized, {
+    components,
+    bottomNav: { enabled: true, items: nextItems }
+  }))
+}
+
+function setBottomNavigationCount(config, count) {
+  const normalized = normalizePortfolioConfig(config)
+  const targetCount = Math.min(4, Math.max(1, Math.floor(toNumber(count, 1))))
+  if (targetCount < 2) {
+    return normalizePortfolioConfig(Object.assign({}, normalized, {
+      bottomNav: { enabled: false }
+    }))
+  }
+  const defaultTitles = ['主页', '作品', '档期', '联系']
+  const currentItems = normalized.bottomNav.enabled ? normalized.bottomNav.items : []
+  const items = Array.from({ length: targetCount }, (_, index) => {
+    if (currentItems[index]) {
+      return normalizeNavigationItem(currentItems[index], index)
+    }
+    return normalizeNavigationItem({
+      key: `nav_${Date.now()}_${index + 1}`,
+      title: defaultTitles[index],
+      components: []
+    }, index)
+  })
+  return normalizePortfolioConfig(Object.assign({}, normalized, {
+    bottomNav: { enabled: true, items }
+  }))
+}
+
+function renameNavigationItem(config, menuKey, title) {
+  const normalized = normalizePortfolioConfig(config)
+  if (!normalized.bottomNav.enabled) {
+    return normalized
+  }
+  const normalizedTitle = Array.from(trimText(title)).slice(0, NAVIGATION_TITLE_MAX_LENGTH).join('')
+  if (!normalizedTitle) {
+    return normalized
+  }
+  const items = normalized.bottomNav.items.map((item) => item.key === trimText(menuKey)
+    ? Object.assign({}, item, { title: normalizedTitle })
+    : item)
+  return normalizePortfolioConfig(Object.assign({}, normalized, {
+    bottomNav: Object.assign({}, normalized.bottomNav, { items })
+  }))
 }
 
 function resolveComponentType(componentType) {
@@ -383,6 +584,9 @@ function validateWorkGridComponent(component = {}, works = []) {
   if (selected.length !== ids.length) {
     return { valid: false, message: '请选择有效作品' }
   }
+  if (selected.some((work) => !['IMAGE', 'VIDEO'].includes(trimText(work.mediaType)))) {
+    return { valid: false, message: '该组件只能选择图片或视频作品' }
+  }
   return { valid: true, message: '' }
 }
 
@@ -392,33 +596,137 @@ function validateSingleWorkComponent(component = {}, works = []) {
     return { valid: false, message: '请选择一个作品' }
   }
   const selected = works.find((work) => toNumber(work && work.id) === workId)
-  if (!selected || !['IMAGE', 'VIDEO'].includes(trimText(selected.mediaType))) {
+  if (!selected || !['IMAGE', 'VIDEO', 'ANIMATION'].includes(trimText(selected.mediaType))) {
     return { valid: false, message: '请选择有效作品' }
   }
   return { valid: true, message: '' }
 }
 
-function addComponent(config, componentType) {
+/**
+ * 校验当前草稿中无需服务端数据即可确定的组件发布必填项。
+ *
+ * @param {object} component 作品集组件
+ * @returns {string} 空字符串表示通过，否则返回错误文案
+ */
+function validatePortfolioComponentForPublish(component = {}) {
+  const config = component.config || {}
+  switch (component.componentType) {
+    case COMPONENT_TYPES.CAROUSEL:
+      return normalizeWorkIds(config.workIds).length > 0
+        ? ''
+        : PUBLISH_COMPONENT_MESSAGES.CAROUSEL_WORK_REQUIRED
+    case COMPONENT_TYPES.WORK_GRID:
+    case COMPONENT_TYPES.WORK_LIST:
+      return collectComponentWorkIds(component).length > 0
+        ? ''
+        : PUBLISH_COMPONENT_MESSAGES.DISPLAY_WORK_REQUIRED
+    case COMPONENT_TYPES.SINGLE_WORK:
+      return normalizeSingleWorkConfig(config).workId > 0
+        ? ''
+        : PUBLISH_COMPONENT_MESSAGES.SINGLE_WORK_REQUIRED
+    case COMPONENT_TYPES.QR_CONTACT:
+      return config.qrUrlSource === 'CUSTOM' && !trimText(config.qrUrl)
+        ? PUBLISH_COMPONENT_MESSAGES.CUSTOM_QR_REQUIRED
+        : ''
+    case COMPONENT_TYPES.TEXT_SECTION: {
+      const content = trimText(config.content)
+      if (!content) {
+        return PUBLISH_COMPONENT_MESSAGES.TEXT_CONTENT_REQUIRED
+      }
+      return countText(content) > TEXT_SECTION_MAX_LENGTH
+        ? PUBLISH_COMPONENT_MESSAGES.TEXT_CONTENT_TOO_LONG
+        : ''
+    }
+    default:
+      return ''
+  }
+}
+
+/**
+ * 按菜单和组件显示顺序定位发布前第一个可确定的配置错误。
+ *
+ * 外部作品是否仍可用等动态规则继续由服务端执行最终校验。
+ *
+ * @param {object} config 作品集配置
+ * @returns {{valid: boolean, menuKey: string, componentKey: string, message: string}} 校验结果
+ */
+function validatePortfolioForPublish(config = {}) {
   const normalized = normalizePortfolioConfig(config)
-  const components = normalized.components.slice()
+  const navigationEnabled = normalized.bottomNav.enabled
+  const menus = navigationEnabled
+    ? normalized.bottomNav.items.map((item) => ({
+        key: item.key,
+        title: item.title,
+        components: getMenuComponentList(normalized, item.key)
+      }))
+    : [{
+        key: '',
+        title: '',
+        components: normalized.components
+      }]
+
+  for (const menu of menus) {
+    const messagePrefix = menu.title ? `【${menu.title}】` : ''
+    if (menu.components.length === 0) {
+      return {
+        valid: false,
+        menuKey: menu.key,
+        componentKey: '',
+        message: messagePrefix
+          ? `${messagePrefix}至少添加一个组件`
+          : '作品集至少需要 1 个启用组件'
+      }
+    }
+    for (const component of menu.components) {
+      const componentMessage = validatePortfolioComponentForPublish(component)
+      if (componentMessage) {
+        return {
+          valid: false,
+          menuKey: menu.key,
+          componentKey: component.componentKey,
+          message: `${messagePrefix}${componentMessage}`
+        }
+      }
+    }
+  }
+
+  return {
+    valid: true,
+    menuKey: '',
+    componentKey: '',
+    message: ''
+  }
+}
+
+function updateMenuComponentList(config, menuKey, updater) {
+  const normalized = normalizePortfolioConfig(config)
+  const components = getMenuComponentList(normalized, menuKey)
+  return replaceMenuComponentList(normalized, menuKey, updater(components))
+}
+
+function addComponent(config, componentType, menuKey = '') {
+  return updateMenuComponentList(config, menuKey, (components) => {
+    const resolvedType = resolveComponentType(componentType)
+    if (resolvedType === COMPONENT_TYPES.PROFILE
+      && components.some((item) => item.componentType === COMPONENT_TYPES.PROFILE)) {
+      return components
+    }
   const nextComponent = createComponent(resolveComponentType(componentType), {
     sortOrder: (components.length + 1) * SORT_ORDER_STEP
   })
-  return normalizePortfolioConfig(Object.assign({}, normalized, {
-    components: components.concat(nextComponent)
-  }))
+    return components.concat(nextComponent)
+  })
 }
 
-function removeComponent(config, componentKey) {
-  return normalizePortfolioConfig(Object.assign({}, config, {
-    components: (config.components || []).filter((item) => item.componentKey !== componentKey)
-  }))
+function removeComponent(config, componentKey, menuKey = '') {
+  return updateMenuComponentList(config, menuKey, (components) => {
+    return components.filter((item) => item.componentKey !== componentKey)
+  })
 }
 
-function updateComponentWorkIds(config, componentKey, workIds) {
-  const normalized = normalizePortfolioConfig(config)
+function updateComponentWorkIds(config, componentKey, workIds, menuKey = '') {
   const targetKey = trimText(componentKey)
-  const components = normalized.components.map((component) => {
+  return updateMenuComponentList(config, menuKey, (components) => components.map((component) => {
     if (component.componentKey !== targetKey) {
       return component
     }
@@ -427,103 +735,102 @@ function updateComponentWorkIds(config, componentKey, workIds) {
         workIds: normalizeWorkIds(workIds)
       })
     })
-  })
-  return normalizePortfolioConfig(Object.assign({}, normalized, { components }))
+  }))
 }
 
-function updateSingleWorkConfig(config, componentKey, singleWorkConfig = {}) {
-  const normalized = normalizePortfolioConfig(config)
+function updateSingleWorkConfig(config, componentKey, singleWorkConfig = {}, menuKey = '') {
   const targetKey = trimText(componentKey)
   const nextSingleWorkConfig = normalizeSingleWorkConfig(singleWorkConfig)
-  const components = normalized.components.map((component) => {
+  return updateMenuComponentList(config, menuKey, (components) => components.map((component) => {
     if (component.componentKey !== targetKey || component.componentType !== COMPONENT_TYPES.SINGLE_WORK) {
       return component
     }
     // SINGLE_WORK 配置采用严格白名单，整体替换可避免遗留或未来未知字段进入保存载荷。
     return Object.assign({}, component, { config: nextSingleWorkConfig })
-  })
-  return normalizePortfolioConfig(Object.assign({}, normalized, { components }))
+  }))
 }
 
-function updateComponentProfileConfig(config, componentKey, profileConfig = {}) {
-  const normalized = normalizePortfolioConfig(config)
+function updateWorkDisplayOptions(config, componentKey, options = {}, menuKey = '') {
+  const targetKey = trimText(componentKey)
+  const displayOptions = normalizeWorkDisplayOptions(options)
+  return updateMenuComponentList(config, menuKey, (components) => components.map((component) => {
+    if (component.componentKey !== targetKey || !isWorkListComponent(component.componentType)) {
+      return component
+    }
+    return Object.assign({}, component, {
+      config: Object.assign({}, component.config || {}, displayOptions)
+    })
+  }))
+}
+
+function updateComponentProfileConfig(config, componentKey, profileConfig = {}, menuKey = '') {
   const targetKey = trimText(componentKey)
   const nextProfileConfig = normalizeProfileComponentConfig(profileConfig)
-  const components = normalized.components.map((component) => {
+  return updateMenuComponentList(config, menuKey, (components) => components.map((component) => {
     if (component.componentKey !== targetKey || component.componentType !== COMPONENT_TYPES.PROFILE) {
       return component
     }
     return Object.assign({}, component, {
       config: Object.assign({}, component.config || {}, nextProfileConfig)
     })
-  })
-  return normalizePortfolioConfig(Object.assign({}, normalized, { components }))
+  }))
 }
 
-function updateComponentScheduleQueryConfig(config, componentKey, scheduleQueryConfig = {}) {
-  const normalized = normalizePortfolioConfig(config)
+function updateComponentScheduleQueryConfig(config, componentKey, scheduleQueryConfig = {}, menuKey = '') {
   const targetKey = trimText(componentKey)
   const nextScheduleQueryConfig = normalizeScheduleQueryConfig(scheduleQueryConfig)
-  const components = normalized.components.map((component) => {
+  return updateMenuComponentList(config, menuKey, (components) => components.map((component) => {
     if (component.componentKey !== targetKey || component.componentType !== COMPONENT_TYPES.SCHEDULE_QUERY) {
       return component
     }
     return Object.assign({}, component, {
       config: Object.assign({}, component.config || {}, nextScheduleQueryConfig)
     })
-  })
-  return normalizePortfolioConfig(Object.assign({}, normalized, { components }))
+  }))
 }
 
-function updateComponentContactFormConfig(config, componentKey, contactFormConfig = {}) {
-  const normalized = normalizePortfolioConfig(config)
+function updateComponentContactFormConfig(config, componentKey, contactFormConfig = {}, menuKey = '') {
   const targetKey = trimText(componentKey)
   const nextContactFormConfig = normalizeContactFormConfig(contactFormConfig)
-  const components = normalized.components.map((component) => {
+  return updateMenuComponentList(config, menuKey, (components) => components.map((component) => {
     if (component.componentKey !== targetKey || component.componentType !== COMPONENT_TYPES.CONTACT_FORM) {
       return component
     }
     return Object.assign({}, component, {
       config: Object.assign({}, component.config || {}, nextContactFormConfig)
     })
-  })
-  return normalizePortfolioConfig(Object.assign({}, normalized, { components }))
+  }))
 }
 
-function updateComponentTextSectionConfig(config, componentKey, textSectionConfig = {}) {
-  const normalized = normalizePortfolioConfig(config)
+function updateComponentTextSectionConfig(config, componentKey, textSectionConfig = {}, menuKey = '') {
   const targetKey = trimText(componentKey)
   const nextTextSectionConfig = normalizeTextSectionConfig(textSectionConfig)
-  const components = normalized.components.map((component) => {
+  return updateMenuComponentList(config, menuKey, (components) => components.map((component) => {
     if (component.componentKey !== targetKey || component.componentType !== COMPONENT_TYPES.TEXT_SECTION) {
       return component
     }
     return Object.assign({}, component, {
       config: Object.assign({}, component.config || {}, nextTextSectionConfig)
     })
-  })
-  return normalizePortfolioConfig(Object.assign({}, normalized, { components }))
+  }))
 }
 
-function updateComponentDividerConfig(config, componentKey, dividerConfig = {}) {
-  const normalized = normalizePortfolioConfig(config)
+function updateComponentDividerConfig(config, componentKey, dividerConfig = {}, menuKey = '') {
   const targetKey = trimText(componentKey)
   const nextDividerConfig = normalizeDividerConfig(dividerConfig)
-  const components = normalized.components.map((component) => {
+  return updateMenuComponentList(config, menuKey, (components) => components.map((component) => {
     if (component.componentKey !== targetKey || component.componentType !== COMPONENT_TYPES.DIVIDER) {
       return component
     }
     return Object.assign({}, component, {
       config: Object.assign({}, component.config || {}, nextDividerConfig)
     })
-  })
-  return normalizePortfolioConfig(Object.assign({}, normalized, { components }))
+  }))
 }
 
-function updateComponentDisplayGroups(config, componentKey, updater) {
-  const normalized = normalizePortfolioConfig(config)
+function updateComponentDisplayGroups(config, componentKey, updater, menuKey = '') {
   const targetKey = trimText(componentKey)
-  const components = normalized.components.map((component) => {
+  return updateMenuComponentList(config, menuKey, (components) => components.map((component) => {
     if (component.componentKey !== targetKey || !isWorkListComponent(component.componentType)) {
       return component
     }
@@ -533,8 +840,7 @@ function updateComponentDisplayGroups(config, componentKey, updater) {
         groups: normalizeDisplayGroups(updater(groups))
       })
     })
-  })
-  return normalizePortfolioConfig(Object.assign({}, normalized, { components }))
+  }))
 }
 
 function validateDisplayGroupName(groups = [], name = '', currentGroupKey = '') {
@@ -564,7 +870,7 @@ function createDisplayGroupKey(groups = []) {
   return `g_${index}`
 }
 
-function addDisplayGroup(config, componentKey, name) {
+function addDisplayGroup(config, componentKey, name, menuKey = '') {
   return updateComponentDisplayGroups(config, componentKey, (groups) => {
     const validation = validateDisplayGroupName(groups, name)
     if (!validation.valid) {
@@ -576,10 +882,10 @@ function addDisplayGroup(config, componentKey, name) {
       sortOrder: (groups.length + 1) * SORT_ORDER_STEP,
       workIds: []
     })
-  })
+  }, menuKey)
 }
 
-function copyWorkTagsToDisplayGroups(config, componentKey, tags = []) {
+function copyWorkTagsToDisplayGroups(config, componentKey, tags = [], menuKey = '') {
   const groups = Array.isArray(tags)
     ? tags.map((tag, index) => ({
         groupKey: `g_${index + 1}`,
@@ -588,10 +894,10 @@ function copyWorkTagsToDisplayGroups(config, componentKey, tags = []) {
         workIds: []
       })).filter((group) => group.name)
     : []
-  return updateComponentDisplayGroups(config, componentKey, () => groups)
+  return updateComponentDisplayGroups(config, componentKey, () => groups, menuKey)
 }
 
-function importWorksIntoDisplayGroup(config, componentKey, groupKey, workIds = []) {
+function importWorksIntoDisplayGroup(config, componentKey, groupKey, workIds = [], menuKey = '') {
   const targetGroupKey = trimText(groupKey)
   const importedIds = normalizeWorkIds(workIds)
   return updateComponentDisplayGroups(config, componentKey, (groups) => groups.map((group) => {
@@ -601,10 +907,10 @@ function importWorksIntoDisplayGroup(config, componentKey, groupKey, workIds = [
     return Object.assign({}, group, {
       workIds: normalizeWorkIds(group.workIds.concat(importedIds))
     })
-  }))
+  }), menuKey)
 }
 
-function updateDisplayGroupName(config, componentKey, groupKey, name) {
+function updateDisplayGroupName(config, componentKey, groupKey, name, menuKey = '') {
   const targetGroupKey = trimText(groupKey)
   const nextName = trimText(name)
   return updateComponentDisplayGroups(config, componentKey, (groups) => groups.map((group) => {
@@ -612,15 +918,20 @@ function updateDisplayGroupName(config, componentKey, groupKey, name) {
       return group
     }
     return Object.assign({}, group, { name: nextName })
-  }))
+  }), menuKey)
 }
 
-function removeDisplayGroup(config, componentKey, groupKey) {
+function removeDisplayGroup(config, componentKey, groupKey, menuKey = '') {
   const targetGroupKey = trimText(groupKey)
-  return updateComponentDisplayGroups(config, componentKey, (groups) => groups.filter((group) => group.groupKey !== targetGroupKey))
+  return updateComponentDisplayGroups(
+    config,
+    componentKey,
+    (groups) => groups.filter((group) => group.groupKey !== targetGroupKey),
+    menuKey
+  )
 }
 
-function reorderDisplayGroup(config, componentKey, fromIndex, toIndex) {
+function reorderDisplayGroup(config, componentKey, fromIndex, toIndex, menuKey = '') {
   const sourceIndex = toNumber(fromIndex, -1)
   const targetIndex = toNumber(toIndex, -1)
   return updateComponentDisplayGroups(config, componentKey, (groups) => {
@@ -633,10 +944,10 @@ function reorderDisplayGroup(config, componentKey, fromIndex, toIndex) {
     return nextGroups.map((group, index) => Object.assign({}, group, {
       sortOrder: (index + 1) * SORT_ORDER_STEP
     }))
-  })
+  }, menuKey)
 }
 
-function updateDisplayGroupWorkIds(config, componentKey, groupKey, workIds = []) {
+function updateDisplayGroupWorkIds(config, componentKey, groupKey, workIds = [], menuKey = '') {
   const targetGroupKey = trimText(groupKey)
   return updateComponentDisplayGroups(config, componentKey, (groups) => groups.map((group) => {
     if (group.groupKey !== targetGroupKey) {
@@ -645,25 +956,26 @@ function updateDisplayGroupWorkIds(config, componentKey, groupKey, workIds = [])
     return Object.assign({}, group, {
       workIds: normalizeWorkIds(workIds)
     })
-  }))
+  }), menuKey)
 }
 
-function reorderComponent(config, fromIndex, toIndex) {
-  const components = Array.isArray(config && config.components) ? config.components.slice() : []
+function reorderComponent(config, fromIndex, toIndex, menuKey = '') {
   const sourceIndex = toNumber(fromIndex, -1)
   const targetIndex = toNumber(toIndex, -1)
-  if (sourceIndex < 0 || targetIndex < 0 || sourceIndex >= components.length || targetIndex >= components.length) {
-    return normalizePortfolioConfig(config)
-  }
-  if (sourceIndex === targetIndex) {
-    return normalizePortfolioConfig(config)
-  }
-  const moving = components.splice(sourceIndex, 1)[0]
-  components.splice(targetIndex, 0, moving)
-  const reordered = components.map((item, index) => Object.assign({}, item, {
-    sortOrder: (index + 1) * SORT_ORDER_STEP
-  }))
-  return normalizePortfolioConfig(Object.assign({}, config, { components: reordered }))
+  return updateMenuComponentList(config, menuKey, (components) => {
+    if (sourceIndex < 0 || targetIndex < 0 || sourceIndex >= components.length || targetIndex >= components.length) {
+      return components
+    }
+    if (sourceIndex === targetIndex) {
+      return components
+    }
+    const reordered = components.slice()
+    const moving = reordered.splice(sourceIndex, 1)[0]
+    reordered.splice(targetIndex, 0, moving)
+    return reordered.map((item, index) => Object.assign({}, item, {
+      sortOrder: (index + 1) * SORT_ORDER_STEP
+    }))
+  })
 }
 
 function buildDraftPayload(config, clientRevision, idempotencyKey) {
@@ -691,6 +1003,8 @@ module.exports = {
   DIVIDER_COLOR_VALUES,
   DIVIDER_COLORS,
   DISPLAY_GROUP_NAME_MAX_LENGTH,
+  EDITOR_SCHEMA_REVISION,
+  NAVIGATION_TITLE_MAX_LENGTH,
   SCHEDULE_QUERY_DISPLAY_MODE_OPTIONS,
   SCHEDULE_QUERY_DISPLAY_MODES,
   SCHEMA_VERSION,
@@ -702,21 +1016,32 @@ module.exports = {
   buildDraftPayload,
   buildPublishPayload,
   copyWorkTagsToDisplayGroups,
+  countUnicodeCodePoints,
   createComponent,
+  findPortfolioComponent,
+  getMenuComponentList,
   importWorksIntoDisplayGroup,
+  normalizeBottomNavConfig,
   normalizePortfolioConfig,
+  normalizeNavigationItem,
+  normalizeStyleConfig,
   normalizeContactFormConfig,
   normalizeDividerConfig,
   normalizeDisplayGroups,
   normalizeProfileComponentConfig,
   normalizeScheduleQueryConfig,
   normalizeSingleWorkConfig,
+  normalizeWorkDisplayOptions,
   normalizeTextSectionConfig,
   normalizeWorkIds,
   reorderComponent,
   reorderDisplayGroup,
+  replaceMenuComponentList,
   removeComponent,
   removeDisplayGroup,
+  removeNavigationItem,
+  renameNavigationItem,
+  setBottomNavigationCount,
   updateDisplayGroupName,
   updateDisplayGroupWorkIds,
   updateComponentContactFormConfig,
@@ -724,10 +1049,13 @@ module.exports = {
   updateComponentProfileConfig,
   updateComponentScheduleQueryConfig,
   updateSingleWorkConfig,
+  updateWorkDisplayOptions,
   updateComponentTextSectionConfig,
   updateComponentWorkIds,
   validateDisplayGroupName,
   validateCarouselComponent,
+  validatePortfolioForPublish,
   validateSingleWorkComponent,
-  validateWorkGridComponent
+  validateWorkGridComponent,
+  visitPortfolioComponents
 }

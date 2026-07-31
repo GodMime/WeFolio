@@ -1,9 +1,10 @@
 /**app.wxss**/
 page {
   min-height: 100vh;
-  color: #17202a;
-  background: #f5f7fb;
-  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  color: #212529;
+  background: #f5f6f7;
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue",
+    "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
 button {
@@ -20,8 +21,7 @@ button::after {
 
 .page-shell {
   min-height: 100vh;
-  background:
-    linear-gradient(180deg, #eef6f4 0%, #f5f7fb 34%, #f5f7fb 100%);
+  background: #f5f6f7;
 }
 
 .user-authored-text,

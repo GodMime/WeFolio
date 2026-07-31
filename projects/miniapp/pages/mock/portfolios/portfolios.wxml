@@ -1,9 +1,10 @@
 <view class="page-shell portfolios-page mock-portfolios-page">
-  <navigation-bar title="作品集" back="{{false}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+  <navigation-bar title="作品集" back="{{false}}" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
 
   <scroll-view class="portfolio-scroll" scroll-y type="list">
     <view class="portfolio-content">
       <view class="segment">
+        <view class="segment-indicator"></view>
         <button class="segment-item active">个人</button>
         <button class="segment-item" bindtap="handleLockedAction">团队</button>
       </view>

@@ -5,6 +5,10 @@ const {
 const {
   DIVIDER_COLOR_VALUES
 } = require('./portfolios')
+const {
+  normalizeHexColor,
+  themeModeFromHex
+} = require('./portfolio-color')
 
 const PROFILE_VISIBLE_FIELD_DEFAULTS = {
   avatar: true,
@@ -21,6 +25,7 @@ const ALL_DISPLAY_GROUP_NAME = '全部'
 const DEFAULT_ALL_GROUP_KEY = 'g_all'
 const DEFAULT_ALL_GROUP_NAME = '全部作品'
 const MEDIA_TYPE_VIDEO = 'VIDEO'
+const MEDIA_TYPE_ANIMATION = 'ANIMATION'
 const DEFAULT_VIDEO_RATIO_WIDTH = 16
 const DEFAULT_VIDEO_RATIO_HEIGHT = 9
 const SINGLE_WORK_MEDIA_WIDTH_RPX = 710
@@ -81,6 +86,7 @@ function normalizeRenderWork(raw = {}) {
     title: trimText(raw.title) || '未命名作品',
     mediaType,
     isVideo: mediaType === MEDIA_TYPE_VIDEO,
+    isAnimation: mediaType === MEDIA_TYPE_ANIMATION,
     coverUrl,
     mediaUrl,
     thumbnailUrl: coverUrl || mediaUrl,
@@ -262,7 +268,12 @@ function normalizeRenderComponent(raw = {}) {
     carouselIntervalMs: normalizeCarouselIntervalMs(raw, config),
     works: Array.isArray(raw.works) ? raw.works.map(normalizeRenderWork) : [],
     work: raw.work ? normalizeSingleRenderWork(raw.work) : null,
-    showTitle: typeof raw.showTitle === 'boolean' ? raw.showTitle : true,
+    showTitle: typeof raw.showTitle === 'boolean'
+      ? raw.showTitle
+      : typeof config.showTitle === 'boolean' ? config.showTitle : true,
+    showDescription: typeof raw.showDescription === 'boolean'
+      ? raw.showDescription
+      : typeof config.showDescription === 'boolean' ? config.showDescription : false,
     groups,
     displayTags: groups.map((group, index) => ({
       groupKey: group.groupKey,
@@ -283,18 +294,47 @@ function normalizeRenderComponent(raw = {}) {
   return component
 }
 
+function normalizeRenderComponents(components = [], preview = false) {
+  return (Array.isArray(components) ? components.map(normalizeRenderComponent) : [])
+    .filter((component) => preview || component.componentType !== 'SINGLE_WORK' || component.work)
+    .sort((left, right) => {
+      const orderDiff = left.sortOrder - right.sortOrder
+      return orderDiff || left.componentKey.localeCompare(right.componentKey)
+    })
+}
+
+function normalizeRenderBottomNav(raw = {}, preview = false, underMaintenance = false) {
+  if (underMaintenance || !raw || raw.enabled !== true || !Array.isArray(raw.items) || raw.items.length < 2) {
+    return { enabled: false, items: [] }
+  }
+  return {
+    enabled: true,
+    items: raw.items.map((item, index) => {
+      const normalized = {
+        key: trimText(item && item.key),
+        title: trimText(item && item.title)
+      }
+      if (index > 0) {
+        normalized.components = normalizeRenderComponents(item && item.components, preview)
+      }
+      return normalized
+    })
+  }
+}
+
 function normalizePortfolioRender(raw = {}) {
   const share = normalizeShare(raw.share || {})
   const underMaintenance = Boolean(raw.underMaintenance)
   const preview = Boolean(raw.preview)
-  const components = underMaintenance
-    ? []
-    : (Array.isArray(raw.components) ? raw.components.map(normalizeRenderComponent) : [])
-        .filter((component) => preview || component.componentType !== 'SINGLE_WORK' || component.work)
-        .sort((left, right) => {
-          const orderDiff = left.sortOrder - right.sortOrder
-          return orderDiff || left.componentKey.localeCompare(right.componentKey)
-        })
+  const components = underMaintenance ? [] : normalizeRenderComponents(raw.components, preview)
+  const backgroundColor = underMaintenance
+    ? '#FFFFFF'
+    : normalizeHexColor(raw.style && raw.style.backgroundColor)
+  const themeMode = underMaintenance
+    ? 'light'
+    : trimText(raw.style && raw.style.themeMode) || themeModeFromHex(backgroundColor)
+  const bottomNav = normalizeRenderBottomNav(raw.bottomNav, preview, underMaintenance)
+  const activeMenuKey = bottomNav.enabled ? bottomNav.items[0].key : ''
   return {
     shareCode: trimText(raw.shareCode),
     portfolioId: toNumber(raw.portfolioId),
@@ -307,7 +347,15 @@ function normalizePortfolioRender(raw = {}) {
       secondary: trimText(raw.maintenanceText && raw.maintenanceText.secondary) || '维护中'
     },
     visitRecordId: raw.visitRecordId || null,
-    components
+    style: {
+      backgroundColor,
+      themeMode
+    },
+    themeMode,
+    components,
+    bottomNav,
+    activeMenuKey,
+    activeComponents: components
   }
 }
 
@@ -322,6 +370,8 @@ function normalizeComponents(components = []) {
           name: item.name,
           title: item.config && item.config.title,
           config: item.config || {},
+          showTitle: item.config && item.config.showTitle,
+          showDescription: item.config && item.config.showDescription,
           works: item.config && Array.isArray(item.config.works) ? item.config.works : [],
           groups: item.config && Array.isArray(item.config.groups) ? item.config.groups : []
         }))
@@ -352,6 +402,13 @@ function normalizeVisitorPortfolio(raw = {}) {
   const config = raw.config || {}
   const share = normalizeShare(config.share || {})
   const underMaintenance = Boolean(raw.underMaintenance)
+  const components = underMaintenance ? [] : normalizeComponents(config.components)
+  const backgroundColor = underMaintenance
+    ? '#FFFFFF'
+    : normalizeHexColor(config.style && config.style.backgroundColor)
+  const themeMode = themeModeFromHex(backgroundColor)
+  const bottomNav = normalizeRenderBottomNav(config.bottomNav, false, underMaintenance)
+  const activeMenuKey = bottomNav.enabled ? bottomNav.items[0].key : ''
   return {
     shareCode: trimText(raw.shareCode),
     portfolioId: toNumber(raw.portfolioId),
@@ -366,12 +423,35 @@ function normalizeVisitorPortfolio(raw = {}) {
     },
     visitRecordId: raw.visitRecordId || null,
     config,
-    components: underMaintenance ? [] : normalizeComponents(config.components),
+    style: { backgroundColor, themeMode },
+    themeMode,
+    components,
+    bottomNav,
+    activeMenuKey,
+    activeComponents: components,
     visitorKey: visitorMeta.visitorKey,
     isNewVisitor: visitorMeta.isNewVisitor,
     needVisitorProfile: visitorMeta.needVisitorProfile,
     visitorProfileToken: visitorMeta.visitorProfileToken
   }
+}
+
+function switchPortfolioMenu(portfolio = {}, menuKey = '') {
+  const bottomNav = portfolio.bottomNav || { enabled: false, items: [] }
+  if (!bottomNav.enabled) {
+    return Object.assign({}, portfolio, {
+      activeMenuKey: '',
+      activeComponents: Array.isArray(portfolio.components) ? portfolio.components : []
+    })
+  }
+  const target = bottomNav.items.find((item) => item.key === trimText(menuKey)) || bottomNav.items[0]
+  const first = bottomNav.items[0]
+  return Object.assign({}, portfolio, {
+    activeMenuKey: target.key,
+    activeComponents: target.key === first.key
+      ? (Array.isArray(portfolio.components) ? portfolio.components : [])
+      : (Array.isArray(target.components) ? target.components : [])
+  })
 }
 
 function buildVisitorEventPayload(event = {}, idempotencyKey) {
@@ -401,7 +481,7 @@ function buildVisitorEventPayload(event = {}, idempotencyKey) {
 function switchDisplayGroup(portfolio, componentKey, groupKey) {
   const sourcePortfolio = portfolio || {}
   const targetGroupKey = trimText(groupKey)
-  const components = (Array.isArray(sourcePortfolio.components) ? sourcePortfolio.components : []).map((component) => {
+  const updateComponents = (sourceComponents) => (Array.isArray(sourceComponents) ? sourceComponents : []).map((component) => {
     if (!component || component.componentKey !== componentKey) {
       return component
     }
@@ -421,7 +501,21 @@ function switchDisplayGroup(portfolio, componentKey, groupKey) {
       }))
     })
   })
-  return Object.assign({}, sourcePortfolio, { components })
+  const components = updateComponents(sourcePortfolio.components)
+  const bottomNav = sourcePortfolio.bottomNav && sourcePortfolio.bottomNav.enabled
+    ? Object.assign({}, sourcePortfolio.bottomNav, {
+        items: sourcePortfolio.bottomNav.items.map((item) => {
+          if (item.key !== sourcePortfolio.activeMenuKey || !Array.isArray(item.components)) {
+            return item
+          }
+          return Object.assign({}, item, { components: updateComponents(item.components) })
+        })
+      })
+    : sourcePortfolio.bottomNav
+  return switchPortfolioMenu(
+    Object.assign({}, sourcePortfolio, { components, bottomNav }),
+    sourcePortfolio.activeMenuKey
+  )
 }
 
 function normalizeVisitorSchedule(raw = {}) {
@@ -549,5 +643,6 @@ module.exports = {
   normalizeVisitorSchedule,
   normalizeVisitorScheduleOptions,
   normalizeVisitorScheduleQueryResult,
+  switchPortfolioMenu,
   switchDisplayGroup
 }

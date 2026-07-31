@@ -1,0 +1,1203 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>08 团队作品集 · TripGlide 风重设计稿</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Instrument Sans", -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #f1f3f5;
+    color: #212529;
+    padding: 48px 40px 80px;
+  }
+  .doc-header { max-width: 1280px; margin: 0 auto 40px; }
+  .doc-header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
+  .doc-header .module-tag {
+    display: inline-block; margin-top: 12px; font-size: 12px; font-weight: 600; color: #868e96;
+    letter-spacing: .03em;
+  }
+  .doc-header ul { margin: 14px 0 0 18px; color: #868e96; font-size: 13px; line-height: 1.9; }
+  .doc-header code { background: #e9ecef; border-radius: 6px; padding: 1px 7px; font-size: 11px; color: #495057; }
+
+  .frames { display: flex; flex-wrap: wrap; gap: 32px; max-width: 1600px; margin: 0 auto; }
+  .frame-item { flex: none; }
+  .frame-label { font-size: 12px; font-weight: 600; color: #868e96; margin-bottom: 12px; line-height: 1.5; }
+  .frame-label .path { display: block; font-size: 11px; font-weight: 400; color: #adb5bd; }
+
+  .phone {
+    width: 375px; min-height: 812px;
+    background: #fff; border-radius: 36px;
+    border: 1px solid #e3e6ea;
+    overflow: hidden; position: relative;
+    display: flex; flex-direction: column;
+  }
+  .phone.gray-bg { background: #f5f6f7; }
+
+  /* 状态栏（纯 CSS 几何图标，无 emoji） */
+  .statusbar {
+    height: 44px; flex: none; display: flex; align-items: center; justify-content: space-between;
+    padding: 0 26px 0 30px; font-size: 14px; font-weight: 600; color: #212529;
+  }
+  .statusbar .icons { display: flex; align-items: center; gap: 6px; }
+  .sig { display: flex; align-items: flex-end; gap: 2px; height: 10px; }
+  .sig i { width: 3px; background: #212529; border-radius: 1px; }
+  .sig i:nth-child(1) { height: 4px; }
+  .sig i:nth-child(2) { height: 6px; }
+  .sig i:nth-child(3) { height: 8px; }
+  .sig i:nth-child(4) { height: 10px; }
+  .statusbar .battery {
+    width: 22px; height: 11px; border: 1px solid #adb5bd; border-radius: 3.5px; position: relative;
+  }
+  .statusbar .battery::after {
+    content: ""; position: absolute; left: 1.5px; top: 1.5px; bottom: 1.5px; width: 70%;
+    background: #212529; border-radius: 1.5px;
+  }
+
+  /* 导航栏 */
+  .navbar {
+    height: 48px; flex: none; display: flex; align-items: center; position: relative;
+    color: #212529;
+  }
+  .navbar .back {
+    position: absolute; left: 20px; top: 50%;
+    width: 10px; height: 10px;
+    border-left: 2px solid #212529; border-bottom: 2px solid #212529;
+    transform: translateY(-50%) rotate(45deg); border-radius: 1px;
+  }
+  .navbar .title {
+    flex: 1; text-align: center; font-size: 16px; font-weight: 700; letter-spacing: -0.01em;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 60px;
+  }
+
+  .screen-note {
+    padding: 12px 14px; margin: 10px 14px 0; font-size: 11px; line-height: 1.7;
+    color: #868e96; background: #f5f6f7; border-radius: 16px;
+  }
+
+  /* ===== 通用 ===== */
+  .btn { display: flex; align-items: center; justify-content: center; font-weight: 600; }
+  .avatar-ph {
+    border-radius: 50%; background: #e9ecef;
+    display: flex; align-items: center; justify-content: center;
+    color: #868e96; font-weight: 600; flex: none;
+  }
+  .img-ph {
+    background: #e9ecef;
+    display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px;
+    color: #adb5bd; font-weight: 500; font-size: 11px;
+  }
+  .img-icon {
+    width: 26px; height: 26px; border: 1.5px solid #ced4da; border-radius: 8px; position: relative;
+  }
+  .img-icon::before {
+    content: ""; position: absolute; top: 4px; left: 4px; width: 5px; height: 5px;
+    border: 1.5px solid #ced4da; border-radius: 50%;
+  }
+  .img-icon::after {
+    content: ""; position: absolute; right: 3px; bottom: 3px; width: 12px; height: 9px;
+    border-left: 1.5px solid #ced4da; border-bottom: 1.5px solid #ced4da;
+    transform: skewY(-24deg); transform-origin: bottom left;
+  }
+
+  /* ===== 02 选择团队 ===== */
+  .ts-body { flex: 1; padding: 16px; }
+  .ts-team {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 10px; padding: 13px 14px; background: #fff;
+    border: 1px solid #eceef1; border-radius: 24px;
+  }
+  .ts-team.selected { border: 2px solid #212529; padding: 12px 13px; }
+  .ts-team .tname { font-size: 14px; font-weight: 600; min-width: 0; }
+  .ts-team .trole { margin-left: auto; color: #adb5bd; font-size: 11px; font-weight: 600; flex: none; letter-spacing: .05em; }
+  .ts-primary {
+    margin-top: 12px; height: 48px; background: #212529; color: #fff;
+    font-size: 15px; border-radius: 999px;
+  }
+
+  /* ===== 03 标准编辑 ===== */
+  .ed-body { flex: 1; padding: 16px 16px 100px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+  .ed-panel {
+    background: #fff; border: 1px solid #eceef1; border-radius: 24px; padding: 14px;
+  }
+  .ed-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .ed-section-title { font-size: 17px; font-weight: 700; line-height: 1.3; letter-spacing: -0.01em; }
+  .ed-section-desc { margin-top: 4px; color: #868e96; font-size: 12px; line-height: 1.5; }
+  /* 状态徽章（纯展示）：无边框无底色，6px 彩色圆点 + 彩色小字 */
+  .ed-status-pill {
+    flex: none; display: inline-flex; align-items: center; gap: 4px;
+    padding: 0 2px; font-size: 11px; font-weight: 500; line-height: 1.4;
+    color: #868e96; border: none; background: none; border-radius: 0;
+  }
+  .ed-status-pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #868e96; }
+  .ed-status-pill.published { color: #5c9e6e; }
+  .ed-status-pill.published::before { background: #5c9e6e; }
+  .ed-status-pill.draft { color: #868e96; }
+  .ed-status-pill.draft::before { background: #868e96; }
+  .ed-status-pill.offline { color: #b55656; }
+  .ed-status-pill.offline::before { background: #b55656; }
+  /* 线索卡跟进状态徽章，同规则 */
+  .follow-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; font-weight: 500; line-height: 1.4;
+  }
+  .follow-badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .follow-badge.pending { color: #868e96; }
+  .follow-badge.contacted { color: #c08a3e; }
+  .follow-badge.won { color: #5c9e6e; }
+  .ed-form-row { margin-top: 12px; }
+  .ed-field-heading { display: flex; align-items: center; justify-content: space-between; }
+  .ed-field-label { color: #868e96; font-size: 12px; font-weight: 600; }
+  .ed-field-limit { color: #adb5bd; font-size: 11px; font-weight: 400; }
+  .ed-input {
+    width: 100%; min-height: 42px; margin-top: 8px; padding: 0 16px;
+    font-size: 14px; line-height: 42px; border-radius: 999px; background: #f5f6f7; color: #212529;
+  }
+  .ed-cover {
+    width: 180px; height: 144px; margin-top: 8px;
+    display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px;
+    border-radius: 20px; background: #e9ecef;
+    color: #adb5bd; font-size: 11px; font-weight: 500;
+  }
+  .ed-link-btn {
+    height: 32px; flex: none; display: flex; align-items: center; justify-content: center;
+    padding: 0 16px; color: #212529; font-size: 12px; font-weight: 600;
+    border-radius: 999px; background: #f5f6f7;
+  }
+  .ed-comp-list { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .ed-comp-row {
+    display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 8px 12px;
+    border: 1px solid #eceef1; border-radius: 999px; background: #fff;
+  }
+  .ed-comp-order {
+    width: 26px; height: 26px; flex: none; display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 11px; font-weight: 700; border-radius: 50%; background: #212529;
+  }
+  .ed-comp-title { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; }
+  .ed-drag-handle {
+    width: 16px; height: 20px; flex: none;
+    background: linear-gradient(to bottom, transparent 0, transparent 3px, #ced4da 3px, #ced4da 4.5px, transparent 4.5px, transparent 8.5px, #ced4da 8.5px, #ced4da 10px, transparent 10px, transparent 14px, #ced4da 14px, #ced4da 15.5px, transparent 15.5px);
+    background-position: center; background-size: 14px 19px; background-repeat: no-repeat;
+  }
+  .ed-row-arrow {
+    width: 7px; height: 7px; flex: none; margin-right: 4px;
+    border-right: 2px solid #adb5bd; border-bottom: 2px solid #adb5bd; transform: rotate(-45deg); border-radius: 1px;
+  }
+  .ed-bottom-actions {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 10;
+    display: flex; gap: 8px; padding: 12px 16px 20px;
+    border-top: 1px solid #eceef1; background: #fff;
+  }
+  .ed-action {
+    flex: 1; height: 48px; display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 600; border-radius: 999px;
+  }
+  .ed-action.primary { color: #212529; background: #f5f6f7; }
+  .ed-action.publish { color: #fff; background: #212529; }
+  .ed-action.secondary { background: #fff; border: 1px solid #e3e6ea; flex-direction: column; gap: 3px; }
+  .ed-action.secondary .t { color: #212529; font-size: 14px; font-weight: 600; line-height: 1; }
+  .ed-action.secondary .n { color: #adb5bd; font-size: 10px; font-weight: 500; line-height: 1; }
+
+  /* ===== 弹层 ===== */
+  .sheet-mask {
+    position: absolute; inset: 0; z-index: 30;
+    display: flex; align-items: flex-end;
+    background: rgba(0,0,0,.4);
+  }
+  .sheet-panel {
+    width: 100%; max-height: 80%; display: flex; flex-direction: column; gap: 12px;
+    padding: 10px 16px 20px;
+    border-radius: 28px 28px 0 0; background: #fff; overflow: hidden;
+  }
+  .sheet-grabber { width: 40px; height: 4px; align-self: center; border-radius: 999px; background: #dee2e6; flex: none; }
+  .sheet-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex: none; }
+  .sheet-title { flex: 1; min-width: 0; color: #212529; font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }
+  .sheet-count {
+    min-height: 24px; flex: none; display: flex; align-items: center; padding: 0 12px;
+    color: #868e96; font-size: 11px; font-weight: 600;
+    border: 1px solid #e9ecef; border-radius: 999px; background: #fff; white-space: nowrap;
+  }
+  .sheet-options { display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+  .sheet-option {
+    display: flex; align-items: center; justify-content: space-between;
+    min-height: 50px; padding: 9px 14px;
+    border: 1px solid #eceef1; border-radius: 20px; background: #fff;
+  }
+  .sheet-option.disabled { opacity: .45; }
+  .sheet-option-name { font-size: 14px; font-weight: 600; }
+  .sheet-option-desc { margin-top: 3px; color: #868e96; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sheet-option-plus {
+    width: 24px; height: 24px; flex: none; margin-left: 10px;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 15px; font-weight: 600; border-radius: 50%; background: #212529;
+  }
+  .sheet-option-added {
+    flex: none; margin-left: 10px; height: 24px; display: flex; align-items: center; padding: 0 12px;
+    color: #868e96; font-size: 11px; font-weight: 600; border-radius: 999px;
+    border: 1px solid #e9ecef; background: #fff;
+  }
+  .sheet-actions { display: flex; gap: 8px; flex: none; }
+  .sheet-btn {
+    flex: 1; height: 46px; display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 600; border-radius: 999px;
+  }
+  .sheet-btn.cancel { color: #212529; background: #f5f6f7; }
+  .sheet-btn.confirm { color: #fff; background: #212529; }
+  .sheet-cancel-right {
+    height: 34px; flex: none; align-self: flex-end; padding: 0 18px;
+    display: flex; align-items: center; justify-content: center;
+    color: #868e96; font-size: 12px; font-weight: 600;
+    border-radius: 999px; background: #f5f6f7;
+  }
+  .sheet-close {
+    width: 28px; height: 28px; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    color: #868e96; font-size: 16px; font-weight: 500; line-height: 1;
+    border-radius: 50%; background: #f5f6f7;
+  }
+
+  /* 单选选项 */
+  .radio-list { display: flex; flex-direction: column; gap: 8px; }
+  .radio-option {
+    display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 14px;
+    border: 1px solid #eceef1; border-radius: 999px; background: #fff;
+    font-size: 14px; font-weight: 600;
+  }
+  .radio-option.active { border: 1.5px solid #212529; }
+  .radio-dot {
+    width: 14px; height: 14px; flex: none; border: 1.5px solid #ced4da; border-radius: 50%; background: #fff;
+  }
+  .radio-option.active .radio-dot { border-color: #212529; background: #212529; box-shadow: inset 0 0 0 3px #fff; }
+
+  /* ===== 组件编辑器 ===== */
+  .editor-field-card {
+    padding: 14px; border: 1px solid #eceef1; border-radius: 20px; background: #fff;
+  }
+  .editor-label-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .editor-label { color: #868e96; font-size: 12px; font-weight: 600; }
+  .editor-limit { color: #adb5bd; font-size: 11px; font-weight: 600; }
+  .member-row { display: flex; gap: 6px; margin-top: 8px; overflow: hidden; }
+  .member-pill {
+    height: 30px; flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px;
+    color: #212529; font-size: 11px; font-weight: 600;
+    border: 1px solid #e3e6ea; border-radius: 999px; background: #fff;
+  }
+  .member-pill.active { color: #fff; border-color: #212529; background: #212529; }
+  .member-pill .cnt {
+    min-width: 17px; height: 17px; display: flex; align-items: center; justify-content: center;
+    padding: 0 5px; font-size: 10px; font-weight: 700; border-radius: 999px;
+    color: #868e96; background: #f1f3f5;
+  }
+  .member-pill.active .cnt { color: #212529; background: #fff; }
+  .work-option {
+    display: flex; align-items: center; gap: 10px; min-height: 54px; padding: 8px;
+    border: 1px solid #eceef1; border-radius: 20px; background: #fff;
+  }
+  .work-option.selected { border: 1.5px solid #212529; }
+  .work-thumb { width: 48px; height: 40px; flex: none; border-radius: 12px; }
+  .work-opt-title { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .work-opt-meta { margin-top: 3px; color: #868e96; font-size: 11px; display: flex; gap: 6px; align-items: center; }
+  .work-opt-ratio {
+    min-height: 17px; display: inline-flex; align-items: center; padding: 0 7px;
+    color: #868e96; font-size: 10px; font-weight: 600;
+    border: 1px solid #e9ecef; border-radius: 999px; background: #fff;
+  }
+  .work-check {
+    width: 22px; height: 22px; flex: none; display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; border-radius: 50%;
+    border: 1px solid #dee2e6; background: #fff; color: transparent;
+  }
+  .work-option.selected .work-check { background: #212529; border-color: #212529; color: #fff; }
+
+  /* ===== 预览 / 访客 ===== */
+  .pv-toolbar {
+    display: flex; align-items: center; gap: 8px; padding: 12px 16px;
+    border-bottom: 1px solid #f1f3f5; flex: none;
+  }
+  .pv-note { flex: 1; min-width: 0; color: #868e96; font-size: 11px; line-height: 1.5; }
+  .folio-comp { margin-top: 12px; }
+  .tp-profile { padding: 8px 16px; text-align: center; }
+  .tp-avatar { width: 76px; height: 76px; margin: 0 auto; font-size: 19px; }
+  .tp-name { display: block; margin-top: 8px; font-size: 19px; font-weight: 700; letter-spacing: -0.01em; }
+  .tp-intro { display: block; margin: 8px auto 0; max-width: 310px; color: #868e96; font-size: 13px; line-height: 1.7; }
+  .carousel-wrap { padding: 0 16px; }
+  .carousel-box { position: relative; height: 270px; border-radius: 20px; overflow: hidden; background: #e9ecef; }
+  .carousel-box .img-ph { position: absolute; inset: 0; background: transparent; font-size: 11px; }
+  .carousel-progress {
+    position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+    display: flex; gap: 5px;
+  }
+  .cp-seg { width: 16px; height: 3px; border-radius: 999px; background: rgba(255,255,255,.55); overflow: hidden; }
+  .cp-seg.current { width: 26px; }
+  .cp-seg .fill { height: 100%; background: #212529; }
+  .cp-seg.done .fill { width: 100%; }
+  .cp-seg.current .fill { width: 60%; }
+  .work-section-title { padding: 0 16px; color: #212529; font-size: 18px; font-weight: 700; line-height: 1.35; letter-spacing: -0.01em; }
+  .portfolio-grid { display: flex; flex-wrap: wrap; padding: 10px 11px 0; }
+  .portfolio-card { width: 50%; padding: 0 5px 10px; }
+  .portfolio-card .cover { width: 100%; height: 118px; border-radius: 20px; }
+  .portfolio-card .pt { margin-top: 6px; font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .portfolio-card .mn { margin-top: 2px; color: #adb5bd; font-size: 11px; font-weight: 500; }
+  .divider-line { height: 1px; background: #e9ecef; margin: 12px 16px 0; }
+  .text-section { padding: 0 16px; font-size: 13px; line-height: 1.8; color: #495057; }
+  .single-work-video { position: relative; height: 200px; border-radius: 20px; overflow: hidden; background: #e9ecef; margin: 0 16px; }
+  .single-work-video .img-ph { position: absolute; inset: 0; background: transparent; }
+  .sw-play {
+    position: absolute; right: 14px; bottom: 14px; width: 34px; height: 34px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 50%; background: #fff;
+  }
+  .sw-play::before {
+    content: ""; width: 0; height: 0; margin-left: 2px;
+    border-left: 10px solid #212529; border-top: 6px solid transparent; border-bottom: 6px solid transparent;
+  }
+  .sw-copy { padding: 8px 16px 0; }
+  .sw-title { font-size: 15px; font-weight: 700; line-height: 1.45; letter-spacing: -0.01em; }
+  .sw-desc { margin-top: 4px; color: #868e96; font-size: 13px; line-height: 1.75; }
+  .comp-block { padding: 0 16px; text-align: center; }
+  .comp-title { font-size: 18px; font-weight: 700; line-height: 1.35; letter-spacing: -0.01em; }
+  .comp-desc { margin-top: 6px; color: #868e96; font-size: 13px; line-height: 1.75; }
+  .dark-btn {
+    width: 180px; height: 46px; margin: 12px auto 0; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 14px; font-weight: 600; border-radius: 999px; background: #212529;
+  }
+  /* 日历 */
+  .sq-calendar { margin-top: 10px; padding: 14px; border: 1px solid #eceef1; border-radius: 24px; background: #fff; text-align: left; }
+  .sq-month-bar { display: flex; align-items: center; gap: 6px; }
+  .sq-month-btn {
+    width: 32px; height: 32px; flex: none; display: flex; align-items: center; justify-content: center;
+    font-size: 18px; font-weight: 500; color: #212529; border-radius: 50%; background: #f5f6f7;
+  }
+  .sq-month-text { flex: 1; min-width: 0; font-size: 14px; font-weight: 700; white-space: nowrap; }
+  .sq-month-picker {
+    height: 30px; flex: none; display: flex; align-items: center; padding: 0 12px;
+    color: #868e96; font-size: 11px; font-weight: 600;
+    border-radius: 999px; background: #f5f6f7; white-space: nowrap;
+  }
+  .sq-weekdays { display: flex; margin: 10px -2px 0; color: #adb5bd; font-size: 11px; font-weight: 600; }
+  .sq-weekdays span { width: calc(14.2857% - 4px); margin: 0 2px; text-align: center; }
+  .sq-days { display: flex; flex-wrap: wrap; margin: 4px -2px 0; }
+  .sq-day {
+    width: calc(14.2857% - 4px); min-height: 40px; margin: 2px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 600; border-radius: 999px; background: #fff; color: #212529;
+  }
+  .sq-day.muted { color: #ced4da; background: #f8f9fa; }
+  .sq-day.selected { color: #fff; background: #212529; }
+  .sq-selected-date { min-height: 20px; margin-top: 8px; color: #868e96; font-size: 12px; font-weight: 600; line-height: 20px; text-align: center; }
+  .sq-submit {
+    width: 140px; height: 44px; margin: 10px auto 0; display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 14px; font-weight: 600; border-radius: 999px; background: #212529;
+  }
+  .sq-results { margin-top: 10px; border-top: 1px solid #f1f3f5; }
+  .sq-member {
+    display: flex; align-items: center; gap: 10px; padding: 9px 0;
+    border-bottom: 1px solid #f1f3f5; text-align: left;
+  }
+  .sq-member .avatar-ph { width: 34px; height: 34px; font-size: 12px; }
+  .sq-member .mname { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sq-state { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; color: #868e96; flex: none; }
+  .sq-state::before { content: ""; width: 6px; height: 6px; border-radius: 50%; }
+  .sq-state.available::before { background: #5c9e6e; }
+  .sq-state.partial::before { background: #c08a3e; }
+  .sq-state.full::before { background: #b55656; }
+  /* 联系表单 */
+  .cf-field {
+    width: 100%; min-height: 42px; margin-top: 8px; padding: 0 16px;
+    display: flex; align-items: center; text-align: left;
+    font-size: 13px;
+    border-radius: 999px; background: #f5f6f7; color: #adb5bd; font-weight: 500;
+  }
+  .cf-field.needs { height: 78px; align-items: flex-start; padding-top: 11px; border-radius: 20px; line-height: 1.6; }
+  /* 预留信息表单字数计数(设计建议,contact-form 代码当前无 maxlength) */
+  .cf-field .field-count { margin-left: auto; flex: none; padding-left: 8px; font-size: 11px; font-weight: 400; }
+  .qr-img {
+    width: 148px; height: 148px; margin: 12px auto 0; background: #fff;
+    border: 1px solid #eceef1; border-radius: 20px;
+    display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px;
+    color: #adb5bd; font-size: 11px; font-weight: 500;
+  }
+  .qr-grid {
+    width: 92px; height: 92px;
+    background:
+      repeating-linear-gradient(0deg, #212529 0 6px, transparent 6px 12px),
+      repeating-linear-gradient(90deg, #212529 0 6px, transparent 6px 12px);
+    opacity: .9;
+  }
+  .brand-footer {
+    display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 24px 0 48px;
+  }
+  .brand-logo-img { width: 28px; height: 28px; object-fit: contain; display: block; }
+  .brand-name { color: #adb5bd; font-size: 12px; font-weight: 600; }
+
+  /* ===== 团队线索 ===== */
+  .cl-body { flex: 1; padding: 16px; overflow: hidden; }
+  .cl-lead {
+    display: flex; flex-direction: column; gap: 5px;
+    margin-bottom: 10px; padding: 14px; background: #fff;
+    border: 1px solid #eceef1; border-radius: 24px;
+    font-size: 13px; line-height: 1.55; color: #212529; font-weight: 500;
+  }
+  .cl-lead .lbl { color: #adb5bd; font-size: 11px; font-weight: 600; }
+  .cl-lead .name { font-weight: 700; font-size: 17px; letter-spacing: -0.01em; }
+  .cl-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .cl-actions .btn {
+    height: 34px; padding: 0 16px; font-size: 12px; font-weight: 600;
+    background: #f5f6f7; color: #212529; border-radius: 999px;
+  }
+  .cl-actions .btn.dark { background: #212529; color: #fff; }
+  .follow-editor {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 20;
+    padding: 14px 16px 20px; background: #fff;
+    border-top: 1px solid #eceef1; border-radius: 28px 28px 0 0;
+  }
+  .follow-status {
+    display: inline-block; margin: 0 6px 8px 0; padding: 7px 12px;
+    border: 1px solid #e9ecef; background: #fff; color: #868e96; font-size: 11px; font-weight: 600; border-radius: 999px;
+    letter-spacing: .02em;
+  }
+  .follow-status.selected { border: 1.5px solid #212529; color: #212529; padding: 6.5px 11px; }
+  .follow-textarea {
+    width: 100%; height: 64px; padding: 10px 16px; background: #f5f6f7;
+    border-radius: 20px;
+    font-size: 13px; color: #adb5bd; font-weight: 500;
+  }
+  .follow-save {
+    margin-top: 10px; height: 48px; display: flex; align-items: center; justify-content: center;
+    background: #212529; color: #fff; font-size: 15px; font-weight: 600; border-radius: 999px;
+  }
+
+  /* ===== 访客资料补全弹层 ===== */
+  .profile-mask {
+    position: absolute; inset: 0; z-index: 40;
+    display: flex; align-items: flex-end; background: rgba(0,0,0,.4);
+  }
+  .profile-panel {
+    flex: 1; display: flex; flex-direction: column; gap: 10px;
+    padding: 16px 16px 22px; background: #fff; border-radius: 28px 28px 0 0;
+  }
+  .profile-panel .pp-input {
+    padding: 11px 16px; background: #f5f6f7;
+    font-size: 14px; color: #adb5bd; font-weight: 500; border-radius: 999px;
+  }
+  .pp-btn {
+    height: 48px; display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 600; border-radius: 999px;
+    background: #f5f6f7; color: #212529;
+  }
+  .pp-btn.primary { background: #212529; color: #fff; }
+
+  /* 空白状态 */
+  .state-text { padding: 40px 16px; text-align: center; color: #868e96; font-size: 13px; line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<header class="doc-header">
+  <h1>08 团队作品集 · TripGlide 风重设计稿</h1>
+  <span class="module-tag">模块：团队作品集 projects/miniapp/pages/team-portfolios（纯 UI 重设计，结构与文案不变 · 共 13 个手机框）</span>
+  <ul>
+    <li><code>portfolios</code> 历史团队作品集列表兼容入口（仅跳转， loading 态）</li>
+    <li><code>team-select/team-select</code> 选择团队（创建团队作品集的入口）</li>
+    <li><code>standard-edit/team-portfolio-standard-edit</code> 标准团队作品集编辑（含添加组件 / 组件编辑器 / 文字说明等弹层）</li>
+    <li><code>standard-preview/team-portfolio-standard-preview</code> 团队作品集预览（预览工具条 + 组件展示）</li>
+    <li><code>contact-leads/team-contact-leads</code> 团队线索（含更新跟进底部编辑器）</li>
+    <li><code>visitor-portfolio/team-visitor-portfolio</code> 访客浏览团队作品集（含访客资料补全弹层）</li>
+  </ul>
+</header>
+
+<div class="frames">
+
+  <!-- ============ 01 兼容入口 ============ -->
+  <div class="frame-item">
+    <div class="frame-label">01 兼容入口（仅加载态后跳转）<span class="path">pages/team-portfolios/portfolios</span></div>
+    <div class="phone gray-bg">
+      <div class="statusbar"><span>9:41</span><span class="icons"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="battery"></span></span></div>
+      <div class="navbar">
+        <div class="title">作品集</div>
+      </div>
+      <div class="state-text" style="padding-top: 40px;">团队作品集加载中</div>
+      <div class="screen-note" style="position: absolute; left: 14px; right: 14px; bottom: 20px; margin: 0;">
+        说明：该页为历史兼容入口，onLoad 中 redirectTo 到统一作品集列表「/pages/portfolios/portfolios?ownerType=TEAM」，页面本身不请求接口，仅展示此加载文案。
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 02 选择团队 ============ -->
+  <div class="frame-item">
+    <div class="frame-label">02 选择团队<span class="path">pages/team-portfolios/team-select/team-select</span></div>
+    <div class="phone gray-bg">
+      <div class="statusbar"><span>9:41</span><span class="icons"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="battery"></span></span></div>
+      <div class="navbar">
+        <div class="back"></div>
+        <div class="title">选择团队</div>
+      </div>
+      <div class="ts-body">
+        <div class="ts-team selected">
+          <div class="avatar-ph" style="width: 36px; height: 36px; font-size: 12px;">拾</div>
+          <span class="tname">拾光婚礼影像团队</span>
+          <span class="trole">OWNER</span>
+        </div>
+        <div class="ts-team">
+          <div class="avatar-ph" style="width: 36px; height: 36px; font-size: 12px;">星</div>
+          <span class="tname">星野演艺工作室</span>
+          <span class="trole">MANAGER</span>
+        </div>
+        <div class="ts-team">
+          <div class="avatar-ph" style="width: 36px; height: 36px; font-size: 12px;">屿</div>
+          <span class="tname">屿森摄影团队</span>
+          <span class="trole">OWNER</span>
+        </div>
+        <div class="btn ts-primary">创建作品集</div>
+      </div>
+      <div class="screen-note">选中态：卡片 2px 纯黑描边；角色直接展示后端角色码（OWNER / MANAGER）。空态文案「暂无可维护团队」。</div>
+    </div>
+  </div>
+
+  <!-- ============ 03 标准编辑 ============ -->
+  <div class="frame-item">
+    <div class="frame-label">03 标准团队作品集（编辑）<span class="path">pages/team-portfolios/standard-edit/team-portfolio-standard-edit</span></div>
+    <div class="phone gray-bg">
+      <div class="statusbar"><span>9:41</span><span class="icons"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="battery"></span></span></div>
+      <div class="navbar">
+        <div class="back"></div>
+        <div class="title">标准团队作品集</div>
+      </div>
+      <div class="ed-body">
+        <div class="ed-panel">
+          <div class="ed-panel-heading">
+            <div>
+              <div class="ed-section-title">分享信息</div>
+              <div class="ed-section-desc">用于微信分享卡片说明</div>
+            </div>
+            <div class="ed-status-pill published">已发布</div>
+          </div>
+          <div class="ed-form-row">
+            <div class="ed-field-heading"><div class="ed-field-label">分享封面</div></div>
+            <div class="ed-cover"><span class="img-icon"></span>封面</div>
+          </div>
+          <div class="ed-form-row">
+            <div class="ed-field-heading">
+              <div class="ed-field-label">作品集标题</div>
+              <div class="ed-field-limit">13/50</div>
+            </div>
+            <div class="ed-input">拾光婚礼影像·2026精选</div>
+          </div>
+        </div>
+        <div class="ed-panel">
+          <div class="ed-panel-heading">
+            <div>
+              <div class="ed-section-title">组件编排</div>
+              <div class="ed-section-desc">访客将按当前顺序浏览作品集内容</div>
+            </div>
+            <div class="ed-link-btn">添加组件</div>
+          </div>
+          <div class="ed-comp-list">
+            <div class="ed-comp-row"><div class="ed-comp-order">1</div><div class="ed-comp-title">团队资料</div><div class="ed-drag-handle"></div><div class="ed-row-arrow"></div></div>
+            <div class="ed-comp-row"><div class="ed-comp-order">2</div><div class="ed-comp-title">轮播图</div><div class="ed-drag-handle"></div><div class="ed-row-arrow"></div></div>
+            <div class="ed-comp-row"><div class="ed-comp-order">3</div><div class="ed-comp-title">双列作品集</div><div class="ed-drag-handle"></div><div class="ed-row-arrow"></div></div>
+            <div class="ed-comp-row"><div class="ed-comp-order">4</div><div class="ed-comp-title">文字说明</div><div class="ed-drag-handle"></div><div class="ed-row-arrow"></div></div>
+            <div class="ed-comp-row"><div class="ed-comp-order">5</div><div class="ed-comp-title">档期查询</div><div class="ed-drag-handle"></div><div class="ed-row-arrow"></div></div>
+            <div class="ed-comp-row"><div class="ed-comp-order">6</div><div class="ed-comp-title">预留联系信息</div><div class="ed-drag-handle"></div><div class="ed-row-arrow"></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="ed-bottom-actions">
+        <div class="ed-action primary">保存草稿</div>
+        <div class="ed-action secondary"><span class="t">预览草稿</span><span class="n">请保存后预览</span></div>
+        <div class="ed-action publish">发布</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 04 编辑页 · 添加组件弹层 ============ -->
+  <div class="frame-item">
+    <div class="frame-label">04 编辑页弹层 · 添加组件<span class="path">standard-edit（componentSheetVisible）</span></div>
+    <div class="phone gray-bg">
+      <div class="statusbar"><span>9:41</span><span class="icons"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="battery"></span></span></div>
+      <div class="navbar">
+        <div class="back"></div>
+        <div class="title">标准团队作品集</div>
+      </div>
+      <div class="ed-body">
+        <div class="ed-panel">
+          <div class="ed-panel-heading">
+            <div>
+              <div class="ed-section-title">组件编排</div>
+              <div class="ed-section-desc">访客将按当前顺序浏览作品集内容</div>
+            </div>
+            <div class="ed-link-btn">添加组件</div>
+          </div>
+        </div>
+      </div>
+      <div class="sheet-mask">
+        <div class="sheet-panel">
+          <div class="sheet-grabber"></div>
+          <div class="sheet-heading">
+            <div class="sheet-title">选择组件</div>
+            <div class="sheet-count">10 个可选</div>
+          </div>
+          <div class="sheet-options">
+            <div class="sheet-option disabled">
+              <div><div class="sheet-option-name">团队资料</div><div class="sheet-option-desc">展示团队头像、名称和简介</div></div>
+              <div class="sheet-option-added">已添加</div>
+            </div>
+            <div class="sheet-option">
+              <div><div class="sheet-option-name">轮播图</div><div class="sheet-option-desc">轮播展示成员的图片作品</div></div>
+              <div class="sheet-option-plus">+</div>
+            </div>
+            <div class="sheet-option">
+              <div><div class="sheet-option-name">单个作品</div><div class="sheet-option-desc">展示一个成员图片或视频作品</div></div>
+              <div class="sheet-option-plus">+</div>
+            </div>
+            <div class="sheet-option">
+              <div><div class="sheet-option-name">分割线</div><div class="sheet-option-desc">分隔不同内容区块</div></div>
+              <div class="sheet-option-plus">+</div>
+            </div>
+            <div class="sheet-option">
+              <div><div class="sheet-option-name">双列作品集</div><div class="sheet-option-desc">双列展示成员已发布作品集</div></div>
+              <div class="sheet-option-plus">+</div>
+            </div>
+            <div class="sheet-option">
+              <div><div class="sheet-option-name">单列作品集</div><div class="sheet-option-desc">单列展示成员已发布作品集</div></div>
+              <div class="sheet-option-plus">+</div>
+            </div>
+            <div class="sheet-option">
+              <div><div class="sheet-option-name">文字说明</div><div class="sheet-option-desc">添加团队服务说明文字</div></div>
+              <div class="sheet-option-plus">+</div>
+            </div>
+            <div class="sheet-option">
+              <div><div class="sheet-option-name">档期查询</div><div class="sheet-option-desc">开放访客查询团队档期</div></div>
+              <div class="sheet-option-plus">+</div>
+            </div>
+            <div class="sheet-option">
+              <div><div class="sheet-option-name">预留联系信息</div><div class="sheet-option-desc">收集访客预留联系信息</div></div>
+              <div class="sheet-option-plus">+</div>
+            </div>
+            <div class="sheet-option">
+              <div><div class="sheet-option-name">二维码联系</div><div class="sheet-option-desc">展示团队二维码联系方式</div></div>
+              <div class="sheet-option-plus">+</div>
+            </div>
+          </div>
+          <div class="sheet-cancel-right">取消</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 05 编辑页 · 组件编辑器（轮播图） ============ -->
+  <div class="frame-item">
+    <div class="frame-label">05 编辑页弹层 · 编辑轮播图<span class="path">standard-edit（componentEditorVisible + carousel 组件）</span></div>
+    <div class="phone gray-bg">
+      <div class="statusbar"><span>9:41</span><span class="icons"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="battery"></span></span></div>
+      <div class="navbar">
+        <div class="back"></div>
+        <div class="title">标准团队作品集</div>
+      </div>
+      <div class="ed-body">
+        <div class="ed-panel"><div class="ed-section-title">组件编排</div></div>
+      </div>
+      <div class="sheet-mask">
+        <div class="sheet-panel" style="max-height: 84%;">
+          <div class="sheet-grabber"></div>
+          <div class="sheet-heading"><div class="sheet-title">编辑轮播图</div></div>
+          <div class="sheet-options" style="gap: 10px;">
+            <div class="editor-field-card">
+              <div class="editor-label-row">
+                <div class="editor-label">选择团队成员</div>
+                <div class="editor-limit">已选 3 / 9</div>
+              </div>
+              <div class="member-row">
+                <div class="member-pill active">阿灿<span class="cnt">2</span></div>
+                <div class="member-pill">林一<span class="cnt">1</span></div>
+                <div class="member-pill">小满<span class="cnt">0</span></div>
+              </div>
+            </div>
+            <div class="editor-field-card">
+              <div class="editor-label">图片作品</div>
+              <div class="sheet-options" style="margin-top: 10px;">
+                <div class="work-option selected">
+                  <div class="img-ph work-thumb"></div>
+                  <div style="flex: 1; min-width: 0;">
+                    <div class="work-opt-title">草坪仪式·逆光拥吻</div>
+                    <div class="work-opt-meta"><span>图片作品</span><span class="work-opt-ratio">4:3</span></div>
+                  </div>
+                  <div class="work-check">1</div>
+                </div>
+                <div class="work-option selected">
+                  <div class="img-ph work-thumb"></div>
+                  <div style="flex: 1; min-width: 0;">
+                    <div class="work-opt-title">酒店晚宴·第一支舞</div>
+                    <div class="work-opt-meta"><span>图片作品</span><span class="work-opt-ratio">3:4</span></div>
+                  </div>
+                  <div class="work-check">2</div>
+                </div>
+                <div class="work-option">
+                  <div class="img-ph work-thumb"></div>
+                  <div style="flex: 1; min-width: 0;">
+                    <div class="work-opt-title">海边外景·落日剪影</div>
+                    <div class="work-opt-meta"><span>图片作品</span><span class="work-opt-ratio">16:9</span></div>
+                  </div>
+                  <div class="work-check"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="sheet-actions">
+            <div class="sheet-btn cancel">取消</div>
+            <div class="sheet-btn confirm">完成</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 06 编辑页 · 文字说明弹层 ============ -->
+  <div class="frame-item">
+    <div class="frame-label">06 编辑页弹层 · 编辑文字说明<span class="path">standard-edit（textSectionSheetVisible）</span></div>
+    <div class="phone gray-bg">
+      <div class="statusbar"><span>9:41</span><span class="icons"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="battery"></span></span></div>
+      <div class="navbar">
+        <div class="back"></div>
+        <div class="title">标准团队作品集</div>
+      </div>
+      <div class="ed-body">
+        <div class="ed-panel"><div class="ed-section-title">组件编排</div></div>
+      </div>
+      <div class="sheet-mask">
+        <div class="sheet-panel">
+          <div class="sheet-grabber"></div>
+          <div class="sheet-heading">
+            <div class="sheet-title">编辑文字说明</div>
+          </div>
+          <div class="ed-form-row" style="margin-top: 0;">
+            <div class="ed-field-heading">
+              <div class="ed-field-label">说明</div>
+              <div class="ed-field-limit">35/200</div>
+            </div>
+            <div class="ed-input" style="height: 110px; line-height: 1.6; padding-top: 12px; border-radius: 20px;">拾光团队专注婚礼纪实影像八年，提供双机位跟拍、当日快剪与精修相册服务。</div>
+          </div>
+          <div class="ed-form-row">
+            <div class="ed-field-heading"><div class="ed-field-label">对齐方式</div></div>
+            <div class="radio-list" style="margin-top: 10px;">
+              <div class="radio-option active"><div class="radio-dot"></div>左对齐</div>
+              <div class="radio-option"><div class="radio-dot"></div>居中</div>
+              <div class="radio-option"><div class="radio-dot"></div>右对齐</div>
+            </div>
+          </div>
+          <div class="sheet-actions">
+            <div class="sheet-btn cancel">取消</div>
+            <div class="sheet-btn confirm">完成</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 07 标准预览 ============ -->
+  <div class="frame-item">
+    <div class="frame-label">07 团队作品集预览<span class="path">pages/team-portfolios/standard-preview/team-portfolio-standard-preview</span></div>
+    <div class="phone" style="min-height: 1500px;">
+      <div class="statusbar"><span>9:41</span><span class="icons"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="battery"></span></span></div>
+      <div class="navbar">
+        <div class="back"></div>
+        <div class="title">团队作品集预览</div>
+      </div>
+      <div class="pv-toolbar">
+        <div class="pv-note">预览模式：禁用真实提交，不统计访问，不扣积分。</div>
+      </div>
+
+      <!-- 团队资料 -->
+      <div class="folio-comp tp-profile">
+        <div class="avatar-ph tp-avatar">拾</div>
+        <span class="tp-name">拾光婚礼影像团队</span>
+        <span class="tp-intro">拾光团队专注婚礼纪实影像八年，用镜头留住每一对新人的高光时刻。</span>
+      </div>
+
+      <!-- 轮播图 -->
+      <div class="folio-comp carousel-wrap">
+        <div class="carousel-box">
+          <div class="img-ph"><span class="img-icon"></span><span>轮播图 563rpx（aspectFill）</span></div>
+          <div class="carousel-progress">
+            <div class="cp-seg done"><div class="fill"></div></div>
+            <div class="cp-seg current"><div class="fill"></div></div>
+            <div class="cp-seg"><div class="fill" style="width: 0;"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 分割线 -->
+      <div class="divider-line"></div>
+
+      <!-- 双列作品集 -->
+      <div class="folio-comp">
+        <div class="work-section-title">作品集</div>
+        <div class="portfolio-grid">
+          <div class="portfolio-card">
+            <div class="img-ph cover"></div>
+            <div class="pt">阿灿 · 婚礼纪实精选</div>
+            <div class="mn">阿灿</div>
+          </div>
+          <div class="portfolio-card">
+            <div class="img-ph cover"></div>
+            <div class="pt">林一 · 婚纱外拍合集</div>
+            <div class="mn">林一</div>
+          </div>
+          <div class="portfolio-card">
+            <div class="img-ph cover"></div>
+            <div class="pt">小满 · 晚宴跟拍</div>
+            <div class="mn">小满</div>
+          </div>
+          <div class="portfolio-card">
+            <div class="img-ph cover"></div>
+            <div class="pt">团队 · 2025 年度混剪</div>
+            <div class="mn">拾光团队</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 文字说明 -->
+      <div class="folio-comp text-section">拾光团队专注婚礼纪实影像八年，提供双机位跟拍、当日快剪与精修相册服务。</div>
+
+      <!-- 档期查询（页面内日历） -->
+      <div class="folio-comp comp-block">
+        <div class="comp-title">查询团队档期</div>
+        <div class="comp-desc">选择日期，查看各位成员的档期状态</div>
+        <div class="sq-calendar">
+          <div class="sq-month-bar">
+            <div class="sq-month-btn">‹</div>
+            <div class="sq-month-text">2026年7月</div>
+            <div class="sq-month-picker">切换年月</div>
+            <div class="sq-month-btn">›</div>
+          </div>
+          <div class="sq-weekdays"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
+          <div class="sq-days">
+            <div class="sq-day muted">28</div><div class="sq-day muted">29</div><div class="sq-day muted">30</div>
+            <div class="sq-day">1</div><div class="sq-day">2</div><div class="sq-day">3</div><div class="sq-day">4</div>
+            <div class="sq-day">5</div><div class="sq-day">6</div><div class="sq-day">7</div><div class="sq-day">8</div><div class="sq-day">9</div><div class="sq-day">10</div><div class="sq-day">11</div>
+            <div class="sq-day">12</div><div class="sq-day">13</div><div class="sq-day">14</div><div class="sq-day">15</div><div class="sq-day">16</div><div class="sq-day">17</div><div class="sq-day selected">18</div>
+            <div class="sq-day">19</div><div class="sq-day">20</div><div class="sq-day">21</div><div class="sq-day">22</div><div class="sq-day">23</div><div class="sq-day">24</div><div class="sq-day">25</div>
+            <div class="sq-day">26</div><div class="sq-day">27</div><div class="sq-day">28</div><div class="sq-day">29</div><div class="sq-day">30</div><div class="sq-day">31</div><div class="sq-day muted">1</div>
+          </div>
+          <div class="sq-selected-date">2026-07-18</div>
+          <div class="sq-submit">查询</div>
+          <div class="sq-results">
+            <div class="sq-member"><div class="avatar-ph">灿</div><span class="mname">阿灿</span><span class="sq-state available">空闲</span></div>
+            <div class="sq-member"><div class="avatar-ph">林</div><span class="mname">林一</span><span class="sq-state partial">部分档期空闲</span></div>
+            <div class="sq-member"><div class="avatar-ph">满</div><span class="mname">小满</span><span class="sq-state full">已满</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 预留联系信息（页面内展示） -->
+      <div class="folio-comp comp-block" style="text-align: center;">
+        <div class="comp-title">预留联系信息</div>
+        <div class="comp-desc">留下联系方式，团队会尽快与您沟通档期</div>
+        <div class="cf-field"><span>称呼（必填）</span><span class="field-count">0/20</span></div>
+        <div class="cf-field"><span>手机号</span><span class="field-count">0/11</span></div>
+        <div class="cf-field"><span>微信号</span><span class="field-count">0/20</span></div>
+        <div class="cf-field">请选择档期（选填）</div>
+        <div class="cf-field needs"><span>需求描述</span><span class="field-count">0/200</span></div>
+        <div class="dark-btn">提交给团队</div>
+      </div>
+
+      <!-- 二维码联系 -->
+      <div class="folio-comp" style="text-align: center; padding: 14px 16px;">
+        <div class="qr-img"><div class="qr-grid"></div>团队联系二维码</div>
+      </div>
+
+      <div class="brand-footer">
+        <img class="brand-logo-img" src="assets/system/folio-logo-stack-bold-small-50kb.png" alt="映期Folio">
+        <div class="brand-name">映期Folio</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 08 团队线索 ============ -->
+  <div class="frame-item">
+    <div class="frame-label">08 团队线索<span class="path">pages/team-portfolios/contact-leads/team-contact-leads</span></div>
+    <div class="phone gray-bg" style="min-height: 1000px;">
+      <div class="statusbar"><span>9:41</span><span class="icons"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="battery"></span></span></div>
+      <div class="navbar">
+        <div class="back"></div>
+        <div class="title">团队线索</div>
+      </div>
+      <div class="cl-body">
+        <div class="cl-lead">
+          <span class="name">王女士</span>
+          <span><span class="lbl">手机：</span>138****6688</span>
+          <span><span class="lbl">微信：</span>wanghs2026</span>
+          <span><span class="lbl">意向档期：</span>2026-10-03</span>
+          <span><span class="lbl">需求：</span>婚礼双机位跟拍 + 当日快剪</span>
+          <span><span class="lbl">团队来源：</span>拾光婚礼影像团队</span>
+          <span><span class="lbl">作品集来源：</span>拾光婚礼影像·2026精选 微信分享</span>
+          <span><span class="lbl">跟进：</span><span class="follow-badge pending">待跟进</span> 首次咨询报价</span>
+          <div class="cl-actions">
+            <div class="btn">拨号</div>
+            <div class="btn">复制微信</div>
+            <div class="btn dark">更新跟进</div>
+          </div>
+        </div>
+        <div class="cl-lead">
+          <span class="name">李先生</span>
+          <span><span class="lbl">手机：</span>159****2233</span>
+          <span><span class="lbl">微信：</span>li_marry_10</span>
+          <span><span class="lbl">意向档期：</span>2026-09-19</span>
+          <span><span class="lbl">需求：</span>草坪婚礼，需要航拍机位</span>
+          <span><span class="lbl">团队来源：</span>拾光婚礼影像团队</span>
+          <span><span class="lbl">作品集来源：</span>拾光婚礼影像·2026精选 朋友圈</span>
+          <span><span class="lbl">跟进：</span><span class="follow-badge contacted">已联系</span> 已发送报价单，等待回复</span>
+          <div class="cl-actions">
+            <div class="btn">拨号</div>
+            <div class="btn">复制微信</div>
+            <div class="btn dark">更新跟进</div>
+          </div>
+        </div>
+        <div class="cl-lead">
+          <span class="name">陈小姐</span>
+          <span><span class="lbl">手机：</span>186****9071</span>
+          <span><span class="lbl">微信：</span>chenxi_0520</span>
+          <span><span class="lbl">意向档期：</span>2026-11-08</span>
+          <span><span class="lbl">需求：</span>订婚宴 + 婚礼两天连拍</span>
+          <span><span class="lbl">团队来源：</span>拾光婚礼影像团队</span>
+          <span><span class="lbl">作品集来源：</span>阿灿 · 婚礼纪实精选 微信分享</span>
+          <span><span class="lbl">跟进：</span><span class="follow-badge won">已成交</span> 定金已收</span>
+          <div class="cl-actions">
+            <div class="btn">拨号</div>
+            <div class="btn">复制微信</div>
+            <div class="btn dark">更新跟进</div>
+          </div>
+        </div>
+      </div>
+      <div class="screen-note">「更新跟进」按钮仅当当前成员可维护（canMaintain）时展示；列表触底加载更多，空态文案「暂无联系线索」。</div>
+    </div>
+  </div>
+
+  <!-- ============ 09 团队线索 · 更新跟进 ============ -->
+  <div class="frame-item">
+    <div class="frame-label">09 团队线索 · 更新跟进编辑器<span class="path">team-contact-leads（followEditor）</span></div>
+    <div class="phone gray-bg">
+      <div class="statusbar"><span>9:41</span><span class="icons"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="battery"></span></span></div>
+      <div class="navbar">
+        <div class="back"></div>
+        <div class="title">团队线索</div>
+      </div>
+      <div class="cl-body">
+        <div class="cl-lead">
+          <span class="name">王女士</span>
+          <span><span class="lbl">手机：</span>138****6688</span>
+          <span><span class="lbl">意向档期：</span>2026-10-03</span>
+          <span><span class="lbl">跟进：</span><span class="follow-badge pending">待跟进</span> 首次咨询报价</span>
+          <div class="cl-actions">
+            <div class="btn">拨号</div>
+            <div class="btn">复制微信</div>
+            <div class="btn dark">更新跟进</div>
+          </div>
+        </div>
+        <div class="screen-note" style="margin: 4px 0 0;">
+          说明：跟进状态选项直接渲染后端枚举码（NOT_FOLLOWED_UP / CONTACTED / DEAL_WON / INVALID），选中态为纯黑 1.5px 描边胶囊。
+        </div>
+      </div>
+      <div class="follow-editor">
+        <div>
+          <span class="follow-status">NOT_FOLLOWED_UP</span>
+          <span class="follow-status selected">CONTACTED</span>
+          <span class="follow-status">DEAL_WON</span>
+          <span class="follow-status">INVALID</span>
+        </div>
+        <div class="follow-textarea">跟进备注</div>
+        <div class="follow-save">保存跟进</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 10 访客浏览 ============ -->
+  <div class="frame-item">
+    <div class="frame-label">10 访客浏览团队作品集<span class="path">pages/team-portfolios/visitor-portfolio/team-visitor-portfolio</span></div>
+    <div class="phone" style="min-height: 1250px;">
+      <div class="statusbar"><span>9:41</span><span class="icons"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="battery"></span></span></div>
+      <div class="navbar">
+        <div class="back"></div>
+        <div class="title">团队作品集</div>
+      </div>
+
+      <!-- 团队资料 -->
+      <div class="folio-comp tp-profile">
+        <div class="avatar-ph tp-avatar">拾</div>
+        <span class="tp-name">拾光婚礼影像团队</span>
+        <span class="tp-intro">拾光团队专注婚礼纪实影像八年，用镜头留住每一对新人的高光时刻。</span>
+      </div>
+
+      <!-- 单个作品（视频封面态） -->
+      <div class="folio-comp">
+        <div class="single-work-video">
+          <div class="img-ph"><span class="img-icon"></span><span>视频封面（点击播放）</span></div>
+          <div class="sw-play"></div>
+        </div>
+        <div class="sw-copy">
+          <div class="sw-title">「山与海」婚礼电影</div>
+          <div class="sw-desc">双机位纪实 + 航拍，成片 3 分 28 秒。</div>
+        </div>
+      </div>
+
+      <!-- 文字说明 -->
+      <div class="folio-comp text-section">拾光团队专注婚礼纪实影像八年，提供双机位跟拍、当日快剪与精修相册服务。</div>
+
+      <!-- 档期查询（弹层入口态） -->
+      <div class="folio-comp comp-block">
+        <div style="height: 22px;"></div>
+        <div class="comp-desc">想预约团队？先查一下大家的档期</div>
+        <div class="dark-btn">查询团队档期</div>
+      </div>
+
+      <!-- 预留联系信息（弹窗入口态） -->
+      <div class="folio-comp comp-block">
+        <div class="dark-btn">预留联系信息</div>
+      </div>
+
+      <!-- 二维码联系 -->
+      <div class="folio-comp" style="text-align: center; padding: 14px 16px;">
+        <div class="qr-img"><div class="qr-grid"></div>团队联系二维码</div>
+      </div>
+
+      <div class="brand-footer">
+        <img class="brand-logo-img" src="assets/system/folio-logo-stack-bold-small-50kb.png" alt="映期Folio">
+        <div class="brand-name">映期Folio</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 11 访客页弹层 · 档期查询 ============ -->
+  <div class="frame-item">
+    <div class="frame-label">11 访客页弹层 · 档期查询<span class="path">team-visitor-portfolio（schedule-query 弹层模式 modalVisible）</span></div>
+    <div class="phone">
+      <div class="statusbar"><span>9:41</span><span class="icons"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="battery"></span></span></div>
+      <div class="navbar">
+        <div class="back"></div>
+        <div class="title">团队作品集</div>
+      </div>
+      <!-- 背景：访客浏览页简化内容 -->
+      <div class="folio-comp tp-profile">
+        <div class="avatar-ph tp-avatar">拾</div>
+        <span class="tp-name">拾光婚礼影像团队</span>
+      </div>
+      <div class="folio-comp carousel-wrap">
+        <div class="carousel-box">
+          <div class="img-ph"><span class="img-icon"></span><span>轮播图 563rpx（aspectFill）</span></div>
+        </div>
+      </div>
+      <!-- 底部弹层：档期查询 -->
+      <div class="sheet-mask">
+        <div class="sheet-panel" style="max-height: 88%;">
+          <div class="sheet-grabber"></div>
+          <div class="sheet-heading">
+            <div class="sheet-title">档期查询</div>
+            <div class="sheet-close">×</div>
+          </div>
+          <div class="sheet-options" style="overflow: hidden;">
+            <div class="sq-calendar" style="margin-top: 0;">
+              <div class="sq-month-bar">
+                <div class="sq-month-btn">‹</div>
+                <div class="sq-month-text">2026年7月</div>
+                <div class="sq-month-picker">切换年月</div>
+                <div class="sq-month-btn">›</div>
+              </div>
+              <div class="sq-weekdays"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
+              <div class="sq-days">
+                <div class="sq-day muted">28</div><div class="sq-day muted">29</div><div class="sq-day muted">30</div>
+                <div class="sq-day">1</div><div class="sq-day">2</div><div class="sq-day">3</div><div class="sq-day">4</div>
+                <div class="sq-day">5</div><div class="sq-day">6</div><div class="sq-day">7</div><div class="sq-day">8</div><div class="sq-day">9</div><div class="sq-day">10</div><div class="sq-day">11</div>
+                <div class="sq-day">12</div><div class="sq-day">13</div><div class="sq-day">14</div><div class="sq-day">15</div><div class="sq-day">16</div><div class="sq-day">17</div><div class="sq-day selected">18</div>
+                <div class="sq-day">19</div><div class="sq-day">20</div><div class="sq-day">21</div><div class="sq-day">22</div><div class="sq-day">23</div><div class="sq-day">24</div><div class="sq-day">25</div>
+                <div class="sq-day">26</div><div class="sq-day">27</div><div class="sq-day">28</div><div class="sq-day">29</div><div class="sq-day">30</div><div class="sq-day">31</div><div class="sq-day muted">1</div>
+              </div>
+              <div class="sq-selected-date">2026-07-18</div>
+              <div class="sq-submit">查询</div>
+              <div class="sq-results">
+                <div class="sq-member"><div class="avatar-ph">灿</div><span class="mname">阿灿</span><span class="sq-state available">空闲</span></div>
+                <div class="sq-member"><div class="avatar-ph">林</div><span class="mname">林一</span><span class="sq-state partial">部分档期空闲</span></div>
+                <div class="sq-member"><div class="avatar-ph">满</div><span class="mname">小满</span><span class="sq-state full">已满</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 12 访客页弹层 · 预留信息 ============ -->
+  <div class="frame-item">
+    <div class="frame-label">12 访客页弹层 · 预留信息<span class="path">team-visitor-portfolio（contact-form 弹窗模式 modalVisible）</span></div>
+    <div class="phone">
+      <div class="statusbar"><span>9:41</span><span class="icons"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="battery"></span></span></div>
+      <div class="navbar">
+        <div class="back"></div>
+        <div class="title">团队作品集</div>
+      </div>
+      <!-- 背景：访客浏览页简化内容 -->
+      <div class="folio-comp tp-profile">
+        <div class="avatar-ph tp-avatar">拾</div>
+        <span class="tp-name">拾光婚礼影像团队</span>
+      </div>
+      <div class="folio-comp carousel-wrap">
+        <div class="carousel-box">
+          <div class="img-ph"><span class="img-icon"></span><span>轮播图 563rpx（aspectFill）</span></div>
+        </div>
+      </div>
+      <!-- 底部弹层：预留信息 -->
+      <div class="sheet-mask">
+        <div class="sheet-panel" style="max-height: 88%;">
+          <div class="sheet-grabber"></div>
+          <div class="sheet-heading">
+            <div class="sheet-title">预留信息</div>
+            <div class="sheet-close">×</div>
+          </div>
+          <div class="comp-desc" style="text-align: left; margin-top: 0;">留下联系方式，团队会尽快与您沟通档期</div>
+          <div class="sheet-options" style="gap: 0;">
+            <div class="cf-field"><span>称呼（必填）</span><span class="field-count">0/20</span></div>
+            <div class="cf-field"><span>手机号</span><span class="field-count">0/11</span></div>
+            <div class="cf-field"><span>微信号</span><span class="field-count">0/20</span></div>
+            <div class="cf-field">请选择档期（选填）</div>
+            <div class="cf-field needs"><span>需求描述</span><span class="field-count">0/200</span></div>
+            <div class="dark-btn">提交给团队</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 13 访客资料补全弹层 ============ -->
+  <div class="frame-item">
+    <div class="frame-label">13 访客页 · 资料补全弹层<span class="path">team-visitor-portfolio（visitorProfileAuthVisible）</span></div>
+    <div class="phone">
+      <div class="statusbar"><span>9:41</span><span class="icons"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="battery"></span></span></div>
+      <div class="navbar">
+        <div class="back"></div>
+        <div class="title">团队作品集</div>
+      </div>
+      <div class="folio-comp tp-profile">
+        <div class="avatar-ph tp-avatar">拾</div>
+        <span class="tp-name">拾光婚礼影像团队</span>
+      </div>
+      <div class="profile-mask">
+        <div class="profile-panel">
+          <div class="pp-input">昵称</div>
+          <div class="pp-btn">选择头像</div>
+          <div class="pp-btn primary">保存资料</div>
+          <div class="pp-btn">暂不填写</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p style="max-width: 960px; margin: 24px 8px 0; color: #868e96; font-size: 12px; line-height: 1.8;">
+    说明：预留信息表单的字数计数（0/20、0/11、0/200 等）为设计建议——<code>components/contact-form</code> 当前代码无 maxlength 限制，如需生效需小程序与后端同步加限制。
+  </p>
+
+</div>
+
+</body>
+</html>

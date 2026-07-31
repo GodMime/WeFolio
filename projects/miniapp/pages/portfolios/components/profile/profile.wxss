@@ -1,0 +1,86 @@
+@import "../../../../styles/portfolio-theme.wxss";
+
+.profile-section {
+  padding: 12rpx 32rpx;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.profile-avatar {
+  display: block;
+  margin: 0 auto;
+  width: 132rpx;
+  height: 132rpx;
+  border-radius: 50%;
+}
+
+.profile-name {
+  margin-top: 18rpx;
+  color: var(--portfolio-text-primary);
+  font-size: 36rpx;
+  font-weight: 900;
+  line-height: 1.25;
+}
+
+.profile-line,
+.profile-bio {
+  color: var(--portfolio-text-secondary);
+  font-size: 26rpx;
+  line-height: 1.75;
+  white-space: pre-wrap;
+}
+
+.profile-line {
+  margin-top: 8rpx;
+}
+
+/* 简介的换行行为由上方与 .profile-line 的组合规则统一保证。 */
+.profile-bio {
+  display: block;
+  margin: 22rpx auto 0;
+  max-width: 620rpx;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+.profile-tags {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 22rpx;
+  margin-top: 22rpx;
+}
+
+.profile-tag {
+  min-height: 48rpx;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 20rpx;
+  color: #0f766e;
+  font-size: 24rpx;
+  line-height: 1.4;
+  border: 1rpx solid #0f766e;
+  border-radius: 999rpx;
+  background: #ffffff;
+  box-sizing: border-box;
+}
+
+.profile-tag-dot {
+  width: 12rpx;
+  height: 12rpx;
+  flex: none;
+  margin-right: 12rpx;
+  border-radius: 50%;
+}
+
+.qr-image {
+  display: block;
+  width: 280rpx;
+  height: 280rpx;
+  margin: 24rpx auto 0;
+  border-radius: 32rpx;
+}
+.profile-section {
+  color: var(--portfolio-text-primary);
+}

@@ -1,5 +1,5 @@
 <view class="page-shell profile-page">
-  <navigation-bar title="基础信息" back="{{true}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+  <navigation-bar title="基础信息" back="{{true}}" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
 
   <scroll-view class="profile-scroll" scroll-y type="list">
     <view class="profile-content">
@@ -84,6 +84,7 @@
           </view>
           <view class="pill-row">
             <view class="tag-pill" wx:for="{{form.tags}}" wx:key="content" style="{{item.style}}">
+              <view class="tag-dot" style="{{item.dotStyle}}"></view>
               <text>{{item.content}}</text>
               <view class="tag-remove" style="{{item.removeStyle}}" data-index="{{index}}" catchtap="handleRemoveTag" aria-role="button" aria-label="删除标签{{item.content}}">
                 <text class="tag-remove-mark">×</text>
@@ -124,7 +125,6 @@
             class="color-choice {{selectedTagColor === item.color ? 'active' : ''}}"
             wx:for="{{tagColorOptions}}"
             wx:key="color"
-            style="{{item.choiceStyle}}"
             data-color="{{item.color}}"
             bindtap="handleSelectTagColor"
             aria-role="button"

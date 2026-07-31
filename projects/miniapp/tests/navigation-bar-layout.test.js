@@ -54,6 +54,50 @@ test('navigation bar reserves top space through the WeChat capsule area', () => 
   assert.equal(layout.safeAreaTop, 'height: 92px; padding-top: 44px')
 })
 
+test('navigation bar prefers split system APIs without calling deprecated system info', () => {
+  const componentPath = path.join(__dirname, '../components/navigation-bar/navigation-bar.js')
+  const previousComponent = global.Component
+  const previousWx = global.wx
+  let definition
+  let layout
+
+  global.Component = (value) => {
+    definition = value
+  }
+  global.wx = {
+    getWindowInfo() {
+      return { windowWidth: 390, statusBarHeight: 44 }
+    },
+    getDeviceInfo() {
+      return { platform: 'android' }
+    },
+    getSystemInfoSync() {
+      throw new Error('不应调用已废弃的 wx.getSystemInfoSync')
+    },
+    getMenuButtonBoundingClientRect() {
+      return { left: 300, top: 52, height: 32 }
+    }
+  }
+
+  delete require.cache[require.resolve(componentPath)]
+  try {
+    require(componentPath)
+    definition.lifetimes.attached.call({
+      setData(value) {
+        layout = value
+      }
+    })
+  } finally {
+    if (previousComponent === undefined) delete global.Component
+    else global.Component = previousComponent
+    if (previousWx === undefined) delete global.wx
+    else global.wx = previousWx
+  }
+
+  assert.equal(layout.ios, false)
+  assert.equal(layout.safeAreaTop, 'height: 92px; padding-top: 44px')
+})
+
 test('navigation bar back button aligns to the calculated content row', () => {
   const navWxss = read('components/navigation-bar/navigation-bar.wxss')
   const leftRule = readRule(navWxss, '.weui-navigation-bar__left')
@@ -61,4 +105,12 @@ test('navigation bar back button aligns to the calculated content row', () => {
   assert.match(leftRule, /display:\s*flex/)
   assert.match(leftRule, /align-items:\s*center;/)
   assert.doesNotMatch(leftRule, /align-items:\s*flex-start;/)
+})
+
+test('navigation bar back button inherits the configured text color', () => {
+  const navWxss = read('components/navigation-bar/navigation-bar.wxss')
+  const backButtonRule = readRule(navWxss, '.weui-navigation-bar__btn_goback')
+
+  assert.match(backButtonRule, /background-color:\s*currentColor;/)
+  assert.doesNotMatch(backButtonRule, /background-color:\s*var\(--weui-FG-0\);/)
 })

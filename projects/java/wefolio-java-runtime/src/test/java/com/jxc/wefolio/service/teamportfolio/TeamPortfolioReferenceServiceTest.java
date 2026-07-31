@@ -21,6 +21,7 @@ import com.jxc.wefolio.service.teamportfolio.component.memberportfoliogrid.TeamM
 import com.jxc.wefolio.service.teamportfolio.component.memberportfoliolist.TeamMemberPortfolioListComponentReferenceExtractor;
 import com.jxc.wefolio.service.teamportfolio.component.qrcontact.TeamQrContactComponentReferenceExtractor;
 import com.jxc.wefolio.service.teamportfolio.component.schedulequery.TeamScheduleQueryComponentReferenceExtractor;
+import com.jxc.wefolio.service.teamportfolio.component.singlework.TeamSingleWorkComponentReferenceExtractor;
 import com.jxc.wefolio.service.teamportfolio.component.teamprofile.TeamProfileComponentReferenceExtractor;
 import com.jxc.wefolio.service.teamportfolio.component.textsection.TeamTextSectionComponentReferenceExtractor;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
@@ -59,6 +60,7 @@ class TeamPortfolioReferenceServiceTest {
     @Mock private PortfolioReferenceEntityMapper referenceMapper;
     @Mock private TeamProfileComponentReferenceExtractor teamProfileExtractor;
     @Mock private TeamCarouselComponentReferenceExtractor carouselExtractor;
+    @Mock private TeamSingleWorkComponentReferenceExtractor singleWorkExtractor;
     @Mock private TeamDividerComponentReferenceExtractor dividerExtractor;
     @Mock private TeamMemberPortfolioGridComponentReferenceExtractor gridExtractor;
     @Mock private TeamMemberPortfolioListComponentReferenceExtractor listExtractor;
@@ -91,7 +93,7 @@ class TeamPortfolioReferenceServiceTest {
         verify(referenceMapper).delete(deleteCaptor.capture());
         assertDeleteScope(deleteCaptor.getValue(), context.portfolioId(), PortfolioConfigScopeDict.DRAFT.getCode());
         ArgumentCaptor<PortfolioReferenceEntity> insertCaptor = ArgumentCaptor.forClass(PortfolioReferenceEntity.class);
-        verify(referenceMapper, times(9)).insert(insertCaptor.capture());
+        verify(referenceMapper, times(10)).insert(insertCaptor.capture());
         assertThat(insertCaptor.getAllValues()).allSatisfy(reference -> {
             assertThat(reference.getPortfolioId()).isEqualTo(context.portfolioId());
             assertThat(reference.getConfigScope()).isEqualTo(PortfolioConfigScopeDict.DRAFT.getCode());
@@ -99,13 +101,14 @@ class TeamPortfolioReferenceServiceTest {
         });
         verify(teamProfileExtractor).extract(eq("team_profile"), eq("components[0]"), any(JSONObject.class), eq(context));
         verify(carouselExtractor).extract(eq("carousel"), eq("components[1]"), any(JSONObject.class), eq(context));
-        verify(dividerExtractor).extract(eq("divider"), eq("components[2]"), any(JSONObject.class), eq(context));
-        verify(gridExtractor).extract(eq("member_portfolio_grid"), eq("components[3]"), any(JSONObject.class), eq(context));
-        verify(listExtractor).extract(eq("member_portfolio_list"), eq("components[4]"), any(JSONObject.class), eq(context));
-        verify(textExtractor).extract(eq("text_section"), eq("components[5]"), any(JSONObject.class), eq(context));
-        verify(scheduleExtractor).extract(eq("schedule_query"), eq("components[6]"), any(JSONObject.class), eq(context));
-        verify(contactExtractor).extract(eq("contact_form"), eq("components[7]"), any(JSONObject.class), eq(context));
-        verify(qrExtractor).extract(eq("qr_contact"), eq("components[8]"), any(JSONObject.class), eq(context));
+        verify(singleWorkExtractor).extract(eq("single_work"), eq("components[2]"), any(JSONObject.class), eq(context));
+        verify(dividerExtractor).extract(eq("divider"), eq("components[3]"), any(JSONObject.class), eq(context));
+        verify(gridExtractor).extract(eq("member_portfolio_grid"), eq("components[4]"), any(JSONObject.class), eq(context));
+        verify(listExtractor).extract(eq("member_portfolio_list"), eq("components[5]"), any(JSONObject.class), eq(context));
+        verify(textExtractor).extract(eq("text_section"), eq("components[6]"), any(JSONObject.class), eq(context));
+        verify(scheduleExtractor).extract(eq("schedule_query"), eq("components[7]"), any(JSONObject.class), eq(context));
+        verify(contactExtractor).extract(eq("contact_form"), eq("components[8]"), any(JSONObject.class), eq(context));
+        verify(qrExtractor).extract(eq("qr_contact"), eq("components[9]"), any(JSONObject.class), eq(context));
     }
 
     /**
@@ -151,6 +154,36 @@ class TeamPortfolioReferenceServiceTest {
         order.verify(dividerExtractor).extract(eq("equal-a"), eq("components[1]"), any(JSONObject.class), eq(context));
         order.verify(dividerExtractor).extract(eq("null-z"), eq("components[2]"), any(JSONObject.class), eq(context));
         order.verify(dividerExtractor).extract(eq("null-a"), eq("components[3]"), any(JSONObject.class), eq(context));
+    }
+
+    /**
+     * 次级菜单组件必须参与引用重建，并携带其在原始配置中的真实路径。
+     */
+    @Test
+    void rebuildShouldExtractSecondaryMenuReferencesWithOriginalPaths() {
+        TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 22L, 3);
+        when(singleWorkExtractor.extract(anyString(), anyString(), any(JSONObject.class), eq(context)))
+                .thenReturn(List.of(reference(TeamPortfolioComponentTypeDict.SINGLE_WORK.getCode())));
+        TeamPortfolioConfigDto config = config(List.of(
+                component("home", TeamPortfolioComponentTypeDict.DIVIDER.getCode(), 1000, false)));
+        TeamPortfolioConfigDto.BottomNavItem home = menu("nav_home", "首页", null);
+        TeamPortfolioConfigDto.BottomNavItem works = menu("nav_works", "作品", List.of(
+                component("secondary-disabled", TeamPortfolioComponentTypeDict.SINGLE_WORK.getCode(), 1000, false),
+                component("secondary-work", TeamPortfolioComponentTypeDict.SINGLE_WORK.getCode(), 2000, true)));
+        TeamPortfolioConfigDto.BottomNav bottomNav = new TeamPortfolioConfigDto.BottomNav();
+        bottomNav.setEnabled(true);
+        bottomNav.setItems(List.of(home, works));
+        config.setBottomNav(bottomNav);
+
+        service().rebuild(context.portfolioId(), PortfolioConfigScopeDict.DRAFT.getCode(), config, context);
+
+        verify(singleWorkExtractor).extract(
+                eq("secondary-work"),
+                eq("bottomNav.items[1].components[1]"),
+                any(JSONObject.class),
+                eq(context));
+        verify(referenceMapper).insert(any(PortfolioReferenceEntity.class));
+        verifyNoInteractions(dividerExtractor);
     }
 
     /**
@@ -254,6 +287,7 @@ class TeamPortfolioReferenceServiceTest {
             switch (type) {
                 case TEAM_PROFILE -> when(teamProfileExtractor.extract(anyString(), anyString(), any(JSONObject.class), eq(context))).thenReturn(references);
                 case CAROUSEL -> when(carouselExtractor.extract(anyString(), anyString(), any(JSONObject.class), eq(context))).thenReturn(references);
+                case SINGLE_WORK -> when(singleWorkExtractor.extract(anyString(), anyString(), any(JSONObject.class), eq(context))).thenReturn(references);
                 case DIVIDER -> when(dividerExtractor.extract(anyString(), anyString(), any(JSONObject.class), eq(context))).thenReturn(references);
                 case MEMBER_PORTFOLIO_GRID -> when(gridExtractor.extract(anyString(), anyString(), any(JSONObject.class), eq(context))).thenReturn(references);
                 case MEMBER_PORTFOLIO_LIST -> when(listExtractor.extract(anyString(), anyString(), any(JSONObject.class), eq(context))).thenReturn(references);
@@ -280,12 +314,12 @@ class TeamPortfolioReferenceServiceTest {
     }
 
     private void verifyNoReferenceCollaboratorInteractions() {
-        verifyNoInteractions(referenceMapper, teamProfileExtractor, carouselExtractor, dividerExtractor, gridExtractor,
+        verifyNoInteractions(referenceMapper, teamProfileExtractor, carouselExtractor, singleWorkExtractor, dividerExtractor, gridExtractor,
                 listExtractor, textExtractor, scheduleExtractor, contactExtractor, qrExtractor);
     }
 
     private TeamPortfolioReferenceService service() {
-        return new TeamPortfolioReferenceService(referenceMapper, teamProfileExtractor, carouselExtractor, dividerExtractor,
+        return new TeamPortfolioReferenceService(referenceMapper, teamProfileExtractor, carouselExtractor, singleWorkExtractor, dividerExtractor,
                 gridExtractor, listExtractor, textExtractor, scheduleExtractor, contactExtractor, qrExtractor);
     }
 
@@ -323,5 +357,17 @@ class TeamPortfolioReferenceServiceTest {
         component.setEnabled(enabled);
         component.setConfig(new JSONObject());
         return component;
+    }
+
+    private TeamPortfolioConfigDto.BottomNavItem menu(
+            String key,
+            String title,
+            List<TeamPortfolioConfigDto.ComponentEnvelope> components
+    ) {
+        TeamPortfolioConfigDto.BottomNavItem item = new TeamPortfolioConfigDto.BottomNavItem();
+        item.setKey(key);
+        item.setTitle(title);
+        item.setComponents(components);
+        return item;
     }
 }

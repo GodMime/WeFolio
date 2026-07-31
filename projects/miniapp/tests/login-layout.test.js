@@ -90,13 +90,10 @@ test('login segmented tabs use flex columns for skyline compatibility', () => {
   assert.doesNotMatch(tabsRule, /display:\s*grid/)
   assert.match(tabRule, /flex:\s*1/)
   assert.ok(
-    loginWxml.indexOf('data-tab="experience"') < loginWxml.indexOf('data-tab="register"'),
-    '体验 tab 应排在注册 tab 左侧'
+    loginWxml.indexOf('data-tab="experience"') < loginWxml.indexOf('data-tab="maintainer"'),
+    '体验 tab 应排在登录注册 tab 左侧'
   )
-  assert.ok(
-    loginWxml.indexOf('data-tab="register"') < loginWxml.indexOf('data-tab="wechat"'),
-    '注册 tab 应排在微信授权 tab 左侧'
-  )
+  assert.doesNotMatch(loginWxml, /data-tab="register"|data-tab="wechat"/)
 })
 
 test('login welcome icon uses product logo image', () => {
@@ -111,6 +108,14 @@ test('login welcome icon uses product logo image', () => {
 test('login hero uses configured background image', () => {
   assert.ok(loginWxml.includes(`src="${BACKGROUND_IMAGE_URL}"`))
   assert.match(loginWxml, /class="hero-image"/)
+})
+
+test('login hero title uses available width before wrapping', () => {
+  const heroTitleRule = readRule('.hero-title')
+
+  assert.match(heroTitleRule, /max-width:\s*100%/)
+  assert.match(heroTitleRule, /white-space:\s*normal/)
+  assert.doesNotMatch(heroTitleRule, /max-width:\s*520rpx/)
 })
 
 test('miniapp pages use system static asset urls', () => {
@@ -178,6 +183,7 @@ test('login layout keeps content at the bottom while hero resizes', () => {
   assert.match(layoutRule, /flex-direction:\s*column/)
   assert.match(heroRule, /flex:\s*1\s+1\s+0/)
   assert.match(contentRule, /flex:\s*none/)
+  assert.match(contentRule, /padding:\s*20rpx 32rpx/)
 })
 
 test('login tab switch animates hero height and image crop', () => {
@@ -186,13 +192,12 @@ test('login tab switch animates hero height and image crop', () => {
 
   assert.match(
     loginWxml,
-    /class="login-hero \{\{activeTab === 'experience' \? 'experience-mode' : activeTab === 'register' \? 'register-mode' : 'wechat-mode'\}\}"/
+    /class="login-hero \{\{activeTab === 'experience' \? 'experience-mode' : 'maintainer-mode'\}\}"/
   )
   assert.match(heroRule, /transition:[^;]*min-height/)
   assert.match(heroImageRule, /transition:[^;]*transform/)
   assert.match(loginWxss, /\.login-hero\.experience-mode\s+\.hero-image\s*\{[\s\S]*transform:\s*scale/)
-  assert.match(loginWxss, /\.login-hero\.register-mode\s+\.hero-image\s*\{[\s\S]*transform:\s*scale/)
-  assert.match(loginWxss, /\.login-hero\.wechat-mode\s+\.hero-image\s*\{[\s\S]*transform:\s*scale/)
+  assert.match(loginWxss, /\.login-hero\.maintainer-mode\s+\.hero-image\s*\{[\s\S]*transform:\s*scale/)
 })
 
 test('login tab content stays mounted for animated height transitions', () => {
@@ -203,7 +208,7 @@ test('login tab content stays mounted for animated height transitions', () => {
 
   assert.match(
     loginWxml,
-    /class="auth-body \{\{activeTab === 'experience' \? 'experience-mode' : activeTab === 'register' \? 'register-mode' : 'wechat-mode'\}\}"/
+    /class="auth-body \{\{activeTab === 'experience' \? 'experience-mode' : 'maintainer-mode'\}\}"/
   )
   assert.match(
     loginWxml,
@@ -211,11 +216,7 @@ test('login tab content stays mounted for animated height transitions', () => {
   )
   assert.match(
     loginWxml,
-    /class="login-form register-form \{\{activeTab === 'register' \? 'active' : 'inactive'\}\}"/
-  )
-  assert.match(
-    loginWxml,
-    /class="login-form wechat-form \{\{activeTab === 'wechat' \? 'active' : 'inactive'\}\}"/
+    /class="login-form maintainer-form \{\{activeTab === 'maintainer' \? 'active' : 'inactive'\}\}"/
   )
   assert.doesNotMatch(loginWxml, /wx:else class="login-form"/)
   assert.match(authBodyRule, /overflow:\s*hidden/)
@@ -235,39 +236,45 @@ test('login tabs match design underline style', () => {
   const activeTabRule = readRule('.login-tab.active')
   const indicatorRule = readRule('.tab-indicator')
   const experienceIndicatorRule = readRule('.tab-indicator.experience')
-  const registerIndicatorRule = readRule('.tab-indicator.register')
-  const wechatIndicatorRule = readRule('.tab-indicator.wechat')
+  const maintainerIndicatorRule = readRule('.tab-indicator.maintainer')
 
   assert.match(
     loginWxml,
     /class="tab-indicator \{\{activeTab\}\}"/
   )
-  assert.match(tabsRule, /border-bottom:\s*1rpx\s+solid\s+#d7dee5/)
+  assert.match(tabsRule, /border-bottom:\s*1rpx\s+solid\s+#e9ecef/)
   assert.match(tabsRule, /background:\s*transparent/)
   assert.match(tabsRule, /padding:\s*0/)
   assert.match(tabsRule, /position:\s*relative/)
   assert.match(activeTabRule, /background:\s*transparent/)
   assert.match(activeTabRule, /box-shadow:\s*none/)
   assert.match(indicatorRule, /position:\s*absolute/)
-  assert.match(indicatorRule, /height:\s*4rpx/)
-  assert.match(indicatorRule, /background:\s*#315f9d/)
+  assert.match(indicatorRule, /width:\s*48rpx/)
+  assert.match(indicatorRule, /height:\s*5rpx/)
+  assert.match(indicatorRule, /background:\s*#212529/)
   assert.match(indicatorRule, /transition:\s*left/)
-  assert.match(experienceIndicatorRule, /left:\s*16\.6667%/)
-  assert.match(registerIndicatorRule, /left:\s*50%/)
-  assert.match(wechatIndicatorRule, /left:\s*83\.3333%/)
+  assert.match(experienceIndicatorRule, /left:\s*25%/)
+  assert.match(maintainerIndicatorRule, /left:\s*75%/)
 })
 
 test('login buttons match first-login design copy and shape', () => {
   const buttonRule = readRule('.primary-button')
 
   assert.match(loginWxml, />\s*先体验\s*</)
-  assert.match(loginWxml, />\s*\{\{loading \? '注册中' : '注册'\}\}\s*</)
-  assert.doesNotMatch(loginWxml, /微信授权获取手机号并注册/)
-  assert.doesNotMatch(loginWxml, /微信授权注册/)
-  assert.match(loginWxml, /微信授权登录/)
-  assert.match(buttonRule, /height:\s*84rpx/)
-  assert.match(buttonRule, /border-radius:\s*16rpx/)
-  assert.match(buttonRule, /background:\s*linear-gradient\(180deg,\s*#263445,\s*#111827\)/)
+  assert.match(loginWxml, />\s*\{\{maintainerButtonText\}\}\s*</)
+  assert.match(loginJs, /'识别账号中'/)
+  assert.match(loginJs, /'重新识别'/)
+  assert.match(loginJs, /'手机号快捷注册'/)
+  assert.match(loginJs, /'登录中'/)
+  assert.match(buttonRule, /width:\s*100%/)
+  assert.match(buttonRule, /min-width:\s*100%/)
+  assert.match(buttonRule, /max-width:\s*100%/)
+  assert.match(buttonRule, /margin-left:\s*0/)
+  assert.match(buttonRule, /margin-right:\s*0/)
+  assert.match(buttonRule, /box-sizing:\s*border-box/)
+  assert.match(buttonRule, /height:\s*92rpx/)
+  assert.match(buttonRule, /border-radius:\s*999rpx/)
+  assert.match(buttonRule, /background:\s*#212529/)
 })
 
 test('experience login tab redirects to independent mock pages', () => {
@@ -290,89 +297,90 @@ test('experience login tab explains trial before registration', () => {
   assert.match(authExperienceRule, /max-height:\s*142rpx/)
   assert.match(experienceFormRule, /max-height:\s*142rpx/)
   assert.match(experienceHintRule, /text-align:\s*center/)
-  assert.match(experienceHintRule, /color:\s*#6b7785/)
+  assert.match(experienceHintRule, /color:\s*#868e96/)
 })
 
-test('register form uses WeChat avatar nickname and phone components', () => {
-  assert.match(loginWxml, /open-type="chooseAvatar"/)
-  assert.match(loginWxml, /bindchooseavatar="handleChooseAvatar"/)
-  assert.match(loginWxml, /type="nickname"/)
-  assert.match(loginWxml, /bindinput="handleNicknameInput"/)
-  assert.match(loginWxml, /open-type="getPhoneNumber"/)
+test('maintainer area uses one button and only enables phone capability for new users', () => {
+  assert.equal(
+    (loginWxml.match(/class="primary-button maintainer-auth-button"/g) || []).length,
+    1
+  )
+  assert.match(loginWxml, /open-type="\{\{phoneAuthorizationRequired \? 'getPhoneNumber' : ''\}\}"/)
+  assert.match(loginWxml, /bindtap="handleMaintainerAuthTap"/)
   assert.match(loginWxml, /bindgetphonenumber="handleRegisterPhone"/)
+  assert.match(loginJs, /if \(this\.data\.phoneAuthorizationRequired\) \{\s*return\s*\}/)
 })
 
-test('avatar picker does not render as a left logo beside nickname', () => {
-  assert.doesNotMatch(loginWxml, /class="profile-fields"/)
-  assert.doesNotMatch(loginWxml, /defaultAvatarUrl/)
-  assert.doesNotMatch(loginJs, /defaultAvatarUrl/)
+test('maintainer registration no longer requires avatar or nickname', () => {
+  assert.doesNotMatch(loginWxml, /chooseAvatar|type="nickname"|avatarError|nicknameError/)
+  assert.doesNotMatch(loginJs, /prepareAvatarFilePath|uploadAvatar|handleChooseAvatar|handleNicknameInput/)
+  assert.doesNotMatch(loginJs, /\/api\/mine\/profile/)
+  assert.match(loginJs, /nickname:\s*''/)
+  assert.match(loginJs, /avatarUrl:\s*''/)
+})
+
+test('login page prechecks on load and uses a fresh wx login code for submission', () => {
+  assert.match(loginJs, /precheckMaintainerWechatLogin/)
+  assert.match(loginJs, /onLoad\(\)\s*\{\s*this\.runWechatLoginPrecheck\(\)/)
+  assert.match(loginJs, /async runWechatLoginPrecheck\(\)[\s\S]*const code = await wxLogin\(\)[\s\S]*precheckMaintainerWechatLogin\(code\)/)
+  assert.match(loginJs, /async authorizeByWechat\(options = \{\}\)[\s\S]*const code = await wxLogin\(\)/)
+})
+
+test('precheck failure keeps phone authorization disabled and supports retry', () => {
+  assert.match(loginJs, /precheckReady:\s*false/)
+  assert.match(loginJs, /phoneAuthorizationRequired:\s*false/)
+  assert.match(loginJs, /precheckErrorMessage:\s*'账号识别失败，请重试'/)
+  assert.match(loginJs, /if \(!this\.data\.precheckReady\) \{\s*this\.runWechatLoginPrecheck\(\)\s*return\s*\}/)
+  assert.match(loginWxml, /disabled="\{\{prechecking \|\| loading\}\}"/)
+})
+
+test('referral code is shown only for an unbound WeChat identity after precheck', () => {
   assert.match(
     loginWxml,
-    /class="profile-auth-row"[\s\S]*class="avatar-picker[\s\S]*class="nickname-auth-field/
+    /wx:if="\{\{precheckReady && phoneAuthorizationRequired\}\}"[^>]*class="form-row"[\s\S]*bindinput="handleReferralInput"/
   )
-  assert.match(loginWxml, /class="avatar-placeholder">头像/)
+  assert.match(
+    loginWxml,
+    /class="field-heading"[\s\S]*推荐码[\s\S]*\{\{referralCode\.length\}\}\/16[\s\S]*maxlength="16"[\s\S]*class="referral-hint">推荐码仅新用户注册时有效/
+  )
 })
 
-test('avatar picker renders as a fixed circular avatar crop', () => {
-  const avatarRule = readRule('.avatar-picker')
-  const pickedAvatarRule = readRule('.picked-avatar')
-
-  assert.match(avatarRule, /width:\s*68rpx/)
-  assert.match(avatarRule, /height:\s*68rpx/)
-  assert.match(avatarRule, /min-width:\s*68rpx/)
-  assert.match(avatarRule, /border-radius:\s*999rpx/)
-  assert.match(avatarRule, /overflow:\s*hidden/)
-  assert.match(loginWxml, /class="picked-avatar"[\s\S]*mode="aspectFill"/)
-  assert.match(pickedAvatarRule, /border-radius:\s*50%/)
+test('referral code is submitted only from the phone registration branch', () => {
+  assert.match(loginWxml, /class="field-heading"[\s\S]*推荐码[\s\S]*\{\{referralCode\.length\}\}\/16[\s\S]*maxlength="16"/)
+  assert.match(loginJs, /if \(options\.phoneCode\) \{[\s\S]*referralCode:\s*this\.data\.referralCode\.trim\(\)/)
 })
 
-test('register form marks missing avatar and nickname authorization in red', () => {
-  assert.match(loginWxml, /avatarError/)
-  assert.match(loginWxml, /nicknameError/)
-  assert.match(loginWxml, /profileErrorText/)
-  assert.match(loginWxml, /class="field-error"/)
-  assert.match(loginWxss, /\.avatar-picker\.invalid\s*\{/)
-  assert.match(loginWxss, /\.nickname-auth-field\.invalid\s*\{/)
-  assert.match(loginWxss, /\.field-error\s*\{/)
-  assert.match(loginWxss, /#d92d20/)
+test('maintainer form height accommodates referral input hint and auth feedback', () => {
+  const authMaintainerRule = readRule('.auth-body.maintainer-mode')
+  const maintainerFormRule = readRule('.maintainer-form.active')
+  const referralHintRule = readRule('.referral-hint')
+
+  assert.match(authMaintainerRule, /max-height:\s*340rpx/)
+  assert.match(maintainerFormRule, /max-height:\s*340rpx/)
+  assert.match(referralHintRule, /font-size:\s*21rpx/)
+  assert.match(referralHintRule, /color:\s*#868e96/)
 })
 
-test('nickname is presented as WeChat authorization instead of manual input', () => {
-  const nativeNicknameRule = readRule('.nickname-native-input')
+test('login cards and referral field use the neutral TripGlide contract', () => {
+  const panelRule = readRule('.panel')
+  const inputRule = readRule('.input-shell')
 
-  assert.doesNotMatch(loginWxml, /class="nickname-input"/)
-  assert.doesNotMatch(loginWxml, /请输入微信昵称/)
-  assert.match(loginWxml, /点击授权微信昵称/)
-  assert.match(loginWxml, /class="nickname-native-input"/)
-  assert.match(loginWxml, /type="nickname"/)
-  assert.match(nativeNicknameRule, /opacity:\s*0/)
-  assert.match(nativeNicknameRule, /position:\s*absolute/)
+  assert.match(panelRule, /border:\s*1rpx solid #e9ecef/)
+  assert.match(panelRule, /border-radius:\s*48rpx/)
+  assert.match(inputRule, /min-height:\s*84rpx/)
 })
 
-test('register flow sends phone code and optional plugin openpid code to backend', () => {
+test('new-user registration sends phone and optional plugin codes while old-user login omits them', () => {
   assert.doesNotMatch(loginJs, /getUserProfile/)
   assert.match(loginJs, /wx\.pluginLogin/)
-  assert.doesNotMatch(loginJs, /当前微信版本不支持 openpid 授权/)
   assert.match(loginJs, /resolve\(''\)/)
-  assert.match(loginJs, /phoneCode/)
-  assert.match(loginJs, /pluginLoginCode/)
-  assert.match(loginJs, /nickname/)
-  assert.match(loginJs, /avatarUrl/)
+  assert.match(loginJs, /const payload = \{\s*code\s*\}/)
+  assert.match(loginJs, /if \(options\.phoneCode\) \{[\s\S]*phoneCode:\s*options\.phoneCode[\s\S]*pluginLoginCode/)
+  assert.match(loginJs, /maintainerWechatLogin\(payload\)/)
 })
 
-test('register flow uploads avatar only after login token is stored', () => {
-  assert.match(loginJs, /avatarUrl:\s*''/)
-  assert.match(loginJs, /const preparedAvatarFilePath = options\.phoneCode/)
-  assert.match(loginJs, /await prepareAvatarFilePath\(this\.data\.avatarUrl\)/)
-  assert.match(
-    loginJs,
-    /setToken\(response\.token\)[\s\S]*const avatarUrl = await uploadAvatar\(preparedAvatarFilePath,[\s\S]*skipPrepare:\s*true[\s\S]*url:\s*'\/api\/mine\/profile'/
-  )
-})
-
-test('wechat authorization tab only shows the design CTA', () => {
-  assert.doesNotMatch(loginWxml, /wechat-note/)
-  assert.doesNotMatch(loginWxml, /使用微信身份快速进入已有账号/)
+test('ordinary login failure refreshes precheck branch', () => {
+  assert.match(loginJs, /catch \(error\) \{[\s\S]*if \(!options\.phoneCode\) \{[\s\S]*this\.runWechatLoginPrecheck\(\)/)
 })
 
 test('mine page does not use login background image', () => {

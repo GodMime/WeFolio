@@ -98,6 +98,7 @@ function syncCarouselDraft(component, requestSources) {
 
 Component({
   properties: {
+    themeMode: { type: String, value: 'light' },
     portfolioId: { type: Number, value: 0 },
     items: {
       type: Array,

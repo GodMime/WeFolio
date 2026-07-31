@@ -1,0 +1,39 @@
+<view class="work-grid-component portfolio-theme-{{themeMode}}">
+<view class="work-section-title">作品列表</view>
+<scroll-view wx:if="{{displayTags.length}}" scroll-x class="display-tag-scroll">
+  <view class="display-tags">
+    <view
+      wx:for="{{displayTags}}"
+      wx:key="groupKey"
+      wx:for-item="tag"
+      class="display-tag {{tag.active ? 'active' : ''}}"
+      data-group-key="{{tag.groupKey}}"
+      bindtap="handleDisplayTagTap"
+    >{{tag.name}}</view>
+  </view>
+</scroll-view>
+<view class="work-grid {{switching ? 'display-switching' : ''}}">
+  <view wx:for="{{activeGroup.works}}" wx:key="workId" wx:for-item="work" class="work-card grid-card">
+    <view
+      class="work-cover-wrap"
+      data-work-id="{{work.workId}}"
+      data-media-type="{{work.mediaType}}"
+      data-media-url="{{work.previewUrl}}"
+      data-cover-url="{{work.thumbnailUrl}}"
+      data-title="{{work.title}}"
+      bindtap="handleWorkTap"
+      aria-role="button"
+      aria-label="{{work.isVideo ? '播放视频' : '查看原图'}}{{work.title}}"
+    >
+      <image class="work-cover" src="{{work.thumbnailUrl}}" mode="aspectFill"></image>
+      <view wx:if="{{work.isVideo}}" class="work-play-badge" aria-hidden="true">
+        <view class="work-play-icon"></view>
+      </view>
+    </view>
+    <view class="work-copy">
+      <view wx:if="{{showTitle && work.title}}" class="work-title">{{work.title}}</view>
+      <view wx:if="{{showDescription && work.description}}" class="work-desc">{{work.description}}</view>
+    </view>
+  </view>
+</view>
+</view>

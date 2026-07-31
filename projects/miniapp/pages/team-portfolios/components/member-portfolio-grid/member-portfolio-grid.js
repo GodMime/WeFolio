@@ -79,6 +79,7 @@ function syncGridDraft(component, requestSources) {
 
 Component({
   properties: {
+    themeMode: { type: String, value: 'light' },
     portfolioId: { type: Number, value: 0 },
     items: { type: Array, value: [], observer() { if (!this.properties.editMode) syncGridDraft(this, false) } },
     members: { type: Array, value: [] },

@@ -33,6 +33,12 @@ public class WorkAuditProperties {
     /** 每轮最多审核的图片作品数 */
     private int maxAuditImagePerRun = 500;
 
+    /** 每轮最多尝试审核的动图任务数 */
+    private int maxAuditAnimationPerRun = 500;
+
+    /** 单个动图审核任务最大尝试次数 */
+    private int animationMaxAttempts = 3;
+
     /** 单个视频审核任务最多主动查询次数 */
     private int videoQueryMaxAttempts = 120;
 
@@ -44,4 +50,28 @@ public class WorkAuditProperties {
 
     /** 腾讯云远端调用超时时间，单位秒 */
     private int remoteCallTimeoutSeconds = 30;
+
+    /**
+     * 设置每轮动图审核上限。
+     *
+     * @param maxAuditAnimationPerRun 正整数上限
+     */
+    public void setMaxAuditAnimationPerRun(int maxAuditAnimationPerRun) {
+        if (maxAuditAnimationPerRun <= 0) {
+            throw new IllegalArgumentException("每轮动图审核上限必须为正整数");
+        }
+        this.maxAuditAnimationPerRun = maxAuditAnimationPerRun;
+    }
+
+    /**
+     * 设置动图审核最大尝试次数。
+     *
+     * @param animationMaxAttempts 正整数上限
+     */
+    public void setAnimationMaxAttempts(int animationMaxAttempts) {
+        if (animationMaxAttempts <= 0) {
+            throw new IllegalArgumentException("动图审核最大尝试次数必须为正整数");
+        }
+        this.animationMaxAttempts = animationMaxAttempts;
+    }
 }

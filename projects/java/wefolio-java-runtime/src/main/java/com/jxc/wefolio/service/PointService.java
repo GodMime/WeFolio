@@ -130,6 +130,7 @@ public class PointService {
     private static final Set<String> MAINTENANCE_SCENES = Set.of(
             PointSceneCodeDict.UPLOAD_IMAGE.getCode(),
             PointSceneCodeDict.UPLOAD_VIDEO.getCode(),
+            PointSceneCodeDict.UPLOAD_ANIMATION.getCode(),
             PointSceneCodeDict.CREATE_TEAM.getCode(),
             PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode(),
             PointSceneCodeDict.MAINTAIN_ADVANCED_PORTFOLIO.getCode(),

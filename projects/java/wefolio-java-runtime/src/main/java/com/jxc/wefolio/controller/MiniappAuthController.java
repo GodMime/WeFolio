@@ -9,6 +9,8 @@ import com.jxc.wefolio.dto.AuthSessionResponse;
 import com.jxc.wefolio.dto.FileUploadResponse;
 import com.jxc.wefolio.dto.MaintainerWechatLoginRequest;
 import com.jxc.wefolio.dto.MaintainerWechatLoginResponse;
+import com.jxc.wefolio.dto.MaintainerWechatLoginPrecheckRequest;
+import com.jxc.wefolio.dto.MaintainerWechatLoginPrecheckResponse;
 import com.jxc.wefolio.dto.MaintainerWechatSessionRefreshRequest;
 import com.jxc.wefolio.service.AccountCancellationService;
 import com.jxc.wefolio.service.AuthTokenService;
@@ -64,6 +66,20 @@ public class MiniappAuthController {
     ) {
         return Response.success(miniappAuthService.loginMaintainerByWechat(
                 request, trustedClientIpResolver.resolveCurrentRequest()));
+    }
+
+    /**
+     * 预检维护者微信身份是否需要手机号授权。
+     *
+     * @param request 维护者微信登录预检请求
+     * @return 手机号授权要求
+     */
+    @LoginAccess
+    @PostMapping("/maintainer/wechat-login/precheck")
+    public Response<MaintainerWechatLoginPrecheckResponse> precheckMaintainerWechatLogin(
+            @RequestBody MaintainerWechatLoginPrecheckRequest request
+    ) {
+        return Response.success(miniappAuthService.precheckMaintainerWechatLogin(request));
     }
 
     /**

@@ -6,7 +6,8 @@ package com.jxc.wefolio.job.dict;
 public enum MediaTypeDict {
 
     IMAGE("IMAGE"),
-    VIDEO("VIDEO");
+    VIDEO("VIDEO"),
+    ANIMATION("ANIMATION");
 
     private final String code;
 

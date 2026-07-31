@@ -14,6 +14,7 @@ import com.jxc.wefolio.entity.WorkTagEntity;
 import com.jxc.wefolio.entity.WorkUploadTaskEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.WfTagEntityMapper;
+import com.jxc.wefolio.mapper.UserEntityMapper;
 import com.jxc.wefolio.mapper.WorkEntityMapper;
 import com.jxc.wefolio.mapper.WorkTagEntityMapper;
 import com.jxc.wefolio.mapper.WorkUploadTaskEntityMapper;
@@ -67,6 +68,9 @@ public class WorkUploadTransactionService {
     /** 上传任务 Mapper */
     private final WorkUploadTaskEntityMapper workUploadTaskEntityMapper;
 
+    /** 用户 Mapper */
+    private final UserEntityMapper userEntityMapper;
+
     /** 作品 Mapper */
     private final WorkEntityMapper workEntityMapper;
 
@@ -98,6 +102,14 @@ public class WorkUploadTransactionService {
     ) {
         requireOwnedTask(userId, task);
         Long taskId = task.getId();
+        if (userEntityMapper.lockActiveUserById(userId) == null) {
+            throw new BusinessException("用户不存在或已停用");
+        }
+        WorkUploadTaskEntity latestTask = workUploadTaskEntityMapper.selectById(taskId);
+        if (latestTask != null) {
+            requireOwnedTask(userId, latestTask);
+            task = latestTask;
+        }
         if (WorkUploadTaskStatusDict.CONFIRMED.getCode().equals(task.getStatus())) {
             WorkEntity existing = workEntityMapper.selectById(task.getConfirmedWorkId());
             return MineWorkUploadCompleteResponse.Item.success(taskId, existing, "作品已确认");
@@ -166,7 +178,9 @@ public class WorkUploadTransactionService {
             task.setCoverObjectKey(coverObjectKey);
         }
         task.setErrorMessage(null);
-        workUploadTaskEntityMapper.updateById(task);
+        if (workUploadTaskEntityMapper.updateById(task) != 1) {
+            throw new BusinessException(MineWorkMessage.WORK_SAVE_FAILED_MESSAGE);
+        }
         confirmCoverTaskIfNeeded(coverTask, work.getId());
         return MineWorkUploadCompleteResponse.Item.success(taskId, work, "上传成功");
     }
@@ -217,6 +231,10 @@ public class WorkUploadTransactionService {
         work.setMimeType(task.getMimeType());
         work.setFileSize(task.getFileSize());
         work.setDurationMs(task.getDurationMs());
+        work.setFrameCount(task.getFrameCount());
+        if (MediaTypeDict.ANIMATION.getCode().equals(task.getMediaType())) {
+            work.setCoverFrameNumber(1);
+        }
         work.setWidth(task.getWidth());
         work.setHeight(task.getHeight());
         work.setAspectRatio(aspectRatio);
@@ -259,6 +277,9 @@ public class WorkUploadTransactionService {
     private String resolveCoverSha256(WorkUploadTaskEntity task, WorkUploadTaskEntity coverTask) {
         if (coverTask != null && hasText(coverTask.getFileSha256())) {
             return coverTask.getFileSha256();
+        }
+        if (hasText(task.getCoverSha256())) {
+            return task.getCoverSha256();
         }
         if (canUseOriginalAsCover(task) && hasText(task.getFileSha256())) {
             return task.getFileSha256();
@@ -324,7 +345,9 @@ public class WorkUploadTransactionService {
         coverTask.setStatus(WorkUploadTaskStatusDict.CONFIRMED.getCode());
         coverTask.setConfirmedWorkId(workId);
         coverTask.setErrorMessage(null);
-        workUploadTaskEntityMapper.updateById(coverTask);
+        if (workUploadTaskEntityMapper.updateById(coverTask) != 1) {
+            throw new BusinessException(MineWorkMessage.WORK_SAVE_FAILED_MESSAGE);
+        }
     }
 
     /**
@@ -496,6 +519,9 @@ public class WorkUploadTransactionService {
         if (MediaTypeDict.VIDEO.getCode().equals(mediaType)) {
             return PointSceneCodeDict.UPLOAD_VIDEO.getCode();
         }
+        if (MediaTypeDict.ANIMATION.getCode().equals(mediaType)) {
+            return PointSceneCodeDict.UPLOAD_ANIMATION.getCode();
+        }
         throw new BusinessException("作品媒体类型不支持");
     }
 
@@ -506,7 +532,16 @@ public class WorkUploadTransactionService {
      * @return 备注
      */
     private String buildPointRemark(String mediaType) {
-        return MediaTypeDict.VIDEO.getCode().equals(mediaType) ? "上传视频作品" : "上传图片作品";
+        if (MediaTypeDict.IMAGE.getCode().equals(mediaType)) {
+            return "上传图片作品";
+        }
+        if (MediaTypeDict.VIDEO.getCode().equals(mediaType)) {
+            return "上传视频作品";
+        }
+        if (MediaTypeDict.ANIMATION.getCode().equals(mediaType)) {
+            return "上传动图作品";
+        }
+        throw new BusinessException("作品媒体类型不支持");
     }
 
     /**

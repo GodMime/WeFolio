@@ -2,6 +2,8 @@
   "navigationStyle": "custom",
   "usingComponents": {
     "navigation-bar": "/components/navigation-bar/navigation-bar",
-    "portfolio-carousel": "/components/portfolio-carousel/portfolio-carousel"
+    "portfolio-carousel": "/components/portfolio-carousel/portfolio-carousel",
+    "portfolio-bottom-nav": "/components/portfolio-bottom-nav/portfolio-bottom-nav",
+    "mock-portfolio-renderer": "/components/mock/portfolio-renderer/portfolio-renderer"
   }
 }

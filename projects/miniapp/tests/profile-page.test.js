@@ -119,8 +119,11 @@ function loadProfilePage(fakeRequest, wxOverrides = {}, assetOverrides = {}) {
     pageDefinition = definition
   }
   global.wx = Object.assign({
-    getSystemInfoSync() {
+    getWindowInfo() {
       return { windowWidth: 375 }
+    },
+    getSystemInfoSync() {
+      throw new Error('不应调用已废弃的 wx.getSystemInfoSync')
     },
     redirectTo() {},
     showToast() {}

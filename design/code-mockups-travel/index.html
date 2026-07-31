@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>映期Folio - TripGlide 风 UI 重设计稿索引</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ink: #212529;
+      --bg: #f1f3f5;
+      --soft: #f5f6f7;
+      --muted: #868e96;
+      --faint: #adb5bd;
+      --line: #e9ecef;
+      font-family: "Instrument Sans", -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); min-height: 100vh; }
+    .page { max-width: 1080px; margin: 0 auto; padding: 56px 24px 80px; }
+    .eyebrow { font-size: 12px; letter-spacing: 0.18em; color: var(--muted); font-weight: 600; text-transform: uppercase; }
+    h1 { margin: 10px 0 12px; font-size: 28px; font-weight: 700; letter-spacing: -0.01em; }
+    .desc { color: var(--muted); font-size: 13.5px; line-height: 1.9; max-width: 760px; }
+    .spec {
+      margin: 24px 0 32px; padding: 20px 24px;
+      background: #fff; border: 1px solid var(--line); border-radius: 24px;
+      font-size: 12.5px; color: var(--muted); line-height: 2;
+    }
+    .spec b { color: var(--ink); font-weight: 600; }
+    .swatches { display: flex; gap: 8px; margin-top: 10px; }
+    .sw { width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--line); }
+    .sw small { display: block; text-align: center; font-size: 9px; color: var(--muted); margin-top: 44px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
+    .card {
+      display: block; background: #fff; border: 1px solid var(--line);
+      border-radius: 24px; padding: 22px 24px; text-decoration: none; color: inherit;
+      transition: border-color 0.15s ease;
+    }
+    .card:hover { border-color: var(--ink); }
+    .card .num { font-size: 11px; color: var(--faint); font-weight: 600; letter-spacing: 0.12em; }
+    .card .name { font-size: 16px; font-weight: 700; margin: 6px 0 6px; letter-spacing: -0.01em; }
+    .card .pages { font-size: 12px; color: var(--muted); line-height: 1.8; }
+    .foot { margin-top: 32px; font-size: 12px; color: var(--muted); line-height: 1.9; }
+    a.compare { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--ink); }
+    code { background: var(--soft); border-radius: 999px; padding: 1px 8px; font-size: 11.5px; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="eyebrow">WeFolio · 映期Folio · TripGlide Style Redesign</div>
+    <h1>TripGlide 风 UI 重设计稿</h1>
+    <p class="desc">
+      本目录是 <code>design/code-mockups/</code>(代码反推稿)的纯 UI 重设计版本,视觉参考
+      Dribbble「Travel Mobile App」(shots/24911825,TripGlide):
+      <b>页面清单、结构、文案、交互逻辑、页面对应关系、mock 数据与原版完全一致</b>。
+      对照原版请打开 <a class="compare" href="../code-mockups/index.html">code-mockups 索引</a>。
+    </p>
+    <div class="spec">
+      <b>视觉规范:</b>Instrument Sans 字体 · 纯黑白灰体系(墨色 #212529 / 浅灰 #f5f6f7 / 白 #ffffff)·
+      大圆角语言(卡片 24px、图片 20px、按钮与输入框全胶囊 999px)·
+      悬浮黑色胶囊 tabbar(白图标、激活白圆底)· 标签色与档位色为仅保留的小面积彩色 · 动态图片统一中性灰占位<br>
+      <b>三层视觉语义:</b>按钮 = 实底胶囊(纯黑主 / 浅灰次),可点击 ·
+      标签 = 白底细边胶囊 + 彩点 + ×,可删除 ·
+      状态 = 无边框「6px 彩点 + 彩色小字」(成功 #5c9e6e / 警告 #c08a3e / 错误 #b55656 / 中性 #868e96),纯展示
+      <div class="swatches">
+        <div class="sw" style="background:#212529"><small>#212529</small></div>
+        <div class="sw" style="background:#f5f6f7"><small>#f5f6f7</small></div>
+        <div class="sw" style="background:#ffffff"><small>#ffffff</small></div>
+        <div class="sw" style="background:#5c9e6e"><small>#5c9e6e</small></div>
+        <div class="sw" style="background:#c08a3e"><small>#c08a3e</small></div>
+        <div class="sw" style="background:#b55656"><small>#b55656</small></div>
+      </div>
+    </div>
+    <div class="grid">
+      <a class="card" href="01-login-index.html">
+        <div class="num">01</div>
+        <div class="name">登录与首页</div>
+        <div class="pages">pages/login · pages/index(我的 / 加载失败态)· 4 框</div>
+      </a>
+      <a class="card" href="02-profile-points.html">
+        <div class="num">02</div>
+        <div class="name">我的与积分</div>
+        <div class="pages">pages/profile · points · points-rules · recharge · recharge-records · 6 框</div>
+      </a>
+      <a class="card" href="03-schedule.html">
+        <div class="num">03</div>
+        <div class="name">档期</div>
+        <div class="pages">pages/schedule(维护 / 定义 / 新增与编辑弹层 / 状态提示)· 7 框</div>
+      </a>
+      <a class="card" href="04-works.html">
+        <div class="num">04</div>
+        <div class="name">作品</div>
+        <div class="pages">pages/works(列表 / 批量 / 编辑 / 裁剪与选帧 / 上传状态 / 删除确认)· 14 框</div>
+      </a>
+      <a class="card" href="05-portfolios.html">
+        <div class="num">05</div>
+        <div class="name">作品集</div>
+        <div class="pages">pages/portfolios(列表 / 分享弹层 / 标准编辑 / 预览 / 访客页 / 档期查询与预留信息弹层 / 预留页)· 12 框</div>
+      </a>
+      <a class="card" href="06-visits-messages.html">
+        <div class="num">06</div>
+        <div class="name">访问记录与消息</div>
+        <div class="pages">pages/visits(趋势图 / 三个明细弹层)· pages/messages · 5 框</div>
+      </a>
+      <a class="card" href="07-teams.html">
+        <div class="num">07</div>
+        <div class="name">团队</div>
+        <div class="pages">pages/teams · team-maintenance · team-member-add · team-member-change · team-invitations · 11 框</div>
+      </a>
+      <a class="card" href="08-team-portfolios.html">
+        <div class="num">08</div>
+        <div class="name">团队作品集</div>
+        <div class="pages">pages/team-portfolios(选择团队 / 编辑 / 预览 / 团队线索 / 访客浏览 / 档期查询与预留信息弹层)· 13 框</div>
+      </a>
+      <a class="card" href="09-portfolio-theme-nav.html">
+        <div class="num">09</div>
+        <div class="name">作品集背景色与底部导航</div>
+        <div class="pages">页面设置 / 连续取色盘弹层 / 分菜单编辑 / 菜单删除确认 / 发布校验定位 / 访客明暗主题 · 10 框</div>
+      </a>
+    </div>
+    <p class="foot">
+      图片资源与原版一致:本地静态资源位于 <code>assets/system/</code>,远程资源沿用相同 CDN URL;
+      用户动态内容(头像、作品图、二维码)以中性灰占位;字体经 Google Fonts CDN 加载,离线时回退系统字体。
+      生成日期:2026-07-26。
+    </p>
+  </div>
+</body>
+</html>

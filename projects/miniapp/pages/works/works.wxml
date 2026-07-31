@@ -1,5 +1,5 @@
 <view class="page-shell works-page">
-  <navigation-bar title="作品" back="{{false}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+  <navigation-bar title="作品" back="{{false}}" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
 
   <view class="works-scroll">
     <view class="works-content" bindtap="handleCloseTagManageMode">
@@ -22,6 +22,17 @@
       </view>
 
       <view class="filter-panel">
+        <scroll-view class="media-filter-scroll" scroll-x type="list">
+          <view class="media-filter-row">
+            <view
+              wx:for="{{list.mediaFilters}}"
+              wx:key="mediaType"
+              class="media-filter-pill {{selectedMediaType === item.mediaType ? 'active' : ''}}"
+              data-type="{{item.mediaType}}"
+              bindtap="handleMediaTypeTap"
+            >{{item.label}}</view>
+          </view>
+        </scroll-view>
         <view class="filter-shell" catchtap="handleFilterShellTap">
           <scroll-view class="tag-scroll" scroll-x type="list">
             <view class="tag-row">
@@ -29,18 +40,24 @@
                 wx:for="{{list.filterTags}}"
                 wx:key="id"
                 class="tag-pill {{(!selectedTagId && !item.id) || selectedTagId === item.id ? 'active' : ''}} {{tagManageMode && item.id ? 'manage' : ''}}"
-                style="{{((!selectedTagId && !item.id) || selectedTagId === item.id) ? item.activeStyle : item.style}}"
+                style="{{tagManageMode && item.id ? '' : (((!selectedTagId && !item.id) || selectedTagId === item.id) ? item.activeStyle : item.filterStyle)}}"
                 data-id="{{item.id}}"
                 bindtap="handleTagTap"
                 bindlongpress="handleTagLongPress"
               >
+                <view
+                  wx:if="{{item.id && (tagManageMode || selectedTagId !== item.id)}}"
+                  class="tag-color-dot"
+                  style="background: {{item.color}};"
+                ></view>
                 <text class="tag-text">{{item.labelText}}</text>
                 <view
                   wx:if="{{tagManageMode && item.id}}"
                   class="tag-delete"
-                  style="{{item.deleteStyle}}"
                   data-id="{{item.id}}"
                   catchtap="handleTagDeleteTap"
+                  aria-role="button"
+                  aria-label="删除标签{{item.name}}"
                 >
                   <text class="tag-delete-mark">×</text>
                 </view>
@@ -81,7 +98,7 @@
               ></image>
             </view>
             <view class="empty-title">暂无作品</view>
-            <view class="empty-desc">从相册选择图片或视频，整理为可复用的作品素材</view>
+            <view class="empty-desc">从相册选择图片、视频或动图，整理为可复用的作品素材</view>
           </view>
 
           <scroll-view
@@ -128,7 +145,7 @@
                     data-id="{{item.id}}"
                     catchtap="handleWorkPreviewTap"
                     aria-role="button"
-                    aria-label="{{item.mediaType === 'VIDEO' ? '播放原视频' : '查看原图'}}"
+                    aria-label="{{item.mediaType === 'VIDEO' ? '播放原视频' : (item.mediaType === 'ANIMATION' ? '查看原动图' : '查看原图')}}"
                   >
                     <image wx:if="{{item.hasCover}}" src="{{item.coverUrl}}" mode="aspectFill"></image>
                     <view wx:else class="thumb-placeholder">{{item.typeText}}</view>
@@ -151,7 +168,10 @@
                     </view>
                     <view class="work-status-row">
                       <view class="reference-pill {{item.referenceCount > 0 ? 'used' : ''}}">{{item.referenceText}}</view>
-                      <view class="audit-pill {{item.auditStatusTone}}">{{item.auditStatusText}}</view>
+                      <view class="status-badge {{item.auditStatusTone}}">
+                        <view class="status-dot"></view>
+                        <text>{{item.auditStatusText}}</text>
+                      </view>
                     </view>
                     <view wx:if="{{item.showAuditRejectReason}}" class="audit-reject-row">
                       <view class="audit-reject-icon">!</view>
@@ -279,6 +299,7 @@
         wx:if="{{imagePreviewVisible && imagePreview.src}}"
         class="image-preview-media"
         src="{{imagePreview.src}}"
+        webp="{{true}}"
         mode="aspectFit"
       ></image>
     </view>
@@ -319,7 +340,7 @@
           value="{{tagForm.name}}"
           maxlength="10"
           placeholder="输入标签名称"
-          placeholder-class="search-placeholder"
+          placeholder-class="tag-input-placeholder"
           bindinput="handleTagNameInput"
         />
       </view>
@@ -331,7 +352,6 @@
             wx:for="{{tagColorOptions}}"
             wx:key="color"
             class="color-choice {{tagForm.color === item.color ? 'active' : ''}}"
-            style="{{item.choiceStyle}}"
             data-color="{{item.color}}"
             bindtap="handleSelectTagColor"
           >
@@ -653,6 +673,121 @@
     </view>
   </view>
 
+  <view class="work-edit-mask animation-edit-mask {{animationEditSheetVisible ? 'visible' : ''}}" catchtap="handleCloseAnimationEditor">
+    <view class="work-edit-panel animation-edit-panel" catchtap="handleEditPanelTap">
+      <view class="work-edit-grabber"></view>
+      <view class="work-edit-heading">
+        <view class="work-edit-title">编辑动图作品</view>
+        <view class="work-edit-type">动图</view>
+      </view>
+
+      <scroll-view class="work-edit-scroll animation-edit-scroll" scroll-y>
+        <view class="work-edit-content">
+          <view class="cover-section animation-cover-section">
+            <view class="cover-heading">
+              <view class="field-label">动图封面</view>
+              <view class="cover-time">第 {{animationEditForm.coverEdit.selectedFrame}} / {{animationEditForm.coverEdit.frameCount}} 帧</view>
+            </view>
+            <view class="work-preview animation-frame-preview">
+              <image
+                wx:if="{{animationEditForm.coverEdit.previewUrl}}"
+                class="work-preview-media"
+                src="{{animationEditForm.coverEdit.previewUrl}}"
+                mode="aspectFit"
+              ></image>
+              <view wx:else class="work-preview-empty">动图帧</view>
+            </view>
+            <slider
+              class="cover-slider"
+              min="1"
+              max="{{animationEditForm.coverEdit.frameCount}}"
+              step="1"
+              value="{{animationEditForm.coverEdit.selectedFrame}}"
+              bindchanging="handleAnimationCoverSliderChanging"
+              bindchange="handleAnimationCoverSliderChange"
+            ></slider>
+            <view class="animation-cover-toolbar">
+              <view class="animation-cover-state">
+                <text wx:if="{{animationEditForm.coverFrameSelected}}">当前帧将在完成后成为新封面</text>
+                <text wx:else>滑动选择帧后，点击使用当前帧</text>
+              </view>
+              <button
+                class="cover-use-frame-button"
+                bindtap="handleUseAnimationCoverFrame"
+                disabled="{{animationEditSaving}}"
+              >使用当前帧</button>
+            </view>
+          </view>
+
+          <view class="field-group">
+            <view class="field-heading">
+              <view class="field-label">作品标题</view>
+              <view class="field-limit">{{animationEditFieldCounters.title}}</view>
+            </view>
+            <input
+              class="text-field"
+              value="{{animationEditForm.title}}"
+              maxlength="30"
+              placeholder="填写作品标题"
+              placeholder-class="search-placeholder"
+              data-field="title"
+              bindinput="handleAnimationEditInput"
+            />
+          </view>
+
+          <view class="field-group">
+            <view class="field-heading">
+              <view class="field-label">作品说明</view>
+              <view class="field-limit">{{animationEditFieldCounters.description}}</view>
+            </view>
+            <textarea
+              class="textarea-field"
+              value="{{animationEditForm.description}}"
+              placeholder="填写作品说明"
+              placeholder-class="search-placeholder"
+              maxlength="1000"
+              data-field="description"
+              bindinput="handleAnimationEditInput"
+              auto-height="{{false}}"
+            ></textarea>
+          </view>
+
+          <view class="edit-tag-section">
+            <view class="edit-tag-header">
+              <view class="field-label">作品标签</view>
+              <view wx:if="{{animationEditForm.tagEditNotice}}" class="edit-tag-note">{{animationEditForm.tagEditNotice}}</view>
+            </view>
+            <view wx:if="{{animationEditForm.tagOptions.length}}" class="edit-tag-list">
+              <view
+                wx:for="{{animationEditForm.tagOptions}}"
+                wx:key="id"
+                class="edit-tag-option {{item.selected ? 'is-selected' : ''}} {{item.locked ? 'is-locked' : ''}}"
+                style="{{item.selected ? item.activeStyle : item.style}}"
+                data-id="{{item.id}}"
+                bindtap="handleAnimationEditTagToggle"
+                aria-role="checkbox"
+                aria-checked="{{item.selected}}"
+              >
+                <view class="edit-tag-checkbox {{item.selected ? 'is-checked' : ''}}">
+                  <text wx:if="{{item.selected}}" class="edit-tag-checkmark">✓</text>
+                </view>
+                <text class="edit-tag-name">{{item.name}}</text>
+              </view>
+            </view>
+            <view wx:else class="edit-tag-empty">暂无作品标签</view>
+          </view>
+
+          <view wx:if="{{animationEditErrorText}}" class="edit-error">{{animationEditErrorText}}</view>
+        </view>
+      </scroll-view>
+
+      <view class="work-edit-actions">
+        <button class="work-edit-cancel" catchtap="handleCloseAnimationEditor" disabled="{{animationEditSaving}}">取消</button>
+        <button class="work-edit-confirm" loading="{{animationEditSaving}}" catchtap="handleConfirmAnimationEdit" disabled="{{animationEditSaving}}">完成</button>
+      </view>
+    </view>
+  </view>
+
   <view class="tabbar">
     <button
       wx:for="{{tabs}}"
@@ -661,7 +796,9 @@
       data-label="{{item.label}}"
       bindtap="handleTabTap"
     >
-      <view class="tab-icon {{item.icon}}-tab-icon"></view>
+      <view class="tab-icon-wrap">
+        <image class="tab-icon-image" src="/assets/system/tabbar/{{item.icon}}{{item.active ? '-active' : ''}}.svg" mode="aspectFit"></image>
+      </view>
       <view class="tab-label">{{item.label}}</view>
     </button>
   </view>

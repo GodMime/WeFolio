@@ -26,14 +26,14 @@ test('mine recharge button matches design draft button shape', () => {
   const buttonRule = readRule('.light-button')
 
   assert.match(indexWxml, /class="light-button"[\s\S]*catchtap="handleRechargeTap"[\s\S]*>充值</)
-  assert.match(buttonRule, /height:\s*88rpx/)
+  assert.match(buttonRule, /height:\s*76rpx/)
   assert.match(buttonRule, /display:\s*inline-flex/)
   assert.match(buttonRule, /align-items:\s*center/)
   assert.match(buttonRule, /justify-content:\s*center/)
   assert.match(buttonRule, /padding:\s*0\s+28rpx/)
   assert.match(buttonRule, /font-weight:\s*800/)
-  assert.match(buttonRule, /border-radius:\s*16rpx/)
-  assert.doesNotMatch(buttonRule, /border-radius:\s*999rpx/)
+  assert.match(buttonRule, /border-radius:\s*999rpx/)
+  assert.match(buttonRule, /background:\s*#212529/)
 })
 
 test('mine recharge button stays pinned to the right of balance band', () => {
@@ -55,14 +55,33 @@ test('mine recharge button stays pinned to the right of balance band', () => {
 test('mine metric cards use Skyline compatible three column flex layout', () => {
   const metricGridRule = readRule('.metric-grid')
   const metricRule = readRule('.metric')
+  const metricDividerRule = readRule('.metric + .metric')
 
   assert.match(indexWxml, /class="metric-grid"[\s\S]*class="metric"/)
   assert.match(metricGridRule, /display:\s*flex/)
-  assert.match(metricGridRule, /gap:\s*16rpx/)
+  assert.match(metricGridRule, /gap:\s*0/)
+  assert.match(metricGridRule, /border:\s*1rpx solid #e9ecef/)
+  assert.match(metricGridRule, /border-radius:\s*48rpx/)
+  assert.match(metricGridRule, /background:\s*#ffffff/)
   assert.doesNotMatch(metricGridRule, /display:\s*grid/)
   assert.doesNotMatch(metricGridRule, /grid-template-columns/)
   assert.match(metricRule, /flex:\s*1\s+1\s+0/)
   assert.match(metricRule, /min-width:\s*0/)
+  assert.match(metricRule, /border:\s*0/)
+  assert.match(metricDividerRule, /border-left:\s*1rpx solid #f1f3f5/)
+})
+
+test('mine content and cards use the neutral TripGlide contract', () => {
+  const contentRule = readRule('.mine-content')
+  const panelRule = readRule('.panel')
+  const balanceRule = readRule('.balance-band')
+
+  assert.match(contentRule, /padding:\s*20rpx 32rpx/)
+  assert.match(panelRule, /border:\s*1rpx solid #e9ecef/)
+  assert.match(panelRule, /border-radius:\s*48rpx/)
+  assert.match(balanceRule, /border:\s*1rpx solid #e9ecef/)
+  assert.match(balanceRule, /border-radius:\s*48rpx/)
+  assert.match(balanceRule, /background:\s*#ffffff/)
 })
 
 test('mine action entries use local package image logos and keep content left aligned', () => {

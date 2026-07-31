@@ -50,6 +50,16 @@ public class WorkAuditWorkRepository {
     }
 
     /**
+     * 查询待审核动图作品。
+     *
+     * @param limit 查询数量上限
+     * @return 待审核动图作品列表
+     */
+    public List<WorkAuditWorkEntity> findPendingAnimations(int limit) {
+        return findPendingWorks(MediaTypeDict.ANIMATION.getCode(), limit);
+    }
+
+    /**
      * 统计未审核视频作品数量。
      *
      * @return 未审核视频作品数量
@@ -65,6 +75,15 @@ public class WorkAuditWorkRepository {
      */
     public long countPendingImages() {
         return countPendingWorks(MediaTypeDict.IMAGE.getCode());
+    }
+
+    /**
+     * 统计未审核动图作品数量。
+     *
+     * @return 未审核动图作品数量
+     */
+    public long countPendingAnimations() {
+        return countPendingWorks(MediaTypeDict.ANIMATION.getCode());
     }
 
     /**
@@ -136,6 +155,34 @@ public class WorkAuditWorkRepository {
                 .set(WorkAuditWorkEntity::getUpdatedAt, now)
                 .setSql(VERSION_INCREMENT_SQL)
                 .eq(WorkAuditWorkEntity::getId, workId)
+                .eq(WorkAuditWorkEntity::getDeleted, NOT_DELETED));
+        return updated == 1;
+    }
+
+    /**
+     * 仅在作品仍属于指定审核轮次时更新审核结果，避免旧任务覆盖重新审核结果。
+     *
+     * @param workId 作品 ID
+     * @param auditRound 审核轮次
+     * @param auditStatus 目标审核状态
+     * @param auditReasonCode 稳定风险类型
+     * @param auditReasonCodes 全部稳定风险类型 JSON
+     * @param auditRejectReason 内部审核原因摘要
+     * @return 是否更新成功
+     */
+    public boolean updateAuditStatusAndReasonsForRound(
+            Long workId, Integer auditRound, WorkAuditStatusDict auditStatus,
+            String auditReasonCode, String auditReasonCodes, String auditRejectReason) {
+        LocalDateTime now = LocalDateTime.now();
+        int updated = workMapper.update(null, Wrappers.<WorkAuditWorkEntity>lambdaUpdate()
+                .set(WorkAuditWorkEntity::getAuditStatus, auditStatus.getCode())
+                .set(WorkAuditWorkEntity::getAuditReasonCode, auditReasonCode)
+                .set(WorkAuditWorkEntity::getAuditReasonCodes, auditReasonCodes)
+                .set(WorkAuditWorkEntity::getAuditRejectReason, auditRejectReason)
+                .set(WorkAuditWorkEntity::getUpdatedAt, now)
+                .setSql(VERSION_INCREMENT_SQL)
+                .eq(WorkAuditWorkEntity::getId, workId)
+                .eq(WorkAuditWorkEntity::getAuditRound, auditRound)
                 .eq(WorkAuditWorkEntity::getDeleted, NOT_DELETED));
         return updated == 1;
     }

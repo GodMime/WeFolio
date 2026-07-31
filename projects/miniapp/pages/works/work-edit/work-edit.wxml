@@ -1,5 +1,5 @@
 <view class="page-shell work-edit-page">
-  <navigation-bar title="编辑作品" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+  <navigation-bar title="编辑作品" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
 
   <scroll-view class="work-edit-scroll" scroll-y type="list">
     <view class="work-edit-content">

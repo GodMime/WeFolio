@@ -1,5 +1,5 @@
 <view class="page-shell teams-page">
-  <navigation-bar title="我的团队" back="{{true}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+  <navigation-bar title="我的团队" back="{{true}}" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
 
   <scroll-view class="teams-scroll" scroll-y type="list">
     <view class="teams-content">
@@ -24,7 +24,7 @@
             <view class="section-title">我的团队</view>
             <view class="summary-desc">{{teamData.summary.summaryText}}</view>
           </view>
-          <view class="count-pill">{{teamData.summary.manageableText}}</view>
+          <view class="count-text">{{teamData.summary.manageableText}}</view>
         </view>
 
         <view class="panel list-panel">
@@ -47,15 +47,13 @@
                 <view wx:else class="team-logo-fallback">TM</view>
               </view>
               <view class="team-copy">
-                <view class="team-name">{{item.name}}</view>
-                <view class="team-subtitle">{{item.subtitle}}</view>
-                <view class="pill-row">
+                <view class="team-tags">
                   <view class="role-pill {{pill.tone}}" wx:for="{{item.pills}}" wx:for-item="pill" wx:key="text">{{pill.text}}</view>
                 </view>
+                <view class="team-name">{{item.name}}</view>
+                <view class="team-subtitle">{{item.subtitle}}</view>
               </view>
-              <view class="team-actions">
-                <view class="entry-arrow"></view>
-              </view>
+              <view class="entry-arrow"></view>
             </view>
           </view>
 

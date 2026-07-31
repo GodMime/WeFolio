@@ -10,6 +10,20 @@ const TEAM_UTILITY_PATH = path.resolve(ROOT, 'utils/team-portfolios.js')
 
 function clone(value) { return JSON.parse(JSON.stringify(value)) }
 function flush() { return new Promise((resolve) => setImmediate(resolve)) }
+function validTeamEditorConfig() {
+  return {
+    schemaVersion: 'standard-team-v1',
+    editorSchemaRevision: 2,
+    share: { title: '测试团队作品集' },
+    components: [{
+      componentKey: 'valid-divider',
+      componentType: 'DIVIDER',
+      sortOrder: 1000,
+      enabled: true,
+      config: {}
+    }]
+  }
+}
 
 function loadPage(relativePath, requestFn, wxOverrides = {}) {
   const pagePath = path.join(ROOT, relativePath)
@@ -99,7 +113,7 @@ test('team pages protect long text and editor styles its source and component co
   const editorCss = fs.readFileSync(path.join(ROOT, 'standard-edit/team-portfolio-standard-edit.wxss'), 'utf8')
   for (const selector of ['.source-state', '.component-list', '.component-row', '.cover-preview']) assert.match(editorCss, new RegExp(`\\${selector}\\s*\\{`))
   assert.match(editorCss, /\.cover-preview\s*\{[^}]*width:\s*360rpx[^}]*height:\s*288rpx/)
-  for (const relativePath of ['team-select/team-select.wxss', 'component-library/team-portfolio-component-library.wxss', 'standard-preview/team-portfolio-standard-preview.wxss', 'contact-leads/team-contact-leads.wxss', 'visitor-portfolio/team-visitor-portfolio.wxss']) {
+  for (const relativePath of ['team-select/team-select.wxss', 'standard-preview/team-portfolio-standard-preview.wxss', 'contact-leads/team-contact-leads.wxss', 'visitor-portfolio/team-visitor-portfolio.wxss']) {
     const css = fs.readFileSync(path.join(ROOT, relativePath), 'utf8')
     assert.match(css, /min-width:\s*0/)
     assert.match(css, /overflow-wrap:\s*anywhere|overflow:\s*hidden|white-space:\s*nowrap/)
@@ -255,7 +269,8 @@ test('editor QR selection opens a square crop without uploading or changing the 
     return { uploadUrl: 'https://cos.example/upload', publicUrl: 'https://cdn.example/new-qr.png', formData: {} }
   }, {
     chooseMedia({ success }) { success({ tempFiles: [{ tempFilePath: 'wxfile://tmp/new-qr.png', width: 1200, height: 800 }] }) },
-    getSystemInfoSync() { return { windowWidth: 375 } },
+    getWindowInfo() { return { windowWidth: 375 } },
+    getSystemInfoSync() { throw new Error('不应调用已废弃的 wx.getSystemInfoSync') },
     getFileSystemManager() { return { statSync() { return { size: 128 } } } },
     uploadFile({ success }) { success({ statusCode: 204 }) }
   })
@@ -412,7 +427,7 @@ test('editor publish retries only publish with one draft revision and clears rej
     }
     return {}
   })
-  page.setData({ portfolioId: 7, teamId: 3, canMaintain: true, draftRevision: 7, config: { share: { title: '测试团队作品集' }, components: [] }, componentValidation: {}, hasInvalidComponents: false })
+  page.setData({ portfolioId: 7, teamId: 3, canMaintain: true, draftRevision: 7, config: validTeamEditorConfig(), componentValidation: { 'valid-divider': true }, hasInvalidComponents: false })
   try {
     await page.handlePublishTap(); await page.handlePublishTap()
     const drafts = requests.filter((item) => item.url.endsWith('/draft'))
@@ -424,8 +439,59 @@ test('editor publish retries only publish with one draft revision and clears rej
   } finally { page.cleanup() }
 
   const rejected = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => { const error = new Error('invalid'); error.statusCode = 400; throw error })
-  rejected.setData({ portfolioId: 7, canMaintain: true, pendingPublishKey: 'publish-key', pendingPublishRevision: 8 })
+  rejected.setData({ portfolioId: 7, canMaintain: true, pendingPublishKey: 'publish-key', pendingPublishRevision: 8, config: validTeamEditorConfig(), componentValidation: { 'valid-divider': true } })
   try { await rejected.handlePublishTap(); assert.equal(rejected.data.pendingPublishKey, ''); assert.equal(rejected.data.pendingPublishRevision, 0) } finally { rejected.cleanup() }
+})
+
+test('editor displays server-authoritative menu errors for draft save and publish', async () => {
+  const saveToasts = []
+  const saveRejected = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => {
+    const error = new Error('【作品】所选成员作品集不可用')
+    error.statusCode = 400
+    throw error
+  }, {
+    showToast(value) { saveToasts.push(value) }
+  })
+  saveRejected.setData({
+    portfolioId: 7,
+    teamId: 3,
+    canMaintain: true,
+    draftRevision: 7,
+    config: validTeamEditorConfig(),
+    componentValidation: { 'valid-divider': true },
+    hasInvalidComponents: false
+  })
+  try {
+    await saveRejected.saveDraft()
+    assert.deepEqual(saveToasts, [{
+      title: '【作品】所选成员作品集不可用',
+      icon: 'none'
+    }])
+  } finally { saveRejected.cleanup() }
+
+  const publishToasts = []
+  const publishRejected = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => {
+    const error = new Error('【档期】团队档期查询配置不正确')
+    error.statusCode = 400
+    throw error
+  }, {
+    showToast(value) { publishToasts.push(value) }
+  })
+  publishRejected.setData({
+    portfolioId: 7,
+    canMaintain: true,
+    pendingPublishKey: 'publish-key',
+    pendingPublishRevision: 8,
+    config: validTeamEditorConfig(),
+    componentValidation: { 'valid-divider': true }
+  })
+  try {
+    await publishRejected.handlePublishTap()
+    assert.deepEqual(publishToasts, [{
+      title: '【档期】团队档期查询配置不正确',
+      icon: 'none'
+    }])
+  } finally { publishRejected.cleanup() }
 })
 
 test('contact leads ignore a forged route role, accept only trusted canMaintain, and tolerate malformed names', async () => {
@@ -455,7 +521,6 @@ test('contact leads shows a toast for feature-disabled permission failures', asy
 test('secondary team pages toast recognized unavailable failures', async () => {
   const cases = [
     ['team-select/team-select.js', (page) => page.bootstrap()],
-    ['component-library/team-portfolio-component-library.js', (page) => page.bootstrap()],
     ['standard-preview/team-portfolio-standard-preview.js', (page) => { page.setData({ portfolioId: 7, scope: 'draft' }); return page.bootstrap() }]
   ]
   for (const [relativePath, run] of cases) {
@@ -474,12 +539,10 @@ test('event-channel success callbacks accept direct opens that omit eventChannel
   safeEditor.setData({ portfolioId: 7, canMaintain: true, config: { share: {}, components: [] } })
   try { safeEditor.handleOpenLibrary(); assert.equal(safeEditor.data.openingLibrary, false) } finally { safeEditor.cleanup() }
 
-  const library = loadPage('component-library/team-portfolio-component-library.js', async () => ({}), { navigateBack() { navigations.push('back') } })
-  try { library.handleSelect({ currentTarget: { dataset: { type: 'TEXT_SECTION', disabled: false } } }); assert.equal(navigations.at(-1), 'back') } finally { library.cleanup() }
 })
 
 test('team WXML handlers exist and templates do not call methods', () => {
-  const pageFiles = ['portfolios', 'team-select/team-select', 'standard-edit/team-portfolio-standard-edit', 'component-library/team-portfolio-component-library', 'standard-preview/team-portfolio-standard-preview', 'contact-leads/team-contact-leads', 'visitor-portfolio/team-visitor-portfolio']
+  const pageFiles = ['portfolios', 'team-select/team-select', 'standard-edit/team-portfolio-standard-edit', 'standard-preview/team-portfolio-standard-preview', 'contact-leads/team-contact-leads', 'visitor-portfolio/team-visitor-portfolio']
   for (const base of pageFiles) {
     const wxml = fs.readFileSync(path.join(ROOT, `${base}.wxml`), 'utf8')
     const source = fs.readFileSync(path.join(ROOT, `${base}.js`), 'utf8')
@@ -493,7 +556,6 @@ function authRequiredError() { const error = new Error('登录已过期'); error
 test('maintainer main loads and representative save operations redirect to login on authRequired', async () => {
   const cases = [
     ['team-select/team-select.js', (page) => page.bootstrap()],
-    ['component-library/team-portfolio-component-library.js', (page) => page.bootstrap()],
     ['standard-edit/team-portfolio-standard-edit.js', (page) => { page.setData({ portfolioId: 7 }); return page.bootstrap() }],
     ['standard-preview/team-portfolio-standard-preview.js', (page) => { page.setData({ portfolioId: 7 }); return page.bootstrap() }],
     ['contact-leads/team-contact-leads.js', (page) => { page.setData({ teamId: 7 }); return page.loadPage(1) }]
@@ -532,7 +594,7 @@ test('operation-level unavailable errors toast without redirecting for save, pub
   const wxOverrides = { redirectTo(value) { redirects.push(value) }, showToast(value) { toasts.push(value) } }
 
   const editor = loadPage('standard-edit/team-portfolio-standard-edit.js', unavailable, wxOverrides)
-  editor.setData({ portfolioId: 8, canMaintain: true, draftRevision: 1, config: { share: { title: '测试团队作品集' }, components: [] }, componentValidation: {} })
+  editor.setData({ portfolioId: 8, canMaintain: true, draftRevision: 1, config: validTeamEditorConfig(), componentValidation: { 'valid-divider': true } })
   try {
     await editor.saveDraft()
     assert.deepEqual(toasts.shift(), { title: '团队作品集功能暂未开放', icon: 'none' })
@@ -606,7 +668,9 @@ test('member switches clear stale second-stage sources and ignore late responses
     const page = loadPage('standard-edit/team-portfolio-standard-edit.js', (options) => {
       requests.push(options)
       if (requests.length < 3) return new Promise((resolve, reject) => pending.push({ resolve, reject }))
-      return Promise.resolve([{ id: 10 }])
+      return Promise.resolve(name === 'Carousel'
+        ? [{ id: 10, mediaType: 'IMAGE' }]
+        : [{ id: 10 }])
     })
     page.setData({ portfolioId: 7, componentSources: { [key]: { [sourceField]: [{ id: 8 }] } } })
     try {
@@ -623,7 +687,9 @@ test('member switches clear stale second-stage sources and ignore late responses
       assert.equal(page.data.componentSources[key].memberUserId, 10)
       await page[`handle${name}RetrySource`]({ currentTarget: { dataset: { key } } })
       assert.match(requests[2].url, /\/members\/10\//)
-      assert.deepEqual(page.data.componentSources[key][sourceField], [{ id: 10 }])
+      assert.deepEqual(page.data.componentSources[key][sourceField], name === 'Carousel'
+        ? [{ id: 10, mediaType: 'IMAGE' }]
+        : [{ id: 10 }])
     } finally { page.cleanup() }
   }
 })

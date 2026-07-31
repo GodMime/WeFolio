@@ -4,10 +4,13 @@ const test = require('node:test')
 const {
   SCHEDULE_STATUS_OPTIONS,
   SLOT_COLOR_OPTIONS,
+  buildDefaultSlotEndTime,
   buildScheduleFieldCounters,
   buildScheduleItemPayload,
+  buildSlotColorOptions,
   buildSlotDefinitionFieldCounters,
   buildSlotDefinitionPayload,
+  findFirstAvailableSlotColor,
   markMonthSelectedDate,
   normalizeMonthOverview,
   normalizeScheduleOverview,
@@ -251,6 +254,11 @@ test('builds and validates slot definition payloads', () => {
   }).message, '开始时间必须早于结束时间')
 })
 
+test('builds slot end time two hours after start and caps it at the end of day', () => {
+  assert.equal(buildDefaultSlotEndTime('10:15'), '12:15')
+  assert.equal(buildDefaultSlotEndTime('22:30'), '23:59')
+})
+
 test('builds and validates schedule item payloads', () => {
   assert.deepEqual(buildScheduleItemPayload({
     scheduleDate: '2026-06-24',
@@ -316,9 +324,41 @@ test('exposes schedule form options', () => {
   assert.deepEqual(SCHEDULE_STATUS_OPTIONS.map((item) => item.value), ['TENTATIVE', 'BOOKED', 'REST'])
   assert.deepEqual(SCHEDULE_STATUS_OPTIONS.map((item) => item.text), ['待定', '已约', '休息'])
   assert.equal(SLOT_COLOR_OPTIONS.length, 8)
-  assert.equal(SLOT_COLOR_OPTIONS[0].color, '#d98200')
-  assert.equal(SLOT_COLOR_OPTIONS[0].name, '琥珀')
-  assert.match(SLOT_COLOR_OPTIONS[0].swatchStyle, /#d98200/)
-  assert.match(SLOT_COLOR_OPTIONS[0].choiceStyle, /border-color:/)
-  assert.match(SLOT_COLOR_OPTIONS[0].choiceStyle, /background:/)
+  assert.deepEqual(SLOT_COLOR_OPTIONS.map(({ name, color }) => ({ name, color })), [
+    { name: '琥珀', color: '#c28f4b' },
+    { name: '湖蓝', color: '#6f8cb5' },
+    { name: '青绿', color: '#5f999b' },
+    { name: '玫红', color: '#af7482' },
+    { name: '森绿', color: '#738e71' },
+    { name: '紫藤', color: '#897dbc' },
+    { name: '珊瑚', color: '#c87a65' },
+    { name: '墨蓝', color: '#667b96' }
+  ])
+  assert.equal(SLOT_COLOR_OPTIONS[0].swatchStyle, 'background: #c28f4b;')
+  assert.equal('choiceStyle' in SLOT_COLOR_OPTIONS[0], false)
+})
+
+test('marks used slot colors unavailable and excludes the edited slot itself', () => {
+  const definitions = [
+    { id: 1, color: '#C28F4B', status: 'DISABLED' },
+    { id: 2, color: '#6f8cb5', status: 'ACTIVE' }
+  ]
+
+  const createOptions = buildSlotColorOptions(definitions)
+  assert.equal(createOptions.find((item) => item.color === '#c28f4b').disabled, true)
+  assert.equal(createOptions.find((item) => item.color === '#6f8cb5').disabled, true)
+  assert.equal(findFirstAvailableSlotColor(createOptions), '#5f999b')
+
+  const editOptions = buildSlotColorOptions(definitions, 1)
+  assert.equal(editOptions.find((item) => item.color === '#c28f4b').disabled, false)
+  assert.equal(editOptions.find((item) => item.color === '#6f8cb5').disabled, true)
+})
+
+test('returns no default color when all slot colors are used', () => {
+  const definitions = SLOT_COLOR_OPTIONS.map((item, index) => ({
+    id: index + 1,
+    color: item.color
+  }))
+
+  assert.equal(findFirstAvailableSlotColor(buildSlotColorOptions(definitions)), '')
 })

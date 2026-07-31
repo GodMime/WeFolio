@@ -17,6 +17,9 @@ public class TeamProfileComponentReferenceExtractor {
     /** 团队配置键。 */
     private static final String CONFIG_KEY_TEAM = "team";
 
+    /** 团队快照真实配置路径后缀。 */
+    private static final String TEAM_CONFIG_PATH_SUFFIX = ".config.team";
+
     /** 有效引用标识。 */
     private static final int REFERENCE_VALID = 1;
 
@@ -40,7 +43,7 @@ public class TeamProfileComponentReferenceExtractor {
         reference.setReferenceType(ReferenceTypeDict.TEAM_PROFILE.getCode());
         reference.setReferenceId(context.teamId());
         reference.setComponentKey(componentKey);
-        reference.setComponentPath(componentPath);
+        reference.setComponentPath(componentPath + TEAM_CONFIG_PATH_SUFFIX);
         reference.setSortOrder(0);
         reference.setIsValid(REFERENCE_VALID);
         reference.setSnapshotJson(normalizedConfig.getJSONObject(CONFIG_KEY_TEAM).toJSONString());

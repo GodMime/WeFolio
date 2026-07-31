@@ -48,6 +48,9 @@ public class MineWorkListResponse {
 
         /** 视频作品数 */
         private long videoCount;
+
+        /** 动图作品数 */
+        private long animationCount;
     }
 
     /**
@@ -81,7 +84,7 @@ public class MineWorkListResponse {
         /** 作品 ID */
         private Long id;
 
-        /** 媒体类型：IMAGE / VIDEO */
+        /** 媒体类型：IMAGE / VIDEO / ANIMATION */
         private String mediaType;
 
         /** 作品标题 */
@@ -104,6 +107,12 @@ public class MineWorkListResponse {
 
         /** 视频时长毫秒 */
         private Integer durationMs;
+
+        /** 动图权威帧数 */
+        private Integer frameCount;
+
+        /** 动图当前封面帧序号 */
+        private Integer coverFrameNumber;
 
         /** 像素宽度 */
         private Integer width;

@@ -48,6 +48,12 @@ public class WorkUploadTaskEntity extends BaseEntity {
     /** 视频时长毫秒，图片为空 */
     private Integer durationMs;
 
+    /** 动图权威帧数，确认前允许为空 */
+    private Integer frameCount;
+
+    /** 后端生成封面的 SHA-256 */
+    private String coverSha256;
+
     /** 像素宽度 */
     private Integer width;
 

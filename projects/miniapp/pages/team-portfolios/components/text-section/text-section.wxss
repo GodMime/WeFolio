@@ -1,5 +1,7 @@
+@import "../../styles/team-portfolio-theme.wxss";
+
 :host { display: block; }
-.text-section { padding: 28rpx 24rpx; color: #17202a; overflow-wrap: anywhere; }
+.text-section { padding: 28rpx 24rpx; color: #212529; overflow-wrap: anywhere; }
 .align-LEFT { text-align: left; }
 .align-CENTER { text-align: center; }
 .align-RIGHT { text-align: right; }

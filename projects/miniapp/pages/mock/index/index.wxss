@@ -10,7 +10,7 @@
   min-width: 112rpx;
   height: 88rpx;
   padding: 0 28rpx;
-  border-radius: 16rpx;
+  border-radius: 999rpx;
   box-sizing: border-box;
 }
 
@@ -22,7 +22,7 @@
   justify-content: center;
   margin: 26rpx 0 0;
   padding: 0 28rpx;
-  border-radius: 16rpx;
+  border-radius: 999rpx;
   line-height: 1;
   box-sizing: border-box;
 }

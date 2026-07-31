@@ -9,9 +9,9 @@ const {
   applyUnifiedWorkTags,
   buildUnifiedWorkTagItems,
   buildUnifiedWorkTagNames,
-  buildWorkTagOptionListHeight,
   buildWorkUpdatePayload,
   buildWorkTagDeleteBlockedMessage,
+  buildWorkTagOptionListHeight,
   buildWorkTagPickerOptions,
   createWorkTagForm,
   normalizeWorkDetail,
@@ -57,10 +57,11 @@ test('normalizes work list for page rendering', () => {
   assert.equal(result.summary.videoText, '视频 6')
   assert.equal(result.tags[1].labelText, '高端婚礼 8')
   assert.equal(result.tags[1].style, 'color: #2d5f9a; background: #e5effb; border-color: #bfd7f4;')
+  assert.equal(result.tags[1].filterStyle, 'color: #2d5f9a; background: #ffffff; border-color: #2d5f9a;')
   assert.equal(result.tags[1].activeStyle, 'color: #ffffff; background: #2d5f9a; border-color: #2d5f9a;')
   assert.equal(result.tags[1].deleteStyle, 'color: #ffffff; background: #2d5f9a;')
   assert.deepEqual(result.filterTags.map((item) => item.labelText), ['全部 36', '高端婚礼 8'])
-  assert.equal(result.filterTags[0].activeStyle, 'color: #40546a; background: #eef4f7; border-color: #cbd8e5;')
+  assert.equal(result.filterTags[0].activeStyle, 'color: #ffffff; background: #212529; border-color: #212529;')
   assert.equal(result.works[0].typeText, '视频')
   assert.equal(result.works[0].durationText, '02:05')
   assert.equal(result.works[0].fileSizeText, '10.0MB')
@@ -246,6 +247,7 @@ test('normalizes work tag response for add-page picker', () => {
   assert.deepEqual(tags.map((item) => item.name), ['高端婚礼', '户外仪式'])
   assert.equal(tags[0].color, '#2d5f9a')
   assert.equal(tags[0].style, 'color: #2d5f9a; background: #e5effb; border-color: #bfd7f4;')
+  assert.equal(tags[0].filterStyle, 'color: #2d5f9a; background: #ffffff; border-color: #2d5f9a;')
   assert.equal(tags[1].color, '')
 })
 
@@ -289,7 +291,7 @@ test('builds picker selection and applies unified tags to chosen files', () => {
   )
 })
 
-test('builds adaptive work tag picker list height from tag count', () => {
+test('builds a non-zero bounded tag picker height for Skyline scroll view', () => {
   assert.equal(buildWorkTagOptionListHeight([]), 0)
   assert.equal(buildWorkTagOptionListHeight([{ id: 1, name: '户外仪式' }]), 80)
   assert.equal(buildWorkTagOptionListHeight([
@@ -404,6 +406,33 @@ test('normalizes work detail references and counters', () => {
   assert.equal(result.referenceSummaryText, '已被 1 个作品集引用')
 })
 
+test('normalizes animation metadata and summary counters', () => {
+  const result = normalizeWorkList({
+    summary: {
+      totalCount: 36,
+      imageCount: 30,
+      videoCount: 5,
+      animationCount: 1
+    },
+    works: [{
+      id: 10,
+      mediaType: 'ANIMATION',
+      title: '循环片段',
+      mediaUrl: 'https://cos.example.com/a.webp',
+      coverUrl: 'https://cos.example.com/a-cover-v2.jpg',
+      frameCount: 24,
+      coverFrameNumber: 8
+    }]
+  })
+
+  assert.equal(result.works[0].typeText, '动图')
+  assert.equal(result.works[0].frameCount, 24)
+  assert.equal(result.works[0].coverFrameNumber, 8)
+  assert.equal(result.summary.animationCount, 1)
+  assert.equal(result.summary.animationText, '动图 1')
+  assert.deepEqual(result.mediaFilters.map((item) => item.mediaType), ['', 'IMAGE', 'VIDEO', 'ANIMATION'])
+})
+
 test('builds and validates work update payload', () => {
   const payload = buildWorkUpdatePayload({
     title: ' 海边仪式 ',
@@ -463,6 +492,35 @@ test('builds work update payload with selected cover frame time', () => {
     coverFrameTimeMs: 5200,
     width: 1080,
     height: 1920
+  })
+})
+
+test('builds work update payload with selected animation frame and edit-session key', () => {
+  const payload = buildWorkUpdatePayload({
+    title: ' 循环片段 ',
+    description: ' 动图封面 ',
+    coverFrameNumber: 18,
+    coverFrameIdempotencyKey: ' animation-cover-10-session '
+  })
+
+  assert.deepEqual(payload, {
+    title: '循环片段',
+    description: '动图封面',
+    coverFrameNumber: 18,
+    coverFrameIdempotencyKey: 'animation-cover-10-session'
+  })
+})
+
+test('omits incomplete animation cover fields', () => {
+  const payload = buildWorkUpdatePayload({
+    title: ' 循环片段 ',
+    description: '',
+    coverFrameNumber: 18
+  })
+
+  assert.deepEqual(payload, {
+    title: '循环片段',
+    description: ''
   })
 })
 

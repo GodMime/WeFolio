@@ -13,9 +13,12 @@ import com.jxc.wefolio.entity.WorkTagEntity;
 import com.jxc.wefolio.entity.WorkUploadTaskEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.WfTagEntityMapper;
+import com.jxc.wefolio.mapper.UserEntityMapper;
 import com.jxc.wefolio.mapper.WorkEntityMapper;
 import com.jxc.wefolio.mapper.WorkTagEntityMapper;
 import com.jxc.wefolio.mapper.WorkUploadTaskEntityMapper;
+import com.jxc.wefolio.message.MineWorkMessage;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -38,6 +41,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -52,6 +56,10 @@ class WorkUploadTransactionServiceTest {
     /** 上传任务 Mapper 模拟 */
     @Mock
     private WorkUploadTaskEntityMapper workUploadTaskEntityMapper;
+
+    /** 用户 Mapper 模拟 */
+    @Mock
+    private UserEntityMapper userEntityMapper;
 
     /** 作品 Mapper 模拟 */
     @Mock
@@ -72,6 +80,13 @@ class WorkUploadTransactionServiceTest {
     /** 内容数量上限服务模拟 */
     @Mock
     private ContentLimitService contentLimitService;
+
+    @BeforeEach
+    void setUp() {
+        lenient().when(userEntityMapper.lockActiveUserById(7L)).thenReturn(7L);
+        lenient().when(workUploadTaskEntityMapper.updateById(any(WorkUploadTaskEntity.class)))
+                .thenReturn(1);
+    }
 
     @Test
     void confirmUploadedTaskShouldBeTransactional() throws NoSuchMethodException {
@@ -106,8 +121,9 @@ class WorkUploadTransactionServiceTest {
 
         MineWorkUploadCompleteResponse.Item response = service().confirmUploadedTask(7L, task, item);
 
-        InOrder inOrder = inOrder(contentLimitService, pointService, workEntityMapper,
+        InOrder inOrder = inOrder(userEntityMapper, contentLimitService, pointService, workEntityMapper,
                 wfTagEntityMapper, workTagEntityMapper, workUploadTaskEntityMapper);
+        inOrder.verify(userEntityMapper).lockActiveUserById(7L);
         inOrder.verify(contentLimitService).ensureWorkCapacity(7L, MediaTypeDict.IMAGE.getCode(), 1L);
         inOrder.verify(pointService).consume(
                 eq(7L),
@@ -142,7 +158,7 @@ class WorkUploadTransactionServiceTest {
         assertThat(taskCaptor.getValue().getConfirmedWorkId()).isEqualTo(120L);
         assertThat(response.isSuccess()).isTrue();
         assertThat(response.getWorkId()).isEqualTo(120L);
-        verify(workUploadTaskEntityMapper, never()).selectById(anyLong());
+        verify(workUploadTaskEntityMapper).selectById(99L);
     }
 
     @Test
@@ -159,6 +175,45 @@ class WorkUploadTransactionServiceTest {
 
         verify(pointService, never()).consume(any(), any(), any(), any(), any(Integer.class), any(), any());
         verify(workEntityMapper, never()).insert(any(WorkEntity.class));
+    }
+
+    @Test
+    void confirmUploadedTaskShouldUseLatestConfirmedTaskAfterUserLock() {
+        WorkUploadTaskEntity staleTask = createdAnimationTask();
+        WorkUploadTaskEntity confirmedTask = createdAnimationTask();
+        confirmedTask.setStatus(WorkUploadTaskStatusDict.CONFIRMED.getCode());
+        confirmedTask.setConfirmedWorkId(120L);
+        WorkEntity existingWork = new WorkEntity();
+        existingWork.setId(120L);
+        existingWork.setTitle("已确认作品");
+        when(workUploadTaskEntityMapper.selectById(99L)).thenReturn(confirmedTask);
+        when(workEntityMapper.selectById(120L)).thenReturn(existingWork);
+
+        MineWorkUploadCompleteResponse.Item response =
+                service().confirmUploadedTask(7L, staleTask, completeItem());
+
+        assertThat(response.isSuccess()).isTrue();
+        assertThat(response.getWorkId()).isEqualTo(120L);
+        verify(userEntityMapper).lockActiveUserById(7L);
+        verify(pointService, never()).consume(any(), any(), any(), any(), any(Integer.class), any(), any());
+        verify(workEntityMapper, never()).insert(any(WorkEntity.class));
+    }
+
+    @Test
+    void confirmUploadedTaskShouldRollbackWhenTaskConfirmationUpdateLosesRace() {
+        WorkUploadTaskEntity task = createdAnimationTask();
+        when(workEntityMapper.insert(any(WorkEntity.class))).thenAnswer(invocation -> {
+            WorkEntity work = invocation.getArgument(0);
+            work.setId(120L);
+            return 1;
+        });
+        when(workUploadTaskEntityMapper.updateById(task)).thenReturn(0);
+
+        assertThatThrownBy(() -> service().confirmUploadedTask(7L, task, completeItem()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage(MineWorkMessage.WORK_SAVE_FAILED_MESSAGE);
+
+        verify(workUploadTaskEntityMapper).updateById(task);
     }
 
     @Test
@@ -206,7 +261,7 @@ class WorkUploadTransactionServiceTest {
         coverTask.setObjectKey("WFA3B1E7A2/work/image/film-cover.jpg");
         coverTask.setFileSha256("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
         coverTask.setOriginalFileName("film-thumb.jpg");
-        when(workUploadTaskEntityMapper.selectById(101L)).thenReturn(coverTask);
+        lenient().when(workUploadTaskEntityMapper.selectById(101L)).thenReturn(coverTask);
         when(workEntityMapper.insert(any(WorkEntity.class))).thenAnswer(invocation -> {
             WorkEntity work = invocation.getArgument(0);
             work.setId(120L);
@@ -242,6 +297,41 @@ class WorkUploadTransactionServiceTest {
     }
 
     @Test
+    void confirmUploadedTaskShouldCreateAnimationWithIndependentPointsAndFrameFields() {
+        WorkUploadTaskEntity task = createdAnimationTask();
+        when(workEntityMapper.insert(any(WorkEntity.class))).thenAnswer(invocation -> {
+            WorkEntity work = invocation.getArgument(0);
+            work.setId(121L);
+            return 1;
+        });
+        MineWorkUploadCompleteRequest.CompleteItem item = completeItem();
+        item.setTagNames(List.of());
+
+        MineWorkUploadCompleteResponse.Item response = service().confirmUploadedTask(7L, task, item);
+
+        InOrder inOrder = inOrder(userEntityMapper, contentLimitService, pointService, workEntityMapper);
+        inOrder.verify(userEntityMapper).lockActiveUserById(7L);
+        inOrder.verify(contentLimitService).ensureWorkCapacity(7L, MediaTypeDict.ANIMATION.getCode(), 1L);
+        inOrder.verify(pointService).consume(
+                7L,
+                PointSceneCodeDict.UPLOAD_ANIMATION.getCode(),
+                "WORK_UPLOAD",
+                "99",
+                1,
+                "confirm-99",
+                "上传动图作品");
+        ArgumentCaptor<WorkEntity> captor = ArgumentCaptor.forClass(WorkEntity.class);
+        inOrder.verify(workEntityMapper).insert(captor.capture());
+        assertThat(captor.getValue().getFrameCount()).isEqualTo(24);
+        assertThat(captor.getValue().getCoverFrameNumber()).isEqualTo(1);
+        assertThat(captor.getValue().getCoverObjectKey())
+                .isEqualTo("WFA3B1E7A2/work/animation/animation-thumb.jpg");
+        assertThat(captor.getValue().getCoverSha256())
+                .isEqualTo("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+        assertThat(response.isSuccess()).isTrue();
+    }
+
+    @Test
     void confirmUploadedTaskShouldUseThumbnailTaskForLargeImageWork() {
         WorkUploadTaskEntity task = createdImageTask();
         task.setFileSize(150L * 1024L);
@@ -251,7 +341,7 @@ class WorkUploadTransactionServiceTest {
         coverTask.setFileSha256("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
         coverTask.setOriginalFileName("photo-thumb.jpg");
         coverTask.setFileSize(90L * 1024L);
-        when(workUploadTaskEntityMapper.selectById(101L)).thenReturn(coverTask);
+        lenient().when(workUploadTaskEntityMapper.selectById(101L)).thenReturn(coverTask);
         when(workEntityMapper.insert(any(WorkEntity.class))).thenAnswer(invocation -> {
             WorkEntity work = invocation.getArgument(0);
             work.setId(120L);
@@ -466,6 +556,7 @@ class WorkUploadTransactionServiceTest {
     private WorkUploadTransactionService service() {
         return new WorkUploadTransactionService(
                 workUploadTaskEntityMapper,
+                userEntityMapper,
                 workEntityMapper,
                 wfTagEntityMapper,
                 workTagEntityMapper,
@@ -501,6 +592,18 @@ class WorkUploadTransactionServiceTest {
         task.setDurationMs(60_000);
         task.setWidth(1920);
         task.setHeight(1080);
+        return task;
+    }
+
+    private WorkUploadTaskEntity createdAnimationTask() {
+        WorkUploadTaskEntity task = createdImageTask();
+        task.setMediaType(MediaTypeDict.ANIMATION.getCode());
+        task.setObjectKey("WFA3B1E7A2/work/animation/animation.gif");
+        task.setOriginalFileName("animation.gif");
+        task.setMimeType("image/gif");
+        task.setFrameCount(24);
+        task.setCoverObjectKey("WFA3B1E7A2/work/animation/animation-thumb.jpg");
+        task.setCoverSha256("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
         return task;
     }
 

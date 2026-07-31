@@ -26,7 +26,9 @@ import com.jxc.wefolio.service.teamportfolio.TeamPortfolioAssetService;
 import com.jxc.wefolio.service.teamportfolio.component.carousel.TeamCarouselComponentService;
 import com.jxc.wefolio.service.teamportfolio.component.memberportfoliogrid.TeamMemberPortfolioGridComponentService;
 import com.jxc.wefolio.service.teamportfolio.component.memberportfoliolist.TeamMemberPortfolioListComponentService;
+import com.jxc.wefolio.service.teamportfolio.component.singlework.TeamSingleWorkComponentService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -42,6 +44,7 @@ import java.util.List;
 @MaintainerAccess
 @RestController
 @RequiredArgsConstructor
+@Slf4j
 public class MineTeamPortfolioController {
 
     /** 团队作品集维护服务。 */
@@ -52,6 +55,9 @@ public class MineTeamPortfolioController {
 
     /** 轮播图组件来源服务。 */
     private final TeamCarouselComponentService carouselComponentService;
+
+    /** 单个作品组件来源服务。 */
+    private final TeamSingleWorkComponentService singleWorkComponentService;
 
     /** 双列成员作品集来源服务。 */
     private final TeamMemberPortfolioGridComponentService gridComponentService;
@@ -201,13 +207,18 @@ public class MineTeamPortfolioController {
 
     /**
      * 查询预览范围内的档期组件配置。
+     *
+     * @deprecated 当前小程序未接入，保留接口以兼容潜在旧客户端
      */
+    @Deprecated(since = "2026-07", forRemoval = false)
     @GetMapping("/api/mine/team-portfolios/{portfolioId}/schedule-options")
     public Response<JSONObject> scheduleOptions(
             @PathVariable Long portfolioId,
             @RequestParam("componentKey") String componentKey,
             @RequestParam(value = "scope", required = false) String scope
     ) {
+        log.warn("调用已弃用团队作品集档期配置接口: portfolioId={}, componentKey={}, scope={}",
+                portfolioId, componentKey, scope);
         return Response.success(mineTeamPortfolioService.scheduleOptions(
                 portfolioId, componentKey, scope, currentUserId()));
     }
@@ -237,24 +248,38 @@ public class MineTeamPortfolioController {
         return Response.success();
     }
 
-    /** 查询团队作品集访问汇总。 */
+    /**
+     * 查询团队作品集访问汇总。
+     *
+     * @deprecated 当前小程序未接入，保留接口以兼容潜在旧客户端
+     */
+    @Deprecated(since = "2026-07", forRemoval = false)
     @GetMapping("/api/mine/teams/{teamId}/visits")
     public Response<MineTeamPortfolioService.TeamVisitRecordsResponse> visitRecords(
             @PathVariable Long teamId,
             @RequestParam(value = "page", defaultValue = "1") int page,
             @RequestParam(value = "pageSize", defaultValue = "20") int pageSize
     ) {
+        log.warn("调用已弃用团队作品集访问记录接口: teamId={}, page={}, pageSize={}",
+                teamId, page, pageSize);
         return Response.success(mineTeamPortfolioService.getVisitRecords(
                 teamId, page, pageSize, currentUserId()));
     }
 
-    /** 分页查询团队作品集查档历史。 */
+    /**
+     * 分页查询团队作品集查档历史。
+     *
+     * @deprecated 当前小程序未接入，保留接口以兼容潜在旧客户端
+     */
+    @Deprecated(since = "2026-07", forRemoval = false)
     @GetMapping("/api/mine/teams/{teamId}/schedule-queries")
     public Response<MineTeamPortfolioService.TeamScheduleQueryRecordsResponse> scheduleQueries(
             @PathVariable Long teamId,
             @RequestParam(value = "page", defaultValue = "1") int page,
             @RequestParam(value = "pageSize", defaultValue = "20") int pageSize
     ) {
+        log.warn("调用已弃用团队作品集查档历史接口: teamId={}, page={}, pageSize={}",
+                teamId, page, pageSize);
         return Response.success(mineTeamPortfolioService.getScheduleQueryRecords(
                 teamId, page, pageSize, currentUserId()));
     }
@@ -301,6 +326,57 @@ public class MineTeamPortfolioController {
             @PathVariable Long memberUserId
     ) {
         return Response.success(carouselComponentService.listWorks(portfolioId, memberUserId, currentUserId()));
+    }
+
+    /**
+     * 按团队查询单个作品可选成员。
+     */
+    @GetMapping("/api/mine/teams/{teamId}/portfolio-components/single-work/members")
+    public Response<List<TeamSingleWorkComponentService.MemberOption>> teamSingleWorkMembers(
+            @PathVariable Long teamId
+    ) {
+        return Response.success(singleWorkComponentService.listTeamMembers(teamId, currentUserId()));
+    }
+
+    /**
+     * 按团队查询单个作品指定成员的可选作品。
+     */
+    @GetMapping("/api/mine/teams/{teamId}/portfolio-components/single-work/members/{memberUserId}/works")
+    public Response<List<TeamSingleWorkComponentService.WorkOption>> teamSingleWorkWorks(
+            @PathVariable Long teamId,
+            @PathVariable Long memberUserId
+    ) {
+        return Response.success(singleWorkComponentService.listTeamWorks(teamId, memberUserId, currentUserId()));
+    }
+
+    /**
+     * 查询单个作品可选成员的兼容接口。
+     *
+     * @deprecated 请改用团队作用域的 {@link #teamSingleWorkMembers(Long)}。
+     */
+    @Deprecated(since = "2026-07", forRemoval = false)
+    @GetMapping("/api/mine/team-portfolios/{portfolioId}/components/single-work/members")
+    public Response<List<TeamSingleWorkComponentService.MemberOption>> singleWorkMembers(
+            @PathVariable Long portfolioId
+    ) {
+        log.warn("调用已弃用团队单个作品成员候选接口: portfolioId={}", portfolioId);
+        return Response.success(singleWorkComponentService.listMembers(portfolioId, currentUserId()));
+    }
+
+    /**
+     * 查询单个作品指定成员可选作品的兼容接口。
+     *
+     * @deprecated 请改用团队作用域的 {@link #teamSingleWorkWorks(Long, Long)}。
+     */
+    @Deprecated(since = "2026-07", forRemoval = false)
+    @GetMapping("/api/mine/team-portfolios/{portfolioId}/components/single-work/members/{memberUserId}/works")
+    public Response<List<TeamSingleWorkComponentService.WorkOption>> singleWorkWorks(
+            @PathVariable Long portfolioId,
+            @PathVariable Long memberUserId
+    ) {
+        log.warn("调用已弃用团队单个作品作品候选接口: portfolioId={}, memberUserId={}",
+                portfolioId, memberUserId);
+        return Response.success(singleWorkComponentService.listWorks(portfolioId, memberUserId, currentUserId()));
     }
 
     /**

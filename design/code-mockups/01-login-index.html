@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>映期Folio 设计稿 · 登录与首页</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #eef2f4;
+    color: #17202a;
+    padding: 40px 32px 64px;
+  }
+
+  /* ===== 标题区 ===== */
+  .doc-header { max-width: 1400px; margin: 0 auto 36px; }
+  .doc-header h1 { font-size: 26px; font-weight: 800; letter-spacing: 0.5px; }
+  .doc-header .module-tag {
+    display: inline-block; margin-bottom: 10px; padding: 4px 12px;
+    font-size: 12px; font-weight: 700; color: #b88a44;
+    background: rgba(184, 138, 68, 0.12); border-radius: 999px;
+  }
+  .doc-header .page-list { margin-top: 12px; font-size: 13px; color: #5b6a78; line-height: 1.8; }
+  .doc-header .page-list code {
+    padding: 1px 6px; font-size: 12px; color: #315f9d;
+    background: #e7eef6; border-radius: 4px;
+  }
+
+  /* ===== 手机框布局 ===== */
+  .phones { display: flex; flex-wrap: wrap; gap: 32px; max-width: 1400px; margin: 0 auto; }
+  .phone-item { flex: none; }
+  .phone-caption {
+    margin-bottom: 12px; font-size: 14px; font-weight: 800; color: #17202a;
+  }
+  .phone-caption .sub { display: block; margin-top: 4px; font-size: 12px; font-weight: 500; color: #7b8794; }
+
+  .phone {
+    position: relative; width: 375px; height: 812px;
+    border-radius: 24px; overflow: hidden;
+    background: #f5f7fb;
+    box-shadow: 0 24px 64px rgba(18, 26, 36, 0.18), 0 4px 16px rgba(18, 26, 36, 0.08);
+    border: 1px solid rgba(18, 26, 36, 0.08);
+    display: flex; flex-direction: column;
+  }
+
+  /* ===== 状态栏 ===== */
+  .status-bar {
+    flex: none; height: 44px; display: flex; align-items: center; justify-content: space-between;
+    padding: 0 28px 0 30px; font-size: 14px; font-weight: 700; color: #17202a;
+    background: rgba(245, 247, 251, 0.94);
+  }
+  .status-icons { display: flex; align-items: center; gap: 6px; }
+  .signal { display: flex; align-items: flex-end; gap: 2px; height: 11px; }
+  .signal i { width: 3px; background: #17202a; border-radius: 1px; }
+  .signal i:nth-child(1) { height: 4px; } .signal i:nth-child(2) { height: 6px; }
+  .signal i:nth-child(3) { height: 8px; } .signal i:nth-child(4) { height: 10px; }
+  .battery {
+    width: 22px; height: 11px; border: 1px solid rgba(23,32,42,.5); border-radius: 3px;
+    position: relative; padding: 1px;
+  }
+  .battery::before { content: ""; display: block; width: 70%; height: 100%; background: #17202a; border-radius: 1.5px; }
+  .battery::after {
+    content: ""; position: absolute; right: -4px; top: 3px; width: 2px; height: 5px;
+    background: rgba(23,32,42,.5); border-radius: 0 2px 2px 0;
+  }
+
+  /* ===== 导航栏（navigation-bar 组件内联） ===== */
+  .nav-bar {
+    flex: none; height: 44px; display: flex; align-items: center; justify-content: center;
+    background: rgba(245, 247, 251, 0.94); color: #17202a;
+    font-size: 17px; font-weight: 700;
+  }
+
+  /* ================= 登录页 ================= */
+  .login-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+  .login-hero {
+    position: relative; flex: 1 1 0; min-height: 250px; /* experience-mode 500rpx */
+    margin: 12px 14px 0; overflow: hidden; border-radius: 8px;
+    background: #17202a;
+    box-shadow: 0 10px 26px rgba(23, 32, 42, 0.14);
+  }
+  .login-hero.small { min-height: 190px; } /* maintainer-mode 380rpx */
+  .hero-img {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: cover; /* 对应小程序 image mode="aspectFill" */
+  }
+  .hero-shade {
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg, rgba(23, 32, 42, 0.03) 0%, rgba(23, 32, 42, 0.66) 100%);
+  }
+  .hero-copy { position: absolute; left: 14px; right: 14px; bottom: 14px; color: #fff; }
+  .hero-title { max-width: 260px; font-size: 19px; font-weight: 800; line-height: 1.25; }
+
+  .login-content { display: flex; flex-direction: column; gap: 10px; padding: 10px 14px 14px; }
+
+  .panel {
+    border: 0.5px solid rgba(23, 32, 42, 0.06); border-radius: 8px;
+    background: rgba(255, 255, 255, 0.94);
+    box-shadow: 0 9px 24px rgba(23, 32, 42, 0.06);
+  }
+
+  .welcome-panel {
+    display: flex; min-height: 75px; padding: 13px;
+    align-items: center; justify-content: space-between; gap: 10px;
+  }
+  .welcome-title { color: #17202a; font-size: 15.5px; font-weight: 800; line-height: 1.3; }
+  .welcome-desc { margin-top: 4px; color: #6b7785; font-size: 12px; line-height: 1.45; }
+  .welcome-avatar {
+    width: 43px; height: 43px; flex: none; border-radius: 50%;
+    background: #eef6f4;
+    object-fit: cover; /* 对应小程序 image mode="aspectFill" */
+  }
+
+  .auth-panel { display: flex; flex-direction: column; gap: 8px; padding: 11px; }
+
+  .login-tabs {
+    position: relative; display: flex; height: 26px;
+    border-bottom: 0.5px solid #d7dee5;
+  }
+  .login-tab {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    color: #66727f; font-size: 11px; font-weight: 800;
+  }
+  .login-tab.active { color: #17202a; }
+  .tab-indicator {
+    position: absolute; bottom: -0.5px; width: 54px; height: 2px;
+    margin-left: -27px; border-radius: 999px; background: #315f9d;
+  }
+  .tab-indicator.experience { left: 25%; }
+  .tab-indicator.maintainer { left: 75%; }
+
+  .login-form { display: flex; flex-direction: column; gap: 7px; padding-top: 4px; }
+
+  .primary-button {
+    display: flex; width: 100%; height: 42px;
+    align-items: center; justify-content: center;
+    color: #fff; font-size: 13px; font-weight: 800;
+    border-radius: 8px;
+    background: linear-gradient(180deg, #263445, #111827);
+    box-shadow: 0 10px 22px rgba(17, 24, 39, 0.2);
+  }
+  .experience-hint {
+    color: #6b7785; font-size: 11px; font-weight: 700; line-height: 1.4; text-align: center;
+  }
+
+  .form-row { display: flex; flex-direction: column; gap: 5px; }
+  .field-label { color: #17202a; font-size: 11.5px; font-weight: 800; }
+  .input-shell {
+    display: flex; height: 42px; padding: 0 11px; align-items: center;
+    border: 0.5px solid #e4ebef; border-radius: 8px; background: #f8fafb;
+  }
+  .input-placeholder { flex: 1; color: #9aa5af; font-size: 13px; }
+  .optional-text { flex: none; margin-left: 9px; color: #8b96a3; font-size: 11px; }
+
+  /* ================= 首页（我的） ================= */
+  .mine-scroll { flex: 1; overflow: hidden; }
+  .mine-content { padding: 14px 14px 86px; }
+
+  .profile-panel {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; min-height: 75px; padding: 13px;
+  }
+  .profile-main { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .avatar {
+    width: 48px; height: 48px; flex: none; overflow: hidden; border-radius: 50%;
+    background: linear-gradient(135deg, #3d5265 0%, #2e7d73 100%);
+    display: flex; align-items: center; justify-content: center;
+    color: rgba(255,255,255,.9); font-size: 15px;
+  }
+  .profile-name {
+    color: #17202a; font-size: 16px; font-weight: 700; line-height: 1.35;
+  }
+  .profile-subtitle {
+    margin-top: 4px; color: #6b7785; font-size: 12px; line-height: 1.4;
+    max-width: 195px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .code-pill {
+    flex: none; padding: 6px 8px;
+    color: #0f766e; font-size: 11px; font-weight: 700; line-height: 1;
+    border-radius: 999px; background: #dcf7f1;
+  }
+
+  .balance-band {
+    margin-top: 11px; padding: 14px; color: #fff; border-radius: 8px;
+    background: linear-gradient(135deg, #17202a 0%, #243241 64%, #326d64 100%);
+    box-shadow: 0 10px 27px rgba(23, 32, 42, 0.16);
+  }
+  .balance-top { display: flex; align-items: center; justify-content: space-between; }
+  .balance-label { color: rgba(255, 255, 255, 0.72); font-size: 12px; }
+  .balance-value { margin-top: 4px; font-size: 32px; font-weight: 800; line-height: 1; }
+  .light-button {
+    min-width: 56px; height: 44px; display: flex; align-items: center; justify-content: center;
+    padding: 0 14px; color: #17202a; font-size: 13px; font-weight: 800;
+    border-radius: 8px; background: #fff;
+    box-shadow: 0 10px 22px rgba(17, 24, 39, 0.2);
+  }
+  .balance-bottom {
+    margin-top: 9px; display: flex; align-items: center; justify-content: space-between;
+    color: rgba(255, 255, 255, 0.72); font-size: 12px;
+  }
+  .warning-pill {
+    padding: 4px 7px; color: #8a4b09; font-size: 11px;
+    border-radius: 999px; background: #ffe8b5;
+  }
+
+  .metric-grid { display: flex; gap: 8px; margin-top: 11px; }
+  .metric {
+    flex: 1 1 0; min-width: 0; min-height: 68px; padding: 12px 6px; text-align: center;
+    border: 0.5px solid rgba(23, 32, 42, 0.06); border-radius: 8px;
+    background: rgba(255, 255, 255, 0.9);
+  }
+  .metric-value { color: #17202a; font-size: 19px; font-weight: 800; line-height: 1.1; }
+  .metric-label { margin-top: 6px; color: #758190; font-size: 11px; line-height: 1.25; }
+
+  .action-panel { margin-top: 11px; padding: 12px; }
+  .panel-heading { display: flex; align-items: center; justify-content: space-between; }
+  .panel-title { color: #17202a; font-size: 14px; font-weight: 800; }
+  .panel-meta { color: #8b96a3; font-size: 11px; }
+
+  .entry-list { margin-top: 8px; }
+  .entry-row {
+    display: flex; align-items: center; width: 100%; min-height: 59px;
+    padding: 9px 0; border-top: 0.5px solid #edf1f5;
+  }
+  .entry-row:first-child { border-top: 0; }
+  .entry-icon {
+    display: block; width: 46px; height: 46px; flex: none;
+    margin-right: 11px; border-radius: 11px;
+    object-fit: contain; /* 对应小程序 image mode="aspectFit" */
+  }
+  .entry-copy { flex: 1; min-width: 0; }
+  .entry-title { color: #17202a; font-size: 14px; font-weight: 700; line-height: 1.3; }
+  .entry-desc {
+    margin-top: 3px; color: #758190; font-size: 11.5px; line-height: 1.35;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .entry-side { display: flex; align-items: center; flex: none; gap: 6px; margin-left: 7px; }
+  .entry-badge {
+    min-width: 18px; height: 18px; display: flex; align-items: center; justify-content: center;
+    padding: 0 5px; color: #fff; font-size: 10px; font-weight: 800; line-height: 1;
+    border-radius: 999px; background: #d9901f;
+  }
+  .entry-arrow { position: relative; width: 14px; height: 14px; flex: none; }
+  .entry-arrow::before {
+    content: ""; position: absolute; right: 3px; top: 2.5px; width: 8px; height: 8px;
+    border-top: 1.5px solid #a7b0ba; border-right: 1.5px solid #a7b0ba;
+    transform: rotate(45deg);
+  }
+
+  /* ===== 空态 / 加载失败 ===== */
+  .empty-state { min-height: 400px; padding: 45px 18px; text-align: center; }
+  .empty-icon { width: 46px; height: 46px; margin: 0 auto 13px; border-radius: 50%; background: #dce7e4; }
+  .empty-title { color: #17202a; font-size: 16px; font-weight: 800; }
+  .empty-desc { margin-top: 6px; color: #758190; font-size: 12px; line-height: 1.5; }
+  .retry-button {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 88px; height: 38px; margin-top: 15px; padding: 0 20px;
+    color: #fff; font-size: 14px; font-weight: 700;
+    border-radius: 999px; background: #17202a;
+  }
+
+  /* ===== 底部 TabBar ===== */
+  .tabbar {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    height: 72px; padding: 5px 10px 14px;
+    display: flex; align-items: center; justify-content: space-around;
+    border-top: 0.5px solid rgba(23, 32, 42, 0.08);
+    background: rgba(255, 255, 255, 0.96);
+  }
+  .tab {
+    position: relative; width: 25%; height: 48px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    color: #8b96a3;
+  }
+  .tab.active { color: #b88a44; }
+  .tab.active::before {
+    content: ""; position: absolute; top: 2px; left: 50%; transform: translateX(-50%);
+    width: 21px; height: 3px; border-radius: 999px; background: #b88a44;
+    box-shadow: 0 2px 8px rgba(184, 138, 68, 0.26);
+  }
+  .tab-icon { position: relative; width: 21px; height: 21px; margin-bottom: 3.5px; }
+  .tab-icon::before, .tab-icon::after { content: ""; position: absolute; box-sizing: border-box; }
+  /* 档期：圆角方块 + 横线 */
+  .schedule-tab-icon::before {
+    left: 3px; top: 3px; width: 15px; height: 15px;
+    border: 2px solid currentColor; border-radius: 5px;
+  }
+  .schedule-tab-icon::after {
+    left: 6px; top: 9px; width: 9px; height: 2px;
+    border-radius: 999px; background: currentColor;
+  }
+  /* 作品：圆角方块 + 对勾 */
+  .work-tab-icon::before {
+    left: 3px; top: 3px; width: 15px; height: 15px;
+    border: 2px solid currentColor; border-radius: 5px;
+  }
+  .work-tab-icon::after {
+    left: 6.5px; bottom: 5.5px; width: 9px; height: 7px;
+    border-left: 2px solid currentColor; border-bottom: 2px solid currentColor;
+    transform: rotate(-45deg); transform-origin: center;
+  }
+  /* 作品集：两个叠放方块 */
+  .portfolio-tab-icon::before {
+    left: 5px; top: 4px; width: 14px; height: 14px;
+    border: 2px solid currentColor; border-radius: 4px;
+    background: rgba(255, 255, 255, 0.96); z-index: 2;
+  }
+  .portfolio-tab-icon::after {
+    left: 2px; top: 7px; width: 14px; height: 14px;
+    border: 2px solid currentColor; border-radius: 4px; z-index: 1;
+  }
+  /* 我的：人像 */
+  .mine-tab-icon::before {
+    left: 6.5px; top: 3px; width: 8px; height: 8px;
+    border: 2px solid currentColor; border-radius: 50%;
+  }
+  .mine-tab-icon::after {
+    left: 3px; bottom: 3px; width: 15px; height: 8px;
+    border: 2px solid currentColor; border-bottom-width: 1.5px;
+    border-radius: 10px 10px 4px 4px;
+  }
+  .tab-label { font-size: 10.5px; line-height: 1.2; }
+</style>
+</head>
+<body>
+
+<header class="doc-header">
+  <span class="module-tag">模块 · 登录与首页</span>
+  <h1>映期Folio 小程序设计稿（01 登录与首页）</h1>
+  <div class="page-list">
+    包含页面：
+    <code>projects/miniapp/pages/login/login</code>（登录页 · 体验态 / 登录注册态）、
+    <code>projects/miniapp/pages/index/index</code>（首页「我的」 · 正常态 / 加载失败态）。
+    视觉依据页面 wxml/wxss 真实样式与文案还原；静态资源使用代码中真实引用的图片（远程 URL 或本地 assets/system/），用户动态内容（头像等）以渐变占位。
+  </div>
+</header>
+
+<div class="phones">
+
+  <!-- ============ 01 登录页 · 体验态 ============ -->
+  <div class="phone-item">
+    <div class="phone-caption">01 登录页（体验 Tab）
+      <span class="sub">pages/login/login · activeTab = experience</span>
+    </div>
+    <div class="phone">
+      <div class="status-bar">
+        <span>9:41</span>
+        <span class="status-icons">
+          <span class="signal"><i></i><i></i><i></i><i></i></span>
+          <span style="font-size:11px;">5G</span>
+          <span class="battery"></span>
+        </span>
+      </div>
+      <div class="nav-bar">映期Folio</div>
+
+      <div class="login-body">
+        <div class="login-hero">
+          <img class="hero-img" src="https://cdn2.we-folio.dingchenyong.top/system/backgroud.jpeg" alt="登录页背景图">
+          <div class="hero-shade"></div>
+          <div class="hero-copy">
+            <div class="hero-title">把作品和档期，装进一张可分享名片</div>
+          </div>
+        </div>
+
+        <div class="login-content">
+          <div class="panel welcome-panel">
+            <div>
+              <div class="welcome-title">欢迎使用映期Folio</div>
+              <div class="welcome-desc">适合司仪、化妆、模特和婚庆团队的作品展示工具。</div>
+            </div>
+            <img class="welcome-avatar" src="https://cdn2.we-folio.dingchenyong.top/system/folio-logo.png" alt="映期Folio LOGO">
+          </div>
+
+          <div class="panel auth-panel">
+            <div class="login-tabs">
+              <div class="login-tab active">体验</div>
+              <div class="login-tab">登录 / 注册</div>
+              <div class="tab-indicator experience"></div>
+            </div>
+            <div class="login-form">
+              <div class="primary-button">先体验</div>
+              <div class="experience-hint">支持先体验基础功能再授权注册</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 02 登录页 · 登录/注册态（需手机号授权） ============ -->
+  <div class="phone-item">
+    <div class="phone-caption">02 登录页（登录 / 注册 Tab）
+      <span class="sub">pages/login/login · 预检完成，需手机号授权注册</span>
+    </div>
+    <div class="phone">
+      <div class="status-bar">
+        <span>9:41</span>
+        <span class="status-icons">
+          <span class="signal"><i></i><i></i><i></i><i></i></span>
+          <span style="font-size:11px;">5G</span>
+          <span class="battery"></span>
+        </span>
+      </div>
+      <div class="nav-bar">映期Folio</div>
+
+      <div class="login-body">
+        <div class="login-hero small">
+          <img class="hero-img" src="https://cdn2.we-folio.dingchenyong.top/system/backgroud.jpeg" alt="登录页背景图">
+          <div class="hero-shade"></div>
+          <div class="hero-copy">
+            <div class="hero-title">把作品和档期，装进一张可分享名片</div>
+          </div>
+        </div>
+
+        <div class="login-content">
+          <div class="panel welcome-panel">
+            <div>
+              <div class="welcome-title">欢迎使用映期Folio</div>
+              <div class="welcome-desc">适合司仪、化妆、模特和婚庆团队的作品展示工具。</div>
+            </div>
+            <img class="welcome-avatar" src="https://cdn2.we-folio.dingchenyong.top/system/folio-logo.png" alt="映期Folio LOGO">
+          </div>
+
+          <div class="panel auth-panel">
+            <div class="login-tabs">
+              <div class="login-tab">体验</div>
+              <div class="login-tab active">登录 / 注册</div>
+              <div class="tab-indicator maintainer"></div>
+            </div>
+            <div class="login-form">
+              <div class="form-row">
+                <div class="field-label">推荐码</div>
+                <div class="input-shell">
+                  <span class="input-placeholder">填写他人的个人唯一码</span>
+                  <span class="optional-text">选填</span>
+                </div>
+              </div>
+              <div class="primary-button">手机号快捷注册</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 03 首页「我的」 · 正常态 ============ -->
+  <div class="phone-item">
+    <div class="phone-caption">03 首页「我的」（正常态）
+      <span class="sub">pages/index/index · dashboard 数据 + 底部 TabBar</span>
+    </div>
+    <div class="phone">
+      <div class="status-bar">
+        <span>9:41</span>
+        <span class="status-icons">
+          <span class="signal"><i></i><i></i><i></i><i></i></span>
+          <span style="font-size:11px;">5G</span>
+          <span class="battery"></span>
+        </span>
+      </div>
+      <div class="nav-bar">我的</div>
+
+      <div class="mine-scroll">
+        <div class="mine-content">
+
+          <div class="panel profile-panel">
+            <div class="profile-main">
+              <div class="avatar">🎤</div>
+              <div>
+                <div class="profile-name">林晓 · 婚礼司仪</div>
+                <div class="profile-subtitle">杭州 / 婚礼司仪 / 双语主持</div>
+              </div>
+            </div>
+            <div class="code-pill">WFA3B1E7A2</div>
+          </div>
+
+          <div class="balance-band">
+            <div class="balance-top">
+              <div>
+                <div class="balance-label">当前积分余额</div>
+                <div class="balance-value">36</div>
+              </div>
+              <div class="light-button">充值</div>
+            </div>
+            <div class="balance-bottom">
+              <span>今日已消耗 12 积分</span>
+              <span class="warning-pill">低于 50 提醒</span>
+            </div>
+          </div>
+
+          <div class="metric-grid">
+            <div class="metric">
+              <div class="metric-value">24</div>
+              <div class="metric-label">作品素材</div>
+            </div>
+            <div class="metric">
+              <div class="metric-value">3</div>
+              <div class="metric-label">作品集</div>
+            </div>
+            <div class="metric">
+              <div class="metric-value">58</div>
+              <div class="metric-label">近 7 日访问</div>
+            </div>
+          </div>
+
+          <div class="panel action-panel">
+            <div class="panel-heading">
+              <div class="panel-title">跟进与团队</div>
+              <div class="panel-meta">管理</div>
+            </div>
+            <div class="entry-list">
+              <div class="entry-row">
+                <img class="entry-icon" src="assets/system/wefolio-visitor-record-icon.png" alt="访问记录图标">
+                <div class="entry-copy">
+                  <div class="entry-title">访问记录</div>
+                  <div class="entry-desc">访客来源、访问次数、跟进状态</div>
+                </div>
+                <div class="entry-side">
+                  <div class="entry-arrow"></div>
+                </div>
+              </div>
+              <div class="entry-row">
+                <img class="entry-icon" src="assets/system/wefolio-team-icon.png" alt="我的团队图标">
+                <div class="entry-copy">
+                  <div class="entry-title">我的团队</div>
+                  <div class="entry-desc">按角色显示可用功能</div>
+                </div>
+                <div class="entry-side">
+                  <div class="entry-arrow"></div>
+                </div>
+              </div>
+              <div class="entry-row">
+                <img class="entry-icon" src="assets/system/wefolio-message-icon.png" alt="我的消息图标">
+                <div class="entry-copy">
+                  <div class="entry-title">我的消息</div>
+                  <div class="entry-desc">系统提醒、团队邀请</div>
+                </div>
+                <div class="entry-side">
+                  <div class="entry-badge">3</div>
+                  <div class="entry-arrow"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="tabbar">
+        <div class="tab">
+          <div class="tab-icon schedule-tab-icon"></div>
+          <div class="tab-label">档期</div>
+        </div>
+        <div class="tab">
+          <div class="tab-icon work-tab-icon"></div>
+          <div class="tab-label">作品</div>
+        </div>
+        <div class="tab">
+          <div class="tab-icon portfolio-tab-icon"></div>
+          <div class="tab-label">作品集</div>
+        </div>
+        <div class="tab active">
+          <div class="tab-icon mine-tab-icon"></div>
+          <div class="tab-label">我的</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 04 首页「我的」 · 加载失败态 ============ -->
+  <div class="phone-item">
+    <div class="phone-caption">04 首页「我的」（加载失败态）
+      <span class="sub">pages/index/index · errorMessage 空态 + 重试按钮</span>
+    </div>
+    <div class="phone">
+      <div class="status-bar">
+        <span>9:41</span>
+        <span class="status-icons">
+          <span class="signal"><i></i><i></i><i></i><i></i></span>
+          <span style="font-size:11px;">5G</span>
+          <span class="battery"></span>
+        </span>
+      </div>
+      <div class="nav-bar">我的</div>
+
+      <div class="mine-scroll">
+        <div class="mine-content">
+          <div class="empty-state">
+            <div class="empty-icon"></div>
+            <div class="empty-title">加载失败</div>
+            <div class="empty-desc">网络异常，请检查网络后重试</div>
+            <div class="retry-button">重试</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tabbar">
+        <div class="tab">
+          <div class="tab-icon schedule-tab-icon"></div>
+          <div class="tab-label">档期</div>
+        </div>
+        <div class="tab">
+          <div class="tab-icon work-tab-icon"></div>
+          <div class="tab-label">作品</div>
+        </div>
+        <div class="tab">
+          <div class="tab-icon portfolio-tab-icon"></div>
+          <div class="tab-label">作品集</div>
+        </div>
+        <div class="tab active">
+          <div class="tab-icon mine-tab-icon"></div>
+          <div class="tab-label">我的</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

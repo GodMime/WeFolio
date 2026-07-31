@@ -1,6 +1,6 @@
 .messages-page {
   min-height: 100vh;
-  background: #f5f7fb;
+  background: #f5f6f7;
 }
 
 .messages-scroll {
@@ -8,15 +8,15 @@
 }
 
 .messages-content {
-  padding: 28rpx 28rpx 56rpx;
+  padding: 20rpx 32rpx 56rpx;
   box-sizing: border-box;
 }
 
 .panel {
-  background: rgba(255, 255, 255, 0.94);
-  border: 1rpx solid rgba(23, 32, 42, 0.06);
-  border-radius: 16rpx;
-  box-shadow: 0 18rpx 48rpx rgba(23, 32, 42, 0.06);
+  background: #ffffff;
+  border: 1rpx solid #e9ecef;
+  border-radius: 48rpx;
+  box-shadow: 0 18rpx 48rpx rgba(33, 37, 41, 0.06);
 }
 
 .summary-panel {
@@ -36,13 +36,13 @@
 .summary-label,
 .message-time,
 .empty-desc {
-  color: #758190;
+  color: #868e96;
   font-size: 23rpx;
 }
 
 .summary-value {
   margin-top: 8rpx;
-  color: #17202a;
+  color: #212529;
   font-size: 48rpx;
   font-weight: 800;
   line-height: 1;
@@ -59,9 +59,9 @@
 
 .invite-pill {
   padding: 12rpx 16rpx;
-  color: #8a4b09;
+  color: #c08a3e;
   font-size: 22rpx;
-  background: #ffe8b5;
+  background: #fbf3e7;
 }
 
 .filter-tabs {
@@ -69,9 +69,9 @@
   gap: 8rpx;
   margin-top: 22rpx;
   padding: 8rpx;
-  border: 1rpx solid #d8e0e8;
-  border-radius: 18rpx;
-  background: rgba(255, 255, 255, 0.94);
+  border: 1rpx solid #e9ecef;
+  border-radius: 999rpx;
+  background: #ffffff;
   box-sizing: border-box;
 }
 
@@ -82,15 +82,15 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #667085;
+  color: #6c757d;
   font-size: 24rpx;
   font-weight: 800;
-  border-radius: 14rpx;
+  border-radius: 999rpx;
 }
 
 .filter-tab.active {
   color: #ffffff;
-  background: #17202a;
+  background: #212529;
 }
 
 .action-row {
@@ -116,18 +116,18 @@
   min-height: 76rpx;
   font-size: 25rpx;
   font-weight: 800;
-  border-radius: 16rpx;
+  border-radius: 999rpx;
 }
 
 .outline-button {
-  color: #17202a;
-  border: 1rpx solid #cbd6e2;
+  color: #212529;
+  border: 1rpx solid #dee2e6;
   background: #ffffff;
 }
 
 .solid-button {
   color: #ffffff;
-  background: #0f766e;
+  background: #212529;
 }
 
 .list-panel {
@@ -144,7 +144,7 @@
   align-items: flex-start;
   gap: 14rpx;
   padding: 24rpx 0;
-  border-top: 1rpx solid #edf1f5;
+  border-top: 1rpx solid #e9ecef;
 }
 
 .message-row:first-child {
@@ -162,13 +162,13 @@
   width: 34rpx;
   height: 34rpx;
   margin-top: 8rpx;
-  border: 2rpx solid #cbd6e2;
+  border: 2rpx solid #ced4da;
   background: #ffffff;
 }
 
 .select-dot.selected {
-  border-color: #0f766e;
-  background: #0f766e;
+  border-color: #212529;
+  background: #212529;
 }
 
 .unread-dot {
@@ -178,11 +178,11 @@
 }
 
 .unread-dot.amber {
-  background: #d9901f;
+  background: #212529;
 }
 
 .unread-dot.muted {
-  background: #cbd6e2;
+  background: #adb5bd;
 }
 
 .message-copy {
@@ -207,18 +207,18 @@
 }
 
 .category-pill.team {
-  color: #0f766e;
-  background: #dcf7f1;
+  color: #5c9e6e;
+  background: #eef6f0;
 }
 
 .category-pill.point {
-  color: #8a4b09;
-  background: #ffe8b5;
+  color: #c08a3e;
+  background: #fbf3e7;
 }
 
 .category-pill.system {
-  color: #536579;
-  background: #eef2f6;
+  color: #6c757d;
+  background: #f1f3f5;
 }
 
 .message-time {
@@ -228,7 +228,7 @@
 .message-title {
   margin-top: 12rpx;
   overflow: hidden;
-  color: #17202a;
+  color: #212529;
   font-size: 28rpx;
   font-weight: 800;
   line-height: 1.35;
@@ -238,7 +238,7 @@
 
 .message-content {
   margin-top: 8rpx;
-  color: #536579;
+  color: #6c757d;
   font-size: 24rpx;
   line-height: 1.45;
 }
@@ -256,12 +256,12 @@
   font-size: 23rpx;
   font-weight: 800;
   border-radius: 999rpx;
-  background: #17202a;
+  background: #212529;
 }
 
 .message-action.ghost {
-  color: #536579;
-  border: 1rpx solid #cbd6e2;
+  color: #6c757d;
+  border: 1rpx solid #dee2e6;
   background: #ffffff;
 }
 
@@ -273,7 +273,7 @@
 
 .load-more-text {
   padding: 10rpx 0 28rpx;
-  color: #758190;
+  color: #868e96;
   font-size: 23rpx;
   text-align: center;
 }
@@ -287,7 +287,7 @@
 }
 
 .empty-title {
-  color: #17202a;
+  color: #212529;
   font-size: 30rpx;
   font-weight: 800;
 }
@@ -308,6 +308,6 @@
   color: #ffffff;
   font-size: 25rpx;
   font-weight: 800;
-  border-radius: 16rpx;
-  background: #17202a;
+  border-radius: 999rpx;
+  background: #212529;
 }

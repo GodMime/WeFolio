@@ -1,42 +1,44 @@
+@import "../../styles/team-portfolio-theme.wxss";
+
 :host { display: block; width: 100%; min-width: 0; }
-.grid-component { width: 100%; padding: 0; color: #17202a; overflow-wrap: anywhere; box-sizing: border-box; }
+.grid-component { width: 100%; padding: 0; color: #212529; overflow-wrap: anywhere; box-sizing: border-box; }
 .grid-component.editor-mode { padding: 0; }
 .editor-form { display: flex; flex-direction: column; gap: 20rpx; padding: 4rpx 0 8rpx; }
-.editor-field { padding: 22rpx; border: 1rpx solid rgba(23, 32, 42, .06); border-radius: 16rpx; background: rgba(255, 255, 255, .94); box-sizing: border-box; }
+.editor-field { padding: 28rpx; border: 1rpx solid #e9ecef; border-radius: 48rpx; background: #fff; box-sizing: border-box; }
 .editor-field-heading { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; }
-.editor-label { color: #5f6b7a; font-size: 24rpx; font-weight: 800; }
+.editor-label { color: #6c757d; font-size: 24rpx; font-weight: 800; }
 .editor-limit { color: #8b96a3; font-size: 22rpx; font-weight: 700; }
-.editor-member-scroll { width: 100%; margin-top: 16rpx; white-space: nowrap; }
-.editor-member-row { display: inline-flex; gap: 12rpx; }
-.editor-member-choice { width: auto; height: 56rpx; flex: none; margin: 0; padding: 0 20rpx; color: #536b82; font-size: 22rpx; font-weight: 800; line-height: 56rpx; border: 1rpx solid #d4dee8; border-radius: 999rpx; background: #fff; box-sizing: border-box; }
-.editor-member-choice.active { color: #fff; border-color: #17202a; background: #17202a; }
+.editor-member-scroll { width: 100%; height: 56rpx; margin-top: 16rpx; white-space: nowrap; }
+.editor-member-row { width: auto; min-width: 0; height: 56rpx; display: inline-flex; align-items: center; gap: 12rpx; }
+.editor-member-choice { display: inline-flex; width: auto; min-width: 0; height: 56rpx; align-items: center; justify-content: center; flex: 0 0 auto; margin: 0; padding: 0 20rpx; color: #6c757d; font-size: 22rpx; font-weight: 800; line-height: 1; white-space: nowrap; border: 1rpx solid #dee2e6; border-radius: 999rpx; background: #fff; box-sizing: border-box; }
+.editor-member-choice.active { color: #fff; border-color: #212529; background: #212529; }
 .editor-content-field { min-height: 220rpx; }
 .editor-switch-field { display: flex; align-items: center; justify-content: space-between; gap: 20rpx; }
 .editor-switch-copy { min-width: 0; flex: 1 1 0; }
 .editor-switch-desc { margin-top: 8rpx; color: #8b96a3; font-size: 22rpx; line-height: 1.5; }
 .editor-option-grid { display: flex; flex-wrap: wrap; gap: 14rpx; margin-top: 16rpx; }
-.editor-option { position: relative; width: calc(50% - 7rpx); min-width: 0; margin: 0; padding: 0; overflow: hidden; text-align: left; border: 1rpx solid #d9e2eb; border-radius: 14rpx; background: #f8fafc; box-sizing: border-box; }
-.editor-option.selected { border-color: #17202a; background: #fff; box-shadow: 0 8rpx 18rpx rgba(23, 32, 42, .12); }
+.editor-option { position: relative; width: calc(50% - 7rpx); min-width: 0; margin: 0; padding: 0; overflow: hidden; text-align: left; border: 1rpx solid #e9ecef; border-radius: 28rpx; background: #f5f6f7; box-sizing: border-box; }
+.editor-option.selected { border-color: #212529; background: #fff; box-shadow: 0 8rpx 18rpx rgba(33, 37, 41, .12); }
 .editor-option image { width: 100%; height: 150rpx; display: block; background: #eef3f7; }
 .editor-option-copy { min-width: 0; padding: 12rpx; }
-.editor-option-title { display: block; overflow: hidden; color: #17202a; font-size: 22rpx; font-weight: 900; text-overflow: ellipsis; white-space: nowrap; }
+.editor-option-title { display: block; overflow: hidden; color: #212529; font-size: 22rpx; font-weight: 900; text-overflow: ellipsis; white-space: nowrap; }
 .editor-option-order { position: absolute; top: 8rpx; right: 8rpx; width: 38rpx; height: 38rpx; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 20rpx; font-weight: 900; border: 2rpx solid rgba(255, 255, 255, .9); border-radius: 50%; background: rgba(23, 32, 42, .78); box-sizing: border-box; }
 .editor-option:not(.selected) .editor-option-order { color: transparent; background: rgba(255, 255, 255, .9); border-color: #cbd6df; }
 .editor-empty { min-height: 150rpx; display: flex; align-items: center; justify-content: center; color: #8a98a8; font-size: 22rpx; text-align: center; }
-.editor-error { padding: 16rpx 18rpx; color: #a9354f; font-size: 22rpx; border-radius: 14rpx; background: #fff1f2; }
+.editor-error { padding: 16rpx 18rpx; color: #b55656; font-size: 22rpx; border-radius: 28rpx; background: #fbefef; }
 .editor-actions { display: flex; justify-content: flex-end; gap: 16rpx; margin-top: 20rpx; }
 .editor-cancel, .editor-confirm { width: 148rpx; height: 64rpx; display: flex; align-items: center; justify-content: center; margin: 0; padding: 0; font-size: 24rpx; font-weight: 900; line-height: 1; border-radius: 999rpx; box-sizing: border-box; }
 .editor-cancel { color: #536b82; border: 1rpx solid #cbd6df; background: #eef3f7; }
-.editor-confirm { color: #fff; background: #17202a; }
+.editor-confirm { color: #fff; background: #212529; }
 .portfolio-display { width: 100%; min-width: 0; }
 .work-section-title { padding: 0 24rpx; color: #000; font-size: 34rpx; font-weight: 900; line-height: 1.35; box-sizing: border-box; }
 .portfolio-grid { width: 100%; display: flex; flex-wrap: wrap; padding: 22rpx 6rpx 0; box-sizing: border-box; }
-.portfolio-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16rpx; }
-.portfolio-card { width: 50%; min-width: 0; flex: 0 0 50%; margin: 0; padding: 0 6rpx 18rpx; color: #17202a; border-radius: 0; background: transparent; overflow: hidden; text-align: left; line-height: normal; box-sizing: border-box; }
-.portfolio-cover { display: block; width: 100%; background: #f3f4f6; }
+.portfolio-options { display: flex; flex-wrap: wrap; gap: 16rpx; }
+.portfolio-card { width: 50%; min-width: 0; flex: 0 0 50%; margin: 0; padding: 0 6rpx 18rpx; color: #212529; border-radius: 0; background: transparent; overflow: hidden; text-align: left; line-height: normal; box-sizing: border-box; }
+.portfolio-cover { display: block; width: 100%; border-radius: 40rpx; background: #f1f3f5; }
 .portfolio-title, .member-name, .option text { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.portfolio-title { margin-top: 10rpx; color: #17202a; font-size: 24rpx; font-weight: 700; line-height: 1.35; }
+.portfolio-title { margin-top: 10rpx; color: #212529; font-size: 24rpx; font-weight: 700; line-height: 1.35; }
 .member-name { margin-top: 4rpx; color: #8a8f98; font-size: 22rpx; line-height: 1.45; }
-.option { min-width: 0; padding: 0; border-radius: 6px; background: #fff; overflow: hidden; text-align: left; }
+.option { width: calc(50% - 8rpx); min-width: 0; flex: 0 0 calc(50% - 8rpx); padding: 0; border-radius: 6px; background: #fff; overflow: hidden; text-align: left; }
 .option image { width: 100%; aspect-ratio: 4 / 3; background: #e8eeef; }
 .empty { display: block; padding: 28rpx 0; text-align: center; color: #708087; }

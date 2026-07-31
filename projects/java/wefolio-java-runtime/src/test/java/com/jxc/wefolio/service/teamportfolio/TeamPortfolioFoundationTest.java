@@ -52,11 +52,11 @@ class TeamPortfolioFoundationTest {
     void componentTypesShouldMatchStandardTeamV1Contract() {
         assertThat(TeamPortfolioComponentTypeDict.values())
                 .extracting(TeamPortfolioComponentTypeDict::getCode)
-                .containsExactly("TEAM_PROFILE", "CAROUSEL", "DIVIDER", "MEMBER_PORTFOLIO_GRID",
+                .containsExactly("TEAM_PROFILE", "CAROUSEL", "SINGLE_WORK", "DIVIDER", "MEMBER_PORTFOLIO_GRID",
                         "MEMBER_PORTFOLIO_LIST", "TEXT_SECTION", "SCHEDULE_QUERY", "CONTACT_FORM", "QR_CONTACT");
         assertThat(TeamPortfolioComponentTypeDict.values())
                 .extracting(TeamPortfolioComponentTypeDict::getDisplayName)
-                .containsExactly("团队资料", "轮播图", "分割线", "双列作品集", "单列作品集", "文字说明", "档期查询", "预留联系信息", "二维码联系");
+                .containsExactly("团队资料", "轮播图", "单个作品", "分割线", "双列作品集", "单列作品集", "文字说明", "档期查询", "预留联系信息", "二维码联系");
         assertThat(TeamPortfolioComponentTypeDict.fromCode("TEAM_PROFILE"))
                 .isEqualTo(TeamPortfolioComponentTypeDict.TEAM_PROFILE);
     }
@@ -103,14 +103,34 @@ class TeamPortfolioFoundationTest {
      */
     @Test
     void dtosShouldExposeOnlyTeamPortfolioFields() {
-        assertFields(TeamPortfolioConfigDto.class, "schemaVersion", "share", "components");
+        assertFields(TeamPortfolioConfigDto.class,
+                "schemaVersion", "editorSchemaRevision", "share", "style", "components", "bottomNav");
         assertFieldType(TeamPortfolioConfigDto.class, "schemaVersion", String.class);
+        assertFieldType(TeamPortfolioConfigDto.class, "editorSchemaRevision", Integer.class);
         assertFieldType(TeamPortfolioConfigDto.class, "share", TeamPortfolioConfigDto.Share.class);
+        assertFieldType(TeamPortfolioConfigDto.class, "style", TeamPortfolioConfigDto.Style.class);
         assertListElementType(TeamPortfolioConfigDto.class, "components", TeamPortfolioConfigDto.ComponentEnvelope.class);
+        assertFieldType(TeamPortfolioConfigDto.class, "bottomNav", TeamPortfolioConfigDto.BottomNav.class);
         assertFields(TeamPortfolioConfigDto.Share.class, "title", "description", "coverUrl");
         assertFieldType(TeamPortfolioConfigDto.Share.class, "title", String.class);
         assertFieldType(TeamPortfolioConfigDto.Share.class, "description", String.class);
         assertFieldType(TeamPortfolioConfigDto.Share.class, "coverUrl", String.class);
+        assertFields(TeamPortfolioConfigDto.Style.class, "backgroundColor");
+        assertFieldType(TeamPortfolioConfigDto.Style.class, "backgroundColor", String.class);
+        assertFields(TeamPortfolioConfigDto.BottomNav.class, "enabled", "items");
+        assertFieldType(TeamPortfolioConfigDto.BottomNav.class, "enabled", Boolean.class);
+        assertListElementType(
+                TeamPortfolioConfigDto.BottomNav.class,
+                "items",
+                TeamPortfolioConfigDto.BottomNavItem.class);
+        assertFields(TeamPortfolioConfigDto.BottomNavItem.class, "key", "title", "iconUrl", "components");
+        assertFieldType(TeamPortfolioConfigDto.BottomNavItem.class, "key", String.class);
+        assertFieldType(TeamPortfolioConfigDto.BottomNavItem.class, "title", String.class);
+        assertFieldType(TeamPortfolioConfigDto.BottomNavItem.class, "iconUrl", String.class);
+        assertListElementType(
+                TeamPortfolioConfigDto.BottomNavItem.class,
+                "components",
+                TeamPortfolioConfigDto.ComponentEnvelope.class);
         assertFields(TeamPortfolioConfigDto.ComponentEnvelope.class,
                 "componentKey", "componentType", "sortOrder", "enabled", "config");
         assertFieldType(TeamPortfolioConfigDto.ComponentEnvelope.class, "componentKey", String.class);
@@ -120,7 +140,7 @@ class TeamPortfolioFoundationTest {
         assertFieldType(TeamPortfolioConfigDto.ComponentEnvelope.class, "config", JSONObject.class);
 
         assertFields(TeamPortfolioRenderDto.class, "shareCode", "portfolioId", "teamId", "teamName", "title",
-                "share", "preview", "underMaintenance", "visitRecordId", "components");
+                "share", "preview", "underMaintenance", "visitRecordId", "style", "components", "bottomNav");
         assertFieldType(TeamPortfolioRenderDto.class, "shareCode", String.class);
         assertFieldType(TeamPortfolioRenderDto.class, "portfolioId", Long.class);
         assertFieldType(TeamPortfolioRenderDto.class, "teamId", Long.class);
@@ -130,7 +150,25 @@ class TeamPortfolioFoundationTest {
         assertFieldType(TeamPortfolioRenderDto.class, "preview", boolean.class);
         assertFieldType(TeamPortfolioRenderDto.class, "underMaintenance", boolean.class);
         assertFieldType(TeamPortfolioRenderDto.class, "visitRecordId", Long.class);
+        assertFieldType(TeamPortfolioRenderDto.class, "style", TeamPortfolioRenderDto.Style.class);
         assertListElementType(TeamPortfolioRenderDto.class, "components", TeamPortfolioRenderDto.Component.class);
+        assertFieldType(TeamPortfolioRenderDto.class, "bottomNav", TeamPortfolioRenderDto.BottomNav.class);
+        assertFields(TeamPortfolioRenderDto.Style.class, "backgroundColor", "themeMode");
+        assertFieldType(TeamPortfolioRenderDto.Style.class, "backgroundColor", String.class);
+        assertFieldType(TeamPortfolioRenderDto.Style.class, "themeMode", String.class);
+        assertFields(TeamPortfolioRenderDto.BottomNav.class, "enabled", "items");
+        assertFieldType(TeamPortfolioRenderDto.BottomNav.class, "enabled", boolean.class);
+        assertListElementType(
+                TeamPortfolioRenderDto.BottomNav.class,
+                "items",
+                TeamPortfolioRenderDto.BottomNavItem.class);
+        assertFields(TeamPortfolioRenderDto.BottomNavItem.class, "key", "title", "components");
+        assertFieldType(TeamPortfolioRenderDto.BottomNavItem.class, "key", String.class);
+        assertFieldType(TeamPortfolioRenderDto.BottomNavItem.class, "title", String.class);
+        assertListElementType(
+                TeamPortfolioRenderDto.BottomNavItem.class,
+                "components",
+                TeamPortfolioRenderDto.Component.class);
         assertFields(TeamPortfolioRenderDto.Component.class,
                 "componentKey", "componentType", "name", "sortOrder", "data");
         assertFieldType(TeamPortfolioRenderDto.Component.class, "componentKey", String.class);
@@ -185,6 +223,40 @@ class TeamPortfolioFoundationTest {
         assertThat(TeamPortfolioMessage.NO_MAINTAIN_PERMISSION).isEqualTo("无团队作品集维护权限");
         assertThat(TeamPortfolioMessage.PORTFOLIO_NOT_FOUND).isEqualTo("团队作品集不存在或无访问权限");
         assertThat(TeamPortfolioMessage.INVALID_SCHEMA).isEqualTo("当前作品集暂未开放访问");
+    }
+
+    /**
+     * 团队单个作品错误文案必须只由消息接口统一维护。
+     *
+     * @throws Exception 读取源码失败
+     */
+    @Test
+    void singleWorkMessagesShouldHaveSingleSource() throws Exception {
+        Path sourceRoot = Path.of("src/main/java/com/jxc/wefolio");
+        String messages = Files.readString(sourceRoot.resolve("message/TeamPortfolioMessage.java"));
+        List<String> singleWorkSources = List.of(
+                "service/teamportfolio/component/singlework/TeamSingleWorkComponentValidator.java",
+                "service/teamportfolio/component/singlework/TeamSingleWorkComponentRenderer.java",
+                "service/teamportfolio/component/singlework/TeamSingleWorkComponentService.java");
+
+        assertThat(messages)
+                .contains("String SINGLE_WORK_CONFIG_INVALID = \"单个作品配置不正确\";")
+                .contains("String SINGLE_WORK_UNAVAILABLE = \"单个作品不存在或不可用\";")
+                .contains("String SINGLE_WORK_MEMBER_UNAVAILABLE = \"团队成员不存在或不可用\";");
+        assertThat(singleWorkSources)
+                .map(sourceRoot::resolve)
+                .map(path -> {
+                    try {
+                        return Files.readString(path);
+                    } catch (Exception exception) {
+                        throw new IllegalStateException(exception);
+                    }
+                })
+                .allSatisfy(source -> assertThat(source)
+                        .contains("TeamPortfolioMessage.")
+                        .doesNotContain("private static final String CONFIG_INVALID_MESSAGE")
+                        .doesNotContain("private static final String WORK_UNAVAILABLE_MESSAGE")
+                        .doesNotContain("private static final String MEMBER_UNAVAILABLE_MESSAGE"));
     }
 
     /**

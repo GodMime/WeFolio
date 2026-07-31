@@ -2,8 +2,11 @@ package com.jxc.wefolio.service;
 
 import com.jxc.wefolio.dto.MaintainerWechatLoginRequest;
 import com.jxc.wefolio.dto.MaintainerWechatLoginResponse;
+import com.jxc.wefolio.dto.MaintainerWechatLoginPrecheckRequest;
+import com.jxc.wefolio.dto.MaintainerWechatLoginPrecheckResponse;
 import com.jxc.wefolio.dto.WechatPhoneNumberResponse;
 import com.jxc.wefolio.dto.WechatSessionResponse;
+import com.jxc.wefolio.entity.ReferralRelationEntity;
 import com.jxc.wefolio.entity.UserEntity;
 import com.jxc.wefolio.entity.UserAuthEntity;
 import com.jxc.wefolio.dict.UserStatusDict;
@@ -40,6 +43,10 @@ import static org.mockito.Mockito.when;
  */
 @ExtendWith(MockitoExtension.class)
 class MiniappAuthServiceTest {
+
+    /** 维护者新用户默认头像 */
+    private static final String DEFAULT_WECHAT_AVATAR_URL =
+            "https://cdn2.we-folio.dingchenyong.top/system/wefolio-default-avatar-512.jpg";
 
     /** 测试用维护者令牌前缀 */
     private static final String MAINTAINER_TOKEN_PREFIX = "wf-maintainer-v1.";
@@ -115,6 +122,45 @@ class MiniappAuthServiceTest {
     }
 
     @Test
+    void precheckRejectsBlankWechatCode() {
+        MiniappAuthService service = buildService();
+        MaintainerWechatLoginPrecheckRequest request = new MaintainerWechatLoginPrecheckRequest();
+        request.setCode(" ");
+
+        assertThatThrownBy(() -> service.precheckMaintainerWechatLogin(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("微信登录凭证不能为空");
+    }
+
+    @Test
+    void precheckExistingWechatIdentityDoesNotRequirePhoneAuthorization() {
+        WechatSessionResponse session = new WechatSessionResponse();
+        session.setOpenid("openid-existing");
+        when(wechatMiniappClient.exchangeCode("precheck-code")).thenReturn(session);
+        when(userAuthEntityMapper.selectOne(any())).thenReturn(new UserAuthEntity());
+
+        MaintainerWechatLoginPrecheckResponse response = buildService()
+                .precheckMaintainerWechatLogin(precheckRequest("precheck-code"));
+
+        assertThat(response.isPhoneAuthorizationRequired()).isFalse();
+        verifyPrecheckHasNoRegistrationSideEffects();
+    }
+
+    @Test
+    void precheckNewWechatIdentityRequiresPhoneAuthorization() {
+        WechatSessionResponse session = new WechatSessionResponse();
+        session.setOpenid("openid-new");
+        when(wechatMiniappClient.exchangeCode("precheck-code")).thenReturn(session);
+        when(userAuthEntityMapper.selectOne(any())).thenReturn(null);
+
+        MaintainerWechatLoginPrecheckResponse response = buildService()
+                .precheckMaintainerWechatLogin(precheckRequest("precheck-code"));
+
+        assertThat(response.isPhoneAuthorizationRequired()).isTrue();
+        verifyPrecheckHasNoRegistrationSideEffects();
+    }
+
+    @Test
     void maintainerWechatLoginCreatesUserAuthAfterCodeSessionExchange() {
         WechatSessionResponse session = new WechatSessionResponse();
         session.setOpenid("openid-123");
@@ -149,10 +195,9 @@ class MiniappAuthServiceTest {
         assertThat(response.getTokenType()).isEqualTo("Bearer");
         verify(cosService).initUserStorage(any());
         verify(pointService).ensureAccount(11L);
-        verify(cosService, never()).uploadFromUrl(any(), any());
         verify(userEntityMapper).insert(org.mockito.ArgumentMatchers.<UserEntity>argThat(user ->
                 "林安".equals(user.getNickname())
-                        && "".equals(user.getAvatarUrl())
+                        && DEFAULT_WECHAT_AVATAR_URL.equals(user.getAvatarUrl())
                         && "+8613812348000".equals(user.getPhoneNumber())
                         && "86".equals(user.getPhoneCountryCode())
                         && "8000".equals(user.getPhoneLast4())
@@ -195,10 +240,9 @@ class MiniappAuthServiceTest {
         verify(wechatMiniappClient, never()).exchangePluginOpenpid(any());
         verify(cosService).initUserStorage(any());
         verify(pointService).ensureAccount(11L);
-        verify(cosService, never()).uploadFromUrl(any(), any());
         verify(userEntityMapper).insert(org.mockito.ArgumentMatchers.<UserEntity>argThat(user ->
                 "林安".equals(user.getNickname())
-                        && "".equals(user.getAvatarUrl())
+                        && DEFAULT_WECHAT_AVATAR_URL.equals(user.getAvatarUrl())
                         && user.getWechatOpenpid() == null
         ));
         ArgumentCaptor<UserAuthEntity> authCaptor = ArgumentCaptor.forClass(UserAuthEntity.class);
@@ -236,12 +280,42 @@ class MiniappAuthServiceTest {
         assertThat(response.getToken()).isNotEqualTo("wf-dev-user-11");
         assertThat(service.resolveUserId("Bearer " + response.getToken())).isEqualTo(11L);
         verify(cosService).initUserStorage(any());
-        verify(cosService, never()).uploadFromUrl(any(), any());
         verify(pointService).ensureAccount(11L);
         verify(userEntityMapper).insert(org.mockito.ArgumentMatchers.<UserEntity>argThat(user ->
                 "林安".equals(user.getNickname())
-                        && "".equals(user.getAvatarUrl())
+                        && DEFAULT_WECHAT_AVATAR_URL.equals(user.getAvatarUrl())
                         && "+8613812348000".equals(user.getPhoneNumber())
+        ));
+    }
+
+    @Test
+    void wechatRegistrationUsesDefaultsWhenNicknameAndAvatarAreMissing() {
+        WechatSessionResponse session = new WechatSessionResponse();
+        session.setOpenid("openid-new");
+        when(wechatMiniappClient.exchangeCode("wx-code")).thenReturn(session);
+        WechatPhoneNumberResponse.PhoneInfo phoneInfo = new WechatPhoneNumberResponse.PhoneInfo();
+        phoneInfo.setPhoneNumber("+8613812348000");
+        phoneInfo.setPurePhoneNumber("13812348000");
+        phoneInfo.setCountryCode("86");
+        when(wechatMiniappClient.exchangePhoneCode("phone-code")).thenReturn(phoneInfo);
+        when(userAuthEntityMapper.selectOne(any())).thenReturn(null);
+        when(uniqueCodeGenerator.generate(eq(UniqueCodeGenerator.USER_PREFIX), any())).thenReturn("WFTEST0003");
+        doAnswer(invocation -> {
+            UserEntity user = invocation.getArgument(0);
+            user.setId(33L);
+            return 1;
+        }).when(userEntityMapper).insert(any(UserEntity.class));
+        MiniappAuthService service = buildService();
+        MaintainerWechatLoginRequest request = new MaintainerWechatLoginRequest();
+        request.setCode("wx-code");
+        request.setPhoneCode("phone-code");
+
+        MaintainerWechatLoginResponse response = service.loginMaintainerByWechat(request);
+
+        assertThat(response.getUserId()).isEqualTo(33L);
+        verify(userEntityMapper).insert(org.mockito.ArgumentMatchers.<UserEntity>argThat(user ->
+                "微信用户".equals(user.getNickname())
+                        && DEFAULT_WECHAT_AVATAR_URL.equals(user.getAvatarUrl())
         ));
     }
 
@@ -275,6 +349,7 @@ class MiniappAuthServiceTest {
         request.setNickname("林安");
         request.setAvatarUrl("wxfile://tmp_avatar.jpg");
         request.setPhoneCode("phone-code");
+        request.setReferralCode("WFREF0001");
 
         MaintainerWechatLoginResponse response = service.loginMaintainerByWechat(request);
 
@@ -289,6 +364,39 @@ class MiniappAuthServiceTest {
         ArgumentCaptor<UserAuthEntity> authCaptor = ArgumentCaptor.forClass(UserAuthEntity.class);
         verify(userAuthEntityMapper).insert(authCaptor.capture());
         assertThat(authCaptor.getValue().getOpenId()).isEqualTo("openid-new");
+        verify(referralRelationEntityMapper, never()).insert(any(ReferralRelationEntity.class));
+    }
+
+    @Test
+    void existingPhoneUserWechatBindingIgnoresReferralCode() {
+        WechatSessionResponse session = new WechatSessionResponse();
+        session.setOpenid("openid-new");
+        when(wechatMiniappClient.exchangeCode("wx-code")).thenReturn(session);
+        WechatPhoneNumberResponse.PhoneInfo phoneInfo = new WechatPhoneNumberResponse.PhoneInfo();
+        phoneInfo.setPhoneNumber("+8613812348000");
+        phoneInfo.setPurePhoneNumber("13812348000");
+        phoneInfo.setCountryCode("86");
+        when(wechatMiniappClient.exchangePhoneCode("phone-code")).thenReturn(phoneInfo);
+        when(userAuthEntityMapper.selectOne(any())).thenReturn(null);
+
+        UserEntity existingUser = new UserEntity();
+        existingUser.setId(22L);
+        existingUser.setUniqueCode("WFOLD0001");
+        existingUser.setNickname("旧用户");
+        existingUser.setAvatarUrl("");
+        existingUser.setStatus(UserStatusDict.ACTIVE.getCode());
+        when(userEntityMapper.selectOne(any())).thenReturn(existingUser);
+
+        MaintainerWechatLoginRequest request = new MaintainerWechatLoginRequest();
+        request.setCode("wx-code");
+        request.setPhoneCode("phone-code");
+        request.setReferralCode("WFREF0001");
+
+        MaintainerWechatLoginResponse response = buildService().loginMaintainerByWechat(request);
+
+        assertThat(response.getUserId()).isEqualTo(22L);
+        verify(userEntityMapper, never()).insert(any(UserEntity.class));
+        verify(referralRelationEntityMapper, never()).insert(any(ReferralRelationEntity.class));
     }
 
     @Test
@@ -311,6 +419,7 @@ class MiniappAuthServiceTest {
         MiniappAuthService service = buildService();
         MaintainerWechatLoginRequest request = new MaintainerWechatLoginRequest();
         request.setCode("wx-code");
+        request.setReferralCode("WFREF0001");
 
         MaintainerWechatLoginResponse response = service.loginMaintainerByWechat(request);
 
@@ -320,6 +429,7 @@ class MiniappAuthServiceTest {
         verify(wechatMiniappClient, never()).exchangePhoneCode(any());
         verify(wechatMiniappClient, never()).exchangePluginOpenpid(any());
         verify(userEntityMapper, never()).insert(any(UserEntity.class));
+        verify(referralRelationEntityMapper, never()).insert(any(ReferralRelationEntity.class));
     }
 
     @Test
@@ -392,6 +502,33 @@ class MiniappAuthServiceTest {
         assertThatThrownBy(() -> service.loginMaintainerByWechat(request))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("请先完成手机号授权注册");
+    }
+
+    /**
+     * 构造微信登录预检请求。
+     *
+     * @param code 预检专用微信登录凭证
+     * @return 预检请求
+     */
+    private MaintainerWechatLoginPrecheckRequest precheckRequest(String code) {
+        MaintainerWechatLoginPrecheckRequest request = new MaintainerWechatLoginPrecheckRequest();
+        request.setCode(code);
+        return request;
+    }
+
+    /**
+     * 验证预检不会触发注册、存储或手机号相关副作用。
+     */
+    private void verifyPrecheckHasNoRegistrationSideEffects() {
+        verify(wechatMiniappClient, never()).exchangePhoneCode(any());
+        verify(wechatMiniappClient, never()).exchangePluginOpenpid(any());
+        verify(userEntityMapper, never()).selectById(any());
+        verify(userEntityMapper, never()).insert(any(UserEntity.class));
+        verify(userEntityMapper, never()).updateById(any(UserEntity.class));
+        verify(userAuthEntityMapper, never()).insert(any(UserAuthEntity.class));
+        verify(cosService, never()).initUserStorage(any());
+        verify(cosService, never()).isUserStorageInitialized(any());
+        verify(pointService, never()).ensureAccount(any());
     }
 
     private MiniappAuthService buildService() {

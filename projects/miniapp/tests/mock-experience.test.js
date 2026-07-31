@@ -19,7 +19,21 @@ const MOCK_PAGE_PATHS = [
 const MOCK_PAGE_SOURCE_FILES = MOCK_PAGE_PATHS.flatMap((pagePath) => [
   `${pagePath}.js`,
   `${pagePath}.wxml`
-]).concat('pages/mock/utils/mock-experience.js')
+]).concat([
+  'pages/mock/utils/mock-experience.js',
+  'components/mock/portfolio-renderer/portfolio-renderer.js',
+  'components/mock/portfolio-renderer/portfolio-renderer.wxml'
+])
+const MOCK_STYLE_FILES = [
+  'pages/mock/common.wxss',
+  'pages/mock/styles/index.wxss',
+  'pages/mock/styles/schedule.wxss',
+  'pages/mock/styles/works.wxss',
+  'pages/mock/styles/portfolios.wxss',
+  'pages/mock/styles/portfolio-standard-edit.wxss',
+  'pages/mock/styles/portfolio-standard-preview.wxss'
+]
+const MOCK_WXML_FILES = MOCK_PAGE_PATHS.map((pagePath) => `${pagePath}.wxml`)
 const FORBIDDEN_MOCK_SOURCE_PATTERNS = [
   /utils\/request/,
   /utils\/session/,
@@ -44,7 +58,9 @@ function readJson(relativePath) {
 
 function readRule(content, selector) {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const matches = Array.from(content.matchAll(new RegExp(`${escapedSelector}\\s*\\{([^}]*)\\}`, 'g')))
+  const matches = Array.from(content.matchAll(
+    new RegExp(`(?:^|\\n)\\s*${escapedSelector}\\s*\\{([^}]*)\\}`, 'g')
+  ))
   const match = matches[matches.length - 1]
   return match ? match[1] : ''
 }
@@ -116,37 +132,44 @@ test('mock tabbar mirrors the production bottom navigation structure and style',
   const wxml = read('components/mock/tabbar/tabbar.wxml')
   const wxss = read('components/mock/tabbar/tabbar.wxss')
   const activeTabRule = readRule(wxss, '.tab.active')
+  const iconWrapRule = readRule(wxss, '.tab-icon-wrap')
+  const activeIconWrapRule = readRule(wxss, '.tab.active .tab-icon-wrap')
   const tabbarRule = readRule(wxss, '.tabbar')
   const tabRule = readRule(wxss, '.tab')
-  const tabIconRule = readRule(wxss, '.tab-icon')
-  const scheduleBeforeRule = readRule(wxss, '.schedule-tab-icon::before')
-  const scheduleAfterRule = readRule(wxss, '.schedule-tab-icon::after')
-  const workAfterRule = readRule(wxss, '.work-tab-icon::after')
-  const portfolioBeforeRule = readRule(wxss, '.portfolio-tab-icon::before')
-  const portfolioAfterRule = readRule(wxss, '.portfolio-tab-icon::after')
-  const mineBeforeRule = readRule(wxss, '.mine-tab-icon::before')
-  const mineAfterRule = readRule(wxss, '.mine-tab-icon::after')
+  const tabIconRule = readRule(wxss, '.tab-icon-image')
+  const tabLabelRule = readRule(wxss, '.tab-label')
 
   assert.match(wxml, /<view class="tabbar">/)
   assert.match(wxml, /<button[\s\S]*class="tab \{\{item\.active \? 'active' : ''\}\}"/)
-  assert.match(wxml, /class="tab-icon \{\{item\.icon\}\}-tab-icon"/)
+  assert.match(wxml, /class="tab-icon-wrap"[\s\S]*class="tab-icon-image"[\s\S]*\/assets\/system\/tabbar\//)
   assert.match(wxml, /class="tab-label"/)
   assert.doesNotMatch(wxml, /mock-tab\b/)
   assert.doesNotMatch(wxss, /\.mock-tab/)
   assert.match(tabbarRule, /justify-content:\s*space-around/)
+  assert.match(tabbarRule, /left:\s*28rpx/)
+  assert.match(tabbarRule, /right:\s*28rpx/)
+  assert.match(tabbarRule, /bottom:\s*calc\(28rpx \+ env\(safe-area-inset-bottom\)\)/)
+  assert.match(tabbarRule, /height:\s*116rpx/)
+  assert.match(tabbarRule, /padding:\s*0/)
+  assert.match(tabbarRule, /border-radius:\s*999rpx/)
+  assert.match(tabbarRule, /background:\s*#ffffff/)
+  assert.match(tabbarRule, /border:\s*2rpx solid #e9ecef/)
+  assert.match(tabbarRule, /box-shadow:\s*0 24rpx 56rpx rgba\(33,\s*37,\s*41,\s*0\.1\)/)
   assert.match(tabRule, /width:\s*25%/)
-  assert.match(tabRule, /height:\s*96rpx/)
-  assert.match(activeTabRule, /color:\s*#b88a44/)
-  assert.match(tabIconRule, /width:\s*42rpx/)
-  assert.match(tabIconRule, /height:\s*42rpx/)
-  assert.match(scheduleBeforeRule, /border:\s*4rpx\s+solid\s+currentColor/)
-  assert.match(scheduleAfterRule, /left:\s*12rpx/)
-  assert.match(scheduleAfterRule, /top:\s*18rpx/)
-  assert.match(workAfterRule, /transform:\s*rotate\(-45deg\)/)
-  assert.match(portfolioBeforeRule, /z-index:\s*2/)
-  assert.match(portfolioAfterRule, /z-index:\s*1/)
-  assert.match(mineBeforeRule, /border-radius:\s*50%/)
-  assert.match(mineAfterRule, /border-bottom-width:\s*3rpx/)
+  assert.match(tabRule, /height:\s*116rpx/)
+  assert.match(tabRule, /color:\s*#868e96/)
+  assert.match(activeTabRule, /color:\s*#212529/)
+  assert.match(iconWrapRule, /width:\s*68rpx/)
+  assert.match(iconWrapRule, /height:\s*52rpx/)
+  assert.match(iconWrapRule, /border-radius:\s*999rpx/)
+  assert.match(activeIconWrapRule, /background:\s*#212529/)
+  assert.match(tabLabelRule, /margin-top:\s*4rpx/)
+  assert.match(tabLabelRule, /font-size:\s*18rpx/)
+  assert.match(tabLabelRule, /font-weight:\s*500/)
+  assert.doesNotMatch(wxss, /\.tab\.active::before/)
+  assert.doesNotMatch(wxss, /#b88a44/)
+  assert.match(tabIconRule, /width:\s*38rpx/)
+  assert.match(tabIconRule, /height:\s*38rpx/)
 })
 
 test('mock pages never import request/session or backend endpoints', () => {
@@ -157,6 +180,40 @@ test('mock pages never import request/session or backend endpoints', () => {
       assert.doesNotMatch(content, pattern, `${relativePath} contains ${pattern}`)
     })
   })
+})
+
+test('mock pages mirror the neutral formal theme without Skyline grid styles', () => {
+  for (const relativePath of MOCK_STYLE_FILES) {
+    const wxss = read(relativePath)
+    assert.doesNotMatch(wxss, /#f5f7fb|#eef6f4|#b88a44/)
+    assert.doesNotMatch(wxss, /display:\s*grid|grid-template-/)
+  }
+
+  for (const relativePath of MOCK_WXML_FILES) {
+    const wxml = read(relativePath)
+    if (!wxml.includes('<navigation-bar')) continue
+    assert.match(wxml, /color=(?:"\#212529"|"[^"]*#212529[^"]*")/)
+  }
+})
+
+test('mock schedule slot toggle action matches the neutral design button', () => {
+  const wxml = read('pages/mock/schedule/schedule.wxml')
+  const wxss = read('pages/mock/styles/schedule.wxss')
+  const slotToggleActionRule = readRule(wxss, '.slot-toggle-action')
+
+  assert.match(wxml, /class="mini-action warn slot-toggle-action"[^>]*>停用<\/button>/)
+  assert.match(wxml, /class="mini-action"[^>]*>编辑<\/button>/)
+  assert.doesNotMatch(wxml, /class="mini-action slot-toggle-action"[^>]*>编辑<\/button>/)
+  assert.match(slotToggleActionRule, /width:\s*112rpx/)
+  assert.match(slotToggleActionRule, /min-width:\s*112rpx/)
+  assert.match(slotToggleActionRule, /max-width:\s*112rpx/)
+  assert.match(slotToggleActionRule, /height:\s*56rpx/)
+  assert.match(slotToggleActionRule, /color:\s*#212529/)
+  assert.match(slotToggleActionRule, /font-size:\s*22rpx/)
+  assert.match(slotToggleActionRule, /font-weight:\s*600/)
+  assert.match(slotToggleActionRule, /border:\s*0/)
+  assert.match(slotToggleActionRule, /border-radius:\s*999rpx/)
+  assert.match(slotToggleActionRule, /background:\s*#f5f6f7/)
 })
 
 test('mock common data keeps all paths inside mock page tree', () => {
@@ -212,8 +269,7 @@ test('mock mine return login button uses the regular full-width primary button s
   assert.match(buttonRule, /display:\s*flex/)
   assert.match(buttonRule, /align-items:\s*center/)
   assert.match(buttonRule, /justify-content:\s*center/)
-  assert.match(buttonRule, /border-radius:\s*16rpx/)
-  assert.doesNotMatch(buttonRule, /border-radius:\s*999rpx/)
+  assert.match(buttonRule, /border-radius:\s*999rpx/)
 })
 
 test('mock mine return button matches the action panel outer width', () => {
@@ -236,7 +292,7 @@ test('mock mine recharge button defines production-aligned visual dimensions ind
   assert.match(buttonRule, /min-width:\s*112rpx/)
   assert.match(buttonRule, /height:\s*88rpx/)
   assert.match(buttonRule, /padding:\s*0\s+28rpx/)
-  assert.match(buttonRule, /border-radius:\s*16rpx/)
+  assert.match(buttonRule, /border-radius:\s*999rpx/)
   assert.match(buttonRule, /box-sizing:\s*border-box/)
 })
 
@@ -271,6 +327,34 @@ test('mock schedule calendar pads rows and uses stable blank cell keys', () => {
   assert.equal(month.days[34].key, 'blank-trailing-34')
   assert.equal(filledDays.length, 31)
   assert.equal(new Set(blankDays.map((day) => day.key)).size, blankDays.length)
+})
+
+test('mock schedule status independently uses original color dot and text without pill background', () => {
+  const scheduleWxss = read('pages/mock/styles/schedule.wxss')
+  const statusRule = readRule(scheduleWxss, '.schedule-status')
+  const statusDotRule = readRule(scheduleWxss, '.schedule-status::before')
+  const tealRule = readRule(scheduleWxss, '.schedule-status.teal')
+  const amberRule = readRule(scheduleWxss, '.schedule-status.amber')
+  const roseRule = readRule(scheduleWxss, '.schedule-status.rose')
+  const mutedRule = readRule(scheduleWxss, '.schedule-status.muted')
+
+  assert.match(statusRule, /display:\s*inline-flex/)
+  assert.match(statusRule, /align-items:\s*center/)
+  assert.match(statusRule, /gap:\s*8rpx/)
+  assert.match(statusRule, /padding:\s*0/)
+  assert.match(statusRule, /background:\s*transparent/)
+  assert.match(statusDotRule, /width:\s*12rpx/)
+  assert.match(statusDotRule, /height:\s*12rpx/)
+  assert.match(statusDotRule, /background:\s*currentColor/)
+  assert.match(statusDotRule, /border-radius:\s*50%/)
+  assert.match(tealRule, /color:\s*#0f766e/)
+  assert.match(amberRule, /color:\s*#8a4b09/)
+  assert.match(roseRule, /color:\s*#a9354f/)
+  assert.match(mutedRule, /color:\s*#66727f/)
+  assert.doesNotMatch(tealRule, /background:/)
+  assert.doesNotMatch(amberRule, /background:/)
+  assert.doesNotMatch(roseRule, /background:/)
+  assert.doesNotMatch(mutedRule, /background:/)
 })
 
 test('mock work library contains one tag, six images, one video, and correct covers', () => {
@@ -318,7 +402,7 @@ test('mock draft portfolio card edits on card tap and renders only preview and p
   assert.doesNotMatch(actionRowMarkup, /data-action="share"/)
 })
 
-test('mock portfolio list inherits wider title layout without changing action buttons', () => {
+test('mock portfolio list inherits wider title layout with visible fixed-width action buttons', () => {
   const wxml = read('pages/mock/portfolios/portfolios.wxml')
   const mockWxss = read('pages/mock/portfolios/portfolios.wxss')
   const listWxss = read('pages/portfolios/portfolios.wxss')
@@ -329,12 +413,14 @@ test('mock portfolio list inherits wider title layout without changing action bu
   assert.match(wxml, /class="page-shell portfolios-page mock-portfolios-page"/)
   assert.match(wxml, /class="portfolio-cover"/)
   assert.match(wxml, /class="portfolio-action-row"/)
-  assert.match(listWxss, /\.portfolio-item-card\s*\{[\s\S]*gap:\s*14rpx;/)
-  assert.match(listWxss, /\.portfolio-cover\s*\{[\s\S]*width:\s*112rpx;[\s\S]*height:\s*90rpx;/)
+  assert.match(listWxss, /\.portfolio-item-card\s*\{[\s\S]*gap:\s*20rpx;/)
+  assert.match(listWxss, /\.portfolio-cover\s*\{[\s\S]*width:\s*152rpx;[\s\S]*height:\s*133rpx;/)
   assert.match(actionRowRule, /flex:\s*0 0 auto/)
-  assert.match(actionButtonRule, /width:\s*108rpx/)
-  assert.match(actionButtonRule, /min-width:\s*108rpx/)
-  assert.match(actionButtonRule, /max-width:\s*108rpx/)
+  assert.match(actionButtonRule, /(?:^|\n)\s*width:\s*108rpx/)
+  assert.match(actionButtonRule, /(?:^|\n)\s*min-width:\s*108rpx/)
+  assert.match(actionButtonRule, /(?:^|\n)\s*max-width:\s*108rpx/)
+  assert.match(actionButtonRule, /height:\s*60rpx/)
+  assert.match(actionButtonRule, /padding:\s*0 26rpx/)
   assert.doesNotMatch(mockWxss, /\.portfolio-(item-card|cover|action-button)\s*\{/)
 })
 
@@ -343,6 +429,13 @@ test('mock portfolio edit page mirrors production component orchestration intera
   const js = read('pages/mock/portfolio-standard-edit/portfolio-standard-edit.js')
 
   assert.match(wxml, /<button class="link-button" bindtap="handleOpenComponentSheet">添加组件<\/button>/)
+  assert.match(wxml, /class="panel page-setting-panel"/)
+  assert.match(wxml, /class="background-color-current"/)
+  assert.match(wxml, /class="background-color-pad"[\s\S]*bindtouchstart="handleBackgroundColorPadTouch"/)
+  assert.match(wxml, /class="background-hue-slider"[\s\S]*bindchanging="handleBackgroundHueChange"/)
+  assert.match(wxml, /bindblur="handleCustomBackgroundColorBlur"/)
+  assert.match(wxml, /handleBottomNavCountTap/)
+  assert.match(wxml, /handleEditorMenuTitleInput/)
   assert.match(wxml, /<scroll-view class="edit-scroll" scroll-y type="list" scroll-top="\{\{editScrollTop\}\}">/)
   assert.match(wxml, /class="component-swipe-row[\s\S]*data-index="\{\{index\}\}"[\s\S]*data-key="\{\{item\.componentKey\}\}"[\s\S]*data-type="\{\{item\.componentType\}\}"/)
   assert.match(wxml, /bindtouchstart="handleComponentTouchStart"/)
@@ -370,7 +463,35 @@ test('mock portfolio edit page mirrors production component orchestration intera
   assert.match(js, /addMockComponent/)
   assert.match(js, /removeMockComponent/)
   assert.match(js, /reorderMockComponent/)
+  assert.match(js, /handleRemoveEditorMenu\(event\)[\s\S]*wx\.showModal/)
+  assert.match(js, /hexToHsv/)
+  assert.match(js, /hsvToHex/)
   assert.match(js, /MOCK_COMPONENT_OPTIONS/)
+})
+
+test('mock color picker hue thumb matches the centered white-ring design', () => {
+  const wxml = read('pages/mock/portfolio-standard-edit/portfolio-standard-edit.wxml')
+  const wxss = read('pages/mock/portfolio-standard-edit/portfolio-standard-edit.wxss')
+
+  assert.match(
+    wxml,
+    /class="background-hue-thumb"\s+style="left: \{\{backgroundColorHsv\.hue \/ 3\.59\}\}%; background-color: \{\{backgroundHueColor\}\};"/
+  )
+  assert.match(wxml, /block-color="transparent"/)
+  assert.match(
+    wxss,
+    /\.background-hue-thumb\s*\{[\s\S]*top:\s*50%;[\s\S]*width:\s*44rpx;[\s\S]*height:\s*44rpx;[\s\S]*border:\s*6rpx solid #ffffff;[\s\S]*transform:\s*translate\(-50%, -50%\);/
+  )
+  assert.doesNotMatch(wxss, /\.background-hue-slider slider\s*\{[^}]*margin:\s*-14rpx/)
+})
+
+test('mock dark portfolio display tags use theme variables', () => {
+  const wxss = read('components/mock/portfolio-renderer/portfolio-renderer.wxss')
+  const tagRule = readRule(wxss, '.display-tag')
+  const activeTagRule = readRule(wxss, '.display-tag.active')
+
+  assert.match(tagRule, /color:\s*var\(--portfolio-text-secondary\)/)
+  assert.match(activeTagRule, /color:\s*var\(--portfolio-text-primary\)/)
 })
 
 test('mock portfolio draft helpers add, remove, and reorder components locally', () => {
@@ -542,13 +663,15 @@ test('mock singular work persists through local draft and preview without networ
 test('mock singular work editor and preview expose title switch, width-fix image, and inline video', () => {
   const editWxml = read('pages/mock/portfolio-standard-edit/portfolio-standard-edit.wxml')
   const previewWxml = read('pages/mock/portfolio-standard-preview/portfolio-standard-preview.wxml')
+  const rendererWxml = read('components/mock/portfolio-renderer/portfolio-renderer.wxml')
 
   assert.match(editWxml, /selectedComponentType === 'SINGLE_WORK'/)
   assert.match(editWxml, /bindchange="handleSingleWorkShowTitleChange"/)
-  assert.match(previewWxml, /item\.componentType === 'SINGLE_WORK'/)
-  assert.match(previewWxml, /class="single-work-image"[\s\S]*mode="widthFix"/)
-  assert.match(previewWxml, /id="singleWorkVideo-\{\{item\.componentKey\}\}"/)
-  assert.match(previewWxml, /activeSingleWorkVideoKey === item\.componentKey/)
+  assert.match(previewWxml, /<mock-portfolio-renderer[\s\S]*active-single-work-video-key="\{\{activeSingleWorkVideoKey\}\}"/)
+  assert.match(rendererWxml, /component\.componentType === 'SINGLE_WORK'/)
+  assert.match(rendererWxml, /class="single-work-image"[\s\S]*mode="widthFix"/)
+  assert.match(rendererWxml, /id="singleWorkVideo-\{\{component\.componentKey\}\}"/)
+  assert.match(rendererWxml, /activeSingleWorkVideoKey === component\.componentKey/)
 })
 
 test('mock standard portfolio renders complete component json in fixed order', () => {
@@ -570,33 +693,179 @@ test('mock standard portfolio renders complete component json in fixed order', (
   assert.equal(portfolio.renderData.components[2].groups[0].works.length, 7)
 })
 
+test('mock personal portfolio preview uses its own isolated renderer without editor labels', () => {
+  const previewJson = readJson('pages/mock/portfolio-standard-preview/portfolio-standard-preview.json')
+  const previewWxml = read('pages/mock/portfolio-standard-preview/portfolio-standard-preview.wxml')
+  const rendererWxml = read('components/mock/portfolio-renderer/portfolio-renderer.wxml')
+  const rendererWxss = read('components/mock/portfolio-renderer/portfolio-renderer.wxss')
+
+  assert.equal(previewJson.usingComponents['mock-portfolio-renderer'], '/components/mock/portfolio-renderer/portfolio-renderer')
+  assert.equal(Object.values(previewJson.usingComponents).some((componentPath) => componentPath.startsWith('/pages/portfolios/')), false)
+  assert.match(previewWxml, /<mock-portfolio-renderer[\s\S]*component="\{\{item\}\}"[\s\S]*bindworktap="handleWorkTap"/)
+  assert.match(rendererWxml, /class="profile-avatar"[\s\S]*src="\{\{component\.profile\.avatarUrl\}\}"/)
+  assert.match(rendererWxml, /class="work-grid"[\s\S]*wx:for="\{\{component\.activeGroup\.works\}\}"/)
+  assert.match(rendererWxml, /class="[^"]*contact-entry-button[^"]*"[\s\S]*component\.contactForm\.title/)
+  assert.doesNotMatch(rendererWxml, />个人资料</)
+  assert.doesNotMatch(rendererWxml, />双列作品列表</)
+  assert.match(rendererWxss, /\.profile-avatar\s*\{[\s\S]*width:\s*132rpx;[\s\S]*height:\s*132rpx;[\s\S]*border-radius:\s*50%;/)
+  assert.match(rendererWxss, /\.grid-card\s*\{[\s\S]*width:\s*50%;/)
+  assert.match(rendererWxss, /\.contact-entry-button\s*\{[\s\S]*border-radius:\s*999rpx;/)
+})
+
+test('mock preview handles display component events locally without network calls', () => {
+  let networkCalls = 0
+  const previews = []
+  const toasts = []
+  const wxMock = {
+    getStorageSync() {
+      return null
+    },
+    previewImage(options) {
+      previews.push(options)
+    },
+    showToast(options) {
+      toasts.push(options)
+    },
+    createVideoContext() {
+      return { pause() {} }
+    },
+    request() {
+      networkCalls += 1
+    }
+  }
+  global.wx = wxMock
+  try {
+    const page = loadMockPage('pages/mock/portfolio-standard-preview/portfolio-standard-preview.js', wxMock)
+    const grid = page.data.portfolio.components.find((item) => item.componentType === 'WORK_GRID')
+    const work = grid.activeGroup.works[0]
+
+    page.handleDisplayTagTap({
+      detail: {
+        componentKey: grid.componentKey,
+        groupKey: grid.displayTags[0].groupKey
+      }
+    })
+    page.handleWorkTap({
+      detail: {
+        mediaType: 'IMAGE',
+        mediaUrl: work.previewUrl,
+        coverUrl: work.thumbnailUrl,
+        title: work.title
+      }
+    })
+    page.handleSubmitContact()
+  } finally {
+    delete global.wx
+  }
+
+  assert.equal(previews.length, 1)
+  assert.deepEqual(toasts.at(-1), { title: MOCK_LOGIN_REQUIRED_MESSAGE, icon: 'none' })
+  assert.equal(networkCalls, 0)
+})
+
+test('mock portfolio background and bottom navigation stay inside the local draft', () => {
+  const mock = loadMockExperience()
+  const original = mock.clone(mock.MOCK_STANDARD_PORTFOLIO)
+  const styled = mock.updateMockPortfolioStyle(original, '#151515')
+  const expanded = mock.setMockBottomNavigationCount(styled, 3)
+  const renamed = mock.renameMockNavigationItem(
+    expanded,
+    expanded.config.bottomNav.items[1].key,
+    '作品集'
+  )
+  const secondaryKey = renamed.config.bottomNav.items[1].key
+  const withSecondaryComponent = mock.addMockComponent(
+    renamed,
+    mock.COMPONENT_TYPES.TEXT_SECTION,
+    secondaryKey
+  )
+
+  assert.equal(original.config.style.backgroundColor, '#FFFFFF')
+  assert.equal(withSecondaryComponent.config.style.backgroundColor, '#151515')
+  assert.equal(withSecondaryComponent.config.bottomNav.items.length, 3)
+  assert.equal(withSecondaryComponent.config.bottomNav.items[1].title, '作品集')
+  assert.equal(
+    mock.getMockMenuComponents(withSecondaryComponent.config, secondaryKey).at(-1).componentType,
+    mock.COMPONENT_TYPES.TEXT_SECTION
+  )
+  assert.equal(withSecondaryComponent.renderData.themeMode, 'dark')
+  assert.equal(withSecondaryComponent.renderData.bottomNav.items[1].components.at(-1).componentType, 'TEXT_SECTION')
+  assert.deepEqual(withSecondaryComponent.renderData.activeComponents, withSecondaryComponent.renderData.components)
+})
+
+test('mock preview switches navigation menus without any backend request', () => {
+  const mock = loadMockExperience()
+  const previewWxml = read('pages/mock/portfolio-standard-preview/portfolio-standard-preview.wxml')
+  let storedDraft = mock.setMockBottomNavigationCount(mock.clone(mock.MOCK_STANDARD_PORTFOLIO), 2)
+  const secondaryKey = storedDraft.config.bottomNav.items[1].key
+  storedDraft = mock.addMockComponent(storedDraft, mock.COMPONENT_TYPES.TEXT_SECTION, secondaryKey)
+  let networkCalls = 0
+  const wxMock = {
+    getStorageSync() {
+      return storedDraft
+    },
+    previewImage() {},
+    showToast() {},
+    createVideoContext() {
+      return { pause() {} }
+    },
+    request() {
+      networkCalls += 1
+    }
+  }
+  global.wx = wxMock
+  try {
+    const page = loadMockPage('pages/mock/portfolio-standard-preview/portfolio-standard-preview.js', wxMock)
+    page.handlePortfolioMenuChange({ detail: { menuKey: secondaryKey } })
+
+    assert.equal(page.data.portfolio.activeMenuKey, secondaryKey)
+    assert.equal(page.data.portfolio.activeComponents.at(-1).componentType, 'TEXT_SECTION')
+  } finally {
+    delete global.wx
+  }
+
+  assert.equal(networkCalls, 0)
+  assert.match(
+    previewWxml,
+    /<portfolio-bottom-nav[\s\S]*navigation="\{\{portfolio\.bottomNav\}\}"[\s\S]*bindchange="handlePortfolioMenuChange"/
+  )
+})
+
 test('mock page markup exposes required registration prompts and navigation actions', () => {
   const mineWxml = read('pages/mock/index/index.wxml')
   const mineJs = read('pages/mock/index/index.js')
   const scheduleWxml = read('pages/mock/schedule/schedule.wxml')
   const scheduleJs = read('pages/mock/schedule/schedule.js')
   const worksWxml = read('pages/mock/works/works.wxml')
+  const worksWxss = read('pages/mock/styles/works.wxss')
   const portfoliosWxml = read('pages/mock/portfolios/portfolios.wxml')
   const editWxml = read('pages/mock/portfolio-standard-edit/portfolio-standard-edit.wxml')
   const editJs = read('pages/mock/portfolio-standard-edit/portfolio-standard-edit.js')
   const previewWxml = read('pages/mock/portfolio-standard-preview/portfolio-standard-preview.wxml')
+  const rendererWxml = read('components/mock/portfolio-renderer/portfolio-renderer.wxml')
 
   assert.match(mineWxml, /返回登录页/)
   assert.match(mineJs, /url:\s*'\/pages\/login\/login'/)
   assert.match(scheduleWxml, /新增档期/)
   assert.match(scheduleJs, /showMockLoginRequiredToast/)
   assert.match(worksWxml, /风景作品/)
-  assert.match(worksWxml, /class="audit-pill \{\{item\.auditStatusTone\}\}"[\s\S]*\{\{item\.auditStatusText\}\}/)
+  assert.match(worksWxml, /class="reference-pill \{\{item\.referenceCount > 0 \? 'used' : ''\}\}"[\s\S]*引用[\s\S]*item\.referenceCount[\s\S]*未引用/)
+  assert.match(worksWxml, /class="status-badge \{\{item\.auditStatusTone\}\}"[\s\S]*class="status-dot"[\s\S]*\{\{item\.auditStatusText\}\}/)
+  assert.doesNotMatch(worksWxml, /已使用 1 次/)
+  assert.match(worksWxss, /\.reference-pill\s*\{[\s\S]*height:\s*42rpx;[\s\S]*background:\s*#ffffff;/)
+  assert.match(worksWxss, /\.status-badge\s*\{[\s\S]*gap:\s*8rpx;/)
+  assert.match(worksWxss, /\.status-dot\s*\{[\s\S]*width:\s*12rpx;[\s\S]*height:\s*12rpx;/)
   assert.match(portfoliosWxml, /data-action="preview"[\s\S]*预览/)
   assert.match(editWxml, /保存草稿/)
   assert.match(editWxml, /发布/)
   assert.match(editWxml, /预览/)
   assert.match(editJs, /saveMockPortfolioDraft/)
-  assert.match(previewWxml, /轮播图/)
-  assert.match(previewWxml, /个人资料/)
-  assert.match(previewWxml, /双列作品列表/)
-  assert.match(previewWxml, /档期查询/)
-  assert.match(previewWxml, /预留联系信息/)
+  assert.match(previewWxml, /<portfolio-carousel/)
+  assert.match(previewWxml, /<mock-portfolio-renderer/)
+  assert.match(rendererWxml, /component\.componentType === 'PROFILE'/)
+  assert.match(rendererWxml, /component\.componentType === 'WORK_GRID'/)
+  assert.match(rendererWxml, /档期查询/)
+  assert.match(rendererWxml, /component\.componentType === 'CONTACT_FORM'/)
 })
 
 test('mock preview video overlay renders in root portal like production preview', () => {
@@ -609,6 +878,21 @@ test('mock preview video overlay renders in root portal like production preview'
   assert.notEqual(maskStart, -1)
   assert.ok(maskStart > portalStart)
   assert.ok(maskStart < portalEnd)
+})
+
+test('mock portfolio preview keeps personal tags in the shared chromatic pill language', () => {
+  const previewWxml = read('pages/mock/portfolio-standard-preview/portfolio-standard-preview.wxml')
+  const rendererWxml = read('components/mock/portfolio-renderer/portfolio-renderer.wxml')
+  const rendererWxss = read('components/mock/portfolio-renderer/portfolio-renderer.wxss')
+
+  assert.match(previewWxml, /<mock-portfolio-renderer[\s\S]*component="\{\{item\}\}"/)
+  assert.match(
+    rendererWxml,
+    /class="profile-tag"[\s\S]*color: \{\{tag\.color \|\| '#0f766e'\}\};[\s\S]*border-color: \{\{tag\.color \|\| '#0f766e'\}\};/
+  )
+  assert.match(rendererWxml, /class="profile-tag-dot"[\s\S]*background: \{\{tag\.color \|\| '#0f766e'\}\};/)
+  assert.match(rendererWxss, /\.profile-tag\s*\{[\s\S]*background:\s*#ffffff;/)
+  assert.match(rendererWxss, /\.profile-tag-dot\s*\{[\s\S]*width:\s*12rpx;[\s\S]*height:\s*12rpx;/)
 })
 
 test('mock pages borrow the corresponding production page visual structure', () => {
@@ -679,9 +963,7 @@ test('mock pages borrow the corresponding production page visual structure', () 
         'page-shell portfolio-preview-page',
         'preview-scroll',
         'folio-component',
-        'profile-section',
-        'work-section-title',
-        'work-grid'
+        'mock-portfolio-renderer'
       ]
     }
   ]

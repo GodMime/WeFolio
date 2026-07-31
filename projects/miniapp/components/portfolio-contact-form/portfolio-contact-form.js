@@ -9,6 +9,10 @@ const VIEW_MODE_MODAL = 'modal'
 
 Component({
   properties: {
+    themeMode: {
+      type: String,
+      value: 'light'
+    },
     contactComponent: {
       type: Object,
       value: {}

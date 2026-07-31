@@ -26,6 +26,7 @@ function validateTextSectionConfig(config = {}) {
 
 Component({
   properties: {
+    themeMode: { type: String, value: 'light' },
     config: { type: Object, value: {} }
   },
   data: {}

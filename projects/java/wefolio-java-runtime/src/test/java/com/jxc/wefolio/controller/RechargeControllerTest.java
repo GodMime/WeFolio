@@ -27,6 +27,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
@@ -120,6 +121,7 @@ class RechargeControllerTest {
                 String.class, String.class, String.class);
         Parameter[] parameters = method.getParameters();
 
+        assertThat(WechatPayNotificationController.class.isAnnotationPresent(RestController.class)).isTrue();
         assertThat(WechatPayNotificationController.class.isAnnotationPresent(SystemAccess.class)).isTrue();
         assertThat(method.getAnnotation(PostMapping.class).value())
                 .containsExactly("/api/payment/wechat/recharge/notify");

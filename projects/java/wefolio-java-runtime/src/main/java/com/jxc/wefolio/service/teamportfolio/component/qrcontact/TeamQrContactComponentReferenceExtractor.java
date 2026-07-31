@@ -33,6 +33,9 @@ public class TeamQrContactComponentReferenceExtractor {
     /** 固定引用排序。 */
     private static final int REFERENCE_SORT_ORDER = 0;
 
+    /** 二维码地址真实配置路径后缀。 */
+    private static final String QR_URL_CONFIG_PATH_SUFFIX = ".config.qrUrl";
+
     /** 二维码联系渲染器。 */
     private final TeamQrContactComponentRenderer renderer;
 
@@ -64,7 +67,7 @@ public class TeamQrContactComponentReferenceExtractor {
         reference.setReferenceType(ReferenceTypeDict.QR_CODE_ASSET.getCode());
         reference.setReferenceId(context.teamId());
         reference.setComponentKey(componentKey);
-        reference.setComponentPath(componentPath);
+        reference.setComponentPath(componentPath + QR_URL_CONFIG_PATH_SUFFIX);
         reference.setSortOrder(REFERENCE_SORT_ORDER);
         reference.setIsValid(VALID_REFERENCE);
         reference.setSnapshotJson(createSnapshot(renderedConfig).toJSONString());

@@ -1,5 +1,5 @@
 <view class="page-shell member-add-page">
-  <navigation-bar title="添加成员" back="{{true}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+  <navigation-bar title="添加成员" back="{{true}}" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
 
   <scroll-view class="member-add-scroll" scroll-y type="list">
     <view class="member-add-content">

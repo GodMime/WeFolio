@@ -1,5 +1,5 @@
 <view class="page-shell mine-page">
-  <navigation-bar title="我的" back="{{false}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+  <navigation-bar title="我的" back="{{false}}" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
 
   <scroll-view class="mine-scroll" scroll-y type="list">
     <view class="mine-content">
@@ -96,7 +96,9 @@
       data-label="{{item.label}}"
       bindtap="handleTabTap"
     >
-      <view class="tab-icon {{item.icon}}-tab-icon"></view>
+      <view class="tab-icon-wrap">
+        <image class="tab-icon-image" src="/assets/system/tabbar/{{item.icon}}{{item.active ? '-active' : ''}}.svg" mode="aspectFit"></image>
+      </view>
       <view class="tab-label">{{item.label}}</view>
     </button>
   </view>

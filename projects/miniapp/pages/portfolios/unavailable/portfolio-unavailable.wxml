@@ -1,5 +1,5 @@
 <view class="page-shell unavailable-page">
-  <navigation-bar title="功能预留" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+  <navigation-bar title="功能预留" color="#212529" background="#ffffff"></navigation-bar>
   <view class="unavailable-card">
     <view class="unavailable-title">暂未开放</view>
     <view class="unavailable-desc">高级个人作品集、标准团队作品集、高级团队作品集正在准备中。</view>

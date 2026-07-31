@@ -180,7 +180,8 @@ public class AuthAspect {
         VisitorContextHolder.set(new VisitorContext(
                 resolvedToken.visitorId(),
                 resolvedToken.visitorKey(),
-                authorization
+                authorization,
+                resolvedToken.anonymous()
         ));
         try {
             return joinPoint.proceed();

@@ -5,7 +5,7 @@ const path = require('node:path')
 
 const ROOT = path.resolve(__dirname, '../pages/team-portfolios/components')
 const COMPONENTS = [
-  'team-profile', 'carousel', 'divider', 'member-portfolio-grid', 'member-portfolio-list',
+  'team-profile', 'carousel', 'single-work', 'divider', 'member-portfolio-grid', 'member-portfolio-list',
   'text-section', 'schedule-query', 'contact-form', 'qr-contact'
 ]
 
@@ -32,6 +32,38 @@ function propertyDefault(definition, key) {
 function clone(value) {
   if (value === undefined || value === null || typeof value !== 'object') return value
   return JSON.parse(JSON.stringify(value))
+}
+
+function resolveClassBackground(sources, ancestorClass, elementClass) {
+  let winner = null
+  let order = 0
+  for (const source of sources) {
+    for (const match of source.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const background = match[2].match(/(?:^|;)\s*background\s*:\s*([^;]+)/)
+      if (!background) continue
+      for (const rawSelector of match[1].split(',')) {
+        const selectorClasses = Array.from(rawSelector.matchAll(/\.([A-Za-z0-9_-]+)/g))
+          .map((classMatch) => classMatch[1])
+        const matchesElement = selectorClasses.includes(elementClass)
+        const matchesContext = selectorClasses.every((className) => {
+          return className === elementClass || className === ancestorClass
+        })
+        if (!matchesElement || !matchesContext) continue
+        const candidate = {
+          value: background[1].trim(),
+          specificity: selectorClasses.length,
+          order
+        }
+        if (!winner ||
+            candidate.specificity > winner.specificity ||
+            (candidate.specificity === winner.specificity && candidate.order > winner.order)) {
+          winner = candidate
+        }
+      }
+      order += 1
+    }
+  }
+  return winner && winner.value
 }
 
 function createComponentHarness(definition, initialProperties = {}) {
@@ -106,6 +138,13 @@ const EDIT_LIFECYCLE_CASES = [
     expectedConfig(exports, source) { return exports.buildCarouselConfig(source) }
   },
   {
+    name: 'single-work', sourceProperty: 'config', draftKey: 'draft', entryEvent: 'loadmembers', extraProperties: { portfolioId: 9 },
+    initial: { memberUserId: 1, workId: 10, showTitle: true, showDescription: false },
+    latest: { memberUserId: 2, workId: 20, showTitle: false, showDescription: true },
+    expectedDraft(exports, source) { return exports.normalizeSingleWorkConfig(source) },
+    expectedConfig(exports, source) { return exports.normalizeSingleWorkConfig(source) }
+  },
+  {
     name: 'divider', sourceProperty: 'config', draftKey: 'draft',
     initial: { color: 'GRAY', heightPx: 16 }, latest: { color: 'BLACK', heightPx: 32 },
     expectedDraft(exports, source) { return exports.normalizeDividerConfig(source) },
@@ -178,7 +217,7 @@ for (const lifecycleCase of EDIT_LIFECYCLE_CASES) {
   })
 }
 
-test('all nine components are independent four-file Component packages', () => {
+test('all ten components are independent four-file Component packages', () => {
   for (const name of COMPONENTS) {
     const directory = path.join(ROOT, name)
     for (const extension of ['js', 'json', 'wxml', 'wxss']) {
@@ -191,6 +230,108 @@ test('all nine components are independent four-file Component packages', () => {
     assert.doesNotMatch(source, /require\([^)]*components\//)
     assert.doesNotMatch(source, /switch\s*\([^)]*componentType/)
   }
+})
+
+test('single work selects member before work and keeps one 16rpx copy gap', () => {
+  const { definition, exports } = loadComponent('single-work')
+  const harness = createComponentHarness(definition, {
+    portfolioId: 9,
+    config: { memberUserId: 1, workId: 10, showTitle: true, showDescription: false },
+    editMode: true
+  })
+
+  harness.instance.selectMember({ currentTarget: { dataset: { id: 2 } } })
+  assert.deepEqual(harness.instance.data.draft, {
+    memberUserId: 2, workId: null, showTitle: true, showDescription: false
+  })
+  harness.instance.selectWork({ currentTarget: { dataset: { item: { workId: 20, mediaType: 'VIDEO' } } } })
+  harness.instance.handleShowDescriptionChange({ detail: { value: true } })
+  harness.instance.saveEdit()
+  assert.deepEqual(harness.eventsByName('save')[0].detail.config, {
+    memberUserId: 2, workId: 20, showTitle: true, showDescription: true
+  })
+  assert.equal(exports.validateSingleWorkConfig(harness.eventsByName('save')[0].detail.config).valid, true)
+
+  const wxml = fs.readFileSync(path.join(ROOT, 'single-work/single-work.wxml'), 'utf8')
+  const wxss = fs.readFileSync(path.join(ROOT, 'single-work/single-work.wxss'), 'utf8')
+  assert.match(wxml, /mode="widthFix"/)
+  assert.match(wxml, /autoplay="\{\{true\}\}"/)
+  assert.match(wxml, /showTitle && work\.title/)
+  assert.match(wxml, /showDescription && work\.description/)
+  assert.match(wxss, /single-work-copy[\s\S]*min-height:\s*16rpx[\s\S]*padding-top:\s*16rpx/)
+  assert.match(wxss, /#59636f/)
+})
+
+test('single work restores a saved member only once when sources are rebound', () => {
+  const { definition } = loadComponent('single-work')
+  const harness = createComponentHarness(definition, {
+    portfolioId: 9,
+    config: { memberUserId: 1, workId: 10, showTitle: true, showDescription: false },
+    editMode: true
+  })
+  const members = [{ memberUserId: 1, displayName: '成员一' }]
+
+  harness.setProperties({ members })
+  assert.equal(harness.eventsByName('memberchange').length, 1)
+
+  harness.setProperties({
+    members,
+    works: [{ workId: 10, title: '作品一', mediaType: 'IMAGE' }]
+  })
+  assert.equal(harness.eventsByName('memberchange').length, 1)
+})
+
+test('single work keeps the complete video and cover inside a black player', () => {
+  const wxml = fs.readFileSync(path.join(ROOT, 'single-work/single-work.wxml'), 'utf8')
+  const wxss = fs.readFileSync(path.join(ROOT, 'single-work/single-work.wxss'), 'utf8')
+
+  assert.match(wxml, /<video[^>]*class="single-work-video"[^>]*object-fit="contain"/)
+  assert.match(wxml, /<image[^>]*class="single-work-video-cover"[^>]*mode="aspectFit"/)
+  assert.match(wxss, /\.single-work-video,\s*\.single-work-video-poster\s*\{[^}]*background:\s*#000;/)
+})
+
+test('single work keeps transparent image media transparent', () => {
+  const wxss = fs.readFileSync(path.join(ROOT, 'single-work/single-work.wxss'), 'utf8')
+
+  assert.match(wxss, /\.single-work-image\s*\{[^}]*background:\s*transparent;/)
+  assert.match(wxss, /\.single-work-video,\s*\.single-work-video-poster\s*\{[^}]*background:\s*#000;/)
+})
+
+test('single work keeps transparent image media transparent in the dark theme', () => {
+  const themeWxss = fs.readFileSync(
+    path.resolve(ROOT, '../styles/team-portfolio-theme.wxss'),
+    'utf8'
+  )
+  const componentWxss = fs.readFileSync(path.join(ROOT, 'single-work/single-work.wxss'), 'utf8')
+
+  assert.equal(
+    resolveClassBackground([themeWxss, componentWxss], 'theme-dark', 'single-work-image'),
+    'transparent'
+  )
+})
+
+test('single work renders animation media and falls back to its static cover', () => {
+  const { definition } = loadComponent('single-work')
+  const harness = createComponentHarness(definition, {
+    componentKey: 'single-animation',
+    work: {
+      workId: 21,
+      mediaType: 'ANIMATION',
+      mediaUrl: 'animation.webp',
+      coverUrl: 'animation-cover.jpg'
+    }
+  })
+  const wxml = fs.readFileSync(path.join(ROOT, 'single-work/single-work.wxml'), 'utf8')
+
+  assert.match(wxml, /work\.mediaType === 'ANIMATION' && !animationLoadFailed/)
+  assert.match(wxml, /src="\{\{work\.mediaUrl\}\}"[\s\S]*webp="\{\{true\}\}"[\s\S]*binderror="handleAnimationLoadError"/)
+  assert.match(wxml, /wx:elif="\{\{work\.mediaType === 'ANIMATION'\}\}"[\s\S]*src="\{\{work\.coverUrl\}\}"/)
+
+  harness.instance.handleAnimationLoadError()
+  harness.instance.handleMediaTap()
+  const preview = harness.eventsByName('preview')[0]
+  assert.equal(preview.detail.work.mediaType, 'ANIMATION')
+  assert.equal(preview.detail.work.mediaUrl, 'animation-cover.jpg')
 })
 
 test('team profile owns safe defaults and validates a team snapshot', () => {
@@ -306,9 +447,15 @@ test('carousel uses the personal-style progress indicator and only rotates multi
   assert.match(wxml, /src="\{\{item\.mediaUrl \|\| item\.coverUrl\}\}"/)
   assert.match(wxml, /class="carousel-progress-bar"/)
   assert.doesNotMatch(wxml, /class="progress"/)
-  assert.match(wxss, /\.carousel\s*\{[^}]*width:\s*calc\(100% \+ 56rpx\);[^}]*margin-left:\s*-28rpx;[^}]*height:\s*563rpx;/)
   assert.match(wxss, /\.carousel\.editor-mode\s*\{[^}]*height:\s*auto;[^}]*overflow:\s*visible;/)
   assert.match(wxss, /\.carousel\.editor-mode\s*\{[^}]*width:\s*100%;[^}]*margin-left:\s*0;/)
+})
+
+test('carousel spans preview and visitor pages without losing its rounded frame', () => {
+  const wxss = fs.readFileSync(path.join(ROOT, 'carousel/carousel.wxss'), 'utf8')
+
+  assert.match(wxss, /\.carousel\s*\{[^}]*width:\s*100%;[^}]*margin-left:\s*0;[^}]*height:\s*563rpx;/)
+  assert.match(wxss, /\.carousel\s*\{[^}]*overflow:\s*hidden;[^}]*border-radius:\s*40rpx;/)
 })
 
 test('shared WXS selection helpers avoid unavailable String and preserve numeric ID matching', () => {
@@ -328,6 +475,38 @@ test('shared WXS selection helpers avoid unavailable String and preserve numeric
   assert.equal(selectionModule.exports.count([], 'memberUserId', 2), 0)
 })
 
+test('carousel removal compacts draft order and visible WXS order', () => {
+  const { exports } = loadComponent('carousel')
+  const wxsSource = fs.readFileSync(path.join(ROOT, 'editor-selection.wxs'), 'utf8')
+  const selectionModule = { exports: {} }
+  new Function('module', wxsSource)(selectionModule)
+  const original = [
+    { memberUserId: 2, workId: 9 },
+    { memberUserId: 2, workId: 10 },
+    { memberUserId: 3, workId: 11 }
+  ]
+
+  const remaining = exports.toggleCarouselWork(original, original[1])
+
+  assert.deepEqual(remaining.map((item) => item.workId), [9, 11])
+  assert.equal(selectionModule.exports.order(remaining, 'workId', 9), 1)
+  assert.equal(selectionModule.exports.order(remaining, 'workId', 11), 2)
+})
+
+test('carousel selection restarts at one after every work is removed', () => {
+  const { exports } = loadComponent('carousel')
+  const wxsSource = fs.readFileSync(path.join(ROOT, 'editor-selection.wxs'), 'utf8')
+  const selectionModule = { exports: {} }
+  new Function('module', wxsSource)(selectionModule)
+  const first = { memberUserId: 2, workId: 9 }
+  const cleared = exports.toggleCarouselWork([first], first)
+  const reselected = exports.toggleCarouselWork(cleared, { memberUserId: 3, workId: 11 })
+
+  assert.deepEqual(cleared, [])
+  assert.deepEqual(reselected, [{ memberUserId: 3, workId: 11 }])
+  assert.equal(selectionModule.exports.order(reselected, 'workId', 11), 1)
+})
+
 test('carousel member buttons hug their content and show every selected work count', () => {
   const wxml = fs.readFileSync(path.join(ROOT, 'carousel/carousel.wxml'), 'utf8')
   const wxss = fs.readFileSync(path.join(ROOT, 'carousel/carousel.wxss'), 'utf8')
@@ -337,6 +516,36 @@ test('carousel member buttons hug their content and show every selected work cou
   assert.match(wxss, /\.editor-member-choice\s*\{[^}]*display:\s*inline-flex;[^}]*width:\s*fit-content;/)
   assert.match(wxss, /\.editor-member-name\s*\{[^}]*max-width:\s*180rpx;[^}]*text-overflow:\s*ellipsis;/)
   assert.match(wxss, /\.editor-member-count\s*\{[^}]*flex:\s*none;/)
+})
+
+test('member-first editors give Skyline horizontal lists an explicit viewport height', () => {
+  for (const name of ['single-work', 'member-portfolio-grid', 'member-portfolio-list']) {
+    const wxss = fs.readFileSync(path.join(ROOT, name, `${name}.wxss`), 'utf8')
+    const memberScrollRule = wxss.match(/\.editor-member-scroll\s*\{([^}]*)\}/)
+    const memberRowRule = wxss.match(/\.editor-member-row\s*\{([^}]*)\}/)
+
+    assert.ok(memberScrollRule, `${name} defines the member scroll viewport`)
+    assert.match(memberScrollRule[1], /height:\s*56rpx;/, `${name} keeps the Skyline viewport visible`)
+    assert.ok(memberRowRule, `${name} defines the member content row`)
+    assert.match(memberRowRule[1], /height:\s*56rpx;/, `${name} keeps the member row measurable`)
+  }
+})
+
+test('member-first editors size view capsules from each nickname', () => {
+  for (const name of ['single-work', 'member-portfolio-grid', 'member-portfolio-list']) {
+    const wxml = fs.readFileSync(path.join(ROOT, name, `${name}.wxml`), 'utf8')
+    const wxss = fs.readFileSync(path.join(ROOT, name, `${name}.wxss`), 'utf8')
+    const memberChoiceRule = wxss.match(/\.editor-member-choice\s*\{([^}]*)\}/)
+
+    assert.match(wxml, /<view wx:for="\{\{members\}\}"[^>]*class="editor-member-choice/)
+    assert.doesNotMatch(wxml, /<button wx:for="\{\{members\}\}"[^>]*class="editor-member-choice/)
+    assert.ok(memberChoiceRule, `${name} defines member choice styles`)
+    assert.match(memberChoiceRule[1], /display:\s*inline-flex;/, `${name} uses a stable inline flex box`)
+    assert.match(memberChoiceRule[1], /width:\s*auto;/, `${name} follows the nickname width`)
+    assert.match(memberChoiceRule[1], /flex:\s*0 0 auto;/, `${name} prevents capsules from growing equally`)
+    assert.match(memberChoiceRule[1], /white-space:\s*nowrap;/, `${name} keeps the nickname on one line`)
+    assert.doesNotMatch(memberChoiceRule[1], /width:\s*fit-content;/, `${name} avoids unsupported fit-content sizing`)
+  }
 })
 
 test('carousel work picker matches the personal vertical work list visual language', () => {
@@ -354,9 +563,9 @@ test('carousel work picker matches the personal vertical work list visual langua
   assert.match(wxss, /\.editor-option-list\s*\{[^}]*width:\s*100%;[^}]*flex-direction:\s*column;[^}]*align-self:\s*stretch;/)
   assert.match(wxss, /\.editor-option\s*\{[^}]*width:\s*100%;[^}]*min-height:\s*112rpx;/)
   assert.match(wxss, /\.editor-option-thumb\s*\{[^}]*width:\s*92rpx;[^}]*height:\s*76rpx;/)
-  assert.match(wxss, /\.editor-option\.selected\s*\{[^}]*border-color:\s*#c28b37;[^}]*background:\s*#fff9ed;/)
+  assert.match(wxss, /\.editor-option\.selected\s*\{[^}]*border-color:\s*#212529;[^}]*background:\s*#fff;/)
   assert.match(wxss, /\.editor-option-check\s*\{[^}]*width:\s*44rpx;[^}]*height:\s*44rpx;/)
-  assert.match(wxss, /\.editor-option\.selected \.editor-option-check\s*\{[^}]*background:\s*#c28b37;/)
+  assert.match(wxss, /\.editor-option\.selected \.editor-option-check\s*\{[^}]*background:\s*#212529;/)
   assert.doesNotMatch(wxss, /width:\s*calc\(33\.333%/)
 })
 

@@ -3,7 +3,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background-color: #f5f7fb;
+  background-color: #f5f6f7;
 }
 
 .work-edit-scroll {
@@ -12,16 +12,16 @@
 }
 
 .work-edit-content {
-  padding: 28rpx 28rpx 180rpx;
+  padding: 20rpx 32rpx 180rpx;
   box-sizing: border-box;
 }
 
 .preview-panel,
 .form-panel,
 .reference-panel {
-  padding: 22rpx;
-  border: 1rpx solid #e2e8ee;
-  border-radius: 16rpx;
+  padding: 28rpx;
+  border: 1rpx solid rgba(33, 37, 41, 0.05);
+  border-radius: 48rpx;
   background: #ffffff;
   box-sizing: border-box;
 }
@@ -46,8 +46,8 @@
   height: 168rpx;
   flex: none;
   overflow: hidden;
-  border-radius: 16rpx;
-  background: #e7edf4;
+  border-radius: 32rpx;
+  background: #e9ecef;
 }
 
 .preview-media image,
@@ -85,7 +85,7 @@
 }
 
 .preview-title {
-  color: #17202a;
+  color: #212529;
   font-size: 32rpx;
   font-weight: 800;
   line-height: 1.35;
@@ -110,7 +110,7 @@
 
 .field-label {
   margin-top: 22rpx;
-  color: #17202a;
+  color: #212529;
   font-size: 25rpx;
   font-weight: 800;
 }
@@ -121,16 +121,16 @@
 
 .text-input,
 .tag-input {
-  height: 72rpx;
-  color: #17202a;
+  height: 84rpx;
+  color: #212529;
   font-size: 27rpx;
 }
 
 .text-input {
   margin-top: 8rpx;
   padding: 0 18rpx;
-  border-radius: 14rpx;
-  background: #f5f8fb;
+  border-radius: 24rpx;
+  background: #f1f3f5;
 }
 
 .tag-editor {
@@ -142,8 +142,8 @@
   flex: 1;
   min-width: 0;
   padding: 0 18rpx;
-  border-radius: 14rpx;
-  background: #f5f8fb;
+  border-radius: 24rpx;
+  background: #f1f3f5;
 }
 
 .tag-add,
@@ -152,11 +152,11 @@
   display: flex;
   align-items: center;
   padding: 0 20rpx;
-  color: #0f766e;
+  color: #212529;
   font-size: 24rpx;
   font-weight: 800;
   border-radius: 999rpx;
-  background: #dcf7f1;
+  background: #e9ecef;
 }
 
 .tag-list {
@@ -173,8 +173,8 @@
   color: #41505f;
   font-size: 25rpx;
   line-height: 1.45;
-  border-radius: 14rpx;
-  background: #f5f8fb;
+  border-radius: 24rpx;
+  background: #f1f3f5;
   box-sizing: border-box;
 }
 
@@ -183,7 +183,7 @@
 }
 
 .panel-title {
-  color: #17202a;
+  color: #212529;
   font-size: 28rpx;
   font-weight: 800;
 }
@@ -200,7 +200,7 @@
 }
 
 .reference-title {
-  color: #17202a;
+  color: #212529;
   font-size: 25rpx;
   font-weight: 800;
 }
@@ -227,7 +227,7 @@
   width: 36rpx;
   height: 36rpx;
   border: 4rpx solid #d8e0e8;
-  border-top-color: #3d6fad;
+  border-top-color: #212529;
   border-radius: 50%;
   animation: loading-spin 820ms linear infinite;
   box-sizing: border-box;
@@ -240,7 +240,7 @@
 }
 
 .empty-title {
-  color: #17202a;
+  color: #212529;
   font-size: 32rpx;
   font-weight: 800;
 }
@@ -251,19 +251,19 @@
 
 .primary-button,
 .danger-button {
-  height: 88rpx;
+  height: 96rpx;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 28rpx;
   font-weight: 800;
-  border-radius: 18rpx;
+  border-radius: 999rpx;
 }
 
 .primary-button {
   width: 100%;
   color: #ffffff;
-  background: #17202a;
+  background: #212529;
 }
 
 .primary-button.compact {
@@ -276,9 +276,9 @@
 
 .danger-button {
   width: 100%;
-  color: #a9354f;
-  border: 1rpx solid #f3c5cf;
-  background: #fff3f6;
+  color: #b55656;
+  border: 1rpx solid #e8caca;
+  background: #faf2f2;
 }
 
 .bottom-action {
@@ -286,7 +286,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  padding: 18rpx 28rpx calc(18rpx + env(safe-area-inset-bottom));
+  padding: 18rpx 32rpx calc(18rpx + env(safe-area-inset-bottom));
   border-top: 1rpx solid rgba(23, 32, 42, 0.08);
   background: rgba(255, 255, 255, 0.96);
   box-sizing: border-box;

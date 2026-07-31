@@ -200,9 +200,6 @@ public class MinePortfolioService {
     /** 上传票据有效分钟数 */
     private static final int TICKET_EXPIRE_MINUTES = 15;
 
-    /** 作品集归属类型错误提示 */
-    private static final String INVALID_OWNER_TYPE_MESSAGE = "作品集归属类型不正确";
-
     /** 草稿保存历史动作 */
     private static final String HISTORY_ACTION_DRAFT_SAVE = "DRAFT_SAVE";
 
@@ -269,7 +266,7 @@ public class MinePortfolioService {
             return response;
         }
         if (!PortfolioOwnerTypeDict.USER.getCode().equals(normalizedOwnerType)) {
-            throw new BusinessException(INVALID_OWNER_TYPE_MESSAGE);
+            throw new BusinessException(PortfolioMessage.PORTFOLIO_OWNER_TYPE_INVALID_MESSAGE);
         }
         List<PortfolioEntity> portfolios = portfolioEntityMapper.selectList(
                 Wrappers.lambdaQuery(PortfolioEntity.class)
@@ -296,7 +293,7 @@ public class MinePortfolioService {
                 componentLibraryItem(PortfolioComponentTypeDict.DIVIDER, "在内容之间加入可调高度的分割线"),
                 componentLibraryItem(PortfolioComponentTypeDict.WORK_GRID, "双列展示图片和视频作品"),
                 componentLibraryItem(PortfolioComponentTypeDict.WORK_LIST, "单列展示重点图片和视频作品"),
-                componentLibraryItem(PortfolioComponentTypeDict.SINGLE_WORK, "突出展示一个图片或视频作品"),
+                componentLibraryItem(PortfolioComponentTypeDict.SINGLE_WORK, "突出展示一个图片、视频或动图作品"),
                 componentLibraryItem(PortfolioComponentTypeDict.SCHEDULE_QUERY, "允许访客查询公开档期"),
                 componentLibraryItem(PortfolioComponentTypeDict.CONTACT_FORM, "收集访客预留联系信息"),
                 componentLibraryItem(PortfolioComponentTypeDict.QR_CONTACT, "展示微信二维码联系方式")
@@ -398,12 +395,19 @@ public class MinePortfolioService {
         if (request == null || request.getConfig() == null) {
             throw new BusinessException(PortfolioMessage.DRAFT_CONFIG_REQUIRED_MESSAGE);
         }
+        if (isNewEditorConfig(request.getConfig()) && request.getClientRevision() == null) {
+            throw new BusinessException(PortfolioMessage.DRAFT_CLIENT_REVISION_REQUIRED_MESSAGE);
+        }
         if (request.getClientRevision() != null && !request.getClientRevision().equals(safeInt(portfolio.getDraftRevision()))) {
             throw new BusinessException(PortfolioMessage.DRAFT_REVISION_CHANGED_SAVE_MESSAGE);
         }
         PortfolioConfigDto oldDraftConfig = parseConfig(portfolio.getDraftConfigJson());
         PortfolioConfigDto publishedConfig = parseConfig(portfolio.getPublishedConfigJson());
-        PortfolioConfigDto normalized = portfolioConfigValidator.normalize(userId, request.getConfig());
+        PortfolioConfigDto normalized = portfolioConfigValidator.normalizeForDraft(
+                userId,
+                request.getConfig(),
+                oldDraftConfig
+        );
         List<String> deletedObjectKeys = resolveUnreferencedAssetObjectKeys(
                 userId,
                 portfolio.getId(),
@@ -602,7 +606,8 @@ public class MinePortfolioService {
         String draftConfigJson = portfolio.getDraftConfigJson();
         PortfolioConfigDto currentDraftConfig = parseConfig(draftConfigJson);
         PortfolioConfigDto oldPublishedConfig = parseConfig(portfolio.getPublishedConfigJson());
-        PortfolioConfigDto normalized = portfolioConfigValidator.normalize(userId, currentDraftConfig);
+        PortfolioConfigDto normalized = portfolioConfigValidator.normalizeForDraft(userId, currentDraftConfig, null);
+        portfolioConfigValidator.validateForPublish(userId, normalized);
         List<String> deletedObjectKeys = resolveUnreferencedAssetObjectKeys(
                 userId,
                 portfolio.getId(),
@@ -1140,7 +1145,9 @@ public class MinePortfolioService {
             addOwnedPortfolioAssetObjectKey(objectKeys, config.getShare().getCoverUrl(), uniqueCode, portfolioId);
             addOwnedPortfolioAssetObjectKey(objectKeys, config.getShare().getAvatarUrl(), uniqueCode, portfolioId);
         }
-        for (PortfolioConfigDto.Component component : safeList(config.getComponents())) {
+        for (PortfolioComponentTraversal.ComponentLocation location
+                : PortfolioComponentTraversal.listComponentLocations(config)) {
+            PortfolioConfigDto.Component component = location.component();
             if (component == null) {
                 continue;
             }
@@ -1321,12 +1328,24 @@ public class MinePortfolioService {
      * @param componentKey 组件实例键
      */
     private void requireScheduleComponentConfig(PortfolioConfigDto config, String componentKey) {
-        safeList(config == null ? null : config.getComponents()).stream()
-                .filter(component -> component != null && Boolean.TRUE.equals(component.getEnabled()))
-                .filter(component -> COMPONENT_TYPE_SCHEDULE_QUERY.equals(component.getComponentType()))
-                .filter(component -> Objects.equals(component.getComponentKey(), componentKey))
-                .findFirst()
+        PortfolioComponentTraversal.findEnabledComponent(
+                        config,
+                        componentKey,
+                        COMPONENT_TYPE_SCHEDULE_QUERY
+                )
                 .orElseThrow(() -> new BusinessException(PortfolioMessage.SCHEDULE_QUERY_COMPONENT_NOT_FOUND_MESSAGE));
+    }
+
+    /**
+     * 判断请求是否来自支持背景和底部导航的新版编辑器。
+     *
+     * @param config 请求配置
+     * @return 是否为新版编辑器配置
+     */
+    private boolean isNewEditorConfig(PortfolioConfigDto config) {
+        return config != null
+                && config.getEditorSchemaRevision() != null
+                && config.getEditorSchemaRevision() >= PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT;
     }
 
     /**
@@ -1598,7 +1617,7 @@ public class MinePortfolioService {
             MessageDigest digest = MessageDigest.getInstance(SHA_256_ALGORITHM);
             return HexFormat.of().formatHex(digest.digest(defaultString(text).getBytes(StandardCharsets.UTF_8)));
         } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 算法不可用", e);
+            throw new IllegalStateException(PortfolioMessage.SHA_256_UNAVAILABLE_MESSAGE, e);
         }
     }
 

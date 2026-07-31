@@ -1,4 +1,4 @@
-<view wx:if="{{viewMode !== modalMode}}" class="portfolio-contact-form">
+<view wx:if="{{viewMode !== modalMode}}" class="portfolio-contact-form portfolio-theme-{{themeMode}}">
   <view wx:if="{{contactComponent.contactForm.displayMode === inlineMode}}" class="form-section">
     <view class="component-title">{{contactComponent.contactForm.title || defaultTitle}}</view>
     <view wx:if="{{contactComponent.contactForm.description}}" class="section-desc">{{contactComponent.contactForm.description}}</view>
@@ -16,7 +16,7 @@
   </view>
 </view>
 
-<view wx:else class="contact-form-mask {{modalVisible ? 'visible' : ''}}" catchtap="handleCloseModal">
+<view wx:else class="contact-form-mask portfolio-theme-{{themeMode}} {{modalVisible ? 'visible' : ''}}" catchtap="handleCloseModal">
   <view class="contact-form-panel" catchtap="noop">
     <view class="contact-form-heading">
       <view class="component-title">{{contactComponent.contactForm.title || defaultTitle}}</view>

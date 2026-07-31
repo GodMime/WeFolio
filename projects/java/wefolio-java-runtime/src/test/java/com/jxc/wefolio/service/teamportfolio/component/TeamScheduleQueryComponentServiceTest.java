@@ -306,7 +306,7 @@ class TeamScheduleQueryComponentServiceTest {
         assertThat(reference.getReferenceType()).isEqualTo("SCHEDULE_COMPONENT");
         assertThat(reference.getReferenceId()).isEqualTo(TEAM_ID);
         assertThat(reference.getComponentKey()).isEqualTo(COMPONENT_KEY);
-        assertThat(reference.getComponentPath()).isEqualTo(COMPONENT_PATH);
+        assertThat(reference.getComponentPath()).isEqualTo(COMPONENT_PATH + ".config");
         assertThat(reference.getSortOrder()).isZero();
         assertThat(reference.getIsValid()).isEqualTo(1);
         assertThat(reference.getConfigScope()).isNull();
@@ -401,6 +401,34 @@ class TeamScheduleQueryComponentServiceTest {
         assertThat(response.getPortfolioType()).isEqualTo("TEAM");
         assertThat(response.getQueriedDate()).isEqualTo(QUERY_DATE);
         verify(teamMemberEntityMapper, times(1)).selectList(any());
+    }
+
+    /**
+     * 预览和发布入口必须能够从次级菜单定位档期查询组件。
+     */
+    @Test
+    void configAwareEntryPointsShouldFindScheduleComponentInSecondaryMenu() {
+        when(teamMemberEntityMapper.selectList(any())).thenReturn(List.of());
+        TeamPortfolioConfigDto config = portfolioConfig();
+        TeamPortfolioConfigDto.BottomNavItem home = new TeamPortfolioConfigDto.BottomNavItem();
+        home.setKey("nav_home");
+        home.setTitle("首页");
+        TeamPortfolioConfigDto.BottomNavItem schedule = new TeamPortfolioConfigDto.BottomNavItem();
+        schedule.setKey("nav_schedule");
+        schedule.setTitle("档期");
+        schedule.setComponents(List.of(
+                component(COMPONENT_KEY, "SCHEDULE_QUERY", true, unlimitedConfig())));
+        TeamPortfolioConfigDto.BottomNav bottomNav = new TeamPortfolioConfigDto.BottomNav();
+        bottomNav.setEnabled(true);
+        bottomNav.setItems(List.of(home, schedule));
+        config.setBottomNav(bottomNav);
+
+        assertThat(service().previewOptions(context(), config, COMPONENT_KEY)).isEqualTo(unlimitedConfig());
+        assertThat(service().queryPublished(
+                portfolio(), config, request(QUERY_DATE),
+                new VisitorContext(91L, "visitor-key", "token"), publishedContext(false))
+                .getPortfolioType()).isEqualTo("TEAM");
+        verify(teamMemberEntityMapper).selectList(any());
     }
 
     /**

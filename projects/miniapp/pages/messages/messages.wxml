@@ -1,5 +1,5 @@
 <view class="page-shell messages-page">
-  <navigation-bar title="我的消息" back="{{true}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+  <navigation-bar title="我的消息" back="{{true}}" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
 
   <scroll-view class="messages-scroll" scroll-y type="list" bindscrolltolower="handleLoadMore" lower-threshold="120">
     <view class="messages-content">

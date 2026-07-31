@@ -39,6 +39,7 @@ import com.jxc.wefolio.mapper.PortfolioReferenceEntityMapper;
 import com.jxc.wefolio.mapper.PortfolioShareRecordEntityMapper;
 import com.jxc.wefolio.mapper.ScheduleEntityMapper;
 import com.jxc.wefolio.mapper.SlotDefinitionEntityMapper;
+import com.jxc.wefolio.message.PortfolioMessage;
 import com.jxc.wefolio.service.teamportfolio.TeamPortfolioReferenceGuardService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -421,7 +422,7 @@ class MinePortfolioServiceTest {
                 .singleElement()
                 .satisfies(item -> {
                     assertThat(item.getName()).isEqualTo("单个作品");
-                    assertThat(item.getDescription()).isEqualTo("突出展示一个图片或视频作品");
+                    assertThat(item.getDescription()).isEqualTo("突出展示一个图片、视频或动图作品");
                 });
     }
 
@@ -431,7 +432,7 @@ class MinePortfolioServiceTest {
         portfolio.setDraftRevision(3);
         when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
         PortfolioConfigDto normalized = config();
-        when(portfolioConfigValidator.normalize(7L, normalized)).thenReturn(normalized);
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), eq(normalized), any())).thenReturn(normalized);
         when(portfolioConfigValidator.buildReferences(88L, 7L, PortfolioConfigScopeDict.DRAFT.getCode(), normalized))
                 .thenReturn(List.of(reference(88L, PortfolioConfigScopeDict.DRAFT.getCode(), 11L)));
         when(portfolioEntityMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
@@ -466,7 +467,7 @@ class MinePortfolioServiceTest {
         portfolio.setPublicationStatus(PortfolioPublicationStatusDict.PUBLISHED.getCode());
         when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
         PortfolioConfigDto normalized = config();
-        when(portfolioConfigValidator.normalize(7L, normalized)).thenReturn(normalized);
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), eq(normalized), any())).thenReturn(normalized);
         when(portfolioConfigValidator.buildReferences(88L, 7L, PortfolioConfigScopeDict.DRAFT.getCode(), normalized))
                 .thenReturn(List.of());
         when(portfolioEntityMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
@@ -505,7 +506,7 @@ class MinePortfolioServiceTest {
                 """.formatted(cosUrl(publishedQr)));
         when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
         PortfolioConfigDto normalized = configWithPortfolioAssets("", "", "");
-        when(portfolioConfigValidator.normalize(7L, normalized)).thenReturn(normalized);
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), eq(normalized), any())).thenReturn(normalized);
         when(portfolioConfigValidator.buildReferences(
                 88L, 7L, PortfolioConfigScopeDict.DRAFT.getCode(), normalized)).thenReturn(List.of());
         when(miniappAuthService.getUniqueCodeByUserId(7L)).thenReturn("WFA3B1E7A2");
@@ -527,7 +528,7 @@ class MinePortfolioServiceTest {
         portfolio.setDraftRevision(3);
         when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
         PortfolioConfigDto normalized = config();
-        when(portfolioConfigValidator.normalize(7L, normalized)).thenReturn(normalized);
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), eq(normalized), any())).thenReturn(normalized);
         when(portfolioEntityMapper.updateById(any(PortfolioEntity.class))).thenReturn(0);
         MinePortfolioDraftSaveRequest request = new MinePortfolioDraftSaveRequest();
         request.setConfig(normalized);
@@ -541,6 +542,68 @@ class MinePortfolioServiceTest {
         verify(portfolioReferenceEntityMapper, never()).insert(any(PortfolioReferenceEntity.class));
         verify(portfolioHistoryEntityMapper, never()).insert(any(PortfolioHistoryEntity.class));
         verify(pointService, never()).consume(any(), any(), any(), any(), any(Integer.class), any(), any());
+    }
+
+    @Test
+    void saveDraftShouldRejectNewEditorWithoutClientRevision() {
+        PortfolioEntity portfolio = ownedPortfolio();
+        portfolio.setDraftRevision(3);
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+        PortfolioConfigDto incoming = config();
+        incoming.setEditorSchemaRevision(PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+        MinePortfolioDraftSaveRequest request = new MinePortfolioDraftSaveRequest();
+        request.setConfig(incoming);
+
+        assertThatThrownBy(() -> service().saveDraft(88L, request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage(PortfolioMessage.DRAFT_CLIENT_REVISION_REQUIRED_MESSAGE);
+
+        verify(portfolioConfigValidator, never()).normalizeForDraft(any(), any(), any());
+        verify(portfolioEntityMapper, never()).updateById(any(PortfolioEntity.class));
+    }
+
+    @Test
+    void saveDraftShouldPassExistingDraftToLegacyMerge() {
+        PortfolioEntity portfolio = ownedPortfolio();
+        portfolio.setDraftRevision(3);
+        portfolio.setDraftConfigJson("""
+                {
+                  "schemaVersion":"standard-personal-v1",
+                  "editorSchemaRevision":2,
+                  "style":{"backgroundColor":"#151515"},
+                  "components":[],
+                  "bottomNav":{"enabled":false}
+                }
+                """);
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+        PortfolioConfigDto incoming = config();
+        PortfolioConfigDto normalized = config();
+        normalized.setEditorSchemaRevision(PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+        PortfolioConfigDto.Style style = new PortfolioConfigDto.Style();
+        style.setBackgroundColor("#151515");
+        normalized.setStyle(style);
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), eq(incoming), any()))
+                .thenReturn(normalized);
+        when(portfolioConfigValidator.buildReferences(
+                88L,
+                7L,
+                PortfolioConfigScopeDict.DRAFT.getCode(),
+                normalized
+        )).thenReturn(List.of());
+        when(portfolioEntityMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
+        MinePortfolioDraftSaveRequest request = new MinePortfolioDraftSaveRequest();
+        request.setConfig(incoming);
+
+        service().saveDraft(88L, request);
+
+        ArgumentCaptor<PortfolioConfigDto> existingDraftCaptor = ArgumentCaptor.forClass(PortfolioConfigDto.class);
+        verify(portfolioConfigValidator).normalizeForDraft(
+                eq(7L),
+                eq(incoming),
+                existingDraftCaptor.capture()
+        );
+        assertThat(existingDraftCaptor.getValue().getEditorSchemaRevision()).isEqualTo(2);
+        assertThat(existingDraftCaptor.getValue().getStyle().getBackgroundColor()).isEqualTo("#151515");
     }
 
     @Test
@@ -660,7 +723,8 @@ class MinePortfolioServiceTest {
         portfolio.setDraftConfigJson("{\"schemaVersion\":\"standard-personal-v1\",\"share\":{\"title\":\"林安婚礼司仪\"},\"components\":[]}");
         when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
         PortfolioConfigDto normalized = config();
-        when(portfolioConfigValidator.normalize(eq(7L), any(PortfolioConfigDto.class))).thenReturn(normalized);
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), any(PortfolioConfigDto.class), any()))
+                .thenReturn(normalized);
         when(portfolioConfigValidator.buildReferences(88L, 7L, PortfolioConfigScopeDict.PUBLISHED.getCode(), normalized))
                 .thenReturn(List.of(reference(88L, PortfolioConfigScopeDict.PUBLISHED.getCode(), 11L)));
         when(portfolioEntityMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
@@ -743,7 +807,8 @@ class MinePortfolioServiceTest {
         portfolio.setDraftConfigJson("{\"schemaVersion\":\"standard-personal-v1\",\"share\":{\"title\":\"林安婚礼司仪\"},\"components\":[]}");
         when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
         PortfolioConfigDto normalized = config();
-        when(portfolioConfigValidator.normalize(eq(7L), any(PortfolioConfigDto.class))).thenReturn(normalized);
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), any(PortfolioConfigDto.class), any()))
+                .thenReturn(normalized);
         when(portfolioConfigValidator.buildReferences(88L, 7L, PortfolioConfigScopeDict.PUBLISHED.getCode(), normalized))
                 .thenReturn(List.of());
         when(portfolioEntityMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
@@ -771,7 +836,8 @@ class MinePortfolioServiceTest {
         portfolio.setDraftConfigJson("{\"schemaVersion\":\"standard-personal-v1\",\"share\":{\"title\":\"林安婚礼司仪\"},\"components\":[]}");
         when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
         PortfolioConfigDto normalized = config();
-        when(portfolioConfigValidator.normalize(eq(7L), any(PortfolioConfigDto.class))).thenReturn(normalized);
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), any(PortfolioConfigDto.class), any()))
+                .thenReturn(normalized);
         when(portfolioEntityMapper.updateById(any(PortfolioEntity.class))).thenReturn(0);
         MinePortfolioPublishRequest request = new MinePortfolioPublishRequest();
         request.setDraftRevision(4);
@@ -801,7 +867,8 @@ class MinePortfolioServiceTest {
         when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
         PortfolioConfigDto normalized = config();
         normalized.getShare().setCoverUrl("https://cos.we-folio.dingchenyong.top/WFA3B1E7A2/protfolio/cover-88-20260702120000-d4c3b2a1.png");
-        when(portfolioConfigValidator.normalize(eq(7L), any(PortfolioConfigDto.class))).thenReturn(normalized);
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), any(PortfolioConfigDto.class), any()))
+                .thenReturn(normalized);
         when(portfolioConfigValidator.buildReferences(88L, 7L, PortfolioConfigScopeDict.PUBLISHED.getCode(), normalized))
                 .thenReturn(List.of());
         when(miniappAuthService.getUniqueCodeByUserId(7L)).thenReturn("WFA3B1E7A2");
@@ -830,7 +897,8 @@ class MinePortfolioServiceTest {
                 """);
         when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
         PortfolioConfigDto normalized = configWithPortfolioAssets("", "", "");
-        when(portfolioConfigValidator.normalize(eq(7L), any(PortfolioConfigDto.class))).thenReturn(normalized);
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), any(PortfolioConfigDto.class), any()))
+                .thenReturn(normalized);
         when(portfolioConfigValidator.buildReferences(
                 88L, 7L, PortfolioConfigScopeDict.PUBLISHED.getCode(), normalized)).thenReturn(List.of());
         when(miniappAuthService.getUniqueCodeByUserId(7L)).thenReturn("WFA3B1E7A2");
@@ -876,7 +944,8 @@ class MinePortfolioServiceTest {
                 "https://cos.we-folio.dingchenyong.top/WFA3B1E7A2/protfolio/profile-avatar-88-20260702121000-d4c3b2a1.jpg",
                 "https://cos.we-folio.dingchenyong.top/WFA3B1E7A2/protfolio/qr-contact-88-20260702122000-d4c3b2a1.png"
         );
-        when(portfolioConfigValidator.normalize(eq(7L), any(PortfolioConfigDto.class))).thenReturn(normalized);
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), any(PortfolioConfigDto.class), any()))
+                .thenReturn(normalized);
         when(portfolioConfigValidator.buildReferences(88L, 7L, PortfolioConfigScopeDict.PUBLISHED.getCode(), normalized))
                 .thenReturn(List.of());
         when(miniappAuthService.getUniqueCodeByUserId(7L)).thenReturn("WFA3B1E7A2");
@@ -911,7 +980,8 @@ class MinePortfolioServiceTest {
                 "https://cos.we-folio.dingchenyong.top/WFA3B1E7A2/protfolio/profile-avatar-88-20260701111000-a1b2c3d4.jpg",
                 ""
         );
-        when(portfolioConfigValidator.normalize(eq(7L), any(PortfolioConfigDto.class))).thenReturn(normalized);
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), any(PortfolioConfigDto.class), any()))
+                .thenReturn(normalized);
         when(portfolioConfigValidator.buildReferences(88L, 7L, PortfolioConfigScopeDict.PUBLISHED.getCode(), normalized))
                 .thenReturn(List.of());
         when(miniappAuthService.getUniqueCodeByUserId(7L)).thenReturn("WFA3B1E7A2");

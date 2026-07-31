@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>映期Folio · 档期模块设计稿</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #eef2f4;
+    color: #17202a;
+    padding: 40px 32px 64px;
+  }
+  .doc-header { margin-bottom: 36px; }
+  .doc-header h1 { font-size: 24px; font-weight: 900; }
+  .doc-header p { margin-top: 8px; font-size: 13px; color: #66727f; line-height: 1.7; }
+  .frames { display: flex; flex-wrap: wrap; gap: 32px; }
+  .frame-wrap { display: flex; flex-direction: column; gap: 12px; }
+  .frame-label { font-size: 13px; font-weight: 800; color: #17202a; }
+  .frame-label small { display: block; margin-top: 2px; font-size: 11px; font-weight: 400; color: #8b96a3; }
+  .phone {
+    position: relative;
+    width: 375px;
+    border-radius: 24px;
+    overflow: hidden;
+    background: #f5f7fb;
+    box-shadow: 0 24px 60px rgba(18, 26, 36, 0.18);
+    display: flex;
+    flex-direction: column;
+  }
+  /* 状态栏 */
+  .statusbar {
+    height: 44px;
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px 0 28px;
+    font-size: 14px;
+    font-weight: 700;
+    color: #17202a;
+  }
+  .statusbar .sb-right { display: flex; align-items: center; gap: 6px; }
+  .sb-signal { display: flex; align-items: flex-end; gap: 1.5px; }
+  .sb-signal i { display: block; width: 3px; background: #17202a; border-radius: 1px; }
+  .sb-signal i:nth-child(1) { height: 4px; }
+  .sb-signal i:nth-child(2) { height: 6px; }
+  .sb-signal i:nth-child(3) { height: 8px; }
+  .sb-signal i:nth-child(4) { height: 10px; }
+  .sb-battery { width: 22px; height: 11px; border: 1px solid #17202a; border-radius: 3px; position: relative; }
+  .sb-battery::after { content: ""; position: absolute; left: 1.5px; top: 1.5px; bottom: 1.5px; width: 14px; background: #17202a; border-radius: 1.5px; }
+  /* 导航栏 */
+  .navbar {
+    height: 44px;
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(245, 247, 251, 0.94);
+    font-size: 17px;
+    font-weight: 700;
+    color: #17202a;
+  }
+  /* 页面内容 */
+  .content { padding: 14px 14px 86px; }
+  /* 分段选择 */
+  .segmented {
+    display: flex; gap: 4px; padding: 4px;
+    border: 0.5px solid #d8e0e8; border-radius: 9px;
+    background: rgba(255, 255, 255, 0.94);
+  }
+  .segment {
+    flex: 1; height: 36px;
+    display: flex; align-items: center; justify-content: center;
+    color: #6b7785; font-size: 13px; font-weight: 700; border-radius: 7px;
+  }
+  .segment.active { color: #fff; background: #17202a; box-shadow: 0 6px 14px rgba(23, 32, 42, 0.14); }
+  /* 面板 */
+  .panel {
+    margin-top: 11px; padding: 12px;
+    border: 0.5px solid rgba(23, 32, 42, 0.06); border-radius: 8px;
+    background: rgba(255, 255, 255, 0.94);
+    box-shadow: 0 9px 24px rgba(23, 32, 42, 0.06);
+  }
+  .panel-heading { display: flex; align-items: center; justify-content: space-between; }
+  .panel-title { color: #17202a; font-size: 14px; font-weight: 800; line-height: 1.3; }
+  .panel-meta { margin-top: 2px; color: #758190; font-size: 11.5px; line-height: 1.4; }
+  /* 图例 */
+  .color-legend { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+  .swatch-option {
+    display: flex; align-items: center; gap: 4px;
+    padding: 5px 7px; color: #41505f; font-size: 11px;
+    border-radius: 999px; background: #f5f8fb;
+  }
+  .swatch { width: 11px; height: 11px; flex: none; border-radius: 50%; }
+  /* 月历 */
+  .calendar-group {
+    margin-top: 11px; border: 0.5px solid #d8e0e8; border-radius: 9px;
+    background: #fff; overflow: hidden;
+  }
+  .calendar-toolbar {
+    display: flex; align-items: center; gap: 6px;
+    min-height: 44px; padding: 6px 8px;
+    border-bottom: 0.5px solid #d8e0e8;
+  }
+  .month-control {
+    width: 32px; height: 32px; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    color: #36516e; font-size: 16px; font-weight: 800;
+    border: 1px solid #d8e0e8; border-radius: 50%; background: #f8fbfd;
+  }
+  .month-control.wide {
+    width: 66px; padding: 0 9px; color: #17202a; font-size: 13px; border-radius: 999px; white-space: nowrap;
+  }
+  .month-title { flex: 1; padding: 0 2px; overflow: hidden; }
+  .month-main { color: #17202a; font-size: 18px; font-weight: 900; line-height: 1.1; white-space: nowrap; }
+  .calendar {
+    display: flex; flex-wrap: wrap; justify-content: space-between;
+    row-gap: 4px; padding: 9px 10px 10px; background: #fff;
+  }
+  .weekday {
+    width: calc((100% - 18px) / 7); min-height: 22px;
+    display: flex; align-items: center; justify-content: center;
+    color: #17202a; font-size: 14px; font-weight: 900;
+  }
+  .calendar-day {
+    position: relative;
+    width: calc((100% - 18px) / 7); min-height: 56px;
+    display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+    padding: 6px 3px 5px;
+    color: #17202a; border: 1px solid #d8e0e8; border-radius: 7px; background: #fff;
+  }
+  .calendar-day.muted { color: #b6c0ca; }
+  .date-stack { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
+  .calendar-day.selected .date-stack {
+    width: 38px; height: 38px; color: #fff; border-radius: 50%;
+    background: #3d6fad; box-shadow: 0 6px 14px rgba(61, 111, 173, 0.24);
+  }
+  .day-number { font-size: 17px; font-weight: 900; line-height: 1; }
+  .day-meta { color: #66727f; font-size: 11px; font-weight: 800; line-height: 1.1; white-space: nowrap; }
+  .calendar-day.muted .day-meta { color: #b6c0ca; }
+  .calendar-day.selected .day-meta { color: #fff; }
+  .day-colors { display: flex; justify-content: center; align-items: center; gap: 3px; min-height: 6px; margin-top: 4px; }
+  .day-color { width: 6px; height: 6px; border-radius: 50%; }
+  /* 当日档期 */
+  .day-panel {
+    margin-top: 11px; padding: 12px;
+    border: 0.5px solid rgba(23, 32, 42, 0.06); border-radius: 8px;
+    background: rgba(255, 255, 255, 0.94);
+    box-shadow: 0 9px 24px rgba(23, 32, 42, 0.06);
+  }
+  .day-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0 9px; }
+  .day-date-copy { display: flex; align-items: baseline; gap: 9px; }
+  .day-title { color: #17202a; font-size: 18px; font-weight: 900; line-height: 1.2; }
+  .day-lunar-title { color: #66727f; font-size: 13px; font-weight: 800; white-space: nowrap; }
+  .day-summary { color: #758190; font-size: 12px; font-weight: 800; white-space: nowrap; }
+  /* 滑动行 */
+  .swipe-row { position: relative; overflow: hidden; border-top: 0.5px solid #edf1f5; }
+  .swipe-row:first-of-type { border-top: 0; }
+  .line {
+    position: relative; z-index: 2; min-height: 56px;
+    display: flex; align-items: center; justify-content: space-between; gap: 9px;
+    padding: 10px 0; background: #fff;
+  }
+  .swipe-row.revealed .line { transform: translateX(-70px); }
+  .delete-pane {
+    position: absolute; right: 0; top: 0; bottom: 0; z-index: 1;
+    width: 64px; display: flex; align-items: center; justify-content: center;
+  }
+  .slot-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
+  .slot-name { color: #17202a; font-size: 14px; font-weight: 800; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .slot-desc { margin-top: 2px; color: #758190; font-size: 11.5px; line-height: 1.4; }
+  .mini-action {
+    width: 64px; height: 30px; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    color: #0f766e; font-size: 12px; font-weight: 800;
+    border: 0.5px solid #bfd7d2; border-radius: 999px; background: #f2fbf8;
+  }
+  .mini-action.warn { color: #8a4b09; border-color: #f0d4a5; background: #fff8ea; }
+  .mini-action.danger { color: #a9354f; border-color: #f3c5cf; background: #fff3f6; }
+  .schedule-status {
+    flex: none; padding: 4px 7px; font-size: 11px; font-weight: 800; line-height: 1; border-radius: 999px;
+  }
+  .schedule-status.teal { color: #0f766e; background: #dcf7f1; }
+  .schedule-status.amber { color: #8a4b09; background: #fff0d7; }
+  .schedule-status.rose { color: #a9354f; background: #fde7ed; }
+  .schedule-status.muted { color: #66727f; background: #eef2f6; }
+  /* 按钮 */
+  .primary-button {
+    width: 100%; height: 42px; margin-top: 12px;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 14px; font-weight: 800; border-radius: 9px; background: #17202a;
+  }
+  /* 底部 Tab */
+  .tabbar {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 10;
+    height: 58px; display: flex; align-items: stretch; justify-content: space-around;
+    padding: 5px 10px 6px;
+    border-top: 0.5px solid rgba(23, 32, 42, 0.08);
+    background: rgba(255, 255, 255, 0.96);
+  }
+  .tab {
+    position: relative; width: 25%;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    color: #8b96a3;
+  }
+  .tab.active { color: #b88a44; }
+  .tab.active::before {
+    content: ""; position: absolute; top: 2px; left: 50%; transform: translateX(-50%);
+    width: 21px; height: 3px; border-radius: 999px; background: #b88a44;
+  }
+  .tab-icon { position: relative; width: 21px; height: 21px; margin-bottom: 3.5px; }
+  .tab-label { font-size: 10.5px; line-height: 1.2; }
+  .schedule-tab-icon::before {
+    content: ""; position: absolute; left: 3px; top: 3px; width: 15px; height: 15px;
+    border: 2px solid currentColor; border-radius: 5px; box-sizing: border-box;
+  }
+  .schedule-tab-icon::after {
+    content: ""; position: absolute; left: 6px; top: 9px; width: 9px; height: 2px;
+    border-radius: 999px; background: currentColor;
+  }
+  .work-tab-icon::before {
+    content: ""; position: absolute; left: 3px; top: 3px; width: 15px; height: 15px;
+    border: 2px solid currentColor; border-radius: 5px; box-sizing: border-box;
+  }
+  .work-tab-icon::after {
+    content: ""; position: absolute; left: 6.5px; top: 8px; width: 9px; height: 7px;
+    border-left: 2px solid currentColor; border-bottom: 2px solid currentColor;
+    transform: rotate(-45deg); box-sizing: border-box;
+  }
+  .portfolio-tab-icon::before {
+    content: ""; position: absolute; left: 5px; top: 4px; width: 14px; height: 14px;
+    border: 2px solid currentColor; border-radius: 4px; background: rgba(255, 255, 255, 0.96);
+    z-index: 2; box-sizing: border-box;
+  }
+  .portfolio-tab-icon::after {
+    content: ""; position: absolute; left: 2px; top: 7px; width: 14px; height: 14px;
+    border: 2px solid currentColor; border-radius: 4px; z-index: 1; box-sizing: border-box;
+  }
+  .mine-tab-icon::before {
+    content: ""; position: absolute; left: 6.5px; top: 3px; width: 8px; height: 8px;
+    border: 2px solid currentColor; border-radius: 50%; box-sizing: border-box;
+  }
+  .mine-tab-icon::after {
+    content: ""; position: absolute; left: 3px; bottom: 3px; width: 15px; height: 8px;
+    border: 2px solid currentColor; border-bottom-width: 1.5px;
+    border-radius: 10px 10px 4px 4px; box-sizing: border-box;
+  }
+  /* 弹层 */
+  .sheet-overlay {
+    position: absolute; left: 0; right: 0; top: 0; bottom: 0; z-index: 20;
+    display: flex; align-items: flex-end; padding: 14px;
+    background: rgba(23, 32, 42, 0.36);
+  }
+  .sheet {
+    width: 100%; padding: 12px;
+    border-radius: 12px 12px 9px 9px; background: #fff;
+  }
+  .sheet-grabber { width: 36px; height: 4px; margin: 0 auto 11px; border-radius: 999px; background: #d8e0e8; }
+  .slot-status-chip { flex: none; padding: 4px 7px; font-size: 11px; font-weight: 800; line-height: 1; border-radius: 999px; color: #0f766e; background: #dcf7f1; }
+  .form-grid { display: flex; gap: 8px; margin-top: 9px; }
+  .form-row { flex: 1; min-width: 0; }
+  .form-row.status-form-row { flex: 2; }
+  .form-row.full { margin-top: 11px; }
+  .field-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .field-label { color: #758190; font-size: 11px; font-weight: 700; }
+  .field-label.standalone { margin-top: 11px; }
+  .field-limit { color: #8b96a3; font-size: 11px; font-weight: 700; }
+  .field-input {
+    width: 100%; height: 38px; margin-top: 5px; padding: 0 9px;
+    display: flex; align-items: center;
+    color: #17202a; font-size: 13px; border-radius: 7px; background: #f5f8fb;
+  }
+  .field-input.placeholder { color: #a7b1bc; }
+  .field-input.textarea { min-height: 84px; padding-top: 9px; align-items: flex-start; line-height: 1.45; }
+  .inline-choice-row { display: flex; gap: 4px; height: 38px; margin-top: 5px; }
+  .slot-status-choice {
+    flex: 1; height: 38px;
+    display: flex; align-items: center; justify-content: center;
+    color: #66727f; font-size: 12px; font-weight: 800;
+    border: 1px solid #d8e0e8; border-radius: 999px; background: #f5f8fb;
+  }
+  .slot-status-choice.teal { color: #0f766e; border-color: #b9e8df; background: #e7f8f4; }
+  .slot-status-choice.muted { color: #66727f; border-color: #d8e0e8; background: #f5f8fb; }
+  .slot-status-choice.active { box-shadow: inset 0 0 0 1px currentColor; }
+  .slot-color-grid { display: flex; flex-wrap: wrap; justify-content: space-between; row-gap: 6px; margin-top: 6px; }
+  .slot-color-choice {
+    width: calc((100% - 18px) / 4); min-height: 32px;
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+    padding: 0 5px; border: 1px solid; border-radius: 999px;
+  }
+  .slot-color-choice.active { box-shadow: inset 0 0 0 1px currentColor; }
+  .slot-color-swatch { width: 10px; height: 10px; flex: none; border-radius: 50%; }
+  .slot-color-name { font-size: 10.5px; font-weight: 800; line-height: 1; white-space: nowrap; }
+  .schedule-slot-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+  .schedule-slot-card {
+    width: calc(50% - 4px); min-height: 63px; padding: 10px;
+    border: 1px solid #e1e8ef; border-radius: 8px; background: #f7fafc;
+  }
+  .schedule-slot-card.active { border-color: #17202a; background: #eef4f3; }
+  .schedule-slot-card.disabled { opacity: 0.48; }
+  .schedule-slot-card-top { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+  .schedule-status-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .schedule-status-choice {
+    height: 29px; display: flex; align-items: center; justify-content: center;
+    padding: 0 11px; color: #66727f; font-size: 12px; font-weight: 800;
+    border-radius: 999px; background: #eef2f6;
+  }
+  .schedule-status-choice.active.teal { color: #0f766e; background: #dcf7f1; }
+  .schedule-status-choice.active.amber { color: #8a4b09; background: #fff0d7; }
+  .schedule-status-choice.active.rose { color: #a9354f; background: #fde7ed; }
+  .schedule-status-choice.active.muted { color: #44505c; background: #e8edf2; }
+  .button-row { display: flex; gap: 8px; margin-top: 11px; }
+  .button-row .btn {
+    flex: 1; height: 42px; display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 800; border-radius: 9px;
+  }
+  .btn.primary { color: #fff; background: #17202a; }
+  .btn.secondary { color: #17202a; border: 0.5px solid #d8e0e8; background: #f7fafc; }
+</style>
+</head>
+<body>
+<div class="doc-header">
+  <h1>模块：档期</h1>
+  <p>包含页面：<code>projects/miniapp/pages/schedule/schedule</code>（档期维护 / 档位定义 双模式）＋ 弹层「新增档期」「新增档位定义」。<br>
+  依据 schedule.wxml / schedule.wxss / schedule.js / utils/schedule.js 真实渲染，列表为 mock 数据；图片与状态栏图标为 CSS 占位。</p>
+</div>
+
+<div class="frames">
+
+  <!-- ============ 01 档期维护 ============ -->
+  <div class="frame-wrap">
+    <div class="frame-label">01 档期维护（默认模式）<small>pages/schedule/schedule · activeMode=maintenance</small></div>
+    <div class="phone">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="sb-right">
+          <span class="sb-signal"><i></i><i></i><i></i><i></i></span>
+          <span class="sb-battery"></span>
+        </span>
+      </div>
+      <div class="navbar">档期</div>
+      <div class="content">
+        <div class="segmented">
+          <div class="segment active">档期维护</div>
+          <div class="segment">档位定义</div>
+        </div>
+
+        <!-- 档位定义图例 -->
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <div class="panel-title">档位定义</div>
+              <div class="panel-meta">名称 / 时间 / 颜色</div>
+            </div>
+          </div>
+          <div class="color-legend">
+            <div class="swatch-option"><span class="swatch" style="background:#d98200"></span>午宴档 07:30-13:30</div>
+            <div class="swatch-option"><span class="swatch" style="background:#1677ff"></span>晚宴档 16:00-21:30</div>
+            <div class="swatch-option"><span class="swatch" style="background:#0f8ea8"></span>全天档 09:00-21:00</div>
+            <div class="swatch-option"><span class="swatch" style="background:#a9354f"></span>试妆档 14:00-16:00</div>
+          </div>
+        </div>
+
+        <!-- 月历 -->
+        <div class="calendar-group">
+          <div class="calendar-toolbar">
+            <div class="month-control">‹</div>
+            <div class="month-title"><div class="month-main">2026 年 7 月</div></div>
+            <div class="month-control wide">切换年月</div>
+            <div class="month-control">›</div>
+          </div>
+          <div class="calendar">
+            <div class="weekday">日</div><div class="weekday">一</div><div class="weekday">二</div><div class="weekday">三</div><div class="weekday">四</div><div class="weekday">五</div><div class="weekday">六</div>
+            <!-- 第一行：6月末 muted + 7/1(周三) -->
+            <div class="calendar-day muted"><div class="date-stack"><div class="day-number">28</div></div><div class="day-colors"></div></div>
+            <div class="calendar-day muted"><div class="date-stack"><div class="day-number">29</div></div><div class="day-colors"></div></div>
+            <div class="calendar-day muted"><div class="date-stack"><div class="day-number">30</div></div><div class="day-colors"></div></div>
+            <div class="calendar-day"><div class="date-stack"><div class="day-number">1</div><div class="day-meta">十七</div></div><div class="day-colors"></div></div>
+            <div class="calendar-day"><div class="date-stack"><div class="day-number">2</div><div class="day-meta">十八</div></div><div class="day-colors"></div></div>
+            <div class="calendar-day"><div class="date-stack"><div class="day-number">3</div><div class="day-meta">十九</div></div><div class="day-colors"></div></div>
+            <div class="calendar-day"><div class="date-stack"><div class="day-number">4</div><div class="day-meta">二十</div></div><div class="day-colors"></div></div>
+            <!-- 第二行 -->
+            <div class="calendar-day"><div class="date-stack"><div class="day-number">5</div><div class="day-meta">廿一</div></div><div class="day-colors"></div></div>
+            <div class="calendar-day"><div class="date-stack"><div class="day-number">6</div><div class="day-meta">廿二</div></div><div class="day-colors"></div></div>
+            <div class="calendar-day"><div class="date-stack"><div class="day-number">7</div><div class="day-meta">小暑</div></div><div class="day-colors"></div></div>
+            <div class="calendar-day"><div class="date-stack"><div class="day-number">8</div><div class="day-meta">廿四</div></div><div class="day-colors"></div></div>
+            <div class="calendar-day"><div class="date-stack"><div class="day-number">9</div><div class="day-meta">廿五</div></div><div class="day-colors"></div></div>
+            <div class="calendar-day"><div class="date-stack"><div class="day-number">10</div><div class="day-meta">廿六</div></div><div class="day-colors"></div></div>
+            <div class="calendar-day"><div class="date-stack"><div class="day-number">11</div><div class="day-meta">廿七</div></div><div class="day-colors"><span class="day-color" style="background:#d98200"></span><span class="day-color" style="background:#1677ff"></span></div></div>
+            <!-- 第三行 -->
+            <div class="calendar-day"><div class="date-stack"><div class="day-number">12</div><div class="day-meta">廿八</div></div><div class="day-colors"></div></div>
+            <div class="calendar-day"><div class="date-stack"><div class="day-number">13</div><div class="day-meta">廿九</div></div><div class="day-colors"></div></div>
+            <div class="calendar-day"><div class="date-stack"><div class="day-number">14</div><div class="day-meta">六月</div></div><div class="day-colors"><span class="day-color" style="background:#a9354f"></span></div></div>
+            <div class="calendar-day"><div class="date-stack"><div class="day-number">15</div><div class="day-meta">初二</div></div><div class="day-colors"></div></div>
+            <div class="calendar-day"><div class="date-stack"><div class="day-number">16</div><div class="day-meta">初三</div></div><div class="day-colors"></div></div>
+            <div class="calendar-day"><div class="date-stack"><div class="day-number">17</div><div class="day-meta">初四</div></div><div class="day-colors"></div></div>
+            <div class="calendar-day"><div class="date-stack"><div class="day-number">18</div><div class="day-meta">初五</div></div><div class="day-colors"><span class="day-color" style="background:#0f8ea8"></span></div></div>
+            <!-- 第四行 -->
+            <div class="calendar-day"><div class="date-stack"><div class="day-number">19</div><div class="day-meta">初六</div></div><div class="day-colors"></div></div>
+            <div class="calendar-day"><div class="date-stack"><div class="day-number">20</div><div class="day-meta">初七</div></div><div class="day-colors"></div></div>
+            <div class="calendar-day"><div class="date-stack"><div class="day-number">21</div><div class="day-meta">初八</div></div><div class="day-colors"></div></div>
+            <div class="calendar-day"><div class="date-stack"><div class="day-number">22</div><div class="day-meta">初九</div></div><div class="day-colors"></div></div>
+            <div class="calendar-day"><div class="date-stack"><div class="day-number">23</div><div class="day-meta">大暑</div></div><div class="day-colors"></div></div>
+            <div class="calendar-day"><div class="date-stack"><div class="day-number">24</div><div class="day-meta">十一</div></div><div class="day-colors"></div></div>
+            <div class="calendar-day selected"><div class="date-stack"><div class="day-number">25</div><div class="day-meta">十二</div></div><div class="day-colors"><span class="day-color" style="background:#d98200"></span><span class="day-color" style="background:#1677ff"></span></div></div>
+            <!-- 第五行 -->
+            <div class="calendar-day"><div class="date-stack"><div class="day-number">26</div><div class="day-meta">十三</div></div><div class="day-colors"></div></div>
+            <div class="calendar-day"><div class="date-stack"><div class="day-number">27</div><div class="day-meta">十四</div></div><div class="day-colors"></div></div>
+            <div class="calendar-day"><div class="date-stack"><div class="day-number">28</div><div class="day-meta">十五</div></div><div class="day-colors"></div></div>
+            <div class="calendar-day"><div class="date-stack"><div class="day-number">29</div><div class="day-meta">十六</div></div><div class="day-colors"></div></div>
+            <div class="calendar-day"><div class="date-stack"><div class="day-number">30</div><div class="day-meta">十七</div></div><div class="day-colors"></div></div>
+            <div class="calendar-day"><div class="date-stack"><div class="day-number">31</div><div class="day-meta">十八</div></div><div class="day-colors"></div></div>
+            <div class="calendar-day muted"><div class="date-stack"><div class="day-number">1</div></div><div class="day-colors"></div></div>
+          </div>
+        </div>
+
+        <!-- 当日档期 -->
+        <div class="day-panel">
+          <div class="day-heading">
+            <div class="day-date-copy">
+              <div class="day-title">7月25日</div>
+              <div class="day-lunar-title">农历六月十二</div>
+            </div>
+            <div class="day-summary">2 条档期</div>
+          </div>
+          <div>
+            <div class="swipe-row">
+              <div class="delete-pane"><div class="mini-action danger">删除</div></div>
+              <div class="line">
+                <div class="slot-main">
+                  <span class="swatch" style="background:#d98200"></span>
+                  <div>
+                    <div class="slot-name">午宴档</div>
+                    <div class="slot-desc">07:30-13:30 · 陈女士 · 138****6688</div>
+                  </div>
+                </div>
+                <div class="schedule-status rose">已约</div>
+              </div>
+            </div>
+            <div class="swipe-row">
+              <div class="delete-pane"><div class="mini-action danger">删除</div></div>
+              <div class="line">
+                <div class="slot-main">
+                  <span class="swatch" style="background:#1677ff"></span>
+                  <div>
+                    <div class="slot-name">晚宴档</div>
+                    <div class="slot-desc">16:00-21:30 · 王先生</div>
+                  </div>
+                </div>
+                <div class="schedule-status amber">待定</div>
+              </div>
+            </div>
+          </div>
+          <div class="primary-button">新增档期</div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <div class="tab active"><div class="tab-icon schedule-tab-icon"></div><div class="tab-label">档期</div></div>
+        <div class="tab"><div class="tab-icon work-tab-icon"></div><div class="tab-label">作品</div></div>
+        <div class="tab"><div class="tab-icon portfolio-tab-icon"></div><div class="tab-label">作品集</div></div>
+        <div class="tab"><div class="tab-icon mine-tab-icon"></div><div class="tab-label">我的</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 02 档位定义 ============ -->
+  <div class="frame-wrap">
+    <div class="frame-label">02 档位定义（切换分段后）<small>pages/schedule/schedule · activeMode=definitions</small></div>
+    <div class="phone">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="sb-right">
+          <span class="sb-signal"><i></i><i></i><i></i><i></i></span>
+          <span class="sb-battery"></span>
+        </span>
+      </div>
+      <div class="navbar">档期</div>
+      <div class="content">
+        <div class="segmented">
+          <div class="segment">档期维护</div>
+          <div class="segment active">档位定义</div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <div class="panel-title">所有定义</div>
+              <div class="panel-meta">启用 / 停用可切换</div>
+            </div>
+          </div>
+
+          <div class="swipe-row">
+            <div class="line">
+              <div class="slot-main">
+                <span class="swatch" style="background:#d98200"></span>
+                <div>
+                  <div class="slot-name">午宴档</div>
+                  <div class="slot-desc">07:30-13:30 · 启用</div>
+                </div>
+              </div>
+              <div class="mini-action warn">停用</div>
+            </div>
+          </div>
+          <div class="swipe-row">
+            <div class="line">
+              <div class="slot-main">
+                <span class="swatch" style="background:#1677ff"></span>
+                <div>
+                  <div class="slot-name">晚宴档</div>
+                  <div class="slot-desc">16:00-21:30 · 启用</div>
+                </div>
+              </div>
+              <div class="mini-action warn">停用</div>
+            </div>
+          </div>
+          <div class="swipe-row">
+            <div class="line">
+              <div class="slot-main">
+                <span class="swatch" style="background:#0f8ea8"></span>
+                <div>
+                  <div class="slot-name">全天档</div>
+                  <div class="slot-desc">09:00-21:00 · 启用</div>
+                </div>
+              </div>
+              <div class="mini-action warn">停用</div>
+            </div>
+          </div>
+          <!-- 停用中的档位：左滑露出删除 -->
+          <div class="swipe-row revealed">
+            <div class="delete-pane"><div class="mini-action danger">删除</div></div>
+            <div class="line">
+              <div class="slot-main">
+                <span class="swatch" style="background:#a9354f"></span>
+                <div>
+                  <div class="slot-name">试妆档</div>
+                  <div class="slot-desc">14:00-16:00 · 停用</div>
+                </div>
+              </div>
+              <div class="mini-action">启用</div>
+            </div>
+          </div>
+
+          <div class="primary-button">新增定义</div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <div class="tab active"><div class="tab-icon schedule-tab-icon"></div><div class="tab-label">档期</div></div>
+        <div class="tab"><div class="tab-icon work-tab-icon"></div><div class="tab-label">作品</div></div>
+        <div class="tab"><div class="tab-icon portfolio-tab-icon"></div><div class="tab-label">作品集</div></div>
+        <div class="tab"><div class="tab-icon mine-tab-icon"></div><div class="tab-label">我的</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 03 新增档期弹层 ============ -->
+  <div class="frame-wrap">
+    <div class="frame-label">03 弹层 · 新增档期<small>schedule-sheet-overlay · scheduleFormVisible=true</small></div>
+    <div class="phone" style="height:812px">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="sb-right">
+          <span class="sb-signal"><i></i><i></i><i></i><i></i></span>
+          <span class="sb-battery"></span>
+        </span>
+      </div>
+      <div class="navbar">档期</div>
+      <div class="content" style="flex:1"></div>
+      <div class="sheet-overlay">
+        <div class="sheet">
+          <div class="sheet-grabber"></div>
+          <div class="panel-heading">
+            <div>
+              <div class="panel-title">新增档期</div>
+              <div class="panel-meta">7月25日</div>
+            </div>
+          </div>
+
+          <div class="field-label standalone">选择档位定义</div>
+          <div class="schedule-slot-grid">
+            <div class="schedule-slot-card active">
+              <div class="schedule-slot-card-top"><div class="slot-name">午宴档</div><span class="swatch" style="background:#d98200"></span></div>
+              <div class="slot-desc">07:30-13:30</div>
+            </div>
+            <div class="schedule-slot-card">
+              <div class="schedule-slot-card-top"><div class="slot-name">晚宴档</div><span class="swatch" style="background:#1677ff"></span></div>
+              <div class="slot-desc">16:00-21:30</div>
+            </div>
+            <div class="schedule-slot-card">
+              <div class="schedule-slot-card-top"><div class="slot-name">全天档</div><span class="swatch" style="background:#0f8ea8"></span></div>
+              <div class="slot-desc">09:00-21:00</div>
+            </div>
+            <div class="schedule-slot-card disabled">
+              <div class="schedule-slot-card-top"><div class="slot-name">试妆档</div><span class="swatch" style="background:#a9354f"></span></div>
+              <div class="slot-desc">14:00-16:00</div>
+            </div>
+          </div>
+
+          <div class="field-label standalone">档期状态</div>
+          <div class="schedule-status-row">
+            <div class="schedule-status-choice active amber">待定</div>
+            <div class="schedule-status-choice">已约</div>
+            <div class="schedule-status-choice">休息</div>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-row">
+              <div class="field-heading"><div class="field-label">联系人姓名</div><div class="field-limit">0/50</div></div>
+              <div class="field-input placeholder">如 陈女士</div>
+            </div>
+            <div class="form-row">
+              <div class="field-heading"><div class="field-label">联系电话</div><div class="field-limit">0/50</div></div>
+              <div class="field-input placeholder">手机号 / 微信号</div>
+            </div>
+          </div>
+
+          <div class="form-row full">
+            <div class="field-heading"><div class="field-label">档期备注</div><div class="field-limit">0/1000</div></div>
+            <div class="field-input textarea placeholder">仅维护者可见，访客端不展示</div>
+          </div>
+
+          <div class="button-row">
+            <div class="btn secondary">取消</div>
+            <div class="btn primary">保存档期</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 04 新增档位定义弹层 ============ -->
+  <div class="frame-wrap">
+    <div class="frame-label">04 弹层 · 新增档位定义<small>definition-sheet-overlay · slotFormVisible=true</small></div>
+    <div class="phone" style="height:812px">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="sb-right">
+          <span class="sb-signal"><i></i><i></i><i></i><i></i></span>
+          <span class="sb-battery"></span>
+        </span>
+      </div>
+      <div class="navbar">档期</div>
+      <div class="content" style="flex:1"></div>
+      <div class="sheet-overlay">
+        <div class="sheet">
+          <div class="sheet-grabber"></div>
+          <div class="panel-heading">
+            <div class="panel-title">新增档位定义</div>
+            <div class="slot-status-chip">启用</div>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-row">
+              <div class="field-heading"><div class="field-label">档位名称</div><div class="field-limit">0/30</div></div>
+              <div class="field-input placeholder">如 中午档</div>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-row">
+              <div class="field-label">开始时间</div>
+              <div class="field-input">07:30</div>
+            </div>
+            <div class="form-row">
+              <div class="field-label">结束时间</div>
+              <div class="field-input">09:30</div>
+            </div>
+            <div class="form-row status-form-row">
+              <div class="field-label">启用状态</div>
+              <div class="inline-choice-row">
+                <div class="slot-status-choice teal active">启用</div>
+                <div class="slot-status-choice muted">停用</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="field-label standalone">档位颜色</div>
+          <div class="slot-color-grid">
+            <div class="slot-color-choice active" style="color:#d98200;background:#fff0d7;border-color:#f5d29b"><span class="slot-color-swatch" style="background:#d98200"></span><span class="slot-color-name">琥珀</span></div>
+            <div class="slot-color-choice" style="color:#1677ff;background:#e5effb;border-color:#bfd7f4"><span class="slot-color-swatch" style="background:#1677ff"></span><span class="slot-color-name">湖蓝</span></div>
+            <div class="slot-color-choice" style="color:#0f8ea8;background:#dcf7f1;border-color:#a7eadc"><span class="slot-color-swatch" style="background:#0f8ea8"></span><span class="slot-color-name">青绿</span></div>
+            <div class="slot-color-choice" style="color:#a9354f;background:#fde7ed;border-color:#f5bfcc"><span class="slot-color-swatch" style="background:#a9354f"></span><span class="slot-color-name">玫红</span></div>
+            <div class="slot-color-choice" style="color:#3f6f45;background:#e6f3e8;border-color:#bfdcc4"><span class="slot-color-swatch" style="background:#3f6f45"></span><span class="slot-color-name">森绿</span></div>
+            <div class="slot-color-choice" style="color:#6d5bd0;background:#eeeafd;border-color:#d2c9fa"><span class="slot-color-swatch" style="background:#6d5bd0"></span><span class="slot-color-name">紫藤</span></div>
+            <div class="slot-color-choice" style="color:#e2553d;background:#ffebe6;border-color:#f5c2b7"><span class="slot-color-swatch" style="background:#e2553d"></span><span class="slot-color-name">珊瑚</span></div>
+            <div class="slot-color-choice" style="color:#36516e;background:#e7edf4;border-color:#c6d3e2"><span class="slot-color-swatch" style="background:#36516e"></span><span class="slot-color-name">墨蓝</span></div>
+          </div>
+
+          <div class="button-row">
+            <div class="btn secondary">取消</div>
+            <div class="btn primary">保存定义</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

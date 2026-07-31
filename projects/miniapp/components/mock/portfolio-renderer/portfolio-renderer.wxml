@@ -1,0 +1,189 @@
+<view class="portfolio-theme-{{themeMode}}">
+<block wx:if="{{component.componentType === 'PROFILE'}}">
+  <view class="profile-section">
+    <image wx:if="{{component.profile.avatarUrl}}" class="profile-avatar" src="{{component.profile.avatarUrl}}" mode="aspectFill"></image>
+    <view wx:if="{{component.profile.displayName}}" class="profile-name">{{component.profile.displayName}}</view>
+    <view wx:if="{{component.profile.profession}}" class="profile-line">{{component.profile.profession}}</view>
+    <view wx:if="{{component.profile.city}}" class="profile-line">{{component.profile.city}}</view>
+    <text wx:if="{{component.profile.bio}}" class="profile-bio" space="nbsp">{{component.profile.bio}}</text>
+    <view wx:if="{{component.profile.tags.length}}" class="profile-tags">
+      <view
+        wx:for="{{component.profile.tags}}"
+        wx:key="name"
+        wx:for-item="tag"
+        class="profile-tag"
+        style="color: {{tag.color || '#0f766e'}}; border-color: {{tag.color || '#0f766e'}};"
+      >
+        <view class="profile-tag-dot" style="background: {{tag.color || '#0f766e'}};"></view>
+        <text>{{tag.name}}</text>
+      </view>
+    </view>
+  </view>
+</block>
+
+<block wx:elif="{{component.componentType === 'WORK_GRID'}}">
+  <view class="work-section-title">作品列表</view>
+  <scroll-view wx:if="{{component.displayTags.length}}" scroll-x class="display-tag-scroll">
+    <view class="display-tags">
+      <view
+        wx:for="{{component.displayTags}}"
+        wx:key="groupKey"
+        wx:for-item="tag"
+        class="display-tag {{tag.active ? 'active' : ''}}"
+        data-group-key="{{tag.groupKey}}"
+        bindtap="handleDisplayTagTap"
+      >{{tag.name}}</view>
+    </view>
+  </scroll-view>
+  <view class="work-grid">
+    <view wx:for="{{component.activeGroup.works}}" wx:key="workId" wx:for-item="work" class="work-card grid-card">
+      <view
+        class="work-cover-wrap grid-cover"
+        data-work-id="{{work.workId}}"
+        data-media-type="{{work.mediaType}}"
+        data-media-url="{{work.previewUrl}}"
+        data-cover-url="{{work.thumbnailUrl}}"
+        data-title="{{work.title}}"
+        bindtap="handleWorkTap"
+        aria-role="button"
+        aria-label="{{work.isVideo ? '播放视频' : '查看原图'}}{{work.title}}"
+      >
+        <image class="work-cover" src="{{work.thumbnailUrl}}" mode="aspectFill"></image>
+        <view wx:if="{{work.isVideo}}" class="work-play-badge" aria-hidden="true"><view class="work-play-icon"></view></view>
+      </view>
+      <view class="work-copy">
+        <view wx:if="{{work.title}}" class="work-title">{{work.title}}</view>
+      </view>
+    </view>
+  </view>
+</block>
+
+<block wx:elif="{{component.componentType === 'WORK_LIST'}}">
+  <view class="work-section-title">作品列表</view>
+  <scroll-view wx:if="{{component.displayTags.length}}" scroll-x class="display-tag-scroll">
+    <view class="display-tags">
+      <view
+        wx:for="{{component.displayTags}}"
+        wx:key="groupKey"
+        wx:for-item="tag"
+        class="display-tag {{tag.active ? 'active' : ''}}"
+        data-group-key="{{tag.groupKey}}"
+        bindtap="handleDisplayTagTap"
+      >{{tag.name}}</view>
+    </view>
+  </scroll-view>
+  <view class="work-list">
+    <view wx:for="{{component.activeGroup.works}}" wx:key="workId" wx:for-item="work" class="work-card list-card">
+      <view
+        class="work-cover-wrap list-cover"
+        data-work-id="{{work.workId}}"
+        data-media-type="{{work.mediaType}}"
+        data-media-url="{{work.previewUrl}}"
+        data-cover-url="{{work.thumbnailUrl}}"
+        data-title="{{work.title}}"
+        bindtap="handleWorkTap"
+        aria-role="button"
+        aria-label="{{work.isVideo ? '播放视频' : '查看原图'}}{{work.title}}"
+      >
+        <image class="work-cover" src="{{work.thumbnailUrl}}" mode="aspectFill"></image>
+        <view wx:if="{{work.isVideo}}" class="work-play-badge" aria-hidden="true"><view class="work-play-icon"></view></view>
+      </view>
+      <view class="work-copy">
+        <view wx:if="{{work.title}}" class="work-title">{{work.title}}</view>
+        <view wx:if="{{work.description}}" class="work-desc">{{work.description}}</view>
+      </view>
+    </view>
+  </view>
+</block>
+
+<block wx:elif="{{component.componentType === 'SINGLE_WORK'}}">
+  <view wx:if="{{component.work}}" class="single-work">
+    <video
+      wx:if="{{component.work.isVideo && activeSingleWorkVideoKey === component.componentKey}}"
+      id="singleWorkVideo-{{component.componentKey}}"
+      class="single-work-video"
+      style="{{component.work.aspectRatioStyle}}"
+      src="{{component.work.previewUrl}}"
+      poster="{{component.work.thumbnailUrl}}"
+      controls="{{true}}"
+      autoplay="{{true}}"
+      show-fullscreen-btn="{{true}}"
+      show-center-play-btn="{{true}}"
+      enable-progress-gesture="{{true}}"
+      object-fit="cover"
+      binderror="handleSingleWorkVideoError"
+    ></video>
+    <view
+      wx:elif="{{component.work.isVideo}}"
+      class="single-work-video-poster"
+      style="{{component.work.aspectRatioStyle}}"
+      data-work-id="{{component.work.workId}}"
+      data-media-type="{{component.work.mediaType}}"
+      data-media-url="{{component.work.previewUrl}}"
+      data-cover-url="{{component.work.thumbnailUrl}}"
+      data-title="{{component.work.title}}"
+      bindtap="handleSingleWorkTap"
+      aria-role="button"
+      aria-label="播放视频{{component.work.title}}"
+    >
+      <image wx:if="{{component.work.thumbnailUrl}}" class="single-work-video-cover" src="{{component.work.thumbnailUrl}}" mode="aspectFill"></image>
+      <view wx:else class="single-work-media-placeholder">暂无视频封面</view>
+      <view class="single-work-play-badge" aria-hidden="true"><view class="work-play-icon"></view></view>
+    </view>
+    <image
+      wx:elif="{{component.work.previewUrl}}"
+      class="single-work-image"
+      src="{{component.work.previewUrl}}"
+      mode="widthFix"
+      data-work-id="{{component.work.workId}}"
+      data-media-type="{{component.work.mediaType}}"
+      data-media-url="{{component.work.previewUrl}}"
+      data-cover-url="{{component.work.thumbnailUrl}}"
+      data-title="{{component.work.title}}"
+      bindtap="handleSingleWorkTap"
+      aria-role="button"
+      aria-label="查看原图{{component.work.title}}"
+    ></image>
+    <view class="single-work-copy">
+      <view wx:if="{{component.showTitle && component.work.title}}" class="single-work-title">{{component.work.title}}</view>
+    </view>
+  </view>
+</block>
+
+<block wx:elif="{{component.componentType === 'SCHEDULE_QUERY'}}">
+  <view class="simple-section">
+    <view class="component-title">{{component.scheduleQuery.title || '档期查询'}}</view>
+    <view wx:if="{{component.scheduleQuery.description}}" class="section-desc">{{component.scheduleQuery.description}}</view>
+    <button class="primary-button" bindtap="handleLockedAction">档期查询</button>
+  </view>
+</block>
+
+<block wx:elif="{{component.componentType === 'QR_CONTACT'}}">
+  <view class="qr-section">
+    <image
+      wx:if="{{component.qrContact.qrUrl}}"
+      class="qr-image"
+      src="{{component.qrContact.qrUrl}}"
+      mode="aspectFit"
+      bindtap="handlePreviewQr"
+    ></image>
+  </view>
+</block>
+
+<block wx:elif="{{component.componentType === 'CONTACT_FORM'}}">
+  <view class="contact-entry-section">
+    <button class="primary-button contact-entry-button" bindtap="handleLockedAction">{{component.contactForm.title || '预留联系信息'}}</button>
+  </view>
+</block>
+
+<block wx:elif="{{component.componentType === 'TEXT_SECTION'}}">
+  <view class="text-section {{component.textSection.alignmentClass}}">
+    <view wx:if="{{component.textSection.title}}" class="component-title">{{component.textSection.title}}</view>
+    <text class="text-content" space="nbsp">{{component.textSection.content}}</text>
+  </view>
+</block>
+
+<block wx:elif="{{component.componentType === 'DIVIDER'}}">
+  <view class="divider-section" style="{{component.divider.style}}"></view>
+</block>
+</view>

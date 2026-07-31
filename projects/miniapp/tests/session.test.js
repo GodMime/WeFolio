@@ -4,8 +4,42 @@ const test = require('node:test')
 const {
   TOKEN_STORAGE_KEY,
   handleMaintainerAuthRequired,
+  precheckMaintainerWechatLogin,
   maintainerWechatLogin
 } = require('../utils/session')
+
+test('maintainer wechat login precheck uses dedicated auth endpoint', async () => {
+  let capturedOptions = null
+  global.wx = {
+    request(options) {
+      capturedOptions = options
+      options.success({
+        statusCode: 200,
+        data: {
+          success: true,
+          data: { phoneAuthorizationRequired: true }
+        }
+      })
+    },
+    getStorageSync() {
+      return ''
+    }
+  }
+
+  try {
+    const data = await precheckMaintainerWechatLogin('precheck-code')
+
+    assert.equal(
+      capturedOptions.url,
+      'https://api.we-folio.dingchenyong.top/api/auth/maintainer/wechat-login/precheck'
+    )
+    assert.equal(capturedOptions.method, 'POST')
+    assert.deepEqual(capturedOptions.data, { code: 'precheck-code' })
+    assert.deepEqual(data, { phoneAuthorizationRequired: true })
+  } finally {
+    delete global.wx
+  }
+})
 
 test('maintainer wechat login uses dedicated auth endpoint', async () => {
   let capturedOptions = null

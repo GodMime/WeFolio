@@ -1,0 +1,49 @@
+@import "../../../../styles/portfolio-theme.wxss";
+
+.text-section {
+  padding: 12rpx 32rpx;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.component-title {
+  padding: 0 24rpx;
+  color: var(--portfolio-text-primary);
+  font-size: 32rpx;
+  font-weight: 900;
+  line-height: 1.35;
+  box-sizing: border-box;
+}
+
+.text-content {
+  display: block;
+  margin-top: 12rpx;
+  color: var(--portfolio-text-secondary);
+  font-size: 26rpx;
+  line-height: 1.75;
+  text-align: left;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+.text-section.align-left,
+.text-section.align-left .component-title,
+.text-section.align-left .text-content {
+  text-align: left;
+}
+
+.text-section.align-center,
+.text-section.align-center .component-title,
+.text-section.align-center .text-content {
+  text-align: center;
+}
+
+.text-section.align-right,
+.text-section.align-right .component-title,
+.text-section.align-right .text-content {
+  text-align: right;
+}
+.text-section {
+  color: var(--portfolio-text-primary);
+}

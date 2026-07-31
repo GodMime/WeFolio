@@ -4,6 +4,7 @@ import com.jxc.wefolio.annotation.LoginAccess;
 import com.jxc.wefolio.annotation.TimelineAnonymousAccess;
 import com.jxc.wefolio.annotation.VisitorAccess;
 import com.jxc.wefolio.common.Response;
+import com.jxc.wefolio.common.auth.VisitorContextHolder;
 import com.jxc.wefolio.dto.ContactLeadSubmitRequest;
 import com.jxc.wefolio.dto.ContactLeadSubmitResponse;
 import com.jxc.wefolio.dto.PortfolioScheduleOptionsResponse;
@@ -19,6 +20,7 @@ import com.jxc.wefolio.dto.VisitorProfileUpdateRequest;
 import com.jxc.wefolio.service.ContactLeadService;
 import com.jxc.wefolio.service.VisitorPortfolioService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -35,6 +37,7 @@ import java.time.LocalDate;
 @VisitorAccess
 @RestController
 @RequiredArgsConstructor
+@Slf4j
 public class VisitorPortfolioController {
 
     /** 访客作品集服务 */
@@ -182,10 +185,29 @@ public class VisitorPortfolioController {
      */
     @PostMapping("/api/visitor/portfolios/{shareCode}/contact-leads")
     @TimelineAnonymousAccess
+    @Deprecated(forRemoval = true)
     public Response<ContactLeadSubmitResponse> contactLead(
             @PathVariable String shareCode,
             @RequestBody ContactLeadSubmitRequest request
     ) {
+        log.warn("访客调用已弃用的联系线索接口: shareCode={}, visitorId={}",
+                shareCode, VisitorContextHolder.getVisitorId().orElse(null));
         return Response.success(contactLeadService.submit(shareCode, request));
+    }
+
+    /**
+     * 严格校验并提交联系线索。
+     *
+     * @param shareCode 分享编码
+     * @param request 提交请求
+     * @return 提交响应
+     */
+    @PostMapping("/api/visitor/portfolios/{shareCode}/contact-leads/v2")
+    @TimelineAnonymousAccess
+    public Response<ContactLeadSubmitResponse> contactLeadV2(
+            @PathVariable String shareCode,
+            @RequestBody ContactLeadSubmitRequest request
+    ) {
+        return Response.success(contactLeadService.submitV2(shareCode, request));
     }
 }

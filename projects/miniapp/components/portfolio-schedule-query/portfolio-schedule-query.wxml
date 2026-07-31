@@ -86,7 +86,7 @@
   </view>
 </template>
 
-<view class="schedule-query {{scheduleQuery.displayMode === 'INLINE_CALENDAR' ? 'inline' : 'modal'}}">
+<view class="schedule-query portfolio-theme-{{themeMode}} {{scheduleQuery.displayMode === 'INLINE_CALENDAR' ? 'inline' : 'modal'}}">
   <block wx:if="{{scheduleQuery.displayMode === 'INLINE_CALENDAR'}}">
     <view class="schedule-query-inline-shell">
       <view class="component-title">{{scheduleQuery.title || '档期查询'}}</view>
@@ -100,14 +100,16 @@
       <view wx:if="{{scheduleQuery.description}}" class="section-desc">{{scheduleQuery.description}}</view>
       <button class="schedule-query-open-button" catchtap="handleOpenCalendar">{{scheduleQuery.buttonText || '档期查询'}}</button>
     </view>
-    <view class="schedule-query-modal-mask {{visible ? 'visible' : ''}}" catchtap="handleCloseCalendar">
-      <view class="schedule-query-modal-panel" catchtap="noop">
-        <view class="schedule-query-modal-heading">
-          <view class="schedule-query-modal-title">{{scheduleQuery.title || '档期查询'}}</view>
-          <view class="schedule-query-close" catchtap="handleCloseCalendar" aria-role="button" aria-label="关闭档期查询">×</view>
+    <root-portal wx:if="{{visible}}">
+      <view class="schedule-query-modal-mask {{visible ? 'visible' : ''}}" catchtap="handleCloseCalendar">
+        <view class="schedule-query-modal-panel" catchtap="noop">
+          <view class="schedule-query-modal-heading">
+            <view class="schedule-query-modal-title">{{scheduleQuery.title || '档期查询'}}</view>
+            <view class="schedule-query-close" catchtap="handleCloseCalendar" aria-role="button" aria-label="关闭档期查询">×</view>
+          </view>
+          <template is="scheduleCalendarContent" data="{{selectedMonth: selectedMonth, selectedMonthText: selectedMonthText, options: options, selectedDate: selectedDate, selectedDaySchedules: selectedDaySchedules, selectedSlotDefinitionId: selectedSlotDefinitionId, loading: loading, submitting: submitting, errorMessage: errorMessage, result: result}}" />
         </view>
-        <template is="scheduleCalendarContent" data="{{selectedMonth: selectedMonth, selectedMonthText: selectedMonthText, options: options, selectedDate: selectedDate, selectedDaySchedules: selectedDaySchedules, selectedSlotDefinitionId: selectedSlotDefinitionId, loading: loading, submitting: submitting, errorMessage: errorMessage, result: result}}" />
       </view>
-    </view>
+    </root-portal>
   </block>
 </view>

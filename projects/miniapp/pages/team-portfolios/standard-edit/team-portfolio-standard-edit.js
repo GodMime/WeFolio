@@ -11,12 +11,35 @@ const {
   moveWechatQrCropState
 } = require('../../../utils/profile-assets.js')
 const { uploadTeamPortfolioAsset } = require('../utils/team-portfolio-assets.js')
-const { createStandardTeamPortfolio, fetchTeamPortfolioDetail, handleTeamMaintainerAuthError, normalizeTeamPortfolioConfig, publishTeamPortfolio, saveTeamPortfolioDraft, showTeamPortfolioUnavailableToast } = require('../utils/team-portfolios.js')
+const {
+  hexToHsv,
+  hsvToHex,
+  normalizeTeamHexColor
+} = require('../utils/team-portfolio-color.js')
+const {
+  createStandardTeamPortfolio,
+  fetchTeamPortfolioDetail,
+  findTeamPortfolioComponent,
+  getTeamMenuComponentList,
+  handleTeamMaintainerAuthError,
+  moveTeamComponent,
+  normalizeTeamPortfolioConfig,
+  publishTeamPortfolio,
+  removeTeamNavigationItem,
+  renameTeamNavigationItem,
+  replaceTeamMenuComponentList,
+  saveTeamPortfolioDraft,
+  setTeamBottomNavigationCount,
+  showTeamPortfolioUnavailableToast,
+  validateTeamPortfolioForPublish,
+  visitTeamPortfolioComponents
+} = require('../utils/team-portfolios.js')
 const { confirmPortfolioPublishDisclaimer } = require('../utils/portfolio-publish-disclaimer.js')
+const { selectableWorksFor } = require('../utils/work-media.js')
 
-const TYPE_BUCKETS = Object.freeze({ TEAM_PROFILE: 'teamProfile', CAROUSEL: 'carousel', DIVIDER: 'divider', MEMBER_PORTFOLIO_GRID: 'grid', MEMBER_PORTFOLIO_LIST: 'list', TEXT_SECTION: 'text', SCHEDULE_QUERY: 'schedule', CONTACT_FORM: 'contact', QR_CONTACT: 'qr' })
-const COMPONENT_NAMES = Object.freeze({ TEAM_PROFILE: '团队资料', CAROUSEL: '轮播图', DIVIDER: '分割线', MEMBER_PORTFOLIO_GRID: '双列作品集', MEMBER_PORTFOLIO_LIST: '单列作品集', TEXT_SECTION: '文字说明', SCHEDULE_QUERY: '档期查询', CONTACT_FORM: '预留联系信息', QR_CONTACT: '二维码联系' })
-const COMPONENT_DESCRIPTIONS = Object.freeze({ TEAM_PROFILE: '展示团队头像、名称和简介', CAROUSEL: '轮播展示成员的图片作品', DIVIDER: '分隔不同内容区块', MEMBER_PORTFOLIO_GRID: '双列展示成员已发布作品集', MEMBER_PORTFOLIO_LIST: '单列展示成员已发布作品集', TEXT_SECTION: '添加团队服务说明文字', SCHEDULE_QUERY: '开放访客查询团队档期', CONTACT_FORM: '收集访客预留联系信息', QR_CONTACT: '展示团队二维码联系方式' })
+const TYPE_BUCKETS = Object.freeze({ TEAM_PROFILE: 'teamProfile', CAROUSEL: 'carousel', SINGLE_WORK: 'singleWork', DIVIDER: 'divider', MEMBER_PORTFOLIO_GRID: 'grid', MEMBER_PORTFOLIO_LIST: 'list', TEXT_SECTION: 'text', SCHEDULE_QUERY: 'schedule', CONTACT_FORM: 'contact', QR_CONTACT: 'qr' })
+const COMPONENT_NAMES = Object.freeze({ TEAM_PROFILE: '团队资料', CAROUSEL: '轮播图', SINGLE_WORK: '单个作品', DIVIDER: '分割线', MEMBER_PORTFOLIO_GRID: '双列作品集', MEMBER_PORTFOLIO_LIST: '单列作品集', TEXT_SECTION: '文字说明', SCHEDULE_QUERY: '档期查询', CONTACT_FORM: '预留联系信息', QR_CONTACT: '二维码联系' })
+const COMPONENT_DESCRIPTIONS = Object.freeze({ TEAM_PROFILE: '展示团队头像、名称和简介', CAROUSEL: '轮播展示成员的图片作品', SINGLE_WORK: '展示一个成员图片、视频或动图作品', DIVIDER: '分隔不同内容区块', MEMBER_PORTFOLIO_GRID: '双列展示成员已发布作品集', MEMBER_PORTFOLIO_LIST: '单列展示成员已发布作品集', TEXT_SECTION: '添加团队服务说明文字', SCHEDULE_QUERY: '开放访客查询团队档期', CONTACT_FORM: '收集访客预留联系信息', QR_CONTACT: '展示团队二维码联系方式' })
 const COMPONENT_TYPES = Object.keys(COMPONENT_NAMES)
 const PORTFOLIO_REQUIRED_COMPONENT_TYPES = Object.freeze(['CAROUSEL', 'MEMBER_PORTFOLIO_GRID', 'MEMBER_PORTFOLIO_LIST'])
 const MEMBER_PORTFOLIO_COMPONENT_TYPES = Object.freeze(['MEMBER_PORTFOLIO_GRID', 'MEMBER_PORTFOLIO_LIST'])
@@ -39,6 +62,8 @@ const TEAM_PORTFOLIOS_COMPAT_PAGE_URL = '/pages/team-portfolios/portfolios'
 const TEXT_SECTION_MAX_LENGTH = 200
 const TEXT_SECTION_REQUIRED_MESSAGE = '请填写文字说明'
 const TEAM_PORTFOLIO_TITLE_REQUIRED_MESSAGE = '请填写团队作品集标题'
+const TEAM_BACKGROUND_COLORS = Object.freeze(['#151515', '#FFFFFF', '#F5F6F8'])
+const TEAM_BOTTOM_NAV_COUNTS = Object.freeze([1, 2, 3, 4])
 const TEXT_SECTION_ALIGNMENTS = Object.freeze({ LEFT: 'LEFT', CENTER: 'CENTER', RIGHT: 'RIGHT' })
 const CONTACT_FORM_DISPLAY_MODES = Object.freeze({ MODAL_FORM: 'MODAL_FORM', INLINE_FORM: 'INLINE_FORM' })
 const CONTACT_FORM_DISPLAY_MODE_OPTIONS = Object.freeze([
@@ -66,6 +91,26 @@ function buildComponentOptions(components = []) {
   const existingTypes = (Array.isArray(components) ? components : []).map((item) => item.componentType)
   return COMPONENT_TYPES.map((componentType) => ({ componentType, name: COMPONENT_NAMES[componentType], description: COMPONENT_DESCRIPTIONS[componentType], disabled: componentType === 'TEAM_PROFILE' && existingTypes.includes(componentType) }))
 }
+function buildTeamBackgroundColorPickerState(backgroundColorHsv = {}) {
+  const normalizedHsv = {
+    hue: Math.min(359, Math.max(0, Number(backgroundColorHsv.hue) || 0)),
+    saturation: Math.min(1, Math.max(0, Number(backgroundColorHsv.saturation) || 0)),
+    value: Math.min(1, Math.max(0, Number(backgroundColorHsv.value) || 0))
+  }
+  return {
+    backgroundColorHsv: normalizedHsv,
+    backgroundColorDraft: hsvToHex(normalizedHsv),
+    backgroundHueColor: hsvToHex({
+      hue: normalizedHsv.hue,
+      saturation: 1,
+      value: 1
+    }),
+    backgroundColorPadDotStyle: [
+      `left: ${Math.round(normalizedHsv.saturation * 100)}%`,
+      `top: ${Math.round((1 - normalizedHsv.value) * 100)}%`
+    ].join('; ')
+  }
+}
 function buildComponentList(components = []) { return (Array.isArray(components) ? components : []).map((item) => Object.assign({}, item, { displayName: COMPONENT_NAMES[item.componentType] || item.componentType || '页面组件' })) }
 function buildPublicationState(status) {
   if (status === 'PUBLISHED' || status === 'PUBLISHED_WITH_DRAFT') return { statusText: status === 'PUBLISHED_WITH_DRAFT' ? '有新草稿' : '已发布', statusTone: 'published', showPublishAction: true }
@@ -74,42 +119,60 @@ function buildPublicationState(status) {
 }
 function touchPoint(event = {}) { const touch = (event.touches && event.touches[0]) || (event.changedTouches && event.changedTouches[0]) || {}; return { x: Number(touch.clientX) || 0, y: Number(touch.clientY) || 0 } }
 function dragStyle(offsetY) { return `transform: translate3d(0, ${Math.round(Number(offsetY) || 0)}px, 0) scale(${COMPONENT_DRAG_SCALE}); transition: transform 80ms linear, box-shadow 160ms ease; z-index: 3;` }
-function normalizeSortOrders(components = []) { return components.map((item, sortOrder) => Object.assign({}, item, { sortOrder })) }
-function buildServerSafeTeamPortfolioConfig(config = {}) {
+function normalizeSortOrders(components = []) { return components.map((item, index) => Object.assign({}, item, { sortOrder: (index + 1) * 1000 })) }
+function updateTeamComponent(config, componentKey, updater) {
   const normalized = normalizeTeamPortfolioConfig(config)
+  const location = findTeamPortfolioComponent(normalized, componentKey)
+  if (!location) return normalized
+  const components = getTeamMenuComponentList(normalized, location.menuKey)
+    .map((component) => component.componentKey === componentKey
+      ? updater(component)
+      : component)
+  return replaceTeamMenuComponentList(normalized, location.menuKey, components)
+}
+function buildServerSafeTeamPortfolioConfig(config = {}) {
+  let normalized = normalizeTeamPortfolioConfig(config)
   const coverUrl = normalized.share && normalized.share.coverUrl
-  const components = normalized.components.map((component) => {
-    if (component.componentType === 'QR_CONTACT') {
-      const qrUrl = component.config && component.config.qrUrl
-      if (!isRemoteUrl(qrUrl)) return null
-      return Object.assign({}, component, {
-        config: {
-          qrUrlSource: TEAM_QR_CONTACT_SOURCE_CUSTOM,
-          qrUrl
-        }
-      })
-    }
-    if (component.componentType === 'TEAM_PROFILE') {
-      const team = component.config && component.config.team ? component.config.team : {}
-      return Object.assign({}, component, {
-        config: Object.assign({}, component.config, {
-          team: Object.assign({}, team, { avatarUrl: isRemoteUrl(team.avatarUrl) ? team.avatarUrl : '' })
+  const menuKeys = normalized.bottomNav.enabled
+    ? normalized.bottomNav.items.map((item) => item.key)
+    : ['']
+  menuKeys.forEach((menuKey) => {
+    const components = getTeamMenuComponentList(normalized, menuKey).map((component) => {
+      if (component.componentType === 'QR_CONTACT') {
+        const qrUrl = component.config && component.config.qrUrl
+        if (!isRemoteUrl(qrUrl)) return null
+        return Object.assign({}, component, {
+          config: { qrUrlSource: TEAM_QR_CONTACT_SOURCE_CUSTOM, qrUrl }
         })
-      })
-    }
-    return component
-  }).filter(Boolean)
+      }
+      if (component.componentType === 'TEAM_PROFILE') {
+        const team = component.config && component.config.team ? component.config.team : {}
+        return Object.assign({}, component, {
+          config: Object.assign({}, component.config, {
+            team: Object.assign({}, team, {
+              avatarUrl: isRemoteUrl(team.avatarUrl) ? team.avatarUrl : ''
+            })
+          })
+        })
+      }
+      return component
+    }).filter(Boolean)
+    normalized = replaceTeamMenuComponentList(normalized, menuKey, components)
+  })
   return normalizeTeamPortfolioConfig(Object.assign({}, normalized, {
-    share: Object.assign({}, normalized.share, { coverUrl: isRemoteUrl(coverUrl) ? coverUrl : '' }),
-    components
+    share: Object.assign({}, normalized.share, {
+      coverUrl: isRemoteUrl(coverUrl) ? coverUrl : ''
+    })
   }))
 }
 
 function makeKey() { return `component-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}` }
 function makeIdempotencyKey(prefix) { return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}` }
 function getQrContactCropBoxWidth(wxApi = wx) {
-  const systemInfo = wxApi && wxApi.getSystemInfoSync ? wxApi.getSystemInfoSync() : {}
-  const windowWidth = Number(systemInfo.windowWidth) || 375
+  const windowInfo = wxApi && wxApi.getWindowInfo
+    ? wxApi.getWindowInfo()
+    : (wxApi && wxApi.getSystemInfoSync ? wxApi.getSystemInfoSync() : {})
+  const windowWidth = Number(windowInfo.windowWidth) || 375
   const rpxScale = windowWidth / DESIGN_VIEWPORT_RPX
   return Math.floor(Math.min(
     QR_CONTACT_CROP_MAX_WIDTH_RPX * rpxScale,
@@ -142,21 +205,19 @@ function buildContactFormConfigForm(config = {}) {
   }
 }
 function updateContactFormConfig(config = {}, componentKey, contactFormConfig = {}) {
-  const normalized = normalizeTeamPortfolioConfig(config)
   const form = buildContactFormConfigForm(contactFormConfig)
-  return Object.assign({}, normalized, {
-    components: normalized.components.map((component) => component.componentKey === componentKey && component.componentType === 'CONTACT_FORM'
+  return updateTeamComponent(config, componentKey, (component) => component.componentType === 'CONTACT_FORM'
       ? Object.assign({}, component, { config: Object.assign({}, component.config, form) })
       : component)
-  })
 }
 function buildScheduleQueryForm(config = {}) {
   return { displayMode: config.displayMode === SCHEDULE_QUERY_DISPLAY_MODES.INLINE_CALENDAR ? SCHEDULE_QUERY_DISPLAY_MODES.INLINE_CALENDAR : SCHEDULE_QUERY_DISPLAY_MODES.MODAL_CALENDAR }
 }
 function updateScheduleQueryConfig(config = {}, componentKey, scheduleQueryConfig = {}) {
-  const normalized = normalizeTeamPortfolioConfig(config)
   const form = buildScheduleQueryForm(scheduleQueryConfig)
-  return Object.assign({}, normalized, { components: normalized.components.map((component) => component.componentKey === componentKey && component.componentType === 'SCHEDULE_QUERY' ? Object.assign({}, component, { config: Object.assign({}, component.config, form) }) : component) })
+  return updateTeamComponent(config, componentKey, (component) => component.componentType === 'SCHEDULE_QUERY'
+    ? Object.assign({}, component, { config: Object.assign({}, component.config, form) })
+    : component)
 }
 function buildDividerForm(config = {}) {
   const color = DIVIDER_COLOR_OPTIONS.some((item) => item.value === config.color) ? config.color : 'GRAY'
@@ -164,20 +225,25 @@ function buildDividerForm(config = {}) {
   return { color, heightPx }
 }
 function updateDividerConfig(config = {}, componentKey, dividerConfig = {}) {
-  const normalized = normalizeTeamPortfolioConfig(config)
   const form = buildDividerForm(dividerConfig)
-  return Object.assign({}, normalized, { components: normalized.components.map((component) => component.componentKey === componentKey && component.componentType === 'DIVIDER' ? Object.assign({}, component, { config: Object.assign({}, component.config, form) }) : component) })
+  return updateTeamComponent(config, componentKey, (component) => component.componentType === 'DIVIDER'
+    ? Object.assign({}, component, { config: Object.assign({}, component.config, form) })
+    : component)
 }
 function updateTextSectionConfig(config = {}, componentKey, textSectionConfig = {}) {
-  const normalized = normalizeTeamPortfolioConfig(config)
   const form = buildTextSectionForm(textSectionConfig)
-  return Object.assign({}, normalized, {
-    components: normalized.components.map((component) => component.componentKey === componentKey && component.componentType === 'TEXT_SECTION'
+  return updateTeamComponent(config, componentKey, (component) => component.componentType === 'TEXT_SECTION'
       ? Object.assign({}, component, { config: Object.assign({}, component.config, form) })
       : component)
-  })
 }
 function isUncertainFailure(error) { return !error || !Number(error.statusCode) || Number(error.statusCode) >= 500 }
+function serverBusinessMessage(error, fallbackMessage) {
+  const statusCode = Number(error && error.statusCode)
+  const message = String(error && error.message || '').trim()
+  return statusCode >= 400 && statusCode < 500 && message
+    ? message
+    : fallbackMessage
+}
 function resolvePortfolioListBackDelta() {
   const pages = typeof getCurrentPages === 'function' ? getCurrentPages() : []
   for (let index = pages.length - 2; index >= 0; index -= 1) {
@@ -188,7 +254,13 @@ function resolvePortfolioListBackDelta() {
 }
 function normalizeTeamSnapshot(teamId, source = {}) { const team = source && typeof source.team === 'object' ? source.team : source; return { teamId: Number(team.teamId) || Number(teamId) || 0, teamName: String(team.teamName || team.name || '').trim(), avatarUrl: String(team.avatarUrl || '').trim(), intro: String(team.intro || '').trim() } }
 function hasTeamSnapshot(snapshot = {}) { return Number(snapshot.teamId) > 0 && Boolean(String(snapshot.teamName || '').trim()) }
-function draftTeamSnapshot(config = {}) { const component = (Array.isArray(config.components) ? config.components : []).find((item) => item.componentType === 'TEAM_PROFILE'); return component ? normalizeTeamSnapshot(0, component.config && component.config.team) : {} }
+function draftTeamSnapshot(config = {}) {
+  const location = visitTeamPortfolioComponents(config)
+    .find((item) => item.component.componentType === 'TEAM_PROFILE')
+  return location
+    ? normalizeTeamSnapshot(0, location.component.config && location.component.config.team)
+    : {}
+}
 function resolveTeamCoverPreviewPath(filePath) {
   if (!filePath || !wx.getImageInfo) return Promise.resolve(filePath || '')
   return new Promise((resolve, reject) => wx.getImageInfo({
@@ -198,13 +270,13 @@ function resolveTeamCoverPreviewPath(filePath) {
   }))
 }
 function buckets(components) {
-  const value = { teamProfile: [], carousel: [], divider: [], grid: [], list: [], text: [], schedule: [], contact: [], qr: [] }
+  const value = { teamProfile: [], carousel: [], singleWork: [], divider: [], grid: [], list: [], text: [], schedule: [], contact: [], qr: [] }
   ;(Array.isArray(components) ? components : []).forEach((component) => { const key = TYPE_BUCKETS[component.componentType]; if (key) value[key].push(component) })
   return value
 }
 
 Page({
-  data: { portfolioId: 0, teamId: 0, teamSnapshot: {}, loading: false, errorMessage: '', canMaintain: false, publicationStatus: 'DRAFT_ONLY', draftRevision: 0, publishedRevision: 0, statusText: '草稿', statusTone: 'draft', showPublishAction: false, config: { schemaVersion: 'standard-team-v1', share: {}, components: [] }, componentList: [], componentBuckets: buckets([]), componentOptions: buildComponentOptions(), componentValidation: {}, componentSources: {}, hasInvalidComponents: false, saving: false, publishing: false, openingLibrary: false, shareCoverUploading: false, qrContactChoosing: false, qrContactCropVisible: false, qrContactCropSaving: false, qrContactCropErrorText: '', qrContactCropState: null, qrContactCropTouchStart: null, qrContactCropCanvasWidth: WECHAT_QR_CROP_OUTPUT_WIDTH, qrContactCropCanvasHeight: WECHAT_QR_CROP_OUTPUT_WIDTH, teamProfileRefreshing: false, pendingDraftKey: '', pendingPublishKey: '', pendingPublishRevision: 0, shareTitleCounter: '0 / 50', componentSheetVisible: false, textSectionSheetVisible: false, textSectionEditingComponentKey: '', textSectionAlignmentOptions: TEXT_SECTION_ALIGNMENT_OPTIONS, textSectionMaxLength: TEXT_SECTION_MAX_LENGTH, textSectionForm: buildTextSectionForm(), textSectionFieldCounters: buildTextSectionFieldCounters(buildTextSectionForm()), contactFormSheetVisible: false, contactFormEditingComponentKey: '', contactFormDisplayModeOptions: CONTACT_FORM_DISPLAY_MODE_OPTIONS, contactFormConfigForm: buildContactFormConfigForm(), scheduleQuerySheetVisible: false, scheduleQueryEditingComponentKey: '', scheduleQueryDisplayModeOptions: SCHEDULE_QUERY_DISPLAY_MODE_OPTIONS, scheduleQueryForm: buildScheduleQueryForm(), dividerSheetVisible: false, dividerEditingComponentKey: '', dividerColorOptions: DIVIDER_COLOR_OPTIONS, dividerForm: buildDividerForm(), componentEditorVisible: false, activeComponentKey: '', activeComponentType: '', activeComponentName: '', activeComponent: { config: {} }, activeComponentSource: {}, activeComponentNeedsPortfolio: false, revealedComponentKey: '', componentTouchStart: null, draggingIndex: -1, dragTargetIndex: -1, componentDragStartY: 0, componentDragStyle: '', shareCoverCropVisible: false, shareCoverCropPath: '' },
+  data: { portfolioId: 0, teamId: 0, teamSnapshot: {}, loading: false, errorMessage: '', canMaintain: false, publicationStatus: 'DRAFT_ONLY', draftRevision: 0, publishedRevision: 0, statusText: '草稿', statusTone: 'draft', showPublishAction: false, config: normalizeTeamPortfolioConfig(), activeMenuKey: '', activeMenuTitle: '', activeMenuTitleCount: 0, navigationItems: [], bottomNavCount: 1, backgroundColorOptions: TEAM_BACKGROUND_COLORS, bottomNavCountOptions: TEAM_BOTTOM_NAV_COUNTS, backgroundColorSheetVisible: false, backgroundColorDraft: '#FFFFFF', backgroundColorHsv: hexToHsv('#FFFFFF'), backgroundHueColor: '#FF0000', backgroundColorPadDotStyle: 'left: 0%; top: 0%', componentList: [], componentBuckets: buckets([]), componentOptions: buildComponentOptions(), componentValidation: {}, componentSources: {}, hasInvalidComponents: false, saving: false, publishing: false, openingLibrary: false, shareCoverUploading: false, qrContactChoosing: false, qrContactCropVisible: false, qrContactCropSaving: false, qrContactCropErrorText: '', qrContactCropState: null, qrContactCropTouchStart: null, qrContactCropCanvasWidth: WECHAT_QR_CROP_OUTPUT_WIDTH, qrContactCropCanvasHeight: WECHAT_QR_CROP_OUTPUT_WIDTH, teamProfileRefreshing: false, pendingDraftKey: '', pendingPublishKey: '', pendingPublishRevision: 0, shareTitleCounter: '0 / 50', componentSheetVisible: false, textSectionSheetVisible: false, textSectionEditingComponentKey: '', textSectionAlignmentOptions: TEXT_SECTION_ALIGNMENT_OPTIONS, textSectionMaxLength: TEXT_SECTION_MAX_LENGTH, textSectionForm: buildTextSectionForm(), textSectionFieldCounters: buildTextSectionFieldCounters(buildTextSectionForm()), contactFormSheetVisible: false, contactFormEditingComponentKey: '', contactFormDisplayModeOptions: CONTACT_FORM_DISPLAY_MODE_OPTIONS, contactFormConfigForm: buildContactFormConfigForm(), scheduleQuerySheetVisible: false, scheduleQueryEditingComponentKey: '', scheduleQueryDisplayModeOptions: SCHEDULE_QUERY_DISPLAY_MODE_OPTIONS, scheduleQueryForm: buildScheduleQueryForm(), dividerSheetVisible: false, dividerEditingComponentKey: '', dividerColorOptions: DIVIDER_COLOR_OPTIONS, dividerForm: buildDividerForm(), componentEditorVisible: false, activeComponentKey: '', activeComponentType: '', activeComponentName: '', activeComponent: { config: {} }, activeComponentSource: {}, activeComponentNeedsPortfolio: false, revealedComponentKey: '', componentTouchStart: null, draggingIndex: -1, dragTargetIndex: -1, componentDragStartY: 0, componentDragStyle: '', componentMoveSheetVisible: false, componentMoveKey: '', componentMoveTargets: [], componentMovePending: false, highlightedComponentKey: '', componentScrollTarget: '', shareCoverCropVisible: false, shareCoverCropPath: '' },
   onLoad(options = {}) {
     const portfolioId = Number(options.portfolioId) || 0
     const teamId = Number(options.teamId) || 0
@@ -234,28 +306,73 @@ Page({
     try {
       const detail = await fetchTeamPortfolioDetail(request, this.data.portfolioId)
       const config = normalizeTeamPortfolioConfig(detail.config)
-      const componentValidation = Object.fromEntries(config.components.map((item) => [item.componentKey, true]))
+      const componentValidation = Object.fromEntries(
+        visitTeamPortfolioComponents(config).map((item) => [item.component.componentKey, true])
+      )
       let teamSnapshot = draftTeamSnapshot(config)
       if (!hasTeamSnapshot(teamSnapshot)) {
         const teamDetail = await request({ url: `/api/mine/teams/${detail.ownerId}` })
         teamSnapshot = normalizeTeamSnapshot(detail.ownerId, teamDetail && teamDetail.team)
       }
-      this.setData(Object.assign({ teamId: detail.ownerId, teamSnapshot, canMaintain: true, publicationStatus: detail.publicationStatus, draftRevision: detail.draftRevision, publishedRevision: detail.publishedRevision, config, componentList: buildComponentList(config.components), componentBuckets: buckets(config.components), componentOptions: buildComponentOptions(config.components), componentValidation, hasInvalidComponents: false, shareTitleCounter: `${String(config.share && config.share.title || '').length} / 50` }, buildPublicationState(detail.publicationStatus)))
+      this.setData(Object.assign({
+        teamId: detail.ownerId,
+        teamSnapshot,
+        canMaintain: true,
+        publicationStatus: detail.publicationStatus,
+        draftRevision: detail.draftRevision,
+        publishedRevision: detail.publishedRevision,
+        componentValidation,
+        hasInvalidComponents: false
+      }, buildPublicationState(detail.publicationStatus)))
+      this.updateConfig(config)
     } catch (error) { if (handleTeamMaintainerAuthError(error)) return; if (showTeamPortfolioUnavailableToast(error)) return; this.setData({ errorMessage: '团队作品集加载失败，请重试', canMaintain: false }) } finally { this.setData({ loading: false }) }
   },
   onShow() { if (this.data.openingLibrary) this.setData({ openingLibrary: false }) },
+  onUnload() {
+    if (this.componentHighlightTimer) clearTimeout(this.componentHighlightTimer)
+  },
   handleRetry() { this.bootstrap() },
-  updateConfig(config) { const components = normalizeSortOrders(config.components || []); const normalized = Object.assign({}, config, { components }); this.setData({ config: normalized, componentList: buildComponentList(components), componentBuckets: buckets(components), componentOptions: buildComponentOptions(components), shareTitleCounter: `${String(normalized.share && normalized.share.title || '').length} / 50` }); if (this.data.activeComponentKey) this.syncActiveComponent(normalized, this.data.activeComponentKey) },
+  updateConfig(config) {
+    const normalized = normalizeTeamPortfolioConfig(config)
+    const navigationItems = normalized.bottomNav.enabled
+      ? normalized.bottomNav.items.map((item) => Object.assign({}, item, {
+        titleLength: Array.from(String(item.title || '')).length
+      }))
+      : []
+    const activeMenuKey = navigationItems.some((item) => item.key === this.data.activeMenuKey)
+      ? this.data.activeMenuKey
+      : (navigationItems[0] && navigationItems[0].key) || ''
+    const activeMenu = navigationItems.find((item) => item.key === activeMenuKey)
+    const components = getTeamMenuComponentList(normalized, activeMenuKey)
+    const allComponents = visitTeamPortfolioComponents(normalized).map((item) => item.component)
+    this.setData({
+      config: normalized,
+      activeMenuKey,
+      activeMenuTitle: activeMenu ? activeMenu.title : '',
+      activeMenuTitleCount: activeMenu ? Array.from(activeMenu.title).length : 0,
+      navigationItems,
+      bottomNavCount: navigationItems.length || 1,
+      backgroundColorDraft: normalized.style.backgroundColor,
+      componentList: buildComponentList(components),
+      componentBuckets: buckets(components),
+      componentOptions: buildComponentOptions(allComponents),
+      shareTitleCounter: `${String(normalized.share && normalized.share.title || '').length} / 50`
+    })
+    if (this.data.activeComponentKey) {
+      this.syncActiveComponent(normalized, this.data.activeComponentKey)
+    }
+  },
   clearPending() { this.setData({ pendingDraftKey: '', pendingPublishKey: '', pendingPublishRevision: 0 }) },
   noop() {},
-  syncActiveComponent(config = this.data.config, componentKey = this.data.activeComponentKey) { const activeComponent = (config.components || []).find((item) => item.componentKey === componentKey) || { config: {} }; this.setData({ activeComponent, activeComponentSource: this.data.componentSources[componentKey] || {} }) },
-  handleOpenComponentSheet() { if (!this.data.canMaintain) return; this.setData({ componentSheetVisible: true, revealedComponentKey: '', componentOptions: buildComponentOptions(this.data.config.components) }) },
+  syncActiveComponent(config = this.data.config, componentKey = this.data.activeComponentKey) { const location = findTeamPortfolioComponent(config, componentKey); const activeComponent = location ? location.component : { config: {} }; this.setData({ activeComponent, activeComponentSource: this.data.componentSources[componentKey] || {} }) },
+  handleOpenComponentSheet() { if (!this.data.canMaintain) return; const allComponents = visitTeamPortfolioComponents(this.data.config).map((item) => item.component); this.setData({ componentSheetVisible: true, revealedComponentKey: '', componentOptions: buildComponentOptions(allComponents) }) },
   handleCloseComponentSheet() { this.setData({ componentSheetVisible: false }) },
   handleSelectComponent(event) { if (event.currentTarget.dataset.disabled) return; const componentType = event.currentTarget.dataset.type; if (!componentType) return; this.addComponent(componentType); this.setData({ componentSheetVisible: false }) },
-  handleComponentTap(event) { const componentKey = event.currentTarget.dataset.key || ''; const componentType = event.currentTarget.dataset.type || ''; if (this.data.revealedComponentKey === componentKey) return this.setData({ revealedComponentKey: '' }); const activeComponent = (this.data.config.components || []).find((item) => item.componentKey === componentKey); if (!activeComponent) return; if (componentType === 'TEXT_SECTION') return this.openTextSectionSheet(componentKey); if (componentType === 'CONTACT_FORM') return this.openContactFormSheet(componentKey); if (componentType === 'SCHEDULE_QUERY') return this.openScheduleQuerySheet(componentKey); if (componentType === 'DIVIDER') return this.openDividerSheet(componentKey); this.setData({ componentEditorVisible: true, activeComponentKey: componentKey, activeComponentType: componentType, activeComponentName: COMPONENT_NAMES[componentType] || '页面组件', activeComponent, activeComponentSource: this.data.componentSources[componentKey] || {}, activeComponentNeedsPortfolio: PORTFOLIO_REQUIRED_COMPONENT_TYPES.includes(componentType) }) },
+  handleComponentTap(event) { const componentKey = event.currentTarget.dataset.key || ''; const componentType = event.currentTarget.dataset.type || ''; if (this.data.revealedComponentKey === componentKey) return this.setData({ revealedComponentKey: '' }); const location = findTeamPortfolioComponent(this.data.config, componentKey); const activeComponent = location && location.component; if (!activeComponent) return; if (componentType === 'TEXT_SECTION') return this.openTextSectionSheet(componentKey); if (componentType === 'CONTACT_FORM') return this.openContactFormSheet(componentKey); if (componentType === 'SCHEDULE_QUERY') return this.openScheduleQuerySheet(componentKey); if (componentType === 'DIVIDER') return this.openDividerSheet(componentKey); this.setData({ componentEditorVisible: true, activeComponentKey: componentKey, activeComponentType: componentType, activeComponentName: COMPONENT_NAMES[componentType] || '页面组件', activeComponent, activeComponentSource: this.data.componentSources[componentKey] || {}, activeComponentNeedsPortfolio: PORTFOLIO_REQUIRED_COMPONENT_TYPES.includes(componentType) }) },
   handleCloseComponentEditor() { this.setData({ componentEditorVisible: false, activeComponentKey: '', activeComponentType: '', activeComponentName: '', activeComponent: { config: {} }, activeComponentSource: {}, activeComponentNeedsPortfolio: false }) },
   openTextSectionSheet(componentKey) {
-    const component = this.data.config.components.find((item) => item.componentKey === componentKey)
+    const location = findTeamPortfolioComponent(this.data.config, componentKey)
+    const component = location && location.component
     if (!component || component.componentType !== 'TEXT_SECTION') return
     const textSectionForm = buildTextSectionForm(component.config)
     this.setData({ textSectionSheetVisible: true, textSectionEditingComponentKey: componentKey, textSectionForm, textSectionFieldCounters: buildTextSectionFieldCounters(textSectionForm) })
@@ -285,7 +402,8 @@ Page({
     this.handleCloseTextSectionSheet()
   },
   openContactFormSheet(componentKey) {
-    const component = this.data.config.components.find((item) => item.componentKey === componentKey)
+    const location = findTeamPortfolioComponent(this.data.config, componentKey)
+    const component = location && location.component
     if (!component || component.componentType !== 'CONTACT_FORM') return
     this.setData({ contactFormSheetVisible: true, contactFormEditingComponentKey: componentKey, contactFormConfigForm: buildContactFormConfigForm(component.config) })
   },
@@ -307,7 +425,8 @@ Page({
     this.handleCloseContactFormSheet()
   },
   openScheduleQuerySheet(componentKey) {
-    const component = this.data.config.components.find((item) => item.componentKey === componentKey)
+    const location = findTeamPortfolioComponent(this.data.config, componentKey)
+    const component = location && location.component
     if (!component || component.componentType !== 'SCHEDULE_QUERY') return
     this.setData({ scheduleQuerySheetVisible: true, scheduleQueryEditingComponentKey: componentKey, scheduleQueryForm: buildScheduleQueryForm(component.config) })
   },
@@ -325,7 +444,8 @@ Page({
     this.handleCloseScheduleQuerySheet()
   },
   openDividerSheet(componentKey) {
-    const component = this.data.config.components.find((item) => item.componentKey === componentKey)
+    const location = findTeamPortfolioComponent(this.data.config, componentKey)
+    const component = location && location.component
     if (!component || component.componentType !== 'DIVIDER') return
     this.setData({ dividerSheetVisible: true, dividerEditingComponentKey: componentKey, dividerForm: buildDividerForm(component.config) })
   },
@@ -346,24 +466,270 @@ Page({
   },
   handleComponentTouchStart(event) { const point = touchPoint(event); this.setData({ componentTouchStart: { key: event.currentTarget.dataset.key || '', index: Number(event.currentTarget.dataset.index), x: point.x, y: point.y } }) },
   handleComponentDragStart(event) { const index = Number(event.currentTarget.dataset.index); if (!Number.isFinite(index)) return; const point = touchPoint(event); this.componentDragRows = []; if (wx.createSelectorQuery) wx.createSelectorQuery().in(this).selectAll('.component-row').boundingClientRect((rows = []) => { this.componentDragRows = rows }).exec(); this.setData({ draggingIndex: index, dragTargetIndex: index, componentDragStartY: point.y, componentDragStyle: dragStyle(0), revealedComponentKey: '' }) },
-  handleComponentTouchMove(event) { if (this.data.draggingIndex < 0) return; const point = touchPoint(event); const rows = this.componentDragRows || []; let targetIndex; if (rows.length) { targetIndex = rows.findIndex((row) => point.y < row.top + row.height / 2); if (targetIndex < 0) targetIndex = rows.length - 1 } else { const delta = point.y - this.data.componentDragStartY; targetIndex = Math.max(0, Math.min(this.data.config.components.length - 1, this.data.draggingIndex + Math.round(delta / DRAG_ROW_FALLBACK_HEIGHT))) } this.setData({ dragTargetIndex: targetIndex, componentDragStyle: dragStyle(point.y - this.data.componentDragStartY) }) },
+  handleComponentTouchMove(event) { if (this.data.draggingIndex < 0) return; const point = touchPoint(event); const rows = this.componentDragRows || []; const components = getTeamMenuComponentList(this.data.config, this.data.activeMenuKey); let targetIndex; if (rows.length) { targetIndex = rows.findIndex((row) => point.y < row.top + row.height / 2); if (targetIndex < 0) targetIndex = rows.length - 1 } else { const delta = point.y - this.data.componentDragStartY; targetIndex = Math.max(0, Math.min(components.length - 1, this.data.draggingIndex + Math.round(delta / DRAG_ROW_FALLBACK_HEIGHT))) } this.setData({ dragTargetIndex: targetIndex, componentDragStyle: dragStyle(point.y - this.data.componentDragStartY) }) },
   handleComponentTouchEnd(event) { if (this.data.draggingIndex >= 0) return this.handleComponentDragEnd(); const start = this.data.componentTouchStart; if (!start || !start.key) return; const point = touchPoint(event); const deltaX = point.x - start.x; const deltaY = Math.abs(point.y - start.y); if (deltaY <= SWIPE_VERTICAL_TOLERANCE && deltaX < SWIPE_REVEAL_THRESHOLD) this.setData({ revealedComponentKey: start.key, componentTouchStart: null }); else if (deltaX > SWIPE_CLOSE_THRESHOLD || Math.abs(deltaX) < 8) this.setData({ revealedComponentKey: '', componentTouchStart: null }); else this.setData({ componentTouchStart: null }) },
   handleComponentTouchCancel() { if (this.data.draggingIndex >= 0) return this.handleComponentDragEnd(); this.setData({ componentTouchStart: null }) },
-  handleComponentDragEnd() { const from = this.data.draggingIndex; const to = this.data.dragTargetIndex; if (from >= 0 && to >= 0 && from !== to) { const components = this.data.config.components.slice(); const moved = components.splice(from, 1)[0]; components.splice(to, 0, moved); this.clearPending(); this.updateConfig(Object.assign({}, this.data.config, { components })) } this.componentDragRows = []; this.setData({ draggingIndex: -1, dragTargetIndex: -1, componentDragStartY: 0, componentDragStyle: '', componentTouchStart: null }) },
+  handleComponentDragEnd() { const from = this.data.draggingIndex; const to = this.data.dragTargetIndex; if (from >= 0 && to >= 0 && from !== to) { const components = getTeamMenuComponentList(this.data.config, this.data.activeMenuKey); const moved = components.splice(from, 1)[0]; components.splice(to, 0, moved); this.clearPending(); this.updateConfig(replaceTeamMenuComponentList(this.data.config, this.data.activeMenuKey, components)) } this.componentDragRows = []; this.setData({ draggingIndex: -1, dragTargetIndex: -1, componentDragStartY: 0, componentDragStyle: '', componentTouchStart: null }) },
   handleRemoveComponent(event) { this.handleComponentDelete(event); this.setData({ revealedComponentKey: '' }) },
   handleShareInput(event) { const field = event.currentTarget.dataset.field; this.clearPending(); this.updateConfig(Object.assign({}, this.data.config, { share: Object.assign({}, this.data.config.share, { [field]: event.detail.value }) })) },
-  handleComponentConfigChange(event) {
-    const detail = event.detail || {}; const componentKey = detail.componentKey || (event.currentTarget && event.currentTarget.dataset.key); const components = this.data.config.components.map((item) => item.componentKey === componentKey ? Object.assign({}, item, { config: detail.config || Object.assign({}, item.config, detail.field ? { [detail.field]: detail.value } : {}) }) : item)
+  handleBackgroundColorTap(event) {
+    if (!this.data.canMaintain) return
+    const backgroundColor = normalizeTeamHexColor(event.currentTarget.dataset.color)
     this.clearPending()
-    const changed = this.data.config.components.find((item) => item.componentKey === componentKey)
+    this.updateConfig(Object.assign({}, this.data.config, { style: { backgroundColor } }))
+  },
+  handleOpenBackgroundColorSheet() {
+    if (!this.data.canMaintain) return
+    const backgroundColor = normalizeTeamHexColor(
+      this.data.config.style && this.data.config.style.backgroundColor
+    )
+    this.setData(Object.assign({
+      backgroundColorSheetVisible: true
+    }, buildTeamBackgroundColorPickerState(hexToHsv(backgroundColor))))
+  },
+  handleCloseBackgroundColorSheet() {
+    this.setData({ backgroundColorSheetVisible: false })
+  },
+  handleBackgroundHueChange(event) {
+    this.setData(buildTeamBackgroundColorPickerState(Object.assign(
+      {},
+      this.data.backgroundColorHsv,
+      { hue: Number(event.detail.value) || 0 }
+    )))
+  },
+  handleBackgroundColorPadTouch(event) {
+    const touch = event && event.touches && event.touches[0]
+    if (!touch || !wx.createSelectorQuery) return
+    wx.createSelectorQuery()
+      .in(this)
+      .select('.team-background-color-pad')
+      .boundingClientRect((rect) => {
+        if (!rect || !rect.width || !rect.height) return
+        const saturation = Math.min(1, Math.max(0, (Number(touch.clientX) - rect.left) / rect.width))
+        const value = 1 - Math.min(1, Math.max(0, (Number(touch.clientY) - rect.top) / rect.height))
+        this.setData(buildTeamBackgroundColorPickerState(Object.assign(
+          {},
+          this.data.backgroundColorHsv,
+          { saturation, value }
+        )))
+      })
+      .exec()
+  },
+  handleBackgroundHexInput(event) {
+    const backgroundColorDraft = String(event.detail.value || '').trim().toUpperCase()
+    if (/^#[0-9A-F]{6}$/.test(backgroundColorDraft)) {
+      this.setData(buildTeamBackgroundColorPickerState(hexToHsv(backgroundColorDraft)))
+      return
+    }
+    this.setData({ backgroundColorDraft })
+  },
+  handleBackgroundHexBlur() {
+    if (!/^#[0-9A-F]{6}$/.test(this.data.backgroundColorDraft)) {
+      wx.showToast({ title: '请输入正确的颜色值', icon: 'none' })
+    }
+  },
+  handleConfirmBackgroundColor() {
+    if (!this.data.canMaintain) return
+    if (!/^#[0-9A-F]{6}$/.test(this.data.backgroundColorDraft)) {
+      wx.showToast({ title: '请输入正确的颜色值', icon: 'none' })
+      return
+    }
+    this.clearPending()
+    this.updateConfig(Object.assign({}, this.data.config, {
+      style: { backgroundColor: this.data.backgroundColorDraft }
+    }))
+    this.setData({ backgroundColorSheetVisible: false })
+  },
+  handleBottomNavigationCountTap(event) {
+    if (!this.data.canMaintain) return
+    const count = Number(event.currentTarget.dataset.count)
+    if (!TEAM_BOTTOM_NAV_COUNTS.includes(count)) return
+    const currentItems = this.data.config.bottomNav.enabled ? this.data.config.bottomNav.items : []
+    const activeMenuIndex = currentItems.findIndex((item) => item.key === this.data.activeMenuKey)
+    const applyCount = () => {
+      this.clearPending()
+      const config = setTeamBottomNavigationCount(this.data.config, count)
+      const nextItems = config.bottomNav.enabled ? config.bottomNav.items : []
+      const nextMenuKey = nextItems.some((item) => item.key === this.data.activeMenuKey)
+        ? this.data.activeMenuKey
+        : ((nextItems[Math.min(
+            Math.max(activeMenuIndex - 1, 0),
+            nextItems.length - 1
+          )] || {}).key || '')
+      this.setData({ activeMenuKey: nextMenuKey, revealedComponentKey: '' })
+      this.updateConfig(config)
+    }
+    if (count >= currentItems.length) return applyCount()
+    const removedItems = count < 2 ? currentItems.slice(1) : currentItems.slice(count)
+    const componentCount = removedItems.reduce((total, item) => {
+      return total + getTeamMenuComponentList(this.data.config, item.key).length
+    }, 0)
+    if (!componentCount) return applyCount()
+    wx.showModal({
+      title: '减少底部菜单？',
+      content: `将同时删除末尾菜单中的 ${componentCount} 个组件`,
+      confirmText: '确认',
+      confirmColor: '#b55656',
+      success: (result) => { if (result.confirm) applyCount() }
+    })
+  },
+  handleMenuTabTap(event) {
+    const menuKey = event.currentTarget.dataset.key || ''
+    this.setData({ activeMenuKey: menuKey, revealedComponentKey: '', highlightedComponentKey: '', componentScrollTarget: '' })
+    this.updateConfig(this.data.config)
+  },
+  handleNavigationTitleInput(event) {
+    if (!this.data.canMaintain) return
+    const menuKey = event.currentTarget.dataset.key || ''
+    this.clearPending()
+    this.updateConfig(renameTeamNavigationItem(this.data.config, menuKey, event.detail.value))
+  },
+  handleRemoveNavigationItem(event) {
+    if (!this.data.canMaintain) return
+    const menuKey = event.currentTarget.dataset.key || ''
+    const items = this.data.config.bottomNav.enabled ? this.data.config.bottomNav.items : []
+    const menuIndex = items.findIndex((item) => item.key === menuKey)
+    if (menuIndex < 0 || items.length <= 2) return
+    const menu = items[menuIndex]
+    const componentCount = getTeamMenuComponentList(this.data.config, menuKey).length
+    const applyRemove = () => {
+      const fallback = items[menuIndex - 1] || items[menuIndex + 1]
+      this.setData({ activeMenuKey: fallback ? fallback.key : '', revealedComponentKey: '' })
+      this.clearPending()
+      this.updateConfig(removeTeamNavigationItem(this.data.config, menuKey))
+    }
+    const promotionWarning = menuIndex === 0
+      ? '删除后，第二个菜单将晋升为第一个菜单，旧版本将展示晋升后的菜单内容。'
+      : ''
+    const componentWarning = componentCount
+      ? `将同时删除其下 ${componentCount} 个组件。`
+      : ''
+    if (menuIndex !== 0 && !componentCount) return applyRemove()
+    wx.showModal({
+      title: `删除菜单「${menu.title}」？`,
+      content: [promotionWarning, componentWarning].filter(Boolean).join('\n'),
+      confirmText: '删除',
+      confirmColor: '#b55656',
+      success: (result) => { if (result.confirm) applyRemove() }
+    })
+  },
+  handleOpenComponentMoveSheet(event) {
+    if (!this.data.config.bottomNav.enabled ||
+        this.data.componentMovePending ||
+        this.data.saving ||
+        this.data.publishing ||
+        this.data.shareCoverUploading ||
+        this.data.qrContactChoosing ||
+        this.data.qrContactCropVisible ||
+        this.data.backgroundColorSheetVisible ||
+        this.data.componentSheetVisible ||
+        this.data.componentEditorVisible ||
+        this.data.textSectionSheetVisible ||
+        this.data.contactFormSheetVisible ||
+        this.data.scheduleQuerySheetVisible ||
+        this.data.dividerSheetVisible) return
+    const componentKey = event.currentTarget.dataset.key || ''
+    const location = findTeamPortfolioComponent(this.data.config, componentKey)
+    if (!location) return
+    const componentMoveTargets = this.data.config.bottomNav.items
+      .filter((item) => item.key !== location.menuKey)
+      .map((item) => ({
+        key: item.key,
+        title: item.title,
+        componentCount: getTeamMenuComponentList(this.data.config, item.key).length
+      }))
+    this.setData({
+      componentMoveSheetVisible: true,
+      componentMoveKey: componentKey,
+      componentMoveTargets,
+      revealedComponentKey: ''
+    })
+  },
+  handleCloseComponentMoveSheet() {
+    if (this.data.componentMovePending) return
+    this.setData({ componentMoveSheetVisible: false, componentMoveKey: '', componentMoveTargets: [] })
+  },
+  handleMoveTargetTap(event) {
+    if (this.data.componentMovePending) return
+    const componentKey = this.data.componentMoveKey
+    const targetMenuKey = event.currentTarget.dataset.key || ''
+    const location = findTeamPortfolioComponent(this.data.config, componentKey)
+    const items = this.data.config.bottomNav.enabled ? this.data.config.bottomNav.items : []
+    if (!location || !targetMenuKey || !items.some((item) => item.key === targetMenuKey)) {
+      wx.showToast({ title: '组件移动失败，请重试', icon: 'none' })
+      return
+    }
+    if (targetMenuKey === location.menuKey) return
+    const sourceIndex = items.findIndex((item) => item.key === location.menuKey)
+    const sourceComponents = getTeamMenuComponentList(this.data.config, location.menuKey)
+    const enabledCount = sourceComponents.filter((item) => item.enabled !== false).length
+    if (sourceIndex === 0 && location.component.enabled !== false && enabledCount <= 1) {
+      wx.showToast({ title: '第一个菜单至少保留一个组件', icon: 'none' })
+      return
+    }
+    this.setData({ componentMovePending: true, activeMenuKey: targetMenuKey })
+    this.clearPending()
+    this.updateConfig(moveTeamComponent(
+      this.data.config,
+      componentKey,
+      location.menuKey,
+      targetMenuKey
+    ))
+    this.setData({
+      componentMovePending: false,
+      componentMoveSheetVisible: false,
+      componentMoveKey: '',
+      componentMoveTargets: [],
+      highlightedComponentKey: componentKey,
+      componentScrollTarget: `team-component-${componentKey}`
+    })
+    if (this.componentHighlightTimer) clearTimeout(this.componentHighlightTimer)
+    this.componentHighlightTimer = setTimeout(() => {
+      this.setData({ highlightedComponentKey: '', componentScrollTarget: '' })
+      this.componentHighlightTimer = null
+    }, 2200)
+  },
+  handleComponentConfigChange(event) {
+    const detail = event.detail || {}
+    const componentKey = detail.componentKey || (event.currentTarget && event.currentTarget.dataset.key)
+    const location = findTeamPortfolioComponent(this.data.config, componentKey)
+    const config = updateTeamComponent(this.data.config, componentKey, (component) => Object.assign({}, component, {
+      config: detail.config || Object.assign({}, component.config, detail.field ? { [detail.field]: detail.value } : {})
+    }))
+    this.clearPending()
+    const changed = location && location.component
     if (changed && changed.componentType === 'TEXT_SECTION' && detail.field) { const componentValidation = Object.assign({}, this.data.componentValidation, { [componentKey]: false }); this.setData({ componentValidation, hasInvalidComponents: true }) }
-    this.updateConfig(Object.assign({}, this.data.config, { components }))
+    this.updateConfig(config)
   },
   handleComponentValidationChange(event) { const detail = event.detail || {}; const componentValidation = Object.assign({}, this.data.componentValidation, { [detail.componentKey]: detail.valid !== false }); this.setData({ componentValidation, hasInvalidComponents: Object.keys(componentValidation).some((key) => componentValidation[key] === false) }) },
   handleComponentSave(event) { const key = event.currentTarget.dataset.key; this.handleComponentConfigChange(event); const componentValidation = Object.assign({}, this.data.componentValidation, { [key]: true }); this.setData({ componentValidation, hasInvalidComponents: Object.keys(componentValidation).some((name) => componentValidation[name] === false) }); if (this.data.activeComponentKey === key) this.handleCloseComponentEditor() },
   handleConfirmComponentEditor() { const component = this.selectComponent('#active-component-editor'); if (component && typeof component.saveEdit === 'function') component.saveEdit() },
-  handleComponentDelete(event) { const key = event.currentTarget.dataset.key; this.clearPending(); const validation = Object.assign({}, this.data.componentValidation); delete validation[key]; this.setData({ componentValidation: validation, hasInvalidComponents: Object.keys(validation).some((name) => validation[name] === false) }); this.updateConfig(Object.assign({}, this.data.config, { components: this.data.config.components.filter((item) => item.componentKey !== key) })) },
-  handleMove(event) { const key = event.currentTarget.dataset.key; const direction = Number(event.currentTarget.dataset.direction); const components = this.data.config.components.slice(); const index = components.findIndex((item) => item.componentKey === key); const target = index + direction; if (index < 0 || target < 0 || target >= components.length) return; this.clearPending(); [components[index], components[target]] = [components[target], components[index]]; this.updateConfig(Object.assign({}, this.data.config, { components: components.map((item, sortOrder) => Object.assign({}, item, { sortOrder })) })) },
+  handleComponentDelete(event) {
+    const key = event.currentTarget.dataset.key
+    const location = findTeamPortfolioComponent(this.data.config, key)
+    if (!location) return
+    this.clearPending()
+    const validation = Object.assign({}, this.data.componentValidation)
+    delete validation[key]
+    this.setData({ componentValidation: validation, hasInvalidComponents: Object.keys(validation).some((name) => validation[name] === false) })
+    this.updateConfig(replaceTeamMenuComponentList(
+      this.data.config,
+      location.menuKey,
+      getTeamMenuComponentList(this.data.config, location.menuKey)
+        .filter((item) => item.componentKey !== key)
+    ))
+  },
+  handleMove(event) {
+    const key = event.currentTarget.dataset.key
+    const direction = Number(event.currentTarget.dataset.direction)
+    const components = getTeamMenuComponentList(this.data.config, this.data.activeMenuKey)
+    const index = components.findIndex((item) => item.componentKey === key)
+    const target = index + direction
+    if (index < 0 || target < 0 || target >= components.length) return
+    this.clearPending()
+    ;[components[index], components[target]] = [components[target], components[index]]
+    this.updateConfig(replaceTeamMenuComponentList(this.data.config, this.data.activeMenuKey, normalizeSortOrders(components)))
+  },
   handleMaintainTeam(event) { const teamId = Number(event.currentTarget.dataset.teamId || this.data.teamId); if (teamId) wx.navigateTo({ url: `/pages/team-maintenance/team-maintenance?teamId=${teamId}` }) },
   async handleTeamProfileChooseAvatar() {
     if (!wx.chooseMedia) return
@@ -392,12 +758,30 @@ Page({
     } finally { this.setData({ teamProfileRefreshing: false }) }
   },
   handleOpenLibrary() { this.setData({ openingLibrary: false }); this.handleOpenComponentSheet() },
-  addComponent(componentType) { if (!componentType) return this.setData({ openingLibrary: false }); this.clearPending(); const componentKey = makeKey(); const componentConfig = componentType === 'TEAM_PROFILE' ? { team: Object.assign({}, this.data.teamSnapshot) } : MEMBER_PORTFOLIO_COMPONENT_TYPES.includes(componentType) ? { showMemberName: true } : {}; const components = this.data.config.components.concat({ componentKey, componentType, sortOrder: this.data.config.components.length, enabled: true, config: componentConfig }); this.updateConfig(Object.assign({}, this.data.config, { components })); this.setData({ componentValidation: Object.assign({}, this.data.componentValidation, { [componentKey]: false }), hasInvalidComponents: true, openingLibrary: false }) },
+  addComponent(componentType) {
+    if (!componentType) return this.setData({ openingLibrary: false })
+    this.clearPending()
+    const componentKey = makeKey()
+    const componentConfig = componentType === 'TEAM_PROFILE'
+      ? { team: Object.assign({}, this.data.teamSnapshot) }
+      : componentType === 'SINGLE_WORK'
+        ? { memberUserId: null, workId: null, showTitle: true, showDescription: false }
+        : MEMBER_PORTFOLIO_COMPONENT_TYPES.includes(componentType)
+          ? { showMemberName: true }
+          : {}
+    const components = getTeamMenuComponentList(this.data.config, this.data.activeMenuKey)
+    components.push({ componentKey, componentType, sortOrder: (components.length + 1) * 1000, enabled: true, config: componentConfig })
+    this.updateConfig(replaceTeamMenuComponentList(this.data.config, this.data.activeMenuKey, components))
+    this.setData({ componentValidation: Object.assign({}, this.data.componentValidation, { [componentKey]: false }), hasInvalidComponents: true, openingLibrary: false })
+  },
   updateSource(componentKey, patch) { const componentSources = Object.assign({}, this.data.componentSources, { [componentKey]: Object.assign({}, this.data.componentSources[componentKey], patch) }); const state = { componentSources }; if (componentKey === this.data.activeComponentKey) state.activeComponentSource = componentSources[componentKey]; this.setData(state) },
-  async loadSource(componentKey, fingerprint, url, patch, failureState) { if (!this.data.portfolioId) return; const source = this.data.componentSources[componentKey] || {}; if (source.loadingFingerprint === fingerprint) return; this.updateSource(componentKey, { loadingFingerprint: fingerprint, errorMessage: '', sourceAvailable: true }); try { const value = await request({ url }); if ((this.data.componentSources[componentKey] || {}).loadingFingerprint !== fingerprint) return; this.updateSource(componentKey, Object.assign({}, patch(value), { loadingFingerprint: '', failedStage: '', memberUserId: 0 })) } catch (error) { if ((this.data.componentSources[componentKey] || {}).loadingFingerprint !== fingerprint) return; if (handleTeamMaintainerAuthError(error)) return; if (showTeamPortfolioUnavailableToast(error)) { this.updateSource(componentKey, Object.assign({ loadingFingerprint: '', errorMessage: '', sourceAvailable: false }, failureState || {})); return }; this.updateSource(componentKey, Object.assign({ loadingFingerprint: '', errorMessage: '来源加载失败，请重试', sourceAvailable: false }, failureState || {})) } },
+  async loadSource(componentKey, fingerprint, url, patch, failureState, scopeId = this.data.portfolioId) { if (!Number(scopeId)) return; const source = this.data.componentSources[componentKey] || {}; if (source.loadingFingerprint === fingerprint) return; this.updateSource(componentKey, { loadingFingerprint: fingerprint, errorMessage: '', sourceAvailable: true }); try { const value = await request({ url }); if ((this.data.componentSources[componentKey] || {}).loadingFingerprint !== fingerprint) return; this.updateSource(componentKey, Object.assign({}, patch(value), { loadingFingerprint: '', failedStage: '', memberUserId: 0 })) } catch (error) { if ((this.data.componentSources[componentKey] || {}).loadingFingerprint !== fingerprint) return; if (handleTeamMaintainerAuthError(error)) return; if (showTeamPortfolioUnavailableToast(error)) { this.updateSource(componentKey, Object.assign({ loadingFingerprint: '', errorMessage: '', sourceAvailable: false }, failureState || {})); return }; this.updateSource(componentKey, Object.assign({ loadingFingerprint: '', errorMessage: '来源加载失败，请重试', sourceAvailable: false }, failureState || {})) } },
   async handleCarouselLoadMembers(event) { const key = event.currentTarget.dataset.key; return this.loadSource(key, 'carousel-members', `/api/mine/team-portfolios/${this.data.portfolioId}/components/carousel/members`, (members) => ({ members, works: [] }), { failedStage: 'members', memberUserId: 0 }) },
-  async handleCarouselMemberChange(event) { const key = event.currentTarget.dataset.key; const memberUserId = event.detail.memberUserId; this.updateSource(key, { works: [], memberUserId, failedStage: '' }); return this.loadSource(key, `carousel-works-${memberUserId}`, `/api/mine/team-portfolios/${this.data.portfolioId}/components/carousel/members/${memberUserId}/works`, (works) => ({ works }), { failedStage: 'member-items', memberUserId }) },
+  async handleCarouselMemberChange(event) { const key = event.currentTarget.dataset.key; const memberUserId = event.detail.memberUserId; this.updateSource(key, { works: [], memberUserId, failedStage: '' }); return this.loadSource(key, `carousel-works-${memberUserId}`, `/api/mine/team-portfolios/${this.data.portfolioId}/components/carousel/members/${memberUserId}/works`, (works) => ({ works: selectableWorksFor('CAROUSEL', works) }), { failedStage: 'member-items', memberUserId }) },
   handleCarouselRetrySource(event) { const source = this.data.componentSources[event.currentTarget.dataset.key] || {}; return source.failedStage === 'member-items' && source.memberUserId ? this.handleCarouselMemberChange({ currentTarget: event.currentTarget, detail: { memberUserId: source.memberUserId } }) : this.handleCarouselLoadMembers(event) },
+  async handleSingleWorkLoadMembers(event) { const key = event.currentTarget.dataset.key; return this.loadSource(key, 'single-work-members', `/api/mine/teams/${this.data.teamId}/portfolio-components/single-work/members`, (members) => ({ members, works: [] }), { failedStage: 'members', memberUserId: 0 }, this.data.teamId) },
+  async handleSingleWorkMemberChange(event) { const key = event.currentTarget.dataset.key; const memberUserId = event.detail.memberUserId; this.updateSource(key, { works: [], memberUserId, failedStage: '' }); return this.loadSource(key, `single-work-works-${memberUserId}`, `/api/mine/teams/${this.data.teamId}/portfolio-components/single-work/members/${memberUserId}/works`, (works) => ({ works: selectableWorksFor('SINGLE_WORK', works) }), { failedStage: 'member-items', memberUserId }, this.data.teamId) },
+  handleSingleWorkRetrySource(event) { const source = this.data.componentSources[event.currentTarget.dataset.key] || {}; return source.failedStage === 'member-items' && source.memberUserId ? this.handleSingleWorkMemberChange({ currentTarget: event.currentTarget, detail: { memberUserId: source.memberUserId } }) : this.handleSingleWorkLoadMembers(event) },
   async handleGridLoadMembers(event) { const key = event.currentTarget.dataset.key; return this.loadSource(key, 'grid-members', `/api/mine/team-portfolios/${this.data.portfolioId}/components/member-portfolio-grid/members`, (members) => ({ members, portfolios: [] }), { failedStage: 'members', memberUserId: 0 }) },
   async handleGridMemberChange(event) { const key = event.currentTarget.dataset.key; const memberUserId = event.detail.memberUserId; this.updateSource(key, { portfolios: [], memberUserId, failedStage: '' }); return this.loadSource(key, `grid-portfolios-${memberUserId}`, `/api/mine/team-portfolios/${this.data.portfolioId}/components/member-portfolio-grid/members/${memberUserId}/portfolios`, (portfolios) => ({ portfolios }), { failedStage: 'member-items', memberUserId }) },
   handleGridRetrySource(event) { const source = this.data.componentSources[event.currentTarget.dataset.key] || {}; return source.failedStage === 'member-items' && source.memberUserId ? this.handleGridMemberChange({ currentTarget: event.currentTarget, detail: { memberUserId: source.memberUserId } }) : this.handleGridLoadMembers(event) },
@@ -526,14 +910,12 @@ Page({
     } finally { this.setData({ shareCoverUploading: false }) }
   },
   async uploadLocalTeamProfileAvatars(portfolioId, config = this.data.config) {
-    const normalized = normalizeTeamPortfolioConfig(config)
-    const components = []
-    for (const component of normalized.components) {
+    let normalized = normalizeTeamPortfolioConfig(config)
+    const locations = visitTeamPortfolioComponents(normalized)
+    for (const location of locations) {
+      const component = location.component
       const team = component.config && component.config.team ? component.config.team : {}
-      if (component.componentType !== 'TEAM_PROFILE' || !team.avatarUrl || isRemoteUrl(team.avatarUrl)) {
-        components.push(component)
-        continue
-      }
+      if (component.componentType !== 'TEAM_PROFILE' || !team.avatarUrl || isRemoteUrl(team.avatarUrl)) continue
       const avatarUrl = await uploadTeamPortfolioAsset({
         portfolioId,
         assetType: TEAM_PROFILE_AVATAR_ASSET_TYPE,
@@ -541,16 +923,17 @@ Page({
         filePath: team.avatarUrl,
         requestFn: request
       })
-      components.push(Object.assign({}, component, {
+      normalized = updateTeamComponent(normalized, component.componentKey, (current) => Object.assign({}, current, {
         config: Object.assign({}, component.config, { team: Object.assign({}, team, { avatarUrl }) })
       }))
     }
-    return normalizeTeamPortfolioConfig(Object.assign({}, normalized, { components }))
+    return normalized
   },
   async uploadLocalQrContacts(portfolioId, config = this.data.config) {
     let normalized = normalizeTeamPortfolioConfig(config)
-    for (let index = 0; index < normalized.components.length; index += 1) {
-      const component = normalized.components[index]
+    const locations = visitTeamPortfolioComponents(normalized)
+    for (const location of locations) {
+      const component = location.component
       const qrUrl = component.config && component.config.qrUrl
       if (component.componentType !== 'QR_CONTACT' || !qrUrl || isRemoteUrl(qrUrl)) continue
       const uploadedUrl = await uploadTeamPortfolioAsset({
@@ -560,11 +943,9 @@ Page({
         filePath: qrUrl,
         requestFn: request
       })
-      const components = normalized.components.slice()
-      components[index] = Object.assign({}, component, {
+      normalized = updateTeamComponent(normalized, component.componentKey, (current) => Object.assign({}, current, {
         config: { qrUrlSource: TEAM_QR_CONTACT_SOURCE_CUSTOM, qrUrl: uploadedUrl }
-      })
-      normalized = normalizeTeamPortfolioConfig(Object.assign({}, normalized, { components }))
+      }))
       this.updateConfig(normalized)
     }
     return normalized
@@ -606,7 +987,8 @@ Page({
       const draftRevision = Number(result && result.draftRevision) || clientRevision
       const config = result && result.config ? normalizeTeamPortfolioConfig(result.config) : uploadedConfig
       publicationStatus = (result && result.publicationStatus) || publicationStatus
-      this.setData(Object.assign({ portfolioId, draftRevision, publicationStatus, config, componentList: buildComponentList(config.components), componentBuckets: buckets(config.components), componentOptions: buildComponentOptions(config.components), pendingDraftKey: '' }, buildPublicationState(publicationStatus)))
+      this.setData(Object.assign({ portfolioId, draftRevision, publicationStatus, pendingDraftKey: '' }, buildPublicationState(publicationStatus)))
+      this.updateConfig(config)
       return result
     } catch (error) {
       if (handleTeamMaintainerAuthError(error)) return null
@@ -615,7 +997,12 @@ Page({
         return null
       }
       if (!isUncertainFailure(error)) this.setData({ pendingDraftKey: '' })
-      wx.showToast({ title: failureStage === 'upload' ? '素材上传失败，请重试' : '保存失败，请检查组件配置', icon: 'none' })
+      wx.showToast({
+        title: failureStage === 'upload'
+          ? '素材上传失败，请重试'
+          : serverBusinessMessage(error, '保存失败，请检查组件配置'),
+        icon: 'none'
+      })
       return null
     } finally { this.setData({ saving: false }) }
   },
@@ -631,6 +1018,19 @@ Page({
   handlePreviewTap() { if (!this.data.portfolioId) return; wx.navigateTo({ url: `/pages/team-portfolios/standard-preview/team-portfolio-standard-preview?portfolioId=${this.data.portfolioId}&scope=draft` }) },
   async handlePublishTap() {
     if (this.data.publishing || !this.data.canMaintain) return
+    const validation = validateTeamPortfolioForPublish(this.data.config)
+    if (!validation.valid) {
+      if (validation.menuKey) this.setData({ activeMenuKey: validation.menuKey })
+      this.updateConfig(this.data.config)
+      this.setData({
+        highlightedComponentKey: validation.componentKey || '',
+        componentScrollTarget: validation.componentKey
+          ? `team-component-${validation.componentKey}`
+          : ''
+      })
+      wx.showToast({ title: validation.message, icon: 'none' })
+      return
+    }
     const confirmed = await confirmPortfolioPublishDisclaimer()
     if (!confirmed) return
     this.setData({ publishing: true })
@@ -660,7 +1060,10 @@ Page({
         return
       }
       if (!isUncertainFailure(error)) this.setData({ pendingPublishKey: '', pendingPublishRevision: 0 })
-      wx.showToast({ title: '发布失败，请重试', icon: 'none' })
+      wx.showToast({
+        title: serverBusinessMessage(error, '发布失败，请重试'),
+        icon: 'none'
+      })
     } finally { this.setData({ publishing: false }) }
   }
 })

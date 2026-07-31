@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
 import com.jxc.wefolio.dict.PortfolioTypeDict;
 import com.jxc.wefolio.dict.BillingWindowScopeDict;
+import com.jxc.wefolio.dict.MediaTypeDict;
 import com.jxc.wefolio.dict.PointSceneCodeDict;
 import com.jxc.wefolio.dict.VisitEventTypeDict;
 import com.jxc.wefolio.dict.VisitSourceTypeDict;
@@ -69,6 +70,9 @@ public class PortfolioVisitService {
 
     /** 访问记录写入失败提示 */
     private static final String RECORD_PERSISTENCE_FAILED_MESSAGE = "个人作品集访问记录保存失败";
+
+    /** 访问事件媒体类型与事件语义不匹配提示 */
+    private static final String EVENT_MEDIA_TYPE_MISMATCH_MESSAGE = "个人作品集访问事件媒体类型不匹配";
 
     /** 分享编码快照兜底 */
     private static final String DEFAULT_PORTFOLIO_SHARE_CODE_SNAPSHOT = "";
@@ -201,6 +205,7 @@ public class PortfolioVisitService {
             Long visitorId,
             VisitorPortfolioEventRequest request
     ) {
+        validateEventMediaType(request);
         if (hasRecordedEvent(request.getIdempotencyKey())) {
             return;
         }
@@ -245,6 +250,29 @@ public class PortfolioVisitService {
         }
         if (visitRecordEntityMapper.updateById(record) != 1) {
             throw new BusinessException(RECORD_PERSISTENCE_FAILED_MESSAGE);
+        }
+    }
+
+    /**
+     * 校验新客户端上报的媒体类型；缺失时保留旧客户端兼容行为。
+     *
+     * @param request 访客事件请求
+     */
+    private void validateEventMediaType(VisitorPortfolioEventRequest request) {
+        String mediaType = request == null || request.getMediaType() == null
+                ? null
+                : request.getMediaType().strip();
+        if (mediaType == null || mediaType.isEmpty()) {
+            return;
+        }
+        String eventType = request.getEventType();
+        boolean matched = VisitEventTypeDict.WORK_VIEWED.getCode().equals(eventType)
+                ? MediaTypeDict.IMAGE.getCode().equals(mediaType)
+                    || MediaTypeDict.ANIMATION.getCode().equals(mediaType)
+                : !VisitEventTypeDict.VIDEO_PLAYED.getCode().equals(eventType)
+                    || MediaTypeDict.VIDEO.getCode().equals(mediaType);
+        if (!matched) {
+            throw new BusinessException(EVENT_MEDIA_TYPE_MISMATCH_MESSAGE);
         }
     }
 

@@ -5,21 +5,20 @@ const {
   toLunarDate
 } = require('../../../utils/lunar')
 
-const DEFAULT_SLOT_COLOR = '#d98200'
+const DEFAULT_SLOT_COLOR = '#c28f4b'
 
 const SLOT_COLOR_OPTIONS = [
-  { name: '琥珀', color: '#d98200', background: '#fff0d7', border: '#f5d29b' },
-  { name: '湖蓝', color: '#1677ff', background: '#e5effb', border: '#bfd7f4' },
-  { name: '青绿', color: '#0f8ea8', background: '#dcf7f1', border: '#a7eadc' },
-  { name: '玫红', color: '#a9354f', background: '#fde7ed', border: '#f5bfcc' },
-  { name: '森绿', color: '#3f6f45', background: '#e6f3e8', border: '#bfdcc4' },
-  { name: '紫藤', color: '#6d5bd0', background: '#eeeafd', border: '#d2c9fa' },
-  { name: '珊瑚', color: '#e2553d', background: '#ffebe6', border: '#f5c2b7' },
-  { name: '墨蓝', color: '#36516e', background: '#e7edf4', border: '#c6d3e2' }
+  { name: '琥珀', color: '#c28f4b' },
+  { name: '湖蓝', color: '#6f8cb5' },
+  { name: '青绿', color: '#5f999b' },
+  { name: '玫红', color: '#af7482' },
+  { name: '森绿', color: '#738e71' },
+  { name: '紫藤', color: '#897dbc' },
+  { name: '珊瑚', color: '#c87a65' },
+  { name: '墨蓝', color: '#667b96' }
 ].map((item) => Object.assign({}, item, {
   style: `background: ${item.color};`,
-  swatchStyle: `background: ${item.color};`,
-  choiceStyle: `color: ${item.color}; background: ${item.background}; border-color: ${item.border};`
+  swatchStyle: `background: ${item.color};`
 }))
 
 const SLOT_STATUS_TEXT = {
@@ -53,6 +52,9 @@ const SCHEDULE_FIELD_LIMITS = {
 const COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const TIME_PATTERN = /^\d{2}:\d{2}$/
+const SLOT_DURATION_MINUTES = 2 * 60
+const MINUTES_PER_HOUR = 60
+const LAST_MINUTE_OF_DAY = 23 * MINUTES_PER_HOUR + 59
 const DAY_META_FIELDS = ['holidayText', 'festivalText', 'noteText', 'lunarText', 'metaText']
 
 function trimText(value) {
@@ -73,9 +75,35 @@ function normalizeColor(value) {
   return COLOR_PATTERN.test(color) ? color : DEFAULT_SLOT_COLOR
 }
 
+function buildSlotColorOptions(slotDefinitions = [], editingSlotId = null) {
+  const normalizedEditingId = normalizeId(editingSlotId)
+  const usedColors = new Set(
+    slotDefinitions
+      .filter((item) => !normalizedEditingId || normalizeId(item.id) !== normalizedEditingId)
+      .map((item) => trimText(item.color).toLowerCase())
+  )
+  return SLOT_COLOR_OPTIONS.map((item) => Object.assign({}, item, {
+    disabled: usedColors.has(item.color)
+  }))
+}
+
+function findFirstAvailableSlotColor(options = []) {
+  const available = options.find((item) => !item.disabled)
+  return available ? available.color : ''
+}
+
 function normalizeTime(value) {
   const time = trimText(value)
   return TIME_PATTERN.test(time) ? time : ''
+}
+
+function buildDefaultSlotEndTime(startTime) {
+  const [hour, minute] = normalizeTime(startTime).split(':').map(Number)
+  const endMinutes = Math.min(
+    hour * MINUTES_PER_HOUR + minute + SLOT_DURATION_MINUTES,
+    LAST_MINUTE_OF_DAY
+  )
+  return `${String(Math.floor(endMinutes / MINUTES_PER_HOUR)).padStart(2, '0')}:${String(endMinutes % MINUTES_PER_HOUR).padStart(2, '0')}`
 }
 
 function buildTimeRangeText(startTime, endTime) {
@@ -355,10 +383,13 @@ module.exports = {
   DEFAULT_SLOT_COLOR,
   SCHEDULE_STATUS_OPTIONS,
   SLOT_COLOR_OPTIONS,
+  buildDefaultSlotEndTime,
   buildScheduleFieldCounters,
   buildScheduleItemPayload,
+  buildSlotColorOptions,
   buildSlotDefinitionFieldCounters,
   buildSlotDefinitionPayload,
+  findFirstAvailableSlotColor,
   markMonthSelectedDate,
   normalizeMonthOverview,
   normalizeScheduleOverview,

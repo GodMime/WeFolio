@@ -551,7 +551,7 @@ test('work add retry skips upload tickets for already ticketed files', async () 
   assert.equal(page.data.files[1].confirmedWorkId, 220)
 })
 
-test('work add adapts tag picker list height to loaded tag count', async () => {
+test('work add gives loaded tag options an explicit Skyline list height', async () => {
   const fakeRequest = () => Promise.resolve({
     tags: [
       { id: 1, name: '户外仪式' },
@@ -889,6 +889,12 @@ test('works page pinch zooms thumbnail crop inside the image editor sheet', () =
 test('works page uses current thumbnail ratio for original-ratio crop option', async () => {
   const imageInfoCalls = []
   const page = loadPage('pages/works/works.js', () => Promise.resolve({ works: [], tags: [], summary: {} }), {
+    getWindowInfo() {
+      return { windowWidth: 375 }
+    },
+    getSystemInfoSync() {
+      throw new Error('不应调用已废弃的 wx.getSystemInfoSync')
+    },
     getImageInfo(options) {
       imageInfoCalls.push(options.src)
       options.success({

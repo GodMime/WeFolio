@@ -1,0 +1,138 @@
+@import "../../../../styles/portfolio-theme.wxss";
+
+.work-section-title {
+  padding: 0 24rpx;
+  color: var(--portfolio-text-primary);
+  font-size: 34rpx;
+  font-weight: 900;
+  line-height: 1.35;
+  box-sizing: border-box;
+}
+
+.display-tag-scroll {
+  height: 56rpx;
+  margin-top: 24rpx;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.display-tags {
+  display: flex;
+  align-items: center;
+  gap: 28rpx;
+  min-width: 100%;
+  height: 56rpx;
+  padding: 0 24rpx;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.display-tag {
+  flex: 0 0 auto;
+  color: var(--portfolio-text-secondary);
+  font-size: 28rpx;
+  line-height: 56rpx;
+  transition: color 160ms ease, opacity 160ms ease;
+  white-space: nowrap;
+}
+
+.display-tag.active {
+  color: var(--portfolio-text-primary);
+  font-weight: 900;
+}
+
+.work-list.display-switching {
+  animation: work-list-switch-in 180ms ease-out both;
+}
+
+@keyframes work-list-switch-in {
+  from {
+    opacity: 0.2;
+    transform: translateY(8rpx);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.work-list {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+  padding: 22rpx 20rpx 0;
+  box-sizing: border-box;
+}
+
+.work-card {
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.work-cover-wrap {
+  position: relative;
+  width: 100%;
+  height: 430rpx;
+  overflow: hidden;
+  border-radius: 40rpx;
+  background: var(--portfolio-surface-muted);
+}
+
+.work-cover {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.work-play-badge {
+  position: absolute;
+  right: 16rpx;
+  bottom: 16rpx;
+  width: 54rpx;
+  height: 54rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2rpx solid rgba(255, 255, 255, 0.82);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.48);
+  box-sizing: border-box;
+}
+
+.work-play-icon {
+  width: 0;
+  height: 0;
+  margin-left: 5rpx;
+  border-top: 10rpx solid transparent;
+  border-bottom: 10rpx solid transparent;
+  border-left: 16rpx solid #ffffff;
+}
+
+.work-copy {
+  min-height: 10rpx;
+  padding-top: 10rpx;
+  box-sizing: border-box;
+}
+
+.work-title {
+  overflow: hidden;
+  color: var(--portfolio-text-primary);
+  font-size: 24rpx;
+  font-weight: 700;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.work-desc {
+  color: var(--portfolio-text-secondary);
+  font-size: 26rpx;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+.work-list-component {
+  color: var(--portfolio-text-primary);
+}

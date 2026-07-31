@@ -1,5 +1,5 @@
 <view class="page-shell team-maintenance-page">
-  <navigation-bar title="团队维护" back="{{true}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+  <navigation-bar title="团队维护" back="{{true}}" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
 
   <scroll-view class="maintenance-scroll" scroll-y type="list">
     <view class="maintenance-content">

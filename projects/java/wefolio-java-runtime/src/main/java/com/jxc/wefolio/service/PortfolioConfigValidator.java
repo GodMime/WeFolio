@@ -3,6 +3,7 @@ package com.jxc.wefolio.service;
 import com.jxc.wefolio.dict.MediaTypeDict;
 import com.jxc.wefolio.dict.PortfolioComponentTypeDict;
 import com.jxc.wefolio.dict.ReferenceTypeDict;
+import com.jxc.wefolio.dict.WorkAuditStatusDict;
 import com.jxc.wefolio.dict.WorkStatusDict;
 import com.jxc.wefolio.dto.PortfolioConfigDto;
 import com.jxc.wefolio.entity.PortfolioReferenceEntity;
@@ -26,6 +27,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.BiConsumer;
+import java.util.regex.Pattern;
 
 /**
  * 作品集配置校验器 — 负责标准个人作品集组件规则和引用构建。
@@ -33,6 +36,17 @@ import java.util.Set;
 @Service
 @RequiredArgsConstructor
 public class PortfolioConfigValidator {
+
+    /** 单作品组件允许的媒体类型 */
+    private static final Set<String> SINGLE_WORK_MEDIA_TYPES = Set.of(
+            MediaTypeDict.IMAGE.getCode(),
+            MediaTypeDict.VIDEO.getCode(),
+            MediaTypeDict.ANIMATION.getCode());
+
+    /** 批量作品组件允许的媒体类型 */
+    private static final Set<String> BULK_WORK_MEDIA_TYPES = Set.of(
+            MediaTypeDict.IMAGE.getCode(),
+            MediaTypeDict.VIDEO.getCode());
 
     /** 轮播图最大作品数量 */
     private static final int CAROUSEL_WORK_MAX_COUNT = 9;
@@ -45,6 +59,21 @@ public class PortfolioConfigValidator {
 
     /** 默认排序间隔 */
     private static final int DEFAULT_SORT_ORDER_STEP = 1000;
+
+    /** 底部导航最少菜单数 */
+    private static final int BOTTOM_NAV_MIN_ITEM_COUNT = 2;
+
+    /** 底部导航最多菜单数 */
+    private static final int BOTTOM_NAV_MAX_ITEM_COUNT = 4;
+
+    /** 底部导航菜单名称最大 Unicode 字符数 */
+    private static final int BOTTOM_NAV_TITLE_MAX_CODE_POINTS = 5;
+
+    /** 页面背景色格式 */
+    private static final Pattern BACKGROUND_COLOR_PATTERN = Pattern.compile("^#[0-9A-Fa-f]{6}$");
+
+    /** 底部导航菜单标识格式 */
+    private static final Pattern BOTTOM_NAV_KEY_PATTERN = Pattern.compile("^nav_[A-Za-z0-9_-]{1,64}$");
 
     /** 联系人字段 */
     private static final String CONTACT_FIELD_NAME = "contactName";
@@ -74,6 +103,9 @@ public class PortfolioConfigValidator {
 
     /** 是否展示作品名配置键 */
     private static final String CONFIG_KEY_SHOW_TITLE = "showTitle";
+
+    /** 是否展示作品说明配置键 */
+    private static final String CONFIG_KEY_SHOW_DESCRIPTION = "showDescription";
 
     /** 作品集展示标签配置键 */
     private static final String CONFIG_KEY_GROUPS = "groups";
@@ -207,6 +239,49 @@ public class PortfolioConfigValidator {
     /** 旧作品列表迁移默认展示标签 */
     private static final String DEFAULT_WORK_GROUP_NAME = "全部作品";
 
+    /**
+     * 编辑器版本引入的配置字段合并步骤，按 revision 升序注册。
+     * <p>
+     * 新增 editorSchemaRevision 时只需在本列表末尾追加对应步骤，
+     * 无需修改 mergeCompatibleConfig 的流程控制。
+     */
+    private static final List<ConfigFieldMergeStep> CONFIG_FIELD_MERGE_STEPS = List.of(
+            new ConfigFieldMergeStep(2, (target, source) -> {
+                target.setStyle(source.getStyle());
+                target.setBottomNav(source.getBottomNav());
+            })
+    );
+
+    /**
+     * 配置字段合并步骤 — 描述单个 editorSchemaRevision 引入的新字段及其拷贝方式。
+     *
+     * @param introducedAtRevision 该字段在哪个 editorSchemaRevision 首次引入
+     * @param mergeFields          从 source 拷贝字段到 target 的策略
+     */
+    private record ConfigFieldMergeStep(
+            int introducedAtRevision,
+            BiConsumer<PortfolioConfigDto, PortfolioConfigDto> mergeFields
+    ) {
+    }
+
+    /**
+     * 组件校验上下文 — 控制错误前缀和菜单级校验规则。
+     */
+    private record ComponentValidationContext(String menuTitle, boolean menuAware) {
+
+        /** 旧配置无导航时的默认上下文，不使用菜单错误语义。 */
+        static final ComponentValidationContext LEGACY = new ComponentValidationContext("", false);
+
+        /** 构造 BusinessException，菜单模式下自动附加【菜单名】前缀。 */
+        BusinessException toException(String message) {
+            if (!menuAware) {
+                return new BusinessException(message);
+            }
+            return new BusinessException(
+                    String.format(PortfolioMessage.MENU_ERROR_PREFIX_TEMPLATE, menuTitle, message));
+        }
+    }
+
     /** 作品 Mapper */
     private final WorkEntityMapper workEntityMapper;
 
@@ -222,62 +297,306 @@ public class PortfolioConfigValidator {
      * @return 规范化配置
      */
     public PortfolioConfigDto normalize(Long userId, PortfolioConfigDto config) {
+        return normalizeForDraft(userId, config, null);
+    }
+
+    /**
+     * 按草稿规则兼容合并、校验并规范化配置。
+     *
+     * @param userId 当前用户 ID
+     * @param incomingConfig 本次请求配置
+     * @param existingDraftConfig 服务端当前草稿配置
+     * @return 完整规范化配置
+     */
+    public PortfolioConfigDto normalizeForDraft(
+            Long userId,
+            PortfolioConfigDto incomingConfig,
+            PortfolioConfigDto existingDraftConfig
+    ) {
         if (userId == null) {
             throw new BusinessException(PortfolioMessage.USER_REQUIRED_MESSAGE);
         }
-        if (config == null) {
+        if (incomingConfig == null) {
             throw new BusinessException(PortfolioMessage.PORTFOLIO_CONFIG_REQUIRED_MESSAGE);
         }
+        Integer incomingRevision = incomingConfig.getEditorSchemaRevision();
+        if (incomingRevision != null && incomingRevision > PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT) {
+            throw new BusinessException(PortfolioMessage.EDITOR_SCHEMA_REVISION_UNSUPPORTED_MESSAGE);
+        }
+
+        PortfolioConfigDto config = mergeCompatibleConfig(incomingConfig, existingDraftConfig);
         if (!PortfolioConfigDto.SCHEMA_VERSION_STANDARD_PERSONAL_V1.equals(config.getSchemaVersion())) {
             throw new BusinessException(PortfolioMessage.PORTFOLIO_CONFIG_VERSION_UNSUPPORTED_MESSAGE);
         }
-        List<PortfolioConfigDto.Component> enabledComponents = safeList(config.getComponents()).stream()
+
+        PortfolioConfigDto normalized = new PortfolioConfigDto();
+        normalized.setSchemaVersion(config.getSchemaVersion());
+        normalized.setEditorSchemaRevision(config.getEditorSchemaRevision());
+        normalized.setShare(copyShare(config.getShare()));
+        normalized.setStyle(normalizeStyle(config.getStyle()));
+
+        PortfolioConfigDto.BottomNav normalizedBottomNav = normalizeBottomNavMetadata(config.getBottomNav());
+        normalized.setBottomNav(normalizedBottomNav);
+
+        Set<String> componentKeys = new LinkedHashSet<>();
+        int[] generatedKeySequence = {1};
+        boolean navigationEnabled = normalizedBottomNav != null
+                && Boolean.TRUE.equals(normalizedBottomNav.getEnabled());
+        String firstMenuTitle = navigationEnabled
+                ? normalizedBottomNav.getItems().getFirst().getTitle()
+                : "";
+        ComponentValidationContext primaryCtx = navigationEnabled
+                ? new ComponentValidationContext(firstMenuTitle, true)
+                : ComponentValidationContext.LEGACY;
+        List<PortfolioConfigDto.Component> normalizedTopLevel = normalizeComponentList(
+                userId,
+                config.getComponents(),
+                primaryCtx,
+                componentKeys,
+                generatedKeySequence
+        );
+        if (normalizedTopLevel.isEmpty()) {
+            throw new BusinessException(PortfolioMessage.ENABLED_COMPONENT_REQUIRED_MESSAGE);
+        }
+        normalized.setComponents(normalizedTopLevel);
+
+        if (normalizedBottomNav != null && Boolean.TRUE.equals(normalizedBottomNav.getEnabled())) {
+            List<PortfolioConfigDto.BottomNavItem> sourceItems = safeList(config.getBottomNav().getItems());
+            List<PortfolioConfigDto.BottomNavItem> normalizedItems = normalizedBottomNav.getItems();
+            for (int menuIndex = 1; menuIndex < normalizedItems.size(); menuIndex++) {
+                PortfolioConfigDto.BottomNavItem sourceItem = sourceItems.get(menuIndex);
+                PortfolioConfigDto.BottomNavItem normalizedItem = normalizedItems.get(menuIndex);
+                ComponentValidationContext secondaryCtx = new ComponentValidationContext(
+                        normalizedItem.getTitle(), true);
+                normalizedItem.setComponents(normalizeComponentList(
+                        userId,
+                        sourceItem == null ? null : sourceItem.getComponents(),
+                        secondaryCtx,
+                        componentKeys,
+                        generatedKeySequence
+                ));
+            }
+        }
+        return normalized;
+    }
+
+    /**
+     * 按发布规则重新校验完整草稿。
+     *
+     * @param userId 当前用户 ID
+     * @param normalizedDraftConfig 已规范化草稿配置
+     */
+    public void validateForPublish(Long userId, PortfolioConfigDto normalizedDraftConfig) {
+        PortfolioConfigDto validated = normalizeForDraft(userId, normalizedDraftConfig, null);
+        PortfolioConfigDto.BottomNav bottomNav = validated.getBottomNav();
+        if (bottomNav == null || !Boolean.TRUE.equals(bottomNav.getEnabled())) {
+            return;
+        }
+        List<PortfolioConfigDto.BottomNavItem> items = safeList(bottomNav.getItems());
+        for (int menuIndex = 1; menuIndex < items.size(); menuIndex++) {
+            PortfolioConfigDto.BottomNavItem item = items.get(menuIndex);
+            if (item == null || safeList(item.getComponents()).isEmpty()) {
+                throw new BusinessException(String.format(
+                        PortfolioMessage.MENU_COMPONENT_REQUIRED_TEMPLATE,
+                        item == null ? "" : defaultString(item.getTitle())
+                ));
+            }
+        }
+    }
+
+    /**
+     * 合并新旧编辑器请求配置。
+     * <p>
+     * 核心字段（schemaVersion、share、components）始终以本次请求为准。
+     * editorSchemaRevision 本身：新请求用新值，旧请求保留草稿中的值。
+     * 其余版本相关字段按 {@link #CONFIG_FIELD_MERGE_STEPS} 逐版本合并。
+     *
+     * @param incomingConfig       本次请求配置
+     * @param existingDraftConfig 服务端当前草稿
+     * @return 待规范化配置
+     */
+    private PortfolioConfigDto mergeCompatibleConfig(
+            PortfolioConfigDto incomingConfig,
+            PortfolioConfigDto existingDraftConfig
+    ) {
+        PortfolioConfigDto merged = new PortfolioConfigDto();
+        merged.setSchemaVersion(incomingConfig.getSchemaVersion());
+        merged.setShare(incomingConfig.getShare());
+        merged.setComponents(incomingConfig.getComponents());
+
+        // editorSchemaRevision 本身：新请求用新值，缺省或显式低版本请求保留草稿中已有的新能力版本
+        Integer incomingRevision = incomingConfig.getEditorSchemaRevision();
+        Integer existingRevision = existingDraftConfig == null
+                ? null
+                : existingDraftConfig.getEditorSchemaRevision();
+        boolean legacyIncoming = incomingRevision == null
+                || incomingRevision < PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT;
+        boolean existingHasCurrentFields = existingRevision != null
+                && existingRevision >= PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT;
+        merged.setEditorSchemaRevision(
+                legacyIncoming && existingHasCurrentFields ? existingRevision : incomingRevision
+        );
+
+        // 逐版本字段合并：新编辑器携带对应版本则取 incoming，否则从草稿保留
+        for (ConfigFieldMergeStep step : CONFIG_FIELD_MERGE_STEPS) {
+            boolean incomingHasFields = incomingConfig.getEditorSchemaRevision() != null
+                    && incomingConfig.getEditorSchemaRevision() >= step.introducedAtRevision();
+            boolean existingHasFields = existingDraftConfig != null
+                    && existingDraftConfig.getEditorSchemaRevision() != null
+                    && existingDraftConfig.getEditorSchemaRevision() >= step.introducedAtRevision();
+
+            if (incomingHasFields) {
+                step.mergeFields().accept(merged, incomingConfig);
+            } else if (existingHasFields) {
+                step.mergeFields().accept(merged, existingDraftConfig);
+            }
+            // 两边都没有 → 保持 null，由后续 normalize 赋默认值
+        }
+        return merged;
+    }
+
+    /**
+     * 规范化页面样式。
+     *
+     * @param style 原页面样式
+     * @return 页面样式
+     */
+    private PortfolioConfigDto.Style normalizeStyle(PortfolioConfigDto.Style style) {
+        PortfolioConfigDto.Style normalized = new PortfolioConfigDto.Style();
+        String backgroundColor = style == null ? "" : defaultString(style.getBackgroundColor());
+        normalized.setBackgroundColor(BACKGROUND_COLOR_PATTERN.matcher(backgroundColor).matches()
+                ? backgroundColor.toUpperCase()
+                : PortfolioConfigDto.DEFAULT_BACKGROUND_COLOR);
+        return normalized;
+    }
+
+    /**
+     * 校验并复制底部导航元数据。
+     *
+     * @param bottomNav 原导航配置
+     * @return 规范化导航配置
+     */
+    private PortfolioConfigDto.BottomNav normalizeBottomNavMetadata(PortfolioConfigDto.BottomNav bottomNav) {
+        PortfolioConfigDto.BottomNav normalized = new PortfolioConfigDto.BottomNav();
+        boolean enabled = bottomNav != null && Boolean.TRUE.equals(bottomNav.getEnabled());
+        normalized.setEnabled(enabled);
+        if (!enabled) {
+            normalized.setItems(null);
+            return normalized;
+        }
+        List<PortfolioConfigDto.BottomNavItem> items = safeList(bottomNav.getItems());
+        if (items.size() < BOTTOM_NAV_MIN_ITEM_COUNT || items.size() > BOTTOM_NAV_MAX_ITEM_COUNT) {
+            throw new BusinessException(PortfolioMessage.BOTTOM_NAV_ITEM_COUNT_INVALID_MESSAGE);
+        }
+        PortfolioConfigDto.BottomNavItem firstItem = items.getFirst();
+        if (firstItem != null && firstItem.getComponents() != null) {
+            throw new BusinessException(PortfolioMessage.FIRST_BOTTOM_NAV_COMPONENTS_DUPLICATE_MESSAGE);
+        }
+
+        Set<String> keys = new LinkedHashSet<>();
+        Set<String> titles = new LinkedHashSet<>();
+        List<PortfolioConfigDto.BottomNavItem> normalizedItems = new ArrayList<>();
+        for (int menuIndex = 0; menuIndex < items.size(); menuIndex++) {
+            PortfolioConfigDto.BottomNavItem item = items.get(menuIndex);
+            String key = item == null ? "" : defaultString(item.getKey());
+            if (!BOTTOM_NAV_KEY_PATTERN.matcher(key).matches()) {
+                throw new BusinessException(PortfolioMessage.BOTTOM_NAV_KEY_INVALID_MESSAGE);
+            }
+            if (!keys.add(key)) {
+                throw new BusinessException(PortfolioMessage.BOTTOM_NAV_KEY_DUPLICATE_MESSAGE);
+            }
+            String title = item == null ? "" : defaultString(item.getTitle());
+            if (title.isEmpty()) {
+                throw new BusinessException(PortfolioMessage.BOTTOM_NAV_TITLE_REQUIRED_MESSAGE);
+            }
+            if (title.codePointCount(0, title.length()) > BOTTOM_NAV_TITLE_MAX_CODE_POINTS) {
+                throw new BusinessException(PortfolioMessage.BOTTOM_NAV_TITLE_TOO_LONG_MESSAGE);
+            }
+            if (!titles.add(title)) {
+                throw new BusinessException(PortfolioMessage.BOTTOM_NAV_TITLE_DUPLICATE_MESSAGE);
+            }
+            PortfolioConfigDto.BottomNavItem normalizedItem = new PortfolioConfigDto.BottomNavItem();
+            normalizedItem.setKey(key);
+            normalizedItem.setTitle(title);
+            normalizedItem.setIconUrl(defaultString(item == null ? null : item.getIconUrl()));
+            normalizedItem.setComponents(menuIndex == 0 ? null : List.of());
+            normalizedItems.add(normalizedItem);
+        }
+        normalized.setItems(normalizedItems);
+        return normalized;
+    }
+
+    /**
+     * 校验并规范化单个菜单的组件列表。
+     *
+     * @param userId                当前用户 ID
+     * @param components            原组件列表
+     * @param ctx                   校验上下文
+     * @param componentKeys         全菜单组件键集合
+     * @param generatedKeySequence 自动组件键序号
+     * @return 规范化组件列表
+     */
+    private List<PortfolioConfigDto.Component> normalizeComponentList(
+            Long userId,
+            List<PortfolioConfigDto.Component> components,
+            ComponentValidationContext ctx,
+            Set<String> componentKeys,
+            int[] generatedKeySequence
+    ) {
+        List<PortfolioConfigDto.Component> enabledComponents = safeList(components).stream()
                 .filter(component -> Boolean.TRUE.equals(component.getEnabled()))
                 .map(this::copyComponent)
                 .sorted(Comparator
                         .comparing(this::safeSortOrder)
                         .thenComparing(component -> defaultString(component.getComponentKey())))
                 .toList();
-        if (enabledComponents.isEmpty()) {
-            throw new BusinessException(PortfolioMessage.ENABLED_COMPONENT_REQUIRED_MESSAGE);
-        }
-        validateProfileComponentLimit(enabledComponents);
+        validateProfileComponentLimit(enabledComponents, ctx);
 
         List<PortfolioConfigDto.Component> normalizedComponents = new ArrayList<>();
-        Set<String> componentKeys = new LinkedHashSet<>();
         int index = 0;
         for (PortfolioConfigDto.Component component : enabledComponents) {
             String key = defaultString(component.getComponentKey());
             if (key.isBlank()) {
-                key = "c_" + (index + 1);
+                do {
+                    key = "c_" + generatedKeySequence[0]++;
+                } while (componentKeys.contains(key));
                 component.setComponentKey(key);
             }
             if (!componentKeys.add(key)) {
-                throw new BusinessException(PortfolioMessage.COMPONENT_KEY_DUPLICATE_MESSAGE);
+                throw new BusinessException(PortfolioMessage.COMPONENT_KEY_CROSS_MENU_DUPLICATE_MESSAGE);
             }
             component.setSortOrder((index + 1) * DEFAULT_SORT_ORDER_STEP);
-            validateComponent(userId, component);
+            try {
+                validateComponent(userId, component);
+            } catch (BusinessException exception) {
+                if (!ctx.menuAware()) {
+                    throw exception;
+                }
+                throw ctx.toException(exception.getMessage());
+            }
             normalizedComponents.add(component);
             index++;
         }
-
-        PortfolioConfigDto normalized = new PortfolioConfigDto();
-        normalized.setSchemaVersion(config.getSchemaVersion());
-        normalized.setShare(copyShare(config.getShare()));
-        normalized.setComponents(normalizedComponents);
-        return normalized;
+        return normalizedComponents;
     }
 
     /**
      * 校验个人资料组件的单例限制。
      *
      * @param enabledComponents 已启用组件
+     * @param ctx               校验上下文
      */
-    private void validateProfileComponentLimit(List<PortfolioConfigDto.Component> enabledComponents) {
+    private void validateProfileComponentLimit(
+            List<PortfolioConfigDto.Component> enabledComponents,
+            ComponentValidationContext ctx
+    ) {
         long profileComponentCount = enabledComponents.stream()
                 .filter(component -> PortfolioComponentTypeDict.PROFILE.getCode().equals(component.getComponentType()))
                 .count();
         if (profileComponentCount > 1) {
+            if (ctx.menuAware()) {
+                throw ctx.toException(PortfolioMessage.MENU_PROFILE_COMPONENT_LIMIT_MESSAGE);
+            }
             throw new BusinessException(PortfolioMessage.PROFILE_COMPONENT_LIMIT_MESSAGE);
         }
     }
@@ -298,14 +617,17 @@ public class PortfolioConfigValidator {
             PortfolioConfigDto config
     ) {
         List<PortfolioReferenceEntity> references = new ArrayList<>();
-        List<PortfolioConfigDto.Component> components = safeList(config == null ? null : config.getComponents());
-        for (int componentIndex = 0; componentIndex < components.size(); componentIndex++) {
-            PortfolioConfigDto.Component component = components.get(componentIndex);
+        for (PortfolioComponentTraversal.ComponentLocation location
+                : PortfolioComponentTraversal.listComponentLocations(config)) {
+            PortfolioConfigDto.Component component = location.component();
+            if (component == null) {
+                continue;
+            }
             PortfolioComponentTypeDict componentType = PortfolioComponentTypeDict.fromCode(component.getComponentType());
             if (componentType == null) {
                 continue;
             }
-            String componentPath = "components[" + componentIndex + "]";
+            String componentPath = location.componentPath();
             switch (componentType) {
                 case PROFILE -> references.add(reference(
                         portfolioId,
@@ -313,7 +635,7 @@ public class PortfolioConfigValidator {
                         ReferenceTypeDict.USER_PROFILE.getCode(),
                         ownerId,
                         component,
-                        componentPath,
+                        componentPath + ".config.profile",
                         0
                 ));
                 case SCHEDULE_QUERY -> references.add(reference(
@@ -322,7 +644,7 @@ public class PortfolioConfigValidator {
                         ReferenceTypeDict.SCHEDULE_COMPONENT.getCode(),
                         ownerId,
                         component,
-                        componentPath,
+                        componentPath + ".config",
                         0
                 ));
                 case QR_CONTACT -> references.add(reference(
@@ -331,7 +653,7 @@ public class PortfolioConfigValidator {
                         ReferenceTypeDict.QR_CODE_ASSET.getCode(),
                         ownerId,
                         component,
-                        componentPath,
+                        componentPath + ".config.qrUrl",
                         0
                 ));
                 case CAROUSEL -> addFlatWorkReferences(references, portfolioId, configScope, component, componentPath);
@@ -441,8 +763,14 @@ public class PortfolioConfigValidator {
         if (workMap.size() != workIds.size()) {
             throw new BusinessException(PortfolioMessage.WORK_REFERENCE_INVALID_MESSAGE);
         }
+        boolean hasUnsupportedMedia = workMap.values().stream()
+                .anyMatch(work -> !BULK_WORK_MEDIA_TYPES.contains(work.getMediaType()));
+        if (hasUnsupportedMedia) {
+            throw new BusinessException(PortfolioMessage.WORK_REFERENCE_INVALID_MESSAGE);
+        }
         component.getConfig().put(CONFIG_KEY_GROUPS, groups);
         component.getConfig().put(CONFIG_KEY_COLUMNS, columns);
+        normalizeWorkDisplayOptions(component.getConfig());
     }
 
     /**
@@ -458,14 +786,34 @@ public class PortfolioConfigValidator {
         }
         Map<Long, WorkEntity> workMap = loadUsableWorks(userId, List.of(workId));
         WorkEntity work = workMap.get(workId);
-        if (work == null || MediaTypeDict.fromCode(work.getMediaType()) == null) {
+        if (work == null || !SINGLE_WORK_MEDIA_TYPES.contains(work.getMediaType())) {
             throw new BusinessException(PortfolioMessage.WORK_REFERENCE_INVALID_MESSAGE);
         }
         Map<String, Object> normalizedConfig = new LinkedHashMap<>();
         normalizedConfig.put(CONFIG_KEY_WORK_ID, workId);
         Object showTitle = component.getConfig().get(CONFIG_KEY_SHOW_TITLE);
         normalizedConfig.put(CONFIG_KEY_SHOW_TITLE, showTitle instanceof Boolean value ? value : Boolean.TRUE);
+        Object showDescription = component.getConfig().get(CONFIG_KEY_SHOW_DESCRIPTION);
+        normalizedConfig.put(
+                CONFIG_KEY_SHOW_DESCRIPTION,
+                showDescription instanceof Boolean value ? value : Boolean.FALSE
+        );
         component.setConfig(normalizedConfig);
+    }
+
+    /**
+     * 规范化作品标题和说明展示开关。
+     *
+     * @param config 组件配置
+     */
+    private void normalizeWorkDisplayOptions(Map<String, Object> config) {
+        Object showTitle = config.get(CONFIG_KEY_SHOW_TITLE);
+        config.put(CONFIG_KEY_SHOW_TITLE, showTitle instanceof Boolean value ? value : Boolean.TRUE);
+        Object showDescription = config.get(CONFIG_KEY_SHOW_DESCRIPTION);
+        config.put(
+                CONFIG_KEY_SHOW_DESCRIPTION,
+                showDescription instanceof Boolean value ? value : Boolean.FALSE
+        );
     }
 
     /**
@@ -649,6 +997,10 @@ public class PortfolioConfigValidator {
             if (!WorkStatusDict.ACTIVE.getCode().equals(work.getStatus())) {
                 continue;
             }
+            if (MediaTypeDict.ANIMATION.getCode().equals(work.getMediaType())
+                    && !WorkAuditStatusDict.PASSED.getCode().equals(work.getAuditStatus())) {
+                continue;
+            }
             result.put(work.getId(), work);
         }
         return result;
@@ -758,7 +1110,7 @@ public class PortfolioConfigValidator {
                     ReferenceTypeDict.WORK.getCode(),
                     workIds.get(index),
                     component,
-                    componentPath + ".workIds[" + index + "]",
+                    componentPath + ".config." + CONFIG_KEY_WORK_IDS + "[" + index + "]",
                     index
             ));
         }
@@ -790,7 +1142,7 @@ public class PortfolioConfigValidator {
                         ReferenceTypeDict.WORK.getCode(),
                         workIds.get(workIndex),
                         component,
-                        componentPath + "." + CONFIG_KEY_GROUPS + "[" + groupIndex + "]."
+                        componentPath + ".config." + CONFIG_KEY_GROUPS + "[" + groupIndex + "]."
                                 + CONFIG_KEY_WORK_IDS + "[" + workIndex + "]",
                         workIndex
                 ));

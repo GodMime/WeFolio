@@ -1,0 +1,26 @@
+<view class="profile-section portfolio-theme-{{themeMode}}">
+  <image wx:if="{{profile.avatarUrl}}" class="profile-avatar" src="{{profile.avatarUrl}}" mode="aspectFill"></image>
+  <view wx:if="{{profile.displayName}}" class="profile-name">{{profile.displayName}}</view>
+  <view wx:if="{{profile.profession}}" class="profile-line">{{profile.profession}}</view>
+  <view wx:if="{{profile.city}}" class="profile-line">{{profile.city}}</view>
+  <text wx:if="{{profile.bio}}" class="profile-bio" space="nbsp">{{profile.bio}}</text>
+  <view wx:if="{{profile.tags.length}}" class="profile-tags">
+    <view
+      wx:for="{{profile.tags}}"
+      wx:key="name"
+      wx:for-item="tag"
+      class="profile-tag"
+      style="color: {{tag.color || '#0f766e'}}; border-color: {{tag.color || '#0f766e'}};"
+    >
+      <view class="profile-tag-dot" style="background: {{tag.color || '#0f766e'}};"></view>
+      <text>{{tag.name}}</text>
+    </view>
+  </view>
+  <image
+    wx:if="{{profile.wechatQrUrl}}"
+    class="profile-qr-image qr-image"
+    src="{{profile.wechatQrUrl}}"
+    mode="aspectFit"
+    bindtap="handlePreviewQr"
+  ></image>
+</view>

@@ -61,11 +61,11 @@ test('team schedule query uses the personal portfolio entry and bottom sheet int
   const wxml = read('components/schedule-query/schedule-query.wxml')
   const wxss = read('components/schedule-query/schedule-query.wxss')
 
-  assert.match(wxml, /class="schedule-query-modal-mask \{\{modalVisible \? 'visible' : ''\}\}" catchtap="closeModal"/)
+  assert.match(wxml, /class="schedule-query-modal-mask theme-\{\{themeMode\}\} \{\{modalVisible \? 'visible' : ''\}\}" catchtap="closeModal"/)
   assert.match(wxml, /class="schedule-query-modal-panel" catchtap="noop"/)
   assert.match(wxml, /class="schedule-query-open-button" catchtap="openModal">查询团队档期<\/button>/)
-  assert.match(wxss, /\.schedule-query-open-button\s*\{[^}]*width:\s*320rpx;[^}]*height:\s*72rpx;[^}]*background:\s*#17202a;/s)
-  assert.match(wxss, /\.schedule-query-modal-panel\s*\{[^}]*max-height:\s*82vh;/s)
+  assert.match(wxss, /\.schedule-query-open-button\s*\{[^}]*width:\s*320rpx;[^}]*height:\s*72rpx;[^}]*background:\s*#212529;/s)
+  assert.match(wxss, /\.schedule-query-modal-panel\s*\{[^}]*max-height:\s*82vh;[^}]*border-radius:\s*56rpx 56rpx 0 0;/s)
 })
 
 test('team schedule query renders the personal-style month calendar grid', () => {
@@ -96,12 +96,14 @@ test('team contact form uses the personal portfolio entry and bottom sheet inter
   const wxml = read('components/contact-form/contact-form.wxml')
   const wxss = read('components/contact-form/contact-form.wxss')
 
-  assert.match(wxml, /class="contact-form-mask \{\{modalVisible \? 'visible' : ''\}\}" catchtap="closeModal"/)
+  assert.match(wxml, /class="contact-form-mask theme-\{\{themeMode\}\} \{\{modalVisible \? 'visible' : ''\}\}" catchtap="closeModal"/)
   assert.match(wxml, /class="contact-form-panel" catchtap="noop"/)
   assert.match(wxml, /class="primary-button contact-form-entry-button" catchtap="openModal"/)
   assert.match(wxss, /\.contact-form-entry-button\s*\{[^}]*width:\s*320rpx;/s)
-  assert.match(wxss, /\.primary-button\s*\{[^}]*height:\s*72rpx;[^}]*background:\s*#17202a;/s)
-  assert.match(wxss, /\.contact-form-panel\s*\{[^}]*max-height:\s*82vh;/s)
+  assert.match(wxss, /\.primary-button\s*\{[^}]*height:\s*72rpx;[^}]*background:\s*#212529;/s)
+  assert.match(wxss, /\.contact-form-panel\s*\{[^}]*max-height:\s*82vh;[^}]*border-radius:\s*56rpx 56rpx 0 0;/s)
+  assert.doesNotMatch(wxml, /maxlength=/)
+  assert.doesNotMatch(wxml, /field-count|\/20|\/11|\/200/)
 })
 
 test('team preview controls each contact form modal and only warns when submitting', () => {

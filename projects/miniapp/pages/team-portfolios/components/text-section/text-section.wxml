@@ -1,3 +1,3 @@
-<view class="text-section align-{{config.alignment || 'LEFT'}}">
+<view class="text-section theme-{{themeMode}} align-{{config.alignment || 'LEFT'}}">
   <text class="content">{{config.content}}</text>
 </view>

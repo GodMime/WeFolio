@@ -145,20 +145,60 @@ test('generates a non-empty idempotency key when opening has no explicit key', a
   }), /幂等键/)
 })
 
-test('visitor top-level normalization sorts components without parsing private data', () => {
-  const { normalizeTeamVisitorPortfolio } = load('team-visitor-portfolio.js')
+test('visitor normalization keeps team theme and menu components independent', () => {
+  const { normalizeTeamVisitorPortfolio, switchTeamPortfolioMenu } = load('team-visitor-portfolio.js')
   const privateData = { members: [{ status: 'AVAILABLE' }], arbitrary: { nested: true } }
   const normalized = normalizeTeamVisitorPortfolio({
     shareCode: 'A', portfolioId: '4', teamId: '5', title: ' 团队页 ', visitRecordId: '6',
-    renderData: { components: [
-      { componentKey: 'later', componentType: 'SCHEDULE_QUERY', sortOrder: 2, data: privateData },
-      { componentKey: 'first', componentType: 'TEAM_PROFILE', sortOrder: 1, data: { team: {} } }
-    ] }
+    renderData: {
+      style: { backgroundColor: '#151515', themeMode: 'dark' },
+      components: [
+        { componentKey: 'later', componentType: 'SCHEDULE_QUERY', sortOrder: 2, data: privateData },
+        { componentKey: 'first', componentType: 'TEAM_PROFILE', sortOrder: 1, data: { team: {} } }
+      ],
+      bottomNav: {
+        enabled: true,
+        items: [
+          { key: 'nav_home', title: '首页' },
+          { key: 'nav_contact', title: '联系', components: [
+            { componentKey: 'contact', componentType: 'CONTACT_FORM', sortOrder: 1, data: { title: '联系' } }
+          ] }
+        ]
+      }
+    }
   })
   assert.equal(normalized.portfolioId, 4)
   assert.equal(normalized.title, '团队页')
+  assert.equal(normalized.themeMode, 'dark')
+  assert.equal(normalized.style.backgroundColor, '#151515')
+  assert.equal(normalized.activeMenuKey, 'nav_home')
   assert.deepEqual(normalized.components.map((item) => item.componentKey), ['first', 'later'])
   assert.equal(normalized.components[1].data, privateData)
+  const contact = switchTeamPortfolioMenu(normalized, 'nav_contact')
+  assert.equal(contact.activeMenuKey, 'nav_contact')
+  assert.deepEqual(contact.activeComponents.map((item) => item.componentKey), ['contact'])
+})
+
+test('team single-work animation uses work-viewed semantics', () => {
+  const { buildTeamSingleWorkViewEvent } = load('team-visitor-portfolio.js')
+
+  assert.deepEqual(buildTeamSingleWorkViewEvent({
+    componentKey: 'single-1',
+    work: { workId: 21, mediaType: 'ANIMATION' }
+  }), {
+    eventType: 'WORK_VIEWED',
+    componentKey: 'single-1',
+    workId: 21,
+    mediaType: 'ANIMATION'
+  })
+  assert.equal(buildTeamSingleWorkViewEvent({
+    componentKey: 'single-1',
+    work: { workId: 21, mediaType: 'VIDEO' }
+  }), null)
+  assert.equal(buildTeamSingleWorkViewEvent({
+    componentKey: 'single-1',
+    work: { workId: 21, mediaType: 'AUDIO' }
+  }), null)
 })
 
 test('event and schedule helpers call team visitor endpoints with visitor auth', async () => {

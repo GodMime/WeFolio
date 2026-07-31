@@ -8,10 +8,15 @@ const {
   buildDraftPayload,
   buildPublishPayload,
   copyWorkTagsToDisplayGroups,
+  countUnicodeCodePoints,
   createComponent,
+  findPortfolioComponent,
+  getMenuComponentList,
   importWorksIntoDisplayGroup,
   normalizePortfolioConfig,
+  removeNavigationItem,
   normalizeSingleWorkConfig,
+  replaceMenuComponentList,
   reorderComponent,
   reorderDisplayGroup,
   removeComponent,
@@ -23,9 +28,173 @@ const {
   updateComponentWorkIds,
   validateDisplayGroupName,
   validateCarouselComponent,
+  validatePortfolioForPublish,
   validateSingleWorkComponent,
   validateWorkGridComponent
 } = require('../utils/portfolios')
+const {
+  hexToHsv,
+  hsvToHex,
+  normalizeHexColor,
+  themeModeFromHex
+} = require('../utils/portfolio-color')
+
+test('normalizes style and bottom navigation without duplicating first menu components', () => {
+  const config = normalizePortfolioConfig({
+    style: { backgroundColor: '#1a2b3c' },
+    components: [createComponent(COMPONENT_TYPES.PROFILE, { componentKey: 'c_home' })],
+    bottomNav: {
+      enabled: true,
+      items: [
+        {
+          key: 'home',
+          title: ' 主页 ',
+          iconUrl: ' https://example.com/home.png ',
+          components: [createComponent(COMPONENT_TYPES.QR_CONTACT)]
+        },
+        {
+          key: 'works',
+          title: '作品',
+          iconUrl: 'https://example.com/works.png',
+          components: [createComponent(COMPONENT_TYPES.WORK_GRID, { componentKey: 'c_works' })]
+        }
+      ]
+    }
+  })
+
+  assert.equal(config.editorSchemaRevision, 2)
+  assert.equal(config.style.backgroundColor, '#1A2B3C')
+  assert.equal(Object.hasOwn(config.bottomNav.items[0], 'components'), false)
+  assert.equal(config.bottomNav.items[0].iconUrl, 'https://example.com/home.png')
+  assert.equal(config.bottomNav.items[1].iconUrl, 'https://example.com/works.png')
+  assert.deepEqual(getMenuComponentList(config, 'home').map((item) => item.componentKey), ['c_home'])
+  assert.deepEqual(getMenuComponentList(config, 'works').map((item) => item.componentKey), ['c_works'])
+  assert.equal(findPortfolioComponent(config, 'c_works').menuKey, 'works')
+})
+
+test('publish validation locates the first invalid component across navigation menus', () => {
+  const config = normalizePortfolioConfig({
+    components: [
+      createComponent(COMPONENT_TYPES.PROFILE, { componentKey: 'c_home' })
+    ],
+    bottomNav: {
+      enabled: true,
+      items: [
+        { key: 'nav_home', title: '主页' },
+        {
+          key: 'nav_works',
+          title: '作品',
+          components: [
+            createComponent(COMPONENT_TYPES.TEXT_SECTION, {
+              componentKey: 'c_empty_text',
+              config: { content: '' }
+            })
+          ]
+        },
+        { key: 'nav_contact', title: '联系', components: [] }
+      ]
+    }
+  })
+
+  assert.deepEqual(validatePortfolioForPublish(config), {
+    valid: false,
+    menuKey: 'nav_works',
+    componentKey: 'c_empty_text',
+    message: '【作品】文字说明内容不能为空'
+  })
+})
+
+test('publish validation reports an empty navigation menu without a component key', () => {
+  const config = normalizePortfolioConfig({
+    components: [
+      createComponent(COMPONENT_TYPES.PROFILE, { componentKey: 'c_home' })
+    ],
+    bottomNav: {
+      enabled: true,
+      items: [
+        { key: 'nav_home', title: '主页' },
+        { key: 'nav_contact', title: '联系', components: [] }
+      ]
+    }
+  })
+
+  assert.deepEqual(validatePortfolioForPublish(config), {
+    valid: false,
+    menuKey: 'nav_contact',
+    componentKey: '',
+    message: '【联系】至少添加一个组件'
+  })
+})
+
+test('publish validation accepts complete components in every navigation menu', () => {
+  const config = normalizePortfolioConfig({
+    components: [
+      createComponent(COMPONENT_TYPES.PROFILE, { componentKey: 'c_home' })
+    ],
+    bottomNav: {
+      enabled: true,
+      items: [
+        { key: 'nav_home', title: '主页' },
+        {
+          key: 'nav_contact',
+          title: '联系',
+          components: [
+            createComponent(COMPONENT_TYPES.DIVIDER, { componentKey: 'c_divider' })
+          ]
+        }
+      ]
+    }
+  })
+
+  assert.deepEqual(validatePortfolioForPublish(config), {
+    valid: true,
+    menuKey: '',
+    componentKey: '',
+    message: ''
+  })
+})
+
+test('replaces and removes menu components independently with first menu promotion', () => {
+  let config = normalizePortfolioConfig({
+    components: [createComponent(COMPONENT_TYPES.PROFILE, { componentKey: 'c_home' })],
+    bottomNav: {
+      enabled: true,
+      items: [
+        { key: 'home', title: '主页' },
+        {
+          key: 'works',
+          title: '作品',
+          components: [createComponent(COMPONENT_TYPES.WORK_GRID, { componentKey: 'c_works' })]
+        },
+        {
+          key: 'contact',
+          title: '联系',
+          components: [createComponent(COMPONENT_TYPES.CONTACT_FORM, { componentKey: 'c_contact' })]
+        }
+      ]
+    }
+  })
+
+  config = replaceMenuComponentList(config, 'works', [
+    createComponent(COMPONENT_TYPES.QR_CONTACT, { componentKey: 'c_qr' })
+  ])
+  assert.deepEqual(getMenuComponentList(config, 'home').map((item) => item.componentKey), ['c_home'])
+  assert.deepEqual(getMenuComponentList(config, 'works').map((item) => item.componentKey), ['c_qr'])
+
+  config = removeNavigationItem(config, 'home')
+  assert.equal(config.bottomNav.items[0].key, 'works')
+  assert.deepEqual(config.components.map((item) => item.componentKey), ['c_qr'])
+  assert.equal(Object.hasOwn(config.bottomNav.items[0], 'components'), false)
+})
+
+test('counts unicode code points and converts portfolio colors consistently', () => {
+  assert.equal(countUnicodeCodePoints('主页😀'), 3)
+  assert.equal(normalizeHexColor('#aabbcc'), '#AABBCC')
+  assert.equal(normalizeHexColor('invalid'), '#FFFFFF')
+  assert.equal(themeModeFromHex('#151515'), 'dark')
+  assert.equal(themeModeFromHex('#808080'), 'light')
+  assert.equal(hsvToHex(hexToHsv('#2D5F9A')), '#2D5F9A')
+})
 
 test('normalizes portfolio config with stable component order', () => {
   const result = normalizePortfolioConfig({
@@ -63,31 +232,58 @@ test('supports single-column work list component type', () => {
   assert.equal(result.components[1].componentType, COMPONENT_TYPES.WORK_LIST)
 })
 
-test('single work component defaults title on and keeps only singular config', () => {
+test('work display components default title on and description off', () => {
+  const grid = createComponent(COMPONENT_TYPES.WORK_GRID, {
+    componentKey: 'c_grid',
+    config: {
+      workIds: [11],
+      showTitle: 'false',
+      showDescription: true
+    }
+  })
+  const list = createComponent(COMPONENT_TYPES.WORK_LIST, {
+    componentKey: 'c_list',
+    config: {
+      workIds: [12],
+      showTitle: false,
+      showDescription: 'true'
+    }
+  })
+
+  assert.equal(grid.config.showTitle, true)
+  assert.equal(grid.config.showDescription, true)
+  assert.equal(list.config.showTitle, false)
+  assert.equal(list.config.showDescription, false)
+})
+
+test('single work component defaults title on and description off while keeping only singular config', () => {
   const component = createComponent(COMPONENT_TYPES.SINGLE_WORK, {
     componentKey: 'c_single',
     config: {
       workId: '12',
       workIds: [13],
       showTitle: 'false',
+      showDescription: true,
       unsupported: true
     }
   })
 
   assert.equal(COMPONENT_TYPES.SINGLE_WORK, 'SINGLE_WORK')
   assert.equal(component.name, '单个作品')
-  assert.deepEqual(component.config, { workId: 12, showTitle: true })
-  assert.deepEqual(normalizeSingleWorkConfig({ workId: 13, showTitle: false }), {
+  assert.deepEqual(component.config, { workId: 12, showTitle: true, showDescription: true })
+  assert.deepEqual(normalizeSingleWorkConfig({ workId: 13, showTitle: false, showDescription: false }), {
     workId: 13,
-    showTitle: false
+    showTitle: false,
+    showDescription: false
   })
   assert.deepEqual(normalizeSingleWorkConfig({ workId: 13.9, showTitle: true }), {
     workId: 0,
-    showTitle: true
+    showTitle: true,
+    showDescription: false
   })
 })
 
-test('single work update replaces one work and preserves explicit title switch', () => {
+test('single work update replaces one work and preserves explicit display switches', () => {
   const config = normalizePortfolioConfig({
     components: [createComponent(COMPONENT_TYPES.SINGLE_WORK, {
       componentKey: 'c_single',
@@ -95,9 +291,17 @@ test('single work update replaces one work and preserves explicit title switch',
     })]
   })
 
-  const updated = updateSingleWorkConfig(config, 'c_single', { workId: 12, showTitle: false })
+  const updated = updateSingleWorkConfig(config, 'c_single', {
+    workId: 12,
+    showTitle: false,
+    showDescription: true
+  })
 
-  assert.deepEqual(updated.components[0].config, { workId: 12, showTitle: false })
+  assert.deepEqual(updated.components[0].config, {
+    workId: 12,
+    showTitle: false,
+    showDescription: true
+  })
 })
 
 test('single work validation requires one valid image or video work', () => {

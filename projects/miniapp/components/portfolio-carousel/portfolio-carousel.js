@@ -135,6 +135,10 @@ function buildCarouselFrameStyle(works) {
 
 Component({
   properties: {
+    themeMode: {
+      type: String,
+      value: 'light'
+    },
     works: {
       type: Array,
       value: [],

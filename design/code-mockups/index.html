@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>映期Folio - 代码反推 HTML 设计稿索引</title>
+  <style>
+    :root {
+      --bg: #eef2f4;
+      --surface: #fcfdfd;
+      --text: #111827;
+      --muted: #66727f;
+      --line: #d7dee5;
+      --ink: #121a24;
+      --gold: #b88a44;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: linear-gradient(180deg, #e8edf0 0%, #f7f9f9 42%, #eef2f4 100%);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    .page { max-width: 1080px; margin: 0 auto; padding: 48px 24px 72px; }
+    .topbar { margin-bottom: 32px; }
+    .eyebrow { font-size: 13px; letter-spacing: 0.14em; color: var(--gold); font-weight: 600; text-transform: uppercase; }
+    h1 { margin: 8px 0 10px; font-size: 30px; color: var(--ink); }
+    .desc { color: var(--muted); font-size: 14px; line-height: 1.8; max-width: 720px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+    .card {
+      display: block;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 20px 22px;
+      text-decoration: none;
+      color: inherit;
+      transition: box-shadow 0.18s ease, transform 0.18s ease;
+    }
+    .card:hover { box-shadow: 0 12px 32px rgba(17, 24, 39, 0.12); transform: translateY(-2px); }
+    .card .num { font-size: 12px; color: var(--gold); font-weight: 700; letter-spacing: 0.1em; }
+    .card .name { font-size: 17px; font-weight: 700; color: var(--ink); margin: 6px 0 6px; }
+    .card .pages { font-size: 12.5px; color: var(--muted); line-height: 1.7; }
+    .foot { margin-top: 28px; font-size: 12.5px; color: var(--muted); line-height: 1.8; }
+    code { background: #eef2f6; border-radius: 4px; padding: 1px 6px; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="topbar">
+      <div class="eyebrow">WeFolio · 映期Folio</div>
+      <h1>代码反推 HTML 设计稿</h1>
+      <p class="desc">
+        本目录下的设计稿由 <code>projects/miniapp/</code> 当前小程序代码(wxml / wxss / js)反向生成,
+        颜色、字号、文案、间距均取自代码(rpx 按 2rpx = 1px 换算),用于视觉走查与沟通。
+        列表数据为按真实字段结构构造的 mock 数据;图片一律以渐变色块占位。
+        与 <code>design/prototype.html</code>(早期原型稿)可能存在的差异,以本目录为准。
+      </p>
+    </div>
+    <div class="grid">
+      <a class="card" href="01-login-index.html">
+        <div class="num">01</div>
+        <div class="name">登录与首页</div>
+        <div class="pages">pages/login · pages/index(我的 / 加载失败态)</div>
+      </a>
+      <a class="card" href="02-profile-points.html">
+        <div class="num">02</div>
+        <div class="name">我的与积分</div>
+        <div class="pages">pages/profile · points · points-rules · recharge · recharge-records · 新增标签弹层</div>
+      </a>
+      <a class="card" href="03-schedule.html">
+        <div class="num">03</div>
+        <div class="name">档期</div>
+        <div class="pages">pages/schedule(档期维护 / 档位定义 / 新增档期弹层 / 新增档位定义弹层)</div>
+      </a>
+      <a class="card" href="04-works.html">
+        <div class="num">04</div>
+        <div class="name">作品</div>
+        <div class="pages">pages/works(列表 / 批量管理 / 排序 / 标签 / 编辑图片与视频 / work-add / work-edit)</div>
+      </a>
+      <a class="card" href="05-portfolios.html">
+        <div class="num">05</div>
+        <div class="name">作品集</div>
+        <div class="pages">pages/portfolios(列表 / 分享弹层 / 标准编辑 / 预览 / 访客作品集 / 访客档期查询 / 预留页)</div>
+      </a>
+      <a class="card" href="06-visits-messages.html">
+        <div class="num">06</div>
+        <div class="name">访问记录与消息</div>
+        <div class="pages">pages/visits(趋势图 / 三个明细弹层)· pages/messages</div>
+      </a>
+      <a class="card" href="07-teams.html">
+        <div class="num">07</div>
+        <div class="name">团队</div>
+        <div class="pages">pages/teams · team-maintenance · team-member-add · team-member-change · team-invitations</div>
+      </a>
+      <a class="card" href="08-team-portfolios.html">
+        <div class="num">08</div>
+        <div class="name">团队作品集</div>
+        <div class="pages">pages/team-portfolios(选择团队 / 编辑 / 预览 / 团队线索 / 访客浏览)</div>
+      </a>
+    </div>
+    <p class="foot">
+      说明:骨架屏与 loading 态大多未单独出框;各文件底部附有对应模块的简化说明。
+      生成日期:2026-07-25。
+    </p>
+  </div>
+</body>
+</html>

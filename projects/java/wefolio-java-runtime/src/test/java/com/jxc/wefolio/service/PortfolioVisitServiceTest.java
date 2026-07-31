@@ -3,6 +3,7 @@ package com.jxc.wefolio.service;
 import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
 import com.jxc.wefolio.dict.PortfolioTypeDict;
 import com.jxc.wefolio.dict.BillingWindowScopeDict;
+import com.jxc.wefolio.dict.MediaTypeDict;
 import com.jxc.wefolio.dict.PointSceneCodeDict;
 import com.jxc.wefolio.dict.VisitEventTypeDict;
 import com.jxc.wefolio.dict.VisitSourceTypeDict;
@@ -256,6 +257,53 @@ class PortfolioVisitServiceTest {
                 "访客播放作品集视频"
         );
         verify(visitEventEntityMapper).insert(any(VisitEventEntity.class));
+    }
+
+    @Test
+    void recordEventShouldAllowAnimationAsWorkViewed() {
+        VisitRecordEntity record = new VisitRecordEntity();
+        record.setId(33L);
+        record.setVisitorKey("visitor-a");
+        record.setPortfolioId(88L);
+        record.setViewWorkCount(0);
+        when(visitRecordEntityMapper.selectOne(any())).thenReturn(record);
+        VisitorPortfolioEventRequest request = new VisitorPortfolioEventRequest();
+        request.setVisitorKey("visitor-a");
+        request.setEventType(VisitEventTypeDict.WORK_VIEWED.getCode());
+        request.setMediaType(MediaTypeDict.ANIMATION.getCode());
+        request.setWorkId(11L);
+        request.setIdempotencyKey("animation-view-1");
+
+        service().recordEvent(portfolio(), 1024L, request);
+
+        assertThat(record.getViewWorkCount()).isEqualTo(1);
+        verify(pointBillingWindowService).consumeIfEligible(
+                7L,
+                1024L,
+                PointSceneCodeDict.VIEW_PORTFOLIO_IMAGES.getCode(),
+                BillingWindowScopeDict.WORK.getCode(),
+                11L,
+                "PORTFOLIO_IMAGE",
+                "88:11:visitor-a",
+                "animation-view-1",
+                "访客查看作品集图片"
+        );
+    }
+
+    @Test
+    void recordEventShouldRejectAnimationAsVideoPlayedBeforeWrites() {
+        VisitorPortfolioEventRequest request = new VisitorPortfolioEventRequest();
+        request.setVisitorKey("visitor-a");
+        request.setEventType(VisitEventTypeDict.VIDEO_PLAYED.getCode());
+        request.setMediaType(MediaTypeDict.ANIMATION.getCode());
+        request.setWorkId(11L);
+        request.setIdempotencyKey("animation-video-1");
+
+        assertThatThrownBy(() -> service().recordEvent(portfolio(), 1024L, request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("个人作品集访问事件媒体类型不匹配");
+
+        verifyNoInteractions(visitRecordEntityMapper, visitEventEntityMapper, pointBillingWindowService);
     }
 
     /** 乐观锁竞争失败时必须抛错，使事件与扣费事务一并回滚。 */

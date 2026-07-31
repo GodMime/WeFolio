@@ -17,10 +17,11 @@ Component({
 
   lifetimes: {
     attached() {
-      const systemInfo = wx.getSystemInfoSync ? wx.getSystemInfoSync() : {}
-      const windowInfo = wx.getWindowInfo ? wx.getWindowInfo() : systemInfo
+      const windowInfo = wx.getWindowInfo
+        ? wx.getWindowInfo()
+        : (wx.getSystemInfoSync ? wx.getSystemInfoSync() : {})
       const menuButtonRect = wx.getMenuButtonBoundingClientRect()
-      const windowWidth = Math.max(0, Number(windowInfo.windowWidth) || Number(systemInfo.windowWidth) || 0)
+      const windowWidth = Math.max(0, Number(windowInfo.windowWidth) || 0)
       const menuTop = Math.max(0, Number(menuButtonRect.top) || 0)
       const menuHeight = Math.max(32, Number(menuButtonRect.height) || 0)
       const menuBottom = Math.max(menuTop + menuHeight, Number(menuButtonRect.bottom) || 0)

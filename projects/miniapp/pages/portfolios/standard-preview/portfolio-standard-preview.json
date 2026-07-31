@@ -1,8 +1,16 @@
 {
   "usingComponents": {
     "navigation-bar": "/components/navigation-bar/navigation-bar",
+    "portfolio-bottom-nav": "/components/portfolio-bottom-nav/portfolio-bottom-nav",
     "portfolio-carousel": "/components/portfolio-carousel/portfolio-carousel",
     "portfolio-schedule-query": "/components/portfolio-schedule-query/portfolio-schedule-query",
-    "portfolio-contact-form": "/components/portfolio-contact-form/portfolio-contact-form"
+    "portfolio-contact-form": "/components/portfolio-contact-form/portfolio-contact-form",
+    "portfolio-profile": "/pages/portfolios/components/profile/profile",
+    "portfolio-work-grid": "/pages/portfolios/components/work-grid/work-grid",
+    "portfolio-work-list": "/pages/portfolios/components/work-list/work-list",
+    "portfolio-single-work": "/pages/portfolios/components/single-work/single-work",
+    "portfolio-qr-contact": "/pages/portfolios/components/qr-contact/qr-contact",
+    "portfolio-text-section": "/pages/portfolios/components/text-section/text-section",
+    "portfolio-divider": "/pages/portfolios/components/divider/divider"
   }
 }

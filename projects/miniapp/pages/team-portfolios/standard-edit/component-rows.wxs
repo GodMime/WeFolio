@@ -1,6 +1,7 @@
 var COMPONENT_NAMES = {
   TEAM_PROFILE: '团队资料',
   CAROUSEL: '轮播图',
+  SINGLE_WORK: '单个作品',
   DIVIDER: '分割线',
   MEMBER_PORTFOLIO_GRID: '双列作品集',
   MEMBER_PORTFOLIO_LIST: '单列作品集',

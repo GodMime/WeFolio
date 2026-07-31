@@ -190,6 +190,10 @@ function buildDisplayOptions(data = {}, options = {}) {
 
 Component({
   properties: {
+    themeMode: {
+      type: String,
+      value: 'light'
+    },
     shareCode: {
       type: String,
       value: ''

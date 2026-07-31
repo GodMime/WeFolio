@@ -5,6 +5,7 @@ import com.jxc.wefolio.dict.MediaTypeDict;
 import com.jxc.wefolio.dict.PortfolioConfigScopeDict;
 import com.jxc.wefolio.dict.PortfolioComponentTypeDict;
 import com.jxc.wefolio.dict.ReferenceTypeDict;
+import com.jxc.wefolio.dict.WorkAuditStatusDict;
 import com.jxc.wefolio.dict.WorkStatusDict;
 import com.jxc.wefolio.dto.PortfolioConfigDto;
 import com.jxc.wefolio.entity.PortfolioReferenceEntity;
@@ -12,6 +13,7 @@ import com.jxc.wefolio.entity.WorkEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.UserEntityMapper;
 import com.jxc.wefolio.mapper.WorkEntityMapper;
+import com.jxc.wefolio.message.PortfolioMessage;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -131,16 +133,20 @@ class PortfolioConfigValidatorTest {
                 PortfolioComponentTypeDict.WORK_GRID.getCode(),
                 1000,
                 true,
-                Map.of("title", "更多案例", "workIds", List.of(11L, 12L), "columns", 2)
+                Map.of("title", "更多案例", "workIds", List.of(11L, 12L), "columns", 2,
+                        "showTitle", false, "showDescription", true)
         ));
 
         PortfolioConfigDto normalized = validator().normalize(7L, config);
 
         assertThat(normalized.getComponents().get(0).getConfig().get("workIds")).isEqualTo(List.of(11L, 12L));
+        assertThat(normalized.getComponents().get(0).getConfig())
+                .containsEntry("showTitle", false)
+                .containsEntry("showDescription", true);
     }
 
     /**
-     * 单个作品组件应同时支持图片和视频，并只保留规范化后的单作品配置。
+     * 单个作品组件应同时支持图片、视频和动图，并只保留规范化后的单作品配置。
      */
     @Test
     void singleWorkShouldAcceptImageAndVideoAndNormalizeSupportedConfig() {
@@ -154,7 +160,7 @@ class PortfolioConfigValidatorTest {
         ));
         PortfolioConfigDto videoConfig = config(component(
                 "c_video", "SINGLE_WORK", 1000, true,
-                Map.of("workId", 12L, "showTitle", false)
+                Map.of("workId", 12L, "showTitle", false, "showDescription", true)
         ));
 
         PortfolioConfigDto normalizedImage = validator().normalize(7L, imageConfig);
@@ -163,13 +169,67 @@ class PortfolioConfigValidatorTest {
         assertThat(normalizedImage.getComponents().get(0).getConfig())
                 .containsExactly(
                         Map.entry("workId", 11L),
-                        Map.entry("showTitle", true)
+                        Map.entry("showTitle", true),
+                        Map.entry("showDescription", false)
                 );
         assertThat(normalizedVideo.getComponents().get(0).getConfig())
                 .containsExactly(
                         Map.entry("workId", 12L),
-                        Map.entry("showTitle", false)
+                        Map.entry("showTitle", false),
+                        Map.entry("showDescription", true)
                 );
+    }
+
+    @Test
+    void singleWorkShouldAcceptAnimationButBulkComponentsShouldRejectIt() {
+        WorkEntity animation = work(
+                13L,
+                7L,
+                MediaTypeDict.ANIMATION.getCode(),
+                WorkStatusDict.ACTIVE.getCode());
+        when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(animation));
+        PortfolioConfigDto singleConfig = config(component(
+                "c_animation",
+                PortfolioComponentTypeDict.SINGLE_WORK.getCode(),
+                1000,
+                true,
+                Map.of("workId", 13L)));
+
+        PortfolioConfigDto normalized = validator().normalize(7L, singleConfig);
+
+        assertThat(normalized.getComponents().get(0).getConfig())
+                .containsEntry("workId", 13L);
+
+        PortfolioConfigDto gridConfig = config(component(
+                "c_grid",
+                PortfolioComponentTypeDict.WORK_GRID.getCode(),
+                1000,
+                true,
+                Map.of("workIds", List.of(13L))));
+        assertThatThrownBy(() -> validator().normalize(7L, gridConfig))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage(PortfolioMessage.WORK_REFERENCE_INVALID_MESSAGE);
+    }
+
+    @Test
+    void singleWorkShouldRejectAnimationBeforeAuditPasses() {
+        WorkEntity animation = work(
+                13L,
+                7L,
+                MediaTypeDict.ANIMATION.getCode(),
+                WorkStatusDict.ACTIVE.getCode());
+        animation.setAuditStatus(WorkAuditStatusDict.AUDITING.getCode());
+        when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(animation));
+        PortfolioConfigDto config = config(component(
+                "c_animation",
+                PortfolioComponentTypeDict.SINGLE_WORK.getCode(),
+                1000,
+                true,
+                Map.of("workId", 13L)));
+
+        assertThatThrownBy(() -> validator().normalize(7L, config))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage(PortfolioMessage.WORK_REFERENCE_INVALID_MESSAGE);
     }
 
     /**
@@ -588,10 +648,10 @@ class PortfolioConfigValidatorTest {
         assertThat(workReferences.stream()
                 .map(PortfolioReferenceEntity::getComponentPath))
                 .containsExactly(
-                        "components[2].groups[0].workIds[0]",
-                        "components[2].groups[0].workIds[1]",
-                        "components[3].groups[0].workIds[0]",
-                        "components[3].groups[1].workIds[0]",
+                        "components[2].config.groups[0].workIds[0]",
+                        "components[2].config.groups[0].workIds[1]",
+                        "components[3].config.groups[0].workIds[0]",
+                        "components[3].config.groups[1].workIds[0]",
                         "components[4].config.workId"
                 );
         assertThat(workReferences.stream()
@@ -601,8 +661,453 @@ class PortfolioConfigValidatorTest {
         assertThat(workReferences.get(4).getSortOrder()).isZero();
     }
 
+    /**
+     * 新编辑器草稿归一化必须保留完整能力字段，并允许空次级菜单。
+     */
+    @Test
+    void normalizeForDraftShouldKeepStyleNavigationAndEmptySecondaryMenu() {
+        PortfolioConfigDto config = navigationConfig(
+                " #151515 ",
+                component("c_profile", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, true, Map.of()),
+                List.of()
+        );
+
+        PortfolioConfigDto normalized = validator().normalizeForDraft(7L, config, null);
+
+        assertThat(normalized.getEditorSchemaRevision())
+                .isEqualTo(PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+        assertThat(normalized.getStyle().getBackgroundColor()).isEqualTo("#151515");
+        assertThat(normalized.getBottomNav().getEnabled()).isTrue();
+        assertThat(normalized.getBottomNav().getItems()).hasSize(2);
+        assertThat(normalized.getBottomNav().getItems().getFirst().getComponents()).isNull();
+        assertThat(normalized.getBottomNav().getItems().get(1).getComponents()).isEmpty();
+    }
+
+    /**
+     * 非法背景色必须统一回退为白色。
+     */
+    @Test
+    void normalizeForDraftShouldFallbackInvalidBackgroundColorToWhite() {
+        PortfolioConfigDto config = navigationConfig(
+                "#fff",
+                component("c_profile", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, true, Map.of()),
+                List.of(component(
+                        "c_text",
+                        PortfolioComponentTypeDict.TEXT_SECTION.getCode(),
+                        1000,
+                        true,
+                        Map.of("content", "旅行记录")
+                ))
+        );
+
+        PortfolioConfigDto normalized = validator().normalizeForDraft(7L, config, null);
+
+        assertThat(normalized.getStyle().getBackgroundColor())
+                .isEqualTo(PortfolioConfigDto.DEFAULT_BACKGROUND_COLOR);
+    }
+
+    /**
+     * 旧编辑器保存必须保留服务端草稿中的新能力字段，但顶层组件以旧请求为准。
+     */
+    @Test
+    void normalizeForDraftShouldMergeLegacyEditorWithExistingNewDraft() {
+        PortfolioConfigDto existingDraft = navigationConfig(
+                "#151515",
+                component("c_old", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, true, Map.of()),
+                List.of(component(
+                        "c_secondary",
+                        PortfolioComponentTypeDict.TEXT_SECTION.getCode(),
+                        1000,
+                        true,
+                        Map.of("content", "次级菜单内容")
+                ))
+        );
+        PortfolioConfigDto legacyIncoming = config(component(
+                "c_new",
+                PortfolioComponentTypeDict.PROFILE.getCode(),
+                1000,
+                true,
+                Map.of()
+        ));
+
+        PortfolioConfigDto normalized = validator().normalizeForDraft(7L, legacyIncoming, existingDraft);
+
+        assertThat(normalized.getEditorSchemaRevision())
+                .isEqualTo(PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+        assertThat(normalized.getStyle().getBackgroundColor()).isEqualTo("#151515");
+        assertThat(normalized.getComponents())
+                .extracting(PortfolioConfigDto.Component::getComponentKey)
+                .containsExactly("c_new");
+        assertThat(normalized.getBottomNav().getItems().get(1).getComponents())
+                .extracting(PortfolioConfigDto.Component::getComponentKey)
+                .containsExactly("c_secondary");
+    }
+
+    /**
+     * 服务端必须拒绝高于当前支持值的编辑器能力版本。
+     */
+    @Test
+    void normalizeForDraftShouldRejectFutureEditorSchemaRevision() {
+        PortfolioConfigDto config = config(component(
+                "c_profile",
+                PortfolioComponentTypeDict.PROFILE.getCode(),
+                1000,
+                true,
+                Map.of()
+        ));
+        config.setEditorSchemaRevision(PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT + 1);
+
+        assertThatThrownBy(() -> validator().normalizeForDraft(7L, config, null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("当前服务暂不支持此作品集配置，请稍后重试");
+    }
+
+    /**
+     * 发布时每个导航菜单都必须包含至少一个启用组件。
+     */
+    @Test
+    void validateForPublishShouldRejectEmptySecondaryMenuWithMenuPrefix() {
+        PortfolioConfigDto draft = navigationConfig(
+                "#FFFFFF",
+                component("c_profile", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, true, Map.of()),
+                List.of()
+        );
+        PortfolioConfigDto normalized = validator().normalizeForDraft(7L, draft, null);
+
+        assertThatThrownBy(() -> validator().validateForPublish(7L, normalized))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("【作品】至少添加一个组件");
+    }
+
+    /**
+     * 个人资料单例限制按菜单独立计算，不同菜单可各有一个。
+     */
+    @Test
+    void normalizeForDraftShouldAllowOneProfilePerMenu() {
+        PortfolioConfigDto config = navigationConfig(
+                "#FFFFFF",
+                component("c_profile_home", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, true, Map.of()),
+                List.of(component(
+                        "c_profile_works",
+                        PortfolioComponentTypeDict.PROFILE.getCode(),
+                        1000,
+                        true,
+                        Map.of()
+                ))
+        );
+
+        PortfolioConfigDto normalized = validator().normalizeForDraft(7L, config, null);
+
+        assertThat(PortfolioComponentTraversal.listComponentLocations(normalized))
+                .extracting(location -> location.component().getComponentKey())
+                .containsExactly("c_profile_home", "c_profile_works");
+    }
+
+    /**
+     * 组件实例键必须在所有菜单之间保持唯一。
+     */
+    @Test
+    void normalizeForDraftShouldRejectDuplicateComponentKeyAcrossMenus() {
+        PortfolioConfigDto config = navigationConfig(
+                "#FFFFFF",
+                component("c_same", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, true, Map.of()),
+                List.of(component(
+                        "c_same",
+                        PortfolioComponentTypeDict.TEXT_SECTION.getCode(),
+                        1000,
+                        true,
+                        Map.of("content", "重复键")
+                ))
+        );
+
+        assertThatThrownBy(() -> validator().normalizeForDraft(7L, config, null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("组件标识不能重复");
+    }
+
+    /**
+     * 第一菜单不得在导航项中重复携带组件。
+     */
+    @Test
+    void normalizeForDraftShouldRejectComponentsInsideFirstNavigationItem() {
+        PortfolioConfigDto config = navigationConfig(
+                "#FFFFFF",
+                component("c_profile", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, true, Map.of()),
+                List.of(component(
+                        "c_text",
+                        PortfolioComponentTypeDict.TEXT_SECTION.getCode(),
+                        1000,
+                        true,
+                        Map.of("content", "次级菜单")
+                ))
+        );
+        config.getBottomNav().getItems().getFirst().setComponents(List.of(component(
+                "c_duplicate_source",
+                PortfolioComponentTypeDict.TEXT_SECTION.getCode(),
+                1000,
+                true,
+                Map.of("content", "不应出现")
+        )));
+
+        assertThatThrownBy(() -> validator().normalizeForDraft(7L, config, null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("第一个菜单不能重复保存组件");
+    }
+
+    /**
+     * 导航名称在校验长度与重复前必须先去除首尾空白。
+     */
+    @Test
+    void normalizeForDraftShouldTrimNavigationTitlesBeforeValidation() {
+        PortfolioConfigDto config = navigationConfig(
+                "#FFFFFF",
+                component("c_profile", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, true, Map.of()),
+                List.of(component(
+                        "c_text",
+                        PortfolioComponentTypeDict.TEXT_SECTION.getCode(),
+                        1000,
+                        true,
+                        Map.of("content", "次级菜单")
+                ))
+        );
+        config.getBottomNav().getItems().getFirst().setTitle(" 主页 ");
+        config.getBottomNav().getItems().get(1).setTitle(" 作品 ");
+
+        PortfolioConfigDto normalized = validator().normalizeForDraft(7L, config, null);
+
+        assertThat(normalized.getBottomNav().getItems())
+                .extracting(PortfolioConfigDto.BottomNavItem::getTitle)
+                .containsExactly("主页", "作品");
+    }
+
+    /**
+     * 引用构建必须覆盖次级菜单并使用真实 config 属性路径。
+     */
+    @Test
+    void buildReferencesShouldIncludeSecondaryMenuWithCanonicalConfigPaths() {
+        when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(
+                work(11L, 7L, MediaTypeDict.IMAGE.getCode(), WorkStatusDict.ACTIVE.getCode())
+        ));
+        PortfolioConfigDto config = navigationConfig(
+                "#FFFFFF",
+                component(
+                        "c_carousel",
+                        PortfolioComponentTypeDict.CAROUSEL.getCode(),
+                        1000,
+                        true,
+                        Map.of("workIds", List.of(11L))
+                ),
+                List.of(component(
+                        "c_single",
+                        PortfolioComponentTypeDict.SINGLE_WORK.getCode(),
+                        1000,
+                        true,
+                        Map.of("workId", 11L)
+                ))
+        );
+        PortfolioConfigDto normalized = validator().normalizeForDraft(7L, config, null);
+
+        List<PortfolioReferenceEntity> references = validator().buildReferences(
+                99L,
+                7L,
+                PortfolioConfigScopeDict.DRAFT.getCode(),
+                normalized
+        );
+
+        assertThat(references).extracting(PortfolioReferenceEntity::getComponentPath)
+                .containsExactly(
+                        "components[0].config.workIds[0]",
+                        "bottomNav.items[1].components[0].config.workId"
+                );
+    }
+
+    /**
+     * 新编辑器请求携带背景色和底部导航时，合并结果必须使用 incoming 的字段。
+     */
+    @Test
+    void mergeCompatibleConfigShouldUseIncomingFieldsForNewEditor() {
+        PortfolioConfigDto incoming = navigationConfig(
+                "#151515",
+                component("c_profile", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, true, Map.of()),
+                List.of()
+        );
+
+        PortfolioConfigDto merged = validator().normalizeForDraft(7L, incoming, null);
+
+        assertThat(merged.getEditorSchemaRevision())
+                .isEqualTo(PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+        assertThat(merged.getStyle().getBackgroundColor()).isEqualTo("#151515");
+        assertThat(merged.getBottomNav().getEnabled()).isTrue();
+        assertThat(merged.getBottomNav().getItems()).hasSize(2);
+    }
+
+    /**
+     * 旧编辑器保存新编辑器创建的配置时，必须从草稿中保留 style、bottomNav 和 editorSchemaRevision。
+     */
+    @Test
+    void mergeCompatibleConfigShouldPreserveNewFieldsForLegacyEditor() {
+        PortfolioConfigDto existingDraft = navigationConfig(
+                "#151515",
+                component("c_old", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, true, Map.of()),
+                List.of(component(
+                        "c_secondary",
+                        PortfolioComponentTypeDict.TEXT_SECTION.getCode(),
+                        1000,
+                        true,
+                        Map.of("content", "次级菜单内容")
+                ))
+        );
+        PortfolioConfigDto legacyIncoming = config(component(
+                "c_new",
+                PortfolioComponentTypeDict.PROFILE.getCode(),
+                1000,
+                true,
+                Map.of()
+        ));
+
+        PortfolioConfigDto merged = validator().normalizeForDraft(7L, legacyIncoming, existingDraft);
+
+        assertThat(merged.getEditorSchemaRevision())
+                .isEqualTo(PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+        assertThat(merged.getStyle().getBackgroundColor()).isEqualTo("#151515");
+        assertThat(merged.getBottomNav().getItems().get(1).getComponents())
+                .extracting(PortfolioConfigDto.Component::getComponentKey)
+                .containsExactly("c_secondary");
+    }
+
+    /**
+     * 显式携带旧能力版本的编辑器保存新草稿时，也不得把草稿能力版本降级。
+     */
+    @Test
+    void mergeCompatibleConfigShouldPreserveNewFieldsForExplicitLegacyRevision() {
+        PortfolioConfigDto existingDraft = navigationConfig(
+                "#151515",
+                component("c_old", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, true, Map.of()),
+                List.of(component(
+                        "c_secondary",
+                        PortfolioComponentTypeDict.TEXT_SECTION.getCode(),
+                        1000,
+                        true,
+                        Map.of("content", "次级菜单内容")
+                ))
+        );
+        PortfolioConfigDto legacyIncoming = config(component(
+                "c_new",
+                PortfolioComponentTypeDict.PROFILE.getCode(),
+                1000,
+                true,
+                Map.of()
+        ));
+        legacyIncoming.setEditorSchemaRevision(1);
+
+        PortfolioConfigDto merged = validator().normalizeForDraft(7L, legacyIncoming, existingDraft);
+        PortfolioConfigDto normalizedAgain = validator().normalizeForDraft(7L, merged, null);
+
+        assertThat(merged.getEditorSchemaRevision())
+                .isEqualTo(PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+        assertThat(normalizedAgain.getEditorSchemaRevision())
+                .isEqualTo(PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+        assertThat(normalizedAgain.getStyle().getBackgroundColor()).isEqualTo("#151515");
+        assertThat(normalizedAgain.getBottomNav().getItems().get(1).getComponents())
+                .extracting(PortfolioConfigDto.Component::getComponentKey)
+                .containsExactly("c_secondary");
+    }
+
+    /**
+     * 旧编辑器保存不存在新字段的旧草稿时，合并后 style 和 bottomNav 为默认值。
+     */
+    @Test
+    void mergeCompatibleConfigShouldApplyDefaultsWhenNoNewFieldsExist() {
+        PortfolioConfigDto legacyIncoming = config(component(
+                "c_profile",
+                PortfolioComponentTypeDict.PROFILE.getCode(),
+                1000,
+                true,
+                Map.of()
+        ));
+
+        PortfolioConfigDto merged = validator().normalizeForDraft(7L, legacyIncoming, null);
+
+        assertThat(merged.getEditorSchemaRevision()).isNull();
+        assertThat(merged.getStyle().getBackgroundColor()).isEqualTo(
+                PortfolioConfigDto.DEFAULT_BACKGROUND_COLOR);
+        assertThat(merged.getBottomNav().getEnabled()).isFalse();
+        assertThat(merged.getBottomNav().getItems()).isNull();
+    }
+
+    /**
+     * 菜单模式下组件业务错误必须附加【菜单名】前缀。
+     */
+    @Test
+    void normalizeForDraftShouldWrapComponentErrorsWithMenuPrefix() {
+        PortfolioConfigDto config = navigationConfig(
+                "#FFFFFF",
+                component("c_home", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, true, Map.of()),
+                List.of(component(
+                        "c_bad",
+                        PortfolioComponentTypeDict.CAROUSEL.getCode(),
+                        1000,
+                        true,
+                        Map.of()  // 空作品列表 → 抛出业务错误
+                ))
+        );
+
+        assertThatThrownBy(() -> validator().normalizeForDraft(7L, config, null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageStartingWith("【作品】");
+    }
+
+    /**
+     * 旧配置无导航时组件错误不得附加菜单前缀。
+     */
+    @Test
+    void normalizeShouldNotWrapComponentErrorsWithMenuPrefix() {
+        PortfolioConfigDto config = config(component(
+                "c_bad",
+                PortfolioComponentTypeDict.CAROUSEL.getCode(),
+                1000,
+                true,
+                Map.of()  // 空作品列表 → 抛出业务错误
+        ));
+
+        assertThatThrownBy(() -> validator().normalize(7L, config))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("请选择要展示的作品");  // 无菜单前缀
+    }
+
     private PortfolioConfigValidator validator() {
         return new PortfolioConfigValidator(workEntityMapper, userEntityMapper);
+    }
+
+    /**
+     * 构造启用两项底部导航的新编辑器配置。
+     */
+    private PortfolioConfigDto navigationConfig(
+            String backgroundColor,
+            PortfolioConfigDto.Component firstMenuComponent,
+            List<PortfolioConfigDto.Component> secondMenuComponents
+    ) {
+        PortfolioConfigDto config = config(firstMenuComponent);
+        config.setEditorSchemaRevision(PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+
+        PortfolioConfigDto.Style style = new PortfolioConfigDto.Style();
+        style.setBackgroundColor(backgroundColor);
+        config.setStyle(style);
+
+        PortfolioConfigDto.BottomNavItem firstItem = new PortfolioConfigDto.BottomNavItem();
+        firstItem.setKey("nav_home");
+        firstItem.setTitle("主页");
+
+        PortfolioConfigDto.BottomNavItem secondItem = new PortfolioConfigDto.BottomNavItem();
+        secondItem.setKey("nav_works");
+        secondItem.setTitle("作品");
+        secondItem.setComponents(secondMenuComponents);
+
+        PortfolioConfigDto.BottomNav bottomNav = new PortfolioConfigDto.BottomNav();
+        bottomNav.setEnabled(true);
+        bottomNav.setItems(List.of(firstItem, secondItem));
+        config.setBottomNav(bottomNav);
+        return config;
     }
 
     private PortfolioConfigDto config(PortfolioConfigDto.Component... components) {
@@ -647,6 +1152,9 @@ class PortfolioConfigValidatorTest {
         work.setMediaType(mediaType);
         work.setTitle("作品" + id);
         work.setStatus(status);
+        if (MediaTypeDict.ANIMATION.getCode().equals(mediaType)) {
+            work.setAuditStatus(WorkAuditStatusDict.PASSED.getCode());
+        }
         return work;
     }
 }

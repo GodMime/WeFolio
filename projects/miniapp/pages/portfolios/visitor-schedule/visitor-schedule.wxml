@@ -1,5 +1,5 @@
 <view class="page-shell visitor-schedule-page">
-  <navigation-bar title="档期查询" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+  <navigation-bar title="档期查询" color="#212529" background="#ffffff"></navigation-bar>
   <view class="query-panel">
     <input class="field" placeholder="开始日期 YYYY-MM-DD" value="{{startDate}}" data-field="startDate" bindinput="handleInput" />
     <input class="field" placeholder="结束日期 YYYY-MM-DD" value="{{endDate}}" data-field="endDate" bindinput="handleInput" />

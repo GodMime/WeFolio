@@ -129,6 +129,12 @@ public class TeamPortfolioVisitService {
     /** metadata 访问来源键。 */
     private static final String METADATA_SOURCE_TYPE = "sourceType";
 
+    /** 联系表单组件类型。 */
+    private static final String COMPONENT_TYPE_CONTACT_FORM = "CONTACT_FORM";
+
+    /** 档期查询组件类型。 */
+    private static final String COMPONENT_TYPE_SCHEDULE_QUERY = "SCHEDULE_QUERY";
+
     /** 允许由公共事件接口上报的客户端事件类型。 */
     private static final Set<VisitEventTypeDict> CLIENT_EVENT_TYPES = Set.of(
             VisitEventTypeDict.WORK_VIEWED,
@@ -242,6 +248,8 @@ public class TeamPortfolioVisitService {
         validateExactEventRequest(event);
         VisitRecordEntity record = findVisitRecord(portfolio, visitorId, visitorKey);
         validateOwnedRecord(record, portfolio, visitorId, visitorKey);
+        validatePublishedComponent(
+                portfolio, event.getComponentKey(), COMPONENT_TYPE_SCHEDULE_QUERY);
         return persistEventIfAbsent(portfolio, record, visitorKey, event);
     }
 
@@ -421,6 +429,10 @@ public class TeamPortfolioVisitService {
         } else if (type == VisitEventTypeDict.QR_CODE_INTERACTED) {
             referenceType = ReferenceTypeDict.QR_CODE_ASSET;
             referenceId = portfolio.getOwnerId();
+        } else if (type == VisitEventTypeDict.CONTACT_FORM_EXPOSED) {
+            validatePublishedComponent(
+                    portfolio, request.getComponentKey(), COMPONENT_TYPE_CONTACT_FORM);
+            return;
         } else {
             return;
         }
@@ -451,18 +463,41 @@ public class TeamPortfolioVisitService {
         }
     }
 
+    /**
+     * 从已发布配置的全部菜单确认互动事件目标组件存在且已启用。
+     */
+    private void validatePublishedComponent(
+            PortfolioEntity portfolio,
+            String componentKey,
+            String componentType
+    ) {
+        try {
+            TeamPortfolioConfigDto config = JSON.parseObject(
+                    portfolio.getPublishedConfigJson(), TeamPortfolioConfigDto.class);
+            if (config == null
+                    || !TeamPortfolioConstants.SCHEMA_VERSION_STANDARD_TEAM_V1.equals(
+                            config.getSchemaVersion())
+                    || TeamPortfolioComponentTraversal.findEnabledComponent(
+                            config, componentKey, componentType).isEmpty()) {
+                throw new BusinessException(EVENT_INVALID_MESSAGE);
+            }
+        } catch (BusinessException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            throw new BusinessException(EVENT_INVALID_MESSAGE, exception);
+        }
+    }
+
     /** 发布引用命中后复验可信作品主数据和媒体类型。 */
     private void validateTrustedWork(
             VisitorTeamPortfolioEventRequest request,
             VisitEventTypeDict type
     ) {
-        String expectedMediaType = type == VisitEventTypeDict.WORK_VIEWED
-                ? MediaTypeDict.IMAGE.getCode() : MediaTypeDict.VIDEO.getCode();
         WorkEntity work = workEntityMapper.selectById(request.getWorkId());
         if (work == null
                 || !Objects.equals(work.getId(), request.getWorkId())
                 || !Objects.equals(work.getDeleted(), 0L)
-                || !expectedMediaType.equals(work.getMediaType())) {
+                || !isMediaTypeAllowedForEvent(type, work.getMediaType())) {
             throw new BusinessException(EVENT_INVALID_MESSAGE);
         }
     }
@@ -596,7 +631,7 @@ public class TeamPortfolioVisitService {
             case WORK_VIEWED -> {
                 requirePositive(request.getWorkId());
                 normalizeRequiredText(request.getComponentKey(), COMPONENT_KEY_MAX_BYTES);
-                requireExpectedMediaType(request.getMediaType(), MediaTypeDict.IMAGE);
+                requireWorkViewedMediaType(request.getMediaType());
                 requireAbsent(request.getMemberPortfolioId(), request.getLeadId(), request.getAction(),
                         request.getSourceType(), request.getQueriedDate());
             }
@@ -838,6 +873,28 @@ public class TeamPortfolioVisitService {
             throw new BusinessException(EVENT_INVALID_MESSAGE);
         }
         return normalized;
+    }
+
+    /** WORK_VIEWED 允许图片和动图，视频仍必须使用 VIDEO_PLAYED。 */
+    private String requireWorkViewedMediaType(String mediaType) {
+        String normalized = normalizeRequiredText(mediaType, CODE_VALUE_MAX_BYTES);
+        if (!MediaTypeDict.IMAGE.getCode().equals(normalized)
+                && !MediaTypeDict.ANIMATION.getCode().equals(normalized)) {
+            throw new BusinessException(EVENT_INVALID_MESSAGE);
+        }
+        return normalized;
+    }
+
+    /** 判断可信作品媒体类型是否符合事件语义。 */
+    private boolean isMediaTypeAllowedForEvent(VisitEventTypeDict type, String mediaType) {
+        if (type == VisitEventTypeDict.WORK_VIEWED) {
+            return MediaTypeDict.IMAGE.getCode().equals(mediaType)
+                    || MediaTypeDict.ANIMATION.getCode().equals(mediaType);
+        }
+        if (type == VisitEventTypeDict.VIDEO_PLAYED) {
+            return MediaTypeDict.VIDEO.getCode().equals(mediaType);
+        }
+        return false;
     }
 
     /** 规范化二维码动作。 */

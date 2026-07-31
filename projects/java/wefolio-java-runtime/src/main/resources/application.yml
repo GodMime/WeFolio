@@ -30,6 +30,7 @@ wefolio:
   content-limit:
     work-image-max-count: ${WEFOLIO_WORK_IMAGE_MAX_COUNT:500}
     work-video-max-count: ${WEFOLIO_WORK_VIDEO_MAX_COUNT:100}
+    work-animation-max-count: ${WEFOLIO_WORK_ANIMATION_MAX_COUNT:100}
     personal-portfolio-max-count: ${WEFOLIO_PERSONAL_PORTFOLIO_MAX_COUNT:10}
     team-portfolio-max-count: ${WEFOLIO_TEAM_PORTFOLIO_MAX_COUNT:10}
   work-audit:

@@ -26,6 +26,9 @@ public class MineWorkUploadTicketResponse {
     /** 视频最大字节数 */
     private long videoMaxBytes;
 
+    /** 动图最大字节数 */
+    private long animationMaxBytes;
+
     /** 视频最大时长毫秒 */
     private int videoMaxDurationMs;
 
@@ -44,7 +47,7 @@ public class MineWorkUploadTicketResponse {
         /** 前端本地临时 ID */
         private String clientId;
 
-        /** 媒体类型：IMAGE / VIDEO */
+        /** 媒体类型：IMAGE / VIDEO / ANIMATION */
         private String mediaType;
 
         /** COS 对象键 */

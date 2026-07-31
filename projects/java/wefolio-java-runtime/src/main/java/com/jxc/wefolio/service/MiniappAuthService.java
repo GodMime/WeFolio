@@ -9,6 +9,8 @@ import com.jxc.wefolio.config.WechatVirtualPaymentProperties;
 import com.jxc.wefolio.dto.AuthSessionResponse;
 import com.jxc.wefolio.dto.MaintainerWechatLoginRequest;
 import com.jxc.wefolio.dto.MaintainerWechatLoginResponse;
+import com.jxc.wefolio.dto.MaintainerWechatLoginPrecheckRequest;
+import com.jxc.wefolio.dto.MaintainerWechatLoginPrecheckResponse;
 import com.jxc.wefolio.dto.MaintainerWechatSessionRefreshRequest;
 import com.jxc.wefolio.dto.WechatPhoneNumberResponse;
 import com.jxc.wefolio.dto.WechatSessionResponse;
@@ -244,7 +246,7 @@ public class MiniappAuthService {
             String clientIp
     ) {
         if (request == null || request.getCode() == null || request.getCode().isBlank()) {
-            throw new BusinessException("微信登录凭证不能为空");
+            throw new BusinessException(MiniappAuthMessage.WECHAT_LOGIN_CODE_REQUIRED_MESSAGE);
         }
 
         WechatSessionResponse session = wechatMiniappClient.exchangeCode(request.getCode());
@@ -307,6 +309,27 @@ public class MiniappAuthService {
     }
 
     /**
+     * 预检维护者微信身份是否需要手机号授权。
+     *
+     * @param request 维护者微信登录预检请求
+     * @return 手机号授权要求
+     */
+    public MaintainerWechatLoginPrecheckResponse precheckMaintainerWechatLogin(
+            MaintainerWechatLoginPrecheckRequest request
+    ) {
+        if (request == null || request.getCode() == null || request.getCode().isBlank()) {
+            throw new BusinessException(MiniappAuthMessage.WECHAT_LOGIN_CODE_REQUIRED_MESSAGE);
+        }
+        WechatSessionResponse session = wechatMiniappClient.exchangeCode(request.getCode());
+        String openId = normalizeRequiredOpenId(session.getOpenid());
+        String openidHash = digestIdentifier(openId);
+        UserAuthEntity auth = findActiveAuth(WECHAT_AUTH_TYPE, openidHash);
+        MaintainerWechatLoginPrecheckResponse response = new MaintainerWechatLoginPrecheckResponse();
+        response.setPhoneAuthorizationRequired(auth == null);
+        return response;
+    }
+
+    /**
      * 使用当前维护者身份刷新微信 session_key，openid 不一致时拒绝覆盖绑定关系。
      *
      * @param userId 当前维护者用户 ID
@@ -319,7 +342,7 @@ public class MiniappAuthService {
             String clientIp
     ) {
         if (userId == null || request == null || request.getCode() == null || request.getCode().isBlank()) {
-            throw new BusinessException("微信登录凭证不能为空");
+            throw new BusinessException(MiniappAuthMessage.WECHAT_LOGIN_CODE_REQUIRED_MESSAGE);
         }
         WechatSessionResponse session = wechatMiniappClient.exchangeCode(request.getCode());
         String openId = normalizeRequiredOpenId(session.getOpenid());

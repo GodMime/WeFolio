@@ -5,6 +5,8 @@ const TEAM_VISITOR_PREFIX = '/api/visitor/team-portfolios'
 const QR_EVENT_TYPE = 'QR_CODE_INTERACTED'
 const QR_ACTIONS = Object.freeze(['CLICK', 'LONG_PRESS'])
 const IDEMPOTENCY_KEY_MAX_LENGTH = 64
+const DEFAULT_BACKGROUND_COLOR = '#FFFFFF'
+const SINGLE_WORK_VIEW_MEDIA_TYPES = Object.freeze(['IMAGE', 'ANIMATION'])
 
 function text(value) {
   return String(value || '').trim()
@@ -16,9 +18,62 @@ function requireIdempotencyKey(value) {
   return normalized
 }
 
+function normalizeRenderComponent(item = {}, index = 0) {
+  return {
+    componentKey: text(item.componentKey),
+    componentType: text(item.componentType),
+    name: text(item.name),
+    sortOrder: Number.isFinite(Number(item.sortOrder)) ? Number(item.sortOrder) : index,
+    data: item.data && typeof item.data === 'object' ? item.data : {}
+  }
+}
+
+function normalizeRenderComponents(items = []) {
+  return (Array.isArray(items) ? items : [])
+    .map(normalizeRenderComponent)
+    .filter((item) => item.componentKey && item.componentType)
+    .sort((left, right) => left.sortOrder - right.sortOrder)
+}
+
+function normalizeBackgroundColor(value) {
+  const color = text(value).toUpperCase()
+  return /^#[0-9A-F]{6}$/.test(color) ? color : DEFAULT_BACKGROUND_COLOR
+}
+
+function themeModeFromColor(backgroundColor) {
+  const color = normalizeBackgroundColor(backgroundColor)
+  const red = Number.parseInt(color.slice(1, 3), 16)
+  const green = Number.parseInt(color.slice(3, 5), 16)
+  const blue = Number.parseInt(color.slice(5, 7), 16)
+  return (red * 299 + green * 587 + blue * 114) / 1000 < 128 ? 'dark' : 'light'
+}
+
+function normalizeBottomNavigation(bottomNav = {}) {
+  if (!bottomNav || bottomNav.enabled !== true || !Array.isArray(bottomNav.items) || bottomNav.items.length < 2) {
+    return { enabled: false, items: [] }
+  }
+  return {
+    enabled: true,
+    items: bottomNav.items.slice(0, 4).map((item = {}, index) => {
+      const normalized = {
+        key: text(item.key),
+        title: text(item.title)
+      }
+      if (index > 0) normalized.components = normalizeRenderComponents(item.components)
+      return normalized
+    }).filter((item) => item.key && item.title)
+  }
+}
+
 function normalizeTeamVisitorPortfolio(payload = {}) {
   const renderData = payload.renderData && typeof payload.renderData === 'object' ? payload.renderData : {}
-  const source = Array.isArray(renderData.components) ? renderData.components : []
+  const components = normalizeRenderComponents(renderData.components)
+  const backgroundColor = normalizeBackgroundColor(renderData.style && renderData.style.backgroundColor)
+  const themeMode = ['light', 'dark'].includes(text(renderData.style && renderData.style.themeMode))
+    ? text(renderData.style.themeMode)
+    : themeModeFromColor(backgroundColor)
+  const bottomNav = normalizeBottomNavigation(renderData.bottomNav)
+  const activeMenuKey = bottomNav.enabled ? bottomNav.items[0].key : ''
   return {
     shareCode: text(payload.shareCode || renderData.shareCode),
     portfolioId: normalizeId(payload.portfolioId || renderData.portfolioId),
@@ -33,15 +88,30 @@ function normalizeTeamVisitorPortfolio(payload = {}) {
     preview: renderData.preview === true,
     underMaintenance: renderData.underMaintenance === true,
     share: renderData.share && typeof renderData.share === 'object' ? renderData.share : {},
-    components: source.map((item = {}, index) => ({
-      componentKey: text(item.componentKey),
-      componentType: text(item.componentType),
-      name: text(item.name),
-      sortOrder: Number.isFinite(Number(item.sortOrder)) ? Number(item.sortOrder) : index,
-      data: item.data && typeof item.data === 'object' ? item.data : {}
-    })).filter((item) => item.componentKey && item.componentType)
-      .sort((left, right) => left.sortOrder - right.sortOrder)
+    style: { backgroundColor, themeMode },
+    themeMode,
+    components,
+    bottomNav,
+    activeMenuKey,
+    activeComponents: components
   }
+}
+
+function switchTeamPortfolioMenu(portfolio = {}, menuKey = '') {
+  const bottomNav = portfolio.bottomNav || { enabled: false, items: [] }
+  if (!bottomNav.enabled || !Array.isArray(bottomNav.items) || !bottomNav.items.length) {
+    return Object.assign({}, portfolio, {
+      activeMenuKey: '',
+      activeComponents: Array.isArray(portfolio.components) ? portfolio.components : []
+    })
+  }
+  const target = bottomNav.items.find((item) => item.key === text(menuKey)) || bottomNav.items[0]
+  return Object.assign({}, portfolio, {
+    activeMenuKey: target.key,
+    activeComponents: target === bottomNav.items[0]
+      ? (Array.isArray(portfolio.components) ? portfolio.components : [])
+      : (Array.isArray(target.components) ? target.components : [])
+  })
 }
 
 function teamVisitorEndpoint(shareCode, suffix) {
@@ -57,6 +127,26 @@ function submitTeamVisitorEvent(requestFn = request, shareCode, payload = {}) {
   let idempotencyKey
   try { idempotencyKey = requireIdempotencyKey(payload.idempotencyKey) } catch (error) { return Promise.reject(error) }
   return requestFn({ url: teamVisitorEndpoint(shareCode, '/events'), method: 'POST', authMode: 'visitor', data: Object.assign({}, payload, { idempotencyKey }) })
+}
+
+/**
+ * 构造团队单作品查看事件，动图沿用普通作品查看语义。
+ *
+ * @param {object} detail 单作品组件事件详情
+ * @returns {object|null} 合法的查看事件，非法媒体类型返回空
+ */
+function buildTeamSingleWorkViewEvent(detail = {}) {
+  const work = detail.work || {}
+  const mediaType = text(work.mediaType)
+  if (!SINGLE_WORK_VIEW_MEDIA_TYPES.includes(mediaType)) {
+    return null
+  }
+  return {
+    eventType: 'WORK_VIEWED',
+    componentKey: text(detail.componentKey),
+    workId: normalizeId(work.workId),
+    mediaType
+  }
 }
 
 function fetchTeamVisitorScheduleOptions(requestFn = request, shareCode, componentKey) {
@@ -77,8 +167,10 @@ module.exports = {
   QR_ACTIONS,
   QR_EVENT_TYPE,
   TEAM_VISITOR_PREFIX,
+  buildTeamSingleWorkViewEvent,
   fetchTeamVisitorScheduleOptions,
   normalizeTeamVisitorPortfolio,
   queryTeamVisitorSchedule,
-  submitTeamVisitorEvent
+  submitTeamVisitorEvent,
+  switchTeamPortfolioMenu
 }

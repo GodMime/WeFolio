@@ -1,5 +1,8 @@
 package com.jxc.wefolio.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.jxc.wefolio.config.RegistrationPointProperties;
 import com.jxc.wefolio.dict.PointCalcModeDict;
@@ -37,6 +40,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
+import org.junit.jupiter.api.BeforeEach;
 import org.springframework.dao.DuplicateKeyException;
 
 import java.lang.reflect.Method;
@@ -83,6 +88,13 @@ class PointServiceTest {
     /** 系统消息 Mapper 模拟 */
     @Mock
     private SystemMessageEntityMapper systemMessageEntityMapper;
+
+    @BeforeEach
+    void initializeLambdaMetadata() {
+        TableInfoHelper.initTableInfo(
+                new MapperBuilderAssistant(new MybatisConfiguration(), "point-service"),
+                PointTransactionEntity.class);
+    }
 
     @Test
     void pointAccountMapperShouldDeductConsumptionWithAtomicUpdateSql() throws NoSuchMethodException {
@@ -1042,6 +1054,16 @@ class PointServiceTest {
         MinePointOverviewResponse response = service().getOverview(7L);
 
         assertThat(response.getMaintenanceConsumed()).isEqualTo(8L);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<LambdaQueryWrapper<PointTransactionEntity>> queryCaptor =
+                ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        verify(pointTransactionEntityMapper, org.mockito.Mockito.times(3))
+                .selectList(queryCaptor.capture());
+        LambdaQueryWrapper<PointTransactionEntity> maintenanceQuery =
+                queryCaptor.getAllValues().get(2);
+        maintenanceQuery.getSqlSegment();
+        assertThat(maintenanceQuery.getParamNameValuePairs())
+                .containsValue(PointSceneCodeDict.UPLOAD_ANIMATION.getCode());
         assertThat(response.getRules()).singleElement().satisfies(item -> {
             assertThat(item.getSceneCode()).isEqualTo("MONTHLY_WORK_STORAGE");
             assertThat(item.getSceneText()).isEqualTo("作品存储月费");

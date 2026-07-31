@@ -40,8 +40,9 @@ class WorkStorageBillingStructureTest {
                 "src/main/java/com/jxc/wefolio/job/service/RuntimeWorkStorageBillingClient.java"));
         assertThat(runtimeClient)
                 .contains("private final RestClient restClient")
-                .contains("this.restClient = RestClient.create()")
-                .doesNotContain("RestClient.create().post()");
+                .contains("this.restClient = restClient")
+                .contains(".requestFactory(createRequestFactory())")
+                .doesNotContain("RestClient.create()");
         for (Path sourceFile : sourceFiles) {
             String source = Files.readString(sourceFile);
             assertThat(source)

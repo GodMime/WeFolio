@@ -1,5 +1,5 @@
 <view class="page-shell recharge-records-page">
-  <navigation-bar title="充值记录" back="{{true}}" color="#17202a" background="rgba(245, 247, 251, 0.94)"></navigation-bar>
+  <navigation-bar title="充值记录" back="{{true}}" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
 
   <scroll-view class="records-scroll" scroll-y type="list" bindscrolltolower="handleLoadMore" lower-threshold="120">
     <view class="records-content">

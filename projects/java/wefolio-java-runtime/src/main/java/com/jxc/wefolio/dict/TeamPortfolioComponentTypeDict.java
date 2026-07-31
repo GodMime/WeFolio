@@ -13,6 +13,8 @@ public enum TeamPortfolioComponentTypeDict {
     TEAM_PROFILE("TEAM_PROFILE", "团队资料"),
     /** 轮播图 */
     CAROUSEL("CAROUSEL", "轮播图"),
+    /** 单个作品 */
+    SINGLE_WORK("SINGLE_WORK", "单个作品"),
     /** 分割线 */
     DIVIDER("DIVIDER", "分割线"),
     /** 双列成员作品集 */

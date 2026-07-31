@@ -1,0 +1,1074 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>09 作品集 · 背景色与底部导航 · 旅行风静态设计稿</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #f1f3f5;
+    font-family: "Instrument Sans", -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: #212529;
+    padding: 40px 32px 72px;
+  }
+  .doc-header { max-width: 1280px; margin: 0 auto 28px; }
+  .doc-header h1 { font-size: 20px; font-weight: 700; }
+  .doc-header .sub { margin-top: 8px; font-size: 12px; color: #868e96; line-height: 1.7; }
+  .doc-header .pages { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .doc-header .chip {
+    font-size: 11px; font-weight: 500; color: #868e96;
+    background: #ffffff; border: 1px solid #e9ecef; border-radius: 999px;
+    padding: 5px 12px;
+  }
+  .stage { display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-start; max-width: 1280px; margin: 0 auto; }
+  .phone-slot { width: 375px; flex: none; }
+  .phone-label { font-size: 12px; font-weight: 600; color: #868e96; margin-bottom: 10px; }
+  .phone-label .path { display: block; font-weight: 400; color: #adb5bd; font-size: 11px; margin-top: 3px; }
+  .frame {
+    width: 375px; min-height: 812px; background: #ffffff;
+    border-radius: 36px; overflow: hidden; position: relative;
+    border: 1px solid #dee2e6;
+    display: flex; flex-direction: column;
+  }
+  .frame.fixed-h { height: 812px; min-height: 812px; }
+
+  /* 状态栏 */
+  .statusbar {
+    flex: none; height: 44px; display: flex; align-items: center;
+    justify-content: space-between; padding: 8px 26px 0;
+    font-size: 13px; font-weight: 600; color: #212529; background: #f5f6f7;
+  }
+  .statusbar .sicons { display: flex; align-items: center; gap: 6px; }
+  /* 暗色主题：反白 */
+  .statusbar.dark { background: #151515; color: #f8f9fa; }
+  /* 亮灰底 */
+  .statusbar.lg { background: #f5f6f8; }
+
+  /* 导航栏：与页面底色一致，标题浮于背景 */
+  .navbar {
+    flex: none; height: 46px; position: relative;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 17px; font-weight: 600; color: #212529;
+    background: #f5f6f7;
+  }
+  .navbar .back {
+    position: absolute; left: 22px; top: 50%;
+    width: 9px; height: 9px; margin-top: -4px;
+    border-left: 2px solid #212529; border-bottom: 2px solid #212529;
+    transform: rotate(45deg);
+  }
+  .navbar.dark { background: #151515; color: #f8f9fa; }
+  .navbar.lg { background: #f5f6f8; }
+
+  /* 中性灰图片占位 */
+  .ph {
+    display: flex; align-items: center; justify-content: center;
+    color: #868e96; font-size: 12px; font-weight: 500;
+    text-align: center; line-height: 1.5; padding: 4px;
+    background: #e9ecef;
+  }
+  .ph-b { background: #dee2e6; }
+  .ph-c { background: #edf0f2; }
+  /* 暗色主题占位：surface-muted */
+  .ph.dark { background: #2a2d31; color: #c1c7ce; }
+
+  /* 底部弹层通用 */
+  .mask { position: absolute; inset: 0; z-index: 5; background: rgba(0,0,0,.4); }
+  .sheet {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 6;
+    display: flex; flex-direction: column; gap: 10px;
+    padding: 10px 16px 18px; background: #ffffff;
+    border-radius: 28px 28px 0 0;
+  }
+  .grabber { width: 36px; height: 4px; align-self: center; border-radius: 999px; background: #dee2e6; }
+  .sheet-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .sheet-title { flex: 1; min-width: 0; color: #212529; font-size: 16px; font-weight: 700; }
+  .sheet-close {
+    width: 28px; height: 28px; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    color: #868e96; font-size: 16px; font-weight: 500; line-height: 1;
+    border-radius: 50%; background: #f5f6f7;
+  }
+  .sheet-actions { display: flex; justify-content: flex-end; gap: 8px; }
+  .btn-cancel, .btn-confirm {
+    min-width: 74px; height: 34px; padding: 0 16px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 600; border-radius: 999px;
+  }
+  .btn-cancel { color: #212529; background: #f5f6f7; }
+  .btn-confirm { color: #ffffff; background: #212529; }
+  /* 危险操作确认：错误红 */
+  .btn-confirm.danger { background: #b55656; }
+
+  /* ===== 编辑页 ===== */
+  .ed-page { flex: 1; background: #f5f6f7; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .panel {
+    background: #ffffff; border: 1px solid #e9ecef; border-radius: 24px; padding: 14px;
+  }
+  .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .sec-title { color: #212529; font-size: 16px; font-weight: 700; }
+  .sec-desc { margin-top: 4px; color: #adb5bd; font-size: 11px; line-height: 1.45; }
+  .status-pill {
+    flex: none; display: inline-flex; align-items: center; gap: 4px;
+    color: #868e96; font-size: 11px; font-weight: 500;
+  }
+  .status-pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .form-row { margin-top: 10px; }
+  .field-heading { display: flex; align-items: center; justify-content: space-between; }
+  .field-label { color: #868e96; font-size: 12px; font-weight: 600; }
+  .field-limit { color: #adb5bd; font-size: 11px; font-weight: 400; }
+  .input {
+    width: 100%; min-height: 42px; margin-top: 6px; padding: 0 14px;
+    display: flex; align-items: center;
+    color: #212529; font-size: 13px; border-radius: 999px;
+    background: #f5f6f7;
+  }
+  .comp-list { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .comp-row {
+    min-height: 50px; display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+    border: 1px solid #e9ecef; border-radius: 20px; background: #ffffff;
+  }
+  .comp-order {
+    width: 24px; height: 24px; flex: none; display: flex; align-items: center; justify-content: center;
+    color: #ffffff; font-size: 11px; font-weight: 700; border-radius: 50%;
+    background: #212529;
+  }
+  .comp-title { flex: 1; min-width: 0; color: #212529; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .drag-handle { width: 20px; height: 24px; flex: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+  .drag-handle i { display: block; width: 12px; height: 1.5px; border-radius: 2px; background: #ced4da; }
+  .row-arrow { width: 7px; height: 7px; flex: none; border-right: 1.8px solid #adb5bd; border-bottom: 1.8px solid #adb5bd; transform: rotate(-45deg); }
+  .bottom-actions {
+    flex: none; display: flex; gap: 8px; padding: 12px 14px;
+    background: #f5f6f7;
+  }
+  .act-btn {
+    flex: 1; height: 46px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 600; border-radius: 999px;
+  }
+  .act-btn.soft { color: #212529; background: #e9ecef; }
+  .act-btn.dark { color: #ffffff; background: #212529; }
+  .act-btn .note { margin-top: 2px; font-size: 9.5px; font-weight: 400; opacity: .65; }
+
+  /* ===== 页面设置 · 背景色 ===== */
+  .bg-color-row { margin-top: 8px; display: flex; align-items: center; gap: 10px; }
+  /* 当前色块预览 */
+  .bg-current { width: 46px; height: 30px; flex: none; border-radius: 10px; border: 1px solid #e9ecef; }
+  /* 快捷色块：圆形；选中态 = 白缝 + 墨色描边（白色块也可见） */
+  .swatch { width: 30px; height: 30px; flex: none; border-radius: 50%; border: 1px solid #e9ecef; }
+  .swatch.cur { box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px #212529; }
+  .custom-btn {
+    min-width: 60px; height: 30px; flex: none; padding: 0 14px;
+    display: flex; align-items: center; justify-content: center;
+    color: #212529; font-size: 12px; font-weight: 600;
+    border-radius: 999px; background: #f5f6f7;
+  }
+  .bg-hex { margin-left: auto; flex: none; color: #868e96; font-size: 11px; font-weight: 500; }
+
+  /* 页面设置 · 底部导航数量单选胶囊 */
+  .nav-opt-row { margin-top: 8px; display: flex; gap: 8px; }
+  .nav-opt {
+    flex: 1; height: 34px; display: flex; align-items: center; justify-content: center;
+    color: #212529; font-size: 12px; font-weight: 600;
+    border-radius: 999px; background: #f5f6f7;
+  }
+  .nav-opt.on { color: #ffffff; background: #212529; }
+
+  /* 菜单切换条：仿悬浮黑色胶囊 tabbar，激活白圆底；铅笔图标提示可改名 */
+  .menu-bar {
+    margin-top: 10px; height: 44px; display: flex; align-items: center; gap: 4px;
+    padding: 4px; border-radius: 999px; background: #212529;
+  }
+  .menu-item {
+    flex: 1; height: 36px; display: flex; align-items: center; justify-content: center; gap: 5px;
+    color: rgba(255,255,255,.6); font-size: 12.5px; font-weight: 600; border-radius: 999px;
+  }
+  .menu-item.on { color: #212529; background: #ffffff; }
+  .menu-pen { width: 11px; height: 11px; flex: none; opacity: .55; }
+
+  /* 菜单组件区空态：虚线圆角卡片 */
+  .empty-comp {
+    margin-top: 10px; min-height: 104px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+    border: 1.5px dashed #dee2e6; border-radius: 24px; background: #ffffff;
+  }
+  .empty-comp .empty-text { color: #adb5bd; font-size: 12px; }
+  .add-comp-btn {
+    height: 42px; margin-top: 8px;
+    display: flex; align-items: center; justify-content: center;
+    color: #ffffff; font-size: 13px; font-weight: 600;
+    border-radius: 999px; background: #212529;
+  }
+
+  /* ===== 自定义背景色弹层：连续取色盘（不使用离散预置色格） ===== */
+  /* 二维色盘：横轴饱和度（白 → 纯色相），纵轴明度（透明 → 黑） */
+  .picker-pad {
+    position: relative; height: 180px; overflow: hidden; border-radius: 20px;
+    background:
+      linear-gradient(to top, #000000, rgba(0,0,0,0)),
+      linear-gradient(to right, #ffffff, #ff4d4d);
+  }
+  /* 选色点：白色小圆环指示器 */
+  .picker-dot {
+    position: absolute; right: 16%; top: 14%;
+    width: 18px; height: 18px; border-radius: 50%;
+    border: 3px solid #ffffff;
+    box-shadow: 0 1px 4px rgba(0,0,0,.35), inset 0 0 2px rgba(0,0,0,.25);
+  }
+  /* 连续色相滑条：横向彩虹渐变胶囊 + 圆形滑块 */
+  .hue-slider {
+    position: relative; height: 16px; border-radius: 999px;
+    background: linear-gradient(to right, #ff3b30, #ffcc00, #34c759, #0a84ff, #5856d6, #af52de, #ff3b30);
+  }
+  .hue-thumb {
+    position: absolute; left: 6%; top: 50%; transform: translate(-50%, -50%);
+    width: 22px; height: 22px; border-radius: 50%;
+    border: 3px solid #ffffff; background: #ff3b30;
+    box-shadow: 0 1px 4px rgba(0,0,0,.3);
+  }
+
+  /* 菜单名编辑态：铅笔 + 输入 + 实时字数计数（1~5 字） */
+  .menu-rename {
+    margin-top: 8px; min-height: 42px; padding: 0 14px;
+    display: flex; align-items: center; gap: 8px;
+    border-radius: 999px; background: #f5f6f7;
+  }
+  .menu-rename .rename-pen { width: 12px; height: 12px; flex: none; color: #868e96; }
+  .menu-rename .rename-text { flex: 1; min-width: 0; color: #212529; font-size: 13px; font-weight: 600; }
+  .menu-rename .rename-count { flex: none; color: #adb5bd; font-size: 11px; }
+  /* 菜单删除入口：编辑态内联红色文字按钮（仅剩 2 个菜单时不展示） */
+  .rename-del { flex: none; color: #b55656; font-size: 12px; font-weight: 600; }
+
+  /* 发布校验错误定位：失败菜单红点 + 错误提示条 + 错误组件描边 */
+  .menu-dot { width: 6px; height: 6px; flex: none; border-radius: 50%; background: #b55656; }
+  .err-banner {
+    margin-top: 8px; display: flex; align-items: center; gap: 6px;
+    padding: 9px 12px; border-radius: 16px;
+    background: rgba(181,86,86,.08); color: #b55656;
+    font-size: 12px; font-weight: 500;
+  }
+  .comp-row.err { border-color: #b55656; }
+  .comp-main { flex: 1; min-width: 0; }
+  .comp-err { margin-top: 2px; color: #b55656; font-size: 11px; }
+  .hex-input {
+    width: 100%; height: 42px; padding: 0 16px;
+    display: flex; align-items: center; justify-content: space-between;
+    color: #212529; font-size: 13px; font-weight: 600;
+    border-radius: 999px; background: #f5f6f7;
+  }
+  .hex-input .hex-label { color: #adb5bd; font-size: 11px; font-weight: 400; }
+  /* 实时预览条：左侧色块 + 右侧文案 */
+  .preview-bar {
+    display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+    border: 1px solid #e9ecef; border-radius: 20px; background: #ffffff;
+  }
+  .preview-color { width: 40px; height: 28px; flex: none; border-radius: 10px; border: 1px solid #e9ecef; }
+  .preview-text { color: #868e96; font-size: 12px; }
+
+  /* 确认弹层说明 */
+  .confirm-desc { color: #868e96; font-size: 12px; line-height: 1.6; }
+
+  /* ===== 预览 / 访客渲染页 ===== */
+  .pv-page { flex: 1; background: #ffffff; }
+  .pv-page.dark { background: #151515; }
+  .pv-page.lg { background: #f5f6f8; }
+  .folio-component { margin-top: 12px; }
+  .folio-carousel { position: relative; width: calc(100% - 24px); margin: 0 12px; height: 240px; overflow: hidden; border-radius: 20px; }
+  .carousel-progress { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; gap: 6px; }
+  .seg-dot { width: 18px; height: 3px; border-radius: 999px; background: rgba(255,255,255,.55); overflow: hidden; }
+  .seg-dot.cur { width: 28px; }
+  .seg-dot.cur i { display: block; width: 60%; height: 100%; background: #ffffff; border-radius: 999px; }
+  .seg-dot.done i { display: block; width: 100%; height: 100%; background: #ffffff; }
+  .text-section { padding: 2px 16px; }
+  .text-title { padding: 0 12px; color: #212529; font-size: 16px; font-weight: 700; text-align: center; }
+  .text-content { display: block; margin-top: 6px; color: #868e96; font-size: 13px; line-height: 1.7; text-align: left; }
+  .text-title.dark { color: #f8f9fa; }
+  .text-content.dark { color: #c1c7ce; }
+  .work-section-title { padding: 0 16px; color: #212529; font-size: 18px; font-weight: 700; }
+  .work-section-title.dark { color: #f8f9fa; }
+  .work-grid { display: flex; flex-wrap: wrap; padding: 10px 8px 0; }
+  .grid-card { width: 50%; padding: 0 4px 10px; }
+  .work-cover-wrap { position: relative; width: 100%; height: 118px; overflow: hidden; border-radius: 20px; }
+  .work-title { margin-top: 6px; padding: 0 2px; color: #212529; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .work-desc { padding: 0 2px; color: #868e96; font-size: 11px; line-height: 1.6; }
+  .work-title.dark { color: #f1f3f5; }
+  .work-desc.dark { color: #c1c7ce; }
+  .brand-footer { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 20px 0 28px; }
+  .brand-logo { width: 28px; height: 28px; object-fit: contain; }
+  .brand-name { color: #adb5bd; font-size: 11px; font-weight: 500; }
+  /* 暗色主题：页脚反白 */
+  .brand-logo.dark { filter: brightness(0) invert(1); opacity: .55; }
+  .brand-name.dark { color: #868e96; }
+
+  /* 档期查询入口（访客页内，跟随整页主题） */
+  .sq-entry {
+    margin: 12px 16px 0; height: 46px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 600; border-radius: 999px;
+  }
+  .sq-entry.dark { color: #f8f9fa; background: #2a2d31; }
+
+  /* 访客页底部导航：样式跟随背景明暗；选中态 = 亮底墨色高亮 / 暗底白色高亮 */
+  .visit-nav-wrap { flex: none; padding: 0 14px 14px; }
+  .visit-nav-wrap.dark { background: #151515; }
+  .visit-nav-wrap.lg { background: #f5f6f8; }
+  .visit-nav {
+    height: 52px; display: flex; align-items: center; gap: 4px;
+    padding: 4px; border-radius: 999px;
+  }
+  .visit-nav.dark { background: #1e1e1e; }
+  .visit-nav.light {
+    background: #ffffff; border: 1px solid #e9ecef;
+    box-shadow: 0 12px 28px rgba(33, 37, 41, 0.10);
+  }
+  .vn-item {
+    flex: 1; height: 44px; display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 600; border-radius: 999px;
+  }
+  .visit-nav.dark .vn-item { color: #868e96; }
+  .visit-nav.dark .vn-item.on { color: #151515; background: #ffffff; }
+  .visit-nav.light .vn-item { color: #868e96; }
+  .visit-nav.light .vn-item.on { color: #ffffff; background: #212529; }
+
+  .dimmed { opacity: .5; }
+</style>
+</head>
+<body>
+
+<div class="doc-header">
+  <h1>09 作品集 · 背景色与底部导航 · 旅行风静态设计稿</h1>
+  <div class="sub">对应方案文档 <code>docs/portfolio-background-bottom-nav-design.md</code>：标准个人作品集新增「页面设置」——页面背景色（黑 / 白 / 灰快捷色 + 自定义 HEX，自定义弹层使用连续取色盘：二维色盘 + 色相滑条）与底部导航（2~4 个菜单，每菜单独立组件列表，任意菜单可单独删除，删除第一菜单时第二菜单晋升为第一个菜单）。明暗模式按背景亮度自动推导，暗底时文字 / 图标 / 导航反白，导航栏选中态亮底用墨色、暗底用白色高亮。发布前集中校验所有菜单，自动切换到第一个失败菜单并滚动到错误组件。视觉语言沿用 <code>05-portfolios.html</code> 的 TripGlide 黑白灰体系。尺寸换算：750rpx = 375px。</div>
+  <div class="pages">
+    <span class="chip">背景色：黑 #151515 / 白 #FFFFFF / 灰 #F5F6F8 快捷色 + 自定义连续取色盘</span>
+    <span class="chip">底部导航：2~4 个菜单，默认不开启</span>
+    <span class="chip">每个菜单独立维护组件列表</span>
+    <span class="chip">任意菜单单独删除，删除第一菜单时第二菜单晋升</span>
+    <span class="chip">明暗模式按背景亮度自动推导</span>
+    <span class="chip">菜单名 1~5 字，实时字数计数</span>
+    <span class="chip">发布校验：自动定位第一个失败菜单与错误组件</span>
+    <span class="chip">第一菜单「主页」承接现有顶层组件</span>
+  </div>
+</div>
+
+<div class="stage">
+
+  <!-- ============ 01 编辑页 · 页面设置 ============ -->
+  <div class="phone-slot">
+    <div class="phone-label">01 编辑页 · 页面设置<span class="path">pages/portfolios/standard-edit/portfolio-standard-edit</span></div>
+    <div class="frame">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="sicons">
+          <svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="#212529"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="#212529"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="#212529"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="#212529"/></svg>
+          <svg width="16" height="11" viewBox="0 0 16 11"><path d="M8 10.2 5.4 7.6a3.7 3.7 0 0 1 5.2 0L8 10.2zM3 5.2a7.1 7.1 0 0 1 10 0l-1.5 1.5a5.1 5.1 0 0 0-7 0L3 5.2zM.6 2.8a10.6 10.6 0 0 1 14.8 0L13.9 4.3a8.6 8.6 0 0 0-11.8 0L.6 2.8z" fill="#212529"/></svg>
+          <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0.5" y="0.5" width="21" height="11" rx="3" fill="none" stroke="#212529" opacity=".4"/><rect x="2" y="2" width="16" height="8" rx="1.6" fill="#212529"/><path d="M23 4v4c1-.3 1.6-1 1.6-2S24 4.3 23 4z" fill="#212529" opacity=".4"/></svg>
+        </span>
+      </div>
+      <div class="navbar"><span class="back"></span>标准个人作品集</div>
+      <div class="ed-page">
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <div class="sec-title">分享信息</div>
+              <div class="sec-desc">用于微信分享卡片说明</div>
+            </div>
+            <div class="status-pill">草稿</div>
+          </div>
+          <div class="form-row">
+            <div class="field-heading">
+              <div class="field-label">作品集标题</div>
+              <div class="field-limit">7/50</div>
+            </div>
+            <div class="input">婚礼主持作品集</div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <div class="sec-title">页面设置</div>
+              <div class="sec-desc">背景色与底部导航，访客页即时生效</div>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="field-heading"><div class="field-label">背景色</div></div>
+            <div class="bg-color-row">
+              <div class="bg-current" style="background:#ffffff;"></div>
+              <div class="swatch" style="background:#151515;"></div>
+              <div class="swatch cur" style="background:#ffffff;"></div>
+              <div class="swatch" style="background:#f5f6f8;"></div>
+              <div class="custom-btn">自定义</div>
+              <div class="bg-hex">#FFFFFF</div>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="field-heading">
+              <div class="field-label">底部导航</div>
+              <div class="field-limit">2~4 个菜单</div>
+            </div>
+            <div class="nav-opt-row">
+              <div class="nav-opt on">不开启</div>
+              <div class="nav-opt">2 个</div>
+              <div class="nav-opt">3 个</div>
+              <div class="nav-opt">4 个</div>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <div class="sec-title">组件编排</div>
+              <div class="sec-desc">访客将按当前顺序浏览作品集内容</div>
+            </div>
+          </div>
+          <div class="comp-list">
+            <div class="comp-row">
+              <div class="comp-order">1</div>
+              <div class="comp-title">轮播图</div>
+              <div class="drag-handle"><i></i><i></i><i></i></div>
+              <div class="row-arrow"></div>
+            </div>
+            <div class="comp-row">
+              <div class="comp-order">2</div>
+              <div class="comp-title">个人资料</div>
+              <div class="drag-handle"><i></i><i></i><i></i></div>
+              <div class="row-arrow"></div>
+            </div>
+            <div class="comp-row">
+              <div class="comp-order">3</div>
+              <div class="comp-title">双列作品列表</div>
+              <div class="drag-handle"><i></i><i></i><i></i></div>
+              <div class="row-arrow"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="bottom-actions">
+        <div class="act-btn soft">保存草稿</div>
+        <div class="act-btn dark">预览草稿<span class="note">请保存后预览</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 02 编辑页弹层 · 自定义背景色 ============ -->
+  <div class="phone-slot">
+    <div class="phone-label">02 编辑页弹层 · 自定义背景色<span class="path">standard-edit「页面设置 · 自定义」底部弹层</span></div>
+    <div class="frame fixed-h">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="sicons">
+          <svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="#212529"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="#212529"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="#212529"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="#212529"/></svg>
+          <svg width="16" height="11" viewBox="0 0 16 11"><path d="M8 10.2 5.4 7.6a3.7 3.7 0 0 1 5.2 0L8 10.2zM3 5.2a7.1 7.1 0 0 1 10 0l-1.5 1.5a5.1 5.1 0 0 0-7 0L3 5.2zM.6 2.8a10.6 10.6 0 0 1 14.8 0L13.9 4.3a8.6 8.6 0 0 0-11.8 0L.6 2.8z" fill="#212529"/></svg>
+          <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0.5" y="0.5" width="21" height="11" rx="3" fill="none" stroke="#212529" opacity=".4"/><rect x="2" y="2" width="16" height="8" rx="1.6" fill="#212529"/><path d="M23 4v4c1-.3 1.6-1 1.6-2S24 4.3 23 4z" fill="#212529" opacity=".4"/></svg>
+        </span>
+      </div>
+      <div class="navbar"><span class="back"></span>标准个人作品集</div>
+      <div class="ed-page dimmed">
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <div class="sec-title">页面设置</div>
+              <div class="sec-desc">背景色与底部导航，访客页即时生效</div>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="field-heading"><div class="field-label">背景色</div></div>
+            <div class="bg-color-row">
+              <div class="bg-current" style="background:#151515;"></div>
+              <div class="swatch cur" style="background:#151515;"></div>
+              <div class="swatch" style="background:#ffffff;"></div>
+              <div class="swatch" style="background:#f5f6f8;"></div>
+              <div class="custom-btn">自定义</div>
+              <div class="bg-hex">#151515</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mask"></div>
+      <div class="sheet">
+        <div class="grabber"></div>
+        <div class="sheet-heading">
+          <div class="sheet-title">自定义背景色</div>
+          <div class="sheet-close">×</div>
+        </div>
+        <div class="picker-pad">
+          <div class="picker-dot"></div>
+        </div>
+        <div class="hue-slider">
+          <div class="hue-thumb"></div>
+        </div>
+        <div class="hex-input"><span>#151515</span><span class="hex-label">6 位 HEX 色值</span></div>
+        <div class="preview-bar">
+          <div class="preview-color" style="background:#151515;"></div>
+          <div class="preview-text">预览 #151515</div>
+        </div>
+        <div class="sheet-actions">
+          <div class="btn-cancel">取消</div>
+          <div class="btn-confirm">确认</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 03 编辑页 · 开启底部导航（编辑主页） ============ -->
+  <div class="phone-slot">
+    <div class="phone-label">03 编辑页 · 开启底部导航（编辑主页）<span class="path">standard-edit · 底部导航 3 个菜单 · activeMenu=主页</span></div>
+    <div class="frame">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="sicons">
+          <svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="#212529"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="#212529"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="#212529"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="#212529"/></svg>
+          <svg width="16" height="11" viewBox="0 0 16 11"><path d="M8 10.2 5.4 7.6a3.7 3.7 0 0 1 5.2 0L8 10.2zM3 5.2a7.1 7.1 0 0 1 10 0l-1.5 1.5a5.1 5.1 0 0 0-7 0L3 5.2zM.6 2.8a10.6 10.6 0 0 1 14.8 0L13.9 4.3a8.6 8.6 0 0 0-11.8 0L.6 2.8z" fill="#212529"/></svg>
+          <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0.5" y="0.5" width="21" height="11" rx="3" fill="none" stroke="#212529" opacity=".4"/><rect x="2" y="2" width="16" height="8" rx="1.6" fill="#212529"/><path d="M23 4v4c1-.3 1.6-1 1.6-2S24 4.3 23 4z" fill="#212529" opacity=".4"/></svg>
+        </span>
+      </div>
+      <div class="navbar"><span class="back"></span>标准个人作品集</div>
+      <div class="ed-page">
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <div class="sec-title">页面设置</div>
+              <div class="sec-desc">背景色与底部导航，访客页即时生效</div>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="field-heading"><div class="field-label">背景色</div></div>
+            <div class="bg-color-row">
+              <div class="bg-current" style="background:#151515;"></div>
+              <div class="swatch cur" style="background:#151515;"></div>
+              <div class="swatch" style="background:#ffffff;"></div>
+              <div class="swatch" style="background:#f5f6f8;"></div>
+              <div class="custom-btn">自定义</div>
+              <div class="bg-hex">#151515</div>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="field-heading">
+              <div class="field-label">底部导航</div>
+              <div class="field-limit">2~4 个菜单</div>
+            </div>
+            <div class="nav-opt-row">
+              <div class="nav-opt">不开启</div>
+              <div class="nav-opt">2 个</div>
+              <div class="nav-opt on">3 个</div>
+              <div class="nav-opt">4 个</div>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <div class="sec-title">组件编排</div>
+              <div class="sec-desc">每个菜单单独维护一套组件</div>
+            </div>
+          </div>
+          <div class="menu-bar">
+            <div class="menu-item on">主页<svg class="menu-pen" viewBox="0 0 12 12"><path d="M8.4 1.5a1.1 1.1 0 0 1 1.6 0l.5.5a1.1 1.1 0 0 1 0 1.6L4.2 10H2V7.8l6.4-6.3z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg></div>
+            <div class="menu-item">作品<svg class="menu-pen" viewBox="0 0 12 12"><path d="M8.4 1.5a1.1 1.1 0 0 1 1.6 0l.5.5a1.1 1.1 0 0 1 0 1.6L4.2 10H2V7.8l6.4-6.3z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg></div>
+            <div class="menu-item">动态<svg class="menu-pen" viewBox="0 0 12 12"><path d="M8.4 1.5a1.1 1.1 0 0 1 1.6 0l.5.5a1.1 1.1 0 0 1 0 1.6L4.2 10H2V7.8l6.4-6.3z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg></div>
+          </div>
+          <div class="comp-list">
+            <div class="comp-row">
+              <div class="comp-order">1</div>
+              <div class="comp-title">轮播图</div>
+              <div class="drag-handle"><i></i><i></i><i></i></div>
+              <div class="row-arrow"></div>
+            </div>
+            <div class="comp-row">
+              <div class="comp-order">2</div>
+              <div class="comp-title">个人资料</div>
+              <div class="drag-handle"><i></i><i></i><i></i></div>
+              <div class="row-arrow"></div>
+            </div>
+          </div>
+          <div class="add-comp-btn">添加组件</div>
+        </div>
+      </div>
+      <div class="bottom-actions">
+        <div class="act-btn soft">保存草稿</div>
+        <div class="act-btn dark">预览草稿<span class="note">请保存后预览</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 04 编辑页 · 编辑「作品」菜单（空态） ============ -->
+  <div class="phone-slot">
+    <div class="phone-label">04 编辑页 · 编辑「作品」菜单（空态）<span class="path">standard-edit · activeMenu=作品 · 次级菜单草稿允许为空</span></div>
+    <div class="frame">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="sicons">
+          <svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="#212529"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="#212529"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="#212529"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="#212529"/></svg>
+          <svg width="16" height="11" viewBox="0 0 16 11"><path d="M8 10.2 5.4 7.6a3.7 3.7 0 0 1 5.2 0L8 10.2zM3 5.2a7.1 7.1 0 0 1 10 0l-1.5 1.5a5.1 5.1 0 0 0-7 0L3 5.2zM.6 2.8a10.6 10.6 0 0 1 14.8 0L13.9 4.3a8.6 8.6 0 0 0-11.8 0L.6 2.8z" fill="#212529"/></svg>
+          <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0.5" y="0.5" width="21" height="11" rx="3" fill="none" stroke="#212529" opacity=".4"/><rect x="2" y="2" width="16" height="8" rx="1.6" fill="#212529"/><path d="M23 4v4c1-.3 1.6-1 1.6-2S24 4.3 23 4z" fill="#212529" opacity=".4"/></svg>
+        </span>
+      </div>
+      <div class="navbar"><span class="back"></span>标准个人作品集</div>
+      <div class="ed-page">
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <div class="sec-title">页面设置</div>
+              <div class="sec-desc">背景色与底部导航，访客页即时生效</div>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="field-heading"><div class="field-label">背景色</div></div>
+            <div class="bg-color-row">
+              <div class="bg-current" style="background:#151515;"></div>
+              <div class="swatch cur" style="background:#151515;"></div>
+              <div class="swatch" style="background:#ffffff;"></div>
+              <div class="swatch" style="background:#f5f6f8;"></div>
+              <div class="custom-btn">自定义</div>
+              <div class="bg-hex">#151515</div>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="field-heading">
+              <div class="field-label">底部导航</div>
+              <div class="field-limit">2~4 个菜单</div>
+            </div>
+            <div class="nav-opt-row">
+              <div class="nav-opt">不开启</div>
+              <div class="nav-opt">2 个</div>
+              <div class="nav-opt on">3 个</div>
+              <div class="nav-opt">4 个</div>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <div class="sec-title">组件编排</div>
+              <div class="sec-desc">每个菜单单独维护一套组件</div>
+            </div>
+          </div>
+          <div class="menu-bar">
+            <div class="menu-item">主页<svg class="menu-pen" viewBox="0 0 12 12"><path d="M8.4 1.5a1.1 1.1 0 0 1 1.6 0l.5.5a1.1 1.1 0 0 1 0 1.6L4.2 10H2V7.8l6.4-6.3z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg></div>
+            <div class="menu-item on">作品<svg class="menu-pen" viewBox="0 0 12 12"><path d="M8.4 1.5a1.1 1.1 0 0 1 1.6 0l.5.5a1.1 1.1 0 0 1 0 1.6L4.2 10H2V7.8l6.4-6.3z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg></div>
+            <div class="menu-item">动态<svg class="menu-pen" viewBox="0 0 12 12"><path d="M8.4 1.5a1.1 1.1 0 0 1 1.6 0l.5.5a1.1 1.1 0 0 1 0 1.6L4.2 10H2V7.8l6.4-6.3z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg></div>
+          </div>
+          <div class="menu-rename">
+            <svg class="rename-pen" viewBox="0 0 12 12"><path d="M8.4 1.5a1.1 1.1 0 0 1 1.6 0l.5.5a1.1 1.1 0 0 1 0 1.6L4.2 10H2V7.8l6.4-6.3z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+            <div class="rename-text">作品</div>
+            <div class="rename-count">2/5</div>
+            <div class="rename-del">删除</div>
+          </div>
+          <div class="empty-comp">
+            <div class="empty-text">当前菜单还没有组件</div>
+          </div>
+          <div class="add-comp-btn">添加组件</div>
+        </div>
+      </div>
+      <div class="bottom-actions">
+        <div class="act-btn soft">保存草稿</div>
+        <div class="act-btn dark">预览草稿<span class="note">请保存后预览</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 05 编辑页弹层 · 删除菜单确认 ============ -->
+  <div class="phone-slot">
+    <div class="phone-label">05 编辑页弹层 · 删除菜单确认<span class="path">standard-edit · 菜单名称编辑态删除入口 · 被删菜单含组件需二次确认</span></div>
+    <div class="frame fixed-h">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="sicons">
+          <svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="#212529"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="#212529"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="#212529"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="#212529"/></svg>
+          <svg width="16" height="11" viewBox="0 0 16 11"><path d="M8 10.2 5.4 7.6a3.7 3.7 0 0 1 5.2 0L8 10.2zM3 5.2a7.1 7.1 0 0 1 10 0l-1.5 1.5a5.1 5.1 0 0 0-7 0L3 5.2zM.6 2.8a10.6 10.6 0 0 1 14.8 0L13.9 4.3a8.6 8.6 0 0 0-11.8 0L.6 2.8z" fill="#212529"/></svg>
+          <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0.5" y="0.5" width="21" height="11" rx="3" fill="none" stroke="#212529" opacity=".4"/><rect x="2" y="2" width="16" height="8" rx="1.6" fill="#212529"/><path d="M23 4v4c1-.3 1.6-1 1.6-2S24 4.3 23 4z" fill="#212529" opacity=".4"/></svg>
+        </span>
+      </div>
+      <div class="navbar"><span class="back"></span>标准个人作品集</div>
+      <div class="ed-page dimmed">
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <div class="sec-title">页面设置</div>
+              <div class="sec-desc">背景色与底部导航，访客页即时生效</div>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="field-heading">
+              <div class="field-label">底部导航</div>
+              <div class="field-limit">2~4 个菜单</div>
+            </div>
+            <div class="nav-opt-row">
+              <div class="nav-opt">不开启</div>
+              <div class="nav-opt">2 个</div>
+              <div class="nav-opt on">3 个</div>
+              <div class="nav-opt">4 个</div>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <div class="sec-title">组件编排</div>
+              <div class="sec-desc">每个菜单单独维护一套组件</div>
+            </div>
+          </div>
+          <div class="menu-bar">
+            <div class="menu-item on">主页<svg class="menu-pen" viewBox="0 0 12 12"><path d="M8.4 1.5a1.1 1.1 0 0 1 1.6 0l.5.5a1.1 1.1 0 0 1 0 1.6L4.2 10H2V7.8l6.4-6.3z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg></div>
+            <div class="menu-item">作品<svg class="menu-pen" viewBox="0 0 12 12"><path d="M8.4 1.5a1.1 1.1 0 0 1 1.6 0l.5.5a1.1 1.1 0 0 1 0 1.6L4.2 10H2V7.8l6.4-6.3z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg></div>
+            <div class="menu-item">动态<svg class="menu-pen" viewBox="0 0 12 12"><path d="M8.4 1.5a1.1 1.1 0 0 1 1.6 0l.5.5a1.1 1.1 0 0 1 0 1.6L4.2 10H2V7.8l6.4-6.3z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg></div>
+          </div>
+        </div>
+      </div>
+      <div class="mask"></div>
+      <div class="sheet">
+        <div class="grabber"></div>
+        <div class="sheet-heading">
+          <div class="sheet-title">删除菜单「动态」？</div>
+        </div>
+        <div class="confirm-desc">删除菜单「动态」将同时删除其下 2 个组件，此操作不可恢复。</div>
+        <div class="sheet-actions">
+          <div class="btn-cancel">取消</div>
+          <div class="btn-confirm danger">确认删除</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 06 编辑页弹层 · 删除第一菜单确认 ============ -->
+  <div class="phone-slot">
+    <div class="phone-label">06 编辑页弹层 · 删除第一菜单确认<span class="path">standard-edit · 删除「主页」· 第二菜单晋升为第一个菜单，无论是否为空都必须确认</span></div>
+    <div class="frame fixed-h">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="sicons">
+          <svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="#212529"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="#212529"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="#212529"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="#212529"/></svg>
+          <svg width="16" height="11" viewBox="0 0 16 11"><path d="M8 10.2 5.4 7.6a3.7 3.7 0 0 1 5.2 0L8 10.2zM3 5.2a7.1 7.1 0 0 1 10 0l-1.5 1.5a5.1 5.1 0 0 0-7 0L3 5.2zM.6 2.8a10.6 10.6 0 0 1 14.8 0L13.9 4.3a8.6 8.6 0 0 0-11.8 0L.6 2.8z" fill="#212529"/></svg>
+          <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0.5" y="0.5" width="21" height="11" rx="3" fill="none" stroke="#212529" opacity=".4"/><rect x="2" y="2" width="16" height="8" rx="1.6" fill="#212529"/><path d="M23 4v4c1-.3 1.6-1 1.6-2S24 4.3 23 4z" fill="#212529" opacity=".4"/></svg>
+        </span>
+      </div>
+      <div class="navbar"><span class="back"></span>标准个人作品集</div>
+      <div class="ed-page dimmed">
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <div class="sec-title">页面设置</div>
+              <div class="sec-desc">背景色与底部导航，访客页即时生效</div>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="field-heading">
+              <div class="field-label">底部导航</div>
+              <div class="field-limit">2~4 个菜单</div>
+            </div>
+            <div class="nav-opt-row">
+              <div class="nav-opt">不开启</div>
+              <div class="nav-opt">2 个</div>
+              <div class="nav-opt on">3 个</div>
+              <div class="nav-opt">4 个</div>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <div class="sec-title">组件编排</div>
+              <div class="sec-desc">每个菜单单独维护一套组件</div>
+            </div>
+          </div>
+          <div class="menu-bar">
+            <div class="menu-item on">主页<svg class="menu-pen" viewBox="0 0 12 12"><path d="M8.4 1.5a1.1 1.1 0 0 1 1.6 0l.5.5a1.1 1.1 0 0 1 0 1.6L4.2 10H2V7.8l6.4-6.3z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg></div>
+            <div class="menu-item">作品<svg class="menu-pen" viewBox="0 0 12 12"><path d="M8.4 1.5a1.1 1.1 0 0 1 1.6 0l.5.5a1.1 1.1 0 0 1 0 1.6L4.2 10H2V7.8l6.4-6.3z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg></div>
+            <div class="menu-item">动态<svg class="menu-pen" viewBox="0 0 12 12"><path d="M8.4 1.5a1.1 1.1 0 0 1 1.6 0l.5.5a1.1 1.1 0 0 1 0 1.6L4.2 10H2V7.8l6.4-6.3z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg></div>
+          </div>
+        </div>
+      </div>
+      <div class="mask"></div>
+      <div class="sheet">
+        <div class="grabber"></div>
+        <div class="sheet-heading">
+          <div class="sheet-title">删除菜单「主页」？</div>
+        </div>
+        <div class="confirm-desc">删除菜单「主页」将同时删除其下 3 个组件。「作品」将成为第一个菜单，旧版本小程序将展示「作品」的内容。</div>
+        <div class="sheet-actions">
+          <div class="btn-cancel">取消</div>
+          <div class="btn-confirm danger">确认删除</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 07 编辑页 · 发布校验错误定位 ============ -->
+  <div class="phone-slot">
+    <div class="phone-label">07 编辑页 · 发布校验错误定位<span class="path">standard-edit · 发布前集中校验所有菜单 · 自动切换到第一个失败菜单并滚动到错误组件</span></div>
+    <div class="frame">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="sicons">
+          <svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="#212529"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="#212529"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="#212529"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="#212529"/></svg>
+          <svg width="16" height="11" viewBox="0 0 16 11"><path d="M8 10.2 5.4 7.6a3.7 3.7 0 0 1 5.2 0L8 10.2zM3 5.2a7.1 7.1 0 0 1 10 0l-1.5 1.5a5.1 5.1 0 0 0-7 0L3 5.2zM.6 2.8a10.6 10.6 0 0 1 14.8 0L13.9 4.3a8.6 8.6 0 0 0-11.8 0L.6 2.8z" fill="#212529"/></svg>
+          <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0.5" y="0.5" width="21" height="11" rx="3" fill="none" stroke="#212529" opacity=".4"/><rect x="2" y="2" width="16" height="8" rx="1.6" fill="#212529"/><path d="M23 4v4c1-.3 1.6-1 1.6-2S24 4.3 23 4z" fill="#212529" opacity=".4"/></svg>
+        </span>
+      </div>
+      <div class="navbar"><span class="back"></span>标准个人作品集</div>
+      <div class="ed-page">
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <div class="sec-title">页面设置</div>
+              <div class="sec-desc">背景色与底部导航，访客页即时生效</div>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="field-heading">
+              <div class="field-label">底部导航</div>
+              <div class="field-limit">2~4 个菜单</div>
+            </div>
+            <div class="nav-opt-row">
+              <div class="nav-opt">不开启</div>
+              <div class="nav-opt">2 个</div>
+              <div class="nav-opt on">3 个</div>
+              <div class="nav-opt">4 个</div>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <div class="sec-title">组件编排</div>
+              <div class="sec-desc">每个菜单单独维护一套组件</div>
+            </div>
+          </div>
+          <div class="menu-bar">
+            <div class="menu-item">主页<svg class="menu-pen" viewBox="0 0 12 12"><path d="M8.4 1.5a1.1 1.1 0 0 1 1.6 0l.5.5a1.1 1.1 0 0 1 0 1.6L4.2 10H2V7.8l6.4-6.3z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg></div>
+            <div class="menu-item on">作品<svg class="menu-pen" viewBox="0 0 12 12"><path d="M8.4 1.5a1.1 1.1 0 0 1 1.6 0l.5.5a1.1 1.1 0 0 1 0 1.6L4.2 10H2V7.8l6.4-6.3z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg><span class="menu-dot"></span></div>
+            <div class="menu-item">动态<svg class="menu-pen" viewBox="0 0 12 12"><path d="M8.4 1.5a1.1 1.1 0 0 1 1.6 0l.5.5a1.1 1.1 0 0 1 0 1.6L4.2 10H2V7.8l6.4-6.3z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg></div>
+          </div>
+          <div class="err-banner">【作品】请选择轮播作品</div>
+          <div class="comp-list">
+            <div class="comp-row err">
+              <div class="comp-order">1</div>
+              <div class="comp-main">
+                <div class="comp-title">轮播图</div>
+                <div class="comp-err">请选择轮播作品</div>
+              </div>
+              <div class="drag-handle"><i></i><i></i><i></i></div>
+              <div class="row-arrow"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="bottom-actions">
+        <div class="act-btn soft">保存草稿</div>
+        <div class="act-btn dark">预览草稿<span class="note">请保存后预览</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 08 访客页 · 暗色主题（主页） ============ -->
+  <div class="phone-slot">
+    <div class="phone-label">08 访客页 · 暗色主题（主页）<span class="path">pages/portfolios/visitor-portfolio/visitor-portfolio · 背景 #151515 · activeMenu=主页</span></div>
+    <div class="frame" style="background:#151515; border-color:#343a40;">
+      <div class="statusbar dark">
+        <span>9:41</span>
+        <span class="sicons">
+          <svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="#f8f9fa"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="#f8f9fa"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="#f8f9fa"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="#f8f9fa"/></svg>
+          <svg width="16" height="11" viewBox="0 0 16 11"><path d="M8 10.2 5.4 7.6a3.7 3.7 0 0 1 5.2 0L8 10.2zM3 5.2a7.1 7.1 0 0 1 10 0l-1.5 1.5a5.1 5.1 0 0 0-7 0L3 5.2zM.6 2.8a10.6 10.6 0 0 1 14.8 0L13.9 4.3a8.6 8.6 0 0 0-11.8 0L.6 2.8z" fill="#f8f9fa"/></svg>
+          <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0.5" y="0.5" width="21" height="11" rx="3" fill="none" stroke="#f8f9fa" opacity=".4"/><rect x="2" y="2" width="16" height="8" rx="1.6" fill="#f8f9fa"/><path d="M23 4v4c1-.3 1.6-1 1.6-2S24 4.3 23 4z" fill="#f8f9fa" opacity=".4"/></svg>
+        </span>
+      </div>
+      <div class="navbar dark">个人作品集</div>
+      <div class="pv-page dark">
+
+        <!-- 轮播图组件 -->
+        <div class="folio-component" style="margin-top:12px;">
+          <div class="folio-carousel ph dark">轮播作品 1 / 3
+            <div class="carousel-progress">
+              <div class="seg-dot done"><i></i></div>
+              <div class="seg-dot cur"><i></i></div>
+              <div class="seg-dot"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 文字说明组件 -->
+        <div class="folio-component">
+          <div class="text-section">
+            <div class="text-title dark">服务说明</div>
+            <span class="text-content dark">承接婚礼、宝宝宴、企业年会主持，杭州及周边可约。档期以月历为准，欢迎提前预留联系信息。</span>
+          </div>
+        </div>
+
+        <!-- 双列作品列表组件 -->
+        <div class="folio-component">
+          <div class="work-section-title dark">作品列表</div>
+          <div class="work-grid">
+            <div class="grid-card">
+              <div class="work-cover-wrap ph dark">作品图</div>
+              <div class="work-title dark">户外草坪婚礼</div>
+            </div>
+            <div class="grid-card">
+              <div class="work-cover-wrap ph dark">作品图</div>
+              <div class="work-title dark">酒店晚宴主持</div>
+            </div>
+            <div class="grid-card">
+              <div class="work-cover-wrap ph dark">视频封面</div>
+              <div class="work-title dark">宝宝周岁宴</div>
+            </div>
+            <div class="grid-card">
+              <div class="work-cover-wrap ph dark">作品图</div>
+              <div class="work-title dark">亲友答谢宴</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="brand-footer">
+          <img class="brand-logo dark" src="assets/system/folio-logo-stack-bold-small-50kb.png" alt="映期Folio">
+          <div class="brand-name dark">映期Folio</div>
+        </div>
+      </div>
+      <div class="visit-nav-wrap dark">
+        <div class="visit-nav dark">
+          <div class="vn-item on">主页</div>
+          <div class="vn-item">作品</div>
+          <div class="vn-item">动态</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 09 访客页 · 暗色主题（切换「作品」菜单） ============ -->
+  <div class="phone-slot">
+    <div class="phone-label">09 访客页 · 暗色主题（切换「作品」菜单）<span class="path">visitor-portfolio · 背景 #151515 · activeMenu=作品</span></div>
+    <div class="frame" style="background:#151515; border-color:#343a40;">
+      <div class="statusbar dark">
+        <span>9:41</span>
+        <span class="sicons">
+          <svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="#f8f9fa"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="#f8f9fa"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="#f8f9fa"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="#f8f9fa"/></svg>
+          <svg width="16" height="11" viewBox="0 0 16 11"><path d="M8 10.2 5.4 7.6a3.7 3.7 0 0 1 5.2 0L8 10.2zM3 5.2a7.1 7.1 0 0 1 10 0l-1.5 1.5a5.1 5.1 0 0 0-7 0L3 5.2zM.6 2.8a10.6 10.6 0 0 1 14.8 0L13.9 4.3a8.6 8.6 0 0 0-11.8 0L.6 2.8z" fill="#f8f9fa"/></svg>
+          <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0.5" y="0.5" width="21" height="11" rx="3" fill="none" stroke="#f8f9fa" opacity=".4"/><rect x="2" y="2" width="16" height="8" rx="1.6" fill="#f8f9fa"/><path d="M23 4v4c1-.3 1.6-1 1.6-2S24 4.3 23 4z" fill="#f8f9fa" opacity=".4"/></svg>
+        </span>
+      </div>
+      <div class="navbar dark">个人作品集</div>
+      <div class="pv-page dark">
+
+        <!-- 双列作品列表组件 -->
+        <div class="folio-component" style="margin-top:12px;">
+          <div class="work-section-title dark">作品列表</div>
+          <div class="work-grid">
+            <div class="grid-card">
+              <div class="work-cover-wrap ph dark">作品图</div>
+              <div class="work-title dark">户外草坪婚礼</div>
+              <div class="work-desc dark">午宴仪式全程主持</div>
+            </div>
+            <div class="grid-card">
+              <div class="work-cover-wrap ph dark">作品图</div>
+              <div class="work-title dark">酒店晚宴主持</div>
+            </div>
+            <div class="grid-card">
+              <div class="work-cover-wrap ph dark">视频封面</div>
+              <div class="work-title dark">宝宝周岁宴</div>
+            </div>
+            <div class="grid-card">
+              <div class="work-cover-wrap ph dark">作品图</div>
+              <div class="work-title dark">亲友答谢宴</div>
+            </div>
+            <div class="grid-card">
+              <div class="work-cover-wrap ph dark">作品图</div>
+              <div class="work-title dark">企业年会</div>
+            </div>
+            <div class="grid-card">
+              <div class="work-cover-wrap ph dark">作品图</div>
+              <div class="work-title dark">西湖订婚宴</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 档期查询入口（页面内入口跟随整页主题，弹层仍为浅色卡片） -->
+        <div class="folio-component">
+          <div class="sq-entry dark">档期查询</div>
+        </div>
+
+        <div class="brand-footer">
+          <img class="brand-logo dark" src="assets/system/folio-logo-stack-bold-small-50kb.png" alt="映期Folio">
+          <div class="brand-name dark">映期Folio</div>
+        </div>
+      </div>
+      <div class="visit-nav-wrap dark">
+        <div class="visit-nav dark">
+          <div class="vn-item">主页</div>
+          <div class="vn-item on">作品</div>
+          <div class="vn-item">动态</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 10 访客页 · 亮灰底（2 个菜单） ============ -->
+  <div class="phone-slot">
+    <div class="phone-label">10 访客页 · 亮灰底（2 个菜单）<span class="path">visitor-portfolio · 背景 #F5F6F8 · 亮色模式 · 导航选中态墨色高亮</span></div>
+    <div class="frame" style="background:#f5f6f8;">
+      <div class="statusbar lg">
+        <span>9:41</span>
+        <span class="sicons">
+          <svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="#212529"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="#212529"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="#212529"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="#212529"/></svg>
+          <svg width="16" height="11" viewBox="0 0 16 11"><path d="M8 10.2 5.4 7.6a3.7 3.7 0 0 1 5.2 0L8 10.2zM3 5.2a7.1 7.1 0 0 1 10 0l-1.5 1.5a5.1 5.1 0 0 0-7 0L3 5.2zM.6 2.8a10.6 10.6 0 0 1 14.8 0L13.9 4.3a8.6 8.6 0 0 0-11.8 0L.6 2.8z" fill="#212529"/></svg>
+          <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0.5" y="0.5" width="21" height="11" rx="3" fill="none" stroke="#212529" opacity=".4"/><rect x="2" y="2" width="16" height="8" rx="1.6" fill="#212529"/><path d="M23 4v4c1-.3 1.6-1 1.6-2S24 4.3 23 4z" fill="#212529" opacity=".4"/></svg>
+        </span>
+      </div>
+      <div class="navbar lg">个人作品集</div>
+      <div class="pv-page lg">
+
+        <!-- 轮播图组件 -->
+        <div class="folio-component" style="margin-top:12px;">
+          <div class="folio-carousel ph">轮播作品 1 / 3
+            <div class="carousel-progress">
+              <div class="seg-dot done"><i></i></div>
+              <div class="seg-dot cur"><i></i></div>
+              <div class="seg-dot"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 双列作品列表组件 -->
+        <div class="folio-component">
+          <div class="work-section-title">作品列表</div>
+          <div class="work-grid">
+            <div class="grid-card">
+              <div class="work-cover-wrap ph">作品图</div>
+              <div class="work-title">户外草坪婚礼</div>
+            </div>
+            <div class="grid-card">
+              <div class="work-cover-wrap ph ph-b">作品图</div>
+              <div class="work-title">酒店晚宴主持</div>
+            </div>
+            <div class="grid-card">
+              <div class="work-cover-wrap ph ph-c">视频封面</div>
+              <div class="work-title">宝宝周岁宴</div>
+            </div>
+            <div class="grid-card">
+              <div class="work-cover-wrap ph ph-b">作品图</div>
+              <div class="work-title">亲友答谢宴</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="brand-footer">
+          <img class="brand-logo" src="assets/system/folio-logo-stack-bold-small-50kb.png" alt="映期Folio">
+          <div class="brand-name">映期Folio</div>
+        </div>
+      </div>
+      <div class="visit-nav-wrap lg">
+        <div class="visit-nav light">
+          <div class="vn-item on">主页</div>
+          <div class="vn-item">档期</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="doc-header" style="margin-top:32px;">
+  <div class="sub">
+    说明：本稿为 <code>docs/portfolio-background-bottom-nav-design.md</code> 的静态 UI 稿。明暗模式由后端按 YIQ 亮度（<code>yiq &lt; 128 =&gt; dark</code>）随 <code>renderData.style.themeMode</code> 下发，配置只保存 <code>style.backgroundColor</code>；导航栏样式不可自定义，仅跟随背景明暗。第一菜单「主页」组件始终存于顶层 <code>components</code>，次级菜单组件存于 <code>bottomNav.items[n].components</code>，旧访客端可完整展示第一菜单。菜单切换条上的铅笔图标表示菜单名可编辑（1~5 字、菜单内不可重复，见 04 框编辑态字数计数与删除入口）。档期查询、联系表单等功能弹层继续使用浅色卡片，只有页面内入口跟随整页主题（见 09 框）。08 / 09 框品牌页脚 logo 以 <code>filter: invert</code> 示意反白，实现时由共享 <code>portfolio-theme.wxss</code> 变量控制。
+  </div>
+</div>
+
+</body>
+</html>

@@ -33,8 +33,11 @@ public class MineWorkUploadCompleteResponse {
         /** 作品标题 */
         private String title;
 
-        /** 媒体类型：IMAGE / VIDEO */
+        /** 媒体类型：IMAGE / VIDEO / ANIMATION */
         private String mediaType;
+
+        /** 可选错误码，仅需要客户端执行专用回退流程时返回 */
+        private String errorCode;
 
         /** 结果消息 */
         private String message;
@@ -68,9 +71,22 @@ public class MineWorkUploadCompleteResponse {
          * @return 失败结果
          */
         public static Item failure(Long taskId, String message) {
+            return failure(taskId, null, message);
+        }
+
+        /**
+         * 构造带错误码的失败结果。
+         *
+         * @param taskId 上传任务 ID
+         * @param errorCode 可选错误码
+         * @param message 失败消息
+         * @return 失败结果
+         */
+        public static Item failure(Long taskId, String errorCode, String message) {
             Item item = new Item();
             item.setTaskId(taskId);
             item.setSuccess(false);
+            item.setErrorCode(errorCode);
             item.setMessage(message);
             return item;
         }

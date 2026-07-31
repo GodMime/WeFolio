@@ -1,11 +1,11 @@
 .team-portfolio-compat-page {
   min-height: 100vh;
-  background: #f5f7fb;
+  background: #f5f6f7;
 }
 
 .compat-loading {
-  padding: 80rpx 28rpx;
-  color: #697786;
+  padding: 80rpx 32rpx;
+  color: #868e96;
   font-size: 26rpx;
   line-height: 1.5;
   text-align: center;

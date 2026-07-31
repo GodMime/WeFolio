@@ -65,6 +65,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 /**
@@ -83,6 +84,9 @@ public class MineWorkService {
 
     /** 视频最大字节数 */
     public static final long VIDEO_MAX_BYTES = 100L * 1024L * 1024L;
+
+    /** 动图最大字节数 */
+    public static final long ANIMATION_MAX_BYTES = 10L * 1024L * 1024L;
 
     /** 视频最大时长毫秒 */
     public static final int VIDEO_MAX_DURATION_MS = 10 * 60 * 1000;
@@ -132,11 +136,17 @@ public class MineWorkService {
     /** 视频 COS 目录 */
     private static final String WORK_VIDEO_FOLDER = "work/video";
 
+    /** 动图 COS 目录 */
+    private static final String WORK_ANIMATION_FOLDER = "work/animation";
+
     /** 图片作品文件名类型标识 */
     private static final String IMAGE_FILE_MARKER = "P";
 
     /** 视频作品文件名类型标识 */
     private static final String VIDEO_FILE_MARKER = "V";
+
+    /** 动图作品文件名类型标识 */
+    private static final String ANIMATION_FILE_MARKER = "A";
 
     /** 作品文件名字段分隔符 */
     private static final String WORK_FILE_NAME_SEPARATOR = "-";
@@ -231,6 +241,27 @@ public class MineWorkService {
     /** 视频扩展名 */
     private static final Set<String> VIDEO_EXTENSIONS = Set.of("mp4", "mov", "m4v");
 
+    /** 动图扩展名 */
+    private static final Set<String> ANIMATION_EXTENSIONS = Set.of("gif", "webp");
+
+    /** 动图严格 MIME 白名单 */
+    private static final Set<String> ANIMATION_MIME_TYPES = Set.of("image/gif", "image/webp");
+
+    /** 单帧动图回退错误码 */
+    private static final String ANIMATION_SINGLE_FRAME_ERROR_CODE = "ANIMATION_SINGLE_FRAME";
+
+    /** 单帧动图回退提示 */
+    private static final String ANIMATION_SINGLE_FRAME_MESSAGE = "该文件只有 1 帧，将按图片重新上传";
+
+    /** 动图封面生成任务幂等前缀 */
+    private static final String ANIMATION_COVER_IDEMPOTENCY_PREFIX = "WORK_ANIMATION_COVER:";
+
+    /** 动图封面任务批次前缀 */
+    private static final String ANIMATION_COVER_BATCH_PREFIX = "edit-animation-cover-";
+
+    /** 保证版本化封面对象键在同一进程内严格递增 */
+    private static final AtomicLong LAST_COVER_VERSION_MILLIS = new AtomicLong();
+
     /** 作品标签固定色板 */
     private static final Set<String> TAG_COLOR_OPTIONS = Set.of(
             "#0f766e",
@@ -270,6 +301,9 @@ public class MineWorkService {
 
     /** COS 服务 */
     private final CosService cosService;
+
+    /** 动图 COS 数据万象服务 */
+    private final AnimationCosService animationCosService;
 
     /** 上传确认事务服务 */
     private final WorkUploadTransactionService workUploadTransactionService;
@@ -517,6 +551,7 @@ public class MineWorkService {
         response.setMaxBatchCount(MAX_BATCH_COUNT);
         response.setImageMaxBytes(IMAGE_MAX_BYTES);
         response.setVideoMaxBytes(VIDEO_MAX_BYTES);
+        response.setAnimationMaxBytes(ANIMATION_MAX_BYTES);
         response.setVideoMaxDurationMs(VIDEO_MAX_DURATION_MS);
         List<PreparedUploadFile> preparedFiles = prepareUploadFiles(userId, user.getUniqueCode(), batchId, files);
         ensureBatchWorkCapacity(userId, preparedFiles);
@@ -560,11 +595,18 @@ public class MineWorkService {
                 .filter(this::isMainWorkUpload)
                 .filter(item -> MediaTypeDict.VIDEO.getCode().equals(item.mediaType()))
                 .count();
+        long animationCount = preparedFiles.stream()
+                .filter(this::isMainWorkUpload)
+                .filter(item -> MediaTypeDict.ANIMATION.getCode().equals(item.mediaType()))
+                .count();
         if (imageCount > 0L) {
             contentLimitService.ensureWorkCapacity(userId, MediaTypeDict.IMAGE.getCode(), imageCount);
         }
         if (videoCount > 0L) {
             contentLimitService.ensureWorkCapacity(userId, MediaTypeDict.VIDEO.getCode(), videoCount);
+        }
+        if (animationCount > 0L) {
+            contentLimitService.ensureWorkCapacity(userId, MediaTypeDict.ANIMATION.getCode(), animationCount);
         }
     }
 
@@ -652,12 +694,31 @@ public class MineWorkService {
         MineWorkUploadCompleteResponse response = new MineWorkUploadCompleteResponse();
         for (MineWorkUploadCompleteRequest.CompleteItem item : items) {
             Long taskId = item == null ? null : item.getTaskId();
+            WorkUploadTaskEntity task = null;
+            boolean confirmedBeforeAttempt = false;
             try {
-                WorkUploadTaskEntity task = requireOwnedUploadTask(userId, taskId);
+                task = requireOwnedUploadTask(userId, taskId);
+                confirmedBeforeAttempt = WorkUploadTaskStatusDict.CONFIRMED.getCode()
+                        .equals(task.getStatus());
                 CosService.ObjectHead head = validateCosObject(task);
+                if (!WorkUploadTaskStatusDict.CONFIRMED.getCode().equals(task.getStatus())) {
+                    prepareAnimationForConfirmation(task, item);
+                    validateDynamicImageType(task);
+                }
                 ensureGeneratedVideoCoverTask(userId, task, item);
                 validateCoverTask(userId, task, head, item);
                 response.getItems().add(workUploadTransactionService.confirmUploadedTask(userId, task, item));
+            } catch (AnimationSingleFrameException e) {
+                cleanupAnimationObjects(task, "single-frame", confirmedBeforeAttempt);
+                markTaskFailedIfPossible(userId, taskId, e.getMessage());
+                response.getItems().add(MineWorkUploadCompleteResponse.Item.failure(
+                        taskId,
+                        ANIMATION_SINGLE_FRAME_ERROR_CODE,
+                        e.getMessage()));
+            } catch (AnimationRejectedException e) {
+                cleanupAnimationObjects(task, "animation-rejected", confirmedBeforeAttempt);
+                markTaskFailedIfPossible(userId, taskId, e.getMessage());
+                response.getItems().add(MineWorkUploadCompleteResponse.Item.failure(taskId, e.getMessage()));
             } catch (BusinessException e) {
                 markTaskFailedIfPossible(userId, taskId, e.getMessage());
                 response.getItems().add(MineWorkUploadCompleteResponse.Item.failure(taskId, e.getMessage()));
@@ -673,6 +734,209 @@ public class MineWorkService {
     }
 
     /**
+     * 动图确认前读取权威元数据并生成默认首帧封面。
+     *
+     * @param task 动图上传任务
+     * @param item 确认参数
+     */
+    private void prepareAnimationForConfirmation(
+            WorkUploadTaskEntity task,
+            MineWorkUploadCompleteRequest.CompleteItem item
+    ) {
+        if (!MediaTypeDict.ANIMATION.getCode().equals(task.getMediaType())) {
+            return;
+        }
+        if (item != null && item.getCoverTaskId() != null) {
+            throw new BusinessException("动图封面由服务端生成，不能使用上传封面任务");
+        }
+        AnimationCosService.AnimationMetadata metadata = animationCosService.inspect(task.getObjectKey());
+        validateAnimationFormat(task, metadata);
+        if (metadata.frameCount() == 1) {
+            throw new AnimationSingleFrameException();
+        }
+        if (metadata.frameCount() < AnimationCosService.ANIMATION_MIN_FRAME_COUNT
+                || metadata.frameCount() > AnimationCosService.ANIMATION_MAX_FRAME_COUNT) {
+            throw new AnimationRejectedException("动图帧数必须在 2 至 300 帧之间");
+        }
+        String coverObjectKey = buildThumbObjectKeyFromSource(task, THUMB_FILE_EXTENSION);
+        AnimationCosService.GeneratedFrame cover = animationCosService.generateCover(
+                task.getObjectKey(),
+                coverObjectKey,
+                1);
+        task.setFrameCount(metadata.frameCount());
+        task.setWidth(metadata.width());
+        task.setHeight(metadata.height());
+        task.setCoverObjectKey(cover.objectKey());
+        task.setCoverSha256(cover.sha256());
+        if (workUploadTaskEntityMapper.updateById(task) != 1) {
+            reuseConcurrentAnimationPreparation(task, metadata);
+        }
+    }
+
+    /**
+     * 当前准备请求输掉乐观锁时，复用并发赢家已经持久化的权威元数据和唯一封面。
+     *
+     * @param task 当前请求任务快照
+     * @param metadata 当前请求读取的权威动图元数据
+     */
+    private void reuseConcurrentAnimationPreparation(
+            WorkUploadTaskEntity task,
+            AnimationCosService.AnimationMetadata metadata
+    ) {
+        WorkUploadTaskEntity latest = workUploadTaskEntityMapper.selectById(task.getId());
+        if (latest == null
+                || !task.getUserId().equals(latest.getUserId())
+                || !MediaTypeDict.ANIMATION.getCode().equals(latest.getMediaType())
+                || !normalizeText(task.getObjectKey()).equals(normalizeText(latest.getObjectKey()))
+                || latest.getFrameCount() == null
+                || latest.getFrameCount() != metadata.frameCount()
+                || !hasText(latest.getCoverObjectKey())
+                || !hasText(latest.getCoverSha256())) {
+            throw new BusinessException(MineWorkMessage.UPLOAD_CONFIRM_UNEXPECTED_FAILED_MESSAGE);
+        }
+        task.setFrameCount(latest.getFrameCount());
+        task.setWidth(latest.getWidth());
+        task.setHeight(latest.getHeight());
+        task.setCoverObjectKey(latest.getCoverObjectKey());
+        task.setCoverSha256(latest.getCoverSha256());
+    }
+
+    /**
+     * 旧版客户端按图片上传 GIF/WebP 时校验其确实为单帧静态图片。
+     *
+     * @param task 图片上传任务
+     */
+    private void validateDynamicImageType(WorkUploadTaskEntity task) {
+        if (!MediaTypeDict.IMAGE.getCode().equals(task.getMediaType()) || !isGifOrWebpCandidate(task)) {
+            return;
+        }
+        AnimationCosService.AnimationMetadata metadata = animationCosService.inspect(task.getObjectKey());
+        try {
+            validateLegacyImageCandidateFormat(task, metadata);
+            if (metadata.frameCount() > 1) {
+                throw new BusinessException("检测到动态图片，请使用动图作品上传");
+            }
+        } catch (BusinessException exception) {
+            animationCosService.deleteQuietly(task.getObjectKey(), "image-animation-type-invalid");
+            throw exception;
+        }
+    }
+
+    /**
+     * 校验旧版 IMAGE 候选的权威格式。
+     *
+     * <p>旧小程序在微信未返回 MIME 时会把 GIF/WebP 默认声明为 image/jpeg，因此这里只要求
+     * 权威格式与文件扩展名一致；声明 MIME 可以是实际类型或旧版默认 JPEG。</p>
+     *
+     * @param task 图片上传任务
+     * @param metadata 权威元数据
+     */
+    private void validateLegacyImageCandidateFormat(
+            WorkUploadTaskEntity task,
+            AnimationCosService.AnimationMetadata metadata
+    ) {
+        String actualFormat = normalizeText(metadata == null ? null : metadata.format())
+                .toLowerCase(Locale.ROOT);
+        String extension = extensionFromFileName(task.getOriginalFileName());
+        String mimeType = normalizeText(task.getMimeType()).toLowerCase(Locale.ROOT);
+        String actualMimeType = "image/" + actualFormat;
+        boolean compatibleMimeType = actualMimeType.equals(mimeType) || "image/jpeg".equals(mimeType);
+        if (!ANIMATION_EXTENSIONS.contains(actualFormat)
+                || !actualFormat.equals(extension)
+                || !compatibleMimeType) {
+            throw new BusinessException("上传文件格式与任务不一致");
+        }
+    }
+
+    /**
+     * 校验任务声明的扩展名、MIME 与数据万象实际格式一致。
+     *
+     * @param task 上传任务
+     * @param metadata 权威元数据
+     */
+    private void validateAnimationFormat(
+            WorkUploadTaskEntity task,
+            AnimationCosService.AnimationMetadata metadata
+    ) {
+        String actualFormat = normalizeText(metadata == null ? null : metadata.format())
+                .toLowerCase(Locale.ROOT);
+        String extension = extensionFromFileName(task.getOriginalFileName());
+        String mimeType = normalizeText(task.getMimeType()).toLowerCase(Locale.ROOT);
+        String expectedMimeType = "image/" + actualFormat;
+        if (!ANIMATION_EXTENSIONS.contains(actualFormat)
+                || !actualFormat.equals(extension)
+                || !expectedMimeType.equals(mimeType)) {
+            throw new AnimationRejectedException("上传文件格式与任务不一致");
+        }
+    }
+
+    /**
+     * 判断图片任务是否需要权威帧数检查。
+     *
+     * @param task 图片任务
+     * @return 是否 GIF/WebP 候选
+     */
+    private boolean isGifOrWebpCandidate(WorkUploadTaskEntity task) {
+        String extension = extensionFromFileName(task.getOriginalFileName());
+        String mimeType = normalizeText(task.getMimeType()).toLowerCase(Locale.ROOT);
+        return ANIMATION_EXTENSIONS.contains(extension) || ANIMATION_MIME_TYPES.contains(mimeType);
+    }
+
+    /**
+     * 确认失败时补偿清理动图原文件和已生成封面。
+     *
+     * @param task 上传任务
+     * @param context 清理上下文
+     * @param confirmedBeforeAttempt 本次确认前任务是否已经确认
+     */
+    private void cleanupAnimationObjects(
+            WorkUploadTaskEntity task,
+            String context,
+            boolean confirmedBeforeAttempt
+    ) {
+        if (task == null
+                || confirmedBeforeAttempt
+                || !MediaTypeDict.ANIMATION.getCode().equals(task.getMediaType())) {
+            return;
+        }
+        if (animationTaskHasConfirmedOwner(task)) {
+            return;
+        }
+        animationCosService.deleteQuietly(task.getObjectKey(), context + "-source");
+        if (hasText(task.getCoverObjectKey())
+                && !normalizeText(task.getCoverObjectKey()).equals(normalizeText(task.getObjectKey()))) {
+            animationCosService.deleteQuietly(task.getCoverObjectKey(), context + "-cover");
+        }
+    }
+
+    /**
+     * 清理前重新读取任务最终状态，避免并发确认已成功后使用旧快照误删线上对象。
+     *
+     * <p>无法确认数据库状态时保守跳过删除，后续可通过存储清理任务处理孤立对象。</p>
+     *
+     * @param task 本次确认使用的任务快照
+     * @return 是否已有作品取得该任务对象的归属，或当前状态不适合安全删除
+     */
+    private boolean animationTaskHasConfirmedOwner(WorkUploadTaskEntity task) {
+        if (task.getId() == null) {
+            return true;
+        }
+        try {
+            WorkUploadTaskEntity latest = workUploadTaskEntityMapper.selectById(task.getId());
+            if (latest == null || !task.getUserId().equals(latest.getUserId())) {
+                log.warn("动图确认失败清理跳过: taskId={}, reason=任务最终状态不可确认", task.getId());
+                return true;
+            }
+            return WorkUploadTaskStatusDict.CONFIRMED.getCode().equals(latest.getStatus())
+                    || latest.getConfirmedWorkId() != null;
+        } catch (RuntimeException exception) {
+            log.warn("动图确认失败清理跳过: taskId={}, reason=读取任务最终状态失败",
+                    task.getId(), exception);
+            return true;
+        }
+    }
+
+    /**
      * 更新作品资料。
      *
      * @param workId 作品 ID
@@ -685,10 +949,20 @@ public class MineWorkService {
         Long coverFrameTimeMs = request == null ? null : request.getCoverFrameTimeMs();
         Long coverTaskId = request == null ? null : request.getCoverTaskId();
         Long thumbnailTaskId = request == null ? null : request.getThumbnailTaskId();
+        Integer animationCoverFrameNumber = request == null ? null : request.getCoverFrameNumber();
+        String animationCoverClientKey = normalizeText(
+                request == null ? null : request.getCoverFrameIdempotencyKey());
+        boolean hasAnimationFrame = animationCoverFrameNumber != null;
+        boolean hasAnimationClientKey = !animationCoverClientKey.isBlank();
+        if (hasAnimationFrame != hasAnimationClientKey) {
+            throw new BusinessException(MineWorkMessage.ANIMATION_COVER_FIELDS_REQUIRED_MESSAGE);
+        }
+        boolean animationCoverRequested = hasAnimationFrame;
         int coverEditModeCount = 0;
         coverEditModeCount += coverFrameTimeMs == null ? 0 : 1;
         coverEditModeCount += coverTaskId == null ? 0 : 1;
         coverEditModeCount += thumbnailTaskId == null ? 0 : 1;
+        coverEditModeCount += animationCoverRequested ? 1 : 0;
         if (coverEditModeCount > 1) {
             throw new BusinessException(MineWorkMessage.COVER_EDIT_MODE_CONFLICT_MESSAGE);
         }
@@ -713,6 +987,12 @@ public class MineWorkService {
         WorkUploadTaskEntity uploadedThumbnailTask = thumbnailTaskId == null
                 ? null
                 : validateImageThumbnailTask(work, thumbnailTaskId);
+        AnimationCoverPreparation animationCover = animationCoverRequested
+                ? prepareAnimationReplacementCover(
+                        work,
+                        animationCoverFrameNumber,
+                        animationCoverClientKey)
+                : null;
         work.setTitle(title);
         work.setDescription(description);
         if (generatedCover != null) {
@@ -731,29 +1011,44 @@ public class MineWorkService {
             work.setCoverObjectKey(uploadedThumbnailTask.getObjectKey());
             work.setCoverSha256(uploadedThumbnailTask.getFileSha256());
         }
-        int updated = workEntityMapper.updateById(work);
-        if (updated <= 0) {
-            deleteGeneratedCoverIfNeeded(generatedCover, oldCoverObjectKey, work.getMediaObjectKey());
-            deleteUploadedCoverIfNeeded(uploadedCoverTask, oldCoverObjectKey, work.getMediaObjectKey());
-            deleteUploadedCoverIfNeeded(uploadedThumbnailTask, oldCoverObjectKey, work.getMediaObjectKey());
-            throw new BusinessException(MineWorkMessage.WORK_SAVE_FAILED_MESSAGE);
+        if (animationCover != null) {
+            work.setCoverObjectKey(animationCover.task().getObjectKey());
+            work.setCoverSha256(animationCover.task().getFileSha256());
+            work.setCoverFrameNumber(animationCover.frameNumber());
+            registerAnimationCoverRollbackCleanup(animationCover);
         }
-        if (uploadedCoverTask != null) {
-            confirmReplacementCoverTask(uploadedCoverTask, work.getId(), oldCoverObjectKey, work.getMediaObjectKey());
+        try {
+            int updated = workEntityMapper.updateById(work);
+            if (updated <= 0) {
+                deleteGeneratedCoverIfNeeded(generatedCover, oldCoverObjectKey, work.getMediaObjectKey());
+                deleteUploadedCoverIfNeeded(uploadedCoverTask, oldCoverObjectKey, work.getMediaObjectKey());
+                deleteUploadedCoverIfNeeded(uploadedThumbnailTask, oldCoverObjectKey, work.getMediaObjectKey());
+                throw new BusinessException(MineWorkMessage.WORK_SAVE_FAILED_MESSAGE);
+            }
+            if (uploadedCoverTask != null) {
+                confirmReplacementCoverTask(uploadedCoverTask, work.getId(), oldCoverObjectKey, work.getMediaObjectKey());
+            }
+            if (uploadedThumbnailTask != null) {
+                confirmImageThumbnailTask(
+                        uploadedThumbnailTask,
+                        work.getId(),
+                        oldCoverObjectKey,
+                        work.getMediaObjectKey());
+            }
+            if (animationCover != null) {
+                confirmAnimationCoverTask(animationCover.task(), work.getId());
+            }
+            if (generatedCover != null
+                    || uploadedCoverTask != null
+                    || uploadedThumbnailTask != null
+                    || animationCover != null) {
+                deleteOldCoverIfNeeded(oldCoverObjectKey, work.getCoverObjectKey(), work.getMediaObjectKey());
+            }
+            return getWorkDetail(work.getId());
+        } catch (RuntimeException exception) {
+            cleanupNewAnimationCoverWithoutSynchronization(animationCover, "update-animation-cover-failed");
+            throw exception;
         }
-        if (uploadedThumbnailTask != null) {
-            confirmImageThumbnailTask(uploadedThumbnailTask, work.getId(), oldCoverObjectKey, work.getMediaObjectKey());
-        }
-        if (generatedCover != null) {
-            deleteOldCoverIfNeeded(oldCoverObjectKey, work.getCoverObjectKey(), work.getMediaObjectKey());
-        }
-        if (uploadedCoverTask != null) {
-            deleteOldCoverIfNeeded(oldCoverObjectKey, work.getCoverObjectKey(), work.getMediaObjectKey());
-        }
-        if (uploadedThumbnailTask != null) {
-            deleteOldCoverIfNeeded(oldCoverObjectKey, work.getCoverObjectKey(), work.getMediaObjectKey());
-        }
-        return getWorkDetail(work.getId());
     }
 
     /**
@@ -1069,6 +1364,20 @@ public class MineWorkService {
     }
 
     /**
+     * 动图封面生成准备结果。
+     *
+     * @param task 幂等生成任务
+     * @param frameNumber 已选择帧号
+     * @param newlyGenerated 本次是否新生成对象
+     */
+    private record AnimationCoverPreparation(
+            WorkUploadTaskEntity task,
+            int frameNumber,
+            boolean newlyGenerated
+    ) {
+    }
+
+    /**
      * 保存上传任务；重复提交时按幂等键返回已有任务。
      *
      * @param task 待保存任务
@@ -1318,18 +1627,27 @@ public class MineWorkService {
         }
         String mediaType = normalizeMediaType(file.getMediaType());
         long fileSize = file.getFileSize() == null ? 0L : file.getFileSize();
+        if (fileSize <= 0L) {
+            throw new BusinessException("上传文件不能为空");
+        }
         if (MediaTypeDict.IMAGE.getCode().equals(mediaType) && fileSize > IMAGE_MAX_BYTES) {
             throw new BusinessException("图片作品不能超过 10MB");
         }
         if (MediaTypeDict.VIDEO.getCode().equals(mediaType) && fileSize > VIDEO_MAX_BYTES) {
             throw new BusinessException("视频作品不能超过 100MB");
         }
+        if (MediaTypeDict.ANIMATION.getCode().equals(mediaType) && fileSize > ANIMATION_MAX_BYTES) {
+            throw new BusinessException("动图作品不能超过 10MB");
+        }
         if (MediaTypeDict.VIDEO.getCode().equals(mediaType)
                 && file.getDurationMs() != null
                 && file.getDurationMs() > VIDEO_MAX_DURATION_MS) {
             throw new BusinessException("视频作品不能超过 10 分钟");
         }
-        normalizeExtension(file.getFileName(), file.getMimeType(), mediaType);
+        String extension = normalizeExtension(file.getFileName(), file.getMimeType(), mediaType);
+        if (MediaTypeDict.ANIMATION.getCode().equals(mediaType)) {
+            validateAnimationTicketType(extension, file.getMimeType());
+        }
     }
 
     /**
@@ -1437,6 +1755,180 @@ public class MineWorkService {
     }
 
     /**
+     * 按编辑会话幂等键生成或复用动图静态封面。
+     *
+     * @param work 动图作品
+     * @param frameNumber 帧序号
+     * @param clientKey 编辑会话幂等键
+     * @return 动图封面准备结果
+     */
+    private AnimationCoverPreparation prepareAnimationReplacementCover(
+            WorkEntity work,
+            Integer frameNumber,
+            String clientKey
+    ) {
+        if (!MediaTypeDict.ANIMATION.getCode().equals(work.getMediaType())) {
+            throw new BusinessException(MineWorkMessage.ANIMATION_COVER_UPDATE_MEDIA_TYPE_MESSAGE);
+        }
+        if (frameNumber == null
+                || frameNumber < 1
+                || work.getFrameCount() == null
+                || frameNumber > work.getFrameCount()) {
+            throw new BusinessException(MineWorkMessage.ANIMATION_COVER_FRAME_INVALID_MESSAGE);
+        }
+        String idempotencyKey = ANIMATION_COVER_IDEMPOTENCY_PREFIX
+                + work.getId()
+                + ":"
+                + clientKey;
+        WorkUploadTaskEntity existing = findUploadTaskByIdempotency(work.getUserId(), idempotencyKey);
+        if (existing != null) {
+            validateReusableAnimationCoverTask(work, existing, frameNumber);
+            return new AnimationCoverPreparation(existing, frameNumber, false);
+        }
+
+        String targetObjectKey = buildVersionedCoverObjectKey(work.getMediaObjectKey());
+        AnimationCosService.GeneratedFrame generatedFrame = animationCosService.generateCover(
+                work.getMediaObjectKey(),
+                targetObjectKey,
+                frameNumber);
+        WorkUploadTaskEntity coverTask = new WorkUploadTaskEntity();
+        coverTask.setBatchId(buildAnimationCoverBatchId(work.getId(), frameNumber));
+        coverTask.setUserId(work.getUserId());
+        coverTask.setMediaType(MediaTypeDict.IMAGE.getCode());
+        coverTask.setObjectKey(generatedFrame.objectKey());
+        coverTask.setFileSha256(generatedFrame.sha256());
+        coverTask.setCoverObjectKey(generatedFrame.objectKey());
+        coverTask.setCoverSha256(generatedFrame.sha256());
+        coverTask.setOriginalFileName(fileNameFromObjectKey(generatedFrame.objectKey()));
+        coverTask.setMimeType(generatedFrame.contentType());
+        coverTask.setFileSize(generatedFrame.contentLength());
+        coverTask.setWidth(work.getWidth());
+        coverTask.setHeight(work.getHeight());
+        coverTask.setStatus(WorkUploadTaskStatusDict.UPLOADED.getCode());
+        coverTask.setExpiresAt(LocalDateTime.now().plusMinutes(TICKET_EXPIRE_MINUTES));
+        coverTask.setIdempotencyKey(idempotencyKey);
+        WorkUploadTaskEntity persistedTask = saveOrFindUploadTask(coverTask);
+        if (persistedTask != coverTask) {
+            animationCosService.deleteQuietly(generatedFrame.objectKey(), "animation-cover-idempotency-race");
+            validateReusableAnimationCoverTask(work, persistedTask, frameNumber);
+            return new AnimationCoverPreparation(persistedTask, frameNumber, false);
+        }
+        return new AnimationCoverPreparation(coverTask, frameNumber, true);
+    }
+
+    /**
+     * 将编辑会话的帧号写入内部批次标识，用于识别相同幂等键下的载荷冲突。
+     *
+     * @param workId 作品 ID
+     * @param frameNumber 封面帧号
+     * @return 动图封面内部批次标识
+     */
+    private String buildAnimationCoverBatchId(Long workId, Integer frameNumber) {
+        return ANIMATION_COVER_BATCH_PREFIX
+                + workId
+                + WORK_FILE_NAME_SEPARATOR
+                + frameNumber;
+    }
+
+    /**
+     * 校验已有动图封面幂等任务仍可复用。
+     *
+     * @param work 动图作品
+     * @param task 已有生成任务
+     * @param frameNumber 本次请求封面帧号
+     */
+    private void validateReusableAnimationCoverTask(
+            WorkEntity work,
+            WorkUploadTaskEntity task,
+            Integer frameNumber
+    ) {
+        if (task == null
+                || !work.getUserId().equals(task.getUserId())
+                || !buildAnimationCoverBatchId(work.getId(), frameNumber).equals(task.getBatchId())
+                || !MediaTypeDict.IMAGE.getCode().equals(task.getMediaType())
+                || !hasText(task.getObjectKey())
+                || !hasText(task.getFileSha256())
+                || (WorkUploadTaskStatusDict.CONFIRMED.getCode().equals(task.getStatus())
+                && !work.getId().equals(task.getConfirmedWorkId()))) {
+            throw new BusinessException(MineWorkMessage.ANIMATION_COVER_GENERATE_FAILED_MESSAGE);
+        }
+        try {
+            CosService.ObjectHead head = cosService.headObject(task.getObjectKey());
+            if (head.contentLength() <= 0L
+                    || head.contentLength() > THUMB_MAX_BYTES
+                    || !contentTypeCompatible("image/jpeg", head.contentType())) {
+                throw new BusinessException(MineWorkMessage.ANIMATION_COVER_GENERATE_FAILED_MESSAGE);
+            }
+        } catch (BusinessException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            throw new BusinessException(MineWorkMessage.ANIMATION_COVER_GENERATE_FAILED_MESSAGE, exception);
+        }
+    }
+
+    /**
+     * 确认动图生成封面任务归属当前作品。
+     *
+     * @param task 封面任务
+     * @param workId 作品 ID
+     */
+    private void confirmAnimationCoverTask(WorkUploadTaskEntity task, Long workId) {
+        if (WorkUploadTaskStatusDict.CONFIRMED.getCode().equals(task.getStatus())
+                && workId.equals(task.getConfirmedWorkId())) {
+            return;
+        }
+        task.setStatus(WorkUploadTaskStatusDict.CONFIRMED.getCode());
+        task.setConfirmedWorkId(workId);
+        task.setCoverObjectKey(task.getObjectKey());
+        task.setCoverSha256(task.getFileSha256());
+        task.setErrorMessage(null);
+        if (workUploadTaskEntityMapper.updateById(task) != 1) {
+            throw new BusinessException(MineWorkMessage.WORK_SAVE_FAILED_MESSAGE);
+        }
+    }
+
+    /**
+     * 注册事务回滚后的新动图封面补偿清理。
+     *
+     * @param preparation 动图封面准备结果
+     */
+    private void registerAnimationCoverRollbackCleanup(AnimationCoverPreparation preparation) {
+        if (preparation == null
+                || !preparation.newlyGenerated()
+                || !TransactionSynchronizationManager.isSynchronizationActive()) {
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status != TransactionSynchronization.STATUS_COMMITTED) {
+                    animationCosService.deleteQuietly(
+                            preparation.task().getObjectKey(),
+                            "animation-cover-transaction-rollback");
+                }
+            }
+        });
+    }
+
+    /**
+     * 无事务同步环境下发生异常时立即清理本次新生成动图封面。
+     *
+     * @param preparation 动图封面准备结果
+     * @param context 清理上下文
+     */
+    private void cleanupNewAnimationCoverWithoutSynchronization(
+            AnimationCoverPreparation preparation,
+            String context
+    ) {
+        if (preparation == null
+                || !preparation.newlyGenerated()
+                || TransactionSynchronizationManager.isSynchronizationActive()) {
+            return;
+        }
+        animationCosService.deleteQuietly(preparation.task().getObjectKey(), context);
+    }
+
+    /**
      * 生成视频封面上传任务。
      *
      * @param userId 当前用户 ID
@@ -1533,6 +2025,15 @@ public class MineWorkService {
             MineWorkUploadCompleteRequest.CompleteItem item
     ) {
         Long coverTaskId = item == null ? null : item.getCoverTaskId();
+        if (MediaTypeDict.ANIMATION.getCode().equals(task.getMediaType())) {
+            if (coverTaskId != null) {
+                throw new BusinessException("动图封面由服务端生成，不能使用上传封面任务");
+            }
+            if (!hasText(task.getCoverObjectKey()) || !hasText(task.getCoverSha256())) {
+                throw new BusinessException(MineWorkMessage.COVER_REQUIRED_MESSAGE);
+            }
+            return;
+        }
         if (coverTaskId == null) {
             if (MediaTypeDict.VIDEO.getCode().equals(task.getMediaType())) {
                 if (hasText(task.getCoverObjectKey())) {
@@ -1923,6 +2424,8 @@ public class MineWorkService {
         item.setMimeType(work.getMimeType());
         item.setFileSize(work.getFileSize());
         item.setDurationMs(work.getDurationMs());
+        item.setFrameCount(work.getFrameCount());
+        item.setCoverFrameNumber(work.getCoverFrameNumber());
         item.setWidth(work.getWidth());
         item.setHeight(work.getHeight());
         item.setAspectRatio(work.getAspectRatio());
@@ -2023,6 +2526,9 @@ public class MineWorkService {
             }
             if (MediaTypeDict.VIDEO.getCode().equals(rowMediaType)) {
                 summary.setVideoCount(count);
+            }
+            if (MediaTypeDict.ANIMATION.getCode().equals(rowMediaType)) {
+                summary.setAnimationCount(count);
             }
         }
         return summary;
@@ -2953,8 +3459,20 @@ public class MineWorkService {
             long uploadTimestamp,
             int uploadSequence
     ) {
-        String folder = MediaTypeDict.VIDEO.getCode().equals(mediaType) ? WORK_VIDEO_FOLDER : WORK_IMAGE_FOLDER;
-        String typeMarker = MediaTypeDict.VIDEO.getCode().equals(mediaType) ? VIDEO_FILE_MARKER : IMAGE_FILE_MARKER;
+        String folder;
+        String typeMarker;
+        if (MediaTypeDict.IMAGE.getCode().equals(mediaType)) {
+            folder = WORK_IMAGE_FOLDER;
+            typeMarker = IMAGE_FILE_MARKER;
+        } else if (MediaTypeDict.VIDEO.getCode().equals(mediaType)) {
+            folder = WORK_VIDEO_FOLDER;
+            typeMarker = VIDEO_FILE_MARKER;
+        } else if (MediaTypeDict.ANIMATION.getCode().equals(mediaType)) {
+            folder = WORK_ANIMATION_FOLDER;
+            typeMarker = ANIMATION_FILE_MARKER;
+        } else {
+            throw new BusinessException(MineWorkMessage.WORK_MEDIA_TYPE_UNSUPPORTED_MESSAGE);
+        }
         String fileName = uniqueCode
                 + WORK_FILE_NAME_SEPARATOR
                 + typeMarker
@@ -3046,9 +3564,33 @@ public class MineWorkService {
         return normalizedSourceObjectKey.substring(0, extensionIndex)
                 + THUMB_FILE_SUFFIX
                 + WORK_FILE_NAME_SEPARATOR
-                + System.currentTimeMillis()
+                + nextCoverVersionMillis()
+                + WORK_FILE_NAME_SEPARATOR
+                + generateUuid()
                 + FILE_EXTENSION_SEPARATOR
                 + THUMB_FILE_EXTENSION;
+    }
+
+    /**
+     * 获取进程内严格递增的封面版本毫秒值；对象键同时附加 UUID，确保多实例不碰撞。
+     *
+     * @return 封面版本值
+     */
+    private long nextCoverVersionMillis() {
+        return LAST_COVER_VERSION_MILLIS.updateAndGet(
+                previous -> Math.max(System.currentTimeMillis(), previous + 1L));
+    }
+
+    /**
+     * 从对象键提取文件名。
+     *
+     * @param objectKey COS 对象键
+     * @return 文件名
+     */
+    private String fileNameFromObjectKey(String objectKey) {
+        String normalizedObjectKey = normalizeText(objectKey);
+        int lastSlashIndex = normalizedObjectKey.lastIndexOf('/');
+        return lastSlashIndex >= 0 ? normalizedObjectKey.substring(lastSlashIndex + 1) : normalizedObjectKey;
     }
 
     /**
@@ -3206,7 +3748,9 @@ public class MineWorkService {
      */
     private String normalizeMediaType(String mediaType) {
         String value = normalizeText(mediaType).toUpperCase(Locale.ROOT);
-        if (MediaTypeDict.IMAGE.getCode().equals(value) || MediaTypeDict.VIDEO.getCode().equals(value)) {
+        if (MediaTypeDict.IMAGE.getCode().equals(value)
+                || MediaTypeDict.VIDEO.getCode().equals(value)
+                || MediaTypeDict.ANIMATION.getCode().equals(value)) {
             return value;
         }
         throw new BusinessException(MineWorkMessage.WORK_MEDIA_TYPE_UNSUPPORTED_MESSAGE);
@@ -3255,7 +3799,16 @@ public class MineWorkService {
         if (extension.isBlank()) {
             extension = extensionFromMime(mimeType, mediaType);
         }
-        Set<String> allowed = MediaTypeDict.IMAGE.getCode().equals(mediaType) ? IMAGE_EXTENSIONS : VIDEO_EXTENSIONS;
+        Set<String> allowed;
+        if (MediaTypeDict.IMAGE.getCode().equals(mediaType)) {
+            allowed = IMAGE_EXTENSIONS;
+        } else if (MediaTypeDict.VIDEO.getCode().equals(mediaType)) {
+            allowed = VIDEO_EXTENSIONS;
+        } else if (MediaTypeDict.ANIMATION.getCode().equals(mediaType)) {
+            allowed = ANIMATION_EXTENSIONS;
+        } else {
+            throw new BusinessException(MineWorkMessage.WORK_MEDIA_TYPE_UNSUPPORTED_MESSAGE);
+        }
         if (!allowed.contains(extension)) {
             throw new BusinessException("作品文件格式不支持");
         }
@@ -3330,7 +3883,30 @@ public class MineWorkService {
         if (value.contains("mp4")) {
             return "mp4";
         }
-        return MediaTypeDict.VIDEO.getCode().equals(mediaType) ? "mp4" : "jpg";
+        if (MediaTypeDict.IMAGE.getCode().equals(mediaType)) {
+            return "jpg";
+        }
+        if (MediaTypeDict.VIDEO.getCode().equals(mediaType)) {
+            return "mp4";
+        }
+        if (MediaTypeDict.ANIMATION.getCode().equals(mediaType)) {
+            throw new BusinessException("动图文件格式不支持");
+        }
+        throw new BusinessException(MineWorkMessage.WORK_MEDIA_TYPE_UNSUPPORTED_MESSAGE);
+    }
+
+    /**
+     * 校验动图扩展名与 MIME 的严格对应关系。
+     *
+     * @param extension 已归一化扩展名
+     * @param mimeType 客户端声明 MIME
+     */
+    private void validateAnimationTicketType(String extension, String mimeType) {
+        String normalizedMimeType = normalizeText(mimeType).toLowerCase(Locale.ROOT);
+        if (!ANIMATION_MIME_TYPES.contains(normalizedMimeType)
+                || !normalizedMimeType.equals("image/" + extension)) {
+            throw new BusinessException("动图文件格式不支持");
+        }
     }
 
     /**
@@ -3340,7 +3916,36 @@ public class MineWorkService {
      * @return 最大字节数
      */
     private long maxBytes(String mediaType) {
-        return MediaTypeDict.VIDEO.getCode().equals(mediaType) ? VIDEO_MAX_BYTES : IMAGE_MAX_BYTES;
+        if (MediaTypeDict.IMAGE.getCode().equals(mediaType)) {
+            return IMAGE_MAX_BYTES;
+        }
+        if (MediaTypeDict.VIDEO.getCode().equals(mediaType)) {
+            return VIDEO_MAX_BYTES;
+        }
+        if (MediaTypeDict.ANIMATION.getCode().equals(mediaType)) {
+            return ANIMATION_MAX_BYTES;
+        }
+        throw new BusinessException(MineWorkMessage.WORK_MEDIA_TYPE_UNSUPPORTED_MESSAGE);
+    }
+
+    /**
+     * 数据万象确认文件只有一帧时使用的专用业务异常。
+     */
+    private static final class AnimationSingleFrameException extends BusinessException {
+
+        private AnimationSingleFrameException() {
+            super(ANIMATION_SINGLE_FRAME_MESSAGE);
+        }
+    }
+
+    /**
+     * 权威元数据已证明上传对象不符合动图规则时使用的专用业务异常。
+     */
+    private static final class AnimationRejectedException extends BusinessException {
+
+        private AnimationRejectedException(String message) {
+            super(message);
+        }
     }
 
     /**

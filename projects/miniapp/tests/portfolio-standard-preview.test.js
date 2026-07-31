@@ -117,6 +117,72 @@ test('portfolio preview and visitor pages render miniapp brand footer', () => {
   assert.equal(fs.existsSync(logoPath), true)
 })
 
+test('personal portfolio scroll regions stay within the viewport below custom navigation', () => {
+  const pageStyles = [
+    {
+      wxss: readExisting('pages/portfolios/standard-preview/portfolio-standard-preview.wxss'),
+      rootSelector: '.portfolio-preview-page',
+      scrollSelector: '.preview-scroll'
+    },
+    {
+      wxss: readExisting('pages/portfolios/visitor-portfolio/visitor-portfolio.wxss'),
+      rootSelector: '.visitor-portfolio-page',
+      scrollSelector: '.visitor-scroll'
+    },
+    {
+      wxss: readExisting('pages/mock/styles/portfolio-standard-preview.wxss'),
+      rootSelector: '.portfolio-preview-page',
+      scrollSelector: '.preview-scroll'
+    }
+  ]
+
+  pageStyles.forEach(({ wxss, rootSelector, scrollSelector }) => {
+    const rootRule = readRule(wxss, rootSelector)
+    const scrollRule = readRule(wxss, scrollSelector)
+
+    assert.match(rootRule, /height:\s*100vh;/)
+    assert.match(rootRule, /display:\s*flex;/)
+    assert.match(rootRule, /flex-direction:\s*column;/)
+    assert.match(rootRule, /overflow:\s*hidden;/)
+    assert.match(scrollRule, /flex:\s*1;/)
+    assert.match(scrollRule, /min-height:\s*0;/)
+    assert.doesNotMatch(scrollRule, /height:\s*100vh;/)
+  })
+})
+
+test('dark preview and visitor footers use the transparent white logo without filters', () => {
+  const darkLogoUrl = '/assets/system/folio-logo-stack-bold-dark-50kb.png'
+  const darkLogoPath = path.join(__dirname, `..${darkLogoUrl}`)
+  const pagePaths = [
+    'pages/portfolios/standard-preview/portfolio-standard-preview',
+    'pages/portfolios/visitor-portfolio/visitor-portfolio',
+    'pages/mock/portfolio-standard-preview/portfolio-standard-preview'
+  ]
+
+  pagePaths.forEach((pagePath) => {
+    const wxml = readExisting(`${pagePath}.wxml`)
+    const wxss = readExisting(`${pagePath}.wxss`)
+    assert.match(
+      wxml,
+      new RegExp(`wx:if="\\{\\{portfolio\\.themeMode === 'dark'\\}\\}"[\\s\\S]*src="${darkLogoUrl.replace(/\./g, '\\.')}"`),
+      pagePath
+    )
+    assert.equal(
+      readRule(
+        wxss,
+        '.portfolio-theme-dark .folio-brand-logo'
+      ),
+      '',
+      pagePath
+    )
+  })
+
+  assert.equal(fs.existsSync(darkLogoPath), true)
+  const darkLogo = fs.readFileSync(darkLogoPath)
+  assert.equal(darkLogo.readUInt8(25), 6)
+  assert.ok(darkLogo.byteLength < 50 * 1024)
+})
+
 test('preview page keeps recoverable loading and error states when request fails', async () => {
   const requests = []
   const fakeRequest = (options) => {
@@ -369,19 +435,28 @@ test('preview page opens image and video work media without visitor event reques
 
 test('preview single work images open originals and videos play inline one at a time', () => {
   const previews = []
-  const videoContexts = []
+  const paused = []
   const wxMock = {
     previewImage(options) {
       previews.push(options)
     },
-    createVideoContext(id) {
-      const context = { id, pauseCalls: 0, pause() { this.pauseCalls += 1 } }
-      videoContexts.push(context)
-      return context
-    },
     showToast() {}
   }
   const page = loadPreviewPage(() => Promise.resolve({}), wxMock)
+  page.selectAllComponents = () => [
+    {
+      data: { componentKey: 'c_video_a' },
+      pauseVideo() {
+        paused.push('c_video_a')
+      }
+    },
+    {
+      data: { componentKey: 'c_video_b' },
+      pauseVideo() {
+        paused.push('c_video_b')
+      }
+    }
+  ]
   global.wx = wxMock
 
   try {
@@ -430,9 +505,36 @@ test('preview single work images open originals and videos play inline one at a 
     urls: ['https://cdn.example.com/original.jpg']
   })
   assert.equal(page.data.activeSingleWorkVideoKey, 'c_video_b')
-  assert.equal(videoContexts[0].id, 'singleWorkVideo-c_video_a')
-  assert.equal(videoContexts[0].pauseCalls, 1)
+  assert.deepEqual(paused, ['c_video_a'])
   assert.equal(page.data.videoPreviewVisible, false)
+})
+
+test('preview page pauses only the active single work child component', () => {
+  const page = loadPreviewPage(() => Promise.resolve({}))
+  const calls = []
+  page.data.activeSingleWorkVideoKey = 'single:active'
+  page.selectAllComponents = (selector) => {
+    assert.equal(selector, '.portfolio-single-work-instance')
+    return [
+      {
+        data: { componentKey: 'single:other' },
+        pauseVideo() {
+          calls.push('other')
+        }
+      },
+      {
+        data: { componentKey: 'single:active' },
+        pauseVideo() {
+          calls.push('active')
+        }
+      }
+    ]
+  }
+
+  page.stopActiveSingleWorkVideo()
+
+  assert.deepEqual(calls, ['active'])
+  assert.equal(page.data.activeSingleWorkVideoKey, '')
 })
 
 test('preview single work does not use cover as missing original or video media', () => {
@@ -476,14 +578,16 @@ test('preview single work does not use cover as missing original or video media'
 })
 
 test('single work markup uses width-fix images and inline autoplay video without changing list overlay', () => {
-  const wxml = readExisting('pages/portfolios/standard-preview/portfolio-standard-preview.wxml')
+  const pageWxml = readExisting('pages/portfolios/standard-preview/portfolio-standard-preview.wxml')
+  const componentWxml = readExisting('pages/portfolios/components/single-work/single-work.wxml')
 
-  assert.match(wxml, /item\.componentType === 'SINGLE_WORK'/)
-  assert.match(wxml, /class="single-work-image"[\s\S]*mode="widthFix"/)
-  assert.match(wxml, /activeSingleWorkVideoKey === item\.componentKey[\s\S]*<video[\s\S]*autoplay="\{\{true\}\}"/)
-  assert.match(wxml, /class="single-work-play-badge"/)
-  assert.match(wxml, /wx:if="\{\{item\.showTitle\}\}" class="single-work-title"/)
-  assert.match(wxml, /<root-portal wx:if="\{\{videoPreviewVisible\}\}">/)
+  assert.match(pageWxml, /item\.componentType === 'SINGLE_WORK'/)
+  assert.match(pageWxml, /<portfolio-single-work[\s\S]*active-video-key="\{\{activeSingleWorkVideoKey\}\}"/)
+  assert.match(componentWxml, /class="single-work-image"[\s\S]*mode="widthFix"/)
+  assert.match(componentWxml, /<video[\s\S]*activeVideoKey === componentKey[\s\S]*autoplay="\{\{true\}\}"/)
+  assert.match(componentWxml, /class="single-work-play-badge"/)
+  assert.match(componentWxml, /wx:if="\{\{showTitle && work\.title\}\}" class="single-work-title"/)
+  assert.match(pageWxml, /<root-portal wx:if="\{\{videoPreviewVisible\}\}">/)
 })
 
 test('preview markup exposes loading skeleton and retryable error state', () => {
@@ -522,49 +626,46 @@ test('portfolio work sections render fixed title, all tags, play badge, and vide
     path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.wxml'),
     'utf8'
   )
-  const previewWxss = fs.readFileSync(
-    path.join(__dirname, '../pages/portfolios/standard-preview/portfolio-standard-preview.wxss'),
-    'utf8'
-  )
-  const visitorWxss = fs.readFileSync(
-    path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.wxss'),
-    'utf8'
-  )
-  const sharedWxss = readExisting('styles/portfolio-render-shared.wxss')
+  const gridWxml = readExisting('pages/portfolios/components/work-grid/work-grid.wxml')
+  const listWxml = readExisting('pages/portfolios/components/work-list/work-list.wxml')
+  const gridWxss = readExisting('pages/portfolios/components/work-grid/work-grid.wxss')
+  const listWxss = readExisting('pages/portfolios/components/work-list/work-list.wxss')
+  const mockSharedWxss = readExisting('styles/portfolio-render-shared.wxss')
 
   ;[previewWxml, visitorWxml].forEach((wxml) => {
-    assert.match(wxml, /class="work-section-title">作品列表<\/view>/)
-    assert.doesNotMatch(wxml, /class="work-section-title">作品 &gt;<\/view>/)
-    assert.match(wxml, /wx:for="\{\{item\.displayTags\}\}"[\s\S]*>\{\{tag\.name\}\}<\/view>/)
-    assert.match(wxml, /class="work-grid \{\{displaySwitchingComponentKey === item\.componentKey \? 'display-switching' : ''\}\}"/)
-    assert.match(wxml, /class="work-list \{\{displaySwitchingComponentKey === item\.componentKey \? 'display-switching' : ''\}\}"/)
-    assert.match(wxml, /class="work-cover-wrap"[\s\S]*bindtap="handleWorkTap"/)
-    assert.match(wxml, /data-media-url="\{\{work\.previewUrl\}\}"/)
-    assert.match(wxml, /wx:if="\{\{work\.isVideo\}\}"[\s\S]*class="work-play-badge"/)
+    assert.match(wxml, /<portfolio-work-grid[\s\S]*switching="\{\{displaySwitchingComponentKey === item\.componentKey\}\}"/)
+    assert.match(wxml, /<portfolio-work-list[\s\S]*switching="\{\{displaySwitchingComponentKey === item\.componentKey\}\}"/)
     assert.match(wxml, /class="work-video-mask \{\{videoPreviewVisible \? 'visible' : ''\}\}"/)
     assert.match(wxml, /id="portfolioWorkVideo"[\s\S]*src="\{\{videoPreview\.src\}\}"[\s\S]*poster="\{\{videoPreview\.poster\}\}"[\s\S]*controls="\{\{true\}\}"[\s\S]*show-fullscreen-btn="\{\{true\}\}"/)
   })
-  ;[previewWxss, visitorWxss].forEach((wxss) => {
-    assert.match(wxss, /@import "\.\.\/\.\.\/\.\.\/styles\/portfolio-render-shared\.wxss";/)
-    assert.match(wxss, /\.work-section-title\s*\{[\s\S]*color:\s*#000000;[\s\S]*font-size:\s*34rpx;/)
+  ;[gridWxml, listWxml].forEach((wxml) => {
+    assert.match(wxml, /class="work-section-title">作品列表<\/view>/)
+    assert.doesNotMatch(wxml, /class="work-section-title">作品 &gt;<\/view>/)
+    assert.match(wxml, /wx:for="\{\{displayTags\}\}"[\s\S]*>\{\{tag\.name\}\}<\/view>/)
+    assert.match(wxml, /class="work-cover-wrap"[\s\S]*bindtap="handleWorkTap"/)
+    assert.match(wxml, /data-media-url="\{\{work\.previewUrl\}\}"/)
+    assert.match(wxml, /wx:if="\{\{work\.isVideo\}\}"[\s\S]*class="work-play-badge"/)
+  })
+  ;[gridWxss, listWxss].forEach((wxss) => {
+    assert.match(wxss, /\.work-section-title\s*\{[\s\S]*color:\s*var\(--portfolio-text-primary\);[\s\S]*font-size:\s*34rpx;/)
     assert.match(wxss, /\.work-play-badge\s*\{[\s\S]*position:\s*absolute;[\s\S]*right:\s*16rpx;[\s\S]*bottom:\s*16rpx;/)
     assert.doesNotMatch(wxss, /\.work-play-badge\s*\{[\s\S]*top:\s*50%;[\s\S]*left:\s*50%;/)
   })
-  ;[sharedWxss].forEach((wxss) => {
-    assert.match(wxss, /\.display-tag\s*\{[\s\S]*color:\s*#8a8f98;[\s\S]*font-size:\s*28rpx;/)
-    assert.match(wxss, /\.display-tag\.active\s*\{[\s\S]*color:\s*#000000;/)
+  ;[mockSharedWxss].forEach((wxss) => {
+    assert.match(wxss, /\.display-tag\s*\{[\s\S]*color:\s*#868e96;[\s\S]*font-size:\s*28rpx;/)
+    assert.match(wxss, /\.display-tag\.active\s*\{[\s\S]*color:\s*#212529;/)
   })
 })
 
 test('single work inline videos fill their frame across production and mock previews', () => {
-  const previewWxml = readExisting('pages/portfolios/standard-preview/portfolio-standard-preview.wxml')
-  const visitorWxml = readExisting('pages/portfolios/visitor-portfolio/visitor-portfolio.wxml')
+  const productionWxml = readExisting('pages/portfolios/components/single-work/single-work.wxml')
   const mockPreviewWxml = readExisting('pages/mock/portfolio-standard-preview/portfolio-standard-preview.wxml')
+  const mockRendererWxml = readExisting('components/mock/portfolio-renderer/portfolio-renderer.wxml')
   const inlineVideoPattern = /<video[\s\S]*?class="single-work-video"[\s\S]*?object-fit="cover"[\s\S]*?<\/video>/
 
-  ;[previewWxml, visitorWxml, mockPreviewWxml].forEach((wxml) => {
-    assert.match(wxml, inlineVideoPattern)
-  })
+  assert.match(productionWxml, inlineVideoPattern)
+  assert.match(mockPreviewWxml, /<mock-portfolio-renderer[\s\S]*active-single-work-video-key="\{\{activeSingleWorkVideoKey\}\}"/)
+  assert.match(mockRendererWxml, inlineVideoPattern)
 })
 
 test('preview video overlay renders in root portal like visitor page', () => {
@@ -603,9 +704,31 @@ test('profile component can render selected wechat qr in actual pages', () => {
     path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.wxml'),
     'utf8'
   )
+  const profileWxml = readExisting('pages/portfolios/components/profile/profile.wxml')
 
-  assert.match(previewWxml, /wx:if="\{\{item\.profile\.wechatQrUrl\}\}"[\s\S]*src="\{\{item\.profile\.wechatQrUrl\}\}"[\s\S]*bindtap="handlePreviewQr"/)
-  assert.match(visitorWxml, /wx:if="\{\{item\.profile\.wechatQrUrl\}\}"[\s\S]*src="\{\{item\.profile\.wechatQrUrl\}\}"[\s\S]*bindtap="handlePreviewQr"/)
+  assert.match(previewWxml, /<portfolio-profile[\s\S]*profile="\{\{item\.profile\}\}"[\s\S]*bindpreviewqr="handlePreviewQr"/)
+  assert.match(visitorWxml, /<portfolio-profile[\s\S]*profile="\{\{item\.profile\}\}"[\s\S]*bindpreviewqr="handlePreviewQr"/)
+  assert.match(profileWxml, /wx:if="\{\{profile\.wechatQrUrl\}\}"[\s\S]*src="\{\{profile\.wechatQrUrl\}\}"[\s\S]*bindtap="handlePreviewQr"/)
+})
+
+test('profile component renders personal tags as chromatic outlined pills', () => {
+  const profileWxml = readExisting('pages/portfolios/components/profile/profile.wxml')
+  const profileWxss = readExisting('pages/portfolios/components/profile/profile.wxss')
+  const tagRule = readRule(profileWxss, '.profile-tag')
+  const dotRule = readRule(profileWxss, '.profile-tag-dot')
+
+  assert.match(
+    profileWxml,
+    /class="profile-tag"[\s\S]*color: \{\{tag\.color \|\| '#0f766e'\}\};[\s\S]*border-color: \{\{tag\.color \|\| '#0f766e'\}\};/
+  )
+  assert.match(
+    profileWxml,
+    /class="profile-tag-dot"[\s\S]*background: \{\{tag\.color \|\| '#0f766e'\}\};/
+  )
+  assert.match(tagRule, /background:\s*#ffffff/)
+  assert.match(dotRule, /width:\s*12rpx/)
+  assert.match(dotRule, /height:\s*12rpx/)
+  assert.match(dotRule, /border-radius:\s*50%/)
 })
 
 test('contact form components support modal entry and inline form in actual pages', () => {
@@ -636,8 +759,38 @@ test('contact form components support modal entry and inline form in actual page
   })
   assert.match(componentWxml, /contactComponent\.contactForm\.displayMode === inlineMode[\s\S]*class="form-section"/)
   assert.match(componentWxml, /class="form-entry-section"[\s\S]*bindtap="handleOpenModal"/)
-  assert.match(componentWxml, /class="contact-form-mask \{\{modalVisible \? 'visible' : ''\}\}"/)
+  assert.match(componentWxml, /class="contact-form-mask portfolio-theme-\{\{themeMode\}\} \{\{modalVisible \? 'visible' : ''\}\}"/)
   assert.match(componentWxml, /class="contact-form-panel"[\s\S]*contactComponent\.contactForm\.title/)
+})
+
+test('preview opens a modal contact form from the active secondary menu', () => {
+  const page = loadPreviewPage(() => Promise.resolve({}))
+  const component = {
+    componentKey: 'c_secondary_contact',
+    componentType: 'CONTACT_FORM',
+    contactForm: {
+      displayMode: 'MODAL_FORM',
+      fields: ['contactName']
+    }
+  }
+  page.data.portfolio = {
+    components: [],
+    activeComponents: [component],
+    bottomNav: {
+      enabled: true,
+      items: [
+        { key: 'nav_home', title: '主页' },
+        { key: 'nav_contact', title: '联系', components: [component] }
+      ]
+    }
+  }
+
+  page.handleOpenContactFormModal({
+    detail: { componentKey: 'c_secondary_contact' }
+  })
+
+  assert.equal(page.data.contactFormModalVisible, true)
+  assert.equal(page.data.activeContactFormComponent.componentKey, 'c_secondary_contact')
 })
 
 test('actual portfolio pages do not render share intro as page content', () => {
@@ -657,51 +810,98 @@ test('actual portfolio pages do not render share intro as page content', () => {
 })
 
 test('portfolio user-authored text preserves line breaks in actual pages', () => {
-  const previewWxml = fs.readFileSync(
-    path.join(__dirname, '../pages/portfolios/standard-preview/portfolio-standard-preview.wxml'),
-    'utf8'
-  )
-  const visitorWxml = fs.readFileSync(
-    path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.wxml'),
-    'utf8'
-  )
+  const profileWxml = readExisting('pages/portfolios/components/profile/profile.wxml')
+  const profileWxss = readExisting('pages/portfolios/components/profile/profile.wxss')
+  const textWxss = readExisting('pages/portfolios/components/text-section/text-section.wxss')
+  const listWxss = readExisting('pages/portfolios/components/work-list/work-list.wxss')
   const appWxss = fs.readFileSync(
     path.join(__dirname, '../app.wxss'),
     'utf8'
   )
-  const previewWxss = fs.readFileSync(
-    path.join(__dirname, '../pages/portfolios/standard-preview/portfolio-standard-preview.wxss'),
-    'utf8'
-  )
-  const visitorWxss = fs.readFileSync(
-    path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.wxss'),
-    'utf8'
-  )
-
-  ;[previewWxml, visitorWxml].forEach((wxml) => {
-    assert.match(wxml, /<text wx:if="\{\{item\.profile\.bio\}\}" class="profile-bio" space="nbsp">\{\{item\.profile\.bio\}\}<\/text>/)
-    assert.doesNotMatch(wxml, /<view wx:if="\{\{item\.profile\.bio\}\}" class="profile-bio">/)
-  })
-  ;[previewWxss, visitorWxss].forEach((wxss) => {
-    assert.match(wxss, /\.profile-bio,\s*\.section-desc,\s*\.text-content,\s*\.work-desc\s*\{[^}]*white-space:\s*pre-wrap;/)
-    assert.match(readRule(wxss, '.profile-bio'), /display:\s*block;/)
+  assert.match(profileWxml, /<text wx:if="\{\{profile\.bio\}\}" class="profile-bio" space="nbsp">\{\{profile\.bio\}\}<\/text>/)
+  assert.match(profileWxss, /\.profile-bio\s*\{[\s\S]*display:\s*block;/)
+  ;[
+    profileWxss,
+    readRule(textWxss, '.text-content'),
+    readRule(listWxss, '.work-desc')
+  ].forEach((rule) => {
+    assert.match(rule, /white-space:\s*pre-wrap;/)
+    assert.match(rule, /overflow-wrap:\s*break-word;/)
+    assert.match(rule, /word-break:\s*break-word;/)
   })
   assert.match(appWxss, /\.user-authored-text,[\s\S]*\.message-content,[\s\S]*\.team-summary,[\s\S]*\.member-summary,[\s\S]*\.candidate-summary,[\s\S]*\.visit-summary\s*\{[^}]*white-space:\s*pre-wrap;/)
 })
 
 test('portfolio profile avatar is centered in actual pages', () => {
-  const previewWxss = fs.readFileSync(
-    path.join(__dirname, '../pages/portfolios/standard-preview/portfolio-standard-preview.wxss'),
-    'utf8'
-  )
-  const visitorWxss = fs.readFileSync(
-    path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.wxss'),
-    'utf8'
-  )
+  const profileWxss = readExisting('pages/portfolios/components/profile/profile.wxss')
+  const profileAvatarRule = readRule(profileWxss, '.profile-avatar')
 
-  ;[previewWxss, visitorWxss].forEach((wxss) => {
-    const profileAvatarRule = readRule(wxss, '.profile-avatar')
-    assert.match(profileAvatarRule, /display:\s*block;/)
-    assert.match(profileAvatarRule, /margin:\s*0 auto;/)
-  })
+  assert.match(profileAvatarRule, /display:\s*block;/)
+  assert.match(profileAvatarRule, /margin:\s*0 auto;/)
+})
+
+test('portfolio bottom navigation derives distinct light and dark selected states', () => {
+  const wxss = readExisting('components/portfolio-bottom-nav/portfolio-bottom-nav.wxss')
+
+  assert.match(wxss, /\.portfolio-bottom-nav-inner\s*\{[\s\S]*background:\s*#ffffff;/)
+  assert.match(wxss, /\.portfolio-bottom-nav-item\.active\s*\{[\s\S]*color:\s*#ffffff;[\s\S]*background:\s*#212529;/)
+  assert.match(wxss, /\.portfolio-bottom-nav\.portfolio-theme-dark \.portfolio-bottom-nav-inner\s*\{[\s\S]*background:\s*#1e1e1e;/)
+  assert.match(wxss, /\.portfolio-bottom-nav\.portfolio-theme-dark \.portfolio-bottom-nav-item\.active\s*\{[\s\S]*color:\s*#151515;[\s\S]*background:\s*#ffffff;/)
+})
+
+test('preview bottom navigation exits old content before entering the target menu', () => {
+  const originalSetTimeout = global.setTimeout
+  const originalClearTimeout = global.clearTimeout
+  const timers = []
+  global.setTimeout = (handler, delay) => {
+    const timer = { handler, delay, id: `timer-${timers.length + 1}` }
+    timers.push(timer)
+    return timer.id
+  }
+  global.clearTimeout = () => {}
+
+  try {
+    const page = loadPreviewPage(() => Promise.resolve({}))
+    const homeComponents = [{ componentKey: 'c_home', componentType: 'PROFILE' }]
+    const worksComponents = [{ componentKey: 'c_works', componentType: 'WORK_GRID' }]
+    page.data.portfolio = {
+      components: homeComponents,
+      activeComponents: homeComponents,
+      activeMenuKey: 'home',
+      bottomNav: {
+        enabled: true,
+        items: [
+          { key: 'home', title: '主页' },
+          { key: 'works', title: '作品', components: worksComponents }
+        ]
+      }
+    }
+
+    const started = page.handleBottomNavChange({
+      detail: { menuKey: 'works' }
+    })
+
+    assert.equal(started, true)
+    assert.equal(page.data.portfolio.activeMenuKey, 'home')
+    assert.deepEqual(page.data.portfolio.activeComponents, homeComponents)
+    assert.equal(page.data.portfolioMenuSwitching, true)
+    assert.equal(page.data.portfolioMenuTransitionClass, 'portfolio-menu-exit-forward')
+    assert.equal(timers[0].delay, 120)
+
+    timers[0].handler()
+
+    assert.equal(page.data.portfolio.activeMenuKey, 'works')
+    assert.deepEqual(page.data.portfolio.activeComponents, worksComponents)
+    assert.equal(page.data.portfolioMenuTransitionClass, 'portfolio-menu-enter-forward')
+    assert.equal(page.data.portfolioScrollTop, 0)
+    assert.equal(timers[1].delay, 220)
+
+    timers[1].handler()
+
+    assert.equal(page.data.portfolioMenuSwitching, false)
+    assert.equal(page.data.portfolioMenuTransitionClass, '')
+  } finally {
+    global.setTimeout = originalSetTimeout
+    global.clearTimeout = originalClearTimeout
+  }
 })

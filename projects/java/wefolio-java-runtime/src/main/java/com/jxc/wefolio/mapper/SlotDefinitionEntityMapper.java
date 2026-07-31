@@ -16,6 +16,25 @@ import java.util.List;
 public interface SlotDefinitionEntityMapper extends BaseMapper<SlotDefinitionEntity> {
 
     /**
+     * 统计同一用户未删除档位中使用指定颜色的冲突记录。
+     *
+     * @param userId 用户 ID
+     * @param color 标准化后的颜色
+     * @param excludedId 编辑时排除的档位 ID，新增时为空
+     * @return 冲突记录数
+     */
+    @Select("<script>"
+            + "SELECT COUNT(*) FROM wf_slot_definition "
+            + "WHERE user_id=#{userId} AND color=#{color} AND deleted=0 "
+            + "<if test='excludedId != null'>AND id&lt;&gt;#{excludedId}</if>"
+            + "</script>")
+    long countColorConflicts(
+            @Param("userId") Long userId,
+            @Param("color") String color,
+            @Param("excludedId") Long excludedId
+    );
+
+    /**
      * 批量查询指定用户的生效档位定义。
      *
      * @param userIds 用户 ID 集合

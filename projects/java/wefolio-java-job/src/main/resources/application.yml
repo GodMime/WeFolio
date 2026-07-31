@@ -67,6 +67,10 @@ work-audit:
   max-submit-video-per-run: 500
   # 每轮最多同步审核多少个未审核图片作品。
   max-audit-image-per-run: 500
+  # 每轮最多尝试审核多少个动图任务。
+  max-audit-animation-per-run: ${WEFOLIO_WORK_AUDIT_MAX_ANIMATION_PER_RUN:500}
+  # 单个动图任务最多尝试次数，重试复用已持久化的抽样帧。
+  animation-max-attempts: ${WEFOLIO_WORK_AUDIT_ANIMATION_MAX_ATTEMPTS:3}
   # 单个视频审核任务最多主动查询次数；每分钟查一次时，120 次约等于 2 小时。
   video-query-max-attempts: 120
   # 视频画面审核截帧间隔秒数；当前只做画面审核，不做音频审核。
@@ -80,6 +84,10 @@ admin:
   point:
     # 复用 Runtime 人工加分接口的后台积分密钥。
     secret: ${ADMIN_POINT_SECRET:}
+
+user-storage-folder-repair:
+  # 历史用户目录修复 ID 游标批大小，批内严格逐个处理。
+  batch-size: ${USER_STORAGE_FOLDER_REPAIR_BATCH_SIZE:200}
 
 work-storage-billing:
   # 是否启用每月作品存储结算调度。

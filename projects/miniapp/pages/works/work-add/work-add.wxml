@@ -1,11 +1,11 @@
 <view class="page-shell work-add-page">
-  <navigation-bar title="添加作品" color="#17202a" background="rgba(252, 253, 253, 0.96)"></navigation-bar>
+  <navigation-bar title="添加作品" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
 
   <scroll-view class="work-add-scroll" scroll-y type="list">
     <view class="work-add-content">
       <button class="upload-box" bindtap="handleChooseMedia" disabled="{{saving}}">
         <view class="upload-plus">+</view>
-        <view class="upload-title">选择图片或视频</view>
+        <view class="upload-title">选择图片、视频或动图</view>
         <view class="upload-desc">一次最多勾选 9 个，标题默认使用文件名。</view>
       </button>
 
@@ -32,9 +32,11 @@
               <view class="selected-work-row" data-index="{{index}}" bindtap="handleOpenFileEditor">
                 <view class="selected-work-thumb {{item.isVideo ? 'video' : ''}}">
                   <image wx:if="{{item.mediaType === 'IMAGE'}}" src="{{item.tempFilePath}}" mode="aspectFill"></image>
+                  <image wx:elif="{{item.mediaType === 'ANIMATION'}}" src="{{item.tempFilePath}}" mode="aspectFill" webp="{{item.mimeType === 'image/webp'}}"></image>
                   <image wx:elif="{{item.coverPath}}" src="{{item.coverPath}}" mode="aspectFill"></image>
                   <view wx:else class="video-thumb">视频</view>
                   <view wx:if="{{item.isVideo}}" class="play-badge">▶</view>
+                  <view wx:if="{{item.isAnimation}}" class="animation-badge">动图</view>
                 </view>
                 <view class="selected-work-copy">
                   <view class="selected-work-title">{{item.title || item.fileName}}</view>
@@ -61,7 +63,7 @@
 
       <view wx:if="{{files.length === 0}}" class="empty-state">
         <view class="empty-title">尚未选择作品</view>
-        <view class="empty-desc">只支持从相册选择，图片不超过 10MB，视频不超过 100MB 且 10 分钟以内</view>
+        <view class="empty-desc">只支持从相册选择，图片和动图不超过 10MB，视频不超过 100MB 且 10 分钟以内</view>
       </view>
 
       <view class="tag-panel">
@@ -106,15 +108,19 @@
             wx:for="{{tagPickerTags}}"
             wx:key="id"
             class="tag-option {{item.selected ? 'selected' : ''}}"
-            style="{{item.style}}"
+            style="{{item.selected ? item.activeStyle : item.filterStyle}}"
             data-id="{{item.id}}"
             catchtap="handleToggleUnifiedTag"
             aria-role="checkbox"
             aria-checked="{{item.selected}}"
             aria-label="选择{{item.name}}标签"
           >
-            <view class="tag-option-name">{{item.name}}</view>
-            <view class="tag-option-check">{{item.selected ? '✓' : ''}}</view>
+            <view
+              class="tag-option-dot"
+              style="background: {{item.selected ? '#ffffff' : item.color}};"
+            ></view>
+            <view class="tag-option-name" style="color: {{item.selected ? '#ffffff' : item.color}};">{{item.name}}</view>
+            <view wx:if="{{item.selected}}" class="tag-option-check">✓</view>
           </view>
         </view>
       </scroll-view>
@@ -130,14 +136,14 @@
     <view class="work-edit-panel" catchtap="handleEditPanelTap">
       <view class="work-edit-grabber"></view>
       <view class="work-edit-heading">
-        <view class="work-edit-title">{{editForm.isVideo ? '编辑视频作品' : '编辑图片作品'}}</view>
-        <view class="work-edit-type">{{editForm.isVideo ? '视频' : '图片'}}</view>
+        <view class="work-edit-title">{{editForm.isVideo ? '编辑视频作品' : editForm.isAnimation ? '编辑动图作品' : '编辑图片作品'}}</view>
+        <view class="work-edit-type">{{editForm.isVideo ? '视频' : editForm.isAnimation ? '动图' : '图片'}}</view>
       </view>
 
       <scroll-view class="work-edit-scroll" scroll-y type="list">
         <view class="work-edit-content">
           <view class="work-preview">
-            <image wx:if="{{!editForm.isVideo}}" class="work-preview-media" src="{{editForm.tempFilePath}}" mode="aspectFit"></image>
+            <image wx:if="{{!editForm.isVideo}}" class="work-preview-media" src="{{editForm.tempFilePath}}" webp="{{true}}" mode="aspectFit"></image>
             <image wx:elif="{{editForm.coverPath}}" class="work-preview-media" src="{{editForm.coverPath}}" mode="aspectFill"></image>
             <view wx:else class="work-preview-empty">视频</view>
           </view>

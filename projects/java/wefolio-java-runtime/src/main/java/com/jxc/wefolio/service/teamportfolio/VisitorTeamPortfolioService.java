@@ -43,6 +43,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -51,6 +52,9 @@ import java.util.Objects;
 @Service
 @RequiredArgsConstructor
 public class VisitorTeamPortfolioService {
+
+    /** 维护遮罩固定使用的中性浅色主题。 */
+    private static final String MAINTENANCE_THEME_MODE = "light";
 
     /** 积分非正维护原因。 */
     private static final String POINT_BALANCE_NON_POSITIVE = "POINT_BALANCE_NON_POSITIVE";
@@ -366,6 +370,15 @@ public class VisitorTeamPortfolioService {
         render.setPreview(false);
         render.setUnderMaintenance(true);
         render.setVisitRecordId(null);
+        TeamPortfolioRenderDto.Style maintenanceStyle = new TeamPortfolioRenderDto.Style();
+        maintenanceStyle.setBackgroundColor(TeamPortfolioConfigDto.DEFAULT_BACKGROUND_COLOR);
+        maintenanceStyle.setThemeMode(MAINTENANCE_THEME_MODE);
+        render.setStyle(maintenanceStyle);
+        render.setComponents(List.of());
+        TeamPortfolioRenderDto.BottomNav maintenanceBottomNav = new TeamPortfolioRenderDto.BottomNav();
+        maintenanceBottomNav.setEnabled(false);
+        maintenanceBottomNav.setItems(List.of());
+        render.setBottomNav(maintenanceBottomNav);
         VisitorTeamPortfolioResponse response = new VisitorTeamPortfolioResponse();
         response.setShareCode(published.portfolio().getShareCode());
         response.setPortfolioId(published.portfolio().getId());

@@ -381,7 +381,7 @@ class TeamCarouselComponentTest {
         assertThat(reference.getReferenceType()).isEqualTo("WORK");
         assertThat(reference.getReferenceId()).isEqualTo(101L);
         assertThat(reference.getComponentKey()).isEqualTo(COMPONENT_KEY);
-        assertThat(reference.getComponentPath()).isEqualTo("components[2].items[0]");
+        assertThat(reference.getComponentPath()).isEqualTo("components[2].config.items[0]");
         assertThat(reference.getSortOrder()).isZero();
         assertThat(reference.getIsValid()).isEqualTo(1);
         assertThat(reference.getConfigScope()).isNull();
