@@ -1,3 +1,4 @@
+@import "../../../../styles/portfolio-text-typography.wxss";
 @import "../../styles/team-portfolio-theme.wxss";
 
 :host { display: block; }

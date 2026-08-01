@@ -9,11 +9,14 @@ const {
   DIVIDER_COLOR_OPTIONS,
   DIVIDER_COLORS,
   COMPONENT_TYPES,
+  EDITOR_SCHEMA_REVISION,
   SCHEDULE_QUERY_DISPLAY_MODES,
   TEXT_SECTION_ALIGNMENTS,
   TEXT_SECTION_MAX_LENGTH,
+  addComponent,
   createComponent,
   normalizePortfolioConfig,
+  normalizeTextSectionConfig,
   updateComponentContactFormConfig,
   updateComponentDividerConfig,
   updateComponentScheduleQueryConfig,
@@ -239,6 +242,53 @@ test('normalizes and updates text section component config', () => {
   assert.equal(TEXT_SECTION_MAX_LENGTH, 200)
 })
 
+test('personal text sections keep legacy defaults and new component defaults', () => {
+  assert.deepEqual(
+    normalizeTextSectionConfig({ content: '旧说明' }),
+    {
+      content: '旧说明',
+      alignment: 'LEFT',
+      fontFamily: 'SYSTEM',
+      fontSizeRpx: 26
+    }
+  )
+
+  const added = addComponent(
+    normalizePortfolioConfig(),
+    COMPONENT_TYPES.TEXT_SECTION
+  )
+  assert.equal(added.components[0].config.fontFamily, 'SYSTEM')
+  assert.equal(added.components[0].config.fontSizeRpx, 28)
+})
+
+test('legacy personal text patches preserve typography and unknown fields', () => {
+  const config = normalizePortfolioConfig({
+    components: [
+      createComponent(COMPONENT_TYPES.TEXT_SECTION, {
+        componentKey: 'c_text',
+        config: {
+          content: '原说明',
+          alignment: 'CENTER',
+          fontFamily: 'WECHAT_SANS_SS',
+          fontSizeRpx: 30,
+          futureField: 'kept'
+        }
+      })
+    ]
+  })
+
+  const updated = updateComponentTextSectionConfig(config, 'c_text', {
+    content: '更新说明',
+    alignment: 'RIGHT'
+  })
+
+  assert.equal(EDITOR_SCHEMA_REVISION, 2)
+  assert.equal(updated.editorSchemaRevision, 2)
+  assert.equal(updated.components[0].config.fontFamily, 'WECHAT_SANS_SS')
+  assert.equal(updated.components[0].config.fontSizeRpx, 30)
+  assert.equal(updated.components[0].config.futureField, 'kept')
+})
+
 test('normalizes and updates divider component config', () => {
   const config = normalizePortfolioConfig({
     components: [
@@ -286,12 +336,15 @@ function loadPortfolioEditorPage(fakeRequest, wxOverrides = {}, assetOverrides =
   const requestPath = path.join(__dirname, '../utils/request.js')
   const sessionPath = path.join(__dirname, '../utils/session.js')
   const assetsPath = path.join(__dirname, '../pages/portfolios/utils/portfolio-assets.js')
+  const fontLoaderPath = path.join(__dirname, '../utils/portfolio-font-loader.js')
   const requestCacheKey = require.resolve(requestPath)
   const sessionCacheKey = require.resolve(sessionPath)
   const assetsCacheKey = require.resolve(assetsPath)
+  const fontLoaderCacheKey = require.resolve(fontLoaderPath)
   const originalRequestCache = require.cache[requestCacheKey]
   const originalSessionCache = require.cache[sessionCacheKey]
   const originalAssetsCache = require.cache[assetsCacheKey]
+  const originalFontLoaderCache = require.cache[fontLoaderCacheKey]
 
   delete require.cache[require.resolve(pagePath)]
   require.cache[requestCacheKey] = {
@@ -358,6 +411,14 @@ function loadPortfolioEditorPage(fakeRequest, wxOverrides = {}, assetOverrides =
       }
     }, assetOverrides)
   }
+  if (harnessOptions.fontLoaderOverrides) {
+    require.cache[fontLoaderCacheKey] = {
+      id: fontLoaderPath,
+      filename: fontLoaderPath,
+      loaded: true,
+      exports: harnessOptions.fontLoaderOverrides
+    }
+  }
 
   let pageDefinition
   global.Page = (definition) => {
@@ -393,6 +454,11 @@ function loadPortfolioEditorPage(fakeRequest, wxOverrides = {}, assetOverrides =
     require.cache[assetsCacheKey] = originalAssetsCache
   } else {
     delete require.cache[assetsCacheKey]
+  }
+  if (originalFontLoaderCache) {
+    require.cache[fontLoaderCacheKey] = originalFontLoaderCache
+  } else {
+    delete require.cache[fontLoaderCacheKey]
   }
 
   let deferredConfigPatch = null
@@ -554,7 +620,7 @@ test('tapping contact form component edits display mode', () => {
   assert.equal(page.data.config.components[0].config.displayMode, CONTACT_FORM_DISPLAY_MODES.INLINE_FORM)
 })
 
-test('tapping text section component edits required content and alignment', () => {
+test('tapping text section component saves typography only after confirmation', () => {
   const toasts = []
   const page = loadPortfolioEditorPage(() => Promise.resolve({}), {
     showToast(options) {
@@ -568,7 +634,8 @@ test('tapping text section component edits required content and alignment', () =
         sortOrder: 1000,
         config: {
           content: '原始说明',
-          alignment: TEXT_SECTION_ALIGNMENTS.LEFT
+          alignment: TEXT_SECTION_ALIGNMENTS.LEFT,
+          futureField: 'kept'
         }
       })
     ]
@@ -580,14 +647,52 @@ test('tapping text section component edits required content and alignment', () =
   assert.equal(page.data.textSectionEditingComponentKey, 'c_text')
   assert.equal(page.data.textSectionForm.content, '原始说明')
   assert.equal(page.data.textSectionForm.alignment, TEXT_SECTION_ALIGNMENTS.LEFT)
+  assert.equal(page.data.textSectionForm.fontFamily, 'SYSTEM')
+  assert.equal(page.data.textSectionForm.fontSizeRpx, 26)
   assert.equal(page.data.textSectionFieldCounters.content, '4 / 200')
   assert.deepEqual(page.data.textSectionAlignmentOptions.map((item) => item.value), [
     TEXT_SECTION_ALIGNMENTS.LEFT,
     TEXT_SECTION_ALIGNMENTS.CENTER,
     TEXT_SECTION_ALIGNMENTS.RIGHT
   ])
+  assert.deepEqual(
+    page.data.textSectionFontOptions.map((item) => item.value),
+    ['SYSTEM', 'WECHAT_SANS_SS']
+  )
 
+  page.data.textSectionFontOptions = page.data.textSectionFontOptions.map((item) =>
+    item.value === 'WECHAT_SANS_SS'
+      ? Object.assign({}, item, { available: true })
+      : item
+  )
+  page.handleTextSectionFontTap({
+    currentTarget: { dataset: { value: 'WECHAT_SANS_SS' } }
+  })
+  page.handleTextSectionFontSizeTap({
+    currentTarget: { dataset: { value: 36 } }
+  })
+  assert.equal(page.data.textSectionForm.fontFamily, 'WECHAT_SANS_SS')
+  assert.equal(page.data.textSectionForm.fontSizeRpx, 36)
+  assert.equal(page.data.config.components[0].config.fontFamily, 'SYSTEM')
+  assert.equal(page.data.config.components[0].config.fontSizeRpx, 26)
+
+  page.handleCloseTextSectionSheet()
+  assert.equal(page.data.config.components[0].config.fontFamily, 'SYSTEM')
+  assert.equal(page.data.config.components[0].config.fontSizeRpx, 26)
+
+  page.handleComponentTap({ currentTarget: { dataset: { key: 'c_text', type: COMPONENT_TYPES.TEXT_SECTION } } })
+  page.data.textSectionFontOptions = page.data.textSectionFontOptions.map((item) =>
+    item.value === 'WECHAT_SANS_SS'
+      ? Object.assign({}, item, { available: true })
+      : item
+  )
   page.handleTextSectionInput({ detail: { value: '第一行\n第二行' } })
+  page.handleTextSectionFontTap({
+    currentTarget: { dataset: { value: 'WECHAT_SANS_SS' } }
+  })
+  page.handleTextSectionFontSizeTap({
+    currentTarget: { dataset: { value: 36 } }
+  })
   page.handleTextSectionAlignmentTap({
     currentTarget: { dataset: { value: TEXT_SECTION_ALIGNMENTS.RIGHT } }
   })
@@ -596,6 +701,10 @@ test('tapping text section component edits required content and alignment', () =
   assert.equal(page.data.textSectionSheetVisible, false)
   assert.equal(page.data.config.components[0].config.content, '第一行\n第二行')
   assert.equal(page.data.config.components[0].config.alignment, TEXT_SECTION_ALIGNMENTS.RIGHT)
+  assert.equal(page.data.config.components[0].config.fontFamily, 'WECHAT_SANS_SS')
+  assert.equal(page.data.config.components[0].config.fontSizeRpx, 36)
+  assert.equal(typeof page.data.config.components[0].config.fontSizeRpx, 'number')
+  assert.equal(page.data.config.components[0].config.futureField, 'kept')
 
   page.handleComponentTap({ currentTarget: { dataset: { key: 'c_text', type: COMPONENT_TYPES.TEXT_SECTION } } })
   page.handleTextSectionInput({ detail: { value: '   ' } })
@@ -603,6 +712,114 @@ test('tapping text section component edits required content and alignment', () =
 
   assert.equal(page.data.textSectionSheetVisible, true)
   assert.equal(toasts.at(-1).title, '请填写文字说明')
+})
+
+test('text section editor preserves custom size and unavailable saved font', () => {
+  const page = loadPortfolioEditorPage(() => Promise.resolve({}))
+  page.data.config = normalizePortfolioConfig({
+    components: [
+      createComponent(COMPONENT_TYPES.TEXT_SECTION, {
+        componentKey: 'c_text',
+        config: {
+          content: '自定义排版',
+          fontFamily: 'WECHAT_SANS_SS',
+          fontSizeRpx: 30
+        }
+      })
+    ]
+  })
+
+  page.handleComponentTap({
+    currentTarget: {
+      dataset: { key: 'c_text', type: COMPONENT_TYPES.TEXT_SECTION }
+    }
+  })
+
+  assert.equal(page.data.textSectionForm.fontFamily, 'WECHAT_SANS_SS')
+  assert.equal(page.data.textSectionForm.fontSizeRpx, 30)
+  assert.deepEqual(page.data.textSectionSizeOptions.at(-1), {
+    value: 30,
+    label: '自定义 30rpx',
+    custom: true
+  })
+  assert.equal(
+    page.data.textSectionFontOptions.find(
+      (item) => item.value === 'WECHAT_SANS_SS'
+    ).available,
+    false
+  )
+
+  page.handleConfirmTextSectionConfig()
+
+  assert.equal(page.data.config.components[0].config.fontFamily, 'WECHAT_SANS_SS')
+  assert.equal(page.data.config.components[0].config.fontSizeRpx, 30)
+})
+
+test('personal font capability refresh keeps the unsupported saved font selected', async () => {
+  let resolveFontCapability
+  const pendingCapability = new Promise((resolve) => {
+    resolveFontCapability = resolve
+  })
+  const initialCapability = {
+    apiAvailable: false,
+    loadedFamilies: {
+      WECHAT_SANS_SS: false
+    }
+  }
+  const page = loadPortfolioEditorPage(
+    () => Promise.resolve({}),
+    {},
+    {},
+    {
+      fontLoaderOverrides: {
+        getPortfolioFontCapability() {
+          return initialCapability
+        },
+        isPortfolioFontAvailable(fontFamily, capability) {
+          return fontFamily === 'SYSTEM'
+            || capability.apiAvailable === true
+              && capability.loadedFamilies[fontFamily] === true
+        },
+        loadPortfolioFonts() {
+          return pendingCapability
+        }
+      }
+    }
+  )
+  page.data.config = normalizePortfolioConfig({
+    components: [
+      createComponent(COMPONENT_TYPES.TEXT_SECTION, {
+        componentKey: 'c_text',
+        config: {
+          content: '个人说明',
+          fontFamily: 'WECHAT_SANS_SS',
+          fontSizeRpx: 30
+        }
+      })
+    ]
+  })
+
+  page.handleComponentTap({
+    currentTarget: {
+      dataset: { key: 'c_text', type: COMPONENT_TYPES.TEXT_SECTION }
+    }
+  })
+  page.loadPortfolioFontCapability()
+  resolveFontCapability({
+    apiAvailable: true,
+    loadedFamilies: {
+      WECHAT_SANS_SS: false
+    }
+  })
+  await flushPromises()
+
+  assert.equal(page.data.textSectionForm.fontFamily, 'WECHAT_SANS_SS')
+  assert.equal(
+    page.data.textSectionFontOptions.find(
+      (item) => item.value === 'WECHAT_SANS_SS'
+    ).available,
+    false
+  )
 })
 
 test('tapping divider component edits color and pixel height', () => {

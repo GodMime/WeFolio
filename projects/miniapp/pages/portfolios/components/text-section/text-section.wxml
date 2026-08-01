@@ -1,4 +1,8 @@
 <view class="text-section portfolio-theme-{{themeMode}} {{textSection.alignmentClass}}">
   <view wx:if="{{textSection.title}}" class="component-title">{{textSection.title}}</view>
-  <text class="text-content" space="nbsp">{{textSection.content}}</text>
+  <text
+    class="text-content {{textSection.fontClass}}"
+    style="{{textSection.fontSizeStyle}}"
+    space="nbsp"
+  >{{textSection.content}}</text>
 </view>

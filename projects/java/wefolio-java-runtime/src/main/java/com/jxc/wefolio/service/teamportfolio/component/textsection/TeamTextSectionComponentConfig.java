@@ -13,4 +13,10 @@ public class TeamTextSectionComponentConfig {
 
     /** 文字对齐方式。 */
     private String alignment;
+
+    /** 正文字体。 */
+    private String fontFamily;
+
+    /** 正文字号，单位 rpx。 */
+    private Integer fontSizeRpx;
 }

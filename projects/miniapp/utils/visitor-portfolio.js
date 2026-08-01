@@ -9,6 +9,10 @@ const {
   normalizeHexColor,
   themeModeFromHex
 } = require('./portfolio-color')
+const {
+  LEGACY_PERSONAL_FONT_SIZE_RPX,
+  buildPortfolioTextTypography
+} = require('./portfolio-text-typography')
 
 const PROFILE_VISIBLE_FIELD_DEFAULTS = {
   avatar: true,
@@ -225,7 +229,11 @@ function normalizeTextSection(raw = {}) {
     title: trimText(raw.title),
     content: trimText(raw.content),
     alignment: normalizedAlignment,
-    alignmentClass: TEXT_SECTION_ALIGNMENT_CLASS_MAP[normalizedAlignment]
+    alignmentClass: TEXT_SECTION_ALIGNMENT_CLASS_MAP[normalizedAlignment],
+    ...buildPortfolioTextTypography(
+      raw,
+      LEGACY_PERSONAL_FONT_SIZE_RPX
+    )
   })
 }
 

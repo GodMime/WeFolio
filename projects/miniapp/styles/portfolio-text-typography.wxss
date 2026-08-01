@@ -1,0 +1,9 @@
+.font-system {
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue",
+    "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+.font-wechat-sans-ss {
+  font-family: "WeFolioWechatSansSS", -apple-system, BlinkMacSystemFont,
+    "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif;
+}

@@ -65,8 +65,15 @@ const COMPONENT_CASES = [
   {
     name: 'text-section',
     properties: { textSection: Object },
-    wxml: [/class="text-section/, /class="text-content"/],
-    wxss: [/\.text-content\s*\{[\s\S]*white-space:\s*pre-wrap;/, /\.text-section\.align-center/]
+    wxml: [
+      /class="text-section/,
+      /class="text-content \{\{textSection\.fontClass\}\}"[^>]*style="\{\{textSection\.fontSizeStyle\}\}"/
+    ],
+    wxss: [
+      /^@import "\.\.\/\.\.\/\.\.\/\.\.\/styles\/portfolio-text-typography\.wxss";/m,
+      /\.text-content\s*\{[\s\S]*white-space:\s*pre-wrap;/,
+      /\.text-section\.align-center/
+    ]
   },
   {
     name: 'divider',
@@ -75,6 +82,28 @@ const COMPONENT_CASES = [
     wxss: [/\.divider-section/]
   }
 ]
+
+test('text section typography applies only to the body copy', () => {
+  const wxml = fs.readFileSync(
+    path.join(COMPONENT_ROOT, 'text-section/text-section.wxml'),
+    'utf8'
+  )
+  const wxss = fs.readFileSync(
+    path.join(COMPONENT_ROOT, 'text-section/text-section.wxss'),
+    'utf8'
+  )
+
+  assert.match(
+    wxml,
+    /class="text-content \{\{textSection\.fontClass\}\}"[^>]*style="\{\{textSection\.fontSizeStyle\}\}"/
+  )
+  assert.match(wxml, /class="component-title"/)
+  assert.doesNotMatch(
+    wxml,
+    /class="component-title[^"]*\{\{textSection\.fontClass\}\}"/
+  )
+  assert.doesNotMatch(wxss, /\.text-content\s*\{[^}]*font-size:/)
+})
 
 function loadComponent(name, wxApi = {}) {
   const modulePath = path.join(COMPONENT_ROOT, name, `${name}.js`)

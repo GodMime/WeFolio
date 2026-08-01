@@ -1,3 +1,4 @@
+@import "../../../../styles/portfolio-text-typography.wxss";
 @import "../../../../styles/portfolio-theme.wxss";
 
 .text-section {
@@ -19,7 +20,6 @@
   display: block;
   margin-top: 12rpx;
   color: var(--portfolio-text-secondary);
-  font-size: 26rpx;
   line-height: 1.75;
   text-align: left;
   white-space: pre-wrap;

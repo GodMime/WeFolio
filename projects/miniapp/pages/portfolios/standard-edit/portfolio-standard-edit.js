@@ -78,6 +78,17 @@ const {
   visitPortfolioComponents
 } = require('../../../utils/portfolios')
 const { hexToHsv, hsvToHex, normalizeHexColor } = require('../../../utils/portfolio-color')
+const {
+  LEGACY_PERSONAL_FONT_SIZE_RPX,
+  PORTFOLIO_TEXT_FONT_OPTIONS,
+  buildPortfolioTextFontSizeOptions,
+  buildPortfolioTextTypography
+} = require('../../../utils/portfolio-text-typography')
+const {
+  getPortfolioFontCapability,
+  isPortfolioFontAvailable,
+  loadPortfolioFonts
+} = require('../../../utils/portfolio-font-loader')
 
 const PORTFOLIO_API_PREFIX = '/api/mine/portfolios'
 const STANDARD_PERSONAL_API_URL = '/api/mine/portfolios/standard-personal'
@@ -599,7 +610,34 @@ function buildTextSectionForm(config = {}) {
   const normalized = normalizeTextSectionConfig(config)
   return {
     content: normalized.content || '',
-    alignment: normalized.alignment || TEXT_SECTION_ALIGNMENTS.LEFT
+    alignment: normalized.alignment || TEXT_SECTION_ALIGNMENTS.LEFT,
+    fontFamily: normalized.fontFamily,
+    fontSizeRpx: normalized.fontSizeRpx
+  }
+}
+
+function buildTextSectionFontOptions(
+  capability = getPortfolioFontCapability()
+) {
+  return PORTFOLIO_TEXT_FONT_OPTIONS.map((item) =>
+    Object.assign({}, item, {
+      available: isPortfolioFontAvailable(item.value, capability)
+    })
+  )
+}
+
+function buildTextSectionEditorState(config = {}) {
+  const textSectionForm = buildTextSectionForm(config)
+  return {
+    textSectionForm,
+    textSectionFieldCounters: buildTextSectionFieldCounters(textSectionForm),
+    textSectionFontOptions: buildTextSectionFontOptions(),
+    textSectionSizeOptions:
+      buildPortfolioTextFontSizeOptions(textSectionForm.fontSizeRpx),
+    textSectionTypography: buildPortfolioTextTypography(
+      textSectionForm,
+      LEGACY_PERSONAL_FONT_SIZE_RPX
+    )
   }
 }
 
@@ -955,8 +993,8 @@ Page({
     textSectionEditingComponentKey: '',
     textSectionAlignmentOptions: TEXT_SECTION_ALIGNMENT_OPTIONS,
     textSectionMaxLength: TEXT_SECTION_MAX_LENGTH,
-    textSectionForm: buildTextSectionForm(),
-    textSectionFieldCounters: buildTextSectionFieldCounters(buildTextSectionForm()),
+    portfolioFontCapability: getPortfolioFontCapability(),
+    ...buildTextSectionEditorState(),
     dividerSheetVisible: false,
     dividerEditingComponentKey: '',
     dividerColorOptions: DIVIDER_COLOR_OPTIONS,
@@ -978,7 +1016,25 @@ Page({
 
   onLoad(options = {}) {
     this.setData({ portfolioId: options.portfolioId || null })
+    this.loadPortfolioFontCapability()
     return this.bootstrap()
+  },
+
+  loadPortfolioFontCapability() {
+    try {
+      loadPortfolioFonts()
+        .then((capability) => {
+          this.setData({
+            portfolioFontCapability: capability,
+            textSectionFontOptions: buildTextSectionFontOptions(capability)
+          })
+        })
+        .catch((error) => {
+          console.warn('加载作品集内置字体失败', error)
+        })
+    } catch (error) {
+      console.warn('启动作品集内置字体加载失败', error)
+    }
   },
 
   bootstrap() {
@@ -1683,23 +1739,19 @@ Page({
     if (!component || component.componentType !== COMPONENT_TYPES.TEXT_SECTION) {
       return undefined
     }
-    const textSectionForm = buildTextSectionForm(component.config || {})
     this.setData({
       textSectionSheetVisible: true,
       textSectionEditingComponentKey: componentKey,
-      textSectionForm,
-      textSectionFieldCounters: buildTextSectionFieldCounters(textSectionForm)
+      ...buildTextSectionEditorState(component.config || {})
     })
     return undefined
   },
 
   handleCloseTextSectionSheet() {
-    const textSectionForm = buildTextSectionForm()
     this.setData({
       textSectionSheetVisible: false,
       textSectionEditingComponentKey: '',
-      textSectionForm,
-      textSectionFieldCounters: buildTextSectionFieldCounters(textSectionForm)
+      ...buildTextSectionEditorState()
     })
   },
 
@@ -1719,6 +1771,48 @@ Page({
     })
   },
 
+  handleTextSectionFontTap(event) {
+    const value = event.currentTarget.dataset.value
+    const option = this.data.textSectionFontOptions.find(
+      (item) => item.value === value
+    )
+    if (!option || !option.available) return
+    const textSectionForm = Object.assign(
+      {},
+      this.data.textSectionForm,
+      { fontFamily: value }
+    )
+    this.setData({
+      textSectionForm,
+      textSectionTypography: buildPortfolioTextTypography(
+        textSectionForm,
+        LEGACY_PERSONAL_FONT_SIZE_RPX
+      )
+    })
+  },
+
+  handleTextSectionFontSizeTap(event) {
+    const value = event.currentTarget.dataset.value
+    const option = this.data.textSectionSizeOptions.find(
+      (item) => item.value === value
+    )
+    if (!option || typeof value !== 'number') return
+    const textSectionForm = Object.assign(
+      {},
+      this.data.textSectionForm,
+      { fontSizeRpx: value }
+    )
+    this.setData({
+      textSectionForm,
+      textSectionSizeOptions:
+        buildPortfolioTextFontSizeOptions(textSectionForm.fontSizeRpx),
+      textSectionTypography: buildPortfolioTextTypography(
+        textSectionForm,
+        LEGACY_PERSONAL_FONT_SIZE_RPX
+      )
+    })
+  },
+
   handleConfirmTextSectionConfig() {
     const form = buildTextSectionForm(this.data.textSectionForm)
     if (!form.content) {
@@ -1731,12 +1825,10 @@ Page({
       form,
       this.data.activeMenuKey
     )
-    const textSectionForm = buildTextSectionForm()
     this.applyEditorConfig(config, this.data.activeMenuKey, {
       textSectionSheetVisible: false,
       textSectionEditingComponentKey: '',
-      textSectionForm,
-      textSectionFieldCounters: buildTextSectionFieldCounters(textSectionForm)
+      ...buildTextSectionEditorState()
     })
   },
 

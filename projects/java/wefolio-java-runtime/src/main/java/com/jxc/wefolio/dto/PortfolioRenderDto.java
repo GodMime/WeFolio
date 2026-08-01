@@ -309,6 +309,12 @@ public class PortfolioRenderDto {
 
         /** 对齐方式：LEFT / CENTER / RIGHT */
         private String alignment;
+
+        /** 字体：SYSTEM / WECHAT_SANS_SS */
+        private String fontFamily;
+
+        /** 正文字号，单位 rpx */
+        private Integer fontSizeRpx;
     }
 
     /**

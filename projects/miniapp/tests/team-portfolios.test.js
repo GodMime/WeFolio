@@ -216,6 +216,42 @@ test('team component mutations target the selected menu and keep team component 
   ])
 })
 
+test('team text sections keep revision two, unknown fields, and new defaults', () => {
+  const {
+    addTeamComponent,
+    getTeamMenuComponentList,
+    normalizeTeamPortfolioConfig,
+    TEAM_EDITOR_SCHEMA_REVISION
+  } = loadUtility('team-portfolios.js')
+  const futureConfig = {
+    content: '旧说明',
+    fontFamily: 'WECHAT_SANS_SS',
+    fontSizeRpx: 30,
+    futureField: 'kept'
+  }
+  const normalized = normalizeTeamPortfolioConfig({
+    editorSchemaRevision: 2,
+    components: [{
+      componentKey: 'legacy-text',
+      componentType: 'TEXT_SECTION',
+      enabled: true,
+      config: futureConfig
+    }]
+  })
+
+  assert.equal(TEAM_EDITOR_SCHEMA_REVISION, 2)
+  assert.equal(normalized.editorSchemaRevision, 2)
+  assert.equal(normalized.components[0].config, futureConfig)
+
+  const added = addTeamComponent(normalized, 'TEXT_SECTION')
+  const addedText = getTeamMenuComponentList(added).at(-1)
+  assert.deepEqual(addedText.config, {
+    fontFamily: 'SYSTEM',
+    fontSizeRpx: 28
+  })
+  assert.equal(added.components[0].config.futureField, 'kept')
+})
+
 test('team navigation helpers add rename and remove menus without losing the promoted first menu', () => {
   const {
     removeTeamNavigationItem,
@@ -535,7 +571,14 @@ test('team asset rejects a compressed file still over 300KB before signing', asy
 })
 
 test('team utility tree only imports approved main-package infrastructure', () => {
-  const approved = new Set(['request.js', 'session.js', 'upload-file.js', 'id.js', 'lunar.js'])
+  const approved = new Set([
+    'request.js',
+    'session.js',
+    'upload-file.js',
+    'id.js',
+    'lunar.js',
+    'portfolio-text-typography.js'
+  ])
   const forbidden = [/pages\/portfolios/, /pages\/visitor-(portfolio|schedule)/, /components\/portfolio-/, /utils\/portfolios\.js$/, /utils\/visitor-(portfolio|session)\.js$/]
   const files = fs.readdirSync(TEAM_UTILS_ROOT).filter((name) => name.endsWith('.js'))
   for (const file of files) {

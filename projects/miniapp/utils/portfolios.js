@@ -1,4 +1,11 @@
 const { normalizeHexColor } = require('./portfolio-color')
+const {
+  LEGACY_PERSONAL_FONT_SIZE_RPX,
+  NEW_COMPONENT_FONT_SIZE_RPX,
+  PORTFOLIO_TEXT_FONT_FAMILIES,
+  normalizePortfolioTextFontFamily,
+  normalizePortfolioTextFontSizeRpx
+} = require('./portfolio-text-typography')
 
 const SCHEMA_VERSION = 'standard-personal-v1'
 const EDITOR_SCHEMA_REVISION = 2
@@ -263,7 +270,12 @@ function normalizeTextSectionAlignment(value) {
 function normalizeTextSectionConfig(raw = {}) {
   return Object.assign({}, raw || {}, {
     content: trimText(raw && raw.content),
-    alignment: normalizeTextSectionAlignment(raw && raw.alignment)
+    alignment: normalizeTextSectionAlignment(raw && raw.alignment),
+    fontFamily: normalizePortfolioTextFontFamily(raw && raw.fontFamily),
+    fontSizeRpx: normalizePortfolioTextFontSizeRpx(
+      raw && raw.fontSizeRpx,
+      LEGACY_PERSONAL_FONT_SIZE_RPX
+    )
   })
 }
 
@@ -711,9 +723,15 @@ function addComponent(config, componentType, menuKey = '') {
       && components.some((item) => item.componentType === COMPONENT_TYPES.PROFILE)) {
       return components
     }
-  const nextComponent = createComponent(resolveComponentType(componentType), {
-    sortOrder: (components.length + 1) * SORT_ORDER_STEP
-  })
+    const nextComponent = createComponent(resolvedType, {
+      sortOrder: (components.length + 1) * SORT_ORDER_STEP,
+      config: resolvedType === COMPONENT_TYPES.TEXT_SECTION
+        ? {
+            fontFamily: PORTFOLIO_TEXT_FONT_FAMILIES.SYSTEM,
+            fontSizeRpx: NEW_COMPONENT_FONT_SIZE_RPX
+          }
+        : {}
+    })
     return components.concat(nextComponent)
   })
 }
@@ -804,7 +822,20 @@ function updateComponentContactFormConfig(config, componentKey, contactFormConfi
 
 function updateComponentTextSectionConfig(config, componentKey, textSectionConfig = {}, menuKey = '') {
   const targetKey = trimText(componentKey)
-  const nextTextSectionConfig = normalizeTextSectionConfig(textSectionConfig)
+  const nextTextSectionConfig = {
+    content: trimText(textSectionConfig.content),
+    alignment: normalizeTextSectionAlignment(textSectionConfig.alignment)
+  }
+  if (Object.prototype.hasOwnProperty.call(textSectionConfig, 'fontFamily')) {
+    nextTextSectionConfig.fontFamily =
+      normalizePortfolioTextFontFamily(textSectionConfig.fontFamily)
+  }
+  if (Object.prototype.hasOwnProperty.call(textSectionConfig, 'fontSizeRpx')) {
+    nextTextSectionConfig.fontSizeRpx = normalizePortfolioTextFontSizeRpx(
+      textSectionConfig.fontSizeRpx,
+      LEGACY_PERSONAL_FONT_SIZE_RPX
+    )
+  }
   return updateMenuComponentList(config, menuKey, (components) => components.map((component) => {
     if (component.componentKey !== targetKey || component.componentType !== COMPONENT_TYPES.TEXT_SECTION) {
       return component

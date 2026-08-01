@@ -1,3 +1,6 @@
+@import "../../../styles/portfolio-text-typography.wxss";
+@import "../../../styles/portfolio-text-section-editor.wxss";
+
 .portfolio-edit-page {
   height: 100vh;
   display: flex;
@@ -644,10 +647,6 @@
 .divider-sheet-confirm {
   color: #ffffff;
   background: #212529;
-}
-
-.text-section-form {
-  padding: 4rpx 0 8rpx;
 }
 
 .text-section-sheet-textarea {

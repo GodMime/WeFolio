@@ -1,0 +1,123 @@
+/* 个人与团队作品集文字说明编辑器共用的布局、字体、字号控件样式。 */
+.text-section-sheet-panel {
+  height: calc(76vh - env(safe-area-inset-bottom));
+}
+
+.text-section-form {
+  flex: 1 1 auto;
+  height: 0;
+  min-height: 0;
+}
+
+.text-section-form-content {
+  padding: 4rpx 0 8rpx;
+}
+
+.text-section-sheet-panel .component-work-actions,
+.text-section-actions {
+  flex: none;
+}
+
+.text-section-font-list {
+  margin-top: 12rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.text-section-font-option {
+  min-height: 104rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding: 16rpx 18rpx;
+  border: 1rpx solid #e1e8ef;
+  border-radius: 18rpx;
+  background: #f8fafc;
+  box-sizing: border-box;
+}
+
+.text-section-font-option.active {
+  border-color: #2d5f9a;
+  background: #edf5fb;
+}
+
+.text-section-font-option.active .schedule-query-mode-radio {
+  border-color: #2d5f9a;
+  background: #2d5f9a;
+  box-shadow: inset 0 0 0 7rpx #edf5fb;
+}
+
+.text-section-font-option.active .text-section-alignment-radio {
+  border-color: #2d5f9a;
+  background: #2d5f9a;
+  box-shadow: inset 0 0 0 7rpx #edf5fb;
+}
+
+.text-section-font-option.disabled:not(.active) {
+  opacity: 0.56;
+}
+
+.text-section-font-copy {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.text-section-font-label {
+  color: #17202a;
+  font-size: 24rpx;
+  font-weight: 900;
+}
+
+.text-section-font-sample {
+  color: #536b82;
+  font-size: 25rpx;
+  line-height: 1.4;
+}
+
+.text-section-font-hint {
+  color: #8a98a8;
+  font-size: 20rpx;
+  font-weight: 700;
+}
+
+.text-section-font-hint.current {
+  color: #2d5f9a;
+}
+
+.text-section-size-list {
+  margin-top: 12rpx;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+}
+
+.text-section-size-option {
+  min-width: 104rpx;
+  min-height: 60rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 18rpx;
+  color: #536b82;
+  font-size: 23rpx;
+  font-weight: 800;
+  border: 1rpx solid #d8e1e9;
+  border-radius: 999rpx;
+  background: #f8fafc;
+  box-sizing: border-box;
+}
+
+.text-section-size-option.active {
+  color: #ffffff;
+  border-color: #212529;
+  background: #212529;
+}
+
+.text-section-size-option.custom {
+  min-width: 176rpx;
+}

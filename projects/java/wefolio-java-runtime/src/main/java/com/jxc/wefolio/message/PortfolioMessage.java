@@ -194,6 +194,12 @@ public interface PortfolioMessage {
     /** 文字说明对齐方式不支持提示 */
     String TEXT_SECTION_ALIGNMENT_UNSUPPORTED_MESSAGE = "文字说明对齐方式不支持";
 
+    /** 文字说明字体不支持提示 */
+    String TEXT_SECTION_FONT_UNSUPPORTED_MESSAGE = "文字说明字体不支持";
+
+    /** 文字说明字号无效提示 */
+    String TEXT_SECTION_FONT_SIZE_INVALID_MESSAGE = "文字说明字号必须为20至48之间的整数";
+
     /** 分割线颜色不支持提示 */
     String DIVIDER_COLOR_UNSUPPORTED_MESSAGE = "分割线颜色不支持";
 

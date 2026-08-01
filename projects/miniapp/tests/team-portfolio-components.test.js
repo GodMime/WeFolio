@@ -646,9 +646,16 @@ test('member portfolio editors preserve selected items while toggling member nam
   }
 })
 
-test('text section trims required body, limits 200 chars and owns alignment', () => {
+test('text section trims required body, limits 200 chars and owns safe typography', () => {
   const { definition, exports } = loadComponent('text-section')
-  assert.deepEqual(exports.createDefaultTextSectionConfig(), { content: '', alignment: 'LEFT' })
+  assert.deepEqual(exports.createDefaultTextSectionConfig(), {
+    content: '',
+    alignment: 'LEFT',
+    fontFamily: 'SYSTEM',
+    fontSizeRpx: 32,
+    fontClass: 'font-system',
+    fontSizeStyle: 'font-size: 32rpx;'
+  })
   assert.equal(exports.validateTextSectionConfig({ content: ' 正文 ', alignment: 'CENTER' }).valid, true)
   assert.equal(exports.validateTextSectionConfig({ content: 'x'.repeat(201), alignment: 'LEFT' }).valid, false)
   assert.equal(exports.validateTextSectionConfig({ content: '😀'.repeat(200), alignment: 'LEFT' }).valid, true)
@@ -656,7 +663,52 @@ test('text section trims required body, limits 200 chars and owns alignment', ()
   assert.equal(exports.countTextCodePoints('😀a'), 2)
   assert.equal(exports.validateTextSectionConfig({ content: '正文', alignment: 'JUSTIFY' }).valid, false)
 
-  assert.deepEqual(definition.data, {})
+  assert.deepEqual(definition.data, {
+    normalizedConfig: exports.createDefaultTextSectionConfig()
+  })
+
+  const harness = createComponentHarness(definition)
+  harness.setProperties({
+    config: {
+      content: '  团队说明\n',
+      alignment: 'CENTER',
+      fontFamily: 'WECHAT_SANS_SS',
+      fontSizeRpx: 36
+    }
+  })
+  assert.equal(harness.instance.data.normalizedConfig.content, '  团队说明\n')
+  assert.equal(harness.instance.data.normalizedConfig.fontClass, 'font-wechat-sans-ss')
+  assert.equal(harness.instance.data.normalizedConfig.fontSizeStyle, 'font-size: 36rpx;')
+
+  harness.setProperties({
+    config: {
+      content: '更新后的团队说明',
+      alignment: 'RIGHT',
+      fontFamily: 'WECHAT_SANS_STD',
+      fontSizeRpx: 20
+    }
+  })
+  assert.equal(harness.instance.data.normalizedConfig.content, '更新后的团队说明')
+  assert.equal(harness.instance.data.normalizedConfig.alignment, 'RIGHT')
+  assert.equal(harness.instance.data.normalizedConfig.fontClass, 'font-system')
+  assert.equal(harness.instance.data.normalizedConfig.fontSizeStyle, 'font-size: 20rpx;')
+
+  const wxml = fs.readFileSync(
+    path.join(ROOT, 'text-section/text-section.wxml'),
+    'utf8'
+  )
+  const wxss = fs.readFileSync(
+    path.join(ROOT, 'text-section/text-section.wxss'),
+    'utf8'
+  )
+  assert.match(
+    wxml,
+    /class="content \{\{normalizedConfig\.fontClass\}\}"[^>]*style="\{\{normalizedConfig\.fontSizeStyle\}\}"/
+  )
+  assert.match(
+    wxss,
+    /^@import "\.\.\/\.\.\/\.\.\/\.\.\/styles\/portfolio-text-typography\.wxss";/m
+  )
 })
 
 test('schedule calendar builds six stable weeks and applies query range bounds', () => {

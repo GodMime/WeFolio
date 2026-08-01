@@ -405,6 +405,148 @@ class PortfolioConfigValidatorTest {
     }
 
     /**
+     * 旧个人文字说明缺少排版字段时，应补齐与既有视觉一致的默认值。
+     */
+    @Test
+    void textSectionShouldNormalizeLegacyPersonalTypographyDefaults() {
+        PortfolioConfigDto normalized = validator().normalize(7L, config(component(
+                "c_text",
+                PortfolioComponentTypeDict.TEXT_SECTION.getCode(),
+                1000,
+                true,
+                Map.of("content", "服务说明", "alignment", "LEFT")
+        )));
+
+        assertThat(normalized.getComponents().get(0).getConfig())
+                .containsEntry("fontFamily", "SYSTEM")
+                .containsEntry("fontSizeRpx", 26);
+    }
+
+    /**
+     * 文字说明应接受全部受支持字体和字号上下边界。
+     */
+    @Test
+    void textSectionShouldAcceptSupportedFontsAndExactIntegerSizeBoundaries() {
+        for (String fontFamily : List.of("SYSTEM", "WECHAT_SANS_SS")) {
+            for (Integer fontSizeRpx : List.of(20, 48)) {
+                Map<String, Object> textConfig = new LinkedHashMap<>();
+                textConfig.put("content", "服务说明");
+                textConfig.put("alignment", "CENTER");
+                textConfig.put("fontFamily", fontFamily);
+                textConfig.put("fontSizeRpx", fontSizeRpx);
+
+                Map<String, Object> normalized = validator().normalize(7L, config(component(
+                        "c_text",
+                        PortfolioComponentTypeDict.TEXT_SECTION.getCode(),
+                        1000,
+                        true,
+                        textConfig
+                ))).getComponents().get(0).getConfig();
+
+                assertThat(normalized)
+                        .containsEntry("fontFamily", fontFamily)
+                        .containsEntry("fontSizeRpx", fontSizeRpx);
+            }
+        }
+    }
+
+    /**
+     * 尚未上线且已删除的 Std 字体配置不得继续被接受。
+     */
+    @Test
+    void textSectionShouldRejectRemovedStdFontFamily() {
+        Map<String, Object> textConfig = new LinkedHashMap<>();
+        textConfig.put("content", "服务说明");
+        textConfig.put("fontFamily", "WECHAT_SANS_STD");
+
+        assertThatThrownBy(() -> validator().normalize(7L, config(component(
+                "c_text",
+                PortfolioComponentTypeDict.TEXT_SECTION.getCode(),
+                1000,
+                true,
+                textConfig
+        ))))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("文字说明字体不支持");
+    }
+
+    /**
+     * 字体是固定配置代码，不能通过去除首尾空白后再接受。
+     */
+    @Test
+    void textSectionShouldRejectFontFamilyWithSurroundingWhitespace() {
+        Map<String, Object> textConfig = new LinkedHashMap<>();
+        textConfig.put("content", "服务说明");
+        textConfig.put("fontFamily", " SYSTEM ");
+
+        assertThatThrownBy(() -> validator().normalize(7L, config(component(
+                "c_text",
+                PortfolioComponentTypeDict.TEXT_SECTION.getCode(),
+                1000,
+                true,
+                textConfig
+        ))))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("文字说明字体不支持");
+    }
+
+    /**
+     * 字号必须是范围内的 JSON 数值型精确整数，不能截断小数或接收数字字符串。
+     */
+    @Test
+    void textSectionShouldRejectNonExactOrOutOfRangeFontSize() {
+        for (Object invalid : List.of(28.5D, "28", 19, 49, 2147483648L)) {
+            Map<String, Object> textConfig = new LinkedHashMap<>();
+            textConfig.put("content", "服务说明");
+            textConfig.put("fontSizeRpx", invalid);
+
+            assertThatThrownBy(() -> validator().normalize(7L, config(component(
+                    "c_text",
+                    PortfolioComponentTypeDict.TEXT_SECTION.getCode(),
+                    1000,
+                    true,
+                    textConfig
+            ))))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("文字说明字号必须为20至48之间的整数");
+        }
+    }
+
+    /**
+     * 文字说明排版错误应保持正文、对齐、字体、字号的稳定校验顺序。
+     */
+    @Test
+    void textSectionShouldValidateAlignmentBeforeFontAndFontBeforeSize() {
+        Map<String, Object> invalidAlignment = new LinkedHashMap<>();
+        invalidAlignment.put("content", "服务说明");
+        invalidAlignment.put("alignment", "JUSTIFY");
+        invalidAlignment.put("fontFamily", "UNKNOWN");
+        invalidAlignment.put("fontSizeRpx", 19);
+
+        assertThatThrownBy(() -> validator().normalize(7L, config(component(
+                "c_text",
+                PortfolioComponentTypeDict.TEXT_SECTION.getCode(),
+                1000,
+                true,
+                invalidAlignment
+        ))))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("文字说明对齐方式不支持");
+
+        Map<String, Object> invalidFont = new LinkedHashMap<>(invalidAlignment);
+        invalidFont.put("alignment", "LEFT");
+        assertThatThrownBy(() -> validator().normalize(7L, config(component(
+                "c_text",
+                PortfolioComponentTypeDict.TEXT_SECTION.getCode(),
+                1000,
+                true,
+                invalidFont
+        ))))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("文字说明字体不支持");
+    }
+
+    /**
      * 分割线组件应补齐默认颜色和默认高度，并规范化显式配置。
      */
     @Test

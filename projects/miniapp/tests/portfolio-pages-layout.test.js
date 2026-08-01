@@ -62,6 +62,93 @@ test('portfolio pages use custom navigation bar', () => {
   ].forEach(assertUsesNavigation)
 })
 
+test('personal and team text section editors share typography control styles', () => {
+  const personalEditorWxss = read(
+    'pages/portfolios/standard-edit/portfolio-standard-edit.wxss'
+  )
+  const teamEditorWxss = read(
+    'pages/team-portfolios/standard-edit/team-portfolio-standard-edit.wxss'
+  )
+
+  assert.match(
+    personalEditorWxss,
+    /@import "\.\.\/\.\.\/\.\.\/styles\/portfolio-text-section-editor\.wxss";/
+  )
+  assert.match(
+    teamEditorWxss,
+    /@import "\.\.\/\.\.\/\.\.\/styles\/portfolio-text-section-editor\.wxss";/
+  )
+
+  const sharedEditorWxss = readExisting(
+    'styles/portfolio-text-section-editor.wxss'
+  )
+  for (const selector of [
+    '.text-section-font-list',
+    '.text-section-font-option',
+    '.text-section-font-option.active',
+    '.text-section-font-option.active .schedule-query-mode-radio',
+    '.text-section-font-option.active .text-section-alignment-radio',
+    '.text-section-size-list',
+    '.text-section-size-option',
+    '.text-section-size-option.active'
+  ]) {
+    assert.notEqual(readRule(sharedEditorWxss, selector).trim(), '', selector)
+  }
+  assert.doesNotMatch(personalEditorWxss, /\.text-section-font-list\s*\{/)
+  assert.doesNotMatch(personalEditorWxss, /\.text-section-size-list\s*\{/)
+  assert.doesNotMatch(teamEditorWxss, /\.text-section-font-list\s*\{/)
+  assert.doesNotMatch(teamEditorWxss, /\.text-section-size-list\s*\{/)
+})
+
+test('personal and team text section sheets keep actions reachable when controls overflow', () => {
+  const editorWxmlPaths = [
+    'pages/portfolios/standard-edit/portfolio-standard-edit.wxml',
+    'pages/team-portfolios/standard-edit/team-portfolio-standard-edit.wxml'
+  ]
+
+  for (const editorWxmlPath of editorWxmlPaths) {
+    const editorWxml = read(editorWxmlPath)
+    const sheetStart = editorWxml.indexOf('<view class="text-section-sheet-mask')
+    const scrollStart = editorWxml.indexOf(
+      '<scroll-view class="text-section-form" scroll-y type="list">',
+      sheetStart
+    )
+    const scrollEnd = editorWxml.indexOf('</scroll-view>', scrollStart)
+    const confirmButton = editorWxml.indexOf(
+      'catchtap="handleConfirmTextSectionConfig"',
+      sheetStart
+    )
+
+    assert.ok(sheetStart >= 0, `${editorWxmlPath} should contain the text section sheet`)
+    assert.ok(scrollStart > sheetStart, `${editorWxmlPath} should make the form scrollable`)
+    assert.ok(scrollEnd > scrollStart, `${editorWxmlPath} should close the form scroll view`)
+    assert.ok(
+      confirmButton > scrollEnd,
+      `${editorWxmlPath} should keep the confirm button outside the scrollable form`
+    )
+    assert.match(
+      editorWxml.slice(scrollStart, scrollEnd),
+      /<view class="text-section-form-content">/
+    )
+  }
+
+  const sharedEditorWxss = readExisting('styles/portfolio-text-section-editor.wxss')
+  const sheetPanelRule = readRule(sharedEditorWxss, '.text-section-sheet-panel')
+  const formRule = readRule(sharedEditorWxss, '.text-section-form')
+
+  assert.match(
+    sheetPanelRule,
+    /height:\s*calc\(76vh - env\(safe-area-inset-bottom\)\);/
+  )
+  assert.match(formRule, /flex:\s*1 1 auto;/)
+  assert.match(formRule, /height:\s*0;/)
+  assert.match(formRule, /min-height:\s*0;/)
+  assert.match(
+    sharedEditorWxss,
+    /\.text-section-sheet-panel \.component-work-actions,\s*\.text-section-actions\s*\{[^}]*flex:\s*none;/
+  )
+})
+
 test('bottom portfolio tabs navigate to portfolio list page', () => {
   [
     'pages/index/index.js',
@@ -281,8 +368,24 @@ test('maintainer portfolio pages expose expected controls', () => {
   assert.match(editWxml, /编辑文字说明/)
   assert.match(editWxml, /文字说明/)
   assert.match(editWxml, /maxlength="\{\{textSectionMaxLength\}\}"/)
+  assert.match(editWxml, /映期 Folio 字体预览 123/)
+  assert.match(editWxml, /catchtap="handleTextSectionFontTap"/)
+  assert.match(editWxml, /catchtap="handleTextSectionFontSizeTap"/)
+  assert.match(editWxml, /当前设备以系统字体预览/)
   assert.match(editWxml, /textSectionAlignmentOptions/)
   assert.match(editWxml, /handleTextSectionAlignmentTap/)
+  const textSectionMarkup = editWxml.slice(
+    editWxml.indexOf('<view class="text-section-sheet-mask'),
+    editWxml.indexOf('<view class="divider-sheet-mask')
+  )
+  const textAreaIndex = textSectionMarkup.indexOf('text-section-sheet-textarea')
+  const fontIndex = textSectionMarkup.indexOf('text-section-font-list')
+  const sizeIndex = textSectionMarkup.indexOf('text-section-size-list')
+  const alignmentIndex = textSectionMarkup.indexOf('textSectionAlignmentOptions')
+  assert.ok(textAreaIndex >= 0)
+  assert.ok(fontIndex > textAreaIndex)
+  assert.ok(sizeIndex > fontIndex)
+  assert.ok(alignmentIndex > sizeIndex)
   assert.match(editWxml, /componentRows\.isEditable\(item\.componentType\)[\s\S]*editable/)
   assert.match(editWxml, /divider-sheet-mask/)
   assert.match(editWxml, /编辑分割线/)
@@ -387,7 +490,7 @@ test('visitor portfolio pages expose maintenance, QR, contact and schedule surfa
   assert.match(visitorWxml, /<portfolio-text-section text-section="\{\{item\.textSection\}\}"/)
   assert.match(previewWxml, /<portfolio-text-section text-section="\{\{item\.textSection\}\}"/)
   assert.match(textSectionWxml, /class="text-section portfolio-theme-\{\{themeMode\}\} \{\{textSection\.alignmentClass\}\}"/)
-  assert.match(textSectionWxml, /<text class="text-content" space="nbsp">\{\{textSection\.content\}\}<\/text>/)
+  assert.match(textSectionWxml, /class="text-content \{\{textSection\.fontClass\}\}"[\s\S]*style="\{\{textSection\.fontSizeStyle\}\}"[\s\S]*space="nbsp"[\s\S]*\{\{textSection\.content\}\}<\/text>/)
   assert.match(visitorWxml, /<portfolio-divider divider="\{\{item\.divider\}\}"/)
   assert.match(previewWxml, /<portfolio-divider divider="\{\{item\.divider\}\}"/)
   assert.match(dividerWxml, /class="divider-section portfolio-theme-\{\{themeMode\}\}"[\s\S]*style="\{\{divider\.style\}\}"/)

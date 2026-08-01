@@ -405,6 +405,64 @@ class PortfolioRenderServiceTest {
     }
 
     /**
+     * 文字说明组件应透出受支持的字体和精确整数字号。
+     */
+    @Test
+    void renderShouldExposeTextSectionTypography() {
+        PortfolioConfigDto config = config(component(
+                "c_text",
+                PortfolioComponentTypeDict.TEXT_SECTION.getCode(),
+                1000,
+                Map.of(
+                        "content", "第一行\n第二行",
+                        "alignment", "RIGHT",
+                        "fontFamily", "WECHAT_SANS_SS",
+                        "fontSizeRpx", 36
+                )
+        ));
+
+        PortfolioRenderDto render = service().render(portfolio(), config, false, false, null, null);
+
+        PortfolioRenderDto.TextSection textSection = render.getComponents().get(0).getTextSection();
+        assertThat(textSection.getFontFamily()).isEqualTo("WECHAT_SANS_SS");
+        assertThat(textSection.getFontSizeRpx()).isEqualTo(36);
+    }
+
+    /**
+     * 历史或异常文字说明配置应回退到安全的个人排版默认值。
+     */
+    @Test
+    void renderShouldFallbackInvalidTextSectionTypography() {
+        Map<String, Object> invalidTypography = new LinkedHashMap<>();
+        invalidTypography.put("content", "异常存量");
+        invalidTypography.put("fontFamily", "UNKNOWN");
+        invalidTypography.put("fontSizeRpx", 28.5D);
+        PortfolioConfigDto config = config(
+                component(
+                        "c_legacy",
+                        PortfolioComponentTypeDict.TEXT_SECTION.getCode(),
+                        1000,
+                        Map.of("content", "旧配置")
+                ),
+                component(
+                        "c_invalid",
+                        PortfolioComponentTypeDict.TEXT_SECTION.getCode(),
+                        2000,
+                        invalidTypography
+                )
+        );
+
+        PortfolioRenderDto render = service().render(portfolio(), config, false, false, null, null);
+
+        assertThat(render.getComponents())
+                .extracting(component -> component.getTextSection().getFontFamily())
+                .containsExactly("SYSTEM", "SYSTEM");
+        assertThat(render.getComponents())
+                .extracting(component -> component.getTextSection().getFontSizeRpx())
+                .containsExactly(26, 26);
+    }
+
+    /**
      * 分割线组件应透出颜色和高度，供预览页和访客页一致展示。
      */
     @Test

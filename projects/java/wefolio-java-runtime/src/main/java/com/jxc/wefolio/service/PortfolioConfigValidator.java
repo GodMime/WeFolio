@@ -1,7 +1,10 @@
 package com.jxc.wefolio.service;
 
+import com.jxc.wefolio.common.PortfolioTextTypographySupport;
+import com.jxc.wefolio.constant.PortfolioTextTypographyConstants;
 import com.jxc.wefolio.dict.MediaTypeDict;
 import com.jxc.wefolio.dict.PortfolioComponentTypeDict;
+import com.jxc.wefolio.dict.PortfolioTextFontFamilyDict;
 import com.jxc.wefolio.dict.ReferenceTypeDict;
 import com.jxc.wefolio.dict.WorkAuditStatusDict;
 import com.jxc.wefolio.dict.WorkStatusDict;
@@ -912,8 +915,26 @@ public class PortfolioConfigValidator {
         if (!TEXT_SECTION_ALIGNMENTS.contains(alignment)) {
             throw new BusinessException(PortfolioMessage.TEXT_SECTION_ALIGNMENT_UNSUPPORTED_MESSAGE);
         }
+        Object fontFamilySource = component.getConfig().get(
+                PortfolioTextTypographySupport.FONT_FAMILY_CONFIG_KEY);
+        String fontFamily = fontFamilySource == null
+                ? PortfolioTextFontFamilyDict.SYSTEM.getCode()
+                : PortfolioTextTypographySupport.asSupportedFontFamily(fontFamilySource);
+        if (fontFamily == null) {
+            throw new BusinessException(PortfolioMessage.TEXT_SECTION_FONT_UNSUPPORTED_MESSAGE);
+        }
+        Object fontSizeSource = component.getConfig().get(
+                PortfolioTextTypographySupport.FONT_SIZE_RPX_CONFIG_KEY);
+        Integer fontSizeRpx = fontSizeSource == null
+                ? Integer.valueOf(PortfolioTextTypographyConstants.LEGACY_PERSONAL_FONT_SIZE_RPX)
+                : PortfolioTextTypographySupport.asExactFontSizeRpx(fontSizeSource);
+        if (!PortfolioTextTypographySupport.isValidFontSizeRpx(fontSizeRpx)) {
+            throw new BusinessException(PortfolioMessage.TEXT_SECTION_FONT_SIZE_INVALID_MESSAGE);
+        }
         component.getConfig().put(CONFIG_KEY_CONTENT, content);
         component.getConfig().put(CONFIG_KEY_ALIGNMENT, alignment);
+        component.getConfig().put(PortfolioTextTypographySupport.FONT_FAMILY_CONFIG_KEY, fontFamily);
+        component.getConfig().put(PortfolioTextTypographySupport.FONT_SIZE_RPX_CONFIG_KEY, fontSizeRpx);
     }
 
     /**

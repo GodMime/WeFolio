@@ -249,12 +249,25 @@ test('does not apply an update after a later download failure clears readiness',
   assert.equal(harness.getApplyCount(), 0)
 })
 
-function loadAppWithUpdateController(updateController) {
+function restoreCachedModule(modulePath, previousModule) {
+  if (previousModule) {
+    require.cache[modulePath] = previousModule
+  } else {
+    delete require.cache[modulePath]
+  }
+}
+
+function loadAppWithUpdateController(
+  updateController,
+  fontLoaderMock = null
+) {
   const appPath = require.resolve('../app')
   const updateManagerPath = require.resolve('../utils/update-manager')
+  const fontLoaderPath = require.resolve('../utils/portfolio-font-loader')
   const previousApp = global.App
   const previousAppModule = require.cache[appPath]
   const previousUpdateManagerModule = require.cache[updateManagerPath]
+  const previousFontLoaderModule = require.cache[fontLoaderPath]
   let appDefinition
 
   require.cache[updateManagerPath] = {
@@ -267,45 +280,58 @@ function loadAppWithUpdateController(updateController) {
       }
     }
   }
+  if (fontLoaderMock) {
+    require.cache[fontLoaderPath] = {
+      id: fontLoaderPath,
+      filename: fontLoaderPath,
+      loaded: true,
+      exports: fontLoaderMock
+    }
+  }
   global.App = (definition) => {
     appDefinition = definition
   }
   delete require.cache[appPath]
 
+  function restore() {
+    global.App = previousApp
+    restoreCachedModule(appPath, previousAppModule)
+    restoreCachedModule(updateManagerPath, previousUpdateManagerModule)
+    restoreCachedModule(fontLoaderPath, previousFontLoaderModule)
+  }
+
   try {
     require(appPath)
   } catch (error) {
-    global.App = previousApp
-    if (previousAppModule) {
-      require.cache[appPath] = previousAppModule
-    } else {
-      delete require.cache[appPath]
-    }
-    if (previousUpdateManagerModule) {
-      require.cache[updateManagerPath] = previousUpdateManagerModule
-    } else {
-      delete require.cache[updateManagerPath]
-    }
+    restore()
     throw error
   }
 
   return {
     appDefinition,
-    cleanup() {
-      global.App = previousApp
-      if (previousAppModule) {
-        require.cache[appPath] = previousAppModule
-      } else {
-        delete require.cache[appPath]
-      }
-      if (previousUpdateManagerModule) {
-        require.cache[updateManagerPath] = previousUpdateManagerModule
-      } else {
-        delete require.cache[updateManagerPath]
-      }
-    }
+    cleanup: restore
   }
 }
+
+test('app starts font registration without awaiting it', () => {
+  let loadCalls = 0
+  const neverSettles = new Promise(() => {})
+  const loaded = loadAppWithUpdateController(
+    { init() {}, promptIfReady() {} },
+    {
+      loadPortfolioFonts() {
+        loadCalls += 1
+        return neverSettles
+      }
+    }
+  )
+  try {
+    assert.doesNotThrow(() => loaded.appDefinition.onLaunch())
+    assert.equal(loadCalls, 1)
+  } finally {
+    loaded.cleanup()
+  }
+})
 
 test('app initializes updates on launch and prompts on show without changing api base url', () => {
   let initCalls = 0

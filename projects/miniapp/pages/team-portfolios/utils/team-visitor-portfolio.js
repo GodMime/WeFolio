@@ -1,5 +1,9 @@
 const { request } = require('../../../utils/request.js')
 const { normalizeId } = require('../../../utils/id.js')
+const {
+  LEGACY_TEAM_FONT_SIZE_RPX,
+  buildPortfolioTextTypography
+} = require('../../../utils/portfolio-text-typography.js')
 
 const TEAM_VISITOR_PREFIX = '/api/visitor/team-portfolios'
 const QR_EVENT_TYPE = 'QR_CODE_INTERACTED'
@@ -19,12 +23,24 @@ function requireIdempotencyKey(value) {
 }
 
 function normalizeRenderComponent(item = {}, index = 0) {
+  const componentType = text(item.componentType)
+  const sourceData = item.data && typeof item.data === 'object' ? item.data : {}
+  const data = componentType === 'TEXT_SECTION'
+    ? Object.assign(
+        {},
+        sourceData,
+        buildPortfolioTextTypography(
+          sourceData,
+          LEGACY_TEAM_FONT_SIZE_RPX
+        )
+      )
+    : sourceData
   return {
     componentKey: text(item.componentKey),
-    componentType: text(item.componentType),
+    componentType,
     name: text(item.name),
     sortOrder: Number.isFinite(Number(item.sortOrder)) ? Number(item.sortOrder) : index,
-    data: item.data && typeof item.data === 'object' ? item.data : {}
+    data
   }
 }
 

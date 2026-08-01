@@ -594,7 +594,9 @@ test('normalizes text section content and alignment for render and config pages'
           sortOrder: 1000,
           textSection: {
             content: '第一行\n第二行',
-            alignment: 'RIGHT'
+            alignment: 'RIGHT',
+            fontFamily: 'WECHAT_SANS_SS',
+            fontSizeRpx: 36
           }
         }
       ]
@@ -624,20 +626,44 @@ test('normalizes text section content and alignment for render and config pages'
           sortOrder: 1000,
           textSection: {
             content: '说明',
-            alignment: 'JUSTIFY'
+            alignment: 'JUSTIFY',
+            fontFamily: 'UNKNOWN',
+            fontSizeRpx: 28.5
           }
         }
       ]
+    }
+  })
+  const stringSizeResult = normalizeVisitorPortfolio({
+    renderData: {
+      components: [{
+        componentKey: 'c_text',
+        componentType: 'TEXT_SECTION',
+        sortOrder: 1000,
+        textSection: {
+          content: '说明',
+          fontFamily: 'WECHAT_SANS_SS',
+          fontSizeRpx: '28'
+        }
+      }]
     }
   })
 
   assert.equal(renderResult.components[0].textSection.content, '第一行\n第二行')
   assert.equal(renderResult.components[0].textSection.alignment, 'RIGHT')
   assert.equal(renderResult.components[0].textSection.alignmentClass, 'align-right')
+  assert.equal(renderResult.components[0].textSection.fontClass, 'font-wechat-sans-ss')
+  assert.equal(renderResult.components[0].textSection.fontSizeStyle, 'font-size: 36rpx;')
   assert.equal(configResult.components[0].textSection.content, '服务说明')
   assert.equal(configResult.components[0].textSection.alignmentClass, 'align-center')
+  assert.equal(configResult.components[0].textSection.fontClass, 'font-system')
+  assert.equal(configResult.components[0].textSection.fontSizeStyle, 'font-size: 26rpx;')
   assert.equal(invalidResult.components[0].textSection.alignment, 'LEFT')
   assert.equal(invalidResult.components[0].textSection.alignmentClass, 'align-left')
+  assert.equal(invalidResult.components[0].textSection.fontClass, 'font-system')
+  assert.equal(invalidResult.components[0].textSection.fontSizeStyle, 'font-size: 26rpx;')
+  assert.equal(stringSizeResult.components[0].textSection.fontClass, 'font-wechat-sans-ss')
+  assert.equal(stringSizeResult.components[0].textSection.fontSizeStyle, 'font-size: 26rpx;')
 })
 
 test('normalizes divider color and height for render and config pages', () => {

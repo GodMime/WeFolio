@@ -36,6 +36,19 @@ const {
 } = require('../utils/team-portfolios.js')
 const { confirmPortfolioPublishDisclaimer } = require('../utils/portfolio-publish-disclaimer.js')
 const { selectableWorksFor } = require('../utils/work-media.js')
+const {
+  LEGACY_TEAM_FONT_SIZE_RPX,
+  NEW_COMPONENT_FONT_SIZE_RPX,
+  PORTFOLIO_TEXT_FONT_FAMILIES,
+  PORTFOLIO_TEXT_FONT_OPTIONS,
+  buildPortfolioTextFontSizeOptions,
+  buildPortfolioTextTypography
+} = require('../../../utils/portfolio-text-typography.js')
+const {
+  getPortfolioFontCapability,
+  isPortfolioFontAvailable,
+  loadPortfolioFonts
+} = require('../../../utils/portfolio-font-loader.js')
 
 const TYPE_BUCKETS = Object.freeze({ TEAM_PROFILE: 'teamProfile', CAROUSEL: 'carousel', SINGLE_WORK: 'singleWork', DIVIDER: 'divider', MEMBER_PORTFOLIO_GRID: 'grid', MEMBER_PORTFOLIO_LIST: 'list', TEXT_SECTION: 'text', SCHEDULE_QUERY: 'schedule', CONTACT_FORM: 'contact', QR_CONTACT: 'qr' })
 const COMPONENT_NAMES = Object.freeze({ TEAM_PROFILE: '团队资料', CAROUSEL: '轮播图', SINGLE_WORK: '单个作品', DIVIDER: '分割线', MEMBER_PORTFOLIO_GRID: '双列作品集', MEMBER_PORTFOLIO_LIST: '单列作品集', TEXT_SECTION: '文字说明', SCHEDULE_QUERY: '档期查询', CONTACT_FORM: '预留联系信息', QR_CONTACT: '二维码联系' })
@@ -191,12 +204,41 @@ function resetQrContactCropState() {
 function countTextCodePoints(value) { return Array.from(String(value || '')).length }
 function buildTextSectionForm(config = {}) {
   const alignment = String(config.alignment || '').trim()
+  const typography = buildPortfolioTextTypography(
+    config,
+    LEGACY_TEAM_FONT_SIZE_RPX
+  )
   return {
     content: String(config.content || '').trim(),
-    alignment: TEXT_SECTION_ALIGNMENT_OPTIONS.some((item) => item.value === alignment) ? alignment : TEXT_SECTION_ALIGNMENTS.LEFT
+    alignment: TEXT_SECTION_ALIGNMENT_OPTIONS.some((item) => item.value === alignment) ? alignment : TEXT_SECTION_ALIGNMENTS.LEFT,
+    fontFamily: typography.fontFamily,
+    fontSizeRpx: typography.fontSizeRpx
   }
 }
 function buildTextSectionFieldCounters(form = {}) { return { content: `${countTextCodePoints(form.content)} / ${TEXT_SECTION_MAX_LENGTH}` } }
+function buildTextSectionFontOptions(
+  capability = getPortfolioFontCapability()
+) {
+  return PORTFOLIO_TEXT_FONT_OPTIONS.map((item) =>
+    Object.assign({}, item, {
+      available: isPortfolioFontAvailable(item.value, capability)
+    })
+  )
+}
+function buildTextSectionEditorState(config = {}) {
+  const textSectionForm = buildTextSectionForm(config)
+  return {
+    textSectionForm,
+    textSectionFieldCounters: buildTextSectionFieldCounters(textSectionForm),
+    textSectionFontOptions: buildTextSectionFontOptions(),
+    textSectionSizeOptions:
+      buildPortfolioTextFontSizeOptions(textSectionForm.fontSizeRpx),
+    textSectionTypography: buildPortfolioTextTypography(
+      textSectionForm,
+      LEGACY_TEAM_FONT_SIZE_RPX
+    )
+  }
+}
 function buildContactFormConfigForm(config = {}) {
   return {
     displayMode: config.displayMode === CONTACT_FORM_DISPLAY_MODES.INLINE_FORM
@@ -276,13 +318,30 @@ function buckets(components) {
 }
 
 Page({
-  data: { portfolioId: 0, teamId: 0, teamSnapshot: {}, loading: false, errorMessage: '', canMaintain: false, publicationStatus: 'DRAFT_ONLY', draftRevision: 0, publishedRevision: 0, statusText: '草稿', statusTone: 'draft', showPublishAction: false, config: normalizeTeamPortfolioConfig(), activeMenuKey: '', activeMenuTitle: '', activeMenuTitleCount: 0, navigationItems: [], bottomNavCount: 1, backgroundColorOptions: TEAM_BACKGROUND_COLORS, bottomNavCountOptions: TEAM_BOTTOM_NAV_COUNTS, backgroundColorSheetVisible: false, backgroundColorDraft: '#FFFFFF', backgroundColorHsv: hexToHsv('#FFFFFF'), backgroundHueColor: '#FF0000', backgroundColorPadDotStyle: 'left: 0%; top: 0%', componentList: [], componentBuckets: buckets([]), componentOptions: buildComponentOptions(), componentValidation: {}, componentSources: {}, hasInvalidComponents: false, saving: false, publishing: false, openingLibrary: false, shareCoverUploading: false, qrContactChoosing: false, qrContactCropVisible: false, qrContactCropSaving: false, qrContactCropErrorText: '', qrContactCropState: null, qrContactCropTouchStart: null, qrContactCropCanvasWidth: WECHAT_QR_CROP_OUTPUT_WIDTH, qrContactCropCanvasHeight: WECHAT_QR_CROP_OUTPUT_WIDTH, teamProfileRefreshing: false, pendingDraftKey: '', pendingPublishKey: '', pendingPublishRevision: 0, shareTitleCounter: '0 / 50', componentSheetVisible: false, textSectionSheetVisible: false, textSectionEditingComponentKey: '', textSectionAlignmentOptions: TEXT_SECTION_ALIGNMENT_OPTIONS, textSectionMaxLength: TEXT_SECTION_MAX_LENGTH, textSectionForm: buildTextSectionForm(), textSectionFieldCounters: buildTextSectionFieldCounters(buildTextSectionForm()), contactFormSheetVisible: false, contactFormEditingComponentKey: '', contactFormDisplayModeOptions: CONTACT_FORM_DISPLAY_MODE_OPTIONS, contactFormConfigForm: buildContactFormConfigForm(), scheduleQuerySheetVisible: false, scheduleQueryEditingComponentKey: '', scheduleQueryDisplayModeOptions: SCHEDULE_QUERY_DISPLAY_MODE_OPTIONS, scheduleQueryForm: buildScheduleQueryForm(), dividerSheetVisible: false, dividerEditingComponentKey: '', dividerColorOptions: DIVIDER_COLOR_OPTIONS, dividerForm: buildDividerForm(), componentEditorVisible: false, activeComponentKey: '', activeComponentType: '', activeComponentName: '', activeComponent: { config: {} }, activeComponentSource: {}, activeComponentNeedsPortfolio: false, revealedComponentKey: '', componentTouchStart: null, draggingIndex: -1, dragTargetIndex: -1, componentDragStartY: 0, componentDragStyle: '', componentMoveSheetVisible: false, componentMoveKey: '', componentMoveTargets: [], componentMovePending: false, highlightedComponentKey: '', componentScrollTarget: '', shareCoverCropVisible: false, shareCoverCropPath: '' },
+  data: { portfolioId: 0, teamId: 0, teamSnapshot: {}, loading: false, errorMessage: '', canMaintain: false, publicationStatus: 'DRAFT_ONLY', draftRevision: 0, publishedRevision: 0, statusText: '草稿', statusTone: 'draft', showPublishAction: false, config: normalizeTeamPortfolioConfig(), activeMenuKey: '', activeMenuTitle: '', activeMenuTitleCount: 0, navigationItems: [], bottomNavCount: 1, backgroundColorOptions: TEAM_BACKGROUND_COLORS, bottomNavCountOptions: TEAM_BOTTOM_NAV_COUNTS, backgroundColorSheetVisible: false, backgroundColorDraft: '#FFFFFF', backgroundColorHsv: hexToHsv('#FFFFFF'), backgroundHueColor: '#FF0000', backgroundColorPadDotStyle: 'left: 0%; top: 0%', componentList: [], componentBuckets: buckets([]), componentOptions: buildComponentOptions(), componentValidation: {}, componentSources: {}, hasInvalidComponents: false, saving: false, publishing: false, openingLibrary: false, shareCoverUploading: false, qrContactChoosing: false, qrContactCropVisible: false, qrContactCropSaving: false, qrContactCropErrorText: '', qrContactCropState: null, qrContactCropTouchStart: null, qrContactCropCanvasWidth: WECHAT_QR_CROP_OUTPUT_WIDTH, qrContactCropCanvasHeight: WECHAT_QR_CROP_OUTPUT_WIDTH, teamProfileRefreshing: false, pendingDraftKey: '', pendingPublishKey: '', pendingPublishRevision: 0, shareTitleCounter: '0 / 50', componentSheetVisible: false, textSectionSheetVisible: false, textSectionEditingComponentKey: '', textSectionAlignmentOptions: TEXT_SECTION_ALIGNMENT_OPTIONS, textSectionMaxLength: TEXT_SECTION_MAX_LENGTH, portfolioFontCapability: getPortfolioFontCapability(), ...buildTextSectionEditorState(), contactFormSheetVisible: false, contactFormEditingComponentKey: '', contactFormDisplayModeOptions: CONTACT_FORM_DISPLAY_MODE_OPTIONS, contactFormConfigForm: buildContactFormConfigForm(), scheduleQuerySheetVisible: false, scheduleQueryEditingComponentKey: '', scheduleQueryDisplayModeOptions: SCHEDULE_QUERY_DISPLAY_MODE_OPTIONS, scheduleQueryForm: buildScheduleQueryForm(), dividerSheetVisible: false, dividerEditingComponentKey: '', dividerColorOptions: DIVIDER_COLOR_OPTIONS, dividerForm: buildDividerForm(), componentEditorVisible: false, activeComponentKey: '', activeComponentType: '', activeComponentName: '', activeComponent: { config: {} }, activeComponentSource: {}, activeComponentNeedsPortfolio: false, revealedComponentKey: '', componentTouchStart: null, draggingIndex: -1, dragTargetIndex: -1, componentDragStartY: 0, componentDragStyle: '', componentMoveSheetVisible: false, componentMoveKey: '', componentMoveTargets: [], componentMovePending: false, highlightedComponentKey: '', componentScrollTarget: '', shareCoverCropVisible: false, shareCoverCropPath: '' },
   onLoad(options = {}) {
     const portfolioId = Number(options.portfolioId) || 0
     const teamId = Number(options.teamId) || 0
+    this.loadPortfolioFontCapability()
     if (portfolioId) { this.setData({ portfolioId }); return this.bootstrap() }
     if (teamId) { this.setData({ teamId }); return this.bootstrapNew() }
     this.setData({ errorMessage: '作品集参数无效' })
+  },
+  loadPortfolioFontCapability() {
+    try {
+      loadPortfolioFonts()
+        .then((capability) => {
+          this.setData({
+            portfolioFontCapability: capability,
+            textSectionFontOptions: buildTextSectionFontOptions(capability)
+          })
+        })
+        .catch((error) => {
+          console.warn('加载团队作品集内置字体失败', error)
+        })
+    } catch (error) {
+      console.warn('启动团队作品集内置字体加载失败', error)
+    }
   },
   async bootstrapNew() {
     if (this.data.loading || !this.data.teamId) return
@@ -374,12 +433,18 @@ Page({
     const location = findTeamPortfolioComponent(this.data.config, componentKey)
     const component = location && location.component
     if (!component || component.componentType !== 'TEXT_SECTION') return
-    const textSectionForm = buildTextSectionForm(component.config)
-    this.setData({ textSectionSheetVisible: true, textSectionEditingComponentKey: componentKey, textSectionForm, textSectionFieldCounters: buildTextSectionFieldCounters(textSectionForm) })
+    this.setData({
+      textSectionSheetVisible: true,
+      textSectionEditingComponentKey: componentKey,
+      ...buildTextSectionEditorState(component.config)
+    })
   },
   handleCloseTextSectionSheet() {
-    const textSectionForm = buildTextSectionForm()
-    this.setData({ textSectionSheetVisible: false, textSectionEditingComponentKey: '', textSectionForm, textSectionFieldCounters: buildTextSectionFieldCounters(textSectionForm) })
+    this.setData({
+      textSectionSheetVisible: false,
+      textSectionEditingComponentKey: '',
+      ...buildTextSectionEditorState()
+    })
   },
   handleTextSectionInput(event) {
     const textSectionForm = Object.assign({}, this.data.textSectionForm, { content: event.detail.value || '' })
@@ -389,6 +454,46 @@ Page({
     const alignment = event.currentTarget.dataset.value
     if (!TEXT_SECTION_ALIGNMENT_OPTIONS.some((item) => item.value === alignment)) return
     this.setData({ textSectionForm: Object.assign({}, this.data.textSectionForm, { alignment }) })
+  },
+  handleTextSectionFontTap(event) {
+    const value = event.currentTarget.dataset.value
+    const option = this.data.textSectionFontOptions.find(
+      (item) => item.value === value
+    )
+    if (!option || !option.available) return
+    const textSectionForm = Object.assign(
+      {},
+      this.data.textSectionForm,
+      { fontFamily: value }
+    )
+    this.setData({
+      textSectionForm,
+      textSectionTypography: buildPortfolioTextTypography(
+        textSectionForm,
+        LEGACY_TEAM_FONT_SIZE_RPX
+      )
+    })
+  },
+  handleTextSectionFontSizeTap(event) {
+    const value = event.currentTarget.dataset.value
+    const option = this.data.textSectionSizeOptions.find(
+      (item) => item.value === value
+    )
+    if (!option || typeof value !== 'number') return
+    const textSectionForm = Object.assign(
+      {},
+      this.data.textSectionForm,
+      { fontSizeRpx: value }
+    )
+    this.setData({
+      textSectionForm,
+      textSectionSizeOptions:
+        buildPortfolioTextFontSizeOptions(textSectionForm.fontSizeRpx),
+      textSectionTypography: buildPortfolioTextTypography(
+        textSectionForm,
+        LEGACY_TEAM_FONT_SIZE_RPX
+      )
+    })
   },
   handleConfirmTextSectionConfig() {
     const form = buildTextSectionForm(this.data.textSectionForm)
@@ -768,7 +873,12 @@ Page({
         ? { memberUserId: null, workId: null, showTitle: true, showDescription: false }
         : MEMBER_PORTFOLIO_COMPONENT_TYPES.includes(componentType)
           ? { showMemberName: true }
-          : {}
+          : componentType === 'TEXT_SECTION'
+            ? {
+                fontFamily: PORTFOLIO_TEXT_FONT_FAMILIES.SYSTEM,
+                fontSizeRpx: NEW_COMPONENT_FONT_SIZE_RPX
+              }
+            : {}
     const components = getTeamMenuComponentList(this.data.config, this.data.activeMenuKey)
     components.push({ componentKey, componentType, sortOrder: (components.length + 1) * 1000, enabled: true, config: componentConfig })
     this.updateConfig(replaceTeamMenuComponentList(this.data.config, this.data.activeMenuKey, components))

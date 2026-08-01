@@ -484,10 +484,159 @@ class TeamDisplayComponentsTest {
         JSONObject rendered = new TeamTextSectionComponentRenderer().render(normalized, context);
         normalized.put("content", "被修改");
 
-        assertThat(rendered).isEqualTo(JSON.parseObject("{\"content\":\"  保留空格  \",\"alignment\":\"LEFT\"}"));
+        assertThat(rendered).isEqualTo(JSON.parseObject("""
+                {
+                  "content":"  保留空格  ",
+                  "alignment":"LEFT",
+                  "fontFamily":"SYSTEM",
+                  "fontSizeRpx":32
+                }
+                """));
         assertThat(new TeamTextSectionComponentReferenceExtractor()
                 .extract(COMPONENT_KEY, COMPONENT_PATH, rendered, context))
                 .isEmpty();
+    }
+
+    /**
+     * 团队文字说明应在 DTO 转换前校验排版值并保留合法配置。
+     */
+    @Test
+    void textSectionShouldValidateTypographyBeforeDtoConversion() {
+        TeamTextSectionComponentValidator validator = new TeamTextSectionComponentValidator();
+        TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 21L, 3);
+
+        JSONObject normalized = validator.normalizeAndValidate(JSON.parseObject("""
+                {
+                  "content":"团队说明",
+                  "alignment":"CENTER",
+                  "fontFamily":"WECHAT_SANS_SS",
+                  "fontSizeRpx":48
+                }
+                """), context);
+        assertThat(normalized)
+                .containsEntry("fontFamily", "WECHAT_SANS_SS")
+                .containsEntry("fontSizeRpx", 48);
+        assertThat(validator.normalizeAndValidate(JSON.parseObject("""
+                {
+                  "content":"团队说明",
+                  "fontFamily":"SYSTEM",
+                  "fontSizeRpx":20
+                }
+                """), context))
+                .containsEntry("fontFamily", "SYSTEM")
+                .containsEntry("fontSizeRpx", 20);
+
+        for (String json : List.of(
+                "{\"content\":\"说明\",\"fontSizeRpx\":28.5}",
+                "{\"content\":\"说明\",\"fontSizeRpx\":\"28\"}",
+                "{\"content\":\"说明\",\"fontSizeRpx\":2147483648}",
+                "{\"content\":\"说明\",\"fontSizeRpx\":19}",
+                "{\"content\":\"说明\",\"fontSizeRpx\":49}"
+        )) {
+            assertThatThrownBy(() -> validator.normalizeAndValidate(JSON.parseObject(json), context))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("文字说明字号必须为20至48之间的整数");
+        }
+        for (String fontFamily : List.of("WECHAT_SANS_STD", "UNKNOWN")) {
+            assertThatThrownBy(() -> validator.normalizeAndValidate(
+                    JSON.parseObject("{\"content\":\"说明\",\"fontFamily\":\"%s\"}"
+                            .formatted(fontFamily)), context))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("文字说明字体不支持");
+        }
+        assertThatThrownBy(() -> validator.normalizeAndValidate(
+                JSON.parseObject("{\"content\":\"说明\",\"fontFamily\":{\"value\":\"SYSTEM\"}}"), context))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("文字说明字体不支持");
+    }
+
+    /**
+     * 团队文字说明组合错误应稳定按正文、长度、对齐、字体、字号顺序返回。
+     */
+    @Test
+    void textSectionShouldKeepValidationErrorPriority() {
+        TeamTextSectionComponentValidator validator = new TeamTextSectionComponentValidator();
+        TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 21L, 3);
+
+        assertThatThrownBy(() -> validator.normalizeAndValidate(JSON.parseObject("""
+                {
+                  "content":"   ",
+                  "alignment":{"value":"LEFT"},
+                  "fontFamily":{"value":"SYSTEM"},
+                  "fontSizeRpx":"28"
+                }
+                """), context))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("文字说明内容不能为空");
+        assertThatThrownBy(() -> validator.normalizeAndValidate(JSON.parseObject("""
+                {
+                  "content":"%s",
+                  "alignment":{"value":"LEFT"},
+                  "fontFamily":{"value":"SYSTEM"},
+                  "fontSizeRpx":"28"
+                }
+                """.formatted("字".repeat(201))), context))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("文字说明最多200个字符");
+        assertThatThrownBy(() -> validator.normalizeAndValidate(JSON.parseObject("""
+                {
+                  "content":"说明",
+                  "alignment":{"value":"LEFT"},
+                  "fontFamily":{"value":"SYSTEM"},
+                  "fontSizeRpx":"28"
+                }
+                """), context))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("文字说明对齐方式不支持");
+        assertThatThrownBy(() -> validator.normalizeAndValidate(JSON.parseObject("""
+                {
+                  "content":"说明",
+                  "alignment":"LEFT",
+                  "fontFamily":{"value":"SYSTEM"},
+                  "fontSizeRpx":"28"
+                }
+                """), context))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("文字说明字体不支持");
+        assertThatThrownBy(() -> validator.normalizeAndValidate(JSON.parseObject("""
+                {
+                  "content":"说明",
+                  "alignment":"LEFT",
+                  "fontFamily":"SYSTEM",
+                  "fontSizeRpx":"28"
+                }
+                """), context))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("文字说明字号必须为20至48之间的整数");
+    }
+
+    /**
+     * 团队文字说明渲染器应防御未经校验的原始排版配置。
+     */
+    @Test
+    void textSectionRendererShouldRejectLossyOrInvalidTypography() {
+        TeamTextSectionComponentRenderer renderer = new TeamTextSectionComponentRenderer();
+        TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 21L, 3);
+
+        for (String json : List.of(
+                "{\"content\":\"说明\",\"fontSizeRpx\":28.5}",
+                "{\"content\":\"说明\",\"fontSizeRpx\":\"28\"}"
+        )) {
+            assertThatThrownBy(() -> renderer.render(JSON.parseObject(json), context))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("文字说明字号必须为20至48之间的整数");
+        }
+        for (String fontFamily : List.of("WECHAT_SANS_STD", "UNKNOWN")) {
+            assertThatThrownBy(() -> renderer.render(
+                    JSON.parseObject("{\"content\":\"说明\",\"fontFamily\":\"%s\"}"
+                            .formatted(fontFamily)), context))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("文字说明字体不支持");
+        }
+        assertThatThrownBy(() -> renderer.render(
+                JSON.parseObject("{\"content\":\"说明\",\"fontFamily\":{\"value\":\"SYSTEM\"}}"), context))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("文字说明字体不支持");
     }
 
     /**
@@ -532,7 +681,8 @@ class TeamDisplayComponentsTest {
         assertFields(TeamProfileComponentConfig.class, "team", "visibleFields");
         assertFields(TeamProfileComponentConfig.TeamSnapshot.class, "teamId", "avatarUrl", "teamName", "intro");
         assertFields(TeamDividerComponentConfig.class, "color", "heightPx");
-        assertFields(TeamTextSectionComponentConfig.class, "content", "alignment");
+        assertFields(TeamTextSectionComponentConfig.class,
+                "content", "alignment", "fontFamily", "fontSizeRpx");
     }
 
     /**

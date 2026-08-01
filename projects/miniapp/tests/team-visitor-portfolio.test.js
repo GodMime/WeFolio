@@ -179,6 +179,61 @@ test('visitor normalization keeps team theme and menu components independent', (
   assert.deepEqual(contact.activeComponents.map((item) => item.componentKey), ['contact'])
 })
 
+test('team visitor normalizes text section typography without truncating invalid sizes', () => {
+  const { normalizeTeamVisitorPortfolio } = load('team-visitor-portfolio.js')
+  const normalized = normalizeTeamVisitorPortfolio({
+    renderData: {
+      components: [
+        {
+          componentKey: 'valid',
+          componentType: 'TEXT_SECTION',
+          sortOrder: 1,
+          data: {
+            content: '合法',
+            fontFamily: 'WECHAT_SANS_SS',
+            fontSizeRpx: 36
+          }
+        },
+        {
+          componentKey: 'legacy',
+          componentType: 'TEXT_SECTION',
+          sortOrder: 2,
+          data: { content: '旧配置' }
+        },
+        {
+          componentKey: 'fraction',
+          componentType: 'TEXT_SECTION',
+          sortOrder: 3,
+          data: {
+            content: '小数',
+            fontFamily: 'UNKNOWN',
+            fontSizeRpx: 28.5
+          }
+        },
+        {
+          componentKey: 'string',
+          componentType: 'TEXT_SECTION',
+          sortOrder: 4,
+          data: {
+            content: '字符串',
+            fontFamily: 'WECHAT_SANS_STD',
+            fontSizeRpx: '28'
+          }
+        }
+      ]
+    }
+  })
+
+  assert.equal(normalized.components[0].data.fontClass, 'font-wechat-sans-ss')
+  assert.equal(normalized.components[0].data.fontSizeStyle, 'font-size: 36rpx;')
+  assert.equal(normalized.components[1].data.fontClass, 'font-system')
+  assert.equal(normalized.components[1].data.fontSizeStyle, 'font-size: 32rpx;')
+  assert.equal(normalized.components[2].data.fontClass, 'font-system')
+  assert.equal(normalized.components[2].data.fontSizeStyle, 'font-size: 32rpx;')
+  assert.equal(normalized.components[3].data.fontClass, 'font-system')
+  assert.equal(normalized.components[3].data.fontSizeStyle, 'font-size: 32rpx;')
+})
+
 test('team single-work animation uses work-viewed semantics', () => {
   const { buildTeamSingleWorkViewEvent } = load('team-visitor-portfolio.js')
 

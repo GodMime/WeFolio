@@ -1,7 +1,10 @@
 package com.jxc.wefolio.service;
 
+import com.jxc.wefolio.common.PortfolioTextTypographySupport;
+import com.jxc.wefolio.constant.PortfolioTextTypographyConstants;
 import com.jxc.wefolio.dict.MediaTypeDict;
 import com.jxc.wefolio.dict.PortfolioComponentTypeDict;
+import com.jxc.wefolio.dict.PortfolioTextFontFamilyDict;
 import com.jxc.wefolio.dict.WorkAuditStatusDict;
 import com.jxc.wefolio.dict.WorkStatusDict;
 import com.jxc.wefolio.dto.PortfolioConfigDto;
@@ -620,6 +623,10 @@ public class PortfolioRenderService {
                 asString(componentConfig.get(CONFIG_KEY_ALIGNMENT)),
                 TEXT_SECTION_ALIGNMENT_LEFT
         ));
+        textSection.setFontFamily(normalizeTextFontFamily(
+                componentConfig.get(PortfolioTextTypographySupport.FONT_FAMILY_CONFIG_KEY)));
+        textSection.setFontSizeRpx(normalizeTextFontSizeRpx(
+                componentConfig.get(PortfolioTextTypographySupport.FONT_SIZE_RPX_CONFIG_KEY)));
         return textSection;
     }
 
@@ -787,6 +794,33 @@ public class PortfolioRenderService {
             }
         }
         return null;
+    }
+
+    /**
+     * 规范化文字说明字体。
+     *
+     * @param value 原始字体配置
+     * @return 受支持字体，异常值回退到系统字体
+     */
+    private String normalizeTextFontFamily(Object value) {
+        String fontFamily = PortfolioTextTypographySupport.asSupportedFontFamily(value);
+        return fontFamily == null
+                ? PortfolioTextFontFamilyDict.SYSTEM.getCode()
+                : fontFamily;
+    }
+
+    /**
+     * 规范化文字说明字号。
+     *
+     * @param value 原始字号配置
+     * @return 范围内的精确整数字号，异常值回退到旧个人字号
+     */
+    private Integer normalizeTextFontSizeRpx(Object value) {
+        Integer fontSizeRpx = PortfolioTextTypographySupport.asExactFontSizeRpx(value);
+        if (!PortfolioTextTypographySupport.isValidFontSizeRpx(fontSizeRpx)) {
+            return PortfolioTextTypographyConstants.LEGACY_PERSONAL_FONT_SIZE_RPX;
+        }
+        return fontSizeRpx;
     }
 
     /**

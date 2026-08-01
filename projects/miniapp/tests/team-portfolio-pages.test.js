@@ -34,15 +34,32 @@ function readCssRule(content, selector) {
   return match ? match[1].replace(/\s+/g, '') : ''
 }
 
-function loadPage(relativePath, requestFn, wxOverrides = {}) {
+function flushPromises() {
+  return new Promise((resolve) => {
+    setImmediate(resolve)
+  })
+}
+
+function loadPage(relativePath, requestFn, wxOverrides = {}, fontLoaderOverrides = null) {
   const pagePath = path.join(ROOT, relativePath)
   const requestPath = path.resolve(ROOT, '../../utils/request.js')
+  const fontLoaderPath = path.resolve(ROOT, '../../utils/portfolio-font-loader.js')
   const requestCacheKey = require.resolve(requestPath)
+  const fontLoaderCacheKey = require.resolve(fontLoaderPath)
   const oldRequest = require.cache[requestCacheKey]
+  const oldFontLoader = require.cache[fontLoaderCacheKey]
   const oldPage = global.Page
   const oldWx = global.wx
   let definition
   require.cache[requestCacheKey] = { id: requestPath, filename: requestPath, loaded: true, exports: { request: requestFn } }
+  if (fontLoaderOverrides) {
+    require.cache[fontLoaderCacheKey] = {
+      id: fontLoaderPath,
+      filename: fontLoaderPath,
+      loaded: true,
+      exports: fontLoaderOverrides
+    }
+  }
   global.Page = (value) => { definition = value }
   global.wx = Object.assign({ navigateTo() {}, redirectTo() {}, showToast() {}, stopPullDownRefresh() {}, getCurrentPages() { return [] } }, wxOverrides)
   delete require.cache[require.resolve(pagePath)]
@@ -50,6 +67,8 @@ function loadPage(relativePath, requestFn, wxOverrides = {}) {
     global.Page = oldPage
     if (oldRequest) require.cache[requestCacheKey] = oldRequest
     else delete require.cache[requestCacheKey]
+    if (oldFontLoader) require.cache[fontLoaderCacheKey] = oldFontLoader
+    else delete require.cache[fontLoaderCacheKey]
   }
   const page = Object.assign({}, definition, { data: JSON.parse(JSON.stringify(definition.data)), setData(patch) { Object.assign(this.data, patch) } })
   page.cleanup = () => { global.wx = oldWx }
@@ -301,13 +320,31 @@ test('team text section opens the dedicated personal-style editing sheet', () =>
   assert.match(wxml, /text-section-sheet-mask component-picker-mask \{\{textSectionSheetVisible \? 'visible' : ''\}\}/)
   assert.match(wxml, /class="component-picker-title">编辑文字说明<\/view>/)
   assert.match(wxml, /value="\{\{textSectionForm\.content\}\}"/)
+  assert.match(wxml, /wx:for="\{\{textSectionFontOptions\}\}"/)
+  assert.match(wxml, /映期 Folio 字体预览 123/)
+  assert.match(wxml, /当前设备不可用/)
+  assert.match(wxml, /当前设备以系统字体预览/)
+  assert.match(wxml, /catchtap="handleTextSectionFontTap"/)
+  assert.match(wxml, /wx:for="\{\{textSectionSizeOptions\}\}"/)
+  assert.match(wxml, /catchtap="handleTextSectionFontSizeTap"/)
   assert.match(wxml, /catchtap="handleTextSectionAlignmentTap"/)
+  assert.ok(
+    wxml.indexOf('text-section-sheet-textarea') < wxml.indexOf('textSectionFontOptions')
+  )
+  assert.ok(
+    wxml.indexOf('textSectionFontOptions') < wxml.indexOf('textSectionSizeOptions')
+  )
+  assert.ok(
+    wxml.indexOf('textSectionSizeOptions') < wxml.indexOf('textSectionAlignmentOptions')
+  )
   assert.match(wxml, /catchtap="handleCloseTextSectionSheet">取消<\/button>/)
   assert.match(wxml, /catchtap="handleConfirmTextSectionConfig">完成<\/button>/)
   assert.doesNotMatch(wxml, /<team-text-section[\s\S]*edit-mode="\{\{true\}\}"/)
+  assert.match(wxss, /^@import "\.\.\/\.\.\/\.\.\/styles\/portfolio-text-typography\.wxss";/)
   assert.match(wxss, /\.text-section-sheet-panel\s*\{[^}]*max-height:\s*76vh;/)
   assert.match(wxss, /\.text-section-sheet-textarea\s*\{[^}]*height:\s*220rpx;/)
   assert.match(js, /openTextSectionSheet/)
+  assert.match(js, /loadPortfolioFontCapability/)
   assert.match(js, /handleConfirmTextSectionConfig/)
 })
 
@@ -340,24 +377,172 @@ test('team schedule and divider use isolated configuration sheets', () => {
   assert.match(js, /openDividerSheet/)
 })
 
-test('team text section sheet saves text and alignment only after confirmation', () => {
+test('team text section sheet keeps legacy typography and saves all fields only after confirmation', () => {
   const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => ({}))
   page.data.config = {
     schemaVersion: 'standard-team-v1',
     share: {},
-    components: [{ componentKey: 'text-1', componentType: 'TEXT_SECTION', sortOrder: 0, enabled: true, config: { content: '原说明', alignment: 'LEFT' } }]
+    components: [{ componentKey: 'text-1', componentType: 'TEXT_SECTION', sortOrder: 0, enabled: true, config: { content: '原说明', alignment: 'LEFT', futureField: 'keep' } }]
   }
 
   page.openTextSectionSheet('text-1')
   assert.equal(page.data.textSectionSheetVisible, true)
-  assert.deepEqual(page.data.textSectionForm, { content: '原说明', alignment: 'LEFT' })
+  assert.deepEqual(page.data.textSectionForm, {
+    content: '原说明',
+    alignment: 'LEFT',
+    fontFamily: 'SYSTEM',
+    fontSizeRpx: 32
+  })
 
   page.handleTextSectionInput({ detail: { value: '团队说明' } })
   page.handleTextSectionAlignmentTap({ currentTarget: { dataset: { value: 'CENTER' } } })
+  page.handleTextSectionFontSizeTap({ currentTarget: { dataset: { value: 28 } } })
+  page.handleCloseTextSectionSheet()
+
+  assert.deepEqual(page.data.config.components[0].config, {
+    content: '原说明',
+    alignment: 'LEFT',
+    futureField: 'keep'
+  })
+
+  page.openTextSectionSheet('text-1')
+  page.handleTextSectionInput({ detail: { value: '团队说明' } })
+  page.handleTextSectionAlignmentTap({ currentTarget: { dataset: { value: 'CENTER' } } })
+  page.handleTextSectionFontSizeTap({ currentTarget: { dataset: { value: 28 } } })
   page.handleConfirmTextSectionConfig()
 
   assert.equal(page.data.textSectionSheetVisible, false)
-  assert.deepEqual(page.data.config.components[0].config, { content: '团队说明', alignment: 'CENTER' })
+  assert.deepEqual(page.data.config.components[0].config, {
+    content: '团队说明',
+    alignment: 'CENTER',
+    fontFamily: 'SYSTEM',
+    fontSizeRpx: 28,
+    futureField: 'keep'
+  })
+  page.cleanup()
+})
+
+test('team text section preserves unavailable WeChat font and a custom integer size', () => {
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => ({}))
+  page.data.config = {
+    schemaVersion: 'standard-team-v1',
+    share: {},
+    components: [{
+      componentKey: 'text-1',
+      componentType: 'TEXT_SECTION',
+      sortOrder: 0,
+      enabled: true,
+      config: {
+        content: '原说明',
+        alignment: 'RIGHT',
+        fontFamily: 'WECHAT_SANS_SS',
+        fontSizeRpx: 30
+      }
+    }]
+  }
+
+  page.openTextSectionSheet('text-1')
+
+  assert.equal(page.data.textSectionForm.fontFamily, 'WECHAT_SANS_SS')
+  assert.equal(page.data.textSectionForm.fontSizeRpx, 30)
+  assert.deepEqual(
+    page.data.textSectionFontOptions.map((item) => item.value),
+    ['SYSTEM', 'WECHAT_SANS_SS']
+  )
+  assert.equal(
+    page.data.textSectionFontOptions.find(
+      (item) => item.value === 'WECHAT_SANS_SS'
+    ).available,
+    false
+  )
+  assert.deepEqual(
+    page.data.textSectionSizeOptions.find((item) => item.value === 30),
+    { value: 30, label: '自定义 30rpx', custom: true }
+  )
+
+  page.handleConfirmTextSectionConfig()
+
+  assert.equal(page.data.config.components[0].config.fontFamily, 'WECHAT_SANS_SS')
+  assert.equal(page.data.config.components[0].config.fontSizeRpx, 30)
+  page.cleanup()
+})
+
+test('team font capability refresh keeps the unsupported saved font selected', async () => {
+  let resolveFontCapability
+  const pendingCapability = new Promise((resolve) => {
+    resolveFontCapability = resolve
+  })
+  const initialCapability = {
+    apiAvailable: false,
+    loadedFamilies: {
+      WECHAT_SANS_SS: false
+    }
+  }
+  const page = loadPage(
+    'standard-edit/team-portfolio-standard-edit.js',
+    async () => ({}),
+    {},
+    {
+      getPortfolioFontCapability() {
+        return initialCapability
+      },
+      isPortfolioFontAvailable(fontFamily, capability) {
+        return fontFamily === 'SYSTEM'
+          || capability.apiAvailable === true
+            && capability.loadedFamilies[fontFamily] === true
+      },
+      loadPortfolioFonts() {
+        return pendingCapability
+      }
+    }
+  )
+  page.data.config = {
+    schemaVersion: 'standard-team-v1',
+    share: {},
+    components: [{
+      componentKey: 'text-1',
+      componentType: 'TEXT_SECTION',
+      sortOrder: 0,
+      enabled: true,
+      config: {
+        content: '团队说明',
+        alignment: 'LEFT',
+        fontFamily: 'WECHAT_SANS_SS',
+        fontSizeRpx: 32
+      }
+    }]
+  }
+
+  page.openTextSectionSheet('text-1')
+  page.loadPortfolioFontCapability()
+  resolveFontCapability({
+    apiAvailable: true,
+    loadedFamilies: {
+      WECHAT_SANS_SS: false
+    }
+  })
+  await flushPromises()
+
+  assert.equal(page.data.textSectionForm.fontFamily, 'WECHAT_SANS_SS')
+  assert.equal(
+    page.data.textSectionFontOptions.find(
+      (item) => item.value === 'WECHAT_SANS_SS'
+    ).available,
+    false
+  )
+  page.cleanup()
+})
+
+test('new team text section uses the explicit new-component typography defaults', () => {
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => ({}))
+
+  page.addComponent('TEXT_SECTION')
+
+  const component = page.data.config.components.find(
+    (item) => item.componentType === 'TEXT_SECTION'
+  )
+  assert.equal(component.config.fontFamily, 'SYSTEM')
+  assert.equal(component.config.fontSizeRpx, 28)
   page.cleanup()
 })
 
