@@ -13,11 +13,11 @@ import com.jxc.wefolio.dict.PortfolioTypeDict;
 import com.jxc.wefolio.dict.TeamRoleDict;
 import com.jxc.wefolio.dict.VisitEventTypeDict;
 import com.jxc.wefolio.dict.VisitSourceTypeDict;
+import com.jxc.wefolio.dto.MineScheduleQueryRecordRow;
 import com.jxc.wefolio.dto.MineVisitRecordPageResponse;
 import com.jxc.wefolio.dto.MineVisitRecordsResponse;
 import com.jxc.wefolio.dto.MineVisitStatisticsResponse;
 import com.jxc.wefolio.entity.ContactLeadEntity;
-import com.jxc.wefolio.entity.ScheduleQueryRecordEntity;
 import com.jxc.wefolio.entity.TeamMemberEntity;
 import com.jxc.wefolio.entity.VisitEventEntity;
 import com.jxc.wefolio.entity.VisitRecordEntity;
@@ -125,6 +125,13 @@ public class MineVisitService {
     private static final Set<String> TEAM_FOLLOW_UPDATABLE_ROLES = Set.of(
             TeamRoleDict.OWNER.getCode(), TeamRoleDict.MANAGER.getCode());
 
+    /** 可查看团队查档记录的角色。 */
+    private static final Set<String> TEAM_SCHEDULE_QUERY_VIEWABLE_ROLES = Set.of(
+            TeamRoleDict.OWNER.getCode(), TeamRoleDict.MANAGER.getCode());
+
+    /** 团队档期摘要格式。 */
+    private static final String TEAM_SCHEDULE_SUMMARY_FORMAT = "空闲 %d 人 · 部分空闲 %d 人 · 已满 %d 人";
+
     /** 默认事件补充说明 */
     private static final String DEFAULT_EVENT_DETAIL_TEXT = "暂无补充信息";
 
@@ -201,8 +208,8 @@ public class MineVisitService {
         List<VisitRecordEntity> records = selectOwnerVisitRecords(userId);
         List<VisitEventEntity> openedEvents = selectRecentOpenedEvents(userId);
         Map<Long, VisitorEntity> visitorsById = selectVisitorsById(records);
-        long scheduleQueryCount = countOwnerScheduleQueries(userId);
         Map<Long, String> joinedTeamRoles = selectJoinedTeamRoles(userId);
+        long scheduleQueryCount = countVisibleScheduleQueries(userId, selectManageableTeamIds(joinedTeamRoles));
         long contactLeadCount = countVisibleContactLeads(userId, joinedTeamRoles.keySet());
 
         MineVisitRecordsResponse response = new MineVisitRecordsResponse();
@@ -221,8 +228,8 @@ public class MineVisitService {
         Long userId = AuthContextHolder.requireUserId();
         List<VisitRecordEntity> records = selectOwnerVisitRecords(userId);
         List<VisitEventEntity> openedEvents = selectRecentOpenedEvents(userId);
-        long scheduleQueryCount = countOwnerScheduleQueries(userId);
         Map<Long, String> joinedTeamRoles = selectJoinedTeamRoles(userId);
+        long scheduleQueryCount = countVisibleScheduleQueries(userId, selectManageableTeamIds(joinedTeamRoles));
         long contactLeadCount = countVisibleContactLeads(userId, joinedTeamRoles.keySet());
 
         MineVisitStatisticsResponse response = new MineVisitStatisticsResponse();
@@ -348,18 +355,20 @@ public class MineVisitService {
         Long userId = AuthContextHolder.requireUserId();
         int normalizedPageNo = normalizeDetailPageNo(pageNo);
         int normalizedPageSize = normalizeDetailPageSize(pageSize);
-        Page<ScheduleQueryRecordEntity> resultPage = scheduleQueryRecordEntityMapper.selectPage(
-                new Page<>(normalizedPageNo, normalizedPageSize),
-                Wrappers.lambdaQuery(ScheduleQueryRecordEntity.class)
-                        .eq(ScheduleQueryRecordEntity::getOwnerType, PortfolioOwnerTypeDict.USER.getCode())
-                        .eq(ScheduleQueryRecordEntity::getOwnerId, userId)
-                        .eq(ScheduleQueryRecordEntity::getPortfolioType, PortfolioTypeDict.PERSONAL.getCode())
-                        .orderByDesc(ScheduleQueryRecordEntity::getQueriedAt)
-                        .orderByDesc(ScheduleQueryRecordEntity::getId)
-        );
-        List<ScheduleQueryRecordEntity> records = resultPage.getRecords();
+        Map<Long, String> joinedTeamRoles = selectJoinedTeamRoles(userId);
+        List<Long> manageableTeamIds = selectManageableTeamIds(joinedTeamRoles);
+        long offset = (long) (normalizedPageNo - FIRST_DETAIL_PAGE_NO) * normalizedPageSize;
+        int resultLimit = normalizedPageSize + 1;
+        long candidateLimit = offset + resultLimit;
+        List<MineScheduleQueryRecordRow> candidates = scheduleQueryRecordEntityMapper.selectVisibleRecords(
+                userId, manageableTeamIds, candidateLimit, offset, resultLimit);
+        List<MineScheduleQueryRecordRow> safeCandidates = candidates == null ? List.of() : candidates;
+        boolean hasMore = safeCandidates.size() > normalizedPageSize;
+        List<MineScheduleQueryRecordRow> records = hasMore
+                ? safeCandidates.subList(0, normalizedPageSize)
+                : safeCandidates;
         Map<Long, VisitorEntity> visitorsById = selectVisitorsByIds(records.stream()
-                .map(ScheduleQueryRecordEntity::getVisitorId)
+                .map(MineScheduleQueryRecordRow::getVisitorId)
                 .filter(Objects::nonNull)
                 .distinct()
                 .toList());
@@ -367,7 +376,7 @@ public class MineVisitService {
         MineVisitRecordsResponse.ScheduleQueryPage response = new MineVisitRecordsResponse.ScheduleQueryPage();
         response.setPageNo(normalizedPageNo);
         response.setPageSize(normalizedPageSize);
-        response.setHasMore(resultPage.getCurrent() < resultPage.getPages());
+        response.setHasMore(hasMore);
         response.setItems(records.stream()
                 .map(record -> buildScheduleQueryItem(record, visitorsById.get(record.getVisitorId())))
                 .toList());
@@ -441,18 +450,14 @@ public class MineVisitService {
     }
 
     /**
-     * 统计当前维护者个人作品集查询档期次数。
+     * 统计当前维护者可见的个人与团队查询档期次数。
      *
      * @param userId 当前用户 ID
+     * @param teamIds 当前用户可管理的团队 ID
      * @return 查询档期次数
      */
-    private long countOwnerScheduleQueries(Long userId) {
-        return safeLong(scheduleQueryRecordEntityMapper.selectCount(
-                Wrappers.lambdaQuery(ScheduleQueryRecordEntity.class)
-                        .eq(ScheduleQueryRecordEntity::getOwnerType, PortfolioOwnerTypeDict.USER.getCode())
-                        .eq(ScheduleQueryRecordEntity::getOwnerId, userId)
-                        .eq(ScheduleQueryRecordEntity::getPortfolioType, PortfolioTypeDict.PERSONAL.getCode())
-        ));
+    private long countVisibleScheduleQueries(Long userId, List<Long> teamIds) {
+        return safeLong(scheduleQueryRecordEntityMapper.countVisibleRecords(userId, teamIds));
     }
 
     /**
@@ -491,6 +496,24 @@ public class MineVisitService {
                         membership -> defaultString(membership.getRole(), ""),
                         (firstRole, ignoredRole) -> firstRole
                 ));
+    }
+
+    /**
+     * 从已加入团队中筛选当前用户可管理的团队，并稳定排序。
+     *
+     * @param joinedTeamRoles 已加入团队及角色
+     * @return 可查看团队查档记录的团队 ID
+     */
+    private List<Long> selectManageableTeamIds(Map<Long, String> joinedTeamRoles) {
+        if (joinedTeamRoles == null || joinedTeamRoles.isEmpty()) {
+            return List.of();
+        }
+        return joinedTeamRoles.entrySet().stream()
+                .filter(entry -> TEAM_SCHEDULE_QUERY_VIEWABLE_ROLES.contains(entry.getValue()))
+                .map(Map.Entry::getKey)
+                .filter(Objects::nonNull)
+                .sorted()
+                .toList();
     }
 
     /**
@@ -812,23 +835,27 @@ public class MineVisitService {
     /**
      * 构建查询档期明细项。
      *
-     * @param record 查询档期记录
+     * @param record 统一查询档期记录
      * @param visitor 访客资料
      * @return 查询档期明细项
      */
     private MineVisitRecordsResponse.ScheduleQueryItem buildScheduleQueryItem(
-            ScheduleQueryRecordEntity record,
+            MineScheduleQueryRecordRow record,
             VisitorEntity visitor
     ) {
+        String recordType = defaultString(record.getRecordType(), PortfolioTypeDict.PERSONAL.getCode());
+        boolean teamRecord = PortfolioTypeDict.TEAM.getCode().equals(recordType);
         String visitorCode = buildVisitorCode(record.getVisitorKey());
         MineVisitRecordsResponse.ScheduleQueryItem item = new MineVisitRecordsResponse.ScheduleQueryItem();
-        item.setId(record.getId());
+        item.setId(buildScheduleQueryItemId(record.getSourceRecordId(), teamRecord));
+        item.setRecordType(recordType);
+        item.setSourceRecordId(record.getSourceRecordId());
         item.setVisitorLabel(resolveVisitorLabel(visitor, visitorCode));
         item.setVisitorAvatarUrl(resolveVisitorAvatarUrl(visitor));
         item.setVisitorInitial(visitorCode.substring(0, 1));
         item.setPortfolioTitle(defaultString(record.getPortfolioTitleSnapshot(), ""));
         item.setQueriedDateText(record.getQueriedDate() == null ? "" : record.getQueriedDate().format(DATE_FORMATTER));
-        item.setSlotText(buildSlotText(record));
+        item.setSlotText(teamRecord ? buildTeamScheduleSummary(record) : buildSlotText(record));
         item.setResultStatus(defaultString(record.getResultStatus(), ""));
         item.setResultStatusText(defaultString(record.getResultStatusText(), ""));
         item.setAvailable(safeInt(record.getAvailable()) == 1);
@@ -836,6 +863,35 @@ public class MineVisitService {
         item.setSourceText(buildSourceText(record.getSourceType(), ""));
         item.setCreatedTimeText(formatDetailTime(record.getQueriedAt()));
         return item;
+    }
+
+    /**
+     * 构造兼容旧小程序列表键的展示 ID。
+     * 团队记录的负数 ID 只用于避免两张表主键相同导致 wx:key 冲突，不是数据库真实主键；
+     * 后端操作应使用记录类型和 sourceRecordId。
+     *
+     * @param sourceRecordId 来源表真实主键
+     * @param teamRecord 是否团队记录
+     * @return 列表展示 ID
+     */
+    private Long buildScheduleQueryItemId(Long sourceRecordId, boolean teamRecord) {
+        if (!teamRecord || sourceRecordId == null) {
+            return sourceRecordId;
+        }
+        return -sourceRecordId;
+    }
+
+    /**
+     * 构建团队成员档期摘要。
+     *
+     * @param record 团队查档投影
+     * @return 团队档期摘要
+     */
+    private String buildTeamScheduleSummary(MineScheduleQueryRecordRow record) {
+        return TEAM_SCHEDULE_SUMMARY_FORMAT.formatted(
+                safeInt(record.getAvailableMemberCount()),
+                safeInt(record.getPartialAvailableMemberCount()),
+                safeInt(record.getFullMemberCount()));
     }
 
     /**
@@ -1216,10 +1272,10 @@ public class MineVisitService {
     /**
      * 构建档位与时间文案。
      *
-     * @param record 查询档期记录
+     * @param record 个人查询档期记录
      * @return 档位与时间文案
      */
-    private String buildSlotText(ScheduleQueryRecordEntity record) {
+    private String buildSlotText(MineScheduleQueryRecordRow record) {
         String slotName = defaultString(record.getSlotNameSnapshot(), "");
         String startTime = formatTime(record.getStartTimeSnapshot());
         String endTime = formatTime(record.getEndTimeSnapshot());

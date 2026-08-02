@@ -7,11 +7,11 @@ import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.jxc.wefolio.common.auth.AuthContext;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
+import com.jxc.wefolio.dto.MineScheduleQueryRecordRow;
 import com.jxc.wefolio.dto.MineVisitRecordPageResponse;
 import com.jxc.wefolio.dto.MineVisitRecordsResponse;
 import com.jxc.wefolio.dto.MineVisitStatisticsResponse;
 import com.jxc.wefolio.entity.ContactLeadEntity;
-import com.jxc.wefolio.entity.ScheduleQueryRecordEntity;
 import com.jxc.wefolio.entity.TeamMemberEntity;
 import com.jxc.wefolio.entity.VisitEventEntity;
 import com.jxc.wefolio.entity.VisitRecordEntity;
@@ -37,11 +37,16 @@ import java.lang.reflect.Method;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -136,7 +141,7 @@ class MineVisitServiceTest {
 
         when(visitRecordEntityMapper.selectList(any())).thenReturn(List.of(firstRecord, secondRecord));
         when(visitEventEntityMapper.selectList(any())).thenReturn(trendEvents);
-        when(scheduleQueryRecordEntityMapper.selectCount(any())).thenReturn(12L);
+        when(scheduleQueryRecordEntityMapper.countVisibleRecords(any(), any())).thenReturn(12L);
         when(contactLeadEntityMapper.selectCount(any())).thenReturn(5L);
 
         MineVisitRecordsResponse response = service().getVisitRecords();
@@ -188,7 +193,7 @@ class MineVisitServiceTest {
                 buildOpenedEvent(now),
                 buildOpenedEvent(now.minusDays(1))
         ));
-        when(scheduleQueryRecordEntityMapper.selectCount(any())).thenReturn(4L);
+        when(scheduleQueryRecordEntityMapper.countVisibleRecords(any(), any())).thenReturn(4L);
         when(contactLeadEntityMapper.selectCount(any())).thenReturn(2L);
         when(teamMemberEntityMapper.selectList(any())).thenReturn(List.of());
 
@@ -426,15 +431,18 @@ class MineVisitServiceTest {
     void scheduleQueryRecordsShouldReturnPagedOwnerPersonalRecordsInReverseCreatedOrder() {
         AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
         LocalDateTime now = LocalDateTime.of(2026, 7, 5, 14, 18);
-        ScheduleQueryRecordEntity first = buildScheduleQueryRecord(301L, 1024L, "visitor-key-8A21", now);
-        ScheduleQueryRecordEntity second = buildScheduleQueryRecord(302L, null, "visitor-key-C19F", now.minusMinutes(6));
-        Page<ScheduleQueryRecordEntity> resultPage = new Page<>(1, 2, 3);
-        resultPage.setRecords(List.of(first, second));
+        MineScheduleQueryRecordRow first = buildScheduleQueryRow(
+                301L, "PERSONAL", "林安婚礼司仪", 1024L, "visitor-key-8A21", now);
+        MineScheduleQueryRecordRow second = buildScheduleQueryRow(
+                302L, "PERSONAL", "林安婚礼司仪", null, "visitor-key-C19F", now.minusMinutes(6));
+        MineScheduleQueryRecordRow extra = buildScheduleQueryRow(
+                303L, "PERSONAL", "林安婚礼司仪", null, "visitor-key-D20A", now.minusMinutes(12));
         VisitorEntity visitor = new VisitorEntity();
         visitor.setId(1024L);
         visitor.setNickname("小陈");
         visitor.setAvatarUrl("https://cdn.example.com/avatar.jpg");
-        when(scheduleQueryRecordEntityMapper.selectPage(any(Page.class), any())).thenReturn(resultPage);
+        when(scheduleQueryRecordEntityMapper.selectVisibleRecords(any(), any(), anyLong(), anyLong(), anyInt()))
+                .thenReturn(List.of(first, second, extra));
         when(visitorEntityMapper.selectBatchIds(List.of(1024L))).thenReturn(List.of(visitor));
 
         MineVisitRecordsResponse.ScheduleQueryPage response = service().getScheduleQueryRecords(1, 2);
@@ -453,10 +461,93 @@ class MineVisitServiceTest {
         assertThat(response.getItems().get(0).getAvailable()).isFalse();
         assertThat(response.getItems().get(0).getCreatedTimeText()).isEqualTo("07-05 14:18");
         assertThat(response.getItems().get(1).getVisitorLabel()).isEqualTo("微信访客 C19F");
-        ArgumentCaptor<Page<ScheduleQueryRecordEntity>> pageCaptor = ArgumentCaptor.captor();
-        verify(scheduleQueryRecordEntityMapper).selectPage(pageCaptor.capture(), any());
-        assertThat(pageCaptor.getValue().getCurrent()).isEqualTo(1L);
-        assertThat(pageCaptor.getValue().getSize()).isEqualTo(2L);
+        ArgumentCaptor<Collection<Long>> teamIdsCaptor = ArgumentCaptor.captor();
+        verify(scheduleQueryRecordEntityMapper).selectVisibleRecords(
+                org.mockito.ArgumentMatchers.eq(7L), teamIdsCaptor.capture(),
+                org.mockito.ArgumentMatchers.eq(3L), org.mockito.ArgumentMatchers.eq(0L),
+                org.mockito.ArgumentMatchers.eq(3));
+        assertThat(teamIdsCaptor.getValue()).isEmpty();
+    }
+
+    @Test
+    void scheduleQueryRecordsShouldMergeManageableTeamsAndUseExtraRowForHasMore() {
+        AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
+        LocalDateTime now = LocalDateTime.of(2026, 7, 5, 15, 0);
+        MineScheduleQueryRecordRow teamOwnerRow = buildScheduleQueryRow(
+                301L, "TEAM", "星曜司仪团", 1024L, "visitor-key-8A21", now);
+        teamOwnerRow.setAvailableMemberCount(2);
+        teamOwnerRow.setPartialAvailableMemberCount(1);
+        teamOwnerRow.setFullMemberCount(3);
+        MineScheduleQueryRecordRow personalRow = buildScheduleQueryRow(
+                301L, "PERSONAL", "林安婚礼司仪", null, "visitor-key-C19F", now.minusMinutes(1));
+        MineScheduleQueryRecordRow teamManagerRow = buildScheduleQueryRow(
+                302L, "TEAM", "远山摄影团队", null, "visitor-key-D20A", now.minusMinutes(2));
+        teamManagerRow.setAvailableMemberCount(1);
+        teamManagerRow.setPartialAvailableMemberCount(0);
+        teamManagerRow.setFullMemberCount(2);
+        MineScheduleQueryRecordRow extraRow = buildScheduleQueryRow(
+                303L, "PERSONAL", "备用个人作品集", null, "visitor-key-E31B", now.minusMinutes(3));
+
+        when(teamMemberEntityMapper.selectList(any())).thenReturn(List.of(
+                buildMembership(201L, "OWNER", "JOINED"),
+                buildMembership(202L, "MANAGER", "JOINED"),
+                buildMembership(203L, "MEMBER", "JOINED"),
+                buildMembership(204L, "OWNER", "REJECTED")
+        ));
+        when(scheduleQueryRecordEntityMapper.selectVisibleRecords(
+                        any(), any(), anyLong(), anyLong(), anyInt()))
+                .thenReturn(List.of(teamOwnerRow, personalRow, teamManagerRow, extraRow));
+        VisitorEntity visitor = new VisitorEntity();
+        visitor.setId(1024L);
+        visitor.setNickname("小陈");
+        visitor.setAvatarUrl("https://cdn.example.com/avatar.jpg");
+        when(visitorEntityMapper.selectBatchIds(List.of(1024L))).thenReturn(List.of(visitor));
+
+        MineVisitRecordsResponse.ScheduleQueryPage response = service().getScheduleQueryRecords(1, 3);
+
+        assertThat(response.getHasMore()).isTrue();
+        assertThat(response.getItems()).hasSize(3);
+        assertThat(response.getItems())
+                .extracting(MineVisitRecordsResponse.ScheduleQueryItem::getPortfolioTitle)
+                .containsExactly("星曜司仪团", "林安婚礼司仪", "远山摄影团队");
+        assertThat(response.getItems())
+                .extracting(MineVisitRecordsResponse.ScheduleQueryItem::getId)
+                .containsExactly(-301L, 301L, -302L);
+        assertThat(response.getItems())
+                .extracting("recordType", "sourceRecordId")
+                .containsExactly(tuple("TEAM", 301L), tuple("PERSONAL", 301L), tuple("TEAM", 302L));
+        assertThat(response.getItems().getFirst().getVisitorLabel()).isEqualTo("小陈");
+        assertThat(response.getItems().getFirst().getSlotText())
+                .isEqualTo("空闲 2 人 · 部分空闲 1 人 · 已满 3 人");
+        assertThat(response.getItems().get(1).getSlotText()).isEqualTo("午宴 10:00-14:00");
+
+        ArgumentCaptor<Collection<Long>> teamIdsCaptor = ArgumentCaptor.captor();
+        verify(scheduleQueryRecordEntityMapper).selectVisibleRecords(
+                org.mockito.ArgumentMatchers.eq(7L), teamIdsCaptor.capture(),
+                org.mockito.ArgumentMatchers.eq(4L), org.mockito.ArgumentMatchers.eq(0L),
+                org.mockito.ArgumentMatchers.eq(4));
+        assertThat(teamIdsCaptor.getValue()).containsExactlyInAnyOrder(201L, 202L);
+        assertThat(Set.copyOf(teamIdsCaptor.getValue())).doesNotContain(203L, 204L);
+    }
+
+    @Test
+    void visitStatisticsShouldCountPersonalAndManageableTeamScheduleQueries() {
+        AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
+        when(teamMemberEntityMapper.selectList(any())).thenReturn(List.of(
+                buildMembership(201L, "OWNER", "JOINED"),
+                buildMembership(202L, "MANAGER", "JOINED"),
+                buildMembership(203L, "MEMBER", "JOINED"),
+                buildMembership(204L, "OWNER", "REJECTED")
+        ));
+        when(scheduleQueryRecordEntityMapper.countVisibleRecords(any(), any())).thenReturn(7L);
+
+        MineVisitStatisticsResponse response = service().getVisitStatistics();
+
+        assertThat(response.getSummary().getScheduleQueryCount()).isEqualTo(7L);
+        ArgumentCaptor<Collection<Long>> teamIdsCaptor = ArgumentCaptor.captor();
+        verify(scheduleQueryRecordEntityMapper).countVisibleRecords(
+                org.mockito.ArgumentMatchers.eq(7L), teamIdsCaptor.capture());
+        assertThat(teamIdsCaptor.getValue()).containsExactlyInAnyOrder(201L, 202L);
     }
 
     @Test
@@ -767,27 +858,30 @@ class MineVisitServiceTest {
         return event;
     }
 
-    private ScheduleQueryRecordEntity buildScheduleQueryRecord(
-            Long id,
+    private MineScheduleQueryRecordRow buildScheduleQueryRow(
+            Long sourceRecordId,
+            String recordType,
+            String portfolioTitle,
             Long visitorId,
             String visitorKey,
             LocalDateTime queriedAt
     ) {
-        ScheduleQueryRecordEntity record = new ScheduleQueryRecordEntity();
-        record.setId(id);
-        record.setVisitorId(visitorId);
-        record.setVisitorKey(visitorKey);
-        record.setPortfolioTitleSnapshot("林安婚礼司仪");
-        record.setSourceType("WECHAT_SHARE_CARD");
-        record.setQueriedDate(LocalDate.of(2026, 7, 18));
-        record.setSlotNameSnapshot("午宴");
-        record.setStartTimeSnapshot(LocalTime.of(10, 0));
-        record.setEndTimeSnapshot(LocalTime.of(14, 0));
-        record.setResultStatus("BOOKED");
-        record.setResultStatusText("已约");
-        record.setAvailable(0);
-        record.setResultMessage("该档期已约");
-        record.setQueriedAt(queriedAt);
-        return record;
+        MineScheduleQueryRecordRow row = new MineScheduleQueryRecordRow();
+        row.setSourceRecordId(sourceRecordId);
+        row.setRecordType(recordType);
+        row.setPortfolioTitleSnapshot(portfolioTitle);
+        row.setVisitorId(visitorId);
+        row.setVisitorKey(visitorKey);
+        row.setSourceType("WECHAT_SHARE_CARD");
+        row.setQueriedDate(LocalDate.of(2026, 7, 18));
+        row.setSlotNameSnapshot("午宴");
+        row.setStartTimeSnapshot(LocalTime.of(10, 0));
+        row.setEndTimeSnapshot(LocalTime.of(14, 0));
+        row.setResultStatus("BOOKED");
+        row.setResultStatusText("已约");
+        row.setAvailable(0);
+        row.setResultMessage("该档期已约");
+        row.setQueriedAt(queriedAt);
+        return row;
     }
 }

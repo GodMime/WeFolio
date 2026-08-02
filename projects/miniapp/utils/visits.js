@@ -290,6 +290,8 @@ function appendVisitEventTimeline(current = {}, nextPage = {}) {
 
 function normalizeScheduleQueryItem(item = {}) {
   const available = Boolean(item.available)
+  const resultMessage = item.resultMessage || ''
+  const resultStatusText = item.resultStatusText || resultMessage
   return {
     id: item.id || '',
     visitorLabel: item.visitorLabel || '微信访客',
@@ -299,9 +301,10 @@ function normalizeScheduleQueryItem(item = {}) {
     queriedDateText: item.queriedDateText || '',
     slotText: item.slotText || '',
     resultStatus: item.resultStatus || '',
-    resultStatusText: item.resultStatusText || item.resultMessage || '',
+    resultStatusText,
     available,
-    resultMessage: item.resultMessage || '',
+    resultMessage,
+    showResultMessage: Boolean(resultMessage) && resultMessage !== resultStatusText,
     resultToneClass: `detail-status ${available ? 'teal' : 'rose'}`,
     sourceText: item.sourceText || '来自未知来源',
     createdTimeText: item.createdTimeText || ''

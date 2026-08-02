@@ -316,6 +316,18 @@ test('normalizes schedule query detail page for bottom sheet rendering', () => {
         resultMessage: '该档期已约',
         sourceText: '来自分享卡片',
         createdTimeText: '07-05 14:18'
+      },
+      {
+        id: -302,
+        visitorLabel: '微信访客 C19F',
+        portfolioTitle: '星曜司仪团',
+        queriedDateText: '2026-07-31',
+        slotText: '空闲 0 人 · 部分空闲 1 人 · 已满 1 人',
+        resultStatusText: '部分成员可约',
+        available: true,
+        resultMessage: '部分成员可约',
+        sourceText: '来自分享卡片',
+        createdTimeText: '07-31 00:25'
       }
     ]
   })
@@ -328,6 +340,8 @@ test('normalizes schedule query detail page for bottom sheet rendering', () => {
   assert.equal(result.items[0].visitorLabel, '小陈')
   assert.equal(result.items[0].slotText, '午宴 10:00-14:00')
   assert.equal(result.items[0].resultToneClass, 'detail-status rose')
+  assert.equal(result.items[0].showResultMessage, true)
+  assert.equal(result.items[1].showResultMessage, false)
 })
 
 test('normalizes and appends contact lead detail pages without ciphertext fields', () => {

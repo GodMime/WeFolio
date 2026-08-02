@@ -367,6 +367,18 @@ test('portfolio editor foundation defines the neutral token and selector contrac
   }
 })
 
+test('portfolio editor sheet mask uses Skyline-compatible viewport anchors', () => {
+  const source = fs.readFileSync(FOUNDATION_PATH, 'utf8')
+  const rules = parseRules(source)
+  const maskBody = ruleBody(rules, '.pe-sheet-mask')
+
+  assert.match(maskBody, /left:\s*0;/)
+  assert.match(maskBody, /right:\s*0;/)
+  assert.match(maskBody, /top:\s*0;/)
+  assert.match(maskBody, /bottom:\s*0;/)
+  assert.doesNotMatch(maskBody, /inset\s*:/)
+})
+
 test('personal portfolio editor consumes the shared page and twelve-sheet contract', () => {
   const wxml = readMiniapp('pages/portfolios/standard-edit/portfolio-standard-edit.wxml')
   const wxss = readMiniapp('pages/portfolios/standard-edit/portfolio-standard-edit.wxss')

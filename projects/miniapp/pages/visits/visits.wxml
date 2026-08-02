@@ -230,7 +230,7 @@
                 </view>
               </view>
               <view class="visit-detail-primary">{{item.queriedDateText}} · {{item.slotText}}</view>
-              <view class="visit-detail-secondary">{{item.resultMessage}}</view>
+              <view wx:if="{{item.showResultMessage}}" class="visit-detail-secondary">{{item.resultMessage}}</view>
               <view class="visit-detail-meta">{{item.portfolioTitle}} · {{item.createdTimeText}}</view>
             </block>
             <block wx:else>

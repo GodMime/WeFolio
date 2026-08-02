@@ -311,9 +311,105 @@ test('creating a standard team portfolio opens an unsaved team editor', async ()
     assert.equal(typeof page.handleCreateStandardTeam, 'function')
     await page.handleCreateStandardTeam()
     assert.deepEqual(requests, [])
+    assert.equal(page.data.teamSelectSheetVisible, false)
     assert.deepEqual(navigations, [{
       url: '/pages/team-portfolios/standard-edit/team-portfolio-standard-edit?teamId=7'
     }])
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('team picker opens before creating a portfolio for multiple maintainable teams', () => {
+  const navigations = []
+  const page = loadPortfolioListPage(() => Promise.resolve({}), {
+    navigateTo(options) {
+      navigations.push(options)
+    }
+  })
+  page.setData({
+    maintainableTeams: [
+      { teamId: 7, teamName: '甲', currentRole: 'OWNER' },
+      { teamId: 8, teamName: '乙', currentRole: 'MANAGER' }
+    ],
+    maintainableTeamsLoaded: true
+  })
+
+  try {
+    page.handleCreateStandardTeam()
+    assert.equal(page.data.teamSelectSheetVisible, true)
+    assert.equal(page.data.selectedCreateTeamId, null)
+    assert.equal(page.data.teamSelectSheetListHeight, 238)
+    assert.deepEqual(navigations, [])
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('team picker confirms a valid selection and clears its state', () => {
+  const navigations = []
+  const page = loadPortfolioListPage(() => Promise.resolve({}), {
+    navigateTo(options) {
+      navigations.push(options)
+    }
+  })
+  page.setData({
+    maintainableTeams: [
+      { teamId: 7, teamName: '甲', currentRole: 'OWNER' },
+      { teamId: 8, teamName: '乙', currentRole: 'MANAGER' }
+    ],
+    teamSelectSheetVisible: true
+  })
+
+  try {
+    page.handleTeamSelectTap({ currentTarget: { dataset: { id: 8 } } })
+    page.handleConfirmTeamSelect()
+    assert.equal(page.data.teamSelectSheetVisible, false)
+    assert.equal(page.data.selectedCreateTeamId, null)
+    assert.deepEqual(navigations, [{
+      url: '/pages/team-portfolios/standard-edit/team-portfolio-standard-edit?teamId=8'
+    }])
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('team picker ignores confirmation without a valid selection', () => {
+  const navigations = []
+  const page = loadPortfolioListPage(() => Promise.resolve({}), {
+    navigateTo(options) {
+      navigations.push(options)
+    }
+  })
+  page.setData({
+    maintainableTeams: [
+      { teamId: 7, teamName: '甲', currentRole: 'OWNER' },
+      { teamId: 8, teamName: '乙', currentRole: 'MANAGER' }
+    ],
+    teamSelectSheetVisible: true,
+    selectedCreateTeamId: 99
+  })
+
+  try {
+    page.handleConfirmTeamSelect()
+    assert.deepEqual(navigations, [])
+    assert.equal(page.data.teamSelectSheetVisible, true)
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('closing the team picker clears its selection', () => {
+  const page = loadPortfolioListPage(() => Promise.resolve({}))
+  page.setData({
+    teamSelectSheetVisible: true,
+    selectedCreateTeamId: 7
+  })
+
+  try {
+    page.handleCloseTeamSelectSheet()
+    assert.equal(page.data.teamSelectSheetVisible, false)
+    assert.equal(page.data.selectedCreateTeamId, null)
   } finally {
     page.cleanup()
   }

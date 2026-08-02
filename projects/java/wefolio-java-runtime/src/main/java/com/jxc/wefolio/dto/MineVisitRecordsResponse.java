@@ -203,8 +203,16 @@ public class MineVisitRecordsResponse {
     @Data
     public static class ScheduleQueryItem {
 
-        /** 查询档期记录 ID */
+        /**
+         * 列表展示 ID。团队记录为来源主键的负数，只用于兼容旧客户端列表键。
+         */
         private Long id;
+
+        /** 记录类型：PERSONAL 或 TEAM。 */
+        private String recordType;
+
+        /** 来源表真实主键；后端操作应与记录类型一起使用。 */
+        private Long sourceRecordId;
 
         /** 访客展示名称 */
         private String visitorLabel;
