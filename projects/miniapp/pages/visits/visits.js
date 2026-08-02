@@ -81,6 +81,7 @@ Page({
   },
 
   async loadVisits() {
+    this.visitRecordScopeBeforeDegradedPage = null
     this.setData({
       loading: true,
       errorMessage: '',
@@ -101,8 +102,12 @@ Page({
         })
       ])
       const recordPage = normalizeVisitRecordPage(recordPageResponse)
+      const scopeComplete = statistics.scopeComplete !== false && recordPage.scopeComplete !== false
+      const scopeReason = statistics.scopeReason || recordPage.scopeReason
       this.setData({
         visitData: normalizeVisitRecords(Object.assign({}, statistics, {
+          scopeComplete,
+          scopeReason,
           records: recordPage.records
         })),
         loading: false,
@@ -144,9 +149,29 @@ Page({
         hasMore: this.data.visitRecordHasMore,
         records: this.data.visitData.records
       }
-      const mergedPage = appendVisitRecordPage(currentPage, response)
+      const nextPage = normalizeVisitRecordPage(response, currentPage)
+      if (!nextPage.scopeComplete) {
+        if (!this.visitRecordScopeBeforeDegradedPage) {
+          this.visitRecordScopeBeforeDegradedPage = {
+            scopeComplete: this.data.visitData.scopeComplete,
+            scopeReason: this.data.visitData.scopeReason,
+            scopeWarningText: this.data.visitData.scopeWarningText
+          }
+        }
+        this.setData({
+          visitData: Object.assign({}, this.data.visitData, {
+            scopeComplete: nextPage.scopeComplete,
+            scopeReason: nextPage.scopeReason,
+            scopeWarningText: nextPage.scopeWarningText
+          }),
+          visitRecordLoadingMore: false
+        })
+        return
+      }
+      const mergedPage = appendVisitRecordPage(currentPage, nextPage)
+      const stableScope = this.visitRecordScopeBeforeDegradedPage
       this.setData({
-        visitData: Object.assign({}, this.data.visitData, {
+        visitData: Object.assign({}, this.data.visitData, stableScope || {}, {
           records: mergedPage.records
         }),
         visitRecordLoadingMore: false,
@@ -154,6 +179,7 @@ Page({
         visitRecordPageSize: mergedPage.pageSize,
         visitRecordHasMore: mergedPage.hasMore
       })
+      this.visitRecordScopeBeforeDegradedPage = null
     } catch (error) {
       this.setData({ visitRecordLoadingMore: false })
       if (error && error.authRequired) {
@@ -205,6 +231,7 @@ Page({
   },
 
   openVisitDetailSheet(type) {
+    this.visitDetailStableScope = null
     this.setData({
       detailSheetVisible: true,
       detailSheetLoading: true,
@@ -495,9 +522,46 @@ Page({
         return
       }
       const normalizedPage = normalizeVisitDetailPage(type, response, this.data.detailSheet)
-      const detailSheet = append
-        ? appendVisitDetailPage(this.data.detailSheet, normalizedPage)
-        : Object.assign({}, normalizedPage, { title: DETAIL_TITLES[type] })
+      if (append && !normalizedPage.scopeComplete) {
+        if (!this.visitDetailStableScope) {
+          this.visitDetailStableScope = {
+            scopeComplete: this.data.detailSheet.scopeComplete,
+            scopeReason: this.data.detailSheet.scopeReason,
+            scopeWarningText: this.data.detailSheet.scopeWarningText
+          }
+        }
+        this.setData({
+          detailSheetLoading: false,
+          detailSheetLoadingMore: false,
+          detailSheetErrorMessage: '',
+          detailSheet: Object.assign({}, this.data.detailSheet, {
+            scopeComplete: normalizedPage.scopeComplete,
+            scopeReason: normalizedPage.scopeReason,
+            scopeWarningText: normalizedPage.scopeWarningText
+          })
+        })
+        return
+      }
+      let detailSheet
+      if (append) {
+        const stableScope = this.visitDetailStableScope || {
+          scopeComplete: this.data.detailSheet.scopeComplete,
+          scopeReason: this.data.detailSheet.scopeReason,
+          scopeWarningText: this.data.detailSheet.scopeWarningText
+        }
+        detailSheet = Object.assign(
+          {},
+          appendVisitDetailPage(this.data.detailSheet, normalizedPage),
+          stableScope
+        )
+      } else {
+        detailSheet = Object.assign({}, normalizedPage, { title: DETAIL_TITLES[type] })
+        this.visitDetailStableScope = {
+          scopeComplete: detailSheet.scopeComplete,
+          scopeReason: detailSheet.scopeReason,
+          scopeWarningText: detailSheet.scopeWarningText
+        }
+      }
       this.setData({
         detailSheetLoading: false,
         detailSheetLoadingMore: false,
@@ -632,6 +696,7 @@ Page({
 
   handleCloseDetailSheet() {
     this.visitDetailRequestId = (this.visitDetailRequestId || 0) + 1
+    this.visitDetailStableScope = null
     this.setData({
       detailSheetVisible: false,
       detailSheetLoading: false,

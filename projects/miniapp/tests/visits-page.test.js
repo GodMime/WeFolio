@@ -144,6 +144,71 @@ test('visit page loads statistics and first record page from split endpoints', a
   assert.equal(page.data.loading, false)
 })
 
+test('visit page keeps returned personal data and shows prioritized warning when initial scope is degraded', async () => {
+  const scenarios = [
+    {
+      statisticsScope: {
+        scopeComplete: false,
+        scopeReason: 'TEAM_SCOPE_UNAVAILABLE'
+      },
+      recordScope: {
+        scopeComplete: true
+      },
+      expectedWarning: '团队数据暂不可用，当前仅展示个人记录'
+    },
+    {
+      statisticsScope: {
+        scopeComplete: true
+      },
+      recordScope: {
+        scopeComplete: false,
+        scopeReason: 'UNKNOWN_SCOPE_REASON'
+      },
+      expectedWarning: '部分数据暂不可用'
+    }
+  ]
+
+  for (const scenario of scenarios) {
+    const page = loadVisitsPage((options) => {
+      if (options.url === '/api/mine/visits/statistics') {
+        return Promise.resolve(Object.assign({}, scenario.statisticsScope, {
+          summary: {
+            totalVisitCount: 6,
+            todayVisitCount: 2,
+            scheduleQueryCount: 1,
+            contactLeadCount: 1
+          },
+          trend: {
+            changeText: '持平',
+            points: [{ label: '周日', value: 2 }]
+          }
+        }))
+      }
+      return Promise.resolve(Object.assign({}, scenario.recordScope, {
+        pageNo: 1,
+        pageSize: 20,
+        hasMore: true,
+        records: [{
+          id: 101,
+          visitorLabel: '微信访客 8A21',
+          portfolioTitle: '林安婚礼司仪',
+          portfolioType: 'PERSONAL'
+        }]
+      }))
+    })
+
+    await page.loadVisits()
+
+    assert.equal(page.data.visitData.metrics[0].value, '6')
+    assert.deepEqual(page.data.visitData.records.map((item) => item.id), [101])
+    assert.equal(page.data.visitData.scopeComplete, false)
+    assert.equal(page.data.visitData.scopeWarningText, scenario.expectedWarning)
+    assert.equal(page.data.visitRecordPageNo, 1)
+    assert.equal(page.data.visitRecordHasMore, true)
+    assert.equal(page.data.loading, false)
+  }
+})
+
 test('visit page appends next record page when main scroller reaches bottom', async () => {
   const requests = []
   const page = loadVisitsPage((options) => {
@@ -244,6 +309,105 @@ test('visit page keeps loaded records and retries same page after load-more fail
   assert.deepEqual(page.data.visitData.records.map((item) => item.id), [102, 101])
   assert.equal(page.data.visitRecordPageNo, 2)
   assert.equal(page.data.visitRecordHasMore, false)
+})
+
+test('visit page rejects a degraded next record page and retries the same page', async () => {
+  const requestedPages = []
+  const page = loadVisitsPage((options) => {
+    requestedPages.push(options.data.pageNo)
+    if (requestedPages.length === 1) {
+      return Promise.resolve({
+        scopeComplete: false,
+        scopeReason: 'TEAM_SCOPE_UNAVAILABLE',
+        pageNo: 2,
+        pageSize: 20,
+        hasMore: false,
+        records: [{ id: 101, visitorLabel: '不应混入的个人记录' }]
+      })
+    }
+    return Promise.resolve({
+      scopeComplete: true,
+      pageNo: 2,
+      pageSize: 20,
+      hasMore: false,
+      records: [{ id: 101, visitorLabel: '微信访客 8A21' }]
+    })
+  })
+  page.setData({
+    loading: false,
+    visitData: normalizeVisitRecords({
+      records: [{ id: 102, visitorLabel: '微信访客 C19F' }]
+    }),
+    visitRecordPageNo: 1,
+    visitRecordPageSize: 20,
+    visitRecordHasMore: true,
+    visitRecordLoadingMore: false
+  })
+
+  await page.handleVisitRecordScrollToLower()
+
+  assert.deepEqual(page.data.visitData.records.map((item) => item.id), [102])
+  assert.equal(page.data.visitData.scopeWarningText, '团队数据暂不可用，当前仅展示个人记录')
+  assert.equal(page.data.visitRecordPageNo, 1)
+  assert.equal(page.data.visitRecordHasMore, true)
+  assert.equal(page.data.visitRecordLoadingMore, false)
+
+  await page.handleVisitRecordScrollToLower()
+
+  assert.deepEqual(requestedPages, [2, 2])
+  assert.deepEqual(page.data.visitData.records.map((item) => item.id), [102, 101])
+  assert.equal(page.data.visitRecordPageNo, 2)
+  assert.equal(page.data.visitRecordHasMore, false)
+  assert.equal(page.data.visitData.scopeComplete, true)
+  assert.equal(page.data.visitData.scopeReason, '')
+  assert.equal(page.data.visitData.scopeWarningText, '')
+})
+
+test('visit page preserves the initial scope warning after a degraded next-page retry succeeds', async () => {
+  let attempt = 0
+  const page = loadVisitsPage(() => {
+    attempt += 1
+    if (attempt === 1) {
+      return Promise.resolve({
+        scopeComplete: false,
+        scopeReason: 'UNKNOWN_SCOPE_REASON',
+        pageNo: 2,
+        pageSize: 20,
+        hasMore: false,
+        records: [{ id: 101, visitorLabel: '不应混入的个人记录' }]
+      })
+    }
+    return Promise.resolve({
+      scopeComplete: true,
+      pageNo: 2,
+      pageSize: 20,
+      hasMore: false,
+      records: [{ id: 101, visitorLabel: '微信访客 8A21' }]
+    })
+  })
+  page.setData({
+    loading: false,
+    visitData: normalizeVisitRecords({
+      scopeComplete: false,
+      scopeReason: 'TEAM_SCOPE_UNAVAILABLE',
+      records: [{ id: 102, visitorLabel: '微信访客 C19F' }]
+    }),
+    visitRecordPageNo: 1,
+    visitRecordPageSize: 20,
+    visitRecordHasMore: true,
+    visitRecordLoadingMore: false
+  })
+
+  await page.handleVisitRecordScrollToLower()
+  assert.equal(page.data.visitData.scopeWarningText, '部分数据暂不可用')
+
+  await page.handleVisitRecordScrollToLower()
+
+  assert.equal(attempt, 2)
+  assert.deepEqual(page.data.visitData.records.map((item) => item.id), [102, 101])
+  assert.equal(page.data.visitData.scopeComplete, false)
+  assert.equal(page.data.visitData.scopeReason, 'TEAM_SCOPE_UNAVAILABLE')
+  assert.equal(page.data.visitData.scopeWarningText, '团队数据暂不可用，当前仅展示个人记录')
 })
 
 test('visit event sheet loads first page and appends next page when scrolled to bottom', async () => {
@@ -377,6 +541,108 @@ test('schedule query metric opens paged detail sheet and appends next page', asy
   assert.deepEqual(page.data.detailSheet.items.map((item) => item.id), [302, 301])
   assert.equal(page.data.detailSheet.hasMore, false)
   assert.equal(page.data.detailSheetLoadingMore, false)
+})
+
+test('visit detail sheet keeps degraded first-page scope after appending a complete next page', async () => {
+  const page = loadVisitsPage((options) => {
+    if (options.data.pageNo === 2) {
+      return Promise.resolve({
+        scopeComplete: true,
+        scopeReason: '',
+        pageNo: 2,
+        pageSize: 20,
+        hasMore: false,
+        items: [{ id: 301, visitorLabel: '微信访客 C19F' }]
+      })
+    }
+    return Promise.resolve({
+      scopeComplete: false,
+      scopeReason: 'TEAM_SCOPE_UNAVAILABLE',
+      pageNo: 1,
+      pageSize: 20,
+      hasMore: true,
+      items: [{ id: 302, visitorLabel: '小陈' }]
+    })
+  })
+
+  page.handleMetricTap({ currentTarget: { dataset: { action: 'scheduleQueries' } } })
+  await flushPromises()
+  page.handleVisitDetailScrollToLower()
+  await flushPromises()
+
+  assert.deepEqual(page.data.detailSheet.items.map((item) => item.id), [302, 301])
+  assert.equal(page.data.detailSheet.scopeComplete, false)
+  assert.equal(page.data.detailSheet.scopeReason, 'TEAM_SCOPE_UNAVAILABLE')
+  assert.equal(page.data.detailSheet.scopeWarningText, '团队数据暂不可用，当前仅展示个人记录')
+  assert.equal(page.data.detailSheetPageNo, 2)
+  assert.equal(page.data.detailSheetHasMore, false)
+})
+
+test('visit detail sheet restores complete first-page scope after a degraded next-page retry', async () => {
+  const requestedPages = []
+  const page = loadVisitsPage((options) => {
+    requestedPages.push(options.data.pageNo)
+    if (requestedPages.length === 1) {
+      return Promise.resolve({
+        scopeComplete: false,
+        scopeReason: 'TEAM_SCOPE_UNAVAILABLE',
+        pageNo: 2,
+        pageSize: 20,
+        hasMore: false,
+        items: [{ id: 301, visitorLabel: '不应混入的个人记录' }]
+      })
+    }
+    return Promise.resolve({
+      scopeComplete: true,
+      pageNo: 2,
+      pageSize: 20,
+      hasMore: false,
+      items: [{
+        id: 301,
+        visitorLabel: '微信访客 C19F',
+        queriedDateText: '2026-07-17'
+      }]
+    })
+  })
+  page.setData({
+    detailSheetVisible: true,
+    detailSheetType: 'scheduleQueries',
+    detailSheetPageNo: 1,
+    detailSheetPageSize: 20,
+    detailSheetHasMore: true,
+    detailSheetLoading: false,
+    detailSheetLoadingMore: false,
+    detailSheet: {
+      type: 'scheduleQueries',
+      title: '查询档期',
+      scopeComplete: true,
+      scopeReason: '',
+      scopeWarningText: '',
+      pageNo: 1,
+      pageSize: 20,
+      hasMore: true,
+      items: [{ id: 302, itemKey: 'PERSONAL:302', visitorLabel: '小陈' }]
+    }
+  })
+
+  await page.handleVisitDetailScrollToLower()
+
+  assert.deepEqual(page.data.detailSheet.items.map((item) => item.id), [302])
+  assert.equal(page.data.detailSheet.scopeWarningText, '团队数据暂不可用，当前仅展示个人记录')
+  assert.equal(page.data.detailSheetPageNo, 1)
+  assert.equal(page.data.detailSheetHasMore, true)
+  assert.equal(page.data.detailSheetLoading, false)
+  assert.equal(page.data.detailSheetLoadingMore, false)
+
+  await page.handleVisitDetailScrollToLower()
+
+  assert.deepEqual(requestedPages, [2, 2])
+  assert.deepEqual(page.data.detailSheet.items.map((item) => item.id), [302, 301])
+  assert.equal(page.data.detailSheet.scopeComplete, true)
+  assert.equal(page.data.detailSheet.scopeReason, '')
+  assert.equal(page.data.detailSheet.scopeWarningText, '')
+  assert.equal(page.data.detailSheetPageNo, 2)
+  assert.equal(page.data.detailSheetHasMore, false)
 })
 
 test('contact lead metric opens contact lead detail endpoint', async () => {

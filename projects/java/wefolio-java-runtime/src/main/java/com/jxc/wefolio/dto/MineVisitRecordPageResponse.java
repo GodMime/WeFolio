@@ -10,6 +10,12 @@ import java.util.List;
 @Data
 public class MineVisitRecordPageResponse {
 
+    /** 团队范围是否完整。 */
+    private Boolean scopeComplete;
+
+    /** 团队范围降级原因，完整时为空字符串。 */
+    private String scopeReason;
+
     /** 当前页码，从 1 开始 */
     private Integer pageNo;
 

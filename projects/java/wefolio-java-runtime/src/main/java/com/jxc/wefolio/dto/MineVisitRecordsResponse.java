@@ -10,6 +10,12 @@ import java.util.List;
 @Data
 public class MineVisitRecordsResponse {
 
+    /** 团队范围是否完整。 */
+    private Boolean scopeComplete;
+
+    /** 团队范围降级原因，完整时为空字符串。 */
+    private String scopeReason;
+
     /** 顶部访问统计 */
     private Summary summary;
 
@@ -91,6 +97,18 @@ public class MineVisitRecordsResponse {
         /** 来源展示文案 */
         private String sourceText;
 
+        /** 被访问作品集标题快照。 */
+        private String portfolioTitle;
+
+        /** 被访问作品集类型：PERSONAL 或 TEAM。 */
+        private String portfolioType;
+
+        /** 被访问作品集类型文案。 */
+        private String portfolioTypeText;
+
+        /** 当前维护者是否可标记该访问记录已跟进。 */
+        private Boolean canMarkFollowed;
+
         /** 行为摘要文案 */
         private String summaryText;
 
@@ -127,6 +145,15 @@ public class MineVisitRecordsResponse {
 
         /** 来源展示文案 */
         private String sourceText;
+
+        /** 被访问作品集标题快照。 */
+        private String portfolioTitle;
+
+        /** 被访问作品集类型：PERSONAL 或 TEAM。 */
+        private String portfolioType;
+
+        /** 被访问作品集类型文案。 */
+        private String portfolioTypeText;
 
         /** 跟进状态展示文案 */
         private String followStatusText;
@@ -184,6 +211,12 @@ public class MineVisitRecordsResponse {
     @Data
     public static class ScheduleQueryPage {
 
+        /** 团队范围是否完整。 */
+        private Boolean scopeComplete;
+
+        /** 团队范围降级原因，完整时为空字符串。 */
+        private String scopeReason;
+
         /** 当前页码，从 1 开始 */
         private Integer pageNo;
 
@@ -203,9 +236,7 @@ public class MineVisitRecordsResponse {
     @Data
     public static class ScheduleQueryItem {
 
-        /**
-         * 列表展示 ID。团队记录为来源主键的负数，只用于兼容旧客户端列表键。
-         */
+        /** 来源表真实主键，个人与团队记录均保持正数。 */
         private Long id;
 
         /** 记录类型：PERSONAL 或 TEAM。 */
@@ -213,6 +244,9 @@ public class MineVisitRecordsResponse {
 
         /** 来源表真实主键；后端操作应与记录类型一起使用。 */
         private Long sourceRecordId;
+
+        /** 前端只读列表复合键，例如 TEAM:18。 */
+        private String scheduleQueryKey;
 
         /** 访客展示名称 */
         private String visitorLabel;

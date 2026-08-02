@@ -20,7 +20,7 @@ public interface ScheduleQueryRecordEntityMapper extends BaseMapper<ScheduleQuer
      * 分页查询当前维护者可见的个人与团队查档记录候选集。
      *
      * @param userId 当前用户 ID
-     * @param teamIds 当前用户可管理的团队 ID
+     * @param teamIds 当前用户已加入的团队 ID
      * @param candidateLimit 每个分表的候选记录上限
      * @param offset 全局分页偏移量
      * @param resultLimit 全局返回上限，包含用于判断下一页的额外一条
@@ -91,7 +91,7 @@ public interface ScheduleQueryRecordEntityMapper extends BaseMapper<ScheduleQuer
      * 统计当前维护者可见的个人与团队查档记录。
      *
      * @param userId 当前用户 ID
-     * @param teamIds 当前用户可管理的团队 ID
+     * @param teamIds 当前用户已加入的团队 ID
      * @return 可见记录数
      */
     @Select("""

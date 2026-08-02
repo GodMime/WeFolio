@@ -1,6 +1,5 @@
 package com.jxc.wefolio.service;
 
-import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
@@ -12,34 +11,38 @@ import com.jxc.wefolio.dto.MineVisitRecordPageResponse;
 import com.jxc.wefolio.dto.MineVisitRecordsResponse;
 import com.jxc.wefolio.dto.MineVisitStatisticsResponse;
 import com.jxc.wefolio.entity.ContactLeadEntity;
-import com.jxc.wefolio.entity.TeamMemberEntity;
 import com.jxc.wefolio.entity.VisitEventEntity;
 import com.jxc.wefolio.entity.VisitRecordEntity;
 import com.jxc.wefolio.entity.VisitorEntity;
+import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.ContactLeadEntityMapper;
 import com.jxc.wefolio.mapper.ScheduleQueryRecordEntityMapper;
-import com.jxc.wefolio.mapper.TeamMemberEntityMapper;
 import com.jxc.wefolio.mapper.VisitEventEntityMapper;
 import com.jxc.wefolio.mapper.VisitRecordEntityMapper;
 import com.jxc.wefolio.mapper.VisitorEntityMapper;
 import com.jxc.wefolio.service.teamportfolio.component.contactform.TeamContactLeadCryptoService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.Collection;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -49,7 +52,9 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -63,10 +68,10 @@ class MineVisitServiceTest {
         MybatisConfiguration configuration = new MybatisConfiguration();
         TableInfoHelper.initTableInfo(new MapperBuilderAssistant(configuration, "mine-visit-contact-lead"),
                 ContactLeadEntity.class);
-        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(configuration, "mine-visit-team-member"),
-                TeamMemberEntity.class);
         TableInfoHelper.initTableInfo(new MapperBuilderAssistant(configuration, "mine-visit-record"),
                 VisitRecordEntity.class);
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(configuration, "mine-visit-event"),
+                VisitEventEntity.class);
     }
 
     @Mock
@@ -85,10 +90,18 @@ class MineVisitServiceTest {
     private ContactLeadEntityMapper contactLeadEntityMapper;
 
     @Mock
-    private TeamMemberEntityMapper teamMemberEntityMapper;
+    private MineVisitScopeService mineVisitScopeService;
 
     @Mock
     private TeamContactLeadCryptoService teamContactLeadCryptoService;
+
+    @BeforeEach
+    void setUpScope() {
+        lenient().when(mineVisitScopeService.resolveReadScope(7L))
+                .thenReturn(MineVisitScopeService.Scope.complete(Map.of()));
+        lenient().when(mineVisitScopeService.requireScope(7L))
+                .thenReturn(MineVisitScopeService.Scope.complete(Map.of()));
+    }
 
     @AfterEach
     void tearDown() {
@@ -131,6 +144,14 @@ class MineVisitServiceTest {
                 "CONTACTED",
                 now.minusHours(2)
         );
+        firstRecord.setPortfolioTitleSnapshot(" 个人作品集 A ");
+        firstRecord.setPortfolioType("PERSONAL");
+        firstRecord.setOwnerType("USER");
+        firstRecord.setOwnerId(7L);
+        secondRecord.setPortfolioTitleSnapshot("团队作品集 B");
+        secondRecord.setPortfolioType("TEAM");
+        secondRecord.setOwnerType("TEAM");
+        secondRecord.setOwnerId(202L);
         List<VisitEventEntity> trendEvents = List.of(
                 buildOpenedEvent(now),
                 buildOpenedEvent(now.minusMinutes(8)),
@@ -143,9 +164,16 @@ class MineVisitServiceTest {
         when(visitEventEntityMapper.selectList(any())).thenReturn(trendEvents);
         when(scheduleQueryRecordEntityMapper.countVisibleRecords(any(), any())).thenReturn(12L);
         when(contactLeadEntityMapper.selectCount(any())).thenReturn(5L);
+        MineVisitScopeService.Scope scope = MineVisitScopeService.Scope.complete(Map.of(
+                201L, "MANAGER",
+                202L, "MEMBER"
+        ));
+        when(mineVisitScopeService.resolveReadScope(7L)).thenReturn(scope);
 
         MineVisitRecordsResponse response = service().getVisitRecords();
 
+        assertThat(response.getScopeComplete()).isTrue();
+        assertThat(response.getScopeReason()).isEmpty();
         assertThat(response.getSummary().getTotalVisitCount()).isEqualTo(6L);
         assertThat(response.getSummary().getTodayVisitCount()).isEqualTo(3L);
         assertThat(response.getSummary().getScheduleQueryCount()).isEqualTo(12L);
@@ -166,6 +194,37 @@ class MineVisitServiceTest {
         assertThat(response.getRecords().get(1).getSourceText()).isEqualTo("来自团队作品集「星曜司仪团」跳转");
         assertThat(response.getRecords().get(1).getSummaryText()).contains("播放视频 2 次").contains("未点二维码");
         assertThat(response.getRecords().get(1).getFollowTone()).isEqualTo("teal");
+        assertThat(response.getRecords())
+                .extracting("portfolioTitle", "portfolioType", "portfolioTypeText", "canMarkFollowed")
+                .containsExactly(
+                        tuple("个人作品集 A", "PERSONAL", "个人作品集", true),
+                        tuple("团队作品集 B", "TEAM", "团队作品集", false));
+
+        ArgumentCaptor<LambdaQueryWrapper<VisitRecordEntity>> recordWrapperCaptor = ArgumentCaptor.captor();
+        verify(visitRecordEntityMapper).selectList(recordWrapperCaptor.capture());
+        assertThat(recordWrapperCaptor.getValue().getSqlSegment())
+                .contains("owner_type", "owner_id", "IN", "ORDER BY last_visited_at DESC,id DESC");
+        assertThat(recordWrapperCaptor.getValue().getParamNameValuePairs().values())
+                .contains("USER", 7L, "TEAM", 201L, 202L);
+
+        ArgumentCaptor<LambdaQueryWrapper<VisitEventEntity>> eventWrapperCaptor = ArgumentCaptor.captor();
+        verify(visitEventEntityMapper).selectList(eventWrapperCaptor.capture());
+        assertThat(eventWrapperCaptor.getValue().getSqlSegment())
+                .contains("owner_type", "owner_id", "IN", "event_type", "occurred_at");
+        assertThat(eventWrapperCaptor.getValue().getParamNameValuePairs().values())
+                .contains("USER", 7L, "TEAM", 201L, 202L, "PORTFOLIO_OPENED");
+
+        ArgumentCaptor<Collection<Long>> scheduleTeamIdsCaptor = ArgumentCaptor.captor();
+        verify(scheduleQueryRecordEntityMapper).countVisibleRecords(
+                org.mockito.ArgumentMatchers.eq(7L), scheduleTeamIdsCaptor.capture());
+        assertThat(scheduleTeamIdsCaptor.getValue()).containsExactly(201L, 202L);
+
+        ArgumentCaptor<LambdaQueryWrapper<ContactLeadEntity>> leadWrapperCaptor = ArgumentCaptor.captor();
+        verify(contactLeadEntityMapper).selectCount(leadWrapperCaptor.capture());
+        leadWrapperCaptor.getValue().getSqlSegment();
+        assertThat(leadWrapperCaptor.getValue().getParamNameValuePairs().values())
+                .contains("USER", 7L, "TEAM", 201L, 202L);
+        verify(mineVisitScopeService).resolveReadScope(7L);
     }
 
     @Test
@@ -195,10 +254,10 @@ class MineVisitServiceTest {
         ));
         when(scheduleQueryRecordEntityMapper.countVisibleRecords(any(), any())).thenReturn(4L);
         when(contactLeadEntityMapper.selectCount(any())).thenReturn(2L);
-        when(teamMemberEntityMapper.selectList(any())).thenReturn(List.of());
-
         MineVisitStatisticsResponse response = service().getVisitStatistics();
 
+        assertThat(response.getScopeComplete()).isTrue();
+        assertThat(response.getScopeReason()).isEmpty();
         assertThat(response.getSummary().getTotalVisitCount()).isEqualTo(3L);
         assertThat(response.getSummary().getTodayVisitCount()).isEqualTo(1L);
         assertThat(response.getSummary().getScheduleQueryCount()).isEqualTo(4L);
@@ -220,9 +279,15 @@ class MineVisitServiceTest {
                 101L, "visitor-8A21", "WECHAT_SHARE_CARD", "PERSONAL", "作品集 A",
                 1, 0, 0, 0, 0, null, "NOT_FOLLOWED_UP", now
         );
+        secondRecord.setOwnerType("TEAM");
+        secondRecord.setOwnerId(201L);
+        secondRecord.setPortfolioType("TEAM");
+        secondRecord.setPortfolioTitleSnapshot("   ");
         Page<VisitRecordEntity> resultPage = new Page<>(1, 2, 3);
         resultPage.setRecords(List.of(firstRecord, secondRecord));
         when(visitRecordEntityMapper.selectPage(any(Page.class), any())).thenReturn(resultPage);
+        when(mineVisitScopeService.resolveReadScope(7L)).thenReturn(
+                MineVisitScopeService.Scope.complete(Map.of(201L, "OWNER")));
 
         MineVisitRecordPageResponse response = service().getVisitRecordPage(1, 2);
 
@@ -231,10 +296,75 @@ class MineVisitServiceTest {
         assertThat(response.getHasMore()).isTrue();
         assertThat(response.getRecords()).extracting(MineVisitRecordsResponse.Record::getId)
                 .containsExactly(102L, 101L);
-        ArgumentCaptor<Wrapper<VisitRecordEntity>> wrapperCaptor = ArgumentCaptor.captor();
+        assertThat(response.getRecords()).extracting(MineVisitRecordsResponse.Record::getPortfolioTitle)
+                .containsExactly("作品集 B", "");
+        assertThat(response.getScopeComplete()).isTrue();
+        assertThat(response.getScopeReason()).isEmpty();
+        ArgumentCaptor<LambdaQueryWrapper<VisitRecordEntity>> wrapperCaptor = ArgumentCaptor.captor();
         verify(visitRecordEntityMapper).selectPage(any(Page.class), wrapperCaptor.capture());
         assertThat(wrapperCaptor.getValue().getSqlSegment())
-                .contains("ORDER BY last_visited_at DESC,id DESC");
+                .contains("owner_type", "owner_id", "IN", "ORDER BY last_visited_at DESC,id DESC");
+        assertThat(wrapperCaptor.getValue().getParamNameValuePairs().values())
+                .contains("USER", 7L, "TEAM", 201L);
+    }
+
+    @Test
+    void recentOpenedEventsShouldKeepOwnerScopeGroupedBeforeEventAndTimeConditions() {
+        AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
+        when(mineVisitScopeService.resolveReadScope(7L)).thenReturn(
+                MineVisitScopeService.Scope.complete(Map.of(201L, "OWNER", 202L, "MEMBER")));
+
+        service().getVisitStatistics();
+
+        ArgumentCaptor<LambdaQueryWrapper<VisitEventEntity>> eventWrapperCaptor = ArgumentCaptor.captor();
+        verify(visitEventEntityMapper).selectList(eventWrapperCaptor.capture());
+        String sql = eventWrapperCaptor.getValue().getSqlSegment().replaceAll("\\s+", " ");
+        assertThat(sql)
+                .startsWith("((owner_type =")
+                .contains(" OR (owner_type =", "))) AND event_type =")
+                .contains(" AND occurred_at >=", " AND occurred_at <");
+    }
+
+    @Test
+    void degradedReadScopeShouldUseOnlyPersonalConditionsAndExposeMetadata() {
+        AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
+        when(mineVisitScopeService.resolveReadScope(7L)).thenReturn(MineVisitScopeService.Scope.degraded());
+        when(visitRecordEntityMapper.selectPage(any(Page.class), any())).thenAnswer(invocation -> {
+            Page<VisitRecordEntity> requestedPage = invocation.getArgument(0);
+            requestedPage.setRecords(List.of());
+            requestedPage.setTotal(0);
+            return requestedPage;
+        });
+
+        MineVisitStatisticsResponse statistics = service().getVisitStatistics();
+        MineVisitRecordPageResponse page = service().getVisitRecordPage(1, 20);
+
+        assertThat(statistics.getScopeComplete()).isFalse();
+        assertThat(statistics.getScopeReason()).isEqualTo("TEAM_SCOPE_UNAVAILABLE");
+        assertThat(page.getScopeComplete()).isFalse();
+        assertThat(page.getScopeReason()).isEqualTo("TEAM_SCOPE_UNAVAILABLE");
+
+        ArgumentCaptor<LambdaQueryWrapper<VisitRecordEntity>> recordListWrapper = ArgumentCaptor.captor();
+        verify(visitRecordEntityMapper).selectList(recordListWrapper.capture());
+        recordListWrapper.getValue().getSqlSegment();
+        assertThat(recordListWrapper.getValue().getParamNameValuePairs().values())
+                .contains("USER", 7L)
+                .doesNotContain("TEAM");
+
+        ArgumentCaptor<LambdaQueryWrapper<VisitEventEntity>> eventWrapper = ArgumentCaptor.captor();
+        verify(visitEventEntityMapper).selectList(eventWrapper.capture());
+        eventWrapper.getValue().getSqlSegment();
+        assertThat(eventWrapper.getValue().getParamNameValuePairs().values())
+                .contains("USER", 7L)
+                .doesNotContain("TEAM");
+
+        ArgumentCaptor<LambdaQueryWrapper<VisitRecordEntity>> pageWrapper = ArgumentCaptor.captor();
+        verify(visitRecordEntityMapper).selectPage(any(Page.class), pageWrapper.capture());
+        pageWrapper.getValue().getSqlSegment();
+        assertThat(pageWrapper.getValue().getParamNameValuePairs().values())
+                .contains("USER", 7L)
+                .doesNotContain("TEAM");
+        verify(mineVisitScopeService, org.mockito.Mockito.times(2)).resolveReadScope(7L);
     }
 
     @Test
@@ -332,6 +462,9 @@ class MineVisitServiceTest {
 
         assertThat(response.getRecordId()).isEqualTo(101L);
         assertThat(response.getVisitorLabel()).isEqualTo("微信访客 8A21");
+        assertThat(response.getPortfolioTitle()).isEqualTo("林安婚礼司仪");
+        assertThat(response.getPortfolioType()).isEqualTo("PERSONAL");
+        assertThat(response.getPortfolioTypeText()).isEqualTo("个人作品集");
         assertThat(response.getPageNo()).isEqualTo(1);
         assertThat(response.getPageSize()).isEqualTo(2);
         assertThat(response.getHasMore()).isTrue();
@@ -346,6 +479,114 @@ class MineVisitServiceTest {
         assertThat(pageCaptor.getValue().getCurrent()).isEqualTo(1L);
         assertThat(pageCaptor.getValue().getSize()).isEqualTo(2L);
         verify(visitEventEntityMapper, never()).selectList(any());
+        verify(mineVisitScopeService, never()).requireScope(7L);
+        assertThat(MineVisitRecordsResponse.EventTimeline.class.getDeclaredFields())
+                .extracting(Field::getName)
+                .doesNotContain("scopeComplete", "scopeReason");
+    }
+
+    /**
+     * 团队事件读取 — 已加入团队的普通成员也可以读取事件，并返回团队作品集快照信息。
+     */
+    @Test
+    void visitEventsShouldAllowJoinedTeamMemberAndReturnPortfolioSnapshot() {
+        AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
+        LocalDateTime now = LocalDateTime.of(2026, 7, 5, 11, 1);
+        VisitRecordEntity record = buildRecord(
+                101L,
+                "anonymous-visitor-key-8A21",
+                "TEAM_PORTFOLIO",
+                "TEAM",
+                "星曜司仪团",
+                4,
+                6,
+                0,
+                1,
+                1,
+                null,
+                "NOT_FOLLOWED_UP",
+                now
+        );
+        record.setOwnerType("TEAM");
+        record.setOwnerId(201L);
+        VisitEventEntity opened = buildEvent(9001L, 101L, "PORTFOLIO_OPENED", now);
+        opened.setOwnerType("TEAM");
+        opened.setOwnerId(201L);
+        when(visitRecordEntityMapper.selectOne(any())).thenReturn(null, record);
+        when(mineVisitScopeService.requireScope(7L)).thenReturn(
+                MineVisitScopeService.Scope.complete(Map.of(201L, "MEMBER", 202L, "MANAGER")));
+        Page<VisitEventEntity> resultPage = new Page<>(1, 20, 1);
+        resultPage.setRecords(List.of(opened));
+        when(visitEventEntityMapper.selectPage(any(Page.class), any())).thenReturn(resultPage);
+
+        MineVisitRecordsResponse.EventTimeline timeline = service().getVisitEvents(101L, 1, 20);
+
+        assertThat(timeline.getPortfolioTitle()).isEqualTo("星曜司仪团");
+        assertThat(timeline.getPortfolioType()).isEqualTo("TEAM");
+        assertThat(timeline.getPortfolioTypeText()).isEqualTo("团队作品集");
+        assertThat(timeline.getEvents()).hasSize(1);
+        verify(mineVisitScopeService).requireScope(7L);
+
+        ArgumentCaptor<LambdaQueryWrapper<VisitRecordEntity>> recordQueryCaptor = ArgumentCaptor.captor();
+        verify(visitRecordEntityMapper, times(2)).selectOne(recordQueryCaptor.capture());
+        LambdaQueryWrapper<VisitRecordEntity> teamRecordQuery = recordQueryCaptor.getAllValues().get(1);
+        String teamRecordSql = teamRecordQuery.getSqlSegment().replaceAll("\\s+", " ");
+        assertThat(teamRecordSql).contains(
+                "id = #{ew.paramNameValuePairs.MPGENVAL1}",
+                "owner_type = #{ew.paramNameValuePairs.MPGENVAL2}",
+                "owner_id IN (#{ew.paramNameValuePairs.MPGENVAL3},#{ew.paramNameValuePairs.MPGENVAL4})");
+        assertThat(teamRecordQuery.getParamNameValuePairs())
+                .containsEntry("MPGENVAL1", 101L)
+                .containsEntry("MPGENVAL2", "TEAM")
+                .containsEntry("MPGENVAL3", 201L)
+                .containsEntry("MPGENVAL4", 202L);
+
+        ArgumentCaptor<LambdaQueryWrapper<VisitEventEntity>> eventQueryCaptor = ArgumentCaptor.captor();
+        verify(visitEventEntityMapper).selectPage(any(Page.class), eventQueryCaptor.capture());
+        LambdaQueryWrapper<VisitEventEntity> eventQuery = eventQueryCaptor.getValue();
+        String eventSql = eventQuery.getSqlSegment().replaceAll("\\s+", " ");
+        assertThat(eventSql).contains(
+                "visit_record_id = #{ew.paramNameValuePairs.MPGENVAL1}",
+                "owner_type = #{ew.paramNameValuePairs.MPGENVAL2}",
+                "owner_id = #{ew.paramNameValuePairs.MPGENVAL3}",
+                "ORDER BY occurred_at DESC,id DESC");
+        assertThat(eventQuery.getParamNameValuePairs())
+                .containsEntry("MPGENVAL1", 101L)
+                .containsEntry("MPGENVAL2", "TEAM")
+                .containsEntry("MPGENVAL3", 201L);
+    }
+
+    /**
+     * 团队事件读取 — 非团队成员不能读取团队事件。
+     */
+    @Test
+    void visitEventsShouldRejectNonMemberTeamRecord() {
+        AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
+        when(visitRecordEntityMapper.selectOne(any())).thenReturn(null);
+        when(mineVisitScopeService.requireScope(7L)).thenReturn(
+                MineVisitScopeService.Scope.complete(Map.of()));
+
+        assertThatThrownBy(() -> service().getVisitEvents(101L, 1, 20))
+                .hasMessage("访问记录不存在或无访问权限");
+
+        verify(mineVisitScopeService).requireScope(7L);
+        verifyNoInteractions(visitEventEntityMapper);
+    }
+
+    /**
+     * 团队事件读取 — 个人记录不存在且团队范围查询失败时整体拒绝，不执行事件查询。
+     */
+    @Test
+    void visitEventsShouldFailClosedWhenTeamScopeCannotBeResolved() {
+        AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
+        DataAccessResourceFailureException scopeFailure =
+                new DataAccessResourceFailureException("team scope unavailable");
+        when(visitRecordEntityMapper.selectOne(any())).thenReturn(null);
+        when(mineVisitScopeService.requireScope(7L)).thenThrow(scopeFailure);
+
+        assertThatThrownBy(() -> service().getVisitEvents(101L, 1, 20)).isSameAs(scopeFailure);
+
+        verifyNoInteractions(visitEventEntityMapper);
     }
 
     @Test
@@ -447,6 +688,8 @@ class MineVisitServiceTest {
 
         MineVisitRecordsResponse.ScheduleQueryPage response = service().getScheduleQueryRecords(1, 2);
 
+        assertThat(response.getScopeComplete()).isTrue();
+        assertThat(response.getScopeReason()).isEmpty();
         assertThat(response.getPageNo()).isEqualTo(1);
         assertThat(response.getPageSize()).isEqualTo(2);
         assertThat(response.getHasMore()).isTrue();
@@ -470,7 +713,7 @@ class MineVisitServiceTest {
     }
 
     @Test
-    void scheduleQueryRecordsShouldMergeManageableTeamsAndUseExtraRowForHasMore() {
+    void scheduleQueryRecordsShouldMergeAllJoinedTeamsAndUseCompositeKeys() {
         AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
         LocalDateTime now = LocalDateTime.of(2026, 7, 5, 15, 0);
         MineScheduleQueryRecordRow teamOwnerRow = buildScheduleQueryRow(
@@ -488,12 +731,12 @@ class MineVisitServiceTest {
         MineScheduleQueryRecordRow extraRow = buildScheduleQueryRow(
                 303L, "PERSONAL", "备用个人作品集", null, "visitor-key-E31B", now.minusMinutes(3));
 
-        when(teamMemberEntityMapper.selectList(any())).thenReturn(List.of(
-                buildMembership(201L, "OWNER", "JOINED"),
-                buildMembership(202L, "MANAGER", "JOINED"),
-                buildMembership(203L, "MEMBER", "JOINED"),
-                buildMembership(204L, "OWNER", "REJECTED")
-        ));
+        when(mineVisitScopeService.resolveReadScope(7L)).thenReturn(
+                MineVisitScopeService.Scope.complete(Map.of(
+                        201L, "OWNER",
+                        202L, "MANAGER",
+                        203L, "MEMBER"
+                )));
         when(scheduleQueryRecordEntityMapper.selectVisibleRecords(
                         any(), any(), anyLong(), anyLong(), anyInt()))
                 .thenReturn(List.of(teamOwnerRow, personalRow, teamManagerRow, extraRow));
@@ -505,17 +748,19 @@ class MineVisitServiceTest {
 
         MineVisitRecordsResponse.ScheduleQueryPage response = service().getScheduleQueryRecords(1, 3);
 
+        assertThat(response.getScopeComplete()).isTrue();
+        assertThat(response.getScopeReason()).isEmpty();
         assertThat(response.getHasMore()).isTrue();
         assertThat(response.getItems()).hasSize(3);
         assertThat(response.getItems())
                 .extracting(MineVisitRecordsResponse.ScheduleQueryItem::getPortfolioTitle)
                 .containsExactly("星曜司仪团", "林安婚礼司仪", "远山摄影团队");
         assertThat(response.getItems())
-                .extracting(MineVisitRecordsResponse.ScheduleQueryItem::getId)
-                .containsExactly(-301L, 301L, -302L);
-        assertThat(response.getItems())
-                .extracting("recordType", "sourceRecordId")
-                .containsExactly(tuple("TEAM", 301L), tuple("PERSONAL", 301L), tuple("TEAM", 302L));
+                .extracting("id", "recordType", "sourceRecordId", "scheduleQueryKey")
+                .containsExactly(
+                        tuple(301L, "TEAM", 301L, "TEAM:301"),
+                        tuple(301L, "PERSONAL", 301L, "PERSONAL:301"),
+                        tuple(302L, "TEAM", 302L, "TEAM:302"));
         assertThat(response.getItems().getFirst().getVisitorLabel()).isEqualTo("小陈");
         assertThat(response.getItems().getFirst().getSlotText())
                 .isEqualTo("空闲 2 人 · 部分空闲 1 人 · 已满 3 人");
@@ -526,28 +771,49 @@ class MineVisitServiceTest {
                 org.mockito.ArgumentMatchers.eq(7L), teamIdsCaptor.capture(),
                 org.mockito.ArgumentMatchers.eq(4L), org.mockito.ArgumentMatchers.eq(0L),
                 org.mockito.ArgumentMatchers.eq(4));
-        assertThat(teamIdsCaptor.getValue()).containsExactlyInAnyOrder(201L, 202L);
-        assertThat(Set.copyOf(teamIdsCaptor.getValue())).doesNotContain(203L, 204L);
+        assertThat(teamIdsCaptor.getValue()).containsExactly(201L, 202L, 203L);
     }
 
     @Test
-    void visitStatisticsShouldCountPersonalAndManageableTeamScheduleQueries() {
+    void visitStatisticsShouldCountPersonalAndAllJoinedTeamScheduleQueries() {
         AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
-        when(teamMemberEntityMapper.selectList(any())).thenReturn(List.of(
-                buildMembership(201L, "OWNER", "JOINED"),
-                buildMembership(202L, "MANAGER", "JOINED"),
-                buildMembership(203L, "MEMBER", "JOINED"),
-                buildMembership(204L, "OWNER", "REJECTED")
-        ));
+        when(mineVisitScopeService.resolveReadScope(7L)).thenReturn(
+                MineVisitScopeService.Scope.complete(Map.of(
+                        201L, "OWNER",
+                        202L, "MANAGER",
+                        203L, "MEMBER"
+                )));
         when(scheduleQueryRecordEntityMapper.countVisibleRecords(any(), any())).thenReturn(7L);
 
         MineVisitStatisticsResponse response = service().getVisitStatistics();
 
+        assertThat(response.getScopeComplete()).isTrue();
+        assertThat(response.getScopeReason()).isEmpty();
         assertThat(response.getSummary().getScheduleQueryCount()).isEqualTo(7L);
         ArgumentCaptor<Collection<Long>> teamIdsCaptor = ArgumentCaptor.captor();
         verify(scheduleQueryRecordEntityMapper).countVisibleRecords(
                 org.mockito.ArgumentMatchers.eq(7L), teamIdsCaptor.capture());
-        assertThat(teamIdsCaptor.getValue()).containsExactlyInAnyOrder(201L, 202L);
+        assertThat(teamIdsCaptor.getValue()).containsExactly(201L, 202L, 203L);
+    }
+
+    @Test
+    void scheduleQueryRecordsShouldExposeDegradedScopeAndQueryOnlyPersonalRecords() {
+        AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
+        when(mineVisitScopeService.resolveReadScope(7L)).thenReturn(MineVisitScopeService.Scope.degraded());
+        when(scheduleQueryRecordEntityMapper.selectVisibleRecords(any(), any(), anyLong(), anyLong(), anyInt()))
+                .thenReturn(List.of());
+
+        MineVisitRecordsResponse.ScheduleQueryPage response = service().getScheduleQueryRecords(1, 20);
+
+        assertThat(response.getScopeComplete()).isFalse();
+        assertThat(response.getScopeReason()).isEqualTo(MineVisitScopeService.TEAM_SCOPE_UNAVAILABLE);
+        assertThat(response.getItems()).isEmpty();
+        ArgumentCaptor<Collection<Long>> teamIdsCaptor = ArgumentCaptor.captor();
+        verify(scheduleQueryRecordEntityMapper).selectVisibleRecords(
+                org.mockito.ArgumentMatchers.eq(7L), teamIdsCaptor.capture(),
+                org.mockito.ArgumentMatchers.eq(21L), org.mockito.ArgumentMatchers.eq(0L),
+                org.mockito.ArgumentMatchers.eq(21));
+        assertThat(teamIdsCaptor.getValue()).isEmpty();
     }
 
     @Test
@@ -601,11 +867,8 @@ class MineVisitServiceTest {
     @Test
     void contactLeadsShouldMergeJoinedTeamRecordsAndDecryptTeamContacts() {
         AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
-        TeamMemberEntity managerMembership = buildMembership(201L, "MANAGER", "JOINED");
-        TeamMemberEntity memberMembership = buildMembership(202L, "MEMBER", "JOINED");
-        TeamMemberEntity rejectedMembership = buildMembership(203L, "OWNER", "REJECTED");
-        when(teamMemberEntityMapper.selectList(any()))
-                .thenReturn(List.of(managerMembership, memberMembership, rejectedMembership));
+        when(mineVisitScopeService.requireScope(7L)).thenReturn(
+                MineVisitScopeService.Scope.complete(Map.of(201L, "MANAGER", 202L, "MEMBER")));
 
         ContactLeadEntity managerLead = buildContactLead(501L, "TEAM", 201L, "星曜司仪团");
         managerLead.setPhoneCiphertext("manager-phone-ciphertext");
@@ -636,12 +899,7 @@ class MineVisitServiceTest {
         assertThat(response.getItems()).extracting(MineVisitRecordsResponse.ContactLeadItem::getWechat)
                 .containsExactly("manager-wx", "member-wx");
 
-        ArgumentCaptor<LambdaQueryWrapper<TeamMemberEntity>> membershipQueryCaptor = ArgumentCaptor.captor();
-        verify(teamMemberEntityMapper).selectList(membershipQueryCaptor.capture());
-        assertThat(membershipQueryCaptor.getValue().getSqlSegment())
-                .contains("user_id", "join_status");
-        assertThat(membershipQueryCaptor.getValue().getParamNameValuePairs().values())
-                .contains(7L, "JOINED");
+        verify(mineVisitScopeService).requireScope(7L);
 
         ArgumentCaptor<LambdaQueryWrapper<ContactLeadEntity>> leadQueryCaptor = ArgumentCaptor.captor();
         verify(contactLeadEntityMapper).selectPage(any(Page.class), leadQueryCaptor.capture());
@@ -655,10 +913,8 @@ class MineVisitServiceTest {
     @Test
     void visitSummaryShouldCountPersonalAndJoinedTeamLeadsWithSameScope() {
         AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
-        when(teamMemberEntityMapper.selectList(any())).thenReturn(List.of(
-                buildMembership(201L, "OWNER", "JOINED"),
-                buildMembership(203L, "OWNER", "REMOVED")
-        ));
+        when(mineVisitScopeService.resolveReadScope(7L)).thenReturn(
+                MineVisitScopeService.Scope.complete(Map.of(201L, "OWNER")));
         when(contactLeadEntityMapper.selectCount(any())).thenReturn(9L);
 
         MineVisitRecordsResponse response = service().getVisitRecords();
@@ -686,7 +942,8 @@ class MineVisitServiceTest {
     void markContactLeadFollowedShouldAllowJoinedTeamManager() {
         AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
         ContactLeadEntity lead = buildContactLead(501L, "TEAM", 201L, "星曜司仪团");
-        when(teamMemberEntityMapper.selectList(any())).thenReturn(List.of(buildMembership(201L, "MANAGER", "JOINED")));
+        when(mineVisitScopeService.requireScope(7L)).thenReturn(
+                MineVisitScopeService.Scope.complete(Map.of(201L, "MANAGER")));
         when(contactLeadEntityMapper.selectOne(any())).thenReturn(lead);
         when(contactLeadEntityMapper.updateById(lead)).thenReturn(1);
 
@@ -702,12 +959,24 @@ class MineVisitServiceTest {
     void markContactLeadFollowedShouldRejectJoinedTeamMember() {
         AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
         ContactLeadEntity lead = buildContactLead(501L, "TEAM", 201L, "星曜司仪团");
-        when(teamMemberEntityMapper.selectList(any())).thenReturn(List.of(buildMembership(201L, "MEMBER", "JOINED")));
+        when(mineVisitScopeService.requireScope(7L)).thenReturn(
+                MineVisitScopeService.Scope.complete(Map.of(201L, "MEMBER")));
         when(contactLeadEntityMapper.selectOne(any())).thenReturn(lead);
 
         assertThatThrownBy(() -> service().markContactLeadFollowed(501L))
                 .hasMessage("预留信息不存在或无访问权限");
         verify(contactLeadEntityMapper, never()).updateById((ContactLeadEntity) any());
+    }
+
+    @Test
+    void contactLeadListShouldFailClosedWhenCompleteScopeCannotBeResolved() {
+        AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
+        IllegalStateException scopeFailure = new IllegalStateException("team scope unavailable");
+        when(mineVisitScopeService.requireScope(7L)).thenThrow(scopeFailure);
+
+        assertThatThrownBy(() -> service().getContactLeads(1, 20)).isSameAs(scopeFailure);
+
+        verifyNoInteractions(contactLeadEntityMapper);
     }
 
     @Test
@@ -742,6 +1011,177 @@ class MineVisitServiceTest {
         assertThat(response.getFollowStatusText()).isEqualTo("已跟进");
         assertThat(response.getFollowTone()).isEqualTo("teal");
         verify(visitRecordEntityMapper).updateById(record);
+    }
+
+    /**
+     * 团队访问记录跟进 — 团队拥有者和管理员均可将记录标记为已跟进。
+     *
+     * @param role 当前用户在团队中的角色
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"OWNER", "MANAGER"})
+    void markVisitFollowedShouldAllowTeamOwnerAndManager(String role) {
+        AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
+        VisitRecordEntity record = buildTeamVisitRecord("NOT_FOLLOWED_UP");
+        when(visitRecordEntityMapper.selectOne(any())).thenReturn(null).thenReturn(record);
+        when(mineVisitScopeService.requireScope(7L)).thenReturn(
+                MineVisitScopeService.Scope.complete(Map.of(201L, role)));
+        when(visitRecordEntityMapper.updateById(record)).thenReturn(1);
+
+        MineVisitRecordsResponse.Record response = service().markVisitFollowed(101L);
+
+        assertThat(response.getFollowStatus()).isEqualTo("CONTACTED");
+        assertThat(response.getCanMarkFollowed()).isTrue();
+        verify(visitRecordEntityMapper).updateById(record);
+    }
+
+    /**
+     * 团队访问记录跟进 — 普通成员可以读取记录但不能标记跟进。
+     */
+    @Test
+    void markVisitFollowedShouldRejectJoinedTeamMember() {
+        AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
+        VisitRecordEntity record = buildTeamVisitRecord("NOT_FOLLOWED_UP");
+        when(visitRecordEntityMapper.selectOne(any())).thenReturn(null).thenReturn(record);
+        lenient().when(mineVisitScopeService.requireScope(7L)).thenReturn(
+                MineVisitScopeService.Scope.complete(Map.of(201L, "MEMBER")));
+
+        assertThatThrownBy(() -> service().markVisitFollowed(101L))
+                .hasMessage("访问记录不存在或无访问权限");
+
+        verify(mineVisitScopeService).requireScope(7L);
+        verify(visitRecordEntityMapper, never()).updateById((VisitRecordEntity) any());
+    }
+
+    /**
+     * 团队访问记录跟进 — 非成员不在可见范围内，不能触发写入。
+     */
+    @Test
+    void markVisitFollowedShouldRejectNonMember() {
+        AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
+        when(visitRecordEntityMapper.selectOne(any())).thenReturn(null);
+        when(mineVisitScopeService.requireScope(7L)).thenReturn(
+                MineVisitScopeService.Scope.complete(Map.of()));
+
+        assertThatThrownBy(() -> service().markVisitFollowed(101L))
+                .hasMessage("访问记录不存在或无访问权限");
+
+        verify(mineVisitScopeService).requireScope(7L);
+        verify(visitRecordEntityMapper, never()).updateById((VisitRecordEntity) any());
+    }
+
+    /**
+     * 团队访问记录跟进 — 已经处于已跟进状态时直接幂等成功。
+     */
+    @Test
+    void markVisitFollowedShouldBeIdempotentWhenAlreadyContacted() {
+        AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
+        VisitRecordEntity record = buildTeamVisitRecord("CONTACTED");
+        when(visitRecordEntityMapper.selectOne(any())).thenReturn(null).thenReturn(record);
+        when(mineVisitScopeService.requireScope(7L)).thenReturn(
+                MineVisitScopeService.Scope.complete(Map.of(201L, "OWNER")));
+
+        MineVisitRecordsResponse.Record response = service().markVisitFollowed(101L);
+
+        assertThat(response.getFollowStatus()).isEqualTo("CONTACTED");
+        verify(visitRecordEntityMapper, never()).updateById((VisitRecordEntity) any());
+    }
+
+    /**
+     * 访问记录跟进 — 初始状态不是未跟进或已跟进时拒绝覆盖业务终态。
+     *
+     * @param followStatus 已存在的业务终态
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"DEAL_WON", "INVALID"})
+    void markVisitFollowedShouldRejectExistingTerminalStatus(String followStatus) {
+        AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
+        VisitRecordEntity record = buildTeamVisitRecord(followStatus);
+        when(visitRecordEntityMapper.selectOne(any())).thenReturn(null).thenReturn(record);
+        when(mineVisitScopeService.requireScope(7L)).thenReturn(
+                MineVisitScopeService.Scope.complete(Map.of(201L, "OWNER")));
+
+        assertThatThrownBy(() -> service().markVisitFollowed(101L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("访问记录状态已变化，请刷新后重试");
+
+        verify(visitRecordEntityMapper, never()).updateById((VisitRecordEntity) any());
+    }
+
+    /**
+     * 访问记录跟进 — 乐观锁冲突后重读为已跟进时按幂等成功处理。
+     */
+    @Test
+    void markVisitFollowedShouldSucceedWhenConflictReloadsContacted() {
+        AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
+        VisitRecordEntity original = buildTeamVisitRecord("NOT_FOLLOWED_UP");
+        VisitRecordEntity latest = buildTeamVisitRecord("CONTACTED");
+        when(visitRecordEntityMapper.selectOne(any()))
+                .thenReturn(null)
+                .thenReturn(original)
+                .thenReturn(null)
+                .thenReturn(latest);
+        when(mineVisitScopeService.requireScope(7L)).thenReturn(
+                MineVisitScopeService.Scope.complete(Map.of(201L, "MANAGER")));
+        when(visitRecordEntityMapper.updateById(original)).thenReturn(0);
+
+        MineVisitRecordsResponse.Record response = service().markVisitFollowed(101L);
+
+        assertThat(response.getFollowStatus()).isEqualTo("CONTACTED");
+        verify(mineVisitScopeService, times(2)).requireScope(7L);
+        verify(visitRecordEntityMapper, times(1)).updateById(original);
+    }
+
+    /**
+     * 访问记录跟进 — 乐观锁冲突后重新授权失败时，即使最新为已跟进也拒绝返回成功。
+     */
+    @Test
+    void markVisitFollowedShouldRejectConflictWhenManagementPermissionWasRevoked() {
+        AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
+        VisitRecordEntity original = buildTeamVisitRecord("NOT_FOLLOWED_UP");
+        VisitRecordEntity latest = buildTeamVisitRecord("CONTACTED");
+        when(visitRecordEntityMapper.selectOne(any()))
+                .thenReturn(null)
+                .thenReturn(original)
+                .thenReturn(null)
+                .thenReturn(latest);
+        when(mineVisitScopeService.requireScope(7L))
+                .thenReturn(MineVisitScopeService.Scope.complete(Map.of(201L, "OWNER")))
+                .thenReturn(MineVisitScopeService.Scope.complete(Map.of(201L, "MEMBER")));
+        when(visitRecordEntityMapper.updateById(original)).thenReturn(0);
+
+        assertThatThrownBy(() -> service().markVisitFollowed(101L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("访问记录状态已变化，请刷新后重试");
+
+        verify(visitRecordEntityMapper, times(1)).updateById(original);
+    }
+
+    /**
+     * 访问记录跟进 — 乐观锁冲突后业务状态已变化时不执行第二次更新。
+     *
+     * @param latestFollowStatus 冲突后读到的最新业务状态
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"DEAL_WON", "INVALID"})
+    void markVisitFollowedShouldRejectChangedStatusAfterConflict(String latestFollowStatus) {
+        AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
+        VisitRecordEntity original = buildTeamVisitRecord("NOT_FOLLOWED_UP");
+        VisitRecordEntity latest = buildTeamVisitRecord(latestFollowStatus);
+        when(visitRecordEntityMapper.selectOne(any()))
+                .thenReturn(null)
+                .thenReturn(original)
+                .thenReturn(null)
+                .thenReturn(latest);
+        when(mineVisitScopeService.requireScope(7L)).thenReturn(
+                MineVisitScopeService.Scope.complete(Map.of(201L, "OWNER")));
+        when(visitRecordEntityMapper.updateById(original)).thenReturn(0);
+
+        assertThatThrownBy(() -> service().markVisitFollowed(101L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("访问记录状态已变化，请刷新后重试");
+
+        verify(visitRecordEntityMapper, times(1)).updateById(original);
     }
 
     @Test
@@ -781,18 +1221,9 @@ class MineVisitServiceTest {
                 visitorEntityMapper,
                 scheduleQueryRecordEntityMapper,
                 contactLeadEntityMapper,
-                teamMemberEntityMapper,
+                mineVisitScopeService,
                 teamContactLeadCryptoService
         );
-    }
-
-    private TeamMemberEntity buildMembership(Long teamId, String role, String joinStatus) {
-        TeamMemberEntity membership = new TeamMemberEntity();
-        membership.setTeamId(teamId);
-        membership.setUserId(7L);
-        membership.setRole(role);
-        membership.setJoinStatus(joinStatus);
-        return membership;
     }
 
     private ContactLeadEntity buildContactLead(Long id, String ownerType, Long ownerId, String portfolioTitle) {
@@ -808,6 +1239,33 @@ class MineVisitServiceTest {
         lead.setFollowStatus("NOT_FOLLOWED_UP");
         lead.setSubmittedAt(LocalDateTime.of(2026, 7, 5, 13, 30));
         return lead;
+    }
+
+    /**
+     * 构造团队访问记录测试数据。
+     *
+     * @param followStatus 跟进状态
+     * @return 归属团队 201 的访问记录
+     */
+    private VisitRecordEntity buildTeamVisitRecord(String followStatus) {
+        VisitRecordEntity record = buildRecord(
+                101L,
+                "anonymous-visitor-key-8A21",
+                "TEAM_PORTFOLIO",
+                "TEAM",
+                "星曜司仪团",
+                4,
+                6,
+                0,
+                1,
+                1,
+                null,
+                followStatus,
+                LocalDateTime.of(2026, 7, 5, 11, 1)
+        );
+        record.setOwnerType("TEAM");
+        record.setOwnerId(201L);
+        return record;
     }
 
     private VisitRecordEntity buildRecord(
@@ -829,6 +1287,10 @@ class MineVisitServiceTest {
         record.setId(id);
         record.setVisitorKey(visitorKey);
         record.setSourceType(sourceType);
+        record.setPortfolioTitleSnapshot(sourceTitle);
+        record.setPortfolioType(sourcePortfolioType);
+        record.setOwnerType("USER");
+        record.setOwnerId(7L);
         record.setSourcePortfolioType(sourcePortfolioType);
         record.setSourcePortfolioTitleSnapshot(sourceTitle);
         record.setVisitCount(visitCount);

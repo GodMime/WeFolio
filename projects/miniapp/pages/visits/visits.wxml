@@ -76,6 +76,8 @@
           </view>
         </view>
 
+        <view wx:if="{{visitData.scopeWarningText}}" class="visit-scope-warning">{{visitData.scopeWarningText}}</view>
+
         <view class="panel visit-detail-panel">
           <view class="panel-heading">
             <view class="section-title">访问明细</view>
@@ -117,6 +119,10 @@
                 <view wx:else class="visitor-icon {{item.followTone}}">{{item.visitorInitial}}</view>
                 <view class="visit-copy">
                   <view class="visitor-name">{{item.visitorLabel}}</view>
+                  <view class="visit-portfolio-row">
+                    <text class="visit-portfolio-title">{{item.portfolioTitleText}}</text>
+                    <text class="visit-portfolio-type">{{item.portfolioTypeText}}</text>
+                  </view>
                   <view class="visit-source">{{item.sourceText}}</view>
                   <view class="visit-summary">{{item.summaryText}}</view>
                 </view>
@@ -146,6 +152,10 @@
           <view wx:else class="visitor-icon event-avatar {{selectedVisitRecord.followTone}}">{{selectedVisitRecord.visitorInitial}}</view>
           <view class="visit-event-heading-copy">
             <view class="visitor-name">{{selectedVisitRecord.visitorLabel}}</view>
+            <view class="visit-portfolio-row">
+              <text class="visit-portfolio-title">{{selectedVisitRecord.portfolioTitleText}}</text>
+              <text class="visit-portfolio-type">{{selectedVisitRecord.portfolioTypeText}}</text>
+            </view>
             <view class="visit-source">{{selectedVisitRecord.sourceText}}</view>
           </view>
           <view class="visit-event-close" bindtap="handleCloseEventSheet" aria-role="button" aria-label="关闭事件明细">×</view>
@@ -200,6 +210,8 @@
           <view class="visit-event-close" bindtap="handleCloseDetailSheet" aria-role="button" aria-label="关闭明细">×</view>
         </view>
 
+        <view wx:if="{{detailSheet.scopeWarningText}}" class="visit-scope-warning">{{detailSheet.scopeWarningText}}</view>
+
         <view wx:if="{{detailSheetLoading}}" class="visit-event-loading">明细加载中...</view>
         <view wx:elif="{{detailSheetErrorMessage}}" class="visit-event-empty">
           <view class="empty-title small">加载失败</view>
@@ -213,7 +225,7 @@
           bindscrolltolower="handleVisitDetailScrollToLower"
           lower-threshold="120"
         >
-          <view class="visit-detail-sheet-item" wx:for="{{detailSheet.items}}" wx:key="id">
+          <view class="visit-detail-sheet-item" wx:for="{{detailSheet.items}}" wx:key="itemKey">
             <block wx:if="{{detailSheet.type === 'scheduleQueries'}}">
               <view class="visit-detail-item-row">
                 <view class="visit-detail-person">

@@ -57,7 +57,7 @@ class MineScheduleQueryRecordMapperContractTest {
         assertThat(boundSql.getAdditionalParameter("__frch_teamId_1")).isEqualTo(202L);
     }
 
-    /** 没有可管理团队时必须直接查询个人表，并沿用相同的分页行数参数。 */
+    /** 没有已加入团队时必须直接查询个人表，并沿用相同的分页行数参数。 */
     @Test
     void visibleRecordsShouldUseDirectPersonalQueryWhenTeamIdsAreEmpty() throws NoSuchMethodException {
         Map<String, Object> parameters = visibleRecordParameters(List.of());
@@ -78,7 +78,7 @@ class MineScheduleQueryRecordMapperContractTest {
                 .containsExactly("userId", "offset", "resultLimit");
     }
 
-    /** 统计必须复用个人归属条件，并仅追加可管理团队范围。 */
+    /** 统计必须复用个人归属条件，并追加全部已加入团队范围。 */
     @Test
     void visibleRecordCountShouldUseTheSamePersonalAndTeamScope() throws NoSuchMethodException {
         Method method = ScheduleQueryRecordEntityMapper.class.getMethod(
