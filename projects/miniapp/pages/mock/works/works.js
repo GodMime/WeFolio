@@ -1,5 +1,6 @@
 const {
   MOCK_WORK_LIBRARY,
+  filterMockWorks,
   getMockTabs,
   showMockLoginRequiredToast
 } = require('../utils/mock-experience')
@@ -8,6 +9,7 @@ Page({
   data: {
     tabs: getMockTabs('work'),
     list: MOCK_WORK_LIBRARY,
+    keyword: '',
     selectedTagId: 0,
     visibleWorks: MOCK_WORK_LIBRARY.works,
     imagePreviewVisible: false,
@@ -20,14 +22,40 @@ Page({
     }
   },
 
+  applyFilters(patch = {}) {
+    const keyword = Object.prototype.hasOwnProperty.call(patch, 'keyword')
+      ? patch.keyword
+      : this.data.keyword
+    const selectedTagId = Object.prototype.hasOwnProperty.call(patch, 'selectedTagId')
+      ? patch.selectedTagId
+      : this.data.selectedTagId
+    this.setData(Object.assign({}, patch, {
+      keyword,
+      selectedTagId,
+      visibleWorks: filterMockWorks(
+        MOCK_WORK_LIBRARY.works,
+        keyword,
+        selectedTagId
+      )
+    }))
+  },
+
+  handleSearchInput(event) {
+    const keyword = event.detail && event.detail.value
+    this.applyFilters({ keyword: keyword || '' })
+  },
+
+  handleSearchConfirm() {
+    this.applyFilters()
+  },
+
+  handleClearSearch() {
+    this.applyFilters({ keyword: '' })
+  },
+
   handleTagTap(event) {
     const tagId = Number(event.currentTarget.dataset.id || 0)
-    this.setData({
-      selectedTagId: tagId,
-      visibleWorks: tagId
-        ? MOCK_WORK_LIBRARY.works.filter((work) => work.tags.some((tag) => tag.id === tagId))
-        : MOCK_WORK_LIBRARY.works
-    })
+    this.applyFilters({ selectedTagId: tagId })
   },
 
   handleWorkTap() {
@@ -82,5 +110,7 @@ Page({
     showMockLoginRequiredToast()
   },
 
-  noop() {}
+  handleImagePreviewPanelTap() {},
+
+  handleVideoPreviewPanelTap() {}
 })

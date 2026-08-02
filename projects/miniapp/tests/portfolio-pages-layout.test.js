@@ -85,12 +85,11 @@ test('personal and team text section editors share typography control styles', (
   for (const selector of [
     '.text-section-font-list',
     '.text-section-font-option',
-    '.text-section-font-option.active',
-    '.text-section-font-option.active .schedule-query-mode-radio',
-    '.text-section-font-option.active .text-section-alignment-radio',
+    '.text-section-font-option[aria-checked="true"] .schedule-query-mode-radio',
+    '.text-section-font-option[aria-checked="true"] .text-section-alignment-radio',
+    '.text-section-font-option.disabled[aria-checked="false"]',
     '.text-section-size-list',
-    '.text-section-size-option',
-    '.text-section-size-option.active'
+    '.text-section-size-option'
   ]) {
     assert.notEqual(readRule(sharedEditorWxss, selector).trim(), '', selector)
   }
@@ -108,9 +107,9 @@ test('personal and team text section sheets keep actions reachable when controls
 
   for (const editorWxmlPath of editorWxmlPaths) {
     const editorWxml = read(editorWxmlPath)
-    const sheetStart = editorWxml.indexOf('<view class="text-section-sheet-mask')
+    const sheetStart = editorWxml.indexOf('text-section-sheet-mask')
     const scrollStart = editorWxml.indexOf(
-      '<scroll-view class="text-section-form" scroll-y type="list">',
+      '<scroll-view class="text-section-form',
       sheetStart
     )
     const scrollEnd = editorWxml.indexOf('</scroll-view>', scrollStart)
@@ -133,19 +132,20 @@ test('personal and team text section sheets keep actions reachable when controls
   }
 
   const sharedEditorWxss = readExisting('styles/portfolio-text-section-editor.wxss')
-  const sheetPanelRule = readRule(sharedEditorWxss, '.text-section-sheet-panel')
+  const foundationWxss = readExisting('styles/portfolio-editor-foundation.wxss')
+  const sheetPanelRule = readRule(foundationWxss, '.pe-sheet-size-long')
   const formRule = readRule(sharedEditorWxss, '.text-section-form')
 
   assert.match(
     sheetPanelRule,
-    /height:\s*calc\(76vh - env\(safe-area-inset-bottom\)\);/
+    /height:\s*86vh;/
   )
   assert.match(formRule, /flex:\s*1 1 auto;/)
   assert.match(formRule, /height:\s*0;/)
   assert.match(formRule, /min-height:\s*0;/)
   assert.match(
-    sharedEditorWxss,
-    /\.text-section-sheet-panel \.component-work-actions,\s*\.text-section-actions\s*\{[^}]*flex:\s*none;/
+    foundationWxss,
+    /\.pe-sheet-actions\s*\{[^}]*flex:\s*none;/
   )
 })
 
@@ -185,11 +185,14 @@ test('maintainer portfolio pages expose expected controls', () => {
   const teamPortfolioSideRule = readRule(listWxss, '.team-portfolio-card .portfolio-side')
   const editWxml = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxml')
   const editWxss = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxss')
-  const componentEditorPanelRule = readRule(editWxss, '.component-picker-panel')
-  const primaryActionRule = readRule(editWxss, '.primary-button')
+  const foundationWxss = read('styles/portfolio-editor-foundation.wxss')
+  const componentEditorPanelRule = readRule(foundationWxss, '.pe-sheet-panel')
+  const primaryActionRule = readRule(foundationWxss, '.pe-page-action-primary')
   const qrSourceTabsRule = readRule(editWxss, '.qr-source-tabs')
   const qrSourceTabRule = readRule(editWxss, '.qr-source-tab')
-  const qrSourceTabActiveRule = readRule(editWxss, '.qr-source-tab.active')
+  const sheetChoiceRule = readRule(foundationWxss, '.pe-sheet-choice')
+  const sheetChoiceSelectedRule = readRule(foundationWxss, '.pe-sheet-choice-selected')
+  const sheetChoiceSelectedFilledRule = readRule(foundationWxss, '.pe-sheet-choice-selected-filled')
   const qrContactImageEditorRule = readRule(editWxss, '.qr-contact-image-editor')
   const qrContactImagePreviewRule = readRule(editWxss, '.qr-contact-image-preview')
   const qrContactSheetMarkup = editWxml.slice(
@@ -299,8 +302,8 @@ test('maintainer portfolio pages expose expected controls', () => {
   assert.match(portfolioActionButtonPublishRule, /color:\s*#ffffff/)
   assert.match(portfolioActionButtonPublishRule, /border-color:\s*#212529/)
   assert.match(portfolioActionButtonPublishRule, /background:\s*#212529/)
-  assert.match(componentEditorPanelRule, /border-radius:\s*56rpx 56rpx 0 0/)
-  assert.match(primaryActionRule, /background:\s*#212529/)
+  assert.match(componentEditorPanelRule, /border-radius:\s*var\(--pe-radius-sheet,\s*56rpx\)\s+var\(--pe-radius-sheet,\s*56rpx\)\s+0\s+0/)
+  assert.match(primaryActionRule, /background:\s*var\(--pe-color-text-primary,\s*#212529\)/i)
   assert.doesNotMatch(listWxss, /#d9a84a|#b88a44/i)
   assert.match(listWxss, /\.portfolio-action-button\.share\s*\{[\s\S]*color:\s*#212529;[\s\S]*background:\s*#f5f6f7;/)
   assert.match(listWxss, /\.portfolio-action-button\.share:active\s*\{[\s\S]*background:\s*#e9eff5;/)
@@ -333,8 +336,8 @@ test('maintainer portfolio pages expose expected controls', () => {
   assert.match(editWxml, /class="status-pill \{\{statusTone\}\}">\{\{statusText\}\}<\/view>/)
   assert.match(editWxml, /二维码联系/)
   assert.match(editWxml, /class="qr-source-tabs"[^>]*aria-role="tablist"/)
-  assert.match(editWxml, /class="qr-source-tab \{\{qrContactForm\.qrUrlSource !== 'CUSTOM' \? 'active' : ''\}\}"[^>]*aria-role="tab"[^>]*aria-selected="\{\{qrContactForm\.qrUrlSource !== 'CUSTOM'\}\}"/)
-  assert.match(editWxml, /class="qr-source-tab \{\{qrContactForm\.qrUrlSource === 'CUSTOM' \? 'active' : ''\}\}"[^>]*aria-role="tab"[^>]*aria-selected="\{\{qrContactForm\.qrUrlSource === 'CUSTOM'\}\}"/)
+  assert.match(editWxml, /class="qr-source-tab pe-sheet-choice \{\{qrContactForm\.qrUrlSource !== 'CUSTOM' \? 'pe-sheet-choice-selected-filled' : ''\}\}"[^>]*aria-role="tab"[^>]*aria-selected="\{\{qrContactForm\.qrUrlSource !== 'CUSTOM'\}\}"/)
+  assert.match(editWxml, /class="qr-source-tab pe-sheet-choice \{\{qrContactForm\.qrUrlSource === 'CUSTOM' \? 'pe-sheet-choice-selected-filled' : ''\}\}"[^>]*aria-role="tab"[^>]*aria-selected="\{\{qrContactForm\.qrUrlSource === 'CUSTOM'\}\}"/)
   assert.match(editWxml, /class="qr-source-tab-panel"[^>]*aria-role="tabpanel"/)
   assert.doesNotMatch(qrContactSheetMarkup, /qrContactForm\.title/)
   assert.doesNotMatch(qrContactSheetMarkup, /qrContactForm\.description/)
@@ -345,15 +348,14 @@ test('maintainer portfolio pages expose expected controls', () => {
   assert.match(qrSourceTabsRule, /min-height:\s*76rpx/)
   assert.match(qrSourceTabsRule, /margin:\s*8rpx 0 12rpx/)
   assert.match(qrSourceTabsRule, /padding:\s*8rpx/)
-  assert.match(qrSourceTabsRule, /border:\s*1rpx solid #e9ecef/)
+  assert.match(qrSourceTabsRule, /border:\s*1rpx solid var\(--pe-color-border,\s*#E9ECEF\)/)
   assert.match(qrSourceTabsRule, /border-radius:\s*24rpx/)
-  assert.match(qrSourceTabsRule, /background:\s*#f5f6f7/)
+  assert.match(qrSourceTabsRule, /background:\s*var\(--pe-color-page,\s*#F5F6F7\)/)
   assert.match(qrSourceTabRule, /height:\s*60rpx/)
   assert.match(qrSourceTabRule, /font-size:\s*24rpx/)
-  assert.match(qrSourceTabRule, /border-radius:\s*10rpx/)
-  assert.match(qrSourceTabRule, /background:\s*transparent/)
-  assert.match(qrSourceTabActiveRule, /color:\s*#ffffff/)
-  assert.match(qrSourceTabActiveRule, /background:\s*#212529/)
+  assert.match(sheetChoiceRule, /border-radius:\s*var\(--pe-radius-control,\s*28rpx\)/)
+  assert.match(sheetChoiceSelectedFilledRule, /color:\s*var\(--pe-color-surface,\s*#FFFFFF\)/)
+  assert.match(sheetChoiceSelectedFilledRule, /background:\s*var\(--pe-color-text-primary,\s*#212529\)/)
   assert.match(qrContactImageEditorRule, /justify-content:\s*center/)
   assert.match(qrContactImagePreviewRule, /width:\s*220rpx/)
   assert.match(qrContactImagePreviewRule, /height:\s*220rpx/)
@@ -393,7 +395,7 @@ test('maintainer portfolio pages expose expected controls', () => {
   assert.match(editWxml, /handleDividerColorTap/)
   assert.match(editWxml, /handleDividerHeightInput/)
   assert.match(editWxss, /\.schedule-query-mode-option\s*\{/)
-  assert.match(editWxss, /\.schedule-query-mode-option\.active\s*\{/)
+  assert.match(editWxss, /\.schedule-query-mode-option\[aria-checked="true"\] \.schedule-query-mode-radio\s*\{/)
   assert.match(editWxss, /\.schedule-query-mode-radio\s*\{/)
   assert.match(editWxss, /\.text-section-sheet-textarea\s*\{/)
   assert.match(editWxss, /\.divider-color-option\s*\{/)
@@ -806,15 +808,19 @@ test('portfolio editor component delete action stays hidden at rest and while dr
 test('portfolio editor component rows keep order title drag handle and edit cue vertically centered', () => {
   const editWxml = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxml')
   const editWxss = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxss')
-  const componentTitleRule = readRule(editWxss, '.component-title')
-  const componentOrderRule = readRule(editWxss, '.component-order')
+  const foundationWxss = read('styles/portfolio-editor-foundation.wxss')
+  const componentRowRule = readRule(foundationWxss, '.pe-component-row')
+  const componentTitleRule = readRule(foundationWxss, '.pe-component-title')
+  const componentOrderRule = readRule(foundationWxss, '.pe-component-index')
   const componentDragHandleRule = readRule(editWxss, '.component-drag-handle')
   const componentArrowRule = readRule(editWxss, '.component-row-arrow')
   const componentArrowIconRule = readRule(editWxss, '.component-row-arrow-icon')
 
-  assert.match(editWxss, /\.component-row\s*\{[\s\S]*display:\s*flex;[\s\S]*align-items:\s*center;/)
+  assert.match(editWxml, /class="component-row pe-component-row/)
+  assert.match(componentRowRule, /display:\s*flex;/)
+  assert.match(componentRowRule, /align-items:\s*center;/)
   assert.match(editWxss, /\.component-copy\s*\{\s*display:\s*flex;\s*align-items:\s*center;\s*\}/)
-  assert.match(componentTitleRule, /line-height:\s*48rpx/)
+  assert.match(componentTitleRule, /line-height:\s*1\.35/)
   assert.doesNotMatch(componentDragHandleRule, /repeating-linear-gradient/)
   assert.match(componentDragHandleRule, /transparent\s+10rpx/)
   assert.match(componentDragHandleRule, /#6f7f90\s+22rpx/)
@@ -823,14 +829,11 @@ test('portfolio editor component rows keep order title drag handle and edit cue 
   assert.doesNotMatch(editWxml, /\? '›' : ''/)
   assert.match(componentArrowRule, /font-size:\s*0/)
   assert.match(componentArrowRule, /line-height:\s*0/)
-  assert.match(componentArrowIconRule, /border-right:\s*5rpx\s+solid\s+#697786/)
-  assert.match(componentArrowIconRule, /border-bottom:\s*5rpx\s+solid\s+#697786/)
+  assert.match(componentArrowIconRule, /border-right:\s*5rpx\s+solid\s+var\(--pe-color-text-secondary,\s*#868E96\)/)
+  assert.match(componentArrowIconRule, /border-bottom:\s*5rpx\s+solid\s+var\(--pe-color-text-secondary,\s*#868E96\)/)
   assert.match(componentArrowIconRule, /transform:\s*rotate\(-45deg\)/)
-  ;[
-    componentOrderRule,
-    componentDragHandleRule,
-    componentArrowRule
-  ].forEach((rule) => {
+  assert.match(componentOrderRule, /height:\s*44rpx/)
+  ;[componentDragHandleRule, componentArrowRule].forEach((rule) => {
     assert.match(rule, /height:\s*48rpx/)
     assert.match(rule, /align-self:\s*center/)
   })
@@ -848,47 +851,51 @@ test('portfolio editor component picker keeps option list visible in Skyline', (
 test('portfolio component work picker keeps work list visible in Skyline', () => {
   const editWxml = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxml')
   const editWxss = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxss')
-  const basePanelRule = readRule(editWxss, '.component-work-picker-panel')
-  const listPanelRule = readRule(editWxss, '.component-work-list-panel')
+  const foundationWxss = read('styles/portfolio-editor-foundation.wxss')
+  const basePanelRule = readRule(foundationWxss, '.pe-sheet-panel')
+  const listPanelRule = readRule(foundationWxss, '.pe-sheet-size-long')
   const scrollRule = readRule(editWxss, '.component-work-scroll')
 
-  assert.match(editWxml, /class="component-work-list-panel component-work-picker-panel"/)
-  assert.match(editWxml, /class="qr-contact-sheet-panel component-work-picker-panel"/)
-  assert.match(editWxml, /class="schedule-query-sheet-panel component-work-picker-panel"/)
-  assert.match(editWxml, /class="contact-form-sheet-panel component-work-picker-panel"/)
-  assert.match(editWxml, /class="text-section-sheet-panel component-work-picker-panel"/)
-  assert.match(editWxml, /class="divider-sheet-panel component-work-picker-panel"/)
+  assert.match(editWxml, /class="component-work-list-panel pe-sheet-panel pe-sheet-size-long/)
+  assert.match(editWxml, /class="qr-contact-sheet-panel pe-sheet-panel pe-sheet-size-standard/)
+  assert.match(editWxml, /class="schedule-query-sheet-panel pe-sheet-panel pe-sheet-size-compact/)
+  assert.match(editWxml, /class="contact-form-sheet-panel pe-sheet-panel pe-sheet-size-standard/)
+  assert.match(editWxml, /class="text-section-sheet-panel pe-sheet-panel pe-sheet-size-long/)
+  assert.match(editWxml, /class="divider-sheet-panel pe-sheet-panel pe-sheet-size-compact/)
   assert.match(editWxml, /<scroll-view wx:else class="component-work-scroll"[^>]*scroll-y[^>]*type="list"/)
   assert.doesNotMatch(basePanelRule, /height:\s*calc\(76vh - env\(safe-area-inset-bottom\)\);/)
-  assert.match(basePanelRule, /max-height:\s*76vh;/)
-  assert.match(listPanelRule, /height:\s*calc\(76vh - env\(safe-area-inset-bottom\)\);/)
-  assert.match(listPanelRule, /max-height:\s*calc\(76vh - env\(safe-area-inset-bottom\)\);/)
+  assert.match(basePanelRule, /padding:\s*24rpx 32rpx calc\(32rpx \+ env\(safe-area-inset-bottom\)\);/)
+  assert.match(listPanelRule, /height:\s*86vh;/)
+  assert.match(listPanelRule, /max-height:\s*calc\(100vh - 176rpx - env\(safe-area-inset-top\)\);/)
   assert.match(scrollRule, /flex:\s*1 1 auto;/)
   assert.match(scrollRule, /height:\s*0;/)
   assert.match(scrollRule, /min-height:\s*0;/)
   assert.match(scrollRule, /max-height:\s*none;/)
 })
 
-test('portfolio editor work tags keep chromatic outlined and active states consistent', () => {
+test('portfolio editor work filters use neutral shared choices and retain semantic dots', () => {
   const editWxml = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxml')
   const editWxss = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxss')
   const tagDotRule = readRule(editWxss, '.display-group-dot')
-  const displayPillRule = readRule(editWxss, '.display-group-pill')
+  const foundationWxss = read('styles/portfolio-editor-foundation.wxss')
+  const displayPillRule = readRule(foundationWxss, '.pe-sheet-choice')
   const displayNameRule = readRule(editWxss, '.display-group-name')
   const displayCountRule = readRule(editWxss, '.display-group-count')
 
   assert.match(
     editWxml,
-    /class="component-work-filter-pill[\s\S]*\? item\.activeStyle : item\.filterStyle/
+    /class="component-work-filter-pill pe-sheet-choice \{\{[^\n]+pe-sheet-choice-selected/
   )
+  assert.doesNotMatch(editWxml, /component-work-filter-pill[^>]+activeStyle/)
   assert.match(
     editWxml,
     /class="component-work-filter-dot"[\s\S]*background: \{\{[^}]*\? '#ffffff' : \(item\.color \|\| '#212529'\)\}\}/
   )
   assert.match(
     editWxml,
-    /class="display-group-pill[\s\S]*style="\{\{item\.active \? item\.activeStyle : item\.filterStyle\}\}"/
+    /class="display-group-pill pe-sheet-choice \{\{item\.active \? 'pe-sheet-choice-selected-filled' : ''\}\}/
   )
+  assert.doesNotMatch(editWxml, /display-group-pill[^>]+activeStyle/)
   assert.match(
     editWxml,
     /class="display-group-dot"[\s\S]*background: \{\{item\.active \? '#ffffff' : item\.color\}\}/
@@ -897,7 +904,7 @@ test('portfolio editor work tags keep chromatic outlined and active states consi
   assert.match(tagDotRule, /width:\s*12rpx/)
   assert.match(tagDotRule, /height:\s*12rpx/)
   assert.match(tagDotRule, /border-radius:\s*50%/)
-  assert.match(displayPillRule, /background:\s*#ffffff/)
+  assert.match(displayPillRule, /background:\s*var\(--pe-color-page,\s*#F5F6F7\)/)
   assert.match(displayNameRule, /color:\s*inherit/)
   assert.match(displayCountRule, /color:\s*inherit/)
 })
@@ -905,12 +912,12 @@ test('portfolio editor work tags keep chromatic outlined and active states consi
 test('portfolio profile editor sheet keeps form content visible in Skyline', () => {
   const editWxml = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxml')
   const editWxss = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxss')
-  const panelRule = readRule(editWxss, '.profile-sheet-panel')
+  const panelRule = readRule(read('styles/portfolio-editor-foundation.wxss'), '.pe-sheet-size-long')
   const scrollRule = readRule(editWxss, '.profile-sheet-scroll')
 
-  assert.match(editWxml, /class="profile-form-scroll profile-sheet-scroll"/)
-  assert.match(panelRule, /height:\s*calc\(82vh - env\(safe-area-inset-bottom\)\);/)
-  assert.match(panelRule, /max-height:\s*calc\(82vh - env\(safe-area-inset-bottom\)\);/)
+  assert.match(editWxml, /class="profile-form-scroll profile-sheet-scroll pe-sheet-scroll"/)
+  assert.match(panelRule, /height:\s*86vh;/)
+  assert.match(panelRule, /max-height:\s*calc\(100vh - 176rpx - env\(safe-area-inset-top\)\);/)
   assert.match(scrollRule, /flex:\s*1 1 auto;/)
   assert.match(scrollRule, /height:\s*0;/)
   assert.match(scrollRule, /min-height:\s*0;/)
@@ -931,7 +938,8 @@ test('portfolio profile editor reuses structured basic profile tag interaction',
   assert.match(editWxml, /wx:for="\{\{profileTagColorOptions\}\}"/)
   assert.match(editWxml, /catchtap="handleAddProfileTag"/)
   assert.match(editWxss, /\.profile-tag-pill-row\s*\{[\s\S]*flex-wrap:\s*wrap;/)
-  assert.match(editWxss, /\.profile-tag-dialog\s*\{[\s\S]*position:\s*fixed;/)
+  assert.match(editWxml, /class="profile-tag-dialog pe-sheet-mask/)
+  assert.match(read('styles/portfolio-editor-foundation.wxss'), /\.pe-sheet-mask\s*\{[\s\S]*position:\s*fixed;/)
 })
 
 test('standard personal portfolio editor renders status as a dot label', () => {
@@ -942,7 +950,7 @@ test('standard personal portfolio editor renders status as a dot label', () => {
 
   assert.match(editWxml, /class="status-pill \{\{statusTone\}\}"/)
   assert.match(statusRule, /gap:\s*8rpx;/)
-  assert.match(statusRule, /color:\s*#868e96;/)
+  assert.match(statusRule, /color:\s*var\(--pe-color-text-secondary,\s*#868E96\);/)
   assert.match(statusRule, /font-size:\s*22rpx;/)
   assert.match(statusRule, /font-weight:\s*500;/)
   assert.doesNotMatch(statusRule, /^\s*(?:min-width|height|border|border-radius|background)\s*:/m)
@@ -955,12 +963,17 @@ test('standard personal portfolio editor renders status as a dot label', () => {
 test('standard personal portfolio editor follows shared maintainer layout', () => {
   const editWxml = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxml')
   const editWxss = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxss')
+  const foundationWxss = read('styles/portfolio-editor-foundation.wxss')
   const editJs = read('pages/portfolios/standard-edit/portfolio-standard-edit.js')
+  const pageContentRule = readRule(foundationWxss, '.pe-page-content')
+  const pageFieldRule = readRule(foundationWxss, '.pe-page-field')
+  const componentRowRule = readRule(foundationWxss, '.pe-component-row')
+  const sheetChoiceSelectedRule = readRule(foundationWxss, '.pe-sheet-choice-selected')
 
-  assert.match(editWxml, /class="edit-content"/)
-  assert.match(editWxml, /class="panel share-panel"/)
-  assert.match(editWxml, /class="panel component-panel"/)
-  assert.match(editWxml, /class="section-desc"/)
+  assert.match(editWxml, /class="edit-content pe-page-content"/)
+  assert.match(editWxml, /class="panel share-panel pe-page-card"/)
+  assert.match(editWxml, /class="panel component-panel pe-page-card"/)
+  assert.match(editWxml, /class="section-desc pe-page-card-description"/)
   assert.match(editWxml, /class="field-heading"/)
   assert.match(editWxml, /class="field-heading"[\s\S]*作品集标题[\s\S]*\{\{shareFieldCounters\.title\}\}/)
   assert.doesNotMatch(editWxml, /分享简介/)
@@ -980,13 +993,13 @@ test('standard personal portfolio editor follows shared maintainer layout', () =
   assert.match(editJs, /handleComponentWorkScrollToLower/)
   assert.match(editWxss, /\.component-work-search\s*\{/)
   assert.match(editWxss, /\.component-work-filter-scroll\s*\{/)
-  assert.match(editWxss, /\.component-work-filter-pill\.active\s*\{/)
+  assert.doesNotMatch(editWxss, /\.component-work-filter-pill\.active\s*\{/)
   assert.match(editWxss, /\.component-work-footer\s*\{/)
   assert.doesNotMatch(editWxml, /data-path="share\.intro"/)
   assert.doesNotMatch(editWxml, /class="input textarea"/)
   assert.match(editWxml, /class="component-list"/)
   assert.match(editWxml, /class="component-swipe-row \{\{revealedComponentKey === item\.componentKey \? 'revealed' : ''\}\} \{\{draggingIndex === index \? 'dragging' : ''\}\}"/)
-  assert.match(editWxml, /class="component-order"/)
+  assert.match(editWxml, /class="component-order pe-component-index"/)
   assert.doesNotMatch(editWxml, /class="component-meta"/)
   assert.doesNotMatch(editWxml, /\{\{item\.componentType\}\} · \{\{item\.componentKey\}\}/)
   assert.match(editWxml, /class="component-drag-handle"/)
@@ -996,7 +1009,7 @@ test('standard personal portfolio editor follows shared maintainer layout', () =
   assert.doesNotMatch(editWxml, /item\.componentType === 'CAROUSEL' \|\| item\.componentType === 'PROFILE' \|\| item\.componentType === 'QR_CONTACT'/)
   assert.match(editWxml, /class="component-row-arrow \{\{componentRows\.isEditable\(item\.componentType\) \? '' : 'placeholder'\}\}"/)
   assert.doesNotMatch(editWxml, /wx:if="\{\{item\.componentType === 'CAROUSEL'\}\}" class="component-row-arrow"/)
-  assert.match(editWxml, /class="profile-sheet-mask component-work-picker-mask \{\{profileSheetVisible \? 'visible' : ''\}\}"/)
+  assert.match(editWxml, /class="profile-sheet-mask pe-sheet-mask \{\{profileSheetVisible \? 'pe-sheet-mask-visible' : ''\}\}"/)
   assert.match(editWxml, /catchtap="handleConfirmProfileSheet"/)
   assert.match(editWxml, /bindchange="handleProfileVisibleFieldChange"/)
   assert.match(editWxml, />从基础资料刷新</)
@@ -1022,23 +1035,23 @@ test('standard personal portfolio editor follows shared maintainer layout', () =
   assert.match(editWxml, /maxlength="50"/)
   assert.match(editWxml, /maxlength="500"/)
   assert.match(editWxml, /class="component-remove-pane"/)
-  assert.match(editWxml, /class="component-remove-button"/)
+  assert.match(editWxml, /class="component-remove-button pe-component-delete"/)
   assert.match(editWxml, /class="action-button secondary-button(?: [^"]*)?"/)
-  assert.match(editWxml, /class="action-button primary-button"/)
+  assert.match(editWxml, /class="action-button primary-button pe-page-action-primary"/)
   assert.match(editWxml, /style="\{\{draggingIndex === index \? componentDragStyle : ''\}\}"/)
   assert.match(editWxml, /data-type="\{\{item\.componentType\}\}"/)
   assert.match(editWxml, /catchtap="handleComponentTap"/)
-  assert.match(editWxml, /class="component-picker-mask \{\{componentSheetVisible \? 'visible' : ''\}\}"/)
-  assert.match(editWxml, /class="component-picker-panel"/)
-  assert.match(editWxml, /class="component-picker-grabber"/)
-  assert.match(editWxml, /class="component-work-picker-mask \{\{componentWorkSheetVisible \? 'visible' : ''\}\}"/)
+  assert.match(editWxml, /class="pe-sheet-mask \{\{componentSheetVisible \? 'pe-sheet-mask-visible' : ''\}\}"/)
+  assert.match(editWxml, /class="pe-sheet-panel pe-sheet-size-compact/)
+  assert.match(editWxml, /class="pe-sheet-grabber"/)
+  assert.match(editWxml, /class="pe-sheet-mask \{\{componentWorkSheetVisible \? 'pe-sheet-mask-visible' : ''\}\}"/)
   assert.match(editWxml, /wx:for="{{componentWorkOptions}}"/)
   assert.match(editWxml, /class="component-work-ratio">\{\{item\.aspectRatioText\}\}<\/view>/)
   assert.match(editWxml, /catchtap="handleToggleComponentWork"/)
   assert.match(editWxml, /catchtap="handleConfirmComponentWorks"/)
-  assert.match(editWxml, /class="display-group-order \{\{item\.selected \? 'selected' : ''\}\}"[\s\S]*catchtap="handleToggleDisplayGroupTag"/)
+  assert.match(editWxml, /class="display-group-order"[\s\S]*catchtap="handleToggleDisplayGroupTag"[\s\S]*aria-checked="\{\{item\.selected\}\}"/)
   assert.match(editWxml, /wx:for="\{\{displayGroupWorkOptions\}\}"/)
-  assert.match(editWxml, /class="display-group-work-order \{\{item\.selected \? 'selected' : ''\}\}"/)
+  assert.match(editWxml, /class="display-group-work-order">/)
   assert.match(editWxml, /catchtap="handleToggleDisplayGroupWork"/)
   assert.doesNotMatch(editWxml, /display-group-add-button/)
   assert.doesNotMatch(editWxml, /displayGroupFormVisible/)
@@ -1084,10 +1097,15 @@ test('standard personal portfolio editor follows shared maintainer layout', () =
 
   assert.match(editWxss, /\.portfolio-edit-page\s*\{[\s\S]*height:\s*100vh;[\s\S]*display:\s*flex;[\s\S]*overflow:\s*hidden;/)
   assert.match(editWxss, /\.edit-scroll\s*\{[\s\S]*flex:\s*1;[\s\S]*min-height:\s*0;/)
-  assert.match(editWxss, /\.edit-content\s*\{[\s\S]*padding:\s*20rpx 32rpx calc\(156rpx \+ env\(safe-area-inset-bottom\)\);[\s\S]*box-sizing:\s*border-box;/)
-  assert.match(editWxss, /\.panel\s*\{[\s\S]*background:\s*#ffffff;[\s\S]*border-radius:\s*48rpx;[\s\S]*box-shadow:/)
-  assert.match(editWxss, /\.field-limit\s*\{[\s\S]*color:\s*#8b96a3;[\s\S]*font-size:\s*22rpx;/)
-  assert.match(editWxss, /\.input\s*\{[\s\S]*width:\s*100%;[\s\S]*min-height:\s*84rpx;[\s\S]*border-radius:\s*24rpx;[\s\S]*box-sizing:\s*border-box;/)
+  assert.match(pageContentRule, /padding:\s*20rpx 32rpx calc\(140rpx \+ env\(safe-area-inset-bottom\)\)/)
+  assert.match(pageContentRule, /gap:\s*20rpx/)
+  assert.match(pageContentRule, /box-sizing:\s*border-box/)
+  assert.match(foundationWxss, /\.pe-page-card\s*\{[\s\S]*background:\s*var\(--pe-color-surface,\s*#FFFFFF\);[\s\S]*border-radius:\s*var\(--pe-radius-card,\s*48rpx\);[\s\S]*box-shadow:\s*none;/)
+  assert.match(editWxss, /\.field-limit\s*\{[\s\S]*color:\s*var\(--pe-color-text-muted,\s*#ADB5BD\);[\s\S]*font-size:\s*22rpx;/)
+  assert.match(pageFieldRule, /width:\s*100%/)
+  assert.match(pageFieldRule, /min-height:\s*84rpx/)
+  assert.match(pageFieldRule, /border-radius:\s*var\(--pe-radius-pill,\s*999rpx\)/)
+  assert.match(pageFieldRule, /box-sizing:\s*border-box/)
   assert.match(editWxss, /\.cover-row\s*\{[\s\S]*display:\s*flex;[\s\S]*gap:/)
   assert.match(editWxss, /\.cover-preview\s*\{[\s\S]*width:\s*360rpx;[\s\S]*height:\s*288rpx;/)
   assert.doesNotMatch(editWxss, /\.cover-actions\s*\{/)
@@ -1095,7 +1113,9 @@ test('standard personal portfolio editor follows shared maintainer layout', () =
   assert.doesNotMatch(editWxss, /\.cover-action-button\.remove\s*\{/)
   assert.doesNotMatch(editWxss, /\.profile-avatar-remove\s*\{/)
   assert.match(editWxss, /\.component-swipe-row\s*\{[\s\S]*position:\s*relative;[\s\S]*overflow:\s*hidden;/)
-  assert.match(editWxss, /\.component-row\s*\{[\s\S]*position:\s*relative;[\s\S]*display:\s*flex;[\s\S]*transition:\s*transform 180ms ease/)
+  assert.match(componentRowRule, /position:\s*relative/)
+  assert.match(componentRowRule, /display:\s*flex/)
+  assert.match(componentRowRule, /transition:\s*transform 180ms ease/)
   assert.match(editWxss, /\.component-swipe-row\.revealed \.component-row\s*\{[\s\S]*transform:\s*translateX\(-140rpx\);/)
   assert.match(editWxss, /\.component-remove-pane\s*\{[\s\S]*position:\s*absolute;[\s\S]*right:\s*0;[\s\S]*width:\s*128rpx;/)
   assert.match(editWxss, /\.component-row\.dragging\s*\{[\s\S]*border-color:/)
@@ -1103,18 +1123,18 @@ test('standard personal portfolio editor follows shared maintainer layout', () =
   assert.match(editWxss, /\.component-drag-handle\s*\{[\s\S]*background-size:\s*22rpx 48rpx;/)
   assert.match(editWxss, /\.component-row-arrow\s*\{[\s\S]*width:\s*28rpx;[\s\S]*flex:\s*none;/)
   assert.match(editWxss, /\.component-row-arrow\.placeholder\s*\{[\s\S]*visibility:\s*hidden;/)
-  assert.match(editWxss, /\.component-picker-mask\s*\{[\s\S]*position:\s*fixed;[\s\S]*align-items:\s*flex-end;[\s\S]*background:\s*rgba\(17,\s*24,\s*39,\s*0\.35\);/)
-  assert.match(editWxss, /\.component-picker-mask\.visible\s*\{[\s\S]*opacity:\s*1;[\s\S]*pointer-events:\s*auto;/)
-  assert.match(editWxss, /\.component-picker-panel\s*\{[\s\S]*max-height:\s*72vh;[\s\S]*border-radius:\s*56rpx 56rpx 0 0;[\s\S]*transform:\s*translateY\(36rpx\);/)
-  assert.match(editWxss, /\.component-picker-mask\.visible \.component-picker-panel\s*\{[\s\S]*transform:\s*translateY\(0\);/)
-  assert.match(editWxss, /\.component-picker-grabber\s*\{[\s\S]*width:\s*72rpx;[\s\S]*height:\s*8rpx;/)
+  assert.match(foundationWxss, /\.pe-sheet-mask\s*\{[\s\S]*position:\s*fixed;[\s\S]*align-items:\s*flex-end;[\s\S]*background:\s*var\(--pe-color-mask,\s*rgba\(17,\s*24,\s*39,\s*0\.42\)\);/)
+  assert.match(foundationWxss, /\.pe-sheet-mask-visible\s*\{[\s\S]*opacity:\s*1;[\s\S]*pointer-events:\s*auto;/)
+  assert.match(foundationWxss, /\.pe-sheet-size-compact\s*\{[\s\S]*max-height:\s*72vh;/)
+  assert.match(foundationWxss, /\.pe-sheet-panel-visible\s*\{[\s\S]*transform:\s*translateY\(0\);/)
+  assert.match(foundationWxss, /\.pe-sheet-grabber\s*\{[\s\S]*width:\s*72rpx;[\s\S]*height:\s*8rpx;/)
   assert.match(editWxss, /\.component-option\s*\{[\s\S]*width:\s*100%;[\s\S]*box-sizing:\s*border-box;/)
-  assert.match(editWxss, /\.component-work-picker-mask\s*\{[\s\S]*position:\s*fixed;[\s\S]*align-items:\s*flex-end;/)
-  assert.match(editWxss, /\.component-work-option\.selected\s*\{[\s\S]*border-color:/)
+  assert.match(foundationWxss, /\.pe-sheet-mask\s*\{[\s\S]*position:\s*fixed;[\s\S]*align-items:\s*flex-end;/)
+  assert.match(sheetChoiceSelectedRule, /border-color:\s*var\(--pe-color-text-primary,\s*#212529\)/)
   assert.match(editWxss, /\.display-group-order\s*\{[\s\S]*border-radius:\s*50%;/)
-  assert.match(editWxss, /\.display-group-order\.selected\s*\{[\s\S]*background:\s*#212529;/)
+  assert.match(editWxss, /\.display-group-order\[aria-checked="true"\]\s*\{[\s\S]*background:\s*var\(--pe-color-text-primary,\s*#212529\);/)
   assert.match(editWxss, /\.display-group-work-order\s*\{[\s\S]*border-radius:\s*50%;/)
-  assert.match(editWxss, /\.display-group-work-order\.selected\s*\{[\s\S]*background:\s*#212529;/)
+  assert.match(editWxss, /\.display-group-work-item\[aria-checked="true"\] \.display-group-work-order\s*\{[\s\S]*background:\s*var\(--pe-color-text-primary,\s*#212529\);/)
   assert.doesNotMatch(editWxss, /\.display-group-add-button\s*\{/)
   assert.doesNotMatch(editWxss, /\.display-group-form\s*\{/)
   assert.doesNotMatch(editWxss, /\.display-group-pill\.manage\s*\{/)
@@ -1122,15 +1142,16 @@ test('standard personal portfolio editor follows shared maintainer layout', () =
   assert.doesNotMatch(editWxss, /\.work-tag-import-button\s*\{/)
   assert.doesNotMatch(editWxss, /\.display-group-row-actions\s*\{/)
   assert.doesNotMatch(editWxss, /\.display-group-row-button\s*\{/)
-  assert.match(editWxss, /\.bottom-actions\s*\{[\s\S]*position:\s*fixed;[\s\S]*display:\s*flex;[\s\S]*gap:\s*12rpx;/)
-  assert.match(editWxss, /\.action-button\s*\{[\s\S]*flex:\s*1 1 0;[\s\S]*min-width:\s*0;[\s\S]*height:\s*96rpx;[\s\S]*border-radius:\s*999rpx;/)
+  assert.match(foundationWxss, /\.pe-page-actions\s*\{[\s\S]*position:\s*fixed;[\s\S]*display:\s*flex;[\s\S]*gap:\s*16rpx;/)
+  assert.match(foundationWxss, /\.pe-page-action-primary\s*\{[\s\S]*height:\s*80rpx;[\s\S]*flex:\s*1;[\s\S]*border-radius:\s*var\(--pe-radius-pill,\s*999rpx\);/)
 })
 
 test('standard portfolio display tag sheet shows ordered tag and work selections', () => {
   const editWxml = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxml')
   const editWxss = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxss')
+  const foundationWxss = read('styles/portfolio-editor-foundation.wxss')
   const tagScrollRule = readRule(editWxss, '.display-group-scroll')
-  const activePillRule = readRule(editWxss, '.display-group-pill.active')
+  const activePillRule = readRule(foundationWxss, '.pe-sheet-choice-selected-filled')
   const tagPillRule = readRule(editWxss, '.display-group-pill')
   const tagMainRule = readRule(editWxss, '.display-group-main')
   const tagNameRule = readRule(editWxss, '.display-group-name')
@@ -1156,17 +1177,17 @@ test('standard portfolio display tag sheet shows ordered tag and work selections
   assert.match(editWxml, /wx:for="\{\{displayGroupOptions\}\}"[\s\S]*class="display-group-pill/)
   assert.match(editWxml, /class="display-group-count">\{\{item\.countText\}\}<\/view>/)
   assert.match(editWxml, /data-group-key="\{\{item\.groupKey\}\}"[\s\S]*catchtap="handleSelectDisplayGroup"/)
-  assert.match(editWxml, /class="display-group-order \{\{item\.selected \? 'selected' : ''\}\}"[\s\S]*data-tag-id="\{\{item\.id\}\}"[\s\S]*catchtap="handleToggleDisplayGroupTag"/)
+  assert.match(editWxml, /class="display-group-order"[\s\S]*data-tag-id="\{\{item\.id\}\}"[\s\S]*catchtap="handleToggleDisplayGroupTag"[\s\S]*aria-checked="\{\{item\.selected\}\}"/)
   assert.match(editWxml, /\{\{item\.selectionOrder \? item\.selectionOrder : ''\}\}/)
   assert.notEqual(workScrollIndex, -1)
   assert.match(editWxml, /<scroll-view[^>]*class="display-group-work-scroll"[^>]*scroll-y[^>]*type="list"/)
   assert.match(editWxml, /class="display-group-work-list"[\s\S]*wx:for="\{\{displayGroupWorkOptions\}\}"/)
-  assert.match(editWxml, /class="display-group-work-item \{\{item\.selected \? 'selected' : ''\}\}"[\s\S]*catchtap="handleToggleDisplayGroupWork"/)
+  assert.match(editWxml, /class="display-group-work-item pe-sheet-choice \{\{item\.selected \? 'pe-sheet-choice-selected' : ''\}\}"[\s\S]*catchtap="handleToggleDisplayGroupWork"/)
   assert.match(editWxml, /class="display-group-work-thumb"[\s\S]*src="\{\{item\.thumbUrl\}\}"/)
   assert.match(editWxml, /class="display-group-work-item-title">/)
   assert.match(editWxml, /class="display-group-work-ratio">\{\{item\.aspectRatioText\}\}<\/view>/)
-  assert.match(editWxml, /class="display-group-work-order \{\{item\.selected \? 'selected' : ''\}\}"/)
-  assert.match(editWxml, /class="component-work-actions"[\s\S]*class="component-work-cancel"[\s\S]*handleCancelDisplayGroupSheet[\s\S]*>取消<[\s\S]*class="component-work-confirm"[\s\S]*handleConfirmDisplayGroupSheet[\s\S]*>完成</)
+  assert.match(editWxml, /class="display-group-work-order">/)
+  assert.match(editWxml, /class="component-work-actions pe-sheet-actions"[\s\S]*class="pe-sheet-action-cancel"[\s\S]*handleCancelDisplayGroupSheet[\s\S]*>取消<[\s\S]*class="pe-sheet-action-confirm"[\s\S]*handleConfirmDisplayGroupSheet[\s\S]*>完成</)
   assert.doesNotMatch(editWxml, />关闭</)
   assert.doesNotMatch(editWxml, /displayGroupWorkPreviewOptions/)
   assert.doesNotMatch(editWxml, /work-tag-import-section/)
@@ -1190,9 +1211,13 @@ test('standard portfolio display tag sheet shows ordered tag and work selections
 
 test('standard personal portfolio editor keeps add button compact and delete hidden behind swipe', () => {
   const editWxss = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxss')
+  const foundationWxss = read('styles/portfolio-editor-foundation.wxss')
+  const deleteRule = readRule(foundationWxss, '.pe-component-delete')
 
   assert.match(editWxss, /\.link-button\s*\{[\s\S]*width:\s*136rpx;[\s\S]*min-width:\s*136rpx;[\s\S]*max-width:\s*136rpx;[\s\S]*flex:\s*0 0 136rpx;[\s\S]*padding:\s*0;/)
-  assert.match(editWxss, /\.component-remove-button\s*\{[\s\S]*width:\s*108rpx;[\s\S]*min-width:\s*108rpx;[\s\S]*height:\s*64rpx;/)
+  assert.match(deleteRule, /width:\s*108rpx;/)
+  assert.match(deleteRule, /min-width:\s*108rpx;/)
+  assert.match(deleteRule, /height:\s*100%/)
   assert.doesNotMatch(editWxss, /\.component-actions\s*\{/)
 })
 
@@ -1202,7 +1227,7 @@ test('standard personal portfolio picker shows disabled profile as an auto-width
   const plusRule = readRule(editWxss, '.component-option-plus')
   const addedRule = readRule(editWxss, '.component-option-added')
 
-  assert.match(editWxml, /class="component-option \{\{item\.disabled \? 'disabled' : ''\}\}"/)
+  assert.match(editWxml, /class="component-option pe-sheet-choice \{\{item\.disabled \? 'disabled' : ''\}\}"/)
   assert.match(editWxml, /data-disabled="\{\{item\.disabled\}\}"/)
   assert.match(editWxml, /class="\{\{item\.disabled \? 'component-option-added' : 'component-option-plus'\}\}">\{\{item\.disabled \? '已添加' : '\+'\}\}<\/view>/)
   assert.match(plusRule, /width:\s*44rpx/)

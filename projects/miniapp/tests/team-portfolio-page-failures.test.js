@@ -81,7 +81,7 @@ test('editor WXML presents all component options in Chinese and binds member sou
   const wxml = fs.readFileSync(path.join(ROOT, 'standard-edit/team-portfolio-standard-edit.wxml'), 'utf8')
   const source = fs.readFileSync(path.join(ROOT, 'standard-edit/team-portfolio-standard-edit.js'), 'utf8')
   for (const label of ['团队资料', '轮播图', '分割线', '双列作品集', '单列作品集', '文字说明', '档期查询', '预留联系信息', '二维码联系']) assert.match(source, new RegExp(label))
-  assert.match(wxml, /class="component-title">\{\{item\.displayName\}\}/)
+  assert.match(wxml, /class="component-title pe-component-title">\{\{item\.displayName\}\}/)
   for (const handler of ['handleCarouselLoadMembers', 'handleGridLoadMembers', 'handleListLoadMembers']) assert.match(wxml, new RegExp(`bindloadmembers="${handler}"`))
   for (const handler of ['handleCarouselRetrySource', 'handleGridRetrySource', 'handleListRetrySource']) assert.match(wxml, new RegExp(`bindtap="${handler}"`))
   assert.match(wxml, /class="source-state"/)
@@ -92,7 +92,9 @@ test('editor WXML presents all component options in Chinese and binds member sou
 test('editor renders the personal-style 1:1 QR crop overlay above the component editor', () => {
   const wxml = fs.readFileSync(path.join(ROOT, 'standard-edit/team-portfolio-standard-edit.wxml'), 'utf8')
   const css = fs.readFileSync(path.join(ROOT, 'standard-edit/team-portfolio-standard-edit.wxss'), 'utf8')
-  assert.match(wxml, /class="qr-contact-crop-mask \{\{qrContactCropVisible \? 'visible' : ''\}\}"/)
+  const foundationCss = fs.readFileSync(path.join(ROOT, '../../styles/portfolio-editor-foundation.wxss'), 'utf8')
+  assert.match(wxml, /class="qr-contact-crop-mask pe-sheet-mask \{\{qrContactCropVisible \? 'pe-sheet-mask-visible' : ''\}\}"/)
+  assert.match(wxml, /class="qr-contact-crop-panel pe-sheet-panel pe-sheet-size-standard \{\{qrContactCropVisible \? 'pe-sheet-panel-visible' : ''\}\}"/)
   assert.match(wxml, />1:1</)
   for (const handler of [
     'handleQrContactCropTouchStart',
@@ -104,7 +106,7 @@ test('editor renders the personal-style 1:1 QR crop overlay above the component 
   ]) assert.match(wxml, new RegExp(handler))
   assert.match(wxml, /id="teamQrContactCropCanvas"/)
   assert.match(wxml, /type="2d"/)
-  assert.match(css, /\.qr-contact-crop-mask\s*\{[^}]*position:\s*fixed[^}]*z-index:\s*45/)
+  assert.match(foundationCss, /\.pe-sheet-mask\s*\{[^}]*position:\s*fixed[^}]*z-index:\s*120/)
   assert.match(css, /\.qr-contact-crop-stage\s*\{[^}]*overflow:\s*hidden/)
   assert.match(css, /\.qr-contact-crop-canvas\s*\{[^}]*left:\s*-9999px/)
 })

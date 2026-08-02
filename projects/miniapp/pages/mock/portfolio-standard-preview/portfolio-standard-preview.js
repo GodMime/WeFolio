@@ -1,4 +1,5 @@
 const {
+  MOCK_SCHEDULE_DATA,
   getMockPortfolioDraft,
   switchMockPortfolioMenu,
   showMockLoginRequiredToast
@@ -41,31 +42,63 @@ function collectImageUrls(portfolio) {
 
 Page({
   data: {
+    loading: false,
+    errorMessage: '',
     portfolio: getMockPortfolioDraft().renderData,
+    portfolioMenuTransitionClass: '',
+    scheduleQueryModalVisible: false,
+    contactFormModalVisible: false,
+    mockSchedules: MOCK_SCHEDULE_DATA.schedules,
+    contactForm: {
+      contactName: '',
+      phone: '',
+      wechat: '',
+      needs: ''
+    },
     videoPreviewVisible: false,
     videoPreview: {
       title: '',
       src: '',
       poster: ''
     },
-    activeSingleWorkVideoKey: ''
-    ,
+    activeSingleWorkVideoKey: '',
     portfolioScrollTop: 0
   },
 
   onShow() {
     this.stopActiveSingleWorkVideo()
-    this.setData({
-      portfolio: getMockPortfolioDraft().renderData
-    })
+    this.refreshPreview()
   },
 
   onHide() {
     this.stopActiveSingleWorkVideo()
+    this.clearPortfolioMenuTransition()
   },
 
   onUnload() {
     this.stopActiveSingleWorkVideo()
+    this.clearPortfolioMenuTransition()
+  },
+
+  refreshPreview() {
+    try {
+      this.setData({
+        loading: false,
+        errorMessage: '',
+        portfolio: getMockPortfolioDraft().renderData
+      })
+    } catch (error) {
+      this.setData({
+        loading: false,
+        errorMessage: error && error.message ? error.message : '本地预览加载失败'
+      })
+    }
+  },
+
+  handleRetryPreview() {
+    this.setData({ loading: true, errorMessage: '' }, () => {
+      this.refreshPreview()
+    })
   },
 
   handleWorkTap(event) {
@@ -177,8 +210,16 @@ Page({
       return
     }
     this.stopActiveSingleWorkVideo()
+    this.clearPortfolioMenuTransition()
+    const items = this.data.portfolio.bottomNav && this.data.portfolio.bottomNav.items
+      ? this.data.portfolio.bottomNav.items
+      : []
+    const currentIndex = items.findIndex((item) => item.key === this.data.portfolio.activeMenuKey)
+    const targetIndex = items.findIndex((item) => item.key === menuKey)
+    const direction = targetIndex > currentIndex ? 'forward' : 'backward'
     this.setData({
       portfolio: switchMockPortfolioMenu(this.data.portfolio, menuKey),
+      portfolioMenuTransitionClass: `portfolio-menu-enter-${direction}`,
       portfolioScrollTop: 1,
       videoPreviewVisible: false,
       videoPreview: {
@@ -188,15 +229,49 @@ Page({
       }
     }, () => {
       this.setData({ portfolioScrollTop: 0 })
+      this.portfolioMenuTransitionTimer = setTimeout(() => {
+        this.portfolioMenuTransitionTimer = null
+        this.setData({ portfolioMenuTransitionClass: '' })
+      }, 220)
     })
+  },
+
+  clearPortfolioMenuTransition() {
+    if (this.portfolioMenuTransitionTimer) {
+      clearTimeout(this.portfolioMenuTransitionTimer)
+      this.portfolioMenuTransitionTimer = null
+    }
   },
 
   handleSubmitContact() {
     showMockLoginRequiredToast()
+    this.setData({ contactFormModalVisible: false })
   },
 
   handleOpenScheduleQuery() {
-    showMockLoginRequiredToast()
+    this.setData({ scheduleQueryModalVisible: true })
+  },
+
+  handleCloseScheduleQuery() {
+    this.setData({ scheduleQueryModalVisible: false })
+  },
+
+  handleOpenContactForm() {
+    this.setData({ contactFormModalVisible: true })
+  },
+
+  handleCloseContactForm() {
+    this.setData({ contactFormModalVisible: false })
+  },
+
+  handleContactInput(event) {
+    const field = event.currentTarget.dataset.field
+    if (!Object.prototype.hasOwnProperty.call(this.data.contactForm, field)) {
+      return
+    }
+    this.setData({
+      [`contactForm.${field}`]: event.detail && event.detail.value ? event.detail.value : ''
+    })
   },
 
   handlePreviewQr(event) {

@@ -53,8 +53,9 @@ test('normalizes work list for page rendering', () => {
     ]
   })
 
-  assert.equal(result.summary.totalText, '全部 36')
-  assert.equal(result.summary.videoText, '视频 6')
+  assert.deepEqual(result.summary, {
+    totalCount: 36
+  })
   assert.equal(result.tags[1].labelText, '高端婚礼 8')
   assert.equal(result.tags[1].style, 'color: #2d5f9a; background: #e5effb; border-color: #bfd7f4;')
   assert.equal(result.tags[1].filterStyle, 'color: #2d5f9a; background: #ffffff; border-color: #2d5f9a;')
@@ -352,7 +353,7 @@ test('normalizes empty work list with safe defaults', () => {
   assert.equal(result.total, 0)
   assert.deepEqual(result.works, [])
   assert.equal(result.empty, true)
-  assert.equal(result.summary.totalText, '全部 0')
+  assert.deepEqual(result.summary, { totalCount: 0 })
   assert.equal(result.filterTags[0].labelText, '全部 0')
 })
 
@@ -406,7 +407,7 @@ test('normalizes work detail references and counters', () => {
   assert.equal(result.referenceSummaryText, '已被 1 个作品集引用')
 })
 
-test('normalizes animation metadata and summary counters', () => {
+test('normalizes animation metadata without media type statistics', () => {
   const result = normalizeWorkList({
     summary: {
       totalCount: 36,
@@ -428,9 +429,10 @@ test('normalizes animation metadata and summary counters', () => {
   assert.equal(result.works[0].typeText, '动图')
   assert.equal(result.works[0].frameCount, 24)
   assert.equal(result.works[0].coverFrameNumber, 8)
-  assert.equal(result.summary.animationCount, 1)
-  assert.equal(result.summary.animationText, '动图 1')
-  assert.deepEqual(result.mediaFilters.map((item) => item.mediaType), ['', 'IMAGE', 'VIDEO', 'ANIMATION'])
+  assert.deepEqual(result.summary, {
+    totalCount: 36
+  })
+  assert.equal(Object.prototype.hasOwnProperty.call(result, 'mediaFilters'), false)
 })
 
 test('builds and validates work update payload', () => {

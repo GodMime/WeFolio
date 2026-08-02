@@ -1,6 +1,8 @@
 const {
   MOCK_SCHEDULE_DATA,
   buildMockCalendarMonth,
+  buildMockSelectedDateMeta,
+  getMockSchedulesForDate,
   getMockTabs,
   shiftMockYearMonth,
   showMockLoginRequiredToast
@@ -13,16 +15,29 @@ function todayText() {
   return `${now.getFullYear()}-${month}-${day}`
 }
 
+function buildSelectedDateState(selectedDate) {
+  const selectedSchedules = getMockSchedulesForDate(selectedDate)
+  const selectedDateOverview = buildMockSelectedDateMeta(selectedDate)
+  return {
+    selectedDate,
+    selectedDateTitle: selectedDateOverview.titleText,
+    selectedDateLunarTitle: selectedDateOverview.lunarTitleText,
+    selectedSchedules,
+    selectedDateSummary: selectedSchedules.length ? `${selectedSchedules.length} 个档期` : '暂无档期'
+  }
+}
+
+const initialSelectedDate = todayText()
+const initialSelectedDateState = buildSelectedDateState(initialSelectedDate)
+
 Page({
-  data: {
+  data: Object.assign({
     activeMode: 'maintenance',
     tabs: getMockTabs('schedule'),
     slotDefinitions: MOCK_SCHEDULE_DATA.slotDefinitions,
     weekdays: ['日', '一', '二', '三', '四', '五', '六'],
-    selectedDate: todayText(),
-    selectedDateSummary: MOCK_SCHEDULE_DATA.selectedDate.summaryText,
-    month: buildMockCalendarMonth('', todayText())
-  },
+    month: buildMockCalendarMonth('', initialSelectedDate)
+  }, initialSelectedDateState),
 
   handleModeTap(event) {
     const mode = event.currentTarget.dataset.mode
@@ -40,28 +55,28 @@ Page({
       return
     }
     const selectedDate = `${yearMonth}-01`
-    this.setData({
-      selectedDate,
-      month: buildMockCalendarMonth(yearMonth, selectedDate)
-    })
+    this.setData(Object.assign(
+      buildSelectedDateState(selectedDate),
+      { month: buildMockCalendarMonth(yearMonth, selectedDate) }
+    ))
   },
 
   handlePrevMonth() {
     const yearMonth = shiftMockYearMonth(this.data.month.yearMonth, -1)
     const selectedDate = `${yearMonth}-01`
-    this.setData({
-      selectedDate,
-      month: buildMockCalendarMonth(yearMonth, selectedDate)
-    })
+    this.setData(Object.assign(
+      buildSelectedDateState(selectedDate),
+      { month: buildMockCalendarMonth(yearMonth, selectedDate) }
+    ))
   },
 
   handleNextMonth() {
     const yearMonth = shiftMockYearMonth(this.data.month.yearMonth, 1)
     const selectedDate = `${yearMonth}-01`
-    this.setData({
-      selectedDate,
-      month: buildMockCalendarMonth(yearMonth, selectedDate)
-    })
+    this.setData(Object.assign(
+      buildSelectedDateState(selectedDate),
+      { month: buildMockCalendarMonth(yearMonth, selectedDate) }
+    ))
   },
 
   handleDayTap(event) {
@@ -69,10 +84,10 @@ Page({
     if (!selectedDate) {
       return
     }
-    this.setData({
-      selectedDate,
-      month: buildMockCalendarMonth(this.data.month.yearMonth, selectedDate)
-    })
+    this.setData(Object.assign(
+      buildSelectedDateState(selectedDate),
+      { month: buildMockCalendarMonth(this.data.month.yearMonth, selectedDate) }
+    ))
   },
 
   handleLockedAction() {

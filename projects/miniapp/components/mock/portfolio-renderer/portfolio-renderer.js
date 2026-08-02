@@ -44,6 +44,14 @@ Component({
       this.triggerEvent('previewqr', { qrUrl: qrContact.qrUrl || '' })
     },
 
+    handleScheduleQuery() {
+      this.triggerEvent('schedulequery')
+    },
+
+    handleContactForm() {
+      this.triggerEvent('contactform')
+    },
+
     handleLockedAction() {
       this.triggerEvent('lockedaction')
     }

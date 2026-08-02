@@ -202,7 +202,7 @@ test('mock schedule slot toggle action matches the neutral design button', () =>
   const slotToggleActionRule = readRule(wxss, '.slot-toggle-action')
 
   assert.match(wxml, /class="mini-action warn slot-toggle-action"[^>]*>停用<\/button>/)
-  assert.match(wxml, /class="mini-action"[^>]*>编辑<\/button>/)
+  assert.doesNotMatch(wxml, /class="mini-action"[^>]*>编辑<\/button>/)
   assert.doesNotMatch(wxml, /class="mini-action slot-toggle-action"[^>]*>编辑<\/button>/)
   assert.match(slotToggleActionRule, /width:\s*112rpx/)
   assert.match(slotToggleActionRule, /min-width:\s*112rpx/)
@@ -306,27 +306,81 @@ test('mock schedule data contains lunch and dinner slots only', () => {
   assert.equal(mock.MOCK_SCHEDULE_DATA.selectedDate.summaryText, '暂无档期')
 })
 
-test('mock schedule calendar pads rows and uses stable blank cell keys', () => {
+test('mock schedule calendar mirrors the production six-week lunar grid', () => {
   const mock = loadMockExperience()
   const scheduleWxml = read('pages/mock/schedule/schedule.wxml')
-  const month = mock.buildMockCalendarMonth('2026-07', '2026-07-06')
-  const blankDays = month.days.filter((day) => !day.date)
-  const filledDays = month.days.filter((day) => day.date)
+  const month = mock.buildMockCalendarMonth('2026-08', '2026-08-02')
 
-  assert.match(scheduleWxml, /wx:key="key"/)
-  assert.equal(month.days.length, 35)
-  assert.equal(month.days.length % 7, 0)
-  assert.deepEqual(month.days.slice(0, 3).map((day) => day.key), [
-    'blank-leading-0',
-    'blank-leading-1',
-    'blank-leading-2'
-  ])
-  assert.equal(month.days[3].date, '2026-07-01')
-  assert.equal(month.days[8].date, '2026-07-06')
-  assert.match(month.days[8].dayClass, /selected/)
-  assert.equal(month.days[34].key, 'blank-trailing-34')
-  assert.equal(filledDays.length, 31)
-  assert.equal(new Set(blankDays.map((day) => day.key)).size, blankDays.length)
+  assert.match(scheduleWxml, /wx:key="date"/)
+  assert.equal(month.days.length, 42)
+  assert.equal(month.days[0].date, '2026-07-26')
+  assert.equal(month.days[41].date, '2026-09-05')
+  assert.match(month.days[0].dayClass, /muted/)
+  assert.match(month.days[7].dayClass, /selected/)
+  assert.equal(month.days.find((day) => day.date === '2026-08-01').metaText, '十九')
+  assert.equal(month.days.find((day) => day.date === '2026-08-19').metaText, '七夕')
+  assert.match(
+    scheduleWxml,
+    /class="date-stack"[\s\S]*class="day-meta"[\s\S]*<\/view>\s*<view class="day-colors"/
+  )
+})
+
+test('mock schedule aligns the initial current month with weekday headers', () => {
+  const RealDate = global.Date
+  const fixedNow = new RealDate(2026, 7, 2, 0, 40, 0)
+
+  class FixedDate extends RealDate {
+    constructor(...args) {
+      super(...(args.length ? args : [fixedNow.getTime()]))
+    }
+
+    static now() {
+      return fixedNow.getTime()
+    }
+  }
+
+  global.Date = FixedDate
+  try {
+    const mock = loadMockExperience()
+    const month = mock.buildMockCalendarMonth('', '2026-08-02')
+
+    assert.equal(month.yearMonth, '2026-08')
+    assert.equal(month.days.findIndex((day) => day.date === '2026-08-01'), 6)
+  } finally {
+    global.Date = RealDate
+    loadMockExperience()
+  }
+})
+
+test('mock schedule selected date uses production solar and lunar titles', () => {
+  const RealDate = global.Date
+  const fixedNow = new RealDate(2026, 7, 2, 0, 40, 0)
+
+  class FixedDate extends RealDate {
+    constructor(...args) {
+      super(...(args.length ? args : [fixedNow.getTime()]))
+    }
+
+    static now() {
+      return fixedNow.getTime()
+    }
+  }
+
+  global.Date = FixedDate
+  try {
+    loadMockExperience()
+    const page = loadMockPage('pages/mock/schedule/schedule.js', {})
+    const scheduleWxml = read('pages/mock/schedule/schedule.wxml')
+
+    assert.equal(page.data.selectedDateTitle, '08月02日')
+    assert.equal(page.data.selectedDateLunarTitle, '农历六月二十')
+    assert.match(scheduleWxml, /\{\{selectedDateTitle\}\}/)
+    assert.match(scheduleWxml, /\{\{selectedDateLunarTitle\}\}/)
+    assert.doesNotMatch(scheduleWxml, /体验档期/)
+  } finally {
+    global.Date = RealDate
+    loadMockExperience()
+  }
 })
 
 test('mock schedule status independently uses original color dot and text without pill background', () => {
@@ -429,7 +483,7 @@ test('mock portfolio edit page mirrors production component orchestration intera
   const js = read('pages/mock/portfolio-standard-edit/portfolio-standard-edit.js')
 
   assert.match(wxml, /<button class="link-button" bindtap="handleOpenComponentSheet">添加组件<\/button>/)
-  assert.match(wxml, /class="panel page-setting-panel"/)
+  assert.match(wxml, /class="panel page-setting-panel pe-page-card"/)
   assert.match(wxml, /class="background-color-current"/)
   assert.match(wxml, /class="background-color-pad"[\s\S]*bindtouchstart="handleBackgroundColorPadTouch"/)
   assert.match(wxml, /class="background-hue-slider"[\s\S]*bindchanging="handleBackgroundHueChange"/)
@@ -445,10 +499,10 @@ test('mock portfolio edit page mirrors production component orchestration intera
   assert.match(wxml, /bindtouchcancel="handleComponentTouchCancel"/)
   assert.match(wxml, /class="component-remove-pane"[\s\S]*handleRemoveComponent/)
   assert.match(wxml, /class="component-row[\s\S]*catchtap="handleComponentTap"/)
-  assert.match(wxml, /class="component-picker-mask \{\{componentSheetVisible \? 'visible' : ''\}\}"/)
+  assert.match(wxml, /class="component-picker-mask pe-sheet-mask \{\{componentSheetVisible \? 'pe-sheet-mask-visible' : ''\}\}"/)
   assert.match(wxml, /wx:for="\{\{componentOptions\}\}"[\s\S]*data-type="\{\{item\.componentType\}\}"[\s\S]*handleSelectComponent/)
-  assert.match(wxml, /class="mock-component-edit-mask component-work-picker-mask \{\{componentEditSheetVisible \? 'visible' : ''\}\}"/)
-  assert.match(wxml, /class="mock-component-edit-panel component-work-picker-panel"/)
+  assert.match(wxml, /class="mock-component-edit-mask component-work-picker-mask pe-sheet-mask \{\{componentEditSheetVisible \? 'pe-sheet-mask-visible' : ''\}\}"/)
+  assert.match(wxml, /class="mock-component-edit-panel component-work-picker-panel pe-sheet-panel pe-sheet-size-long/)
   assert.match(wxml, /handleCloseComponentEditSheet/)
   assert.match(wxml, /handleConfirmComponentEditSheet/)
   assert.doesNotMatch(wxml, /panel component-panel mock-editor-panel/)
@@ -480,7 +534,7 @@ test('mock color picker hue thumb matches the centered white-ring design', () =>
   assert.match(wxml, /block-color="transparent"/)
   assert.match(
     wxss,
-    /\.background-hue-thumb\s*\{[\s\S]*top:\s*50%;[\s\S]*width:\s*44rpx;[\s\S]*height:\s*44rpx;[\s\S]*border:\s*6rpx solid #ffffff;[\s\S]*transform:\s*translate\(-50%, -50%\);/
+    /\.background-hue-thumb\s*\{[\s\S]*top:\s*50%;[\s\S]*width:\s*44rpx;[\s\S]*height:\s*44rpx;[\s\S]*border:\s*6rpx solid var\(--pe-color-surface,\s*#FFFFFF\);[\s\S]*transform:\s*translate\(-50%, -50%\);/
   )
   assert.doesNotMatch(wxss, /\.background-hue-slider slider\s*\{[^}]*margin:\s*-14rpx/)
 })

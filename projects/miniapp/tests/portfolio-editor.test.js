@@ -1292,7 +1292,7 @@ test('component work picker renders carousel order without changing selection ac
   assert.match(wxml, /aria-role="\{\{componentWorkSelectionMode === 'single' \? 'radio' : 'checkbox'\}\}"/)
   assert.match(wxml, /aria-checked="\{\{item\.selected\}\}"/)
   assert.match(wxss, /\.component-work-check\.carousel-order\s*\{[^}]*font-size:\s*22rpx;/)
-  assert.match(wxss, /\.component-work-option\.selected \.component-work-check\s*\{[^}]*background:\s*#c28b37;/)
+  assert.match(wxss, /\.component-work-option\[aria-checked="true"\] \.component-work-check\s*\{[^}]*background:\s*var\(--pe-color-text-primary,\s*#212529\);/)
 })
 
 test('component work picker searches filters by tag and appends next page', async () => {
@@ -2719,8 +2719,8 @@ test('portfolio page settings match the continuous color picker and guarded menu
   assert.match(wxml, /class="background-color-current"/)
   assert.match(wxml, /class="background-color-pad"[\s\S]*bindtouchstart="handleBackgroundColorPadTouch"/)
   assert.match(wxml, /class="background-hue-slider"[\s\S]*bindchanging="handleBackgroundHueChange"/)
-  assert.match(wxml, /class="background-hex-input"[\s\S]*bindinput="handleBackgroundHexInput"/)
-  assert.match(wxml, /class="background-hex-input"[\s\S]*bindblur="handleBackgroundHexBlur"/)
+  assert.match(wxml, /class="background-hex-input pe-sheet-field"[\s\S]*bindinput="handleBackgroundHexInput"/)
+  assert.match(wxml, /class="background-hex-input pe-sheet-field"[\s\S]*bindblur="handleBackgroundHexBlur"/)
   assert.match(wxml, /item === 1 \? '不开启' : item \+ ' 个'/)
   assert.match(wxml, /class="editor-component-empty"/)
   assert.match(js, /BACKGROUND_COLOR_OPTIONS\s*=\s*\['#151515', '#FFFFFF', '#F5F6F8'\]/)
@@ -2732,7 +2732,7 @@ test('portfolio page settings match the continuous color picker and guarded menu
   assert.match(wxml, /scroll-into-view="\{\{validationComponentAnchor\}\}"/)
   assert.match(wxml, /id="component-row-\{\{item\.componentKey\}\}"/)
   assert.match(wxml, /validationComponentKey === item\.componentKey \? 'validation-error' : ''/)
-  assert.match(wxss, /\.component-row\.validation-error\s*\{[\s\S]*border-color:\s*#b55656;/)
+  assert.match(wxss, /\.component-row\.validation-error\s*\{[\s\S]*border-color:\s*var\(--pe-color-danger,\s*#B55656\);/)
 })
 
 test('production color picker hue thumb matches the centered white-ring design', () => {
@@ -2747,7 +2747,7 @@ test('production color picker hue thumb matches the centered white-ring design',
   assert.match(wxml, /block-color="transparent"/)
   assert.match(
     wxss,
-    /\.background-hue-thumb\s*\{[\s\S]*top:\s*50%;[\s\S]*width:\s*44rpx;[\s\S]*height:\s*44rpx;[\s\S]*border:\s*6rpx solid #ffffff;[\s\S]*transform:\s*translate\(-50%, -50%\);/
+    /\.background-hue-thumb\s*\{[\s\S]*top:\s*50%;[\s\S]*width:\s*44rpx;[\s\S]*height:\s*44rpx;[\s\S]*border:\s*6rpx solid var\(--pe-color-surface,\s*#FFFFFF\);[\s\S]*transform:\s*translate\(-50%, -50%\);/
   )
   assert.doesNotMatch(wxss, /\.background-hue-slider slider\s*\{[^}]*margin:\s*-14rpx/)
 })

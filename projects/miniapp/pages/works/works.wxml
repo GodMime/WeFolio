@@ -22,17 +22,6 @@
       </view>
 
       <view class="filter-panel">
-        <scroll-view class="media-filter-scroll" scroll-x type="list">
-          <view class="media-filter-row">
-            <view
-              wx:for="{{list.mediaFilters}}"
-              wx:key="mediaType"
-              class="media-filter-pill {{selectedMediaType === item.mediaType ? 'active' : ''}}"
-              data-type="{{item.mediaType}}"
-              bindtap="handleMediaTypeTap"
-            >{{item.label}}</view>
-          </view>
-        </scroll-view>
         <view class="filter-shell" catchtap="handleFilterShellTap">
           <scroll-view class="tag-scroll" scroll-x type="list">
             <view class="tag-row">
@@ -211,7 +200,7 @@
         <view class="batch-heading">
           <view class="batch-copy">
             <view class="batch-title">批量动作</view>
-            <view class="batch-desc">选择多个作品后可统一删除，作品集入口先保留位置</view>
+            <view class="batch-desc">选择多个作品后可统一删除或调整排序</view>
           </view>
           <view class="batch-heading-actions">
             <view class="batch-count">{{batchSelectedCountText}}</view>
@@ -220,7 +209,6 @@
         </view>
         <view class="batch-actions">
           <button class="batch-action danger" loading="{{batchDeleting}}" disabled="{{batchDeleting}}" bindtap="handleBatchDeleteTap">删除</button>
-          <button class="batch-action muted" bindtap="handleBatchPortfolioTap">加入作品集</button>
           <button class="batch-action" bindtap="handleOpenSortMode">调整排序</button>
         </view>
       </view>

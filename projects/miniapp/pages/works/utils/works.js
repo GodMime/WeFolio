@@ -264,28 +264,9 @@ function normalizeWork(raw = {}) {
 
 function normalizeSummary(raw = {}) {
   const totalCount = toNumber(raw.totalCount)
-  const imageCount = toNumber(raw.imageCount)
-  const videoCount = toNumber(raw.videoCount)
-  const animationCount = toNumber(raw.animationCount)
   return {
-    totalCount,
-    imageCount,
-    videoCount,
-    animationCount,
-    totalText: `全部 ${totalCount}`,
-    imageText: `图片 ${imageCount}`,
-    videoText: `视频 ${videoCount}`,
-    animationText: `动图 ${animationCount}`
+    totalCount
   }
-}
-
-function buildMediaFilters(summary = {}) {
-  return [
-    { mediaType: '', label: summary.totalText },
-    { mediaType: 'IMAGE', label: summary.imageText },
-    { mediaType: 'VIDEO', label: summary.videoText },
-    { mediaType: 'ANIMATION', label: summary.animationText }
-  ]
 }
 
 function isAllTag(tag = {}) {
@@ -320,7 +301,6 @@ function normalizeWorkList(raw = {}) {
     total: toNumber(raw.total),
     hasMore: Boolean(raw.hasMore),
     summary,
-    mediaFilters: buildMediaFilters(summary),
     tags,
     filterTags: buildFilterTags(summary, tags),
     works,

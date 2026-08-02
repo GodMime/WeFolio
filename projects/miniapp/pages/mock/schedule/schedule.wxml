@@ -40,7 +40,7 @@
               <view class="weekday" wx:for="{{weekdays}}" wx:key="*this">{{item}}</view>
               <view
                 wx:for="{{month.days}}"
-                wx:key="key"
+                wx:key="date"
                 class="{{item.dayClass}}"
                 data-date="{{item.date}}"
                 bindtap="handleDayTap"
@@ -48,6 +48,9 @@
                 <view class="date-stack">
                   <view class="day-number">{{item.dayNumber}}</view>
                   <view class="day-meta" wx:if="{{item.metaText}}">{{item.metaText}}</view>
+                </view>
+                <view class="day-colors" wx:if="{{item.markerColors.length}}">
+                  <view class="day-color" wx:for="{{item.markerColors}}" wx:for-item="marker" wx:key="color" style="{{marker.style}}"></view>
                 </view>
               </view>
             </view>
@@ -57,14 +60,26 @@
         <view class="day-panel">
           <view class="day-heading">
             <view class="day-date-copy">
-              <view class="day-title">{{selectedDate}}</view>
-              <view class="day-lunar-title">体验档期</view>
+              <view class="day-title">{{selectedDateTitle}}</view>
+              <view class="day-lunar-title">{{selectedDateLunarTitle}}</view>
             </view>
             <view class="day-summary">{{selectedDateSummary}}</view>
           </view>
-          <view class="inline-empty">
+          <view class="inline-empty" wx:if="{{selectedSchedules.length === 0}}">
             <view class="empty-title small">当天暂无档期</view>
             <view class="empty-desc">体验版新增档期需要注册登录</view>
+          </view>
+          <view wx:for="{{selectedSchedules}}" wx:key="id" class="schedule-swipe-row">
+            <view class="schedule-line" bindtap="handleLockedAction">
+              <view class="slot-main">
+                <view class="swatch" style="{{item.colorStyle}}"></view>
+                <view class="slot-copy">
+                  <view class="slot-name">{{item.slotName}}</view>
+                  <view class="slot-desc">{{item.timeRangeText}} · {{item.contactText}}</view>
+                </view>
+              </view>
+              <view class="{{item.statusClass}}">{{item.statusText}}</view>
+            </view>
           </view>
           <button class="primary-button schedule-add-button" bindtap="handleLockedAction">新增档期</button>
         </view>
@@ -88,7 +103,6 @@
                 </view>
               </view>
               <view class="slot-actions">
-                <button class="mini-action" catchtap="handleLockedAction">编辑</button>
                 <button class="mini-action warn slot-toggle-action" catchtap="handleLockedAction">停用</button>
               </view>
             </view>

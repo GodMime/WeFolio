@@ -62,7 +62,7 @@ const cases = [
     active: '.segment-item.active',
     indicator: '.segment-indicator',
     indicatorActive: '.segment-indicator.team-active',
-    indicatorMarkup: /class="segment-indicator"/,
+    indicatorMarkup: /class="segment-indicator \{\{ownerType === 'TEAM' \? 'team-active' : ''\}\}"/,
     legacyIndicator: '.segment-item.active::after'
   }
 ]

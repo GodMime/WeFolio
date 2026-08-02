@@ -6,7 +6,18 @@
       <view class="search-panel">
         <view class="search-box">
           <view class="search-icon"></view>
-          <input class="search-input" disabled="{{true}}" value="" placeholder="搜索作品标题、标签" placeholder-class="search-placeholder" />
+          <input
+            class="search-input"
+            value="{{keyword}}"
+            confirm-type="search"
+            placeholder="搜索作品标题、标签"
+            placeholder-class="search-placeholder"
+            bindinput="handleSearchInput"
+            bindconfirm="handleSearchConfirm"
+          />
+          <view class="search-clear" wx:if="{{keyword}}" catchtap="handleClearSearch" aria-role="button" aria-label="清空搜索">
+            <text class="search-clear-mark">×</text>
+          </view>
         </view>
       </view>
 
@@ -14,17 +25,20 @@
         <view class="filter-shell">
           <scroll-view class="tag-scroll" scroll-x type="list">
             <view class="tag-row">
-              <view class="tag-pill {{selectedTagId === 0 ? 'active' : ''}}" data-id="0" bindtap="handleTagTap">
-                <text class="tag-text">全部</text>
-              </view>
               <view
-                wx:for="{{list.tags}}"
+                wx:for="{{list.filterTags}}"
                 wx:key="id"
-                class="tag-pill {{selectedTagId === item.id ? 'active' : ''}}"
+                class="tag-pill {{(!selectedTagId && !item.id) || selectedTagId === item.id ? 'active' : ''}}"
+                style="{{((!selectedTagId && !item.id) || selectedTagId === item.id) ? item.activeStyle : item.filterStyle}}"
                 data-id="{{item.id}}"
                 bindtap="handleTagTap"
               >
-                <text class="tag-text">{{item.name}}</text>
+                <view
+                  wx:if="{{item.id && selectedTagId !== item.id}}"
+                  class="tag-color-dot"
+                  style="background: {{item.color}};"
+                ></view>
+                <text class="tag-text">{{item.labelText}}</text>
               </view>
             </view>
           </scroll-view>
@@ -53,7 +67,7 @@
                   data-id="{{item.id}}"
                   catchtap="handleWorkPreviewTap"
                   aria-role="button"
-                  aria-label="{{item.mediaType === 'VIDEO' ? '播放原视频' : '查看原图'}}"
+                  aria-label="{{item.mediaType === 'VIDEO' ? '播放原视频' : (item.mediaType === 'ANIMATION' ? '查看原动图' : '查看原图')}}"
                 >
                   <image src="{{item.coverUrl}}" mode="aspectFill"></image>
                   <view
@@ -68,7 +82,7 @@
                 <view class="work-copy">
                   <view class="work-title">{{item.title}}</view>
                   <view class="work-meta">
-                    <text>{{item.mediaType === 'VIDEO' ? '视频' : '图片'}}</text>
+                    <text>{{item.mediaType === 'VIDEO' ? '视频' : (item.mediaType === 'ANIMATION' ? '动图' : '图片')}}</text>
                     <text> / 风景作品</text>
                   </view>
                   <view class="work-status-row">
@@ -90,32 +104,36 @@
   </view>
 
   <view class="image-preview-mask {{imagePreviewVisible ? 'visible' : ''}}" catchtap="handleCloseImagePreview">
-    <view class="image-preview-panel" catchtap="noop">
-      <view class="video-heading">
-        <view class="video-title">{{imagePreview.title}}</view>
-        <view class="video-close" catchtap="handleCloseImagePreview" aria-role="button" aria-label="关闭图片">×</view>
+    <view class="image-preview-panel" catchtap="handleImagePreviewPanelTap">
+      <view class="image-preview-heading">
+        <view class="image-preview-title">{{imagePreview.title}}</view>
+        <view class="image-preview-close" catchtap="handleCloseImagePreview" aria-role="button" aria-label="关闭图片">×</view>
       </view>
       <image
-        class="image-player"
+        wx:if="{{imagePreviewVisible && imagePreview.src}}"
+        class="image-preview-media"
         src="{{imagePreview.src}}"
+        webp="{{true}}"
         mode="aspectFit"
       ></image>
     </view>
   </view>
 
   <view class="video-preview-mask {{videoPreviewVisible ? 'visible' : ''}}" catchtap="handleCloseVideoPreview">
-    <view class="video-preview-panel" catchtap="noop">
-      <view class="video-heading">
-        <view class="video-title">{{videoPreview.title}}</view>
-        <view class="video-close" catchtap="handleCloseVideoPreview">×</view>
+    <view class="video-preview-panel" catchtap="handleVideoPreviewPanelTap">
+      <view class="video-preview-heading">
+        <view class="video-preview-title">{{videoPreview.title}}</view>
+        <view class="video-preview-close" catchtap="handleCloseVideoPreview" aria-role="button" aria-label="关闭视频">×</view>
       </view>
       <video
         id="mockWorkVideo"
-        class="video-player"
+        class="video-preview-player"
         src="{{videoPreview.src}}"
         poster="{{videoPreview.poster}}"
         controls="{{true}}"
         autoplay="{{true}}"
+        show-center-play-btn="{{true}}"
+        enable-progress-gesture="{{true}}"
         object-fit="contain"
       ></video>
     </view>

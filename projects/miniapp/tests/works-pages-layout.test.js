@@ -90,6 +90,55 @@ test('work library uses the same adaptive viewport contract in formal and mock p
   })
 })
 
+test('works batch actions only show equal-width delete and sort buttons', () => {
+  const worksWxml = read('pages/works/works.wxml')
+  const worksWxss = read('pages/works/works.wxss')
+  const batchActionRule = readRule(worksWxss, '.batch-action')
+  const batchDangerRule = readRule(worksWxss, '.batch-action.danger')
+  const batchActionsTemplate = readBetween(
+    worksWxml,
+    /<view class="batch-actions">/,
+    /<view class="sort-mode-mask /
+  )
+  const buttonLabels = Array.from(
+    batchActionsTemplate.matchAll(/<button class="batch-action[^"]*"[^>]*>([^<]+)<\/button>/g),
+    (match) => match[1]
+  )
+
+  assert.deepEqual(buttonLabels, ['删除', '调整排序'])
+  assert.match(worksWxml, /class="batch-desc">选择多个作品后可统一删除或调整排序<\/view>/)
+  assert.doesNotMatch(worksWxml, /加入作品集|handleBatchPortfolioTap/)
+  assert.match(batchActionRule, /height:\s*86rpx;/)
+  assert.match(batchActionRule, /flex:\s*1 1 0;/)
+  assert.match(batchActionRule, /color:\s*#ffffff;/)
+  assert.match(batchActionRule, /border:\s*1rpx solid #212529;/)
+  assert.match(batchActionRule, /border-radius:\s*999rpx;/)
+  assert.match(batchActionRule, /background:\s*#212529;/)
+  assert.match(batchDangerRule, /color:\s*#b55656;/)
+  assert.match(batchDangerRule, /border-color:\s*#e9c9c9;/)
+  assert.match(batchDangerRule, /background:\s*#ffffff;/)
+})
+
+test('formal and mock work batch management buttons match the approved design', () => {
+  const styleFiles = [
+    'pages/works/works.wxss',
+    'pages/mock/styles/works.wxss'
+  ]
+
+  styleFiles.forEach((styleFile) => {
+    const textActionRule = readRule(read(styleFile), '.text-action')
+
+    assert.match(textActionRule, /width:\s*154rpx;/)
+    assert.match(textActionRule, /min-width:\s*154rpx;/)
+    assert.match(textActionRule, /max-width:\s*154rpx;/)
+    assert.match(textActionRule, /height:\s*60rpx;/)
+    assert.match(textActionRule, /color:\s*#212529;/)
+    assert.match(textActionRule, /border:\s*1rpx solid #e9ecef;/)
+    assert.match(textActionRule, /border-radius:\s*999rpx;/)
+    assert.match(textActionRule, /background:\s*#ffffff;/)
+  })
+})
+
 test('works pages expose expected upload and edit structure', () => {
   const worksWxml = read('pages/works/works.wxml')
   const worksWxss = read('pages/works/works.wxss')
@@ -139,7 +188,10 @@ test('works pages expose expected upload and edit structure', () => {
   assert.match(worksWxml, /<view class="works-scroll">[\s\S]*class="works-content" bindtap="handleCloseTagManageMode"/)
   assert.doesNotMatch(worksWxml, /<scroll-view class="works-scroll"[\s\S]*bindscrolltolower="handleScrollToLower"/)
   assert.match(worksWxml, /class="filter-panel"/)
-  assert.match(worksWxml, /wx:for="\{\{list\.mediaFilters\}\}"[\s\S]*bindtap="handleMediaTypeTap"/)
+  assert.doesNotMatch(worksWxml, /media-filter/)
+  assert.doesNotMatch(worksJs, /selectedMediaType|handleMediaTypeTap/)
+  assert.doesNotMatch(worksJs, /mediaType:\s*this\.data/)
+  assert.doesNotMatch(worksWxss, /\.media-filter-/)
   assert.match(worksWxml, /class="filter-shell" catchtap="handleFilterShellTap"/)
   assert.match(worksWxml, /<view[\s\S]*wx:for="\{\{list\.filterTags\}\}"[\s\S]*class="tag-pill/)
   assert.match(tagFilterTemplate, /style="\{\{tagManageMode && item\.id \? '' : \(\(\(!selectedTagId && !item\.id\) \|\| selectedTagId === item\.id\) \? item\.activeStyle : item\.filterStyle\)\}\}"/)
@@ -248,7 +300,7 @@ test('works pages expose expected upload and edit structure', () => {
   assert.match(worksWxml, /class="batch-panel" wx:if="\{\{batchMode && !loading && !errorMessage\}\}"/)
   assert.match(worksWxml, /class="batch-heading"[\s\S]*class="batch-copy"[\s\S]*class="batch-heading-actions"[\s\S]*class="batch-count"[\s\S]*class="batch-select-all"[\s\S]*bindtap="handleSelectAllBatchTap"[\s\S]*\{\{batchSelectAllText\}\}/)
   assert.match(worksWxml, /bindtap="handleBatchDeleteTap"/)
-  assert.match(worksWxml, /bindtap="handleBatchPortfolioTap"/)
+  assert.doesNotMatch(worksWxml, /bindtap="handleBatchPortfolioTap"/)
   assert.match(worksWxml, /bindtap="handleOpenSortMode"/)
   assert.match(worksWxml, /class="sort-mode-mask \{\{sortMode \? 'visible' : ''\}\}"/)
   assert.doesNotMatch(worksWxml, /class="sort-mode-mask" wx:if="\{\{sortMode\}\}"/)
@@ -366,7 +418,7 @@ test('works pages expose expected upload and edit structure', () => {
   assert.match(worksWxss, /\.list-actions\s*\{[\s\S]*width:\s*auto;[\s\S]*flex:\s*none;[\s\S]*gap:\s*14rpx;/)
   assert.match(worksWxss, /\.work-add-button\s*\{[\s\S]*flex:\s*none;/)
   assert.doesNotMatch(worksWxss, /\.page-add-button\s*\{/)
-  assert.match(worksWxss, /\.text-action\s*\{[\s\S]*min-width:\s*128rpx;[\s\S]*max-width:\s*128rpx;/)
+  assert.match(worksWxss, /\.text-action\s*\{[\s\S]*min-width:\s*154rpx;[\s\S]*max-width:\s*154rpx;/)
   assert.match(worksWxss, /\.batch-copy\s*\{[\s\S]*flex:\s*1 1 auto;[\s\S]*min-width:\s*0;/)
   assert.match(worksWxss, /\.batch-heading-actions\s*\{[\s\S]*display:\s*flex;[\s\S]*align-items:\s*center;[\s\S]*flex:\s*none;[\s\S]*gap:\s*12rpx;/)
   assert.match(worksWxss, /\.batch-select-all\s*\{[\s\S]*width:\s*auto;[\s\S]*min-width:\s*88rpx;[\s\S]*max-width:\s*136rpx;[\s\S]*height:\s*50rpx;/)

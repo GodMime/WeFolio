@@ -4,10 +4,10 @@ const path = require('node:path')
 const test = require('node:test')
 
 const MINIAPP_ROOT = path.resolve(__dirname, '..')
-const REMOVE_BUTTON_STYLE_PATHS = [
-  'pages/portfolios/standard-edit/portfolio-standard-edit.wxss',
-  'pages/mock/styles/portfolio-standard-edit.wxss',
-  'pages/team-portfolios/standard-edit/team-portfolio-standard-edit.wxss'
+const REMOVE_BUTTON_MARKUP_PATHS = [
+  'pages/portfolios/standard-edit/portfolio-standard-edit.wxml',
+  'pages/mock/portfolio-standard-edit/portfolio-standard-edit.wxml',
+  'pages/team-portfolios/standard-edit/team-portfolio-standard-edit.wxml'
 ]
 
 function read(relativePath) {
@@ -61,11 +61,13 @@ function loadTeamEditor(requestFn) {
 }
 
 test('portfolio component delete buttons fill the component row height', () => {
-  for (const relativePath of REMOVE_BUTTON_STYLE_PATHS) {
-    const rule = readCssRule(read(relativePath), '.component-remove-button')
-    assert.match(rule, /(?:^|\n)\s*height:\s*100%;/, relativePath)
-    assert.match(rule, /min-height:\s*100%;/, relativePath)
-    assert.doesNotMatch(rule, /(?:^|\n)\s*height:\s*64rpx;/, relativePath)
+  const rule = readCssRule(read('styles/portfolio-editor-foundation.wxss'), '.pe-component-delete')
+  assert.match(rule, /(?:^|\n)\s*height:\s*100%;/)
+  assert.match(rule, /min-height:\s*100%;/)
+  assert.doesNotMatch(rule, /(?:^|\n)\s*height:\s*64rpx;/)
+
+  for (const relativePath of REMOVE_BUTTON_MARKUP_PATHS) {
+    assert.match(read(relativePath), /class="component-remove-button pe-component-delete"/, relativePath)
   }
 })
 

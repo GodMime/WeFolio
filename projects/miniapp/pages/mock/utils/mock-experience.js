@@ -1,13 +1,26 @@
+const {
+  buildPortfolioTextTypography
+} = require('../../../utils/portfolio-text-typography')
+const {
+  formatLunarDayMeta,
+  formatLunarFullText,
+  toLunarDate
+} = require('../../../utils/lunar')
+
 const MOCK_LOGIN_REQUIRED_MESSAGE = '请去“我的”页面注册登录'
 const MOCK_AVATAR_URL = 'https://cdn2.we-folio.dingchenyong.top/demo/demo-avatar.png'
 const MOCK_ASSET_ROOT = 'https://cdn2.we-folio.dingchenyong.top/demo'
+const CALENDAR_DAY_COUNT = 42
 const MOCK_PORTFOLIO_DRAFT_STORAGE_KEY = 'wefolio_mock_portfolio_draft'
 const MOCK_PORTFOLIO_ID = 9001
 const MOCK_TAG = {
   id: 201,
   name: '风景作品',
   color: '#0f766e',
-  count: 7
+  count: 7,
+  labelText: '风景作品 7',
+  filterStyle: 'color: #0f766e; background: #ffffff; border-color: #0f766e;',
+  activeStyle: 'color: #ffffff; background: #0f766e; border-color: #0f766e;'
 }
 const MOCK_WORK_AUDIT_STATUS = 'PASSED'
 const MOCK_WORK_AUDIT_STATUS_TEXT = '审核通过'
@@ -123,7 +136,9 @@ const MOCK_COMPONENT_DEFAULT_CONFIGS = {
   TEXT_SECTION: {
     title: '',
     content: '用一段文字说明你的服务风格、拍摄流程或报价说明。',
-    alignment: 'LEFT'
+    alignment: 'LEFT',
+    fontFamily: 'SYSTEM',
+    fontSizeRpx: 26
   },
   DIVIDER: {
     color: 'GRAY',
@@ -204,6 +219,18 @@ function buildWork({
   }
 }
 
+function filterMockWorks(works = [], keyword = '', tagId = 0) {
+  const normalizedKeyword = trimText(keyword).toLowerCase()
+  const normalizedTagId = toPositiveId(tagId)
+  return works.filter((work = {}) => {
+    const tags = Array.isArray(work.tags) ? work.tags : []
+    const keywordText = `${trimText(work.title)} ${tags.map((tag) => trimText(tag.name)).join(' ')}`.toLowerCase()
+    const matchesKeyword = !normalizedKeyword || keywordText.includes(normalizedKeyword)
+    const matchesTag = !normalizedTagId || tags.some((tag) => toPositiveId(tag.id) === normalizedTagId)
+    return matchesKeyword && matchesTag
+  })
+}
+
 const MOCK_BOTTOM_TABS = [
   {
     key: 'schedule',
@@ -280,6 +307,13 @@ const MOCK_DASHBOARD = {
   ]
 }
 
+const mockScheduleToday = new Date()
+const mockScheduleLater = new Date(
+  mockScheduleToday.getFullYear(),
+  mockScheduleToday.getMonth(),
+  mockScheduleToday.getDate() + 3
+)
+
 const MOCK_SCHEDULE_DATA = {
   slotDefinitions: [
     {
@@ -303,6 +337,34 @@ const MOCK_SCHEDULE_DATA = {
       enabled: true
     }
   ],
+  schedules: [
+    {
+      id: 101,
+      date: formatDate(mockScheduleToday),
+      scheduleDate: formatDate(mockScheduleToday),
+      slotName: '午宴',
+      timeRangeText: '10:30-14:00',
+      contactText: '婚礼跟拍',
+      color: '#d98200',
+      colorStyle: 'background: #d98200;',
+      status: 'AVAILABLE',
+      statusText: '可约',
+      statusClass: 'schedule-status teal'
+    },
+    {
+      id: 102,
+      date: formatDate(mockScheduleLater),
+      scheduleDate: formatDate(mockScheduleLater),
+      slotName: '晚宴',
+      timeRangeText: '17:30-21:30',
+      contactText: '已预留咨询',
+      color: '#36516e',
+      colorStyle: 'background: #36516e;',
+      status: 'PENDING',
+      statusText: '待确认',
+      statusClass: 'schedule-status amber'
+    }
+  ],
   month: {
     yearMonth: '2026-07',
     days: []
@@ -319,12 +381,19 @@ const MOCK_WORK_LIBRARY = {
   pageSize: 20,
   total: 7,
   hasMore: false,
-  summary: {
-    totalCount: 7,
-    imageCount: 6,
-    videoCount: 1
-  },
   tags: [clone(MOCK_TAG)],
+  filterTags: [
+    {
+      id: null,
+      name: '全部',
+      color: '',
+      count: 7,
+      labelText: '全部 7',
+      filterStyle: '',
+      activeStyle: 'color: #ffffff; background: #212529; border-color: #212529;'
+    },
+    clone(MOCK_TAG)
+  ],
   works: [
     buildWork({
       id: 101,
@@ -434,6 +503,36 @@ const MOCK_PORTFOLIO_LIST = {
         publish: 'toast-login-required',
         delete: 'toast-login-required'
       }
+    }
+  ]
+}
+
+const MOCK_TEAM_PORTFOLIO_LIST = {
+  ownerType: 'TEAM',
+  ownerTitle: '团队作品集',
+  summary: {
+    publishedText: '1 已发布',
+    draftText: '0 草稿'
+  },
+  portfolios: [
+    {
+      portfolioId: 9902,
+      ownerType: 'TEAM',
+      templateType: 'STANDARD',
+      publicationStatus: 'PUBLISHED',
+      statusText: '已发布',
+      statusTone: 'published',
+      title: '城市婚礼影像团队作品集',
+      titleScrollable: false,
+      teamName: '映期影像工作室',
+      currentRole: '摄影师',
+      coverUrl: `${MOCK_ASSET_ROOT}/demo-image-2.jpg`,
+      coverAlt: '城市婚礼影像团队作品集',
+      updatedText: '最近更新 07-08',
+      canPreviewDraft: false,
+      canPublishedPreview: true,
+      canMaintain: false,
+      canShare: true
     }
   ]
 }
@@ -600,7 +699,8 @@ function parseYearMonth(yearMonth) {
   const year = Number(parts[0])
   const month = Number(parts[1])
   if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) {
-    return new Date()
+    const now = new Date()
+    return new Date(now.getFullYear(), now.getMonth(), 1)
   }
   return new Date(year, month - 1, 1)
 }
@@ -610,57 +710,70 @@ function shiftMockYearMonth(yearMonth, offset) {
   return formatYearMonth(new Date(base.getFullYear(), base.getMonth() + offset, 1))
 }
 
+function getMockSchedulesForDate(date) {
+  return MOCK_SCHEDULE_DATA.schedules
+    .filter((schedule) => schedule.scheduleDate === date)
+    .map((schedule) => clone(schedule))
+}
+
+function buildMockSelectedDateMeta(date) {
+  const value = String(date || '')
+  const match = value.match(/^\d{4}-(\d{2})-(\d{2})$/)
+  const lunarText = formatLunarFullText(toLunarDate(value))
+  return {
+    titleText: match ? `${match[1]}月${match[2]}日` : '请选择日期',
+    lunarTitleText: lunarText ? `农历${lunarText}` : ''
+  }
+}
+
 function buildMockCalendarMonth(yearMonth = formatYearMonth(new Date()), selectedDate = formatDate(new Date())) {
   const firstDate = parseYearMonth(yearMonth)
   const year = firstDate.getFullYear()
   const month = firstDate.getMonth()
-  const totalDays = new Date(year, month + 1, 0).getDate()
-  const leadingCount = firstDate.getDay()
-  const days = []
-
-  for (let index = 0; index < leadingCount; index += 1) {
-    days.push({
-      key: `blank-leading-${index}`,
-      date: '',
-      dayNumber: '',
-      muted: true,
-      selected: false,
-      dayClass: 'calendar-day muted'
-    })
-  }
-
-  for (let day = 1; day <= totalDays; day += 1) {
-    const date = formatDate(new Date(year, month, day))
-    const selected = date === selectedDate
-    days.push({
+  const calendarStart = new Date(year, month, 1 - firstDate.getDay())
+  const rawDays = Array.from({ length: CALENDAR_DAY_COUNT }, (_, index) => {
+    const value = new Date(
+      calendarStart.getFullYear(),
+      calendarStart.getMonth(),
+      calendarStart.getDate() + index
+    )
+    const date = formatDate(value)
+    const schedules = getMockSchedulesForDate(date)
+    const statusColors = Array.from(new Set(schedules.map((schedule) => schedule.color).filter(Boolean)))
+    const classes = ['calendar-day']
+    const currentMonth = value.getFullYear() === year && value.getMonth() === month
+    if (!currentMonth) {
+      classes.push('muted')
+    }
+    if (date === selectedDate) {
+      classes.push('selected')
+    }
+    if (schedules.length > 0) {
+      classes.push('filled')
+    }
+    return {
       key: date,
       date,
-      dayNumber: day,
-      muted: false,
-      selected,
-      metaText: '',
-      colors: [],
-      dayClass: selected ? 'calendar-day selected' : 'calendar-day'
-    })
-  }
-
-  const trailingCount = (7 - (days.length % 7)) % 7
-  for (let index = 0; index < trailingCount; index += 1) {
-    const position = days.length
-    days.push({
-      key: `blank-trailing-${position}`,
-      date: '',
-      dayNumber: '',
-      muted: true,
-      selected: false,
-      dayClass: 'calendar-day muted'
-    })
-  }
+      dayNumber: value.getDate(),
+      currentMonth,
+      selected: date === selectedDate,
+      colors: statusColors,
+      statusColors,
+      markerColors: statusColors.map((color) => ({
+        color,
+        style: `background: ${color};`
+      })),
+      metaText: formatLunarDayMeta(toLunarDate(date)),
+      count: schedules.length,
+      countText: schedules.length > 0 ? String(schedules.length) : '',
+      dayClass: classes.join(' ')
+    }
+  })
 
   return {
     yearMonth: formatYearMonth(firstDate),
     title: `${year} 年 ${month + 1} 月`,
-    days
+    days: rawDays
   }
 }
 
@@ -756,7 +869,11 @@ function buildMockTextSectionConfig(componentConfig = {}) {
   const alignment = ['LEFT', 'CENTER', 'RIGHT'].includes(componentConfig.alignment)
     ? componentConfig.alignment
     : MOCK_COMPONENT_DEFAULT_CONFIGS.TEXT_SECTION.alignment
-  return Object.assign({}, MOCK_COMPONENT_DEFAULT_CONFIGS.TEXT_SECTION, componentConfig, {
+  const typography = buildPortfolioTextTypography(
+    componentConfig,
+    MOCK_COMPONENT_DEFAULT_CONFIGS.TEXT_SECTION.fontSizeRpx
+  )
+  return Object.assign({}, MOCK_COMPONENT_DEFAULT_CONFIGS.TEXT_SECTION, componentConfig, typography, {
     title: trimText(componentConfig.title),
     content: trimText(componentConfig.content) || MOCK_COMPONENT_DEFAULT_CONFIGS.TEXT_SECTION.content,
     alignment,
@@ -1323,14 +1440,18 @@ module.exports = {
   MOCK_SCHEDULE_DATA,
   MOCK_WORK_LIBRARY,
   MOCK_PORTFOLIO_LIST,
+  MOCK_TEAM_PORTFOLIO_LIST,
   MOCK_STANDARD_PORTFOLIO,
   MOCK_COMPONENT_OPTIONS,
   COMPONENT_TYPES,
   clone,
+  filterMockWorks,
   getMockTabs,
   showMockLoginRequiredToast,
   navigateMockTab,
   buildMockCalendarMonth,
+  buildMockSelectedDateMeta,
+  getMockSchedulesForDate,
   shiftMockYearMonth,
   buildMockPortfolioRenderData,
   buildStandardPortfolio,

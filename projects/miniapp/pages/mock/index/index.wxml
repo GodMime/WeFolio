@@ -22,7 +22,7 @@
             <view class="balance-label">当前积分余额</view>
             <view class="balance-value">{{dashboard.point.balance}}</view>
           </view>
-          <button class="light-button">充值</button>
+          <button class="light-button" bindtap="handleLockedAction">充值</button>
         </view>
         <view class="balance-bottom">
           <text>今日已消耗 {{dashboard.point.todayConsumed}}</text>
@@ -51,7 +51,15 @@
           <view class="panel-meta">体验</view>
         </view>
         <view class="entry-list">
-          <view wx:for="{{dashboard.entries}}" wx:key="type" class="entry-row">
+          <view
+            wx:for="{{dashboard.entries}}"
+            wx:key="type"
+            class="entry-row"
+            data-type="{{item.type}}"
+            bindtap="handleEntryTap"
+            aria-role="button"
+            aria-label="{{item.title}}"
+          >
             <image class="entry-icon" src="{{item.iconUrl}}" mode="aspectFit"></image>
             <view class="entry-copy">
               <view class="entry-title">{{item.title}}</view>
