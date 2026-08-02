@@ -589,7 +589,7 @@ test('contact leads WXML renders team and portfolio sources without masking', ()
   assert.doesNotMatch(wxml, /\*{3}|脱敏|mask/i)
 })
 
-test('operation-level unavailable errors toast without redirecting for save, publish, preview query, follow update, visitor query, and visitor contact', async () => {
+test('operation-level unavailable errors toast without redirecting while preview query stays local', async () => {
   const unavailable = async () => { throw new Error('团队作品集功能暂未开放') }
   const redirects = []
   const toasts = []
@@ -609,7 +609,11 @@ test('operation-level unavailable errors toast without redirecting for save, pub
   preview.setData({ portfolioId: 8, scope: 'draft' })
   const previewRejections = []
   preview.selectComponent = () => ({ rejectQuery(value) { previewRejections.push(value) } })
-  try { await preview.handleScheduleQuery({ detail: { componentKey: 'schedule-1', queriedDate: '2026-08-01', idempotencyKey: 'query-1' } }); assert.deepEqual(toasts.shift(), { title: '团队作品集功能暂未开放', icon: 'none' }); assert.equal(previewRejections.length, 1) } finally { preview.cleanup() }
+  try {
+    await preview.handleScheduleQuery({ detail: { componentKey: 'schedule-1', queriedDate: '2026-08-01', idempotencyKey: 'query-1' } })
+    assert.deepEqual(toasts.shift(), { title: '预览模式不提交档期查询', icon: 'none' })
+    assert.deepEqual(previewRejections, [{ detail: { message: '预览模式不提交档期查询', clearPendingIdempotencyKey: true } }])
+  } finally { preview.cleanup() }
 
   const leads = loadPage('contact-leads/team-contact-leads.js', unavailable, wxOverrides)
   leads.setData({ teamId: 7, canUpdateFollow: true, followEditor: { leadId: 1, followStatus: 'CONTACTED', followNote: '' }, items: [{ leadId: 1 }] })

@@ -170,17 +170,80 @@ test('mock portfolio editor filters local works and exposes typography controls'
 
 test('mock portfolio preview keeps production stable states and local modal entry points', () => {
   const wxml = read('pages/mock/portfolio-standard-preview/portfolio-standard-preview.wxml')
-  const js = read('pages/mock/portfolio-standard-preview/portfolio-standard-preview.js')
+  const json = JSON.parse(read('pages/mock/portfolio-standard-preview/portfolio-standard-preview.json'))
+  const rendererWxml = read('components/mock/portfolio-renderer/portfolio-renderer.wxml')
 
   assert.match(wxml, /wx:if="\{\{loading\}\}"/)
   assert.match(wxml, /class="preview-skeleton"/)
   assert.match(wxml, /wx:elif="\{\{errorMessage\}\}"/)
   assert.match(wxml, /class="preview-error"/)
   assert.match(wxml, /class="portfolio-menu-transition-content \{\{portfolioMenuTransitionClass\}\}"/)
-  assert.match(wxml, /class="mock-schedule-query-modal/)
-  assert.match(wxml, /class="mock-contact-form-modal/)
-  assert.match(js, /scheduleQueryModalVisible:/)
-  assert.match(js, /contactFormModalVisible:/)
+  assert.equal(
+    json.usingComponents['mock-portfolio-schedule-query'],
+    '/components/mock/portfolio-schedule-query/portfolio-schedule-query'
+  )
+  assert.equal(
+    json.usingComponents['mock-portfolio-contact-form'],
+    '/components/mock/portfolio-contact-form/portfolio-contact-form'
+  )
+  assert.match(wxml, /<mock-portfolio-schedule-query[\s\S]*schedule-query="\{\{item\.scheduleQuery\}\}"/)
+  assert.match(wxml, /<mock-portfolio-contact-form[\s\S]*contact-component="\{\{item\}\}"/)
+  assert.doesNotMatch(wxml, /mock-schedule-query-modal|mock-contact-form-modal/)
+  assert.doesNotMatch(rendererWxml, /component\.componentType === 'SCHEDULE_QUERY'|component\.componentType === 'CONTACT_FORM'/)
+})
+
+test('mock inquiry components mirror formal entries and dark theme tokens independently', () => {
+  const formalScheduleWxss = read('components/portfolio-schedule-query/portfolio-schedule-query.wxss')
+  const formalContactWxss = read('components/portfolio-contact-form/portfolio-contact-form.wxss')
+  const mockScheduleWxss = read('components/mock/portfolio-schedule-query/portfolio-schedule-query.wxss')
+  const mockContactWxss = read('components/mock/portfolio-contact-form/portfolio-contact-form.wxss')
+  const mockScheduleWxml = read('components/mock/portfolio-schedule-query/portfolio-schedule-query.wxml')
+  const mockContactWxml = read('components/mock/portfolio-contact-form/portfolio-contact-form.wxml')
+  const calendarSelectors = [
+    '.schedule-query-weekdays',
+    '.schedule-query-weekdays > view',
+    '.schedule-query-days',
+    '.schedule-calendar-day',
+    '.schedule-calendar-day.muted',
+    '.schedule-calendar-day.filled',
+    '.schedule-calendar-day.selected',
+    '.schedule-query-day-number',
+    '.schedule-query-day-stack',
+    '.schedule-calendar-day.selected .schedule-query-day-stack',
+    '.schedule-query-day-meta',
+    '.schedule-calendar-day.muted .schedule-query-day-meta',
+    '.schedule-calendar-day.selected .schedule-query-day-meta',
+    '.schedule-query-day-dots',
+    '.schedule-query-day-dot'
+  ]
+
+  assert.equal(
+    normalizeRule(readRule(mockScheduleWxss, '.schedule-query-open-button')),
+    normalizeRule(readRule(formalScheduleWxss, '.schedule-query-open-button'))
+  )
+  assert.equal(
+    normalizeRule(readRule(mockContactWxss, '.contact-form-entry-button')),
+    normalizeRule(readRule(formalContactWxss, '.contact-form-entry-button'))
+  )
+  for (const selector of calendarSelectors) {
+    assert.equal(
+      normalizeRule(readRule(mockScheduleWxss, selector)),
+      normalizeRule(readRule(formalScheduleWxss, selector)),
+      `${selector} should stay visually identical to the formal schedule query component`
+    )
+  }
+  assert.match(readRule(mockScheduleWxss, '.schedule-calendar-day'), /border:\s*0/)
+  assert.match(readRule(mockScheduleWxss, '.schedule-calendar-day'), /background:\s*transparent/)
+  assert.match(
+    readRule(mockScheduleWxss, '.schedule-query.portfolio-theme-dark .schedule-query-open-button'),
+    /color:\s*var\(--portfolio-text-primary\);[\s\S]*background:\s*var\(--portfolio-surface-muted\);/
+  )
+  assert.match(
+    readRule(mockContactWxss, '.portfolio-contact-form.portfolio-theme-dark .contact-form-entry-button'),
+    /color:\s*var\(--portfolio-text-primary\);[\s\S]*background:\s*var\(--portfolio-surface-muted\);/
+  )
+  assert.match(mockScheduleWxml, /参考正式组件：components\/portfolio-schedule-query/)
+  assert.match(mockContactWxml, /参考正式组件：components\/portfolio-contact-form/)
 })
 
 test('mock mine entries expose the same visible action semantics as formal entries', () => {

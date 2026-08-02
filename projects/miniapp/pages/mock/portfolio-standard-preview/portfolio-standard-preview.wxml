@@ -45,6 +45,27 @@
         ></portfolio-carousel>
       </block>
 
+      <mock-portfolio-schedule-query
+        wx:elif="{{item.componentType === 'SCHEDULE_QUERY'}}"
+        schedule-query="{{item.scheduleQuery}}"
+        calendar-month="{{mockScheduleMonth}}"
+        slot-definitions="{{mockSlotDefinitions}}"
+        theme-mode="{{portfolio.themeMode}}"
+        bindmonthchange="handleMockScheduleMonthChange"
+        bindlockedaction="handleSubmitContact"
+      ></mock-portfolio-schedule-query>
+
+      <mock-portfolio-contact-form
+        wx:elif="{{item.componentType === 'CONTACT_FORM'}}"
+        contact-component="{{item}}"
+        contact-form="{{contactForm}}"
+        submit-text="预览提交"
+        theme-mode="{{portfolio.themeMode}}"
+        bindcontactinput="handleContactInput"
+        bindsubmitcontact="handleSubmitContact"
+        bindopenmodal="handleOpenContactFormModal"
+      ></mock-portfolio-contact-form>
+
       <mock-portfolio-renderer
         wx:else
         component="{{item}}"
@@ -55,9 +76,6 @@
         bindsingleworktap="handleSingleWorkTap"
         bindsingleworkvideoerror="handleSingleWorkVideoError"
         bindpreviewqr="handlePreviewQr"
-        bindschedulequery="handleOpenScheduleQuery"
-        bindcontactform="handleOpenContactForm"
-        bindlockedaction="handleSubmitContact"
       ></mock-portfolio-renderer>
     </view>
 
@@ -96,42 +114,15 @@
     </view>
   </root-portal>
 
-  <root-portal wx:if="{{scheduleQueryModalVisible}}">
-    <view class="mock-modal-mask" catchtap="handleCloseScheduleQuery">
-      <view class="mock-schedule-query-modal mock-modal-panel" catchtap="noop">
-        <view class="mock-modal-heading">
-          <view class="mock-modal-title">查询我的可约档期</view>
-          <button class="mock-modal-close" catchtap="handleCloseScheduleQuery" aria-label="关闭档期查询">×</button>
-        </view>
-        <view class="mock-modal-desc">以下为体验版示例档期，仅用于了解访客看到的查询流程。</view>
-        <view class="mock-schedule-list">
-          <view wx:for="{{mockSchedules}}" wx:key="id" class="mock-schedule-row">
-            <view class="mock-schedule-color" style="{{item.colorStyle}}"></view>
-            <view class="mock-schedule-copy">
-              <view class="mock-schedule-date">{{item.date}} · {{item.slotName}}</view>
-              <view class="mock-schedule-time">{{item.timeRangeText}} · {{item.statusText}}</view>
-            </view>
-          </view>
-        </view>
-        <button class="mock-modal-primary" catchtap="handleCloseScheduleQuery">我知道了</button>
-      </view>
-    </view>
-  </root-portal>
-
-  <root-portal wx:if="{{contactFormModalVisible}}">
-    <view class="mock-modal-mask" catchtap="handleCloseContactForm">
-      <view class="mock-contact-form-modal mock-modal-panel" catchtap="noop">
-        <view class="mock-modal-heading">
-          <view class="mock-modal-title">预留联系信息</view>
-          <button class="mock-modal-close" catchtap="handleCloseContactForm" aria-label="关闭联系表单">×</button>
-        </view>
-        <view class="mock-modal-desc">可体验填写；提交时会引导注册登录，不会发送数据。</view>
-        <input class="mock-contact-input" data-field="contactName" value="{{contactForm.contactName}}" bindinput="handleContactInput" placeholder="怎么称呼您" />
-        <input class="mock-contact-input" data-field="phone" value="{{contactForm.phone}}" bindinput="handleContactInput" placeholder="手机号" type="number" />
-        <input class="mock-contact-input" data-field="wechat" value="{{contactForm.wechat}}" bindinput="handleContactInput" placeholder="微信号" />
-        <textarea class="mock-contact-textarea" data-field="needs" value="{{contactForm.needs}}" bindinput="handleContactInput" placeholder="请简单描述您的需求"></textarea>
-        <button class="mock-modal-primary" catchtap="handleSubmitContact">提交联系信息</button>
-      </view>
-    </view>
-  </root-portal>
+  <mock-portfolio-contact-form
+    view-mode="modal"
+    modal-visible="{{contactFormModalVisible}}"
+    contact-component="{{activeContactFormComponent}}"
+    contact-form="{{contactForm}}"
+    submit-text="预览提交"
+    theme-mode="{{portfolio.themeMode}}"
+    bindcontactinput="handleContactInput"
+    bindsubmitcontact="handleSubmitContact"
+    bindclosemodal="handleCloseContactFormModal"
+  ></mock-portfolio-contact-form>
 </view>

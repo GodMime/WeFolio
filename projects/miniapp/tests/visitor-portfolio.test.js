@@ -2351,7 +2351,7 @@ test('portfolio schedule query component hides visitor month schedule marks befo
   assert.deepEqual(component.data.selectedDaySchedules, [])
 })
 
-test('portfolio schedule query component keeps preview month schedule marks', async () => {
+test('portfolio schedule query component hides preview month schedule marks like visitor page', async () => {
   const component = loadScheduleQueryComponent(() => Promise.resolve({
     yearMonth: '2026-07',
     slotDefinitions: [
@@ -2384,10 +2384,11 @@ test('portfolio schedule query component keeps preview month schedule marks', as
   component.handleDayTap({ currentTarget: { dataset: { date: '2026-07-18' } } })
 
   const day = component.data.options.days[0]
-  assert.equal(day.dayClass, 'schedule-calendar-day filled')
-  assert.deepEqual(day.colors, ['#2d5f9a'])
-  assert.equal(day.count, 1)
-  assert.equal(component.data.selectedDaySchedules[0].statusText, '已约')
+  assert.equal(day.dayClass, 'schedule-calendar-day')
+  assert.deepEqual(day.colors, [])
+  assert.equal(day.count, 0)
+  assert.deepEqual(component.data.options.schedules, [])
+  assert.deepEqual(component.data.selectedDaySchedules, [])
 })
 
 test('portfolio schedule query component ignores month switching while loading', async () => {
@@ -2477,7 +2478,7 @@ test('portfolio schedule query component creates a fresh idempotency key for eac
   assert.notEqual(requests[1].data.idempotencyKey, requests[0].data.idempotencyKey)
 })
 
-test('portfolio schedule query component uses preview endpoints and scope', async () => {
+test('portfolio schedule query component loads preview options without submitting a real query', async () => {
   const requests = []
   const component = loadScheduleQueryComponent((options) => {
     requests.push(options)
@@ -2514,22 +2515,18 @@ test('portfolio schedule query component uses preview endpoints and scope', asyn
     selectedDate: '2026-07-18',
     selectedSlotDefinitionId: 12
   })
-  await component.handleSubmitQuery()
+  const submitResult = await component.handleSubmitQuery()
 
+  assert.equal(requests.length, 1)
   assert.equal(requests[0].url, '/api/mine/portfolios/88/schedule-options')
   assert.equal(requests[0].authMode, undefined)
   assert.deepEqual(requests[0].data, { month: '2026-07', componentKey: 'c_schedule', scope: 'published' })
-  assert.equal(requests[1].url, '/api/mine/portfolios/88/schedule-query-preview?scope=published')
-  assert.equal(requests[1].authMode, undefined)
-  assert.equal(requests[1].method, 'POST')
-  assert.equal(requests[1].data.componentKey, 'c_schedule')
-  assert.equal(requests[1].data.queriedDate, '2026-07-18')
-  assert.equal(requests[1].data.slotDefinitionId, 12)
-  assert.equal(Object.hasOwn(requests[1].data, 'visitorKey'), false)
-  assert.equal(component.data.result.available, false)
+  assert.equal(submitResult, false)
+  assert.equal(component.data.submitting, false)
+  assert.equal(component.data.result, null)
 })
 
-test('portfolio schedule query component uses nested team member preview endpoints', async () => {
+test('team member portfolio preview loads options without submitting a real query', async () => {
   const requests = []
   const component = loadScheduleQueryComponent((options) => {
     requests.push(options)
@@ -2562,8 +2559,9 @@ test('portfolio schedule query component uses nested team member preview endpoin
 
   await component.loadScheduleOptions('2026-07')
   component.setData({ selectedDate: '2026-07-18', selectedSlotDefinitionId: 12 })
-  await component.handleSubmitQuery()
+  const submitResult = await component.handleSubmitQuery()
 
+  assert.equal(requests.length, 1)
   assert.equal(requests[0].url, '/api/mine/team-portfolios/13/member-portfolios/88/schedule-options')
   assert.deepEqual(requests[0].data, {
     month: '2026-07',
@@ -2571,8 +2569,7 @@ test('portfolio schedule query component uses nested team member preview endpoin
     scope: 'draft'
   })
   assert.equal(requests[0].authMode, undefined)
-  assert.equal(requests[1].url, '/api/mine/team-portfolios/13/member-portfolios/88/schedule-query-preview?scope=draft')
-  assert.equal(requests[1].method, 'POST')
-  assert.equal(requests[1].authMode, undefined)
-  assert.equal(Object.hasOwn(requests[1].data, 'visitorKey'), false)
+  assert.equal(submitResult, false)
+  assert.equal(component.data.submitting, false)
+  assert.equal(component.data.result, null)
 })

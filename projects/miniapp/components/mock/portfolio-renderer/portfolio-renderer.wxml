@@ -150,14 +150,6 @@
   </view>
 </block>
 
-<block wx:elif="{{component.componentType === 'SCHEDULE_QUERY'}}">
-  <view class="simple-section">
-    <view class="component-title">{{component.scheduleQuery.title || '档期查询'}}</view>
-    <view wx:if="{{component.scheduleQuery.description}}" class="section-desc">{{component.scheduleQuery.description}}</view>
-    <button class="primary-button" bindtap="handleScheduleQuery">档期查询</button>
-  </view>
-</block>
-
 <block wx:elif="{{component.componentType === 'QR_CONTACT'}}">
   <view class="qr-section">
     <image
@@ -167,12 +159,6 @@
       mode="aspectFit"
       bindtap="handlePreviewQr"
     ></image>
-  </view>
-</block>
-
-<block wx:elif="{{component.componentType === 'CONTACT_FORM'}}">
-  <view class="contact-entry-section">
-    <button class="primary-button contact-entry-button" bindtap="handleContactForm">{{component.contactForm.title || '预留联系信息'}}</button>
   </view>
 </block>
 

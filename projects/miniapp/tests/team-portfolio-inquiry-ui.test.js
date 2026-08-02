@@ -81,15 +81,18 @@ test('team schedule query renders the personal-style month calendar grid', () =>
   assert.match(wxml, /wx:key="key"/)
   assert.match(wxml, /catchtap="handleDayTap"/)
   assert.match(wxml, /class="\{\{item\.dayClass\}\} \{\{selectedDate === item\.date \? 'selected' : ''\}\}"/)
+  assert.match(wxml, /class="schedule-query-day-stack"[\s\S]*class="schedule-query-day-number"/)
   assert.match(wxml, /disabled="\{\{!selectedDate \|\| loading\}\}"/)
   assert.doesNotMatch(wxml, /<picker mode="date" value="\{\{selectedDate\}\}"/)
 
   assert.match(wxss, /\.schedule-query-weekdays\s*\{/)
   assert.match(wxss, /\.schedule-query-days\s*\{/)
-  assert.match(wxss, /\.schedule-calendar-day\s*\{[^}]*width:\s*calc\(14\.285714% - 8rpx\);/s)
+  assert.match(wxss, /\.schedule-calendar-day\s*\{[^}]*width:\s*calc\(14\.285714% - 8rpx\);[^}]*min-height:\s*88rpx;[^}]*padding:\s*8rpx 4rpx;[^}]*border:\s*0;[^}]*background:\s*transparent;/s)
   assert.match(wxss, /\.schedule-calendar-day\.muted\s*\{/)
   assert.match(wxss, /\.schedule-calendar-day\.disabled\s*\{/)
-  assert.match(wxss, /\.schedule-calendar-day\.selected\s*\{/)
+  assert.match(wxss, /\.schedule-calendar-day\.selected\s*\{[^}]*background:\s*transparent;/s)
+  assert.match(wxss, /\.schedule-calendar-day\.selected \.schedule-query-day-stack\s*\{[^}]*width:\s*72rpx;[^}]*height:\s*72rpx;[^}]*border-radius:\s*50%;[^}]*background:\s*#212529;/s)
+  assert.match(wxss, /\.schedule-query-day-number\s*\{[^}]*font-size:\s*30rpx;[^}]*font-weight:\s*600;/s)
 })
 
 test('team contact form uses the personal portfolio entry and bottom sheet interaction', () => {

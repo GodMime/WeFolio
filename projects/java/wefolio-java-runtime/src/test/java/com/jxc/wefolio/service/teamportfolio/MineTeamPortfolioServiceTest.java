@@ -853,7 +853,7 @@ class MineTeamPortfolioServiceTest {
     }
 
     @Test
-    void schedulePreviewDelegatesToScheduleQueryComponentService() {
+    void schedulePreviewAllowsJoinedMemberAndDelegatesToScheduleQueryComponentService() {
         TestContext context = context(true);
         PortfolioEntity portfolio = portfolio(TEAM_ID);
         portfolio.setDraftRevision(4);
@@ -865,8 +865,10 @@ class MineTeamPortfolioServiceTest {
         component.setConfig(new JSONObject());
         scheduleConfig.setComponents(List.of(component));
         portfolio.setDraftConfigJson(JSON.toJSONString(scheduleConfig));
-        when(context.access.requireMaintainablePortfolio(PORTFOLIO_ID, USER_ID))
-                .thenReturn(access(portfolio, TeamRoleDict.OWNER.getCode()));
+        TeamPortfolioAccessService.TeamPortfolioAccess memberAccess =
+                access(portfolio, TeamRoleDict.MEMBER.getCode());
+        when(context.access.requireVisiblePortfolio(PORTFOLIO_ID, USER_ID)).thenReturn(memberAccess);
+        when(context.access.requireMaintainablePortfolio(PORTFOLIO_ID, USER_ID)).thenReturn(memberAccess);
         TeamPortfolioScheduleQueryResponse expected = mock(TeamPortfolioScheduleQueryResponse.class);
         JSONObject options = JSON.parseObject("{\"queryRange\":{\"type\":\"UNLIMITED\"}}");
         when(context.scheduleService.previewOptions(any(), any(TeamPortfolioConfigDto.class), eq("schedule-1")))
@@ -884,6 +886,8 @@ class MineTeamPortfolioServiceTest {
 
         assertThat(actualOptions).isSameAs(options);
         assertThat(actual).isSameAs(expected);
+        verify(context.access, times(2)).requireVisiblePortfolio(PORTFOLIO_ID, USER_ID);
+        verify(context.access, never()).requireMaintainablePortfolio(PORTFOLIO_ID, USER_ID);
         verify(context.scheduleService).previewOptions(
                 eq(new TeamPortfolioComponentContext(TEAM_ID, PORTFOLIO_ID, 4)),
                 any(TeamPortfolioConfigDto.class), eq("schedule-1"));
@@ -960,17 +964,19 @@ class MineTeamPortfolioServiceTest {
                         org.springframework.beans.factory.annotation.Autowired.class) != null);
     }
 
-    /** 草稿维护预览必须补齐上下文且保留渲染器结果。 */
+    /** 普通成员草稿预览必须补齐上下文且保留渲染器结果。 */
     @Test
-    void draftPreviewFillsMaintenanceRenderContextWithoutChangingRenderedContent() {
+    void draftPreviewAllowsJoinedMemberAndFillsRenderContextWithoutChangingRenderedContent() {
         TestContext context = context(true);
         PortfolioEntity portfolio = portfolio(TEAM_ID);
         portfolio.setDraftRevision(3);
         TeamEntity team = team(TEAM_ID, "映期团队");
         TeamPortfolioRenderDto render = renderData();
-        when(context.access.requireMaintainablePortfolio(PORTFOLIO_ID, USER_ID))
-                .thenReturn(new TeamPortfolioAccessService.TeamPortfolioAccess(
-                        portfolio, team, membership(TEAM_ID, TeamRoleDict.OWNER.getCode()), true, true));
+        TeamPortfolioAccessService.TeamPortfolioAccess memberAccess =
+                new TeamPortfolioAccessService.TeamPortfolioAccess(
+                        portfolio, team, membership(TEAM_ID, TeamRoleDict.MEMBER.getCode()), false, true);
+        when(context.access.requireVisiblePortfolio(PORTFOLIO_ID, USER_ID)).thenReturn(memberAccess);
+        when(context.access.requireMaintainablePortfolio(PORTFOLIO_ID, USER_ID)).thenReturn(memberAccess);
         when(context.renderService.render(
                 portfolio.getDraftConfigJson(),
                 new TeamPortfolioComponentContext(TEAM_ID, PORTFOLIO_ID, 3)))
@@ -979,6 +985,8 @@ class MineTeamPortfolioServiceTest {
         var response = context.service.preview(PORTFOLIO_ID, USER_ID);
 
         assertMaintenancePreviewRender(render, response.getRenderData(), portfolio, team);
+        verify(context.access).requireVisiblePortfolio(PORTFOLIO_ID, USER_ID);
+        verify(context.access, never()).requireMaintainablePortfolio(PORTFOLIO_ID, USER_ID);
     }
 
     /** 已发布维护预览必须补齐上下文且保留渲染器结果。 */

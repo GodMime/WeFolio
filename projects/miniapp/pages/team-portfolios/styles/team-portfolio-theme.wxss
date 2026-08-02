@@ -65,11 +65,16 @@
 }
 
 .theme-dark .schedule-query-inline-shell .schedule-query-calendar,
-.theme-dark .schedule-query-inline-shell .schedule-calendar-day,
 .theme-dark .schedule-query-inline-shell .schedule-query-month-button {
   color: var(--team-portfolio-text-primary);
   background: #222222;
   border-color: var(--team-portfolio-border);
+}
+
+.theme-dark .schedule-query-inline-shell .schedule-calendar-day {
+  color: var(--team-portfolio-text-primary);
+  background: transparent;
+  border-color: transparent;
 }
 
 .theme-dark .schedule-query-weekdays,
@@ -80,13 +85,21 @@
 .theme-dark .schedule-calendar-day.muted,
 .theme-dark .schedule-calendar-day.disabled {
   color: #6c757d;
-  background: #24272b;
-  border-color: var(--team-portfolio-border);
+  background: transparent;
+  border-color: transparent;
 }
 
-.theme-dark .schedule-calendar-day.selected,
 .theme-dark .primary-button,
 .theme-dark .schedule-query-submit {
+  color: #212529;
+  background: #ffffff;
+}
+
+.theme-dark .schedule-calendar-day.selected {
+  background: transparent;
+}
+
+.theme-dark .schedule-calendar-day.selected .schedule-query-day-stack {
   color: #212529;
   background: #ffffff;
 }
@@ -147,22 +160,30 @@
 
 .theme-dark .schedule-query-modal-panel .schedule-calendar-day {
   color: #212529;
-  background: #ffffff;
-  border-color: #e9ecef;
+  background: transparent;
+  border-color: transparent;
 }
 
 .theme-dark .schedule-query-modal-panel .schedule-calendar-day.muted {
   color: #9aa5b1;
-  background: #f5f7f9;
+  background: transparent;
 }
 
 .theme-dark .schedule-query-modal-panel .schedule-calendar-day.disabled {
   color: #c1c8d0;
-  background: #f3f5f7;
+  background: transparent;
 }
 
-.theme-dark .schedule-query-modal-panel .schedule-calendar-day.selected,
 .theme-dark .schedule-query-modal-panel .schedule-query-submit {
+  color: #ffffff;
+  background: #212529;
+}
+
+.theme-dark .schedule-query-modal-panel .schedule-calendar-day.selected {
+  background: transparent;
+}
+
+.theme-dark .schedule-query-modal-panel .schedule-calendar-day.selected .schedule-query-day-stack {
   color: #ffffff;
   background: #212529;
 }

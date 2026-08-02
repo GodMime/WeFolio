@@ -1,4 +1,5 @@
-@import "../../styles/portfolio-theme.wxss";
+/* 视觉规则参考正式组件 components/portfolio-schedule-query/portfolio-schedule-query.wxss；本文件为独立 Mock 副本。 */
+@import "../../../styles/portfolio-theme.wxss";
 
 .schedule-query {
   padding: 8rpx 34rpx;

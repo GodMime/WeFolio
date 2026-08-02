@@ -109,7 +109,7 @@ function normalizeTeamPortfolioItem(item = {}) {
     title: defaultString(item.title || item.teamName, '未命名团队作品集'),
     teamName: defaultString(item.teamName, '团队'),
     canShare,
-    canPreviewDraft: !isPublished && item.canMaintain === true,
+    canPreviewDraft: !isPublished,
     canPublishedPreview: canShare,
     canDelete: item.canMaintain === true
   })

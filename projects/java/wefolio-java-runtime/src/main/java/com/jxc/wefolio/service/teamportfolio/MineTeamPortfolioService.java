@@ -584,11 +584,11 @@ public class MineTeamPortfolioService {
     }
 
     /**
-     * 预览团队作品集草稿，仅维护角色可用。
+     * 预览团队作品集草稿，已加入成员均可用。
      */
     public TeamPortfolioDetailResponse preview(long portfolioId, long userId) {
         TeamPortfolioAccessService.TeamPortfolioAccess access =
-                accessService.requireMaintainablePortfolio(portfolioId, userId);
+                accessService.requireVisiblePortfolio(portfolioId, userId);
         PortfolioEntity portfolio = access.portfolio();
         TeamPortfolioConfigDto config = parseConfig(portfolio.getDraftConfigJson());
         TeamPortfolioDetailResponse response = buildDetail(portfolio, config);
@@ -627,7 +627,7 @@ public class MineTeamPortfolioService {
             long userId
     ) {
         TeamPortfolioAccessService.TeamPortfolioAccess access =
-                accessService.requireMaintainablePortfolio(portfolioId, userId);
+                accessService.requireVisiblePortfolio(portfolioId, userId);
         PortfolioEntity portfolio = access.portfolio();
         TeamPortfolioConfigDto config = resolvePreviewConfig(portfolio, scope);
         int revision = PREVIEW_SCOPE_PUBLISHED.equals(normalizeScope(scope))
@@ -648,7 +648,7 @@ public class MineTeamPortfolioService {
             long userId
     ) {
         TeamPortfolioAccessService.TeamPortfolioAccess access =
-                accessService.requireMaintainablePortfolio(portfolioId, userId);
+                accessService.requireVisiblePortfolio(portfolioId, userId);
         PortfolioEntity portfolio = access.portfolio();
         TeamPortfolioConfigDto config = resolvePreviewConfig(portfolio, scope);
         int revision = PREVIEW_SCOPE_PUBLISHED.equals(normalizeScope(scope))

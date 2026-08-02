@@ -230,6 +230,67 @@ test('team cards choose draft or published preview from publication status', asy
   }
 })
 
+test('ordinary team members preview drafts and published versions without maintenance access', async () => {
+  const navigations = []
+  const page = loadPortfolioListPage(async (options) => {
+    if (options.url.endsWith('/maintainable-teams')) {
+      return []
+    }
+    return [
+      {
+        portfolioId: 33,
+        teamId: 7,
+        currentRole: 'MEMBER',
+        publicationStatus: 'DRAFT_ONLY',
+        canMaintain: false,
+        canShare: false
+      },
+      {
+        portfolioId: 34,
+        teamId: 7,
+        currentRole: 'MEMBER',
+        publicationStatus: 'PUBLISHED',
+        canMaintain: false,
+        canShare: true,
+        shareCode: 'TEAM-MEMBER-SHARE'
+      }
+    ]
+  }, {
+    navigateTo(options) {
+      navigations.push(options)
+    }
+  })
+
+  try {
+    await page.bootstrapTeam()
+    const [draft, published] = page.data.teamDisplayPortfolios
+
+    assert.equal(draft.canPreviewDraft, true)
+    assert.equal(draft.canPublishedPreview, false)
+    assert.equal(draft.canDelete, false)
+    assert.equal(published.canPreviewDraft, false)
+    assert.equal(published.canPublishedPreview, true)
+    assert.equal(published.canShare, true)
+    assert.equal(published.canDelete, false)
+
+    page.handleTeamPortfolioCardTap({ currentTarget: { dataset: { item: draft } } })
+    page.handleTeamPreviewTap({ currentTarget: { dataset: { item: draft, scope: 'draft' } } })
+    page.handleTeamPreviewTap({ currentTarget: { dataset: { item: published, scope: 'published' } } })
+    assert.deepEqual(navigations.map((item) => item.url), [
+      '/pages/team-portfolios/standard-preview/team-portfolio-standard-preview?portfolioId=33&scope=draft',
+      '/pages/team-portfolios/standard-preview/team-portfolio-standard-preview?portfolioId=34&scope=published'
+    ])
+
+    page.handleShareTap({
+      currentTarget: { dataset: { ownerType: 'TEAM', id: published.portfolioId } }
+    })
+    assert.equal(page.data.shareSheetVisible, true)
+    assert.deepEqual(page.data.shareTarget, { ownerType: 'TEAM', portfolioId: 34 })
+  } finally {
+    page.cleanup()
+  }
+})
+
 test('creating a standard team portfolio opens an unsaved team editor', async () => {
   const requests = []
   const navigations = []

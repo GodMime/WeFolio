@@ -22,7 +22,11 @@ const MOCK_PAGE_SOURCE_FILES = MOCK_PAGE_PATHS.flatMap((pagePath) => [
 ]).concat([
   'pages/mock/utils/mock-experience.js',
   'components/mock/portfolio-renderer/portfolio-renderer.js',
-  'components/mock/portfolio-renderer/portfolio-renderer.wxml'
+  'components/mock/portfolio-renderer/portfolio-renderer.wxml',
+  'components/mock/portfolio-schedule-query/portfolio-schedule-query.js',
+  'components/mock/portfolio-schedule-query/portfolio-schedule-query.wxml',
+  'components/mock/portfolio-contact-form/portfolio-contact-form.js',
+  'components/mock/portfolio-contact-form/portfolio-contact-form.wxml'
 ])
 const MOCK_STYLE_FILES = [
   'pages/mock/common.wxss',
@@ -31,7 +35,9 @@ const MOCK_STYLE_FILES = [
   'pages/mock/styles/works.wxss',
   'pages/mock/styles/portfolios.wxss',
   'pages/mock/styles/portfolio-standard-edit.wxss',
-  'pages/mock/styles/portfolio-standard-preview.wxss'
+  'pages/mock/styles/portfolio-standard-preview.wxss',
+  'components/mock/portfolio-schedule-query/portfolio-schedule-query.wxss',
+  'components/mock/portfolio-contact-form/portfolio-contact-form.wxss'
 ]
 const MOCK_WXML_FILES = MOCK_PAGE_PATHS.map((pagePath) => `${pagePath}.wxml`)
 const FORBIDDEN_MOCK_SOURCE_PATTERNS = [
@@ -113,6 +119,44 @@ function loadMockPage(relativePath, wxMock) {
       }
     }
   })
+}
+
+function loadMockComponent(relativePath) {
+  assertExists(relativePath)
+  const modulePath = path.join(ROOT, relativePath)
+  const previousComponent = global.Component
+  let definition
+  delete require.cache[require.resolve(modulePath)]
+  try {
+    global.Component = (componentDefinition) => {
+      definition = componentDefinition
+    }
+    require(modulePath)
+  } finally {
+    if (previousComponent === undefined) {
+      delete global.Component
+    } else {
+      global.Component = previousComponent
+    }
+  }
+  return definition
+}
+
+function createMockComponentHarness(definition, data = {}) {
+  const events = []
+  const instance = {
+    data: Object.assign({}, definition.data || {}, data),
+    setData(patch) {
+      Object.assign(this.data, patch)
+    },
+    triggerEvent(name, detail) {
+      events.push({ name, detail })
+    }
+  }
+  Object.entries(definition.methods || {}).forEach(([name, method]) => {
+    instance[name] = method.bind(instance)
+  })
+  return { instance, events }
 }
 
 test('app registers mock experience pages in the mock subpackage', () => {
@@ -778,12 +822,72 @@ test('mock personal portfolio preview uses its own isolated renderer without edi
   assert.match(previewWxml, /<mock-portfolio-renderer[\s\S]*component="\{\{item\}\}"[\s\S]*bindworktap="handleWorkTap"/)
   assert.match(rendererWxml, /class="profile-avatar"[\s\S]*src="\{\{component\.profile\.avatarUrl\}\}"/)
   assert.match(rendererWxml, /class="work-grid"[\s\S]*wx:for="\{\{component\.activeGroup\.works\}\}"/)
-  assert.match(rendererWxml, /class="[^"]*contact-entry-button[^"]*"[\s\S]*component\.contactForm\.title/)
+  assert.doesNotMatch(rendererWxml, /component\.componentType === 'SCHEDULE_QUERY'/)
+  assert.doesNotMatch(rendererWxml, /component\.componentType === 'CONTACT_FORM'/)
   assert.doesNotMatch(rendererWxml, />个人资料</)
   assert.doesNotMatch(rendererWxml, />双列作品列表</)
   assert.match(rendererWxss, /\.profile-avatar\s*\{[\s\S]*width:\s*132rpx;[\s\S]*height:\s*132rpx;[\s\S]*border-radius:\s*50%;/)
   assert.match(rendererWxss, /\.grid-card\s*\{[\s\S]*width:\s*50%;/)
-  assert.match(rendererWxss, /\.contact-entry-button\s*\{[\s\S]*border-radius:\s*999rpx;/)
+})
+
+test('mock schedule query component keeps all interaction local before locking submit', () => {
+  const mock = loadMockExperience()
+  const definition = loadMockComponent(
+    'components/mock/portfolio-schedule-query/portfolio-schedule-query.js'
+  )
+  const { instance, events } = createMockComponentHarness(definition, {
+    calendarMonth: mock.buildMockCalendarMonth('2026-08', ''),
+    slotDefinitions: mock.MOCK_SCHEDULE_DATA.slotDefinitions,
+    selectedDate: '',
+    selectedSlotDefinitionId: null
+  })
+
+  instance.handleOpenCalendar()
+  instance.handleDayTap({ currentTarget: { dataset: { date: '2026-08-02' } } })
+  instance.handleSlotTap({ currentTarget: { dataset: { id: 1 } } })
+  instance.handleSubmitQuery()
+
+  assert.equal(instance.data.visible, true)
+  assert.equal(instance.data.selectedDate, '2026-08-02')
+  assert.equal(instance.data.selectedSlotDefinitionId, 1)
+  assert.deepEqual(events, [{ name: 'lockedaction', detail: undefined }])
+})
+
+test('mock portfolio preview hides month schedule marks like visitor page', () => {
+  const mock = loadMockExperience()
+  const page = loadMockPage(
+    'pages/mock/portfolio-standard-preview/portfolio-standard-preview.js',
+    { getStorageSync() { return null } }
+  )
+  const scheduledDate = mock.MOCK_SCHEDULE_DATA.schedules[0].scheduleDate
+  const scheduledDay = page.data.mockScheduleMonth.days.find((day) => day.date === scheduledDate)
+
+  assert.ok(scheduledDay)
+  assert.deepEqual(scheduledDay.colors, [])
+  assert.equal(scheduledDay.count, 0)
+  assert.doesNotMatch(scheduledDay.dayClass, /\bfilled\b/)
+})
+
+test('mock contact form component emits local form and modal events', () => {
+  const definition = loadMockComponent(
+    'components/mock/portfolio-contact-form/portfolio-contact-form.js'
+  )
+  const { instance, events } = createMockComponentHarness(definition)
+
+  instance.handleInput({
+    currentTarget: { dataset: { field: 'contactName' } },
+    detail: { value: '小映' }
+  })
+  instance.handleOpenModal({
+    currentTarget: { dataset: { componentKey: 'mock_contact_form' } }
+  })
+  instance.handleSubmit()
+
+  assert.deepEqual(events, [
+    { name: 'contactinput', detail: { field: 'contactName', value: '小映' } },
+    { name: 'openmodal', detail: { componentKey: 'mock_contact_form' } },
+    { name: 'submitcontact', detail: undefined }
+  ])
 })
 
 test('mock preview handles display component events locally without network calls', () => {
@@ -936,10 +1040,12 @@ test('mock page markup exposes required registration prompts and navigation acti
   assert.match(editJs, /saveMockPortfolioDraft/)
   assert.match(previewWxml, /<portfolio-carousel/)
   assert.match(previewWxml, /<mock-portfolio-renderer/)
+  assert.match(previewWxml, /<mock-portfolio-schedule-query/)
+  assert.match(previewWxml, /<mock-portfolio-contact-form/)
   assert.match(rendererWxml, /component\.componentType === 'PROFILE'/)
   assert.match(rendererWxml, /component\.componentType === 'WORK_GRID'/)
-  assert.match(rendererWxml, /档期查询/)
-  assert.match(rendererWxml, /component\.componentType === 'CONTACT_FORM'/)
+  assert.doesNotMatch(rendererWxml, /档期查询/)
+  assert.doesNotMatch(rendererWxml, /component\.componentType === 'CONTACT_FORM'/)
 })
 
 test('mock preview video overlay renders in root portal like production preview', () => {

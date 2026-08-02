@@ -1014,54 +1014,44 @@ test('visitor modal contact opens, completes child submission, and schedule succ
   } finally { page.cleanup() }
 })
 
-test('team preview ignores a schedule response that arrives after leaving its menu', async () => {
-  let resolveRequest
-  const requestPending = new Promise((resolve) => { resolveRequest = resolve })
-  const resolved = []
+test('team preview rejects schedule query locally without a request', async () => {
+  const requests = []
+  const rejected = []
+  const toasts = []
   const page = loadPage(
     'standard-preview/team-portfolio-standard-preview.js',
-    async () => requestPending
+    async (options) => {
+      requests.push(options)
+      return { status: 'TEAM_AVAILABLE' }
+    },
+    { showToast(value) { toasts.push(value) } }
   )
-  page.setData = function setData(patch, callback) {
-    Object.assign(this.data, patch)
-    if (callback) callback()
-  }
   page.selectComponent = () => ({
-    resolveQuery(value) { resolved.push(value) }
+    rejectQuery(value) { rejected.push(value) }
   })
   page.setData({
     portfolioId: 7,
-    scheduleResults: {},
-    portfolio: {
-      activeMenuKey: 'nav_home',
-      activeComponents: [{
-        componentKey: 'schedule-1',
-        componentType: 'SCHEDULE_QUERY'
-      }],
-      bottomNav: {
-        enabled: true,
-        items: [
-          { key: 'nav_home', title: '主页' },
-          { key: 'nav_second', title: '菜单 2', components: [] }
-        ]
-      }
-    }
+    scheduleResults: {}
   })
   try {
-    const query = page.handleScheduleQuery({
+    const result = await page.handleScheduleQuery({
       detail: {
         componentKey: 'schedule-1',
         queriedDate: '2026-08-01',
         idempotencyKey: 'query-1'
       }
     })
-    page.handleMenuTap({ detail: { menuKey: 'nav_second' } })
-    resolveRequest({ status: 'TEAM_AVAILABLE' })
-    await query
+    assert.equal(result, false)
+    assert.deepEqual(requests, [])
     assert.deepEqual(page.data.scheduleResults, {})
-    assert.deepEqual(resolved, [])
+    assert.deepEqual(rejected, [{
+      detail: {
+        message: '预览模式不提交档期查询',
+        clearPendingIdempotencyKey: true
+      }
+    }])
+    assert.deepEqual(toasts, [{ title: '预览模式不提交档期查询', icon: 'none' }])
   } finally {
-    page.onUnload()
     page.cleanup()
   }
 })

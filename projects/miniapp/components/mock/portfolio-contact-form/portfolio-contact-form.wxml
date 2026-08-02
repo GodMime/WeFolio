@@ -1,0 +1,36 @@
+<!-- 参考正式组件：components/portfolio-contact-form/portfolio-contact-form.wxml；本组件仅维护本地 Mock 表单。 -->
+<view wx:if="{{viewMode !== modalMode}}" class="portfolio-contact-form portfolio-theme-{{themeMode}}">
+  <view wx:if="{{contactComponent.contactForm.displayMode === inlineMode}}" class="form-section">
+    <view class="component-title">{{contactComponent.contactForm.title || defaultTitle}}</view>
+    <view wx:if="{{contactComponent.contactForm.description}}" class="section-desc">{{contactComponent.contactForm.description}}</view>
+    <input class="field" placeholder="联系人" value="{{contactForm.contactName}}" data-field="contactName" bindinput="handleInput" />
+    <input class="field" placeholder="手机号" value="{{contactForm.phone}}" data-field="phone" bindinput="handleInput" />
+    <input class="field" placeholder="微信号" value="{{contactForm.wechat}}" data-field="wechat" bindinput="handleInput" />
+    <picker mode="date" value="{{contactForm.desiredSchedule}}" data-field="desiredSchedule" bindchange="handleDateChange">
+      <view class="field date-field {{contactForm.desiredSchedule ? '' : 'placeholder'}}">{{contactForm.desiredSchedule || '请选择档期（选填）'}}</view>
+    </picker>
+    <textarea class="field textarea" placeholder="需求描述" value="{{contactForm.needs}}" data-field="needs" bindinput="handleInput"></textarea>
+    <button class="primary-button" bindtap="handleSubmit">{{submitText}}</button>
+  </view>
+  <view wx:else class="form-entry-section">
+    <button class="primary-button contact-form-entry-button" data-component-key="{{contactComponent.componentKey}}" bindtap="handleOpenModal">{{contactComponent.contactForm.title || defaultTitle}}</button>
+  </view>
+</view>
+
+<view wx:else class="contact-form-mask portfolio-theme-{{themeMode}} {{modalVisible ? 'visible' : ''}}" catchtap="handleCloseModal">
+  <view class="contact-form-panel" catchtap="noop">
+    <view class="contact-form-heading">
+      <view class="component-title">{{contactComponent.contactForm.title || defaultTitle}}</view>
+      <view class="contact-form-close" catchtap="handleCloseModal" aria-role="button" aria-label="关闭联系表单">×</view>
+    </view>
+    <view wx:if="{{contactComponent.contactForm.description}}" class="section-desc">{{contactComponent.contactForm.description}}</view>
+    <input class="field" placeholder="联系人" value="{{contactForm.contactName}}" data-field="contactName" bindinput="handleInput" />
+    <input class="field" placeholder="手机号" value="{{contactForm.phone}}" data-field="phone" bindinput="handleInput" />
+    <input class="field" placeholder="微信号" value="{{contactForm.wechat}}" data-field="wechat" bindinput="handleInput" />
+    <picker mode="date" value="{{contactForm.desiredSchedule}}" data-field="desiredSchedule" bindchange="handleDateChange">
+      <view class="field date-field {{contactForm.desiredSchedule ? '' : 'placeholder'}}">{{contactForm.desiredSchedule || '请选择档期（选填）'}}</view>
+    </picker>
+    <textarea class="field textarea" placeholder="需求描述" value="{{contactForm.needs}}" data-field="needs" bindinput="handleInput"></textarea>
+    <button class="primary-button" bindtap="handleSubmit">{{submitText}}</button>
+  </view>
+</view>
