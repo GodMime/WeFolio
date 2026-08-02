@@ -714,6 +714,26 @@ test('mock singular work persists through local draft and preview without networ
   assert.equal(networkCalls, 0)
 })
 
+test('mock editor migrates stored drafts without style before building page state', () => {
+  const mock = loadMockExperience()
+  const storedDraft = mock.clone(mock.MOCK_STANDARD_PORTFOLIO)
+  delete storedDraft.config.style
+  const wxMock = {
+    getStorageSync(key) {
+      assert.equal(key, mock.MOCK_PORTFOLIO_DRAFT_STORAGE_KEY)
+      return storedDraft
+    }
+  }
+
+  const editor = loadMockPage(
+    'pages/mock/portfolio-standard-edit/portfolio-standard-edit.js',
+    wxMock
+  )
+
+  assert.equal(editor.data.draft.config.style.backgroundColor, '#FFFFFF')
+  assert.equal(editor.data.customBackgroundColor, '#FFFFFF')
+})
+
 test('mock singular work editor and preview expose title switch, width-fix image, and inline video', () => {
   const editWxml = read('pages/mock/portfolio-standard-edit/portfolio-standard-edit.wxml')
   const previewWxml = read('pages/mock/portfolio-standard-preview/portfolio-standard-preview.wxml')

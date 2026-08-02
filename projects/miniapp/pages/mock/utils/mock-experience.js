@@ -1363,9 +1363,7 @@ function getMockPortfolioDraft() {
   try {
     const storedDraft = runtimeWx.getStorageSync(MOCK_PORTFOLIO_DRAFT_STORAGE_KEY)
     if (storedDraft && storedDraft.config && Array.isArray(storedDraft.config.components)) {
-      return Object.assign({}, clone(storedDraft), {
-        renderData: buildMockPortfolioRenderData(storedDraft.config)
-      })
+      return refreshMockDraftRenderData(storedDraft)
     }
   } catch (error) {
     return clone(MOCK_STANDARD_PORTFOLIO)

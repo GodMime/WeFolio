@@ -98,6 +98,38 @@ test('mock schedule renders local dated schedules and calendar color marks', () 
   assert.match(wxml, /class="day-colors"/)
 })
 
+test('mock schedule keeps the formal borderless calendar cell geometry', () => {
+  const formalWxss = read('pages/schedule/schedule.wxss')
+  const mockWxss = read('pages/mock/styles/schedule.wxss')
+  const selectors = [
+    '.calendar',
+    '.weekday',
+    '.calendar-day',
+    '.calendar-day.muted',
+    '.calendar-day.selected',
+    '.date-stack',
+    '.calendar-day.selected .date-stack',
+    '.day-number',
+    '.day-meta',
+    '.calendar-day.muted .day-meta',
+    '.calendar-day.selected .day-meta',
+    '.day-colors',
+    '.day-color'
+  ]
+
+  for (const selector of selectors) {
+    assert.equal(
+      normalizeRule(readRule(mockWxss, selector)),
+      normalizeRule(readRule(formalWxss, selector)),
+      `${selector} should stay visually identical to the formal schedule page`
+    )
+  }
+
+  const calendarDayRule = readRule(mockWxss, '.calendar-day')
+  assert.match(calendarDayRule, /min-height:\s*88rpx/)
+  assert.match(calendarDayRule, /border:\s*0/)
+})
+
 test('mock slot definitions use the same single toggle action as the formal page', () => {
   const wxml = read('pages/mock/schedule/schedule.wxml')
 
