@@ -52,4 +52,17 @@ class StandardPersonalPortfolioMigrationTest {
         assertThat(sql).contains("ADD UNIQUE KEY `uk_portfolio_reference_scope`");
         assertThat(sql).contains("`portfolio_id`, `config_scope`, `component_path`, `reference_type`, `reference_id`, `deleted`");
     }
+
+    @Test
+    void hyperlinkMigrationShouldAddLinkedPortfolioWithoutRemovingExistingReferenceTypes() throws IOException {
+        String sql = Files.readString(Path.of(
+                "src/main/resources/db/migration/V48__support_personal_portfolio_hyperlink.sql"));
+
+        assertThat(sql).contains("DROP CHECK `chk_reference_type`");
+        assertThat(sql).contains("'LINKED_PORTFOLIO'");
+        assertThat(sql).contains(
+                "'WORK'", "'MEMBER_PORTFOLIO'", "'USER_PROFILE'",
+                "'TEAM_PROFILE'", "'SCHEDULE_COMPONENT'", "'QR_CODE_ASSET'"
+        );
+    }
 }

@@ -24,6 +24,7 @@ import com.jxc.wefolio.dto.MinePortfolioPublishRequest;
 import com.jxc.wefolio.dto.MinePortfolioShareRecordRequest;
 import com.jxc.wefolio.dto.PortfolioComponentLibraryResponse;
 import com.jxc.wefolio.dto.PortfolioConfigDto;
+import com.jxc.wefolio.dto.PortfolioHyperlinkTargetResponse;
 import com.jxc.wefolio.dto.PortfolioScheduleOptionsResponse;
 import com.jxc.wefolio.dto.PortfolioScheduleQueryRequest;
 import com.jxc.wefolio.dto.PortfolioScheduleQueryResponse;
@@ -236,6 +237,9 @@ public class MinePortfolioService {
     /** 配置校验器 */
     private final PortfolioConfigValidator portfolioConfigValidator;
 
+    /** 个人作品集超链接引用图服务 */
+    private final PortfolioHyperlinkGraphService portfolioHyperlinkGraphService;
+
     /** 作品集渲染服务 */
     private final PortfolioRenderService portfolioRenderService;
 
@@ -282,22 +286,30 @@ public class MinePortfolioService {
     /**
      * 获取组件库说明。
      *
+     * @param editorSchemaRevision 客户端编辑器能力版本
      * @return 组件库响应
      */
-    public PortfolioComponentLibraryResponse getComponentLibrary() {
+    public PortfolioComponentLibraryResponse getComponentLibrary(Integer editorSchemaRevision) {
         PortfolioComponentLibraryResponse response = new PortfolioComponentLibraryResponse();
-        response.setComponents(List.of(
+        List<PortfolioComponentLibraryResponse.ComponentItem> components = new ArrayList<>(List.of(
                 componentLibraryItem(PortfolioComponentTypeDict.PROFILE, "展示个人资料和服务标签"),
                 componentLibraryItem(PortfolioComponentTypeDict.CAROUSEL, "首页轮播展示代表作品"),
                 componentLibraryItem(PortfolioComponentTypeDict.TEXT_SECTION, "展示服务说明和补充文字"),
                 componentLibraryItem(PortfolioComponentTypeDict.DIVIDER, "在内容之间加入可调高度的分割线"),
                 componentLibraryItem(PortfolioComponentTypeDict.WORK_GRID, "双列展示图片和视频作品"),
                 componentLibraryItem(PortfolioComponentTypeDict.WORK_LIST, "单列展示重点图片和视频作品"),
-                componentLibraryItem(PortfolioComponentTypeDict.SINGLE_WORK, "突出展示一个图片、视频或动图作品"),
+                componentLibraryItem(PortfolioComponentTypeDict.SINGLE_WORK, "突出展示一个图片、视频或动图作品")
+        ));
+        if (editorSchemaRevision != null
+                && editorSchemaRevision >= PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT) {
+            components.add(componentLibraryItem(PortfolioComponentTypeDict.HYPERLINK, "通过展示作品跳转作品集或复制分享内容"));
+        }
+        components.addAll(List.of(
                 componentLibraryItem(PortfolioComponentTypeDict.SCHEDULE_QUERY, "允许访客查询公开档期"),
                 componentLibraryItem(PortfolioComponentTypeDict.CONTACT_FORM, "收集访客预留联系信息"),
                 componentLibraryItem(PortfolioComponentTypeDict.QR_CONTACT, "展示微信二维码联系方式")
         ));
+        response.setComponents(components);
         return response;
     }
 
@@ -391,13 +403,17 @@ public class MinePortfolioService {
     @Transactional(rollbackFor = Exception.class)
     public MinePortfolioDetailResponse saveDraft(Long portfolioId, MinePortfolioDraftSaveRequest request) {
         Long userId = AuthContextHolder.requireUserId();
-        PortfolioEntity portfolio = requireOwnedStandardPersonal(portfolioId);
         if (request == null || request.getConfig() == null) {
             throw new BusinessException(PortfolioMessage.DRAFT_CONFIG_REQUIRED_MESSAGE);
         }
         if (isNewEditorConfig(request.getConfig()) && request.getClientRevision() == null) {
             throw new BusinessException(PortfolioMessage.DRAFT_CLIENT_REVISION_REQUIRED_MESSAGE);
         }
+        // 先保留既有的归属与模板错误语义，事务内图锁仍负责重新确认当前有效状态。
+        requireOwnedStandardPersonal(portfolioId);
+        PortfolioHyperlinkGraphService.LockedGraph graph =
+                portfolioHyperlinkGraphService.lockUserGraph(userId, portfolioId);
+        PortfolioEntity portfolio = graph.source();
         if (request.getClientRevision() != null && !request.getClientRevision().equals(safeInt(portfolio.getDraftRevision()))) {
             throw new BusinessException(PortfolioMessage.DRAFT_REVISION_CHANGED_SAVE_MESSAGE);
         }
@@ -407,6 +423,18 @@ public class MinePortfolioService {
                 userId,
                 request.getConfig(),
                 oldDraftConfig
+        );
+        List<PortfolioReferenceEntity> draftReferences = portfolioConfigValidator.buildReferences(
+                portfolio.getId(),
+                userId,
+                PortfolioConfigScopeDict.DRAFT.getCode(),
+                normalized
+        );
+        portfolioHyperlinkGraphService.validateReferences(
+                graph,
+                PortfolioConfigScopeDict.DRAFT.getCode(),
+                draftReferences,
+                normalized
         );
         List<String> deletedObjectKeys = resolveUnreferencedAssetObjectKeys(
                 userId,
@@ -438,8 +466,7 @@ public class MinePortfolioService {
         if (updated != 1) {
             throw new BusinessException(PortfolioMessage.PORTFOLIO_CONCURRENT_UPDATE_MESSAGE);
         }
-        rebuildReferences(portfolio.getId(), PortfolioConfigScopeDict.DRAFT.getCode(),
-                portfolioConfigValidator.buildReferences(portfolio.getId(), userId, PortfolioConfigScopeDict.DRAFT.getCode(), normalized));
+        rebuildReferences(portfolio.getId(), PortfolioConfigScopeDict.DRAFT.getCode(), draftReferences);
         insertHistory(portfolio, nextHistoryRevision, normalized, hash, userId, now, HISTORY_ACTION_DRAFT_SAVE);
         deleteUnreferencedAssetsAfterCommit(portfolio.getId(), deletedObjectKeys);
         return buildDetail(portfolio, normalized);
@@ -601,13 +628,27 @@ public class MinePortfolioService {
             MinePortfolioPublishRequest request,
             Long userId
     ) {
-        PortfolioEntity portfolio = requireOwnedStandardPersonal(portfolioId);
+        PortfolioHyperlinkGraphService.LockedGraph graph =
+                portfolioHyperlinkGraphService.lockUserGraph(userId, portfolioId);
+        PortfolioEntity portfolio = graph.source();
         String idempotencyKey = validatePublishRequest(portfolio, request);
         String draftConfigJson = portfolio.getDraftConfigJson();
         PortfolioConfigDto currentDraftConfig = parseConfig(draftConfigJson);
         PortfolioConfigDto oldPublishedConfig = parseConfig(portfolio.getPublishedConfigJson());
         PortfolioConfigDto normalized = portfolioConfigValidator.normalizeForDraft(userId, currentDraftConfig, null);
         portfolioConfigValidator.validateForPublish(userId, normalized);
+        List<PortfolioReferenceEntity> publishedReferences = portfolioConfigValidator.buildReferences(
+                portfolio.getId(),
+                userId,
+                PortfolioConfigScopeDict.PUBLISHED.getCode(),
+                normalized
+        );
+        portfolioHyperlinkGraphService.validateReferences(
+                graph,
+                PortfolioConfigScopeDict.PUBLISHED.getCode(),
+                publishedReferences,
+                normalized
+        );
         List<String> deletedObjectKeys = resolveUnreferencedAssetObjectKeys(
                 userId,
                 portfolio.getId(),
@@ -635,8 +676,7 @@ public class MinePortfolioService {
         if (updated != 1) {
             throw new BusinessException(PortfolioMessage.PORTFOLIO_CONCURRENT_UPDATE_MESSAGE);
         }
-        rebuildReferences(portfolio.getId(), PortfolioConfigScopeDict.PUBLISHED.getCode(),
-                portfolioConfigValidator.buildReferences(portfolio.getId(), userId, PortfolioConfigScopeDict.PUBLISHED.getCode(), normalized));
+        rebuildReferences(portfolio.getId(), PortfolioConfigScopeDict.PUBLISHED.getCode(), publishedReferences);
         insertHistory(portfolio, nextHistoryRevision, normalized, hash, userId, now, HISTORY_ACTION_PUBLISH);
         pointService.consume(
                 userId,
@@ -711,8 +751,13 @@ public class MinePortfolioService {
     @Transactional(rollbackFor = Exception.class)
     public void deletePortfolio(Long portfolioId) {
         Long userId = AuthContextHolder.requireUserId();
-        PortfolioEntity portfolio = requireOwnedStandardPersonal(portfolioId);
+        // 非标准模板沿用维护能力不可用提示，避免图锁过滤后降级为“作品集不存在”。
+        requireOwnedStandardPersonal(portfolioId);
+        PortfolioHyperlinkGraphService.LockedGraph graph =
+                portfolioHyperlinkGraphService.lockUserGraph(userId, portfolioId);
+        PortfolioEntity portfolio = graph.source();
         teamPortfolioReferenceGuardService.assertPersonalPortfolioNotReferenced(portfolio.getId());
+        portfolioHyperlinkGraphService.assertNoIncomingLinks(graph, portfolio.getId());
         List<String> deletedObjectKeys = resolveDeletedPortfolioAssetObjectKeys(userId, portfolio);
         portfolioReferenceEntityMapper.delete(
                 Wrappers.lambdaQuery(PortfolioReferenceEntity.class)
@@ -733,6 +778,25 @@ public class MinePortfolioService {
             throw new BusinessException(PortfolioMessage.PORTFOLIO_DELETE_FAILED_MESSAGE);
         }
         deletePortfolioAssetsAfterCommit(portfolio.getId(), deletedObjectKeys);
+    }
+
+    /**
+     * 查询超链接内部跳转目标。
+     *
+     * @param sourcePortfolioId 可选来源作品集 ID
+     * @param selectedTargetPortfolioId 可选当前目标 ID
+     * @return 内部目标列表
+     */
+    public PortfolioHyperlinkTargetResponse listHyperlinkTargets(
+            Long sourcePortfolioId,
+            Long selectedTargetPortfolioId
+    ) {
+        Long userId = AuthContextHolder.requireUserId();
+        return portfolioHyperlinkGraphService.listTargets(
+                userId,
+                sourcePortfolioId,
+                selectedTargetPortfolioId
+        );
     }
 
     /**

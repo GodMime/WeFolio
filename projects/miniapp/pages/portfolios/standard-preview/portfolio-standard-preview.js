@@ -10,6 +10,7 @@ const {
   readPortfolioRenderEventData
 } = require('../utils/portfolio-render-events')
 const { clearDisplaySwitchingTimer, markDisplaySwitching } = require('../utils/display-switching')
+const { createClipboardPromptController } = require('../../../utils/portfolio-hyperlink')
 const {
   clearPortfolioMenuTransitionTimers,
   startPortfolioMenuTransition
@@ -47,7 +48,9 @@ Page({
     displaySwitchingComponentKey: '',
     portfolioMenuSwitching: false,
     portfolioMenuTransitionClass: '',
-    portfolioScrollTop: 0
+    portfolioScrollTop: 0,
+    clipboardPromptVisible: false,
+    clipboardPromptText: ''
   },
 
   onLoad(options = {}) {
@@ -117,6 +120,52 @@ Page({
     wx.previewImage({ current: url, urls: [url] })
   },
 
+  ensureClipboardPromptController() {
+    if (!this.clipboardPromptController) {
+      this.clipboardPromptController = createClipboardPromptController({
+        onChange: (state) => {
+          this.setData({
+            clipboardPromptVisible: state.visible,
+            clipboardPromptText: state.text
+          })
+        }
+      })
+    }
+    return this.clipboardPromptController
+  },
+
+  handleHyperlinkTap(event) {
+    const hyperlink = readPortfolioRenderEventData(event)
+    if (hyperlink.actionType === 'INTERNAL_PORTFOLIO') {
+      const targetPortfolioId = Number(hyperlink.targetPortfolioId)
+      if (!hyperlink.targetAvailable || !Number.isInteger(targetPortfolioId) || targetPortfolioId <= 0) {
+        wx.showToast({ title: '内容暂不可见', icon: 'none' })
+        return Promise.resolve(false)
+      }
+      wx.navigateTo({
+        url: `/pages/portfolios/standard-preview/portfolio-standard-preview?portfolioId=${targetPortfolioId}&scope=published`
+      })
+      return Promise.resolve(true)
+    }
+    if (hyperlink.actionType !== 'EXTERNAL_LINK' || typeof hyperlink.externalContent !== 'string' || !hyperlink.externalContent) {
+      wx.showToast({ title: '内容暂不可见', icon: 'none' })
+      return Promise.resolve(false)
+    }
+    return new Promise((resolve) => {
+      wx.setClipboardData({
+        data: hyperlink.externalContent,
+        success: () => {
+          this.ensureClipboardPromptController().copied(hyperlink.promptText)
+          resolve(true)
+        },
+        fail: () => {
+          wx.showToast({ title: '复制失败，请重试', icon: 'none' })
+          resolve(false)
+        }
+      })
+    })
+  },
+
   handleDisplayTagTap(event) {
     const data = readPortfolioRenderEventData(event)
     const componentKey = data.componentKey
@@ -153,10 +202,23 @@ Page({
     clearPortfolioMenuTransitionTimers(this)
     clearDisplaySwitchingTimer(this)
     this.stopActiveSingleWorkVideo()
+    if (this.clipboardPromptController) {
+      this.clipboardPromptController.dispose()
+      this.clipboardPromptController = null
+    }
   },
 
   onHide() {
     this.stopActiveSingleWorkVideo()
+    if (this.clipboardPromptController) {
+      this.clipboardPromptController.pause()
+    }
+  },
+
+  onShow() {
+    if (this.clipboardPromptController) {
+      this.clipboardPromptController.resume()
+    }
   },
 
   handleContactInput(event) {

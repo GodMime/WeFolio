@@ -17,7 +17,7 @@ public class PortfolioReferenceEntity extends BaseEntity {
     /** 配置作用域：DRAFT 草稿 / PUBLISHED 正式 */
     private String configScope;
 
-    /** 引用类型：WORK / MEMBER_PORTFOLIO / USER_PROFILE / TEAM_PROFILE / SCHEDULE_COMPONENT / QR_CODE_ASSET */
+    /** 引用类型：WORK / MEMBER_PORTFOLIO / LINKED_PORTFOLIO / USER_PROFILE / TEAM_PROFILE / SCHEDULE_COMPONENT / QR_CODE_ASSET */
     private String referenceType;
 
     /** 被引用业务记录 ID，档期组件等虚拟引用可取所有者 ID */

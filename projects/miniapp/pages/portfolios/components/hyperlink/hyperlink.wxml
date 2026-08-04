@@ -1,0 +1,46 @@
+<view class="hyperlink-section portfolio-theme-{{themeMode}}">
+  <view
+    wx:if="{{hyperlink && hyperlink.displayWork}}"
+    class="hyperlink-tap-area"
+    bindtap="handleHyperlinkTap"
+    aria-role="button"
+    aria-label="{{hyperlink.actionType === 'INTERNAL_PORTFOLIO' ? '打开作品集：' + (hyperlink.targetTitle || '目标作品集') : '复制链接或分享内容'}}"
+  >
+    <view class="hyperlink-media-wrap">
+      <image
+        wx:if="{{hyperlink.displayWork.isAnimation && !animationLoadFailed}}"
+        class="hyperlink-media"
+        src="{{hyperlink.displayWork.previewUrl}}"
+        mode="widthFix"
+        webp="{{true}}"
+        binderror="handleAnimationLoadError"
+      ></image>
+      <image
+        wx:else
+        class="hyperlink-media"
+        src="{{hyperlink.displayWork.isAnimation ? hyperlink.displayWork.thumbnailUrl : hyperlink.displayWork.previewUrl}}"
+        mode="widthFix"
+      ></image>
+      <view
+        wx:if="{{hyperlink.showClickIcon && !iconLoadFailed && clickIconInside}}"
+        class="hyperlink-click-icon overlay {{clickIconClass}}"
+      >
+        <image
+          class="hyperlink-click-icon-image"
+          src="{{clickIconUrl}}"
+          mode="aspectFit"
+          binderror="handleIconLoadError"
+        ></image>
+      </view>
+    </view>
+    <view wx:if="{{hyperlink.showClickIcon && !iconLoadFailed && !clickIconInside}}" class="hyperlink-click-icon-row">
+      <image
+        class="hyperlink-click-icon below"
+        src="{{clickIconUrl}}"
+        mode="aspectFit"
+        binderror="handleIconLoadError"
+      ></image>
+    </view>
+  </view>
+  <view wx:elif="{{repairMode}}" class="hyperlink-repair">超链接展示作品不可用，请重新选择</view>
+</view>

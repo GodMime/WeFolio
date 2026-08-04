@@ -12,6 +12,7 @@
     "portfolio-single-work": "/pages/portfolios/components/single-work/single-work",
     "portfolio-qr-contact": "/pages/portfolios/components/qr-contact/qr-contact",
     "portfolio-text-section": "/pages/portfolios/components/text-section/text-section",
-    "portfolio-divider": "/pages/portfolios/components/divider/divider"
+    "portfolio-divider": "/pages/portfolios/components/divider/divider",
+    "portfolio-hyperlink": "/pages/portfolios/components/hyperlink/hyperlink"
   }
 }

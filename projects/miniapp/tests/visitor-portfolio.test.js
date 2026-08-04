@@ -530,6 +530,208 @@ test('visitor render skips unavailable singular work while preview keeps repair 
   assert.deepEqual(preview.components.map((item) => item.componentKey), ['c_missing', 'c_text'])
 })
 
+test('normalizes hyperlink render data without trimming copied content or requiring target share code', () => {
+  const content = ' 9#小程序://小红书/乱码\n😀 '
+  const portfolio = normalizeVisitorPortfolio({
+    renderData: {
+      preview: false,
+      components: [
+        {
+          componentKey: 'c_external',
+          componentType: 'HYPERLINK',
+          sortOrder: 1000,
+          hyperlink: {
+            displayWork: { workId: 11, mediaType: 'ANIMATION', mediaUrl: 'link.gif', coverUrl: 'cover.jpg' },
+            actionType: 'EXTERNAL_LINK',
+            externalContent: content,
+            promptText: '请打开小红书粘贴',
+            showClickIcon: true,
+            iconPosition: 'BELOW'
+          }
+        },
+        {
+          componentKey: 'c_invalid_target',
+          componentType: 'HYPERLINK',
+          sortOrder: 2000,
+          hyperlink: {
+            displayWork: { workId: 12, mediaType: 'IMAGE', mediaUrl: 'image.jpg' },
+            actionType: 'INTERNAL_PORTFOLIO',
+            targetPortfolioId: 99,
+            targetAvailable: false
+          }
+        }
+      ]
+    }
+  })
+
+  assert.equal(portfolio.components[0].hyperlink.externalContent, content)
+  assert.equal(portfolio.components[0].hyperlink.displayWork.isAnimation, true)
+  assert.equal(portfolio.components[0].hyperlink.iconPosition, 'BELOW')
+  assert.equal(portfolio.components[1].hyperlink.targetAvailable, false)
+  assert.equal(portfolio.components[1].hyperlink.targetTitle, '')
+  assert.equal(portfolio.components[1].hyperlink.targetShareCode, '')
+})
+
+test('normalizes every new hyperlink click-icon position and defaults unknown values', () => {
+  const portfolio = normalizeVisitorPortfolio({
+    renderData: {
+      preview: false,
+      components: [
+        {
+          componentKey: 'c_bottom_center',
+          componentType: 'HYPERLINK',
+          sortOrder: 1000,
+          hyperlink: {
+            displayWork: { workId: 11, mediaType: 'IMAGE', mediaUrl: 'bottom-center.jpg' },
+            actionType: 'EXTERNAL_LINK',
+            externalContent: '底部居中',
+            promptText: '已复制',
+            showClickIcon: true,
+            iconPosition: 'OVERLAY_BOTTOM_CENTER'
+          }
+        },
+        {
+          componentKey: 'c_center',
+          componentType: 'HYPERLINK',
+          sortOrder: 2000,
+          hyperlink: {
+            displayWork: { workId: 12, mediaType: 'IMAGE', mediaUrl: 'center.jpg' },
+            actionType: 'EXTERNAL_LINK',
+            externalContent: '正中',
+            promptText: '已复制',
+            showClickIcon: true,
+            iconPosition: 'OVERLAY_CENTER'
+          }
+        },
+        {
+          componentKey: 'c_unknown',
+          componentType: 'HYPERLINK',
+          sortOrder: 3000,
+          hyperlink: {
+            displayWork: { workId: 13, mediaType: 'IMAGE', mediaUrl: 'unknown.jpg' },
+            actionType: 'EXTERNAL_LINK',
+            externalContent: '未知位置',
+            promptText: '已复制',
+            showClickIcon: true,
+            iconPosition: 'UNKNOWN'
+          }
+        }
+      ]
+    }
+  })
+
+  assert.deepEqual(
+    portfolio.components.map((item) => item.hyperlink.iconPosition),
+    ['OVERLAY_BOTTOM_CENTER', 'OVERLAY_CENTER', 'OVERLAY']
+  )
+})
+
+test('visitor hyperlink navigates to an available internal portfolio and copies external content verbatim', async () => {
+  const navigations = []
+  const clipboardValues = []
+  const toasts = []
+  const page = loadVisitorPage(() => Promise.resolve({}))
+  const previousWx = global.wx
+  global.wx = {
+    navigateTo(options) {
+      navigations.push(options)
+    },
+    setClipboardData(options) {
+      clipboardValues.push(options.data)
+      options.success()
+    },
+    showToast(options) {
+      toasts.push(options)
+    }
+  }
+  try {
+    page.handleHyperlinkTap({
+      detail: {
+        actionType: 'INTERNAL_PORTFOLIO',
+        targetPortfolioId: 99,
+        targetAvailable: true,
+        targetShareCode: 'PF target/1'
+      }
+    })
+    await page.handleHyperlinkTap({
+      detail: {
+        actionType: 'EXTERNAL_LINK',
+        externalContent: ' 复制打开抖音\n8@x😀 ',
+        promptText: '请打开抖音粘贴'
+      }
+    })
+    await page.handleHyperlinkTap({
+      detail: {
+        actionType: 'EXTERNAL_LINK',
+        externalContent: ''
+      }
+    })
+
+    assert.deepEqual(navigations, [{
+      url: '/pages/portfolios/visitor-portfolio/visitor-portfolio?shareCode=PF%20target%2F1&sourceType=PERSONAL_PORTFOLIO'
+    }])
+    assert.deepEqual(clipboardValues, [' 复制打开抖音\n8@x😀 '])
+    assert.deepEqual(toasts, [{ title: '内容暂不可见', icon: 'none' }])
+    assert.equal(page.data.clipboardPromptVisible, false)
+  } finally {
+    page.onUnload()
+    if (previousWx === undefined) delete global.wx
+    else global.wx = previousWx
+  }
+})
+
+test('visitor hyperlink reports clipboard write failure', async () => {
+  const clipboardValues = []
+  const toasts = []
+  const page = loadVisitorPage(() => Promise.resolve({}))
+  const previousWx = global.wx
+  global.wx = {
+    setClipboardData(options) {
+      clipboardValues.push(options.data)
+      options.fail(new Error('clipboard denied'))
+    },
+    showToast(options) {
+      toasts.push(options)
+    }
+  }
+  try {
+    const copied = await page.handleHyperlinkTap({
+      detail: {
+        actionType: 'EXTERNAL_LINK',
+        externalContent: '复制内容',
+        promptText: '复制成功'
+      }
+    })
+
+    assert.equal(copied, false)
+    assert.deepEqual(clipboardValues, ['复制内容'])
+    assert.deepEqual(toasts, [{ title: '复制失败，请重试', icon: 'none' }])
+    assert.equal(page.data.clipboardPromptVisible, false)
+  } finally {
+    page.onUnload()
+    if (previousWx === undefined) delete global.wx
+    else global.wx = previousWx
+  }
+})
+
+test('visitor skips a hyperlink with an unavailable display work while preview keeps repair context', () => {
+  const component = {
+    componentKey: 'c_missing_link',
+    componentType: 'HYPERLINK',
+    hyperlink: {
+      displayWork: null,
+      actionType: 'EXTERNAL_LINK',
+      externalContent: '复制我',
+      promptText: '已复制'
+    }
+  }
+  const visitor = normalizeVisitorPortfolio({ renderData: { preview: false, components: [component] } })
+  const preview = normalizeVisitorPortfolio({ renderData: { preview: true, components: [component] } })
+
+  assert.equal(visitor.components.length, 0)
+  assert.equal(preview.components[0].hyperlink.displayWork, null)
+})
+
 test('normalizes contact form display mode for render and config pages', () => {
   const renderResult = normalizeVisitorPortfolio({
     renderData: {
@@ -1085,7 +1287,7 @@ test('builds visitor event payload with idempotency key', () => {
   })
 })
 
-test('visitor page uses source type constant for WeChat share card', () => {
+test('visitor page preserves WeChat source by default and accepts controlled personal portfolio source', () => {
   const pageSource = fs.readFileSync(
     path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.js'),
     'utf8'
@@ -1096,7 +1298,9 @@ test('visitor page uses source type constant for WeChat share card', () => {
   )
 
   assert.match(visitorSessionSource, /const SOURCE_TYPE_WECHAT_SHARE_CARD = 'WECHAT_SHARE_CARD'/)
-  assert.equal((pageSource.match(/sourceType: SOURCE_TYPE_WECHAT_SHARE_CARD/g) || []).length, 3)
+  assert.match(visitorSessionSource, /const SOURCE_TYPE_PERSONAL_PORTFOLIO = 'PERSONAL_PORTFOLIO'/)
+  assert.equal((pageSource.match(/sourceType: this\.visitorSourceType/g) || []).length, 3)
+  assert.match(pageSource, /options\.sourceType === SOURCE_TYPE_PERSONAL_PORTFOLIO/)
   assert.equal((pageSource.match(/sourceType: 'WECHAT_SHARE_CARD'/g) || []).length, 0)
 })
 

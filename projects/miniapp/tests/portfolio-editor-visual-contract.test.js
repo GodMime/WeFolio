@@ -84,6 +84,7 @@ const EXPECTED_SHEET_TIERS = {
   'pages/portfolios/standard-edit/portfolio-standard-edit.wxml': {
     backgroundColorSheetVisible: 'compact',
     componentSheetVisible: 'compact',
+    hyperlinkSheetVisible: 'long',
     componentWorkSheetVisible: 'long',
     profileSheetVisible: 'long',
     profileTagDialogVisible: 'compact',
@@ -379,7 +380,7 @@ test('portfolio editor sheet mask uses Skyline-compatible viewport anchors', () 
   assert.doesNotMatch(maskBody, /inset\s*:/)
 })
 
-test('personal portfolio editor consumes the shared page and twelve-sheet contract', () => {
+test('personal portfolio editor consumes the shared page and thirteen-sheet contract', () => {
   const wxml = readMiniapp('pages/portfolios/standard-edit/portfolio-standard-edit.wxml')
   const wxss = readMiniapp('pages/portfolios/standard-edit/portfolio-standard-edit.wxss')
 
@@ -400,28 +401,29 @@ test('personal portfolio editor consumes the shared page and twelve-sheet contra
   assert.equal(classTokenCount(wxml, 'pe-page-content'), 1)
   assert.equal(classTokenCount(wxml, 'pe-component-delete'), 1)
 
-  assert.equal(classTokenCount(wxml, 'pe-sheet-mask'), 12)
-  assert.equal(classTokenCount(wxml, 'pe-sheet-mask-visible'), 12)
-  assert.equal(classTokenCount(wxml, 'pe-sheet-panel'), 12)
-  assert.equal(classTokenCount(wxml, 'pe-sheet-panel-visible'), 12)
+  assert.equal(classTokenCount(wxml, 'pe-sheet-mask'), 13)
+  assert.equal(classTokenCount(wxml, 'pe-sheet-mask-visible'), 13)
+  assert.equal(classTokenCount(wxml, 'pe-sheet-panel'), 13)
+  assert.equal(classTokenCount(wxml, 'pe-sheet-panel-visible'), 13)
   assert.equal(classTokenCount(wxml, 'pe-sheet-size-compact'), 5)
   assert.equal(classTokenCount(wxml, 'pe-sheet-size-standard'), 3)
-  assert.equal(classTokenCount(wxml, 'pe-sheet-size-long'), 4)
+  assert.equal(classTokenCount(wxml, 'pe-sheet-size-long'), 5)
   assertSheetTierMap(wxml, EXPECTED_SHEET_TIERS['pages/portfolios/standard-edit/portfolio-standard-edit.wxml'], '个人作品集编辑器')
   assert.doesNotMatch(wxml, /\?\s*'visible'\s*:/)
   assert.doesNotMatch(wxml, /class="input pe-page-field"/)
   assertNoLegacyChoiceStateClasses(wxml, '个人作品集编辑器')
   for (const [switchTag] of wxml.matchAll(/<switch\b[^>]*>/g)) assert.match(switchTag, /\bcolor="#212529"/)
   assertLongSheetScrollContracts(wxml, {
+    hyperlinkSheetVisible: 'hyperlink-form-scroll',
     componentWorkSheetVisible: 'component-work-scroll',
     profileSheetVisible: 'profile-sheet-scroll',
     displayGroupSheetVisible: 'display-group-scroll',
     textSectionSheetVisible: 'text-section-form'
   }, 'pages/portfolios/standard-edit/portfolio-standard-edit.wxml')
 
-  assert.ok(classTokenCount(wxml, 'pe-sheet-heading') >= 12)
-  assert.ok(classTokenCount(wxml, 'pe-sheet-title') >= 12)
-  assert.ok(classTokenCount(wxml, 'pe-sheet-actions') >= 12)
+  assert.ok(classTokenCount(wxml, 'pe-sheet-heading') >= 13)
+  assert.ok(classTokenCount(wxml, 'pe-sheet-title') >= 13)
+  assert.ok(classTokenCount(wxml, 'pe-sheet-actions') >= 13)
   assert.ok(classTokenCount(wxml, 'pe-sheet-action-cancel') >= 11)
   assert.ok(classTokenCount(wxml, 'pe-sheet-action-confirm') >= 11)
   assert.ok(classTokenCount(wxml, 'pe-sheet-field') >= 8)
@@ -431,6 +433,48 @@ test('personal portfolio editor consumes the shared page and twelve-sheet contra
 
   assertNativeLoadingContract(wxml, '个人作品集编辑器', 2)
   assert.doesNotMatch(wxss, /(?:^|\n)\s*\.pe-[^{]+\{/)
+})
+
+test('hyperlink editor follows the travel-design sheet composition', () => {
+  const wxml = readMiniapp('pages/portfolios/standard-edit/portfolio-standard-edit.wxml')
+  const wxss = readMiniapp('pages/portfolios/standard-edit/portfolio-standard-edit.wxss')
+  const rules = parseRules(wxss)
+  const start = wxml.indexOf("hyperlinkSheetVisible ? 'pe-sheet-mask-visible'")
+  const end = wxml.indexOf("componentWorkSheetVisible ? 'pe-sheet-mask-visible'", start)
+  const sheet = wxml.slice(start, end)
+
+  assert.match(sheet, /hyperlinkForm\.actionType\s*\?\s*''\s*:\s*'hyperlink-sheet-panel-initial'/)
+  assert.match(sheet, /class="pe-sheet-meta hyperlink-sheet-meta">二选一配置<\/view>/)
+  assert.match(sheet, />展示图片（图片 \/ 动图作品）<\/view>/)
+  assert.match(sheet, /class="hyperlink-work-current/)
+  assert.match(sheet, />当前已选<\/view>/)
+  assert.match(sheet, /wx:for="\{\{componentWorkFilterTags\}\}"/)
+  assert.match(sheet, /class="hyperlink-work-scroll"[\s\S]*scroll-x/)
+  assert.match(sheet, /bindscrolltolower="handleComponentWorkScrollToLower"/)
+  assert.match(sheet, /catchtap="handleSelectHyperlinkWork"/)
+  assert.match(sheet, />点击行为（二选一）<\/view>/)
+  assert.match(sheet, /class="hyperlink-choice-title">\{\{item\.label\}\}<\/view>/)
+  assert.match(sheet, /class="hyperlink-choice-description">\{\{item\.description\}\}<\/view>/)
+  assert.match(sheet, /class="hyperlink-sheet-note"/)
+  assert.match(sheet, /hyperlinkForm\.actionType\s*\?\s*''\s*:\s*'hyperlink-action-confirm-initial'/)
+  assert.doesNotMatch(sheet, />图标位置<\/view>/)
+  assert.match(sheet, /选中「内部作品集跳转」后才展示跳转作品集配置/)
+  assert.match(sheet, /点击图片后跳转到目标作品集/)
+  assert.match(sheet, /点击图片后原样复制整段内容/)
+  assert.match(sheet, /class="hyperlink-sheet-actions pe-sheet-actions"/)
+
+  assert.match(ruleBody(rules, '.hyperlink-sheet-panel-initial'), /height:\s*auto;/)
+  assert.match(ruleBody(rules, '.hyperlink-sheet-panel-initial'), /max-height:\s*72vh;/)
+  assert.match(ruleBody(rules, '.hyperlink-form-content'), /padding:\s*0\s+0\s+8rpx;/)
+  assert.match(ruleBody(rules, '.hyperlink-work-list'), /display:\s*inline-flex;/)
+  assert.match(ruleBody(rules, '.hyperlink-work-option'), /width:\s*260rpx;/)
+  assert.match(ruleBody(rules, '.hyperlink-work-option'), /flex:\s*0\s+0\s+260rpx;/)
+  assert.match(ruleBody(rules, '.hyperlink-choice'), /border-radius:\s*40rpx;/)
+  assert.match(ruleBody(rules, '.hyperlink-choice[aria-checked="true"] .schedule-query-mode-radio'), /background:\s*var\(--pe-color-text-primary,\s*#212529\)/)
+  assert.match(ruleBody(rules, '.hyperlink-sheet-actions'), /justify-content:\s*flex-end;/)
+  assert.match(ruleBody(rules, '.hyperlink-action-confirm-initial'), /opacity:\s*0\.4;/)
+  assert.match(ruleBody(rules, '.hyperlink-action-confirm'), /width:\s*148rpx;/)
+  assert.match(ruleBody(rules, '.hyperlink-action-confirm'), /height:\s*68rpx;/)
 })
 
 test('team portfolio editor consumes the shared page and ten-sheet contract', () => {
@@ -631,8 +675,8 @@ test('portfolio editor style closure has one pe source and no direct contract or
     readMiniapp('pages/mock/portfolio-standard-edit/portfolio-standard-edit.wxml')
   ].join('\n')
   assert.doesNotMatch(pageMarkup, LEGACY_ACCENT_PATTERN, '编辑器 WXML 不得继续使用旧蓝色或金色控件色')
-  assert.equal(classTokenCount(pageMarkup, 'pe-sheet-panel'), 25)
+  assert.equal(classTokenCount(pageMarkup, 'pe-sheet-panel'), 26)
   assert.equal(classTokenCount(pageMarkup, 'pe-sheet-size-compact'), 12)
   assert.equal(classTokenCount(pageMarkup, 'pe-sheet-size-standard'), 6)
-  assert.equal(classTokenCount(pageMarkup, 'pe-sheet-size-long'), 7)
+  assert.equal(classTokenCount(pageMarkup, 'pe-sheet-size-long'), 8)
 })

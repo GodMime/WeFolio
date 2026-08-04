@@ -157,9 +157,10 @@
               aria-label="{{componentRows.resolveAriaLabel(item.componentType, item.name)}}"
             >
               <view class="component-order pe-component-index">{{index + 1}}</view>
-              <view class="component-copy {{item.componentType === 'SINGLE_WORK' ? 'with-summary' : ''}}">
+              <view class="component-copy {{item.componentType === 'SINGLE_WORK' || item.componentType === 'HYPERLINK' ? 'with-summary' : ''}}">
                 <view class="component-title pe-component-title">{{item.name || item.componentType}}</view>
                 <view wx:if="{{item.componentType === 'SINGLE_WORK'}}" class="component-summary pe-component-description">{{componentRows.resolveSingleWorkSummary(item, singleWorkSummaries)}}</view>
+                <view wx:elif="{{item.componentType === 'HYPERLINK'}}" class="component-summary pe-component-description">{{componentRows.resolveHyperlinkSummary(item, singleWorkSummaries)}}</view>
               </view>
               <view class="component-drag-handle"></view>
               <view class="component-row-arrow {{componentRows.isEditable(item.componentType) ? '' : 'placeholder'}}">
@@ -263,6 +264,225 @@
     </view>
   </view>
 
+  <view class="pe-sheet-mask {{hyperlinkSheetVisible ? 'pe-sheet-mask-visible' : ''}}" catchtap="handleCloseHyperlinkSheet">
+    <view class="hyperlink-sheet-panel pe-sheet-panel pe-sheet-size-long {{hyperlinkForm.actionType ? '' : 'hyperlink-sheet-panel-initial'}} {{hyperlinkSheetVisible ? 'pe-sheet-panel-visible' : ''}}" catchtap="noop">
+      <view class="pe-sheet-grabber"></view>
+      <view class="pe-sheet-heading">
+        <view class="pe-sheet-title">编辑超链接</view>
+        <view class="pe-sheet-meta hyperlink-sheet-meta">二选一配置</view>
+      </view>
+
+      <scroll-view class="hyperlink-form-scroll pe-sheet-scroll" scroll-y type="list">
+        <view class="hyperlink-form-content">
+          <view class="form-row">
+            <view class="field-heading">
+              <view class="field-label">展示图片（图片 / 动图作品）</view>
+            </view>
+            <view class="hyperlink-work-current {{hyperlinkForm.workId ? '' : 'hyperlink-work-current-empty'}}">
+              <view class="hyperlink-work-current-label">当前已选</view>
+              <view wx:if="{{hyperlinkForm.workId}}" class="hyperlink-work-current-content">
+                <view class="hyperlink-work-thumbnail">
+                  <image
+                    wx:if="{{singleWorkSummaryMap[hyperlinkForm.workId] && singleWorkSummaryMap[hyperlinkForm.workId].thumbUrl}}"
+                    class="hyperlink-work-thumbnail-image"
+                    src="{{singleWorkSummaryMap[hyperlinkForm.workId].thumbUrl}}"
+                    mode="aspectFill"
+                  ></image>
+                  <view wx:else class="hyperlink-work-thumbnail-placeholder">作品图</view>
+                </view>
+                <view class="hyperlink-work-copy">
+                  <view class="hyperlink-work-title">{{hyperlinkWorkSummary}}</view>
+                  <view class="hyperlink-work-note">{{singleWorkSummaryMap[hyperlinkForm.workId] ? (singleWorkSummaryMap[hyperlinkForm.workId].metaText || '图片 / 动图作品') : '图片 / 动图作品'}}</view>
+                </view>
+              </view>
+              <view wx:else class="hyperlink-work-current-empty-text">请从下方选择图片或动图作品</view>
+            </view>
+
+            <scroll-view wx:if="{{componentWorkFilterTags.length}}" class="hyperlink-work-filter-scroll" scroll-x type="list">
+              <view class="component-work-filter-row hyperlink-work-filter-row">
+                <view
+                  wx:for="{{componentWorkFilterTags}}"
+                  wx:key="id"
+                  class="component-work-filter-pill pe-sheet-choice {{(!componentWorkSelectedTagId && !item.id) || componentWorkSelectedTagId === item.id ? 'pe-sheet-choice-selected-filled' : ''}}"
+                  data-tag-id="{{item.id}}"
+                  catchtap="handleComponentWorkTagTap"
+                  aria-role="button"
+                  aria-label="筛选{{item.name}}"
+                >
+                  <view
+                    class="component-work-filter-dot"
+                    style="background: {{((!componentWorkSelectedTagId && !item.id) || componentWorkSelectedTagId === item.id) ? '#ffffff' : (item.color || '#212529')}};"
+                  ></view>
+                  <text>{{item.labelText}}</text>
+                </view>
+              </view>
+            </scroll-view>
+
+            <view wx:if="{{componentWorkLoading && componentWorkOptions.length === 0}}" class="component-work-state hyperlink-work-state">加载中...</view>
+            <view wx:elif="{{componentWorkErrorText && componentWorkOptions.length === 0}}" class="component-work-state hyperlink-work-state error">
+              <view>{{componentWorkErrorText}}</view>
+              <view class="component-work-retry" catchtap="handleRetryHyperlinkWorks" aria-role="button" aria-label="重新加载超链接作品">重试</view>
+            </view>
+            <view wx:elif="{{componentWorkOptions.length === 0 && !componentWorkHasMore}}" class="component-work-state hyperlink-work-state">{{componentWorkEmptyText}}</view>
+            <scroll-view
+              wx:else
+              class="hyperlink-work-scroll"
+              scroll-x
+              type="list"
+              lower-threshold="80"
+              bindscrolltolower="handleComponentWorkScrollToLower"
+            >
+              <view class="hyperlink-work-list">
+                <view
+                  wx:for="{{componentWorkOptions}}"
+                  wx:key="id"
+                  class="hyperlink-work-option pe-sheet-choice {{item.selected ? 'pe-sheet-choice-selected' : ''}}"
+                  data-id="{{item.id}}"
+                  catchtap="handleSelectHyperlinkWork"
+                  aria-role="radio"
+                  aria-checked="{{item.selected}}"
+                  aria-label="选择{{item.title}}"
+                >
+                  <view class="hyperlink-work-option-thumbnail">
+                    <image wx:if="{{item.thumbUrl}}" src="{{item.thumbUrl}}" mode="aspectFill"></image>
+                    <view wx:else class="hyperlink-work-option-placeholder">作品</view>
+                    <view class="schedule-query-mode-radio"></view>
+                  </view>
+                  <view class="hyperlink-work-option-title">{{item.title}}</view>
+                  <view class="hyperlink-work-option-meta">{{item.metaText}}</view>
+                </view>
+                <view wx:if="{{componentWorkLoadingMore}}" class="hyperlink-work-tail">加载更多作品</view>
+                <view wx:elif="{{componentWorkErrorText}}" class="hyperlink-work-tail hyperlink-work-tail-retry" catchtap="handleRetryHyperlinkWorks" aria-role="button">{{componentWorkErrorText}} · 重试</view>
+                <view wx:elif="{{!componentWorkHasMore && componentWorkOptions.length > 0}}" class="hyperlink-work-tail">已显示全部作品</view>
+              </view>
+            </scroll-view>
+          </view>
+
+          <view class="form-row">
+            <view class="field-heading"><view class="field-label">点击行为（二选一）</view></view>
+            <view class="hyperlink-choice-list">
+              <view
+                wx:for="{{hyperlinkActionTypeOptions}}"
+                wx:key="value"
+                class="hyperlink-choice pe-sheet-choice {{hyperlinkForm.actionType === item.value ? 'pe-sheet-choice-selected' : ''}} {{hyperlinkForm.actionType && hyperlinkForm.actionType !== item.value ? 'hyperlink-choice-muted' : ''}}"
+                data-value="{{item.value}}"
+                catchtap="handleHyperlinkActionTypeTap"
+                aria-role="radio"
+                aria-checked="{{hyperlinkForm.actionType === item.value}}"
+              >
+                <view class="schedule-query-mode-radio"></view>
+                <view class="hyperlink-choice-copy">
+                  <view class="hyperlink-choice-title">{{item.label}}</view>
+                  <view class="hyperlink-choice-description">{{item.description}}</view>
+                </view>
+              </view>
+            </view>
+          </view>
+
+          <view wx:if="{{hyperlinkForm.actionType === 'INTERNAL_PORTFOLIO'}}" class="form-row">
+            <view class="field-heading"><view class="field-label">跳转作品集（仅已发布 · 左右滑动单选）</view></view>
+            <view wx:if="{{hyperlinkTargetLoading}}" class="component-work-state">加载中...</view>
+            <view wx:elif="{{hyperlinkTargetErrorText}}" class="component-work-state error">
+              <view>{{hyperlinkTargetErrorText}}</view>
+              <view class="component-work-retry" catchtap="handleRetryHyperlinkTargets">重试</view>
+            </view>
+            <view wx:elif="{{hyperlinkTargetOptions.length === 0}}" class="component-work-state">暂无可跳转的已发布作品集</view>
+            <scroll-view wx:else class="hyperlink-target-scroll" scroll-x type="list">
+              <view class="hyperlink-target-list">
+                <view
+                  wx:for="{{hyperlinkTargetOptions}}"
+                  wx:key="portfolioId"
+                  class="hyperlink-target-option pe-sheet-choice {{hyperlinkForm.targetPortfolioId === item.portfolioId ? 'pe-sheet-choice-selected' : ''}} {{item.selectable ? '' : 'disabled'}}"
+                  data-id="{{item.portfolioId}}"
+                  data-selectable="{{item.selectable}}"
+                  catchtap="handleSelectHyperlinkTarget"
+                  aria-role="radio"
+                  aria-checked="{{hyperlinkForm.targetPortfolioId === item.portfolioId}}"
+                  aria-disabled="{{!item.selectable}}"
+                >
+                  <view class="hyperlink-target-cover">
+                    <image wx:if="{{item.coverUrl}}" class="hyperlink-target-cover-image" src="{{item.coverUrl}}" mode="aspectFill"></image>
+                    <view wx:else class="hyperlink-target-cover-placeholder">封面</view>
+                  </view>
+                  <view class="hyperlink-target-copy">
+                    <view class="hyperlink-target-title">{{item.title}}</view>
+                    <view wx:if="{{item.currentSelection}}" class="hyperlink-target-current">当前选择·已失效</view>
+                    <view wx:if="{{item.disabledReason}}" class="hyperlink-target-reason">{{item.disabledReason}}</view>
+                  </view>
+                  <view class="schedule-query-mode-radio"></view>
+                </view>
+              </view>
+            </scroll-view>
+            <view class="hyperlink-field-note hyperlink-target-note">仅展示已发布的个人作品集；左右滑动浏览，点按卡片单选。</view>
+          </view>
+
+          <block wx:if="{{hyperlinkForm.actionType === 'EXTERNAL_LINK'}}">
+            <view class="form-row">
+              <view class="field-heading">
+                <view class="field-label">链接 / 分享内容</view>
+                <view class="field-limit">{{hyperlinkExternalContentCount}} / {{hyperlinkExternalContentMaxLength}}</view>
+              </view>
+              <textarea
+                class="hyperlink-content-input pe-sheet-field pe-sheet-field-textarea"
+                value="{{hyperlinkForm.externalContent}}"
+                placeholder="粘贴链接、口令或带说明的分享内容"
+                bindinput="handleHyperlinkExternalContentInput"
+                maxlength="-1"
+              ></textarea>
+            </view>
+            <view class="form-row">
+              <view class="field-heading">
+                <view class="field-label">提示语（复制成功后展示）</view>
+                <view class="field-limit">{{hyperlinkPromptTextCount}} / {{hyperlinkPromptTextMaxLength}}</view>
+              </view>
+              <input
+                class="hyperlink-prompt-input pe-sheet-field"
+                value="{{hyperlinkForm.promptText}}"
+                placeholder="请打开小红书粘贴"
+                bindinput="handleHyperlinkPromptTextInput"
+                maxlength="-1"
+              />
+            </view>
+          </block>
+
+          <view class="form-row hyperlink-icon-switch-row">
+            <view class="hyperlink-icon-switch-copy">
+              <view class="field-label">展示点击图标</view>
+            </view>
+            <switch checked="{{hyperlinkForm.showClickIcon}}" color="#212529" bindchange="handleHyperlinkShowIconChange"></switch>
+          </view>
+          <view wx:if="{{hyperlinkForm.showClickIcon}}" class="form-row">
+            <view class="hyperlink-choice-list">
+              <view
+                wx:for="{{hyperlinkIconPositionOptions}}"
+                wx:key="value"
+                class="hyperlink-choice hyperlink-position-choice pe-sheet-choice {{hyperlinkForm.iconPosition === item.value ? 'pe-sheet-choice-selected' : ''}}"
+                data-value="{{item.value}}"
+                catchtap="handleHyperlinkIconPositionTap"
+                aria-role="radio"
+                aria-checked="{{hyperlinkForm.iconPosition === item.value}}"
+              >
+                <view class="schedule-query-mode-radio"></view>
+                <view class="hyperlink-choice-copy">
+                  <view class="hyperlink-choice-title">{{item.label}}</view>
+                  <view class="hyperlink-choice-description">{{item.description}}</view>
+                </view>
+              </view>
+            </view>
+          </view>
+          <view wx:if="{{!hyperlinkForm.actionType}}" class="hyperlink-sheet-note">选中「内部作品集跳转」后才展示跳转作品集配置；选中「外部链接复制」后才展示链接 / 分享内容与提示语；未选中时对应配置不出现。开关关闭时不展示图标位置选项。</view>
+          <view wx:elif="{{hyperlinkForm.actionType === 'INTERNAL_PORTFOLIO'}}" class="hyperlink-sheet-note">预览页与访客页点击图片后跳转到目标作品集，可通过左上角返回来源页。</view>
+          <view wx:else class="hyperlink-sheet-note">预览页与访客页点击图片后原样复制整段内容。微信系统「内容已复制」提示结束后，再显示上方维护者提示语，两个提示不叠加。</view>
+        </view>
+      </scroll-view>
+
+      <view class="hyperlink-sheet-actions pe-sheet-actions">
+        <button class="hyperlink-action-cancel pe-sheet-action-cancel" catchtap="handleCloseHyperlinkSheet">取消</button>
+        <button class="hyperlink-action-confirm pe-sheet-action-confirm {{hyperlinkForm.actionType ? '' : 'hyperlink-action-confirm-initial'}}" catchtap="handleConfirmHyperlinkConfig">完成</button>
+      </view>
+    </view>
+  </view>
+
   <view class="pe-sheet-mask {{componentWorkSheetVisible ? 'pe-sheet-mask-visible' : ''}}" catchtap="handleCloseComponentWorkSheet">
     <view class="component-work-list-panel pe-sheet-panel pe-sheet-size-long {{componentWorkSheetVisible ? 'pe-sheet-panel-visible' : ''}}" catchtap="noop">
       <view class="pe-sheet-grabber"></view>
@@ -345,14 +565,14 @@
         </view>
       </scroll-view>
 
-      <view wx:if="{{componentWorkSelectionMode === 'single'}}" class="single-work-title-setting">
+      <view wx:if="{{editingComponentType === 'SINGLE_WORK'}}" class="single-work-title-setting">
         <view class="single-work-title-setting-copy">
           <view class="single-work-title-setting-label">展示作品名</view>
           <view class="single-work-title-setting-note">关闭后隐藏作品标题</view>
         </view>
         <switch checked="{{componentWorkShowTitle}}" color="#212529" bindchange="handleSingleWorkShowTitleChange"></switch>
       </view>
-      <view wx:if="{{componentWorkSelectionMode === 'single'}}" class="single-work-title-setting">
+      <view wx:if="{{editingComponentType === 'SINGLE_WORK'}}" class="single-work-title-setting">
         <view class="single-work-title-setting-copy">
           <view class="single-work-title-setting-label">展示作品说明</view>
           <view class="single-work-title-setting-note">关闭后隐藏作品说明</view>

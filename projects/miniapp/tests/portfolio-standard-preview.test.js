@@ -85,6 +85,88 @@ function loadPreviewPage(fakeRequest, wxOverrides = {}) {
   })
 }
 
+test('preview hyperlink always opens the target published preview and keeps native back navigation', async () => {
+  const navigations = []
+  const toasts = []
+  const page = loadPreviewPage(() => Promise.resolve({}))
+  const previousWx = global.wx
+  global.wx = {
+    navigateTo(options) {
+      navigations.push(options)
+    },
+    showToast(options) {
+      toasts.push(options)
+    }
+  }
+  try {
+    await page.handleHyperlinkTap({
+      detail: {
+        actionType: 'INTERNAL_PORTFOLIO',
+        targetPortfolioId: 99,
+        targetAvailable: true,
+        targetShareCode: 'PF-TARGET'
+      }
+    })
+    await page.handleHyperlinkTap({
+      detail: {
+        actionType: 'INTERNAL_PORTFOLIO',
+        targetPortfolioId: 100,
+        targetAvailable: false
+      }
+    })
+    await page.handleHyperlinkTap({
+      detail: {
+        actionType: 'EXTERNAL_LINK',
+        externalContent: ''
+      }
+    })
+
+    assert.deepEqual(navigations, [{
+      url: '/pages/portfolios/standard-preview/portfolio-standard-preview?portfolioId=99&scope=published'
+    }])
+    assert.deepEqual(toasts, [
+      { title: '内容暂不可见', icon: 'none' },
+      { title: '内容暂不可见', icon: 'none' }
+    ])
+  } finally {
+    if (previousWx === undefined) delete global.wx
+    else global.wx = previousWx
+  }
+})
+
+test('preview hyperlink reports clipboard write failure', async () => {
+  const clipboardValues = []
+  const toasts = []
+  const page = loadPreviewPage(() => Promise.resolve({}))
+  const previousWx = global.wx
+  global.wx = {
+    setClipboardData(options) {
+      clipboardValues.push(options.data)
+      options.fail(new Error('clipboard denied'))
+    },
+    showToast(options) {
+      toasts.push(options)
+    }
+  }
+  try {
+    const copied = await page.handleHyperlinkTap({
+      detail: {
+        actionType: 'EXTERNAL_LINK',
+        externalContent: '复制内容',
+        promptText: '复制成功'
+      }
+    })
+
+    assert.equal(copied, false)
+    assert.deepEqual(clipboardValues, ['复制内容'])
+    assert.deepEqual(toasts, [{ title: '复制失败，请重试', icon: 'none' }])
+    assert.equal(page.data.clipboardPromptVisible, false)
+  } finally {
+    if (previousWx === undefined) delete global.wx
+    else global.wx = previousWx
+  }
+})
+
 test('portfolio preview and visitor pages render miniapp brand footer', () => {
   const logoUrl = '/assets/system/folio-logo-stack-bold-small-50kb.png'
   const brandName = '映期Folio'

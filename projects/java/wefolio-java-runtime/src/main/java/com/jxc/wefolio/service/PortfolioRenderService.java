@@ -1,9 +1,14 @@
 package com.jxc.wefolio.service;
 
+import com.alibaba.fastjson2.JSON;
 import com.jxc.wefolio.common.PortfolioTextTypographySupport;
 import com.jxc.wefolio.constant.PortfolioTextTypographyConstants;
 import com.jxc.wefolio.dict.MediaTypeDict;
 import com.jxc.wefolio.dict.PortfolioComponentTypeDict;
+import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
+import com.jxc.wefolio.dict.PortfolioPublicationStatusDict;
+import com.jxc.wefolio.dict.PortfolioStatusDict;
+import com.jxc.wefolio.dict.PortfolioTemplateTypeDict;
 import com.jxc.wefolio.dict.PortfolioTextFontFamilyDict;
 import com.jxc.wefolio.dict.WorkAuditStatusDict;
 import com.jxc.wefolio.dict.WorkStatusDict;
@@ -12,6 +17,7 @@ import com.jxc.wefolio.dto.PortfolioRenderDto;
 import com.jxc.wefolio.dto.VisitorPortfolioResponse;
 import com.jxc.wefolio.entity.PortfolioEntity;
 import com.jxc.wefolio.entity.WorkEntity;
+import com.jxc.wefolio.mapper.PortfolioEntityMapper;
 import com.jxc.wefolio.mapper.WorkEntityMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -47,6 +53,11 @@ public class PortfolioRenderService {
     /** 轮播组件只允许图片 */
     private static final Set<String> CAROUSEL_MEDIA_TYPES = Set.of(MediaTypeDict.IMAGE.getCode());
 
+    /** 超链接展示作品允许的媒体类型 */
+    private static final Set<String> HYPERLINK_MEDIA_TYPES = Set.of(
+            MediaTypeDict.IMAGE.getCode(),
+            MediaTypeDict.ANIMATION.getCode());
+
     /** 默认页面标题 */
     private static final String DEFAULT_TITLE = "个人作品集";
 
@@ -61,6 +72,30 @@ public class PortfolioRenderService {
 
     /** 是否展示作品说明配置键 */
     private static final String CONFIG_KEY_SHOW_DESCRIPTION = "showDescription";
+
+    /** 超链接行为类型配置键 */
+    private static final String CONFIG_KEY_ACTION_TYPE = "actionType";
+
+    /** 内部跳转目标作品集配置键 */
+    private static final String CONFIG_KEY_TARGET_PORTFOLIO_ID = "targetPortfolioId";
+
+    /** 外部链接或分享内容配置键 */
+    private static final String CONFIG_KEY_EXTERNAL_CONTENT = "externalContent";
+
+    /** 复制成功提示语配置键 */
+    private static final String CONFIG_KEY_PROMPT_TEXT = "promptText";
+
+    /** 点击图标开关配置键 */
+    private static final String CONFIG_KEY_SHOW_CLICK_ICON = "showClickIcon";
+
+    /** 点击图标位置配置键 */
+    private static final String CONFIG_KEY_ICON_POSITION = "iconPosition";
+
+    /** 内部作品集跳转 */
+    private static final String HYPERLINK_ACTION_INTERNAL_PORTFOLIO = "INTERNAL_PORTFOLIO";
+
+    /** 超链接图标默认悬浮于图片上 */
+    private static final String HYPERLINK_ICON_POSITION_OVERLAY = "OVERLAY";
 
     /** 作品集展示标签配置键 */
     private static final String CONFIG_KEY_GROUPS = "groups";
@@ -179,6 +214,9 @@ public class PortfolioRenderService {
     /** 作品 Mapper */
     private final WorkEntityMapper workEntityMapper;
 
+    /** 作品集 Mapper */
+    private final PortfolioEntityMapper portfolioEntityMapper;
+
     /** COS 服务 */
     private final CosService cosService;
 
@@ -220,8 +258,15 @@ public class PortfolioRenderService {
         render.setStyle(buildStyle(config == null || config.getStyle() == null
                 ? null
                 : config.getStyle().getBackgroundColor()));
-        render.setComponents(buildComponents(ownerId, config == null ? null : config.getComponents()));
-        render.setBottomNav(buildBottomNav(ownerId, config == null ? null : config.getBottomNav()));
+        HyperlinkRenderContext hyperlinkContext = buildHyperlinkRenderContext(ownerId, preview, config);
+        render.setComponents(buildComponents(
+                ownerId,
+                config == null ? null : config.getComponents(),
+                hyperlinkContext));
+        render.setBottomNav(buildBottomNav(
+                ownerId,
+                config == null ? null : config.getBottomNav(),
+                hyperlinkContext));
         return render;
     }
 
@@ -230,18 +275,21 @@ public class PortfolioRenderService {
      *
      * @param ownerId 作品集归属用户 ID
      * @param components 配置组件
+     * @param hyperlinkContext 超链接批量渲染上下文
      * @return 渲染组件列表
      */
     private List<PortfolioRenderDto.Component> buildComponents(
             Long ownerId,
-            List<PortfolioConfigDto.Component> components
+            List<PortfolioConfigDto.Component> components,
+            HyperlinkRenderContext hyperlinkContext
     ) {
         return safeList(components).stream()
                 .filter(component -> component != null && !Boolean.FALSE.equals(component.getEnabled()))
                 .sorted(Comparator
                         .comparing(this::safeComponentSortOrder)
                         .thenComparing(component -> defaultString(component.getComponentKey())))
-                .map(component -> buildComponent(ownerId, component))
+                .map(component -> buildComponent(ownerId, component, hyperlinkContext))
+                .filter(Objects::nonNull)
                 .toList();
     }
 
@@ -264,11 +312,13 @@ public class PortfolioRenderService {
      *
      * @param ownerId 作品集归属用户 ID
      * @param configuredBottomNav 底部导航配置
+     * @param hyperlinkContext 超链接批量渲染上下文
      * @return 底部导航渲染数据
      */
     private PortfolioRenderDto.BottomNav buildBottomNav(
             Long ownerId,
-            PortfolioConfigDto.BottomNav configuredBottomNav
+            PortfolioConfigDto.BottomNav configuredBottomNav,
+            HyperlinkRenderContext hyperlinkContext
     ) {
         if (configuredBottomNav == null || !Boolean.TRUE.equals(configuredBottomNav.getEnabled())) {
             return buildDisabledBottomNav();
@@ -286,7 +336,7 @@ public class PortfolioRenderService {
             item.setKey(defaultString(configuredItem.getKey()));
             item.setTitle(defaultString(configuredItem.getTitle()));
             if (index > 0) {
-                item.setComponents(buildComponents(ownerId, configuredItem.getComponents()));
+                item.setComponents(buildComponents(ownerId, configuredItem.getComponents(), hyperlinkContext));
             }
             items.add(item);
         }
@@ -338,9 +388,14 @@ public class PortfolioRenderService {
      *
      * @param ownerId 作品集归属用户 ID
      * @param component 配置组件
+     * @param hyperlinkContext 超链接批量渲染上下文
      * @return 渲染组件
      */
-    private PortfolioRenderDto.Component buildComponent(Long ownerId, PortfolioConfigDto.Component component) {
+    private PortfolioRenderDto.Component buildComponent(
+            Long ownerId,
+            PortfolioConfigDto.Component component,
+            HyperlinkRenderContext hyperlinkContext
+    ) {
         PortfolioRenderDto.Component render = new PortfolioRenderDto.Component();
         String componentTypeCode = defaultString(component.getComponentType());
         PortfolioComponentTypeDict componentType = PortfolioComponentTypeDict.fromCode(componentTypeCode);
@@ -369,8 +424,165 @@ public class PortfolioRenderService {
             case CONTACT_FORM -> render.setContactForm(buildContactForm(componentConfig));
             case TEXT_SECTION -> render.setTextSection(buildTextSection(componentConfig));
             case DIVIDER -> render.setDivider(buildDivider(componentConfig));
+            case HYPERLINK -> {
+                PortfolioRenderDto.Hyperlink hyperlink = buildHyperlink(componentConfig, hyperlinkContext);
+                if (hyperlink == null) {
+                    return null;
+                }
+                render.setHyperlink(hyperlink);
+            }
         }
         return render;
+    }
+
+    /**
+     * 批量读取超链接组件依赖的展示作品和目标作品集。
+     *
+     * @param ownerId 当前作品集归属用户 ID
+     * @param preview 是否为预览模式
+     * @param config 作品集配置
+     * @return 超链接渲染上下文
+     */
+    private HyperlinkRenderContext buildHyperlinkRenderContext(
+            Long ownerId,
+            boolean preview,
+            PortfolioConfigDto config
+    ) {
+        LinkedHashSet<Long> workIds = new LinkedHashSet<>();
+        LinkedHashSet<Long> targetPortfolioIds = new LinkedHashSet<>();
+        for (PortfolioComponentTraversal.ComponentLocation location
+                : PortfolioComponentTraversal.listComponentLocations(config)) {
+            PortfolioConfigDto.Component component = location.component();
+            if (component == null
+                    || Boolean.FALSE.equals(component.getEnabled())
+                    || !PortfolioComponentTypeDict.HYPERLINK.getCode().equals(component.getComponentType())) {
+                continue;
+            }
+            Map<String, Object> componentConfig = component.getConfig() == null ? Map.of() : component.getConfig();
+            Long workId = asLong(componentConfig.get(CONFIG_KEY_WORK_ID));
+            if (workId != null && workId > 0L) {
+                workIds.add(workId);
+            }
+            Long targetPortfolioId = asLong(componentConfig.get(CONFIG_KEY_TARGET_PORTFOLIO_ID));
+            if (targetPortfolioId != null && targetPortfolioId > 0L) {
+                targetPortfolioIds.add(targetPortfolioId);
+            }
+        }
+        Map<Long, WorkEntity> works = loadWorkMap(ownerId, new ArrayList<>(workIds));
+        Map<Long, PortfolioEntity> targets = loadTargetPortfolioMap(targetPortfolioIds);
+        return new HyperlinkRenderContext(ownerId, preview, works, targets);
+    }
+
+    /**
+     * 读取内部跳转目标作品集映射。
+     *
+     * @param targetPortfolioIds 目标作品集 ID
+     * @return 目标作品集映射
+     */
+    private Map<Long, PortfolioEntity> loadTargetPortfolioMap(Set<Long> targetPortfolioIds) {
+        if (targetPortfolioIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, PortfolioEntity> result = new LinkedHashMap<>();
+        for (PortfolioEntity portfolio : safeList(portfolioEntityMapper.selectBatchIds(targetPortfolioIds))) {
+            if (portfolio != null
+                    && portfolio.getId() != null
+                    && targetPortfolioIds.contains(portfolio.getId())) {
+                result.put(portfolio.getId(), portfolio);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * 构建超链接组件渲染数据。
+     *
+     * @param componentConfig 组件配置
+     * @param context 超链接批量渲染上下文
+     * @return 超链接渲染数据；访客态展示作品失效时返回 null
+     */
+    private PortfolioRenderDto.Hyperlink buildHyperlink(
+            Map<String, Object> componentConfig,
+            HyperlinkRenderContext context
+    ) {
+        Long workId = asLong(componentConfig.get(CONFIG_KEY_WORK_ID));
+        WorkEntity displayWork = context.works().get(workId);
+        boolean displayWorkAvailable = displayWork != null
+                && HYPERLINK_MEDIA_TYPES.contains(displayWork.getMediaType());
+        if (!displayWorkAvailable && !context.preview()) {
+            return null;
+        }
+
+        PortfolioRenderDto.Hyperlink hyperlink = new PortfolioRenderDto.Hyperlink();
+        hyperlink.setDisplayWork(displayWorkAvailable ? buildWorkItem(displayWork) : null);
+        String actionType = asString(componentConfig.get(CONFIG_KEY_ACTION_TYPE));
+        hyperlink.setActionType(actionType);
+        hyperlink.setShowClickIcon(Boolean.TRUE.equals(componentConfig.get(CONFIG_KEY_SHOW_CLICK_ICON)));
+        hyperlink.setIconPosition(defaultString(
+                asString(componentConfig.get(CONFIG_KEY_ICON_POSITION)),
+                HYPERLINK_ICON_POSITION_OVERLAY));
+        if (HYPERLINK_ACTION_INTERNAL_PORTFOLIO.equals(actionType)) {
+            Long targetPortfolioId = asLong(componentConfig.get(CONFIG_KEY_TARGET_PORTFOLIO_ID));
+            hyperlink.setTargetPortfolioId(targetPortfolioId);
+            hyperlink.setExternalContent("");
+            hyperlink.setPromptText("");
+            PortfolioEntity target = context.targets().get(targetPortfolioId);
+            boolean targetAvailable = isAvailableTargetPortfolio(context.ownerId(), target);
+            hyperlink.setTargetAvailable(targetAvailable);
+            hyperlink.setTargetShareCode(targetAvailable ? target.getShareCode() : null);
+            hyperlink.setTargetTitle(targetAvailable ? resolveTargetPortfolioTitle(target) : null);
+        } else {
+            hyperlink.setExternalContent(rawString(componentConfig.get(CONFIG_KEY_EXTERNAL_CONTENT)));
+            hyperlink.setPromptText(rawString(componentConfig.get(CONFIG_KEY_PROMPT_TEXT)));
+        }
+        return hyperlink;
+    }
+
+    /**
+     * 判断内部跳转目标在访客态是否可用。
+     *
+     * @param ownerId 当前作品集归属用户 ID
+     * @param target 目标作品集
+     * @return true 表示可跳转且可返回分享编码
+     */
+    private boolean isAvailableTargetPortfolio(Long ownerId, PortfolioEntity target) {
+        if (target == null
+                || !Objects.equals(ownerId, target.getOwnerId())
+                || !PortfolioOwnerTypeDict.USER.getCode().equals(target.getOwnerType())
+                || !PortfolioTemplateTypeDict.STANDARD.getCode().equals(target.getTemplateType())
+                || !PortfolioStatusDict.ACTIVE.getCode().equals(target.getStatus())
+                || !PortfolioPublicationStatusDict.PUBLISHED.getCode().equals(target.getPublicationStatus())
+                || !hasText(target.getShareCode())
+                || !hasText(target.getPublishedConfigJson())) {
+            return false;
+        }
+        try {
+            PortfolioConfigDto targetConfig = JSON.parseObject(
+                    target.getPublishedConfigJson(),
+                    PortfolioConfigDto.class);
+            return targetConfig != null
+                    && PortfolioConfigDto.SCHEMA_VERSION_STANDARD_PERSONAL_V1.equals(targetConfig.getSchemaVersion())
+                    && PortfolioComponentTraversal.listComponentLocations(targetConfig).stream()
+                    .map(PortfolioComponentTraversal.ComponentLocation::component)
+                    .anyMatch(component -> component != null && !Boolean.FALSE.equals(component.getEnabled()));
+        } catch (RuntimeException exception) {
+            return false;
+        }
+    }
+
+    /** 读取已确认可用目标作品集的分享标题。 */
+    private String resolveTargetPortfolioTitle(PortfolioEntity target) {
+        try {
+            PortfolioConfigDto targetConfig = JSON.parseObject(
+                    target.getPublishedConfigJson(),
+                    PortfolioConfigDto.class);
+            String title = targetConfig == null || targetConfig.getShare() == null
+                    ? ""
+                    : defaultString(targetConfig.getShare().getTitle());
+            return hasText(title) ? title : DEFAULT_TITLE;
+        } catch (RuntimeException exception) {
+            return DEFAULT_TITLE;
+        }
     }
 
     /**
@@ -834,6 +1046,16 @@ public class PortfolioRenderService {
     }
 
     /**
+     * 原样读取字符串，用于保留外部分享内容中的空格和换行。
+     *
+     * @param value 原值
+     * @return 未裁剪的字符串
+     */
+    private String rawString(Object value) {
+        return value instanceof String text ? text : "";
+    }
+
+    /**
      * 生成 COS 公开地址。
      *
      * @param objectKey 对象键
@@ -905,5 +1127,21 @@ public class PortfolioRenderService {
      */
     private <T> List<T> safeList(List<T> list) {
         return list == null ? List.of() : list;
+    }
+
+    /**
+     * 超链接组件批量渲染上下文。
+     *
+     * @param ownerId 当前作品集归属用户 ID
+     * @param preview 是否为预览模式
+     * @param works 可用展示作品映射
+     * @param targets 内部跳转目标作品集映射
+     */
+    private record HyperlinkRenderContext(
+            Long ownerId,
+            boolean preview,
+            Map<Long, WorkEntity> works,
+            Map<Long, PortfolioEntity> targets
+    ) {
     }
 }

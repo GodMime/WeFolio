@@ -11,6 +11,7 @@ import com.jxc.wefolio.dto.MinePortfolioListResponse;
 import com.jxc.wefolio.dto.MinePortfolioPublishRequest;
 import com.jxc.wefolio.dto.MinePortfolioShareRecordRequest;
 import com.jxc.wefolio.dto.PortfolioComponentLibraryResponse;
+import com.jxc.wefolio.dto.PortfolioHyperlinkTargetResponse;
 import com.jxc.wefolio.dto.PortfolioScheduleOptionsResponse;
 import com.jxc.wefolio.dto.PortfolioScheduleQueryRequest;
 import com.jxc.wefolio.dto.PortfolioScheduleQueryResponse;
@@ -51,11 +52,32 @@ public class MinePortfolioController {
     /**
      * 查询组件库。
      *
+     * @param editorSchemaRevision 客户端编辑器能力版本
      * @return 组件库响应
      */
     @GetMapping("/api/mine/portfolios/component-library")
-    public Response<PortfolioComponentLibraryResponse> componentLibrary() {
-        return Response.success(minePortfolioService.getComponentLibrary());
+    public Response<PortfolioComponentLibraryResponse> componentLibrary(
+            @RequestParam(value = "editorSchemaRevision", required = false) Integer editorSchemaRevision
+    ) {
+        return Response.success(minePortfolioService.getComponentLibrary(editorSchemaRevision));
+    }
+
+    /**
+     * 查询个人作品集超链接内部目标。
+     *
+     * @param sourcePortfolioId 可选来源作品集 ID
+     * @param selectedTargetPortfolioId 可选当前目标 ID
+     * @return 内部目标列表
+     */
+    @GetMapping("/api/mine/portfolios/hyperlink-targets")
+    public Response<PortfolioHyperlinkTargetResponse> hyperlinkTargets(
+            @RequestParam(value = "sourcePortfolioId", required = false) Long sourcePortfolioId,
+            @RequestParam(value = "selectedTargetPortfolioId", required = false) Long selectedTargetPortfolioId
+    ) {
+        return Response.success(minePortfolioService.listHyperlinkTargets(
+                sourcePortfolioId,
+                selectedTargetPortfolioId
+        ));
     }
 
     /**

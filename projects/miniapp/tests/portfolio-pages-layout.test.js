@@ -932,6 +932,7 @@ test('portfolio component work picker keeps work list visible in Skyline', () =>
 test('portfolio editor work filters use neutral shared choices and retain semantic dots', () => {
   const editWxml = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxml')
   const editWxss = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxss')
+  const workFilterDotRule = readRule(editWxss, '.component-work-filter-dot')
   const tagDotRule = readRule(editWxss, '.display-group-dot')
   const foundationWxss = read('styles/portfolio-editor-foundation.wxss')
   const displayPillRule = readRule(foundationWxss, '.pe-sheet-choice')
@@ -957,6 +958,7 @@ test('portfolio editor work filters use neutral shared choices and retain semant
     /class="display-group-dot"[\s\S]*background: \{\{item\.active \? '#ffffff' : item\.color\}\}/
   )
   assert.match(editWxss, /\.component-work-filter-dot,\s*\.display-group-dot\s*\{/)
+  assert.match(workFilterDotRule, /margin-right:\s*10rpx/)
   assert.match(tagDotRule, /width:\s*12rpx/)
   assert.match(tagDotRule, /height:\s*12rpx/)
   assert.match(tagDotRule, /border-radius:\s*50%/)

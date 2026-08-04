@@ -15,6 +15,7 @@ public enum PortfolioComponentTypeDict {
     WORK_GRID("WORK_GRID", "双列作品列表"),
     WORK_LIST("WORK_LIST", "单列作品列表"),
     SINGLE_WORK("SINGLE_WORK", "单个作品"),
+    HYPERLINK("HYPERLINK", "超链接"),
     QR_CONTACT("QR_CONTACT", "二维码联系"),
     CONTACT_FORM("CONTACT_FORM", "预留联系信息"),
     TEXT_SECTION("TEXT_SECTION", "文字说明"),

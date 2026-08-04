@@ -10,6 +10,8 @@ const {
   DIVIDER_COLORS,
   COMPONENT_TYPES,
   EDITOR_SCHEMA_REVISION,
+  HYPERLINK_ACTION_TYPE_OPTIONS,
+  HYPERLINK_ICON_POSITION_OPTIONS,
   SCHEDULE_QUERY_DISPLAY_MODES,
   TEXT_SECTION_ALIGNMENTS,
   TEXT_SECTION_MAX_LENGTH,
@@ -22,12 +24,22 @@ const {
   updateComponentScheduleQueryConfig,
   updateComponentTextSectionConfig
 } = require('../utils/portfolios')
-const { selectableWorksFor } = require('../pages/portfolios/utils/works')
+const { selectableWorksFor } = require('../pages/portfolios/utils/portfolio-work-media')
 
 function flushPromises() {
   return new Promise((resolve) => {
     setImmediate(resolve)
   })
+}
+
+function deferred() {
+  let resolve
+  let reject
+  const promise = new Promise((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+  return { promise, resolve, reject }
 }
 
 function clone(value) {
@@ -49,6 +61,77 @@ function applyData(target, patch) {
       return result[part]
     }, target)
     parent[lastKey] = patch[key]
+  })
+}
+
+function assertHyperlinkEditorReset(page) {
+  assert.deepEqual({
+    hyperlinkSheetVisible: page.data.hyperlinkSheetVisible,
+    hyperlinkEditingComponentKey: page.data.hyperlinkEditingComponentKey,
+    hyperlinkEditingMenuKey: page.data.hyperlinkEditingMenuKey,
+    hyperlinkEditingNewComponent: page.data.hyperlinkEditingNewComponent,
+    hyperlinkForm: page.data.hyperlinkForm,
+    hyperlinkTargetOptions: page.data.hyperlinkTargetOptions,
+    hyperlinkTargetLoading: page.data.hyperlinkTargetLoading,
+    hyperlinkTargetErrorText: page.data.hyperlinkTargetErrorText,
+    hyperlinkExternalContentCount: page.data.hyperlinkExternalContentCount,
+    hyperlinkPromptTextCount: page.data.hyperlinkPromptTextCount,
+    hyperlinkWorkSummary: page.data.hyperlinkWorkSummary,
+    componentWorkSheetVisible: page.data.componentWorkSheetVisible,
+    componentWorkLoading: page.data.componentWorkLoading,
+    componentWorkLoadingMore: page.data.componentWorkLoadingMore,
+    componentWorkErrorText: page.data.componentWorkErrorText,
+    componentWorkEmptyText: page.data.componentWorkEmptyText,
+    componentWorkOptions: page.data.componentWorkOptions,
+    componentWorkFilterTags: page.data.componentWorkFilterTags,
+    componentWorkKeyword: page.data.componentWorkKeyword,
+    componentWorkSelectedTagId: page.data.componentWorkSelectedTagId,
+    componentWorkPage: page.data.componentWorkPage,
+    componentWorkPageSize: page.data.componentWorkPageSize,
+    componentWorkHasMore: page.data.componentWorkHasMore,
+    componentWorkSelectedIds: page.data.componentWorkSelectedIds,
+    componentWorkSelectedCountText: page.data.componentWorkSelectedCountText,
+    componentWorkSelectionMode: page.data.componentWorkSelectionMode,
+    componentWorkShowTitle: page.data.componentWorkShowTitle,
+    componentWorkShowDescription: page.data.componentWorkShowDescription,
+    editingComponentKey: page.data.editingComponentKey,
+    editingComponentType: page.data.editingComponentType
+  }, {
+    hyperlinkSheetVisible: false,
+    hyperlinkEditingComponentKey: '',
+    hyperlinkEditingMenuKey: '',
+    hyperlinkEditingNewComponent: false,
+    hyperlinkForm: {
+      workId: 0,
+      actionType: '',
+      showClickIcon: false,
+      iconPosition: 'OVERLAY'
+    },
+    hyperlinkTargetOptions: [],
+    hyperlinkTargetLoading: false,
+    hyperlinkTargetErrorText: '',
+    hyperlinkExternalContentCount: 0,
+    hyperlinkPromptTextCount: 0,
+    hyperlinkWorkSummary: '',
+    componentWorkSheetVisible: false,
+    componentWorkLoading: false,
+    componentWorkLoadingMore: false,
+    componentWorkErrorText: '',
+    componentWorkEmptyText: '暂无图片或动图作品',
+    componentWorkOptions: [],
+    componentWorkFilterTags: [],
+    componentWorkKeyword: '',
+    componentWorkSelectedTagId: null,
+    componentWorkPage: 1,
+    componentWorkPageSize: 20,
+    componentWorkHasMore: false,
+    componentWorkSelectedIds: [],
+    componentWorkSelectedCountText: '0 已选',
+    componentWorkSelectionMode: 'multiple',
+    componentWorkShowTitle: true,
+    componentWorkShowDescription: false,
+    editingComponentKey: '',
+    editingComponentType: ''
   })
 }
 
@@ -76,6 +159,10 @@ test('filters works by component media-type whitelist', () => {
   assert.deepEqual(
     selectableWorksFor('CAROUSEL', works).map((item) => item.mediaType),
     ['IMAGE']
+  )
+  assert.deepEqual(
+    selectableWorksFor('HYPERLINK', works).map((item) => item.mediaType),
+    ['IMAGE', 'ANIMATION']
   )
   assert.deepEqual(selectableWorksFor('UNKNOWN', works), [])
 })
@@ -261,7 +348,7 @@ test('personal text sections keep legacy defaults and new component defaults', (
   assert.equal(added.components[0].config.fontSizeRpx, 28)
 })
 
-test('legacy personal text patches preserve typography and unknown fields', () => {
+test('personal text patches preserve typography and unknown fields under the current editor revision', () => {
   const config = normalizePortfolioConfig({
     components: [
       createComponent(COMPONENT_TYPES.TEXT_SECTION, {
@@ -282,8 +369,8 @@ test('legacy personal text patches preserve typography and unknown fields', () =
     alignment: 'RIGHT'
   })
 
-  assert.equal(EDITOR_SCHEMA_REVISION, 2)
-  assert.equal(updated.editorSchemaRevision, 2)
+  assert.equal(EDITOR_SCHEMA_REVISION, 3)
+  assert.equal(updated.editorSchemaRevision, 3)
   assert.equal(updated.components[0].config.fontFamily, 'WECHAT_SANS_SS')
   assert.equal(updated.components[0].config.fontSizeRpx, 30)
   assert.equal(updated.components[0].config.futureField, 'kept')
@@ -508,7 +595,9 @@ test('standard portfolio disables profile option when profile component already 
 })
 
 test('standard portfolio keeps profile option disabled after component library loads', async () => {
+  const requests = []
   const page = loadPortfolioEditorPage((options) => {
+    requests.push(options)
     if (options.url === '/api/mine/portfolios/component-library') {
       return Promise.resolve({
         components: [
@@ -525,6 +614,796 @@ test('standard portfolio keeps profile option disabled after component library l
 
   const profileOption = page.data.componentOptions.find((item) => item.componentType === COMPONENT_TYPES.PROFILE)
   assert.equal(profileOption.disabled, true)
+  assert.deepEqual(requests[0].data, { editorSchemaRevision: 3 })
+})
+
+test('hyperlink editor omits source id for an unsaved portfolio and keeps invalid current selection visible', async () => {
+  const requests = []
+  const page = loadPortfolioEditorPage((options) => {
+    requests.push(options)
+    if (options.url === '/api/mine/portfolios/hyperlink-targets') {
+      return Promise.resolve({
+        portfolios: [
+          {
+            portfolioId: 99,
+            title: '已发布作品集',
+            coverUrl: 'https://cdn.example/portfolio-cover.jpg',
+            selectable: true
+          },
+          { portfolioId: 100, title: '会形成循环', selectable: false, disabledReason: '不能循环跳转' }
+        ],
+        currentSelection: {
+          portfolioId: 88,
+          title: '当前选择已失效',
+          selectable: false,
+          disabledReason: '作品集已下线'
+        }
+      })
+    }
+    return Promise.resolve({})
+  })
+  page.data.portfolioId = null
+  page.data.config = normalizePortfolioConfig({
+    components: [createComponent(COMPONENT_TYPES.HYPERLINK, {
+      componentKey: 'c_link',
+      config: {
+        workId: 11,
+        actionType: 'INTERNAL_PORTFOLIO',
+        targetPortfolioId: 88
+      }
+    })]
+  })
+
+  await page.handleComponentTap({
+    currentTarget: { dataset: { key: 'c_link', type: COMPONENT_TYPES.HYPERLINK } }
+  })
+  await flushPromises()
+
+  assert.equal(page.data.portfolioId, null)
+  assert.equal(page.data.hyperlinkSheetVisible, true)
+  assert.deepEqual(requests.map((item) => item.url), [
+    '/api/mine/works',
+    '/api/mine/portfolios/hyperlink-targets'
+  ])
+  assert.deepEqual(requests[1].data, {
+    sourcePortfolioId: undefined,
+    selectedTargetPortfolioId: 88
+  })
+  assert.deepEqual(page.data.hyperlinkTargetOptions.map((item) => item.portfolioId), [88, 99, 100])
+  assert.equal(page.data.hyperlinkTargetOptions[0].currentSelection, true)
+  assert.equal(page.data.hyperlinkTargetOptions[0].selectable, false)
+  assert.equal(page.data.hyperlinkTargetOptions[1].coverUrl, 'https://cdn.example/portfolio-cover.jpg')
+})
+
+test('hyperlink editor loads its inline work picker without opening a second sheet', async () => {
+  const requests = []
+  const page = loadPortfolioEditorPage((options) => {
+    requests.push(options)
+    return Promise.resolve({
+      page: 1,
+      pageSize: 20,
+      hasMore: false,
+      summary: { totalCount: 1 },
+      tags: [{ id: 7, name: '仪式', count: 1 }],
+      works: [
+        {
+          id: 11,
+          mediaType: 'IMAGE',
+          auditStatus: 'PASSED',
+          title: '草坪仪式',
+          coverUrl: 'https://cdn.example/works/11.jpg'
+        }
+      ]
+    })
+  })
+  page.data.config = normalizePortfolioConfig({
+    components: [createComponent(COMPONENT_TYPES.HYPERLINK, {
+      componentKey: 'c_link',
+      config: {
+        workId: 11,
+        actionType: 'EXTERNAL_LINK',
+        externalContent: '分享内容',
+        promptText: '请复制'
+      }
+    })]
+  })
+
+  await page.handleComponentTap({
+    currentTarget: { dataset: { key: 'c_link', type: COMPONENT_TYPES.HYPERLINK } }
+  })
+
+  assert.equal(page.data.hyperlinkSheetVisible, true)
+  assert.equal(page.data.componentWorkSheetVisible, false)
+  assert.equal(page.data.editingComponentType, COMPONENT_TYPES.HYPERLINK)
+  assert.deepEqual(page.data.componentWorkSelectedIds, [11])
+  assert.deepEqual(page.data.componentWorkOptions.map((item) => item.id), [11])
+  assert.equal(page.data.componentWorkSelectedTagId, null)
+  assert.equal(page.data.componentWorkKeyword, '')
+  assert.equal(requests.length, 1)
+  assert.equal(requests[0].url, '/api/mine/works')
+  assert.deepEqual(requests[0].data, {
+    keyword: '',
+    tagId: undefined,
+    mediaType: undefined,
+    auditStatus: 'PASSED',
+    page: 1,
+    pageSize: 20
+  })
+})
+
+test('adding a hyperlink opens its editor immediately and cancel removes the unfinished component', async () => {
+  const requests = []
+  const page = loadPortfolioEditorPage((options) => {
+    requests.push(options)
+    return Promise.resolve({})
+  })
+  const beforeKeys = page.data.config.components.map((component) => component.componentKey)
+
+  await page.handleSelectComponent({
+    currentTarget: { dataset: { type: COMPONENT_TYPES.HYPERLINK } }
+  })
+
+  assert.equal(page.data.hyperlinkSheetVisible, true)
+  assert.equal(page.data.hyperlinkEditingNewComponent, true)
+  assert.equal(page.data.config.components.at(-1).componentType, COMPONENT_TYPES.HYPERLINK)
+  assert.deepEqual(requests.map((item) => item.url), ['/api/mine/works'])
+
+  page.handleCloseHyperlinkSheet()
+
+  assertHyperlinkEditorReset(page)
+  assert.deepEqual(page.data.config.components.map((component) => component.componentKey), beforeKeys)
+})
+
+test('hyperlink editor switches to external content and removes the old internal target atomically', () => {
+  const page = loadPortfolioEditorPage(() => Promise.resolve({}))
+  page.data.config = normalizePortfolioConfig({
+    components: [createComponent(COMPONENT_TYPES.HYPERLINK, {
+      componentKey: 'c_link',
+      config: {
+        workId: 11,
+        actionType: 'INTERNAL_PORTFOLIO',
+        targetPortfolioId: 88
+      }
+    })]
+  })
+  page.data.hyperlinkSheetVisible = true
+  page.data.hyperlinkEditingComponentKey = 'c_link'
+  page.data.hyperlinkForm = clone(page.data.config.components[0].config)
+
+  page.handleHyperlinkActionTypeTap({ currentTarget: { dataset: { value: 'EXTERNAL_LINK' } } })
+  page.handleHyperlinkExternalContentInput({ detail: { value: ' 复制打开抖音 8@x\n😀 ' } })
+  page.handleHyperlinkPromptTextInput({ detail: { value: '请打开抖音粘贴' } })
+  page.handleHyperlinkShowIconChange({ detail: { value: true } })
+  page.handleHyperlinkIconPositionTap({ currentTarget: { dataset: { value: 'BELOW' } } })
+  page.handleConfirmHyperlinkConfig()
+
+  const saved = page.data.config.components[0].config
+  assert.equal(saved.actionType, 'EXTERNAL_LINK')
+  assert.equal(saved.externalContent, ' 复制打开抖音 8@x\n😀 ')
+  assert.equal(saved.promptText, '请打开抖音粘贴')
+  assert.equal(saved.showClickIcon, true)
+  assert.equal(saved.iconPosition, 'BELOW')
+  assert.equal(Object.hasOwn(saved, 'targetPortfolioId'), false)
+  assertHyperlinkEditorReset(page)
+})
+
+test('hyperlink editor preserves both action drafts while switching and strips inactive fields only on confirm', async () => {
+  const page = loadPortfolioEditorPage(() => Promise.resolve({ portfolios: [] }))
+  page.data.config = normalizePortfolioConfig({
+    components: [createComponent(COMPONENT_TYPES.HYPERLINK, {
+      componentKey: 'c_link',
+      config: {
+        workId: 11,
+        actionType: 'EXTERNAL_LINK',
+        externalContent: ' 复制打开小红书\n乱码😀 ',
+        promptText: '请打开小红书粘贴'
+      }
+    })]
+  })
+  page.data.hyperlinkSheetVisible = true
+  page.data.hyperlinkEditingComponentKey = 'c_link'
+  page.data.hyperlinkForm = clone(page.data.config.components[0].config)
+
+  await page.handleHyperlinkActionTypeTap({ currentTarget: { dataset: { value: 'INTERNAL_PORTFOLIO' } } })
+  assert.equal(page.data.hyperlinkForm.externalContent, ' 复制打开小红书\n乱码😀 ')
+  assert.equal(page.data.hyperlinkForm.promptText, '请打开小红书粘贴')
+
+  page.handleSelectHyperlinkTarget({ currentTarget: { dataset: { id: 88, selectable: true } } })
+  await page.handleHyperlinkActionTypeTap({ currentTarget: { dataset: { value: 'EXTERNAL_LINK' } } })
+  assert.equal(page.data.hyperlinkForm.targetPortfolioId, 88)
+  assert.equal(page.data.hyperlinkForm.externalContent, ' 复制打开小红书\n乱码😀 ')
+  assert.equal(page.data.hyperlinkForm.promptText, '请打开小红书粘贴')
+
+  page.handleConfirmHyperlinkConfig()
+  const saved = page.data.config.components[0].config
+  assert.equal(saved.actionType, 'EXTERNAL_LINK')
+  assert.equal(saved.externalContent, ' 复制打开小红书\n乱码😀 ')
+  assert.equal(saved.promptText, '请打开小红书粘贴')
+  assert.equal(Object.hasOwn(saved, 'targetPortfolioId'), false)
+})
+
+test('hyperlink target loader ignores an older response that finishes after the latest request', async () => {
+  const first = deferred()
+  const second = deferred()
+  let requestCount = 0
+  const page = loadPortfolioEditorPage(() => {
+    requestCount += 1
+    return requestCount === 1 ? first.promise : second.promise
+  })
+  page.data.hyperlinkForm = {
+    actionType: 'INTERNAL_PORTFOLIO',
+    targetPortfolioId: 88
+  }
+
+  const firstLoad = page.loadHyperlinkTargets()
+  page.data.hyperlinkForm.targetPortfolioId = 99
+  const secondLoad = page.loadHyperlinkTargets()
+  second.resolve({ portfolios: [{ portfolioId: 99, title: '最新结果', selectable: true }] })
+  await secondLoad
+  first.resolve({ portfolios: [{ portfolioId: 88, title: '过期结果', selectable: true }] })
+  await firstLoad
+
+  assert.deepEqual(page.data.hyperlinkTargetOptions.map((item) => item.portfolioId), [99])
+  assert.equal(page.data.hyperlinkTargetLoading, false)
+})
+
+test('hyperlink work loader skips filtered-empty raw pages', async () => {
+  const requests = []
+  const page = loadPortfolioEditorPage((options) => {
+    requests.push(options)
+    if (options.data.page === 1) {
+      return Promise.resolve({
+        page: 1,
+        pageSize: 20,
+        hasMore: true,
+        summary: { totalCount: 2 },
+        tags: [],
+        works: [
+          { id: 11, mediaType: 'VIDEO', auditStatus: 'PASSED', title: '视频作品' }
+        ]
+      })
+    }
+    return Promise.resolve({
+      page: 2,
+      pageSize: 20,
+      hasMore: false,
+      summary: { totalCount: 2 },
+      tags: [],
+      works: [
+        { id: 12, mediaType: 'IMAGE', auditStatus: 'PASSED', title: '图片作品' }
+      ]
+    })
+  })
+
+  await page.loadComponentWorks({
+    reset: true,
+    componentType: COMPONENT_TYPES.HYPERLINK,
+    selectedIds: []
+  })
+
+  assert.deepEqual(requests.map((item) => item.data.page), [1, 2])
+  assert.deepEqual(page.data.componentWorkOptions.map((item) => item.id), [12])
+  assert.equal(page.data.componentWorkPage, 2)
+  assert.equal(page.data.componentWorkHasMore, false)
+})
+
+test('hyperlink work loader exhausts video-only pages before showing an empty result', async () => {
+  const requestedPages = []
+  const page = loadPortfolioEditorPage((options) => {
+    requestedPages.push(options.data.page)
+    return Promise.resolve({
+      page: options.data.page,
+      pageSize: 20,
+      hasMore: options.data.page === 1,
+      works: [
+        { id: 10 + options.data.page, mediaType: 'VIDEO', auditStatus: 'PASSED', title: '视频作品' }
+      ]
+    })
+  })
+
+  await page.loadComponentWorks({
+    reset: true,
+    componentType: COMPONENT_TYPES.HYPERLINK,
+    selectedIds: []
+  })
+
+  assert.deepEqual(requestedPages, [1, 2])
+  assert.deepEqual(page.data.componentWorkOptions, [])
+  assert.equal(page.data.componentWorkPage, 2)
+  assert.equal(page.data.componentWorkHasMore, false)
+  assert.equal(page.data.componentWorkLoading, false)
+})
+
+test('hyperlink work filter and duplicate scroll events preserve its off-page draft', async () => {
+  const nextPage = deferred()
+  const requests = []
+  const page = loadPortfolioEditorPage((options) => {
+    requests.push(options.data)
+    if (options.data.page === 2) {
+      return nextPage.promise
+    }
+    return Promise.resolve({
+      page: 1,
+      pageSize: 20,
+      hasMore: true,
+      tags: [{ id: 7, name: '仪式', count: 2 }],
+      works: [{ id: 31, mediaType: 'IMAGE', title: '筛选第一页' }]
+    })
+  })
+  page.data.editingComponentType = COMPONENT_TYPES.HYPERLINK
+  page.data.hyperlinkForm = { workId: 11 }
+  page.data.componentWorkSelectedIds = [11]
+  page.data.componentWorkOptions = [{ id: 11, mediaType: 'IMAGE', title: '当前作品', selected: true }]
+
+  await page.handleComponentWorkTagTap({ currentTarget: { dataset: { tagId: 7 } } })
+  const firstScroll = page.handleComponentWorkScrollToLower()
+  const duplicateScroll = page.handleComponentWorkScrollToLower()
+
+  assert.equal(requests.filter((item) => item.page === 2).length, 1)
+  nextPage.resolve({
+    page: 2,
+    pageSize: 20,
+    hasMore: false,
+    tags: [{ id: 7, name: '仪式', count: 2 }],
+    works: [
+      { id: 31, mediaType: 'IMAGE', title: '重复作品' },
+      { id: 32, mediaType: 'ANIMATION', title: '筛选第二页' }
+    ]
+  })
+  await Promise.all([firstScroll, duplicateScroll])
+
+  assert.deepEqual(page.data.componentWorkOptions.map((item) => item.id), [31, 32])
+  assert.deepEqual(page.data.componentWorkSelectedIds, [11])
+  assert.equal(page.data.hyperlinkForm.workId, 11)
+  assert.equal(page.data.componentWorkSelectedTagId, 7)
+})
+
+test('hyperlink work load-more failure retries the same raw page', async () => {
+  const requestedPages = []
+  let pageTwoAttempts = 0
+  const page = loadPortfolioEditorPage((options) => {
+    requestedPages.push(options.data.page)
+    pageTwoAttempts += 1
+    if (pageTwoAttempts === 1) {
+      return Promise.reject(new Error('网络波动'))
+    }
+    return Promise.resolve({
+      page: 2,
+      pageSize: 20,
+      hasMore: false,
+      works: [{ id: 12, mediaType: 'ANIMATION', title: '重试作品' }]
+    })
+  })
+  page.data.editingComponentType = COMPONENT_TYPES.HYPERLINK
+  page.data.componentWorkPage = 1
+  page.data.componentWorkHasMore = true
+  page.data.componentWorkOptions = [{ id: 11, mediaType: 'IMAGE', title: '已有作品' }]
+  page.data.componentWorkSelectedIds = [11]
+
+  await page.handleComponentWorkScrollToLower()
+
+  assert.equal(page.data.componentWorkErrorText, '网络波动')
+  assert.equal(page.data.componentWorkPage, 1)
+  assert.deepEqual(page.data.componentWorkOptions.map((item) => item.id), [11])
+
+  await page.handleRetryHyperlinkWorks()
+
+  assert.deepEqual(requestedPages, [2, 2])
+  assert.deepEqual(page.data.componentWorkOptions.map((item) => item.id), [11, 12])
+  assert.equal(page.data.componentWorkErrorText, '')
+})
+
+test('generic work sheet ignores a late work response after close', async () => {
+  const pending = deferred()
+  const page = loadPortfolioEditorPage(() => pending.promise)
+
+  const loading = page.loadComponentWorks({
+    reset: true,
+    componentType: COMPONENT_TYPES.SINGLE_WORK,
+    selectedIds: []
+  })
+  page.handleCloseComponentWorkSheet()
+  pending.resolve({
+    page: 1,
+    pageSize: 20,
+    hasMore: false,
+    works: [{ id: 11, mediaType: 'IMAGE', title: '迟到作品' }]
+  })
+  await loading
+
+  assert.deepEqual(page.data.componentWorkOptions, [])
+})
+
+test('generic work sheet ignores a late work rejection after close', async () => {
+  const pending = deferred()
+  const page = loadPortfolioEditorPage(() => pending.promise)
+
+  const loading = page.loadComponentWorks({
+    reset: true,
+    componentType: COMPONENT_TYPES.SINGLE_WORK,
+    selectedIds: []
+  })
+  page.handleCloseComponentWorkSheet()
+  pending.reject(new Error('迟到失败'))
+  await loading
+
+  assert.equal(page.data.componentWorkErrorText, '')
+})
+
+test('generic work sheet ignores a late work response after completion', async () => {
+  const pending = deferred()
+  const page = loadPortfolioEditorPage(() => pending.promise)
+  page.data.config = normalizePortfolioConfig({
+    components: [createComponent(COMPONENT_TYPES.SINGLE_WORK, {
+      componentKey: 'c_single',
+      config: { workId: 11, showTitle: true, showDescription: false }
+    })]
+  })
+  page.data.editingComponentKey = 'c_single'
+  page.data.editingComponentType = COMPONENT_TYPES.SINGLE_WORK
+  page.data.componentWorkPage = 1
+  page.data.componentWorkHasMore = true
+  page.data.componentWorkOptions = [
+    { id: 11, mediaType: 'IMAGE', title: '当前作品', selected: true }
+  ]
+  page.data.componentWorkSelectedIds = [11]
+
+  const loading = page.loadComponentWorks({
+    reset: false,
+    componentType: COMPONENT_TYPES.SINGLE_WORK,
+    selectedIds: [11]
+  })
+  page.handleConfirmComponentWorks()
+  pending.resolve({
+    page: 2,
+    pageSize: 20,
+    hasMore: false,
+    works: [{ id: 99, mediaType: 'IMAGE', title: '迟到作品' }]
+  })
+  await loading
+
+  assert.equal(page.data.componentWorkSheetVisible, false)
+  assert.deepEqual(page.data.componentWorkOptions.map((item) => item.id), [11])
+})
+
+test('hyperlink sheet ignores a late work response after cancel', async () => {
+  const pending = deferred()
+  const page = loadPortfolioEditorPage(() => pending.promise)
+
+  const loading = page.loadComponentWorks({
+    reset: true,
+    componentType: COMPONENT_TYPES.HYPERLINK,
+    selectedIds: []
+  })
+  page.handleCloseHyperlinkSheet()
+  pending.resolve({
+    page: 1,
+    pageSize: 20,
+    hasMore: false,
+    works: [{ id: 11, mediaType: 'IMAGE', title: '迟到作品' }]
+  })
+  await loading
+
+  assert.deepEqual(page.data.componentWorkOptions, [])
+})
+
+test('hyperlink sheet ignores a late work response after completion', async () => {
+  const pending = deferred()
+  const page = loadPortfolioEditorPage(() => pending.promise)
+  page.data.config = normalizePortfolioConfig({
+    components: [createComponent(COMPONENT_TYPES.HYPERLINK, {
+      componentKey: 'c_link',
+      config: {
+        workId: 11,
+        actionType: 'EXTERNAL_LINK',
+        externalContent: '分享内容',
+        promptText: '请复制'
+      }
+    })]
+  })
+  page.data.hyperlinkEditingComponentKey = 'c_link'
+  page.data.hyperlinkForm = clone(page.data.config.components[0].config)
+
+  const loading = page.loadComponentWorks({
+    reset: true,
+    componentType: COMPONENT_TYPES.HYPERLINK,
+    selectedIds: [11]
+  })
+  page.handleConfirmHyperlinkConfig()
+  pending.resolve({
+    page: 1,
+    pageSize: 20,
+    hasMore: false,
+    works: [{ id: 11, mediaType: 'IMAGE', title: '迟到作品' }]
+  })
+  await loading
+
+  assert.deepEqual(page.data.componentWorkOptions, [])
+})
+
+test('hyperlink editor uses the server prompt-length validation message', () => {
+  const toasts = []
+  const page = loadPortfolioEditorPage(() => Promise.resolve({}), {
+    showToast(options) {
+      toasts.push(options)
+    }
+  })
+  page.data.hyperlinkForm = {
+    workId: 11,
+    actionType: 'EXTERNAL_LINK',
+    externalContent: '复制内容',
+    promptText: '😀'.repeat(31)
+  }
+
+  page.handleConfirmHyperlinkConfig()
+
+  assert.deepEqual(toasts, [{ title: '提示语长度必须为1至30个字符', icon: 'none' }])
+})
+
+test('hyperlink editor uses the server required-field validation messages', () => {
+  const toasts = []
+  const page = loadPortfolioEditorPage(() => Promise.resolve({}), {
+    showToast(options) {
+      toasts.push(options)
+    }
+  })
+
+  page.data.hyperlinkForm = {
+    actionType: 'INTERNAL_PORTFOLIO',
+    targetPortfolioId: 99
+  }
+  page.handleConfirmHyperlinkConfig()
+
+  page.data.hyperlinkForm = {
+    workId: 11,
+    actionType: 'INTERNAL_PORTFOLIO'
+  }
+  page.handleConfirmHyperlinkConfig()
+
+  assert.deepEqual(toasts, [
+    { title: '请选择图片或动图作品', icon: 'none' },
+    { title: '请选择已发布的个人作品集', icon: 'none' }
+  ])
+})
+
+test('hyperlink editor layout exposes work, action, target, external content and icon controls', () => {
+  const pageRoot = path.join(__dirname, '../pages/portfolios/standard-edit')
+  const wxml = fs.readFileSync(path.join(pageRoot, 'portfolio-standard-edit.wxml'), 'utf8')
+  const wxss = fs.readFileSync(path.join(pageRoot, 'portfolio-standard-edit.wxss'), 'utf8')
+
+  assert.match(wxml, /hyperlinkSheetVisible/)
+  assert.doesNotMatch(wxml, /handleOpenHyperlinkWorkSheet/)
+  assert.match(wxml, /class="hyperlink-work-current/)
+  assert.match(wxml, /wx:if="\{\{singleWorkSummaryMap\[hyperlinkForm\.workId\] && singleWorkSummaryMap\[hyperlinkForm\.workId\]\.thumbUrl\}\}"[\s\S]*class="hyperlink-work-thumbnail-image"[\s\S]*src="\{\{singleWorkSummaryMap\[hyperlinkForm\.workId\]\.thumbUrl\}\}"/)
+  assert.match(wxml, /wx:for="\{\{componentWorkFilterTags\}\}"[\s\S]*catchtap="handleComponentWorkTagTap"/)
+  assert.match(wxml, /class="hyperlink-work-scroll"[\s\S]*scroll-x[\s\S]*bindscrolltolower="handleComponentWorkScrollToLower"/)
+  assert.match(wxml, /class="hyperlink-work-option[^"]*\{\{item\.selected[\s\S]*catchtap="handleSelectHyperlinkWork"[\s\S]*aria-role="radio"/)
+  assert.match(wxml, /handleRetryHyperlinkWorks/)
+  assert.match(wxml, /handleHyperlinkActionTypeTap/)
+  assert.match(wxml, /wx:for="\{\{hyperlinkTargetOptions\}\}"/)
+  assert.match(wxml, /class="hyperlink-target-scroll" scroll-x/)
+  assert.match(wxml, /class="hyperlink-target-cover"/)
+  assert.match(wxml, /src="\{\{item\.coverUrl\}\}"/)
+  assert.match(wxml, /class="hyperlink-target-cover-placeholder"/)
+  assert.match(wxml, /handleHyperlinkExternalContentInput/)
+  assert.match(wxml, /handleHyperlinkPromptTextInput/)
+  assert.match(wxml, /class="hyperlink-content-input[\s\S]*maxlength="-1"/)
+  assert.match(wxml, /handleHyperlinkShowIconChange/)
+  assert.match(wxml, /handleHyperlinkIconPositionTap/)
+  assert.match(wxml, /componentRows\.resolveHyperlinkSummary\(item, singleWorkSummaries\)/)
+  assert.match(wxss, /\.hyperlink-target-option/)
+  assert.match(wxss, /\.hyperlink-target-cover\s*\{[\s\S]*width:\s*100%;[\s\S]*height:\s*128rpx;/)
+  assert.match(wxss, /\.hyperlink-work-thumbnail-image,\s*\n\.hyperlink-work-thumbnail-placeholder\s*\{\s*width:\s*100%;\s*height:\s*100%;\s*\}/)
+  assert.match(wxss, /\.hyperlink-work-list\s*\{[^}]*display:\s*inline-flex;[^}]*gap:\s*12rpx;/)
+  assert.match(wxss, /\.hyperlink-work-option\s*\{[^}]*width:\s*260rpx;[^}]*flex:\s*0\s+0\s+260rpx;/)
+})
+
+test('inline hyperlink work selection updates draft without saving config', () => {
+  const page = loadPortfolioEditorPage(() => Promise.resolve({}))
+  page.data.config = normalizePortfolioConfig({
+    components: [createComponent(COMPONENT_TYPES.HYPERLINK, {
+      componentKey: 'c_link',
+      config: {
+        workId: 11,
+        actionType: 'EXTERNAL_LINK',
+        externalContent: '分享内容',
+        promptText: '请复制'
+      }
+    })]
+  })
+  page.data.hyperlinkForm = clone(page.data.config.components[0].config)
+  page.data.componentWorkSelectedIds = [11]
+  page.data.componentWorkOptions = [
+    {
+      id: 11,
+      mediaType: 'IMAGE',
+      typeText: '图片',
+      tagText: '仪式',
+      title: '原作品',
+      coverUrl: 'https://cdn.example/works/11.jpg',
+      selected: true
+    },
+    {
+      id: 12,
+      mediaType: 'ANIMATION',
+      typeText: '动图',
+      tagText: '迎宾',
+      title: '新作品',
+      coverUrl: 'https://cdn.example/works/12.jpg',
+      aspectRatio: '4:3',
+      selected: false
+    }
+  ]
+
+  page.handleSelectHyperlinkWork({ currentTarget: { dataset: { id: 12 } } })
+
+  assert.equal(page.data.hyperlinkForm.workId, 12)
+  assert.equal(page.data.config.components[0].config.workId, 11)
+  assert.deepEqual(page.data.componentWorkSelectedIds, [12])
+  assert.deepEqual(page.data.componentWorkOptions.map((item) => item.selected), [false, true])
+  assert.deepEqual(page.data.singleWorkSummaryMap[12], {
+    id: 12,
+    title: '新作品',
+    thumbUrl: 'https://cdn.example/works/12.jpg',
+    metaText: '动图 · 迎宾',
+    aspectRatioText: '4:3'
+  })
+})
+
+test('hyperlink editor reopens with original work after canceling inline selection', async () => {
+  const page = loadPortfolioEditorPage(() => Promise.resolve({
+    page: 1,
+    pageSize: 20,
+    hasMore: false,
+    works: [
+      { id: 11, mediaType: 'IMAGE', title: '原作品' },
+      { id: 12, mediaType: 'ANIMATION', title: '新作品' }
+    ]
+  }))
+  page.data.config = normalizePortfolioConfig({
+    components: [createComponent(COMPONENT_TYPES.HYPERLINK, {
+      componentKey: 'c_link',
+      config: {
+        workId: 11,
+        actionType: 'EXTERNAL_LINK',
+        externalContent: '分享内容',
+        promptText: '请复制'
+      }
+    })]
+  })
+
+  await page.handleComponentTap({
+    currentTarget: { dataset: { key: 'c_link', type: COMPONENT_TYPES.HYPERLINK } }
+  })
+  page.handleSelectHyperlinkWork({ currentTarget: { dataset: { id: 12 } } })
+  page.handleCloseHyperlinkSheet()
+  await page.handleComponentTap({
+    currentTarget: { dataset: { key: 'c_link', type: COMPONENT_TYPES.HYPERLINK } }
+  })
+
+  assert.equal(page.data.hyperlinkForm.workId, 11)
+  assert.deepEqual(page.data.componentWorkSelectedIds, [11])
+  assert.equal(page.data.config.components[0].config.workId, 11)
+})
+
+test('hyperlink editor keeps off-page current work when saving without replacement', async () => {
+  const page = loadPortfolioEditorPage(() => Promise.resolve({
+    page: 1,
+    pageSize: 20,
+    hasMore: false,
+    works: [
+      { id: 12, mediaType: 'IMAGE', title: '第一页其他作品' }
+    ]
+  }))
+  page.data.config = normalizePortfolioConfig({
+    components: [createComponent(COMPONENT_TYPES.HYPERLINK, {
+      componentKey: 'c_link',
+      config: {
+        workId: 11,
+        actionType: 'EXTERNAL_LINK',
+        externalContent: '分享内容',
+        promptText: '请复制'
+      }
+    })]
+  })
+  page.data.singleWorkSummaryMap = {
+    11: {
+      id: 11,
+      title: '当前已选作品',
+      thumbUrl: 'https://cdn.example/works/11.jpg',
+      metaText: '图片 · 仪式'
+    }
+  }
+
+  await page.handleComponentTap({
+    currentTarget: { dataset: { key: 'c_link', type: COMPONENT_TYPES.HYPERLINK } }
+  })
+
+  assert.equal(page.data.hyperlinkForm.workId, 11)
+  assert.equal(page.data.hyperlinkWorkSummary, '当前已选作品')
+  assert.deepEqual(page.data.componentWorkOptions.map((item) => item.selected), [false])
+
+  page.handleConfirmHyperlinkConfig()
+
+  assert.equal(page.data.config.components[0].config.workId, 11)
+})
+
+test('hyperlink editor exposes the travel-design labels and supporting descriptions', () => {
+  assert.deepEqual(HYPERLINK_ACTION_TYPE_OPTIONS, [
+    {
+      value: 'INTERNAL_PORTFOLIO',
+      label: '内部作品集跳转',
+      description: '跳转至一个已发布的作品集，访客可返回'
+    },
+    {
+      value: 'EXTERNAL_LINK',
+      label: '外部链接复制',
+      description: '点击后复制链接或分享内容并展示提示语'
+    }
+  ])
+  assert.deepEqual(HYPERLINK_ICON_POSITION_OPTIONS, [
+    {
+      value: 'OVERLAY',
+      label: '图标悬浮于图片内右下角',
+      description: '悬浮在图片内部右下角，带脉冲引导'
+    },
+    {
+      value: 'OVERLAY_BOTTOM_CENTER',
+      label: '图标悬浮于图片内下方',
+      description: '悬浮在图片内部底部居中，带脉冲引导'
+    },
+    {
+      value: 'OVERLAY_CENTER',
+      label: '图标悬浮于图片内正中',
+      description: '悬浮在图片内部正中，带脉冲引导'
+    },
+    {
+      value: 'BELOW',
+      label: '图标置于图片下方',
+      description: '居中显示在图片下方一行'
+    }
+  ])
+})
+
+test('server cycle validation focuses the exact hyperlink component after draft save fails', async () => {
+  const toasts = []
+  const page = loadPortfolioEditorPage((options) => {
+    if (options.url.endsWith('/draft')) {
+      const error = new Error('作品集之间不能循环跳转')
+      error.data = { errorCode: 'PORTFOLIO_HYPERLINK_CYCLE', componentKey: 'c_link' }
+      throw error
+    }
+    return Promise.resolve({})
+  }, {
+    showToast(options) {
+      toasts.push(options)
+    }
+  })
+  page.data.portfolioId = 77
+  page.data.config = normalizePortfolioConfig({
+    components: [createComponent(COMPONENT_TYPES.PROFILE)],
+    bottomNav: {
+      enabled: true,
+      items: [
+        { key: 'home', title: '主页' },
+        {
+          key: 'links',
+          title: '链接',
+          components: [createComponent(COMPONENT_TYPES.HYPERLINK, {
+            componentKey: 'c_link',
+            config: { workId: 11, actionType: 'INTERNAL_PORTFOLIO', targetPortfolioId: 99 }
+          })]
+        }
+      ]
+    }
+  })
+
+  await page.handleSaveDraft()
+
+  assert.equal(page.data.activeMenuKey, 'links')
+  assert.equal(page.data.validationComponentKey, 'c_link')
+  assert.equal(page.data.validationComponentAnchor, 'component-row-c_link')
+  assert.equal(toasts.at(-1).title, '作品集之间不能循环跳转')
 })
 
 test('standard portfolio ignores selection of disabled profile option', () => {
@@ -1233,6 +2112,80 @@ test('single work row summaries resolve selected work titles from formal work de
 
   assert.equal(page.data.singleWorkSummaryMap[11].title, '草坪仪式')
   assert.equal(page.data.singleWorkSummaries[0].title, '草坪仪式')
+})
+
+test('late work summaries preserve a newly selected hyperlink draft', async () => {
+  const pending = deferred()
+  const page = loadPortfolioEditorPage(() => pending.promise)
+  const config = normalizePortfolioConfig({
+    components: [createComponent(COMPONENT_TYPES.HYPERLINK, {
+      componentKey: 'c_link',
+      config: {
+        workId: 11,
+        actionType: 'EXTERNAL_LINK',
+        externalContent: '分享内容',
+        promptText: '请复制'
+      }
+    })]
+  })
+  page.data.config = config
+  page.data.hyperlinkSheetVisible = true
+  page.data.hyperlinkEditingComponentKey = 'c_link'
+  page.data.hyperlinkForm = clone(config.components[0].config)
+  page.data.componentWorkOptions = [
+    {
+      id: 12,
+      mediaType: 'ANIMATION',
+      typeText: '动图',
+      title: '新选择',
+      coverUrl: 'https://example.com/12.jpg'
+    }
+  ]
+
+  const loading = page.loadSingleWorkSummaries(config)
+  page.handleSelectHyperlinkWork({ currentTarget: { dataset: { id: 12 } } })
+  pending.resolve({
+    work: { id: 11, mediaType: 'IMAGE', title: '旧作品', coverUrl: 'https://example.com/11.jpg' }
+  })
+  await loading
+
+  assert.equal(page.data.singleWorkSummaryMap[12].title, '新选择')
+  assert.equal(page.data.hyperlinkForm.workId, 12)
+  assert.equal(page.data.hyperlinkWorkSummary, '新选择')
+
+  page.handleConfirmHyperlinkConfig()
+
+  assert.equal(page.data.config.components[0].config.workId, 12)
+  assert.deepEqual(page.data.singleWorkSummaries.map((item) => item.id), [12])
+  assert.equal(page.data.singleWorkSummaries[0].title, '新选择')
+})
+
+test('deferred work summary replaces the hyperlink fallback title', async () => {
+  const pending = deferred()
+  const page = loadPortfolioEditorPage(() => pending.promise)
+  const config = normalizePortfolioConfig({
+    components: [createComponent(COMPONENT_TYPES.HYPERLINK, {
+      componentKey: 'c_link',
+      config: {
+        workId: 11,
+        actionType: 'EXTERNAL_LINK',
+        externalContent: '分享内容',
+        promptText: '请复制'
+      }
+    })]
+  })
+  page.data.config = config
+  page.data.hyperlinkSheetVisible = true
+  page.data.hyperlinkForm = clone(config.components[0].config)
+  page.data.hyperlinkWorkSummary = '已选择作品 #11'
+
+  const loading = page.loadSingleWorkSummaries(config)
+  pending.resolve({
+    work: { id: 11, mediaType: 'IMAGE', title: '正式标题', coverUrl: 'https://example.com/11.jpg' }
+  })
+  await loading
+
+  assert.equal(page.data.hyperlinkWorkSummary, '正式标题')
 })
 
 test('single work row summaries distinguish detail failures from unavailable works', async () => {

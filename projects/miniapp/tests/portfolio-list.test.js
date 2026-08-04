@@ -1019,6 +1019,51 @@ test('left swiping a personal portfolio reveals delete and confirm delete refres
   }
 })
 
+test('personal portfolio delete guard shows referenced portfolio titles and scopes in a modal', async () => {
+  const modals = []
+  const toasts = []
+  const referenceMessage = '作品集被《婚礼主持作品集》（已发布版本）引用，请先移除引用'
+  const page = loadPortfolioListPage((options) => {
+    if (options.url === '/api/mine/portfolios/delete/88') {
+      const error = new Error(referenceMessage)
+      error.errorCode = 'PERSONAL_PORTFOLIO_REFERENCED'
+      error.data = {
+        errorCode: 'PERSONAL_PORTFOLIO_REFERENCED',
+        references: [{ sourcePortfolioId: 99, sourceTitle: '婚礼主持作品集', configScope: 'PUBLISHED' }]
+      }
+      return Promise.reject(error)
+    }
+    return Promise.resolve({ portfolios: [{ portfolioId: 88, title: '目标作品集' }] })
+  }, {
+    showModal(options) {
+      modals.push(options)
+      if (options.confirmText === '删除') {
+        options.success({ confirm: true })
+      }
+    },
+    showToast(options) {
+      toasts.push(options)
+    }
+  })
+
+  page.bootstrap()
+  await flushPromises()
+  page.handleDeletePortfolioTap({ currentTarget: { dataset: { id: 88 } } })
+  await flushPromises()
+  await flushPromises()
+
+  try {
+    assert.equal(page.data.deletingPortfolioId, null)
+    assert.equal(modals.length, 2)
+    assert.equal(modals[1].title, '无法删除作品集')
+    assert.equal(modals[1].content, referenceMessage)
+    assert.equal(modals[1].showCancel, false)
+    assert.deepEqual(toasts, [])
+  } finally {
+    page.cleanup()
+  }
+})
+
 test('tapping a revealed portfolio card closes delete action instead of opening editor', async () => {
   const navigations = []
   const page = loadPortfolioListPage(() => Promise.resolve({ portfolios: [] }), {

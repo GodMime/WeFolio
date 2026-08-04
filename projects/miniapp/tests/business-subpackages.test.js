@@ -32,6 +32,7 @@ const PACKAGE_LOCAL_UTILS = {
     'portfolio-contact-form.js',
     'portfolio-publish-disclaimer.js',
     'portfolio-render-events.js',
+    'portfolio-work-media.js',
     'single-page-mode.js',
     'team-portfolio-list.js',
     'visitor-profile.js',
@@ -326,6 +327,19 @@ test('work media utilities stay inside their business subpackages', () => {
   })
   const packageSources = packageUtilityPaths.map((utilityPath) => fs.readFileSync(utilityPath, 'utf8'))
   assert.equal(new Set(packageSources).size, 1, 'work media utility copies should stay aligned')
+  const works = [
+    { id: 1, mediaType: 'IMAGE' },
+    { id: 2, mediaType: 'ANIMATION' }
+  ]
+  packageUtilityPaths.forEach((utilityPath) => {
+    delete require.cache[require.resolve(utilityPath)]
+    const { selectableWorksFor } = require(utilityPath)
+    assert.deepEqual(
+      selectableWorksFor('HYPERLINK', works),
+      [],
+      `${path.relative(MINIAPP_ROOT, utilityPath)} should not expose personal hyperlink rules`
+    )
+  })
 })
 
 test('team portfolio list utility copies stay byte-for-byte aligned across business subpackages', () => {

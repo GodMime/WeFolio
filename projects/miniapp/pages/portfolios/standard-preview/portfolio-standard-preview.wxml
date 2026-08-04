@@ -126,6 +126,16 @@
         <block wx:elif="{{item.componentType === 'DIVIDER'}}">
           <portfolio-divider divider="{{item.divider}}" theme-mode="{{portfolio.themeMode}}"></portfolio-divider>
         </block>
+
+        <block wx:elif="{{item.componentType === 'HYPERLINK'}}">
+          <portfolio-hyperlink
+            component-key="{{item.componentKey}}"
+            hyperlink="{{item.hyperlink}}"
+            repair-mode="{{true}}"
+            theme-mode="{{portfolio.themeMode}}"
+            bindhyperlinktap="handleHyperlinkTap"
+          ></portfolio-hyperlink>
+        </block>
       </view>
 
       <view class="folio-brand-footer">
@@ -178,4 +188,8 @@
     bindsubmitcontact="handleSubmitContact"
     bindclosemodal="handleCloseContactFormModal"
   ></portfolio-contact-form>
+
+  <root-portal wx:if="{{clipboardPromptVisible}}">
+    <view class="clipboard-prompt-card portfolio-theme-{{portfolio.themeMode}}">{{clipboardPromptText}}</view>
+  </root-portal>
 </view>

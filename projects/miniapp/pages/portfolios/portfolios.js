@@ -49,6 +49,7 @@ const TEAM_VISITOR_SHARE_PATH_PREFIX = '/pages/team-portfolios/visitor-portfolio
 const SHARE_SCENE_TEAM_PORTFOLIO_LIST = 'TEAM_PORTFOLIO_LIST'
 const IDEMPOTENCY_PREFIX_TEAM_PUBLISH = 'team-publish'
 const SHARE_UNAVAILABLE_MESSAGE = '当前作品集暂不可分享'
+const PERSONAL_PORTFOLIO_REFERENCED_ERROR_CODE = 'PERSONAL_PORTFOLIO_REFERENCED'
 
 function makeIdempotencyKey(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`
@@ -855,6 +856,16 @@ Page({
             deletingPortfolioId: null,
             revealedPortfolioId: null
           })
+          const errorCode = error && (error.errorCode || (error.data && error.data.errorCode))
+          if (errorCode === PERSONAL_PORTFOLIO_REFERENCED_ERROR_CODE) {
+            wx.showModal({
+              title: '无法删除作品集',
+              content: error.message || '作品集正在被其他个人作品集使用，请先移除引用',
+              showCancel: false,
+              confirmText: '知道了'
+            })
+            return
+          }
           wx.showToast({
             title: error && error.message ? error.message : '作品集删除失败',
             icon: 'none',

@@ -3,6 +3,7 @@ const test = require('node:test')
 
 const {
   COMPONENT_TYPES,
+  EDITOR_SCHEMA_REVISION,
   addDisplayGroup,
   addComponent,
   buildDraftPayload,
@@ -14,6 +15,7 @@ const {
   getMenuComponentList,
   importWorksIntoDisplayGroup,
   normalizePortfolioConfig,
+  normalizeHyperlinkConfig,
   removeNavigationItem,
   normalizeSingleWorkConfig,
   replaceMenuComponentList,
@@ -22,6 +24,7 @@ const {
   removeComponent,
   removeDisplayGroup,
   updateComponentProfileConfig,
+  updateComponentHyperlinkConfig,
   updateSingleWorkConfig,
   updateDisplayGroupName,
   updateDisplayGroupWorkIds,
@@ -29,6 +32,7 @@ const {
   validateDisplayGroupName,
   validateCarouselComponent,
   validatePortfolioForPublish,
+  validateHyperlinkComponent,
   validateSingleWorkComponent,
   validateWorkGridComponent
 } = require('../utils/portfolios')
@@ -38,6 +42,10 @@ const {
   normalizeHexColor,
   themeModeFromHex
 } = require('../utils/portfolio-color')
+
+test('new editor advertises hyperlink schema revision', () => {
+  assert.equal(EDITOR_SCHEMA_REVISION, 3)
+})
 
 test('normalizes style and bottom navigation without duplicating first menu components', () => {
   const config = normalizePortfolioConfig({
@@ -62,7 +70,7 @@ test('normalizes style and bottom navigation without duplicating first menu comp
     }
   })
 
-  assert.equal(config.editorSchemaRevision, 2)
+  assert.equal(config.editorSchemaRevision, 3)
   assert.equal(config.style.backgroundColor, '#1A2B3C')
   assert.equal(Object.hasOwn(config.bottomNav.items[0], 'components'), false)
   assert.equal(config.bottomNav.items[0].iconUrl, 'https://example.com/home.png')
@@ -70,6 +78,69 @@ test('normalizes style and bottom navigation without duplicating first menu comp
   assert.deepEqual(getMenuComponentList(config, 'home').map((item) => item.componentKey), ['c_home'])
   assert.deepEqual(getMenuComponentList(config, 'works').map((item) => item.componentKey), ['c_works'])
   assert.equal(findPortfolioComponent(config, 'c_works').menuKey, 'works')
+})
+
+test('legacy editor preserves unknown hyperlink components when saving unrelated changes', () => {
+  const rawConfig = {
+    schemaVersion: 'standard-personal-v1',
+    editorSchemaRevision: 3,
+    share: { title: '原标题' },
+    components: [
+      {
+        componentKey: 'c_hyperlink_top',
+        componentType: 'HYPERLINK',
+        sortOrder: 1000,
+        enabled: true,
+        config: {
+          workId: 11,
+          actionType: 'EXTERNAL_LINK',
+          externalContent: '复制这段内容\n😀 保留空格 ',
+          promptText: '去小红书粘贴',
+          showClickIcon: true,
+          iconPosition: 'OVERLAY',
+          futureField: { nested: 'keep-me' }
+        }
+      }
+    ],
+    bottomNav: {
+      enabled: true,
+      items: [
+        { key: 'home', title: '主页' },
+        {
+          key: 'links',
+          title: '链接',
+          components: [
+            {
+              componentKey: 'c_hyperlink_nested',
+              componentType: 'HYPERLINK',
+              sortOrder: 1000,
+              enabled: true,
+              config: {
+                workId: 12,
+                actionType: 'INTERNAL_PORTFOLIO',
+                targetPortfolioId: 99,
+                showClickIcon: false,
+                iconPosition: 'BELOW',
+                futureFlag: true
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+
+  const normalized = normalizePortfolioConfig(rawConfig)
+  normalized.share.title = '修改后的标题'
+  const payload = buildDraftPayload(normalized, 7, 'idem-legacy-hyperlink')
+
+  assert.equal(payload.config.share.title, '修改后的标题')
+  assert.deepEqual(payload.config.components.map((item) => item.componentKey), ['c_hyperlink_top'])
+  assert.equal(payload.config.components[0].componentType, 'HYPERLINK')
+  assert.deepEqual(payload.config.components[0].config, rawConfig.components[0].config)
+  assert.deepEqual(payload.config.bottomNav.items[1].components.map((item) => item.componentKey), ['c_hyperlink_nested'])
+  assert.equal(payload.config.bottomNav.items[1].components[0].componentType, 'HYPERLINK')
+  assert.deepEqual(payload.config.bottomNav.items[1].components[0].config, rawConfig.bottomNav.items[1].components[0].config)
 })
 
 test('publish validation locates the first invalid component across navigation menus', () => {
@@ -189,6 +260,7 @@ test('replaces and removes menu components independently with first menu promoti
 
 test('counts unicode code points and converts portfolio colors consistently', () => {
   assert.equal(countUnicodeCodePoints('主页😀'), 3)
+  assert.equal(countUnicodeCodePoints('👨‍👩‍👧‍👦'), 7)
   assert.equal(normalizeHexColor('#aabbcc'), '#AABBCC')
   assert.equal(normalizeHexColor('invalid'), '#FFFFFF')
   assert.equal(themeModeFromHex('#151515'), 'dark')
@@ -314,6 +386,131 @@ test('single work validation requires one valid image or video work', () => {
   assert.equal(validateSingleWorkComponent({ config: { workId: 99 } }, works).message, '请选择有效作品')
   assert.equal(validateSingleWorkComponent({ config: { workId: 11 } }, works).valid, true)
   assert.equal(validateSingleWorkComponent({ config: { workId: 12 } }, works).valid, true)
+})
+
+test('hyperlink component normalizes mutually exclusive actions without changing external content', () => {
+  const content = ' 9#小程序://小红书/乱码\n😀 复制整段 '
+  const external = normalizeHyperlinkConfig({
+    workId: '11',
+    actionType: 'EXTERNAL_LINK',
+    targetPortfolioId: 99,
+    externalContent: content,
+    promptText: '打开小红书粘贴',
+    showClickIcon: true,
+    iconPosition: 'BELOW'
+  })
+  assert.equal(external.workId, 11)
+  assert.equal(external.externalContent, content)
+  assert.equal(Object.hasOwn(external, 'targetPortfolioId'), false)
+
+  const internal = normalizeHyperlinkConfig({
+    workId: 12,
+    actionType: 'INTERNAL_PORTFOLIO',
+    targetPortfolioId: '88',
+    externalContent: '不应保留',
+    promptText: '不应保留'
+  })
+  assert.equal(internal.targetPortfolioId, 88)
+  assert.equal(internal.showClickIcon, false)
+  assert.equal(internal.iconPosition, 'OVERLAY')
+  assert.equal(Object.hasOwn(internal, 'externalContent'), false)
+  assert.equal(Object.hasOwn(internal, 'promptText'), false)
+})
+
+test('hyperlink component preserves every supported click-icon position and defaults unknown values', () => {
+  for (const iconPosition of ['OVERLAY', 'OVERLAY_BOTTOM_CENTER', 'OVERLAY_CENTER', 'BELOW']) {
+    assert.equal(normalizeHyperlinkConfig({ iconPosition }).iconPosition, iconPosition)
+  }
+  assert.equal(normalizeHyperlinkConfig({ iconPosition: 'UNKNOWN' }).iconPosition, 'OVERLAY')
+})
+
+test('hyperlink update removes the previous internal target when switching to external action', () => {
+  const config = normalizePortfolioConfig({
+    components: [createComponent(COMPONENT_TYPES.HYPERLINK, {
+      componentKey: 'c_link',
+      config: {
+        workId: 11,
+        actionType: 'INTERNAL_PORTFOLIO',
+        targetPortfolioId: 88
+      }
+    })]
+  })
+  const updated = updateComponentHyperlinkConfig(config, 'c_link', {
+    workId: 11,
+    actionType: 'EXTERNAL_LINK',
+    externalContent: '复制这段内容',
+    promptText: '复制成功'
+  })
+
+  assert.equal(Object.hasOwn(updated.components[0].config, 'targetPortfolioId'), false)
+  assert.equal(updated.components[0].config.externalContent, '复制这段内容')
+})
+
+test('hyperlink validation accepts image or passed animation and counts Unicode code points', () => {
+  const works = [
+    { id: 11, mediaType: 'IMAGE' },
+    { id: 12, mediaType: 'ANIMATION', auditStatus: 'PASSED' },
+    { id: 13, mediaType: 'VIDEO' }
+  ]
+  assert.equal(validateHyperlinkComponent({ config: {} }, works).message, '请选择图片或动图作品')
+  assert.equal(validateHyperlinkComponent({ config: {
+    workId: 13,
+    actionType: 'EXTERNAL_LINK',
+    externalContent: 'x',
+    promptText: 'y'
+  } }, works).message, '展示作品只能选择图片或动图')
+  assert.equal(validateHyperlinkComponent({ config: {
+    workId: 12,
+    actionType: 'EXTERNAL_LINK',
+    externalContent: '😀'.repeat(2048),
+    promptText: '😀'.repeat(30),
+    iconPosition: 'BELOW'
+  } }, works).valid, true)
+  assert.equal(validateHyperlinkComponent({ config: {
+    workId: 11,
+    actionType: 'EXTERNAL_LINK',
+    externalContent: '😀'.repeat(2049),
+    promptText: '已复制'
+  } }, works).message, '链接或分享内容长度必须为1至2048个字符')
+  assert.equal(validateHyperlinkComponent({ config: {
+    workId: 11,
+    actionType: 'EXTERNAL_LINK',
+    externalContent: '复制内容',
+    promptText: '😀'.repeat(31)
+  } }, works).message, '提示语长度必须为1至30个字符')
+  assert.equal(validateHyperlinkComponent({ config: {
+    workId: 11,
+    actionType: 'INTERNAL_PORTFOLIO',
+    targetPortfolioId: 0
+  } }, works).message, '请选择已发布的个人作品集')
+})
+
+test('hyperlink publish validation uses the server required-field messages', () => {
+  const missingWork = normalizePortfolioConfig({
+    components: [createComponent(COMPONENT_TYPES.HYPERLINK, {
+      componentKey: 'c_missing_work',
+      config: { actionType: 'INTERNAL_PORTFOLIO', targetPortfolioId: 99 }
+    })]
+  })
+  assert.deepEqual(validatePortfolioForPublish(missingWork), {
+    valid: false,
+    menuKey: '',
+    componentKey: 'c_missing_work',
+    message: '请选择图片或动图作品'
+  })
+
+  const missingTarget = normalizePortfolioConfig({
+    components: [createComponent(COMPONENT_TYPES.HYPERLINK, {
+      componentKey: 'c_missing_target',
+      config: { workId: 11, actionType: 'INTERNAL_PORTFOLIO' }
+    })]
+  })
+  assert.deepEqual(validatePortfolioForPublish(missingTarget), {
+    valid: false,
+    menuKey: '',
+    componentKey: 'c_missing_target',
+    message: '请选择已发布的个人作品集'
+  })
 })
 
 test('contact form component defaults to visitor input fields', () => {

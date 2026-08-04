@@ -86,6 +86,15 @@ public interface PortfolioMessage {
     /** 作品集并发更新冲突提示 */
     String PORTFOLIO_CONCURRENT_UPDATE_MESSAGE = "并发冲突，请刷新重试";
 
+    /** 个人作品集图锁等待失败提示 */
+    String PORTFOLIO_GRAPH_BUSY_MESSAGE = "作品集正在更新，请稍后重试";
+
+    /** 超链接不能跳转当前作品集提示 */
+    String HYPERLINK_SELF_TARGET_MESSAGE = "不能跳转到当前作品集";
+
+    /** 超链接循环引用提示 */
+    String HYPERLINK_CYCLE_MESSAGE = "作品集之间不能循环跳转";
+
     /** 作品集删除失败提示 */
     String PORTFOLIO_DELETE_FAILED_MESSAGE = "作品集删除失败，请刷新重试";
 
@@ -166,6 +175,27 @@ public interface PortfolioMessage {
 
     /** 作品引用不可用提示 */
     String WORK_REFERENCE_INVALID_MESSAGE = "作品集引用了不可用作品，请刷新作品列表后重试";
+
+    /** 超链接展示作品为空提示 */
+    String HYPERLINK_DISPLAY_WORK_REQUIRED_MESSAGE = "请选择图片或动图作品";
+
+    /** 超链接展示作品不可用提示 */
+    String HYPERLINK_DISPLAY_WORK_INVALID_MESSAGE = "超链接展示作品不可用，请重新选择";
+
+    /** 超链接点击行为为空提示 */
+    String HYPERLINK_ACTION_REQUIRED_MESSAGE = "请选择点击行为";
+
+    /** 超链接内部目标为空提示 */
+    String HYPERLINK_TARGET_REQUIRED_MESSAGE = "请选择已发布的个人作品集";
+
+    /** 超链接外部内容长度提示 */
+    String HYPERLINK_EXTERNAL_CONTENT_LENGTH_MESSAGE = "链接或分享内容长度必须为1至2048个字符";
+
+    /** 超链接提示语长度提示 */
+    String HYPERLINK_PROMPT_TEXT_LENGTH_MESSAGE = "提示语长度必须为1至30个字符";
+
+    /** 超链接图标位置提示 */
+    String HYPERLINK_ICON_POSITION_UNSUPPORTED_MESSAGE = "点击图标位置不支持";
 
     /** 轮播图只能选图片提示 */
     String CAROUSEL_IMAGE_ONLY_MESSAGE = "轮播图只能选择图片作品";

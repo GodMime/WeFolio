@@ -1,0 +1,1291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>10 作品集 · 超链接组件 · 旅行风静态设计稿（新功能）</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #f1f3f5;
+    font-family: "Instrument Sans", -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: #212529;
+    padding: 40px 32px 72px;
+  }
+  .doc-header { max-width: 1280px; margin: 0 auto 28px; }
+  .doc-header h1 { font-size: 20px; font-weight: 700; }
+  .doc-header .sub { margin-top: 8px; font-size: 12px; color: #868e96; line-height: 1.7; }
+  .doc-header .pages { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .doc-header .chip {
+    font-size: 11px; font-weight: 500; color: #868e96;
+    background: #ffffff; border: 1px solid #e9ecef; border-radius: 999px;
+    padding: 5px 12px;
+  }
+  .stage { display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-start; max-width: 1280px; margin: 0 auto; }
+  .phone-slot { width: 375px; flex: none; }
+  .phone-label { font-size: 12px; font-weight: 600; color: #868e96; margin-bottom: 10px; }
+  .phone-label .path { display: block; font-weight: 400; color: #adb5bd; font-size: 11px; margin-top: 3px; }
+  .frame {
+    width: 375px; min-height: 812px; background: #ffffff;
+    border-radius: 36px; overflow: hidden; position: relative;
+    border: 1px solid #dee2e6;
+    display: flex; flex-direction: column;
+  }
+  .frame.fixed-h { height: 812px; min-height: 812px; }
+
+  /* 状态栏 */
+  .statusbar {
+    flex: none; height: 44px; display: flex; align-items: center;
+    justify-content: space-between; padding: 8px 26px 0;
+    font-size: 13px; font-weight: 600; color: #212529; background: #f5f6f7;
+  }
+  .statusbar .sicons { display: flex; align-items: center; gap: 6px; }
+
+  /* 导航栏 */
+  .navbar {
+    flex: none; height: 46px; position: relative;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 17px; font-weight: 600; color: #212529;
+    background: #f5f6f7;
+  }
+  .navbar .back {
+    position: absolute; left: 22px; top: 50%;
+    width: 9px; height: 9px; margin-top: -4px;
+    border-left: 2px solid #212529; border-bottom: 2px solid #212529;
+    transform: rotate(45deg);
+  }
+
+  /* 中性灰图片占位 */
+  .ph {
+    display: flex; align-items: center; justify-content: center;
+    color: #868e96; font-size: 12px; font-weight: 500;
+    text-align: center; line-height: 1.5; padding: 4px;
+    background: #e9ecef;
+  }
+  .ph-b { background: #dee2e6; }
+  .ph-c { background: #edf0f2; }
+
+  /* ===== 编辑页 ===== */
+  .ed-page { flex: 1; background: #f5f6f7; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .panel {
+    background: #ffffff; border: 1px solid #e9ecef; border-radius: 24px; padding: 14px;
+  }
+  .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .sec-title { color: #212529; font-size: 16px; font-weight: 700; }
+  .sec-desc { margin-top: 4px; color: #adb5bd; font-size: 11px; line-height: 1.45; }
+  .link-button {
+    min-width: 66px; height: 30px; flex: none; padding: 0 14px;
+    display: flex; align-items: center; justify-content: center;
+    color: #212529; font-size: 12px; font-weight: 600;
+    border-radius: 999px; background: #f5f6f7;
+  }
+  .comp-list { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .comp-row {
+    min-height: 50px; display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+    border: 1px solid #e9ecef; border-radius: 20px; background: #ffffff;
+  }
+  .comp-order {
+    width: 24px; height: 24px; flex: none; display: flex; align-items: center; justify-content: center;
+    color: #ffffff; font-size: 11px; font-weight: 700; border-radius: 50%;
+    background: #212529;
+  }
+  .comp-title { flex: 1; min-width: 0; color: #212529; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .comp-summary { display: block; margin-top: 2px; color: #adb5bd; font-size: 10.5px; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .drag-handle { width: 20px; height: 24px; flex: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+  .drag-handle i { display: block; width: 12px; height: 1.5px; border-radius: 2px; background: #ced4da; }
+  .row-arrow { width: 7px; height: 7px; flex: none; border-right: 1.8px solid #adb5bd; border-bottom: 1.8px solid #adb5bd; transform: rotate(-45deg); }
+
+  /* 底部弹层通用 */
+  .mask { position: absolute; inset: 0; z-index: 5; background: rgba(0,0,0,.4); }
+  .sheet {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 6;
+    display: flex; flex-direction: column; gap: 10px;
+    padding: 10px 16px 18px; background: #ffffff;
+    border-radius: 28px 28px 0 0;
+  }
+  .grabber { width: 36px; height: 4px; align-self: center; border-radius: 999px; background: #dee2e6; }
+  .sheet-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .sheet-title { flex: 1; min-width: 0; color: #212529; font-size: 16px; font-weight: 700; }
+  .sheet-count {
+    flex: none; min-height: 24px; display: flex; align-items: center; padding: 0 10px;
+    color: #868e96; font-size: 11px; font-weight: 600; white-space: nowrap;
+    border: 1px solid #e9ecef; border-radius: 999px; background: #ffffff;
+  }
+  .sheet-actions { display: flex; justify-content: flex-end; gap: 8px; }
+  .btn-cancel, .btn-confirm {
+    min-width: 74px; height: 34px; padding: 0 16px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 600; border-radius: 999px;
+  }
+  .btn-cancel { color: #212529; background: #f5f6f7; }
+  .btn-confirm { color: #ffffff; background: #212529; }
+
+  /* 选择组件弹层 */
+  .opt-list { display: flex; flex-direction: column; gap: 6px; }
+  .opt {
+    min-height: 48px; display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 12px; border: 1px solid #e9ecef; border-radius: 20px; background: #ffffff;
+  }
+  .opt.disabled { opacity: .45; }
+  .opt.hl-new { border-color: #212529; }
+  .opt-name { color: #212529; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+  .opt-desc { margin-top: 3px; color: #adb5bd; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .opt-plus {
+    width: 24px; height: 24px; flex: none; margin-left: 9px;
+    display: flex; align-items: center; justify-content: center;
+    color: #ffffff; font-size: 15px; font-weight: 500; border-radius: 50%; background: #212529;
+  }
+  .opt-added {
+    flex: none; margin-left: 9px; min-width: 54px; height: 24px; padding: 0 10px;
+    display: flex; align-items: center; justify-content: center;
+    color: #868e96; font-size: 10.5px; font-weight: 600; border-radius: 999px;
+    border: 1px solid #e9ecef; background: #ffffff;
+  }
+  .new-badge {
+    flex: none; height: 16px; padding: 0 6px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #ffffff; font-size: 9px; font-weight: 600; border-radius: 999px; background: #212529;
+  }
+
+  /* ===== 超链接编辑弹层 ===== */
+  .form-row { margin-top: 10px; }
+  .field-heading { display: flex; align-items: center; justify-content: space-between; }
+  .field-label { color: #868e96; font-size: 12px; font-weight: 600; }
+  .field-limit { color: #adb5bd; font-size: 11px; font-weight: 400; }
+  .input {
+    width: 100%; min-height: 42px; margin-top: 6px; padding: 0 14px;
+    display: flex; align-items: center;
+    color: #212529; font-size: 13px; border-radius: 999px;
+    background: #f5f6f7;
+  }
+  .input.placeholder { color: #adb5bd; }
+  .textarea {
+    width: 100%; min-height: 78px; margin-top: 6px; padding: 11px 14px;
+    display: flex; align-items: flex-start;
+    color: #212529; font-size: 13px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere;
+    border-radius: 20px; background: #f5f6f7;
+  }
+
+  /* 展示图片选择行 */
+  .pick-work {
+    margin-top: 6px; display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+    border: 1px solid #e9ecef; border-radius: 20px; background: #ffffff;
+  }
+  .pick-work-thumb {
+    position: relative; width: 64px; height: 64px; flex: none; overflow: hidden;
+    border-radius: 16px; background: #dee2e6;
+    display: flex; align-items: center; justify-content: center;
+    color: #868e96; font-size: 10.5px; font-weight: 500;
+  }
+  .gif-badge {
+    position: absolute; left: 5px; top: 5px; height: 15px; padding: 0 5px;
+    display: flex; align-items: center; justify-content: center;
+    color: #ffffff; font-size: 8.5px; font-weight: 700; letter-spacing: .4px;
+    border-radius: 999px; background: rgba(33,37,41,.72);
+  }
+  .pick-work-name { color: #212529; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pick-work-meta { margin-top: 4px; color: #adb5bd; font-size: 11px; }
+  .pick-work-btn {
+    height: 30px; flex: none; padding: 0 14px;
+    display: flex; align-items: center; justify-content: center;
+    color: #212529; font-size: 11px; font-weight: 600;
+    border-radius: 999px; background: #f5f6f7;
+  }
+
+  /* 链接类型二选一卡片 */
+  .type-list { margin-top: 6px; display: flex; flex-direction: column; gap: 6px; }
+  .type-card {
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+    border: 1px solid #e9ecef; border-radius: 20px; background: #ffffff;
+  }
+  .type-card.sel { border-color: #212529; }
+  .type-card.off { opacity: .55; }
+  .radio-dot {
+    width: 18px; height: 18px; flex: none; border-radius: 50%;
+    border: 1.5px solid #ced4da; background: #ffffff;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .type-card.sel .radio-dot { border-color: #212529; background: #212529; }
+  .type-card.sel .radio-dot::after {
+    content: ""; width: 6px; height: 6px; border-radius: 50%; background: #ffffff;
+  }
+  .type-name { color: #212529; font-size: 13px; font-weight: 600; }
+  .type-desc { margin-top: 3px; color: #adb5bd; font-size: 11px; line-height: 1.4; }
+
+  /* 跳转作品集选择行 */
+  .pick-folio {
+    margin-top: 6px; display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+    border: 1px solid #e9ecef; border-radius: 20px; background: #ffffff;
+  }
+  .pick-folio-cover { width: 52px; height: 44px; flex: none; border-radius: 14px; overflow: hidden; background: #dee2e6; }
+  .pick-folio-name { color: #212529; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pick-folio-status {
+    display: inline-flex; align-items: center; gap: 4px; margin-top: 4px;
+    color: #5c9e6e; font-size: 10.5px; font-weight: 500;
+  }
+  .pick-folio-status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  /* 开关与位置选项 */
+  .vis-list { display: flex; flex-direction: column; gap: 6px; }
+  .vis-row { min-height: 30px; display: flex; align-items: center; justify-content: space-between; gap: 9px; }
+  .vis-label { color: #868e96; font-size: 12px; font-weight: 500; }
+  .switch { width: 42px; height: 25px; flex: none; border-radius: 999px; background: #212529; position: relative; }
+  .switch::after { content: ""; position: absolute; top: 3px; right: 3px; width: 19px; height: 19px; border-radius: 50%; background: #ffffff; }
+  .switch.off { background: #dee2e6; }
+  .switch.off::after { right: auto; left: 3px; }
+
+  .pos-list { margin-top: 6px; display: flex; flex-direction: column; gap: 6px; }
+  .pos-card {
+    display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+    border: 1px solid #e9ecef; border-radius: 20px; background: #ffffff;
+  }
+  .pos-card.sel { border-color: #212529; }
+  .pos-card .radio-dot { width: 16px; height: 16px; }
+  .pos-card.sel .radio-dot { border-color: #212529; background: #212529; }
+  .pos-card.sel .radio-dot::after { content: ""; width: 5px; height: 5px; border-radius: 50%; background: #ffffff; }
+  .pos-name { color: #212529; font-size: 12px; font-weight: 600; }
+  .pos-desc { margin-top: 2px; color: #adb5bd; font-size: 10.5px; }
+
+  /* 编辑弹层内位置小预览 */
+  .pos-preview {
+    position: relative; margin-top: 6px; height: 92px; overflow: hidden;
+    border-radius: 16px; background: #e9ecef;
+    display: flex; align-items: center; justify-content: center;
+    color: #adb5bd; font-size: 10.5px;
+  }
+
+  .sheet-note { color: #adb5bd; font-size: 10.5px; line-height: 1.5; }
+
+  /* 跳转作品集：编辑弹层内嵌滑动单选（禁止二次弹层） */
+  .folio-strip { display: flex; gap: 8px; margin-top: 6px; padding: 2px; overflow: hidden; }
+  .folio-card {
+    position: relative; width: 116px; flex: none; padding: 8px;
+    border: 1px solid #e9ecef; border-radius: 20px; background: #ffffff;
+  }
+  .folio-card.sel { border-color: #212529; }
+  .folio-card.peek { opacity: .5; }
+  .folio-card-cover { width: 100%; height: 64px; border-radius: 14px; overflow: hidden; background: #dee2e6; }
+  .folio-card-name { margin-top: 7px; color: #212529; font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .folio-card-meta { margin-top: 3px; color: #adb5bd; font-size: 9.5px; }
+  .folio-card-check {
+    position: absolute; right: 14px; top: 14px; width: 18px; height: 18px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: #ffffff; font-size: 10px; font-weight: 600; background: #212529;
+  }
+
+  /* ===== 选择展示作品弹层 ===== */
+  .work-search {
+    width: 100%; height: 38px; padding: 0 14px;
+    display: flex; align-items: center;
+    color: #adb5bd; font-size: 12px; border-radius: 999px; background: #f5f6f7;
+  }
+  .work-filters { display: flex; gap: 6px; }
+  .work-filter {
+    height: 28px; padding: 0 12px; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    color: #868e96; font-size: 11px; font-weight: 500;
+    border: 1px solid #e9ecef; border-radius: 999px; background: #ffffff;
+  }
+  .work-filter.on { color: #ffffff; border-color: #212529; background: #212529; }
+  .work-opt {
+    display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+    border: 1px solid #e9ecef; border-radius: 20px; background: #ffffff;
+  }
+  .work-opt.sel { border-color: #212529; }
+  .work-check {
+    width: 20px; height: 20px; flex: none; margin-left: auto;
+    display: flex; align-items: center; justify-content: center;
+    color: #ffffff; font-size: 11px; font-weight: 600; border-radius: 50%; background: #212529;
+  }
+  .work-check.none { background: #ffffff; border: 1.5px solid #ced4da; }
+
+  /* ===== 选择跳转作品集弹层 ===== */
+  .folio-opt {
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+    border: 1px solid #e9ecef; border-radius: 20px; background: #ffffff;
+  }
+  .folio-opt.sel { border-color: #212529; }
+  .folio-opt.disabled { opacity: .45; }
+  .folio-opt-cover { width: 52px; height: 44px; flex: none; border-radius: 14px; overflow: hidden; background: #dee2e6; }
+  .folio-opt-name { color: #212529; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .folio-opt-status {
+    display: inline-flex; align-items: center; gap: 4px; margin-top: 4px;
+    font-size: 10.5px; font-weight: 500; color: #5c9e6e;
+  }
+  .folio-opt-status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .folio-opt-status.dft { color: #adb5bd; }
+
+  /* ===== 预览 / 访客渲染页 ===== */
+  .pv-page { flex: 1; background: #ffffff; }
+  .preview-toolbar { padding: 10px 16px; border-bottom: 1px solid #e9ecef; }
+  .preview-note { color: #868e96; font-size: 11px; line-height: 1.4; }
+  .folio-component { margin-top: 12px; }
+  .folio-carousel { position: relative; width: calc(100% - 24px); margin: 0 12px; height: 240px; overflow: hidden; border-radius: 20px; }
+  .carousel-progress { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; gap: 6px; }
+  .seg-dot { width: 18px; height: 3px; border-radius: 999px; background: rgba(255,255,255,.55); overflow: hidden; }
+  .seg-dot.cur { width: 28px; }
+  .seg-dot.cur i { display: block; width: 60%; height: 100%; background: #ffffff; border-radius: 999px; }
+  .seg-dot.done i { display: block; width: 100%; height: 100%; background: #ffffff; }
+  .text-section { padding: 2px 16px; }
+  .text-title { padding: 0 12px; color: #212529; font-size: 16px; font-weight: 700; text-align: center; }
+  .text-content { display: block; margin-top: 6px; color: #868e96; font-size: 13px; line-height: 1.7; text-align: left; }
+  .brand-footer { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 20px 0 28px; }
+  .brand-logo { width: 28px; height: 28px; object-fit: contain; }
+  .brand-name { color: #adb5bd; font-size: 11px; font-weight: 500; }
+
+  /* ===== 超链接组件（渲染态） ===== */
+  .hl-comp { padding: 2px 12px; }
+  .hl-img {
+    position: relative; width: 100%; height: 210px; overflow: hidden; border-radius: 20px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  /* 点击图标徽标：黑底圆形 + 白色指尖涟漪图形 */
+  .hl-badge {
+    position: relative; width: 44px; height: 44px; flex: none; border-radius: 50%;
+    background: #212529;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 6px 16px rgba(33,37,41,.28);
+  }
+  .hl-badge img { width: 107%; height: 107%; margin: -3.5%; display: block; border-radius: 50%; }
+  /* 悬浮于图片上：半透明白描边 + 外圈脉冲环，保证在深/浅图上均可识别 */
+  .hl-badge.float {
+    position: absolute; right: 14px; bottom: 14px;
+    border: 1.5px solid rgba(255,255,255,.9);
+  }
+  .hl-badge.float::before {
+    content: ""; position: absolute; inset: -7px; border-radius: 50%;
+    border: 1.5px solid rgba(33,37,41,.28);
+  }
+  /* 置于图片下方：居中一行 */
+  .hl-below { display: flex; align-items: center; justify-content: center; padding-top: 12px; }
+  .hl-below .hl-badge { width: 38px; height: 38px; }
+  .hl-below .hl-badge img { width: 107%; height: 107%; }
+
+  /* 系统复制提示结束后的页面内配置提示卡 */
+  .prompt-card {
+    position: absolute; left: 50%; top: 296px; z-index: 8; transform: translateX(-50%);
+    width: 280px; padding: 14px 16px; border-radius: 20px;
+    background: rgba(33,37,41,.92);
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    box-shadow: 0 14px 34px rgba(33,37,41,.30);
+  }
+  .prompt-card-check {
+    width: 30px; height: 30px; border-radius: 50%;
+    border: 1.5px solid rgba(255,255,255,.85);
+    display: flex; align-items: center; justify-content: center;
+    color: #ffffff; font-size: 14px; font-weight: 600;
+  }
+  .prompt-card-hint { color: #ffffff; font-size: 13px; font-weight: 600; text-align: center; line-height: 1.5; }
+  .prompt-card-sub { color: rgba(255,255,255,.62); font-size: 11px; text-align: center; }
+
+  /* ===== 图标设计板 ===== */
+  .icon-board { width: 782px; flex: none; }
+  .board {
+    background: #ffffff; border: 1px solid #dee2e6; border-radius: 28px;
+    padding: 20px; display: flex; flex-direction: column; gap: 16px;
+  }
+  .board-title { color: #212529; font-size: 16px; font-weight: 700; }
+  .board-desc { margin-top: 4px; color: #868e96; font-size: 11.5px; line-height: 1.6; }
+  .board-row { display: flex; gap: 14px; align-items: stretch; }
+  .board-cell {
+    flex: 1; padding: 14px; border: 1px solid #e9ecef; border-radius: 20px;
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+  }
+  .board-cell-label { color: #868e96; font-size: 10.5px; font-weight: 500; }
+  .board-sizes { display: flex; align-items: flex-end; gap: 18px; min-height: 96px; }
+  .board-size-item { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .board-on-img {
+    position: relative; width: 100%; height: 110px; border-radius: 16px; overflow: hidden;
+    background: #dee2e6;
+  }
+  .board-on-img.dark { background: #495057; }
+  .spec-list { display: flex; flex-direction: column; gap: 6px; }
+  .spec-item { display: flex; gap: 8px; color: #868e96; font-size: 11.5px; line-height: 1.55; }
+  .spec-item b { color: #212529; font-weight: 600; flex: none; }
+  .spec-item::before { content: ""; flex: none; width: 5px; height: 5px; margin-top: 6px; border-radius: 50%; background: #212529; }
+
+  /* ===== 暗色主题（与 09 设计稿一致：#151515 底） ===== */
+  .statusbar.dark { background: #151515; color: #f8f9fa; }
+  .statusbar.dark svg rect, .statusbar.dark svg path { fill: #f8f9fa; stroke: #f8f9fa; }
+  .navbar.dark { background: #151515; color: #f8f9fa; }
+  .navbar.dark .back { border-color: #f8f9fa; }
+  .pv-page.dark { background: #151515; }
+  .preview-toolbar.dark { border-color: #2a2d31; }
+  .preview-note.dark { color: #868e96; }
+  .ph.dark { background: #2a2d31; color: #c1c7ce; }
+  .text-title.dark { color: #f8f9fa; }
+  .text-content.dark { color: #c1c7ce; }
+  .brand-logo.dark { filter: brightness(0) invert(1); opacity: .55; }
+  .brand-name.dark { color: #868e96; }
+  .hl-badge.float.dark-ring::before { border-color: rgba(255,255,255,.35); }
+  .board-cell.dark { background: #151515; border-color: #2a2d31; }
+  .board-cell.dark .board-cell-label { color: #868e96; }
+
+  .dimmed { opacity: .5; }
+</style>
+</head>
+<body>
+
+<div class="doc-header">
+  <h1>10 作品集 · 超链接组件 · 旅行风静态设计稿（新功能）</h1>
+  <div class="sub">标准个人作品集新增「超链接」组件：选择一个图片 / 动图作品作为展示，点击行为二选一（内部已发布作品集跳转，可返回；或把链接 / 第三方分享内容原样复制到剪贴板并展示提示语）。可开关点击图标，图标支持「悬浮于图片上 / 置于图片下方」两种位置。样式体系沿用本目录旅行风（TripGlide）设计稿，图片均为灰阶占位。</div>
+  <div class="pages">
+    <span class="chip">standard-edit 选择组件弹层（新增「超链接」）</span>
+    <span class="chip">standard-edit 超链接编辑弹层（内部跳转 / 外部内容复制）</span>
+    <span class="chip">standard-edit 选择展示作品弹层（图片 / 动图）</span>
+    <span class="chip">standard-edit 跳转作品集 · 编辑弹层内嵌滑动单选（仅已发布）</span>
+    <span class="chip">standard-preview 预览 · 图标悬浮 / 图标下方</span>
+    <span class="chip">visitor-portfolio 访客页 · 复制后配置提示卡</span>
+    <span class="chip">visitor-portfolio 访客页 · 内部跳转目标页（可返回）</span>
+    <span class="chip">standard-preview / visitor-portfolio 暗色主题</span>
+    <span class="chip">点击图标 Logo 设计板（浅色 / 暗色双主题透明 GIF 动效）</span>
+  </div>
+</div>
+
+<div class="stage">
+
+<style>
+  .radio-dot.sel { border-color: #212529; background: #212529; }
+  .radio-dot.sel::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #ffffff; }
+</style>
+
+  <!-- ============ 01 编辑页弹层 · 选择组件（新增「超链接」） ============ -->
+  <div class="phone-slot">
+    <div class="phone-label">01 编辑页弹层 · 选择组件<span class="path">standard-edit「添加组件」底部弹层 · 新增「超链接」选项</span></div>
+    <div class="frame fixed-h">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="sicons">
+          <svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="#212529"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="#212529"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="#212529"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="#212529"/></svg>
+          <svg width="16" height="11" viewBox="0 0 16 11"><path d="M8 10.2 5.4 7.6a3.7 3.7 0 0 1 5.2 0L8 10.2zM3 5.2a7.1 7.1 0 0 1 10 0l-1.5 1.5a5.1 5.1 0 0 0-7 0L3 5.2zM.6 2.8a10.6 10.6 0 0 1 14.8 0L13.9 4.3a8.6 8.6 0 0 0-11.8 0L.6 2.8z" fill="#212529"/></svg>
+          <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0.5" y="0.5" width="21" height="11" rx="3" fill="none" stroke="#212529" opacity=".4"/><rect x="2" y="2" width="16" height="8" rx="1.6" fill="#212529"/><path d="M23 4v4c1-.3 1.6-1 1.6-2S24 4.3 23 4z" fill="#212529" opacity=".4"/></svg>
+        </span>
+      </div>
+      <div class="navbar"><span class="back"></span>标准个人作品集</div>
+      <div class="ed-page dimmed">
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <div class="sec-title">组件编排</div>
+              <div class="sec-desc">访客将按当前顺序浏览作品集内容</div>
+            </div>
+            <div class="link-button">添加组件</div>
+          </div>
+          <div class="comp-list">
+            <div class="comp-row">
+              <div class="comp-order">1</div>
+              <div class="comp-title">个人资料</div>
+              <div class="drag-handle"><i></i><i></i><i></i></div>
+              <div class="row-arrow"></div>
+            </div>
+            <div class="comp-row">
+              <div class="comp-order">2</div>
+              <div class="comp-title">轮播图</div>
+              <div class="drag-handle"><i></i><i></i><i></i></div>
+              <div class="row-arrow"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mask"></div>
+      <div class="sheet" style="max-height:640px; overflow:hidden;">
+        <div class="grabber"></div>
+        <div class="sheet-heading">
+          <div class="sheet-title">选择组件</div>
+          <div class="sheet-count">11 个可选</div>
+        </div>
+        <div class="opt-list" style="overflow:hidden;">
+          <div class="opt">
+            <div style="min-width:0;"><div class="opt-name">轮播图</div><div class="opt-desc">展示已选择的图片作品</div></div>
+            <div class="opt-plus">+</div>
+          </div>
+          <div class="opt disabled">
+            <div style="min-width:0;"><div class="opt-name">个人资料</div><div class="opt-desc">展示个人资料和服务标签</div></div>
+            <div class="opt-added">已添加</div>
+          </div>
+          <div class="opt">
+            <div style="min-width:0;"><div class="opt-name">单个作品</div><div class="opt-desc">突出展示一个图片或视频作品</div></div>
+            <div class="opt-plus">+</div>
+          </div>
+          <div class="opt hl-new">
+            <div style="min-width:0;">
+              <div class="opt-name">超链接<span class="new-badge">新增</span></div>
+              <div class="opt-desc">以图片 / 动图作品承载跳转或链接复制</div>
+            </div>
+            <div class="opt-plus">+</div>
+          </div>
+          <div class="opt">
+            <div style="min-width:0;"><div class="opt-name">档期查询</div><div class="opt-desc">开放访客查询档期</div></div>
+            <div class="opt-plus">+</div>
+          </div>
+          <div class="opt">
+            <div style="min-width:0;"><div class="opt-name">二维码联系</div><div class="opt-desc">展示二维码联系方式</div></div>
+            <div class="opt-plus">+</div>
+          </div>
+          <div class="opt">
+            <div style="min-width:0;"><div class="opt-name">文字说明</div><div class="opt-desc">添加服务说明文字</div></div>
+            <div class="opt-plus">+</div>
+          </div>
+        </div>
+        <div class="sheet-actions">
+          <div class="btn-cancel">取消</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 02 编辑弹层 · 编辑超链接（初始态 · 未选择点击行为） ============ -->
+  <div class="phone-slot">
+    <div class="phone-label">02 编辑页弹层 · 编辑超链接<span class="path">standard-edit「超链接」组件编辑弹层 · 初始态：未选择点击行为，联动配置不展示</span></div>
+    <div class="frame fixed-h">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="sicons">
+          <svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="#212529"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="#212529"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="#212529"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="#212529"/></svg>
+          <svg width="16" height="11" viewBox="0 0 16 11"><path d="M8 10.2 5.4 7.6a3.7 3.7 0 0 1 5.2 0L8 10.2zM3 5.2a7.1 7.1 0 0 1 10 0l-1.5 1.5a5.1 5.1 0 0 0-7 0L3 5.2zM.6 2.8a10.6 10.6 0 0 1 14.8 0L13.9 4.3a8.6 8.6 0 0 0-11.8 0L.6 2.8z" fill="#212529"/></svg>
+          <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0.5" y="0.5" width="21" height="11" rx="3" fill="none" stroke="#212529" opacity=".4"/><rect x="2" y="2" width="16" height="8" rx="1.6" fill="#212529"/><path d="M23 4v4c1-.3 1.6-1 1.6-2S24 4.3 23 4z" fill="#212529" opacity=".4"/></svg>
+        </span>
+      </div>
+      <div class="navbar"><span class="back"></span>标准个人作品集</div>
+      <div class="ed-page dimmed">
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <div class="sec-title">组件编排</div>
+              <div class="sec-desc">访客将按当前顺序浏览作品集内容</div>
+            </div>
+            <div class="link-button">添加组件</div>
+          </div>
+          <div class="comp-list">
+            <div class="comp-row">
+              <div class="comp-order">1</div>
+              <div class="comp-title">个人资料</div>
+              <div class="drag-handle"><i></i><i></i><i></i></div>
+              <div class="row-arrow"></div>
+            </div>
+            <div class="comp-row">
+              <div class="comp-order">2</div>
+              <div class="comp-title">超链接</div>
+              <div class="drag-handle"><i></i><i></i><i></i></div>
+              <div class="row-arrow"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mask"></div>
+      <div class="sheet" style="max-height:560px; overflow:hidden;">
+        <div class="grabber"></div>
+        <div class="sheet-heading">
+          <div class="sheet-title">编辑超链接</div>
+          <div class="sheet-count">二选一配置</div>
+        </div>
+        <div>
+          <div class="field-heading"><div class="field-label">展示图片（图片 / 动图作品）</div></div>
+          <div class="pick-work" style="border-style:dashed; justify-content:center; min-height:60px; color:#adb5bd; font-size:12px; font-weight:500;">+ 选择图片 / 动图作品</div>
+        </div>
+        <div>
+          <div class="field-heading"><div class="field-label">点击行为（二选一）</div></div>
+          <div class="type-list">
+            <div class="type-card">
+              <div class="radio-dot"></div>
+              <div style="flex:1;min-width:0;">
+                <div class="type-name">内部作品集跳转</div>
+                <div class="type-desc">跳转至一个已发布的作品集，访客可返回</div>
+              </div>
+            </div>
+            <div class="type-card">
+              <div class="radio-dot"></div>
+              <div style="flex:1;min-width:0;">
+                <div class="type-name">外部链接复制</div>
+                <div class="type-desc">点击后复制链接或分享内容并展示提示语</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="vis-row" style="margin-top:2px;">
+            <div class="vis-label">展示点击图标</div>
+            <div class="switch off"></div>
+          </div>
+        </div>
+        <div class="sheet-note">选中「内部作品集跳转」后才展示跳转作品集配置；选中「外部链接复制」后才展示链接 / 分享内容与提示语；未选中时对应配置不出现。开关关闭时不展示图标位置选项。</div>
+        <div class="sheet-actions">
+          <div class="btn-cancel">取消</div>
+          <div class="btn-confirm" style="opacity:.4;">完成</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 03 编辑弹层 · 选择展示作品（图片 / 动图） ============ -->
+  <div class="phone-slot">
+    <div class="phone-label">03 编辑页弹层 · 选择展示作品<span class="path">standard-edit 超链接「展示图片」选择弹层 · 单选，仅图片与动图</span></div>
+    <div class="frame fixed-h">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="sicons">
+          <svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="#212529"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="#212529"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="#212529"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="#212529"/></svg>
+          <svg width="16" height="11" viewBox="0 0 16 11"><path d="M8 10.2 5.4 7.6a3.7 3.7 0 0 1 5.2 0L8 10.2zM3 5.2a7.1 7.1 0 0 1 10 0l-1.5 1.5a5.1 5.1 0 0 0-7 0L3 5.2zM.6 2.8a10.6 10.6 0 0 1 14.8 0L13.9 4.3a8.6 8.6 0 0 0-11.8 0L.6 2.8z" fill="#212529"/></svg>
+          <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0.5" y="0.5" width="21" height="11" rx="3" fill="none" stroke="#212529" opacity=".4"/><rect x="2" y="2" width="16" height="8" rx="1.6" fill="#212529"/><path d="M23 4v4c1-.3 1.6-1 1.6-2S24 4.3 23 4z" fill="#212529" opacity=".4"/></svg>
+        </span>
+      </div>
+      <div class="navbar"><span class="back"></span>标准个人作品集</div>
+      <div class="ed-page dimmed">
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <div class="sec-title">组件编排</div>
+              <div class="sec-desc">访客将按当前顺序浏览作品集内容</div>
+            </div>
+            <div class="link-button">添加组件</div>
+          </div>
+          <div class="comp-list">
+            <div class="comp-row">
+              <div class="comp-order">1</div>
+              <div class="comp-title">个人资料</div>
+              <div class="drag-handle"><i></i><i></i><i></i></div>
+              <div class="row-arrow"></div>
+            </div>
+            <div class="comp-row">
+              <div class="comp-order">2</div>
+              <div class="comp-title">超链接</div>
+              <div class="drag-handle"><i></i><i></i><i></i></div>
+              <div class="row-arrow"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mask"></div>
+      <div class="sheet" style="max-height:640px; overflow:hidden;">
+        <div class="grabber"></div>
+        <div class="sheet-heading">
+          <div class="sheet-title">选择展示作品</div>
+          <div class="sheet-count">仅图片与动图 · 已选 1</div>
+        </div>
+        <div class="work-search">搜索作品标题</div>
+        <div class="work-filters">
+          <div class="work-filter on">全部</div>
+          <div class="work-filter">婚礼现场</div>
+          <div class="work-filter">宝宝宴</div>
+          <div class="work-filter">年会</div>
+        </div>
+        <div class="opt-list">
+          <div class="work-opt sel">
+            <div class="pick-work-thumb">动图封面<span class="gif-badge">GIF</span></div>
+            <div style="flex:1;min-width:0;">
+              <div class="pick-work-name">婚礼快剪动图</div>
+              <div class="pick-work-meta">动图 · 婚礼现场</div>
+            </div>
+            <div class="work-check">✓</div>
+          </div>
+          <div class="work-opt">
+            <div class="pick-work-thumb" style="background:#e9ecef;">作品图</div>
+            <div style="flex:1;min-width:0;">
+              <div class="pick-work-name">户外草坪婚礼</div>
+              <div class="pick-work-meta">图片 · 婚礼现场</div>
+            </div>
+            <div class="work-check none"></div>
+          </div>
+          <div class="work-opt">
+            <div class="pick-work-thumb" style="background:#e9ecef;">动图封面<span class="gif-badge">GIF</span></div>
+            <div style="flex:1;min-width:0;">
+              <div class="pick-work-name">宝宝宴花絮动图</div>
+              <div class="pick-work-meta">动图 · 宝宝宴</div>
+            </div>
+            <div class="work-check none"></div>
+          </div>
+          <div class="work-opt">
+            <div class="pick-work-thumb" style="background:#edf0f2;">作品图</div>
+            <div style="flex:1;min-width:0;">
+              <div class="pick-work-name">酒店晚宴主持</div>
+              <div class="pick-work-meta">图片 · 婚礼现场</div>
+            </div>
+            <div class="work-check none"></div>
+          </div>
+        </div>
+        <div class="sheet-note">视频作品不可作为超链接展示图，列表仅展示图片与动图作品。</div>
+        <div class="sheet-actions">
+          <div class="btn-cancel">取消</div>
+          <div class="btn-confirm">完成</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 04 编辑弹层 · 编辑超链接（内部跳转 · 图标悬浮） ============ -->
+  <div class="phone-slot">
+    <div class="phone-label">04 编辑页弹层 · 编辑超链接<span class="path">standard-edit「超链接」组件编辑弹层 · 内部作品集跳转（内嵌滑动单选）+ 图标悬浮于图片上</span></div>
+    <div class="frame fixed-h">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="sicons">
+          <svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="#212529"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="#212529"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="#212529"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="#212529"/></svg>
+          <svg width="16" height="11" viewBox="0 0 16 11"><path d="M8 10.2 5.4 7.6a3.7 3.7 0 0 1 5.2 0L8 10.2zM3 5.2a7.1 7.1 0 0 1 10 0l-1.5 1.5a5.1 5.1 0 0 0-7 0L3 5.2zM.6 2.8a10.6 10.6 0 0 1 14.8 0L13.9 4.3a8.6 8.6 0 0 0-11.8 0L.6 2.8z" fill="#212529"/></svg>
+          <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0.5" y="0.5" width="21" height="11" rx="3" fill="none" stroke="#212529" opacity=".4"/><rect x="2" y="2" width="16" height="8" rx="1.6" fill="#212529"/><path d="M23 4v4c1-.3 1.6-1 1.6-2S24 4.3 23 4z" fill="#212529" opacity=".4"/></svg>
+        </span>
+      </div>
+      <div class="navbar"><span class="back"></span>标准个人作品集</div>
+      <div class="ed-page dimmed">
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <div class="sec-title">组件编排</div>
+              <div class="sec-desc">访客将按当前顺序浏览作品集内容</div>
+            </div>
+            <div class="link-button">添加组件</div>
+          </div>
+          <div class="comp-list">
+            <div class="comp-row">
+              <div class="comp-order">1</div>
+              <div class="comp-title">个人资料</div>
+              <div class="drag-handle"><i></i><i></i><i></i></div>
+              <div class="row-arrow"></div>
+            </div>
+            <div class="comp-row">
+              <div class="comp-order">2</div>
+              <div class="comp-title">超链接</div>
+              <div class="drag-handle"><i></i><i></i><i></i></div>
+              <div class="row-arrow"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mask"></div>
+      <div class="sheet" style="max-height:768px; overflow:hidden;">
+        <div class="grabber"></div>
+        <div class="sheet-heading">
+          <div class="sheet-title">编辑超链接</div>
+          <div class="sheet-count">二选一配置</div>
+        </div>
+        <div>
+          <div class="field-heading"><div class="field-label">展示图片（图片 / 动图作品）</div></div>
+          <div class="pick-work">
+            <div class="pick-work-thumb">动图封面<span class="gif-badge">GIF</span></div>
+            <div style="flex:1;min-width:0;">
+              <div class="pick-work-name">婚礼快剪动图</div>
+              <div class="pick-work-meta">动图 · 婚礼现场</div>
+            </div>
+            <div class="pick-work-btn">更换</div>
+          </div>
+        </div>
+        <div>
+          <div class="field-heading"><div class="field-label">点击行为（二选一）</div></div>
+          <div class="type-list">
+            <div class="type-card sel">
+              <div class="radio-dot"></div>
+              <div style="flex:1;min-width:0;">
+                <div class="type-name">内部作品集跳转</div>
+                <div class="type-desc">跳转至一个已发布的作品集，访客可返回</div>
+              </div>
+            </div>
+            <div class="type-card off">
+              <div class="radio-dot"></div>
+              <div style="flex:1;min-width:0;">
+                <div class="type-name">外部链接复制</div>
+                <div class="type-desc">点击后复制链接或分享内容并展示提示语</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="field-heading"><div class="field-label">跳转作品集（仅已发布 · 左右滑动单选）</div></div>
+          <div class="folio-strip">
+            <div class="folio-card sel">
+              <div class="folio-card-cover ph"></div>
+              <div class="folio-card-name">宝宝宴周岁主持集</div>
+              <div class="folio-card-meta">最近更新 07-18 · 已发布</div>
+              <div class="folio-card-check">✓</div>
+            </div>
+            <div class="folio-card">
+              <div class="folio-card-cover ph ph-b"></div>
+              <div class="folio-card-name">婚礼主持作品集</div>
+              <div class="folio-card-meta">最近更新 07-20 · 已发布</div>
+            </div>
+            <div class="folio-card peek">
+              <div class="folio-card-cover ph ph-c"></div>
+              <div class="folio-card-name">年会答谢主持集</div>
+              <div class="folio-card-meta">最近更新 07-10 · 已发布</div>
+            </div>
+          </div>
+          <div class="sheet-note" style="margin-top:6px;">仅筛选展示已发布的个人作品集，未发布不出现；左右滑动浏览，点按卡片单选。目标作品集下线后，访客端点击提示「内容暂不可见」。</div>
+        </div>
+        <div>
+          <div class="vis-row" style="margin-top:2px;">
+            <div class="vis-label">展示点击图标</div>
+            <div class="switch"></div>
+          </div>
+          <div class="pos-list">
+            <div class="pos-card sel">
+              <div class="radio-dot"></div>
+              <div style="flex:1;min-width:0;">
+                <div class="pos-name">图标悬浮于图片上</div>
+                <div class="pos-desc">叠加在图片右下角，带脉冲引导</div>
+              </div>
+            </div>
+            <div class="pos-card">
+              <div class="radio-dot"></div>
+              <div style="flex:1;min-width:0;">
+                <div class="pos-name">图标置于图片下方</div>
+                <div class="pos-desc">居中显示在图片下方一行</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="sheet-note">预览页与访客页点击图片后跳转到目标作品集，可通过左上角返回来源页。</div>
+        <div class="sheet-actions">
+          <div class="btn-cancel">取消</div>
+          <div class="btn-confirm">完成</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 05 编辑弹层 · 编辑超链接（外部链接 · 图标置于下方） ============ -->
+  <div class="phone-slot">
+    <div class="phone-label">05 编辑页弹层 · 编辑超链接<span class="path">standard-edit「超链接」组件编辑弹层 · 外部链接复制 + 图标置于图片下方</span></div>
+    <div class="frame fixed-h">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="sicons">
+          <svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="#212529"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="#212529"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="#212529"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="#212529"/></svg>
+          <svg width="16" height="11" viewBox="0 0 16 11"><path d="M8 10.2 5.4 7.6a3.7 3.7 0 0 1 5.2 0L8 10.2zM3 5.2a7.1 7.1 0 0 1 10 0l-1.5 1.5a5.1 5.1 0 0 0-7 0L3 5.2zM.6 2.8a10.6 10.6 0 0 1 14.8 0L13.9 4.3a8.6 8.6 0 0 0-11.8 0L.6 2.8z" fill="#212529"/></svg>
+          <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0.5" y="0.5" width="21" height="11" rx="3" fill="none" stroke="#212529" opacity=".4"/><rect x="2" y="2" width="16" height="8" rx="1.6" fill="#212529"/><path d="M23 4v4c1-.3 1.6-1 1.6-2S24 4.3 23 4z" fill="#212529" opacity=".4"/></svg>
+        </span>
+      </div>
+      <div class="navbar"><span class="back"></span>标准个人作品集</div>
+      <div class="ed-page dimmed">
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <div class="sec-title">组件编排</div>
+              <div class="sec-desc">访客将按当前顺序浏览作品集内容</div>
+            </div>
+            <div class="link-button">添加组件</div>
+          </div>
+          <div class="comp-list">
+            <div class="comp-row">
+              <div class="comp-order">1</div>
+              <div class="comp-title">个人资料</div>
+              <div class="drag-handle"><i></i><i></i><i></i></div>
+              <div class="row-arrow"></div>
+            </div>
+            <div class="comp-row">
+              <div class="comp-order">2</div>
+              <div class="comp-title">超链接</div>
+              <div class="drag-handle"><i></i><i></i><i></i></div>
+              <div class="row-arrow"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mask"></div>
+      <div class="sheet" style="max-height:768px; overflow:hidden;">
+        <div class="grabber"></div>
+        <div class="sheet-heading">
+          <div class="sheet-title">编辑超链接</div>
+          <div class="sheet-count">二选一配置</div>
+        </div>
+        <div>
+          <div class="field-heading"><div class="field-label">展示图片（图片 / 动图作品）</div></div>
+          <div class="pick-work">
+            <div class="pick-work-thumb" style="background:#e9ecef;">作品图</div>
+            <div style="flex:1;min-width:0;">
+              <div class="pick-work-name">户外草坪婚礼</div>
+              <div class="pick-work-meta">图片 · 婚礼现场</div>
+            </div>
+            <div class="pick-work-btn">更换</div>
+          </div>
+        </div>
+        <div>
+          <div class="field-heading"><div class="field-label">点击行为（二选一）</div></div>
+          <div class="type-list">
+            <div class="type-card off">
+              <div class="radio-dot"></div>
+              <div style="flex:1;min-width:0;">
+                <div class="type-name">内部作品集跳转</div>
+                <div class="type-desc">跳转至一个已发布的作品集，访客可返回</div>
+              </div>
+            </div>
+            <div class="type-card sel">
+              <div class="radio-dot"></div>
+              <div style="flex:1;min-width:0;">
+                <div class="type-name">外部链接复制</div>
+                <div class="type-desc">点击后复制链接或分享内容并展示提示语</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="form-row" style="margin-top:0;">
+          <div class="field-heading"><div class="field-label">链接 / 分享内容</div><div class="field-limit">58/2048</div></div>
+          <div class="textarea">8.23 复制打开抖音，看看【映期Folio的作品】……
+https://v.douyin.com/example/</div>
+        </div>
+        <div class="form-row" style="margin-top:0;">
+          <div class="field-heading"><div class="field-label">提示语（复制成功后展示）</div><div class="field-limit">13/30</div></div>
+          <div class="input">内容已复制，请打开对应应用</div>
+        </div>
+        <div>
+          <div class="vis-row" style="margin-top:2px;">
+            <div class="vis-label">展示点击图标</div>
+            <div class="switch"></div>
+          </div>
+          <div class="pos-list">
+            <div class="pos-card">
+              <div class="radio-dot"></div>
+              <div style="flex:1;min-width:0;">
+                <div class="pos-name">图标悬浮于图片上</div>
+                <div class="pos-desc">叠加在图片右下角，带脉冲引导</div>
+              </div>
+            </div>
+            <div class="pos-card sel">
+              <div class="radio-dot"></div>
+              <div style="flex:1;min-width:0;">
+                <div class="pos-name">图标置于图片下方</div>
+                <div class="pos-desc">居中显示在图片下方一行</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="sheet-note">预览页与访客页点击图片后原样复制整段内容。微信系统「内容已复制」提示结束后，再显示上方维护者提示语，两个提示不叠加。</div>
+        <div class="sheet-actions">
+          <div class="btn-cancel">取消</div>
+          <div class="btn-confirm">完成</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 06 预览页 · 图标悬浮于图片（内部跳转） ============ -->
+  <div class="phone-slot">
+    <div class="phone-label">06 标准作品集 · 预览<span class="path">standard-preview · 超链接组件：图标悬浮于图片上（内部跳转）</span></div>
+    <div class="frame">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="sicons">
+          <svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="#212529"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="#212529"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="#212529"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="#212529"/></svg>
+          <svg width="16" height="11" viewBox="0 0 16 11"><path d="M8 10.2 5.4 7.6a3.7 3.7 0 0 1 5.2 0L8 10.2zM3 5.2a7.1 7.1 0 0 1 10 0l-1.5 1.5a5.1 5.1 0 0 0-7 0L3 5.2zM.6 2.8a10.6 10.6 0 0 1 14.8 0L13.9 4.3a8.6 8.6 0 0 0-11.8 0L.6 2.8z" fill="#212529"/></svg>
+          <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0.5" y="0.5" width="21" height="11" rx="3" fill="none" stroke="#212529" opacity=".4"/><rect x="2" y="2" width="16" height="8" rx="1.6" fill="#212529"/><path d="M23 4v4c1-.3 1.6-1 1.6-2S24 4.3 23 4z" fill="#212529" opacity=".4"/></svg>
+        </span>
+      </div>
+      <div class="navbar"><span class="back"></span>婚礼主持作品集</div>
+      <div class="pv-page">
+        <div class="preview-toolbar">
+          <div class="preview-note">预览模式：禁用真实提交，不统计访问，不扣积分。</div>
+        </div>
+
+        <!-- 超链接组件：图标悬浮于图片上 -->
+        <div class="folio-component" style="margin-top:12px;">
+          <div class="hl-comp">
+            <div class="hl-img ph">
+              动图作品（GIF）
+              <span class="gif-badge">GIF</span>
+              <div class="hl-badge float"><img src="https://cdn2.we-folio.dingchenyong.top/system/click-tap-icon.gif" alt="点击动效"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 文字说明组件 -->
+        <div class="folio-component">
+          <div class="text-section">
+            <div class="text-title">更多案例</div>
+            <span class="text-content">点击上方图片，查看宝宝宴专场作品集；预览模式下同样支持跳转与返回。</span>
+          </div>
+        </div>
+
+        <div class="brand-footer">
+          <img class="brand-logo" src="assets/system/folio-logo-stack-bold-small-50kb.png" alt="映期Folio">
+          <div class="brand-name">映期Folio</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 07 访客页 · 图标置于图片下方（外部链接） ============ -->
+  <div class="phone-slot">
+    <div class="phone-label">07 访客作品集页<span class="path">visitor-portfolio · 超链接组件：图标置于图片下方（外部链接）</span></div>
+    <div class="frame">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="sicons">
+          <svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="#212529"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="#212529"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="#212529"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="#212529"/></svg>
+          <svg width="16" height="11" viewBox="0 0 16 11"><path d="M8 10.2 5.4 7.6a3.7 3.7 0 0 1 5.2 0L8 10.2zM3 5.2a7.1 7.1 0 0 1 10 0l-1.5 1.5a5.1 5.1 0 0 0-7 0L3 5.2zM.6 2.8a10.6 10.6 0 0 1 14.8 0L13.9 4.3a8.6 8.6 0 0 0-11.8 0L.6 2.8z" fill="#212529"/></svg>
+          <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0.5" y="0.5" width="21" height="11" rx="3" fill="none" stroke="#212529" opacity=".4"/><rect x="2" y="2" width="16" height="8" rx="1.6" fill="#212529"/><path d="M23 4v4c1-.3 1.6-1 1.6-2S24 4.3 23 4z" fill="#212529" opacity=".4"/></svg>
+        </span>
+      </div>
+      <div class="navbar">个人作品集</div>
+      <div class="pv-page">
+
+        <!-- 超链接组件：图标置于图片下方 -->
+        <div class="folio-component" style="margin-top:12px;">
+          <div class="hl-comp">
+            <div class="hl-img ph ph-b">图片作品</div>
+            <div class="hl-below">
+              <div class="hl-badge"><img src="https://cdn2.we-folio.dingchenyong.top/system/click-tap-icon.gif" alt="点击动效"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 文字说明组件 -->
+        <div class="folio-component">
+          <div class="text-section">
+            <div class="text-title">服务说明</div>
+            <span class="text-content">承接婚礼、宝宝宴、企业年会主持，杭州及周边可约。点击上方图标获取我的主页链接。</span>
+          </div>
+        </div>
+
+        <div class="brand-footer">
+          <img class="brand-logo" src="assets/system/folio-logo-stack-bold-small-50kb.png" alt="映期Folio">
+          <div class="brand-name">映期Folio</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 08 访客页 · 外部内容点击反馈（配置提示卡） ============ -->
+  <div class="phone-slot">
+    <div class="phone-label">08 访客页 · 外部内容点击反馈<span class="path">visitor-portfolio · 系统复制提示结束后，页面内提示卡展示维护者提示语</span></div>
+    <div class="frame fixed-h">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="sicons">
+          <svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="#212529"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="#212529"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="#212529"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="#212529"/></svg>
+          <svg width="16" height="11" viewBox="0 0 16 11"><path d="M8 10.2 5.4 7.6a3.7 3.7 0 0 1 5.2 0L8 10.2zM3 5.2a7.1 7.1 0 0 1 10 0l-1.5 1.5a5.1 5.1 0 0 0-7 0L3 5.2zM.6 2.8a10.6 10.6 0 0 1 14.8 0L13.9 4.3a8.6 8.6 0 0 0-11.8 0L.6 2.8z" fill="#212529"/></svg>
+          <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0.5" y="0.5" width="21" height="11" rx="3" fill="none" stroke="#212529" opacity=".4"/><rect x="2" y="2" width="16" height="8" rx="1.6" fill="#212529"/><path d="M23 4v4c1-.3 1.6-1 1.6-2S24 4.3 23 4z" fill="#212529" opacity=".4"/></svg>
+        </span>
+      </div>
+      <div class="navbar">个人作品集</div>
+      <div class="pv-page dimmed">
+        <div class="folio-component" style="margin-top:12px;">
+          <div class="hl-comp">
+            <div class="hl-img ph ph-b">图片作品</div>
+            <div class="hl-below">
+              <div class="hl-badge"><img src="https://cdn2.we-folio.dingchenyong.top/system/click-tap-icon.gif" alt="点击动效"></div>
+            </div>
+          </div>
+        </div>
+        <div class="folio-component">
+          <div class="text-section">
+            <div class="text-title">服务说明</div>
+            <span class="text-content">承接婚礼、宝宝宴、企业年会主持，杭州及周边可约。</span>
+          </div>
+        </div>
+      </div>
+      <div class="prompt-card">
+        <div class="prompt-card-check">✓</div>
+        <div class="prompt-card-hint">内容已复制，请打开对应应用</div>
+        <div class="prompt-card-sub">系统提示已结束 · 切换应用时暂停计时，返回后继续展示</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 09 访客页 · 内部跳转目标作品集（可返回） ============ -->
+  <div class="phone-slot">
+    <div class="phone-label">09 访客页 · 内部跳转目标作品集<span class="path">visitor-portfolio · 点击后跳转至目标作品集，左上角返回来源页</span></div>
+    <div class="frame">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="sicons">
+          <svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="#212529"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="#212529"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="#212529"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="#212529"/></svg>
+          <svg width="16" height="11" viewBox="0 0 16 11"><path d="M8 10.2 5.4 7.6a3.7 3.7 0 0 1 5.2 0L8 10.2zM3 5.2a7.1 7.1 0 0 1 10 0l-1.5 1.5a5.1 5.1 0 0 0-7 0L3 5.2zM.6 2.8a10.6 10.6 0 0 1 14.8 0L13.9 4.3a8.6 8.6 0 0 0-11.8 0L.6 2.8z" fill="#212529"/></svg>
+          <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0.5" y="0.5" width="21" height="11" rx="3" fill="none" stroke="#212529" opacity=".4"/><rect x="2" y="2" width="16" height="8" rx="1.6" fill="#212529"/><path d="M23 4v4c1-.3 1.6-1 1.6-2S24 4.3 23 4z" fill="#212529" opacity=".4"/></svg>
+        </span>
+      </div>
+      <div class="navbar"><span class="back"></span>宝宝宴周岁主持集</div>
+      <div class="pv-page">
+        <div class="folio-component" style="margin-top:12px;">
+          <div class="folio-carousel ph">轮播作品 1 / 3
+            <div class="carousel-progress">
+              <div class="seg-dot done"><i></i></div>
+              <div class="seg-dot cur"><i></i></div>
+              <div class="seg-dot"></div>
+            </div>
+          </div>
+        </div>
+        <div class="folio-component">
+          <div class="text-section">
+            <div class="text-title">宝宝宴专场</div>
+            <span class="text-content">由来源作品集「超链接」组件跳转进入，点击左上角返回来源作品集继续浏览。</span>
+          </div>
+        </div>
+        <div class="brand-footer">
+          <img class="brand-logo" src="assets/system/folio-logo-stack-bold-small-50kb.png" alt="映期Folio">
+          <div class="brand-name">映期Folio</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 10 预览页 · 暗色主题（图标悬浮于图片） ============ -->
+  <div class="phone-slot">
+    <div class="phone-label">10 标准作品集 · 预览 · 暗色主题<span class="path">standard-preview · 超链接组件暗色版：反白点击徽标悬浮于图片上</span></div>
+    <div class="frame">
+      <div class="statusbar dark">
+        <span>9:41</span>
+        <span class="sicons">
+          <svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="#212529"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="#212529"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="#212529"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="#212529"/></svg>
+          <svg width="16" height="11" viewBox="0 0 16 11"><path d="M8 10.2 5.4 7.6a3.7 3.7 0 0 1 5.2 0L8 10.2zM3 5.2a7.1 7.1 0 0 1 10 0l-1.5 1.5a5.1 5.1 0 0 0-7 0L3 5.2zM.6 2.8a10.6 10.6 0 0 1 14.8 0L13.9 4.3a8.6 8.6 0 0 0-11.8 0L.6 2.8z" fill="#212529"/></svg>
+          <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0.5" y="0.5" width="21" height="11" rx="3" fill="none" stroke="#212529" opacity=".4"/><rect x="2" y="2" width="16" height="8" rx="1.6" fill="#212529"/><path d="M23 4v4c1-.3 1.6-1 1.6-2S24 4.3 23 4z" fill="#212529" opacity=".4"/></svg>
+        </span>
+      </div>
+      <div class="navbar dark"><span class="back"></span>婚礼主持作品集</div>
+      <div class="pv-page dark">
+        <div class="preview-toolbar dark">
+          <div class="preview-note dark">预览模式：禁用真实提交，不统计访问，不扣积分。</div>
+        </div>
+
+        <!-- 超链接组件：暗色主题，反白点击徽标悬浮于图片上 -->
+        <div class="folio-component" style="margin-top:12px;">
+          <div class="hl-comp">
+            <div class="hl-img ph dark">
+              动图作品（GIF）
+              <span class="gif-badge">GIF</span>
+              <div class="hl-badge float dark-ring">
+                <img src="https://cdn2.we-folio.dingchenyong.top/system/click-tap-icon-dark.gif" alt="点击动效">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="folio-component">
+          <div class="text-section">
+            <div class="text-title dark">更多案例</div>
+            <span class="text-content dark">点击上方图片，查看宝宝宴专场作品集；暗色主题下点击图标自动切换为反白徽标。</span>
+          </div>
+        </div>
+
+        <div class="brand-footer">
+          <img class="brand-logo dark" src="assets/system/folio-logo-stack-bold-small-50kb.png" alt="映期Folio">
+          <div class="brand-name dark">映期Folio</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 11 访客页 · 暗色主题（图标置于图片下方） ============ -->
+  <div class="phone-slot">
+    <div class="phone-label">11 访客作品集页 · 暗色主题<span class="path">visitor-portfolio · 超链接组件暗色版：反白点击徽标置于图片下方</span></div>
+    <div class="frame">
+      <div class="statusbar dark">
+        <span>9:41</span>
+        <span class="sicons">
+          <svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="#212529"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="#212529"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="#212529"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="#212529"/></svg>
+          <svg width="16" height="11" viewBox="0 0 16 11"><path d="M8 10.2 5.4 7.6a3.7 3.7 0 0 1 5.2 0L8 10.2zM3 5.2a7.1 7.1 0 0 1 10 0l-1.5 1.5a5.1 5.1 0 0 0-7 0L3 5.2zM.6 2.8a10.6 10.6 0 0 1 14.8 0L13.9 4.3a8.6 8.6 0 0 0-11.8 0L.6 2.8z" fill="#212529"/></svg>
+          <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0.5" y="0.5" width="21" height="11" rx="3" fill="none" stroke="#212529" opacity=".4"/><rect x="2" y="2" width="16" height="8" rx="1.6" fill="#212529"/><path d="M23 4v4c1-.3 1.6-1 1.6-2S24 4.3 23 4z" fill="#212529" opacity=".4"/></svg>
+        </span>
+      </div>
+      <div class="navbar dark">个人作品集</div>
+      <div class="pv-page dark">
+
+        <!-- 超链接组件：暗色主题，反白点击徽标置于图片下方 -->
+        <div class="folio-component" style="margin-top:12px;">
+          <div class="hl-comp">
+            <div class="hl-img ph dark">图片作品</div>
+            <div class="hl-below">
+              <div class="hl-badge">
+                <img src="https://cdn2.we-folio.dingchenyong.top/system/click-tap-icon-dark.gif" alt="点击动效">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="folio-component">
+          <div class="text-section">
+            <div class="text-title dark">服务说明</div>
+            <span class="text-content dark">承接婚礼、宝宝宴、企业年会主持，杭州及周边可约。点击上方图标获取我的主页链接。</span>
+          </div>
+        </div>
+
+        <div class="brand-footer">
+          <img class="brand-logo dark" src="assets/system/folio-logo-stack-bold-small-50kb.png" alt="映期Folio">
+          <div class="brand-name dark">映期Folio</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 12 点击图标 Logo 设计板 ============ -->
+  <div class="phone-slot icon-board">
+    <div class="phone-label">12 点击图标 Logo 设计<span class="path">超链接组件点击图标 · 图形含义 / 尺寸 / 深浅底适配 / 浅色与暗色双主题 / 设计规范 / 透明 GIF 点击动效</span></div>
+    <div class="board">
+      <div>
+        <div class="board-title">点按手型 · 点击图标</div>
+        <div class="board-desc">拟人点按手型：食指伸直、拇指外展、三指弯曲收拢，整体微倾 12° 营造“伸手去点”的动感；指尖上方三道点击光芒线，直观表达“点按触发”。延续旅行风黑白灰体系：#212529 圆形徽标 + 白色图形；悬浮于图片上时叠加 1.5px 半透明白描边与外圈脉冲环，保证深色 / 浅色 / 复杂图片上均可识别。</div>
+      </div>
+      <div class="board-row">
+        <div class="board-cell">
+          <div class="board-cell-label">主徽标 · 使用尺寸（44 / 38 / 30 / 24px）</div>
+          <div class="board-sizes">
+            <div class="board-size-item">
+              <div class="hl-badge" style="width:44px;height:44px;"><img src="https://cdn2.we-folio.dingchenyong.top/system/click-tap-icon.gif" alt="点击动效"></div>
+              <div class="board-cell-label">44 悬浮</div>
+            </div>
+            <div class="board-size-item">
+              <div class="hl-badge" style="width:38px;height:38px;"><img src="https://cdn2.we-folio.dingchenyong.top/system/click-tap-icon.gif" alt="点击动效"></div>
+              <div class="board-cell-label">38 图下方</div>
+            </div>
+            <div class="board-size-item">
+              <div class="hl-badge" style="width:30px;height:30px;"><img src="https://cdn2.we-folio.dingchenyong.top/system/click-tap-icon.gif" alt="点击动效"></div>
+              <div class="board-cell-label">30 编辑预览</div>
+            </div>
+            <div class="board-size-item">
+              <div class="hl-badge" style="width:24px;height:24px;"><img src="https://cdn2.we-folio.dingchenyong.top/system/click-tap-icon.gif" alt="点击动效"></div>
+              <div class="board-cell-label">24 最小</div>
+            </div>
+          </div>
+        </div>
+        <div class="board-cell dark">
+          <div class="board-cell-label">暗色主题徽标 · 反白（44 / 38px）</div>
+          <div class="board-sizes">
+            <div class="board-size-item">
+              <div class="hl-badge dark-ring" style="width:44px;height:44px;background:#ffffff;"><img src="https://cdn2.we-folio.dingchenyong.top/system/click-tap-icon-dark.gif" alt="点击动效"></div>
+              <div class="board-cell-label">44 悬浮</div>
+            </div>
+            <div class="board-size-item">
+              <div class="hl-badge" style="width:38px;height:38px;background:#ffffff;"><img src="https://cdn2.we-folio.dingchenyong.top/system/click-tap-icon-dark.gif" alt="点击动效"></div>
+              <div class="board-cell-label">38 图下方</div>
+            </div>
+          </div>
+        </div>
+        <div class="board-cell">
+          <div class="board-cell-label">悬浮于浅色图</div>
+          <div class="board-on-img">
+            <div class="hl-badge float" style="width:38px;height:38px;"><img src="https://cdn2.we-folio.dingchenyong.top/system/click-tap-icon.gif" alt="点击动效"></div>
+          </div>
+          <div class="board-cell-label">白描边 + 脉冲环保证边缘清晰</div>
+        </div>
+        <div class="board-cell">
+          <div class="board-cell-label">悬浮于深色图</div>
+          <div class="board-on-img dark">
+            <div class="hl-badge float" style="width:38px;height:38px;"><img src="https://cdn2.we-folio.dingchenyong.top/system/click-tap-icon.gif" alt="点击动效"></div>
+          </div>
+          <div class="board-cell-label">深色图上徽标不沉没</div>
+        </div>
+      </div>
+      <div class="board-row">
+        <div class="board-cell" style="flex:0 0 220px;">
+          <div class="board-cell-label">图形构成（48px 网格）</div>
+          <div class="hl-badge" style="width:96px;height:96px;"><img src="https://cdn2.we-folio.dingchenyong.top/system/click-tap-icon.gif" alt="点击动效"></div>
+          <div class="board-cell-label">动效：下压回弹 + 触控扩散环 + 点击光芒</div>
+        </div>
+        <div class="board-cell" style="align-items:flex-start;">
+          <div class="board-cell-label">设计规范</div>
+          <div class="spec-list">
+            <div class="spec-item"><b>网格</b>48 × 48px 绘制，2.4px 线稿，圆角端点与连接，四周留 6px 安全区。</div>
+            <div class="spec-item"><b>构成</b>拟人点按手型（食指伸直、拇指外展、三指弯曲收拢）整体微倾 12° + 指尖三道点击光芒线，表达“点按、有回应”。</div>
+            <div class="spec-item"><b>徽标</b>圆形底色 #212529，图形纯白，投影 0 6px 16px rgba(33,37,41,.28)。</div>
+            <div class="spec-item"><b>悬浮态</b>1.5px rgba(255,255,255,.9) 描边 + 外扩 7px 脉冲环 rgba(33,37,41,.28)，定位图片右下角（right/bottom 14px）。</div>
+            <div class="spec-item"><b>图下方态</b>徽标 38px，居中一行，无描边与脉冲环。</div>
+            <div class="spec-item"><b>最小尺寸</b>24px；低于 24px 时省略光芒线，仅保留点按手型。</div>
+            <div class="spec-item"><b>双主题</b>浅色页：#212529 徽标 + 白色图形（CDN click-tap-icon.gif）；暗色页：#ffffff 反白徽标 + 深色图形（CDN click-tap-icon-dark.gif），动效一致。</div>
+            <div class="spec-item"><b>动效</b>交付为透明 GIF（240 × 240，约 1.4s 循环）：点按时手型下压回弹，指尖扩散触控环并闪现点击光芒，可直接叠加在任意图片上。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

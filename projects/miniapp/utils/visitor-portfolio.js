@@ -47,6 +47,12 @@ const TEXT_SECTION_ALIGNMENT_CLASS_MAP = {
 const DEFAULT_DIVIDER_COLOR = 'GRAY'
 const DEFAULT_DIVIDER_HEIGHT_PX = 16
 const VALID_DIVIDER_COLORS = ['BLACK', 'WHITE', 'GRAY', 'TRANSPARENT']
+const VALID_HYPERLINK_ICON_POSITIONS = [
+  'OVERLAY',
+  'OVERLAY_BOTTOM_CENTER',
+  'OVERLAY_CENTER',
+  'BELOW'
+]
 const DIVIDER_COLOR_VALUE_MAP = DIVIDER_COLOR_VALUES
 const SCHEDULE_DAY_META_FIELDS = ['holidayText', 'festivalText', 'noteText', 'lunarText', 'metaText']
 
@@ -250,6 +256,22 @@ function normalizeDivider(raw = {}) {
   })
 }
 
+function normalizeHyperlink(raw = {}) {
+  const iconPosition = trimText(raw.iconPosition)
+  return {
+    displayWork: raw.displayWork ? normalizeRenderWork(raw.displayWork) : null,
+    actionType: trimText(raw.actionType),
+    targetPortfolioId: toNumber(raw.targetPortfolioId),
+    targetAvailable: raw.targetAvailable === true,
+    targetTitle: trimText(raw.targetTitle),
+    targetShareCode: trimText(raw.targetShareCode),
+    externalContent: typeof raw.externalContent === 'string' ? raw.externalContent : '',
+    promptText: typeof raw.promptText === 'string' ? raw.promptText : '',
+    showClickIcon: raw.showClickIcon === true,
+    iconPosition: VALID_HYPERLINK_ICON_POSITIONS.includes(iconPosition) ? iconPosition : 'OVERLAY'
+  }
+}
+
 function normalizeCarouselIntervalMs(raw = {}, config = {}) {
   return toPositiveNumber(
     raw.carouselIntervalMs || config.carouselIntervalMs || config.intervalMs,
@@ -297,14 +319,26 @@ function normalizeRenderComponent(raw = {}) {
     previewImageUrl: qrContact.qrUrl,
     contactForm: normalizeContactForm(raw.contactForm || config),
     textSection: normalizeTextSection(raw.textSection || config),
-    divider: normalizeDivider(raw.divider || config)
+    divider: normalizeDivider(raw.divider || config),
+    hyperlink: normalizeHyperlink(raw.hyperlink || config)
   }
   return component
 }
 
 function normalizeRenderComponents(components = [], preview = false) {
   return (Array.isArray(components) ? components.map(normalizeRenderComponent) : [])
-    .filter((component) => preview || component.componentType !== 'SINGLE_WORK' || component.work)
+    .filter((component) => {
+      if (preview) {
+        return true
+      }
+      if (component.componentType === 'SINGLE_WORK') {
+        return Boolean(component.work)
+      }
+      if (component.componentType === 'HYPERLINK') {
+        return Boolean(component.hyperlink.displayWork)
+      }
+      return true
+    })
     .sort((left, right) => {
       const orderDiff = left.sortOrder - right.sortOrder
       return orderDiff || left.componentKey.localeCompare(right.componentKey)

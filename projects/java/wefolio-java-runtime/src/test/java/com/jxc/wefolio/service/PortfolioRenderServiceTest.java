@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jxc.wefolio.dict.MediaTypeDict;
 import com.jxc.wefolio.dict.PortfolioComponentTypeDict;
 import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
+import com.jxc.wefolio.dict.PortfolioPublicationStatusDict;
 import com.jxc.wefolio.dict.PortfolioStatusDict;
 import com.jxc.wefolio.dict.PortfolioTemplateTypeDict;
 import com.jxc.wefolio.dict.WorkAuditStatusDict;
@@ -16,6 +17,7 @@ import com.jxc.wefolio.dto.VisitorPortfolioResponse;
 import com.jxc.wefolio.entity.PortfolioEntity;
 import com.jxc.wefolio.entity.WorkEntity;
 import com.jxc.wefolio.mapper.WorkEntityMapper;
+import com.jxc.wefolio.mapper.PortfolioEntityMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -38,6 +40,10 @@ class PortfolioRenderServiceTest {
     /** 作品 Mapper 模拟 */
     @Mock
     private WorkEntityMapper workEntityMapper;
+
+    /** 作品集 Mapper 模拟 */
+    @Mock
+    private PortfolioEntityMapper portfolioEntityMapper;
 
     /** COS 服务模拟 */
     @Mock
@@ -484,8 +490,115 @@ class PortfolioRenderServiceTest {
         assertThat(divider.getHeightPx()).isEqualTo(28);
     }
 
+    @Test
+    void renderShouldExposeAvailableInternalHyperlinkWithoutLeakingInvalidTargets() {
+        when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(
+                work(11L, MediaTypeDict.IMAGE.getCode(), "gallery/11.jpg", "cover/11.jpg", null)
+        ));
+        PortfolioEntity target = publishedTarget(99L, 7L, "PFTARGET");
+        when(portfolioEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(target));
+        PortfolioConfigDto config = config(component(
+                "c_link",
+                PortfolioComponentTypeDict.HYPERLINK.getCode(),
+                1000,
+                Map.of(
+                        "workId", 11L,
+                        "actionType", "INTERNAL_PORTFOLIO",
+                        "targetPortfolioId", 99L,
+                        "showClickIcon", true,
+                        "iconPosition", "OVERLAY"
+                )
+        ));
+
+        PortfolioRenderDto.Hyperlink hyperlink = service()
+                .render(portfolio(), config, false, false, null, null)
+                .getComponents().getFirst().getHyperlink();
+
+        assertThat(hyperlink.getDisplayWork().getWorkId()).isEqualTo(11L);
+        assertThat(hyperlink.getActionType()).isEqualTo("INTERNAL_PORTFOLIO");
+        assertThat(hyperlink.getTargetPortfolioId()).isEqualTo(99L);
+        assertThat(hyperlink.isTargetAvailable()).isTrue();
+        assertThat(hyperlink.getTargetShareCode()).isEqualTo("PFTARGET");
+        assertThat(hyperlink.getTargetTitle()).isEqualTo("目标作品集");
+        assertThat(hyperlink.getExternalContent()).isEmpty();
+        assertThat(hyperlink.getPromptText()).isEmpty();
+
+        target.setOwnerId(8L);
+        PortfolioRenderDto.Hyperlink invalid = service()
+                .render(portfolio(), config, false, false, null, null)
+                .getComponents().getFirst().getHyperlink();
+        assertThat(invalid.isTargetAvailable()).isFalse();
+        assertThat(invalid.getTargetShareCode()).isNull();
+        assertThat(invalid.getTargetTitle()).isNull();
+    }
+
+    /**
+     * 渲染结果应原样保留新增的图片内点击图标位置。
+     */
+    @Test
+    void renderShouldPreserveEveryNewHyperlinkIconPosition() {
+        when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(
+                work(11L, MediaTypeDict.IMAGE.getCode(), "gallery/11.jpg", "cover/11.jpg", null)
+        ));
+
+        for (String iconPosition : List.of("OVERLAY_BOTTOM_CENTER", "OVERLAY_CENTER")) {
+            PortfolioConfigDto config = config(component(
+                    "c_link_" + iconPosition,
+                    PortfolioComponentTypeDict.HYPERLINK.getCode(),
+                    1000,
+                    Map.of(
+                            "workId", 11L,
+                            "actionType", "EXTERNAL_LINK",
+                            "externalContent", "复制内容",
+                            "promptText", "已复制",
+                            "showClickIcon", true,
+                            "iconPosition", iconPosition
+                    )
+            ));
+
+            PortfolioRenderDto.Hyperlink hyperlink = service()
+                    .render(portfolio(), config, false, false, null, null)
+                    .getComponents().getFirst().getHyperlink();
+
+            assertThat(hyperlink.getIconPosition()).isEqualTo(iconPosition);
+        }
+    }
+
+    @Test
+    void renderShouldPreserveExternalContentAndHideInvalidDisplayWorkOnlyForVisitors() {
+        WorkEntity animation = work(
+                12L, MediaTypeDict.ANIMATION.getCode(), "gallery/12.gif", "cover/12.jpg", null);
+        when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(animation));
+        String content = " 复制打开小红书\n😀 保留空格 ";
+        PortfolioConfigDto config = config(component(
+                "c_external",
+                PortfolioComponentTypeDict.HYPERLINK.getCode(),
+                1000,
+                Map.of(
+                        "workId", 12L,
+                        "actionType", "EXTERNAL_LINK",
+                        "externalContent", content,
+                        "promptText", "请打开小红书",
+                        "showClickIcon", true,
+                        "iconPosition", "BELOW"
+                )
+        ));
+
+        PortfolioRenderDto.Hyperlink hyperlink = service()
+                .render(portfolio(), config, false, false, null, null)
+                .getComponents().getFirst().getHyperlink();
+        assertThat(hyperlink.getExternalContent()).isEqualTo(content);
+        assertThat(hyperlink.getPromptText()).isEqualTo("请打开小红书");
+        assertThat(hyperlink.getDisplayWork().getMediaType()).isEqualTo("ANIMATION");
+
+        animation.setStatus(WorkStatusDict.PROCESSING.getCode());
+        assertThat(service().render(portfolio(), config, false, false, null, null).getComponents()).isEmpty();
+        assertThat(service().render(portfolio(), config, true, false, null, null)
+                .getComponents().getFirst().getHyperlink().getDisplayWork()).isNull();
+    }
+
     private PortfolioRenderService service() {
-        return new PortfolioRenderService(workEntityMapper, cosService);
+        return new PortfolioRenderService(workEntityMapper, portfolioEntityMapper, cosService);
     }
 
     private PortfolioEntity portfolio() {
@@ -544,5 +657,21 @@ class PortfolioRenderServiceTest {
             work.setAuditStatus(WorkAuditStatusDict.PASSED.getCode());
         }
         return work;
+    }
+
+    private PortfolioEntity publishedTarget(Long id, Long ownerId, String shareCode) {
+        PortfolioEntity target = new PortfolioEntity();
+        target.setId(id);
+        target.setOwnerId(ownerId);
+        target.setOwnerType(PortfolioOwnerTypeDict.USER.getCode());
+        target.setTemplateType(PortfolioTemplateTypeDict.STANDARD.getCode());
+        target.setStatus(PortfolioStatusDict.ACTIVE.getCode());
+        target.setPublicationStatus(PortfolioPublicationStatusDict.PUBLISHED.getCode());
+        target.setShareCode(shareCode);
+        PortfolioConfigDto targetConfig = config(component(
+                "c_profile", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, Map.of()));
+        targetConfig.getShare().setTitle("目标作品集");
+        target.setPublishedConfigJson(JSON.toJSONString(targetConfig));
+        return target;
     }
 }

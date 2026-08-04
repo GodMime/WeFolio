@@ -84,6 +84,14 @@ function createRequestError(message, extra = {}) {
   return error
 }
 
+function buildBackendFailureExtra(body, statusCode) {
+  const responseData = body && Object.prototype.hasOwnProperty.call(body, 'data') ? body.data : undefined
+  const detailFields = responseData && typeof responseData === 'object' && !Array.isArray(responseData)
+    ? responseData
+    : {}
+  return Object.assign({ statusCode, data: responseData }, detailFields)
+}
+
 function isEmptyGetQueryValue(value) {
   return value === undefined || value === null || value === ''
 }
@@ -143,11 +151,17 @@ function createRequestClient(options = {}) {
             return
           }
           if (response.statusCode < 200 || response.statusCode >= 300) {
-            reject(createRequestError(body.message || `请求失败(${response.statusCode})`, { statusCode: response.statusCode }))
+            reject(createRequestError(
+              body.message || `请求失败(${response.statusCode})`,
+              buildBackendFailureExtra(body, response.statusCode)
+            ))
             return
           }
           if (body.success === false) {
-            reject(createRequestError(body.message || '请求失败', { statusCode: response.statusCode }))
+            reject(createRequestError(
+              body.message || '请求失败',
+              buildBackendFailureExtra(body, response.statusCode)
+            ))
             return
           }
           resolve(Object.prototype.hasOwnProperty.call(body, 'data') ? body.data : body)
