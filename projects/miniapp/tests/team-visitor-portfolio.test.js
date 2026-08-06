@@ -179,6 +179,22 @@ test('visitor normalization keeps team theme and menu components independent', (
   assert.deepEqual(contact.activeComponents.map((item) => item.componentKey), ['contact'])
 })
 
+test('unknown team components are omitted while adjacent known components retain order', () => {
+  const { normalizeTeamVisitorPortfolio } = load('team-visitor-portfolio.js')
+  const portfolio = normalizeTeamVisitorPortfolio({
+    renderData: {
+      components: [
+        { componentKey: 'known-a', componentType: 'TEAM_PROFILE', sortOrder: 1000, data: {} },
+        { componentKey: 'unknown', componentType: 'FUTURE_WIDGET', sortOrder: 2000, data: {} },
+        { componentKey: 'known-b', componentType: 'DIVIDER', sortOrder: 3000, data: {} }
+      ]
+    }
+  })
+  assert.deepEqual(portfolio.components.map((item) => item.componentKey), ['known-a', 'known-b'])
+  const unknownOnly = normalizeTeamVisitorPortfolio({ renderData: { components: [{ componentKey: 'unknown', componentType: 'FUTURE_WIDGET' }] } })
+  assert.deepEqual(unknownOnly.components, [])
+})
+
 test('team visitor normalizes text section typography without truncating invalid sizes', () => {
   const { normalizeTeamVisitorPortfolio } = load('team-visitor-portfolio.js')
   const normalized = normalizeTeamVisitorPortfolio({

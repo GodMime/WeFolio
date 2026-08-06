@@ -152,6 +152,10 @@ class MinePortfolioServiceTest {
     @Mock
     private ContentLimitService contentLimitService;
 
+    /** 视频轮播候选来源服务模拟 */
+    @Mock
+    private PortfolioVideoCarouselSourceService portfolioVideoCarouselSourceService;
+
     @BeforeEach
     void setUp() {
         AuthContextHolder.set(new AuthContext(7L, "wf-user-7"));
@@ -414,18 +418,23 @@ class MinePortfolioServiceTest {
     }
 
     @Test
-    void componentLibraryShouldGateHyperlinkByEditorRevision() {
+    void componentLibraryShouldGateEachEntryByItsIntroducedRevision() {
         assertThat(service().getComponentLibrary(null).getComponents())
                 .extracting("componentType")
-                .doesNotContain("HYPERLINK");
+                .doesNotContain("HYPERLINK", "VIDEO_CAROUSEL");
         assertThat(service().getComponentLibrary(2).getComponents())
                 .extracting("componentType")
-                .doesNotContain("HYPERLINK");
+                .doesNotContain("HYPERLINK", "VIDEO_CAROUSEL");
         assertThat(service().getComponentLibrary(3).getComponents())
+                .extracting("componentType")
+                .contains("HYPERLINK")
+                .doesNotContain("VIDEO_CAROUSEL");
+        assertThat(service().getComponentLibrary(4).getComponents())
                 .extracting("componentType")
                 .containsExactly(
                         PortfolioComponentTypeDict.PROFILE.getCode(),
                         PortfolioComponentTypeDict.CAROUSEL.getCode(),
+                        "VIDEO_CAROUSEL",
                         PortfolioComponentTypeDict.TEXT_SECTION.getCode(),
                         PortfolioComponentTypeDict.DIVIDER.getCode(),
                         PortfolioComponentTypeDict.WORK_GRID.getCode(),
@@ -620,7 +629,7 @@ class MinePortfolioServiceTest {
     @Test
     void saveDraftShouldRejectNewEditorWithoutClientRevision() {
         PortfolioConfigDto incoming = config();
-        incoming.setEditorSchemaRevision(PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+        incoming.setEditorSchemaRevision(3);
         MinePortfolioDraftSaveRequest request = new MinePortfolioDraftSaveRequest();
         request.setConfig(incoming);
 
@@ -1295,7 +1304,8 @@ class MinePortfolioServiceTest {
                 miniappAuthService,
                 cosService,
                 teamPortfolioReferenceGuardService,
-                contentLimitService
+                contentLimitService,
+                portfolioVideoCarouselSourceService
         );
     }
 

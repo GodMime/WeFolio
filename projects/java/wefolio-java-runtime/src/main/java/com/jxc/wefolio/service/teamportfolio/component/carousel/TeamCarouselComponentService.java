@@ -26,6 +26,9 @@ import java.util.Set;
 
 /**
  * 团队轮播图成员和作品来源服务。
+ *
+ * <p>{@link #listMembers(long, long)} 是媒体无关的团队成员授权查询；其接口路径保留历史
+ * {@code carousel} 命名，但图片和视频组件均可复用成员结果。</p>
  */
 @Service
 @RequiredArgsConstructor
@@ -56,7 +59,7 @@ public class TeamCarouselComponentService {
     private final CosService cosService;
 
     /**
-     * 列出可用于轮播图的活跃团队成员。
+     * 列出允许团队作品引用的活跃成员，查询语义与媒体类型无关。
      *
      * @param portfolioId 团队作品集 ID
      * @param userId 当前维护者用户 ID

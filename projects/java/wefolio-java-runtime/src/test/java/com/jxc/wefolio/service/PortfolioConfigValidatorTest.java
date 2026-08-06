@@ -117,6 +117,179 @@ class PortfolioConfigValidatorTest {
                 .hasMessage("轮播图只能选择图片作品");
     }
 
+    /**
+     * 视频轮播应保留选择顺序、修剪标题并丢弃未支持配置。
+     */
+    @Test
+    void videoCarouselShouldNormalizeFullConfigContract() {
+        when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(
+                video(11L, 7L, WorkStatusDict.ACTIVE.getCode(), WorkAuditStatusDict.PASSED.getCode()),
+                video(12L, 7L, WorkStatusDict.ACTIVE.getCode(), WorkAuditStatusDict.PASSED.getCode()),
+                video(13L, 7L, WorkStatusDict.ACTIVE.getCode(), WorkAuditStatusDict.PASSED.getCode())
+        ));
+        PortfolioConfigDto config = config(component(
+                "c_video_carousel",
+                PortfolioComponentTypeDict.VIDEO_CAROUSEL.getCode(),
+                1000,
+                true,
+                Map.of(
+                        "title", "  一二三四五六七八九十  ",
+                        "workIds", List.of("13", 11L, 12),
+                        "unsupported", "discard"
+                )
+        ));
+        config.setEditorSchemaRevision(PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+
+        PortfolioConfigDto normalized = validator().normalize(7L, config);
+
+        assertThat(normalized.getComponents().getFirst().getConfig()).containsExactly(
+                Map.entry("title", "一二三四五六七八九十"),
+                Map.entry("workIds", List.of(13L, 11L, 12L)),
+                Map.entry("showTitle", true),
+                Map.entry("showSwipeHint", true)
+        );
+    }
+
+    /**
+     * 视频轮播缺省标题为“视频作品”，且最多可选八个作品。
+     */
+    @Test
+    void videoCarouselShouldDefaultBlankTitleAndAcceptEightWorks() {
+        when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(
+                video(11L, 7L, WorkStatusDict.ACTIVE.getCode(), WorkAuditStatusDict.PASSED.getCode()),
+                video(12L, 7L, WorkStatusDict.ACTIVE.getCode(), WorkAuditStatusDict.PASSED.getCode()),
+                video(13L, 7L, WorkStatusDict.ACTIVE.getCode(), WorkAuditStatusDict.PASSED.getCode()),
+                video(14L, 7L, WorkStatusDict.ACTIVE.getCode(), WorkAuditStatusDict.PASSED.getCode()),
+                video(15L, 7L, WorkStatusDict.ACTIVE.getCode(), WorkAuditStatusDict.PASSED.getCode()),
+                video(16L, 7L, WorkStatusDict.ACTIVE.getCode(), WorkAuditStatusDict.PASSED.getCode()),
+                video(17L, 7L, WorkStatusDict.ACTIVE.getCode(), WorkAuditStatusDict.PASSED.getCode()),
+                video(18L, 7L, WorkStatusDict.ACTIVE.getCode(), WorkAuditStatusDict.PASSED.getCode())
+        ));
+        PortfolioConfigDto config = config(component(
+                "c_video_carousel",
+                PortfolioComponentTypeDict.VIDEO_CAROUSEL.getCode(),
+                1000,
+                true,
+                Map.of("title", "  ", "workIds", List.of(11L, 12L, 13L, 14L, 15L, 16L, 17L, 18L),
+                        "showTitle", false, "showSwipeHint", false)
+        ));
+        config.setEditorSchemaRevision(PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+
+        PortfolioConfigDto normalized = validator().normalize(7L, config);
+
+        assertThat(normalized.getComponents().getFirst().getConfig())
+                .containsEntry("title", "视频作品")
+                .containsEntry("workIds", List.of(11L, 12L, 13L, 14L, 15L, 16L, 17L, 18L))
+                .containsEntry("showTitle", false)
+                .containsEntry("showSwipeHint", false);
+    }
+
+    /**
+     * 视频轮播非字符串标题必须使用默认标题，不得把 JSON 值强转为文案。
+     */
+    @Test
+    void videoCarouselShouldDefaultNonStringTitle() {
+        when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(
+                video(11L, 7L, WorkStatusDict.ACTIVE.getCode(), WorkAuditStatusDict.PASSED.getCode()),
+                video(12L, 7L, WorkStatusDict.ACTIVE.getCode(), WorkAuditStatusDict.PASSED.getCode()),
+                video(13L, 7L, WorkStatusDict.ACTIVE.getCode(), WorkAuditStatusDict.PASSED.getCode())
+        ));
+        PortfolioConfigDto config = videoCarouselConfig(List.of(11L, 12L, 13L));
+        config.getComponents().getFirst().getConfig().put("title", 123);
+
+        PortfolioConfigDto normalized = validator().normalize(7L, config);
+
+        assertThat(normalized.getComponents().getFirst().getConfig())
+                .containsEntry("title", "视频作品");
+    }
+
+    /**
+     * 视频轮播必须选择三至八个作品。
+     */
+    @Test
+    void videoCarouselShouldRejectMissingTooFewAndTooManyWorks() {
+        PortfolioConfigDto missing = videoCarouselConfig(List.of());
+        PortfolioConfigDto tooFew = videoCarouselConfig(List.of(11L, 12L));
+        PortfolioConfigDto tooMany = videoCarouselConfig(List.of(11L, 12L, 13L, 14L, 15L, 16L, 17L, 18L, 19L));
+
+        assertThatThrownBy(() -> validator().normalize(7L, missing))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage(PortfolioMessage.VIDEO_CAROUSEL_WORK_COUNT_MESSAGE);
+        assertThatThrownBy(() -> validator().normalize(7L, tooFew))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage(PortfolioMessage.VIDEO_CAROUSEL_WORK_COUNT_MESSAGE);
+        assertThatThrownBy(() -> validator().normalize(7L, tooMany))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage(PortfolioMessage.VIDEO_CAROUSEL_WORK_COUNT_MESSAGE);
+    }
+
+    /**
+     * 视频轮播不得静默去重或把小数截断为作品 ID。
+     */
+    @Test
+    void videoCarouselShouldRejectDuplicateAndInexactWorkIds() {
+        PortfolioConfigDto duplicate = videoCarouselConfig(List.of(11L, 11L, 12L));
+        PortfolioConfigDto nonPositive = videoCarouselConfig(List.of(11L, 0L, 12L));
+        PortfolioConfigDto fractional = videoCarouselConfig(List.of(11L, 12.5D, 13L));
+
+        assertThatThrownBy(() -> validator().normalize(7L, duplicate))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage(PortfolioMessage.VIDEO_CAROUSEL_WORK_DUPLICATE_MESSAGE);
+        assertThatThrownBy(() -> validator().normalize(7L, nonPositive))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage(PortfolioMessage.WORK_REFERENCE_INVALID_MESSAGE);
+        assertThatThrownBy(() -> validator().normalize(7L, fractional))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage(PortfolioMessage.WORK_REFERENCE_INVALID_MESSAGE);
+    }
+
+    /**
+     * 视频轮播标题按 Unicode 码点计算，不得超过十个字符。
+     */
+    @Test
+    void videoCarouselShouldRejectTitleOverTenUnicodeCodePoints() {
+        PortfolioConfigDto config = videoCarouselConfig(List.of(11L, 12L, 13L));
+        config.getComponents().getFirst().getConfig().put("title", "一二三四五六七八九十一");
+
+        assertThatThrownBy(() -> validator().normalize(7L, config))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage(PortfolioMessage.VIDEO_CAROUSEL_TITLE_LENGTH_MESSAGE);
+    }
+
+    /**
+     * 保存和发布时都必须以当前数据库归属、状态、审核与媒体类型为准。
+     */
+    @Test
+    void videoCarouselShouldRejectUnavailableWorksAndReReadBeforePublish() {
+        WorkEntity first = video(11L, 7L, WorkStatusDict.ACTIVE.getCode(), WorkAuditStatusDict.PASSED.getCode());
+        WorkEntity second = video(12L, 7L, WorkStatusDict.ACTIVE.getCode(), WorkAuditStatusDict.PASSED.getCode());
+        WorkEntity third = video(13L, 7L, WorkStatusDict.ACTIVE.getCode(), WorkAuditStatusDict.PASSED.getCode());
+        WorkEntity inactive = video(13L, 7L, WorkStatusDict.PROCESSING.getCode(), WorkAuditStatusDict.PASSED.getCode());
+        when(workEntityMapper.selectBatchIds(anyCollection()))
+                .thenReturn(List.of(first, second, third))
+                .thenReturn(List.of(first, second, inactive));
+        PortfolioConfigDto normalized = validator().normalize(7L, videoCarouselConfig(List.of(11L, 12L, 13L)));
+
+        assertThatThrownBy(() -> validator().validateForPublish(7L, normalized))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage(PortfolioMessage.WORK_REFERENCE_INVALID_MESSAGE);
+
+        WorkEntity wrongOwner = video(13L, 8L, WorkStatusDict.ACTIVE.getCode(), WorkAuditStatusDict.PASSED.getCode());
+        WorkEntity auditing = video(13L, 7L, WorkStatusDict.ACTIVE.getCode(), WorkAuditStatusDict.AUDITING.getCode());
+        WorkEntity image = work(13L, 7L, MediaTypeDict.IMAGE.getCode(), WorkStatusDict.ACTIVE.getCode());
+        when(workEntityMapper.selectBatchIds(anyCollection()))
+                .thenReturn(List.of(first, second, wrongOwner))
+                .thenReturn(List.of(first, second, auditing))
+                .thenReturn(List.of(first, second, image))
+                .thenReturn(List.of(first, second));
+
+        for (int attempt = 0; attempt < 4; attempt++) {
+            assertThatThrownBy(() -> validator().normalize(7L, videoCarouselConfig(List.of(11L, 12L, 13L))))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage(PortfolioMessage.WORK_REFERENCE_INVALID_MESSAGE);
+        }
+    }
+
     @Test
     void workGridShouldAcceptImageAndVideoWorks() {
         when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(
@@ -1232,6 +1405,56 @@ class PortfolioConfigValidatorTest {
     }
 
     /**
+     * 视频轮播的每个作品都必须生成有序引用，包括次级菜单内的组件。
+     */
+    @Test
+    void videoCarouselReferencesShouldIncludeEveryOrderedWorkInSecondaryMenu() {
+        when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(
+                video(11L, 7L, WorkStatusDict.ACTIVE.getCode(), WorkAuditStatusDict.PASSED.getCode()),
+                video(12L, 7L, WorkStatusDict.ACTIVE.getCode(), WorkAuditStatusDict.PASSED.getCode()),
+                video(13L, 7L, WorkStatusDict.ACTIVE.getCode(), WorkAuditStatusDict.PASSED.getCode())
+        ));
+        PortfolioConfigDto config = navigationConfig(
+                "#FFFFFF",
+                component("c_profile", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, true, Map.of()),
+                List.of(component(
+                        "c_video_carousel",
+                        PortfolioComponentTypeDict.VIDEO_CAROUSEL.getCode(),
+                        1000,
+                        true,
+                        Map.of("workIds", List.of(13L, 11L, 12L))
+                ))
+        );
+        PortfolioConfigDto normalized = validator().normalizeForDraft(7L, config, null);
+
+        List<PortfolioReferenceEntity> references = validator().buildReferences(
+                99L,
+                7L,
+                PortfolioConfigScopeDict.PUBLISHED.getCode(),
+                normalized
+        );
+
+        assertThat(references).extracting(
+                        PortfolioReferenceEntity::getReferenceType,
+                        PortfolioReferenceEntity::getReferenceId,
+                        PortfolioReferenceEntity::getComponentPath,
+                        PortfolioReferenceEntity::getSortOrder)
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple(
+                                ReferenceTypeDict.USER_PROFILE.getCode(), 7L, "components[0].config.profile", 0),
+                        org.assertj.core.groups.Tuple.tuple(
+                                ReferenceTypeDict.WORK.getCode(), 13L,
+                                "bottomNav.items[1].components[0].config.workIds[0]", 0),
+                        org.assertj.core.groups.Tuple.tuple(
+                                ReferenceTypeDict.WORK.getCode(), 11L,
+                                "bottomNav.items[1].components[0].config.workIds[1]", 1),
+                        org.assertj.core.groups.Tuple.tuple(
+                                ReferenceTypeDict.WORK.getCode(), 12L,
+                                "bottomNav.items[1].components[0].config.workIds[2]", 2)
+                );
+    }
+
+    /**
      * 新编辑器请求携带背景色和底部导航时，合并结果必须使用 incoming 的字段。
      */
     @Test
@@ -1430,6 +1653,24 @@ class PortfolioConfigValidatorTest {
         return config;
     }
 
+    /**
+     * 构造当前版本视频轮播配置。
+     *
+     * @param workIds 作品 ID
+     * @return 配置
+     */
+    private PortfolioConfigDto videoCarouselConfig(List<?> workIds) {
+        PortfolioConfigDto config = config(component(
+                "c_video_carousel",
+                PortfolioComponentTypeDict.VIDEO_CAROUSEL.getCode(),
+                1000,
+                true,
+                Map.of("workIds", workIds)
+        ));
+        config.setEditorSchemaRevision(PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+        return config;
+    }
+
     private PortfolioConfigDto.Component component(
             String key,
             String type,
@@ -1465,6 +1706,15 @@ class PortfolioConfigValidatorTest {
         if (MediaTypeDict.ANIMATION.getCode().equals(mediaType)) {
             work.setAuditStatus(WorkAuditStatusDict.PASSED.getCode());
         }
+        return work;
+    }
+
+    /**
+     * 构造带审核状态的视频作品。
+     */
+    private WorkEntity video(Long id, Long userId, String status, String auditStatus) {
+        WorkEntity work = work(id, userId, MediaTypeDict.VIDEO.getCode(), status);
+        work.setAuditStatus(auditStatus);
         return work;
     }
 }

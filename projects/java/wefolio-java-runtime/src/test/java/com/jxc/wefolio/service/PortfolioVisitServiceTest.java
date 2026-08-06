@@ -1,7 +1,9 @@
 package com.jxc.wefolio.service;
 
 import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
+import com.jxc.wefolio.dict.PortfolioConfigScopeDict;
 import com.jxc.wefolio.dict.PortfolioTypeDict;
+import com.jxc.wefolio.dict.ReferenceTypeDict;
 import com.jxc.wefolio.dict.BillingWindowScopeDict;
 import com.jxc.wefolio.dict.MediaTypeDict;
 import com.jxc.wefolio.dict.PointSceneCodeDict;
@@ -9,11 +11,13 @@ import com.jxc.wefolio.dict.VisitEventTypeDict;
 import com.jxc.wefolio.dict.VisitSourceTypeDict;
 import com.jxc.wefolio.dto.VisitorPortfolioEventRequest;
 import com.jxc.wefolio.entity.PortfolioEntity;
+import com.jxc.wefolio.entity.PortfolioReferenceEntity;
 import com.jxc.wefolio.entity.VisitEventEntity;
 import com.jxc.wefolio.entity.VisitRecordEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.VisitEventEntityMapper;
 import com.jxc.wefolio.mapper.VisitRecordEntityMapper;
+import com.jxc.wefolio.mapper.PortfolioReferenceEntityMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -56,6 +60,10 @@ class PortfolioVisitServiceTest {
     /** 积分滚动扣费窗口服务模拟 */
     @Mock
     private PointBillingWindowService pointBillingWindowService;
+
+    /** 作品集引用 Mapper 模拟 */
+    @Mock
+    private PortfolioReferenceEntityMapper portfolioReferenceEntityMapper;
 
     @BeforeEach
     void setUp() {
@@ -257,6 +265,64 @@ class PortfolioVisitServiceTest {
                 "访客播放作品集视频"
         );
         verify(visitEventEntityMapper).insert(any(VisitEventEntity.class));
+    }
+
+    /**
+     * 新版访客上报视频轮播播放时，必须命中已发布的作品与组件引用对。
+     */
+    @Test
+    void recordVideoEventShouldTrustPublishedWorkAndComponentReferencePair() {
+        VisitRecordEntity record = new VisitRecordEntity();
+        record.setId(33L);
+        record.setVisitorKey("visitor-a");
+        record.setPortfolioId(88L);
+        record.setPlayVideoCount(0);
+        when(visitRecordEntityMapper.selectOne(any())).thenReturn(record);
+        PortfolioReferenceEntity reference = new PortfolioReferenceEntity();
+        reference.setPortfolioId(88L);
+        reference.setConfigScope(PortfolioConfigScopeDict.PUBLISHED.getCode());
+        reference.setReferenceType(ReferenceTypeDict.WORK.getCode());
+        reference.setReferenceId(11L);
+        reference.setComponentKey("c_video_carousel");
+        reference.setIsValid(1);
+        reference.setDeleted(0L);
+        when(portfolioReferenceEntityMapper.selectList(any())).thenReturn(java.util.List.of(reference));
+        VisitorPortfolioEventRequest request = new VisitorPortfolioEventRequest();
+        request.setVisitorKey("visitor-a");
+        request.setEventType(VisitEventTypeDict.VIDEO_PLAYED.getCode());
+        request.setComponentKey("c_video_carousel");
+        request.setWorkId(11L);
+        request.setMediaType(MediaTypeDict.VIDEO.getCode());
+        request.setDurationSeconds(0);
+        request.setIdempotencyKey("video-carousel-1");
+
+        service().recordEvent(portfolio(), 1024L, request);
+
+        assertThat(record.getPlayVideoCount()).isEqualTo(1);
+        verify(portfolioReferenceEntityMapper).selectList(any());
+        verify(visitEventEntityMapper).insert(any(VisitEventEntity.class));
+    }
+
+    /**
+     * 作品或组件与已发布引用不匹配时，必须在任何计数和扣费前拒绝。
+     */
+    @Test
+    void recordVideoEventShouldRejectUnreferencedWorkAndComponentPair() {
+        when(portfolioReferenceEntityMapper.selectList(any())).thenReturn(java.util.List.of());
+        VisitorPortfolioEventRequest request = new VisitorPortfolioEventRequest();
+        request.setVisitorKey("visitor-a");
+        request.setEventType(VisitEventTypeDict.VIDEO_PLAYED.getCode());
+        request.setComponentKey("c_video_carousel_other");
+        request.setWorkId(11L);
+        request.setMediaType(MediaTypeDict.VIDEO.getCode());
+        request.setDurationSeconds(0);
+        request.setIdempotencyKey("video-carousel-invalid-1");
+
+        assertThatThrownBy(() -> service().recordEvent(portfolio(), 1024L, request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("个人作品集访问事件无效");
+
+        verifyNoInteractions(visitRecordEntityMapper, visitEventEntityMapper, pointBillingWindowService);
     }
 
     @Test
@@ -519,7 +585,8 @@ class PortfolioVisitServiceTest {
         return new PortfolioVisitService(
                 visitRecordEntityMapper,
                 visitEventEntityMapper,
-                pointBillingWindowService
+                pointBillingWindowService,
+                portfolioReferenceEntityMapper
         );
     }
 

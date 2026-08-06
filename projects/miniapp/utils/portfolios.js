@@ -8,7 +8,7 @@ const {
 } = require('./portfolio-text-typography')
 
 const SCHEMA_VERSION = 'standard-personal-v1'
-const EDITOR_SCHEMA_REVISION = 3
+const EDITOR_SCHEMA_REVISION = 4
 const SORT_ORDER_STEP = 1000
 const NAVIGATION_TITLE_MAX_LENGTH = 5
 const DISPLAY_GROUP_NAME_MAX_LENGTH = 20
@@ -26,6 +26,7 @@ const DEFAULT_CONTACT_FORM_FIELDS = ['contactName', 'phone', 'wechat', 'needs']
 
 const COMPONENT_TYPES = {
   CAROUSEL: 'CAROUSEL',
+  VIDEO_CAROUSEL: 'VIDEO_CAROUSEL',
   PROFILE: 'PROFILE',
   SCHEDULE_QUERY: 'SCHEDULE_QUERY',
   WORK_GRID: 'WORK_GRID',
@@ -40,6 +41,7 @@ const COMPONENT_TYPES = {
 
 const COMPONENT_NAMES = {
   CAROUSEL: '轮播图',
+  VIDEO_CAROUSEL: '视频轮播',
   PROFILE: '个人资料',
   SCHEDULE_QUERY: '档期查询',
   WORK_GRID: '双列作品列表',
@@ -134,6 +136,8 @@ const TEXT_SECTION_ALIGNMENT_OPTIONS = [
 const DEFAULT_DIVIDER_HEIGHT_PX = 16
 const PUBLISH_COMPONENT_MESSAGES = {
   CAROUSEL_WORK_REQUIRED: '请选择轮播作品',
+  VIDEO_CAROUSEL_MIN_WORK_REQUIRED: '视频轮播至少选择3个视频',
+  VIDEO_CAROUSEL_MAX_WORK_REQUIRED: '视频轮播最多选择8个视频',
   DISPLAY_WORK_REQUIRED: '请选择要展示的作品',
   SINGLE_WORK_REQUIRED: '请选择一个作品',
   CUSTOM_QR_REQUIRED: '请上传自定义联系二维码',
@@ -189,6 +193,17 @@ function normalizeWorkIds(workIds) {
     }
     return result
   }, [])
+}
+
+function normalizeVideoCarouselConfig(raw = {}) {
+  const title = Array.from(trimText(raw.title) || '视频作品').slice(0, 10).join('')
+  const workIds = normalizeWorkIds(raw.workIds).filter(Number.isInteger)
+  return {
+    title,
+    workIds,
+    showTitle: typeof raw.showTitle === 'boolean' ? raw.showTitle : true,
+    showSwipeHint: typeof raw.showSwipeHint === 'boolean' ? raw.showSwipeHint : true
+  }
 }
 
 function normalizeSingleWorkConfig(raw = {}) {
@@ -409,6 +424,11 @@ function createComponent(componentType, options = {}) {
     const singleWorkConfig = normalizeSingleWorkConfig(config)
     Object.keys(config).forEach((key) => delete config[key])
     Object.assign(config, singleWorkConfig)
+  }
+  if (componentType === COMPONENT_TYPES.VIDEO_CAROUSEL) {
+    const videoCarouselConfig = normalizeVideoCarouselConfig(config)
+    Object.keys(config).forEach((key) => delete config[key])
+    Object.assign(config, videoCarouselConfig)
   }
   if (componentType === COMPONENT_TYPES.HYPERLINK) {
     const hyperlinkConfig = normalizeHyperlinkConfig(config)
@@ -753,6 +773,11 @@ function validatePortfolioComponentForPublish(component = {}) {
       return normalizeWorkIds(config.workIds).length > 0
         ? ''
         : PUBLISH_COMPONENT_MESSAGES.CAROUSEL_WORK_REQUIRED
+    case COMPONENT_TYPES.VIDEO_CAROUSEL: {
+      const count = normalizeVideoCarouselConfig(config).workIds.length
+      if (count < 3) return PUBLISH_COMPONENT_MESSAGES.VIDEO_CAROUSEL_MIN_WORK_REQUIRED
+      return count > 8 ? PUBLISH_COMPONENT_MESSAGES.VIDEO_CAROUSEL_MAX_WORK_REQUIRED : ''
+    }
     case COMPONENT_TYPES.WORK_GRID:
     case COMPONENT_TYPES.WORK_LIST:
       return collectComponentWorkIds(component).length > 0
@@ -899,6 +924,18 @@ function updateComponentWorkIds(config, componentKey, workIds, menuKey = '') {
         workIds: normalizeWorkIds(workIds)
       })
     })
+  }))
+}
+
+function updateVideoCarouselConfig(config, componentKey, videoCarouselConfig = {}, menuKey = '') {
+  const targetKey = trimText(componentKey)
+  const nextVideoCarouselConfig = normalizeVideoCarouselConfig(videoCarouselConfig)
+  return updateMenuComponentList(config, menuKey, (components) => components.map((component) => {
+    if (component.componentKey !== targetKey || component.componentType !== COMPONENT_TYPES.VIDEO_CAROUSEL) {
+      return component
+    }
+    // VIDEO_CAROUSEL 配置采用严格白名单，避免编辑器把候选作品的临时字段写入草稿。
+    return Object.assign({}, component, { config: nextVideoCarouselConfig })
   }))
 }
 
@@ -1212,6 +1249,7 @@ module.exports = {
   buildDraftPayload,
   buildPublishPayload,
   copyWorkTagsToDisplayGroups,
+  collectComponentWorkIds,
   countUnicodeCodePoints,
   createComponent,
   findPortfolioComponent,
@@ -1228,6 +1266,7 @@ module.exports = {
   normalizeProfileComponentConfig,
   normalizeScheduleQueryConfig,
   normalizeSingleWorkConfig,
+  normalizeVideoCarouselConfig,
   normalizeWorkDisplayOptions,
   normalizeTextSectionConfig,
   normalizeWorkIds,
@@ -1247,6 +1286,7 @@ module.exports = {
   updateComponentProfileConfig,
   updateComponentScheduleQueryConfig,
   updateSingleWorkConfig,
+  updateVideoCarouselConfig,
   updateWorkDisplayOptions,
   updateComponentTextSectionConfig,
   updateComponentWorkIds,

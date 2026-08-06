@@ -14,6 +14,8 @@ import com.jxc.wefolio.service.teamportfolio.component.carousel.TeamCarouselComp
 import com.jxc.wefolio.service.teamportfolio.component.memberportfoliogrid.TeamMemberPortfolioGridComponentService;
 import com.jxc.wefolio.service.teamportfolio.component.memberportfoliolist.TeamMemberPortfolioListComponentService;
 import com.jxc.wefolio.service.teamportfolio.component.singlework.TeamSingleWorkComponentService;
+import com.jxc.wefolio.service.teamportfolio.component.videocarousel.TeamVideoCarouselComponentService;
+import com.jxc.wefolio.dto.teamportfolio.TeamVideoCarouselWorkPageResponse;
 import com.jxc.wefolio.dto.teamportfolio.TeamContactLeadResponse;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -78,6 +80,7 @@ class MineTeamPortfolioControllerTest {
         expected.put("POST /api/mine/team-portfolios/{portfolioId}/share-records", "shareRecord");
         expected.put("GET /api/mine/team-portfolios/{portfolioId}/components/carousel/members", "carouselMembers");
         expected.put("GET /api/mine/team-portfolios/{portfolioId}/components/carousel/members/{memberUserId}/works", "carouselWorks");
+        expected.put("GET /api/mine/team-portfolios/{portfolioId}/components/video-carousel/members/{memberUserId}/works", "videoCarouselWorks");
         expected.put("GET /api/mine/team-portfolios/{portfolioId}/components/single-work/members", "singleWorkMembers");
         expected.put("GET /api/mine/team-portfolios/{portfolioId}/components/single-work/members/{memberUserId}/works", "singleWorkWorks");
         expected.put("GET /api/mine/teams/{teamId}/portfolio-components/single-work/members", "teamSingleWorkMembers");
@@ -97,6 +100,13 @@ class MineTeamPortfolioControllerTest {
 
     @Test
     void endpointParametersKeepExactPathBodyAndQueryBindings() {
+        Method library = method("componentLibrary");
+        assertRequestParam(
+                library,
+                0,
+                "editorSchemaRevision",
+                org.springframework.web.bind.annotation.ValueConstants.DEFAULT_NONE);
+
         Method create = method("createStandard");
         assertThat(create.getParameters()[0].getAnnotation(PathVariable.class)).isNotNull();
         RequestBody optionalCreateBody = create.getParameters()[1].getAnnotation(RequestBody.class);
@@ -126,6 +136,16 @@ class MineTeamPortfolioControllerTest {
         Method carouselWorks = method("carouselWorks");
         assertThat(carouselWorks.getParameters()[0].getAnnotation(PathVariable.class)).isNotNull();
         assertThat(carouselWorks.getParameters()[1].getAnnotation(PathVariable.class)).isNotNull();
+        Method videoCarouselWorks = method("videoCarouselWorks");
+        assertThat(videoCarouselWorks.getParameters()[0].getAnnotation(PathVariable.class)).isNotNull();
+        assertThat(videoCarouselWorks.getParameters()[1].getAnnotation(PathVariable.class)).isNotNull();
+        assertRequestParam(
+                videoCarouselWorks,
+                2,
+                "keyword",
+                org.springframework.web.bind.annotation.ValueConstants.DEFAULT_NONE);
+        assertRequestParam(videoCarouselWorks, 3, "page", "1");
+        assertRequestParam(videoCarouselWorks, 4, "pageSize", "20");
         assertThat(method("singleWorkMembers").getAnnotation(Deprecated.class)).isNotNull();
         assertThat(method("singleWorkWorks").getAnnotation(Deprecated.class)).isNotNull();
         Method teamSingleWorkWorksPage = method("teamSingleWorkWorksPage");
@@ -155,18 +175,43 @@ class MineTeamPortfolioControllerTest {
     }
 
     @Test
+    void componentLibraryDelegatesNullableEditorRevisionWithoutBusinessRules() {
+        MineTeamPortfolioService mineService = mock(MineTeamPortfolioService.class);
+        MineTeamPortfolioController controller = new MineTeamPortfolioController(
+                mineService,
+                mock(TeamPortfolioAssetService.class),
+                mock(TeamCarouselComponentService.class),
+                mock(TeamVideoCarouselComponentService.class),
+                mock(TeamSingleWorkComponentService.class),
+                mock(TeamMemberPortfolioGridComponentService.class),
+                mock(TeamMemberPortfolioListComponentService.class),
+                mock(TeamMemberPortfolioPreviewService.class));
+
+        controller.componentLibrary(null);
+        controller.componentLibrary(3);
+
+        verify(mineService).getComponentLibrary(null);
+        verify(mineService).getComponentLibrary(3);
+    }
+
+    @Test
     void sourceEndpointsDelegateToTheirOwnComponentServices() {
         MineTeamPortfolioService mineService = mock(MineTeamPortfolioService.class);
         TeamPortfolioAssetService assetService = mock(TeamPortfolioAssetService.class);
         TeamCarouselComponentService carousel = mock(TeamCarouselComponentService.class);
+        TeamVideoCarouselComponentService videoCarousel = mock(TeamVideoCarouselComponentService.class);
         TeamSingleWorkComponentService singleWork = mock(TeamSingleWorkComponentService.class);
         TeamMemberPortfolioGridComponentService grid = mock(TeamMemberPortfolioGridComponentService.class);
         TeamMemberPortfolioListComponentService list = mock(TeamMemberPortfolioListComponentService.class);
         MineTeamPortfolioController controller = new MineTeamPortfolioController(
-                mineService, assetService, carousel, singleWork, grid, list, mock(TeamMemberPortfolioPreviewService.class));
+                mineService, assetService, carousel, videoCarousel, singleWork, grid, list,
+                mock(TeamMemberPortfolioPreviewService.class));
 
         controller.carouselMembers(13L);
         controller.carouselWorks(13L, 17L);
+        TeamVideoCarouselWorkPageResponse videoPage = new TeamVideoCarouselWorkPageResponse();
+        when(videoCarousel.pageWorks(13L, 17L, USER_ID, "婚礼", 2, 30)).thenReturn(videoPage);
+        assertThat(controller.videoCarouselWorks(13L, 17L, "婚礼", 2, 30).getData()).isSameAs(videoPage);
         controller.singleWorkMembers(13L);
         controller.singleWorkWorks(13L, 17L);
         controller.teamSingleWorkMembers(23L);
@@ -179,6 +224,7 @@ class MineTeamPortfolioControllerTest {
 
         verify(carousel).listMembers(13L, USER_ID);
         verify(carousel).listWorks(13L, 17L, USER_ID);
+        verify(videoCarousel).pageWorks(13L, 17L, USER_ID, "婚礼", 2, 30);
         verify(singleWork).listMembers(13L, USER_ID);
         verify(singleWork).listWorks(13L, 17L, USER_ID);
         verify(singleWork).listTeamMembers(23L, USER_ID);
@@ -200,6 +246,7 @@ class MineTeamPortfolioControllerTest {
                 mineService,
                 mock(TeamPortfolioAssetService.class),
                 mock(TeamCarouselComponentService.class),
+                mock(TeamVideoCarouselComponentService.class),
                 mock(TeamSingleWorkComponentService.class),
                 mock(TeamMemberPortfolioGridComponentService.class),
                 mock(TeamMemberPortfolioListComponentService.class),
@@ -258,6 +305,7 @@ class MineTeamPortfolioControllerTest {
                 mock(MineTeamPortfolioService.class),
                 mock(TeamPortfolioAssetService.class),
                 mock(TeamCarouselComponentService.class),
+                mock(TeamVideoCarouselComponentService.class),
                 mock(TeamSingleWorkComponentService.class),
                 mock(TeamMemberPortfolioGridComponentService.class),
                 mock(TeamMemberPortfolioListComponentService.class),
@@ -286,6 +334,7 @@ class MineTeamPortfolioControllerTest {
                 mock(MineTeamPortfolioService.class),
                 mock(TeamPortfolioAssetService.class),
                 mock(TeamCarouselComponentService.class),
+                mock(TeamVideoCarouselComponentService.class),
                 mock(TeamSingleWorkComponentService.class),
                 mock(TeamMemberPortfolioGridComponentService.class),
                 mock(TeamMemberPortfolioListComponentService.class),

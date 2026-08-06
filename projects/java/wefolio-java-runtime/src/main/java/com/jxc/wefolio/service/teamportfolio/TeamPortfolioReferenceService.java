@@ -19,6 +19,7 @@ import com.jxc.wefolio.service.teamportfolio.component.schedulequery.TeamSchedul
 import com.jxc.wefolio.service.teamportfolio.component.singlework.TeamSingleWorkComponentReferenceExtractor;
 import com.jxc.wefolio.service.teamportfolio.component.teamprofile.TeamProfileComponentReferenceExtractor;
 import com.jxc.wefolio.service.teamportfolio.component.textsection.TeamTextSectionComponentReferenceExtractor;
+import com.jxc.wefolio.service.teamportfolio.component.videocarousel.TeamVideoCarouselComponentReferenceExtractor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -58,6 +59,7 @@ public class TeamPortfolioReferenceService {
     private final TeamScheduleQueryComponentReferenceExtractor scheduleExtractor;
     private final TeamContactFormComponentReferenceExtractor contactExtractor;
     private final TeamQrContactComponentReferenceExtractor qrExtractor;
+    private final TeamVideoCarouselComponentReferenceExtractor videoCarouselExtractor;
 
     /**
      * 创建团队作品集引用重建服务。
@@ -73,7 +75,8 @@ public class TeamPortfolioReferenceService {
             TeamTextSectionComponentReferenceExtractor textExtractor,
             TeamScheduleQueryComponentReferenceExtractor scheduleExtractor,
             TeamContactFormComponentReferenceExtractor contactExtractor,
-            TeamQrContactComponentReferenceExtractor qrExtractor
+            TeamQrContactComponentReferenceExtractor qrExtractor,
+            TeamVideoCarouselComponentReferenceExtractor videoCarouselExtractor
     ) {
         this.referenceMapper = referenceMapper;
         this.teamProfileExtractor = teamProfileExtractor;
@@ -86,6 +89,7 @@ public class TeamPortfolioReferenceService {
         this.scheduleExtractor = scheduleExtractor;
         this.contactExtractor = contactExtractor;
         this.qrExtractor = qrExtractor;
+        this.videoCarouselExtractor = videoCarouselExtractor;
     }
 
     /**
@@ -174,6 +178,8 @@ public class TeamPortfolioReferenceService {
             case SCHEDULE_QUERY -> scheduleExtractor.extract(componentKey, componentPath, normalizedConfig, context);
             case CONTACT_FORM -> contactExtractor.extract(componentKey, componentPath, normalizedConfig, context);
             case QR_CONTACT -> qrExtractor.extract(componentKey, componentPath, normalizedConfig, context);
+            case VIDEO_CAROUSEL -> videoCarouselExtractor.extract(
+                    componentKey, componentPath, normalizedConfig, context);
         };
     }
 

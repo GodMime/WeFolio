@@ -15,6 +15,7 @@ import com.jxc.wefolio.dto.PortfolioHyperlinkTargetResponse;
 import com.jxc.wefolio.dto.PortfolioScheduleOptionsResponse;
 import com.jxc.wefolio.dto.PortfolioScheduleQueryRequest;
 import com.jxc.wefolio.dto.PortfolioScheduleQueryResponse;
+import com.jxc.wefolio.dto.PortfolioVideoCarouselWorkPageResponse;
 import com.jxc.wefolio.service.MinePortfolioService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -60,6 +61,25 @@ public class MinePortfolioController {
             @RequestParam(value = "editorSchemaRevision", required = false) Integer editorSchemaRevision
     ) {
         return Response.success(minePortfolioService.getComponentLibrary(editorSchemaRevision));
+    }
+
+    /**
+     * 分页查询视频轮播候选作品。
+     *
+     * @param keyword 搜索关键字
+     * @param tagId 可选作品标签 ID，不传与选择“全部”一致
+     * @param page 页码
+     * @param pageSize 每页条数
+     * @return 视频候选分页
+     */
+    @GetMapping("/api/mine/portfolios/components/video-carousel/works")
+    public Response<PortfolioVideoCarouselWorkPageResponse> videoCarouselWorks(
+            @RequestParam(value = "keyword", required = false) String keyword,
+            @RequestParam(value = "tagId", required = false) Long tagId,
+            @RequestParam(value = "page", defaultValue = "1") int page,
+            @RequestParam(value = "pageSize", defaultValue = "20") int pageSize
+    ) {
+        return Response.success(minePortfolioService.pageVideoCarouselWorks(keyword, tagId, page, pageSize));
     }
 
     /**

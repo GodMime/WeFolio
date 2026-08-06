@@ -200,6 +200,15 @@ public interface PortfolioMessage {
     /** 轮播图只能选图片提示 */
     String CAROUSEL_IMAGE_ONLY_MESSAGE = "轮播图只能选择图片作品";
 
+    /** 视频轮播标题过长提示 */
+    String VIDEO_CAROUSEL_TITLE_LENGTH_MESSAGE = "视频轮播标题不能超过10个字符";
+
+    /** 视频轮播作品数量提示 */
+    String VIDEO_CAROUSEL_WORK_COUNT_MESSAGE = "视频轮播需选择3至8个视频作品";
+
+    /** 视频轮播作品重复提示 */
+    String VIDEO_CAROUSEL_WORK_DUPLICATE_MESSAGE = "视频轮播不能重复选择同一视频作品";
+
     /** 二维码来源不支持提示 */
     String QR_SOURCE_UNSUPPORTED_MESSAGE = "二维码来源不支持";
 

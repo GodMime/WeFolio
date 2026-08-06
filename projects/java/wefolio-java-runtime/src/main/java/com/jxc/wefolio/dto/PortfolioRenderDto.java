@@ -122,6 +122,9 @@ public class PortfolioRenderDto {
         /** 是否展示作品说明 */
         private Boolean showDescription;
 
+        /** 是否展示视频轮播滑动提示 */
+        private Boolean showSwipeHint;
+
         /** 作品集展示标签 */
         private List<DisplayGroup> groups = new ArrayList<>();
 

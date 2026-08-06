@@ -1,3 +1,23 @@
 @import "../styles/team-portfolio-menu-transition.wxss";
 
 .page-shell{height:100vh;color:#212529}.page-shell.theme-dark{color:#f8f9fa}.page-shell.with-bottom-nav{padding-bottom:calc(112rpx + env(safe-area-inset-bottom));box-sizing:border-box}.preview-toolbar{display:flex;align-items:center;gap:16rpx;padding:20rpx 32rpx;border-bottom:1rpx solid #e9ecef;box-sizing:border-box}.theme-dark .preview-toolbar{border-bottom-color:rgba(134,142,150,.24)}.preview-note{flex:1;min-width:0;color:#868e96;font-size:22rpx;line-height:1.4;}.theme-dark .preview-note,.theme-dark .state{color:#adb5bd}.content{display:flex;flex-direction:column;min-width:0}.folio-component{display:block;width:100%;min-width:0;margin-top:34rpx;box-sizing:border-box}.state{min-width:0;padding:100rpx 32rpx;text-align:center;color:#868e96;overflow-wrap:anywhere}.folio-brand-footer{display:flex;flex-direction:column;align-items:center;gap:12rpx;padding:56rpx 0 calc(160rpx + env(safe-area-inset-bottom));box-sizing:border-box}.folio-brand-logo{width:56rpx;height:56rpx}.folio-brand-name{color:#adb5bd;font-size:24rpx;font-weight:800;line-height:1.4}
+.work-video-mask {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32rpx 24rpx calc(32rpx + env(safe-area-inset-bottom));
+  background: rgba(0, 0, 0, 0.82);
+  box-sizing: border-box;
+}
+
+.work-video-panel { width: 100%; display: flex; flex-direction: column; gap: 18rpx; }
+.work-video-heading { display: flex; align-items: center; justify-content: space-between; gap: 18rpx; }
+.work-video-title { min-width: 0; flex: 1 1 auto; overflow: hidden; color: #ffffff; font-size: 28rpx; font-weight: 900; text-overflow: ellipsis; white-space: nowrap; }
+.work-video-close { width: 58rpx; height: 58rpx; display: flex; align-items: center; justify-content: center; flex: none; color: #ffffff; font-size: 36rpx; border-radius: 50%; background: rgba(255, 255, 255, 0.18); }
+.work-video-player { width: 100%; height: auto; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 40rpx; background: #000000; }

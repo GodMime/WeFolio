@@ -1,0 +1,1155 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>11 作品集 · 视频轮播组件（叠放循环）· 旅行风交互设计稿（新功能）</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #f1f3f5;
+    font-family: "Instrument Sans", -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: #212529;
+    padding: 40px 32px 72px;
+  }
+  .doc-header { max-width: 1280px; margin: 0 auto 28px; }
+  .doc-header h1 { font-size: 20px; font-weight: 700; }
+  .doc-header .sub { margin-top: 8px; font-size: 12px; color: #868e96; line-height: 1.7; max-width: 960px; }
+  .doc-header .sub b { color: #212529; font-weight: 600; }
+  .doc-header .pages { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .doc-header .chip {
+    font-size: 11px; font-weight: 500; color: #868e96;
+    background: #ffffff; border: 1px solid #e9ecef; border-radius: 999px;
+    padding: 5px 12px;
+  }
+  .stage { display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-start; max-width: 1280px; margin: 0 auto; }
+  .phone-slot { width: 375px; flex: none; }
+  .phone-label { font-size: 12px; font-weight: 600; color: #868e96; margin-bottom: 10px; }
+  .phone-label .path { display: block; font-weight: 400; color: #adb5bd; font-size: 11px; margin-top: 3px; }
+  .frame {
+    width: 375px; min-height: 812px; background: #ffffff;
+    border-radius: 36px; overflow: hidden; position: relative;
+    border: 1px solid #dee2e6;
+    display: flex; flex-direction: column;
+  }
+  .frame.fixed-h { height: 812px; min-height: 812px; }
+  .frame.dark { background: #0e1013; border-color: #2b2f36; }
+
+  /* 状态栏 */
+  .statusbar {
+    flex: none; height: 44px; display: flex; align-items: center;
+    justify-content: space-between; padding: 8px 26px 0;
+    font-size: 13px; font-weight: 600; color: #212529; background: #f5f6f7;
+  }
+  .statusbar .sicons { display: flex; align-items: center; gap: 6px; }
+  .statusbar svg { display: block; }
+  .frame.dark .statusbar { background: #0e1013; color: #f1f3f5; }
+  .frame.dark .statusbar svg * { fill: #f1f3f5; stroke: #f1f3f5; }
+
+  /* 中性灰图片占位 */
+  .ph {
+    display: flex; align-items: center; justify-content: center;
+    color: #868e96; font-size: 12px; font-weight: 500;
+    text-align: center; line-height: 1.5; padding: 4px;
+    background: #e9ecef;
+  }
+
+  /* ===== 访客页公共 ===== */
+  .visitor-page { flex: 1; display: flex; flex-direction: column; background: #f5f6f7; }
+  .frame.dark .visitor-page { background: #0e1013; }
+  .visitor-head { padding: 18px 20px 6px; display: flex; align-items: center; gap: 12px; }
+  .visitor-avatar { width: 52px; height: 52px; flex: none; border-radius: 50%; }
+  .visitor-name { font-size: 17px; font-weight: 700; color: #212529; }
+  .visitor-sub { margin-top: 3px; font-size: 11px; color: #868e96; }
+  .frame.dark .visitor-name { color: #f1f3f5; }
+  .frame.dark .visitor-sub { color: #868e96; }
+  .visitor-tags { padding: 10px 20px 0; display: flex; flex-wrap: wrap; gap: 6px; }
+  .visitor-tag {
+    font-size: 10.5px; font-weight: 500; color: #868e96;
+    background: #ffffff; border: 1px solid #e9ecef; border-radius: 999px; padding: 4px 10px;
+  }
+  .frame.dark .visitor-tag { background: #171a1f; border-color: #2b2f36; color: #adb5bd; }
+
+  /* 参考视频风格：左右双标题 */
+  .hero-titles { padding: 22px 22px 4px; display: flex; justify-content: space-between; align-items: flex-start; }
+  .hero-titles .ht-en { font-size: 21px; font-weight: 700; letter-spacing: 0.06em; line-height: 1.15; color: #f1f3f5; }
+  .hero-titles .ht-en i { display: block; font-style: italic; font-weight: 500; font-size: 12px; letter-spacing: 0.02em; color: #c08a3e; margin: 2px 0; }
+  .hero-titles .ht-cn { margin-top: 6px; font-size: 11px; color: #adb5bd; }
+  .hero-titles .right { text-align: right; }
+
+  .sec-row { padding: 16px 20px 2px; display: flex; align-items: baseline; justify-content: space-between; }
+  .sec-name { font-size: 15px; font-weight: 700; color: #212529; }
+  .sec-more { font-size: 11px; color: #adb5bd; }
+  .frame.dark .sec-name { color: #f1f3f5; }
+
+  /* ===== 视频轮播组件 video-stack-carousel ===== */
+  .vsc { margin-top: 12px; }
+  .vsc-stage {
+    position: relative; height: 232px; overflow: hidden;
+    touch-action: pan-y; user-select: none; -webkit-user-select: none;
+    cursor: grab;
+  }
+  .vsc-stage:active { cursor: grabbing; }
+  .vsc-card {
+    position: absolute; left: 50%; top: 50%;
+    width: 288px; height: 180px;
+    border-radius: 20px; overflow: hidden;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, .18);
+    will-change: transform, opacity, filter;
+  }
+  .frame.dark .vsc-card { box-shadow: 0 12px 30px rgba(0, 0, 0, .55); }
+  .vsc-cover { position: absolute; inset: 0; }
+  .vsc-cover.t1 { background: linear-gradient(135deg, #b6bcc4 0%, #868e96 55%, #5c636a 100%); }
+  .vsc-cover.t2 { background: linear-gradient(150deg, #8b939c 0%, #5c636a 60%, #343a40 100%); }
+  .vsc-cover.t3 { background: linear-gradient(120deg, #ced4da 0%, #98a1ab 50%, #6c757d 100%); }
+  .vsc-cover.t4 { background: linear-gradient(160deg, #6c757d 0%, #495057 55%, #212529 100%); }
+  .vsc-cover.t5 { background: linear-gradient(140deg, #dee2e6 0%, #adb5bd 55%, #868e96 100%); }
+  .vsc-cover.t6 { background: linear-gradient(130deg, #98a1ab 0%, #6c757d 55%, #3f454c 100%); }
+  .vsc-cover::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(180deg, rgba(0,0,0,0) 40%, rgba(0,0,0,.42) 100%);
+  }
+  .vsc-info { position: absolute; left: 16px; bottom: 14px; z-index: 2; color: #ffffff; }
+  .vsc-info .en { font-size: 20px; font-weight: 700; letter-spacing: 0.14em; }
+  .vsc-info .cn { margin-top: 3px; font-size: 11px; font-weight: 500; color: rgba(255,255,255,.85); }
+  .vsc-info .meta { margin-top: 5px; font-size: 8.5px; letter-spacing: 0.08em; color: rgba(255,255,255,.55); }
+  .vsc-play {
+    position: absolute; left: 50%; top: 50%; z-index: 2;
+    width: 46px; height: 46px; margin: -23px 0 0 -23px;
+    border: 1.5px solid rgba(255,255,255,.9); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,.18);
+    opacity: 0; transition: opacity .15s ease;
+  }
+  .vsc-play::after {
+    content: ""; margin-left: 3px;
+    border-left: 13px solid #ffffff;
+    border-top: 8px solid transparent;
+    border-bottom: 8px solid transparent;
+  }
+  .vsc-card.is-center .vsc-play { opacity: 1; }
+
+  /* 滑动提示 */
+  .vsc-hint {
+    margin-top: 16px; display: flex; flex-direction: column; align-items: center; gap: 7px;
+    color: #adb5bd; font-size: 11.5px; letter-spacing: 0.04em;
+  }
+  .frame.dark .vsc-hint { color: #6c757d; }
+
+  /* 访客页底部栏 */
+  .visitor-bar {
+    margin-top: auto; flex: none; height: 64px;
+    display: flex; border-top: 1px solid #e9ecef; background: #ffffff;
+  }
+  .visitor-bar .vb {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 600; color: #212529;
+  }
+  .visitor-bar .vb.ask { color: #ffffff; background: #212529; }
+  .frame.dark .visitor-bar { background: #171a1f; border-top-color: #2b2f36; }
+  .frame.dark .visitor-bar .vb { color: #e9ecef; }
+  .frame.dark .visitor-bar .vb.ask { background: #f1f3f5; color: #212529; }
+
+  /* ===== 播放态覆盖层 ===== */
+  .player {
+    position: absolute; inset: 0; z-index: 20;
+    background: rgba(8, 9, 11, .97);
+    display: none; flex-direction: column;
+  }
+  .player.show { display: flex; }
+  .player.static-demo { display: flex; }
+  .player-top { flex: none; height: 52px; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; }
+  .player-title { font-size: 13px; font-weight: 600; color: #f1f3f5; }
+  .player-close {
+    width: 30px; height: 30px; border-radius: 50%;
+    border: 1px solid #3f454c; color: #adb5bd;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; cursor: pointer;
+  }
+  .player-body { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 0 0 40px; }
+  .player-screen { position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; }
+  .player-screen .vsc-cover { position: absolute; }
+  .player-shimmer {
+    position: absolute; inset: 0; z-index: 1;
+    background: linear-gradient(115deg, transparent 30%, rgba(255,255,255,.10) 46%, transparent 60%);
+    animation: shimmer 2.6s linear infinite;
+  }
+  @keyframes shimmer { 0% { transform: translateX(-100%);} 100% { transform: translateX(100%);} }
+  .player-pause {
+    position: absolute; left: 50%; top: 50%; z-index: 2;
+    width: 54px; height: 54px; margin: -27px 0 0 -27px;
+    border: 1.5px solid rgba(255,255,255,.85); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; gap: 5px;
+    background: rgba(0,0,0,.25);
+  }
+  .player-pause i { display: block; width: 4px; height: 16px; border-radius: 2px; background: #ffffff; }
+  .player-ctrl { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; padding: 10px 16px 12px; }
+  .player-progress { height: 3px; border-radius: 999px; background: rgba(255,255,255,.22); overflow: hidden; }
+  .player-progress i { display: block; height: 100%; width: 0; border-radius: 999px; background: #ffffff; animation: prog 24s linear infinite; }
+  @keyframes prog { 0% { width: 0; } 100% { width: 100%; } }
+  .player-time { margin-top: 8px; display: flex; justify-content: space-between; font-size: 10.5px; color: rgba(255,255,255,.75); }
+  .player-tip { margin-top: 26px; text-align: center; font-size: 11px; color: #6c757d; }
+
+  /* ===== 编辑页（沿用 10 号稿结构） ===== */
+  .navbar {
+    flex: none; height: 46px; position: relative;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 17px; font-weight: 600; color: #212529;
+    background: #f5f6f7;
+  }
+  .navbar .back {
+    position: absolute; left: 22px; top: 50%;
+    width: 9px; height: 9px; margin-top: -4px;
+    border-left: 2px solid #212529; border-bottom: 2px solid #212529;
+    transform: rotate(45deg);
+  }
+  .ed-page { flex: 1; background: #f5f6f7; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .ed-page.dimmed { opacity: .45; }
+  .panel { background: #ffffff; border: 1px solid #e9ecef; border-radius: 24px; padding: 14px; }
+  .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .sec-title { color: #212529; font-size: 16px; font-weight: 700; }
+  .sec-desc { margin-top: 4px; color: #adb5bd; font-size: 11px; line-height: 1.45; }
+  .link-button {
+    min-width: 66px; height: 30px; flex: none; padding: 0 14px;
+    display: flex; align-items: center; justify-content: center;
+    color: #212529; font-size: 12px; font-weight: 600;
+    border-radius: 999px; background: #f5f6f7;
+  }
+  .comp-list { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .comp-row {
+    min-height: 50px; display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+    border: 1px solid #e9ecef; border-radius: 20px; background: #ffffff;
+  }
+  .comp-order {
+    width: 24px; height: 24px; flex: none; display: flex; align-items: center; justify-content: center;
+    color: #ffffff; font-size: 11px; font-weight: 700; border-radius: 50%;
+    background: #212529;
+  }
+  .comp-title { flex: 1; min-width: 0; color: #212529; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .comp-summary { display: block; margin-top: 2px; color: #adb5bd; font-size: 10.5px; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .drag-handle { width: 20px; height: 24px; flex: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+  .drag-handle i { display: block; width: 12px; height: 1.5px; border-radius: 2px; background: #ced4da; }
+  .row-arrow { width: 7px; height: 7px; flex: none; border-right: 1.8px solid #adb5bd; border-bottom: 1.8px solid #adb5bd; transform: rotate(-45deg); }
+
+  .mask { position: absolute; inset: 0; z-index: 5; background: rgba(0,0,0,.4); }
+  .sheet {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 6;
+    display: flex; flex-direction: column; gap: 10px;
+    padding: 10px 16px 18px; background: #ffffff;
+    border-radius: 28px 28px 0 0;
+  }
+  .grabber { width: 36px; height: 4px; align-self: center; border-radius: 999px; background: #dee2e6; }
+  .sheet-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .sheet-title { flex: 1; min-width: 0; color: #212529; font-size: 16px; font-weight: 700; }
+  .sheet-count {
+    flex: none; min-height: 24px; display: flex; align-items: center; padding: 0 10px;
+    color: #868e96; font-size: 11px; font-weight: 600; white-space: nowrap;
+    border: 1px solid #e9ecef; border-radius: 999px; background: #ffffff;
+  }
+  .sheet-actions { display: flex; justify-content: flex-end; gap: 8px; }
+  .btn-cancel, .btn-confirm {
+    min-width: 74px; height: 34px; padding: 0 16px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 600; border-radius: 999px;
+  }
+  .btn-cancel { color: #212529; background: #f5f6f7; }
+  .btn-confirm { color: #ffffff; background: #212529; }
+  .sheet-note { color: #adb5bd; font-size: 10.5px; line-height: 1.5; }
+
+  .opt-list { display: flex; flex-direction: column; gap: 8px; }
+  .opt {
+    min-height: 50px; display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+    border: 1px solid #e9ecef; border-radius: 20px; background: #ffffff;
+  }
+  .opt-name { color: #212529; font-size: 13px; font-weight: 600; }
+  .opt-desc { display: block; margin-top: 2px; color: #adb5bd; font-size: 10.5px; }
+  .opt-plus {
+    margin-left: auto; width: 26px; height: 26px; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    color: #ffffff; font-size: 15px; font-weight: 600; border-radius: 50%;
+    background: #212529;
+  }
+  .opt-added { margin-left: auto; flex: none; color: #adb5bd; font-size: 11px; font-weight: 500; }
+  .opt.disabled { opacity: .55; }
+  .opt.hl-new { border-color: #212529; }
+  .new-badge {
+    display: inline-block; margin-left: 6px; padding: 1px 7px;
+    font-size: 9.5px; font-weight: 600; color: #ffffff; vertical-align: 2px;
+    border-radius: 999px; background: #212529;
+  }
+
+  /* ===== 视频轮播编辑弹层 ===== */
+  .field-heading { display: flex; align-items: center; justify-content: space-between; }
+  .field-label { color: #868e96; font-size: 12px; font-weight: 600; }
+  .field-limit { color: #adb5bd; font-size: 11px; font-weight: 400; }
+  .input {
+    width: 100%; min-height: 42px; margin-top: 6px; padding: 0 14px;
+    display: flex; align-items: center;
+    color: #212529; font-size: 13px; border-radius: 999px;
+    background: #f5f6f7;
+  }
+  .input.placeholder { color: #adb5bd; }
+  .pick-area {
+    margin-top: 6px; display: flex; align-items: center; justify-content: center; min-height: 60px;
+    border: 1px dashed #ced4da; border-radius: 20px; background: #ffffff;
+    color: #adb5bd; font-size: 12px; font-weight: 500;
+  }
+  .vis-row { min-height: 30px; display: flex; align-items: center; justify-content: space-between; gap: 9px; }
+  .vis-label { color: #868e96; font-size: 12px; font-weight: 500; }
+  .switch { width: 42px; height: 25px; flex: none; border-radius: 999px; background: #212529; position: relative; }
+  .switch::after { content: ""; position: absolute; top: 3px; right: 3px; width: 19px; height: 19px; border-radius: 50%; background: #ffffff; }
+  .switch.off { background: #dee2e6; }
+  .switch.off::after { right: auto; left: 3px; }
+
+  /* 视频时长徽标 */
+  .dur-badge {
+    position: absolute; right: 3px; bottom: 3px; height: 13px; padding: 0 4px; z-index: 2;
+    display: flex; align-items: center; justify-content: center;
+    color: #ffffff; font-size: 8px; font-weight: 600; letter-spacing: .3px;
+    border-radius: 999px; background: rgba(33,37,41,.72);
+  }
+
+  /* ===== 选择视频作品弹层 ===== */
+  .work-search {
+    width: 100%; height: 38px; padding: 0 14px;
+    display: flex; align-items: center;
+    color: #adb5bd; font-size: 12px; border-radius: 999px; background: #f5f6f7;
+  }
+  .work-filters { display: flex; gap: 6px; }
+  .work-filter {
+    height: 28px; padding: 0 12px; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    color: #868e96; font-size: 11px; font-weight: 500;
+    border: 1px solid #e9ecef; border-radius: 999px; background: #ffffff;
+  }
+  .work-filter.on { color: #ffffff; border-color: #212529; background: #212529; }
+  .work-opt {
+    display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+    border: 1px solid #e9ecef; border-radius: 20px; background: #ffffff;
+  }
+  .work-opt.sel { border-color: #212529; }
+  .work-thumb { position: relative; width: 72px; height: 46px; flex: none; border-radius: 12px; overflow: hidden; }
+  .work-thumb .vsc-cover { position: absolute; }
+  .work-opt-name { color: #212529; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .work-opt-meta { margin-top: 4px; color: #adb5bd; font-size: 11px; }
+  .work-check {
+    width: 20px; height: 20px; flex: none; margin-left: auto;
+    display: flex; align-items: center; justify-content: center;
+    color: #ffffff; font-size: 11px; font-weight: 600; border-radius: 50%; background: #212529;
+  }
+  .work-check.none { background: #ffffff; border: 1.5px solid #ced4da; }
+
+  /* 团队成员选择（团队作品集编辑弹层） */
+  .member-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .member-pill {
+    height: 32px; padding: 0 14px; flex: none;
+    display: flex; align-items: center; gap: 6px;
+    color: #868e96; font-size: 12px; font-weight: 500;
+    border: 1px solid #e9ecef; border-radius: 999px; background: #ffffff;
+  }
+  .member-pill.active { color: #ffffff; border-color: #212529; background: #212529; }
+  .member-pill .cnt {
+    min-width: 16px; height: 16px; padding: 0 4px;
+    display: flex; align-items: center; justify-content: center;
+    color: #868e96; font-size: 9.5px; font-weight: 600;
+    border-radius: 999px; background: #f5f6f7;
+  }
+  .member-pill.active .cnt { color: #ffffff; background: rgba(255,255,255,.22); }
+</style>
+</head>
+<body>
+
+<div class="doc-header">
+  <h1>11 作品集 · 视频轮播组件（叠放循环）· 旅行风交互设计稿（新功能）</h1>
+  <div class="sub">
+    新功能设计稿：参考竞品「叠放式循环视频展示」交互。组件命名建议 <b>「视频轮播」</b>（技术组件名
+    <b>video-stack-carousel</b>，叠放式循环视频轮播），与现有「轮播图」（图片）并列。
+    候选名：视频叠卡 / 案例影廊 —— 均不如「视频轮播」直白、且与编辑器现有命名体系一致。
+    编辑配置：<b>板块标题</b>（默认「视频作品」，可改）、<b>轮播视频</b>（仅视频作品，3–8 个；个人作品集按<b>作品标签</b>筛选，团队作品集按<b>团队成员</b>筛选，选中按先后标记数字序号、序号即轮播顺序，与轮播图组件一致）、
+    <b>展示作品标题</b>与<b>展示滑动提示</b>开关；不足 3 个不可完成。
+    访客交互：<b>左右拖动循环滑动</b>（首尾相接、无限循环）；两侧卡片叠放露出（缩放 + 变暗 + 层级递减）；
+    点击中间卡片进入<b>全屏播放态</b>；点击侧边卡片滑动到该卡片。个人作品集与团队作品集通用，明暗双主题适配。
+    05 / 06 / 07 框为<b>可交互演示</b>（直接拖动或点击）。图片均为灰阶占位。
+  </div>
+  <div class="pages">
+    <span class="chip">standard-edit 选择组件弹层（新增「视频轮播」）</span>
+    <span class="chip">standard-edit 编辑弹层（初始态）</span>
+    <span class="chip">standard-edit 选择视频作品（作品标签筛选 · 序号标记）</span>
+    <span class="chip">team-standard-edit 编辑弹层（团队成员筛选 · 成员已选数）</span>
+    <span class="chip">visitor-portfolio 个人作品集 · 亮色 / 暗色（可交互）</span>
+    <span class="chip">visitor-team-portfolio 团队作品集（可交互）</span>
+    <span class="chip">播放态 · 点击中间卡片全屏播放</span>
+  </div>
+</div>
+
+<div class="stage">
+
+  <!-- ============ 01 编辑页弹层 · 选择组件（新增「视频轮播」） ============ -->
+  <div class="phone-slot">
+    <div class="phone-label">01 编辑页弹层 · 选择组件<span class="path">standard-edit「添加组件」底部弹层 · 新增「视频轮播」选项（个人 / 团队作品集通用）</span></div>
+    <div class="frame fixed-h">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="sicons">
+          <svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="#212529"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="#212529"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="#212529"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="#212529"/></svg>
+          <svg width="16" height="11" viewBox="0 0 16 11"><path d="M8 10.2 5.4 7.6a3.7 3.7 0 0 1 5.2 0L8 10.2zM3 5.2a7.1 7.1 0 0 1 10 0l-1.5 1.5a5.1 5.1 0 0 0-7 0L3 5.2zM.6 2.8a10.6 10.6 0 0 1 14.8 0L13.9 4.3a8.6 8.6 0 0 0-11.8 0L.6 2.8z" fill="#212529"/></svg>
+          <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0.5" y="0.5" width="21" height="11" rx="3" fill="none" stroke="#212529" opacity=".4"/><rect x="2" y="2" width="16" height="8" rx="1.6" fill="#212529"/><path d="M23 4v4c1-.3 1.6-1 1.6-2S24 4.3 23 4z" fill="#212529" opacity=".4"/></svg>
+        </span>
+      </div>
+      <div class="navbar"><span class="back"></span>标准个人作品集</div>
+      <div class="ed-page dimmed">
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <div class="sec-title">组件编排</div>
+              <div class="sec-desc">访客将按当前顺序浏览作品集内容</div>
+            </div>
+            <div class="link-button">添加组件</div>
+          </div>
+          <div class="comp-list">
+            <div class="comp-row">
+              <div class="comp-order">1</div>
+              <div class="comp-title">个人资料</div>
+              <div class="drag-handle"><i></i><i></i><i></i></div>
+              <div class="row-arrow"></div>
+            </div>
+            <div class="comp-row">
+              <div class="comp-order">2</div>
+              <div class="comp-title">视频轮播<span class="comp-summary">6 个视频作品 · 叠放循环展示</span></div>
+              <div class="drag-handle"><i></i><i></i><i></i></div>
+              <div class="row-arrow"></div>
+            </div>
+            <div class="comp-row">
+              <div class="comp-order">3</div>
+              <div class="comp-title">轮播图</div>
+              <div class="drag-handle"><i></i><i></i><i></i></div>
+              <div class="row-arrow"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mask"></div>
+      <div class="sheet" style="max-height:640px; overflow:hidden;">
+        <div class="grabber"></div>
+        <div class="sheet-heading">
+          <div class="sheet-title">选择组件</div>
+          <div class="sheet-count">12 个可选</div>
+        </div>
+        <div class="opt-list" style="overflow:hidden;">
+          <div class="opt">
+            <div style="min-width:0;"><div class="opt-name">轮播图</div><div class="opt-desc">展示已选择的图片作品</div></div>
+            <div class="opt-plus">+</div>
+          </div>
+          <div class="opt hl-new">
+            <div style="min-width:0;">
+              <div class="opt-name">视频轮播<span class="new-badge">新增</span></div>
+              <div class="opt-desc">叠放循环展示视频作品，访客左右滑动浏览、点击播放</div>
+            </div>
+            <div class="opt-plus">+</div>
+          </div>
+          <div class="opt disabled">
+            <div style="min-width:0;"><div class="opt-name">个人资料</div><div class="opt-desc">展示个人资料和服务标签</div></div>
+            <div class="opt-added">已添加</div>
+          </div>
+          <div class="opt">
+            <div style="min-width:0;"><div class="opt-name">单个作品</div><div class="opt-desc">突出展示一个图片或视频作品</div></div>
+            <div class="opt-plus">+</div>
+          </div>
+          <div class="opt">
+            <div style="min-width:0;"><div class="opt-name">档期查询</div><div class="opt-desc">开放访客查询档期</div></div>
+            <div class="opt-plus">+</div>
+          </div>
+          <div class="opt">
+            <div style="min-width:0;"><div class="opt-name">二维码联系</div><div class="opt-desc">展示二维码联系方式</div></div>
+            <div class="opt-plus">+</div>
+          </div>
+          <div class="opt">
+            <div style="min-width:0;"><div class="opt-name">文字说明</div><div class="opt-desc">添加服务说明文字</div></div>
+            <div class="opt-plus">+</div>
+          </div>
+        </div>
+        <div class="sheet-actions">
+          <div class="btn-cancel">取消</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 02 编辑弹层 · 编辑视频轮播（初始态 · 未选择视频） ============ -->
+  <div class="phone-slot">
+    <div class="phone-label">02 编辑页弹层 · 编辑视频轮播<span class="path">standard-edit「视频轮播」组件编辑弹层 · 初始态：未选择视频，「完成」不可用</span></div>
+    <div class="frame fixed-h">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="sicons">
+          <svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="#212529"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="#212529"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="#212529"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="#212529"/></svg>
+          <svg width="16" height="11" viewBox="0 0 16 11"><path d="M8 10.2 5.4 7.6a3.7 3.7 0 0 1 5.2 0L8 10.2zM3 5.2a7.1 7.1 0 0 1 10 0l-1.5 1.5a5.1 5.1 0 0 0-7 0L3 5.2zM.6 2.8a10.6 10.6 0 0 1 14.8 0L13.9 4.3a8.6 8.6 0 0 0-11.8 0L.6 2.8z" fill="#212529"/></svg>
+          <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0.5" y="0.5" width="21" height="11" rx="3" fill="none" stroke="#212529" opacity=".4"/><rect x="2" y="2" width="16" height="8" rx="1.6" fill="#212529"/><path d="M23 4v4c1-.3 1.6-1 1.6-2S24 4.3 23 4z" fill="#212529" opacity=".4"/></svg>
+        </span>
+      </div>
+      <div class="navbar"><span class="back"></span>标准个人作品集</div>
+      <div class="ed-page dimmed">
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <div class="sec-title">组件编排</div>
+              <div class="sec-desc">访客将按当前顺序浏览作品集内容</div>
+            </div>
+            <div class="link-button">添加组件</div>
+          </div>
+          <div class="comp-list">
+            <div class="comp-row">
+              <div class="comp-order">1</div>
+              <div class="comp-title">个人资料</div>
+              <div class="drag-handle"><i></i><i></i><i></i></div>
+              <div class="row-arrow"></div>
+            </div>
+            <div class="comp-row">
+              <div class="comp-order">2</div>
+              <div class="comp-title">视频轮播</div>
+              <div class="drag-handle"><i></i><i></i><i></i></div>
+              <div class="row-arrow"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mask"></div>
+      <div class="sheet" style="max-height:560px; overflow:hidden;">
+        <div class="grabber"></div>
+        <div class="sheet-heading">
+          <div class="sheet-title">编辑视频轮播</div>
+          <div class="sheet-count">3–8 个视频</div>
+        </div>
+        <div>
+          <div class="field-heading">
+            <div class="field-label">板块标题</div>
+            <div class="field-limit">最多 10 字</div>
+          </div>
+          <div class="input placeholder">视频作品（默认，可修改）</div>
+        </div>
+        <div>
+          <div class="field-heading">
+            <div class="field-label">轮播视频（仅视频作品）</div>
+            <div class="field-limit">已选 0 / 8</div>
+          </div>
+          <div class="pick-area">+ 选择视频作品（3–8 个）</div>
+        </div>
+        <div>
+          <div class="vis-row">
+            <div class="vis-label">展示作品标题</div>
+            <div class="switch"></div>
+          </div>
+          <div class="vis-row" style="margin-top:4px;">
+            <div class="vis-label">展示滑动提示</div>
+            <div class="switch"></div>
+          </div>
+        </div>
+        <div class="sheet-note">至少选择 3 个视频才能完成；叠放循环效果在 3 个及以上视频时生效。「展示作品标题」关闭后轮播卡片只展示视频封面；「展示滑动提示」控制组件下方「左右滑动，观看案例」引导。</div>
+        <div class="sheet-actions">
+          <div class="btn-cancel">取消</div>
+          <div class="btn-confirm" style="opacity:.4;">完成</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 03 编辑弹层 · 选择视频作品（多选 · 仅视频） ============ -->
+  <div class="phone-slot">
+    <div class="phone-label">03 编辑页弹层 · 选择视频作品（个人作品集）<span class="path">standard-edit 视频轮播「轮播视频」选择弹层 · 按作品标签筛选，多选仅视频，选中标记序号（同轮播图组件），已选 4 / 8</span></div>
+    <div class="frame fixed-h">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="sicons">
+          <svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="#212529"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="#212529"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="#212529"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="#212529"/></svg>
+          <svg width="16" height="11" viewBox="0 0 16 11"><path d="M8 10.2 5.4 7.6a3.7 3.7 0 0 1 5.2 0L8 10.2zM3 5.2a7.1 7.1 0 0 1 10 0l-1.5 1.5a5.1 5.1 0 0 0-7 0L3 5.2zM.6 2.8a10.6 10.6 0 0 1 14.8 0L13.9 4.3a8.6 8.6 0 0 0-11.8 0L.6 2.8z" fill="#212529"/></svg>
+          <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0.5" y="0.5" width="21" height="11" rx="3" fill="none" stroke="#212529" opacity=".4"/><rect x="2" y="2" width="16" height="8" rx="1.6" fill="#212529"/><path d="M23 4v4c1-.3 1.6-1 1.6-2S24 4.3 23 4z" fill="#212529" opacity=".4"/></svg>
+        </span>
+      </div>
+      <div class="navbar"><span class="back"></span>标准个人作品集</div>
+      <div class="ed-page dimmed">
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <div class="sec-title">组件编排</div>
+              <div class="sec-desc">访客将按当前顺序浏览作品集内容</div>
+            </div>
+            <div class="link-button">添加组件</div>
+          </div>
+          <div class="comp-list">
+            <div class="comp-row">
+              <div class="comp-order">1</div>
+              <div class="comp-title">个人资料</div>
+              <div class="drag-handle"><i></i><i></i><i></i></div>
+              <div class="row-arrow"></div>
+            </div>
+            <div class="comp-row">
+              <div class="comp-order">2</div>
+              <div class="comp-title">视频轮播</div>
+              <div class="drag-handle"><i></i><i></i><i></i></div>
+              <div class="row-arrow"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mask"></div>
+      <div class="sheet" style="max-height:640px; overflow:hidden;">
+        <div class="grabber"></div>
+        <div class="sheet-heading">
+          <div class="sheet-title">选择视频作品</div>
+          <div class="sheet-count">仅视频 · 已选 4 / 8</div>
+        </div>
+        <div>
+          <div class="field-heading">
+            <div class="field-label">作品标签</div>
+            <div class="field-limit">单选</div>
+          </div>
+          <div class="work-filters" style="margin-top:6px;">
+            <div class="work-filter">全部</div>
+            <div class="work-filter on">婚礼现场</div>
+            <div class="work-filter">宝宝宴</div>
+            <div class="work-filter">年会</div>
+          </div>
+        </div>
+        <div>
+          <div class="field-heading">
+            <div class="field-label">视频作品</div>
+            <div class="field-limit">已选 4 / 8</div>
+          </div>
+          <div class="work-search" style="margin-top:6px;">搜索当前标签下的视频作品</div>
+        </div>
+        <div class="opt-list" style="gap:6px;">
+          <div class="work-opt sel">
+            <div class="work-thumb"><div class="vsc-cover t1"></div><span class="dur-badge">01:03</span></div>
+            <div style="flex:1;min-width:0;">
+              <div class="work-opt-name">三亚目的地婚礼</div>
+              <div class="work-opt-meta">视频 · 婚礼现场</div>
+            </div>
+            <div class="work-check">1</div>
+          </div>
+          <div class="work-opt sel">
+            <div class="work-thumb"><div class="vsc-cover t2"></div><span class="dur-badge">00:47</span></div>
+            <div style="flex:1;min-width:0;">
+              <div class="work-opt-name">「沙丘」主题婚礼</div>
+              <div class="work-opt-meta">视频 · 婚礼现场</div>
+            </div>
+            <div class="work-check">2</div>
+          </div>
+          <div class="work-opt sel">
+            <div class="work-thumb"><div class="vsc-cover t3"></div><span class="dur-badge">00:58</span></div>
+            <div style="flex:1;min-width:0;">
+              <div class="work-opt-name">水晶主题婚礼</div>
+              <div class="work-opt-meta">视频 · 婚礼现场</div>
+            </div>
+            <div class="work-check">3</div>
+          </div>
+          <div class="work-opt sel">
+            <div class="work-thumb"><div class="vsc-cover t4"></div><span class="dur-badge">01:21</span></div>
+            <div style="flex:1;min-width:0;">
+              <div class="work-opt-name">羚羊谷主题婚礼</div>
+              <div class="work-opt-meta">视频 · 婚礼现场</div>
+            </div>
+            <div class="work-check">4</div>
+          </div>
+          <div class="work-opt">
+            <div class="work-thumb"><div class="vsc-cover t5"></div><span class="dur-badge">00:52</span></div>
+            <div style="flex:1;min-width:0;">
+              <div class="work-opt-name">韩式主题婚礼</div>
+              <div class="work-opt-meta">视频 · 婚礼现场</div>
+            </div>
+            <div class="work-check none"></div>
+          </div>
+          <div class="work-opt">
+            <div class="work-thumb"><div class="vsc-cover t6"></div><span class="dur-badge">01:10</span></div>
+            <div style="flex:1;min-width:0;">
+              <div class="work-opt-name">万物的浪漫</div>
+              <div class="work-opt-meta">视频 · 婚礼现场</div>
+            </div>
+            <div class="work-check none"></div>
+          </div>
+        </div>
+        <div class="sheet-note">作品标签用于筛选列表，仅视频作品可选，图片与动图不出现在列表；选中后右侧标记数字序号，序号即轮播顺序，取消选中后序号自动重排，切换标签时已选序号保留。</div>
+        <div class="sheet-actions">
+          <div class="btn-cancel">取消</div>
+          <div class="btn-confirm">完成</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 04 编辑页弹层 · 编辑视频轮播（团队作品集 · 按成员选择） ============ -->
+  <div class="phone-slot">
+    <div class="phone-label">04 编辑页弹层 · 编辑视频轮播（团队作品集）<span class="path">team-standard-edit「视频轮播」组件编辑弹层 · 按团队成员筛选视频作品，成员胶囊标记已选数（同轮播图组件）</span></div>
+    <div class="frame fixed-h">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="sicons">
+          <svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="#212529"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="#212529"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="#212529"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="#212529"/></svg>
+          <svg width="16" height="11" viewBox="0 0 16 11"><path d="M8 10.2 5.4 7.6a3.7 3.7 0 0 1 5.2 0L8 10.2zM3 5.2a7.1 7.1 0 0 1 10 0l-1.5 1.5a5.1 5.1 0 0 0-7 0L3 5.2zM.6 2.8a10.6 10.6 0 0 1 14.8 0L13.9 4.3a8.6 8.6 0 0 0-11.8 0L.6 2.8z" fill="#212529"/></svg>
+          <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0.5" y="0.5" width="21" height="11" rx="3" fill="none" stroke="#212529" opacity=".4"/><rect x="2" y="2" width="16" height="8" rx="1.6" fill="#212529"/><path d="M23 4v4c1-.3 1.6-1 1.6-2S24 4.3 23 4z" fill="#212529" opacity=".4"/></svg>
+        </span>
+      </div>
+      <div class="navbar"><span class="back"></span>标准团队作品集</div>
+      <div class="ed-page dimmed">
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <div class="sec-title">组件编排</div>
+              <div class="sec-desc">访客将按当前顺序浏览作品集内容</div>
+            </div>
+            <div class="link-button">添加组件</div>
+          </div>
+          <div class="comp-list">
+            <div class="comp-row">
+              <div class="comp-order">1</div>
+              <div class="comp-title">团队资料</div>
+              <div class="drag-handle"><i></i><i></i><i></i></div>
+              <div class="row-arrow"></div>
+            </div>
+            <div class="comp-row">
+              <div class="comp-order">2</div>
+              <div class="comp-title">视频轮播</div>
+              <div class="drag-handle"><i></i><i></i><i></i></div>
+              <div class="row-arrow"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mask"></div>
+      <div class="sheet" style="max-height:660px; overflow:hidden;">
+        <div class="grabber"></div>
+        <div class="sheet-heading">
+          <div class="sheet-title">编辑视频轮播</div>
+          <div class="sheet-count">3–8 个视频</div>
+        </div>
+        <div>
+          <div class="field-heading">
+            <div class="field-label">板块标题</div>
+            <div class="field-limit">最多 10 字</div>
+          </div>
+          <div class="input">团队视频案例</div>
+        </div>
+        <div>
+          <div class="field-heading">
+            <div class="field-label">选择团队成员</div>
+            <div class="field-limit">已选 4 / 8</div>
+          </div>
+          <div class="member-row">
+            <div class="member-pill active">一辰<span class="cnt">3</span></div>
+            <div class="member-pill">阿舟<span class="cnt">1</span></div>
+            <div class="member-pill">麦子<span class="cnt">0</span></div>
+            <div class="member-pill">小满<span class="cnt">0</span></div>
+          </div>
+        </div>
+        <div>
+          <div class="field-heading">
+            <div class="field-label">视频作品</div>
+            <div class="field-limit">仅视频</div>
+          </div>
+          <div class="opt-list" style="margin-top:6px; gap:6px;">
+            <div class="work-opt sel">
+              <div class="work-thumb"><div class="vsc-cover t1"></div><span class="dur-badge">01:03</span></div>
+              <div style="flex:1;min-width:0;">
+                <div class="work-opt-name">三亚目的地婚礼</div>
+                <div class="work-opt-meta">视频 · 婚礼现场 · 一辰</div>
+              </div>
+              <div class="work-check">1</div>
+            </div>
+            <div class="work-opt sel">
+              <div class="work-thumb"><div class="vsc-cover t2"></div><span class="dur-badge">00:47</span></div>
+              <div style="flex:1;min-width:0;">
+                <div class="work-opt-name">「沙丘」主题婚礼</div>
+                <div class="work-opt-meta">视频 · 婚礼现场 · 一辰</div>
+              </div>
+              <div class="work-check">2</div>
+            </div>
+            <div class="work-opt sel">
+              <div class="work-thumb"><div class="vsc-cover t3"></div><span class="dur-badge">00:58</span></div>
+              <div style="flex:1;min-width:0;">
+                <div class="work-opt-name">水晶主题婚礼</div>
+                <div class="work-opt-meta">视频 · 婚礼现场 · 一辰</div>
+              </div>
+              <div class="work-check">3</div>
+            </div>
+            <div class="work-opt">
+              <div class="work-thumb"><div class="vsc-cover t4"></div><span class="dur-badge">01:21</span></div>
+              <div style="flex:1;min-width:0;">
+                <div class="work-opt-name">羚羊谷主题婚礼</div>
+                <div class="work-opt-meta">视频 · 婚礼现场 · 一辰</div>
+              </div>
+              <div class="work-check none"></div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="vis-row">
+            <div class="vis-label">展示作品标题</div>
+            <div class="switch"></div>
+          </div>
+          <div class="vis-row" style="margin-top:4px;">
+            <div class="vis-label">展示滑动提示</div>
+            <div class="switch"></div>
+          </div>
+        </div>
+        <div class="sheet-note">团队成员用于筛选列表，仅展示所选成员的视频作品；成员胶囊上的数字为该成员已选数量，可跨成员选择，序号跨成员连续、即轮播顺序。成员被移出团队后其视频自动跳过。</div>
+        <div class="sheet-actions">
+          <div class="btn-cancel">取消</div>
+          <div class="btn-confirm">完成</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 05 个人作品集访客页 · 亮色主题（可交互） ============ -->
+  <div class="phone-slot">
+    <div class="phone-label">05 个人作品集访客页 · 亮色主题（可拖动 / 点击播放）<span class="path">visitor-portfolio · 视频轮播组件亮色版 · 叠放循环滑动</span></div>
+    <div class="frame fixed-h">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="sicons">
+          <svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="#212529"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="#212529"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="#212529"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="#212529"/></svg>
+          <svg width="16" height="11" viewBox="0 0 16 11"><path d="M8 10.2 5.4 7.6a3.7 3.7 0 0 1 5.2 0L8 10.2zM3 5.2a7.1 7.1 0 0 1 10 0l-1.5 1.5a5.1 5.1 0 0 0-7 0L3 5.2zM.6 2.8a10.6 10.6 0 0 1 14.8 0L13.9 4.3a8.6 8.6 0 0 0-11.8 0L.6 2.8z" fill="#212529"/></svg>
+          <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0.5" y="0.5" width="21" height="11" rx="3" fill="none" stroke="#212529" opacity=".4"/><rect x="2" y="2" width="16" height="8" rx="1.6" fill="#212529"/><path d="M23 4v4c1-.3 1.6-1 1.6-2S24 4.3 23 4z" fill="#212529" opacity=".4"/></svg>
+        </span>
+      </div>
+      <div class="visitor-page">
+        <div class="visitor-head">
+          <div class="visitor-avatar ph">头像</div>
+          <div>
+            <div class="visitor-name">主持人一辰</div>
+            <div class="visitor-sub">浙江 · 宁波 · 从业 8 年</div>
+          </div>
+        </div>
+        <div class="visitor-tags">
+          <span class="visitor-tag">婚礼主持</span>
+          <span class="visitor-tag">宴会主持</span>
+          <span class="visitor-tag">目的地婚礼</span>
+        </div>
+        <div class="sec-row">
+          <div class="sec-name">视频作品</div>
+          <div class="sec-more">6 个案例</div>
+        </div>
+        <div class="vsc">
+          <div class="vsc-stage">
+            <div class="vsc-card" data-title="DESTINY · 三亚目的地婚礼"><div class="vsc-cover t1"></div><div class="vsc-info"><div class="en">DESTINY</div><div class="cn">三亚目的地婚礼</div><div class="meta">三亚 · 2026.05 · 海边仪式</div></div><div class="vsc-play"></div></div>
+            <div class="vsc-card" data-title="DUNE · 沙丘主题婚礼"><div class="vsc-cover t2"></div><div class="vsc-info"><div class="en">DUNE</div><div class="cn">「沙丘」主题婚礼</div><div class="meta">宁波 · 2026.03 · 宴会厅</div></div><div class="vsc-play"></div></div>
+            <div class="vsc-card" data-title="CRYSTAL · 水晶主题婚礼"><div class="vsc-cover t3"></div><div class="vsc-info"><div class="en">CRYSTAL</div><div class="cn">水晶主题婚礼</div><div class="meta">杭州 · 2026.01 · 酒店宴会</div></div><div class="vsc-play"></div></div>
+            <div class="vsc-card" data-title="TIMELESS · 羚羊谷主题婚礼"><div class="vsc-cover t4"></div><div class="vsc-info"><div class="en">TIMELESS</div><div class="cn">羚羊谷主题婚礼</div><div class="meta">上海 · 2025.12 · 沉浸式</div></div><div class="vsc-play"></div></div>
+            <div class="vsc-card" data-title="SOULMATE · 韩式主题婚礼"><div class="vsc-cover t5"></div><div class="vsc-info"><div class="en">SOULMATE</div><div class="cn">韩式主题婚礼</div><div class="meta">宁波 · 2025.10 · 花园仪式</div></div><div class="vsc-play"></div></div>
+            <div class="vsc-card" data-title="ROMANTIC · 万物的浪漫"><div class="vsc-cover t6"></div><div class="vsc-info"><div class="en">ROMANTIC</div><div class="cn">万物的浪漫</div><div class="meta">舟山 · 2025.09 · 户外草坪</div></div><div class="vsc-play"></div></div>
+          </div>
+        </div>
+        <div class="vsc-hint">
+          <svg width="26" height="26" viewBox="0 0 26 26" fill="none"><path d="M4 13h18M4 13l4-4M4 13l4 4M22 13l-4-4M22 13l-4 4" stroke="#adb5bd" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>左右滑动，观看案例</span>
+        </div>
+        <div class="visitor-bar">
+          <div class="vb">分享</div>
+          <div class="vb ask">咨询</div>
+        </div>
+      </div>
+      <!-- 播放态覆盖层 -->
+      <div class="player">
+        <div class="player-top">
+          <div class="player-title">视频标题</div>
+          <div class="player-close">×</div>
+        </div>
+        <div class="player-body">
+          <div class="player-screen">
+            <div class="vsc-cover t1"></div>
+            <div class="player-shimmer"></div>
+            <div class="player-pause"><i></i><i></i></div>
+            <div class="player-ctrl">
+              <div class="player-progress"><i></i></div>
+              <div class="player-time"><span>00:00</span><span>01:03</span></div>
+            </div>
+          </div>
+          <div class="player-tip">点击 × 关闭播放，返回作品集</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 06 个人作品集访客页 · 暗色主题（可交互，参考竞品视觉） ============ -->
+  <div class="phone-slot">
+    <div class="phone-label">06 个人作品集访客页 · 暗色主题（可拖动 / 点击播放）<span class="path">visitor-portfolio · 视频轮播组件暗色版 · 双标题排版参考竞品</span></div>
+    <div class="frame fixed-h dark">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="sicons">
+          <svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1"/><rect x="4.5" y="5" width="3" height="6" rx="1"/><rect x="9" y="2.5" width="3" height="8.5" rx="1"/><rect x="13.5" y="0" width="3" height="11" rx="1"/></svg>
+          <svg width="16" height="11" viewBox="0 0 16 11"><path d="M8 10.2 5.4 7.6a3.7 3.7 0 0 1 5.2 0L8 10.2zM3 5.2a7.1 7.1 0 0 1 10 0l-1.5 1.5a5.1 5.1 0 0 0-7 0L3 5.2zM.6 2.8a10.6 10.6 0 0 1 14.8 0L13.9 4.3a8.6 8.6 0 0 0-11.8 0L.6 2.8z" stroke="none"/></svg>
+          <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0.5" y="0.5" width="21" height="11" rx="3" fill="none" opacity=".4"/><rect x="2" y="2" width="16" height="8" rx="1.6"/><path d="M23 4v4c1-.3 1.6-1 1.6-2S24 4.3 23 4z" opacity=".4"/></svg>
+        </span>
+      </div>
+      <div class="visitor-page">
+        <div class="hero-titles">
+          <div class="left">
+            <div class="ht-en">A DAY<br><i>to</i>REMEMBER</div>
+            <div class="ht-cn">一辰主持的婚礼</div>
+          </div>
+          <div class="right">
+            <div class="ht-en">THE<br><i>banquet</i>HOST</div>
+            <div class="ht-cn">宴会主持案例</div>
+          </div>
+        </div>
+        <div class="vsc" style="margin-top:26px;">
+          <div class="vsc-stage">
+            <div class="vsc-card" data-title="DESTINY · 三亚目的地婚礼"><div class="vsc-cover t1"></div><div class="vsc-info"><div class="en">DESTINY</div><div class="cn">三亚目的地婚礼</div><div class="meta">三亚 · 2026.05 · 海边仪式</div></div><div class="vsc-play"></div></div>
+            <div class="vsc-card" data-title="DUNE · 沙丘主题婚礼"><div class="vsc-cover t2"></div><div class="vsc-info"><div class="en">DUNE</div><div class="cn">「沙丘」主题婚礼</div><div class="meta">宁波 · 2026.03 · 宴会厅</div></div><div class="vsc-play"></div></div>
+            <div class="vsc-card" data-title="CRYSTAL · 水晶主题婚礼"><div class="vsc-cover t3"></div><div class="vsc-info"><div class="en">CRYSTAL</div><div class="cn">水晶主题婚礼</div><div class="meta">杭州 · 2026.01 · 酒店宴会</div></div><div class="vsc-play"></div></div>
+            <div class="vsc-card" data-title="TIMELESS · 羚羊谷主题婚礼"><div class="vsc-cover t4"></div><div class="vsc-info"><div class="en">TIMELESS</div><div class="cn">羚羊谷主题婚礼</div><div class="meta">上海 · 2025.12 · 沉浸式</div></div><div class="vsc-play"></div></div>
+            <div class="vsc-card" data-title="SOULMATE · 韩式主题婚礼"><div class="vsc-cover t5"></div><div class="vsc-info"><div class="en">SOULMATE</div><div class="cn">韩式主题婚礼</div><div class="meta">宁波 · 2025.10 · 花园仪式</div></div><div class="vsc-play"></div></div>
+            <div class="vsc-card" data-title="ROMANTIC · 万物的浪漫"><div class="vsc-cover t6"></div><div class="vsc-info"><div class="en">ROMANTIC</div><div class="cn">万物的浪漫</div><div class="meta">舟山 · 2025.09 · 户外草坪</div></div><div class="vsc-play"></div></div>
+          </div>
+        </div>
+        <div class="vsc-hint" style="margin-top:24px;">
+          <svg width="26" height="26" viewBox="0 0 26 26" fill="none"><path d="M4 13h18M4 13l4-4M4 13l4 4M22 13l-4-4M22 13l-4 4" stroke="#6c757d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>左右滑动，观看案例</span>
+        </div>
+        <div class="visitor-bar">
+          <div class="vb">分享</div>
+          <div class="vb ask">咨询</div>
+        </div>
+      </div>
+      <div class="player">
+        <div class="player-top">
+          <div class="player-title">视频标题</div>
+          <div class="player-close">×</div>
+        </div>
+        <div class="player-body">
+          <div class="player-screen">
+            <div class="vsc-cover t2"></div>
+            <div class="player-shimmer"></div>
+            <div class="player-pause"><i></i><i></i></div>
+            <div class="player-ctrl">
+              <div class="player-progress"><i></i></div>
+              <div class="player-time"><span>00:00</span><span>01:03</span></div>
+            </div>
+          </div>
+          <div class="player-tip">点击 × 关闭播放，返回作品集</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 07 团队作品集访客页（可交互） ============ -->
+  <div class="phone-slot">
+    <div class="phone-label">07 团队作品集访客页（可拖动 / 点击播放）<span class="path">visitor-team-portfolio · 同一视频轮播组件 · 团队案例数据</span></div>
+    <div class="frame fixed-h">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="sicons">
+          <svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1" fill="#212529"/><rect x="4.5" y="5" width="3" height="6" rx="1" fill="#212529"/><rect x="9" y="2.5" width="3" height="8.5" rx="1" fill="#212529"/><rect x="13.5" y="0" width="3" height="11" rx="1" fill="#212529"/></svg>
+          <svg width="16" height="11" viewBox="0 0 16 11"><path d="M8 10.2 5.4 7.6a3.7 3.7 0 0 1 5.2 0L8 10.2zM3 5.2a7.1 7.1 0 0 1 10 0l-1.5 1.5a5.1 5.1 0 0 0-7 0L3 5.2zM.6 2.8a10.6 10.6 0 0 1 14.8 0L13.9 4.3a8.6 8.6 0 0 0-11.8 0L.6 2.8z" fill="#212529"/></svg>
+          <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0.5" y="0.5" width="21" height="11" rx="3" fill="none" stroke="#212529" opacity=".4"/><rect x="2" y="2" width="16" height="8" rx="1.6" fill="#212529"/><path d="M23 4v4c1-.3 1.6-1 1.6-2S24 4.3 23 4z" fill="#212529" opacity=".4"/></svg>
+        </span>
+      </div>
+      <div class="visitor-page">
+        <div class="visitor-head">
+          <div class="visitor-avatar ph">团队</div>
+          <div>
+            <div class="visitor-name">拾光婚礼团队</div>
+            <div class="visitor-sub">主持 / 摄影 / 摄像 · 6 位成员</div>
+          </div>
+        </div>
+        <div class="visitor-tags">
+          <span class="visitor-tag">团队服务</span>
+          <span class="visitor-tag">全程跟拍</span>
+          <span class="visitor-tag">双机位</span>
+        </div>
+        <div class="sec-row">
+          <div class="sec-name">团队视频案例</div>
+          <div class="sec-more">5 个案例</div>
+        </div>
+        <div class="vsc">
+          <div class="vsc-stage">
+            <div class="vsc-card" data-title="序章 · 团队年度合集"><div class="vsc-cover t4"></div><div class="vsc-info"><div class="en">PROLOGUE</div><div class="cn">团队年度合集</div><div class="meta">2025 · 团队成员联合出品</div></div><div class="vsc-play"></div></div>
+            <div class="vsc-card" data-title="拾光 · 礼堂婚礼纪实"><div class="vsc-cover t2"></div><div class="vsc-info"><div class="en">CHAPTER</div><div class="cn">礼堂婚礼纪实</div><div class="meta">宁波 · 2026.04 · 主持：一辰</div></div><div class="vsc-play"></div></div>
+            <div class="vsc-card" data-title="山海 · 目的地婚礼影像"><div class="vsc-cover t1"></div><div class="vsc-info"><div class="en">VOYAGE</div><div class="cn">目的地婚礼影像</div><div class="meta">大理 · 2026.02 · 摄像：阿舟</div></div><div class="vsc-play"></div></div>
+            <div class="vsc-card" data-title="微光 · 晚宴派对记录"><div class="vsc-cover t6"></div><div class="vsc-info"><div class="en">GLIMMER</div><div class="cn">晚宴派对记录</div><div class="meta">杭州 · 2025.11 · 摄影：麦子</div></div><div class="vsc-play"></div></div>
+            <div class="vsc-card" data-title="归宁 · 中式婚礼全程"><div class="vsc-cover t3"></div><div class="vsc-info"><div class="en">RETURN</div><div class="cn">中式婚礼全程</div><div class="meta">绍兴 · 2025.08 · 团队三机位</div></div><div class="vsc-play"></div></div>
+          </div>
+        </div>
+        <div class="vsc-hint">
+          <svg width="26" height="26" viewBox="0 0 26 26" fill="none"><path d="M4 13h18M4 13l4-4M4 13l4 4M22 13l-4-4M22 13l-4 4" stroke="#adb5bd" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>左右滑动，观看案例</span>
+        </div>
+        <div class="visitor-bar">
+          <div class="vb">分享</div>
+          <div class="vb ask">咨询</div>
+        </div>
+      </div>
+      <div class="player">
+        <div class="player-top">
+          <div class="player-title">视频标题</div>
+          <div class="player-close">×</div>
+        </div>
+        <div class="player-body">
+          <div class="player-screen">
+            <div class="vsc-cover t4"></div>
+            <div class="player-shimmer"></div>
+            <div class="player-pause"><i></i><i></i></div>
+            <div class="player-ctrl">
+              <div class="player-progress"><i></i></div>
+              <div class="player-time"><span>00:00</span><span>01:03</span></div>
+            </div>
+          </div>
+          <div class="player-tip">点击 × 关闭播放，返回作品集</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 08 播放态（点击中间卡片后的全屏播放） ============ -->
+  <div class="phone-slot">
+    <div class="phone-label">08 播放态 · 点击中间卡片全屏播放<span class="path">visitor-portfolio · 点击轮播中间卡片进入播放态 · 竖屏内嵌 16:9 播放器（静态示意）</span></div>
+    <div class="frame fixed-h dark">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="sicons">
+          <svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1"/><rect x="4.5" y="5" width="3" height="6" rx="1"/><rect x="9" y="2.5" width="3" height="8.5" rx="1"/><rect x="13.5" y="0" width="3" height="11" rx="1"/></svg>
+          <svg width="16" height="11" viewBox="0 0 16 11"><path d="M8 10.2 5.4 7.6a3.7 3.7 0 0 1 5.2 0L8 10.2zM3 5.2a7.1 7.1 0 0 1 10 0l-1.5 1.5a5.1 5.1 0 0 0-7 0L3 5.2zM.6 2.8a10.6 10.6 0 0 1 14.8 0L13.9 4.3a8.6 8.6 0 0 0-11.8 0L.6 2.8z" stroke="none"/></svg>
+          <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0.5" y="0.5" width="21" height="11" rx="3" fill="none" opacity=".4"/><rect x="2" y="2" width="16" height="8" rx="1.6"/><path d="M23 4v4c1-.3 1.6-1 1.6-2S24 4.3 23 4z" opacity=".4"/></svg>
+        </span>
+      </div>
+      <div class="player static-demo" style="position:relative; flex:1;">
+        <div class="player-top">
+          <div class="player-title">DUNE · 沙丘主题婚礼</div>
+          <div class="player-close">×</div>
+        </div>
+        <div class="player-body">
+          <div class="player-screen">
+            <div class="vsc-cover t2"></div>
+            <div class="player-shimmer"></div>
+            <div class="player-pause"><i></i><i></i></div>
+            <div class="player-ctrl">
+              <div class="player-progress"><i></i></div>
+              <div class="player-time"><span>00:12</span><span>01:03</span></div>
+            </div>
+          </div>
+          <div class="player-tip">点击 × 关闭播放，返回作品集</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// 视频轮播组件 video-stack-carousel：叠放式循环轮播
+// 左右拖动循环滑动；点击中间卡片进入播放态；点击侧边卡片滑动至该卡片
+(function () {
+  var SPACING = 236; // 相邻卡片中心间距（px）
+
+  document.querySelectorAll('.vsc-stage').forEach(function (stage) {
+    var cards = Array.prototype.slice.call(stage.querySelectorAll('.vsc-card'));
+    var n = cards.length;
+    var offset = 0;      // 当前浮点索引（可为小数，表示拖动中）
+    var dragging = false;
+    var startX = 0;
+    var startOffset = 0;
+    var moved = 0;
+    var raf = null;
+
+    // 归一化相对位置到 [-n/2, n/2)
+    function rel(i) {
+      var r = (i - offset) % n;
+      if (r > n / 2) r -= n;
+      if (r < -n / 2) r += n;
+      return r;
+    }
+
+    function render() {
+      cards.forEach(function (card, i) {
+        var r = rel(i);
+        var ar = Math.abs(r);
+        var scale = Math.max(0.6, 1 - ar * 0.16);
+        card.style.transform = 'translate(-50%, -50%) translateX(' + (r * SPACING) + 'px) scale(' + scale + ')';
+        card.style.zIndex = String(100 - Math.round(ar * 10));
+        card.style.opacity = ar > 2.3 ? '0' : String(Math.max(0.25, 1 - Math.max(0, ar - 1.4) * 0.5));
+        card.style.filter = ar < 0.5 ? 'none' : 'brightness(' + (1 - Math.min(ar, 2) * 0.14) + ')';
+        card.classList.toggle('is-center', ar < 0.5);
+      });
+    }
+
+    // 缓动滑动到目标索引
+    function animateTo(target) {
+      cancelAnimationFrame(raf);
+      var step = function () {
+        offset += (target - offset) * 0.16;
+        if (Math.abs(target - offset) < 0.003) {
+          offset = target;
+          render();
+          return;
+        }
+        render();
+        raf = requestAnimationFrame(step);
+      };
+      step();
+    }
+
+    function openPlayer(card) {
+      var frame = stage.closest('.frame');
+      var player = frame && frame.querySelector('.player');
+      if (!player) return;
+      player.querySelector('.player-title').textContent = card.dataset.title || '';
+      player.classList.add('show');
+    }
+
+    stage.addEventListener('pointerdown', function (e) {
+      dragging = true;
+      moved = 0;
+      startX = e.clientX;
+      startOffset = offset;
+      cancelAnimationFrame(raf);
+    });
+
+    window.addEventListener('pointermove', function (e) {
+      if (!dragging) return;
+      var dx = e.clientX - startX;
+      moved = Math.max(moved, Math.abs(dx));
+      offset = startOffset - dx / SPACING;
+      render();
+    });
+
+    window.addEventListener('pointerup', function (e) {
+      if (!dragging) return;
+      dragging = false;
+      if (moved < 8) {
+        // 视为点击：命中中间卡片则播放，命中侧边卡片则滑过去
+        var cardEl = e.target.closest && e.target.closest('.vsc-card');
+        if (cardEl && stage.contains(cardEl)) {
+          var idx = cards.indexOf(cardEl);
+          var r = rel(idx);
+          if (Math.abs(r) < 0.5) {
+            offset = Math.round(offset);
+            render();
+            openPlayer(cardEl);
+          } else {
+            animateTo(offset + r);
+          }
+          return;
+        }
+      }
+      // 吸附到最近卡片
+      animateTo(Math.round(offset));
+    });
+
+    render();
+  });
+
+  // 播放态关闭
+  document.querySelectorAll('.player:not(.static-demo)').forEach(function (player) {
+    player.addEventListener('click', function (e) {
+      if (e.target.closest('.player-close') || !e.target.closest('.player-screen')) {
+        player.classList.remove('show');
+      }
+    });
+  });
+})();
+</script>
+
+</body>
+</html>

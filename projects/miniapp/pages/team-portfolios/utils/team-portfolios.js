@@ -14,7 +14,7 @@ const {
 
 const COMPONENT_LIBRARY_ENDPOINT = `${TEAM_PORTFOLIOS_ENDPOINT}/component-library`
 const STANDARD_TEAM_SCHEMA_VERSION = 'standard-team-v1'
-const TEAM_EDITOR_SCHEMA_REVISION = 2
+const TEAM_EDITOR_SCHEMA_REVISION = 3
 const DEFAULT_TEAM_BACKGROUND_COLOR = '#FFFFFF'
 const TEAM_NAVIGATION_TITLE_MAX_LENGTH = 5
 const TEAM_COMPONENT_SORT_ORDER_STEP = 1000
@@ -42,12 +42,31 @@ function normalizeTeamHexColor(value) {
   return /^#[0-9A-F]{6}$/.test(color) ? color : DEFAULT_TEAM_BACKGROUND_COLOR
 }
 
-// 新编辑器保存时始终声明 revision 2；旧编辑器不发送该字段，由后端据此执行兼容合并。
+// 新编辑器保存时始终声明 revision 3；旧编辑器不发送该字段，由后端据此执行兼容合并。
 function normalizeTeamEditorSchemaRevision(value) {
   const revision = Number(value)
   return Number.isInteger(revision) && revision > TEAM_EDITOR_SCHEMA_REVISION
     ? revision
     : TEAM_EDITOR_SCHEMA_REVISION
+}
+
+function normalizeTeamVideoCarouselConfig(raw = {}) {
+  const seenWorkIds = new Set()
+  const items = (Array.isArray(raw.items) ? raw.items : []).reduce((result, item) => {
+    const memberUserId = Number(item && item.memberUserId)
+    const workId = Number(item && item.workId)
+    if (!Number.isInteger(memberUserId) || memberUserId <= 0 ||
+      !Number.isInteger(workId) || workId <= 0 || seenWorkIds.has(workId)) return result
+    seenWorkIds.add(workId)
+    result.push({ memberUserId, workId })
+    return result
+  }, [])
+  return {
+    title: Array.from(text(raw.title) || '视频作品').slice(0, 10).join(''),
+    items,
+    showTitle: typeof raw.showTitle === 'boolean' ? raw.showTitle : true,
+    showSwipeHint: typeof raw.showSwipeHint === 'boolean' ? raw.showSwipeHint : true
+  }
 }
 
 function normalizeTeamComponentList(components = []) {
@@ -59,7 +78,9 @@ function normalizeTeamComponentList(components = []) {
         ? Number(item.sortOrder)
         : (index + 1) * TEAM_COMPONENT_SORT_ORDER_STEP,
       enabled: item.enabled !== false,
-      config: item.config && typeof item.config === 'object' ? item.config : {}
+      config: text(item.componentType) === 'VIDEO_CAROUSEL'
+        ? normalizeTeamVideoCarouselConfig(item.config && typeof item.config === 'object' ? item.config : {})
+        : (item.config && typeof item.config === 'object' ? item.config : {})
     }))
     .filter((item) => item.componentKey && item.componentType)
     .sort((left, right) => left.sortOrder - right.sortOrder)
@@ -167,7 +188,9 @@ function addTeamComponent(config, componentType, menuKey = '') {
           fontFamily: PORTFOLIO_TEXT_FONT_FAMILIES.SYSTEM,
           fontSizeRpx: NEW_COMPONENT_FONT_SIZE_RPX
         }
-      : {}
+      : type === 'VIDEO_CAROUSEL'
+        ? normalizeTeamVideoCarouselConfig()
+        : {}
   })
   return replaceTeamMenuComponentList(normalized, menuKey, components)
 }
@@ -335,6 +358,11 @@ function validateTeamComponentForPublish(component = {}) {
   switch (component.componentType) {
     case 'CAROUSEL':
       return Array.isArray(config.items) && config.items.length ? '' : '请选择轮播作品'
+    case 'VIDEO_CAROUSEL': {
+      const count = normalizeTeamVideoCarouselConfig(config).items.length
+      if (count < 3) return '视频轮播至少选择3个视频'
+      return count > 8 ? '视频轮播最多选择8个视频' : ''
+    }
     case 'SINGLE_WORK':
       return Number(config.workId) > 0 ? '' : '请选择一个作品'
     case 'MEMBER_PORTFOLIO_GRID':
@@ -594,7 +622,10 @@ function normalizeTeamPortfolioDetail(payload = {}) {
 }
 
 function fetchTeamComponentLibrary(requestFn = request) {
-  return requestFn({ url: COMPONENT_LIBRARY_ENDPOINT })
+  return requestFn({
+    url: COMPONENT_LIBRARY_ENDPOINT,
+    data: { editorSchemaRevision: TEAM_EDITOR_SCHEMA_REVISION }
+  })
 }
 
 function fetchTeamPortfolioDetail(requestFn = request, portfolioId) {
@@ -638,6 +669,7 @@ module.exports = Object.assign({}, teamPortfolioList, {
   moveTeamComponent,
   normalizeTeamPortfolioConfig,
   normalizeTeamPortfolioDetail,
+  normalizeTeamVideoCarouselConfig,
   removeTeamNavigationItem,
   removeTeamComponent,
   renameTeamNavigationItem,

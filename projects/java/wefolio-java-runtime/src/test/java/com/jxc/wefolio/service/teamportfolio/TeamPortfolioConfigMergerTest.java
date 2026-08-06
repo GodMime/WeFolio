@@ -1,6 +1,7 @@
 package com.jxc.wefolio.service.teamportfolio;
 
 import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioConfigDto;
+import com.jxc.wefolio.dict.TeamPortfolioComponentTypeDict;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -163,6 +164,64 @@ class TeamPortfolioConfigMergerTest {
         assertThat(merged.getBottomNav().getItems()).hasSize(2);
     }
 
+    @Test
+    void mergeShouldProtectRevisionThreeVideoCarouselWithAnchorOrdering() {
+        TeamPortfolioConfigDto existing = configWithRevision(
+                3, "#151515", bottomNav(menu("nav_home", "主页", null)));
+        existing.setComponents(List.of(
+                component("A"),
+                component("VC", TeamPortfolioComponentTypeDict.VIDEO_CAROUSEL.getCode(),
+                        com.alibaba.fastjson2.JSONObject.of("title", "数据库视频")),
+                component("B"),
+                component("C")));
+        TeamPortfolioConfigDto incoming = configWithRevision(
+                2, "#F5F6F8", bottomNav(menu("nav_home", "主页", null)));
+        incoming.setComponents(List.of(component("A"), component("C"), component("B")));
+
+        TeamPortfolioConfigDto merged = TeamPortfolioConfigMerger.merge(incoming, existing);
+
+        assertThat(merged.getEditorSchemaRevision()).isEqualTo(3);
+        assertThat(merged.getStyle().getBackgroundColor()).isEqualTo("#F5F6F8");
+        assertThat(merged.getComponents())
+                .extracting(TeamPortfolioConfigDto.ComponentEnvelope::getComponentKey)
+                .containsExactly("A", "VC", "C", "B");
+        assertThat(merged.getComponents())
+                .extracting(TeamPortfolioConfigDto.ComponentEnvelope::getSortOrder)
+                .containsExactly(1000, 2000, 3000, 4000);
+    }
+
+    @Test
+    void mergeShouldProtectVideoCarouselInsideMatchingMenuAndRejectPayloadMutation() {
+        TeamPortfolioConfigDto existing = configWithRevision(
+                3, "#151515", bottomNav(
+                        menu("nav_home", "主页", null),
+                        menu("nav_works", "作品", List.of(
+                                component("A"),
+                                component("VC", TeamPortfolioComponentTypeDict.VIDEO_CAROUSEL.getCode(),
+                                        com.alibaba.fastjson2.JSONObject.of("title", "数据库视频")),
+                                component("B")))));
+        existing.setComponents(List.of(component("HOME")));
+        TeamPortfolioConfigDto incoming = configWithRevision(
+                2, "#F5F6F8", bottomNav(
+                        menu("nav_home", "主页", null),
+                        menu("nav_works", "作品", List.of(
+                                component("B"),
+                                component("VC", TeamPortfolioComponentTypeDict.TEXT_SECTION.getCode(),
+                                        com.alibaba.fastjson2.JSONObject.of("content", "篡改")),
+                                component("A")))));
+        incoming.setComponents(List.of(component("HOME")));
+
+        TeamPortfolioConfigDto merged = TeamPortfolioConfigMerger.merge(incoming, existing);
+
+        assertThat(merged.getBottomNav().getItems().get(1).getComponents())
+                .extracting(TeamPortfolioConfigDto.ComponentEnvelope::getComponentKey)
+                .containsExactly("VC", "B", "A");
+        assertThat(merged.getBottomNav().getItems().get(1).getComponents().getFirst().getComponentType())
+                .isEqualTo(TeamPortfolioComponentTypeDict.VIDEO_CAROUSEL.getCode());
+        assertThat(merged.getBottomNav().getItems().get(1).getComponents().getFirst().getConfig())
+                .containsEntry("title", "数据库视频");
+    }
+
     // ==================== 辅助方法 ====================
 
     private TeamPortfolioConfigDto configWithRevision(int revision, String bgColor,
@@ -199,13 +258,22 @@ class TeamPortfolioConfigMergerTest {
     }
 
     private TeamPortfolioConfigDto.ComponentEnvelope component(String key) {
+        return component(key, TeamPortfolioComponentTypeDict.DIVIDER.getCode(),
+                new com.alibaba.fastjson2.JSONObject());
+    }
+
+    private TeamPortfolioConfigDto.ComponentEnvelope component(
+            String key,
+            String type,
+            com.alibaba.fastjson2.JSONObject config
+    ) {
         TeamPortfolioConfigDto.ComponentEnvelope component =
                 new TeamPortfolioConfigDto.ComponentEnvelope();
         component.setComponentKey(key);
-        component.setComponentType("DIVIDER");
+        component.setComponentType(type);
         component.setEnabled(true);
         component.setSortOrder(1000);
-        component.setConfig(new com.alibaba.fastjson2.JSONObject());
+        component.setConfig(config);
         return component;
     }
 }

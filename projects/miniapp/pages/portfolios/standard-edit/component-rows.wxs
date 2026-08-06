@@ -1,5 +1,6 @@
 var EDIT_LABELS = {
   CAROUSEL: '编辑轮播图作品',
+  VIDEO_CAROUSEL: '编辑视频轮播',
   PROFILE: '编辑个人资料',
   QR_CONTACT: '编辑二维码联系',
   SCHEDULE_QUERY: '编辑档期查询',

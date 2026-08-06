@@ -43,6 +43,7 @@ Page({
     contactFormModalVisible: false,
     activeContactFormComponent: createActiveContactFormComponent(),
     videoPreviewVisible: false,
+    videoPreviewUrl: '',
     videoPreview: null,
     activeSingleWorkVideoKey: '',
     displaySwitchingComponentKey: '',
@@ -191,6 +192,7 @@ Page({
         contactFormModalVisible: false,
         activeContactFormComponent: createActiveContactFormComponent(),
         videoPreviewVisible: false,
+        videoPreviewUrl: '',
         videoPreview: null,
         displaySwitchingComponentKey: ''
       },
@@ -202,6 +204,7 @@ Page({
     clearPortfolioMenuTransitionTimers(this)
     clearDisplaySwitchingTimer(this)
     this.stopActiveSingleWorkVideo()
+    this.clearVideoPreview()
     if (this.clipboardPromptController) {
       this.clipboardPromptController.dispose()
       this.clipboardPromptController = null
@@ -210,6 +213,7 @@ Page({
 
   onHide() {
     this.stopActiveSingleWorkVideo()
+    this.clearVideoPreview()
     if (this.clipboardPromptController) {
       this.clipboardPromptController.pause()
     }
@@ -311,19 +315,7 @@ Page({
 
   openWorkMedia(work) {
     if (work.mediaType === MEDIA_TYPE_VIDEO) {
-      if (!work.previewUrl) {
-        wx.showToast({ title: VIDEO_MISSING_MESSAGE, icon: 'none' })
-        return Promise.resolve(false)
-      }
-      this.setData({
-        videoPreviewVisible: true,
-        videoPreview: {
-          src: work.previewUrl,
-          poster: work.coverUrl,
-          title: work.title || DEFAULT_VIDEO_TITLE
-        }
-      })
-      return Promise.resolve(true)
+      return Promise.resolve(this.openVideoPreview(work))
     }
     if (!work.previewUrl) {
       wx.showToast({ title: IMAGE_MISSING_MESSAGE, icon: 'none' })
@@ -334,10 +326,54 @@ Page({
   },
 
   handleCloseVideoPreview() {
+    this.clearVideoPreview()
+  },
+
+  clearVideoPreview() {
+    if (typeof wx !== 'undefined' && wx.createVideoContext && this.data.videoPreviewUrl) {
+      const context = wx.createVideoContext('portfolioWorkVideo', this)
+      if (context && typeof context.stop === 'function') context.stop()
+    }
     this.setData({
       videoPreviewVisible: false,
+      videoPreviewUrl: '',
       videoPreview: null
     })
+  },
+
+  openVideoPreview(work = {}) {
+    const previewUrl = work.mediaUrl || work.previewUrl || ''
+    if (!previewUrl) {
+      wx.showToast({ title: VIDEO_MISSING_MESSAGE, icon: 'none' })
+      return false
+    }
+    this.stopActiveSingleWorkVideo()
+    if (this.data.videoPreviewVisible || this.data.videoPreviewUrl) this.clearVideoPreview()
+    this.setData({
+      videoPreviewVisible: true,
+      videoPreviewUrl: previewUrl,
+      videoPreview: {
+        src: previewUrl,
+        poster: work.coverUrl || '',
+        title: work.title || DEFAULT_VIDEO_TITLE
+      }
+    })
+    return true
+  },
+
+  handleVideoCarouselPlay(event) {
+    const detail = event && event.detail || {}
+    const work = detail.work || {}
+    if (!work.mediaUrl) {
+      wx.showToast({ title: VIDEO_MISSING_MESSAGE, icon: 'none' })
+      return Promise.resolve(false)
+    }
+    return Promise.resolve(this.openVideoPreview(work))
+  },
+
+  handleVideoPreviewError() {
+    this.clearVideoPreview()
+    wx.showToast({ title: '视频播放失败，请重试', icon: 'none' })
   },
 
   handleVideoPreviewPanelTap() {

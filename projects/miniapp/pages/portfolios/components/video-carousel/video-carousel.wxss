@@ -1,0 +1,19 @@
+:host { display: block; }
+.video-carousel { width: 100%; padding: 24rpx 0 20rpx; color: #212529; box-sizing: border-box; }
+.video-carousel-title { padding: 0 40rpx 8rpx; font-size: 30rpx; font-weight: 800; line-height: 1.35; }
+.video-carousel-stage { position: relative; width: calc(100% - 48rpx); height: 464rpx; margin: 0 24rpx; overflow: hidden; }
+.video-carousel-card { position: absolute; left: 50%; top: 50%; width: 576rpx; height: 360rpx; overflow: hidden; border-radius: 40rpx; background: #e9ecef; box-shadow: 0 24rpx 56rpx rgba(0, 0, 0, .18); will-change: transform, opacity, filter; }
+.video-carousel-cover, .video-carousel-placeholder, .video-carousel-shade { position: absolute; inset: 0; width: 100%; height: 100%; }
+.video-carousel-cover { display: block; }
+.video-carousel-placeholder { display: flex; align-items: center; justify-content: center; color: #868e96; font-size: 24rpx; font-weight: 700; background: #e9ecef; }
+.video-carousel-shade { background: linear-gradient(180deg, rgba(0, 0, 0, 0) 42%, rgba(0, 0, 0, .46) 100%); }
+.video-carousel-work-title { position: absolute; left: 32rpx; right: 32rpx; bottom: 28rpx; z-index: 2; overflow: hidden; color: #fff; font-size: 26rpx; font-weight: 800; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.video-carousel-play { position: absolute; left: 50%; top: 50%; z-index: 3; width: 92rpx; height: 92rpx; display: flex; align-items: center; justify-content: center; border: 3rpx solid rgba(255, 255, 255, .9); border-radius: 50%; background: rgba(0, 0, 0, .2); opacity: 0; transform: translate(-50%, -50%); }
+.video-carousel-card.is-center .video-carousel-play { opacity: 1; }
+.video-carousel-play-mark { width: 0; height: 0; margin-left: 8rpx; border-top: 16rpx solid transparent; border-bottom: 16rpx solid transparent; border-left: 26rpx solid #fff; }
+.video-carousel-hint { margin-top: 24rpx; color: #adb5bd; font-size: 23rpx; line-height: 1.4; letter-spacing: 2rpx; text-align: center; }
+.video-carousel-empty { height: 240rpx; display: flex; align-items: center; justify-content: center; color: #8a98a8; font-size: 24rpx; }
+.theme-dark { color: #f1f3f5; }
+.theme-dark .video-carousel-card { background: #2b2f36; box-shadow: 0 24rpx 60rpx rgba(0, 0, 0, .55); }
+.theme-dark .video-carousel-placeholder { color: #adb5bd; background: #2b2f36; }
+.theme-dark .video-carousel-hint, .theme-dark .video-carousel-empty { color: #c1c7ce; }

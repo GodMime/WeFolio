@@ -371,8 +371,8 @@ test('personal text patches preserve typography and unknown fields under the cur
     alignment: 'RIGHT'
   })
 
-  assert.equal(EDITOR_SCHEMA_REVISION, 3)
-  assert.equal(updated.editorSchemaRevision, 3)
+  assert.equal(EDITOR_SCHEMA_REVISION, 4)
+  assert.equal(updated.editorSchemaRevision, 4)
   assert.equal(updated.components[0].config.fontFamily, 'WECHAT_SANS_SS')
   assert.equal(updated.components[0].config.fontSizeRpx, 30)
   assert.equal(updated.components[0].config.futureField, 'kept')
@@ -616,7 +616,111 @@ test('standard portfolio keeps profile option disabled after component library l
 
   const profileOption = page.data.componentOptions.find((item) => item.componentType === COMPONENT_TYPES.PROFILE)
   assert.equal(profileOption.disabled, true)
-  assert.deepEqual(requests[0].data, { editorSchemaRevision: 3 })
+  assert.deepEqual(requests[0].data, { editorSchemaRevision: 4 })
+})
+
+test('personal video carousel opens immediately and keeps ordered selections across tag filters', async () => {
+  const requests = []
+  const page = loadPortfolioEditorPage((options) => {
+    requests.push(clone(options))
+    if (options.url === '/api/mine/portfolios/components/video-carousel/works') {
+      const tagId = options.data.tagId
+      return Promise.resolve({
+        page: 1,
+        pageSize: 20,
+        total: 2,
+        hasMore: false,
+        filterTags: [
+          { tagId: null, name: '全部', color: '', count: 2, active: !tagId },
+          { tagId: 7, name: '婚礼', color: '#0f766e', count: 1, active: tagId === 7 }
+        ],
+        works: tagId === 7
+          ? [{ workId: 102, title: '海边婚礼', mediaType: 'VIDEO', coverUrl: 'cover-102', mediaUrl: 'video-102', tags: [] }]
+          : [{ workId: 101, title: '草坪婚礼', mediaType: 'VIDEO', coverUrl: 'cover-101', mediaUrl: 'video-101', durationMs: 65000, tags: [] }]
+      })
+    }
+    return Promise.resolve({})
+  })
+  page.data.config = normalizePortfolioConfig({ components: [createComponent(COMPONENT_TYPES.PROFILE)] })
+  page.data.activeComponents = page.data.config.components
+
+  await page.handleSelectComponent({ currentTarget: { dataset: { type: COMPONENT_TYPES.VIDEO_CAROUSEL } } })
+
+  assert.equal(page.data.componentWorkSheetVisible, true)
+  assert.equal(page.data.editingComponentType, COMPONENT_TYPES.VIDEO_CAROUSEL)
+  assert.equal(page.data.videoCarouselTitle, '视频作品')
+  assert.deepEqual(requests[0], {
+    url: '/api/mine/portfolios/components/video-carousel/works',
+    data: { keyword: '', page: 1, pageSize: 20 }
+  })
+  assert.equal(page.data.componentWorkOptions[0].durationText, '01:05')
+  page.handleToggleComponentWork({ currentTarget: { dataset: { id: 101 } } })
+  await page.handleComponentWorkTagTap({ currentTarget: { dataset: { tagId: 7 } } })
+  assert.deepEqual(requests[1].data, { keyword: '', page: 1, pageSize: 20, tagId: 7 })
+  assert.deepEqual(page.data.videoCarouselSelectedWorks.map((item) => item.workId), [101])
+  page.handleToggleComponentWork({ currentTarget: { dataset: { id: 102 } } })
+  assert.deepEqual(page.data.videoCarouselSelectedWorks.map((item) => item.workId), [101, 102])
+  assert.equal(page.data.componentWorkOptions[0].selectionOrder, 2)
+  page.handleToggleComponentWork({ currentTarget: { dataset: { id: 102 } } })
+  assert.deepEqual(page.data.videoCarouselSelectedWorks.map((item) => item.workId), [101])
+})
+
+test('personal video carousel caps title and saves exactly four config fields with three selections', async () => {
+  const component = createComponent(COMPONENT_TYPES.VIDEO_CAROUSEL, {
+    componentKey: 'video-component',
+    config: { title: '原标题', workIds: [1, 2, 3], showTitle: false, showSwipeHint: false }
+  })
+  const page = loadPortfolioEditorPage(() => Promise.resolve({
+    page: 1,
+    pageSize: 20,
+    total: 3,
+    hasMore: false,
+    filterTags: [],
+    works: [1, 2, 3].map((workId) => ({ workId, title: `视频${workId}`, mediaType: 'VIDEO', tags: [] }))
+  }))
+  page.data.config = normalizePortfolioConfig({ components: [component] })
+  page.data.activeComponents = page.data.config.components
+
+  await page.handleComponentTap({
+    currentTarget: { dataset: { key: 'video-component', type: COMPONENT_TYPES.VIDEO_CAROUSEL } }
+  })
+  page.handleVideoCarouselTitleInput({ detail: { value: '一二三四五六七八九十😀' } })
+  page.handleVideoCarouselShowTitleChange({ detail: { value: true } })
+  page.handleConfirmComponentWorks()
+
+  const saved = page.data.config.components[0].config
+  assert.deepEqual(saved, {
+    title: '一二三四五六七八九十',
+    workIds: [1, 2, 3],
+    showTitle: true,
+    showSwipeHint: false
+  })
+})
+
+test('personal video carousel blocks a ninth selection and preserves selected work after reload failure', async () => {
+  const toasts = []
+  let rejectNext = false
+  const page = loadPortfolioEditorPage(() => {
+    if (rejectNext) return Promise.reject(new Error('视频加载失败'))
+    return Promise.resolve({ page: 1, pageSize: 20, total: 1, hasMore: false, filterTags: [], works: [{ workId: 9, title: '第九个', mediaType: 'VIDEO', tags: [] }] })
+  }, {
+    showToast(options) { toasts.push(options) }
+  })
+  const component = createComponent(COMPONENT_TYPES.VIDEO_CAROUSEL, {
+    componentKey: 'video-component',
+    config: { workIds: [1, 2, 3, 4, 5, 6, 7, 8] }
+  })
+  page.data.config = normalizePortfolioConfig({ components: [component] })
+  page.data.activeComponents = page.data.config.components
+  await page.handleComponentTap({ currentTarget: { dataset: { key: 'video-component', type: COMPONENT_TYPES.VIDEO_CAROUSEL } } })
+
+  page.handleToggleComponentWork({ currentTarget: { dataset: { id: 9 } } })
+  assert.equal(toasts.at(-1).title, '视频轮播最多选择8个视频')
+  assert.deepEqual(page.data.videoCarouselSelectedWorks.map((item) => item.workId), [1, 2, 3, 4, 5, 6, 7, 8])
+  rejectNext = true
+  await page.handleComponentWorkSearchConfirm()
+  assert.equal(page.data.componentWorkErrorText, '视频加载失败')
+  assert.deepEqual(page.data.videoCarouselSelectedWorks.map((item) => item.workId), [1, 2, 3, 4, 5, 6, 7, 8])
 })
 
 test('hyperlink editor omits source id for an unsaved portfolio and keeps invalid current selection visible', async () => {

@@ -85,6 +85,60 @@ function loadPreviewPage(fakeRequest, wxOverrides = {}) {
   })
 }
 
+test('preview video carousel opens and fully clears the root portal player', async () => {
+  const toasts = []
+  const requests = []
+  const page = loadPreviewPage((options) => {
+    requests.push(options)
+    return Promise.resolve({})
+  }, {
+    showToast(options) { toasts.push(options) },
+    createVideoContext() { return { stop() {} } }
+  })
+  const previousWx = global.wx
+  global.wx = {
+    showToast(options) { toasts.push(options) },
+    createVideoContext() { return { stop() {} } }
+  }
+  try {
+    const opened = await page.handleVideoCarouselPlay({
+      detail: {
+        componentKey: 'vc-1',
+        work: { workId: 11, mediaType: 'VIDEO', mediaUrl: 'video-11', coverUrl: 'cover-11', title: '视频十一' }
+      }
+    })
+    assert.equal(opened, true)
+    assert.equal(page.data.videoPreviewVisible, true)
+    assert.equal(page.data.videoPreviewUrl, 'video-11')
+    assert.deepEqual(requests, [])
+
+    page.handleCloseVideoPreview()
+    assert.equal(page.data.videoPreviewVisible, false)
+    assert.equal(page.data.videoPreviewUrl, '')
+    assert.equal(page.data.videoPreview, null)
+
+    await page.handleVideoCarouselPlay({
+      detail: {
+        componentKey: 'vc-1',
+        work: {
+          workId: 12,
+          mediaType: 'VIDEO',
+          mediaUrl: '',
+          previewUrl: 'cover-12',
+          coverUrl: 'cover-12'
+        }
+      }
+    })
+    assert.equal(toasts.at(-1).title, '视频地址缺失')
+    assert.equal(page.data.videoPreviewVisible, false)
+    page.handleVideoPreviewError()
+    assert.equal(toasts.at(-1).title, '视频播放失败，请重试')
+    assert.equal(page.data.videoPreviewUrl, '')
+  } finally {
+    global.wx = previousWx
+  }
+})
+
 test('preview hyperlink always opens the target published preview and keeps native back navigation', async () => {
   const navigations = []
   const toasts = []

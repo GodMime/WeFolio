@@ -17,6 +17,7 @@ import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioScheduleQueryResponse;
 import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioShareRecordRequest;
 import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioSummaryResponse;
 import com.jxc.wefolio.dto.teamportfolio.TeamSingleWorkPageResponse;
+import com.jxc.wefolio.dto.teamportfolio.TeamVideoCarouselWorkPageResponse;
 import com.jxc.wefolio.dto.MinePortfolioDetailResponse;
 import com.jxc.wefolio.dto.PortfolioScheduleOptionsResponse;
 import com.jxc.wefolio.dto.PortfolioScheduleQueryRequest;
@@ -28,6 +29,7 @@ import com.jxc.wefolio.service.teamportfolio.component.carousel.TeamCarouselComp
 import com.jxc.wefolio.service.teamportfolio.component.memberportfoliogrid.TeamMemberPortfolioGridComponentService;
 import com.jxc.wefolio.service.teamportfolio.component.memberportfoliolist.TeamMemberPortfolioListComponentService;
 import com.jxc.wefolio.service.teamportfolio.component.singlework.TeamSingleWorkComponentService;
+import com.jxc.wefolio.service.teamportfolio.component.videocarousel.TeamVideoCarouselComponentService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -56,6 +58,9 @@ public class MineTeamPortfolioController {
 
     /** 轮播图组件来源服务。 */
     private final TeamCarouselComponentService carouselComponentService;
+
+    /** 视频轮播组件来源服务。 */
+    private final TeamVideoCarouselComponentService videoCarouselComponentService;
 
     /** 单个作品组件来源服务。 */
     private final TeamSingleWorkComponentService singleWorkComponentService;
@@ -89,8 +94,10 @@ public class MineTeamPortfolioController {
      * 查询标准团队作品集组件库。
      */
     @GetMapping("/api/mine/team-portfolios/component-library")
-    public Response<List<MineTeamPortfolioService.ComponentLibraryItem>> componentLibrary() {
-        return Response.success(mineTeamPortfolioService.getComponentLibrary());
+    public Response<List<MineTeamPortfolioService.ComponentLibraryItem>> componentLibrary(
+            @RequestParam(value = "editorSchemaRevision", required = false) Integer editorSchemaRevision
+    ) {
+        return Response.success(mineTeamPortfolioService.getComponentLibrary(editorSchemaRevision));
     }
 
     /**
@@ -309,7 +316,9 @@ public class MineTeamPortfolioController {
     }
 
     /**
-     * 查询轮播图可选成员。
+     * 查询允许团队作品引用的活跃成员。
+     *
+     * <p>路径中的 {@code carousel} 是历史命名；该接口语义与媒体类型无关，可供图片和视频组件复用。</p>
      */
     @GetMapping("/api/mine/team-portfolios/{portfolioId}/components/carousel/members")
     public Response<List<TeamCarouselComponentService.MemberOption>> carouselMembers(
@@ -327,6 +336,21 @@ public class MineTeamPortfolioController {
             @PathVariable Long memberUserId
     ) {
         return Response.success(carouselComponentService.listWorks(portfolioId, memberUserId, currentUserId()));
+    }
+
+    /**
+     * 分页查询视频轮播指定成员的候选作品。
+     */
+    @GetMapping("/api/mine/team-portfolios/{portfolioId}/components/video-carousel/members/{memberUserId}/works")
+    public Response<TeamVideoCarouselWorkPageResponse> videoCarouselWorks(
+            @PathVariable Long portfolioId,
+            @PathVariable Long memberUserId,
+            @RequestParam(value = "keyword", required = false) String keyword,
+            @RequestParam(value = "page", defaultValue = "1") int page,
+            @RequestParam(value = "pageSize", defaultValue = "20") int pageSize
+    ) {
+        return Response.success(videoCarouselComponentService.pageWorks(
+                portfolioId, memberUserId, currentUserId(), keyword, page, pageSize));
     }
 
     /**

@@ -16,6 +16,7 @@ import com.jxc.wefolio.service.teamportfolio.component.schedulequery.TeamSchedul
 import com.jxc.wefolio.service.teamportfolio.component.singlework.TeamSingleWorkComponentValidator;
 import com.jxc.wefolio.service.teamportfolio.component.teamprofile.TeamProfileComponentValidator;
 import com.jxc.wefolio.service.teamportfolio.component.textsection.TeamTextSectionComponentValidator;
+import com.jxc.wefolio.service.teamportfolio.component.videocarousel.TeamVideoCarouselComponentValidator;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -58,6 +59,31 @@ class TeamPortfolioConfigValidatorTest {
     private TeamContactFormComponentValidator contactValidator;
     @Mock
     private TeamQrContactComponentValidator qrValidator;
+    @Mock
+    private TeamVideoCarouselComponentValidator videoCarouselValidator;
+
+    /**
+     * revision 3 配置必须把视频轮播分发到独立校验器。
+     */
+    @Test
+    void normalizeForDraftShouldDispatchVideoCarouselValidator() {
+        TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 22L, 3);
+        JSONObject normalizedData = new JSONObject();
+        normalizedData.put("title", "视频作品");
+        when(videoCarouselValidator.normalizeAndValidate(any(JSONObject.class), eq(context)))
+                .thenReturn(normalizedData);
+        TeamPortfolioConfigDto config = config(List.of(component(
+                "video-carousel-1", TeamPortfolioComponentTypeDict.VIDEO_CAROUSEL.getCode(), 1000, true)));
+        config.setEditorSchemaRevision(3);
+
+        TeamPortfolioConfigDto normalized = service().normalizeForDraft(config, null, context);
+
+        assertThat(normalized.getComponents()).singleElement().satisfies(component -> {
+            assertThat(component.getComponentType()).isEqualTo(TeamPortfolioComponentTypeDict.VIDEO_CAROUSEL.getCode());
+            assertThat(component.getConfig()).isEqualTo(normalizedData);
+        });
+        verify(videoCarouselValidator).normalizeAndValidate(any(JSONObject.class), eq(context));
+    }
 
     /**
      * 缺失、空值或纯空白的团队作品集标题必须在组件分发前被拒绝。
@@ -118,6 +144,9 @@ class TeamPortfolioConfigValidatorTest {
         List<TeamPortfolioConfigDto.ComponentEnvelope> components = new ArrayList<>();
         int sortOrder = 9000;
         for (TeamPortfolioComponentTypeDict type : TeamPortfolioComponentTypeDict.values()) {
+            if (type.getIntroducedAtRevision() > 2) {
+                continue;
+            }
             components.add(component(type.getCode().toLowerCase(), type.getCode(), sortOrder, true));
             sortOrder -= 1000;
         }
@@ -532,18 +561,21 @@ class TeamPortfolioConfigValidatorTest {
                 case SCHEDULE_QUERY -> when(scheduleValidator.normalizeAndValidate(any(JSONObject.class), eq(context))).thenReturn(normalized);
                 case CONTACT_FORM -> when(contactValidator.normalizeAndValidate(any(JSONObject.class), eq(context))).thenReturn(normalized);
                 case QR_CONTACT -> when(qrValidator.normalizeAndValidate(any(JSONObject.class), eq(context))).thenReturn(normalized);
+                case VIDEO_CAROUSEL -> {
+                    // revision 3 新组件由独立用例覆盖；本用例只验证 revision 2 已有组件集合。
+                }
             }
         }
     }
 
     private TeamPortfolioConfigValidator service() {
         return new TeamPortfolioConfigValidator(teamProfileValidator, carouselValidator, singleWorkValidator, dividerValidator, gridValidator,
-                listValidator, textValidator, scheduleValidator, contactValidator, qrValidator);
+                listValidator, textValidator, scheduleValidator, contactValidator, qrValidator, videoCarouselValidator);
     }
 
     private void verifyNoComponentValidatorInteractions() {
         verifyNoInteractions(teamProfileValidator, carouselValidator, singleWorkValidator, dividerValidator, gridValidator, listValidator,
-                textValidator, scheduleValidator, contactValidator, qrValidator);
+                textValidator, scheduleValidator, contactValidator, qrValidator, videoCarouselValidator);
     }
 
     private TeamPortfolioConfigDto config(List<TeamPortfolioConfigDto.ComponentEnvelope> components) {

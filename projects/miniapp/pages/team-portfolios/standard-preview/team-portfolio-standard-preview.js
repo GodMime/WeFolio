@@ -17,6 +17,7 @@ const {
 const TYPE_BUCKETS = Object.freeze({
   TEAM_PROFILE: 'teamProfile',
   CAROUSEL: 'carousel',
+  VIDEO_CAROUSEL: 'videoCarousel',
   SINGLE_WORK: 'singleWork',
   DIVIDER: 'divider',
   MEMBER_PORTFOLIO_GRID: 'grid',
@@ -33,7 +34,7 @@ const PREVIEW_QUERY_UNSUPPORTED_MESSAGE = '预览模式不提交档期查询'
 
 function buckets(items) {
   const value = {
-    teamProfile: [], carousel: [], singleWork: [], divider: [], grid: [],
+    teamProfile: [], carousel: [], videoCarousel: [], singleWork: [], divider: [], grid: [],
     list: [], text: [], schedule: [], contact: [], qr: []
   }
   ;(Array.isArray(items) ? items : []).forEach((item) => {
@@ -61,6 +62,9 @@ Page({
     teamPortfolioMenuSwitching: false,
     teamPortfolioMenuTransitionClass: '',
     activeSingleWorkVideoKey: '',
+    videoPreviewVisible: false,
+    videoPreviewUrl: '',
+    videoPreview: null,
     scheduleResults: {},
     contactForms: {},
     contactModalVisible: {}
@@ -117,7 +121,7 @@ Page({
       (event.currentTarget && event.currentTarget.dataset.key)
     const leavingComponents = this.data.portfolio.activeComponents
     startTeamPortfolioMenuTransition(this, menuKey, {
-      onBeforeExit: () => this.stopSingleWorkVideos(),
+      onBeforeExit: () => { this.stopSingleWorkVideos(); this.clearVideoPreview() },
       switchPortfolio: switchTeamPortfolioMenu,
       buildSwitchPatch: (portfolio) => ({
         componentBuckets: buckets(portfolio.activeComponents),
@@ -177,9 +181,29 @@ Page({
     this.pauseSingleWorkVideos('')
     this.setData({ activeSingleWorkVideoKey: '' })
   },
-  onHide() { this.stopSingleWorkVideos() },
+  clearVideoPreview() {
+    if (wx.createVideoContext && this.data.videoPreviewUrl) {
+      const context = wx.createVideoContext('teamPortfolioWorkVideo', this)
+      if (context && context.stop) context.stop()
+    }
+    this.setData({ videoPreviewVisible: false, videoPreviewUrl: '', videoPreview: null })
+  },
+  openVideoPreview(work = {}) {
+    const mediaUrl = String(work.mediaUrl || '')
+    if (!mediaUrl) { wx.showToast({ title: '视频地址缺失', icon: 'none' }); return false }
+    this.stopSingleWorkVideos()
+    if (this.data.videoPreviewVisible || this.data.videoPreviewUrl) this.clearVideoPreview()
+    this.setData({ videoPreviewVisible: true, videoPreviewUrl: mediaUrl, videoPreview: { title: work.title || '视频作品', poster: work.coverUrl || '' } })
+    return true
+  },
+  handleVideoCarouselPlay(event) { return this.openVideoPreview(event && event.detail && event.detail.work) },
+  handleCloseVideoPreview() { this.clearVideoPreview() },
+  handleVideoPreviewPanelTap() {},
+  handleVideoPreviewError() { this.clearVideoPreview(); wx.showToast({ title: '视频播放失败，请重试', icon: 'none' }) },
+  onHide() { this.stopSingleWorkVideos(); this.clearVideoPreview() },
   onUnload() {
     this.stopSingleWorkVideos()
+    this.clearVideoPreview()
     clearTeamPortfolioMenuTransitionTimers(this)
   },
   handleQrPreview() {},

@@ -32,6 +32,11 @@ const MEDIA_TYPE_VIDEO = 'VIDEO'
 const MEDIA_TYPE_ANIMATION = 'ANIMATION'
 const DEFAULT_VIDEO_RATIO_WIDTH = 16
 const DEFAULT_VIDEO_RATIO_HEIGHT = 9
+const RENDER_COMPONENT_TYPES = Object.freeze([
+  'CAROUSEL', 'VIDEO_CAROUSEL', 'PROFILE', 'WORK_GRID', 'WORK_LIST',
+  'SINGLE_WORK', 'SCHEDULE_QUERY', 'QR_CONTACT', 'CONTACT_FORM',
+  'TEXT_SECTION', 'DIVIDER', 'HYPERLINK'
+])
 const SINGLE_WORK_MEDIA_WIDTH_RPX = 710
 const DEFAULT_SCHEDULE_DISPLAY_MODE = 'MODAL_CALENDAR'
 const VALID_SCHEDULE_DISPLAY_MODES = ['MODAL_CALENDAR', 'INLINE_CALENDAR']
@@ -301,6 +306,9 @@ function normalizeRenderComponent(raw = {}) {
     showTitle: typeof raw.showTitle === 'boolean'
       ? raw.showTitle
       : typeof config.showTitle === 'boolean' ? config.showTitle : true,
+    showSwipeHint: typeof raw.showSwipeHint === 'boolean'
+      ? raw.showSwipeHint
+      : typeof config.showSwipeHint === 'boolean' ? config.showSwipeHint : true,
     showDescription: typeof raw.showDescription === 'boolean'
       ? raw.showDescription
       : typeof config.showDescription === 'boolean' ? config.showDescription : false,
@@ -328,6 +336,12 @@ function normalizeRenderComponent(raw = {}) {
 function normalizeRenderComponents(components = [], preview = false) {
   return (Array.isArray(components) ? components.map(normalizeRenderComponent) : [])
     .filter((component) => {
+      if (!RENDER_COMPONENT_TYPES.includes(component.componentType)) {
+        return false
+      }
+      if (component.componentType === 'VIDEO_CAROUSEL') {
+        return component.works.length > 0
+      }
       if (preview) {
         return true
       }
@@ -413,6 +427,7 @@ function normalizeComponents(components = []) {
           title: item.config && item.config.title,
           config: item.config || {},
           showTitle: item.config && item.config.showTitle,
+          showSwipeHint: item.config && item.config.showSwipeHint,
           showDescription: item.config && item.config.showDescription,
           works: item.config && Array.isArray(item.config.works) ? item.config.works : [],
           groups: item.config && Array.isArray(item.config.groups) ? item.config.groups : []
@@ -507,6 +522,9 @@ function buildVisitorEventPayload(event = {}, idempotencyKey) {
   }
   if (event.mediaType) {
     payload.mediaType = trimText(event.mediaType)
+  }
+  if (event.componentKey) {
+    payload.componentKey = trimText(event.componentKey)
   }
   if (event.durationSeconds !== undefined && event.durationSeconds !== null) {
     payload.durationSeconds = toNumber(event.durationSeconds)

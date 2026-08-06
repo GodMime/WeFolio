@@ -3,7 +3,9 @@ package com.jxc.wefolio.service;
 import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
+import com.jxc.wefolio.dict.PortfolioConfigScopeDict;
 import com.jxc.wefolio.dict.PortfolioTypeDict;
+import com.jxc.wefolio.dict.ReferenceTypeDict;
 import com.jxc.wefolio.dict.BillingWindowScopeDict;
 import com.jxc.wefolio.dict.MediaTypeDict;
 import com.jxc.wefolio.dict.PointSceneCodeDict;
@@ -12,11 +14,13 @@ import com.jxc.wefolio.dict.VisitSourceTypeDict;
 import com.jxc.wefolio.dto.PortfolioConfigDto;
 import com.jxc.wefolio.dto.VisitorPortfolioEventRequest;
 import com.jxc.wefolio.entity.PortfolioEntity;
+import com.jxc.wefolio.entity.PortfolioReferenceEntity;
 import com.jxc.wefolio.entity.VisitEventEntity;
 import com.jxc.wefolio.entity.VisitRecordEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.VisitEventEntityMapper;
 import com.jxc.wefolio.mapper.VisitRecordEntityMapper;
+import com.jxc.wefolio.mapper.PortfolioReferenceEntityMapper;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DuplicateKeyException;
@@ -26,7 +30,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * 作品集访问服务 — 负责访客访问汇总、事件明细和访客侧扣费。
@@ -74,6 +80,9 @@ public class PortfolioVisitService {
     /** 访问事件媒体类型与事件语义不匹配提示 */
     private static final String EVENT_MEDIA_TYPE_MISMATCH_MESSAGE = "个人作品集访问事件媒体类型不匹配";
 
+    /** 访问事件与已发布引用不匹配提示 */
+    private static final String EVENT_REFERENCE_INVALID_MESSAGE = "个人作品集访问事件无效";
+
     /** 分享编码快照兜底 */
     private static final String DEFAULT_PORTFOLIO_SHARE_CODE_SNAPSHOT = "";
 
@@ -85,6 +94,9 @@ public class PortfolioVisitService {
 
     /** 积分滚动扣费窗口服务 */
     private final PointBillingWindowService pointBillingWindowService;
+
+    /** 作品集引用 Mapper */
+    private final PortfolioReferenceEntityMapper portfolioReferenceEntityMapper;
 
     /**
      * 记录作品集打开。
@@ -206,6 +218,7 @@ public class PortfolioVisitService {
             VisitorPortfolioEventRequest request
     ) {
         validateEventMediaType(request);
+        validatePublishedWorkReference(portfolio, request);
         if (hasRecordedEvent(request.getIdempotencyKey())) {
             return;
         }
@@ -273,6 +286,57 @@ public class PortfolioVisitService {
                     || MediaTypeDict.VIDEO.getCode().equals(mediaType);
         if (!matched) {
             throw new BusinessException(EVENT_MEDIA_TYPE_MISMATCH_MESSAGE);
+        }
+    }
+
+    /**
+     * 校验新版客户端上报的作品与组件已发布引用对。
+     *
+     * <p>旧版客户端不传 componentKey，此时保留原有行为；一旦携带则必须精确命中已发布引用。</p>
+     *
+     * @param portfolio 已发布作品集
+     * @param request 访客事件请求
+     */
+    private void validatePublishedWorkReference(
+            PortfolioEntity portfolio,
+            VisitorPortfolioEventRequest request
+    ) {
+        if (request == null || request.getComponentKey() == null) {
+            return;
+        }
+        String eventType = request.getEventType();
+        if (!VisitEventTypeDict.WORK_VIEWED.getCode().equals(eventType)
+                && !VisitEventTypeDict.VIDEO_PLAYED.getCode().equals(eventType)) {
+            return;
+        }
+        String componentKey = request.getComponentKey().strip();
+        Long workId = request.getWorkId();
+        if (componentKey.isEmpty() || workId == null || workId <= 0L || portfolio == null
+                || portfolio.getId() == null) {
+            throw new BusinessException(EVENT_REFERENCE_INVALID_MESSAGE);
+        }
+        request.setComponentKey(componentKey);
+        List<PortfolioReferenceEntity> references = portfolioReferenceEntityMapper.selectList(
+                Wrappers.lambdaQuery(PortfolioReferenceEntity.class)
+                        .eq(PortfolioReferenceEntity::getPortfolioId, portfolio.getId())
+                        .eq(PortfolioReferenceEntity::getConfigScope, PortfolioConfigScopeDict.PUBLISHED.getCode())
+                        .eq(PortfolioReferenceEntity::getReferenceType, ReferenceTypeDict.WORK.getCode())
+                        .eq(PortfolioReferenceEntity::getReferenceId, workId)
+                        .eq(PortfolioReferenceEntity::getComponentKey, componentKey)
+                        .eq(PortfolioReferenceEntity::getIsValid, 1)
+                        .eq(PortfolioReferenceEntity::getDeleted, 0L)
+        );
+        boolean matched = (references == null ? List.<PortfolioReferenceEntity>of() : references).stream()
+                .anyMatch(reference -> reference != null
+                        && Objects.equals(reference.getPortfolioId(), portfolio.getId())
+                        && PortfolioConfigScopeDict.PUBLISHED.getCode().equals(reference.getConfigScope())
+                        && ReferenceTypeDict.WORK.getCode().equals(reference.getReferenceType())
+                        && Objects.equals(reference.getReferenceId(), workId)
+                        && componentKey.equals(reference.getComponentKey())
+                        && Objects.equals(reference.getIsValid(), 1)
+                        && Objects.equals(reference.getDeleted(), 0L));
+        if (!matched) {
+            throw new BusinessException(EVENT_REFERENCE_INVALID_MESSAGE);
         }
     }
 

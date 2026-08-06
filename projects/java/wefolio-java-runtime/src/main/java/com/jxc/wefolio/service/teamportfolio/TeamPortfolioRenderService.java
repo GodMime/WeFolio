@@ -17,6 +17,7 @@ import com.jxc.wefolio.service.teamportfolio.component.schedulequery.TeamSchedul
 import com.jxc.wefolio.service.teamportfolio.component.singlework.TeamSingleWorkComponentRenderer;
 import com.jxc.wefolio.service.teamportfolio.component.teamprofile.TeamProfileComponentRenderer;
 import com.jxc.wefolio.service.teamportfolio.component.textsection.TeamTextSectionComponentRenderer;
+import com.jxc.wefolio.service.teamportfolio.component.videocarousel.TeamVideoCarouselComponentRenderer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -24,6 +25,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -64,6 +66,7 @@ public class TeamPortfolioRenderService {
     private final TeamScheduleQueryComponentRenderer scheduleRenderer;
     private final TeamContactFormComponentRenderer contactRenderer;
     private final TeamQrContactComponentRenderer qrRenderer;
+    private final TeamVideoCarouselComponentRenderer videoCarouselRenderer;
 
     /**
      * 创建团队作品集渲染服务。
@@ -78,7 +81,8 @@ public class TeamPortfolioRenderService {
             TeamTextSectionComponentRenderer textRenderer,
             TeamScheduleQueryComponentRenderer scheduleRenderer,
             TeamContactFormComponentRenderer contactRenderer,
-            TeamQrContactComponentRenderer qrRenderer
+            TeamQrContactComponentRenderer qrRenderer,
+            TeamVideoCarouselComponentRenderer videoCarouselRenderer
     ) {
         this.teamProfileRenderer = teamProfileRenderer;
         this.carouselRenderer = carouselRenderer;
@@ -90,6 +94,7 @@ public class TeamPortfolioRenderService {
         this.scheduleRenderer = scheduleRenderer;
         this.contactRenderer = contactRenderer;
         this.qrRenderer = qrRenderer;
+        this.videoCarouselRenderer = videoCarouselRenderer;
     }
 
     /**
@@ -171,6 +176,7 @@ public class TeamPortfolioRenderService {
     ) {
         return sortedEnabledComponents(components).stream()
                 .map(component -> renderComponent(component, context))
+                .filter(Objects::nonNull)
                 .toList();
     }
 
@@ -292,12 +298,16 @@ public class TeamPortfolioRenderService {
             TeamPortfolioComponentContext context
     ) {
         TeamPortfolioComponentTypeDict componentType = componentType(component.getComponentType());
+        JSONObject componentData = renderComponentData(componentType, component.getConfig(), context);
+        if (componentData == null) {
+            return null;
+        }
         TeamPortfolioRenderDto.Component rendered = new TeamPortfolioRenderDto.Component();
         rendered.setComponentKey(component.getComponentKey());
         rendered.setComponentType(componentType.getCode());
         rendered.setName(componentType.getDisplayName());
         rendered.setSortOrder(component.getSortOrder());
-        rendered.setData(renderComponentData(componentType, component.getConfig(), context));
+        rendered.setData(componentData);
         return rendered;
     }
 
@@ -321,6 +331,7 @@ public class TeamPortfolioRenderService {
             case SCHEDULE_QUERY -> scheduleRenderer.render(config, context);
             case CONTACT_FORM -> contactRenderer.render(config, context);
             case QR_CONTACT -> qrRenderer.render(config, context);
+            case VIDEO_CAROUSEL -> videoCarouselRenderer.render(config, context);
         };
     }
 

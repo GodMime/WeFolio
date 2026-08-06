@@ -21,6 +21,9 @@ public class VisitorPortfolioEventRequest {
     /** 相关作品 ID */
     private Long workId;
 
+    /** 互动所属组件键；新版客户端携带，缺省时保留旧版兼容行为 */
+    private String componentKey;
+
     /** 媒体类型 */
     private String mediaType;
 

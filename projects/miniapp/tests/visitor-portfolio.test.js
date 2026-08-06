@@ -46,6 +46,24 @@ test('normalizes render theme and secondary bottom navigation components', () =>
   assert.deepEqual(switched.activeComponents.map((item) => item.componentKey), ['c_works'])
 })
 
+test('personal video carousel preserves disabled title and swipe hint switches', () => {
+  const portfolio = normalizeVisitorPortfolio({
+    renderData: {
+      components: [{
+        componentKey: 'vc-disabled-switches',
+        componentType: 'VIDEO_CAROUSEL',
+        title: '视频作品',
+        showTitle: false,
+        showSwipeHint: false,
+        works: [{ workId: 11, mediaType: 'VIDEO', mediaUrl: 'video-11' }]
+      }]
+    }
+  })
+
+  assert.equal(portfolio.components[0].showTitle, false)
+  assert.equal(portfolio.components[0].showSwipeHint, false)
+})
+
 test('visitor opens a modal contact form from the active secondary menu', () => {
   const page = loadVisitorPage(() => Promise.resolve({}))
   const component = {
@@ -1268,6 +1286,7 @@ test('builds visitor event payload with idempotency key', () => {
     eventType: 'VIDEO_PLAYED',
     workId: 11,
     mediaType: 'VIDEO',
+    componentKey: 'video-carousel-1',
     durationSeconds: 18,
     metadata: {
       action: 'PREVIEW_QR'
@@ -1279,12 +1298,103 @@ test('builds visitor event payload with idempotency key', () => {
     eventType: 'VIDEO_PLAYED',
     workId: 11,
     mediaType: 'VIDEO',
+    componentKey: 'video-carousel-1',
     durationSeconds: 18,
     metadata: {
       action: 'PREVIEW_QR'
     },
     idempotencyKey: 'event-1'
   })
+})
+
+test('visitor video carousel blocks playback and reports the existing event failure', async () => {
+  const requests = []
+  const toasts = []
+  const page = loadVisitorPage((options) => {
+    requests.push(clone(options))
+    return Promise.reject(new Error('统计失败'))
+  }, {
+    showToast(options) { toasts.push(options) },
+    createVideoContext() { return { stop() {} } }
+  })
+  page.data.shareCode = 'PF001'
+  page.data.visitorKey = 'visitor-a'
+  const previousWx = global.wx
+  global.wx = {
+    showToast(options) { toasts.push(options) },
+    createVideoContext() { return { stop() {} } },
+    getStorageSync() { return 'visitor-a' },
+    setStorageSync() {}
+  }
+  try {
+    const opened = await page.handleVideoCarouselPlay({
+      detail: {
+        componentKey: 'vc-1',
+        work: { workId: 11, mediaType: 'VIDEO', mediaUrl: 'video-11', coverUrl: 'cover-11', title: '视频十一' }
+      }
+    })
+    assert.equal(opened, false)
+    assert.equal(page.data.videoPreviewVisible, false)
+    assert.equal(page.data.videoPreviewUrl, '')
+    assert.equal(requests.length, 1)
+    assert.equal(requests[0].data.eventType, 'VIDEO_PLAYED')
+    assert.equal(requests[0].data.componentKey, 'vc-1')
+    assert.equal(requests[0].data.workId, 11)
+    assert.equal(requests[0].data.mediaType, 'VIDEO')
+    assert.equal(requests[0].data.durationSeconds, 0)
+    assert.deepEqual(toasts, [{ title: '统计失败', icon: 'none' }])
+  } finally {
+    global.wx = previousWx
+  }
+})
+
+test('visitor video carousel treats a cover-only work as a missing video before recording', async () => {
+  const requests = []
+  const toasts = []
+  const page = loadVisitorPage((options) => {
+    requests.push(clone(options))
+    return Promise.resolve({})
+  })
+  const previousWx = global.wx
+  global.wx = {
+    showToast(options) { toasts.push(options) }
+  }
+  try {
+    const opened = await page.handleVideoCarouselPlay({
+      detail: {
+        componentKey: 'vc-1',
+        work: {
+          workId: 12,
+          mediaType: 'VIDEO',
+          mediaUrl: '',
+          previewUrl: 'cover-12',
+          coverUrl: 'cover-12'
+        }
+      }
+    })
+
+    assert.equal(opened, false)
+    assert.equal(page.data.videoPreviewVisible, false)
+    assert.deepEqual(requests, [])
+    assert.deepEqual(toasts, [{ title: '视频地址缺失', icon: 'none' }])
+  } finally {
+    global.wx = previousWx
+  }
+})
+
+test('unknown personal components are silently omitted without hiding adjacent known components', () => {
+  const portfolio = normalizeVisitorPortfolio({
+    renderData: {
+      components: [
+        { componentKey: 'known-a', componentType: 'PROFILE', sortOrder: 1000 },
+        { componentKey: 'unknown', componentType: 'FUTURE_WIDGET', sortOrder: 2000 },
+        { componentKey: 'known-b', componentType: 'DIVIDER', sortOrder: 3000 }
+      ]
+    }
+  })
+  assert.deepEqual(portfolio.components.map((item) => item.componentKey), ['known-a', 'known-b'])
+  const unknownOnly = normalizeVisitorPortfolio({ renderData: { components: [{ componentKey: 'unknown', componentType: 'FUTURE_WIDGET' }] } })
+  assert.deepEqual(unknownOnly.components, [])
 })
 
 test('visitor page preserves WeChat source by default and accepts controlled personal portfolio source', () => {

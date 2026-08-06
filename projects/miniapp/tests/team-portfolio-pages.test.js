@@ -9,8 +9,8 @@ const PAGE_NAMES = [
   'standard-preview/team-portfolio-standard-preview', 'contact-leads/team-contact-leads',
   'visitor-portfolio/team-visitor-portfolio'
 ]
-const TEN_COMPONENTS = ['team-profile', 'team-carousel', 'team-single-work', 'team-divider', 'team-member-portfolio-grid', 'team-member-portfolio-list', 'team-text-section', 'team-schedule-query', 'team-contact-form', 'team-qr-contact']
-const STANDARD_EDITOR_RENDERED_COMPONENTS = TEN_COMPONENTS.filter((component) => !['team-divider', 'team-text-section', 'team-schedule-query', 'team-contact-form'].includes(component))
+const ELEVEN_COMPONENTS = ['team-profile', 'team-carousel', 'team-video-carousel', 'team-single-work', 'team-divider', 'team-member-portfolio-grid', 'team-member-portfolio-list', 'team-text-section', 'team-schedule-query', 'team-contact-form', 'team-qr-contact']
+const STANDARD_EDITOR_RENDERED_COMPONENTS = ELEVEN_COMPONENTS.filter((component) => !['team-video-carousel', 'team-divider', 'team-text-section', 'team-schedule-query', 'team-contact-form'].includes(component))
 const EDITOR_COMPONENT_PATHS = [
   'team-profile/team-profile',
   'carousel/carousel',
@@ -75,7 +75,7 @@ function loadPage(relativePath, requestFn, wxOverrides = {}, fontLoaderOverrides
   return page
 }
 
-test('team portfolio pages provide all page artifacts, custom navigation, and explicit ten component composition', () => {
+test('team portfolio pages provide all page artifacts, custom navigation, and explicit eleven component composition', () => {
   for (const name of PAGE_NAMES) {
     for (const extension of ['.js', '.json', '.wxml', '.wxss']) assert.equal(fs.existsSync(path.join(ROOT, `${name}${extension}`)), true, `${name}${extension}`)
     const json = JSON.parse(read(`${name}.json`))
@@ -86,7 +86,7 @@ test('team portfolio pages provide all page artifacts, custom navigation, and ex
     const wxml = read(`${name}.wxml`)
     const renderedComponents = name === 'standard-edit/team-portfolio-standard-edit'
       ? STANDARD_EDITOR_RENDERED_COMPONENTS
-      : TEN_COMPONENTS
+      : ELEVEN_COMPONENTS
     for (const component of renderedComponents) {
       assert.ok(json.usingComponents[component], `${name} registers ${component}`)
       assert.match(wxml, new RegExp(`<${component}[\\s>]`), `${name} renders ${component}`)
@@ -314,7 +314,7 @@ test('team page level component editor owns the shared cancel and confirm action
   assert.equal(Array.from(wxml.matchAll(/id="active-component-editor"/g)).length, 6)
   assert.match(wxml, /class="component-editor-actions pe-sheet-actions"/)
   assert.match(wxml, /class="pe-sheet-action-cancel" catchtap="handleCloseComponentEditor">取消<\/button>/)
-  assert.match(wxml, /class="pe-sheet-action-confirm" catchtap="handleConfirmComponentEditor">完成<\/button>/)
+  assert.match(wxml, /class="pe-sheet-action-confirm" catchtap="handleConfirmComponentEditor" disabled="\{\{activeComponentType === 'VIDEO_CAROUSEL' && teamVideoSelectedItems.length < 3\}\}">完成<\/button>/)
   assert.doesNotMatch(wxml, /class="editor-close"/)
   assert.match(js, /handleConfirmComponentEditor\(\)/)
   assert.doesNotMatch(wxss, /\.component-editor-actions\s*\{/)
@@ -605,6 +605,96 @@ test('new team text section uses the explicit new-component typography defaults'
   page.cleanup()
 })
 
+test('team video carousel keeps global order while members act as filters', async () => {
+  const requests = []
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
+    requests.push(JSON.parse(JSON.stringify(options)))
+    if (options.url.endsWith('/components/carousel/members')) {
+      return [
+        { memberUserId: 8, displayName: '甲' },
+        { memberUserId: 9, displayName: '乙' }
+      ]
+    }
+    if (options.url.includes('/components/video-carousel/members/8/works')) {
+      return { page: 1, pageSize: 20, total: 1, hasMore: false, works: [{ memberUserId: 8, memberDisplayName: '甲', workId: 81, title: '甲的视频', durationMs: 65000 }] }
+    }
+    if (options.url.includes('/components/video-carousel/members/9/works')) {
+      return { page: 1, pageSize: 20, total: 2, hasMore: false, works: [{ memberUserId: 9, workId: 91, title: '乙的视频一' }, { memberUserId: 9, workId: 92, title: '乙的视频二' }] }
+    }
+    return {}
+  })
+  page.data.portfolioId = 55
+  page.updateConfig({
+    schemaVersion: 'standard-team-v1',
+    share: {},
+    components: [{
+      componentKey: 'video-1',
+      componentType: 'VIDEO_CAROUSEL',
+      sortOrder: 1000,
+      enabled: true,
+      config: { title: '团队视频', items: [], showTitle: true, showSwipeHint: true }
+    }]
+  })
+
+  await page.openTeamVideoCarouselSheet('video-1')
+  assert.deepEqual(requests[0], { url: '/api/mine/team-portfolios/55/components/carousel/members' })
+  assert.deepEqual(requests[1], {
+    url: '/api/mine/team-portfolios/55/components/video-carousel/members/8/works',
+    data: { keyword: '', page: 1, pageSize: 20 }
+  })
+  assert.equal(page.data.teamVideoWorkOptions[0].memberDisplayName, '甲')
+  assert.equal(page.data.teamVideoWorkOptions[0].durationText, '01:05')
+  page.handleTeamVideoWorkTap({ currentTarget: { dataset: { workId: 81 } } })
+  await page.handleTeamVideoMemberTap({ currentTarget: { dataset: { memberUserId: 9 } } })
+  page.handleTeamVideoWorkTap({ currentTarget: { dataset: { workId: 91 } } })
+  page.handleTeamVideoWorkTap({ currentTarget: { dataset: { workId: 92 } } })
+  assert.deepEqual(page.data.teamVideoSelectedItems.map((item) => [item.memberUserId, item.workId]), [[8, 81], [9, 91], [9, 92]])
+  assert.deepEqual(page.data.teamVideoMembers.map((item) => item.selectedCount), [1, 2])
+  assert.deepEqual(page.data.teamVideoWorkOptions.map((item) => item.selectionOrder), [2, 3])
+
+  page.handleTeamVideoTitleInput({ detail: { value: '一二三四五六七八九十😀' } })
+  page.handleTeamVideoShowTitleChange({ detail: { value: false } })
+  page.handleConfirmComponentEditor()
+  assert.deepEqual(page.data.config.components[0].config, {
+    title: '一二三四五六七八九十',
+    items: [
+      { memberUserId: 8, workId: 81 },
+      { memberUserId: 9, workId: 91 },
+      { memberUserId: 9, workId: 92 }
+    ],
+    showTitle: false,
+    showSwipeHint: true
+  })
+  page.cleanup()
+})
+
+test('team video carousel blocks ninth selection and keeps selections after source failure', async () => {
+  const toasts = []
+  let rejectWorks = false
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
+    if (options.url.endsWith('/components/carousel/members')) return [{ memberUserId: 8, displayName: '甲' }]
+    if (rejectWorks) throw new Error('视频加载失败')
+    return { page: 1, pageSize: 20, total: 1, hasMore: false, works: [{ memberUserId: 8, workId: 9, title: '第九个' }] }
+  }, { showToast(options) { toasts.push(options) } })
+  page.data.portfolioId = 55
+  page.updateConfig({
+    schemaVersion: 'standard-team-v1',
+    share: {},
+    components: [{
+      componentKey: 'video-1', componentType: 'VIDEO_CAROUSEL', sortOrder: 1000, enabled: true,
+      config: { items: [1, 2, 3, 4, 5, 6, 7, 8].map((workId) => ({ memberUserId: 8, workId })) }
+    }]
+  })
+  await page.openTeamVideoCarouselSheet('video-1')
+  page.handleTeamVideoWorkTap({ currentTarget: { dataset: { workId: 9 } } })
+  assert.equal(toasts.at(-1).title, '视频轮播最多选择8个视频')
+  rejectWorks = true
+  await page.handleTeamVideoSearchConfirm()
+  assert.equal(page.data.teamVideoErrorText, '视频加载失败')
+  assert.equal(page.data.teamVideoSelectedItems.length, 8)
+  page.cleanup()
+})
+
 test('standard team portfolio picker shows disabled team profile as an auto-width added pill', () => {
   const wxml = read('standard-edit/team-portfolio-standard-edit.wxml')
   const wxss = read('standard-edit/team-portfolio-standard-edit.wxss')
@@ -778,7 +868,7 @@ test('team preview and visitor use the personal portfolio content baseline witho
   const listWxss = read('components/member-portfolio-list/member-portfolio-list.wxss')
 
   for (const page of [previewWxml, visitorWxml]) {
-    assert.equal(Array.from(page.matchAll(/class="folio-component"/g)).length, 9)
+    assert.equal(Array.from(page.matchAll(/class="folio-component"/g)).length, 10)
   }
 
   for (const pageStyles of [previewWxss, visitorWxss]) {

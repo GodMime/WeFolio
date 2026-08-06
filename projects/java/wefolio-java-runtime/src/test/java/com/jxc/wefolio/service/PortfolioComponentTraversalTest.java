@@ -60,6 +60,29 @@ class PortfolioComponentTraversalTest {
     }
 
     /**
+     * 新组件类型不得破坏次级菜单的通用定位能力。
+     */
+    @Test
+    void findEnabledComponentShouldLocateVideoCarouselInSecondaryMenu() {
+        PortfolioConfigDto config = navigationConfig();
+        config.getBottomNav().getItems().get(1).setComponents(List.of(component(
+                "c_video_carousel",
+                PortfolioComponentTypeDict.VIDEO_CAROUSEL.getCode(),
+                true
+        )));
+
+        PortfolioComponentTraversal.ComponentLocation location =
+                PortfolioComponentTraversal.findEnabledComponent(
+                        config,
+                        "c_video_carousel",
+                        PortfolioComponentTypeDict.VIDEO_CAROUSEL.getCode()
+                ).orElseThrow();
+
+        assertThat(location.menuIndex()).isEqualTo(1);
+        assertThat(location.componentPath()).isEqualTo("bottomNav.items[1].components[0]");
+    }
+
+    /**
      * 无导航旧配置仍只遍历顶层组件，并提供稳定的默认菜单元数据。
      */
     @Test

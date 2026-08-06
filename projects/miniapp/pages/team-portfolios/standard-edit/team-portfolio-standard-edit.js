@@ -24,6 +24,7 @@ const {
   handleTeamMaintainerAuthError,
   moveTeamComponent,
   normalizeTeamPortfolioConfig,
+  normalizeTeamVideoCarouselConfig,
   publishTeamPortfolio,
   removeTeamNavigationItem,
   renameTeamNavigationItem,
@@ -35,6 +36,7 @@ const {
   visitTeamPortfolioComponents
 } = require('../utils/team-portfolios.js')
 const { confirmPortfolioPublishDisclaimer } = require('../utils/portfolio-publish-disclaimer.js')
+const { formatDuration } = require('../utils/video-carousel.js')
 const {
   LEGACY_TEAM_FONT_SIZE_RPX,
   NEW_COMPONENT_FONT_SIZE_RPX,
@@ -49,11 +51,11 @@ const {
   loadPortfolioFonts
 } = require('../../../utils/portfolio-font-loader.js')
 
-const TYPE_BUCKETS = Object.freeze({ TEAM_PROFILE: 'teamProfile', CAROUSEL: 'carousel', SINGLE_WORK: 'singleWork', DIVIDER: 'divider', MEMBER_PORTFOLIO_GRID: 'grid', MEMBER_PORTFOLIO_LIST: 'list', TEXT_SECTION: 'text', SCHEDULE_QUERY: 'schedule', CONTACT_FORM: 'contact', QR_CONTACT: 'qr' })
-const COMPONENT_NAMES = Object.freeze({ TEAM_PROFILE: '团队资料', CAROUSEL: '轮播图', SINGLE_WORK: '单个作品', DIVIDER: '分割线', MEMBER_PORTFOLIO_GRID: '双列作品集', MEMBER_PORTFOLIO_LIST: '单列作品集', TEXT_SECTION: '文字说明', SCHEDULE_QUERY: '档期查询', CONTACT_FORM: '预留联系信息', QR_CONTACT: '二维码联系' })
-const COMPONENT_DESCRIPTIONS = Object.freeze({ TEAM_PROFILE: '展示团队头像、名称和简介', CAROUSEL: '轮播展示成员的图片作品', SINGLE_WORK: '展示一个成员图片、视频或动图作品', DIVIDER: '分隔不同内容区块', MEMBER_PORTFOLIO_GRID: '双列展示成员已发布作品集', MEMBER_PORTFOLIO_LIST: '单列展示成员已发布作品集', TEXT_SECTION: '添加团队服务说明文字', SCHEDULE_QUERY: '开放访客查询团队档期', CONTACT_FORM: '收集访客预留联系信息', QR_CONTACT: '展示团队二维码联系方式' })
+const TYPE_BUCKETS = Object.freeze({ TEAM_PROFILE: 'teamProfile', CAROUSEL: 'carousel', VIDEO_CAROUSEL: 'videoCarousel', SINGLE_WORK: 'singleWork', DIVIDER: 'divider', MEMBER_PORTFOLIO_GRID: 'grid', MEMBER_PORTFOLIO_LIST: 'list', TEXT_SECTION: 'text', SCHEDULE_QUERY: 'schedule', CONTACT_FORM: 'contact', QR_CONTACT: 'qr' })
+const COMPONENT_NAMES = Object.freeze({ TEAM_PROFILE: '团队资料', CAROUSEL: '轮播图', VIDEO_CAROUSEL: '视频轮播', SINGLE_WORK: '单个作品', DIVIDER: '分割线', MEMBER_PORTFOLIO_GRID: '双列作品集', MEMBER_PORTFOLIO_LIST: '单列作品集', TEXT_SECTION: '文字说明', SCHEDULE_QUERY: '档期查询', CONTACT_FORM: '预留联系信息', QR_CONTACT: '二维码联系' })
+const COMPONENT_DESCRIPTIONS = Object.freeze({ TEAM_PROFILE: '展示团队头像、名称和简介', CAROUSEL: '轮播展示成员的图片作品', VIDEO_CAROUSEL: '叠放循环展示视频作品，访客左右滑动浏览、点击播放', SINGLE_WORK: '展示一个成员图片、视频或动图作品', DIVIDER: '分隔不同内容区块', MEMBER_PORTFOLIO_GRID: '双列展示成员已发布作品集', MEMBER_PORTFOLIO_LIST: '单列展示成员已发布作品集', TEXT_SECTION: '添加团队服务说明文字', SCHEDULE_QUERY: '开放访客查询团队档期', CONTACT_FORM: '收集访客预留联系信息', QR_CONTACT: '展示团队二维码联系方式' })
 const COMPONENT_TYPES = Object.keys(COMPONENT_NAMES)
-const PORTFOLIO_REQUIRED_COMPONENT_TYPES = Object.freeze(['CAROUSEL', 'MEMBER_PORTFOLIO_GRID', 'MEMBER_PORTFOLIO_LIST'])
+const PORTFOLIO_REQUIRED_COMPONENT_TYPES = Object.freeze(['CAROUSEL', 'VIDEO_CAROUSEL', 'MEMBER_PORTFOLIO_GRID', 'MEMBER_PORTFOLIO_LIST'])
 const MEMBER_PORTFOLIO_COMPONENT_TYPES = Object.freeze(['MEMBER_PORTFOLIO_GRID', 'MEMBER_PORTFOLIO_LIST'])
 const SWIPE_REVEAL_THRESHOLD = -32
 const SWIPE_CLOSE_THRESHOLD = 24
@@ -94,6 +96,9 @@ const TEXT_SECTION_MAX_LENGTH = 200
 const TEXT_SECTION_REQUIRED_MESSAGE = '请填写文字说明'
 const TEAM_PORTFOLIO_TITLE_REQUIRED_MESSAGE = '请填写团队作品集标题'
 const SINGLE_WORK_PAGE_SIZE = 20
+const TEAM_VIDEO_PAGE_SIZE = 20
+const TEAM_VIDEO_MIN_ITEMS = 3
+const TEAM_VIDEO_MAX_ITEMS = 8
 const SINGLE_WORK_ROW_SUMMARY_STATUS = Object.freeze({
   LOADING: 'LOADING',
   FAILED: 'FAILED',
@@ -183,6 +188,81 @@ function mergeSingleWorkPage(existing = [], incoming = []) {
       seen.add(workId)
       return true
     })
+}
+function teamVideoItemKey(item = {}) { return `${Number(item.memberUserId) || 0}:${Number(item.workId) || 0}` }
+function normalizeTeamVideoCandidate(work = {}, fallbackMemberUserId = 0) {
+  const memberUserId = Number(work.memberUserId || fallbackMemberUserId)
+  const workId = Number(work.workId || work.id)
+  if (!Number.isInteger(memberUserId) || memberUserId <= 0 || !Number.isInteger(workId) || workId <= 0) return null
+  const tags = Array.isArray(work.tags) ? work.tags : []
+  const tagText = tags.map((tag) => String(tag && tag.name || '').trim()).filter(Boolean).join('、')
+  return {
+    memberUserId,
+    workId,
+    memberDisplayName: String(work.memberDisplayName || work.displayName || '').trim(),
+    title: String(work.title || '').trim() || `视频 #${workId}`,
+    coverUrl: String(work.coverUrl || ''),
+    mediaUrl: String(work.mediaUrl || ''),
+    thumbUrl: String(work.coverUrl || work.mediaUrl || ''),
+    durationMs: Number(work.durationMs) || 0,
+    durationText: formatDuration(work.durationMs),
+    width: Number(work.width) || 0,
+    height: Number(work.height) || 0,
+    aspectRatio: String(work.aspectRatio || ''),
+    aspectRatioText: String(work.aspectRatio || '').trim() || '--',
+    tags,
+    metaText: tagText ? `视频 · ${tagText}` : '视频'
+  }
+}
+function mergeTeamVideoCandidates(existing = [], incoming = [], memberUserId = 0) {
+  const seen = new Set()
+  return (Array.isArray(existing) ? existing : [])
+    .concat(Array.isArray(incoming) ? incoming : [])
+    .map((work) => normalizeTeamVideoCandidate(work, memberUserId))
+    .filter((work) => {
+      const key = work && teamVideoItemKey(work)
+      if (!work || seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+}
+function hydrateTeamVideoSelectedItems(items = [], candidates = []) {
+  const candidateMap = mergeTeamVideoCandidates([], candidates)
+    .reduce((result, work) => result.set(teamVideoItemKey(work), work), new Map())
+  return normalizeTeamVideoCarouselConfig({ items }).items.map((item) => candidateMap.get(teamVideoItemKey(item)) || {
+    memberUserId: item.memberUserId,
+    workId: item.workId,
+    title: `视频 #${item.workId}`,
+    thumbUrl: '',
+    metaText: '视频',
+    memberDisplayName: '',
+    durationText: formatDuration(0),
+    aspectRatioText: '--'
+  })
+}
+function buildTeamVideoWorkOptions(candidates = [], selectedItems = []) {
+  const selectedKeys = new Set(selectedItems.map(teamVideoItemKey))
+  const selectionOrder = selectedItems.reduce((result, item, index) => result.set(teamVideoItemKey(item), index + 1), new Map())
+  return mergeTeamVideoCandidates([], candidates).map((work) => ({
+    ...work,
+    selected: selectedKeys.has(teamVideoItemKey(work)),
+    selectionOrder: selectionOrder.get(teamVideoItemKey(work)) || 0
+  }))
+}
+function buildTeamVideoMembers(members = [], selectedItems = [], activeMemberUserId = 0) {
+  const counts = selectedItems.reduce((result, item) => {
+    result[item.memberUserId] = (result[item.memberUserId] || 0) + 1
+    return result
+  }, {})
+  return (Array.isArray(members) ? members : []).map((member) => {
+    const memberUserId = Number(member && member.memberUserId)
+    return Object.assign({}, member, {
+      memberUserId,
+      displayName: String(member && (member.displayName || member.memberDisplayName) || '').trim() || `成员 #${memberUserId}`,
+      selectedCount: counts[memberUserId] || 0,
+      active: memberUserId === Number(activeMemberUserId)
+    })
+  }).filter((member) => member.memberUserId > 0)
 }
 function updateTeamComponent(config, componentKey, updater) {
   const normalized = normalizeTeamPortfolioConfig(config)
@@ -363,13 +443,15 @@ function resolveTeamCoverPreviewPath(filePath) {
   }))
 }
 function buckets(components) {
-  const value = { teamProfile: [], carousel: [], singleWork: [], divider: [], grid: [], list: [], text: [], schedule: [], contact: [], qr: [] }
+  const value = { teamProfile: [], carousel: [], videoCarousel: [], singleWork: [], divider: [], grid: [], list: [], text: [], schedule: [], contact: [], qr: [] }
   ;(Array.isArray(components) ? components : []).forEach((component) => { const key = TYPE_BUCKETS[component.componentType]; if (key) value[key].push(component) })
   return value
 }
 
 Page({
-  data: { portfolioId: 0, teamId: 0, teamSnapshot: {}, loading: false, errorMessage: '', canMaintain: false, publicationStatus: 'DRAFT_ONLY', draftRevision: 0, publishedRevision: 0, statusText: '草稿', statusTone: 'draft', showPublishAction: false, config: normalizeTeamPortfolioConfig(), activeMenuKey: '', activeMenuTitle: '', activeMenuTitleCount: 0, navigationItems: [], bottomNavCount: 1, backgroundColorOptions: TEAM_BACKGROUND_COLORS, bottomNavCountOptions: TEAM_BOTTOM_NAV_COUNTS, backgroundColorSheetVisible: false, backgroundColorDraft: '#FFFFFF', backgroundColorHsv: hexToHsv('#FFFFFF'), backgroundHueColor: '#FF0000', backgroundColorPadDotStyle: 'left: 0%; top: 0%', componentList: [], componentBuckets: buckets([]), componentOptions: buildComponentOptions(), componentValidation: {}, componentSources: {}, singleWorkRowSummaryMap: {}, hasInvalidComponents: false, saving: false, publishing: false, openingLibrary: false, shareCoverUploading: false, qrContactChoosing: false, qrContactCropVisible: false, qrContactCropSaving: false, qrContactCropErrorText: '', qrContactCropState: null, qrContactCropTouchStart: null, qrContactCropCanvasWidth: WECHAT_QR_CROP_OUTPUT_WIDTH, qrContactCropCanvasHeight: WECHAT_QR_CROP_OUTPUT_WIDTH, teamProfileRefreshing: false, pendingDraftKey: '', pendingPublishKey: '', pendingPublishRevision: 0, shareTitleCounter: '0 / 50', componentSheetVisible: false, textSectionSheetVisible: false, textSectionEditingComponentKey: '', textSectionAlignmentOptions: TEXT_SECTION_ALIGNMENT_OPTIONS, textSectionMaxLength: TEXT_SECTION_MAX_LENGTH, portfolioFontCapability: getPortfolioFontCapability(), ...buildTextSectionEditorState(), contactFormSheetVisible: false, contactFormEditingComponentKey: '', contactFormDisplayModeOptions: CONTACT_FORM_DISPLAY_MODE_OPTIONS, contactFormConfigForm: buildContactFormConfigForm(), scheduleQuerySheetVisible: false, scheduleQueryEditingComponentKey: '', scheduleQueryDisplayModeOptions: SCHEDULE_QUERY_DISPLAY_MODE_OPTIONS, scheduleQueryForm: buildScheduleQueryForm(), dividerSheetVisible: false, dividerEditingComponentKey: '', dividerColorOptions: DIVIDER_COLOR_OPTIONS, dividerForm: buildDividerForm(), componentEditorVisible: false, componentEditorLayoutType: '', activeComponentKey: '', activeComponentType: '', activeComponentName: '', activeComponent: { config: {} }, activeComponentSource: {}, activeComponentNeedsPortfolio: false, revealedComponentKey: '', componentTouchStart: null, draggingIndex: -1, dragTargetIndex: -1, componentDragStartY: 0, componentDragStyle: '', componentMoveSheetVisible: false, componentMoveKey: '', componentMoveTargets: [], componentMovePending: false, highlightedComponentKey: '', componentScrollTarget: '', shareCoverCropVisible: false, shareCoverCropPath: '', ...buildCarouselEditorLayoutState(CAROUSEL_EDITOR_SCROLL_MIN_HEIGHT_RPX) },
+  teamVideoRequestSeq: 0,
+  teamVideoMembersRequestSeq: 0,
+  data: { portfolioId: 0, teamId: 0, teamSnapshot: {}, loading: false, errorMessage: '', canMaintain: false, publicationStatus: 'DRAFT_ONLY', draftRevision: 0, publishedRevision: 0, statusText: '草稿', statusTone: 'draft', showPublishAction: false, config: normalizeTeamPortfolioConfig(), activeMenuKey: '', activeMenuTitle: '', activeMenuTitleCount: 0, navigationItems: [], bottomNavCount: 1, backgroundColorOptions: TEAM_BACKGROUND_COLORS, bottomNavCountOptions: TEAM_BOTTOM_NAV_COUNTS, backgroundColorSheetVisible: false, backgroundColorDraft: '#FFFFFF', backgroundColorHsv: hexToHsv('#FFFFFF'), backgroundHueColor: '#FF0000', backgroundColorPadDotStyle: 'left: 0%; top: 0%', componentList: [], componentBuckets: buckets([]), componentOptions: buildComponentOptions(), componentValidation: {}, componentSources: {}, singleWorkRowSummaryMap: {}, hasInvalidComponents: false, saving: false, publishing: false, openingLibrary: false, shareCoverUploading: false, qrContactChoosing: false, qrContactCropVisible: false, qrContactCropSaving: false, qrContactCropErrorText: '', qrContactCropState: null, qrContactCropTouchStart: null, qrContactCropCanvasWidth: WECHAT_QR_CROP_OUTPUT_WIDTH, qrContactCropCanvasHeight: WECHAT_QR_CROP_OUTPUT_WIDTH, teamProfileRefreshing: false, pendingDraftKey: '', pendingPublishKey: '', pendingPublishRevision: 0, shareTitleCounter: '0 / 50', componentSheetVisible: false, textSectionSheetVisible: false, textSectionEditingComponentKey: '', textSectionAlignmentOptions: TEXT_SECTION_ALIGNMENT_OPTIONS, textSectionMaxLength: TEXT_SECTION_MAX_LENGTH, portfolioFontCapability: getPortfolioFontCapability(), ...buildTextSectionEditorState(), contactFormSheetVisible: false, contactFormEditingComponentKey: '', contactFormDisplayModeOptions: CONTACT_FORM_DISPLAY_MODE_OPTIONS, contactFormConfigForm: buildContactFormConfigForm(), scheduleQuerySheetVisible: false, scheduleQueryEditingComponentKey: '', scheduleQueryDisplayModeOptions: SCHEDULE_QUERY_DISPLAY_MODE_OPTIONS, scheduleQueryForm: buildScheduleQueryForm(), dividerSheetVisible: false, dividerEditingComponentKey: '', dividerColorOptions: DIVIDER_COLOR_OPTIONS, dividerForm: buildDividerForm(), componentEditorVisible: false, componentEditorLayoutType: '', activeComponentKey: '', activeComponentType: '', activeComponentName: '', activeComponent: { config: {} }, activeComponentSource: {}, activeComponentNeedsPortfolio: false, teamVideoTitle: '视频作品', teamVideoTitleCount: 4, teamVideoShowTitle: true, teamVideoShowSwipeHint: true, teamVideoMembers: [], teamVideoSelectedMemberUserId: 0, teamVideoCandidates: [], teamVideoWorkOptions: [], teamVideoSelectedItems: [], teamVideoKeyword: '', teamVideoPage: 1, teamVideoPageSize: TEAM_VIDEO_PAGE_SIZE, teamVideoHasMore: false, teamVideoMembersLoading: false, teamVideoWorksLoading: false, teamVideoLoadingMore: false, teamVideoErrorText: '', teamVideoEditingNewComponent: false, revealedComponentKey: '', componentTouchStart: null, draggingIndex: -1, dragTargetIndex: -1, componentDragStartY: 0, componentDragStyle: '', componentMoveSheetVisible: false, componentMoveKey: '', componentMoveTargets: [], componentMovePending: false, highlightedComponentKey: '', componentScrollTarget: '', shareCoverCropVisible: false, shareCoverCropPath: '', ...buildCarouselEditorLayoutState(CAROUSEL_EDITOR_SCROLL_MIN_HEIGHT_RPX) },
   onLoad(options = {}) {
     const portfolioId = Number(options.portfolioId) || 0
     const teamId = Number(options.teamId) || 0
@@ -550,11 +632,233 @@ Page({
   syncActiveComponent(config = this.data.config, componentKey = this.data.activeComponentKey) { const location = findTeamPortfolioComponent(config, componentKey); const activeComponent = location ? location.component : { config: {} }; this.setData({ activeComponent, activeComponentSource: this.data.componentSources[componentKey] || {} }) },
   handleOpenComponentSheet() { if (!this.data.canMaintain) return; const allComponents = visitTeamPortfolioComponents(this.data.config).map((item) => item.component); this.setData({ componentSheetVisible: true, revealedComponentKey: '', componentOptions: buildComponentOptions(allComponents) }) },
   handleCloseComponentSheet() { this.setData({ componentSheetVisible: false }) },
-  handleSelectComponent(event) { if (event.currentTarget.dataset.disabled) return; const componentType = event.currentTarget.dataset.type; if (!componentType) return; this.addComponent(componentType); this.setData({ componentSheetVisible: false }) },
-  handleComponentTap(event) { const componentKey = event.currentTarget.dataset.key || ''; const componentType = event.currentTarget.dataset.type || ''; if (this.data.revealedComponentKey === componentKey) return this.setData({ revealedComponentKey: '' }); const location = findTeamPortfolioComponent(this.data.config, componentKey); const activeComponent = location && location.component; if (!activeComponent) return; if (componentType === 'TEXT_SECTION') return this.openTextSectionSheet(componentKey); if (componentType === 'CONTACT_FORM') return this.openContactFormSheet(componentKey); if (componentType === 'SCHEDULE_QUERY') return this.openScheduleQuerySheet(componentKey); if (componentType === 'DIVIDER') return this.openDividerSheet(componentKey); this.setData({ componentEditorVisible: true, componentEditorLayoutType: componentType, activeComponentKey: componentKey, activeComponentType: componentType, activeComponentName: COMPONENT_NAMES[componentType] || '页面组件', activeComponent, activeComponentSource: this.data.componentSources[componentKey] || {}, activeComponentNeedsPortfolio: PORTFOLIO_REQUIRED_COMPONENT_TYPES.includes(componentType), ...(componentType === 'CAROUSEL' ? buildCarouselEditorLayoutState(CAROUSEL_EDITOR_SCROLL_MIN_HEIGHT_RPX) : {}) }) },
+  handleSelectComponent(event) { if (event.currentTarget.dataset.disabled) return; const componentType = event.currentTarget.dataset.type; if (!componentType) return; const componentKey = this.addComponent(componentType); this.setData({ componentSheetVisible: false }); if (componentType === 'VIDEO_CAROUSEL' && componentKey) return this.openTeamVideoCarouselSheet(componentKey, true) },
+  handleComponentTap(event) { const componentKey = event.currentTarget.dataset.key || ''; const componentType = event.currentTarget.dataset.type || ''; if (this.data.revealedComponentKey === componentKey) return this.setData({ revealedComponentKey: '' }); const location = findTeamPortfolioComponent(this.data.config, componentKey); const activeComponent = location && location.component; if (!activeComponent) return; if (componentType === 'VIDEO_CAROUSEL') return this.openTeamVideoCarouselSheet(componentKey); if (componentType === 'TEXT_SECTION') return this.openTextSectionSheet(componentKey); if (componentType === 'CONTACT_FORM') return this.openContactFormSheet(componentKey); if (componentType === 'SCHEDULE_QUERY') return this.openScheduleQuerySheet(componentKey); if (componentType === 'DIVIDER') return this.openDividerSheet(componentKey); this.setData({ componentEditorVisible: true, componentEditorLayoutType: componentType, activeComponentKey: componentKey, activeComponentType: componentType, activeComponentName: COMPONENT_NAMES[componentType] || '页面组件', activeComponent, activeComponentSource: this.data.componentSources[componentKey] || {}, activeComponentNeedsPortfolio: PORTFOLIO_REQUIRED_COMPONENT_TYPES.includes(componentType), ...(componentType === 'CAROUSEL' ? buildCarouselEditorLayoutState(CAROUSEL_EDITOR_SCROLL_MIN_HEIGHT_RPX) : {}) }) },
+  resetTeamVideoEditorState() {
+    this.setData({
+      teamVideoTitle: '视频作品',
+      teamVideoTitleCount: 4,
+      teamVideoShowTitle: true,
+      teamVideoShowSwipeHint: true,
+      teamVideoMembers: [],
+      teamVideoSelectedMemberUserId: 0,
+      teamVideoCandidates: [],
+      teamVideoWorkOptions: [],
+      teamVideoSelectedItems: [],
+      teamVideoKeyword: '',
+      teamVideoPage: 1,
+      teamVideoPageSize: TEAM_VIDEO_PAGE_SIZE,
+      teamVideoHasMore: false,
+      teamVideoMembersLoading: false,
+      teamVideoWorksLoading: false,
+      teamVideoLoadingMore: false,
+      teamVideoErrorText: '',
+      teamVideoEditingNewComponent: false
+    })
+  },
+  async openTeamVideoCarouselSheet(componentKey, editingNewComponent = false) {
+    const location = findTeamPortfolioComponent(this.data.config, componentKey)
+    const activeComponent = location && location.component
+    if (!activeComponent || activeComponent.componentType !== 'VIDEO_CAROUSEL') return
+    const config = normalizeTeamVideoCarouselConfig(activeComponent.config || {})
+    const selectedItems = hydrateTeamVideoSelectedItems(config.items)
+    this.setData({
+      componentEditorVisible: true,
+      componentEditorLayoutType: 'VIDEO_CAROUSEL',
+      activeComponentKey: componentKey,
+      activeComponentType: 'VIDEO_CAROUSEL',
+      activeComponentName: COMPONENT_NAMES.VIDEO_CAROUSEL,
+      activeComponent,
+      activeComponentSource: {},
+      activeComponentNeedsPortfolio: true,
+      teamVideoTitle: config.title,
+      teamVideoTitleCount: countTextCodePoints(config.title),
+      teamVideoShowTitle: config.showTitle,
+      teamVideoShowSwipeHint: config.showSwipeHint,
+      teamVideoMembers: [],
+      teamVideoSelectedMemberUserId: 0,
+      teamVideoCandidates: [],
+      teamVideoWorkOptions: [],
+      teamVideoSelectedItems: selectedItems,
+      teamVideoKeyword: '',
+      teamVideoPage: 1,
+      teamVideoPageSize: TEAM_VIDEO_PAGE_SIZE,
+      teamVideoHasMore: false,
+      teamVideoMembersLoading: Boolean(this.data.portfolioId),
+      teamVideoWorksLoading: false,
+      teamVideoLoadingMore: false,
+      teamVideoErrorText: '',
+      teamVideoEditingNewComponent: Boolean(editingNewComponent)
+    })
+    if (this.data.portfolioId) return this.loadTeamVideoMembers()
+  },
+  async loadTeamVideoMembers() {
+    if (!Number(this.data.portfolioId)) return
+    const requestSeq = this.teamVideoMembersRequestSeq + 1
+    this.teamVideoMembersRequestSeq = requestSeq
+    this.setData({ teamVideoMembersLoading: true, teamVideoErrorText: '' })
+    try {
+      const response = await request({
+        url: `/api/mine/team-portfolios/${this.data.portfolioId}/components/carousel/members`
+      })
+      if (requestSeq !== this.teamVideoMembersRequestSeq || this.data.activeComponentType !== 'VIDEO_CAROUSEL') return
+      const sourceMembers = Array.isArray(response) ? response : []
+      const preferredMemberUserId = Number(this.data.teamVideoSelectedItems[0] && this.data.teamVideoSelectedItems[0].memberUserId)
+      const preferredAvailable = sourceMembers.some((member) => Number(member && member.memberUserId) === preferredMemberUserId)
+      const memberUserId = preferredAvailable
+        ? preferredMemberUserId
+        : Number(sourceMembers[0] && sourceMembers[0].memberUserId) || 0
+      this.setData({
+        teamVideoMembers: buildTeamVideoMembers(sourceMembers, this.data.teamVideoSelectedItems, memberUserId),
+        teamVideoSelectedMemberUserId: memberUserId,
+        teamVideoMembersLoading: false,
+        teamVideoErrorText: ''
+      })
+      if (memberUserId) return this.loadTeamVideoWorks(memberUserId, { reset: true })
+    } catch (error) {
+      if (requestSeq !== this.teamVideoMembersRequestSeq) return
+      if (handleTeamMaintainerAuthError(error)) return
+      if (showTeamPortfolioUnavailableToast(error)) return
+      this.setData({
+        teamVideoMembersLoading: false,
+        teamVideoErrorText: error && error.message ? error.message : '团队成员加载失败'
+      })
+    }
+  },
+  async loadTeamVideoWorks(memberUserId, options = {}) {
+    memberUserId = Number(memberUserId || this.data.teamVideoSelectedMemberUserId)
+    if (!Number(this.data.portfolioId) || !memberUserId) return
+    const reset = options.reset !== false
+    const pageSize = Number(this.data.teamVideoPageSize) || TEAM_VIDEO_PAGE_SIZE
+    const page = reset ? 1 : (Number(this.data.teamVideoPage) || 1) + 1
+    const keyword = String(this.data.teamVideoKeyword || '').trim()
+    const requestSeq = this.teamVideoRequestSeq + 1
+    this.teamVideoRequestSeq = requestSeq
+    this.setData(reset
+      ? { teamVideoWorksLoading: true, teamVideoLoadingMore: false, teamVideoErrorText: '' }
+      : { teamVideoLoadingMore: true, teamVideoErrorText: '' })
+    try {
+      const response = await request({
+        url: `/api/mine/team-portfolios/${this.data.portfolioId}/components/video-carousel/members/${memberUserId}/works`,
+        data: { keyword, page, pageSize }
+      })
+      if (requestSeq !== this.teamVideoRequestSeq || memberUserId !== Number(this.data.teamVideoSelectedMemberUserId)) return
+      const incoming = Array.isArray(response && response.works) ? response.works : []
+      const candidates = reset
+        ? mergeTeamVideoCandidates([], incoming, memberUserId)
+        : mergeTeamVideoCandidates(this.data.teamVideoCandidates, incoming, memberUserId)
+      const selectedItems = hydrateTeamVideoSelectedItems(
+        this.data.teamVideoSelectedItems,
+        candidates.concat(this.data.teamVideoSelectedItems)
+      )
+      this.setData({
+        teamVideoCandidates: candidates,
+        teamVideoWorkOptions: buildTeamVideoWorkOptions(candidates, selectedItems),
+        teamVideoSelectedItems: selectedItems,
+        teamVideoMembers: buildTeamVideoMembers(this.data.teamVideoMembers, selectedItems, memberUserId),
+        teamVideoPage: Math.max(1, Number(response && response.page) || page),
+        teamVideoPageSize: Math.max(1, Number(response && response.pageSize) || pageSize),
+        teamVideoHasMore: Boolean(response && response.hasMore),
+        teamVideoWorksLoading: false,
+        teamVideoLoadingMore: false,
+        teamVideoErrorText: ''
+      })
+    } catch (error) {
+      if (requestSeq !== this.teamVideoRequestSeq) return
+      if (handleTeamMaintainerAuthError(error)) return
+      if (showTeamPortfolioUnavailableToast(error)) return
+      this.setData({
+        teamVideoWorksLoading: false,
+        teamVideoLoadingMore: false,
+        teamVideoErrorText: error && error.message ? error.message : '视频作品加载失败'
+      })
+    }
+  },
+  handleTeamVideoTitleInput(event) { const title = Array.from(String(event && event.detail && event.detail.value || '')).slice(0, 10).join(''); this.setData({ teamVideoTitle: title, teamVideoTitleCount: countTextCodePoints(title) }) },
+  handleTeamVideoShowTitleChange(event) { this.setData({ teamVideoShowTitle: Boolean(event && event.detail && event.detail.value) }) },
+  handleTeamVideoShowSwipeHintChange(event) { this.setData({ teamVideoShowSwipeHint: Boolean(event && event.detail && event.detail.value) }) },
+  handleTeamVideoKeywordInput(event) { this.setData({ teamVideoKeyword: String(event && event.detail && event.detail.value || '') }) },
+  handleTeamVideoSearchConfirm() { return this.loadTeamVideoWorks(this.data.teamVideoSelectedMemberUserId, { reset: true }) },
+  handleTeamVideoClearSearch() { if (!this.data.teamVideoKeyword) return Promise.resolve(); this.setData({ teamVideoKeyword: '' }); return this.loadTeamVideoWorks(this.data.teamVideoSelectedMemberUserId, { reset: true }) },
+  handleTeamVideoLoadMore() { if (this.data.teamVideoWorksLoading || this.data.teamVideoLoadingMore || !this.data.teamVideoHasMore) return Promise.resolve(); return this.loadTeamVideoWorks(this.data.teamVideoSelectedMemberUserId, { reset: false }) },
+  handleTeamVideoRetry() { return this.data.teamVideoMembers.length ? this.handleTeamVideoSearchConfirm() : this.loadTeamVideoMembers() },
+  handleTeamVideoMemberTap(event) {
+    const memberUserId = Number(event && event.currentTarget && event.currentTarget.dataset.memberUserId)
+    if (!memberUserId || memberUserId === Number(this.data.teamVideoSelectedMemberUserId)) return Promise.resolve()
+    this.teamVideoRequestSeq += 1
+    this.setData({
+      teamVideoSelectedMemberUserId: memberUserId,
+      teamVideoMembers: buildTeamVideoMembers(this.data.teamVideoMembers, this.data.teamVideoSelectedItems, memberUserId),
+      teamVideoCandidates: [],
+      teamVideoWorkOptions: [],
+      teamVideoPage: 1,
+      teamVideoHasMore: false,
+      teamVideoErrorText: ''
+    })
+    return this.loadTeamVideoWorks(memberUserId, { reset: true })
+  },
+  handleTeamVideoWorkTap(event) {
+    const workId = Number(event && event.currentTarget && event.currentTarget.dataset.workId)
+    const memberUserId = Number(this.data.teamVideoSelectedMemberUserId)
+    if (!memberUserId || !workId) return
+    const key = teamVideoItemKey({ memberUserId, workId })
+    const selectedItems = this.data.teamVideoSelectedItems || []
+    const selectedIndex = selectedItems.findIndex((item) => teamVideoItemKey(item) === key)
+    if (selectedIndex < 0 && selectedItems.length >= TEAM_VIDEO_MAX_ITEMS) {
+      wx.showToast({ title: '视频轮播最多选择8个视频', icon: 'none' })
+      return
+    }
+    const candidate = normalizeTeamVideoCandidate(
+      this.data.teamVideoWorkOptions.find((work) => teamVideoItemKey(work) === key) || { memberUserId, workId },
+      memberUserId
+    )
+    const nextSelectedItems = selectedIndex >= 0
+      ? selectedItems.filter((_, index) => index !== selectedIndex)
+      : selectedItems.concat(candidate)
+    this.setData({
+      teamVideoSelectedItems: nextSelectedItems,
+      teamVideoWorkOptions: buildTeamVideoWorkOptions(this.data.teamVideoCandidates, nextSelectedItems),
+      teamVideoMembers: buildTeamVideoMembers(this.data.teamVideoMembers, nextSelectedItems, memberUserId)
+    })
+  },
+  saveTeamVideoCarouselConfig() {
+    if (this.data.teamVideoSelectedItems.length < TEAM_VIDEO_MIN_ITEMS) {
+      wx.showToast({ title: '视频轮播至少选择3个视频', icon: 'none' })
+      return
+    }
+    const componentKey = this.data.activeComponentKey
+    const nextConfig = normalizeTeamVideoCarouselConfig({
+      title: this.data.teamVideoTitle,
+      items: this.data.teamVideoSelectedItems,
+      showTitle: this.data.teamVideoShowTitle,
+      showSwipeHint: this.data.teamVideoShowSwipeHint
+    })
+    this.clearPending()
+    this.updateConfig(updateTeamComponent(this.data.config, componentKey, (component) => component.componentType === 'VIDEO_CAROUSEL'
+      ? Object.assign({}, component, { config: nextConfig })
+      : component))
+    const componentValidation = Object.assign({}, this.data.componentValidation, { [componentKey]: true })
+    this.setData({ componentValidation, hasInvalidComponents: Object.keys(componentValidation).some((key) => componentValidation[key] === false), teamVideoEditingNewComponent: false })
+    this.handleCloseComponentEditor()
+  },
   handleCloseComponentEditor() {
     this.singleWorkRequestSeq = (Number(this.singleWorkRequestSeq) || 0) + 1
+    this.teamVideoRequestSeq += 1
+    this.teamVideoMembersRequestSeq += 1
+    if (this.data.activeComponentType === 'VIDEO_CAROUSEL' && this.data.teamVideoEditingNewComponent) {
+      const componentKey = this.data.activeComponentKey
+      const location = findTeamPortfolioComponent(this.data.config, componentKey)
+      if (location) {
+        this.updateConfig(replaceTeamMenuComponentList(
+          this.data.config,
+          location.menuKey,
+          getTeamMenuComponentList(this.data.config, location.menuKey)
+            .filter((component) => component.componentKey !== componentKey)
+        ))
+      }
+    }
     this.setData({ componentEditorVisible: false, activeComponentKey: '', activeComponentType: '', activeComponentName: '', activeComponent: { config: {} }, activeComponentSource: {}, activeComponentNeedsPortfolio: false })
+    this.resetTeamVideoEditorState()
   },
   openTextSectionSheet(componentKey) {
     const location = findTeamPortfolioComponent(this.data.config, componentKey)
@@ -935,7 +1239,7 @@ Page({
   },
   handleComponentValidationChange(event) { const detail = event.detail || {}; const componentValidation = Object.assign({}, this.data.componentValidation, { [detail.componentKey]: detail.valid !== false }); this.setData({ componentValidation, hasInvalidComponents: Object.keys(componentValidation).some((key) => componentValidation[key] === false) }) },
   handleComponentSave(event) { const key = event.currentTarget.dataset.key; const location = findTeamPortfolioComponent(this.data.config, key); this.handleComponentConfigChange(event); if (location && location.component.componentType === 'SINGLE_WORK') this.updateSingleWorkRowSummary(key, event.detail && event.detail.config); const componentValidation = Object.assign({}, this.data.componentValidation, { [key]: true }); this.setData({ componentValidation, hasInvalidComponents: Object.keys(componentValidation).some((name) => componentValidation[name] === false) }); if (this.data.activeComponentKey === key) this.handleCloseComponentEditor() },
-  handleConfirmComponentEditor() { const component = this.selectComponent('#active-component-editor'); if (component && typeof component.saveEdit === 'function') component.saveEdit() },
+  handleConfirmComponentEditor() { if (this.data.activeComponentType === 'VIDEO_CAROUSEL') return this.saveTeamVideoCarouselConfig(); const component = this.selectComponent('#active-component-editor'); if (component && typeof component.saveEdit === 'function') component.saveEdit() },
   handleComponentDelete(event) {
     const key = event.currentTarget.dataset.key
     const location = findTeamPortfolioComponent(this.data.config, key)
@@ -991,13 +1295,15 @@ Page({
   },
   handleOpenLibrary() { this.setData({ openingLibrary: false }); this.handleOpenComponentSheet() },
   addComponent(componentType) {
-    if (!componentType) return this.setData({ openingLibrary: false })
+    if (!componentType) { this.setData({ openingLibrary: false }); return '' }
     this.clearPending()
     const componentKey = makeKey()
     const componentConfig = componentType === 'TEAM_PROFILE'
       ? { team: Object.assign({}, this.data.teamSnapshot) }
       : componentType === 'SINGLE_WORK'
         ? { memberUserId: null, workId: null, showTitle: true, showDescription: false }
+        : componentType === 'VIDEO_CAROUSEL'
+          ? normalizeTeamVideoCarouselConfig()
         : MEMBER_PORTFOLIO_COMPONENT_TYPES.includes(componentType)
           ? { showMemberName: true }
           : componentType === 'TEXT_SECTION'
@@ -1010,6 +1316,7 @@ Page({
     components.push({ componentKey, componentType, sortOrder: (components.length + 1) * 1000, enabled: true, config: componentConfig })
     this.updateConfig(replaceTeamMenuComponentList(this.data.config, this.data.activeMenuKey, components))
     this.setData({ componentValidation: Object.assign({}, this.data.componentValidation, { [componentKey]: false }), hasInvalidComponents: true, openingLibrary: false })
+    return componentKey
   },
   updateSource(componentKey, patch) { const componentSources = Object.assign({}, this.data.componentSources, { [componentKey]: Object.assign({}, this.data.componentSources[componentKey], patch) }); const state = { componentSources }; if (componentKey === this.data.activeComponentKey) state.activeComponentSource = componentSources[componentKey]; this.setData(state) },
   async loadSource(componentKey, fingerprint, url, patch, failureState, scopeId = this.data.portfolioId) { if (!Number(scopeId)) return; const source = this.data.componentSources[componentKey] || {}; if (source.loadingFingerprint === fingerprint) return; this.updateSource(componentKey, { loadingFingerprint: fingerprint, errorMessage: '', sourceAvailable: true }); try { const value = await request({ url }); if ((this.data.componentSources[componentKey] || {}).loadingFingerprint !== fingerprint) return; this.updateSource(componentKey, Object.assign({}, patch(value), { loadingFingerprint: '', failedStage: '', memberUserId: 0 })) } catch (error) { if ((this.data.componentSources[componentKey] || {}).loadingFingerprint !== fingerprint) return; if (handleTeamMaintainerAuthError(error)) return; if (showTeamPortfolioUnavailableToast(error)) { this.updateSource(componentKey, Object.assign({ loadingFingerprint: '', errorMessage: '', sourceAvailable: false }, failureState || {})); return }; this.updateSource(componentKey, Object.assign({ loadingFingerprint: '', errorMessage: '来源加载失败，请重试', sourceAvailable: false }, failureState || {})) } },

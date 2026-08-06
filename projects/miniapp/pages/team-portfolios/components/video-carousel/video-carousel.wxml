@@ -1,0 +1,29 @@
+<view wx:if="{{works.length}}" class="video-carousel theme-{{themeMode}}">
+  <view wx:if="{{title}}" class="video-carousel-title">{{title}}</view>
+  <view
+    class="video-carousel-stage"
+    bindtouchstart="handleTouchStart"
+    bindtouchmove="handleTouchMove"
+    bindtouchend="handleTouchEnd"
+    bindtouchcancel="handleTouchCancel"
+  >
+    <block wx:for="{{cardStates}}" wx:key="workKey">
+    <view
+      wx:if="{{!item.hidden}}"
+      class="video-carousel-card {{item.isCenter ? 'is-center' : ''}}"
+      style="transform: translate(-50%, -50%) translateX({{item.translateX}}rpx) scale({{item.scale}}); z-index: {{item.zIndex}}; opacity: {{item.opacity}}; filter: brightness({{item.brightness}});"
+      data-index="{{item.workIndex}}"
+      bindtap="handleCardTap"
+      aria-role="button"
+      aria-label="{{item.isCenter ? '播放' : '切换至'}}视频{{item.work.title}}"
+    >
+      <image wx:if="{{item.work.coverUrl}}" class="video-carousel-cover" src="{{item.work.coverUrl}}" mode="aspectFill" />
+      <view wx:else class="video-carousel-placeholder">暂无封面</view>
+      <view class="video-carousel-shade"></view>
+      <view wx:if="{{showTitle}}" class="video-carousel-work-title">{{item.work.title || '未命名视频'}}</view>
+      <view class="video-carousel-play" aria-hidden="true"><view class="video-carousel-play-mark"></view></view>
+    </view>
+    </block>
+  </view>
+  <view wx:if="{{showSwipeHint && works.length > 1}}" class="video-carousel-hint">左右滑动，点击观看视频</view>
+</view>

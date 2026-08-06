@@ -28,7 +28,10 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -95,6 +98,88 @@ class PortfolioRenderServiceTest {
                 .isEqualTo("https://cdn.example.com/cover/11.jpg");
         PortfolioRenderDto.Component carousel = render.getComponents().get(2);
         assertThat(carousel.getWorks().get(0).getWorkId()).isEqualTo(12L);
+    }
+
+    /**
+     * 视频轮播应按配置顺序输出已审核视频的完整播放字段。
+     */
+    @Test
+    void renderShouldExposeOrderedVideoCarouselWithoutCosHeadChecks() {
+        WorkEntity first = work(11L, MediaTypeDict.VIDEO.getCode(), "video/11.mp4", "cover/11.jpg", 6100);
+        first.setAuditStatus(WorkAuditStatusDict.PASSED.getCode());
+        first.setAspectRatio("16:9");
+        WorkEntity second = work(12L, MediaTypeDict.VIDEO.getCode(), "video/12.mp4", "cover/12.jpg", 7200);
+        second.setAuditStatus(WorkAuditStatusDict.PASSED.getCode());
+        second.setAspectRatio("9:16");
+        WorkEntity third = work(13L, MediaTypeDict.VIDEO.getCode(), "video/13.mp4", "cover/13.jpg", 8300);
+        third.setAuditStatus(WorkAuditStatusDict.PASSED.getCode());
+        third.setAspectRatio("4:3");
+        when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(second, first, third));
+        for (long workId : List.of(11L, 12L, 13L)) {
+            when(cosService.publicUrl("video/" + workId + ".mp4"))
+                    .thenReturn("https://cdn.example.com/video/" + workId + ".mp4");
+            when(cosService.publicUrl("cover/" + workId + ".jpg"))
+                    .thenReturn("https://cdn.example.com/cover/" + workId + ".jpg");
+        }
+        PortfolioConfigDto config = config(component(
+                "c_video_carousel",
+                PortfolioComponentTypeDict.VIDEO_CAROUSEL.getCode(),
+                1000,
+                Map.of(
+                        "title", "婚礼电影",
+                        "workIds", List.of(13L, 11L, 12L),
+                        "showTitle", false,
+                        "showSwipeHint", true
+                )
+        ));
+
+        PortfolioRenderDto.Component component = service()
+                .render(portfolio(), config, false, false, null, null)
+                .getComponents().getFirst();
+
+        assertThat(component.getTitle()).isEqualTo("婚礼电影");
+        assertThat(component.getShowTitle()).isFalse();
+        assertThat(component.getShowSwipeHint()).isTrue();
+        assertThat(component.getWorks()).extracting(PortfolioRenderDto.WorkItem::getWorkId)
+                .containsExactly(13L, 11L, 12L);
+        assertThat(component.getWorks().getFirst())
+                .satisfies(work -> {
+                    assertThat(work.getMediaType()).isEqualTo(MediaTypeDict.VIDEO.getCode());
+                    assertThat(work.getMediaUrl()).isEqualTo("https://cdn.example.com/video/13.mp4");
+                    assertThat(work.getCoverUrl()).isEqualTo("https://cdn.example.com/cover/13.jpg");
+                    assertThat(work.getDurationMs()).isEqualTo(8300);
+                    assertThat(work.getDescription()).isEqualTo("说明13");
+                    assertThat(work.getAspectRatio()).isEqualTo("4:3");
+                });
+        verify(cosService, never()).headObject(any());
+    }
+
+    /**
+     * 访客渲染时应忽略未审核或非视频的异常存量条目。
+     */
+    @Test
+    void renderShouldFilterInvalidVideoCarouselWorks() {
+        WorkEntity passed = work(11L, MediaTypeDict.VIDEO.getCode(), "video/11.mp4", "cover/11.jpg", 6100);
+        passed.setAuditStatus(WorkAuditStatusDict.PASSED.getCode());
+        WorkEntity auditing = work(12L, MediaTypeDict.VIDEO.getCode(), "video/12.mp4", "cover/12.jpg", 7200);
+        auditing.setAuditStatus(WorkAuditStatusDict.AUDITING.getCode());
+        WorkEntity image = work(13L, MediaTypeDict.IMAGE.getCode(), "image/13.jpg", "cover/13.jpg", null);
+        when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(passed, auditing, image));
+        when(cosService.publicUrl("video/11.mp4")).thenReturn("https://cdn.example.com/video/11.mp4");
+        when(cosService.publicUrl("cover/11.jpg")).thenReturn("https://cdn.example.com/cover/11.jpg");
+        PortfolioConfigDto config = config(component(
+                "c_video_carousel",
+                PortfolioComponentTypeDict.VIDEO_CAROUSEL.getCode(),
+                1000,
+                Map.of("workIds", List.of(11L, 12L, 13L))
+        ));
+
+        PortfolioRenderDto.Component component = service()
+                .render(portfolio(), config, false, false, null, null)
+                .getComponents().getFirst();
+
+        assertThat(component.getWorks()).extracting(PortfolioRenderDto.WorkItem::getWorkId)
+                .containsExactly(11L);
     }
 
     /**
