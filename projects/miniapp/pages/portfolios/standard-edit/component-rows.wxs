@@ -8,7 +8,8 @@ var EDIT_LABELS = {
   DIVIDER: '编辑分割线',
   WORK_GRID: '编辑作品集展示标签',
   WORK_LIST: '编辑作品集展示标签',
-  SINGLE_WORK: '编辑单个作品'
+  SINGLE_WORK: '编辑单个作品',
+  HYPERLINK: '编辑超链接'
 }
 var SINGLE_WORK_SUMMARY_STATUS_LOADING = 'LOADING'
 var SINGLE_WORK_SUMMARY_STATUS_FAILED = 'FAILED'
@@ -55,9 +56,26 @@ function resolveSingleWorkSummary(component, summaries) {
   return work.title || '作品不可用，请重新选择'
 }
 
+function resolveHyperlinkSummary(component, summaries) {
+  var workSummary = resolveSingleWorkSummary(component, summaries)
+  if (workSummary == '请选择作品' || workSummary == '作品信息加载中' ||
+      workSummary == '作品信息加载失败' || workSummary == '作品不可用，请重新选择') {
+    return workSummary
+  }
+  var config = component && component.config ? component.config : {}
+  if (config.actionType == 'INTERNAL_PORTFOLIO') {
+    return workSummary + ' · 内部跳转'
+  }
+  if (config.actionType == 'EXTERNAL_LINK') {
+    return workSummary + ' · 外部复制'
+  }
+  return workSummary + ' · 请选择点击行为'
+}
+
 module.exports = {
   isEditable: isEditable,
   resolveAriaRole: resolveAriaRole,
   resolveAriaLabel: resolveAriaLabel,
-  resolveSingleWorkSummary: resolveSingleWorkSummary
+  resolveSingleWorkSummary: resolveSingleWorkSummary,
+  resolveHyperlinkSummary: resolveHyperlinkSummary
 }

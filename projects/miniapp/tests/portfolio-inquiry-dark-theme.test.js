@@ -29,6 +29,10 @@ test('personal inline schedule query replaces light calendar surfaces in dark th
     wxss,
     '.schedule-query.portfolio-theme-dark .schedule-query-inline-shell .schedule-calendar-day.selected'
   )
+  const selectedDayStackRule = readRule(
+    wxss,
+    '.schedule-query.portfolio-theme-dark .schedule-query-inline-shell .schedule-calendar-day.selected .schedule-query-day-stack'
+  )
   const submitRule = readRule(
     wxss,
     '.schedule-query.portfolio-theme-dark .schedule-query-inline-shell .schedule-query-submit'
@@ -46,9 +50,11 @@ test('personal inline schedule query replaces light calendar surfaces in dark th
   assert.match(calendarRule, /border-color:\s*var\(--portfolio-border\);/)
   assert.match(calendarRule, /background:\s*var\(--portfolio-surface\);/)
   assert.match(dayRule, /color:\s*var\(--portfolio-text-primary\);/)
-  assert.match(dayRule, /background:\s*var\(--portfolio-surface-muted\);/)
-  assert.match(selectedDayRule, /color:\s*#212529;/)
-  assert.match(selectedDayRule, /background:\s*var\(--portfolio-text-primary\);/)
+  assert.match(dayRule, /border-color:\s*transparent;/)
+  assert.match(dayRule, /background:\s*transparent;/)
+  assert.match(selectedDayRule, /background:\s*transparent;/)
+  assert.match(selectedDayStackRule, /color:\s*#212529;/)
+  assert.match(selectedDayStackRule, /background:\s*var\(--portfolio-text-primary\);/)
   assert.match(submitRule, /color:\s*#212529;/)
   assert.match(submitRule, /background:\s*var\(--portfolio-text-primary\);/)
   assert.match(disabledSubmitRule, /color:\s*var\(--portfolio-text-muted\);/)
@@ -105,6 +111,11 @@ test('team inquiry components keep their dark theme wiring and secondary schedul
   const contactWxml = read('pages/team-portfolios/components/contact-form/contact-form.wxml')
   const themeWxss = read('pages/team-portfolios/styles/team-portfolio-theme.wxss')
   const placeholderRule = readRule(themeWxss, '.theme-dark .date-field.placeholder')
+  const selectedDayRule = readRule(themeWxss, '.theme-dark .schedule-calendar-day.selected')
+  const selectedDayStackRule = readRule(
+    themeWxss,
+    '.theme-dark .schedule-calendar-day.selected .schedule-query-day-stack'
+  )
 
   assert.match(scheduleWxml, /class="schedule-query theme-\{\{themeMode\}\}/)
   assert.match(contactWxml, /class="contact-form theme-\{\{themeMode\}\}/)
@@ -112,9 +123,8 @@ test('team inquiry components keep their dark theme wiring and secondary schedul
     themeWxss,
     /\.theme-dark \.schedule-query-inline-shell \.schedule-query-calendar,[\s\S]*background:\s*#222222;/
   )
-  assert.match(
-    themeWxss,
-    /\.theme-dark \.schedule-calendar-day\.selected,[\s\S]*color:\s*#212529;[\s\S]*background:\s*#ffffff;/
-  )
+  assert.match(selectedDayRule, /background:\s*transparent;/)
+  assert.match(selectedDayStackRule, /color:\s*#212529;/)
+  assert.match(selectedDayStackRule, /background:\s*#ffffff;/)
   assert.match(placeholderRule, /color:\s*var\(--team-portfolio-text-secondary\);/)
 })

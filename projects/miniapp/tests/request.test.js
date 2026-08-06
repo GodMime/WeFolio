@@ -214,3 +214,37 @@ test('request client marks 401 responses as auth required', async () => {
     }
   )
 })
+
+test('request client attaches structured backend failure data to the error', async () => {
+  const wxApi = {
+    request(options) {
+      options.success({
+        statusCode: 400,
+        data: {
+          success: false,
+          message: '作品集之间不能循环跳转',
+          data: {
+            errorCode: 'PORTFOLIO_HYPERLINK_CYCLE',
+            componentKey: 'c_hyperlink_2',
+            targetPortfolioId: 789
+          }
+        }
+      })
+    }
+  }
+  const client = createRequestClient({ baseUrl: 'http://api.test', wxApi, getToken: () => '' })
+
+  await assert.rejects(
+    () => client.request({ url: '/api/mine/portfolios/88/draft', method: 'PUT' }),
+    (error) => {
+      assert.equal(error.message, '作品集之间不能循环跳转')
+      assert.deepEqual(error.data, {
+        errorCode: 'PORTFOLIO_HYPERLINK_CYCLE',
+        componentKey: 'c_hyperlink_2',
+        targetPortfolioId: 789
+      })
+      assert.equal(error.componentKey, 'c_hyperlink_2')
+      return true
+    }
+  )
+})

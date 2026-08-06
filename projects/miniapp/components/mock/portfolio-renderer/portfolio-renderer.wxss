@@ -1,4 +1,5 @@
 @import "../../../styles/portfolio-theme.wxss";
+@import "../../../styles/portfolio-text-typography.wxss";
 
 .profile-section {
   padding: 12rpx 32rpx;
@@ -260,8 +261,6 @@
   line-height: 1.35;
 }
 
-.simple-section,
-.contact-entry-section,
 .qr-section,
 .text-section {
   padding: 8rpx 34rpx;
@@ -278,7 +277,6 @@
   box-sizing: border-box;
 }
 
-.section-desc,
 .text-content {
   display: block;
   color: #868e96;
@@ -287,33 +285,6 @@
   white-space: pre-wrap;
   overflow-wrap: break-word;
   word-break: break-word;
-}
-
-.section-desc {
-  margin-top: 8rpx;
-}
-
-.primary-button {
-  width: 260rpx;
-  height: 96rpx;
-  margin: 24rpx auto 0;
-  padding: 0;
-  color: #ffffff;
-  font-size: 26rpx;
-  line-height: 96rpx;
-  border-radius: 999rpx;
-  background: #212529;
-}
-
-.contact-entry-button {
-  width: 320rpx;
-  height: 72rpx;
-  line-height: 72rpx;
-  border-radius: 999rpx;
-}
-
-.primary-button::after {
-  border: none;
 }
 
 .qr-image {
@@ -350,13 +321,7 @@
 
 .portfolio-theme-dark .profile-line,
 .portfolio-theme-dark .profile-bio,
-.portfolio-theme-dark .section-desc,
 .portfolio-theme-dark .work-desc,
 .portfolio-theme-dark .text-content {
   color: var(--portfolio-text-secondary);
-}
-
-.portfolio-theme-dark .primary-button {
-  color: var(--portfolio-text-primary);
-  background: var(--portfolio-surface-muted);
 }

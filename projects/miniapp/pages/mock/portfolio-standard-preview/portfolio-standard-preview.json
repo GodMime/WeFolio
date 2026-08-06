@@ -4,6 +4,8 @@
     "navigation-bar": "/components/navigation-bar/navigation-bar",
     "portfolio-carousel": "/components/portfolio-carousel/portfolio-carousel",
     "portfolio-bottom-nav": "/components/portfolio-bottom-nav/portfolio-bottom-nav",
-    "mock-portfolio-renderer": "/components/mock/portfolio-renderer/portfolio-renderer"
+    "mock-portfolio-renderer": "/components/mock/portfolio-renderer/portfolio-renderer",
+    "mock-portfolio-schedule-query": "/components/mock/portfolio-schedule-query/portfolio-schedule-query",
+    "mock-portfolio-contact-form": "/components/mock/portfolio-contact-form/portfolio-contact-form"
   }
 }

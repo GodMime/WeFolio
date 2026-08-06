@@ -40,13 +40,16 @@ const PORTFOLIO_TITLE_SCROLL_MIN_LENGTH = 7
 const OWNER_TYPE_USER = 'USER'
 const OWNER_TYPE_TEAM = 'TEAM'
 const OWNER_SWITCH_DURATION_MS = 240
-const TEAM_SELECT_URL = '/pages/team-portfolios/team-select/team-select'
+const TEAM_SELECT_SHEET_ROW_HEIGHT = 112
+const TEAM_SELECT_SHEET_ROW_GAP = 14
+const TEAM_SELECT_SHEET_MAX_HEIGHT = 520
 const TEAM_EDIT_URL = '/pages/team-portfolios/standard-edit/team-portfolio-standard-edit'
 const TEAM_PREVIEW_URL = '/pages/team-portfolios/standard-preview/team-portfolio-standard-preview'
 const TEAM_VISITOR_SHARE_PATH_PREFIX = '/pages/team-portfolios/visitor-portfolio/team-visitor-portfolio?shareCode='
 const SHARE_SCENE_TEAM_PORTFOLIO_LIST = 'TEAM_PORTFOLIO_LIST'
 const IDEMPOTENCY_PREFIX_TEAM_PUBLISH = 'team-publish'
 const SHARE_UNAVAILABLE_MESSAGE = '当前作品集暂不可分享'
+const PERSONAL_PORTFOLIO_REFERENCED_ERROR_CODE = 'PERSONAL_PORTFOLIO_REFERENCED'
 
 function makeIdempotencyKey(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`
@@ -109,7 +112,7 @@ function normalizeTeamPortfolioItem(item = {}) {
     title: defaultString(item.title || item.teamName, '未命名团队作品集'),
     teamName: defaultString(item.teamName, '团队'),
     canShare,
-    canPreviewDraft: !isPublished && item.canMaintain === true,
+    canPreviewDraft: !isPublished,
     canPublishedPreview: canShare,
     canDelete: item.canMaintain === true
   })
@@ -139,6 +142,17 @@ function buildTimelineGuidePath(ownerType, portfolioId, shareCode) {
   return `${sharePath}&shareGuide=timeline&sharePortfolioId=${encodeURIComponent(normalizeId(portfolioId))}`
 }
 
+function buildTeamSelectSheetListHeight(teams) {
+  const count = Array.isArray(teams) ? teams.length : 0
+  if (count <= 0) {
+    return 0
+  }
+  return Math.min(
+    TEAM_SELECT_SHEET_MAX_HEIGHT,
+    count * TEAM_SELECT_SHEET_ROW_HEIGHT + (count - 1) * TEAM_SELECT_SHEET_ROW_GAP
+  )
+}
+
 Page({
   data: {
     ownerType: OWNER_TYPE_USER,
@@ -166,6 +180,9 @@ Page({
     maintainableTeamsLoaded: false,
     noMaintainableTeam: false,
     creatingTeamPortfolio: false,
+    teamSelectSheetVisible: false,
+    selectedCreateTeamId: null,
+    teamSelectSheetListHeight: 0,
     deletingTeamPortfolioId: null,
     publishingTeamPortfolioId: null,
     sharingTeamPortfolioId: null,
@@ -284,7 +301,10 @@ Page({
       teamErrorMessage: '',
       noMaintainableTeam: false,
       revealedTeamPortfolioId: null,
-      teamPortfolioTouchStart: null
+      teamPortfolioTouchStart: null,
+      teamSelectSheetVisible: false,
+      selectedCreateTeamId: null,
+      teamSelectSheetListHeight: 0
     })
     try {
       const [portfolios, maintainableTeams] = await Promise.all([
@@ -325,7 +345,10 @@ Page({
       revealedPortfolioId: null,
       portfolioTouchStart: null,
       revealedTeamPortfolioId: null,
-      teamPortfolioTouchStart: null
+      teamPortfolioTouchStart: null,
+      teamSelectSheetVisible: false,
+      selectedCreateTeamId: null,
+      teamSelectSheetListHeight: 0
     })
     if (ownerType === OWNER_TYPE_TEAM) {
       this.bootstrapTeam({ onlyIfNeeded: true })
@@ -353,18 +376,48 @@ Page({
       return
     }
     if (route.action === 'SELECT') {
-      wx.navigateTo({
-        url: TEAM_SELECT_URL,
-        success: (result) => {
-          const channel = result && result.eventChannel
-          if (channel && typeof channel.emit === 'function') {
-            channel.emit('maintainableTeams', this.data.maintainableTeams)
-          }
-        }
+      this.setData({
+        teamSelectSheetVisible: true,
+        selectedCreateTeamId: null,
+        teamSelectSheetListHeight: buildTeamSelectSheetListHeight(this.data.maintainableTeams)
       })
       return
     }
     wx.navigateTo({ url: `${TEAM_EDIT_URL}?teamId=${route.teamId}` })
+  },
+
+  noop() {},
+
+  handleTeamSelectTap(event) {
+    const teamId = normalizeId(event.currentTarget.dataset.id)
+    const selectedTeam = (this.data.maintainableTeams || [])
+      .find((team) => normalizeId(team.teamId) === teamId)
+    if (!selectedTeam) {
+      return
+    }
+    this.setData({ selectedCreateTeamId: teamId })
+  },
+
+  handleCloseTeamSelectSheet() {
+    this.setData({
+      teamSelectSheetVisible: false,
+      selectedCreateTeamId: null,
+      teamSelectSheetListHeight: 0
+    })
+  },
+
+  handleConfirmTeamSelect() {
+    if (this.data.creatingTeamPortfolio) {
+      return
+    }
+    const teamId = normalizeId(this.data.selectedCreateTeamId)
+    const selectedTeam = (this.data.maintainableTeams || [])
+      .find((team) => normalizeId(team.teamId) === teamId)
+    if (!selectedTeam) {
+      return
+    }
+    this.handleCloseTeamSelectSheet()
+    wx.navigateTo({ url: `${TEAM_EDIT_URL}?teamId=${teamId}` })
   },
 
   handleTeamPortfolioCardTap(event) {
@@ -803,6 +856,16 @@ Page({
             deletingPortfolioId: null,
             revealedPortfolioId: null
           })
+          const errorCode = error && (error.errorCode || (error.data && error.data.errorCode))
+          if (errorCode === PERSONAL_PORTFOLIO_REFERENCED_ERROR_CODE) {
+            wx.showModal({
+              title: '无法删除作品集',
+              content: error.message || '作品集正在被其他个人作品集使用，请先移除引用',
+              showCancel: false,
+              confirmText: '知道了'
+            })
+            return
+          }
           wx.showToast({
             title: error && error.message ? error.message : '作品集删除失败',
             icon: 'none',

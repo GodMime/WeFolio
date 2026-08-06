@@ -16,6 +16,10 @@ const PORTFOLIO_TYPE_PERSONAL = 'PERSONAL'
 const PORTFOLIO_TYPE_TEAM = 'TEAM'
 const PORTFOLIO_TYPE_TEXT_PERSONAL = '个人作品集'
 const PORTFOLIO_TYPE_TEXT_TEAM = '团队作品集'
+const SCOPE_REASON_MESSAGES = {
+  TEAM_SCOPE_UNAVAILABLE: '团队数据暂不可用，当前仅展示个人记录'
+}
+const DEFAULT_SCOPE_WARNING = '部分数据暂不可用'
 const TREND_CHART_WIDTH = 646
 const TREND_CHART_HEIGHT = 156
 const TREND_CHART_PADDING_TOP = 30
@@ -33,6 +37,29 @@ function toDisplayText(value) {
 function toPositiveNumber(value, fallback) {
   const numberValue = Number(value)
   return Number.isFinite(numberValue) && numberValue > 0 ? numberValue : fallback
+}
+
+function normalizeScope(raw = {}) {
+  const scopeComplete = raw.scopeComplete !== false
+  const scopeReason = raw.scopeReason || ''
+  return {
+    scopeComplete,
+    scopeReason,
+    scopeWarningText: scopeComplete ? '' : (SCOPE_REASON_MESSAGES[scopeReason] || DEFAULT_SCOPE_WARNING)
+  }
+}
+
+function normalizePortfolioTypeText(portfolioType, portfolioTypeText) {
+  if (portfolioTypeText) {
+    return portfolioTypeText
+  }
+  if (portfolioType === PORTFOLIO_TYPE_TEAM) {
+    return PORTFOLIO_TYPE_TEXT_TEAM
+  }
+  if (portfolioType === PORTFOLIO_TYPE_PERSONAL) {
+    return PORTFOLIO_TYPE_TEXT_PERSONAL
+  }
+  return ''
 }
 
 function buildMetric(label, value, action = '') {
@@ -207,6 +234,9 @@ function normalizeRecord(record = {}) {
   const pageNo = toPositiveNumber(record.pageNo, 1)
   const pageSize = toPositiveNumber(record.pageSize, 20)
   const hasMore = Boolean(record.hasMore)
+  const portfolioTitle = record.portfolioTitle || ''
+  const portfolioType = record.portfolioType || ''
+  const backendCanMarkFollowed = record.canMarkFollowed !== false
   return {
     id: record.id || record.recordId || record.visitorCode || record.visitorLabel,
     recordId: record.recordId || record.id || null,
@@ -215,11 +245,15 @@ function normalizeRecord(record = {}) {
     visitorAvatarUrl: record.visitorAvatarUrl || '',
     sourceText: record.sourceText || '来自未知来源',
     summaryText: record.summaryText || '暂无行为摘要',
+    portfolioTitle,
+    portfolioTitleText: String(portfolioTitle).trim() || '未命名作品集',
+    portfolioType,
+    portfolioTypeText: normalizePortfolioTypeText(portfolioType, record.portfolioTypeText),
     followStatus,
     followStatusText: buildFollowStatusText(followStatus, record.followStatusText),
     followTone,
     followToneClass: `follow-pill ${followTone}`,
-    canMarkFollowed: followStatus === FOLLOW_STATUS_NOT_FOLLOWED_UP,
+    canMarkFollowed: backendCanMarkFollowed && followStatus === FOLLOW_STATUS_NOT_FOLLOWED_UP,
     lastVisitedText: record.lastVisitedText || '',
     events,
     eventCountText: buildEventCountText(events),
@@ -235,6 +269,7 @@ function normalizeVisitRecordPage(raw = {}, fallbackPage = {}) {
   const pageSize = toPositiveNumber(raw.pageSize, toPositiveNumber(fallbackPage.pageSize, 20))
   const hasMore = Boolean(raw.hasMore)
   return {
+    ...normalizeScope(raw),
     pageNo,
     pageSize,
     hasMore,
@@ -290,8 +325,16 @@ function appendVisitEventTimeline(current = {}, nextPage = {}) {
 
 function normalizeScheduleQueryItem(item = {}) {
   const available = Boolean(item.available)
+  const resultMessage = item.resultMessage || ''
+  const resultStatusText = item.resultStatusText || resultMessage
+  const scheduleQueryKey = item.scheduleQueryKey
+    || `${item.recordType || PORTFOLIO_TYPE_PERSONAL}:${item.sourceRecordId || item.id || ''}`
   return {
     id: item.id || '',
+    recordType: item.recordType || '',
+    sourceRecordId: item.sourceRecordId || '',
+    scheduleQueryKey,
+    itemKey: scheduleQueryKey,
     visitorLabel: item.visitorLabel || '微信访客',
     visitorAvatarUrl: item.visitorAvatarUrl || '',
     visitorInitial: extractVisitorInitial(item),
@@ -299,9 +342,10 @@ function normalizeScheduleQueryItem(item = {}) {
     queriedDateText: item.queriedDateText || '',
     slotText: item.slotText || '',
     resultStatus: item.resultStatus || '',
-    resultStatusText: item.resultStatusText || item.resultMessage || '',
+    resultStatusText,
     available,
-    resultMessage: item.resultMessage || '',
+    resultMessage,
+    showResultMessage: Boolean(resultMessage) && resultMessage !== resultStatusText,
     resultToneClass: `detail-status ${available ? 'teal' : 'rose'}`,
     sourceText: item.sourceText || '来自未知来源',
     createdTimeText: item.createdTimeText || ''
@@ -316,13 +360,10 @@ function normalizeContactLeadItem(item = {}) {
   const wechatMaskHint = item.wechatMaskHint || ''
   const desiredSchedule = item.desiredSchedule || ''
   const portfolioType = item.portfolioType || ''
-  const portfolioTypeText = item.portfolioTypeText || (
-    portfolioType === PORTFOLIO_TYPE_TEAM
-      ? PORTFOLIO_TYPE_TEXT_TEAM
-      : portfolioType === PORTFOLIO_TYPE_PERSONAL ? PORTFOLIO_TYPE_TEXT_PERSONAL : ''
-  )
+  const portfolioTypeText = normalizePortfolioTypeText(portfolioType, item.portfolioTypeText)
   return {
     id: item.id || '',
+    itemKey: `CONTACT_LEAD:${item.id || ''}`,
     contactName: item.contactName || '未留姓名',
     phone,
     phoneLast4,
@@ -357,6 +398,7 @@ function normalizeVisitDetailPage(type, raw = {}, fallbackPage = {}) {
   const hasMore = Boolean(raw.hasMore)
   const normalizer = type === DETAIL_TYPE_CONTACT_LEADS ? normalizeContactLeadItem : normalizeScheduleQueryItem
   return {
+    ...normalizeScope(raw),
     type,
     title: type === DETAIL_TYPE_CONTACT_LEADS ? '预留信息' : '查询档期',
     pageNo,
@@ -395,6 +437,7 @@ function normalizeVisitRecords(raw = {}) {
     buildMetric('预留信息', summary.contactLeadCount, DETAIL_TYPE_CONTACT_LEADS)
   ]
   return {
+    ...normalizeScope(raw),
     metrics,
     metricRows: [
       metrics.slice(0, 2),

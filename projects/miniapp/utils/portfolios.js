@@ -1,7 +1,14 @@
 const { normalizeHexColor } = require('./portfolio-color')
+const {
+  LEGACY_PERSONAL_FONT_SIZE_RPX,
+  NEW_COMPONENT_FONT_SIZE_RPX,
+  PORTFOLIO_TEXT_FONT_FAMILIES,
+  normalizePortfolioTextFontFamily,
+  normalizePortfolioTextFontSizeRpx
+} = require('./portfolio-text-typography')
 
 const SCHEMA_VERSION = 'standard-personal-v1'
-const EDITOR_SCHEMA_REVISION = 2
+const EDITOR_SCHEMA_REVISION = 3
 const SORT_ORDER_STEP = 1000
 const NAVIGATION_TITLE_MAX_LENGTH = 5
 const DISPLAY_GROUP_NAME_MAX_LENGTH = 20
@@ -27,7 +34,8 @@ const COMPONENT_TYPES = {
   QR_CONTACT: 'QR_CONTACT',
   CONTACT_FORM: 'CONTACT_FORM',
   TEXT_SECTION: 'TEXT_SECTION',
-  DIVIDER: 'DIVIDER'
+  DIVIDER: 'DIVIDER',
+  HYPERLINK: 'HYPERLINK'
 }
 
 const COMPONENT_NAMES = {
@@ -40,8 +48,58 @@ const COMPONENT_NAMES = {
   QR_CONTACT: '二维码联系',
   CONTACT_FORM: '预留联系信息',
   TEXT_SECTION: '文字说明',
-  DIVIDER: '分割线'
+  DIVIDER: '分割线',
+  HYPERLINK: '超链接'
 }
+
+const HYPERLINK_ACTION_TYPES = {
+  INTERNAL_PORTFOLIO: 'INTERNAL_PORTFOLIO',
+  EXTERNAL_LINK: 'EXTERNAL_LINK'
+}
+const HYPERLINK_ACTION_TYPE_OPTIONS = [
+  {
+    value: HYPERLINK_ACTION_TYPES.INTERNAL_PORTFOLIO,
+    label: '内部作品集跳转',
+    description: '跳转至一个已发布的作品集，访客可返回'
+  },
+  {
+    value: HYPERLINK_ACTION_TYPES.EXTERNAL_LINK,
+    label: '外部链接复制',
+    description: '点击后复制链接或分享内容并展示提示语'
+  }
+]
+const HYPERLINK_ICON_POSITIONS = {
+  OVERLAY: 'OVERLAY',
+  OVERLAY_BOTTOM_CENTER: 'OVERLAY_BOTTOM_CENTER',
+  OVERLAY_CENTER: 'OVERLAY_CENTER',
+  BELOW: 'BELOW'
+}
+const HYPERLINK_ICON_POSITION_OPTIONS = [
+  {
+    value: HYPERLINK_ICON_POSITIONS.OVERLAY,
+    label: '图标悬浮于图片内右下角',
+    description: '悬浮在图片内部右下角，带脉冲引导'
+  },
+  {
+    value: HYPERLINK_ICON_POSITIONS.OVERLAY_BOTTOM_CENTER,
+    label: '图标悬浮于图片内下方',
+    description: '悬浮在图片内部底部居中，带脉冲引导'
+  },
+  {
+    value: HYPERLINK_ICON_POSITIONS.OVERLAY_CENTER,
+    label: '图标悬浮于图片内正中',
+    description: '悬浮在图片内部正中，带脉冲引导'
+  },
+  {
+    value: HYPERLINK_ICON_POSITIONS.BELOW,
+    label: '图标置于图片下方',
+    description: '居中显示在图片下方一行'
+  }
+]
+const HYPERLINK_EXTERNAL_CONTENT_MAX_LENGTH = 2048
+const HYPERLINK_PROMPT_TEXT_MAX_LENGTH = 30
+const HYPERLINK_DISPLAY_WORK_REQUIRED_MESSAGE = '请选择图片或动图作品'
+const HYPERLINK_TARGET_REQUIRED_MESSAGE = '请选择已发布的个人作品集'
 
 const SCHEDULE_QUERY_DISPLAY_MODES = {
   MODAL_CALENDAR: 'MODAL_CALENDAR',
@@ -263,7 +321,12 @@ function normalizeTextSectionAlignment(value) {
 function normalizeTextSectionConfig(raw = {}) {
   return Object.assign({}, raw || {}, {
     content: trimText(raw && raw.content),
-    alignment: normalizeTextSectionAlignment(raw && raw.alignment)
+    alignment: normalizeTextSectionAlignment(raw && raw.alignment),
+    fontFamily: normalizePortfolioTextFontFamily(raw && raw.fontFamily),
+    fontSizeRpx: normalizePortfolioTextFontSizeRpx(
+      raw && raw.fontSizeRpx,
+      LEGACY_PERSONAL_FONT_SIZE_RPX
+    )
   })
 }
 
@@ -286,9 +349,44 @@ function normalizeDividerConfig(raw = {}) {
   })
 }
 
+function normalizeHyperlinkConfig(raw = {}) {
+  const config = Object.assign({}, raw || {})
+  const workId = toNumber(config.workId)
+  config.workId = Number.isInteger(workId) && workId > 0 ? workId : 0
+  const actionType = trimText(config.actionType)
+  config.actionType = HYPERLINK_ACTION_TYPE_OPTIONS.some((item) => item.value === actionType)
+    ? actionType
+    : ''
+  config.showClickIcon = typeof config.showClickIcon === 'boolean'
+    ? config.showClickIcon
+    : false
+  const iconPosition = trimText(config.iconPosition)
+  config.iconPosition = HYPERLINK_ICON_POSITION_OPTIONS.some((item) => item.value === iconPosition)
+    ? iconPosition
+    : HYPERLINK_ICON_POSITIONS.OVERLAY
+  if (config.actionType === HYPERLINK_ACTION_TYPES.INTERNAL_PORTFOLIO) {
+    const targetPortfolioId = toNumber(config.targetPortfolioId)
+    config.targetPortfolioId = Number.isInteger(targetPortfolioId) && targetPortfolioId > 0
+      ? targetPortfolioId
+      : 0
+    delete config.externalContent
+    delete config.promptText
+  } else if (config.actionType === HYPERLINK_ACTION_TYPES.EXTERNAL_LINK) {
+    config.externalContent = typeof config.externalContent === 'string' ? config.externalContent : ''
+    config.promptText = typeof config.promptText === 'string' ? config.promptText : ''
+    delete config.targetPortfolioId
+  } else {
+    delete config.targetPortfolioId
+    delete config.externalContent
+    delete config.promptText
+  }
+  return config
+}
+
 function collectComponentWorkIds(component = {}) {
   const config = component.config || {}
-  if (component.componentType === COMPONENT_TYPES.SINGLE_WORK) {
+  if (component.componentType === COMPONENT_TYPES.SINGLE_WORK ||
+    component.componentType === COMPONENT_TYPES.HYPERLINK) {
     return normalizeWorkIds([config.workId])
   }
   const groups = normalizeDisplayGroups(config.groups, config.workIds)
@@ -311,6 +409,11 @@ function createComponent(componentType, options = {}) {
     const singleWorkConfig = normalizeSingleWorkConfig(config)
     Object.keys(config).forEach((key) => delete config[key])
     Object.assign(config, singleWorkConfig)
+  }
+  if (componentType === COMPONENT_TYPES.HYPERLINK) {
+    const hyperlinkConfig = normalizeHyperlinkConfig(config)
+    Object.keys(config).forEach((key) => delete config[key])
+    Object.assign(config, hyperlinkConfig)
   }
   if (componentType === COMPONENT_TYPES.CONTACT_FORM) {
     Object.assign(config, normalizeContactFormConfig(config))
@@ -602,6 +705,41 @@ function validateSingleWorkComponent(component = {}, works = []) {
   return { valid: true, message: '' }
 }
 
+function validateHyperlinkComponent(component = {}, works = []) {
+  const config = normalizeHyperlinkConfig(component.config || {})
+  if (!config.workId) {
+    return { valid: false, message: HYPERLINK_DISPLAY_WORK_REQUIRED_MESSAGE }
+  }
+  const selected = works.find((work) => toNumber(work && work.id) === config.workId)
+  if (!selected) {
+    return { valid: false, message: '请选择有效展示作品' }
+  }
+  const mediaType = trimText(selected.mediaType)
+  if (!['IMAGE', 'ANIMATION'].includes(mediaType)) {
+    return { valid: false, message: '展示作品只能选择图片或动图' }
+  }
+  if (mediaType === 'ANIMATION' && trimText(selected.auditStatus) !== 'PASSED') {
+    return { valid: false, message: '请选择审核通过的动图作品' }
+  }
+  if (!HYPERLINK_ACTION_TYPE_OPTIONS.some((item) => item.value === config.actionType)) {
+    return { valid: false, message: '请选择点击行为' }
+  }
+  if (config.actionType === HYPERLINK_ACTION_TYPES.INTERNAL_PORTFOLIO) {
+    return config.targetPortfolioId > 0
+      ? { valid: true, message: '' }
+      : { valid: false, message: HYPERLINK_TARGET_REQUIRED_MESSAGE }
+  }
+  const contentLength = countUnicodeCodePoints(config.externalContent)
+  if (contentLength < 1 || contentLength > HYPERLINK_EXTERNAL_CONTENT_MAX_LENGTH) {
+    return { valid: false, message: '链接或分享内容长度必须为1至2048个字符' }
+  }
+  const promptLength = countUnicodeCodePoints(config.promptText)
+  if (promptLength < 1 || promptLength > HYPERLINK_PROMPT_TEXT_MAX_LENGTH) {
+    return { valid: false, message: '提示语长度必须为1至30个字符' }
+  }
+  return { valid: true, message: '' }
+}
+
 /**
  * 校验当前草稿中无需服务端数据即可确定的组件发布必填项。
  *
@@ -624,6 +762,26 @@ function validatePortfolioComponentForPublish(component = {}) {
       return normalizeSingleWorkConfig(config).workId > 0
         ? ''
         : PUBLISH_COMPONENT_MESSAGES.SINGLE_WORK_REQUIRED
+    case COMPONENT_TYPES.HYPERLINK: {
+      const hyperlink = normalizeHyperlinkConfig(config)
+      if (!hyperlink.workId) {
+        return HYPERLINK_DISPLAY_WORK_REQUIRED_MESSAGE
+      }
+      if (!HYPERLINK_ACTION_TYPE_OPTIONS.some((item) => item.value === hyperlink.actionType)) {
+        return '请选择点击行为'
+      }
+      if (hyperlink.actionType === HYPERLINK_ACTION_TYPES.INTERNAL_PORTFOLIO) {
+        return hyperlink.targetPortfolioId > 0 ? '' : HYPERLINK_TARGET_REQUIRED_MESSAGE
+      }
+      const contentLength = countUnicodeCodePoints(hyperlink.externalContent)
+      if (contentLength < 1 || contentLength > HYPERLINK_EXTERNAL_CONTENT_MAX_LENGTH) {
+        return '链接或分享内容长度必须为1至2048个字符'
+      }
+      const promptLength = countUnicodeCodePoints(hyperlink.promptText)
+      return promptLength < 1 || promptLength > HYPERLINK_PROMPT_TEXT_MAX_LENGTH
+        ? '提示语长度必须为1至30个字符'
+        : ''
+    }
     case COMPONENT_TYPES.QR_CONTACT:
       return config.qrUrlSource === 'CUSTOM' && !trimText(config.qrUrl)
         ? PUBLISH_COMPONENT_MESSAGES.CUSTOM_QR_REQUIRED
@@ -711,9 +869,15 @@ function addComponent(config, componentType, menuKey = '') {
       && components.some((item) => item.componentType === COMPONENT_TYPES.PROFILE)) {
       return components
     }
-  const nextComponent = createComponent(resolveComponentType(componentType), {
-    sortOrder: (components.length + 1) * SORT_ORDER_STEP
-  })
+    const nextComponent = createComponent(resolvedType, {
+      sortOrder: (components.length + 1) * SORT_ORDER_STEP,
+      config: resolvedType === COMPONENT_TYPES.TEXT_SECTION
+        ? {
+            fontFamily: PORTFOLIO_TEXT_FONT_FAMILIES.SYSTEM,
+            fontSizeRpx: NEW_COMPONENT_FONT_SIZE_RPX
+          }
+        : {}
+    })
     return components.concat(nextComponent)
   })
 }
@@ -747,6 +911,17 @@ function updateSingleWorkConfig(config, componentKey, singleWorkConfig = {}, men
     }
     // SINGLE_WORK 配置采用严格白名单，整体替换可避免遗留或未来未知字段进入保存载荷。
     return Object.assign({}, component, { config: nextSingleWorkConfig })
+  }))
+}
+
+function updateComponentHyperlinkConfig(config, componentKey, hyperlinkConfig = {}, menuKey = '') {
+  const targetKey = trimText(componentKey)
+  const nextHyperlinkConfig = normalizeHyperlinkConfig(hyperlinkConfig)
+  return updateMenuComponentList(config, menuKey, (components) => components.map((component) => {
+    if (component.componentKey !== targetKey || component.componentType !== COMPONENT_TYPES.HYPERLINK) {
+      return component
+    }
+    return Object.assign({}, component, { config: nextHyperlinkConfig })
   }))
 }
 
@@ -804,7 +979,20 @@ function updateComponentContactFormConfig(config, componentKey, contactFormConfi
 
 function updateComponentTextSectionConfig(config, componentKey, textSectionConfig = {}, menuKey = '') {
   const targetKey = trimText(componentKey)
-  const nextTextSectionConfig = normalizeTextSectionConfig(textSectionConfig)
+  const nextTextSectionConfig = {
+    content: trimText(textSectionConfig.content),
+    alignment: normalizeTextSectionAlignment(textSectionConfig.alignment)
+  }
+  if (Object.prototype.hasOwnProperty.call(textSectionConfig, 'fontFamily')) {
+    nextTextSectionConfig.fontFamily =
+      normalizePortfolioTextFontFamily(textSectionConfig.fontFamily)
+  }
+  if (Object.prototype.hasOwnProperty.call(textSectionConfig, 'fontSizeRpx')) {
+    nextTextSectionConfig.fontSizeRpx = normalizePortfolioTextFontSizeRpx(
+      textSectionConfig.fontSizeRpx,
+      LEGACY_PERSONAL_FONT_SIZE_RPX
+    )
+  }
   return updateMenuComponentList(config, menuKey, (components) => components.map((component) => {
     if (component.componentKey !== targetKey || component.componentType !== COMPONENT_TYPES.TEXT_SECTION) {
       return component
@@ -1004,6 +1192,14 @@ module.exports = {
   DIVIDER_COLORS,
   DISPLAY_GROUP_NAME_MAX_LENGTH,
   EDITOR_SCHEMA_REVISION,
+  HYPERLINK_ACTION_TYPE_OPTIONS,
+  HYPERLINK_ACTION_TYPES,
+  HYPERLINK_DISPLAY_WORK_REQUIRED_MESSAGE,
+  HYPERLINK_EXTERNAL_CONTENT_MAX_LENGTH,
+  HYPERLINK_ICON_POSITION_OPTIONS,
+  HYPERLINK_ICON_POSITIONS,
+  HYPERLINK_PROMPT_TEXT_MAX_LENGTH,
+  HYPERLINK_TARGET_REQUIRED_MESSAGE,
   NAVIGATION_TITLE_MAX_LENGTH,
   SCHEDULE_QUERY_DISPLAY_MODE_OPTIONS,
   SCHEDULE_QUERY_DISPLAY_MODES,
@@ -1022,6 +1218,7 @@ module.exports = {
   getMenuComponentList,
   importWorksIntoDisplayGroup,
   normalizeBottomNavConfig,
+  normalizeHyperlinkConfig,
   normalizePortfolioConfig,
   normalizeNavigationItem,
   normalizeStyleConfig,
@@ -1046,6 +1243,7 @@ module.exports = {
   updateDisplayGroupWorkIds,
   updateComponentContactFormConfig,
   updateComponentDividerConfig,
+  updateComponentHyperlinkConfig,
   updateComponentProfileConfig,
   updateComponentScheduleQueryConfig,
   updateSingleWorkConfig,
@@ -1054,6 +1252,7 @@ module.exports = {
   updateComponentWorkIds,
   validateDisplayGroupName,
   validateCarouselComponent,
+  validateHyperlinkComponent,
   validatePortfolioForPublish,
   validateSingleWorkComponent,
   validateWorkGridComponent,

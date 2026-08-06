@@ -204,4 +204,40 @@
     bindclose="handleCloseShareSheet"
     bindtimeline="handleTimelineShare"
   ></share-channel-sheet>
+
+  <root-portal wx:if="{{teamSelectSheetVisible}}">
+    <view class="team-select-sheet-mask" catchtap="handleCloseTeamSelectSheet" catchtouchmove="noop">
+      <view class="team-select-sheet-panel" catchtap="noop">
+        <view class="team-select-sheet-grabber"></view>
+        <view class="team-select-sheet-heading">
+          <view class="team-select-sheet-title">选择团队</view>
+          <view class="team-select-sheet-count">{{maintainableTeams.length}} 个可选</view>
+        </view>
+        <scroll-view class="team-select-sheet-list" style="height: {{teamSelectSheetListHeight}}rpx;" scroll-y type="list">
+          <view
+            wx:for="{{maintainableTeams}}"
+            wx:key="teamId"
+            class="team-select-sheet-option {{selectedCreateTeamId === item.teamId ? 'selected' : ''}}"
+            data-id="{{item.teamId}}"
+            catchtap="handleTeamSelectTap"
+            aria-role="radio"
+            aria-checked="{{selectedCreateTeamId === item.teamId}}"
+            aria-label="{{item.teamName}}，{{item.currentRole}}"
+          >
+            <image wx:if="{{item.avatarUrl}}" class="team-select-sheet-avatar" src="{{item.avatarUrl}}" mode="aspectFill"></image>
+            <view wx:else class="team-select-sheet-avatar team-select-sheet-avatar-placeholder">团</view>
+            <view class="team-select-sheet-copy">
+              <view class="team-select-sheet-name">{{item.teamName}}</view>
+              <view class="team-select-sheet-role">{{item.currentRole}}</view>
+            </view>
+            <view class="team-select-sheet-radio"></view>
+          </view>
+        </scroll-view>
+        <view class="team-select-sheet-actions">
+          <button class="team-select-sheet-cancel" catchtap="handleCloseTeamSelectSheet">取消</button>
+          <button class="team-select-sheet-confirm" disabled="{{!selectedCreateTeamId || creatingTeamPortfolio}}" catchtap="handleConfirmTeamSelect">创建作品集</button>
+        </view>
+      </view>
+    </view>
+  </root-portal>
 </view>

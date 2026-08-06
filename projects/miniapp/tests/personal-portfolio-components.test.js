@@ -65,16 +65,74 @@ const COMPONENT_CASES = [
   {
     name: 'text-section',
     properties: { textSection: Object },
-    wxml: [/class="text-section/, /class="text-content"/],
-    wxss: [/\.text-content\s*\{[\s\S]*white-space:\s*pre-wrap;/, /\.text-section\.align-center/]
+    wxml: [
+      /class="text-section/,
+      /class="text-content \{\{textSection\.fontClass\}\}"[^>]*style="\{\{textSection\.fontSizeStyle\}\}"/
+    ],
+    wxss: [
+      /^@import "\.\.\/\.\.\/\.\.\/\.\.\/styles\/portfolio-text-typography\.wxss";/m,
+      /\.text-content\s*\{[\s\S]*white-space:\s*pre-wrap;/,
+      /\.text-section\.align-center/
+    ]
   },
   {
     name: 'divider',
     properties: { divider: Object },
     wxml: [/class="divider-section portfolio-theme-\{\{themeMode\}\}"/, /style="\{\{divider\.style\}\}"/],
     wxss: [/\.divider-section/]
+  },
+  {
+    name: 'hyperlink',
+    properties: { componentKey: String, hyperlink: Object, repairMode: Boolean },
+    wxml: [
+      /class="hyperlink-section portfolio-theme-\{\{themeMode\}\}"/,
+      /bindtap="handleHyperlinkTap"/,
+      /超链接展示作品不可用，请重新选择/,
+      /src="\{\{clickIconUrl\}\}"/,
+      /clickIconInside/,
+      /class="hyperlink-click-icon overlay \{\{clickIconClass\}\}"/,
+      /class="hyperlink-click-icon below"/,
+      /打开作品集：/,
+      /binderror="handleIconLoadError"/
+    ],
+    wxss: [
+      /\.hyperlink-media-wrap/,
+      /\.hyperlink-click-icon\s*\{[\s\S]*background-color:\s*var\(--hyperlink-click-icon-bg\);/,
+      /\.hyperlink-section\s*\{[\s\S]*--hyperlink-click-icon-bg:\s*#212529;/,
+      /\.hyperlink-section\.portfolio-theme-dark\s*\{[\s\S]*--hyperlink-click-icon-bg:\s*#FFFFFF;/,
+      /\.hyperlink-click-icon\.overlay\s*\{[\s\S]*width:\s*88rpx;[\s\S]*height:\s*88rpx;[\s\S]*border:\s*3rpx solid rgba\(255,\s*255,\s*255,\s*0\.9\);/,
+      /\.hyperlink-click-icon\.overlay-bottom-right\s*\{[^}]*right:\s*28rpx;[^}]*bottom:\s*28rpx;/,
+      /\.hyperlink-click-icon\.overlay-bottom-center\s*\{[^}]*left:\s*50%;[^}]*bottom:\s*28rpx;[^}]*transform:\s*translateX\(-50%\);/,
+      /\.hyperlink-click-icon\.overlay-center\s*\{[^}]*left:\s*50%;[^}]*top:\s*50%;[^}]*transform:\s*translate\(-50%,\s*-50%\);/,
+      /\.hyperlink-click-icon\.overlay::before\s*\{[\s\S]*border:\s*3rpx solid rgba\(33,\s*37,\s*41,\s*0\.28\);/,
+      /\.portfolio-theme-dark \.hyperlink-click-icon\.overlay::before\s*\{[\s\S]*border-color:\s*rgba\(255,\s*255,\s*255,\s*0\.35\);/,
+      /\.hyperlink-click-icon\.below\s*\{[\s\S]*width:\s*76rpx;[\s\S]*height:\s*76rpx;/,
+      /\.portfolio-theme-dark \.hyperlink-repair\s*\{[\s\S]*color:\s*#c1c7ce;[\s\S]*background:\s*#2a2d31;/
+    ]
   }
 ]
+
+test('text section typography applies only to the body copy', () => {
+  const wxml = fs.readFileSync(
+    path.join(COMPONENT_ROOT, 'text-section/text-section.wxml'),
+    'utf8'
+  )
+  const wxss = fs.readFileSync(
+    path.join(COMPONENT_ROOT, 'text-section/text-section.wxss'),
+    'utf8'
+  )
+
+  assert.match(
+    wxml,
+    /class="text-content \{\{textSection\.fontClass\}\}"[^>]*style="\{\{textSection\.fontSizeStyle\}\}"/
+  )
+  assert.match(wxml, /class="component-title"/)
+  assert.doesNotMatch(
+    wxml,
+    /class="component-title[^"]*\{\{textSection\.fontClass\}\}"/
+  )
+  assert.doesNotMatch(wxss, /\.text-content\s*\{[^}]*font-size:/)
+})
 
 function loadComponent(name, wxApi = {}) {
   const modulePath = path.join(COMPONENT_ROOT, name, `${name}.js`)
@@ -98,7 +156,10 @@ function loadComponent(name, wxApi = {}) {
 function createComponentHarness(definition, data = {}) {
   const events = []
   const instance = {
-    data: Object.assign({}, data),
+    data: Object.assign({}, definition.data || {}, data),
+    setData(patch) {
+      Object.assign(this.data, patch)
+    },
     triggerEvent(name, detail) {
       events.push({ name, detail })
     }
@@ -176,7 +237,7 @@ test('portfolio render event normalizes list and single work media with existing
   })
 })
 
-test('personal portfolio renderers are seven isolated four-file components with explicit properties', () => {
+test('personal portfolio renderers are eight isolated four-file components with explicit properties', () => {
   for (const componentCase of COMPONENT_CASES) {
     const directory = path.join(COMPONENT_ROOT, componentCase.name)
     for (const extension of ['js', 'json', 'wxml', 'wxss']) {
@@ -282,6 +343,65 @@ test('personal portfolio interactive components emit page-compatible event detai
   })
   qr.instance.handlePreviewQr()
   assert.deepEqual(qr.events, [{ name: 'previewqr', detail: { qrUrl: 'contact-qr.png' } }])
+
+  const hyperlink = createComponentHarness(loadComponent('hyperlink'), {
+    componentKey: 'link-1',
+    hyperlink: { actionType: 'EXTERNAL_LINK', externalContent: ' 复制内容 ' }
+  })
+  hyperlink.instance.handleHyperlinkTap()
+  assert.deepEqual(hyperlink.events, [{
+    name: 'hyperlinktap',
+    detail: {
+      componentKey: 'link-1',
+      actionType: 'EXTERNAL_LINK',
+      targetPortfolioId: 0,
+      targetTitle: '',
+      targetAvailable: false,
+      targetShareCode: '',
+      externalContent: ' 复制内容 ',
+      promptText: ''
+    }
+  }])
+
+  hyperlink.instance.handleIconLoadError()
+  assert.equal(hyperlink.instance.data.iconLoadFailed, true)
+})
+
+test('hyperlink resolves every light and dark click-icon position combination', () => {
+  const definition = loadComponent('hyperlink')
+  const observer = definition.observers['hyperlink.showClickIcon, hyperlink.iconPosition, themeMode']
+  const cases = [
+    ['light', 'OVERLAY', true, 'overlay-bottom-right', 'https://cdn2.we-folio.dingchenyong.top/system/click-tap-icon.gif'],
+    ['light', 'OVERLAY_BOTTOM_CENTER', true, 'overlay-bottom-center', 'https://cdn2.we-folio.dingchenyong.top/system/click-tap-icon.gif'],
+    ['light', 'OVERLAY_CENTER', true, 'overlay-center', 'https://cdn2.we-folio.dingchenyong.top/system/click-tap-icon.gif'],
+    ['light', 'BELOW', false, 'below', 'https://cdn2.we-folio.dingchenyong.top/system/click-tap-icon.gif'],
+    ['dark', 'OVERLAY', true, 'overlay-bottom-right', 'https://cdn2.we-folio.dingchenyong.top/system/click-tap-icon-dark.gif'],
+    ['dark', 'OVERLAY_BOTTOM_CENTER', true, 'overlay-bottom-center', 'https://cdn2.we-folio.dingchenyong.top/system/click-tap-icon-dark.gif'],
+    ['dark', 'OVERLAY_CENTER', true, 'overlay-center', 'https://cdn2.we-folio.dingchenyong.top/system/click-tap-icon-dark.gif'],
+    ['dark', 'BELOW', false, 'below', 'https://cdn2.we-folio.dingchenyong.top/system/click-tap-icon-dark.gif']
+  ]
+
+  cases.forEach(([themeMode, iconPosition, expectedInside, expectedClass, expectedUrl]) => {
+    const hyperlink = createComponentHarness(definition, {
+      hyperlink: { showClickIcon: true, iconPosition },
+      themeMode
+    })
+
+    observer.call(hyperlink.instance, true, iconPosition, themeMode)
+
+    assert.equal(hyperlink.instance.data.clickIconInside, expectedInside)
+    assert.equal(hyperlink.instance.data.clickIconClass, expectedClass)
+    assert.equal(hyperlink.instance.data.clickIconUrl, expectedUrl)
+    assert.equal(hyperlink.instance.data.iconLoadFailed, false)
+  })
+
+  const unknown = createComponentHarness(definition, {
+    hyperlink: { showClickIcon: true, iconPosition: 'UNKNOWN' },
+    themeMode: 'light'
+  })
+  observer.call(unknown.instance, true, 'UNKNOWN', 'light')
+  assert.equal(unknown.instance.data.clickIconInside, true)
+  assert.equal(unknown.instance.data.clickIconClass, 'overlay-bottom-right')
 })
 
 test('single work pauses native video only in the matching component scope', () => {
@@ -325,7 +445,7 @@ test('single work pauses native video only in the matching component scope', () 
   }
 })
 
-test('preview and visitor pages register and compose the same seven personal render components', () => {
+test('preview and visitor pages register and compose the same eight personal render components', () => {
   const componentNames = [
     'profile',
     'work-grid',
@@ -333,7 +453,8 @@ test('preview and visitor pages register and compose the same seven personal ren
     'single-work',
     'qr-contact',
     'text-section',
-    'divider'
+    'divider',
+    'hyperlink'
   ]
   const pages = [
     {

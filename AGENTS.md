@@ -176,6 +176,14 @@ Flyway 规则：
 - 登录态封装位于 `projects/miniapp/utils/session.js`。
 - 保持与现有 Skyline/glass-easel 写法一致。
 
+### JavaScript 包边界约束
+
+- `projects/miniapp/utils/` 属于主包，只允许存放能够从 `app.js`、主包页面或主包组件的真实生产代码到达的 JavaScript；测试文件引用不算主包使用。
+- 仅供单一分包使用的 JavaScript 必须放在该分包根目录内，工具模块统一优先放到 `{subPackage.root}/utils/`，禁止为了复用而把分包专用文件放进主包。
+- 同一逻辑仅被多个分包使用、主包没有真实调用方时，各分包保留本地实现，并像现有分包工具一样增加一致性测试；分包不得跨目录引用另一个分包的源码。
+- 新增或移动小程序 JavaScript 前，必须根据 `app.json` 的 `pages`、`subPackages` 和真实 `require()` 调用确认文件归属。禁止添加无业务意义的主包 `require()`、空调用或修改 `ignoreDevUnusedFiles`、`ignoreUploadUnusedFiles` 来绕过质量检查。
+- 完成小程序 JavaScript 改动前，至少运行 `cd projects/miniapp && node --test tests/business-subpackages.test.js`；任务完成前仍须按测试约定运行相关测试和完整 `node --test tests/*.test.js`。
+
 ## Mock 体验版约定
 
 - mock 体验版必须完全独立于正式维护者端页面和组件；除登录页的“体验”入口和跳转外，不要改动既有正式页面或正式组件来承载 mock 行为。

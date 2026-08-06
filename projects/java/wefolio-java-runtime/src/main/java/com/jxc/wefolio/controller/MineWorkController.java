@@ -52,6 +52,10 @@ public class MineWorkController {
     /** 删除作品标签路径，小程序端使用 POST 规避 DELETE 兼容问题 */
     private static final String WORK_TAG_DELETE_PATH = "/api/mine/works/tags/delete/{tagId}";
 
+    /** 已弃用媒体类型筛选参数命中日志 */
+    private static final String DEPRECATED_MEDIA_TYPE_LOG_MESSAGE =
+            "调用已弃用作品媒体类型筛选参数: mediaType={}";
+
     /** 我的作品服务 */
     private final MineWorkService mineWorkService;
 
@@ -74,7 +78,7 @@ public class MineWorkController {
      *
      * @param keyword 搜索关键词
      * @param tagId 标签 ID
-     * @param mediaType 媒体类型，可为空
+     * @param mediaType 已废弃的媒体类型筛选参数，仅为兼容旧客户端保留
      * @param auditStatus 审核状态，可为空
      * @param page 页码
      * @param pageSize 每页数量
@@ -84,11 +88,15 @@ public class MineWorkController {
     public Response<MineWorkListResponse> works(
             @RequestParam(value = "keyword", required = false) String keyword,
             @RequestParam(value = "tagId", required = false) Long tagId,
+            @Deprecated(since = "2026-08", forRemoval = false)
             @RequestParam(value = "mediaType", required = false) String mediaType,
             @RequestParam(value = "auditStatus", required = false) String auditStatus,
             @RequestParam(value = "page", defaultValue = "1") int page,
             @RequestParam(value = "pageSize", defaultValue = "20") int pageSize
     ) {
+        if (mediaType != null && !mediaType.isBlank()) {
+            log.warn(DEPRECATED_MEDIA_TYPE_LOG_MESSAGE, mediaType);
+        }
         return Response.success(mineWorkService.listWorks(keyword, tagId, mediaType, auditStatus, page, pageSize));
     }
 

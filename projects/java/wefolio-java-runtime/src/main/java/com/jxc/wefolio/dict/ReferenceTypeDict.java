@@ -11,11 +11,12 @@ import java.util.stream.Collectors;
 public enum ReferenceTypeDict {
 
     WORK("WORK", "作品"),
-        MEMBER_PORTFOLIO("MEMBER_PORTFOLIO", "成员作品集"),
-        USER_PROFILE("USER_PROFILE", "用户资料"),
-        TEAM_PROFILE("TEAM_PROFILE", "团队资料"),
-        SCHEDULE_COMPONENT("SCHEDULE_COMPONENT", "档期组件"),
-        QR_CODE_ASSET("QR_CODE_ASSET", "二维码资源");
+    MEMBER_PORTFOLIO("MEMBER_PORTFOLIO", "成员作品集"),
+    LINKED_PORTFOLIO("LINKED_PORTFOLIO", "跳转作品集"),
+    USER_PROFILE("USER_PROFILE", "用户资料"),
+    TEAM_PROFILE("TEAM_PROFILE", "团队资料"),
+    SCHEDULE_COMPONENT("SCHEDULE_COMPONENT", "档期组件"),
+    QR_CODE_ASSET("QR_CODE_ASSET", "二维码资源");
 
     private final String code;
     private final String displayName;

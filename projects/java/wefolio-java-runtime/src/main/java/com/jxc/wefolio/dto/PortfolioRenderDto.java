@@ -142,6 +142,48 @@ public class PortfolioRenderDto {
 
         /** 分割线渲染数据 */
         private Divider divider;
+
+        /** 超链接组件渲染数据 */
+        private Hyperlink hyperlink;
+    }
+
+    /**
+     * 超链接组件渲染数据。
+     */
+    @Data
+    public static class Hyperlink {
+
+        /** 展示用的图片或动图作品 */
+        private WorkItem displayWork;
+
+        /** 点击行为：INTERNAL_PORTFOLIO / EXTERNAL_LINK */
+        private String actionType;
+
+        /** 内部跳转目标作品集 ID */
+        private Long targetPortfolioId;
+
+        /** 可用内部目标的分享编码；不可用时不返回 */
+        @JsonInclude(JsonInclude.Include.NON_EMPTY)
+        private String targetShareCode;
+
+        /** 内部目标当前是否可访问 */
+        private boolean targetAvailable;
+
+        /** 可用内部目标的展示标题 */
+        @JsonInclude(JsonInclude.Include.NON_EMPTY)
+        private String targetTitle;
+
+        /** 需要复制的外部链接或分享内容 */
+        private String externalContent;
+
+        /** 复制成功后展示的提示语 */
+        private String promptText;
+
+        /** 是否展示点击图标 */
+        private boolean showClickIcon;
+
+        /** 图标位置：OVERLAY / OVERLAY_BOTTOM_CENTER / OVERLAY_CENTER / BELOW */
+        private String iconPosition;
     }
 
     /**
@@ -309,6 +351,12 @@ public class PortfolioRenderDto {
 
         /** 对齐方式：LEFT / CENTER / RIGHT */
         private String alignment;
+
+        /** 字体：SYSTEM / WECHAT_SANS_SS */
+        private String fontFamily;
+
+        /** 正文字号，单位 rpx */
+        private Integer fontSizeRpx;
     }
 
     /**

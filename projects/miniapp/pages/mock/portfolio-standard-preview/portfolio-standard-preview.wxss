@@ -1,6 +1,7 @@
 @import "../styles/portfolio-standard-preview.wxss";
 @import "../common.wxss";
 @import "../../../styles/portfolio-theme.wxss";
+@import "../../../styles/portfolio-menu-transition.wxss";
 
 .mock-section-desc {
   margin-top: 8rpx;

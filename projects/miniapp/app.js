@@ -1,5 +1,6 @@
 const { createUpdateController } = require('./utils/update-manager')
 const { createMaintainerWechatSessionController } = require('./utils/maintainer-wechat-session')
+const { loadPortfolioFonts } = require('./utils/portfolio-font-loader')
 
 const updateController = createUpdateController()
 const maintainerWechatSessionController = createMaintainerWechatSessionController()
@@ -10,6 +11,13 @@ App({
       updateController.init()
     } catch (error) {
       console.warn('初始化小程序更新监听失败', error)
+    }
+    try {
+      loadPortfolioFonts().catch((error) => {
+        console.warn('注册作品集内置字体失败', error)
+      })
+    } catch (error) {
+      console.warn('启动作品集内置字体注册失败', error)
     }
   },
   onShow() {

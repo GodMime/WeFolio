@@ -33,6 +33,7 @@ import com.jxc.wefolio.entity.PortfolioShareRecordEntity;
 import com.jxc.wefolio.entity.ScheduleEntity;
 import com.jxc.wefolio.entity.SlotDefinitionEntity;
 import com.jxc.wefolio.exception.BusinessException;
+import com.jxc.wefolio.exception.PortfolioValidationException;
 import com.jxc.wefolio.mapper.PortfolioEntityMapper;
 import com.jxc.wefolio.mapper.PortfolioHistoryEntityMapper;
 import com.jxc.wefolio.mapper.PortfolioReferenceEntityMapper;
@@ -47,6 +48,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
@@ -126,6 +128,10 @@ class MinePortfolioServiceTest {
     @Mock
     private PortfolioConfigValidator portfolioConfigValidator;
 
+    /** 个人作品集超链接引用图服务模拟 */
+    @Mock
+    private PortfolioHyperlinkGraphService portfolioHyperlinkGraphService;
+
     /** 作品集渲染服务模拟 */
     @Mock
     private PortfolioRenderService portfolioRenderService;
@@ -154,6 +160,12 @@ class MinePortfolioServiceTest {
         lenient().when(portfolioPublishTransactionService.execute(any())).thenAnswer(invocation -> {
             Supplier<?> publishAction = invocation.getArgument(0);
             return publishAction.get();
+        });
+        lenient().when(portfolioHyperlinkGraphService.lockUserGraph(eq(7L), any())).thenAnswer(invocation -> {
+            Long portfolioId = invocation.getArgument(1);
+            PortfolioEntity source = portfolioEntityMapper.selectById(portfolioId);
+            List<PortfolioEntity> portfolios = source == null ? List.of() : List.of(source);
+            return new PortfolioHyperlinkGraphService.LockedGraph(7L, source, portfolios);
         });
     }
 
@@ -402,8 +414,14 @@ class MinePortfolioServiceTest {
     }
 
     @Test
-    void componentLibraryShouldReturnConfiguredDisplayOrder() {
-        assertThat(service().getComponentLibrary().getComponents())
+    void componentLibraryShouldGateHyperlinkByEditorRevision() {
+        assertThat(service().getComponentLibrary(null).getComponents())
+                .extracting("componentType")
+                .doesNotContain("HYPERLINK");
+        assertThat(service().getComponentLibrary(2).getComponents())
+                .extracting("componentType")
+                .doesNotContain("HYPERLINK");
+        assertThat(service().getComponentLibrary(3).getComponents())
                 .extracting("componentType")
                 .containsExactly(
                         PortfolioComponentTypeDict.PROFILE.getCode(),
@@ -413,11 +431,12 @@ class MinePortfolioServiceTest {
                         PortfolioComponentTypeDict.WORK_GRID.getCode(),
                         PortfolioComponentTypeDict.WORK_LIST.getCode(),
                         "SINGLE_WORK",
+                        "HYPERLINK",
                         PortfolioComponentTypeDict.SCHEDULE_QUERY.getCode(),
                         PortfolioComponentTypeDict.CONTACT_FORM.getCode(),
                         PortfolioComponentTypeDict.QR_CONTACT.getCode()
                 );
-        assertThat(service().getComponentLibrary().getComponents())
+        assertThat(service().getComponentLibrary(3).getComponents())
                 .filteredOn(item -> "SINGLE_WORK".equals(item.getComponentType()))
                 .singleElement()
                 .satisfies(item -> {
@@ -456,6 +475,60 @@ class MinePortfolioServiceTest {
         verify(portfolioHistoryEntityMapper).insert(any(PortfolioHistoryEntity.class));
         verify(pointService, never()).consume(any(), any(), any(), any(), any(Integer.class), any(), any());
         assertThat(response.getDraftRevision()).isEqualTo(4);
+    }
+
+    @Test
+    void saveDraftShouldKeepMaintenanceUnavailableMessageForOwnedNonStandardPortfolio() {
+        PortfolioEntity portfolio = ownedPortfolio();
+        portfolio.setTemplateType(PortfolioTemplateTypeDict.ADVANCED.getCode());
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+        MinePortfolioDraftSaveRequest request = new MinePortfolioDraftSaveRequest();
+        request.setConfig(config());
+
+        assertThatThrownBy(() -> service().saveDraft(88L, request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage(PortfolioMessage.PORTFOLIO_MAINTENANCE_UNAVAILABLE_MESSAGE);
+
+        verify(portfolioHyperlinkGraphService, never()).lockUserGraph(any(), any());
+        verify(portfolioEntityMapper, never()).updateById(any(PortfolioEntity.class));
+    }
+
+    @Test
+    void saveDraftChangingInternalTargetShouldDeleteOldScopeBeforeWritingNewReference() {
+        PortfolioEntity portfolio = ownedPortfolio();
+        portfolio.setDraftRevision(2);
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+        PortfolioConfigDto normalized = config();
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), eq(normalized), any())).thenReturn(normalized);
+        PortfolioReferenceEntity newTargetReference = reference(
+                88L, PortfolioConfigScopeDict.DRAFT.getCode(), 100L);
+        newTargetReference.setReferenceType(ReferenceTypeDict.LINKED_PORTFOLIO.getCode());
+        newTargetReference.setComponentPath("components[0].config.targetPortfolioId");
+        when(portfolioConfigValidator.buildReferences(
+                88L, 7L, PortfolioConfigScopeDict.DRAFT.getCode(), normalized))
+                .thenReturn(List.of(newTargetReference));
+        when(portfolioEntityMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
+        MinePortfolioDraftSaveRequest request = new MinePortfolioDraftSaveRequest();
+        request.setConfig(normalized);
+        request.setClientRevision(2);
+        request.setIdempotencyKey("draft-change-target");
+
+        service().saveDraft(88L, request);
+
+        InOrder order = org.mockito.Mockito.inOrder(
+                portfolioHyperlinkGraphService,
+                portfolioEntityMapper,
+                portfolioReferenceEntityMapper
+        );
+        order.verify(portfolioHyperlinkGraphService).validateReferences(
+                any(PortfolioHyperlinkGraphService.LockedGraph.class),
+                eq(PortfolioConfigScopeDict.DRAFT.getCode()),
+                eq(List.of(newTargetReference)),
+                eq(normalized)
+        );
+        order.verify(portfolioEntityMapper).updateById(any(PortfolioEntity.class));
+        order.verify(portfolioReferenceEntityMapper).delete(any());
+        order.verify(portfolioReferenceEntityMapper).insert(newTargetReference);
     }
 
     @Test
@@ -546,9 +619,6 @@ class MinePortfolioServiceTest {
 
     @Test
     void saveDraftShouldRejectNewEditorWithoutClientRevision() {
-        PortfolioEntity portfolio = ownedPortfolio();
-        portfolio.setDraftRevision(3);
-        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
         PortfolioConfigDto incoming = config();
         incoming.setEditorSchemaRevision(PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
         MinePortfolioDraftSaveRequest request = new MinePortfolioDraftSaveRequest();
@@ -763,6 +833,60 @@ class MinePortfolioServiceTest {
         verify(portfolioHistoryEntityMapper).insert(any(PortfolioHistoryEntity.class));
         assertThat(response.getPublishedRevision()).isEqualTo(2);
         assertThat(response.getPublicationStatus()).isEqualTo(PortfolioPublicationStatusDict.PUBLISHED.getCode());
+    }
+
+    @Test
+    void publishShouldNotConsumePointsOrChangePublishedStateWhenHyperlinkCycleValidationFails() {
+        PortfolioEntity portfolio = ownedPortfolio();
+        portfolio.setDraftRevision(4);
+        portfolio.setPublishedRevision(2);
+        portfolio.setPublicationStatus(PortfolioPublicationStatusDict.PUBLISHED.getCode());
+        portfolio.setDraftConfigJson(
+                "{\"schemaVersion\":\"standard-personal-v1\",\"components\":[{}]}"
+        );
+        portfolio.setPublishedConfigJson("{\"schemaVersion\":\"standard-personal-v1\",\"components\":[{}]}");
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+        PortfolioConfigDto normalized = config();
+        List<PortfolioReferenceEntity> references = List.of(
+                reference(88L, PortfolioConfigScopeDict.PUBLISHED.getCode(), 99L));
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), any(PortfolioConfigDto.class), any()))
+                .thenReturn(normalized);
+        when(portfolioConfigValidator.buildReferences(
+                88L,
+                7L,
+                PortfolioConfigScopeDict.PUBLISHED.getCode(),
+                normalized
+        )).thenReturn(references);
+        doThrow(new PortfolioValidationException(
+                "作品集之间不能循环跳转",
+                Map.of(
+                        "errorCode", "PORTFOLIO_HYPERLINK_CYCLE",
+                        "componentKey", "c_link",
+                        "targetPortfolioId", 99L
+                )
+        )).when(portfolioHyperlinkGraphService).validateReferences(
+                any(),
+                eq(PortfolioConfigScopeDict.PUBLISHED.getCode()),
+                eq(references),
+                eq(normalized)
+        );
+        MinePortfolioPublishRequest request = new MinePortfolioPublishRequest();
+        request.setDraftRevision(4);
+        request.setIdempotencyKey("publish-cycle");
+
+        assertThatThrownBy(() -> service().publish(88L, request))
+                .isInstanceOf(PortfolioValidationException.class)
+                .hasMessage("作品集之间不能循环跳转");
+
+        assertThat(portfolio.getPublishedRevision()).isEqualTo(2);
+        assertThat(portfolio.getPublishedConfigJson())
+                .isEqualTo("{\"schemaVersion\":\"standard-personal-v1\",\"components\":[{}]}");
+        assertThat(portfolio.getPublicationStatus()).isEqualTo(PortfolioPublicationStatusDict.PUBLISHED.getCode());
+        verify(portfolioEntityMapper, never()).updateById(any(PortfolioEntity.class));
+        verify(pointService, never()).consume(any(), any(), any(), any(), any(Integer.class), any(), any());
+        verify(portfolioReferenceEntityMapper, never()).delete(any());
+        verify(portfolioReferenceEntityMapper, never()).insert(any(PortfolioReferenceEntity.class));
+        verify(portfolioHistoryEntityMapper, never()).insert(any(PortfolioHistoryEntity.class));
     }
 
     @Test
@@ -1055,6 +1179,20 @@ class MinePortfolioServiceTest {
     }
 
     @Test
+    void deletePortfolioShouldKeepMaintenanceUnavailableMessageForOwnedNonStandardPortfolio() {
+        PortfolioEntity portfolio = ownedPortfolio();
+        portfolio.setTemplateType(PortfolioTemplateTypeDict.ADVANCED.getCode());
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+
+        assertThatThrownBy(() -> service().deletePortfolio(88L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage(PortfolioMessage.PORTFOLIO_MAINTENANCE_UNAVAILABLE_MESSAGE);
+
+        verify(portfolioHyperlinkGraphService, never()).lockUserGraph(any(), any());
+        verify(portfolioEntityMapper, never()).update(any(PortfolioEntity.class), any());
+    }
+
+    @Test
     void deletePortfolioShouldContinueWhenOneCosDeleteFails() {
         PortfolioEntity portfolio = ownedPortfolio();
         portfolio.setDraftConfigJson("""
@@ -1152,6 +1290,7 @@ class MinePortfolioServiceTest {
                 pointService,
                 portfolioPublishTransactionService,
                 portfolioConfigValidator,
+                portfolioHyperlinkGraphService,
                 portfolioRenderService,
                 miniappAuthService,
                 cosService,

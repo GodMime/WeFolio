@@ -1,0 +1,125 @@
+.hyperlink-section {
+  --hyperlink-text: #212529;
+  --hyperlink-muted: #868e96;
+  --hyperlink-click-icon-bg: #212529;
+  width: 100%;
+  color: var(--hyperlink-text);
+  box-sizing: border-box;
+}
+
+.hyperlink-section.portfolio-theme-dark {
+  --hyperlink-text: #f8f9fa;
+  --hyperlink-muted: #ced4da;
+  --hyperlink-click-icon-bg: #FFFFFF;
+}
+
+.hyperlink-tap-area,
+.hyperlink-media-wrap {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.hyperlink-media-wrap {
+  position: relative;
+  overflow: hidden;
+  border-radius: 24rpx;
+  background: transparent;
+}
+
+.hyperlink-media {
+  display: block;
+  width: 100%;
+  min-height: 180rpx;
+}
+
+.hyperlink-click-icon {
+  width: 76rpx;
+  height: 76rpx;
+  border-radius: 50%;
+  background-color: var(--hyperlink-click-icon-bg);
+}
+
+.hyperlink-click-icon.overlay {
+  position: absolute;
+  width: 88rpx;
+  height: 88rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 3rpx solid rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.16);
+}
+
+.hyperlink-click-icon.overlay-bottom-right {
+  right: 28rpx;
+  bottom: 28rpx;
+}
+
+.hyperlink-click-icon.overlay-bottom-center {
+  left: 50%;
+  bottom: 28rpx;
+  transform: translateX(-50%);
+}
+
+.hyperlink-click-icon.overlay-center {
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.hyperlink-click-icon.overlay::before {
+  content: "";
+  position: absolute;
+  left: -14rpx;
+  right: -14rpx;
+  top: -14rpx;
+  bottom: -14rpx;
+  border: 3rpx solid rgba(33, 37, 41, 0.28);
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+
+.portfolio-theme-dark .hyperlink-click-icon.overlay::before {
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.hyperlink-click-icon-image {
+  width: 107%;
+  height: 107%;
+  margin: -3.5%;
+  border-radius: 50%;
+}
+
+.hyperlink-click-icon-row {
+  display: flex;
+  justify-content: center;
+  padding-top: 16rpx;
+}
+
+.hyperlink-click-icon.below {
+  width: 76rpx;
+  height: 76rpx;
+  flex: none;
+}
+
+.hyperlink-repair {
+  display: flex;
+  min-height: 180rpx;
+  align-items: center;
+  justify-content: center;
+  padding: 32rpx;
+  color: #868e96;
+  font-size: 24rpx;
+  font-weight: 700;
+  text-align: center;
+  border: 2rpx dashed currentColor;
+  border-radius: 24rpx;
+  background: #f1f3f5;
+  box-sizing: border-box;
+}
+
+.portfolio-theme-dark .hyperlink-repair {
+  color: #c1c7ce;
+  background: #2a2d31;
+}

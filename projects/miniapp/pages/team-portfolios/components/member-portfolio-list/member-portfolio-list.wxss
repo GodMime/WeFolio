@@ -16,16 +16,15 @@
 .editor-switch-field { display: flex; align-items: center; justify-content: space-between; gap: 20rpx; }
 .editor-switch-copy { min-width: 0; flex: 1 1 0; }
 .editor-switch-desc { margin-top: 8rpx; color: #8b96a3; font-size: 22rpx; line-height: 1.5; }
-.editor-option-list { display: flex; flex-direction: column; gap: 12rpx; margin-top: 16rpx; }
-.editor-option { position: relative; width: 100%; min-height: 112rpx; display: flex; align-items: center; gap: 16rpx; margin: 0; padding: 12rpx 60rpx 12rpx 12rpx; overflow: hidden; text-align: left; border: 1rpx solid #e9ecef; border-radius: 28rpx; background: #f5f6f7; box-sizing: border-box; }
-.editor-option.selected { border-color: #212529; background: #fff; }
-.editor-option image { width: 116rpx; height: 88rpx; flex: none; border-radius: 12rpx; background: #eef3f7; }
-.editor-option-copy { min-width: 0; flex: 1 1 0; padding: 0; }
-.editor-option-title, .editor-option-meta { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.editor-option-title { color: #212529; font-size: 24rpx; font-weight: 900; }
-.editor-option-meta { margin-top: 8rpx; color: #697786; font-size: 20rpx; }
-.editor-option-order { position: absolute; right: 16rpx; width: 40rpx; height: 40rpx; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 20rpx; font-weight: 900; border: 2rpx solid #212529; border-radius: 50%; background: #212529; box-sizing: border-box; }
-.editor-option:not(.selected) .editor-option-order { color: transparent; border-color: #cbd6df; background: #fff; }
+.editor-portfolio-scroll { width: 100%; height: 224rpx; margin-top: 16rpx; white-space: nowrap; }
+.editor-option-row { width: max-content; min-width: 100%; min-height: 208rpx; display: flex; flex-wrap: nowrap; align-items: stretch; justify-content: flex-start; gap: 8rpx; padding-right: 48rpx; box-sizing: border-box; }
+.editor-option { position: relative; width: 248rpx; min-width: 0; flex: 0 0 248rpx; margin: 0; padding: 0; overflow: hidden; text-align: left; border: 1rpx solid #e9ecef; border-radius: 28rpx; background: #f5f6f7; box-sizing: border-box; }
+.editor-option.selected { border-color: #212529; background: #fff; box-shadow: 0 8rpx 18rpx rgba(33, 37, 41, .12); }
+.editor-option image { width: 100%; height: 150rpx; display: block; background: #eef3f7; }
+.editor-option-copy { min-width: 0; padding: 12rpx; }
+.editor-option-title { display: block; overflow: hidden; color: #212529; font-size: 22rpx; font-weight: 900; text-overflow: ellipsis; white-space: nowrap; }
+.editor-option-order { position: absolute; top: 8rpx; right: 8rpx; width: 38rpx; height: 38rpx; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 20rpx; font-weight: 900; border: 2rpx solid rgba(255, 255, 255, .9); border-radius: 50%; background: rgba(23, 32, 42, .78); box-sizing: border-box; }
+.editor-option:not(.selected) .editor-option-order { color: transparent; background: rgba(255, 255, 255, .9); border-color: #cbd6df; }
 .editor-empty { min-height: 150rpx; display: flex; align-items: center; justify-content: center; color: #8a98a8; font-size: 22rpx; text-align: center; }
 .editor-error { padding: 16rpx 18rpx; color: #b55656; font-size: 22rpx; border-radius: 28rpx; background: #fbefef; }
 .editor-actions { display: flex; justify-content: flex-end; gap: 16rpx; margin-top: 20rpx; }

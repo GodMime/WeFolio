@@ -6,18 +6,20 @@
 .editor-form { display: flex; flex-direction: column; gap: 20rpx; padding: 4rpx 0 8rpx; }
 .editor-field { padding: 28rpx; border: 1rpx solid #e9ecef; border-radius: 48rpx; background: #fff; box-sizing: border-box; }
 .editor-field-heading { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; }
-.editor-label { color: #6c757d; font-size: 24rpx; font-weight: 800; }
-.editor-limit { color: #8b96a3; font-size: 22rpx; font-weight: 700; }
-.editor-member-scroll { width: 100%; margin-top: 16rpx; white-space: nowrap; }
-.editor-member-row { display: inline-flex; gap: 12rpx; padding-right: 2rpx; }
+.editor-label { color: #6c757d; font-size: 24rpx; font-weight: 800; line-height: 32rpx; }
+.editor-limit { color: #8b96a3; font-size: 22rpx; font-weight: 700; line-height: 32rpx; }
+.editor-member-scroll { width: 100%; height: 56rpx; margin-top: 16rpx; white-space: nowrap; }
+.editor-member-row { height: 56rpx; display: inline-flex; gap: 12rpx; padding-right: 2rpx; }
 .editor-member-choice { display: inline-flex; width: fit-content; max-width: 280rpx; height: 56rpx; align-items: center; justify-content: center; gap: 10rpx; flex: none; margin: 0; padding: 0 12rpx 0 18rpx; color: #6c757d; font-size: 22rpx; font-weight: 800; line-height: 1; border: 1rpx solid #dee2e6; border-radius: 999rpx; background: #fff; box-sizing: border-box; }
 .editor-member-choice.active { color: #fff; border-color: #212529; background: #212529; }
 .editor-member-name { max-width: 180rpx; min-width: 0; overflow: hidden; line-height: 1; text-overflow: ellipsis; white-space: nowrap; }
 .editor-member-count { min-width: 32rpx; height: 32rpx; display: flex; align-items: center; justify-content: center; flex: none; padding: 0 7rpx; color: #536b82; font-size: 20rpx; font-weight: 900; line-height: 1; border-radius: 999rpx; background: #eef3f7; box-sizing: border-box; }
 .editor-member-choice.active .editor-member-count { color: #212529; background: rgba(255, 255, 255, .9); }
-.editor-content-field { min-height: 220rpx; }
-.editor-option-list { width: 100%; display: flex; flex-direction: column; align-self: stretch; gap: 14rpx; margin-top: 16rpx; box-sizing: border-box; }
-.editor-option { width: 100%; min-height: 112rpx; display: flex; align-items: center; gap: 18rpx; margin: 0; padding: 14rpx; text-align: left; border: 1rpx solid #e9ecef; border-radius: 28rpx; background: #f5f6f7; box-sizing: border-box; }
+.editor-content-field { min-height: 254rpx; }
+.editor-work-stage { width: 100%; min-height: 150rpx; max-height: 616rpx; margin-top: 16rpx; overflow: hidden; transition: height 220ms ease-out; }
+.editor-work-scroll { width: 100%; height: 100%; }
+.editor-option-list { width: 100%; display: flex; flex-direction: column; align-self: stretch; gap: 14rpx; box-sizing: border-box; }
+.editor-option { width: 100%; height: 112rpx; min-height: 112rpx; display: flex; align-items: center; gap: 18rpx; margin: 0; padding: 14rpx; text-align: left; border: 1rpx solid #e9ecef; border-radius: 28rpx; background: #f5f6f7; box-sizing: border-box; }
 .editor-option.selected { border-color: #212529; background: #fff; }
 .editor-option-thumb { width: 92rpx; height: 76rpx; flex: none; overflow: hidden; border-radius: 12rpx; background: #eef3f7; }
 .editor-option-thumb image { width: 100%; height: 100%; display: block; }
@@ -29,6 +31,7 @@
 .editor-option-check { width: 44rpx; height: 44rpx; display: flex; align-items: center; justify-content: center; flex: none; color: #fff; font-size: 22rpx; font-weight: 900; line-height: 1; border-radius: 50%; background: #d9e2eb; }
 .editor-option.selected .editor-option-check { background: #212529; }
 .editor-empty { min-height: 150rpx; display: flex; align-items: center; justify-content: center; color: #8a98a8; font-size: 22rpx; text-align: center; }
+.editor-work-stage .editor-empty { height: 100%; min-height: 0; }
 .editor-error { padding: 16rpx 18rpx; color: #b55656; font-size: 22rpx; border-radius: 28rpx; background: #fbefef; }
 .editor-actions { display: flex; justify-content: flex-end; gap: 16rpx; margin-top: 20rpx; }
 .editor-cancel, .editor-confirm { width: 148rpx; height: 64rpx; display: flex; align-items: center; justify-content: center; margin: 0; padding: 0; font-size: 24rpx; font-weight: 900; line-height: 1; border-radius: 999rpx; box-sizing: border-box; }

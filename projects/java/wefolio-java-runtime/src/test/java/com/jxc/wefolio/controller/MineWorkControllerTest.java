@@ -1,5 +1,9 @@
 package com.jxc.wefolio.controller;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jxc.wefolio.annotation.MaintainerAccess;
 import com.jxc.wefolio.common.Response;
@@ -30,6 +34,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -37,6 +42,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
+import java.lang.reflect.Method;
 import java.util.Arrays;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -49,6 +55,11 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class MineWorkControllerTest {
 
+    /** 作品列表接口参数类型。 */
+    private static final Class<?>[] WORK_LIST_PARAMETER_TYPES = {
+            String.class, Long.class, String.class, String.class, int.class, int.class
+    };
+
     /** 我的作品服务模拟 */
     @Mock
     private MineWorkService mineWorkService;
@@ -56,6 +67,47 @@ class MineWorkControllerTest {
     /** 我的作品审核服务模拟 */
     @Mock
     private MineWorkAuditService mineWorkAuditService;
+
+    @Test
+    void mediaTypeCompatibilityContractShouldBeDeprecated() throws Exception {
+        Method worksMethod = MineWorkController.class.getMethod("works", WORK_LIST_PARAMETER_TYPES);
+        Deprecated mediaTypeDeprecated = worksMethod.getParameters()[2].getAnnotation(Deprecated.class);
+
+        assertThat(mediaTypeDeprecated).isNotNull();
+        assertThat(mediaTypeDeprecated.since()).isEqualTo("2026-08");
+        assertThat(mediaTypeDeprecated.forRemoval()).isFalse();
+        for (String fieldName : Arrays.asList("imageCount", "videoCount", "animationCount")) {
+            Deprecated countDeprecated = MineWorkListResponse.Summary.class
+                    .getDeclaredField(fieldName)
+                    .getAnnotation(Deprecated.class);
+            assertThat(countDeprecated).as(fieldName + " 废弃标记").isNotNull();
+            assertThat(countDeprecated.since()).as(fieldName + " 废弃版本").isEqualTo("2026-08");
+            assertThat(countDeprecated.forRemoval()).as(fieldName + " 暂不删除").isFalse();
+        }
+    }
+
+    @Test
+    void mediaTypeCompatibilityParameterShouldWriteWarningWhenUsed() {
+        MineWorkController controller = new MineWorkController(mineWorkService, mineWorkAuditService);
+        Logger logger = (Logger) LoggerFactory.getLogger(MineWorkController.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            controller.works("婚礼", 12L, "IMAGE", null, 1, 20);
+            controller.works("婚礼", 12L, null, null, 1, 20);
+
+            assertThat(appender.list)
+                    .extracting(ILoggingEvent::getLevel)
+                    .containsExactly(Level.WARN);
+            assertThat(appender.list)
+                    .extracting(ILoggingEvent::getFormattedMessage)
+                    .containsExactly("调用已弃用作品媒体类型筛选参数: mediaType=IMAGE");
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
+    }
 
     @Test
     void workEndpointsUseMaintainerAccessAndDelegateToService() throws NoSuchMethodException {

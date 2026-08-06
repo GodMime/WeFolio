@@ -42,10 +42,6 @@ Component({
     handlePreviewQr() {
       const qrContact = this.data.component.qrContact || {}
       this.triggerEvent('previewqr', { qrUrl: qrContact.qrUrl || '' })
-    },
-
-    handleLockedAction() {
-      this.triggerEvent('lockedaction')
     }
   }
 })

@@ -1,7 +1,10 @@
 package com.jxc.wefolio.service;
 
+import com.jxc.wefolio.common.PortfolioTextTypographySupport;
+import com.jxc.wefolio.constant.PortfolioTextTypographyConstants;
 import com.jxc.wefolio.dict.MediaTypeDict;
 import com.jxc.wefolio.dict.PortfolioComponentTypeDict;
+import com.jxc.wefolio.dict.PortfolioTextFontFamilyDict;
 import com.jxc.wefolio.dict.ReferenceTypeDict;
 import com.jxc.wefolio.dict.WorkAuditStatusDict;
 import com.jxc.wefolio.dict.WorkStatusDict;
@@ -9,7 +12,6 @@ import com.jxc.wefolio.dto.PortfolioConfigDto;
 import com.jxc.wefolio.entity.PortfolioReferenceEntity;
 import com.jxc.wefolio.entity.WorkEntity;
 import com.jxc.wefolio.exception.BusinessException;
-import com.jxc.wefolio.mapper.UserEntityMapper;
 import com.jxc.wefolio.mapper.WorkEntityMapper;
 import com.jxc.wefolio.message.PortfolioMessage;
 import lombok.RequiredArgsConstructor;
@@ -100,6 +102,24 @@ public class PortfolioConfigValidator {
 
     /** 单个作品 ID 配置键 */
     private static final String CONFIG_KEY_WORK_ID = "workId";
+
+    /** 超链接点击行为配置键 */
+    private static final String CONFIG_KEY_ACTION_TYPE = "actionType";
+
+    /** 超链接内部目标配置键 */
+    private static final String CONFIG_KEY_TARGET_PORTFOLIO_ID = "targetPortfolioId";
+
+    /** 超链接外部复制内容配置键 */
+    private static final String CONFIG_KEY_EXTERNAL_CONTENT = "externalContent";
+
+    /** 超链接复制提示语配置键 */
+    private static final String CONFIG_KEY_PROMPT_TEXT = "promptText";
+
+    /** 是否展示超链接点击图标配置键 */
+    private static final String CONFIG_KEY_SHOW_CLICK_ICON = "showClickIcon";
+
+    /** 超链接点击图标位置配置键 */
+    private static final String CONFIG_KEY_ICON_POSITION = "iconPosition";
 
     /** 是否展示作品名配置键 */
     private static final String CONFIG_KEY_SHOW_TITLE = "showTitle";
@@ -239,6 +259,43 @@ public class PortfolioConfigValidator {
     /** 旧作品列表迁移默认展示标签 */
     private static final String DEFAULT_WORK_GROUP_NAME = "全部作品";
 
+    /** 跳转内部个人作品集 */
+    private static final String HYPERLINK_ACTION_INTERNAL_PORTFOLIO = "INTERNAL_PORTFOLIO";
+
+    /** 复制外部链接或分享内容 */
+    private static final String HYPERLINK_ACTION_EXTERNAL_LINK = "EXTERNAL_LINK";
+
+    /** 点击图标悬浮于图片内右下角 */
+    private static final String HYPERLINK_ICON_OVERLAY = "OVERLAY";
+
+    /** 点击图标悬浮于图片内底部居中 */
+    private static final String HYPERLINK_ICON_OVERLAY_BOTTOM_CENTER = "OVERLAY_BOTTOM_CENTER";
+
+    /** 点击图标悬浮于图片内正中 */
+    private static final String HYPERLINK_ICON_OVERLAY_CENTER = "OVERLAY_CENTER";
+
+    /** 点击图标置于图片下方 */
+    private static final String HYPERLINK_ICON_BELOW = "BELOW";
+
+    /** 超链接点击图标允许的位置 */
+    private static final Set<String> HYPERLINK_ICON_POSITIONS = Set.of(
+            HYPERLINK_ICON_OVERLAY,
+            HYPERLINK_ICON_OVERLAY_BOTTOM_CENTER,
+            HYPERLINK_ICON_OVERLAY_CENTER,
+            HYPERLINK_ICON_BELOW);
+
+    /** 超链接外部内容最大 Unicode 码点数 */
+    private static final int HYPERLINK_EXTERNAL_CONTENT_MAX_CODE_POINTS = 2048;
+
+    /** 超链接提示语最大 Unicode 码点数 */
+    private static final int HYPERLINK_PROMPT_TEXT_MAX_CODE_POINTS = 30;
+
+    /** 超链接展示作品允许的媒体类型 */
+    private static final Set<String> HYPERLINK_WORK_MEDIA_TYPES = Set.of(
+            MediaTypeDict.IMAGE.getCode(),
+            MediaTypeDict.ANIMATION.getCode()
+    );
+
     /**
      * 编辑器版本引入的配置字段合并步骤，按 revision 升序注册。
      * <p>
@@ -284,10 +341,6 @@ public class PortfolioConfigValidator {
 
     /** 作品 Mapper */
     private final WorkEntityMapper workEntityMapper;
-
-    /** 用户 Mapper */
-    @SuppressWarnings("unused")
-    private final UserEntityMapper userEntityMapper;
 
     /**
      * 校验并规范化配置。
@@ -665,6 +718,13 @@ public class PortfolioConfigValidator {
                         component,
                         componentPath
                 );
+                case HYPERLINK -> addHyperlinkReferences(
+                        references,
+                        portfolioId,
+                        configScope,
+                        component,
+                        componentPath
+                );
                 default -> {
                 }
             }
@@ -710,6 +770,7 @@ public class PortfolioConfigValidator {
             case WORK_GRID -> validateWorkDisplayGroups(userId, component, WORK_GRID_MAX_COUNT, 2);
             case WORK_LIST -> validateWorkDisplayGroups(userId, component, WORK_LIST_MAX_COUNT, 1);
             case SINGLE_WORK -> validateSingleWork(userId, component);
+            case HYPERLINK -> validateHyperlink(userId, component);
             case SCHEDULE_QUERY -> validateScheduleQuery(component);
             case QR_CONTACT -> validateQrContact(component);
             case CONTACT_FORM -> validateContactForm(component);
@@ -799,6 +860,68 @@ public class PortfolioConfigValidator {
                 showDescription instanceof Boolean value ? value : Boolean.FALSE
         );
         component.setConfig(normalizedConfig);
+    }
+
+    /**
+     * 校验并规范化超链接组件。
+     *
+     * @param userId 当前用户 ID
+     * @param component 超链接组件
+     */
+    private void validateHyperlink(Long userId, PortfolioConfigDto.Component component) {
+        Map<String, Object> source = component.getConfig();
+        Long workId = asExactLong(source.get(CONFIG_KEY_WORK_ID));
+        if (workId == null || workId <= 0L) {
+            throw new BusinessException(PortfolioMessage.HYPERLINK_DISPLAY_WORK_REQUIRED_MESSAGE);
+        }
+        WorkEntity work = loadUsableWorks(userId, List.of(workId)).get(workId);
+        if (work == null || !HYPERLINK_WORK_MEDIA_TYPES.contains(work.getMediaType())) {
+            throw new BusinessException(PortfolioMessage.HYPERLINK_DISPLAY_WORK_INVALID_MESSAGE);
+        }
+
+        String actionType = defaultString(asString(source.get(CONFIG_KEY_ACTION_TYPE))).strip();
+        if (!HYPERLINK_ACTION_INTERNAL_PORTFOLIO.equals(actionType)
+                && !HYPERLINK_ACTION_EXTERNAL_LINK.equals(actionType)) {
+            throw new BusinessException(PortfolioMessage.HYPERLINK_ACTION_REQUIRED_MESSAGE);
+        }
+
+        Object iconPositionValue = source.get(CONFIG_KEY_ICON_POSITION);
+        String iconPosition = iconPositionValue == null
+                ? HYPERLINK_ICON_OVERLAY
+                : defaultString(asString(iconPositionValue)).strip();
+        if (!HYPERLINK_ICON_POSITIONS.contains(iconPosition)) {
+            throw new BusinessException(PortfolioMessage.HYPERLINK_ICON_POSITION_UNSUPPORTED_MESSAGE);
+        }
+
+        Map<String, Object> normalized = new LinkedHashMap<>();
+        normalized.put(CONFIG_KEY_WORK_ID, workId);
+        normalized.put(CONFIG_KEY_ACTION_TYPE, actionType);
+        if (HYPERLINK_ACTION_INTERNAL_PORTFOLIO.equals(actionType)) {
+            Long targetPortfolioId = asExactLong(source.get(CONFIG_KEY_TARGET_PORTFOLIO_ID));
+            if (targetPortfolioId == null || targetPortfolioId <= 0L) {
+                throw new BusinessException(PortfolioMessage.HYPERLINK_TARGET_REQUIRED_MESSAGE);
+            }
+            normalized.put(CONFIG_KEY_TARGET_PORTFOLIO_ID, targetPortfolioId);
+        } else {
+            String externalContent = rawString(source.get(CONFIG_KEY_EXTERNAL_CONTENT));
+            requireCodePointLength(
+                    externalContent,
+                    HYPERLINK_EXTERNAL_CONTENT_MAX_CODE_POINTS,
+                    PortfolioMessage.HYPERLINK_EXTERNAL_CONTENT_LENGTH_MESSAGE
+            );
+            String promptText = rawString(source.get(CONFIG_KEY_PROMPT_TEXT));
+            requireCodePointLength(
+                    promptText,
+                    HYPERLINK_PROMPT_TEXT_MAX_CODE_POINTS,
+                    PortfolioMessage.HYPERLINK_PROMPT_TEXT_LENGTH_MESSAGE
+            );
+            normalized.put(CONFIG_KEY_EXTERNAL_CONTENT, externalContent);
+            normalized.put(CONFIG_KEY_PROMPT_TEXT, promptText);
+        }
+        Object showClickIcon = source.get(CONFIG_KEY_SHOW_CLICK_ICON);
+        normalized.put(CONFIG_KEY_SHOW_CLICK_ICON, showClickIcon instanceof Boolean value ? value : Boolean.FALSE);
+        normalized.put(CONFIG_KEY_ICON_POSITION, iconPosition);
+        component.setConfig(normalized);
     }
 
     /**
@@ -912,8 +1035,26 @@ public class PortfolioConfigValidator {
         if (!TEXT_SECTION_ALIGNMENTS.contains(alignment)) {
             throw new BusinessException(PortfolioMessage.TEXT_SECTION_ALIGNMENT_UNSUPPORTED_MESSAGE);
         }
+        Object fontFamilySource = component.getConfig().get(
+                PortfolioTextTypographySupport.FONT_FAMILY_CONFIG_KEY);
+        String fontFamily = fontFamilySource == null
+                ? PortfolioTextFontFamilyDict.SYSTEM.getCode()
+                : PortfolioTextTypographySupport.asSupportedFontFamily(fontFamilySource);
+        if (fontFamily == null) {
+            throw new BusinessException(PortfolioMessage.TEXT_SECTION_FONT_UNSUPPORTED_MESSAGE);
+        }
+        Object fontSizeSource = component.getConfig().get(
+                PortfolioTextTypographySupport.FONT_SIZE_RPX_CONFIG_KEY);
+        Integer fontSizeRpx = fontSizeSource == null
+                ? Integer.valueOf(PortfolioTextTypographyConstants.LEGACY_PERSONAL_FONT_SIZE_RPX)
+                : PortfolioTextTypographySupport.asExactFontSizeRpx(fontSizeSource);
+        if (!PortfolioTextTypographySupport.isValidFontSizeRpx(fontSizeRpx)) {
+            throw new BusinessException(PortfolioMessage.TEXT_SECTION_FONT_SIZE_INVALID_MESSAGE);
+        }
         component.getConfig().put(CONFIG_KEY_CONTENT, content);
         component.getConfig().put(CONFIG_KEY_ALIGNMENT, alignment);
+        component.getConfig().put(PortfolioTextTypographySupport.FONT_FAMILY_CONFIG_KEY, fontFamily);
+        component.getConfig().put(PortfolioTextTypographySupport.FONT_SIZE_RPX_CONFIG_KEY, fontSizeRpx);
     }
 
     /**
@@ -1182,6 +1323,53 @@ public class PortfolioConfigValidator {
     }
 
     /**
+     * 添加超链接展示作品和可选的内部作品集引用。
+     *
+     * @param references 引用列表
+     * @param portfolioId 作品集 ID
+     * @param configScope 配置作用域
+     * @param component 超链接组件
+     * @param componentPath 组件路径
+     */
+    private void addHyperlinkReferences(
+            List<PortfolioReferenceEntity> references,
+            Long portfolioId,
+            String configScope,
+            PortfolioConfigDto.Component component,
+            String componentPath
+    ) {
+        Long workId = asLong(component.getConfig().get(CONFIG_KEY_WORK_ID));
+        if (workId != null && workId > 0L) {
+            references.add(reference(
+                    portfolioId,
+                    configScope,
+                    ReferenceTypeDict.WORK.getCode(),
+                    workId,
+                    component,
+                    componentPath + ".config." + CONFIG_KEY_WORK_ID,
+                    0
+            ));
+        }
+        if (!HYPERLINK_ACTION_INTERNAL_PORTFOLIO.equals(
+                asString(component.getConfig().get(CONFIG_KEY_ACTION_TYPE)))) {
+            return;
+        }
+        Long targetPortfolioId = asLong(component.getConfig().get(CONFIG_KEY_TARGET_PORTFOLIO_ID));
+        if (targetPortfolioId == null || targetPortfolioId <= 0L) {
+            return;
+        }
+        references.add(reference(
+                portfolioId,
+                configScope,
+                ReferenceTypeDict.LINKED_PORTFOLIO.getCode(),
+                targetPortfolioId,
+                component,
+                componentPath + ".config." + CONFIG_KEY_TARGET_PORTFOLIO_ID,
+                1
+        ));
+    }
+
+    /**
      * 创建引用实体。
      *
      * @param portfolioId 作品集 ID
@@ -1440,6 +1628,30 @@ public class PortfolioConfigValidator {
      */
     private String asString(Object value) {
         return value == null ? "" : String.valueOf(value).strip();
+    }
+
+    /**
+     * 获取不裁剪、不改写的配置字符串。
+     *
+     * @param value 原值
+     * @return 原始字符串，非字符串按空值处理
+     */
+    private String rawString(Object value) {
+        return value instanceof String text ? text : "";
+    }
+
+    /**
+     * 按 Unicode 码点校验必填文本长度。
+     *
+     * @param value 原始文本
+     * @param maxCodePoints 最大码点数
+     * @param message 校验失败提示
+     */
+    private void requireCodePointLength(String value, int maxCodePoints, String message) {
+        int length = value.codePointCount(0, value.length());
+        if (length < 1 || length > maxCodePoints) {
+            throw new BusinessException(message);
+        }
     }
 
     /**

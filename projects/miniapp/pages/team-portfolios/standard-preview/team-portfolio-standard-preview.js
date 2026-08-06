@@ -9,10 +9,8 @@ const {
   switchTeamPortfolioMenu
 } = require('../utils/team-visitor-portfolio.js')
 const {
-  captureTeamPortfolioMenuInteraction,
   clearTeamPortfolioMenuComponentState,
   clearTeamPortfolioMenuTransitionTimers,
-  isTeamPortfolioMenuInteractionCurrent,
   startTeamPortfolioMenuTransition
 } = require('../utils/team-portfolio-menu-transition.js')
 
@@ -31,6 +29,7 @@ const TYPE_BUCKETS = Object.freeze({
 const PERSONAL_PREVIEW_URL = '/pages' + '/portfolios/standard-preview/portfolio-standard-preview'
 const LIGHT_LOGO_URL = '/assets/system/folio-logo-stack-bold-small-50kb.png'
 const DARK_LOGO_URL = '/assets/system/folio-logo-stack-bold-dark-50kb.png'
+const PREVIEW_QUERY_UNSUPPORTED_MESSAGE = '预览模式不提交档期查询'
 
 function buckets(items) {
   const value = {
@@ -193,43 +192,19 @@ Page({
       })
     }
   },
-  async handleScheduleQuery(event) {
+  handleScheduleQuery(event) {
     const detail = event.detail || {}
     const child = this.selectComponent(`#schedule-${detail.componentKey}`)
-    const menuInteraction = captureTeamPortfolioMenuInteraction(this)
-    try {
-      const result = await request({
-        url: `/api/mine/team-portfolios/${this.data.portfolioId}` +
-          `/schedule-query-preview?scope=${this.data.scope}`,
-        method: 'POST',
-        data: {
-          componentKey: detail.componentKey,
-          queriedDate: detail.queriedDate,
-          idempotencyKey: detail.idempotencyKey
+    if (child && child.rejectQuery) {
+      child.rejectQuery({
+        detail: {
+          message: PREVIEW_QUERY_UNSUPPORTED_MESSAGE,
+          clearPendingIdempotencyKey: true
         }
       })
-      if (!isTeamPortfolioMenuInteractionCurrent(this, menuInteraction)) return
-      this.setData({
-        scheduleResults: Object.assign({}, this.data.scheduleResults, {
-          [detail.componentKey]: result
-        })
-      })
-      if (child && child.resolveQuery) child.resolveQuery({ detail: result })
-    } catch (error) {
-      if (handleTeamMaintainerAuthError(error)) return
-      if (showTeamPortfolioUnavailableToast(error)) {
-        if (isTeamPortfolioMenuInteractionCurrent(this, menuInteraction) &&
-            child && child.rejectQuery) {
-          child.rejectQuery({ detail: { message: '当前团队作品集不可用' } })
-        }
-        return
-      }
-      if (!isTeamPortfolioMenuInteractionCurrent(this, menuInteraction)) return
-      if (child && child.rejectQuery) {
-        child.rejectQuery({ detail: { message: '档期查询失败，请重试' } })
-      }
-      wx.showToast({ title: '档期查询失败，请重试', icon: 'none' })
     }
+    wx.showToast({ title: PREVIEW_QUERY_UNSUPPORTED_MESSAGE, icon: 'none' })
+    return false
   },
   handleContactInput(event) {
     const componentKey = event.currentTarget.dataset.key

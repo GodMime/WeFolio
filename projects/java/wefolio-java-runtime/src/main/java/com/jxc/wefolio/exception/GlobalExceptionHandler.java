@@ -54,6 +54,19 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * 处理携带新版客户端增量详情的作品集业务异常。
+     *
+     * @param e 作品集结构化业务异常
+     * @return 失败响应
+     */
+    @ExceptionHandler(PortfolioValidationException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Response<Object> handlePortfolioValidation(PortfolioValidationException e) {
+        log.error("Portfolio validation exception: {}", e.getMessage(), e);
+        return Response.fail(e.getMessage(), e.getData());
+    }
+
+    /**
      * 处理已知业务异常 — 消息可直接返回给客户端
      *
      * @param e 业务异常

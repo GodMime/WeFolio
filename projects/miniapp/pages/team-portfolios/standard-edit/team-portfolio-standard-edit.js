@@ -35,7 +35,19 @@ const {
   visitTeamPortfolioComponents
 } = require('../utils/team-portfolios.js')
 const { confirmPortfolioPublishDisclaimer } = require('../utils/portfolio-publish-disclaimer.js')
-const { selectableWorksFor } = require('../utils/work-media.js')
+const {
+  LEGACY_TEAM_FONT_SIZE_RPX,
+  NEW_COMPONENT_FONT_SIZE_RPX,
+  PORTFOLIO_TEXT_FONT_FAMILIES,
+  PORTFOLIO_TEXT_FONT_OPTIONS,
+  buildPortfolioTextFontSizeOptions,
+  buildPortfolioTextTypography
+} = require('../../../utils/portfolio-text-typography.js')
+const {
+  getPortfolioFontCapability,
+  isPortfolioFontAvailable,
+  loadPortfolioFonts
+} = require('../../../utils/portfolio-font-loader.js')
 
 const TYPE_BUCKETS = Object.freeze({ TEAM_PROFILE: 'teamProfile', CAROUSEL: 'carousel', SINGLE_WORK: 'singleWork', DIVIDER: 'divider', MEMBER_PORTFOLIO_GRID: 'grid', MEMBER_PORTFOLIO_LIST: 'list', TEXT_SECTION: 'text', SCHEDULE_QUERY: 'schedule', CONTACT_FORM: 'contact', QR_CONTACT: 'qr' })
 const COMPONENT_NAMES = Object.freeze({ TEAM_PROFILE: '团队资料', CAROUSEL: '轮播图', SINGLE_WORK: '单个作品', DIVIDER: '分割线', MEMBER_PORTFOLIO_GRID: '双列作品集', MEMBER_PORTFOLIO_LIST: '单列作品集', TEXT_SECTION: '文字说明', SCHEDULE_QUERY: '档期查询', CONTACT_FORM: '预留联系信息', QR_CONTACT: '二维码联系' })
@@ -56,12 +68,37 @@ const DESIGN_VIEWPORT_RPX = 750
 const QR_CONTACT_CROP_MAX_WIDTH_RPX = 560
 const QR_CONTACT_CROP_HORIZONTAL_GUTTER_RPX = 116
 const QR_CONTACT_CROP_CANVAS_ID = 'teamQrContactCropCanvas'
+const CAROUSEL_EDITOR_SCROLL_MIN_HEIGHT_RPX = 460
+const CAROUSEL_EDITOR_SCROLL_MAX_HEIGHT_RPX = 926
+const CAROUSEL_EDITOR_PANEL_CHROME_HEIGHT_RPX = 250
+
+/**
+ * 将轮播图子组件上报的内容高度限制在弹层可用范围内，并同步生成内外两层样式。
+ */
+function buildCarouselEditorLayoutState(scrollHeightRpx) {
+  const requestedHeight = Number(scrollHeightRpx)
+  const safeHeight = Number.isFinite(requestedHeight) ? requestedHeight : CAROUSEL_EDITOR_SCROLL_MIN_HEIGHT_RPX
+  const height = Math.max(
+    CAROUSEL_EDITOR_SCROLL_MIN_HEIGHT_RPX,
+    Math.min(CAROUSEL_EDITOR_SCROLL_MAX_HEIGHT_RPX, Math.round(safeHeight))
+  )
+  return {
+    carouselEditorScrollStyle: `height: ${height}rpx;`,
+    carouselEditorPanelStyle: `height: calc(${height + CAROUSEL_EDITOR_PANEL_CHROME_HEIGHT_RPX}rpx + env(safe-area-inset-bottom));`
+  }
+}
 const QR_CONTACT_CROP_FAILED_MESSAGE = '二维码裁剪失败，请重试'
 const PORTFOLIO_LIST_ROUTE_SUFFIX = '/portfolios/portfolios'
 const TEAM_PORTFOLIOS_COMPAT_PAGE_URL = '/pages/team-portfolios/portfolios'
 const TEXT_SECTION_MAX_LENGTH = 200
 const TEXT_SECTION_REQUIRED_MESSAGE = '请填写文字说明'
 const TEAM_PORTFOLIO_TITLE_REQUIRED_MESSAGE = '请填写团队作品集标题'
+const SINGLE_WORK_PAGE_SIZE = 20
+const SINGLE_WORK_ROW_SUMMARY_STATUS = Object.freeze({
+  LOADING: 'LOADING',
+  FAILED: 'FAILED',
+  UNAVAILABLE: 'UNAVAILABLE'
+})
 const TEAM_BACKGROUND_COLORS = Object.freeze(['#151515', '#FFFFFF', '#F5F6F8'])
 const TEAM_BOTTOM_NAV_COUNTS = Object.freeze([1, 2, 3, 4])
 const TEXT_SECTION_ALIGNMENTS = Object.freeze({ LEFT: 'LEFT', CENTER: 'CENTER', RIGHT: 'RIGHT' })
@@ -111,7 +148,23 @@ function buildTeamBackgroundColorPickerState(backgroundColorHsv = {}) {
     ].join('; ')
   }
 }
-function buildComponentList(components = []) { return (Array.isArray(components) ? components : []).map((item) => Object.assign({}, item, { displayName: COMPONENT_NAMES[item.componentType] || item.componentType || '页面组件' })) }
+function resolveSingleWorkRowSummary(component = {}, summaryMap = {}) {
+  const config = component.config || {}
+  const workId = Number(config.workId)
+  if (!workId) return '请选择作品'
+  const summary = summaryMap[component.componentKey]
+  if (!summary || summary.status === SINGLE_WORK_ROW_SUMMARY_STATUS.LOADING) return '作品信息加载中'
+  if (summary.status === SINGLE_WORK_ROW_SUMMARY_STATUS.FAILED) return '作品信息加载失败'
+  if (summary.status === SINGLE_WORK_ROW_SUMMARY_STATUS.UNAVAILABLE) return '作品不可用，请重新选择'
+  return String(summary.title || '').trim() || '作品不可用，请重新选择'
+}
+function buildComponentList(components = [], singleWorkRowSummaryMap = {}) {
+  return (Array.isArray(components) ? components : []).map((item) => Object.assign({}, item, {
+    displayName: COMPONENT_NAMES[item.componentType] || item.componentType || '页面组件'
+  }, item.componentType === 'SINGLE_WORK'
+    ? { showSummary: true, summaryText: resolveSingleWorkRowSummary(item, singleWorkRowSummaryMap) }
+    : {}))
+}
 function buildPublicationState(status) {
   if (status === 'PUBLISHED' || status === 'PUBLISHED_WITH_DRAFT') return { statusText: status === 'PUBLISHED_WITH_DRAFT' ? '有新草稿' : '已发布', statusTone: 'published', showPublishAction: true }
   if (status === 'OFFLINE') return { statusText: '已下线', statusTone: 'muted', showPublishAction: true }
@@ -120,6 +173,17 @@ function buildPublicationState(status) {
 function touchPoint(event = {}) { const touch = (event.touches && event.touches[0]) || (event.changedTouches && event.changedTouches[0]) || {}; return { x: Number(touch.clientX) || 0, y: Number(touch.clientY) || 0 } }
 function dragStyle(offsetY) { return `transform: translate3d(0, ${Math.round(Number(offsetY) || 0)}px, 0) scale(${COMPONENT_DRAG_SCALE}); transition: transform 80ms linear, box-shadow 160ms ease; z-index: 3;` }
 function normalizeSortOrders(components = []) { return components.map((item, index) => Object.assign({}, item, { sortOrder: (index + 1) * 1000 })) }
+function mergeSingleWorkPage(existing = [], incoming = []) {
+  const seen = new Set()
+  return (Array.isArray(existing) ? existing : [])
+    .concat(Array.isArray(incoming) ? incoming : [])
+    .filter((item) => {
+      const workId = Number(item && item.workId)
+      if (!workId || seen.has(workId)) return false
+      seen.add(workId)
+      return true
+    })
+}
 function updateTeamComponent(config, componentKey, updater) {
   const normalized = normalizeTeamPortfolioConfig(config)
   const location = findTeamPortfolioComponent(normalized, componentKey)
@@ -191,12 +255,41 @@ function resetQrContactCropState() {
 function countTextCodePoints(value) { return Array.from(String(value || '')).length }
 function buildTextSectionForm(config = {}) {
   const alignment = String(config.alignment || '').trim()
+  const typography = buildPortfolioTextTypography(
+    config,
+    LEGACY_TEAM_FONT_SIZE_RPX
+  )
   return {
     content: String(config.content || '').trim(),
-    alignment: TEXT_SECTION_ALIGNMENT_OPTIONS.some((item) => item.value === alignment) ? alignment : TEXT_SECTION_ALIGNMENTS.LEFT
+    alignment: TEXT_SECTION_ALIGNMENT_OPTIONS.some((item) => item.value === alignment) ? alignment : TEXT_SECTION_ALIGNMENTS.LEFT,
+    fontFamily: typography.fontFamily,
+    fontSizeRpx: typography.fontSizeRpx
   }
 }
 function buildTextSectionFieldCounters(form = {}) { return { content: `${countTextCodePoints(form.content)} / ${TEXT_SECTION_MAX_LENGTH}` } }
+function buildTextSectionFontOptions(
+  capability = getPortfolioFontCapability()
+) {
+  return PORTFOLIO_TEXT_FONT_OPTIONS.map((item) =>
+    Object.assign({}, item, {
+      available: isPortfolioFontAvailable(item.value, capability)
+    })
+  )
+}
+function buildTextSectionEditorState(config = {}) {
+  const textSectionForm = buildTextSectionForm(config)
+  return {
+    textSectionForm,
+    textSectionFieldCounters: buildTextSectionFieldCounters(textSectionForm),
+    textSectionFontOptions: buildTextSectionFontOptions(),
+    textSectionSizeOptions:
+      buildPortfolioTextFontSizeOptions(textSectionForm.fontSizeRpx),
+    textSectionTypography: buildPortfolioTextTypography(
+      textSectionForm,
+      LEGACY_TEAM_FONT_SIZE_RPX
+    )
+  }
+}
 function buildContactFormConfigForm(config = {}) {
   return {
     displayMode: config.displayMode === CONTACT_FORM_DISPLAY_MODES.INLINE_FORM
@@ -276,13 +369,30 @@ function buckets(components) {
 }
 
 Page({
-  data: { portfolioId: 0, teamId: 0, teamSnapshot: {}, loading: false, errorMessage: '', canMaintain: false, publicationStatus: 'DRAFT_ONLY', draftRevision: 0, publishedRevision: 0, statusText: '草稿', statusTone: 'draft', showPublishAction: false, config: normalizeTeamPortfolioConfig(), activeMenuKey: '', activeMenuTitle: '', activeMenuTitleCount: 0, navigationItems: [], bottomNavCount: 1, backgroundColorOptions: TEAM_BACKGROUND_COLORS, bottomNavCountOptions: TEAM_BOTTOM_NAV_COUNTS, backgroundColorSheetVisible: false, backgroundColorDraft: '#FFFFFF', backgroundColorHsv: hexToHsv('#FFFFFF'), backgroundHueColor: '#FF0000', backgroundColorPadDotStyle: 'left: 0%; top: 0%', componentList: [], componentBuckets: buckets([]), componentOptions: buildComponentOptions(), componentValidation: {}, componentSources: {}, hasInvalidComponents: false, saving: false, publishing: false, openingLibrary: false, shareCoverUploading: false, qrContactChoosing: false, qrContactCropVisible: false, qrContactCropSaving: false, qrContactCropErrorText: '', qrContactCropState: null, qrContactCropTouchStart: null, qrContactCropCanvasWidth: WECHAT_QR_CROP_OUTPUT_WIDTH, qrContactCropCanvasHeight: WECHAT_QR_CROP_OUTPUT_WIDTH, teamProfileRefreshing: false, pendingDraftKey: '', pendingPublishKey: '', pendingPublishRevision: 0, shareTitleCounter: '0 / 50', componentSheetVisible: false, textSectionSheetVisible: false, textSectionEditingComponentKey: '', textSectionAlignmentOptions: TEXT_SECTION_ALIGNMENT_OPTIONS, textSectionMaxLength: TEXT_SECTION_MAX_LENGTH, textSectionForm: buildTextSectionForm(), textSectionFieldCounters: buildTextSectionFieldCounters(buildTextSectionForm()), contactFormSheetVisible: false, contactFormEditingComponentKey: '', contactFormDisplayModeOptions: CONTACT_FORM_DISPLAY_MODE_OPTIONS, contactFormConfigForm: buildContactFormConfigForm(), scheduleQuerySheetVisible: false, scheduleQueryEditingComponentKey: '', scheduleQueryDisplayModeOptions: SCHEDULE_QUERY_DISPLAY_MODE_OPTIONS, scheduleQueryForm: buildScheduleQueryForm(), dividerSheetVisible: false, dividerEditingComponentKey: '', dividerColorOptions: DIVIDER_COLOR_OPTIONS, dividerForm: buildDividerForm(), componentEditorVisible: false, activeComponentKey: '', activeComponentType: '', activeComponentName: '', activeComponent: { config: {} }, activeComponentSource: {}, activeComponentNeedsPortfolio: false, revealedComponentKey: '', componentTouchStart: null, draggingIndex: -1, dragTargetIndex: -1, componentDragStartY: 0, componentDragStyle: '', componentMoveSheetVisible: false, componentMoveKey: '', componentMoveTargets: [], componentMovePending: false, highlightedComponentKey: '', componentScrollTarget: '', shareCoverCropVisible: false, shareCoverCropPath: '' },
+  data: { portfolioId: 0, teamId: 0, teamSnapshot: {}, loading: false, errorMessage: '', canMaintain: false, publicationStatus: 'DRAFT_ONLY', draftRevision: 0, publishedRevision: 0, statusText: '草稿', statusTone: 'draft', showPublishAction: false, config: normalizeTeamPortfolioConfig(), activeMenuKey: '', activeMenuTitle: '', activeMenuTitleCount: 0, navigationItems: [], bottomNavCount: 1, backgroundColorOptions: TEAM_BACKGROUND_COLORS, bottomNavCountOptions: TEAM_BOTTOM_NAV_COUNTS, backgroundColorSheetVisible: false, backgroundColorDraft: '#FFFFFF', backgroundColorHsv: hexToHsv('#FFFFFF'), backgroundHueColor: '#FF0000', backgroundColorPadDotStyle: 'left: 0%; top: 0%', componentList: [], componentBuckets: buckets([]), componentOptions: buildComponentOptions(), componentValidation: {}, componentSources: {}, singleWorkRowSummaryMap: {}, hasInvalidComponents: false, saving: false, publishing: false, openingLibrary: false, shareCoverUploading: false, qrContactChoosing: false, qrContactCropVisible: false, qrContactCropSaving: false, qrContactCropErrorText: '', qrContactCropState: null, qrContactCropTouchStart: null, qrContactCropCanvasWidth: WECHAT_QR_CROP_OUTPUT_WIDTH, qrContactCropCanvasHeight: WECHAT_QR_CROP_OUTPUT_WIDTH, teamProfileRefreshing: false, pendingDraftKey: '', pendingPublishKey: '', pendingPublishRevision: 0, shareTitleCounter: '0 / 50', componentSheetVisible: false, textSectionSheetVisible: false, textSectionEditingComponentKey: '', textSectionAlignmentOptions: TEXT_SECTION_ALIGNMENT_OPTIONS, textSectionMaxLength: TEXT_SECTION_MAX_LENGTH, portfolioFontCapability: getPortfolioFontCapability(), ...buildTextSectionEditorState(), contactFormSheetVisible: false, contactFormEditingComponentKey: '', contactFormDisplayModeOptions: CONTACT_FORM_DISPLAY_MODE_OPTIONS, contactFormConfigForm: buildContactFormConfigForm(), scheduleQuerySheetVisible: false, scheduleQueryEditingComponentKey: '', scheduleQueryDisplayModeOptions: SCHEDULE_QUERY_DISPLAY_MODE_OPTIONS, scheduleQueryForm: buildScheduleQueryForm(), dividerSheetVisible: false, dividerEditingComponentKey: '', dividerColorOptions: DIVIDER_COLOR_OPTIONS, dividerForm: buildDividerForm(), componentEditorVisible: false, componentEditorLayoutType: '', activeComponentKey: '', activeComponentType: '', activeComponentName: '', activeComponent: { config: {} }, activeComponentSource: {}, activeComponentNeedsPortfolio: false, revealedComponentKey: '', componentTouchStart: null, draggingIndex: -1, dragTargetIndex: -1, componentDragStartY: 0, componentDragStyle: '', componentMoveSheetVisible: false, componentMoveKey: '', componentMoveTargets: [], componentMovePending: false, highlightedComponentKey: '', componentScrollTarget: '', shareCoverCropVisible: false, shareCoverCropPath: '', ...buildCarouselEditorLayoutState(CAROUSEL_EDITOR_SCROLL_MIN_HEIGHT_RPX) },
   onLoad(options = {}) {
     const portfolioId = Number(options.portfolioId) || 0
     const teamId = Number(options.teamId) || 0
+    this.loadPortfolioFontCapability()
     if (portfolioId) { this.setData({ portfolioId }); return this.bootstrap() }
     if (teamId) { this.setData({ teamId }); return this.bootstrapNew() }
     this.setData({ errorMessage: '作品集参数无效' })
+  },
+  loadPortfolioFontCapability() {
+    try {
+      loadPortfolioFonts()
+        .then((capability) => {
+          this.setData({
+            portfolioFontCapability: capability,
+            textSectionFontOptions: buildTextSectionFontOptions(capability)
+          })
+        })
+        .catch((error) => {
+          console.warn('加载团队作品集内置字体失败', error)
+        })
+    } catch (error) {
+      console.warn('启动团队作品集内置字体加载失败', error)
+    }
   },
   async bootstrapNew() {
     if (this.data.loading || !this.data.teamId) return
@@ -325,11 +435,13 @@ Page({
         hasInvalidComponents: false
       }, buildPublicationState(detail.publicationStatus)))
       this.updateConfig(config)
+      this.loadSingleWorkRowSummaries(config)
     } catch (error) { if (handleTeamMaintainerAuthError(error)) return; if (showTeamPortfolioUnavailableToast(error)) return; this.setData({ errorMessage: '团队作品集加载失败，请重试', canMaintain: false }) } finally { this.setData({ loading: false }) }
   },
   onShow() { if (this.data.openingLibrary) this.setData({ openingLibrary: false }) },
   onUnload() {
     if (this.componentHighlightTimer) clearTimeout(this.componentHighlightTimer)
+    this.singleWorkRowSummaryRequestSeq = (Number(this.singleWorkRowSummaryRequestSeq) || 0) + 1
   },
   handleRetry() { this.bootstrap() },
   updateConfig(config) {
@@ -353,7 +465,7 @@ Page({
       navigationItems,
       bottomNavCount: navigationItems.length || 1,
       backgroundColorDraft: normalized.style.backgroundColor,
-      componentList: buildComponentList(components),
+      componentList: buildComponentList(components, this.data.singleWorkRowSummaryMap),
       componentBuckets: buckets(components),
       componentOptions: buildComponentOptions(allComponents),
       shareTitleCounter: `${String(normalized.share && normalized.share.title || '').length} / 50`
@@ -362,24 +474,104 @@ Page({
       this.syncActiveComponent(normalized, this.data.activeComponentKey)
     }
   },
+  refreshComponentList(singleWorkRowSummaryMap = this.data.singleWorkRowSummaryMap) {
+    const components = getTeamMenuComponentList(this.data.config, this.data.activeMenuKey)
+    this.setData({
+      singleWorkRowSummaryMap,
+      componentList: buildComponentList(components, singleWorkRowSummaryMap)
+    })
+  },
+  loadSingleWorkRowSummaries(config = this.data.config) {
+    const requestSeq = (Number(this.singleWorkRowSummaryRequestSeq) || 0) + 1
+    this.singleWorkRowSummaryRequestSeq = requestSeq
+    const components = visitTeamPortfolioComponents(config)
+      .map((item) => item.component)
+      .filter((component) => component.componentType === 'SINGLE_WORK')
+    const summaryMap = {}
+    const pendingComponents = []
+    components.forEach((component) => {
+      const componentConfig = component.config || {}
+      const workId = Number(componentConfig.workId)
+      const memberUserId = Number(componentConfig.memberUserId)
+      if (!workId) return
+      if (!memberUserId || !Number(this.data.teamId)) {
+        summaryMap[component.componentKey] = { workId, status: SINGLE_WORK_ROW_SUMMARY_STATUS.UNAVAILABLE }
+        return
+      }
+      summaryMap[component.componentKey] = { workId, status: SINGLE_WORK_ROW_SUMMARY_STATUS.LOADING }
+      pendingComponents.push({ componentKey: component.componentKey, memberUserId, workId })
+    })
+    this.refreshComponentList(summaryMap)
+    if (!pendingComponents.length) return Promise.resolve(summaryMap)
+    return Promise.all(pendingComponents.map((component) => request({
+      url: `/api/mine/teams/${this.data.teamId}/portfolio-components/single-work/members/${component.memberUserId}/works/page`,
+      data: { page: 1, pageSize: 1, selectedWorkId: component.workId }
+    }).then((response = {}) => {
+      const selectedWork = response.selectedWork
+      return selectedWork && Number(selectedWork.workId) === component.workId
+        ? Object.assign({}, component, { title: selectedWork.title || '', status: '' })
+        : Object.assign({}, component, { status: SINGLE_WORK_ROW_SUMMARY_STATUS.UNAVAILABLE })
+    }).catch(() => Object.assign({}, component, {
+      status: SINGLE_WORK_ROW_SUMMARY_STATUS.FAILED
+    })))).then((results) => {
+      if (requestSeq !== this.singleWorkRowSummaryRequestSeq) return this.data.singleWorkRowSummaryMap
+      const nextSummaryMap = Object.assign({}, this.data.singleWorkRowSummaryMap)
+      results.forEach((result) => {
+        const location = findTeamPortfolioComponent(this.data.config, result.componentKey)
+        const currentConfig = location && location.component && location.component.config || {}
+        if (
+          Number(currentConfig.memberUserId) !== result.memberUserId ||
+          Number(currentConfig.workId) !== result.workId
+        ) return
+        nextSummaryMap[result.componentKey] = {
+          workId: result.workId,
+          title: result.title || '',
+          status: result.status
+        }
+      })
+      this.refreshComponentList(nextSummaryMap)
+      return nextSummaryMap
+    })
+  },
+  updateSingleWorkRowSummary(componentKey, config = {}) {
+    const workId = Number(config.workId)
+    const source = this.data.componentSources[componentKey] || {}
+    const selectedWork = [source.selectedWork].concat(Array.isArray(source.works) ? source.works : [])
+      .find((item) => Number(item && item.workId) === workId)
+    const singleWorkRowSummaryMap = Object.assign({}, this.data.singleWorkRowSummaryMap, {
+      [componentKey]: selectedWork
+        ? { workId, title: selectedWork.title || '', status: '' }
+        : { workId, status: SINGLE_WORK_ROW_SUMMARY_STATUS.UNAVAILABLE }
+    })
+    this.refreshComponentList(singleWorkRowSummaryMap)
+  },
   clearPending() { this.setData({ pendingDraftKey: '', pendingPublishKey: '', pendingPublishRevision: 0 }) },
   noop() {},
   syncActiveComponent(config = this.data.config, componentKey = this.data.activeComponentKey) { const location = findTeamPortfolioComponent(config, componentKey); const activeComponent = location ? location.component : { config: {} }; this.setData({ activeComponent, activeComponentSource: this.data.componentSources[componentKey] || {} }) },
   handleOpenComponentSheet() { if (!this.data.canMaintain) return; const allComponents = visitTeamPortfolioComponents(this.data.config).map((item) => item.component); this.setData({ componentSheetVisible: true, revealedComponentKey: '', componentOptions: buildComponentOptions(allComponents) }) },
   handleCloseComponentSheet() { this.setData({ componentSheetVisible: false }) },
   handleSelectComponent(event) { if (event.currentTarget.dataset.disabled) return; const componentType = event.currentTarget.dataset.type; if (!componentType) return; this.addComponent(componentType); this.setData({ componentSheetVisible: false }) },
-  handleComponentTap(event) { const componentKey = event.currentTarget.dataset.key || ''; const componentType = event.currentTarget.dataset.type || ''; if (this.data.revealedComponentKey === componentKey) return this.setData({ revealedComponentKey: '' }); const location = findTeamPortfolioComponent(this.data.config, componentKey); const activeComponent = location && location.component; if (!activeComponent) return; if (componentType === 'TEXT_SECTION') return this.openTextSectionSheet(componentKey); if (componentType === 'CONTACT_FORM') return this.openContactFormSheet(componentKey); if (componentType === 'SCHEDULE_QUERY') return this.openScheduleQuerySheet(componentKey); if (componentType === 'DIVIDER') return this.openDividerSheet(componentKey); this.setData({ componentEditorVisible: true, activeComponentKey: componentKey, activeComponentType: componentType, activeComponentName: COMPONENT_NAMES[componentType] || '页面组件', activeComponent, activeComponentSource: this.data.componentSources[componentKey] || {}, activeComponentNeedsPortfolio: PORTFOLIO_REQUIRED_COMPONENT_TYPES.includes(componentType) }) },
-  handleCloseComponentEditor() { this.setData({ componentEditorVisible: false, activeComponentKey: '', activeComponentType: '', activeComponentName: '', activeComponent: { config: {} }, activeComponentSource: {}, activeComponentNeedsPortfolio: false }) },
+  handleComponentTap(event) { const componentKey = event.currentTarget.dataset.key || ''; const componentType = event.currentTarget.dataset.type || ''; if (this.data.revealedComponentKey === componentKey) return this.setData({ revealedComponentKey: '' }); const location = findTeamPortfolioComponent(this.data.config, componentKey); const activeComponent = location && location.component; if (!activeComponent) return; if (componentType === 'TEXT_SECTION') return this.openTextSectionSheet(componentKey); if (componentType === 'CONTACT_FORM') return this.openContactFormSheet(componentKey); if (componentType === 'SCHEDULE_QUERY') return this.openScheduleQuerySheet(componentKey); if (componentType === 'DIVIDER') return this.openDividerSheet(componentKey); this.setData({ componentEditorVisible: true, componentEditorLayoutType: componentType, activeComponentKey: componentKey, activeComponentType: componentType, activeComponentName: COMPONENT_NAMES[componentType] || '页面组件', activeComponent, activeComponentSource: this.data.componentSources[componentKey] || {}, activeComponentNeedsPortfolio: PORTFOLIO_REQUIRED_COMPONENT_TYPES.includes(componentType), ...(componentType === 'CAROUSEL' ? buildCarouselEditorLayoutState(CAROUSEL_EDITOR_SCROLL_MIN_HEIGHT_RPX) : {}) }) },
+  handleCloseComponentEditor() {
+    this.singleWorkRequestSeq = (Number(this.singleWorkRequestSeq) || 0) + 1
+    this.setData({ componentEditorVisible: false, activeComponentKey: '', activeComponentType: '', activeComponentName: '', activeComponent: { config: {} }, activeComponentSource: {}, activeComponentNeedsPortfolio: false })
+  },
   openTextSectionSheet(componentKey) {
     const location = findTeamPortfolioComponent(this.data.config, componentKey)
     const component = location && location.component
     if (!component || component.componentType !== 'TEXT_SECTION') return
-    const textSectionForm = buildTextSectionForm(component.config)
-    this.setData({ textSectionSheetVisible: true, textSectionEditingComponentKey: componentKey, textSectionForm, textSectionFieldCounters: buildTextSectionFieldCounters(textSectionForm) })
+    this.setData({
+      textSectionSheetVisible: true,
+      textSectionEditingComponentKey: componentKey,
+      ...buildTextSectionEditorState(component.config)
+    })
   },
   handleCloseTextSectionSheet() {
-    const textSectionForm = buildTextSectionForm()
-    this.setData({ textSectionSheetVisible: false, textSectionEditingComponentKey: '', textSectionForm, textSectionFieldCounters: buildTextSectionFieldCounters(textSectionForm) })
+    this.setData({
+      textSectionSheetVisible: false,
+      textSectionEditingComponentKey: '',
+      ...buildTextSectionEditorState()
+    })
   },
   handleTextSectionInput(event) {
     const textSectionForm = Object.assign({}, this.data.textSectionForm, { content: event.detail.value || '' })
@@ -389,6 +581,46 @@ Page({
     const alignment = event.currentTarget.dataset.value
     if (!TEXT_SECTION_ALIGNMENT_OPTIONS.some((item) => item.value === alignment)) return
     this.setData({ textSectionForm: Object.assign({}, this.data.textSectionForm, { alignment }) })
+  },
+  handleTextSectionFontTap(event) {
+    const value = event.currentTarget.dataset.value
+    const option = this.data.textSectionFontOptions.find(
+      (item) => item.value === value
+    )
+    if (!option || !option.available) return
+    const textSectionForm = Object.assign(
+      {},
+      this.data.textSectionForm,
+      { fontFamily: value }
+    )
+    this.setData({
+      textSectionForm,
+      textSectionTypography: buildPortfolioTextTypography(
+        textSectionForm,
+        LEGACY_TEAM_FONT_SIZE_RPX
+      )
+    })
+  },
+  handleTextSectionFontSizeTap(event) {
+    const value = event.currentTarget.dataset.value
+    const option = this.data.textSectionSizeOptions.find(
+      (item) => item.value === value
+    )
+    if (!option || typeof value !== 'number') return
+    const textSectionForm = Object.assign(
+      {},
+      this.data.textSectionForm,
+      { fontSizeRpx: value }
+    )
+    this.setData({
+      textSectionForm,
+      textSectionSizeOptions:
+        buildPortfolioTextFontSizeOptions(textSectionForm.fontSizeRpx),
+      textSectionTypography: buildPortfolioTextTypography(
+        textSectionForm,
+        LEGACY_TEAM_FONT_SIZE_RPX
+      )
+    })
   },
   handleConfirmTextSectionConfig() {
     const form = buildTextSectionForm(this.data.textSectionForm)
@@ -702,7 +934,7 @@ Page({
     this.updateConfig(config)
   },
   handleComponentValidationChange(event) { const detail = event.detail || {}; const componentValidation = Object.assign({}, this.data.componentValidation, { [detail.componentKey]: detail.valid !== false }); this.setData({ componentValidation, hasInvalidComponents: Object.keys(componentValidation).some((key) => componentValidation[key] === false) }) },
-  handleComponentSave(event) { const key = event.currentTarget.dataset.key; this.handleComponentConfigChange(event); const componentValidation = Object.assign({}, this.data.componentValidation, { [key]: true }); this.setData({ componentValidation, hasInvalidComponents: Object.keys(componentValidation).some((name) => componentValidation[name] === false) }); if (this.data.activeComponentKey === key) this.handleCloseComponentEditor() },
+  handleComponentSave(event) { const key = event.currentTarget.dataset.key; const location = findTeamPortfolioComponent(this.data.config, key); this.handleComponentConfigChange(event); if (location && location.component.componentType === 'SINGLE_WORK') this.updateSingleWorkRowSummary(key, event.detail && event.detail.config); const componentValidation = Object.assign({}, this.data.componentValidation, { [key]: true }); this.setData({ componentValidation, hasInvalidComponents: Object.keys(componentValidation).some((name) => componentValidation[name] === false) }); if (this.data.activeComponentKey === key) this.handleCloseComponentEditor() },
   handleConfirmComponentEditor() { const component = this.selectComponent('#active-component-editor'); if (component && typeof component.saveEdit === 'function') component.saveEdit() },
   handleComponentDelete(event) {
     const key = event.currentTarget.dataset.key
@@ -768,7 +1000,12 @@ Page({
         ? { memberUserId: null, workId: null, showTitle: true, showDescription: false }
         : MEMBER_PORTFOLIO_COMPONENT_TYPES.includes(componentType)
           ? { showMemberName: true }
-          : {}
+          : componentType === 'TEXT_SECTION'
+            ? {
+                fontFamily: PORTFOLIO_TEXT_FONT_FAMILIES.SYSTEM,
+                fontSizeRpx: NEW_COMPONENT_FONT_SIZE_RPX
+              }
+            : {}
     const components = getTeamMenuComponentList(this.data.config, this.data.activeMenuKey)
     components.push({ componentKey, componentType, sortOrder: (components.length + 1) * 1000, enabled: true, config: componentConfig })
     this.updateConfig(replaceTeamMenuComponentList(this.data.config, this.data.activeMenuKey, components))
@@ -777,11 +1014,166 @@ Page({
   updateSource(componentKey, patch) { const componentSources = Object.assign({}, this.data.componentSources, { [componentKey]: Object.assign({}, this.data.componentSources[componentKey], patch) }); const state = { componentSources }; if (componentKey === this.data.activeComponentKey) state.activeComponentSource = componentSources[componentKey]; this.setData(state) },
   async loadSource(componentKey, fingerprint, url, patch, failureState, scopeId = this.data.portfolioId) { if (!Number(scopeId)) return; const source = this.data.componentSources[componentKey] || {}; if (source.loadingFingerprint === fingerprint) return; this.updateSource(componentKey, { loadingFingerprint: fingerprint, errorMessage: '', sourceAvailable: true }); try { const value = await request({ url }); if ((this.data.componentSources[componentKey] || {}).loadingFingerprint !== fingerprint) return; this.updateSource(componentKey, Object.assign({}, patch(value), { loadingFingerprint: '', failedStage: '', memberUserId: 0 })) } catch (error) { if ((this.data.componentSources[componentKey] || {}).loadingFingerprint !== fingerprint) return; if (handleTeamMaintainerAuthError(error)) return; if (showTeamPortfolioUnavailableToast(error)) { this.updateSource(componentKey, Object.assign({ loadingFingerprint: '', errorMessage: '', sourceAvailable: false }, failureState || {})); return }; this.updateSource(componentKey, Object.assign({ loadingFingerprint: '', errorMessage: '来源加载失败，请重试', sourceAvailable: false }, failureState || {})) } },
   async handleCarouselLoadMembers(event) { const key = event.currentTarget.dataset.key; return this.loadSource(key, 'carousel-members', `/api/mine/team-portfolios/${this.data.portfolioId}/components/carousel/members`, (members) => ({ members, works: [] }), { failedStage: 'members', memberUserId: 0 }) },
-  async handleCarouselMemberChange(event) { const key = event.currentTarget.dataset.key; const memberUserId = event.detail.memberUserId; this.updateSource(key, { works: [], memberUserId, failedStage: '' }); return this.loadSource(key, `carousel-works-${memberUserId}`, `/api/mine/team-portfolios/${this.data.portfolioId}/components/carousel/members/${memberUserId}/works`, (works) => ({ works: selectableWorksFor('CAROUSEL', works) }), { failedStage: 'member-items', memberUserId }) },
+  async handleCarouselMemberChange(event) { const key = event.currentTarget.dataset.key; const memberUserId = event.detail.memberUserId; this.updateSource(key, { works: [], memberUserId, failedStage: '' }); return this.loadSource(key, `carousel-works-${memberUserId}`, `/api/mine/team-portfolios/${this.data.portfolioId}/components/carousel/members/${memberUserId}/works`, (works) => ({ works: Array.isArray(works) ? works : [] }), { failedStage: 'member-items', memberUserId }) },
+  handleCarouselLayoutChange(event) {
+    if (!this.data.componentEditorVisible || this.data.activeComponentType !== 'CAROUSEL') return
+    this.setData(buildCarouselEditorLayoutState(event && event.detail && event.detail.scrollHeightRpx))
+  },
   handleCarouselRetrySource(event) { const source = this.data.componentSources[event.currentTarget.dataset.key] || {}; return source.failedStage === 'member-items' && source.memberUserId ? this.handleCarouselMemberChange({ currentTarget: event.currentTarget, detail: { memberUserId: source.memberUserId } }) : this.handleCarouselLoadMembers(event) },
-  async handleSingleWorkLoadMembers(event) { const key = event.currentTarget.dataset.key; return this.loadSource(key, 'single-work-members', `/api/mine/teams/${this.data.teamId}/portfolio-components/single-work/members`, (members) => ({ members, works: [] }), { failedStage: 'members', memberUserId: 0 }, this.data.teamId) },
-  async handleSingleWorkMemberChange(event) { const key = event.currentTarget.dataset.key; const memberUserId = event.detail.memberUserId; this.updateSource(key, { works: [], memberUserId, failedStage: '' }); return this.loadSource(key, `single-work-works-${memberUserId}`, `/api/mine/teams/${this.data.teamId}/portfolio-components/single-work/members/${memberUserId}/works`, (works) => ({ works: selectableWorksFor('SINGLE_WORK', works) }), { failedStage: 'member-items', memberUserId }, this.data.teamId) },
-  handleSingleWorkRetrySource(event) { const source = this.data.componentSources[event.currentTarget.dataset.key] || {}; return source.failedStage === 'member-items' && source.memberUserId ? this.handleSingleWorkMemberChange({ currentTarget: event.currentTarget, detail: { memberUserId: source.memberUserId } }) : this.handleSingleWorkLoadMembers(event) },
+  async handleSingleWorkLoadMembers(event) {
+    const key = event.currentTarget.dataset.key
+    return this.loadSource(
+      key,
+      'single-work-members',
+      `/api/mine/teams/${this.data.teamId}/portfolio-components/single-work/members`,
+      (members) => ({
+        members,
+        works: [],
+        selectedWork: null,
+        singleWorkPage: 0,
+        singleWorkPageSize: SINGLE_WORK_PAGE_SIZE,
+        singleWorkHasMore: false,
+        singleWorkLoading: false,
+        singleWorkLoadingMore: false,
+        singleWorkLoadMoreError: ''
+      }),
+      { failedStage: 'members', memberUserId: 0 },
+      this.data.teamId
+    )
+  },
+  async loadSingleWorkPage(componentKey, memberUserId, options = {}) {
+    const normalizedMemberUserId = Number(memberUserId)
+    if (!Number(this.data.teamId) || !normalizedMemberUserId) return
+    const source = this.data.componentSources[componentKey] || {}
+    const reset = options.reset !== false
+    const pageSize = reset
+      ? SINGLE_WORK_PAGE_SIZE
+      : (Number(source.singleWorkPageSize) || SINGLE_WORK_PAGE_SIZE)
+    const requestPage = reset ? 1 : (Number(source.singleWorkPage) || 0) + 1
+    const selectedWorkId = reset ? (Number(options.selectedWorkId) || null) : null
+    const requestSeq = (Number(this.singleWorkRequestSeq) || 0) + 1
+    this.singleWorkRequestSeq = requestSeq
+    const fingerprint = `${componentKey}:${normalizedMemberUserId}:${requestPage}:${requestSeq}`
+    this.updateSource(componentKey, reset ? {
+      works: [],
+      selectedWork: null,
+      memberUserId: normalizedMemberUserId,
+      singleWorkPage: 0,
+      singleWorkPageSize: pageSize,
+      singleWorkHasMore: false,
+      singleWorkLoading: true,
+      singleWorkLoadingMore: false,
+      singleWorkLoadMoreError: '',
+      singleWorkSelectedWorkId: selectedWorkId,
+      singleWorkRequestFingerprint: fingerprint,
+      errorMessage: '',
+      failedStage: '',
+      sourceAvailable: true
+    } : {
+      memberUserId: normalizedMemberUserId,
+      singleWorkLoadingMore: true,
+      singleWorkLoadMoreError: '',
+      singleWorkRequestFingerprint: fingerprint
+    })
+    try {
+      const response = await request({
+        url: `/api/mine/teams/${this.data.teamId}/portfolio-components/single-work/members/${normalizedMemberUserId}/works/page`,
+        data: Object.assign({ page: requestPage, pageSize }, selectedWorkId
+          ? { selectedWorkId }
+          : {})
+      })
+      const latest = this.data.componentSources[componentKey] || {}
+      if (
+        this.singleWorkRequestSeq !== requestSeq ||
+        latest.singleWorkRequestFingerprint !== fingerprint ||
+        Number(latest.memberUserId) !== normalizedMemberUserId
+      ) return
+      const incomingWorks = Array.isArray(response && response.works) ? response.works : []
+      this.updateSource(componentKey, {
+        works: reset ? mergeSingleWorkPage([], incomingWorks) : mergeSingleWorkPage(latest.works, incomingWorks),
+        selectedWork: reset ? (response && response.selectedWork || null) : latest.selectedWork,
+        memberUserId: normalizedMemberUserId,
+        singleWorkPage: Number(response && response.page) || requestPage,
+        singleWorkPageSize: Number(response && response.pageSize) || pageSize,
+        singleWorkHasMore: Boolean(response && response.hasMore),
+        singleWorkLoading: false,
+        singleWorkLoadingMore: false,
+        singleWorkLoadMoreError: '',
+        singleWorkRequestFingerprint: '',
+        errorMessage: '',
+        failedStage: '',
+        sourceAvailable: true
+      })
+    } catch (error) {
+      const latest = this.data.componentSources[componentKey] || {}
+      if (
+        this.singleWorkRequestSeq !== requestSeq ||
+        latest.singleWorkRequestFingerprint !== fingerprint ||
+        Number(latest.memberUserId) !== normalizedMemberUserId
+      ) return
+      if (handleTeamMaintainerAuthError(error)) {
+        this.updateSource(componentKey, {
+          singleWorkLoading: false,
+          singleWorkLoadingMore: false,
+          singleWorkRequestFingerprint: ''
+        })
+        return
+      }
+      if (showTeamPortfolioUnavailableToast(error)) {
+        this.updateSource(componentKey, {
+          singleWorkLoading: false,
+          singleWorkLoadingMore: false,
+          singleWorkRequestFingerprint: '',
+          sourceAvailable: false
+        })
+        return
+      }
+      if (reset) {
+        this.updateSource(componentKey, {
+          singleWorkLoading: false,
+          singleWorkLoadingMore: false,
+          singleWorkRequestFingerprint: '',
+          errorMessage: '来源加载失败，请重试',
+          sourceAvailable: false,
+          failedStage: 'member-items',
+          memberUserId: normalizedMemberUserId
+        })
+        return
+      }
+      this.updateSource(componentKey, {
+        singleWorkLoadingMore: false,
+        singleWorkLoadMoreError: '作品加载失败，请重试',
+        singleWorkRequestFingerprint: ''
+      })
+    }
+  },
+  async handleSingleWorkMemberChange(event) {
+    const key = event.currentTarget.dataset.key
+    const memberUserId = Number(event.detail && event.detail.memberUserId)
+    const selectedWorkId = Number(event.detail && event.detail.selectedWorkId) || null
+    return this.loadSingleWorkPage(key, memberUserId, { reset: true, selectedWorkId })
+  },
+  handleSingleWorkLoadMore(event) {
+    const key = event.currentTarget.dataset.key
+    const source = this.data.componentSources[key] || {}
+    if (
+      !source.memberUserId ||
+      source.singleWorkLoading ||
+      source.singleWorkLoadingMore ||
+      !source.singleWorkHasMore
+    ) return Promise.resolve()
+    return this.loadSingleWorkPage(key, source.memberUserId, { reset: false })
+  },
+  handleSingleWorkRetrySource(event) {
+    const key = event.currentTarget.dataset.key
+    const source = this.data.componentSources[key] || {}
+    return source.failedStage === 'member-items' && source.memberUserId
+      ? this.loadSingleWorkPage(key, source.memberUserId, {
+          reset: true,
+          selectedWorkId: source.singleWorkSelectedWorkId
+        })
+      : this.handleSingleWorkLoadMembers(event)
+  },
   async handleGridLoadMembers(event) { const key = event.currentTarget.dataset.key; return this.loadSource(key, 'grid-members', `/api/mine/team-portfolios/${this.data.portfolioId}/components/member-portfolio-grid/members`, (members) => ({ members, portfolios: [] }), { failedStage: 'members', memberUserId: 0 }) },
   async handleGridMemberChange(event) { const key = event.currentTarget.dataset.key; const memberUserId = event.detail.memberUserId; this.updateSource(key, { portfolios: [], memberUserId, failedStage: '' }); return this.loadSource(key, `grid-portfolios-${memberUserId}`, `/api/mine/team-portfolios/${this.data.portfolioId}/components/member-portfolio-grid/members/${memberUserId}/portfolios`, (portfolios) => ({ portfolios }), { failedStage: 'member-items', memberUserId }) },
   handleGridRetrySource(event) { const source = this.data.componentSources[event.currentTarget.dataset.key] || {}; return source.failedStage === 'member-items' && source.memberUserId ? this.handleGridMemberChange({ currentTarget: event.currentTarget, detail: { memberUserId: source.memberUserId } }) : this.handleGridLoadMembers(event) },

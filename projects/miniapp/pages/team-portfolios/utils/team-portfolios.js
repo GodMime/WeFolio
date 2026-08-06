@@ -1,5 +1,9 @@
 const { request } = require('../../../utils/request.js')
 const { normalizeId } = require('../../../utils/id.js')
+const {
+  NEW_COMPONENT_FONT_SIZE_RPX,
+  PORTFOLIO_TEXT_FONT_FAMILIES
+} = require('../../../utils/portfolio-text-typography.js')
 const teamPortfolioList = require('./team-portfolio-list.js')
 const {
   TEAM_PORTFOLIOS_ENDPOINT,
@@ -158,7 +162,12 @@ function addTeamComponent(config, componentType, menuKey = '') {
     componentType: type,
     sortOrder: (components.length + 1) * TEAM_COMPONENT_SORT_ORDER_STEP,
     enabled: true,
-    config: {}
+    config: type === 'TEXT_SECTION'
+      ? {
+          fontFamily: PORTFOLIO_TEXT_FONT_FAMILIES.SYSTEM,
+          fontSizeRpx: NEW_COMPONENT_FONT_SIZE_RPX
+        }
+      : {}
   })
   return replaceTeamMenuComponentList(normalized, menuKey, components)
 }

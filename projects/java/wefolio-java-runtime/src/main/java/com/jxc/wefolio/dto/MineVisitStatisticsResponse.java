@@ -8,6 +8,12 @@ import lombok.Data;
 @Data
 public class MineVisitStatisticsResponse {
 
+    /** 团队范围是否完整。 */
+    private Boolean scopeComplete;
+
+    /** 团队范围降级原因，完整时为空字符串。 */
+    private String scopeReason;
+
     /** 顶部访问统计 */
     private MineVisitRecordsResponse.Summary summary;
 

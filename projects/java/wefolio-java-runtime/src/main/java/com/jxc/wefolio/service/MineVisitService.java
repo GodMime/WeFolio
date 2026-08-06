@@ -7,28 +7,26 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
 import com.jxc.wefolio.dict.FollowStatusDict;
-import com.jxc.wefolio.dict.JoinStatusDict;
 import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
 import com.jxc.wefolio.dict.PortfolioTypeDict;
 import com.jxc.wefolio.dict.TeamRoleDict;
 import com.jxc.wefolio.dict.VisitEventTypeDict;
 import com.jxc.wefolio.dict.VisitSourceTypeDict;
+import com.jxc.wefolio.dto.MineScheduleQueryRecordRow;
 import com.jxc.wefolio.dto.MineVisitRecordPageResponse;
 import com.jxc.wefolio.dto.MineVisitRecordsResponse;
 import com.jxc.wefolio.dto.MineVisitStatisticsResponse;
 import com.jxc.wefolio.entity.ContactLeadEntity;
-import com.jxc.wefolio.entity.ScheduleQueryRecordEntity;
-import com.jxc.wefolio.entity.TeamMemberEntity;
 import com.jxc.wefolio.entity.VisitEventEntity;
 import com.jxc.wefolio.entity.VisitRecordEntity;
 import com.jxc.wefolio.entity.VisitorEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.ContactLeadEntityMapper;
 import com.jxc.wefolio.mapper.ScheduleQueryRecordEntityMapper;
-import com.jxc.wefolio.mapper.TeamMemberEntityMapper;
 import com.jxc.wefolio.mapper.VisitEventEntityMapper;
 import com.jxc.wefolio.mapper.VisitRecordEntityMapper;
 import com.jxc.wefolio.mapper.VisitorEntityMapper;
+import com.jxc.wefolio.message.MineVisitMessage;
 import com.jxc.wefolio.service.teamportfolio.component.contactform.TeamContactLeadCryptoService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -39,6 +37,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -125,6 +124,12 @@ public class MineVisitService {
     private static final Set<String> TEAM_FOLLOW_UPDATABLE_ROLES = Set.of(
             TeamRoleDict.OWNER.getCode(), TeamRoleDict.MANAGER.getCode());
 
+    /** 团队档期摘要格式。 */
+    private static final String TEAM_SCHEDULE_SUMMARY_FORMAT = "空闲 %d 人 · 部分空闲 %d 人 · 已满 %d 人";
+
+    /** 查询档期列表复合键分隔符。 */
+    private static final String SCHEDULE_QUERY_KEY_SEPARATOR = ":";
+
     /** 默认事件补充说明 */
     private static final String DEFAULT_EVENT_DETAIL_TEXT = "暂无补充信息";
 
@@ -185,11 +190,20 @@ public class MineVisitService {
     /** 联系线索 Mapper */
     private final ContactLeadEntityMapper contactLeadEntityMapper;
 
-    /** 团队成员 Mapper */
-    private final TeamMemberEntityMapper teamMemberEntityMapper;
+    /** 访问记录可见范围服务 */
+    private final MineVisitScopeService mineVisitScopeService;
 
     /** 团队联系方式加解密服务 */
     private final TeamContactLeadCryptoService teamContactLeadCryptoService;
+
+    /**
+     * 当前维护者可见的访问记录及同次请求解析出的团队范围。
+     *
+     * @param record 访问汇总实体
+     * @param scope 当前请求的完整团队范围
+     */
+    private record VisibleVisitRecord(VisitRecordEntity record, MineVisitScopeService.Scope scope) {
+    }
 
     /**
      * 获取当前维护者访问记录页数据。
@@ -198,17 +212,19 @@ public class MineVisitService {
      */
     public MineVisitRecordsResponse getVisitRecords() {
         Long userId = AuthContextHolder.requireUserId();
-        List<VisitRecordEntity> records = selectOwnerVisitRecords(userId);
-        List<VisitEventEntity> openedEvents = selectRecentOpenedEvents(userId);
+        MineVisitScopeService.Scope scope = mineVisitScopeService.resolveReadScope(userId);
+        List<VisitRecordEntity> records = selectVisibleVisitRecords(userId, scope.teamIds());
+        List<VisitEventEntity> openedEvents = selectRecentOpenedEvents(userId, scope.teamIds());
         Map<Long, VisitorEntity> visitorsById = selectVisitorsById(records);
-        long scheduleQueryCount = countOwnerScheduleQueries(userId);
-        Map<Long, String> joinedTeamRoles = selectJoinedTeamRoles(userId);
-        long contactLeadCount = countVisibleContactLeads(userId, joinedTeamRoles.keySet());
+        long scheduleQueryCount = countVisibleScheduleQueries(userId, scope.teamIds());
+        // 预留信息计数仅返回聚合数字，团队范围不可用时允许显式降级为个人计数。
+        long contactLeadCount = countVisibleContactLeads(userId, scope.teamIds());
 
         MineVisitRecordsResponse response = new MineVisitRecordsResponse();
         response.setSummary(buildSummary(records, openedEvents, scheduleQueryCount, contactLeadCount));
         response.setTrend(buildTrend(openedEvents));
-        response.setRecords(buildRecords(records, visitorsById));
+        response.setRecords(buildRecords(records, visitorsById, userId, scope));
+        applyScopeMetadata(response, scope);
         return response;
     }
 
@@ -219,16 +235,65 @@ public class MineVisitService {
      */
     public MineVisitStatisticsResponse getVisitStatistics() {
         Long userId = AuthContextHolder.requireUserId();
-        List<VisitRecordEntity> records = selectOwnerVisitRecords(userId);
-        List<VisitEventEntity> openedEvents = selectRecentOpenedEvents(userId);
-        long scheduleQueryCount = countOwnerScheduleQueries(userId);
-        Map<Long, String> joinedTeamRoles = selectJoinedTeamRoles(userId);
-        long contactLeadCount = countVisibleContactLeads(userId, joinedTeamRoles.keySet());
+        MineVisitScopeService.Scope scope = mineVisitScopeService.resolveReadScope(userId);
+        List<VisitRecordEntity> records = selectVisibleVisitRecords(userId, scope.teamIds());
+        List<VisitEventEntity> openedEvents = selectRecentOpenedEvents(userId, scope.teamIds());
+        long scheduleQueryCount = countVisibleScheduleQueries(userId, scope.teamIds());
+        // 预留信息计数仅返回聚合数字，团队范围不可用时允许显式降级为个人计数。
+        long contactLeadCount = countVisibleContactLeads(userId, scope.teamIds());
 
         MineVisitStatisticsResponse response = new MineVisitStatisticsResponse();
         response.setSummary(buildSummary(records, openedEvents, scheduleQueryCount, contactLeadCount));
         response.setTrend(buildTrend(openedEvents));
+        applyScopeMetadata(response, scope);
         return response;
+    }
+
+    /**
+     * 写入兼容聚合响应的团队范围元数据。
+     *
+     * @param response 兼容聚合响应
+     * @param scope 当前请求解析出的访问范围
+     */
+    private void applyScopeMetadata(MineVisitRecordsResponse response, MineVisitScopeService.Scope scope) {
+        response.setScopeComplete(scope.complete());
+        response.setScopeReason(scope.reason());
+    }
+
+    /**
+     * 写入统计响应的团队范围元数据。
+     *
+     * @param response 统计响应
+     * @param scope 当前请求解析出的访问范围
+     */
+    private void applyScopeMetadata(MineVisitStatisticsResponse response, MineVisitScopeService.Scope scope) {
+        response.setScopeComplete(scope.complete());
+        response.setScopeReason(scope.reason());
+    }
+
+    /**
+     * 写入访问分页响应的团队范围元数据。
+     *
+     * @param response 访问分页响应
+     * @param scope 当前请求解析出的访问范围
+     */
+    private void applyScopeMetadata(MineVisitRecordPageResponse response, MineVisitScopeService.Scope scope) {
+        response.setScopeComplete(scope.complete());
+        response.setScopeReason(scope.reason());
+    }
+
+    /**
+     * 写入查档分页响应的团队范围元数据。
+     *
+     * @param response 查档分页响应
+     * @param scope 当前请求解析出的访问范围
+     */
+    private void applyScopeMetadata(
+            MineVisitRecordsResponse.ScheduleQueryPage response,
+            MineVisitScopeService.Scope scope
+    ) {
+        response.setScopeComplete(scope.complete());
+        response.setScopeReason(scope.reason());
     }
 
     /**
@@ -240,13 +305,12 @@ public class MineVisitService {
      */
     public MineVisitRecordPageResponse getVisitRecordPage(Integer pageNo, Integer pageSize) {
         Long userId = AuthContextHolder.requireUserId();
+        MineVisitScopeService.Scope scope = mineVisitScopeService.resolveReadScope(userId);
         int normalizedPageNo = normalizeRecordPageNo(pageNo);
         int normalizedPageSize = normalizeRecordPageSize(pageSize);
         Page<VisitRecordEntity> resultPage = visitRecordEntityMapper.selectPage(
                 new Page<>(normalizedPageNo, normalizedPageSize),
-                Wrappers.lambdaQuery(VisitRecordEntity.class)
-                        .eq(VisitRecordEntity::getOwnerType, PortfolioOwnerTypeDict.USER.getCode())
-                        .eq(VisitRecordEntity::getOwnerId, userId)
+                buildVisibleVisitRecordQuery(userId, scope.teamIds())
                         .orderByDesc(VisitRecordEntity::getLastVisitedAt)
                         .orderByDesc(VisitRecordEntity::getId)
         );
@@ -257,7 +321,8 @@ public class MineVisitService {
         response.setPageNo(normalizedPageNo);
         response.setPageSize(normalizedPageSize);
         response.setHasMore(resultPage.getCurrent() < resultPage.getPages());
-        response.setRecords(buildRecordPage(records, visitorsById));
+        response.setRecords(buildRecordPage(records, visitorsById, userId, scope));
+        applyScopeMetadata(response, scope);
         return response;
     }
 
@@ -281,16 +346,17 @@ public class MineVisitService {
      */
     public MineVisitRecordsResponse.EventTimeline getVisitEvents(Long recordId, Integer pageNo, Integer pageSize) {
         Long userId = AuthContextHolder.requireUserId();
-        VisitRecordEntity record = selectOwnerVisitRecord(userId, recordId);
-        if (record == null) {
+        VisibleVisitRecord visibleRecord = selectVisibleVisitRecord(userId, recordId);
+        if (visibleRecord == null) {
             throw new BusinessException(VISIT_RECORD_NOT_FOUND_MESSAGE);
         }
+        VisitRecordEntity record = visibleRecord.record();
         int normalizedPageNo = normalizeEventPageNo(pageNo);
         int normalizedPageSize = normalizeEventPageSize(pageSize);
         VisitorEntity visitor = record.getVisitorId() == null
                 ? null
                 : visitorEntityMapper.selectById(record.getVisitorId());
-        MineVisitRecordsResponse.Record recordView = buildRecord(record, visitor);
+        MineVisitRecordsResponse.Record recordView = buildRecord(record, visitor, userId, visibleRecord.scope());
         Page<VisitEventEntity> eventPage = selectVisitEvents(record, normalizedPageNo, normalizedPageSize);
         List<VisitEventEntity> pagedEvents = eventPage.getRecords();
         boolean hasMore = eventPage.getCurrent() < eventPage.getPages();
@@ -304,6 +370,9 @@ public class MineVisitService {
         timeline.setVisitorInitial(recordView.getVisitorInitial());
         timeline.setVisitorAvatarUrl(recordView.getVisitorAvatarUrl());
         timeline.setSourceText(recordView.getSourceText());
+        timeline.setPortfolioTitle(recordView.getPortfolioTitle());
+        timeline.setPortfolioType(recordView.getPortfolioType());
+        timeline.setPortfolioTypeText(recordView.getPortfolioTypeText());
         timeline.setFollowStatusText(recordView.getFollowStatusText());
         timeline.setFollowTone(recordView.getFollowTone());
         timeline.setLastVisitedText(recordView.getLastVisitedText());
@@ -322,19 +391,29 @@ public class MineVisitService {
      */
     public MineVisitRecordsResponse.Record markVisitFollowed(Long recordId) {
         Long userId = AuthContextHolder.requireUserId();
-        VisitRecordEntity record = selectOwnerVisitRecord(userId, recordId);
-        if (record == null) {
+        VisibleVisitRecord visibleRecord = selectVisibleVisitRecord(userId, recordId);
+        if (visibleRecord == null || !canMarkVisitFollowed(visibleRecord.record(), userId, visibleRecord.scope())) {
             throw new BusinessException(VISIT_RECORD_NOT_FOUND_MESSAGE);
+        }
+        VisitRecordEntity record = visibleRecord.record();
+        if (FollowStatusDict.CONTACTED.getCode().equals(record.getFollowStatus())) {
+            return buildRecord(record, selectVisitor(record), userId, visibleRecord.scope());
+        }
+        if (!FollowStatusDict.NOT_FOLLOWED_UP.getCode().equals(record.getFollowStatus())) {
+            throw new BusinessException(MineVisitMessage.VISIT_RECORD_STATE_CHANGED_MESSAGE);
         }
         record.setFollowStatus(FollowStatusDict.CONTACTED.getCode());
         int updated = visitRecordEntityMapper.updateById(record);
         if (updated <= 0) {
-            throw new BusinessException("访问记录跟进状态保存失败");
+            VisibleVisitRecord latest = selectVisibleVisitRecord(userId, recordId);
+            if (latest != null
+                    && canMarkVisitFollowed(latest.record(), userId, latest.scope())
+                    && FollowStatusDict.CONTACTED.getCode().equals(latest.record().getFollowStatus())) {
+                return buildRecord(latest.record(), selectVisitor(latest.record()), userId, latest.scope());
+            }
+            throw new BusinessException(MineVisitMessage.VISIT_RECORD_STATE_CHANGED_MESSAGE);
         }
-        VisitorEntity visitor = record.getVisitorId() == null
-                ? null
-                : visitorEntityMapper.selectById(record.getVisitorId());
-        return buildRecord(record, visitor);
+        return buildRecord(record, selectVisitor(record), userId, visibleRecord.scope());
     }
 
     /**
@@ -346,20 +425,21 @@ public class MineVisitService {
      */
     public MineVisitRecordsResponse.ScheduleQueryPage getScheduleQueryRecords(Integer pageNo, Integer pageSize) {
         Long userId = AuthContextHolder.requireUserId();
+        MineVisitScopeService.Scope scope = mineVisitScopeService.resolveReadScope(userId);
         int normalizedPageNo = normalizeDetailPageNo(pageNo);
         int normalizedPageSize = normalizeDetailPageSize(pageSize);
-        Page<ScheduleQueryRecordEntity> resultPage = scheduleQueryRecordEntityMapper.selectPage(
-                new Page<>(normalizedPageNo, normalizedPageSize),
-                Wrappers.lambdaQuery(ScheduleQueryRecordEntity.class)
-                        .eq(ScheduleQueryRecordEntity::getOwnerType, PortfolioOwnerTypeDict.USER.getCode())
-                        .eq(ScheduleQueryRecordEntity::getOwnerId, userId)
-                        .eq(ScheduleQueryRecordEntity::getPortfolioType, PortfolioTypeDict.PERSONAL.getCode())
-                        .orderByDesc(ScheduleQueryRecordEntity::getQueriedAt)
-                        .orderByDesc(ScheduleQueryRecordEntity::getId)
-        );
-        List<ScheduleQueryRecordEntity> records = resultPage.getRecords();
+        long offset = (long) (normalizedPageNo - FIRST_DETAIL_PAGE_NO) * normalizedPageSize;
+        int resultLimit = normalizedPageSize + 1;
+        long candidateLimit = offset + resultLimit;
+        List<MineScheduleQueryRecordRow> candidates = scheduleQueryRecordEntityMapper.selectVisibleRecords(
+                userId, scope.teamIds(), candidateLimit, offset, resultLimit);
+        List<MineScheduleQueryRecordRow> safeCandidates = candidates == null ? List.of() : candidates;
+        boolean hasMore = safeCandidates.size() > normalizedPageSize;
+        List<MineScheduleQueryRecordRow> records = hasMore
+                ? safeCandidates.subList(0, normalizedPageSize)
+                : safeCandidates;
         Map<Long, VisitorEntity> visitorsById = selectVisitorsByIds(records.stream()
-                .map(ScheduleQueryRecordEntity::getVisitorId)
+                .map(MineScheduleQueryRecordRow::getVisitorId)
                 .filter(Objects::nonNull)
                 .distinct()
                 .toList());
@@ -367,10 +447,11 @@ public class MineVisitService {
         MineVisitRecordsResponse.ScheduleQueryPage response = new MineVisitRecordsResponse.ScheduleQueryPage();
         response.setPageNo(normalizedPageNo);
         response.setPageSize(normalizedPageSize);
-        response.setHasMore(resultPage.getCurrent() < resultPage.getPages());
+        response.setHasMore(hasMore);
         response.setItems(records.stream()
                 .map(record -> buildScheduleQueryItem(record, visitorsById.get(record.getVisitorId())))
                 .toList());
+        applyScopeMetadata(response, scope);
         return response;
     }
 
@@ -383,12 +464,13 @@ public class MineVisitService {
      */
     public MineVisitRecordsResponse.ContactLeadPage getContactLeads(Integer pageNo, Integer pageSize) {
         Long userId = AuthContextHolder.requireUserId();
-        Map<Long, String> joinedTeamRoles = selectJoinedTeamRoles(userId);
+        // 列表含手机号、微信号等敏感字段，必须确认完整团队范围，不能返回无法确认授权的部分数据。
+        MineVisitScopeService.Scope scope = mineVisitScopeService.requireScope(userId);
         int normalizedPageNo = normalizeDetailPageNo(pageNo);
         int normalizedPageSize = normalizeDetailPageSize(pageSize);
         Page<ContactLeadEntity> resultPage = contactLeadEntityMapper.selectPage(
                 new Page<>(normalizedPageNo, normalizedPageSize),
-                buildVisibleContactLeadQuery(userId, joinedTeamRoles.keySet())
+                buildVisibleContactLeadQuery(userId, scope.teamIds())
                         .orderByDesc(ContactLeadEntity::getSubmittedAt)
                         .orderByDesc(ContactLeadEntity::getId)
         );
@@ -398,7 +480,7 @@ public class MineVisitService {
         response.setPageSize(normalizedPageSize);
         response.setHasMore(resultPage.getCurrent() < resultPage.getPages());
         response.setItems(resultPage.getRecords().stream()
-                .map(lead -> buildContactLeadItem(lead, joinedTeamRoles))
+                .map(lead -> buildContactLeadItem(lead, scope.teamRoles()))
                 .toList());
         return response;
     }
@@ -412,9 +494,9 @@ public class MineVisitService {
     @Transactional(rollbackFor = Exception.class)
     public MineVisitRecordsResponse.ContactLeadItem markContactLeadFollowed(Long leadId) {
         Long userId = AuthContextHolder.requireUserId();
-        Map<Long, String> joinedTeamRoles = selectJoinedTeamRoles(userId);
-        ContactLeadEntity lead = selectVisibleContactLead(userId, leadId, joinedTeamRoles.keySet());
-        if (lead == null || !canMarkContactLeadFollowed(lead, userId, joinedTeamRoles)) {
+        MineVisitScopeService.Scope scope = mineVisitScopeService.requireScope(userId);
+        ContactLeadEntity lead = selectVisibleContactLead(userId, leadId, scope.teamIds());
+        if (lead == null || !canMarkContactLeadFollowed(lead, userId, scope.teamRoles())) {
             throw new BusinessException(CONTACT_LEAD_NOT_FOUND_MESSAGE);
         }
         lead.setFollowStatus(FollowStatusDict.CONTACTED.getCode());
@@ -422,75 +504,92 @@ public class MineVisitService {
         if (updated <= 0) {
             throw new BusinessException(CONTACT_LEAD_FOLLOW_SAVE_FAILED_MESSAGE);
         }
-        return buildContactLeadItem(lead, joinedTeamRoles);
+        return buildContactLeadItem(lead, scope.teamRoles());
     }
 
     /**
-     * 查询当前维护者名下访问汇总。
+     * 查询当前维护者可见的个人与团队访问汇总。
      *
      * @param userId 当前用户 ID
+     * @param teamIds 已加入团队 ID
      * @return 访问汇总列表
      */
-    private List<VisitRecordEntity> selectOwnerVisitRecords(Long userId) {
+    private List<VisitRecordEntity> selectVisibleVisitRecords(Long userId, Collection<Long> teamIds) {
         return visitRecordEntityMapper.selectList(
-                Wrappers.lambdaQuery(VisitRecordEntity.class)
-                        .eq(VisitRecordEntity::getOwnerType, PortfolioOwnerTypeDict.USER.getCode())
-                        .eq(VisitRecordEntity::getOwnerId, userId)
+                buildVisibleVisitRecordQuery(userId, teamIds)
                         .orderByDesc(VisitRecordEntity::getLastVisitedAt)
+                        .orderByDesc(VisitRecordEntity::getId)
         );
     }
 
     /**
-     * 统计当前维护者个人作品集查询档期次数。
+     * 统计当前维护者可见的个人与团队查询档期次数。
      *
      * @param userId 当前用户 ID
+     * @param teamIds 当前用户已加入的团队 ID
      * @return 查询档期次数
      */
-    private long countOwnerScheduleQueries(Long userId) {
-        return safeLong(scheduleQueryRecordEntityMapper.selectCount(
-                Wrappers.lambdaQuery(ScheduleQueryRecordEntity.class)
-                        .eq(ScheduleQueryRecordEntity::getOwnerType, PortfolioOwnerTypeDict.USER.getCode())
-                        .eq(ScheduleQueryRecordEntity::getOwnerId, userId)
-                        .eq(ScheduleQueryRecordEntity::getPortfolioType, PortfolioTypeDict.PERSONAL.getCode())
-        ));
+    private long countVisibleScheduleQueries(Long userId, List<Long> teamIds) {
+        return safeLong(scheduleQueryRecordEntityMapper.countVisibleRecords(userId, teamIds));
     }
 
     /**
      * 统计当前维护者预留信息次数。
      *
      * @param userId 当前用户 ID
+     * @param teamIds 已加入团队 ID
      * @return 预留信息次数
      */
-    private long countVisibleContactLeads(Long userId, Set<Long> teamIds) {
+    private long countVisibleContactLeads(Long userId, Collection<Long> teamIds) {
         return safeLong(contactLeadEntityMapper.selectCount(
                 buildVisibleContactLeadQuery(userId, teamIds)
         ));
     }
 
     /**
-     * 查询当前用户已加入团队及其角色。
+     * 构建本人及已加入团队的访问汇总查询范围。
      *
      * @param userId 当前用户 ID
-     * @return 团队 ID 到角色编码的映射
+     * @param teamIds 已加入团队 ID
+     * @return 访问汇总查询条件
      */
-    private Map<Long, String> selectJoinedTeamRoles(Long userId) {
-        List<TeamMemberEntity> memberships = teamMemberEntityMapper.selectList(
-                Wrappers.lambdaQuery(TeamMemberEntity.class)
-                        .eq(TeamMemberEntity::getUserId, userId)
-                        .eq(TeamMemberEntity::getJoinStatus, JoinStatusDict.JOINED.getCode())
-        );
-        if (memberships == null || memberships.isEmpty()) {
-            return Map.of();
-        }
-        return memberships.stream()
-                .filter(Objects::nonNull)
-                .filter(membership -> membership.getTeamId() != null)
-                .filter(membership -> JoinStatusDict.JOINED.getCode().equals(membership.getJoinStatus()))
-                .collect(Collectors.toMap(
-                        TeamMemberEntity::getTeamId,
-                        membership -> defaultString(membership.getRole(), ""),
-                        (firstRole, ignoredRole) -> firstRole
-                ));
+    private LambdaQueryWrapper<VisitRecordEntity> buildVisibleVisitRecordQuery(
+            Long userId,
+            Collection<Long> teamIds
+    ) {
+        LambdaQueryWrapper<VisitRecordEntity> query = Wrappers.lambdaQuery(VisitRecordEntity.class);
+        return query.and(scope -> {
+            scope.eq(VisitRecordEntity::getOwnerType, PortfolioOwnerTypeDict.USER.getCode())
+                    .eq(VisitRecordEntity::getOwnerId, userId);
+            if (teamIds != null && !teamIds.isEmpty()) {
+                scope.or(teamScope -> teamScope
+                        .eq(VisitRecordEntity::getOwnerType, PortfolioOwnerTypeDict.TEAM.getCode())
+                        .in(VisitRecordEntity::getOwnerId, teamIds));
+            }
+        });
+    }
+
+    /**
+     * 构建本人及已加入团队的访问事件查询范围。
+     *
+     * @param userId 当前用户 ID
+     * @param teamIds 已加入团队 ID
+     * @return 访问事件查询条件
+     */
+    private LambdaQueryWrapper<VisitEventEntity> buildVisibleVisitEventQuery(
+            Long userId,
+            Collection<Long> teamIds
+    ) {
+        LambdaQueryWrapper<VisitEventEntity> query = Wrappers.lambdaQuery(VisitEventEntity.class);
+        return query.and(scope -> {
+            scope.eq(VisitEventEntity::getOwnerType, PortfolioOwnerTypeDict.USER.getCode())
+                    .eq(VisitEventEntity::getOwnerId, userId);
+            if (teamIds != null && !teamIds.isEmpty()) {
+                scope.or(teamScope -> teamScope
+                        .eq(VisitEventEntity::getOwnerType, PortfolioOwnerTypeDict.TEAM.getCode())
+                        .in(VisitEventEntity::getOwnerId, teamIds));
+            }
+        });
     }
 
     /**
@@ -500,7 +599,10 @@ public class MineVisitService {
      * @param teamIds 已加入团队 ID
      * @return 联系线索查询条件
      */
-    private LambdaQueryWrapper<ContactLeadEntity> buildVisibleContactLeadQuery(Long userId, Set<Long> teamIds) {
+    private LambdaQueryWrapper<ContactLeadEntity> buildVisibleContactLeadQuery(
+            Long userId,
+            Collection<Long> teamIds
+    ) {
         LambdaQueryWrapper<ContactLeadEntity> query = Wrappers.lambdaQuery(ContactLeadEntity.class);
         return query.and(scope -> {
             scope.eq(ContactLeadEntity::getOwnerType, PortfolioOwnerTypeDict.USER.getCode())
@@ -514,13 +616,30 @@ public class MineVisitService {
     }
 
     /**
-     * 查询当前维护者名下单条访问汇总。
+     * 优先查询本人访问记录；个人记录不存在时强制解析完整团队范围再查询团队记录。
      *
      * @param userId 当前用户 ID
      * @param recordId 访问汇总记录 ID
-     * @return 访问汇总
+     * @return 可见访问记录及同次请求解析出的团队范围，不可见时返回 null
      */
-    private VisitRecordEntity selectOwnerVisitRecord(Long userId, Long recordId) {
+    private VisibleVisitRecord selectVisibleVisitRecord(Long userId, Long recordId) {
+        VisitRecordEntity personal = selectPersonalVisitRecord(userId, recordId);
+        if (personal != null) {
+            return new VisibleVisitRecord(personal, MineVisitScopeService.Scope.complete(Map.of()));
+        }
+        MineVisitScopeService.Scope scope = mineVisitScopeService.requireScope(userId);
+        VisitRecordEntity team = selectTeamVisitRecord(recordId, scope.teamIds());
+        return team == null ? null : new VisibleVisitRecord(team, scope);
+    }
+
+    /**
+     * 查询当前维护者本人的单条访问汇总。
+     *
+     * @param userId 当前用户 ID
+     * @param recordId 访问汇总记录 ID
+     * @return 本人访问汇总
+     */
+    private VisitRecordEntity selectPersonalVisitRecord(Long userId, Long recordId) {
         if (recordId == null) {
             return null;
         }
@@ -534,13 +653,37 @@ public class MineVisitService {
     }
 
     /**
+     * 查询已加入团队范围内的单条访问汇总。
+     *
+     * @param recordId 访问汇总记录 ID
+     * @param teamIds 已加入团队 ID
+     * @return 团队访问汇总，不在范围内时返回 null
+     */
+    private VisitRecordEntity selectTeamVisitRecord(Long recordId, Collection<Long> teamIds) {
+        if (recordId == null || teamIds == null || teamIds.isEmpty()) {
+            return null;
+        }
+        return visitRecordEntityMapper.selectOne(
+                Wrappers.lambdaQuery(VisitRecordEntity.class)
+                        .eq(VisitRecordEntity::getId, recordId)
+                        .eq(VisitRecordEntity::getOwnerType, PortfolioOwnerTypeDict.TEAM.getCode())
+                        .in(VisitRecordEntity::getOwnerId, teamIds)
+                        .last(SQL_SINGLE_LIMIT_CLAUSE)
+        );
+    }
+
+    /**
      * 查询当前维护者名下单条预留信息。
      *
      * @param userId 当前用户 ID
      * @param leadId 预留信息 ID
      * @return 预留信息
      */
-    private ContactLeadEntity selectVisibleContactLead(Long userId, Long leadId, Set<Long> teamIds) {
+    private ContactLeadEntity selectVisibleContactLead(
+            Long userId,
+            Long leadId,
+            Collection<Long> teamIds
+    ) {
         if (leadId == null) {
             return null;
         }
@@ -654,16 +797,15 @@ public class MineVisitService {
      * 查询近 7 日作品集打开事件。
      *
      * @param userId 当前用户 ID
+     * @param teamIds 已加入团队 ID
      * @return 打开事件列表
      */
-    private List<VisitEventEntity> selectRecentOpenedEvents(Long userId) {
+    private List<VisitEventEntity> selectRecentOpenedEvents(Long userId, Collection<Long> teamIds) {
         LocalDate today = LocalDate.now();
         LocalDateTime start = today.minusDays(TREND_DAYS - 1L).atStartOfDay();
         LocalDateTime end = today.plusDays(1).atStartOfDay();
         return visitEventEntityMapper.selectList(
-                Wrappers.lambdaQuery(VisitEventEntity.class)
-                        .eq(VisitEventEntity::getOwnerType, PortfolioOwnerTypeDict.USER.getCode())
-                        .eq(VisitEventEntity::getOwnerId, userId)
+                buildVisibleVisitEventQuery(userId, teamIds)
                         .eq(VisitEventEntity::getEventType, VisitEventTypeDict.PORTFOLIO_OPENED.getCode())
                         .ge(VisitEventEntity::getOccurredAt, start)
                         .lt(VisitEventEntity::getOccurredAt, end)
@@ -735,17 +877,26 @@ public class MineVisitService {
      * 构建最近访问明细。
      *
      * @param records 访问汇总
+     * @param visitorsById 访客 ID 到访客资料的映射
+     * @param userId 当前用户 ID
+     * @param scope 当前请求解析出的访问范围
      * @return 明细列表
      */
     private List<MineVisitRecordsResponse.Record> buildRecords(
             List<VisitRecordEntity> records,
-            Map<Long, VisitorEntity> visitorsById
+            Map<Long, VisitorEntity> visitorsById,
+            Long userId,
+            MineVisitScopeService.Scope scope
     ) {
         return records.stream()
                 .sorted(Comparator.comparing(VisitRecordEntity::getLastVisitedAt,
                         Comparator.nullsLast(Comparator.reverseOrder())))
                 .limit(RECORD_LIMIT)
-                .map(record -> buildRecord(record, record.getVisitorId() == null ? null : visitorsById.get(record.getVisitorId())))
+                .map(record -> buildRecord(
+                        record,
+                        record.getVisitorId() == null ? null : visitorsById.get(record.getVisitorId()),
+                        userId,
+                        scope))
                 .toList();
     }
 
@@ -754,15 +905,22 @@ public class MineVisitService {
      *
      * @param records 当前页访问汇总
      * @param visitorsById 访客 ID 到访客资料的映射
+     * @param userId 当前用户 ID
+     * @param scope 当前请求解析出的访问范围
      * @return 当前页访问明细
      */
     private List<MineVisitRecordsResponse.Record> buildRecordPage(
             List<VisitRecordEntity> records,
-            Map<Long, VisitorEntity> visitorsById
+            Map<Long, VisitorEntity> visitorsById,
+            Long userId,
+            MineVisitScopeService.Scope scope
     ) {
         return records.stream()
-                .map(record -> buildRecord(record,
-                        record.getVisitorId() == null ? null : visitorsById.get(record.getVisitorId())))
+                .map(record -> buildRecord(
+                        record,
+                        record.getVisitorId() == null ? null : visitorsById.get(record.getVisitorId()),
+                        userId,
+                        scope))
                 .toList();
     }
 
@@ -770,11 +928,22 @@ public class MineVisitService {
      * 构建单条访问明细。
      *
      * @param record 访问汇总实体
+     * @param visitor 访客资料
+     * @param userId 当前用户 ID
+     * @param scope 当前请求解析出的访问范围
      * @return 访问明细 DTO
      */
-    private MineVisitRecordsResponse.Record buildRecord(VisitRecordEntity record, VisitorEntity visitor) {
+    private MineVisitRecordsResponse.Record buildRecord(
+            VisitRecordEntity record,
+            VisitorEntity visitor,
+            Long userId,
+            MineVisitScopeService.Scope scope
+    ) {
         String visitorCode = buildVisitorCode(record.getVisitorKey());
         String followStatus = defaultString(record.getFollowStatus(), FollowStatusDict.NOT_FOLLOWED_UP.getCode());
+        String portfolioType = PortfolioTypeDict.TEAM.getCode().equals(record.getPortfolioType())
+                ? PortfolioTypeDict.TEAM.getCode()
+                : PortfolioTypeDict.PERSONAL.getCode();
         MineVisitRecordsResponse.Record item = new MineVisitRecordsResponse.Record();
         item.setId(record.getId());
         item.setVisitorCode(visitorCode);
@@ -782,12 +951,50 @@ public class MineVisitService {
         item.setVisitorInitial(visitorCode.substring(0, 1));
         item.setVisitorAvatarUrl(resolveVisitorAvatarUrl(visitor));
         item.setSourceText(buildSourceText(record));
+        item.setPortfolioTitle(normalizeSnapshotTitle(record.getPortfolioTitleSnapshot()));
+        item.setPortfolioType(portfolioType);
+        item.setPortfolioTypeText(PortfolioTypeDict.TEAM.getCode().equals(portfolioType)
+                ? TEAM_PORTFOLIO_TYPE_TEXT
+                : PERSONAL_PORTFOLIO_TYPE_TEXT);
+        item.setCanMarkFollowed(canMarkVisitFollowed(record, userId, scope));
         item.setSummaryText(buildSummaryText(record));
         item.setFollowStatus(followStatus);
         item.setFollowStatusText(buildFollowStatusText(followStatus));
         item.setFollowTone(buildFollowTone(followStatus));
         item.setLastVisitedText(buildLastVisitedText(record.getLastVisitedAt()));
         return item;
+    }
+
+    /**
+     * 规范化作品集标题快照。
+     *
+     * @param titleSnapshot 标题快照
+     * @return 去除首尾空白的标题，缺失或空白时返回空字符串
+     */
+    private String normalizeSnapshotTitle(String titleSnapshot) {
+        return titleSnapshot == null ? "" : titleSnapshot.strip();
+    }
+
+    /**
+     * 判断当前维护者是否可以标记访问记录已跟进。
+     *
+     * @param record 访问汇总实体
+     * @param userId 当前用户 ID
+     * @param scope 当前请求解析出的访问范围
+     * @return 个人记录属于本人，或团队记录具备管理权限时为 true
+     */
+    private boolean canMarkVisitFollowed(
+            VisitRecordEntity record,
+            Long userId,
+            MineVisitScopeService.Scope scope
+    ) {
+        if (PortfolioOwnerTypeDict.USER.getCode().equals(record.getOwnerType())) {
+            return Objects.equals(userId, record.getOwnerId());
+        }
+        if (!PortfolioOwnerTypeDict.TEAM.getCode().equals(record.getOwnerType())) {
+            return false;
+        }
+        return scope.canManageTeam(record.getOwnerId());
     }
 
     /**
@@ -812,23 +1019,28 @@ public class MineVisitService {
     /**
      * 构建查询档期明细项。
      *
-     * @param record 查询档期记录
+     * @param record 统一查询档期记录
      * @param visitor 访客资料
      * @return 查询档期明细项
      */
     private MineVisitRecordsResponse.ScheduleQueryItem buildScheduleQueryItem(
-            ScheduleQueryRecordEntity record,
+            MineScheduleQueryRecordRow record,
             VisitorEntity visitor
     ) {
+        String recordType = defaultString(record.getRecordType(), PortfolioTypeDict.PERSONAL.getCode());
+        boolean teamRecord = PortfolioTypeDict.TEAM.getCode().equals(recordType);
         String visitorCode = buildVisitorCode(record.getVisitorKey());
         MineVisitRecordsResponse.ScheduleQueryItem item = new MineVisitRecordsResponse.ScheduleQueryItem();
-        item.setId(record.getId());
+        item.setId(record.getSourceRecordId());
+        item.setRecordType(recordType);
+        item.setSourceRecordId(record.getSourceRecordId());
+        item.setScheduleQueryKey(recordType + SCHEDULE_QUERY_KEY_SEPARATOR + record.getSourceRecordId());
         item.setVisitorLabel(resolveVisitorLabel(visitor, visitorCode));
         item.setVisitorAvatarUrl(resolveVisitorAvatarUrl(visitor));
         item.setVisitorInitial(visitorCode.substring(0, 1));
         item.setPortfolioTitle(defaultString(record.getPortfolioTitleSnapshot(), ""));
         item.setQueriedDateText(record.getQueriedDate() == null ? "" : record.getQueriedDate().format(DATE_FORMATTER));
-        item.setSlotText(buildSlotText(record));
+        item.setSlotText(teamRecord ? buildTeamScheduleSummary(record) : buildSlotText(record));
         item.setResultStatus(defaultString(record.getResultStatus(), ""));
         item.setResultStatusText(defaultString(record.getResultStatusText(), ""));
         item.setAvailable(safeInt(record.getAvailable()) == 1);
@@ -836,6 +1048,19 @@ public class MineVisitService {
         item.setSourceText(buildSourceText(record.getSourceType(), ""));
         item.setCreatedTimeText(formatDetailTime(record.getQueriedAt()));
         return item;
+    }
+
+    /**
+     * 构建团队成员档期摘要。
+     *
+     * @param record 团队查档投影
+     * @return 团队档期摘要
+     */
+    private String buildTeamScheduleSummary(MineScheduleQueryRecordRow record) {
+        return TEAM_SCHEDULE_SUMMARY_FORMAT.formatted(
+                safeInt(record.getAvailableMemberCount()),
+                safeInt(record.getPartialAvailableMemberCount()),
+                safeInt(record.getFullMemberCount()));
     }
 
     /**
@@ -1092,6 +1317,16 @@ public class MineVisitService {
     }
 
     /**
+     * 查询单条访问记录关联的访客资料。
+     *
+     * @param record 访问汇总实体
+     * @return 访客资料，记录未关联访客时返回 null
+     */
+    private VisitorEntity selectVisitor(VisitRecordEntity record) {
+        return record.getVisitorId() == null ? null : visitorEntityMapper.selectById(record.getVisitorId());
+    }
+
+    /**
      * 批量查询访客资料。
      *
      * @param records 访问汇总
@@ -1216,10 +1451,10 @@ public class MineVisitService {
     /**
      * 构建档位与时间文案。
      *
-     * @param record 查询档期记录
+     * @param record 个人查询档期记录
      * @return 档位与时间文案
      */
-    private String buildSlotText(ScheduleQueryRecordEntity record) {
+    private String buildSlotText(MineScheduleQueryRecordRow record) {
         String slotName = defaultString(record.getSlotNameSnapshot(), "");
         String startTime = formatTime(record.getStartTimeSnapshot());
         String endTime = formatTime(record.getEndTimeSnapshot());

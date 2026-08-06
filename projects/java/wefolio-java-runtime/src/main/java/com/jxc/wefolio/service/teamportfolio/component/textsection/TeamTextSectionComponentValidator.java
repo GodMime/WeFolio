@@ -2,7 +2,11 @@ package com.jxc.wefolio.service.teamportfolio.component.textsection;
 
 import com.alibaba.fastjson2.JSONObject;
 import com.alibaba.fastjson2.JSON;
+import com.jxc.wefolio.common.PortfolioTextTypographySupport;
+import com.jxc.wefolio.constant.PortfolioTextTypographyConstants;
+import com.jxc.wefolio.dict.PortfolioTextFontFamilyDict;
 import com.jxc.wefolio.exception.BusinessException;
+import com.jxc.wefolio.message.PortfolioMessage;
 import com.jxc.wefolio.service.teamportfolio.TeamPortfolioComponentContext;
 import org.springframework.stereotype.Component;
 
@@ -46,44 +50,53 @@ public class TeamTextSectionComponentValidator {
      * @return 规范化文字说明配置
      */
     public JSONObject normalizeAndValidate(JSONObject config, TeamPortfolioComponentContext context) {
-        TeamTextSectionComponentConfig componentConfig = toComponentConfig(config);
-        String content = componentConfig.getContent();
+        JSONObject source = config == null ? new JSONObject() : config;
+        Object contentSource = source.get(CONFIG_KEY_CONTENT);
+        if (contentSource != null && !(contentSource instanceof String)) {
+            throw new BusinessException(CONTENT_REQUIRED_MESSAGE);
+        }
+        String content = (String) contentSource;
         if (content == null || content.trim().isEmpty()) {
             throw new BusinessException(CONTENT_REQUIRED_MESSAGE);
         }
         if (content.codePointCount(0, content.length()) > CONTENT_MAX_CODE_POINT_COUNT) {
             throw new BusinessException(CONTENT_TOO_LONG_MESSAGE);
         }
-        String alignment = componentConfig.getAlignment() == null ? DEFAULT_ALIGNMENT : componentConfig.getAlignment();
+        Object alignmentSource = source.get(CONFIG_KEY_ALIGNMENT);
+        if (alignmentSource != null && !(alignmentSource instanceof String)) {
+            throw new BusinessException(ALIGNMENT_UNSUPPORTED_MESSAGE);
+        }
+        String alignment = alignmentSource == null ? DEFAULT_ALIGNMENT : (String) alignmentSource;
         if (!SUPPORTED_ALIGNMENTS.contains(alignment)) {
             throw new BusinessException(ALIGNMENT_UNSUPPORTED_MESSAGE);
         }
+        Object fontFamilySource = source.get(PortfolioTextTypographySupport.FONT_FAMILY_CONFIG_KEY);
+        if (fontFamilySource != null && !(fontFamilySource instanceof String)) {
+            throw new BusinessException(PortfolioMessage.TEXT_SECTION_FONT_UNSUPPORTED_MESSAGE);
+        }
+        String fontFamily = fontFamilySource == null
+                ? PortfolioTextFontFamilyDict.SYSTEM.getCode()
+                : PortfolioTextTypographySupport.asSupportedFontFamily(fontFamilySource);
+        if (fontFamily == null) {
+            throw new BusinessException(PortfolioMessage.TEXT_SECTION_FONT_UNSUPPORTED_MESSAGE);
+        }
+        Object fontSizeSource = source.get(PortfolioTextTypographySupport.FONT_SIZE_RPX_CONFIG_KEY);
+        if (fontSizeSource != null && !(fontSizeSource instanceof Number)) {
+            throw new BusinessException(PortfolioMessage.TEXT_SECTION_FONT_SIZE_INVALID_MESSAGE);
+        }
+        Integer fontSizeRpx = fontSizeSource == null
+                ? Integer.valueOf(PortfolioTextTypographyConstants.LEGACY_TEAM_FONT_SIZE_RPX)
+                : PortfolioTextTypographySupport.asExactFontSizeRpx(fontSizeSource);
+        if (!PortfolioTextTypographySupport.isValidFontSizeRpx(fontSizeRpx)) {
+            throw new BusinessException(PortfolioMessage.TEXT_SECTION_FONT_SIZE_INVALID_MESSAGE);
+        }
+
+        TeamTextSectionComponentConfig componentConfig = new TeamTextSectionComponentConfig();
+        componentConfig.setContent(content);
         componentConfig.setAlignment(alignment);
+        componentConfig.setFontFamily(fontFamily);
+        componentConfig.setFontSizeRpx(fontSizeRpx);
         return JSON.parseObject(JSON.toJSONString(componentConfig));
     }
 
-    /**
-     * 将客户端 JSON 转换为文字说明配置模型。
-     *
-     * @param config 原始配置
-     * @return 文字说明配置模型
-     */
-    private TeamTextSectionComponentConfig toComponentConfig(JSONObject config) {
-        if (config == null) {
-            return new TeamTextSectionComponentConfig();
-        }
-        Object content = config.get(CONFIG_KEY_CONTENT);
-        if (content != null && !(content instanceof String)) {
-            throw new BusinessException(CONTENT_REQUIRED_MESSAGE);
-        }
-        Object alignment = config.get(CONFIG_KEY_ALIGNMENT);
-        if (alignment != null && !(alignment instanceof String)) {
-            throw new BusinessException(ALIGNMENT_UNSUPPORTED_MESSAGE);
-        }
-        try {
-            return config.toJavaObject(TeamTextSectionComponentConfig.class);
-        } catch (RuntimeException exception) {
-            throw new BusinessException(CONTENT_REQUIRED_MESSAGE);
-        }
-    }
 }

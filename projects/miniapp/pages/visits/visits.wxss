@@ -182,6 +182,16 @@
   padding-bottom: 12rpx;
 }
 
+.visit-scope-warning {
+  margin: 0 0 20rpx;
+  padding: 18rpx 22rpx;
+  color: #6c757d;
+  background: #ffffff;
+  border: 1rpx solid #e9ecef;
+  border-radius: 24rpx;
+  font-size: 24rpx;
+}
+
 .visit-list {
   margin-top: 10rpx;
 }
@@ -322,6 +332,26 @@
 .visit-copy {
   flex: 1;
   min-width: 0;
+}
+
+.visit-portfolio-row {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  min-width: 0;
+}
+
+.visit-portfolio-title {
+  overflow: hidden;
+  color: #495057;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.visit-portfolio-type {
+  flex: none;
+  color: #868e96;
+  font-size: 22rpx;
 }
 
 .visitor-name {
@@ -590,18 +620,17 @@
 }
 
 .detail-status {
-  max-width: 148rpx;
+  max-width: 180rpx;
   flex: none;
   display: flex;
   align-items: center;
   gap: 8rpx;
-  overflow: hidden;
+  overflow: visible;
   padding: 0;
   font-size: 22rpx;
   font-weight: 800;
   line-height: 1;
   text-align: center;
-  text-overflow: ellipsis;
   white-space: nowrap;
   border: 0;
   background: transparent;

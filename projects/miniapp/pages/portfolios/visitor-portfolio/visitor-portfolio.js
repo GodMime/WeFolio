@@ -20,8 +20,10 @@ const {
   switchPortfolioMenu
 } = require('../../../utils/visitor-portfolio')
 const { uploadVisitorAvatarProfile } = require('../utils/visitor-profile')
+const { createClipboardPromptController } = require('../utils/portfolio-hyperlink')
 const { request } = require('../../../utils/request')
 const {
+  SOURCE_TYPE_PERSONAL_PORTFOLIO,
   SOURCE_TYPE_WECHAT_SHARE_CARD,
   openVisitorSession,
   requestWithVisitorSessionRefresh
@@ -96,7 +98,9 @@ Page({
     displaySwitchingComponentKey: '',
     portfolioMenuSwitching: false,
     portfolioMenuTransitionClass: '',
-    portfolioScrollTop: 0
+    portfolioScrollTop: 0,
+    clipboardPromptVisible: false,
+    clipboardPromptText: ''
   },
 
   onLoad(options = {}) {
@@ -105,6 +109,9 @@ Page({
     const shareCode = options.shareCode || options.scene || ''
     const showNavigationBack = hasPreviousPage()
     const timelineGuideRequested = options.shareGuide === TIMELINE_SHARE_GUIDE_VALUE
+    this.visitorSourceType = options.sourceType === SOURCE_TYPE_PERSONAL_PORTFOLIO
+      ? SOURCE_TYPE_PERSONAL_PORTFOLIO
+      : SOURCE_TYPE_WECHAT_SHARE_CARD
     this.anonymousSessionId = isWechatTimelineSinglePage()
       ? createAnonymousSessionId()
       : ''
@@ -129,7 +136,7 @@ Page({
     }
     try {
       const response = await openVisitorSession(this.data.shareCode, {
-        sourceType: SOURCE_TYPE_WECHAT_SHARE_CARD,
+        sourceType: this.visitorSourceType,
         anonymousSessionId: this.anonymousSessionId
       })
       this.applyVisitorOpenResponse(response)
@@ -157,7 +164,7 @@ Page({
   requestWithVisitorRefresh(requestOptions) {
     return requestWithVisitorSessionRefresh(requestOptions, {
       shareCode: this.data.shareCode,
-      sourceType: SOURCE_TYPE_WECHAT_SHARE_CARD,
+      sourceType: this.visitorSourceType,
       anonymousSessionId: this.anonymousSessionId,
       onRefresh: (response) => this.applyVisitorOpenResponse(response)
     })
@@ -188,7 +195,7 @@ Page({
       data: buildContactLeadPayload(this.data.contactForm, {
         visitorKey: this.data.visitorKey,
         visitRecordId: this.data.portfolio.visitRecordId,
-        sourceType: SOURCE_TYPE_WECHAT_SHARE_CARD,
+        sourceType: this.visitorSourceType,
         idempotencyKey: idempotencyKey('lead')
       })
     }).then(() => {
@@ -228,6 +235,51 @@ Page({
     }
     wx.previewImage({ current: url, urls: [url] })
     return this.recordQrEvent()
+  },
+
+  ensureClipboardPromptController() {
+    if (!this.clipboardPromptController) {
+      this.clipboardPromptController = createClipboardPromptController({
+        onChange: (state) => {
+          this.setData({
+            clipboardPromptVisible: state.visible,
+            clipboardPromptText: state.text
+          })
+        }
+      })
+    }
+    return this.clipboardPromptController
+  },
+
+  handleHyperlinkTap(event) {
+    const hyperlink = readPortfolioRenderEventData(event)
+    if (hyperlink.actionType === 'INTERNAL_PORTFOLIO') {
+      if (!hyperlink.targetAvailable || !hyperlink.targetShareCode) {
+        wx.showToast({ title: '内容暂不可见', icon: 'none' })
+        return Promise.resolve(false)
+      }
+      wx.navigateTo({
+        url: `/pages/portfolios/visitor-portfolio/visitor-portfolio?shareCode=${encodeURIComponent(hyperlink.targetShareCode)}&sourceType=${SOURCE_TYPE_PERSONAL_PORTFOLIO}`
+      })
+      return Promise.resolve(true)
+    }
+    if (hyperlink.actionType !== 'EXTERNAL_LINK' || typeof hyperlink.externalContent !== 'string' || !hyperlink.externalContent) {
+      wx.showToast({ title: '内容暂不可见', icon: 'none' })
+      return Promise.resolve(false)
+    }
+    return new Promise((resolve) => {
+      wx.setClipboardData({
+        data: hyperlink.externalContent,
+        success: () => {
+          this.ensureClipboardPromptController().copied(hyperlink.promptText)
+          resolve(true)
+        },
+        fail: () => {
+          wx.showToast({ title: '复制失败，请重试', icon: 'none' })
+          resolve(false)
+        }
+      })
+    })
   },
 
   recordQrEvent() {
@@ -287,16 +339,26 @@ Page({
     clearPortfolioMenuTransitionTimers(this)
     clearDisplaySwitchingTimer(this)
     this.stopActiveSingleWorkVideo()
+    if (this.clipboardPromptController) {
+      this.clipboardPromptController.dispose()
+      this.clipboardPromptController = null
+    }
   },
 
   onHide() {
     this.singleWorkPageVisible = false
     this.invalidateSingleWorkInteraction()
     this.stopActiveSingleWorkVideo()
+    if (this.clipboardPromptController) {
+      this.clipboardPromptController.pause()
+    }
   },
 
   onShow() {
     this.singleWorkPageVisible = true
+    if (this.clipboardPromptController) {
+      this.clipboardPromptController.resume()
+    }
   },
 
   onShareAppMessage() {

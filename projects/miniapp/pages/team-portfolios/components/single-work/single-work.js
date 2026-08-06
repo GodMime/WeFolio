@@ -19,9 +19,24 @@ function validateSingleWorkConfig(config = {}) {
   return { valid: true, message: '' }
 }
 
+function resolveCurrentSelection(selectedWork, workId) {
+  const selectedWorkId = positiveId(selectedWork && selectedWork.workId)
+  if (!workId) return null
+  if (selectedWorkId === workId) return Object.assign({}, selectedWork)
+  return { workId, status: 'unavailable' }
+}
+
 function syncDraft(component, requestSources) {
   const draft = normalizeSingleWorkConfig(component.properties.config || {})
-  const patch = { draft, errorMessage: '' }
+  const currentSelection = component.data.currentSelection
+  const currentSelectionWorkId = positiveId(currentSelection && currentSelection.workId)
+  const patch = {
+    draft,
+    currentSelection: currentSelectionWorkId === draft.workId
+      ? currentSelection
+      : resolveCurrentSelection(component.properties.selectedWork, draft.workId),
+    errorMessage: ''
+  }
   if (requestSources) patch.restoredMemberUserId = null
   component.setData(patch)
   if (requestSources) {
@@ -56,12 +71,36 @@ Component({
           this.setData({ restoredMemberUserId: memberUserId })
           this.triggerEvent('memberchange', {
             portfolioId: this.properties.portfolioId,
-            memberUserId
+            memberUserId,
+            selectedWorkId: positiveId(this.data.draft.workId)
           })
         }
       }
     },
     works: { type: Array, value: [] },
+    selectedWork: {
+      type: Object,
+      value: null,
+      observer(value) {
+        const workId = positiveId(this.data.draft && this.data.draft.workId)
+        const savedWorkId = positiveId(this.properties.config && this.properties.config.workId)
+        const selectedWorkId = positiveId(value && value.workId)
+        const currentSelectionWorkId = positiveId(
+          this.data.currentSelection && this.data.currentSelection.workId
+        )
+        if (workId !== savedWorkId) {
+          return
+        }
+        if (currentSelectionWorkId === workId && selectedWorkId !== workId) {
+          return
+        }
+        this.setData({ currentSelection: resolveCurrentSelection(value, workId) })
+      }
+    },
+    singleWorkLoading: { type: Boolean, value: false },
+    singleWorkLoadingMore: { type: Boolean, value: false },
+    singleWorkHasMore: { type: Boolean, value: false },
+    singleWorkLoadMoreError: { type: String, value: '' },
     work: {
       type: Object,
       value: null,
@@ -84,6 +123,7 @@ Component({
     draft: normalizeSingleWorkConfig(),
     errorMessage: '',
     restoredMemberUserId: null,
+    currentSelection: null,
     animationLoadFailed: false
   },
   methods: {
@@ -95,19 +135,35 @@ Component({
       this.setData({
         draft: Object.assign({}, this.data.draft, { memberUserId, workId: null }),
         restoredMemberUserId: memberUserId,
+        currentSelection: null,
         errorMessage: ''
       })
       this.triggerEvent('memberchange', {
         portfolioId: this.properties.portfolioId,
-        memberUserId
+        memberUserId,
+        selectedWorkId: null
       })
     },
     selectWork(event) {
       const item = event.currentTarget.dataset.item || {}
       this.setData({
         draft: Object.assign({}, this.data.draft, { workId: positiveId(item.workId) }),
+        currentSelection: Object.assign({}, item),
         errorMessage: ''
       })
+    },
+    handleWorksScrollToLower() {
+      if (
+        this.properties.singleWorkLoading ||
+        this.properties.singleWorkLoadingMore ||
+        !this.properties.singleWorkHasMore
+      ) {
+        return
+      }
+      this.triggerEvent('loadmore', { memberUserId: this.data.draft.memberUserId })
+    },
+    retryLoadMore() {
+      this.triggerEvent('retryloadmore', { memberUserId: this.data.draft.memberUserId })
     },
     handleShowTitleChange(event) {
       this.setData({

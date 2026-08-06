@@ -16,6 +16,7 @@ import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioScheduleQueryRequest;
 import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioScheduleQueryResponse;
 import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioShareRecordRequest;
 import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioSummaryResponse;
+import com.jxc.wefolio.dto.teamportfolio.TeamSingleWorkPageResponse;
 import com.jxc.wefolio.dto.MinePortfolioDetailResponse;
 import com.jxc.wefolio.dto.PortfolioScheduleOptionsResponse;
 import com.jxc.wefolio.dto.PortfolioScheduleQueryRequest;
@@ -340,13 +341,33 @@ public class MineTeamPortfolioController {
 
     /**
      * 按团队查询单个作品指定成员的可选作品。
+     *
+     * @deprecated 请改用分页接口 {@link #teamSingleWorkWorksPage(Long, Long, int, int, Long)}。
      */
+    @Deprecated(since = "2026-08", forRemoval = false)
     @GetMapping("/api/mine/teams/{teamId}/portfolio-components/single-work/members/{memberUserId}/works")
     public Response<List<TeamSingleWorkComponentService.WorkOption>> teamSingleWorkWorks(
             @PathVariable Long teamId,
             @PathVariable Long memberUserId
     ) {
+        log.warn("调用已弃用团队单个作品全量候选接口: teamId={}, memberUserId={}",
+                teamId, memberUserId);
         return Response.success(singleWorkComponentService.listTeamWorks(teamId, memberUserId, currentUserId()));
+    }
+
+    /**
+     * 按团队分页查询单个作品指定成员的可选作品。
+     */
+    @GetMapping("/api/mine/teams/{teamId}/portfolio-components/single-work/members/{memberUserId}/works/page")
+    public Response<TeamSingleWorkPageResponse> teamSingleWorkWorksPage(
+            @PathVariable Long teamId,
+            @PathVariable Long memberUserId,
+            @RequestParam(value = "page", defaultValue = "1") int page,
+            @RequestParam(value = "pageSize", defaultValue = "20") int pageSize,
+            @RequestParam(value = "selectedWorkId", required = false) Long selectedWorkId
+    ) {
+        return Response.success(singleWorkComponentService.pageTeamWorks(
+                teamId, memberUserId, currentUserId(), page, pageSize, selectedWorkId));
     }
 
     /**

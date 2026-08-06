@@ -43,13 +43,28 @@ public class MineWorkListResponse {
         /** 全部作品数 */
         private long totalCount;
 
-        /** 图片作品数 */
+        /**
+         * 图片作品数。
+         *
+         * @deprecated 作品列表已移除媒体类型统计，仅为兼容旧客户端保留
+         */
+        @Deprecated(since = "2026-08", forRemoval = false)
         private long imageCount;
 
-        /** 视频作品数 */
+        /**
+         * 视频作品数。
+         *
+         * @deprecated 作品列表已移除媒体类型统计，仅为兼容旧客户端保留
+         */
+        @Deprecated(since = "2026-08", forRemoval = false)
         private long videoCount;
 
-        /** 动图作品数 */
+        /**
+         * 动图作品数。
+         *
+         * @deprecated 作品列表已移除媒体类型统计，仅为兼容旧客户端保留
+         */
+        @Deprecated(since = "2026-08", forRemoval = false)
         private long animationCount;
     }
 

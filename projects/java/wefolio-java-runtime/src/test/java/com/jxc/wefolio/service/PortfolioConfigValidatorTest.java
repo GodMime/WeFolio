@@ -11,7 +11,6 @@ import com.jxc.wefolio.dto.PortfolioConfigDto;
 import com.jxc.wefolio.entity.PortfolioReferenceEntity;
 import com.jxc.wefolio.entity.WorkEntity;
 import com.jxc.wefolio.exception.BusinessException;
-import com.jxc.wefolio.mapper.UserEntityMapper;
 import com.jxc.wefolio.mapper.WorkEntityMapper;
 import com.jxc.wefolio.message.PortfolioMessage;
 import org.junit.jupiter.api.Test;
@@ -37,10 +36,6 @@ class PortfolioConfigValidatorTest {
     /** 作品 Mapper 模拟 */
     @Mock
     private WorkEntityMapper workEntityMapper;
-
-    /** 用户 Mapper 模拟 */
-    @Mock
-    private UserEntityMapper userEntityMapper;
 
     @Test
     void normalizeShouldSortEnabledComponentsAndKeepStableKeys() {
@@ -269,6 +264,179 @@ class PortfolioConfigValidatorTest {
     }
 
     @Test
+    void hyperlinkShouldPreserveArbitraryExternalContentAndNormalizeBranchFields() {
+        when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(
+                work(11L, 7L, MediaTypeDict.IMAGE.getCode(), WorkStatusDict.ACTIVE.getCode())
+        ));
+        String externalContent = " 8.23 复制打开抖音\n😀 https://v.douyin.com/example/ ";
+        Map<String, Object> raw = new LinkedHashMap<>();
+        raw.put("workId", 11L);
+        raw.put("actionType", "EXTERNAL_LINK");
+        raw.put("targetPortfolioId", 99L);
+        raw.put("externalContent", externalContent);
+        raw.put("promptText", "👨‍👩‍👧‍👦");
+        raw.put("showClickIcon", false);
+        raw.put("iconPosition", "BELOW");
+
+        PortfolioConfigDto normalized = validator().normalize(7L, config(component(
+                "c_link", PortfolioComponentTypeDict.HYPERLINK.getCode(), 1000, true, raw)));
+
+        assertThat(normalized.getComponents().getFirst().getConfig())
+                .containsEntry("workId", 11L)
+                .containsEntry("actionType", "EXTERNAL_LINK")
+                .containsEntry("externalContent", externalContent)
+                .containsEntry("promptText", "👨‍👩‍👧‍👦")
+                .containsEntry("showClickIcon", false)
+                .containsEntry("iconPosition", "BELOW")
+                .doesNotContainKey("targetPortfolioId");
+    }
+
+    /**
+     * 超链接应接受全部点击图标位置，并拒绝未知位置。
+     */
+    @Test
+    void hyperlinkShouldAcceptEveryClickIconPositionAndRejectUnknownValues() {
+        when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(
+                work(11L, 7L, MediaTypeDict.IMAGE.getCode(), WorkStatusDict.ACTIVE.getCode())
+        ));
+
+        for (String iconPosition : List.of(
+                "OVERLAY", "OVERLAY_BOTTOM_CENTER", "OVERLAY_CENTER", "BELOW")) {
+            PortfolioConfigDto config = config(component(
+                    "c_link_" + iconPosition,
+                    PortfolioComponentTypeDict.HYPERLINK.getCode(),
+                    1000,
+                    true,
+                    Map.of(
+                            "workId", 11L,
+                            "actionType", "EXTERNAL_LINK",
+                            "externalContent", "复制内容",
+                            "promptText", "已复制",
+                            "iconPosition", iconPosition
+                    )
+            ));
+
+            assertThat(validator().normalize(7L, config).getComponents().getFirst().getConfig())
+                    .containsEntry("iconPosition", iconPosition);
+        }
+
+        PortfolioConfigDto unknownPosition = config(component(
+                "c_link_unknown",
+                PortfolioComponentTypeDict.HYPERLINK.getCode(),
+                1000,
+                true,
+                Map.of(
+                        "workId", 11L,
+                        "actionType", "EXTERNAL_LINK",
+                        "externalContent", "复制内容",
+                        "promptText", "已复制",
+                        "iconPosition", "UNKNOWN"
+                )
+        ));
+
+        assertThatThrownBy(() -> validator().normalize(7L, unknownPosition))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("点击图标位置不支持");
+    }
+
+    @Test
+    void hyperlinkShouldAcceptPassedAnimationAndRejectVideo() {
+        WorkEntity animation = work(12L, 7L, MediaTypeDict.ANIMATION.getCode(), WorkStatusDict.ACTIVE.getCode());
+        when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(animation));
+        PortfolioConfigDto animationConfig = config(component(
+                "c_animation_link", PortfolioComponentTypeDict.HYPERLINK.getCode(), 1000, true,
+                Map.of("workId", 12L, "actionType", "INTERNAL_PORTFOLIO", "targetPortfolioId", 99L)));
+
+        assertThat(validator().normalize(7L, animationConfig).getComponents().getFirst().getConfig())
+                .containsEntry("workId", 12L)
+                .containsEntry("showClickIcon", false)
+                .containsEntry("iconPosition", "OVERLAY");
+
+        when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(
+                work(13L, 7L, MediaTypeDict.VIDEO.getCode(), WorkStatusDict.ACTIVE.getCode())
+        ));
+        PortfolioConfigDto videoConfig = config(component(
+                "c_video_link", PortfolioComponentTypeDict.HYPERLINK.getCode(), 1000, true,
+                Map.of("workId", 13L, "actionType", "INTERNAL_PORTFOLIO", "targetPortfolioId", 99L)));
+
+        assertThatThrownBy(() -> validator().normalize(7L, videoConfig))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("超链接展示作品不可用，请重新选择");
+    }
+
+    @Test
+    void hyperlinkShouldCountUnicodeCodePointsAtExternalFieldBoundaries() {
+        when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(
+                work(11L, 7L, MediaTypeDict.IMAGE.getCode(), WorkStatusDict.ACTIVE.getCode())
+        ));
+        String familyEmoji = "👨‍👩‍👧‍👦";
+        assertThat(familyEmoji.codePointCount(0, familyEmoji.length())).isEqualTo(7);
+        assertThat(familyEmoji.length()).isEqualTo(11);
+        PortfolioConfigDto maxContent = config(component(
+                "c_max_link", PortfolioComponentTypeDict.HYPERLINK.getCode(), 1000, true,
+                Map.of(
+                        "workId", 11L,
+                        "actionType", "EXTERNAL_LINK",
+                        "externalContent", familyEmoji.repeat(292) + "abcd",
+                        "promptText", familyEmoji.repeat(4) + "ab"
+                )));
+        PortfolioConfigDto tooLongContent = config(component(
+                "c_long_link", PortfolioComponentTypeDict.HYPERLINK.getCode(), 1000, true,
+                Map.of(
+                        "workId", 11L,
+                        "actionType", "EXTERNAL_LINK",
+                        "externalContent", familyEmoji.repeat(292) + "abcde",
+                        "promptText", "复制成功"
+                )));
+        PortfolioConfigDto tooLongPrompt = config(component(
+                "c_long_prompt", PortfolioComponentTypeDict.HYPERLINK.getCode(), 1000, true,
+                Map.of(
+                        "workId", 11L,
+                        "actionType", "EXTERNAL_LINK",
+                        "externalContent", "复制内容",
+                        "promptText", familyEmoji.repeat(4) + "abc"
+                )));
+
+        assertThat(validator().normalize(7L, maxContent).getComponents()).hasSize(1);
+        assertThatThrownBy(() -> validator().normalize(7L, tooLongContent))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("链接或分享内容长度必须为1至2048个字符");
+        assertThatThrownBy(() -> validator().normalize(7L, tooLongPrompt))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("提示语长度必须为1至30个字符");
+    }
+
+    @Test
+    void hyperlinkReferencesShouldIncludeWorkAndOptionalPortfolioEdge() {
+        when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(
+                work(11L, 7L, MediaTypeDict.IMAGE.getCode(), WorkStatusDict.ACTIVE.getCode()),
+                work(12L, 7L, MediaTypeDict.ANIMATION.getCode(), WorkStatusDict.ACTIVE.getCode())
+        ));
+        PortfolioConfigDto normalized = validator().normalize(7L, config(
+                component("c_internal", PortfolioComponentTypeDict.HYPERLINK.getCode(), 1000, true,
+                        Map.of("workId", 11L, "actionType", "INTERNAL_PORTFOLIO", "targetPortfolioId", 88L)),
+                component("c_external", PortfolioComponentTypeDict.HYPERLINK.getCode(), 2000, true,
+                        Map.of("workId", 12L, "actionType", "EXTERNAL_LINK",
+                                "externalContent", "小红书分享内容", "promptText", "请打开小红书"))
+        ));
+
+        List<PortfolioReferenceEntity> references = validator().buildReferences(
+                99L, 7L, PortfolioConfigScopeDict.DRAFT.getCode(), normalized);
+
+        assertThat(references).extracting(
+                        PortfolioReferenceEntity::getReferenceType,
+                        PortfolioReferenceEntity::getReferenceId,
+                        PortfolioReferenceEntity::getComponentPath,
+                        PortfolioReferenceEntity::getSortOrder)
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple("WORK", 11L, "components[0].config.workId", 0),
+                        org.assertj.core.groups.Tuple.tuple("LINKED_PORTFOLIO", 88L,
+                                "components[0].config.targetPortfolioId", 1),
+                        org.assertj.core.groups.Tuple.tuple("WORK", 12L, "components[1].config.workId", 0)
+                );
+    }
+
+    @Test
     void workListShouldNormalizeDisplayGroupsWithWorks() {
         when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(
                 work(11L, 7L, MediaTypeDict.IMAGE.getCode(), WorkStatusDict.ACTIVE.getCode()),
@@ -402,6 +570,148 @@ class PortfolioConfigValidatorTest {
         assertThat(validator().normalize(7L, defaultAlignmentConfig)
                 .getComponents().get(0).getConfig().get("alignment"))
                 .isEqualTo("LEFT");
+    }
+
+    /**
+     * 旧个人文字说明缺少排版字段时，应补齐与既有视觉一致的默认值。
+     */
+    @Test
+    void textSectionShouldNormalizeLegacyPersonalTypographyDefaults() {
+        PortfolioConfigDto normalized = validator().normalize(7L, config(component(
+                "c_text",
+                PortfolioComponentTypeDict.TEXT_SECTION.getCode(),
+                1000,
+                true,
+                Map.of("content", "服务说明", "alignment", "LEFT")
+        )));
+
+        assertThat(normalized.getComponents().get(0).getConfig())
+                .containsEntry("fontFamily", "SYSTEM")
+                .containsEntry("fontSizeRpx", 26);
+    }
+
+    /**
+     * 文字说明应接受全部受支持字体和字号上下边界。
+     */
+    @Test
+    void textSectionShouldAcceptSupportedFontsAndExactIntegerSizeBoundaries() {
+        for (String fontFamily : List.of("SYSTEM", "WECHAT_SANS_SS")) {
+            for (Integer fontSizeRpx : List.of(20, 48)) {
+                Map<String, Object> textConfig = new LinkedHashMap<>();
+                textConfig.put("content", "服务说明");
+                textConfig.put("alignment", "CENTER");
+                textConfig.put("fontFamily", fontFamily);
+                textConfig.put("fontSizeRpx", fontSizeRpx);
+
+                Map<String, Object> normalized = validator().normalize(7L, config(component(
+                        "c_text",
+                        PortfolioComponentTypeDict.TEXT_SECTION.getCode(),
+                        1000,
+                        true,
+                        textConfig
+                ))).getComponents().get(0).getConfig();
+
+                assertThat(normalized)
+                        .containsEntry("fontFamily", fontFamily)
+                        .containsEntry("fontSizeRpx", fontSizeRpx);
+            }
+        }
+    }
+
+    /**
+     * 尚未上线且已删除的 Std 字体配置不得继续被接受。
+     */
+    @Test
+    void textSectionShouldRejectRemovedStdFontFamily() {
+        Map<String, Object> textConfig = new LinkedHashMap<>();
+        textConfig.put("content", "服务说明");
+        textConfig.put("fontFamily", "WECHAT_SANS_STD");
+
+        assertThatThrownBy(() -> validator().normalize(7L, config(component(
+                "c_text",
+                PortfolioComponentTypeDict.TEXT_SECTION.getCode(),
+                1000,
+                true,
+                textConfig
+        ))))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("文字说明字体不支持");
+    }
+
+    /**
+     * 字体是固定配置代码，不能通过去除首尾空白后再接受。
+     */
+    @Test
+    void textSectionShouldRejectFontFamilyWithSurroundingWhitespace() {
+        Map<String, Object> textConfig = new LinkedHashMap<>();
+        textConfig.put("content", "服务说明");
+        textConfig.put("fontFamily", " SYSTEM ");
+
+        assertThatThrownBy(() -> validator().normalize(7L, config(component(
+                "c_text",
+                PortfolioComponentTypeDict.TEXT_SECTION.getCode(),
+                1000,
+                true,
+                textConfig
+        ))))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("文字说明字体不支持");
+    }
+
+    /**
+     * 字号必须是范围内的 JSON 数值型精确整数，不能截断小数或接收数字字符串。
+     */
+    @Test
+    void textSectionShouldRejectNonExactOrOutOfRangeFontSize() {
+        for (Object invalid : List.of(28.5D, "28", 19, 49, 2147483648L)) {
+            Map<String, Object> textConfig = new LinkedHashMap<>();
+            textConfig.put("content", "服务说明");
+            textConfig.put("fontSizeRpx", invalid);
+
+            assertThatThrownBy(() -> validator().normalize(7L, config(component(
+                    "c_text",
+                    PortfolioComponentTypeDict.TEXT_SECTION.getCode(),
+                    1000,
+                    true,
+                    textConfig
+            ))))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("文字说明字号必须为20至48之间的整数");
+        }
+    }
+
+    /**
+     * 文字说明排版错误应保持正文、对齐、字体、字号的稳定校验顺序。
+     */
+    @Test
+    void textSectionShouldValidateAlignmentBeforeFontAndFontBeforeSize() {
+        Map<String, Object> invalidAlignment = new LinkedHashMap<>();
+        invalidAlignment.put("content", "服务说明");
+        invalidAlignment.put("alignment", "JUSTIFY");
+        invalidAlignment.put("fontFamily", "UNKNOWN");
+        invalidAlignment.put("fontSizeRpx", 19);
+
+        assertThatThrownBy(() -> validator().normalize(7L, config(component(
+                "c_text",
+                PortfolioComponentTypeDict.TEXT_SECTION.getCode(),
+                1000,
+                true,
+                invalidAlignment
+        ))))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("文字说明对齐方式不支持");
+
+        Map<String, Object> invalidFont = new LinkedHashMap<>(invalidAlignment);
+        invalidFont.put("alignment", "LEFT");
+        assertThatThrownBy(() -> validator().normalize(7L, config(component(
+                "c_text",
+                PortfolioComponentTypeDict.TEXT_SECTION.getCode(),
+                1000,
+                true,
+                invalidFont
+        ))))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("文字说明字体不支持");
     }
 
     /**
@@ -1076,7 +1386,7 @@ class PortfolioConfigValidatorTest {
     }
 
     private PortfolioConfigValidator validator() {
-        return new PortfolioConfigValidator(workEntityMapper, userEntityMapper);
+        return new PortfolioConfigValidator(workEntityMapper);
     }
 
     /**

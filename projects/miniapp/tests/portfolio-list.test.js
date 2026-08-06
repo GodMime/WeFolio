@@ -230,6 +230,67 @@ test('team cards choose draft or published preview from publication status', asy
   }
 })
 
+test('ordinary team members preview drafts and published versions without maintenance access', async () => {
+  const navigations = []
+  const page = loadPortfolioListPage(async (options) => {
+    if (options.url.endsWith('/maintainable-teams')) {
+      return []
+    }
+    return [
+      {
+        portfolioId: 33,
+        teamId: 7,
+        currentRole: 'MEMBER',
+        publicationStatus: 'DRAFT_ONLY',
+        canMaintain: false,
+        canShare: false
+      },
+      {
+        portfolioId: 34,
+        teamId: 7,
+        currentRole: 'MEMBER',
+        publicationStatus: 'PUBLISHED',
+        canMaintain: false,
+        canShare: true,
+        shareCode: 'TEAM-MEMBER-SHARE'
+      }
+    ]
+  }, {
+    navigateTo(options) {
+      navigations.push(options)
+    }
+  })
+
+  try {
+    await page.bootstrapTeam()
+    const [draft, published] = page.data.teamDisplayPortfolios
+
+    assert.equal(draft.canPreviewDraft, true)
+    assert.equal(draft.canPublishedPreview, false)
+    assert.equal(draft.canDelete, false)
+    assert.equal(published.canPreviewDraft, false)
+    assert.equal(published.canPublishedPreview, true)
+    assert.equal(published.canShare, true)
+    assert.equal(published.canDelete, false)
+
+    page.handleTeamPortfolioCardTap({ currentTarget: { dataset: { item: draft } } })
+    page.handleTeamPreviewTap({ currentTarget: { dataset: { item: draft, scope: 'draft' } } })
+    page.handleTeamPreviewTap({ currentTarget: { dataset: { item: published, scope: 'published' } } })
+    assert.deepEqual(navigations.map((item) => item.url), [
+      '/pages/team-portfolios/standard-preview/team-portfolio-standard-preview?portfolioId=33&scope=draft',
+      '/pages/team-portfolios/standard-preview/team-portfolio-standard-preview?portfolioId=34&scope=published'
+    ])
+
+    page.handleShareTap({
+      currentTarget: { dataset: { ownerType: 'TEAM', id: published.portfolioId } }
+    })
+    assert.equal(page.data.shareSheetVisible, true)
+    assert.deepEqual(page.data.shareTarget, { ownerType: 'TEAM', portfolioId: 34 })
+  } finally {
+    page.cleanup()
+  }
+})
+
 test('creating a standard team portfolio opens an unsaved team editor', async () => {
   const requests = []
   const navigations = []
@@ -250,9 +311,105 @@ test('creating a standard team portfolio opens an unsaved team editor', async ()
     assert.equal(typeof page.handleCreateStandardTeam, 'function')
     await page.handleCreateStandardTeam()
     assert.deepEqual(requests, [])
+    assert.equal(page.data.teamSelectSheetVisible, false)
     assert.deepEqual(navigations, [{
       url: '/pages/team-portfolios/standard-edit/team-portfolio-standard-edit?teamId=7'
     }])
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('team picker opens before creating a portfolio for multiple maintainable teams', () => {
+  const navigations = []
+  const page = loadPortfolioListPage(() => Promise.resolve({}), {
+    navigateTo(options) {
+      navigations.push(options)
+    }
+  })
+  page.setData({
+    maintainableTeams: [
+      { teamId: 7, teamName: '甲', currentRole: 'OWNER' },
+      { teamId: 8, teamName: '乙', currentRole: 'MANAGER' }
+    ],
+    maintainableTeamsLoaded: true
+  })
+
+  try {
+    page.handleCreateStandardTeam()
+    assert.equal(page.data.teamSelectSheetVisible, true)
+    assert.equal(page.data.selectedCreateTeamId, null)
+    assert.equal(page.data.teamSelectSheetListHeight, 238)
+    assert.deepEqual(navigations, [])
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('team picker confirms a valid selection and clears its state', () => {
+  const navigations = []
+  const page = loadPortfolioListPage(() => Promise.resolve({}), {
+    navigateTo(options) {
+      navigations.push(options)
+    }
+  })
+  page.setData({
+    maintainableTeams: [
+      { teamId: 7, teamName: '甲', currentRole: 'OWNER' },
+      { teamId: 8, teamName: '乙', currentRole: 'MANAGER' }
+    ],
+    teamSelectSheetVisible: true
+  })
+
+  try {
+    page.handleTeamSelectTap({ currentTarget: { dataset: { id: 8 } } })
+    page.handleConfirmTeamSelect()
+    assert.equal(page.data.teamSelectSheetVisible, false)
+    assert.equal(page.data.selectedCreateTeamId, null)
+    assert.deepEqual(navigations, [{
+      url: '/pages/team-portfolios/standard-edit/team-portfolio-standard-edit?teamId=8'
+    }])
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('team picker ignores confirmation without a valid selection', () => {
+  const navigations = []
+  const page = loadPortfolioListPage(() => Promise.resolve({}), {
+    navigateTo(options) {
+      navigations.push(options)
+    }
+  })
+  page.setData({
+    maintainableTeams: [
+      { teamId: 7, teamName: '甲', currentRole: 'OWNER' },
+      { teamId: 8, teamName: '乙', currentRole: 'MANAGER' }
+    ],
+    teamSelectSheetVisible: true,
+    selectedCreateTeamId: 99
+  })
+
+  try {
+    page.handleConfirmTeamSelect()
+    assert.deepEqual(navigations, [])
+    assert.equal(page.data.teamSelectSheetVisible, true)
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('closing the team picker clears its selection', () => {
+  const page = loadPortfolioListPage(() => Promise.resolve({}))
+  page.setData({
+    teamSelectSheetVisible: true,
+    selectedCreateTeamId: 7
+  })
+
+  try {
+    page.handleCloseTeamSelectSheet()
+    assert.equal(page.data.teamSelectSheetVisible, false)
+    assert.equal(page.data.selectedCreateTeamId, null)
   } finally {
     page.cleanup()
   }
@@ -857,6 +1014,51 @@ test('left swiping a personal portfolio reveals delete and confirm delete refres
       ['/api/mine/portfolios', 'GET']
     ])
     assert.equal(toasts[0].title, '作品集已删除')
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('personal portfolio delete guard shows referenced portfolio titles and scopes in a modal', async () => {
+  const modals = []
+  const toasts = []
+  const referenceMessage = '作品集被《婚礼主持作品集》（已发布版本）引用，请先移除引用'
+  const page = loadPortfolioListPage((options) => {
+    if (options.url === '/api/mine/portfolios/delete/88') {
+      const error = new Error(referenceMessage)
+      error.errorCode = 'PERSONAL_PORTFOLIO_REFERENCED'
+      error.data = {
+        errorCode: 'PERSONAL_PORTFOLIO_REFERENCED',
+        references: [{ sourcePortfolioId: 99, sourceTitle: '婚礼主持作品集', configScope: 'PUBLISHED' }]
+      }
+      return Promise.reject(error)
+    }
+    return Promise.resolve({ portfolios: [{ portfolioId: 88, title: '目标作品集' }] })
+  }, {
+    showModal(options) {
+      modals.push(options)
+      if (options.confirmText === '删除') {
+        options.success({ confirm: true })
+      }
+    },
+    showToast(options) {
+      toasts.push(options)
+    }
+  })
+
+  page.bootstrap()
+  await flushPromises()
+  page.handleDeletePortfolioTap({ currentTarget: { dataset: { id: 88 } } })
+  await flushPromises()
+  await flushPromises()
+
+  try {
+    assert.equal(page.data.deletingPortfolioId, null)
+    assert.equal(modals.length, 2)
+    assert.equal(modals[1].title, '无法删除作品集')
+    assert.equal(modals[1].content, referenceMessage)
+    assert.equal(modals[1].showCancel, false)
+    assert.deepEqual(toasts, [])
   } finally {
     page.cleanup()
   }

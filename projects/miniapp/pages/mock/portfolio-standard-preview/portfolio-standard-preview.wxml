@@ -13,6 +13,29 @@
       <view class="preview-note">体验预览：不请求后端，不统计访问，不提交真实表单。</view>
     </view>
 
+    <block wx:if="{{loading}}">
+      <view class="preview-skeleton">
+        <view class="preview-skeleton-hero"></view>
+        <view class="preview-skeleton-line short"></view>
+        <view class="preview-skeleton-line"></view>
+        <view class="preview-skeleton-grid">
+          <view class="preview-skeleton-tile"></view>
+          <view class="preview-skeleton-tile"></view>
+          <view class="preview-skeleton-tile"></view>
+          <view class="preview-skeleton-tile"></view>
+        </view>
+      </view>
+    </block>
+
+    <block wx:elif="{{errorMessage}}">
+      <view class="preview-error">
+        <view class="preview-error-title">预览加载失败</view>
+        <view class="preview-error-message">{{errorMessage}}</view>
+        <button class="secondary-action" bindtap="handleRetryPreview">重试</button>
+      </view>
+    </block>
+
+    <view wx:else class="portfolio-menu-transition-content {{portfolioMenuTransitionClass}}">
     <view wx:for="{{portfolio.activeComponents}}" wx:key="componentKey" class="folio-component">
       <block wx:if="{{item.componentType === 'CAROUSEL'}}">
         <portfolio-carousel
@@ -21,6 +44,27 @@
           theme-mode="{{portfolio.themeMode}}"
         ></portfolio-carousel>
       </block>
+
+      <mock-portfolio-schedule-query
+        wx:elif="{{item.componentType === 'SCHEDULE_QUERY'}}"
+        schedule-query="{{item.scheduleQuery}}"
+        calendar-month="{{mockScheduleMonth}}"
+        slot-definitions="{{mockSlotDefinitions}}"
+        theme-mode="{{portfolio.themeMode}}"
+        bindmonthchange="handleMockScheduleMonthChange"
+        bindlockedaction="handleSubmitContact"
+      ></mock-portfolio-schedule-query>
+
+      <mock-portfolio-contact-form
+        wx:elif="{{item.componentType === 'CONTACT_FORM'}}"
+        contact-component="{{item}}"
+        contact-form="{{contactForm}}"
+        submit-text="预览提交"
+        theme-mode="{{portfolio.themeMode}}"
+        bindcontactinput="handleContactInput"
+        bindsubmitcontact="handleSubmitContact"
+        bindopenmodal="handleOpenContactFormModal"
+      ></mock-portfolio-contact-form>
 
       <mock-portfolio-renderer
         wx:else
@@ -32,7 +76,6 @@
         bindsingleworktap="handleSingleWorkTap"
         bindsingleworkvideoerror="handleSingleWorkVideoError"
         bindpreviewqr="handlePreviewQr"
-        bindlockedaction="handleSubmitContact"
       ></mock-portfolio-renderer>
     </view>
 
@@ -40,6 +83,7 @@
       <image wx:if="{{portfolio.themeMode === 'dark'}}" class="folio-brand-logo" src="/assets/system/folio-logo-stack-bold-dark-50kb.png" mode="aspectFit"></image>
       <image wx:else class="folio-brand-logo" src="/assets/system/folio-logo-stack-bold-small-50kb.png" mode="aspectFit"></image>
       <view class="folio-brand-name">映期Folio</view>
+    </view>
     </view>
   </scroll-view>
 
@@ -69,4 +113,16 @@
       </view>
     </view>
   </root-portal>
+
+  <mock-portfolio-contact-form
+    view-mode="modal"
+    modal-visible="{{contactFormModalVisible}}"
+    contact-component="{{activeContactFormComponent}}"
+    contact-form="{{contactForm}}"
+    submit-text="预览提交"
+    theme-mode="{{portfolio.themeMode}}"
+    bindcontactinput="handleContactInput"
+    bindsubmitcontact="handleSubmitContact"
+    bindclosemodal="handleCloseContactFormModal"
+  ></mock-portfolio-contact-form>
 </view>

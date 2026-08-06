@@ -11,6 +11,7 @@ import com.jxc.wefolio.dto.MinePortfolioListResponse;
 import com.jxc.wefolio.dto.MinePortfolioPublishRequest;
 import com.jxc.wefolio.dto.MinePortfolioShareRecordRequest;
 import com.jxc.wefolio.dto.PortfolioComponentLibraryResponse;
+import com.jxc.wefolio.dto.PortfolioHyperlinkTargetResponse;
 import com.jxc.wefolio.dto.PortfolioScheduleOptionsResponse;
 import com.jxc.wefolio.dto.PortfolioScheduleQueryRequest;
 import com.jxc.wefolio.dto.PortfolioScheduleQueryResponse;
@@ -46,6 +47,7 @@ class MinePortfolioControllerTest {
         MinePortfolioController controller = new MinePortfolioController(minePortfolioService);
         MinePortfolioListResponse listResponse = new MinePortfolioListResponse();
         PortfolioComponentLibraryResponse libraryResponse = new PortfolioComponentLibraryResponse();
+        PortfolioHyperlinkTargetResponse hyperlinkTargetsResponse = new PortfolioHyperlinkTargetResponse();
         MinePortfolioCreateRequest createRequest = new MinePortfolioCreateRequest();
         MinePortfolioAssetUploadTicketRequest assetTicketRequest = new MinePortfolioAssetUploadTicketRequest();
         MinePortfolioAssetUploadTicketResponse assetTicketResponse = new MinePortfolioAssetUploadTicketResponse();
@@ -57,7 +59,8 @@ class MinePortfolioControllerTest {
         PortfolioScheduleQueryRequest scheduleQueryRequest = new PortfolioScheduleQueryRequest();
         PortfolioScheduleQueryResponse scheduleQueryResponse = new PortfolioScheduleQueryResponse();
         when(minePortfolioService.listPortfolios("USER")).thenReturn(listResponse);
-        when(minePortfolioService.getComponentLibrary()).thenReturn(libraryResponse);
+        when(minePortfolioService.getComponentLibrary(3)).thenReturn(libraryResponse);
+        when(minePortfolioService.listHyperlinkTargets(88L, 99L)).thenReturn(hyperlinkTargetsResponse);
         when(minePortfolioService.createStandardPersonal(createRequest)).thenReturn(detailResponse);
         when(minePortfolioService.createAssetUploadTicket(88L, assetTicketRequest)).thenReturn(assetTicketResponse);
         when(minePortfolioService.getDetail(88L)).thenReturn(detailResponse);
@@ -71,7 +74,8 @@ class MinePortfolioControllerTest {
                 .thenReturn(scheduleQueryResponse);
 
         Response<MinePortfolioListResponse> listed = controller.list("USER");
-        Response<PortfolioComponentLibraryResponse> library = controller.componentLibrary();
+        Response<PortfolioComponentLibraryResponse> library = controller.componentLibrary(3);
+        Response<PortfolioHyperlinkTargetResponse> hyperlinkTargets = controller.hyperlinkTargets(88L, 99L);
         Response<MinePortfolioDetailResponse> created = controller.createStandardPersonal(createRequest);
         Response<MinePortfolioAssetUploadTicketResponse> assetTicket = controller.createAssetUploadTicket(88L, assetTicketRequest);
         Response<MinePortfolioDetailResponse> detail = controller.detail(88L);
@@ -88,7 +92,9 @@ class MinePortfolioControllerTest {
 
         assertThat(MinePortfolioController.class.isAnnotationPresent(MaintainerAccess.class)).isTrue();
         assertGetMapping("list", new Class<?>[] {String.class}, "/api/mine/portfolios");
-        assertGetMapping("componentLibrary", new Class<?>[] {}, "/api/mine/portfolios/component-library");
+        assertGetMapping("componentLibrary", new Class<?>[] {Integer.class}, "/api/mine/portfolios/component-library");
+        assertGetMapping("hyperlinkTargets", new Class<?>[] {Long.class, Long.class},
+                "/api/mine/portfolios/hyperlink-targets");
         assertPostMapping("createStandardPersonal",
                 new Class<?>[] {MinePortfolioCreateRequest.class},
                 "/api/mine/portfolios/standard-personal");
@@ -126,6 +132,7 @@ class MinePortfolioControllerTest {
                 .doesNotContain("createCoverUploadTicket");
         assertThat(listed.getData()).isSameAs(listResponse);
         assertThat(library.getData()).isSameAs(libraryResponse);
+        assertThat(hyperlinkTargets.getData()).isSameAs(hyperlinkTargetsResponse);
         assertThat(created.getData()).isSameAs(detailResponse);
         assertThat(assetTicket.getData()).isSameAs(assetTicketResponse);
         assertThat(detail.getData()).isSameAs(detailResponse);

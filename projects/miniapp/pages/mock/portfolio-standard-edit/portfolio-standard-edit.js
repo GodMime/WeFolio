@@ -19,6 +19,11 @@ const {
   updateMockSingleWorkConfig
 } = require('../utils/mock-experience')
 const {
+  PORTFOLIO_TEXT_FONT_OPTIONS,
+  buildPortfolioTextFontSizeOptions,
+  buildPortfolioTextTypography
+} = require('../../../utils/portfolio-text-typography')
+const {
   hexToHsv,
   hsvToHex
 } = require('../../../utils/portfolio-color')
@@ -144,6 +149,18 @@ function buildWorkOptions(workIds, carouselOnly) {
     }))
 }
 
+function buildFilteredWorkOptions(workIds, carouselOnly, keyword = '', selectedTagId = 0) {
+  const normalizedKeyword = trimText(keyword).toLowerCase()
+  const normalizedTagId = Number(selectedTagId) || 0
+  return buildWorkOptions(workIds, carouselOnly).filter((work) => {
+    const tags = Array.isArray(work.tags) ? work.tags : []
+    const keywordText = `${trimText(work.title)} ${tags.map((tag) => trimText(tag.name)).join(' ')}`.toLowerCase()
+    const keywordMatched = !normalizedKeyword || keywordText.includes(normalizedKeyword)
+    const tagMatched = !normalizedTagId || tags.some((tag) => Number(tag.id) === normalizedTagId)
+    return keywordMatched && tagMatched
+  })
+}
+
 function resolveActiveMenuKey(draft, activeMenuKey) {
   const bottomNav = draft.config && draft.config.bottomNav
   const items = bottomNav && bottomNav.enabled && Array.isArray(bottomNav.items)
@@ -167,6 +184,8 @@ function buildState(draft, selectedComponentKey = DEFAULT_SELECTED_COMPONENT_KEY
   const backgroundColorPickerState = buildBackgroundColorPickerState(
     hexToHsv(draft.config.style.backgroundColor)
   )
+  const textSectionConfig = Object.assign({}, findConfig(selectedComponent))
+  const textSectionTypography = buildPortfolioTextTypography(textSectionConfig)
   return {
     draft,
     backgroundColorOptions: BACKGROUND_COLOR_OPTIONS,
@@ -188,16 +207,26 @@ function buildState(draft, selectedComponentKey = DEFAULT_SELECTED_COMPONENT_KEY
     scheduleQueryForm: Object.assign({}, findConfig(selectedComponent)),
     contactFormConfig: Object.assign({}, findConfig(selectedComponent)),
     qrContactForm: Object.assign({}, findConfig(selectedComponent)),
-    textSectionForm: Object.assign({}, findConfig(selectedComponent)),
+    textSectionForm: Object.assign({}, textSectionConfig, textSectionTypography, {
+      textAlign: textSectionConfig.alignment || 'LEFT'
+    }),
+    textSectionTypography,
+    textSectionFontOptions: PORTFOLIO_TEXT_FONT_OPTIONS.map((item) => Object.assign({}, item, {
+      available: true
+    })),
+    textSectionSizeOptions: buildPortfolioTextFontSizeOptions(textSectionTypography.fontSizeRpx),
     dividerForm: Object.assign({}, findConfig(selectedComponent)),
     textSectionAlignmentOptions: TEXT_SECTION_ALIGNMENT_OPTIONS,
     dividerColorOptions: DIVIDER_COLOR_OPTIONS,
     selectedWorkIds,
+    workFilterKeyword: '',
+    selectedWorkFilterTagId: 0,
+    workFilterTags: [{ id: 0, name: '全部', color: '#212529' }].concat(MOCK_WORK_LIBRARY.tags),
     singleWorkShowTitle: selectedComponent.componentType === 'SINGLE_WORK'
       ? typeof selectedComponent.config.showTitle === 'boolean' ? selectedComponent.config.showTitle : true
       : true,
     componentOptions: MOCK_COMPONENT_OPTIONS,
-    workOptions: buildWorkOptions(
+    workOptions: buildFilteredWorkOptions(
       isWorkSelectionComponent(selectedComponent.componentType) ? selectedWorkIds : [],
       selectedComponent.componentType === 'CAROUSEL'
     )
@@ -568,6 +597,30 @@ Page({
     this.setDraftState(draft, componentKey)
   },
 
+  handleTextSectionFontTap(event) {
+    const fontFamily = event.currentTarget.dataset.value || 'SYSTEM'
+    const componentKey = this.data.selectedComponentKey
+    if (this.data.selectedComponentType !== 'TEXT_SECTION') {
+      return
+    }
+    const draft = updateComponentConfig(this.data.draft, componentKey, (config) => {
+      return Object.assign({}, config, { fontFamily })
+    }, this.data.activeMenuKey)
+    this.setDraftState(draft, componentKey)
+  },
+
+  handleTextSectionFontSizeTap(event) {
+    const fontSizeRpx = Number(event.currentTarget.dataset.value)
+    const componentKey = this.data.selectedComponentKey
+    if (this.data.selectedComponentType !== 'TEXT_SECTION' || !fontSizeRpx) {
+      return
+    }
+    const draft = updateComponentConfig(this.data.draft, componentKey, (config) => {
+      return Object.assign({}, config, { fontSizeRpx })
+    }, this.data.activeMenuKey)
+    this.setDraftState(draft, componentKey)
+  },
+
   handleDividerColorTap(event) {
     const value = event.currentTarget.dataset.value || 'GRAY'
     const componentKey = this.data.selectedComponentKey
@@ -610,7 +663,12 @@ Page({
       const selectedWorkIds = [workId]
       this.setData({
         selectedWorkIds,
-        workOptions: buildWorkOptions(selectedWorkIds, false)
+        workOptions: buildFilteredWorkOptions(
+          selectedWorkIds,
+          false,
+          this.data.workFilterKeyword,
+          this.data.selectedWorkFilterTagId
+        )
       })
       return
     }
@@ -634,7 +692,42 @@ Page({
         workIds: nextIds
       })
     }, this.data.activeMenuKey)
-    this.setDraftState(draft, componentKey)
+    this.setDraftState(draft, componentKey, {
+      workFilterKeyword: this.data.workFilterKeyword,
+      selectedWorkFilterTagId: this.data.selectedWorkFilterTagId,
+      workOptions: buildFilteredWorkOptions(
+        nextIds,
+        this.data.selectedComponentType === 'CAROUSEL',
+        this.data.workFilterKeyword,
+        this.data.selectedWorkFilterTagId
+      )
+    })
+  },
+
+  handleWorkFilterInput(event) {
+    const workFilterKeyword = event.detail && event.detail.value ? event.detail.value : ''
+    this.setData({
+      workFilterKeyword,
+      workOptions: buildFilteredWorkOptions(
+        this.data.selectedWorkIds,
+        this.data.selectedComponentType === 'CAROUSEL',
+        workFilterKeyword,
+        this.data.selectedWorkFilterTagId
+      )
+    })
+  },
+
+  handleWorkFilterTagTap(event) {
+    const selectedWorkFilterTagId = Number(event.currentTarget.dataset.tagId) || 0
+    this.setData({
+      selectedWorkFilterTagId,
+      workOptions: buildFilteredWorkOptions(
+        this.data.selectedWorkIds,
+        this.data.selectedComponentType === 'CAROUSEL',
+        this.data.workFilterKeyword,
+        selectedWorkFilterTagId
+      )
+    })
   },
 
   handleSingleWorkShowTitleChange(event) {

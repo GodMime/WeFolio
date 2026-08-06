@@ -10,12 +10,12 @@
     scroll-top="{{editScrollTop}}"
     scroll-into-view="{{validationComponentAnchor}}"
   >
-    <view class="edit-content">
-      <view class="panel share-panel">
-        <view class="panel-heading">
+    <view class="edit-content pe-page-content">
+      <view class="panel share-panel pe-page-card">
+        <view class="panel-heading pe-page-card-heading">
           <view class="heading-copy">
-            <view class="section-title">分享信息</view>
-            <view class="section-desc">用于微信分享卡片说明</view>
+            <view class="section-title pe-page-card-title">分享信息</view>
+            <view class="section-desc pe-page-card-description">用于微信分享卡片说明</view>
           </view>
           <view class="status-pill {{statusTone}}">{{statusText}}</view>
         </view>
@@ -37,15 +37,15 @@
             <view class="field-label">作品集标题</view>
             <view class="field-limit">{{shareFieldCounters.title}}</view>
           </view>
-          <input class="input" placeholder="未命名作品集" value="{{config.share.title}}" data-path="share.title" bindinput="handleShareInput" maxlength="50" />
+          <input class="pe-page-field" placeholder="未命名作品集" value="{{config.share.title}}" data-path="share.title" bindinput="handleShareInput" maxlength="50" />
         </view>
       </view>
 
-      <view class="panel page-setting-panel">
-        <view class="panel-heading">
+      <view class="panel page-setting-panel pe-page-card">
+        <view class="panel-heading pe-page-card-heading">
           <view class="heading-copy">
-            <view class="section-title">页面设置</view>
-            <view class="section-desc">设置作品集背景与底部导航</view>
+            <view class="section-title pe-page-card-title">页面设置</view>
+            <view class="section-desc pe-page-card-description">设置作品集背景与底部导航</view>
           </view>
         </view>
 
@@ -120,11 +120,11 @@
         </view>
       </view>
 
-      <view class="panel component-panel">
-        <view class="panel-heading">
+      <view class="panel component-panel pe-page-card">
+        <view class="panel-heading pe-page-card-heading">
           <view class="heading-copy">
-            <view class="section-title">组件编排</view>
-            <view class="section-desc">访客将按当前菜单内的顺序浏览内容</view>
+            <view class="section-title pe-page-card-title">组件编排</view>
+            <view class="section-desc pe-page-card-description">访客将按当前菜单内的顺序浏览内容</view>
           </view>
           <button class="link-button" bindtap="handleOpenComponentSheet">添加组件</button>
         </view>
@@ -144,11 +144,11 @@
             bindtouchcancel="handleComponentTouchCancel"
           >
             <view class="component-remove-pane" catchtap="noop">
-              <button class="component-remove-button" data-key="{{item.componentKey}}" catchtap="handleRemoveComponent">删除</button>
+              <button class="component-remove-button pe-component-delete" data-key="{{item.componentKey}}" catchtap="handleRemoveComponent">删除</button>
             </view>
             <view
               id="component-row-{{item.componentKey}}"
-              class="component-row {{draggingIndex === index ? 'dragging' : ''}} {{dragTargetIndex === index && draggingIndex !== -1 ? 'drag-target' : ''}} {{componentRows.isEditable(item.componentType) ? 'editable' : ''}} {{validationComponentKey === item.componentKey ? 'validation-error' : ''}}"
+              class="component-row pe-component-row {{draggingIndex === index ? 'dragging' : ''}} {{dragTargetIndex === index && draggingIndex !== -1 ? 'drag-target' : ''}} {{componentRows.isEditable(item.componentType) ? 'editable' : ''}} {{validationComponentKey === item.componentKey ? 'validation-error' : ''}}"
               style="{{draggingIndex === index ? componentDragStyle : ''}}"
               data-key="{{item.componentKey}}"
               data-type="{{item.componentType}}"
@@ -156,10 +156,11 @@
               aria-role="{{componentRows.resolveAriaRole(item.componentType)}}"
               aria-label="{{componentRows.resolveAriaLabel(item.componentType, item.name)}}"
             >
-              <view class="component-order">{{index + 1}}</view>
-              <view class="component-copy {{item.componentType === 'SINGLE_WORK' ? 'with-summary' : ''}}">
-                <view class="component-title">{{item.name || item.componentType}}</view>
-                <view wx:if="{{item.componentType === 'SINGLE_WORK'}}" class="component-summary">{{componentRows.resolveSingleWorkSummary(item, singleWorkSummaries)}}</view>
+              <view class="component-order pe-component-index">{{index + 1}}</view>
+              <view class="component-copy {{item.componentType === 'SINGLE_WORK' || item.componentType === 'HYPERLINK' ? 'with-summary' : ''}}">
+                <view class="component-title pe-component-title">{{item.name || item.componentType}}</view>
+                <view wx:if="{{item.componentType === 'SINGLE_WORK'}}" class="component-summary pe-component-description">{{componentRows.resolveSingleWorkSummary(item, singleWorkSummaries)}}</view>
+                <view wx:elif="{{item.componentType === 'HYPERLINK'}}" class="component-summary pe-component-description">{{componentRows.resolveHyperlinkSummary(item, singleWorkSummaries)}}</view>
               </view>
               <view class="component-drag-handle"></view>
               <view class="component-row-arrow {{componentRows.isEditable(item.componentType) ? '' : 'placeholder'}}">
@@ -176,12 +177,12 @@
     </view>
   </scroll-view>
 
-  <view class="component-picker-mask {{backgroundColorSheetVisible ? 'visible' : ''}}" catchtap="handleCloseBackgroundColorSheet">
-    <view class="component-picker-panel background-color-panel" catchtap="noop">
-      <view class="component-picker-grabber"></view>
-      <view class="component-picker-heading">
-        <view class="component-picker-title">自定义背景色</view>
-        <view class="component-picker-count">{{backgroundColorDraft}}</view>
+  <view class="pe-sheet-mask {{backgroundColorSheetVisible ? 'pe-sheet-mask-visible' : ''}}" catchtap="handleCloseBackgroundColorSheet">
+    <view class="background-color-panel pe-sheet-panel pe-sheet-size-compact {{backgroundColorSheetVisible ? 'pe-sheet-panel-visible' : ''}}" catchtap="noop">
+      <view class="pe-sheet-grabber"></view>
+      <view class="pe-sheet-heading">
+        <view class="pe-sheet-title">自定义背景色</view>
+        <view class="pe-sheet-meta">{{backgroundColorDraft}}</view>
       </view>
       <view
         class="background-color-pad"
@@ -210,7 +211,7 @@
         ></view>
       </view>
       <input
-        class="background-hex-input"
+        class="background-hex-input pe-sheet-field"
         value="{{backgroundColorDraft}}"
         bindinput="handleBackgroundHexInput"
         bindblur="handleBackgroundHexBlur"
@@ -221,19 +222,19 @@
         <view class="background-color-preview-chip" style="background-color: {{backgroundColorDraft}};"></view>
         <view class="background-color-preview-text">预览 {{backgroundColorDraft}}</view>
       </view>
-      <view class="component-picker-actions">
-        <button class="component-picker-cancel" catchtap="handleCloseBackgroundColorSheet">取消</button>
-        <button class="component-picker-confirm" catchtap="handleConfirmBackgroundColor">确定</button>
+      <view class="pe-sheet-actions">
+        <button class="pe-sheet-action-cancel" catchtap="handleCloseBackgroundColorSheet">取消</button>
+        <button class="pe-sheet-action-confirm" catchtap="handleConfirmBackgroundColor">确定</button>
       </view>
     </view>
   </view>
 
-  <view class="component-picker-mask {{componentSheetVisible ? 'visible' : ''}}" catchtap="handleCloseComponentSheet">
-    <view class="component-picker-panel" catchtap="noop">
-      <view class="component-picker-grabber"></view>
-      <view class="component-picker-heading">
-        <view class="component-picker-title">选择组件</view>
-        <view class="component-picker-count">{{componentOptions.length}} 个可选</view>
+  <view class="pe-sheet-mask {{componentSheetVisible ? 'pe-sheet-mask-visible' : ''}}" catchtap="handleCloseComponentSheet">
+    <view class="pe-sheet-panel pe-sheet-size-compact {{componentSheetVisible ? 'pe-sheet-panel-visible' : ''}}" catchtap="noop">
+      <view class="pe-sheet-grabber"></view>
+      <view class="pe-sheet-heading">
+        <view class="pe-sheet-title">选择组件</view>
+        <view class="pe-sheet-meta">{{componentOptions.length}} 个可选</view>
       </view>
 
       <scroll-view class="component-option-scroll" scroll-y type="list">
@@ -241,7 +242,7 @@
           <view
             wx:for="{{componentOptions}}"
             wx:key="componentType"
-            class="component-option {{item.disabled ? 'disabled' : ''}}"
+            class="component-option pe-sheet-choice {{item.disabled ? 'disabled' : ''}}"
             data-type="{{item.componentType}}"
             data-disabled="{{item.disabled}}"
             catchtap="handleSelectComponent"
@@ -257,25 +258,278 @@
         </view>
       </scroll-view>
 
-      <view class="component-picker-actions">
-        <button class="component-picker-cancel" catchtap="handleCloseComponentSheet">取消</button>
+      <view class="pe-sheet-actions">
+        <button class="pe-sheet-action-cancel" catchtap="handleCloseComponentSheet">取消</button>
       </view>
     </view>
   </view>
 
-  <view class="component-work-picker-mask {{componentWorkSheetVisible ? 'visible' : ''}}" catchtap="handleCloseComponentWorkSheet">
-    <view class="component-work-list-panel component-work-picker-panel" catchtap="noop">
-      <view class="component-picker-grabber"></view>
-      <view class="component-picker-heading">
-        <view class="component-picker-title">{{componentWorkSheetTitle}}</view>
-        <view class="component-picker-count">{{componentWorkSelectedCountText}}</view>
+  <view class="pe-sheet-mask {{hyperlinkSheetVisible ? 'pe-sheet-mask-visible' : ''}}" catchtap="handleCloseHyperlinkSheet">
+    <view class="hyperlink-sheet-panel pe-sheet-panel pe-sheet-size-long {{hyperlinkForm.actionType ? '' : 'hyperlink-sheet-panel-initial'}} {{hyperlinkSheetVisible ? 'pe-sheet-panel-visible' : ''}}" catchtap="noop">
+      <view class="pe-sheet-grabber"></view>
+      <view class="pe-sheet-heading">
+        <view class="pe-sheet-title">编辑超链接</view>
+        <view class="pe-sheet-meta hyperlink-sheet-meta">二选一配置</view>
       </view>
 
+      <scroll-view class="hyperlink-form-scroll pe-sheet-scroll" scroll-y type="list">
+        <view class="hyperlink-form-content">
+          <view class="form-row">
+            <view class="field-heading">
+              <view class="field-label">展示图片（图片 / 动图作品）</view>
+            </view>
+            <view class="hyperlink-work-current {{hyperlinkForm.workId ? '' : 'hyperlink-work-current-empty'}}">
+              <view class="hyperlink-work-current-label">当前已选</view>
+              <view wx:if="{{hyperlinkForm.workId}}" class="hyperlink-work-current-content">
+                <view class="hyperlink-work-thumbnail">
+                  <image
+                    wx:if="{{singleWorkSummaryMap[hyperlinkForm.workId] && singleWorkSummaryMap[hyperlinkForm.workId].thumbUrl}}"
+                    class="hyperlink-work-thumbnail-image"
+                    src="{{singleWorkSummaryMap[hyperlinkForm.workId].thumbUrl}}"
+                    mode="aspectFill"
+                  ></image>
+                  <view wx:else class="hyperlink-work-thumbnail-placeholder">作品图</view>
+                </view>
+                <view class="hyperlink-work-copy">
+                  <view class="hyperlink-work-title">{{hyperlinkWorkSummary}}</view>
+                  <view class="hyperlink-work-note">{{singleWorkSummaryMap[hyperlinkForm.workId] ? (singleWorkSummaryMap[hyperlinkForm.workId].metaText || '图片 / 动图作品') : '图片 / 动图作品'}}</view>
+                </view>
+              </view>
+              <view wx:else class="hyperlink-work-current-empty-text">请从下方选择图片或动图作品</view>
+            </view>
+
+            <scroll-view wx:if="{{componentWorkFilterTags.length}}" class="hyperlink-work-filter-scroll" scroll-x type="list">
+              <view class="component-work-filter-row hyperlink-work-filter-row">
+                <view
+                  wx:for="{{componentWorkFilterTags}}"
+                  wx:key="id"
+                  class="component-work-filter-pill pe-sheet-choice {{(!componentWorkSelectedTagId && !item.id) || componentWorkSelectedTagId === item.id ? 'pe-sheet-choice-selected-filled' : ''}}"
+                  data-tag-id="{{item.id}}"
+                  catchtap="handleComponentWorkTagTap"
+                  aria-role="button"
+                  aria-label="筛选{{item.name}}"
+                >
+                  <view
+                    class="component-work-filter-dot"
+                    style="background: {{((!componentWorkSelectedTagId && !item.id) || componentWorkSelectedTagId === item.id) ? '#ffffff' : (item.color || '#212529')}};"
+                  ></view>
+                  <text>{{item.labelText}}</text>
+                </view>
+              </view>
+            </scroll-view>
+
+            <view wx:if="{{componentWorkLoading && componentWorkOptions.length === 0}}" class="component-work-state hyperlink-work-state">加载中...</view>
+            <view wx:elif="{{componentWorkErrorText && componentWorkOptions.length === 0}}" class="component-work-state hyperlink-work-state error">
+              <view>{{componentWorkErrorText}}</view>
+              <view class="component-work-retry" catchtap="handleRetryHyperlinkWorks" aria-role="button" aria-label="重新加载超链接作品">重试</view>
+            </view>
+            <view wx:elif="{{componentWorkOptions.length === 0 && !componentWorkHasMore}}" class="component-work-state hyperlink-work-state">{{componentWorkEmptyText}}</view>
+            <scroll-view
+              wx:else
+              class="hyperlink-work-scroll"
+              scroll-x
+              type="list"
+              lower-threshold="80"
+              bindscrolltolower="handleComponentWorkScrollToLower"
+            >
+              <view class="hyperlink-work-list">
+                <view
+                  wx:for="{{componentWorkOptions}}"
+                  wx:key="id"
+                  class="hyperlink-work-option pe-sheet-choice {{item.selected ? 'pe-sheet-choice-selected hyperlink-option-selected' : ''}}"
+                  data-id="{{item.id}}"
+                  catchtap="handleSelectHyperlinkWork"
+                  aria-role="radio"
+                  aria-checked="{{item.selected}}"
+                  aria-label="选择{{item.title}}"
+                >
+                  <view class="hyperlink-work-option-thumbnail">
+                    <image wx:if="{{item.thumbUrl}}" src="{{item.thumbUrl}}" mode="aspectFill"></image>
+                    <view wx:else class="hyperlink-work-option-placeholder">作品</view>
+                    <view class="schedule-query-mode-radio">
+                      <view class="hyperlink-radio-dot" aria-hidden="true"></view>
+                    </view>
+                  </view>
+                  <view class="hyperlink-work-option-title">{{item.title}}</view>
+                  <view class="hyperlink-work-option-meta">{{item.metaText}}</view>
+                </view>
+                <view wx:if="{{componentWorkLoadingMore}}" class="hyperlink-work-tail">加载更多作品</view>
+                <view wx:elif="{{componentWorkErrorText}}" class="hyperlink-work-tail hyperlink-work-tail-retry" catchtap="handleRetryHyperlinkWorks" aria-role="button">{{componentWorkErrorText}} · 重试</view>
+                <view wx:elif="{{!componentWorkHasMore && componentWorkOptions.length > 0}}" class="hyperlink-work-tail">已显示全部作品</view>
+              </view>
+            </scroll-view>
+          </view>
+
+          <view class="form-row">
+            <view class="field-heading"><view class="field-label">点击行为（二选一）</view></view>
+            <view class="hyperlink-choice-list">
+              <view
+                wx:for="{{hyperlinkActionTypeOptions}}"
+                wx:key="value"
+                class="hyperlink-choice pe-sheet-choice {{hyperlinkForm.actionType === item.value ? 'pe-sheet-choice-selected hyperlink-option-selected' : ''}} {{hyperlinkForm.actionType && hyperlinkForm.actionType !== item.value ? 'hyperlink-choice-muted' : ''}}"
+                data-value="{{item.value}}"
+                catchtap="handleHyperlinkActionTypeTap"
+                aria-role="radio"
+                aria-checked="{{hyperlinkForm.actionType === item.value}}"
+              >
+                <view class="schedule-query-mode-radio">
+                  <view class="hyperlink-radio-dot" aria-hidden="true"></view>
+                </view>
+                <view class="hyperlink-choice-copy">
+                  <view class="hyperlink-choice-title">{{item.label}}</view>
+                  <view class="hyperlink-choice-description">{{item.description}}</view>
+                </view>
+              </view>
+            </view>
+          </view>
+
+          <view wx:if="{{hyperlinkForm.actionType === 'INTERNAL_PORTFOLIO'}}" class="form-row">
+            <view class="field-heading"><view class="field-label">跳转作品集（仅已发布 · 左右滑动单选）</view></view>
+            <view wx:if="{{hyperlinkTargetLoading}}" class="component-work-state">加载中...</view>
+            <view wx:elif="{{hyperlinkTargetErrorText}}" class="component-work-state error">
+              <view>{{hyperlinkTargetErrorText}}</view>
+              <view class="component-work-retry" catchtap="handleRetryHyperlinkTargets">重试</view>
+            </view>
+            <view wx:elif="{{hyperlinkTargetOptions.length === 0}}" class="component-work-state">暂无可跳转的已发布作品集</view>
+            <scroll-view wx:else class="hyperlink-target-scroll" scroll-x type="list">
+              <view class="hyperlink-target-list">
+                <view
+                  wx:for="{{hyperlinkTargetOptions}}"
+                  wx:key="portfolioId"
+                  class="hyperlink-target-option pe-sheet-choice {{hyperlinkForm.targetPortfolioId === item.portfolioId ? 'pe-sheet-choice-selected hyperlink-option-selected' : ''}} {{item.selectable ? '' : 'disabled'}}"
+                  data-id="{{item.portfolioId}}"
+                  data-selectable="{{item.selectable}}"
+                  catchtap="handleSelectHyperlinkTarget"
+                  aria-role="radio"
+                  aria-checked="{{hyperlinkForm.targetPortfolioId === item.portfolioId}}"
+                  aria-disabled="{{!item.selectable}}"
+                >
+                  <view class="hyperlink-target-cover">
+                    <image wx:if="{{item.coverUrl}}" class="hyperlink-target-cover-image" src="{{item.coverUrl}}" mode="aspectFill"></image>
+                    <view wx:else class="hyperlink-target-cover-placeholder">封面</view>
+                  </view>
+                  <view class="hyperlink-target-copy">
+                    <view class="hyperlink-target-title">{{item.title}}</view>
+                    <view wx:if="{{item.currentSelection}}" class="hyperlink-target-current">当前选择·已失效</view>
+                    <view wx:if="{{item.disabledReason}}" class="hyperlink-target-reason">{{item.disabledReason}}</view>
+                  </view>
+                  <view class="schedule-query-mode-radio">
+                    <view class="hyperlink-radio-dot" aria-hidden="true"></view>
+                  </view>
+                </view>
+              </view>
+            </scroll-view>
+            <view class="hyperlink-field-note hyperlink-target-note">仅展示已发布的个人作品集；左右滑动浏览，点按卡片单选。</view>
+          </view>
+
+          <block wx:if="{{hyperlinkForm.actionType === 'EXTERNAL_LINK'}}">
+            <view class="form-row">
+              <view class="field-heading">
+                <view class="field-label">链接 / 分享内容</view>
+                <view class="field-limit">{{hyperlinkExternalContentCount}} / {{hyperlinkExternalContentMaxLength}}</view>
+              </view>
+              <textarea
+                class="hyperlink-content-input pe-sheet-field pe-sheet-field-textarea"
+                value="{{hyperlinkForm.externalContent}}"
+                placeholder="粘贴链接、口令或带说明的分享内容"
+                bindinput="handleHyperlinkExternalContentInput"
+                maxlength="-1"
+              ></textarea>
+            </view>
+            <view class="form-row">
+              <view class="field-heading">
+                <view class="field-label">提示语（复制成功后展示）</view>
+                <view class="field-limit">{{hyperlinkPromptTextCount}} / {{hyperlinkPromptTextMaxLength}}</view>
+              </view>
+              <input
+                class="hyperlink-prompt-input pe-sheet-field"
+                value="{{hyperlinkForm.promptText}}"
+                placeholder="请打开小红书粘贴"
+                bindinput="handleHyperlinkPromptTextInput"
+                maxlength="-1"
+              />
+            </view>
+          </block>
+
+          <view class="form-row hyperlink-icon-switch-row">
+            <view class="hyperlink-icon-switch-copy">
+              <view class="field-label">展示点击图标</view>
+            </view>
+            <switch checked="{{hyperlinkForm.showClickIcon}}" color="#212529" bindchange="handleHyperlinkShowIconChange"></switch>
+          </view>
+          <view wx:if="{{hyperlinkForm.showClickIcon}}" class="form-row">
+            <view class="hyperlink-choice-list">
+              <view
+                wx:for="{{hyperlinkIconPositionOptions}}"
+                wx:key="value"
+                class="hyperlink-choice hyperlink-position-choice pe-sheet-choice {{hyperlinkForm.iconPosition === item.value ? 'pe-sheet-choice-selected hyperlink-option-selected' : ''}}"
+                data-value="{{item.value}}"
+                catchtap="handleHyperlinkIconPositionTap"
+                aria-role="radio"
+                aria-checked="{{hyperlinkForm.iconPosition === item.value}}"
+              >
+                <view class="schedule-query-mode-radio">
+                  <view class="hyperlink-radio-dot" aria-hidden="true"></view>
+                </view>
+                <view class="hyperlink-choice-copy">
+                  <view class="hyperlink-choice-title">{{item.label}}</view>
+                  <view class="hyperlink-choice-description">{{item.description}}</view>
+                </view>
+              </view>
+            </view>
+          </view>
+          <view wx:if="{{!hyperlinkForm.actionType}}" class="hyperlink-sheet-note">选中「内部作品集跳转」后才展示跳转作品集配置；选中「外部链接复制」后才展示链接 / 分享内容与提示语；未选中时对应配置不出现。开关关闭时不展示图标位置选项。</view>
+          <view wx:elif="{{hyperlinkForm.actionType === 'INTERNAL_PORTFOLIO'}}" class="hyperlink-sheet-note">预览页与访客页点击图片后跳转到目标作品集，可通过左上角返回来源页。</view>
+          <view wx:else class="hyperlink-sheet-note">预览页与访客页点击图片后原样复制整段内容。微信系统「内容已复制」提示结束后，再显示上方维护者提示语，两个提示不叠加。</view>
+        </view>
+      </scroll-view>
+
+      <view class="hyperlink-sheet-actions pe-sheet-actions">
+        <button class="hyperlink-action-cancel pe-sheet-action-cancel" catchtap="handleCloseHyperlinkSheet">取消</button>
+        <button class="hyperlink-action-confirm pe-sheet-action-confirm {{hyperlinkForm.actionType ? '' : 'hyperlink-action-confirm-initial'}}" catchtap="handleConfirmHyperlinkConfig">完成</button>
+      </view>
+    </view>
+  </view>
+
+  <view class="pe-sheet-mask {{componentWorkSheetVisible ? 'pe-sheet-mask-visible' : ''}}" catchtap="handleCloseComponentWorkSheet">
+    <view class="component-work-list-panel pe-sheet-panel pe-sheet-size-long {{componentWorkSheetVisible ? 'pe-sheet-panel-visible' : ''}}" catchtap="noop">
+      <view class="pe-sheet-grabber"></view>
+      <view class="pe-sheet-heading">
+        <view class="pe-sheet-title">{{componentWorkSheetTitle}}</view>
+        <view class="pe-sheet-meta">{{componentWorkSelectedCountText}}</view>
+      </view>
+
+      <single-work-picker
+        wx:if="{{editingComponentType === 'SINGLE_WORK'}}"
+        current-selection="{{componentWorkCurrentSelection}}"
+        keyword="{{componentWorkKeyword}}"
+        filter-tags="{{componentWorkFilterTags}}"
+        selected-tag-id="{{componentWorkSelectedTagId}}"
+        options="{{componentWorkOptions}}"
+        loading="{{componentWorkLoading}}"
+        loading-more="{{componentWorkLoadingMore}}"
+        error-text="{{componentWorkErrorText}}"
+        empty-text="{{componentWorkEmptyText}}"
+        has-more="{{componentWorkHasMore}}"
+        show-title="{{componentWorkShowTitle}}"
+        show-description="{{componentWorkShowDescription}}"
+        bindkeywordchange="handleComponentWorkKeywordInput"
+        bindsearch="handleComponentWorkSearchConfirm"
+        bindclearsearch="handleClearComponentWorkSearch"
+        bindtagchange="handleSingleWorkPickerTagChange"
+        bindworkselect="handleSingleWorkPickerSelect"
+        bindloadmore="handleComponentWorkScrollToLower"
+        bindretryloadmore="handleRetrySingleWorkPicker"
+        bindshowtitlechange="handleSingleWorkShowTitleChange"
+        bindshowdescriptionchange="handleWorkShowDescriptionChange"
+      ></single-work-picker>
+
+      <block wx:else>
       <view class="component-work-tools">
         <view class="component-work-search">
           <view class="component-work-search-icon"></view>
           <input
-            class="component-work-search-input"
+            class="component-work-search-input pe-sheet-field"
             value="{{componentWorkKeyword}}"
             confirm-type="search"
             placeholder="搜索作品名称"
@@ -293,8 +547,7 @@
             <view
               wx:for="{{componentWorkFilterTags}}"
               wx:key="id"
-              class="component-work-filter-pill {{(!componentWorkSelectedTagId && !item.id) || componentWorkSelectedTagId === item.id ? 'active' : ''}}"
-              style="{{((!componentWorkSelectedTagId && !item.id) || componentWorkSelectedTagId === item.id) ? item.activeStyle : item.filterStyle}}"
+              class="component-work-filter-pill pe-sheet-choice {{(!componentWorkSelectedTagId && !item.id) || componentWorkSelectedTagId === item.id ? 'pe-sheet-choice-selected-filled' : ''}}"
               data-tag-id="{{item.id}}"
               catchtap="handleComponentWorkTagTap"
               aria-role="button"
@@ -321,7 +574,7 @@
           <view
             wx:for="{{componentWorkOptions}}"
             wx:key="id"
-            class="component-work-option {{item.selected ? 'selected' : ''}}"
+            class="component-work-option pe-sheet-choice {{item.selected ? 'pe-sheet-choice-selected' : ''}}"
             data-id="{{item.id}}"
             catchtap="handleToggleComponentWork"
             aria-role="{{componentWorkSelectionMode === 'single' ? 'radio' : 'checkbox'}}"
@@ -345,40 +598,26 @@
           <view wx:if="{{!componentWorkHasMore && componentWorkOptions.length > 0}}" class="component-work-footer">已显示全部作品</view>
         </view>
       </scroll-view>
+      </block>
 
-      <view wx:if="{{componentWorkSelectionMode === 'single'}}" class="single-work-title-setting">
-        <view class="single-work-title-setting-copy">
-          <view class="single-work-title-setting-label">展示作品名</view>
-          <view class="single-work-title-setting-note">关闭后隐藏作品标题</view>
-        </view>
-        <switch checked="{{componentWorkShowTitle}}" color="#c28b37" bindchange="handleSingleWorkShowTitleChange"></switch>
-      </view>
-      <view wx:if="{{componentWorkSelectionMode === 'single'}}" class="single-work-title-setting">
-        <view class="single-work-title-setting-copy">
-          <view class="single-work-title-setting-label">展示作品说明</view>
-          <view class="single-work-title-setting-note">关闭后隐藏作品说明</view>
-        </view>
-        <switch checked="{{componentWorkShowDescription}}" color="#c28b37" bindchange="handleWorkShowDescriptionChange"></switch>
-      </view>
-
-      <view class="component-work-actions">
-        <button class="component-work-cancel" catchtap="handleCloseComponentWorkSheet">取消</button>
-        <button class="component-work-confirm" catchtap="handleConfirmComponentWorks">完成</button>
+      <view class="component-work-actions pe-sheet-actions">
+        <button class="pe-sheet-action-cancel" catchtap="handleCloseComponentWorkSheet">取消</button>
+        <button class="pe-sheet-action-confirm" catchtap="handleConfirmComponentWorks">完成</button>
       </view>
     </view>
   </view>
 
-  <view class="profile-sheet-mask component-work-picker-mask {{profileSheetVisible ? 'visible' : ''}}" catchtap="handleCloseProfileSheet">
-    <view class="profile-sheet-panel component-work-picker-panel" catchtap="noop">
-      <view class="component-picker-grabber"></view>
-      <view class="component-picker-heading">
-        <view class="component-picker-title">编辑个人资料</view>
-        <button class="profile-refresh-button" catchtap="handleRefreshProfileFromBase" loading="{{profileSheetLoading}}">从基础资料刷新</button>
+  <view class="profile-sheet-mask pe-sheet-mask {{profileSheetVisible ? 'pe-sheet-mask-visible' : ''}}" catchtap="handleCloseProfileSheet">
+    <view class="profile-sheet-panel pe-sheet-panel pe-sheet-size-long {{profileSheetVisible ? 'pe-sheet-panel-visible' : ''}}" catchtap="noop">
+      <view class="pe-sheet-grabber"></view>
+      <view class="pe-sheet-heading">
+        <view class="pe-sheet-title">编辑个人资料</view>
+        <button class="profile-refresh-button {{profileSheetLoading ? 'pe-action-loading' : ''}}" catchtap="handleRefreshProfileFromBase" loading="{{profileSheetLoading}}" disabled="{{profileSheetLoading}}">从基础资料刷新</button>
       </view>
 
       <view wx:if="{{profileSheetErrorText}}" class="component-work-state error profile-sheet-error">{{profileSheetErrorText}}</view>
 
-      <scroll-view class="profile-form-scroll profile-sheet-scroll" scroll-y type="list">
+      <scroll-view class="profile-form-scroll profile-sheet-scroll pe-sheet-scroll" scroll-y type="list">
         <view class="profile-form-list-content">
           <view class="profile-sheet-fields-panel">
             <view class="form-row">
@@ -399,28 +638,28 @@
                 <view class="field-label">姓名 / 艺名</view>
                 <view class="profile-field-limit">{{profileFieldCounters.displayName}}</view>
               </view>
-              <input class="input profile-sheet-input" value="{{profileForm.displayName}}" data-field="displayName" bindinput="handleProfileInput" maxlength="50" />
+              <input class="profile-sheet-input pe-sheet-field" value="{{profileForm.displayName}}" data-field="displayName" bindinput="handleProfileInput" maxlength="50" />
             </view>
             <view class="form-row">
               <view class="field-heading">
                 <view class="field-label">职业身份</view>
                 <view class="profile-field-limit">{{profileFieldCounters.profession}}</view>
               </view>
-              <input class="input profile-sheet-input" value="{{profileForm.profession}}" data-field="profession" bindinput="handleProfileInput" maxlength="50" />
+              <input class="profile-sheet-input pe-sheet-field" value="{{profileForm.profession}}" data-field="profession" bindinput="handleProfileInput" maxlength="50" />
             </view>
             <view class="form-row">
               <view class="field-heading">
                 <view class="field-label">服务城市</view>
                 <view class="profile-field-limit">{{profileFieldCounters.city}}</view>
               </view>
-              <input class="input profile-sheet-input" value="{{profileForm.city}}" data-field="city" bindinput="handleProfileInput" maxlength="50" />
+              <input class="profile-sheet-input pe-sheet-field" value="{{profileForm.city}}" data-field="city" bindinput="handleProfileInput" maxlength="50" />
             </view>
             <view class="form-row">
               <view class="field-heading">
                 <view class="field-label">个人简介</view>
                 <view class="profile-field-limit">{{profileFieldCounters.bio}}</view>
               </view>
-              <textarea class="input textarea profile-sheet-textarea" value="{{profileForm.bio}}" data-field="bio" bindinput="handleProfileInput" maxlength="500"></textarea>
+              <textarea class="profile-sheet-textarea pe-sheet-field pe-sheet-field-textarea" value="{{profileForm.bio}}" data-field="bio" bindinput="handleProfileInput" maxlength="500"></textarea>
             </view>
             <view class="form-row profile-tag-form-row">
               <view class="field-heading">
@@ -469,34 +708,35 @@
               <view
                 wx:for="{{profileVisibleOptions}}"
                 wx:key="field"
-                class="profile-visibility-option"
+                class="profile-visibility-option pe-sheet-choice"
               >
                 <view class="profile-visibility-label">{{item.label}}</view>
-                <switch checked="{{item.checked}}" color="#17202a" data-field="{{item.field}}" bindchange="handleProfileVisibleFieldChange" />
+                <switch checked="{{item.checked}}" color="#212529" data-field="{{item.field}}" bindchange="handleProfileVisibleFieldChange" />
               </view>
             </view>
           </view>
         </view>
       </scroll-view>
 
-      <view class="component-work-actions">
-        <button class="component-work-cancel" catchtap="handleCloseProfileSheet">取消</button>
-        <button class="component-work-confirm" catchtap="handleConfirmProfileSheet">完成</button>
+      <view class="component-work-actions pe-sheet-actions">
+        <button class="pe-sheet-action-cancel" catchtap="handleCloseProfileSheet">取消</button>
+        <button class="pe-sheet-action-confirm" catchtap="handleConfirmProfileSheet">完成</button>
       </view>
     </view>
   </view>
 
-  <view class="profile-tag-dialog {{profileTagDialogVisible ? 'visible' : ''}}">
+  <view class="profile-tag-dialog pe-sheet-mask {{profileTagDialogVisible ? 'pe-sheet-mask-visible' : ''}}">
     <view class="profile-tag-dialog-backdrop" catchtap="handleCloseProfileTagDialog"></view>
-    <view class="profile-tag-dialog-panel" catchtap="noop">
-      <view class="field-heading">
-        <view class="component-picker-title">新增标签</view>
-        <view class="profile-field-limit">{{profileForm.tags.length}} / 10</view>
+    <view class="profile-tag-dialog-panel pe-sheet-panel pe-sheet-size-compact {{profileTagDialogVisible ? 'pe-sheet-panel-visible' : ''}}" catchtap="noop">
+      <view class="pe-sheet-grabber"></view>
+      <view class="pe-sheet-heading">
+        <view class="pe-sheet-title">新增标签</view>
+        <view class="pe-sheet-meta">{{profileForm.tags.length}} / 10</view>
       </view>
       <view class="form-row">
         <view class="field-label">标签文字</view>
         <input
-          class="input profile-sheet-input"
+          class="profile-sheet-input pe-sheet-field"
           value="{{profileNewTag}}"
           bindinput="handleProfileNewTagInput"
           maxlength="10"
@@ -507,12 +747,13 @@
         <view class="field-label">标签颜色</view>
         <view class="profile-tag-color-grid">
           <view
-            class="profile-tag-color-choice {{profileSelectedTagColor === item.color ? 'active' : ''}}"
+            class="profile-tag-color-choice pe-sheet-choice {{profileSelectedTagColor === item.color ? 'pe-sheet-choice-selected' : ''}}"
             wx:for="{{profileTagColorOptions}}"
             wx:key="color"
             data-color="{{item.color}}"
             catchtap="handleSelectProfileTagColor"
-            aria-role="button"
+            aria-role="radio"
+            aria-checked="{{profileSelectedTagColor === item.color}}"
             aria-label="选择{{item.name}}标签颜色"
           >
             <view class="profile-tag-color-swatch" style="{{item.swatchStyle}}"></view>
@@ -521,50 +762,52 @@
         </view>
       </view>
       <view wx:if="{{profileTagErrorText}}" class="profile-tag-error">{{profileTagErrorText}}</view>
-      <view class="component-work-actions profile-tag-dialog-actions">
-        <button class="component-work-cancel" catchtap="handleCloseProfileTagDialog">取消</button>
-        <button class="component-work-confirm" catchtap="handleAddProfileTag">添加</button>
+      <view class="component-work-actions profile-tag-dialog-actions pe-sheet-actions">
+        <button class="pe-sheet-action-cancel" catchtap="handleCloseProfileTagDialog">取消</button>
+        <button class="pe-sheet-action-confirm" catchtap="handleAddProfileTag">添加</button>
       </view>
     </view>
   </view>
 
-  <view class="display-group-picker-mask {{displayGroupSheetVisible ? 'visible' : ''}}" catchtap="handleCloseDisplayGroupSheet">
-    <view class="display-group-picker-panel" catchtap="noop">
-      <view class="component-picker-grabber"></view>
-      <view class="component-picker-heading">
-        <view class="component-picker-title">作品集展示标签</view>
-        <view class="component-picker-count">{{displayGroupOptions.length}} 个作品标签</view>
+  <view class="display-group-picker-mask pe-sheet-mask {{displayGroupSheetVisible ? 'pe-sheet-mask-visible' : ''}}" catchtap="handleCloseDisplayGroupSheet">
+    <view class="display-group-picker-panel pe-sheet-panel pe-sheet-size-long {{displayGroupSheetVisible ? 'pe-sheet-panel-visible' : ''}}" catchtap="noop">
+      <view class="pe-sheet-grabber"></view>
+      <view class="pe-sheet-heading">
+        <view class="pe-sheet-title">作品集展示标签</view>
+        <view class="pe-sheet-meta">{{displayGroupOptions.length}} 个作品标签</view>
       </view>
 
       <view wx:if="{{displayGroupLoading}}" class="component-work-state">处理中...</view>
       <view wx:elif="{{displayGroupErrorText}}" class="component-work-state error">{{displayGroupErrorText}}</view>
 
-      <scroll-view wx:else class="display-group-scroll" scroll-y type="list">
+      <scroll-view wx:else class="display-group-scroll" scroll-x>
         <view class="display-group-list-content">
           <view
             wx:for="{{displayGroupOptions}}"
             wx:key="groupKey"
-            class="display-group-pill {{item.active ? 'active' : ''}} {{item.selected ? 'selected' : ''}}"
-            style="{{item.active ? item.activeStyle : item.filterStyle}}"
+            class="display-group-pill pe-sheet-choice {{item.active ? 'pe-sheet-choice-selected-filled' : ''}}"
             data-group-key="{{item.groupKey}}"
             catchtap="handleSelectDisplayGroup"
             aria-role="button"
+            aria-current="{{item.active}}"
             aria-label="选择{{item.name}}"
           >
             <view class="display-group-main">
               <view class="display-group-dot" style="background: {{item.active ? '#ffffff' : item.color}};"></view>
               <view class="display-group-name">{{item.name}}</view>
-              <view class="display-group-count">{{item.countText}}</view>
             </view>
-            <view
-              class="display-group-order {{item.selected ? 'selected' : ''}}"
-              data-tag-id="{{item.id}}"
-              catchtap="handleToggleDisplayGroupTag"
-              aria-role="checkbox"
-              aria-checked="{{item.selected}}"
-              aria-label="{{item.selected ? '取消选择' : '选择'}}{{item.name}}作品标签"
-            >
-              <text>{{item.selectionOrder ? item.selectionOrder : ''}}</text>
+            <view class="display-group-badges">
+              <view class="display-group-count">{{item.countText}}</view>
+              <view
+                class="display-group-order"
+                data-tag-id="{{item.id}}"
+                catchtap="handleToggleDisplayGroupTag"
+                aria-role="checkbox"
+                aria-checked="{{item.selected}}"
+                aria-label="{{item.selected ? '取消选择' : '选择'}}{{item.name}}作品标签"
+              >
+                <text>{{item.selectionOrder ? item.selectionOrder : ''}}</text>
+              </view>
             </view>
           </view>
         </view>
@@ -578,12 +821,12 @@
           </view>
         </view>
 
-        <scroll-view wx:if="{{displayGroupWorkOptions.length}}" class="display-group-work-scroll" scroll-y type="list">
+        <scroll-view wx:if="{{displayGroupWorkOptions.length}}" class="display-group-work-scroll" style="height: {{displayGroupWorkScrollHeight}}rpx;" scroll-y type="list">
           <view class="display-group-work-list">
             <view
               wx:for="{{displayGroupWorkOptions}}"
               wx:key="id"
-              class="display-group-work-item {{item.selected ? 'selected' : ''}}"
+              class="display-group-work-item pe-sheet-choice {{item.selected ? 'pe-sheet-choice-selected' : ''}}"
               data-id="{{item.id}}"
               catchtap="handleToggleDisplayGroupWork"
               aria-role="checkbox"
@@ -601,7 +844,7 @@
                   <view class="display-group-work-ratio">{{item.aspectRatioText}}</view>
                 </view>
               </view>
-              <view class="display-group-work-order {{item.selected ? 'selected' : ''}}">
+              <view class="display-group-work-order">
                 <text>{{item.selectionOrder ? item.selectionOrder : ''}}</text>
               </view>
             </view>
@@ -615,29 +858,29 @@
           <view class="single-work-title-setting-label">展示作品标题</view>
           <view class="single-work-title-setting-note">关闭后隐藏作品标题</view>
         </view>
-        <switch checked="{{displayGroupShowTitle}}" color="#c28b37" bindchange="handleDisplayGroupShowTitleChange"></switch>
+        <switch checked="{{displayGroupShowTitle}}" color="#212529" bindchange="handleDisplayGroupShowTitleChange"></switch>
       </view>
       <view wx:if="{{!displayGroupLoading && !displayGroupErrorText}}" class="single-work-title-setting">
         <view class="single-work-title-setting-copy">
           <view class="single-work-title-setting-label">展示作品说明</view>
           <view class="single-work-title-setting-note">关闭后隐藏作品说明</view>
         </view>
-        <switch checked="{{displayGroupShowDescription}}" color="#c28b37" bindchange="handleDisplayGroupShowDescriptionChange"></switch>
+        <switch checked="{{displayGroupShowDescription}}" color="#212529" bindchange="handleDisplayGroupShowDescriptionChange"></switch>
       </view>
 
-      <view class="component-work-actions">
-        <button class="component-work-cancel" catchtap="handleCancelDisplayGroupSheet">取消</button>
-        <button class="component-work-confirm" catchtap="handleConfirmDisplayGroupSheet">完成</button>
+      <view class="component-work-actions pe-sheet-actions">
+        <button class="pe-sheet-action-cancel" catchtap="handleCancelDisplayGroupSheet">取消</button>
+        <button class="pe-sheet-action-confirm" catchtap="handleConfirmDisplayGroupSheet">完成</button>
       </view>
     </view>
   </view>
 
-  <view class="qr-contact-sheet-mask component-work-picker-mask {{qrContactSheetVisible ? 'visible' : ''}}" catchtap="handleCloseQrContactSheet">
-    <view class="qr-contact-sheet-panel component-work-picker-panel" catchtap="noop">
-      <view class="component-picker-grabber"></view>
-      <view class="component-picker-heading">
-        <view class="component-picker-title">编辑二维码联系</view>
-        <view class="component-picker-count">{{qrContactForm.qrUrlSource === 'CUSTOM' ? '自定义' : '资料'}}</view>
+  <view class="qr-contact-sheet-mask pe-sheet-mask {{qrContactSheetVisible ? 'pe-sheet-mask-visible' : ''}}" catchtap="handleCloseQrContactSheet">
+    <view class="qr-contact-sheet-panel pe-sheet-panel pe-sheet-size-standard {{qrContactSheetVisible ? 'pe-sheet-panel-visible' : ''}}" catchtap="noop">
+      <view class="pe-sheet-grabber"></view>
+      <view class="pe-sheet-heading">
+        <view class="pe-sheet-title">编辑二维码联系</view>
+        <view class="pe-sheet-meta">{{qrContactForm.qrUrlSource === 'CUSTOM' ? '自定义' : '资料'}}</view>
       </view>
 
       <scroll-view class="profile-form-scroll" scroll-y type="list">
@@ -648,8 +891,8 @@
                 <view class="field-label">二维码来源</view>
               </view>
               <view class="qr-source-tabs" aria-role="tablist">
-                <button class="qr-source-tab {{qrContactForm.qrUrlSource !== 'CUSTOM' ? 'active' : ''}}" aria-role="tab" aria-selected="{{qrContactForm.qrUrlSource !== 'CUSTOM'}}" catchtap="handleUseProfileQrContact">个人资料</button>
-                <button class="qr-source-tab {{qrContactForm.qrUrlSource === 'CUSTOM' ? 'active' : ''}}" aria-role="tab" aria-selected="{{qrContactForm.qrUrlSource === 'CUSTOM'}}" catchtap="handleUseCustomQrContact">自定义图片</button>
+                <button class="qr-source-tab pe-sheet-choice {{qrContactForm.qrUrlSource !== 'CUSTOM' ? 'pe-sheet-choice-selected-filled' : ''}}" aria-role="tab" aria-selected="{{qrContactForm.qrUrlSource !== 'CUSTOM'}}" catchtap="handleUseProfileQrContact">个人资料</button>
+                <button class="qr-source-tab pe-sheet-choice {{qrContactForm.qrUrlSource === 'CUSTOM' ? 'pe-sheet-choice-selected-filled' : ''}}" aria-role="tab" aria-selected="{{qrContactForm.qrUrlSource === 'CUSTOM'}}" catchtap="handleUseCustomQrContact">自定义图片</button>
               </view>
               <view class="qr-source-tab-panel" aria-role="tabpanel">
                 <view wx:if="{{qrContactForm.qrUrlSource !== 'CUSTOM'}}" class="qr-contact-image-editor">
@@ -670,19 +913,19 @@
         </view>
       </scroll-view>
 
-      <view class="component-work-actions">
-        <button class="component-work-cancel" catchtap="handleCloseQrContactSheet">取消</button>
-        <button class="component-work-confirm" catchtap="handleConfirmQrContactSheet">完成</button>
+      <view class="component-work-actions pe-sheet-actions">
+        <button class="pe-sheet-action-cancel" catchtap="handleCloseQrContactSheet">取消</button>
+        <button class="pe-sheet-action-confirm" catchtap="handleConfirmQrContactSheet">完成</button>
       </view>
     </view>
   </view>
 
-  <view class="schedule-query-sheet-mask component-work-picker-mask {{scheduleQuerySheetVisible ? 'visible' : ''}}" catchtap="handleCloseScheduleQuerySheet">
-    <view class="schedule-query-sheet-panel component-work-picker-panel" catchtap="noop">
-      <view class="component-picker-grabber"></view>
-      <view class="component-picker-heading">
-        <view class="component-picker-title">编辑档期查询</view>
-        <view class="component-picker-count">{{scheduleQueryForm.displayMode === 'INLINE_CALENDAR' ? '内联' : '弹层'}}</view>
+  <view class="schedule-query-sheet-mask pe-sheet-mask {{scheduleQuerySheetVisible ? 'pe-sheet-mask-visible' : ''}}" catchtap="handleCloseScheduleQuerySheet">
+    <view class="schedule-query-sheet-panel pe-sheet-panel pe-sheet-size-compact {{scheduleQuerySheetVisible ? 'pe-sheet-panel-visible' : ''}}" catchtap="noop">
+      <view class="pe-sheet-grabber"></view>
+      <view class="pe-sheet-heading">
+        <view class="pe-sheet-title">编辑档期查询</view>
+        <view class="pe-sheet-meta">{{scheduleQueryForm.displayMode === 'INLINE_CALENDAR' ? '内联' : '弹层'}}</view>
       </view>
 
       <view class="schedule-query-form">
@@ -694,7 +937,7 @@
             <view
               wx:for="{{scheduleQueryDisplayModeOptions}}"
               wx:key="value"
-              class="schedule-query-mode-option {{scheduleQueryForm.displayMode === item.value ? 'active' : ''}}"
+              class="schedule-query-mode-option pe-sheet-choice {{scheduleQueryForm.displayMode === item.value ? 'pe-sheet-choice-selected' : ''}}"
               data-value="{{item.value}}"
               catchtap="handleScheduleQueryDisplayModeTap"
               aria-role="radio"
@@ -707,19 +950,19 @@
         </view>
       </view>
 
-      <view class="component-work-actions">
-        <button class="component-work-cancel" catchtap="handleCloseScheduleQuerySheet">取消</button>
-        <button class="component-work-confirm" catchtap="handleConfirmScheduleQueryConfig">完成</button>
+      <view class="component-work-actions pe-sheet-actions">
+        <button class="pe-sheet-action-cancel" catchtap="handleCloseScheduleQuerySheet">取消</button>
+        <button class="pe-sheet-action-confirm" catchtap="handleConfirmScheduleQueryConfig">完成</button>
       </view>
     </view>
   </view>
 
-  <view class="contact-form-sheet-mask component-work-picker-mask {{contactFormSheetVisible ? 'visible' : ''}}" catchtap="handleCloseContactFormSheet">
-    <view class="contact-form-sheet-panel component-work-picker-panel" catchtap="noop">
-      <view class="component-picker-grabber"></view>
-      <view class="component-picker-heading">
-        <view class="component-picker-title">编辑预留联系信息</view>
-        <view class="component-picker-count">{{contactFormConfigForm.displayMode === 'INLINE_FORM' ? '直接' : '弹层'}}</view>
+  <view class="contact-form-sheet-mask pe-sheet-mask {{contactFormSheetVisible ? 'pe-sheet-mask-visible' : ''}}" catchtap="handleCloseContactFormSheet">
+    <view class="contact-form-sheet-panel pe-sheet-panel pe-sheet-size-standard {{contactFormSheetVisible ? 'pe-sheet-panel-visible' : ''}}" catchtap="noop">
+      <view class="pe-sheet-grabber"></view>
+      <view class="pe-sheet-heading">
+        <view class="pe-sheet-title">编辑预留联系信息</view>
+        <view class="pe-sheet-meta">{{contactFormConfigForm.displayMode === 'INLINE_FORM' ? '直接' : '弹层'}}</view>
       </view>
 
       <view class="schedule-query-form">
@@ -731,7 +974,7 @@
             <view
               wx:for="{{contactFormDisplayModeOptions}}"
               wx:key="value"
-              class="schedule-query-mode-option {{contactFormConfigForm.displayMode === item.value ? 'active' : ''}}"
+              class="schedule-query-mode-option pe-sheet-choice {{contactFormConfigForm.displayMode === item.value ? 'pe-sheet-choice-selected' : ''}}"
               data-value="{{item.value}}"
               catchtap="handleContactFormDisplayModeTap"
               aria-role="radio"
@@ -744,70 +987,119 @@
         </view>
       </view>
 
-      <view class="component-work-actions">
-        <button class="component-work-cancel" catchtap="handleCloseContactFormSheet">取消</button>
-        <button class="component-work-confirm" catchtap="handleConfirmContactFormConfig">完成</button>
+      <view class="component-work-actions pe-sheet-actions">
+        <button class="pe-sheet-action-cancel" catchtap="handleCloseContactFormSheet">取消</button>
+        <button class="pe-sheet-action-confirm" catchtap="handleConfirmContactFormConfig">完成</button>
       </view>
     </view>
   </view>
 
-  <view class="text-section-sheet-mask component-work-picker-mask {{textSectionSheetVisible ? 'visible' : ''}}" catchtap="handleCloseTextSectionSheet">
-    <view class="text-section-sheet-panel component-work-picker-panel" catchtap="noop">
-      <view class="component-picker-grabber"></view>
-      <view class="component-picker-heading">
-        <view class="component-picker-title">编辑文字说明</view>
-        <view class="component-picker-count">{{textSectionFieldCounters.content}}</view>
+  <view class="text-section-sheet-mask pe-sheet-mask {{textSectionSheetVisible ? 'pe-sheet-mask-visible' : ''}}" catchtap="handleCloseTextSectionSheet">
+    <view class="text-section-sheet-panel pe-sheet-panel pe-sheet-size-long {{textSectionSheetVisible ? 'pe-sheet-panel-visible' : ''}}" catchtap="noop">
+      <view class="pe-sheet-grabber"></view>
+      <view class="pe-sheet-heading">
+        <view class="pe-sheet-title">编辑文字说明</view>
       </view>
 
-      <view class="text-section-form">
-        <view class="form-row">
-          <view class="field-heading">
-            <view class="field-label">说明</view>
-            <view class="field-limit">{{textSectionFieldCounters.content}}</view>
+      <scroll-view class="text-section-form pe-sheet-scroll" scroll-y type="list">
+        <view class="text-section-form-content">
+          <view class="form-row">
+            <view class="field-heading">
+              <view class="field-label">说明</view>
+              <view class="field-limit">{{textSectionFieldCounters.content}}</view>
+            </view>
+            <textarea
+              class="profile-sheet-textarea text-section-sheet-textarea pe-sheet-field pe-sheet-field-textarea {{textSectionTypography.fontClass}}"
+              style="{{textSectionTypography.fontSizeStyle}}"
+              value="{{textSectionForm.content}}"
+              placeholder="请输入给访客看的说明文字"
+              maxlength="{{textSectionMaxLength}}"
+              bindinput="handleTextSectionInput"
+            ></textarea>
           </view>
-          <textarea
-            class="input textarea profile-sheet-textarea text-section-sheet-textarea"
-            value="{{textSectionForm.content}}"
-            placeholder="请输入给访客看的说明文字"
-            maxlength="{{textSectionMaxLength}}"
-            bindinput="handleTextSectionInput"
-          ></textarea>
-        </view>
 
-        <view class="form-row">
-          <view class="field-heading">
-            <view class="field-label">对齐方式</view>
+          <view class="form-row">
+            <view class="field-heading">
+              <view class="field-label">字体</view>
+            </view>
+            <view class="text-section-font-list">
+              <view
+                wx:for="{{textSectionFontOptions}}"
+                wx:key="value"
+                class="text-section-font-option pe-sheet-choice {{textSectionForm.fontFamily === item.value ? 'pe-sheet-choice-selected' : ''}} {{item.available ? '' : 'disabled'}}"
+                data-value="{{item.value}}"
+                catchtap="handleTextSectionFontTap"
+                aria-role="radio"
+                aria-checked="{{textSectionForm.fontFamily === item.value}}"
+                aria-disabled="{{!item.available}}"
+                aria-label="{{item.label}}，映期 Folio 字体预览 123"
+              >
+                <view class="text-section-font-copy">
+                  <view class="text-section-font-label">{{item.label}}</view>
+                  <view class="text-section-font-sample {{item.fontClass}}">映期 Folio 字体预览 123</view>
+                  <view wx:if="{{!item.available}}" class="text-section-font-hint">当前设备不可用</view>
+                  <view
+                    wx:if="{{textSectionForm.fontFamily === item.value && !item.available}}"
+                    class="text-section-font-hint current"
+                  >当前设备以系统字体预览</view>
+                </view>
+                <view class="schedule-query-mode-radio"></view>
+              </view>
+            </view>
           </view>
-          <view class="schedule-query-mode-list">
-            <view
-              wx:for="{{textSectionAlignmentOptions}}"
-              wx:key="value"
-              class="schedule-query-mode-option {{textSectionForm.alignment === item.value ? 'active' : ''}}"
-              data-value="{{item.value}}"
-              catchtap="handleTextSectionAlignmentTap"
-              aria-role="radio"
-              aria-checked="{{textSectionForm.alignment === item.value}}"
-            >
-              <view class="schedule-query-mode-radio"></view>
-              <view class="schedule-query-mode-label">{{item.label}}</view>
+
+          <view class="form-row">
+            <view class="field-heading">
+              <view class="field-label">字号</view>
+            </view>
+            <view class="text-section-size-list">
+              <view
+                wx:for="{{textSectionSizeOptions}}"
+                wx:key="value"
+                class="text-section-size-option pe-sheet-choice {{textSectionForm.fontSizeRpx === item.value ? 'pe-sheet-choice-selected-filled' : ''}} {{item.custom ? 'custom' : ''}}"
+                data-value="{{item.value}}"
+                catchtap="handleTextSectionFontSizeTap"
+                aria-role="radio"
+                aria-checked="{{textSectionForm.fontSizeRpx === item.value}}"
+              >{{item.label}}</view>
+            </view>
+          </view>
+
+          <view class="form-row">
+            <view class="field-heading">
+              <view class="field-label">对齐方式</view>
+            </view>
+            <view class="schedule-query-mode-list">
+              <view
+                wx:for="{{textSectionAlignmentOptions}}"
+                wx:key="value"
+                class="schedule-query-mode-option pe-sheet-choice {{textSectionForm.alignment === item.value ? 'pe-sheet-choice-selected' : ''}}"
+                data-value="{{item.value}}"
+                catchtap="handleTextSectionAlignmentTap"
+                aria-role="radio"
+                aria-checked="{{textSectionForm.alignment === item.value}}"
+              >
+                <view class="schedule-query-mode-radio"></view>
+                <view class="schedule-query-mode-label">{{item.label}}</view>
+              </view>
             </view>
           </view>
         </view>
-      </view>
+      </scroll-view>
 
-      <view class="component-work-actions">
-        <button class="component-work-cancel" catchtap="handleCloseTextSectionSheet">取消</button>
-        <button class="component-work-confirm" catchtap="handleConfirmTextSectionConfig">完成</button>
+      <view class="component-work-actions pe-sheet-actions">
+        <button class="pe-sheet-action-cancel" catchtap="handleCloseTextSectionSheet">取消</button>
+        <button class="pe-sheet-action-confirm" catchtap="handleConfirmTextSectionConfig">完成</button>
       </view>
     </view>
   </view>
 
-  <view class="divider-sheet-mask component-work-picker-mask {{dividerSheetVisible ? 'visible' : ''}}" catchtap="handleCloseDividerSheet">
-    <view class="divider-sheet-panel component-work-picker-panel" catchtap="noop">
-      <view class="component-picker-grabber"></view>
-      <view class="component-picker-heading">
-        <view class="component-picker-title">编辑分割线</view>
-        <view class="component-picker-count">{{dividerForm.heightPx}}px</view>
+  <view class="divider-sheet-mask pe-sheet-mask {{dividerSheetVisible ? 'pe-sheet-mask-visible' : ''}}" catchtap="handleCloseDividerSheet">
+    <view class="divider-sheet-panel pe-sheet-panel pe-sheet-size-compact {{dividerSheetVisible ? 'pe-sheet-panel-visible' : ''}}" catchtap="noop">
+      <view class="pe-sheet-grabber"></view>
+      <view class="pe-sheet-heading">
+        <view class="pe-sheet-title">编辑分割线</view>
+        <view class="pe-sheet-meta">{{dividerForm.heightPx}}px</view>
       </view>
 
       <view class="divider-form">
@@ -819,7 +1111,7 @@
             <view
               wx:for="{{dividerColorOptions}}"
               wx:key="value"
-              class="divider-color-option {{dividerForm.color === item.value ? 'active' : ''}}"
+              class="divider-color-option pe-sheet-choice {{dividerForm.color === item.value ? 'pe-sheet-choice-selected' : ''}}"
               data-value="{{item.value}}"
               catchtap="handleDividerColorTap"
               aria-role="radio"
@@ -836,7 +1128,7 @@
             <view class="field-label">高度(px)</view>
           </view>
           <input
-            class="input divider-height-input"
+            class="divider-height-input pe-sheet-field"
             type="number"
             value="{{dividerForm.heightPx}}"
             placeholder="16"
@@ -845,19 +1137,19 @@
         </view>
       </view>
 
-      <view class="component-work-actions">
-        <button class="component-work-cancel" catchtap="handleCloseDividerSheet">取消</button>
-        <button class="component-work-confirm" catchtap="handleConfirmDividerConfig">完成</button>
+      <view class="component-work-actions pe-sheet-actions">
+        <button class="pe-sheet-action-cancel" catchtap="handleCloseDividerSheet">取消</button>
+        <button class="pe-sheet-action-confirm" catchtap="handleConfirmDividerConfig">完成</button>
       </view>
     </view>
   </view>
 
-  <view class="share-cover-crop-mask {{shareCoverCropVisible ? 'visible' : ''}}" catchtap="handleCloseShareCoverCrop">
-    <view class="share-cover-crop-panel" catchtap="noop">
-      <view class="component-picker-grabber"></view>
-      <view class="component-picker-heading">
-        <view class="component-picker-title">裁剪分享封面</view>
-        <view class="component-picker-count">5:4</view>
+  <view class="share-cover-crop-mask pe-sheet-mask {{shareCoverCropVisible ? 'pe-sheet-mask-visible' : ''}}" catchtap="handleCloseShareCoverCrop">
+    <view class="share-cover-crop-panel pe-sheet-panel pe-sheet-size-standard {{shareCoverCropVisible ? 'pe-sheet-panel-visible' : ''}}" catchtap="noop">
+      <view class="pe-sheet-grabber"></view>
+      <view class="pe-sheet-heading">
+        <view class="pe-sheet-title">裁剪分享封面</view>
+        <view class="pe-sheet-meta">5:4</view>
       </view>
 
       <view
@@ -875,9 +1167,9 @@
 
       <view wx:if="{{shareCoverCropErrorText}}" class="share-cover-crop-error">{{shareCoverCropErrorText}}</view>
 
-      <view class="component-work-actions share-cover-crop-actions">
-        <button class="component-work-cancel" catchtap="handleCloseShareCoverCrop">取消</button>
-        <button class="component-work-confirm" catchtap="handleConfirmShareCoverCrop" loading="{{shareCoverCropSaving}}" disabled="{{shareCoverCropSaving}}">完成</button>
+      <view class="share-cover-crop-actions pe-sheet-actions">
+        <button class="pe-sheet-action-cancel" catchtap="handleCloseShareCoverCrop">取消</button>
+        <button class="pe-sheet-action-confirm {{shareCoverCropSaving ? 'pe-action-loading' : ''}}" catchtap="handleConfirmShareCoverCrop" loading="{{shareCoverCropSaving}}" disabled="{{shareCoverCropSaving}}">完成</button>
       </view>
     </view>
   </view>
@@ -889,14 +1181,14 @@
     style="width: {{shareCoverCropCanvasWidth}}px; height: {{shareCoverCropCanvasHeight}}px;"
   ></canvas>
 
-  <view class="bottom-actions">
-    <button class="action-button primary-button" bindtap="handleSaveDraft">保存草稿</button>
+  <view class="bottom-actions pe-page-actions">
+    <button class="action-button primary-button pe-page-action-primary" bindtap="handleSaveDraft">保存草稿</button>
     <view class="preview-action-stack">
-      <button class="action-button secondary-button preview-draft-button" bindtap="handlePreview">
+      <button class="action-button secondary-button preview-draft-button pe-page-action-secondary" bindtap="handlePreview">
         <view class="preview-action-title">预览草稿</view>
         <view class="preview-action-note">请保存后预览</view>
       </button>
     </view>
-    <button wx:if="{{showPublishAction}}" class="action-button publish-button" bindtap="handlePublish">发布</button>
+    <button wx:if="{{showPublishAction}}" class="action-button publish-button pe-page-action-primary" bindtap="handlePublish">发布</button>
   </view>
 </view>

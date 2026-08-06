@@ -1,6 +1,7 @@
 const {
   MOCK_DASHBOARD,
-  getMockTabs
+  getMockTabs,
+  showMockLoginRequiredToast
 } = require('../utils/mock-experience')
 
 Page({
@@ -13,5 +14,13 @@ Page({
     wx.redirectTo({
       url: '/pages/login/login'
     })
+  },
+
+  handleEntryTap() {
+    showMockLoginRequiredToast()
+  },
+
+  handleLockedAction() {
+    showMockLoginRequiredToast()
   }
 })

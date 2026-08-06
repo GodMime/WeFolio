@@ -34,15 +34,32 @@ function readCssRule(content, selector) {
   return match ? match[1].replace(/\s+/g, '') : ''
 }
 
-function loadPage(relativePath, requestFn, wxOverrides = {}) {
+function flushPromises() {
+  return new Promise((resolve) => {
+    setImmediate(resolve)
+  })
+}
+
+function loadPage(relativePath, requestFn, wxOverrides = {}, fontLoaderOverrides = null) {
   const pagePath = path.join(ROOT, relativePath)
   const requestPath = path.resolve(ROOT, '../../utils/request.js')
+  const fontLoaderPath = path.resolve(ROOT, '../../utils/portfolio-font-loader.js')
   const requestCacheKey = require.resolve(requestPath)
+  const fontLoaderCacheKey = require.resolve(fontLoaderPath)
   const oldRequest = require.cache[requestCacheKey]
+  const oldFontLoader = require.cache[fontLoaderCacheKey]
   const oldPage = global.Page
   const oldWx = global.wx
   let definition
   require.cache[requestCacheKey] = { id: requestPath, filename: requestPath, loaded: true, exports: { request: requestFn } }
+  if (fontLoaderOverrides) {
+    require.cache[fontLoaderCacheKey] = {
+      id: fontLoaderPath,
+      filename: fontLoaderPath,
+      loaded: true,
+      exports: fontLoaderOverrides
+    }
+  }
   global.Page = (value) => { definition = value }
   global.wx = Object.assign({ navigateTo() {}, redirectTo() {}, showToast() {}, stopPullDownRefresh() {}, getCurrentPages() { return [] } }, wxOverrides)
   delete require.cache[require.resolve(pagePath)]
@@ -50,6 +67,8 @@ function loadPage(relativePath, requestFn, wxOverrides = {}) {
     global.Page = oldPage
     if (oldRequest) require.cache[requestCacheKey] = oldRequest
     else delete require.cache[requestCacheKey]
+    if (oldFontLoader) require.cache[fontLoaderCacheKey] = oldFontLoader
+    else delete require.cache[fontLoaderCacheKey]
   }
   const page = Object.assign({}, definition, { data: JSON.parse(JSON.stringify(definition.data)), setData(patch) { Object.assign(this.data, patch) } })
   page.cleanup = () => { global.wx = oldWx }
@@ -174,20 +193,23 @@ test('legacy team list keeps only a lightweight loading surface', () => {
 test('team portfolio selection and editor use the approved neutral surfaces', () => {
   const teamSelectCss = read('team-select/team-select.wxss')
   const editorCss = read('standard-edit/team-portfolio-standard-edit.wxss')
+  const foundationCss = fs.readFileSync(path.resolve(ROOT, '../../styles/portfolio-editor-foundation.wxss'), 'utf8')
   const teamSelectCardRule = readCssRule(teamSelectCss, '.team')
-  const editorPanelRule = readCssRule(editorCss, '.panel')
-  const editorPanelContentRule = readCssRule(editorCss, '.component-panel')
-  const sheetRule = readCssRule(editorCss, '.component-picker-panel')
+  const editorPanelRule = readCssRule(foundationCss, '.pe-page-card')
+  const sheetRule = readCssRule(foundationCss, '.pe-sheet-panel')
 
   assert.match(teamSelectCardRule, /border-radius:48rpx/)
-  assert.match(editorPanelContentRule, /padding:28rpx/)
-  assert.match(editorPanelRule, /border-radius:48rpx/)
-  assert.match(sheetRule, /border-radius:56rpx56rpx00/)
+  assert.doesNotMatch(editorCss, /\.component-panel\s*\{/)
+  assert.match(editorPanelRule, /padding:28rpx/)
+  assert.match(editorPanelRule, /border-radius:var\(--pe-radius-card,48rpx\)/)
+  assert.match(sheetRule, /border-radius:var\(--pe-radius-sheet,56rpx\)var\(--pe-radius-sheet,56rpx\)00/)
 })
 
 test('standard team editor independently matches the personal editor interaction shell', () => {
   const wxml = read('standard-edit/team-portfolio-standard-edit.wxml')
   const wxss = read('standard-edit/team-portfolio-standard-edit.wxss')
+  const foundationWxss = fs.readFileSync(path.resolve(ROOT, '../../styles/portfolio-editor-foundation.wxss'), 'utf8')
+  const sheetCancelRule = readCssRule(foundationWxss, '.pe-sheet-action-cancel')
   const js = read('standard-edit/team-portfolio-standard-edit.js')
   const personalRoot = path.resolve(ROOT, '../portfolios/standard-edit')
   const personalCss = fs.readFileSync(
@@ -196,8 +218,8 @@ test('standard team editor independently matches the personal editor interaction
   )
 
   assert.match(wxml, /class="page-shell portfolio-edit-page team-portfolio-edit-page"/)
-  assert.match(wxml, /class="panel share-panel"/)
-  assert.match(wxml, /class="panel page-setting-panel"/)
+  assert.match(wxml, /class="panel share-panel pe-page-card"/)
+  assert.match(wxml, /class="panel page-setting-panel pe-page-card"/)
   assert.match(wxml, /<view class="field-label">背景色<\/view>/)
   assert.match(wxml, /class="background-color-current"/)
   assert.match(wxml, /class="background-color-swatch \{\{config\.style\.backgroundColor === item \? 'active' : ''\}\}"/)
@@ -207,30 +229,34 @@ test('standard team editor independently matches the personal editor interaction
   assert.doesNotMatch(wxml, /bindchange="handleBottomNavigationToggle"/)
   assert.doesNotMatch(wxml, /class="background-color-option/)
   assert.doesNotMatch(wxml, /class="navigation-title-list"/)
-  assert.match(wxml, /class="background-color-panel component-picker-panel"/)
+  assert.match(wxml, /class="background-color-panel pe-sheet-panel pe-sheet-size-compact/)
   assert.match(wxml, /bindtouchstart="handleBackgroundColorPadTouch"/)
   assert.match(wxml, /bindtap="handleMenuTabTap"/)
-  assert.match(wxml, /class="component-move-sheet-panel component-picker-panel"/)
+  assert.match(wxml, /class="component-move-sheet-panel pe-sheet-panel pe-sheet-size-compact/)
   assert.match(wxml, /catchtap="handleMoveTargetTap"/)
   assert.match(wxml, /class="status-pill \{\{statusTone\}\}"/)
   assert.match(wxml, /class="component-list"/)
   assert.match(wxml, /bindlongpress="handleComponentDragStart"/)
   assert.match(wxml, /bindtouchmove="handleComponentTouchMove"/)
   assert.match(wxml, /class="component-remove-pane"[\s\S]*handleRemoveComponent/)
-  assert.match(wxml, /component-picker-mask \{\{componentSheetVisible \? 'visible' : ''\}\}/)
-  assert.match(wxml, /component-editor-mask \{\{componentEditorVisible \? 'visible' : ''\}\}/)
+  assert.match(wxml, /pe-sheet-mask \{\{componentSheetVisible \? 'pe-sheet-mask-visible' : ''\}\}/)
+  assert.match(wxml, /component-editor-mask pe-sheet-mask \{\{componentEditorVisible \? 'pe-sheet-mask-visible' : ''\}\}/)
   assert.equal(Array.from(wxml.matchAll(/bindcancel="handleCloseComponentEditor"/g)).length, 0)
-  assert.match(wxml, /class="component-editor-cancel" catchtap="handleCloseComponentEditor">取消<\/button>/)
-  assert.match(wxml, /share-cover-crop-mask \{\{shareCoverCropVisible \? 'visible' : ''\}\}/)
+  assert.match(wxml, /class="pe-sheet-action-cancel" catchtap="handleCloseComponentEditor">取消<\/button>/)
+  assert.match(wxml, /share-cover-crop-mask pe-sheet-mask \{\{shareCoverCropVisible \? 'pe-sheet-mask-visible' : ''\}\}/)
   assert.match(wxml, /wx:if="\{\{shareCoverCropPath\}\}" class="share-cover-crop-image" src="\{\{shareCoverCropPath\}\}"/)
-  assert.match(wxss, /\.share-cover-crop-panel\s*\{[^}]*overflow-y:\s*auto;/)
+  assert.match(wxml, /share-cover-crop-panel pe-sheet-panel pe-sheet-size-standard/)
   assert.match(wxss, /\.share-cover-crop-image\s*\{[^}]*width:\s*100%;[^}]*height:\s*100%;/)
-  assert.match(wxss, /\.sheet-actions button\s*\{[^}]*display:\s*flex;[^}]*align-items:\s*center;[^}]*justify-content:\s*center;[^}]*padding:\s*0;[^}]*line-height:\s*1;/)
+  assert.doesNotMatch(wxss, /\.sheet-actions button\s*\{/)
+  assert.match(sheetCancelRule, /display:flex/)
+  assert.match(sheetCancelRule, /align-items:center/)
+  assert.match(sheetCancelRule, /justify-content:center/)
+  assert.match(sheetCancelRule, /padding:024rpx/)
   assert.match(wxml, /class="preview-action-note">请保存后预览/)
   assert.match(wxml, /wx:if="\{\{showPublishAction\}\}"/)
   assert.match(wxss, /\.component-swipe-row\.revealed \.component-row/)
-  assert.match(wxss, /\.component-picker-mask\.visible/)
-  assert.match(wxss, /\.bottom-actions/)
+  assert.match(wxml, /pe-sheet-mask-visible/)
+  assert.match(wxml, /bottom-actions pe-page-actions/)
   assert.match(js, /handleOpenComponentSheet/)
   assert.match(js, /handleComponentDragStart/)
   assert.match(js, /handleComponentTouchMove/)
@@ -282,15 +308,67 @@ test('team preview and visitor own theme styling without importing personal port
 test('team page level component editor owns the shared cancel and confirm actions for team-specific selectors', () => {
   const wxml = read('standard-edit/team-portfolio-standard-edit.wxml')
   const wxss = read('standard-edit/team-portfolio-standard-edit.wxss')
+  const foundationWxss = fs.readFileSync(path.resolve(ROOT, '../../styles/portfolio-editor-foundation.wxss'), 'utf8')
   const js = read('standard-edit/team-portfolio-standard-edit.js')
 
   assert.equal(Array.from(wxml.matchAll(/id="active-component-editor"/g)).length, 6)
-  assert.match(wxml, /class="component-editor-actions"/)
-  assert.match(wxml, /class="component-editor-cancel" catchtap="handleCloseComponentEditor">取消<\/button>/)
-  assert.match(wxml, /class="component-editor-confirm" catchtap="handleConfirmComponentEditor">完成<\/button>/)
+  assert.match(wxml, /class="component-editor-actions pe-sheet-actions"/)
+  assert.match(wxml, /class="pe-sheet-action-cancel" catchtap="handleCloseComponentEditor">取消<\/button>/)
+  assert.match(wxml, /class="pe-sheet-action-confirm" catchtap="handleConfirmComponentEditor">完成<\/button>/)
   assert.doesNotMatch(wxml, /class="editor-close"/)
   assert.match(js, /handleConfirmComponentEditor\(\)/)
-  assert.match(wxss, /\.component-editor-actions\s*\{[^}]*display:\s*flex;/)
+  assert.doesNotMatch(wxss, /\.component-editor-actions\s*\{/)
+  assert.match(readCssRule(foundationWxss, '.pe-sheet-actions'), /display:flex/)
+})
+
+test('horizontal member portfolio pickers use a shorter component editor sheet', () => {
+  const wxml = read('standard-edit/team-portfolio-standard-edit.wxml')
+  const wxss = read('standard-edit/team-portfolio-standard-edit.wxss')
+  const js = read('standard-edit/team-portfolio-standard-edit.js')
+
+  assert.match(wxml, /componentEditorLayoutType === 'MEMBER_PORTFOLIO_GRID' \|\| componentEditorLayoutType === 'MEMBER_PORTFOLIO_LIST'/)
+  assert.match(js, /componentEditorLayoutType: componentType/)
+  assert.match(readCssRule(wxss, '.member-portfolio-editor-compact'), /height:auto/)
+  assert.match(readCssRule(wxss, '.member-portfolio-editor-compact'), /max-height:76vh/)
+  const compactScrollRule = readCssRule(wxss, '.member-portfolio-editor-compact .component-editor-scroll')
+  assert.match(compactScrollRule, /height:680rpx/)
+  assert.match(compactScrollRule, /min-height:0/)
+  assert.match(compactScrollRule, /max-height:58vh/)
+  assert.match(compactScrollRule, /flex:01auto/)
+})
+
+test('team carousel editor sheet follows a bounded animated content height without blank space', () => {
+  const wxml = read('standard-edit/team-portfolio-standard-edit.wxml')
+  const wxss = read('standard-edit/team-portfolio-standard-edit.wxss')
+
+  assert.match(wxml, /\{\{componentEditorLayoutType === 'CAROUSEL' \? 'carousel-editor-content-sized' : ''\}\}/)
+  assert.match(wxml, /style="\{\{componentEditorLayoutType === 'CAROUSEL' \? carouselEditorPanelStyle : ''\}\}"/)
+  assert.match(wxml, /class="component-editor-scroll pe-sheet-scroll"[^>]*style="\{\{componentEditorLayoutType === 'CAROUSEL' \? carouselEditorScrollStyle : ''\}\}"/)
+  assert.match(wxml, /<team-carousel[^>]*bindlayoutchange="handleCarouselLayoutChange"/)
+
+  const panelRule = readCssRule(wxss, '.carousel-editor-content-sized')
+  assert.match(panelRule, /min-height:710rpx/)
+  assert.match(panelRule, /max-height:calc\(100vh-176rpx-env\(safe-area-inset-top\)\)/)
+  assert.match(panelRule, /transition:transform220msease-out,height220msease-out/)
+
+  const scrollRule = readCssRule(wxss, '.carousel-editor-content-sized .component-editor-scroll')
+  assert.match(scrollRule, /min-height:460rpx/)
+  assert.match(scrollRule, /max-height:58vh/)
+  assert.match(scrollRule, /flex:01auto/)
+  assert.match(scrollRule, /transition:height220msease-out/)
+})
+
+test('team carousel keeps member source loading inside its fixed editor content area', () => {
+  const wxml = read('standard-edit/team-portfolio-standard-edit.wxml')
+
+  assert.match(
+    wxml,
+    /wx:if="\{\{activeComponentSource\.loadingFingerprint && activeComponentType !== 'CAROUSEL'\}\}" class="source-state"/
+  )
+  assert.match(
+    wxml,
+    /<team-carousel[^>]*loading="\{\{activeComponentSource\.loadingFingerprint \? true : false\}\}"/
+  )
 })
 
 test('team text section opens the dedicated personal-style editing sheet', () => {
@@ -298,16 +376,34 @@ test('team text section opens the dedicated personal-style editing sheet', () =>
   const wxss = read('standard-edit/team-portfolio-standard-edit.wxss')
   const js = read('standard-edit/team-portfolio-standard-edit.js')
 
-  assert.match(wxml, /text-section-sheet-mask component-picker-mask \{\{textSectionSheetVisible \? 'visible' : ''\}\}/)
-  assert.match(wxml, /class="component-picker-title">编辑文字说明<\/view>/)
+  assert.match(wxml, /text-section-sheet-mask pe-sheet-mask \{\{textSectionSheetVisible \? 'pe-sheet-mask-visible' : ''\}\}/)
+  assert.match(wxml, /class="pe-sheet-title">编辑文字说明<\/view>/)
   assert.match(wxml, /value="\{\{textSectionForm\.content\}\}"/)
+  assert.match(wxml, /wx:for="\{\{textSectionFontOptions\}\}"/)
+  assert.match(wxml, /映期 Folio 字体预览 123/)
+  assert.match(wxml, /当前设备不可用/)
+  assert.match(wxml, /当前设备以系统字体预览/)
+  assert.match(wxml, /catchtap="handleTextSectionFontTap"/)
+  assert.match(wxml, /wx:for="\{\{textSectionSizeOptions\}\}"/)
+  assert.match(wxml, /catchtap="handleTextSectionFontSizeTap"/)
   assert.match(wxml, /catchtap="handleTextSectionAlignmentTap"/)
+  assert.ok(
+    wxml.indexOf('text-section-sheet-textarea') < wxml.indexOf('textSectionFontOptions')
+  )
+  assert.ok(
+    wxml.indexOf('textSectionFontOptions') < wxml.indexOf('textSectionSizeOptions')
+  )
+  assert.ok(
+    wxml.indexOf('textSectionSizeOptions') < wxml.indexOf('textSectionAlignmentOptions')
+  )
   assert.match(wxml, /catchtap="handleCloseTextSectionSheet">取消<\/button>/)
   assert.match(wxml, /catchtap="handleConfirmTextSectionConfig">完成<\/button>/)
   assert.doesNotMatch(wxml, /<team-text-section[\s\S]*edit-mode="\{\{true\}\}"/)
-  assert.match(wxss, /\.text-section-sheet-panel\s*\{[^}]*max-height:\s*76vh;/)
+  assert.match(wxss, /^@import "\.\.\/\.\.\/\.\.\/styles\/portfolio-text-typography\.wxss";/)
+  assert.match(wxml, /text-section-sheet-panel pe-sheet-panel pe-sheet-size-long/)
   assert.match(wxss, /\.text-section-sheet-textarea\s*\{[^}]*height:\s*220rpx;/)
   assert.match(js, /openTextSectionSheet/)
+  assert.match(js, /loadPortfolioFontCapability/)
   assert.match(js, /handleConfirmTextSectionConfig/)
 })
 
@@ -316,13 +412,13 @@ test('team contact form uses an isolated display-mode sheet', () => {
   const wxss = read('standard-edit/team-portfolio-standard-edit.wxss')
   const js = read('standard-edit/team-portfolio-standard-edit.js')
 
-  assert.match(wxml, /contact-form-sheet-mask component-picker-mask \{\{contactFormSheetVisible \? 'visible' : ''\}\}/)
-  assert.match(wxml, /class="component-picker-title">编辑预留联系信息<\/view>/)
+  assert.match(wxml, /contact-form-sheet-mask pe-sheet-mask \{\{contactFormSheetVisible \? 'pe-sheet-mask-visible' : ''\}\}/)
+  assert.match(wxml, /class="pe-sheet-title">编辑预留联系信息<\/view>/)
   assert.match(wxml, /catchtap="handleContactFormDisplayModeTap"/)
   assert.match(wxml, /catchtap="handleCloseContactFormSheet">取消<\/button>/)
   assert.match(wxml, /catchtap="handleConfirmContactFormConfig">完成<\/button>/)
   assert.doesNotMatch(wxml, /<team-contact-form[\s\S]*edit-mode="\{\{true\}\}"/)
-  assert.match(wxss, /\.contact-form-sheet-panel\s*\{[^}]*max-height:\s*76vh;/)
+  assert.match(wxml, /contact-form-sheet-panel pe-sheet-panel pe-sheet-size-standard/)
   assert.match(js, /openContactFormSheet/)
   assert.match(js, /handleConfirmContactFormConfig/)
   assert.doesNotMatch(js, /portfolio-standard-edit/)
@@ -332,32 +428,180 @@ test('team schedule and divider use isolated configuration sheets', () => {
   const wxml = read('standard-edit/team-portfolio-standard-edit.wxml')
   const js = read('standard-edit/team-portfolio-standard-edit.js')
 
-  assert.match(wxml, /schedule-query-sheet-mask component-picker-mask \{\{scheduleQuerySheetVisible \? 'visible' : ''\}\}/)
-  assert.match(wxml, /divider-sheet-mask component-picker-mask \{\{dividerSheetVisible \? 'visible' : ''\}\}/)
+  assert.match(wxml, /schedule-query-sheet-mask pe-sheet-mask \{\{scheduleQuerySheetVisible \? 'pe-sheet-mask-visible' : ''\}\}/)
+  assert.match(wxml, /divider-sheet-mask pe-sheet-mask \{\{dividerSheetVisible \? 'pe-sheet-mask-visible' : ''\}\}/)
   assert.doesNotMatch(wxml, /<team-schedule-query[\s\S]*edit-mode="\{\{true\}\}"/)
   assert.doesNotMatch(wxml, /<team-divider[\s\S]*edit-mode="\{\{true\}\}"/)
   assert.match(js, /openScheduleQuerySheet/)
   assert.match(js, /openDividerSheet/)
 })
 
-test('team text section sheet saves text and alignment only after confirmation', () => {
+test('team text section sheet keeps legacy typography and saves all fields only after confirmation', () => {
   const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => ({}))
   page.data.config = {
     schemaVersion: 'standard-team-v1',
     share: {},
-    components: [{ componentKey: 'text-1', componentType: 'TEXT_SECTION', sortOrder: 0, enabled: true, config: { content: '原说明', alignment: 'LEFT' } }]
+    components: [{ componentKey: 'text-1', componentType: 'TEXT_SECTION', sortOrder: 0, enabled: true, config: { content: '原说明', alignment: 'LEFT', futureField: 'keep' } }]
   }
 
   page.openTextSectionSheet('text-1')
   assert.equal(page.data.textSectionSheetVisible, true)
-  assert.deepEqual(page.data.textSectionForm, { content: '原说明', alignment: 'LEFT' })
+  assert.deepEqual(page.data.textSectionForm, {
+    content: '原说明',
+    alignment: 'LEFT',
+    fontFamily: 'SYSTEM',
+    fontSizeRpx: 32
+  })
 
   page.handleTextSectionInput({ detail: { value: '团队说明' } })
   page.handleTextSectionAlignmentTap({ currentTarget: { dataset: { value: 'CENTER' } } })
+  page.handleTextSectionFontSizeTap({ currentTarget: { dataset: { value: 28 } } })
+  page.handleCloseTextSectionSheet()
+
+  assert.deepEqual(page.data.config.components[0].config, {
+    content: '原说明',
+    alignment: 'LEFT',
+    futureField: 'keep'
+  })
+
+  page.openTextSectionSheet('text-1')
+  page.handleTextSectionInput({ detail: { value: '团队说明' } })
+  page.handleTextSectionAlignmentTap({ currentTarget: { dataset: { value: 'CENTER' } } })
+  page.handleTextSectionFontSizeTap({ currentTarget: { dataset: { value: 28 } } })
   page.handleConfirmTextSectionConfig()
 
   assert.equal(page.data.textSectionSheetVisible, false)
-  assert.deepEqual(page.data.config.components[0].config, { content: '团队说明', alignment: 'CENTER' })
+  assert.deepEqual(page.data.config.components[0].config, {
+    content: '团队说明',
+    alignment: 'CENTER',
+    fontFamily: 'SYSTEM',
+    fontSizeRpx: 28,
+    futureField: 'keep'
+  })
+  page.cleanup()
+})
+
+test('team text section preserves unavailable WeChat font and a custom integer size', () => {
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => ({}))
+  page.data.config = {
+    schemaVersion: 'standard-team-v1',
+    share: {},
+    components: [{
+      componentKey: 'text-1',
+      componentType: 'TEXT_SECTION',
+      sortOrder: 0,
+      enabled: true,
+      config: {
+        content: '原说明',
+        alignment: 'RIGHT',
+        fontFamily: 'WECHAT_SANS_SS',
+        fontSizeRpx: 30
+      }
+    }]
+  }
+
+  page.openTextSectionSheet('text-1')
+
+  assert.equal(page.data.textSectionForm.fontFamily, 'WECHAT_SANS_SS')
+  assert.equal(page.data.textSectionForm.fontSizeRpx, 30)
+  assert.deepEqual(
+    page.data.textSectionFontOptions.map((item) => item.value),
+    ['SYSTEM', 'WECHAT_SANS_SS']
+  )
+  assert.equal(
+    page.data.textSectionFontOptions.find(
+      (item) => item.value === 'WECHAT_SANS_SS'
+    ).available,
+    false
+  )
+  assert.deepEqual(
+    page.data.textSectionSizeOptions.find((item) => item.value === 30),
+    { value: 30, label: '自定义 30rpx', custom: true }
+  )
+
+  page.handleConfirmTextSectionConfig()
+
+  assert.equal(page.data.config.components[0].config.fontFamily, 'WECHAT_SANS_SS')
+  assert.equal(page.data.config.components[0].config.fontSizeRpx, 30)
+  page.cleanup()
+})
+
+test('team font capability refresh keeps the unsupported saved font selected', async () => {
+  let resolveFontCapability
+  const pendingCapability = new Promise((resolve) => {
+    resolveFontCapability = resolve
+  })
+  const initialCapability = {
+    apiAvailable: false,
+    loadedFamilies: {
+      WECHAT_SANS_SS: false
+    }
+  }
+  const page = loadPage(
+    'standard-edit/team-portfolio-standard-edit.js',
+    async () => ({}),
+    {},
+    {
+      getPortfolioFontCapability() {
+        return initialCapability
+      },
+      isPortfolioFontAvailable(fontFamily, capability) {
+        return fontFamily === 'SYSTEM'
+          || capability.apiAvailable === true
+            && capability.loadedFamilies[fontFamily] === true
+      },
+      loadPortfolioFonts() {
+        return pendingCapability
+      }
+    }
+  )
+  page.data.config = {
+    schemaVersion: 'standard-team-v1',
+    share: {},
+    components: [{
+      componentKey: 'text-1',
+      componentType: 'TEXT_SECTION',
+      sortOrder: 0,
+      enabled: true,
+      config: {
+        content: '团队说明',
+        alignment: 'LEFT',
+        fontFamily: 'WECHAT_SANS_SS',
+        fontSizeRpx: 32
+      }
+    }]
+  }
+
+  page.openTextSectionSheet('text-1')
+  page.loadPortfolioFontCapability()
+  resolveFontCapability({
+    apiAvailable: true,
+    loadedFamilies: {
+      WECHAT_SANS_SS: false
+    }
+  })
+  await flushPromises()
+
+  assert.equal(page.data.textSectionForm.fontFamily, 'WECHAT_SANS_SS')
+  assert.equal(
+    page.data.textSectionFontOptions.find(
+      (item) => item.value === 'WECHAT_SANS_SS'
+    ).available,
+    false
+  )
+  page.cleanup()
+})
+
+test('new team text section uses the explicit new-component typography defaults', () => {
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => ({}))
+
+  page.addComponent('TEXT_SECTION')
+
+  const component = page.data.config.components.find(
+    (item) => item.componentType === 'TEXT_SECTION'
+  )
+  assert.equal(component.config.fontFamily, 'SYSTEM')
+  assert.equal(component.config.fontSizeRpx, 28)
   page.cleanup()
 })
 

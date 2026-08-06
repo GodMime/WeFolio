@@ -11,9 +11,12 @@ const {
 } = require('../../../utils/profile')
 const {
   normalizeWorkList,
-  normalizeWorkTags,
-  selectableWorksFor
+  normalizeWorkTags
 } = require('../utils/works')
+const {
+  buildDisplayGroupWorkScrollHeight
+} = require('../utils/display-group-layout')
+const { selectableWorksFor } = require('../utils/portfolio-work-media')
 const { confirmPortfolioPublishDisclaimer } = require('../utils/portfolio-publish-disclaimer')
 const {
   PORTFOLIO_ASSET_TYPES,
@@ -39,6 +42,14 @@ const {
   DEFAULT_DIVIDER_HEIGHT_PX,
   DIVIDER_COLOR_OPTIONS,
   DIVIDER_COLORS,
+  EDITOR_SCHEMA_REVISION,
+  HYPERLINK_ACTION_TYPE_OPTIONS,
+  HYPERLINK_ACTION_TYPES,
+  HYPERLINK_DISPLAY_WORK_REQUIRED_MESSAGE,
+  HYPERLINK_EXTERNAL_CONTENT_MAX_LENGTH,
+  HYPERLINK_ICON_POSITION_OPTIONS,
+  HYPERLINK_PROMPT_TEXT_MAX_LENGTH,
+  HYPERLINK_TARGET_REQUIRED_MESSAGE,
   SCHEDULE_QUERY_DISPLAY_MODE_OPTIONS,
   SCHEDULE_QUERY_DISPLAY_MODES,
   TEXT_SECTION_ALIGNMENT_OPTIONS,
@@ -53,6 +64,7 @@ const {
   getMenuComponentList,
   normalizeContactFormConfig,
   normalizeDividerConfig,
+  normalizeHyperlinkConfig,
   normalizeScheduleQueryConfig,
   normalizeSingleWorkConfig,
   normalizeWorkDisplayOptions,
@@ -68,6 +80,7 @@ const {
   setBottomNavigationCount,
   updateComponentContactFormConfig,
   updateComponentDividerConfig,
+  updateComponentHyperlinkConfig,
   updateComponentScheduleQueryConfig,
   updateSingleWorkConfig,
   updateWorkDisplayOptions,
@@ -78,10 +91,22 @@ const {
   visitPortfolioComponents
 } = require('../../../utils/portfolios')
 const { hexToHsv, hsvToHex, normalizeHexColor } = require('../../../utils/portfolio-color')
+const {
+  LEGACY_PERSONAL_FONT_SIZE_RPX,
+  PORTFOLIO_TEXT_FONT_OPTIONS,
+  buildPortfolioTextFontSizeOptions,
+  buildPortfolioTextTypography
+} = require('../../../utils/portfolio-text-typography')
+const {
+  getPortfolioFontCapability,
+  isPortfolioFontAvailable,
+  loadPortfolioFonts
+} = require('../../../utils/portfolio-font-loader')
 
 const PORTFOLIO_API_PREFIX = '/api/mine/portfolios'
 const STANDARD_PERSONAL_API_URL = '/api/mine/portfolios/standard-personal'
 const COMPONENT_LIBRARY_API_URL = '/api/mine/portfolios/component-library'
+const HYPERLINK_TARGETS_API_URL = '/api/mine/portfolios/hyperlink-targets'
 const BASIC_PROFILE_API_URL = '/api/mine/profile'
 const WORKS_API_URL = '/api/mine/works'
 const PASSED_WORK_AUDIT_STATUS = 'PASSED'
@@ -156,7 +181,8 @@ const DEFAULT_COMPONENT_DESCRIPTIONS = {
   QR_CONTACT: '展示二维码联系方式',
   CONTACT_FORM: '收集访客预留联系信息',
   TEXT_SECTION: '添加服务说明文字',
-  DIVIDER: '分隔不同内容区块'
+  DIVIDER: '分隔不同内容区块',
+  HYPERLINK: '以图片或动图触发作品集跳转或复制分享内容'
 }
 
 function makeIdempotencyKey(prefix) {
@@ -271,6 +297,7 @@ function isEditableComponentType(componentType) {
     componentType === COMPONENT_TYPES.CONTACT_FORM ||
     componentType === COMPONENT_TYPES.TEXT_SECTION ||
     componentType === COMPONENT_TYPES.DIVIDER ||
+    componentType === COMPONENT_TYPES.HYPERLINK ||
     isDisplayGroupComponent(componentType)
 }
 
@@ -280,6 +307,74 @@ function buildSelectedCountText(workIds = []) {
 
 function clonePlainObject(value = {}) {
   return JSON.parse(JSON.stringify(value || {}))
+}
+
+function buildHyperlinkTargetOptions(response = {}) {
+  const candidates = Array.isArray(response.portfolios) ? response.portfolios : []
+  const currentSelection = response.currentSelection && response.currentSelection.portfolioId
+    ? Object.assign({}, response.currentSelection, { currentSelection: true })
+    : null
+  const withoutCurrent = currentSelection
+    ? candidates.filter((item) => Number(item && item.portfolioId) !== Number(currentSelection.portfolioId))
+    : candidates
+  return currentSelection ? [currentSelection].concat(withoutCurrent) : withoutCurrent
+}
+
+function buildHyperlinkSheetResetState() {
+  return {
+    hyperlinkSheetVisible: false,
+    hyperlinkEditingComponentKey: '',
+    hyperlinkEditingMenuKey: '',
+    hyperlinkEditingNewComponent: false,
+    hyperlinkForm: normalizeHyperlinkConfig(),
+    hyperlinkTargetOptions: [],
+    hyperlinkTargetLoading: false,
+    hyperlinkTargetErrorText: '',
+    hyperlinkExternalContentCount: 0,
+    hyperlinkPromptTextCount: 0,
+    hyperlinkWorkSummary: '',
+    componentWorkSheetVisible: false,
+    componentWorkLoading: false,
+    componentWorkLoadingMore: false,
+    componentWorkErrorText: '',
+    componentWorkEmptyText: '暂无图片或动图作品',
+    componentWorkOptions: [],
+    componentWorkFilterTags: [],
+    componentWorkKeyword: '',
+    componentWorkSelectedTagId: null,
+    componentWorkPage: 1,
+    componentWorkPageSize: COMPONENT_WORK_PAGE_SIZE,
+    componentWorkHasMore: false,
+    componentWorkSelectedIds: [],
+    componentWorkSelectedCountText: '0 已选',
+    componentWorkSelectionMode: 'multiple',
+    componentWorkShowTitle: true,
+    componentWorkShowDescription: false,
+    componentWorkCurrentSelection: null,
+    editingComponentKey: '',
+    editingComponentType: ''
+  }
+}
+
+function validateHyperlinkForm(form = {}) {
+  const config = normalizeHyperlinkConfig(form)
+  if (!config.workId) {
+    return HYPERLINK_DISPLAY_WORK_REQUIRED_MESSAGE
+  }
+  if (!HYPERLINK_ACTION_TYPE_OPTIONS.some((item) => item.value === config.actionType)) {
+    return '请选择点击行为'
+  }
+  if (config.actionType === HYPERLINK_ACTION_TYPES.INTERNAL_PORTFOLIO) {
+    return config.targetPortfolioId > 0 ? '' : HYPERLINK_TARGET_REQUIRED_MESSAGE
+  }
+  const contentLength = countUnicodeCodePoints(config.externalContent)
+  if (contentLength < 1 || contentLength > HYPERLINK_EXTERNAL_CONTENT_MAX_LENGTH) {
+    return '链接或分享内容长度必须为1至2048个字符'
+  }
+  const promptLength = countUnicodeCodePoints(config.promptText)
+  return promptLength < 1 || promptLength > HYPERLINK_PROMPT_TEXT_MAX_LENGTH
+    ? '提示语长度必须为1至30个字符'
+    : ''
 }
 
 function buildDisplayGroupTagKey(tagId) {
@@ -404,6 +499,23 @@ function normalizeDisplayGroupWorkPreview(work = {}, fallbackId = 0) {
   }
 }
 
+function buildComponentWorkCurrentSelection(work = {}, fallbackId = 0) {
+  const id = Number(work && (work.id || work.workId)) || Number(fallbackId) || 0
+  if (!id) {
+    return null
+  }
+  const selection = normalizeDisplayGroupWorkPreview(work, id)
+  const status = String(work && work.status || '').toUpperCase()
+  if (status === 'FAILED' || status === 'UNAVAILABLE') {
+    selection.status = 'unavailable'
+  } else if (status === SINGLE_WORK_SUMMARY_STATUS_LOADING) {
+    selection.status = 'unresolved'
+  } else if (!work || !Object.keys(work).length) {
+    selection.status = 'unresolved'
+  }
+  return selection
+}
+
 function mergeDisplayGroupWorkMap(currentMap = {}, works = []) {
   return works.reduce((result, work) => {
     const workId = Number(work && work.id)
@@ -438,7 +550,8 @@ function findSingleWorkIds(config = {}) {
     locations.push(...getMenuComponentList(normalized, menuKey))
   })
   return normalizeWorkIds(locations
-    .filter((component) => component.componentType === COMPONENT_TYPES.SINGLE_WORK)
+    .filter((component) => [COMPONENT_TYPES.SINGLE_WORK, COMPONENT_TYPES.HYPERLINK]
+      .includes(component.componentType))
     .map((component) => component.config && component.config.workId))
 }
 
@@ -599,7 +712,34 @@ function buildTextSectionForm(config = {}) {
   const normalized = normalizeTextSectionConfig(config)
   return {
     content: normalized.content || '',
-    alignment: normalized.alignment || TEXT_SECTION_ALIGNMENTS.LEFT
+    alignment: normalized.alignment || TEXT_SECTION_ALIGNMENTS.LEFT,
+    fontFamily: normalized.fontFamily,
+    fontSizeRpx: normalized.fontSizeRpx
+  }
+}
+
+function buildTextSectionFontOptions(
+  capability = getPortfolioFontCapability()
+) {
+  return PORTFOLIO_TEXT_FONT_OPTIONS.map((item) =>
+    Object.assign({}, item, {
+      available: isPortfolioFontAvailable(item.value, capability)
+    })
+  )
+}
+
+function buildTextSectionEditorState(config = {}) {
+  const textSectionForm = buildTextSectionForm(config)
+  return {
+    textSectionForm,
+    textSectionFieldCounters: buildTextSectionFieldCounters(textSectionForm),
+    textSectionFontOptions: buildTextSectionFontOptions(),
+    textSectionSizeOptions:
+      buildPortfolioTextFontSizeOptions(textSectionForm.fontSizeRpx),
+    textSectionTypography: buildPortfolioTextTypography(
+      textSectionForm,
+      LEGACY_PERSONAL_FONT_SIZE_RPX
+    )
   }
 }
 
@@ -864,6 +1004,7 @@ function updateShareCoverUrlInConfig(config = {}, coverUrl = '') {
 
 Page({
   componentWorkRequestSeq: 0,
+  singleWorkSummaryRequestSeq: 0,
 
   data: {
     portfolioId: null,
@@ -911,6 +1052,7 @@ Page({
     componentWorkSelectionMode: 'multiple',
     componentWorkShowTitle: true,
     componentWorkShowDescription: false,
+    componentWorkCurrentSelection: null,
     editingComponentKey: '',
     editingComponentType: '',
     displayGroupSheetVisible: false,
@@ -920,6 +1062,7 @@ Page({
     activeDisplayGroupKey: '',
     activeDisplayGroupWorkCountText: '0 个已选',
     displayGroupWorkOptions: [],
+    displayGroupWorkScrollHeight: 0,
     displayGroupAllWorks: [],
     displayGroupWorkMap: {},
     singleWorkSummaryMap: {},
@@ -955,12 +1098,17 @@ Page({
     textSectionEditingComponentKey: '',
     textSectionAlignmentOptions: TEXT_SECTION_ALIGNMENT_OPTIONS,
     textSectionMaxLength: TEXT_SECTION_MAX_LENGTH,
-    textSectionForm: buildTextSectionForm(),
-    textSectionFieldCounters: buildTextSectionFieldCounters(buildTextSectionForm()),
+    portfolioFontCapability: getPortfolioFontCapability(),
+    ...buildTextSectionEditorState(),
     dividerSheetVisible: false,
     dividerEditingComponentKey: '',
     dividerColorOptions: DIVIDER_COLOR_OPTIONS,
     dividerForm: buildDividerForm(),
+    ...buildHyperlinkSheetResetState(),
+    hyperlinkActionTypeOptions: HYPERLINK_ACTION_TYPE_OPTIONS,
+    hyperlinkIconPositionOptions: HYPERLINK_ICON_POSITION_OPTIONS,
+    hyperlinkExternalContentMaxLength: HYPERLINK_EXTERNAL_CONTENT_MAX_LENGTH,
+    hyperlinkPromptTextMaxLength: HYPERLINK_PROMPT_TEXT_MAX_LENGTH,
     shareFieldCounters: buildShareFieldCounters(),
     shareCoverCropVisible: false,
     shareCoverCropSaving: false,
@@ -978,7 +1126,25 @@ Page({
 
   onLoad(options = {}) {
     this.setData({ portfolioId: options.portfolioId || null })
+    this.loadPortfolioFontCapability()
     return this.bootstrap()
+  },
+
+  loadPortfolioFontCapability() {
+    try {
+      loadPortfolioFonts()
+        .then((capability) => {
+          this.setData({
+            portfolioFontCapability: capability,
+            textSectionFontOptions: buildTextSectionFontOptions(capability)
+          })
+        })
+        .catch((error) => {
+          console.warn('加载作品集内置字体失败', error)
+        })
+    } catch (error) {
+      console.warn('启动作品集内置字体加载失败', error)
+    }
   },
 
   bootstrap() {
@@ -1184,15 +1350,18 @@ Page({
   },
 
   loadSingleWorkSummaries(config = this.data.config) {
+    const requestSeq = this.singleWorkSummaryRequestSeq + 1
+    this.singleWorkSummaryRequestSeq = requestSeq
     const workIds = findSingleWorkIds(config)
     if (workIds.length === 0) {
       this.setData({ singleWorkSummaryMap: {}, singleWorkSummaries: [] })
       return Promise.resolve({})
     }
     const loadingSummaryMap = buildSingleWorkSummaryStatusMap(workIds, SINGLE_WORK_SUMMARY_STATUS_LOADING)
+    const currentSummaryMap = Object.assign({}, this.data.singleWorkSummaryMap, loadingSummaryMap)
     this.setData({
-      singleWorkSummaryMap: loadingSummaryMap,
-      singleWorkSummaries: buildSingleWorkSummaryList(workIds, loadingSummaryMap)
+      singleWorkSummaryMap: currentSummaryMap,
+      singleWorkSummaries: buildSingleWorkSummaryList(workIds, currentSummaryMap)
     })
     return Promise.all(workIds.map((workId) => request({ url: `${WORKS_API_URL}/${workId}` })
       .then((response = {}) => ({
@@ -1206,22 +1375,46 @@ Page({
         status: SINGLE_WORK_SUMMARY_STATUS_FAILED
       }))))
       .then((results) => {
-        const singleWorkSummaryMap = mergeDisplayGroupWorkMap(
+        if (requestSeq !== this.singleWorkSummaryRequestSeq) {
+          return this.data.singleWorkSummaryMap
+        }
+        const resolvedSummaryMap = mergeDisplayGroupWorkMap(
           {},
           results.map((result) => result.work).filter(Boolean)
         )
         results.forEach((result) => {
           if (!result.work) {
-            singleWorkSummaryMap[result.workId] = {
+            resolvedSummaryMap[result.workId] = {
               id: result.workId,
               status: result.status
             }
           }
         })
-        this.setData({
+        const singleWorkSummaryMap = Object.assign({}, this.data.singleWorkSummaryMap, resolvedSummaryMap)
+        const state = {
           singleWorkSummaryMap,
           singleWorkSummaries: buildSingleWorkSummaryList(workIds, singleWorkSummaryMap)
-        })
+        }
+        const currentHyperlinkWorkId = Number(this.data.hyperlinkForm && this.data.hyperlinkForm.workId)
+        const currentHyperlinkSummary = singleWorkSummaryMap[currentHyperlinkWorkId]
+        if (this.data.hyperlinkSheetVisible && currentHyperlinkSummary && currentHyperlinkSummary.title) {
+          state.hyperlinkWorkSummary = currentHyperlinkSummary.title
+        }
+        const currentSingleWorkId = Number(this.data.componentWorkSelectedIds[0])
+        const currentSingleWorkSummary = singleWorkSummaryMap[currentSingleWorkId]
+        if (
+          this.data.componentWorkSheetVisible &&
+          this.data.editingComponentType === COMPONENT_TYPES.SINGLE_WORK &&
+          currentSingleWorkId > 0 &&
+          Number(this.data.componentWorkCurrentSelection && this.data.componentWorkCurrentSelection.id) === currentSingleWorkId &&
+          Object.prototype.hasOwnProperty.call(resolvedSummaryMap, currentSingleWorkId)
+        ) {
+          state.componentWorkCurrentSelection = buildComponentWorkCurrentSelection(
+            currentSingleWorkSummary || {},
+            currentSingleWorkId
+          )
+        }
+        this.setData(state)
         return singleWorkSummaryMap
       })
   },
@@ -1406,7 +1599,10 @@ Page({
   },
 
   loadComponentOptions() {
-    request({ url: COMPONENT_LIBRARY_API_URL })
+    request({
+      url: COMPONENT_LIBRARY_API_URL,
+      data: { editorSchemaRevision: EDITOR_SCHEMA_REVISION }
+    })
       .then((response) => {
         if (response && Array.isArray(response.components) && response.components.length > 0) {
           this.setData({
@@ -1431,9 +1627,19 @@ Page({
     if (!componentType || disabled || profileAdded) {
       return
     }
-    this.applyEditorConfig(addComponent(this.data.config, componentType, this.data.activeMenuKey), this.data.activeMenuKey, {
+    const menuKey = this.data.activeMenuKey
+    const previousKeys = new Set(getMenuComponentList(this.data.config, menuKey)
+      .map((component) => component.componentKey))
+    const nextConfig = this.applyEditorConfig(addComponent(this.data.config, componentType, menuKey), menuKey, {
       componentSheetVisible: false
     })
+    if (componentType === COMPONENT_TYPES.HYPERLINK) {
+      const added = getMenuComponentList(nextConfig, menuKey)
+        .find((component) => !previousKeys.has(component.componentKey))
+      return added
+        ? this.openHyperlinkSheet(added.componentKey, true)
+        : Promise.resolve()
+    }
   },
 
   handleComponentTouchStart(event) {
@@ -1588,6 +1794,9 @@ Page({
     if (componentType === COMPONENT_TYPES.DIVIDER) {
       return this.openDividerSheet(componentKey)
     }
+    if (componentType === COMPONENT_TYPES.HYPERLINK) {
+      return this.openHyperlinkSheet(componentKey)
+    }
     if (isDisplayGroupComponent(componentType)) {
       return this.openDisplayGroupSheet(componentKey, componentType)
     }
@@ -1683,23 +1892,19 @@ Page({
     if (!component || component.componentType !== COMPONENT_TYPES.TEXT_SECTION) {
       return undefined
     }
-    const textSectionForm = buildTextSectionForm(component.config || {})
     this.setData({
       textSectionSheetVisible: true,
       textSectionEditingComponentKey: componentKey,
-      textSectionForm,
-      textSectionFieldCounters: buildTextSectionFieldCounters(textSectionForm)
+      ...buildTextSectionEditorState(component.config || {})
     })
     return undefined
   },
 
   handleCloseTextSectionSheet() {
-    const textSectionForm = buildTextSectionForm()
     this.setData({
       textSectionSheetVisible: false,
       textSectionEditingComponentKey: '',
-      textSectionForm,
-      textSectionFieldCounters: buildTextSectionFieldCounters(textSectionForm)
+      ...buildTextSectionEditorState()
     })
   },
 
@@ -1719,6 +1924,48 @@ Page({
     })
   },
 
+  handleTextSectionFontTap(event) {
+    const value = event.currentTarget.dataset.value
+    const option = this.data.textSectionFontOptions.find(
+      (item) => item.value === value
+    )
+    if (!option || !option.available) return
+    const textSectionForm = Object.assign(
+      {},
+      this.data.textSectionForm,
+      { fontFamily: value }
+    )
+    this.setData({
+      textSectionForm,
+      textSectionTypography: buildPortfolioTextTypography(
+        textSectionForm,
+        LEGACY_PERSONAL_FONT_SIZE_RPX
+      )
+    })
+  },
+
+  handleTextSectionFontSizeTap(event) {
+    const value = event.currentTarget.dataset.value
+    const option = this.data.textSectionSizeOptions.find(
+      (item) => item.value === value
+    )
+    if (!option || typeof value !== 'number') return
+    const textSectionForm = Object.assign(
+      {},
+      this.data.textSectionForm,
+      { fontSizeRpx: value }
+    )
+    this.setData({
+      textSectionForm,
+      textSectionSizeOptions:
+        buildPortfolioTextFontSizeOptions(textSectionForm.fontSizeRpx),
+      textSectionTypography: buildPortfolioTextTypography(
+        textSectionForm,
+        LEGACY_PERSONAL_FONT_SIZE_RPX
+      )
+    })
+  },
+
   handleConfirmTextSectionConfig() {
     const form = buildTextSectionForm(this.data.textSectionForm)
     if (!form.content) {
@@ -1731,12 +1978,10 @@ Page({
       form,
       this.data.activeMenuKey
     )
-    const textSectionForm = buildTextSectionForm()
     this.applyEditorConfig(config, this.data.activeMenuKey, {
       textSectionSheetVisible: false,
       textSectionEditingComponentKey: '',
-      textSectionForm,
-      textSectionFieldCounters: buildTextSectionFieldCounters(textSectionForm)
+      ...buildTextSectionEditorState()
     })
   },
 
@@ -1793,6 +2038,244 @@ Page({
     })
   },
 
+  openHyperlinkSheet(componentKey, editingNewComponent = false) {
+    const location = findPortfolioComponent(this.data.config, componentKey)
+    const component = location && location.component
+    if (!component || component.componentType !== COMPONENT_TYPES.HYPERLINK) {
+      return Promise.resolve()
+    }
+    const form = normalizeHyperlinkConfig(component.config || {})
+    const summary = this.data.singleWorkSummaryMap[form.workId]
+    const selectedIds = form.workId ? [form.workId] : []
+    this.setData({
+      hyperlinkSheetVisible: true,
+      hyperlinkEditingComponentKey: componentKey,
+      hyperlinkEditingMenuKey: location.menuKey,
+      hyperlinkEditingNewComponent: editingNewComponent,
+      hyperlinkForm: form,
+      hyperlinkTargetOptions: [],
+      hyperlinkTargetLoading: false,
+      hyperlinkTargetErrorText: '',
+      hyperlinkExternalContentCount: countUnicodeCodePoints(form.externalContent),
+      hyperlinkPromptTextCount: countUnicodeCodePoints(form.promptText),
+      hyperlinkWorkSummary: summary && summary.title
+        ? summary.title
+        : (form.workId ? `已选择作品 #${form.workId}` : HYPERLINK_DISPLAY_WORK_REQUIRED_MESSAGE),
+      componentWorkSheetVisible: false,
+      componentWorkLoading: true,
+      componentWorkLoadingMore: false,
+      componentWorkErrorText: '',
+      componentWorkEmptyText: '暂无图片或动图作品',
+      componentWorkOptions: [],
+      componentWorkFilterTags: [],
+      componentWorkKeyword: '',
+      componentWorkSelectedTagId: null,
+      componentWorkPage: 1,
+      componentWorkPageSize: COMPONENT_WORK_PAGE_SIZE,
+      componentWorkHasMore: false,
+      componentWorkSelectedIds: selectedIds,
+      componentWorkSelectedCountText: buildSelectedCountText(selectedIds),
+      componentWorkSelectionMode: 'single',
+      componentWorkShowTitle: true,
+      componentWorkShowDescription: false,
+      componentWorkCurrentSelection: null,
+      editingComponentKey: componentKey,
+      editingComponentType: COMPONENT_TYPES.HYPERLINK
+    })
+    const workRequest = this.loadComponentWorks({
+      reset: true,
+      componentType: COMPONENT_TYPES.HYPERLINK,
+      selectedIds
+    })
+    const targetRequest = form.actionType === HYPERLINK_ACTION_TYPES.INTERNAL_PORTFOLIO
+      ? this.loadHyperlinkTargets()
+      : Promise.resolve()
+    return Promise.all([workRequest, targetRequest]).then(() => undefined)
+  },
+
+  handleCloseHyperlinkSheet() {
+    this.hyperlinkTargetRequestSerial = (this.hyperlinkTargetRequestSerial || 0) + 1
+    this.componentWorkRequestSeq += 1
+    const resetState = buildHyperlinkSheetResetState()
+    if (this.data.hyperlinkEditingNewComponent && this.data.hyperlinkEditingComponentKey) {
+      this.applyEditorConfig(removeComponent(
+        this.data.config,
+        this.data.hyperlinkEditingComponentKey,
+        this.data.hyperlinkEditingMenuKey
+      ), this.data.hyperlinkEditingMenuKey, resetState)
+      return
+    }
+    this.setData(resetState)
+  },
+
+  loadHyperlinkTargets() {
+    const requestSerial = (this.hyperlinkTargetRequestSerial || 0) + 1
+    this.hyperlinkTargetRequestSerial = requestSerial
+    this.setData({
+      hyperlinkTargetLoading: true,
+      hyperlinkTargetErrorText: ''
+    })
+    return request({
+      url: HYPERLINK_TARGETS_API_URL,
+      data: {
+        sourcePortfolioId: this.data.portfolioId || undefined,
+        selectedTargetPortfolioId: this.data.hyperlinkForm.targetPortfolioId || undefined
+      }
+    }).then((response = {}) => {
+      if (requestSerial !== this.hyperlinkTargetRequestSerial) {
+        return
+      }
+      this.setData({
+        hyperlinkTargetLoading: false,
+        hyperlinkTargetOptions: buildHyperlinkTargetOptions(response),
+        hyperlinkTargetErrorText: ''
+      })
+    }).catch((error) => {
+      if (requestSerial !== this.hyperlinkTargetRequestSerial) {
+        return
+      }
+      this.setData({
+        hyperlinkTargetLoading: false,
+        hyperlinkTargetOptions: [],
+        hyperlinkTargetErrorText: error && error.message ? error.message : '作品集列表加载失败'
+      })
+    })
+  },
+
+  handleRetryHyperlinkTargets() {
+    return this.loadHyperlinkTargets()
+  },
+
+  handleSelectHyperlinkWork(event) {
+    const workId = Number(event.currentTarget.dataset.id)
+    const selected = this.data.componentWorkOptions.find((item) => Number(item.id) === workId)
+    if (!Number.isFinite(workId) || workId <= 0 || !selected) {
+      return
+    }
+    const selectedIds = [workId]
+    const singleWorkSummaryMap = mergeDisplayGroupWorkMap(
+      this.data.singleWorkSummaryMap,
+      this.data.componentWorkOptions
+    )
+    const summaryWorkIds = normalizeWorkIds(findSingleWorkIds(this.data.config).concat(workId))
+    this.setData({
+      'hyperlinkForm.workId': workId,
+      hyperlinkWorkSummary: selected.title || `已选择作品 #${workId}`,
+      componentWorkSelectedIds: selectedIds,
+      componentWorkSelectedCountText: buildSelectedCountText(selectedIds),
+      componentWorkOptions: buildComponentWorkOptions(
+        this.data.componentWorkOptions,
+        selectedIds,
+        COMPONENT_TYPES.HYPERLINK
+      ),
+      singleWorkSummaryMap,
+      singleWorkSummaries: buildSingleWorkSummaryList(summaryWorkIds, singleWorkSummaryMap)
+    })
+  },
+
+  handleRetryHyperlinkWorks() {
+    return this.loadComponentWorks({
+      reset: this.data.componentWorkOptions.length === 0,
+      componentType: COMPONENT_TYPES.HYPERLINK,
+      selectedIds: this.data.componentWorkSelectedIds
+    })
+  },
+
+  handleHyperlinkActionTypeTap(event) {
+    const actionType = event.currentTarget.dataset.value
+    const form = Object.assign({}, this.data.hyperlinkForm || {}, { actionType })
+    this.setData({
+      hyperlinkForm: form,
+      hyperlinkExternalContentCount: countUnicodeCodePoints(form.externalContent),
+      hyperlinkPromptTextCount: countUnicodeCodePoints(form.promptText)
+    })
+    if (actionType === HYPERLINK_ACTION_TYPES.INTERNAL_PORTFOLIO) {
+      return this.loadHyperlinkTargets()
+    }
+    this.hyperlinkTargetRequestSerial = (this.hyperlinkTargetRequestSerial || 0) + 1
+    this.setData({
+      hyperlinkTargetOptions: [],
+      hyperlinkTargetLoading: false,
+      hyperlinkTargetErrorText: ''
+    })
+    return Promise.resolve()
+  },
+
+  handleSelectHyperlinkTarget(event) {
+    const selectable = event.currentTarget.dataset.selectable
+    if (selectable === false || selectable === 'false') {
+      return
+    }
+    const portfolioId = Number(event.currentTarget.dataset.id)
+    if (!Number.isFinite(portfolioId) || portfolioId <= 0) {
+      return
+    }
+    this.setData({ 'hyperlinkForm.targetPortfolioId': portfolioId })
+  },
+
+  handleHyperlinkExternalContentInput(event) {
+    const value = event.detail.value || ''
+    this.setData({
+      'hyperlinkForm.externalContent': value,
+      hyperlinkExternalContentCount: countUnicodeCodePoints(value)
+    })
+  },
+
+  handleHyperlinkPromptTextInput(event) {
+    const value = event.detail.value || ''
+    this.setData({
+      'hyperlinkForm.promptText': value,
+      hyperlinkPromptTextCount: countUnicodeCodePoints(value)
+    })
+  },
+
+  handleHyperlinkShowIconChange(event) {
+    this.setData({ 'hyperlinkForm.showClickIcon': Boolean(event.detail && event.detail.value) })
+  },
+
+  handleHyperlinkIconPositionTap(event) {
+    this.setData({ 'hyperlinkForm.iconPosition': event.currentTarget.dataset.value })
+  },
+
+  handleConfirmHyperlinkConfig() {
+    const form = normalizeHyperlinkConfig(this.data.hyperlinkForm)
+    let message = validateHyperlinkForm(form)
+    if (!message && form.actionType === HYPERLINK_ACTION_TYPES.INTERNAL_PORTFOLIO) {
+      const selected = this.data.hyperlinkTargetOptions.find(
+        (item) => Number(item.portfolioId) === Number(form.targetPortfolioId)
+      )
+      if (!selected) {
+        message = this.data.hyperlinkTargetLoading
+          ? '作品集列表加载中'
+          : (this.data.hyperlinkTargetErrorText || '请重新选择可用作品集')
+      } else if (selected.selectable === false) {
+        message = selected.disabledReason || '请重新选择可用作品集'
+      }
+    }
+    if (message) {
+      wx.showToast({ title: message, icon: 'none' })
+      return
+    }
+    this.componentWorkRequestSeq += 1
+    const config = updateComponentHyperlinkConfig(
+      this.data.config,
+      this.data.hyperlinkEditingComponentKey,
+      form,
+      this.data.hyperlinkEditingMenuKey
+    )
+    const resetState = Object.assign(buildHyperlinkSheetResetState(), {
+      singleWorkSummaries: buildSingleWorkSummaryList(
+        findSingleWorkIds(config),
+        this.data.singleWorkSummaryMap
+      )
+    })
+    this.applyEditorConfig(
+      config,
+      this.data.hyperlinkEditingMenuKey,
+      resetState
+    )
+  },
+
   openDisplayGroupSheet(componentKey, componentType) {
     const component = findComponentByKey(this.data.config, componentKey)
     if (!component) {
@@ -1807,6 +2290,7 @@ Page({
       displayGroupOptions: [],
       activeDisplayGroupWorkCountText: '0 个已选',
       displayGroupWorkOptions: [],
+      displayGroupWorkScrollHeight: 0,
       displayGroupAllWorks: [],
       displayGroupOriginalConfig: clonePlainObject(this.data.config),
       displayGroupShowTitle: displayOptions.showTitle,
@@ -2197,6 +2681,7 @@ Page({
       activeDisplayGroupKey: '',
       activeDisplayGroupWorkCountText: '0 个已选',
       displayGroupWorkOptions: [],
+      displayGroupWorkScrollHeight: 0,
       displayGroupAllWorks: [],
       displayGroupOriginalConfig: null,
       displayGroupShowTitle: true,
@@ -2223,6 +2708,7 @@ Page({
       activeDisplayGroupKey: '',
       activeDisplayGroupWorkCountText: '0 个已选',
       displayGroupWorkOptions: [],
+      displayGroupWorkScrollHeight: 0,
       displayGroupAllWorks: [],
       displayGroupOriginalConfig: null,
       displayGroupShowTitle: true,
@@ -2258,10 +2744,12 @@ Page({
     const component = findComponentByKey(this.data.config, componentKey)
     const tags = this.data.workTagOptions
     const works = this.data.displayGroupAllWorks
+    const displayGroupWorkOptions = buildDisplayGroupWorkOptions(component || {}, activeGroupKey, tags, works)
     this.setData({
       displayGroupOptions: buildDisplayGroupOptions(component || {}, activeGroupKey, tags),
       activeDisplayGroupWorkCountText: buildActiveDisplayGroupWorkCountText(component || {}, activeGroupKey, tags),
-      displayGroupWorkOptions: buildDisplayGroupWorkOptions(component || {}, activeGroupKey, tags, works)
+      displayGroupWorkOptions,
+      displayGroupWorkScrollHeight: buildDisplayGroupWorkScrollHeight(displayGroupWorkOptions)
     })
   },
 
@@ -2298,6 +2786,7 @@ Page({
       const component = findComponentByKey(config, componentKey)
       const activeGroupKey = resolveActiveDisplayGroupKey(component || {}, tags, this.data.activeDisplayGroupKey)
       const displayGroupWorkMap = mergeDisplayGroupWorkMap(this.data.displayGroupWorkMap, works)
+      const displayGroupWorkOptions = buildDisplayGroupWorkOptions(component || {}, activeGroupKey, tags, works)
       this.applyEditorConfig(config, this.data.activeMenuKey, {
         workTagOptions: tags,
         displayGroupAllWorks: works,
@@ -2305,7 +2794,8 @@ Page({
         activeDisplayGroupKey: activeGroupKey,
         displayGroupOptions: buildDisplayGroupOptions(component || {}, activeGroupKey, tags),
         activeDisplayGroupWorkCountText: buildActiveDisplayGroupWorkCountText(component || {}, activeGroupKey, tags),
-        displayGroupWorkOptions: buildDisplayGroupWorkOptions(component || {}, activeGroupKey, tags, works),
+        displayGroupWorkOptions,
+        displayGroupWorkScrollHeight: buildDisplayGroupWorkScrollHeight(displayGroupWorkOptions),
         displayGroupLoading: false,
         displayGroupErrorText: ''
       })
@@ -2423,6 +2913,10 @@ Page({
       : singleWorkConfig
         ? [singleWorkConfig.workId]
         : component.config && component.config.workIds)
+    const selectedWorkId = componentType === COMPONENT_TYPES.SINGLE_WORK ? selectedIds[0] : 0
+    const selectedWorkSummary = selectedWorkId
+      ? this.data.singleWorkSummaryMap[selectedWorkId]
+      : null
     this.setData({
       componentWorkSheetVisible: true,
       componentWorkSheetTitle: options.title || (componentType === COMPONENT_TYPES.CAROUSEL
@@ -2444,6 +2938,9 @@ Page({
       componentWorkSelectionMode: componentType === COMPONENT_TYPES.SINGLE_WORK ? 'single' : 'multiple',
       componentWorkShowTitle: singleWorkConfig ? singleWorkConfig.showTitle : true,
       componentWorkShowDescription: singleWorkConfig ? singleWorkConfig.showDescription : false,
+      componentWorkCurrentSelection: componentType === COMPONENT_TYPES.SINGLE_WORK
+        ? buildComponentWorkCurrentSelection(selectedWorkSummary || {}, selectedWorkId)
+        : null,
       editingComponentKey: componentKey,
       editingComponentType: componentType
     })
@@ -2453,12 +2950,13 @@ Page({
   async loadComponentWorks(options = {}) {
     const reset = options.reset !== false
     const componentType = options.componentType || this.data.editingComponentType
-    const selectedIds = options.selectedIds || this.data.componentWorkSelectedIds
     const pageSize = Number(this.data.componentWorkPageSize) || COMPONENT_WORK_PAGE_SIZE
-    const nextPage = reset ? 1 : (Number(this.data.componentWorkPage) || 1) + 1
+    let requestPage = reset ? 1 : (Number(this.data.componentWorkPage) || 1) + 1
     const keyword = String(this.data.componentWorkKeyword || '').trim()
     const tagId = normalizeComponentWorkTagId(this.data.componentWorkSelectedTagId)
     const mediaType = componentType === COMPONENT_TYPES.CAROUSEL ? 'IMAGE' : ''
+    const initialWorks = reset ? [] : this.data.componentWorkOptions
+    const initialOptionCount = initialWorks.length
     const requestSeq = this.componentWorkRequestSeq + 1
     this.componentWorkRequestSeq = requestSeq
     this.setData(reset ? {
@@ -2471,35 +2969,65 @@ Page({
       componentWorkErrorText: ''
     })
     try {
-      const response = await request({
-        url: WORKS_API_URL,
-        data: {
-          keyword,
-          tagId: tagId || undefined,
-          mediaType: mediaType || undefined,
-          auditStatus: PASSED_WORK_AUDIT_STATUS,
-          page: nextPage,
-          pageSize
+      let list
+      let works = initialWorks
+      let workOptions = []
+      do {
+        const response = await request({
+          url: WORKS_API_URL,
+          data: {
+            keyword,
+            tagId: tagId || undefined,
+            mediaType: mediaType || undefined,
+            auditStatus: PASSED_WORK_AUDIT_STATUS,
+            page: requestPage,
+            pageSize
+          }
+        })
+        if (requestSeq !== this.componentWorkRequestSeq) {
+          return
         }
-      })
-      if (requestSeq !== this.componentWorkRequestSeq) {
-        return
-      }
-      const list = normalizeWorkList(response)
-      const works = reset ? list.works : mergeComponentWorks(this.data.componentWorkOptions, list.works)
+        list = normalizeWorkList(response)
+        works = mergeComponentWorks(works, list.works)
+        workOptions = buildComponentWorkOptions(
+          works,
+          this.data.componentWorkSelectedIds,
+          componentType
+        )
+        requestPage = list.page + 1
+      } while (
+        componentType === COMPONENT_TYPES.HYPERLINK &&
+        workOptions.length === initialOptionCount &&
+        list.hasMore
+      )
+      const latestSelectedIds = this.data.componentWorkSelectedIds
+      workOptions = buildComponentWorkOptions(works, latestSelectedIds, componentType)
       const displayGroupWorkMap = mergeDisplayGroupWorkMap(this.data.displayGroupWorkMap, works)
-      this.setData({
+      const currentWorkId = componentType === COMPONENT_TYPES.SINGLE_WORK ? latestSelectedIds[0] : 0
+      const currentOption = currentWorkId
+        ? workOptions.find((item) => Number(item.id) === Number(currentWorkId))
+        : null
+      const patch = {
         componentWorkLoading: false,
         componentWorkLoadingMore: false,
         componentWorkErrorText: '',
-        componentWorkOptions: buildComponentWorkOptions(works, selectedIds, componentType),
+        componentWorkOptions: workOptions,
         componentWorkFilterTags: list.filterTags,
         componentWorkPage: list.page,
         componentWorkPageSize: list.pageSize || pageSize,
         componentWorkHasMore: list.hasMore,
         displayGroupWorkMap
-      })
+      }
+      if (componentType === COMPONENT_TYPES.SINGLE_WORK) {
+        patch.componentWorkCurrentSelection = currentOption
+          ? buildComponentWorkCurrentSelection(currentOption, currentWorkId)
+          : this.data.componentWorkCurrentSelection
+      }
+      this.setData(patch)
     } catch (error) {
+      if (requestSeq !== this.componentWorkRequestSeq) {
+        return
+      }
       if (error && error.authRequired) {
         this.setData({
           componentWorkLoading: false,
@@ -2564,6 +3092,7 @@ Page({
   },
 
   handleCloseComponentWorkSheet() {
+    this.componentWorkRequestSeq += 1
     this.setData({
       componentWorkSheetVisible: false,
       editingComponentKey: '',
@@ -2572,8 +3101,30 @@ Page({
       componentWorkLoadingMore: false,
       componentWorkSelectionMode: 'multiple',
       componentWorkShowTitle: true,
-      componentWorkShowDescription: false
+      componentWorkShowDescription: false,
+      componentWorkCurrentSelection: null
     })
+  },
+
+  handleSingleWorkPickerTagChange(event) {
+    return this.handleComponentWorkTagTap({
+      currentTarget: { dataset: { tagId: event.detail && event.detail.tagId } }
+    })
+  },
+
+  handleSingleWorkPickerSelect(event) {
+    const work = event.detail && event.detail.work
+    if (!work) {
+      return
+    }
+    this.handleToggleComponentWork({ currentTarget: { dataset: { id: work.id } } })
+  },
+
+  handleRetrySingleWorkPicker() {
+    if (this.data.componentWorkOptions.length > 0) {
+      return this.handleComponentWorkScrollToLower()
+    }
+    return this.handleRetryLoadComponentWorks()
   },
 
   handleSingleWorkShowTitleChange(event) {
@@ -2602,6 +3153,10 @@ Page({
           this.data.componentWorkOptions,
           nextSelectedIds,
           this.data.editingComponentType
+        ),
+        componentWorkCurrentSelection: buildComponentWorkCurrentSelection(
+          this.data.componentWorkOptions.find((item) => Number(item.id) === workId) || {},
+          workId
         )
       })
       return
@@ -2634,6 +3189,7 @@ Page({
       wx.showToast({ title: '请选择一个作品', icon: 'none' })
       return
     }
+    this.componentWorkRequestSeq += 1
     const config = this.data.editingComponentType === COMPONENT_TYPES.SINGLE_WORK
       ? updateSingleWorkConfig(this.data.config, componentKey, {
           workId: this.data.componentWorkSelectedIds[0],
@@ -2657,7 +3213,8 @@ Page({
       editingComponentType: '',
       componentWorkSelectionMode: 'multiple',
       componentWorkShowTitle: true,
-      componentWorkShowDescription: false
+      componentWorkShowDescription: false,
+      componentWorkCurrentSelection: null
     })
   },
 
@@ -2853,8 +3410,26 @@ Page({
       return this.uploadLocalPortfolioAssets(portfolioId)
         .then((config) => this.saveDraftForPortfolio(portfolioId, config))
     }).catch((error) => {
+      this.focusServerComponentError(error)
       wx.showToast({ title: error.message || '保存失败', icon: 'none' })
     })
+  },
+
+  focusServerComponentError(error) {
+    const details = error && error.data && typeof error.data === 'object' ? error.data : {}
+    const componentKey = String(error && error.componentKey || details.componentKey || '')
+    const location = componentKey ? findPortfolioComponent(this.data.config, componentKey) : null
+    if (!location) {
+      return false
+    }
+    const message = error && error.message ? error.message : '组件配置校验失败'
+    this.applyEditorConfig(this.data.config, location.menuKey, {
+      validationMenuKey: location.menuKey,
+      validationComponentKey: componentKey,
+      validationComponentAnchor: `component-row-${componentKey}`,
+      validationMenuMessage: message
+    })
+    return true
   },
 
   handlePublish() {
@@ -2909,6 +3484,7 @@ Page({
         return
       }
       const message = error && error.message ? error.message : '发布失败'
+      this.focusServerComponentError(error)
       const matchedMenu = message.match(/^【(.+?)】/)
       if (matchedMenu && this.data.config.bottomNav.enabled) {
         const targetMenu = this.data.config.bottomNav.items.find((item) => item.title === matchedMenu[1])

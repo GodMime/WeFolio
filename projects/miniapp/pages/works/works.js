@@ -416,7 +416,6 @@ Page({
     errorMessage: '',
     keyword: '',
     selectedTagId: null,
-    selectedMediaType: '',
     batchMode: false,
     selectedWorkIds: [],
     batchSelectedCountText: '0 已选',
@@ -554,9 +553,6 @@ Page({
         data: {
           keyword: this.data.keyword,
           tagId: this.data.selectedTagId || undefined,
-          ...(this.data.selectedMediaType ? {
-            mediaType: this.data.selectedMediaType
-          } : {}),
           page: nextPage,
           pageSize: currentList.pageSize || 20
         }
@@ -625,22 +621,6 @@ Page({
   },
 
   handleFilterShellTap() {
-  },
-
-  handleMediaTypeTap(event) {
-    if (this.data.sortMode) {
-      return
-    }
-    const mediaType = String(event.currentTarget.dataset.type || '').trim()
-    this.setData({
-      selectedMediaType: mediaType,
-      batchMode: false,
-      selectedWorkIds: [],
-      batchSelectedCountText: '0 已选',
-      batchSelectAllText: '全选',
-      revealedWorkId: null
-    })
-    this.loadWorks(true)
   },
 
   handleCloseTagManageMode() {
@@ -2126,13 +2106,6 @@ Page({
       ? this.data.selectedWorkIds.filter((workId) => !hasSelectedWork(visibleWorkIds, workId))
       : mergeSelectedWorkIds(this.data.selectedWorkIds, visibleWorkIds)
     this.setSelectedWorkIds(selectedWorkIds)
-  },
-
-  handleBatchPortfolioTap() {
-    wx.showToast({
-      title: '作品集编辑器接入中',
-      icon: 'none'
-    })
   },
 
   async handleBatchDeleteTap() {

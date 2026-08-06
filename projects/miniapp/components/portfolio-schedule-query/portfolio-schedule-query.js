@@ -14,6 +14,7 @@ const DATE_REQUIRED_MESSAGE = '请选择日期'
 const SLOT_REQUIRED_MESSAGE = '请选择档位'
 const LOAD_FAILED_MESSAGE = '月历加载失败'
 const QUERY_FAILED_MESSAGE = '档期查询失败'
+const PREVIEW_QUERY_UNSUPPORTED_MESSAGE = '预览模式不提交档期查询'
 const IDEMPOTENCY_KEY_PREFIX = 'schedule-query'
 const IDEMPOTENCY_KEY_MAX_LENGTH = 64
 const IDEMPOTENCY_RANDOM_SEGMENT_LENGTH = 8
@@ -172,7 +173,7 @@ function removeFilledDayClass(dayClass = '') {
   return classes.length ? classes.join(' ') : CALENDAR_DAY_BASE_CLASS
 }
 
-function hideVisitorScheduleHints(options = {}) {
+function hideScheduleHints(options = {}) {
   const days = Array.isArray(options.days) ? options.days : []
   return Object.assign({}, options, {
     days: days.map((day) => Object.assign({}, day, {
@@ -184,8 +185,8 @@ function hideVisitorScheduleHints(options = {}) {
   })
 }
 
-function buildDisplayOptions(data = {}, options = {}) {
-  return data.preview ? options : hideVisitorScheduleHints(options)
+function buildDisplayOptions(options = {}) {
+  return hideScheduleHints(options)
 }
 
 Component({
@@ -319,7 +320,7 @@ Component({
         const requestOptions = buildOptionsRequest(this.data, targetMonth)
         const response = await sendScheduleRequest(requestOptions, this.data)
         const options = normalizeVisitorScheduleOptions(response)
-        const displayOptions = buildDisplayOptions(this.data, options)
+        const displayOptions = buildDisplayOptions(options)
         const selectedDate = this.data.selectedDate && String(this.data.selectedDate).startsWith(options.yearMonth || targetMonth)
           ? this.data.selectedDate
           : ''
@@ -376,6 +377,10 @@ Component({
       }
       if (!this.data.selectedSlotDefinitionId) {
         getRuntimeWx().showToast({ title: SLOT_REQUIRED_MESSAGE, icon: 'none' })
+        return false
+      }
+      if (this.data.preview) {
+        getRuntimeWx().showToast({ title: PREVIEW_QUERY_UNSUPPORTED_MESSAGE, icon: 'none' })
         return false
       }
       this.setData({

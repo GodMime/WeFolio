@@ -15,7 +15,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 /**
- * 团队维护预览下钻成员个人作品集服务。
+ * 团队预览下钻成员个人作品集服务。
  */
 @Service
 @RequiredArgsConstructor
@@ -95,11 +95,7 @@ public class TeamMemberPortfolioPreviewService {
             long userId
     ) {
         String normalizedScope = normalizeScope(scope);
-        if (PUBLISHED_PREVIEW_SCOPE.equals(normalizedScope)) {
-            accessService.requireVisiblePortfolio(teamPortfolioId, userId);
-        } else {
-            accessService.requireMaintainablePortfolio(teamPortfolioId, userId);
-        }
+        accessService.requireVisiblePortfolio(teamPortfolioId, userId);
         String configScope = PUBLISHED_PREVIEW_SCOPE.equals(normalizedScope)
                 ? PortfolioConfigScopeDict.PUBLISHED.getCode()
                 : PortfolioConfigScopeDict.DRAFT.getCode();

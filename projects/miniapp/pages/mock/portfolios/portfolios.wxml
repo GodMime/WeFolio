@@ -1,15 +1,19 @@
 <view class="page-shell portfolios-page mock-portfolios-page">
   <navigation-bar title="作品集" back="{{false}}" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
 
-  <scroll-view class="portfolio-scroll" scroll-y type="list">
-    <view class="portfolio-content">
-      <view class="segment">
-        <view class="segment-indicator"></view>
-        <button class="segment-item active">个人</button>
-        <button class="segment-item" bindtap="handleLockedAction">团队</button>
-      </view>
+  <view class="portfolio-segment-shell">
+    <view class="segment">
+      <view class="segment-indicator {{ownerType === 'TEAM' ? 'team-active' : ''}}"></view>
+      <button class="segment-item {{ownerType === 'USER' ? 'active' : ''}}" data-type="USER" bindtap="handleOwnerTypeTap">个人</button>
+      <button class="segment-item {{ownerType === 'TEAM' ? 'active' : ''}}" data-type="TEAM" bindtap="handleOwnerTypeTap">团队</button>
+    </view>
+  </view>
 
-      <view class="portfolio-list-panel">
+  <view class="portfolio-switch-viewport">
+    <view class="portfolio-switch-track {{ownerType === 'TEAM' ? 'team-active' : ''}}">
+      <view class="portfolio-switch-panel">
+        <view class="portfolio-content personal-portfolio-content">
+          <view class="portfolio-list-panel">
         <view class="list-heading">
           <view class="list-title">{{portfolioList.ownerTitle}}</view>
           <view class="summary-pills">
@@ -18,6 +22,7 @@
           </view>
         </view>
 
+            <scroll-view class="portfolio-list-scroll personal-portfolio-list-scroll" scroll-y type="list">
         <view class="portfolio-list">
           <view wx:for="{{portfolioList.portfolios}}" wx:key="portfolioId" class="portfolio-swipe-row">
             <view class="portfolio-delete-pane">
@@ -58,14 +63,71 @@
             </view>
           </view>
         </view>
-      </view>
+            </scroll-view>
+          </view>
 
       <view class="create-actions">
         <button class="create-action standard" bindtap="handleLockedAction">新建标准个人作品集</button>
         <button class="create-action advanced" bindtap="handleLockedAction">新建高级个人作品集</button>
       </view>
+        </view>
+      </view>
+
+      <view class="portfolio-switch-panel">
+        <view class="portfolio-content team-portfolio-content">
+          <view class="portfolio-list-panel">
+            <view class="list-heading">
+              <view class="list-title">{{teamPortfolioList.ownerTitle}}</view>
+              <view class="summary-pills">
+                <view class="summary-pill published">{{teamPortfolioList.summary.publishedText}}</view>
+                <view class="summary-pill draft">{{teamPortfolioList.summary.draftText}}</view>
+              </view>
+            </view>
+
+            <scroll-view class="portfolio-list-scroll team-portfolio-list-scroll" scroll-y type="list">
+              <view class="portfolio-list">
+                <view wx:for="{{teamPortfolioList.portfolios}}" wx:key="portfolioId" class="portfolio-swipe-row">
+                  <view class="portfolio-delete-pane">
+                    <button class="portfolio-delete-button" catchtap="handleTeamActionTap" data-action="delete">删除</button>
+                  </view>
+                  <view class="portfolio-item-card team-portfolio-card" bindtap="handleTeamPortfolioTap">
+                    <view class="team-portfolio-affiliation">{{item.teamName}} · {{item.currentRole}}</view>
+                    <view class="portfolio-cover">
+                      <image class="portfolio-cover-image" src="{{item.coverUrl}}" mode="aspectFill" aria-label="{{item.coverAlt}}"></image>
+                    </view>
+                    <view class="portfolio-copy">
+                      <view class="portfolio-title {{item.titleScrollable ? 'scrolling' : ''}}">
+                        <view class="portfolio-title-track">
+                          <text class="portfolio-title-text">{{item.title}}</text>
+                        </view>
+                      </view>
+                      <view class="portfolio-meta">{{item.updatedText}}</view>
+                      <view class="portfolio-badges"><view class="status-badge {{item.statusTone}}">{{item.statusText}}</view></view>
+                    </view>
+                    <view class="portfolio-side">
+                      <view class="portfolio-action-row">
+                        <button wx:if="{{item.canPublishedPreview}}" class="portfolio-action-button preview" catchtap="handleTeamActionTap" data-action="preview">预览</button>
+                        <button wx:if="{{item.canShare}}" class="portfolio-action-button share" catchtap="handleTeamActionTap" data-action="share">分享</button>
+                      </view>
+                      <view wx:if="{{item.canMaintain}}" class="portfolio-arrow"></view>
+                    </view>
+                  </view>
+                </view>
+              </view>
+            </scroll-view>
+          </view>
+
+          <view class="team-action-hint-slot">
+            <view class="inline-hint">团队维护权限需注册登录后获取</view>
+          </view>
+          <view class="create-actions">
+            <button class="create-action standard" bindtap="handleLockedAction">新建标准团队作品集</button>
+            <button class="create-action advanced" bindtap="handleLockedAction">新建高级团队作品集</button>
+          </view>
+        </view>
+      </view>
     </view>
-  </scroll-view>
+  </view>
 
   <mock-tabbar tabs="{{tabs}}"></mock-tabbar>
 </view>

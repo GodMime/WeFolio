@@ -1,5 +1,6 @@
 const {
   MOCK_PORTFOLIO_LIST,
+  MOCK_TEAM_PORTFOLIO_LIST,
   getMockTabs,
   showMockLoginRequiredToast
 } = require('../utils/mock-experience')
@@ -10,7 +11,17 @@ const PREVIEW_URL = '/pages/mock/portfolio-standard-preview/portfolio-standard-p
 Page({
   data: {
     tabs: getMockTabs('portfolio'),
-    portfolioList: MOCK_PORTFOLIO_LIST
+    ownerType: 'USER',
+    portfolioList: MOCK_PORTFOLIO_LIST,
+    teamPortfolioList: MOCK_TEAM_PORTFOLIO_LIST
+  },
+
+  handleOwnerTypeTap(event) {
+    const ownerType = event.currentTarget.dataset.type === 'TEAM' ? 'TEAM' : 'USER'
+    if (ownerType === this.data.ownerType) {
+      return
+    }
+    this.setData({ ownerType })
   },
 
   handlePortfolioTap() {
@@ -20,6 +31,19 @@ Page({
   },
 
   handleActionTap(event) {
+    const action = event.currentTarget.dataset.action
+    if (action === 'preview') {
+      wx.navigateTo({ url: PREVIEW_URL })
+      return
+    }
+    showMockLoginRequiredToast()
+  },
+
+  handleTeamPortfolioTap() {
+    showMockLoginRequiredToast()
+  },
+
+  handleTeamActionTap(event) {
     const action = event.currentTarget.dataset.action
     if (action === 'preview') {
       wx.navigateTo({ url: PREVIEW_URL })

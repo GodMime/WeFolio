@@ -1,5 +1,10 @@
 const MAX_CAROUSEL_ITEMS = 9
 const DEFAULT_INTERVAL = 5000
+const CAROUSEL_WORK_ITEM_HEIGHT_RPX = 112
+const CAROUSEL_WORK_ITEM_GAP_RPX = 14
+const CAROUSEL_WORK_LIST_MIN_HEIGHT_RPX = 150
+const CAROUSEL_WORK_LIST_MAX_HEIGHT_RPX = 616
+const CAROUSEL_EDITOR_FIXED_HEIGHT_RPX = 310
 
 function createDefaultCarouselConfig() {
   return { items: [] }
@@ -30,6 +35,37 @@ function normalizeCarouselItem(item = {}) {
 function normalizePositiveNumber(value, fallback) {
   const numberValue = Number(value)
   return Number.isFinite(numberValue) && numberValue > 0 ? Math.round(numberValue) : fallback
+}
+
+/**
+ * 根据当前作品数计算列表视口高度，少量作品时收拢，超过五项后在列表内滚动。
+ */
+function buildCarouselWorkListHeight(works = [], loading = false) {
+  if (loading) return CAROUSEL_WORK_LIST_MIN_HEIGHT_RPX
+  const count = Array.isArray(works) ? works.length : 0
+  if (!count) return CAROUSEL_WORK_LIST_MIN_HEIGHT_RPX
+  const contentHeight = count * CAROUSEL_WORK_ITEM_HEIGHT_RPX + (count - 1) * CAROUSEL_WORK_ITEM_GAP_RPX
+  return Math.max(
+    CAROUSEL_WORK_LIST_MIN_HEIGHT_RPX,
+    Math.min(CAROUSEL_WORK_LIST_MAX_HEIGHT_RPX, contentHeight)
+  )
+}
+
+/**
+ * 计算页面级滚动区所需高度，固定区域包含成员选择、字段内边距和组件间距。
+ */
+function buildCarouselEditorScrollHeight(works = [], loading = false) {
+  return CAROUSEL_EDITOR_FIXED_HEIGHT_RPX + buildCarouselWorkListHeight(works, loading)
+}
+
+function syncCarouselEditorLayout(component) {
+  const workListHeightRpx = buildCarouselWorkListHeight(component.properties.works, component.properties.loading)
+  component.setData({ workListHeightRpx })
+  if (component.properties.editMode) {
+    component.triggerEvent('layoutchange', {
+      scrollHeightRpx: CAROUSEL_EDITOR_FIXED_HEIGHT_RPX + workListHeightRpx
+    })
+  }
 }
 
 function buildProgressSegments(items, current) {
@@ -109,11 +145,23 @@ Component({
       }
     },
     members: { type: Array, value: [] },
-    works: { type: Array, value: [] },
+    works: {
+      type: Array,
+      value: [],
+      observer() { syncCarouselEditorLayout(this) }
+    },
+    loading: {
+      type: Boolean,
+      value: false,
+      observer() { syncCarouselEditorLayout(this) }
+    },
     editMode: {
       type: Boolean,
       value: false,
-      observer(value, oldValue) { if (value !== oldValue) syncCarouselDraft(this, value === true) }
+      observer(value, oldValue) {
+        if (value !== oldValue) syncCarouselDraft(this, value === true)
+        syncCarouselEditorLayout(this)
+      }
     },
     interval: {
       type: Number,
@@ -130,6 +178,7 @@ Component({
     progressSegments: [],
     selectedMemberId: null,
     draftItems: [],
+    workListHeightRpx: CAROUSEL_WORK_LIST_MIN_HEIGHT_RPX,
     errorMessage: ''
   },
   methods: {
@@ -149,8 +198,9 @@ Component({
     attached() {
       syncCarouselDisplay(this)
       syncCarouselDraft(this, this.properties.editMode === true)
+      syncCarouselEditorLayout(this)
     }
   }
 })
 
-module.exports = { DEFAULT_INTERVAL, MAX_CAROUSEL_ITEMS, buildCarouselConfig, buildProgressSegments, createDefaultCarouselConfig, fetchCarouselMembers, fetchCarouselWorks, normalizeCarouselItem, normalizePositiveNumber, toggleCarouselWork, validateCarouselConfig }
+module.exports = { CAROUSEL_WORK_LIST_MAX_HEIGHT_RPX, CAROUSEL_WORK_LIST_MIN_HEIGHT_RPX, DEFAULT_INTERVAL, MAX_CAROUSEL_ITEMS, buildCarouselConfig, buildCarouselEditorScrollHeight, buildCarouselWorkListHeight, buildProgressSegments, createDefaultCarouselConfig, fetchCarouselMembers, fetchCarouselWorks, normalizeCarouselItem, normalizePositiveNumber, toggleCarouselWork, validateCarouselConfig }

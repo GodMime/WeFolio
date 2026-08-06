@@ -316,6 +316,18 @@ test('normalizes schedule query detail page for bottom sheet rendering', () => {
         resultMessage: '该档期已约',
         sourceText: '来自分享卡片',
         createdTimeText: '07-05 14:18'
+      },
+      {
+        id: -302,
+        visitorLabel: '微信访客 C19F',
+        portfolioTitle: '星曜司仪团',
+        queriedDateText: '2026-07-31',
+        slotText: '空闲 0 人 · 部分空闲 1 人 · 已满 1 人',
+        resultStatusText: '部分成员可约',
+        available: true,
+        resultMessage: '部分成员可约',
+        sourceText: '来自分享卡片',
+        createdTimeText: '07-31 00:25'
       }
     ]
   })
@@ -328,6 +340,8 @@ test('normalizes schedule query detail page for bottom sheet rendering', () => {
   assert.equal(result.items[0].visitorLabel, '小陈')
   assert.equal(result.items[0].slotText, '午宴 10:00-14:00')
   assert.equal(result.items[0].resultToneClass, 'detail-status rose')
+  assert.equal(result.items[0].showResultMessage, true)
+  assert.equal(result.items[1].showResultMessage, false)
 })
 
 test('normalizes and appends contact lead detail pages without ciphertext fields', () => {
@@ -450,4 +464,60 @@ test('normalizes empty visit records response with safe defaults', () => {
   assert.equal(result.trend.changeText, '暂无趋势')
   assert.equal(result.trend.points.length, 7)
   assert.deepEqual(result.records, [])
+})
+
+test('normalizes unavailable team scope, portfolio display fields, and server follow permission', () => {
+  const degraded = normalizeVisitRecords({
+    scopeComplete: false,
+    scopeReason: 'TEAM_SCOPE_UNAVAILABLE',
+    records: [{
+      id: 8,
+      portfolioTitle: '  ',
+      portfolioType: 'TEAM',
+      canMarkFollowed: false,
+      followStatus: 'NOT_FOLLOWED_UP'
+    }]
+  })
+
+  assert.equal(degraded.scopeComplete, false)
+  assert.equal(degraded.scopeReason, 'TEAM_SCOPE_UNAVAILABLE')
+  assert.equal(degraded.scopeWarningText, '团队数据暂不可用，当前仅展示个人记录')
+  assert.equal(degraded.records[0].portfolioTitleText, '未命名作品集')
+  assert.equal(degraded.records[0].portfolioTypeText, '团队作品集')
+  assert.equal(degraded.records[0].canMarkFollowed, false)
+})
+
+test('normalizes unknown unavailable scope reason to the default warning', () => {
+  const result = normalizeVisitRecordPage({
+    scopeComplete: false,
+    scopeReason: 'UNKNOWN_SCOPE_REASON'
+  })
+
+  assert.equal(result.scopeComplete, false)
+  assert.equal(result.scopeReason, 'UNKNOWN_SCOPE_REASON')
+  assert.equal(result.scopeWarningText, '部分数据暂不可用')
+})
+
+test('keeps legacy record follow permission when the backend omits it', () => {
+  const result = normalizeVisitRecordPage({
+    records: [{ id: 9, followStatus: 'NOT_FOLLOWED_UP' }]
+  })
+
+  assert.equal(result.records[0].canMarkFollowed, true)
+})
+
+test('normalizes shared detail item keys and propagates scope', () => {
+  const schedule = normalizeVisitDetailPage('scheduleQueries', {
+    scopeComplete: false,
+    scopeReason: 'TEAM_SCOPE_UNAVAILABLE',
+    items: [{ id: 18, recordType: 'TEAM', scheduleQueryKey: 'TEAM:18' }]
+  })
+  const contact = normalizeVisitDetailPage('contactLeads', {
+    items: [{ id: 19 }]
+  })
+
+  assert.equal(schedule.scopeWarningText, '团队数据暂不可用，当前仅展示个人记录')
+  assert.equal(schedule.items[0].scheduleQueryKey, 'TEAM:18')
+  assert.equal(schedule.items[0].itemKey, 'TEAM:18')
+  assert.equal(contact.items[0].itemKey, 'CONTACT_LEAD:19')
 })

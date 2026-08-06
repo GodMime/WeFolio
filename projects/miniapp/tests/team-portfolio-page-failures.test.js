@@ -80,19 +80,27 @@ test('editor QR picker cancellation is silent and preserves the existing configu
 test('editor WXML presents all component options in Chinese and binds member source states', () => {
   const wxml = fs.readFileSync(path.join(ROOT, 'standard-edit/team-portfolio-standard-edit.wxml'), 'utf8')
   const source = fs.readFileSync(path.join(ROOT, 'standard-edit/team-portfolio-standard-edit.js'), 'utf8')
+  const css = fs.readFileSync(path.join(ROOT, 'standard-edit/team-portfolio-standard-edit.wxss'), 'utf8')
   for (const label of ['团队资料', '轮播图', '分割线', '双列作品集', '单列作品集', '文字说明', '档期查询', '预留联系信息', '二维码联系']) assert.match(source, new RegExp(label))
-  assert.match(wxml, /class="component-title">\{\{item\.displayName\}\}/)
+  assert.match(wxml, /class="component-title pe-component-title">\{\{item\.displayName\}\}/)
+  assert.match(wxml, /item\.showSummary \? 'with-summary' : ''/)
+  assert.match(wxml, /wx:if="\{\{item\.showSummary\}\}" class="component-summary pe-component-description">\{\{item\.summaryText\}\}/)
+  assert.match(css, /\.component-copy\.with-summary\s*\{[^}]*flex-direction:\s*column;[^}]*align-items:\s*flex-start;/s)
   for (const handler of ['handleCarouselLoadMembers', 'handleGridLoadMembers', 'handleListLoadMembers']) assert.match(wxml, new RegExp(`bindloadmembers="${handler}"`))
   for (const handler of ['handleCarouselRetrySource', 'handleGridRetrySource', 'handleListRetrySource']) assert.match(wxml, new RegExp(`bindtap="${handler}"`))
   assert.match(wxml, /class="source-state"/)
   assert.match(wxml, /class="source-state source-error"/)
-  assert.doesNotMatch(wxml, /<team-(?:carousel|member-portfolio-grid|member-portfolio-list)[^>]*\s(?:loading|error-message)=/)
+  assert.match(wxml, /<team-carousel[^>]*\sloading="\{\{activeComponentSource\.loadingFingerprint \? true : false\}\}"/)
+  assert.doesNotMatch(wxml, /<team-carousel[^>]*\serror-message=/)
+  assert.doesNotMatch(wxml, /<team-(?:member-portfolio-grid|member-portfolio-list)[^>]*\s(?:loading|error-message)=/)
 })
 
 test('editor renders the personal-style 1:1 QR crop overlay above the component editor', () => {
   const wxml = fs.readFileSync(path.join(ROOT, 'standard-edit/team-portfolio-standard-edit.wxml'), 'utf8')
   const css = fs.readFileSync(path.join(ROOT, 'standard-edit/team-portfolio-standard-edit.wxss'), 'utf8')
-  assert.match(wxml, /class="qr-contact-crop-mask \{\{qrContactCropVisible \? 'visible' : ''\}\}"/)
+  const foundationCss = fs.readFileSync(path.join(ROOT, '../../styles/portfolio-editor-foundation.wxss'), 'utf8')
+  assert.match(wxml, /class="qr-contact-crop-mask pe-sheet-mask \{\{qrContactCropVisible \? 'pe-sheet-mask-visible' : ''\}\}"/)
+  assert.match(wxml, /class="qr-contact-crop-panel pe-sheet-panel pe-sheet-size-standard \{\{qrContactCropVisible \? 'pe-sheet-panel-visible' : ''\}\}"/)
   assert.match(wxml, />1:1</)
   for (const handler of [
     'handleQrContactCropTouchStart',
@@ -104,7 +112,7 @@ test('editor renders the personal-style 1:1 QR crop overlay above the component 
   ]) assert.match(wxml, new RegExp(handler))
   assert.match(wxml, /id="teamQrContactCropCanvas"/)
   assert.match(wxml, /type="2d"/)
-  assert.match(css, /\.qr-contact-crop-mask\s*\{[^}]*position:\s*fixed[^}]*z-index:\s*45/)
+  assert.match(foundationCss, /\.pe-sheet-mask\s*\{[^}]*position:\s*fixed[^}]*z-index:\s*120/)
   assert.match(css, /\.qr-contact-crop-stage\s*\{[^}]*overflow:\s*hidden/)
   assert.match(css, /\.qr-contact-crop-canvas\s*\{[^}]*left:\s*-9999px/)
 })
@@ -587,7 +595,7 @@ test('contact leads WXML renders team and portfolio sources without masking', ()
   assert.doesNotMatch(wxml, /\*{3}|脱敏|mask/i)
 })
 
-test('operation-level unavailable errors toast without redirecting for save, publish, preview query, follow update, visitor query, and visitor contact', async () => {
+test('operation-level unavailable errors toast without redirecting while preview query stays local', async () => {
   const unavailable = async () => { throw new Error('团队作品集功能暂未开放') }
   const redirects = []
   const toasts = []
@@ -607,7 +615,11 @@ test('operation-level unavailable errors toast without redirecting for save, pub
   preview.setData({ portfolioId: 8, scope: 'draft' })
   const previewRejections = []
   preview.selectComponent = () => ({ rejectQuery(value) { previewRejections.push(value) } })
-  try { await preview.handleScheduleQuery({ detail: { componentKey: 'schedule-1', queriedDate: '2026-08-01', idempotencyKey: 'query-1' } }); assert.deepEqual(toasts.shift(), { title: '团队作品集功能暂未开放', icon: 'none' }); assert.equal(previewRejections.length, 1) } finally { preview.cleanup() }
+  try {
+    await preview.handleScheduleQuery({ detail: { componentKey: 'schedule-1', queriedDate: '2026-08-01', idempotencyKey: 'query-1' } })
+    assert.deepEqual(toasts.shift(), { title: '预览模式不提交档期查询', icon: 'none' })
+    assert.deepEqual(previewRejections, [{ detail: { message: '预览模式不提交档期查询', clearPendingIdempotencyKey: true } }])
+  } finally { preview.cleanup() }
 
   const leads = loadPage('contact-leads/team-contact-leads.js', unavailable, wxOverrides)
   leads.setData({ teamId: 7, canUpdateFollow: true, followEditor: { leadId: 1, followStatus: 'CONTACTED', followNote: '' }, items: [{ leadId: 1 }] })

@@ -229,3 +229,23 @@
   border-radius: 40rpx;
   background: #000000;
 }
+
+.clipboard-prompt-card {
+  position: fixed;
+  left: 50%;
+  bottom: calc(160rpx + env(safe-area-inset-bottom));
+  z-index: 10020;
+  max-width: calc(100vw - 96rpx);
+  padding: 22rpx 30rpx;
+  color: #ffffff;
+  font-size: 25rpx;
+  font-weight: 800;
+  line-height: 1.45;
+  text-align: center;
+  border: 1rpx solid rgba(255, 255, 255, 0.26);
+  border-radius: 24rpx;
+  background: rgba(33, 37, 41, 0.94);
+  box-shadow: 0 16rpx 42rpx rgba(0, 0, 0, 0.22);
+  transform: translateX(-50%);
+  box-sizing: border-box;
+}

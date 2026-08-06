@@ -39,7 +39,7 @@ class TeamMemberPortfolioPreviewServiceTest {
     }
 
     @Test
-    void draftPreviewRequiresMaintainableAccessAndDelegatesPublishedPersonalPreview() {
+    void draftPreviewRequiresVisibleAccessAndDelegatesPublishedPersonalPreview() {
         TestContext context = context(1L);
         MinePortfolioDetailResponse expected = new MinePortfolioDetailResponse();
         when(context.minePortfolioService.previewPublishedReferencedPortfolio(MEMBER_PORTFOLIO_ID))
@@ -49,8 +49,8 @@ class TeamMemberPortfolioPreviewServiceTest {
                 TEAM_PORTFOLIO_ID, MEMBER_PORTFOLIO_ID, "draft", USER_ID);
 
         assertThat(actual).isSameAs(expected);
-        verify(context.accessService).requireMaintainablePortfolio(TEAM_PORTFOLIO_ID, USER_ID);
-        verify(context.accessService, never()).requireVisiblePortfolio(TEAM_PORTFOLIO_ID, USER_ID);
+        verify(context.accessService).requireVisiblePortfolio(TEAM_PORTFOLIO_ID, USER_ID);
+        verify(context.accessService, never()).requireMaintainablePortfolio(TEAM_PORTFOLIO_ID, USER_ID);
         verify(context.minePortfolioService).previewPublishedReferencedPortfolio(MEMBER_PORTFOLIO_ID);
     }
 
