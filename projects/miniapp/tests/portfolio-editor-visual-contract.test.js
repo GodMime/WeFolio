@@ -462,6 +462,8 @@ test('hyperlink editor follows the travel-design sheet composition', () => {
   assert.match(sheet, /点击图片后跳转到目标作品集/)
   assert.match(sheet, /点击图片后原样复制整段内容/)
   assert.match(sheet, /class="hyperlink-sheet-actions pe-sheet-actions"/)
+  assert.equal(classTokenCount(sheet, 'hyperlink-radio-dot'), 4)
+  assert.equal(classTokenCount(sheet, 'hyperlink-option-selected'), 4)
 
   assert.match(ruleBody(rules, '.hyperlink-sheet-panel-initial'), /height:\s*auto;/)
   assert.match(ruleBody(rules, '.hyperlink-sheet-panel-initial'), /max-height:\s*72vh;/)
@@ -470,11 +472,52 @@ test('hyperlink editor follows the travel-design sheet composition', () => {
   assert.match(ruleBody(rules, '.hyperlink-work-option'), /width:\s*260rpx;/)
   assert.match(ruleBody(rules, '.hyperlink-work-option'), /flex:\s*0\s+0\s+260rpx;/)
   assert.match(ruleBody(rules, '.hyperlink-choice'), /border-radius:\s*40rpx;/)
-  assert.match(ruleBody(rules, '.hyperlink-choice[aria-checked="true"] .schedule-query-mode-radio'), /background:\s*var\(--pe-color-text-primary,\s*#212529\)/)
+  assert.match(ruleBody(rules, '.hyperlink-radio-dot'), /background:\s*var\(--pe-color-text-primary,\s*#212529\)/)
+  assert.match(ruleBody(rules, '.hyperlink-radio-dot'), /transform:\s*scale\(0\)/)
+  assert.match(ruleBody(rules, '.hyperlink-sheet-panel .hyperlink-option-selected .schedule-query-mode-radio'), /border-color:\s*var\(--pe-color-text-primary,\s*#212529\)/)
+  assert.match(ruleBody(rules, '.hyperlink-sheet-panel .hyperlink-option-selected .hyperlink-radio-dot'), /transform:\s*scale\(1\)/)
+  assert.doesNotMatch(wxss, /\.hyperlink-(?:work-option|choice|target-option)\[aria-checked="true"\]/)
   assert.match(ruleBody(rules, '.hyperlink-sheet-actions'), /justify-content:\s*flex-end;/)
   assert.match(ruleBody(rules, '.hyperlink-action-confirm-initial'), /opacity:\s*0\.4;/)
   assert.match(ruleBody(rules, '.hyperlink-action-confirm'), /width:\s*148rpx;/)
   assert.match(ruleBody(rules, '.hyperlink-action-confirm'), /height:\s*68rpx;/)
+})
+
+test('personal and team single work editors use current-first horizontal radio pickers', () => {
+  const personalPageJson = JSON.parse(readMiniapp('pages/portfolios/standard-edit/portfolio-standard-edit.json'))
+  const personalPageWxml = readMiniapp('pages/portfolios/standard-edit/portfolio-standard-edit.wxml')
+  const personalWxml = readMiniapp('pages/portfolios/components/single-work-picker/single-work-picker.wxml')
+  const personalWxss = readMiniapp('pages/portfolios/components/single-work-picker/single-work-picker.wxss')
+  const teamPageWxml = readMiniapp('pages/team-portfolios/standard-edit/team-portfolio-standard-edit.wxml')
+  const teamPageJs = readMiniapp('pages/team-portfolios/standard-edit/team-portfolio-standard-edit.js')
+  const teamWxml = readMiniapp('pages/team-portfolios/components/single-work/single-work.wxml')
+  const teamWxss = readMiniapp('pages/team-portfolios/components/single-work/single-work.wxss')
+
+  assert.equal(
+    personalPageJson.usingComponents['single-work-picker'],
+    '/pages/portfolios/components/single-work-picker/single-work-picker'
+  )
+  assert.match(personalPageWxml, /<single-work-picker[\s\S]*wx:if="\{\{editingComponentType === 'SINGLE_WORK'\}\}"/)
+  assert.ok(personalWxml.indexOf('single-work-picker-current') < personalWxml.indexOf('single-work-picker-search'))
+  assert.ok(personalWxml.indexOf('single-work-picker-search') < personalWxml.indexOf('single-work-picker-filter-scroll'))
+  assert.ok(personalWxml.indexOf('single-work-picker-filter-scroll') < personalWxml.indexOf('single-work-picker-candidate-scroll'))
+  assert.ok(personalWxml.indexOf('single-work-picker-candidate-scroll') < personalWxml.indexOf('single-work-picker-switches'))
+  assert.match(personalWxml, /class="single-work-picker-candidate-scroll"[^>]*scroll-x/)
+  assert.match(personalWxml, /class="single-work-picker-radio-dot"/)
+  assert.match(personalWxml, /class="single-work-picker-tail"/)
+  assert.doesNotMatch(personalWxml, /✓/)
+  assert.match(personalWxss, /\.single-work-picker-radio\s*\{[^}]*position:\s*absolute;[^}]*top:\s*12rpx;[^}]*right:\s*12rpx;/s)
+
+  assert.match(teamPageWxml, /selected-work="\{\{activeComponentSource\.selectedWork\}\}"/)
+  assert.match(teamPageWxml, /bindloadmore="handleSingleWorkLoadMore"/)
+  assert.match(teamWxml, /class="editor-current-work/)
+  assert.match(teamWxml, /class="editor-work-scroll"[^>]*scroll-x/)
+  assert.match(teamWxml, /class="editor-option-radio-dot"/)
+  assert.match(teamWxml, /class="editor-work-tail"/)
+  assert.doesNotMatch(teamWxml.slice(0, teamWxml.indexOf('<block wx:else>')), /✓/)
+  assert.match(teamWxss, /\.editor-option-radio\s*\{[^}]*position:\s*absolute;[^}]*top:\s*12rpx;[^}]*right:\s*12rpx;/s)
+  assert.match(teamPageJs, /single-work\/members\/\$\{normalizedMemberUserId\}\/works\/page/)
+  assert.doesNotMatch(teamPageJs, /selectableWorksFor\('SINGLE_WORK'/)
 })
 
 test('team portfolio editor consumes the shared page and ten-sheet contract', () => {

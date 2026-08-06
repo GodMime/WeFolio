@@ -20,7 +20,7 @@ const {
   switchPortfolioMenu
 } = require('../../../utils/visitor-portfolio')
 const { uploadVisitorAvatarProfile } = require('../utils/visitor-profile')
-const { createClipboardPromptController } = require('../../../utils/portfolio-hyperlink')
+const { createClipboardPromptController } = require('../utils/portfolio-hyperlink')
 const { request } = require('../../../utils/request')
 const {
   SOURCE_TYPE_PERSONAL_PORTFOLIO,

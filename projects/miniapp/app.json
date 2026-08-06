@@ -72,6 +72,20 @@
       ]
     }
   ],
+  "preloadRule": {
+    "pages/index/index": {
+      "network": "all",
+      "packages": [
+        "portfolio"
+      ]
+    },
+    "pages/portfolios/portfolios": {
+      "network": "all",
+      "packages": [
+        "teamPortfolio"
+      ]
+    }
+  },
   "window": {
     "navigationBarTextStyle": "black",
     "navigationStyle": "custom"

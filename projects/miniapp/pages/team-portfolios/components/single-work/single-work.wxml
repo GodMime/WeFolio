@@ -10,17 +10,43 @@
         </scroll-view>
       </view>
       <view class="editor-field editor-content-field">
+        <view class="editor-current-work {{currentSelection && currentSelection.workId ? '' : 'empty'}}">
+          <view class="editor-current-label">当前已选</view>
+          <view wx:if="{{currentSelection && currentSelection.workId && currentSelection.status !== 'unavailable'}}" class="editor-current-content">
+            <view class="editor-current-thumb">
+              <image wx:if="{{currentSelection.coverUrl || currentSelection.mediaUrl}}" src="{{currentSelection.coverUrl || currentSelection.mediaUrl}}" mode="aspectFill"></image>
+              <view wx:else class="editor-current-placeholder">作品图</view>
+            </view>
+            <view class="editor-current-copy">
+              <view class="editor-current-title">{{currentSelection.title || '当前作品'}}</view>
+              <view class="editor-current-meta">{{currentSelection.mediaType === 'VIDEO' ? '视频作品' : (currentSelection.mediaType === 'ANIMATION' ? '动图作品' : '图片作品')}} {{currentSelection.aspectRatio || ''}}</view>
+            </view>
+          </view>
+          <view wx:elif="{{currentSelection && currentSelection.status === 'unavailable'}}" class="editor-current-empty">当前作品不可用，请重新选择</view>
+          <view wx:else class="editor-current-empty">请从下方选择一个作品</view>
+        </view>
         <view class="editor-label">选择作品</view>
-        <view wx:if="{{draft.memberUserId && works.length}}" class="editor-option-list">
-          <view wx:for="{{works}}" wx:key="workId" class="editor-option {{draft.workId === item.workId ? 'selected' : ''}}" data-item="{{item}}" catchtap="selectWork" aria-role="radio" aria-checked="{{draft.workId === item.workId}}">
-            <view class="editor-option-thumb"><image src="{{item.coverUrl || item.mediaUrl}}" mode="aspectFill" /></view>
-            <view class="editor-option-copy">
+        <view wx:if="{{draft.memberUserId && singleWorkLoading && !works.length}}" class="editor-empty">正在加载作品...</view>
+        <scroll-view wx:elif="{{draft.memberUserId && works.length}}" class="editor-work-scroll" scroll-x type="list" bindscrolltolower="handleWorksScrollToLower">
+          <view class="editor-option-row">
+            <view wx:for="{{works}}" wx:key="workId" class="editor-option {{draft.workId === item.workId ? 'selected' : ''}}" data-item="{{item}}" catchtap="selectWork" aria-role="radio" aria-checked="{{draft.workId === item.workId}}">
+              <view class="editor-option-thumb">
+                <image wx:if="{{item.coverUrl || item.mediaUrl}}" src="{{item.coverUrl || item.mediaUrl}}" mode="aspectFill" />
+                <view wx:else class="editor-option-placeholder">作品</view>
+                <view class="editor-option-radio {{draft.workId === item.workId ? 'selected' : ''}}" aria-hidden="true">
+                  <view wx:if="{{draft.workId === item.workId}}" class="editor-option-radio-dot"></view>
+                </view>
+              </view>
               <view class="editor-option-title">{{item.title || '未命名作品'}}</view>
               <view class="editor-option-meta">{{item.mediaType === 'VIDEO' ? '视频作品' : (item.mediaType === 'ANIMATION' ? '动图作品' : '图片作品')}} {{item.aspectRatio || ''}}</view>
             </view>
-            <view class="editor-option-check">{{draft.workId === item.workId ? '✓' : ''}}</view>
+            <view wx:if="{{singleWorkLoadingMore || singleWorkLoadMoreError || !singleWorkHasMore}}" class="editor-work-tail">
+              <text wx:if="{{singleWorkLoadingMore}}">加载更多作品</text>
+              <view wx:elif="{{singleWorkLoadMoreError}}" class="editor-work-tail-retry" catchtap="retryLoadMore" aria-role="button">加载失败，点击重试</view>
+              <text wx:else>已显示全部作品</text>
+            </view>
           </view>
-        </view>
+        </scroll-view>
         <view wx:elif="{{draft.memberUserId}}" class="editor-empty">该成员暂无可展示作品</view>
         <view wx:else class="editor-empty">请先选择团队成员</view>
       </view>

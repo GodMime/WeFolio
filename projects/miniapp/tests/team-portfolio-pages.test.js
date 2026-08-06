@@ -321,6 +321,56 @@ test('team page level component editor owns the shared cancel and confirm action
   assert.match(readCssRule(foundationWxss, '.pe-sheet-actions'), /display:flex/)
 })
 
+test('horizontal member portfolio pickers use a shorter component editor sheet', () => {
+  const wxml = read('standard-edit/team-portfolio-standard-edit.wxml')
+  const wxss = read('standard-edit/team-portfolio-standard-edit.wxss')
+  const js = read('standard-edit/team-portfolio-standard-edit.js')
+
+  assert.match(wxml, /componentEditorLayoutType === 'MEMBER_PORTFOLIO_GRID' \|\| componentEditorLayoutType === 'MEMBER_PORTFOLIO_LIST'/)
+  assert.match(js, /componentEditorLayoutType: componentType/)
+  assert.match(readCssRule(wxss, '.member-portfolio-editor-compact'), /height:auto/)
+  assert.match(readCssRule(wxss, '.member-portfolio-editor-compact'), /max-height:76vh/)
+  const compactScrollRule = readCssRule(wxss, '.member-portfolio-editor-compact .component-editor-scroll')
+  assert.match(compactScrollRule, /height:680rpx/)
+  assert.match(compactScrollRule, /min-height:0/)
+  assert.match(compactScrollRule, /max-height:58vh/)
+  assert.match(compactScrollRule, /flex:01auto/)
+})
+
+test('team carousel editor sheet follows a bounded animated content height without blank space', () => {
+  const wxml = read('standard-edit/team-portfolio-standard-edit.wxml')
+  const wxss = read('standard-edit/team-portfolio-standard-edit.wxss')
+
+  assert.match(wxml, /\{\{componentEditorLayoutType === 'CAROUSEL' \? 'carousel-editor-content-sized' : ''\}\}/)
+  assert.match(wxml, /style="\{\{componentEditorLayoutType === 'CAROUSEL' \? carouselEditorPanelStyle : ''\}\}"/)
+  assert.match(wxml, /class="component-editor-scroll pe-sheet-scroll"[^>]*style="\{\{componentEditorLayoutType === 'CAROUSEL' \? carouselEditorScrollStyle : ''\}\}"/)
+  assert.match(wxml, /<team-carousel[^>]*bindlayoutchange="handleCarouselLayoutChange"/)
+
+  const panelRule = readCssRule(wxss, '.carousel-editor-content-sized')
+  assert.match(panelRule, /min-height:710rpx/)
+  assert.match(panelRule, /max-height:calc\(100vh-176rpx-env\(safe-area-inset-top\)\)/)
+  assert.match(panelRule, /transition:transform220msease-out,height220msease-out/)
+
+  const scrollRule = readCssRule(wxss, '.carousel-editor-content-sized .component-editor-scroll')
+  assert.match(scrollRule, /min-height:460rpx/)
+  assert.match(scrollRule, /max-height:58vh/)
+  assert.match(scrollRule, /flex:01auto/)
+  assert.match(scrollRule, /transition:height220msease-out/)
+})
+
+test('team carousel keeps member source loading inside its fixed editor content area', () => {
+  const wxml = read('standard-edit/team-portfolio-standard-edit.wxml')
+
+  assert.match(
+    wxml,
+    /wx:if="\{\{activeComponentSource\.loadingFingerprint && activeComponentType !== 'CAROUSEL'\}\}" class="source-state"/
+  )
+  assert.match(
+    wxml,
+    /<team-carousel[^>]*loading="\{\{activeComponentSource\.loadingFingerprint \? true : false\}\}"/
+  )
+})
+
 test('team text section opens the dedicated personal-style editing sheet', () => {
   const wxml = read('standard-edit/team-portfolio-standard-edit.wxml')
   const wxss = read('standard-edit/team-portfolio-standard-edit.wxss')

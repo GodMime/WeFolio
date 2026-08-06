@@ -409,8 +409,15 @@ test('new editor configures single work through team-scoped sources before creat
     if (options.url === '/api/mine/teams/3/portfolio-components/single-work/members') {
       return [{ memberUserId: 8, displayName: '甲' }]
     }
-    if (options.url === '/api/mine/teams/3/portfolio-components/single-work/members/8/works') {
-      return [{ workId: 9, mediaType: 'IMAGE', title: '图片' }]
+    if (options.url === '/api/mine/teams/3/portfolio-components/single-work/members/8/works/page') {
+      return {
+        page: 1,
+        pageSize: 20,
+        total: 1,
+        hasMore: false,
+        works: [{ workId: 9, mediaType: 'IMAGE', title: '图片' }],
+        selectedWork: null
+      }
     }
     if (options.url === '/api/mine/teams/3/portfolios/standard') {
       return {
@@ -450,13 +457,14 @@ test('new editor configures single work through team-scoped sources before creat
         config: { memberUserId: 8, workId: 9, showTitle: true, showDescription: false }
       }
     }))
+    assert.equal(page.data.componentList[0].summaryText, '图片')
     await page.saveDraft()
 
     assert.equal(page.data.portfolioId, 51)
     assert.equal(page.data.hasInvalidComponents, false)
     assert.deepEqual(requests, [
       '/api/mine/teams/3/portfolio-components/single-work/members',
-      '/api/mine/teams/3/portfolio-components/single-work/members/8/works',
+      '/api/mine/teams/3/portfolio-components/single-work/members/8/works/page',
       '/api/mine/teams/3/portfolios/standard',
       '/api/mine/team-portfolios/51/draft'
     ])
@@ -953,6 +961,87 @@ test('editor loads member-first sources, blocks a new component until save, and 
   } finally { page.cleanup() }
 })
 
+test('team carousel keeps backend image work options that omit mediaType', async () => {
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
+    if (options.url.endsWith('/components/carousel/members/8/works')) {
+      return [{ workId: 9, title: '作品', coverUrl: 'https://cdn.example/9.jpg', mediaUrl: 'https://cdn.example/9-original.jpg' }]
+    }
+    throw new Error(`unexpected request: ${options.url}`)
+  })
+  page.setData({ portfolioId: 7, componentSources: {} })
+  try {
+    await page.handleCarouselMemberChange({
+      currentTarget: { dataset: { key: 'carousel-1' } },
+      detail: { memberUserId: 8 }
+    })
+
+    assert.equal(page.data.componentSources['carousel-1'].works.length, 1)
+    assert.equal(page.data.componentSources['carousel-1'].works[0].workId, 9)
+  } finally { page.cleanup() }
+})
+
+test('team carousel editor clamps and synchronizes its scroll and sheet heights', () => {
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => ({}))
+  try {
+    page.setData({ componentEditorVisible: true, activeComponentType: 'CAROUSEL' })
+    page.handleCarouselLayoutChange({ detail: { scrollHeightRpx: 548 } })
+    assert.equal(page.data.carouselEditorScrollStyle, 'height: 548rpx;')
+    assert.equal(page.data.carouselEditorPanelStyle, 'height: calc(798rpx + env(safe-area-inset-bottom));')
+
+    page.handleCarouselLayoutChange({ detail: { scrollHeightRpx: 100 } })
+    assert.equal(page.data.carouselEditorScrollStyle, 'height: 460rpx;')
+    assert.equal(page.data.carouselEditorPanelStyle, 'height: calc(710rpx + env(safe-area-inset-bottom));')
+
+    page.handleCarouselLayoutChange({ detail: { scrollHeightRpx: 2000 } })
+    assert.equal(page.data.carouselEditorScrollStyle, 'height: 926rpx;')
+    assert.equal(page.data.carouselEditorPanelStyle, 'height: calc(1176rpx + env(safe-area-inset-bottom));')
+  } finally { page.cleanup() }
+})
+
+test('team component editor preserves its layout shell through exit and replaces it on next open', () => {
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => ({}))
+  const carousel = {
+    componentKey: 'carousel-1',
+    componentType: 'CAROUSEL',
+    sortOrder: 1000,
+    enabled: true,
+    config: { items: [] }
+  }
+  const profile = {
+    componentKey: 'profile-1',
+    componentType: 'TEAM_PROFILE',
+    sortOrder: 2000,
+    enabled: true,
+    config: { team: {} }
+  }
+  page.setData({
+    config: validTeamEditorConfig({ components: [carousel, profile] }),
+    componentSources: { 'carousel-1': { members: [], works: [] } }
+  })
+  try {
+    page.handleComponentTap({ currentTarget: { dataset: { key: 'carousel-1', type: 'CAROUSEL' } } })
+    assert.equal(page.data.componentEditorLayoutType, 'CAROUSEL')
+    page.handleCarouselLayoutChange({ detail: { scrollHeightRpx: 548 } })
+    const frozenScrollStyle = page.data.carouselEditorScrollStyle
+    const frozenPanelStyle = page.data.carouselEditorPanelStyle
+
+    page.handleCloseComponentEditor()
+
+    assert.equal(page.data.componentEditorVisible, false)
+    assert.equal(page.data.activeComponentType, '')
+    assert.equal(page.data.componentEditorLayoutType, 'CAROUSEL')
+    assert.equal(page.data.carouselEditorScrollStyle, frozenScrollStyle)
+    assert.equal(page.data.carouselEditorPanelStyle, frozenPanelStyle)
+
+    page.handleCarouselLayoutChange({ detail: { scrollHeightRpx: 926 } })
+    assert.equal(page.data.carouselEditorScrollStyle, frozenScrollStyle)
+    assert.equal(page.data.carouselEditorPanelStyle, frozenPanelStyle)
+
+    page.handleComponentTap({ currentTarget: { dataset: { key: 'profile-1', type: 'TEAM_PROFILE' } } })
+    assert.equal(page.data.componentEditorLayoutType, 'TEAM_PROFILE')
+  } finally { page.cleanup() }
+})
+
 test('team single work loads members before image and video works and retries the failed stage', async () => {
   const requests = []
   let workAttempts = 0
@@ -961,13 +1050,20 @@ test('team single work loads members before image and video works and retries th
     if (options.url.endsWith('/single-work/members')) {
       return [{ memberUserId: 8, displayName: '甲' }]
     }
-    if (options.url.endsWith('/single-work/members/8/works')) {
+    if (options.url.endsWith('/single-work/members/8/works/page')) {
       workAttempts += 1
       if (workAttempts === 1) throw new Error('network')
-      return [
-        { workId: 9, mediaType: 'IMAGE', title: '图片' },
-        { workId: 10, mediaType: 'VIDEO', title: '视频' }
-      ]
+      return {
+        page: 1,
+        pageSize: 20,
+        total: 2,
+        hasMore: false,
+        works: [
+          { workId: 9, mediaType: 'IMAGE', title: '图片' },
+          { workId: 10, mediaType: 'VIDEO', title: '视频' }
+        ],
+        selectedWork: null
+      }
     }
     throw new Error(`unexpected request: ${options.url}`)
   })
@@ -981,9 +1077,205 @@ test('team single work loads members before image and video works and retries th
     assert.deepEqual(page.data.componentSources['single-1'].works.map((item) => item.mediaType), ['IMAGE', 'VIDEO'])
     assert.deepEqual(requests, [
       '/api/mine/teams/3/portfolio-components/single-work/members',
-      '/api/mine/teams/3/portfolio-components/single-work/members/8/works',
-      '/api/mine/teams/3/portfolio-components/single-work/members/8/works'
+      '/api/mine/teams/3/portfolio-components/single-work/members/8/works/page',
+      '/api/mine/teams/3/portfolio-components/single-work/members/8/works/page'
     ])
+  } finally { page.cleanup() }
+})
+
+test('team single work pages append deduplicate and preserve the selected summary', async () => {
+  const requests = []
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
+    requests.push(options)
+    if (options.data.page === 1) {
+      return {
+        page: 1,
+        pageSize: 2,
+        total: 3,
+        hasMore: true,
+        works: [
+          { workId: 8, mediaType: 'IMAGE', title: '第一页图片' },
+          { workId: 9, mediaType: 'AUDIO', title: '契约透传项' }
+        ],
+        selectedWork: { workId: 9, mediaType: 'IMAGE', title: '当前已选' }
+      }
+    }
+    return {
+      page: 2,
+      pageSize: 2,
+      total: 3,
+      hasMore: false,
+      works: [
+        { workId: 9, mediaType: 'AUDIO', title: '重复项' },
+        { workId: 10, mediaType: 'VIDEO', title: '第二页视频' }
+      ],
+      selectedWork: null
+    }
+  })
+  page.setData({ portfolioId: 7, teamId: 3 })
+  const event = { currentTarget: { dataset: { key: 'single-1' } } }
+  try {
+    await page.handleSingleWorkMemberChange(Object.assign({}, event, {
+      detail: { memberUserId: 8, selectedWorkId: 9 }
+    }))
+    await page.handleSingleWorkLoadMore(event)
+
+    assert.deepEqual(requests.map((item) => item.url), [
+      '/api/mine/teams/3/portfolio-components/single-work/members/8/works/page',
+      '/api/mine/teams/3/portfolio-components/single-work/members/8/works/page'
+    ])
+    assert.deepEqual(requests[0].data, { page: 1, pageSize: 20, selectedWorkId: 9 })
+    assert.deepEqual(requests[1].data, { page: 2, pageSize: 2 })
+    const source = page.data.componentSources['single-1']
+    assert.deepEqual(source.works.map((item) => item.workId), [8, 9, 10])
+    assert.deepEqual(source.works.map((item) => item.mediaType), ['IMAGE', 'AUDIO', 'VIDEO'])
+    assert.equal(source.selectedWork.title, '当前已选')
+    assert.equal(source.singleWorkPage, 2)
+    assert.equal(source.singleWorkHasMore, false)
+  } finally { page.cleanup() }
+})
+
+test('team editor resolves the selected work title for the component row', async () => {
+  const requests = []
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
+    requests.push(clone(options))
+    if (options.url === '/api/mine/team-portfolios/7') {
+      return {
+        portfolioId: 7,
+        ownerId: 3,
+        publicationStatus: 'DRAFT_ONLY',
+        config: {
+          share: { title: TEST_TEAM_PORTFOLIO_TITLE },
+          components: [
+            {
+              componentKey: 'profile-1',
+              componentType: 'TEAM_PROFILE',
+              sortOrder: 1000,
+              enabled: true,
+              config: { team: { teamId: 3, teamName: '甲团队' } }
+            },
+            {
+              componentKey: 'single-1',
+              componentType: 'SINGLE_WORK',
+              sortOrder: 2000,
+              enabled: true,
+              config: { memberUserId: 8, workId: 9, showTitle: true, showDescription: false }
+            }
+          ]
+        }
+      }
+    }
+    if (options.url === '/api/mine/teams/3/portfolio-components/single-work/members/8/works/page') {
+      return {
+        page: 1,
+        pageSize: 1,
+        total: 1,
+        hasMore: false,
+        works: [],
+        selectedWork: { workId: 9, mediaType: 'IMAGE', title: '团队婚礼作品' }
+      }
+    }
+    throw new Error(`unexpected request: ${options.url}`)
+  })
+  page.setData({ portfolioId: 7 })
+  try {
+    await page.bootstrap()
+    await flush()
+
+    const singleWork = page.data.componentList.find((item) => item.componentKey === 'single-1')
+    assert.equal(singleWork.summaryText, '团队婚礼作品')
+    assert.deepEqual(requests[1], {
+      url: '/api/mine/teams/3/portfolio-components/single-work/members/8/works/page',
+      data: { page: 1, pageSize: 1, selectedWorkId: 9 }
+    })
+  } finally { page.cleanup() }
+})
+
+test('team single work load more failure keeps cards and retries the same page', async () => {
+  let pageTwoAttempts = 0
+  const requestedPages = []
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
+    requestedPages.push(options.data.page)
+    if (options.data.page === 1) {
+      return {
+        page: 1,
+        pageSize: 1,
+        total: 2,
+        hasMore: true,
+        works: [{ workId: 8, mediaType: 'IMAGE', title: '第一页' }],
+        selectedWork: null
+      }
+    }
+    pageTwoAttempts += 1
+    if (pageTwoAttempts === 1) throw new Error('network')
+    return {
+      page: 2,
+      pageSize: 1,
+      total: 2,
+      hasMore: false,
+      works: [{ workId: 9, mediaType: 'VIDEO', title: '第二页' }],
+      selectedWork: null
+    }
+  })
+  page.setData({ portfolioId: 7, teamId: 3 })
+  const event = { currentTarget: { dataset: { key: 'single-1' } } }
+  try {
+    await page.handleSingleWorkMemberChange(Object.assign({}, event, {
+      detail: { memberUserId: 8, selectedWorkId: null }
+    }))
+    await page.handleSingleWorkLoadMore(event)
+
+    assert.deepEqual(page.data.componentSources['single-1'].works.map((item) => item.workId), [8])
+    assert.equal(page.data.componentSources['single-1'].singleWorkPage, 1)
+    assert.equal(page.data.componentSources['single-1'].singleWorkLoadMoreError, '作品加载失败，请重试')
+
+    await page.handleSingleWorkLoadMore(event)
+
+    assert.deepEqual(requestedPages, [1, 2, 2])
+    assert.deepEqual(page.data.componentSources['single-1'].works.map((item) => item.workId), [8, 9])
+    assert.equal(page.data.componentSources['single-1'].singleWorkLoadMoreError, '')
+  } finally { page.cleanup() }
+})
+
+test('team single work member switch ignores the previous late page', async () => {
+  let resolveFirst
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', (options) => {
+    if (options.url.includes('/members/8/')) {
+      return new Promise((resolve) => { resolveFirst = resolve })
+    }
+    return Promise.resolve({
+      page: 1,
+      pageSize: 20,
+      total: 1,
+      hasMore: false,
+      works: [{ workId: 20, mediaType: 'IMAGE', title: '成员乙' }],
+      selectedWork: null
+    })
+  })
+  page.setData({ portfolioId: 7, teamId: 3 })
+  const event = { currentTarget: { dataset: { key: 'single-1' } } }
+  try {
+    const first = page.handleSingleWorkMemberChange(Object.assign({}, event, {
+      detail: { memberUserId: 8, selectedWorkId: 9 }
+    }))
+    await flush()
+    await page.handleSingleWorkMemberChange(Object.assign({}, event, {
+      detail: { memberUserId: 10, selectedWorkId: null }
+    }))
+    resolveFirst({
+      page: 1,
+      pageSize: 20,
+      total: 1,
+      hasMore: false,
+      works: [{ workId: 9, mediaType: 'VIDEO', title: '成员甲迟到响应' }],
+      selectedWork: { workId: 9, mediaType: 'VIDEO', title: '成员甲当前作品' }
+    })
+    await first
+
+    const source = page.data.componentSources['single-1']
+    assert.equal(source.memberUserId, 10)
+    assert.deepEqual(source.works.map((item) => item.workId), [20])
+    assert.equal(source.selectedWork, null)
   } finally { page.cleanup() }
 })
 

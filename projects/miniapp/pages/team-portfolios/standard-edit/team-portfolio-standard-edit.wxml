@@ -158,8 +158,9 @@
               aria-label="编辑{{item.displayName}}"
             >
               <view class="component-order pe-component-index">{{index + 1}}</view>
-              <view class="component-copy">
+              <view class="component-copy {{item.showSummary ? 'with-summary' : ''}}">
                 <view class="component-title pe-component-title">{{item.displayName}}</view>
+                <view wx:if="{{item.showSummary}}" class="component-summary pe-component-description">{{item.summaryText}}</view>
               </view>
               <view class="component-drag-handle"></view>
               <view class="component-row-arrow"><view class="component-row-arrow-icon"></view></view>
@@ -409,13 +410,13 @@
   </view>
 
   <view class="component-editor-mask pe-sheet-mask {{componentEditorVisible ? 'pe-sheet-mask-visible' : ''}}" catchtap="handleCloseComponentEditor">
-    <view class="component-editor-panel pe-sheet-panel pe-sheet-size-long {{componentEditorVisible ? 'pe-sheet-panel-visible' : ''}}" catchtap="noop">
+    <view class="component-editor-panel pe-sheet-panel pe-sheet-size-long {{componentEditorLayoutType === 'MEMBER_PORTFOLIO_GRID' || componentEditorLayoutType === 'MEMBER_PORTFOLIO_LIST' ? 'member-portfolio-editor-compact' : ''}} {{componentEditorLayoutType === 'CAROUSEL' ? 'carousel-editor-content-sized' : ''}} {{componentEditorVisible ? 'pe-sheet-panel-visible' : ''}}" style="{{componentEditorLayoutType === 'CAROUSEL' ? carouselEditorPanelStyle : ''}}" catchtap="noop">
       <view class="pe-sheet-grabber"></view>
       <view class="pe-sheet-heading">
         <view class="pe-sheet-title">编辑{{activeComponentName}}</view>
       </view>
       <view wx:if="{{!portfolioId && activeComponentNeedsPortfolio}}" class="editor-notice">请先保存草稿，再选择团队成员内容</view>
-      <view wx:if="{{activeComponentSource.loadingFingerprint}}" class="source-state">正在加载团队内容...</view>
+      <view wx:if="{{activeComponentSource.loadingFingerprint && activeComponentType !== 'CAROUSEL'}}" class="source-state">正在加载团队内容...</view>
       <view wx:if="{{activeComponentSource.errorMessage}}" class="source-state source-error">
         <view>{{activeComponentSource.errorMessage}}</view>
         <button wx:if="{{activeComponentType === 'CAROUSEL'}}" data-key="{{activeComponentKey}}" bindtap="handleCarouselRetrySource">重试</button>
@@ -423,11 +424,11 @@
         <button wx:if="{{activeComponentType === 'MEMBER_PORTFOLIO_GRID'}}" data-key="{{activeComponentKey}}" bindtap="handleGridRetrySource">重试</button>
         <button wx:if="{{activeComponentType === 'MEMBER_PORTFOLIO_LIST'}}" data-key="{{activeComponentKey}}" bindtap="handleListRetrySource">重试</button>
       </view>
-      <scroll-view class="component-editor-scroll pe-sheet-scroll" scroll-y type="list">
+      <scroll-view class="component-editor-scroll pe-sheet-scroll" style="{{componentEditorLayoutType === 'CAROUSEL' ? carouselEditorScrollStyle : ''}}" scroll-y type="list">
         <view class="component-editor-content">
           <team-profile wx:if="{{activeComponentType === 'TEAM_PROFILE'}}" id="active-component-editor" data-key="{{activeComponentKey}}" team="{{activeComponent.config.team}}" visible-fields="{{activeComponent.config.visibleFields}}" edit-mode="{{true}}" refreshing="{{teamProfileRefreshing}}" bindchooseavatar="handleTeamProfileChooseAvatar" bindrefresh="handleTeamProfileRefresh" bindsave="handleComponentSave" />
-          <team-carousel wx:if="{{activeComponentType === 'CAROUSEL'}}" id="active-component-editor" data-key="{{activeComponentKey}}" portfolio-id="{{portfolioId}}" items="{{activeComponent.config.items}}" members="{{activeComponentSource.members}}" works="{{activeComponentSource.works}}" edit-mode="{{true}}" bindloadmembers="handleCarouselLoadMembers" bindmemberchange="handleCarouselMemberChange" bindsave="handleComponentSave" />
-          <team-single-work wx:if="{{activeComponentType === 'SINGLE_WORK'}}" id="active-component-editor" data-key="{{activeComponentKey}}" component-key="{{activeComponentKey}}" portfolio-id="{{portfolioId}}" config="{{activeComponent.config}}" members="{{activeComponentSource.members}}" works="{{activeComponentSource.works}}" edit-mode="{{true}}" bindloadmembers="handleSingleWorkLoadMembers" bindmemberchange="handleSingleWorkMemberChange" bindsave="handleComponentSave" />
+          <team-carousel wx:if="{{activeComponentType === 'CAROUSEL'}}" id="active-component-editor" data-key="{{activeComponentKey}}" portfolio-id="{{portfolioId}}" items="{{activeComponent.config.items}}" members="{{activeComponentSource.members}}" works="{{activeComponentSource.works}}" loading="{{activeComponentSource.loadingFingerprint ? true : false}}" edit-mode="{{true}}" bindloadmembers="handleCarouselLoadMembers" bindmemberchange="handleCarouselMemberChange" bindlayoutchange="handleCarouselLayoutChange" bindsave="handleComponentSave" />
+          <team-single-work wx:if="{{activeComponentType === 'SINGLE_WORK'}}" id="active-component-editor" data-key="{{activeComponentKey}}" component-key="{{activeComponentKey}}" portfolio-id="{{portfolioId}}" config="{{activeComponent.config}}" members="{{activeComponentSource.members}}" works="{{activeComponentSource.works}}" selected-work="{{activeComponentSource.selectedWork}}" single-work-loading="{{activeComponentSource.singleWorkLoading}}" single-work-loading-more="{{activeComponentSource.singleWorkLoadingMore}}" single-work-has-more="{{activeComponentSource.singleWorkHasMore}}" single-work-load-more-error="{{activeComponentSource.singleWorkLoadMoreError}}" edit-mode="{{true}}" bindloadmembers="handleSingleWorkLoadMembers" bindmemberchange="handleSingleWorkMemberChange" bindloadmore="handleSingleWorkLoadMore" bindretryloadmore="handleSingleWorkLoadMore" bindsave="handleComponentSave" />
           <team-member-portfolio-grid wx:if="{{activeComponentType === 'MEMBER_PORTFOLIO_GRID'}}" id="active-component-editor" data-key="{{activeComponentKey}}" portfolio-id="{{portfolioId}}" items="{{activeComponent.config.items}}" show-member-name="{{activeComponent.config.showMemberName}}" members="{{activeComponentSource.members}}" portfolios="{{activeComponentSource.portfolios}}" edit-mode="{{true}}" bindloadmembers="handleGridLoadMembers" bindmemberchange="handleGridMemberChange" bindsave="handleComponentSave" />
           <team-member-portfolio-list wx:if="{{activeComponentType === 'MEMBER_PORTFOLIO_LIST'}}" id="active-component-editor" data-key="{{activeComponentKey}}" portfolio-id="{{portfolioId}}" items="{{activeComponent.config.items}}" show-member-name="{{activeComponent.config.showMemberName}}" members="{{activeComponentSource.members}}" portfolios="{{activeComponentSource.portfolios}}" edit-mode="{{true}}" bindloadmembers="handleListLoadMembers" bindmemberchange="handleListMemberChange" bindsave="handleComponentSave" />
           <team-qr-contact wx:if="{{activeComponentType === 'QR_CONTACT'}}" id="active-component-editor" data-key="{{activeComponentKey}}" config="{{activeComponent.config}}" edit-mode="{{true}}" choosing="{{qrContactChoosing}}" bindchoose="handleQrChoose" bindsave="handleComponentSave" />

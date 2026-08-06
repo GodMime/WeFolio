@@ -1,6 +1,8 @@
 package com.jxc.wefolio.service.teamportfolio.component.singlework;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.jxc.wefolio.dict.JoinStatusDict;
 import com.jxc.wefolio.dict.MediaTypeDict;
 import com.jxc.wefolio.dict.TeamRoleDict;
@@ -11,6 +13,7 @@ import com.jxc.wefolio.entity.TeamEntity;
 import com.jxc.wefolio.entity.TeamMemberEntity;
 import com.jxc.wefolio.entity.UserEntity;
 import com.jxc.wefolio.entity.WorkEntity;
+import com.jxc.wefolio.dto.teamportfolio.TeamSingleWorkPageResponse;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.TeamMemberEntityMapper;
 import com.jxc.wefolio.mapper.UserEntityMapper;
@@ -33,6 +36,15 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class TeamSingleWorkComponentService {
 
+    /** 默认页码。 */
+    private static final int DEFAULT_PAGE = 1;
+
+    /** 默认页大小。 */
+    private static final int DEFAULT_PAGE_SIZE = 20;
+
+    /** 最大页大小。 */
+    private static final int MAX_PAGE_SIZE = 100;
+
     /** 允许作品授权标识。 */
     private static final int ALLOW_WORKS = 1;
 
@@ -43,6 +55,13 @@ public class TeamSingleWorkComponentService {
     private static final Set<String> MAINTAINABLE_ROLES = Set.of(
             TeamRoleDict.OWNER.getCode(),
             TeamRoleDict.MANAGER.getCode()
+    );
+
+    /** 单个作品组件支持的媒体类型。 */
+    private static final List<String> SUPPORTED_MEDIA_TYPES = List.of(
+            MediaTypeDict.IMAGE.getCode(),
+            MediaTypeDict.VIDEO.getCode(),
+            MediaTypeDict.ANIMATION.getCode()
     );
 
     /** 团队作品集访问服务。 */
@@ -131,6 +150,46 @@ public class TeamSingleWorkComponentService {
     }
 
     /**
+     * 按团队分页查询指定成员可展示的图片、视频和动图作品。
+     *
+     * @param teamId 团队 ID
+     * @param memberUserId 成员用户 ID
+     * @param userId 当前维护者用户 ID
+     * @param page 页码
+     * @param pageSize 页大小
+     * @param selectedWorkId 当前配置引用的作品 ID
+     * @return 作品分页与当前选择
+     */
+    public TeamSingleWorkPageResponse pageTeamWorks(
+            long teamId,
+            long memberUserId,
+            long userId,
+            int page,
+            int pageSize,
+            Long selectedWorkId
+    ) {
+        int normalizedPage = page <= 0 ? DEFAULT_PAGE : page;
+        int normalizedPageSize = pageSize <= 0
+                ? DEFAULT_PAGE_SIZE
+                : Math.min(pageSize, MAX_PAGE_SIZE);
+        TeamEntity team = teamPortfolioAccessService.requireTeamRole(teamId, userId, MAINTAINABLE_ROLES).team();
+        requireAvailableMember(team.getId(), memberUserId);
+
+        Page<WorkEntity> resultPage = workEntityMapper.selectPage(
+                new Page<>(normalizedPage, normalizedPageSize),
+                eligibleWorksQuery(memberUserId));
+        List<WorkEntity> records = resultPage.getRecords() == null ? List.of() : resultPage.getRecords();
+        TeamSingleWorkPageResponse response = new TeamSingleWorkPageResponse();
+        response.setPage(normalizedPage);
+        response.setPageSize(normalizedPageSize);
+        response.setTotal(resultPage.getTotal());
+        response.setHasMore(resultPage.getCurrent() < resultPage.getPages());
+        response.setWorks(records.stream().map(this::toPageWorkItem).toList());
+        response.setSelectedWork(findSelectedWork(memberUserId, selectedWorkId));
+        return response;
+    }
+
+    /**
      * 查询已校验团队下指定成员的可展示作品。
      *
      * @param teamId 已校验团队 ID
@@ -138,6 +197,20 @@ public class TeamSingleWorkComponentService {
      * @return 作品候选
      */
     private List<WorkOption> listWorksForTeam(long teamId, long memberUserId) {
+        requireAvailableMember(teamId, memberUserId);
+        List<WorkEntity> works = workEntityMapper.selectList(eligibleWorksQuery(memberUserId));
+        return (works == null ? List.<WorkEntity>of() : works).stream()
+                .map(this::toWorkOption)
+                .toList();
+    }
+
+    /**
+     * 校验成员仍可向团队作品集授权作品。
+     *
+     * @param teamId 已校验团队 ID
+     * @param memberUserId 成员用户 ID
+     */
+    private void requireAvailableMember(long teamId, long memberUserId) {
         TeamMemberEntity membership = teamMemberEntityMapper.selectOne(
                 Wrappers.lambdaQuery(TeamMemberEntity.class)
                         .eq(TeamMemberEntity::getTeamId, teamId)
@@ -150,21 +223,64 @@ public class TeamSingleWorkComponentService {
         if (membership == null || user == null || !UserStatusDict.ACTIVE.getCode().equals(user.getStatus())) {
             throw new BusinessException(TeamPortfolioMessage.SINGLE_WORK_MEMBER_UNAVAILABLE);
         }
-        List<WorkEntity> works = workEntityMapper.selectList(
-                Wrappers.lambdaQuery(WorkEntity.class)
-                        .eq(WorkEntity::getUserId, memberUserId)
-                        .eq(WorkEntity::getStatus, WorkStatusDict.ACTIVE.getCode())
-                        .eq(WorkEntity::getAuditStatus, WorkAuditStatusDict.PASSED.getCode())
-                        .in(WorkEntity::getMediaType, List.of(
-                                MediaTypeDict.IMAGE.getCode(),
-                                MediaTypeDict.VIDEO.getCode(),
-                                MediaTypeDict.ANIMATION.getCode()))
-                        .orderByAsc(WorkEntity::getSortOrder)
-                        .orderByAsc(WorkEntity::getId)
-        );
-        return (works == null ? List.<WorkEntity>of() : works).stream()
-                .map(this::toWorkOption)
-                .toList();
+    }
+
+    /**
+     * 构造可展示作品的稳定排序查询条件。
+     *
+     * @param memberUserId 成员用户 ID
+     * @return 作品候选查询条件
+     */
+    private LambdaQueryWrapper<WorkEntity> eligibleWorksQuery(long memberUserId) {
+        return Wrappers.lambdaQuery(WorkEntity.class)
+                .eq(WorkEntity::getUserId, memberUserId)
+                .eq(WorkEntity::getStatus, WorkStatusDict.ACTIVE.getCode())
+                .eq(WorkEntity::getAuditStatus, WorkAuditStatusDict.PASSED.getCode())
+                .in(WorkEntity::getMediaType, SUPPORTED_MEDIA_TYPES)
+                .orderByAsc(WorkEntity::getSortOrder)
+                .orderByAsc(WorkEntity::getId);
+    }
+
+    /**
+     * 查询当前配置引用的有效作品。
+     *
+     * @param memberUserId 成员用户 ID
+     * @param selectedWorkId 当前配置引用的作品 ID
+     * @return 有效作品项，不可用时返回空
+     */
+    private TeamSingleWorkPageResponse.WorkItem findSelectedWork(long memberUserId, Long selectedWorkId) {
+        if (selectedWorkId == null || selectedWorkId <= 0) {
+            return null;
+        }
+        WorkEntity selectedWork = workEntityMapper.selectOne(
+                eligibleWorksQuery(memberUserId)
+                        .eq(WorkEntity::getId, selectedWorkId)
+                        .last(QUERY_LIMIT_ONE));
+        if (!isEligibleSelectedWork(memberUserId, selectedWorkId, selectedWork)) {
+            return null;
+        }
+        return toPageWorkItem(selectedWork);
+    }
+
+    /**
+     * 防御性校验数据层返回的当前作品仍满足成员归属和展示资格。
+     *
+     * @param memberUserId 成员用户 ID
+     * @param selectedWorkId 当前配置引用的作品 ID
+     * @param selectedWork 数据层返回的作品
+     * @return 是否允许作为当前选择返回
+     */
+    private boolean isEligibleSelectedWork(
+            long memberUserId,
+            Long selectedWorkId,
+            WorkEntity selectedWork
+    ) {
+        return selectedWork != null
+                && selectedWorkId.equals(selectedWork.getId())
+                && Long.valueOf(memberUserId).equals(selectedWork.getUserId())
+                && WorkStatusDict.ACTIVE.getCode().equals(selectedWork.getStatus())
+                && WorkAuditStatusDict.PASSED.getCode().equals(selectedWork.getAuditStatus())
+                && SUPPORTED_MEDIA_TYPES.contains(selectedWork.getMediaType());
     }
 
     /**
@@ -201,6 +317,28 @@ public class TeamSingleWorkComponentService {
                 work.getHeight(),
                 work.getAspectRatio(),
                 work.getDurationMs());
+    }
+
+    /**
+     * 将原全量候选项转换为分页响应项。
+     *
+     * @param work 作品实体
+     * @return 分页作品候选项
+     */
+    private TeamSingleWorkPageResponse.WorkItem toPageWorkItem(WorkEntity work) {
+        WorkOption option = toWorkOption(work);
+        TeamSingleWorkPageResponse.WorkItem item = new TeamSingleWorkPageResponse.WorkItem();
+        item.setWorkId(option.workId());
+        item.setTitle(option.title());
+        item.setDescription(option.description());
+        item.setMediaType(option.mediaType());
+        item.setCoverUrl(option.coverUrl());
+        item.setMediaUrl(option.mediaUrl());
+        item.setWidth(option.width());
+        item.setHeight(option.height());
+        item.setAspectRatio(option.aspectRatio());
+        item.setDurationMs(option.durationMs());
+        return item;
     }
 
     /**

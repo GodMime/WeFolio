@@ -94,6 +94,7 @@ function assertHyperlinkEditorReset(page) {
     componentWorkSelectionMode: page.data.componentWorkSelectionMode,
     componentWorkShowTitle: page.data.componentWorkShowTitle,
     componentWorkShowDescription: page.data.componentWorkShowDescription,
+    componentWorkCurrentSelection: page.data.componentWorkCurrentSelection,
     editingComponentKey: page.data.editingComponentKey,
     editingComponentType: page.data.editingComponentType
   }, {
@@ -130,6 +131,7 @@ function assertHyperlinkEditorReset(page) {
     componentWorkSelectionMode: 'multiple',
     componentWorkShowTitle: true,
     componentWorkShowDescription: false,
+    componentWorkCurrentSelection: null,
     editingComponentKey: '',
     editingComponentType: ''
   })
@@ -653,7 +655,6 @@ test('hyperlink editor omits source id for an unsaved portfolio and keeps invali
       }
     })]
   })
-
   await page.handleComponentTap({
     currentTarget: { dataset: { key: 'c_link', type: COMPONENT_TYPES.HYPERLINK } }
   })
@@ -1064,6 +1065,49 @@ test('generic work sheet ignores a late work response after completion', async (
 
   assert.equal(page.data.componentWorkSheetVisible, false)
   assert.deepEqual(page.data.componentWorkOptions.map((item) => item.id), [11])
+})
+
+test('single work load more keeps the latest draft selection when its response arrives', async () => {
+  const pending = deferred()
+  const page = loadPortfolioEditorPage(() => pending.promise)
+  page.data.editingComponentType = COMPONENT_TYPES.SINGLE_WORK
+  page.data.componentWorkPage = 1
+  page.data.componentWorkPageSize = 20
+  page.data.componentWorkHasMore = true
+  page.data.componentWorkSelectedIds = [11]
+  page.data.componentWorkOptions = [
+    { id: 11, mediaType: 'IMAGE', title: '作品 A', selected: true },
+    { id: 12, mediaType: 'IMAGE', title: '作品 B', selected: false }
+  ]
+  page.data.componentWorkCurrentSelection = {
+    id: 11,
+    title: '作品 A',
+    metaText: '图片',
+    aspectRatioText: '--'
+  }
+
+  const loading = page.loadComponentWorks({
+    reset: false,
+    componentType: COMPONENT_TYPES.SINGLE_WORK
+  })
+  page.handleSingleWorkPickerSelect({
+    detail: { work: page.data.componentWorkOptions[1] }
+  })
+  pending.resolve({
+    page: 2,
+    pageSize: 20,
+    hasMore: false,
+    works: [{ id: 13, mediaType: 'VIDEO', title: '作品 C' }]
+  })
+  await loading
+
+  assert.deepEqual(page.data.componentWorkSelectedIds, [12])
+  assert.deepEqual(
+    page.data.componentWorkOptions.map((item) => [item.id, item.selected]),
+    [[11, false], [12, true], [13, false]]
+  )
+  assert.equal(page.data.componentWorkCurrentSelection.id, 12)
+  assert.equal(page.data.componentWorkCurrentSelection.title, '作品 B')
 })
 
 test('hyperlink sheet ignores a late work response after cancel', async () => {
@@ -2012,6 +2056,16 @@ test('single work editor replaces one selection and commits display switches ato
       config: { workId: 11, showTitle: true, showDescription: false }
     })]
   })
+  page.data.singleWorkSummaryMap = {
+    11: {
+      id: 11,
+      title: '仪式合影',
+      thumbUrl: 'https://example.com/11.jpg',
+      metaText: '图片作品',
+      aspectRatioText: '3:2'
+    }
+  }
+  page.data.singleWorkSummaries = [{ id: 11, title: '仪式合影' }]
 
   await page.handleComponentTap({
     currentTarget: { dataset: { key: 'c_single', type: COMPONENT_TYPES.SINGLE_WORK } }
@@ -2022,13 +2076,23 @@ test('single work editor replaces one selection and commits display switches ato
   assert.equal(page.data.componentWorkSelectionMode, 'single')
   assert.deepEqual(page.data.componentWorkSelectedIds, [11])
   assert.deepEqual(page.data.componentWorkOptions.map((item) => item.selectionOrder), [0, 0])
+  assert.deepEqual(page.data.componentWorkCurrentSelection, {
+    id: 11,
+    title: '仪式合影',
+    thumbUrl: 'https://example.com/11.jpg',
+    metaText: '图片',
+    aspectRatioText: '--'
+  })
 
-  page.handleToggleComponentWork({ currentTarget: { dataset: { id: 12 } } })
-  page.handleToggleComponentWork({ currentTarget: { dataset: { id: 12 } } })
+  page.handleSingleWorkPickerSelect({ detail: { work: page.data.componentWorkOptions[1] } })
+  page.handleSingleWorkPickerSelect({ detail: { work: page.data.componentWorkOptions[1] } })
   page.handleSingleWorkShowTitleChange({ detail: { value: false } })
   page.handleWorkShowDescriptionChange({ detail: { value: true } })
 
   assert.deepEqual(page.data.componentWorkSelectedIds, [12])
+  assert.equal(page.data.componentWorkCurrentSelection.id, 12)
+  assert.equal(page.data.componentWorkCurrentSelection.title, '婚礼快剪')
+  assert.deepEqual(page.data.singleWorkSummaries, [{ id: 11, title: '仪式合影' }])
   assert.deepEqual(page.data.config.components[0].config, {
     workId: 11,
     showTitle: true,
@@ -2045,6 +2109,7 @@ test('single work editor replaces one selection and commits display switches ato
   assert.equal(page.data.singleWorkSummaries[0].id, 12)
   assert.equal(page.data.singleWorkSummaries[0].title, '婚礼快剪')
   assert.equal(page.data.componentWorkSheetVisible, false)
+  assert.equal(page.data.componentWorkCurrentSelection, null)
 })
 
 test('single work editor blocks completion without a work and cancel preserves config', async () => {
@@ -2112,6 +2177,71 @@ test('single work row summaries resolve selected work titles from formal work de
 
   assert.equal(page.data.singleWorkSummaryMap[11].title, '草坪仪式')
   assert.equal(page.data.singleWorkSummaries[0].title, '草坪仪式')
+})
+
+test('single work sheet refreshes an off-page current summary after its loading detail resolves', async () => {
+  const pendingDetail = deferred()
+  const page = loadPortfolioEditorPage((options) => {
+    if (options.url === '/api/mine/works/11') {
+      return pendingDetail.promise
+    }
+    if (options.url === '/api/mine/works') {
+      return Promise.resolve({
+        page: 1,
+        pageSize: 20,
+        hasMore: false,
+        works: [{ id: 12, mediaType: 'IMAGE', title: '当前页其他作品' }]
+      })
+    }
+    return Promise.resolve({})
+  })
+  const config = normalizePortfolioConfig({
+    components: [createComponent(COMPONENT_TYPES.SINGLE_WORK, {
+      componentKey: 'c_single',
+      config: { workId: 11, showTitle: true, showDescription: false }
+    })]
+  })
+  page.data.config = config
+
+  const summaryLoading = page.loadSingleWorkSummaries(config)
+  await page.openComponentWorkSheet('c_single', COMPONENT_TYPES.SINGLE_WORK)
+
+  assert.deepEqual(page.data.componentWorkOptions.map((item) => item.id), [12])
+  assert.equal(page.data.componentWorkCurrentSelection.id, 11)
+  assert.equal(page.data.componentWorkCurrentSelection.status, 'unresolved')
+
+  pendingDetail.resolve({
+    work: {
+      id: 11,
+      mediaType: 'IMAGE',
+      title: '异步加载的当前作品',
+      coverUrl: 'https://example.com/11.jpg'
+    }
+  })
+  await summaryLoading
+
+  assert.deepEqual(page.data.componentWorkOptions.map((item) => item.id), [12])
+  assert.equal(page.data.componentWorkCurrentSelection.id, 11)
+  assert.equal(page.data.componentWorkCurrentSelection.title, '异步加载的当前作品')
+  assert.equal(page.data.componentWorkCurrentSelection.status, undefined)
+})
+
+test('single work sheet distinguishes unresolved and unavailable current summaries', async () => {
+  const page = loadPortfolioEditorPage(() => Promise.resolve({ works: [] }))
+  page.data.config = normalizePortfolioConfig({
+    components: [createComponent(COMPONENT_TYPES.SINGLE_WORK, {
+      componentKey: 'c_single',
+      config: { workId: 11 }
+    })]
+  })
+
+  await page.openComponentWorkSheet('c_single', COMPONENT_TYPES.SINGLE_WORK)
+  assert.equal(page.data.componentWorkCurrentSelection.status, 'unresolved')
+
+  page.handleCloseComponentWorkSheet()
+  page.data.singleWorkSummaryMap = { 11: { id: 11, status: 'UNAVAILABLE' } }
+  await page.openComponentWorkSheet('c_single', COMPONENT_TYPES.SINGLE_WORK)
+  assert.equal(page.data.componentWorkCurrentSelection.status, 'unavailable')
 })
 
 test('late work summaries preserve a newly selected hyperlink draft', async () => {
@@ -2824,6 +2954,12 @@ test('tapping work grid component loads tag-driven display group selector', asyn
   assert.deepEqual(page.data.displayGroupWorkOptions.map((item) => item.aspectRatioText), ['4:3', '16:9'])
   assert.deepEqual(page.data.displayGroupWorkOptions.map((item) => item.selectionOrder), [2, 1])
   assert.deepEqual(page.data.displayGroupWorkOptions.map((item) => item.selected), [true, true])
+  assert.equal(page.data.displayGroupWorkScrollHeight, 204)
+
+  page.handleSelectDisplayGroup({ currentTarget: { dataset: { groupKey: 'tag_9' } } })
+
+  assert.deepEqual(page.data.displayGroupWorkOptions.map((item) => item.id), [31])
+  assert.equal(page.data.displayGroupWorkScrollHeight, 96)
 })
 
 test('work grid and list editors keep saved selected works visible without catalog tag relations', async () => {
@@ -3000,6 +3136,7 @@ test('display group sheet cancel restores selections and confirm keeps them', as
 
   assert.deepEqual(page.data.config.components[0].config.groups.map((item) => item.groupKey), ['tag_8'])
   assert.equal(page.data.displayGroupSheetVisible, false)
+  assert.equal(page.data.displayGroupWorkScrollHeight, 0)
 
   await page.handleComponentTap({ currentTarget: { dataset: { key: 'c_grid', type: COMPONENT_TYPES.WORK_GRID } } })
   await flushPromises()
@@ -3008,6 +3145,7 @@ test('display group sheet cancel restores selections and confirm keeps them', as
 
   assert.deepEqual(page.data.config.components[0].config.groups.map((item) => item.groupKey), ['tag_8', 'tag_9'])
   assert.equal(page.data.displayGroupSheetVisible, false)
+  assert.equal(page.data.displayGroupWorkScrollHeight, 0)
 })
 
 test('saving draft in create mode creates portfolio before saving draft', async () => {

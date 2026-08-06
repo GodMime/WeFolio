@@ -80,13 +80,19 @@ test('editor QR picker cancellation is silent and preserves the existing configu
 test('editor WXML presents all component options in Chinese and binds member source states', () => {
   const wxml = fs.readFileSync(path.join(ROOT, 'standard-edit/team-portfolio-standard-edit.wxml'), 'utf8')
   const source = fs.readFileSync(path.join(ROOT, 'standard-edit/team-portfolio-standard-edit.js'), 'utf8')
+  const css = fs.readFileSync(path.join(ROOT, 'standard-edit/team-portfolio-standard-edit.wxss'), 'utf8')
   for (const label of ['团队资料', '轮播图', '分割线', '双列作品集', '单列作品集', '文字说明', '档期查询', '预留联系信息', '二维码联系']) assert.match(source, new RegExp(label))
   assert.match(wxml, /class="component-title pe-component-title">\{\{item\.displayName\}\}/)
+  assert.match(wxml, /item\.showSummary \? 'with-summary' : ''/)
+  assert.match(wxml, /wx:if="\{\{item\.showSummary\}\}" class="component-summary pe-component-description">\{\{item\.summaryText\}\}/)
+  assert.match(css, /\.component-copy\.with-summary\s*\{[^}]*flex-direction:\s*column;[^}]*align-items:\s*flex-start;/s)
   for (const handler of ['handleCarouselLoadMembers', 'handleGridLoadMembers', 'handleListLoadMembers']) assert.match(wxml, new RegExp(`bindloadmembers="${handler}"`))
   for (const handler of ['handleCarouselRetrySource', 'handleGridRetrySource', 'handleListRetrySource']) assert.match(wxml, new RegExp(`bindtap="${handler}"`))
   assert.match(wxml, /class="source-state"/)
   assert.match(wxml, /class="source-state source-error"/)
-  assert.doesNotMatch(wxml, /<team-(?:carousel|member-portfolio-grid|member-portfolio-list)[^>]*\s(?:loading|error-message)=/)
+  assert.match(wxml, /<team-carousel[^>]*\sloading="\{\{activeComponentSource\.loadingFingerprint \? true : false\}\}"/)
+  assert.doesNotMatch(wxml, /<team-carousel[^>]*\serror-message=/)
+  assert.doesNotMatch(wxml, /<team-(?:member-portfolio-grid|member-portfolio-list)[^>]*\s(?:loading|error-message)=/)
 })
 
 test('editor renders the personal-style 1:1 QR crop overlay above the component editor', () => {

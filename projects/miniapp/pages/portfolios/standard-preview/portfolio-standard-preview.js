@@ -10,7 +10,7 @@ const {
   readPortfolioRenderEventData
 } = require('../utils/portfolio-render-events')
 const { clearDisplaySwitchingTimer, markDisplaySwitching } = require('../utils/display-switching')
-const { createClipboardPromptController } = require('../../../utils/portfolio-hyperlink')
+const { createClipboardPromptController } = require('../utils/portfolio-hyperlink')
 const {
   clearPortfolioMenuTransitionTimers,
   startPortfolioMenuTransition

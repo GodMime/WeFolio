@@ -1,0 +1,104 @@
+<scroll-view class="single-work-picker-scroll" scroll-y>
+<view class="single-work-picker">
+  <view class="single-work-picker-current {{currentSelection && currentSelection.id ? '' : 'empty'}}">
+    <view class="single-work-picker-current-label">当前已选</view>
+    <view wx:if="{{currentSelection && currentSelection.id && currentSelection.status !== 'unavailable' && currentSelection.status !== 'unresolved'}}" class="single-work-picker-current-content">
+      <view class="single-work-picker-current-thumb">
+        <image wx:if="{{currentSelection.thumbUrl}}" src="{{currentSelection.thumbUrl}}" mode="aspectFill"></image>
+        <view wx:else class="single-work-picker-current-placeholder">作品图</view>
+      </view>
+      <view class="single-work-picker-current-copy">
+        <view class="single-work-picker-current-title">{{currentSelection.title || '当前作品'}}</view>
+        <view class="single-work-picker-current-meta">{{currentSelection.metaText || '图片 / 视频 / 动图作品'}} {{currentSelection.aspectRatioText || ''}}</view>
+      </view>
+    </view>
+    <view wx:elif="{{currentSelection && currentSelection.status === 'unavailable'}}" class="single-work-picker-current-empty-text">当前作品不可用，请重新选择</view>
+    <view wx:elif="{{currentSelection && currentSelection.status === 'unresolved'}}" class="single-work-picker-current-empty-text">作品信息加载中...</view>
+    <view wx:else class="single-work-picker-current-empty-text">请从下方选择一个作品</view>
+  </view>
+
+  <view class="single-work-picker-search">
+    <view class="single-work-picker-search-icon"></view>
+    <input
+      class="single-work-picker-search-input"
+      value="{{keyword}}"
+      confirm-type="search"
+      placeholder="搜索作品名称"
+      placeholder-class="single-work-picker-search-placeholder"
+      bindinput="handleKeywordInput"
+      bindconfirm="handleSearchConfirm"
+    />
+    <view wx:if="{{keyword}}" class="single-work-picker-search-clear" catchtap="handleClearSearch" aria-role="button" aria-label="清空作品搜索">×</view>
+  </view>
+
+  <scroll-view wx:if="{{filterTags.length}}" class="single-work-picker-filter-scroll" scroll-x type="list">
+    <view class="single-work-picker-filter-row">
+      <view
+        wx:for="{{filterTags}}"
+        wx:key="id"
+        class="single-work-picker-filter-pill {{(!selectedTagId && !item.id) || selectedTagId === item.id ? 'selected' : ''}}"
+        data-tag-id="{{item.id}}"
+        catchtap="handleTagTap"
+        aria-role="button"
+        aria-label="筛选{{item.name}}"
+      >
+        <view class="single-work-picker-filter-dot" style="background: {{((!selectedTagId && !item.id) || selectedTagId === item.id) ? '#ffffff' : (item.color || '#212529')}};"></view>
+        <text>{{item.labelText}}</text>
+      </view>
+    </view>
+  </scroll-view>
+
+  <view wx:if="{{loading && options.length === 0}}" class="single-work-picker-state">加载中...</view>
+  <view wx:elif="{{errorText && options.length === 0}}" class="single-work-picker-state error">
+    <view>{{errorText}}</view>
+    <view class="single-work-picker-retry" catchtap="handleRetryLoadMore" aria-role="button">重试</view>
+  </view>
+  <view wx:elif="{{options.length === 0}}" class="single-work-picker-state">{{emptyText}}</view>
+  <scroll-view wx:else class="single-work-picker-candidate-scroll" scroll-x type="list" bindscrolltolower="handleScrollToLower">
+    <view class="single-work-picker-candidate-row">
+      <view
+        wx:for="{{options}}"
+        wx:key="id"
+        class="single-work-picker-candidate {{item.selected ? 'selected' : ''}}"
+        data-item="{{item}}"
+        catchtap="handleWorkTap"
+        aria-role="radio"
+        aria-checked="{{item.selected}}"
+        aria-label="选择{{item.title}}"
+      >
+        <view class="single-work-picker-candidate-thumb">
+          <image wx:if="{{item.thumbUrl}}" src="{{item.thumbUrl}}" mode="aspectFill"></image>
+          <view wx:else class="single-work-picker-candidate-placeholder">作品</view>
+          <view class="single-work-picker-radio {{item.selected ? 'selected' : ''}}" aria-hidden="true">
+            <view wx:if="{{item.selected}}" class="single-work-picker-radio-dot"></view>
+          </view>
+        </view>
+        <view class="single-work-picker-candidate-title">{{item.title}}</view>
+        <view class="single-work-picker-candidate-meta">{{item.metaText}} {{item.aspectRatioText}}</view>
+      </view>
+      <view wx:if="{{loadingMore || errorText || !hasMore}}" class="single-work-picker-tail">
+        <text wx:if="{{loadingMore}}">加载更多作品</text>
+        <view wx:elif="{{errorText}}" class="single-work-picker-tail-retry" catchtap="handleRetryLoadMore" aria-role="button">加载失败，点击重试</view>
+        <text wx:else>已显示全部作品</text>
+      </view>
+    </view>
+  </scroll-view>
+
+  <view class="single-work-picker-switches">
+    <view class="single-work-picker-switch-row">
+      <view class="single-work-picker-switch-copy">
+        <view class="single-work-picker-switch-label">展示作品名</view>
+        <view class="single-work-picker-switch-note">关闭后隐藏作品标题</view>
+      </view>
+      <switch checked="{{showTitle}}" color="#212529" bindchange="handleShowTitleChange"></switch>
+    </view>
+    <view class="single-work-picker-switch-row">
+      <view class="single-work-picker-switch-copy">
+        <view class="single-work-picker-switch-label">展示作品说明</view>
+        <view class="single-work-picker-switch-note">关闭后隐藏作品说明</view>
+      </view>
+      <switch checked="{{showDescription}}" color="#212529" bindchange="handleShowDescriptionChange"></switch>
+    </view>
+  </view>
+</view>
+</scroll-view>

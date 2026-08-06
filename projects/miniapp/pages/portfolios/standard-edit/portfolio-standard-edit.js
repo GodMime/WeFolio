@@ -13,6 +13,9 @@ const {
   normalizeWorkList,
   normalizeWorkTags
 } = require('../utils/works')
+const {
+  buildDisplayGroupWorkScrollHeight
+} = require('../utils/display-group-layout')
 const { selectableWorksFor } = require('../utils/portfolio-work-media')
 const { confirmPortfolioPublishDisclaimer } = require('../utils/portfolio-publish-disclaimer')
 const {
@@ -347,6 +350,7 @@ function buildHyperlinkSheetResetState() {
     componentWorkSelectionMode: 'multiple',
     componentWorkShowTitle: true,
     componentWorkShowDescription: false,
+    componentWorkCurrentSelection: null,
     editingComponentKey: '',
     editingComponentType: ''
   }
@@ -493,6 +497,23 @@ function normalizeDisplayGroupWorkPreview(work = {}, fallbackId = 0) {
     metaText: tagText && tagText !== '未设置标签' ? `${typeText || '作品'} · ${tagText}` : (typeText || '作品'),
     aspectRatioText: normalizeWorkAspectRatioText(work)
   }
+}
+
+function buildComponentWorkCurrentSelection(work = {}, fallbackId = 0) {
+  const id = Number(work && (work.id || work.workId)) || Number(fallbackId) || 0
+  if (!id) {
+    return null
+  }
+  const selection = normalizeDisplayGroupWorkPreview(work, id)
+  const status = String(work && work.status || '').toUpperCase()
+  if (status === 'FAILED' || status === 'UNAVAILABLE') {
+    selection.status = 'unavailable'
+  } else if (status === SINGLE_WORK_SUMMARY_STATUS_LOADING) {
+    selection.status = 'unresolved'
+  } else if (!work || !Object.keys(work).length) {
+    selection.status = 'unresolved'
+  }
+  return selection
 }
 
 function mergeDisplayGroupWorkMap(currentMap = {}, works = []) {
@@ -1031,6 +1052,7 @@ Page({
     componentWorkSelectionMode: 'multiple',
     componentWorkShowTitle: true,
     componentWorkShowDescription: false,
+    componentWorkCurrentSelection: null,
     editingComponentKey: '',
     editingComponentType: '',
     displayGroupSheetVisible: false,
@@ -1040,6 +1062,7 @@ Page({
     activeDisplayGroupKey: '',
     activeDisplayGroupWorkCountText: '0 个已选',
     displayGroupWorkOptions: [],
+    displayGroupWorkScrollHeight: 0,
     displayGroupAllWorks: [],
     displayGroupWorkMap: {},
     singleWorkSummaryMap: {},
@@ -1376,6 +1399,20 @@ Page({
         const currentHyperlinkSummary = singleWorkSummaryMap[currentHyperlinkWorkId]
         if (this.data.hyperlinkSheetVisible && currentHyperlinkSummary && currentHyperlinkSummary.title) {
           state.hyperlinkWorkSummary = currentHyperlinkSummary.title
+        }
+        const currentSingleWorkId = Number(this.data.componentWorkSelectedIds[0])
+        const currentSingleWorkSummary = singleWorkSummaryMap[currentSingleWorkId]
+        if (
+          this.data.componentWorkSheetVisible &&
+          this.data.editingComponentType === COMPONENT_TYPES.SINGLE_WORK &&
+          currentSingleWorkId > 0 &&
+          Number(this.data.componentWorkCurrentSelection && this.data.componentWorkCurrentSelection.id) === currentSingleWorkId &&
+          Object.prototype.hasOwnProperty.call(resolvedSummaryMap, currentSingleWorkId)
+        ) {
+          state.componentWorkCurrentSelection = buildComponentWorkCurrentSelection(
+            currentSingleWorkSummary || {},
+            currentSingleWorkId
+          )
         }
         this.setData(state)
         return singleWorkSummaryMap
@@ -2041,6 +2078,7 @@ Page({
       componentWorkSelectionMode: 'single',
       componentWorkShowTitle: true,
       componentWorkShowDescription: false,
+      componentWorkCurrentSelection: null,
       editingComponentKey: componentKey,
       editingComponentType: COMPONENT_TYPES.HYPERLINK
     })
@@ -2252,6 +2290,7 @@ Page({
       displayGroupOptions: [],
       activeDisplayGroupWorkCountText: '0 个已选',
       displayGroupWorkOptions: [],
+      displayGroupWorkScrollHeight: 0,
       displayGroupAllWorks: [],
       displayGroupOriginalConfig: clonePlainObject(this.data.config),
       displayGroupShowTitle: displayOptions.showTitle,
@@ -2642,6 +2681,7 @@ Page({
       activeDisplayGroupKey: '',
       activeDisplayGroupWorkCountText: '0 个已选',
       displayGroupWorkOptions: [],
+      displayGroupWorkScrollHeight: 0,
       displayGroupAllWorks: [],
       displayGroupOriginalConfig: null,
       displayGroupShowTitle: true,
@@ -2668,6 +2708,7 @@ Page({
       activeDisplayGroupKey: '',
       activeDisplayGroupWorkCountText: '0 个已选',
       displayGroupWorkOptions: [],
+      displayGroupWorkScrollHeight: 0,
       displayGroupAllWorks: [],
       displayGroupOriginalConfig: null,
       displayGroupShowTitle: true,
@@ -2703,10 +2744,12 @@ Page({
     const component = findComponentByKey(this.data.config, componentKey)
     const tags = this.data.workTagOptions
     const works = this.data.displayGroupAllWorks
+    const displayGroupWorkOptions = buildDisplayGroupWorkOptions(component || {}, activeGroupKey, tags, works)
     this.setData({
       displayGroupOptions: buildDisplayGroupOptions(component || {}, activeGroupKey, tags),
       activeDisplayGroupWorkCountText: buildActiveDisplayGroupWorkCountText(component || {}, activeGroupKey, tags),
-      displayGroupWorkOptions: buildDisplayGroupWorkOptions(component || {}, activeGroupKey, tags, works)
+      displayGroupWorkOptions,
+      displayGroupWorkScrollHeight: buildDisplayGroupWorkScrollHeight(displayGroupWorkOptions)
     })
   },
 
@@ -2743,6 +2786,7 @@ Page({
       const component = findComponentByKey(config, componentKey)
       const activeGroupKey = resolveActiveDisplayGroupKey(component || {}, tags, this.data.activeDisplayGroupKey)
       const displayGroupWorkMap = mergeDisplayGroupWorkMap(this.data.displayGroupWorkMap, works)
+      const displayGroupWorkOptions = buildDisplayGroupWorkOptions(component || {}, activeGroupKey, tags, works)
       this.applyEditorConfig(config, this.data.activeMenuKey, {
         workTagOptions: tags,
         displayGroupAllWorks: works,
@@ -2750,7 +2794,8 @@ Page({
         activeDisplayGroupKey: activeGroupKey,
         displayGroupOptions: buildDisplayGroupOptions(component || {}, activeGroupKey, tags),
         activeDisplayGroupWorkCountText: buildActiveDisplayGroupWorkCountText(component || {}, activeGroupKey, tags),
-        displayGroupWorkOptions: buildDisplayGroupWorkOptions(component || {}, activeGroupKey, tags, works),
+        displayGroupWorkOptions,
+        displayGroupWorkScrollHeight: buildDisplayGroupWorkScrollHeight(displayGroupWorkOptions),
         displayGroupLoading: false,
         displayGroupErrorText: ''
       })
@@ -2868,6 +2913,10 @@ Page({
       : singleWorkConfig
         ? [singleWorkConfig.workId]
         : component.config && component.config.workIds)
+    const selectedWorkId = componentType === COMPONENT_TYPES.SINGLE_WORK ? selectedIds[0] : 0
+    const selectedWorkSummary = selectedWorkId
+      ? this.data.singleWorkSummaryMap[selectedWorkId]
+      : null
     this.setData({
       componentWorkSheetVisible: true,
       componentWorkSheetTitle: options.title || (componentType === COMPONENT_TYPES.CAROUSEL
@@ -2889,6 +2938,9 @@ Page({
       componentWorkSelectionMode: componentType === COMPONENT_TYPES.SINGLE_WORK ? 'single' : 'multiple',
       componentWorkShowTitle: singleWorkConfig ? singleWorkConfig.showTitle : true,
       componentWorkShowDescription: singleWorkConfig ? singleWorkConfig.showDescription : false,
+      componentWorkCurrentSelection: componentType === COMPONENT_TYPES.SINGLE_WORK
+        ? buildComponentWorkCurrentSelection(selectedWorkSummary || {}, selectedWorkId)
+        : null,
       editingComponentKey: componentKey,
       editingComponentType: componentType
     })
@@ -2898,7 +2950,6 @@ Page({
   async loadComponentWorks(options = {}) {
     const reset = options.reset !== false
     const componentType = options.componentType || this.data.editingComponentType
-    const selectedIds = options.selectedIds || this.data.componentWorkSelectedIds
     const pageSize = Number(this.data.componentWorkPageSize) || COMPONENT_WORK_PAGE_SIZE
     let requestPage = reset ? 1 : (Number(this.data.componentWorkPage) || 1) + 1
     const keyword = String(this.data.componentWorkKeyword || '').trim()
@@ -2938,15 +2989,25 @@ Page({
         }
         list = normalizeWorkList(response)
         works = mergeComponentWorks(works, list.works)
-        workOptions = buildComponentWorkOptions(works, selectedIds, componentType)
+        workOptions = buildComponentWorkOptions(
+          works,
+          this.data.componentWorkSelectedIds,
+          componentType
+        )
         requestPage = list.page + 1
       } while (
         componentType === COMPONENT_TYPES.HYPERLINK &&
         workOptions.length === initialOptionCount &&
         list.hasMore
       )
+      const latestSelectedIds = this.data.componentWorkSelectedIds
+      workOptions = buildComponentWorkOptions(works, latestSelectedIds, componentType)
       const displayGroupWorkMap = mergeDisplayGroupWorkMap(this.data.displayGroupWorkMap, works)
-      this.setData({
+      const currentWorkId = componentType === COMPONENT_TYPES.SINGLE_WORK ? latestSelectedIds[0] : 0
+      const currentOption = currentWorkId
+        ? workOptions.find((item) => Number(item.id) === Number(currentWorkId))
+        : null
+      const patch = {
         componentWorkLoading: false,
         componentWorkLoadingMore: false,
         componentWorkErrorText: '',
@@ -2956,7 +3017,13 @@ Page({
         componentWorkPageSize: list.pageSize || pageSize,
         componentWorkHasMore: list.hasMore,
         displayGroupWorkMap
-      })
+      }
+      if (componentType === COMPONENT_TYPES.SINGLE_WORK) {
+        patch.componentWorkCurrentSelection = currentOption
+          ? buildComponentWorkCurrentSelection(currentOption, currentWorkId)
+          : this.data.componentWorkCurrentSelection
+      }
+      this.setData(patch)
     } catch (error) {
       if (requestSeq !== this.componentWorkRequestSeq) {
         return
@@ -3034,8 +3101,30 @@ Page({
       componentWorkLoadingMore: false,
       componentWorkSelectionMode: 'multiple',
       componentWorkShowTitle: true,
-      componentWorkShowDescription: false
+      componentWorkShowDescription: false,
+      componentWorkCurrentSelection: null
     })
+  },
+
+  handleSingleWorkPickerTagChange(event) {
+    return this.handleComponentWorkTagTap({
+      currentTarget: { dataset: { tagId: event.detail && event.detail.tagId } }
+    })
+  },
+
+  handleSingleWorkPickerSelect(event) {
+    const work = event.detail && event.detail.work
+    if (!work) {
+      return
+    }
+    this.handleToggleComponentWork({ currentTarget: { dataset: { id: work.id } } })
+  },
+
+  handleRetrySingleWorkPicker() {
+    if (this.data.componentWorkOptions.length > 0) {
+      return this.handleComponentWorkScrollToLower()
+    }
+    return this.handleRetryLoadComponentWorks()
   },
 
   handleSingleWorkShowTitleChange(event) {
@@ -3064,6 +3153,10 @@ Page({
           this.data.componentWorkOptions,
           nextSelectedIds,
           this.data.editingComponentType
+        ),
+        componentWorkCurrentSelection: buildComponentWorkCurrentSelection(
+          this.data.componentWorkOptions.find((item) => Number(item.id) === workId) || {},
+          workId
         )
       })
       return
@@ -3120,7 +3213,8 @@ Page({
       editingComponentType: '',
       componentWorkSelectionMode: 'multiple',
       componentWorkShowTitle: true,
-      componentWorkShowDescription: false
+      componentWorkShowDescription: false,
+      componentWorkCurrentSelection: null
     })
   },
 

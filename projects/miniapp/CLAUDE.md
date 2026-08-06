@@ -32,6 +32,14 @@ node --test --test-name-pattern="dashboard" tests/*.test.js
 
 没有 `package.json` 和 npm 脚本，不引入额外构建依赖。纯原生微信小程序开发，不使用 TypeScript、Webpack 或 Vite。
 
+## JavaScript 包边界
+
+- 根目录 `utils/` 属于主包。这里的每个生产 JavaScript 都必须能够从 `app.js`、`app.json` 注册的主包页面或主包 `components/` 的真实代码到达；只有测试引用不算主包使用。
+- 仅由一个分包使用的模块放在该分包的 `utils/` 下，例如作品集分包专用模块应放在 `pages/portfolios/utils/`，不得放在根目录 `utils/`。
+- 仅由多个分包共享、主包没有真实调用方的逻辑，在各分包保留本地文件，并增加字节一致性或行为一致性测试；禁止从一个分包跨目录引用另一个分包。
+- 新增或移动 `.js` 文件前，先检查 `app.json` 的 `pages`、`subPackages` 以及所有真实 `require()` 调用，再决定归属。禁止用虚假 `require()`、空调用或关闭 `project.config.json` 的未使用文件检查来制造合规假象。
+- 修改小程序 JavaScript 后至少运行 `node --test tests/business-subpackages.test.js`；交付前还要运行相关测试及完整 `node --test tests/*.test.js`。该边界测试会动态拦截“只被分包依赖却放在主包”的 JavaScript，不得依赖手工文件名清单代替动态检查。
+
 ## Architecture
 
 ```

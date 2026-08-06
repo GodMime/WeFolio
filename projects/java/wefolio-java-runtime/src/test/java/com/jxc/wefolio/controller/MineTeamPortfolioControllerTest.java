@@ -82,6 +82,7 @@ class MineTeamPortfolioControllerTest {
         expected.put("GET /api/mine/team-portfolios/{portfolioId}/components/single-work/members/{memberUserId}/works", "singleWorkWorks");
         expected.put("GET /api/mine/teams/{teamId}/portfolio-components/single-work/members", "teamSingleWorkMembers");
         expected.put("GET /api/mine/teams/{teamId}/portfolio-components/single-work/members/{memberUserId}/works", "teamSingleWorkWorks");
+        expected.put("GET /api/mine/teams/{teamId}/portfolio-components/single-work/members/{memberUserId}/works/page", "teamSingleWorkWorksPage");
         expected.put("GET /api/mine/team-portfolios/{portfolioId}/components/member-portfolio-grid/members", "gridMembers");
         expected.put("GET /api/mine/team-portfolios/{portfolioId}/components/member-portfolio-grid/members/{memberUserId}/portfolios", "gridPortfolios");
         expected.put("GET /api/mine/team-portfolios/{portfolioId}/components/member-portfolio-list/members", "listMembers");
@@ -127,6 +128,16 @@ class MineTeamPortfolioControllerTest {
         assertThat(carouselWorks.getParameters()[1].getAnnotation(PathVariable.class)).isNotNull();
         assertThat(method("singleWorkMembers").getAnnotation(Deprecated.class)).isNotNull();
         assertThat(method("singleWorkWorks").getAnnotation(Deprecated.class)).isNotNull();
+        Method teamSingleWorkWorksPage = method("teamSingleWorkWorksPage");
+        assertThat(teamSingleWorkWorksPage.getParameters()[0].getAnnotation(PathVariable.class)).isNotNull();
+        assertThat(teamSingleWorkWorksPage.getParameters()[1].getAnnotation(PathVariable.class)).isNotNull();
+        assertRequestParam(teamSingleWorkWorksPage, 2, "page", "1");
+        assertRequestParam(teamSingleWorkWorksPage, 3, "pageSize", "20");
+        assertRequestParam(
+                teamSingleWorkWorksPage,
+                4,
+                "selectedWorkId",
+                org.springframework.web.bind.annotation.ValueConstants.DEFAULT_NONE);
 
         Method visits = method("visitRecords");
         assertTask8PageParameters(visits);
@@ -160,6 +171,7 @@ class MineTeamPortfolioControllerTest {
         controller.singleWorkWorks(13L, 17L);
         controller.teamSingleWorkMembers(23L);
         controller.teamSingleWorkWorks(23L, 17L);
+        controller.teamSingleWorkWorksPage(23L, 17L, 2, 30, 19L);
         controller.gridMembers(13L);
         controller.gridPortfolios(13L, 17L);
         controller.listMembers(13L);
@@ -171,6 +183,7 @@ class MineTeamPortfolioControllerTest {
         verify(singleWork).listWorks(13L, 17L, USER_ID);
         verify(singleWork).listTeamMembers(23L, USER_ID);
         verify(singleWork).listTeamWorks(23L, 17L, USER_ID);
+        verify(singleWork).pageTeamWorks(23L, 17L, USER_ID, 2, 30, 19L);
         verify(grid).listMembers(13L, USER_ID);
         verify(grid).listPortfolios(13L, 17L, USER_ID);
         verify(list).listMembers(13L, USER_ID);
@@ -223,6 +236,47 @@ class MineTeamPortfolioControllerTest {
             assertThat(deprecated).as(methodName + " 弃用标记").isNotNull();
             assertThat(deprecated.since()).as(methodName + " 弃用版本").isEqualTo("2026-07");
             assertThat(deprecated.forRemoval()).as(methodName + " 暂不删除").isFalse();
+        }
+    }
+
+    @Test
+    void teamSingleWorkFullListKeepsCompatibilityDeprecationMetadata() {
+        Deprecated teamScoped = method("teamSingleWorkWorks").getAnnotation(Deprecated.class);
+        Deprecated portfolioScoped = method("singleWorkWorks").getAnnotation(Deprecated.class);
+
+        assertThat(teamScoped).isNotNull();
+        assertThat(teamScoped.since()).isEqualTo("2026-08");
+        assertThat(teamScoped.forRemoval()).isFalse();
+        assertThat(portfolioScoped).isNotNull();
+        assertThat(portfolioScoped.since()).isEqualTo("2026-07");
+        assertThat(portfolioScoped.forRemoval()).isFalse();
+    }
+
+    @Test
+    void teamSingleWorkFullListWritesOneMigrationWarning() {
+        MineTeamPortfolioController controller = new MineTeamPortfolioController(
+                mock(MineTeamPortfolioService.class),
+                mock(TeamPortfolioAssetService.class),
+                mock(TeamCarouselComponentService.class),
+                mock(TeamSingleWorkComponentService.class),
+                mock(TeamMemberPortfolioGridComponentService.class),
+                mock(TeamMemberPortfolioListComponentService.class),
+                mock(TeamMemberPortfolioPreviewService.class));
+        Logger logger = (Logger) LoggerFactory.getLogger(MineTeamPortfolioController.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            controller.teamSingleWorkWorks(23L, 17L);
+
+            assertThat(appender.list).singleElement().satisfies(event -> {
+                assertThat(event.getLevel()).isEqualTo(Level.WARN);
+                assertThat(event.getFormattedMessage()).isEqualTo(
+                        "调用已弃用团队单个作品全量候选接口: teamId=23, memberUserId=17");
+            });
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
         }
     }
 

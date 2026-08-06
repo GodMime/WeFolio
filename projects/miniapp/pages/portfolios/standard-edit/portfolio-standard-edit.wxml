@@ -336,7 +336,7 @@
                 <view
                   wx:for="{{componentWorkOptions}}"
                   wx:key="id"
-                  class="hyperlink-work-option pe-sheet-choice {{item.selected ? 'pe-sheet-choice-selected' : ''}}"
+                  class="hyperlink-work-option pe-sheet-choice {{item.selected ? 'pe-sheet-choice-selected hyperlink-option-selected' : ''}}"
                   data-id="{{item.id}}"
                   catchtap="handleSelectHyperlinkWork"
                   aria-role="radio"
@@ -346,7 +346,9 @@
                   <view class="hyperlink-work-option-thumbnail">
                     <image wx:if="{{item.thumbUrl}}" src="{{item.thumbUrl}}" mode="aspectFill"></image>
                     <view wx:else class="hyperlink-work-option-placeholder">作品</view>
-                    <view class="schedule-query-mode-radio"></view>
+                    <view class="schedule-query-mode-radio">
+                      <view class="hyperlink-radio-dot" aria-hidden="true"></view>
+                    </view>
                   </view>
                   <view class="hyperlink-work-option-title">{{item.title}}</view>
                   <view class="hyperlink-work-option-meta">{{item.metaText}}</view>
@@ -364,13 +366,15 @@
               <view
                 wx:for="{{hyperlinkActionTypeOptions}}"
                 wx:key="value"
-                class="hyperlink-choice pe-sheet-choice {{hyperlinkForm.actionType === item.value ? 'pe-sheet-choice-selected' : ''}} {{hyperlinkForm.actionType && hyperlinkForm.actionType !== item.value ? 'hyperlink-choice-muted' : ''}}"
+                class="hyperlink-choice pe-sheet-choice {{hyperlinkForm.actionType === item.value ? 'pe-sheet-choice-selected hyperlink-option-selected' : ''}} {{hyperlinkForm.actionType && hyperlinkForm.actionType !== item.value ? 'hyperlink-choice-muted' : ''}}"
                 data-value="{{item.value}}"
                 catchtap="handleHyperlinkActionTypeTap"
                 aria-role="radio"
                 aria-checked="{{hyperlinkForm.actionType === item.value}}"
               >
-                <view class="schedule-query-mode-radio"></view>
+                <view class="schedule-query-mode-radio">
+                  <view class="hyperlink-radio-dot" aria-hidden="true"></view>
+                </view>
                 <view class="hyperlink-choice-copy">
                   <view class="hyperlink-choice-title">{{item.label}}</view>
                   <view class="hyperlink-choice-description">{{item.description}}</view>
@@ -392,7 +396,7 @@
                 <view
                   wx:for="{{hyperlinkTargetOptions}}"
                   wx:key="portfolioId"
-                  class="hyperlink-target-option pe-sheet-choice {{hyperlinkForm.targetPortfolioId === item.portfolioId ? 'pe-sheet-choice-selected' : ''}} {{item.selectable ? '' : 'disabled'}}"
+                  class="hyperlink-target-option pe-sheet-choice {{hyperlinkForm.targetPortfolioId === item.portfolioId ? 'pe-sheet-choice-selected hyperlink-option-selected' : ''}} {{item.selectable ? '' : 'disabled'}}"
                   data-id="{{item.portfolioId}}"
                   data-selectable="{{item.selectable}}"
                   catchtap="handleSelectHyperlinkTarget"
@@ -409,7 +413,9 @@
                     <view wx:if="{{item.currentSelection}}" class="hyperlink-target-current">当前选择·已失效</view>
                     <view wx:if="{{item.disabledReason}}" class="hyperlink-target-reason">{{item.disabledReason}}</view>
                   </view>
-                  <view class="schedule-query-mode-radio"></view>
+                  <view class="schedule-query-mode-radio">
+                    <view class="hyperlink-radio-dot" aria-hidden="true"></view>
+                  </view>
                 </view>
               </view>
             </scroll-view>
@@ -456,13 +462,15 @@
               <view
                 wx:for="{{hyperlinkIconPositionOptions}}"
                 wx:key="value"
-                class="hyperlink-choice hyperlink-position-choice pe-sheet-choice {{hyperlinkForm.iconPosition === item.value ? 'pe-sheet-choice-selected' : ''}}"
+                class="hyperlink-choice hyperlink-position-choice pe-sheet-choice {{hyperlinkForm.iconPosition === item.value ? 'pe-sheet-choice-selected hyperlink-option-selected' : ''}}"
                 data-value="{{item.value}}"
                 catchtap="handleHyperlinkIconPositionTap"
                 aria-role="radio"
                 aria-checked="{{hyperlinkForm.iconPosition === item.value}}"
               >
-                <view class="schedule-query-mode-radio"></view>
+                <view class="schedule-query-mode-radio">
+                  <view class="hyperlink-radio-dot" aria-hidden="true"></view>
+                </view>
                 <view class="hyperlink-choice-copy">
                   <view class="hyperlink-choice-title">{{item.label}}</view>
                   <view class="hyperlink-choice-description">{{item.description}}</view>
@@ -491,6 +499,32 @@
         <view class="pe-sheet-meta">{{componentWorkSelectedCountText}}</view>
       </view>
 
+      <single-work-picker
+        wx:if="{{editingComponentType === 'SINGLE_WORK'}}"
+        current-selection="{{componentWorkCurrentSelection}}"
+        keyword="{{componentWorkKeyword}}"
+        filter-tags="{{componentWorkFilterTags}}"
+        selected-tag-id="{{componentWorkSelectedTagId}}"
+        options="{{componentWorkOptions}}"
+        loading="{{componentWorkLoading}}"
+        loading-more="{{componentWorkLoadingMore}}"
+        error-text="{{componentWorkErrorText}}"
+        empty-text="{{componentWorkEmptyText}}"
+        has-more="{{componentWorkHasMore}}"
+        show-title="{{componentWorkShowTitle}}"
+        show-description="{{componentWorkShowDescription}}"
+        bindkeywordchange="handleComponentWorkKeywordInput"
+        bindsearch="handleComponentWorkSearchConfirm"
+        bindclearsearch="handleClearComponentWorkSearch"
+        bindtagchange="handleSingleWorkPickerTagChange"
+        bindworkselect="handleSingleWorkPickerSelect"
+        bindloadmore="handleComponentWorkScrollToLower"
+        bindretryloadmore="handleRetrySingleWorkPicker"
+        bindshowtitlechange="handleSingleWorkShowTitleChange"
+        bindshowdescriptionchange="handleWorkShowDescriptionChange"
+      ></single-work-picker>
+
+      <block wx:else>
       <view class="component-work-tools">
         <view class="component-work-search">
           <view class="component-work-search-icon"></view>
@@ -564,21 +598,7 @@
           <view wx:if="{{!componentWorkHasMore && componentWorkOptions.length > 0}}" class="component-work-footer">已显示全部作品</view>
         </view>
       </scroll-view>
-
-      <view wx:if="{{editingComponentType === 'SINGLE_WORK'}}" class="single-work-title-setting">
-        <view class="single-work-title-setting-copy">
-          <view class="single-work-title-setting-label">展示作品名</view>
-          <view class="single-work-title-setting-note">关闭后隐藏作品标题</view>
-        </view>
-        <switch checked="{{componentWorkShowTitle}}" color="#212529" bindchange="handleSingleWorkShowTitleChange"></switch>
-      </view>
-      <view wx:if="{{editingComponentType === 'SINGLE_WORK'}}" class="single-work-title-setting">
-        <view class="single-work-title-setting-copy">
-          <view class="single-work-title-setting-label">展示作品说明</view>
-          <view class="single-work-title-setting-note">关闭后隐藏作品说明</view>
-        </view>
-        <switch checked="{{componentWorkShowDescription}}" color="#212529" bindchange="handleWorkShowDescriptionChange"></switch>
-      </view>
+      </block>
 
       <view class="component-work-actions pe-sheet-actions">
         <button class="pe-sheet-action-cancel" catchtap="handleCloseComponentWorkSheet">取消</button>
@@ -760,7 +780,7 @@
       <view wx:if="{{displayGroupLoading}}" class="component-work-state">处理中...</view>
       <view wx:elif="{{displayGroupErrorText}}" class="component-work-state error">{{displayGroupErrorText}}</view>
 
-      <scroll-view wx:else class="display-group-scroll pe-sheet-scroll" scroll-y type="list">
+      <scroll-view wx:else class="display-group-scroll" scroll-x>
         <view class="display-group-list-content">
           <view
             wx:for="{{displayGroupOptions}}"
@@ -775,17 +795,19 @@
             <view class="display-group-main">
               <view class="display-group-dot" style="background: {{item.active ? '#ffffff' : item.color}};"></view>
               <view class="display-group-name">{{item.name}}</view>
-              <view class="display-group-count">{{item.countText}}</view>
             </view>
-            <view
-              class="display-group-order"
-              data-tag-id="{{item.id}}"
-              catchtap="handleToggleDisplayGroupTag"
-              aria-role="checkbox"
-              aria-checked="{{item.selected}}"
-              aria-label="{{item.selected ? '取消选择' : '选择'}}{{item.name}}作品标签"
-            >
-              <text>{{item.selectionOrder ? item.selectionOrder : ''}}</text>
+            <view class="display-group-badges">
+              <view class="display-group-count">{{item.countText}}</view>
+              <view
+                class="display-group-order"
+                data-tag-id="{{item.id}}"
+                catchtap="handleToggleDisplayGroupTag"
+                aria-role="checkbox"
+                aria-checked="{{item.selected}}"
+                aria-label="{{item.selected ? '取消选择' : '选择'}}{{item.name}}作品标签"
+              >
+                <text>{{item.selectionOrder ? item.selectionOrder : ''}}</text>
+              </view>
             </view>
           </view>
         </view>
@@ -799,7 +821,7 @@
           </view>
         </view>
 
-        <scroll-view wx:if="{{displayGroupWorkOptions.length}}" class="display-group-work-scroll" scroll-y type="list">
+        <scroll-view wx:if="{{displayGroupWorkOptions.length}}" class="display-group-work-scroll" style="height: {{displayGroupWorkScrollHeight}}rpx;" scroll-y type="list">
           <view class="display-group-work-list">
             <view
               wx:for="{{displayGroupWorkOptions}}"

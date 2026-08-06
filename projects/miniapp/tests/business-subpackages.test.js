@@ -30,6 +30,7 @@ const PACKAGE_LOCAL_UTILS = {
     'display-switching.js',
     'portfolio-assets.js',
     'portfolio-contact-form.js',
+    'portfolio-hyperlink.js',
     'portfolio-publish-disclaimer.js',
     'portfolio-render-events.js',
     'portfolio-work-media.js',
@@ -74,6 +75,92 @@ function listFiles(directory, extension) {
   })
 }
 
+function isInside(directory, filePath) {
+  const relativePath = path.relative(directory, filePath)
+  return relativePath === '' || (!relativePath.startsWith('..') && !path.isAbsolute(relativePath))
+}
+
+function resolveJavaScriptRequest(jsPath, requestPath) {
+  const unresolvedPath = path.resolve(path.dirname(jsPath), requestPath)
+  const candidates = [
+    unresolvedPath,
+    `${unresolvedPath}.js`,
+    path.join(unresolvedPath, 'index.js')
+  ]
+  return candidates.find((candidate) => candidate.endsWith('.js') && fs.existsSync(candidate)) || null
+}
+
+function collectComponentJavaScript(configPaths) {
+  const componentJavaScript = new Set()
+  const pendingConfigs = [...configPaths]
+  const visitedConfigs = new Set()
+
+  while (pendingConfigs.length > 0) {
+    const configPath = pendingConfigs.pop()
+    if (visitedConfigs.has(configPath) || !fs.existsSync(configPath)) {
+      continue
+    }
+    visitedConfigs.add(configPath)
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'))
+    for (const componentPath of Object.values(config.usingComponents || {})) {
+      if (typeof componentPath !== 'string' || componentPath.startsWith('plugin://')) {
+        continue
+      }
+      const componentBase = componentPath.startsWith('/')
+        ? path.join(MINIAPP_ROOT, componentPath.slice(1))
+        : path.resolve(path.dirname(configPath), componentPath)
+      const jsPath = `${componentBase}.js`
+      const jsonPath = `${componentBase}.json`
+      if (fs.existsSync(jsPath)) {
+        componentJavaScript.add(jsPath)
+      }
+      if (fs.existsSync(jsonPath)) {
+        pendingConfigs.push(jsonPath)
+      }
+    }
+  }
+  return componentJavaScript
+}
+
+function collectJavaScriptEntries(pageRoutes, includeApp = false) {
+  const entries = new Set(pageRoutes.map((route) => path.join(MINIAPP_ROOT, `${route}.js`)))
+  const configPaths = pageRoutes.map((route) => path.join(MINIAPP_ROOT, `${route}.json`))
+  if (includeApp) {
+    entries.add(path.join(MINIAPP_ROOT, 'app.js'))
+    configPaths.push(path.join(MINIAPP_ROOT, 'app.json'))
+    for (const componentPath of listFiles(path.join(MINIAPP_ROOT, 'components'), '.js')) {
+      entries.add(componentPath)
+    }
+  }
+  for (const componentPath of collectComponentJavaScript(configPaths)) {
+    entries.add(componentPath)
+  }
+  return entries
+}
+
+function collectReachableJavaScript(entries) {
+  const reachable = new Set()
+  const pending = [...entries]
+  while (pending.length > 0) {
+    const jsPath = pending.pop()
+    if (reachable.has(jsPath) || !fs.existsSync(jsPath)) {
+      continue
+    }
+    reachable.add(jsPath)
+    const source = fs.readFileSync(jsPath, 'utf8')
+    const requests = Array.from(source.matchAll(/require\s*\(\s*["']([^"']+)["']\s*\)/g))
+      .map((match) => match[1])
+      .filter((requestPath) => requestPath.startsWith('.'))
+    for (const requestPath of requests) {
+      const resolvedPath = resolveJavaScriptRequest(jsPath, requestPath)
+      if (resolvedPath) {
+        pending.push(resolvedPath)
+      }
+    }
+  }
+  return reachable
+}
+
 test('app registers business pages in named subpackages without duplicate routes', () => {
   const appJson = readJson('app.json')
   const packagesByName = Object.fromEntries(
@@ -85,7 +172,16 @@ test('app registers business pages in named subpackages without duplicate routes
     assert.equal(packagesByName[name].root, root)
     assert.notEqual(packagesByName[name].independent, true)
   }
-  assert.equal(appJson.preloadRule, undefined)
+  assert.deepEqual(appJson.preloadRule, {
+    'pages/index/index': {
+      network: 'all',
+      packages: ['portfolio']
+    },
+    'pages/portfolios/portfolios': {
+      network: 'all',
+      packages: ['teamPortfolio']
+    }
+  })
 
   const routes = getRegisteredPageRoutes(appJson)
   assert.equal(new Set(routes).size, routes.length, 'registered page routes should not repeat')
@@ -119,7 +215,10 @@ test('team portfolio subpackage is appended without changing existing route base
   assert.deepEqual(appJson.subPackages.slice(0, 4).map((pkg) => pkg.name), ['mock', 'works', 'portfolio', 'schedule'])
   assert.deepEqual(appJson.subPackages[4], { name: 'teamPortfolio', root: 'pages/team-portfolios', pages: expectedTeamPages })
   assert.equal(appJson.subPackages[4].independent, undefined)
-  assert.equal(appJson.preloadRule, undefined)
+  assert.deepEqual(appJson.preloadRule['pages/portfolios/portfolios'], {
+    network: 'all',
+    packages: ['teamPortfolio']
+  })
 })
 
 test('unused personal and team component library artifacts stay removed from packages', () => {
@@ -304,6 +403,31 @@ test('JavaScript dependencies respect main and subpackage boundaries', () => {
       }
     }
   }
+})
+
+test('main package JavaScript used by subpackages stays reachable from a main package production entry', () => {
+  const appJson = readJson('app.json')
+  const mainEntries = collectJavaScriptEntries(appJson.pages, true)
+  const subpackageRoutes = appJson.subPackages.flatMap((pkg) => (
+    pkg.pages.map((pageRoute) => `${pkg.root}/${pageRoute}`)
+  ))
+  const subpackageEntries = collectJavaScriptEntries(subpackageRoutes)
+  const mainReachable = collectReachableJavaScript(mainEntries)
+  const subpackageReachable = collectReachableJavaScript(subpackageEntries)
+  const subpackageRoots = appJson.subPackages.map((pkg) => path.join(MINIAPP_ROOT, pkg.root))
+  const subpackageOnlyMainJavaScript = Array.from(subpackageReachable)
+    .filter((filePath) => (
+      !subpackageRoots.some((subpackageRoot) => isInside(subpackageRoot, filePath)) &&
+      !mainReachable.has(filePath)
+    ))
+    .map((filePath) => path.relative(MINIAPP_ROOT, filePath))
+    .sort()
+
+  assert.deepEqual(
+    subpackageOnlyMainJavaScript,
+    [],
+    `move subpackage-only JavaScript under its subpackage root: ${subpackageOnlyMainJavaScript.join(', ')}`
+  )
 })
 
 test('works utility copies stay byte-for-byte aligned across business subpackages', () => {

@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict')
 const test = require('node:test')
 
-const { createClipboardPromptController } = require('../utils/portfolio-hyperlink')
+const { createClipboardPromptController } = require('../pages/portfolios/utils/portfolio-hyperlink')
 
 function createClock() {
   let now = 0

@@ -273,12 +273,79 @@ test('single work restores a saved member only once when sources are rebound', (
 
   harness.setProperties({ members })
   assert.equal(harness.eventsByName('memberchange').length, 1)
+  assert.deepEqual(harness.eventsByName('memberchange')[0].detail, {
+    portfolioId: 9,
+    memberUserId: 1,
+    selectedWorkId: 10
+  })
 
   harness.setProperties({
     members,
     works: [{ workId: 10, title: '作品一', mediaType: 'IMAGE' }]
   })
   assert.equal(harness.eventsByName('memberchange').length, 1)
+})
+
+test('single work keeps a current summary and emits horizontal paging events', () => {
+  const { definition } = loadComponent('single-work')
+  const selectedWork = {
+    workId: 10,
+    title: '当前作品',
+    mediaType: 'IMAGE',
+    coverUrl: 'current.jpg',
+    aspectRatio: '3:2'
+  }
+  const harness = createComponentHarness(definition, {
+    portfolioId: 9,
+    config: { memberUserId: 1, workId: 10, showTitle: true, showDescription: false },
+    selectedWork,
+    singleWorkHasMore: true,
+    editMode: true
+  })
+
+  assert.equal(harness.instance.data.currentSelection.workId, 10)
+  harness.instance.selectWork({
+    currentTarget: {
+      dataset: {
+        item: { workId: 20, title: '新作品', mediaType: 'VIDEO', coverUrl: 'next.jpg' }
+      }
+    }
+  })
+  assert.equal(harness.instance.data.currentSelection.workId, 20)
+  assert.equal(harness.instance.data.currentSelection.title, '新作品')
+  harness.setProperties({ selectedWork: Object.assign({}, selectedWork) })
+  assert.equal(harness.instance.data.currentSelection.workId, 20)
+  assert.equal(harness.instance.data.currentSelection.title, '新作品')
+  harness.setProperties({
+    config: { memberUserId: 1, workId: 20, showTitle: true, showDescription: false }
+  })
+  assert.equal(harness.instance.data.currentSelection.workId, 20)
+  assert.equal(harness.instance.data.currentSelection.title, '新作品')
+  harness.setProperties({ selectedWork: Object.assign({}, selectedWork) })
+  assert.equal(harness.instance.data.currentSelection.workId, 20)
+  assert.equal(harness.instance.data.currentSelection.title, '新作品')
+
+  harness.instance.handleWorksScrollToLower()
+  assert.deepEqual(harness.eventsByName('loadmore')[0].detail, { memberUserId: 1 })
+  harness.instance.retryLoadMore()
+  assert.deepEqual(harness.eventsByName('retryloadmore')[0].detail, { memberUserId: 1 })
+
+  harness.setProperties({ singleWorkLoadingMore: true })
+  harness.instance.handleWorksScrollToLower()
+  harness.setProperties({ singleWorkLoadingMore: false, singleWorkHasMore: false })
+  harness.instance.handleWorksScrollToLower()
+  assert.equal(harness.eventsByName('loadmore').length, 1)
+
+  const wxml = fs.readFileSync(path.join(ROOT, 'single-work/single-work.wxml'), 'utf8')
+  const wxss = fs.readFileSync(path.join(ROOT, 'single-work/single-work.wxss'), 'utf8')
+  const editor = wxml.slice(wxml.indexOf('<block wx:if="{{editMode}}">'), wxml.indexOf('<block wx:else>'))
+  assert.match(editor, /class="editor-current-work/)
+  assert.match(editor, /class="editor-work-scroll"[^>]*scroll-x[^>]*bindscrolltolower="handleWorksScrollToLower"/)
+  assert.match(editor, /class="editor-option-radio-dot"/)
+  assert.match(editor, /class="editor-work-tail"/)
+  assert.doesNotMatch(editor, /✓/)
+  assert.match(wxss, /\.editor-option-row\s*\{[^}]*display:\s*flex;[^}]*padding-right:\s*48rpx;/s)
+  assert.match(wxss, /\.editor-option-radio\s*\{[^}]*position:\s*absolute;[^}]*top:\s*12rpx;[^}]*right:\s*12rpx;/s)
 })
 
 test('single work keeps the complete video and cover inside a black player', () => {
@@ -421,6 +488,48 @@ test('carousel loads members before approved image works and preserves selection
   assert.deepEqual(exports.buildCarouselConfig([{ memberUserId: 2, workId: 9, title: '仅展示' }]), { items: [{ memberUserId: 2, workId: 9 }] })
 })
 
+test('carousel renders loading feedback inside the fixed image work field', () => {
+  const { definition } = loadComponent('carousel')
+  const wxml = fs.readFileSync(path.join(ROOT, 'carousel/carousel.wxml'), 'utf8')
+
+  assert.equal(definition.properties.loading.type, Boolean)
+  assert.equal(definition.properties.loading.value, false)
+  assert.match(wxml, /class="editor-work-stage" style="height: \{\{workListHeightRpx\}\}rpx;"/)
+  assert.match(wxml, /<view wx:if="\{\{loading\}\}" class="editor-empty">\{\{selectedMemberId \? '正在加载作品\.\.\.' : '正在加载团队成员\.\.\.'\}\}<\/view>/)
+  assert.match(wxml, /<scroll-view wx:elif="\{\{selectedMemberId && works\.length\}\}" class="editor-work-scroll" scroll-y type="list">/)
+})
+
+test('carousel work list derives a bounded animated height from visible work count', () => {
+  const { exports } = loadComponent('carousel')
+  const wxss = fs.readFileSync(path.join(ROOT, 'carousel/carousel.wxss'), 'utf8')
+
+  assert.equal(exports.buildCarouselWorkListHeight([], false), 150)
+  assert.equal(exports.buildCarouselWorkListHeight([{}], false), 150)
+  assert.equal(exports.buildCarouselWorkListHeight([{}, {}], false), 238)
+  assert.equal(exports.buildCarouselWorkListHeight(Array.from({ length: 5 }, () => ({})), false), 616)
+  assert.equal(exports.buildCarouselWorkListHeight(Array.from({ length: 9 }, () => ({})), false), 616)
+  assert.equal(exports.buildCarouselWorkListHeight(Array.from({ length: 9 }, () => ({})), true), 150)
+
+  assert.match(wxss, /\.editor-work-stage\s*\{[^}]*min-height:\s*150rpx;[^}]*max-height:\s*616rpx;[^}]*transition:\s*height 220ms ease-out;/s)
+  assert.match(wxss, /\.editor-work-scroll\s*\{[^}]*height:\s*100%;/s)
+})
+
+test('carousel reports its bounded editor height when loading and work count change', () => {
+  const { definition } = loadComponent('carousel')
+  const carousel = createComponentHarness(definition, { editMode: true, works: [{}, {}], loading: false })
+
+  assert.equal(carousel.instance.data.workListHeightRpx, 238)
+  assert.equal(carousel.eventsByName('layoutchange').at(-1).detail.scrollHeightRpx, 548)
+
+  carousel.setProperties({ loading: true })
+  assert.equal(carousel.instance.data.workListHeightRpx, 150)
+  assert.equal(carousel.eventsByName('layoutchange').at(-1).detail.scrollHeightRpx, 460)
+
+  carousel.setProperties({ loading: false, works: Array.from({ length: 9 }, () => ({})) })
+  assert.equal(carousel.instance.data.workListHeightRpx, 616)
+  assert.equal(carousel.eventsByName('layoutchange').at(-1).detail.scrollHeightRpx, 926)
+})
+
 test('carousel uses the personal-style progress indicator and only rotates multiple items', () => {
   const { definition } = loadComponent('carousel')
   const first = { memberUserId: 2, workId: 9, mediaUrl: 'first.jpg', coverUrl: 'first-cover.jpg' }
@@ -529,6 +638,42 @@ test('member-first editors give Skyline horizontal lists an explicit viewport he
     assert.ok(memberRowRule, `${name} defines the member content row`)
     assert.match(memberRowRule[1], /height:\s*56rpx;/, `${name} keeps the member row measurable`)
   }
+})
+
+test('member portfolio editors select full-list results through horizontal card scrollers', () => {
+  for (const name of ['member-portfolio-grid', 'member-portfolio-list']) {
+    const wxml = fs.readFileSync(path.join(ROOT, name, `${name}.wxml`), 'utf8')
+    const wxss = fs.readFileSync(path.join(ROOT, name, `${name}.wxss`), 'utf8')
+
+    assert.match(wxml, /<scroll-view[^>]*class="editor-portfolio-scroll"[^>]*scroll-x[^>]*type="list"/)
+    assert.match(wxml, /class="editor-option-row"/)
+    assert.doesNotMatch(wxml, /editor-portfolio-scroll[^>]*bindscrolltolower/)
+    assert.match(wxss, /\.editor-portfolio-scroll\s*\{[^}]*width:\s*100%;[^}]*white-space:\s*nowrap;/s)
+    assert.match(wxss, /\.editor-option-row\s*\{[^}]*width:\s*max-content;[^}]*display:\s*flex;[^}]*flex-wrap:\s*nowrap;[^}]*padding-right:\s*48rpx;/s)
+    assert.match(wxss, /\.editor-option\s*\{[^}]*flex:\s*0 0 [0-9]+rpx;/s)
+  }
+})
+
+test('member portfolio editors share one compact grid-style picker', () => {
+  const gridWxml = fs.readFileSync(path.join(ROOT, 'member-portfolio-grid/member-portfolio-grid.wxml'), 'utf8')
+  const listWxml = fs.readFileSync(path.join(ROOT, 'member-portfolio-list/member-portfolio-list.wxml'), 'utf8')
+  const gridWxss = fs.readFileSync(path.join(ROOT, 'member-portfolio-grid/member-portfolio-grid.wxss'), 'utf8')
+  const listWxss = fs.readFileSync(path.join(ROOT, 'member-portfolio-list/member-portfolio-list.wxss'), 'utf8')
+  const editorMarkup = (source) => source.slice(
+    source.indexOf('<block wx:if="{{editMode}}">'),
+    source.indexOf('<view wx:else class="portfolio-display">')
+  )
+  const editorStyles = (source) => source.slice(
+    source.indexOf('.editor-form'),
+    source.indexOf('.portfolio-display')
+  )
+
+  assert.equal(editorMarkup(listWxml), editorMarkup(gridWxml))
+  assert.equal(editorStyles(listWxss), editorStyles(gridWxss))
+  assert.match(editorMarkup(gridWxml), /<view wx:for="\{\{portfolios\}\}"[^>]*catchtap="togglePortfolio"[^>]*aria-role="checkbox"/)
+  assert.doesNotMatch(editorMarkup(gridWxml), /<button[^>]*class="editor-option/)
+  assert.match(editorStyles(gridWxss), /\.editor-option-row\s*\{[^}]*justify-content:\s*flex-start;[^}]*gap:\s*8rpx;/s)
+  assert.match(editorStyles(gridWxss), /\.editor-option\s*\{[^}]*width:\s*248rpx;[^}]*flex:\s*0 0 248rpx;/s)
 })
 
 test('member-first editors size view capsules from each nickname', () => {

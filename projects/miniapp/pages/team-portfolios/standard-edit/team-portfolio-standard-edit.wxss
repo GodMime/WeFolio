@@ -41,6 +41,12 @@
   align-items: center;
 }
 
+.component-copy.with-summary {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+}
+
 .status-pill {
   flex: none;
   gap: 8rpx;
@@ -518,6 +524,33 @@
   min-height: 320rpx;
   max-height: 58vh;
   flex: 1 1 auto;
+}
+
+/* 单列、双列作品集的编辑内容已改为单行横向选择，使用更短的弹层。 */
+.member-portfolio-editor-compact {
+  height: auto;
+  max-height: 76vh;
+}
+
+.member-portfolio-editor-compact .component-editor-scroll {
+  height: 680rpx;
+  min-height: 0;
+  max-height: 58vh;
+  flex: 0 1 auto;
+}
+
+/* 轮播图的列表与弹层按作品数同步伸缩，超出上限后仅滚动作品列表。 */
+.carousel-editor-content-sized {
+  min-height: 710rpx;
+  max-height: calc(100vh - 176rpx - env(safe-area-inset-top));
+  transition: transform 220ms ease-out, height 220ms ease-out;
+}
+
+.carousel-editor-content-sized .component-editor-scroll {
+  min-height: 460rpx;
+  max-height: 58vh;
+  flex: 0 1 auto;
+  transition: height 220ms ease-out;
 }
 
 .component-editor-content {
