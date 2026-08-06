@@ -102,6 +102,7 @@
 .theme-dark .schedule-calendar-day.selected .schedule-query-day-stack {
   color: #212529;
   background: #ffffff;
+  box-shadow: 0 0 0 20rpx #ffffff;
 }
 
 .theme-dark .contact-form-entry-button {
@@ -186,4 +187,5 @@
 .theme-dark .schedule-query-modal-panel .schedule-calendar-day.selected .schedule-query-day-stack {
   color: #ffffff;
   background: #212529;
+  box-shadow: 0 0 0 20rpx #212529;
 }

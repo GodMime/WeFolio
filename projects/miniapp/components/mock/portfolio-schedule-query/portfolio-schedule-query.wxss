@@ -288,9 +288,12 @@
 }
 
 .schedule-query-day-stack {
+  width: 54rpx;
+  height: 54rpx;
   max-width: 100%;
   min-width: 0;
   display: flex;
+  flex: none;
   align-items: center;
   justify-content: center;
   flex-direction: column;
@@ -298,11 +301,10 @@
 }
 
 .schedule-calendar-day.selected .schedule-query-day-stack {
-  width: 72rpx;
-  height: 72rpx;
   color: #ffffff;
   border-radius: 50%;
   background: #212529;
+  box-shadow: 0 0 0 9rpx #212529;
 }
 
 .schedule-query-day-meta {
@@ -588,6 +590,7 @@
 .schedule-query.portfolio-theme-dark .schedule-query-inline-shell .schedule-calendar-day.selected .schedule-query-day-stack {
   color: #212529;
   background: var(--portfolio-text-primary);
+  box-shadow: 0 0 0 9rpx var(--portfolio-text-primary);
 }
 
 .schedule-query.portfolio-theme-dark .schedule-query-inline-shell .schedule-calendar-day.selected .schedule-query-day-meta {

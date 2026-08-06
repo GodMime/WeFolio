@@ -489,7 +489,7 @@
   border-radius: 28rpx;
   background: #ffffff;
   text-align: center;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .calendar-day.muted {
@@ -502,8 +502,11 @@
 }
 
 .date-stack {
+  width: 54rpx;
+  height: 54rpx;
   min-width: 0;
   display: flex;
+  flex: none;
   flex-direction: column;
   align-items: center;
   justify-content: center;
@@ -511,12 +514,10 @@
 }
 
 .calendar-day.selected .date-stack {
-  width: 72rpx;
-  height: 72rpx;
   color: #ffffff;
   border-radius: 50%;
   background: #212529;
-  box-shadow: none;
+  box-shadow: 0 0 0 9rpx #212529;
 }
 
 .day-number {

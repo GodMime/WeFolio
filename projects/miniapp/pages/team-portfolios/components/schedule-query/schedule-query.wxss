@@ -47,12 +47,12 @@
 .schedule-query-weekdays { display: flex; align-items: center; margin: 20rpx -4rpx 0; color: #adb5bd; font-size: 22rpx; font-weight: 600; line-height: 1.4; }
 .schedule-query-weekdays > view { width: calc(14.285714% - 8rpx); min-width: 0; min-height: 40rpx; display: flex; align-items: center; justify-content: center; flex: 0 0 calc(14.285714% - 8rpx); margin: 0 4rpx; text-align: center; box-sizing: border-box; }
 .schedule-query-days { display: flex; flex-wrap: wrap; margin: 12rpx -4rpx 0; }
-.schedule-calendar-day { width: calc(14.285714% - 8rpx); min-width: 0; min-height: 88rpx; display: flex; align-items: center; justify-content: space-between; flex: 0 0 calc(14.285714% - 8rpx); flex-direction: column; margin: 4rpx; padding: 8rpx 4rpx; color: #212529; border: 0; border-radius: 28rpx; background: transparent; box-sizing: border-box; }
+.schedule-calendar-day { width: calc(14.285714% - 8rpx); min-width: 0; min-height: 88rpx; display: flex; align-items: center; justify-content: center; flex: 0 0 calc(14.285714% - 8rpx); flex-direction: column; margin: 4rpx; padding: 8rpx 4rpx; color: #212529; border: 0; border-radius: 28rpx; background: transparent; box-sizing: border-box; }
 .schedule-calendar-day.muted { color: #ced4da; background: transparent; }
 .schedule-calendar-day.disabled { color: #dee2e6; background: transparent; opacity: .58; }
 .schedule-calendar-day.selected { color: #212529; background: transparent; box-shadow: none; }
-.schedule-query-day-stack { min-width: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; }
-.schedule-calendar-day.selected .schedule-query-day-stack { width: 72rpx; height: 72rpx; color: #fff; border-radius: 50%; background: #212529; }
+.schedule-query-day-stack { width: 32rpx; height: 32rpx; min-width: 0; display: flex; align-items: center; justify-content: center; flex: none; flex-direction: column; }
+.schedule-calendar-day.selected .schedule-query-day-stack { color: #fff; border-radius: 50%; background: #212529; box-shadow: 0 0 0 20rpx #212529; }
 .schedule-query-day-number { font-size: 30rpx; font-weight: 600; line-height: 1; }
 .schedule-query-selected-date { min-height: 40rpx; margin-top: 16rpx; color: #59636f; font-size: 24rpx; line-height: 40rpx; text-align: center; }
 .schedule-query-submit { width: 260rpx; height: 72rpx; margin: 24rpx auto 0; padding: 0; color: #fff; font-size: 26rpx; line-height: 72rpx; border-radius: 999rpx; background: #212529; }

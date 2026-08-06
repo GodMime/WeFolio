@@ -12,6 +12,12 @@ function read(relativePath) {
   return fs.readFileSync(path.join(TEAM_ROOT, relativePath), 'utf8')
 }
 
+function readRule(content, selector) {
+  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const match = content.match(new RegExp(`${escapedSelector}\\s*\\{([^}]*)\\}`))
+  return match ? match[1] : ''
+}
+
 function clone(value) {
   return JSON.parse(JSON.stringify(value))
 }
@@ -71,6 +77,9 @@ test('team schedule query uses the personal portfolio entry and bottom sheet int
 test('team schedule query renders the personal-style month calendar grid', () => {
   const wxml = read('components/schedule-query/schedule-query.wxml')
   const wxss = read('components/schedule-query/schedule-query.wxss')
+  const calendarDayRule = readRule(wxss, '.schedule-calendar-day')
+  const dayStackRule = readRule(wxss, '.schedule-query-day-stack')
+  const selectedDayStackRule = readRule(wxss, '.schedule-calendar-day.selected .schedule-query-day-stack')
 
   assert.match(wxml, /class="schedule-query-month-bar"/)
   assert.match(wxml, /catchtap="handlePrevMonth"/)
@@ -87,11 +96,23 @@ test('team schedule query renders the personal-style month calendar grid', () =>
 
   assert.match(wxss, /\.schedule-query-weekdays\s*\{/)
   assert.match(wxss, /\.schedule-query-days\s*\{/)
-  assert.match(wxss, /\.schedule-calendar-day\s*\{[^}]*width:\s*calc\(14\.285714% - 8rpx\);[^}]*min-height:\s*88rpx;[^}]*padding:\s*8rpx 4rpx;[^}]*border:\s*0;[^}]*background:\s*transparent;/s)
+  assert.match(calendarDayRule, /width:\s*calc\(14\.285714% - 8rpx\)/)
+  assert.match(calendarDayRule, /min-height:\s*88rpx/)
+  assert.match(calendarDayRule, /justify-content:\s*center/)
+  assert.match(calendarDayRule, /padding:\s*8rpx 4rpx/)
+  assert.match(calendarDayRule, /border:\s*0/)
+  assert.match(calendarDayRule, /background:\s*transparent/)
   assert.match(wxss, /\.schedule-calendar-day\.muted\s*\{/)
   assert.match(wxss, /\.schedule-calendar-day\.disabled\s*\{/)
   assert.match(wxss, /\.schedule-calendar-day\.selected\s*\{[^}]*background:\s*transparent;/s)
-  assert.match(wxss, /\.schedule-calendar-day\.selected \.schedule-query-day-stack\s*\{[^}]*width:\s*72rpx;[^}]*height:\s*72rpx;[^}]*border-radius:\s*50%;[^}]*background:\s*#212529;/s)
+  assert.match(dayStackRule, /width:\s*32rpx/)
+  assert.match(dayStackRule, /height:\s*32rpx/)
+  assert.match(dayStackRule, /flex:\s*none/)
+  assert.doesNotMatch(selectedDayStackRule, /\bwidth\s*:/)
+  assert.doesNotMatch(selectedDayStackRule, /\bheight\s*:/)
+  assert.match(selectedDayStackRule, /border-radius:\s*50%/)
+  assert.match(selectedDayStackRule, /background:\s*#212529/)
+  assert.match(selectedDayStackRule, /box-shadow:\s*0\s+0\s+0\s+20rpx\s+#212529/)
   assert.match(wxss, /\.schedule-query-day-number\s*\{[^}]*font-size:\s*30rpx;[^}]*font-weight:\s*600;/s)
 })
 
