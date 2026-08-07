@@ -162,7 +162,11 @@
                 <view class="component-title pe-component-title">{{item.displayName}}</view>
                 <view wx:if="{{item.showSummary}}" class="component-summary pe-component-description">{{item.summaryText}}</view>
               </view>
-              <view class="component-drag-handle"></view>
+              <view class="component-drag-handle">
+                <view class="component-drag-line"></view>
+                <view class="component-drag-line"></view>
+                <view class="component-drag-line"></view>
+              </view>
               <view class="component-row-arrow"><view class="component-row-arrow-icon"></view></view>
             </view>
           </view>

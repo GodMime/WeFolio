@@ -262,14 +262,21 @@
 .component-drag-handle {
   width: 42rpx;
   height: 48rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   flex: none;
   align-self: center;
   justify-content: center;
+  gap: 8rpx;
   border-radius: 12rpx;
-  background: linear-gradient(to bottom, transparent 0, transparent 10rpx, #6f7f90 10rpx, #6f7f90 14rpx, transparent 14rpx, transparent 22rpx, #6f7f90 22rpx, #6f7f90 26rpx, transparent 26rpx, transparent 34rpx, #6f7f90 34rpx, #6f7f90 38rpx, transparent 38rpx, transparent 48rpx);
-  background-position: center center;
-  background-size: 22rpx 48rpx;
-  background-repeat: no-repeat;
+}
+
+.component-drag-line {
+  width: 22rpx;
+  height: 4rpx;
+  flex: none;
+  background: #6f7f90;
 }
 
 .component-row-arrow {

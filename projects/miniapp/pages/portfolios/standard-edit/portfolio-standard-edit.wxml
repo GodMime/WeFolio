@@ -162,7 +162,11 @@
                 <view wx:if="{{item.componentType === 'SINGLE_WORK'}}" class="component-summary pe-component-description">{{componentRows.resolveSingleWorkSummary(item, singleWorkSummaries)}}</view>
                 <view wx:elif="{{item.componentType === 'HYPERLINK'}}" class="component-summary pe-component-description">{{componentRows.resolveHyperlinkSummary(item, singleWorkSummaries)}}</view>
               </view>
-              <view class="component-drag-handle"></view>
+              <view class="component-drag-handle">
+                <view class="component-drag-line"></view>
+                <view class="component-drag-line"></view>
+                <view class="component-drag-line"></view>
+              </view>
               <view class="component-row-arrow {{componentRows.isEditable(item.componentType) ? '' : 'placeholder'}}">
                 <view wx:if="{{componentRows.isEditable(item.componentType)}}" class="component-row-arrow-icon"></view>
               </view>

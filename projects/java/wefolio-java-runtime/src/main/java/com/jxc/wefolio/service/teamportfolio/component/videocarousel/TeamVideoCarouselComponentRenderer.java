@@ -55,6 +55,7 @@ public class TeamVideoCarouselComponentRenderer {
     private static final String CONFIG_KEY_WORK_ID = "workId";
     private static final String CONFIG_KEY_SHOW_TITLE = "showTitle";
     private static final String CONFIG_KEY_SHOW_SWIPE_HINT = "showSwipeHint";
+    private static final String RENDER_KEY_WORKS = "works";
     private static final String RENDER_KEY_MEMBER_DISPLAY_NAME = "memberDisplayName";
     private static final String RENDER_KEY_MEMBER_AVATAR_URL = "memberAvatarUrl";
     private static final String RENDER_KEY_MEDIA_TYPE = "mediaType";
@@ -115,6 +116,7 @@ public class TeamVideoCarouselComponentRenderer {
         JSONObject rendered = new JSONObject();
         rendered.put(CONFIG_KEY_TITLE, config.getTitle());
         rendered.put(CONFIG_KEY_ITEMS, renderedItems);
+        rendered.put(RENDER_KEY_WORKS, renderedItems);
         rendered.put(CONFIG_KEY_SHOW_TITLE, config.isShowTitle());
         rendered.put(CONFIG_KEY_SHOW_SWIPE_HINT, config.isShowSwipeHint());
         return rendered;

@@ -248,7 +248,8 @@ class TeamVideoCarouselComponentTest {
         assertThat(rendered.getString("title")).isEqualTo("视频作品");
         assertThat(rendered.getBooleanValue("showTitle")).isTrue();
         assertThat(rendered.getBooleanValue("showSwipeHint")).isTrue();
-        assertThat(rendered.getJSONArray("items")).singleElement().satisfies(value -> {
+        assertThat(rendered.getJSONArray("items")).isEqualTo(rendered.getJSONArray("works"));
+        assertThat(rendered.getJSONArray("works")).singleElement().satisfies(value -> {
             JSONObject item = (JSONObject) value;
             assertThat(item).containsEntry("memberUserId", 1L)
                     .containsEntry("memberDisplayName", "成员1")
@@ -283,7 +284,7 @@ class TeamVideoCarouselComponentTest {
         JSONObject rendered = renderer().render(
                 config("", item(1L, 101L), item(2L, 102L), item(3L, 103L)), context());
 
-        JSONObject first = rendered.getJSONArray("items").getJSONObject(0);
+        JSONObject first = rendered.getJSONArray("works").getJSONObject(0);
         assertThat(first).containsEntry("memberDisplayName", "")
                 .containsEntry("memberAvatarUrl", "");
     }

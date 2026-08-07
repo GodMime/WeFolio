@@ -714,13 +714,15 @@ test('standard team portfolio picker shows disabled team profile as an auto-widt
 
 test('standard team editor uses the personal editor core visual measurements', () => {
   const teamCss = read('standard-edit/team-portfolio-standard-edit.wxss')
+  const teamWxml = read('standard-edit/team-portfolio-standard-edit.wxml')
   const personalCss = fs.readFileSync(path.resolve(ROOT, '../portfolios/standard-edit/portfolio-standard-edit.wxss'), 'utf8')
+  const componentDragHandleMarkup = /<view class="component-drag-handle">\s*(?:<view class="component-drag-line"><\/view>\s*){3}<\/view>/
   const sharedSelectors = [
     '.edit-content', '.panel', '.section-title', '.section-desc', '.status-pill',
     '.field-label', '.field-limit', '.input', '.cover-preview', '.cover-empty',
     '.link-button', '.component-list', '.component-swipe-row', '.component-row',
     '.component-remove-pane', '.component-remove-button', '.component-order',
-    '.component-drag-handle', '.component-title', '.component-row-arrow',
+    '.component-drag-handle', '.component-drag-line', '.component-title', '.component-row-arrow',
     '.component-row-arrow-icon', '.component-picker-mask', '.component-picker-panel',
     '.component-picker-grabber', '.component-picker-title', '.component-picker-count',
     '.component-option-scroll', '.component-option', '.component-option-name',
@@ -731,6 +733,9 @@ test('standard team editor uses the personal editor core visual measurements', (
   for (const selector of sharedSelectors) {
     assert.equal(readCssRule(teamCss, selector), readCssRule(personalCss, selector), selector)
   }
+  assert.match(teamWxml, componentDragHandleMarkup)
+  assert.match(readCssRule(teamCss, '.component-drag-line'), /width:22rpx/)
+  assert.match(readCssRule(teamCss, '.component-drag-line'), /height:4rpx/)
   assert.doesNotMatch(teamCss, /\binset\s*:/)
 })
 
