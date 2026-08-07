@@ -1,7 +1,6 @@
 package com.jxc.wefolio.controller;
 
 import com.jxc.wefolio.annotation.SystemAccess;
-import com.jxc.wefolio.service.payment.WechatPayClient;
 import com.jxc.wefolio.service.payment.WechatPayNotificationException;
 import com.jxc.wefolio.service.payment.WechatPaySignatureException;
 import com.jxc.wefolio.service.payment.WechatRechargeNotificationService;
@@ -51,10 +50,8 @@ public class WechatPayNotificationController {
             @RequestHeader(value = "Wechatpay-Signature-Type", required = false) String signType,
             @RequestBody String body
     ) {
-        WechatPayClient.NotificationRequest request = new WechatPayClient.NotificationRequest(
-                serialNumber, signature, timestamp, nonce, signType, body);
         try {
-            notificationService.handle(request);
+            notificationService.handle(serialNumber, signature, timestamp, nonce, signType, body);
             return ResponseEntity.ok().build();
         } catch (WechatPaySignatureException exception) {
             log.warn("微信支付通知验签失败: serialNumber={}", serialNumber);

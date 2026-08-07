@@ -24,8 +24,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 
-import java.time.LocalDate;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -65,8 +63,8 @@ class VisitorPortfolioControllerTest {
                 .thenReturn(uploadTicketResponse);
         when(visitorPortfolioService.querySchedule(
                 "PF001",
-                LocalDate.of(2026, 7, 18),
-                LocalDate.of(2026, 7, 18),
+                "2026-07-18",
+                "2026-07-18",
                 "ALL",
                 "visitor-a",
                 "schedule-1")).thenReturn(scheduleResponse);

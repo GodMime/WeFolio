@@ -119,6 +119,19 @@ public class MiniappAuthController {
     }
 
     /**
+     * 主动退出当前维护者登录，吊销本次携带的单个令牌。
+     *
+     * @param authorization Authorization 请求头
+     * @return 空成功响应
+     */
+    @MaintainerAccess
+    @PostMapping("/logout")
+    public Response<Void> logout(@RequestHeader("Authorization") String authorization) {
+        authTokenService.revokeAuthorization(authorization);
+        return Response.success();
+    }
+
+    /**
      * 上传微信头像昵称填写能力返回的头像临时文件，
      * 存入当前用户的 others 目录（{@code {uniqueCode}/others/}）。
      *

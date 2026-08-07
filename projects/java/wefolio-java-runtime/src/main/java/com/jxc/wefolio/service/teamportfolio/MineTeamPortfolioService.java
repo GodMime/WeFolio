@@ -242,6 +242,9 @@ public class MineTeamPortfolioService {
     /** 标准作品集发布事务服务。 */
     private final PortfolioPublishTransactionService portfolioPublishTransactionService;
 
+    /** 团队引用写入与个人作品集删除共用的 JVM 互斥边界。 */
+    private final PortfolioReferenceMutex portfolioReferenceMutex;
+
     /**
      * 查询当前用户所有有效已加入团队中的标准团队作品集。
      *
@@ -328,6 +331,15 @@ public class MineTeamPortfolioService {
             TeamPortfolioCreateRequest request,
             long userId
     ) {
+        return portfolioReferenceMutex.execute(() -> createStandardLocked(teamId, request, userId));
+    }
+
+    /** 在作品集引用互斥区间内创建标准团队作品集。 */
+    private TeamPortfolioDetailResponse createStandardLocked(
+            long teamId,
+            TeamPortfolioCreateRequest request,
+            long userId
+    ) {
         accessService.requireTeamRole(teamId, userId, MAINTAINABLE_ROLES);
         contentLimitService.ensureTeamPortfolioCapacity(teamId);
         TeamPortfolioConfigDto initialConfig = request == null || request.getConfig() == null
@@ -396,6 +408,15 @@ public class MineTeamPortfolioService {
             TeamPortfolioDraftSaveRequest request,
             long userId
     ) {
+        return portfolioReferenceMutex.execute(() -> saveDraftLocked(portfolioId, request, userId));
+    }
+
+    /** 在作品集引用互斥区间内保存团队作品集草稿。 */
+    private TeamPortfolioDetailResponse saveDraftLocked(
+            long portfolioId,
+            TeamPortfolioDraftSaveRequest request,
+            long userId
+    ) {
         TeamPortfolioAccessService.TeamPortfolioAccess access =
                 accessService.requireMaintainablePortfolio(portfolioId, userId);
         PortfolioEntity portfolio = access.portfolio();
@@ -458,6 +479,15 @@ public class MineTeamPortfolioService {
      * 发布团队作品集并重建正式引用。
      */
     public TeamPortfolioDetailResponse publish(
+            long portfolioId,
+            TeamPortfolioPublishRequest request,
+            long userId
+    ) {
+        return portfolioReferenceMutex.execute(() -> publishLocked(portfolioId, request, userId));
+    }
+
+    /** 在作品集引用互斥区间内完成发布预检和发布事务。 */
+    private TeamPortfolioDetailResponse publishLocked(
             long portfolioId,
             TeamPortfolioPublishRequest request,
             long userId

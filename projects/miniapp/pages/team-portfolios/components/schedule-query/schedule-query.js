@@ -1,8 +1,11 @@
+const { buildScheduleDayMetaText } = require('../../utils/schedule-calendar')
+
 const DISPLAY_MODES = Object.freeze(['MODAL_CALENDAR', 'INLINE_CALENDAR'])
 const QUERY_RANGE_TYPES = Object.freeze(['UNLIMITED', 'FUTURE_DAYS', 'DATE_RANGE'])
 const MEMBER_STATE_AVAILABLE = 'AVAILABLE'
 const MEMBER_STATE_PARTIAL = 'PARTIAL_AVAILABLE'
 const MEMBER_STATE_FULL = 'FULL'
+const MEMBER_STATE_UNAVAILABLE = 'UNAVAILABLE'
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const MONTH_PATTERN = /^(\d{4})-(\d{2})$/
 const CALENDAR_DAY_COUNT = 42
@@ -116,6 +119,8 @@ function buildCalendarDays(yearMonth, bounds = {}) {
       dayNumber: dateValue.getDate(),
       currentMonth,
       disabled,
+      metaText: buildScheduleDayMetaText(date),
+      colors: [],
       dayClass: classes.join(' ')
     }
   })
@@ -168,6 +173,7 @@ function mapMemberScheduleState(member = {}) {
   }
   const total = Math.max(0, Number(member.totalSlotCount) || 0)
   const available = Math.max(0, Number(member.availableSlotCount) || 0)
+  if (total === 0) return { code: MEMBER_STATE_UNAVAILABLE, text: '暂未开放档期', tone: 'unavailable' }
   if (member.status === MEMBER_STATE_AVAILABLE || (total > 0 && available >= total)) return { code: MEMBER_STATE_AVAILABLE, text: '空闲', tone: 'available' }
   if (member.status === MEMBER_STATE_PARTIAL || (available > 0 && available < total)) return { code: MEMBER_STATE_PARTIAL, text: '部分档期空闲', tone: 'partial' }
   return { code: MEMBER_STATE_FULL, text: '已满', tone: 'full' }

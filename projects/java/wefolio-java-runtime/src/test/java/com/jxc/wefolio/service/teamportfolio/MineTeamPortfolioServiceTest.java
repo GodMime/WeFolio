@@ -1095,7 +1095,7 @@ class MineTeamPortfolioServiceTest {
                 referenceMapper, shareMapper, teamMapper, memberMapper, access, validator, renderService,
                 referenceService, assetService, scheduleService,
                 visitRecordMapper, scheduleRecordMapper, contactService, contentLimitService,
-                pointService, publishTransactionService);
+                pointService, publishTransactionService, new LocalPortfolioReferenceMutex());
         return new TestContext(service, portfolioMapper, historyMapper, referenceMapper, shareMapper, teamMapper,
                 memberMapper, access, validator, renderService, referenceService, assetService, scheduleService,
                 visitRecordMapper, scheduleRecordMapper, contactService, contentLimitService,

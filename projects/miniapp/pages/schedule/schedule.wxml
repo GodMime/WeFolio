@@ -305,7 +305,7 @@
 
       <view class="button-row">
         <button class="secondary-button" bindtap="handleSlotCancel">取消</button>
-        <button class="primary-button" loading="{{saving}}" bindtap="handleSaveSlot">保存定义</button>
+        <button class="primary-button" loading="{{saving}}" disabled="{{saving}}" bindtap="handleSaveSlot">保存定义</button>
       </view>
     </view>
   </view>
@@ -379,7 +379,7 @@
 
       <view class="button-row">
         <button class="secondary-button" bindtap="handleScheduleCancel">取消</button>
-        <button class="primary-button" loading="{{saving}}" bindtap="handleSaveSchedule">保存档期</button>
+        <button class="primary-button" loading="{{saving}}" disabled="{{saving}}" bindtap="handleSaveSchedule">保存档期</button>
       </view>
     </view>
   </view>

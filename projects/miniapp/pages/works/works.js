@@ -574,6 +574,9 @@ Page({
         batchSelectAllText: buildBatchSelectAllText(normalized.works, this.data.selectedWorkIds)
       })
     } catch (error) {
+      if (requestSeq !== this.requestSeq) {
+        return
+      }
       if (error && error.authRequired) {
         this.setData({
           loading: false,

@@ -28,6 +28,26 @@ public class WechatRechargeNotificationService {
      * @deprecated 普通支付通知不再参与充值入账
      */
     @Deprecated(forRemoval = true)
+    public RechargeSettlementResult handle(
+            String serialNumber,
+            String signature,
+            String timestamp,
+            String nonce,
+            String signType,
+            String body
+    ) {
+        return handle(new WechatPayClient.NotificationRequest(
+                serialNumber, signature, timestamp, nonce, signType, body));
+    }
+
+    /**
+     * 处理已组装的微信支付通知请求。
+     *
+     * @param request 微信支付客户端通知请求
+     * @return 充值结算结果
+     * @deprecated 普通支付通知不再参与充值入账
+     */
+    @Deprecated(forRemoval = true)
     public RechargeSettlementResult handle(WechatPayClient.NotificationRequest request) {
         WechatPayClient.Transaction transaction = wechatPayClient.parseNotification(request);
         if (transaction.tradeState() != WechatPayClient.TradeState.SUCCESS) {

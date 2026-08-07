@@ -175,7 +175,7 @@ Page({
       if (!paymentCompleted && !options.sessionRetried && isVirtualPaymentSessionInvalid(error)) {
         await refreshWechatSessionNow()
         this.setData({ paying: false, syncing: false })
-        return this.handlePay({ sessionRetried: true })
+        return await this.handlePay({ sessionRetried: true })
       }
       wx.showToast({
         title: error && error.message ? error.message : '支付调起失败，请稍后重试',

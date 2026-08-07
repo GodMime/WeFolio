@@ -212,6 +212,126 @@ test('points page ignores stale load-more response after reloading first page', 
   assert.equal(page.data.loadingMore, false)
 })
 
+test('works page ignores stale load-more failure after refreshed list succeeds', async () => {
+  const requests = []
+  const fakeRequest = (options) => {
+    const pending = deferred()
+    requests.push(Object.assign({ pending }, options))
+    return pending.promise
+  }
+  const page = loadPage('pages/works/works.js', fakeRequest)
+  page.data.loading = false
+  page.data.list.page = 1
+  page.data.list.pageSize = 20
+  page.data.list.hasMore = true
+
+  const staleLoadMore = page.loadWorks(false)
+  const refresh = page.loadWorks(true)
+  requests[1].pending.resolve({ page: 1, pageSize: 20, hasMore: false, works: [] })
+  await refresh
+  requests[0].pending.reject(new Error('旧请求失败'))
+  await staleLoadMore
+
+  assert.equal(page.data.errorMessage, '')
+  assert.equal(page.data.loading, false)
+  assert.equal(page.data.loadingMore, false)
+})
+
+test('team creation remains successful when only the avatar upload fails', async () => {
+  const requests = []
+  const toasts = []
+  const page = loadPage('pages/teams/teams.js', (options) => {
+    requests.push(options)
+    if (options.url === '/api/mine/teams' && options.method === 'POST') {
+      return Promise.resolve({ team: { teamId: 101, name: '星曜司仪团' } })
+    }
+    return Promise.resolve({ teams: [] })
+  }, {
+    getStorageSync() {
+      return 'maintainer-token'
+    },
+    getFileSystemManager() {
+      return { statSync() { return { size: 100 * 1024 } } }
+    },
+    uploadFile(options) {
+      options.fail({ errMsg: 'uploadFile:fail timeout' })
+    },
+    showToast(options) {
+      toasts.push(options)
+    }
+  })
+  page.data.loading = false
+  page.data.createFormVisible = true
+  page.data.form = {
+    name: '星曜司仪团',
+    intro: '婚礼主持团队',
+    avatarUrl: '/tmp/team-avatar.jpg'
+  }
+
+  await page.handleCreateTeam()
+  await flushPromises()
+
+  assert.equal(requests.filter((item) => item.url === '/api/mine/teams' && item.method === 'POST').length, 1)
+  assert.equal(page.data.createFormVisible, false)
+  assert.equal(page.data.saving, false)
+  assert.equal(page.data.form.name, '')
+  assert.deepEqual(toasts.at(-1), {
+    title: '团队已创建，图标上传失败，可稍后在团队资料中重试',
+    icon: 'none'
+  })
+})
+
+test('delayed team navigation timers are cancelled when their page unloads', () => {
+  const originalSetTimeout = global.setTimeout
+  const originalClearTimeout = global.clearTimeout
+  const cleared = []
+  let nextTimer = 0
+  global.setTimeout = () => {
+    nextTimer += 1
+    return nextTimer
+  }
+  global.clearTimeout = (timer) => {
+    cleared.push(timer)
+  }
+  try {
+    const invitationPage = loadPage('pages/team-invitations/team-invitations.js', () => Promise.resolve({}))
+    invitationPage.navigateBackAfterToast()
+    invitationPage.onUnload()
+
+    const memberAddPage = loadPage('pages/team-member-add/team-member-add.js', () => Promise.resolve({}))
+    memberAddPage.navigateBackAfterToast()
+    memberAddPage.onUnload()
+
+    assert.deepEqual(cleared, [1, 2])
+    assert.equal(invitationPage._navigateBackTimer, null)
+    assert.equal(memberAddPage._navigateBackTimer, null)
+  } finally {
+    global.setTimeout = originalSetTimeout
+    global.clearTimeout = originalClearTimeout
+  }
+})
+
+test('visitor schedule formats its initial date with local calendar fields', () => {
+  let definition
+  const pagePath = path.join(__dirname, '../pages/portfolios/visitor-schedule/visitor-schedule.js')
+  delete require.cache[require.resolve(pagePath)]
+  global.Page = (value) => { definition = value }
+  const { todayText } = require(pagePath)
+  delete global.Page
+
+  const localDate = {
+    getFullYear() { return 2026 },
+    getMonth() { return 7 },
+    getDate() { return 7 },
+    toISOString() { return '2026-08-06T16:30:00.000Z' }
+  }
+
+  assert.equal(todayText(localDate), '2026-08-07')
+  assert.ok(definition)
+  delete require.cache[require.resolve(pagePath)]
+  delete require.cache[require.resolve('../utils/visitor-session.js')]
+})
+
 test('points page enables automatic marquee only for overflowing ledger descriptions', async () => {
   const page = loadPage('pages/points/points.js', (options) => {
     if (options.url === '/api/mine/points') {

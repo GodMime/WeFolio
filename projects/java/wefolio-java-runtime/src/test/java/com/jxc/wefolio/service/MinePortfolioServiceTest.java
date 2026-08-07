@@ -1305,7 +1305,8 @@ class MinePortfolioServiceTest {
                 cosService,
                 teamPortfolioReferenceGuardService,
                 contentLimitService,
-                portfolioVideoCarouselSourceService
+                portfolioVideoCarouselSourceService,
+                new com.jxc.wefolio.service.teamportfolio.LocalPortfolioReferenceMutex()
         );
     }
 

@@ -151,20 +151,21 @@ Page({
         })
       })
       // 拿到 teamId 后再上传本地头像，并用返回的公开 URL 回写团队资料。
+      let avatarUpdateError = null
       if (payload.avatarUrl && !isRemoteUrl(payload.avatarUrl)) {
-        const avatarUrl = await uploadTeamAvatar(created.team.teamId, payload.avatarUrl)
-        await request({
-          url: `/api/mine/teams/${created.team.teamId}`,
-          method: 'PUT',
-          data: {
-            avatarUrl
-          }
-        })
+        try {
+          const avatarUrl = await uploadTeamAvatar(created.team.teamId, payload.avatarUrl)
+          await request({
+            url: `/api/mine/teams/${created.team.teamId}`,
+            method: 'PUT',
+            data: {
+              avatarUrl
+            }
+          })
+        } catch (error) {
+          avatarUpdateError = error
+        }
       }
-      wx.showToast({
-        title: '团队已创建',
-        icon: 'success'
-      })
       this.setData({
         saving: false,
         createFormVisible: false,
@@ -172,6 +173,17 @@ Page({
         fieldCounters: buildTeamFieldCounters(emptyForm())
       })
       this.loadTeams()
+      if (avatarUpdateError && avatarUpdateError.authRequired) {
+        handleMaintainerAuthRequired(avatarUpdateError.message)
+        return
+      }
+      wx.showToast(avatarUpdateError ? {
+        title: '团队已创建，图标上传失败，可稍后在团队资料中重试',
+        icon: 'none'
+      } : {
+        title: '团队已创建',
+        icon: 'success'
+      })
     } catch (error) {
       if (error && error.authRequired) {
         handleMaintainerAuthRequired(error.message)

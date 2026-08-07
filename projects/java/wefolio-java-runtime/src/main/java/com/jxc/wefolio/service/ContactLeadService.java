@@ -91,9 +91,12 @@ public class ContactLeadService {
         PortfolioEntity portfolio = portfolioEntityMapper.selectOne(
                 Wrappers.lambdaQuery(PortfolioEntity.class)
                         .eq(PortfolioEntity::getShareCode, shareCode)
+                        .eq(PortfolioEntity::getOwnerType, PortfolioOwnerTypeDict.USER.getCode())
                         .last("LIMIT 1")
         );
-        if (portfolio == null || !PortfolioPublicationStatusDict.PUBLISHED.getCode().equals(portfolio.getPublicationStatus())) {
+        if (portfolio == null
+                || !PortfolioOwnerTypeDict.USER.getCode().equals(portfolio.getOwnerType())
+                || !PortfolioPublicationStatusDict.PUBLISHED.getCode().equals(portfolio.getPublicationStatus())) {
             throw new BusinessException(PortfolioMessage.PORTFOLIO_UNAVAILABLE_MESSAGE);
         }
         return submitInternal(portfolio, request);

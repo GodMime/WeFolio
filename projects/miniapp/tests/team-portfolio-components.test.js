@@ -890,6 +890,9 @@ test('schedule calendar builds six stable weeks and applies query range bounds',
   assert.equal(new Set(days.map((item) => item.key)).size, 42)
   assert.equal(days.find((item) => item.date === '2026-08-02').disabled, true)
   assert.equal(days.find((item) => item.date === '2026-08-03').disabled, false)
+  assert.equal(days.find((item) => item.date === '2026-08-01').metaText, '十九')
+  assert.equal(days.find((item) => item.date === '2026-08-19').metaText, '七夕')
+  assert.ok(days.every((item) => Array.isArray(item.colors) && item.colors.length === 0))
   assert.match(days.find((item) => item.date === '2026-07-31').dayClass, /muted/)
   assert.match(days.find((item) => item.date === '2026-08-02').dayClass, /disabled/)
   assert.equal(exports.formatYearMonthTitle('2026-08'), '2026 年 8 月')
@@ -956,7 +959,10 @@ test('schedule maps members to three display states and deduplicates loading', a
   assert.equal(exports.validateScheduleQueryConfig({ displayMode: 'INLINE_CALENDAR', queryRange: { type: 'FUTURE_DAYS', futureDays: 30 } }).valid, true)
   assert.equal(exports.validateScheduleQueryConfig({ displayMode: 'MODAL_CALENDAR', queryRange: { type: 'DATE_RANGE', startDate: '2026-08-02', endDate: '2026-08-01' } }).valid, false)
   assert.deepEqual(exports.resolveScheduleDateBounds({ queryRange: { type: 'FUTURE_DAYS', futureDays: 2 } }, '2026-08-01'), { startDate: '2026-08-01', endDate: '2026-08-03' })
-  assert.equal(exports.mapMemberScheduleState({ totalSlotCount: 0, availableSlotCount: 0, emptySlotDefinition: true }).text, '已满')
+  assert.deepEqual(
+    exports.mapMemberScheduleState({ totalSlotCount: 0, availableSlotCount: 0, emptySlotDefinition: true }),
+    { code: 'UNAVAILABLE', text: '暂未开放档期', tone: 'unavailable' }
+  )
   assert.equal(exports.mapMemberScheduleState({ totalSlotCount: 3, availableSlotCount: 1 }).text, '部分档期空闲')
   assert.equal(exports.mapMemberScheduleState({ totalSlotCount: 3, availableSlotCount: 0 }).text, '已满')
   assert.equal(exports.mapMemberScheduleState({ slotStatuses: ['BOOKED', 'TENTATIVE', 'REST'] }).text, '已满')

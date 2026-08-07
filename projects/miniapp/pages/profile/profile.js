@@ -1,5 +1,5 @@
 const { request } = require('../../utils/request')
-const { clearToken, handleMaintainerAuthRequired, hasLocalToken } = require('../../utils/session')
+const { clearToken, handleMaintainerAuthRequired, hasLocalToken, logoutMaintainer } = require('../../utils/session')
 const { noop } = require('../../utils/noop')
 const {
   WECHAT_QR_CROP_FILE_TYPE,
@@ -502,11 +502,17 @@ Page({
     }
   },
 
-  handleLogout() {
-    clearToken()
-    wx.redirectTo({
-      url: '/pages/login/login'
-    })
+  async handleLogout() {
+    try {
+      await logoutMaintainer()
+    } catch (error) {
+      // 无论服务端是否可达，都要完成本地退出；服务端成功时原令牌已被主动吊销。
+    } finally {
+      clearToken()
+      wx.redirectTo({
+        url: '/pages/login/login'
+      })
+    }
   },
 
   handleCancelAccount() {

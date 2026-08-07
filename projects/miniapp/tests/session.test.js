@@ -5,7 +5,8 @@ const {
   TOKEN_STORAGE_KEY,
   handleMaintainerAuthRequired,
   precheckMaintainerWechatLogin,
-  maintainerWechatLogin
+  maintainerWechatLogin,
+  logoutMaintainer
 } = require('../utils/session')
 
 test('maintainer wechat login precheck uses dedicated auth endpoint', async () => {
@@ -104,4 +105,27 @@ test('maintainer auth required handler clears maintainer token, shows toast and 
   assert.deepEqual(calls.redirect, {
     url: '/pages/login/login'
   })
+})
+
+test('maintainer logout calls active token revocation endpoint', async () => {
+  let capturedOptions = null
+  global.wx = {
+    request(options) {
+      capturedOptions = options
+      options.success({ statusCode: 200, data: { success: true } })
+    },
+    getStorageSync() {
+      return 'maintainer-token'
+    }
+  }
+
+  try {
+    await logoutMaintainer()
+
+    assert.equal(capturedOptions.url, 'https://api.we-folio.dingchenyong.top/api/auth/logout')
+    assert.equal(capturedOptions.method, 'POST')
+    assert.equal(capturedOptions.header.Authorization, 'Bearer maintainer-token')
+  } finally {
+    delete global.wx
+  }
 })

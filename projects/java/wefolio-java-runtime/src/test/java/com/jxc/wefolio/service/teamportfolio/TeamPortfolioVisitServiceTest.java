@@ -43,6 +43,7 @@ import java.util.function.Consumer;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -97,7 +98,6 @@ class TeamPortfolioVisitServiceTest {
         });
         when(context.eventMapper.selectOne(any())).thenReturn(null);
         when(context.eventMapper.insert(any(VisitEventEntity.class))).thenReturn(1);
-        when(context.recordMapper.updateById(any(VisitRecordEntity.class))).thenReturn(1);
 
         VisitRecordEntity result = context.service.recordOpen(
                 portfolio(), VISITOR_ID, VISITOR_KEY,
@@ -129,7 +129,6 @@ class TeamPortfolioVisitServiceTest {
                 .thenThrow(new DuplicateKeyException("visit race"));
         when(context.eventMapper.selectOne(any())).thenReturn(null);
         when(context.eventMapper.insert(any(VisitEventEntity.class))).thenReturn(1);
-        when(context.recordMapper.updateById(winner)).thenReturn(1);
 
         VisitRecordEntity result = context.service.recordOpen(
                 portfolio(), VISITOR_ID, VISITOR_KEY, VisitSourceTypeDict.QR_CODE.getCode(), "open-race");
@@ -771,7 +770,9 @@ class TeamPortfolioVisitServiceTest {
         resourceOrder.verify(context.referenceMapper).selectList(any());
         resourceOrder.verify(context.workMapper).selectById(request.getWorkId());
         verify(context.eventMapper).insert(any(VisitEventEntity.class));
-        verify(context.recordMapper).updateById(result.visitRecord());
+        verify(context.recordMapper).incrementCounters(
+                org.mockito.ArgumentMatchers.eq(result.visitRecord()),
+                anyInt(), anyInt(), anyInt(), anyInt(), anyInt(), anyInt(), anyInt());
     }
 
     /** 断言客户端事件完整载荷变化时幂等冲突且零计数。 */
@@ -832,13 +833,15 @@ class TeamPortfolioVisitServiceTest {
         when(context.recordMapper.selectOne(any())).thenReturn(ownedRecord());
         when(context.eventMapper.selectOne(any())).thenReturn(null);
         when(context.eventMapper.insert(any(VisitEventEntity.class))).thenReturn(1);
-        when(context.recordMapper.updateById(any(VisitRecordEntity.class))).thenReturn(1);
         return context;
     }
 
     /** 创建服务测试上下文。 */
     private static Context context() {
         VisitRecordEntityMapper recordMapper = mock(VisitRecordEntityMapper.class);
+        when(recordMapper.incrementCounters(
+                any(VisitRecordEntity.class), anyInt(), anyInt(), anyInt(), anyInt(), anyInt(), anyInt(), anyInt()))
+                .thenReturn(1);
         VisitEventEntityMapper eventMapper = mock(VisitEventEntityMapper.class);
         PortfolioReferenceEntityMapper referenceMapper = mock(PortfolioReferenceEntityMapper.class);
         WorkEntityMapper workMapper = mock(WorkEntityMapper.class);

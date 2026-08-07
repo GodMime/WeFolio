@@ -2,6 +2,8 @@ package com.jxc.wefolio.service.point;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -34,9 +36,28 @@ public class LocalUserPointMutex implements UserPointMutex {
         try {
             return action.get();
         } finally {
-            reference.lock.unlock();
-            release(userId, reference);
+            releaseAfterTransaction(userId, reference);
         }
+    }
+
+    /** 当前动作位于事务中时延迟到提交或回滚完成后释放互斥。 */
+    private void releaseAfterTransaction(Long userId, LockReference reference) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCompletion(int status) {
+                    unlockAndRelease(userId, reference);
+                }
+            });
+            return;
+        }
+        unlockAndRelease(userId, reference);
+    }
+
+    /** 释放当前线程持有的锁并回收引用。 */
+    private void unlockAndRelease(Long userId, LockReference reference) {
+        reference.lock.unlock();
+        release(userId, reference);
     }
 
     /** 获取或创建锁对象，并在同一键原子计算中增加引用数。 */

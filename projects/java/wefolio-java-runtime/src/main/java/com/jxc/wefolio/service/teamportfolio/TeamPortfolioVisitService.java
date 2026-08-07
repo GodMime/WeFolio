@@ -361,7 +361,18 @@ public class TeamPortfolioVisitService {
         }
         updateCounters(record, type, candidate.getDurationSeconds());
         record.setLastVisitedAt(candidate.getOccurredAt());
-        if (visitRecordEntityMapper.updateById(record) != 1) {
+        int durationDelta = candidate.getDurationSeconds() == null || candidate.getDurationSeconds() <= 0
+                ? 0
+                : candidate.getDurationSeconds();
+        if (visitRecordEntityMapper.incrementCounters(
+                record,
+                type == VisitEventTypeDict.PORTFOLIO_OPENED ? 1 : 0,
+                type == VisitEventTypeDict.WORK_VIEWED ? 1 : 0,
+                type == VisitEventTypeDict.VIDEO_PLAYED ? 1 : 0,
+                type == VisitEventTypeDict.SCHEDULE_QUERIED ? 1 : 0,
+                type == VisitEventTypeDict.QR_CODE_INTERACTED ? 1 : 0,
+                type == VisitEventTypeDict.CONTACT_LEAD_SUBMITTED ? 1 : 0,
+                durationDelta) != 1) {
             throw new BusinessException(RECORD_PERSISTENCE_FAILED_MESSAGE);
         }
         return new EventRecordResult(true, record, candidate.getOccurredAt());

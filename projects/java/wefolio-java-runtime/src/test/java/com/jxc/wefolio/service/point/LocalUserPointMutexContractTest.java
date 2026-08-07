@@ -1,6 +1,8 @@
 package com.jxc.wefolio.service.point;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -73,6 +75,40 @@ class LocalUserPointMutexContractTest {
 
         Object result = invoke(execute, mutex, 9L, () -> "恢复成功");
         assertThat(result).isEqualTo("恢复成功");
+        assertThat(activeMutexCount(mutex)).isZero();
+    }
+
+    @Test
+    void transactionShouldKeepUserMutexUntilCompletionCallback() throws Exception {
+        Object mutex = newMutex();
+        Method execute = executeMethod(mutex);
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        CountDownLatch secondEntered = new CountDownLatch(1);
+        java.util.List<TransactionSynchronization> synchronizations = java.util.List.of();
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            assertThat(invoke(execute, mutex, 7L, () -> "first")).isEqualTo("first");
+            synchronizations = TransactionSynchronizationManager.getSynchronizations();
+            Future<?> second = executor.submit(() -> invoke(execute, mutex, 7L, () -> {
+                secondEntered.countDown();
+                return null;
+            }));
+
+            assertThat(secondEntered.await(100, java.util.concurrent.TimeUnit.MILLISECONDS)).isFalse();
+            synchronizations.forEach(synchronization ->
+                    synchronization.afterCompletion(TransactionSynchronization.STATUS_COMMITTED));
+            TransactionSynchronizationManager.clearSynchronization();
+            assertThat(secondEntered.await(1, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            second.get(1, java.util.concurrent.TimeUnit.SECONDS);
+        } finally {
+            if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                synchronizations.forEach(synchronization ->
+                        synchronization.afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK));
+                TransactionSynchronizationManager.clearSynchronization();
+            }
+            executor.shutdownNow();
+        }
+
         assertThat(activeMutexCount(mutex)).isZero();
     }
 

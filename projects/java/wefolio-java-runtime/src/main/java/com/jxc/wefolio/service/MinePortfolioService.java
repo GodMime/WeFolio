@@ -44,6 +44,7 @@ import com.jxc.wefolio.mapper.ScheduleEntityMapper;
 import com.jxc.wefolio.mapper.SlotDefinitionEntityMapper;
 import com.jxc.wefolio.message.PortfolioMessage;
 import com.jxc.wefolio.service.teamportfolio.TeamPortfolioReferenceGuardService;
+import com.jxc.wefolio.service.teamportfolio.PortfolioReferenceMutex;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -281,6 +282,9 @@ public class MinePortfolioService {
 
     /** 视频轮播候选来源服务 */
     private final PortfolioVideoCarouselSourceService portfolioVideoCarouselSourceService;
+
+    /** 个人删除与团队引用写入共用的 JVM 互斥边界。 */
+    private final PortfolioReferenceMutex portfolioReferenceMutex;
 
     /**
      * 查询作品集列表。
@@ -787,6 +791,14 @@ public class MinePortfolioService {
      */
     @Transactional(rollbackFor = Exception.class)
     public void deletePortfolio(Long portfolioId) {
+        portfolioReferenceMutex.execute(() -> {
+            deletePortfolioLocked(portfolioId);
+            return null;
+        });
+    }
+
+    /** 在作品集引用互斥区间内删除标准个人作品集。 */
+    private void deletePortfolioLocked(Long portfolioId) {
         Long userId = AuthContextHolder.requireUserId();
         // 非标准模板沿用维护能力不可用提示，避免图锁过滤后降级为“作品集不存在”。
         requireOwnedStandardPersonal(portfolioId);

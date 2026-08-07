@@ -86,6 +86,9 @@ public class WorkUploadTransactionService {
     /** 内容数量上限服务 */
     private final ContentLimitService contentLimitService;
 
+    /** 上传任务过期状态独立事务服务。 */
+    private final WorkUploadTaskExpirationService workUploadTaskExpirationService;
+
     /**
      * 确认单个上传任务并创建作品。
      *
@@ -120,9 +123,7 @@ public class WorkUploadTransactionService {
             throw new BusinessException("上传任务状态不可确认");
         }
         if (task.getExpiresAt() != null && task.getExpiresAt().isBefore(LocalDateTime.now())) {
-            task.setStatus(WorkUploadTaskStatusDict.EXPIRED.getCode());
-            task.setErrorMessage("上传任务已过期");
-            workUploadTaskEntityMapper.updateById(task);
+            workUploadTaskExpirationService.markExpired(task, "上传任务已过期");
             throw new BusinessException("上传任务已过期，请重新选择文件");
         }
 
@@ -324,9 +325,7 @@ public class WorkUploadTransactionService {
             throw new BusinessException(MineWorkMessage.COVER_TASK_USED_MESSAGE);
         }
         if (coverTask.getExpiresAt() != null && coverTask.getExpiresAt().isBefore(LocalDateTime.now())) {
-            coverTask.setStatus(WorkUploadTaskStatusDict.EXPIRED.getCode());
-            coverTask.setErrorMessage("封面上传任务已过期");
-            workUploadTaskEntityMapper.updateById(coverTask);
+            workUploadTaskExpirationService.markExpired(coverTask, "封面上传任务已过期");
             throw new BusinessException(MineWorkMessage.COVER_TASK_EXPIRED_MESSAGE);
         }
         return coverTask;

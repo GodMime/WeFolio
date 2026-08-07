@@ -327,6 +327,36 @@ public class VisitorPortfolioService {
      */
     public VisitorPortfolioScheduleResponse querySchedule(
             String shareCode,
+            String startDate,
+            String endDate,
+            String scope,
+            @Deprecated
+            String visitorKey,
+            String idempotencyKey
+    ) {
+        return querySchedule(
+                shareCode,
+                parseScheduleDate(startDate),
+                parseScheduleDate(endDate),
+                scope,
+                visitorKey,
+                idempotencyKey
+        );
+    }
+
+    /**
+     * 使用已解析日期查询访客档期。
+     *
+     * @param shareCode 分享编码
+     * @param startDate 开始日期
+     * @param endDate 结束日期
+     * @param scope 查询范围
+     * @param visitorKey 旧版客户端兼容参数
+     * @param idempotencyKey 幂等键
+     * @return 档期响应
+     */
+    public VisitorPortfolioScheduleResponse querySchedule(
+            String shareCode,
             LocalDate startDate,
             LocalDate endDate,
             String scope,
@@ -350,6 +380,15 @@ public class VisitorPortfolioService {
         VisitorPortfolioScheduleResponse response = new VisitorPortfolioScheduleResponse();
         response.setSchedules(safeList(schedules).stream().map(this::buildScheduleItem).toList());
         return response;
+    }
+
+    /** 解析访客档期查询日期并统一转换为业务异常。 */
+    private LocalDate parseScheduleDate(String value) {
+        try {
+            return LocalDate.parse(value);
+        } catch (DateTimeParseException | NullPointerException exception) {
+            throw new BusinessException(PortfolioMessage.SCHEDULE_QUERY_DATE_INVALID_MESSAGE, exception);
+        }
     }
 
     /**

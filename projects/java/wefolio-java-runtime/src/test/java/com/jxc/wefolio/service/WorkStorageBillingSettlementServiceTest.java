@@ -11,6 +11,7 @@ import com.jxc.wefolio.service.point.DebitCommand;
 import com.jxc.wefolio.service.point.PointCommandService;
 import com.jxc.wefolio.service.point.PointMutationResult;
 import com.jxc.wefolio.service.point.SystemDebitResult;
+import com.jxc.wefolio.service.point.UserPointMutex;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -22,12 +23,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
+import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.lenient;
 
 /**
  * Runtime 作品存储月度结算服务测试。
@@ -53,9 +56,32 @@ class WorkStorageBillingSettlementServiceTest {
     @Mock
     private PointCommandService pointCommandService;
 
+    /** 当前 JVM 用户级积分互斥。 */
+    @Mock
+    private UserPointMutex userPointMutex;
+
     /** 待测试结算服务。 */
     @InjectMocks
     private WorkStorageBillingSettlementService settlementService;
+
+    /** 让互斥模拟直接执行被保护的结算动作。 */
+    @org.junit.jupiter.api.BeforeEach
+    void executeMutexAction() {
+        lenient().when(userPointMutex.execute(any(), any())).thenAnswer(invocation -> {
+            Supplier<?> action = invocation.getArgument(1);
+            return action.get();
+        });
+    }
+
+    /** 单用户整体结算必须处于 JVM 互斥区间内。 */
+    @Test
+    void settlementShouldExecuteInsideUserMutex() {
+        arrangeSettlement(0L, 0L);
+
+        settlementService.settle(USER_ID, BILLING_MONTH);
+
+        verify(userPointMutex).execute(org.mockito.ArgumentMatchers.eq(USER_ID), any());
+    }
 
     /** 新规则只按完整 2MB 计费，未满计费单位的字节不进位。 */
     @ParameterizedTest

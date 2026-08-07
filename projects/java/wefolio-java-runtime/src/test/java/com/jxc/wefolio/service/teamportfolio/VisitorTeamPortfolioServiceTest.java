@@ -648,7 +648,8 @@ class VisitorTeamPortfolioServiceTest {
                 contactService,
                 mock(ContentLimitService.class),
                 mock(PointService.class),
-                mock(PortfolioPublishTransactionService.class));
+                mock(PortfolioPublishTransactionService.class),
+                new LocalPortfolioReferenceMutex());
         assertThat(MineTeamPortfolioService.class.getDeclaredFields())
                 .filteredOn(field -> List.of(
                         "visitRecordEntityMapper",

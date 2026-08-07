@@ -5,6 +5,7 @@ import com.jxc.wefolio.common.auth.AuthContext;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
 import com.jxc.wefolio.common.upload.AvatarUploadResult;
 import com.jxc.wefolio.annotation.LoginAccess;
+import com.jxc.wefolio.annotation.MaintainerAccess;
 import com.jxc.wefolio.dto.FileUploadResponse;
 import com.jxc.wefolio.dto.MaintainerWechatLoginRequest;
 import com.jxc.wefolio.dto.MaintainerWechatLoginPrecheckRequest;
@@ -175,5 +176,25 @@ class MiniappAuthControllerTest {
 
         assertThat(response.isSuccess()).isTrue();
         verify(accountCancellationService).cancelCurrentUser();
+    }
+
+    /** 退出登录必须是受保护的主动单令牌吊销接口。 */
+    @Test
+    void logoutShouldRevokeCurrentAuthorization() throws NoSuchMethodException {
+        MiniappAuthController controller = new MiniappAuthController(
+                miniappAuthService,
+                authTokenService,
+                accountCancellationService,
+                maintainerAvatarService,
+                trustedClientIpResolver
+        );
+
+        Response<Void> response = controller.logout("Bearer maintainer-token");
+
+        Method method = MiniappAuthController.class.getMethod("logout", String.class);
+        assertThat(method.isAnnotationPresent(MaintainerAccess.class)).isTrue();
+        assertThat(method.getAnnotation(PostMapping.class).value()).containsExactly("/logout");
+        assertThat(response.isSuccess()).isTrue();
+        verify(authTokenService).revokeAuthorization("Bearer maintainer-token");
     }
 }

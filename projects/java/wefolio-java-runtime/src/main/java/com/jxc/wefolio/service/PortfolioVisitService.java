@@ -71,6 +71,9 @@ public class PortfolioVisitService {
     /** MySQL 单条限制片段 */
     private static final String SQL_SINGLE_LIMIT_CLAUSE = "LIMIT 1";
 
+    /** 唯一键竞争后读取已提交赢家的当前读限制片段 */
+    private static final String SQL_SINGLE_LIMIT_FOR_UPDATE_CLAUSE = "LIMIT 1 FOR UPDATE";
+
     /** 作品集标题快照兜底 */
     private static final String DEFAULT_PORTFOLIO_TITLE_SNAPSHOT = "个人作品集";
 
@@ -116,6 +119,13 @@ public class PortfolioVisitService {
             String sourceType,
             String idempotencyKey
     ) {
+        if (hasRecordedEvent(idempotencyKey)) {
+            VisitRecordEntity existing = findRecord(portfolio.getId(), visitorId, visitorKey);
+            if (existing == null) {
+                throw new BusinessException(RECORD_PERSISTENCE_FAILED_MESSAGE);
+            }
+            return existing;
+        }
         LocalDateTime now = LocalDateTime.now();
         VisitRecordEntity record = findRecord(portfolio.getId(), visitorId, visitorKey);
         if (record == null) {
@@ -129,7 +139,7 @@ public class PortfolioVisitService {
             record.setOwnerType(portfolio.getOwnerType());
             record.setOwnerId(portfolio.getOwnerId());
             record.setSourceType(defaultSource(sourceType));
-            record.setVisitCount(1);
+            record.setVisitCount(0);
             record.setViewWorkCount(0);
             record.setPlayVideoCount(0);
             record.setScheduleQueryCount(0);
@@ -138,22 +148,31 @@ public class PortfolioVisitService {
             record.setTotalDurationSeconds(0);
             record.setFirstVisitedAt(now);
             record.setLastVisitedAt(now);
-            visitRecordEntityMapper.insert(record);
+            try {
+                visitRecordEntityMapper.insert(record);
+            } catch (DuplicateKeyException exception) {
+                record = findRecordForUpdate(portfolio.getId(), visitorId, visitorKey);
+                if (record == null) {
+                    throw exception;
+                }
+            }
         } else {
             if (visitorId != null) {
                 record.setVisitorId(visitorId);
             }
-            record.setVisitCount(safeInt(record.getVisitCount()) + 1);
             fillPortfolioSnapshot(record, portfolio);
             record.setLastPortfolioRevision(portfolio.getPublishedRevision());
             record.setLastVisitedAt(now);
-            if (visitRecordEntityMapper.updateById(record) != 1) {
-                throw new BusinessException(RECORD_PERSISTENCE_FAILED_MESSAGE);
-            }
         }
-        consumePortfolioOpen(portfolio, visitorId, idempotencyKey);
-        insertEvent(record, portfolio, VisitEventTypeDict.PORTFOLIO_OPENED.getCode(), null, null, null,
+        boolean inserted = insertEventIfAbsent(
+                record, portfolio, VisitEventTypeDict.PORTFOLIO_OPENED.getCode(), null, null, null,
                 idempotencyKey, null, now);
+        if (!inserted) {
+            return record;
+        }
+        record.setVisitCount(safeInt(record.getVisitCount()) + 1);
+        persistCounterDelta(record, 1, 0, 0, 0, 0, 0, 0);
+        consumePortfolioOpen(portfolio, visitorId, idempotencyKey);
         return record;
     }
 
@@ -261,9 +280,7 @@ public class PortfolioVisitService {
         } else if (VisitEventTypeDict.CONTACT_FORM_EXPOSED.getCode().equals(eventType)) {
             record.setLastVisitedAt(now);
         }
-        if (visitRecordEntityMapper.updateById(record) != 1) {
-            throw new BusinessException(RECORD_PERSISTENCE_FAILED_MESSAGE);
-        }
+        persistEventCounterDelta(record, eventType, request.getDurationSeconds());
     }
 
     /**
@@ -420,7 +437,7 @@ public class PortfolioVisitService {
             return ScheduleQueryRecordResult.concurrentConflict(record, now);
         }
         record.setScheduleQueryCount(safeInt(record.getScheduleQueryCount()) + 1);
-        visitRecordEntityMapper.updateById(record);
+        persistCounterDelta(record, 0, 0, 0, 1, 0, 0, 0);
         return ScheduleQueryRecordResult.recorded(record, now);
     }
 
@@ -436,10 +453,59 @@ public class PortfolioVisitService {
     public void recordContactLeadSubmitted(PortfolioEntity portfolio, String visitorKey, Long leadId, String idempotencyKey) {
         VisitRecordEntity record = findRecord(portfolio.getId(), visitorKey);
         if (record != null) {
+            LocalDateTime now = LocalDateTime.now();
+            boolean inserted = insertEventIfAbsent(
+                    record, portfolio, VisitEventTypeDict.CONTACT_LEAD_SUBMITTED.getCode(), null, null,
+                    null, idempotencyKey, Map.of("leadId", leadId), now);
+            if (!inserted) {
+                return;
+            }
             record.setContactSubmitCount(safeInt(record.getContactSubmitCount()) + 1);
-            visitRecordEntityMapper.updateById(record);
-            insertEvent(record, portfolio, VisitEventTypeDict.CONTACT_LEAD_SUBMITTED.getCode(), null, null,
-                    null, idempotencyKey, Map.of("leadId", leadId), LocalDateTime.now());
+            record.setLastVisitedAt(now);
+            persistCounterDelta(record, 0, 0, 0, 0, 0, 1, 0);
+        }
+    }
+
+    /** 按事件类型原子累加个人访问汇总。 */
+    private void persistEventCounterDelta(
+            VisitRecordEntity record,
+            String eventType,
+            Integer durationSeconds
+    ) {
+        int durationDelta = durationSeconds == null || durationSeconds <= 0 ? 0 : durationSeconds;
+        persistCounterDelta(
+                record,
+                0,
+                VisitEventTypeDict.WORK_VIEWED.getCode().equals(eventType) ? 1 : 0,
+                VisitEventTypeDict.VIDEO_PLAYED.getCode().equals(eventType) ? 1 : 0,
+                0,
+                VisitEventTypeDict.QR_CODE_INTERACTED.getCode().equals(eventType) ? 1 : 0,
+                0,
+                durationDelta
+        );
+    }
+
+    /** 原子累加访问汇总并校验记录仍存在。 */
+    private void persistCounterDelta(
+            VisitRecordEntity record,
+            int visitDelta,
+            int viewWorkDelta,
+            int playVideoDelta,
+            int scheduleQueryDelta,
+            int qrActionDelta,
+            int contactSubmitDelta,
+            int durationDelta
+    ) {
+        if (visitRecordEntityMapper.incrementCounters(
+                record,
+                visitDelta,
+                viewWorkDelta,
+                playVideoDelta,
+                scheduleQueryDelta,
+                qrActionDelta,
+                contactSubmitDelta,
+                durationDelta) != 1) {
+            throw new BusinessException(RECORD_PERSISTENCE_FAILED_MESSAGE);
         }
     }
 
@@ -482,6 +548,32 @@ public class PortfolioVisitService {
                         .eq(VisitRecordEntity::getPortfolioId, portfolioId)
                         .eq(VisitRecordEntity::getVisitorKey, visitorKey)
                         .last(SQL_SINGLE_LIMIT_CLAUSE)
+        );
+    }
+
+    /**
+     * 唯一键竞争后通过当前读获取已提交的赢家汇总，避免 REPEATABLE READ 旧快照仍返回空。
+     */
+    private VisitRecordEntity findRecordForUpdate(Long portfolioId, Long visitorId, String visitorKey) {
+        if (visitorId != null) {
+            VisitRecordEntity record = visitRecordEntityMapper.selectOne(
+                    Wrappers.lambdaQuery(VisitRecordEntity.class)
+                            .eq(VisitRecordEntity::getPortfolioId, portfolioId)
+                            .eq(VisitRecordEntity::getVisitorId, visitorId)
+                            .last(SQL_SINGLE_LIMIT_FOR_UPDATE_CLAUSE)
+            );
+            if (record != null) {
+                return record;
+            }
+        }
+        if (visitorKey == null) {
+            return null;
+        }
+        return visitRecordEntityMapper.selectOne(
+                Wrappers.lambdaQuery(VisitRecordEntity.class)
+                        .eq(VisitRecordEntity::getPortfolioId, portfolioId)
+                        .eq(VisitRecordEntity::getVisitorKey, visitorKey)
+                        .last(SQL_SINGLE_LIMIT_FOR_UPDATE_CLAUSE)
         );
     }
 
