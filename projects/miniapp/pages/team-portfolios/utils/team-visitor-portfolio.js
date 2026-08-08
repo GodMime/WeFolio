@@ -11,6 +11,11 @@ const QR_ACTIONS = Object.freeze(['CLICK', 'LONG_PRESS'])
 const IDEMPOTENCY_KEY_MAX_LENGTH = 64
 const DEFAULT_BACKGROUND_COLOR = '#FFFFFF'
 const SINGLE_WORK_VIEW_MEDIA_TYPES = Object.freeze(['IMAGE', 'ANIMATION'])
+const RENDER_COMPONENT_TYPES = Object.freeze([
+  'TEAM_PROFILE', 'CAROUSEL', 'VIDEO_CAROUSEL', 'SINGLE_WORK', 'DIVIDER',
+  'MEMBER_PORTFOLIO_GRID', 'MEMBER_PORTFOLIO_LIST', 'TEXT_SECTION',
+  'SCHEDULE_QUERY', 'CONTACT_FORM', 'QR_CONTACT'
+])
 
 function text(value) {
   return String(value || '').trim()
@@ -47,7 +52,8 @@ function normalizeRenderComponent(item = {}, index = 0) {
 function normalizeRenderComponents(items = []) {
   return (Array.isArray(items) ? items : [])
     .map(normalizeRenderComponent)
-    .filter((item) => item.componentKey && item.componentType)
+    .filter((item) => item.componentKey && RENDER_COMPONENT_TYPES.includes(item.componentType))
+    .filter((item) => item.componentType !== 'VIDEO_CAROUSEL' || (Array.isArray(item.data.works) && item.data.works.length > 0))
     .sort((left, right) => left.sortOrder - right.sortOrder)
 }
 

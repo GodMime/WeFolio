@@ -162,7 +162,11 @@
                 <view wx:if="{{item.componentType === 'SINGLE_WORK'}}" class="component-summary pe-component-description">{{componentRows.resolveSingleWorkSummary(item, singleWorkSummaries)}}</view>
                 <view wx:elif="{{item.componentType === 'HYPERLINK'}}" class="component-summary pe-component-description">{{componentRows.resolveHyperlinkSummary(item, singleWorkSummaries)}}</view>
               </view>
-              <view class="component-drag-handle"></view>
+              <view class="component-drag-handle">
+                <view class="component-drag-line"></view>
+                <view class="component-drag-line"></view>
+                <view class="component-drag-line"></view>
+              </view>
               <view class="component-row-arrow {{componentRows.isEditable(item.componentType) ? '' : 'placeholder'}}">
                 <view wx:if="{{componentRows.isEditable(item.componentType)}}" class="component-row-arrow-icon"></view>
               </view>
@@ -525,6 +529,35 @@
       ></single-work-picker>
 
       <block wx:else>
+      <view wx:if="{{editingComponentType === 'VIDEO_CAROUSEL'}}" class="video-carousel-editor-settings">
+        <view class="video-carousel-title-setting">
+          <view class="video-carousel-setting-heading">
+            <view class="field-label">组件标题</view>
+            <view class="video-carousel-title-count">{{videoCarouselTitleCount}} / 10</view>
+          </view>
+          <input
+            class="video-carousel-title-input pe-sheet-field"
+            value="{{videoCarouselTitle}}"
+            maxlength="-1"
+            placeholder="视频作品"
+            bindinput="handleVideoCarouselTitleInput"
+          />
+        </view>
+        <view class="video-carousel-switch-setting">
+          <view class="video-carousel-switch-copy">
+            <view class="video-carousel-switch-title">显示作品标题</view>
+            <view class="video-carousel-switch-note">在卡片下方展示每个视频的标题</view>
+          </view>
+          <switch checked="{{videoCarouselShowTitle}}" color="#212529" bindchange="handleVideoCarouselShowTitleChange" />
+        </view>
+        <view class="video-carousel-switch-setting">
+          <view class="video-carousel-switch-copy">
+            <view class="video-carousel-switch-title">显示滑动提示</view>
+            <view class="video-carousel-switch-note">提示访客可左右拖动浏览视频</view>
+          </view>
+          <switch checked="{{videoCarouselShowSwipeHint}}" color="#212529" bindchange="handleVideoCarouselShowSwipeHintChange" />
+        </view>
+      </view>
       <view class="component-work-tools">
         <view class="component-work-search">
           <view class="component-work-search-icon"></view>
@@ -583,16 +616,17 @@
           >
             <view class="component-work-thumb">
               <image wx:if="{{item.thumbUrl}}" src="{{item.thumbUrl}}" mode="aspectFill"></image>
-              <view wx:else class="component-work-thumb-empty">图片</view>
+              <view wx:else class="component-work-thumb-empty">{{editingComponentType === 'VIDEO_CAROUSEL' ? '视频' : '图片'}}</view>
             </view>
             <view class="component-work-copy">
               <view class="component-work-title">{{item.title}}</view>
               <view class="component-work-meta-row">
                 <view class="component-work-meta">{{item.metaText}}</view>
                 <view class="component-work-ratio">{{item.aspectRatioText}}</view>
+                <view class="component-work-ratio">{{item.durationText}}</view>
               </view>
             </view>
-            <view class="component-work-check {{editingComponentType === 'CAROUSEL' ? 'carousel-order' : ''}}">{{editingComponentType === 'CAROUSEL' ? (item.selectionOrder || '') : (item.selected ? '✓' : '')}}</view>
+            <view class="component-work-check {{editingComponentType === 'CAROUSEL' || editingComponentType === 'VIDEO_CAROUSEL' ? 'carousel-order' : ''}}">{{editingComponentType === 'CAROUSEL' || editingComponentType === 'VIDEO_CAROUSEL' ? (item.selectionOrder || '') : (item.selected ? '✓' : '')}}</view>
           </view>
           <view wx:if="{{componentWorkLoadingMore}}" class="component-work-footer">加载更多作品</view>
           <view wx:if="{{!componentWorkHasMore && componentWorkOptions.length > 0}}" class="component-work-footer">已显示全部作品</view>
@@ -602,7 +636,7 @@
 
       <view class="component-work-actions pe-sheet-actions">
         <button class="pe-sheet-action-cancel" catchtap="handleCloseComponentWorkSheet">取消</button>
-        <button class="pe-sheet-action-confirm" catchtap="handleConfirmComponentWorks">完成</button>
+        <button class="pe-sheet-action-confirm" catchtap="handleConfirmComponentWorks" disabled="{{editingComponentType === 'VIDEO_CAROUSEL' && videoCarouselSelectedWorks.length < 3}}">完成</button>
       </view>
     </view>
   </view>

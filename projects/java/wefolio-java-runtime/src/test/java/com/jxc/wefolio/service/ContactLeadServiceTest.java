@@ -82,6 +82,21 @@ class ContactLeadServiceTest {
                 .hasMessage("请至少填写手机号或微信号");
     }
 
+    /** 旧版留资入口不得接受团队作品集，避免向团队密文字段写入明文。 */
+    @Test
+    void submitShouldRejectPublishedTeamPortfolio() {
+        PortfolioEntity teamPortfolio = portfolio();
+        teamPortfolio.setOwnerType(PortfolioOwnerTypeDict.TEAM.getCode());
+        teamPortfolio.setOwnerId(100L);
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(teamPortfolio);
+
+        assertThatThrownBy(() -> service().submit("TPF001", request()))
+                .isInstanceOf(com.jxc.wefolio.exception.BusinessException.class)
+                .hasMessage("作品集暂不可访问");
+
+        verify(contactLeadEntityMapper, never()).insert(any(ContactLeadEntity.class));
+    }
+
     @Test
     void submitShouldStoreMaskedLeadAndRecordSubmitEvent() {
         when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio());

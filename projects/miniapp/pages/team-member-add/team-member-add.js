@@ -42,6 +42,13 @@ Page({
     this.bootstrap()
   },
 
+  onUnload() {
+    if (this._navigateBackTimer) {
+      clearTimeout(this._navigateBackTimer)
+      this._navigateBackTimer = null
+    }
+  },
+
   bootstrap() {
     if (!hasLocalToken()) {
       wx.redirectTo({
@@ -229,7 +236,8 @@ Page({
   },
 
   navigateBackAfterToast() {
-    setTimeout(() => {
+    this._navigateBackTimer = setTimeout(() => {
+      this._navigateBackTimer = null
       wx.navigateBack()
     }, TOAST_NAVIGATE_BACK_DELAY_MS)
   },

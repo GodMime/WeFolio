@@ -12,6 +12,12 @@ const {
 const COMPONENT_ROOT = path.resolve(__dirname, '../pages/portfolios/components')
 const COMPONENT_CASES = [
   {
+    name: 'video-carousel',
+    properties: { componentKey: String, title: String, works: Array, showTitle: Boolean, showSwipeHint: Boolean },
+    wxml: [/class="video-carousel/, /bindtouchstart="handleTouchStart"/, /bindtouchmove="handleTouchMove"/, /bindtouchend="handleTouchEnd"/],
+    wxss: [/\.video-carousel-stage/, /\.video-carousel-card/]
+  },
+  {
     name: 'profile',
     properties: { profile: Object },
     wxml: [/class="profile-section portfolio-theme-\{\{themeMode\}\}"/, /bindtap="handlePreviewQr"/],
@@ -237,7 +243,7 @@ test('portfolio render event normalizes list and single work media with existing
   })
 })
 
-test('personal portfolio renderers are eight isolated four-file components with explicit properties', () => {
+test('personal portfolio renderers are nine isolated four-file components with explicit properties', () => {
   for (const componentCase of COMPONENT_CASES) {
     const directory = path.join(COMPONENT_ROOT, componentCase.name)
     for (const extension of ['js', 'json', 'wxml', 'wxss']) {
@@ -445,7 +451,7 @@ test('single work pauses native video only in the matching component scope', () 
   }
 })
 
-test('preview and visitor pages register and compose the same eight personal render components', () => {
+test('preview and visitor pages register and compose the same nine personal render components', () => {
   const componentNames = [
     'profile',
     'work-grid',
@@ -482,6 +488,8 @@ test('preview and visitor pages register and compose the same eight personal ren
       )
       assert.match(wxml, new RegExp(`<portfolio-${componentName}`))
     }
+    assert.equal(json.usingComponents['video-carousel'], '/pages/portfolios/components/video-carousel/video-carousel')
+    assert.match(wxml, /<video-carousel/)
     assert.match(
       wxml,
       new RegExp(`<portfolio-single-work[\\s\\S]*repair-mode="\\{\\{${page.repairMode}\\}\\}"[\\s\\S]*class="portfolio-single-work-instance"`)

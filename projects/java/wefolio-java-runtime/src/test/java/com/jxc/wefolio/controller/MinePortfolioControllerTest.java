@@ -15,6 +15,7 @@ import com.jxc.wefolio.dto.PortfolioHyperlinkTargetResponse;
 import com.jxc.wefolio.dto.PortfolioScheduleOptionsResponse;
 import com.jxc.wefolio.dto.PortfolioScheduleQueryRequest;
 import com.jxc.wefolio.dto.PortfolioScheduleQueryResponse;
+import com.jxc.wefolio.dto.PortfolioVideoCarouselWorkPageResponse;
 import com.jxc.wefolio.service.MinePortfolioService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -41,6 +42,36 @@ class MinePortfolioControllerTest {
     /** 作品集服务模拟 */
     @Mock
     private MinePortfolioService minePortfolioService;
+
+    /**
+     * 视频轮播候选接口只绑定标签、搜索和分页参数，不暴露媒体与审核筛选。
+     */
+    @Test
+    void videoCarouselWorksShouldDelegateDedicatedCandidateContract() throws NoSuchMethodException {
+        MinePortfolioController controller = new MinePortfolioController(minePortfolioService);
+        PortfolioVideoCarouselWorkPageResponse expected = new PortfolioVideoCarouselWorkPageResponse();
+        when(minePortfolioService.pageVideoCarouselWorks("草坪", 7L, 2, 30)).thenReturn(expected);
+
+        Response<PortfolioVideoCarouselWorkPageResponse> response =
+                controller.videoCarouselWorks("草坪", 7L, 2, 30);
+
+        assertThat(response.getData()).isSameAs(expected);
+        verify(minePortfolioService).pageVideoCarouselWorks("草坪", 7L, 2, 30);
+        var method = MinePortfolioController.class.getMethod(
+                "videoCarouselWorks", String.class, Long.class, int.class, int.class);
+        assertThat(method.getAnnotation(GetMapping.class).value())
+                .containsExactly("/api/mine/portfolios/components/video-carousel/works");
+        RequestParam keyword = method.getParameters()[0].getAnnotation(RequestParam.class);
+        RequestParam tagId = method.getParameters()[1].getAnnotation(RequestParam.class);
+        RequestParam page = method.getParameters()[2].getAnnotation(RequestParam.class);
+        RequestParam pageSize = method.getParameters()[3].getAnnotation(RequestParam.class);
+        assertThat(keyword.value()).isEqualTo("keyword");
+        assertThat(keyword.required()).isFalse();
+        assertThat(tagId.value()).isEqualTo("tagId");
+        assertThat(tagId.required()).isFalse();
+        assertThat(page.defaultValue()).isEqualTo("1");
+        assertThat(pageSize.defaultValue()).isEqualTo("20");
+    }
 
     @Test
     void controllerShouldUseMaintainerAccessAndDelegateToService() throws NoSuchMethodException {

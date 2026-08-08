@@ -671,6 +671,9 @@ Page({
   },
 
   async handleSaveSchedule() {
+    if (this.data.saving) {
+      return
+    }
     const payload = buildScheduleItemPayload(this.data.scheduleForm)
     const validation = validateScheduleItemPayload(payload)
     if (!validation.valid) {
@@ -713,6 +716,9 @@ Page({
   },
 
   async handleSaveSlot() {
+    if (this.data.saving) {
+      return
+    }
     const payload = buildSlotDefinitionPayload(this.data.slotForm)
     const validation = validateSlotDefinitionPayload(payload)
     if (!validation.valid) {

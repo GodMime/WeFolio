@@ -10,6 +10,7 @@
     <view wx:else class="content">
       <team-profile theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.teamProfile}}" wx:key="componentKey" style="order:{{item.sortOrder}}" team="{{item.data.team}}" />
       <team-carousel theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.carousel}}" wx:key="componentKey" style="order:{{item.sortOrder}}" items="{{item.data.items}}" bindpreview="handleImagePreview" />
+      <team-video-carousel theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.videoCarousel}}" wx:key="componentKey" style="order:{{item.sortOrder}}" component-key="{{item.componentKey}}" title="{{item.data.title}}" works="{{item.data.works}}" show-title="{{item.data.showTitle}}" show-swipe-hint="{{item.data.showSwipeHint}}" bindplay="handleVideoCarouselPlay" />
       <team-single-work theme-mode="{{themeMode}}" class="folio-component team-single-work-instance" wx:for="{{componentBuckets.singleWork}}" wx:key="componentKey" style="order:{{item.sortOrder}}" component-key="{{item.componentKey}}" work="{{item.data.work}}" show-title="{{item.data.showTitle}}" show-description="{{item.data.showDescription}}" active-video-key="{{activeSingleWorkVideoKey}}" bindpreview="handleSingleWorkPreview" bindactivate="handleSingleWorkActivate" bindvideoerror="handleSingleWorkVideoError" />
       <team-divider theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.divider}}" wx:key="componentKey" style="order:{{item.sortOrder}}" config="{{item.data}}" />
       <team-member-portfolio-grid theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.grid}}" wx:key="componentKey" style="order:{{item.sortOrder}}" items="{{item.data.items}}" show-member-name="{{item.data.showMemberName}}" bindpreview="handleMemberPortfolio" />
@@ -32,3 +33,11 @@
   theme-mode="{{themeMode}}"
   bindchange="handleMenuTap"
 ></portfolio-bottom-nav>
+<root-portal wx:if="{{videoPreviewVisible}}">
+  <view class="work-video-mask visible" catchtap="handleCloseVideoPreview">
+    <view class="work-video-panel" catchtap="handleVideoPreviewPanelTap">
+      <view class="work-video-heading"><view class="work-video-title">{{videoPreview.title}}</view><view class="work-video-close" catchtap="handleCloseVideoPreview">×</view></view>
+      <video id="teamPortfolioWorkVideo" class="work-video-player" src="{{videoPreviewUrl}}" poster="{{videoPreview.poster}}" controls="{{true}}" autoplay="{{true}}" show-fullscreen-btn="{{true}}" show-center-play-btn="{{true}}" enable-progress-gesture="{{true}}" object-fit="contain" binderror="handleVideoPreviewError"></video>
+    </view>
+  </view>
+</root-portal>

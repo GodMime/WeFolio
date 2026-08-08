@@ -89,6 +89,11 @@
   border-color: transparent;
 }
 
+.theme-dark .schedule-calendar-day.muted .schedule-query-day-meta,
+.theme-dark .schedule-calendar-day.disabled .schedule-query-day-meta {
+  color: #6c757d;
+}
+
 .theme-dark .primary-button,
 .theme-dark .schedule-query-submit {
   color: #212529;
@@ -102,6 +107,11 @@
 .theme-dark .schedule-calendar-day.selected .schedule-query-day-stack {
   color: #212529;
   background: #ffffff;
+  box-shadow: 0 0 0 9rpx #ffffff;
+}
+
+.theme-dark .schedule-calendar-day.selected .schedule-query-day-meta {
+  color: #212529;
 }
 
 .theme-dark .contact-form-entry-button {
@@ -174,6 +184,14 @@
   background: transparent;
 }
 
+.theme-dark .schedule-query-modal-panel .schedule-calendar-day.muted .schedule-query-day-meta {
+  color: #9aa5b1;
+}
+
+.theme-dark .schedule-query-modal-panel .schedule-calendar-day.disabled .schedule-query-day-meta {
+  color: #c1c8d0;
+}
+
 .theme-dark .schedule-query-modal-panel .schedule-query-submit {
   color: #ffffff;
   background: #212529;
@@ -186,4 +204,9 @@
 .theme-dark .schedule-query-modal-panel .schedule-calendar-day.selected .schedule-query-day-stack {
   color: #ffffff;
   background: #212529;
+  box-shadow: 0 0 0 9rpx #212529;
+}
+
+.theme-dark .schedule-query-modal-panel .schedule-calendar-day.selected .schedule-query-day-meta {
+  color: #ffffff;
 }

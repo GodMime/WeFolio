@@ -527,7 +527,8 @@ test('team portfolio editor consumes the shared page and ten-sheet contract', ()
   assert.deepEqual(importPaths(wxss), [
     '../../../styles/portfolio-text-typography.wxss',
     '../../../styles/portfolio-text-section-editor.wxss',
-    '../../../styles/portfolio-editor-foundation.wxss'
+    '../../../styles/portfolio-editor-foundation.wxss',
+    '../styles/team-member-selector.wxss'
   ])
   assert.match(wxss, /^(?:@import[^\n]+\n)+\n[^@]/)
 

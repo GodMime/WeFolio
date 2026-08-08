@@ -83,6 +83,7 @@ Page({
     contactFormModalVisible: false,
     activeContactFormComponent: createActiveContactFormComponent(),
     videoPreviewVisible: false,
+    videoPreviewUrl: '',
     videoPreview: null,
     activeSingleWorkVideoKey: '',
     visitorProfileAuthVisible: false,
@@ -326,6 +327,7 @@ Page({
         contactFormModalVisible: false,
         activeContactFormComponent: createActiveContactFormComponent(),
         videoPreviewVisible: false,
+        videoPreviewUrl: '',
         videoPreview: null,
         displaySwitchingComponentKey: ''
       },
@@ -339,6 +341,7 @@ Page({
     clearPortfolioMenuTransitionTimers(this)
     clearDisplaySwitchingTimer(this)
     this.stopActiveSingleWorkVideo()
+    this.clearVideoPreview()
     if (this.clipboardPromptController) {
       this.clipboardPromptController.dispose()
       this.clipboardPromptController = null
@@ -349,6 +352,7 @@ Page({
     this.singleWorkPageVisible = false
     this.invalidateSingleWorkInteraction()
     this.stopActiveSingleWorkVideo()
+    this.clearVideoPreview()
     if (this.clipboardPromptController) {
       this.clipboardPromptController.pause()
     }
@@ -524,27 +528,88 @@ Page({
     })
   },
 
+  recordVideoCarouselEvent(componentKey, work) {
+    if (!this.data.shareCode) return Promise.resolve()
+    return this.requestWithVisitorRefresh({
+      url: `${VISITOR_PORTFOLIO_API_PREFIX}/${this.data.shareCode}/events`,
+      method: 'POST',
+      authMode: 'visitor',
+      data: buildVisitorEventPayload({
+        visitorKey: this.data.visitorKey,
+        eventType: VIDEO_PLAYED_EVENT_TYPE,
+        componentKey,
+        workId: work.workId,
+        mediaType: MEDIA_TYPE_VIDEO,
+        durationSeconds: 0
+      }, idempotencyKey('video-carousel'))
+    })
+  },
+
   openWorkMedia(work) {
     if (work.mediaType === MEDIA_TYPE_VIDEO) {
-      this.setData({
-        videoPreviewVisible: true,
-        videoPreview: {
-          src: work.previewUrl,
-          poster: work.coverUrl,
-          title: work.title || DEFAULT_VIDEO_TITLE
-        }
-      })
-      return true
+      return this.openVideoPreview(work)
     }
     wx.previewImage({ current: work.previewUrl, urls: [work.previewUrl] })
     return true
   },
 
   handleCloseVideoPreview() {
+    this.clearVideoPreview()
+  },
+
+  clearVideoPreview() {
+    if (typeof wx !== 'undefined' && wx.createVideoContext && this.data.videoPreviewUrl) {
+      const context = wx.createVideoContext('portfolioWorkVideo', this)
+      if (context && typeof context.stop === 'function') context.stop()
+    }
     this.setData({
       videoPreviewVisible: false,
+      videoPreviewUrl: '',
       videoPreview: null
     })
+  },
+
+  openVideoPreview(work = {}) {
+    const previewUrl = work.mediaUrl || work.previewUrl || ''
+    if (!previewUrl) {
+      wx.showToast({ title: VIDEO_MISSING_MESSAGE, icon: 'none' })
+      return false
+    }
+    this.stopActiveSingleWorkVideo()
+    if (this.data.videoPreviewVisible || this.data.videoPreviewUrl) this.clearVideoPreview()
+    this.setData({
+      videoPreviewVisible: true,
+      videoPreviewUrl: previewUrl,
+      videoPreview: {
+        src: previewUrl,
+        poster: work.coverUrl || '',
+        title: work.title || DEFAULT_VIDEO_TITLE
+      }
+    })
+    return true
+  },
+
+  handleVideoCarouselPlay(event) {
+    const detail = event && event.detail || {}
+    const sourceWork = detail.work || {}
+    const work = normalizeWorkTapDataset(sourceWork)
+    if (!sourceWork.mediaUrl) {
+      wx.showToast({ title: VIDEO_MISSING_MESSAGE, icon: 'none' })
+      return Promise.resolve(false)
+    }
+    return this.recordVideoCarouselEvent(detail.componentKey || '', work)
+      .then(() => this.openVideoPreview(Object.assign({}, work, {
+        mediaUrl: sourceWork.mediaUrl
+      })))
+      .catch((error) => {
+        wx.showToast({ title: error.message || '作品打开失败', icon: 'none' })
+        return false
+      })
+  },
+
+  handleVideoPreviewError() {
+    this.clearVideoPreview()
+    wx.showToast({ title: '视频播放失败，请重试', icon: 'none' })
   },
 
   handleVideoPreviewPanelTap() {

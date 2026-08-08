@@ -13,6 +13,7 @@ const {
   normalizeWorkList,
   normalizeWorkTags
 } = require('../utils/works')
+const { formatDuration } = require('../utils/video-carousel')
 const {
   buildDisplayGroupWorkScrollHeight
 } = require('../utils/display-group-layout')
@@ -71,6 +72,7 @@ const {
   normalizeProfileComponentConfig,
   normalizePortfolioConfig,
   normalizeTextSectionConfig,
+  normalizeVideoCarouselConfig,
   normalizeWorkIds,
   removeNavigationItem,
   renameNavigationItem,
@@ -87,6 +89,7 @@ const {
   updateComponentProfileConfig,
   updateComponentTextSectionConfig,
   updateComponentWorkIds,
+  updateVideoCarouselConfig,
   validatePortfolioForPublish,
   visitPortfolioComponents
 } = require('../../../utils/portfolios')
@@ -109,6 +112,7 @@ const COMPONENT_LIBRARY_API_URL = '/api/mine/portfolios/component-library'
 const HYPERLINK_TARGETS_API_URL = '/api/mine/portfolios/hyperlink-targets'
 const BASIC_PROFILE_API_URL = '/api/mine/profile'
 const WORKS_API_URL = '/api/mine/works'
+const VIDEO_CAROUSEL_WORKS_API_URL = '/api/mine/portfolios/components/video-carousel/works'
 const PASSED_WORK_AUDIT_STATUS = 'PASSED'
 const PORTFOLIOS_PAGE_ROUTE = 'pages/portfolios/portfolios'
 const PORTFOLIOS_PAGE_URL = `/${PORTFOLIOS_PAGE_ROUTE}`
@@ -118,6 +122,8 @@ const SWIPE_VERTICAL_TOLERANCE = 48
 const COMPONENT_DRAG_SCALE = 1.015
 const COMPONENT_WORK_PAGE_SIZE = 20
 const MAX_PERSONAL_CAROUSEL_ITEMS = 9
+const MAX_PERSONAL_VIDEO_CAROUSEL_ITEMS = 8
+const MIN_PERSONAL_VIDEO_CAROUSEL_ITEMS = 3
 const DISPLAY_GROUP_WORK_PAGE_SIZE = 100
 const DISPLAY_GROUP_TAG_KEY_PREFIX = 'tag_'
 const DISPLAY_GROUP_SORT_ORDER_STEP = 1000
@@ -173,6 +179,7 @@ const BOTTOM_NAV_COUNT_OPTIONS = [1, 2, 3, 4]
 
 const DEFAULT_COMPONENT_DESCRIPTIONS = {
   CAROUSEL: '展示已选择的图片作品',
+  VIDEO_CAROUSEL: '叠放循环展示视频作品，访客左右滑动浏览、点击播放',
   PROFILE: '展示个人资料和服务标签',
   SCHEDULE_QUERY: '开放访客查询档期',
   WORK_GRID: '双列展示图片和视频作品',
@@ -290,6 +297,7 @@ function isDisplayGroupComponent(componentType) {
 
 function isEditableComponentType(componentType) {
   return componentType === COMPONENT_TYPES.CAROUSEL ||
+    componentType === COMPONENT_TYPES.VIDEO_CAROUSEL ||
     componentType === COMPONENT_TYPES.SINGLE_WORK ||
     componentType === COMPONENT_TYPES.PROFILE ||
     componentType === COMPONENT_TYPES.QR_CONTACT ||
@@ -483,6 +491,100 @@ function buildComponentWorkOptions(works = [], selectedIds = [], componentType =
       metaText: work.tagText && work.tagText !== '未设置标签' ? `${work.typeText} · ${work.tagText}` : work.typeText,
       aspectRatioText: normalizeWorkAspectRatioText(work)
     }))
+}
+
+function normalizeVideoCarouselCandidate(work = {}) {
+  const workId = Number(work.workId || work.id)
+  if (!Number.isInteger(workId) || workId <= 0) {
+    return null
+  }
+  const tags = Array.isArray(work.tags) ? work.tags : []
+  const tagText = tags.map((tag) => String(tag && tag.name || '').trim()).filter(Boolean).join('、')
+  return {
+    id: workId,
+    workId,
+    title: String(work.title || '').trim() || `视频 #${workId}`,
+    coverUrl: String(work.coverUrl || ''),
+    mediaUrl: String(work.mediaUrl || ''),
+    thumbUrl: String(work.coverUrl || work.mediaUrl || ''),
+    durationMs: Number(work.durationMs) || 0,
+    durationText: formatDuration(work.durationMs),
+    width: Number(work.width) || 0,
+    height: Number(work.height) || 0,
+    aspectRatio: String(work.aspectRatio || ''),
+    aspectRatioText: String(work.aspectRatio || '').trim() || WORK_ASPECT_RATIO_FALLBACK_TEXT,
+    tags,
+    metaText: tagText ? `视频 · ${tagText}` : '视频'
+  }
+}
+
+function normalizeVideoCarouselFilterTags(filterTags = []) {
+  return (Array.isArray(filterTags) ? filterTags : []).map((tag) => {
+    const id = normalizeComponentWorkTagId(tag && (tag.tagId || tag.id))
+    const name = String(tag && tag.name || '').trim() || (id ? '未命名标签' : '全部')
+    const count = Math.max(0, Number(tag && tag.count) || 0)
+    return {
+      id,
+      name,
+      color: String(tag && tag.color || ''),
+      count,
+      active: Boolean(tag && tag.active),
+      labelText: `${name} ${count}`
+    }
+  })
+}
+
+function buildVideoCarouselSelectedWorks(workIds = [], candidates = []) {
+  const candidateMap = (Array.isArray(candidates) ? candidates : []).reduce((result, item) => {
+    const normalized = normalizeVideoCarouselCandidate(item)
+    if (normalized) {
+      result.set(normalized.workId, normalized)
+    }
+    return result
+  }, new Map())
+  return normalizeWorkIds(workIds).map((workId) => candidateMap.get(workId) || {
+    id: workId,
+    workId,
+    title: `视频 #${workId}`,
+    thumbUrl: '',
+    metaText: '视频',
+    durationText: formatDuration(0),
+    aspectRatioText: WORK_ASPECT_RATIO_FALLBACK_TEXT
+  })
+}
+
+function buildVideoCarouselWorkOptions(works = [], selectedWorks = []) {
+  const selectedIds = normalizeWorkIds((Array.isArray(selectedWorks) ? selectedWorks : [])
+    .map((work) => work && work.workId))
+  const selectedSet = new Set(selectedIds)
+  const selectionOrder = selectedIds.reduce((result, workId, index) => {
+    result.set(workId, index + 1)
+    return result
+  }, new Map())
+  return (Array.isArray(works) ? works : [])
+    .map(normalizeVideoCarouselCandidate)
+    .filter(Boolean)
+    .map((work) => Object.assign({}, work, {
+      selected: selectedSet.has(work.workId),
+      selectionOrder: selectionOrder.get(work.workId) || 0
+    }))
+}
+
+function mergeVideoCarouselCandidates(currentWorks = [], nextWorks = []) {
+  const seen = new Set()
+  return currentWorks.concat(nextWorks)
+    .map(normalizeVideoCarouselCandidate)
+    .filter((work) => {
+      if (!work || seen.has(work.workId)) {
+        return false
+      }
+      seen.add(work.workId)
+      return true
+    })
+}
+
+function buildVideoCarouselCountText(selectedWorks = []) {
+  return `${Array.isArray(selectedWorks) ? selectedWorks.length : 0} / ${MAX_PERSONAL_VIDEO_CAROUSEL_ITEMS} 已选`
 }
 
 function normalizeDisplayGroupWorkPreview(work = {}, fallbackId = 0) {
@@ -1055,6 +1157,13 @@ Page({
     componentWorkCurrentSelection: null,
     editingComponentKey: '',
     editingComponentType: '',
+    videoCarouselTitle: '视频作品',
+    videoCarouselTitleCount: 4,
+    videoCarouselShowTitle: true,
+    videoCarouselShowSwipeHint: true,
+    videoCarouselCandidateWorks: [],
+    videoCarouselSelectedWorks: [],
+    videoCarouselEditingNewComponent: false,
     displayGroupSheetVisible: false,
     editingDisplayComponentKey: '',
     editingDisplayComponentType: '',
@@ -1640,6 +1749,13 @@ Page({
         ? this.openHyperlinkSheet(added.componentKey, true)
         : Promise.resolve()
     }
+    if (componentType === COMPONENT_TYPES.VIDEO_CAROUSEL) {
+      const added = getMenuComponentList(nextConfig, menuKey)
+        .find((component) => !previousKeys.has(component.componentKey))
+      return added
+        ? this.openVideoCarouselSheet(added.componentKey, true)
+        : Promise.resolve()
+    }
   },
 
   handleComponentTouchStart(event) {
@@ -1772,6 +1888,9 @@ Page({
     }
     if (componentType === COMPONENT_TYPES.CAROUSEL) {
       return this.openComponentWorkSheet(componentKey, componentType)
+    }
+    if (componentType === COMPONENT_TYPES.VIDEO_CAROUSEL) {
+      return this.openVideoCarouselSheet(componentKey)
     }
     if (componentType === COMPONENT_TYPES.SINGLE_WORK) {
       return this.openComponentWorkSheet(componentKey, componentType)
@@ -2900,6 +3019,126 @@ Page({
     })
   },
 
+  openVideoCarouselSheet(componentKey, editingNewComponent = false) {
+    const component = findComponentByKey(this.data.config, componentKey)
+    if (!component || component.componentType !== COMPONENT_TYPES.VIDEO_CAROUSEL) {
+      return Promise.resolve()
+    }
+    const config = normalizeVideoCarouselConfig(component.config || {})
+    const selectedWorks = buildVideoCarouselSelectedWorks(config.workIds)
+    this.setData({
+      componentWorkSheetVisible: true,
+      componentWorkSheetTitle: '编辑视频轮播',
+      componentWorkLoading: true,
+      componentWorkLoadingMore: false,
+      componentWorkErrorText: '',
+      componentWorkEmptyText: '暂无可选视频作品',
+      componentWorkOptions: [],
+      componentWorkFilterTags: [],
+      componentWorkKeyword: '',
+      componentWorkSelectedTagId: null,
+      componentWorkPage: 1,
+      componentWorkPageSize: COMPONENT_WORK_PAGE_SIZE,
+      componentWorkHasMore: false,
+      componentWorkSelectedIds: config.workIds,
+      componentWorkSelectedCountText: buildVideoCarouselCountText(selectedWorks),
+      componentWorkSelectionMode: 'multiple',
+      editingComponentKey: componentKey,
+      editingComponentType: COMPONENT_TYPES.VIDEO_CAROUSEL,
+      videoCarouselTitle: config.title,
+      videoCarouselTitleCount: countUnicodeCodePoints(config.title),
+      videoCarouselShowTitle: config.showTitle,
+      videoCarouselShowSwipeHint: config.showSwipeHint,
+      videoCarouselCandidateWorks: [],
+      videoCarouselSelectedWorks: selectedWorks,
+      videoCarouselEditingNewComponent: Boolean(editingNewComponent)
+    })
+    return this.loadVideoCarouselWorks({ reset: true })
+  },
+
+  async loadVideoCarouselWorks(options = {}) {
+    const reset = options.reset !== false
+    const pageSize = Number(this.data.componentWorkPageSize) || COMPONENT_WORK_PAGE_SIZE
+    const requestPage = reset ? 1 : (Number(this.data.componentWorkPage) || 1) + 1
+    const keyword = String(this.data.componentWorkKeyword || '').trim()
+    const tagId = normalizeComponentWorkTagId(this.data.componentWorkSelectedTagId)
+    const requestData = { keyword, page: requestPage, pageSize }
+    if (tagId) {
+      requestData.tagId = tagId
+    }
+    const requestSeq = this.componentWorkRequestSeq + 1
+    this.componentWorkRequestSeq = requestSeq
+    this.setData(reset ? {
+      componentWorkLoading: true,
+      componentWorkLoadingMore: false,
+      componentWorkErrorText: ''
+    } : {
+      componentWorkLoadingMore: true,
+      componentWorkErrorText: ''
+    })
+    try {
+      const response = await request({
+        url: VIDEO_CAROUSEL_WORKS_API_URL,
+        data: requestData
+      })
+      if (requestSeq !== this.componentWorkRequestSeq) {
+        return
+      }
+      const incomingWorks = Array.isArray(response && response.works) ? response.works : []
+      const candidateWorks = reset
+        ? mergeVideoCarouselCandidates([], incomingWorks)
+        : mergeVideoCarouselCandidates(this.data.videoCarouselCandidateWorks, incomingWorks)
+      const selectedWorks = buildVideoCarouselSelectedWorks(
+        this.data.videoCarouselSelectedWorks.map((work) => work.workId),
+        candidateWorks.concat(this.data.videoCarouselSelectedWorks)
+      )
+      this.setData({
+        componentWorkLoading: false,
+        componentWorkLoadingMore: false,
+        componentWorkErrorText: '',
+        componentWorkOptions: buildVideoCarouselWorkOptions(candidateWorks, selectedWorks),
+        componentWorkFilterTags: normalizeVideoCarouselFilterTags(response && response.filterTags),
+        componentWorkPage: Math.max(1, Number(response && response.page) || requestPage),
+        componentWorkPageSize: Math.max(1, Number(response && response.pageSize) || pageSize),
+        componentWorkHasMore: Boolean(response && response.hasMore),
+        componentWorkSelectedIds: selectedWorks.map((work) => work.workId),
+        componentWorkSelectedCountText: buildVideoCarouselCountText(selectedWorks),
+        videoCarouselCandidateWorks: candidateWorks,
+        videoCarouselSelectedWorks: selectedWorks
+      })
+    } catch (error) {
+      if (requestSeq !== this.componentWorkRequestSeq) {
+        return
+      }
+      if (error && error.authRequired) {
+        this.setData({ componentWorkLoading: false, componentWorkLoadingMore: false })
+        handleMaintainerAuthRequired(error.message)
+        return
+      }
+      this.setData({
+        componentWorkLoading: false,
+        componentWorkLoadingMore: false,
+        componentWorkErrorText: error && error.message ? error.message : '视频作品加载失败'
+      })
+    }
+  },
+
+  handleVideoCarouselTitleInput(event) {
+    const title = Array.from(String(event && event.detail && event.detail.value || '')).slice(0, 10).join('')
+    this.setData({
+      videoCarouselTitle: title,
+      videoCarouselTitleCount: countUnicodeCodePoints(title)
+    })
+  },
+
+  handleVideoCarouselShowTitleChange(event) {
+    this.setData({ videoCarouselShowTitle: Boolean(event && event.detail && event.detail.value) })
+  },
+
+  handleVideoCarouselShowSwipeHintChange(event) {
+    this.setData({ videoCarouselShowSwipeHint: Boolean(event && event.detail && event.detail.value) })
+  },
+
   openComponentWorkSheet(componentKey, componentType, options = {}) {
     const component = findComponentByKey(this.data.config, componentKey)
     if (!component) {
@@ -3050,6 +3289,9 @@ Page({
       componentWorkLoadingMore: false,
       componentWorkErrorText: ''
     })
+    if (this.data.editingComponentType === COMPONENT_TYPES.VIDEO_CAROUSEL) {
+      return this.loadVideoCarouselWorks({ reset: true })
+    }
     return this.loadComponentWorks({ reset: true })
   },
 
@@ -3060,6 +3302,9 @@ Page({
   },
 
   handleComponentWorkSearchConfirm() {
+    if (this.data.editingComponentType === COMPONENT_TYPES.VIDEO_CAROUSEL) {
+      return this.loadVideoCarouselWorks({ reset: true })
+    }
     return this.loadComponentWorks({ reset: true })
   },
 
@@ -3070,6 +3315,9 @@ Page({
     this.setData({
       componentWorkKeyword: ''
     })
+    if (this.data.editingComponentType === COMPONENT_TYPES.VIDEO_CAROUSEL) {
+      return this.loadVideoCarouselWorks({ reset: true })
+    }
     return this.loadComponentWorks({ reset: true })
   },
 
@@ -3081,6 +3329,9 @@ Page({
     this.setData({
       componentWorkSelectedTagId: tagId
     })
+    if (this.data.editingComponentType === COMPONENT_TYPES.VIDEO_CAROUSEL) {
+      return this.loadVideoCarouselWorks({ reset: true })
+    }
     return this.loadComponentWorks({ reset: true })
   },
 
@@ -3088,12 +3339,15 @@ Page({
     if (this.data.componentWorkLoading || this.data.componentWorkLoadingMore || !this.data.componentWorkHasMore) {
       return Promise.resolve()
     }
+    if (this.data.editingComponentType === COMPONENT_TYPES.VIDEO_CAROUSEL) {
+      return this.loadVideoCarouselWorks({ reset: false })
+    }
     return this.loadComponentWorks({ reset: false })
   },
 
   handleCloseComponentWorkSheet() {
     this.componentWorkRequestSeq += 1
-    this.setData({
+    const nextState = {
       componentWorkSheetVisible: false,
       editingComponentKey: '',
       editingComponentType: '',
@@ -3102,8 +3356,20 @@ Page({
       componentWorkSelectionMode: 'multiple',
       componentWorkShowTitle: true,
       componentWorkShowDescription: false,
-      componentWorkCurrentSelection: null
-    })
+      componentWorkCurrentSelection: null,
+      videoCarouselCandidateWorks: [],
+      videoCarouselSelectedWorks: [],
+      videoCarouselEditingNewComponent: false
+    }
+    if (this.data.editingComponentType === COMPONENT_TYPES.VIDEO_CAROUSEL && this.data.videoCarouselEditingNewComponent) {
+      this.applyEditorConfig(removeComponent(
+        this.data.config,
+        this.data.editingComponentKey,
+        this.data.activeMenuKey
+      ), this.data.activeMenuKey, nextState)
+      return
+    }
+    this.setData(nextState)
   },
 
   handleSingleWorkPickerTagChange(event) {
@@ -3138,6 +3404,29 @@ Page({
   handleToggleComponentWork(event) {
     const workId = Number(event.currentTarget.dataset.id)
     if (!Number.isFinite(workId) || workId <= 0) {
+      return
+    }
+    if (this.data.editingComponentType === COMPONENT_TYPES.VIDEO_CAROUSEL) {
+      const selectedWorks = Array.isArray(this.data.videoCarouselSelectedWorks)
+        ? this.data.videoCarouselSelectedWorks
+        : []
+      const selectedIndex = selectedWorks.findIndex((work) => Number(work && work.workId) === workId)
+      if (selectedIndex < 0 && selectedWorks.length >= MAX_PERSONAL_VIDEO_CAROUSEL_ITEMS) {
+        wx.showToast({ title: '视频轮播最多选择8个视频', icon: 'none' })
+        return
+      }
+      const candidate = normalizeVideoCarouselCandidate(
+        this.data.componentWorkOptions.find((work) => Number(work && (work.workId || work.id)) === workId) || { workId }
+      )
+      const nextSelectedWorks = selectedIndex >= 0
+        ? selectedWorks.filter((_, index) => index !== selectedIndex)
+        : selectedWorks.concat(candidate)
+      this.setData({
+        componentWorkSelectedIds: nextSelectedWorks.map((work) => work.workId),
+        componentWorkSelectedCountText: buildVideoCarouselCountText(nextSelectedWorks),
+        componentWorkOptions: buildVideoCarouselWorkOptions(this.data.videoCarouselCandidateWorks, nextSelectedWorks),
+        videoCarouselSelectedWorks: nextSelectedWorks
+      })
       return
     }
     const selectedIds = normalizeWorkIds(this.data.componentWorkSelectedIds)
@@ -3189,8 +3478,22 @@ Page({
       wx.showToast({ title: '请选择一个作品', icon: 'none' })
       return
     }
+    if (
+      this.data.editingComponentType === COMPONENT_TYPES.VIDEO_CAROUSEL &&
+      this.data.videoCarouselSelectedWorks.length < MIN_PERSONAL_VIDEO_CAROUSEL_ITEMS
+    ) {
+      wx.showToast({ title: '视频轮播至少选择3个视频', icon: 'none' })
+      return
+    }
     this.componentWorkRequestSeq += 1
-    const config = this.data.editingComponentType === COMPONENT_TYPES.SINGLE_WORK
+    const config = this.data.editingComponentType === COMPONENT_TYPES.VIDEO_CAROUSEL
+      ? updateVideoCarouselConfig(this.data.config, componentKey, {
+          title: this.data.videoCarouselTitle,
+          workIds: this.data.videoCarouselSelectedWorks.map((work) => work.workId),
+          showTitle: this.data.videoCarouselShowTitle,
+          showSwipeHint: this.data.videoCarouselShowSwipeHint
+        }, this.data.activeMenuKey)
+      : this.data.editingComponentType === COMPONENT_TYPES.SINGLE_WORK
       ? updateSingleWorkConfig(this.data.config, componentKey, {
           workId: this.data.componentWorkSelectedIds[0],
           showTitle: this.data.componentWorkShowTitle,
@@ -3214,7 +3517,10 @@ Page({
       componentWorkSelectionMode: 'multiple',
       componentWorkShowTitle: true,
       componentWorkShowDescription: false,
-      componentWorkCurrentSelection: null
+      componentWorkCurrentSelection: null,
+      videoCarouselCandidateWorks: [],
+      videoCarouselSelectedWorks: [],
+      videoCarouselEditingNewComponent: false
     })
   },
 

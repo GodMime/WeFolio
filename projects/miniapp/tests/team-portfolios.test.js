@@ -72,7 +72,7 @@ test('normalizes team theme and menu components while keeping private data opaqu
   const privateConfig = { items: [{ workId: 'not-top-level' }] }
   const config = normalizeTeamPortfolioConfig({
     schemaVersion: 'standard-team-v1',
-    editorSchemaRevision: 2,
+    editorSchemaRevision: 3,
     share: { title: ' 团队 ', description: ' 简介 ', coverUrl: 'cover' },
     style: { backgroundColor: '#1a2b3c' },
     components: [
@@ -90,7 +90,7 @@ test('normalizes team theme and menu components while keeping private data opaqu
     }
   })
   assert.equal(config.share.title, '团队')
-  assert.equal(config.editorSchemaRevision, 2)
+  assert.equal(config.editorSchemaRevision, 3)
   assert.deepEqual(config.style, { backgroundColor: '#1A2B3C' })
   assert.deepEqual(config.components.map((item) => item.componentKey), ['a', 'b'])
   assert.equal(config.components[1].config, privateConfig)
@@ -117,7 +117,7 @@ test('team menu helpers map the first menu to top-level components and move atom
   const profileConfig = { team: { teamId: 7, teamName: '映期团队' }, localAsset: 'wxfile://avatar' }
   const config = {
     schemaVersion: 'standard-team-v1',
-    editorSchemaRevision: 2,
+    editorSchemaRevision: 3,
     components: [
       { componentKey: 'component-profile', componentType: 'TEAM_PROFILE', enabled: true, config: profileConfig },
       { componentKey: 'component-divider', componentType: 'DIVIDER', enabled: true, config: {} }
@@ -216,7 +216,7 @@ test('team component mutations target the selected menu and keep team component 
   ])
 })
 
-test('team text sections keep revision two, unknown fields, and new defaults', () => {
+test('team text sections keep revision three, unknown fields, and new defaults', () => {
   const {
     addTeamComponent,
     getTeamMenuComponentList,
@@ -230,7 +230,7 @@ test('team text sections keep revision two, unknown fields, and new defaults', (
     futureField: 'kept'
   }
   const normalized = normalizeTeamPortfolioConfig({
-    editorSchemaRevision: 2,
+    editorSchemaRevision: 3,
     components: [{
       componentKey: 'legacy-text',
       componentType: 'TEXT_SECTION',
@@ -239,8 +239,8 @@ test('team text sections keep revision two, unknown fields, and new defaults', (
     }]
   })
 
-  assert.equal(TEAM_EDITOR_SCHEMA_REVISION, 2)
-  assert.equal(normalized.editorSchemaRevision, 2)
+  assert.equal(TEAM_EDITOR_SCHEMA_REVISION, 3)
+  assert.equal(normalized.editorSchemaRevision, 3)
   assert.equal(normalized.components[0].config, futureConfig)
 
   const added = addTeamComponent(normalized, 'TEXT_SECTION')
@@ -250,6 +250,75 @@ test('team text sections keep revision two, unknown fields, and new defaults', (
     fontSizeRpx: 28
   })
   assert.equal(added.components[0].config.futureField, 'kept')
+})
+
+test('team video carousel defaults normalize ordered items and enforce publish count', () => {
+  const {
+    TEAM_EDITOR_SCHEMA_REVISION,
+    addTeamComponent,
+    getTeamMenuComponentList,
+    normalizeTeamPortfolioConfig,
+    validateTeamPortfolioForPublish
+  } = loadUtility('team-portfolios.js')
+  const added = addTeamComponent({ components: [] }, 'VIDEO_CAROUSEL')
+  assert.equal(TEAM_EDITOR_SCHEMA_REVISION, 3)
+  assert.deepEqual(getTeamMenuComponentList(added)[0].config, {
+    title: '视频作品',
+    items: [],
+    showTitle: true,
+    showSwipeHint: true
+  })
+  const normalized = normalizeTeamPortfolioConfig({
+    components: [{
+      componentKey: 'video',
+      componentType: 'VIDEO_CAROUSEL',
+      enabled: true,
+      config: {
+        title: '  一二三四五六七八九十😀  ',
+        items: [
+          { memberUserId: 2, workId: 20 },
+          { memberUserId: '3', workId: '30' },
+          { memberUserId: 9, workId: 20 },
+          { memberUserId: 0, workId: 40 }
+        ],
+        showSwipeHint: false
+      }
+    }]
+  })
+  assert.deepEqual(normalized.components[0].config, {
+    title: '一二三四五六七八九十',
+    items: [
+      { memberUserId: 2, workId: 20 },
+      { memberUserId: 3, workId: 30 }
+    ],
+    showTitle: true,
+    showSwipeHint: false
+  })
+  assert.equal(validateTeamPortfolioForPublish(normalized).message, '视频轮播至少选择3个视频')
+  normalized.components[0].config.items.push({ memberUserId: 4, workId: 40 })
+  assert.equal(validateTeamPortfolioForPublish(normalized).valid, true)
+  normalized.components[0].config.items.push(
+    { memberUserId: 5, workId: 50 },
+    { memberUserId: 6, workId: 60 },
+    { memberUserId: 7, workId: 70 },
+    { memberUserId: 8, workId: 80 },
+    { memberUserId: 9, workId: 90 },
+    { memberUserId: 10, workId: 100 }
+  )
+  assert.equal(validateTeamPortfolioForPublish(normalized).message, '视频轮播最多选择8个视频')
+})
+
+test('team component library request advertises revision three', async () => {
+  const { fetchTeamComponentLibrary } = loadUtility('team-portfolios.js')
+  const calls = []
+  await fetchTeamComponentLibrary(async (options) => {
+    calls.push(options)
+    return []
+  })
+  assert.deepEqual(calls, [{
+    url: '/api/mine/team-portfolios/component-library',
+    data: { editorSchemaRevision: 3 }
+  }])
 })
 
 test('team navigation helpers add rename and remove menus without losing the promoted first menu', () => {
@@ -291,7 +360,7 @@ test('team publish validation returns the first local menu and component error',
   const { validateTeamPortfolioForPublish } = loadUtility('team-portfolios.js')
   const duplicate = {
     schemaVersion: 'standard-team-v1',
-    editorSchemaRevision: 2,
+    editorSchemaRevision: 3,
     style: { backgroundColor: '#FFFFFF' },
     components: [{ componentKey: 'same', componentType: 'DIVIDER', enabled: true, config: {} }],
     bottomNav: {
@@ -328,7 +397,7 @@ test('team publish validation rejects raw navigation errors before normalization
   } = loadUtility('team-portfolios.js')
   const config = {
     schemaVersion: 'standard-team-v1',
-    editorSchemaRevision: 2,
+    editorSchemaRevision: 3,
     style: { backgroundColor: '#FFFFFF' },
     components: [{ componentKey: 'home', componentType: 'DIVIDER', enabled: true, config: {} }],
     bottomNav: {
@@ -388,10 +457,10 @@ test('team publish validation rejects raw navigation errors before normalization
   })
 
   const unsupportedRevision = JSON.parse(JSON.stringify(config))
-  unsupportedRevision.editorSchemaRevision = 3
+  unsupportedRevision.editorSchemaRevision = 4
   const normalizedUnsupportedRevision =
     normalizeTeamPortfolioConfig(unsupportedRevision)
-  assert.equal(normalizedUnsupportedRevision.editorSchemaRevision, 3)
+  assert.equal(normalizedUnsupportedRevision.editorSchemaRevision, 4)
   assert.deepEqual(validateTeamPortfolioForPublish(normalizedUnsupportedRevision), {
     valid: false,
     menuKey: '',
@@ -615,6 +684,17 @@ test('recursively rejects personal and cross-component imports in the team packa
     } else {
       for (const pattern of forbidden) assert.doesNotMatch(source, pattern, relativePath)
     }
-    if (file.includes(`${path.sep}components${path.sep}`)) assert.doesNotMatch(source, /require\(/, path.relative(packageRoot, file))
+    if (file.includes(`${path.sep}components${path.sep}`)) {
+      const componentsRoot = path.join(packageRoot, 'components')
+      const currentComponent = path.relative(componentsRoot, file).split(path.sep)[0]
+      for (const match of source.matchAll(/require\(['"]([^'"]+)['"]\)/g)) {
+        const resolved = path.resolve(path.dirname(file), match[1])
+        assert.ok(resolved.startsWith(packageRoot + path.sep), `${relativePath}: ${match[1]}`)
+        if (resolved.startsWith(componentsRoot + path.sep)) {
+          const importedComponent = path.relative(componentsRoot, resolved).split(path.sep)[0]
+          assert.equal(importedComponent, currentComponent, `${relativePath}: ${match[1]}`)
+        }
+      }
+    }
   }
 })

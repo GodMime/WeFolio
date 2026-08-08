@@ -14,6 +14,7 @@ import com.jxc.wefolio.mapper.WorkStorageBillingMapper.StorageAggregate;
 import com.jxc.wefolio.service.point.DebitCommand;
 import com.jxc.wefolio.service.point.PointCommandService;
 import com.jxc.wefolio.service.point.SystemDebitResult;
+import com.jxc.wefolio.service.point.UserPointMutex;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +39,7 @@ public class WorkStorageBillingSettlementService {
     private final WorkStorageBillingMapper workStorageBillingMapper;
     private final PointService pointService;
     private final PointCommandService pointCommandService;
+    private final UserPointMutex userPointMutex;
 
     /** 在一个事务内重新查询规则、容量和余额并完成单用户账期结算。 */
     @Transactional(rollbackFor = Exception.class)
@@ -45,6 +47,11 @@ public class WorkStorageBillingSettlementService {
         if (userId == null || billingMonth == null) {
             throw new BusinessException("用户与账期不能为空");
         }
+        return userPointMutex.execute(userId, () -> settleLocked(userId, billingMonth));
+    }
+
+    /** 在当前 JVM 用户级互斥区间内执行完整账期结算。 */
+    private WorkStorageBillingSettlementResponse settleLocked(Long userId, YearMonth billingMonth) {
         LocalDate month = billingMonth.atDay(1);
         ExistingBill existing = findBill(userId, month);
         if (existing != null) {

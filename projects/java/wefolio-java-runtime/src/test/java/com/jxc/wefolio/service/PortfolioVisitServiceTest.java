@@ -1,7 +1,9 @@
 package com.jxc.wefolio.service;
 
 import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
+import com.jxc.wefolio.dict.PortfolioConfigScopeDict;
 import com.jxc.wefolio.dict.PortfolioTypeDict;
+import com.jxc.wefolio.dict.ReferenceTypeDict;
 import com.jxc.wefolio.dict.BillingWindowScopeDict;
 import com.jxc.wefolio.dict.MediaTypeDict;
 import com.jxc.wefolio.dict.PointSceneCodeDict;
@@ -9,11 +11,13 @@ import com.jxc.wefolio.dict.VisitEventTypeDict;
 import com.jxc.wefolio.dict.VisitSourceTypeDict;
 import com.jxc.wefolio.dto.VisitorPortfolioEventRequest;
 import com.jxc.wefolio.entity.PortfolioEntity;
+import com.jxc.wefolio.entity.PortfolioReferenceEntity;
 import com.jxc.wefolio.entity.VisitEventEntity;
 import com.jxc.wefolio.entity.VisitRecordEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.VisitEventEntityMapper;
 import com.jxc.wefolio.mapper.VisitRecordEntityMapper;
+import com.jxc.wefolio.mapper.PortfolioReferenceEntityMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -57,9 +61,15 @@ class PortfolioVisitServiceTest {
     @Mock
     private PointBillingWindowService pointBillingWindowService;
 
+    /** 作品集引用 Mapper 模拟 */
+    @Mock
+    private PortfolioReferenceEntityMapper portfolioReferenceEntityMapper;
+
     @BeforeEach
     void setUp() {
-        lenient().when(visitRecordEntityMapper.updateById(any(VisitRecordEntity.class))).thenReturn(1);
+        lenient().when(visitRecordEntityMapper.incrementCounters(
+                any(VisitRecordEntity.class), anyInt(), anyInt(), anyInt(), anyInt(), anyInt(), anyInt(), anyInt()))
+                .thenReturn(1);
     }
 
     @Test
@@ -125,6 +135,50 @@ class PortfolioVisitServiceTest {
         assertThat(eventCaptor.getValue().getVisitorKey()).isEqualTo("visitor-stable-key");
     }
 
+    /** 同一个打开幂等键重试时直接返回原汇总，不再计数或扣费。 */
+    @Test
+    void recordOpenShouldReturnIdempotentlyForRepeatedKey() {
+        VisitEventEntity existingEvent = new VisitEventEntity();
+        existingEvent.setId(91L);
+        VisitRecordEntity existingRecord = new VisitRecordEntity();
+        existingRecord.setId(33L);
+        existingRecord.setVisitorId(1024L);
+        existingRecord.setVisitorKey("visitor-a");
+        when(visitEventEntityMapper.selectOne(any())).thenReturn(existingEvent);
+        when(visitRecordEntityMapper.selectOne(any())).thenReturn(existingRecord);
+
+        VisitRecordEntity result = service().recordOpen(
+                portfolio(), 1024L, "visitor-a", "WECHAT_SHARE_CARD", "open-retry-1");
+
+        assertThat(result).isSameAs(existingRecord);
+        verify(visitEventEntityMapper, never()).insert(any(VisitEventEntity.class));
+        verify(visitRecordEntityMapper, never()).insert(any(VisitRecordEntity.class));
+        verifyNoInteractions(pointBillingWindowService);
+    }
+
+    /** 首访汇总唯一键竞争的输家必须重查赢家并继续幂等事件写入。 */
+    @Test
+    void recordOpenShouldReloadWinnerAfterVisitRecordInsertRace() {
+        VisitRecordEntity winner = new VisitRecordEntity();
+        winner.setId(44L);
+        winner.setVisitorId(1024L);
+        winner.setVisitorKey("visitor-a");
+        winner.setPortfolioId(88L);
+        winner.setVisitCount(2);
+        when(visitRecordEntityMapper.selectOne(any())).thenReturn(null, null, winner);
+        when(visitRecordEntityMapper.insert(any(VisitRecordEntity.class)))
+                .thenThrow(new DuplicateKeyException("visit record race"));
+
+        VisitRecordEntity result = service().recordOpen(
+                portfolio(), 1024L, "visitor-a", "WECHAT_SHARE_CARD", "open-race-1");
+
+        assertThat(result).isSameAs(winner);
+        assertThat(result.getVisitCount()).isEqualTo(3);
+        verify(visitEventEntityMapper).insert(any(VisitEventEntity.class));
+        verify(visitRecordEntityMapper).incrementCounters(
+                eq(winner), eq(1), eq(0), eq(0), eq(0), eq(0), eq(0), eq(0));
+    }
+
     /** 打开事件缺少客户端幂等键时必须生成服务端窗口幂等键。 */
     @Test
     void recordOpenShouldGenerateWindowIdempotencyKeyWhenClientKeyIsMissing() {
@@ -172,7 +226,8 @@ class PortfolioVisitServiceTest {
         ArgumentCaptor<VisitRecordEntity> recordCaptor = ArgumentCaptor.forClass(VisitRecordEntity.class);
         verify(visitRecordEntityMapper, times(2)).selectOne(any());
         verify(visitRecordEntityMapper, never()).insert(any(VisitRecordEntity.class));
-        verify(visitRecordEntityMapper).updateById(recordCaptor.capture());
+        verify(visitRecordEntityMapper).incrementCounters(
+                recordCaptor.capture(), eq(1), eq(0), eq(0), eq(0), eq(0), eq(0), eq(0));
         assertThat(record.getId()).isEqualTo(44L);
         assertThat(recordCaptor.getValue().getVisitorId()).isEqualTo(1024L);
         assertThat(recordCaptor.getValue().getVisitorKey()).isEqualTo("legacy-key");
@@ -193,13 +248,14 @@ class PortfolioVisitServiceTest {
         service().recordOpen(portfolio(), 1024L, "visitor-a", "WECHAT_SHARE_CARD", "open-2");
 
         ArgumentCaptor<VisitRecordEntity> recordCaptor = ArgumentCaptor.forClass(VisitRecordEntity.class);
-        verify(visitRecordEntityMapper).updateById(recordCaptor.capture());
+        verify(visitRecordEntityMapper).incrementCounters(
+                recordCaptor.capture(), eq(1), eq(0), eq(0), eq(0), eq(0), eq(0), eq(0));
         assertThat(recordCaptor.getValue().getPortfolioTitleSnapshot()).isEqualTo("林安婚礼司仪");
         assertThat(recordCaptor.getValue().getPortfolioShareCodeSnapshot()).isEqualTo("PF001");
         assertThat(recordCaptor.getValue().getVisitCount()).isEqualTo(2);
     }
 
-    /** 乐观锁竞争失败时不得静默丢失打开次数。 */
+    /** 原子计数更新未命中记录时不得静默丢失打开次数。 */
     @Test
     void recordOpenShouldRejectOptimisticLockConflict() {
         VisitRecordEntity record = new VisitRecordEntity();
@@ -208,7 +264,9 @@ class PortfolioVisitServiceTest {
         record.setPortfolioId(88L);
         record.setVisitCount(1);
         when(visitRecordEntityMapper.selectOne(any())).thenReturn(record);
-        when(visitRecordEntityMapper.updateById(record)).thenReturn(0);
+        when(visitRecordEntityMapper.incrementCounters(
+                eq(record), anyInt(), anyInt(), anyInt(), anyInt(), anyInt(), anyInt(), anyInt()))
+                .thenReturn(0);
 
         assertThatThrownBy(() -> service().recordOpen(
                 portfolio(),
@@ -221,7 +279,7 @@ class PortfolioVisitServiceTest {
                 .hasMessage("个人作品集访问记录保存失败");
 
         verifyNoInteractions(pointBillingWindowService);
-        verify(visitEventEntityMapper, never()).insert(any(VisitEventEntity.class));
+        verify(visitEventEntityMapper).insert(any(VisitEventEntity.class));
     }
 
     @Test
@@ -243,7 +301,8 @@ class PortfolioVisitServiceTest {
         service().recordEvent(portfolio(), 1024L, request);
 
         ArgumentCaptor<VisitRecordEntity> recordCaptor = ArgumentCaptor.forClass(VisitRecordEntity.class);
-        verify(visitRecordEntityMapper).updateById(recordCaptor.capture());
+        verify(visitRecordEntityMapper).incrementCounters(
+                recordCaptor.capture(), eq(0), eq(0), eq(1), eq(0), eq(0), eq(0), eq(18));
         assertThat(recordCaptor.getValue().getPlayVideoCount()).isEqualTo(1);
         verify(pointBillingWindowService).consumeIfEligible(
                 7L,
@@ -257,6 +316,64 @@ class PortfolioVisitServiceTest {
                 "访客播放作品集视频"
         );
         verify(visitEventEntityMapper).insert(any(VisitEventEntity.class));
+    }
+
+    /**
+     * 新版访客上报视频轮播播放时，必须命中已发布的作品与组件引用对。
+     */
+    @Test
+    void recordVideoEventShouldTrustPublishedWorkAndComponentReferencePair() {
+        VisitRecordEntity record = new VisitRecordEntity();
+        record.setId(33L);
+        record.setVisitorKey("visitor-a");
+        record.setPortfolioId(88L);
+        record.setPlayVideoCount(0);
+        when(visitRecordEntityMapper.selectOne(any())).thenReturn(record);
+        PortfolioReferenceEntity reference = new PortfolioReferenceEntity();
+        reference.setPortfolioId(88L);
+        reference.setConfigScope(PortfolioConfigScopeDict.PUBLISHED.getCode());
+        reference.setReferenceType(ReferenceTypeDict.WORK.getCode());
+        reference.setReferenceId(11L);
+        reference.setComponentKey("c_video_carousel");
+        reference.setIsValid(1);
+        reference.setDeleted(0L);
+        when(portfolioReferenceEntityMapper.selectList(any())).thenReturn(java.util.List.of(reference));
+        VisitorPortfolioEventRequest request = new VisitorPortfolioEventRequest();
+        request.setVisitorKey("visitor-a");
+        request.setEventType(VisitEventTypeDict.VIDEO_PLAYED.getCode());
+        request.setComponentKey("c_video_carousel");
+        request.setWorkId(11L);
+        request.setMediaType(MediaTypeDict.VIDEO.getCode());
+        request.setDurationSeconds(0);
+        request.setIdempotencyKey("video-carousel-1");
+
+        service().recordEvent(portfolio(), 1024L, request);
+
+        assertThat(record.getPlayVideoCount()).isEqualTo(1);
+        verify(portfolioReferenceEntityMapper).selectList(any());
+        verify(visitEventEntityMapper).insert(any(VisitEventEntity.class));
+    }
+
+    /**
+     * 作品或组件与已发布引用不匹配时，必须在任何计数和扣费前拒绝。
+     */
+    @Test
+    void recordVideoEventShouldRejectUnreferencedWorkAndComponentPair() {
+        when(portfolioReferenceEntityMapper.selectList(any())).thenReturn(java.util.List.of());
+        VisitorPortfolioEventRequest request = new VisitorPortfolioEventRequest();
+        request.setVisitorKey("visitor-a");
+        request.setEventType(VisitEventTypeDict.VIDEO_PLAYED.getCode());
+        request.setComponentKey("c_video_carousel_other");
+        request.setWorkId(11L);
+        request.setMediaType(MediaTypeDict.VIDEO.getCode());
+        request.setDurationSeconds(0);
+        request.setIdempotencyKey("video-carousel-invalid-1");
+
+        assertThatThrownBy(() -> service().recordEvent(portfolio(), 1024L, request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("个人作品集访问事件无效");
+
+        verifyNoInteractions(visitRecordEntityMapper, visitEventEntityMapper, pointBillingWindowService);
     }
 
     @Test
@@ -306,7 +423,7 @@ class PortfolioVisitServiceTest {
         verifyNoInteractions(visitRecordEntityMapper, visitEventEntityMapper, pointBillingWindowService);
     }
 
-    /** 乐观锁竞争失败时必须抛错，使事件与扣费事务一并回滚。 */
+    /** 原子计数更新未命中记录时必须抛错，使事件与扣费事务一并回滚。 */
     @Test
     void recordEventShouldRejectOptimisticLockConflict() {
         VisitRecordEntity record = new VisitRecordEntity();
@@ -315,7 +432,9 @@ class PortfolioVisitServiceTest {
         record.setPortfolioId(88L);
         record.setViewWorkCount(0);
         when(visitRecordEntityMapper.selectOne(any())).thenReturn(record);
-        when(visitRecordEntityMapper.updateById(record)).thenReturn(0);
+        when(visitRecordEntityMapper.incrementCounters(
+                eq(record), anyInt(), anyInt(), anyInt(), anyInt(), anyInt(), anyInt(), anyInt()))
+                .thenReturn(0);
         VisitorPortfolioEventRequest request = new VisitorPortfolioEventRequest();
         request.setVisitorKey("visitor-a");
         request.setEventType(VisitEventTypeDict.WORK_VIEWED.getCode());
@@ -504,7 +623,8 @@ class PortfolioVisitServiceTest {
         );
 
         ArgumentCaptor<VisitRecordEntity> recordCaptor = ArgumentCaptor.forClass(VisitRecordEntity.class);
-        verify(visitRecordEntityMapper).updateById(recordCaptor.capture());
+        verify(visitRecordEntityMapper).incrementCounters(
+                recordCaptor.capture(), eq(0), eq(0), eq(0), eq(1), eq(0), eq(0), eq(0));
         assertThat(recordCaptor.getValue().getScheduleQueryCount()).isEqualTo(3);
         ArgumentCaptor<VisitEventEntity> eventCaptor = ArgumentCaptor.forClass(VisitEventEntity.class);
         verify(visitEventEntityMapper).insert(eventCaptor.capture());
@@ -519,7 +639,8 @@ class PortfolioVisitServiceTest {
         return new PortfolioVisitService(
                 visitRecordEntityMapper,
                 visitEventEntityMapper,
-                pointBillingWindowService
+                pointBillingWindowService,
+                portfolioReferenceEntityMapper
         );
     }
 

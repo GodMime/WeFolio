@@ -968,6 +968,73 @@ class MineVisitServiceTest {
         verify(contactLeadEntityMapper, never()).updateById((ContactLeadEntity) any());
     }
 
+    /** 已联系状态重复操作应幂等返回，不再触发写库。 */
+    @Test
+    void markContactLeadFollowedShouldReturnIdempotentlyWhenAlreadyContacted() {
+        AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
+        ContactLeadEntity lead = buildContactLead(501L, "TEAM", 201L, "星曜司仪团");
+        lead.setFollowStatus("CONTACTED");
+        when(mineVisitScopeService.requireScope(7L)).thenReturn(
+                MineVisitScopeService.Scope.complete(Map.of(201L, "MANAGER")));
+        when(contactLeadEntityMapper.selectOne(any())).thenReturn(lead);
+
+        MineVisitRecordsResponse.ContactLeadItem response = service().markContactLeadFollowed(501L);
+
+        assertThat(response.getFollowStatus()).isEqualTo("CONTACTED");
+        verify(contactLeadEntityMapper, never()).updateById(any(ContactLeadEntity.class));
+    }
+
+    /** 已成交或无效线索不得被“标记已跟进”倒退为已联系。 */
+    @ParameterizedTest
+    @ValueSource(strings = {"DEAL_WON", "INVALID"})
+    void markContactLeadFollowedShouldRejectTerminalStateRegression(String followStatus) {
+        AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
+        ContactLeadEntity lead = buildContactLead(501L, "TEAM", 201L, "星曜司仪团");
+        lead.setFollowStatus(followStatus);
+        when(mineVisitScopeService.requireScope(7L)).thenReturn(
+                MineVisitScopeService.Scope.complete(Map.of(201L, "OWNER")));
+        when(contactLeadEntityMapper.selectOne(any())).thenReturn(lead);
+
+        assertThatThrownBy(() -> service().markContactLeadFollowed(501L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("预留信息状态已变化，请刷新后重试");
+
+        assertThat(lead.getFollowStatus()).isEqualTo(followStatus);
+        verify(contactLeadEntityMapper, never()).updateById(any(ContactLeadEntity.class));
+    }
+
+    /** 单条团队历史脏线索解密失败时列表必须降级展示掩码，不能让整页失败。 */
+    @Test
+    void contactLeadListShouldDegradeSingleTeamDecryptionFailure() {
+        AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
+        ContactLeadEntity lead = buildContactLead(501L, "TEAM", 201L, "星曜司仪团");
+        lead.setPhoneCiphertext("13800138000");
+        lead.setPhoneLast4("8000");
+        lead.setWechatCiphertext("plain-wechat");
+        lead.setWechatMaskHint("pl***at");
+        when(mineVisitScopeService.requireScope(7L)).thenReturn(
+                MineVisitScopeService.Scope.complete(Map.of(201L, "MANAGER")));
+        when(contactLeadEntityMapper.selectPage(any(Page.class), any())).thenAnswer(invocation -> {
+            Page<ContactLeadEntity> page = invocation.getArgument(0);
+            page.setRecords(List.of(lead));
+            page.setTotal(1L);
+            return page;
+        });
+        when(teamContactLeadCryptoService.decryptPhone("13800138000"))
+                .thenThrow(new BusinessException("团队预留联系信息解密失败"));
+        when(teamContactLeadCryptoService.decryptWechat("plain-wechat"))
+                .thenThrow(new BusinessException("团队预留联系信息解密失败"));
+
+        MineVisitRecordsResponse.ContactLeadPage response = service().getContactLeads(1, 20);
+
+        assertThat(response.getItems()).singleElement().satisfies(item -> {
+            assertThat(item.getPhone()).isEmpty();
+            assertThat(item.getPhoneLast4()).isEqualTo("8000");
+            assertThat(item.getWechat()).isEmpty();
+            assertThat(item.getWechatMaskHint()).isEqualTo("pl***at");
+        });
+    }
+
     @Test
     void contactLeadListShouldFailClosedWhenCompleteScopeCannotBeResolved() {
         AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));

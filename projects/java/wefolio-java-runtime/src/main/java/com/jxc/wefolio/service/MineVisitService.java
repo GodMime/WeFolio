@@ -29,6 +29,7 @@ import com.jxc.wefolio.mapper.VisitorEntityMapper;
 import com.jxc.wefolio.message.MineVisitMessage;
 import com.jxc.wefolio.service.teamportfolio.component.contactform.TeamContactLeadCryptoService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -52,6 +53,7 @@ import java.util.stream.IntStream;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class MineVisitService {
 
     /** 明细列表最多返回条数 */
@@ -498,6 +500,12 @@ public class MineVisitService {
         ContactLeadEntity lead = selectVisibleContactLead(userId, leadId, scope.teamIds());
         if (lead == null || !canMarkContactLeadFollowed(lead, userId, scope.teamRoles())) {
             throw new BusinessException(CONTACT_LEAD_NOT_FOUND_MESSAGE);
+        }
+        if (FollowStatusDict.CONTACTED.getCode().equals(lead.getFollowStatus())) {
+            return buildContactLeadItem(lead, scope.teamRoles());
+        }
+        if (!FollowStatusDict.NOT_FOLLOWED_UP.getCode().equals(lead.getFollowStatus())) {
+            throw new BusinessException(MineVisitMessage.CONTACT_LEAD_STATE_CHANGED_MESSAGE);
         }
         lead.setFollowStatus(FollowStatusDict.CONTACTED.getCode());
         int updated = contactLeadEntityMapper.updateById(lead);
@@ -1079,11 +1087,11 @@ public class MineVisitService {
         item.setId(lead.getId());
         item.setContactName(defaultString(lead.getContactName(), ""));
         item.setPhone(teamPortfolio
-                ? teamContactLeadCryptoService.decryptPhone(lead.getPhoneCiphertext())
+                ? decryptTeamContactSafely(lead, true)
                 : defaultString(lead.getPhoneCiphertext(), ""));
         item.setPhoneLast4(defaultString(lead.getPhoneLast4(), ""));
         item.setWechat(teamPortfolio
-                ? teamContactLeadCryptoService.decryptWechat(lead.getWechatCiphertext())
+                ? decryptTeamContactSafely(lead, false)
                 : defaultString(lead.getWechatCiphertext(), ""));
         item.setWechatMaskHint(defaultString(lead.getWechatMaskHint(), ""));
         item.setDesiredSchedule(defaultString(lead.getDesiredSchedule(), ""));
@@ -1103,6 +1111,25 @@ public class MineVisitService {
                 || !teamPortfolio);
         item.setSubmittedTimeText(formatDetailTime(lead.getSubmittedAt()));
         return item;
+    }
+
+    /**
+     * 安全解密单条团队联系方式，历史脏数据只降级当前字段。
+     *
+     * @param lead 联系线索
+     * @param phone 是否解密手机号
+     * @return 联系方式明文，失败时返回空字符串
+     */
+    private String decryptTeamContactSafely(ContactLeadEntity lead, boolean phone) {
+        try {
+            return phone
+                    ? teamContactLeadCryptoService.decryptPhone(lead.getPhoneCiphertext())
+                    : teamContactLeadCryptoService.decryptWechat(lead.getWechatCiphertext());
+        } catch (BusinessException exception) {
+            log.warn("团队预留联系信息单条解密失败，已降级为掩码展示: leadId={}, field={}",
+                    lead.getId(), phone ? "phone" : "wechat");
+            return "";
+        }
     }
 
     /**

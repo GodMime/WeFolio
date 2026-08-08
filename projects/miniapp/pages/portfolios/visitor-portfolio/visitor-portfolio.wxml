@@ -8,6 +8,10 @@
         <portfolio-carousel works="{{item.works}}" interval="{{item.carouselIntervalMs}}" theme-mode="{{portfolio.themeMode}}"></portfolio-carousel>
       </block>
 
+      <block wx:elif="{{item.componentType === 'VIDEO_CAROUSEL'}}">
+        <video-carousel component-key="{{item.componentKey}}" title="{{item.title}}" works="{{item.works}}" show-title="{{item.showTitle}}" show-swipe-hint="{{item.showSwipeHint}}" theme-mode="{{portfolio.themeMode}}" bindplay="handleVideoCarouselPlay"></video-carousel>
+      </block>
+
       <block wx:elif="{{item.componentType === 'PROFILE'}}">
         <portfolio-profile
           profile="{{item.profile}}"
@@ -141,6 +145,7 @@
           show-center-play-btn="{{true}}"
           enable-progress-gesture="{{true}}"
           object-fit="contain"
+          binderror="handleVideoPreviewError"
         ></video>
       </view>
     </view>

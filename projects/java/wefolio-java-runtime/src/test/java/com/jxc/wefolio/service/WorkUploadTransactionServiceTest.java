@@ -561,7 +561,8 @@ class WorkUploadTransactionServiceTest {
                 wfTagEntityMapper,
                 workTagEntityMapper,
                 pointService,
-                contentLimitService);
+                contentLimitService,
+                new WorkUploadTaskExpirationService(workUploadTaskEntityMapper));
     }
 
     private WorkUploadTaskEntity createdImageTask() {

@@ -2758,7 +2758,8 @@ class MineWorkServiceTest {
                 animationCosService,
                 workUploadTransactionService,
                 contentLimitService,
-                mineWorkAuditService);
+                mineWorkAuditService,
+                new WorkUploadTaskExpirationService(workUploadTaskEntityMapper));
     }
 
     private MineWorkUploadCompleteRequest.CompleteItem completeItem(Long taskId) {

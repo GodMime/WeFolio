@@ -110,4 +110,19 @@ public interface TeamPortfolioMessage {
 
     /** 团队单个作品成员不可用 */
     String SINGLE_WORK_MEMBER_UNAVAILABLE = "团队成员不存在或不可用";
+
+    /** 团队视频轮播配置错误 */
+    String VIDEO_CAROUSEL_CONFIG_INVALID = "视频轮播作品配置不正确";
+
+    /** 团队视频轮播标题过长 */
+    String VIDEO_CAROUSEL_TITLE_TOO_LONG = "视频轮播标题不能超过10个字符";
+
+    /** 团队视频轮播作品数量无效 */
+    String VIDEO_CAROUSEL_ITEM_COUNT_INVALID = "视频轮播需选择3至8个视频作品";
+
+    /** 团队视频轮播作品重复 */
+    String VIDEO_CAROUSEL_WORK_DUPLICATE = "视频轮播不能重复选择同一视频作品";
+
+    /** 团队视频轮播作品不可用 */
+    String VIDEO_CAROUSEL_WORK_UNAVAILABLE = "视频轮播作品不存在或不可用";
 }

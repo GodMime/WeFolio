@@ -29,8 +29,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.time.LocalDate;
-
 /**
  * 访客作品集控制器 — 提供公开作品集、档期、事件和联系线索接口。
  */
@@ -117,8 +115,8 @@ public class VisitorPortfolioController {
     ) {
         return Response.success(visitorPortfolioService.querySchedule(
                 shareCode,
-                LocalDate.parse(startDate),
-                LocalDate.parse(endDate),
+                startDate,
+                endDate,
                 scope,
                 visitorKey,
                 idempotencyKey

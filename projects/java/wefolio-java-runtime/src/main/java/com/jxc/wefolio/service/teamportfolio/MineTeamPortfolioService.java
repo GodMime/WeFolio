@@ -83,6 +83,25 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class MineTeamPortfolioService {
 
+    /** 未携带能力版本的旧客户端按 revision 2 处理。 */
+    private static final int COMPONENT_LIBRARY_LEGACY_REVISION = 2;
+
+    /** 团队组件库按单项引入版本过滤。 */
+    private static final List<ComponentLibraryDefinition> COMPONENT_LIBRARY_DEFINITIONS = List.of(
+            new ComponentLibraryDefinition(TeamPortfolioComponentTypeDict.TEAM_PROFILE, "展示当前团队资料"),
+            new ComponentLibraryDefinition(TeamPortfolioComponentTypeDict.CAROUSEL, "轮播展示已授权成员作品"),
+            new ComponentLibraryDefinition(TeamPortfolioComponentTypeDict.VIDEO_CAROUSEL,
+                    "叠放循环展示视频作品，访客左右滑动浏览、点击播放"),
+            new ComponentLibraryDefinition(TeamPortfolioComponentTypeDict.SINGLE_WORK, "展示一个已授权成员的图片、视频或动图作品"),
+            new ComponentLibraryDefinition(TeamPortfolioComponentTypeDict.DIVIDER, "分隔团队作品集内容"),
+            new ComponentLibraryDefinition(TeamPortfolioComponentTypeDict.MEMBER_PORTFOLIO_GRID, "双列展示成员个人作品集"),
+            new ComponentLibraryDefinition(TeamPortfolioComponentTypeDict.MEMBER_PORTFOLIO_LIST, "单列展示成员个人作品集"),
+            new ComponentLibraryDefinition(TeamPortfolioComponentTypeDict.TEXT_SECTION, "展示团队服务说明"),
+            new ComponentLibraryDefinition(TeamPortfolioComponentTypeDict.SCHEDULE_QUERY, "允许访客查询团队档期"),
+            new ComponentLibraryDefinition(TeamPortfolioComponentTypeDict.CONTACT_FORM, "收集访客预留联系信息"),
+            new ComponentLibraryDefinition(TeamPortfolioComponentTypeDict.QR_CONTACT, "展示团队联系二维码")
+    );
+
     /** 作品集积分业务类型。 */
     private static final String POINT_BUSINESS_TYPE_PORTFOLIO = "PORTFOLIO";
 
@@ -223,6 +242,9 @@ public class MineTeamPortfolioService {
     /** 标准作品集发布事务服务。 */
     private final PortfolioPublishTransactionService portfolioPublishTransactionService;
 
+    /** 团队引用写入与个人作品集删除共用的 JVM 互斥边界。 */
+    private final PortfolioReferenceMutex portfolioReferenceMutex;
+
     /**
      * 查询当前用户所有有效已加入团队中的标准团队作品集。
      *
@@ -282,21 +304,17 @@ public class MineTeamPortfolioService {
     /**
      * 获取团队作品集组件库。
      *
-     * @return 十类团队组件
+     * @param editorSchemaRevision 客户端编辑器能力版本
+     * @return 当前客户端可识别的团队组件
      */
-    public List<ComponentLibraryItem> getComponentLibrary() {
+    public List<ComponentLibraryItem> getComponentLibrary(Integer editorSchemaRevision) {
         requireFeatureEnabled();
-        return List.of(
-                componentItem(TeamPortfolioComponentTypeDict.TEAM_PROFILE, "展示当前团队资料"),
-                componentItem(TeamPortfolioComponentTypeDict.CAROUSEL, "轮播展示已授权成员作品"),
-                componentItem(TeamPortfolioComponentTypeDict.SINGLE_WORK, "展示一个已授权成员的图片、视频或动图作品"),
-                componentItem(TeamPortfolioComponentTypeDict.DIVIDER, "分隔团队作品集内容"),
-                componentItem(TeamPortfolioComponentTypeDict.MEMBER_PORTFOLIO_GRID, "双列展示成员个人作品集"),
-                componentItem(TeamPortfolioComponentTypeDict.MEMBER_PORTFOLIO_LIST, "单列展示成员个人作品集"),
-                componentItem(TeamPortfolioComponentTypeDict.TEXT_SECTION, "展示团队服务说明"),
-                componentItem(TeamPortfolioComponentTypeDict.SCHEDULE_QUERY, "允许访客查询团队档期"),
-                componentItem(TeamPortfolioComponentTypeDict.CONTACT_FORM, "收集访客预留联系信息"),
-                componentItem(TeamPortfolioComponentTypeDict.QR_CONTACT, "展示团队联系二维码"));
+        int effectiveRevision = editorSchemaRevision == null
+                ? COMPONENT_LIBRARY_LEGACY_REVISION : editorSchemaRevision;
+        return COMPONENT_LIBRARY_DEFINITIONS.stream()
+                .filter(definition -> definition.type().getIntroducedAtRevision() <= effectiveRevision)
+                .map(definition -> componentItem(definition.type(), definition.description()))
+                .toList();
     }
 
     /**
@@ -309,6 +327,15 @@ public class MineTeamPortfolioService {
      */
     @Transactional(rollbackFor = Exception.class)
     public TeamPortfolioDetailResponse createStandard(
+            long teamId,
+            TeamPortfolioCreateRequest request,
+            long userId
+    ) {
+        return portfolioReferenceMutex.execute(() -> createStandardLocked(teamId, request, userId));
+    }
+
+    /** 在作品集引用互斥区间内创建标准团队作品集。 */
+    private TeamPortfolioDetailResponse createStandardLocked(
             long teamId,
             TeamPortfolioCreateRequest request,
             long userId
@@ -381,6 +408,15 @@ public class MineTeamPortfolioService {
             TeamPortfolioDraftSaveRequest request,
             long userId
     ) {
+        return portfolioReferenceMutex.execute(() -> saveDraftLocked(portfolioId, request, userId));
+    }
+
+    /** 在作品集引用互斥区间内保存团队作品集草稿。 */
+    private TeamPortfolioDetailResponse saveDraftLocked(
+            long portfolioId,
+            TeamPortfolioDraftSaveRequest request,
+            long userId
+    ) {
         TeamPortfolioAccessService.TeamPortfolioAccess access =
                 accessService.requireMaintainablePortfolio(portfolioId, userId);
         PortfolioEntity portfolio = access.portfolio();
@@ -443,6 +479,15 @@ public class MineTeamPortfolioService {
      * 发布团队作品集并重建正式引用。
      */
     public TeamPortfolioDetailResponse publish(
+            long portfolioId,
+            TeamPortfolioPublishRequest request,
+            long userId
+    ) {
+        return portfolioReferenceMutex.execute(() -> publishLocked(portfolioId, request, userId));
+    }
+
+    /** 在作品集引用互斥区间内完成发布预检和发布事务。 */
+    private TeamPortfolioDetailResponse publishLocked(
             long portfolioId,
             TeamPortfolioPublishRequest request,
             long userId
@@ -1345,6 +1390,10 @@ public class MineTeamPortfolioService {
      * @param description 组件说明
      */
     public record ComponentLibraryItem(String componentType, String name, String description) {
+    }
+
+    /** 组件库内部定义，引入版本只参与服务端过滤，不进入响应。 */
+    private record ComponentLibraryDefinition(TeamPortfolioComponentTypeDict type, String description) {
     }
 
     /**

@@ -75,6 +75,13 @@ function refreshMaintainerWechatSession(code) {
   })
 }
 
+function logoutMaintainer() {
+  return request({
+    url: '/api/auth/logout',
+    method: 'POST'
+  })
+}
+
 module.exports = {
   TOKEN_STORAGE_KEY,
   getToken,
@@ -85,5 +92,6 @@ module.exports = {
   ensureSession,
   precheckMaintainerWechatLogin,
   maintainerWechatLogin,
-  refreshMaintainerWechatSession
+  refreshMaintainerWechatSession,
+  logoutMaintainer
 }

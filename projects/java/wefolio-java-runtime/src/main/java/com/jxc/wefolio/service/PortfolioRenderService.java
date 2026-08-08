@@ -53,6 +53,9 @@ public class PortfolioRenderService {
     /** 轮播组件只允许图片 */
     private static final Set<String> CAROUSEL_MEDIA_TYPES = Set.of(MediaTypeDict.IMAGE.getCode());
 
+    /** 视频轮播组件只允许视频 */
+    private static final Set<String> VIDEO_CAROUSEL_MEDIA_TYPES = Set.of(MediaTypeDict.VIDEO.getCode());
+
     /** 超链接展示作品允许的媒体类型 */
     private static final Set<String> HYPERLINK_MEDIA_TYPES = Set.of(
             MediaTypeDict.IMAGE.getCode(),
@@ -72,6 +75,9 @@ public class PortfolioRenderService {
 
     /** 是否展示作品说明配置键 */
     private static final String CONFIG_KEY_SHOW_DESCRIPTION = "showDescription";
+
+    /** 是否展示视频轮播滑动提示配置键 */
+    private static final String CONFIG_KEY_SHOW_SWIPE_HINT = "showSwipeHint";
 
     /** 超链接行为类型配置键 */
     private static final String CONFIG_KEY_ACTION_TYPE = "actionType";
@@ -413,6 +419,17 @@ public class PortfolioRenderService {
                     ownerId,
                     asLongList(componentConfig.get(CONFIG_KEY_WORK_IDS)),
                     CAROUSEL_MEDIA_TYPES));
+            case VIDEO_CAROUSEL -> {
+                render.setWorks(buildWorks(
+                        ownerId,
+                        asLongList(componentConfig.get(CONFIG_KEY_WORK_IDS)),
+                        VIDEO_CAROUSEL_MEDIA_TYPES,
+                        true));
+                Object showTitle = componentConfig.get(CONFIG_KEY_SHOW_TITLE);
+                render.setShowTitle(showTitle instanceof Boolean value ? value : Boolean.TRUE);
+                Object showSwipeHint = componentConfig.get(CONFIG_KEY_SHOW_SWIPE_HINT);
+                render.setShowSwipeHint(showSwipeHint instanceof Boolean value ? value : Boolean.TRUE);
+            }
             case PROFILE -> render.setProfile(buildProfile(componentConfig));
             case WORK_GRID, WORK_LIST -> {
                 applyWorkDisplayOptions(render, componentConfig);
@@ -673,11 +690,31 @@ public class PortfolioRenderService {
             List<Long> workIds,
             Set<String> allowedMediaTypes
     ) {
+        return buildWorks(ownerId, workIds, allowedMediaTypes, false);
+    }
+
+    /**
+     * 构建可选要求审核通过的作品展示项。
+     *
+     * @param ownerId 作品集归属用户 ID
+     * @param workIds 作品 ID
+     * @param allowedMediaTypes 允许的媒体类型
+     * @param requireAuditPassed 是否必须审核通过
+     * @return 作品展示项
+     */
+    private List<PortfolioRenderDto.WorkItem> buildWorks(
+            Long ownerId,
+            List<Long> workIds,
+            Set<String> allowedMediaTypes,
+            boolean requireAuditPassed
+    ) {
         Map<Long, WorkEntity> workMap = loadWorkMap(ownerId, workIds);
         return workIds.stream()
                 .map(workMap::get)
                 .filter(Objects::nonNull)
                 .filter(work -> allowedMediaTypes.contains(work.getMediaType()))
+                .filter(work -> !requireAuditPassed
+                        || WorkAuditStatusDict.PASSED.getCode().equals(work.getAuditStatus()))
                 .map(this::buildWorkItem)
                 .toList();
     }

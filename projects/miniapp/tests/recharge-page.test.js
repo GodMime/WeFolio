@@ -37,7 +37,8 @@ function loadRechargePage(fakeRequest, wxOverrides = {}) {
     loaded: true,
     exports: {
       handleMaintainerAuthRequired() {},
-      hasLocalToken() { return true }
+      hasLocalToken() { return true },
+      refreshMaintainerWechatSession() { return Promise.resolve() }
     }
   }
 
@@ -183,4 +184,45 @@ test('keeps confirmed balance visible when post-payment package refresh fails', 
   assert.equal(page.data.rechargeData.balanceText, '806')
   assert.equal(page.data.errorMessage, '')
   assert.ok(toasts.includes('充值成功，积分已到账'))
+})
+
+test('keeps payment lock while virtual payment session refresh retry is in flight', async () => {
+  let paymentInvocation = 0
+  let completeRetriedPayment
+  const page = loadRechargePage((options) => {
+    if (options.url.endsWith('/sync')) {
+      return Promise.resolve({ status: 'PENDING', confirmed: false })
+    }
+    return Promise.resolve({
+      merchantOrderNo: `WFR-RETRY-${paymentInvocation}`,
+      mode: 'short_series_coin',
+      signData: '{}',
+      paySig: 'pay-sign',
+      signature: 'user-sign'
+    })
+  }, {
+    login(options) {
+      options.success({ code: 'fresh-session-code' })
+    },
+    requestVirtualPayment(options) {
+      paymentInvocation += 1
+      if (paymentInvocation === 1) {
+        options.fail({ errCode: -15007, errMsg: 'session invalid' })
+        return
+      }
+      completeRetriedPayment = options.success
+    }
+  })
+  page.data.rechargeData.selectedPackageId = 3
+
+  const paymentPromise = page.handlePay()
+  await flushPromises()
+  await flushPromises()
+
+  assert.equal(paymentInvocation, 2)
+  assert.equal(page.data.paying, true)
+  completeRetriedPayment()
+  await paymentPromise
+  assert.equal(page.data.paying, false)
+  assert.equal(page.data.syncing, false)
 })

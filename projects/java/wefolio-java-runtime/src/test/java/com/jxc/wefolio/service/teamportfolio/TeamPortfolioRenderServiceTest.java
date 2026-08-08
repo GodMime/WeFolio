@@ -17,6 +17,7 @@ import com.jxc.wefolio.service.teamportfolio.component.schedulequery.TeamSchedul
 import com.jxc.wefolio.service.teamportfolio.component.singlework.TeamSingleWorkComponentRenderer;
 import com.jxc.wefolio.service.teamportfolio.component.teamprofile.TeamProfileComponentRenderer;
 import com.jxc.wefolio.service.teamportfolio.component.textsection.TeamTextSectionComponentRenderer;
+import com.jxc.wefolio.service.teamportfolio.component.videocarousel.TeamVideoCarouselComponentRenderer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -52,6 +53,7 @@ class TeamPortfolioRenderServiceTest {
     @Mock private TeamScheduleQueryComponentRenderer scheduleRenderer;
     @Mock private TeamContactFormComponentRenderer contactRenderer;
     @Mock private TeamQrContactComponentRenderer qrRenderer;
+    @Mock private TeamVideoCarouselComponentRenderer videoCarouselRenderer;
 
     /**
      * 渲染仅分发已启用的团队组件，并保持其稳定排序。
@@ -75,6 +77,7 @@ class TeamPortfolioRenderServiceTest {
         assertThat(render.getTitle()).isEqualTo("团队作品集");
         assertThat(render.getComponents()).extracting(TeamPortfolioRenderDto.Component::getComponentType)
                 .containsExactly(
+                        TeamPortfolioComponentTypeDict.VIDEO_CAROUSEL.getCode(),
                         TeamPortfolioComponentTypeDict.QR_CONTACT.getCode(),
                         TeamPortfolioComponentTypeDict.CONTACT_FORM.getCode(),
                         TeamPortfolioComponentTypeDict.SCHEDULE_QUERY.getCode(),
@@ -97,6 +100,27 @@ class TeamPortfolioRenderServiceTest {
         verify(scheduleRenderer).render(any(JSONObject.class), eq(context));
         verify(contactRenderer).render(any(JSONObject.class), eq(context));
         verify(qrRenderer).render(any(JSONObject.class), eq(context));
+        verify(videoCarouselRenderer).render(any(JSONObject.class), eq(context));
+    }
+
+    /**
+     * 视频轮播全部条目失效时，顶层渲染应省略该组件且不影响其他组件。
+     */
+    @Test
+    void renderShouldOmitVideoCarouselWhenRendererReturnsNull() {
+        TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 22L, 3);
+        when(videoCarouselRenderer.render(any(JSONObject.class), eq(context))).thenReturn(null);
+        JSONObject dividerData = new JSONObject();
+        dividerData.put("heightPx", 16);
+        when(dividerRenderer.render(any(JSONObject.class), eq(context))).thenReturn(dividerData);
+        TeamPortfolioConfigDto config = config(List.of(
+                component("video", TeamPortfolioComponentTypeDict.VIDEO_CAROUSEL.getCode(), 1000, true),
+                component("divider", TeamPortfolioComponentTypeDict.DIVIDER.getCode(), 2000, true)));
+
+        TeamPortfolioRenderDto render = service().render(JSON.toJSONString(config), context);
+
+        assertThat(render.getComponents()).extracting(TeamPortfolioRenderDto.Component::getComponentKey)
+                .containsExactly("divider");
     }
 
     /**
@@ -337,18 +361,19 @@ class TeamPortfolioRenderServiceTest {
                 case SCHEDULE_QUERY -> when(scheduleRenderer.render(any(JSONObject.class), eq(context))).thenReturn(rendered);
                 case CONTACT_FORM -> when(contactRenderer.render(any(JSONObject.class), eq(context))).thenReturn(rendered);
                 case QR_CONTACT -> when(qrRenderer.render(any(JSONObject.class), eq(context))).thenReturn(rendered);
+                case VIDEO_CAROUSEL -> when(videoCarouselRenderer.render(any(JSONObject.class), eq(context))).thenReturn(rendered);
             }
         }
     }
 
     private TeamPortfolioRenderService service() {
         return new TeamPortfolioRenderService(teamProfileRenderer, carouselRenderer, singleWorkRenderer, dividerRenderer, gridRenderer,
-                listRenderer, textRenderer, scheduleRenderer, contactRenderer, qrRenderer);
+                listRenderer, textRenderer, scheduleRenderer, contactRenderer, qrRenderer, videoCarouselRenderer);
     }
 
     private void verifyNoRendererInteractions() {
         verifyNoInteractions(teamProfileRenderer, carouselRenderer, singleWorkRenderer, dividerRenderer, gridRenderer, listRenderer,
-                textRenderer, scheduleRenderer, contactRenderer, qrRenderer);
+                textRenderer, scheduleRenderer, contactRenderer, qrRenderer, videoCarouselRenderer);
     }
 
     private TeamPortfolioConfigDto config(List<TeamPortfolioConfigDto.ComponentEnvelope> components) {

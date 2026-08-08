@@ -3,14 +3,14 @@
 <view class="carousel theme-{{themeMode}} {{editMode ? 'editor-mode' : ''}}">
   <block wx:if="{{editMode}}">
     <view class="editor-form">
-      <view class="editor-field">
-        <view class="editor-field-heading"><view class="editor-label">选择团队成员</view><view class="editor-limit">已选 {{draftItems.length}} / 9</view></view>
-        <scroll-view class="editor-member-scroll" scroll-x type="list">
-          <view class="editor-member-row">
-            <button wx:for="{{members}}" wx:key="memberUserId" class="editor-member-choice {{selectedMemberId === item.memberUserId ? 'active' : ''}}" data-id="{{item.memberUserId}}" bindtap="selectMember">
-              <view class="editor-member-name">{{item.displayName}}</view>
-              <view class="editor-member-count">{{selection.count(draftItems, 'memberUserId', item.memberUserId)}}</view>
-            </button>
+      <view class="editor-field team-member-selector-field">
+        <view class="editor-field-heading team-member-selector-heading"><view class="editor-label team-member-selector-label">选择团队成员</view><view class="editor-limit">已选 {{draftItems.length}} / 9</view></view>
+        <scroll-view class="team-member-selector-scroll" scroll-x type="list">
+          <view class="team-member-selector-row">
+            <view wx:for="{{members}}" wx:key="memberUserId" class="team-member-selector-choice {{selectedMemberId === item.memberUserId ? 'active' : ''}}" data-id="{{item.memberUserId}}" bindtap="selectMember" aria-role="radio" aria-checked="{{selectedMemberId === item.memberUserId}}">
+              <view class="team-member-selector-name">{{item.displayName}}</view>
+              <view wx:if="{{selection.count(draftItems, 'memberUserId', item.memberUserId)}}" class="team-member-selector-count">{{selection.count(draftItems, 'memberUserId', item.memberUserId)}}</view>
+            </view>
           </view>
         </scroll-view>
       </view>

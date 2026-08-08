@@ -17,6 +17,7 @@ import com.jxc.wefolio.service.teamportfolio.component.schedulequery.TeamSchedul
 import com.jxc.wefolio.service.teamportfolio.component.singlework.TeamSingleWorkComponentValidator;
 import com.jxc.wefolio.service.teamportfolio.component.teamprofile.TeamProfileComponentValidator;
 import com.jxc.wefolio.service.teamportfolio.component.textsection.TeamTextSectionComponentValidator;
+import com.jxc.wefolio.service.teamportfolio.component.videocarousel.TeamVideoCarouselComponentValidator;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -75,6 +76,7 @@ public class TeamPortfolioConfigValidator {
     private final TeamScheduleQueryComponentValidator scheduleValidator;
     private final TeamContactFormComponentValidator contactValidator;
     private final TeamQrContactComponentValidator qrValidator;
+    private final TeamVideoCarouselComponentValidator videoCarouselValidator;
 
     /**
      * 创建团队作品集配置校验器。
@@ -89,7 +91,8 @@ public class TeamPortfolioConfigValidator {
             TeamTextSectionComponentValidator textValidator,
             TeamScheduleQueryComponentValidator scheduleValidator,
             TeamContactFormComponentValidator contactValidator,
-            TeamQrContactComponentValidator qrValidator
+            TeamQrContactComponentValidator qrValidator,
+            TeamVideoCarouselComponentValidator videoCarouselValidator
     ) {
         this.teamProfileValidator = teamProfileValidator;
         this.carouselValidator = carouselValidator;
@@ -101,6 +104,7 @@ public class TeamPortfolioConfigValidator {
         this.scheduleValidator = scheduleValidator;
         this.contactValidator = contactValidator;
         this.qrValidator = qrValidator;
+        this.videoCarouselValidator = videoCarouselValidator;
     }
 
     /**
@@ -455,6 +459,7 @@ public class TeamPortfolioConfigValidator {
             case SCHEDULE_QUERY -> scheduleValidator.normalizeAndValidate(config, context);
             case CONTACT_FORM -> contactValidator.normalizeAndValidate(config, context);
             case QR_CONTACT -> qrValidator.normalizeAndValidate(config, context);
+            case VIDEO_CAROUSEL -> videoCarouselValidator.normalizeAndValidate(config, context);
         };
     }
 

@@ -1,4 +1,5 @@
 @import "../../styles/team-portfolio-theme.wxss";
+@import "../../styles/team-member-selector.wxss";
 
 :host { display: block; }
 .carousel { position: relative; width: 100%; margin-left: 0; height: 563rpx; color: #212529; overflow: hidden; overflow-wrap: anywhere; border-radius: 40rpx; background: #f1f3f5; }
@@ -8,13 +9,6 @@
 .editor-field-heading { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; }
 .editor-label { color: #6c757d; font-size: 24rpx; font-weight: 800; line-height: 32rpx; }
 .editor-limit { color: #8b96a3; font-size: 22rpx; font-weight: 700; line-height: 32rpx; }
-.editor-member-scroll { width: 100%; height: 56rpx; margin-top: 16rpx; white-space: nowrap; }
-.editor-member-row { height: 56rpx; display: inline-flex; gap: 12rpx; padding-right: 2rpx; }
-.editor-member-choice { display: inline-flex; width: fit-content; max-width: 280rpx; height: 56rpx; align-items: center; justify-content: center; gap: 10rpx; flex: none; margin: 0; padding: 0 12rpx 0 18rpx; color: #6c757d; font-size: 22rpx; font-weight: 800; line-height: 1; border: 1rpx solid #dee2e6; border-radius: 999rpx; background: #fff; box-sizing: border-box; }
-.editor-member-choice.active { color: #fff; border-color: #212529; background: #212529; }
-.editor-member-name { max-width: 180rpx; min-width: 0; overflow: hidden; line-height: 1; text-overflow: ellipsis; white-space: nowrap; }
-.editor-member-count { min-width: 32rpx; height: 32rpx; display: flex; align-items: center; justify-content: center; flex: none; padding: 0 7rpx; color: #536b82; font-size: 20rpx; font-weight: 900; line-height: 1; border-radius: 999rpx; background: #eef3f7; box-sizing: border-box; }
-.editor-member-choice.active .editor-member-count { color: #212529; background: rgba(255, 255, 255, .9); }
 .editor-content-field { min-height: 254rpx; }
 .editor-work-stage { width: 100%; min-height: 150rpx; max-height: 616rpx; margin-top: 16rpx; overflow: hidden; transition: height 220ms ease-out; }
 .editor-work-scroll { width: 100%; height: 100%; }

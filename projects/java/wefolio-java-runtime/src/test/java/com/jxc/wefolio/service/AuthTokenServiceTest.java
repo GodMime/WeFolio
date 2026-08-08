@@ -180,6 +180,28 @@ class AuthTokenServiceTest {
         }
     }
 
+    /** 主动退出后原令牌即使尚未自然过期，也不得从缓存或离线密文恢复登录。 */
+    @Test
+    void revokeAuthorizationShouldRejectOnlyTheLoggedOutToken() {
+        when(miniappAuthService.resolveAuthToken("Bearer token-old")).thenReturn(resolvedToken(7L));
+        when(miniappAuthService.resolveAuthToken("Bearer token-new")).thenReturn(resolvedToken(7L));
+        UserEntity activeUser = new UserEntity();
+        activeUser.setId(7L);
+        activeUser.setStatus(UserStatusDict.ACTIVE.getCode());
+        when(userEntityMapper.selectById(7L)).thenReturn(activeUser);
+        LocalCacheService cacheService = new LocalCacheService(new LocalCacheProperties());
+        AuthTokenService service = new AuthTokenService(miniappAuthService, userEntityMapper, cacheService);
+
+        assertThat(service.resolveAuthenticatedUserId("Bearer token-old")).contains(7L);
+        service.revokeAuthorization("Bearer token-old");
+
+        assertThat(service.resolveAuthenticatedUserId("Bearer token-old")).isEmpty();
+        assertThat(service.resolveAuthenticatedUserId("Bearer token-new")).contains(7L);
+        assertThat(cacheService.get("auth:revoked-token:token-old", Boolean.class)).contains(true);
+        assertThat(cacheService.get("auth:token:token-new", Long.class)).contains(7L);
+        verify(miniappAuthService, times(1)).resolveAuthToken("Bearer token-new");
+    }
+
     /**
      * 构造已解析的测试令牌。
      *

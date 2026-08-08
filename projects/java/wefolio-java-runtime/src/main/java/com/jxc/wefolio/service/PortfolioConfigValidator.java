@@ -53,6 +53,18 @@ public class PortfolioConfigValidator {
     /** 轮播图最大作品数量 */
     private static final int CAROUSEL_WORK_MAX_COUNT = 9;
 
+    /** 视频轮播默认标题 */
+    private static final String VIDEO_CAROUSEL_DEFAULT_TITLE = "视频作品";
+
+    /** 视频轮播标题最大 Unicode 码点数 */
+    private static final int VIDEO_CAROUSEL_TITLE_MAX_CODE_POINTS = 10;
+
+    /** 视频轮播最少作品数量 */
+    private static final int VIDEO_CAROUSEL_WORK_MIN_COUNT = 3;
+
+    /** 视频轮播最多作品数量 */
+    private static final int VIDEO_CAROUSEL_WORK_MAX_COUNT = 8;
+
     /** 双列作品列表最大作品数量 */
     private static final int WORK_GRID_MAX_COUNT = 50;
 
@@ -126,6 +138,9 @@ public class PortfolioConfigValidator {
 
     /** 是否展示作品说明配置键 */
     private static final String CONFIG_KEY_SHOW_DESCRIPTION = "showDescription";
+
+    /** 是否展示视频轮播滑动提示配置键 */
+    private static final String CONFIG_KEY_SHOW_SWIPE_HINT = "showSwipeHint";
 
     /** 作品集展示标签配置键 */
     private static final String CONFIG_KEY_GROUPS = "groups";
@@ -460,7 +475,7 @@ public class PortfolioConfigValidator {
     /**
      * 合并新旧编辑器请求配置。
      * <p>
-     * 核心字段（schemaVersion、share、components）始终以本次请求为准。
+     * schemaVersion、share 以本次请求为准；components 先按组件版本兼容规则与现有草稿合并。
      * editorSchemaRevision 本身：新请求用新值，旧请求保留草稿中的值。
      * 其余版本相关字段按 {@link #CONFIG_FIELD_MERGE_STEPS} 逐版本合并。
      *
@@ -472,22 +487,22 @@ public class PortfolioConfigValidator {
             PortfolioConfigDto incomingConfig,
             PortfolioConfigDto existingDraftConfig
     ) {
+        PortfolioConfigDto componentMerged = PortfolioComponentCompatibilityMerger.merge(
+                incomingConfig, existingDraftConfig);
         PortfolioConfigDto merged = new PortfolioConfigDto();
-        merged.setSchemaVersion(incomingConfig.getSchemaVersion());
-        merged.setShare(incomingConfig.getShare());
-        merged.setComponents(incomingConfig.getComponents());
+        merged.setSchemaVersion(componentMerged.getSchemaVersion());
+        merged.setShare(componentMerged.getShare());
+        merged.setComponents(componentMerged.getComponents());
 
         // editorSchemaRevision 本身：新请求用新值，缺省或显式低版本请求保留草稿中已有的新能力版本
         Integer incomingRevision = incomingConfig.getEditorSchemaRevision();
         Integer existingRevision = existingDraftConfig == null
                 ? null
                 : existingDraftConfig.getEditorSchemaRevision();
-        boolean legacyIncoming = incomingRevision == null
-                || incomingRevision < PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT;
-        boolean existingHasCurrentFields = existingRevision != null
-                && existingRevision >= PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT;
         merged.setEditorSchemaRevision(
-                legacyIncoming && existingHasCurrentFields ? existingRevision : incomingRevision
+                existingRevision != null
+                        && (incomingRevision == null || incomingRevision < existingRevision)
+                        ? existingRevision : incomingRevision
         );
 
         // 逐版本字段合并：新编辑器携带对应版本则取 incoming，否则从草稿保留
@@ -499,7 +514,7 @@ public class PortfolioConfigValidator {
                     && existingDraftConfig.getEditorSchemaRevision() >= step.introducedAtRevision();
 
             if (incomingHasFields) {
-                step.mergeFields().accept(merged, incomingConfig);
+                step.mergeFields().accept(merged, componentMerged);
             } else if (existingHasFields) {
                 step.mergeFields().accept(merged, existingDraftConfig);
             }
@@ -709,7 +724,8 @@ public class PortfolioConfigValidator {
                         componentPath + ".config.qrUrl",
                         0
                 ));
-                case CAROUSEL -> addFlatWorkReferences(references, portfolioId, configScope, component, componentPath);
+                case CAROUSEL, VIDEO_CAROUSEL ->
+                        addFlatWorkReferences(references, portfolioId, configScope, component, componentPath);
                 case WORK_GRID, WORK_LIST -> addGroupedWorkReferences(references, portfolioId, configScope, component, componentPath);
                 case SINGLE_WORK -> addSingleWorkReference(
                         references,
@@ -767,6 +783,7 @@ public class PortfolioConfigValidator {
         }
         switch (componentType) {
             case CAROUSEL -> validateCarousel(userId, component);
+            case VIDEO_CAROUSEL -> validateVideoCarousel(userId, component);
             case WORK_GRID -> validateWorkDisplayGroups(userId, component, WORK_GRID_MAX_COUNT, 2);
             case WORK_LIST -> validateWorkDisplayGroups(userId, component, WORK_LIST_MAX_COUNT, 1);
             case SINGLE_WORK -> validateSingleWork(userId, component);
@@ -799,6 +816,73 @@ public class PortfolioConfigValidator {
             throw new BusinessException(PortfolioMessage.CAROUSEL_IMAGE_ONLY_MESSAGE);
         }
         component.getConfig().put(CONFIG_KEY_WORK_IDS, workIds);
+    }
+
+    /**
+     * 校验并规范化视频轮播组件。
+     *
+     * <p>候选列表只用于辅助选择，保存和发布会在此重新读取数据库中的作品状态。</p>
+     *
+     * @param userId 当前用户 ID
+     * @param component 视频轮播组件
+     */
+    private void validateVideoCarousel(Long userId, PortfolioConfigDto.Component component) {
+        Map<String, Object> source = component.getConfig();
+        List<Long> workIds = normalizeVideoCarouselWorkIds(source.get(CONFIG_KEY_WORK_IDS));
+        String title = rawString(source.get(CONFIG_KEY_TITLE)).strip();
+        if (title.isEmpty()) {
+            title = VIDEO_CAROUSEL_DEFAULT_TITLE;
+        }
+        if (title.codePointCount(0, title.length()) > VIDEO_CAROUSEL_TITLE_MAX_CODE_POINTS) {
+            throw new BusinessException(PortfolioMessage.VIDEO_CAROUSEL_TITLE_LENGTH_MESSAGE);
+        }
+
+        Map<Long, WorkEntity> workMap = loadUsableWorks(userId, workIds);
+        boolean allAvailableVideos = workMap.size() == workIds.size()
+                && workIds.stream().allMatch(workId -> {
+                    WorkEntity work = workMap.get(workId);
+                    return work != null
+                            && MediaTypeDict.VIDEO.getCode().equals(work.getMediaType())
+                            && WorkAuditStatusDict.PASSED.getCode().equals(work.getAuditStatus());
+                });
+        if (!allAvailableVideos) {
+            throw new BusinessException(PortfolioMessage.WORK_REFERENCE_INVALID_MESSAGE);
+        }
+
+        Map<String, Object> normalized = new LinkedHashMap<>();
+        normalized.put(CONFIG_KEY_TITLE, title);
+        normalized.put(CONFIG_KEY_WORK_IDS, workIds);
+        Object showTitle = source.get(CONFIG_KEY_SHOW_TITLE);
+        normalized.put(CONFIG_KEY_SHOW_TITLE, showTitle instanceof Boolean value ? value : Boolean.TRUE);
+        Object showSwipeHint = source.get(CONFIG_KEY_SHOW_SWIPE_HINT);
+        normalized.put(CONFIG_KEY_SHOW_SWIPE_HINT,
+                showSwipeHint instanceof Boolean value ? value : Boolean.TRUE);
+        component.setConfig(normalized);
+    }
+
+    /**
+     * 精确读取视频轮播作品 ID，保留顺序且显式拒绝重复值。
+     *
+     * @param value 原始作品 ID 集合
+     * @return 规范化作品 ID
+     */
+    private List<Long> normalizeVideoCarouselWorkIds(Object value) {
+        if (!(value instanceof Collection<?> collection)
+                || collection.size() < VIDEO_CAROUSEL_WORK_MIN_COUNT
+                || collection.size() > VIDEO_CAROUSEL_WORK_MAX_COUNT) {
+            throw new BusinessException(PortfolioMessage.VIDEO_CAROUSEL_WORK_COUNT_MESSAGE);
+        }
+        LinkedHashSet<Long> uniqueIds = new LinkedHashSet<>();
+        for (Object item : collection) {
+            Long workId = asExactLong(item);
+            if (workId == null || workId <= 0L) {
+                throw new BusinessException(PortfolioMessage.WORK_REFERENCE_INVALID_MESSAGE);
+            }
+            if (!uniqueIds.add(workId)) {
+                throw new BusinessException(PortfolioMessage.VIDEO_CAROUSEL_WORK_DUPLICATE_MESSAGE);
+            }
+        }
+        return new ArrayList<>(uniqueIds);
     }
 
     /**

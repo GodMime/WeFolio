@@ -314,6 +314,9 @@ public class MineWorkService {
     /** 作品审核资格和展示服务 */
     private final MineWorkAuditService mineWorkAuditService;
 
+    /** 上传任务过期状态独立事务服务。 */
+    private final WorkUploadTaskExpirationService workUploadTaskExpirationService;
+
     /**
      * 分页查询我的作品。
      *
@@ -2077,9 +2080,7 @@ public class MineWorkService {
             throw new BusinessException(MineWorkMessage.COVER_TASK_USED_MESSAGE);
         }
         if (coverTask.getExpiresAt() != null && coverTask.getExpiresAt().isBefore(LocalDateTime.now())) {
-            coverTask.setStatus(WorkUploadTaskStatusDict.EXPIRED.getCode());
-            coverTask.setErrorMessage("封面上传任务已过期");
-            workUploadTaskEntityMapper.updateById(coverTask);
+            workUploadTaskExpirationService.markExpired(coverTask, "封面上传任务已过期");
             throw new BusinessException(MineWorkMessage.COVER_TASK_EXPIRED_MESSAGE);
         }
         validateCoverFileName(work.getOriginalFileName(), coverTask);
@@ -2108,9 +2109,7 @@ public class MineWorkService {
             throw new BusinessException(MineWorkMessage.COVER_TASK_USED_MESSAGE);
         }
         if (thumbnailTask.getExpiresAt() != null && thumbnailTask.getExpiresAt().isBefore(LocalDateTime.now())) {
-            thumbnailTask.setStatus(WorkUploadTaskStatusDict.EXPIRED.getCode());
-            thumbnailTask.setErrorMessage(IMAGE_THUMBNAIL_TASK_EXPIRED_ERROR_MESSAGE);
-            workUploadTaskEntityMapper.updateById(thumbnailTask);
+            workUploadTaskExpirationService.markExpired(thumbnailTask, IMAGE_THUMBNAIL_TASK_EXPIRED_ERROR_MESSAGE);
             throw new BusinessException(MineWorkMessage.COVER_TASK_EXPIRED_MESSAGE);
         }
         validateCoverFileName(work.getOriginalFileName(), thumbnailTask);

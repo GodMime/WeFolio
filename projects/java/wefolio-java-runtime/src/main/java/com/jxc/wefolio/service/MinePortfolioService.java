@@ -28,6 +28,7 @@ import com.jxc.wefolio.dto.PortfolioHyperlinkTargetResponse;
 import com.jxc.wefolio.dto.PortfolioScheduleOptionsResponse;
 import com.jxc.wefolio.dto.PortfolioScheduleQueryRequest;
 import com.jxc.wefolio.dto.PortfolioScheduleQueryResponse;
+import com.jxc.wefolio.dto.PortfolioVideoCarouselWorkPageResponse;
 import com.jxc.wefolio.entity.PortfolioEntity;
 import com.jxc.wefolio.entity.PortfolioHistoryEntity;
 import com.jxc.wefolio.entity.PortfolioReferenceEntity;
@@ -43,6 +44,7 @@ import com.jxc.wefolio.mapper.ScheduleEntityMapper;
 import com.jxc.wefolio.mapper.SlotDefinitionEntityMapper;
 import com.jxc.wefolio.message.PortfolioMessage;
 import com.jxc.wefolio.service.teamportfolio.TeamPortfolioReferenceGuardService;
+import com.jxc.wefolio.service.teamportfolio.PortfolioReferenceMutex;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -81,6 +83,29 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Slf4j
 public class MinePortfolioService {
+
+    /** 未携带能力版本的旧客户端按 revision 2 处理。 */
+    private static final int COMPONENT_LIBRARY_LEGACY_REVISION = 2;
+
+    /** 从 revision 3 起保存草稿必须携带客户端草稿版本，避免并发覆盖。 */
+    private static final int CLIENT_REVISION_REQUIRED_SINCE = 3;
+
+    /** 组件库按单项引入版本过滤，避免升级 CURRENT 时降级旧能力。 */
+    private static final List<ComponentLibraryDefinition> COMPONENT_LIBRARY_DEFINITIONS = List.of(
+            new ComponentLibraryDefinition(PortfolioComponentTypeDict.PROFILE, "展示个人资料和服务标签"),
+            new ComponentLibraryDefinition(PortfolioComponentTypeDict.CAROUSEL, "首页轮播展示代表作品"),
+            new ComponentLibraryDefinition(PortfolioComponentTypeDict.VIDEO_CAROUSEL,
+                    "叠放循环展示视频作品，访客左右滑动浏览、点击播放"),
+            new ComponentLibraryDefinition(PortfolioComponentTypeDict.TEXT_SECTION, "展示服务说明和补充文字"),
+            new ComponentLibraryDefinition(PortfolioComponentTypeDict.DIVIDER, "在内容之间加入可调高度的分割线"),
+            new ComponentLibraryDefinition(PortfolioComponentTypeDict.WORK_GRID, "双列展示图片和视频作品"),
+            new ComponentLibraryDefinition(PortfolioComponentTypeDict.WORK_LIST, "单列展示重点图片和视频作品"),
+            new ComponentLibraryDefinition(PortfolioComponentTypeDict.SINGLE_WORK, "突出展示一个图片、视频或动图作品"),
+            new ComponentLibraryDefinition(PortfolioComponentTypeDict.HYPERLINK, "通过展示作品跳转作品集或复制分享内容"),
+            new ComponentLibraryDefinition(PortfolioComponentTypeDict.SCHEDULE_QUERY, "允许访客查询公开档期"),
+            new ComponentLibraryDefinition(PortfolioComponentTypeDict.CONTACT_FORM, "收集访客预留联系信息"),
+            new ComponentLibraryDefinition(PortfolioComponentTypeDict.QR_CONTACT, "展示微信二维码联系方式")
+    );
 
     /** 作品集积分业务类型 */
     private static final String POINT_BUSINESS_TYPE_PORTFOLIO = "PORTFOLIO";
@@ -255,6 +280,12 @@ public class MinePortfolioService {
     /** 内容数量上限服务 */
     private final ContentLimitService contentLimitService;
 
+    /** 视频轮播候选来源服务 */
+    private final PortfolioVideoCarouselSourceService portfolioVideoCarouselSourceService;
+
+    /** 个人删除与团队引用写入共用的 JVM 互斥边界。 */
+    private final PortfolioReferenceMutex portfolioReferenceMutex;
+
     /**
      * 查询作品集列表。
      *
@@ -291,26 +322,36 @@ public class MinePortfolioService {
      */
     public PortfolioComponentLibraryResponse getComponentLibrary(Integer editorSchemaRevision) {
         PortfolioComponentLibraryResponse response = new PortfolioComponentLibraryResponse();
-        List<PortfolioComponentLibraryResponse.ComponentItem> components = new ArrayList<>(List.of(
-                componentLibraryItem(PortfolioComponentTypeDict.PROFILE, "展示个人资料和服务标签"),
-                componentLibraryItem(PortfolioComponentTypeDict.CAROUSEL, "首页轮播展示代表作品"),
-                componentLibraryItem(PortfolioComponentTypeDict.TEXT_SECTION, "展示服务说明和补充文字"),
-                componentLibraryItem(PortfolioComponentTypeDict.DIVIDER, "在内容之间加入可调高度的分割线"),
-                componentLibraryItem(PortfolioComponentTypeDict.WORK_GRID, "双列展示图片和视频作品"),
-                componentLibraryItem(PortfolioComponentTypeDict.WORK_LIST, "单列展示重点图片和视频作品"),
-                componentLibraryItem(PortfolioComponentTypeDict.SINGLE_WORK, "突出展示一个图片、视频或动图作品")
-        ));
-        if (editorSchemaRevision != null
-                && editorSchemaRevision >= PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT) {
-            components.add(componentLibraryItem(PortfolioComponentTypeDict.HYPERLINK, "通过展示作品跳转作品集或复制分享内容"));
-        }
-        components.addAll(List.of(
-                componentLibraryItem(PortfolioComponentTypeDict.SCHEDULE_QUERY, "允许访客查询公开档期"),
-                componentLibraryItem(PortfolioComponentTypeDict.CONTACT_FORM, "收集访客预留联系信息"),
-                componentLibraryItem(PortfolioComponentTypeDict.QR_CONTACT, "展示微信二维码联系方式")
-        ));
+        int effectiveRevision = editorSchemaRevision == null
+                ? COMPONENT_LIBRARY_LEGACY_REVISION : editorSchemaRevision;
+        List<PortfolioComponentLibraryResponse.ComponentItem> components = COMPONENT_LIBRARY_DEFINITIONS.stream()
+                .filter(definition -> definition.type().getIntroducedAtRevision() <= effectiveRevision)
+                .map(definition -> componentLibraryItem(definition.type(), definition.description()))
+                .toList();
         response.setComponents(components);
         return response;
+    }
+
+    /**
+     * 分页查询个人作品集视频轮播候选作品。
+     *
+     * @param keyword 搜索关键字
+     * @param tagId 可选作品标签 ID，不传表示全部
+     * @param page 页码
+     * @param pageSize 每页条数
+     * @return 视频候选分页
+     */
+    public PortfolioVideoCarouselWorkPageResponse pageVideoCarouselWorks(
+            String keyword,
+            Long tagId,
+            int page,
+            int pageSize
+    ) {
+        return portfolioVideoCarouselSourceService.page(keyword, tagId, page, pageSize);
+    }
+
+    /** 组件库内部定义，引入版本只参与服务端过滤，不进入响应。 */
+    private record ComponentLibraryDefinition(PortfolioComponentTypeDict type, String description) {
     }
 
     /**
@@ -750,6 +791,14 @@ public class MinePortfolioService {
      */
     @Transactional(rollbackFor = Exception.class)
     public void deletePortfolio(Long portfolioId) {
+        portfolioReferenceMutex.execute(() -> {
+            deletePortfolioLocked(portfolioId);
+            return null;
+        });
+    }
+
+    /** 在作品集引用互斥区间内删除标准个人作品集。 */
+    private void deletePortfolioLocked(Long portfolioId) {
         Long userId = AuthContextHolder.requireUserId();
         // 非标准模板沿用维护能力不可用提示，避免图锁过滤后降级为“作品集不存在”。
         requireOwnedStandardPersonal(portfolioId);
@@ -1409,7 +1458,7 @@ public class MinePortfolioService {
     private boolean isNewEditorConfig(PortfolioConfigDto config) {
         return config != null
                 && config.getEditorSchemaRevision() != null
-                && config.getEditorSchemaRevision() >= PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT;
+                && config.getEditorSchemaRevision() >= CLIENT_REVISION_REQUIRED_SINCE;
     }
 
     /**

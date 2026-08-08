@@ -7,4 +7,7 @@ public interface MineVisitMessage {
 
     /** 访问记录并发状态变化提示。 */
     String VISIT_RECORD_STATE_CHANGED_MESSAGE = "访问记录状态已变化，请刷新后重试";
+
+    /** 预留信息并发状态变化提示。 */
+    String CONTACT_LEAD_STATE_CHANGED_MESSAGE = "预留信息状态已变化，请刷新后重试";
 }

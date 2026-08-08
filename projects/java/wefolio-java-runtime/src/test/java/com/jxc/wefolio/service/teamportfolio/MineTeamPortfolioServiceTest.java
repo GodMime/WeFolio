@@ -99,18 +99,34 @@ class MineTeamPortfolioServiceTest {
         TableInfoHelper.initTableInfo(new MapperBuilderAssistant(configuration, ""), TeamScheduleQueryRecordEntity.class);
     }
 
-    /**
-     * 组件库必须完整公开包含单个作品在内的十类组件。
-     */
     @Test
-    void componentLibraryShouldExposeTenTypesIncludingSingleWork() {
+    void componentLibraryShouldGateVideoCarouselAtRevisionThree() {
         TestContext context = context(true);
+        List<String> originalTypes = java.util.Arrays.stream(TeamPortfolioComponentTypeDict.values())
+                .map(TeamPortfolioComponentTypeDict::getCode)
+                .filter(type -> !"VIDEO_CAROUSEL".equals(type))
+                .toList();
 
-        assertThat(context.service.getComponentLibrary())
+        assertThat(context.service.getComponentLibrary(null))
                 .extracting(MineTeamPortfolioService.ComponentLibraryItem::componentType)
-                .containsExactlyElementsOf(java.util.Arrays.stream(TeamPortfolioComponentTypeDict.values())
-                        .map(TeamPortfolioComponentTypeDict::getCode)
-                        .toList());
+                .containsExactlyElementsOf(originalTypes);
+        assertThat(context.service.getComponentLibrary(2))
+                .extracting(MineTeamPortfolioService.ComponentLibraryItem::componentType)
+                .containsExactlyElementsOf(originalTypes);
+        assertThat(context.service.getComponentLibrary(3))
+                .extracting(MineTeamPortfolioService.ComponentLibraryItem::componentType)
+                .containsExactly(
+                        TeamPortfolioComponentTypeDict.TEAM_PROFILE.getCode(),
+                        TeamPortfolioComponentTypeDict.CAROUSEL.getCode(),
+                        TeamPortfolioComponentTypeDict.VIDEO_CAROUSEL.getCode(),
+                        TeamPortfolioComponentTypeDict.SINGLE_WORK.getCode(),
+                        TeamPortfolioComponentTypeDict.DIVIDER.getCode(),
+                        TeamPortfolioComponentTypeDict.MEMBER_PORTFOLIO_GRID.getCode(),
+                        TeamPortfolioComponentTypeDict.MEMBER_PORTFOLIO_LIST.getCode(),
+                        TeamPortfolioComponentTypeDict.TEXT_SECTION.getCode(),
+                        TeamPortfolioComponentTypeDict.SCHEDULE_QUERY.getCode(),
+                        TeamPortfolioComponentTypeDict.CONTACT_FORM.getCode(),
+                        TeamPortfolioComponentTypeDict.QR_CONTACT.getCode());
     }
 
     @Test
@@ -1022,7 +1038,7 @@ class MineTeamPortfolioServiceTest {
                 .isInstanceOf(BusinessException.class).hasMessage(TeamPortfolioMessage.FEATURE_DISABLED);
         assertThatThrownBy(() -> context.service.listMaintainableTeams(USER_ID))
                 .isInstanceOf(BusinessException.class).hasMessage(TeamPortfolioMessage.FEATURE_DISABLED);
-        assertThatThrownBy(context.service::getComponentLibrary)
+        assertThatThrownBy(() -> context.service.getComponentLibrary(null))
                 .isInstanceOf(BusinessException.class).hasMessage(TeamPortfolioMessage.FEATURE_DISABLED);
         assertThatThrownBy(() -> context.service.createStandard(TEAM_ID, new TeamPortfolioCreateRequest(), USER_ID))
                 .isInstanceOf(BusinessException.class).hasMessage(TeamPortfolioMessage.FEATURE_DISABLED);
@@ -1079,7 +1095,7 @@ class MineTeamPortfolioServiceTest {
                 referenceMapper, shareMapper, teamMapper, memberMapper, access, validator, renderService,
                 referenceService, assetService, scheduleService,
                 visitRecordMapper, scheduleRecordMapper, contactService, contentLimitService,
-                pointService, publishTransactionService);
+                pointService, publishTransactionService, new LocalPortfolioReferenceMutex());
         return new TestContext(service, portfolioMapper, historyMapper, referenceMapper, shareMapper, teamMapper,
                 memberMapper, access, validator, renderService, referenceService, assetService, scheduleService,
                 visitRecordMapper, scheduleRecordMapper, contactService, contentLimitService,

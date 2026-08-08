@@ -55,6 +55,7 @@ test('personal inline schedule query replaces light calendar surfaces in dark th
   assert.match(selectedDayRule, /background:\s*transparent;/)
   assert.match(selectedDayStackRule, /color:\s*#212529;/)
   assert.match(selectedDayStackRule, /background:\s*var\(--portfolio-text-primary\);/)
+  assert.match(selectedDayStackRule, /box-shadow:\s*0\s+0\s+0\s+9rpx\s+var\(--portfolio-text-primary\);/)
   assert.match(submitRule, /color:\s*#212529;/)
   assert.match(submitRule, /background:\s*var\(--portfolio-text-primary\);/)
   assert.match(disabledSubmitRule, /color:\s*var\(--portfolio-text-muted\);/)
@@ -116,6 +117,18 @@ test('team inquiry components keep their dark theme wiring and secondary schedul
     themeWxss,
     '.theme-dark .schedule-calendar-day.selected .schedule-query-day-stack'
   )
+  const selectedDayMetaRule = readRule(
+    themeWxss,
+    '.theme-dark .schedule-calendar-day.selected .schedule-query-day-meta'
+  )
+  const modalSelectedDayStackRule = readRule(
+    themeWxss,
+    '.theme-dark .schedule-query-modal-panel .schedule-calendar-day.selected .schedule-query-day-stack'
+  )
+  const modalSelectedDayMetaRule = readRule(
+    themeWxss,
+    '.theme-dark .schedule-query-modal-panel .schedule-calendar-day.selected .schedule-query-day-meta'
+  )
 
   assert.match(scheduleWxml, /class="schedule-query theme-\{\{themeMode\}\}/)
   assert.match(contactWxml, /class="contact-form theme-\{\{themeMode\}\}/)
@@ -126,5 +139,11 @@ test('team inquiry components keep their dark theme wiring and secondary schedul
   assert.match(selectedDayRule, /background:\s*transparent;/)
   assert.match(selectedDayStackRule, /color:\s*#212529;/)
   assert.match(selectedDayStackRule, /background:\s*#ffffff;/)
+  assert.match(selectedDayStackRule, /box-shadow:\s*0\s+0\s+0\s+9rpx\s+#ffffff;/)
+  assert.match(selectedDayMetaRule, /color:\s*#212529;/)
+  assert.match(modalSelectedDayStackRule, /color:\s*#ffffff;/)
+  assert.match(modalSelectedDayStackRule, /background:\s*#212529;/)
+  assert.match(modalSelectedDayStackRule, /box-shadow:\s*0\s+0\s+0\s+9rpx\s+#212529;/)
+  assert.match(modalSelectedDayMetaRule, /color:\s*#ffffff;/)
   assert.match(placeholderRule, /color:\s*var\(--team-portfolio-text-secondary\);/)
 })

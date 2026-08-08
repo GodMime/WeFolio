@@ -53,10 +53,11 @@ class TeamPortfolioFoundationTest {
         assertThat(TeamPortfolioComponentTypeDict.values())
                 .extracting(TeamPortfolioComponentTypeDict::getCode)
                 .containsExactly("TEAM_PROFILE", "CAROUSEL", "SINGLE_WORK", "DIVIDER", "MEMBER_PORTFOLIO_GRID",
-                        "MEMBER_PORTFOLIO_LIST", "TEXT_SECTION", "SCHEDULE_QUERY", "CONTACT_FORM", "QR_CONTACT");
+                        "MEMBER_PORTFOLIO_LIST", "TEXT_SECTION", "SCHEDULE_QUERY", "CONTACT_FORM", "QR_CONTACT",
+                        "VIDEO_CAROUSEL");
         assertThat(TeamPortfolioComponentTypeDict.values())
                 .extracting(TeamPortfolioComponentTypeDict::getDisplayName)
-                .containsExactly("团队资料", "轮播图", "单个作品", "分割线", "双列作品集", "单列作品集", "文字说明", "档期查询", "预留联系信息", "二维码联系");
+                .containsExactly("团队资料", "轮播图", "单个作品", "分割线", "双列作品集", "单列作品集", "文字说明", "档期查询", "预留联系信息", "二维码联系", "视频轮播");
         assertThat(TeamPortfolioComponentTypeDict.fromCode("TEAM_PROFILE"))
                 .isEqualTo(TeamPortfolioComponentTypeDict.TEAM_PROFILE);
     }

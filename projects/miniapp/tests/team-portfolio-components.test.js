@@ -6,7 +6,7 @@ const path = require('node:path')
 const ROOT = path.resolve(__dirname, '../pages/team-portfolios/components')
 const COMPONENTS = [
   'team-profile', 'carousel', 'single-work', 'divider', 'member-portfolio-grid', 'member-portfolio-list',
-  'text-section', 'schedule-query', 'contact-form', 'qr-contact'
+  'text-section', 'schedule-query', 'contact-form', 'qr-contact', 'video-carousel'
 ]
 
 function loadComponent(name) {
@@ -217,7 +217,7 @@ for (const lifecycleCase of EDIT_LIFECYCLE_CASES) {
   })
 }
 
-test('all ten components are independent four-file Component packages', () => {
+test('all eleven components are independent four-file Component packages', () => {
   for (const name of COMPONENTS) {
     const directory = path.join(ROOT, name)
     for (const extension of ['js', 'json', 'wxml', 'wxss']) {
@@ -616,27 +616,34 @@ test('carousel selection restarts at one after every work is removed', () => {
   assert.equal(selectionModule.exports.order(reselected, 'workId', 11), 1)
 })
 
-test('carousel member buttons hug their content and show every selected work count', () => {
+test('carousel member capsules hug their content and show selected work counts', () => {
   const wxml = fs.readFileSync(path.join(ROOT, 'carousel/carousel.wxml'), 'utf8')
-  const wxss = fs.readFileSync(path.join(ROOT, 'carousel/carousel.wxss'), 'utf8')
+  const wxss = fs.readFileSync(path.join(ROOT, '../styles/team-member-selector.wxss'), 'utf8')
 
-  assert.match(wxml, /class="editor-member-name">\{\{item\.displayName\}\}<\/view>/)
-  assert.match(wxml, /class="editor-member-count">\{\{selection\.count\(draftItems, 'memberUserId', item\.memberUserId\)\}\}<\/view>/)
-  assert.match(wxss, /\.editor-member-choice\s*\{[^}]*display:\s*inline-flex;[^}]*width:\s*fit-content;/)
-  assert.match(wxss, /\.editor-member-name\s*\{[^}]*max-width:\s*180rpx;[^}]*text-overflow:\s*ellipsis;/)
-  assert.match(wxss, /\.editor-member-count\s*\{[^}]*flex:\s*none;/)
+  assert.match(wxml, /class="team-member-selector-name">\{\{item\.displayName\}\}<\/view>/)
+  assert.match(wxml, /wx:if="\{\{selection\.count\(draftItems, 'memberUserId', item\.memberUserId\)\}\}" class="team-member-selector-count">/)
+  assert.match(wxss, /\.team-member-selector-choice\s*\{[^}]*width:\s*auto;[^}]*display:\s*inline-flex;/s)
+  assert.match(wxss, /\.team-member-selector-name\s*\{[^}]*max-width:\s*180rpx;[^}]*text-overflow:\s*ellipsis;/s)
+  assert.match(wxss, /\.team-member-selector-count\s*\{[^}]*flex:\s*none;/s)
 })
 
 test('member-first editors give Skyline horizontal lists an explicit viewport height', () => {
-  for (const name of ['single-work', 'member-portfolio-grid', 'member-portfolio-list']) {
-    const wxss = fs.readFileSync(path.join(ROOT, name, `${name}.wxss`), 'utf8')
-    const memberScrollRule = wxss.match(/\.editor-member-scroll\s*\{([^}]*)\}/)
-    const memberRowRule = wxss.match(/\.editor-member-row\s*\{([^}]*)\}/)
+  const sharedWxss = fs.readFileSync(path.join(ROOT, '../styles/team-member-selector.wxss'), 'utf8')
+  const memberScrollRule = sharedWxss.match(/\.team-member-selector-scroll\s*\{([^}]*)\}/)
+  const memberRowRule = sharedWxss.match(/\.team-member-selector-row\s*\{([^}]*)\}/)
 
-    assert.ok(memberScrollRule, `${name} defines the member scroll viewport`)
-    assert.match(memberScrollRule[1], /height:\s*56rpx;/, `${name} keeps the Skyline viewport visible`)
-    assert.ok(memberRowRule, `${name} defines the member content row`)
-    assert.match(memberRowRule[1], /height:\s*56rpx;/, `${name} keeps the member row measurable`)
+  assert.ok(memberScrollRule, 'shared styles define the member scroll viewport')
+  assert.match(memberScrollRule[1], /height:\s*56rpx;/, 'shared styles keep the Skyline viewport visible')
+  assert.ok(memberRowRule, 'shared styles define the member content row')
+  assert.match(memberRowRule[1], /height:\s*56rpx;/, 'shared styles keep the member row measurable')
+
+  for (const name of ['single-work', 'member-portfolio-grid', 'member-portfolio-list']) {
+    const wxml = fs.readFileSync(path.join(ROOT, name, `${name}.wxml`), 'utf8')
+    const wxss = fs.readFileSync(path.join(ROOT, name, `${name}.wxss`), 'utf8')
+
+    assert.match(wxss, /@import "\.\.\/\.\.\/styles\/team-member-selector\.wxss";/)
+    assert.match(wxml, /class="team-member-selector-scroll"/)
+    assert.match(wxml, /class="team-member-selector-row"/)
   }
 })
 
@@ -677,19 +684,33 @@ test('member portfolio editors share one compact grid-style picker', () => {
 })
 
 test('member-first editors size view capsules from each nickname', () => {
+  const sharedWxss = fs.readFileSync(path.join(ROOT, '../styles/team-member-selector.wxss'), 'utf8')
+  const memberChoiceRule = sharedWxss.match(/\.team-member-selector-choice\s*\{([^}]*)\}/)
+
+  assert.ok(memberChoiceRule, 'shared styles define member choice styles')
+  assert.match(memberChoiceRule[1], /display:\s*inline-flex;/, 'member choices use a stable inline flex box')
+  assert.match(memberChoiceRule[1], /width:\s*auto;/, 'member choices follow the nickname width')
+  assert.match(memberChoiceRule[1], /flex:\s*0 0 auto;/, 'member choices do not grow equally')
+  assert.match(memberChoiceRule[1], /white-space:\s*nowrap;/, 'member choices keep the nickname on one line')
+  assert.doesNotMatch(memberChoiceRule[1], /width:\s*fit-content;/, 'member choices avoid unsupported fit-content sizing')
+
   for (const name of ['single-work', 'member-portfolio-grid', 'member-portfolio-list']) {
     const wxml = fs.readFileSync(path.join(ROOT, name, `${name}.wxml`), 'utf8')
-    const wxss = fs.readFileSync(path.join(ROOT, name, `${name}.wxss`), 'utf8')
-    const memberChoiceRule = wxss.match(/\.editor-member-choice\s*\{([^}]*)\}/)
 
-    assert.match(wxml, /<view wx:for="\{\{members\}\}"[^>]*class="editor-member-choice/)
-    assert.doesNotMatch(wxml, /<button wx:for="\{\{members\}\}"[^>]*class="editor-member-choice/)
-    assert.ok(memberChoiceRule, `${name} defines member choice styles`)
-    assert.match(memberChoiceRule[1], /display:\s*inline-flex;/, `${name} uses a stable inline flex box`)
-    assert.match(memberChoiceRule[1], /width:\s*auto;/, `${name} follows the nickname width`)
-    assert.match(memberChoiceRule[1], /flex:\s*0 0 auto;/, `${name} prevents capsules from growing equally`)
-    assert.match(memberChoiceRule[1], /white-space:\s*nowrap;/, `${name} keeps the nickname on one line`)
-    assert.doesNotMatch(memberChoiceRule[1], /width:\s*fit-content;/, `${name} avoids unsupported fit-content sizing`)
+    assert.match(wxml, /<view wx:for="\{\{members\}\}"[^>]*class="team-member-selector-choice/)
+    assert.doesNotMatch(wxml, /<button wx:for="\{\{members\}\}"/)
+  }
+})
+
+test('member portfolio editors show each member selected portfolio count', () => {
+  for (const name of ['member-portfolio-grid', 'member-portfolio-list']) {
+    const wxml = fs.readFileSync(path.join(ROOT, name, `${name}.wxml`), 'utf8')
+
+    assert.match(
+      wxml,
+      /wx:if="\{\{selection\.count\(draftItems, 'memberUserId', item\.memberUserId\)\}\}" class="team-member-selector-count">\{\{selection\.count\(draftItems, 'memberUserId', item\.memberUserId\)\}\}<\/view>/,
+      `${name} shows the selected portfolio count beside its member name`
+    )
   }
 })
 
@@ -869,6 +890,9 @@ test('schedule calendar builds six stable weeks and applies query range bounds',
   assert.equal(new Set(days.map((item) => item.key)).size, 42)
   assert.equal(days.find((item) => item.date === '2026-08-02').disabled, true)
   assert.equal(days.find((item) => item.date === '2026-08-03').disabled, false)
+  assert.equal(days.find((item) => item.date === '2026-08-01').metaText, '十九')
+  assert.equal(days.find((item) => item.date === '2026-08-19').metaText, '七夕')
+  assert.ok(days.every((item) => Array.isArray(item.colors) && item.colors.length === 0))
   assert.match(days.find((item) => item.date === '2026-07-31').dayClass, /muted/)
   assert.match(days.find((item) => item.date === '2026-08-02').dayClass, /disabled/)
   assert.equal(exports.formatYearMonthTitle('2026-08'), '2026 年 8 月')
@@ -935,7 +959,10 @@ test('schedule maps members to three display states and deduplicates loading', a
   assert.equal(exports.validateScheduleQueryConfig({ displayMode: 'INLINE_CALENDAR', queryRange: { type: 'FUTURE_DAYS', futureDays: 30 } }).valid, true)
   assert.equal(exports.validateScheduleQueryConfig({ displayMode: 'MODAL_CALENDAR', queryRange: { type: 'DATE_RANGE', startDate: '2026-08-02', endDate: '2026-08-01' } }).valid, false)
   assert.deepEqual(exports.resolveScheduleDateBounds({ queryRange: { type: 'FUTURE_DAYS', futureDays: 2 } }, '2026-08-01'), { startDate: '2026-08-01', endDate: '2026-08-03' })
-  assert.equal(exports.mapMemberScheduleState({ totalSlotCount: 0, availableSlotCount: 0, emptySlotDefinition: true }).text, '已满')
+  assert.deepEqual(
+    exports.mapMemberScheduleState({ totalSlotCount: 0, availableSlotCount: 0, emptySlotDefinition: true }),
+    { code: 'UNAVAILABLE', text: '暂未开放档期', tone: 'unavailable' }
+  )
   assert.equal(exports.mapMemberScheduleState({ totalSlotCount: 3, availableSlotCount: 1 }).text, '部分档期空闲')
   assert.equal(exports.mapMemberScheduleState({ totalSlotCount: 3, availableSlotCount: 0 }).text, '已满')
   assert.equal(exports.mapMemberScheduleState({ slotStatuses: ['BOOKED', 'TENTATIVE', 'REST'] }).text, '已满')
@@ -1101,10 +1128,10 @@ test('QR is CUSTOM-only and distinguishes maintainer preview from visitor intera
   assert.deepEqual(events[2], ['interact', { eventType: 'QR_CODE_INTERACTED', componentKey: 'qr-1', action: 'LONG_PRESS' }])
 })
 
-test('component styles constrain cards and long text without decorative gradients', () => {
+test('component styles constrain cards and long text without unrelated decorative gradients', () => {
   for (const name of COMPONENTS) {
     const source = fs.readFileSync(path.join(ROOT, name, `${name}.wxss`), 'utf8')
-    assert.doesNotMatch(source, /linear-gradient|radial-gradient/)
+    if (name !== 'video-carousel') assert.doesNotMatch(source, /linear-gradient|radial-gradient/)
     assert.doesNotMatch(source, /border-radius:\s*(?:[9-9]|[1-9]\d+)px/)
     assert.match(source, /overflow-wrap|word-break|text-overflow/)
   }

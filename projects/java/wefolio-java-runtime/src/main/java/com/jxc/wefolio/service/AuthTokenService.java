@@ -29,6 +29,9 @@ public class AuthTokenService {
     /** 用户令牌索引缓存 key 前缀 */
     private static final String USER_TOKEN_CACHE_KEY_PREFIX = "auth:user-tokens:";
 
+    /** 主动吊销令牌缓存 key 前缀 */
+    private static final String REVOKED_TOKEN_CACHE_KEY_PREFIX = "auth:revoked-token:";
+
     /** 登录态解析缓存有效期 */
     private static final Duration AUTH_CACHE_TTL = Duration.ofMinutes(10);
 
@@ -53,6 +56,9 @@ public class AuthTokenService {
     public Optional<Long> resolveAuthenticatedUserId(String authorization) {
         String token = normalizeToken(authorization);
         if (token.isBlank()) {
+            return Optional.empty();
+        }
+        if (isRevoked(token)) {
             return Optional.empty();
         }
 
@@ -118,6 +124,39 @@ public class AuthTokenService {
     }
 
     /**
+     * 主动吊销指定 Authorization 对应的维护者登录令牌。
+     *
+     * <p>吊销标记保留到原令牌自然过期；再次登录签发的新令牌不受影响，并会重新建立解析缓存。</p>
+     *
+     * @param authorization Authorization 请求头
+     */
+    public void revokeAuthorization(String authorization) {
+        String token = normalizeToken(authorization);
+        if (token.isBlank()) {
+            return;
+        }
+        MiniappAuthService.ResolvedAuthToken resolvedToken;
+        try {
+            resolvedToken = miniappAuthService.resolveAuthToken(authorization);
+        } catch (InvalidAuthTokenException exception) {
+            evictAuthorization(authorization);
+            return;
+        }
+        if (resolvedToken != null && resolvedToken.expiresAt() != null) {
+            Duration remainingTtl = Duration.between(Instant.now(), resolvedToken.expiresAt());
+            if (!remainingTtl.isZero() && !remainingTtl.isNegative()) {
+                cacheService.put(buildRevokedTokenCacheKey(token), Boolean.TRUE, remainingTtl);
+            }
+        }
+        evictAuthorization(authorization);
+    }
+
+    /** 判断令牌是否已经被当前服务主动吊销。 */
+    private boolean isRevoked(String token) {
+        return cacheService.get(buildRevokedTokenCacheKey(token), Boolean.class).orElse(false);
+    }
+
+    /**
      * 标准化 Authorization 中的令牌值。
      *
      * @param authorization Authorization 请求头
@@ -135,6 +174,11 @@ public class AuthTokenService {
      */
     private String buildCacheKey(String token) {
         return CACHE_KEY_PREFIX + token;
+    }
+
+    /** 构建主动吊销令牌缓存 key。 */
+    private String buildRevokedTokenCacheKey(String token) {
+        return REVOKED_TOKEN_CACHE_KEY_PREFIX + token;
     }
 
     /**

@@ -109,9 +109,25 @@ class RechargeControllerTest {
 
         assertThat(WechatPayNotificationController.class.isAnnotationPresent(SystemAccess.class)).isTrue();
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        verify(notificationService).handle(new WechatPayClient.NotificationRequest(
+        verify(notificationService).handle(
                 "PUB_KEY_ID_123", "signature", "1784273400", "nonce",
-                "WECHATPAY2-SHA256-RSA2048", "{\"id\":\"notification-1\"}"));
+                "WECHATPAY2-SHA256-RSA2048", "{\"id\":\"notification-1\"}");
+    }
+
+    /** 支付通知 Controller 不得直接依赖微信远端 Client 类型。 */
+    @Test
+    void notificationControllerShouldNotDependOnWechatPayClientType() {
+        assertThat(WechatPayNotificationController.class.getDeclaredFields())
+                .noneMatch(field -> WechatPayClient.class.isAssignableFrom(field.getType()));
+        assertThat(WechatPayNotificationController.class.getDeclaredMethods())
+                .allMatch(method -> java.util.Arrays.stream(method.getParameterTypes())
+                        .noneMatch(type -> type.getName().startsWith(WechatPayClient.class.getName())));
+        assertThat(java.util.Arrays.stream(WechatRechargeNotificationService.class.getMethods()))
+                .anyMatch(method -> method.getName().equals("handle")
+                        && java.util.Arrays.equals(method.getParameterTypes(), new Class<?>[] {
+                                String.class, String.class, String.class,
+                                String.class, String.class, String.class
+                        }));
     }
 
     @Test
@@ -142,9 +158,8 @@ class RechargeControllerTest {
     @Test
     void notificationControllerShouldReturnUnauthorizedForSignatureFailure() {
         WechatPayNotificationController controller = new WechatPayNotificationController(notificationService);
-        WechatPayClient.NotificationRequest request = new WechatPayClient.NotificationRequest(
-                "PUB_KEY_ID_123", "signature", "1784273400", "nonce", null, "{}");
-        when(notificationService.handle(request))
+        when(notificationService.handle(
+                "PUB_KEY_ID_123", "signature", "1784273400", "nonce", null, "{}"))
                 .thenThrow(new WechatPaySignatureException("微信支付通知验签失败", null));
 
         ResponseEntity<Void> response = controller.notifyRecharge(
@@ -156,9 +171,8 @@ class RechargeControllerTest {
     @Test
     void notificationControllerShouldReturnBadRequestForMalformedNotification() {
         WechatPayNotificationController controller = new WechatPayNotificationController(notificationService);
-        WechatPayClient.NotificationRequest request = new WechatPayClient.NotificationRequest(
-                "PUB_KEY_ID_123", "signature", "1784273400", "nonce", null, "{}");
-        when(notificationService.handle(request))
+        when(notificationService.handle(
+                "PUB_KEY_ID_123", "signature", "1784273400", "nonce", null, "{}"))
                 .thenThrow(new WechatPayNotificationException("微信支付通知内容无效", null));
 
         ResponseEntity<Void> response = controller.notifyRecharge(

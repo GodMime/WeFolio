@@ -24,6 +24,7 @@ import com.jxc.wefolio.service.teamportfolio.component.schedulequery.TeamSchedul
 import com.jxc.wefolio.service.teamportfolio.component.singlework.TeamSingleWorkComponentReferenceExtractor;
 import com.jxc.wefolio.service.teamportfolio.component.teamprofile.TeamProfileComponentReferenceExtractor;
 import com.jxc.wefolio.service.teamportfolio.component.textsection.TeamTextSectionComponentReferenceExtractor;
+import com.jxc.wefolio.service.teamportfolio.component.videocarousel.TeamVideoCarouselComponentReferenceExtractor;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -68,6 +69,7 @@ class TeamPortfolioReferenceServiceTest {
     @Mock private TeamScheduleQueryComponentReferenceExtractor scheduleExtractor;
     @Mock private TeamContactFormComponentReferenceExtractor contactExtractor;
     @Mock private TeamQrContactComponentReferenceExtractor qrExtractor;
+    @Mock private TeamVideoCarouselComponentReferenceExtractor videoCarouselExtractor;
 
     /**
      * 初始化 LambdaQueryWrapper 的实体表信息。
@@ -93,7 +95,7 @@ class TeamPortfolioReferenceServiceTest {
         verify(referenceMapper).delete(deleteCaptor.capture());
         assertDeleteScope(deleteCaptor.getValue(), context.portfolioId(), PortfolioConfigScopeDict.DRAFT.getCode());
         ArgumentCaptor<PortfolioReferenceEntity> insertCaptor = ArgumentCaptor.forClass(PortfolioReferenceEntity.class);
-        verify(referenceMapper, times(10)).insert(insertCaptor.capture());
+        verify(referenceMapper, times(11)).insert(insertCaptor.capture());
         assertThat(insertCaptor.getAllValues()).allSatisfy(reference -> {
             assertThat(reference.getPortfolioId()).isEqualTo(context.portfolioId());
             assertThat(reference.getConfigScope()).isEqualTo(PortfolioConfigScopeDict.DRAFT.getCode());
@@ -109,6 +111,8 @@ class TeamPortfolioReferenceServiceTest {
         verify(scheduleExtractor).extract(eq("schedule_query"), eq("components[7]"), any(JSONObject.class), eq(context));
         verify(contactExtractor).extract(eq("contact_form"), eq("components[8]"), any(JSONObject.class), eq(context));
         verify(qrExtractor).extract(eq("qr_contact"), eq("components[9]"), any(JSONObject.class), eq(context));
+        verify(videoCarouselExtractor).extract(
+                eq("video_carousel"), eq("components[10]"), any(JSONObject.class), eq(context));
     }
 
     /**
@@ -295,6 +299,8 @@ class TeamPortfolioReferenceServiceTest {
                 case SCHEDULE_QUERY -> when(scheduleExtractor.extract(anyString(), anyString(), any(JSONObject.class), eq(context))).thenReturn(references);
                 case CONTACT_FORM -> when(contactExtractor.extract(anyString(), anyString(), any(JSONObject.class), eq(context))).thenReturn(references);
                 case QR_CONTACT -> when(qrExtractor.extract(anyString(), anyString(), any(JSONObject.class), eq(context))).thenReturn(references);
+                case VIDEO_CAROUSEL -> when(videoCarouselExtractor.extract(
+                        anyString(), anyString(), any(JSONObject.class), eq(context))).thenReturn(references);
             }
         }
     }
@@ -315,12 +321,13 @@ class TeamPortfolioReferenceServiceTest {
 
     private void verifyNoReferenceCollaboratorInteractions() {
         verifyNoInteractions(referenceMapper, teamProfileExtractor, carouselExtractor, singleWorkExtractor, dividerExtractor, gridExtractor,
-                listExtractor, textExtractor, scheduleExtractor, contactExtractor, qrExtractor);
+                listExtractor, textExtractor, scheduleExtractor, contactExtractor, qrExtractor, videoCarouselExtractor);
     }
 
     private TeamPortfolioReferenceService service() {
         return new TeamPortfolioReferenceService(referenceMapper, teamProfileExtractor, carouselExtractor, singleWorkExtractor, dividerExtractor,
-                gridExtractor, listExtractor, textExtractor, scheduleExtractor, contactExtractor, qrExtractor);
+                gridExtractor, listExtractor, textExtractor, scheduleExtractor, contactExtractor, qrExtractor,
+                videoCarouselExtractor);
     }
 
     private TeamPortfolioConfigDto configForEveryType(boolean enabled) {

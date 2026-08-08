@@ -162,7 +162,11 @@
                 <view class="component-title pe-component-title">{{item.displayName}}</view>
                 <view wx:if="{{item.showSummary}}" class="component-summary pe-component-description">{{item.summaryText}}</view>
               </view>
-              <view class="component-drag-handle"></view>
+              <view class="component-drag-handle">
+                <view class="component-drag-line"></view>
+                <view class="component-drag-line"></view>
+                <view class="component-drag-line"></view>
+              </view>
               <view class="component-row-arrow"><view class="component-row-arrow-icon"></view></view>
             </view>
           </view>
@@ -426,6 +430,60 @@
       </view>
       <scroll-view class="component-editor-scroll pe-sheet-scroll" style="{{componentEditorLayoutType === 'CAROUSEL' ? carouselEditorScrollStyle : ''}}" scroll-y type="list">
         <view class="component-editor-content">
+          <block wx:if="{{activeComponentType === 'VIDEO_CAROUSEL'}}">
+            <view class="team-video-editor-settings">
+              <view class="team-video-title-setting">
+                <view class="team-video-setting-heading">
+                  <view class="field-label">组件标题</view>
+                  <view class="team-video-title-count">{{teamVideoTitleCount}} / 10</view>
+                </view>
+                <input class="team-video-title-input pe-sheet-field" value="{{teamVideoTitle}}" maxlength="-1" placeholder="视频作品" bindinput="handleTeamVideoTitleInput" />
+              </view>
+              <view class="team-video-switch-setting">
+                <view class="team-video-switch-copy"><view class="team-video-switch-title">显示作品标题</view><view class="team-video-switch-note">在卡片下方展示每个视频的标题</view></view>
+                <switch checked="{{teamVideoShowTitle}}" color="#212529" bindchange="handleTeamVideoShowTitleChange" />
+              </view>
+              <view class="team-video-switch-setting">
+                <view class="team-video-switch-copy"><view class="team-video-switch-title">显示滑动提示</view><view class="team-video-switch-note">提示访客可左右拖动浏览视频</view></view>
+                <switch checked="{{teamVideoShowSwipeHint}}" color="#212529" bindchange="handleTeamVideoShowSwipeHintChange" />
+              </view>
+            </view>
+
+            <view class="team-member-selector-field team-video-member-field">
+              <view class="team-member-selector-label">选择团队成员</view>
+              <view wx:if="{{teamVideoMembersLoading}}" class="team-video-source-state">正在加载团队成员...</view>
+              <view wx:elif="{{!portfolioId}}" class="team-video-source-state">请先保存草稿，再选择团队成员内容</view>
+              <view wx:elif="{{!teamVideoMembers.length && !teamVideoErrorText}}" class="team-video-source-state">暂无可选择的团队成员</view>
+              <scroll-view wx:else class="team-member-selector-scroll" scroll-x type="list">
+                <view class="team-member-selector-row">
+                  <view wx:for="{{teamVideoMembers}}" wx:key="memberUserId" class="team-member-selector-choice {{item.active ? 'active' : ''}}" data-member-user-id="{{item.memberUserId}}" catchtap="handleTeamVideoMemberTap" aria-role="radio" aria-checked="{{item.active}}">
+                    <view class="team-member-selector-name">{{item.displayName}}</view><view wx:if="{{item.selectedCount}}" class="team-member-selector-count">{{item.selectedCount}}</view>
+                  </view>
+                </view>
+              </scroll-view>
+            </view>
+
+            <view wx:if="{{teamVideoMembers.length}}" class="team-video-search">
+              <view class="team-video-search-icon"></view>
+              <input class="team-video-search-input pe-sheet-field" value="{{teamVideoKeyword}}" confirm-type="search" placeholder="搜索视频作品" bindinput="handleTeamVideoKeywordInput" bindconfirm="handleTeamVideoSearchConfirm" />
+              <view wx:if="{{teamVideoKeyword}}" class="team-video-search-clear" catchtap="handleTeamVideoClearSearch">×</view>
+            </view>
+
+            <view wx:if="{{teamVideoErrorText}}" class="team-video-source-state source-error"><view>{{teamVideoErrorText}}</view><button catchtap="handleTeamVideoRetry">重试</button></view>
+            <view wx:elif="{{teamVideoWorksLoading}}" class="team-video-source-state">正在加载视频作品...</view>
+            <view wx:elif="{{teamVideoMembers.length && !teamVideoWorkOptions.length}}" class="team-video-source-state">当前成员暂无视频作品</view>
+            <scroll-view wx:else class="team-video-work-scroll" scroll-y type="list" bindscrolltolower="handleTeamVideoLoadMore">
+              <view class="team-video-work-list">
+                <view wx:for="{{teamVideoWorkOptions}}" wx:key="workId" class="team-video-work-option pe-sheet-choice {{item.selected ? 'pe-sheet-choice-selected' : ''}}" data-work-id="{{item.workId}}" catchtap="handleTeamVideoWorkTap" aria-role="checkbox" aria-checked="{{item.selected}}">
+                  <view class="team-video-work-thumb"><image wx:if="{{item.thumbUrl}}" src="{{item.thumbUrl}}" mode="aspectFill"></image><view wx:else class="team-video-work-placeholder">视频</view></view>
+                  <view class="team-video-work-copy"><view class="team-video-work-title">{{item.title}}</view><view class="team-video-work-meta">{{item.memberDisplayName}} · {{item.metaText}} · {{item.aspectRatioText}} · {{item.durationText}}</view></view>
+                  <view class="team-video-work-order">{{item.selectionOrder || ''}}</view>
+                </view>
+                <view wx:if="{{teamVideoLoadingMore}}" class="team-video-work-footer">加载更多视频</view>
+                <view wx:if="{{!teamVideoHasMore && teamVideoWorkOptions.length}}" class="team-video-work-footer">已显示全部视频</view>
+              </view>
+            </scroll-view>
+          </block>
           <team-profile wx:if="{{activeComponentType === 'TEAM_PROFILE'}}" id="active-component-editor" data-key="{{activeComponentKey}}" team="{{activeComponent.config.team}}" visible-fields="{{activeComponent.config.visibleFields}}" edit-mode="{{true}}" refreshing="{{teamProfileRefreshing}}" bindchooseavatar="handleTeamProfileChooseAvatar" bindrefresh="handleTeamProfileRefresh" bindsave="handleComponentSave" />
           <team-carousel wx:if="{{activeComponentType === 'CAROUSEL'}}" id="active-component-editor" data-key="{{activeComponentKey}}" portfolio-id="{{portfolioId}}" items="{{activeComponent.config.items}}" members="{{activeComponentSource.members}}" works="{{activeComponentSource.works}}" loading="{{activeComponentSource.loadingFingerprint ? true : false}}" edit-mode="{{true}}" bindloadmembers="handleCarouselLoadMembers" bindmemberchange="handleCarouselMemberChange" bindlayoutchange="handleCarouselLayoutChange" bindsave="handleComponentSave" />
           <team-single-work wx:if="{{activeComponentType === 'SINGLE_WORK'}}" id="active-component-editor" data-key="{{activeComponentKey}}" component-key="{{activeComponentKey}}" portfolio-id="{{portfolioId}}" config="{{activeComponent.config}}" members="{{activeComponentSource.members}}" works="{{activeComponentSource.works}}" selected-work="{{activeComponentSource.selectedWork}}" single-work-loading="{{activeComponentSource.singleWorkLoading}}" single-work-loading-more="{{activeComponentSource.singleWorkLoadingMore}}" single-work-has-more="{{activeComponentSource.singleWorkHasMore}}" single-work-load-more-error="{{activeComponentSource.singleWorkLoadMoreError}}" edit-mode="{{true}}" bindloadmembers="handleSingleWorkLoadMembers" bindmemberchange="handleSingleWorkMemberChange" bindloadmore="handleSingleWorkLoadMore" bindretryloadmore="handleSingleWorkLoadMore" bindsave="handleComponentSave" />
@@ -436,7 +494,7 @@
       </scroll-view>
       <view class="component-editor-actions pe-sheet-actions">
         <button class="pe-sheet-action-cancel" catchtap="handleCloseComponentEditor">取消</button>
-        <button class="pe-sheet-action-confirm" catchtap="handleConfirmComponentEditor">完成</button>
+        <button class="pe-sheet-action-confirm" catchtap="handleConfirmComponentEditor" disabled="{{activeComponentType === 'VIDEO_CAROUSEL' && teamVideoSelectedItems.length < 3}}">完成</button>
       </view>
     </view>
   </view>

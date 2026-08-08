@@ -1,6 +1,7 @@
 @import "../../../styles/portfolio-text-typography.wxss";
 @import "../../../styles/portfolio-text-section-editor.wxss";
 @import "../../../styles/portfolio-editor-foundation.wxss";
+@import "../styles/team-member-selector.wxss";
 
 .portfolio-edit-page {
   height: 100vh;
@@ -261,14 +262,21 @@
 .component-drag-handle {
   width: 42rpx;
   height: 48rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   flex: none;
   align-self: center;
   justify-content: center;
+  gap: 8rpx;
   border-radius: 12rpx;
-  background: linear-gradient(to bottom, transparent 0, transparent 10rpx, #6f7f90 10rpx, #6f7f90 14rpx, transparent 14rpx, transparent 22rpx, #6f7f90 22rpx, #6f7f90 26rpx, transparent 26rpx, transparent 34rpx, #6f7f90 34rpx, #6f7f90 38rpx, transparent 38rpx, transparent 48rpx);
-  background-position: center center;
-  background-size: 22rpx 48rpx;
-  background-repeat: no-repeat;
+}
+
+.component-drag-line {
+  width: 22rpx;
+  height: 4rpx;
+  flex: none;
+  background: #6f7f90;
 }
 
 .component-row-arrow {
@@ -573,6 +581,192 @@
 
 .source-error button {
   margin-top: 10rpx;
+}
+
+.team-video-editor-settings {
+  width: 100%;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4rpx;
+  padding-bottom: 14rpx;
+  border-bottom: 1rpx solid var(--pe-color-border, #E9ECEF);
+}
+
+.team-video-title-setting,
+.team-video-switch-copy {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.team-video-title-setting {
+  gap: 10rpx;
+  padding: 8rpx 0 14rpx;
+}
+
+.team-video-setting-heading,
+.team-video-switch-setting {
+  justify-content: space-between;
+  gap: 24rpx;
+}
+
+.team-video-title-count,
+.team-video-switch-note,
+.team-video-work-meta {
+  color: var(--pe-color-text-secondary, #868E96);
+  font-size: 21rpx;
+  line-height: 1.35;
+}
+
+.team-video-title-input,
+.team-video-search {
+  width: 100%;
+  border: 1rpx solid var(--pe-color-border-strong, #DEE2E6);
+  border-radius: 14rpx;
+  background: var(--pe-color-page, #F5F6F7);
+  box-sizing: border-box;
+}
+
+.team-video-title-input {
+  min-height: 68rpx;
+  padding: 0 18rpx;
+}
+
+.team-video-switch-setting {
+  min-height: 84rpx;
+  padding: 14rpx 0;
+}
+
+.team-video-switch-copy {
+  min-width: 0;
+  flex: 1 1 0;
+  align-items: flex-start;
+  gap: 4rpx;
+}
+
+.team-video-switch-title,
+.team-video-work-title {
+  color: var(--pe-color-text-primary, #212529);
+  font-size: 24rpx;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.team-video-source-state {
+  min-height: 112rpx;
+  justify-content: center;
+  gap: 12rpx;
+  color: var(--pe-color-text-secondary, #868E96);
+  font-size: 23rpx;
+  text-align: center;
+}
+
+.team-video-member-field {
+  margin-top: 20rpx;
+}
+
+.team-video-search {
+  height: 64rpx;
+  gap: 14rpx;
+  margin-top: 12rpx;
+  padding: 0 18rpx;
+}
+
+.team-video-search-icon {
+  width: 18rpx;
+  height: 18rpx;
+  flex: none;
+  border: 3rpx solid var(--pe-color-text-muted, #ADB5BD);
+  border-radius: 50%;
+}
+
+.team-video-search-input {
+  min-width: 0;
+  flex: 1 1 0;
+}
+
+.team-video-search-clear {
+  width: 34rpx;
+  height: 34rpx;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--pe-color-border-strong, #DEE2E6);
+}
+
+.team-video-work-scroll {
+  width: 100%;
+  height: 520rpx;
+  margin-top: 14rpx;
+}
+
+.team-video-work-list {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12rpx;
+}
+
+.team-video-work-option {
+  width: 100%;
+  min-height: 112rpx;
+  gap: 16rpx;
+}
+
+.team-video-work-thumb {
+  width: 92rpx;
+  height: 76rpx;
+  flex: none;
+  overflow: hidden;
+  border-radius: 12rpx;
+  background: var(--pe-color-page, #F5F6F7);
+}
+
+.team-video-work-thumb image,
+.team-video-work-placeholder {
+  width: 100%;
+  height: 100%;
+}
+
+.team-video-work-placeholder {
+  justify-content: center;
+  color: var(--pe-color-text-muted, #ADB5BD);
+  font-size: 20rpx;
+}
+
+.team-video-work-copy {
+  min-width: 0;
+  flex: 1 1 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7rpx;
+}
+
+.team-video-work-order {
+  width: 44rpx;
+  height: 44rpx;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--pe-color-surface, #FFFFFF);
+  font-size: 22rpx;
+  font-weight: 900;
+  line-height: 1;
+  border-radius: 50%;
+  background: var(--pe-color-border-strong, #DEE2E6);
+}
+
+.team-video-work-option[aria-checked="true"] .team-video-work-order {
+  background: var(--pe-color-text-primary, #212529);
+}
+
+.team-video-work-footer {
+  min-height: 48rpx;
+  justify-content: center;
+  color: var(--pe-color-text-muted, #ADB5BD);
+  font-size: 22rpx;
+}
+
+.component-editor-actions button[disabled] {
+  opacity: 0.42;
 }
 
 .share-cover-crop-stage {

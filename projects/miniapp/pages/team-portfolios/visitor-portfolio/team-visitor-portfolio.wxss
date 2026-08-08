@@ -1,3 +1,23 @@
 @import "../styles/team-portfolio-menu-transition.wxss";
 
 .page-shell{height:100vh;color:#212529}.page-shell.theme-dark{color:#f8f9fa}.page-shell.with-bottom-nav{padding-bottom:calc(112rpx + env(safe-area-inset-bottom));box-sizing:border-box}.content{display:flex;flex-direction:column;min-width:0}.folio-component{display:block;width:100%;min-width:0;margin-top:34rpx;box-sizing:border-box}.state{min-width:0;padding:100rpx 32rpx;text-align:center;color:#868e96;overflow-wrap:anywhere}.theme-dark .state{color:#adb5bd}.folio-brand-footer{display:flex;flex-direction:column;align-items:center;gap:12rpx;padding:56rpx 0 calc(160rpx + env(safe-area-inset-bottom));box-sizing:border-box}.folio-brand-logo{width:56rpx;height:56rpx}.folio-brand-name{color:#adb5bd;font-size:24rpx;font-weight:800;line-height:1.4}.profile-mask{position:fixed;z-index:30;inset:0;display:flex;align-items:flex-end;background:rgba(33,37,41,.42)}.profile-panel{display:flex;flex:1;flex-direction:column;gap:20rpx;min-width:0;padding:28rpx 32rpx calc(32rpx + env(safe-area-inset-bottom));background:#fff;border-radius:56rpx 56rpx 0 0;overflow-wrap:anywhere}.profile-panel input{min-height:84rpx;padding:0 20rpx;color:#212529;border:1rpx solid #e9ecef;border-radius:40rpx;background:#f5f6f7;box-sizing:border-box}.profile-panel button{min-height:72rpx;margin:0;border-radius:999rpx}.primary{background:#212529;color:#fff}
+.work-video-mask {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32rpx 24rpx calc(32rpx + env(safe-area-inset-bottom));
+  background: rgba(0, 0, 0, 0.82);
+  box-sizing: border-box;
+}
+
+.work-video-panel { width: 100%; display: flex; flex-direction: column; gap: 18rpx; }
+.work-video-heading { display: flex; align-items: center; justify-content: space-between; gap: 18rpx; }
+.work-video-title { min-width: 0; flex: 1 1 auto; overflow: hidden; color: #ffffff; font-size: 28rpx; font-weight: 900; text-overflow: ellipsis; white-space: nowrap; }
+.work-video-close { width: 58rpx; height: 58rpx; display: flex; align-items: center; justify-content: center; flex: none; color: #ffffff; font-size: 36rpx; border-radius: 50%; background: rgba(255, 255, 255, 0.18); }
+.work-video-player { width: 100%; height: auto; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 40rpx; background: #000000; }

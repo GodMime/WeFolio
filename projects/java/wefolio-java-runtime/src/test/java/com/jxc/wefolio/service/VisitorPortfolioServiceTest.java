@@ -40,8 +40,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.Arrays;
 import java.util.List;
 
 import com.alibaba.fastjson2.JSON;
@@ -61,6 +64,34 @@ import static org.mockito.Mockito.lenient;
  */
 @ExtendWith(MockitoExtension.class)
 class VisitorPortfolioServiceTest {
+
+    /** 访客档期原始日期必须由服务层解析，并转换为稳定业务异常。 */
+    @Test
+    void queryScheduleShouldRejectInvalidRawDateInServiceLayer() {
+        Method method = Arrays.stream(VisitorPortfolioService.class.getMethods())
+                .filter(candidate -> candidate.getName().equals("querySchedule"))
+                .filter(candidate -> Arrays.equals(candidate.getParameterTypes(), new Class<?>[] {
+                        String.class, String.class, String.class, String.class, String.class, String.class
+                }))
+                .findFirst()
+                .orElse(null);
+
+        assertThat(method).as("服务层必须接收原始日期字符串").isNotNull();
+
+        assertThatThrownBy(() -> invoke(method, service(),
+                "PF001", "invalid", "2026-08-07", "ALL", "visitor-a", "schedule-invalid"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("档期查询日期格式不正确");
+    }
+
+    /** 调用反射方法并把目标业务异常原样抛出。 */
+    private Object invoke(Method method, Object target, Object... arguments) throws Throwable {
+        try {
+            return method.invoke(target, arguments);
+        } catch (InvocationTargetException exception) {
+            throw exception.getCause();
+        }
+    }
 
     /** 作品集 Mapper 模拟 */
     @Mock

@@ -1,11 +1,11 @@
 <view class="single-work theme-{{themeMode}} {{editMode ? 'editor-mode' : ''}}">
   <block wx:if="{{editMode}}">
     <view class="editor-form">
-      <view class="editor-field">
-        <view class="editor-label">选择团队成员</view>
-        <scroll-view class="editor-member-scroll" scroll-x type="list">
-          <view class="editor-member-row">
-            <view wx:for="{{members}}" wx:key="memberUserId" class="editor-member-choice {{draft.memberUserId === item.memberUserId ? 'active' : ''}}" data-id="{{item.memberUserId}}" bindtap="selectMember" aria-role="radio" aria-checked="{{draft.memberUserId === item.memberUserId}}">{{item.displayName}}</view>
+      <view class="editor-field team-member-selector-field">
+        <view class="editor-label team-member-selector-label">选择团队成员</view>
+        <scroll-view class="team-member-selector-scroll" scroll-x type="list">
+          <view class="team-member-selector-row">
+            <view wx:for="{{members}}" wx:key="memberUserId" class="team-member-selector-choice {{draft.memberUserId === item.memberUserId ? 'active' : ''}}" data-id="{{item.memberUserId}}" bindtap="selectMember" aria-role="radio" aria-checked="{{draft.memberUserId === item.memberUserId}}"><view class="team-member-selector-name">{{item.displayName}}</view></view>
           </view>
         </scroll-view>
       </view>

@@ -31,6 +31,10 @@
       >
         <view class="schedule-query-day-stack">
           <view class="schedule-query-day-number">{{item.dayNumber}}</view>
+          <view class="schedule-query-day-meta" wx:if="{{item.metaText}}">{{item.metaText}}</view>
+        </view>
+        <view class="schedule-query-day-dots">
+          <view wx:for="{{item.colors}}" wx:for-item="color" wx:key="*this" class="schedule-query-day-dot" style="background: {{color}};"></view>
         </view>
       </view>
     </view>

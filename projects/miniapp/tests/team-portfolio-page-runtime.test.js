@@ -14,7 +14,7 @@ function clone(value) { return JSON.parse(JSON.stringify(value)) }
 function validTeamEditorConfig(patch = {}) {
   return Object.assign({
     schemaVersion: 'standard-team-v1',
-    editorSchemaRevision: 2,
+    editorSchemaRevision: 3,
     share: { title: TEST_TEAM_PORTFOLIO_TITLE },
     components: [{
       componentKey: 'valid-divider',
@@ -1346,6 +1346,40 @@ test('team preview rejects schedule query locally without a request', async () =
   } finally {
     page.cleanup()
   }
+})
+
+test('team preview video carousel opens and clears the root portal player without events', () => {
+  const toasts = []
+  const page = loadPage('standard-preview/team-portfolio-standard-preview.js', async () => ({}), {
+    showToast(options) { toasts.push(options) },
+    createVideoContext() { return { stop() {} } }
+  })
+  try {
+    assert.equal(page.handleVideoCarouselPlay({ detail: { componentKey: 'vc-1', work: { workId: 11, mediaUrl: 'video-11', coverUrl: 'cover-11', title: '视频十一' } } }), true)
+    assert.equal(page.data.videoPreviewVisible, true)
+    assert.equal(page.data.videoPreviewUrl, 'video-11')
+    page.handleCloseVideoPreview()
+    assert.equal(page.data.videoPreviewUrl, '')
+    page.handleVideoCarouselPlay({ detail: { componentKey: 'vc-1', work: { workId: 12 } } })
+    assert.equal(toasts.at(-1).title, '视频地址缺失')
+    page.handleVideoPreviewError()
+    assert.equal(toasts.at(-1).title, '视频播放失败，请重试')
+  } finally { page.cleanup() }
+})
+
+test('team visitor video carousel sends exact event before opening the player', () => {
+  const events = []
+  const page = loadPage('visitor-portfolio/team-visitor-portfolio.js', async () => ({}), {
+    createVideoContext() { return { stop() {} } }
+  })
+  page.sendEvent = (payload) => { events.push(clone(payload)); return Promise.resolve({}) }
+  try {
+    const opened = page.handleVideoCarouselPlay({ detail: { componentKey: 'vc-1', work: { workId: 11, mediaUrl: 'video-11', coverUrl: 'cover-11', title: '视频十一' } } })
+    assert.equal(opened, true)
+    assert.deepEqual(events, [{ eventType: 'VIDEO_PLAYED', componentKey: 'vc-1', workId: 11, mediaType: 'VIDEO', durationSeconds: 0 }])
+    assert.equal(page.data.videoPreviewVisible, true)
+    assert.equal(page.data.videoPreviewUrl, 'video-11')
+  } finally { page.cleanup() }
 })
 
 test('team visitor ignores schedule and contact callbacks that arrive after leaving their menu', async () => {

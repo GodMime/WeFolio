@@ -9,6 +9,7 @@ const {
   buildDraftPayload,
   buildPublishPayload,
   copyWorkTagsToDisplayGroups,
+  collectComponentWorkIds,
   countUnicodeCodePoints,
   createComponent,
   findPortfolioComponent,
@@ -43,8 +44,45 @@ const {
   themeModeFromHex
 } = require('../utils/portfolio-color')
 
-test('new editor advertises hyperlink schema revision', () => {
-  assert.equal(EDITOR_SCHEMA_REVISION, 3)
+test('new editor advertises video carousel schema revision', () => {
+  assert.equal(EDITOR_SCHEMA_REVISION, 4)
+})
+
+test('personal video carousel defaults normalize identifiers and enforce publish count', () => {
+  const component = createComponent(COMPONENT_TYPES.VIDEO_CAROUSEL, {
+    componentKey: 'c_video',
+    config: {
+      title: '  一二三四五六七八九十😀  ',
+      workIds: [3, '2', 3, 0, -1, 2.5, 'bad', 1],
+      showTitle: false
+    }
+  })
+  assert.equal(COMPONENT_TYPES.VIDEO_CAROUSEL, 'VIDEO_CAROUSEL')
+  assert.deepEqual(component.config, {
+    title: '一二三四五六七八九十',
+    workIds: [3, 2, 1],
+    showTitle: false,
+    showSwipeHint: true
+  })
+  assert.deepEqual(collectComponentWorkIds(component), [3, 2, 1])
+  assert.equal(validatePortfolioForPublish({
+    components: [createComponent(COMPONENT_TYPES.VIDEO_CAROUSEL, {
+      componentKey: 'too-few',
+      config: { workIds: [1, 2] }
+    })]
+  }).message, '视频轮播至少选择3个视频')
+  assert.equal(validatePortfolioForPublish({
+    components: [createComponent(COMPONENT_TYPES.VIDEO_CAROUSEL, {
+      componentKey: 'valid',
+      config: { workIds: [1, 2, 3] }
+    })]
+  }).valid, true)
+  assert.equal(validatePortfolioForPublish({
+    components: [createComponent(COMPONENT_TYPES.VIDEO_CAROUSEL, {
+      componentKey: 'too-many',
+      config: { workIds: [1, 2, 3, 4, 5, 6, 7, 8, 9] }
+    })]
+  }).message, '视频轮播最多选择8个视频')
 })
 
 test('normalizes style and bottom navigation without duplicating first menu components', () => {
@@ -70,7 +108,7 @@ test('normalizes style and bottom navigation without duplicating first menu comp
     }
   })
 
-  assert.equal(config.editorSchemaRevision, 3)
+  assert.equal(config.editorSchemaRevision, 4)
   assert.equal(config.style.backgroundColor, '#1A2B3C')
   assert.equal(Object.hasOwn(config.bottomNav.items[0], 'components'), false)
   assert.equal(config.bottomNav.items[0].iconUrl, 'https://example.com/home.png')
