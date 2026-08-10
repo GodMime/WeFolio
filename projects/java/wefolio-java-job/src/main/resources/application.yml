@@ -110,3 +110,17 @@ recharge-order-close:
   batch-size: ${RECHARGE_ORDER_CLOSE_BATCH_SIZE:200}
   # 单轮最多执行的批次数，防止长期占用任务线程。
   max-batches: ${RECHARGE_ORDER_CLOSE_MAX_BATCHES:10}
+
+virtual-payment-dispatch:
+  # Release A 默认关闭；确认所有 runtime 实例均已提供单任务接口后再启用。
+  enabled: ${VIRTUAL_PAYMENT_DISPATCH_ENABLED:false}
+  # 上一轮赠送订单分发完成后的固定扫描延迟。
+  gift-scan-interval: ${VIRTUAL_PAYMENT_GIFT_DISPATCH_INTERVAL:60s}
+  # 上一轮待扣任务分发完成后的固定扫描延迟。
+  debit-scan-interval: ${VIRTUAL_PAYMENT_DEBIT_DISPATCH_INTERVAL:30s}
+  # 每类候选单轮最多读取数量。
+  batch-size: ${VIRTUAL_PAYMENT_DISPATCH_BATCH_SIZE:100}
+  # 单轮分发固定工作线程数。
+  worker-count: ${VIRTUAL_PAYMENT_DISPATCH_WORKER_COUNT:4}
+  # 单次 runtime 请求连接和读取超时，不在同一轮自动重试。
+  request-timeout: ${VIRTUAL_PAYMENT_DISPATCH_REQUEST_TIMEOUT:30s}

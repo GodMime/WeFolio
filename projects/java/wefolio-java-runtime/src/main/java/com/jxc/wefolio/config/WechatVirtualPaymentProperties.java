@@ -53,6 +53,7 @@ public class WechatVirtualPaymentProperties {
         requireText(sessionEncryptionSecret, "WECHAT_SESSION_ENCRYPTION_SECRET");
         requireText(messageToken, "WECHAT_MESSAGE_TOKEN");
         requireText(messageEncodingAesKey, "WECHAT_MESSAGE_ENCODING_AES_KEY");
+        validateExecutionLeaseDuration();
     }
 
     /** 获取会话检查间隔秒数。 */
@@ -67,6 +68,17 @@ public class WechatVirtualPaymentProperties {
         }
     }
 
+    /** 校验执行租约能够覆盖两次有界远端请求时间。 */
+    private void validateExecutionLeaseDuration() {
+        if (requestTimeout == null || requestTimeout.isZero() || requestTimeout.isNegative()) {
+            throw new IllegalStateException("微信虚拟支付请求超时必须大于零");
+        }
+        Duration leaseDuration = settlement == null ? null : settlement.getLeaseDuration();
+        if (leaseDuration == null || leaseDuration.compareTo(requestTimeout.multipliedBy(2L)) < 0) {
+            throw new IllegalStateException("微信虚拟支付执行租约时长不得小于请求超时的两倍");
+        }
+    }
+
     /** 待结算任务配置。 */
     @Data
     public static class Settlement {
@@ -76,9 +88,6 @@ public class WechatVirtualPaymentProperties {
 
         /** 首次失败后的最大自动重试次数。 */
         private int maxRetries = 3;
-
-        /** 数据库恢复扫描固定延迟。 */
-        private Duration scanInterval = Duration.ofSeconds(10L);
 
         /** 单次任务领取租约时长。 */
         private Duration leaseDuration = Duration.ofSeconds(60L);

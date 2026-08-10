@@ -52,6 +52,9 @@ public class PointDebitTaskEntity extends BaseEntity {
     /** 任务租约实例 */
     private String leaseOwner;
 
+    /** 当前执行租约令牌，每次成功领取任务时重新生成 */
+    private String executionLeaseToken;
+
     /** 任务租约截止时间 */
     private LocalDateTime leaseUntil;
 

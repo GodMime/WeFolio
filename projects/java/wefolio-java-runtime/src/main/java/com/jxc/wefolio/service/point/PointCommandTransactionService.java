@@ -18,10 +18,9 @@ import com.jxc.wefolio.mapper.PointTransactionEntityMapper;
 import com.jxc.wefolio.mapper.UserEntityMapper;
 import com.jxc.wefolio.message.PointMessage;
 import com.jxc.wefolio.service.payment.PointDebitTaskService;
-import com.jxc.wefolio.service.payment.PointGiftOrderCreatedEvent;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,7 +34,6 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Supplier;
-import org.springframework.dao.DuplicateKeyException;
 
 /**
  * 统一积分命令事务服务 — 在用户锁内原子写账户、流水、待扣来源和活动任务。
@@ -70,9 +68,6 @@ public class PointCommandTransactionService {
 
     /** 赠送订单 Mapper。 */
     private final PointGiftOrderEntityMapper pointGiftOrderEntityMapper;
-
-    /** 来源事务提交后赠送事件发布器。 */
-    private final ApplicationEventPublisher eventPublisher;
 
     /** 创建赠送订单并按用户 ID 升序取得本地锁。 */
     @Transactional(propagation = Propagation.REQUIRED, rollbackFor = Exception.class)
@@ -138,7 +133,6 @@ public class PointCommandTransactionService {
     /** 在全部目标用户锁内创建赠送订单。 */
     private GiftOrderResult createGiftOrdersInsideLocks(List<GiftCommand> commands) {
         List<GiftOrderResult.GiftOrderItem> items = new ArrayList<>();
-        List<Long> createdOrderIds = new ArrayList<>();
         List<GiftCommand> ordered = commands.stream()
                 .sorted(Comparator.comparing(GiftCommand::userId).thenComparing(GiftCommand::idempotencyKey))
                 .toList();
@@ -164,11 +158,7 @@ public class PointCommandTransactionService {
             order.setRetryCount(0);
             order.setNextExecuteAt(LocalDateTime.now());
             pointGiftOrderEntityMapper.insert(order);
-            createdOrderIds.add(order.getId());
             items.add(toGiftItem(order, false));
-        }
-        if (!createdOrderIds.isEmpty()) {
-            eventPublisher.publishEvent(new PointGiftOrderCreatedEvent(List.copyOf(createdOrderIds)));
         }
         return new GiftOrderResult(List.copyOf(items));
     }
