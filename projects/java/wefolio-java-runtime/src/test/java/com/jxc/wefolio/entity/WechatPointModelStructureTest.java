@@ -51,6 +51,7 @@ class WechatPointModelStructureTest {
                 .contains("private String taskNo;")
                 .contains("private Integer activeFlag;")
                 .contains("private Long requestAmount;")
+                .contains("private String executionLeaseToken;")
                 .contains("private LocalDateTime leaseUntil;")
                 .contains("private Long sessionVersion;");
         assertThat(read("entity/PointGiftOrderEntity.java"))
@@ -58,6 +59,7 @@ class WechatPointModelStructureTest {
                 .contains("private String orderNo;")
                 .contains("private String businessSnapshot;")
                 .contains("private String idempotencyKey;")
+                .contains("private String executionLeaseToken;")
                 .contains("private Long wechatPresentBalanceAfter;");
         assertThat(read("entity/MaintainerWechatSessionEntity.java"))
                 .contains("@TableName(\"wf_maintainer_wechat_session\")")

@@ -1,6 +1,7 @@
 package com.jxc.wefolio.service;
 
 import com.jxc.wefolio.common.cache.LocalCacheService;
+import com.jxc.wefolio.common.lock.TestDistributedLockExecutor;
 import com.jxc.wefolio.config.LocalCacheProperties;
 import com.jxc.wefolio.config.WechatMiniappProperties;
 import com.jxc.wefolio.dto.WechatAccessTokenResponse;
@@ -83,7 +84,12 @@ class WechatAccessTokenServiceTest {
         WechatMiniappProperties properties = new WechatMiniappProperties();
         properties.setAppId("wxa-test");
         properties.setAppSecret("secret-test");
-        return new WechatAccessTokenService(properties, cacheService, fetcher);
+        return new WechatAccessTokenService(
+                properties,
+                cacheService,
+                fetcher,
+                new TestDistributedLockExecutor()
+        );
     }
 
     /** @return 成功响应。 */

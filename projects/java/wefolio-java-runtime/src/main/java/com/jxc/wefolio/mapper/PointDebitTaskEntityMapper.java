@@ -5,6 +5,7 @@ import com.jxc.wefolio.entity.PointDebitTaskEntity;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
 import java.time.LocalDateTime;
@@ -41,7 +42,7 @@ public interface PointDebitTaskEntityMapper extends BaseMapper<PointDebitTaskEnt
     @Update("""
             UPDATE wf_point_debit_task
                SET status = 'RUNNING',
-                   lease_owner = #{leaseOwner},
+                   execution_lease_token = #{executionLeaseToken},
                    lease_until = #{leaseUntil},
                    started_at = COALESCE(started_at, #{now}),
                    version = version + 1,
@@ -56,9 +57,31 @@ public interface PointDebitTaskEntityMapper extends BaseMapper<PointDebitTaskEnt
             """)
     int tryClaim(
             @Param("taskId") Long taskId,
-            @Param("leaseOwner") String leaseOwner,
+            @Param("executionLeaseToken") String executionLeaseToken,
             @Param("leaseUntil") LocalDateTime leaseUntil,
             @Param("now") LocalDateTime now
+    );
+
+    /** 读取数据库当前毫秒时间，避免不同实例时钟偏差。 */
+    @Select("SELECT CURRENT_TIMESTAMP(3)")
+    LocalDateTime selectCurrentTimestamp();
+
+    /** 仅允许当前执行租约令牌延长扣币任务租约。 */
+    @Update("""
+            UPDATE wf_point_debit_task
+               SET lease_until = #{leaseUntil},
+                   version = version + 1,
+                   updated_at = CURRENT_TIMESTAMP(3)
+             WHERE id = #{taskId}
+               AND execution_lease_token = #{executionLeaseToken}
+               AND status = 'RUNNING'
+               AND active_flag = 1
+               AND deleted = 0
+            """)
+    int renewLease(
+            @Param("taskId") Long taskId,
+            @Param("executionLeaseToken") String executionLeaseToken,
+            @Param("leaseUntil") LocalDateTime leaseUntil
     );
 
     /** 新会话可用时唤醒等待会话的活动任务，不修改其他活动任务时间窗口。 */
@@ -66,7 +89,7 @@ public interface PointDebitTaskEntityMapper extends BaseMapper<PointDebitTaskEnt
             UPDATE wf_point_debit_task
                SET status = 'WAITING',
                    next_execute_at = #{nextExecuteAt},
-                   lease_owner = NULL,
+                   execution_lease_token = NULL,
                    lease_until = NULL,
                    version = version + 1,
                    updated_at = CURRENT_TIMESTAMP(3)
@@ -86,7 +109,7 @@ public interface PointDebitTaskEntityMapper extends BaseMapper<PointDebitTaskEnt
                SET status = 'RETRY_WAIT',
                    retry_count = 0,
                    next_execute_at = CURRENT_TIMESTAMP(3),
-                   lease_owner = NULL,
+                   execution_lease_token = NULL,
                    lease_until = NULL,
                    last_error_code = NULL,
                    last_error_message = NULL,

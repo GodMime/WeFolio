@@ -21,7 +21,10 @@ class PointGiftOrderProcessorStructureTest {
                 "src/main/java/com/jxc/wefolio/service/payment/PointGiftOrderTransactionService.java"));
 
         assertThat(processor)
-                .contains("tryClaim(orderId")
+                .contains("public TaskExecutionOutcome process(Long orderId)")
+                .contains("tokenGenerator.generate()")
+                .contains("tryClaim(orderId, executionLeaseToken)")
+                .contains("renewLease(order.getId(), executionLeaseToken)")
                 .contains("order.getOrderNo()")
                 .contains("findWechatOpenid(order.getUserId())")
                 .contains("AuthTypeDict.WECHAT_MINI_APP.getCode()")
@@ -29,7 +32,8 @@ class PointGiftOrderProcessorStructureTest {
                 .contains("wechatVirtualPaymentClient.presentCurrency")
                 .contains("new WechatPresentCurrencyRequest")
                 .contains("WechatVirtualPaymentErrorType.DUPLICATE_SUCCESS")
-                .contains("markFailure");
+                .contains("markFailure")
+                .doesNotContain("public void process(Long orderId, String");
         assertThat(transactionService)
                 .contains("Propagation.REQUIRES_NEW")
                 .contains("pointAccountEntityMapper.applyGiftWechatBalance")

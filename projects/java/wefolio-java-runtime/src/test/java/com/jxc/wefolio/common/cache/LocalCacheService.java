@@ -8,6 +8,7 @@ import com.jxc.wefolio.config.LocalCacheProperties;
 import com.jxc.wefolio.exception.BusinessException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
@@ -21,6 +22,7 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 @Slf4j
 @Service
+@Profile("test")
 public class LocalCacheService implements CacheService {
 
     /** 缓存状态聚合日志间隔。 */

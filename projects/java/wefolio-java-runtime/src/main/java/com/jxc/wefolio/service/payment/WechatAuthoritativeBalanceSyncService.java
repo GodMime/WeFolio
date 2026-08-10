@@ -64,7 +64,7 @@ public class WechatAuthoritativeBalanceSyncService {
                     referenceNo, userId, result.errorType());
             return;
         }
-        PointAccountEntity account = debitTaskTransactionService.syncBalance(
+        PointAccountEntity account = debitTaskTransactionService.syncAuthoritativeBalance(
                 accountId, result.balance(), result.presentBalance());
         debitTaskService.ensureActiveTask(account);
         log.info("微信虚拟支付业务完成 operation=同步权威余额 referenceNo={} userId={} "

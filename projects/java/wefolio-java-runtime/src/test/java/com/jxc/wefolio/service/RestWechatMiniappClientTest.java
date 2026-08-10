@@ -2,6 +2,7 @@ package com.jxc.wefolio.service;
 
 import com.jxc.wefolio.config.WechatMiniappProperties;
 import com.jxc.wefolio.common.cache.LocalCacheService;
+import com.jxc.wefolio.common.lock.TestDistributedLockExecutor;
 import com.jxc.wefolio.config.LocalCacheProperties;
 import com.jxc.wefolio.dto.WechatPhoneNumberResponse;
 import com.jxc.wefolio.exception.BusinessException;
@@ -182,7 +183,8 @@ class RestWechatMiniappClientTest {
         WechatAccessTokenService tokenService = new WechatAccessTokenService(
                 properties,
                 new LocalCacheService(new LocalCacheProperties()),
-                fetcher
+                fetcher,
+                new TestDistributedLockExecutor()
         );
         RestWechatMiniappClient client = new RestWechatMiniappClient(
                 properties, tokenService, new WechatInteractionLogSanitizer());

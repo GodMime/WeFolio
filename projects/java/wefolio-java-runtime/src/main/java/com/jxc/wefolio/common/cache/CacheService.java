@@ -4,7 +4,7 @@ import java.time.Duration;
 import java.util.Optional;
 
 /**
- * 缓存服务接口 — 统一业务缓存入口，后续可将本地实现替换为 Redis 实现
+ * 缓存服务接口 — 统一业务缓存入口；生产环境使用 Redis，测试环境使用本地替身
  */
 public interface CacheService {
 

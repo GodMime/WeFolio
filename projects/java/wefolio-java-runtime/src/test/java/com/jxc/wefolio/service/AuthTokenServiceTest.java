@@ -2,6 +2,7 @@ package com.jxc.wefolio.service;
 
 import com.jxc.wefolio.common.cache.CacheService;
 import com.jxc.wefolio.common.cache.LocalCacheService;
+import com.jxc.wefolio.common.lock.TestDistributedLockExecutor;
 import com.jxc.wefolio.config.LocalCacheProperties;
 import com.jxc.wefolio.dict.UserStatusDict;
 import com.jxc.wefolio.entity.UserEntity;
@@ -36,6 +37,8 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class AuthTokenServiceTest {
 
+    private final TestDistributedLockExecutor lockExecutor = new TestDistributedLockExecutor();
+
     @Mock
     private MiniappAuthService miniappAuthService;
 
@@ -46,7 +49,8 @@ class AuthTokenServiceTest {
     void resolvesUserIdFromCacheWithoutQueryingDatabase() {
         LocalCacheService cacheService = new LocalCacheService(new LocalCacheProperties());
         cacheService.put("auth:token:wf-dev-user-7", 7L, Duration.ofMinutes(10));
-        AuthTokenService service = new AuthTokenService(miniappAuthService, userEntityMapper, cacheService);
+        AuthTokenService service = new AuthTokenService(
+                miniappAuthService, userEntityMapper, cacheService, lockExecutor);
 
         Optional<Long> userId = service.resolveAuthenticatedUserId("Bearer wf-dev-user-7");
 
@@ -58,7 +62,8 @@ class AuthTokenServiceTest {
     void resolvesCachedTokenWrappedByUnicodeWhitespace() {
         LocalCacheService cacheService = new LocalCacheService(new LocalCacheProperties());
         cacheService.put("auth:token:wf-dev-user-7", 7L, Duration.ofMinutes(10));
-        AuthTokenService service = new AuthTokenService(miniappAuthService, userEntityMapper, cacheService);
+        AuthTokenService service = new AuthTokenService(
+                miniappAuthService, userEntityMapper, cacheService, lockExecutor);
 
         Optional<Long> fullWidthSpaceUserId = service.resolveAuthenticatedUserId("\u3000Bearer wf-dev-user-7\u3000");
         Optional<Long> nonBreakingSpaceUserId = service.resolveAuthenticatedUserId("\u00A0Bearer wf-dev-user-7\u00A0");
@@ -78,7 +83,8 @@ class AuthTokenServiceTest {
         user.setStatus(UserStatusDict.ACTIVE.getCode());
         when(userEntityMapper.selectById(7L)).thenReturn(user);
         LocalCacheService cacheService = new LocalCacheService(new LocalCacheProperties());
-        AuthTokenService service = new AuthTokenService(miniappAuthService, userEntityMapper, cacheService);
+        AuthTokenService service = new AuthTokenService(
+                miniappAuthService, userEntityMapper, cacheService, lockExecutor);
 
         Optional<Long> userId = service.resolveAuthenticatedUserId("Bearer wf-dev-user-7");
 
@@ -90,7 +96,8 @@ class AuthTokenServiceTest {
     void rejectsInvalidTokenWithoutWritingCache() {
         when(miniappAuthService.resolveAuthToken("Bearer invalid")).thenReturn(null);
         LocalCacheService cacheService = new LocalCacheService(new LocalCacheProperties());
-        AuthTokenService service = new AuthTokenService(miniappAuthService, userEntityMapper, cacheService);
+        AuthTokenService service = new AuthTokenService(
+                miniappAuthService, userEntityMapper, cacheService, lockExecutor);
 
         Optional<Long> userId = service.resolveAuthenticatedUserId("Bearer invalid");
 
@@ -103,7 +110,8 @@ class AuthTokenServiceTest {
         when(miniappAuthService.resolveAuthToken("Bearer broken"))
                 .thenThrow(new InvalidAuthTokenException("登录令牌解析失败，请重新登录"));
         LocalCacheService cacheService = new LocalCacheService(new LocalCacheProperties());
-        AuthTokenService service = new AuthTokenService(miniappAuthService, userEntityMapper, cacheService);
+        AuthTokenService service = new AuthTokenService(
+                miniappAuthService, userEntityMapper, cacheService, lockExecutor);
 
         Optional<Long> userId = service.resolveAuthenticatedUserId("Bearer broken");
 
@@ -119,7 +127,8 @@ class AuthTokenServiceTest {
         user.setStatus(UserStatusDict.DISABLED.getCode());
         when(userEntityMapper.selectById(7L)).thenReturn(user);
         LocalCacheService cacheService = new LocalCacheService(new LocalCacheProperties());
-        AuthTokenService service = new AuthTokenService(miniappAuthService, userEntityMapper, cacheService);
+        AuthTokenService service = new AuthTokenService(
+                miniappAuthService, userEntityMapper, cacheService, lockExecutor);
 
         Optional<Long> userId = service.resolveAuthenticatedUserId("Bearer wf-dev-user-7");
 
@@ -138,7 +147,8 @@ class AuthTokenServiceTest {
         disabledUser.setStatus(UserStatusDict.DISABLED.getCode());
         when(userEntityMapper.selectById(7L)).thenReturn(activeUser, disabledUser);
         LocalCacheService cacheService = new LocalCacheService(new LocalCacheProperties());
-        AuthTokenService service = new AuthTokenService(miniappAuthService, userEntityMapper, cacheService);
+        AuthTokenService service = new AuthTokenService(
+                miniappAuthService, userEntityMapper, cacheService, lockExecutor);
 
         Optional<Long> cachedUserId = service.resolveAuthenticatedUserId("Bearer wf-dev-user-7");
         service.evictUser(7L);
@@ -159,7 +169,8 @@ class AuthTokenServiceTest {
         activeUser.setStatus(UserStatusDict.ACTIVE.getCode());
         when(userEntityMapper.selectById(7L)).thenReturn(activeUser);
         CoordinatedCacheService cacheService = new CoordinatedCacheService("auth:user-tokens:7", 2);
-        AuthTokenService service = new AuthTokenService(miniappAuthService, userEntityMapper, cacheService);
+        AuthTokenService service = new AuthTokenService(
+                miniappAuthService, userEntityMapper, cacheService, lockExecutor);
         ExecutorService executorService = Executors.newFixedThreadPool(2);
 
         try {
@@ -190,7 +201,8 @@ class AuthTokenServiceTest {
         activeUser.setStatus(UserStatusDict.ACTIVE.getCode());
         when(userEntityMapper.selectById(7L)).thenReturn(activeUser);
         LocalCacheService cacheService = new LocalCacheService(new LocalCacheProperties());
-        AuthTokenService service = new AuthTokenService(miniappAuthService, userEntityMapper, cacheService);
+        AuthTokenService service = new AuthTokenService(
+                miniappAuthService, userEntityMapper, cacheService, lockExecutor);
 
         assertThat(service.resolveAuthenticatedUserId("Bearer token-old")).contains(7L);
         service.revokeAuthorization("Bearer token-old");

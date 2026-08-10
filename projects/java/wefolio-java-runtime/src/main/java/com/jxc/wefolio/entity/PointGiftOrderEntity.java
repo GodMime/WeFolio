@@ -52,6 +52,9 @@ public class PointGiftOrderEntity extends BaseEntity {
     /** 领取实例 */
     private String leaseOwner;
 
+    /** 当前执行租约令牌，每次成功领取订单时重新生成 */
+    private String executionLeaseToken;
+
     /** 租约截止时间 */
     private LocalDateTime leaseUntil;
 

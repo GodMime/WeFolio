@@ -35,29 +35,51 @@ public class PointGiftOrderTransactionService {
 
     /** 在独立短事务中领取赠送订单。 */
     @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
-    public PointGiftOrderEntity tryClaim(Long orderId, String leaseOwner) {
-        LocalDateTime now = LocalDateTime.now();
+    public PointGiftOrderEntity tryClaim(Long orderId, String executionLeaseToken) {
+        LocalDateTime now = pointGiftOrderEntityMapper.selectCurrentTimestamp();
         int claimed = pointGiftOrderEntityMapper.tryClaim(
                 orderId,
-                leaseOwner,
+                executionLeaseToken,
                 now.plus(properties.getSettlement().getLeaseDuration()),
                 now
         );
         return claimed == 1 ? pointGiftOrderEntityMapper.selectById(orderId) : null;
     }
 
+    /** 延长当前赠送订单执行租约，令牌失效时立即终止调用方。 */
+    @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
+    public void renewLease(Long orderId, String executionLeaseToken) {
+        renewLeaseInCurrentTransaction(orderId, executionLeaseToken);
+    }
+
+    /** 在调用方当前事务内续租并锁住任务行，不单独提交。 */
+    private void renewLeaseInCurrentTransaction(Long orderId, String executionLeaseToken) {
+        LocalDateTime now = pointGiftOrderEntityMapper.selectCurrentTimestamp();
+        int renewed = pointGiftOrderEntityMapper.renewLease(
+                orderId,
+                executionLeaseToken,
+                now.plus(properties.getSettlement().getLeaseDuration())
+        );
+        if (renewed != 1) {
+            throw new ExecutionLeaseLostException("赠送订单执行租约已被其他执行器接管");
+        }
+    }
+
     /**
      * 微信赠送成功或重复成功后，在同一独立事务中同步账户、写流水并完成订单。
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
-    public void completeSuccess(Long orderId, String leaseOwner, WechatVirtualPaymentResult result) {
+    public void completeSuccess(
+            Long orderId,
+            String executionLeaseToken,
+            WechatVirtualPaymentResult result
+    ) {
         PointGiftOrderEntity order = pointGiftOrderEntityMapper.selectById(orderId);
         if (order == null || PointGiftOrderStatusDict.SUCCEEDED.getCode().equals(order.getStatus())) {
             return;
         }
-        if (!leaseOwner.equals(order.getLeaseOwner())) {
-            throw new IllegalStateException("赠送订单租约已被其他执行器接管");
-        }
+        // 先更新并锁住任务租约行，再修改账户和流水，避免结算事务中途被接管。
+        renewLeaseInCurrentTransaction(orderId, executionLeaseToken);
         PointAccountEntity account = pointAccountEntityMapper.selectById(order.getAccountId());
         if (account == null) {
             throw new IllegalStateException("赠送订单对应积分账户不存在");
@@ -78,11 +100,11 @@ public class PointGiftOrderTransactionService {
                         .set(PointGiftOrderEntity::getPointTransactionId, transaction.getId())
                         .set(PointGiftOrderEntity::getWechatBalanceAfter, result.balance())
                         .set(PointGiftOrderEntity::getWechatPresentBalanceAfter, result.presentBalance())
-                        .set(PointGiftOrderEntity::getLeaseOwner, null)
+                        .set(PointGiftOrderEntity::getExecutionLeaseToken, null)
                         .set(PointGiftOrderEntity::getLeaseUntil, null)
                         .set(PointGiftOrderEntity::getCompletedAt, LocalDateTime.now())
                         .eq(PointGiftOrderEntity::getId, orderId)
-                        .eq(PointGiftOrderEntity::getLeaseOwner, leaseOwner)
+                        .eq(PointGiftOrderEntity::getExecutionLeaseToken, executionLeaseToken)
                         .in(PointGiftOrderEntity::getStatus,
                                 PointGiftOrderStatusDict.READY.getCode(),
                                 PointGiftOrderStatusDict.RETRY_WAIT.getCode()));
@@ -97,12 +119,12 @@ public class PointGiftOrderTransactionService {
     @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
     public void markFailure(
             Long orderId,
-            String leaseOwner,
+            String executionLeaseToken,
             WechatVirtualPaymentResult result
     ) {
         PointGiftOrderEntity order = pointGiftOrderEntityMapper.selectById(orderId);
         if (order == null || PointGiftOrderStatusDict.SUCCEEDED.getCode().equals(order.getStatus())
-                || !leaseOwner.equals(order.getLeaseOwner())) {
+                || !ownsLease(order, executionLeaseToken)) {
             return;
         }
         int nextRetryCount = value(order.getRetryCount()) + 1;
@@ -116,13 +138,13 @@ public class PointGiftOrderTransactionService {
                         .set(PointGiftOrderEntity::getRetryCount, nextRetryCount)
                         .set(PointGiftOrderEntity::getNextExecuteAt,
                                 LocalDateTime.now().plus(properties.getSettlement().getDelay()))
-                        .set(PointGiftOrderEntity::getLeaseOwner, null)
+                        .set(PointGiftOrderEntity::getExecutionLeaseToken, null)
                         .set(PointGiftOrderEntity::getLeaseUntil, null)
                         .set(PointGiftOrderEntity::getLastErrorCode, errorCode(result))
                         .set(PointGiftOrderEntity::getLastErrorMessage, safeMessage(result.errorMessage()))
                         .set(PointGiftOrderEntity::getLastFailedAt, LocalDateTime.now())
                         .eq(PointGiftOrderEntity::getId, orderId)
-                        .eq(PointGiftOrderEntity::getLeaseOwner, leaseOwner));
+                        .eq(PointGiftOrderEntity::getExecutionLeaseToken, executionLeaseToken));
     }
 
     /** 后台人工重试失败订单。 */
@@ -183,5 +205,10 @@ public class PointGiftOrderTransactionService {
     /** 可空整数转零。 */
     private int value(Integer number) {
         return number == null ? 0 : number;
+    }
+
+    /** 校验当前执行租约令牌。 */
+    private boolean ownsLease(PointGiftOrderEntity order, String executionLeaseToken) {
+        return executionLeaseToken.equals(order.getExecutionLeaseToken());
     }
 }

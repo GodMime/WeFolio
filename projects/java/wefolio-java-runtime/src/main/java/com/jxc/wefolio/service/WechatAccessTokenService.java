@@ -1,6 +1,7 @@
 package com.jxc.wefolio.service;
 
 import com.jxc.wefolio.common.cache.CacheService;
+import com.jxc.wefolio.common.lock.DistributedLockExecutor;
 import com.jxc.wefolio.config.WechatMiniappProperties;
 import com.jxc.wefolio.dto.WechatAccessTokenResponse;
 import com.jxc.wefolio.exception.BusinessException;
@@ -9,9 +10,6 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * 微信接口调用凭证服务 — 提供无锁缓存快路径、单飞刷新和失效凭证条件刷新。
@@ -22,6 +20,9 @@ public class WechatAccessTokenService {
 
     /** 凭证缓存键前缀。 */
     private static final String CACHE_KEY_PREFIX = "wechat:miniapp:access-token:";
+
+    /** 按小程序隔离的凭证刷新分布式锁前缀。 */
+    private static final String LOCK_KEY_PREFIX = "lock:wechat-access-token:";
 
     /** 凭证到期前刷新缓冲秒数。 */
     private static final long REFRESH_BUFFER_SECONDS = 5L * 60L;
@@ -35,8 +36,8 @@ public class WechatAccessTokenService {
     /** 微信凭证远端获取器。 */
     private final WechatAccessTokenFetcher wechatAccessTokenFetcher;
 
-    /** 按小程序隔离的刷新锁；应用运行期间保留，避免锁对象更替破坏单飞语义。 */
-    private final ConcurrentMap<String, ReentrantLock> refreshLocks = new ConcurrentHashMap<>();
+    /** 分布式锁执行器。 */
+    private final DistributedLockExecutor lockExecutor;
 
     /**
      * 获取可用凭证。缓存未命中时仅允许一个线程访问微信服务。
@@ -50,17 +51,13 @@ public class WechatAccessTokenService {
         if (cached.isPresent() && !isBlank(cached.get())) {
             return cached.get();
         }
-        ReentrantLock lock = refreshLocks.computeIfAbsent(properties.getAppId(), ignored -> new ReentrantLock());
-        lock.lock();
-        try {
-            cached = cacheService.get(cacheKey, String.class);
-            if (cached.isPresent() && !isBlank(cached.get())) {
-                return cached.get();
+        return lockExecutor.execute(lockKey(), () -> {
+            Optional<String> current = cacheService.get(cacheKey, String.class);
+            if (current.isPresent() && !isBlank(current.get())) {
+                return current.get();
             }
             return fetchAndCache(cacheKey);
-        } finally {
-            lock.unlock();
-        }
+        });
     }
 
     /**
@@ -72,18 +69,14 @@ public class WechatAccessTokenService {
     public String refreshAfterRejected(String rejectedAccessToken) {
         validateProperties();
         String cacheKey = cacheKey();
-        ReentrantLock lock = refreshLocks.computeIfAbsent(properties.getAppId(), ignored -> new ReentrantLock());
-        lock.lock();
-        try {
+        return lockExecutor.execute(lockKey(), () -> {
             String current = cacheService.get(cacheKey, String.class).orElse(null);
             if (!isBlank(current) && !current.equals(rejectedAccessToken)) {
                 return current;
             }
             cacheService.evict(cacheKey);
             return fetchAndCache(cacheKey);
-        } finally {
-            lock.unlock();
-        }
+        });
     }
 
     /**
@@ -129,6 +122,11 @@ public class WechatAccessTokenService {
     /** @return 当前小程序的缓存键。 */
     private String cacheKey() {
         return CACHE_KEY_PREFIX + properties.getAppId();
+    }
+
+    /** @return 当前小程序的凭证刷新分布式锁 key。 */
+    private String lockKey() {
+        return LOCK_KEY_PREFIX + properties.getAppId();
     }
 
     /** @param value 文本 @return 是否为空。 */

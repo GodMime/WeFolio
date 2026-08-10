@@ -26,32 +26,40 @@ public class PointGiftOrderProcessor {
     private final WechatVirtualPaymentClient wechatVirtualPaymentClient;
     private final UserAuthEntityMapper userAuthEntityMapper;
     private final UserPointMutex userPointMutex;
+    private final ExecutionLeaseTokenGenerator tokenGenerator;
 
     /** 领取并独立处理一条赠送订单。 */
-    public void process(Long orderId, String leaseOwner) {
-        PointGiftOrderEntity order = transactionService.tryClaim(orderId, leaseOwner);
+    public TaskExecutionOutcome process(Long orderId) {
+        String executionLeaseToken = tokenGenerator.generate();
+        PointGiftOrderEntity order = transactionService.tryClaim(orderId, executionLeaseToken);
         if (order == null) {
-            return;
+            return TaskExecutionOutcome.SKIPPED_NOT_CLAIMABLE;
         }
         log.info("微信虚拟支付业务开始 operation=处理赠送订单 referenceNo={} userId={} amount={}",
                 order.getOrderNo(), order.getUserId(), order.getAmount());
-        userPointMutex.execute(order.getUserId(), () -> {
-            processClaimed(order, leaseOwner);
-            return null;
-        });
+        try {
+            userPointMutex.execute(order.getUserId(), () -> {
+                processClaimed(order, executionLeaseToken);
+                return null;
+            });
+        } catch (ExecutionLeaseLostException exception) {
+            log.info("赠送订单执行租约失效 orderId={} userId={}", orderId, order.getUserId());
+        }
+        return TaskExecutionOutcome.PROCESSED;
     }
 
     /** 在用户锁内访问微信并落库。 */
-    private void processClaimed(PointGiftOrderEntity order, String leaseOwner) {
+    private void processClaimed(PointGiftOrderEntity order, String executionLeaseToken) {
         String openid = findWechatOpenid(order.getUserId());
         if (openid == null || openid.isBlank()) {
-            transactionService.markFailure(order.getId(), leaseOwner,
+            transactionService.markFailure(order.getId(), executionLeaseToken,
                     failure(WechatVirtualPaymentErrorType.PERMANENT, "用户缺少有效微信身份"));
             log.info("微信虚拟支付业务完成 operation=处理赠送订单 referenceNo={} userId={} "
                             + "localStatus=FAILED reason=MISSING_WECHAT_IDENTITY",
                     order.getOrderNo(), order.getUserId());
             return;
         }
+        transactionService.renewLease(order.getId(), executionLeaseToken);
         WechatVirtualPaymentResult result;
         try {
             result = wechatVirtualPaymentClient.presentCurrency(new WechatPresentCurrencyRequest(
@@ -74,12 +82,12 @@ public class PointGiftOrderProcessor {
                 result.balance(), result.presentBalance());
         if (result.errorType() == WechatVirtualPaymentErrorType.SUCCESS
                 || result.errorType() == WechatVirtualPaymentErrorType.DUPLICATE_SUCCESS) {
-            transactionService.completeSuccess(order.getId(), leaseOwner, result);
+            transactionService.completeSuccess(order.getId(), executionLeaseToken, result);
             log.info("微信虚拟支付业务完成 operation=处理赠送订单 referenceNo={} userId={} "
                             + "localStatus=SUCCESS balance={} presentBalance={}",
                     order.getOrderNo(), order.getUserId(), result.balance(), result.presentBalance());
         } else {
-            transactionService.markFailure(order.getId(), leaseOwner, result);
+            transactionService.markFailure(order.getId(), executionLeaseToken, result);
             log.info("微信虚拟支付业务完成 operation=处理赠送订单 referenceNo={} userId={} "
                             + "localStatus=FAILED errorType={}",
                     order.getOrderNo(), order.getUserId(), result.errorType());
