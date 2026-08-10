@@ -5,8 +5,7 @@ import java.util.function.Supplier;
 /**
  * 作品集跨聚合引用互斥抽象。
  *
- * <p>个人作品集删除与团队作品集引用写入必须共用该边界。当前实现只覆盖单个 JVM，
- * 多实例部署时应替换为分布式锁实现。</p>
+ * <p>个人作品集删除与团队作品集引用写入必须共用该跨实例分布式互斥边界。</p>
  */
 public interface PortfolioReferenceMutex {
 

@@ -24,8 +24,9 @@ class LocalUserPointMutexContractTest {
 
     /** 本地锁实现源码路径。 */
     private static final Path IMPLEMENTATION = Path.of(
-            "src/main/java/com/jxc/wefolio/service/point/LocalUserPointMutex.java");
+            "src/test/java/com/jxc/wefolio/service/point/LocalUserPointMutex.java");
 
+    /** 验证同一用户动作不会重叠且所有调用完成后锁引用被回收。 */
     @Test
     void sameUserActionsShouldNeverOverlapAndLockShouldBeReclaimed() throws Exception {
         assertThat(IMPLEMENTATION).exists();
@@ -63,6 +64,7 @@ class LocalUserPointMutexContractTest {
         assertThat(activeMutexCount(mutex)).isZero();
     }
 
+    /** 验证业务动作异常时释放锁并允许同一用户继续执行。 */
     @Test
     void exceptionShouldReleaseLockAndAllowNextAction() throws Exception {
         assertThat(IMPLEMENTATION).exists();
@@ -78,6 +80,7 @@ class LocalUserPointMutexContractTest {
         assertThat(activeMutexCount(mutex)).isZero();
     }
 
+    /** 验证事务完成回调触发前，同一用户的第二个动作持续等待。 */
     @Test
     void transactionShouldKeepUserMutexUntilCompletionCallback() throws Exception {
         Object mutex = newMutex();
@@ -95,9 +98,9 @@ class LocalUserPointMutexContractTest {
             }));
 
             assertThat(secondEntered.await(100, java.util.concurrent.TimeUnit.MILLISECONDS)).isFalse();
+            TransactionSynchronizationManager.clearSynchronization();
             synchronizations.forEach(synchronization ->
                     synchronization.afterCompletion(TransactionSynchronization.STATUS_COMMITTED));
-            TransactionSynchronizationManager.clearSynchronization();
             assertThat(secondEntered.await(1, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
             second.get(1, java.util.concurrent.TimeUnit.SECONDS);
         } finally {

@@ -86,14 +86,15 @@ wechat:
       max-retries: ${WECHAT_VIRTUAL_PAYMENT_MAX_RETRIES:3}
       lease-duration: ${WECHAT_VIRTUAL_PAYMENT_LEASE_DURATION:60s}
 
-point:
-  lock:
-    provider: ${POINT_LOCK_PROVIDER:local}
-
-# --- Local Cache Configuration ---
-cache:
-  local:
-    max-size: ${LOCAL_CACHE_MAX_SIZE:50000}
+# --- Redis 配置 ---
+redis:
+  enabled: true
+  address: ${REDIS_ADDRESS}
+  password: ${REDIS_PASSWORD:}
+  database: ${REDIS_DATABASE:0}
+  key-prefix: ${REDIS_KEY_PREFIX:wefolio:runtime:}
+  connect-timeout: ${REDIS_CONNECT_TIMEOUT:3s}
+  command-timeout: ${REDIS_COMMAND_TIMEOUT:3s}
 
 # --- Auth Token Configuration ---
 auth:

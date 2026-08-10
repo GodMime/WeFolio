@@ -1,6 +1,6 @@
 package com.jxc.wefolio.service.point;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -12,13 +12,10 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 
 /**
- * 本地用户积分互斥实现 — 仅适用于单 runtime 实例。
- *
- * <p>多实例部署前必须通过 {@code point.lock.provider} 替换为全局互斥实现。
- * 数据库任务租约始终是任务唯一领取边界，未来 Redis 锁也不能替代任务租约。</p>
+ * 测试环境的本地用户积分互斥实现。
  */
 @Component
-@ConditionalOnProperty(prefix = "point.lock", name = "provider", havingValue = "local", matchIfMissing = true)
+@Profile("test")
 public class LocalUserPointMutex implements UserPointMutex {
 
     /** 按用户保存当前持有者和等待者共同引用的锁对象。 */

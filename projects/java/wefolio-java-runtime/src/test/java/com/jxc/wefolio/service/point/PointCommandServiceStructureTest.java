@@ -54,4 +54,17 @@ class PointCommandServiceStructureTest {
                 .contains("PointTransactionTypeDict.CONSUMPTION.getCode()")
                 .contains("InsufficientPointBalanceException");
     }
+
+    @Test
+    void multiUserGiftShouldKeepAscendingRecursiveLockOrder() throws IOException {
+        assertThat(TRANSACTION_SERVICE).exists();
+        String source = Files.readString(TRANSACTION_SERVICE);
+
+        assertThat(source)
+                .contains(".distinct()")
+                .contains(".sorted()")
+                .contains("executeWithUserLocks(userIds, 0")
+                .contains("userPointMutex.execute(userIds.get(index)")
+                .contains("executeWithUserLocks(userIds, index + 1, action)");
+    }
 }

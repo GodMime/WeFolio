@@ -24,6 +24,12 @@ mybatis-plus:
 server:
   port: 18090
 
+# --- Redis 测试配置 ---
+# 默认单元测试使用测试源码内的本地替身，不创建生产 RedissonClient。
+redis:
+  enabled: false
+  address: redis://127.0.0.1:6379
+
 # --- COS 测试占位配置 ---
 # 上下文加载测试不调用 COS API，仅需占位值通过属性绑定
 cos:

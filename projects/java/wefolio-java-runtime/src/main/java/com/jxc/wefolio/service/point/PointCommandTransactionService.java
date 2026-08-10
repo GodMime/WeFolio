@@ -69,7 +69,7 @@ public class PointCommandTransactionService {
     /** 赠送订单 Mapper。 */
     private final PointGiftOrderEntityMapper pointGiftOrderEntityMapper;
 
-    /** 创建赠送订单并按用户 ID 升序取得本地锁。 */
+    /** 创建赠送订单并按用户 ID 升序取得分布式公平锁。 */
     @Transactional(propagation = Propagation.REQUIRED, rollbackFor = Exception.class)
     public GiftOrderResult createGiftOrders(List<GiftCommand> commands) {
         List<Long> userIds = commands.stream()
@@ -334,7 +334,11 @@ public class PointCommandTransactionService {
                 order.getId(), order.getOrderNo(), order.getUserId(), order.getStatus(), idempotent);
     }
 
-    /** 按用户 ID 顺序递归取得全部锁，避免多用户赠送发生交叉加锁。 */
+    /**
+     * 按用户 ID 顺序递归取得全部分布式锁，避免多用户赠送发生交叉加锁。
+     *
+     * <p>继续逐个获取既有用户粒度锁，不使用 Redisson MultiLock；固定升序仍是死锁避免边界。</p>
+     */
     private <T> T executeWithUserLocks(List<Long> userIds, int index, Supplier<T> action) {
         if (index >= userIds.size()) {
             return action.get();

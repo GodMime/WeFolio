@@ -2,11 +2,13 @@ package com.jxc.wefolio.config;
 
 import lombok.Getter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 /** 本地进程内缓存配置。 */
 @Getter
 @Component
+@Profile("test")
 @ConfigurationProperties(prefix = "cache.local")
 public class LocalCacheProperties {
 

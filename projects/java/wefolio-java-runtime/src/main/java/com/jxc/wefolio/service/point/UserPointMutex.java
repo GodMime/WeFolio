@@ -3,10 +3,10 @@ package com.jxc.wefolio.service.point;
 import java.util.function.Supplier;
 
 /**
- * 用户积分互斥抽象 — 调用方只能依赖该接口，不得依赖当前本地实现。
+ * 用户积分互斥抽象 — 调用方只能依赖该接口，不得依赖具体 Redis 实现。
  *
- * <p>该互斥只缩小同一 runtime 实例内的方法体并发窗口。数据库原子 SQL、唯一键和
- * 任务租约仍是数据一致性与任务唯一领取的最终边界。</p>
+ * <p>生产实现跨 runtime 实例互斥；数据库原子 SQL、唯一键和任务租约仍是数据一致性与
+ * 任务唯一领取的最终边界。</p>
  */
 public interface UserPointMutex {
 

@@ -2,6 +2,7 @@ package com.jxc.wefolio.service;
 
 import com.jxc.wefolio.common.cache.CacheService;
 import com.jxc.wefolio.common.auth.AuthorizationHeaderUtils;
+import com.jxc.wefolio.common.lock.DistributedLockExecutor;
 import com.jxc.wefolio.dict.UserStatusDict;
 import com.jxc.wefolio.entity.UserEntity;
 import com.jxc.wefolio.exception.InvalidAuthTokenException;
@@ -32,6 +33,9 @@ public class AuthTokenService {
     /** 主动吊销令牌缓存 key 前缀 */
     private static final String REVOKED_TOKEN_CACHE_KEY_PREFIX = "auth:revoked-token:";
 
+    /** 用户令牌反向索引分布式锁 key 前缀 */
+    private static final String USER_TOKEN_INDEX_LOCK_KEY_PREFIX = "lock:auth:user-token-index:";
+
     /** 登录态解析缓存有效期 */
     private static final Duration AUTH_CACHE_TTL = Duration.ofMinutes(10);
 
@@ -44,8 +48,8 @@ public class AuthTokenService {
     /** 统一缓存服务 */
     private final CacheService cacheService;
 
-    /** 用户令牌反向索引监视器，保证本地缓存读改写与清理互斥 */
-    private final Object userTokenIndexMonitor = new Object();
+    /** 分布式锁执行器 */
+    private final DistributedLockExecutor lockExecutor;
 
     /**
      * 解析并校验当前登录用户 ID。
@@ -101,14 +105,15 @@ public class AuthTokenService {
         if (userId == null) {
             return;
         }
-        synchronized (userTokenIndexMonitor) {
+        lockExecutor.execute(buildUserTokenIndexLockKey(userId), () -> {
             String userTokenCacheKey = buildUserTokenCacheKey(userId);
             Set<String> tokens = readUserTokens(userTokenCacheKey);
             for (String token : tokens) {
                 cacheService.evict(buildCacheKey(token));
             }
             cacheService.evict(userTokenCacheKey);
-        }
+            return null;
+        });
     }
 
     /**
@@ -205,12 +210,13 @@ public class AuthTokenService {
      * @param token 标准化后的令牌
      */
     private void rememberUserToken(Long userId, String token) {
-        synchronized (userTokenIndexMonitor) {
+        lockExecutor.execute(buildUserTokenIndexLockKey(userId), () -> {
             String userTokenCacheKey = buildUserTokenCacheKey(userId);
             Set<String> tokens = readUserTokens(userTokenCacheKey);
             tokens.add(token);
             cacheService.put(userTokenCacheKey, Collections.unmodifiableSet(tokens), AUTH_CACHE_TTL);
-        }
+            return null;
+        });
     }
 
     /**
@@ -241,5 +247,10 @@ public class AuthTokenService {
      */
     private String buildUserTokenCacheKey(Long userId) {
         return USER_TOKEN_CACHE_KEY_PREFIX + userId;
+    }
+
+    /** 构建用户令牌反向索引的分布式锁 key。 */
+    private String buildUserTokenIndexLockKey(Long userId) {
+        return USER_TOKEN_INDEX_LOCK_KEY_PREFIX + userId;
     }
 }
