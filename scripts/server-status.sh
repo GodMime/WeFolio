@@ -1,18 +1,29 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-# 本脚本在本机执行，通过单次 SSH 会话只读采集服务器和 Java 服务状态。
-readonly DEFAULT_SERVER="root@49.235.146.161"
-readonly SERVER="${1:-${DEFAULT_SERVER}}"
+# 本脚本在本机执行，通过独立 SSH 会话只读采集两台服务器和 Java 服务状态。
+readonly DEFAULT_OLD_SERVER="root@49.235.146.161"
+readonly DEFAULT_NEW_SERVER="root@124.222.148.233"
+readonly OLD_SERVER="${1:-${DEFAULT_OLD_SERVER}}"
+readonly NEW_SERVER="${2:-${DEFAULT_NEW_SERVER}}"
 readonly SSH_COMMAND="${SSH_BIN:-ssh}"
 
-printf '正在连接服务器：%s\n' "${SERVER}"
-LC_ALL=C LANG=C "${SSH_COMMAND}" \
-    -o BatchMode=yes \
-    -o ConnectTimeout=8 \
-    "${SERVER}" \
-    env LC_ALL=C LANG=C bash -s <<'REMOTE_SCRIPT'
+inspect_server() {
+    local server="$1"
+    local node_label="$2"
+    local check_job="$3"
+
+    printf '\n正在连接%s：%s\n' "${node_label}" "${server}"
+    LC_ALL=C LANG=C "${SSH_COMMAND}" \
+        -o BatchMode=yes \
+        -o ConnectTimeout=8 \
+        "${server}" \
+        env LC_ALL=C LANG=C bash -s -- "${node_label}" "${server}" "${check_job}" <<'REMOTE_SCRIPT'
 set -uo pipefail
+
+readonly NODE_LABEL="$1"
+readonly NODE_SERVER="$2"
+readonly CHECK_JOB="$3"
 
 CPU_IDLE=0
 CPU_TOTAL=0
@@ -36,7 +47,7 @@ read_cpu_sample() {
 print_server_status() {
     local first_idle first_total idle_delta total_delta cpu_count
 
-    print_section "服务器资源"
+    print_section "${NODE_LABEL}（${NODE_SERVER}）服务器资源"
     printf '主机名：%s\n' "$(hostname 2>/dev/null || printf '不可用')"
     printf '系统时间：%s\n' "$(date '+%Y-%m-%d %H:%M:%S %Z')"
     printf '内核：%s\n' "$(uname -srmo 2>/dev/null || printf '不可用')"
@@ -226,37 +237,66 @@ job_result="异常"
 
 print_server_status
 
-if inspect_service "Runtime" "wefolio.service" "http://127.0.0.1:8090/api/health"; then
+if inspect_service "Runtime（${NODE_LABEL} ${NODE_SERVER}）" \
+    "wefolio.service" "http://127.0.0.1:8090/api/health"; then
     runtime_result="健康"
 else
     overall_status=10
 fi
 
-if inspect_service "Job" "wefolio-job.service" "http://127.0.0.1:8091/job-api/health"; then
-    job_result="健康"
-else
-    overall_status=10
+if [[ "${CHECK_JOB}" == "yes" ]]; then
+    if inspect_service "Job（${NODE_LABEL} ${NODE_SERVER}）" \
+        "wefolio-job.service" "http://127.0.0.1:8091/job-api/health"; then
+        job_result="健康"
+    else
+        overall_status=10
+    fi
 fi
 
-print_section "汇总"
+print_section "${NODE_LABEL}（${NODE_SERVER}）汇总"
 printf 'Runtime：%s\n' "${runtime_result}"
-printf 'Job：%s\n' "${job_result}"
+if [[ "${CHECK_JOB}" == "yes" ]]; then
+    printf 'Job：%s\n' "${job_result}"
+fi
 
 exit "${overall_status}"
 REMOTE_SCRIPT
-ssh_status=$?
+}
 
-case "${ssh_status}" in
-    0)
-        exit 0
-        ;;
-    10)
-        printf '\n[异常] 状态采集完成，但至少一个 Java 服务不健康。\n' >&2
-        exit 1
-        ;;
-    *)
-        printf '\n[失败] 无法完成服务器状态采集，SSH/远端命令退出码：%s\n' \
-            "${ssh_status}" >&2
-        exit "${ssh_status}"
-        ;;
-esac
+format_result() {
+    local status="$1"
+
+    case "${status}" in
+        0) printf '健康' ;;
+        10) printf '服务异常' ;;
+        *) printf '采集失败（退出码 %s）' "${status}" ;;
+    esac
+}
+
+inspect_server "${OLD_SERVER}" "老节点" "yes"
+old_status=$?
+if [[ "${old_status}" -ne 0 ]]; then
+    printf '\n[异常] 老节点（%s）检查失败，退出码：%s。继续检查新节点。\n' \
+        "${OLD_SERVER}" "${old_status}" >&2
+fi
+
+inspect_server "${NEW_SERVER}" "新节点" "no"
+new_status=$?
+if [[ "${new_status}" -ne 0 ]]; then
+    printf '\n[异常] 新节点（%s）检查失败，退出码：%s。\n' \
+        "${NEW_SERVER}" "${new_status}" >&2
+fi
+
+old_result="$(format_result "${old_status}")"
+new_result="$(format_result "${new_status}")"
+
+printf '\n========== 双节点汇总 ==========\n'
+printf '老节点（%s）：%s\n' "${OLD_SERVER}" "${old_result}"
+printf '新节点（%s）：%s\n' "${NEW_SERVER}" "${new_result}"
+
+if [[ "${old_status}" -eq 0 && "${new_status}" -eq 0 ]]; then
+    exit 0
+fi
+
+printf '\n[异常] 双节点状态采集完成，但至少一个节点检查异常。\n' >&2
+exit 1
