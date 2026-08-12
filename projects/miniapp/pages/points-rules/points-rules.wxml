@@ -34,7 +34,7 @@
                   <view class="cost-title">{{rule.ruleName}}</view>
                   <view class="cost-desc">{{rule.desc}}</view>
                 </view>
-                <view class="cost-chip">{{rule.costText}}</view>
+                <view class="cost-chip {{item.groupTone}}">{{rule.costText}}</view>
               </view>
             </view>
           </view>

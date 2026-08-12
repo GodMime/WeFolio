@@ -108,7 +108,7 @@
 }
 
 .cost-mark.maintenance {
-  color: #5c9e6e;
+  color: #2d5f9a;
   background: #ffffff;
 }
 
@@ -201,6 +201,14 @@
   border-radius: 999rpx;
   background: #ffffff;
   box-sizing: border-box;
+}
+
+.cost-chip.maintenance {
+  color: #2d5f9a;
+}
+
+.cost-chip.visitor {
+  color: #c08a3e;
 }
 
 .cost-chip.gift {
