@@ -43,7 +43,7 @@ wefolio:
       normal-sample-rate: ${PORTFOLIO_OPEN_NORMAL_SAMPLE_RATE:0.01}
 
 server:
-  address: 127.0.0.1
+  address: ${SERVER_ADDRESS:127.0.0.1}
   port: 8090
 
 # --- COS Configuration ---
