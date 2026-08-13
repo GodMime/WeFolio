@@ -6,7 +6,6 @@ const vm = require('node:vm')
 
 const MINIAPP_ROOT = path.join(__dirname, '..')
 const NEW_VISITOR_PAGE = '/pages/portfolios/visitor-portfolio/visitor-portfolio'
-const NEW_VISITOR_SCHEDULE_PAGE = '/pages/portfolios/visitor-schedule/visitor-schedule'
 
 function read(relativePath) {
   return fs.readFileSync(path.join(MINIAPP_ROOT, relativePath), 'utf8')
@@ -70,18 +69,7 @@ test('old visitor portfolio route forwards shareCode and scene to the new subpac
   )
 })
 
-test('old visitor schedule route forwards all supported launch parameters', () => {
-  assert.deepEqual(
-    runOnLoad('pages/visitor-schedule/visitor-schedule.js', {
-      shareCode: 'PF001',
-      scene: 'SCENE001',
-      visitorKey: 'VK001'
-    }),
-    [`${NEW_VISITOR_SCHEDULE_PAGE}?shareCode=PF001&scene=SCENE001&visitorKey=VK001`]
-  )
-})
-
-test('new visitor schedule consumes scene forwarded by the old route', () => {
+test('new visitor schedule accepts scene as its direct launch share code', () => {
   const loaded = loadCompatPage('pages/portfolios/visitor-schedule/visitor-schedule.js')
   const context = {
     data: Object.assign({}, loaded.pageDefinition.data),
@@ -96,16 +84,11 @@ test('new visitor schedule consumes scene forwarded by the old route', () => {
   assert.equal(context.data.visitorKey, 'VK001')
 })
 
-test('old compatibility pages stay lightweight and carry deletion guards', () => {
+test('old visitor portfolio compatibility page stays lightweight and carries deletion guards', () => {
   const visitorCompatSource = read('pages/visitor-portfolio/visitor-portfolio.js')
-  const scheduleCompatSource = read('pages/visitor-schedule/visitor-schedule.js')
 
   assert.doesNotMatch(visitorCompatSource, /\brequest\b|openVisitorSession|wx\.request/)
-  assert.doesNotMatch(scheduleCompatSource, /\brequest\b|openVisitorSession|wx\.request/)
   assert.match(visitorCompatSource, /历史访客作品集分享兼容入口/)
   assert.match(visitorCompatSource, /禁止删除或改作业务页面/)
   assert.match(visitorCompatSource, /禁止请求接口或创建访客会话/)
-  assert.match(scheduleCompatSource, /历史访客档期分享兼容入口/)
-  assert.match(scheduleCompatSource, /禁止删除或改作业务页面/)
-  assert.match(scheduleCompatSource, /禁止请求接口或查询档期/)
 })

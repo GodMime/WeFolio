@@ -1,3 +1,8 @@
+/**
+ * 当前状态：业务入口不可达。
+ * 原因：添加成员能力已合并到团队维护页的成员添加弹层，现有流程不再跳转本独立页面。
+ * 保留说明：暂时保留页面注册和实现，后续统一清理旧页面时需同步更新相关测试。
+ */
 const { request } = require('../../utils/request')
 const { handleMaintainerAuthRequired, hasLocalToken } = require('../../utils/session')
 const {
