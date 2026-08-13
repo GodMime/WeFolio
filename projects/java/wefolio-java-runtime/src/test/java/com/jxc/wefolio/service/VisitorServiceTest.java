@@ -23,11 +23,15 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -110,6 +114,37 @@ class VisitorServiceTest {
         assertThat(result.newVisitor()).isTrue();
         assertThat(result.anonymous()).isTrue();
         verifyNoInteractions(wechatMiniappClient);
+    }
+
+    /** 不同朋友圈匿名会话必须按同一作品集聚合为一个访客。 */
+    @Test
+    void resolveForOpenShouldAggregateTimelineSessionsByPortfolioScope() {
+        VisitorEntity existing = new VisitorEntity();
+        existing.setId(2048L);
+        existing.setOpenid("timeline:portfolio-scope-hash");
+        existing.setVisitorKey("timeline-visitor-key");
+        VisitorIdentityPersistenceService persistenceService =
+                mock(VisitorIdentityPersistenceService.class);
+        when(persistenceService.tryResolveOrCreate(any(), isNull()))
+                .thenReturn(Optional.of(
+                        new VisitorIdentityPersistenceService.VisitorIdentity(existing, false)));
+        VisitorService service = service(persistenceService);
+
+        VisitorService.VisitorSession first = service.resolveForOpen(
+                null, "timeline-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "PERSONAL:88", null);
+        VisitorService.VisitorSession second = service.resolveForOpen(
+                null, "timeline-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "PERSONAL:88", null);
+
+        ArgumentCaptor<String> identityCaptor = ArgumentCaptor.forClass(String.class);
+        verify(persistenceService, times(2))
+                .tryResolveOrCreate(identityCaptor.capture(), isNull());
+        assertThat(identityCaptor.getAllValues()).containsExactly(
+                "timeline:14eafe2d4d2d7e2cd4785f0e05eb885eb30d9d9472907acb3f1b88c391f74666",
+                "timeline:14eafe2d4d2d7e2cd4785f0e05eb885eb30d9d9472907acb3f1b88c391f74666");
+        assertThat(first.visitor().getId()).isEqualTo(2048L);
+        assertThat(second.visitor().getId()).isEqualTo(2048L);
     }
 
     @Test
@@ -267,11 +302,16 @@ class VisitorServiceTest {
     }
 
     private VisitorService service() {
+        return service(new VisitorIdentityPersistenceService(visitorEntityMapper));
+    }
+
+    /** 使用指定身份持久化服务构造被测服务。 */
+    private VisitorService service(VisitorIdentityPersistenceService persistenceService) {
         return new VisitorService(
                 visitorEntityMapper,
                 wechatMiniappClient,
                 new LocalCacheService(new LocalCacheProperties()),
                 cosService,
-                new VisitorIdentityPersistenceService(visitorEntityMapper));
+                persistenceService);
     }
 }

@@ -141,7 +141,9 @@ public class PointService {
     private static final Set<String> VISITOR_SCENES = Set.of(
             PointSceneCodeDict.VISIT_PERSONAL_PORTFOLIO.getCode(),
             PointSceneCodeDict.VIEW_PORTFOLIO_IMAGES.getCode(),
-            PointSceneCodeDict.VIEW_PORTFOLIO_VIDEO.getCode()
+            PointSceneCodeDict.VIEW_PORTFOLIO_VIDEO.getCode(),
+            PointSceneCodeDict.QUERY_PORTFOLIO_SCHEDULE.getCode(),
+            PointSceneCodeDict.SUBMIT_CONTACT_LEAD.getCode()
     );
 
     /** 用户 Mapper */

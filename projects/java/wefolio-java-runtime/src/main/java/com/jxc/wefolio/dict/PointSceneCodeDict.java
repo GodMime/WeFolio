@@ -45,6 +45,14 @@ public class PointSceneCodeDict {
     public static final DictValue VIEW_PORTFOLIO_VIDEO =
             new DictValue("VIEW_PORTFOLIO_VIDEO", "访客查看作品集视频");
 
+    /** 访客查询作品集档期 */
+    public static final DictValue QUERY_PORTFOLIO_SCHEDULE =
+            new DictValue("QUERY_PORTFOLIO_SCHEDULE", "访客查询档期");
+
+    /** 访客预留联系信息 */
+    public static final DictValue SUBMIT_CONTACT_LEAD =
+            new DictValue("SUBMIT_CONTACT_LEAD", "访客预留联系信息");
+
     /** 后台人工加分 */
     public static final DictValue MANUAL_ADMIN_GRANT =
             new DictValue("MANUAL_ADMIN_GRANT", "后台人工加分");
@@ -77,6 +85,8 @@ public class PointSceneCodeDict {
             Map.entry(VISIT_PERSONAL_PORTFOLIO.getCode(), VISIT_PERSONAL_PORTFOLIO),
             Map.entry(VIEW_PORTFOLIO_IMAGES.getCode(), VIEW_PORTFOLIO_IMAGES),
             Map.entry(VIEW_PORTFOLIO_VIDEO.getCode(), VIEW_PORTFOLIO_VIDEO),
+            Map.entry(QUERY_PORTFOLIO_SCHEDULE.getCode(), QUERY_PORTFOLIO_SCHEDULE),
+            Map.entry(SUBMIT_CONTACT_LEAD.getCode(), SUBMIT_CONTACT_LEAD),
             Map.entry(MANUAL_ADMIN_GRANT.getCode(), MANUAL_ADMIN_GRANT),
             Map.entry(RECHARGE_PACKAGE.getCode(), RECHARGE_PACKAGE),
             Map.entry(RECHARGE_BONUS_GIFT.getCode(), RECHARGE_BONUS_GIFT),

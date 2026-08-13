@@ -29,10 +29,14 @@ import com.jxc.wefolio.entity.UserEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.PointAccountEntityMapper;
 import com.jxc.wefolio.mapper.PointMeterEntityMapper;
+import com.jxc.wefolio.mapper.PointPendingDebitEntityMapper;
 import com.jxc.wefolio.mapper.PointRuleEntityMapper;
 import com.jxc.wefolio.mapper.PointTransactionEntityMapper;
 import com.jxc.wefolio.mapper.SystemMessageEntityMapper;
 import com.jxc.wefolio.mapper.UserEntityMapper;
+import com.jxc.wefolio.service.point.DebitCommand;
+import com.jxc.wefolio.service.point.PointCommandService;
+import com.jxc.wefolio.service.point.PointMutationResult;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -55,6 +59,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -88,6 +93,14 @@ class PointServiceTest {
     /** 系统消息 Mapper 模拟 */
     @Mock
     private SystemMessageEntityMapper systemMessageEntityMapper;
+
+    /** 统一积分命令服务模拟 */
+    @Mock
+    private PointCommandService pointCommandService;
+
+    /** 待扣来源 Mapper 模拟 */
+    @Mock
+    private PointPendingDebitEntityMapper pointPendingDebitEntityMapper;
 
     @BeforeEach
     void initializeLambdaMetadata() {
@@ -1005,6 +1018,75 @@ class PointServiceTest {
         });
     }
 
+    /** 查档与留资必须允许扣成负余额。 */
+    @Test
+    void visitorIntentScenesShouldUseVisitorDebitCommand() {
+        activeUser(7L);
+        PointRuleEntity queryRule = rule(51L,
+                PointSceneCodeDict.QUERY_PORTFOLIO_SCHEDULE,
+                PointCalcModeDict.FIXED_PER_ACTION, 1, 10L);
+        PointRuleEntity leadRule = rule(52L,
+                PointSceneCodeDict.SUBMIT_CONTACT_LEAD,
+                PointCalcModeDict.FIXED_PER_ACTION, 1, 10L);
+        when(pointRuleEntityMapper.selectList(any()))
+                .thenReturn(List.of(queryRule), List.of(leadRule));
+        when(pointAccountEntityMapper.selectOne(any()))
+                .thenReturn(account(10L, 7L, 10L));
+        when(pointCommandService.deductForVisitor(any()))
+                .thenReturn(
+                        new PointMutationResult(91L, 10L, 10L, 10L, 0L, false),
+                        new PointMutationResult(92L, 10L, 10L, 0L, -10L, false));
+
+        PointMutationResponse query = productionService().consume(
+                7L, "QUERY_PORTFOLIO_SCHEDULE", "PORTFOLIO_SCHEDULE_QUERY",
+                "501", 1, "PF_SCHEDULE_QUERY:501", "访客查询作品集档期");
+        PointMutationResponse lead = productionService().consume(
+                7L, "SUBMIT_CONTACT_LEAD", "PORTFOLIO_CONTACT_LEAD",
+                "601", 1, "PF_CONTACT_LEAD:601", "访客预留联系信息");
+
+        ArgumentCaptor<DebitCommand> captor = ArgumentCaptor.forClass(DebitCommand.class);
+        verify(pointCommandService, times(2))
+                .deductForVisitor(captor.capture());
+        assertThat(captor.getAllValues()).extracting(DebitCommand::sceneCode)
+                .containsExactly("QUERY_PORTFOLIO_SCHEDULE", "SUBMIT_CONTACT_LEAD");
+        verify(pointCommandService, never()).deductForMaintainer(any());
+        assertThat(query.getBalanceAfter()).isZero();
+        assertThat(lead.getBalanceAfter()).isEqualTo(-10L);
+    }
+
+    /** 积分规则页必须返回两条新访客规则。 */
+    @Test
+    void getOverviewShouldReturnVisitorIntentRules() {
+        activeUser(7L);
+        when(pointAccountEntityMapper.selectOne(any()))
+                .thenReturn(account(10L, 7L, 30L));
+        PointRuleEntity queryRule = rule(51L,
+                PointSceneCodeDict.QUERY_PORTFOLIO_SCHEDULE,
+                PointCalcModeDict.FIXED_PER_ACTION, 1, 10L);
+        queryRule.setGroupCode("VISITOR");
+        queryRule.setConfigJson(
+                "{\"dedupeWindowHours\":2,\"dedupeScope\":\"PORTFOLIO\"}");
+        PointRuleEntity leadRule = rule(52L,
+                PointSceneCodeDict.SUBMIT_CONTACT_LEAD,
+                PointCalcModeDict.FIXED_PER_ACTION, 1, 10L);
+        leadRule.setGroupCode("VISITOR");
+        leadRule.setConfigJson(
+                "{\"dedupeWindowHours\":2,\"dedupeScope\":\"PORTFOLIO\"}");
+        when(pointRuleEntityMapper.selectList(any()))
+                .thenReturn(List.of(queryRule, leadRule));
+
+        MinePointOverviewResponse response = service().getOverview(7L);
+
+        assertThat(response.getRules())
+                .extracting("sceneCode", "sceneText", "groupCode",
+                        "pointsValue", "dedupeWindowHours", "dedupeScope")
+                .containsExactly(
+                        tuple("QUERY_PORTFOLIO_SCHEDULE", "访客查询档期",
+                                "VISITOR", 10L, 2, "PORTFOLIO"),
+                        tuple("SUBMIT_CONTACT_LEAD", "访客预留联系信息",
+                                "VISITOR", 10L, 2, "PORTFOLIO"));
+    }
+
     /** 非法窗口展示配置不得影响积分规则金额返回。 */
     @Test
     void getOverviewIgnoresMalformedBillingWindowConfig() {
@@ -1057,7 +1139,7 @@ class PointServiceTest {
         @SuppressWarnings("unchecked")
         ArgumentCaptor<LambdaQueryWrapper<PointTransactionEntity>> queryCaptor =
                 ArgumentCaptor.forClass(LambdaQueryWrapper.class);
-        verify(pointTransactionEntityMapper, org.mockito.Mockito.times(3))
+        verify(pointTransactionEntityMapper, times(3))
                 .selectList(queryCaptor.capture());
         LambdaQueryWrapper<PointTransactionEntity> maintenanceQuery =
                 queryCaptor.getAllValues().get(2);
@@ -1087,6 +1169,15 @@ class PointServiceTest {
                 pointTransactionEntityMapper,
                 systemMessageEntityMapper
         );
+    }
+
+    /** 构造使用统一积分命令的生产形态服务。 */
+    private PointService productionService() {
+        return new PointService(
+                userEntityMapper, pointAccountEntityMapper, pointRuleEntityMapper,
+                pointMeterEntityMapper, pointTransactionEntityMapper,
+                systemMessageEntityMapper, pointCommandService,
+                pointPendingDebitEntityMapper, new RegistrationPointProperties());
     }
 
     /**

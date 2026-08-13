@@ -46,4 +46,21 @@ class PointSceneCodeDictTest {
                 .contains(PointSceneCodeDict.UPLOAD_ANIMATION);
         assertThat(PointSceneCodeDict.fromCode("UNKNOWN")).isEmpty();
     }
+
+    /** 查档与留资必须使用独立访客积分场景。 */
+    @Test
+    void visitorIntentActionsShouldExposeIndependentScenes() {
+        assertThat(PointSceneCodeDict.QUERY_PORTFOLIO_SCHEDULE.getCode())
+                .isEqualTo("QUERY_PORTFOLIO_SCHEDULE");
+        assertThat(PointSceneCodeDict.QUERY_PORTFOLIO_SCHEDULE.getDisplayName())
+                .isEqualTo("访客查询档期");
+        assertThat(PointSceneCodeDict.SUBMIT_CONTACT_LEAD.getCode())
+                .isEqualTo("SUBMIT_CONTACT_LEAD");
+        assertThat(PointSceneCodeDict.SUBMIT_CONTACT_LEAD.getDisplayName())
+                .isEqualTo("访客预留联系信息");
+        assertThat(PointSceneCodeDict.fromCode("QUERY_PORTFOLIO_SCHEDULE"))
+                .contains(PointSceneCodeDict.QUERY_PORTFOLIO_SCHEDULE);
+        assertThat(PointSceneCodeDict.fromCode("SUBMIT_CONTACT_LEAD"))
+                .contains(PointSceneCodeDict.SUBMIT_CONTACT_LEAD);
+    }
 }

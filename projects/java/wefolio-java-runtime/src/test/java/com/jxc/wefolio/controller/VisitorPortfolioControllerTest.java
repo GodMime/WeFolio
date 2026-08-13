@@ -15,23 +15,39 @@ import com.jxc.wefolio.dto.VisitorPortfolioEventRequest;
 import com.jxc.wefolio.dto.VisitorPortfolioResponse;
 import com.jxc.wefolio.dto.VisitorPortfolioScheduleResponse;
 import com.jxc.wefolio.dto.VisitorProfileUpdateRequest;
+import com.jxc.wefolio.exception.BusinessException;
+import com.jxc.wefolio.exception.GlobalExceptionHandler;
 import com.jxc.wefolio.service.ContactLeadService;
 import com.jxc.wefolio.service.VisitorPortfolioService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * 访客作品集控制器测试 — 固定访客端接口路径和访问注解。
  */
-@ExtendWith(MockitoExtension.class)
+@ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 class VisitorPortfolioControllerTest {
 
     /** 访客作品集服务模拟 */
@@ -145,6 +161,76 @@ class VisitorPortfolioControllerTest {
                             && java.util.Arrays.asList(mapping.value()).contains("/api/visitor/portfolios/{shareCode}");
                 })
                 .isEmpty();
+    }
+
+    /** 旧留资入口必须继续委派旧方法并打印弃用告警。 */
+    @Test
+    void legacyContactLeadShouldKeepDeprecatedWarning(CapturedOutput output) {
+        VisitorPortfolioController controller =
+                new VisitorPortfolioController(visitorPortfolioService, contactLeadService);
+        ContactLeadSubmitRequest request = new ContactLeadSubmitRequest();
+        ContactLeadSubmitResponse response = new ContactLeadSubmitResponse();
+        when(contactLeadService.submit("PF001", request)).thenReturn(response);
+
+        Response<ContactLeadSubmitResponse> actual =
+                controller.contactLead("PF001", request);
+
+        assertThat(actual.getData()).isSameAs(response);
+        verify(contactLeadService).submit("PF001", request);
+        verify(contactLeadService, never()).submitV2(anyString(), any());
+        assertThat(output).contains("访客调用已弃用的联系线索接口")
+                .contains("shareCode=PF001");
+    }
+
+    /** 计费业务故障必须返回 400 失败响应。 */
+    @Test
+    void billingBusinessFailureShouldReturnBadRequestForBothEndpoints()
+            throws Exception {
+        when(visitorPortfolioService.submitScheduleQuery(eq("PF001"), any()))
+                .thenThrow(new BusinessException("积分规则不存在或未启用"));
+        when(contactLeadService.submitV2(eq("PF001"), any()))
+                .thenThrow(new BusinessException("积分规则不存在或未启用"));
+        MockMvc mvc = MockMvcBuilders
+                .standaloneSetup(new VisitorPortfolioController(
+                        visitorPortfolioService, contactLeadService))
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
+
+        for (String path : List.of(
+                "/api/visitor/portfolios/PF001/schedule-query",
+                "/api/visitor/portfolios/PF001/contact-leads/v2")) {
+            mvc.perform(post(path).contentType(MediaType.APPLICATION_JSON)
+                            .content("{}"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.success").value(false))
+                    .andExpect(jsonPath("$.message")
+                            .value("积分规则不存在或未启用"));
+        }
+    }
+
+    /** 未预期计费系统故障必须返回 500 通用失败响应。 */
+    @Test
+    void billingSystemFailureShouldReturnInternalServerErrorForBothEndpoints()
+            throws Exception {
+        when(visitorPortfolioService.submitScheduleQuery(eq("PF001"), any()))
+                .thenThrow(new IllegalStateException("ledger write failed"));
+        when(contactLeadService.submitV2(eq("PF001"), any()))
+                .thenThrow(new IllegalStateException("ledger write failed"));
+        MockMvc mvc = MockMvcBuilders
+                .standaloneSetup(new VisitorPortfolioController(
+                        visitorPortfolioService, contactLeadService))
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
+
+        for (String path : List.of(
+                "/api/visitor/portfolios/PF001/schedule-query",
+                "/api/visitor/portfolios/PF001/contact-leads/v2")) {
+            mvc.perform(post(path).contentType(MediaType.APPLICATION_JSON)
+                            .content("{}"))
+                    .andExpect(status().isInternalServerError())
+                    .andExpect(jsonPath("$.success").value(false))
+                    .andExpect(jsonPath("$.message").value("Internal server error"));
+        }
     }
 
     private void assertGetMapping(String methodName, Class<?>[] parameterTypes, String path)

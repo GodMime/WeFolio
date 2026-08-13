@@ -3,6 +3,8 @@ package com.jxc.wefolio.service;
 import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.jxc.wefolio.common.auth.VisitorContextHolder;
+import com.jxc.wefolio.dict.BillingWindowScopeDict;
+import com.jxc.wefolio.dict.PointSceneCodeDict;
 import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
 import com.jxc.wefolio.dict.PortfolioPublicationStatusDict;
 import com.jxc.wefolio.dict.PortfolioTypeDict;
@@ -97,6 +99,22 @@ public class VisitorPortfolioService {
     /** 已约提示 */
     private static final String MESSAGE_BOOKED = "该档期已约";
 
+    /** 查档积分业务类型 */
+    private static final String SCHEDULE_QUERY_POINT_BUSINESS_TYPE =
+            "PORTFOLIO_SCHEDULE_QUERY";
+
+    /** 查档积分幂等键前缀 */
+    private static final String SCHEDULE_QUERY_POINT_IDEMPOTENCY_PREFIX =
+            "PF_SCHEDULE_QUERY:";
+
+    /** 查档积分流水备注 */
+    private static final String SCHEDULE_QUERY_POINT_REMARK =
+            "访客查询作品集档期";
+
+    /** 查档记录主键未回填提示 */
+    private static final String SCHEDULE_QUERY_RECORD_ID_MISSING_MESSAGE =
+            "查档记录 ID 未回填";
+
     /** 作品集 Mapper */
     private final PortfolioEntityMapper portfolioEntityMapper;
 
@@ -126,6 +144,9 @@ public class VisitorPortfolioService {
 
     /** 维护者实际可用积分门禁。 */
     private final PointBalanceGateService pointBalanceGateService;
+
+    /** 访客积分滚动窗口服务 */
+    private final PointBillingWindowService pointBillingWindowService;
 
     /** 作品集打开分段耗时日志器。 */
     private final PortfolioOpenPerformanceLogger portfolioOpenPerformanceLogger;
@@ -407,7 +428,8 @@ public class VisitorPortfolioService {
     }
 
     /**
-     * 提交档期查询并记录访客事件。
+     * 提交个人作品集档期查询。
+     * 维护者自访只返回实时结果；其他访客在新建事件快照后进入独立积分窗口。
      *
      * @param shareCode 分享编码
      * @param request 查询请求
@@ -418,11 +440,18 @@ public class VisitorPortfolioService {
         if (request == null) {
             throw new BusinessException(PortfolioMessage.SCHEDULE_QUERY_REQUEST_REQUIRED_MESSAGE);
         }
+        Long visitorId = VisitorContextHolder.requireVisitorId();
         request.setVisitorKey(VisitorContextHolder.requireVisitorKey());
         PortfolioEntity portfolio = requirePublishedPortfolio(shareCode);
         PortfolioConfigDto config = parseConfig(portfolio.getPublishedConfigJson());
         Map<String, Object> componentConfig = requireScheduleComponentConfig(config, request.getComponentKey());
         PortfolioScheduleQueryResponse response = buildScheduleQueryResponse(portfolio.getOwnerId(), request);
+        VisitorEntity visitor = visitorService.findById(visitorId);
+        if (visitor != null && ownerSelfVisitService.isOwnerSelfVisitor(
+                portfolio.getOwnerId(), visitor.getOpenid(), portfolio.getId(),
+                visitorId, VisitEventTypeDict.SCHEDULE_QUERIED.getCode())) {
+            return response;
+        }
         Map<String, Object> metadata = buildScheduleQueryMetadata(request, response, componentConfig);
         PortfolioVisitService.ScheduleQueryRecordResult recordResult = portfolioVisitService.recordScheduleQuery(
                 portfolio,
@@ -431,7 +460,19 @@ public class VisitorPortfolioService {
                 metadata,
                 request.getIdempotencyKey()
         );
-        recordScheduleQuerySnapshot(portfolio, config, request, response, componentConfig, recordResult);
+        ScheduleQueryRecordEntity record = recordScheduleQuerySnapshot(
+                portfolio, config, request, response, componentConfig, recordResult);
+        if (record != null) {
+            Long recordId = Objects.requireNonNull(
+                    record.getId(), SCHEDULE_QUERY_RECORD_ID_MISSING_MESSAGE);
+            pointBillingWindowService.consumeIfEligible(
+                    portfolio.getOwnerId(), visitorId,
+                    PointSceneCodeDict.QUERY_PORTFOLIO_SCHEDULE.getCode(),
+                    BillingWindowScopeDict.PORTFOLIO.getCode(), portfolio.getId(),
+                    SCHEDULE_QUERY_POINT_BUSINESS_TYPE, recordId.toString(),
+                    SCHEDULE_QUERY_POINT_IDEMPOTENCY_PREFIX + recordId,
+                    SCHEDULE_QUERY_POINT_REMARK);
+        }
         return response;
     }
 
@@ -655,8 +696,9 @@ public class VisitorPortfolioService {
      * @param response 查询响应
      * @param componentConfig 查档组件配置
      * @param recordResult 访问事件写入结果
+     * @return 新建的查档快照；幂等命中或无需记录时返回 null
      */
-    private void recordScheduleQuerySnapshot(
+    private ScheduleQueryRecordEntity recordScheduleQuerySnapshot(
             PortfolioEntity portfolio,
             PortfolioConfigDto config,
             PortfolioScheduleQueryRequest request,
@@ -666,7 +708,7 @@ public class VisitorPortfolioService {
     ) {
         if (recordResult == null || !recordResult.isSnapshotRecordable()
                 || recordResult.getRecord() == null || recordResult.getOccurredAt() == null) {
-            return;
+            return null;
         }
         VisitRecordEntity visitRecord = recordResult.getRecord();
         ScheduleQueryRecordEntity record = new ScheduleQueryRecordEntity();
@@ -692,6 +734,7 @@ public class VisitorPortfolioService {
         record.setResultMessage(defaultString(response.getMessage(), ""));
         record.setQueriedAt(recordResult.getOccurredAt());
         scheduleQueryRecordEntityMapper.insert(record);
+        return record;
     }
 
     /**
