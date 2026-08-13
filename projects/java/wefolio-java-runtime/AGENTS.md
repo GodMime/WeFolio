@@ -100,6 +100,7 @@ Flyway 规则：
 - 数据库变更必须新增 `V{version}__{description}.sql`。
 - 新增唯一索引时确认是否需要包含 `deleted`。
 - 新增枚举值域时同步 SQL 约束、`dict` 字典类、实体字段注释和测试。
+- **禁止在 migration 中写入"重置/清理"类破坏性数据操作**（如 `DELETE` 全表、`UPDATE` 清零余额/流水）；数据重置与清理只能在对应环境手工执行并留痕，不得以 Flyway migration 形式进入迁移链。
 
 ## 实体与字典
 

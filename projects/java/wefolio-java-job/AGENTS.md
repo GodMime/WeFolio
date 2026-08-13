@@ -74,6 +74,8 @@ src/main/resources/
 
 后台任务工程只消费已经存在的表结构；如需调整数据库，必须在 runtime 工程新增 `V{version}__{description}.sql` migration。
 
+**禁止在 migration 中写入"重置/清理"类破坏性数据操作**（如 `DELETE` 全表、`UPDATE` 清零余额/流水）；数据重置与清理只能在对应环境手工执行并留痕，不得以 Flyway migration 形式进入迁移链。
+
 ## Web 接口
 
 本工程作为 Web 进程启动，用于部署探活和版本确认：

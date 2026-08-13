@@ -174,6 +174,7 @@ Spring Boot 后台任务 (:8091)
 - Flyway migration：已提交 Git 的脚本**绝对不可修改**（checksum 校验），所有变更必须追加新 V 版本文件
 - 所有 SQL 变更都必须走 `projects/java/wefolio-java-runtime/` 工程的 Flyway SQL 脚本，包括建表、改表、索引、约束、初始化数据和数据修正 SQL。
 - `wefolio-java-job` 不维护 migration；如后台任务需要数据库变更，仍在 `wefolio-java-runtime` 新增 Flyway migration。
+- **禁止在 migration 中写入"重置/清理"类破坏性数据操作**（如 `DELETE` 全表、`UPDATE` 清零余额/流水）；数据重置与清理只能在对应环境手工执行并留痕，不得以 Flyway migration 形式进入迁移链。
 
 ## 编码规范
 
