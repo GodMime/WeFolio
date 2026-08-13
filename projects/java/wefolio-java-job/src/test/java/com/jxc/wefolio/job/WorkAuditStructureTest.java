@@ -45,6 +45,7 @@ class WorkAuditStructureTest {
                 .contains("# 数据库连接地址，参考 wefolio-java-runtime。")
                 .contains("# 腾讯云访问密钥 ID，参考 wefolio-java-runtime。")
                 .contains("# 是否启用作品审核定时任务。")
+                .contains("video-submit-max-attempts: ${WEFOLIO_WORK_AUDIT_VIDEO_SUBMIT_MAX_ATTEMPTS:3}")
                 .contains("video-query-max-attempts: 120")
                 .contains("video-snapshot-interval-seconds: 60")
                 .doesNotContain("flyway:");

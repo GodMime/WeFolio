@@ -39,6 +39,7 @@ work-audit:
   task-lock-seconds: 300
   max-query-video-per-run: 1000
   max-submit-video-per-run: 500
+  video-submit-max-attempts: 3
   max-audit-image-per-run: 500
   video-query-max-attempts: 120
   video-snapshot-interval-seconds: 60

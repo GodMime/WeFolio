@@ -50,12 +50,18 @@ class WorkAuditClaimTransactionServiceTest {
         assertTransactional("markTaskSuccessAndUpdateWork",
                 Long.class, Long.class, AuditResultDict.class, String.class, Integer.class, String.class,
                 Integer.class, List.class, String.class, WorkAuditStatusDict.class, String.class);
-        assertTransactional("markVideoSubmittedAndUpdateWorkAuditing",
-                Long.class, Long.class, String.class, String.class);
+        assertTransactional("markVideoSubmittedAndKeepWorkAuditing",
+                Long.class, Long.class, Integer.class, String.class, String.class, String.class);
         assertTransactional("markVideoRunningAndKeepWorkAuditing",
-                Long.class, Long.class, String.class, String.class);
-        assertTransactional("markQueryFailureForNextRunAndKeepWorkAuditing",
-                Long.class, Long.class, String.class, String.class);
+                Long.class, Long.class, Integer.class, String.class, String.class, String.class);
+        assertTransactional("markVideoQueryFailureForNextRunAndKeepWorkAuditing",
+                Long.class, Long.class, Integer.class, String.class, String.class, String.class);
+        assertTransactional("markVideoTaskFailedAndUpdateWorkFailed",
+                Long.class, Long.class, Integer.class, String.class, String.class, String.class, String.class);
+        assertTransactional("markVideoTaskSuccessAndUpdateWork",
+                Long.class, Long.class, Integer.class, String.class,
+                AuditResultDict.class, String.class, Integer.class, String.class, Integer.class,
+                List.class, String.class, WorkAuditStatusDict.class, String.class);
     }
 
     @Test
@@ -262,18 +268,66 @@ class WorkAuditClaimTransactionServiceTest {
     }
 
     @Test
-    void markVideoSubmittedAndUpdateWorkAuditingShouldClearReason() {
+    void markVideoSubmittedAndKeepWorkAuditingShouldUseTokenAndRound() {
         WorkAuditWorkRepository workRepository = mock(WorkAuditWorkRepository.class);
         WorkAuditTaskRepository taskRepository = mock(WorkAuditTaskRepository.class);
         WorkAuditClaimTransactionService service =
                 service(workRepository, taskRepository);
+        when(taskRepository.markVideoSubmitted(
+                101L, "claim-token", "video-job-id", "{}")).thenReturn(true);
+        when(workRepository.updateAuditStatusAndReasonsForRound(
+                11L, 2, WorkAuditStatusDict.AUDITING, null, null, null)).thenReturn(true);
 
-        service.markVideoSubmittedAndUpdateWorkAuditing(101L, 11L, "video-job-id", "{}");
+        boolean updated = service.markVideoSubmittedAndKeepWorkAuditing(
+                101L, 11L, 2, "claim-token", "video-job-id", "{}");
 
+        assertThat(updated).isTrue();
         InOrder inOrder = inOrder(taskRepository, workRepository);
-        inOrder.verify(taskRepository).markVideoSubmitted(101L, "video-job-id", "{}");
-        inOrder.verify(workRepository).updateAuditStatusAndReasons(
-                11L, WorkAuditStatusDict.AUDITING, null, null, null);
+        inOrder.verify(taskRepository).markVideoSubmitted(
+                101L, "claim-token", "video-job-id", "{}");
+        inOrder.verify(workRepository).updateAuditStatusAndReasonsForRound(
+                11L, 2, WorkAuditStatusDict.AUDITING, null, null, null);
+    }
+
+    @Test
+    void staleVideoWorkerShouldNotUpdateWorkAfterClaimTokenWasLost() {
+        WorkAuditWorkRepository workRepository = mock(WorkAuditWorkRepository.class);
+        WorkAuditTaskRepository taskRepository = mock(WorkAuditTaskRepository.class);
+        WorkAuditClaimTransactionService service = service(workRepository, taskRepository);
+        when(taskRepository.markVideoRunning(
+                101L, "stale-token", "Running", "{}")).thenReturn(false);
+
+        boolean updated = service.markVideoRunningAndKeepWorkAuditing(
+                101L, 11L, 2, "stale-token", "Running", "{}");
+
+        assertThat(updated).isFalse();
+        verify(workRepository, never()).updateAuditStatusAndReasonsForRound(
+                any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void markVideoTaskSuccessShouldUpdateTaskBeforeMatchingWorkRound() {
+        WorkAuditWorkRepository workRepository = mock(WorkAuditWorkRepository.class);
+        WorkAuditTaskRepository taskRepository = mock(WorkAuditTaskRepository.class);
+        WorkAuditClaimTransactionService service = service(workRepository, taskRepository);
+        when(taskRepository.markVideoSuccess(
+                101L, "claim-token", AuditResultDict.PASS,
+                "Success", 0, "Normal", 0, "{}")).thenReturn(true);
+        when(workRepository.updateAuditStatusAndReasonsForRound(
+                11L, 2, WorkAuditStatusDict.PASSED, null, null, null)).thenReturn(true);
+
+        boolean updated = service.markVideoTaskSuccessAndUpdateWork(
+                101L, 11L, 2, "claim-token", AuditResultDict.PASS,
+                "Success", 0, "Normal", 0, List.of(), "{}",
+                WorkAuditStatusDict.PASSED, null);
+
+        assertThat(updated).isTrue();
+        InOrder inOrder = inOrder(taskRepository, workRepository);
+        inOrder.verify(taskRepository).markVideoSuccess(
+                101L, "claim-token", AuditResultDict.PASS,
+                "Success", 0, "Normal", 0, "{}");
+        inOrder.verify(workRepository).updateAuditStatusAndReasonsForRound(
+                11L, 2, WorkAuditStatusDict.PASSED, null, null, null);
     }
 
     @Test

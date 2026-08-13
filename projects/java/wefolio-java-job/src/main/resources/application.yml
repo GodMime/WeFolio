@@ -65,6 +65,8 @@ work-audit:
   max-query-video-per-run: 1000
   # 每轮最多提交多少个未审核视频作品到腾讯云异步审核；提交后不等待结果。
   max-submit-video-per-run: 500
+  # 单个视频提交任务最多尝试次数，约束进程中断后的原任务重提。
+  video-submit-max-attempts: ${WEFOLIO_WORK_AUDIT_VIDEO_SUBMIT_MAX_ATTEMPTS:3}
   # 每轮最多同步审核多少个未审核图片作品。
   max-audit-image-per-run: 500
   # 每轮最多尝试审核多少个动图任务。
