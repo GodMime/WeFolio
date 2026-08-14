@@ -1,7 +1,7 @@
 # 技术信息与服务配置台账
 
-版本：v0.3
-日期：2026-08-13
+版本：v0.4
+日期：2026-08-15
 维护人：dingchenyong
 
 ## 1. 文档目的
@@ -23,19 +23,32 @@
 | --- | --- | --- | --- | --- | --- |
 | 开发环境 | 本地开发与联调 | 待补充 | 待补充 | 待补充 | 待补充 |
 | 测试环境 | 功能测试与验收 | 待补充 | 待补充 | 待补充 | 待补充 |
-| 生产环境 | 线上用户访问 | `api.we-folio.dingchenyong.top` | SCP 上传 JAR + systemctl (`wefolio.service`) | 待补充 | 后端服务已部署，通过 Nginx 反向代理至 8090 端口 |
+| 生产环境 | 线上用户访问 | `api.we-folio.dingchenyong.top` | Runtime 双节点滚动发布；Job 单节点发布；SCP 上传 JAR + systemctl | 待补充 | Nginx 位于老节点；Runtime 在两台服务器的 8090 端口运行，Job 在老节点的 8091 端口运行 |
 
 ## 4. 服务器信息
 
 | 环境 | 云厂商 | 地域/可用区 | 实例名称 | 公网 IP/域名 | 内网 IP | 系统 | 登录方式 | 开放端口 | 部署目录 | 日志目录 | 备注 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 待确认 | 腾讯云 | 待补充 | 服务器1 | `49.235.146.161` | 待补充 | CentOS | `root` SSH 密钥登录，使用本机 `~/.ssh/id_ed25519` | 22 / 8090（后端服务） | 待补充 | 待补充 | SSH 密钥登录已验证；`PasswordAuthentication no` 已生效；root 密码未在仓库明文记录；Nginx 已部署，反向代理到 localhost:8090 |
+| 生产环境 | 腾讯云 | 待补充 | 老节点（Runtime / Nginx / Job） | `49.235.146.161` | 待确认；Nginx 通过 `127.0.0.1:8090` 访问本机 Runtime | CentOS | `root` SSH 密钥登录，使用本机 `~/.ssh/id_ed25519` | 22 / 80 / 443；本机服务 8090（Runtime）/ 8091（Job） | Runtime：`/root/java`；Job：`/root/java/job` | `LOG_PATH`，未配置时默认为 `./logs` | SSH 密钥登录已验证；`PasswordAuthentication no` 已生效；运行 `wefolio.service`、`wefolio-job.service`；Nginx 配置为 `/etc/nginx/conf.d/myapp.conf` |
+| 生产环境 | 待确认 | 待补充 | 新节点（Runtime） | `124.222.148.233` | `10.0.4.7` | 待补充 | `root` SSH 密钥登录，部署脚本使用 BatchMode | 22；内网 8090（供老节点 Nginx 访问 Runtime） | `/root/java` | `LOG_PATH`，未配置时默认为 `./logs` | 仅运行 `wefolio.service`，不部署 Nginx 和 Job；Runtime JAR 与老节点保持相同 SHA-256 |
+
+### 4.1 当前生产部署拓扑
+
+以下信息以 `projects/java/wefolio-java-runtime/deploy.sh` 和 `projects/java/wefolio-java-job/deploy.sh` 的当前配置为准：
+
+| 组件 | 老节点 `49.235.146.161` | 新节点 `124.222.148.233` | 服务与路径 | 访问/调度方式 |
+| --- | --- | --- | --- | --- |
+| Runtime | 已部署 | 已部署 | `wefolio.service`；`/root/java/wefolio-java-runtime.jar` | Nginx upstream 使用 `127.0.0.1:8090` 与 `10.0.4.7:8090`，正常状态为默认 round-robin |
+| Job | 已部署 | 未部署 | `wefolio-job.service`；`/root/java/job/wefolio-java-job.jar` | 老节点单实例，服务端口 8091，Web 接口前缀为 `/job-api` |
+| Nginx | 已部署 | 未部署 | `nginx`；`/etc/nginx/conf.d/myapp.conf` | 公网流量入口；Runtime 发布时在 `new_only`、`old_only`、`round_robin` 三种路由状态间切换 |
+
+Runtime 发布脚本在本地只构建一次 JAR，计算 SHA-256 后把同一制品依次发布到两个节点。单节点发布时先上传为 `.uploading`，校验通过后将原 JAR 保存为固定的 `.backup`，再原子替换正式 JAR、重启 `wefolio.service` 并执行健康检查。任一节点发布失败时脚本会停止后续步骤，并保持当时的摘流状态，需人工排障后重新发布。
 
 ## 5. 域名、CDN 与证书
 
 | 环境 | 域名 | DNS 服务商 | CDN 服务商 | 源站 | 证书到期日 | 自动续期 | 备注 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 生产环境 | `api.we-folio.dingchenyong.top` | 待补充 | 待补充 | 49.235.146.161 | 待补充 | 待补充 | DNS 已解析到 49.235.146.161，Nginx 反向代理至 8090 端口 |
+| 生产环境 | `api.we-folio.dingchenyong.top` | 待补充 | 待补充 | `49.235.146.161`（Nginx 入口） | 待补充 | 待补充 | DNS 解析到老节点；Nginx 将 Runtime 流量转发到本机 `127.0.0.1:8090` 和新节点内网地址 `10.0.4.7:8090` |
 
 ## 6. 对象存储
 
@@ -59,7 +72,7 @@
 
 | 环境 | 服务类型 | 服务地址 | 端口 | 用户名 | 密码存放位置 | 用途 | 备份/持久化 | 备注 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 生产环境 | Nginx | 49.235.146.161 | 80/443（HTTPS 待配） | — | — | 反向代理到 localhost:8090（Spring Boot 后端） | 待补充 | 已部署 |
+| 生产环境 | Nginx | `49.235.146.161` | 80/443 | — | — | Runtime 双节点反向代理与滚动发布切流；Job 请求转发到老节点服务 | 待补充 | 配置文件：`/etc/nginx/conf.d/myapp.conf`；Runtime upstream：`127.0.0.1:8090`、`10.0.4.7:8090` |
 
 ## 10. 环境变量索引
 
@@ -106,5 +119,6 @@
 | 2026-06-23 | dingchenyong | 服务器部署 Nginx，配置反向代理到 localhost:8090 | Web 访问入口 | 回滚 Nginx 配置 |
 | 2026-06-23 | dingchenyong | Java 后端服务部署至 8090 端口，由 systemctl `wefolio.service` 管理 | 后端服务 | 重启旧版本 JAR |
 | 2026-08-13 | dingchenyong | 补充 V51 积分规则部署的数据库与应用双时钟检查 | 查档与新版留资积分规则 | 校准 NTP 后重启后端实例 |
+| 2026-08-15 | dingchenyong | 根据当前部署脚本补充新服务器 `124.222.148.233`，同步 Runtime 双节点滚动发布、Nginx upstream 与 Job 单节点现状 | 生产服务器与部署台账 | 仅文档更新，不涉及线上资源变更；可恢复本文档上一版本 |
 | 2026-06-19 | 待补充 | 服务器1 启用 SSH 密钥登录并关闭密码登录 | SSH 登录方式 | 服务器备份文件：`/etc/ssh/sshd_config.bak-20260619-before-disable-passwordauth`；恢复后执行 `sshd -t` 并重载 `sshd` |
 | 2026-06-19 | 待补充 | 初始化技术信息与服务配置台账 | 文档模板 | 不涉及 |
