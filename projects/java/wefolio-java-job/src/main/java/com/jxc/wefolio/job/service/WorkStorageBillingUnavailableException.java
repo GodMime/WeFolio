@@ -6,6 +6,15 @@ package com.jxc.wefolio.job.service;
 public class WorkStorageBillingUnavailableException extends RuntimeException {
 
     /**
+     * 创建无底层异常的不可用结果。
+     *
+     * @param message 安全错误消息
+     */
+    public WorkStorageBillingUnavailableException(String message) {
+        super(message);
+    }
+
+    /**
      * 创建异常。
      *
      * @param message 安全错误消息

@@ -4,6 +4,7 @@ import com.jxc.wefolio.job.service.UserStorageFolderRepairExecutionCoordinator.S
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -46,5 +47,24 @@ class UserStorageFolderRepairExecutionServiceTest {
         assertThat(result.outcome())
                 .isEqualTo(UserStorageFolderRepairExecutionService.ExecutionOutcome.UNAUTHORIZED);
         verify(coordinator, never()).submit();
+    }
+
+    @Test
+    void stoppedCoordinatorShouldReturnUnavailableWithStopMessage() {
+        AdminPointSecretValidator validator = mock(AdminPointSecretValidator.class);
+        when(validator.isValid(anyString())).thenReturn(true);
+        UserStorageFolderRepairExecutionCoordinator coordinator =
+                mock(UserStorageFolderRepairExecutionCoordinator.class);
+        when(coordinator.submit()).thenThrow(new UserStorageFolderRepairUnavailableException(
+                "job 服务正在停用，不再接受历史用户目录修复任务"));
+        UserStorageFolderRepairExecutionService service =
+                new UserStorageFolderRepairExecutionService(validator, coordinator);
+
+        var result = service.execute("secret");
+
+        assertThat(result.outcome())
+                .isEqualTo(UserStorageFolderRepairExecutionService.ExecutionOutcome.UNAVAILABLE);
+        assertThat(result.message()).isEqualTo("job 服务正在停用，不再接受历史用户目录修复任务");
+        assertThat(result.data()).isNull();
     }
 }

@@ -87,6 +87,10 @@ admin:
     # 复用 Runtime 人工加分接口的后台积分密钥。
     secret: ${ADMIN_POINT_SECRET:}
 
+job-scheduling:
+  # 发布旧服务前等待当前后台工作自然结束的最长时间。
+  disable-timeout: ${JOB_SCHEDULING_DISABLE_TIMEOUT:10s}
+
 user-storage-folder-repair:
   # 历史用户目录修复 ID 游标批大小，批内严格逐个处理。
   batch-size: ${USER_STORAGE_FOLDER_REPAIR_BATCH_SIZE:200}

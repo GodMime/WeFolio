@@ -55,3 +55,7 @@ work-storage-billing:
   cron: "0 0 2 1 * ?"
   zone: Asia/Shanghai
   batch-size: 100
+
+recharge-order-close:
+  # 上下文测试不执行真实的过期订单关闭 SQL。
+  enabled: false

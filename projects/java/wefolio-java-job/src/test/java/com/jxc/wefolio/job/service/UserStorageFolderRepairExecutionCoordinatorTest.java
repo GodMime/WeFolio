@@ -22,8 +22,9 @@ class UserStorageFolderRepairExecutionCoordinatorTest {
         UserStorageFolderRepairService repairService =
                 mock(UserStorageFolderRepairService.class);
         ManualExecutor executor = new ManualExecutor();
+        JobExecutionLifecycle lifecycle = new JobExecutionLifecycle();
         UserStorageFolderRepairExecutionCoordinator coordinator =
-                new UserStorageFolderRepairExecutionCoordinator(repairService, executor);
+                new UserStorageFolderRepairExecutionCoordinator(repairService, executor, lifecycle);
 
         var accepted = coordinator.submit();
         var running = coordinator.submit();
@@ -31,8 +32,10 @@ class UserStorageFolderRepairExecutionCoordinatorTest {
         assertThat(accepted.accepted()).isTrue();
         assertThat(running.accepted()).isFalse();
         assertThat(running.executionId()).isEqualTo(accepted.executionId());
+        assertThat(lifecycle.snapshot().activeTaskCount()).isOne();
         executor.runNext();
         verify(repairService).run(accepted.executionId());
+        assertThat(lifecycle.snapshot().activeTaskCount()).isZero();
         assertThat(coordinator.submit().accepted()).isTrue();
     }
 
@@ -41,14 +44,39 @@ class UserStorageFolderRepairExecutionCoordinatorTest {
         TaskExecutor rejectedExecutor = task -> {
             throw new TaskRejectedException("busy");
         };
+        JobExecutionLifecycle lifecycle = new JobExecutionLifecycle();
         UserStorageFolderRepairExecutionCoordinator coordinator =
                 new UserStorageFolderRepairExecutionCoordinator(
-                        mock(UserStorageFolderRepairService.class), rejectedExecutor);
+                        mock(UserStorageFolderRepairService.class), rejectedExecutor, lifecycle);
 
         assertThatThrownBy(coordinator::submit)
                 .isInstanceOf(UserStorageFolderRepairUnavailableException.class);
+        assertThat(lifecycle.snapshot().activeTaskCount()).isZero();
         assertThatThrownBy(coordinator::submit)
                 .isInstanceOf(UserStorageFolderRepairUnavailableException.class);
+        assertThat(lifecycle.snapshot().activeTaskCount()).isZero();
+    }
+
+    @Test
+    void acceptedRepairShouldRemainActiveAndNewRepairShouldBeRejectedAfterDisable() {
+        JobExecutionLifecycle lifecycle = new JobExecutionLifecycle();
+        ManualExecutor executor = new ManualExecutor();
+        UserStorageFolderRepairExecutionCoordinator coordinator =
+                new UserStorageFolderRepairExecutionCoordinator(
+                        mock(UserStorageFolderRepairService.class), executor, lifecycle);
+
+        coordinator.submit();
+        lifecycle.disable();
+
+        assertThat(lifecycle.snapshot().status()).isEqualTo(JobExecutionLifecycle.Status.DRAINING);
+        assertThatThrownBy(coordinator::submit)
+                .isInstanceOf(UserStorageFolderRepairUnavailableException.class)
+                .hasMessage("job 服务正在停用，不再接受历史用户目录修复任务");
+        assertThat(lifecycle.snapshot().activeTaskCount()).isOne();
+
+        executor.runNext();
+        assertThat(lifecycle.snapshot().status()).isEqualTo(JobExecutionLifecycle.Status.DISABLED);
+        assertThat(lifecycle.snapshot().activeTaskCount()).isZero();
     }
 
     private static final class ManualExecutor implements TaskExecutor {

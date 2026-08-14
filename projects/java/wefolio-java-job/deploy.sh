@@ -14,6 +14,10 @@ UPLOAD_JAR_NAME="${JAR_NAME}.uploading"
 SERVICE_NAME="wefolio-job.service"
 APP_NAME="wefolio-java-job"
 DEPLOY_LABEL="${APP_NAME} / ${SERVICE_NAME}"
+DISABLE_URL="https://api.we-folio.dingchenyong.top/job-api/scheduling/disable"
+DISABLE_MAX_ATTEMPTS=3
+RETRY_DELAY_SECONDS=3
+WAIT_AFTER_DISABLE_SECONDS=3
 
 # === 计时工具（毫秒精度）===
 _now_ms() { python3 -c 'import time; print(int(time.time()*1000))'; }
@@ -64,12 +68,47 @@ echo ">>> [${DEPLOY_LABEL}] 覆盖 JAR..."
 ssh "${SERVER}" "mv -f ${REMOTE_DIR}/${UPLOAD_JAR_NAME} ${REMOTE_DIR}/${JAR_NAME}" || die "覆盖 JAR 失败"
 elapsed
 
-# === 6. 重启服务 ===
+# === 6. 停用旧实例调度并等待排空 ===
+echo ">>> [${DEPLOY_LABEL}] 停用旧实例调度 ${DISABLE_URL} ..."
+ADMIN_SECRET="$(grep '^POINT_ADMIN_SECRET=' .env | cut -d= -f2)" || die "读取 .env 运维密钥失败（缺少 POINT_ADMIN_SECRET）"
+disable_attempt=1
+while [ "${disable_attempt}" -le "${DISABLE_MAX_ATTEMPTS}" ]; do
+    disable_response="$(curl -s -m 15 -w $'\n%{http_code}' \
+        -X POST -H "X-Admin-Point-Secret: ${ADMIN_SECRET}" "${DISABLE_URL}")" \
+        || die "停用接口请求失败（网络不可达或服务异常）"
+    disable_code="${disable_response##*$'\n'}"
+    disable_body="${disable_response%$'\n'*}"
+    case "${disable_code}" in
+        200)
+            echo ">>> [${DEPLOY_LABEL}] 停用成功：${disable_body}"
+            break
+            ;;
+        503)
+            echo ">>> [警告] 第 ${disable_attempt}/${DISABLE_MAX_ATTEMPTS} 次停用未排空（响应：${disable_body}），等待 ${RETRY_DELAY_SECONDS}s 后重试..."
+            if [ "${disable_attempt}" -ge "${DISABLE_MAX_ATTEMPTS}" ]; then
+                die "旧实例仍有运行中任务未排空，已保留旧实例未重启，请稍后重试或人工排查"
+            fi
+            sleep "${RETRY_DELAY_SECONDS}"
+            ;;
+        401)
+            die "停用接口返回 401：请确认生产实例注入了 ADMIN_POINT_SECRET 且与本地 .env 一致"
+            ;;
+        *)
+            die "停用接口返回异常状态码 ${disable_code}：${disable_body}"
+            ;;
+    esac
+    disable_attempt=$((disable_attempt + 1))
+done
+echo ">>> [${DEPLOY_LABEL}] 已停用，等待 ${WAIT_AFTER_DISABLE_SECONDS}s 后继续发布..."
+sleep "${WAIT_AFTER_DISABLE_SECONDS}"
+elapsed
+
+# === 7. 重启服务 ===
 echo ">>> [${DEPLOY_LABEL}] 重启服务 ${SERVICE_NAME}..."
 ssh "${SERVER}" "systemctl restart ${SERVICE_NAME}" || die "重启服务失败"
 elapsed
 
-# === 7. 查看状态 ===
+# === 8. 查看状态 ===
 echo ">>> [${DEPLOY_LABEL}] 服务状态..."
 ssh "${SERVER}" "systemctl status ${SERVICE_NAME} --no-pager" || die "获取服务状态失败"
 elapsed
