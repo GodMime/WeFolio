@@ -110,5 +110,5 @@ admin:
 # --- Registration Point Configuration ---
 registration:
   point:
-    new-user-gift-points: ${REGISTRATION_NEW_USER_GIFT_POINTS:500}
+    new-user-gift-points: ${REGISTRATION_NEW_USER_GIFT_POINTS:1000}
     referral-gift-points: ${REGISTRATION_REFERRAL_GIFT_POINTS:500}

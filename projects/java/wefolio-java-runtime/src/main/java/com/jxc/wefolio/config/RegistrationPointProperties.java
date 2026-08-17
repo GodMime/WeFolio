@@ -13,7 +13,7 @@ import org.springframework.stereotype.Component;
 public class RegistrationPointProperties {
 
     /** 新用户注册赠送积分 */
-    private Long newUserGiftPoints = 500L;
+    private Long newUserGiftPoints = 1000L;
 
     /** 推荐用户注册时推荐人赠送积分 */
     private Long referralGiftPoints = 500L;
