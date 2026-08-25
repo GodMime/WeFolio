@@ -13,6 +13,9 @@
 /test/
 /tmp/
 
+# 软件著作权申请材料（含企业及联系人信息，不提交仓库）
+/software-copyright/
+
 # 微信朋友圈广告生成项目（本地素材、文案、成图与构建辅助文件）
 /promote/assets/moments-ad*/
 /promote/image/moments-ad*
