@@ -1,0 +1,82 @@
+<view class="page-shell feedback-page">
+  <navigation-bar title="问题反馈" back="{{true}}" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
+
+  <scroll-view class="feedback-scroll" scroll-y type="list">
+    <view class="feedback-content">
+      <block wx:if="{{loading}}">
+        <view class="panel feedback-panel skeleton-panel"></view>
+      </block>
+
+      <block wx:elif="{{errorMessage}}">
+        <view class="empty-state">
+          <view class="empty-title">加载失败</view>
+          <view class="empty-desc">{{errorMessage}}</view>
+          <button class="primary-button compact" bindtap="handleRetry">重试</button>
+        </view>
+      </block>
+
+      <block wx:else>
+        <view class="feedback-intro">
+          <image class="feedback-icon" src="/assets/system/wefolio-feedback-icon.png" mode="aspectFit"></image>
+          <view class="feedback-intro-copy">
+            <view class="feedback-title">告诉我们遇到的问题</view>
+            <view class="feedback-subtitle">提交后团队会尽快跟进</view>
+          </view>
+        </view>
+
+        <view class="panel feedback-panel">
+          <view class="field-heading">
+            <view class="field-title">问题描述</view>
+            <view class="description-count">{{descriptionLength}} / 200</view>
+          </view>
+          <textarea
+            class="description-input"
+            value="{{draft.description}}"
+            maxlength="-1"
+            placeholder="请描述发生了什么，以及你期待的结果"
+            disabled="{{submitting}}"
+            bindinput="handleDescriptionInput"
+          ></textarea>
+
+          <view class="field-heading attachment-heading">
+            <view class="field-title">图片或视频</view>
+            <view class="field-note">最多 3 个</view>
+          </view>
+          <view class="attachment-slots">
+            <view class="attachment-slot" wx:for="{{attachmentSlots}}" wx:key="slotIndex">
+              <view wx:if="{{item.file}}" class="attachment-preview" data-index="{{item.slotIndex}}" bindtap="handlePreviewAttachment" aria-role="button">
+                <image wx:if="{{item.file.mediaType === 'IMAGE'}}" class="attachment-image" src="{{item.file.tempFilePath}}" mode="aspectFill"></image>
+                <view wx:else class="video-placeholder">
+                  <view class="video-play"></view>
+                  <view class="video-label">视频</view>
+                </view>
+                <view class="attachment-remove" data-index="{{item.slotIndex}}" catchtap="handleRemoveAttachment" aria-role="button" aria-label="删除附件">×</view>
+              </view>
+              <view wx:else class="attachment-add" bindtap="handleChooseMedia" aria-role="button" aria-label="添加附件">
+                <view class="attachment-plus">+</view>
+                <view class="attachment-add-text">添加</view>
+              </view>
+            </view>
+          </view>
+        </view>
+
+        <view class="quota-hint {{creationState.canCreate ? '' : 'blocked'}}">{{creationState.hintText}}</view>
+        <view wx:if="{{submitting && draft.attachments.length}}" class="upload-progress">
+          <view class="upload-progress-track">
+            <view class="upload-progress-fill" style="width: {{uploadProgressPercent}}%;"></view>
+          </view>
+          <view class="upload-progress-text">附件上传 {{uploadProgressPercent}}%</view>
+        </view>
+        <button class="submit-button" loading="{{submitting}}" disabled="{{submitDisabled}}" bindtap="handleSubmit">
+          {{submitting ? '正在提交' : '提交问题'}}
+        </button>
+      </block>
+    </view>
+  </scroll-view>
+
+  <view class="feedback-footer">
+    <button class="history-action" bindtap="handleHistoryTap" aria-label="历史问题">
+      历史问题
+    </button>
+  </view>
+</view>

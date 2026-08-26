@@ -41,6 +41,12 @@ wefolio:
     portfolio-open:
       slow-threshold: ${PORTFOLIO_OPEN_SLOW_THRESHOLD:2s}
       normal-sample-rate: ${PORTFOLIO_OPEN_NORMAL_SAMPLE_RATE:0.01}
+  feedback:
+    webhook-url: ${FEISHU_FEEDBACK_WEBHOOK_URL:}
+    webhook-secret: ${FEISHU_FEEDBACK_WEBHOOK_SECRET:}
+    status-api-base-url: ${FEEDBACK_STATUS_API_BASE_URL:https://api.we-folio.dingchenyong.top}
+    connect-timeout: 2s
+    read-timeout: 3s
 
 server:
   address: ${SERVER_ADDRESS:127.0.0.1}

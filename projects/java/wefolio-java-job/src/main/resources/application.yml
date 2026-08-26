@@ -117,6 +117,18 @@ recharge-order-close:
   # 单轮最多执行的批次数，防止长期占用任务线程。
   max-batches: ${RECHARGE_ORDER_CLOSE_MAX_BATCHES:10}
 
+feedback-upload-cleanup:
+  # 是否启用反馈附件过期清理任务。
+  enabled: ${FEEDBACK_UPLOAD_CLEANUP_ENABLED:true}
+  # 每日凌晨 3:40 低峰执行，避免占用白天业务资源。
+  cron: "${FEEDBACK_UPLOAD_CLEANUP_CRON:0 40 3 * * ?}"
+  # cron 调度时区，不影响按上海业务时区解释的过期时间。
+  zone: ${FEEDBACK_UPLOAD_CLEANUP_ZONE:Asia/Shanghai}
+  # 单轮最多读取并逐条清理的上传任务数量。
+  batch-size: ${FEEDBACK_UPLOAD_CLEANUP_BATCH_SIZE:200}
+  # 单轮最多执行的 keyset 批次数，防止长期占用清理线程。
+  max-batches: ${FEEDBACK_UPLOAD_CLEANUP_MAX_BATCHES:10}
+
 virtual-payment-dispatch:
   # Release A 默认关闭；确认所有 runtime 实例均已提供单任务接口后再启用。
   enabled: ${VIRTUAL_PAYMENT_DISPATCH_ENABLED:false}

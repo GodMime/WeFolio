@@ -7,6 +7,9 @@ const MESSAGE_ENTRY_TYPE = 'messages'
 const MESSAGE_ICON_URL = '/assets/system/wefolio-message-icon.png'
 const MESSAGE_UNREAD_COUNT_URL = '/api/mine/messages/unread-count'
 const MESSAGES_PAGE_URL = '/pages/messages/messages'
+const FEEDBACK_ENTRY_TYPE = 'feedback'
+const FEEDBACK_ICON_URL = '/assets/system/wefolio-feedback-icon.png'
+const FEEDBACK_PAGE_URL = '/pages/feedback/feedback'
 const POINTS_PAGE_URL = '/pages/points/points'
 const RECHARGE_PAGE_URL = '/pages/recharge/recharge'
 const SCHEDULE_PAGE_URL = '/pages/schedule/schedule'
@@ -33,6 +36,12 @@ function buildEntries(messageUnread = normalizeUnreadCount({})) {
       desc: '系统提醒、团队邀请',
       iconUrl: MESSAGE_ICON_URL,
       badgeText: messageUnread.badgeText
+    },
+    {
+      type: FEEDBACK_ENTRY_TYPE,
+      title: '问题反馈',
+      desc: '提交问题、查看处理进度',
+      iconUrl: FEEDBACK_ICON_URL
     }
   ]
 }
@@ -164,6 +173,12 @@ Page({
     if (type === MESSAGE_ENTRY_TYPE) {
       wx.navigateTo({
         url: MESSAGES_PAGE_URL
+      })
+      return
+    }
+    if (type === FEEDBACK_ENTRY_TYPE) {
+      wx.navigateTo({
+        url: FEEDBACK_PAGE_URL
       })
       return
     }

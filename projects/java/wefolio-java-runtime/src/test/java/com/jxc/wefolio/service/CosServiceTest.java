@@ -6,6 +6,7 @@ import com.alibaba.fastjson2.JSONObject;
 import com.jxc.wefolio.config.CosProperties;
 import com.qcloud.cos.COSClient;
 import com.qcloud.cos.model.COSObject;
+import com.qcloud.cos.model.BucketVersioningConfiguration;
 import com.qcloud.cos.model.GetObjectRequest;
 import com.qcloud.cos.model.ObjectMetadata;
 import com.qcloud.cos.model.PutObjectRequest;
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.parallel.ResourceLock;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -35,10 +37,13 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.security.MessageDigest;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.TimeZone;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -48,6 +53,12 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 class CosServiceTest {
+
+    /** 反馈业务统一时区。 */
+    private static final ZoneId SHANGHAI_ZONE = ZoneId.of("Asia/Shanghai");
+
+    /** 修改 JVM 默认时区时使用的并行测试资源锁。 */
+    private static final String DEFAULT_TIME_ZONE_RESOURCE = "java.util.TimeZone.default";
 
     @Mock
     private TransferManager transferManager;
@@ -104,6 +115,79 @@ class CosServiceTest {
         assertThat(policy).contains("\"Content-Type\":\"image/jpeg\"");
         assertThat(policy).contains("[\"content-length-range\",0,10485760]");
         assertThat(policy).contains("\"success_action_status\":\"200\"");
+    }
+
+    /** 显式时区签票必须让签名终点和 policy 过期时间对应同一瞬时。 */
+    @Test
+    @ResourceLock(DEFAULT_TIME_ZONE_RESOURCE)
+    void createPostUploadTicketShouldInterpretExpirationInExplicitZone() throws Exception {
+        when(cosProperties.getSecretId()).thenReturn("AKID_TEST");
+        when(cosProperties.getSecretKey()).thenReturn("SECRET_TEST");
+        LocalDateTime expiresAt = LocalDateTime.now(SHANGHAI_ZONE).plusMinutes(30).withNano(0);
+        Instant expectedExpiration = expiresAt.atZone(SHANGHAI_ZONE).toInstant();
+        TimeZone originalTimeZone = TimeZone.getDefault();
+        try {
+            TimeZone.setDefault(TimeZone.getTimeZone("UTC"));
+            CosService.PostUploadTicket ticket = cosService.createPostUploadTicket(
+                    "WFA3B1E7A2/others/feedback.jpg",
+                    "image/jpeg",
+                    1024L,
+                    expiresAt,
+                    SHANGHAI_ZONE);
+
+            String[] keyTimeParts = ticket.formData().get("q-key-time").split(";");
+            JSONObject policy = JSON.parseObject(new String(
+                    Base64.getDecoder().decode(ticket.formData().get("policy"))));
+            assertThat(Long.parseLong(keyTimeParts[1])).isEqualTo(expectedExpiration.getEpochSecond());
+            assertThat(Instant.parse(policy.getString("expiration"))).isEqualTo(expectedExpiration);
+        } finally {
+            TimeZone.setDefault(originalTimeZone);
+        }
+    }
+
+    /** 不可覆盖票据必须把保护字段同时写入表单和签名策略。 */
+    @Test
+    void createPostUploadTicketShouldSignForbidOverwriteWhenRequested() {
+        when(cosProperties.getSecretId()).thenReturn("AKID_TEST");
+        when(cosProperties.getSecretKey()).thenReturn("SECRET_TEST");
+
+        CosService.PostUploadTicket ticket = cosService.createPostUploadTicket(
+                "WFA3B1E7A2/others/feedback.jpg",
+                "image/jpeg",
+                1024L,
+                LocalDateTime.now(SHANGHAI_ZONE).plusMinutes(15),
+                SHANGHAI_ZONE,
+                true);
+
+        String policy = new String(Base64.getDecoder().decode(ticket.formData().get("policy")));
+        assertThat(ticket.formData()).containsEntry("x-cos-forbid-overwrite", "true");
+        assertThat(policy).contains("\"x-cos-forbid-overwrite\":\"true\"");
+    }
+
+    /** 开启版本控制时 COS 会忽略禁止覆盖字段，必须在签票前拒绝。 */
+    @Test
+    void overwriteProtectionShouldRejectVersionedBucket() {
+        COSClient cosClient = mock(COSClient.class);
+        when(transferManager.getCOSClient()).thenReturn(cosClient);
+        when(cosClient.getBucketVersioningConfiguration("test-bucket"))
+                .thenReturn(new BucketVersioningConfiguration(BucketVersioningConfiguration.ENABLED));
+
+        assertThatThrownBy(() -> cosService.ensurePostOverwriteProtectionAvailable())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("COS 存储桶已开启版本控制，无法保证反馈附件禁止覆盖");
+    }
+
+    /** 未开启版本控制时可使用禁止覆盖票据。 */
+    @Test
+    void overwriteProtectionShouldAllowUnversionedBucket() {
+        COSClient cosClient = mock(COSClient.class);
+        when(transferManager.getCOSClient()).thenReturn(cosClient);
+        when(cosClient.getBucketVersioningConfiguration("test-bucket"))
+                .thenReturn(new BucketVersioningConfiguration(BucketVersioningConfiguration.OFF));
+
+        cosService.ensurePostOverwriteProtectionAvailable();
+
+        verify(cosClient).getBucketVersioningConfiguration("test-bucket");
     }
 
     @Test

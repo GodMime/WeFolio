@@ -49,3 +49,10 @@ wechat:
 auth:
   token:
     secret: test-auth-token-secret
+
+# --- 问题反馈测试占位配置 ---
+wefolio:
+  feedback:
+    webhook-url: https://open.feishu.cn/open-apis/bot/v2/hook/test-feedback-webhook
+    webhook-secret: test-feedback-webhook-secret
+    status-api-base-url: https://api.test.wefolio.example

@@ -1,5 +1,8 @@
 package com.jxc.wefolio.service;
 
+import com.jxc.wefolio.dict.FeedbackMediaTypeDict;
+import com.jxc.wefolio.dict.FeedbackStatusDict;
+import com.jxc.wefolio.dict.FeedbackUploadTaskStatusDict;
 import com.jxc.wefolio.dict.ScheduleStatusDict;
 import org.junit.jupiter.api.Test;
 
@@ -70,6 +73,70 @@ class StatusDictionaryUsageTest {
         assertThat(source).doesNotContain("return \"rose\"");
         assertThat(source).doesNotContain("return \"amber\"");
         assertThat(source).doesNotContain("return \"muted\"");
+    }
+
+    /**
+     * 意见反馈状态、媒体类型与上传任务状态应由字典统一承载。
+     *
+     * @throws Exception 读取源码失败时抛出异常
+     */
+    @Test
+    void feedbackDictionariesDeclareCompleteMappingsAndRejectUnknownCodes() {
+        assertDictionaryValue(FeedbackStatusDict.PROCESSING, "PROCESSING", "处理中");
+        assertDictionaryValue(FeedbackStatusDict.WAITING_FOLLOW_UP, "WAITING_FOLLOW_UP", "待再次反馈");
+        assertDictionaryValue(FeedbackStatusDict.RESOLVED, "RESOLVED", "已处理");
+        assertThat(FeedbackStatusDict.fromCode(null)).isNull();
+        assertThat(FeedbackStatusDict.fromCode("UNKNOWN")).isNull();
+
+        assertDictionaryValue(FeedbackMediaTypeDict.IMAGE, "IMAGE", "图片");
+        assertDictionaryValue(FeedbackMediaTypeDict.VIDEO, "VIDEO", "视频");
+        assertThat(FeedbackMediaTypeDict.fromCode(null)).isNull();
+        assertThat(FeedbackMediaTypeDict.fromCode("UNKNOWN")).isNull();
+
+        assertDictionaryValue(FeedbackUploadTaskStatusDict.PENDING, "PENDING", "待上传");
+        assertDictionaryValue(FeedbackUploadTaskStatusDict.CONFIRMED, "CONFIRMED", "已确认");
+        assertDictionaryValue(FeedbackUploadTaskStatusDict.EXPIRED, "EXPIRED", "已过期");
+        assertThat(FeedbackUploadTaskStatusDict.fromCode(null)).isNull();
+        assertThat(FeedbackUploadTaskStatusDict.fromCode("UNKNOWN")).isNull();
+    }
+
+    /**
+     * 验证意见反馈处理状态的完整映射。
+     *
+     * @param value 状态字典值
+     * @param code 预期编码
+     * @param displayName 预期展示名称
+     */
+    private void assertDictionaryValue(FeedbackStatusDict value, String code, String displayName) {
+        assertThat(value.getCode()).isEqualTo(code);
+        assertThat(value.getDisplayName()).isEqualTo(displayName);
+        assertThat(FeedbackStatusDict.fromCode(code)).isSameAs(value);
+    }
+
+    /**
+     * 验证意见反馈媒体类型的完整映射。
+     *
+     * @param value 媒体类型字典值
+     * @param code 预期编码
+     * @param displayName 预期展示名称
+     */
+    private void assertDictionaryValue(FeedbackMediaTypeDict value, String code, String displayName) {
+        assertThat(value.getCode()).isEqualTo(code);
+        assertThat(value.getDisplayName()).isEqualTo(displayName);
+        assertThat(FeedbackMediaTypeDict.fromCode(code)).isSameAs(value);
+    }
+
+    /**
+     * 验证意见反馈上传任务状态的完整映射。
+     *
+     * @param value 上传任务状态字典值
+     * @param code 预期编码
+     * @param displayName 预期展示名称
+     */
+    private void assertDictionaryValue(FeedbackUploadTaskStatusDict value, String code, String displayName) {
+        assertThat(value.getCode()).isEqualTo(code);
+        assertThat(value.getDisplayName()).isEqualTo(displayName);
+        assertThat(FeedbackUploadTaskStatusDict.fromCode(code)).isSameAs(value);
     }
 
     /**

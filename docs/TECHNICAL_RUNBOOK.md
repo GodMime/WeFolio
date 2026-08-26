@@ -1,7 +1,7 @@
 # 技术信息与服务配置台账
 
-版本：v0.4
-日期：2026-08-15
+版本：v0.5
+日期：2026-08-26
 维护人：dingchenyong
 
 ## 1. 文档目的
@@ -44,6 +44,47 @@
 
 Runtime 发布脚本在本地只构建一次 JAR，计算 SHA-256 后把同一制品依次发布到两个节点。单节点发布时先上传为 `.uploading`，校验通过后将原 JAR 保存为固定的 `.backup`，再原子替换正式 JAR、重启 `wefolio.service` 并执行健康检查。任一节点发布失败时脚本会停止后续步骤，并保持当时的摘流状态，需人工排障后重新发布。
 
+### 4.2 问题反馈 Runtime 配置与出网检查
+
+问题反馈飞书通知依赖两项敏感环境变量。老节点 `49.235.146.161` 与新节点 `124.222.148.233` 的 `wefolio.service` 必须同时配置，不能只更新其中一个 Runtime 节点。状态接口无认证；卡片中的 `curl` 默认使用生产 API 域名，可通过非敏感变量 `FEEDBACK_STATUS_API_BASE_URL` 覆盖。
+
+1. 分别在两台节点执行 `systemctl cat wefolio.service`，确认当前单元使用的 `EnvironmentFile` 或 drop-in；沿用现有注入位置，不在命令行、shell history 或本台账中写入真实值。
+2. 在仅 `root` 可读的环境文件或 `systemctl edit wefolio.service` 创建的 drop-in 中配置 `FEISHU_FEEDBACK_WEBHOOK_URL`、`FEISHU_FEEDBACK_WEBHOOK_SECRET`，文件权限保持 `0600`。非生产域名部署另行设置 `FEEDBACK_STATUS_API_BASE_URL`。
+3. 分别执行 `systemctl daemon-reload`。发布时沿用 Runtime 双节点滚动顺序，逐节点重启 `wefolio.service` 并完成健康检查，避免两个节点同时中断服务。
+4. 重启后在每台节点执行下方命令，检查两个敏感变量已进入实际 Runtime 进程且值非空。命令只输出 `SET` 或 `MISSING`，任一项缺失时以非零状态退出，不会回显密钥：
+
+```bash
+runtime_pid="$(systemctl show --property MainPID --value wefolio.service)"
+test "${runtime_pid}" -gt 0
+sudo awk -v RS='\0' -F= '
+  $1 == "FEISHU_FEEDBACK_WEBHOOK_URL" && length($2) > 0 { webhook = 1 }
+  $1 == "FEISHU_FEEDBACK_WEBHOOK_SECRET" && length($2) > 0 { secret = 1 }
+  END {
+    print "FEISHU_FEEDBACK_WEBHOOK_URL=" (webhook ? "SET" : "MISSING")
+    print "FEISHU_FEEDBACK_WEBHOOK_SECRET=" (secret ? "SET" : "MISSING")
+    exit !(webhook && secret)
+  }
+' "/proc/${runtime_pid}/environ"
+```
+
+5. 分别从两台节点验证 `open.feishu.cn` 的 DNS 解析和 `443` 端口 TCP/TLS 连通性。连通性检查只访问主机和端口，不调用真实机器人 Webhook 路径。
+6. 在腾讯云 COS 控制台确认生产 Bucket 的版本控制状态为“未开启（Off）”。反馈直传票据会签入 `x-cos-forbid-overwrite=true`，Runtime 也会在签票前实时校验版本控制；状态不是 `Off` 时拒绝签票，避免已提交附件被原票据覆盖。
+
+反馈附件清理 Job 默认开启。发布顺序固定为先发布 Runtime 并确认 Flyway V53 成功，再发布 Job；不得让新版 Job 在 V53 建表前启动。
+
+本次仓库变更只交付代码和运行手册。实际密钥写入、服务重启、双节点出网验证和真实通知验收，必须在取得生产密钥及部署授权后执行。
+
+飞书配置缺失不会阻断 Runtime 启动；通知配置缺失、网络异常或远端错误只记录一条不含敏感内容的 `error`，不回滚问题创建或追加结果，也不进入重试或补偿流程。
+
+状态接口不读取认证请求头。飞书卡片会按问题编号展示以下同类命令，团队成员复制后修改 `feedbackResult` 即可执行：
+
+```bash
+curl -X PUT 'https://api.we-folio.dingchenyong.top/api/internal/feedbacks/FB替换为实际编号' -H 'Content-Type: application/json' -d '{"status":"WAITING_FOLLOW_UP","feedbackResult":"请补充更多信息"}'
+curl -X PUT 'https://api.we-folio.dingchenyong.top/api/internal/feedbacks/FB替换为实际编号' -H 'Content-Type: application/json' -d '{"status":"RESOLVED","feedbackResult":"问题已处理"}'
+```
+
+该接口无认证，问题编号等同于操作凭据。禁止把飞书卡片、问题编号或完整命令转发到无关群组、工单或公开日志；如发生泄露，应按数据安全事件处理并评估增加认证或网关访问限制。
+
 ## 5. 域名、CDN 与证书
 
 | 环境 | 域名 | DNS 服务商 | CDN 服务商 | 源站 | 证书到期日 | 自动续期 | 备注 |
@@ -55,6 +96,8 @@ Runtime 发布脚本在本地只构建一次 JAR，计算 SHA-256 后把同一�
 | 环境 | 云厂商 | Bucket | 地域 | Endpoint | CDN/访问域名 | AccessKey ID | Secret 存放位置 | 权限范围 | 生命周期策略 | 备注 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 待补充 | 待补充 | 待补充 | 待补充 | 待补充 | 待补充 | 待补充 | 待补充 | 待补充 | 待补充 | 待补充 |
+
+问题反馈附件依赖 COS `POST Object` 的禁止覆盖能力。生产 Bucket 必须保持版本控制为 `Off`；如果未来需要启用版本控制，必须先改造反馈附件快照，使其固定引用对象版本，再调整此约束。
 
 ## 7. 大模型服务
 
@@ -82,6 +125,14 @@ Runtime 发布脚本在本地只构建一次 JAR，计算 SHA-256 后把同一�
 | `OBJECT_STORAGE_ACCESS_KEY_ID` | 待补充 | 对象存储 AccessKey ID | 待补充 | 待补充 | 是 | 建议最小权限 |
 | `OBJECT_STORAGE_ACCESS_KEY_SECRET` | 待补充 | 对象存储 AccessKey Secret | 待补充 | 待补充 | 是 | 只记录存放位置 |
 | `LLM_API_KEY` | 待补充 | 大模型服务调用密钥 | 待补充 | 待补充 | 是 | 只记录存放位置 |
+| `FEISHU_FEEDBACK_WEBHOOK_URL` | 生产 Runtime 双节点 | 问题反馈飞书机器人 Webhook | 不记录值 | `wefolio.service` 现有 `EnvironmentFile` 或 root-only drop-in | 是 | URL 含访问令牌，禁止进入日志、数据库和命令历史 |
+| `FEISHU_FEEDBACK_WEBHOOK_SECRET` | 生产 Runtime 双节点 | 飞书机器人签名密钥 | 不记录值 | `wefolio.service` 现有 `EnvironmentFile` 或 root-only drop-in | 是 | 两台 Runtime 必须使用同一有效配置 |
+| `FEEDBACK_STATUS_API_BASE_URL` | Runtime | 飞书卡片状态更新 curl 的 API 基础地址 | `https://api.we-folio.dingchenyong.top` | `application.yml` 默认值或 `wefolio.service` 环境配置 | 否 | 非生产环境需要覆盖；末尾斜杠会自动移除 |
+| `FEEDBACK_UPLOAD_CLEANUP_ENABLED` | 生产 Job | 是否启用反馈临时附件清理 | `true` | `wefolio-job.service` 环境配置 | 否 | 默认启用 |
+| `FEEDBACK_UPLOAD_CLEANUP_CRON` | 生产 Job | 反馈临时附件清理调度表达式 | `0 40 3 * * ?` | `wefolio-job.service` 环境配置 | 否 | 默认每日低峰执行 |
+| `FEEDBACK_UPLOAD_CLEANUP_ZONE` | 生产 Job | 反馈清理 cron 调度时区 | `Asia/Shanghai` | `wefolio-job.service` 环境配置 | 否 | 只影响调度触发；数据库过期比较固定使用 `Asia/Shanghai` |
+| `FEEDBACK_UPLOAD_CLEANUP_BATCH_SIZE` | 生产 Job | 单批反馈上传任务数量 | `200` | `wefolio-job.service` 环境配置 | 否 | 有效范围 1 至 1000 |
+| `FEEDBACK_UPLOAD_CLEANUP_MAX_BATCHES` | 生产 Job | 单轮最多处理批次数 | `10` | `wefolio-job.service` 环境配置 | 否 | 有效范围 1 至 100 |
 
 ## 11. 备份与恢复
 
@@ -110,6 +161,10 @@ Runtime 发布脚本在本地只构建一次 JAR，计算 SHA-256 后把同一�
 - 生产数据库启用自动备份，并定期验证恢复流程。
 - 证书到期前有自动续期或人工提醒。
 - 大模型服务配置了额度、调用频率或账单告警。
+- 问题反馈 Webhook URL 和飞书签名密钥未进入代码仓库、数据库、应用日志或部署命令历史。
+- 问题反馈状态接口无认证；问题编号和飞书卡片仅在授权团队范围内流转，未进入公开日志或外部工单。
+- 两台 Runtime 均能访问 `open.feishu.cn:443`，连通性检查未调用真实机器人 Webhook。
+- 生产 COS Bucket 版本控制为 `Off`，反馈票据中的 `x-cos-forbid-overwrite=true` 已通过联调验证。
 
 ## 14. 变更记录
 
@@ -120,5 +175,6 @@ Runtime 发布脚本在本地只构建一次 JAR，计算 SHA-256 后把同一�
 | 2026-06-23 | dingchenyong | Java 后端服务部署至 8090 端口，由 systemctl `wefolio.service` 管理 | 后端服务 | 重启旧版本 JAR |
 | 2026-08-13 | dingchenyong | 补充 V51 积分规则部署的数据库与应用双时钟检查 | 查档与新版留资积分规则 | 校准 NTP 后重启后端实例 |
 | 2026-08-15 | dingchenyong | 根据当前部署脚本补充新服务器 `124.222.148.233`，同步 Runtime 双节点滚动发布、Nginx upstream 与 Job 单节点现状 | 生产服务器与部署台账 | 仅文档更新，不涉及线上资源变更；可恢复本文档上一版本 |
+| 2026-08-26 | dingchenyong | 增加问题反馈单次飞书卡片通知、无认证状态更新 curl、COS 禁止覆盖前置条件和过期附件清理说明 | Runtime 双节点、COS Bucket、Job 单节点与团队操作流程 | 仅文档更新；生产配置尚未执行，可恢复本文档上一版本 |
 | 2026-06-19 | 待补充 | 服务器1 启用 SSH 密钥登录并关闭密码登录 | SSH 登录方式 | 服务器备份文件：`/etc/ssh/sshd_config.bak-20260619-before-disable-passwordauth`；恢复后执行 `sshd -t` 并重载 `sshd` |
 | 2026-06-19 | 待补充 | 初始化技术信息与服务配置台账 | 文档模板 | 不涉及 |

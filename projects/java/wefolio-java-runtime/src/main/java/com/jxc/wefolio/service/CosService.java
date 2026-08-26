@@ -6,6 +6,7 @@ import com.jxc.wefolio.config.CosProperties;
 import com.jxc.wefolio.message.CosMessage;
 import com.qcloud.cos.auth.COSSigner;
 import com.qcloud.cos.model.CannedAccessControlList;
+import com.qcloud.cos.model.BucketVersioningConfiguration;
 import com.qcloud.cos.model.COSObject;
 import com.qcloud.cos.model.GetObjectRequest;
 import com.qcloud.cos.model.ObjectMetadata;
@@ -47,6 +48,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 @Slf4j
@@ -96,6 +98,9 @@ public class CosService {
     /** COS 表单对象 MIME 类型字段 */
     private static final String POST_FIELD_CONTENT_TYPE = "Content-Type";
 
+    /** COS 表单禁止覆盖同名对象字段 */
+    private static final String POST_FIELD_FORBID_OVERWRITE = "x-cos-forbid-overwrite";
+
     /** COS 表单上传对象访问权限：公有读私有写 */
     private static final String POST_ACL_PUBLIC_READ = CannedAccessControlList.PublicRead.toString();
 
@@ -107,6 +112,13 @@ public class CosService {
 
     /** COS 表单签名起始时间回退秒数，用于容忍服务器与 COS 的轻微时钟偏差 */
     private static final long POST_KEY_TIME_CLOCK_SKEW_SECONDS = 60L;
+
+    /** COS 表单上传票据时区为空提示。 */
+    private static final String POST_UPLOAD_ZONE_REQUIRED_MESSAGE = "上传票据时区不能为空";
+
+    /** COS 版本控制与禁止覆盖能力冲突提示。 */
+    private static final String POST_OVERWRITE_PROTECTION_UNAVAILABLE_MESSAGE =
+            "COS 存储桶已开启版本控制，无法保证反馈附件禁止覆盖";
 
     /** 小程序合法上传域名默认值 */
     private static final String DEFAULT_POST_UPLOAD_BASE_URL = "https://cos.we-folio.dingchenyong.top";
@@ -192,17 +204,64 @@ public class CosService {
             long maxBytes,
             LocalDateTime expiresAt
     ) {
-        LocalDateTime now = LocalDateTime.now();
+        return createPostUploadTicket(objectKey, contentType, maxBytes, expiresAt, ZoneId.systemDefault());
+    }
+
+    /**
+     * 使用显式时区创建 COS 表单直传票据。
+     *
+     * <p>过期校验、签名终点和 policy UTC 过期时间均使用同一时区解释本地时间。</p>
+     *
+     * @param objectKey 后端生成的 COS 对象键
+     * @param contentType 文件 MIME 类型
+     * @param maxBytes 最大允许字节数
+     * @param expiresAt 票据过期本地时间
+     * @param zoneId 解释本地时间的业务时区
+     * @return COS 表单直传票据
+     */
+    public PostUploadTicket createPostUploadTicket(
+            String objectKey,
+            String contentType,
+            long maxBytes,
+            LocalDateTime expiresAt,
+            ZoneId zoneId
+    ) {
+        return createPostUploadTicket(objectKey, contentType, maxBytes, expiresAt, zoneId, false);
+    }
+
+    /**
+     * 使用显式时区创建 COS 表单直传票据，并可要求对象首次写入后禁止覆盖。
+     *
+     * @param objectKey 后端生成的 COS 对象键
+     * @param contentType 文件 MIME 类型
+     * @param maxBytes 最大允许字节数
+     * @param expiresAt 票据过期本地时间
+     * @param zoneId 解释本地时间的业务时区
+     * @param forbidOverwrite 是否禁止覆盖已存在对象
+     * @return COS 表单直传票据
+     */
+    public PostUploadTicket createPostUploadTicket(
+            String objectKey,
+            String contentType,
+            long maxBytes,
+            LocalDateTime expiresAt,
+            ZoneId zoneId,
+            boolean forbidOverwrite
+    ) {
+        ZoneId safeZoneId = Objects.requireNonNull(zoneId, POST_UPLOAD_ZONE_REQUIRED_MESSAGE);
+        LocalDateTime now = LocalDateTime.now(safeZoneId);
         if (expiresAt != null && expiresAt.isBefore(now)) {
             throw new IllegalArgumentException("上传票据过期时间不能早于当前时间");
         }
         LocalDateTime safeExpiresAt = expiresAt == null ? now.plusMinutes(15) : expiresAt;
         long nowEpochSecond = System.currentTimeMillis() / 1000;
-        long expiresEpochSecond = safeExpiresAt.atZone(ZoneId.systemDefault()).toEpochSecond();
+        long expiresEpochSecond = safeExpiresAt.atZone(safeZoneId).toEpochSecond();
         long keyTimeStart = Math.max(0L, nowEpochSecond - POST_KEY_TIME_CLOCK_SKEW_SECONDS);
         String keyTime = keyTimeStart + ";" + expiresEpochSecond;
         String normalizedContentType = contentType == null ? "" : contentType.trim();
-        String policy = buildPostPolicy(objectKey, normalizedContentType, maxBytes, safeExpiresAt, keyTime);
+        String policy = buildPostPolicy(
+                objectKey, normalizedContentType, maxBytes, safeExpiresAt, safeZoneId, keyTime,
+                forbidOverwrite);
         String encodedPolicy = Base64.getEncoder().encodeToString(policy.getBytes(StandardCharsets.UTF_8));
         String signature = new COSSigner().buildPostObjectSignature(
                 cosProperties.getSecretKey(),
@@ -222,6 +281,9 @@ public class CosService {
         if (!normalizedContentType.isBlank()) {
             formData.put(POST_FIELD_CONTENT_TYPE, normalizedContentType);
         }
+        if (forbidOverwrite) {
+            formData.put(POST_FIELD_FORBID_OVERWRITE, TRUE_VALUE);
+        }
 
         return new PostUploadTicket(
                 buildPostUploadUrl(),
@@ -231,6 +293,21 @@ public class CosService {
                 safeExpiresAt,
                 formData
         );
+    }
+
+    /**
+     * 校验当前存储桶能够执行禁止覆盖上传。
+     *
+     * <p>COS 在开启版本控制时会忽略 {@code x-cos-forbid-overwrite}，因此反馈签票前必须
+     * 实时检查并在不满足条件时失败，避免已提交附件被原票据覆盖。</p>
+     */
+    public void ensurePostOverwriteProtectionAvailable() {
+        BucketVersioningConfiguration configuration = transferManager.getCOSClient()
+                .getBucketVersioningConfiguration(cosProperties.getBucketName());
+        String status = configuration == null ? null : configuration.getStatus();
+        if (!BucketVersioningConfiguration.OFF.equals(status)) {
+            throw new IllegalStateException(POST_OVERWRITE_PROTECTION_UNAVAILABLE_MESSAGE);
+        }
     }
 
     /**
@@ -551,7 +628,9 @@ public class CosService {
      * @param objectKey COS 对象键
      * @param maxBytes 最大允许字节数
      * @param expiresAt 过期时间
+     * @param zoneId 解释过期本地时间的业务时区
      * @param keyTime 签名时间范围
+     * @param forbidOverwrite 是否禁止覆盖已存在对象
      * @return policy JSON
      */
     private String buildPostPolicy(
@@ -559,9 +638,11 @@ public class CosService {
             String contentType,
             long maxBytes,
             LocalDateTime expiresAt,
-            String keyTime
+            ZoneId zoneId,
+            String keyTime,
+            boolean forbidOverwrite
     ) {
-        String expiration = expiresAt.atZone(ZoneId.systemDefault())
+        String expiration = expiresAt.atZone(zoneId)
                 .withZoneSameInstant(ZoneOffset.UTC)
                 .format(POLICY_EXPIRATION_FORMATTER);
         Map<String, Object> policy = new LinkedHashMap<>();
@@ -575,6 +656,9 @@ public class CosService {
         conditions.add(postPolicyCondition(POST_FIELD_ACL, POST_ACL_PUBLIC_READ));
         if (contentType != null && !contentType.isBlank()) {
             conditions.add(postPolicyCondition(POST_FIELD_CONTENT_TYPE, contentType));
+        }
+        if (forbidOverwrite) {
+            conditions.add(postPolicyCondition(POST_FIELD_FORBID_OVERWRITE, TRUE_VALUE));
         }
         conditions.add(postPolicyContentLengthRange(maxBytes));
         policy.put("expiration", expiration);

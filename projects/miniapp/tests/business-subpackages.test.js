@@ -203,7 +203,8 @@ test('team portfolio subpackage is appended without changing existing route base
     'pages/index/index', 'pages/points/points', 'pages/points-rules/points-rules',
     'pages/recharge/recharge', 'pages/recharge-records/recharge-records', 'pages/teams/teams',
     'pages/team-maintenance/team-maintenance', 'pages/team-member-add/team-member-add', 'pages/team-invitations/team-invitations',
-    'pages/team-member-change/team-member-change', 'pages/messages/messages', 'pages/visits/visits', 'pages/profile/profile',
+    'pages/team-member-change/team-member-change', 'pages/messages/messages', 'pages/feedback/feedback',
+    'pages/feedback-history/feedback-history', 'pages/visits/visits', 'pages/profile/profile',
     'pages/login/login', 'pages/visitor-portfolio/visitor-portfolio', 'pages/visitor-schedule/visitor-schedule'
   ]
   const expectedTeamPages = [
