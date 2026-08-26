@@ -149,6 +149,33 @@ class FeishuFeedbackNotifierTest {
         server.verify();
     }
 
+    /** 无附件测试消息通过内存模拟服务发送一次，不依赖本地监听端口。 */
+    @Test
+    void testMessageSendsInteractiveCardOnceWithoutAttachments() {
+        stubNotificationUser();
+        server.expect(once(), requestTo(WEBHOOK_URL))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(request -> {
+                    String requestBody = ((MockClientHttpRequest) request).getBodyAsString();
+                    JSONObject payload = JSONObject.parseObject(requestBody);
+                    JSONArray elements = payload.getJSONObject("card").getJSONArray("elements");
+                    assertThat(payload.getString("msg_type")).isEqualTo("interactive");
+                    assertThat(elements.getJSONObject(1).getJSONObject("text").getString("content"))
+                            .isEqualTo("本轮描述\n飞书通知测试消息");
+                    assertThat(elements.getJSONObject(2).getJSONObject("text").getString("content"))
+                            .isEqualTo("**附件**\n无");
+                })
+                .andRespond(withSuccess("{\"code\":0}", MediaType.APPLICATION_JSON));
+
+        FeedbackTransactionService.MutationResult result = mutationResult("飞书通知测试消息");
+        result.submittedRound().setAttachments(List.of());
+        notifier.notifyCreated(result);
+
+        verify(userEntityMapper).selectById(7L);
+        server.verify();
+    }
+
     /** 追加通知使用补充标题。 */
     @Test
     void appendedNotificationUsesSupplementTitle() {
@@ -200,13 +227,18 @@ class FeishuFeedbackNotifierTest {
 
     /** 准备用户唯一码和附件公开 URL。 */
     private void stubNotificationContext() {
-        UserEntity user = new UserEntity();
-        user.setUniqueCode("WFA3B1E7A2");
-        when(userEntityMapper.selectById(7L)).thenReturn(user);
+        stubNotificationUser();
         when(cosService.publicUrl("WFA3B1E7A2/others/image.jpg"))
                 .thenReturn("https://cdn.example.com/image.jpg");
         when(cosService.publicUrl("WFA3B1E7A2/others/video.mp4"))
                 .thenReturn("https://cdn.example.com/video.mp4");
+    }
+
+    /** 准备通知用户唯一码。 */
+    private void stubNotificationUser() {
+        UserEntity user = new UserEntity();
+        user.setUniqueCode("WFA3B1E7A2");
+        when(userEntityMapper.selectById(7L)).thenReturn(user);
     }
 
     /** 构造一次新写入的反馈事务结果。 */
