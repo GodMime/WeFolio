@@ -3,10 +3,11 @@ package com.jxc.wefolio.service;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONException;
 import com.jxc.wefolio.config.WechatMiniappProperties;
-import com.jxc.wefolio.exception.BusinessException;
-import com.jxc.wefolio.dto.WechatSessionResponse;
 import com.jxc.wefolio.dto.WechatPhoneNumberResponse;
 import com.jxc.wefolio.dto.WechatPluginOpenpidResponse;
+import com.jxc.wefolio.dto.WechatSessionResponse;
+import com.jxc.wefolio.exception.BusinessException;
+import com.jxc.wefolio.message.WechatMiniappMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.ClientHttpResponse;
@@ -16,6 +17,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Map;
 
 /**
@@ -195,7 +197,7 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
             return parseWechatResponse(body, responseType);
         } catch (RuntimeException exception) {
             logWechatException(serviceName, startedAt, exception);
-            throw exception;
+            throw buildSafeWechatException(serviceName, exception);
         }
     }
 
@@ -234,8 +236,26 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
             return parseWechatResponse(body, responseType);
         } catch (RuntimeException exception) {
             logWechatException(serviceName, startedAt, exception);
-            throw exception;
+            throw buildSafeWechatException(serviceName, exception);
         }
+    }
+
+    /**
+     * 将微信交互异常转换为不携带敏感 URL 和原始 cause 的安全异常。
+     *
+     * @param serviceName 微信服务名称
+     * @param exception 原始异常
+     * @return 可安全向上抛出的异常
+     */
+    private RuntimeException buildSafeWechatException(String serviceName, RuntimeException exception) {
+        // 当前微信交互 try 块只允许普通 BusinessException；引入子类时须显式保留其结构字段。
+        if (exception instanceof BusinessException) {
+            return new BusinessException(defaultString(
+                    exception.getMessage(),
+                    serviceName + WechatMiniappMessage.SERVICE_REQUEST_FAILED_SUFFIX
+            ));
+        }
+        return new IllegalStateException(serviceName + WechatMiniappMessage.SERVICE_CALL_EXCEPTION_SUFFIX);
     }
 
     /**
@@ -298,9 +318,9 @@ public class RestWechatMiniappClient implements WechatMiniappClient {
     /** 记录经过脱敏的微信交互异常。 */
     private void logWechatException(String serviceName, long startedAt, RuntimeException exception) {
         log.warn("微信交互异常 operation={} referenceNo=null userId=null elapsedMs={} retryCount=0 "
-                        + "exceptionType={} message={}",
+                        + "exceptionType={} message={} stackTrace={}",
                 serviceName, elapsedMillis(startedAt), exception.getClass().getSimpleName(),
-                logSanitizer.sanitizeText(exception.getMessage()));
+                logSanitizer.sanitizeText(exception.getMessage()), Arrays.toString(exception.getStackTrace()));
     }
 
     /**

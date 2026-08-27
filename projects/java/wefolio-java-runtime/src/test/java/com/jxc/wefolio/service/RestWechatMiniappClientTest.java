@@ -1,12 +1,12 @@
 package com.jxc.wefolio.service;
 
-import com.jxc.wefolio.config.WechatMiniappProperties;
 import com.jxc.wefolio.common.cache.LocalCacheService;
 import com.jxc.wefolio.common.lock.TestDistributedLockExecutor;
 import com.jxc.wefolio.config.LocalCacheProperties;
+import com.jxc.wefolio.config.WechatMiniappProperties;
 import com.jxc.wefolio.dto.WechatPhoneNumberResponse;
-import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.dto.WechatSessionResponse;
+import com.jxc.wefolio.exception.BusinessException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.test.system.CapturedOutput;
@@ -57,6 +57,56 @@ class RestWechatMiniappClientTest {
         assertThat(output).doesNotContain("openid-123");
         assertThat(output).doesNotContain("session-key");
         server.verify();
+    }
+
+    /** 微信非 JSON 错误体中的客户端文案不得被日志脱敏器改写。 */
+    @Test
+    void exchangeCodePreservesClientVisibleWechatErrorMessage(CapturedOutput output) throws Exception {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        RestWechatMiniappClient client = createClient(properties(), builder.build());
+        server.expect(requestTo(
+                        "https://api.weixin.qq.com/sns/jscode2session?appid=wxa-test"
+                                + "&secret=secret-for-hmac&js_code=wx-code&grant_type=authorization_code"
+                ))
+                .andRespond(withStatus(HttpStatus.BAD_GATEWAY)
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .body("upstream code=client-visible-code"));
+
+        assertThatThrownBy(() -> client.exchangeCode("wx-code"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("微信登录服务请求失败：HTTP 502 Bad Gateway，upstream code=client-visible-code")
+                .hasNoCause();
+
+        assertThat(output).contains("upstream code=***");
+        assertThat(output).doesNotContain("upstream code=client-visible-code");
+        server.verify();
+    }
+
+    /** 微信请求 URI 被拒绝时不得向上暴露 AppSecret 或原始登录 code。 */
+    @Test
+    void exchangeCodeDoesNotExposeAppSecretWhenRequestUriIsRejected(CapturedOutput output) throws Exception {
+        String probeCode = "security-probe-code";
+        RestClient restClient = RestClient.builder()
+                .requestFactory((uri, method) -> {
+                    throw new IllegalArgumentException("Rejected request URI: " + uri);
+                })
+                .build();
+        RestWechatMiniappClient client = createClient(properties(), restClient);
+
+        assertThatThrownBy(() -> client.exchangeCode(probeCode))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("微信登录服务调用异常")
+                .hasNoCause();
+
+        assertThat(output).contains("微信交互异常 operation=微信登录服务");
+        assertThat(output).contains("exceptionType=IllegalArgumentException");
+        assertThat(output).contains("secret=***");
+        assertThat(output).contains("js_code=***");
+        assertThat(output).contains("stackTrace=[");
+        assertThat(output).contains("RestWechatMiniappClientTest");
+        assertThat(output).doesNotContain("secret-for-hmac");
+        assertThat(output).doesNotContain(probeCode);
     }
 
     @Test
