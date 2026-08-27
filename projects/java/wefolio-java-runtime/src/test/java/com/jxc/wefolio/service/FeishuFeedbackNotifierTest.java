@@ -2,6 +2,7 @@ package com.jxc.wefolio.service;
 
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
+import com.jxc.wefolio.config.AdminPointProperties;
 import com.jxc.wefolio.config.FeedbackProperties;
 import com.jxc.wefolio.dict.FeedbackMediaTypeDict;
 import com.jxc.wefolio.dict.FeedbackStatusDict;
@@ -19,6 +20,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.mock.http.client.MockClientHttpRequest;
 import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
@@ -36,6 +38,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.client.ExpectedCount.once;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
@@ -62,6 +65,9 @@ class FeishuFeedbackNotifierTest {
     private static final String EXPECTED_SIGN =
             "mbm4Y4oluIPQ00qlBIhX8vAZ0EKv3nw0LuTb91jPL84=";
 
+    /** 回传接口使用的完整内部密钥。 */
+    private static final String ADMIN_POINT_SECRET = "admin-point-secret";
+
     /** 包含群体提醒、伪造链接和内部提示的恶意描述。 */
     private static final String MALICIOUS_DESCRIPTION =
             "<at id=all>所有人</at> [伪造](https://evil.example)\n"
@@ -81,6 +87,9 @@ class FeishuFeedbackNotifierTest {
     /** 待测试通知器。 */
     private FeishuFeedbackNotifier notifier;
 
+    /** 内部回传密钥配置。 */
+    private AdminPointProperties adminPointProperties;
+
     /** 每个用例使用独立 REST 客户端和固定时钟。 */
     @BeforeEach
     void setUp() {
@@ -90,8 +99,11 @@ class FeishuFeedbackNotifierTest {
         properties.setWebhookUrl(WEBHOOK_URL);
         properties.setWebhookSecret(WEBHOOK_SECRET);
         properties.setStatusApiBaseUrl("https://api.test.wefolio.example");
+        adminPointProperties = new AdminPointProperties();
+        adminPointProperties.setSecret(ADMIN_POINT_SECRET);
         notifier = new FeishuFeedbackNotifier(
                 properties,
+                adminPointProperties,
                 userEntityMapper,
                 cosService,
                 builder.build(),
@@ -134,6 +146,7 @@ class FeishuFeedbackNotifierTest {
                         containsString("图片 1"),
                         containsString("视频 2"),
                         containsString("curl -X PUT 'https://api.test.wefolio.example/api/internal/feedbacks/"),
+                        containsString("-H 'X-Admin-Point-Secret: " + ADMIN_POINT_SECRET + "'"),
                         containsString("WAITING_FOLLOW_UP"),
                         containsString("RESOLVED"),
                         containsString("问题已修复，请更新小程序（重新进入小程序后会自动更新）"))))
@@ -141,12 +154,57 @@ class FeishuFeedbackNotifierTest {
                     String requestBody = ((MockClientHttpRequest) request).getBodyAsString();
                     assertThat(requestBody)
                             .doesNotContain("\"tag\":\"button\"");
+                    assertThat(StringUtils.countOccurrencesOf(
+                            requestBody,
+                            "-H 'X-Admin-Point-Secret: " + ADMIN_POINT_SECRET + "'"))
+                            .isEqualTo(2);
                 })
                 .andRespond(withSuccess("{\"code\":0}", MediaType.APPLICATION_JSON));
 
         notifier.notifyCreated(mutationResult("用户描述-private"));
 
         verify(userEntityMapper).selectById(7L);
+        server.verify();
+    }
+
+    /** Webhook 已启用但内部密钥为空时不得构造或发送不可执行的回传命令。 */
+    @Test
+    void blankAdminPointSecretFailsBeforeNotificationRequest() {
+        adminPointProperties.setSecret(" ");
+
+        assertThatThrownBy(() -> notifier.notifyCreated(mutationResult("描述")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("后台积分密钥未配置");
+
+        verifyNoInteractions(userEntityMapper, cosService);
+        server.verify();
+    }
+
+    /** 内部密钥包含单引号时，两条命令都必须生成可执行的 shell 转义。 */
+    @Test
+    void adminPointSecretSingleQuoteIsShellEscapedInEveryCurl() {
+        adminPointProperties.setSecret("admin'point-secret");
+        stubNotificationContext();
+        server.expect(once(), requestTo(WEBHOOK_URL))
+                .andExpect(request -> {
+                    JSONObject payload = JSONObject.parseObject(
+                            ((MockClientHttpRequest) request).getBodyAsString());
+                    String commands = payload.getJSONObject("card")
+                            .getJSONArray("elements")
+                            .getJSONObject(4)
+                            .getJSONArray("elements")
+                            .getJSONObject(0)
+                            .getString("content");
+                    String escapedHeader =
+                            "-H 'X-Admin-Point-Secret: admin'\\''point-secret'";
+                    assertThat(commands).contains(escapedHeader);
+                    assertThat(StringUtils.countOccurrencesOf(commands, escapedHeader))
+                            .isEqualTo(2);
+                })
+                .andRespond(withSuccess());
+
+        notifier.notifyCreated(mutationResult("描述"));
+
         server.verify();
     }
 

@@ -6,6 +6,7 @@ import com.jxc.wefolio.common.upload.AvatarUploadResult;
 import com.jxc.wefolio.dto.FileUploadResponse;
 import com.jxc.wefolio.dto.MineTeamCreateRequest;
 import com.jxc.wefolio.dto.MineTeamDetailResponse;
+import com.jxc.wefolio.dto.MineTeamIdempotentCreateRequest;
 import com.jxc.wefolio.dto.MineTeamInvitationResponse;
 import com.jxc.wefolio.dto.MineTeamListResponse;
 import com.jxc.wefolio.dto.MineTeamMemberChangeCreateRequest;
@@ -17,6 +18,7 @@ import com.jxc.wefolio.dto.MineTeamMemberRemoveRequest;
 import com.jxc.wefolio.dto.MineTeamUpdateRequest;
 import com.jxc.wefolio.dto.MineTeamOwnerTransferRequest;
 import com.jxc.wefolio.service.MineTeamService;
+import com.jxc.wefolio.service.MineTeamCreationApplicationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -42,6 +44,9 @@ public class MineTeamController {
     /** 我的团队业务服务，负责权限、团队唯一码、COS 目录和成员关系等核心逻辑 */
     private final MineTeamService mineTeamService;
 
+    /** 团队创建幂等应用服务 */
+    private final MineTeamCreationApplicationService creationApplicationService;
+
     /**
      * 获取我的团队列表。
      *
@@ -59,8 +64,22 @@ public class MineTeamController {
      * @return 新团队详情
      */
     @PostMapping("/api/mine/teams")
+    @Deprecated(since = "2026-08", forRemoval = false)
     public Response<MineTeamDetailResponse> createTeam(@RequestBody MineTeamCreateRequest request) {
         return Response.success(mineTeamService.createTeam(request));
+    }
+
+    /**
+     * 使用客户端幂等键创建团队。
+     *
+     * @param request 带幂等键的团队创建请求
+     * @return 新建或幂等重放的团队详情
+     */
+    @PostMapping("/api/mine/teams/v2")
+    public Response<MineTeamDetailResponse> createTeamV2(
+            @RequestBody MineTeamIdempotentCreateRequest request
+    ) {
+        return Response.success(creationApplicationService.create(request));
     }
 
     /**

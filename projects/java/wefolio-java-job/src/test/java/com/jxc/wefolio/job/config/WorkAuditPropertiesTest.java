@@ -37,4 +37,14 @@ class WorkAuditPropertiesTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("视频审核提交最大尝试次数必须为正整数");
     }
+
+    @Test
+    void imageMaxAttemptsShouldUseSafeDefaultAndRejectNonPositiveValues() {
+        WorkAuditProperties properties = new WorkAuditProperties();
+
+        assertThat(properties.getImageMaxAttempts()).isEqualTo(3);
+        assertThatThrownBy(() -> properties.setImageMaxAttempts(0))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("图片审核最大尝试次数必须为正整数");
+    }
 }

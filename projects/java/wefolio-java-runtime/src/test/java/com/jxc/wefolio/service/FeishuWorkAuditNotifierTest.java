@@ -2,6 +2,7 @@ package com.jxc.wefolio.service;
 
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
+import com.jxc.wefolio.config.AdminPointProperties;
 import com.jxc.wefolio.config.WorkManualAuditProperties;
 import com.jxc.wefolio.dict.UserStatusDict;
 import com.jxc.wefolio.entity.UserEntity;
@@ -18,6 +19,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.mock.http.client.MockClientHttpRequest;
 import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
@@ -65,6 +67,9 @@ class FeishuWorkAuditNotifierTest {
     private static final String EXPECTED_SIGN =
             "mbm4Y4oluIPQ00qlBIhX8vAZ0EKv3nw0LuTb91jPL84=";
 
+    /** 回传接口使用的完整内部密钥。 */
+    private static final String ADMIN_POINT_SECRET = "admin-point-secret";
+
     /** 模拟飞书 HTTP 服务。 */
     private MockRestServiceServer server;
 
@@ -79,6 +84,9 @@ class FeishuWorkAuditNotifierTest {
     /** 作品人工审核配置。 */
     private WorkManualAuditProperties properties;
 
+    /** 内部回传密钥配置。 */
+    private AdminPointProperties adminPointProperties;
+
     /** 绑定模拟服务的 REST 客户端。 */
     private RestClient restClient;
 
@@ -92,6 +100,8 @@ class FeishuWorkAuditNotifierTest {
         properties.setWebhookUrl(WEBHOOK_URL);
         properties.setWebhookSecret(WEBHOOK_SECRET);
         properties.setReviewApiBaseUrl("https://api.test.wefolio.example");
+        adminPointProperties = new AdminPointProperties();
+        adminPointProperties.setSecret(ADMIN_POINT_SECRET);
     }
 
     /** 固定时间戳与密钥必须生成精确飞书签名。 */
@@ -120,9 +130,14 @@ class FeishuWorkAuditNotifierTest {
                             .contains("第 3/3 轮")
                             .contains("上一轮审核原因")
                             .contains("https://cdn.example.com/work.mp4")
+                            .contains("-H 'X-Admin-Point-Secret: " + ADMIN_POINT_SECRET + "'")
                             .contains("\\\"status\\\":\\\"PASSED\\\"")
                             .contains("\\\"status\\\":\\\"REJECTED\\\"")
                             .doesNotContain("<<'JSON'", "--data-binary @-", "\\\"tag\\\":\\\"button\\\"");
+                    assertThat(StringUtils.countOccurrencesOf(
+                            requestBody,
+                            "-H 'X-Admin-Point-Secret: " + ADMIN_POINT_SECRET + "'"))
+                            .isEqualTo(2);
                     JSONObject payload = JSONObject.parseObject(requestBody);
                     assertThat(payload.getString("timestamp")).isEqualTo("1700000000");
                     assertThat(payload.getString("sign")).isEqualTo(EXPECTED_SIGN);
@@ -138,9 +153,23 @@ class FeishuWorkAuditNotifierTest {
         server.verify();
     }
 
+    /** Webhook 已启用但内部密钥为空时不得构造或发送不可执行的回传命令。 */
+    @Test
+    void blankAdminPointSecretFailsBeforeNotificationRequest() {
+        adminPointProperties.setSecret(" ");
+
+        assertThatThrownBy(() -> notifier().notifySubmitted(submission()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("后台积分密钥未配置");
+
+        verifyNoInteractions(userEntityMapper, cosService);
+        server.verify();
+    }
+
     /** 审核命令必须使用可直接复制执行的单行 JSON 请求体。 */
     @Test
     void reviewCurlCommandsUseSingleLineJsonBody() {
+        adminPointProperties.setSecret("admin'point-secret");
         stubActiveUser();
         when(cosService.publicUrl("WFA3B1E7A2/work/video/demo.mp4"))
                 .thenReturn("https://cdn.example.com/work.mp4");
@@ -154,10 +183,15 @@ class FeishuWorkAuditNotifierTest {
                             .getJSONObject(0)
                             .getString("content");
                     assertThat(commands)
+                            .contains("-H 'X-Admin-Point-Secret: admin'\\''point-secret'")
                             .contains("-d '{\"status\":\"PASSED\"}'")
                             .contains("-d '{\"status\":\"REJECTED\","
                                     + "\"auditRejectReason\":\"请填写拒绝原因\"}'")
                             .doesNotContain("<<'JSON'", "--data-binary @-");
+                    assertThat(StringUtils.countOccurrencesOf(
+                            commands,
+                            "-H 'X-Admin-Point-Secret: admin'\\''point-secret'"))
+                            .isEqualTo(2);
                 })
                 .andRespond(withSuccess());
 
@@ -224,6 +258,7 @@ class FeishuWorkAuditNotifierTest {
     private FeishuWorkAuditNotifier notifier() {
         return new FeishuWorkAuditNotifier(
                 properties,
+                adminPointProperties,
                 userEntityMapper,
                 cosService,
                 restClient,

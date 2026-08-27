@@ -73,6 +73,17 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class MineTeamServiceTest {
 
+    /** 旧创建入口必须保留废弃标记和告警日志。 */
+    @Test
+    void legacyCreateTeamIsDeprecatedAndWarns() throws Exception {
+        Method method = MineTeamService.class.getMethod("createTeam", MineTeamCreateRequest.class);
+        String source = Files.readString(Path.of(
+                "src/main/java/com/jxc/wefolio/service/MineTeamService.java"));
+
+        assertThat(method.isAnnotationPresent(Deprecated.class)).isTrue();
+        assertThat(source).contains("log.warn(\"调用已废弃的团队创建接口");
+    }
+
     /** 团队 Mapper 模拟 */
     @Mock
     private TeamEntityMapper teamEntityMapper;

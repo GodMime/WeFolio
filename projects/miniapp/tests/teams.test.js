@@ -7,6 +7,7 @@ const {
   buildMemberInvitePayload,
   buildTeamFieldCounters,
   buildTeamPayload,
+  createTeamIdempotencyKey,
   normalizeTeamMemberChangeDetail,
   normalizeTeamInvitation,
   normalizeTeamMemberCandidate,
@@ -16,6 +17,13 @@ const {
   validateMemberInviteForm,
   validateTeamForm
 } = require('../utils/teams')
+
+test('creates printable team idempotency keys within the backend limit', () => {
+  const key = createTeamIdempotencyKey({ nowMs: 123456, randomFn: () => 0.5 })
+
+  assert.match(key, /^team-create-[\x21-\x7e]+$/)
+  assert.ok(key.length <= 64)
+})
 
 test('normalizes team list response for cards and summary', () => {
   const data = normalizeTeamList({

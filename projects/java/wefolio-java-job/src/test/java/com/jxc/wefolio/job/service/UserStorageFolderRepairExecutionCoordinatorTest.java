@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.core.task.TaskRejectedException;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -66,7 +67,7 @@ class UserStorageFolderRepairExecutionCoordinatorTest {
                         mock(UserStorageFolderRepairService.class), executor, lifecycle);
 
         coordinator.submit();
-        lifecycle.disable();
+        lifecycle.pause(Duration.ofMinutes(10));
 
         assertThat(lifecycle.snapshot().status()).isEqualTo(JobExecutionLifecycle.Status.DRAINING);
         assertThatThrownBy(coordinator::submit)

@@ -40,33 +40,47 @@ public class WorkManualAuditService {
     /** 作品 Mapper */
     private final WorkEntityMapper mapper;
 
+    /** 内部接口密钥校验器 */
+    private final AdminPointSecretValidator adminPointSecretValidator;
+
     /** 人工审核首次结论时间来源 */
     private final Clock clock;
 
     /** 创建使用系统时间的人工审核服务。 */
     @Autowired
-    public WorkManualAuditService(WorkEntityMapper mapper) {
-        this(mapper, Clock.systemDefaultZone());
+    public WorkManualAuditService(
+            WorkEntityMapper mapper,
+            AdminPointSecretValidator adminPointSecretValidator
+    ) {
+        this(mapper, adminPointSecretValidator, Clock.systemDefaultZone());
     }
 
     /** 创建使用指定时钟的人工审核服务，供测试固定结论时间。 */
-    WorkManualAuditService(WorkEntityMapper mapper, Clock clock) {
+    WorkManualAuditService(
+            WorkEntityMapper mapper,
+            AdminPointSecretValidator adminPointSecretValidator,
+            Clock clock
+    ) {
         this.mapper = mapper;
+        this.adminPointSecretValidator = adminPointSecretValidator;
         this.clock = clock;
     }
 
     /**
      * 按人工审核编号写入或幂等重放最终结论。
      *
+     * @param secret 请求头中的后台积分密钥
      * @param manualAuditNo 人工审核编号
      * @param request 审核结论请求
      * @return 最小审核结果
      */
     @Transactional(rollbackFor = Exception.class)
     public WorkManualAuditUpdateResponse update(
+            String secret,
             String manualAuditNo,
             WorkManualAuditUpdateRequest request
     ) {
+        adminPointSecretValidator.validate(secret);
         String normalizedNo = normalizeManualAuditNo(manualAuditNo);
         String targetStatus = normalizeStatus(request == null ? null : request.getStatus());
         String reason = normalizeReason(

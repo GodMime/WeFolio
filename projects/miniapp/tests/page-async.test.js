@@ -242,7 +242,7 @@ test('team creation remains successful when only the avatar upload fails', async
   const toasts = []
   const page = loadPage('pages/teams/teams.js', (options) => {
     requests.push(options)
-    if (options.url === '/api/mine/teams' && options.method === 'POST') {
+    if (options.url === '/api/mine/teams/v2' && options.method === 'POST') {
       return Promise.resolve({ team: { teamId: 101, name: '星曜司仪团' } })
     }
     return Promise.resolve({ teams: [] })
@@ -271,7 +271,9 @@ test('team creation remains successful when only the avatar upload fails', async
   await page.handleCreateTeam()
   await flushPromises()
 
-  assert.equal(requests.filter((item) => item.url === '/api/mine/teams' && item.method === 'POST').length, 1)
+  const createRequests = requests.filter((item) => item.url === '/api/mine/teams/v2' && item.method === 'POST')
+  assert.equal(createRequests.length, 1)
+  assert.match(createRequests[0].data.idempotencyKey, /^team-create-/)
   assert.equal(page.data.createFormVisible, false)
   assert.equal(page.data.saving, false)
   assert.equal(page.data.form.name, '')
@@ -279,6 +281,53 @@ test('team creation remains successful when only the avatar upload fails', async
     title: '团队已创建，图标上传失败，可稍后在团队资料中重试',
     icon: 'none'
   })
+})
+
+test('team creation retries reuse the pending idempotency key', async () => {
+  const requests = []
+  let attempt = 0
+  const page = loadPage('pages/teams/teams.js', (options) => {
+    requests.push(options)
+    if (options.url === '/api/mine/teams/v2' && options.method === 'POST') {
+      attempt += 1
+      if (attempt === 1) return Promise.reject(new Error('网络超时'))
+      return Promise.resolve({ team: { teamId: 102, name: '星曜司仪团' } })
+    }
+    return Promise.resolve({ teams: [] })
+  }, {
+    getStorageSync() { return 'maintainer-token' },
+    showToast() {}
+  })
+  page.data.loading = false
+  page.data.createFormVisible = true
+  page.data.form = { name: '星曜司仪团', intro: '', avatarUrl: '' }
+
+  await page.handleCreateTeam()
+  await page.handleCreateTeam()
+
+  const creates = requests.filter((item) => item.url === '/api/mine/teams/v2' && item.method === 'POST')
+  assert.equal(creates.length, 2)
+  assert.equal(creates[0].data.idempotencyKey, creates[1].data.idempotencyKey)
+  assert.equal(page.pendingCreateIdempotencyKey, '')
+})
+
+test('editing the team form after a failed create starts a new idempotency operation', async () => {
+  const page = loadPage('pages/teams/teams.js', (options) => {
+    if (options.url === '/api/mine/teams/v2' && options.method === 'POST') {
+      return Promise.reject(new Error('网络超时'))
+    }
+    return Promise.resolve({ teams: [] })
+  }, {
+    getStorageSync() { return 'maintainer-token' },
+    showToast() {}
+  })
+  page.data.form = { name: '星曜司仪团', intro: '', avatarUrl: '' }
+
+  await page.handleCreateTeam()
+  assert.match(page.pendingCreateIdempotencyKey, /^team-create-/)
+
+  page.handleInput({ currentTarget: { dataset: { field: 'name' } }, detail: { value: '新团队名' } })
+  assert.equal(page.pendingCreateIdempotencyKey, '')
 })
 
 test('delayed team navigation timers are cancelled when their page unloads', () => {

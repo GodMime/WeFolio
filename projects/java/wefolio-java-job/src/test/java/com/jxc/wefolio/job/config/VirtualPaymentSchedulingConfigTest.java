@@ -4,6 +4,7 @@ import com.jxc.wefolio.job.service.JobExecutionLifecycle;
 import org.junit.jupiter.api.Test;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -53,7 +54,7 @@ class VirtualPaymentSchedulingConfigTest {
             scheduler.schedule(invocationCount::incrementAndGet, Instant.now());
             assertThat(executionLatch.get().await(1, TimeUnit.SECONDS)).isTrue();
 
-            lifecycle.disable();
+            lifecycle.pause(Duration.ofMinutes(10));
             executionLatch.set(new CountDownLatch(2));
             defaultScheduler.schedule(invocationCount::incrementAndGet, Instant.now());
             scheduler.schedule(invocationCount::incrementAndGet, Instant.now());

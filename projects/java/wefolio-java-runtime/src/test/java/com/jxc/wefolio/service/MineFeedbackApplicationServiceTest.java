@@ -6,6 +6,7 @@ import com.jxc.wefolio.dto.FeedbackStatusUpdateResponse;
 import com.jxc.wefolio.dto.MineFeedbackCreateRequest;
 import com.jxc.wefolio.dto.MineFeedbackDetailResponse;
 import com.jxc.wefolio.entity.FeedbackEntity;
+import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.model.FeedbackRoundSnapshot;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,10 +18,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /** 当前用户问题反馈应用服务测试。 */
@@ -39,6 +42,10 @@ class MineFeedbackApplicationServiceTest {
     @Mock
     private FeishuFeedbackNotifier notifier;
 
+    /** 内部接口密钥校验器模拟。 */
+    @Mock
+    private AdminPointSecretValidator adminPointSecretValidator;
+
     /** 待测试应用服务。 */
     private MineFeedbackApplicationService applicationService;
 
@@ -48,7 +55,8 @@ class MineFeedbackApplicationServiceTest {
         applicationService = new MineFeedbackApplicationService(
                 feedbackTransactionService,
                 mineFeedbackService,
-                notifier);
+                notifier,
+                adminPointSecretValidator);
     }
 
     /** 新建发生写入时必须在事务返回后通知一次并返回详情。 */
@@ -144,7 +152,7 @@ class MineFeedbackApplicationServiceTest {
         verify(notifier).notifyAppended(thrownMutation);
     }
 
-    /** 无认证状态接口委派事务，并返回不含用户或 JSON 的最小响应。 */
+    /** 内部密钥校验必须先于状态事务，并返回不含用户或 JSON 的最小响应。 */
     @Test
     void updateStatusValidatesThenReturnsMinimalResponse() {
         FeedbackStatusUpdateRequest request = statusRequest();
@@ -155,7 +163,7 @@ class MineFeedbackApplicationServiceTest {
                 "FB0123456789abcdef0123456789abcdef", request)).thenReturn(mutation);
 
         FeedbackStatusUpdateResponse response = applicationService.updateStatus(
-                "FB0123456789abcdef0123456789abcdef", request);
+                "admin-secret", "FB0123456789abcdef0123456789abcdef", request);
 
         assertThat(response.getFeedbackNo()).isEqualTo("FB0123456789abcdef0123456789abcdef");
         assertThat(response.getStatus()).isEqualTo(FeedbackStatusDict.WAITING_FOLLOW_UP.getCode());
@@ -165,8 +173,24 @@ class MineFeedbackApplicationServiceTest {
         assertThat(FeedbackStatusUpdateResponse.class.getDeclaredFields())
                 .extracting(java.lang.reflect.Field::getName)
                 .doesNotContain("userId", "roundsJson", "feedback");
-        verify(feedbackTransactionService).updateStatus(
+        InOrder order = inOrder(adminPointSecretValidator, feedbackTransactionService);
+        order.verify(adminPointSecretValidator).validate("admin-secret");
+        order.verify(feedbackTransactionService).updateStatus(
                 "FB0123456789abcdef0123456789abcdef", request);
+    }
+
+    /** 内部密钥无效时不得进入反馈状态事务。 */
+    @Test
+    void invalidAdminSecretFailsBeforeStatusTransaction() {
+        doThrow(new BusinessException("后台积分密钥无效"))
+                .when(adminPointSecretValidator).validate("wrong-secret");
+
+        assertThatThrownBy(() -> applicationService.updateStatus(
+                "wrong-secret", "FB0123456789abcdef0123456789abcdef", statusRequest()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("后台积分密钥无效");
+
+        verifyNoInteractions(feedbackTransactionService);
     }
 
     /** 构造内部状态更新请求。 */

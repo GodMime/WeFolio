@@ -69,6 +69,8 @@ work-audit:
   video-submit-max-attempts: ${WEFOLIO_WORK_AUDIT_VIDEO_SUBMIT_MAX_ATTEMPTS:3}
   # 每轮最多同步审核多少个未审核图片作品。
   max-audit-image-per-run: 500
+  # 单个图片审核任务最多尝试次数，用于进程中断后的原任务恢复。
+  image-max-attempts: ${WEFOLIO_WORK_AUDIT_IMAGE_MAX_ATTEMPTS:3}
   # 每轮最多尝试审核多少个动图任务。
   max-audit-animation-per-run: ${WEFOLIO_WORK_AUDIT_MAX_ANIMATION_PER_RUN:500}
   # 单个动图任务最多尝试次数，重试复用已持久化的抽样帧。
@@ -90,6 +92,8 @@ admin:
 job-scheduling:
   # 发布旧服务前等待当前后台工作自然结束的最长时间。
   disable-timeout: ${JOB_SCHEDULING_DISABLE_TIMEOUT:10s}
+  # 发布期间暂停接收新后台工作的时长，到期后惰性自动恢复。
+  pause-duration: ${JOB_SCHEDULING_PAUSE_DURATION:10m}
 
 user-storage-folder-repair:
   # 历史用户目录修复 ID 游标批大小，批内严格逐个处理。

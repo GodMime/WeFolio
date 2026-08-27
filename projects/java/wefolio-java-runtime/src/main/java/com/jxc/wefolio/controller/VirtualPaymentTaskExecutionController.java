@@ -11,6 +11,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
+import static com.jxc.wefolio.constant.PointConstants.ADMIN_POINT_SECRET_HEADER;
+
 /**
  * job 调用的微信虚拟支付单任务内部接口。
  */
@@ -18,9 +20,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequiredArgsConstructor
 public class VirtualPaymentTaskExecutionController {
-
-    /** 后台积分内部密钥请求头。 */
-    private static final String ADMIN_POINT_SECRET_HEADER = "X-Admin-Point-Secret";
 
     /** 赠送订单执行路径。 */
     private static final String GIFT_ORDER_EXECUTION_PATH =

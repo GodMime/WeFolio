@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.core.task.TaskRejectedException;
 
+import java.time.Duration;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -94,7 +95,7 @@ class WorkStorageBillingExecutionCoordinatorTest {
         coordinator.submit(month(7), WorkStorageBillingExecutionCoordinator.TriggerSource.MANUAL);
         assertThat(lifecycle.snapshot().activeTaskCount()).isOne();
 
-        lifecycle.disable();
+        lifecycle.pause(Duration.ofMinutes(10));
         assertThat(lifecycle.snapshot().status()).isEqualTo(JobExecutionLifecycle.Status.DRAINING);
         executor.runNext();
 
@@ -105,7 +106,7 @@ class WorkStorageBillingExecutionCoordinatorTest {
     @Test
     void manualSubmissionShouldBeRejectedAfterDisable() {
         JobExecutionLifecycle lifecycle = new JobExecutionLifecycle();
-        lifecycle.disable();
+        lifecycle.pause(Duration.ofMinutes(10));
         WorkStorageBillingExecutionCoordinator coordinator = new WorkStorageBillingExecutionCoordinator(
                 mock(WorkStorageBillingService.class), new ManualExecutor(), lifecycle);
 
@@ -124,7 +125,7 @@ class WorkStorageBillingExecutionCoordinatorTest {
         AtomicReference<WorkStorageBillingExecutionCoordinator.Submission> submission = new AtomicReference<>();
 
         lifecycle.runScheduled(() -> {
-            lifecycle.disable();
+            lifecycle.pause(Duration.ofMinutes(10));
             submission.set(coordinator.submit(
                     month(7), WorkStorageBillingExecutionCoordinator.TriggerSource.SCHEDULED));
         });

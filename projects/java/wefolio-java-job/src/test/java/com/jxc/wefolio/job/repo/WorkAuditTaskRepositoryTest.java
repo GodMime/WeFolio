@@ -97,6 +97,108 @@ class WorkAuditTaskRepositoryTest {
                         0L);
     }
 
+    /** 可恢复图片任务必须处于过期提交态，并关联同轮次非人工审核作品。 */
+    @Test
+    void findRetryableExpiredImageTasksShouldRequireActiveMatchingAutomaticWork() {
+        WorkAuditTaskMapper taskMapper = mock(WorkAuditTaskMapper.class);
+        WorkAuditTaskRepository repository = new WorkAuditTaskRepository(taskMapper);
+        LocalDateTime now = LocalDateTime.of(2026, 8, 27, 12, 0);
+
+        repository.findRetryableExpiredImageTasks(20, 3, now);
+
+        LambdaQueryWrapper<WorkAuditTaskEntity> wrapper = captureSelectListWrapper(taskMapper);
+        assertThat(wrapper.getSqlSegment()).contains(
+                "media_type", "task_status", "locked_until", "attempt_count", "deleted",
+                "EXISTS", "wf_work", "audit_round", "audit_status", "manual_audit_no", "LIMIT 20");
+        assertThat(wrapper.getParamNameValuePairs().values()).contains(
+                MediaTypeDict.IMAGE.getCode(), WorkAuditTaskStatusDict.SUBMITTING.getCode(),
+                now, 3, WorkAuditStatusDict.AUDITING.getCode(), 0L);
+    }
+
+    /** 达到上限的图片任务查询必须复用自动审核硬隔离条件。 */
+    @Test
+    void findExhaustedExpiredImageTasksShouldRequireActiveMatchingAutomaticWork() {
+        WorkAuditTaskMapper taskMapper = mock(WorkAuditTaskMapper.class);
+        WorkAuditTaskRepository repository = new WorkAuditTaskRepository(taskMapper);
+        LocalDateTime now = LocalDateTime.of(2026, 8, 27, 12, 0);
+
+        repository.findExhaustedExpiredImageTasks(20, 3, now);
+
+        LambdaQueryWrapper<WorkAuditTaskEntity> wrapper = captureSelectListWrapper(taskMapper);
+        assertThat(wrapper.getSqlSegment()).contains(
+                "media_type", "task_status", "locked_until", "attempt_count", "deleted",
+                "EXISTS", "wf_work", "audit_round", "audit_status", "manual_audit_no", "LIMIT 20");
+        assertThat(wrapper.getParamNameValuePairs().values()).contains(
+                MediaTypeDict.IMAGE.getCode(), WorkAuditTaskStatusDict.SUBMITTING.getCode(),
+                now, 3, WorkAuditStatusDict.AUDITING.getCode(), 0L);
+    }
+
+    /** 图片任务恢复领取必须刷新租约、递增尝试次数并复用自动审核硬隔离条件。 */
+    @Test
+    void claimExpiredImageTaskShouldIncrementAttemptAndRequireActiveMatchingAutomaticWork() {
+        WorkAuditTaskMapper taskMapper = mock(WorkAuditTaskMapper.class);
+        WorkAuditTaskRepository repository = new WorkAuditTaskRepository(taskMapper);
+        LocalDateTime now = LocalDateTime.of(2026, 8, 27, 12, 0);
+
+        repository.claimExpiredImageTask(101L, "image-token", now, now.plusMinutes(5), 3);
+
+        LambdaUpdateWrapper<WorkAuditTaskEntity> wrapper = captureUpdateWrapper(taskMapper);
+        assertThat(wrapper.getSqlSet()).contains(
+                "locked_by", "locked_until", "started_at", "last_error_message", "updated_at",
+                "attempt_count = attempt_count + 1", "version = version + 1");
+        assertThat(wrapper.getSqlSegment()).contains(
+                "media_type", "task_status", "locked_until", "attempt_count", "deleted",
+                "EXISTS", "wf_work", "audit_round", "audit_status", "manual_audit_no");
+        assertThat(wrapper.getParamNameValuePairs().values()).contains(
+                101L, MediaTypeDict.IMAGE.getCode(), WorkAuditTaskStatusDict.SUBMITTING.getCode(),
+                now, 3, WorkAuditStatusDict.AUDITING.getCode(), 0L);
+    }
+
+    /** 图片终态回收领取不得增加已经达到上限的尝试次数。 */
+    @Test
+    void claimExhaustedExpiredImageTaskShouldNotIncrementAttemptCount() {
+        WorkAuditTaskMapper taskMapper = mock(WorkAuditTaskMapper.class);
+        WorkAuditTaskRepository repository = new WorkAuditTaskRepository(taskMapper);
+        LocalDateTime now = LocalDateTime.of(2026, 8, 27, 12, 0);
+
+        repository.claimExhaustedExpiredImageTask(101L, "terminal-token", now, now.plusMinutes(5), 3);
+
+        LambdaUpdateWrapper<WorkAuditTaskEntity> wrapper = captureUpdateWrapper(taskMapper);
+        assertThat(wrapper.getSqlSet())
+                .contains("locked_by", "locked_until", "updated_at", "version = version + 1")
+                .doesNotContain("attempt_count = attempt_count + 1");
+        assertThat(wrapper.getSqlSegment()).contains(
+                "media_type", "task_status", "locked_until", "attempt_count", "deleted",
+                "EXISTS", "wf_work", "audit_round", "audit_status", "manual_audit_no");
+    }
+
+    /** 图片结果写回必须同时校验领取 token 与同轮自动审核作品。 */
+    @Test
+    void imageTerminalUpdatesShouldRequireClaimTokenAndActiveMatchingAutomaticWork() {
+        WorkAuditTaskMapper successMapper = mock(WorkAuditTaskMapper.class);
+        WorkAuditTaskRepository successRepository = new WorkAuditTaskRepository(successMapper);
+
+        successRepository.markImageSuccess(
+                101L, "image-token", AuditResultDict.PASS, "Success", 0, "Normal", 0, "{}");
+
+        LambdaUpdateWrapper<WorkAuditTaskEntity> successWrapper = captureUpdateWrapper(successMapper);
+        assertThat(successWrapper.getSqlSegment()).contains(
+                "id", "media_type", "task_status", "locked_by", "deleted",
+                "EXISTS", "wf_work", "audit_round", "audit_status", "manual_audit_no");
+        assertThat(successWrapper.getParamNameValuePairs().values()).contains(
+                101L, MediaTypeDict.IMAGE.getCode(), WorkAuditTaskStatusDict.SUBMITTING.getCode(),
+                "image-token", WorkAuditStatusDict.AUDITING.getCode(), 0L);
+
+        WorkAuditTaskMapper failureMapper = mock(WorkAuditTaskMapper.class);
+        WorkAuditTaskRepository failureRepository = new WorkAuditTaskRepository(failureMapper);
+        failureRepository.markImageFailed(101L, "image-token", "远端调用失败", "{}");
+
+        LambdaUpdateWrapper<WorkAuditTaskEntity> failureWrapper = captureUpdateWrapper(failureMapper);
+        assertThat(failureWrapper.getSqlSegment()).contains(
+                "id", "media_type", "task_status", "locked_by", "deleted",
+                "EXISTS", "wf_work", "audit_round", "audit_status", "manual_audit_no");
+    }
+
     /** 视频结果候选查询必须关联同轮次且非人工的审核中作品。 */
     @Test
     void findQueryableVideoTasksShouldIncludeExpiredQueryingAndRequireActiveMatchingWork() {
@@ -259,6 +361,10 @@ class WorkAuditTaskRepositoryTest {
         assertUpdateRefreshesAuditColumns(repository -> repository.markVideoFailed(
                 101L, "claim-token", "远端调用失败", "{}"));
         assertUpdateRefreshesAuditColumns(repository -> repository.markFailed(101L, "远端调用失败", "{}"));
+        assertUpdateRefreshesAuditColumns(repository -> repository.markImageSuccess(
+                101L, "claim-token", AuditResultDict.PASS, "Success", 0, "Normal", 0, "{}"));
+        assertUpdateRefreshesAuditColumns(repository -> repository.markImageFailed(
+                101L, "claim-token", "远端调用失败", "{}"));
         assertUpdateRefreshesAuditColumns(repository -> repository.logicDeleteFailedTasksByWorkId(11L));
     }
 

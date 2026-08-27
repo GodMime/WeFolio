@@ -25,11 +25,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /** 作品人工审核行锁与 first-write-wins 并发集成测试。 */
 @ActiveProfiles("test")
-@SpringBootTest
+@SpringBootTest(properties = "admin.point.secret=test-admin-secret")
 class WorkManualAuditConcurrencyIntegrationTest {
 
     /** 固定人工审核编号。 */
     private static final String MANUAL_NO = "WA20260827153042A7K2Q9";
+
+    /** 集成测试内部接口密钥。 */
+    private static final String ADMIN_SECRET = "test-admin-secret";
 
     /** 并发任务等待上限秒数。 */
     private static final long TIMEOUT_SECONDS = 5L;
@@ -135,7 +138,8 @@ class WorkManualAuditConcurrencyIntegrationTest {
     ) throws Exception {
         start.await(TIMEOUT_SECONDS, TimeUnit.SECONDS);
         try {
-            WorkManualAuditUpdateResponse response = service.update(MANUAL_NO, request);
+            WorkManualAuditUpdateResponse response = service.update(
+                    ADMIN_SECRET, MANUAL_NO, request);
             return new Outcome(
                     response.getAuditStatus(), response.isChanged(),
                     response.getManualAuditResultAt(), null);

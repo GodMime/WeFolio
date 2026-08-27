@@ -45,6 +45,12 @@ class WorkAuditClaimTransactionServiceTest {
 
     @Test
     void resultUpdateMethodsShouldUseSpringTransaction() throws NoSuchMethodException {
+        assertTransactional("markImageTaskFailedAndUpdateWorkFailed",
+                Long.class, Long.class, Integer.class, String.class, String.class, String.class, String.class);
+        assertTransactional("markImageTaskSuccessAndUpdateWork",
+                Long.class, Long.class, Integer.class, String.class,
+                AuditResultDict.class, String.class, Integer.class, String.class, Integer.class,
+                List.class, String.class, WorkAuditStatusDict.class, String.class);
         assertTransactional("markTaskFailedAndUpdateWorkFailed",
                 Long.class, Long.class, Integer.class, String.class, String.class, String.class);
         assertTransactional("markTaskSuccessAndUpdateWork",
@@ -287,6 +293,46 @@ class WorkAuditClaimTransactionServiceTest {
 
         assertThat(service.markTaskFailedAndUpdateWorkFailed(
                 101L, 11L, 2, "失败", "{}", "拒绝原因")).isFalse();
+
+        verify(workRepository, never()).updateAuditStatusAndReasonsForRound(
+                any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void markImageTaskFailedShouldUseClaimTokenBeforeUpdatingMatchingWork() {
+        WorkAuditWorkRepository workRepository = mock(WorkAuditWorkRepository.class);
+        WorkAuditTaskRepository taskRepository = mock(WorkAuditTaskRepository.class);
+        WorkAuditClaimTransactionService service = service(workRepository, taskRepository);
+        when(taskRepository.markImageFailed(101L, "image-token", "失败", "{}")).thenReturn(true);
+        when(workRepository.updateAuditStatusAndReasonsForRound(
+                11L, 2, WorkAuditStatusDict.FAILED,
+                WorkAuditReasonCodeDict.AUDIT_SERVICE_ERROR.getCode(),
+                "[\"AUDIT_SERVICE_ERROR\"]", "拒绝原因")).thenReturn(true);
+
+        assertThat(service.markImageTaskFailedAndUpdateWorkFailed(
+                101L, 11L, 2, "image-token", "失败", "{}", "拒绝原因")).isTrue();
+
+        InOrder inOrder = inOrder(taskRepository, workRepository);
+        inOrder.verify(taskRepository).markImageFailed(101L, "image-token", "失败", "{}");
+        inOrder.verify(workRepository).updateAuditStatusAndReasonsForRound(
+                11L, 2, WorkAuditStatusDict.FAILED,
+                WorkAuditReasonCodeDict.AUDIT_SERVICE_ERROR.getCode(),
+                "[\"AUDIT_SERVICE_ERROR\"]", "拒绝原因");
+    }
+
+    @Test
+    void markImageTaskSuccessShouldStopWhenClaimOrAutomaticWorkGuardWasLost() {
+        WorkAuditWorkRepository workRepository = mock(WorkAuditWorkRepository.class);
+        WorkAuditTaskRepository taskRepository = mock(WorkAuditTaskRepository.class);
+        WorkAuditClaimTransactionService service = service(workRepository, taskRepository);
+        when(taskRepository.markImageSuccess(
+                101L, "stale-token", AuditResultDict.PASS,
+                "Success", 0, "Normal", 0, "{}")).thenReturn(false);
+
+        assertThat(service.markImageTaskSuccessAndUpdateWork(
+                101L, 11L, 2, "stale-token", AuditResultDict.PASS,
+                "Success", 0, "Normal", 0, List.of(), "{}",
+                WorkAuditStatusDict.PASSED, null)).isFalse();
 
         verify(workRepository, never()).updateAuditStatusAndReasonsForRound(
                 any(), any(), any(), any(), any(), any());

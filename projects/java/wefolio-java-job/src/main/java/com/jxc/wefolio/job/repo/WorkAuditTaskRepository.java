@@ -203,6 +203,50 @@ public class WorkAuditTaskRepository {
     }
 
     /**
+     * 查询仍可恢复且租约已过期的图片审核任务。
+     *
+     * @param limit 查询数量上限
+     * @param maxAttempts 最大尝试次数
+     * @param now 本轮统一时间
+     * @return 可恢复的图片审核任务
+     */
+    public List<WorkAuditTaskEntity> findRetryableExpiredImageTasks(
+            int limit, int maxAttempts, LocalDateTime now) {
+        return taskMapper.selectList(Wrappers.<WorkAuditTaskEntity>lambdaQuery()
+                .eq(WorkAuditTaskEntity::getMediaType, MediaTypeDict.IMAGE.getCode())
+                .eq(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.SUBMITTING.getCode())
+                .lt(WorkAuditTaskEntity::getLockedUntil, now)
+                .lt(WorkAuditTaskEntity::getAttemptCount, maxAttempts)
+                .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED)
+                .apply(ACTIVE_AUDITING_WORK_EXISTS_SQL,
+                        WorkAuditStatusDict.AUDITING.getCode(), NOT_DELETED)
+                .orderByAsc(WorkAuditTaskEntity::getId)
+                .last(LIMIT_SQL_PREFIX + normalizedLimit(limit)));
+    }
+
+    /**
+     * 查询达到尝试上限且租约已过期的图片审核任务。
+     *
+     * @param limit 查询数量上限
+     * @param maxAttempts 最大尝试次数
+     * @param now 本轮统一时间
+     * @return 待失败终态回收的图片审核任务
+     */
+    public List<WorkAuditTaskEntity> findExhaustedExpiredImageTasks(
+            int limit, int maxAttempts, LocalDateTime now) {
+        return taskMapper.selectList(Wrappers.<WorkAuditTaskEntity>lambdaQuery()
+                .eq(WorkAuditTaskEntity::getMediaType, MediaTypeDict.IMAGE.getCode())
+                .eq(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.SUBMITTING.getCode())
+                .lt(WorkAuditTaskEntity::getLockedUntil, now)
+                .ge(WorkAuditTaskEntity::getAttemptCount, maxAttempts)
+                .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED)
+                .apply(ACTIVE_AUDITING_WORK_EXISTS_SQL,
+                        WorkAuditStatusDict.AUDITING.getCode(), NOT_DELETED)
+                .orderByAsc(WorkAuditTaskEntity::getId)
+                .last(LIMIT_SQL_PREFIX + normalizedLimit(limit)));
+    }
+
+    /**
      * 查询待执行或锁已过期的动图审核任务。
      *
      * @param limit 查询数量上限
@@ -445,6 +489,65 @@ public class WorkAuditTaskRepository {
     }
 
     /**
+     * 原子重领租约已过期且仍可重试的图片审核任务。
+     *
+     * @param taskId 任务 ID
+     * @param claimToken 本次领取 token
+     * @param now 本轮统一时间
+     * @param lockedUntil 新租约截止时间
+     * @param maxAttempts 最大尝试次数
+     * @return 是否领取成功
+     */
+    public boolean claimExpiredImageTask(Long taskId, String claimToken, LocalDateTime now,
+                                         LocalDateTime lockedUntil, int maxAttempts) {
+        int updated = taskMapper.update(null, Wrappers.<WorkAuditTaskEntity>lambdaUpdate()
+                .set(WorkAuditTaskEntity::getLockedBy, claimToken)
+                .set(WorkAuditTaskEntity::getLockedUntil, lockedUntil)
+                .set(WorkAuditTaskEntity::getStartedAt, now)
+                .set(WorkAuditTaskEntity::getLastErrorMessage, null)
+                .set(WorkAuditTaskEntity::getUpdatedAt, now)
+                .setSql(ATTEMPT_COUNT_INCREMENT_SQL)
+                .setSql(VERSION_INCREMENT_SQL)
+                .eq(WorkAuditTaskEntity::getId, taskId)
+                .eq(WorkAuditTaskEntity::getMediaType, MediaTypeDict.IMAGE.getCode())
+                .eq(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.SUBMITTING.getCode())
+                .lt(WorkAuditTaskEntity::getLockedUntil, now)
+                .lt(WorkAuditTaskEntity::getAttemptCount, maxAttempts)
+                .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED)
+                .apply(ACTIVE_AUDITING_WORK_EXISTS_SQL,
+                        WorkAuditStatusDict.AUDITING.getCode(), NOT_DELETED));
+        return updated == 1;
+    }
+
+    /**
+     * 原子领取达到尝试上限的过期图片任务，用于失败终态回收。
+     *
+     * @param taskId 任务 ID
+     * @param claimToken 本次领取 token
+     * @param now 本轮统一时间
+     * @param lockedUntil 新租约截止时间
+     * @param maxAttempts 最大尝试次数
+     * @return 是否领取成功
+     */
+    public boolean claimExhaustedExpiredImageTask(Long taskId, String claimToken, LocalDateTime now,
+                                                  LocalDateTime lockedUntil, int maxAttempts) {
+        int updated = taskMapper.update(null, Wrappers.<WorkAuditTaskEntity>lambdaUpdate()
+                .set(WorkAuditTaskEntity::getLockedBy, claimToken)
+                .set(WorkAuditTaskEntity::getLockedUntil, lockedUntil)
+                .set(WorkAuditTaskEntity::getUpdatedAt, now)
+                .setSql(VERSION_INCREMENT_SQL)
+                .eq(WorkAuditTaskEntity::getId, taskId)
+                .eq(WorkAuditTaskEntity::getMediaType, MediaTypeDict.IMAGE.getCode())
+                .eq(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.SUBMITTING.getCode())
+                .lt(WorkAuditTaskEntity::getLockedUntil, now)
+                .ge(WorkAuditTaskEntity::getAttemptCount, maxAttempts)
+                .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED)
+                .apply(ACTIVE_AUDITING_WORK_EXISTS_SQL,
+                        WorkAuditStatusDict.AUDITING.getCode(), NOT_DELETED));
+        return updated == 1;
+    }
+
+    /**
      * 视频提交成功后写入腾讯云任务 ID。
      *
      * @param taskId 任务 ID
@@ -530,6 +633,46 @@ public class WorkAuditTaskRepository {
                 .eq(WorkAuditTaskEntity::getId, taskId)
                 .in(WorkAuditTaskEntity::getTaskStatus, FINISHABLE_TASK_STATUSES)
                 .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED));
+        return updated == 1;
+    }
+
+    /**
+     * 使用本次领取 token 将图片任务写入成功终态。
+     *
+     * @param taskId 任务 ID
+     * @param lockOwner 本次领取 token
+     * @param result 审核结果
+     * @param ciState 腾讯云状态
+     * @param ciResult 腾讯云结果码
+     * @param ciLabel 命中标签
+     * @param ciScore 命中分数
+     * @param responsePayload 响应摘要
+     * @return 是否仍持有有效自动审核任务的领取权
+     */
+    public boolean markImageSuccess(
+            Long taskId, String lockOwner, AuditResultDict result, String ciState, Integer ciResult,
+            String ciLabel, Integer ciScore, String responsePayload) {
+        LocalDateTime now = LocalDateTime.now();
+        int updated = taskMapper.update(null, Wrappers.<WorkAuditTaskEntity>lambdaUpdate()
+                .set(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.SUCCESS.getCode())
+                .set(WorkAuditTaskEntity::getAuditResult, result.getCode())
+                .set(WorkAuditTaskEntity::getCiState, ciState)
+                .set(WorkAuditTaskEntity::getCiResult, ciResult)
+                .set(WorkAuditTaskEntity::getCiLabel, ciLabel)
+                .set(WorkAuditTaskEntity::getCiScore, ciScore)
+                .set(WorkAuditTaskEntity::getResponsePayload, responsePayload)
+                .set(WorkAuditTaskEntity::getFinishedAt, now)
+                .set(WorkAuditTaskEntity::getLockedBy, null)
+                .set(WorkAuditTaskEntity::getLockedUntil, null)
+                .set(WorkAuditTaskEntity::getUpdatedAt, now)
+                .setSql(VERSION_INCREMENT_SQL)
+                .eq(WorkAuditTaskEntity::getId, taskId)
+                .eq(WorkAuditTaskEntity::getMediaType, MediaTypeDict.IMAGE.getCode())
+                .eq(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.SUBMITTING.getCode())
+                .eq(WorkAuditTaskEntity::getLockedBy, lockOwner)
+                .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED)
+                .apply(ACTIVE_AUDITING_WORK_EXISTS_SQL,
+                        WorkAuditStatusDict.AUDITING.getCode(), NOT_DELETED));
         return updated == 1;
     }
 
@@ -747,6 +890,38 @@ public class WorkAuditTaskRepository {
                 .eq(WorkAuditTaskEntity::getId, taskId)
                 .in(WorkAuditTaskEntity::getTaskStatus, FINISHABLE_TASK_STATUSES)
                 .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED));
+        return updated == 1;
+    }
+
+    /**
+     * 使用本次领取 token 将图片任务写入失败终态。
+     *
+     * @param taskId 任务 ID
+     * @param lockOwner 本次领取 token
+     * @param errorMessage 错误摘要
+     * @param responsePayload 响应摘要
+     * @return 是否仍持有有效自动审核任务的领取权
+     */
+    public boolean markImageFailed(
+            Long taskId, String lockOwner, String errorMessage, String responsePayload) {
+        LocalDateTime now = LocalDateTime.now();
+        int updated = taskMapper.update(null, Wrappers.<WorkAuditTaskEntity>lambdaUpdate()
+                .set(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.FAILED.getCode())
+                .set(WorkAuditTaskEntity::getAuditResult, AuditResultDict.UNKNOWN.getCode())
+                .set(WorkAuditTaskEntity::getLastErrorMessage, errorMessage)
+                .set(WorkAuditTaskEntity::getResponsePayload, responsePayload)
+                .set(WorkAuditTaskEntity::getFinishedAt, now)
+                .set(WorkAuditTaskEntity::getLockedBy, null)
+                .set(WorkAuditTaskEntity::getLockedUntil, null)
+                .set(WorkAuditTaskEntity::getUpdatedAt, now)
+                .setSql(VERSION_INCREMENT_SQL)
+                .eq(WorkAuditTaskEntity::getId, taskId)
+                .eq(WorkAuditTaskEntity::getMediaType, MediaTypeDict.IMAGE.getCode())
+                .eq(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.SUBMITTING.getCode())
+                .eq(WorkAuditTaskEntity::getLockedBy, lockOwner)
+                .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED)
+                .apply(ACTIVE_AUDITING_WORK_EXISTS_SQL,
+                        WorkAuditStatusDict.AUDITING.getCode(), NOT_DELETED));
         return updated == 1;
     }
 

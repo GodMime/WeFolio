@@ -1,6 +1,7 @@
 package com.jxc.wefolio.service;
 
 import com.alibaba.fastjson2.JSON;
+import com.jxc.wefolio.config.AdminPointProperties;
 import com.jxc.wefolio.config.FeedbackConfiguration;
 import com.jxc.wefolio.config.FeedbackProperties;
 import com.jxc.wefolio.dict.FeedbackMediaTypeDict;
@@ -8,6 +9,7 @@ import com.jxc.wefolio.dict.FeedbackStatusDict;
 import com.jxc.wefolio.entity.FeedbackEntity;
 import com.jxc.wefolio.entity.UserEntity;
 import com.jxc.wefolio.mapper.UserEntityMapper;
+import com.jxc.wefolio.message.PointMessage;
 import com.jxc.wefolio.model.FeedbackRoundSnapshot;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -28,6 +30,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+
+import static com.jxc.wefolio.common.ShellCommandEscaper.singleQuote;
+import static com.jxc.wefolio.constant.PointConstants.ADMIN_POINT_SECRET_HEADER;
 
 /** 飞书问题反馈通知器，负责签名、卡片构建和同步单次调用。 */
 @Service
@@ -117,6 +122,9 @@ public class FeishuFeedbackNotifier {
     /** 问题反馈配置。 */
     private final FeedbackProperties properties;
 
+    /** 内部回传密钥配置。 */
+    private final AdminPointProperties adminPointProperties;
+
     /** 用户 Mapper。 */
     private final UserEntityMapper userEntityMapper;
 
@@ -133,6 +141,7 @@ public class FeishuFeedbackNotifier {
      * 创建生产环境飞书通知器。
      *
      * @param properties 问题反馈配置
+     * @param adminPointProperties 内部回传密钥配置
      * @param userEntityMapper 用户 Mapper
      * @param cosService COS 服务
      * @param restClient 飞书 REST 客户端
@@ -140,17 +149,20 @@ public class FeishuFeedbackNotifier {
     @Autowired
     public FeishuFeedbackNotifier(
             FeedbackProperties properties,
+            AdminPointProperties adminPointProperties,
             UserEntityMapper userEntityMapper,
             CosService cosService,
             @Qualifier(FeedbackConfiguration.FEEDBACK_REST_CLIENT_BEAN_NAME) RestClient restClient
     ) {
-        this(properties, userEntityMapper, cosService, restClient, Clock.systemUTC());
+        this(properties, adminPointProperties, userEntityMapper, cosService,
+                restClient, Clock.systemUTC());
     }
 
     /**
      * 创建使用指定时钟的飞书通知器，供测试固定签名时间。
      *
      * @param properties 问题反馈配置
+     * @param adminPointProperties 内部回传密钥配置
      * @param userEntityMapper 用户 Mapper
      * @param cosService COS 服务
      * @param restClient 飞书 REST 客户端
@@ -158,12 +170,14 @@ public class FeishuFeedbackNotifier {
      */
     FeishuFeedbackNotifier(
             FeedbackProperties properties,
+            AdminPointProperties adminPointProperties,
             UserEntityMapper userEntityMapper,
             CosService cosService,
             RestClient restClient,
             Clock clock
     ) {
         this.properties = properties;
+        this.adminPointProperties = adminPointProperties;
         this.userEntityMapper = userEntityMapper;
         this.cosService = cosService;
         this.restClient = restClient;
@@ -193,11 +207,12 @@ public class FeishuFeedbackNotifier {
             String title,
             FeedbackTransactionService.MutationResult result
     ) {
+        String adminPointSecret = requireAdminPointSecret();
         NotificationContext context = buildContext(result);
         restClient.post()
                 .uri(properties.getWebhookUrl())
                 .contentType(MediaType.APPLICATION_JSON)
-                .body(buildPayload(title, context))
+                .body(buildPayload(title, context, adminPointSecret))
                 .retrieve()
                 .toBodilessEntity();
     }
@@ -238,18 +253,26 @@ public class FeishuFeedbackNotifier {
     }
 
     /** 构建符合飞书 custom-bot 协议的 interactive 消息体。 */
-    private String buildPayload(String title, NotificationContext context) {
+    private String buildPayload(
+            String title,
+            NotificationContext context,
+            String adminPointSecret
+    ) {
         long timestamp = clock.instant().getEpochSecond();
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("timestamp", Long.toString(timestamp));
         payload.put("sign", generateSign(timestamp, properties.getWebhookSecret()));
         payload.put("msg_type", INTERACTIVE_MESSAGE_TYPE);
-        payload.put("card", buildCard(title, context));
+        payload.put("card", buildCard(title, context, adminPointSecret));
         return JSON.toJSONString(payload);
     }
 
     /** 构建飞书消息卡片。 */
-    private Map<String, Object> buildCard(String title, NotificationContext context) {
+    private Map<String, Object> buildCard(
+            String title,
+            NotificationContext context,
+            String adminPointSecret
+    ) {
         Map<String, Object> card = new LinkedHashMap<>();
         card.put("config", Map.of("wide_screen_mode", true));
         card.put("header", Map.of(
@@ -277,13 +300,13 @@ public class FeishuFeedbackNotifier {
                 "tag", NOTE_TAG,
                 "elements", List.of(text(
                         PLAIN_TEXT_TAG,
-                        buildStatusCurlCommands(context.feedbackNo())))));
+                        buildStatusCurlCommands(context.feedbackNo(), adminPointSecret)))));
         card.put("elements", elements);
         return card;
     }
 
-    /** 构建供飞书用户复制执行的两条无认证状态更新命令。 */
-    private String buildStatusCurlCommands(String feedbackNo) {
+    /** 构建供飞书用户复制执行的两条内部认证状态更新命令。 */
+    private String buildStatusCurlCommands(String feedbackNo, String adminPointSecret) {
         String baseUrl = Objects.requireNonNull(properties.getStatusApiBaseUrl()).strip();
         while (baseUrl.endsWith("/")) {
             baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
@@ -291,18 +314,34 @@ public class FeishuFeedbackNotifier {
         String endpoint = baseUrl + INTERNAL_STATUS_PATH_FORMAT.formatted(feedbackNo);
         return WAITING_CURL_TITLE + "\n"
                 + buildStatusCurl(endpoint, FeedbackStatusDict.WAITING_FOLLOW_UP.getCode(),
-                DEFAULT_WAITING_RESULT)
+                DEFAULT_WAITING_RESULT, adminPointSecret)
                 + "\n\n" + RESOLVED_CURL_TITLE + "\n"
-                + buildStatusCurl(endpoint, FeedbackStatusDict.RESOLVED.getCode(), DEFAULT_RESOLVED_RESULT);
+                + buildStatusCurl(endpoint, FeedbackStatusDict.RESOLVED.getCode(),
+                DEFAULT_RESOLVED_RESULT, adminPointSecret);
     }
 
-    /** 构建单条无认证状态更新 curl。 */
-    private String buildStatusCurl(String endpoint, String status, String feedbackResult) {
+    /** 构建单条内部认证状态更新 curl。 */
+    private String buildStatusCurl(
+            String endpoint,
+            String status,
+            String feedbackResult,
+            String adminPointSecret
+    ) {
         String body = JSON.toJSONString(Map.of(
                 "status", status,
                 "feedbackResult", feedbackResult));
         return "curl -X PUT '" + endpoint + "' -H '" + JSON_CONTENT_TYPE_HEADER
-                + "' -d '" + body + "'";
+                + "' -H " + singleQuote(ADMIN_POINT_SECRET_HEADER + ": " + adminPointSecret)
+                + " -d '" + body + "'";
+    }
+
+    /** 读取用于飞书回传命令的完整内部密钥。 */
+    private String requireAdminPointSecret() {
+        String secret = adminPointProperties.getSecret();
+        if (secret == null || secret.isBlank()) {
+            throw new IllegalStateException(PointMessage.ADMIN_SECRET_MISSING_MESSAGE);
+        }
+        return secret;
     }
 
     /** 构建卡片短字段。 */

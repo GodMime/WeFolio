@@ -1,6 +1,5 @@
 package com.jxc.wefolio.job.service;
 
-import com.jxc.wefolio.job.config.JobScheduledTaskRegistry;
 import com.jxc.wefolio.job.config.JobSchedulingProperties;
 import com.jxc.wefolio.job.dto.JobSchedulingDisableResponse;
 import lombok.RequiredArgsConstructor;
@@ -26,9 +25,6 @@ public class JobSchedulingDisableService {
     /** 等待活动工作排空超时时的固定响应消息。 */
     private static final String TIMEOUT_MESSAGE = "定时调度任务已停止接收新任务，但仍有运行中任务未结束";
 
-    /** 无法访问定时任务注册信息时的固定响应消息。 */
-    private static final String REGISTRY_UNAVAILABLE_MESSAGE = "定时任务注册器暂不可用";
-
     /** 停用等待线程被中断时的固定响应消息。 */
     private static final String INTERRUPTED_MESSAGE = "定时调度任务停用等待被中断";
 
@@ -37,9 +33,6 @@ public class JobSchedulingDisableService {
 
     /** 统一控制后台工作的准入和排空状态。 */
     private final JobExecutionLifecycle executionLifecycle;
-
-    /** 提供全部 Spring 定时任务的非中断取消能力。 */
-    private final JobScheduledTaskRegistry scheduledTaskRegistry;
 
     /** 提供停用接口的有界等待配置。 */
     private final JobSchedulingProperties schedulingProperties;
@@ -56,15 +49,7 @@ public class JobSchedulingDisableService {
         }
 
         long startedNanos = System.nanoTime();
-        executionLifecycle.disable();
-        try {
-            int cancelledTaskCount = scheduledTaskRegistry.cancelScheduledTasks();
-            log.info("已取消后续定时调度 operation=CANCEL_SCHEDULES scheduledTaskCount={}",
-                    cancelledTaskCount);
-        } catch (RuntimeException exception) {
-            log.error("停用定时调度失败 operation=CANCEL_SCHEDULES", exception);
-            return result(ExecutionOutcome.UNAVAILABLE, REGISTRY_UNAVAILABLE_MESSAGE);
-        }
+        executionLifecycle.pause(schedulingProperties.getPauseDuration());
 
         try {
             if (executionLifecycle.awaitDisabled(schedulingProperties.getDisableTimeout())) {
@@ -136,7 +121,7 @@ public class JobSchedulingDisableService {
         UNAUTHORIZED,
         /** 等待活动工作超时。 */
         TIMEOUT,
-        /** 注册器或等待过程暂不可用。 */
+        /** 等待过程暂不可用。 */
         UNAVAILABLE
     }
 

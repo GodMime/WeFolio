@@ -46,12 +46,12 @@ Runtime 发布脚本在本地只构建一次 JAR，计算 SHA-256 后把同一�
 
 ### 4.2 问题反馈 Runtime 配置与出网检查
 
-问题反馈飞书通知依赖两项敏感环境变量。老节点 `49.235.146.161` 与新节点 `124.222.148.233` 的 `wefolio.service` 必须同时配置，不能只更新其中一个 Runtime 节点。状态接口无认证；卡片中的 `curl` 默认使用生产 API 域名，可通过非敏感变量 `FEEDBACK_STATUS_API_BASE_URL` 覆盖。
+问题反馈飞书通知依赖三项敏感环境变量：Webhook URL、Webhook 签名密钥和复用的内部回传密钥 `ADMIN_POINT_SECRET`。老节点 `49.235.146.161` 与新节点 `124.222.148.233` 的 `wefolio.service` 必须同时配置，不能只更新其中一个 Runtime 节点。状态接口要求请求头 `X-Admin-Point-Secret` 与 `ADMIN_POINT_SECRET` 完全一致；卡片中的 `curl` 默认使用生产 API 域名，可通过非敏感变量 `FEEDBACK_STATUS_API_BASE_URL` 覆盖。
 
 1. 分别在两台节点执行 `systemctl cat wefolio.service`，确认当前单元使用的 `EnvironmentFile` 或 drop-in；沿用现有注入位置，不在命令行、shell history 或本台账中写入真实值。
-2. 在仅 `root` 可读的环境文件或 `systemctl edit wefolio.service` 创建的 drop-in 中配置 `FEISHU_FEEDBACK_WEBHOOK_URL`、`FEISHU_FEEDBACK_WEBHOOK_SECRET`，文件权限保持 `0600`。非生产域名部署另行设置 `FEEDBACK_STATUS_API_BASE_URL`。
+2. 在仅 `root` 可读的环境文件或 `systemctl edit wefolio.service` 创建的 drop-in 中配置 `FEISHU_FEEDBACK_WEBHOOK_URL`、`FEISHU_FEEDBACK_WEBHOOK_SECRET`、`ADMIN_POINT_SECRET`，文件权限保持 `0600`。非生产域名部署另行设置 `FEEDBACK_STATUS_API_BASE_URL`。
 3. 分别执行 `systemctl daemon-reload`。发布时沿用 Runtime 双节点滚动顺序，逐节点重启 `wefolio.service` 并完成健康检查，避免两个节点同时中断服务。
-4. 重启后在每台节点执行下方命令，检查两个敏感变量已进入实际 Runtime 进程且值非空。命令只输出 `SET` 或 `MISSING`，任一项缺失时以非零状态退出，不会回显密钥：
+4. 重启后在每台节点执行下方命令，检查三个敏感变量已进入实际 Runtime 进程且值非空。命令只输出 `SET` 或 `MISSING`，任一项缺失时以非零状态退出，不会回显密钥：
 
 ```bash
 runtime_pid="$(systemctl show --property MainPID --value wefolio.service)"
@@ -59,10 +59,12 @@ test "${runtime_pid}" -gt 0
 sudo awk -v RS='\0' -F= '
   $1 == "FEISHU_FEEDBACK_WEBHOOK_URL" && length($2) > 0 { webhook = 1 }
   $1 == "FEISHU_FEEDBACK_WEBHOOK_SECRET" && length($2) > 0 { secret = 1 }
+  $1 == "ADMIN_POINT_SECRET" && length($2) > 0 { admin_secret = 1 }
   END {
     print "FEISHU_FEEDBACK_WEBHOOK_URL=" (webhook ? "SET" : "MISSING")
     print "FEISHU_FEEDBACK_WEBHOOK_SECRET=" (secret ? "SET" : "MISSING")
-    exit !(webhook && secret)
+    print "ADMIN_POINT_SECRET=" (admin_secret ? "SET" : "MISSING")
+    exit !(webhook && secret && admin_secret)
   }
 ' "/proc/${runtime_pid}/environ"
 ```
@@ -74,24 +76,25 @@ sudo awk -v RS='\0' -F= '
 
 本次仓库变更只交付代码和运行手册。实际密钥写入、服务重启、双节点出网验证和真实通知验收，必须在取得生产密钥及部署授权后执行。
 
-飞书配置缺失不会阻断 Runtime 启动；通知配置缺失、网络异常或远端错误只记录一条不含敏感内容的 `error`，不回滚问题创建或追加结果，也不进入重试或补偿流程。
+飞书配置缺失不会阻断 Runtime 启动；通知配置或 `ADMIN_POINT_SECRET` 缺失、网络异常或远端错误只记录一条不含敏感内容的 `error`，不回滚问题创建或追加结果，也不进入重试或补偿流程。`ADMIN_POINT_SECRET` 为空时不会发送缺少认证头的不可执行卡片。
 
-状态接口不读取认证请求头。飞书卡片会按问题编号展示以下同类命令，团队成员复制后修改 `feedbackResult` 即可执行：
+状态接口读取 `X-Admin-Point-Secret` 并在任何业务读写前校验。飞书卡片会把当前 Runtime 配置的完整 `ADMIN_POINT_SECRET` 写入以下同类命令，团队成员复制后修改 `feedbackResult` 即可执行：
 
 ```bash
-curl -X PUT 'https://api.we-folio.dingchenyong.top/api/internal/feedbacks/FB替换为实际编号' -H 'Content-Type: application/json' -d '{"status":"WAITING_FOLLOW_UP","feedbackResult":"请补充更多信息"}'
-curl -X PUT 'https://api.we-folio.dingchenyong.top/api/internal/feedbacks/FB替换为实际编号' -H 'Content-Type: application/json' -d '{"status":"RESOLVED","feedbackResult":"问题已修复，请更新小程序（重新进入小程序后会自动更新）"}'
+curl -X PUT 'https://api.we-folio.dingchenyong.top/api/internal/feedbacks/FB替换为实际编号' -H 'Content-Type: application/json' -H 'X-Admin-Point-Secret: <ADMIN_POINT_SECRET实际值>' -d '{"status":"WAITING_FOLLOW_UP","feedbackResult":"请补充更多信息"}'
+curl -X PUT 'https://api.we-folio.dingchenyong.top/api/internal/feedbacks/FB替换为实际编号' -H 'Content-Type: application/json' -H 'X-Admin-Point-Secret: <ADMIN_POINT_SECRET实际值>' -d '{"status":"RESOLVED","feedbackResult":"问题已修复，请更新小程序（重新进入小程序后会自动更新）"}'
 ```
 
-该接口无认证，问题编号等同于操作凭据。禁止把飞书卡片、问题编号或完整命令转发到无关群组、工单或公开日志；如发生泄露，应按数据安全事件处理并评估增加认证或网关访问限制。
+完整飞书命令包含共享内部密钥。禁止把飞书卡片或完整命令转发到无关群组、工单或公开日志；如发生泄露，应按数据安全事件处理，立即轮换两台 Runtime 及所有内部调用方的 `ADMIN_POINT_SECRET`。
 
 ### 4.3 作品最终轮人工审核配置与操作
 
-作品第 3 轮（当前 `max-rounds=3` 的最终轮）重审进入 `AUDITING` 后由审核员在飞书完成。该功能使用以下三项专用配置，不读取问题反馈的同类变量：
+作品第 3 轮（当前 `max-rounds=3` 的最终轮）重审进入 `AUDITING` 后由审核员在飞书完成。该功能使用以下三项专用配置，不读取问题反馈的同类变量，并额外复用内部回传密钥 `ADMIN_POINT_SECRET`：
 
 - `FEISHU_WORK_AUDIT_WEBHOOK_URL`：作品审核机器人 Webhook，敏感，Runtime 两节点必配。
 - `FEISHU_WORK_AUDIT_WEBHOOK_SECRET`：作品审核机器人签名密钥，敏感，Runtime 两节点必配。
 - `WORK_AUDIT_REVIEW_API_BASE_URL`：卡片审核回传命令的 API 基础地址，默认 `https://api.we-folio.dingchenyong.top`；非生产环境必须覆盖，末尾斜杠会自动移除。
+- `ADMIN_POINT_SECRET`：与积分内部接口共用的回传密钥，敏感，Runtime 两节点必配；卡片 curl 会包含完整实际值。
 
 作品审核与问题反馈可以使用相同或不同的飞书机器人配置。作品审核专用值与问题反馈值相同时会投递到同一个群，不同时会分群；即使值相同，也必须分别配置专用变量，禁止代码层回退读取问题反馈变量。
 
@@ -104,11 +107,13 @@ sudo awk -v RS='\0' -F= '
   $1 == "FEISHU_WORK_AUDIT_WEBHOOK_URL" && length($2) > 0 { webhook = 1 }
   $1 == "FEISHU_WORK_AUDIT_WEBHOOK_SECRET" && length($2) > 0 { secret = 1 }
   $1 == "WORK_AUDIT_REVIEW_API_BASE_URL" && length($2) > 0 { base_url = 1 }
+  $1 == "ADMIN_POINT_SECRET" && length($2) > 0 { admin_secret = 1 }
   END {
     print "FEISHU_WORK_AUDIT_WEBHOOK_URL=" (webhook ? "SET" : "MISSING")
     print "FEISHU_WORK_AUDIT_WEBHOOK_SECRET=" (secret ? "SET" : "MISSING")
     print "WORK_AUDIT_REVIEW_API_BASE_URL=" (base_url ? "SET" : "MISSING")
-    exit !(webhook && secret)
+    print "ADMIN_POINT_SECRET=" (admin_secret ? "SET" : "MISSING")
+    exit !(webhook && secret && admin_secret)
   }
 ' "/proc/${runtime_pid}/environ"
 ```
@@ -117,7 +122,7 @@ sudo awk -v RS='\0' -F= '
 
 最终轮状态与人工编号在事务内持久化，事务提交后只尝试一次飞书通知。配置缺失、用户记录失效、网络异常或飞书错误只写一条脱敏错误日志：不回滚作品的 `AUDITING` 状态，不自动重试，也没有人工重发接口。人工审核编号一旦生成便不轮换，即使后续调整 `max-rounds` 也不能据此恢复自动重审。
 
-卡片中的 `curl` 与问题反馈飞书交互保持一致，使用单行 `-d '<json>'`，审核员只修改 JSON 结论和拒绝原因。`PASSED` 的 `auditRejectReason` 必须为空；`REJECTED` 必须提供不超过 512 个 Unicode 码点的原因。拒绝原因含单引号时需改用双引号包裹请求体并转义 JSON 双引号；双引号、反斜杠和控制字符仍需按 JSON 规则转义。回传接口无认证，人工审核编号等同操作凭据；禁止转发卡片、编号和完整命令到无关群组、外部工单或公开日志。
+卡片中的 `curl` 与问题反馈飞书交互保持一致，使用单行 `-d '<json>'`，并携带完整的 `X-Admin-Point-Secret: <ADMIN_POINT_SECRET实际值>`。审核员只修改 JSON 结论和拒绝原因，不得修改或删除认证头。`PASSED` 的 `auditRejectReason` 必须为空；`REJECTED` 必须提供不超过 512 个 Unicode 码点的原因。拒绝原因含单引号时需改用双引号包裹请求体并转义 JSON 双引号；双引号、反斜杠和控制字符仍需按 JSON 规则转义。回传服务会在任何业务读写前校验内部密钥；禁止转发包含完整密钥的卡片和命令到无关群组、外部工单或公开日志。
 
 飞书通知失败后没有自动积压巡检。值班人员需先结合脱敏通知错误日志与审核群消息，使用下列手工 SQL 查找超过 24 小时仍无结论的记录：
 
@@ -194,6 +199,7 @@ ORDER BY updated_at ASC;
 | `LLM_API_KEY` | 待补充 | 大模型服务调用密钥 | 待补充 | 待补充 | 是 | 只记录存放位置 |
 | `FEISHU_FEEDBACK_WEBHOOK_URL` | 生产 Runtime 双节点 | 问题反馈飞书机器人 Webhook | 不记录值 | `wefolio.service` 现有 `EnvironmentFile` 或 root-only drop-in | 是 | URL 含访问令牌，禁止进入日志、数据库和命令历史 |
 | `FEISHU_FEEDBACK_WEBHOOK_SECRET` | 生产 Runtime 双节点 | 飞书机器人签名密钥 | 不记录值 | `wefolio.service` 现有 `EnvironmentFile` 或 root-only drop-in | 是 | 两台 Runtime 必须使用同一有效配置 |
+| `ADMIN_POINT_SECRET` | Runtime 双节点及内部调用方 | 积分、反馈状态和作品人工审核回传的共享内部密钥 | 不记录值 | root-only 服务环境配置 | 是 | 两台 Runtime 与所有调用方必须一致；反馈和审核飞书卡片会包含完整值 |
 | `FEEDBACK_STATUS_API_BASE_URL` | Runtime | 飞书卡片状态更新 curl 的 API 基础地址 | `https://api.we-folio.dingchenyong.top` | `application.yml` 默认值或 `wefolio.service` 环境配置 | 否 | 非生产环境需要覆盖；末尾斜杠会自动移除 |
 | `FEISHU_WORK_AUDIT_WEBHOOK_URL` | 生产 Runtime 双节点 | 作品最终轮人工审核飞书机器人 Webhook | 不记录值 | `wefolio.service` 现有 `EnvironmentFile` 或 root-only drop-in | 是 | 与问题反馈值相同则同群，不同则分群；禁止回退读取反馈变量 |
 | `FEISHU_WORK_AUDIT_WEBHOOK_SECRET` | 生产 Runtime 双节点 | 作品最终轮人工审核飞书签名密钥 | 不记录值 | `wefolio.service` 现有 `EnvironmentFile` 或 root-only drop-in | 是 | 两台 Runtime 必须使用同一有效配置 |
@@ -232,8 +238,8 @@ ORDER BY updated_at ASC;
 - 证书到期前有自动续期或人工提醒。
 - 大模型服务配置了额度、调用频率或账单告警。
 - 问题反馈 Webhook URL 和飞书签名密钥未进入代码仓库、数据库、应用日志或部署命令历史。
-- 问题反馈状态接口无认证；问题编号和飞书卡片仅在授权团队范围内流转，未进入公开日志或外部工单。
-- 作品人工审核回传接口无认证；人工审核编号、飞书卡片和完整审核命令仅在授权审核群内流转。
+- 问题反馈状态接口已校验 `X-Admin-Point-Secret`；包含完整共享密钥的飞书卡片仅在授权团队范围内流转，未进入公开日志或外部工单。
+- 作品人工审核回传接口已校验 `X-Admin-Point-Secret`；包含完整共享密钥的飞书卡片和审核命令仅在授权审核群内流转。
 - 作品人工审核 Webhook URL 和签名密钥未进入代码仓库、数据库、应用日志或部署命令历史。
 - 两台 Runtime 均能访问 `open.feishu.cn:443`，连通性检查未调用真实机器人 Webhook。
 - 生产 COS Bucket 版本控制为 `Off`，反馈票据中的 `x-cos-forbid-overwrite=true` 已通过联调验证。
@@ -249,5 +255,6 @@ ORDER BY updated_at ASC;
 | 2026-08-15 | dingchenyong | 根据当前部署脚本补充新服务器 `124.222.148.233`，同步 Runtime 双节点滚动发布、Nginx upstream 与 Job 单节点现状 | 生产服务器与部署台账 | 仅文档更新，不涉及线上资源变更；可恢复本文档上一版本 |
 | 2026-08-26 | dingchenyong | 增加问题反馈单次飞书卡片通知、无认证状态更新 curl、COS 禁止覆盖前置条件和过期附件清理说明 | Runtime 双节点、COS Bucket、Job 单节点与团队操作流程 | 仅文档更新；生产配置尚未执行，可恢复本文档上一版本 |
 | 2026-08-26 | dingchenyong | 增加作品最终轮人工审核飞书配置、回传安全说明、积压盘点 SQL 与非生产并发验收步骤 | Runtime 双节点、Job 单节点与审核团队操作流程 | 仅文档更新；生产配置尚未执行，可恢复本文档上一版本 |
+| 2026-08-27 | Codex | 为问题反馈和作品人工审核回传复用 `ADMIN_POINT_SECRET`，飞书 curl 携带完整认证头 | Runtime 双节点、内部调用方与飞书审核流程 | 回滚应用版本；如已轮换密钥，需同步恢复所有调用方配置 |
 | 2026-06-19 | 待补充 | 服务器1 启用 SSH 密钥登录并关闭密码登录 | SSH 登录方式 | 服务器备份文件：`/etc/ssh/sshd_config.bak-20260619-before-disable-passwordauth`；恢复后执行 `sshd -t` 并重载 `sshd` |
 | 2026-06-19 | 待补充 | 初始化技术信息与服务配置台账 | 文档模板 | 不涉及 |

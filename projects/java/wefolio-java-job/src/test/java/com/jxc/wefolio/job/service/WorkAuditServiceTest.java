@@ -61,6 +61,8 @@ class WorkAuditServiceTest {
         inOrder.verify(taskRepository).findExhaustedExpiredVideoQueryTasks(eq(1000), eq(120), any());
         inOrder.verify(taskRepository).findQueryableVideoTasks(eq(1000), eq(120), any());
         inOrder.verify(workRepository).findPendingVideos(500);
+        inOrder.verify(taskRepository).findExhaustedExpiredImageTasks(eq(500), eq(3), any());
+        inOrder.verify(taskRepository).findRetryableExpiredImageTasks(eq(500), eq(3), any());
         inOrder.verify(workRepository).findPendingImages(500);
         inOrder.verify(taskRepository).findQueryableVideoTasks(eq(1000), eq(120), any());
     }
@@ -249,7 +251,8 @@ class WorkAuditServiceTest {
         assertThat(appender.list)
                 .extracting(ILoggingEvent::getFormattedMessage)
                 .contains("作品审核任务开始: 单轮视频查询任务上限=1000, 单轮视频提交作品上限=500, "
-                        + "视频提交最大尝试次数=3, 单轮图片审核作品上限=500, 单轮动图审核任务上限=500, "
+                        + "视频提交最大尝试次数=3, 单轮图片审核作品上限=500, 图片最大尝试次数=3, "
+                        + "单轮动图审核任务上限=500, "
                         + "动图最大尝试次数=3, 视频主动查询最大次数=120");
     }
 
@@ -360,7 +363,7 @@ class WorkAuditServiceTest {
     }
 
     @Test
-    void newVideoSubmissionShouldUseUniqueTokenWhileImageKeepsInstancePrefix() {
+    void newVideoAndImageTasksShouldUseUniqueClaimTokens() {
         WorkAuditWorkEntity video = work(41L, MediaTypeDict.VIDEO, "unique-video.mp4", 1000);
         WorkAuditWorkEntity image = work(42L, MediaTypeDict.IMAGE, "plain-image.jpg", null);
         WorkAuditWorkRepository workRepository = mock(WorkAuditWorkRepository.class);
@@ -388,7 +391,7 @@ class WorkAuditServiceTest {
         verify(claimTransactionService, times(2))
                 .claimAndCreateSubmittingTask(any(), taskCaptor.capture());
         assertThat(taskCaptor.getAllValues().get(0).getLockedBy()).matches("test-[0-9a-f]{32}");
-        assertThat(taskCaptor.getAllValues().get(1).getLockedBy()).isEqualTo("test");
+        assertThat(taskCaptor.getAllValues().get(1).getLockedBy()).matches("test-[0-9a-f]{32}");
     }
 
     @Test
@@ -588,8 +591,8 @@ class WorkAuditServiceTest {
         service.auditPendingImages(500);
 
         ArgumentCaptor<String> reasonCaptor = ArgumentCaptor.forClass(String.class);
-        verify(claimTransactionService).markTaskSuccessAndUpdateWork(
-                eq(102L), eq(12L), eq(1), eq(AuditResultDict.REVIEW), any(), eq(1), eq("Porn"), eq(90),
+        verify(claimTransactionService).markImageTaskSuccessAndUpdateWork(
+                eq(102L), eq(12L), eq(1), anyString(), eq(AuditResultDict.REVIEW), any(), eq(1), eq("Porn"), eq(90),
                 eq(List.<TencentCiAuditRisk>of()), eq("{}"),
                 eq(WorkAuditStatusDict.REVIEW_REQUIRED), reasonCaptor.capture());
         assertThat(reasonCaptor.getValue()).contains("疑似违规", "需人工复核", "Porn", "90");
@@ -615,8 +618,8 @@ class WorkAuditServiceTest {
 
         service.auditPendingImages(500);
 
-        verify(claimTransactionService).markTaskSuccessAndUpdateWork(
-                eq(106L), eq(16L), eq(1), eq(AuditResultDict.PASS), any(), eq(0), eq("Normal"), eq(0),
+        verify(claimTransactionService).markImageTaskSuccessAndUpdateWork(
+                eq(106L), eq(16L), eq(1), anyString(), eq(AuditResultDict.PASS), any(), eq(0), eq("Normal"), eq(0),
                 eq(List.<TencentCiAuditRisk>of()), eq("{}"),
                 eq(WorkAuditStatusDict.PASSED), eq(null));
     }
@@ -640,8 +643,8 @@ class WorkAuditServiceTest {
         when(auditClient.auditImage("sensitive-image.jpg")).thenReturn(new TencentCiAuditResult(
                 "image-job-id", null, AuditResultDict.PASS, 0, "Normal", 0, true, false,
                 "sensitive-payload"));
-        when(claimTransactionService.markTaskSuccessAndUpdateWork(
-                eq(107L), eq(17L), eq(2), eq(AuditResultDict.PASS), any(), eq(0), eq("Normal"), eq(0),
+        when(claimTransactionService.markImageTaskSuccessAndUpdateWork(
+                eq(107L), eq(17L), eq(2), anyString(), eq(AuditResultDict.PASS), any(), eq(0), eq("Normal"), eq(0),
                 eq(List.<TencentCiAuditRisk>of()), eq("sensitive-payload"),
                 eq(WorkAuditStatusDict.PASSED), eq(null))).thenReturn(false);
         WorkAuditService service = new WorkAuditService(
@@ -656,6 +659,93 @@ class WorkAuditServiceTest {
                 .allMatch(message -> !message.contains("sensitive-image.jpg")
                         && !message.contains("sensitive-payload"));
         assertThat(messages).noneMatch(message -> message.contains("图片作品审核简洁结果"));
+    }
+
+    @Test
+    void recoveredAndNewImageTasksShouldReusePersistedTaskAndShareCapacity() {
+        LocalDateTime now = LocalDateTime.of(2026, 8, 27, 12, 0);
+        WorkAuditTaskEntity recovered = imageTask(501L, 51L, 2, "persisted-old.jpg", 1);
+        WorkAuditWorkEntity newWork = work(52L, MediaTypeDict.IMAGE, "new-image.jpg", null);
+        WorkAuditWorkRepository workRepository = mock(WorkAuditWorkRepository.class);
+        WorkAuditTaskRepository taskRepository = mock(WorkAuditTaskRepository.class);
+        WorkAuditClaimTransactionService claimTransactionService = mock(WorkAuditClaimTransactionService.class);
+        TencentCiAuditClient auditClient = mock(TencentCiAuditClient.class);
+        when(taskRepository.findRetryableExpiredImageTasks(2, 3, now)).thenReturn(List.of(recovered));
+        when(taskRepository.claimExpiredImageTask(
+                eq(501L), anyString(), eq(now), eq(now.plusMinutes(5)), eq(3))).thenReturn(true);
+        when(workRepository.findPendingImages(1)).thenReturn(List.of(newWork));
+        when(claimTransactionService.claimAndCreateSubmittingTask(eq(52L), any()))
+                .thenAnswer(invocation -> {
+                    WorkAuditTaskEntity task = invocation.getArgument(1);
+                    task.setId(502L);
+                    return task;
+                });
+        when(auditClient.auditImage(anyString())).thenReturn(imageResult(AuditResultDict.PASS, 0, "Normal", 0));
+        when(claimTransactionService.markImageTaskSuccessAndUpdateWork(
+                any(), any(), any(), anyString(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(true);
+        WorkAuditService service = new WorkAuditService(
+                workRepository, taskRepository, claimTransactionService, auditClient, properties());
+
+        service.auditPendingImages(2, now);
+
+        InOrder order = inOrder(taskRepository, workRepository);
+        order.verify(taskRepository).findExhaustedExpiredImageTasks(2, 3, now);
+        order.verify(taskRepository).findRetryableExpiredImageTasks(2, 3, now);
+        order.verify(workRepository).findPendingImages(1);
+        verify(auditClient).auditImage("persisted-old.jpg");
+        verify(auditClient).auditImage("new-image.jpg");
+        verify(claimTransactionService).markImageTaskSuccessAndUpdateWork(
+                eq(501L), eq(51L), eq(2), anyString(), eq(AuditResultDict.PASS), any(), eq(0), eq("Normal"), eq(0),
+                eq(List.<TencentCiAuditRisk>of()), eq("{}"), eq(WorkAuditStatusDict.PASSED), eq(null));
+        verify(claimTransactionService, times(1)).claimAndCreateSubmittingTask(any(), any());
+    }
+
+    @Test
+    void exhaustedImageTaskShouldFailWithoutConsumingRemoteCapacity() {
+        LocalDateTime now = LocalDateTime.of(2026, 8, 27, 12, 0);
+        WorkAuditTaskEntity exhausted = imageTask(511L, 61L, 1, "old-image.jpg", 3);
+        WorkAuditWorkRepository workRepository = mock(WorkAuditWorkRepository.class);
+        WorkAuditTaskRepository taskRepository = mock(WorkAuditTaskRepository.class);
+        WorkAuditClaimTransactionService claimTransactionService = mock(WorkAuditClaimTransactionService.class);
+        TencentCiAuditClient auditClient = mock(TencentCiAuditClient.class);
+        when(taskRepository.findExhaustedExpiredImageTasks(1, 3, now)).thenReturn(List.of(exhausted));
+        when(taskRepository.claimExhaustedExpiredImageTask(
+                eq(511L), anyString(), eq(now), eq(now.plusMinutes(5)), eq(3))).thenReturn(true);
+        when(claimTransactionService.markImageTaskFailedAndUpdateWorkFailed(
+                eq(511L), eq(61L), eq(1), anyString(), anyString(), eq(null), anyString())).thenReturn(true);
+        WorkAuditService service = new WorkAuditService(
+                workRepository, taskRepository, claimTransactionService, auditClient, properties());
+
+        service.auditPendingImages(1, now);
+
+        verify(claimTransactionService).markImageTaskFailedAndUpdateWorkFailed(
+                eq(511L), eq(61L), eq(1), anyString(),
+                eq("图片审核任务在最后一次尝试中断"), eq(null),
+                eq("图片审核任务连续中断并达到最大恢复次数"));
+        verify(workRepository).findPendingImages(1);
+        verifyNoInteractions(auditClient);
+    }
+
+    @Test
+    void imageTaskEnteringFinalManualAuditBeforeClaimShouldNeverCallTencentCi() {
+        LocalDateTime now = LocalDateTime.of(2026, 8, 27, 12, 0);
+        WorkAuditTaskEntity manual = imageTask(521L, 71L, 1, "manual-image.jpg", 1);
+        WorkAuditWorkRepository workRepository = mock(WorkAuditWorkRepository.class);
+        WorkAuditTaskRepository taskRepository = mock(WorkAuditTaskRepository.class);
+        WorkAuditClaimTransactionService claimTransactionService = mock(WorkAuditClaimTransactionService.class);
+        TencentCiAuditClient auditClient = mock(TencentCiAuditClient.class);
+        when(taskRepository.findRetryableExpiredImageTasks(1, 3, now)).thenReturn(List.of(manual));
+        when(taskRepository.claimExpiredImageTask(
+                eq(521L), anyString(), eq(now), eq(now.plusMinutes(5)), eq(3))).thenReturn(false);
+        WorkAuditService service = new WorkAuditService(
+                workRepository, taskRepository, claimTransactionService, auditClient, properties());
+
+        service.auditPendingImages(1, now);
+
+        verify(workRepository).findPendingImages(1);
+        verifyNoInteractions(auditClient);
+        verifyNoInteractions(claimTransactionService);
     }
 
     @Test
@@ -977,6 +1067,19 @@ class WorkAuditServiceTest {
         task.setCiJobId("video-job-id");
         task.setAuditRound(1);
         task.setQueryCount(queryCount);
+        return task;
+    }
+
+    private WorkAuditTaskEntity imageTask(
+            Long id, Long workId, Integer auditRound, String objectKey, Integer attemptCount) {
+        WorkAuditTaskEntity task = new WorkAuditTaskEntity();
+        task.setId(id);
+        task.setWorkId(workId);
+        task.setUserId(99L);
+        task.setMediaType(MediaTypeDict.IMAGE.getCode());
+        task.setMediaObjectKey(objectKey);
+        task.setAuditRound(auditRound);
+        task.setAttemptCount(attemptCount);
         return task;
     }
 

@@ -13,6 +13,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.boot.test.system.CapturedOutput;
@@ -28,6 +29,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -40,6 +43,9 @@ class WorkManualAuditServiceTest {
     /** 固定人工审核编号。 */
     private static final String MANUAL_NO = "WA20260827153042A7K2Q9";
 
+    /** 固定内部接口密钥。 */
+    private static final String ADMIN_SECRET = "admin-secret";
+
     /** 固定首次结论时间。 */
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 8, 26, 12, 0);
 
@@ -47,12 +53,44 @@ class WorkManualAuditServiceTest {
     @Mock
     private WorkEntityMapper mapper;
 
+    /** 内部接口密钥校验器模拟。 */
+    @Mock
+    private AdminPointSecretValidator adminPointSecretValidator;
+
+    /** 无效内部密钥必须在请求解析和数据库访问前失败。 */
+    @Test
+    void invalidAdminSecretFailsBeforeRequestParsingAndDatabaseAccess() {
+        doThrow(new BusinessException("后台积分密钥无效"))
+                .when(adminPointSecretValidator).validate("wrong-secret");
+
+        assertThatThrownBy(() -> service().update("wrong-secret", null, null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("后台积分密钥无效");
+
+        verifyNoInteractions(mapper);
+    }
+
+    /** 有效内部密钥必须在首次数据库读取前完成校验。 */
+    @Test
+    void validAdminSecretIsCheckedBeforeDatabaseRead() {
+        when(mapper.lockByManualAuditNo(MANUAL_NO)).thenReturn(auditingWork());
+        when(mapper.completeManualAudit(
+                91L, MANUAL_NO, WorkAuditStatusDict.PASSED.getCode(), null, NOW))
+                .thenReturn(1);
+
+        service().update(ADMIN_SECRET, MANUAL_NO, request("PASSED", null));
+
+        InOrder order = inOrder(adminPointSecretValidator, mapper);
+        order.verify(adminPointSecretValidator).validate(ADMIN_SECRET);
+        order.verify(mapper).lockByManualAuditNo(MANUAL_NO);
+    }
+
     /** 非法人工审核编号必须在访问数据库前失败。 */
     @ParameterizedTest
     @NullSource
     @ValueSource(strings = {"", " ", "FB20260827153042ABCDEF"})
     void invalidManualNumberFailsBeforeDatabaseAccess(String manualAuditNo) {
-        assertThatThrownBy(() -> service().update(manualAuditNo, request("PASSED", null)))
+        assertThatThrownBy(() -> service().update(ADMIN_SECRET, manualAuditNo, request("PASSED", null)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage(WorkManualAuditMessage.NOT_FOUND_MESSAGE);
 
@@ -73,7 +111,7 @@ class WorkManualAuditServiceTest {
                 null,
                 NOW)).thenReturn(1);
 
-        WorkManualAuditUpdateResponse response = service().update(
+        WorkManualAuditUpdateResponse response = service().update(ADMIN_SECRET,
                 " WAlegacy-text ", request("PASSED", null));
 
         assertThat(response.getManualAuditNo()).isEqualTo(normalizedManualAuditNo);
@@ -84,7 +122,7 @@ class WorkManualAuditServiceTest {
     /** 状态规范化后只允许通过或拒绝。 */
     @Test
     void requestOnlyAllowsPassedOrRejected() {
-        assertThatThrownBy(() -> service().update(MANUAL_NO, request("AUDITING", null)))
+        assertThatThrownBy(() -> service().update(ADMIN_SECRET, MANUAL_NO, request("AUDITING", null)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage(WorkManualAuditMessage.STATUS_INVALID_MESSAGE);
         verify(mapper, never()).lockByManualAuditNo(anyString());
@@ -97,7 +135,7 @@ class WorkManualAuditServiceTest {
         when(mapper.completeManualAudit(anyLong(), anyString(), anyString(), any(), any()))
                 .thenReturn(1);
 
-        WorkManualAuditUpdateResponse accepted = service().update(
+        WorkManualAuditUpdateResponse accepted = service().update(ADMIN_SECRET,
                 MANUAL_NO, request(" rejected ", " " + "😀".repeat(512) + " "));
 
         assertThat(accepted.getAuditRejectReason()).isEqualTo("😀".repeat(512));
@@ -109,7 +147,7 @@ class WorkManualAuditServiceTest {
     /** 超过 512 个 Unicode 码点的拒绝原因必须在访问数据库前失败。 */
     @Test
     void tooLongRejectReasonFailsBeforeDatabaseAccess() {
-        assertThatThrownBy(() -> service().update(
+        assertThatThrownBy(() -> service().update(ADMIN_SECRET,
                 MANUAL_NO, request("REJECTED", "😀".repeat(513))))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage(WorkManualAuditMessage.REJECT_REASON_TOO_LONG_MESSAGE);
@@ -120,17 +158,17 @@ class WorkManualAuditServiceTest {
     /** 通过和拒绝分别执行对应的原因规则，并兼容大小写和首尾空白。 */
     @Test
     void reasonRulesDependOnTargetStatus() {
-        assertThatThrownBy(() -> service().update(MANUAL_NO, request("REJECTED", " ")))
+        assertThatThrownBy(() -> service().update(ADMIN_SECRET, MANUAL_NO, request("REJECTED", " ")))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage(WorkManualAuditMessage.REJECT_REASON_EMPTY_MESSAGE);
-        assertThatThrownBy(() -> service().update(MANUAL_NO, request("PASSED", "不应携带")))
+        assertThatThrownBy(() -> service().update(ADMIN_SECRET, MANUAL_NO, request("PASSED", "不应携带")))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage(WorkManualAuditMessage.PASSED_REASON_NOT_ALLOWED_MESSAGE);
 
         when(mapper.lockByManualAuditNo(MANUAL_NO)).thenReturn(auditingWork());
         when(mapper.completeManualAudit(anyLong(), anyString(), anyString(), any(), any()))
                 .thenReturn(1);
-        assertThat(service().update(MANUAL_NO, request(" PASSED ", "  "))
+        assertThat(service().update(ADMIN_SECRET, MANUAL_NO, request(" PASSED ", "  "))
                 .getAuditRejectReason()).isNull();
     }
 
@@ -142,7 +180,7 @@ class WorkManualAuditServiceTest {
                 91L, MANUAL_NO, WorkAuditStatusDict.REJECTED.getCode(), "原因", NOW))
                 .thenReturn(1);
 
-        WorkManualAuditUpdateResponse response = service().update(
+        WorkManualAuditUpdateResponse response = service().update(ADMIN_SECRET,
                 MANUAL_NO, request("REJECTED", " 原因 "));
 
         assertThat(response.getManualAuditNo()).isEqualTo(MANUAL_NO);
@@ -158,7 +196,7 @@ class WorkManualAuditServiceTest {
         WorkEntity passed = terminalWork(WorkAuditStatusDict.PASSED, null);
         when(mapper.lockByManualAuditNo(MANUAL_NO)).thenReturn(passed);
 
-        WorkManualAuditUpdateResponse response = service().update(
+        WorkManualAuditUpdateResponse response = service().update(ADMIN_SECRET,
                 MANUAL_NO, request(" passed ", null));
 
         assertThat(response.isChanged()).isFalse();
@@ -172,7 +210,7 @@ class WorkManualAuditServiceTest {
         WorkEntity rejected = terminalWork(WorkAuditStatusDict.REJECTED, "原因");
         when(mapper.lockByManualAuditNo(MANUAL_NO)).thenReturn(rejected);
 
-        WorkManualAuditUpdateResponse response = service().update(
+        WorkManualAuditUpdateResponse response = service().update(ADMIN_SECRET,
                 MANUAL_NO, request("REJECTED", " 原因 "));
 
         assertThat(response.isChanged()).isFalse();
@@ -186,11 +224,11 @@ class WorkManualAuditServiceTest {
         WorkEntity rejected = terminalWork(WorkAuditStatusDict.REJECTED, "原因");
         when(mapper.lockByManualAuditNo(MANUAL_NO)).thenReturn(rejected);
 
-        assertThatThrownBy(() -> service().update(
+        assertThatThrownBy(() -> service().update(ADMIN_SECRET,
                 MANUAL_NO, request("REJECTED", "另一原因")))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage(WorkManualAuditMessage.RESULT_CONFLICT_MESSAGE);
-        assertThatThrownBy(() -> service().update(MANUAL_NO, request("PASSED", null)))
+        assertThatThrownBy(() -> service().update(ADMIN_SECRET, MANUAL_NO, request("PASSED", null)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage(WorkManualAuditMessage.RESULT_CONFLICT_MESSAGE);
         verify(mapper, never()).completeManualAudit(anyLong(), anyString(), anyString(), any(), any());
@@ -206,7 +244,7 @@ class WorkManualAuditServiceTest {
                 91L, MANUAL_NO, WorkAuditStatusDict.PASSED.getCode(), null, NOW))
                 .thenReturn(1);
 
-        WorkManualAuditUpdateResponse response = service().update(
+        WorkManualAuditUpdateResponse response = service().update(ADMIN_SECRET,
                 MANUAL_NO, request("PASSED", null));
 
         assertThat(response.getAuditStatus()).isEqualTo(WorkAuditStatusDict.PASSED.getCode());
@@ -242,7 +280,7 @@ class WorkManualAuditServiceTest {
         when(mapper.completeManualAudit(anyLong(), anyString(), anyString(), any(), any()))
                 .thenReturn(0);
 
-        assertThatThrownBy(() -> service().update(
+        assertThatThrownBy(() -> service().update(ADMIN_SECRET,
                 MANUAL_NO, request("REJECTED", "敏感拒绝原因")))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage(WorkManualAuditMessage.CONCURRENT_CONFLICT_MESSAGE);
@@ -256,7 +294,7 @@ class WorkManualAuditServiceTest {
 
     /** 断言当前人工记录按失效语义失败。 */
     private void assertExpired() {
-        assertThatThrownBy(() -> service().update(MANUAL_NO, request("PASSED", null)))
+        assertThatThrownBy(() -> service().update(ADMIN_SECRET, MANUAL_NO, request("PASSED", null)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage(WorkManualAuditMessage.NOT_FOUND_MESSAGE);
     }
@@ -265,6 +303,7 @@ class WorkManualAuditServiceTest {
     private WorkManualAuditService service() {
         return new WorkManualAuditService(
                 mapper,
+                adminPointSecretValidator,
                 Clock.fixed(Instant.parse("2026-08-26T12:00:00Z"), ZoneOffset.UTC));
     }
 

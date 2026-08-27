@@ -30,6 +30,9 @@ public class MineFeedbackApplicationService {
     /** 飞书反馈通知器。 */
     private final FeishuFeedbackNotifier notifier;
 
+    /** 内部接口密钥校验器。 */
+    private final AdminPointSecretValidator adminPointSecretValidator;
+
     /**
      * 创建当前用户的问题反馈并在事务完成后发送一次飞书通知。
      *
@@ -63,14 +66,17 @@ public class MineFeedbackApplicationService {
     /**
      * 更新问题状态。
      *
+     * @param secret 请求头中的后台积分密钥
      * @param feedbackNo 对外问题反馈编号
      * @param request 状态更新请求
      * @return 不含用户身份和原始轮次 JSON 的最小响应
      */
     public FeedbackStatusUpdateResponse updateStatus(
+            String secret,
             String feedbackNo,
             FeedbackStatusUpdateRequest request
     ) {
+        adminPointSecretValidator.validate(secret);
         FeedbackTransactionService.MutationResult result =
                 feedbackTransactionService.updateStatus(feedbackNo, request);
         FeedbackEntity feedback = result.feedback();

@@ -12,6 +12,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -21,6 +22,8 @@ import java.util.Arrays;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import static com.jxc.wefolio.constant.PointConstants.ADMIN_POINT_SECRET_HEADER;
 
 /** 问题反馈内部状态控制器测试。 */
 @ExtendWith(MockitoExtension.class)
@@ -40,32 +43,32 @@ class FeedbackStatusControllerTest {
                 .containsExactly(MineFeedbackApplicationService.class);
     }
 
-    /** 状态更新接口必须无认证头并原样委派编号和请求体。 */
+    /** 状态更新接口必须绑定内部密钥并原样委派密钥、编号和请求体。 */
     @Test
-    void updateStatusDelegatesPathAndBodyWithoutAuthenticationHeader() throws NoSuchMethodException {
+    void updateStatusDelegatesSecretPathAndBody() throws NoSuchMethodException {
         FeedbackStatusUpdateRequest request = new FeedbackStatusUpdateRequest();
         FeedbackStatusUpdateResponse serviceResponse = new FeedbackStatusUpdateResponse();
         when(applicationService.updateStatus(
-                "FB0123456789abcdef0123456789abcdef", request))
+                "admin-secret", "FB0123456789abcdef0123456789abcdef", request))
                 .thenReturn(serviceResponse);
         FeedbackStatusController controller = new FeedbackStatusController(applicationService);
 
         Response<FeedbackStatusUpdateResponse> response = controller.updateStatus(
-                "FB0123456789abcdef0123456789abcdef", request);
+                "admin-secret", "FB0123456789abcdef0123456789abcdef", request);
 
         Method method = FeedbackStatusController.class.getMethod(
-                "updateStatus", String.class, FeedbackStatusUpdateRequest.class);
+                "updateStatus", String.class, String.class, FeedbackStatusUpdateRequest.class);
         assertThat(method.getAnnotation(PutMapping.class).value())
                 .containsExactly("/api/internal/feedbacks/{feedbackNo}");
-        assertThat(Arrays.stream(method.getParameters())
-                .noneMatch(parameter -> parameter.isAnnotationPresent(
-                        org.springframework.web.bind.annotation.RequestHeader.class))).isTrue();
-        assertThat(method.getParameters()[0].getAnnotation(PathVariable.class).value())
+        RequestHeader requestHeader = method.getParameters()[0].getAnnotation(RequestHeader.class);
+        assertThat(requestHeader.value()).isEqualTo(ADMIN_POINT_SECRET_HEADER);
+        assertThat(requestHeader.required()).isFalse();
+        assertThat(method.getParameters()[1].getAnnotation(PathVariable.class).value())
                 .isEqualTo("feedbackNo");
-        assertThat(method.getParameters()[1].isAnnotationPresent(RequestBody.class)).isTrue();
+        assertThat(method.getParameters()[2].isAnnotationPresent(RequestBody.class)).isTrue();
         assertThat(response.isSuccess()).isTrue();
         assertThat(response.getData()).isSameAs(serviceResponse);
         verify(applicationService).updateStatus(
-                "FB0123456789abcdef0123456789abcdef", request);
+                "admin-secret", "FB0123456789abcdef0123456789abcdef", request);
     }
 }

@@ -41,6 +41,14 @@ function trimText(value) {
   return String(value || '').trim()
 }
 
+// 团队创建键在失败重试期间保持不变，格式与后端 64 字符可打印 ASCII 约束一致。
+function createTeamIdempotencyKey(options = {}) {
+  const nowMs = options.nowMs === undefined ? Date.now() : Number(options.nowMs)
+  const randomFn = typeof options.randomFn === 'function' ? options.randomFn : Math.random
+  const randomValue = Math.floor(Math.max(0, Math.min(0.999999999, Number(randomFn()) || 0)) * 2176782336)
+  return `team-create-${Math.max(0, nowMs).toString(36)}-${randomValue.toString(36)}`.slice(0, 64)
+}
+
 function toBoolean(value, fallback = false) {
   if (value === undefined || value === null) {
     return fallback
@@ -449,6 +457,7 @@ module.exports = {
   TEAM_NAME_MAX_LENGTH,
   buildTeamFieldCounters,
   buildTeamPayload,
+  createTeamIdempotencyKey,
   normalizeTeamMemberChangeDetail,
   normalizeTeamInvitation,
   normalizeTeamMemberCandidate,

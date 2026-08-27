@@ -3,6 +3,7 @@ package com.jxc.wefolio.job.config;
 import com.jxc.wefolio.job.service.JobExecutionLifecycle;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -20,10 +21,11 @@ class JobSchedulingTaskDecoratorTest {
         Runnable decorated = decorator.decorate(invocationCount::incrementAndGet);
 
         decorated.run();
-        lifecycle.disable();
+        lifecycle.pause(Duration.ofMinutes(10));
         decorated.run();
 
         assertThat(invocationCount).hasValue(1);
         assertThat(lifecycle.snapshot().status()).isEqualTo(JobExecutionLifecycle.Status.DISABLED);
     }
+
 }

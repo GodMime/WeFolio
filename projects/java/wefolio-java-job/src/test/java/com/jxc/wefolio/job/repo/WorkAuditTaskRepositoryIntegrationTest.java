@@ -3,6 +3,7 @@ package com.jxc.wefolio.job.repo;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.MybatisSqlSessionFactoryBuilder;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import com.jxc.wefolio.job.dict.AuditResultDict;
 import com.jxc.wefolio.job.entity.WorkAuditTaskEntity;
 import com.jxc.wefolio.job.mapper.WorkAuditTaskMapper;
 import org.apache.ibatis.mapping.Environment;
@@ -203,6 +204,53 @@ class WorkAuditTaskRepositoryIntegrationTest {
         assertThat(taskValue(306L, "locked_by", String.class)).isEqualTo("terminal-token");
     }
 
+    /** 图片恢复全链路必须排除旧轮次、终态、删除及最终人工审核作品。 */
+    @Test
+    void imageRecoverySqlShouldRequireSameRoundAuditingAndNoManualAuditNo() {
+        for (long workId = 41L; workId <= 49L; workId++) {
+            insertWork(workId, "AUDITING", 1, 0L);
+        }
+        jdbcTemplate.update("UPDATE wf_work SET audit_round = 2 WHERE id = 42");
+        jdbcTemplate.update("UPDATE wf_work SET audit_status = 'PASSED' WHERE id = 43");
+        jdbcTemplate.update("UPDATE wf_work SET deleted = 44 WHERE id = 44");
+        markWorkAsManualAudit(45L);
+
+        insertImageTask(401L, 41L, "SUBMITTING", 1, NOW.minusMinutes(1), 1);
+        insertImageTask(402L, 42L, "SUBMITTING", 1, NOW.minusMinutes(1), 1);
+        insertImageTask(403L, 43L, "SUBMITTING", 1, NOW.minusMinutes(1), 1);
+        insertImageTask(404L, 44L, "SUBMITTING", 1, NOW.minusMinutes(1), 1);
+        insertImageTask(405L, 45L, "SUBMITTING", 1, NOW.minusMinutes(1), 1);
+        insertImageTask(406L, 46L, "SUCCESS", 1, NOW.minusMinutes(1), 1);
+        insertImageTask(407L, 47L, "SUBMITTING", 1, NOW.plusMinutes(1), 1);
+        insertImageTask(408L, 48L, "SUBMITTING", 3, NOW.minusMinutes(1), 1);
+        insertImageTask(409L, 49L, "SUBMITTING", 1, NOW.minusMinutes(1), 1);
+
+        assertThat(repository.findRetryableExpiredImageTasks(20, 3, NOW))
+                .extracting(WorkAuditTaskEntity::getId)
+                .containsExactly(401L, 409L);
+        assertThat(repository.findExhaustedExpiredImageTasks(20, 3, NOW))
+                .extracting(WorkAuditTaskEntity::getId)
+                .containsExactly(408L);
+
+        assertThat(repository.claimExpiredImageTask(
+                401L, "retry-token", NOW, NOW.plusMinutes(5), 3)).isTrue();
+        assertThat(taskValue(401L, "attempt_count", Integer.class)).isEqualTo(2);
+        assertThat(taskValue(401L, "locked_by", String.class)).isEqualTo("retry-token");
+        assertThat(repository.claimExpiredImageTask(
+                405L, "manual-token", NOW, NOW.plusMinutes(5), 3)).isFalse();
+        assertThat(repository.claimExhaustedExpiredImageTask(
+                408L, "terminal-token", NOW, NOW.plusMinutes(5), 3)).isTrue();
+        assertThat(taskValue(408L, "attempt_count", Integer.class)).isEqualTo(3);
+
+        assertThat(repository.claimExpiredImageTask(
+                409L, "race-token", NOW, NOW.plusMinutes(5), 3)).isTrue();
+        markWorkAsManualAudit(49L);
+        assertThat(repository.markImageSuccess(
+                409L, "race-token", AuditResultDict.PASS, "Success", 0, "Normal", 0, "{}"))
+                .isFalse();
+        assertThat(taskValue(409L, "task_status", String.class)).isEqualTo("SUBMITTING");
+    }
+
     private void createTables() {
         jdbcTemplate.execute("""
                 CREATE TABLE wf_work (
@@ -280,6 +328,20 @@ class WorkAuditTaskRepositoryIntegrationTest {
                           provider, task_status, audit_result, attempt_count, query_count,
                           locked_until, created_at, updated_at, deleted, version
                         ) VALUES (?, ?, 1, 'ANIMATION', 'image/test.gif', ?,
+                                  'TENCENT_CI', ?, 'UNKNOWN', ?, 0, ?, ?, ?, 0, 0)
+                        """,
+                id, workId, auditRound, taskStatus, attemptCount, lockedUntil,
+                NOW.minusHours(1), NOW.minusHours(1));
+    }
+
+    private void insertImageTask(Long id, Long workId, String taskStatus, int attemptCount,
+                                 LocalDateTime lockedUntil, int auditRound) {
+        jdbcTemplate.update("""
+                        INSERT INTO wf_work_audit_task(
+                          id, work_id, user_id, media_type, media_object_key, audit_round,
+                          provider, task_status, audit_result, attempt_count, query_count,
+                          locked_until, created_at, updated_at, deleted, version
+                        ) VALUES (?, ?, 1, 'IMAGE', 'image/test.jpg', ?,
                                   'TENCENT_CI', ?, 'UNKNOWN', ?, 0, ?, ?, ?, 0, 0)
                         """,
                 id, workId, auditRound, taskStatus, attemptCount, lockedUntil,

@@ -11,6 +11,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
+import static com.jxc.wefolio.constant.PointConstants.ADMIN_POINT_SECRET_HEADER;
+
 /** job 调用的 runtime 月度作品存储内部接口。 */
 @SystemAccess
 @RestController
@@ -23,7 +25,7 @@ public class WorkStorageBillingSettlementController {
     /** 执行单用户账期结算。 */
     @PostMapping("/api/admin/points/work-storage-billing/settlements")
     public Response<WorkStorageBillingSettlementResponse> settle(
-            @RequestHeader(value = "X-Admin-Point-Secret", required = false) String secret,
+            @RequestHeader(value = ADMIN_POINT_SECRET_HEADER, required = false) String secret,
             @RequestBody WorkStorageBillingSettlementRequest request
     ) {
         return Response.success(settlementApplicationService.settle(secret, request));

@@ -2,7 +2,9 @@ package com.jxc.wefolio.job.service;
 
 import org.springframework.stereotype.Service;
 
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Condition;
@@ -13,6 +15,9 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 @Service
 public class JobExecutionLifecycle {
+
+    /** 提供暂停截止时间，生产环境固定使用 UTC 系统时钟，测试可替换。 */
+    private final Clock clock;
 
     /** 保护生命周期状态与活动计数的互斥锁。 */
     private final ReentrantLock lifecycleLock = new ReentrantLock();
@@ -29,8 +34,27 @@ public class JobExecutionLifecycle {
     /** 当前生命周期状态，只允许在持有 {@link #lifecycleLock} 时读写。 */
     private Status status = Status.ACCEPTING;
 
+    /** 暂停截止时间；接受新任务时为空，只允许在持有生命周期锁时读写。 */
+    private Instant pausedUntil;
+
     /** 已获得凭证且尚未释放的工作数，只允许在持有生命周期锁时读写。 */
     private int activeTaskCount;
+
+    /**
+     * 使用 UTC 系统时钟创建生命周期，供非 Spring 场景和简单单元测试使用。
+     */
+    public JobExecutionLifecycle() {
+        this(Clock.systemUTC());
+    }
+
+    /**
+     * 使用可控时钟创建生命周期。
+     *
+     * @param clock 暂停截止时间使用的时钟
+     */
+    JobExecutionLifecycle(Clock clock) {
+        this.clock = clock;
+    }
 
     /**
      * 尝试为新的后台工作申请执行凭证。
@@ -40,6 +64,7 @@ public class JobExecutionLifecycle {
     public Optional<ExecutionPermit> tryAcquire() {
         lifecycleLock.lock();
         try {
+            reopenIfPauseExpiredUnsafe();
             if (status != Status.ACCEPTING) {
                 return Optional.empty();
             }
@@ -64,6 +89,7 @@ public class JobExecutionLifecycle {
         }
         lifecycleLock.lock();
         try {
+            reopenIfPauseExpiredUnsafe();
             if (status == Status.DISABLED) {
                 return Optional.empty();
             }
@@ -100,18 +126,18 @@ public class JobExecutionLifecycle {
     }
 
     /**
-     * 启动一次性停用流程，并返回切换后的快照。
+     * 暂停新工作直到指定时长结束，并返回切换后的快照。
      *
+     * @param duration 本次暂停时长
      * @return 当前生命周期快照
      */
-    public ExecutionSnapshot disable() {
+    public ExecutionSnapshot pause(Duration duration) {
         lifecycleLock.lock();
         try {
-            if (status == Status.ACCEPTING) {
-                status = activeTaskCount == 0 ? Status.DISABLED : Status.DRAINING;
-                if (status == Status.DISABLED) {
-                    disabledCondition.signalAll();
-                }
+            pausedUntil = clock.instant().plus(duration);
+            status = activeTaskCount == 0 ? Status.DISABLED : Status.DRAINING;
+            if (status == Status.DISABLED) {
+                disabledCondition.signalAll();
             }
             return snapshotUnsafe();
         } finally {
@@ -150,6 +176,7 @@ public class JobExecutionLifecycle {
     public ExecutionSnapshot snapshot() {
         lifecycleLock.lock();
         try {
+            reopenIfPauseExpiredUnsafe();
             return snapshotUnsafe();
         } finally {
             lifecycleLock.unlock();
@@ -162,7 +189,17 @@ public class JobExecutionLifecycle {
      * @return 当前状态与活动工作数
      */
     private ExecutionSnapshot snapshotUnsafe() {
-        return new ExecutionSnapshot(status, activeTaskCount);
+        return new ExecutionSnapshot(status, activeTaskCount, pausedUntil);
+    }
+
+    /**
+     * 在准入或观测同步边界内惰性结束已到期暂停。
+     */
+    private void reopenIfPauseExpiredUnsafe() {
+        if (pausedUntil != null && !clock.instant().isBefore(pausedUntil)) {
+            pausedUntil = null;
+            status = Status.ACCEPTING;
+        }
     }
 
     /**
@@ -201,8 +238,9 @@ public class JobExecutionLifecycle {
      *
      * @param status 当前状态
      * @param activeTaskCount 当前活动工作数
+     * @param pausedUntil 暂停截止时间，接受新任务时为空
      */
-    public record ExecutionSnapshot(Status status, int activeTaskCount) {
+    public record ExecutionSnapshot(Status status, int activeTaskCount, Instant pausedUntil) {
     }
 
     /**

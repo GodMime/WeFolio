@@ -36,6 +36,9 @@ public class WorkAuditProperties {
     /** 每轮最多审核的图片作品数 */
     private int maxAuditImagePerRun = 500;
 
+    /** 单个图片审核任务最大尝试次数 */
+    private int imageMaxAttempts = 3;
+
     /** 每轮最多尝试审核的动图任务数 */
     private int maxAuditAnimationPerRun = 500;
 
@@ -64,6 +67,18 @@ public class WorkAuditProperties {
             throw new IllegalArgumentException("每轮动图审核上限必须为正整数");
         }
         this.maxAuditAnimationPerRun = maxAuditAnimationPerRun;
+    }
+
+    /**
+     * 设置图片审核最大尝试次数。
+     *
+     * @param imageMaxAttempts 正整数上限
+     */
+    public void setImageMaxAttempts(int imageMaxAttempts) {
+        if (imageMaxAttempts <= 0) {
+            throw new IllegalArgumentException("图片审核最大尝试次数必须为正整数");
+        }
+        this.imageMaxAttempts = imageMaxAttempts;
     }
 
     /**
