@@ -15,6 +15,13 @@ const { handleMaintainerAuthRequired, hasLocalToken } = require('../../utils/ses
 const LOGIN_PAGE_URL = '/pages/login/login'
 const FEEDBACK_PAGE_URL = '/pages/feedback/feedback'
 const PAGE_SIZE = 20
+const DETAIL_SHEET_MAX_HEIGHT_RATIO = 0.88
+const DETAIL_SCROLL_MIN_HEIGHT_PX = 1
+const DETAIL_APPEND_TRANSITION_MS = 280
+const DETAIL_OVERLAY_SELECTOR = '.detail-overlay'
+const DETAIL_SHEET_SELECTOR = '.detail-sheet'
+const DETAIL_SCROLL_SELECTOR = '.detail-scroll'
+const DETAIL_SCROLL_CONTENT_SELECTOR = '.detail-scroll-content'
 
 function buildAttachmentSlots(attachments = []) {
   return Array.from({ length: MAX_ATTACHMENT_COUNT }, (_, index) => ({
@@ -48,6 +55,31 @@ function chooseFeedbackMedia(count) {
   }))
 }
 
+function calculateDetailScrollHeight(overlayRect, sheetRect, scrollRect, contentRect) {
+  const overlayHeight = Number(overlayRect && overlayRect.height)
+  const sheetHeight = Number(sheetRect && sheetRect.height)
+  const scrollHeight = Number(scrollRect && scrollRect.height)
+  const contentHeight = Number(contentRect && contentRect.height)
+  if (
+    ![overlayHeight, sheetHeight, scrollHeight, contentHeight].every(Number.isFinite)
+    || overlayHeight <= 0
+    || sheetHeight <= 0
+    || scrollHeight < 0
+    || contentHeight < 0
+  ) {
+    return null
+  }
+  const chromeHeight = Math.max(0, sheetHeight - scrollHeight)
+  const maxScrollHeight = Math.max(
+    DETAIL_SCROLL_MIN_HEIGHT_PX,
+    Math.floor(overlayHeight * DETAIL_SHEET_MAX_HEIGHT_RATIO - chromeHeight)
+  )
+  return Math.max(
+    DETAIL_SCROLL_MIN_HEIGHT_PX,
+    Math.min(Math.ceil(contentHeight), maxScrollHeight)
+  )
+}
+
 Page({
   data: {
     loading: true,
@@ -59,6 +91,7 @@ Page({
     detailLoading: false,
     detailErrorMessage: '',
     detail: normalizeFeedbackDetail({}),
+    detailScrollHeightPx: DETAIL_SCROLL_MIN_HEIGHT_PX,
     appendFormVisible: false,
     appendSubmitting: false,
     appendDraft: createFeedbackDraft(),
@@ -76,6 +109,7 @@ Page({
   },
 
   onUnload() {
+    this.invalidateDetailLayoutMeasurement()
     this.stopPreviewVideo()
   },
 
@@ -186,11 +220,13 @@ Page({
     if (!feedbackId) {
       return
     }
+    this.invalidateDetailLayoutMeasurement()
     this.setData({
       detailVisible: true,
       detailLoading: true,
       detailErrorMessage: '',
       detail: normalizeFeedbackDetail({ id: feedbackId }),
+      detailScrollHeightPx: DETAIL_SCROLL_MIN_HEIGHT_PX,
       appendFormVisible: false,
       appendDraft: createFeedbackDraft(),
       appendDescriptionLength: 0,
@@ -218,6 +254,8 @@ Page({
         detailLoading: false,
         detailErrorMessage: '',
         detail: normalizeFeedbackDetail(response)
+      }, () => {
+        this.scheduleDetailScrollMeasurement()
       })
     } catch (error) {
       if (
@@ -242,7 +280,12 @@ Page({
     if (!feedbackId) {
       return
     }
-    this.setData({ detailLoading: true, detailErrorMessage: '' })
+    this.invalidateDetailLayoutMeasurement()
+    this.setData({
+      detailLoading: true,
+      detailErrorMessage: '',
+      detailScrollHeightPx: DETAIL_SCROLL_MIN_HEIGHT_PX
+    })
     this.loadFeedbackDetail(feedbackId)
   },
 
@@ -251,6 +294,7 @@ Page({
       return
     }
     this.feedbackDetailRequestId = (this.feedbackDetailRequestId || 0) + 1
+    this.invalidateDetailLayoutMeasurement()
     this.stopPreviewVideo()
     this.setData({
       detailVisible: false,
@@ -259,6 +303,64 @@ Page({
   },
 
   noop() {},
+
+  measureDetailScrollHeight() {
+    const feedbackId = Number(this.data.detail.id)
+    if (
+      !this.data.detailVisible
+      || this.data.detailLoading
+      || !feedbackId
+      || typeof this.createSelectorQuery !== 'function'
+    ) {
+      return
+    }
+    const measureId = (this.detailLayoutMeasureId || 0) + 1
+    this.detailLayoutMeasureId = measureId
+    const query = this.createSelectorQuery()
+    query.select(DETAIL_OVERLAY_SELECTOR).boundingClientRect()
+    query.select(DETAIL_SHEET_SELECTOR).boundingClientRect()
+    query.select(DETAIL_SCROLL_SELECTOR).boundingClientRect()
+    query.select(DETAIL_SCROLL_CONTENT_SELECTOR).boundingClientRect()
+    query.exec((results = []) => {
+      if (
+        measureId !== this.detailLayoutMeasureId
+        || !this.data.detailVisible
+        || Number(this.data.detail.id) !== feedbackId
+      ) {
+        return
+      }
+      const height = calculateDetailScrollHeight(...results)
+      if (height !== null && height !== this.data.detailScrollHeightPx) {
+        this.setData({ detailScrollHeightPx: height })
+      }
+    })
+  },
+
+  scheduleDetailScrollMeasurement(remeasureAfterTransition = false) {
+    this.measureDetailScrollHeight()
+    if (!remeasureAfterTransition) {
+      return
+    }
+    if (this.detailLayoutMeasureTimer) {
+      clearTimeout(this.detailLayoutMeasureTimer)
+    }
+    const feedbackId = Number(this.data.detail.id)
+    this.detailLayoutMeasureTimer = setTimeout(() => {
+      this.detailLayoutMeasureTimer = null
+      if (!this.data.detailVisible || Number(this.data.detail.id) !== feedbackId) {
+        return
+      }
+      this.measureDetailScrollHeight()
+    }, DETAIL_APPEND_TRANSITION_MS)
+  },
+
+  invalidateDetailLayoutMeasurement() {
+    this.detailLayoutMeasureId = (this.detailLayoutMeasureId || 0) + 1
+    if (this.detailLayoutMeasureTimer) {
+      clearTimeout(this.detailLayoutMeasureTimer)
+      this.detailLayoutMeasureTimer = null
+    }
+  },
 
   handlePreviewImage(event) {
     const current = String(event.currentTarget.dataset.url || '')
@@ -299,7 +401,9 @@ Page({
     if (!this.data.detail.canAppendRound || this.data.appendSubmitting) {
       return
     }
-    this.setData({ appendFormVisible: !this.data.appendFormVisible })
+    this.setData({ appendFormVisible: !this.data.appendFormVisible }, () => {
+      this.scheduleDetailScrollMeasurement(true)
+    })
   },
 
   handleAppendDescriptionInput(event) {
@@ -406,6 +510,8 @@ Page({
       appendSubmitDisabled: true,
       appendUploadProgress: {},
       appendUploadProgressPercent: 0
+    }, () => {
+      this.scheduleDetailScrollMeasurement()
     })
     try {
       // 历史轮次不可编辑；这里始终创建下一轮，并在失败时保留当前补充草稿。
@@ -425,6 +531,8 @@ Page({
         appendUploadProgress: {},
         appendUploadProgressPercent: 0,
         detail: result.detail
+      }, () => {
+        this.scheduleDetailScrollMeasurement(true)
       })
       wx.showToast({ title: '补充反馈已提交', icon: 'success' })
       this.loadFeedbacks({ background: true })
@@ -440,6 +548,8 @@ Page({
         appendSubmitDisabled: isAppendSubmitDisabled(
           appendDraft, this.data.detail.canAppendRound, false
         )
+      }, () => {
+        this.scheduleDetailScrollMeasurement()
       })
       wx.showToast({
         title: error && error.message ? error.message : '补充反馈提交失败',

@@ -20,6 +20,47 @@ function readRule(content, selector) {
   return match ? match[1] : ''
 }
 
+function createFeedbackHistoryMeasurementPage() {
+  let pageDefinition
+  const feedbackModule = {
+    MAX_ATTACHMENT_COUNT: 3,
+    addChosenFeedbackMedia() {},
+    createFeedbackDraft() { return { idempotencyKey: 'append', description: '', attachments: [] } },
+    fetchFeedbackDetail() {},
+    fetchFeedbackList() {},
+    mergeFeedbackPage() {},
+    normalizeFeedbackDetail(raw = {}) { return Object.assign({ rounds: [] }, raw) },
+    normalizeFeedbackPage() { return { pageNo: 1, pageSize: 20, total: 0, hasMore: false, items: [] } },
+    submitFeedbackDraft() {},
+    validateFeedbackDescription() { return { valid: false } }
+  }
+  const sandbox = {
+    Page(definition) { pageDefinition = definition },
+    clearTimeout,
+    setTimeout,
+    wx: {},
+    require(request) {
+      if (request === '../../utils/feedback') return feedbackModule
+      if (request === '../../utils/session') {
+        return { handleMaintainerAuthRequired() {}, hasLocalToken() { return true } }
+      }
+      throw new Error(`unexpected require: ${request}`)
+    }
+  }
+  vm.runInNewContext(readProjectFile('pages/feedback-history/feedback-history.js'), sandbox)
+  const page = Object.assign({}, pageDefinition, {
+    data: structuredClone(pageDefinition.data),
+    setData(values, callback) {
+      Object.assign(this.data, values)
+      if (typeof callback === 'function') callback()
+    }
+  })
+  page.data.detailVisible = true
+  page.data.detailLoading = false
+  page.data.detail = { id: 1, canAppendRound: false, rounds: [] }
+  return page
+}
+
 test('feedback pages are registered as complete main package pages', () => {
   const appJson = readJson('app.json')
   const pageBases = ['pages/feedback/feedback', 'pages/feedback-history/feedback-history']
@@ -194,6 +235,11 @@ test('feedback history page paginates and keeps detail and native video layers m
   assert.match(pageWxml, /class="history-empty-action"[\s\S]*bindtap="handleSubmitFeedbackTap"[\s\S]*>去提交问题<\/button>/)
   assert.match(pageWxml, /class="detail-overlay \{\{detailVisible \? 'visible' : ''\}\}"/)
   assert.doesNotMatch(pageWxml, /wx:if="\{\{detailVisible\}\}"/)
+  assert.match(
+    pageWxml,
+    /class="detail-scroll"[\s\S]*style="height: \{\{detailScrollHeightPx\}\}px;"[\s\S]*scroll-y[\s\S]*type="list"/
+  )
+  assert.match(pageWxml, /class="detail-scroll-content"/)
   assert.match(pageWxml, /class="feedback-status \{\{detail\.statusTone\}\}"/)
   assert.match(pageWxml, /wx:for="\{\{detail\.timeline\}\}"/)
   assert.match(pageWxml, /bindtap="handlePreviewImage"/)
@@ -210,13 +256,20 @@ test('feedback history page paginates and keeps detail and native video layers m
   assert.match(overlayRule, /position:\s*fixed/)
   assert.match(overlayRule, /pointer-events:\s*none/)
   assert.match(visibleOverlayRule, /pointer-events:\s*auto/)
+  ;['top', 'right', 'bottom', 'left'].forEach((side) => {
+    const sideDeclaration = new RegExp(`(?:^|;)\\s*${side}\\s*:\\s*0(?:rpx|px)?\\s*(?:;|$)`)
+    assert.match(overlayRule, sideDeclaration)
+    assert.match(videoLayerRule, sideDeclaration)
+  })
+  assert.doesNotMatch(overlayRule, /inset\s*:/)
+  assert.doesNotMatch(videoLayerRule, /inset\s*:/)
   assert.match(sheetRule, /transform:\s*translateY\(32rpx\)/)
   assert.match(sheetRule, /height:\s*auto/)
   assert.match(sheetRule, /max-height:\s*88vh/)
   assert.match(sheetRule, /overflow:\s*hidden/)
   assert.doesNotMatch(sheetRule, /(?:^|;)\s*height:\s*88vh\s*;/)
   assert.doesNotMatch(sheetRule, /max-height:\s*1320rpx/)
-  assert.match(detailScrollRule, /flex:\s*0 1 auto/)
+  assert.match(detailScrollRule, /flex:\s*none/)
   assert.match(detailScrollRule, /min-height:\s*0/)
   assert.match(videoLayerRule, /position:\s*fixed/)
   assert.match(historyEmptyRule, /display:\s*flex/)
@@ -237,6 +290,54 @@ test('feedback history page paginates and keeps detail and native video layers m
   assert.match(pageWxss, /\.feedback-status\.teal[\s\S]*#0f766e/)
   assert.doesNotMatch(pageWxss, /\.status-pill/)
   assert.doesNotMatch(pageWxss, /gradient|orb|bokeh/i)
+})
+
+test('feedback detail sheet uses content height and caps the scroll area at 88vh', () => {
+  const page = createFeedbackHistoryMeasurementPage()
+  let rects = []
+  let queriedSelectors = []
+  page.createSelectorQuery = () => ({
+    select(selector) {
+      queriedSelectors.push(selector)
+      return this
+    },
+    boundingClientRect() { return this },
+    exec(callback) { callback(rects) }
+  })
+
+  rects = [{ height: 1000 }, { height: 181 }, { height: 1 }, { height: 320 }]
+  page.measureDetailScrollHeight()
+
+  assert.equal(page.data.detailScrollHeightPx, 320)
+  assert.deepEqual(queriedSelectors, [
+    '.detail-overlay',
+    '.detail-sheet',
+    '.detail-scroll',
+    '.detail-scroll-content'
+  ])
+
+  queriedSelectors = []
+  rects = [{ height: 1000 }, { height: 500 }, { height: 320 }, { height: 900 }]
+  page.measureDetailScrollHeight()
+
+  assert.equal(page.data.detailScrollHeightPx, 700)
+  assert.equal(queriedSelectors.length, 4)
+})
+
+test('feedback detail sheet ignores a measurement completed after closing', () => {
+  const page = createFeedbackHistoryMeasurementPage()
+  let queryCallback
+  page.createSelectorQuery = () => ({
+    select() { return this },
+    boundingClientRect() { return this },
+    exec(callback) { queryCallback = callback }
+  })
+
+  page.measureDetailScrollHeight()
+  page.handleCloseDetail()
+  queryCallback([{ height: 1000 }, { height: 181 }, { height: 1 }, { height: 320 }])
+
+  assert.equal(page.data.detailScrollHeightPx, 1)
 })
 
 test('feedback history empty-state action returns and falls back to feedback page', () => {

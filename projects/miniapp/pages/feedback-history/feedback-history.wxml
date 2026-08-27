@@ -82,79 +82,87 @@
         <button class="secondary-button compact" bindtap="handleRetryDetail">重试</button>
       </view>
 
-      <scroll-view wx:else class="detail-scroll" scroll-y type="list">
-        <view class="detail-status-row">
-          <view class="feedback-status {{detail.statusTone}}">{{detail.statusText}}</view>
-          <view>{{detail.roundCount}} 轮 · {{detail.attachmentCount}} 个附件</view>
-        </view>
+      <scroll-view
+        wx:else
+        class="detail-scroll"
+        style="height: {{detailScrollHeightPx}}px;"
+        scroll-y
+        type="list"
+      >
+        <view class="detail-scroll-content">
+          <view class="detail-status-row">
+            <view class="feedback-status {{detail.statusTone}}">{{detail.statusText}}</view>
+            <view>{{detail.roundCount}} 轮 · {{detail.attachmentCount}} 个附件</view>
+          </view>
 
-        <view class="timeline">
-          <view wx:for="{{detail.timeline}}" wx:key="key" wx:for-item="timelineItem" class="timeline-item {{timelineItem.type === 'USER' ? 'user' : 'team'}}">
-            <view class="timeline-rail">
-              <view class="timeline-dot"></view>
-              <view class="timeline-line"></view>
-            </view>
-            <view class="timeline-content">
-              <view class="timeline-heading">
-                <view class="timeline-title">{{timelineItem.titleText}}</view>
-                <view class="timeline-time">{{timelineItem.timeText}}</view>
+          <view class="timeline">
+            <view wx:for="{{detail.timeline}}" wx:key="key" wx:for-item="timelineItem" class="timeline-item {{timelineItem.type === 'USER' ? 'user' : 'team'}}">
+              <view class="timeline-rail">
+                <view class="timeline-dot"></view>
+                <view class="timeline-line"></view>
               </view>
-              <view class="timeline-description">{{timelineItem.description}}</view>
-              <view wx:if="{{timelineItem.attachments.length}}" class="timeline-attachments">
-                <view wx:for="{{timelineItem.attachments}}" wx:key="url" wx:for-item="attachment" class="timeline-attachment">
-                  <image
-                    wx:if="{{attachment.isImage}}"
-                    class="timeline-image"
-                    src="{{attachment.url}}"
-                    mode="aspectFill"
-                    data-url="{{attachment.url}}"
-                    bindtap="handlePreviewImage"
-                  ></image>
-                  <view wx:else class="timeline-video" data-url="{{attachment.url}}" bindtap="handleOpenVideo" aria-role="button">
-                    <view class="video-play"></view>
-                    <view>播放视频</view>
+              <view class="timeline-content">
+                <view class="timeline-heading">
+                  <view class="timeline-title">{{timelineItem.titleText}}</view>
+                  <view class="timeline-time">{{timelineItem.timeText}}</view>
+                </view>
+                <view class="timeline-description">{{timelineItem.description}}</view>
+                <view wx:if="{{timelineItem.attachments.length}}" class="timeline-attachments">
+                  <view wx:for="{{timelineItem.attachments}}" wx:key="url" wx:for-item="attachment" class="timeline-attachment">
+                    <image
+                      wx:if="{{attachment.isImage}}"
+                      class="timeline-image"
+                      src="{{attachment.url}}"
+                      mode="aspectFill"
+                      data-url="{{attachment.url}}"
+                      bindtap="handlePreviewImage"
+                    ></image>
+                    <view wx:else class="timeline-video" data-url="{{attachment.url}}" bindtap="handleOpenVideo" aria-role="button">
+                      <view class="video-play"></view>
+                      <view>播放视频</view>
+                    </view>
                   </view>
                 </view>
               </view>
             </view>
           </view>
-        </view>
 
-        <button wx:if="{{detail.canAppendRound}}" class="append-toggle" bindtap="handleAppendToggle">
-          {{appendFormVisible ? '收起补充反馈' : '补充反馈'}}
-        </button>
+          <button wx:if="{{detail.canAppendRound}}" class="append-toggle" bindtap="handleAppendToggle">
+            {{appendFormVisible ? '收起补充反馈' : '补充反馈'}}
+          </button>
 
-        <view class="append-form {{appendFormVisible ? 'expanded' : ''}}">
-          <view class="append-form-body">
-            <view class="append-field-heading">
-              <view class="append-field-title">补充描述</view>
-              <view class="append-count">{{appendDescriptionLength}} / 200</view>
-            </view>
-            <textarea
-              class="append-description-input"
-              value="{{appendDraft.description}}"
-              maxlength="-1"
-              placeholder="补充团队需要的信息"
-              disabled="{{appendSubmitting}}"
-              bindinput="handleAppendDescriptionInput"
-            ></textarea>
-            <view class="append-attachment-slots">
-              <view class="append-attachment-slot" wx:for="{{appendAttachmentSlots}}" wx:key="slotIndex">
-                <view wx:if="{{item.file}}" class="append-attachment-preview" data-index="{{item.slotIndex}}" bindtap="handleAppendPreviewAttachment">
-                  <image wx:if="{{item.file.mediaType === 'IMAGE'}}" src="{{item.file.tempFilePath}}" mode="aspectFill"></image>
-                  <view wx:else class="append-video-placeholder">视频</view>
-                  <view class="append-remove" data-index="{{item.slotIndex}}" catchtap="handleAppendRemoveAttachment" aria-role="button" aria-label="删除附件">×</view>
+          <view class="append-form {{appendFormVisible ? 'expanded' : ''}}">
+            <view class="append-form-body">
+              <view class="append-field-heading">
+                <view class="append-field-title">补充描述</view>
+                <view class="append-count">{{appendDescriptionLength}} / 200</view>
+              </view>
+              <textarea
+                class="append-description-input"
+                value="{{appendDraft.description}}"
+                maxlength="-1"
+                placeholder="补充团队需要的信息"
+                disabled="{{appendSubmitting}}"
+                bindinput="handleAppendDescriptionInput"
+              ></textarea>
+              <view class="append-attachment-slots">
+                <view class="append-attachment-slot" wx:for="{{appendAttachmentSlots}}" wx:key="slotIndex">
+                  <view wx:if="{{item.file}}" class="append-attachment-preview" data-index="{{item.slotIndex}}" bindtap="handleAppendPreviewAttachment">
+                    <image wx:if="{{item.file.mediaType === 'IMAGE'}}" src="{{item.file.tempFilePath}}" mode="aspectFill"></image>
+                    <view wx:else class="append-video-placeholder">视频</view>
+                    <view class="append-remove" data-index="{{item.slotIndex}}" catchtap="handleAppendRemoveAttachment" aria-role="button" aria-label="删除附件">×</view>
+                  </view>
+                  <view wx:else class="append-attachment-add" bindtap="handleAppendChooseMedia" aria-role="button" aria-label="添加附件">+</view>
                 </view>
-                <view wx:else class="append-attachment-add" bindtap="handleAppendChooseMedia" aria-role="button" aria-label="添加附件">+</view>
               </view>
-            </view>
-            <view wx:if="{{appendSubmitting && appendDraft.attachments.length}}" class="append-upload-progress">
-              <view class="append-upload-progress-track">
-                <view class="append-upload-progress-fill" style="width: {{appendUploadProgressPercent}}%;"></view>
+              <view wx:if="{{appendSubmitting && appendDraft.attachments.length}}" class="append-upload-progress">
+                <view class="append-upload-progress-track">
+                  <view class="append-upload-progress-fill" style="width: {{appendUploadProgressPercent}}%;"></view>
+                </view>
+                <view class="append-upload-progress-text">附件上传 {{appendUploadProgressPercent}}%</view>
               </view>
-              <view class="append-upload-progress-text">附件上传 {{appendUploadProgressPercent}}%</view>
+              <button class="append-submit" loading="{{appendSubmitting}}" disabled="{{appendSubmitDisabled}}" bindtap="handleAppendSubmit">提交补充</button>
             </view>
-            <button class="append-submit" loading="{{appendSubmitting}}" disabled="{{appendSubmitDisabled}}" bindtap="handleAppendSubmit">提交补充</button>
           </view>
         </view>
       </scroll-view>
