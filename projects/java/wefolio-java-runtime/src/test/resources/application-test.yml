@@ -56,3 +56,8 @@ wefolio:
     webhook-url: https://open.feishu.cn/open-apis/bot/v2/hook/test-feedback-webhook
     webhook-secret: test-feedback-webhook-secret
     status-api-base-url: https://api.test.wefolio.example
+  work-audit:
+    manual-review:
+      webhook-url: https://open.feishu.cn/open-apis/bot/v2/hook/test-work-audit-webhook
+      webhook-secret: test-work-audit-webhook-secret
+      review-api-base-url: https://api.test.wefolio.example

@@ -83,7 +83,8 @@ test('normalizes work audit status for list badges', () => {
       { id: 2, title: '复核作品', auditStatus: 'REVIEW_REQUIRED', auditRejectReason: ' 疑似图片风险 ' },
       { id: 3, title: '自定义文案', auditStatus: 'PASSED', auditStatusText: '已通过平台审核' },
       { id: 4, title: '违规作品', auditStatus: 'REJECTED', auditRejectReason: '确认违规内容' },
-      { id: 5, title: '失败作品', auditStatus: 'FAILED', auditRejectReason: '审核服务异常' }
+      { id: 5, title: '失败作品', auditStatus: 'FAILED', auditRejectReason: '审核服务异常' },
+      { id: 6, title: '人工审核作品', auditStatus: 'AUDITING' }
     ]
   })
 
@@ -100,7 +101,8 @@ test('normalizes work audit status for list badges', () => {
       { status: 'REVIEW_REQUIRED', text: '疑似违规', tone: 'review', rejectReason: '疑似图片风险', showRejectReason: true },
       { status: 'PASSED', text: '已通过平台审核', tone: 'passed', rejectReason: '', showRejectReason: false },
       { status: 'REJECTED', text: '确认违规', tone: 'rejected', rejectReason: '确认违规内容', showRejectReason: true },
-      { status: 'FAILED', text: '审核失败', tone: 'failed', rejectReason: '审核服务异常', showRejectReason: true }
+      { status: 'FAILED', text: '审核失败', tone: 'failed', rejectReason: '审核服务异常', showRejectReason: true },
+      { status: 'AUDITING', text: '审核中', tone: 'auditing', rejectReason: '', showRejectReason: false }
     ]
   )
 })

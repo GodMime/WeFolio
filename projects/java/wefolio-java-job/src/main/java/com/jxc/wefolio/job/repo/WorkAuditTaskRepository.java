@@ -49,6 +49,7 @@ public class WorkAuditTaskRepository {
               WHERE work.id = wf_work_audit_task.work_id
                 AND work.audit_round = wf_work_audit_task.audit_round
                 AND work.audit_status = {0}
+                AND work.manual_audit_no IS NULL
                 AND work.deleted = {1}
             )
             """;
@@ -220,6 +221,8 @@ public class WorkAuditTaskRepository {
                                 .lt(WorkAuditTaskEntity::getLockedUntil, now)))
                 .lt(WorkAuditTaskEntity::getAttemptCount, maxAttempts)
                 .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED)
+                .apply(ACTIVE_AUDITING_WORK_EXISTS_SQL,
+                        WorkAuditStatusDict.AUDITING.getCode(), NOT_DELETED)
                 .orderByAsc(WorkAuditTaskEntity::getId)
                 // limit 已归一化为非负整数，拼接 LIMIT 子句不会引入 SQL 注入风险。
                 .last(LIMIT_SQL_PREFIX + normalizedLimit(limit)));
@@ -241,6 +244,8 @@ public class WorkAuditTaskRepository {
                 .lt(WorkAuditTaskEntity::getLockedUntil, now)
                 .ge(WorkAuditTaskEntity::getAttemptCount, maxAttempts)
                 .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED)
+                .apply(ACTIVE_AUDITING_WORK_EXISTS_SQL,
+                        WorkAuditStatusDict.AUDITING.getCode(), NOT_DELETED)
                 .orderByAsc(WorkAuditTaskEntity::getId)
                 .last(LIMIT_SQL_PREFIX + normalizedLimit(limit)));
     }
@@ -276,7 +281,9 @@ public class WorkAuditTaskRepository {
                                         WorkAuditTaskStatusDict.SUBMITTING.getCode())
                                 .lt(WorkAuditTaskEntity::getLockedUntil, now)))
                 .lt(WorkAuditTaskEntity::getAttemptCount, maxAttempts)
-                .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED));
+                .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED)
+                .apply(ACTIVE_AUDITING_WORK_EXISTS_SQL,
+                        WorkAuditStatusDict.AUDITING.getCode(), NOT_DELETED));
         return updated == 1;
     }
 
@@ -302,7 +309,9 @@ public class WorkAuditTaskRepository {
                 .eq(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.SUBMITTING.getCode())
                 .lt(WorkAuditTaskEntity::getLockedUntil, now)
                 .ge(WorkAuditTaskEntity::getAttemptCount, maxAttempts)
-                .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED));
+                .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED)
+                .apply(ACTIVE_AUDITING_WORK_EXISTS_SQL,
+                        WorkAuditStatusDict.AUDITING.getCode(), NOT_DELETED));
         return updated == 1;
     }
 

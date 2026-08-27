@@ -89,6 +89,12 @@ public class WorkEntity extends BaseEntity {
     /** 审核拒绝原因 */
     private String auditRejectReason;
 
+    /** 最终轮人工审核编号，存在后不轮换或清空。 */
+    private String manualAuditNo;
+
+    /** 人工审核首次写入最终结论时间。 */
+    private LocalDateTime manualAuditResultAt;
+
     /** 逻辑删除时间 */
     private LocalDateTime deletedAt;
 

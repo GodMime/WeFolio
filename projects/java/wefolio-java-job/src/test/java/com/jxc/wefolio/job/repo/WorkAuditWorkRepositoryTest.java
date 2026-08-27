@@ -24,6 +24,13 @@ import static org.mockito.Mockito.verify;
  */
 class WorkAuditWorkRepositoryTest {
 
+    /** Job 作品实体必须声明人工审核隔离字段。 */
+    @Test
+    void workEntityDeclaresManualAuditIsolationField() throws NoSuchFieldException {
+        assertThat(WorkAuditWorkEntity.class.getDeclaredField("manualAuditNo").getType())
+                .isEqualTo(String.class);
+    }
+
     /**
      * 初始化 MyBatis-Plus Lambda 字段缓存，便于直接检查 wrapper 条件。
      */
@@ -44,7 +51,8 @@ class WorkAuditWorkRepositoryTest {
         repository.countPendingImages();
 
         LambdaQueryWrapper<WorkAuditWorkEntity> wrapper = captureSelectCountWrapper(workMapper);
-        assertThat(wrapper.getSqlSegment()).contains("audit_status", "media_type", "deleted");
+        assertThat(wrapper.getSqlSegment())
+                .contains("audit_status", "media_type", "manual_audit_no", "deleted");
         assertThat(wrapper.getParamNameValuePairs().values())
                 .contains(WorkAuditStatusDict.PENDING.getCode(), MediaTypeDict.IMAGE.getCode(), 0L);
     }
@@ -57,7 +65,8 @@ class WorkAuditWorkRepositoryTest {
         repository.countPendingVideos();
 
         LambdaQueryWrapper<WorkAuditWorkEntity> wrapper = captureSelectCountWrapper(workMapper);
-        assertThat(wrapper.getSqlSegment()).contains("audit_status", "media_type", "deleted");
+        assertThat(wrapper.getSqlSegment())
+                .contains("audit_status", "media_type", "manual_audit_no", "deleted");
         assertThat(wrapper.getParamNameValuePairs().values())
                 .contains(WorkAuditStatusDict.PENDING.getCode(), MediaTypeDict.VIDEO.getCode(), 0L);
     }
@@ -70,7 +79,8 @@ class WorkAuditWorkRepositoryTest {
         repository.findPendingAnimations(25);
 
         LambdaQueryWrapper<WorkAuditWorkEntity> wrapper = captureSelectListWrapper(workMapper);
-        assertThat(wrapper.getSqlSegment()).contains("audit_status", "media_type", "deleted", "LIMIT 25");
+        assertThat(wrapper.getSqlSegment())
+                .contains("audit_status", "media_type", "manual_audit_no", "deleted", "LIMIT 25");
         assertThat(wrapper.getParamNameValuePairs().values())
                 .contains(WorkAuditStatusDict.PENDING.getCode(), MediaTypeDict.ANIMATION.getCode(), 0L);
     }
@@ -83,7 +93,8 @@ class WorkAuditWorkRepositoryTest {
         repository.countPendingAnimations();
 
         LambdaQueryWrapper<WorkAuditWorkEntity> wrapper = captureSelectCountWrapper(workMapper);
-        assertThat(wrapper.getSqlSegment()).contains("audit_status", "media_type", "deleted");
+        assertThat(wrapper.getSqlSegment())
+                .contains("audit_status", "media_type", "manual_audit_no", "deleted");
         assertThat(wrapper.getParamNameValuePairs().values())
                 .contains(WorkAuditStatusDict.PENDING.getCode(), MediaTypeDict.ANIMATION.getCode(), 0L);
     }
@@ -96,7 +107,8 @@ class WorkAuditWorkRepositoryTest {
         repository.claimPendingWork(11L);
 
         LambdaUpdateWrapper<WorkAuditWorkEntity> wrapper = captureUpdateWrapper(workMapper);
-        assertThat(wrapper.getSqlSegment()).contains("id", "audit_status", "deleted");
+        assertThat(wrapper.getSqlSegment())
+                .contains("id", "audit_status", "manual_audit_no", "deleted");
         assertThat(wrapper.getSqlSet())
                 .contains("audit_status", "audit_reason_code", "audit_reason_codes", "audit_reject_reason", "updated_at",
                         "version = version + 1");
@@ -104,57 +116,34 @@ class WorkAuditWorkRepositoryTest {
                 .contains(11L, WorkAuditStatusDict.PENDING.getCode(), WorkAuditStatusDict.AUDITING.getCode(), 0L);
     }
 
+    /** 待审核图片扫描必须排除人工审核作品。 */
     @Test
-    @SuppressWarnings("deprecation")
-    void updateAuditStatusShouldFilterNotDeletedAndRefreshAuditColumns() {
+    void findPendingImagesShouldExcludeManualAuditWorks() {
         WorkAuditWorkMapper workMapper = mock(WorkAuditWorkMapper.class);
         WorkAuditWorkRepository repository = new WorkAuditWorkRepository(workMapper);
 
-        repository.updateAuditStatus(11L, WorkAuditStatusDict.PASSED);
+        repository.findPendingImages(20);
 
-        LambdaUpdateWrapper<WorkAuditWorkEntity> wrapper = captureUpdateWrapper(workMapper);
-        assertThat(wrapper.getSqlSegment()).contains("id", "deleted");
-        assertThat(wrapper.getSqlSet()).contains("audit_status", "updated_at", "version = version + 1");
+        LambdaQueryWrapper<WorkAuditWorkEntity> wrapper = captureSelectListWrapper(workMapper);
+        assertThat(wrapper.getSqlSegment())
+                .contains("audit_status", "media_type", "manual_audit_no", "deleted");
         assertThat(wrapper.getParamNameValuePairs().values())
-                .contains(11L, WorkAuditStatusDict.PASSED.getCode(), 0L);
+                .contains(WorkAuditStatusDict.PENDING.getCode(), MediaTypeDict.IMAGE.getCode(), 0L);
     }
 
+    /** 待审核视频扫描必须排除人工审核作品。 */
     @Test
-    void updateAuditStatusAndRejectReasonShouldUpdateStatusAndReasonTogether() {
+    void findPendingVideosShouldExcludeManualAuditWorks() {
         WorkAuditWorkMapper workMapper = mock(WorkAuditWorkMapper.class);
         WorkAuditWorkRepository repository = new WorkAuditWorkRepository(workMapper);
 
-        repository.updateAuditStatusAndRejectReason(11L, WorkAuditStatusDict.REVIEW_REQUIRED, "疑似违规");
+        repository.findPendingVideos(20);
 
-        LambdaUpdateWrapper<WorkAuditWorkEntity> wrapper = captureUpdateWrapper(workMapper);
-        assertThat(wrapper.getSqlSegment()).contains("id", "deleted");
-        assertThat(wrapper.getSqlSet())
-                .contains("audit_status", "audit_reject_reason", "updated_at", "version = version + 1");
+        LambdaQueryWrapper<WorkAuditWorkEntity> wrapper = captureSelectListWrapper(workMapper);
+        assertThat(wrapper.getSqlSegment())
+                .contains("audit_status", "media_type", "manual_audit_no", "deleted");
         assertThat(wrapper.getParamNameValuePairs().values())
-                .contains(11L, WorkAuditStatusDict.REVIEW_REQUIRED.getCode(), "疑似违规", 0L);
-    }
-
-    @Test
-    void updateAuditStatusAndReasonsShouldPersistStableReasonCodeAndInternalSummaryTogether() {
-        WorkAuditWorkMapper workMapper = mock(WorkAuditWorkMapper.class);
-        WorkAuditWorkRepository repository = new WorkAuditWorkRepository(workMapper);
-
-        repository.updateAuditStatusAndReasons(
-                11L,
-                WorkAuditStatusDict.REJECTED,
-                "PORN_CONTENT",
-                "[\"PORN_CONTENT\",\"ADVERTISING_CONTENT\"]",
-                "腾讯云判定违规：label=Porn，result=1，score=88");
-
-        LambdaUpdateWrapper<WorkAuditWorkEntity> wrapper = captureUpdateWrapper(workMapper);
-        assertThat(wrapper.getSqlSegment()).contains("id", "deleted");
-        assertThat(wrapper.getSqlSet())
-                .contains("audit_status", "audit_reason_code", "audit_reason_codes", "audit_reject_reason", "updated_at",
-                        "version = version + 1");
-        assertThat(wrapper.getParamNameValuePairs().values())
-                .contains(11L, WorkAuditStatusDict.REJECTED.getCode(), "PORN_CONTENT",
-                        "[\"PORN_CONTENT\",\"ADVERTISING_CONTENT\"]",
-                        "腾讯云判定违规：label=Porn，result=1，score=88", 0L);
+                .contains(WorkAuditStatusDict.PENDING.getCode(), MediaTypeDict.VIDEO.getCode(), 0L);
     }
 
     @Test
@@ -166,9 +155,11 @@ class WorkAuditWorkRepositoryTest {
                 11L, 2, WorkAuditStatusDict.PASSED, null, null, null);
 
         LambdaUpdateWrapper<WorkAuditWorkEntity> wrapper = captureUpdateWrapper(workMapper);
-        assertThat(wrapper.getSqlSegment()).contains("id", "audit_round", "deleted");
+        assertThat(wrapper.getSqlSegment())
+                .contains("id", "audit_round", "audit_status", "manual_audit_no", "deleted");
         assertThat(wrapper.getParamNameValuePairs().values())
-                .contains(11L, 2, WorkAuditStatusDict.PASSED.getCode(), 0L);
+                .contains(11L, 2, WorkAuditStatusDict.AUDITING.getCode(),
+                        WorkAuditStatusDict.PASSED.getCode(), 0L);
     }
 
     @SuppressWarnings("unchecked")

@@ -571,8 +571,12 @@ public class WorkAuditService {
             TencentCiAuditResult result = auditClient.auditImage(work.getMediaObjectKey());
             if (result.auditResult() == AuditResultDict.UNKNOWN) {
                 String auditRejectReason = unknownAuditResultReason("图片审核结果未知", result);
-                claimTransactionService.markTaskFailedAndUpdateWorkFailed(
-                        task.getId(), work.getId(), "图片审核结果未知", result.rawPayload(), auditRejectReason);
+                if (!claimTransactionService.markTaskFailedAndUpdateWorkFailed(
+                        task.getId(), work.getId(), work.getAuditRound(), "图片审核结果未知",
+                        result.rawPayload(), auditRejectReason)) {
+                    logDiscardedImageResult(work, task);
+                    return;
+                }
                 log.info("图片作品审核简洁结果: workId={}, taskId={}, objectKey={}, ciJobId={}, ciState={}, "
                                 + "auditResult={}, ciResult={}, ciLabel={}, ciScore={}, auditStatus={}, "
                                 + "auditRejectReason={}",
@@ -583,9 +587,13 @@ public class WorkAuditService {
             }
             WorkAuditStatusDict auditStatus = mapWorkAuditStatus(result.auditResult());
             String auditRejectReason = auditRejectReason(result);
-            claimTransactionService.markTaskSuccessAndUpdateWork(task.getId(), work.getId(), result.auditResult(),
+            if (!claimTransactionService.markTaskSuccessAndUpdateWork(
+                    task.getId(), work.getId(), work.getAuditRound(), result.auditResult(),
                     result.ciState(), result.ciResult(), result.ciLabel(), result.ciScore(), result.risks(),
-                    result.rawPayload(), auditStatus, auditRejectReason);
+                    result.rawPayload(), auditStatus, auditRejectReason)) {
+                logDiscardedImageResult(work, task);
+                return;
+            }
             log.info("图片作品审核简洁结果: workId={}, taskId={}, objectKey={}, ciJobId={}, ciState={}, "
                             + "auditResult={}, ciResult={}, ciLabel={}, ciScore={}, auditStatus={}, "
                             + "auditRejectReason={}",
@@ -597,12 +605,22 @@ public class WorkAuditService {
             String auditRejectReason = throwableReason("图片审核调用腾讯云失败", ex);
             log.warn("调用腾讯云图片审核失败: workId={}, taskId={}, objectKey={}, attemptCount={}, error={}",
                     work.getId(), task.getId(), work.getMediaObjectKey(), task.getAttemptCount(), errorMessage);
-            claimTransactionService.markTaskFailedAndUpdateWorkFailed(
-                    task.getId(), work.getId(), errorMessage, errorPayload(ex), auditRejectReason);
+            if (!claimTransactionService.markTaskFailedAndUpdateWorkFailed(
+                    task.getId(), work.getId(), work.getAuditRound(), errorMessage,
+                    errorPayload(ex), auditRejectReason)) {
+                logDiscardedImageResult(work, task);
+                return;
+            }
             log.info("图片作品审核简洁结果: workId={}, taskId={}, objectKey={}, auditStatus={}, auditRejectReason={}",
                     work.getId(), task.getId(), work.getMediaObjectKey(), WorkAuditStatusDict.FAILED.getCode(),
                     auditRejectReason);
         }
+    }
+
+    /** 记录图片自动审核结果被轮次、状态或人工审核隔离条件拒绝。 */
+    private void logDiscardedImageResult(WorkAuditWorkEntity work, WorkAuditTaskEntity task) {
+        log.warn("图片自动审核结果被隔离条件拒绝: workId={}, taskId={}, auditRound={}",
+                work.getId(), task.getId(), work.getAuditRound());
     }
 
     private void queryOneVideoResult(WorkAuditTaskEntity task, LocalDateTime now) {

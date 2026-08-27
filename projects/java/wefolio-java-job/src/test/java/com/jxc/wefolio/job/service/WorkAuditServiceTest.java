@@ -40,6 +40,7 @@ import static org.mockito.Mockito.when;
  */
 class WorkAuditServiceTest {
 
+    /** 一轮任务必须按既定顺序执行各类审核链路。 */
     @Test
     void runOneRoundShouldFollowDesignedSequence() {
         WorkAuditWorkRepository workRepository = mock(WorkAuditWorkRepository.class);
@@ -62,6 +63,46 @@ class WorkAuditServiceTest {
         inOrder.verify(workRepository).findPendingVideos(500);
         inOrder.verify(workRepository).findPendingImages(500);
         inOrder.verify(taskRepository).findQueryableVideoTasks(eq(1000), eq(120), any());
+    }
+
+    /** 视频候选为空时编排层不得调用腾讯云。 */
+    @Test
+    void emptyVideoCandidatesDoNotReachTencentClient() {
+        WorkAuditWorkRepository workRepository = mock(WorkAuditWorkRepository.class);
+        WorkAuditTaskRepository taskRepository = mock(WorkAuditTaskRepository.class);
+        WorkAuditClaimTransactionService claimTransactionService =
+                mock(WorkAuditClaimTransactionService.class);
+        TencentCiAuditClient auditClient = mock(TencentCiAuditClient.class);
+        when(workRepository.findPendingVideos(20)).thenReturn(List.of());
+        WorkAuditService service = new WorkAuditService(
+                workRepository, taskRepository, claimTransactionService, auditClient, properties());
+
+        service.submitPendingVideoAudits(20);
+
+        verify(workRepository).findPendingVideos(20);
+        verifyNoInteractions(auditClient);
+    }
+
+    /** 动图候选和任务均为空时编排层不得调用腾讯云。 */
+    @Test
+    void emptyAnimationCandidatesDoNotReachTencentClient() {
+        WorkAuditWorkRepository workRepository = mock(WorkAuditWorkRepository.class);
+        WorkAuditTaskRepository taskRepository = mock(WorkAuditTaskRepository.class);
+        WorkAuditClaimTransactionService claimTransactionService =
+                mock(WorkAuditClaimTransactionService.class);
+        TencentCiAuditClient auditClient = mock(TencentCiAuditClient.class);
+        when(taskRepository.findExhaustedExpiredAnimationTasks(eq(20), eq(3), any()))
+                .thenReturn(List.of());
+        when(taskRepository.findRunnableAnimationTasks(eq(20), eq(3), any()))
+                .thenReturn(List.of());
+        when(workRepository.findPendingAnimations(20)).thenReturn(List.of());
+        WorkAuditService service = new WorkAuditService(
+                workRepository, taskRepository, claimTransactionService, auditClient, properties());
+
+        service.auditPendingAnimations(20);
+
+        verify(workRepository).findPendingAnimations(20);
+        verifyNoInteractions(auditClient);
     }
 
     @Test
@@ -548,7 +589,7 @@ class WorkAuditServiceTest {
 
         ArgumentCaptor<String> reasonCaptor = ArgumentCaptor.forClass(String.class);
         verify(claimTransactionService).markTaskSuccessAndUpdateWork(
-                eq(102L), eq(12L), eq(AuditResultDict.REVIEW), any(), eq(1), eq("Porn"), eq(90),
+                eq(102L), eq(12L), eq(1), eq(AuditResultDict.REVIEW), any(), eq(1), eq("Porn"), eq(90),
                 eq(List.<TencentCiAuditRisk>of()), eq("{}"),
                 eq(WorkAuditStatusDict.REVIEW_REQUIRED), reasonCaptor.capture());
         assertThat(reasonCaptor.getValue()).contains("疑似违规", "需人工复核", "Porn", "90");
@@ -575,9 +616,46 @@ class WorkAuditServiceTest {
         service.auditPendingImages(500);
 
         verify(claimTransactionService).markTaskSuccessAndUpdateWork(
-                eq(106L), eq(16L), eq(AuditResultDict.PASS), any(), eq(0), eq("Normal"), eq(0),
+                eq(106L), eq(16L), eq(1), eq(AuditResultDict.PASS), any(), eq(0), eq("Normal"), eq(0),
                 eq(List.<TencentCiAuditRisk>of()), eq("{}"),
                 eq(WorkAuditStatusDict.PASSED), eq(null));
+    }
+
+    /** 图片结果被隔离条件拒绝时只记录脱敏告警且不记录成功日志。 */
+    @Test
+    void discardedImageResultShouldWriteSanitizedWarningAndSkipSuccessLog() {
+        WorkAuditWorkEntity work = work(17L, MediaTypeDict.IMAGE, "sensitive-image.jpg", null);
+        work.setAuditRound(2);
+        WorkAuditWorkRepository workRepository = mock(WorkAuditWorkRepository.class);
+        WorkAuditTaskRepository taskRepository = mock(WorkAuditTaskRepository.class);
+        WorkAuditClaimTransactionService claimTransactionService = mock(WorkAuditClaimTransactionService.class);
+        TencentCiAuditClient auditClient = mock(TencentCiAuditClient.class);
+        when(workRepository.findPendingImages(1)).thenReturn(List.of(work));
+        when(claimTransactionService.claimAndCreateSubmittingTask(eq(17L), any(WorkAuditTaskEntity.class)))
+                .thenAnswer(invocation -> {
+                    WorkAuditTaskEntity task = invocation.getArgument(1);
+                    task.setId(107L);
+                    return task;
+                });
+        when(auditClient.auditImage("sensitive-image.jpg")).thenReturn(new TencentCiAuditResult(
+                "image-job-id", null, AuditResultDict.PASS, 0, "Normal", 0, true, false,
+                "sensitive-payload"));
+        when(claimTransactionService.markTaskSuccessAndUpdateWork(
+                eq(107L), eq(17L), eq(2), eq(AuditResultDict.PASS), any(), eq(0), eq("Normal"), eq(0),
+                eq(List.<TencentCiAuditRisk>of()), eq("sensitive-payload"),
+                eq(WorkAuditStatusDict.PASSED), eq(null))).thenReturn(false);
+        WorkAuditService service = new WorkAuditService(
+                workRepository, taskRepository, claimTransactionService, auditClient, properties());
+
+        List<String> messages = captureLogMessages(() -> service.auditPendingImages(1));
+
+        assertThat(messages).anyMatch(message -> message.equals(
+                "图片自动审核结果被隔离条件拒绝: workId=17, taskId=107, auditRound=2"));
+        assertThat(messages.stream()
+                .filter(message -> message.contains("图片自动审核结果被隔离条件拒绝")))
+                .allMatch(message -> !message.contains("sensitive-image.jpg")
+                        && !message.contains("sensitive-payload"));
+        assertThat(messages).noneMatch(message -> message.contains("图片作品审核简洁结果"));
     }
 
     @Test

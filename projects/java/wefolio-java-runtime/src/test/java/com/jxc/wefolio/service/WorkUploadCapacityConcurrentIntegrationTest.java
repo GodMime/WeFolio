@@ -107,6 +107,8 @@ class WorkUploadCapacityConcurrentIntegrationTest {
                   audit_reason_code VARCHAR(64),
                   audit_reason_codes CLOB,
                   audit_reject_reason VARCHAR(1000),
+                  manual_audit_no CHAR(34),
+                  manual_audit_result_at TIMESTAMP(3),
                   deleted_at TIMESTAMP,
                   created_at TIMESTAMP NOT NULL,
                   updated_at TIMESTAMP NOT NULL,

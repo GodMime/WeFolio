@@ -210,16 +210,22 @@ public class WorkAuditClaimTransactionService {
      *
      * @param taskId 任务 ID
      * @param workId 作品 ID
+     * @param auditRound 任务所属审核轮次
      * @param errorMessage 任务错误摘要
      * @param responsePayload 响应摘要
      * @param auditRejectReason 作品审核拒绝原因
+     * @return 任务与作品是否均成功写入
      */
     @Transactional(rollbackFor = Exception.class)
-    public void markTaskFailedAndUpdateWorkFailed(Long taskId, Long workId, String errorMessage,
-                                                  String responsePayload, String auditRejectReason) {
-        taskRepository.markFailed(taskId, errorMessage, responsePayload);
-        workRepository.updateAuditStatusAndReasons(
+    public boolean markTaskFailedAndUpdateWorkFailed(
+            Long taskId, Long workId, Integer auditRound, String errorMessage,
+            String responsePayload, String auditRejectReason) {
+        if (!taskRepository.markFailed(taskId, errorMessage, responsePayload)) {
+            return false;
+        }
+        return workRepository.updateAuditStatusAndReasonsForRound(
                 workId,
+                auditRound,
                 WorkAuditStatusDict.FAILED,
                 WorkAuditReasonCodeDict.AUDIT_SERVICE_ERROR.getCode(),
                 JSON.toJSONString(List.of(WorkAuditReasonCodeDict.AUDIT_SERVICE_ERROR.getCode())),
@@ -310,6 +316,7 @@ public class WorkAuditClaimTransactionService {
      *
      * @param taskId 任务 ID
      * @param workId 作品 ID
+     * @param auditRound 任务所属审核轮次
      * @param result 审核结果
      * @param ciState 腾讯云状态
      * @param ciResult 腾讯云结果码
@@ -319,20 +326,24 @@ public class WorkAuditClaimTransactionService {
      * @param responsePayload 响应摘要
      * @param auditStatus 作品审核状态
      * @param auditRejectReason 作品审核拒绝原因
+     * @return 任务与作品是否均成功写入
      */
     @Transactional(rollbackFor = Exception.class)
-    public void markTaskSuccessAndUpdateWork(Long taskId, Long workId, AuditResultDict result, String ciState,
-                                             Integer ciResult, String ciLabel, Integer ciScore,
-                                             List<TencentCiAuditRisk> risks, String responsePayload,
-                                             WorkAuditStatusDict auditStatus,
-                                             String auditRejectReason) {
-        taskRepository.markSuccess(taskId, result, ciState, ciResult, ciLabel, ciScore, responsePayload);
+    public boolean markTaskSuccessAndUpdateWork(
+            Long taskId, Long workId, Integer auditRound, AuditResultDict result, String ciState,
+            Integer ciResult, String ciLabel, Integer ciScore, List<TencentCiAuditRisk> risks,
+            String responsePayload, WorkAuditStatusDict auditStatus, String auditRejectReason) {
+        if (!taskRepository.markSuccess(
+                taskId, result, ciState, ciResult, ciLabel, ciScore, responsePayload)) {
+            return false;
+        }
         WorkAuditReasonCodeDict reasonCode = riskTypeResolver.resolve(result, ciLabel, false);
         List<String> reasonCodes = riskCollectionResolver.resolve(result, ciLabel, risks).stream()
                 .map(WorkAuditReasonCodeDict::getCode)
                 .toList();
-        workRepository.updateAuditStatusAndReasons(
+        return workRepository.updateAuditStatusAndReasonsForRound(
                 workId,
+                auditRound,
                 auditStatus,
                 reasonCode == null ? null : reasonCode.getCode(),
                 reasonCodes.isEmpty() ? null : JSON.toJSONString(reasonCodes),

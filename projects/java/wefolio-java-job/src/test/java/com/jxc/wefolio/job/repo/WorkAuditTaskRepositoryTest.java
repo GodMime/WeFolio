@@ -73,6 +73,7 @@ class WorkAuditTaskRepositoryTest {
                 .contains(WorkAuditTaskStatusDict.SUBMITTING.getCode(), WorkAuditTaskStatusDict.QUERYING.getCode());
     }
 
+    /** 视频结果候选计数必须关联同轮次且非人工的审核中作品。 */
     @Test
     void countQueryableVideoTasksShouldMatchCandidatePredicate() {
         WorkAuditTaskMapper taskMapper = mock(WorkAuditTaskMapper.class);
@@ -84,7 +85,7 @@ class WorkAuditTaskRepositoryTest {
         LambdaQueryWrapper<WorkAuditTaskEntity> wrapper = captureSelectCountWrapper(taskMapper);
         assertThat(wrapper.getSqlSegment()).contains(
                 "media_type", "task_status", "locked_until", "query_count", "deleted",
-                "EXISTS", "wf_work", "audit_round", "audit_status");
+                "EXISTS", "wf_work", "audit_round", "audit_status", "manual_audit_no");
         assertThat(wrapper.getParamNameValuePairs().values())
                 .contains(MediaTypeDict.VIDEO.getCode(),
                         WorkAuditTaskStatusDict.SUBMITTED.getCode(),
@@ -96,6 +97,7 @@ class WorkAuditTaskRepositoryTest {
                         0L);
     }
 
+    /** 视频结果候选查询必须关联同轮次且非人工的审核中作品。 */
     @Test
     void findQueryableVideoTasksShouldIncludeExpiredQueryingAndRequireActiveMatchingWork() {
         WorkAuditTaskMapper taskMapper = mock(WorkAuditTaskMapper.class);
@@ -107,13 +109,14 @@ class WorkAuditTaskRepositoryTest {
         LambdaQueryWrapper<WorkAuditTaskEntity> wrapper = captureSelectListWrapper(taskMapper);
         assertThat(wrapper.getSqlSegment()).contains(
                 "media_type", "task_status", "locked_until", "query_count", "deleted",
-                "EXISTS", "wf_work", "audit_round", "audit_status", "LIMIT 20");
+                "EXISTS", "wf_work", "audit_round", "audit_status", "manual_audit_no", "LIMIT 20");
         assertThat(wrapper.getParamNameValuePairs().values()).contains(
                 WorkAuditTaskStatusDict.SUBMITTED.getCode(), WorkAuditTaskStatusDict.RUNNING.getCode(),
                 WorkAuditTaskStatusDict.QUERYING.getCode(), now, 120,
                 WorkAuditStatusDict.AUDITING.getCode(), 0L);
     }
 
+    /** 过期视频提交领取必须关联同轮次且非人工的审核中作品。 */
     @Test
     void claimExpiredVideoSubmitShouldIncrementAttemptAndRequireActiveMatchingWork() {
         WorkAuditTaskMapper taskMapper = mock(WorkAuditTaskMapper.class);
@@ -129,11 +132,12 @@ class WorkAuditTaskRepositoryTest {
                 "attempt_count = attempt_count + 1", "updated_at", "version = version + 1");
         assertThat(wrapper.getSqlSegment()).contains(
                 "media_type", "task_status", "locked_until", "attempt_count",
-                "EXISTS", "wf_work", "audit_round", "audit_status", "deleted");
+                "EXISTS", "wf_work", "audit_round", "audit_status", "manual_audit_no", "deleted");
         assertThat(wrapper.getParamNameValuePairs().values()).contains(
                 101L, "VIDEO", "SUBMITTING", now, 3, "AUDITING", 0L);
     }
 
+    /** 达到上限的视频提交领取必须关联非人工作品且不再递增尝试次数。 */
     @Test
     void claimExhaustedExpiredVideoSubmitShouldNotIncrementAttemptCount() {
         WorkAuditTaskMapper taskMapper = mock(WorkAuditTaskMapper.class);
@@ -147,9 +151,11 @@ class WorkAuditTaskRepositoryTest {
         assertThat(wrapper.getSqlSet())
                 .contains("locked_by", "locked_until", "updated_at", "version = version + 1")
                 .doesNotContain("attempt_count = attempt_count + 1");
-        assertThat(wrapper.getSqlSegment()).contains("EXISTS", "attempt_count");
+        assertThat(wrapper.getSqlSegment()).contains(
+                "EXISTS", "wf_work", "audit_round", "audit_status", "manual_audit_no", "attempt_count");
     }
 
+    /** 视频提交恢复的重试与终态候选都必须排除人工审核作品。 */
     @Test
     void submissionRecoveryCandidatesShouldSplitRetryableAndExhaustedTasks() {
         LocalDateTime now = LocalDateTime.of(2026, 8, 13, 12, 0);
@@ -159,7 +165,8 @@ class WorkAuditTaskRepositoryTest {
                 .findRetryableExpiredVideoSubmitTasks(20, 3, now);
         LambdaQueryWrapper<WorkAuditTaskEntity> retryable = captureSelectListWrapper(retryableMapper);
         assertThat(retryable.getSqlSegment()).contains(
-                "media_type", "task_status", "locked_until", "attempt_count", "EXISTS", "LIMIT 20");
+                "media_type", "task_status", "locked_until", "attempt_count", "EXISTS",
+                "wf_work", "audit_round", "audit_status", "manual_audit_no", "LIMIT 20");
         assertThat(retryable.getParamNameValuePairs().values()).contains(
                 MediaTypeDict.VIDEO.getCode(), WorkAuditTaskStatusDict.SUBMITTING.getCode(),
                 now, 3, WorkAuditStatusDict.AUDITING.getCode(), 0L);
@@ -169,12 +176,32 @@ class WorkAuditTaskRepositoryTest {
                 .findExhaustedExpiredVideoSubmitTasks(20, 3, now);
         LambdaQueryWrapper<WorkAuditTaskEntity> exhausted = captureSelectListWrapper(exhaustedMapper);
         assertThat(exhausted.getSqlSegment()).contains(
-                "media_type", "task_status", "locked_until", "attempt_count", "EXISTS", "LIMIT 20");
+                "media_type", "task_status", "locked_until", "attempt_count", "EXISTS",
+                "wf_work", "audit_round", "audit_status", "manual_audit_no", "LIMIT 20");
         assertThat(exhausted.getParamNameValuePairs().values()).contains(
                 MediaTypeDict.VIDEO.getCode(), WorkAuditTaskStatusDict.SUBMITTING.getCode(),
                 now, 3, WorkAuditStatusDict.AUDITING.getCode(), 0L);
     }
 
+    /** 达到查询上限的视频候选必须排除人工审核作品。 */
+    @Test
+    void exhaustedVideoQueryCandidatesShouldRequireAutomaticAuditingWork() {
+        WorkAuditTaskMapper taskMapper = mock(WorkAuditTaskMapper.class);
+        WorkAuditTaskRepository repository = new WorkAuditTaskRepository(taskMapper);
+        LocalDateTime now = LocalDateTime.of(2026, 8, 13, 12, 0);
+
+        repository.findExhaustedExpiredVideoQueryTasks(20, 120, now);
+
+        LambdaQueryWrapper<WorkAuditTaskEntity> wrapper = captureSelectListWrapper(taskMapper);
+        assertThat(wrapper.getSqlSegment()).contains(
+                "media_type", "task_status", "locked_until", "query_count", "EXISTS",
+                "wf_work", "audit_round", "audit_status", "manual_audit_no", "LIMIT 20");
+        assertThat(wrapper.getParamNameValuePairs().values()).contains(
+                MediaTypeDict.VIDEO.getCode(), WorkAuditTaskStatusDict.QUERYING.getCode(),
+                now, 120, WorkAuditStatusDict.AUDITING.getCode(), 0L);
+    }
+
+    /** 视频结果领取必须关联同轮次且非人工的审核中作品。 */
     @Test
     void claimVideoQueryShouldIncrementQueryCountAndRefreshLastQueryAt() {
         WorkAuditTaskMapper taskMapper = mock(WorkAuditTaskMapper.class);
@@ -188,13 +215,15 @@ class WorkAuditTaskRepositoryTest {
                 "task_status", "locked_by", "locked_until", "last_query_at",
                 "query_count = query_count + 1", "updated_at", "version = version + 1");
         assertThat(wrapper.getSqlSegment()).contains(
-                "task_status", "locked_until", "query_count", "EXISTS", "audit_round");
+                "task_status", "locked_until", "query_count", "EXISTS", "wf_work",
+                "audit_round", "audit_status", "manual_audit_no");
         assertThat(wrapper.getParamNameValuePairs().values()).contains(
                 WorkAuditTaskStatusDict.SUBMITTED.getCode(), WorkAuditTaskStatusDict.RUNNING.getCode(),
                 WorkAuditTaskStatusDict.QUERYING.getCode(), now, 120,
                 WorkAuditStatusDict.AUDITING.getCode(), 0L);
     }
 
+    /** 达到查询上限的视频领取必须排除人工审核作品且不再递增计数。 */
     @Test
     void claimExhaustedExpiredVideoQueryShouldNotIncrementQueryCount() {
         WorkAuditTaskMapper taskMapper = mock(WorkAuditTaskMapper.class);
@@ -209,7 +238,8 @@ class WorkAuditTaskRepositoryTest {
                 .contains("locked_by", "locked_until", "updated_at", "version = version + 1")
                 .doesNotContain("query_count = query_count + 1");
         assertThat(wrapper.getSqlSegment()).contains(
-                "media_type", "task_status", "locked_until", "query_count", "EXISTS");
+                "media_type", "task_status", "locked_until", "query_count", "EXISTS",
+                "wf_work", "audit_round", "audit_status", "manual_audit_no");
     }
 
     @Test
@@ -278,13 +308,15 @@ class WorkAuditTaskRepositoryTest {
 
         LambdaQueryWrapper<WorkAuditTaskEntity> wrapper = captureSelectListWrapper(taskMapper);
         assertThat(wrapper.getSqlSegment())
-                .contains("media_type", "task_status", "locked_until", "attempt_count", "deleted", "LIMIT 30");
+                .contains("media_type", "task_status", "locked_until", "attempt_count", "deleted",
+                        "EXISTS", "wf_work", "audit_round", "audit_status", "manual_audit_no", "LIMIT 30");
         assertThat(wrapper.getParamNameValuePairs().values())
                 .contains(MediaTypeDict.ANIMATION.getCode(),
                         WorkAuditTaskStatusDict.PENDING.getCode(),
                         WorkAuditTaskStatusDict.SUBMITTING.getCode(),
                         now,
                         3,
+                        WorkAuditStatusDict.AUDITING.getCode(),
                         0L);
     }
 
@@ -301,10 +333,12 @@ class WorkAuditTaskRepositoryTest {
                 .contains("task_status", "attempt_count = attempt_count + 1", "locked_by", "locked_until",
                         "started_at", "updated_at", "version = version + 1");
         assertThat(wrapper.getSqlSegment())
-                .contains("media_type", "task_status", "locked_until", "attempt_count", "deleted");
+                .contains("media_type", "task_status", "locked_until", "attempt_count", "deleted",
+                        "EXISTS", "wf_work", "audit_round", "audit_status", "manual_audit_no");
         assertThat(wrapper.getParamNameValuePairs().values())
                 .contains(101L, MediaTypeDict.ANIMATION.getCode(), WorkAuditTaskStatusDict.PENDING.getCode(),
-                        WorkAuditTaskStatusDict.SUBMITTING.getCode(), 3, 0L);
+                        WorkAuditTaskStatusDict.SUBMITTING.getCode(), 3,
+                        WorkAuditStatusDict.AUDITING.getCode(), 0L);
     }
 
     @Test
@@ -365,10 +399,33 @@ class WorkAuditTaskRepositoryTest {
 
         LambdaQueryWrapper<WorkAuditTaskEntity> wrapper = captureSelectListWrapper(taskMapper);
         assertThat(wrapper.getSqlSegment())
-                .contains("media_type", "task_status", "locked_until", "attempt_count", "deleted", "LIMIT 20");
+                .contains("media_type", "task_status", "locked_until", "attempt_count", "deleted",
+                        "EXISTS", "wf_work", "audit_round", "audit_status", "manual_audit_no", "LIMIT 20");
         assertThat(wrapper.getParamNameValuePairs().values())
                 .contains(MediaTypeDict.ANIMATION.getCode(), WorkAuditTaskStatusDict.SUBMITTING.getCode(),
-                        now, 3, 0L);
+                        now, 3, WorkAuditStatusDict.AUDITING.getCode(), 0L);
+    }
+
+    /** 达到尝试上限的动图任务领取必须关联有效的同轮自动审核作品。 */
+    @Test
+    void claimExhaustedAnimationTaskShouldRequireActiveMatchingAutomaticWork() {
+        WorkAuditTaskMapper taskMapper = mock(WorkAuditTaskMapper.class);
+        WorkAuditTaskRepository repository = new WorkAuditTaskRepository(taskMapper);
+        LocalDateTime lockedUntil = LocalDateTime.of(2026, 7, 30, 18, 5);
+
+        repository.claimExhaustedAnimationTask(101L, "terminal-token", lockedUntil, 3);
+
+        LambdaUpdateWrapper<WorkAuditTaskEntity> wrapper = captureUpdateWrapper(taskMapper);
+        assertThat(wrapper.getSqlSet())
+                .contains("locked_by", "locked_until", "updated_at", "version = version + 1")
+                .doesNotContain("attempt_count = attempt_count + 1");
+        assertThat(wrapper.getSqlSegment())
+                .contains("media_type", "task_status", "locked_until", "attempt_count", "deleted",
+                        "EXISTS", "wf_work", "audit_round", "audit_status", "manual_audit_no");
+        assertThat(wrapper.getParamNameValuePairs().values())
+                .contains(101L, MediaTypeDict.ANIMATION.getCode(),
+                        WorkAuditTaskStatusDict.SUBMITTING.getCode(), 3,
+                        WorkAuditStatusDict.AUDITING.getCode(), 0L);
     }
 
     private void assertUpdateRefreshesAuditColumns(Consumer<WorkAuditTaskRepository> repositoryCall) {

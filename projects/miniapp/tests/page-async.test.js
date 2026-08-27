@@ -1665,7 +1665,7 @@ test('works page confirms audit resubmit, prevents duplicate requests, and refre
   page.handleAuditResubmitTap({ currentTarget: { dataset: { id: '18' } } })
   assert.equal(modals.length, 1)
 
-  resubmit.resolve({ auditStatus: 'PENDING', auditRound: 2 })
+  resubmit.resolve({ auditStatus: 'AUDITING', auditRound: 3 })
   await submitPromise
   await flushPromises()
 

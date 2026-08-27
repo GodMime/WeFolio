@@ -70,12 +70,15 @@ class WorkAuditTaskRepositoryIntegrationTest {
         insertWork(14L, "AUDITING", 1, 14L);
         insertWork(15L, "AUDITING", 1, 0L);
         insertWork(16L, "AUDITING", 1, 0L);
+        insertWork(17L, "AUDITING", 1, 0L);
+        markWorkAsManualAudit(17L);
         insertVideoTask(101L, 11L, "SUBMITTING", 1, 0, NOW.minusMinutes(1), 1);
         insertVideoTask(102L, 12L, "SUBMITTING", 1, 0, NOW.minusMinutes(1), 1);
         insertVideoTask(103L, 13L, "SUBMITTING", 1, 0, NOW.minusMinutes(1), 1);
         insertVideoTask(104L, 14L, "SUBMITTING", 1, 0, NOW.minusMinutes(1), 1);
         insertVideoTask(105L, 15L, "SUBMITTING", 3, 0, NOW.minusMinutes(1), 1);
         insertVideoTask(106L, 16L, "SUBMITTING", 1, 0, NOW.plusMinutes(1), 1);
+        insertVideoTask(107L, 17L, "SUBMITTING", 1, 0, NOW.minusMinutes(1), 1);
 
         assertThat(repository.findRetryableExpiredVideoSubmitTasks(20, 3, NOW))
                 .extracting(WorkAuditTaskEntity::getId)
@@ -104,6 +107,8 @@ class WorkAuditTaskRepositoryIntegrationTest {
                 104L, "invalid-token", NOW, NOW.plusMinutes(5), 3)).isFalse();
         assertThat(repository.claimExpiredVideoSubmit(
                 106L, "invalid-token", NOW, NOW.plusMinutes(5), 3)).isFalse();
+        assertThat(repository.claimExpiredVideoSubmit(
+                107L, "invalid-token", NOW, NOW.plusMinutes(5), 3)).isFalse();
     }
 
     @Test
@@ -154,12 +159,57 @@ class WorkAuditTaskRepositoryIntegrationTest {
                 208L, "invalid-token", NOW, NOW.plusMinutes(5), 120)).isFalse();
     }
 
+    /** 动图任务的查询、恢复和领取必须同时校验轮次、审核中状态及非人工标记。 */
+    @Test
+    void animationRecoverySqlShouldRequireSameRoundAuditingAndNoManualAuditNo() {
+        for (long workId = 31L; workId <= 37L; workId++) {
+            insertWork(workId, "AUDITING", 1, 0L);
+        }
+        jdbcTemplate.update("UPDATE wf_work SET audit_round = 2 WHERE id = 32");
+        jdbcTemplate.update("UPDATE wf_work SET audit_status = 'PASSED' WHERE id = 33");
+        jdbcTemplate.update("UPDATE wf_work SET deleted = 34 WHERE id = 34");
+        markWorkAsManualAudit(35L);
+
+        insertAnimationTask(301L, 31L, "PENDING", 0, null, 1);
+        insertAnimationTask(302L, 32L, "PENDING", 0, null, 1);
+        insertAnimationTask(303L, 33L, "SUBMITTING", 1, NOW.minusMinutes(1), 1);
+        insertAnimationTask(304L, 34L, "SUBMITTING", 1, NOW.minusMinutes(1), 1);
+        insertAnimationTask(305L, 35L, "SUBMITTING", 1, NOW.minusMinutes(1), 1);
+        insertAnimationTask(306L, 36L, "SUBMITTING", 3, NOW.minusMinutes(1), 1);
+        insertAnimationTask(307L, 37L, "SUBMITTING", 1, NOW.minusMinutes(1), 1);
+        insertAnimationTask(308L, 999L, "PENDING", 0, null, 1);
+
+        assertThat(repository.findRunnableAnimationTasks(20, 3, NOW))
+                .extracting(WorkAuditTaskEntity::getId)
+                .containsExactly(301L, 307L);
+        assertThat(repository.findExhaustedExpiredAnimationTasks(20, 3, NOW))
+                .extracting(WorkAuditTaskEntity::getId)
+                .containsExactly(306L);
+
+        assertThat(repository.claimAnimationTask(
+                301L, "pending-token", NOW.plusMinutes(5), 3)).isTrue();
+        assertThat(repository.claimAnimationTask(
+                305L, "manual-token", NOW.plusMinutes(5), 3)).isFalse();
+        assertThat(repository.claimAnimationTask(
+                307L, "retry-token", NOW.plusMinutes(5), 3)).isTrue();
+        assertThat(repository.claimExhaustedAnimationTask(
+                306L, "terminal-token", NOW.plusMinutes(5), 3)).isTrue();
+        assertThat(repository.claimExhaustedAnimationTask(
+                305L, "manual-terminal-token", NOW.plusMinutes(5), 1)).isFalse();
+
+        assertThat(taskValue(301L, "attempt_count", Integer.class)).isEqualTo(1);
+        assertThat(taskValue(307L, "attempt_count", Integer.class)).isEqualTo(2);
+        assertThat(taskValue(306L, "attempt_count", Integer.class)).isEqualTo(3);
+        assertThat(taskValue(306L, "locked_by", String.class)).isEqualTo("terminal-token");
+    }
+
     private void createTables() {
         jdbcTemplate.execute("""
                 CREATE TABLE wf_work (
                   id BIGINT PRIMARY KEY,
                   audit_status VARCHAR(32) NOT NULL,
                   audit_round INT NOT NULL,
+                  manual_audit_no VARCHAR(34),
                   deleted BIGINT NOT NULL
                 )
                 """);
@@ -220,6 +270,26 @@ class WorkAuditTaskRepositoryIntegrationTest {
                         """,
                 id, workId, auditRound, taskStatus, attemptCount, queryCount,
                 lockedUntil, NOW.minusHours(1), NOW.minusHours(1));
+    }
+
+    private void insertAnimationTask(Long id, Long workId, String taskStatus, int attemptCount,
+                                     LocalDateTime lockedUntil, int auditRound) {
+        jdbcTemplate.update("""
+                        INSERT INTO wf_work_audit_task(
+                          id, work_id, user_id, media_type, media_object_key, audit_round,
+                          provider, task_status, audit_result, attempt_count, query_count,
+                          locked_until, created_at, updated_at, deleted, version
+                        ) VALUES (?, ?, 1, 'ANIMATION', 'image/test.gif', ?,
+                                  'TENCENT_CI', ?, 'UNKNOWN', ?, 0, ?, ?, ?, 0, 0)
+                        """,
+                id, workId, auditRound, taskStatus, attemptCount, lockedUntil,
+                NOW.minusHours(1), NOW.minusHours(1));
+    }
+
+    private void markWorkAsManualAudit(Long workId) {
+        jdbcTemplate.update(
+                "UPDATE wf_work SET manual_audit_no = 'WA20260827153042A7K2Q9' WHERE id = ?",
+                workId);
     }
 
     private <T> T taskValue(Long taskId, String column, Class<T> valueType) {

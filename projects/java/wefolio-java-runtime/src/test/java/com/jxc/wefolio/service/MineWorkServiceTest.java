@@ -2746,7 +2746,8 @@ class MineWorkServiceTest {
         MineWorkAuditService mineWorkAuditService = new MineWorkAuditService(
                 workEntityMapper,
                 workAuditProperties,
-                new WorkAuditUserReasonResolver());
+                new WorkAuditUserReasonResolver(),
+                new WorkManualAuditNoGenerator());
         return new MineWorkService(
                 userEntityMapper,
                 workEntityMapper,
