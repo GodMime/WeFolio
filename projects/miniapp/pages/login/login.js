@@ -4,6 +4,19 @@ const {
   maintainerWechatLogin
 } = require('../../utils/session')
 
+const REFERRAL_CODE_MAX_LENGTH = 16
+
+function normalizeReferralCode(value) {
+  if (typeof value !== 'string') {
+    return ''
+  }
+  try {
+    return decodeURIComponent(value).trim().slice(0, REFERRAL_CODE_MAX_LENGTH)
+  } catch (error) {
+    return ''
+  }
+}
+
 function wxLogin() {
   return new Promise((resolve, reject) => {
     wx.login({
@@ -50,7 +63,14 @@ Page({
     referralCode: ''
   },
 
-  onLoad() {
+  onLoad(options = {}) {
+    const referralCode = normalizeReferralCode(options.referralCode)
+    if (referralCode) {
+      this.setData({
+        activeTab: 'maintainer',
+        referralCode
+      })
+    }
     this.runWechatLoginPrecheck()
   },
 

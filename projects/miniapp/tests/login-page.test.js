@@ -79,6 +79,62 @@ function loadLoginPage() {
   }
 }
 
+test('referral share opens maintainer tab with normalized referral code', () => {
+  const harness = loadLoginPage()
+  try {
+    let precheckCalls = 0
+    harness.page.runWechatLoginPrecheck = () => {
+      precheckCalls += 1
+    }
+
+    harness.page.onLoad({
+      referralCode: encodeURIComponent('  WF23456789ABCDEFG  ')
+    })
+
+    assert.equal(harness.page.data.activeTab, 'maintainer')
+    assert.equal(harness.page.data.referralCode, 'WF23456789ABCDEF')
+    assert.equal(precheckCalls, 1)
+  } finally {
+    harness.cleanup()
+  }
+})
+
+test('ordinary login entry keeps experience tab without referral code', () => {
+  const harness = loadLoginPage()
+  try {
+    let precheckCalls = 0
+    harness.page.runWechatLoginPrecheck = () => {
+      precheckCalls += 1
+    }
+
+    harness.page.onLoad({})
+
+    assert.equal(harness.page.data.activeTab, 'experience')
+    assert.equal(harness.page.data.referralCode, '')
+    assert.equal(precheckCalls, 1)
+  } finally {
+    harness.cleanup()
+  }
+})
+
+test('malformed referral share keeps ordinary login state', () => {
+  const harness = loadLoginPage()
+  try {
+    let precheckCalls = 0
+    harness.page.runWechatLoginPrecheck = () => {
+      precheckCalls += 1
+    }
+
+    harness.page.onLoad({ referralCode: '%E0%A4%A' })
+
+    assert.equal(harness.page.data.activeTab, 'experience')
+    assert.equal(harness.page.data.referralCode, '')
+    assert.equal(precheckCalls, 1)
+  } finally {
+    harness.cleanup()
+  }
+})
+
 test('new-user phone registration submits trimmed referral code', async () => {
   const harness = loadLoginPage()
   try {

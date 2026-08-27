@@ -15,6 +15,10 @@ const RECHARGE_PAGE_URL = '/pages/recharge/recharge'
 const SCHEDULE_PAGE_URL = '/pages/schedule/schedule'
 const WORKS_PAGE_URL = '/pages/works/works'
 const PORTFOLIOS_PAGE_URL = '/pages/portfolios/portfolios'
+const LOGIN_PAGE_URL = '/pages/login/login'
+const APP_REFERRAL_SHARE_TITLE = '映期Folio｜把作品和档期，装进一张可分享名片'
+const APP_REFERRAL_SHARE_IMAGE_URL = 'https://cdn2.we-folio.dingchenyong.top/system/folio-logo.png'
+const INVALID_UNIQUE_CODE = '-'
 
 function buildEntries(messageUnread = normalizeUnreadCount({})) {
   return [
@@ -62,6 +66,19 @@ Page({
 
   onShow() {
     this.bootstrap()
+  },
+
+  onShareAppMessage() {
+    const rawUniqueCode = this.data.dashboard.profile.uniqueCode
+    const uniqueCode = typeof rawUniqueCode === 'string' ? rawUniqueCode.trim() : ''
+    const path = uniqueCode && uniqueCode !== INVALID_UNIQUE_CODE
+      ? `${LOGIN_PAGE_URL}?referralCode=${encodeURIComponent(uniqueCode)}`
+      : LOGIN_PAGE_URL
+    return {
+      title: APP_REFERRAL_SHARE_TITLE,
+      path,
+      imageUrl: APP_REFERRAL_SHARE_IMAGE_URL
+    }
   },
 
   bootstrap() {

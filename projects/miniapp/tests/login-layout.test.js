@@ -321,7 +321,7 @@ test('maintainer registration no longer requires avatar or nickname', () => {
 
 test('login page prechecks on load and uses a fresh wx login code for submission', () => {
   assert.match(loginJs, /precheckMaintainerWechatLogin/)
-  assert.match(loginJs, /onLoad\(\)\s*\{\s*this\.runWechatLoginPrecheck\(\)/)
+  assert.match(loginJs, /onLoad\(options = \{\}\)\s*\{[\s\S]*?this\.runWechatLoginPrecheck\(\)\s*\n\s*\},/)
   assert.match(loginJs, /async runWechatLoginPrecheck\(\)[\s\S]*const code = await wxLogin\(\)[\s\S]*precheckMaintainerWechatLogin\(code\)/)
   assert.match(loginJs, /async authorizeByWechat\(options = \{\}\)[\s\S]*const code = await wxLogin\(\)/)
 })
