@@ -135,7 +135,8 @@ class FeishuFeedbackNotifierTest {
                         containsString("视频 2"),
                         containsString("curl -X PUT 'https://api.test.wefolio.example/api/internal/feedbacks/"),
                         containsString("WAITING_FOLLOW_UP"),
-                        containsString("RESOLVED"))))
+                        containsString("RESOLVED"),
+                        containsString("问题已修复，请更新小程序（重新进入小程序后会自动更新）"))))
                 .andExpect(request -> {
                     String requestBody = ((MockClientHttpRequest) request).getBodyAsString();
                     assertThat(requestBody)

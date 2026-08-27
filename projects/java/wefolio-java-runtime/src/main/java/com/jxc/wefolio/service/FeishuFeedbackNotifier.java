@@ -80,7 +80,8 @@ public class FeishuFeedbackNotifier {
     private static final String DEFAULT_WAITING_RESULT = "请补充更多信息";
 
     /** 已处理默认结果。 */
-    private static final String DEFAULT_RESOLVED_RESULT = "问题已处理";
+    private static final String DEFAULT_RESOLVED_RESULT =
+            "问题已修复，请更新小程序（重新进入小程序后会自动更新）";
 
     /** 无附件提示。 */
     private static final String NO_ATTACHMENT_TEXT = "无";

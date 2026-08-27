@@ -80,7 +80,7 @@ sudo awk -v RS='\0' -F= '
 
 ```bash
 curl -X PUT 'https://api.we-folio.dingchenyong.top/api/internal/feedbacks/FB替换为实际编号' -H 'Content-Type: application/json' -d '{"status":"WAITING_FOLLOW_UP","feedbackResult":"请补充更多信息"}'
-curl -X PUT 'https://api.we-folio.dingchenyong.top/api/internal/feedbacks/FB替换为实际编号' -H 'Content-Type: application/json' -d '{"status":"RESOLVED","feedbackResult":"问题已处理"}'
+curl -X PUT 'https://api.we-folio.dingchenyong.top/api/internal/feedbacks/FB替换为实际编号' -H 'Content-Type: application/json' -d '{"status":"RESOLVED","feedbackResult":"问题已修复，请更新小程序（重新进入小程序后会自动更新）"}'
 ```
 
 该接口无认证，问题编号等同于操作凭据。禁止把飞书卡片、问题编号或完整命令转发到无关群组、工单或公开日志；如发生泄露，应按数据安全事件处理并评估增加认证或网关访问限制。
