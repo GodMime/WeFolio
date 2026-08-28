@@ -39,6 +39,7 @@ work-audit:
   task-lock-seconds: 300
   max-query-video-per-run: 1000
   max-submit-video-per-run: 500
+  video-submit-max-attempts: 3
   max-audit-image-per-run: 500
   video-query-max-attempts: 120
   video-snapshot-interval-seconds: 60
@@ -54,3 +55,7 @@ work-storage-billing:
   cron: "0 0 2 1 * ?"
   zone: Asia/Shanghai
   batch-size: 100
+
+recharge-order-close:
+  # 上下文测试不执行真实的过期订单关闭 SQL。
+  enabled: false

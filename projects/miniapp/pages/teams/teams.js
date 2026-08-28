@@ -4,6 +4,7 @@ const { uploadTeamAvatar } = require('../../utils/team-avatar')
 const {
   buildTeamFieldCounters,
   buildTeamPayload,
+  createTeamIdempotencyKey,
   normalizeTeamList,
   validateTeamForm
 } = require('../../utils/teams')
@@ -86,6 +87,9 @@ Page({
 
   handleCreateToggle() {
     const nextVisible = !this.data.createFormVisible
+    if (!nextVisible) {
+      this.pendingCreateIdempotencyKey = ''
+    }
     // 收起创建区时清空表单，避免下次展开残留上一次未提交的团队信息。
     this.setData({
       createFormVisible: nextVisible,
@@ -101,6 +105,7 @@ Page({
       return
     }
     const value = event.detail.value || ''
+    this.pendingCreateIdempotencyKey = ''
     const form = Object.assign({}, this.data.form, {
       [field]: value
     })
@@ -116,6 +121,7 @@ Page({
     if (!avatarUrl) {
       return
     }
+    this.pendingCreateIdempotencyKey = ''
     this.setData({
       'form.avatarUrl': avatarUrl
     })
@@ -142,12 +148,15 @@ Page({
 
     try {
       const payload = buildTeamPayload(this.data.form)
+      const idempotencyKey = this.pendingCreateIdempotencyKey || createTeamIdempotencyKey()
+      this.pendingCreateIdempotencyKey = idempotencyKey
       // 创建接口先生成团队 ID 和唯一码；本地头像无法随 JSON 提交，先传空头像。
       const created = await request({
-        url: '/api/mine/teams',
+        url: '/api/mine/teams/v2',
         method: 'POST',
         data: Object.assign({}, payload, {
-          avatarUrl: isRemoteUrl(payload.avatarUrl) ? payload.avatarUrl : ''
+          avatarUrl: isRemoteUrl(payload.avatarUrl) ? payload.avatarUrl : '',
+          idempotencyKey
         })
       })
       // 拿到 teamId 后再上传本地头像，并用返回的公开 URL 回写团队资料。
@@ -172,6 +181,7 @@ Page({
         form: emptyForm(),
         fieldCounters: buildTeamFieldCounters(emptyForm())
       })
+      this.pendingCreateIdempotencyKey = ''
       this.loadTeams()
       if (avatarUpdateError && avatarUpdateError.authRequired) {
         handleMaintainerAuthRequired(avatarUpdateError.message)

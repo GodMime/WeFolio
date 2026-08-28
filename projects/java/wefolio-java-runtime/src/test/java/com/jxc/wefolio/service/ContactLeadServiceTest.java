@@ -2,14 +2,19 @@ package com.jxc.wefolio.service;
 
 import com.jxc.wefolio.common.auth.VisitorContext;
 import com.jxc.wefolio.common.auth.VisitorContextHolder;
+import com.jxc.wefolio.dict.BillingWindowScopeDict;
+import com.jxc.wefolio.dict.PointSceneCodeDict;
 import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
 import com.jxc.wefolio.dict.PortfolioPublicationStatusDict;
 import com.jxc.wefolio.dict.PortfolioTypeDict;
+import com.jxc.wefolio.dict.VisitEventTypeDict;
 import com.jxc.wefolio.dto.ContactLeadSubmitRequest;
 import com.jxc.wefolio.dto.ContactLeadSubmitResponse;
 import com.jxc.wefolio.entity.ContactLeadEntity;
 import com.jxc.wefolio.entity.PortfolioEntity;
 import com.jxc.wefolio.entity.VisitRecordEntity;
+import com.jxc.wefolio.entity.VisitorEntity;
+import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.ContactLeadEntityMapper;
 import com.jxc.wefolio.mapper.PortfolioEntityMapper;
 import com.jxc.wefolio.mapper.VisitRecordEntityMapper;
@@ -18,17 +23,24 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.lang.reflect.Method;
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -53,9 +65,28 @@ class ContactLeadServiceTest {
     @Mock
     private PortfolioVisitService portfolioVisitService;
 
+    /** 访客身份服务模拟 */
+    @Mock
+    private VisitorService visitorService;
+
+    /** 维护者本人访问识别服务模拟 */
+    @Mock
+    private OwnerSelfVisitService ownerSelfVisitService;
+
+    /** 访客积分滚动窗口服务模拟 */
+    @Mock
+    private PointBillingWindowService pointBillingWindowService;
+
     @BeforeEach
     void setUp() {
         VisitorContextHolder.set(new VisitorContext(1024L, "visitor-a", "Bearer wf-visitor-v1.test"));
+        VisitorEntity ordinaryVisitor = new VisitorEntity();
+        ordinaryVisitor.setId(1024L);
+        ordinaryVisitor.setOpenid("openid-visitor");
+        lenient().when(visitorService.findById(1024L)).thenReturn(ordinaryVisitor);
+        lenient().when(ownerSelfVisitService.isOwnerSelfVisitor(
+                eq(7L), eq("openid-visitor"), eq(88L), eq(1024L), any()))
+                .thenReturn(false);
     }
 
     @AfterEach
@@ -121,6 +152,7 @@ class ContactLeadServiceTest {
         assertThat(lead.getWechatMaskHint()).isEqualTo("we***io");
         assertThat(lead.getWechatCiphertext()).isEqualTo("wefolio");
         verify(portfolioVisitService).recordContactLeadSubmitted(portfolio(), "visitor-a", 66L, "lead-1");
+        verifyNoInteractions(pointBillingWindowService);
     }
 
     @Test
@@ -185,6 +217,39 @@ class ContactLeadServiceTest {
         verify(contactLeadEntityMapper).selectCount(any());
     }
 
+    /** v2 新建线索必须以线索 ID 进入独立作品集窗口。 */
+    @Test
+    void submitV2ShouldBillNewLeadInPortfolioWindow() {
+        PortfolioEntity portfolio = portfolioWithContactForm();
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
+        when(visitRecordEntityMapper.selectOne(any())).thenReturn(visitRecord());
+        when(contactLeadEntityMapper.insert(any(ContactLeadEntity.class)))
+                .thenAnswer(invocation -> {
+                    ContactLeadEntity lead = invocation.getArgument(0);
+                    lead.setId(66L);
+                    return 1;
+                });
+
+        ContactLeadSubmitResponse response = service().submitV2("PF001", request());
+
+        assertThat(response.getLeadId()).isEqualTo(66L);
+        InOrder writes = inOrder(
+                contactLeadEntityMapper,
+                portfolioVisitService,
+                pointBillingWindowService);
+        writes.verify(contactLeadEntityMapper).insert(any(ContactLeadEntity.class));
+        writes.verify(portfolioVisitService).recordContactLeadSubmitted(
+                eq(portfolio), eq("visitor-a"), eq(66L), eq("lead-1"));
+        writes.verify(pointBillingWindowService).consumeIfEligible(
+                any(), any(), any(), any(), any(), any(), any(), any(), any());
+        verify(pointBillingWindowService).consumeIfEligible(
+                7L, 1024L,
+                PointSceneCodeDict.SUBMIT_CONTACT_LEAD.getCode(),
+                BillingWindowScopeDict.PORTFOLIO.getCode(), 88L,
+                "PORTFOLIO_CONTACT_LEAD", "66", "PF_CONTACT_LEAD:66",
+                "访客预留联系信息");
+    }
+
     @Test
     void submitV2ShouldFindContactFormInSecondaryMenu() {
         when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolioWithSecondaryContactForm());
@@ -229,6 +294,98 @@ class ContactLeadServiceTest {
         assertThat(response.getLeadId()).isEqualTo(77L);
         verify(contactLeadEntityMapper, never()).selectCount(any());
         verify(contactLeadEntityMapper, never()).insert(any(ContactLeadEntity.class));
+        verifyNoInteractions(pointBillingWindowService);
+    }
+
+    /** v2 并发重复键败者返回既有线索，不再计费。 */
+    @Test
+    void submitV2ShouldNotBillDuplicateKeyRecovery() {
+        when(portfolioEntityMapper.selectOne(any()))
+                .thenReturn(portfolioWithContactForm());
+        when(visitRecordEntityMapper.selectOne(any())).thenReturn(visitRecord());
+        ContactLeadEntity existing = new ContactLeadEntity();
+        existing.setId(77L);
+        existing.setSubmittedAt(LocalDateTime.of(2026, 8, 13, 10, 0));
+        when(contactLeadEntityMapper.insert(any(ContactLeadEntity.class)))
+                .thenThrow(new DuplicateKeyException("duplicate"));
+        when(contactLeadEntityMapper.selectOne(any()))
+                .thenReturn(null, existing);
+
+        ContactLeadSubmitResponse response = service().submitV2("PF001", request());
+
+        assertThat(response.getLeadId()).isEqualTo(77L);
+        verify(portfolioVisitService, never())
+                .recordContactLeadSubmitted(any(), any(), any(), any());
+        verifyNoInteractions(pointBillingWindowService);
+    }
+
+    /** 正常自访无访问记录，在规范化阶段拒绝且零写入。 */
+    @Test
+    void ownerSelfWithoutVisitRecordShouldFailBeforeIdentityLookupOrWrites() {
+        when(portfolioEntityMapper.selectOne(any()))
+                .thenReturn(portfolioWithContactForm());
+        ContactLeadSubmitRequest request = request();
+        request.setVisitRecordId(null);
+
+        assertThatThrownBy(() -> service().submitV2("PF001", request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("访问记录无效");
+
+        verifyNoInteractions(visitorService, ownerSelfVisitService,
+                visitRecordEntityMapper, contactLeadEntityMapper,
+                portfolioVisitService, pointBillingWindowService);
+    }
+
+    /** 自访异常携带正数访问记录时仍在行锁和写入前拒绝。 */
+    @Test
+    void ownerSelfWithPositiveVisitRecordShouldFailBeforeVisitLockOrWrites() {
+        when(portfolioEntityMapper.selectOne(any()))
+                .thenReturn(portfolioWithContactForm());
+        VisitorEntity visitor = new VisitorEntity();
+        visitor.setId(1024L);
+        visitor.setOpenid("openid-owner");
+        when(visitorService.findById(1024L)).thenReturn(visitor);
+        when(ownerSelfVisitService.isOwnerSelfVisitor(
+                7L, "openid-owner", 88L, 1024L,
+                VisitEventTypeDict.CONTACT_LEAD_SUBMITTED.getCode())).thenReturn(true);
+
+        assertThatThrownBy(() -> service().submitV2("PF001", request()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("访问记录无效");
+
+        verifyNoInteractions(visitRecordEntityMapper, contactLeadEntityMapper,
+                portfolioVisitService, pointBillingWindowService);
+    }
+
+    /** 线索写入后计费故障必须向上抛出以触发整体回滚。 */
+    @Test
+    void submitV2ShouldPropagateBillingFailure() {
+        when(portfolioEntityMapper.selectOne(any()))
+                .thenReturn(portfolioWithContactForm());
+        when(visitRecordEntityMapper.selectOne(any())).thenReturn(visitRecord());
+        when(contactLeadEntityMapper.insert(any(ContactLeadEntity.class)))
+                .thenAnswer(invocation -> {
+                    ContactLeadEntity lead = invocation.getArgument(0);
+                    lead.setId(66L);
+                    return 1;
+                });
+        when(pointBillingWindowService.consumeIfEligible(
+                any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenThrow(new BusinessException("积分计费窗口异常"));
+
+        assertThatThrownBy(() -> service().submitV2("PF001", request()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("积分计费窗口异常");
+    }
+
+    /** v2 留资编排必须对所有异常回滚。 */
+    @Test
+    void submitV2ShouldUseRollbackTransaction() throws NoSuchMethodException {
+        Method method = ContactLeadService.class.getMethod(
+                "submitV2", String.class, ContactLeadSubmitRequest.class);
+        Transactional transactional = method.getAnnotation(Transactional.class);
+        assertThat(transactional).isNotNull();
+        assertThat(transactional.rollbackFor()).contains(Exception.class);
     }
 
     @Test
@@ -295,7 +452,10 @@ class ContactLeadServiceTest {
                 contactLeadEntityMapper,
                 portfolioEntityMapper,
                 visitRecordEntityMapper,
-                portfolioVisitService
+                portfolioVisitService,
+                visitorService,
+                ownerSelfVisitService,
+                pointBillingWindowService
         );
     }
 

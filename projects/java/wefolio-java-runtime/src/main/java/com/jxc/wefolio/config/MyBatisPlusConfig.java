@@ -6,6 +6,8 @@ import com.baomidou.mybatisplus.core.handlers.MetaObjectHandler;
 import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.inner.OptimisticLockerInnerInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerInterceptor;
+import com.jxc.wefolio.entity.FeedbackEntity;
+import com.jxc.wefolio.entity.FeedbackUploadTaskEntity;
 import org.apache.ibatis.logging.nologging.NoLoggingImpl;
 import org.apache.ibatis.logging.stdout.StdOutImpl;
 import org.apache.ibatis.reflection.MetaObject;
@@ -15,6 +17,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 
 /**
@@ -37,6 +40,9 @@ public class MyBatisPlusConfig {
 
     /** BaseEntity 更新时间字段名 */
     private static final String FIELD_UPDATED_AT = "updatedAt";
+
+    /** 问题反馈使用的业务时区 */
+    private static final ZoneId FEEDBACK_BUSINESS_ZONE = ZoneId.of("Asia/Shanghai");
 
     /**
      * MyBatis Plus 核心拦截器
@@ -71,7 +77,7 @@ public class MyBatisPlusConfig {
              */
             @Override
             public void insertFill(MetaObject metaObject) {
-                LocalDateTime now = LocalDateTime.now();
+                LocalDateTime now = currentTime(metaObject);
                 fillWhenEmpty(metaObject, FIELD_CREATED_AT, now);
                 fillWhenEmpty(metaObject, FIELD_UPDATED_AT, now);
             }
@@ -83,7 +89,21 @@ public class MyBatisPlusConfig {
              */
             @Override
             public void updateFill(MetaObject metaObject) {
-                setFieldValByName(FIELD_UPDATED_AT, LocalDateTime.now(), metaObject);
+                setFieldValByName(FIELD_UPDATED_AT, currentTime(metaObject), metaObject);
+            }
+
+            /**
+             * 反馈实体使用固定业务时区，其余既有实体保持 JVM 默认时区语义。
+             *
+             * @param metaObject MyBatis 元对象
+             * @return 当前本地时间
+             */
+            private LocalDateTime currentTime(MetaObject metaObject) {
+                Object entity = metaObject.getOriginalObject();
+                if (entity instanceof FeedbackEntity || entity instanceof FeedbackUploadTaskEntity) {
+                    return LocalDateTime.now(FEEDBACK_BUSINESS_ZONE);
+                }
+                return LocalDateTime.now();
             }
 
             /**

@@ -70,6 +70,8 @@ DEFAULT_OLD_CALL="$(sed -n '1p' "${FAKE_SSH_ARGS_FILE}")"
 DEFAULT_NEW_CALL="$(sed -n '2p' "${FAKE_SSH_ARGS_FILE}")"
 assert_contains "${DEFAULT_OLD_CALL}" "root@49.235.146.161 env LC_ALL=C LANG=C bash -s -- 老节点 root@49.235.146.161 yes"
 assert_contains "${DEFAULT_NEW_CALL}" "root@124.222.148.233 env LC_ALL=C LANG=C bash -s -- 新节点 root@124.222.148.233 no"
+assert_contains "${DEFAULT_OLD_CALL}" "yes http://127.0.0.1:8090/api/health"
+assert_contains "${DEFAULT_NEW_CALL}" "no http://10.0.4.7:8090/api/health"
 
 reset_fake_ssh
 SSH_BIN="${TEST_TMP_DIR}/fake-ssh" bash "${STATUS_SCRIPT}" \
@@ -78,6 +80,15 @@ OVERRIDE_OLD_CALL="$(sed -n '1p' "${FAKE_SSH_ARGS_FILE}")"
 OVERRIDE_NEW_CALL="$(sed -n '2p' "${FAKE_SSH_ARGS_FILE}")"
 assert_contains "${OVERRIDE_OLD_CALL}" "ops@old.example.com env LC_ALL=C LANG=C bash -s -- 老节点 ops@old.example.com yes"
 assert_contains "${OVERRIDE_NEW_CALL}" "ops@new.example.com env LC_ALL=C LANG=C bash -s -- 新节点 ops@new.example.com no"
+
+reset_fake_ssh
+OLD_RUNTIME_HEALTH_URL="http://10.1.0.10:8090/api/health" \
+NEW_RUNTIME_HEALTH_URL="http://10.1.0.11:8090/api/health" \
+    SSH_BIN="${TEST_TMP_DIR}/fake-ssh" bash "${STATUS_SCRIPT}" >/dev/null
+OVERRIDE_OLD_HEALTH_CALL="$(sed -n '1p' "${FAKE_SSH_ARGS_FILE}")"
+OVERRIDE_NEW_HEALTH_CALL="$(sed -n '2p' "${FAKE_SSH_ARGS_FILE}")"
+assert_contains "${OVERRIDE_OLD_HEALTH_CALL}" "yes http://10.1.0.10:8090/api/health"
+assert_contains "${OVERRIDE_NEW_HEALTH_CALL}" "no http://10.1.0.11:8090/api/health"
 
 reset_fake_ssh
 SSH_BIN="${TEST_TMP_DIR}/fake-ssh" bash "${STATUS_SCRIPT}" ops@example.com >/dev/null

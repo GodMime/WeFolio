@@ -4,11 +4,14 @@ import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.jxc.wefolio.common.auth.VisitorContext;
 import com.jxc.wefolio.common.auth.VisitorContextHolder;
+import com.jxc.wefolio.dict.BillingWindowScopeDict;
 import com.jxc.wefolio.dict.FollowStatusDict;
+import com.jxc.wefolio.dict.PointSceneCodeDict;
 import com.jxc.wefolio.dict.PortfolioComponentTypeDict;
 import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
 import com.jxc.wefolio.dict.PortfolioPublicationStatusDict;
 import com.jxc.wefolio.dict.PortfolioTypeDict;
+import com.jxc.wefolio.dict.VisitEventTypeDict;
 import com.jxc.wefolio.dict.VisitSourceTypeDict;
 import com.jxc.wefolio.dto.ContactLeadSubmitRequest;
 import com.jxc.wefolio.dto.ContactLeadSubmitResponse;
@@ -16,6 +19,7 @@ import com.jxc.wefolio.dto.PortfolioConfigDto;
 import com.jxc.wefolio.entity.ContactLeadEntity;
 import com.jxc.wefolio.entity.PortfolioEntity;
 import com.jxc.wefolio.entity.VisitRecordEntity;
+import com.jxc.wefolio.entity.VisitorEntity;
 import com.jxc.wefolio.exception.AuthenticationRequiredException;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.ContactLeadEntityMapper;
@@ -67,6 +71,22 @@ public class ContactLeadService {
     /** 普通访客在同一作品集允许提交的最大次数 */
     private static final long MAX_SUBMISSION_COUNT = 3L;
 
+    /** 留资积分业务类型 */
+    private static final String CONTACT_LEAD_POINT_BUSINESS_TYPE =
+            "PORTFOLIO_CONTACT_LEAD";
+
+    /** 留资积分幂等键前缀 */
+    private static final String CONTACT_LEAD_POINT_IDEMPOTENCY_PREFIX =
+            "PF_CONTACT_LEAD:";
+
+    /** 留资积分流水备注 */
+    private static final String CONTACT_LEAD_POINT_REMARK =
+            "访客预留联系信息";
+
+    /** 联系线索主键未回填提示 */
+    private static final String CONTACT_LEAD_ID_MISSING_MESSAGE =
+            "联系线索 ID 未回填";
+
     /** 联系线索 Mapper */
     private final ContactLeadEntityMapper contactLeadEntityMapper;
 
@@ -78,6 +98,15 @@ public class ContactLeadService {
 
     /** 访问服务 */
     private final PortfolioVisitService portfolioVisitService;
+
+    /** 访客身份服务 */
+    private final VisitorService visitorService;
+
+    /** 维护者本人访问识别服务 */
+    private final OwnerSelfVisitService ownerSelfVisitService;
+
+    /** 访客积分滚动窗口服务 */
+    private final PointBillingWindowService pointBillingWindowService;
 
     /**
      * 按分享编码提交线索。
@@ -103,7 +132,8 @@ public class ContactLeadService {
     }
 
     /**
-     * 按分享编码严格校验并提交线索。
+     * 按分享编码严格校验并通过 v2 提交线索。
+     * 自访在任何业务写入前拒绝，只有本次新建的线索进入独立积分窗口。
      *
      * @param shareCode 分享编码
      * @param request 提交请求
@@ -116,6 +146,14 @@ public class ContactLeadService {
         NormalizedContactLeadRequest normalized = normalizeRequest(request, true);
         VisitorContext visitorContext = VisitorContextHolder.current()
                 .orElseThrow(() -> new AuthenticationRequiredException("访客未登录"));
+        VisitorEntity visitor = visitorService.findById(visitorContext.getVisitorId());
+        if (visitor != null && ownerSelfVisitService.isOwnerSelfVisitor(
+                portfolio.getOwnerId(), visitor.getOpenid(), portfolio.getId(),
+                visitorContext.getVisitorId(),
+                VisitEventTypeDict.CONTACT_LEAD_SUBMITTED.getCode())) {
+            throw new BusinessException(
+                    PortfolioMessage.CONTACT_LEAD_VISIT_RECORD_INVALID_MESSAGE);
+        }
         VisitRecordEntity visitRecord = requireMatchingVisitRecord(
                 portfolio,
                 normalized.visitRecordId(),
@@ -128,7 +166,21 @@ public class ContactLeadService {
         if (!visitorContext.isTimelineAnonymous()) {
             enforceSubmissionLimit(portfolio, visitRecord);
         }
-        return persistLead(portfolio, normalized, normalizeSourceType(visitRecord.getSourceType()));
+        ContactLeadPersistenceResult result = persistLead(
+                portfolio, normalized, normalizeSourceType(visitRecord.getSourceType()));
+        if (result.created()) {
+            ContactLeadEntity lead = result.lead();
+            Long leadId = Objects.requireNonNull(
+                    lead.getId(), CONTACT_LEAD_ID_MISSING_MESSAGE);
+            pointBillingWindowService.consumeIfEligible(
+                    portfolio.getOwnerId(), visitorContext.getVisitorId(),
+                    PointSceneCodeDict.SUBMIT_CONTACT_LEAD.getCode(),
+                    BillingWindowScopeDict.PORTFOLIO.getCode(), portfolio.getId(),
+                    CONTACT_LEAD_POINT_BUSINESS_TYPE, leadId.toString(),
+                    CONTACT_LEAD_POINT_IDEMPOTENCY_PREFIX + leadId,
+                    CONTACT_LEAD_POINT_REMARK);
+        }
+        return buildSubmitResponse(result.lead());
     }
 
     /**
@@ -140,7 +192,9 @@ public class ContactLeadService {
      */
     private ContactLeadSubmitResponse submitInternal(PortfolioEntity portfolio, ContactLeadSubmitRequest request) {
         NormalizedContactLeadRequest normalized = normalizeRequest(request, false);
-        return persistLead(portfolio, normalized, normalizeSourceType(request.getSourceType()));
+        ContactLeadPersistenceResult result = persistLead(
+                portfolio, normalized, normalizeSourceType(request.getSourceType()));
+        return buildSubmitResponse(result.lead());
     }
 
     /**
@@ -149,9 +203,9 @@ public class ContactLeadService {
      * @param portfolio 作品集
      * @param request 已规范化请求
      * @param sourceType 可信来源类型
-     * @return 提交响应
+     * @return 持久化结果
      */
-    private ContactLeadSubmitResponse persistLead(
+    private ContactLeadPersistenceResult persistLead(
             PortfolioEntity portfolio,
             NormalizedContactLeadRequest request,
             String sourceType
@@ -183,7 +237,7 @@ public class ContactLeadService {
         } catch (DuplicateKeyException e) {
             ContactLeadEntity existingLead = findExistingLead(portfolio, lead.getIdempotencyKey());
             if (existingLead != null) {
-                return buildSubmitResponse(existingLead);
+                return ContactLeadPersistenceResult.existing(existingLead);
             }
             throw e;
         }
@@ -194,7 +248,28 @@ public class ContactLeadService {
                 lead.getIdempotencyKey()
         );
 
-        return buildSubmitResponse(lead);
+        return ContactLeadPersistenceResult.created(lead);
+    }
+
+    /**
+     * 联系线索持久化结果。
+     *
+     * @param lead 线索实体
+     * @param created 是否由本次请求新建
+     */
+    private record ContactLeadPersistenceResult(
+            ContactLeadEntity lead,
+            boolean created
+    ) {
+        /** 构造新建结果。 */
+        private static ContactLeadPersistenceResult created(ContactLeadEntity lead) {
+            return new ContactLeadPersistenceResult(lead, true);
+        }
+
+        /** 构造已有结果。 */
+        private static ContactLeadPersistenceResult existing(ContactLeadEntity lead) {
+            return new ContactLeadPersistenceResult(lead, false);
+        }
     }
 
     /**

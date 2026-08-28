@@ -20,7 +20,7 @@ class BillingWindowScopeDictTest {
         assertThat(BillingWindowScopeDict.fromCode("VISITOR_WORK")).isEmpty();
     }
 
-    /** 三类访客积分场景必须映射到唯一作用域。 */
+    /** 所有访客积分场景必须映射到各自唯一作用域。 */
     @Test
     void fromSceneCodeMapsEveryBillableVisitorScene() {
         assertThat(BillingWindowScopeDict.fromSceneCode(
@@ -32,6 +32,12 @@ class BillingWindowScopeDictTest {
         assertThat(BillingWindowScopeDict.fromSceneCode(
                 PointSceneCodeDict.VIEW_PORTFOLIO_VIDEO.getCode()))
                 .contains(BillingWindowScopeDict.WORK);
+        assertThat(BillingWindowScopeDict.fromSceneCode(
+                PointSceneCodeDict.QUERY_PORTFOLIO_SCHEDULE.getCode()))
+                .contains(BillingWindowScopeDict.PORTFOLIO);
+        assertThat(BillingWindowScopeDict.fromSceneCode(
+                PointSceneCodeDict.SUBMIT_CONTACT_LEAD.getCode()))
+                .contains(BillingWindowScopeDict.PORTFOLIO);
         assertThat(BillingWindowScopeDict.fromSceneCode(null)).isEmpty();
         assertThat(BillingWindowScopeDict.fromSceneCode(
                 PointSceneCodeDict.UPLOAD_IMAGE.getCode())).isEmpty();

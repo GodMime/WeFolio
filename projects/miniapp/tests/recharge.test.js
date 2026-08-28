@@ -18,17 +18,17 @@ test('normalizes recharge packages and selects fifty yuan package by default', (
     lowBalance: false,
     lowBalanceThreshold: 50,
     packages: [
-      { packageId: 1, packageCode: 'POINT_1', packageName: '1 元档', amountFen: 100, basePoints: 10, bonusPoints: 0, totalPoints: 10 },
-      { packageId: 2, packageCode: 'POINT_10', packageName: '10 元档', amountFen: 1000, basePoints: 100, bonusPoints: 0, totalPoints: 100 },
-      { packageId: 3, packageCode: 'POINT_50', packageName: '50 元档', amountFen: 5000, basePoints: 500, bonusPoints: 20, totalPoints: 520 },
-      { packageId: 4, packageCode: 'POINT_100', packageName: '100 元档', amountFen: 10000, basePoints: 1000, bonusPoints: 100, totalPoints: 1100 }
+      { packageId: 1, packageCode: 'RECHARGE_5_YUAN', packageName: '5 元档', amountFen: 500, basePoints: 500, bonusPoints: 0, totalPoints: 500 },
+      { packageId: 2, packageCode: 'RECHARGE_10_YUAN', packageName: '10 元档', amountFen: 1000, basePoints: 1000, bonusPoints: 0, totalPoints: 1000 },
+      { packageId: 3, packageCode: 'RECHARGE_50_YUAN', packageName: '50 元档', amountFen: 5000, basePoints: 5000, bonusPoints: 200, totalPoints: 5200 },
+      { packageId: 4, packageCode: 'RECHARGE_100_YUAN', packageName: '100 元档', amountFen: 10000, basePoints: 10000, bonusPoints: 1000, totalPoints: 11000 }
     ]
   })
 
   assert.equal(rechargeData.balanceText, '286')
   assert.equal(rechargeData.selectedPackageId, 3)
   assert.equal(rechargeData.selectedPackage.amountText, '50 元')
-  assert.equal(rechargeData.selectedPackage.bonusText, '多送 20 积分')
+  assert.equal(rechargeData.selectedPackage.bonusText, '多送 200 积分')
   assert.deepEqual(rechargeData.packages.map((item) => item.selected), [false, false, true, false])
 })
 

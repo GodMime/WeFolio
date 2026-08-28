@@ -23,7 +23,7 @@ import com.jxc.wefolio.dto.MineWorkUploadCompleteResponse;
 import com.jxc.wefolio.dto.MineWorkUploadTicketRequest;
 import com.jxc.wefolio.dto.MineWorkUploadTicketResponse;
 import com.jxc.wefolio.service.MineWorkService;
-import com.jxc.wefolio.service.MineWorkAuditService;
+import com.jxc.wefolio.service.MineWorkAuditApplicationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -59,8 +59,8 @@ public class MineWorkController {
     /** 我的作品服务 */
     private final MineWorkService mineWorkService;
 
-    /** 我的作品审核服务 */
-    private final MineWorkAuditService mineWorkAuditService;
+    /** 我的作品审核应用服务 */
+    private final MineWorkAuditApplicationService mineWorkAuditApplicationService;
 
     /**
      * 主动将作品提交到下一审核轮次。
@@ -70,7 +70,7 @@ public class MineWorkController {
      */
     @PostMapping("/api/mine/works/{workId}/audit-resubmit")
     public Response<MineWorkAuditResubmitResponse> resubmitAudit(@PathVariable Long workId) {
-        return Response.success(mineWorkAuditService.resubmit(workId));
+        return Response.success(mineWorkAuditApplicationService.resubmit(workId));
     }
 
     /**

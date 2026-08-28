@@ -19,8 +19,10 @@ import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -128,6 +130,49 @@ class PointBillingWindowServiceTest {
         when(mapper.updateCharged(31L, 20L, 93L, databaseNow)).thenReturn(1);
 
         assertThat(consumeVideo("video-3")).isEqualTo(BillingWindowResult.CHARGED);
+    }
+
+    /** 查档与留资场景、不同作品集必须形成独立窗口身份。 */
+    @Test
+    void visitorIntentActionsAndPortfoliosShouldUseIndependentIdentities() {
+        when(mapper.insertIgnore(any(PointBillingWindowEntity.class))).thenReturn(1);
+        when(mapper.selectForUpdateByUniqueKey(any(), any(), any(), any(), any()))
+                .thenAnswer(invocation -> {
+                    PointBillingWindowEntity value = window(null);
+                    value.setSceneCode(invocation.getArgument(1));
+                    value.setScopeId(invocation.getArgument(4));
+                    return value;
+                });
+        when(mapper.selectCurrentTimestamp()).thenReturn(
+                LocalDateTime.of(2026, 8, 13, 10, 0));
+        when(pointService.consume(any(), any(), any(), any(), any(Integer.class),
+                any(), any())).thenReturn(
+                        mutation(20L, 91L), mutation(20L, 92L), mutation(20L, 93L));
+        when(mapper.updateCharged(any(), any(), any(), any())).thenReturn(1);
+
+        service().consumeIfEligible(7L, 1024L,
+                PointSceneCodeDict.QUERY_PORTFOLIO_SCHEDULE.getCode(),
+                BillingWindowScopeDict.PORTFOLIO.getCode(), 88L,
+                "PORTFOLIO_SCHEDULE_QUERY", "501", "query-501", "访客查档");
+        service().consumeIfEligible(7L, 1024L,
+                PointSceneCodeDict.SUBMIT_CONTACT_LEAD.getCode(),
+                BillingWindowScopeDict.PORTFOLIO.getCode(), 88L,
+                "PORTFOLIO_CONTACT_LEAD", "601", "lead-601", "访客留资");
+        service().consumeIfEligible(7L, 1024L,
+                PointSceneCodeDict.QUERY_PORTFOLIO_SCHEDULE.getCode(),
+                BillingWindowScopeDict.PORTFOLIO.getCode(), 99L,
+                "PORTFOLIO_SCHEDULE_QUERY", "502", "query-502", "访客查档");
+
+        ArgumentCaptor<PointBillingWindowEntity> captor =
+                ArgumentCaptor.forClass(PointBillingWindowEntity.class);
+        verify(mapper, times(3)).insertIgnore(captor.capture());
+        assertThat(captor.getAllValues())
+                .extracting(PointBillingWindowEntity::getSceneCode,
+                        PointBillingWindowEntity::getScopeId)
+                .containsExactly(
+                        tuple("QUERY_PORTFOLIO_SCHEDULE", 88L),
+                        tuple("SUBMIT_CONTACT_LEAD", 88L),
+                        tuple("QUERY_PORTFOLIO_SCHEDULE", 99L));
     }
 
     /** 无效参数和场景作用域不匹配必须在写数据库前拒绝。 */

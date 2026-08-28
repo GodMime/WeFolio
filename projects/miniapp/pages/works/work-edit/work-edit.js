@@ -1,3 +1,8 @@
+/**
+ * 当前状态：业务入口不可达。
+ * 原因：作品编辑能力已合并到作品列表页的图片、视频和动图编辑弹层，现有流程不再跳转本独立页面。
+ * 保留说明：暂时保留页面注册和实现，后续统一清理旧页面时需同步更新相关测试。
+ */
 const { request } = require('../../../utils/request')
 const { normalizeId } = require('../../../utils/id')
 const { handleMaintainerAuthRequired, hasLocalToken } = require('../../../utils/session')

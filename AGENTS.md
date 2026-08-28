@@ -167,6 +167,7 @@ Flyway 规则：
 - 所有 SQL 变更都必须走 `projects/java/wefolio-java-runtime/` 工程的 Flyway SQL 脚本，包括建表、改表、索引、约束、初始化数据和数据修正 SQL。
 - 已提交或已执行的 migration 绝对不要修改。
 - 数据库变更必须新增 `V{version}__{description}.sql`。
+- **禁止在 migration 中写入"重置/清理"类破坏性数据操作**（如 `DELETE` 全表、`UPDATE` 清零余额/流水）；数据重置与清理只能在对应环境手工执行并留痕，不得以 Flyway migration 形式进入迁移链。
 
 ## 小程序约定
 

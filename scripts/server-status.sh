@@ -4,6 +4,9 @@ set -uo pipefail
 # 本脚本在本机执行，通过独立 SSH 会话只读采集两台服务器和 Java 服务状态。
 readonly DEFAULT_OLD_SERVER="root@49.235.146.161"
 readonly DEFAULT_NEW_SERVER="root@124.222.148.233"
+# 两台 Runtime 的监听地址不同，允许运维在内网地址变化时通过环境变量覆盖。
+readonly OLD_RUNTIME_HEALTH_URL="${OLD_RUNTIME_HEALTH_URL:-http://127.0.0.1:8090/api/health}"
+readonly NEW_RUNTIME_HEALTH_URL="${NEW_RUNTIME_HEALTH_URL:-http://10.0.4.7:8090/api/health}"
 readonly OLD_SERVER="${1:-${DEFAULT_OLD_SERVER}}"
 readonly NEW_SERVER="${2:-${DEFAULT_NEW_SERVER}}"
 readonly SSH_COMMAND="${SSH_BIN:-ssh}"
@@ -12,18 +15,21 @@ inspect_server() {
     local server="$1"
     local node_label="$2"
     local check_job="$3"
+    local runtime_health_url="$4"
 
     printf '\n正在连接%s：%s\n' "${node_label}" "${server}"
     LC_ALL=C LANG=C "${SSH_COMMAND}" \
         -o BatchMode=yes \
         -o ConnectTimeout=8 \
         "${server}" \
-        env LC_ALL=C LANG=C bash -s -- "${node_label}" "${server}" "${check_job}" <<'REMOTE_SCRIPT'
+        env LC_ALL=C LANG=C bash -s -- \
+        "${node_label}" "${server}" "${check_job}" "${runtime_health_url}" <<'REMOTE_SCRIPT'
 set -uo pipefail
 
 readonly NODE_LABEL="$1"
 readonly NODE_SERVER="$2"
 readonly CHECK_JOB="$3"
+readonly RUNTIME_HEALTH_URL="$4"
 
 CPU_IDLE=0
 CPU_TOTAL=0
@@ -238,7 +244,7 @@ job_result="异常"
 print_server_status
 
 if inspect_service "Runtime（${NODE_LABEL} ${NODE_SERVER}）" \
-    "wefolio.service" "http://127.0.0.1:8090/api/health"; then
+    "wefolio.service" "${RUNTIME_HEALTH_URL}"; then
     runtime_result="健康"
 else
     overall_status=10
@@ -273,14 +279,14 @@ format_result() {
     esac
 }
 
-inspect_server "${OLD_SERVER}" "老节点" "yes"
+inspect_server "${OLD_SERVER}" "老节点" "yes" "${OLD_RUNTIME_HEALTH_URL}"
 old_status=$?
 if [[ "${old_status}" -ne 0 ]]; then
     printf '\n[异常] 老节点（%s）检查失败，退出码：%s。继续检查新节点。\n' \
         "${OLD_SERVER}" "${old_status}" >&2
 fi
 
-inspect_server "${NEW_SERVER}" "新节点" "no"
+inspect_server "${NEW_SERVER}" "新节点" "no" "${NEW_RUNTIME_HEALTH_URL}"
 new_status=$?
 if [[ "${new_status}" -ne 0 ]]; then
     printf '\n[异常] 新节点（%s）检查失败，退出码：%s。\n' \

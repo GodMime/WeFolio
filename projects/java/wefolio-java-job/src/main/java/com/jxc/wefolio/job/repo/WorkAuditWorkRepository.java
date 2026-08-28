@@ -103,58 +103,7 @@ public class WorkAuditWorkRepository {
                 .setSql(VERSION_INCREMENT_SQL)
                 .eq(WorkAuditWorkEntity::getId, workId)
                 .eq(WorkAuditWorkEntity::getAuditStatus, WorkAuditStatusDict.PENDING.getCode())
-                .eq(WorkAuditWorkEntity::getDeleted, NOT_DELETED));
-        return updated == 1;
-    }
-
-    /**
-     * 更新作品审核状态，默认清空拒绝原因。
-     *
-     * @param workId 作品 ID
-     * @param auditStatus 目标审核状态
-     * @return 是否更新成功
-     * @deprecated 审核结果落库应使用 {@link #updateAuditStatusAndRejectReason(Long, WorkAuditStatusDict, String)}
-     */
-    @Deprecated(since = "0.0.1", forRemoval = false)
-    public boolean updateAuditStatus(Long workId, WorkAuditStatusDict auditStatus) {
-        return updateAuditStatusAndRejectReason(workId, auditStatus, null);
-    }
-
-    /**
-     * 更新作品审核状态和拒绝原因。
-     *
-     * @param workId 作品 ID
-     * @param auditStatus 目标审核状态
-     * @param auditRejectReason 审核拒绝原因，审核通过时为空
-     * @return 是否更新成功
-     */
-    public boolean updateAuditStatusAndRejectReason(Long workId, WorkAuditStatusDict auditStatus,
-                                                    String auditRejectReason) {
-        return updateAuditStatusAndReasons(workId, auditStatus, null, null, auditRejectReason);
-    }
-
-    /**
-     * 同时更新作品审核状态、稳定风险类型和内部原因摘要。
-     *
-     * @param workId 作品 ID
-     * @param auditStatus 目标审核状态
-     * @param auditReasonCode 稳定风险类型，审核通过或处理中时为空
-     * @param auditReasonCodes 当前轮次全部稳定风险类型 JSON 数组，审核通过或处理中时为空
-     * @param auditRejectReason 内部审核原因摘要，审核通过或处理中时为空
-     * @return 是否更新成功
-     */
-    public boolean updateAuditStatusAndReasons(Long workId, WorkAuditStatusDict auditStatus,
-                                               String auditReasonCode, String auditReasonCodes,
-                                               String auditRejectReason) {
-        LocalDateTime now = LocalDateTime.now();
-        int updated = workMapper.update(null, Wrappers.<WorkAuditWorkEntity>lambdaUpdate()
-                .set(WorkAuditWorkEntity::getAuditStatus, auditStatus.getCode())
-                .set(WorkAuditWorkEntity::getAuditReasonCode, auditReasonCode)
-                .set(WorkAuditWorkEntity::getAuditReasonCodes, auditReasonCodes)
-                .set(WorkAuditWorkEntity::getAuditRejectReason, auditRejectReason)
-                .set(WorkAuditWorkEntity::getUpdatedAt, now)
-                .setSql(VERSION_INCREMENT_SQL)
-                .eq(WorkAuditWorkEntity::getId, workId)
+                .isNull(WorkAuditWorkEntity::getManualAuditNo)
                 .eq(WorkAuditWorkEntity::getDeleted, NOT_DELETED));
         return updated == 1;
     }
@@ -183,6 +132,8 @@ public class WorkAuditWorkRepository {
                 .setSql(VERSION_INCREMENT_SQL)
                 .eq(WorkAuditWorkEntity::getId, workId)
                 .eq(WorkAuditWorkEntity::getAuditRound, auditRound)
+                .eq(WorkAuditWorkEntity::getAuditStatus, WorkAuditStatusDict.AUDITING.getCode())
+                .isNull(WorkAuditWorkEntity::getManualAuditNo)
                 .eq(WorkAuditWorkEntity::getDeleted, NOT_DELETED));
         return updated == 1;
     }
@@ -191,6 +142,7 @@ public class WorkAuditWorkRepository {
         return workMapper.selectList(Wrappers.<WorkAuditWorkEntity>lambdaQuery()
                 .eq(WorkAuditWorkEntity::getAuditStatus, WorkAuditStatusDict.PENDING.getCode())
                 .eq(WorkAuditWorkEntity::getMediaType, mediaType)
+                .isNull(WorkAuditWorkEntity::getManualAuditNo)
                 .eq(WorkAuditWorkEntity::getDeleted, NOT_DELETED)
                 .orderByAsc(WorkAuditWorkEntity::getId)
                 // limit 已归一化为非负整数，拼接 LIMIT 子句不会引入 SQL 注入风险。
@@ -201,6 +153,7 @@ public class WorkAuditWorkRepository {
         return workMapper.selectCount(Wrappers.<WorkAuditWorkEntity>lambdaQuery()
                 .eq(WorkAuditWorkEntity::getAuditStatus, WorkAuditStatusDict.PENDING.getCode())
                 .eq(WorkAuditWorkEntity::getMediaType, mediaType)
+                .isNull(WorkAuditWorkEntity::getManualAuditNo)
                 .eq(WorkAuditWorkEntity::getDeleted, NOT_DELETED));
     }
 

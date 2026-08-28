@@ -28,6 +28,12 @@ public class GlobalExceptionHandler {
     /** 缺省参数类型名称 */
     private static final String UNKNOWN_PARAMETER_TYPE = "unknown";
 
+    /** User-Agent 请求头名称 */
+    private static final String USER_AGENT_HEADER = "User-Agent";
+
+    /** 腾讯安全扫描请求的 User-Agent 前缀 */
+    private static final String TENCENT_SECURITY_TEAM_USER_AGENT_PREFIX = "Tencent Security Team";
+
     /**
      * 处理上传文件超限异常
      *
@@ -70,12 +76,15 @@ public class GlobalExceptionHandler {
      * 处理已知业务异常 — 消息可直接返回给客户端
      *
      * @param e 业务异常
+     * @param request 原始 HTTP 请求
      * @return 失败响应
      */
     @ExceptionHandler(BusinessException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public Response<Void> handleBusiness(BusinessException e) {
-        log.error("Business exception: {}", e.getMessage(), e);
+    public Response<Void> handleBusiness(BusinessException e, HttpServletRequest request) {
+        if (!logTencentSecurityScanWarning(request, e)) {
+            log.error("Business exception: {}", e.getMessage(), e);
+        }
         return Response.fail(e.getMessage());
     }
 
@@ -162,13 +171,43 @@ public class GlobalExceptionHandler {
      * 处理未预期异常
      *
      * @param e 原始异常
+     * @param request 原始 HTTP 请求
      * @return 失败响应
      */
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
-    public Response<Void> handleGeneral(Exception e) {
-        log.error("Unexpected error", e);
+    public Response<Void> handleGeneral(Exception e, HttpServletRequest request) {
+        if (!logTencentSecurityScanWarning(request, e)) {
+            log.error("Unexpected error", e);
+        }
         return Response.fail("Internal server error");
+    }
+
+    /**
+     * 腾讯安全扫描请求只记录不含异常详情和堆栈的告警日志。
+     *
+     * @param request 原始 HTTP 请求
+     * @param exception 原始异常
+     * @return 是否已记录腾讯安全扫描告警
+     */
+    private boolean logTencentSecurityScanWarning(HttpServletRequest request, Exception exception) {
+        if (!isTencentSecurityTeamRequest(request)) {
+            return false;
+        }
+        log.warn("Tencent security scan request rejected: method={} uri={} exceptionType={}",
+                request.getMethod(), request.getRequestURI(), exception.getClass().getSimpleName());
+        return true;
+    }
+
+    /**
+     * 判断请求是否来自腾讯安全扫描 User-Agent。
+     *
+     * @param request 原始 HTTP 请求
+     * @return User-Agent 是否以腾讯安全团队标识开头
+     */
+    private boolean isTencentSecurityTeamRequest(HttpServletRequest request) {
+        String userAgent = request.getHeader(USER_AGENT_HEADER);
+        return userAgent != null && userAgent.startsWith(TENCENT_SECURITY_TEAM_USER_AGENT_PREFIX);
     }
 
     /**

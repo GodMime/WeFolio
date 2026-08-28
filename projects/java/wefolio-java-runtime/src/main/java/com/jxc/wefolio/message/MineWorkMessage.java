@@ -155,6 +155,9 @@ public interface MineWorkMessage {
     /** 并发状态变化提示 */
     String AUDIT_RESUBMIT_STATE_CHANGED_MESSAGE = "作品审核状态已变化，请刷新后重试";
 
+    /** 人工审核编号生成冲突提示 */
+    String MANUAL_AUDIT_NO_CONFLICT_MESSAGE = "人工审核编号生成冲突，请重试";
+
     /** 作品删除失败提示 */
     String WORK_DELETE_FAILED_MESSAGE = "作品删除失败，请刷新后重试";
 

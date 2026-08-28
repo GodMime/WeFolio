@@ -36,6 +36,9 @@ public class WorkAuditWorkEntity extends BaseEntity {
     /** 作品当前审核轮次 */
     private Integer auditRound;
 
+    /** 人工审核编号，非空时自动审核任务必须隔离 */
+    private String manualAuditNo;
+
     /** 与审核供应商解耦的稳定风险类型 */
     private String auditReasonCode;
 

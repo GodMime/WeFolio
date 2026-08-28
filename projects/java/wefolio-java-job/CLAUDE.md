@@ -64,6 +64,8 @@ com.jxc.wefolio.job
 
 如果后台任务需要数据库结构或数据脚本变更，必须在 runtime 工程新增 `V{version}__{description}.sql` migration，并保持 job 工程只消费已经存在的表结构。
 
+**禁止在 migration 中写入"重置/清理"类破坏性数据操作**（如 `DELETE` 全表、`UPDATE` 清零余额/流水）；数据重置与清理只能在对应环境手工执行并留痕，不得以 Flyway migration 形式进入迁移链。
+
 ## 系统接口
 
 ```text

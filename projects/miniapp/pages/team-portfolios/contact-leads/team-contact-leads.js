@@ -1,3 +1,8 @@
+/**
+ * 当前状态：业务入口不可达。
+ * 原因：团队线索页面和接口能力已经实现，但当前前端导航与后端消息动作均未配置入口。
+ * 保留说明：该页面属于待接入能力，不应按废弃页面删除；接入产品入口后需同步更新本说明。
+ */
 const { fetchTeamContactLeads, updateTeamContactLeadFollowStatus } = require('../utils/team-contact-leads.js')
 const { fetchTeamPortfolioList, handleTeamMaintainerAuthError, showTeamPortfolioUnavailableToast } = require('../utils/team-portfolios.js')
 const { request } = require('../../../utils/request.js')

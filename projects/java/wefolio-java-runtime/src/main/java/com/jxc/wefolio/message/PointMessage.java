@@ -5,6 +5,9 @@ package com.jxc.wefolio.message;
  */
 public interface PointMessage {
 
+    /** 后台积分内部密钥缺失提示 */
+    String ADMIN_SECRET_MISSING_MESSAGE = "后台积分密钥未配置";
+
     /** 积分余额不足提示 */
     String INSUFFICIENT_BALANCE_MESSAGE = "积分余额不足，请充值后再试";
 

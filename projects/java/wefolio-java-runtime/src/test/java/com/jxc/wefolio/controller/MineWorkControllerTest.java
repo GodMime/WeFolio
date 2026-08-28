@@ -29,7 +29,7 @@ import com.jxc.wefolio.dto.MineWorkUploadTicketRequest;
 import com.jxc.wefolio.dto.MineWorkUploadTicketResponse;
 import com.jxc.wefolio.dict.WorkAuditStatusDict;
 import com.jxc.wefolio.service.MineWorkService;
-import com.jxc.wefolio.service.MineWorkAuditService;
+import com.jxc.wefolio.service.MineWorkAuditApplicationService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -64,9 +64,9 @@ class MineWorkControllerTest {
     @Mock
     private MineWorkService mineWorkService;
 
-    /** 我的作品审核服务模拟 */
+    /** 我的作品审核应用服务模拟 */
     @Mock
-    private MineWorkAuditService mineWorkAuditService;
+    private MineWorkAuditApplicationService mineWorkAuditApplicationService;
 
     @Test
     void mediaTypeCompatibilityContractShouldBeDeprecated() throws Exception {
@@ -88,7 +88,8 @@ class MineWorkControllerTest {
 
     @Test
     void mediaTypeCompatibilityParameterShouldWriteWarningWhenUsed() {
-        MineWorkController controller = new MineWorkController(mineWorkService, mineWorkAuditService);
+        MineWorkController controller = new MineWorkController(
+                mineWorkService, mineWorkAuditApplicationService);
         Logger logger = (Logger) LoggerFactory.getLogger(MineWorkController.class);
         ListAppender<ILoggingEvent> appender = new ListAppender<>();
         appender.start();
@@ -111,7 +112,8 @@ class MineWorkControllerTest {
 
     @Test
     void workEndpointsUseMaintainerAccessAndDelegateToService() throws NoSuchMethodException {
-        MineWorkController controller = new MineWorkController(mineWorkService, mineWorkAuditService);
+        MineWorkController controller = new MineWorkController(
+                mineWorkService, mineWorkAuditApplicationService);
         MineWorkListResponse listResponse = new MineWorkListResponse();
         MineWorkTagResponse tagResponse = new MineWorkTagResponse();
         MineWorkDetailResponse detailResponse = new MineWorkDetailResponse();
@@ -161,7 +163,7 @@ class MineWorkControllerTest {
         when(mineWorkService.checkDeleteWork(99L)).thenReturn(deleteCheckResponse);
         when(mineWorkService.checkDeleteWorks(batchDeleteRequest)).thenReturn(batchDeleteCheckResponse);
         when(mineWorkService.deleteWorks(batchDeleteRequest)).thenReturn(batchDeleteResponse);
-        when(mineWorkAuditService.resubmit(99L)).thenReturn(auditResubmitResponse);
+        when(mineWorkAuditApplicationService.resubmit(99L)).thenReturn(auditResubmitResponse);
 
         Response<MineWorkListResponse> listed = controller.works(
                 "草坪",
@@ -257,7 +259,7 @@ class MineWorkControllerTest {
         verify(mineWorkService).deleteWork(99L);
         verify(mineWorkService).deleteWorks(batchDeleteRequest);
         verify(mineWorkService).deleteTag(31L);
-        verify(mineWorkAuditService).resubmit(99L);
+        verify(mineWorkAuditApplicationService).resubmit(99L);
     }
 
     @Test

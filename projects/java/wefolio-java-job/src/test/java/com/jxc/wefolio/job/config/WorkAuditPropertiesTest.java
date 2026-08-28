@@ -27,4 +27,24 @@ class WorkAuditPropertiesTest {
         assertThatThrownBy(() -> properties.setAnimationMaxAttempts(-1))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void videoSubmitMaxAttemptsShouldUseSafeDefaultAndRejectNonPositiveValues() {
+        WorkAuditProperties properties = new WorkAuditProperties();
+
+        assertThat(properties.getVideoSubmitMaxAttempts()).isEqualTo(3);
+        assertThatThrownBy(() -> properties.setVideoSubmitMaxAttempts(0))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("视频审核提交最大尝试次数必须为正整数");
+    }
+
+    @Test
+    void imageMaxAttemptsShouldUseSafeDefaultAndRejectNonPositiveValues() {
+        WorkAuditProperties properties = new WorkAuditProperties();
+
+        assertThat(properties.getImageMaxAttempts()).isEqualTo(3);
+        assertThatThrownBy(() -> properties.setImageMaxAttempts(0))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("图片审核最大尝试次数必须为正整数");
+    }
 }

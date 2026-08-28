@@ -1,0 +1,191 @@
+<view class="page-shell feedback-history-page">
+  <navigation-bar title="历史问题" back="{{true}}" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
+
+  <scroll-view
+    class="history-scroll"
+    scroll-y
+    type="list"
+    lower-threshold="120"
+    bindscrolltolower="handleLoadMore"
+    refresher-enabled="{{true}}"
+    refresher-triggered="{{refresherTriggered}}"
+    bindrefresherrefresh="handleRefresh"
+  >
+    <view class="history-content">
+      <block wx:if="{{loading}}">
+        <view class="feedback-card skeleton-card"></view>
+        <view class="feedback-card skeleton-card"></view>
+      </block>
+
+      <block wx:elif="{{errorMessage}}">
+        <view class="empty-state">
+          <view class="empty-title">加载失败</view>
+          <view class="empty-desc">{{errorMessage}}</view>
+          <button class="primary-button compact" bindtap="handleRetry">重试</button>
+        </view>
+      </block>
+
+      <block wx:else>
+        <view wx:if="{{!feedbackPage.items.length}}" class="empty-state history-empty">
+          <image
+            class="history-empty-icon"
+            src="/assets/system/wefolio-feedback-icon.png"
+            mode="aspectFit"
+          ></image>
+          <view class="empty-title">还没有历史问题</view>
+          <view class="empty-desc">提交后可在这里查看团队处理进度</view>
+          <button
+            class="history-empty-action"
+            bindtap="handleSubmitFeedbackTap"
+            aria-role="button"
+            aria-label="去提交问题"
+          >去提交问题</button>
+        </view>
+        <view
+          wx:for="{{feedbackPage.items}}"
+          wx:key="id"
+          class="feedback-card"
+          data-feedback-id="{{item.id}}"
+          bindtap="handleFeedbackTap"
+          aria-role="button"
+        >
+          <view class="card-heading">
+            <view class="feedback-no">{{item.feedbackNo}}</view>
+            <view class="feedback-status {{item.statusTone}}">{{item.statusText}}</view>
+          </view>
+          <view class="feedback-summary">{{item.descriptionSummary}}</view>
+          <view class="feedback-meta">
+            <view>最近更新 {{item.updatedAtText}}</view>
+            <view>{{item.roundCount}} 轮 · {{item.attachmentCount}} 个附件</view>
+          </view>
+        </view>
+        <view wx:if="{{loadingMore}}" class="list-footer">正在加载更多</view>
+        <view wx:elif="{{feedbackPage.items.length && !feedbackPage.hasMore}}" class="list-footer">已显示全部问题</view>
+      </block>
+    </view>
+  </scroll-view>
+
+  <view class="detail-overlay {{detailVisible ? 'visible' : ''}}" catchtap="handleCloseDetail">
+    <view class="detail-sheet" catchtap="noop">
+      <view class="sheet-handle"></view>
+      <view class="detail-heading">
+        <view class="detail-heading-copy">
+          <view class="detail-no">{{detail.feedbackNo || '问题详情'}}</view>
+          <view class="detail-created">创建于 {{detail.createdAtText}}</view>
+        </view>
+        <view class="detail-close" catchtap="handleCloseDetail" aria-role="button" aria-label="关闭详情">×</view>
+      </view>
+
+      <view wx:if="{{detailLoading}}" class="detail-state">正在加载详情</view>
+      <view wx:elif="{{detailErrorMessage}}" class="detail-state error-state">
+        <view>{{detailErrorMessage}}</view>
+        <button class="secondary-button compact" bindtap="handleRetryDetail">重试</button>
+      </view>
+
+      <scroll-view
+        wx:else
+        class="detail-scroll"
+        style="height: {{detailScrollHeightPx}}px;"
+        scroll-y
+        type="list"
+      >
+        <view class="detail-scroll-content">
+          <view class="detail-status-row">
+            <view class="feedback-status {{detail.statusTone}}">{{detail.statusText}}</view>
+            <view>{{detail.roundCount}} 轮 · {{detail.attachmentCount}} 个附件</view>
+          </view>
+
+          <view class="timeline">
+            <view wx:for="{{detail.timeline}}" wx:key="key" wx:for-item="timelineItem" class="timeline-item {{timelineItem.type === 'USER' ? 'user' : 'team'}}">
+              <view class="timeline-rail">
+                <view class="timeline-dot"></view>
+                <view class="timeline-line"></view>
+              </view>
+              <view class="timeline-content">
+                <view class="timeline-heading">
+                  <view class="timeline-title">{{timelineItem.titleText}}</view>
+                  <view class="timeline-time">{{timelineItem.timeText}}</view>
+                </view>
+                <view class="timeline-description">{{timelineItem.description}}</view>
+                <view wx:if="{{timelineItem.attachments.length}}" class="timeline-attachments">
+                  <view wx:for="{{timelineItem.attachments}}" wx:key="url" wx:for-item="attachment" class="timeline-attachment">
+                    <image
+                      wx:if="{{attachment.isImage}}"
+                      class="timeline-image"
+                      src="{{attachment.url}}"
+                      mode="aspectFill"
+                      data-url="{{attachment.url}}"
+                      bindtap="handlePreviewImage"
+                    ></image>
+                    <view wx:else class="timeline-video" data-url="{{attachment.url}}" bindtap="handleOpenVideo" aria-role="button">
+                      <view class="video-play"></view>
+                      <view>播放视频</view>
+                    </view>
+                  </view>
+                </view>
+              </view>
+            </view>
+          </view>
+
+          <button wx:if="{{detail.canAppendRound}}" class="append-toggle" bindtap="handleAppendToggle">
+            {{appendFormVisible ? '收起补充反馈' : '补充反馈'}}
+          </button>
+
+          <view class="append-form {{appendFormVisible ? 'expanded' : ''}}">
+            <view class="append-form-body">
+              <view class="append-field-heading">
+                <view class="append-field-title">补充描述</view>
+                <view class="append-count">{{appendDescriptionLength}} / 200</view>
+              </view>
+              <textarea
+                class="append-description-input"
+                value="{{appendDraft.description}}"
+                maxlength="-1"
+                placeholder="补充团队需要的信息"
+                disabled="{{appendSubmitting}}"
+                bindinput="handleAppendDescriptionInput"
+              ></textarea>
+              <view class="append-attachment-slots">
+                <view class="append-attachment-slot" wx:for="{{appendAttachmentSlots}}" wx:key="slotIndex">
+                  <view wx:if="{{item.file}}" class="append-attachment-preview" data-index="{{item.slotIndex}}" bindtap="handleAppendPreviewAttachment">
+                    <image wx:if="{{item.file.mediaType === 'IMAGE'}}" src="{{item.file.tempFilePath}}" mode="aspectFill"></image>
+                    <view wx:else class="append-video-placeholder">视频</view>
+                    <view class="append-remove" data-index="{{item.slotIndex}}" catchtap="handleAppendRemoveAttachment" aria-role="button" aria-label="删除附件">×</view>
+                  </view>
+                  <view wx:else class="append-attachment-add" bindtap="handleAppendChooseMedia" aria-role="button" aria-label="添加附件">+</view>
+                </view>
+              </view>
+              <view wx:if="{{appendSubmitting && appendDraft.attachments.length}}" class="append-upload-progress">
+                <view class="append-upload-progress-track">
+                  <view class="append-upload-progress-fill" style="width: {{appendUploadProgressPercent}}%;"></view>
+                </view>
+                <view class="append-upload-progress-text">附件上传 {{appendUploadProgressPercent}}%</view>
+              </view>
+              <button class="append-submit" loading="{{appendSubmitting}}" disabled="{{appendSubmitDisabled}}" bindtap="handleAppendSubmit">提交补充</button>
+            </view>
+          </view>
+        </view>
+      </scroll-view>
+    </view>
+  </view>
+
+  <view class="video-preview-layer {{videoPreviewVisible ? 'visible' : ''}}" catchtap="handleCloseVideo">
+    <view class="video-preview-panel" catchtap="noop">
+      <view class="video-preview-heading">
+        <view class="video-preview-title">视频附件</view>
+        <view class="video-preview-close" catchtap="handleCloseVideo" aria-role="button" aria-label="关闭视频">×</view>
+      </view>
+      <video
+        id="feedbackPreviewVideo"
+        class="video-preview-player"
+        src="{{videoPreviewUrl}}"
+        controls="{{true}}"
+        autoplay="{{videoPreviewVisible}}"
+        show-fullscreen-btn="{{true}}"
+        show-center-play-btn="{{true}}"
+        enable-progress-gesture="{{true}}"
+        object-fit="contain"
+      ></video>
+    </view>
+  </view>
+</view>

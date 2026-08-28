@@ -30,8 +30,14 @@ public class WorkAuditProperties {
     /** 每轮最多提交的视频作品数 */
     private int maxSubmitVideoPerRun = 500;
 
+    /** 单个视频审核任务最大提交尝试次数 */
+    private int videoSubmitMaxAttempts = 3;
+
     /** 每轮最多审核的图片作品数 */
     private int maxAuditImagePerRun = 500;
+
+    /** 单个图片审核任务最大尝试次数 */
+    private int imageMaxAttempts = 3;
 
     /** 每轮最多尝试审核的动图任务数 */
     private int maxAuditAnimationPerRun = 500;
@@ -64,6 +70,18 @@ public class WorkAuditProperties {
     }
 
     /**
+     * 设置图片审核最大尝试次数。
+     *
+     * @param imageMaxAttempts 正整数上限
+     */
+    public void setImageMaxAttempts(int imageMaxAttempts) {
+        if (imageMaxAttempts <= 0) {
+            throw new IllegalArgumentException("图片审核最大尝试次数必须为正整数");
+        }
+        this.imageMaxAttempts = imageMaxAttempts;
+    }
+
+    /**
      * 设置动图审核最大尝试次数。
      *
      * @param animationMaxAttempts 正整数上限
@@ -73,5 +91,17 @@ public class WorkAuditProperties {
             throw new IllegalArgumentException("动图审核最大尝试次数必须为正整数");
         }
         this.animationMaxAttempts = animationMaxAttempts;
+    }
+
+    /**
+     * 设置视频审核提交最大尝试次数。
+     *
+     * @param videoSubmitMaxAttempts 正整数上限
+     */
+    public void setVideoSubmitMaxAttempts(int videoSubmitMaxAttempts) {
+        if (videoSubmitMaxAttempts <= 0) {
+            throw new IllegalArgumentException("视频审核提交最大尝试次数必须为正整数");
+        }
+        this.videoSubmitMaxAttempts = videoSubmitMaxAttempts;
     }
 }

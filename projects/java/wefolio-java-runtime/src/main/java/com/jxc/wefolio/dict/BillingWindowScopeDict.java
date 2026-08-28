@@ -21,10 +21,12 @@ public class BillingWindowScopeDict {
     );
 
     /** 积分场景对应作用域 */
-    private static final Map<String, DictValue> SCENE_SCOPE_MAP = Map.of(
-            PointSceneCodeDict.VISIT_PERSONAL_PORTFOLIO.getCode(), PORTFOLIO,
-            PointSceneCodeDict.VIEW_PORTFOLIO_IMAGES.getCode(), WORK,
-            PointSceneCodeDict.VIEW_PORTFOLIO_VIDEO.getCode(), WORK
+    private static final Map<String, DictValue> SCENE_SCOPE_MAP = Map.ofEntries(
+            Map.entry(PointSceneCodeDict.VISIT_PERSONAL_PORTFOLIO.getCode(), PORTFOLIO),
+            Map.entry(PointSceneCodeDict.VIEW_PORTFOLIO_IMAGES.getCode(), WORK),
+            Map.entry(PointSceneCodeDict.VIEW_PORTFOLIO_VIDEO.getCode(), WORK),
+            Map.entry(PointSceneCodeDict.QUERY_PORTFOLIO_SCHEDULE.getCode(), PORTFOLIO),
+            Map.entry(PointSceneCodeDict.SUBMIT_CONTACT_LEAD.getCode(), PORTFOLIO)
     );
 
     private BillingWindowScopeDict() {

@@ -5,6 +5,9 @@ package com.jxc.wefolio.constant;
  */
 public final class PointConstants {
 
+    /** 后台积分内部密钥请求头。 */
+    public static final String ADMIN_POINT_SECRET_HEADER = "X-Admin-Point-Secret";
+
     /** 低余额提醒阈值，余额低于该值时视为低余额。 */
     public static final long LOW_BALANCE_THRESHOLD = 50L;
 

@@ -77,14 +77,20 @@ public class WorkAuditClaimTransactionService {
      *
      * @param taskId 任务 ID
      * @param workId 作品 ID
+     * @param auditRound 任务所属审核轮次
+     * @param lockOwner 本次领取 token
      * @param ciJobId 腾讯云任务 ID
      * @param responsePayload 响应摘要
      */
     @Transactional(rollbackFor = Exception.class)
-    public void markVideoSubmittedAndUpdateWorkAuditing(Long taskId, Long workId, String ciJobId,
-                                                        String responsePayload) {
-        taskRepository.markVideoSubmitted(taskId, ciJobId, responsePayload);
-        workRepository.updateAuditStatusAndReasons(workId, WorkAuditStatusDict.AUDITING, null, null, null);
+    public boolean markVideoSubmittedAndKeepWorkAuditing(
+            Long taskId, Long workId, Integer auditRound, String lockOwner,
+            String ciJobId, String responsePayload) {
+        if (!taskRepository.markVideoSubmitted(taskId, lockOwner, ciJobId, responsePayload)) {
+            return false;
+        }
+        return workRepository.updateAuditStatusAndReasonsForRound(
+                workId, auditRound, WorkAuditStatusDict.AUDITING, null, null, null);
     }
 
     /**
@@ -92,13 +98,20 @@ public class WorkAuditClaimTransactionService {
      *
      * @param taskId 任务 ID
      * @param workId 作品 ID
+     * @param auditRound 任务所属审核轮次
+     * @param lockOwner 本次领取 token
      * @param ciState 腾讯云状态
      * @param responsePayload 响应摘要
      */
     @Transactional(rollbackFor = Exception.class)
-    public void markVideoRunningAndKeepWorkAuditing(Long taskId, Long workId, String ciState, String responsePayload) {
-        taskRepository.markVideoRunning(taskId, ciState, responsePayload);
-        workRepository.updateAuditStatusAndReasons(workId, WorkAuditStatusDict.AUDITING, null, null, null);
+    public boolean markVideoRunningAndKeepWorkAuditing(
+            Long taskId, Long workId, Integer auditRound, String lockOwner,
+            String ciState, String responsePayload) {
+        if (!taskRepository.markVideoRunning(taskId, lockOwner, ciState, responsePayload)) {
+            return false;
+        }
+        return workRepository.updateAuditStatusAndReasonsForRound(
+                workId, auditRound, WorkAuditStatusDict.AUDITING, null, null, null);
     }
 
     /**
@@ -112,10 +125,153 @@ public class WorkAuditClaimTransactionService {
      * @param responsePayload 响应摘要
      */
     @Transactional(rollbackFor = Exception.class)
-    public void markQueryFailureForNextRunAndKeepWorkAuditing(Long taskId, Long workId, String errorMessage,
-                                                              String responsePayload) {
-        taskRepository.markQueryFailureForNextRun(taskId, errorMessage, responsePayload);
-        workRepository.updateAuditStatusAndReasons(workId, WorkAuditStatusDict.AUDITING, null, null, null);
+    public boolean markVideoQueryFailureForNextRunAndKeepWorkAuditing(
+            Long taskId, Long workId, Integer auditRound, String lockOwner,
+            String errorMessage, String responsePayload) {
+        if (!taskRepository.markVideoQueryFailureForNextRun(
+                taskId, lockOwner, errorMessage, responsePayload)) {
+            return false;
+        }
+        return workRepository.updateAuditStatusAndReasonsForRound(
+                workId, auditRound, WorkAuditStatusDict.AUDITING, null, null, null);
+    }
+
+    /**
+     * 使用当前领取 token 标记视频任务失败，并只更新同一审核轮次作品。
+     *
+     * @param taskId 任务 ID
+     * @param workId 作品 ID
+     * @param auditRound 任务所属审核轮次
+     * @param lockOwner 本次领取 token
+     * @param errorMessage 错误摘要
+     * @param responsePayload 响应摘要
+     * @param auditRejectReason 作品审核拒绝原因
+     * @return 是否仍持有本次任务领取权且作品轮次匹配
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public boolean markVideoTaskFailedAndUpdateWorkFailed(
+            Long taskId, Long workId, Integer auditRound, String lockOwner,
+            String errorMessage, String responsePayload, String auditRejectReason) {
+        if (!taskRepository.markVideoFailed(taskId, lockOwner, errorMessage, responsePayload)) {
+            return false;
+        }
+        return workRepository.updateAuditStatusAndReasonsForRound(
+                workId,
+                auditRound,
+                WorkAuditStatusDict.FAILED,
+                WorkAuditReasonCodeDict.AUDIT_SERVICE_ERROR.getCode(),
+                JSON.toJSONString(List.of(WorkAuditReasonCodeDict.AUDIT_SERVICE_ERROR.getCode())),
+                auditRejectReason);
+    }
+
+    /**
+     * 使用当前领取 token 标记视频任务成功，并只更新同一审核轮次作品。
+     *
+     * @param taskId 任务 ID
+     * @param workId 作品 ID
+     * @param auditRound 任务所属审核轮次
+     * @param lockOwner 本次领取 token
+     * @param result 审核结果
+     * @param ciState 腾讯云状态
+     * @param ciResult 腾讯云结果码
+     * @param ciLabel 命中标签
+     * @param ciScore 命中分数
+     * @param risks 各审核场景命中摘要
+     * @param responsePayload 响应摘要
+     * @param auditStatus 作品审核状态
+     * @param auditRejectReason 作品审核拒绝原因
+     * @return 是否仍持有本次任务领取权且作品轮次匹配
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public boolean markVideoTaskSuccessAndUpdateWork(
+            Long taskId, Long workId, Integer auditRound, String lockOwner,
+            AuditResultDict result, String ciState, Integer ciResult, String ciLabel, Integer ciScore,
+            List<TencentCiAuditRisk> risks, String responsePayload, WorkAuditStatusDict auditStatus,
+            String auditRejectReason) {
+        if (!taskRepository.markVideoSuccess(
+                taskId, lockOwner, result, ciState, ciResult, ciLabel, ciScore, responsePayload)) {
+            return false;
+        }
+        WorkAuditReasonCodeDict reasonCode = riskTypeResolver.resolve(result, ciLabel, false);
+        List<String> reasonCodes = riskCollectionResolver.resolve(result, ciLabel, risks).stream()
+                .map(WorkAuditReasonCodeDict::getCode)
+                .toList();
+        return workRepository.updateAuditStatusAndReasonsForRound(
+                workId,
+                auditRound,
+                auditStatus,
+                reasonCode == null ? null : reasonCode.getCode(),
+                reasonCodes.isEmpty() ? null : JSON.toJSONString(reasonCodes),
+                auditRejectReason);
+    }
+
+    /**
+     * 使用当前领取 token 标记图片任务失败，并只更新同一轮自动审核作品。
+     *
+     * @param taskId 任务 ID
+     * @param workId 作品 ID
+     * @param auditRound 任务所属审核轮次
+     * @param lockOwner 本次领取 token
+     * @param errorMessage 错误摘要
+     * @param responsePayload 响应摘要
+     * @param auditRejectReason 作品审核拒绝原因
+     * @return 是否仍持有有效自动审核任务的领取权
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public boolean markImageTaskFailedAndUpdateWorkFailed(
+            Long taskId, Long workId, Integer auditRound, String lockOwner,
+            String errorMessage, String responsePayload, String auditRejectReason) {
+        if (!taskRepository.markImageFailed(taskId, lockOwner, errorMessage, responsePayload)) {
+            return false;
+        }
+        return workRepository.updateAuditStatusAndReasonsForRound(
+                workId,
+                auditRound,
+                WorkAuditStatusDict.FAILED,
+                WorkAuditReasonCodeDict.AUDIT_SERVICE_ERROR.getCode(),
+                JSON.toJSONString(List.of(WorkAuditReasonCodeDict.AUDIT_SERVICE_ERROR.getCode())),
+                auditRejectReason);
+    }
+
+    /**
+     * 使用当前领取 token 标记图片任务成功，并只更新同一轮自动审核作品。
+     *
+     * @param taskId 任务 ID
+     * @param workId 作品 ID
+     * @param auditRound 任务所属审核轮次
+     * @param lockOwner 本次领取 token
+     * @param result 审核结果
+     * @param ciState 腾讯云状态
+     * @param ciResult 腾讯云结果码
+     * @param ciLabel 命中标签
+     * @param ciScore 命中分数
+     * @param risks 各审核场景命中摘要
+     * @param responsePayload 响应摘要
+     * @param auditStatus 作品审核状态
+     * @param auditRejectReason 作品审核拒绝原因
+     * @return 是否仍持有有效自动审核任务的领取权
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public boolean markImageTaskSuccessAndUpdateWork(
+            Long taskId, Long workId, Integer auditRound, String lockOwner,
+            AuditResultDict result, String ciState, Integer ciResult, String ciLabel, Integer ciScore,
+            List<TencentCiAuditRisk> risks, String responsePayload, WorkAuditStatusDict auditStatus,
+            String auditRejectReason) {
+        if (!taskRepository.markImageSuccess(
+                taskId, lockOwner, result, ciState, ciResult, ciLabel, ciScore, responsePayload)) {
+            return false;
+        }
+        WorkAuditReasonCodeDict reasonCode = riskTypeResolver.resolve(result, ciLabel, false);
+        List<String> reasonCodes = riskCollectionResolver.resolve(result, ciLabel, risks).stream()
+                .map(WorkAuditReasonCodeDict::getCode)
+                .toList();
+        return workRepository.updateAuditStatusAndReasonsForRound(
+                workId,
+                auditRound,
+                auditStatus,
+                reasonCode == null ? null : reasonCode.getCode(),
+                reasonCodes.isEmpty() ? null : JSON.toJSONString(reasonCodes),
+                auditRejectReason);
     }
 
     /**
@@ -123,16 +279,22 @@ public class WorkAuditClaimTransactionService {
      *
      * @param taskId 任务 ID
      * @param workId 作品 ID
+     * @param auditRound 任务所属审核轮次
      * @param errorMessage 任务错误摘要
      * @param responsePayload 响应摘要
      * @param auditRejectReason 作品审核拒绝原因
+     * @return 任务与作品是否均成功写入
      */
     @Transactional(rollbackFor = Exception.class)
-    public void markTaskFailedAndUpdateWorkFailed(Long taskId, Long workId, String errorMessage,
-                                                  String responsePayload, String auditRejectReason) {
-        taskRepository.markFailed(taskId, errorMessage, responsePayload);
-        workRepository.updateAuditStatusAndReasons(
+    public boolean markTaskFailedAndUpdateWorkFailed(
+            Long taskId, Long workId, Integer auditRound, String errorMessage,
+            String responsePayload, String auditRejectReason) {
+        if (!taskRepository.markFailed(taskId, errorMessage, responsePayload)) {
+            return false;
+        }
+        return workRepository.updateAuditStatusAndReasonsForRound(
                 workId,
+                auditRound,
                 WorkAuditStatusDict.FAILED,
                 WorkAuditReasonCodeDict.AUDIT_SERVICE_ERROR.getCode(),
                 JSON.toJSONString(List.of(WorkAuditReasonCodeDict.AUDIT_SERVICE_ERROR.getCode())),
@@ -223,6 +385,7 @@ public class WorkAuditClaimTransactionService {
      *
      * @param taskId 任务 ID
      * @param workId 作品 ID
+     * @param auditRound 任务所属审核轮次
      * @param result 审核结果
      * @param ciState 腾讯云状态
      * @param ciResult 腾讯云结果码
@@ -232,20 +395,24 @@ public class WorkAuditClaimTransactionService {
      * @param responsePayload 响应摘要
      * @param auditStatus 作品审核状态
      * @param auditRejectReason 作品审核拒绝原因
+     * @return 任务与作品是否均成功写入
      */
     @Transactional(rollbackFor = Exception.class)
-    public void markTaskSuccessAndUpdateWork(Long taskId, Long workId, AuditResultDict result, String ciState,
-                                             Integer ciResult, String ciLabel, Integer ciScore,
-                                             List<TencentCiAuditRisk> risks, String responsePayload,
-                                             WorkAuditStatusDict auditStatus,
-                                             String auditRejectReason) {
-        taskRepository.markSuccess(taskId, result, ciState, ciResult, ciLabel, ciScore, responsePayload);
+    public boolean markTaskSuccessAndUpdateWork(
+            Long taskId, Long workId, Integer auditRound, AuditResultDict result, String ciState,
+            Integer ciResult, String ciLabel, Integer ciScore, List<TencentCiAuditRisk> risks,
+            String responsePayload, WorkAuditStatusDict auditStatus, String auditRejectReason) {
+        if (!taskRepository.markSuccess(
+                taskId, result, ciState, ciResult, ciLabel, ciScore, responsePayload)) {
+            return false;
+        }
         WorkAuditReasonCodeDict reasonCode = riskTypeResolver.resolve(result, ciLabel, false);
         List<String> reasonCodes = riskCollectionResolver.resolve(result, ciLabel, risks).stream()
                 .map(WorkAuditReasonCodeDict::getCode)
                 .toList();
-        workRepository.updateAuditStatusAndReasons(
+        return workRepository.updateAuditStatusAndReasonsForRound(
                 workId,
+                auditRound,
                 auditStatus,
                 reasonCode == null ? null : reasonCode.getCode(),
                 reasonCodes.isEmpty() ? null : JSON.toJSONString(reasonCodes),

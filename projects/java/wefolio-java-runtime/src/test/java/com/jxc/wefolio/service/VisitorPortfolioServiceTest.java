@@ -3,6 +3,8 @@ package com.jxc.wefolio.service;
 import com.jxc.wefolio.common.auth.VisitorContext;
 import com.jxc.wefolio.common.auth.VisitorContextHolder;
 import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
+import com.jxc.wefolio.dict.BillingWindowScopeDict;
+import com.jxc.wefolio.dict.PointSceneCodeDict;
 import com.jxc.wefolio.dict.PortfolioPublicationStatusDict;
 import com.jxc.wefolio.dict.PortfolioStatusDict;
 import com.jxc.wefolio.dict.PortfolioTemplateTypeDict;
@@ -35,9 +37,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.lang.reflect.InvocationTargetException;
@@ -54,10 +58,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.lenient;
 
 /**
  * 访客作品集服务测试 — 覆盖已发布配置读取、维护中遮罩和访客档期。
@@ -129,6 +135,14 @@ class VisitorPortfolioServiceTest {
     @Mock
     private OwnerSelfVisitService ownerSelfVisitService;
 
+    /** 积分余额门禁服务模拟 */
+    @Mock
+    private PointBalanceGateService pointBalanceGateService;
+
+    /** 访客积分滚动窗口服务模拟 */
+    @Mock
+    private PointBillingWindowService pointBillingWindowService;
+
     @BeforeEach
     void setUp() {
         VisitorContextHolder.set(new VisitorContext(1024L, "visitor-a", "Bearer wf-visitor-v1.test"));
@@ -138,6 +152,14 @@ class VisitorPortfolioServiceTest {
                         "wf-visitor-v1.test",
                         30L * 24L * 60L * 60L
                 ));
+        lenient().when(scheduleQueryRecordEntityMapper.insert(
+                any(ScheduleQueryRecordEntity.class))).thenAnswer(invocation -> {
+                    ScheduleQueryRecordEntity record = invocation.getArgument(0);
+                    if (record.getId() == null) {
+                        record.setId(501L);
+                    }
+                    return 1;
+                });
     }
 
     @AfterEach
@@ -260,6 +282,37 @@ class VisitorPortfolioServiceTest {
         assertThat(response.getVisitorProfileToken()).isNull();
         verify(visitorService, never()).createProfileToken(any(), any(), any());
         verify(visitorAuthTokenService, never()).issueToken(any(), any());
+    }
+
+    /** 余额变为非正后下次打开必须进入维护中。 */
+    @Test
+    void nextOpenShouldReturnMaintenanceWhenBalanceIsNonPositive() {
+        PortfolioEntity portfolio = publishedPortfolio();
+        VisitorEntity visitor = new VisitorEntity();
+        visitor.setId(1024L);
+        visitor.setVisitorKey("visitor-a");
+        VisitorService.VisitorSession session =
+                new VisitorService.VisitorSession(visitor, false, false);
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
+        when(visitorService.resolveForOpen(
+                isNull(), isNull(), eq("PERSONAL:88"), any()))
+                .thenReturn(session);
+        when(pointBalanceGateService.isNonPositive(7L)).thenReturn(true);
+        PortfolioRenderDto renderData = new PortfolioRenderDto();
+        renderData.setUnderMaintenance(true);
+        when(portfolioRenderService.render(
+                eq(portfolio), any(), eq(false), eq(true), any(), eq(null)))
+                .thenReturn(renderData);
+
+        VisitorPortfolioResponse response = service().openPortfolio(
+                "PF001", new VisitorPortfolioOpenRequest());
+
+        assertThat(response.isUnderMaintenance()).isTrue();
+        assertThat(response.getMaintenanceReason())
+                .isEqualTo("POINT_BALANCE_NON_POSITIVE");
+        assertThat(response.getRenderData()).isSameAs(renderData);
+        verify(portfolioVisitService, never())
+                .recordOpen(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -644,6 +697,78 @@ class VisitorPortfolioServiceTest {
         assertThat(record.getQueriedAt()).isEqualTo(queriedAt);
     }
 
+    /** 新查档快照必须以可信访客与快照 ID 进入计费窗口。 */
+    @Test
+    void submitScheduleQueryShouldBillNewSnapshotInPortfolioWindow() {
+        PortfolioEntity portfolio = publishedPortfolioWithScheduleComponent();
+        VisitRecordEntity visitRecord = new VisitRecordEntity();
+        visitRecord.setId(33L);
+        visitRecord.setVisitorId(1024L);
+        visitRecord.setVisitorKey("visitor-a");
+        visitRecord.setSourceType(VisitSourceTypeDict.WECHAT_SHARE_CARD.getCode());
+        VisitorEntity visitor = new VisitorEntity();
+        visitor.setId(1024L);
+        visitor.setOpenid("openid-visitor");
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
+        when(visitorService.findById(1024L)).thenReturn(visitor);
+        when(slotDefinitionEntityMapper.selectById(12L))
+                .thenReturn(slotDefinition(12L, "午宴"));
+        when(scheduleEntityMapper.selectOne(any())).thenReturn(null);
+        when(portfolioVisitService.recordScheduleQuery(
+                eq(portfolio), eq("visitor-a"), eq(LocalDate.of(2026, 7, 18)),
+                any(), eq("schedule-bill-1")))
+                .thenReturn(PortfolioVisitService.ScheduleQueryRecordResult.recorded(
+                        visitRecord, LocalDateTime.of(2026, 8, 13, 10, 0)));
+
+        service().submitScheduleQuery("PF001", scheduleRequest("schedule-bill-1"));
+
+        InOrder writes = inOrder(
+                portfolioVisitService,
+                scheduleQueryRecordEntityMapper,
+                pointBillingWindowService);
+        writes.verify(portfolioVisitService).recordScheduleQuery(
+                eq(portfolio), eq("visitor-a"), eq(LocalDate.of(2026, 7, 18)),
+                any(), eq("schedule-bill-1"));
+        writes.verify(scheduleQueryRecordEntityMapper)
+                .insert(any(ScheduleQueryRecordEntity.class));
+        writes.verify(pointBillingWindowService).consumeIfEligible(
+                any(), any(), any(), any(), any(), any(), any(), any(), any());
+        verify(pointBillingWindowService).consumeIfEligible(
+                7L, 1024L,
+                PointSceneCodeDict.QUERY_PORTFOLIO_SCHEDULE.getCode(),
+                BillingWindowScopeDict.PORTFOLIO.getCode(), 88L,
+                "PORTFOLIO_SCHEDULE_QUERY", "501", "PF_SCHEDULE_QUERY:501",
+                "访客查询作品集档期");
+    }
+
+    /** 维护者本人查档只返回实时结果，不写访客业务数据。 */
+    @Test
+    void ownerSelfScheduleQueryShouldReturnResultWithoutRecordsOrBilling() {
+        PortfolioEntity portfolio = publishedPortfolioWithScheduleComponent();
+        VisitorEntity visitor = new VisitorEntity();
+        visitor.setId(1024L);
+        visitor.setOpenid("openid-owner");
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
+        when(visitorService.findById(1024L)).thenReturn(visitor);
+        when(slotDefinitionEntityMapper.selectById(12L))
+                .thenReturn(slotDefinition(12L, "午宴"));
+        when(scheduleEntityMapper.selectOne(any())).thenReturn(null);
+        when(ownerSelfVisitService.isOwnerSelfVisitor(
+                7L, "openid-owner", 88L, 1024L,
+                VisitEventTypeDict.SCHEDULE_QUERIED.getCode())).thenReturn(true);
+
+        PortfolioScheduleQueryResponse response = service().submitScheduleQuery(
+                "PF001", scheduleRequest("schedule-owner-1"));
+
+        assertThat(response.isAvailable()).isTrue();
+        assertThat(response.getMessage()).isEqualTo("档期空闲");
+        verify(portfolioVisitService, never())
+                .recordScheduleQuery(any(), any(), any(), any(), any());
+        verify(scheduleQueryRecordEntityMapper, never())
+                .insert(any(ScheduleQueryRecordEntity.class));
+        verifyNoInteractions(pointBillingWindowService);
+    }
+
     @Test
     void submitScheduleQueryShouldPersistBusinessRecordWhenScheduleTimeSnapshotsMissing() {
         PortfolioEntity portfolio = publishedPortfolioWithScheduleComponent();
@@ -718,6 +843,12 @@ class VisitorPortfolioServiceTest {
         assertThat(record.getAvailable()).isEqualTo(1);
         assertThat(record.getResultMessage()).isEqualTo(response.getMessage());
         assertThat(record.getQueriedAt()).isEqualTo(queriedAt);
+        verify(pointBillingWindowService).consumeIfEligible(
+                eq(7L), eq(1024L),
+                eq(PointSceneCodeDict.QUERY_PORTFOLIO_SCHEDULE.getCode()),
+                eq(BillingWindowScopeDict.PORTFOLIO.getCode()), eq(88L),
+                eq("PORTFOLIO_SCHEDULE_QUERY"), eq("501"),
+                eq("PF_SCHEDULE_QUERY:501"), eq("访客查询作品集档期"));
     }
 
     @Test
@@ -754,6 +885,47 @@ class VisitorPortfolioServiceTest {
 
         assertThat(response.isAvailable()).isTrue();
         verify(scheduleQueryRecordEntityMapper, never()).insert(any(ScheduleQueryRecordEntity.class));
+        verifyNoInteractions(pointBillingWindowService);
+    }
+
+    /** 计费故障必须向上抛出，不能返回伪成功查档结果。 */
+    @Test
+    void submitScheduleQueryShouldPropagateBillingFailure() {
+        PortfolioEntity portfolio = publishedPortfolioWithScheduleComponent();
+        VisitRecordEntity visitRecord = new VisitRecordEntity();
+        visitRecord.setId(33L);
+        visitRecord.setVisitorId(1024L);
+        visitRecord.setVisitorKey("visitor-a");
+        VisitorEntity visitor = new VisitorEntity();
+        visitor.setId(1024L);
+        visitor.setOpenid("openid-visitor");
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
+        when(visitorService.findById(1024L)).thenReturn(visitor);
+        when(slotDefinitionEntityMapper.selectById(12L))
+                .thenReturn(slotDefinition(12L, "午宴"));
+        when(scheduleEntityMapper.selectOne(any())).thenReturn(null);
+        when(portfolioVisitService.recordScheduleQuery(any(), any(), any(), any(), any()))
+                .thenReturn(PortfolioVisitService.ScheduleQueryRecordResult.recorded(
+                        visitRecord, LocalDateTime.of(2026, 8, 13, 10, 0)));
+        when(pointBillingWindowService.consumeIfEligible(
+                any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenThrow(new BusinessException("积分规则不存在或未启用"));
+
+        assertThatThrownBy(() -> service().submitScheduleQuery(
+                "PF001", scheduleRequest("schedule-fail-1")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("积分规则不存在或未启用");
+    }
+
+    /** 查档编排必须对所有异常回滚。 */
+    @Test
+    void submitScheduleQueryShouldUseRollbackTransaction() throws NoSuchMethodException {
+        Method method = VisitorPortfolioService.class.getMethod(
+                "submitScheduleQuery", String.class,
+                PortfolioScheduleQueryRequest.class);
+        Transactional transactional = method.getAnnotation(Transactional.class);
+        assertThat(transactional).isNotNull();
+        assertThat(transactional.rollbackFor()).contains(Exception.class);
     }
 
     @Test
@@ -865,7 +1037,8 @@ class VisitorPortfolioServiceTest {
                 visitorAuthTokenService,
                 scheduleQueryRecordEntityMapper,
                 ownerSelfVisitService,
-                org.mockito.Mockito.mock(PointBalanceGateService.class),
+                pointBalanceGateService,
+                pointBillingWindowService,
                 performanceLogger()
         );
     }
@@ -901,6 +1074,17 @@ class VisitorPortfolioServiceTest {
                 ]}
                 """);
         return portfolio;
+    }
+
+    /** 构造按钮查档请求。 */
+    private PortfolioScheduleQueryRequest scheduleRequest(String idempotencyKey) {
+        PortfolioScheduleQueryRequest request = new PortfolioScheduleQueryRequest();
+        request.setVisitorKey("untrusted-client-key");
+        request.setComponentKey("c_schedule");
+        request.setQueriedDate(LocalDate.of(2026, 7, 18));
+        request.setSlotDefinitionId(12L);
+        request.setIdempotencyKey(idempotencyKey);
+        return request;
     }
 
     private PortfolioEntity publishedPortfolioWithSecondaryScheduleComponent() {

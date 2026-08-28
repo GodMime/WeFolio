@@ -51,6 +51,33 @@ public class WorkAuditService {
     /** 锁实例前缀为空时的兜底值 */
     private static final String DEFAULT_LOCK_OWNER_PREFIX = "local";
 
+    /** 视频提交最后一次尝试中断错误摘要 */
+    private static final String VIDEO_SUBMIT_INTERRUPTED_ERROR = "视频审核提交任务在最后一次尝试中断";
+
+    /** 视频提交连续中断并达到恢复上限的作品原因 */
+    private static final String VIDEO_SUBMIT_RECOVERY_LIMIT_REASON = "视频审核提交任务连续中断并达到最大恢复次数";
+
+    /** 图片审核最后一次尝试中断错误摘要 */
+    private static final String IMAGE_AUDIT_INTERRUPTED_ERROR = "图片审核任务在最后一次尝试中断";
+
+    /** 图片审核连续中断并达到恢复上限的作品原因 */
+    private static final String IMAGE_AUDIT_RECOVERY_LIMIT_REASON = "图片审核任务连续中断并达到最大恢复次数";
+
+    /** 视频审核查询次数达到上限错误摘要 */
+    private static final String VIDEO_QUERY_LIMIT_ERROR = "视频审核查询次数超过上限";
+
+    /** 腾讯云视频审核任务失败错误摘要 */
+    private static final String VIDEO_PROVIDER_FAILED_ERROR = "腾讯云视频审核任务失败";
+
+    /** 腾讯云视频审核结果未知错误摘要 */
+    private static final String VIDEO_UNKNOWN_RESULT_ERROR = "腾讯云视频审核结果未知";
+
+    /** 任务领取竞争失败原因 */
+    private static final String TASK_CLAIM_NOT_ACQUIRED_REASON = "未抢占到任务";
+
+    /** 审核任务租约或作品审核轮次失效原因 */
+    private static final String CLAIM_OR_ROUND_STALE_REASON = "任务租约已失效或作品审核轮次已变化";
+
     private final WorkAuditWorkRepository workRepository;
 
     private final WorkAuditTaskRepository taskRepository;
@@ -110,16 +137,22 @@ public class WorkAuditService {
      */
     public void runOneRound() {
         long startNanos = System.nanoTime();
-        log.info("作品审核任务开始: 单轮视频查询任务上限={}, 单轮视频提交作品上限={}, 单轮图片审核作品上限={}, "
-                        + "单轮动图审核任务上限={}, 动图最大尝试次数={}, 视频主动查询最大次数={}",
+        log.info("作品审核任务开始: 单轮视频查询任务上限={}, 单轮视频提交作品上限={}, 视频提交最大尝试次数={}, "
+                        + "单轮图片审核作品上限={}, 图片最大尝试次数={}, 单轮动图审核任务上限={}, 动图最大尝试次数={}, "
+                        + "视频主动查询最大次数={}",
                 properties.getMaxQueryVideoPerRun(), properties.getMaxSubmitVideoPerRun(),
-                properties.getMaxAuditImagePerRun(), properties.getMaxAuditAnimationPerRun(),
+                properties.getVideoSubmitMaxAttempts(), properties.getMaxAuditImagePerRun(),
+                properties.getImageMaxAttempts(), properties.getMaxAuditAnimationPerRun(),
                 properties.getAnimationMaxAttempts(), properties.getVideoQueryMaxAttempts());
         try {
-            logAuditBacklogSummary();
-            queryPendingVideoResults(properties.getMaxQueryVideoPerRun());
-            submitPendingVideoAudits(properties.getMaxSubmitVideoPerRun());
-            auditPendingImages(properties.getMaxAuditImagePerRun());
+            LocalDateTime roundNow = LocalDateTime.now();
+            logAuditBacklogSummary(roundNow);
+            int remainingVideoSubmitCapacity = recoverExpiredVideoSubmissions(
+                    properties.getMaxSubmitVideoPerRun(), roundNow);
+            recoverExhaustedVideoQueries(properties.getMaxQueryVideoPerRun(), roundNow);
+            queryPendingVideoResults(properties.getMaxQueryVideoPerRun(), roundNow);
+            submitPendingVideoAudits(remainingVideoSubmitCapacity);
+            auditPendingImages(properties.getMaxAuditImagePerRun(), roundNow);
             auditPendingAnimations(properties.getMaxAuditAnimationPerRun());
             queryAllPendingVideoResults(properties.getMaxQueryVideoPerRun());
         } finally {
@@ -134,8 +167,18 @@ public class WorkAuditService {
      * @param limit 查询数量上限
      */
     public void queryPendingVideoResults(int limit) {
-        taskRepository.findQueryableVideoTasks(limit, properties.getVideoQueryMaxAttempts())
-                .forEach(this::queryOneVideoResult);
+        queryPendingVideoResults(limit, LocalDateTime.now());
+    }
+
+    /**
+     * 使用本轮统一时间查询可执行的视频审核任务。
+     *
+     * @param limit 查询数量上限
+     * @param now 本轮统一时间
+     */
+    void queryPendingVideoResults(int limit, LocalDateTime now) {
+        taskRepository.findQueryableVideoTasks(limit, properties.getVideoQueryMaxAttempts(), now)
+                .forEach(task -> queryOneVideoResult(task, now));
     }
 
     /**
@@ -148,12 +191,184 @@ public class WorkAuditService {
     }
 
     /**
+     * 先终态回收达到上限的提交任务，再重领仍可重提的过期任务。
+     *
+     * @param limit 本轮视频提交容量
+     * @param now 本轮统一时间
+     * @return 新视频可使用的剩余提交容量
+     */
+    int recoverExpiredVideoSubmissions(int limit, LocalDateTime now) {
+        int remainingCapacity = Math.max(limit, 0);
+        int terminalRecovered = 0;
+        int retried = 0;
+        List<WorkAuditTaskEntity> exhaustedTasks = taskRepository.findExhaustedExpiredVideoSubmitTasks(
+                Math.max(limit, 0), properties.getVideoSubmitMaxAttempts(), now);
+        for (WorkAuditTaskEntity task : exhaustedTasks) {
+            String claimToken = newClaimToken();
+            if (!taskRepository.claimExhaustedExpiredVideoSubmit(
+                    task.getId(), claimToken, now, lockedUntil(now),
+                    properties.getVideoSubmitMaxAttempts())) {
+                logVideoSubmitTerminalRecoverySkipped(task, TASK_CLAIM_NOT_ACQUIRED_REASON);
+                continue;
+            }
+            task.setLockedBy(claimToken);
+            boolean updated = claimTransactionService.markVideoTaskFailedAndUpdateWorkFailed(
+                    task.getId(), task.getWorkId(), task.getAuditRound(), claimToken,
+                    VIDEO_SUBMIT_INTERRUPTED_ERROR, null, VIDEO_SUBMIT_RECOVERY_LIMIT_REASON);
+            if (updated) {
+                terminalRecovered++;
+            } else {
+                logVideoSubmitTerminalRecoverySkipped(task, CLAIM_OR_ROUND_STALE_REASON);
+            }
+        }
+
+        List<WorkAuditTaskEntity> retryableTasks = taskRepository.findRetryableExpiredVideoSubmitTasks(
+                remainingCapacity, properties.getVideoSubmitMaxAttempts(), now);
+        for (WorkAuditTaskEntity task : retryableTasks) {
+            if (remainingCapacity == 0) {
+                break;
+            }
+            String claimToken = newClaimToken();
+            if (!taskRepository.claimExpiredVideoSubmit(
+                    task.getId(), claimToken, now, lockedUntil(now),
+                    properties.getVideoSubmitMaxAttempts())) {
+                log.info("视频提交恢复跳过: workId={}, taskId={}, auditRound={}, attemptCount={}, "
+                                + "maxAttempts={}, 原锁过期时间={}, reason={}",
+                        task.getWorkId(), task.getId(), task.getAuditRound(), task.getAttemptCount(),
+                        properties.getVideoSubmitMaxAttempts(), task.getLockedUntil(),
+                        TASK_CLAIM_NOT_ACQUIRED_REASON);
+                continue;
+            }
+            task.setLockedBy(claimToken);
+            task.setAttemptCount(nullToZero(task.getAttemptCount()) + 1);
+            submitClaimedVideoTask(task);
+            remainingCapacity--;
+            retried++;
+        }
+        log.info("视频提交恢复本轮统计: 终态回收数={}, 恢复提交数={}, 剩余新提交容量={}, 单轮上限={}",
+                terminalRecovered, retried, remainingCapacity, limit);
+        return remainingCapacity;
+    }
+
+    /**
+     * 回收达到查询次数上限且租约已过期的视频任务。
+     *
+     * @param limit 回收数量上限
+     * @param now 本轮统一时间
+     */
+    void recoverExhaustedVideoQueries(int limit, LocalDateTime now) {
+        int recovered = 0;
+        List<WorkAuditTaskEntity> tasks = taskRepository.findExhaustedExpiredVideoQueryTasks(
+                Math.max(limit, 0), properties.getVideoQueryMaxAttempts(), now);
+        for (WorkAuditTaskEntity task : tasks) {
+            String claimToken = newClaimToken();
+            if (!taskRepository.claimExhaustedExpiredVideoQuery(
+                    task.getId(), claimToken, now, lockedUntil(now),
+                    properties.getVideoQueryMaxAttempts())) {
+                logVideoQueryTerminalRecoverySkipped(task, TASK_CLAIM_NOT_ACQUIRED_REASON);
+                continue;
+            }
+            task.setLockedBy(claimToken);
+            boolean updated = claimTransactionService.markVideoTaskFailedAndUpdateWorkFailed(
+                    task.getId(), task.getWorkId(), task.getAuditRound(), claimToken,
+                    VIDEO_QUERY_LIMIT_ERROR, null,
+                    queryLimitReason(nullToZero(task.getQueryCount())));
+            if (updated) {
+                recovered++;
+            } else {
+                logVideoQueryTerminalRecoverySkipped(task, CLAIM_OR_ROUND_STALE_REASON);
+            }
+        }
+        log.info("视频查询终态回收本轮统计: 回收数={}, 每轮上限={}", recovered, limit);
+    }
+
+    /**
      * 同步审核待审核图片。
      *
      * @param limit 审核数量上限
      */
     public void auditPendingImages(int limit) {
-        workRepository.findPendingImages(limit).forEach(this::auditOneImage);
+        auditPendingImages(limit, LocalDateTime.now());
+    }
+
+    /**
+     * 先回收达到上限的过期任务，再恢复可重试任务，最后处理新的待审核图片。
+     *
+     * @param limit 本轮图片远端审核容量
+     * @param now 本轮统一时间
+     */
+    void auditPendingImages(int limit, LocalDateTime now) {
+        int remainingCapacity = Math.max(limit, 0);
+        int terminalRecovered = recoverExhaustedImageTasks(remainingCapacity, now);
+        int retried = 0;
+        int newTasks = 0;
+
+        List<WorkAuditTaskEntity> retryableTasks = taskRepository.findRetryableExpiredImageTasks(
+                remainingCapacity, properties.getImageMaxAttempts(), now);
+        for (WorkAuditTaskEntity task : retryableTasks) {
+            if (remainingCapacity == 0) {
+                break;
+            }
+            String claimToken = newClaimToken();
+            if (!taskRepository.claimExpiredImageTask(
+                    task.getId(), claimToken, now, lockedUntil(now), properties.getImageMaxAttempts())) {
+                log.info("图片审核恢复跳过: workId={}, taskId={}, auditRound={}, attemptCount={}, "
+                                + "maxAttempts={}, 原锁过期时间={}, reason={}",
+                        task.getWorkId(), task.getId(), task.getAuditRound(), task.getAttemptCount(),
+                        properties.getImageMaxAttempts(), task.getLockedUntil(), TASK_CLAIM_NOT_ACQUIRED_REASON);
+                continue;
+            }
+            task.setLockedBy(claimToken);
+            task.setLockedUntil(lockedUntil(now));
+            task.setStartedAt(now);
+            task.setAttemptCount(nullToZero(task.getAttemptCount()) + 1);
+            executeImageTask(task);
+            remainingCapacity--;
+            retried++;
+        }
+
+        if (remainingCapacity > 0) {
+            List<WorkAuditWorkEntity> pendingWorks = workRepository.findPendingImages(remainingCapacity);
+            for (WorkAuditWorkEntity work : pendingWorks) {
+                if (remainingCapacity == 0) {
+                    break;
+                }
+                if (auditOneImage(work)) {
+                    remainingCapacity--;
+                    newTasks++;
+                }
+            }
+        }
+        log.info("图片审核恢复本轮统计: 终态回收数={}, 恢复审核数={}, 新建审核数={}, 剩余容量={}, 单轮上限={}",
+                terminalRecovered, retried, newTasks, remainingCapacity, limit);
+    }
+
+    /** 回收达到尝试上限且租约过期的图片任务，不占用远端审核容量。 */
+    private int recoverExhaustedImageTasks(int limit, LocalDateTime now) {
+        int recovered = 0;
+        List<WorkAuditTaskEntity> tasks = taskRepository.findExhaustedExpiredImageTasks(
+                Math.max(limit, 0), properties.getImageMaxAttempts(), now);
+        for (WorkAuditTaskEntity task : tasks) {
+            String claimToken = newClaimToken();
+            if (!taskRepository.claimExhaustedExpiredImageTask(
+                    task.getId(), claimToken, now, lockedUntil(now), properties.getImageMaxAttempts())) {
+                log.info("图片审核终态回收跳过: workId={}, taskId={}, auditRound={}, attemptCount={}, reason={}",
+                        task.getWorkId(), task.getId(), task.getAuditRound(), task.getAttemptCount(),
+                        TASK_CLAIM_NOT_ACQUIRED_REASON);
+                continue;
+            }
+            task.setLockedBy(claimToken);
+            if (claimTransactionService.markImageTaskFailedAndUpdateWorkFailed(
+                    task.getId(), task.getWorkId(), task.getAuditRound(), claimToken,
+                    IMAGE_AUDIT_INTERRUPTED_ERROR, null, IMAGE_AUDIT_RECOVERY_LIMIT_REASON)) {
+                recovered++;
+            } else {
+                log.info("图片审核终态回收跳过: workId={}, taskId={}, auditRound={}, attemptCount={}, reason={}",
+                        task.getWorkId(), task.getId(), task.getAuditRound(), task.getAttemptCount(),
+                        CLAIM_OR_ROUND_STALE_REASON);
+            }
+        }
+        return recovered;
     }
 
     /**
@@ -205,11 +420,12 @@ public class WorkAuditService {
         queryPendingVideoResults(limit);
     }
 
-    private void logAuditBacklogSummary() {
+    private void logAuditBacklogSummary(LocalDateTime now) {
         long pendingImageWorks = workRepository.countPendingImages();
         long pendingVideoWorks = workRepository.countPendingVideos();
         long pendingAnimationWorks = workRepository.countPendingAnimations();
-        long queryableVideoTasks = taskRepository.countQueryableVideoTasks(properties.getVideoQueryMaxAttempts());
+        long queryableVideoTasks = taskRepository.countQueryableVideoTasks(
+                properties.getVideoQueryMaxAttempts(), now);
         long pendingTotalWorks = pendingImageWorks + pendingVideoWorks + pendingAnimationWorks;
 
         log.info("作品审核待处理统计: 待审核图片作品数={}, 待审核视频作品数={}, 待审核动图作品数={}, "
@@ -233,7 +449,7 @@ public class WorkAuditService {
     }
 
     private boolean claimAndExecuteAnimationTask(WorkAuditTaskEntity task) {
-        String claimToken = newAnimationClaimToken();
+        String claimToken = newClaimToken();
         if (!taskRepository.claimAnimationTask(
                 task.getId(),
                 claimToken,
@@ -253,7 +469,7 @@ public class WorkAuditService {
         List<WorkAuditTaskEntity> tasks = taskRepository.findExhaustedExpiredAnimationTasks(
                 Math.max(limit, 0), properties.getAnimationMaxAttempts(), LocalDateTime.now());
         for (WorkAuditTaskEntity task : tasks) {
-            String claimToken = newAnimationClaimToken();
+            String claimToken = newClaimToken();
             if (!taskRepository.claimExhaustedAnimationTask(
                     task.getId(), claimToken, lockedUntil(), properties.getAnimationMaxAttempts())) {
                 continue;
@@ -338,7 +554,7 @@ public class WorkAuditService {
         }
     }
 
-    private String newAnimationClaimToken() {
+    private String newClaimToken() {
         String prefix = properties.getLockOwnerPrefix();
         String normalizedPrefix = prefix == null ? "" : prefix.strip();
         if (normalizedPrefix.isEmpty()) {
@@ -370,6 +586,7 @@ public class WorkAuditService {
     private void submitOneVideo(WorkAuditWorkEntity work) {
         int snapshotCount = calculateSnapshotCount(work.getDurationMs());
         WorkAuditTaskEntity task = newSubmittingTask(work, MediaTypeDict.VIDEO);
+        task.setLockedBy(newClaimToken());
         task.setSnapshotIntervalSeconds(properties.getVideoSnapshotIntervalSeconds());
         task.setSnapshotCount(snapshotCount);
         task = claimTransactionService.claimAndCreateSubmittingTask(work.getId(), task);
@@ -384,92 +601,133 @@ public class WorkAuditService {
                 work.getDurationMs(), task.getAttemptCount(), task.getQueryCount(),
                 task.getSnapshotIntervalSeconds(), task.getSnapshotCount());
 
+        submitClaimedVideoTask(task);
+    }
+
+    private void submitClaimedVideoTask(WorkAuditTaskEntity task) {
         try {
             TencentCiAuditResult result = auditClient.submitVideo(
-                    work.getMediaObjectKey(),
-                    properties.getVideoSnapshotIntervalSeconds(),
-                    snapshotCount);
-            claimTransactionService.markVideoSubmittedAndUpdateWorkAuditing(
-                    task.getId(), work.getId(), result.ciJobId(), result.rawPayload());
+                    task.getMediaObjectKey(),
+                    task.getSnapshotIntervalSeconds(),
+                    task.getSnapshotCount());
+            boolean updated = claimTransactionService.markVideoSubmittedAndKeepWorkAuditing(
+                    task.getId(), task.getWorkId(), task.getAuditRound(), task.getLockedBy(),
+                    result.ciJobId(), result.rawPayload());
+            if (!updated) {
+                logDiscardedVideoResult(task);
+                return;
+            }
             log.info("视频作品审核提交完成: workId={}, taskId={}, objectKey={}, ciJobId={}, ciState={}, "
                             + "auditResult={}, queryCount={}, maxQueryCount={}, nextStatus={}",
-                    work.getId(), task.getId(), work.getMediaObjectKey(), result.ciJobId(), result.ciState(),
+                    task.getWorkId(), task.getId(), task.getMediaObjectKey(), result.ciJobId(), result.ciState(),
                     result.auditResult().getCode(), task.getQueryCount(), properties.getVideoQueryMaxAttempts(),
                     WorkAuditTaskStatusDict.SUBMITTED.getCode());
         } catch (RuntimeException ex) {
             String errorMessage = errorMessage(ex);
             String auditRejectReason = throwableReason("提交腾讯云视频审核失败", ex);
             log.warn("提交腾讯云视频审核失败: workId={}, taskId={}, objectKey={}, attemptCount={}, error={}",
-                    work.getId(), task.getId(), work.getMediaObjectKey(), task.getAttemptCount(), errorMessage);
-            claimTransactionService.markTaskFailedAndUpdateWorkFailed(
-                    task.getId(), work.getId(), errorMessage, errorPayload(ex), auditRejectReason);
+                    task.getWorkId(), task.getId(), task.getMediaObjectKey(), task.getAttemptCount(), errorMessage);
+            boolean updated = claimTransactionService.markVideoTaskFailedAndUpdateWorkFailed(
+                    task.getId(), task.getWorkId(), task.getAuditRound(), task.getLockedBy(),
+                    errorMessage, errorPayload(ex), auditRejectReason);
+            if (!updated) {
+                logDiscardedVideoResult(task);
+                return;
+            }
             log.info("视频作品审核简洁结果: workId={}, taskId={}, objectKey={}, auditStatus={}, auditRejectReason={}",
-                    work.getId(), task.getId(), work.getMediaObjectKey(), WorkAuditStatusDict.FAILED.getCode(),
-                    auditRejectReason);
+                    task.getWorkId(), task.getId(), task.getMediaObjectKey(),
+                    WorkAuditStatusDict.FAILED.getCode(), auditRejectReason);
         }
     }
 
-    private void auditOneImage(WorkAuditWorkEntity work) {
+    private boolean auditOneImage(WorkAuditWorkEntity work) {
         WorkAuditTaskEntity task = newSubmittingTask(work, MediaTypeDict.IMAGE);
+        task.setLockedBy(newClaimToken());
         task = claimTransactionService.claimAndCreateSubmittingTask(work.getId(), task);
         if (task == null) {
             log.info("图片作品审核跳过: workId={}, userId={}, objectKey={}, reason=未抢占到作品",
                     work.getId(), work.getUserId(), work.getMediaObjectKey());
-            return;
+            return false;
         }
         log.info("开始处理图片作品审核: workId={}, taskId={}, userId={}, objectKey={}, mediaSha256={}, "
                         + "attemptCount={}",
                 work.getId(), task.getId(), work.getUserId(), work.getMediaObjectKey(), work.getMediaSha256(),
                 task.getAttemptCount());
 
+        executeImageTask(task);
+        return true;
+    }
+
+    /** 使用已经领取的图片任务执行远端审核并按领取 token 写回结果。 */
+    private void executeImageTask(WorkAuditTaskEntity task) {
         try {
-            TencentCiAuditResult result = auditClient.auditImage(work.getMediaObjectKey());
+            TencentCiAuditResult result = auditClient.auditImage(task.getMediaObjectKey());
             if (result.auditResult() == AuditResultDict.UNKNOWN) {
                 String auditRejectReason = unknownAuditResultReason("图片审核结果未知", result);
-                claimTransactionService.markTaskFailedAndUpdateWorkFailed(
-                        task.getId(), work.getId(), "图片审核结果未知", result.rawPayload(), auditRejectReason);
+                if (!claimTransactionService.markImageTaskFailedAndUpdateWorkFailed(
+                        task.getId(), task.getWorkId(), task.getAuditRound(), task.getLockedBy(), "图片审核结果未知",
+                        result.rawPayload(), auditRejectReason)) {
+                    logDiscardedImageResult(task);
+                    return;
+                }
                 log.info("图片作品审核简洁结果: workId={}, taskId={}, objectKey={}, ciJobId={}, ciState={}, "
                                 + "auditResult={}, ciResult={}, ciLabel={}, ciScore={}, auditStatus={}, "
                                 + "auditRejectReason={}",
-                        work.getId(), task.getId(), work.getMediaObjectKey(), result.ciJobId(), result.ciState(),
+                        task.getWorkId(), task.getId(), task.getMediaObjectKey(), result.ciJobId(), result.ciState(),
                         result.auditResult().getCode(), result.ciResult(), result.ciLabel(), result.ciScore(),
                         WorkAuditStatusDict.FAILED.getCode(), auditRejectReason);
                 return;
             }
             WorkAuditStatusDict auditStatus = mapWorkAuditStatus(result.auditResult());
             String auditRejectReason = auditRejectReason(result);
-            claimTransactionService.markTaskSuccessAndUpdateWork(task.getId(), work.getId(), result.auditResult(),
+            if (!claimTransactionService.markImageTaskSuccessAndUpdateWork(
+                    task.getId(), task.getWorkId(), task.getAuditRound(), task.getLockedBy(), result.auditResult(),
                     result.ciState(), result.ciResult(), result.ciLabel(), result.ciScore(), result.risks(),
-                    result.rawPayload(), auditStatus, auditRejectReason);
+                    result.rawPayload(), auditStatus, auditRejectReason)) {
+                logDiscardedImageResult(task);
+                return;
+            }
             log.info("图片作品审核简洁结果: workId={}, taskId={}, objectKey={}, ciJobId={}, ciState={}, "
                             + "auditResult={}, ciResult={}, ciLabel={}, ciScore={}, auditStatus={}, "
                             + "auditRejectReason={}",
-                    work.getId(), task.getId(), work.getMediaObjectKey(), result.ciJobId(), result.ciState(),
+                    task.getWorkId(), task.getId(), task.getMediaObjectKey(), result.ciJobId(), result.ciState(),
                     result.auditResult().getCode(), result.ciResult(), result.ciLabel(), result.ciScore(),
                     auditStatus.getCode(), auditRejectReason);
         } catch (RuntimeException ex) {
             String errorMessage = errorMessage(ex);
             String auditRejectReason = throwableReason("图片审核调用腾讯云失败", ex);
             log.warn("调用腾讯云图片审核失败: workId={}, taskId={}, objectKey={}, attemptCount={}, error={}",
-                    work.getId(), task.getId(), work.getMediaObjectKey(), task.getAttemptCount(), errorMessage);
-            claimTransactionService.markTaskFailedAndUpdateWorkFailed(
-                    task.getId(), work.getId(), errorMessage, errorPayload(ex), auditRejectReason);
+                    task.getWorkId(), task.getId(), task.getMediaObjectKey(), task.getAttemptCount(), errorMessage);
+            if (!claimTransactionService.markImageTaskFailedAndUpdateWorkFailed(
+                    task.getId(), task.getWorkId(), task.getAuditRound(), task.getLockedBy(), errorMessage,
+                    errorPayload(ex), auditRejectReason)) {
+                logDiscardedImageResult(task);
+                return;
+            }
             log.info("图片作品审核简洁结果: workId={}, taskId={}, objectKey={}, auditStatus={}, auditRejectReason={}",
-                    work.getId(), task.getId(), work.getMediaObjectKey(), WorkAuditStatusDict.FAILED.getCode(),
+                    task.getWorkId(), task.getId(), task.getMediaObjectKey(), WorkAuditStatusDict.FAILED.getCode(),
                     auditRejectReason);
         }
     }
 
-    private void queryOneVideoResult(WorkAuditTaskEntity task) {
+    /** 记录图片自动审核结果被轮次、状态或人工审核隔离条件拒绝。 */
+    private void logDiscardedImageResult(WorkAuditTaskEntity task) {
+        log.warn("图片自动审核结果被隔离条件拒绝: workId={}, taskId={}, auditRound={}",
+                task.getWorkId(), task.getId(), task.getAuditRound());
+    }
+
+    private void queryOneVideoResult(WorkAuditTaskEntity task, LocalDateTime now) {
         int nextQueryCount = nullToZero(task.getQueryCount()) + 1;
-        if (!taskRepository.claimVideoQuery(task.getId(), properties.getLockOwnerPrefix(),
-                lockedUntil(), properties.getVideoQueryMaxAttempts())) {
+        String claimToken = newClaimToken();
+        if (!taskRepository.claimVideoQuery(task.getId(), claimToken, now,
+                lockedUntil(now), properties.getVideoQueryMaxAttempts())) {
             log.info("视频审核结果查询跳过: workId={}, taskId={}, objectKey={}, ciJobId={}, queryCount={}, maxQueryCount={}, "
-                            + "reason=未抢占到任务",
+                            + "reason={}",
                     task.getWorkId(), task.getId(), task.getMediaObjectKey(), task.getCiJobId(),
-                    task.getQueryCount(), properties.getVideoQueryMaxAttempts());
+                    task.getQueryCount(), properties.getVideoQueryMaxAttempts(), TASK_CLAIM_NOT_ACQUIRED_REASON);
             return;
         }
+        task.setLockedBy(claimToken);
         log.info("开始查询视频审核结果: workId={}, taskId={}, objectKey={}, ciJobId={}, queryCountBefore={}, "
                         + "queryCountAfterClaim={}, maxQueryCount={}",
                 task.getWorkId(), task.getId(), task.getMediaObjectKey(), task.getCiJobId(), task.getQueryCount(),
@@ -489,8 +747,13 @@ public class WorkAuditService {
                     properties.getVideoQueryMaxAttempts(), ex.getMessage());
             if (nextQueryCount >= properties.getVideoQueryMaxAttempts()) {
                 String auditRejectReason = queryLimitReason(nextQueryCount);
-                claimTransactionService.markTaskFailedAndUpdateWorkFailed(
-                        task.getId(), task.getWorkId(), "视频审核查询次数超过上限", errorPayload(ex), auditRejectReason);
+                boolean updated = claimTransactionService.markVideoTaskFailedAndUpdateWorkFailed(
+                        task.getId(), task.getWorkId(), task.getAuditRound(), task.getLockedBy(),
+                        VIDEO_QUERY_LIMIT_ERROR, errorPayload(ex), auditRejectReason);
+                if (!updated) {
+                    logDiscardedVideoResult(task);
+                    return;
+                }
                 log.info("视频作品审核简洁结果: workId={}, taskId={}, objectKey={}, ciJobId={}, auditStatus={}, "
                                 + "queryCount={}, maxQueryCount={}, auditRejectReason={}",
                         task.getWorkId(), task.getId(), task.getMediaObjectKey(), task.getCiJobId(),
@@ -498,8 +761,13 @@ public class WorkAuditService {
                         auditRejectReason);
                 return;
             }
-            claimTransactionService.markQueryFailureForNextRunAndKeepWorkAuditing(
-                    task.getId(), task.getWorkId(), errorMessage(ex), errorPayload(ex));
+            boolean updated = claimTransactionService.markVideoQueryFailureForNextRunAndKeepWorkAuditing(
+                    task.getId(), task.getWorkId(), task.getAuditRound(), task.getLockedBy(),
+                    errorMessage(ex), errorPayload(ex));
+            if (!updated) {
+                logDiscardedVideoResult(task);
+                return;
+            }
             log.info("视频审核查询失败后回到运行中: workId={}, taskId={}, objectKey={}, ciJobId={}, queryCount={}, "
                             + "maxQueryCount={}, nextStatus={}",
                     task.getWorkId(), task.getId(), task.getMediaObjectKey(), task.getCiJobId(), nextQueryCount,
@@ -510,8 +778,13 @@ public class WorkAuditService {
     private void handleVideoQueryResult(WorkAuditTaskEntity task, int nextQueryCount, TencentCiAuditResult result) {
         if (result.providerFailed()) {
             String auditRejectReason = videoProviderFailedReason(task, result);
-            claimTransactionService.markTaskFailedAndUpdateWorkFailed(
-                    task.getId(), task.getWorkId(), "腾讯云视频审核任务失败", result.rawPayload(), auditRejectReason);
+            boolean updated = claimTransactionService.markVideoTaskFailedAndUpdateWorkFailed(
+                    task.getId(), task.getWorkId(), task.getAuditRound(), task.getLockedBy(),
+                    VIDEO_PROVIDER_FAILED_ERROR, result.rawPayload(), auditRejectReason);
+            if (!updated) {
+                logDiscardedVideoResult(task);
+                return;
+            }
             log.info("视频作品审核简洁结果: workId={}, taskId={}, objectKey={}, ciJobId={}, ciState={}, auditResult={}, "
                             + "auditStatus={}, queryCount={}, maxQueryCount={}, auditRejectReason={}",
                     task.getWorkId(), task.getId(), task.getMediaObjectKey(), task.getCiJobId(), result.ciState(),
@@ -521,9 +794,14 @@ public class WorkAuditService {
         }
         if (result.terminal()) {
             if (result.auditResult() == AuditResultDict.UNKNOWN) {
-                String auditRejectReason = unknownAuditResultReason("腾讯云视频审核结果未知", result);
-                claimTransactionService.markTaskFailedAndUpdateWorkFailed(
-                        task.getId(), task.getWorkId(), "腾讯云视频审核结果未知", result.rawPayload(), auditRejectReason);
+                String auditRejectReason = unknownAuditResultReason(VIDEO_UNKNOWN_RESULT_ERROR, result);
+                boolean updated = claimTransactionService.markVideoTaskFailedAndUpdateWorkFailed(
+                        task.getId(), task.getWorkId(), task.getAuditRound(), task.getLockedBy(),
+                        VIDEO_UNKNOWN_RESULT_ERROR, result.rawPayload(), auditRejectReason);
+                if (!updated) {
+                    logDiscardedVideoResult(task);
+                    return;
+                }
                 log.info("视频作品审核简洁结果: workId={}, taskId={}, objectKey={}, ciJobId={}, ciState={}, auditResult={}, "
                                 + "auditStatus={}, queryCount={}, maxQueryCount={}, auditRejectReason={}",
                         task.getWorkId(), task.getId(), task.getMediaObjectKey(), task.getCiJobId(), result.ciState(),
@@ -533,9 +811,14 @@ public class WorkAuditService {
             }
             WorkAuditStatusDict auditStatus = mapWorkAuditStatus(result.auditResult());
             String auditRejectReason = auditRejectReason(result);
-            claimTransactionService.markTaskSuccessAndUpdateWork(task.getId(), task.getWorkId(), result.auditResult(),
-                    result.ciState(), result.ciResult(), result.ciLabel(), result.ciScore(), result.risks(),
-                    result.rawPayload(), auditStatus, auditRejectReason);
+            boolean updated = claimTransactionService.markVideoTaskSuccessAndUpdateWork(
+                    task.getId(), task.getWorkId(), task.getAuditRound(), task.getLockedBy(),
+                    result.auditResult(), result.ciState(), result.ciResult(), result.ciLabel(), result.ciScore(),
+                    result.risks(), result.rawPayload(), auditStatus, auditRejectReason);
+            if (!updated) {
+                logDiscardedVideoResult(task);
+                return;
+            }
             log.info("视频作品审核简洁结果: workId={}, taskId={}, objectKey={}, ciJobId={}, ciState={}, auditResult={}, "
                             + "ciResult={}, ciLabel={}, ciScore={}, auditStatus={}, queryCount={}, maxQueryCount={}, "
                             + "auditRejectReason={}",
@@ -546,8 +829,13 @@ public class WorkAuditService {
         }
         if (nextQueryCount >= properties.getVideoQueryMaxAttempts()) {
             String auditRejectReason = queryLimitReason(nextQueryCount);
-            claimTransactionService.markTaskFailedAndUpdateWorkFailed(
-                    task.getId(), task.getWorkId(), "视频审核查询次数超过上限", result.rawPayload(), auditRejectReason);
+            boolean updated = claimTransactionService.markVideoTaskFailedAndUpdateWorkFailed(
+                    task.getId(), task.getWorkId(), task.getAuditRound(), task.getLockedBy(),
+                    VIDEO_QUERY_LIMIT_ERROR, result.rawPayload(), auditRejectReason);
+            if (!updated) {
+                logDiscardedVideoResult(task);
+                return;
+            }
             log.info("视频作品审核简洁结果: workId={}, taskId={}, objectKey={}, ciJobId={}, ciState={}, auditResult={}, "
                             + "auditStatus={}, queryCount={}, maxQueryCount={}, auditRejectReason={}",
                     task.getWorkId(), task.getId(), task.getMediaObjectKey(), task.getCiJobId(), result.ciState(),
@@ -555,8 +843,13 @@ public class WorkAuditService {
                     properties.getVideoQueryMaxAttempts(), auditRejectReason);
             return;
         }
-        claimTransactionService.markVideoRunningAndKeepWorkAuditing(
-                task.getId(), task.getWorkId(), result.ciState(), result.rawPayload());
+        boolean updated = claimTransactionService.markVideoRunningAndKeepWorkAuditing(
+                task.getId(), task.getWorkId(), task.getAuditRound(), task.getLockedBy(),
+                result.ciState(), result.rawPayload());
+        if (!updated) {
+            logDiscardedVideoResult(task);
+            return;
+        }
         log.info("视频审核仍在处理中: workId={}, taskId={}, objectKey={}, ciJobId={}, ciState={}, auditResult={}, "
                         + "queryCount={}, maxQueryCount={}, nextStatus={}",
                 task.getWorkId(), task.getId(), task.getMediaObjectKey(), task.getCiJobId(), result.ciState(),
@@ -613,7 +906,7 @@ public class WorkAuditService {
      * @return 失败原因
      */
     private String videoProviderFailedReason(WorkAuditTaskEntity task, TencentCiAuditResult result) {
-        return truncateAuditRejectReason("腾讯云视频审核任务失败：state=" + result.ciState()
+        return truncateAuditRejectReason(VIDEO_PROVIDER_FAILED_ERROR + "：state=" + result.ciState()
                 + "，jobId=" + task.getCiJobId());
     }
 
@@ -624,8 +917,44 @@ public class WorkAuditService {
      * @return 失败原因
      */
     private String queryLimitReason(int queryCount) {
-        return truncateAuditRejectReason("视频审核查询次数超过上限：queryCount=" + queryCount
+        return truncateAuditRejectReason(VIDEO_QUERY_LIMIT_ERROR + "：queryCount=" + queryCount
                 + "，maxQueryCount=" + properties.getVideoQueryMaxAttempts());
+    }
+
+    /**
+     * 记录达到视频提交重试上限的任务未能完成终态回收。
+     *
+     * @param task 审核任务
+     * @param reason 跳过原因
+     */
+    private void logVideoSubmitTerminalRecoverySkipped(WorkAuditTaskEntity task, String reason) {
+        log.info("视频提交终态回收跳过: workId={}, taskId={}, auditRound={}, attemptCount={}, "
+                        + "maxAttempts={}, 原锁过期时间={}, reason={}",
+                task.getWorkId(), task.getId(), task.getAuditRound(), task.getAttemptCount(),
+                properties.getVideoSubmitMaxAttempts(), task.getLockedUntil(), reason);
+    }
+
+    /**
+     * 记录达到视频查询上限的任务未能完成终态回收。
+     *
+     * @param task 审核任务
+     * @param reason 跳过原因
+     */
+    private void logVideoQueryTerminalRecoverySkipped(WorkAuditTaskEntity task, String reason) {
+        log.info("视频查询终态回收跳过: workId={}, taskId={}, auditRound={}, queryCount={}, "
+                        + "maxQueryCount={}, 原锁过期时间={}, reason={}",
+                task.getWorkId(), task.getId(), task.getAuditRound(), task.getQueryCount(),
+                properties.getVideoQueryMaxAttempts(), task.getLockedUntil(), reason);
+    }
+
+    /**
+     * 记录因任务租约或作品审核轮次失效而丢弃的视频审核结果。
+     *
+     * @param task 审核任务
+     */
+    private void logDiscardedVideoResult(WorkAuditTaskEntity task) {
+        log.info("视频审核结果丢弃: workId={}, taskId={}, reason={}",
+                task.getWorkId(), task.getId(), CLAIM_OR_ROUND_STALE_REASON);
     }
 
     /**
@@ -703,6 +1032,16 @@ public class WorkAuditService {
 
     private LocalDateTime lockedUntil() {
         return LocalDateTime.now().plusSeconds(properties.getTaskLockSeconds());
+    }
+
+    /**
+     * 根据指定基准时间计算任务租约到期时间。
+     *
+     * @param now 租约开始时间
+     * @return 租约到期时间
+     */
+    private LocalDateTime lockedUntil(LocalDateTime now) {
+        return now.plusSeconds(properties.getTaskLockSeconds());
     }
 
     private int nullToZero(Integer value) {

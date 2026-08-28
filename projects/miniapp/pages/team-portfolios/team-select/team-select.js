@@ -1,3 +1,8 @@
+/**
+ * 当前状态：业务入口不可达。
+ * 原因：创建团队作品集时的团队选择已合并到统一作品集列表页的内嵌弹层，不再跳转本独立页面。
+ * 保留说明：工具模块仍保留历史路由常量，后续清理本页面时需同步移除常量及相关测试。
+ */
 const { request } = require('../../../utils/request.js')
 const { fetchMaintainableTeams, handleTeamMaintainerAuthError, showTeamPortfolioUnavailableToast } = require('../utils/team-portfolios.js')
 

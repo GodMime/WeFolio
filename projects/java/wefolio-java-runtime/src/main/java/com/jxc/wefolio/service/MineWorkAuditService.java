@@ -10,8 +10,9 @@ import com.jxc.wefolio.entity.WorkEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.WorkEntityMapper;
 import com.jxc.wefolio.message.MineWorkMessage;
-import lombok.RequiredArgsConstructor;
+import com.jxc.wefolio.model.WorkManualAuditSubmission;
 import org.springframework.stereotype.Service;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -22,7 +23,6 @@ import java.util.Set;
  * 我的作品审核服务 — 负责主动重审资格、轮次状态流转和对外审核展示。
  */
 @Service
-@RequiredArgsConstructor
 public class MineWorkAuditService {
 
     /** 逻辑未删除值 */
@@ -34,6 +34,9 @@ public class MineWorkAuditService {
     /** 乐观锁版本递增表达式 */
     private static final String VERSION_INCREMENT_SQL = "version = version + 1";
 
+    /** 人工审核原因类型 */
+    private static final String MANUAL_REVIEW_REASON_CODE = "MANUAL_REVIEW";
+
     /** 允许用户主动重审的作品状态 */
     private static final Set<String> RESUBMITTABLE_STATUSES = Set.of(
             WorkAuditStatusDict.REJECTED.getCode(),
@@ -41,50 +44,106 @@ public class MineWorkAuditService {
             WorkAuditStatusDict.FAILED.getCode()
     );
 
+    /** 作品 Mapper */
     private final WorkEntityMapper workEntityMapper;
+
+    /** 作品审核轮次配置 */
     private final WorkAuditProperties workAuditProperties;
+
+    /** 用户可读审核原因解析器 */
     private final WorkAuditUserReasonResolver userReasonResolver;
+
+    /** 人工审核编号生成器 */
+    private final WorkManualAuditNoGenerator manualAuditNoGenerator;
+
+    /** 创建作品审核服务。 */
+    public MineWorkAuditService(
+            WorkEntityMapper workEntityMapper,
+            WorkAuditProperties workAuditProperties,
+            WorkAuditUserReasonResolver userReasonResolver,
+            WorkManualAuditNoGenerator manualAuditNoGenerator
+    ) {
+        this.workEntityMapper = workEntityMapper;
+        this.workAuditProperties = workAuditProperties;
+        this.userReasonResolver = userReasonResolver;
+        this.manualAuditNoGenerator = manualAuditNoGenerator;
+    }
 
     /**
      * 主动将作品提交到下一审核轮次。
      *
      * @param workId 作品 ID
-     * @return 重审后的审核状态
+     * @return 重审响应及可选的事务后通知快照
      */
     @Transactional(rollbackFor = Exception.class)
-    public MineWorkAuditResubmitResponse resubmit(Long workId) {
+    public ResubmitResult resubmit(Long workId) {
         Long userId = AuthContextHolder.requireUserId();
         WorkEntity current = findOwnedActiveWork(userId, workId);
         validateCanResubmit(current);
 
         int currentRound = normalizedRound(current.getAuditRound());
-        int updated = workEntityMapper.update(null, Wrappers.<WorkEntity>lambdaUpdate()
-                .set(WorkEntity::getAuditStatus, WorkAuditStatusDict.PENDING.getCode())
+        int nextRound = currentRound + 1;
+        int maxRounds = workAuditProperties.getMaxRounds();
+        boolean manualFinalRound = nextRound == maxRounds;
+        String manualAuditNo = manualFinalRound ? manualAuditNoGenerator.generate() : null;
+        LocalDateTime submittedAt = LocalDateTime.now();
+        List<WorkAuditUserReasonResolver.AuditReason> previousReasons = manualFinalRound
+                ? buildAuditView(current).auditReasons() : List.of();
+        var updateWrapper = Wrappers.<WorkEntity>lambdaUpdate()
+                .set(WorkEntity::getAuditStatus, manualFinalRound
+                        ? WorkAuditStatusDict.AUDITING.getCode()
+                        : WorkAuditStatusDict.PENDING.getCode())
                 .setSql(AUDIT_ROUND_INCREMENT_SQL)
                 .set(WorkEntity::getAuditReasonCode, null)
                 .set(WorkEntity::getAuditReasonCodes, null)
                 .set(WorkEntity::getAuditRejectReason, null)
-                .set(WorkEntity::getUpdatedAt, LocalDateTime.now())
+                .set(WorkEntity::getUpdatedAt, submittedAt)
                 .setSql(VERSION_INCREMENT_SQL)
                 .eq(WorkEntity::getId, workId)
                 .eq(WorkEntity::getUserId, userId)
                 .eq(WorkEntity::getStatus, WorkStatusDict.ACTIVE.getCode())
                 .in(WorkEntity::getAuditStatus, RESUBMITTABLE_STATUSES)
-                .lt(WorkEntity::getAuditRound, workAuditProperties.getMaxRounds())
-                .eq(WorkEntity::getDeleted, NOT_DELETED));
+                .lt(WorkEntity::getAuditRound, maxRounds)
+                .isNull(WorkEntity::getManualAuditNo)
+                .eq(WorkEntity::getDeleted, NOT_DELETED);
+        if (manualFinalRound) {
+            updateWrapper
+                    .set(WorkEntity::getManualAuditNo, manualAuditNo)
+                    .set(WorkEntity::getManualAuditResultAt, null);
+        }
+        int updated;
+        try {
+            updated = workEntityMapper.update(null, updateWrapper);
+        } catch (DuplicateKeyException exception) {
+            throw new BusinessException(MineWorkMessage.MANUAL_AUDIT_NO_CONFLICT_MESSAGE);
+        }
         if (updated != 1) {
             throwConcurrentStateException(findOwnedActiveWork(userId, workId));
         }
 
-        int nextRound = currentRound + 1;
         MineWorkAuditResubmitResponse response = new MineWorkAuditResubmitResponse();
         response.setWorkId(workId);
-        response.setAuditStatus(WorkAuditStatusDict.PENDING.getCode());
+        response.setAuditStatus(manualFinalRound
+                ? WorkAuditStatusDict.AUDITING.getCode()
+                : WorkAuditStatusDict.PENDING.getCode());
         response.setAuditRound(nextRound);
-        response.setMaxAuditRounds(workAuditProperties.getMaxRounds());
+        response.setMaxAuditRounds(maxRounds);
         response.setRemainingAuditResubmitCount(remainingCount(nextRound));
         response.setCanResubmitAudit(false);
-        return response;
+        WorkManualAuditSubmission notification = manualFinalRound
+                ? new WorkManualAuditSubmission(
+                        workId,
+                        userId,
+                        current.getTitle(),
+                        current.getMediaType(),
+                        current.getMediaObjectKey(),
+                        manualAuditNo,
+                        nextRound,
+                        maxRounds,
+                        submittedAt,
+                        List.copyOf(previousReasons))
+                : null;
+        return new ResubmitResult(response, notification);
     }
 
     /**
@@ -97,9 +156,26 @@ public class MineWorkAuditService {
         int round = normalizedRound(work == null ? null : work.getAuditRound());
         int maxRounds = workAuditProperties.getMaxRounds();
         String auditStatus = work == null ? null : work.getAuditStatus();
-        boolean canResubmit = auditStatus != null
+        boolean manualAudit = hasManualAuditNo(work);
+        boolean canResubmit = !manualAudit && auditStatus != null
                 && RESUBMITTABLE_STATUSES.contains(auditStatus)
                 && round < maxRounds;
+        if (manualAudit) {
+            String manualReason = WorkAuditStatusDict.REJECTED.getCode().equals(auditStatus)
+                    ? work.getAuditRejectReason() : null;
+            List<WorkAuditUserReasonResolver.AuditReason> manualReasons =
+                    WorkAuditStatusDict.REJECTED.getCode().equals(auditStatus)
+                            ? List.of(new WorkAuditUserReasonResolver.AuditReason(
+                                    MANUAL_REVIEW_REASON_CODE, manualReason))
+                            : List.of();
+            return new AuditView(
+                    round,
+                    maxRounds,
+                    0,
+                    false,
+                    manualReason,
+                    manualReasons);
+        }
         return new AuditView(
                 round,
                 maxRounds,
@@ -134,6 +210,9 @@ public class MineWorkAuditService {
         if (work == null) {
             throw new BusinessException(MineWorkMessage.WORK_NOT_FOUND_MESSAGE);
         }
+        if (hasManualAuditNo(work)) {
+            throw new BusinessException(MineWorkMessage.AUDIT_RESUBMIT_LIMIT_REACHED_MESSAGE);
+        }
         throwStatusExceptionIfNeeded(work);
         if (!RESUBMITTABLE_STATUSES.contains(work.getAuditStatus())) {
             throw new BusinessException(MineWorkMessage.AUDIT_RESUBMIT_STATE_CHANGED_MESSAGE);
@@ -146,6 +225,9 @@ public class MineWorkAuditService {
     private void throwConcurrentStateException(WorkEntity latest) {
         if (latest == null) {
             throw new BusinessException(MineWorkMessage.WORK_NOT_FOUND_MESSAGE);
+        }
+        if (hasManualAuditNo(latest)) {
+            throw new BusinessException(MineWorkMessage.AUDIT_RESUBMIT_LIMIT_REACHED_MESSAGE);
         }
         throwStatusExceptionIfNeeded(latest);
         if (RESUBMITTABLE_STATUSES.contains(latest.getAuditStatus())
@@ -171,6 +253,25 @@ public class MineWorkAuditService {
 
     private int remainingCount(int auditRound) {
         return Math.max(0, workAuditProperties.getMaxRounds() - auditRound);
+    }
+
+    /** 判断作品是否已进入过最终人工审核，编号存在后不得轮换或再次重审。 */
+    private boolean hasManualAuditNo(WorkEntity work) {
+        return work != null
+                && work.getManualAuditNo() != null
+                && !work.getManualAuditNo().isBlank();
+    }
+
+    /**
+     * 重审事务结果。
+     *
+     * @param response 兼容既有接口的重审响应
+     * @param notification 最终人工轮通知快照，自动轮次为空
+     */
+    public record ResubmitResult(
+            MineWorkAuditResubmitResponse response,
+            WorkManualAuditSubmission notification
+    ) {
     }
 
     /**

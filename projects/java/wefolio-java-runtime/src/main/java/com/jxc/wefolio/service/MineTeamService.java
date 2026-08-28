@@ -335,17 +335,35 @@ public class MineTeamService {
      * @param request 创建请求
      * @return 团队维护详情响应
      */
+    @Deprecated(since = "2026-08", forRemoval = false)
     public MineTeamDetailResponse createTeam(MineTeamCreateRequest request) {
+        log.warn("调用已废弃的团队创建接口，请切换到带幂等键的新接口");
+        PreparedTeamCreation prepared = prepareTeamCreation(request);
+        return createPreparedTeam(prepared, generateTeamUniqueCode());
+    }
+
+    /** 规范化并校验团队创建请求。 */
+    PreparedTeamCreation prepareTeamCreation(MineTeamCreateRequest request) {
         if (request == null) {
             throw new BusinessException("团队内容不能为空");
         }
-        log.info("创建团队: name={}, intro={}, avatarUrl={}",
-                request.getName(), request.getIntro(), request.getAvatarUrl());
-        Long userId = AuthContextHolder.requireUserId();
         String name = normalizeRequiredString(request.getName(), NAME_MAX_LENGTH, "团队名称");
         String intro = normalizeOptionalString(request.getIntro(), INTRO_MAX_LENGTH, "团队简介");
         String avatarUrl = normalizeOptionalString(request.getAvatarUrl(), AVATAR_URL_MAX_LENGTH, "团队图标");
-        String uniqueCode = generateUniqueTeamCode();
+        return new PreparedTeamCreation(name, intro, avatarUrl);
+    }
+
+    /**
+     * 使用已经规范化的字段和指定唯一码创建团队。
+     *
+     * @param prepared 规范化创建字段
+     * @param uniqueCode 已预留团队唯一码
+     * @return 团队维护详情响应
+     */
+    MineTeamDetailResponse createPreparedTeam(PreparedTeamCreation prepared, String uniqueCode) {
+        Long userId = AuthContextHolder.requireUserId();
+        log.info("创建团队: name={}, intro={}, avatarUrl={}",
+                prepared.name(), prepared.intro(), prepared.avatarUrl());
 
         pointService.assertCanConsume(userId, PointSceneCodeDict.CREATE_TEAM.getCode(), 1);
         try {
@@ -356,9 +374,13 @@ public class MineTeamService {
         }
 
         TeamRegistrationService.TeamCreationResult result = teamRegistrationService.createTeamWithOwner(
-                uniqueCode, userId, name, intro, avatarUrl);
+                uniqueCode, userId, prepared.name(), prepared.intro(), prepared.avatarUrl());
         return buildDetailResponse(result.getTeam(), result.getOwnerMembership(),
                 List.of(result.getOwnerMembership()), Collections.emptyMap());
+    }
+
+    /** 规范化后的团队创建字段。 */
+    record PreparedTeamCreation(String name, String intro, String avatarUrl) {
     }
 
     /**
@@ -1907,7 +1929,7 @@ public class MineTeamService {
      *
      * @return 团队唯一码
      */
-    private String generateUniqueTeamCode() {
+    String generateTeamUniqueCode() {
         return uniqueCodeGenerator.generate(UniqueCodeGenerator.TEAM_PREFIX, candidates ->
                 teamEntityMapper.selectList(
                                 Wrappers.<TeamEntity>query()

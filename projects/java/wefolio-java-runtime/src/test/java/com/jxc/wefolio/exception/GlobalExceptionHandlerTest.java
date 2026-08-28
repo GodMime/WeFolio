@@ -43,8 +43,12 @@ class GlobalExceptionHandlerTest {
     void handleBusinessLogsOriginalStackTrace(CapturedOutput output) {
         GlobalExceptionHandler handler = new GlobalExceptionHandler();
         BusinessException exception = new BusinessException("微信手机号服务请求失败");
+        MockHttpServletRequest request = new MockHttpServletRequest(
+                "POST",
+                "/api/auth/maintainer/wechat-login/precheck"
+        );
 
-        Response<Void> response = handler.handleBusiness(exception);
+        Response<Void> response = handler.handleBusiness(exception, request);
 
         assertThat(response.isSuccess()).isFalse();
         assertThat(response.getMessage()).isEqualTo("微信手机号服务请求失败");
@@ -56,12 +60,34 @@ class GlobalExceptionHandlerTest {
 
     @Test
     void handleBusinessReturnsBadRequestStatus() throws NoSuchMethodException {
-        Method method = GlobalExceptionHandler.class.getMethod("handleBusiness", BusinessException.class);
+        Method method = GlobalExceptionHandler.class.getMethod(
+                "handleBusiness",
+                BusinessException.class,
+                HttpServletRequest.class
+        );
 
         ResponseStatus responseStatus = method.getAnnotation(ResponseStatus.class);
 
         assertThat(responseStatus).isNotNull();
         assertThat(responseStatus.value()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    /** 腾讯安全扫描业务异常只记录不含异常详情的 WARN。 */
+    @Test
+    void handleBusinessLogsWarningWithoutExceptionDetailsForTencentSecurityTeam(CapturedOutput output) {
+        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+        BusinessException exception = new BusinessException("微信登录失败：invalid code");
+
+        Response<Void> response = handler.handleBusiness(exception, tencentSecurityRequest());
+
+        assertThat(response.isSuccess()).isFalse();
+        assertThat(response.getMessage()).isEqualTo("微信登录失败：invalid code");
+        assertThat(output).contains("WARN");
+        assertThat(output).contains("Tencent security scan request rejected: method=POST "
+                + "uri=/api/auth/maintainer/wechat-login/precheck exceptionType=BusinessException");
+        assertThat(output).doesNotContain("ERROR");
+        assertThat(output).doesNotContain("微信登录失败：invalid code");
+        assertThat(output).doesNotContain("GlobalExceptionHandlerTest.handleBusinessLogsWarning");
     }
 
     @Test
@@ -244,12 +270,64 @@ class GlobalExceptionHandlerTest {
 
     @Test
     void handleGeneralReturnsInternalServerErrorStatus() throws NoSuchMethodException {
-        Method method = GlobalExceptionHandler.class.getMethod("handleGeneral", Exception.class);
+        Method method = GlobalExceptionHandler.class.getMethod(
+                "handleGeneral",
+                Exception.class,
+                HttpServletRequest.class
+        );
 
         ResponseStatus responseStatus = method.getAnnotation(ResponseStatus.class);
 
         assertThat(responseStatus).isNotNull();
         assertThat(responseStatus.value()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    /** 腾讯安全扫描未知异常只记录不含异常详情的 WARN。 */
+    @Test
+    void handleGeneralLogsWarningWithoutExceptionDetailsForTencentSecurityTeam(CapturedOutput output) {
+        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+        IllegalStateException exception = new IllegalStateException("secret=should-not-be-logged");
+
+        Response<Void> response = handler.handleGeneral(exception, tencentSecurityRequest());
+
+        assertThat(response.isSuccess()).isFalse();
+        assertThat(response.getMessage()).isEqualTo("Internal server error");
+        assertThat(output).contains("WARN");
+        assertThat(output).contains("Tencent security scan request rejected: method=POST "
+                + "uri=/api/auth/maintainer/wechat-login/precheck exceptionType=IllegalStateException");
+        assertThat(output).doesNotContain("ERROR");
+        assertThat(output).doesNotContain("secret=should-not-be-logged");
+        assertThat(output).doesNotContain("GlobalExceptionHandlerTest.handleGeneralLogsWarning");
+    }
+
+    /** 普通请求的未知异常继续记录原始 ERROR 和堆栈。 */
+    @Test
+    void handleGeneralLogsOriginalStackTraceForOrdinaryRequest(CapturedOutput output) {
+        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+        IllegalStateException exception = new IllegalStateException("ordinary failure");
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/ordinary");
+
+        Response<Void> response = handler.handleGeneral(exception, request);
+
+        assertThat(response.isSuccess()).isFalse();
+        assertThat(response.getMessage()).isEqualTo("Internal server error");
+        assertThat(output).contains("ERROR");
+        assertThat(output).contains("Unexpected error");
+        assertThat(output).contains("java.lang.IllegalStateException: ordinary failure");
+        assertThat(output).contains("GlobalExceptionHandlerTest.handleGeneralLogsOriginalStackTraceForOrdinaryRequest");
+    }
+
+    /** 构造腾讯安全扫描请求。 */
+    private MockHttpServletRequest tencentSecurityRequest() {
+        MockHttpServletRequest request = new MockHttpServletRequest(
+                "POST",
+                "/api/auth/maintainer/wechat-login/precheck"
+        );
+        request.addHeader(
+                "User-Agent",
+                "Tencent Security Team, more information: https://developers.weixin.qq.com/"
+        );
+        return request;
     }
 
     /**

@@ -11,7 +11,9 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -78,6 +80,22 @@ class WorkStorageBillingExecutionServiceTest {
                 .isEqualTo(WorkStorageBillingExecutionService.ExecutionOutcome.ALREADY_RUNNING);
         assertThat(result.message()).isEqualTo("作品存储结算任务正在执行，本次未重复提交");
         assertThat(result.data().isAccepted()).isFalse();
+    }
+
+    /** 停用后协调器拒绝新任务时必须沿用现有 503 应用结果契约。 */
+    @Test
+    void stoppedCoordinatorShouldReturnUnavailableWithStopMessage() {
+        WorkStorageBillingExecutionCoordinator coordinator = mock(WorkStorageBillingExecutionCoordinator.class);
+        when(coordinator.submit(any(), eq(TriggerSource.MANUAL)))
+                .thenThrow(new WorkStorageBillingUnavailableException(
+                        "job 服务正在停用，不再接受作品存储结算任务"));
+
+        WorkStorageBillingExecutionService.ExecutionResult result = service(
+                validSecretValidator(), coordinator).execute("secret", request("2026-07"));
+
+        assertThat(result.outcome()).isEqualTo(WorkStorageBillingExecutionService.ExecutionOutcome.UNAVAILABLE);
+        assertThat(result.message()).isEqualTo("job 服务正在停用，不再接受作品存储结算任务");
+        assertThat(result.data()).isNull();
     }
 
     private WorkStorageBillingExecutionService service(

@@ -1,3 +1,8 @@
+/**
+ * 当前状态：业务入口不可达，仅用于开发阶段的视频选帧诊断。
+ * 原因：生产页面没有跳转入口，开发者工具中的旧启动配置也未指向当前分包路径。
+ * 保留说明：如仍需诊断视频解码能力，应通过开发者工具直接以当前页面路径启动。
+ */
 const { writeRgbaFrameToCanvas } = require('../utils/frame-canvas')
 const { decodeVideoFrameAtTime } = require('../utils/video-frame-decoder')
 

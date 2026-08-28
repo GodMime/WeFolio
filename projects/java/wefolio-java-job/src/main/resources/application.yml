@@ -65,8 +65,12 @@ work-audit:
   max-query-video-per-run: 1000
   # 每轮最多提交多少个未审核视频作品到腾讯云异步审核；提交后不等待结果。
   max-submit-video-per-run: 500
+  # 单个视频提交任务最多尝试次数，约束进程中断后的原任务重提。
+  video-submit-max-attempts: ${WEFOLIO_WORK_AUDIT_VIDEO_SUBMIT_MAX_ATTEMPTS:3}
   # 每轮最多同步审核多少个未审核图片作品。
   max-audit-image-per-run: 500
+  # 单个图片审核任务最多尝试次数，用于进程中断后的原任务恢复。
+  image-max-attempts: ${WEFOLIO_WORK_AUDIT_IMAGE_MAX_ATTEMPTS:3}
   # 每轮最多尝试审核多少个动图任务。
   max-audit-animation-per-run: ${WEFOLIO_WORK_AUDIT_MAX_ANIMATION_PER_RUN:500}
   # 单个动图任务最多尝试次数，重试复用已持久化的抽样帧。
@@ -84,6 +88,12 @@ admin:
   point:
     # 复用 Runtime 人工加分接口的后台积分密钥。
     secret: ${ADMIN_POINT_SECRET:}
+
+job-scheduling:
+  # 发布旧服务前等待当前后台工作自然结束的最长时间。
+  disable-timeout: ${JOB_SCHEDULING_DISABLE_TIMEOUT:10s}
+  # 发布期间暂停接收新后台工作的时长，到期后惰性自动恢复。
+  pause-duration: ${JOB_SCHEDULING_PAUSE_DURATION:10m}
 
 user-storage-folder-repair:
   # 历史用户目录修复 ID 游标批大小，批内严格逐个处理。
@@ -110,6 +120,18 @@ recharge-order-close:
   batch-size: ${RECHARGE_ORDER_CLOSE_BATCH_SIZE:200}
   # 单轮最多执行的批次数，防止长期占用任务线程。
   max-batches: ${RECHARGE_ORDER_CLOSE_MAX_BATCHES:10}
+
+feedback-upload-cleanup:
+  # 是否启用反馈附件过期清理任务。
+  enabled: ${FEEDBACK_UPLOAD_CLEANUP_ENABLED:true}
+  # 每日凌晨 3:40 低峰执行，避免占用白天业务资源。
+  cron: "${FEEDBACK_UPLOAD_CLEANUP_CRON:0 40 3 * * ?}"
+  # cron 调度时区，不影响按上海业务时区解释的过期时间。
+  zone: ${FEEDBACK_UPLOAD_CLEANUP_ZONE:Asia/Shanghai}
+  # 单轮最多读取并逐条清理的上传任务数量。
+  batch-size: ${FEEDBACK_UPLOAD_CLEANUP_BATCH_SIZE:200}
+  # 单轮最多执行的 keyset 批次数，防止长期占用清理线程。
+  max-batches: ${FEEDBACK_UPLOAD_CLEANUP_MAX_BATCHES:10}
 
 virtual-payment-dispatch:
   # Release A 默认关闭；确认所有 runtime 实例均已提供单任务接口后再启用。

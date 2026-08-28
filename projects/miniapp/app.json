@@ -11,6 +11,8 @@
     "pages/team-invitations/team-invitations",
     "pages/team-member-change/team-member-change",
     "pages/messages/messages",
+    "pages/feedback/feedback",
+    "pages/feedback-history/feedback-history",
     "pages/visits/visits",
     "pages/profile/profile",
     "pages/login/login",

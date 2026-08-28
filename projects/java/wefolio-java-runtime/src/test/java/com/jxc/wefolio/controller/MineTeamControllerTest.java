@@ -6,6 +6,7 @@ import com.jxc.wefolio.common.upload.AvatarUploadResult;
 import com.jxc.wefolio.dto.FileUploadResponse;
 import com.jxc.wefolio.dto.MineTeamCreateRequest;
 import com.jxc.wefolio.dto.MineTeamDetailResponse;
+import com.jxc.wefolio.dto.MineTeamIdempotentCreateRequest;
 import com.jxc.wefolio.dto.MineTeamInvitationResponse;
 import com.jxc.wefolio.dto.MineTeamListResponse;
 import com.jxc.wefolio.dto.MineTeamMemberChangeCreateRequest;
@@ -17,6 +18,7 @@ import com.jxc.wefolio.dto.MineTeamMemberRemoveRequest;
 import com.jxc.wefolio.dto.MineTeamUpdateRequest;
 import com.jxc.wefolio.dto.MineTeamOwnerTransferRequest;
 import com.jxc.wefolio.service.MineTeamService;
+import com.jxc.wefolio.service.MineTeamCreationApplicationService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -48,6 +50,10 @@ class MineTeamControllerTest {
     @Mock
     private MineTeamService mineTeamService;
 
+    /** 团队创建幂等应用服务模拟 */
+    @Mock
+    private MineTeamCreationApplicationService creationApplicationService;
+
     /** 团队 Controller 不得持有业务操作日志。 */
     @Test
     void controllerShouldOnlyDelegateWithoutBusinessLogs() throws IOException {
@@ -59,13 +65,14 @@ class MineTeamControllerTest {
 
     @Test
     void teamEndpointsUseMaintainerAccessAndDelegateToService() throws NoSuchMethodException {
-        MineTeamController controller = new MineTeamController(mineTeamService);
+        MineTeamController controller = new MineTeamController(mineTeamService, creationApplicationService);
         MineTeamListResponse listResponse = new MineTeamListResponse();
         MineTeamDetailResponse detailResponse = new MineTeamDetailResponse();
         MineTeamMemberCandidateResponse candidateResponse = new MineTeamMemberCandidateResponse();
         MineTeamInvitationResponse invitationResponse = new MineTeamInvitationResponse();
         MineTeamMemberChangeDetailResponse changeDetailResponse = new MineTeamMemberChangeDetailResponse();
         MineTeamCreateRequest createRequest = new MineTeamCreateRequest();
+        MineTeamIdempotentCreateRequest idempotentCreateRequest = new MineTeamIdempotentCreateRequest();
         MineTeamUpdateRequest updateRequest = new MineTeamUpdateRequest();
         MineTeamMemberInviteRequest inviteRequest = new MineTeamMemberInviteRequest();
         MineTeamMemberChangeCreateRequest changeRequest = new MineTeamMemberChangeCreateRequest();
@@ -76,6 +83,7 @@ class MineTeamControllerTest {
         MockMultipartFile file = new MockMultipartFile("file", "team.png", "image/png", pngBytes());
         when(mineTeamService.listTeams()).thenReturn(listResponse);
         when(mineTeamService.createTeam(createRequest)).thenReturn(detailResponse);
+        when(creationApplicationService.create(idempotentCreateRequest)).thenReturn(detailResponse);
         when(mineTeamService.getTeamDetail(100L)).thenReturn(detailResponse);
         when(mineTeamService.updateTeam(100L, updateRequest)).thenReturn(detailResponse);
         when(mineTeamService.getMemberCandidate(100L, "WF1186")).thenReturn(candidateResponse);
@@ -94,6 +102,7 @@ class MineTeamControllerTest {
 
         Response<MineTeamListResponse> teams = controller.teams();
         Response<MineTeamDetailResponse> created = controller.createTeam(createRequest);
+        Response<MineTeamDetailResponse> idempotentCreated = controller.createTeamV2(idempotentCreateRequest);
         Response<MineTeamDetailResponse> detail = controller.teamDetail(100L);
         Response<MineTeamDetailResponse> updated = controller.updateTeam(100L, updateRequest);
         Response<MineTeamMemberCandidateResponse> candidate = controller.memberCandidate(100L, "WF1186");
@@ -112,6 +121,10 @@ class MineTeamControllerTest {
         assertThat(MineTeamController.class.isAnnotationPresent(MaintainerAccess.class)).isTrue();
         assertGetMapping("teams", "/api/mine/teams");
         assertPostMapping("createTeam", new Class<?>[] {MineTeamCreateRequest.class}, "/api/mine/teams");
+        assertPostMapping("createTeamV2", new Class<?>[] {MineTeamIdempotentCreateRequest.class},
+                "/api/mine/teams/v2");
+        assertThat(MineTeamController.class.getMethod("createTeam", MineTeamCreateRequest.class)
+                .isAnnotationPresent(Deprecated.class)).isTrue();
         assertGetMapping("teamDetail", new Class<?>[] {Long.class}, "/api/mine/teams/{teamId}");
         assertPutMapping("updateTeam", new Class<?>[] {Long.class, MineTeamUpdateRequest.class}, "/api/mine/teams/{teamId}");
         assertGetMapping("memberCandidate", new Class<?>[] {Long.class, String.class}, "/api/mine/teams/{teamId}/member-candidate");
@@ -144,6 +157,7 @@ class MineTeamControllerTest {
         assertRequestBody("removeMember", MineTeamMemberRemoveRequest.class);
         assertThat(teams.getData()).isSameAs(listResponse);
         assertThat(created.getData()).isSameAs(detailResponse);
+        assertThat(idempotentCreated.getData()).isSameAs(detailResponse);
         assertThat(detail.getData()).isSameAs(detailResponse);
         assertThat(updated.getData()).isSameAs(detailResponse);
         assertThat(candidate.getData()).isSameAs(candidateResponse);
@@ -160,6 +174,7 @@ class MineTeamControllerTest {
         assertThat(uploaded.getData()).isSameAs(uploadResponse);
         verify(mineTeamService).listTeams();
         verify(mineTeamService).createTeam(createRequest);
+        verify(creationApplicationService).create(idempotentCreateRequest);
         verify(mineTeamService).getTeamDetail(100L);
         verify(mineTeamService).updateTeam(100L, updateRequest);
         verify(mineTeamService).getMemberCandidate(100L, "WF1186");
@@ -182,7 +197,7 @@ class MineTeamControllerTest {
         MockMultipartFile file = new MockMultipartFile("file", "team.png", "image/png", content);
         when(mineTeamService.uploadTeamAvatar(100L, file))
                 .thenReturn(AvatarUploadResult.failure("团队图标不能超过 200KB"));
-        MineTeamController controller = new MineTeamController(mineTeamService);
+        MineTeamController controller = new MineTeamController(mineTeamService, creationApplicationService);
 
         Response<FileUploadResponse> response = controller.uploadTeamAvatar(100L, file);
 
@@ -201,7 +216,7 @@ class MineTeamControllerTest {
         );
         when(mineTeamService.uploadTeamAvatar(100L, file))
                 .thenReturn(AvatarUploadResult.failure("团队图标仅支持 JPG、PNG、GIF、WebP 格式"));
-        MineTeamController controller = new MineTeamController(mineTeamService);
+        MineTeamController controller = new MineTeamController(mineTeamService, creationApplicationService);
 
         Response<FileUploadResponse> response = controller.uploadTeamAvatar(100L, file);
 
