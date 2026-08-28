@@ -53,7 +53,7 @@ function tryWxPluginLogin() {
 
 Page({
   data: {
-    activeTab: 'experience',
+    activeTab: 'maintainer',
     prechecking: false,
     precheckReady: false,
     phoneAuthorizationRequired: false,

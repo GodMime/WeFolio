@@ -99,7 +99,7 @@ test('referral share opens maintainer tab with normalized referral code', () => 
   }
 })
 
-test('ordinary login entry keeps experience tab without referral code', () => {
+test('ordinary login entry defaults to maintainer tab without referral code', () => {
   const harness = loadLoginPage()
   try {
     let precheckCalls = 0
@@ -109,7 +109,7 @@ test('ordinary login entry keeps experience tab without referral code', () => {
 
     harness.page.onLoad({})
 
-    assert.equal(harness.page.data.activeTab, 'experience')
+    assert.equal(harness.page.data.activeTab, 'maintainer')
     assert.equal(harness.page.data.referralCode, '')
     assert.equal(precheckCalls, 1)
   } finally {
@@ -117,7 +117,7 @@ test('ordinary login entry keeps experience tab without referral code', () => {
   }
 })
 
-test('malformed referral share keeps ordinary login state', () => {
+test('malformed referral share keeps ordinary maintainer login state', () => {
   const harness = loadLoginPage()
   try {
     let precheckCalls = 0
@@ -127,7 +127,7 @@ test('malformed referral share keeps ordinary login state', () => {
 
     harness.page.onLoad({ referralCode: '%E0%A4%A' })
 
-    assert.equal(harness.page.data.activeTab, 'experience')
+    assert.equal(harness.page.data.activeTab, 'maintainer')
     assert.equal(harness.page.data.referralCode, '')
     assert.equal(precheckCalls, 1)
   } finally {

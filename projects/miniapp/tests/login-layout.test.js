@@ -278,7 +278,7 @@ test('login buttons match first-login design copy and shape', () => {
 })
 
 test('experience login tab redirects to independent mock pages', () => {
-  assert.match(loginJs, /activeTab:\s*'experience'/)
+  assert.match(loginJs, /activeTab:\s*'maintainer'/)
   assert.match(loginJs, /handleExperienceTap\(\)/)
   assert.match(loginJs, /wx\.redirectTo\(\{[\s\S]*url:\s*'\/pages\/mock\/index\/index'/)
   assert.match(loginWxml, /data-tab="experience"[\s\S]*体验/)
