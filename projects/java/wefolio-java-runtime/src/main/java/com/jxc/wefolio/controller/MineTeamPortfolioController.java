@@ -31,7 +31,6 @@ import com.jxc.wefolio.service.teamportfolio.component.memberportfoliolist.TeamM
 import com.jxc.wefolio.service.teamportfolio.component.singlework.TeamSingleWorkComponentService;
 import com.jxc.wefolio.service.teamportfolio.component.videocarousel.TeamVideoCarouselComponentService;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -47,7 +46,6 @@ import java.util.List;
 @MaintainerAccess
 @RestController
 @RequiredArgsConstructor
-@Slf4j
 public class MineTeamPortfolioController {
 
     /** 团队作品集维护服务。 */
@@ -225,8 +223,6 @@ public class MineTeamPortfolioController {
             @RequestParam("componentKey") String componentKey,
             @RequestParam(value = "scope", required = false) String scope
     ) {
-        log.warn("调用已弃用团队作品集档期配置接口: portfolioId={}, componentKey={}, scope={}",
-                portfolioId, componentKey, scope);
         return Response.success(mineTeamPortfolioService.scheduleOptions(
                 portfolioId, componentKey, scope, currentUserId()));
     }
@@ -268,8 +264,6 @@ public class MineTeamPortfolioController {
             @RequestParam(value = "page", defaultValue = "1") int page,
             @RequestParam(value = "pageSize", defaultValue = "20") int pageSize
     ) {
-        log.warn("调用已弃用团队作品集访问记录接口: teamId={}, page={}, pageSize={}",
-                teamId, page, pageSize);
         return Response.success(mineTeamPortfolioService.getVisitRecords(
                 teamId, page, pageSize, currentUserId()));
     }
@@ -286,8 +280,6 @@ public class MineTeamPortfolioController {
             @RequestParam(value = "page", defaultValue = "1") int page,
             @RequestParam(value = "pageSize", defaultValue = "20") int pageSize
     ) {
-        log.warn("调用已弃用团队作品集查档历史接口: teamId={}, page={}, pageSize={}",
-                teamId, page, pageSize);
         return Response.success(mineTeamPortfolioService.getScheduleQueryRecords(
                 teamId, page, pageSize, currentUserId()));
     }
@@ -374,8 +366,6 @@ public class MineTeamPortfolioController {
             @PathVariable Long teamId,
             @PathVariable Long memberUserId
     ) {
-        log.warn("调用已弃用团队单个作品全量候选接口: teamId={}, memberUserId={}",
-                teamId, memberUserId);
         return Response.success(singleWorkComponentService.listTeamWorks(teamId, memberUserId, currentUserId()));
     }
 
@@ -404,7 +394,6 @@ public class MineTeamPortfolioController {
     public Response<List<TeamSingleWorkComponentService.MemberOption>> singleWorkMembers(
             @PathVariable Long portfolioId
     ) {
-        log.warn("调用已弃用团队单个作品成员候选接口: portfolioId={}", portfolioId);
         return Response.success(singleWorkComponentService.listMembers(portfolioId, currentUserId()));
     }
 
@@ -419,8 +408,6 @@ public class MineTeamPortfolioController {
             @PathVariable Long portfolioId,
             @PathVariable Long memberUserId
     ) {
-        log.warn("调用已弃用团队单个作品作品候选接口: portfolioId={}, memberUserId={}",
-                portfolioId, memberUserId);
         return Response.success(singleWorkComponentService.listWorks(portfolioId, memberUserId, currentUserId()));
     }
 

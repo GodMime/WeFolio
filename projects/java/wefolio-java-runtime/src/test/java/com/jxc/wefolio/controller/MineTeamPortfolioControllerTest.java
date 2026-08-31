@@ -1,9 +1,5 @@
 package com.jxc.wefolio.controller;
 
-import ch.qos.logback.classic.Level;
-import ch.qos.logback.classic.Logger;
-import ch.qos.logback.classic.spi.ILoggingEvent;
-import ch.qos.logback.core.read.ListAppender;
 import com.jxc.wefolio.annotation.MaintainerAccess;
 import com.jxc.wefolio.common.auth.AuthContext;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
@@ -20,7 +16,6 @@ import com.jxc.wefolio.dto.teamportfolio.TeamContactLeadResponse;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -297,70 +292,6 @@ class MineTeamPortfolioControllerTest {
         assertThat(portfolioScoped).isNotNull();
         assertThat(portfolioScoped.since()).isEqualTo("2026-07");
         assertThat(portfolioScoped.forRemoval()).isFalse();
-    }
-
-    @Test
-    void teamSingleWorkFullListWritesOneMigrationWarning() {
-        MineTeamPortfolioController controller = new MineTeamPortfolioController(
-                mock(MineTeamPortfolioService.class),
-                mock(TeamPortfolioAssetService.class),
-                mock(TeamCarouselComponentService.class),
-                mock(TeamVideoCarouselComponentService.class),
-                mock(TeamSingleWorkComponentService.class),
-                mock(TeamMemberPortfolioGridComponentService.class),
-                mock(TeamMemberPortfolioListComponentService.class),
-                mock(TeamMemberPortfolioPreviewService.class));
-        Logger logger = (Logger) LoggerFactory.getLogger(MineTeamPortfolioController.class);
-        ListAppender<ILoggingEvent> appender = new ListAppender<>();
-        appender.start();
-        logger.addAppender(appender);
-        try {
-            controller.teamSingleWorkWorks(23L, 17L);
-
-            assertThat(appender.list).singleElement().satisfies(event -> {
-                assertThat(event.getLevel()).isEqualTo(Level.WARN);
-                assertThat(event.getFormattedMessage()).isEqualTo(
-                        "调用已弃用团队单个作品全量候选接口: teamId=23, memberUserId=17");
-            });
-        } finally {
-            logger.detachAppender(appender);
-            appender.stop();
-        }
-    }
-
-    @Test
-    void unwiredEndpointsWriteDeprecationWarnings() {
-        MineTeamPortfolioController controller = new MineTeamPortfolioController(
-                mock(MineTeamPortfolioService.class),
-                mock(TeamPortfolioAssetService.class),
-                mock(TeamCarouselComponentService.class),
-                mock(TeamVideoCarouselComponentService.class),
-                mock(TeamSingleWorkComponentService.class),
-                mock(TeamMemberPortfolioGridComponentService.class),
-                mock(TeamMemberPortfolioListComponentService.class),
-                mock(TeamMemberPortfolioPreviewService.class));
-        Logger logger = (Logger) LoggerFactory.getLogger(MineTeamPortfolioController.class);
-        ListAppender<ILoggingEvent> appender = new ListAppender<>();
-        appender.start();
-        logger.addAppender(appender);
-        try {
-            controller.scheduleOptions(13L, "schedule-1", "draft");
-            controller.visitRecords(31L, 1, 20);
-            controller.scheduleQueries(31L, 2, 10);
-
-            assertThat(appender.list)
-                    .extracting(ILoggingEvent::getLevel)
-                    .containsExactly(Level.WARN, Level.WARN, Level.WARN);
-            assertThat(appender.list)
-                    .extracting(ILoggingEvent::getFormattedMessage)
-                    .containsExactly(
-                            "调用已弃用团队作品集档期配置接口: portfolioId=13, componentKey=schedule-1, scope=draft",
-                            "调用已弃用团队作品集访问记录接口: teamId=31, page=1, pageSize=20",
-                            "调用已弃用团队作品集查档历史接口: teamId=31, page=2, pageSize=10");
-        } finally {
-            logger.detachAppender(appender);
-            appender.stop();
-        }
     }
 
     /** 断言分页接口的直接声明、GET 映射及默认参数。 */

@@ -9,7 +9,6 @@ import com.jxc.wefolio.dto.PointCalculationRequest;
 import com.jxc.wefolio.dto.PointCalculationResponse;
 import com.jxc.wefolio.service.PointService;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -22,7 +21,6 @@ import org.springframework.web.bind.annotation.RestController;
 @MaintainerAccess
 @RestController
 @RequiredArgsConstructor
-@Slf4j
 public class MinePointController {
 
     /** 积分服务 */
@@ -69,7 +67,6 @@ public class MinePointController {
     @PostMapping("/api/mine/points/calculate")
     public Response<PointCalculationResponse> calculate(@RequestBody PointCalculationRequest request) {
         Long userId = AuthContextHolder.requireUserId();
-        log.warn("调用已弃用积分试算接口: userId={}", userId);
         return Response.success(pointService.calculate(userId, request));
     }
 }

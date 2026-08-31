@@ -1,9 +1,5 @@
 package com.jxc.wefolio.controller;
 
-import ch.qos.logback.classic.Level;
-import ch.qos.logback.classic.Logger;
-import ch.qos.logback.classic.spi.ILoggingEvent;
-import ch.qos.logback.core.read.ListAppender;
 import com.jxc.wefolio.annotation.MaintainerAccess;
 import com.jxc.wefolio.common.Response;
 import com.jxc.wefolio.common.auth.AuthContext;
@@ -19,7 +15,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 
@@ -94,24 +89,4 @@ class MinePointControllerTest {
         assertThat(deprecated.forRemoval()).isFalse();
     }
 
-    @Test
-    void calculateEndpointWritesDeprecationWarning() {
-        Logger logger = (Logger) LoggerFactory.getLogger(MinePointController.class);
-        ListAppender<ILoggingEvent> appender = new ListAppender<>();
-        appender.start();
-        logger.addAppender(appender);
-        try {
-            new MinePointController(pointService).calculate(new PointCalculationRequest());
-
-            assertThat(appender.list)
-                    .extracting(ILoggingEvent::getLevel)
-                    .containsExactly(Level.WARN);
-            assertThat(appender.list)
-                    .extracting(ILoggingEvent::getFormattedMessage)
-                    .containsExactly("调用已弃用积分试算接口: userId=7");
-        } finally {
-            logger.detachAppender(appender);
-            appender.stop();
-        }
-    }
 }

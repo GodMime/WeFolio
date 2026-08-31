@@ -4,7 +4,6 @@ import com.jxc.wefolio.annotation.LoginAccess;
 import com.jxc.wefolio.annotation.TimelineAnonymousAccess;
 import com.jxc.wefolio.annotation.VisitorAccess;
 import com.jxc.wefolio.common.Response;
-import com.jxc.wefolio.common.auth.VisitorContextHolder;
 import com.jxc.wefolio.dto.ContactLeadSubmitRequest;
 import com.jxc.wefolio.dto.ContactLeadSubmitResponse;
 import com.jxc.wefolio.dto.PortfolioScheduleOptionsResponse;
@@ -20,7 +19,6 @@ import com.jxc.wefolio.dto.VisitorProfileUpdateRequest;
 import com.jxc.wefolio.service.ContactLeadService;
 import com.jxc.wefolio.service.VisitorPortfolioService;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -35,7 +33,6 @@ import org.springframework.web.bind.annotation.RestController;
 @VisitorAccess
 @RestController
 @RequiredArgsConstructor
-@Slf4j
 public class VisitorPortfolioController {
 
     /** 访客作品集服务 */
@@ -188,8 +185,6 @@ public class VisitorPortfolioController {
             @PathVariable String shareCode,
             @RequestBody ContactLeadSubmitRequest request
     ) {
-        log.warn("访客调用已弃用的联系线索接口: shareCode={}, visitorId={}",
-                shareCode, VisitorContextHolder.getVisitorId().orElse(null));
         return Response.success(contactLeadService.submit(shareCode, request));
     }
 

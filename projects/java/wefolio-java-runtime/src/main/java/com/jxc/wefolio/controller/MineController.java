@@ -96,7 +96,6 @@ public class MineController {
     @Deprecated
     @GetMapping(LEGACY_MINE_VISITS_PATH)
     public Response<MineVisitRecordsResponse> visits() {
-        log.warn("调用已弃用访问记录接口: path={}", LEGACY_MINE_VISITS_PATH);
         return Response.success(mineVisitService.getVisitRecords());
     }
 
