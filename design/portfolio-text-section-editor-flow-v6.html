@@ -1,0 +1,518 @@
+<meta charset="utf-8">
+<style>
+  #wefolio-editor-flow {
+    --wf-page: light-dark(#f4f5f6, #1c1d20);
+    --wf-sheet: light-dark(#ffffff, #242529);
+    --wf-field: light-dark(#f5f6f7, #2d2f34);
+    --wf-text: light-dark(#212529, #f5f6f7);
+    --wf-secondary: light-dark(#868e96, #b1b6be);
+    --wf-border: light-dark(#e9ecef, #3b3d43);
+    --wf-selected: light-dark(#212529, #f5f6f7);
+    --wf-selected-text: light-dark(#ffffff, #212529);
+    color: var(--wf-text);
+  }
+
+  #wefolio-editor-flow .wf-flow-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(280px, 1fr));
+    gap: 22px;
+  }
+
+  #wefolio-editor-flow .wf-stage h3 {
+    margin-bottom: 8px;
+  }
+
+  #wefolio-editor-flow .wf-phone {
+    min-height: 560px;
+    display: flex;
+    align-items: flex-end;
+    padding-top: 42px;
+    border-radius: 8px;
+    background: var(--wf-page);
+    overflow: hidden;
+  }
+
+  #wefolio-editor-flow .wf-sheet {
+    width: 100%;
+    min-height: 500px;
+    padding: 10px 14px 16px;
+    border-radius: 18px 18px 0 0;
+    background: var(--wf-sheet);
+    box-sizing: border-box;
+  }
+
+  #wefolio-editor-flow .wf-grabber {
+    width: 34px;
+    height: 4px;
+    margin: 0 auto 14px;
+    border-radius: 2px;
+    background: var(--wf-border);
+  }
+
+  #wefolio-editor-flow .wf-sheet-head,
+  #wefolio-editor-flow .wf-row,
+  #wefolio-editor-flow .wf-work,
+  #wefolio-editor-flow .wf-block-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  #wefolio-editor-flow .wf-sheet-head {
+    margin-bottom: 14px;
+  }
+
+  #wefolio-editor-flow .wf-sheet-title {
+    font-weight: 700;
+  }
+
+  #wefolio-editor-flow .wf-count,
+  #wefolio-editor-flow .wf-caption,
+  #wefolio-editor-flow .wf-meta {
+    color: var(--wf-secondary);
+    font-size: 12px;
+  }
+
+  #wefolio-editor-flow .wf-section {
+    margin-top: 16px;
+  }
+
+  #wefolio-editor-flow .wf-label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  #wefolio-editor-flow .wf-textarea {
+    min-height: 82px;
+    padding: 10px;
+    border: 1px solid var(--wf-border);
+    border-radius: 7px;
+    background: var(--wf-field);
+    line-height: 1.6;
+  }
+
+  #wefolio-editor-flow .wf-segments {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  #wefolio-editor-flow .wf-segment {
+    padding: 7px 10px;
+    color: var(--wf-secondary);
+    border: 1px solid var(--wf-border);
+    border-radius: 999px;
+    background: var(--wf-field);
+    font-size: 12px;
+  }
+
+  #wefolio-editor-flow .wf-segment.selected {
+    color: var(--wf-selected-text);
+    border-color: var(--wf-selected);
+    background: var(--wf-selected);
+  }
+
+  #wefolio-editor-flow .wf-switch {
+    width: 34px;
+    height: 20px;
+    position: relative;
+    flex: none;
+    border-radius: 999px;
+    background: var(--wf-selected);
+  }
+
+  #wefolio-editor-flow .wf-switch::after {
+    content: '';
+    width: 16px;
+    height: 16px;
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    border-radius: 50%;
+    background: var(--wf-selected-text);
+  }
+
+  #wefolio-editor-flow .wf-work {
+    padding: 8px;
+    border: 1px solid var(--wf-border);
+    border-radius: 7px;
+    background: var(--wf-field);
+  }
+
+  #wefolio-editor-flow .wf-work-main {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+  }
+
+  #wefolio-editor-flow .wf-thumb {
+    width: 42px;
+    height: 42px;
+    flex: none;
+    border-radius: 5px;
+    object-fit: cover;
+  }
+
+  #wefolio-editor-flow .wf-work-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+  }
+
+  #wefolio-editor-flow .wf-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    margin-bottom: 14px;
+    border-bottom: 1px solid var(--wf-border);
+  }
+
+  #wefolio-editor-flow .wf-tab {
+    padding: 9px;
+    color: var(--wf-secondary);
+    text-align: center;
+    font-size: 13px;
+  }
+
+  #wefolio-editor-flow .wf-tab.selected {
+    color: var(--wf-text);
+    border-bottom: 2px solid var(--wf-selected);
+    font-weight: 700;
+  }
+
+  #wefolio-editor-flow .wf-blocks {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  #wefolio-editor-flow .wf-block-row {
+    min-height: 42px;
+    padding: 7px 9px;
+    border-bottom: 1px solid var(--wf-border);
+  }
+
+  #wefolio-editor-flow .wf-block-main {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr);
+    align-items: center;
+    gap: 8px;
+  }
+
+  #wefolio-editor-flow .wf-block-copy {
+    min-width: 0;
+  }
+
+  #wefolio-editor-flow .wf-block-content {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+  }
+
+  #wefolio-editor-flow .wf-add {
+    width: 100%;
+    margin-top: 10px;
+    padding: 10px;
+    color: var(--wf-text);
+    border: 1px dashed var(--wf-border);
+    border-radius: 7px;
+    background: transparent;
+    font-size: 13px;
+  }
+
+  #wefolio-editor-flow .wf-spacing {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  #wefolio-editor-flow .wf-number {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    border: 1px solid var(--wf-border);
+    border-radius: 7px;
+    background: var(--wf-field);
+    font-size: 12px;
+  }
+
+  #wefolio-editor-flow .wf-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 18px;
+  }
+
+  #wefolio-editor-flow .wf-action {
+    padding: 10px;
+    border: 1px solid var(--wf-border);
+    border-radius: 7px;
+    background: var(--wf-field);
+    color: var(--wf-text);
+  }
+
+  #wefolio-editor-flow .wf-action.primary {
+    color: var(--wf-selected-text);
+    border-color: var(--wf-selected);
+    background: var(--wf-selected);
+  }
+
+  #wf-plain-text .wf-textarea { display: block; width: 100%; height: 110px; resize: vertical; color: var(--wf-text); font: inherit; box-sizing: border-box; }
+  #wf-plain-text .wf-plain-options { display: flex; flex-direction: column; gap: 6px; }
+  #wf-plain-text .wf-plain-font, #wf-plain-text .wf-plain-choice { display: flex; align-items: center; gap: 8px; padding: 10px; min-height: 44px; border: 1px solid var(--wf-border); border-radius: 14px; background: var(--wf-field); box-sizing: border-box; cursor: pointer; }
+  #wf-plain-text .wf-plain-font { justify-content: space-between; min-height: 64px; }
+  #wf-plain-text .wf-plain-font:has(input:checked), #wf-plain-text .wf-plain-choice:has(input:checked) { border-color: var(--wf-text); }
+  #wf-plain-text .wf-plain-sample { display: block; margin-top: 4px; font-size: 13px; }
+  #wf-plain-text input { accent-color: var(--wf-text); }
+  #wf-plain-text input[role="switch"] { appearance: none; width: 38px; height: 22px; border-radius: 20px; background: var(--wf-border); position: relative; cursor: pointer; }
+  #wf-plain-text input[role="switch"]:checked { background: var(--wf-selected); }
+  #wf-plain-text input[role="switch"]::after { content: ''; position: absolute; width: 16px; height: 16px; left: 3px; top: 3px; border-radius: 50%; background: var(--wf-sheet); }
+  #wf-plain-text input[role="switch"]:checked::after { left: 19px; background: var(--wf-selected-text); }
+  #wf-plain-text .wf-segment { cursor: pointer; }
+  @media (max-width: 720px) {
+    #wefolio-editor-flow .wf-flow-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<div id="wefolio-editor-flow">
+  <h2>两个组件的编辑流程</h2>
+  <p class="subtitle">个人与团队共用交互；团队选择作品时多一步成员筛选。</p>
+
+  <div class="wf-flow-grid">
+    <section class="wf-stage" id="wf-plain-text">
+      <h3>1. 普通文字说明</h3>
+      <p class="wf-caption">保留现有字段顺序与控件形式；下方完整展开滚动区，便于审核新增配置。</p>
+      <div class="wf-phone">
+        <div class="wf-sheet">
+          <div class="wf-grabber"></div>
+          <div class="wf-sheet-head"><span class="wf-sheet-title">编辑文字说明</span></div>
+          <div class="wf-row"><label class="wf-label" for="wf-plain-content">说明</label><span class="wf-count" id="wf-plain-count">14 / 200</span></div>
+          <textarea class="wf-textarea" id="wf-plain-content" maxlength="200" placeholder="请输入给访客看的说明文字">导演你的婚礼，而不是主持它。</textarea>
+          <div class="wf-section"><span class="wf-label">字体</span><div class="wf-plain-options">
+            <label class="wf-plain-font"><span><strong>系统默认</strong><span class="wf-plain-sample">映期 Folio 字体预览 123</span></span><input type="radio" name="wf-plain-font" value="system" checked></label>
+            <label class="wf-plain-font"><span><strong>微信字体</strong><span class="wf-plain-sample">映期 Folio 字体预览 123</span></span><input type="radio" name="wf-plain-font" value="wechat"></label>
+          </div></div>
+          <div class="wf-section"><span class="wf-label">字号</span><div class="wf-segments" id="wf-plain-sizes"><button type="button" class="wf-segment" aria-pressed="false">26rpx</button><button type="button" class="wf-segment selected" aria-pressed="true">28rpx</button><button type="button" class="wf-segment" aria-pressed="false">32rpx</button><button type="button" class="wf-segment" aria-pressed="false">36rpx</button></div></div>
+          <div class="wf-section"><span class="wf-label">左右对齐方式</span><div class="wf-plain-options">
+            <label class="wf-plain-choice"><input type="radio" name="wf-plain-alignment" value="left" checked>左对齐</label>
+            <label class="wf-plain-choice"><input type="radio" name="wf-plain-alignment" value="center">居中</label>
+            <label class="wf-plain-choice"><input type="radio" name="wf-plain-alignment" value="right">右对齐</label>
+          </div></div>
+          <div class="wf-section"><label class="wf-row"><span class="wf-label">背景作品</span><input id="wf-plain-background" type="checkbox" role="switch" checked></label></div>
+          <div id="wf-plain-background-fields">
+            <div class="wf-section"><span class="wf-label">选择背景作品（必选）</span><div class="wf-work"><div class="wf-work-main"><img class="wf-thumb" src="portfolio-text-section-reference.jpg" alt="背景作品示意"><div><div class="wf-work-title">已选作品（示意）</div><div class="wf-meta">仅支持图片或动图</div></div></div><span class="wf-caption">更换</span></div></div>
+            <div class="wf-section"><span class="wf-label">背景处理</span><div class="wf-plain-options">
+              <label class="wf-plain-choice"><input type="radio" name="wf-plain-treatment" value="original">原图直出</label>
+              <label class="wf-plain-choice"><input type="radio" name="wf-plain-treatment" value="dark">全局暗色遮罩</label>
+              <label class="wf-plain-choice"><input type="radio" name="wf-plain-treatment" value="gradient" checked>固定渐进遮罩</label>
+            </div></div>
+            <div class="wf-section"><span class="wf-label">上下对齐方式</span><div class="wf-plain-options">
+              <label class="wf-plain-choice"><input type="radio" name="wf-plain-vertical" value="top">置顶</label>
+              <label class="wf-plain-choice"><input type="radio" name="wf-plain-vertical" value="center" checked>居中</label>
+              <label class="wf-plain-choice"><input type="radio" name="wf-plain-vertical" value="bottom">下沉</label>
+            </div></div>
+          </div>
+          <div class="wf-actions"><button class="wf-action" type="button">取消</button><button class="wf-action primary" type="button">完成</button></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="wf-stage">
+      <h3>2. 结构化文字：区块列表</h3>
+      <p class="wf-caption">区块支持左滑显示删除按钮，点击后移除对应区块；右滑或点击其他位置收起。同一时间只展开一项，纵向滚动不触发删除操作。</p>
+      <div class="wf-phone">
+        <div class="wf-sheet">
+          <div class="wf-grabber"></div>
+          <div class="wf-sheet-head"><span class="wf-sheet-title">编辑结构化文字说明</span><span class="wf-count">6 / 20</span></div>
+          <div class="wf-tabs"><span class="wf-tab selected">内容</span><span class="wf-tab">背景</span></div>
+          <div class="wf-blocks" id="wf-swipe-blocks">
+            <div class="wf-block-row"><div class="wf-block-main"><span class="wf-caption">⋮⋮</span><div class="wf-block-copy"><div class="wf-block-content">CHENG</div><div class="wf-meta">眉题</div></div></div><span>›</span></div>
+            <div class="wf-block-row"><div class="wf-block-main"><span class="wf-caption">⋮⋮</span><div class="wf-block-copy"><div class="wf-block-content">导演你的婚礼，而不是主持它</div><div class="wf-meta">标题</div></div></div><span>›</span></div>
+            <div class="wf-block-row"><div class="wf-block-main"><span class="wf-caption">⋮⋮</span><div class="wf-block-copy"><div class="wf-block-content">不煽情，不套路。</div><div class="wf-meta">正文</div></div></div><span>›</span></div>
+            <div class="wf-block-row"><div class="wf-block-main"><span class="wf-caption">⋮⋮</span><div class="wf-block-copy"><div class="wf-block-content">只导演属于你们的瞬间</div><div class="wf-meta">正文</div></div></div><span>›</span></div>
+            <div class="wf-block-row"><div class="wf-block-main"><span class="wf-caption">⋮⋮</span><div class="wf-block-copy"><div class="wf-block-content">2016年入行 · 累计主持1000+场</div><div class="wf-meta">列表 · 4 项</div></div></div><span>›</span></div>
+            <div class="wf-block-row"><div class="wf-block-main"><span class="wf-caption">⋮⋮</span><div class="wf-block-copy"><div class="wf-block-content">SCROLL ↓</div><div class="wf-meta">提示</div></div></div><span>›</span></div>
+          </div>
+          <button class="wf-add" type="button">＋ 添加区块</button>
+          <div class="wf-actions"><button class="wf-action" type="button">取消</button><button class="wf-action primary" type="button">完成</button></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="wf-stage">
+      <h3>3. 结构化文字：区块详情</h3>
+      <div class="wf-phone">
+        <div class="wf-sheet">
+          <div class="wf-grabber"></div>
+          <div class="wf-sheet-head"><span class="wf-sheet-title">编辑标题区块</span><span class="wf-count">18 / 200</span></div>
+          <div class="wf-section"><span class="wf-label">区块类型</span><div class="wf-segments"><span class="wf-segment">眉题</span><span class="wf-segment selected">标题</span><span class="wf-segment">正文</span><span class="wf-segment">列表</span><span class="wf-segment">提示</span><span class="wf-segment">留白</span></div></div>
+          <div class="wf-section"><span class="wf-label">内容</span><div class="wf-textarea">导演你的婚礼<br>而不是主持它</div></div>
+          <div class="wf-section"><span class="wf-label">字体</span><div class="wf-segments"><span class="wf-segment selected">系统字体</span><span class="wf-segment">微信体</span></div></div>
+          <div class="wf-section"><span class="wf-label">字号</span><div class="wf-segments"><span class="wf-segment">36rpx</span><span class="wf-segment selected">44rpx</span><span class="wf-segment">48rpx</span></div></div>
+          <div class="wf-section"><span class="wf-label">字重</span><div class="wf-segments"><span class="wf-segment">常规</span><span class="wf-segment selected">粗体</span></div></div>
+          <div class="wf-section"><span class="wf-label">颜色</span><div class="wf-segments"><span class="wf-segment selected">白色</span><span class="wf-segment">黑色</span><span class="wf-segment">自定义</span></div></div>
+          <div class="wf-section"><span class="wf-label">左右对齐方式</span><div class="wf-segments"><span class="wf-segment selected">左对齐</span><span class="wf-segment">居中</span><span class="wf-segment">右对齐</span></div></div>
+          <div class="wf-section" id="wf-block-spacing"><span class="wf-label">区块间距</span>
+            <p class="wf-spacing-hint">0–128 rpx · 每次 4 rpx</p>
+            <div class="wf-spacing-inputs">
+              <label class="wf-label" for="wf-spacing-top">上间距</label>
+              <div class="wf-spacing-controls"><button type="button" data-target="wf-spacing-top" data-delta="-4" aria-label="减少上间距">−</button><input id="wf-spacing-top" type="number" min="0" max="128" step="4" value="24" aria-describedby="wf-spacing-unit"><span id="wf-spacing-unit">rpx</span><button type="button" data-target="wf-spacing-top" data-delta="4" aria-label="增加上间距">＋</button></div>
+              <label class="wf-label" for="wf-spacing-bottom">下间距</label>
+              <div class="wf-spacing-controls"><button type="button" data-target="wf-spacing-bottom" data-delta="-4" aria-label="减少下间距">−</button><input id="wf-spacing-bottom" type="number" min="0" max="128" step="4" value="16" aria-label="下间距，单位 rpx"><span>rpx</span><button type="button" data-target="wf-spacing-bottom" data-delta="4" aria-label="增加下间距">＋</button></div>
+            </div>
+            <p class="wf-spacing-note">上下独立调整，点击数值可输入。<br>相邻间距 = 前一区块下间距 + 后一区块上间距。</p>
+          </div>
+          <div class="wf-actions"><button class="wf-action" type="button">删除区块</button><button class="wf-action primary" type="button">保存区块</button></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="wf-stage">
+      <h3>4. 结构化文字：背景</h3>
+      <div class="wf-phone">
+        <div class="wf-sheet">
+          <div class="wf-grabber"></div>
+          <div class="wf-sheet-head"><span class="wf-sheet-title">编辑结构化文字说明</span><span class="wf-count">6 / 20</span></div>
+          <div class="wf-tabs"><span class="wf-tab">内容</span><span class="wf-tab selected">背景</span></div>
+          <div class="wf-section"><div class="wf-row"><span><span class="wf-label">背景作品</span><span class="wf-caption">图片或动图</span></span><span class="wf-switch" aria-label="背景作品已开启"></span></div></div>
+          <div class="wf-section"><span class="wf-label">已选作品</span><div class="wf-work"><div class="wf-work-main"><img class="wf-thumb" src="portfolio-text-section-reference.jpg" alt="已选背景作品"><div><div class="wf-work-title">人物介绍动图</div><div class="wf-meta">动图 · 9:16</div></div></div><span class="wf-caption">更换</span></div></div>
+          <div class="wf-section"><span class="wf-label">背景处理</span><div class="wf-segments"><span class="wf-segment">原图直出</span><span class="wf-segment">暗色遮罩</span><span class="wf-segment selected">渐进遮罩</span></div></div>
+          <div class="wf-actions"><button class="wf-action" type="button">取消</button><button class="wf-action primary" type="button">完成</button></div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+<style>
+  #wefolio-editor-flow .wf-swipe-shell { position: relative; overflow: hidden; border-radius: 7px; }
+  #wefolio-editor-flow .wf-swipe-shell .wf-block-row { position: relative; background: var(--wf-sheet); margin: 0; transition: transform .18s ease; touch-action: pan-y; user-select: none; }
+  #wefolio-editor-flow .wf-swipe-shell.is-open .wf-block-row { transform: translateX(-72px); }
+  #wefolio-editor-flow .wf-swipe-delete { position: absolute; right: 0; top: 0; bottom: 0; width: 72px; border: 0; background: #c93434; color: #fff; font: inherit; cursor: pointer; visibility: hidden; }
+  #wefolio-editor-flow .wf-swipe-shell.is-open .wf-swipe-delete { visibility: visible; }
+  @media (prefers-reduced-motion: reduce) { #wefolio-editor-flow .wf-swipe-shell .wf-block-row { transition: none; } }
+</style>
+<script>
+(() => {
+  const list = document.getElementById('wf-swipe-blocks');
+  const stage = list.closest('.wf-stage');
+  function closeAll(except) {
+    list.querySelectorAll('.wf-swipe-shell').forEach(shell => {
+      if (shell !== except) shell.classList.remove('is-open');
+    });
+  }
+  Array.from(list.children).forEach((row, index) => {
+    const shell = document.createElement('div');
+    shell.className = 'wf-swipe-shell';
+    row.before(shell);
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'wf-swipe-delete';
+    remove.textContent = '删除';
+    remove.setAttribute('aria-label', `删除第 ${index + 1} 个区块`);
+    shell.append(remove, row);
+    let start = null;
+    let swiped = false;
+    row.addEventListener('pointerdown', event => {
+      if (event.button !== 0) return;
+      start = { x: event.clientX, y: event.clientY };
+      swiped = false;
+      row.setPointerCapture(event.pointerId);
+    });
+    row.addEventListener('pointerup', event => {
+      if (!start) return;
+      const dx = event.clientX - start.x;
+      const dy = event.clientY - start.y;
+      start = null;
+      if (Math.abs(dx) < 32 || Math.abs(dx) <= Math.abs(dy)) return;
+      swiped = true;
+      closeAll(shell);
+      shell.classList.toggle('is-open', dx < 0);
+    });
+    row.addEventListener('pointercancel', () => { start = null; });
+    row.addEventListener('click', event => {
+      if (swiped) { event.stopPropagation(); swiped = false; return; }
+      closeAll();
+    });
+    remove.addEventListener('click', event => {
+      event.stopPropagation();
+      shell.remove();
+      stage.querySelector('.wf-count').textContent = `${list.children.length} / 20`;
+    });
+    if (index === 1) shell.classList.add('is-open');
+  });
+  document.addEventListener('click', event => { if (!list.contains(event.target)) closeAll(); });
+})();
+</script>
+<style>
+  #wefolio-editor-flow .wf-spacing-hint,
+  #wefolio-editor-flow .wf-spacing-note { color: var(--wf-secondary); font-size: 12px; line-height: 1.6; }
+  #wefolio-editor-flow .wf-spacing-hint { margin: -2px 0 14px; }
+  #wefolio-editor-flow .wf-spacing-note { margin: 14px 0 0; }
+  #wefolio-editor-flow .wf-spacing-inputs { display: grid; grid-template-columns: minmax(52px, 1fr) auto; align-items: center; gap: 14px 12px; }
+  #wefolio-editor-flow .wf-spacing-inputs .wf-label { margin: 0; font-weight: 400; }
+  #wefolio-editor-flow .wf-spacing-controls { display: flex; align-items: center; justify-self: end; gap: 0; padding: 2px; border: 1px solid var(--wf-border); border-radius: 10px; background: var(--wf-field); }
+  #wefolio-editor-flow .wf-spacing-controls button,
+  #wefolio-editor-flow .wf-spacing-controls input { height: 36px; border: 0; border-radius: 7px; background: transparent; color: var(--wf-text); font: inherit; box-sizing: border-box; }
+  #wefolio-editor-flow .wf-spacing-controls button { flex: 0 0 36px; width: 36px; padding: 0; font-size: 20px; font-weight: 400; cursor: pointer; }
+  #wefolio-editor-flow .wf-spacing-controls input { width: 44px; min-width: 0; padding: 0 2px; font-size: 16px; font-weight: 500; font-variant-numeric: tabular-nums; text-align: center; appearance: textfield; -moz-appearance: textfield; }
+  #wefolio-editor-flow .wf-spacing-controls input::-webkit-inner-spin-button,
+  #wefolio-editor-flow .wf-spacing-controls input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  #wefolio-editor-flow .wf-spacing-controls span { padding-right: 10px; color: var(--wf-secondary); font-size: 11px; }
+  #wefolio-editor-flow .wf-spacing-controls button:not(:disabled):active { background: var(--wf-border); }
+  #wefolio-editor-flow .wf-spacing-controls button:disabled { opacity: .3; cursor: default; }
+  @media (hover: hover) { #wefolio-editor-flow .wf-spacing-controls button:not(:disabled):hover { background: var(--wf-sheet); } }
+  @media (pointer: coarse) {
+    #wefolio-editor-flow .wf-spacing-controls button { flex-basis: 44px; width: 44px; height: 44px; }
+    #wefolio-editor-flow .wf-spacing-controls input { height: 44px; }
+  }
+</style>
+<script>
+(() => {
+  const root = document.getElementById('wf-block-spacing');
+  function normalize(value) { return Math.max(0, Math.min(128, Math.round((Number(value) || 0) / 4) * 4)); }
+  function refresh() {
+    root.querySelectorAll('button[data-target]').forEach(button => {
+      const input = document.getElementById(button.dataset.target);
+      button.disabled = Number(button.dataset.delta) < 0 ? Number(input.value) <= 0 : Number(input.value) >= 128;
+    });
+  }
+  root.querySelectorAll('input').forEach(input => input.addEventListener('change', () => { input.value = normalize(input.value); refresh(); }));
+  root.querySelectorAll('button[data-target]').forEach(button => button.addEventListener('click', () => {
+    const input = document.getElementById(button.dataset.target);
+    input.value = normalize(Number(input.value) + Number(button.dataset.delta));
+    refresh();
+  }));
+  refresh();
+})();
+</script>
+<script>
+(() => {
+  const root = document.getElementById('wf-plain-text');
+  const toggle = root.querySelector('#wf-plain-background');
+  const fields = root.querySelector('#wf-plain-background-fields');
+  const content = root.querySelector('#wf-plain-content');
+  const count = root.querySelector('#wf-plain-count');
+  toggle.addEventListener('change', () => { fields.hidden = !toggle.checked; });
+  function updateCount() { count.textContent = `${Array.from(content.value).length} / 200`; }
+  content.addEventListener('input', updateCount);
+  updateCount();
+  root.querySelectorAll('#wf-plain-sizes button').forEach(button => {
+    button.addEventListener('click', () => {
+      root.querySelectorAll('#wf-plain-sizes button').forEach(item => {
+        item.classList.toggle('selected', item === button);
+        item.setAttribute('aria-pressed', String(item === button));
+      });
+      content.style.fontSize = `${Number.parseInt(button.textContent, 10) / 2}px`;
+    });
+  });
+})();
+</script>
