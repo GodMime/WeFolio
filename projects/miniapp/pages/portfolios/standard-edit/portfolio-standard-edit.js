@@ -239,14 +239,17 @@ function buildBackgroundColorPickerState(backgroundColorHsv = {}) {
     saturation: Math.min(1, Math.max(0, Number(backgroundColorHsv.saturation) || 0)),
     value: Math.min(1, Math.max(0, Number(backgroundColorHsv.value) || 0))
   }
+  const backgroundHueColor = hsvToHex({
+    hue: normalizedHsv.hue,
+    saturation: 1,
+    value: 1
+  })
   return {
     backgroundColorHsv: normalizedHsv,
     backgroundColorDraft: hsvToHex(normalizedHsv),
-    backgroundHueColor: hsvToHex({
-      hue: normalizedHsv.hue,
-      saturation: 1,
-      value: 1
-    }),
+    backgroundHueColor,
+    // 完整绑定样式，避免 WXML 编辑器将百分比插值误判为 CSS 语法错误。
+    backgroundHueThumbStyle: `left: ${normalizedHsv.hue / 3.59}%; background-color: ${backgroundHueColor};`,
     backgroundColorPadDotStyle: [
       `left: ${Math.round(normalizedHsv.saturation * 100)}%`,
       `top: ${Math.round((1 - normalizedHsv.value) * 100)}%`

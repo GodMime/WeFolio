@@ -211,7 +211,7 @@
         ></slider>
         <view
           class="background-hue-thumb"
-          style="left: {{backgroundColorHsv.hue / 3.59}}%; background-color: {{backgroundHueColor}};"
+          style="{{backgroundHueThumbStyle}}"
         ></view>
       </view>
       <input

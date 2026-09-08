@@ -3935,10 +3935,17 @@ test('production color picker hue thumb matches the centered white-ring design',
   const pageRoot = path.join(__dirname, '../pages/portfolios/standard-edit')
   const wxml = fs.readFileSync(path.join(pageRoot, 'portfolio-standard-edit.wxml'), 'utf8')
   const wxss = fs.readFileSync(path.join(pageRoot, 'portfolio-standard-edit.wxss'), 'utf8')
+  const page = loadPortfolioEditorPage(() => Promise.resolve({}))
+
+  assert.equal(page.data.backgroundHueThumbStyle, 'left: 0%; background-color: #FF0000;')
+  page.handleBackgroundHueChange({ detail: { value: 179.5 } })
+  assert.equal(page.data.backgroundHueThumbStyle, 'left: 50%; background-color: #00FFFD;')
+  page.handleBackgroundHueChange({ detail: { value: 359 } })
+  assert.equal(page.data.backgroundHueThumbStyle, 'left: 100%; background-color: #FF0004;')
 
   assert.match(
     wxml,
-    /class="background-hue-thumb"\s+style="left: \{\{backgroundColorHsv\.hue \/ 3\.59\}\}%; background-color: \{\{backgroundHueColor\}\};"/
+    /class="background-hue-thumb"\s+style="\{\{backgroundHueThumbStyle\}\}"/
   )
   assert.match(wxml, /block-color="transparent"/)
   assert.match(
