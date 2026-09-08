@@ -96,6 +96,9 @@
       <block wx:elif="{{item.componentType === 'TEXT_SECTION'}}">
         <portfolio-text-section text-section="{{item.textSection}}" theme-mode="{{portfolio.themeMode}}"></portfolio-text-section>
       </block>
+      <block wx:elif="{{item.componentType === 'STRUCTURED_TEXT_SECTION'}}">
+        <portfolio-structured-text-section structured-text-section="{{item.structuredTextSection}}" theme-mode="{{portfolio.themeMode}}" />
+      </block>
 
       <block wx:elif="{{item.componentType === 'DIVIDER'}}">
         <portfolio-divider divider="{{item.divider}}" theme-mode="{{portfolio.themeMode}}"></portfolio-divider>

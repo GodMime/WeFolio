@@ -7,7 +7,7 @@ const { uploadTeamVisitorProfile } = require('../utils/team-visitor-profile.js')
 const { showTeamPortfolioUnavailableToast } = require('../utils/team-portfolios.js')
 const { createAnonymousSessionId, isWechatTimelineSinglePage } = require('../utils/single-page-mode.js')
 
-const TYPE_BUCKETS = Object.freeze({ TEAM_PROFILE: 'teamProfile', CAROUSEL: 'carousel', VIDEO_CAROUSEL: 'videoCarousel', SINGLE_WORK: 'singleWork', DIVIDER: 'divider', MEMBER_PORTFOLIO_GRID: 'grid', MEMBER_PORTFOLIO_LIST: 'list', TEXT_SECTION: 'text', SCHEDULE_QUERY: 'schedule', CONTACT_FORM: 'contact', QR_CONTACT: 'qr' })
+const TYPE_BUCKETS = Object.freeze({ TEAM_PROFILE: 'teamProfile', CAROUSEL: 'carousel', VIDEO_CAROUSEL: 'videoCarousel', SINGLE_WORK: 'singleWork', DIVIDER: 'divider', MEMBER_PORTFOLIO_GRID: 'grid', MEMBER_PORTFOLIO_LIST: 'list', TEXT_SECTION: 'text', STRUCTURED_TEXT_SECTION: 'structuredText', SCHEDULE_QUERY: 'schedule', CONTACT_FORM: 'contact', QR_CONTACT: 'qr' })
 const VIDEO_PLAYED_EVENT_TYPE = 'VIDEO_PLAYED'
 const WORK_VIEWED_EVENT_TYPE = 'WORK_VIEWED'
 const MEDIA_TYPE_IMAGE = 'IMAGE'
@@ -20,7 +20,7 @@ const SHARE_CHANNEL_WECHAT_TIMELINE = 'WECHAT_TIMELINE'
 const SHARE_SCENE_TEAM_PORTFOLIO_LIST = 'TEAM_PORTFOLIO_LIST'
 const LIGHT_LOGO_URL = '/assets/system/folio-logo-stack-bold-small-50kb.png'
 const DARK_LOGO_URL = '/assets/system/folio-logo-stack-bold-dark-50kb.png'
-function buckets(items) { const value = { teamProfile: [], carousel: [], videoCarousel: [], singleWork: [], divider: [], grid: [], list: [], text: [], schedule: [], contact: [], qr: [] }; (Array.isArray(items) ? items : []).forEach((item) => { const key = TYPE_BUCKETS[item.componentType]; if (key) value[key].push(item) }); return value }
+function buckets(items) { const value = { teamProfile: [], carousel: [], videoCarousel: [], singleWork: [], divider: [], grid: [], list: [], text: [], structuredText: [], schedule: [], contact: [], qr: [] }; (Array.isArray(items) ? items : []).forEach((item) => { const key = TYPE_BUCKETS[item.componentType]; if (key) value[key].push(item) }); return value }
 function isUncertainFailure(error) { return !error || !Number(error.statusCode) || Number(error.statusCode) >= 500 }
 function positiveId(value) { const id = Number(value); return Number.isInteger(id) && id > 0 ? id : 0 }
 function shareTitle(render = {}) { return render.share && render.share.title || render.title || '团队作品集' }

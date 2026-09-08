@@ -1,0 +1,92 @@
+<view class="structured-mask {{visible ? 'is-visible' : ''}}" catchtap="handleCancel">
+  <view class="structured-panel" catchtap="noop">
+    <view class="structured-grabber-zone" data-layer="component" catchtouchstart="handleSheetTouchStart" catchtouchend="handleSheetTouchEnd"><view class="structured-grabber"></view></view>
+    <view class="structured-header">
+      <view class="structured-title">{{isNew ? '添加结构化文字说明' : '编辑结构化文字说明'}}</view>
+      <view class="structured-count">{{draft.blocks.length}} / 20</view>
+    </view>
+    <view class="structured-tabs">
+      <view class="structured-tab-indicator {{tab === 'background' ? 'background-active' : ''}}" aria-hidden="true"></view>
+      <view class="structured-tab {{tab === 'content' ? 'active' : ''}}" data-value="content" bindtap="handleTab" aria-role="button" aria-label="内容">内容</view>
+      <view class="structured-tab {{tab === 'background' ? 'active' : ''}}" data-value="background" bindtap="handleTab" aria-role="button" aria-label="背景">背景</view>
+    </view>
+    <scroll-view class="structured-scroll" scroll-y="{{!draggingKey}}" type="list" bindtap="handleOutsideTap">
+      <view class="structured-body structured-tab-body {{tabLeaving ? 'tab-leaving' : ''}} {{tabSwitching ? 'tab-switching' : ''}}">
+        <view wx:if="{{tab === 'content'}}">
+          <view wx:if="{{!rows.length}}" class="structured-empty">添加文字、列表或留白区块，开始编排介绍</view>
+          <view wx:for="{{rows}}" wx:key="blockKey" class="structured-row {{dragTargetKey === item.blockKey ? 'drag-target' : ''}} {{draggingKey === item.blockKey ? 'row-dragging' : ''}}" data-key="{{item.blockKey}}" bindtouchstart="handleRowTouchStart" bindtouchend="handleRowTouchEnd">
+            <view class="structured-delete {{!draggingKey && revealedKey === item.blockKey ? 'delete-visible' : ''}}" data-key="{{item.blockKey}}" catchtap="handleDeleteBlock" aria-hidden="{{!!draggingKey || revealedKey !== item.blockKey}}" aria-role="button" aria-label="删除区块">删除</view>
+            <view class="structured-row-main {{revealedKey === item.blockKey ? 'revealed' : ''}} {{draggingKey === item.blockKey ? 'dragging' : ''}}" style="{{draggingKey === item.blockKey ? dragStyle : ''}}">
+              <view class="structured-drag-handle" data-key="{{item.blockKey}}" catchtouchstart="handleDragStart" catchtouchmove="handleDragMove" catchtouchend="handleDragEnd" catchtouchcancel="handleDragEnd" aria-role="button" aria-label="拖动排序">⋮⋮</view>
+              <view class="structured-row-copy" data-key="{{item.blockKey}}" catchtap="handleEditBlock"><view class="structured-summary">{{item.summary || '空区块'}}</view><view class="structured-meta">{{item.label}}{{item.itemCount ? ' · ' + item.itemCount + ' 条' : ''}}</view></view>
+              <view class="structured-edit" data-key="{{item.blockKey}}" catchtap="handleEditBlock" aria-role="button" aria-label="编辑区块">›</view>
+            </view>
+          </view>
+          <button class="structured-add" bindtap="handleAdd" disabled="{{draft.blocks.length >= 20}}">＋ 添加区块</button>
+          <view class="structured-type-picker {{showTypes ? 'is-expanded' : ''}}" aria-hidden="{{!showTypes}}">
+            <view class="structured-type-guide">
+              <view class="structured-label">请选择一种区块类型</view>
+              <view class="structured-meta">点击下方类型，继续编辑内容或设置留白。</view>
+            </view>
+            <view class="structured-options"><view wx:for="{{types}}" wx:key="value" class="structured-option" data-value="{{item.value}}" bindtap="handleAddType">{{item.label}}</view></view>
+          </view>
+          <view class="structured-meta">{{count}} / 2000 字符</view>
+          <view class="structured-meta">拖动左侧手柄排序；向左滑动区块显示删除</view>
+        </view>
+        <text-background-editor wx:if="{{tab === 'background'}}" config="{{draft}}" structured="{{true}}" options="{{backgroundOptions}}" loading="{{backgroundLoading}}" error="{{backgroundError}}" has-more="{{backgroundHasMore}}" members="{{backgroundMembers}}" member-user-id="{{backgroundMemberUserId}}" members-loading="{{backgroundMembersLoading}}" bindchange="handleBackgroundChange" bindrequest="handleBackgroundRequest" />
+        <view wx:if="{{error && !blockDraft}}" class="structured-error">{{error}}</view>
+      </view>
+    </scroll-view>
+    <view class="structured-actions"><button bindtap="handleCancel">取消</button><button class="primary" bindtap="handleConfirm" disabled="{{!!blockDraft || tabSwitching}}">完成</button></view>
+  </view>
+
+  <view class="structured-detail-mask {{blockDraft && !detailClosing ? 'detail-visible' : ''}} {{blockDraft ? 'detail-mounted' : ''}}" catchtap="handleCancelBlock" aria-hidden="{{!blockDraft || detailClosing}}">
+    <view class="structured-panel detail-panel" catchtap="noop">
+      <block wx:if="{{blockDraft}}">
+      <view class="structured-grabber-zone" data-layer="detail" catchtouchstart="handleSheetTouchStart" catchtouchend="handleSheetTouchEnd"><view class="structured-grabber"></view></view><view class="structured-title">{{blockIsNew ? '添加区块' : '编辑区块'}}</view>
+      <scroll-view class="structured-scroll" scroll-y type="list">
+        <view class="structured-body">
+          <view class="structured-label">区块类型</view>
+          <view class="structured-options"><view wx:for="{{types}}" wx:key="value" class="structured-option {{blockDraft.block.type === item.value ? 'selected' : ''}}" data-value="{{item.value}}" bindtap="handleBlockType">{{item.label}}</view></view>
+          <block wx:if="{{blockDraft.block.type !== 'SPACER'}}">
+            <view class="structured-label">内容</view>
+            <block wx:if="{{blockDraft.block.type === 'LIST'}}">
+              <view wx:for="{{listRows}}" wx:for-item="line" wx:key="key" class="structured-list-row">
+                <text>{{line.index + 1}}.</text><textarea value="{{line.content}}" maxlength="-1" auto-height data-index="{{line.index}}" bindinput="handleListInput" placeholder="填写列表条目" /><view data-index="{{line.index}}" bindtap="handleDeleteListItem" aria-role="button" aria-label="删除条目">删除</view>
+              </view>
+              <button class="structured-add" bindtap="handleAddListItem" disabled="{{blockDraft.block.items.length >= 10}}">＋ 添加条目（最多 10 条）</button>
+            </block>
+            <textarea wx:else class="structured-textarea" value="{{blockDraft.block.content}}" maxlength="-1" data-field="content" bindinput="handleBlockInput" placeholder="填写文字，支持换行" />
+            <view class="structured-label">字体</view>
+            <view class="structured-options"><view wx:for="{{fonts}}" wx:key="value" class="structured-option font-option {{blockDraft.block.fontFamily === item.value ? 'selected' : ''}} {{!item.available ? 'disabled' : ''}}" data-field="fontFamily" data-value="{{item.value}}" bindtap="handleBlockOption" aria-disabled="{{!item.available}}"><view>{{item.label}}</view><view class="{{item.fontClass}}">映期 Folio 字体预览 123</view><view wx:if="{{!item.available}}" class="structured-meta">{{blockDraft.block.fontFamily === item.value ? '已保存字体保留，当前设备以系统字体预览' : '当前设备不可用'}}</view></view></view>
+            <view class="structured-spacing-row structured-font-size">
+              <text>字号</text>
+              <view class="structured-stepper">
+                <button data-delta="{{-fontStep}}" bindtap="handleFontSizeStep" disabled="{{fontDecreaseDisabled || detailClosing}}" aria-label="减小字号">−</button>
+                <input type="number" value="{{blockDraft.block.fontSizeRpx}}" bindinput="handleFontSizeInput" disabled="{{detailClosing}}" aria-label="字号，{{fontMin}}至{{fontMax}} rpx" />
+                <text>rpx</text>
+                <button data-delta="{{fontStep}}" bindtap="handleFontSizeStep" disabled="{{fontIncreaseDisabled || detailClosing}}" aria-label="增大字号">＋</button>
+              </view>
+            </view>
+            <view class="structured-meta">{{fontMin}}–{{fontMax}} rpx · 每次 {{fontStep}} rpx · 可输入整数</view>
+            <view wx:if="{{fontSizeError}}" class="structured-error">{{fontSizeError}}</view>
+            <view class="structured-label">字重</view>
+            <view class="structured-options"><view wx:for="{{weights}}" wx:key="value" class="structured-option {{blockDraft.block.fontWeight === item.value ? 'selected' : ''}}" data-field="fontWeight" data-value="{{item.value}}" bindtap="handleBlockOption">{{item.label}}</view></view>
+            <view class="structured-label">颜色</view>
+            <text-color-editor color="{{blockDraft.block.color}}" active="{{visible && !!blockDraft && !detailClosing}}" bindchange="handleColorChange" />
+            <view class="structured-label">左右对齐方式</view>
+            <view class="structured-options"><view wx:for="{{alignments}}" wx:key="value" class="structured-option {{blockDraft.block.alignment === item.value ? 'selected' : ''}}" data-field="alignment" data-value="{{item.value}}" bindtap="handleBlockOption">{{item.label}}</view></view>
+          </block>
+          <view wx:else class="structured-meta spacer-notice">留白不显示文字。保存为留白后，本区块原文字不会保留；取消可恢复。</view>
+          <view wx:for="{{spacingRows}}" wx:key="field" class="structured-spacing-row">
+            <text>{{item.label}}</text><view class="structured-stepper"><button data-field="{{item.field}}" data-delta="{{-4}}" bindtap="handleSpacingStep" disabled="{{item.value <= 0}}" aria-label="减少{{item.label}}">−</button><input type="number" value="{{item.value}}" data-field="{{item.field}}" bindblur="handleSpacingInput" bindconfirm="handleSpacingInput" /><text>rpx</text><button data-field="{{item.field}}" data-delta="{{4}}" bindtap="handleSpacingStep" disabled="{{item.value >= 128}}" aria-label="增加{{item.label}}">＋</button></view>
+          </view>
+          <view class="structured-meta">0–128 rpx · 每次 4 rpx</view>
+          <view wx:if="{{error}}" class="structured-error">{{error}}</view>
+        </view>
+      </scroll-view>
+      <view class="structured-actions"><button bindtap="handleCancelBlock" disabled="{{detailClosing}}">取消</button><button class="primary" bindtap="handleSaveBlock" disabled="{{detailClosing || !!fontSizeError}}">保存区块</button></view>
+      </block>
+    </view>
+  </view>
+</view>

@@ -1,0 +1,7 @@
+@import "../../../../styles/portfolio-text-typography.wxss";
+@import "../text-section/text-background.wxss";
+.structured-text-section { position: relative; box-sizing: border-box; display: flex; flex-direction: column; }
+.structured-text-content { position: relative; z-index: 1; display: flex; flex-direction: column; padding: 32rpx; box-sizing: border-box; }
+.structured-block { flex-shrink: 0; line-height: 1.65; min-width: 0; }
+.structured-copy, .structured-list-item { display: block; white-space: pre-wrap; overflow-wrap: break-word; word-break: break-word; }
+.structured-spacer { line-height: 0; font-size: 0; }

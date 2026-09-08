@@ -1,10 +1,15 @@
 const { request } = require('../../../utils/request.js')
 const { normalizeId } = require('../../../utils/id.js')
+const { isValidTextColor, TEXT_COLOR_ERROR } = require('./portfolio-text-color.js')
 const {
   NEW_COMPONENT_FONT_SIZE_RPX,
   PORTFOLIO_TEXT_FONT_FAMILIES
 } = require('../../../utils/portfolio-text-typography.js')
 const teamPortfolioList = require('./team-portfolio-list.js')
+const {
+  validateTextBackground,
+  validateStructuredTextConfig
+} = require('./portfolio-text-sections.js')
 const {
   TEAM_PORTFOLIOS_ENDPOINT,
   nonNegativeInteger,
@@ -14,7 +19,7 @@ const {
 
 const COMPONENT_LIBRARY_ENDPOINT = `${TEAM_PORTFOLIOS_ENDPOINT}/component-library`
 const STANDARD_TEAM_SCHEMA_VERSION = 'standard-team-v1'
-const TEAM_EDITOR_SCHEMA_REVISION = 3
+const TEAM_EDITOR_SCHEMA_REVISION = 4
 const DEFAULT_TEAM_BACKGROUND_COLOR = '#FFFFFF'
 const TEAM_NAVIGATION_TITLE_MAX_LENGTH = 5
 const TEAM_COMPONENT_SORT_ORDER_STEP = 1000
@@ -42,7 +47,7 @@ function normalizeTeamHexColor(value) {
   return /^#[0-9A-F]{6}$/.test(color) ? color : DEFAULT_TEAM_BACKGROUND_COLOR
 }
 
-// 新编辑器保存时始终声明 revision 3；旧编辑器不发送该字段，由后端据此执行兼容合并。
+// 当前编辑器声明结构化文字所需的 revision 4；保留服务端既有兼容合并机制。
 function normalizeTeamEditorSchemaRevision(value) {
   const revision = Number(value)
   return Number.isInteger(revision) && revision > TEAM_EDITOR_SCHEMA_REVISION
@@ -369,7 +374,9 @@ function validateTeamComponentForPublish(component = {}) {
     case 'MEMBER_PORTFOLIO_LIST':
       return Array.isArray(config.items) && config.items.length ? '' : '请选择成员作品集'
     case 'TEXT_SECTION':
-      return text(config.content) ? '' : '请填写文字说明'
+      return text(config.content) ? (!isValidTextColor(config.color) ? TEXT_COLOR_ERROR : validateTextBackground(config, { team: true })) : '请填写文字说明'
+    case 'STRUCTURED_TEXT_SECTION':
+      return validateStructuredTextConfig(config, { team: true })
     case 'QR_CONTACT':
       return config.qrUrlSource === 'CUSTOM' && !text(config.qrUrl)
         ? '请选择二维码图片'

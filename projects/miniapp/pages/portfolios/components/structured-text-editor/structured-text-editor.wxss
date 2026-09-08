@@ -1,0 +1,78 @@
+@import "../../../../styles/portfolio-text-typography.wxss";
+.structured-mask, .structured-detail-mask { position: fixed; top: 0; right: 0; bottom: 0; left: 0; background: rgba(0,0,0,.4); z-index: 1300; display: flex; align-items: flex-end; }
+.structured-mask { opacity: 0; pointer-events: none; transition: opacity .2s; }
+.structured-mask.is-visible { opacity: 1; pointer-events: auto; }
+.structured-panel { width: 100%; height: 88vh; display: flex; flex-direction: column; background: #FFFFFF; border-radius: 32rpx 32rpx 0 0; color: #212529; box-sizing: border-box; padding-bottom: env(safe-area-inset-bottom); transform: translateY(100%); transition: transform .2s; }
+.is-visible .structured-panel { transform: translateY(0); }
+.structured-detail-mask { z-index: 1301; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .2s ease; }
+.structured-detail-mask.detail-mounted { visibility: visible; pointer-events: auto; }
+.structured-detail-mask.detail-visible { opacity: 1; }
+/* 详情容器常驻；内容在退场后再清理，且不继承主弹层的展开位移。 */
+.structured-detail-mask .detail-panel { transform: translateY(24rpx); opacity: 0; pointer-events: none; transition: transform .2s ease, opacity .2s ease; }
+.structured-detail-mask.detail-visible .detail-panel { transform: translateY(0); opacity: 1; pointer-events: auto; }
+.detail-panel { height: 92vh; }
+.structured-grabber { width: 64rpx; height: 8rpx; background: #DEE2E6; border-radius: 8rpx; margin: 16rpx auto; flex-shrink: 0; }
+.structured-grabber-zone { padding: 4rpx 0; flex-shrink: 0; }
+.structured-header { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; padding: 12rpx 28rpx 28rpx; flex-shrink: 0; }
+.structured-title { font-size: 32rpx; line-height: 1.4; font-weight: 700; padding: 12rpx 28rpx 28rpx; }
+.structured-header .structured-title { min-width: 0; padding: 0; }
+.structured-count { flex-shrink: 0; color: #868E96; font-size: 24rpx; line-height: 1.5; }
+.structured-tabs { position: relative; display: flex; min-height: 72rpx; margin: 0 28rpx 20rpx; padding: 0; border-bottom: 1rpx solid #e9ecef; box-sizing: border-box; flex-shrink: 0; }
+.structured-tab { position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; flex: 1; min-width: 0; height: 72rpx; font-size: 26rpx; font-weight: 500; line-height: 1; color: #868e96; background: transparent; }
+.structured-tabs .active { background: transparent; color: #212529; font-weight: 600; }
+/* 与作品集页一致，使用独立节点显示居中短线，避免选中线铺满整个页签。 */
+.structured-tab-indicator { position: absolute; left: 25%; bottom: -1rpx; z-index: 2; width: 48rpx; height: 5rpx; margin-left: -24rpx; border-radius: 999rpx; background: #212529; pointer-events: none; transition: left 220ms cubic-bezier(0.22, 1, 0.36, 1); }
+.structured-tab-indicator.background-active { left: 75%; }
+.structured-scroll { flex: 1; min-height: 0; height: 0; }
+.structured-body { padding: 0 28rpx 28rpx; }
+.structured-tab-body { opacity: 1; transform: translateY(0); transition: opacity .1s ease, transform .1s ease; }
+.structured-tab-body.tab-leaving { opacity: 0; transform: translateY(8rpx); }
+.structured-tab-body.tab-switching { pointer-events: none; }
+.structured-meta { color: #868E96; font-size: 24rpx; line-height: 1.5; margin-top: 12rpx; }
+.structured-empty { padding: 32rpx 20rpx; text-align: center; color: #868E96; font-size: 26rpx; line-height: 1.6; }
+.structured-row { position: relative; margin: 0 0 14rpx; border-radius: 14rpx; overflow: hidden; background: #F8F9FA; }
+.structured-row.row-dragging { overflow: visible; background: #F8F9FA; z-index: 2; }
+.structured-row-main { position: relative; display: flex; align-items: center; min-height: 112rpx; background: #FFFFFF; border: 0; border-bottom: 2rpx solid #E9ECEF; box-sizing: border-box; transition: transform .15s; }
+.structured-row-main.revealed { transform: translateX(-120rpx); }
+.structured-row-main.dragging { opacity: 1; z-index: 2; transition: none; }
+.drag-target { outline: 2rpx solid #868E96; }
+.structured-delete { position: absolute; right: 0; top: 0; bottom: 0; width: 120rpx; display: flex; align-items: center; justify-content: center; color: #FFFFFF; background: #C8493B; }
+.structured-delete { pointer-events: none; visibility: hidden; }
+.structured-delete.delete-visible { pointer-events: auto; visibility: visible; }
+.structured-drag-handle { padding: 28rpx 18rpx; color: #868E96; font-size: 24rpx; }
+.structured-row-copy { flex: 1; min-width: 0; padding: 14rpx 0; }
+.structured-row-copy .structured-meta { margin-top: 4rpx; }
+.structured-summary { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 26rpx; line-height: 1.5; }
+.structured-edit { padding: 28rpx 18rpx; font-size: 32rpx; line-height: 1.5; }
+/* 全局按钮重置清除了尺寸；提高类选择器优先级，覆盖微信原生按钮的默认固定宽度。 */
+.structured-body .structured-add { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 80rpx; box-sizing: border-box; margin: 20rpx 0; padding: 20rpx; font-size: 26rpx; line-height: 1.5; font-weight: 400; color: #212529; border: 2rpx dashed #E9ECEF; border-radius: 14rpx; background: transparent; }
+.structured-add::after { border: 0; }
+.structured-add[disabled] { color: #868E96; opacity: .55; }
+.structured-options { display: flex; flex-wrap: wrap; gap: 12rpx; }
+.structured-type-picker { max-height: 0; opacity: 0; overflow: hidden; visibility: hidden; pointer-events: none; transform: translateY(-8rpx); transition: max-height .2s ease, opacity .2s ease, transform .2s ease, visibility .2s; }
+.structured-type-picker.is-expanded { max-height: 520rpx; opacity: 1; visibility: visible; pointer-events: auto; transform: translateY(0); }
+.structured-type-guide { margin-bottom: 16rpx; }
+.structured-type-guide .structured-label { margin: 0; font-size: 26rpx; line-height: 1.5; }
+.structured-type-guide .structured-meta { margin-top: 4rpx; }
+.structured-option { padding: 14rpx 20rpx; border: 2rpx solid #E9ECEF; background: #F5F6F7; border-radius: 999rpx; color: #868E96; font-size: 24rpx; line-height: 1.5; }
+.structured-option.selected { border-color: #212529; background: #212529; color: #FFFFFF; }
+.structured-option.disabled { opacity: .55; }
+.font-option { flex: 1; min-width: 240rpx; border-radius: 14rpx; line-height: 1.7; }
+.font-option.selected .structured-meta { color: #DEE2E6; }
+.structured-label { font-size: 28rpx; font-weight: 600; margin: 30rpx 0 18rpx; }
+.structured-textarea { width: 100%; min-height: 180rpx; background: #F8F9FA; border-radius: 16rpx; padding: 24rpx; box-sizing: border-box; }
+.structured-list-row { display: flex; align-items: center; gap: 16rpx; padding: 20rpx 0; }
+.structured-list-row textarea { flex: 1; min-width: 0; background: #F8F9FA; border-radius: 12rpx; padding: 16rpx; }
+.structured-list-row > view { color: #A33B32; padding: 12rpx; font-size: 24rpx; }
+.structured-spacing-row { display: flex; align-items: center; justify-content: space-between; margin-top: 28rpx; }
+.structured-stepper { display: flex; align-items: center; background: #F1F3F5; border-radius: 16rpx; overflow: hidden; }
+.structured-stepper button { margin: 0; padding: 0; width: 76rpx; height: 80rpx; line-height: 80rpx; background: transparent; font-size: 32rpx; border: 0; }
+.structured-stepper button::after { border: 0; }
+.structured-stepper button[disabled] { color: #ADB5BD; }
+.structured-stepper input { width: 76rpx; text-align: center; font-size: 32rpx; font-weight: 700; }
+.structured-stepper text { font-size: 22rpx; color: #868E96; padding-right: 8rpx; }
+.structured-error { margin-top: 20rpx; color: #A33B32; font-size: 26rpx; }
+.structured-actions { display: flex; gap: 16rpx; padding: 24rpx 28rpx 32rpx; flex-shrink: 0; background: #FFFFFF; }
+.structured-actions button { display: flex; align-items: center; justify-content: center; flex: 1; min-width: 0; min-height: 80rpx; box-sizing: border-box; margin: 0; padding: 20rpx; border: 2rpx solid #E9ECEF; border-radius: 14rpx; font-size: 26rpx; line-height: 1.5; font-weight: 400; color: #212529; background: #F5F6F7; }
+.structured-actions button::after { border: 0; }
+.structured-actions .primary { color: #FFFFFF; background: #212529; border-color: #212529; }

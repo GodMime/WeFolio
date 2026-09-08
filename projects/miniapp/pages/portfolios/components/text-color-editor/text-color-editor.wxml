@@ -1,0 +1,38 @@
+<view class="text-color-options {{active ? '' : 'is-inactive'}}">
+  <view wx:for="{{presets}}" wx:key="color" class="text-color-option {{selectedColor === item.color ? 'selected' : ''}}" data-color="{{item.color}}" catchtap="handlePreset" aria-role="button" aria-label="{{item.label}}">{{item.label}}</view>
+  <view class="text-color-option text-color-custom {{customSelected ? 'selected' : ''}}" catchtap="handleOpenCustom" aria-role="button" aria-label="自定义文字颜色">
+    <view wx:if="{{customSelected}}" class="text-color-swatch" style="background-color: {{selectedColor}};"></view>
+    <text>自定义{{customSelected ? ' ' + selectedColor : ''}}</text>
+  </view>
+</view>
+<!-- 取色器在根节点渲染，避免父编辑器的滚动和位移裁切；节点常驻以保留双向动画。 -->
+<root-portal>
+  <view class="text-color-mask {{pickerMounted && active ? 'is-mounted' : ''}} {{pickerVisible && active ? 'is-visible' : ''}}" catchtap="handleCancelCustom" catchtouchmove="noop">
+    <view class="text-color-panel" catchtap="noop">
+      <view class="text-color-grabber"></view>
+      <view class="text-color-heading">
+        <view class="text-color-title">自定义文字颜色</view>
+        <view class="text-color-meta">{{draftColor}}</view>
+      </view>
+      <view class="text-color-pad" style="background-color: {{hueColor}};" bindtouchstart="handleColorPadTouch" catchtouchmove="handleColorPadTouch">
+        <view class="text-color-pad-white"></view>
+        <view class="text-color-pad-black"></view>
+        <view class="text-color-pad-dot" style="{{padDotStyle}}"></view>
+      </view>
+      <view class="text-color-hue-slider">
+        <slider min="0" max="359" value="{{colorHsv.hue}}" bindchanging="handleHueChange" bindchange="handleHueChange" backgroundColor="transparent" activeColor="transparent" block-color="transparent" block-size="22" disabled="{{!pickerVisible || !active}}"></slider>
+        <view class="text-color-hue-thumb" style="left: {{huePosition}}%; background-color: {{hueColor}};"></view>
+      </view>
+      <input class="text-color-hex-input" value="{{hexInput}}" bindinput="handleHexInput" bindblur="handleHexBlur" maxlength="7" placeholder="#212529" disabled="{{!pickerVisible || !active}}" aria-label="十六进制文字颜色" />
+      <view class="text-color-error">{{errorMessage}}</view>
+      <view class="text-color-preview-bar">
+        <view class="text-color-preview-chip" style="background-color: {{draftColor}};"></view>
+        <view class="text-color-preview-text">预览 {{draftColor}}</view>
+      </view>
+      <view class="text-color-actions">
+        <button class="text-color-cancel" catchtap="handleCancelCustom">取消</button>
+        <button class="text-color-confirm" catchtap="handleConfirmCustom" disabled="{{!!errorMessage || !pickerVisible || !active}}">确定</button>
+      </view>
+    </view>
+  </view>
+</root-portal>

@@ -17,6 +17,7 @@ import com.jxc.wefolio.service.teamportfolio.component.schedulequery.TeamSchedul
 import com.jxc.wefolio.service.teamportfolio.component.singlework.TeamSingleWorkComponentValidator;
 import com.jxc.wefolio.service.teamportfolio.component.teamprofile.TeamProfileComponentValidator;
 import com.jxc.wefolio.service.teamportfolio.component.textsection.TeamTextSectionComponentValidator;
+import com.jxc.wefolio.service.teamportfolio.component.structuredtextsection.TeamStructuredTextSectionComponentValidator;
 import com.jxc.wefolio.service.teamportfolio.component.videocarousel.TeamVideoCarouselComponentValidator;
 import org.springframework.stereotype.Service;
 
@@ -73,6 +74,8 @@ public class TeamPortfolioConfigValidator {
     private final TeamMemberPortfolioGridComponentValidator gridValidator;
     private final TeamMemberPortfolioListComponentValidator listValidator;
     private final TeamTextSectionComponentValidator textValidator;
+    /** 结构化文字组件策略。 */
+    private final TeamStructuredTextSectionComponentValidator structuredTextValidator;
     private final TeamScheduleQueryComponentValidator scheduleValidator;
     private final TeamContactFormComponentValidator contactValidator;
     private final TeamQrContactComponentValidator qrValidator;
@@ -92,7 +95,8 @@ public class TeamPortfolioConfigValidator {
             TeamScheduleQueryComponentValidator scheduleValidator,
             TeamContactFormComponentValidator contactValidator,
             TeamQrContactComponentValidator qrValidator,
-            TeamVideoCarouselComponentValidator videoCarouselValidator
+            TeamVideoCarouselComponentValidator videoCarouselValidator,
+            TeamStructuredTextSectionComponentValidator structuredTextValidator
     ) {
         this.teamProfileValidator = teamProfileValidator;
         this.carouselValidator = carouselValidator;
@@ -105,6 +109,7 @@ public class TeamPortfolioConfigValidator {
         this.contactValidator = contactValidator;
         this.qrValidator = qrValidator;
         this.videoCarouselValidator = videoCarouselValidator;
+        this.structuredTextValidator = structuredTextValidator;
     }
 
     /**
@@ -456,6 +461,7 @@ public class TeamPortfolioConfigValidator {
             case MEMBER_PORTFOLIO_GRID -> gridValidator.normalizeAndValidate(config, context);
             case MEMBER_PORTFOLIO_LIST -> listValidator.normalizeAndValidate(config, context);
             case TEXT_SECTION -> textValidator.normalizeAndValidate(config, context);
+            case STRUCTURED_TEXT_SECTION -> structuredTextValidator.normalizeAndValidate(config, context);
             case SCHEDULE_QUERY -> scheduleValidator.normalizeAndValidate(config, context);
             case CONTACT_FORM -> contactValidator.normalizeAndValidate(config, context);
             case QR_CONTACT -> qrValidator.normalizeAndValidate(config, context);

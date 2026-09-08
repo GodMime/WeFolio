@@ -1,8 +1,13 @@
-<view class="text-section portfolio-theme-{{themeMode}} {{textSection.alignmentClass}}">
-  <view wx:if="{{textSection.title}}" class="component-title">{{textSection.title}}</view>
+<view class="text-section portfolio-theme-{{themeMode}} {{textSection.alignmentClass}} {{background.enabled ? 'text-background-enabled ' + verticalClass : ''}}" style="{{frameStyle}}">
+  <image wx:if="{{background.imageUrl && !backgroundFailed}}" class="text-background-image" src="{{background.imageUrl}}" data-src="{{background.imageUrl}}" mode="aspectFill" webp="{{true}}" binderror="handleBackgroundError" bindload="handleBackgroundLoad" />
+  <view wx:if="{{background.enabled}}" class="text-background-mask {{background.treatmentClass}}"></view>
+  <view wx:if="{{repairMode && background.enabled && (background.invalid || backgroundFailed)}}" class="text-background-warning">{{backgroundFailed ? '背景加载失败，请重新选择或关闭背景' : '背景作品已失效，请重新选择或关闭背景'}}</view>
+  <view class="text-section-content">
+  <view wx:if="{{textSection.title}}" class="component-title" style="{{textColorStyle}}">{{textSection.title}}</view>
   <text
     class="text-content {{textSection.fontClass}}"
-    style="{{textSection.fontSizeStyle}}"
+    style="{{textSection.fontSizeStyle}}{{textColorStyle}}"
     space="nbsp"
   >{{textSection.content}}</text>
+  </view>
 </view>

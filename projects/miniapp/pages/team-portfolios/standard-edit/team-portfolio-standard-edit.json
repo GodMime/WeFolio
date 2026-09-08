@@ -1,5 +1,6 @@
 {
   "usingComponents": {
+    "text-color-editor": "../components/text-color-editor/text-color-editor",
     "navigation-bar": "/components/navigation-bar/navigation-bar",
     "team-profile": "../components/team-profile/team-profile",
     "team-carousel": "../components/carousel/carousel",
@@ -8,6 +9,8 @@
     "team-member-portfolio-grid": "../components/member-portfolio-grid/member-portfolio-grid",
     "team-member-portfolio-list": "../components/member-portfolio-list/member-portfolio-list",
     "team-text-section": "../components/text-section/text-section",
+    "team-structured-text-editor": "../components/structured-text-editor/structured-text-editor",
+    "team-text-background-editor": "../components/text-background-editor/text-background-editor",
     "team-schedule-query": "../components/schedule-query/schedule-query",
     "team-contact-form": "../components/contact-form/contact-form",
     "team-qr-contact": "../components/qr-contact/qr-contact"

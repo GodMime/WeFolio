@@ -1,6 +1,8 @@
 package com.jxc.wefolio.service.teamportfolio.component;
 
 import com.alibaba.fastjson2.JSON;
+import com.jxc.wefolio.service.teamportfolio.TeamTextBackgroundSupport;
+import static org.mockito.Mockito.mock;
 import com.alibaba.fastjson2.JSONObject;
 import com.jxc.wefolio.entity.PortfolioReferenceEntity;
 import com.jxc.wefolio.entity.TeamEntity;
@@ -477,22 +479,26 @@ class TeamDisplayComponentsTest {
      */
     @Test
     void textSectionShouldPreserveContentAndApplyDefaultAlignment() {
-        TeamTextSectionComponentValidator validator = new TeamTextSectionComponentValidator();
+        TeamTextSectionComponentValidator validator = new TeamTextSectionComponentValidator(mock(TeamTextBackgroundSupport.class));
         TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 21L, 3);
         JSONObject normalized = validator.normalizeAndValidate(
                 JSON.parseObject("{\"content\":\"  保留空格  \"}"), context);
-        JSONObject rendered = new TeamTextSectionComponentRenderer().render(normalized, context);
+        JSONObject rendered = new TeamTextSectionComponentRenderer(mock(TeamTextBackgroundSupport.class)).render(normalized, context);
         normalized.put("content", "被修改");
 
         assertThat(rendered).isEqualTo(JSON.parseObject("""
                 {
                   "content":"  保留空格  ",
+                  "color":"AUTO",
                   "alignment":"LEFT",
                   "fontFamily":"SYSTEM",
-                  "fontSizeRpx":32
+                  "fontSizeRpx":32,
+                  "backgroundEnabled":false,
+                  "backgroundTreatment":"GRADIENT",
+                  "verticalAlignment":"CENTER"
                 }
                 """));
-        assertThat(new TeamTextSectionComponentReferenceExtractor()
+        assertThat(new TeamTextSectionComponentReferenceExtractor(mock(TeamTextBackgroundSupport.class))
                 .extract(COMPONENT_KEY, COMPONENT_PATH, rendered, context))
                 .isEmpty();
     }
@@ -502,7 +508,7 @@ class TeamDisplayComponentsTest {
      */
     @Test
     void textSectionShouldValidateTypographyBeforeDtoConversion() {
-        TeamTextSectionComponentValidator validator = new TeamTextSectionComponentValidator();
+        TeamTextSectionComponentValidator validator = new TeamTextSectionComponentValidator(mock(TeamTextBackgroundSupport.class));
         TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 21L, 3);
 
         JSONObject normalized = validator.normalizeAndValidate(JSON.parseObject("""
@@ -555,7 +561,7 @@ class TeamDisplayComponentsTest {
      */
     @Test
     void textSectionShouldKeepValidationErrorPriority() {
-        TeamTextSectionComponentValidator validator = new TeamTextSectionComponentValidator();
+        TeamTextSectionComponentValidator validator = new TeamTextSectionComponentValidator(mock(TeamTextBackgroundSupport.class));
         TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 21L, 3);
 
         assertThatThrownBy(() -> validator.normalizeAndValidate(JSON.parseObject("""
@@ -615,7 +621,7 @@ class TeamDisplayComponentsTest {
      */
     @Test
     void textSectionRendererShouldRejectLossyOrInvalidTypography() {
-        TeamTextSectionComponentRenderer renderer = new TeamTextSectionComponentRenderer();
+        TeamTextSectionComponentRenderer renderer = new TeamTextSectionComponentRenderer(mock(TeamTextBackgroundSupport.class));
         TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 21L, 3);
 
         for (String json : List.of(
@@ -644,7 +650,7 @@ class TeamDisplayComponentsTest {
      */
     @Test
     void textSectionShouldValidateContentAndUnicodeCodePointBoundary() {
-        TeamTextSectionComponentValidator validator = new TeamTextSectionComponentValidator();
+        TeamTextSectionComponentValidator validator = new TeamTextSectionComponentValidator(mock(TeamTextBackgroundSupport.class));
         TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 21L, 3);
         String twoCodeUnitCharacter = "😀";
 
@@ -682,7 +688,7 @@ class TeamDisplayComponentsTest {
         assertFields(TeamProfileComponentConfig.TeamSnapshot.class, "teamId", "avatarUrl", "teamName", "intro");
         assertFields(TeamDividerComponentConfig.class, "color", "heightPx");
         assertFields(TeamTextSectionComponentConfig.class,
-                "content", "alignment", "fontFamily", "fontSizeRpx");
+                "content", "alignment", "fontFamily", "fontSizeRpx", "color");
     }
 
     /**
@@ -727,7 +733,9 @@ class TeamDisplayComponentsTest {
         for (Path sourceFile : sourceFiles) {
             String source = Files.readString(sourceFile);
             Path componentPath = sourceRoot.relativize(sourceFile.getParent());
-            assertThat(source).doesNotContain(forbiddenPersonalReferences.toArray(String[]::new));
+            // 明确允许两端共用的纯背景配置规则，个人业务服务依赖仍然禁止。
+            String isolatedSource = source.replace("import com.jxc.wefolio.service.PortfolioTextBackgroundConfigSupport;", "");
+            assertThat(isolatedSource).doesNotContain(forbiddenPersonalReferences.toArray(String[]::new));
             assertThat(source).doesNotContain(forbiddenCrossComponentPackages.get(componentPath).toArray(String[]::new));
         }
     }

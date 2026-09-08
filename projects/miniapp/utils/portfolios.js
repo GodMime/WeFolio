@@ -1,4 +1,5 @@
 const { normalizeHexColor } = require('./portfolio-color')
+const { normalizeTextColor, isValidTextColor, TEXT_COLOR_ERROR } = require('./portfolio-text-color')
 const {
   LEGACY_PERSONAL_FONT_SIZE_RPX,
   NEW_COMPONENT_FONT_SIZE_RPX,
@@ -8,7 +9,7 @@ const {
 } = require('./portfolio-text-typography')
 
 const SCHEMA_VERSION = 'standard-personal-v1'
-const EDITOR_SCHEMA_REVISION = 4
+const EDITOR_SCHEMA_REVISION = 5
 const SORT_ORDER_STEP = 1000
 const NAVIGATION_TITLE_MAX_LENGTH = 5
 const DISPLAY_GROUP_NAME_MAX_LENGTH = 20
@@ -35,6 +36,7 @@ const COMPONENT_TYPES = {
   QR_CONTACT: 'QR_CONTACT',
   CONTACT_FORM: 'CONTACT_FORM',
   TEXT_SECTION: 'TEXT_SECTION',
+  STRUCTURED_TEXT_SECTION: 'STRUCTURED_TEXT_SECTION',
   DIVIDER: 'DIVIDER',
   HYPERLINK: 'HYPERLINK'
 }
@@ -50,6 +52,7 @@ const COMPONENT_NAMES = {
   QR_CONTACT: '二维码联系',
   CONTACT_FORM: '预留联系信息',
   TEXT_SECTION: '文字说明',
+  STRUCTURED_TEXT_SECTION: '结构化文字说明',
   DIVIDER: '分割线',
   HYPERLINK: '超链接'
 }
@@ -335,6 +338,7 @@ function normalizeTextSectionAlignment(value) {
 
 function normalizeTextSectionConfig(raw = {}) {
   return Object.assign({}, raw || {}, {
+    color: normalizeTextColor(raw && raw.color),
     content: trimText(raw && raw.content),
     alignment: normalizeTextSectionAlignment(raw && raw.alignment),
     fontFamily: normalizePortfolioTextFontFamily(raw && raw.fontFamily),
@@ -818,7 +822,7 @@ function validatePortfolioComponentForPublish(component = {}) {
       }
       return countText(content) > TEXT_SECTION_MAX_LENGTH
         ? PUBLISH_COMPONENT_MESSAGES.TEXT_CONTENT_TOO_LONG
-        : ''
+        : isValidTextColor(config.color) ? '' : TEXT_COLOR_ERROR
     }
     default:
       return ''
@@ -1019,6 +1023,9 @@ function updateComponentTextSectionConfig(config, componentKey, textSectionConfi
   const nextTextSectionConfig = {
     content: trimText(textSectionConfig.content),
     alignment: normalizeTextSectionAlignment(textSectionConfig.alignment)
+  }
+  if (Object.prototype.hasOwnProperty.call(textSectionConfig, 'color')) {
+    nextTextSectionConfig.color = normalizeTextColor(textSectionConfig.color)
   }
   if (Object.prototype.hasOwnProperty.call(textSectionConfig, 'fontFamily')) {
     nextTextSectionConfig.fontFamily =

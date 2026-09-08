@@ -816,6 +816,7 @@ test('text section trims required body, limits 200 chars and owns safe typograph
   const { definition, exports } = loadComponent('text-section')
   assert.deepEqual(exports.createDefaultTextSectionConfig(), {
     content: '',
+    color: 'AUTO',
     alignment: 'LEFT',
     fontFamily: 'SYSTEM',
     fontSizeRpx: 32,
@@ -829,9 +830,9 @@ test('text section trims required body, limits 200 chars and owns safe typograph
   assert.equal(exports.countTextCodePoints('😀a'), 2)
   assert.equal(exports.validateTextSectionConfig({ content: '正文', alignment: 'JUSTIFY' }).valid, false)
 
-  assert.deepEqual(definition.data, {
-    normalizedConfig: exports.createDefaultTextSectionConfig()
-  })
+  assert.deepEqual(definition.data.normalizedConfig, exports.createDefaultTextSectionConfig())
+  assert.equal(definition.data.background.enabled, false)
+  assert.equal(definition.data.frameStyle, '')
 
   const harness = createComponentHarness(definition)
   harness.setProperties({
@@ -869,7 +870,7 @@ test('text section trims required body, limits 200 chars and owns safe typograph
   )
   assert.match(
     wxml,
-    /class="content \{\{normalizedConfig\.fontClass\}\}"[^>]*style="\{\{normalizedConfig\.fontSizeStyle\}\}"/
+    /class="content \{\{normalizedConfig\.fontClass\}\}"[^>]*style="\{\{normalizedConfig\.fontSizeStyle\}\}\{\{textColorStyle\}\}"/
   )
   assert.match(
     wxss,
@@ -1131,7 +1132,11 @@ test('QR is CUSTOM-only and distinguishes maintainer preview from visitor intera
 test('component styles constrain cards and long text without unrelated decorative gradients', () => {
   for (const name of COMPONENTS) {
     const source = fs.readFileSync(path.join(ROOT, name, `${name}.wxss`), 'utf8')
-    if (name !== 'video-carousel') assert.doesNotMatch(source, /linear-gradient|radial-gradient/)
+    if (!['video-carousel', 'text-section'].includes(name)) assert.doesNotMatch(source, /linear-gradient|radial-gradient/)
+    if (name === 'text-section') {
+      assert.doesNotMatch(source, /radial-gradient/)
+      assert.match(source, /\.text-background--gradient \.text-background-mask\s*\{\s*background:\s*linear-gradient/)
+    }
     assert.doesNotMatch(source, /border-radius:\s*(?:[9-9]|[1-9]\d+)px/)
     assert.match(source, /overflow-wrap|word-break|text-overflow/)
   }

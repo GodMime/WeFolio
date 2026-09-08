@@ -1,6 +1,10 @@
 package com.jxc.wefolio.service.teamportfolio.component.textsection;
 
 import com.alibaba.fastjson2.JSONObject;
+import com.jxc.wefolio.service.PortfolioTextBackgroundConfigSupport;
+import com.jxc.wefolio.common.PortfolioTextColorSupport;
+import com.jxc.wefolio.service.teamportfolio.TeamTextBackgroundSupport;
+import lombok.RequiredArgsConstructor;
 import com.alibaba.fastjson2.JSON;
 import com.jxc.wefolio.common.PortfolioTextTypographySupport;
 import com.jxc.wefolio.constant.PortfolioTextTypographyConstants;
@@ -16,7 +20,11 @@ import java.util.Set;
  * 文字说明组件配置校验器。
  */
 @Component
+@RequiredArgsConstructor
 public class TeamTextSectionComponentValidator {
+
+    /** 共用团队背景资源支持。 */
+    private final TeamTextBackgroundSupport backgroundSupport;
 
     /** 内容配置键。 */
     private static final String CONFIG_KEY_CONTENT = "content";
@@ -96,7 +104,11 @@ public class TeamTextSectionComponentValidator {
         componentConfig.setAlignment(alignment);
         componentConfig.setFontFamily(fontFamily);
         componentConfig.setFontSizeRpx(fontSizeRpx);
-        return JSON.parseObject(JSON.toJSONString(componentConfig));
+        componentConfig.setColor(PortfolioTextColorSupport.normalize(source.get(PortfolioTextColorSupport.COLOR_CONFIG_KEY)));
+        JSONObject result = JSON.parseObject(JSON.toJSONString(componentConfig));
+        result.putAll(PortfolioTextBackgroundConfigSupport.normalize(source,true,true));
+        backgroundSupport.validate(result,context);
+        return result;
     }
 
 }

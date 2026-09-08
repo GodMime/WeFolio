@@ -2,6 +2,7 @@ const {
   formatLunarDayMeta,
   toLunarDate
 } = require('./lunar')
+const { normalizeTextColor } = require('./portfolio-text-color')
 const {
   DIVIDER_COLOR_VALUES
 } = require('./portfolios')
@@ -35,7 +36,7 @@ const DEFAULT_VIDEO_RATIO_HEIGHT = 9
 const RENDER_COMPONENT_TYPES = Object.freeze([
   'CAROUSEL', 'VIDEO_CAROUSEL', 'PROFILE', 'WORK_GRID', 'WORK_LIST',
   'SINGLE_WORK', 'SCHEDULE_QUERY', 'QR_CONTACT', 'CONTACT_FORM',
-  'TEXT_SECTION', 'DIVIDER', 'HYPERLINK'
+  'TEXT_SECTION', 'STRUCTURED_TEXT_SECTION', 'DIVIDER', 'HYPERLINK'
 ])
 const SINGLE_WORK_MEDIA_WIDTH_RPX = 710
 const DEFAULT_SCHEDULE_DISPLAY_MODE = 'MODAL_CALENDAR'
@@ -237,6 +238,7 @@ function normalizeTextSection(raw = {}) {
     ? alignment
     : DEFAULT_TEXT_SECTION_ALIGNMENT
   return Object.assign({}, raw || {}, {
+    color: normalizeTextColor(raw.color),
     title: trimText(raw.title),
     content: trimText(raw.content),
     alignment: normalizedAlignment,
@@ -327,6 +329,7 @@ function normalizeRenderComponent(raw = {}) {
     previewImageUrl: qrContact.qrUrl,
     contactForm: normalizeContactForm(raw.contactForm || config),
     textSection: normalizeTextSection(raw.textSection || config),
+    structuredTextSection: JSON.parse(JSON.stringify(raw.structuredTextSection || config)),
     divider: normalizeDivider(raw.divider || config),
     hyperlink: normalizeHyperlink(raw.hyperlink || config)
   }

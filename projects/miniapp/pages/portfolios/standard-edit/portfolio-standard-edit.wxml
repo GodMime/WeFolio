@@ -1101,7 +1101,7 @@
 
           <view class="form-row">
             <view class="field-heading">
-              <view class="field-label">对齐方式</view>
+              <view class="field-label">左右对齐方式</view>
             </view>
             <view class="schedule-query-mode-list">
               <view
@@ -1118,6 +1118,11 @@
               </view>
             </view>
           </view>
+          <view class="form-row">
+            <view class="field-heading"><view class="field-label">颜色</view></view>
+            <text-color-editor color="{{textSectionForm.color}}" active="{{textSectionSheetVisible}}" bindchange="handleTextSectionColorChange" />
+          </view>
+          <text-background-editor wx:if="{{textSectionSheetVisible}}" config="{{textSectionForm}}" options="{{textBackgroundOptions}}" loading="{{textBackgroundLoading}}" error="{{textBackgroundError}}" has-more="{{textBackgroundHasMore}}" bindchange="handleTextBackgroundChange" bindrequest="handleTextBackgroundRequest" />
         </view>
       </scroll-view>
 
@@ -1127,6 +1132,8 @@
       </view>
     </view>
   </view>
+
+  <structured-text-editor visible="{{structuredTextSheetVisible}}" config="{{structuredTextConfig}}" is-new="{{structuredTextIsNew}}" background-options="{{textBackgroundOptions}}" background-loading="{{textBackgroundLoading}}" background-error="{{textBackgroundError}}" background-has-more="{{textBackgroundHasMore}}" background-selection="{{textBackgroundSelection}}" bindconfirm="handleConfirmStructuredText" bindcancel="handleCancelStructuredText" bindbackgroundrequest="handleTextBackgroundRequest" bindbackgroundchange="handleStructuredTextBackgroundChange" />
 
   <view class="divider-sheet-mask pe-sheet-mask {{dividerSheetVisible ? 'pe-sheet-mask-visible' : ''}}" catchtap="handleCloseDividerSheet">
     <view class="divider-sheet-panel pe-sheet-panel pe-sheet-size-compact {{dividerSheetVisible ? 'pe-sheet-panel-visible' : ''}}" catchtap="noop">

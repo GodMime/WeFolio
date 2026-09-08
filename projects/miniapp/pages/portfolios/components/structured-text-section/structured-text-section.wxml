@@ -1,0 +1,11 @@
+<view class="structured-text-section {{background.enabled ? 'text-background-enabled' : ''}}" style="{{frameStyle}}">
+  <image wx:if="{{background.imageUrl && !backgroundFailed}}" class="text-background-image" src="{{background.imageUrl}}" data-src="{{background.imageUrl}}" mode="aspectFill" webp="{{true}}" binderror="handleBackgroundError" bindload="handleBackgroundLoad" />
+  <view wx:if="{{background.enabled}}" class="text-background-mask {{background.treatmentClass}}"></view>
+  <view class="structured-text-content">
+    <view wx:if="{{repairMode && background.enabled && (background.invalid || backgroundFailed)}}" class="text-background-warning">{{backgroundFailed ? '背景加载失败，请重新选择或关闭背景' : '背景作品已失效，请重新选择或关闭背景'}}</view>
+    <view wx:for="{{presentation.blocks}}" wx:key="blockKey" class="structured-block {{item.fontClass}} {{item.type === 'SPACER' ? 'structured-spacer' : ''}}" style="{{item.style}}">
+      <block wx:if="{{item.type === 'LIST'}}"><text wx:for="{{item.listItems}}" wx:for-item="line" wx:key="key" class="structured-list-item" space="nbsp">• {{line.content}}</text></block>
+      <text wx:elif="{{item.type !== 'SPACER'}}" class="structured-copy" space="nbsp">{{item.content}}</text>
+    </view>
+  </view>
+</view>

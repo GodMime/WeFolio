@@ -14,7 +14,7 @@ function clone(value) { return JSON.parse(JSON.stringify(value)) }
 function validTeamEditorConfig(patch = {}) {
   return Object.assign({
     schemaVersion: 'standard-team-v1',
-    editorSchemaRevision: 3,
+    editorSchemaRevision: 4,
     share: { title: TEST_TEAM_PORTFOLIO_TITLE },
     components: [{
       componentKey: 'valid-divider',

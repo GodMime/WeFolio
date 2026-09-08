@@ -23,6 +23,7 @@ const TYPE_BUCKETS = Object.freeze({
   MEMBER_PORTFOLIO_GRID: 'grid',
   MEMBER_PORTFOLIO_LIST: 'list',
   TEXT_SECTION: 'text',
+  STRUCTURED_TEXT_SECTION: 'structuredText',
   SCHEDULE_QUERY: 'schedule',
   CONTACT_FORM: 'contact',
   QR_CONTACT: 'qr'
@@ -35,7 +36,7 @@ const PREVIEW_QUERY_UNSUPPORTED_MESSAGE = '预览模式不提交档期查询'
 function buckets(items) {
   const value = {
     teamProfile: [], carousel: [], videoCarousel: [], singleWork: [], divider: [], grid: [],
-    list: [], text: [], schedule: [], contact: [], qr: []
+    list: [], text: [], structuredText: [], schedule: [], contact: [], qr: []
   }
   ;(Array.isArray(items) ? items : []).forEach((item) => {
     const key = TYPE_BUCKETS[item.componentType]

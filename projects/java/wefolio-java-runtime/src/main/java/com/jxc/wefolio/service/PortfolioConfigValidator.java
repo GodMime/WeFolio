@@ -1,5 +1,7 @@
 package com.jxc.wefolio.service;
 
+import com.jxc.wefolio.common.PortfolioTextColorSupport;
+
 import com.jxc.wefolio.common.PortfolioTextTypographySupport;
 import com.jxc.wefolio.constant.PortfolioTextTypographyConstants;
 import com.jxc.wefolio.dict.MediaTypeDict;
@@ -14,6 +16,7 @@ import com.jxc.wefolio.entity.WorkEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.WorkEntityMapper;
 import com.jxc.wefolio.message.PortfolioMessage;
+import com.jxc.wefolio.message.PortfolioTextMessage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -734,6 +737,16 @@ public class PortfolioConfigValidator {
                         component,
                         componentPath
                 );
+                case TEXT_SECTION, STRUCTURED_TEXT_SECTION -> {
+                    Map<String,Object> values = component.getConfig();
+                    if (values != null && Boolean.TRUE.equals(values.get(PortfolioTextBackgroundConfigSupport.ENABLED))) {
+                        Long workId = asLong(values.get(PortfolioTextBackgroundConfigSupport.WORK_ID));
+                        if (workId != null && workId > 0) {
+                            references.add(reference(portfolioId, configScope, ReferenceTypeDict.WORK.getCode(),
+                                    workId, component, componentPath + PortfolioTextBackgroundConfigSupport.REFERENCE_PATH, 0));
+                        }
+                    }
+                }
                 case HYPERLINK -> addHyperlinkReferences(
                         references,
                         portfolioId,
@@ -791,7 +804,15 @@ public class PortfolioConfigValidator {
             case SCHEDULE_QUERY -> validateScheduleQuery(component);
             case QR_CONTACT -> validateQrContact(component);
             case CONTACT_FORM -> validateContactForm(component);
-            case TEXT_SECTION -> validateTextSection(component);
+            case TEXT_SECTION -> {
+                validateTextSection(component);
+                PortfolioTextBackgroundConfigSupport.apply(component.getConfig(), false, true);
+                validateTextBackground(userId, component.getConfig());
+            }
+            case STRUCTURED_TEXT_SECTION -> {
+                component.setConfig(PortfolioStructuredTextConfigSupport.normalize(component.getConfig(), false));
+                validateTextBackground(userId, component.getConfig());
+            }
             case DIVIDER -> validateDivider(component);
             default -> {
             }
@@ -1139,6 +1160,18 @@ public class PortfolioConfigValidator {
         component.getConfig().put(CONFIG_KEY_ALIGNMENT, alignment);
         component.getConfig().put(PortfolioTextTypographySupport.FONT_FAMILY_CONFIG_KEY, fontFamily);
         component.getConfig().put(PortfolioTextTypographySupport.FONT_SIZE_RPX_CONFIG_KEY, fontSizeRpx);
+        component.getConfig().put(PortfolioTextColorSupport.COLOR_CONFIG_KEY,
+                PortfolioTextColorSupport.normalize(component.getConfig().get(PortfolioTextColorSupport.COLOR_CONFIG_KEY)));
+    }
+
+    /** 验证个人背景真实归属、可用状态和图片动图类型。 */
+    private void validateTextBackground(Long userId, Map<String,Object> config) {
+        if (!Boolean.TRUE.equals(config.get(PortfolioTextBackgroundConfigSupport.ENABLED))) { return; }
+        Long workId = PortfolioTextBackgroundConfigSupport.positiveLong(config.get(PortfolioTextBackgroundConfigSupport.WORK_ID));
+        WorkEntity work = loadUsableWorks(userId, List.of(workId)).get(workId);
+        if (work == null || !PortfolioTextBackgroundConfigSupport.supportsMedia(work.getMediaType())) {
+            throw new BusinessException(PortfolioTextMessage.BACKGROUND_UNAVAILABLE);
+        }
     }
 
     /**

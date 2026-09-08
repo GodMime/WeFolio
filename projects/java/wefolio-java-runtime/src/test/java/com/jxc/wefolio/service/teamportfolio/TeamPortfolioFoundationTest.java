@@ -22,6 +22,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -54,10 +55,10 @@ class TeamPortfolioFoundationTest {
                 .extracting(TeamPortfolioComponentTypeDict::getCode)
                 .containsExactly("TEAM_PROFILE", "CAROUSEL", "SINGLE_WORK", "DIVIDER", "MEMBER_PORTFOLIO_GRID",
                         "MEMBER_PORTFOLIO_LIST", "TEXT_SECTION", "SCHEDULE_QUERY", "CONTACT_FORM", "QR_CONTACT",
-                        "VIDEO_CAROUSEL");
+                        "VIDEO_CAROUSEL", "STRUCTURED_TEXT_SECTION");
         assertThat(TeamPortfolioComponentTypeDict.values())
                 .extracting(TeamPortfolioComponentTypeDict::getDisplayName)
-                .containsExactly("团队资料", "轮播图", "单个作品", "分割线", "双列作品集", "单列作品集", "文字说明", "档期查询", "预留联系信息", "二维码联系", "视频轮播");
+                .containsExactly("团队资料", "轮播图", "单个作品", "分割线", "双列作品集", "单列作品集", "文字说明", "档期查询", "预留联系信息", "二维码联系", "视频轮播", "结构化文字说明");
         assertThat(TeamPortfolioComponentTypeDict.fromCode("TEAM_PROFILE"))
                 .isEqualTo(TeamPortfolioComponentTypeDict.TEAM_PROFILE);
     }
@@ -214,10 +215,10 @@ class TeamPortfolioFoundationTest {
         assertThat(TeamPortfolioComponentContext.class.isRecord()).isTrue();
         assertThat(TeamPortfolioComponentContext.class.getRecordComponents())
                 .extracting(RecordComponent::getName)
-                .containsExactly("teamId", "portfolioId", "revision");
+                .containsExactly("teamId", "portfolioId", "revision", "textBackgroundWorks");
         assertThat(TeamPortfolioComponentContext.class.getRecordComponents())
                 .extracting(RecordComponent::getType)
-                .containsExactly(long.class, long.class, int.class);
+                .containsExactly(long.class, long.class, int.class, Map.class);
         assertThat(TeamPortfolioMessage.class.isInterface()).isTrue();
         assertThat(TeamPortfolioMessage.FEATURE_DISABLED).isEqualTo("团队作品集功能暂未开放");
         assertThat(TeamPortfolioMessage.NO_ACCESS).isEqualTo("团队不存在或无访问权限");

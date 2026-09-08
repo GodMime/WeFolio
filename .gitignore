@@ -5,6 +5,8 @@
 /docs/superpowers/
 /docs/operations/
 /docs/audits/
+# 本地设计方案与视觉验收记录
+/docs/design/
 .codex/
 .superpowers/
 .claude/

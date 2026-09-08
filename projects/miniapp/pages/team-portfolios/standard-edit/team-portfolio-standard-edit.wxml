@@ -352,7 +352,7 @@
           </view>
 
           <view class="form-row">
-            <view class="field-heading"><view class="field-label">对齐方式</view></view>
+            <view class="field-heading"><view class="field-label">左右对齐方式</view></view>
             <view class="text-section-alignment-list">
               <view wx:for="{{textSectionAlignmentOptions}}" wx:key="value" class="text-section-alignment-option pe-sheet-choice {{textSectionForm.alignment === item.value ? 'pe-sheet-choice-selected' : ''}}" data-value="{{item.value}}" catchtap="handleTextSectionAlignmentTap" aria-role="radio" aria-checked="{{textSectionForm.alignment === item.value}}">
                 <view class="text-section-alignment-radio"></view>
@@ -360,6 +360,11 @@
               </view>
             </view>
           </view>
+          <view class="form-row">
+            <view class="field-heading"><view class="field-label">颜色</view></view>
+            <text-color-editor color="{{textSectionForm.color}}" active="{{textSectionSheetVisible && canMaintain}}" bindchange="handleTextSectionColorChange" />
+          </view>
+          <team-text-background-editor wx:if="{{textSectionSheetVisible}}" config="{{textSectionForm}}" options="{{textBackgroundOptions}}" loading="{{textBackgroundLoading}}" error="{{textBackgroundError}}" has-more="{{textBackgroundHasMore}}" members="{{textBackgroundMembers}}" member-user-id="{{textBackgroundMemberUserId}}" members-loading="{{textBackgroundMembersLoading}}" bindchange="handleTextBackgroundChange" bindrequest="handleTextBackgroundRequest" />
         </view>
       </scroll-view>
 
@@ -369,6 +374,8 @@
       </view>
     </view>
   </view>
+
+  <team-structured-text-editor visible="{{structuredTextSheetVisible}}" config="{{structuredTextConfig}}" is-new="{{structuredTextIsNew}}" font-options="{{textSectionFontOptions}}" background-options="{{textBackgroundOptions}}" background-loading="{{textBackgroundLoading}}" background-error="{{textBackgroundError}}" background-has-more="{{textBackgroundHasMore}}" background-members="{{textBackgroundMembers}}" background-member-user-id="{{textBackgroundMemberUserId}}" background-members-loading="{{textBackgroundMembersLoading}}" background-resource="{{textBackgroundResource}}" bindconfirm="handleConfirmStructuredText" bindcancel="handleCancelStructuredText" bindbackgroundrequest="handleTextBackgroundRequest" bindbackgroundchange="handleStructuredTextBackgroundChange" />
 
   <view class="contact-form-sheet-mask pe-sheet-mask {{contactFormSheetVisible ? 'pe-sheet-mask-visible' : ''}}" catchtap="handleCloseContactFormSheet">
     <view class="contact-form-sheet-panel pe-sheet-panel pe-sheet-size-standard {{contactFormSheetVisible ? 'pe-sheet-panel-visible' : ''}}" catchtap="noop">

@@ -73,7 +73,7 @@ const COMPONENT_CASES = [
     properties: { textSection: Object },
     wxml: [
       /class="text-section/,
-      /class="text-content \{\{textSection\.fontClass\}\}"[^>]*style="\{\{textSection\.fontSizeStyle\}\}"/
+      /class="text-content \{\{textSection\.fontClass\}\}"[^>]*style="\{\{textSection\.fontSizeStyle\}\}\{\{textColorStyle\}\}"/
     ],
     wxss: [
       /^@import "\.\.\/\.\.\/\.\.\/\.\.\/styles\/portfolio-text-typography\.wxss";/m,
@@ -130,7 +130,7 @@ test('text section typography applies only to the body copy', () => {
 
   assert.match(
     wxml,
-    /class="text-content \{\{textSection\.fontClass\}\}"[^>]*style="\{\{textSection\.fontSizeStyle\}\}"/
+    /class="text-content \{\{textSection\.fontClass\}\}"[^>]*style="\{\{textSection\.fontSizeStyle\}\}\{\{textColorStyle\}\}"/
   )
   assert.match(wxml, /class="component-title"/)
   assert.doesNotMatch(

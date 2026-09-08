@@ -1,0 +1,38 @@
+<view class="background-editor">
+  <view class="background-heading"><text>背景作品</text><switch checked="{{config.backgroundEnabled}}" bindchange="handleToggle" color="#212529" /></view>
+  <block wx:if="{{config.backgroundEnabled}}">
+    <view wx:if="{{config.backgroundLoading}}" class="background-muted">正在恢复已选背景作品…</view>
+    <view wx:elif="{{config.backgroundLoadError || config.backgroundInvalid}}" class="background-error">{{config.backgroundLoadError || '背景作品已失效，请重新选择或关闭背景'}}</view>
+    <button wx:if="{{config.backgroundWorkId && !config.backgroundLoading && (config.backgroundLoadError || config.backgroundInvalid)}}" bindtap="handleRetrySelected">重新加载当前背景</button>
+    <view class="background-selection" bindtap="handleOpenPicker" aria-role="button" aria-label="{{pickerOpen ? '收起作品列表' : '选择背景作品'}}" aria-expanded="{{pickerOpen}}">
+      <image wx:if="{{config.backgroundWork.url}}" class="background-thumbnail" src="{{config.backgroundWork.url}}" mode="aspectFill" webp="{{true}}" />
+      <view>{{pickerOpen ? '收起作品列表' : (config.backgroundWorkId ? '已选作品 #' + config.backgroundWorkId + ' · 点击更换' : '选择图片或动图作品')}}</view>
+    </view>
+    <view wx:if="{{pickerOpen}}" class="background-picker">
+      <view class="background-search">
+        <input class="background-search-input" value="{{keyword}}" placeholder="搜索作品名称" placeholder-class="background-search-placeholder" bindinput="handleKeyword" bindconfirm="handleSearch" />
+        <button class="background-search-button background-search-submit" bindtap="handleSearch">搜索</button>
+        <button class="background-search-button" bindtap="handleClosePicker">收起</button>
+      </view>
+      <view wx:if="{{selectionError}}" class="background-error">{{selectionError}}</view>
+      <view wx:for="{{options}}" wx:key="id" class="background-work {{config.backgroundWorkId === item.id ? 'selected' : ''}}" data-id="{{item.id}}" bindtap="handleSelect">
+        <image class="background-thumbnail" src="{{item.url}}" mode="aspectFill" webp="{{true}}" />
+        <view class="background-work-copy"><text>{{item.title || '未命名作品'}}</text><text class="background-muted">{{item.mediaType === 'ANIMATION' ? '动图' : '图片'}} {{config.backgroundWorkId === item.id ? '· 已选' : ''}}</text></view>
+      </view>
+      <view wx:if="{{loading}}" class="background-muted">正在加载作品…</view>
+      <view wx:elif="{{error}}" class="background-error" bindtap="handleSearch">{{error}} · 点击重试</view>
+      <view wx:elif="{{!options.length}}" class="background-muted">{{keyword ? '没有符合条件的图片或动图' : '暂无可用图片或动图作品'}}</view>
+      <button wx:if="{{hasMore && !loading}}" bindtap="handleMore">加载更多</button>
+    </view>
+    <block wx:if="{{!pickerOpen}}">
+      <view class="background-label">背景处理</view>
+      <view class="background-choices">
+        <view wx:for="{{treatments}}" wx:key="value" class="background-choice {{config.backgroundTreatment === item.value ? 'selected' : ''}}" data-field="backgroundTreatment" data-value="{{item.value}}" bindtap="handleOption" aria-role="radio" aria-checked="{{config.backgroundTreatment === item.value}}">{{item.label}}</view>
+      </view>
+      <block wx:if="{{!structured}}">
+        <view class="background-label">上下对齐方式</view>
+        <view class="background-choices"><view wx:for="{{alignments}}" wx:key="value" class="background-choice {{config.verticalAlignment === item.value ? 'selected' : ''}}" data-field="verticalAlignment" data-value="{{item.value}}" bindtap="handleOption">{{item.label}}</view></view>
+      </block>
+    </block>
+  </block>
+</view>

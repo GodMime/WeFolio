@@ -336,6 +336,7 @@ test('personal text sections keep legacy defaults and new component defaults', (
     normalizeTextSectionConfig({ content: '旧说明' }),
     {
       content: '旧说明',
+      color: 'AUTO',
       alignment: 'LEFT',
       fontFamily: 'SYSTEM',
       fontSizeRpx: 26
@@ -371,8 +372,8 @@ test('personal text patches preserve typography and unknown fields under the cur
     alignment: 'RIGHT'
   })
 
-  assert.equal(EDITOR_SCHEMA_REVISION, 4)
-  assert.equal(updated.editorSchemaRevision, 4)
+  assert.equal(EDITOR_SCHEMA_REVISION, 5)
+  assert.equal(updated.editorSchemaRevision, 5)
   assert.equal(updated.components[0].config.fontFamily, 'WECHAT_SANS_SS')
   assert.equal(updated.components[0].config.fontSizeRpx, 30)
   assert.equal(updated.components[0].config.futureField, 'kept')
@@ -616,7 +617,7 @@ test('standard portfolio keeps profile option disabled after component library l
 
   const profileOption = page.data.componentOptions.find((item) => item.componentType === COMPONENT_TYPES.PROFILE)
   assert.equal(profileOption.disabled, true)
-  assert.deepEqual(requests[0].data, { editorSchemaRevision: 4 })
+  assert.deepEqual(requests[0].data, { editorSchemaRevision: 5 })
 })
 
 test('personal video carousel opens immediately and keeps ordered selections across tag filters', async () => {

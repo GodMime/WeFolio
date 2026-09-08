@@ -7,6 +7,7 @@ import com.jxc.wefolio.dict.TeamPortfolioComponentTypeDict;
 import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioConfigDto;
 import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioRenderDto;
 import com.jxc.wefolio.exception.BusinessException;
+import com.jxc.wefolio.service.teamportfolio.TeamTextBackgroundSupport;
 import com.jxc.wefolio.service.teamportfolio.component.carousel.TeamCarouselComponentRenderer;
 import com.jxc.wefolio.service.teamportfolio.component.contactform.TeamContactFormComponentRenderer;
 import com.jxc.wefolio.service.teamportfolio.component.divider.TeamDividerComponentRenderer;
@@ -17,6 +18,7 @@ import com.jxc.wefolio.service.teamportfolio.component.schedulequery.TeamSchedul
 import com.jxc.wefolio.service.teamportfolio.component.singlework.TeamSingleWorkComponentRenderer;
 import com.jxc.wefolio.service.teamportfolio.component.teamprofile.TeamProfileComponentRenderer;
 import com.jxc.wefolio.service.teamportfolio.component.textsection.TeamTextSectionComponentRenderer;
+import com.jxc.wefolio.service.teamportfolio.component.structuredtextsection.TeamStructuredTextSectionComponentRenderer;
 import com.jxc.wefolio.service.teamportfolio.component.videocarousel.TeamVideoCarouselComponentRenderer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -63,6 +65,10 @@ public class TeamPortfolioRenderService {
     private final TeamMemberPortfolioGridComponentRenderer gridRenderer;
     private final TeamMemberPortfolioListComponentRenderer listRenderer;
     private final TeamTextSectionComponentRenderer textRenderer;
+    /** 结构化文字组件策略。 */
+    private final TeamStructuredTextSectionComponentRenderer structuredTextRenderer;
+    /** 两类文字背景批量授权查询。 */
+    private final TeamTextBackgroundSupport textBackgroundSupport;
     private final TeamScheduleQueryComponentRenderer scheduleRenderer;
     private final TeamContactFormComponentRenderer contactRenderer;
     private final TeamQrContactComponentRenderer qrRenderer;
@@ -82,7 +88,9 @@ public class TeamPortfolioRenderService {
             TeamScheduleQueryComponentRenderer scheduleRenderer,
             TeamContactFormComponentRenderer contactRenderer,
             TeamQrContactComponentRenderer qrRenderer,
-            TeamVideoCarouselComponentRenderer videoCarouselRenderer
+            TeamVideoCarouselComponentRenderer videoCarouselRenderer,
+            TeamStructuredTextSectionComponentRenderer structuredTextRenderer,
+            TeamTextBackgroundSupport textBackgroundSupport
     ) {
         this.teamProfileRenderer = teamProfileRenderer;
         this.carouselRenderer = carouselRenderer;
@@ -95,6 +103,8 @@ public class TeamPortfolioRenderService {
         this.contactRenderer = contactRenderer;
         this.qrRenderer = qrRenderer;
         this.videoCarouselRenderer = videoCarouselRenderer;
+        this.structuredTextRenderer = structuredTextRenderer;
+        this.textBackgroundSupport = textBackgroundSupport;
     }
 
     /**
@@ -119,8 +129,9 @@ public class TeamPortfolioRenderService {
         render.setShare(copyShare(config.getShare()));
         render.setTitle(resolveTitle(config.getShare()));
         render.setStyle(buildStyle(config.getStyle()));
-        render.setComponents(buildComponents(config.getComponents(), context));
-        render.setBottomNav(buildBottomNav(config.getBottomNav(), context));
+        TeamPortfolioComponentContext renderContext = withTextBackgroundWorks(config,context);
+        render.setComponents(buildComponents(config.getComponents(), renderContext));
+        render.setBottomNav(buildBottomNav(config.getBottomNav(), renderContext));
         return render;
     }
 
@@ -328,6 +339,7 @@ public class TeamPortfolioRenderService {
             case MEMBER_PORTFOLIO_GRID -> gridRenderer.render(config, context);
             case MEMBER_PORTFOLIO_LIST -> listRenderer.render(config, context);
             case TEXT_SECTION -> textRenderer.render(config, context);
+            case STRUCTURED_TEXT_SECTION -> structuredTextRenderer.render(config, context);
             case SCHEDULE_QUERY -> scheduleRenderer.render(config, context);
             case CONTACT_FORM -> contactRenderer.render(config, context);
             case QR_CONTACT -> qrRenderer.render(config, context);
@@ -344,6 +356,22 @@ public class TeamPortfolioRenderService {
             throw new BusinessException(COMPONENT_TYPE_UNSUPPORTED_MESSAGE);
         }
         return componentType;
+    }
+
+    /** 汇总所有页面的已启用背景，在组件展开前一次验证作品和成员资源。 */
+    private TeamPortfolioComponentContext withTextBackgroundWorks(TeamPortfolioConfigDto config,
+                                                                  TeamPortfolioComponentContext context) {
+        List<JSONObject> backgrounds = TeamPortfolioComponentTraversal.listComponentLocations(config).stream()
+                .map(TeamPortfolioComponentTraversal.ComponentLocation::component)
+                .filter(component -> component != null && !Boolean.FALSE.equals(component.getEnabled()))
+                .filter(component -> TeamPortfolioComponentTypeDict.TEXT_SECTION.getCode().equals(component.getComponentType())
+                        || TeamPortfolioComponentTypeDict.STRUCTURED_TEXT_SECTION.getCode().equals(component.getComponentType()))
+                .map(TeamPortfolioConfigDto.ComponentEnvelope::getConfig)
+                .filter(TeamTextBackgroundSupport::isEnabled)
+                .toList();
+        if (backgrounds.isEmpty()) { return context; }
+        return new TeamPortfolioComponentContext(context.teamId(),context.portfolioId(),context.revision(),
+                textBackgroundSupport.load(backgrounds,context));
     }
 
     /**

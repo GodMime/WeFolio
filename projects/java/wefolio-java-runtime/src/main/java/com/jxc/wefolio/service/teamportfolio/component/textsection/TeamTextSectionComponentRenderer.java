@@ -2,6 +2,10 @@ package com.jxc.wefolio.service.teamportfolio.component.textsection;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
+import com.jxc.wefolio.service.PortfolioTextBackgroundConfigSupport;
+import com.jxc.wefolio.common.PortfolioTextColorSupport;
+import com.jxc.wefolio.service.teamportfolio.TeamTextBackgroundSupport;
+import lombok.RequiredArgsConstructor;
 import com.jxc.wefolio.common.PortfolioTextTypographySupport;
 import com.jxc.wefolio.constant.PortfolioTextTypographyConstants;
 import com.jxc.wefolio.dict.PortfolioTextFontFamilyDict;
@@ -14,7 +18,11 @@ import org.springframework.stereotype.Component;
  * 文字说明组件渲染器。
  */
 @Component
+@RequiredArgsConstructor
 public class TeamTextSectionComponentRenderer {
+
+    /** 共用团队背景资源支持。 */
+    private final TeamTextBackgroundSupport backgroundSupport;
 
     /** 内容配置键。 */
     private static final String CONFIG_KEY_CONTENT = "content";
@@ -69,13 +77,19 @@ public class TeamTextSectionComponentRenderer {
         }
         source.put(PortfolioTextTypographySupport.FONT_FAMILY_CONFIG_KEY, fontFamily);
         source.put(PortfolioTextTypographySupport.FONT_SIZE_RPX_CONFIG_KEY, fontSizeRpx);
+        source.put(PortfolioTextColorSupport.COLOR_CONFIG_KEY,
+                PortfolioTextColorSupport.forRender(source.get(PortfolioTextColorSupport.COLOR_CONFIG_KEY)));
+        JSONObject result;
         try {
             TeamTextSectionComponentConfig componentConfig =
                     source.toJavaObject(TeamTextSectionComponentConfig.class);
-            return JSON.parseObject(JSON.toJSONString(componentConfig));
+            result = JSON.parseObject(JSON.toJSONString(componentConfig));
         } catch (RuntimeException exception) {
             throw new BusinessException(CONTENT_REQUIRED_MESSAGE);
         }
+        result.putAll(PortfolioTextBackgroundConfigSupport.forRender(source,true,true));
+        backgroundSupport.render(result,result,context);
+        return result;
     }
 
 }

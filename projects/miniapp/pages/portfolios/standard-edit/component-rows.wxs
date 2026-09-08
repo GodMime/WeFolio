@@ -6,6 +6,7 @@ var EDIT_LABELS = {
   SCHEDULE_QUERY: '编辑档期查询',
   CONTACT_FORM: '编辑预留联系信息',
   TEXT_SECTION: '编辑文字说明',
+  STRUCTURED_TEXT_SECTION: '编辑结构化文字说明',
   DIVIDER: '编辑分割线',
   WORK_GRID: '编辑作品集展示标签',
   WORK_LIST: '编辑作品集展示标签',

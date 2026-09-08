@@ -419,6 +419,10 @@ class MinePortfolioServiceTest {
 
     @Test
     void componentLibraryShouldGateEachEntryByItsIntroducedRevision() {
+        assertThat(service().getComponentLibrary(5).getComponents())
+                .extracting("componentType").contains(PortfolioComponentTypeDict.STRUCTURED_TEXT_SECTION.getCode());
+        assertThat(service().getComponentLibrary(4).getComponents())
+                .extracting("componentType").doesNotContain(PortfolioComponentTypeDict.STRUCTURED_TEXT_SECTION.getCode());
         assertThat(service().getComponentLibrary(null).getComponents())
                 .extracting("componentType")
                 .doesNotContain("HYPERLINK", "VIDEO_CAROUSEL");

@@ -90,7 +90,7 @@ test('normalizes team theme and menu components while keeping private data opaqu
     }
   })
   assert.equal(config.share.title, '团队')
-  assert.equal(config.editorSchemaRevision, 3)
+  assert.equal(config.editorSchemaRevision, 4)
   assert.deepEqual(config.style, { backgroundColor: '#1A2B3C' })
   assert.deepEqual(config.components.map((item) => item.componentKey), ['a', 'b'])
   assert.equal(config.components[1].config, privateConfig)
@@ -216,7 +216,7 @@ test('team component mutations target the selected menu and keep team component 
   ])
 })
 
-test('team text sections keep revision three, unknown fields, and new defaults', () => {
+test('team text sections keep current revision, unknown fields, and new defaults', () => {
   const {
     addTeamComponent,
     getTeamMenuComponentList,
@@ -239,8 +239,8 @@ test('team text sections keep revision three, unknown fields, and new defaults',
     }]
   })
 
-  assert.equal(TEAM_EDITOR_SCHEMA_REVISION, 3)
-  assert.equal(normalized.editorSchemaRevision, 3)
+  assert.equal(TEAM_EDITOR_SCHEMA_REVISION, 4)
+  assert.equal(normalized.editorSchemaRevision, 4)
   assert.equal(normalized.components[0].config, futureConfig)
 
   const added = addTeamComponent(normalized, 'TEXT_SECTION')
@@ -261,7 +261,7 @@ test('team video carousel defaults normalize ordered items and enforce publish c
     validateTeamPortfolioForPublish
   } = loadUtility('team-portfolios.js')
   const added = addTeamComponent({ components: [] }, 'VIDEO_CAROUSEL')
-  assert.equal(TEAM_EDITOR_SCHEMA_REVISION, 3)
+  assert.equal(TEAM_EDITOR_SCHEMA_REVISION, 4)
   assert.deepEqual(getTeamMenuComponentList(added)[0].config, {
     title: '视频作品',
     items: [],
@@ -308,7 +308,7 @@ test('team video carousel defaults normalize ordered items and enforce publish c
   assert.equal(validateTeamPortfolioForPublish(normalized).message, '视频轮播最多选择8个视频')
 })
 
-test('team component library request advertises revision three', async () => {
+test('team component library request advertises current revision', async () => {
   const { fetchTeamComponentLibrary } = loadUtility('team-portfolios.js')
   const calls = []
   await fetchTeamComponentLibrary(async (options) => {
@@ -317,7 +317,7 @@ test('team component library request advertises revision three', async () => {
   })
   assert.deepEqual(calls, [{
     url: '/api/mine/team-portfolios/component-library',
-    data: { editorSchemaRevision: 3 }
+    data: { editorSchemaRevision: 4 }
   }])
 })
 
@@ -360,7 +360,7 @@ test('team publish validation returns the first local menu and component error',
   const { validateTeamPortfolioForPublish } = loadUtility('team-portfolios.js')
   const duplicate = {
     schemaVersion: 'standard-team-v1',
-    editorSchemaRevision: 3,
+    editorSchemaRevision: 4,
     style: { backgroundColor: '#FFFFFF' },
     components: [{ componentKey: 'same', componentType: 'DIVIDER', enabled: true, config: {} }],
     bottomNav: {
@@ -397,7 +397,7 @@ test('team publish validation rejects raw navigation errors before normalization
   } = loadUtility('team-portfolios.js')
   const config = {
     schemaVersion: 'standard-team-v1',
-    editorSchemaRevision: 3,
+    editorSchemaRevision: 4,
     style: { backgroundColor: '#FFFFFF' },
     components: [{ componentKey: 'home', componentType: 'DIVIDER', enabled: true, config: {} }],
     bottomNav: {
@@ -457,10 +457,10 @@ test('team publish validation rejects raw navigation errors before normalization
   })
 
   const unsupportedRevision = JSON.parse(JSON.stringify(config))
-  unsupportedRevision.editorSchemaRevision = 4
+  unsupportedRevision.editorSchemaRevision = 5
   const normalizedUnsupportedRevision =
     normalizeTeamPortfolioConfig(unsupportedRevision)
-  assert.equal(normalizedUnsupportedRevision.editorSchemaRevision, 4)
+  assert.equal(normalizedUnsupportedRevision.editorSchemaRevision, 5)
   assert.deepEqual(validateTeamPortfolioForPublish(normalizedUnsupportedRevision), {
     valid: false,
     menuKey: '',

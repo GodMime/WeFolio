@@ -97,6 +97,7 @@ public class MineTeamPortfolioService {
             new ComponentLibraryDefinition(TeamPortfolioComponentTypeDict.MEMBER_PORTFOLIO_GRID, "双列展示成员个人作品集"),
             new ComponentLibraryDefinition(TeamPortfolioComponentTypeDict.MEMBER_PORTFOLIO_LIST, "单列展示成员个人作品集"),
             new ComponentLibraryDefinition(TeamPortfolioComponentTypeDict.TEXT_SECTION, "展示团队服务说明"),
+            new ComponentLibraryDefinition(TeamPortfolioComponentTypeDict.STRUCTURED_TEXT_SECTION, "通过独立文字区块组合团队介绍与背景"),
             new ComponentLibraryDefinition(TeamPortfolioComponentTypeDict.SCHEDULE_QUERY, "允许访客查询团队档期"),
             new ComponentLibraryDefinition(TeamPortfolioComponentTypeDict.CONTACT_FORM, "收集访客预留联系信息"),
             new ComponentLibraryDefinition(TeamPortfolioComponentTypeDict.QR_CONTACT, "展示团队联系二维码")

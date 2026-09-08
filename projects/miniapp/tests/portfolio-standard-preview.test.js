@@ -31,7 +31,7 @@ function clone(value) {
 
 function readRule(content, selector) {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const match = content.match(new RegExp(`${escapedSelector}\\s*\\{([^}]*)\\}`))
+  const match = content.match(new RegExp(`^\\s*${escapedSelector}\\s*\\{([^}]*)\\}`, 'm'))
   return match ? match[1] : ''
 }
 

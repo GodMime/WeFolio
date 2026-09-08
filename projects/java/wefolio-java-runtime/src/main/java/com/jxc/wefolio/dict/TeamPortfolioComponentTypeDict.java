@@ -30,7 +30,9 @@ public enum TeamPortfolioComponentTypeDict {
     /** 二维码联系 */
     QR_CONTACT("QR_CONTACT", "二维码联系", 2),
     /** 视频轮播 */
-    VIDEO_CAROUSEL("VIDEO_CAROUSEL", "视频轮播", 3);
+    VIDEO_CAROUSEL("VIDEO_CAROUSEL", "视频轮播", 3),
+    /** 结构化文字说明 */
+    STRUCTURED_TEXT_SECTION("STRUCTURED_TEXT_SECTION", "结构化文字说明", 4);
 
     /** 组件编码 */
     private final String code;

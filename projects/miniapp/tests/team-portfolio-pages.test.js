@@ -448,9 +448,13 @@ test('team text section sheet keeps legacy typography and saves all fields only 
   assert.equal(page.data.textSectionSheetVisible, true)
   assert.deepEqual(page.data.textSectionForm, {
     content: '原说明',
+    color: 'AUTO',
     alignment: 'LEFT',
     fontFamily: 'SYSTEM',
-    fontSizeRpx: 32
+    fontSizeRpx: 32,
+    backgroundEnabled: false,
+    backgroundTreatment: 'GRADIENT',
+    verticalAlignment: 'CENTER'
   })
 
   page.handleTextSectionInput({ detail: { value: '团队说明' } })
@@ -473,10 +477,14 @@ test('team text section sheet keeps legacy typography and saves all fields only 
   assert.equal(page.data.textSectionSheetVisible, false)
   assert.deepEqual(page.data.config.components[0].config, {
     content: '团队说明',
+    color: 'AUTO',
     alignment: 'CENTER',
     fontFamily: 'SYSTEM',
     fontSizeRpx: 28,
-    futureField: 'keep'
+    futureField: 'keep',
+    backgroundEnabled: false,
+    backgroundTreatment: 'GRADIENT',
+    verticalAlignment: 'CENTER'
   })
   page.cleanup()
 })
@@ -873,7 +881,7 @@ test('team preview and visitor use the personal portfolio content baseline witho
   const listWxss = read('components/member-portfolio-list/member-portfolio-list.wxss')
 
   for (const page of [previewWxml, visitorWxml]) {
-    assert.equal(Array.from(page.matchAll(/class="folio-component"/g)).length, 10)
+    assert.equal(Array.from(page.matchAll(/class="folio-component"/g)).length, 11)
   }
 
   for (const pageStyles of [previewWxss, visitorWxss]) {

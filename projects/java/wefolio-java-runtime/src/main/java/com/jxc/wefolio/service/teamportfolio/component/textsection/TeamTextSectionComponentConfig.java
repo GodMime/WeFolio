@@ -8,6 +8,9 @@ import lombok.Data;
 @Data
 public class TeamTextSectionComponentConfig {
 
+    /** 普通文字颜色：AUTO 或六位十六进制；旧配置默认 AUTO。 */
+    private String color;
+
     /** 文字内容。 */
     private String content;
 

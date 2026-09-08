@@ -16,6 +16,8 @@ import com.jxc.wefolio.service.teamportfolio.component.schedulequery.TeamSchedul
 import com.jxc.wefolio.service.teamportfolio.component.singlework.TeamSingleWorkComponentValidator;
 import com.jxc.wefolio.service.teamportfolio.component.teamprofile.TeamProfileComponentValidator;
 import com.jxc.wefolio.service.teamportfolio.component.textsection.TeamTextSectionComponentValidator;
+import com.jxc.wefolio.service.teamportfolio.component.structuredtextsection.TeamStructuredTextSectionComponentValidator;
+import com.jxc.wefolio.service.teamportfolio.TeamTextBackgroundSupport;
 import com.jxc.wefolio.service.teamportfolio.component.videocarousel.TeamVideoCarouselComponentValidator;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -53,6 +55,10 @@ class TeamPortfolioConfigValidatorTest {
     private TeamMemberPortfolioListComponentValidator listValidator;
     @Mock
     private TeamTextSectionComponentValidator textValidator;
+
+    /** 结构化文字组件策略模拟。 */
+    @Mock
+    private TeamStructuredTextSectionComponentValidator structuredTextValidator;
     @Mock
     private TeamScheduleQueryComponentValidator scheduleValidator;
     @Mock
@@ -561,7 +567,7 @@ class TeamPortfolioConfigValidatorTest {
                 case SCHEDULE_QUERY -> when(scheduleValidator.normalizeAndValidate(any(JSONObject.class), eq(context))).thenReturn(normalized);
                 case CONTACT_FORM -> when(contactValidator.normalizeAndValidate(any(JSONObject.class), eq(context))).thenReturn(normalized);
                 case QR_CONTACT -> when(qrValidator.normalizeAndValidate(any(JSONObject.class), eq(context))).thenReturn(normalized);
-                case VIDEO_CAROUSEL -> {
+                case VIDEO_CAROUSEL, STRUCTURED_TEXT_SECTION -> {
                     // revision 3 新组件由独立用例覆盖；本用例只验证 revision 2 已有组件集合。
                 }
             }
@@ -570,12 +576,12 @@ class TeamPortfolioConfigValidatorTest {
 
     private TeamPortfolioConfigValidator service() {
         return new TeamPortfolioConfigValidator(teamProfileValidator, carouselValidator, singleWorkValidator, dividerValidator, gridValidator,
-                listValidator, textValidator, scheduleValidator, contactValidator, qrValidator, videoCarouselValidator);
+                listValidator, textValidator, scheduleValidator, contactValidator, qrValidator, videoCarouselValidator, structuredTextValidator);
     }
 
     private void verifyNoComponentValidatorInteractions() {
         verifyNoInteractions(teamProfileValidator, carouselValidator, singleWorkValidator, dividerValidator, gridValidator, listValidator,
-                textValidator, scheduleValidator, contactValidator, qrValidator, videoCarouselValidator);
+                textValidator, scheduleValidator, contactValidator, qrValidator, videoCarouselValidator, structuredTextValidator);
     }
 
     private TeamPortfolioConfigDto config(List<TeamPortfolioConfigDto.ComponentEnvelope> components) {

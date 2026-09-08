@@ -2,6 +2,7 @@
   "usingComponents": {
     "navigation-bar": "/components/navigation-bar/navigation-bar",
     "portfolio-bottom-nav": "/components/portfolio-bottom-nav/portfolio-bottom-nav",
+    "team-structured-text-section": "../components/structured-text-section/structured-text-section",
     "team-profile": "../components/team-profile/team-profile", "team-carousel": "../components/carousel/carousel", "team-single-work": "../components/single-work/single-work", "team-divider": "../components/divider/divider", "team-member-portfolio-grid": "../components/member-portfolio-grid/member-portfolio-grid", "team-member-portfolio-list": "../components/member-portfolio-list/member-portfolio-list", "team-text-section": "../components/text-section/text-section", "team-schedule-query": "../components/schedule-query/schedule-query", "team-contact-form": "../components/contact-form/contact-form", "team-qr-contact": "../components/qr-contact/qr-contact",
     "team-video-carousel": "/pages/team-portfolios/components/video-carousel/video-carousel"
   }

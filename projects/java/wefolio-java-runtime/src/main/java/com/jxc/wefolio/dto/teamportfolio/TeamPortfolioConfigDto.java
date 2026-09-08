@@ -12,7 +12,7 @@ import java.util.List;
 public class TeamPortfolioConfigDto {
 
     /** 当前团队编辑器配置能力版本 */
-    public static final int EDITOR_SCHEMA_REVISION_CURRENT = 3;
+    public static final int EDITOR_SCHEMA_REVISION_CURRENT = 4;
 
     /** 默认页面背景色 */
     public static final String DEFAULT_BACKGROUND_COLOR = "#FFFFFF";

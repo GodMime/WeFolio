@@ -97,6 +97,7 @@ public class MinePortfolioService {
             new ComponentLibraryDefinition(PortfolioComponentTypeDict.VIDEO_CAROUSEL,
                     "叠放循环展示视频作品，访客左右滑动浏览、点击播放"),
             new ComponentLibraryDefinition(PortfolioComponentTypeDict.TEXT_SECTION, "展示服务说明和补充文字"),
+            new ComponentLibraryDefinition(PortfolioComponentTypeDict.STRUCTURED_TEXT_SECTION, "通过独立文字区块组合介绍与背景"),
             new ComponentLibraryDefinition(PortfolioComponentTypeDict.DIVIDER, "在内容之间加入可调高度的分割线"),
             new ComponentLibraryDefinition(PortfolioComponentTypeDict.WORK_GRID, "双列展示图片和视频作品"),
             new ComponentLibraryDefinition(PortfolioComponentTypeDict.WORK_LIST, "单列展示重点图片和视频作品"),

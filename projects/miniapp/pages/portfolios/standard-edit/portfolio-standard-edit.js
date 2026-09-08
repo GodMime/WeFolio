@@ -1,4 +1,5 @@
 const { request } = require('../../../utils/request')
+const { normalizeTextColor, isValidTextColor, TEXT_COLOR_ERROR } = require('../../../utils/portfolio-text-color')
 const { handleMaintainerAuthRequired, hasLocalToken } = require('../../../utils/session')
 const { noop } = require('../../../utils/noop')
 const { isRemoteUrl } = require('../../../utils/upload-file')
@@ -95,6 +96,10 @@ const {
 } = require('../../../utils/portfolios')
 const { hexToHsv, hsvToHex, normalizeHexColor } = require('../../../utils/portfolio-color')
 const {
+  normalizeTextBackground, finalizeTextBackground, validateTextBackground,
+  normalizeStructuredTextConfig, finalizeStructuredTextConfig, validateStructuredTextConfig
+} = require('../utils/portfolio-text-sections')
+const {
   LEGACY_PERSONAL_FONT_SIZE_RPX,
   PORTFOLIO_TEXT_FONT_OPTIONS,
   buildPortfolioTextFontSizeOptions,
@@ -188,6 +193,7 @@ const DEFAULT_COMPONENT_DESCRIPTIONS = {
   QR_CONTACT: '展示二维码联系方式',
   CONTACT_FORM: '收集访客预留联系信息',
   TEXT_SECTION: '添加服务说明文字',
+  STRUCTURED_TEXT_SECTION: '使用独立区块编排文字与背景',
   DIVIDER: '分隔不同内容区块',
   HYPERLINK: '以图片或动图触发作品集跳转或复制分享内容'
 }
@@ -304,6 +310,7 @@ function isEditableComponentType(componentType) {
     componentType === COMPONENT_TYPES.SCHEDULE_QUERY ||
     componentType === COMPONENT_TYPES.CONTACT_FORM ||
     componentType === COMPONENT_TYPES.TEXT_SECTION ||
+    componentType === COMPONENT_TYPES.STRUCTURED_TEXT_SECTION ||
     componentType === COMPONENT_TYPES.DIVIDER ||
     componentType === COMPONENT_TYPES.HYPERLINK ||
     isDisplayGroupComponent(componentType)
@@ -813,7 +820,13 @@ function buildContactFormConfigForm(config = {}) {
 function buildTextSectionForm(config = {}) {
   const normalized = normalizeTextSectionConfig(config)
   return {
+    ...normalizeTextBackground(config),
+    ...(Object.prototype.hasOwnProperty.call(config, 'backgroundWork') ? { backgroundWork: config.backgroundWork } : {}),
+    ...(Object.prototype.hasOwnProperty.call(config, 'backgroundInvalid') ? { backgroundInvalid: config.backgroundInvalid } : {}),
+    backgroundLoading: config.backgroundLoading === true,
+    backgroundLoadError: config.backgroundLoadError || '',
     content: normalized.content || '',
+    color: normalized.color,
     alignment: normalized.alignment || TEXT_SECTION_ALIGNMENTS.LEFT,
     fontFamily: normalized.fontFamily,
     fontSizeRpx: normalized.fontSizeRpx
@@ -1204,6 +1217,16 @@ Page({
     contactFormDisplayModeOptions: CONTACT_FORM_DISPLAY_MODE_OPTIONS,
     contactFormConfigForm: buildContactFormConfigForm(),
     textSectionSheetVisible: false,
+    structuredTextSheetVisible: false,
+    structuredTextEditingComponentKey: '',
+    structuredTextConfig: {},
+    structuredTextIsNew: false,
+    textBackgroundOptions: [],
+    textBackgroundSelection: {},
+    textBackgroundLoading: false,
+    textBackgroundError: '',
+    textBackgroundHasMore: false,
+    textBackgroundKeyword: '',
     textSectionEditingComponentKey: '',
     textSectionAlignmentOptions: TEXT_SECTION_ALIGNMENT_OPTIONS,
     textSectionMaxLength: TEXT_SECTION_MAX_LENGTH,
@@ -1736,6 +1759,10 @@ Page({
     if (!componentType || disabled || profileAdded) {
       return
     }
+    if (componentType === COMPONENT_TYPES.STRUCTURED_TEXT_SECTION) {
+      this.setData({ componentSheetVisible: false })
+      return this.openStructuredTextSheet()
+    }
     const menuKey = this.data.activeMenuKey
     const previousKeys = new Set(getMenuComponentList(this.data.config, menuKey)
       .map((component) => component.componentKey))
@@ -1910,6 +1937,9 @@ Page({
     if (componentType === COMPONENT_TYPES.TEXT_SECTION) {
       return this.openTextSectionSheet(componentKey)
     }
+    if (componentType === COMPONENT_TYPES.STRUCTURED_TEXT_SECTION) {
+      return this.openStructuredTextSheet(componentKey)
+    }
     if (componentType === COMPONENT_TYPES.DIVIDER) {
       return this.openDividerSheet(componentKey)
     }
@@ -2011,20 +2041,29 @@ Page({
     if (!component || component.componentType !== COMPONENT_TYPES.TEXT_SECTION) {
       return undefined
     }
+    this.resetTextBackgroundSession()
     this.setData({
       textSectionSheetVisible: true,
       textSectionEditingComponentKey: componentKey,
-      ...buildTextSectionEditorState(component.config || {})
+      ...buildTextSectionEditorState(Object.assign({}, component.config || {}, {
+        backgroundLoading: !!(component.config.backgroundEnabled && component.config.backgroundWorkId)
+      }))
     })
-    return undefined
+    return this.restoreTextBackground(component.config || {}, false)
   },
 
   handleCloseTextSectionSheet() {
+    this.resetTextBackgroundSession()
     this.setData({
       textSectionSheetVisible: false,
       textSectionEditingComponentKey: '',
       ...buildTextSectionEditorState()
     })
+  },
+
+  handleTextSectionColorChange(event) {
+    if (!this.data.textSectionSheetVisible || !isValidTextColor(event.detail.color)) return
+    this.setData({ 'textSectionForm.color': normalizeTextColor(event.detail.color) })
   },
 
   handleTextSectionInput(event) {
@@ -2091,17 +2130,202 @@ Page({
       wx.showToast({ title: TEXT_SECTION_REQUIRED_MESSAGE, icon: 'none' })
       return
     }
-    const config = updateComponentTextSectionConfig(
+    if (!isValidTextColor(form.color)) {
+      wx.showToast({ title: TEXT_COLOR_ERROR, icon: 'none' })
+      return
+    }
+    const backgroundError = form.backgroundEnabled && form.backgroundLoading ? '背景作品加载中，请稍候' : validateTextBackground(form)
+    if (backgroundError) {
+      wx.showToast({ title: backgroundError, icon: 'none' })
+      return
+    }
+    let config = updateComponentTextSectionConfig(
       this.data.config,
       this.data.textSectionEditingComponentKey,
       form,
       this.data.activeMenuKey
     )
+    const components = getMenuComponentList(config, this.data.activeMenuKey).map(item => {
+      if (item.componentKey !== this.data.textSectionEditingComponentKey) return item
+      const clean = Object.assign({}, item.config, finalizeTextBackground(form))
+      delete clean.backgroundWork
+      delete clean.backgroundInvalid
+      if (!clean.backgroundEnabled) delete clean.backgroundWorkId
+      return Object.assign({}, item, { config: clean })
+    })
+    config = replaceMenuComponentList(config, this.data.activeMenuKey, components)
+    this.resetTextBackgroundSession()
     this.applyEditorConfig(config, this.data.activeMenuKey, {
       textSectionSheetVisible: false,
       textSectionEditingComponentKey: '',
       ...buildTextSectionEditorState()
     })
+  },
+
+  openStructuredTextSheet(componentKey = '') {
+    const component = componentKey ? findComponentByKey(this.data.config, componentKey) : null
+    if (componentKey && (!component || component.componentType !== COMPONENT_TYPES.STRUCTURED_TEXT_SECTION)) return
+    this.resetTextBackgroundSession()
+    this.textBackgroundDraftSelection = Object.assign({}, component ? component.config : {})
+    this.structuredTextMenuKey = this.data.activeMenuKey
+    this.setData({ structuredTextSheetVisible: true, structuredTextEditingComponentKey: componentKey,
+      structuredTextIsNew: !component, structuredTextConfig: Object.assign(
+        normalizeStructuredTextConfig(component ? component.config : {}), {
+          backgroundLoading: !!(component && component.config.backgroundEnabled && component.config.backgroundWorkId)
+        }) })
+    return component ? this.restoreTextBackground(component.config || {}, true) : Promise.resolve()
+  },
+
+  handleCancelStructuredText() {
+    this.resetTextBackgroundSession()
+    this.setData({ structuredTextSheetVisible: false, structuredTextEditingComponentKey: '', structuredTextConfig: {} })
+  },
+
+  handleConfirmStructuredText(event) {
+    if (!this.data.structuredTextSheetVisible) return
+    const error = validateStructuredTextConfig(event.detail)
+    if (error) { wx.showToast({ title: error, icon: 'none' }); return }
+    const form = finalizeStructuredTextConfig(event.detail)
+    const menuKey = this.structuredTextMenuKey || ''
+    let config = this.data.config
+    let key = this.data.structuredTextEditingComponentKey
+    if (!key) {
+      config = addComponent(config, COMPONENT_TYPES.STRUCTURED_TEXT_SECTION, menuKey)
+      key = getMenuComponentList(config, menuKey).slice(-1)[0].componentKey
+    }
+    const components = getMenuComponentList(config, menuKey).map(item => item.componentKey === key
+      ? Object.assign({}, item, { config: form }) : item)
+    this.resetTextBackgroundSession()
+    this.applyEditorConfig(replaceMenuComponentList(config, menuKey, components), menuKey, {
+      structuredTextSheetVisible: false, structuredTextEditingComponentKey: '', structuredTextConfig: {}
+    })
+  },
+
+  handleTextBackgroundChange(event) {
+    const previous = this.data.textSectionForm
+    const form = Object.assign({}, previous, event.detail)
+    if (!form.backgroundEnabled || !form.backgroundLoading || String(previous.backgroundWorkId) !== String(form.backgroundWorkId)) {
+      this.textBackgroundRestoreSeq = (this.textBackgroundRestoreSeq || 0) + 1
+    }
+    this.setData({ textSectionForm: form })
+  },
+
+  handleStructuredTextBackgroundChange(event) {
+    const previous = this.textBackgroundDraftSelection || {}
+    const form = Object.assign({}, previous, event.detail)
+    if (!form.backgroundEnabled || !form.backgroundLoading || String(previous.backgroundWorkId) !== String(form.backgroundWorkId)) {
+      this.textBackgroundRestoreSeq = (this.textBackgroundRestoreSeq || 0) + 1
+    }
+    this.textBackgroundDraftSelection = form
+  },
+
+  resetTextBackgroundSession() {
+    this.textBackgroundSession = (this.textBackgroundSession || 0) + 1
+    this.textBackgroundRestoreSeq = (this.textBackgroundRestoreSeq || 0) + 1
+    this.textBackgroundDraftSelection = null
+    this.textBackgroundRequestSeq = (this.textBackgroundRequestSeq || 0) + 1
+    this.textBackgroundPage = 0
+    this.setData({ textBackgroundOptions: [], textBackgroundSelection: {}, textBackgroundLoading: false, textBackgroundError: '',
+      textBackgroundHasMore: false, textBackgroundKeyword: '' })
+  },
+
+  onUnload() {
+    this.textBackgroundRequestSeq = (this.textBackgroundRequestSeq || 0) + 1
+    this.textBackgroundSession = (this.textBackgroundSession || 0) + 1
+  },
+
+  isTextBackgroundRestoreCurrent(session, requestSeq, structured, workId) {
+    const visible = structured ? this.data.structuredTextSheetVisible : this.data.textSectionSheetVisible
+    const config = structured ? this.textBackgroundDraftSelection : this.data.textSectionForm
+    return session === this.textBackgroundSession && requestSeq === this.textBackgroundRestoreSeq
+      && visible && config && config.backgroundEnabled && String(config.backgroundWorkId) === String(workId)
+  },
+
+  async restoreTextBackground(config, structured) {
+    if (!config.backgroundEnabled || !config.backgroundWorkId) return
+    const session = this.textBackgroundSession
+    const workId = config.backgroundWorkId
+    const requestSeq = (this.textBackgroundRestoreSeq || 0) + 1
+    this.textBackgroundRestoreSeq = requestSeq
+    if (!this.isTextBackgroundRestoreCurrent(session, requestSeq, structured, workId)) return
+    if (structured) {
+      this.textBackgroundDraftSelection = Object.assign({}, this.textBackgroundDraftSelection, { backgroundLoading: true })
+      this.setData({ textBackgroundSelection: { workId, loading: true } })
+    } else {
+      this.setData({ textSectionForm: Object.assign({}, this.data.textSectionForm, { backgroundLoading: true, backgroundLoadError: '' }) })
+    }
+    let work = null
+    let error = ''
+    try {
+      const response = await request({ url: `${WORKS_API_URL}/${workId}` })
+      const source = response && response.work
+      const valid = source && String(source.id) === String(workId) && source.status === 'ACTIVE'
+        && (source.mediaType === 'IMAGE' || (source.mediaType === 'ANIMATION' && source.auditStatus === PASSED_WORK_AUDIT_STATUS))
+        && source.mediaUrl
+      if (valid) work = { workId, mediaType: source.mediaType, url: source.mediaUrl, width: source.width, height: source.height }
+      else error = '背景作品已失效，请重新选择或关闭背景'
+    } catch (failure) {
+      if (!this.isTextBackgroundRestoreCurrent(session, requestSeq, structured, workId)) return
+      if (failure.authRequired) {
+        handleMaintainerAuthRequired(failure.message)
+        return
+      }
+      error = '背景作品加载失败，请重试、重新选择或关闭背景'
+    }
+    if (!this.isTextBackgroundRestoreCurrent(session, requestSeq, structured, workId)) return
+    const selection = { workId, work, error }
+    this.setData({ textBackgroundSelection: selection })
+    const current = this.data.textSectionForm
+    if (!structured && current.backgroundLoading && String(current.backgroundWorkId) === String(workId)) {
+      this.setData({ textSectionForm: Object.assign({}, current, { backgroundWork: work,
+        backgroundInvalid: !work, backgroundLoading: false, backgroundLoadError: error }) })
+    }
+  },
+
+  async handleTextBackgroundRequest(event = {}) {
+    const detail = event.detail || {}
+    const reset = detail.reset !== false
+    if (!this.data.textSectionSheetVisible && !this.data.structuredTextSheetVisible) return
+    if (detail.cancelCandidates) {
+      this.textBackgroundRequestSeq = (this.textBackgroundRequestSeq || 0) + 1
+      this.setData({ textBackgroundLoading: false, textBackgroundError: '' })
+      return
+    }
+    if (detail.restore) {
+      const structured = this.data.structuredTextSheetVisible
+      const config = structured ? this.textBackgroundDraftSelection : this.data.textSectionForm
+      if (!config || String(config.backgroundWorkId) !== String(detail.workId)) return
+      return this.restoreTextBackground(config, structured)
+    }
+    if (!reset && (this.data.textBackgroundLoading || !this.data.textBackgroundHasMore)) return
+    const seq = (this.textBackgroundRequestSeq || 0) + 1
+    this.textBackgroundRequestSeq = seq
+    const keyword = typeof detail.keyword === 'string' ? detail.keyword.trim() : this.data.textBackgroundKeyword
+    let page = reset ? 1 : (this.textBackgroundPage || 0) + 1
+    let works = reset ? [] : this.data.textBackgroundOptions
+    const initialCount = works.length
+    if (reset) this.textBackgroundPage = 0
+    this.setData({ textBackgroundLoading: true, textBackgroundError: '', textBackgroundKeyword: keyword,
+      textBackgroundOptions: works, textBackgroundHasMore: reset ? false : this.data.textBackgroundHasMore })
+    try {
+      let list
+      do {
+        const response = await request({ url: WORKS_API_URL,
+          data: { keyword, auditStatus: PASSED_WORK_AUDIT_STATUS, page, pageSize: COMPONENT_WORK_PAGE_SIZE } })
+        if (seq !== this.textBackgroundRequestSeq) return
+        list = normalizeWorkList(response)
+        const images = list.works.filter(work => work.mediaType === 'IMAGE' || work.mediaType === 'ANIMATION')
+          .map(work => Object.assign({}, work, { url: work.mediaUrl }))
+        works = mergeComponentWorks(works, images)
+        page = list.page + 1
+      } while (works.length === initialCount && list.hasMore)
+      this.textBackgroundPage = list.page
+      this.setData({ textBackgroundOptions: works, textBackgroundLoading: false, textBackgroundHasMore: list.hasMore })
+    } catch (error) {
+      if (seq !== this.textBackgroundRequestSeq) return
+      this.setData({ textBackgroundLoading: false, textBackgroundError: error.message || '作品加载失败，请重试' })
+      if (error.authRequired) handleMaintainerAuthRequired(error.message)
+    }
   },
 
   openDividerSheet(componentKey) {
@@ -3712,6 +3936,7 @@ Page({
   },
 
   handleSaveDraft() {
+    if (!this.validateTextComponentsBeforeSave()) return Promise.resolve()
     return this.ensureDraftPortfolio().then((portfolioId) => {
       return this.uploadLocalPortfolioAssets(portfolioId)
         .then((config) => this.saveDraftForPortfolio(portfolioId, config))
@@ -3719,6 +3944,27 @@ Page({
       this.focusServerComponentError(error)
       wx.showToast({ title: error.message || '保存失败', icon: 'none' })
     })
+  },
+
+  validateTextComponentsBeforeSave() {
+    for (const location of visitPortfolioComponents(this.data.config)) {
+      const component = location.component
+      if (component.enabled === false) continue
+      let message = ''
+      if (component.componentType === COMPONENT_TYPES.STRUCTURED_TEXT_SECTION) {
+        message = validateStructuredTextConfig(component.config || {})
+      } else if (component.componentType === COMPONENT_TYPES.TEXT_SECTION) {
+        message = validateTextBackground(component.config || {})
+      }
+      if (!message) continue
+      this.applyEditorConfig(this.data.config, location.menuKey, {
+        validationMenuKey: location.menuKey, validationComponentKey: component.componentKey,
+        validationComponentAnchor: `component-row-${component.componentKey}`, validationMenuMessage: message
+      })
+      wx.showToast({ title: message, icon: 'none' })
+      return false
+    }
+    return true
   },
 
   focusServerComponentError(error) {
@@ -3745,6 +3991,7 @@ Page({
       validationComponentAnchor: '',
       validationMenuMessage: ''
     })
+    if (!this.validateTextComponentsBeforeSave()) return Promise.resolve()
     const validation = validatePortfolioForPublish(this.data.config)
     if (!validation.valid) {
       this.applyEditorConfig(this.data.config, validation.menuKey, {

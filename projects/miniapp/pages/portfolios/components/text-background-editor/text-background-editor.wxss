@@ -1,0 +1,50 @@
+.background-editor { color: #212529; padding: 24rpx 0; }
+.background-heading, .background-selection, .background-work, .background-search { display: flex; align-items: center; gap: 16rpx; }
+.background-heading { justify-content: space-between; font-weight: 600; }
+.background-selection, .background-work { padding: 20rpx; margin-top: 16rpx; background: #F8F9FA; border: 2rpx solid #E9ECEF; border-radius: 16rpx; }
+.background-thumbnail { width: 96rpx; height: 96rpx; flex-shrink: 0; border-radius: 12rpx; }
+.background-label { margin: 24rpx 0 16rpx; font-size: 26rpx; }
+.background-choices { display: flex; flex-wrap: wrap; gap: 12rpx; }
+.background-choice { padding: 20rpx; background: #F8F9FA; border: 2rpx solid #E9ECEF; border-radius: 12rpx; font-size: 24rpx; }
+.selected { border-color: #212529; background: #E9ECEF; }
+.background-muted { color: #868E96; font-size: 24rpx; margin: 16rpx 0; }
+.background-error { color: #A33B32; font-size: 24rpx; padding: 16rpx 0; }
+.background-picker { margin-top: 24rpx; }
+/* 输入框占据剩余空间，按钮显式覆盖微信默认宽度与全局按钮重置。 */
+.background-search .background-search-input {
+  flex: 1;
+  width: 0;
+  min-width: 0;
+  height: 80rpx;
+  box-sizing: border-box;
+  padding: 0 20rpx;
+  border: 2rpx solid #E9ECEF;
+  border-radius: 14rpx;
+  background: #F8F9FA;
+  color: #212529;
+  font-size: 26rpx;
+  line-height: 40rpx;
+}
+.background-search-placeholder { color: #868E96; }
+.background-search .background-search-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 104rpx;
+  min-width: 104rpx;
+  height: 80rpx;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0 16rpx;
+  border: 2rpx solid #E9ECEF;
+  border-radius: 14rpx;
+  background: #F5F6F7;
+  color: #212529;
+  font-size: 26rpx;
+  line-height: 40rpx;
+  font-weight: 400;
+}
+.background-search-button::after { border: 0; }
+.background-search .background-search-submit { border-color: #212529; background: #212529; color: #FFFFFF; }
+.background-work-copy { display: flex; flex-direction: column; min-width: 0; }

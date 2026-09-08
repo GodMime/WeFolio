@@ -102,9 +102,16 @@ class MineTeamPortfolioServiceTest {
     @Test
     void componentLibraryShouldGateVideoCarouselAtRevisionThree() {
         TestContext context = context(true);
+        assertThat(context.service.getComponentLibrary(4))
+                .extracting(MineTeamPortfolioService.ComponentLibraryItem::componentType)
+                .contains(TeamPortfolioComponentTypeDict.STRUCTURED_TEXT_SECTION.getCode());
+        assertThat(context.service.getComponentLibrary(3))
+                .extracting(MineTeamPortfolioService.ComponentLibraryItem::componentType)
+                .doesNotContain(TeamPortfolioComponentTypeDict.STRUCTURED_TEXT_SECTION.getCode());
         List<String> originalTypes = java.util.Arrays.stream(TeamPortfolioComponentTypeDict.values())
                 .map(TeamPortfolioComponentTypeDict::getCode)
                 .filter(type -> !"VIDEO_CAROUSEL".equals(type))
+                .filter(type -> !"STRUCTURED_TEXT_SECTION".equals(type))
                 .toList();
 
         assertThat(context.service.getComponentLibrary(null))

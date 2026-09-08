@@ -6,6 +6,7 @@ var COMPONENT_NAMES = {
   MEMBER_PORTFOLIO_GRID: '双列作品集',
   MEMBER_PORTFOLIO_LIST: '单列作品集',
   TEXT_SECTION: '文字说明',
+  STRUCTURED_TEXT_SECTION: '结构化文字说明',
   SCHEDULE_QUERY: '档期查询',
   CONTACT_FORM: '预留联系信息',
   QR_CONTACT: '二维码联系'

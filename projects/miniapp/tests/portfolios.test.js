@@ -44,8 +44,8 @@ const {
   themeModeFromHex
 } = require('../utils/portfolio-color')
 
-test('new editor advertises video carousel schema revision', () => {
-  assert.equal(EDITOR_SCHEMA_REVISION, 4)
+test('new editor advertises structured text schema revision', () => {
+  assert.equal(EDITOR_SCHEMA_REVISION, 5)
 })
 
 test('personal video carousel defaults normalize identifiers and enforce publish count', () => {
@@ -108,7 +108,7 @@ test('normalizes style and bottom navigation without duplicating first menu comp
     }
   })
 
-  assert.equal(config.editorSchemaRevision, 4)
+  assert.equal(config.editorSchemaRevision, 5)
   assert.equal(config.style.backgroundColor, '#1A2B3C')
   assert.equal(Object.hasOwn(config.bottomNav.items[0], 'components'), false)
   assert.equal(config.bottomNav.items[0].iconUrl, 'https://example.com/home.png')
