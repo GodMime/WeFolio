@@ -909,7 +909,9 @@ test('schedule calendar builds six stable weeks and applies query range bounds',
   )
 })
 
-test('schedule calendar changes months and selects only enabled dates', () => {
+test('schedule calendar changes months and selects only enabled dates', (t) => {
+  // 固定在用例的八月查询区间内，避免真实月份变化影响初始化；结束后由测试上下文恢复时钟。
+  t.mock.timers.enable({ apis: ['Date'], now: new Date(2026, 7, 3, 12).getTime() })
   const { definition } = loadComponent('schedule-query')
   const harness = createComponentHarness(definition, {
     config: {
