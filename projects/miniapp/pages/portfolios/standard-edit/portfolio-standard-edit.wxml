@@ -946,7 +946,7 @@
         <view class="pe-sheet-meta">{{qrContactForm.qrUrlSource === 'CUSTOM' ? '自定义' : '资料'}}</view>
       </view>
 
-      <scroll-view class="profile-form-scroll" scroll-y type="list">
+      <scroll-view class="profile-form-scroll qr-contact-form-scroll" scroll-y type="list">
         <view class="profile-form-list-content">
           <view class="profile-sheet-fields-panel">
             <view class="form-row qr-source-row">

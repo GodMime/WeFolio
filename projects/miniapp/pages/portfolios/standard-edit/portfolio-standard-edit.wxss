@@ -1015,6 +1015,13 @@
   max-height: none;
 }
 
+/* Skyline 的滚动容器需要明确高度，避免自动高度弹层中的二维码表单塌陷。 */
+.qr-contact-form-scroll {
+  height: 440rpx;
+  min-height: 0;
+  flex: 0 1 auto;
+}
+
 .profile-form-list-content {
   display: flex;
   flex-direction: column;
