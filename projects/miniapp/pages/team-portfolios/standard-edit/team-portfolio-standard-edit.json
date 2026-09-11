@@ -1,5 +1,6 @@
 {
   "usingComponents": {
+    "background-audio-control": "../components/background-audio-control/background-audio-control",
     "text-color-editor": "../components/text-color-editor/text-color-editor",
     "navigation-bar": "/components/navigation-bar/navigation-bar",
     "team-profile": "../components/team-profile/team-profile",

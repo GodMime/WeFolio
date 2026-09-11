@@ -4,6 +4,8 @@ import com.jxc.wefolio.job.config.CosProperties;
 import com.jxc.wefolio.job.dict.AuditResultDict;
 import com.qcloud.cos.COSClient;
 import com.qcloud.cos.model.ciModel.auditing.AuditingJobsDetail;
+import com.qcloud.cos.model.ciModel.auditing.AudioAuditingRequest;
+import com.qcloud.cos.model.ciModel.auditing.AudioAuditingResponse;
 import com.qcloud.cos.model.ciModel.auditing.AdsInfo;
 import com.qcloud.cos.model.ciModel.auditing.ImageAuditingRequest;
 import com.qcloud.cos.model.ciModel.auditing.ImageAuditingResponse;
@@ -27,6 +29,31 @@ import static org.mockito.Mockito.when;
  * 腾讯云数据万象审核客户端测试。
  */
 class CosTencentCiAuditClientTest {
+
+    /** 音频提交仅传对象键，查询映射腾讯终态。 */
+    @Test
+    void audioShouldSubmitObjectAddressAndMapQueryResult() {
+        COSClient cos = mock(COSClient.class);
+        AudioAuditingResponse response = new AudioAuditingResponse();
+        AuditingJobsDetail detail = new AuditingJobsDetail();
+        detail.setJobId("audio-job");
+        detail.setState("Success");
+        detail.setResult("0");
+        response.setJobsDetail(detail);
+        when(cos.createAudioAuditingJobs(org.mockito.ArgumentMatchers.any(AudioAuditingRequest.class))).thenReturn(response);
+        when(cos.describeAudioAuditingJob(org.mockito.ArgumentMatchers.any(AudioAuditingRequest.class))).thenReturn(response);
+        CosTencentCiAuditClient client = new CosTencentCiAuditClient(cos, testCosProperties());
+        assertThat(client.submitAudio("user/work/audio/a.mp3").ciJobId()).isEqualTo("audio-job");
+        TencentCiAuditResult result = client.queryAudio("audio-job");
+        assertThat(result.auditResult()).isEqualTo(AuditResultDict.PASS);
+        assertThat(result.terminal()).isTrue();
+        ArgumentCaptor<AudioAuditingRequest> captor = ArgumentCaptor.forClass(AudioAuditingRequest.class);
+        verify(cos).createAudioAuditingJobs(captor.capture());
+        assertThat(captor.getValue().getInput().getObject()).isEqualTo("user/work/audio/a.mp3");
+        assertThat(captor.getValue().getBucketName()).isEqualTo(BUCKET_NAME);
+        verify(cos).describeAudioAuditingJob(captor.capture());
+        assertThat(captor.getValue().getJobId()).isEqualTo("audio-job");
+    }
 
     /** 测试用存储桶名称 */
     private static final String BUCKET_NAME = "test-bucket";

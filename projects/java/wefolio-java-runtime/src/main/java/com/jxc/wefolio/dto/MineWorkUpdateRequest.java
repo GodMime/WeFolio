@@ -16,6 +16,9 @@ public class MineWorkUpdateRequest {
     /** 作品说明，最长 1000 字 */
     private String description;
 
+    /** 音频封面原件 key；null 保持不变，空字符串恢复默认，仅接受本人有效图片作品。 */
+    private String audioCoverObjectKey;
+
     /** 视频封面截帧时间点，单位毫秒，仅视频作品可提交 */
     private Long coverFrameTimeMs;
 

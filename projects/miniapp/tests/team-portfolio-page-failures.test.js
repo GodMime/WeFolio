@@ -555,7 +555,12 @@ test('team WXML handlers exist and templates do not call methods', () => {
     const wxml = fs.readFileSync(path.join(ROOT, `${base}.wxml`), 'utf8')
     const source = fs.readFileSync(path.join(ROOT, `${base}.js`), 'utf8')
     assert.doesNotMatch(wxml, /\{\{[^}]*[A-Za-z_$][\w$]*\s*\(/)
-    for (const match of wxml.matchAll(/\b(?:bind|catch)[a-z]+="([A-Za-z][A-Za-z0-9_]*)"/g)) assert.match(source, new RegExp(`\\b${match[1]}\\s*\\(`))
+    const page = loadPage(`${base}.js`, async () => ({}))
+    try {
+      for (const match of wxml.matchAll(/\b(?:bind|catch)[a-z]+="([A-Za-z][A-Za-z0-9_]*)"/g)) {
+        assert.equal(typeof page[match[1]], 'function', `${base}: ${match[1]} 必须注册到 Page（包含复用方法）`)
+      }
+    } finally { page.cleanup() }
   }
 })
 

@@ -111,6 +111,9 @@ public class MineWorkListResponse {
         /** 媒体访问 URL */
         private String mediaUrl;
 
+        /** 媒体原件 key，供音频封面选择引用；不改变原有 URL 字段。 */
+        private String mediaObjectKey;
+
         /** 封面访问 URL */
         private String coverUrl;
 

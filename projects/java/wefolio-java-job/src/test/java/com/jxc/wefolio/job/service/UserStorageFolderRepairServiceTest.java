@@ -41,13 +41,17 @@ class UserStorageFolderRepairServiceTest {
         Summary summary = new UserStorageFolderRepairService(
                 repository, cosService, properties).run("execution-1");
 
-        assertThat(summary).isEqualTo(new Summary(2, 0, 1, 1));
+        assertThat(summary).isEqualTo(new Summary(2, 0, 3, 1));
         InOrder inOrder = inOrder(repository, cosService);
         inOrder.verify(repository).findActiveUsersAfter(0L, 200);
         inOrder.verify(cosService).exists(first.uniqueCode(), "work/animation/");
         inOrder.verify(cosService).create(first.uniqueCode(), "work/animation/");
+        inOrder.verify(cosService).exists(first.uniqueCode(), "work/audio/");
+        inOrder.verify(cosService).create(first.uniqueCode(), "work/audio/");
         inOrder.verify(cosService).exists(second.uniqueCode(), "work/animation/");
         inOrder.verify(cosService).create(second.uniqueCode(), "work/animation/");
+        inOrder.verify(cosService).exists(second.uniqueCode(), "work/audio/");
+        inOrder.verify(cosService).create(second.uniqueCode(), "work/audio/");
         inOrder.verify(repository).findActiveUsersAfter(2L, 200);
     }
 }

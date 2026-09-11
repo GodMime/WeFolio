@@ -33,6 +33,15 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class ContentLimitServiceTest {
 
+    /** 音频独立计数，第一百个允许、第一百零一个拒绝。 */
+    @Test
+    void audioCapacityShouldUseIndependentLimit() {
+        when(workEntityMapper.selectCount(any())).thenReturn(99L, 100L);
+        assertThatCode(() -> service.ensureWorkCapacity(7L, "AUDIO", 1L)).doesNotThrowAnyException();
+        assertThatThrownBy(() -> service.ensureWorkCapacity(7L, "AUDIO", 1L))
+                .hasMessage("音频作品最多保留 100 个");
+    }
+
     @Mock
     private WorkEntityMapper workEntityMapper;
 

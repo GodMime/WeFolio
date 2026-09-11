@@ -30,6 +30,7 @@ const {
 const { calculateFileSha256: calculateLocalFileSha256 } = require('./utils/sha256')
 const {
   DEFAULT_WORK_TAG_COLOR,
+  DEFAULT_AUDIO_COVER_URL,
   WORK_TAG_COLOR_OPTIONS,
   WORK_TAG_MAX_COUNT,
   buildWorkEditSelectedTagIds,
@@ -80,6 +81,7 @@ const WORK_THUMBNAIL_CROP_HORIZONTAL_GUTTER_RPX = 112
 const WORK_THUMBNAIL_PREVIEW_FILE_PREFIX = 'work-thumbnail-preview'
 const WORK_TAG_REFERENCED_NOTICE = '已引用作品只能新增标签，不能删除已有标签'
 const WORK_TAG_REFERENCED_TOAST = '已引用作品不能删除已有标签'
+const WORK_VIDEO_IDS = ['workPreviewVideo', 'workCoverVideo']
 
 function clampNumber(value, min, max) {
   const numberValue = Number(value)
@@ -157,6 +159,16 @@ function buildBaseWorkEditForm(work = {}) {
 }
 
 function buildImageEditForm(work = {}) {
+  if (work.mediaType === 'AUDIO') {
+    return Object.assign(buildBaseWorkEditForm(work), {
+      isAudio: true,
+      audioCoverUrl: work.coverUrl || DEFAULT_AUDIO_COVER_URL,
+      thumbnailSourcePath: '',
+      durationText: work.durationText || formatFrameTime(work.durationMs),
+      fileSizeText: work.fileSizeText || '',
+      auditStatus: work.auditStatus
+    })
+  }
   const clientId = `${EDIT_COVER_CLIENT_PREFIX}-${work.id}`
   const thumbnailPreviewPath = work.coverUrl || work.mediaUrl || ''
   return Object.assign(buildBaseWorkEditForm(work), {
@@ -450,6 +462,13 @@ Page({
     thumbnailCanvasWidth: WORK_THUMBNAIL_MAX_SIDE,
     thumbnailCanvasHeight: WORK_THUMBNAIL_MAX_SIDE,
     imageThumbnailUploadProgress: 0,
+    audioWorkId: null,
+    audioPlaying: false,
+    audioCoverPickerVisible: false,
+    audioCoverCandidates: [],
+    audioCoverPage: 0,
+    audioCoverHasMore: false,
+    audioCoverLoading: false,
     videoEditSheetVisible: false,
     videoEditForm: null,
     videoEditFieldCounters: buildWorkFieldCounters({}),
@@ -490,7 +509,121 @@ Page({
   },
 
   onShow() {
+    this.audioHidden = false
     this.bootstrap()
+  },
+
+  onHide() {
+    this.audioHidden = true
+    this.pauseWorkAudio()
+  },
+
+  // 作品库只手动试听，一个页面共用一个原生实例。
+  toggleWorkAudio(work) {
+    if (!work || this.audioHidden || this.audioDisposed) return
+    if (work.auditStatus !== 'PASSED' || !work.mediaUrl) {
+      wx.showToast({ title: '音频审核通过后才能试听', icon: 'none' })
+      return
+    }
+    if (this.data.audioWorkId === work.id && this.data.audioPlaying) {
+      this.pauseWorkAudio()
+      return
+    }
+    try {
+      if (!this.workAudio) {
+        const audio = wx.createInnerAudioContext()
+        this.workAudio = audio
+        audio.autoplay = false
+        const update = (playing) => {
+          if (this.audioDisposed || this.workAudio !== audio) return
+          if (playing && this.audioHidden) { audio.pause(); return }
+          this.setData({ audioPlaying: playing })
+        }
+        audio.onPlay(() => update(true))
+        audio.onPause(() => update(false))
+        audio.onStop(() => update(false))
+        audio.onEnded(() => update(false))
+        audio.onError(() => {
+          update(false)
+          if (!this.audioDisposed && !this.audioHidden) wx.showToast({ title: '音频播放失败，请重试', icon: 'none' })
+        })
+      }
+      if (wx.createVideoContext) WORK_VIDEO_IDS.forEach((id) => wx.createVideoContext(id, this).pause())
+      if (this.data.audioWorkId !== work.id || this.workAudio.src !== work.mediaUrl) {
+        this.workAudio.stop()
+        this.setData({ audioWorkId: work.id, audioPlaying: false })
+        this.workAudio.src = work.mediaUrl
+      }
+      this.workAudio.play()
+    } catch (error) {
+      this.setData({ audioPlaying: false })
+      wx.showToast({ title: '音频播放失败，请重试', icon: 'none' })
+    }
+  },
+
+  pauseWorkAudio() {
+    if (this.workAudio) this.workAudio.pause()
+    if (!this.audioDisposed) this.setData({ audioPlaying: false })
+  },
+
+  handleAudioEditPlay() {
+    this.toggleWorkAudio(this.data.imageEditForm)
+  },
+
+  handleAudioCoverError(event) {
+    const id = normalizeId(event.currentTarget.dataset.id)
+    const work = this.findWorkById(id)
+    if (work && work.mediaType === 'AUDIO' && work.coverUrl !== DEFAULT_AUDIO_COVER_URL) {
+      this.patchWorkInList(work, { coverUrl: DEFAULT_AUDIO_COVER_URL })
+    }
+    if (this.data.imageEditForm && this.data.imageEditForm.isAudio
+      && (!id || id === this.data.imageEditForm.id) && this.data.imageEditForm.audioCoverUrl !== DEFAULT_AUDIO_COVER_URL) {
+      this.setData({ 'imageEditForm.audioCoverUrl': DEFAULT_AUDIO_COVER_URL })
+    }
+  },
+
+  handleChooseAudioCover() {
+    if (!this.data.imageEditForm || !this.data.imageEditForm.isAudio || this.data.imageEditSaving) return
+    this.audioCoverVersion = (this.audioCoverVersion || 0) + 1
+    this.setData({ audioCoverPickerVisible: true, audioCoverCandidates: [], audioCoverPage: 0, audioCoverHasMore: true, audioCoverLoading: false, imageEditErrorText: '' })
+    return this.handleLoadMoreAudioCovers()
+  },
+
+  async handleLoadMoreAudioCovers() {
+    if (!this.data.audioCoverPickerVisible || this.data.audioCoverLoading || !this.data.audioCoverHasMore) return
+    const version = this.audioCoverVersion
+    const page = this.data.audioCoverPage + 1
+    const isCurrent = () => !this.audioDisposed && this.data.audioCoverPickerVisible && this.audioCoverVersion === version
+    this.setData({ audioCoverLoading: true, imageEditErrorText: '' })
+    try {
+      const response = await request({ url: WORKS_API_PREFIX, data: { mediaType: 'IMAGE', auditStatus: 'PASSED', page, pageSize: 20 } })
+      if (!isCurrent()) return
+      const list = normalizeWorkList(response)
+      this.setData({ audioCoverCandidates: this.data.audioCoverCandidates.concat(list.works), audioCoverPage: page, audioCoverHasMore: list.hasMore })
+    } catch (error) {
+      if (!isCurrent()) return
+      if (error && error.authRequired) handleMaintainerAuthRequired(error.message)
+      else this.setData({ imageEditErrorText: error && error.message ? error.message : '图片加载失败，请重试' })
+    } finally {
+      if (isCurrent()) this.setData({ audioCoverLoading: false })
+    }
+  },
+
+  handleSelectAudioCover(event) {
+    if (this.data.imageEditSaving || !this.data.audioCoverPickerVisible) return
+    const id = normalizeId(event.currentTarget.dataset.id)
+    const image = this.data.audioCoverCandidates.find((item) => item.id === id)
+    if (!image || image.mediaType !== 'IMAGE' || image.auditStatus !== 'PASSED' || !image.mediaObjectKey) return
+    this.setData({ 'imageEditForm.audioCoverObjectKey': image.mediaObjectKey, 'imageEditForm.audioCoverUrl': image.mediaUrl, audioCoverPickerVisible: false })
+  },
+
+  handleResetAudioCover() {
+    if (!this.data.imageEditForm || !this.data.imageEditForm.isAudio || this.data.imageEditSaving) return
+    this.setData({ 'imageEditForm.audioCoverObjectKey': '', 'imageEditForm.audioCoverUrl': DEFAULT_AUDIO_COVER_URL, audioCoverPickerVisible: false })
+  },
+
+  handleCloseAudioCoverPicker() {
+    this.setData({ audioCoverPickerVisible: false })
   },
 
   onPullDownRefresh() {
@@ -516,6 +649,10 @@ Page({
   },
 
   onUnload() {
+    this.pauseWorkAudio()
+    this.audioDisposed = true
+    if (this.workAudio) this.workAudio.destroy()
+    this.workAudio = null
     Object.keys(this.uploadTasks).forEach((key) => {
       const task = this.uploadTasks[key]
       if (task && task.abort) {
@@ -534,6 +671,7 @@ Page({
   },
 
   async loadWorks(reset = false, options = {}) {
+    if (reset) this.pauseWorkAudio()
     const requestSeq = this.requestSeq + 1
     this.requestSeq = requestSeq
     const currentList = this.data.list
@@ -1021,12 +1159,14 @@ Page({
   },
 
   openImageEditSheet(work) {
+    this.pauseWorkAudio()
     const imageEditForm = Object.assign(buildImageEditForm(work), {
       tagOptions: buildWorkEditTagOptions(this.data.list.tags, work.tags, work.referenceCount),
       tagEditNotice: work.referenceCount > 0 ? WORK_TAG_REFERENCED_NOTICE : ''
     })
     this.setData({
       imageEditSheetVisible: true,
+      audioCoverPickerVisible: false,
       imageEditForm,
       imageEditFieldCounters: buildWorkFieldCounters(imageEditForm),
       imageEditSaving: false,
@@ -1058,6 +1198,7 @@ Page({
   },
 
   openVideoEditSheet(work) {
+    this.pauseWorkAudio()
     const videoEditForm = Object.assign(buildVideoEditForm(work), {
       tagOptions: buildWorkEditTagOptions(this.data.list.tags, work.tags, work.referenceCount),
       tagEditNotice: work.referenceCount > 0 ? WORK_TAG_REFERENCED_NOTICE : ''
@@ -1088,6 +1229,7 @@ Page({
   },
 
   openAnimationEditSheet(work) {
+    this.pauseWorkAudio()
     const animationEditForm = Object.assign(buildAnimationEditForm(work), {
       tagOptions: buildWorkEditTagOptions(this.data.list.tags, work.tags, work.referenceCount),
       tagEditNotice: work.referenceCount > 0 ? WORK_TAG_REFERENCED_NOTICE : '',
@@ -1136,6 +1278,10 @@ Page({
       this.openVideoPreview(work)
       return
     }
+    if (work.mediaType === 'AUDIO') {
+      this.toggleWorkAudio(work)
+      return
+    }
     this.openImagePreview(work)
   },
 
@@ -1160,6 +1306,7 @@ Page({
   },
 
   openVideoPreview(work = {}) {
+    this.pauseWorkAudio()
     const src = work.mediaUrl || ''
     if (!src) {
       wx.showToast({
@@ -1213,8 +1360,10 @@ Page({
     if (this.data.imageEditSaving) {
       return
     }
+    this.pauseWorkAudio()
     this.setData({
       imageEditSheetVisible: false,
+      audioCoverPickerVisible: false,
       imageEditForm: null,
       imageEditFieldCounters: buildWorkFieldCounters({}),
       imageEditErrorText: '',
@@ -1309,7 +1458,7 @@ Page({
 
   async handleOpenThumbnailCrop() {
     const imageEditForm = this.data.imageEditForm
-    if (!imageEditForm || this.data.imageEditSaving || this.data.thumbnailCropSaving) {
+    if (!imageEditForm || imageEditForm.isAudio || this.data.imageEditSaving || this.data.thumbnailCropSaving) {
       return
     }
     try {
@@ -1666,12 +1815,15 @@ Page({
       imageEditErrorText: ''
     })
     try {
-      const thumbnailTicket = imageEditForm.thumbnailEdited
+      const thumbnailTicket = !imageEditForm.isAudio && imageEditForm.thumbnailEdited
         ? await this.uploadImageThumbnailOnConfirm(imageEditForm)
         : null
       const payload = buildWorkUpdatePayload({
         title: imageEditForm.title,
         description: imageEditForm.description,
+        ...(imageEditForm.isAudio && hasOwnField(imageEditForm, 'audioCoverObjectKey') ? {
+          audioCoverObjectKey: imageEditForm.audioCoverObjectKey
+        } : {}),
         ...buildEditTagPayloadFields(imageEditForm),
         ...(thumbnailTicket && thumbnailTicket.taskId ? {
           thumbnailTaskId: thumbnailTicket.taskId
@@ -1683,6 +1835,7 @@ Page({
         data: payload
       })
       this.patchWorkInList(imageEditForm, response && response.work ? response.work : payload)
+      this.pauseWorkAudio()
       wx.showToast({
         title: '作品已更新',
         icon: 'success'

@@ -14,7 +14,7 @@
     show-center-play-btn="{{true}}"
     enable-progress-gesture="{{true}}"
     object-fit="cover"
-    binderror="handleVideoError"
+    bindplay="handleVideoPlay" binderror="handleVideoError"
   ></video>
   <view
     wx:elif="{{work.isVideo}}"

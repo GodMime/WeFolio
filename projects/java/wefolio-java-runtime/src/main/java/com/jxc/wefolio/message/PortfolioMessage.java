@@ -290,6 +290,15 @@ public interface PortfolioMessage {
     /** 展示作品数量超限提示 */
     String DISPLAY_WORK_COUNT_LIMIT_MESSAGE = "选择的作品数量过多";
 
+    /** 背景音频字段无效提示。 */
+    String BACKGROUND_AUDIO_CONFIG_INVALID = "背景音频配置不正确";
+
+    /** 开启背景音频但未选择作品。 */
+    String BACKGROUND_AUDIO_REQUIRED = "开启背景音频后，请从音频作品中选择";
+
+    /** 背景音频作品不可用。 */
+    String BACKGROUND_AUDIO_UNAVAILABLE = "所选背景音频不可用，请重新选择";
+
     /** 组件为空提示 */
     String PORTFOLIO_COMPONENT_EMPTY_MESSAGE = "作品集组件不能为空";
 }

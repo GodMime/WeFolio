@@ -4,12 +4,25 @@ const {
   normalizeDimension
 } = require('./media')
 const { calculateFileSha256 } = require('./sha256')
+const { DEFAULT_AUDIO_COVER_URL } = require('./works')
 
 const MAX_BATCH_COUNT = 9
 const IMAGE_MAX_BYTES = 10 * 1024 * 1024
 const ANIMATION_MAX_BYTES = 10 * 1024 * 1024
 const VIDEO_MAX_BYTES = 100 * 1024 * 1024
 const VIDEO_MAX_DURATION_SECONDS = 10 * 60
+const AUDIO_MAX_BYTES = 50 * 1024 * 1024
+const AUDIO_MAX_DURATION_MS = 10 * 60 * 1000
+const AUDIO_READ_TIMEOUT_MS = 5000
+const AUDIO_READ_FAILED_MESSAGE = '无法读取音频信息，请转换为 MP3 后重试'
+const AUDIO_MIME_TYPES = { mp3: 'audio/mpeg', m4a: 'audio/mp4', aac: 'audio/aac', wav: 'audio/wav' }
+const AUDIO_PICKER_FILE_TYPE = 'file'
+const AUDIO_PICKER_UNSUPPORTED_MESSAGE = '当前微信版本不支持选择文件，请升级微信'
+const AUDIO_PICKER_FAILED_MESSAGE = '选择音频失败，请重试'
+const AUDIO_PICKER_UNAVAILABLE_MESSAGE = '暂时无法选择音频，请联系管理员'
+const AUDIO_PICKER_PRIVACY_MESSAGE = '请同意隐私保护指引后选择音频'
+const PRIVACY_SCOPE_UNDECLARED_ERRNO = 112
+const PRIVACY_AUTH_DENIED_ERRNOS = [103, 104]
 const IMAGE_UPLOAD_CONCURRENCY = 2
 const ANIMATION_UPLOAD_CONCURRENCY = 2
 const VIDEO_UPLOAD_CONCURRENCY = 1
@@ -71,6 +84,47 @@ function createChooseMediaOptions(remainingCount = MAX_BATCH_COUNT) {
     sourceType: [CHOOSE_SOURCE_TYPE_ALBUM],
     sizeType: ['original']
   }
+}
+
+function createChooseAudioError(rawError = {}) {
+  const errMsg = trimText(rawError && (rawError.errMsg || rawError.message))
+  const errno = rawError && rawError.errno
+  let message = AUDIO_PICKER_FAILED_MESSAGE
+  if (/cancel/i.test(errMsg)) {
+    message = errMsg
+  } else if (Number(errno) === PRIVACY_SCOPE_UNDECLARED_ERRNO
+      || /api scope is not declared in the privacy agreement|appid privacy api banned/i.test(errMsg)) {
+    // 聊天文件的隐私声明独立于照片和视频，须在微信管理后台补充，不能由客户端绕过。
+    message = AUDIO_PICKER_UNAVAILABLE_MESSAGE
+  } else if (PRIVACY_AUTH_DENIED_ERRNOS.includes(Number(errno))) {
+    message = AUDIO_PICKER_PRIVACY_MESSAGE
+  }
+  const error = new Error(message)
+  error.errMsg = errMsg
+  error.errno = errno
+  return error
+}
+
+// 保留微信 fail 对象中的诊断字段，避免页面只读取 Error.message 而丢失原始原因。
+function chooseAudioFiles(remainingCount = MAX_BATCH_COUNT, options = {}) {
+  return new Promise((resolve, reject) => {
+    const runtimeWx = getRuntimeWx(options.wxApi)
+    if (typeof runtimeWx.chooseMessageFile !== 'function') {
+      reject(new Error(AUDIO_PICKER_UNSUPPORTED_MESSAGE))
+      return
+    }
+    try {
+      runtimeWx.chooseMessageFile({
+        count: createChooseMediaOptions(remainingCount).count,
+        type: AUDIO_PICKER_FILE_TYPE,
+        extension: Object.keys(AUDIO_MIME_TYPES),
+        success: resolve,
+        fail(error) { reject(createChooseAudioError(error)) }
+      })
+    } catch (error) {
+      reject(createChooseAudioError(error))
+    }
+  })
 }
 
 function createChooseCoverImageOptions() {
@@ -170,6 +224,9 @@ function formatDurationText(durationMs) {
 }
 
 function buildMediaMetaText(mediaType, durationMs) {
+  if (mediaType === 'AUDIO') {
+    return `默认标题 · 音频 ${formatDurationText(durationMs)}`
+  }
   if (mediaType === 'VIDEO') {
     const durationText = formatDurationText(durationMs)
     return durationText ? `默认标题 · 视频 ${durationText}` : '默认标题 · 视频'
@@ -191,7 +248,7 @@ function mimeTypeFromFile(file) {
 function normalizeChosenMediaFile(raw = {}, index = 0) {
   const filePath = trimText(raw.tempFilePath || raw.path)
   const fileName = trimText(raw.name) || fileNameFromPath(filePath)
-  const mediaType = raw.fileType === 'video' ? 'VIDEO' : 'IMAGE'
+  const mediaType = raw.fileType === 'audio' ? 'AUDIO' : raw.fileType === 'video' ? 'VIDEO' : 'IMAGE'
   const durationMs = raw.duration ? Math.round(Number(raw.duration) * 1000) : normalizeSize(raw.durationMs)
   const width = normalizeDimension(raw.width)
   const height = normalizeDimension(raw.height)
@@ -200,6 +257,7 @@ function normalizeChosenMediaFile(raw = {}, index = 0) {
     clientId: raw.clientId || `client-${Date.now()}-${index}`,
     tempFilePath: filePath,
     coverPath: trimText(raw.thumbTempFilePath),
+    audioCoverUrl: mediaType === 'AUDIO' ? DEFAULT_AUDIO_COVER_URL : '',
     fileName,
     title: titleFromFileName(fileName),
     description: '',
@@ -208,8 +266,8 @@ function normalizeChosenMediaFile(raw = {}, index = 0) {
     isAnimation: mediaType === 'ANIMATION',
     metaText: buildMediaMetaText(mediaType, durationMs),
     mediaType,
-    fileType: mediaType === 'VIDEO' ? 'video' : 'image',
-    mimeType: mimeTypeFromFile(raw),
+    fileType: mediaType.toLowerCase(),
+    mimeType: mediaType === 'AUDIO' ? (AUDIO_MIME_TYPES[fileName.split('.').pop().toLowerCase()] || '') : mimeTypeFromFile(raw),
     size: normalizeSize(raw.size),
     sha256: trimText(raw.sha256),
     durationMs,
@@ -383,6 +441,44 @@ function getVideoInfo(filePath, wxApi) {
   })
 }
 
+// 只让微信读取本地时长，不播放、不解析文件内容；退出页面可取消。
+function readAudioDuration(filePath, options = {}) {
+  return new Promise((resolve, reject) => {
+    let context
+    let timer
+    let poll
+    let settled = false
+    const finish = (error, durationMs) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      clearInterval(poll)
+      if (context) context.destroy()
+      if (options.onCancelReady) options.onCancelReady(null)
+      if (error) reject(error)
+      else resolve(durationMs)
+    }
+    const read = () => {
+      if (settled) return
+      const seconds = Number(context.duration)
+      if (Number.isFinite(seconds) && seconds > 0) finish(null, Math.max(1, Math.round(seconds * 1000)))
+    }
+    try {
+      context = getRuntimeWx(options.wxApi).createInnerAudioContext()
+      context.autoplay = false
+      context.onCanplay(read)
+      context.onError(() => finish(new Error(AUDIO_READ_FAILED_MESSAGE)))
+      timer = setTimeout(() => finish(new Error(AUDIO_READ_FAILED_MESSAGE)), options.timeoutMs || AUDIO_READ_TIMEOUT_MS)
+      // canplay 时 duration 可能尚未就绪，只在此次读取的五秒窗口内等待。
+      poll = setInterval(read, 100)
+      if (options.onCancelReady) options.onCancelReady(() => finish(new Error('cancel')))
+      context.src = filePath
+    } catch (error) {
+      finish(new Error(AUDIO_READ_FAILED_MESSAGE))
+    }
+  })
+}
+
 function getImageInfo(filePath, wxApi) {
   let runtimeWx
   try {
@@ -515,6 +611,16 @@ function validateChosenMediaFiles(files = []) {
     return { valid: false, message: '一次最多上传 9 个作品' }
   }
   for (const file of files) {
+    if (file.mediaType === 'AUDIO') {
+      if (!AUDIO_MIME_TYPES[trimText(file.fileName).split('.').pop().toLowerCase()]) {
+        return { valid: false, message: '音频仅支持 MP3、M4A、AAC、WAV' }
+      }
+      if (normalizeSize(file.size) <= 0 || file.size > AUDIO_MAX_BYTES) {
+        return { valid: false, message: '音频文件不能为空且不能超过 50MB' }
+      }
+      if (normalizeSize(file.durationMs) <= 0) return { valid: false, message: AUDIO_READ_FAILED_MESSAGE }
+      if (file.durationMs > AUDIO_MAX_DURATION_MS) return { valid: false, message: '音频作品不能超过 10 分钟' }
+    }
     if (file.mediaType === 'IMAGE' && normalizeSize(file.size) > IMAGE_MAX_BYTES) {
       return { valid: false, message: IMAGE_TOO_LARGE_MESSAGE }
     }
@@ -527,7 +633,7 @@ function validateChosenMediaFiles(files = []) {
     if (file.mediaType === 'VIDEO' && normalizeSize(file.durationMs) > VIDEO_MAX_DURATION_SECONDS * 1000) {
       return { valid: false, message: '视频作品不能超过 10 分钟' }
     }
-    if (file.mediaType !== 'IMAGE' && file.mediaType !== 'VIDEO' && file.mediaType !== 'ANIMATION') {
+    if (file.mediaType !== 'IMAGE' && file.mediaType !== 'VIDEO' && file.mediaType !== 'ANIMATION' && file.mediaType !== 'AUDIO') {
       return { valid: false, message: '作品文件格式不支持' }
     }
   }
@@ -546,12 +652,16 @@ function buildUploadTicketPayload(files = [], batchId = '') {
           fileName: file.fileName,
           mimeType: file.mimeType,
           fileSize: file.size,
-          durationMs: file.mediaType === 'VIDEO' ? file.durationMs : null,
+          durationMs: file.mediaType === 'VIDEO' || file.mediaType === 'AUDIO' ? file.durationMs : null,
           width: file.width,
           height: file.height,
           idempotencyKey: `ticket-${file.clientId}`
         }
         const sha256 = trimText(file.sha256)
+        if (file.mediaType === 'AUDIO') {
+          delete item.width
+          delete item.height
+        }
         if (sha256) {
           item.sha256 = sha256
         }
@@ -756,7 +866,8 @@ function buildUploadCompletePayload(files = []) {
           aspectRatio: resolveAspectRatio(file),
           idempotencyKey: file.confirmIdempotencyKey
         }
-        if (file.customCoverTaskId && file.customCoverStatus === 'UPLOADED') {
+        if (file.mediaType === 'AUDIO') delete item.aspectRatio
+        if (file.mediaType !== 'AUDIO' && file.customCoverTaskId && file.customCoverStatus === 'UPLOADED') {
           item.coverTaskId = file.customCoverTaskId
         }
         return item
@@ -892,7 +1003,7 @@ async function runWorkUploadQueue(items = [], uploadFn, options = {}) {
   const pendingItems = items.filter(shouldUploadMainFile)
   const images = pendingItems.filter((item) => item.mediaType === 'IMAGE')
   const animations = pendingItems.filter((item) => item.mediaType === 'ANIMATION')
-  const videos = pendingItems.filter((item) => item.mediaType === 'VIDEO')
+  const videos = pendingItems.filter((item) => item.mediaType === 'VIDEO' || item.mediaType === 'AUDIO')
   const [imageResults, animationResults, videoResults] = await Promise.all([
     runPool(images, imageConcurrency, uploadFn),
     runPool(animations, animationConcurrency, uploadFn),
@@ -902,6 +1013,9 @@ async function runWorkUploadQueue(items = [], uploadFn, options = {}) {
 }
 
 module.exports = {
+  AUDIO_MAX_BYTES,
+  AUDIO_MIME_TYPES,
+  readAudioDuration,
   ANIMATION_MAX_BYTES,
   ANIMATION_UPLOAD_CONCURRENCY,
   COS_UPLOAD_TIMEOUT,
@@ -923,6 +1037,7 @@ module.exports = {
   buildUploadTicketPayload,
   createChooseCoverImageOptions,
   createChooseMediaOptions,
+  chooseAudioFiles,
   classifyChosenMediaFiles,
   enrichVideoFileMetadata,
   normalizeChosenMediaFiles,

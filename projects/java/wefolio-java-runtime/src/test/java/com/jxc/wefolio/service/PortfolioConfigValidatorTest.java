@@ -1,6 +1,9 @@
 package com.jxc.wefolio.service;
 
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
+import com.jxc.wefolio.common.auth.AuthContext;
+import com.jxc.wefolio.common.auth.AuthContextHolder;
 import com.jxc.wefolio.dict.MediaTypeDict;
 import com.jxc.wefolio.dict.PortfolioConfigScopeDict;
 import com.jxc.wefolio.dict.PortfolioComponentTypeDict;
@@ -8,6 +11,7 @@ import com.jxc.wefolio.dict.ReferenceTypeDict;
 import com.jxc.wefolio.dict.WorkAuditStatusDict;
 import com.jxc.wefolio.dict.WorkStatusDict;
 import com.jxc.wefolio.dto.PortfolioConfigDto;
+import com.jxc.wefolio.dto.BackgroundAudioConfigDto;
 import com.jxc.wefolio.entity.PortfolioReferenceEntity;
 import com.jxc.wefolio.entity.WorkEntity;
 import com.jxc.wefolio.exception.BusinessException;
@@ -32,6 +36,89 @@ import static org.mockito.Mockito.when;
  */
 @ExtendWith(MockitoExtension.class)
 class PortfolioConfigValidatorTest {
+
+    /** 背景字段缺省保留，显式提交直接生效，不依赖能力头。 */
+    @Test
+    void backgroundAudioMergeShouldUseFieldPresence() {
+        PortfolioConfigDto base = config(component("profile", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, true, Map.of()));
+        PortfolioConfigDto stored = validator().normalize(7L, base);
+        assertThat(stored.getBackgroundAudio().getEnabled()).isFalse();
+        assertThat(stored.getBackgroundAudio().getWorkId()).isNull();
+        assertThat(stored.getBackgroundAudio().getDisplayStyle()).isEqualTo("DISC");
+        stored.getBackgroundAudio().setEnabled(true);
+        stored.getBackgroundAudio().setDisplayStyle("SLEEVE");
+        assertThat(validator().normalizeForDraft(7L, base, stored).getBackgroundAudio().getDisplayStyle()).isEqualTo("SLEEVE");
+        base.setBackgroundAudio(new BackgroundAudioConfigDto());
+        assertThat(validator().normalizeForDraft(7L, base, stored).getBackgroundAudio().getEnabled()).isFalse();
+        assertThat(stored.getBackgroundAudio().getEnabled()).isTrue();
+    }
+
+    /** 音频引用只接受本人已通过审核的可用音频，客户端不能绕过作品归属。 */
+    @Test
+    void backgroundAudioShouldRejectUnavailableAndUnownedWorks() {
+        PortfolioConfigDto input = config(component("profile", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, true, Map.of()));
+        BackgroundAudioConfigDto audio = new BackgroundAudioConfigDto();
+        audio.setWorkId(19L);
+        input.setBackgroundAudio(audio);
+        WorkEntity work = work(19L, 8L, "AUDIO", "ACTIVE");
+        work.setAuditStatus("PASSED");
+        when(workEntityMapper.selectById(19L)).thenReturn(work);
+        assertThatThrownBy(() -> validator().normalize(7L, input)).hasMessage(PortfolioMessage.BACKGROUND_AUDIO_UNAVAILABLE);
+        work.setUserId(7L);
+        work.setMediaType("VIDEO");
+        assertThatThrownBy(() -> validator().normalize(7L, input)).hasMessage(PortfolioMessage.BACKGROUND_AUDIO_UNAVAILABLE);
+        work.setMediaType("AUDIO");
+        work.setAuditStatus("PENDING");
+        assertThatThrownBy(() -> validator().normalize(7L, input)).hasMessage(PortfolioMessage.BACKGROUND_AUDIO_UNAVAILABLE);
+    }
+
+    /** 关闭仍保留音频引用；旧请求不得擦除已有选择。 */
+    @Test
+    void backgroundAudioShouldSurviveLegacySaveAndKeepReferenceWhenDisabled() {
+        PortfolioConfigDto base = config(component("profile", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, true, Map.of()));
+        JSONObject json = JSON.parseObject(JSON.toJSONString(base));
+        json.put("backgroundAudio", Map.of("enabled", false, "workId", 19, "displayStyle", "DISC"));
+        PortfolioConfigDto stored = json.toJavaObject(PortfolioConfigDto.class);
+        WorkEntity audioWork = work(19L, 7L, MediaTypeDict.AUDIO.getCode(), WorkStatusDict.ACTIVE.getCode());
+        audioWork.setAuditStatus(WorkAuditStatusDict.PASSED.getCode());
+        when(workEntityMapper.selectById(19L)).thenReturn(audioWork);
+        PortfolioConfigDto normalized = validator().normalizeForDraft(7L, base, stored);
+        JSONObject audio = JSON.parseObject(JSON.toJSONString(normalized)).getJSONObject("backgroundAudio");
+        assertThat(audio).isNotNull();
+        assertThat(audio.getLong("workId")).isEqualTo(19L);
+        assertThat(audio.getBoolean("enabled")).isFalse();
+        for (String scope : List.of(PortfolioConfigScopeDict.DRAFT.getCode(), PortfolioConfigScopeDict.PUBLISHED.getCode())) {
+            assertThat(validator().buildReferences(11L, 7L, scope, normalized))
+                    .anySatisfy(reference -> {
+                        assertThat(reference.getReferenceId()).isEqualTo(19L);
+                        assertThat(reference.getComponentPath()).isEqualTo("backgroundAudio.workId");
+                        assertThat(reference.getConfigScope()).isEqualTo(scope);
+                        assertThat(reference.getReferenceType()).isEqualTo("WORK");
+                    });
+        }
+    }
+
+    /** 无选择可保存开启草稿，但发布必须补齐选择；新客户端可以显式移除旧选择。 */
+    @Test
+    void enabledBackgroundAudioWithoutWorkShouldOnlyBeAllowedInDraft() {
+        PortfolioConfigDto base = config(component("profile", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, true, Map.of()));
+        JSONObject json = JSON.parseObject(JSON.toJSONString(base));
+        json.put("backgroundAudio", Map.of("enabled", true, "displayStyle", "SLEEVE"));
+        PortfolioConfigDto input = json.toJavaObject(PortfolioConfigDto.class);
+        PortfolioConfigDto draft = validator().normalizeForDraft(7L, input, null);
+        assertThatThrownBy(() -> validator().validateForPublish(7L, draft)).isInstanceOf(BusinessException.class)
+                .hasMessage("开启背景音频后，请从音频作品中选择");
+        AuthContextHolder.set(new AuthContext(7L, "test"));
+        try {
+            json.put("backgroundAudio", Map.of("enabled", false, "displayStyle", "DISC"));
+            PortfolioConfigDto removed = validator().normalizeForDraft(7L, json.toJavaObject(PortfolioConfigDto.class), draft);
+            JSONObject audio = JSON.parseObject(JSON.toJSONString(removed)).getJSONObject("backgroundAudio");
+            assertThat(audio.getBoolean("enabled")).isFalse();
+            assertThat(audio.getLong("workId")).isNull();
+        } finally {
+            AuthContextHolder.clear();
+        }
+    }
 
     /** 作品 Mapper 模拟 */
     @Mock

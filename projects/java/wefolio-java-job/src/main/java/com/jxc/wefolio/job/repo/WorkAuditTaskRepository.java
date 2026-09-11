@@ -84,7 +84,7 @@ public class WorkAuditTaskRepository {
     public List<WorkAuditTaskEntity> findQueryableVideoTasks(
             int limit, int maxAttempts, LocalDateTime now) {
         return taskMapper.selectList(Wrappers.<WorkAuditTaskEntity>lambdaQuery()
-                .eq(WorkAuditTaskEntity::getMediaType, MediaTypeDict.VIDEO.getCode())
+                .in(WorkAuditTaskEntity::getMediaType, MediaTypeDict.VIDEO.getCode(), MediaTypeDict.AUDIO.getCode())
                 .and(status -> status
                         .and(regular -> regular
                                 .in(WorkAuditTaskEntity::getTaskStatus,
@@ -116,7 +116,7 @@ public class WorkAuditTaskRepository {
      */
     public long countQueryableVideoTasks(int maxAttempts, LocalDateTime now) {
         return taskMapper.selectCount(Wrappers.<WorkAuditTaskEntity>lambdaQuery()
-                .eq(WorkAuditTaskEntity::getMediaType, MediaTypeDict.VIDEO.getCode())
+                .in(WorkAuditTaskEntity::getMediaType, MediaTypeDict.VIDEO.getCode(), MediaTypeDict.AUDIO.getCode())
                 .and(status -> status
                         .and(regular -> regular
                                 .in(WorkAuditTaskEntity::getTaskStatus,
@@ -147,7 +147,7 @@ public class WorkAuditTaskRepository {
     public List<WorkAuditTaskEntity> findRetryableExpiredVideoSubmitTasks(
             int limit, int maxAttempts, LocalDateTime now) {
         return taskMapper.selectList(Wrappers.<WorkAuditTaskEntity>lambdaQuery()
-                .eq(WorkAuditTaskEntity::getMediaType, MediaTypeDict.VIDEO.getCode())
+                .in(WorkAuditTaskEntity::getMediaType, MediaTypeDict.VIDEO.getCode(), MediaTypeDict.AUDIO.getCode())
                 .eq(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.SUBMITTING.getCode())
                 .lt(WorkAuditTaskEntity::getLockedUntil, now)
                 .lt(WorkAuditTaskEntity::getAttemptCount, maxAttempts)
@@ -169,7 +169,7 @@ public class WorkAuditTaskRepository {
     public List<WorkAuditTaskEntity> findExhaustedExpiredVideoSubmitTasks(
             int limit, int maxAttempts, LocalDateTime now) {
         return taskMapper.selectList(Wrappers.<WorkAuditTaskEntity>lambdaQuery()
-                .eq(WorkAuditTaskEntity::getMediaType, MediaTypeDict.VIDEO.getCode())
+                .in(WorkAuditTaskEntity::getMediaType, MediaTypeDict.VIDEO.getCode(), MediaTypeDict.AUDIO.getCode())
                 .eq(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.SUBMITTING.getCode())
                 .lt(WorkAuditTaskEntity::getLockedUntil, now)
                 .ge(WorkAuditTaskEntity::getAttemptCount, maxAttempts)
@@ -191,7 +191,7 @@ public class WorkAuditTaskRepository {
     public List<WorkAuditTaskEntity> findExhaustedExpiredVideoQueryTasks(
             int limit, int maxAttempts, LocalDateTime now) {
         return taskMapper.selectList(Wrappers.<WorkAuditTaskEntity>lambdaQuery()
-                .eq(WorkAuditTaskEntity::getMediaType, MediaTypeDict.VIDEO.getCode())
+                .in(WorkAuditTaskEntity::getMediaType, MediaTypeDict.VIDEO.getCode(), MediaTypeDict.AUDIO.getCode())
                 .eq(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.QUERYING.getCode())
                 .lt(WorkAuditTaskEntity::getLockedUntil, now)
                 .ge(WorkAuditTaskEntity::getQueryCount, maxAttempts)
@@ -380,7 +380,7 @@ public class WorkAuditTaskRepository {
                 .setSql(QUERY_COUNT_INCREMENT_SQL)
                 .setSql(VERSION_INCREMENT_SQL)
                 .eq(WorkAuditTaskEntity::getId, taskId)
-                .eq(WorkAuditTaskEntity::getMediaType, MediaTypeDict.VIDEO.getCode())
+                .in(WorkAuditTaskEntity::getMediaType, MediaTypeDict.VIDEO.getCode(), MediaTypeDict.AUDIO.getCode())
                 .and(status -> status
                         .and(regular -> regular
                                 .in(WorkAuditTaskEntity::getTaskStatus,
@@ -422,7 +422,7 @@ public class WorkAuditTaskRepository {
                 .setSql(ATTEMPT_COUNT_INCREMENT_SQL)
                 .setSql(VERSION_INCREMENT_SQL)
                 .eq(WorkAuditTaskEntity::getId, taskId)
-                .eq(WorkAuditTaskEntity::getMediaType, MediaTypeDict.VIDEO.getCode())
+                .in(WorkAuditTaskEntity::getMediaType, MediaTypeDict.VIDEO.getCode(), MediaTypeDict.AUDIO.getCode())
                 .eq(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.SUBMITTING.getCode())
                 .lt(WorkAuditTaskEntity::getLockedUntil, now)
                 .lt(WorkAuditTaskEntity::getAttemptCount, maxAttempts)
@@ -450,7 +450,7 @@ public class WorkAuditTaskRepository {
                 .set(WorkAuditTaskEntity::getUpdatedAt, now)
                 .setSql(VERSION_INCREMENT_SQL)
                 .eq(WorkAuditTaskEntity::getId, taskId)
-                .eq(WorkAuditTaskEntity::getMediaType, MediaTypeDict.VIDEO.getCode())
+                .in(WorkAuditTaskEntity::getMediaType, MediaTypeDict.VIDEO.getCode(), MediaTypeDict.AUDIO.getCode())
                 .eq(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.SUBMITTING.getCode())
                 .lt(WorkAuditTaskEntity::getLockedUntil, now)
                 .ge(WorkAuditTaskEntity::getAttemptCount, maxAttempts)
@@ -478,7 +478,7 @@ public class WorkAuditTaskRepository {
                 .set(WorkAuditTaskEntity::getUpdatedAt, now)
                 .setSql(VERSION_INCREMENT_SQL)
                 .eq(WorkAuditTaskEntity::getId, taskId)
-                .eq(WorkAuditTaskEntity::getMediaType, MediaTypeDict.VIDEO.getCode())
+                .in(WorkAuditTaskEntity::getMediaType, MediaTypeDict.VIDEO.getCode(), MediaTypeDict.AUDIO.getCode())
                 .eq(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.QUERYING.getCode())
                 .lt(WorkAuditTaskEntity::getLockedUntil, now)
                 .ge(WorkAuditTaskEntity::getQueryCount, maxAttempts)
@@ -568,7 +568,7 @@ public class WorkAuditTaskRepository {
                 .set(WorkAuditTaskEntity::getUpdatedAt, now)
                 .setSql(VERSION_INCREMENT_SQL)
                 .eq(WorkAuditTaskEntity::getId, taskId)
-                .eq(WorkAuditTaskEntity::getMediaType, MediaTypeDict.VIDEO.getCode())
+                .in(WorkAuditTaskEntity::getMediaType, MediaTypeDict.VIDEO.getCode(), MediaTypeDict.AUDIO.getCode())
                 .eq(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.SUBMITTING.getCode())
                 .eq(WorkAuditTaskEntity::getLockedBy, lockOwner)
                 .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED));
@@ -595,7 +595,7 @@ public class WorkAuditTaskRepository {
                 .set(WorkAuditTaskEntity::getUpdatedAt, now)
                 .setSql(VERSION_INCREMENT_SQL)
                 .eq(WorkAuditTaskEntity::getId, taskId)
-                .eq(WorkAuditTaskEntity::getMediaType, MediaTypeDict.VIDEO.getCode())
+                .in(WorkAuditTaskEntity::getMediaType, MediaTypeDict.VIDEO.getCode(), MediaTypeDict.AUDIO.getCode())
                 .eq(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.QUERYING.getCode())
                 .eq(WorkAuditTaskEntity::getLockedBy, lockOwner)
                 .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED));
@@ -707,7 +707,7 @@ public class WorkAuditTaskRepository {
                 .set(WorkAuditTaskEntity::getUpdatedAt, now)
                 .setSql(VERSION_INCREMENT_SQL)
                 .eq(WorkAuditTaskEntity::getId, taskId)
-                .eq(WorkAuditTaskEntity::getMediaType, MediaTypeDict.VIDEO.getCode())
+                .in(WorkAuditTaskEntity::getMediaType, MediaTypeDict.VIDEO.getCode(), MediaTypeDict.AUDIO.getCode())
                 .eq(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.QUERYING.getCode())
                 .eq(WorkAuditTaskEntity::getLockedBy, lockOwner)
                 .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED));
@@ -774,7 +774,7 @@ public class WorkAuditTaskRepository {
                 .set(WorkAuditTaskEntity::getUpdatedAt, now)
                 .setSql(VERSION_INCREMENT_SQL)
                 .eq(WorkAuditTaskEntity::getId, taskId)
-                .eq(WorkAuditTaskEntity::getMediaType, MediaTypeDict.VIDEO.getCode())
+                .in(WorkAuditTaskEntity::getMediaType, MediaTypeDict.VIDEO.getCode(), MediaTypeDict.AUDIO.getCode())
                 .eq(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.QUERYING.getCode())
                 .eq(WorkAuditTaskEntity::getLockedBy, lockOwner)
                 .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED));
@@ -948,7 +948,7 @@ public class WorkAuditTaskRepository {
                 .set(WorkAuditTaskEntity::getUpdatedAt, now)
                 .setSql(VERSION_INCREMENT_SQL)
                 .eq(WorkAuditTaskEntity::getId, taskId)
-                .eq(WorkAuditTaskEntity::getMediaType, MediaTypeDict.VIDEO.getCode())
+                .in(WorkAuditTaskEntity::getMediaType, MediaTypeDict.VIDEO.getCode(), MediaTypeDict.AUDIO.getCode())
                 .in(WorkAuditTaskEntity::getTaskStatus, FINISHABLE_TASK_STATUSES)
                 .eq(WorkAuditTaskEntity::getLockedBy, lockOwner)
                 .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED));

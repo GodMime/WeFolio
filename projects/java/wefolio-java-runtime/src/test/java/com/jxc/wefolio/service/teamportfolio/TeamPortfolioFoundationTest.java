@@ -1,5 +1,8 @@
 package com.jxc.wefolio.service.teamportfolio;
 
+import com.jxc.wefolio.dto.BackgroundAudioConfigDto;
+import com.jxc.wefolio.dto.BackgroundAudioRenderDto;
+
 import com.alibaba.fastjson2.JSONObject;
 import com.jxc.wefolio.config.TeamPortfolioProperties;
 import com.jxc.wefolio.dict.TeamPortfolioComponentTypeDict;
@@ -106,7 +109,9 @@ class TeamPortfolioFoundationTest {
     @Test
     void dtosShouldExposeOnlyTeamPortfolioFields() {
         assertFields(TeamPortfolioConfigDto.class,
-                "schemaVersion", "editorSchemaRevision", "share", "style", "components", "bottomNav");
+                "schemaVersion", "editorSchemaRevision", "share", "style", "backgroundAudio", "components", "bottomNav");
+        assertFieldType(TeamPortfolioConfigDto.class, "backgroundAudio", BackgroundAudioConfigDto.class);
+        assertFields(BackgroundAudioConfigDto.class, "enabled", "workId", "displayStyle");
         assertFieldType(TeamPortfolioConfigDto.class, "schemaVersion", String.class);
         assertFieldType(TeamPortfolioConfigDto.class, "editorSchemaRevision", Integer.class);
         assertFieldType(TeamPortfolioConfigDto.class, "share", TeamPortfolioConfigDto.Share.class);
@@ -142,7 +147,8 @@ class TeamPortfolioFoundationTest {
         assertFieldType(TeamPortfolioConfigDto.ComponentEnvelope.class, "config", JSONObject.class);
 
         assertFields(TeamPortfolioRenderDto.class, "shareCode", "portfolioId", "teamId", "teamName", "title",
-                "share", "preview", "underMaintenance", "visitRecordId", "style", "components", "bottomNav");
+                "share", "preview", "underMaintenance", "visitRecordId", "style", "backgroundAudio", "components", "bottomNav");
+        assertFieldType(TeamPortfolioRenderDto.class, "backgroundAudio", BackgroundAudioRenderDto.class);
         assertFieldType(TeamPortfolioRenderDto.class, "shareCode", String.class);
         assertFieldType(TeamPortfolioRenderDto.class, "portfolioId", Long.class);
         assertFieldType(TeamPortfolioRenderDto.class, "teamId", Long.class);

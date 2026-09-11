@@ -36,6 +36,7 @@ test('request client injects bearer token and unwraps successful response data',
 
   assert.equal(capturedOptions.url, 'http://api.test/api/mine/dashboard')
   assert.equal(capturedOptions.header.Authorization, 'Bearer wf-dev-user-7')
+  assert.equal(capturedOptions.header['X-WeFolio-Capabilities'], undefined)
   assert.deepEqual(data, { ok: true })
 })
 

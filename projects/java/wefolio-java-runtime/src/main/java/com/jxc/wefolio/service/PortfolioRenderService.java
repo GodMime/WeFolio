@@ -230,6 +230,9 @@ public class PortfolioRenderService {
     /** COS 服务 */
     private final CosService cosService;
 
+    /** 全局音频展示数据。 */
+    private final PortfolioBackgroundAudioService backgroundAudioService;
+
     /**
      * 构建作品集渲染模型。
      *
@@ -265,6 +268,7 @@ public class PortfolioRenderService {
             return render;
         }
         Long ownerId = portfolio == null ? null : portfolio.getOwnerId();
+        render.setBackgroundAudio(backgroundAudioService.renderPersonal(config == null ? null : config.getBackgroundAudio(), ownerId));
         render.setStyle(buildStyle(config == null || config.getStyle() == null
                 ? null
                 : config.getStyle().getBackgroundColor()));

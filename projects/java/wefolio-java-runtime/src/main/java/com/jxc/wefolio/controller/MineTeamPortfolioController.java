@@ -358,7 +358,7 @@ public class MineTeamPortfolioController {
     /**
      * 按团队查询单个作品指定成员的可选作品。
      *
-     * @deprecated 请改用分页接口 {@link #teamSingleWorkWorksPage(Long, Long, int, int, Long)}。
+     * @deprecated 请改用分页接口 {@link #teamSingleWorkWorksPage(Long, Long, int, int, Long, String)}。
      */
     @Deprecated(since = "2026-08", forRemoval = false)
     @GetMapping("/api/mine/teams/{teamId}/portfolio-components/single-work/members/{memberUserId}/works")
@@ -378,10 +378,11 @@ public class MineTeamPortfolioController {
             @PathVariable Long memberUserId,
             @RequestParam(value = "page", defaultValue = "1") int page,
             @RequestParam(value = "pageSize", defaultValue = "20") int pageSize,
-            @RequestParam(value = "selectedWorkId", required = false) Long selectedWorkId
+            @RequestParam(value = "selectedWorkId", required = false) Long selectedWorkId,
+            @RequestParam(value = "mediaType", required = false) String mediaType
     ) {
         return Response.success(singleWorkComponentService.pageTeamWorks(
-                teamId, memberUserId, currentUserId(), page, pageSize, selectedWorkId));
+                teamId, memberUserId, currentUserId(), page, pageSize, selectedWorkId, mediaType));
     }
 
     /**

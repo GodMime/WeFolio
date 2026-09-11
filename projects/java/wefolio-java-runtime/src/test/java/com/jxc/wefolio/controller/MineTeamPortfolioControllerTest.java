@@ -211,7 +211,7 @@ class MineTeamPortfolioControllerTest {
         controller.singleWorkWorks(13L, 17L);
         controller.teamSingleWorkMembers(23L);
         controller.teamSingleWorkWorks(23L, 17L);
-        controller.teamSingleWorkWorksPage(23L, 17L, 2, 30, 19L);
+        controller.teamSingleWorkWorksPage(23L, 17L, 2, 30, 19L, null);
         controller.gridMembers(13L);
         controller.gridPortfolios(13L, 17L);
         controller.listMembers(13L);
@@ -224,7 +224,7 @@ class MineTeamPortfolioControllerTest {
         verify(singleWork).listWorks(13L, 17L, USER_ID);
         verify(singleWork).listTeamMembers(23L, USER_ID);
         verify(singleWork).listTeamWorks(23L, 17L, USER_ID);
-        verify(singleWork).pageTeamWorks(23L, 17L, USER_ID, 2, 30, 19L);
+        verify(singleWork).pageTeamWorks(23L, 17L, USER_ID, 2, 30, 19L, null);
         verify(grid).listMembers(13L, USER_ID);
         verify(grid).listPortfolios(13L, 17L, USER_ID);
         verify(list).listMembers(13L, USER_ID);

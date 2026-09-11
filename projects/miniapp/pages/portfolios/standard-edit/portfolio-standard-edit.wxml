@@ -72,6 +72,35 @@
 
         <view class="form-row">
           <view class="field-heading">
+            <view class="field-label">背景音频</view>
+            <switch checked="{{config.backgroundAudio.enabled}}" bindchange="handleBackgroundAudioSwitch" aria-label="开启背景音频" color="#212529" />
+          </view>
+          <block wx:if="{{config.backgroundAudio.enabled}}">
+            <view class="section-desc pe-page-card-description">全局配置；关闭后保留选择，移除后取消引用</view>
+            <view wx:if="{{config.backgroundAudio.workId}}" class="section-desc pe-page-card-description">{{backgroundAudioSelected.title || '已选择音频'}}</view>
+            <button wx:if="{{config.backgroundAudio.workId}}" class="background-audio-action pe-page-action-secondary" disabled="{{!backgroundAudioResource.mediaUrl}}" bindtap="handleToggleBackgroundAudio">{{backgroundAudioPlaying ? '暂停试听' : '试听音频'}}</button>
+            <view class="background-audio-styles">
+              <view wx:for="{{backgroundAudioStyles}}" wx:key="value" class="background-audio-style {{config.backgroundAudio.displayStyle === item.value ? 'audio-style-selected' : ''}}" data-style="{{item.value}}" bindtap="handleBackgroundAudioStyle" aria-role="radio" aria-checked="{{config.backgroundAudio.displayStyle === item.value}}" aria-label="{{item.label}}">
+                <view class="background-audio-sample"><background-audio-control display-style="{{item.value}}" cover-url="{{backgroundAudioResource.coverUrl}}" title="{{backgroundAudioResource.title}}" playing="{{backgroundAudioPlaying}}" sample="{{true}}" /></view>
+                <view class="background-audio-style-label">{{item.label}}{{config.backgroundAudio.displayStyle === item.value ? ' · 已选' : ''}}</view>
+              </view>
+            </view>
+            <button class="background-audio-action pe-page-action-secondary" bindtap="handleChooseBackgroundAudio">从音频作品中选择</button>
+            <button wx:if="{{config.backgroundAudio.workId}}" class="background-audio-action pe-page-action-secondary" bindtap="handleRemoveBackgroundAudio">移除音频</button>
+            <view wx:if="{{backgroundAudioPickerVisible}}" class="background-audio-options">
+              <button wx:for="{{backgroundAudioOptions}}" wx:key="id" class="background-audio-option" data-index="{{index}}" bindtap="handleSelectBackgroundAudio">
+                <text>{{item.title || '未命名音频'}}</text>
+              </button>
+              <view wx:if="{{backgroundAudioLoading}}" class="section-desc pe-page-card-description">加载中…</view>
+              <view wx:if="{{!backgroundAudioLoading && backgroundAudioOptions.length === 0}}" class="section-desc pe-page-card-description">暂无可用音频，请先上传并等待审核通过</view>
+              <button wx:if="{{backgroundAudioHasMore}}" class="background-audio-action pe-page-action-secondary {{backgroundAudioLoading ? 'pe-action-loading' : ''}}" bindtap="loadBackgroundAudioOptions" loading="{{backgroundAudioLoading}}" disabled="{{backgroundAudioLoading}}">加载更多</button>
+              <button class="background-audio-action pe-page-action-secondary" bindtap="handleCloseBackgroundAudioPicker">收起选择</button>
+            </view>
+          </block>
+        </view>
+
+        <view class="form-row">
+          <view class="field-heading">
             <view class="field-label">底部导航</view>
             <view class="field-limit">2~4 个菜单</view>
           </view>

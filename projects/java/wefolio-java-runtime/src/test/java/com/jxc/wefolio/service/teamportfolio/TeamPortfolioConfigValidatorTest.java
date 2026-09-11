@@ -1,5 +1,8 @@
 package com.jxc.wefolio.service.teamportfolio;
 
+import java.util.Map;
+import com.jxc.wefolio.dto.BackgroundAudioConfigDto;
+
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.jxc.wefolio.constant.TeamPortfolioConstants;
@@ -40,6 +43,39 @@ import static org.mockito.Mockito.when;
  */
 @ExtendWith(MockitoExtension.class)
 class TeamPortfolioConfigValidatorTest {
+
+    /** 背景字段缺省保留，显式提交直接生效，不依赖能力头。 */
+    @Test
+    void teamBackgroundAudioMergeShouldUseFieldPresence() {
+        TeamPortfolioConfigDto base = config(List.of(component("divider", TeamPortfolioComponentTypeDict.DIVIDER.getCode(), 1000, true)));
+        TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 22L, 1);
+        TeamPortfolioConfigDto stored = service().normalizeForDraft(base, null, context);
+        assertThat(stored.getBackgroundAudio().getEnabled()).isFalse();
+        stored.getBackgroundAudio().setWorkId(19L);
+        stored.getBackgroundAudio().setEnabled(true);
+        assertThat(service().normalizeForDraft(base, stored, context).getBackgroundAudio().getWorkId()).isEqualTo(19L);
+        base.setBackgroundAudio(new BackgroundAudioConfigDto());
+        assertThat(service().normalizeForDraft(base, stored, context).getBackgroundAudio().getWorkId()).isNull();
+        assertThat(stored.getBackgroundAudio().getWorkId()).isEqualTo(19L);
+        verify(singleWorkValidator).validateAudio(19L, context);
+    }
+
+    /** 团队旧请求保留背景音频，开启但无选择的草稿不能发布。 */
+    @Test
+    void backgroundAudioShouldBePreservedForLegacyTeamSave() {
+        TeamPortfolioConfigDto base = config(List.of(component("divider", TeamPortfolioComponentTypeDict.DIVIDER.getCode(), 1000, true)));
+        JSONObject json = JSON.parseObject(JSON.toJSONString(base));
+        json.put("backgroundAudio", Map.of("enabled", true, "displayStyle", "MINI_PLAYER"));
+        TeamPortfolioConfigDto stored = json.toJavaObject(TeamPortfolioConfigDto.class);
+        TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 22L, 1);
+        TeamPortfolioConfigDto draft = service().normalizeForDraft(base, stored, context);
+        JSONObject audio = JSON.parseObject(JSON.toJSONString(draft)).getJSONObject("backgroundAudio");
+        assertThat(audio).isNotNull();
+        assertThat(audio.getBoolean("enabled")).isTrue();
+        assertThat(audio.getString("displayStyle")).isEqualTo("MINI_PLAYER");
+        assertThatThrownBy(() -> service().validateForPublish(draft, context)).isInstanceOf(BusinessException.class)
+                .hasMessage("开启背景音频后，请从音频作品中选择");
+    }
 
     @Mock
     private TeamProfileComponentValidator teamProfileValidator;

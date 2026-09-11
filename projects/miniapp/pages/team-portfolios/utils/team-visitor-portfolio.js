@@ -109,6 +109,7 @@ function normalizeTeamVisitorPortfolio(payload = {}) {
     visitorProfileToken: text(payload.visitorProfileToken),
     preview: renderData.preview === true,
     underMaintenance: renderData.underMaintenance === true,
+    backgroundAudio: payload.underMaintenance || renderData.underMaintenance ? null : renderData.backgroundAudio || null,
     share: renderData.share && typeof renderData.share === 'object' ? renderData.share : {},
     style: { backgroundColor, themeMode },
     themeMode,

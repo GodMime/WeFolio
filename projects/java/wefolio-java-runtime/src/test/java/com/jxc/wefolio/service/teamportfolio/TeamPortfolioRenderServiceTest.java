@@ -1,5 +1,8 @@
 package com.jxc.wefolio.service.teamportfolio;
 
+import com.jxc.wefolio.service.PortfolioBackgroundAudioService;
+import static org.mockito.Mockito.mock;
+
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.jxc.wefolio.constant.TeamPortfolioConstants;
@@ -435,7 +438,8 @@ class TeamPortfolioRenderServiceTest {
 
     private TeamPortfolioRenderService service() {
         return new TeamPortfolioRenderService(teamProfileRenderer, carouselRenderer, singleWorkRenderer, dividerRenderer, gridRenderer,
-                listRenderer, textRenderer, scheduleRenderer, contactRenderer, qrRenderer, videoCarouselRenderer, structuredTextRenderer, textBackgroundSupport);
+                listRenderer, textRenderer, scheduleRenderer, contactRenderer, qrRenderer, videoCarouselRenderer, structuredTextRenderer, textBackgroundSupport,
+                mock(PortfolioBackgroundAudioService.class));
     }
 
     private void verifyNoRendererInteractions() {

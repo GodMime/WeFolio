@@ -37,7 +37,7 @@ class PortfolioTextColorPipelineTest {
 
     /** 个人完整展示入口。 */
     private final PortfolioRenderService personalRenderer = new PortfolioRenderService(
-            workMapper, mock(PortfolioEntityMapper.class), cosService);
+            workMapper, mock(PortfolioEntityMapper.class), cosService, mock(PortfolioBackgroundAudioService.class));
 
     /** 团队背景规则使用真实实现，避免遮蔽颜色与背景配置的合并行为。 */
     private final TeamTextBackgroundSupport teamBackground = new TeamTextBackgroundSupport(

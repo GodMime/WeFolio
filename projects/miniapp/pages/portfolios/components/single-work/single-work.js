@@ -52,6 +52,10 @@ Component({
       })
     },
 
+    handleVideoPlay() {
+      this.triggerEvent('videoplay', { componentKey: this.data.componentKey })
+    },
+
     handleAnimationLoadError() {
       this.setData({ animationLoadFailed: true })
     },

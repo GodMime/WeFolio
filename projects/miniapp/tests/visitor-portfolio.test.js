@@ -1544,8 +1544,10 @@ test('personal visitor keeps timeline guide hidden for empty, maintenance, and f
   }
 })
 
-test('personal visitor ignores unknown timeline guide values and registers the shared guide', async () => {
+test('personal visitor ignores unknown timeline guide values and registers the shared guide', async (t) => {
   const page = loadVisitorPage(() => Promise.resolve({}))
+  global.wx = {}
+  t.after(() => { delete global.wx })
   page.bootstrap = () => Promise.resolve()
   await page.onLoad({ shareCode: 'PF001', shareGuide: 'true' })
 
@@ -1558,17 +1560,20 @@ test('personal visitor ignores unknown timeline guide values and registers the s
   assert.match(wxml, /<timeline-share-guide[^>]*back="\{\{showNavigationBack\}\}"[^>]*bindback="handleTimelineGuideBack"[^>]*bindclose="handleCloseTimelineGuide"/)
 })
 
-test('visitor page shows navigation back only when the page stack has a previous page', async () => {
+test('visitor page shows navigation back only when the page stack has a previous page', async (t) => {
+  t.after(() => { delete global.wx })
   const previousGetCurrentPages = global.getCurrentPages
   try {
     global.getCurrentPages = () => [{ route: 'pages/portfolios/portfolios' }, { route: 'pages/portfolios/visitor-portfolio/visitor-portfolio' }]
     const internalPage = loadVisitorPage(() => Promise.resolve({}))
+    global.wx = {}
     internalPage.bootstrap = () => Promise.resolve()
     await internalPage.onLoad({ shareCode: 'PF001' })
     assert.equal(internalPage.data.showNavigationBack, true)
 
     global.getCurrentPages = () => [{ route: 'pages/portfolios/visitor-portfolio/visitor-portfolio' }]
     const directSharePage = loadVisitorPage(() => Promise.resolve({}))
+    global.wx = {}
     directSharePage.bootstrap = () => Promise.resolve()
     await directSharePage.onLoad({ shareCode: 'PF001', fromTeamPortfolio: '1' })
     assert.equal(directSharePage.data.showNavigationBack, false)

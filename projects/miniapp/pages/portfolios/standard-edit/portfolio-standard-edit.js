@@ -1,3 +1,4 @@
+const { portfolioAudioPageMethods, AUDIO_STYLE_OPTIONS, normalizeAudioResource } = require('../utils/portfolio-audio-player')
 const { request } = require('../../../utils/request')
 const { normalizeTextColor, isValidTextColor, TEXT_COLOR_ERROR } = require('../../../utils/portfolio-text-color')
 const { handleMaintainerAuthRequired, hasLocalToken } = require('../../../utils/session')
@@ -1121,10 +1122,17 @@ function updateShareCoverUrlInConfig(config = {}, coverUrl = '') {
 }
 
 Page({
+  ...portfolioAudioPageMethods,
   componentWorkRequestSeq: 0,
   singleWorkSummaryRequestSeq: 0,
 
   data: {
+    backgroundAudioStyles: AUDIO_STYLE_OPTIONS, backgroundAudioResource: normalizeAudioResource(), backgroundAudioPlaying: false,
+    backgroundAudioPickerVisible: false,
+    backgroundAudioOptions: [],
+    backgroundAudioLoading: false,
+    backgroundAudioHasMore: false,
+    backgroundAudioSelected: null,
     portfolioId: null,
     draftRevision: 0,
     publishedRevision: 0,
@@ -1299,6 +1307,7 @@ Page({
           ...buildEditorMenuState(config, this.data.activeMenuKey),
           shareFieldCounters: buildShareFieldCounters(config.share)
         }, buildPublicationStatusState(response.publicationStatus)))
+        this.restoreBackgroundAudioSelection()
         this.loadSingleWorkSummaries(config)
         return this.loadBasicProfileDefaults(config)
       })
@@ -1324,6 +1333,93 @@ Page({
     this.applyEditorConfig(Object.assign({}, this.data.config, {
       style: { backgroundColor }
     }))
+  },
+
+  handleBackgroundAudioStyle(event) {
+    const style = event.currentTarget.dataset.style
+    if (AUDIO_STYLE_OPTIONS.some((item) => item.value === style)) this.updateBackgroundAudio({ displayStyle: style })
+  },
+
+  async restoreBackgroundAudioSelection() {
+    const workId = this.data.config.backgroundAudio && this.data.config.backgroundAudio.workId
+    if (!workId || this.backgroundAudioDisposed) return
+    const seq = this.backgroundAudioRestoreSeq = (this.backgroundAudioRestoreSeq || 0) + 1
+    try {
+      const response = await request({ url: `/api/mine/works/${workId}` })
+      if (this.backgroundAudioDisposed || seq !== this.backgroundAudioRestoreSeq ||
+          workId !== this.data.config.backgroundAudio.workId) return
+      const work = response.work && response.work.mediaType === 'AUDIO' && response.work.auditStatus === 'PASSED' ? response.work : null
+      this.syncBackgroundAudio(work ? Object.assign({}, work, { enabled: false }) : null)
+      this.setData({ backgroundAudioSelected: work || null })
+    } catch (error) {
+      if (this.backgroundAudioDisposed || seq !== this.backgroundAudioRestoreSeq ||
+          workId !== this.data.config.backgroundAudio.workId) return
+      this.syncBackgroundAudio(null)
+      if (error.authRequired) handleMaintainerAuthRequired(error.message)
+    }
+  },
+
+  updateBackgroundAudio(patch) {
+    this.applyEditorConfig(Object.assign({}, this.data.config, {
+      backgroundAudio: Object.assign({}, this.data.config.backgroundAudio, patch)
+    }))
+  },
+
+  handleBackgroundAudioSwitch(event) {
+    const enabled = event.detail.value === true
+    this.updateBackgroundAudio({ enabled })
+    if (!enabled) {
+      this.pauseBackgroundAudio()
+      this.handleCloseBackgroundAudioPicker()
+    }
+  },
+
+  handleRemoveBackgroundAudio() {
+    this.updateBackgroundAudio({ enabled: false, workId: null })
+    this.syncBackgroundAudio(null)
+    this.setData({ backgroundAudioSelected: null })
+    this.handleCloseBackgroundAudioPicker()
+  },
+
+  handleChooseBackgroundAudio() {
+    this.backgroundAudioPage = 0
+    this.backgroundAudioRequestSeq = (this.backgroundAudioRequestSeq || 0) + 1
+    this.setData({ backgroundAudioPickerVisible: true, backgroundAudioOptions: [], backgroundAudioLoading: false })
+    return this.loadBackgroundAudioOptions()
+  },
+
+  handleCloseBackgroundAudioPicker() {
+    this.backgroundAudioRequestSeq = (this.backgroundAudioRequestSeq || 0) + 1
+    this.setData({ backgroundAudioPickerVisible: false, backgroundAudioLoading: false })
+  },
+
+  async loadBackgroundAudioOptions() {
+    if (this.data.backgroundAudioLoading || !this.data.backgroundAudioPickerVisible) return
+    const seq = this.backgroundAudioRequestSeq
+    const page = (this.backgroundAudioPage || 0) + 1
+    this.setData({ backgroundAudioLoading: true })
+    try {
+      const response = await request({ url: '/api/mine/works', data: { mediaType: 'AUDIO', auditStatus: 'PASSED', page, pageSize: 20 } })
+      if (seq !== this.backgroundAudioRequestSeq) return
+      const list = normalizeWorkList(response)
+      this.backgroundAudioPage = page
+      this.setData({ backgroundAudioOptions: this.data.backgroundAudioOptions.concat(list.works), backgroundAudioHasMore: list.hasMore })
+    } catch (error) {
+      if (seq !== this.backgroundAudioRequestSeq) return
+      if (error.authRequired) handleMaintainerAuthRequired(error.message)
+      else wx.showToast({ title: error.message || '音频加载失败，请重试', icon: 'none' })
+    } finally {
+      if (seq === this.backgroundAudioRequestSeq) this.setData({ backgroundAudioLoading: false })
+    }
+  },
+
+  handleSelectBackgroundAudio(event) {
+    const work = this.data.backgroundAudioOptions[Number(event.currentTarget.dataset.index)]
+    if (!work) return
+    this.updateBackgroundAudio({ workId: work.id })
+    this.syncBackgroundAudio(Object.assign({}, work, { enabled: false }))
+    this.setData({ backgroundAudioSelected: work })
+    this.handleCloseBackgroundAudioPicker()
   },
 
   handleOpenBackgroundColorSheet() {
@@ -2232,7 +2328,11 @@ Page({
       textBackgroundHasMore: false, textBackgroundKeyword: '' })
   },
 
+  onShow() { this.showBackgroundAudio() },
+  onHide() { this.hideBackgroundAudio() },
   onUnload() {
+    this.destroyBackgroundAudio()
+    this.backgroundAudioRequestSeq = (this.backgroundAudioRequestSeq || 0) + 1
     this.textBackgroundRequestSeq = (this.textBackgroundRequestSeq || 0) + 1
     this.textBackgroundSession = (this.textBackgroundSession || 0) + 1
   },

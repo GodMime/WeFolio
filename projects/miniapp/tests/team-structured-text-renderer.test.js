@@ -77,7 +77,10 @@ test('团队访客失效背景不产生图片地址，也不丢失区块', () =>
   assert.equal(component.data.showRepairHint, false)
 })
 
-test('团队预览和访客页面将结构化文字放入实际展示分组', () => {
+test('团队预览和访客页面将结构化文字放入实际展示分组', (t) => {
+  const previousWx = global.wx
+  global.wx = {}
+  t.after(() => { if (previousWx === undefined) delete global.wx; else global.wx = previousWx })
   const paths = [
     '../pages/team-portfolios/standard-preview/team-portfolio-standard-preview',
     '../pages/team-portfolios/visitor-portfolio/team-visitor-portfolio'

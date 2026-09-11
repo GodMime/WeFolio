@@ -64,7 +64,8 @@ class PortfolioTextBackgroundPipelineTest {
     /** 渲染背景保留原动图与宽高，失效时保留文字和开关且不下发URL。 */
     @Test void rendersOriginalBackgroundAndPreservesContentWhenUnauthorized() {
         PortfolioEntity portfolio = new PortfolioEntity(); portfolio.setOwnerId(7L); portfolio.setId(90L);
-        PortfolioRenderService service = new PortfolioRenderService(mapper,mock(PortfolioEntityMapper.class),cos);
+        PortfolioRenderService service = new PortfolioRenderService(mapper,mock(PortfolioEntityMapper.class),cos,
+                mock(PortfolioBackgroundAudioService.class));
         for (String type : List.of("TEXT_SECTION","STRUCTURED_TEXT_SECTION")) {
             when(mapper.selectBatchIds(anyCollection())).thenReturn(List.of(work(MediaTypeDict.ANIMATION,7L)));
             when(cos.publicUrl("work/original.gif")).thenReturn("https://cdn.example/original.gif");
@@ -86,7 +87,8 @@ class PortfolioTextBackgroundPipelineTest {
     /** 历史配置丢失作品标识时保留文字，发布重新验证资源。 */
     @Test void missingBackgroundDoesNotEraseTextAndPublishRevalidates() {
         PortfolioEntity portfolio = new PortfolioEntity(); portfolio.setOwnerId(7L);
-        PortfolioRenderService service = new PortfolioRenderService(mapper,mock(PortfolioEntityMapper.class),cos);
+        PortfolioRenderService service = new PortfolioRenderService(mapper,mock(PortfolioEntityMapper.class),cos,
+                mock(PortfolioBackgroundAudioService.class));
         for (String type : List.of("TEXT_SECTION","STRUCTURED_TEXT_SECTION")) {
             PortfolioConfigDto config = config(type,true);
             config.getComponents().getFirst().getConfig().remove("backgroundWorkId");

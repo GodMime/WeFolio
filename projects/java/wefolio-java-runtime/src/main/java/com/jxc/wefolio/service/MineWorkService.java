@@ -91,6 +91,18 @@ public class MineWorkService {
     /** 视频最大时长毫秒 */
     public static final int VIDEO_MAX_DURATION_MS = 10 * 60 * 1000;
 
+    /** 音频原文件大小上限；时长由前端读取，后端不探测文件。 */
+    private static final long AUDIO_MAX_BYTES = 50L * 1024 * 1024;
+
+    /** 音频允许的文件后缀。 */
+    private static final Set<String> AUDIO_EXTENSIONS = Set.of("mp3", "m4a", "aac", "wav");
+
+    /** 音频 COS 目录。 */
+    private static final String WORK_AUDIO_FOLDER = "work/audio";
+
+    /** 音频作品文件名标识。 */
+    private static final String AUDIO_FILE_MARKER = "S";
+
     /** 上传票据有效分钟数 */
     private static final int TICKET_EXPIRE_MINUTES = 15;
 
@@ -611,6 +623,11 @@ public class MineWorkService {
         if (animationCount > 0L) {
             contentLimitService.ensureWorkCapacity(userId, MediaTypeDict.ANIMATION.getCode(), animationCount);
         }
+        long audioCount = preparedFiles.stream().filter(this::isMainWorkUpload)
+                .filter(item -> MediaTypeDict.AUDIO.getCode().equals(item.mediaType())).count();
+        if (audioCount > 0L) {
+            contentLimitService.ensureWorkCapacity(userId, MediaTypeDict.AUDIO.getCode(), audioCount);
+        }
     }
 
     /**
@@ -950,6 +967,7 @@ public class MineWorkService {
     public MineWorkDetailResponse updateWork(Long workId, MineWorkUpdateRequest request) {
         WorkEntity work = requireOwnedWork(workId);
         Long coverFrameTimeMs = request == null ? null : request.getCoverFrameTimeMs();
+        String audioCoverKey = request == null ? null : request.getAudioCoverObjectKey();
         Long coverTaskId = request == null ? null : request.getCoverTaskId();
         Long thumbnailTaskId = request == null ? null : request.getThumbnailTaskId();
         Integer animationCoverFrameNumber = request == null ? null : request.getCoverFrameNumber();
@@ -966,6 +984,7 @@ public class MineWorkService {
         coverEditModeCount += coverTaskId == null ? 0 : 1;
         coverEditModeCount += thumbnailTaskId == null ? 0 : 1;
         coverEditModeCount += animationCoverRequested ? 1 : 0;
+        coverEditModeCount += audioCoverKey == null ? 0 : 1;
         if (coverEditModeCount > 1) {
             throw new BusinessException(MineWorkMessage.COVER_EDIT_MODE_CONFLICT_MESSAGE);
         }
@@ -998,6 +1017,23 @@ public class MineWorkService {
                 : null;
         work.setTitle(title);
         work.setDescription(description);
+        if (audioCoverKey != null) {
+            if (!MediaTypeDict.AUDIO.getCode().equals(work.getMediaType())) {
+                throw new BusinessException(MineWorkMessage.AUDIO_COVER_MEDIA_TYPE_MESSAGE);
+            }
+            if (audioCoverKey.isBlank()) {
+                work.setCoverObjectKey(WorkUploadTransactionService.DEFAULT_AUDIO_COVER_KEY);
+                work.setCoverSha256(WorkUploadTransactionService.DEFAULT_AUDIO_COVER_SHA256);
+            } else {
+                WorkEntity image = findAvailableAudioCoverImage(work.getUserId(), audioCoverKey);
+                if (image == null) {
+                    throw new BusinessException(MineWorkMessage.AUDIO_COVER_SOURCE_MESSAGE);
+                }
+                work.setCoverObjectKey(image.getMediaObjectKey());
+                work.setCoverSha256(image.getMediaSha256());
+            }
+            // 音频封面只引用共享图片，不进入下方旧封面的 COS 清理分支。
+        }
         if (generatedCover != null) {
             work.setCoverObjectKey(generatedCover.objectKey());
             work.setCoverSha256(generatedCover.sha256());
@@ -1136,10 +1172,11 @@ public class MineWorkService {
     public MineWorkDeleteCheckResponse checkDeleteWork(Long workId) {
         WorkEntity work = requireOwnedWork(workId);
         long referenceCount = findWorkReferences(work.getId()).size();
+        String blockedReason = workDeleteBlockedReason(work, referenceCount);
         MineWorkDeleteCheckResponse response = new MineWorkDeleteCheckResponse();
-        response.setCanDelete(referenceCount <= 0L);
+        response.setCanDelete(blockedReason == null);
         response.setReferenceCount(referenceCount);
-        response.setMessage(buildDeleteMessage(referenceCount));
+        response.setMessage(blockedReason == null ? buildDeleteMessage(referenceCount) : blockedReason);
         return response;
     }
 
@@ -1182,8 +1219,9 @@ public class MineWorkService {
     public void deleteWork(Long workId) {
         WorkEntity work = requireOwnedWork(workId);
         long referenceCount = findWorkReferences(work.getId()).size();
-        if (referenceCount > 0L) {
-            throw new BusinessException(buildDeleteMessage(referenceCount));
+        String blockedReason = workDeleteBlockedReason(work, referenceCount);
+        if (blockedReason != null) {
+            throw new BusinessException(blockedReason);
         }
         deleteOwnedWork(work);
     }
@@ -1208,14 +1246,15 @@ public class MineWorkService {
         for (WorkEntity work : orderWorksByIds(workIds, works)) {
             long referenceCount = referenceCounts.getOrDefault(work.getId(), 0L);
             MineWorkBatchDeleteResponse.Item item = buildBatchDeleteItem(work, referenceCount);
-            if (referenceCount <= 0L) {
+            String blockedReason = workDeleteBlockedReason(work, referenceCount);
+            if (blockedReason == null) {
                 deleteOwnedWork(work);
                 item.setSuccess(true);
                 item.setMessage(BATCH_DELETE_SUCCESS_MESSAGE);
                 response.setSuccessCount(response.getSuccessCount() + 1);
             } else {
                 item.setSuccess(false);
-                item.setMessage(buildDeleteMessage(referenceCount));
+                item.setMessage(blockedReason);
                 response.setFailedCount(response.getFailedCount() + 1);
             }
             response.getItems().add(item);
@@ -1641,6 +1680,9 @@ public class MineWorkService {
         }
         if (MediaTypeDict.ANIMATION.getCode().equals(mediaType) && fileSize > ANIMATION_MAX_BYTES) {
             throw new BusinessException("动图作品不能超过 10MB");
+        }
+        if (MediaTypeDict.AUDIO.getCode().equals(mediaType) && fileSize > AUDIO_MAX_BYTES) {
+            throw new BusinessException(MineWorkMessage.AUDIO_TOO_LARGE_MESSAGE);
         }
         if (MediaTypeDict.VIDEO.getCode().equals(mediaType)
                 && file.getDurationMs() != null
@@ -2419,7 +2461,8 @@ public class MineWorkService {
         item.setTitle(work.getTitle());
         item.setOriginalFileName(work.getOriginalFileName());
         item.setMediaUrl(cosService.publicUrl(work.getMediaObjectKey()));
-        item.setCoverUrl(hasText(work.getCoverObjectKey()) ? cosService.publicUrl(work.getCoverObjectKey()) : "");
+        item.setMediaObjectKey(work.getMediaObjectKey());
+        item.setCoverUrl(resolveWorkCoverUrl(work));
         item.setMimeType(work.getMimeType());
         item.setFileSize(work.getFileSize());
         item.setDurationMs(work.getDurationMs());
@@ -3072,7 +3115,10 @@ public class MineWorkService {
     private Set<String> collectWorkObjectKeys(WorkEntity work) {
         Set<String> objectKeys = new LinkedHashSet<>();
         addObjectKey(objectKeys, work.getMediaObjectKey());
-        addObjectKey(objectKeys, work.getCoverObjectKey());
+        // 音频封面是共享系统资源或图片作品引用，不属于此音频的待删除对象。
+        if (!MediaTypeDict.AUDIO.getCode().equals(work.getMediaType())) {
+            addObjectKey(objectKeys, work.getCoverObjectKey());
+        }
         return objectKeys;
     }
 
@@ -3368,7 +3414,7 @@ public class MineWorkService {
         item.setId(work.getId());
         item.setMediaType(work.getMediaType());
         item.setTitle(work.getTitle());
-        item.setCoverUrl(hasText(work.getCoverObjectKey()) ? cosService.publicUrl(work.getCoverObjectKey()) : "");
+        item.setCoverUrl(resolveWorkCoverUrl(work));
         item.setSortOrder(sortOrder);
         return item;
     }
@@ -3385,9 +3431,47 @@ public class MineWorkService {
         item.setWorkId(work.getId());
         item.setTitle(work.getTitle());
         item.setReferenceCount(referenceCount);
-        item.setCanDelete(referenceCount <= 0L);
-        item.setMessage(buildDeleteMessage(referenceCount));
+        String blockedReason = workDeleteBlockedReason(work, referenceCount);
+        item.setCanDelete(blockedReason == null);
+        item.setMessage(blockedReason == null ? buildDeleteMessage(referenceCount) : blockedReason);
         return item;
+    }
+
+    /** 按本人和精确原件 key 查找有效图片，不以 URL、缩略图或文件名前缀匹配。 */
+    private WorkEntity findAvailableAudioCoverImage(Long userId, String key) {
+        return workEntityMapper.selectOne(Wrappers.<WorkEntity>lambdaQuery()
+                .eq(WorkEntity::getUserId, userId)
+                .eq(WorkEntity::getMediaType, MediaTypeDict.IMAGE.getCode())
+                .eq(WorkEntity::getStatus, WorkStatusDict.ACTIVE.getCode())
+                .eq(WorkEntity::getAuditStatus, WorkAuditStatusDict.PASSED.getCode())
+                .eq(WorkEntity::getDeleted, 0L)
+                .eq(WorkEntity::getMediaObjectKey, key));
+    }
+
+    /** 失效的音频封面仅回退显示，不修改原 key 关联。 */
+    private String resolveWorkCoverUrl(WorkEntity work) {
+        String key = work.getCoverObjectKey();
+        if (MediaTypeDict.AUDIO.getCode().equals(work.getMediaType())
+                && !WorkUploadTransactionService.DEFAULT_AUDIO_COVER_KEY.equals(key)
+                && (!hasText(key) || findAvailableAudioCoverImage(work.getUserId(), key) == null)) {
+            key = WorkUploadTransactionService.DEFAULT_AUDIO_COVER_KEY;
+        }
+        return hasText(key) ? cosService.publicUrl(key) : "";
+    }
+
+    /** 所有删除入口共用引用检查；封面引用不伪装成作品集引用数。 */
+    private String workDeleteBlockedReason(WorkEntity work, long referenceCount) {
+        if (referenceCount > 0L) {
+            return buildDeleteMessage(referenceCount);
+        }
+        if (MediaTypeDict.IMAGE.getCode().equals(work.getMediaType()) && hasText(work.getMediaObjectKey())
+                && workEntityMapper.selectCount(Wrappers.<WorkEntity>lambdaQuery()
+                        .eq(WorkEntity::getMediaType, MediaTypeDict.AUDIO.getCode())
+                        .eq(WorkEntity::getDeleted, 0L)
+                        .eq(WorkEntity::getCoverObjectKey, work.getMediaObjectKey())) > 0L) {
+            return MineWorkMessage.AUDIO_COVER_DELETE_BLOCKED_MESSAGE;
+        }
+        return null;
     }
 
     /**
@@ -3469,6 +3553,9 @@ public class MineWorkService {
         } else if (MediaTypeDict.ANIMATION.getCode().equals(mediaType)) {
             folder = WORK_ANIMATION_FOLDER;
             typeMarker = ANIMATION_FILE_MARKER;
+        } else if (MediaTypeDict.AUDIO.getCode().equals(mediaType)) {
+            folder = WORK_AUDIO_FOLDER;
+            typeMarker = AUDIO_FILE_MARKER;
         } else {
             throw new BusinessException(MineWorkMessage.WORK_MEDIA_TYPE_UNSUPPORTED_MESSAGE);
         }
@@ -3749,7 +3836,8 @@ public class MineWorkService {
         String value = normalizeText(mediaType).toUpperCase(Locale.ROOT);
         if (MediaTypeDict.IMAGE.getCode().equals(value)
                 || MediaTypeDict.VIDEO.getCode().equals(value)
-                || MediaTypeDict.ANIMATION.getCode().equals(value)) {
+                || MediaTypeDict.ANIMATION.getCode().equals(value)
+                || MediaTypeDict.AUDIO.getCode().equals(value)) {
             return value;
         }
         throw new BusinessException(MineWorkMessage.WORK_MEDIA_TYPE_UNSUPPORTED_MESSAGE);
@@ -3805,6 +3893,8 @@ public class MineWorkService {
             allowed = VIDEO_EXTENSIONS;
         } else if (MediaTypeDict.ANIMATION.getCode().equals(mediaType)) {
             allowed = ANIMATION_EXTENSIONS;
+        } else if (MediaTypeDict.AUDIO.getCode().equals(mediaType)) {
+            allowed = AUDIO_EXTENSIONS;
         } else {
             throw new BusinessException(MineWorkMessage.WORK_MEDIA_TYPE_UNSUPPORTED_MESSAGE);
         }
@@ -3915,6 +4005,9 @@ public class MineWorkService {
      * @return 最大字节数
      */
     private long maxBytes(String mediaType) {
+        if (MediaTypeDict.AUDIO.getCode().equals(mediaType)) {
+            return AUDIO_MAX_BYTES;
+        }
         if (MediaTypeDict.IMAGE.getCode().equals(mediaType)) {
             return IMAGE_MAX_BYTES;
         }

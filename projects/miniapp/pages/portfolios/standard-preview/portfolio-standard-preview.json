@@ -1,5 +1,6 @@
 {
   "usingComponents": {
+    "background-audio-control": "../components/background-audio-control/background-audio-control",
     "navigation-bar": "/components/navigation-bar/navigation-bar",
     "portfolio-bottom-nav": "/components/portfolio-bottom-nav/portfolio-bottom-nav",
     "portfolio-carousel": "/components/portfolio-carousel/portfolio-carousel",

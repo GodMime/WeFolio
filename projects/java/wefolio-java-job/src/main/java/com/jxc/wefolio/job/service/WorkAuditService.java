@@ -585,10 +585,13 @@ public class WorkAuditService {
 
     private void submitOneVideo(WorkAuditWorkEntity work) {
         int snapshotCount = calculateSnapshotCount(work.getDurationMs());
-        WorkAuditTaskEntity task = newSubmittingTask(work, MediaTypeDict.VIDEO);
+        boolean audio = MediaTypeDict.AUDIO.getCode().equals(work.getMediaType());
+        WorkAuditTaskEntity task = newSubmittingTask(work, audio ? MediaTypeDict.AUDIO : MediaTypeDict.VIDEO);
         task.setLockedBy(newClaimToken());
-        task.setSnapshotIntervalSeconds(properties.getVideoSnapshotIntervalSeconds());
-        task.setSnapshotCount(snapshotCount);
+        if (!audio) {
+            task.setSnapshotIntervalSeconds(properties.getVideoSnapshotIntervalSeconds());
+            task.setSnapshotCount(snapshotCount);
+        }
         task = claimTransactionService.claimAndCreateSubmittingTask(work.getId(), task);
         if (task == null) {
             log.info("视频作品审核跳过: workId={}, userId={}, objectKey={}, reason=未抢占到作品",
@@ -606,7 +609,8 @@ public class WorkAuditService {
 
     private void submitClaimedVideoTask(WorkAuditTaskEntity task) {
         try {
-            TencentCiAuditResult result = auditClient.submitVideo(
+            TencentCiAuditResult result = MediaTypeDict.AUDIO.getCode().equals(task.getMediaType())
+                    ? auditClient.submitAudio(task.getMediaObjectKey()) : auditClient.submitVideo(
                     task.getMediaObjectKey(),
                     task.getSnapshotIntervalSeconds(),
                     task.getSnapshotCount());
@@ -738,7 +742,8 @@ public class WorkAuditService {
             log.info("视频审核查询次数确认: workId={}, taskId={}, objectKey={}, ciJobId={}, queryCount={}, maxQueryCount={}",
                     task.getWorkId(), task.getId(), task.getMediaObjectKey(), task.getCiJobId(), nextQueryCount,
                     properties.getVideoQueryMaxAttempts());
-            TencentCiAuditResult result = auditClient.queryVideo(task.getCiJobId());
+            TencentCiAuditResult result = MediaTypeDict.AUDIO.getCode().equals(task.getMediaType())
+                    ? auditClient.queryAudio(task.getCiJobId()) : auditClient.queryVideo(task.getCiJobId());
             handleVideoQueryResult(task, nextQueryCount, result);
         } catch (RuntimeException ex) {
             log.warn("查询腾讯云视频审核结果失败: workId={}, taskId={}, objectKey={}, ciJobId={}, queryCount={}, "

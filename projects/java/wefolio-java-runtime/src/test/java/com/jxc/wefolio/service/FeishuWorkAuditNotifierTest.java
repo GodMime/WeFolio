@@ -49,6 +49,28 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 @ExtendWith(MockitoExtension.class)
 class FeishuWorkAuditNotifierTest {
 
+    /** 音频人工审核直接展示可复制的完整地址，不要求另取播放链接。 */
+    @Test
+    void audioNotificationShouldExposeFullCopyableUrl() {
+        stubActiveUser();
+        String key = "WFA3B1E7A2/work/audio/demo.mp3";
+        String url = "https://cdn.example.com/" + key;
+        when(cosService.publicUrl(key)).thenReturn(url);
+        WorkManualAuditSubmission base = submission();
+        WorkManualAuditSubmission audio = new WorkManualAuditSubmission(base.workId(), base.userId(),
+                base.title(), "AUDIO", key, base.manualAuditNo(), base.auditRound(), base.maxAuditRounds(),
+                base.submittedAt(), base.previousReasons());
+        server.expect(requestTo(WEBHOOK_URL)).andExpect(request -> {
+            JSONObject payload = JSONObject.parseObject(((MockClientHttpRequest) request).getBodyAsString());
+            JSONObject media = payload.getJSONObject("card").getJSONArray("elements")
+                    .getJSONObject(3).getJSONObject("text");
+            assertThat(media.getString("tag")).isEqualTo("plain_text");
+            assertThat(media.getString("content")).contains(url);
+        }).andRespond(withSuccess("{\"code\":0}", MediaType.APPLICATION_JSON));
+        notifier().notifySubmitted(audio);
+        server.verify();
+    }
+
     /** 固定飞书签名时间戳。 */
     private static final long TIMESTAMP_SECONDS = 1_700_000_000L;
 

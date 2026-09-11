@@ -86,7 +86,7 @@
             theme-mode="{{portfolio.themeMode}}"
             class="portfolio-single-work-instance"
             bindsingleworktap="handleSingleWorkTap"
-            bindvideoerror="handleSingleWorkVideoError"
+            bindvideoplay="pauseBackgroundAudio" bindvideoerror="handleSingleWorkVideoError"
           ></portfolio-single-work>
         </block>
 
@@ -179,7 +179,7 @@
           show-center-play-btn="{{true}}"
           enable-progress-gesture="{{true}}"
           object-fit="contain"
-          binderror="handleVideoPreviewError"
+          bindplay="pauseBackgroundAudio" binderror="handleVideoPreviewError"
         ></video>
       </view>
     </view>
@@ -200,4 +200,7 @@
   <root-portal wx:if="{{clipboardPromptVisible}}">
     <view class="clipboard-prompt-card portfolio-theme-{{portfolio.themeMode}}">{{clipboardPromptText}}</view>
   </root-portal>
+  <view wx:if="{{backgroundAudioResource.enabled && backgroundAudioResource.mediaUrl && !loading && !errorMessage}}" class="portfolio-background-audio" style="position: fixed; top: {{backgroundAudioTop}}px; right: 12px; z-index: 20;">
+    <background-audio-control display-style="{{backgroundAudioResource.displayStyle}}" cover-url="{{backgroundAudioResource.coverUrl}}" title="{{backgroundAudioResource.title}}" playing="{{backgroundAudioPlaying}}" bindtoggle="handleToggleBackgroundAudio" />
+  </view>
 </view>

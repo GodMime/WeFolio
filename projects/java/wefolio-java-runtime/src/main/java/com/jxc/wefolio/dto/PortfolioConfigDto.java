@@ -32,6 +32,9 @@ public class PortfolioConfigDto {
     /** 页面样式 */
     private Style style;
 
+    /** 全局背景音频；请求缺省保持 null，供旧客户端兼容合并判断。 */
+    private BackgroundAudioConfigDto backgroundAudio;
+
     /** 按 sortOrder 升序渲染的组件列表 */
     private List<Component> components;
 

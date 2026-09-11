@@ -1,5 +1,7 @@
 package com.jxc.wefolio.service.teamportfolio;
 
+import com.jxc.wefolio.common.PortfolioBackgroundAudioSupport;
+
 import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.jxc.wefolio.constant.TeamPortfolioConstants;
@@ -153,6 +155,9 @@ public class TeamPortfolioReferenceService {
         List<TeamPortfolioComponentTraversal.ComponentLocation> locations =
                 sortedEnabledComponentLocations(config);
         List<PortfolioReferenceEntity> references = new ArrayList<>();
+        if (config.getBackgroundAudio() != null && config.getBackgroundAudio().getWorkId() != null) {
+            references.add(PortfolioBackgroundAudioSupport.reference(config.getBackgroundAudio()));
+        }
         for (TeamPortfolioComponentTraversal.ComponentLocation location : locations) {
             TeamPortfolioConfigDto.ComponentEnvelope component = location.component();
             TeamPortfolioComponentTypeDict componentType = componentType(component.getComponentType());

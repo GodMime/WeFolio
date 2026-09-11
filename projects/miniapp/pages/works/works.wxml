@@ -134,10 +134,11 @@
                     data-id="{{item.id}}"
                     catchtap="handleWorkPreviewTap"
                     aria-role="button"
-                    aria-label="{{item.mediaType === 'VIDEO' ? '播放原视频' : (item.mediaType === 'ANIMATION' ? '查看原动图' : '查看原图')}}"
+                    aria-label="{{item.mediaType === 'AUDIO' ? '试听音频' : (item.mediaType === 'VIDEO' ? '播放原视频' : (item.mediaType === 'ANIMATION' ? '查看原动图' : '查看原图'))}}"
                   >
-                    <image wx:if="{{item.hasCover}}" src="{{item.coverUrl}}" mode="aspectFill"></image>
+                    <image wx:if="{{item.hasCover}}" src="{{item.coverUrl}}" mode="aspectFill" data-id="{{item.id}}" binderror="handleAudioCoverError"></image>
                     <view wx:else class="thumb-placeholder">{{item.typeText}}</view>
+                    <view wx:if="{{item.mediaType === 'AUDIO'}}" class="audio-badge">{{audioWorkId === item.id && audioPlaying ? '暂停' : '试听'}}</view>
                     <view
                       wx:if="{{item.mediaType === 'VIDEO'}}"
                       class="play-badge"
@@ -153,7 +154,8 @@
                       <text>{{item.typeText}}</text>
                       <text wx:if="{{item.durationText}}"> · {{item.durationText}}</text>
                       <text> / {{item.tagText}}</text>
-                      <text> / 长宽比 {{item.aspectRatioText}}</text>
+                      <text wx:if="{{item.mediaType === 'AUDIO'}}"> / {{item.fileSizeText}}</text>
+                      <text wx:else> / 长宽比 {{item.aspectRatioText}}</text>
                     </view>
                     <view class="work-status-row">
                       <view class="reference-pill {{item.referenceCount > 0 ? 'used' : ''}}">{{item.referenceText}}</view>
@@ -301,6 +303,7 @@
       </view>
       <video
         id="workPreviewVideo"
+        bindplay="pauseWorkAudio"
         class="video-preview-player"
         src="{{videoPreview.src}}"
         poster="{{videoPreview.poster}}"
@@ -362,13 +365,41 @@
     <view class="work-edit-panel image-edit-panel" catchtap="handleEditPanelTap">
       <view class="work-edit-grabber"></view>
       <view class="work-edit-heading">
-        <view class="work-edit-title">{{thumbnailCropVisible ? '编辑缩略图' : '编辑图片作品'}}</view>
-        <view class="work-edit-type">{{thumbnailCropVisible ? (thumbnailSelectedRatioKey === 'original' ? '原图比例' : thumbnailSelectedRatioKey) : '图片'}}</view>
+        <view class="work-edit-title">{{imageEditForm.isAudio ? '编辑音频作品' : (thumbnailCropVisible ? '编辑缩略图' : '编辑图片作品')}}</view>
+        <view class="work-edit-type">{{imageEditForm.isAudio ? '音频' : (thumbnailCropVisible ? (thumbnailSelectedRatioKey === 'original' ? '原图比例' : thumbnailSelectedRatioKey) : '图片')}}</view>
       </view>
 
       <scroll-view wx:if="{{!thumbnailCropVisible}}" class="work-edit-scroll image-edit-scroll" scroll-y>
         <view class="work-edit-content">
-          <view class="cover-section thumbnail-section">
+          <view wx:if="{{imageEditForm.isAudio}}" class="cover-section audio-section">
+            <view class="audio-preview-row">
+              <image class="audio-cover" src="{{imageEditForm.audioCoverUrl}}" mode="aspectFill" binderror="handleAudioCoverError"></image>
+              <view class="audio-preview-copy">
+                <view class="field-label">{{imageEditForm.durationText}} · {{imageEditForm.fileSizeText}}</view>
+                <button class="cover-upload-button" bindtap="handleAudioEditPlay" disabled="{{imageEditForm.auditStatus !== 'PASSED'}}">{{audioWorkId === imageEditForm.id && audioPlaying ? '暂停' : '试听音频'}}</button>
+                <view wx:if="{{imageEditForm.auditStatus !== 'PASSED'}}" class="local-cover-desc">审核通过后可试听</view>
+              </view>
+            </view>
+            <view class="audio-cover-actions">
+              <button class="cover-upload-button" bindtap="handleChooseAudioCover" disabled="{{imageEditSaving}}">从图片作品中选择封面</button>
+              <button class="cover-upload-button" bindtap="handleResetAudioCover" disabled="{{imageEditSaving}}">恢复默认</button>
+            </view>
+            <view wx:if="{{audioCoverPickerVisible}}" class="audio-cover-picker">
+              <view class="cover-heading">
+                <text class="field-label">我的图片作品</text>
+                <button class="cover-upload-button compact" bindtap="handleCloseAudioCoverPicker">收起</button>
+              </view>
+              <scroll-view class="audio-cover-options" scroll-y bindscrolltolower="handleLoadMoreAudioCovers">
+                <view wx:for="{{audioCoverCandidates}}" wx:key="id" class="audio-cover-option" data-id="{{item.id}}" bindtap="handleSelectAudioCover" aria-role="button" aria-label="选择 {{item.title}} 作为封面">
+                  <image src="{{item.coverUrl || item.mediaUrl}}" mode="aspectFill"></image>
+                  <text>{{item.title}}</text>
+                </view>
+                <view wx:if="{{!audioCoverLoading && !audioCoverCandidates.length}}" class="edit-tag-empty">暂无审核通过的图片作品</view>
+                <button wx:if="{{audioCoverHasMore}}" class="cover-upload-button" bindtap="handleLoadMoreAudioCovers" loading="{{audioCoverLoading}}" disabled="{{audioCoverLoading}}">{{imageEditErrorText ? '重试' : '加载更多'}}</button>
+              </scroll-view>
+            </view>
+          </view>
+          <view wx:else class="cover-section thumbnail-section">
             <view class="cover-heading">
               <view class="field-label">缩略图</view>
               <view class="thumbnail-state">{{imageEditForm.thumbnailEdited ? '已编辑' : '当前缩略图'}}</view>
@@ -613,6 +644,7 @@
               </view>
               <video
                 id="workCoverVideo"
+                bindplay="pauseWorkAudio"
                 class="cover-video"
                 src="{{videoEditForm.tempFilePath}}"
                 controls

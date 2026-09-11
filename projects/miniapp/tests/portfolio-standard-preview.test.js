@@ -319,7 +319,7 @@ test('dark preview and visitor footers use the transparent white logo without fi
   assert.ok(darkLogo.byteLength < 50 * 1024)
 })
 
-test('preview page keeps recoverable loading and error states when request fails', async () => {
+test('preview page keeps recoverable loading and error states when request fails', async (t) => {
   const requests = []
   const fakeRequest = (options) => {
     const pending = deferred()
@@ -327,6 +327,8 @@ test('preview page keeps recoverable loading and error states when request fails
     return pending.promise
   }
   const page = loadPreviewPage(fakeRequest)
+  global.wx = {}
+  t.after(() => { delete global.wx })
 
   page.onLoad({ portfolioId: '88' })
 
@@ -359,7 +361,7 @@ test('preview page keeps recoverable loading and error states when request fails
   assert.equal(page.data.portfolio.title, '预览成功')
 })
 
-test('preview page requests published preview endpoint for published scope', async () => {
+test('preview page requests published preview endpoint for published scope', async (t) => {
   const requests = []
   const page = loadPreviewPage((options) => {
     requests.push(options)
@@ -374,6 +376,8 @@ test('preview page requests published preview endpoint for published scope', asy
     })
   })
 
+  global.wx = {}
+  t.after(() => { delete global.wx })
   page.onLoad({ portfolioId: '88', scope: 'published' })
   await flushPromises()
 
@@ -382,7 +386,7 @@ test('preview page requests published preview endpoint for published scope', asy
   assert.equal(page.data.portfolio.preview, true)
 })
 
-test('preview page loads a team-referenced member portfolio through the nested published endpoint', async () => {
+test('preview page loads a team-referenced member portfolio through the nested published endpoint', async (t) => {
   const requests = []
   const page = loadPreviewPage((options) => {
     requests.push(options)
@@ -397,6 +401,8 @@ test('preview page loads a team-referenced member portfolio through the nested p
     })
   })
 
+  global.wx = {}
+  t.after(() => { delete global.wx })
   page.onLoad({
     portfolioId: '88',
     teamPortfolioId: '13',

@@ -399,6 +399,7 @@ function normalizePortfolioRender(raw = {}) {
     portfolioId: toNumber(raw.portfolioId),
     title: trimText(raw.title) || share.title || '个人作品集',
     share,
+    backgroundAudio: underMaintenance ? null : raw.backgroundAudio || null,
     preview,
     underMaintenance,
     maintenanceText: {

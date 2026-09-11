@@ -1,3 +1,4 @@
+const { portfolioAudioPageMethods } = require('../utils/portfolio-audio-player')
 const { buildContactLeadPayload, createContactLeadForm, validateContactLeadForm } = require('../utils/contact-lead')
 const {
   createActiveContactFormComponent,
@@ -70,7 +71,9 @@ function buildWorkEventMetadata(work) {
 }
 
 Page({
+  ...portfolioAudioPageMethods,
   data: {
+    backgroundAudioPlaying: false, backgroundAudioResource: {}, backgroundAudioTop: 76,
     shareCode: '',
     showNavigationBack: false,
     timelineGuideRequested: false,
@@ -105,6 +108,7 @@ Page({
   },
 
   onLoad(options = {}) {
+    this.positionBackgroundAudio()
     this.singleWorkPageVisible = true
     this.singleWorkInteractionRevision = 0
     const shareCode = options.shareCode || options.scene || ''
@@ -149,6 +153,7 @@ Page({
 
   applyVisitorOpenResponse(response) {
     const portfolio = normalizeVisitorPortfolio(response)
+    this.syncBackgroundAudio(portfolio.backgroundAudio, true)
     const displayable = !portfolio.underMaintenance && portfolio.components.length > 0
     this.setData({
       portfolio,
@@ -336,6 +341,7 @@ Page({
   },
 
   onUnload() {
+    this.destroyBackgroundAudio()
     this.singleWorkPageVisible = false
     this.invalidateSingleWorkInteraction()
     clearPortfolioMenuTransitionTimers(this)
@@ -349,6 +355,7 @@ Page({
   },
 
   onHide() {
+    this.hideBackgroundAudio()
     this.singleWorkPageVisible = false
     this.invalidateSingleWorkInteraction()
     this.stopActiveSingleWorkVideo()
@@ -359,6 +366,7 @@ Page({
   },
 
   onShow() {
+    this.showBackgroundAudio()
     this.singleWorkPageVisible = true
     if (this.clipboardPromptController) {
       this.clipboardPromptController.resume()
@@ -418,6 +426,7 @@ Page({
 
   handleWorkTap(event) {
     const work = normalizeWorkTapDataset(readPortfolioRenderEventData(event))
+    if (work.mediaType === MEDIA_TYPE_VIDEO) this.pauseBackgroundAudio()
     if (!work.previewUrl) {
       wx.showToast({
         title: work.mediaType === MEDIA_TYPE_VIDEO ? VIDEO_MISSING_MESSAGE : IMAGE_MISSING_MESSAGE,
@@ -437,6 +446,7 @@ Page({
     const interactionRevision = this.beginSingleWorkInteraction()
     const data = readPortfolioRenderEventData(event)
     const work = normalizeSingleWorkTapDataset(data)
+    if (work.mediaType === MEDIA_TYPE_VIDEO) this.pauseBackgroundAudio()
     const componentKey = data.componentKey || ''
     if (!work.previewUrl) {
       wx.showToast({
@@ -479,6 +489,7 @@ Page({
 
   openSingleWorkMedia(work, componentKey) {
     if (work.mediaType === MEDIA_TYPE_VIDEO) {
+      this.pauseBackgroundAudio()
       this.stopActiveSingleWorkVideo()
       this.setData({ activeSingleWorkVideoKey: componentKey })
       return true
@@ -570,6 +581,7 @@ Page({
   },
 
   openVideoPreview(work = {}) {
+    this.pauseBackgroundAudio()
     const previewUrl = work.mediaUrl || work.previewUrl || ''
     if (!previewUrl) {
       wx.showToast({ title: VIDEO_MISSING_MESSAGE, icon: 'none' })
@@ -590,6 +602,7 @@ Page({
   },
 
   handleVideoCarouselPlay(event) {
+    this.pauseBackgroundAudio()
     const detail = event && event.detail || {}
     const sourceWork = detail.work || {}
     const work = normalizeWorkTapDataset(sourceWork)

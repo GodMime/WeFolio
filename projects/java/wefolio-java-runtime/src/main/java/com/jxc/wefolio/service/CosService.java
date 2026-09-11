@@ -395,6 +395,7 @@ public class CosService {
                 uniqueCode + "/work/image/",
                 uniqueCode + "/work/video/",
                 uniqueCode + "/work/animation/",
+                uniqueCode + "/work/audio/",
                 uniqueCode + "/protfolio/",
                 uniqueCode + "/others/"
         );

@@ -1,3 +1,4 @@
+const { portfolioAudioPageMethods, AUDIO_STYLE_OPTIONS, normalizeAudioResource } = require('../utils/portfolio-audio-player')
 const { request } = require('../../../utils/request.js')
 const { normalizeTextColor, isValidTextColor, TEXT_COLOR_ERROR } = require('../utils/portfolio-text-color')
 const { isRemoteUrl } = require('../../../utils/upload-file.js')
@@ -470,9 +471,15 @@ function buckets(components) {
 }
 
 Page({
+  ...portfolioAudioPageMethods,
   teamVideoRequestSeq: 0,
   teamVideoMembersRequestSeq: 0,
-  data: { portfolioId: 0, teamId: 0, teamSnapshot: {}, loading: false, errorMessage: '', canMaintain: false, publicationStatus: 'DRAFT_ONLY', draftRevision: 0, publishedRevision: 0, statusText: '草稿', statusTone: 'draft', showPublishAction: false, config: normalizeTeamPortfolioConfig(), activeMenuKey: '', activeMenuTitle: '', activeMenuTitleCount: 0, navigationItems: [], bottomNavCount: 1, backgroundColorOptions: TEAM_BACKGROUND_COLORS, bottomNavCountOptions: TEAM_BOTTOM_NAV_COUNTS, backgroundColorSheetVisible: false, backgroundColorDraft: '#FFFFFF', backgroundColorHsv: hexToHsv('#FFFFFF'), backgroundHueColor: '#FF0000', backgroundColorPadDotStyle: 'left: 0%; top: 0%', componentList: [], componentBuckets: buckets([]), componentOptions: buildComponentOptions(), componentValidation: {}, componentSources: {}, singleWorkRowSummaryMap: {}, hasInvalidComponents: false, saving: false, publishing: false, openingLibrary: false, shareCoverUploading: false, qrContactChoosing: false, qrContactCropVisible: false, qrContactCropSaving: false, qrContactCropErrorText: '', qrContactCropState: null, qrContactCropTouchStart: null, qrContactCropCanvasWidth: WECHAT_QR_CROP_OUTPUT_WIDTH, qrContactCropCanvasHeight: WECHAT_QR_CROP_OUTPUT_WIDTH, teamProfileRefreshing: false, pendingDraftKey: '', pendingPublishKey: '', pendingPublishRevision: 0, shareTitleCounter: '0 / 50', componentSheetVisible: false, textSectionSheetVisible: false, textSectionEditingComponentKey: '', structuredTextSheetVisible: false, structuredTextEditingComponentKey: '', structuredTextIsNew: false, structuredTextConfig: { blocks: [] }, textBackgroundOptions: [], textBackgroundLoading: false, textBackgroundError: '', textBackgroundHasMore: false, textBackgroundMembers: [], textBackgroundMemberUserId: 0, textBackgroundMembersLoading: false, textBackgroundResource: {}, textSectionAlignmentOptions: TEXT_SECTION_ALIGNMENT_OPTIONS, textSectionMaxLength: TEXT_SECTION_MAX_LENGTH, portfolioFontCapability: getPortfolioFontCapability(), ...buildTextSectionEditorState(), contactFormSheetVisible: false, contactFormEditingComponentKey: '', contactFormDisplayModeOptions: CONTACT_FORM_DISPLAY_MODE_OPTIONS, contactFormConfigForm: buildContactFormConfigForm(), scheduleQuerySheetVisible: false, scheduleQueryEditingComponentKey: '', scheduleQueryDisplayModeOptions: SCHEDULE_QUERY_DISPLAY_MODE_OPTIONS, scheduleQueryForm: buildScheduleQueryForm(), dividerSheetVisible: false, dividerEditingComponentKey: '', dividerColorOptions: DIVIDER_COLOR_OPTIONS, dividerForm: buildDividerForm(), componentEditorVisible: false, componentEditorLayoutType: '', activeComponentKey: '', activeComponentType: '', activeComponentName: '', activeComponent: { config: {} }, activeComponentSource: {}, activeComponentNeedsPortfolio: false, teamVideoTitle: '视频作品', teamVideoTitleCount: 4, teamVideoShowTitle: true, teamVideoShowSwipeHint: true, teamVideoMembers: [], teamVideoSelectedMemberUserId: 0, teamVideoCandidates: [], teamVideoWorkOptions: [], teamVideoSelectedItems: [], teamVideoKeyword: '', teamVideoPage: 1, teamVideoPageSize: TEAM_VIDEO_PAGE_SIZE, teamVideoHasMore: false, teamVideoMembersLoading: false, teamVideoWorksLoading: false, teamVideoLoadingMore: false, teamVideoErrorText: '', teamVideoEditingNewComponent: false, revealedComponentKey: '', componentTouchStart: null, draggingIndex: -1, dragTargetIndex: -1, componentDragStartY: 0, componentDragStyle: '', componentMoveSheetVisible: false, componentMoveKey: '', componentMoveTargets: [], componentMovePending: false, highlightedComponentKey: '', componentScrollTarget: '', shareCoverCropVisible: false, shareCoverCropPath: '', ...buildCarouselEditorLayoutState(CAROUSEL_EDITOR_SCROLL_MIN_HEIGHT_RPX) },
+  data: {
+    backgroundAudioStyles: AUDIO_STYLE_OPTIONS, backgroundAudioResource: normalizeAudioResource(), backgroundAudioPlaying: false,
+    backgroundAudioPickerVisible: false, backgroundAudioOptions: [], backgroundAudioLoading: false,
+    backgroundAudioHasMore: false, backgroundAudioMembers: [], backgroundAudioMemberIndex: 0,
+    backgroundAudioSelected: null,
+    portfolioId: 0, teamId: 0, teamSnapshot: {}, loading: false, errorMessage: '', canMaintain: false, publicationStatus: 'DRAFT_ONLY', draftRevision: 0, publishedRevision: 0, statusText: '草稿', statusTone: 'draft', showPublishAction: false, config: normalizeTeamPortfolioConfig(), activeMenuKey: '', activeMenuTitle: '', activeMenuTitleCount: 0, navigationItems: [], bottomNavCount: 1, backgroundColorOptions: TEAM_BACKGROUND_COLORS, bottomNavCountOptions: TEAM_BOTTOM_NAV_COUNTS, backgroundColorSheetVisible: false, backgroundColorDraft: '#FFFFFF', backgroundColorHsv: hexToHsv('#FFFFFF'), backgroundHueColor: '#FF0000', backgroundColorPadDotStyle: 'left: 0%; top: 0%', componentList: [], componentBuckets: buckets([]), componentOptions: buildComponentOptions(), componentValidation: {}, componentSources: {}, singleWorkRowSummaryMap: {}, hasInvalidComponents: false, saving: false, publishing: false, openingLibrary: false, shareCoverUploading: false, qrContactChoosing: false, qrContactCropVisible: false, qrContactCropSaving: false, qrContactCropErrorText: '', qrContactCropState: null, qrContactCropTouchStart: null, qrContactCropCanvasWidth: WECHAT_QR_CROP_OUTPUT_WIDTH, qrContactCropCanvasHeight: WECHAT_QR_CROP_OUTPUT_WIDTH, teamProfileRefreshing: false, pendingDraftKey: '', pendingPublishKey: '', pendingPublishRevision: 0, shareTitleCounter: '0 / 50', componentSheetVisible: false, textSectionSheetVisible: false, textSectionEditingComponentKey: '', structuredTextSheetVisible: false, structuredTextEditingComponentKey: '', structuredTextIsNew: false, structuredTextConfig: { blocks: [] }, textBackgroundOptions: [], textBackgroundLoading: false, textBackgroundError: '', textBackgroundHasMore: false, textBackgroundMembers: [], textBackgroundMemberUserId: 0, textBackgroundMembersLoading: false, textBackgroundResource: {}, textSectionAlignmentOptions: TEXT_SECTION_ALIGNMENT_OPTIONS, textSectionMaxLength: TEXT_SECTION_MAX_LENGTH, portfolioFontCapability: getPortfolioFontCapability(), ...buildTextSectionEditorState(), contactFormSheetVisible: false, contactFormEditingComponentKey: '', contactFormDisplayModeOptions: CONTACT_FORM_DISPLAY_MODE_OPTIONS, contactFormConfigForm: buildContactFormConfigForm(), scheduleQuerySheetVisible: false, scheduleQueryEditingComponentKey: '', scheduleQueryDisplayModeOptions: SCHEDULE_QUERY_DISPLAY_MODE_OPTIONS, scheduleQueryForm: buildScheduleQueryForm(), dividerSheetVisible: false, dividerEditingComponentKey: '', dividerColorOptions: DIVIDER_COLOR_OPTIONS, dividerForm: buildDividerForm(), componentEditorVisible: false, componentEditorLayoutType: '', activeComponentKey: '', activeComponentType: '', activeComponentName: '', activeComponent: { config: {} }, activeComponentSource: {}, activeComponentNeedsPortfolio: false, teamVideoTitle: '视频作品', teamVideoTitleCount: 4, teamVideoShowTitle: true, teamVideoShowSwipeHint: true, teamVideoMembers: [], teamVideoSelectedMemberUserId: 0, teamVideoCandidates: [], teamVideoWorkOptions: [], teamVideoSelectedItems: [], teamVideoKeyword: '', teamVideoPage: 1, teamVideoPageSize: TEAM_VIDEO_PAGE_SIZE, teamVideoHasMore: false, teamVideoMembersLoading: false, teamVideoWorksLoading: false, teamVideoLoadingMore: false, teamVideoErrorText: '', teamVideoEditingNewComponent: false, revealedComponentKey: '', componentTouchStart: null, draggingIndex: -1, dragTargetIndex: -1, componentDragStartY: 0, componentDragStyle: '', componentMoveSheetVisible: false, componentMoveKey: '', componentMoveTargets: [], componentMovePending: false, highlightedComponentKey: '', componentScrollTarget: '', shareCoverCropVisible: false, shareCoverCropPath: '', ...buildCarouselEditorLayoutState(CAROUSEL_EDITOR_SCROLL_MIN_HEIGHT_RPX) },
   onLoad(options = {}) {
     const portfolioId = Number(options.portfolioId) || 0
     const teamId = Number(options.teamId) || 0
@@ -538,11 +545,15 @@ Page({
         hasInvalidComponents: false
       }, buildPublicationState(detail.publicationStatus)))
       this.updateConfig(config)
+      this.restoreBackgroundAudioSelection()
       this.loadSingleWorkRowSummaries(config)
     } catch (error) { if (handleTeamMaintainerAuthError(error)) return; if (showTeamPortfolioUnavailableToast(error)) return; this.setData({ errorMessage: '团队作品集加载失败，请重试', canMaintain: false }) } finally { this.setData({ loading: false }) }
   },
-  onShow() { if (this.data.openingLibrary) this.setData({ openingLibrary: false }) },
+  onShow() { this.showBackgroundAudio(); if (this.data.openingLibrary) this.setData({ openingLibrary: false }) },
+  onHide() { this.hideBackgroundAudio() },
   onUnload() {
+    this.destroyBackgroundAudio()
+    this.backgroundAudioRequestSeq = (this.backgroundAudioRequestSeq || 0) + 1
     this.textBackgroundSession = (Number(this.textBackgroundSession) || 0) + 1
     if (this.componentHighlightTimer) clearTimeout(this.componentHighlightTimer)
     this.singleWorkRowSummaryRequestSeq = (Number(this.singleWorkRowSummaryRequestSeq) || 0) + 1
@@ -1242,6 +1253,117 @@ Page({
     const backgroundColor = normalizeTeamHexColor(event.currentTarget.dataset.color)
     this.clearPending()
     this.updateConfig(Object.assign({}, this.data.config, { style: { backgroundColor } }))
+  },
+
+  handleBackgroundAudioStyle(event) {
+    const style = event.currentTarget.dataset.style
+    if (AUDIO_STYLE_OPTIONS.some((item) => item.value === style)) this.updateBackgroundAudio({ displayStyle: style })
+  },
+
+  async restoreBackgroundAudioSelection() {
+    const workId = this.data.config.backgroundAudio && this.data.config.backgroundAudio.workId
+    if (!workId || this.backgroundAudioDisposed) return
+    const seq = this.backgroundAudioRestoreSeq = (this.backgroundAudioRestoreSeq || 0) + 1
+    try {
+      const response = await request({ url: `/api/mine/team-portfolios/${this.data.portfolioId}/preview` })
+      if (this.backgroundAudioDisposed || seq !== this.backgroundAudioRestoreSeq ||
+          workId !== this.data.config.backgroundAudio.workId) return
+      const work = response.renderData && response.renderData.backgroundAudio
+      this.syncBackgroundAudio(work ? Object.assign({}, work, { enabled: false }) : null)
+      this.setData({ backgroundAudioSelected: work || null })
+    } catch (error) {
+      if (this.backgroundAudioDisposed || seq !== this.backgroundAudioRestoreSeq ||
+          workId !== this.data.config.backgroundAudio.workId) return
+      this.syncBackgroundAudio(null)
+      handleTeamMaintainerAuthError(error)
+    }
+  },
+
+  updateBackgroundAudio(patch) {
+    if (!this.data.canMaintain) return
+    this.clearPending()
+    this.updateConfig(Object.assign({}, this.data.config, {
+      backgroundAudio: Object.assign({}, this.data.config.backgroundAudio, patch)
+    }))
+  },
+
+  handleBackgroundAudioSwitch(event) {
+    if (!this.data.canMaintain) return
+    const enabled = event.detail.value === true
+    this.updateBackgroundAudio({ enabled })
+    if (!enabled) {
+      this.pauseBackgroundAudio()
+      this.handleCloseBackgroundAudioPicker()
+    }
+  },
+
+  handleRemoveBackgroundAudio() {
+    if (!this.data.canMaintain) return
+    this.updateBackgroundAudio({ enabled: false, workId: null })
+    this.syncBackgroundAudio(null)
+    this.setData({ backgroundAudioSelected: null })
+    this.handleCloseBackgroundAudioPicker()
+  },
+
+  async handleChooseBackgroundAudio() {
+    if (!this.data.canMaintain) return
+    const seq = this.backgroundAudioRequestSeq = (this.backgroundAudioRequestSeq || 0) + 1
+    this.setData({ backgroundAudioPickerVisible: true, backgroundAudioMembers: [], backgroundAudioOptions: [], backgroundAudioLoading: true })
+    try {
+      const members = await request({ url: `/api/mine/teams/${this.data.teamId}/portfolio-components/single-work/members` })
+      if (seq !== this.backgroundAudioRequestSeq) return
+      this.setData({ backgroundAudioMembers: members, backgroundAudioMemberIndex: 0, backgroundAudioLoading: false })
+      return this.handleBackgroundAudioMemberChange({ detail: { value: 0 } })
+    } catch (error) {
+      if (seq !== this.backgroundAudioRequestSeq) return
+      this.setData({ backgroundAudioLoading: false })
+      if (!handleTeamMaintainerAuthError(error)) wx.showToast({ title: error.message || '成员加载失败，请重试', icon: 'none' })
+    }
+  },
+
+  handleBackgroundAudioMemberChange(event) {
+    this.backgroundAudioRequestSeq = (this.backgroundAudioRequestSeq || 0) + 1
+    this.backgroundAudioPage = 0
+    this.setData({ backgroundAudioMemberIndex: Number(event.detail.value), backgroundAudioOptions: [], backgroundAudioLoading: false, backgroundAudioHasMore: false })
+    return this.loadBackgroundAudioOptions()
+  },
+
+  handleCloseBackgroundAudioPicker() {
+    this.backgroundAudioRequestSeq = (this.backgroundAudioRequestSeq || 0) + 1
+    this.setData({ backgroundAudioPickerVisible: false, backgroundAudioLoading: false })
+  },
+
+  async loadBackgroundAudioOptions() {
+    if (!this.data.canMaintain || this.data.backgroundAudioLoading || !this.data.backgroundAudioPickerVisible) return
+    const member = this.data.backgroundAudioMembers[this.data.backgroundAudioMemberIndex]
+    if (!member) return
+    const seq = this.backgroundAudioRequestSeq
+    const page = (this.backgroundAudioPage || 0) + 1
+    this.setData({ backgroundAudioLoading: true })
+    try {
+      const response = await request({
+        url: `/api/mine/teams/${this.data.teamId}/portfolio-components/single-work/members/${member.memberUserId}/works/page`,
+        data: { mediaType: 'AUDIO', page, pageSize: 20 }
+      })
+      if (seq !== this.backgroundAudioRequestSeq) return
+      this.backgroundAudioPage = page
+      this.setData({ backgroundAudioOptions: this.data.backgroundAudioOptions.concat(response.works || []), backgroundAudioHasMore: !!response.hasMore })
+    } catch (error) {
+      if (seq !== this.backgroundAudioRequestSeq) return
+      if (!handleTeamMaintainerAuthError(error)) wx.showToast({ title: error.message || '音频加载失败，请重试', icon: 'none' })
+    } finally {
+      if (seq === this.backgroundAudioRequestSeq) this.setData({ backgroundAudioLoading: false })
+    }
+  },
+
+  handleSelectBackgroundAudio(event) {
+    if (!this.data.canMaintain) return
+    const work = this.data.backgroundAudioOptions[Number(event.currentTarget.dataset.index)]
+    if (!work) return
+    this.updateBackgroundAudio({ workId: work.workId })
+    this.syncBackgroundAudio(Object.assign({}, work, { enabled: false }))
+    this.setData({ backgroundAudioSelected: work })
+    this.handleCloseBackgroundAudioPicker()
   },
   handleOpenBackgroundColorSheet() {
     if (!this.data.canMaintain) return

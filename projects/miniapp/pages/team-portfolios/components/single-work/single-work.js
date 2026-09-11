@@ -219,6 +219,10 @@ Component({
         error: event.detail
       })
     },
+
+    handleVideoPlay() {
+      this.triggerEvent('videoplay', { componentKey: this.data.componentKey })
+    },
     pauseVideo() {
       if (this.properties.activeVideoKey !== this.properties.componentKey) return
       const context = wx.createVideoContext &&

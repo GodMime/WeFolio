@@ -1,5 +1,7 @@
 package com.jxc.wefolio.service.teamportfolio;
 
+import com.jxc.wefolio.common.PortfolioBackgroundAudioSupport;
+
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.jxc.wefolio.constant.TeamPortfolioConstants;
@@ -165,6 +167,10 @@ public class TeamPortfolioConfigValidator {
         normalized.setEditorSchemaRevision(config.getEditorSchemaRevision());
         normalized.setShare(normalizeShare(config.getShare()));
         normalized.setStyle(normalizeStyle(config.getStyle()));
+        normalized.setBackgroundAudio(PortfolioBackgroundAudioSupport.normalize(config.getBackgroundAudio()));
+        if (normalized.getBackgroundAudio().getWorkId() != null) {
+            singleWorkValidator.validateAudio(normalized.getBackgroundAudio().getWorkId(), context);
+        }
         normalized.setBottomNav(normalizeBottomNavMetadata(config.getBottomNav()));
 
         List<TeamPortfolioConfigDto.ComponentEnvelope> allComponents = allSourceComponents(config);
@@ -216,6 +222,7 @@ public class TeamPortfolioConfigValidator {
             TeamPortfolioComponentContext context
     ) {
         TeamPortfolioConfigDto validated = normalizeForDraft(normalizedDraftConfig, null, context);
+        PortfolioBackgroundAudioSupport.validateForPublish(validated.getBackgroundAudio());
         if (!Boolean.TRUE.equals(validated.getBottomNav().getEnabled())) {
             return validated;
         }

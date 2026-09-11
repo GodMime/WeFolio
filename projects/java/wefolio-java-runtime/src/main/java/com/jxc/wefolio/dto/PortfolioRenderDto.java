@@ -41,6 +41,9 @@ public class PortfolioRenderDto {
     /** 页面渲染样式 */
     private Style style;
 
+    /** 全局背景音频展示数据。 */
+    private BackgroundAudioRenderDto backgroundAudio;
+
     /** 渲染组件 */
     private List<Component> components = new ArrayList<>();
 

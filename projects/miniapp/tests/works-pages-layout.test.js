@@ -51,6 +51,18 @@ test('app registers works pages in the mini program', () => {
   assert.ok(registeredPageRoutes.includes('pages/works/work-edit/work-edit'))
 })
 
+test('音频复用编辑表单并提供试听和自有图片封面入口，不暴露裁剪', () => {
+  const wxml = read('pages/works/works.wxml')
+  assert.match(wxml, /wx:if="\{\{imageEditForm.isAudio\}\}"/)
+  assert.match(wxml, /bindtap="handleAudioEditPlay"/)
+  assert.match(wxml, /bindtap="handleChooseAudioCover"/)
+  assert.match(wxml, /bindtap="handleResetAudioCover"/)
+  assert.match(wxml, /wx:else class="cover-section thumbnail-section"/)
+  assert.match(wxml, /bindtap="handleLoadMoreAudioCovers"/)
+  assert.match(wxml, /bindplay="pauseWorkAudio"/)
+  assert.match(wxml, /<image wx:if="\{\{item.hasCover\}\}"[^>]*binderror="handleAudioCoverError"><\/image>\s*<view wx:else class="thumb-placeholder"/)
+})
+
 test('mine and schedule bottom tabs navigate to works page', () => {
   const indexJs = read('pages/index/index.js')
   const scheduleJs = read('pages/schedule/schedule.js')
@@ -438,7 +450,7 @@ test('works pages expose expected upload and edit structure', () => {
   assert.match(addWxml, /class="selected-work-row"[\s\S]*bindtap="handleOpenFileEditor"[\s\S]*\{\{item\.title \|\| item\.fileName\}\}/)
   assert.match(addWxml, /class="work-edit-mask \{\{editForm\.isVideo \? 'video-edit-mask' : 'image-edit-mask'\}\} \{\{editSheetVisible \? 'visible' : ''\}\}"[\s\S]*class="work-edit-panel"/)
   assert.doesNotMatch(addWxml, /class="work-edit-mask" wx:if="\{\{editSheetVisible\}\}"/)
-  assert.match(addWxml, /<image wx:if="\{\{!editForm\.isVideo\}\}" class="work-preview-media" src="\{\{editForm\.tempFilePath\}\}" webp="\{\{true\}\}" mode="aspectFit"><\/image>/)
+  assert.match(addWxml, /<image wx:elif="\{\{!editForm\.isVideo\}\}" class="work-preview-media" src="\{\{editForm\.tempFilePath\}\}" webp="\{\{true\}\}" mode="aspectFit"><\/image>/)
   assert.doesNotMatch(addWxml, /<image wx:if="\{\{!editForm\.isVideo\}\}" class="work-preview-media" src="\{\{editForm\.tempFilePath\}\}" mode="aspectFill"><\/image>/)
   assert.match(addWxml, /placeholder="填写作品标题"[\s\S]*bindinput="handleEditInput"/)
   assert.match(addWxml, /placeholder="填写作品说明"[\s\S]*maxlength="1000"[\s\S]*bindinput="handleEditInput"/)
@@ -457,7 +469,7 @@ test('works pages expose expected upload and edit structure', () => {
   assert.match(addWxml, /class="primary-button \{\{files\.length === 0 \? 'empty-disabled' : ''\}\}"/)
   assert.match(addWxml, /class="primary-button-label"[\s\S]*\{\{saving \? uploadOverallText : '保存作品'\}\}/)
   assert.match(addWxml, /class="primary-button-progress"[\s\S]*class="primary-button-progress-fill"[\s\S]*width:\s*\{\{uploadOverallProgress\}\}%/)
-  assert.match(addWxml, /disabled="\{\{saving\}\}"/)
+  assert.match(addWxml, /disabled="\{\{saving \|\| choosing\}\}"/)
   assert.doesNotMatch(addWxml, /disabled="\{\{saving \|\| files\.length === 0\}\}"/)
   assert.doesNotMatch(addWxml, /placeholder="统一标签"/)
   assert.doesNotMatch(addWxml, /class="tag-input"/)

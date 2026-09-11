@@ -1172,3 +1172,18 @@
 .sheet-confirm::after {
   border: 0;
 }
+
+.background-audio-styles { display: flex; flex-direction: column; margin-top: 20rpx; }
+.background-audio-style { display: flex; align-items: center; justify-content: space-between; min-height: 80px; padding: 12px; margin-bottom: 8px; border: 1px solid var(--pe-color-border, #E9ECEF); border-radius: 8px; background: var(--pe-color-surface, #FFFFFF); }
+.background-audio-style.audio-style-selected { border-color: var(--pe-color-text-primary, #212529); background: var(--pe-color-border, #E9ECEF); }
+.background-audio-sample { display: flex; align-items: center; min-width: 180px; min-height: 48px; }
+.background-audio-style-label { font-size: 22rpx; color: var(--pe-color-text-secondary, #868E96); margin-left: 8px; text-align: right; }
+.background-audio-action {
+  width: 100%;
+  min-width: 100%;
+  flex: none;
+  margin-top: 16rpx;
+}
+
+.background-audio-options { padding: 16rpx 0; }
+.background-audio-option { display: flex; align-items: center; min-height: 44px; margin-top: 12rpx; padding: 12rpx 16rpx; font-size: 26rpx; text-align: left; }

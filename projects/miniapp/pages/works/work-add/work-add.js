@@ -16,10 +16,13 @@ const {
   buildCoverUploadTicketPayload,
   buildUploadTicketPayload,
   buildUploadProgressSummary,
+  chooseAudioFiles,
   createChooseMediaOptions,
   classifyChosenMediaFiles,
   enrichVideoFileMetadata,
   normalizeChosenMediaFiles,
+  AUDIO_MAX_BYTES,
+  readAudioDuration,
   prepareCoverUploadFiles,
   prepareStaticImageMainFiles,
   runWorkUploadQueue,
@@ -53,6 +56,8 @@ function buildEditForm(file, index) {
     mediaType: file.mediaType,
     isVideo: file.mediaType === 'VIDEO',
     isAnimation: file.mediaType === 'ANIMATION',
+    isAudio: file.mediaType === 'AUDIO',
+    audioCoverUrl: file.audioCoverUrl || '',
     tempFilePath: file.tempFilePath,
     coverPath: file.coverPath || '',
     title: file.title || '',
@@ -76,6 +81,7 @@ Page({
   data: {
     files: [],
     saving: false,
+    choosing: false,
     errorMessage: '',
     unifiedTags: [],
     tagPickerVisible: false,
@@ -94,12 +100,15 @@ Page({
   },
 
   onLoad() {
+    this.disposed = false
     if (!hasLocalToken()) {
       this.redirectToLogin()
     }
   },
 
   onUnload() {
+    this.disposed = true
+    if (this.cancelAudioRead) this.cancelAudioRead()
     Object.keys(this.uploadTasks).forEach((key) => {
       const task = this.uploadTasks[key]
       if (task && task.abort) {
@@ -115,7 +124,8 @@ Page({
     })
   },
 
-  async handleChooseMedia() {
+  async handleChooseMedia(event = {}) {
+    if (this.data.saving || this.data.choosing) return
     const remainingCount = 9 - this.data.files.length
     if (remainingCount <= 0) {
       wx.showToast({
@@ -124,9 +134,27 @@ Page({
       })
       return
     }
+    const audio = event.currentTarget && event.currentTarget.dataset.mediaType === 'AUDIO'
+    this.setData({ choosing: true })
     try {
-      const response = await this.chooseMedia(createChooseMediaOptions(remainingCount))
-      const normalizedFiles = normalizeChosenMediaFiles(response.tempFiles || [])
+      const response = audio
+        ? await chooseAudioFiles(remainingCount, { wxApi: wx })
+        : await this.chooseMedia(createChooseMediaOptions(remainingCount))
+      if (this.disposed) return
+      const rawFiles = audio ? (response.tempFiles || []).map((file) => Object.assign({}, file, { fileType: 'audio' })) : response.tempFiles || []
+      const normalizedFiles = normalizeChosenMediaFiles(rawFiles)
+      if (audio) {
+        for (const file of normalizedFiles) {
+          if (!file.mimeType) throw new Error('音频仅支持 MP3、M4A、AAC、WAV')
+          if (file.size <= 0 || file.size > AUDIO_MAX_BYTES) throw new Error('音频文件不能为空且不能超过 50MB')
+          file.durationMs = await readAudioDuration(file.tempFilePath, {
+            wxApi: wx,
+            onCancelReady: (cancel) => { this.cancelAudioRead = cancel }
+          })
+          if (this.disposed) return
+          file.metaText = `默认标题 · 音频 ${formatFrameTime(file.durationMs)}`
+        }
+      }
       const classifiedFiles = await classifyChosenMediaFiles(normalizedFiles)
       const preparedFiles = await prepareStaticImageMainFiles(classifiedFiles)
       const mediaFiles = await enrichVideoFileMetadata(preparedFiles)
@@ -149,13 +177,19 @@ Page({
         revealedFileId: ''
       })
     } catch (error) {
-      if (error && /cancel/.test(error.errMsg || error.message || '')) {
+      if (this.disposed) return
+      if (error && /cancel/i.test(error.errMsg || error.message || '')) {
         return
+      }
+      if (audio && error && error.errMsg) {
+        console.warn('选择音频作品失败', { errMsg: error.errMsg, errno: error.errno })
       }
       wx.showToast({
         title: error && error.message ? error.message : '选择作品失败',
         icon: 'none'
       })
+    } finally {
+      if (!this.disposed) this.setData({ choosing: false })
     }
   },
 
@@ -413,6 +447,7 @@ Page({
   },
 
   async handleSubmit() {
+    if (this.data.choosing) return
     if (!hasLocalToken()) {
       this.redirectToLogin()
       return

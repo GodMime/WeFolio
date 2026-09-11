@@ -1,3 +1,4 @@
+const { portfolioAudioPageMethods } = require('../utils/portfolio-audio-player')
 const { request } = require('../../../utils/request.js')
 const { createTeamContactLeadForm, submitTeamContactLead } = require('../utils/team-contact-leads.js')
 const { buildTeamSingleWorkViewEvent, normalizeTeamVisitorPortfolio, queryTeamVisitorSchedule, submitTeamVisitorEvent, switchTeamPortfolioMenu } = require('../utils/team-visitor-portfolio.js')
@@ -27,8 +28,11 @@ function shareTitle(render = {}) { return render.share && render.share.title || 
 function hasPreviousPage() { const pages = typeof getCurrentPages === 'function' ? getCurrentPages() : []; return Array.isArray(pages) && pages.length > 1 }
 
 Page({
-  data: { shareCode: '', sourceType: 'WECHAT_SHARE_CARD', loading: false, errorMessage: '', render: {}, portfolio: normalizeTeamVisitorPortfolio(), componentBuckets: buckets([]), activeSingleWorkVideoKey: '', videoPreviewVisible: false, videoPreviewUrl: '', videoPreview: null, visitorKey: '', visitRecordId: 0, visitorProfileToken: '', visitorProfileAuthVisible: false, visitorProfileForm: { nickname: '', avatarPath: '' }, visitorProfileSaving: false, empty: true, underMaintenance: false, showNavigationBack: false, timelineGuideRequested: false, timelineGuideVisible: false, timelineSharePortfolioId: 0, timelineShareRecordEnabled: false, scheduleResults: {}, contactForms: {}, contactSubmitting: {}, contactModalVisible: {}, pendingOpenKey: '', pendingContactKeys: {}, themeMode: 'light', backgroundColor: '#FFFFFF', navigationColor: '#212529', brandLogoUrl: LIGHT_LOGO_URL, portfolioScrollTop: 0, teamPortfolioMenuSwitching: false, teamPortfolioMenuTransitionClass: '' },
+  ...portfolioAudioPageMethods,
+  data: {
+    backgroundAudioPlaying: false, backgroundAudioResource: {}, backgroundAudioTop: 76, shareCode: '', sourceType: 'WECHAT_SHARE_CARD', loading: false, errorMessage: '', render: {}, portfolio: normalizeTeamVisitorPortfolio(), componentBuckets: buckets([]), activeSingleWorkVideoKey: '', videoPreviewVisible: false, videoPreviewUrl: '', videoPreview: null, visitorKey: '', visitRecordId: 0, visitorProfileToken: '', visitorProfileAuthVisible: false, visitorProfileForm: { nickname: '', avatarPath: '' }, visitorProfileSaving: false, empty: true, underMaintenance: false, showNavigationBack: false, timelineGuideRequested: false, timelineGuideVisible: false, timelineSharePortfolioId: 0, timelineShareRecordEnabled: false, scheduleResults: {}, contactForms: {}, contactSubmitting: {}, contactModalVisible: {}, pendingOpenKey: '', pendingContactKeys: {}, themeMode: 'light', backgroundColor: '#FFFFFF', navigationColor: '#212529', brandLogoUrl: LIGHT_LOGO_URL, portfolioScrollTop: 0, teamPortfolioMenuSwitching: false, teamPortfolioMenuTransitionClass: '' },
   onLoad(options = {}) {
+    this.positionBackgroundAudio()
     const shareCode = resolveTeamShareCode(options)
     if (!shareCode) {
       wx.showToast({ title: '暂无权限访问该团队作品集', icon: 'none' })
@@ -63,6 +67,7 @@ Page({
     const render = preferredMenuKey
       ? switchTeamPortfolioMenu(normalizedRender, preferredMenuKey)
       : normalizedRender
+    this.syncBackgroundAudio(render.backgroundAudio, true)
     const displayable = !render.underMaintenance && render.components.length > 0
     const activeComponents = Array.isArray(render.activeComponents) ? render.activeComponents : []
     const themeMode = render.themeMode === 'dark' ? 'dark' : 'light'
@@ -110,18 +115,23 @@ Page({
   sendEvent(payload) { return submitTeamVisitorEvent((options) => this.visitorRequest(options), this.data.shareCode, Object.assign({}, payload, { idempotencyKey: createIdempotencyKey() })).catch((error) => { this.handleUnavailableError(error); return null }) },
   handleImagePreview(event) { const item = event.detail && event.detail.item; const componentKey = event.currentTarget.dataset.key; if (!item) return; this.sendEvent({ eventType: WORK_VIEWED_EVENT_TYPE, componentKey, workId: item.workId, mediaType: MEDIA_TYPE_IMAGE }); const url = item.mediaUrl || item.coverUrl; if (url) wx.previewImage({ current: url, urls: [url] }) },
   handleSingleWorkPreview(event) { const detail = event.detail || {}; const work = detail.work; const visitorEvent = buildTeamSingleWorkViewEvent(detail); if (!visitorEvent || !work || !work.mediaUrl) return; this.sendEvent(visitorEvent); wx.previewImage({ current: work.mediaUrl, urls: [work.mediaUrl] }) },
-  handleSingleWorkActivate(event) { const detail = event.detail || {}; const work = detail.work; if (!detail.componentKey || !work) return; this.pauseSingleWorkVideos(detail.componentKey); this.setData({ activeSingleWorkVideoKey: detail.componentKey }); this.sendEvent({ eventType: VIDEO_PLAYED_EVENT_TYPE, componentKey: detail.componentKey, workId: work.workId, mediaType: MEDIA_TYPE_VIDEO, durationSeconds: 0 }) },
+  handleSingleWorkActivate(event) {
+    this.pauseBackgroundAudio(); const detail = event.detail || {}; const work = detail.work; if (!detail.componentKey || !work) return; this.pauseSingleWorkVideos(detail.componentKey); this.setData({ activeSingleWorkVideoKey: detail.componentKey }); this.sendEvent({ eventType: VIDEO_PLAYED_EVENT_TYPE, componentKey: detail.componentKey, workId: work.workId, mediaType: MEDIA_TYPE_VIDEO, durationSeconds: 0 }) },
   handleVideoCarouselPlay(event) { const detail = event && event.detail || {}; const work = detail.work || {}; if (!work.mediaUrl) { wx.showToast({ title: '视频地址缺失', icon: 'none' }); return false }; this.sendEvent({ eventType: VIDEO_PLAYED_EVENT_TYPE, componentKey: detail.componentKey || '', workId: work.workId, mediaType: MEDIA_TYPE_VIDEO, durationSeconds: 0 }); return this.openVideoPreview(work) },
   handleSingleWorkVideoError() { this.stopSingleWorkVideos(); wx.showToast({ title: '视频播放失败，请重试', icon: 'none' }) },
   pauseSingleWorkVideos(exceptKey) { const children = this.selectAllComponents ? this.selectAllComponents('.team-single-work-instance') : []; (children || []).forEach((child) => { if (!exceptKey || child.properties.componentKey !== exceptKey) child.pauseVideo && child.pauseVideo() }) },
   stopSingleWorkVideos() { this.pauseSingleWorkVideos(''); this.setData({ activeSingleWorkVideoKey: '' }) },
   clearVideoPreview() { if (wx.createVideoContext && this.data.videoPreviewUrl) { const context = wx.createVideoContext('teamPortfolioWorkVideo', this); if (context && context.stop) context.stop() }; this.setData({ videoPreviewVisible: false, videoPreviewUrl: '', videoPreview: null }) },
-  openVideoPreview(work = {}) { const mediaUrl = String(work.mediaUrl || ''); if (!mediaUrl) { wx.showToast({ title: '视频地址缺失', icon: 'none' }); return false }; this.stopSingleWorkVideos(); if (this.data.videoPreviewVisible || this.data.videoPreviewUrl) this.clearVideoPreview(); this.setData({ videoPreviewVisible: true, videoPreviewUrl: mediaUrl, videoPreview: { title: work.title || '视频作品', poster: work.coverUrl || '' } }); return true },
+  openVideoPreview(work = {}) {
+    this.pauseBackgroundAudio(); const mediaUrl = String(work.mediaUrl || ''); if (!mediaUrl) { wx.showToast({ title: '视频地址缺失', icon: 'none' }); return false }; this.stopSingleWorkVideos(); if (this.data.videoPreviewVisible || this.data.videoPreviewUrl) this.clearVideoPreview(); this.setData({ videoPreviewVisible: true, videoPreviewUrl: mediaUrl, videoPreview: { title: work.title || '视频作品', poster: work.coverUrl || '' } }); return true },
   handleCloseVideoPreview() { this.clearVideoPreview() },
   handleVideoPreviewPanelTap() {},
   handleVideoPreviewError() { this.clearVideoPreview(); wx.showToast({ title: '视频播放失败，请重试', icon: 'none' }) },
-  onHide() { this.stopSingleWorkVideos(); this.clearVideoPreview() },
-  onUnload() { this.stopSingleWorkVideos(); this.clearVideoPreview(); clearTeamPortfolioMenuTransitionTimers(this) },
+  onShow() { this.showBackgroundAudio() },
+  onHide() {
+    this.hideBackgroundAudio(); this.stopSingleWorkVideos(); this.clearVideoPreview() },
+  onUnload() {
+    this.destroyBackgroundAudio(); this.stopSingleWorkVideos(); this.clearVideoPreview(); clearTeamPortfolioMenuTransitionTimers(this) },
   handleMemberPortfolio(event) { const detail = event.detail || {}; const componentKey = event.currentTarget.dataset.key; this.sendEvent({ eventType: 'MEMBER_PORTFOLIO_OPENED', componentKey, memberPortfolioId: detail.portfolioId }); if (detail.shareCode) wx.navigateTo({ url: `${PERSONAL_VISITOR_URL}?shareCode=${encodeURIComponent(detail.shareCode)}&${PERSONAL_VISITOR_TEAM_SOURCE_QUERY}` }) },
   async handleScheduleQuery(event) {
     const detail = event.detail || {}

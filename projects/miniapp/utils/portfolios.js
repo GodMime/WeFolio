@@ -1,4 +1,5 @@
 const { normalizeHexColor } = require('./portfolio-color')
+const { normalizeBackgroundAudio } = require('./portfolio-background-audio')
 const { normalizeTextColor, isValidTextColor, TEXT_COLOR_ERROR } = require('./portfolio-text-color')
 const {
   LEGACY_PERSONAL_FONT_SIZE_RPX,
@@ -533,6 +534,7 @@ function normalizePortfolioConfig(raw = {}) {
     editorSchemaRevision: EDITOR_SCHEMA_REVISION,
     share: normalizeShare(raw.share || {}),
     style: normalizeStyleConfig(raw.style || {}),
+    backgroundAudio: normalizeBackgroundAudio(raw.backgroundAudio),
     components: normalizeComponentList(raw.components),
     bottomNav: normalizeBottomNavConfig(raw.bottomNav || {})
   }

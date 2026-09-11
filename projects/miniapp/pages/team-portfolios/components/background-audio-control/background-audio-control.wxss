@@ -1,0 +1,29 @@
+/* 尺寸与结构来自 audio-control-styles V1/V2；点击区域不小于 44px。 */
+.audio-control { position: relative; min-width: 44px; min-height: 44px; color: #fff; }
+.style-DISC { width: 46px; height: 46px; }
+.audio-disc { position: relative; width: 46px; height: 46px; border-radius: 50%; background: #202020; box-shadow: 0 4px 14px rgba(0,0,0,.3); }
+.audio-disc-art { position: absolute; top: 4px; left: 4px; width: 38px; height: 38px; border-radius: 50%; background: #555; }
+.audio-disc-hole { position: absolute; top: 50%; left: 50%; width: 10px; height: 10px; transform: translate(-50%,-50%); border-radius: 50%; background: #222; box-shadow: 0 0 0 2px rgba(255,255,255,.62); }
+.audio-spin { animation: audio-spin 8s linear infinite; animation-play-state: paused; }
+.is-playing .audio-spin { animation-play-state: running; }
+.audio-play-badge { position: absolute; z-index: 3; right: -2px; bottom: -2px; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: #fff; color: #222; font-size: 10px; box-shadow: 0 2px 6px rgba(0,0,0,.26); }
+.style-SLEEVE, .audio-sleeve { width: 68px; height: 48px; }
+.audio-sleeve { position: relative; }
+.audio-sleeve-disc { position: absolute; top: 3px; right: 0; width: 42px; height: 42px; border-radius: 50%; background: #222; }
+.audio-sleeve-disc .audio-disc-art { top: 3px; left: 3px; width: 36px; height: 36px; opacity: .65; }
+.audio-sleeve-cover { position: absolute; top: 0; left: 0; z-index: 2; width: 48px; height: 48px; border-radius: 3px; overflow: hidden; background: #555; box-shadow: 0 4px 12px rgba(0,0,0,.3); }
+.audio-square-art { width: 100%; height: 100%; }
+.style-MINI_PLAYER { width: 180px; height: 48px; }
+.audio-mini { box-sizing: border-box; display: flex; align-items: center; width: 180px; height: 48px; padding: 6px 30px 6px 6px; border-radius: 4px; background: rgba(22,22,22,.86); box-shadow: 0 4px 14px rgba(0,0,0,.3); }
+.audio-mini-cover { width: 36px; height: 36px; flex-shrink: 0; overflow: hidden; border-radius: 2px; background: #555; }
+.audio-mini-copy { display: flex; flex-direction: column; flex: 1; min-width: 0; margin-left: 7px; }
+.audio-title { font-size: 11px; line-height: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.audio-subtitle { font-size: 10px; line-height: 14px; opacity: .7; }
+.style-MINI_PLAYER .audio-play-badge { right: 6px; bottom: 14px; width: 20px; height: 20px; box-shadow: none; }
+.audio-bars { display: flex; align-items: center; height: 18px; margin-left: 5px; opacity: .35; }
+.audio-bars view { width: 2px; height: 7px; margin-right: 2px; background: #fff; }
+.audio-bars view:nth-child(2) { height: 14px; }
+.audio-bars view:nth-child(3) { height: 9px; }
+.is-playing .audio-bars { opacity: 1; }
+@keyframes audio-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .audio-spin { animation: none; } }

@@ -1,5 +1,7 @@
 package com.jxc.wefolio.service;
 
+import static org.mockito.Mockito.mock;
+
 import com.alibaba.fastjson2.JSON;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -683,7 +685,8 @@ class PortfolioRenderServiceTest {
     }
 
     private PortfolioRenderService service() {
-        return new PortfolioRenderService(workEntityMapper, portfolioEntityMapper, cosService);
+        return new PortfolioRenderService(workEntityMapper, portfolioEntityMapper, cosService,
+                mock(PortfolioBackgroundAudioService.class));
     }
 
     private PortfolioEntity portfolio() {

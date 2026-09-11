@@ -10,6 +10,7 @@ import com.jxc.wefolio.constant.TeamPortfolioConstants;
 import com.jxc.wefolio.dict.PortfolioConfigScopeDict;
 import com.jxc.wefolio.dict.TeamPortfolioComponentTypeDict;
 import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioConfigDto;
+import com.jxc.wefolio.dto.BackgroundAudioConfigDto;
 import com.jxc.wefolio.entity.BaseEntity;
 import com.jxc.wefolio.entity.PortfolioReferenceEntity;
 import com.jxc.wefolio.exception.BusinessException;
@@ -59,6 +60,33 @@ import static org.mockito.Mockito.when;
  */
 @ExtendWith(MockitoExtension.class)
 class TeamPortfolioReferenceServiceTest {
+
+    /** 关闭仍在两个作用域保留音频引用；显式移除才不再插入该引用。 */
+    @Test
+    void disabledBackgroundAudioShouldRetainDraftAndPublishedWorkReferences() {
+        TeamPortfolioConfigDto config = new TeamPortfolioConfigDto();
+        config.setSchemaVersion(TeamPortfolioConstants.SCHEMA_VERSION_STANDARD_TEAM_V1);
+        config.setComponents(List.of());
+        BackgroundAudioConfigDto audio = new BackgroundAudioConfigDto();
+        audio.setEnabled(false);
+        audio.setWorkId(19L);
+        config.setBackgroundAudio(audio);
+        TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 22L, 3);
+        service().rebuild(22L, "DRAFT", config, context);
+        service().rebuild(22L, "PUBLISHED", config, context);
+        audio.setWorkId(null);
+        service().rebuild(22L, "DRAFT", config, context);
+        ArgumentCaptor<PortfolioReferenceEntity> refs = ArgumentCaptor.forClass(PortfolioReferenceEntity.class);
+        verify(referenceMapper, times(2)).insert(refs.capture());
+        assertThat(refs.getAllValues()).extracting(PortfolioReferenceEntity::getConfigScope)
+                .containsExactly("DRAFT", "PUBLISHED");
+        assertThat(refs.getAllValues()).allSatisfy(ref -> {
+            assertThat(ref.getPortfolioId()).isEqualTo(22L);
+            assertThat(ref.getReferenceId()).isEqualTo(19L);
+            assertThat(ref.getReferenceType()).isEqualTo("WORK");
+            assertThat(ref.getComponentPath()).isEqualTo("backgroundAudio.workId");
+        });
+    }
     /** 结构化文字组件策略模拟。 */
     @Mock private TeamStructuredTextSectionComponentReferenceExtractor structuredTextExtractor;
 

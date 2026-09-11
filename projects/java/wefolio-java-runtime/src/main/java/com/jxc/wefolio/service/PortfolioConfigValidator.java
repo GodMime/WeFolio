@@ -1,6 +1,7 @@
 package com.jxc.wefolio.service;
 
 import com.jxc.wefolio.common.PortfolioTextColorSupport;
+import com.jxc.wefolio.common.PortfolioBackgroundAudioSupport;
 
 import com.jxc.wefolio.common.PortfolioTextTypographySupport;
 import com.jxc.wefolio.constant.PortfolioTextTypographyConstants;
@@ -405,6 +406,17 @@ public class PortfolioConfigValidator {
         normalized.setEditorSchemaRevision(config.getEditorSchemaRevision());
         normalized.setShare(copyShare(config.getShare()));
         normalized.setStyle(normalizeStyle(config.getStyle()));
+        normalized.setBackgroundAudio(PortfolioBackgroundAudioSupport.normalize(config.getBackgroundAudio()));
+        Long audioWorkId = normalized.getBackgroundAudio().getWorkId();
+        if (audioWorkId != null) {
+            WorkEntity audio = workEntityMapper.selectById(audioWorkId);
+            if (audio == null || !userId.equals(audio.getUserId())
+                    || !MediaTypeDict.AUDIO.getCode().equals(audio.getMediaType())
+                    || !WorkStatusDict.ACTIVE.getCode().equals(audio.getStatus())
+                    || !WorkAuditStatusDict.PASSED.getCode().equals(audio.getAuditStatus())) {
+                throw new BusinessException(PortfolioMessage.BACKGROUND_AUDIO_UNAVAILABLE);
+            }
+        }
 
         PortfolioConfigDto.BottomNav normalizedBottomNav = normalizeBottomNavMetadata(config.getBottomNav());
         normalized.setBottomNav(normalizedBottomNav);
@@ -459,6 +471,7 @@ public class PortfolioConfigValidator {
      */
     public void validateForPublish(Long userId, PortfolioConfigDto normalizedDraftConfig) {
         PortfolioConfigDto validated = normalizeForDraft(userId, normalizedDraftConfig, null);
+        PortfolioBackgroundAudioSupport.validateForPublish(validated.getBackgroundAudio());
         PortfolioConfigDto.BottomNav bottomNav = validated.getBottomNav();
         if (bottomNav == null || !Boolean.TRUE.equals(bottomNav.getEnabled())) {
             return;
@@ -496,6 +509,9 @@ public class PortfolioConfigValidator {
         merged.setSchemaVersion(componentMerged.getSchemaVersion());
         merged.setShare(componentMerged.getShare());
         merged.setComponents(componentMerged.getComponents());
+        merged.setBackgroundAudio(existingDraftConfig != null
+                && incomingConfig.getBackgroundAudio() == null
+                ? existingDraftConfig.getBackgroundAudio() : incomingConfig.getBackgroundAudio());
 
         // editorSchemaRevision 本身：新请求用新值，缺省或显式低版本请求保留草稿中已有的新能力版本
         Integer incomingRevision = incomingConfig.getEditorSchemaRevision();
@@ -688,6 +704,12 @@ public class PortfolioConfigValidator {
             PortfolioConfigDto config
     ) {
         List<PortfolioReferenceEntity> references = new ArrayList<>();
+        if (config.getBackgroundAudio() != null && config.getBackgroundAudio().getWorkId() != null) {
+            PortfolioReferenceEntity audioReference = PortfolioBackgroundAudioSupport.reference(config.getBackgroundAudio());
+            audioReference.setPortfolioId(portfolioId);
+            audioReference.setConfigScope(configScope);
+            references.add(audioReference);
+        }
         for (PortfolioComponentTraversal.ComponentLocation location
                 : PortfolioComponentTraversal.listComponentLocations(config)) {
             PortfolioConfigDto.Component component = location.component();

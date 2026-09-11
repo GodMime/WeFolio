@@ -1,4 +1,5 @@
 const { request } = require('../../../utils/request.js')
+const { normalizeBackgroundAudio } = require('./portfolio-background-audio')
 const { normalizeId } = require('../../../utils/id.js')
 const { isValidTextColor, TEXT_COLOR_ERROR } = require('./portfolio-text-color.js')
 const {
@@ -131,6 +132,7 @@ function normalizeTeamPortfolioConfig(payload = {}) {
       )
     },
     components: normalizeTeamComponentList(payload.components),
+    backgroundAudio: normalizeBackgroundAudio(payload.backgroundAudio),
     bottomNav: normalizeTeamBottomNavigation(payload.bottomNav)
   }
 }

@@ -7,7 +7,8 @@ public enum MediaTypeDict {
 
     IMAGE("IMAGE"),
     VIDEO("VIDEO"),
-    ANIMATION("ANIMATION");
+    ANIMATION("ANIMATION"),
+    AUDIO("AUDIO");
 
     private final String code;
 

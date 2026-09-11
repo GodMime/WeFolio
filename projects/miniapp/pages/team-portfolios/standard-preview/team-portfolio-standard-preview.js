@@ -1,3 +1,4 @@
+const { portfolioAudioPageMethods } = require('../utils/portfolio-audio-player')
 const { request } = require('../../../utils/request.js')
 const {
   handleTeamMaintainerAuthError,
@@ -46,7 +47,9 @@ function buckets(items) {
 }
 
 Page({
+  ...portfolioAudioPageMethods,
   data: {
+    backgroundAudioPlaying: false, backgroundAudioResource: {}, backgroundAudioTop: 76,
     portfolioId: 0,
     scope: 'draft',
     loading: false,
@@ -71,6 +74,7 @@ Page({
     contactModalVisible: {}
   },
   onLoad(options = {}) {
+    this.positionBackgroundAudio()
     const portfolioId = Number(options.portfolioId)
     const scope = options.scope === 'published' ? 'published' : 'draft'
     if (!portfolioId) {
@@ -103,6 +107,7 @@ Page({
     }
   },
   applyPortfolio(portfolio) {
+    this.syncBackgroundAudio(portfolio.backgroundAudio, true)
     const activeComponents = Array.isArray(portfolio.activeComponents)
       ? portfolio.activeComponents
       : []
@@ -159,6 +164,7 @@ Page({
     }
   },
   handleSingleWorkActivate(event) {
+    this.pauseBackgroundAudio()
     const componentKey = event.detail && event.detail.componentKey
     if (!componentKey) return
     this.pauseSingleWorkVideos(componentKey)
@@ -190,6 +196,7 @@ Page({
     this.setData({ videoPreviewVisible: false, videoPreviewUrl: '', videoPreview: null })
   },
   openVideoPreview(work = {}) {
+    this.pauseBackgroundAudio()
     const mediaUrl = String(work.mediaUrl || '')
     if (!mediaUrl) { wx.showToast({ title: '视频地址缺失', icon: 'none' }); return false }
     this.stopSingleWorkVideos()
@@ -201,8 +208,11 @@ Page({
   handleCloseVideoPreview() { this.clearVideoPreview() },
   handleVideoPreviewPanelTap() {},
   handleVideoPreviewError() { this.clearVideoPreview(); wx.showToast({ title: '视频播放失败，请重试', icon: 'none' }) },
-  onHide() { this.stopSingleWorkVideos(); this.clearVideoPreview() },
+  onShow() { this.showBackgroundAudio() },
+  onHide() {
+    this.hideBackgroundAudio(); this.stopSingleWorkVideos(); this.clearVideoPreview() },
   onUnload() {
+    this.destroyBackgroundAudio()
     this.stopSingleWorkVideos()
     this.clearVideoPreview()
     clearTeamPortfolioMenuTransitionTimers(this)

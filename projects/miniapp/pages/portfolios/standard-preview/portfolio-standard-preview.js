@@ -1,3 +1,4 @@
+const { portfolioAudioPageMethods } = require('../utils/portfolio-audio-player')
 const { request } = require('../../../utils/request')
 const { createContactLeadForm } = require('../utils/contact-lead')
 const {
@@ -31,7 +32,9 @@ const VIDEO_MISSING_MESSAGE = '视频地址缺失'
 const DEFAULT_VIDEO_TITLE = '视频作品'
 
 Page({
+  ...portfolioAudioPageMethods,
   data: {
+    backgroundAudioPlaying: false, backgroundAudioResource: {}, backgroundAudioTop: 76,
     portfolioId: null,
     previewScope: '',
     teamPortfolioId: 0,
@@ -55,6 +58,7 @@ Page({
   },
 
   onLoad(options = {}) {
+    this.positionBackgroundAudio()
     const teamPortfolioId = Number(options.teamPortfolioId) || 0
     const teamPreviewScope = teamPortfolioId && options.teamScope === PUBLISHED_PREVIEW_SCOPE
       ? PUBLISHED_PREVIEW_SCOPE
@@ -79,6 +83,7 @@ Page({
         url: `${TEAM_PORTFOLIO_API_PREFIX}/${this.data.teamPortfolioId}/member-portfolios/${this.data.portfolioId}/published-preview`,
         data: { scope: this.data.teamPreviewScope }
       }).then((response) => {
+        this.syncBackgroundAudio(normalizeVisitorPortfolio(response).backgroundAudio, true)
         this.setData({
           portfolio: normalizeVisitorPortfolio(response),
           loading: false,
@@ -94,6 +99,7 @@ Page({
     const previewPath = this.data.previewScope === PUBLISHED_PREVIEW_SCOPE ? 'published-preview' : 'preview'
     return request({ url: `${PORTFOLIO_API_PREFIX}/${this.data.portfolioId}/${previewPath}` })
       .then((response) => {
+        this.syncBackgroundAudio(normalizeVisitorPortfolio(response).backgroundAudio, true)
         this.setData({
           portfolio: normalizeVisitorPortfolio(response),
           loading: false,
@@ -201,6 +207,7 @@ Page({
   },
 
   onUnload() {
+    this.destroyBackgroundAudio()
     clearPortfolioMenuTransitionTimers(this)
     clearDisplaySwitchingTimer(this)
     this.stopActiveSingleWorkVideo()
@@ -212,6 +219,7 @@ Page({
   },
 
   onHide() {
+    this.hideBackgroundAudio()
     this.stopActiveSingleWorkVideo()
     this.clearVideoPreview()
     if (this.clipboardPromptController) {
@@ -220,6 +228,7 @@ Page({
   },
 
   onShow() {
+    this.showBackgroundAudio()
     if (this.clipboardPromptController) {
       this.clipboardPromptController.resume()
     }
@@ -277,6 +286,7 @@ Page({
       wx.showToast({ title: VIDEO_MISSING_MESSAGE, icon: 'none' })
       return false
     }
+    this.pauseBackgroundAudio()
     this.stopActiveSingleWorkVideo()
     this.setData({ activeSingleWorkVideoKey: componentKey })
     return true
@@ -342,6 +352,7 @@ Page({
   },
 
   openVideoPreview(work = {}) {
+    this.pauseBackgroundAudio()
     const previewUrl = work.mediaUrl || work.previewUrl || ''
     if (!previewUrl) {
       wx.showToast({ title: VIDEO_MISSING_MESSAGE, icon: 'none' })

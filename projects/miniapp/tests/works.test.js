@@ -21,6 +21,17 @@ const {
   validateWorkForm
 } = require('../pages/works/utils/works')
 
+test('音频列表展示时长、大小和默认封面，封面变更区分未提交和恢复默认', () => {
+  const work = normalizeWorkList({ works: [{ id: 18, mediaType: 'AUDIO', durationMs: 125000, fileSize: 1048576 }] }).works[0]
+  assert.equal(work.typeText, '音频')
+  assert.equal(work.durationText, '02:05')
+  assert.equal(work.fileSizeText, '1.0MB')
+  assert.match(work.coverUrl, /system\/default-audio-cover-v1-200kb.png$/)
+  assert.equal(Object.hasOwn(buildWorkUpdatePayload({ title: '音频' }), 'audioCoverObjectKey'), false)
+  assert.equal(buildWorkUpdatePayload({ title: '音频', audioCoverObjectKey: '' }).audioCoverObjectKey, '')
+  assert.equal(buildWorkUpdatePayload({ title: '音频', audioCoverObjectKey: 'u/work/image/p.jpg' }).audioCoverObjectKey, 'u/work/image/p.jpg')
+})
+
 test('normalizes work list for page rendering', () => {
   const result = normalizeWorkList({
     page: 1,

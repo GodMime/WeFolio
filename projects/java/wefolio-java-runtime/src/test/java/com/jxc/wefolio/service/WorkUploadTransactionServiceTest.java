@@ -45,6 +45,7 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -52,6 +53,29 @@ import static org.mockito.Mockito.when;
  */
 @ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 class WorkUploadTransactionServiceTest {
+
+    /** 音频只建立作品记录和审核任务，使用默认封面且不扣固定上传积分。 */
+    @Test
+    void audioConfirmationShouldUseDefaultCoverWithoutUploadFee() {
+        WorkUploadTaskEntity task = createdImageTask();
+        task.setMediaType("AUDIO");
+        task.setDurationMs(12345);
+        task.setObjectKey("WFA3B1E7A2/work/audio/song.mp3");
+        when(workEntityMapper.insert(any(WorkEntity.class))).thenAnswer(invocation -> {
+            WorkEntity work = invocation.getArgument(0);
+            work.setId(121L);
+            return 1;
+        });
+        MineWorkUploadCompleteRequest.CompleteItem item = completeItem();
+        item.setTagNames(List.of());
+        assertThat(service().confirmUploadedTask(7L, task, item).isSuccess()).isTrue();
+        ArgumentCaptor<WorkEntity> captor = ArgumentCaptor.forClass(WorkEntity.class);
+        verify(workEntityMapper).insert(captor.capture());
+        assertThat(captor.getValue().getCoverObjectKey()).isEqualTo("system/default-audio-cover-v1-200kb.png");
+        assertThat(captor.getValue().getCoverSha256()).isEqualTo("f998fbcd98052b9b6bf3eba13d89f7c3dc506ebac3566261bd6085e9a8438f34");
+        assertThat(captor.getValue().getDurationMs()).isEqualTo(12345);
+        verifyNoInteractions(pointService);
+    }
 
     /** 上传任务 Mapper 模拟 */
     @Mock

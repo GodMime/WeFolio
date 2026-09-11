@@ -1,5 +1,10 @@
 package com.jxc.wefolio.service;
 
+import com.alibaba.fastjson2.JSON;
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.jxc.wefolio.common.auth.AuthContext;
@@ -13,6 +18,7 @@ import com.jxc.wefolio.dict.WfTagStatusDict;
 import com.jxc.wefolio.dict.WorkAuditStatusDict;
 import com.jxc.wefolio.dict.WorkAuditReasonCodeDict;
 import com.jxc.wefolio.dict.WorkUploadTaskStatusDict;
+import com.jxc.wefolio.dict.WorkStatusDict;
 import com.jxc.wefolio.dto.MineWorkBatchDeleteCheckResponse;
 import com.jxc.wefolio.dto.MineWorkBatchDeleteRequest;
 import com.jxc.wefolio.dto.MineWorkBatchDeleteResponse;
@@ -50,6 +56,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.apache.ibatis.annotations.Update;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -86,6 +93,172 @@ import static org.mockito.Mockito.when;
  */
 @ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 class MineWorkServiceTest {
+
+    /** 音频与其它作品共用标签计数和排序，不依赖客户端能力头。 */
+    @Test
+    void tagCountsAndSortShouldIncludeAudioWithoutCapabilityHeader() {
+        WorkEntity audio = ownedWork(19L);
+        audio.setMediaType(MediaTypeDict.AUDIO.getCode());
+        WfTagEntity tag = ownedTag(31L, "音乐", "#0f766e");
+        when(wfTagEntityMapper.selectList(any())).thenReturn(List.of(tag));
+        when(wfTagEntityMapper.selectById(31L)).thenReturn(tag);
+        when(workTagEntityMapper.selectList(any())).thenReturn(List.of(workTagRelation(19L, 31L)));
+        when(workEntityMapper.selectBatchIds(any())).thenReturn(List.of(audio));
+        assertThat(service().listTags().getTags()).singleElement().satisfies(item -> assertThat(item.getCount()).isEqualTo(1));
+        assertThat(service().listSortItems("TAG", 31L).getWorks()).singleElement()
+                .satisfies(item -> assertThat(item.getMediaType()).isEqualTo("AUDIO"));
+    }
+
+    /** 分页及统计不根据客户端版本隐藏音频，仍按已有筛选参数查询。 */
+    @Test
+    void workPageAndSummaryShouldIncludeAudioWithoutCapabilityHeader() {
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), WorkEntity.class);
+        when(workEntityMapper.selectPage(any(), any())).thenAnswer(invocation -> {
+            LambdaQueryWrapper<WorkEntity> query = invocation.getArgument(1);
+            assertThat(query.getSqlSegment()).doesNotContain("media_type <>");
+            return new Page<WorkEntity>(1, 20, 0);
+        });
+        when(workEntityMapper.selectMaps(any())).thenAnswer(invocation -> {
+            QueryWrapper<WorkEntity> query = invocation.getArgument(0);
+            assertThat(query.getSqlSegment()).doesNotContain("media_type <>");
+            return List.of();
+        });
+        assertThat(service().listWorks(null, null, 1, 20).getTotal()).isZero();
+    }
+
+    /** 封面编辑只能引用源图，不复制或清理旧封面，旧请求则保持原封面。 */
+    @Test
+    void audioCoverShouldReuseOwnImageAndAllowResetWithoutDeletingObjects() {
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), WorkEntity.class);
+        WorkEntity audio = ownedWork(18L);
+        audio.setMediaType(MediaTypeDict.AUDIO.getCode());
+        audio.setCoverObjectKey("old-shared.jpg");
+        WorkEntity image = ownedWork(19L);
+        image.setMediaType(MediaTypeDict.IMAGE.getCode());
+        image.setStatus(WorkStatusDict.ACTIVE.getCode());
+        image.setAuditStatus(WorkAuditStatusDict.PASSED.getCode());
+        image.setMediaObjectKey("WFA3B1E7A2/work/image/photo.jpg");
+        image.setMediaSha256("a".repeat(64));
+        when(workEntityMapper.selectById(18L)).thenReturn(audio);
+        lenient().when(workEntityMapper.selectOne(any())).thenAnswer(invocation -> {
+            LambdaQueryWrapper<WorkEntity> query = invocation.getArgument(0);
+            assertThat(query.getSqlSegment()).contains("user_id =", "media_type =", "status =", "audit_status =", "deleted =", "media_object_key =")
+                    .doesNotContain("LIKE", " OR ");
+            assertThat(query.getParamNameValuePairs().values()).containsExactlyInAnyOrder(
+                    7L, MediaTypeDict.IMAGE.getCode(), WorkStatusDict.ACTIVE.getCode(), WorkAuditStatusDict.PASSED.getCode(), 0L, "WFA3B1E7A2/work/image/photo.jpg");
+            return image;
+        });
+        when(workEntityMapper.updateById(any(WorkEntity.class))).thenReturn(1);
+        MineWorkService service = service();
+
+        service.updateWork(18L, JSON.parseObject("{\"title\":\"配乐\",\"audioCoverObjectKey\":\"WFA3B1E7A2/work/image/photo.jpg\"}", MineWorkUpdateRequest.class));
+        assertThat(audio.getCoverObjectKey()).isEqualTo(image.getMediaObjectKey());
+        assertThat(audio.getCoverSha256()).isEqualTo(image.getMediaSha256());
+        service.updateWork(18L, JSON.parseObject("{\"title\":\"旧请求\"}", MineWorkUpdateRequest.class));
+        assertThat(audio.getCoverObjectKey()).isEqualTo(image.getMediaObjectKey());
+        service.updateWork(18L, JSON.parseObject("{\"title\":\"配乐\",\"audioCoverObjectKey\":\"\"}", MineWorkUpdateRequest.class));
+        assertThat(audio.getCoverObjectKey()).isEqualTo(WorkUploadTransactionService.DEFAULT_AUDIO_COVER_KEY);
+        assertThat(audio.getCoverSha256()).isEqualTo(WorkUploadTransactionService.DEFAULT_AUDIO_COVER_SHA256);
+        verify(cosService, never()).delete(any());
+        verifyNoInteractions(workUploadTaskEntityMapper, animationCosService);
+    }
+
+    /** 不存在的图片 key 和非音频目标不能使用音频封面编辑参数。 */
+    @Test
+    void audioCoverShouldRejectUnavailableSourceAndOtherMedia() {
+        WorkEntity work = ownedWork(18L);
+        work.setMediaType(MediaTypeDict.AUDIO.getCode());
+        when(workEntityMapper.selectById(18L)).thenReturn(work);
+        MineWorkUpdateRequest request = JSON.parseObject("{\"title\":\"配乐\",\"audioCoverObjectKey\":\"missing.jpg\"}", MineWorkUpdateRequest.class);
+        assertThatThrownBy(() -> service().updateWork(18L, request)).isInstanceOf(BusinessException.class)
+                .hasMessage("请选择本人有效且审核通过的图片作品作为音频封面");
+        work.setMediaType(MediaTypeDict.VIDEO.getCode());
+        assertThatThrownBy(() -> service().updateWork(18L, request)).isInstanceOf(BusinessException.class)
+                .hasMessage("只有音频作品可以选择图片作品作为封面");
+        verify(workEntityMapper, never()).updateById(any(WorkEntity.class));
+    }
+
+    /** 图片被音频封面引用时，单条、批量检查及实际删除均保留源图片。 */
+    @Test
+    void imageUsedAsAudioCoverShouldBlockAllDeleteEntrances() {
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), WorkEntity.class);
+        WorkEntity image = ownedWork(18L);
+        image.setMediaType(MediaTypeDict.IMAGE.getCode());
+        image.setMediaObjectKey("WFA3B1E7A2/work/image/photo.jpg");
+        when(workEntityMapper.selectById(18L)).thenReturn(image);
+        lenient().when(workEntityMapper.selectBatchIds(any())).thenReturn(List.of(image));
+        lenient().when(workEntityMapper.selectCount(any())).thenAnswer(invocation -> {
+            LambdaQueryWrapper<WorkEntity> query = invocation.getArgument(0);
+            assertThat(query.getSqlSegment()).contains("media_type =", "deleted =", "cover_object_key =").doesNotContain("LIKE", "status =");
+            assertThat(query.getParamNameValuePairs().values()).containsExactlyInAnyOrder(
+                    MediaTypeDict.AUDIO.getCode(), 0L, "WFA3B1E7A2/work/image/photo.jpg");
+            return 1L;
+        });
+        MineWorkService service = service();
+        assertThat(service.checkDeleteWork(18L).isCanDelete()).isFalse();
+        assertThatThrownBy(() -> service.deleteWork(18L)).isInstanceOf(BusinessException.class)
+                .hasMessage("图片正在作为音频封面使用，请先更换音频封面");
+        MineWorkBatchDeleteRequest request = new MineWorkBatchDeleteRequest();
+        request.setWorkIds(List.of(18L));
+        assertThat(service.checkDeleteWorks(request).getBlockedCount()).isEqualTo(1);
+        assertThat(service.deleteWorks(request).getFailedCount()).isEqualTo(1);
+        verify(workEntityMapper, never()).update(any(), any());
+        verifyNoInteractions(cosService);
+    }
+
+    /** 已失效的自定义封面只在展示时回退，不能删除数据库中的关联。 */
+    @Test
+    void unavailableAudioCoverShouldRenderDefaultWithoutClearingKey() {
+        WorkEntity audio = ownedWork(18L);
+        audio.setMediaType(MediaTypeDict.AUDIO.getCode());
+        audio.setCoverObjectKey("missing.jpg");
+        when(workEntityMapper.selectById(18L)).thenReturn(audio);
+        when(cosService.publicUrl(any())).thenAnswer(invocation -> "https://cdn.example/" + invocation.getArgument(0));
+        MineWorkDetailResponse detail = service().getWorkDetail(18L);
+        assertThat(detail.getWork().getCoverUrl()).isEqualTo("https://cdn.example/system/default-audio-cover-v1-200kb.png");
+        assertThat(audio.getCoverObjectKey()).isEqualTo("missing.jpg");
+        verify(workEntityMapper, never()).updateById(any(WorkEntity.class));
+    }
+
+    /** 删除音频只能删除音频原件，不能删除共享默认图或图片作品。 */
+    @Test
+    void deletingAudioShouldKeepReferencedCover() {
+        WorkEntity work = new WorkEntity();
+        work.setId(18L);
+        work.setUserId(7L);
+        work.setMediaType(MediaTypeDict.AUDIO.getCode());
+        work.setMediaObjectKey("WFA3B1E7A2/work/audio/a.mp3");
+        work.setCoverObjectKey("system/default-audio-cover-v1-200kb.png");
+        when(workEntityMapper.selectById(18L)).thenReturn(work);
+        when(portfolioReferenceEntityMapper.selectList(any())).thenReturn(List.of());
+        when(workEntityMapper.update(any(), any())).thenReturn(1);
+        service().deleteWork(18L);
+        verify(cosService).delete(work.getMediaObjectKey());
+        verify(cosService, never()).delete(work.getCoverObjectKey());
+    }
+
+    /** 音频沿用签票流程、独立目录和容量，不读取文件。 */
+    @Test
+    void audioTicketsShouldReuseUploadFlow() {
+        when(userEntityMapper.selectById(7L)).thenReturn(activeUser());
+        when(cosService.createPostUploadTicket(any(), any(), anyLong(), any()))
+                .thenAnswer(invocation -> new CosService.PostUploadTicket(
+                        "https://bucket.cos.example.com", invocation.getArgument(0),
+                        invocation.getArgument(1), invocation.getArgument(2), invocation.getArgument(3), Map.of()));
+        MineWorkUploadTicketRequest request = new MineWorkUploadTicketRequest();
+        MineWorkUploadTicketRequest.UploadFileItem file = ticketFile("audio-1", "AUDIO", "song.mp3", "audio/mpeg", 2048L);
+        file.setDurationMs(12345);
+        request.setFiles(List.of(file));
+        MineWorkUploadTicketResponse response = service().createUploadTickets(request);
+        ArgumentCaptor<WorkUploadTaskEntity> captor = ArgumentCaptor.forClass(WorkUploadTaskEntity.class);
+        verify(workUploadTaskEntityMapper).insert(captor.capture());
+        assertThat(captor.getValue().getObjectKey()).matches("WFA3B1E7A2/work/audio/WFA3B1E7A2-S-\\d{13}-1\\.mp3");
+        assertThat(captor.getValue().getDurationMs()).isEqualTo(12345);
+        assertThat(response.getItems().get(0).getMaxBytes()).isEqualTo(50L * 1024 * 1024);
+        verify(contentLimitService).ensureWorkCapacity(7L, "AUDIO", 1L);
+        verify(cosService, never()).headObject(any());
+        verifyNoInteractions(animationCosService);
+    }
 
     /** 用户 Mapper 模拟 */
     @Mock
@@ -201,11 +374,16 @@ class MineWorkServiceTest {
 
     @Test
     void updateTagShouldChangeOwnedTagTextAndColor() {
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), WorkTagEntity.class);
         WfTagEntity tag = ownedTag(31L, "高端婚礼", "#0f766e");
         when(wfTagEntityMapper.selectById(31L)).thenReturn(tag);
         when(wfTagEntityMapper.selectOne(any())).thenReturn(null);
         when(wfTagEntityMapper.updateById(any(WfTagEntity.class))).thenReturn(1);
-        when(workTagEntityMapper.selectCount(any())).thenReturn(3L);
+        when(workTagEntityMapper.selectCount(any())).thenAnswer(invocation -> {
+            LambdaQueryWrapper<WorkTagEntity> query = invocation.getArgument(0);
+            assertThat(query.getSqlSegment()).contains("user_id =", "tag_id =").doesNotContain("work_id NOT IN");
+            return 3L;
+        });
         MineWorkTagUpsertRequest request = tagRequest(" 草坪婚礼 ", "#2d5f9a");
 
         MineWorkListResponse.TagItem response = service().updateTag(31L, request);

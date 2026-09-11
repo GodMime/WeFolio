@@ -191,7 +191,7 @@ erDiagram
 
 ### 7.4 `wf_work`
 
-用途：图片和视频作品主数据。
+用途：图片、动图、视频和音频作品主数据。
 
 业务字段：
 
@@ -203,6 +203,8 @@ erDiagram
 - `status`：作品处理状态。
 - `audit_status`、`audit_reject_reason`：内容审核结果。
 - `deleted_at`：逻辑删除时间。
+
+音频复用上述字段，`media_type = AUDIO`，`duration_ms` 信任前端原生读取结果，不增加码率字段。默认 `cover_object_key = system/default-audio-cover-v1-200kb.png`，自定义封面仅引用本人图片作品原件 key；图片与音频封面的关联通过精确 key 查询，不新增关联表，也不重复计量封面存储。
 
 索引与约束：`uk_work_user_media_sha256(user_id, media_sha256, deleted)`、`idx_work_user_list(user_id, deleted, sort_order, id)`、`idx_work_user_media(user_id, media_type, deleted)`、`idx_work_user_title(user_id, title)`、`idx_work_audit_scan(audit_status, media_type, deleted, id)`。
 
@@ -225,6 +227,8 @@ erDiagram
 ### 7.7 `wf_work_upload_task`
 
 用途：小程序直传 COS 上传任务。
+
+音频沿用同一上传任务及确认接口，不新增任务模型。新增未执行迁移 `V55__support_audio_works.sql` 仅将 `wf_work`、`wf_work_upload_task`、`wf_work_audit_task` 的三个媒体类型 CHECK 扩展为允许 AUDIO，不新增表、字段或索引；发布前单独验收并执行迁移。
 
 业务字段：
 
@@ -331,6 +335,8 @@ erDiagram
 
 用途：作品集草稿、正式发布配置和状态。
 
+个人和团队背景音频复用配置 JSON：`backgroundAudio = { enabled: false, workId: null, displayStyle: "DISC" }`，可选样式另有 `SLEEVE`、`MINI_PLAYER`；配置不保存媒体/封面 URL。历史无配置按关闭读取，无需回填；旧版保存保留已存的新配置。
+
 业务字段：
 
 - `share_code`、`owner_type`、`owner_id`、`template_type`、`status`。
@@ -354,6 +360,8 @@ erDiagram
 ### 7.17 `wf_portfolio_reference`
 
 用途：作品集草稿和正式配置中的资源引用。
+
+背景音频复用 `WORK` 引用和 `backgroundAudio.workId` 路径，分别写入 DRAFT/PUBLISHED 作用域；关闭仍保留引用，移除选择才解除，不新增音频专用关系表。
 
 业务字段：
 

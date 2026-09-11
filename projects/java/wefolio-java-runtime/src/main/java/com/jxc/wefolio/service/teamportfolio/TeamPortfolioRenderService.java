@@ -1,5 +1,7 @@
 package com.jxc.wefolio.service.teamportfolio;
 
+import com.jxc.wefolio.service.PortfolioBackgroundAudioService;
+
 import com.alibaba.fastjson2.JSON;
 import com.jxc.wefolio.constant.TeamPortfolioConstants;
 import com.alibaba.fastjson2.JSONObject;
@@ -69,6 +71,8 @@ public class TeamPortfolioRenderService {
     private final TeamStructuredTextSectionComponentRenderer structuredTextRenderer;
     /** 两类文字背景批量授权查询。 */
     private final TeamTextBackgroundSupport textBackgroundSupport;
+    /** 全局音频展示数据。 */
+    private final PortfolioBackgroundAudioService backgroundAudioService;
     private final TeamScheduleQueryComponentRenderer scheduleRenderer;
     private final TeamContactFormComponentRenderer contactRenderer;
     private final TeamQrContactComponentRenderer qrRenderer;
@@ -90,7 +94,8 @@ public class TeamPortfolioRenderService {
             TeamQrContactComponentRenderer qrRenderer,
             TeamVideoCarouselComponentRenderer videoCarouselRenderer,
             TeamStructuredTextSectionComponentRenderer structuredTextRenderer,
-            TeamTextBackgroundSupport textBackgroundSupport
+            TeamTextBackgroundSupport textBackgroundSupport,
+            PortfolioBackgroundAudioService backgroundAudioService
     ) {
         this.teamProfileRenderer = teamProfileRenderer;
         this.carouselRenderer = carouselRenderer;
@@ -105,6 +110,7 @@ public class TeamPortfolioRenderService {
         this.videoCarouselRenderer = videoCarouselRenderer;
         this.structuredTextRenderer = structuredTextRenderer;
         this.textBackgroundSupport = textBackgroundSupport;
+        this.backgroundAudioService = backgroundAudioService;
     }
 
     /**
@@ -129,6 +135,7 @@ public class TeamPortfolioRenderService {
         render.setShare(copyShare(config.getShare()));
         render.setTitle(resolveTitle(config.getShare()));
         render.setStyle(buildStyle(config.getStyle()));
+        render.setBackgroundAudio(backgroundAudioService.renderTeam(config.getBackgroundAudio(), context));
         TeamPortfolioComponentContext renderContext = withTextBackgroundWorks(config,context);
         render.setComponents(buildComponents(config.getComponents(), renderContext));
         render.setBottomNav(buildBottomNav(config.getBottomNav(), renderContext));

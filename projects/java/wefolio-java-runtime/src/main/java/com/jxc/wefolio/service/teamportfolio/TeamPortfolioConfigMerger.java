@@ -1,5 +1,7 @@
 package com.jxc.wefolio.service.teamportfolio;
 
+import com.jxc.wefolio.dto.BackgroundAudioConfigDto;
+
 import com.alibaba.fastjson2.JSON;
 import com.jxc.wefolio.dict.TeamPortfolioComponentTypeDict;
 import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioConfigDto;
@@ -49,6 +51,9 @@ public final class TeamPortfolioConfigMerger {
         TeamPortfolioConfigDto merged = deepCopy(incomingConfig, TeamPortfolioConfigDto.class);
         if (existingDraftConfig == null) {
             return merged;
+        }
+        if (incomingConfig.getBackgroundAudio() == null) {
+            merged.setBackgroundAudio(deepCopy(existingDraftConfig.getBackgroundAudio(), BackgroundAudioConfigDto.class));
         }
 
         Integer incomingRevision = incomingConfig.getEditorSchemaRevision();

@@ -6,6 +6,8 @@ import com.jxc.wefolio.job.dict.AuditResultDict;
 import com.qcloud.cos.COSClient;
 import com.qcloud.cos.model.ciModel.auditing.AudtingCommonInfo;
 import com.qcloud.cos.model.ciModel.auditing.AuditingJobsDetail;
+import com.qcloud.cos.model.ciModel.auditing.AudioAuditingRequest;
+import com.qcloud.cos.model.ciModel.auditing.AudioAuditingResponse;
 import com.qcloud.cos.model.ciModel.auditing.ImageAuditingRequest;
 import com.qcloud.cos.model.ciModel.auditing.ImageAuditingResponse;
 import com.qcloud.cos.model.ciModel.auditing.SnapshotInfo;
@@ -85,6 +87,31 @@ public class CosTencentCiAuditClient implements TencentCiAuditClient {
 
     private final CosProperties cosProperties;
 
+    /** 复用异步审核结果结构，音频只提交 COS 对象地址。 */
+    @Override
+    public TencentCiAuditResult submitAudio(String objectKey) {
+        AudioAuditingRequest request = new AudioAuditingRequest();
+        request.setBucketName(cosProperties.getBucketName());
+        request.getInput().setObject(objectKey);
+        request.getConf().setDetectType(DETECT_TYPE_ALL);
+        logTencentPayload("腾讯云音频审核提交原始入参", JSON.toJSONString(request));
+        AudioAuditingResponse response = cosClient.createAudioAuditingJobs(request);
+        logTencentPayload("腾讯云音频审核提交原始出参", JSON.toJSONString(response));
+        return toMediaResult(response.getJobsDetail(), JSON.toJSONString(response));
+    }
+
+    /** 音频查询沿用视频的终态与风险映射，不进行媒体信息探测。 */
+    @Override
+    public TencentCiAuditResult queryAudio(String ciJobId) {
+        AudioAuditingRequest request = new AudioAuditingRequest();
+        request.setBucketName(cosProperties.getBucketName());
+        request.setJobId(ciJobId);
+        logTencentPayload("腾讯云音频审核查询原始入参", JSON.toJSONString(request));
+        AudioAuditingResponse response = cosClient.describeAudioAuditingJob(request);
+        logTencentPayload("腾讯云音频审核查询原始出参", JSON.toJSONString(response));
+        return toMediaResult(response.getJobsDetail(), JSON.toJSONString(response));
+    }
+
     @Override
     public TencentCiAuditResult auditImage(String objectKey) {
         ImageAuditingRequest request = new ImageAuditingRequest();
@@ -163,10 +190,14 @@ public class CosTencentCiAuditClient implements TencentCiAuditClient {
     }
 
     private TencentCiAuditResult toVideoResult(VideoAuditingResponse response) {
-        AuditingJobsDetail detail = response.getJobsDetail();
+        return toMediaResult(response.getJobsDetail(), JSON.toJSONString(response));
+    }
+
+    /** 音频、视频共享腾讯异步结果结构。 */
+    private TencentCiAuditResult toMediaResult(AuditingJobsDetail detail, String rawPayload) {
         if (detail == null) {
             return new TencentCiAuditResult(null, null, AuditResultDict.UNKNOWN,
-                    null, null, null, false, false, JSON.toJSONString(response));
+                    null, null, null, false, false, rawPayload);
         }
         String ciState = detail.getState();
         boolean failed = CI_STATE_FAILED.equalsIgnoreCase(ciState);
@@ -180,7 +211,7 @@ public class CosTencentCiAuditClient implements TencentCiAuditClient {
                 null,
                 terminal,
                 failed,
-                JSON.toJSONString(response),
+                rawPayload,
                 collectVideoRisks(detail)
         );
     }

@@ -97,6 +97,207 @@ function createEventDrivenVideoDecoder(calls) {
   }
 }
 
+test('个人背景音频复用作品分页，关闭保留选择，移除清空', async () => {
+  const calls = []
+  const page = loadPage('pages/portfolios/standard-edit/portfolio-standard-edit.js', async (options) => {
+    calls.push(options)
+    return { works: [{ id: 19, mediaType: 'AUDIO', auditStatus: 'PASSED', title: '音乐', coverUrl: 'https://cdn/cover.png' }], hasMore: false }
+  })
+  await page.handleChooseBackgroundAudio()
+  assert.equal(calls[0].url, '/api/mine/works')
+  assert.equal(calls[0].data.mediaType, 'AUDIO')
+  assert.equal(calls[0].data.auditStatus, 'PASSED')
+  page.handleSelectBackgroundAudio({ currentTarget: { dataset: { index: 0 } } })
+  page.handleBackgroundAudioSwitch({ detail: { value: true } })
+  page.handleBackgroundAudioSwitch({ detail: { value: false } })
+  assert.equal(page.data.config.backgroundAudio.workId, 19)
+  page.handleRemoveBackgroundAudio()
+  assert.equal(page.data.config.backgroundAudio.workId, null)
+  assert.equal(page.data.config.backgroundAudio.enabled, false)
+})
+
+test('团队背景音频先选授权成员，沿用可选音频分页，并清除旧保存幂等键', async () => {
+  const calls = []
+  const page = loadPage('pages/team-portfolios/standard-edit/team-portfolio-standard-edit.js', async (options) => {
+    calls.push(options)
+    return options.url.endsWith('/members') ? [{ memberUserId: 7, nickname: '成员' }]
+      : { works: [{ workId: 19, mediaType: 'AUDIO', title: '音乐' }], hasMore: false }
+  })
+  page.setData({ canMaintain: true, teamId: 11, pendingDraftKey: 'old-key' })
+  await page.handleChooseBackgroundAudio()
+  assert.match(calls[0].url, /\/teams\/11\/.+\/members$/)
+  assert.match(calls[1].url, /\/members\/7\/works\/page$/)
+  assert.equal(calls[1].data.mediaType, 'AUDIO')
+  page.handleSelectBackgroundAudio({ currentTarget: { dataset: { index: 0 } } })
+  assert.equal(page.data.config.backgroundAudio.workId, 19)
+  assert.equal(page.data.pendingDraftKey, '')
+  page.handleBackgroundAudioSwitch({ detail: { value: false } })
+  assert.equal(page.data.config.backgroundAudio.workId, 19)
+  page.handleRemoveBackgroundAudio()
+  assert.equal(page.data.config.backgroundAudio.workId, null)
+})
+
+test('关闭个人音频候选后迟到的查询不回填列表', async () => {
+  let finish
+  const page = loadPage('pages/portfolios/standard-edit/portfolio-standard-edit.js', () => new Promise((resolve) => { finish = resolve }))
+  const loading = page.handleChooseBackgroundAudio()
+  page.handleCloseBackgroundAudioPicker()
+  finish({ works: [{ id: 19, mediaType: 'AUDIO' }], hasMore: false })
+  await loading
+  assert.equal(page.data.backgroundAudioPickerVisible, false)
+  assert.deepEqual(page.data.backgroundAudioOptions, [])
+})
+
+for (const [pagePath, load] of [
+  ['pages/portfolios/standard-preview/portfolio-standard-preview.js', async (page) => { page.setData({ portfolioId: 11 }); await page.bootstrap() }],
+  ['pages/portfolios/visitor-portfolio/visitor-portfolio.js', (page, response) => page.applyVisitorOpenResponse(response)],
+  ['pages/team-portfolios/standard-preview/team-portfolio-standard-preview.js', async (page) => { page.setData({ portfolioId: 11 }); await page.bootstrap() }],
+  ['pages/team-portfolios/visitor-portfolio/team-visitor-portfolio.js', (page, response) => page.applySession(response)]
+]) {
+  test(`${pagePath} 背景音频接入真实加载、视频互斥和页面生命周期`, async () => {
+    const response = { renderData: { backgroundAudio: { enabled: true, workId: 19, mediaUrl: 'https://cdn/audio.mp3', title: '音乐', displayStyle: 'DISC' }, components: [] } }
+    const events = {}, calls = []
+    const audio = { play() { calls.push('audio-play') }, pause() { calls.push('audio-pause') }, destroy() { calls.push('audio-destroy') } }
+    for (const name of ['Play', 'Pause', 'Stop', 'Ended', 'Error']) audio[`on${name}`] = (callback) => { events[name] = callback }
+    const page = loadPage(pagePath, async () => response, {
+      createInnerAudioContext() { calls.push('audio-create'); return audio },
+      createVideoContext() { return { stop() { calls.push('video-stop') } } }
+    })
+    await load(page, response)
+    assert.equal(calls.filter((call) => call === 'audio-play').length, 1)
+    events.Play()
+    assert.equal(page.data.backgroundAudioPlaying, true)
+    page.openVideoPreview({ mediaUrl: 'https://cdn/video.mp4' })
+    assert.ok(calls.includes('audio-pause'))
+    assert.equal(page.data.backgroundAudioPlaying, false)
+    page.handleToggleBackgroundAudio()
+    assert.ok(calls.lastIndexOf('video-stop') < calls.lastIndexOf('audio-play'))
+    assert.equal(page.data.videoPreviewVisible, false)
+    page.onHide()
+    page.onShow()
+    assert.equal(calls.filter((call) => call === 'audio-play').length, 2)
+    await load(page, response)
+    assert.equal(calls.filter((call) => call === 'audio-create').length, 1)
+    assert.equal(calls.filter((call) => call === 'audio-play').length, 2)
+    page.onUnload()
+    await load(page, response)
+    assert.equal(calls.filter((call) => call === 'audio-create').length, 1)
+    assert.ok(calls.includes('audio-destroy'))
+  })
+}
+
+test('访客点击视频时立即暂停音频，不等待访问事件请求结束', async () => {
+  let finish
+  let pauses = 0
+  const audio = { play() {}, pause() { pauses++ }, destroy() {} }
+  for (const name of ['Play', 'Pause', 'Stop', 'Ended', 'Error']) audio[`on${name}`] = () => {}
+  const page = loadPage('pages/portfolios/visitor-portfolio/visitor-portfolio.js', async () => ({}), {
+    createInnerAudioContext: () => audio
+  })
+  page.syncBackgroundAudio({ enabled: true, workId: 19, mediaUrl: 'https://cdn/music.mp3' }, true)
+  page.recordWorkEvent = () => new Promise((resolve) => { finish = resolve })
+  const pending = page.handleSingleWorkTap({ detail: { componentKey: 'video', workId: 2, mediaType: 'VIDEO', mediaUrl: 'https://cdn/video.mp4' } })
+  assert.equal(pauses, 1)
+  finish()
+  await pending
+})
+
+for (const [pagePath, team] of [
+  ['pages/portfolios/standard-edit/portfolio-standard-edit.js', false],
+  ['pages/team-portfolios/standard-edit/team-portfolio-standard-edit.js', true]
+]) {
+  test(`${pagePath} 关闭音频暂停试听并忽略迟到选项，重新开启保留选择`, async () => {
+    const pending = deferred()
+    const work = { id: 19, workId: 19, title: '音乐', mediaUrl: 'https://cdn/music.mp3' }
+    const calls = [], events = {}
+    const audio = {
+      play() { calls.push('play'); events.Play() },
+      pause() { calls.push('pause'); events.Pause() },
+      destroy() {}
+    }
+    for (const name of ['Play', 'Pause', 'Stop', 'Ended', 'Error']) audio[`on${name}`] = (callback) => { events[name] = callback }
+    const page = loadPage(pagePath, (options) => team && options.url.endsWith('/members')
+      ? Promise.resolve([{ memberUserId: 7, nickname: '成员' }]) : pending.promise, {
+      createInnerAudioContext: () => audio
+    })
+    page.setData({
+      canMaintain: true,
+      teamId: 11,
+      'config.backgroundAudio': { enabled: true, workId: 19, displayStyle: 'SLEEVE' },
+      backgroundAudioSelected: work
+    })
+    page.syncBackgroundAudio(work)
+    page.handleToggleBackgroundAudio()
+    assert.equal(page.data.backgroundAudioPlaying, true)
+    const loading = page.handleChooseBackgroundAudio()
+    await flushPromises()
+    assert.equal(page.data.backgroundAudioLoading, true)
+    page.handleBackgroundAudioSwitch({ detail: { value: false } })
+    assert.equal(page.data.backgroundAudioPlaying, false)
+    assert.equal(page.data.backgroundAudioPickerVisible, false)
+    assert.equal(page.data.backgroundAudioLoading, false)
+    assert.deepEqual(calls, ['play', 'pause'])
+    assert.deepEqual(page.data.config.backgroundAudio, { enabled: false, workId: 19, displayStyle: 'SLEEVE' })
+    page.handleBackgroundAudioSwitch({ detail: { value: true } })
+    pending.resolve({ works: [{ id: 20, workId: 20, mediaType: 'AUDIO' }], hasMore: true })
+    await loading
+    assert.deepEqual(page.data.backgroundAudioOptions, [])
+    assert.equal(page.data.backgroundAudioPickerVisible, false)
+    assert.deepEqual(page.data.backgroundAudioSelected, work)
+    assert.equal(page.data.backgroundAudioResource.mediaUrl, work.mediaUrl)
+    assert.deepEqual(page.data.config.backgroundAudio, { enabled: true, workId: 19, displayStyle: 'SLEEVE' })
+    assert.deepEqual(calls, ['play', 'pause'])
+    page.onUnload()
+  })
+
+  test(`${pagePath} 编辑器恢复所选封面但不自动播放，三款样式可保存`, async () => {
+    const work = { id: 19, workId: 19, title: '音乐', mediaType: 'AUDIO', auditStatus: 'PASSED', coverUrl: 'https://cdn/cover.jpg', mediaUrl: 'https://cdn/music.mp3' }
+    let created = 0
+    const audio = { play() {}, pause() {}, destroy() {} }
+    for (const name of ['Play', 'Pause', 'Stop', 'Ended', 'Error']) audio[`on${name}`] = () => {}
+    const page = loadPage(pagePath, async () => team ? { renderData: { backgroundAudio: work } } : { work }, {
+      createInnerAudioContext() { created++; return audio }
+    })
+    page.setData({ portfolioId: 11, canMaintain: true, 'config.backgroundAudio': { enabled: false, workId: 19, displayStyle: 'DISC' } })
+    await page.restoreBackgroundAudioSelection()
+    assert.equal(page.data.backgroundAudioResource.coverUrl, 'https://cdn/cover.jpg')
+    assert.equal(created, 0)
+    for (const style of ['DISC', 'SLEEVE', 'MINI_PLAYER']) {
+      page.handleBackgroundAudioStyle({ currentTarget: { dataset: { style } } })
+      assert.equal(page.data.config.backgroundAudio.displayStyle, style)
+      assert.equal(page.data.config.backgroundAudio.workId, 19)
+    }
+    page.handleToggleBackgroundAudio()
+    assert.equal(created, 1)
+    page.onHide()
+    page.onShow()
+    assert.equal(created, 1)
+    page.handleRemoveBackgroundAudio()
+    assert.equal(page.data.backgroundAudioResource.mediaUrl, '')
+    assert.equal(page.data.config.backgroundAudio.enabled, false)
+    page.onUnload()
+  })
+}
+
+test('关闭团队背景音频后迟到的成员查询不继续加载音频', async () => {
+  const pending = deferred()
+  const calls = []
+  const page = loadPage('pages/team-portfolios/standard-edit/team-portfolio-standard-edit.js', (options) => {
+    calls.push(options.url)
+    return pending.promise
+  })
+  page.setData({ canMaintain: true, teamId: 11, 'config.backgroundAudio.enabled': true })
+  const loading = page.handleChooseBackgroundAudio()
+  page.handleBackgroundAudioSwitch({ detail: { value: false } })
+  pending.resolve([{ memberUserId: 7, nickname: '成员' }])
+  await loading
+  assert.equal(calls.length, 1)
+  assert.deepEqual(page.data.backgroundAudioMembers, [])
+  assert.deepEqual(page.data.backgroundAudioOptions, [])
+  assert.equal(page.data.backgroundAudioPickerVisible, false)
+  assert.equal(page.data.backgroundAudioLoading, false)
+})
+
 function loadPage(pageRelativePath, fakeRequest, wxOverrides = {}) {
   const pagePath = path.join(__dirname, '..', pageRelativePath)
   const requestPath = path.join(__dirname, '../utils/request.js')
@@ -159,6 +360,98 @@ function loadPage(pageRelativePath, fakeRequest, wxOverrides = {}) {
     }
   })
 }
+
+test('音频编辑复用图片表单，封面候选分页加载且只提交原件 key', async () => {
+  const requests = []
+  const page = loadPage('pages/works/works.js', async (options) => {
+    requests.push(options)
+    if (options.method === 'PUT') return { work: { id: 18, mediaType: 'AUDIO', title: '新音频', coverUrl: 'https://cdn/p.jpg' } }
+    if (options.data && options.data.mediaType === 'IMAGE') {
+      assert.equal(options.data.auditStatus, 'PASSED')
+      const id = options.data.page === 1 ? 19 : 20
+      return { works: [{ id, mediaType: 'IMAGE', status: 'ACTIVE', auditStatus: 'PASSED', mediaObjectKey: `u/work/image/${id}.jpg`, mediaUrl: `https://cdn/${id}.jpg` }], hasMore: id === 19 }
+    }
+    return { works: [], tags: [], summary: {} }
+  })
+  page.openImageEditSheet({ id: 18, mediaType: 'AUDIO', title: '音频', mediaUrl: 'https://cdn/a.mp3', durationText: '02:05', fileSizeText: '1.0MB' })
+  assert.equal(page.data.imageEditForm.isAudio, true)
+  assert.equal(page.data.imageEditForm.thumbnailSourcePath, '')
+  await page.handleChooseAudioCover()
+  await page.handleLoadMoreAudioCovers()
+  assert.equal(page.data.audioCoverCandidates.length, 2)
+  page.handleSelectAudioCover({ currentTarget: { dataset: { id: 20 } } })
+  page.handleImageEditInput({ currentTarget: { dataset: { field: 'title' } }, detail: { value: '新音频' } })
+  await page.handleConfirmImageEdit()
+  const save = requests.find((item) => item.method === 'PUT')
+  assert.equal(save.url, '/api/mine/works/18')
+  assert.equal(save.data.audioCoverObjectKey, 'u/work/image/20.jpg')
+  assert.equal(save.data.title, '新音频')
+  assert.equal(Object.hasOwn(save.data, 'thumbnailTaskId'), false)
+  assert.equal(requests.some((item) => /upload/.test(item.url)), false)
+})
+
+test('音频试听只由用户触发，切换停止旧音频、隐藏暂停、卸载销毁', () => {
+  const events = []
+  const listeners = {}
+  const context = {
+    src: '',
+    onPlay(fn) { listeners.play = fn }, onPause(fn) { listeners.pause = fn },
+    onStop(fn) { listeners.stop = fn }, onEnded(fn) { listeners.end = fn }, onError(fn) { listeners.error = fn },
+    play() { events.push('play'); listeners.play() },
+    pause() { events.push('pause'); listeners.pause() },
+    stop() { events.push('stop'); listeners.stop() },
+    destroy() { events.push('destroy') }
+  }
+  const page = loadPage('pages/works/works.js', async () => ({}), {
+    createInnerAudioContext() { events.push('create'); return context }
+  })
+  const first = { id: 18, mediaType: 'AUDIO', auditStatus: 'PASSED', mediaUrl: 'https://cdn/a.mp3' }
+  page.data.list.works = [first, { ...first, id: 19, mediaUrl: 'https://cdn/b.mp3' }, { ...first, id: 20, auditStatus: 'PENDING' }]
+  page.openImageEditSheet(first)
+  assert.deepEqual(events, [])
+  const tap = (id) => page.handleWorkPreviewTap({ currentTarget: { dataset: { id } } })
+  tap(18)
+  assert.equal(page.data.audioPlaying, true)
+  tap(19)
+  assert.equal(context.src, 'https://cdn/b.mp3')
+  assert.equal(events.filter((value) => value === 'create').length, 1)
+  assert.ok(events.indexOf('stop') < events.lastIndexOf('play'))
+  page.onHide()
+  assert.equal(page.data.audioPlaying, false)
+  const plays = events.filter((value) => value === 'play').length
+  tap(20)
+  assert.equal(events.filter((value) => value === 'play').length, plays)
+  page.onUnload()
+  assert.equal(events.at(-1), 'destroy')
+  listeners.play()
+  assert.equal(page.data.audioPlaying, false)
+})
+
+test('音频封面候选的迟到响应不覆盖新弹层，恢复默认提交空 key', async () => {
+  const pending = []
+  const page = loadPage('pages/works/works.js', () => {
+    const result = deferred()
+    pending.push(result)
+    return result.promise
+  })
+  page.openImageEditSheet({ id: 18, mediaType: 'AUDIO', coverUrl: 'https://cdn/old.jpg' })
+  const oldLoad = page.handleChooseAudioCover()
+  page.handleCloseImageEditor()
+  page.openImageEditSheet({ id: 19, mediaType: 'AUDIO' })
+  const newLoad = page.handleChooseAudioCover()
+  pending[1].resolve({ works: [{ id: 22, mediaType: 'IMAGE', auditStatus: 'PASSED', mediaObjectKey: 'new.jpg', mediaUrl: 'https://cdn/new.jpg' }], hasMore: false })
+  await newLoad
+  pending[0].resolve({ works: [{ id: 21, title: '迟到结果' }] })
+  await oldLoad
+  assert.equal(page.data.audioCoverCandidates[0].id, 22)
+  page.handleSelectAudioCover({ currentTarget: { dataset: { id: 22 } } })
+  assert.equal(page.data.imageEditForm.audioCoverObjectKey, 'new.jpg')
+  page.handleAudioCoverError({ currentTarget: { dataset: {} } })
+  assert.match(page.data.imageEditForm.audioCoverUrl, /default-audio-cover/)
+  assert.equal(page.data.imageEditForm.audioCoverObjectKey, 'new.jpg')
+  page.handleResetAudioCover()
+  assert.equal(page.data.imageEditForm.audioCoverObjectKey, '')
+})
 
 test('points page ignores stale load-more response after reloading first page', async () => {
   const requests = []

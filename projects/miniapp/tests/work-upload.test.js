@@ -21,12 +21,78 @@ const {
   classifyChosenMediaFiles,
   enrichVideoFileMetadata,
   normalizeChosenMediaFiles,
+  readAudioDuration,
   prepareLocalCoverUploadFile,
   prepareCoverUploadFiles,
   prepareStaticImageMainFiles,
   runWorkUploadQueue,
   validateChosenMediaFiles
 } = require('../pages/works/utils/work-upload')
+
+test('音频复用原票据和队列，保留时长且不产生封面任务', async () => {
+  const [file] = normalizeChosenMediaFiles([
+    { path: 'wxfile://song', name: '歌曲.M4A', fileType: 'audio', size: 1024, durationMs: 12345 }
+  ])
+  assert.equal(file.mediaType, 'AUDIO')
+  assert.equal(file.fileType, 'audio')
+  assert.equal(file.mimeType, 'audio/mp4')
+  assert.equal(validateChosenMediaFiles([file]).valid, true)
+  const item = buildUploadTicketPayload([file]).files[0]
+  assert.equal(item.durationMs, 12345)
+  assert.equal(Object.hasOwn(item, 'width'), false)
+  assert.equal(Object.hasOwn(item, 'bitRateBps'), false)
+  assert.deepEqual(buildCoverUploadTicketPayload([file]).files, [])
+  const uploaded = []
+  await runWorkUploadQueue([file], async (target) => uploaded.push(target.fileName))
+  assert.deepEqual(uploaded, ['歌曲.M4A'])
+})
+
+test('音频仅限制后缀、大小和时长，不限制码率', () => {
+  const file = { mediaType: 'AUDIO', fileName: 'a.wav', size: 50 * 1024 * 1024, durationMs: 600000 }
+  assert.equal(validateChosenMediaFiles([file]).valid, true)
+  assert.equal(validateChosenMediaFiles([{ ...file, bitrate: 1411200 }]).valid, true)
+  for (const patch of [{ fileName: 'a.exe' }, { size: 0 }, { size: file.size + 1 }, { durationMs: 0 }, { durationMs: NaN }, { durationMs: 600001 }]) {
+    assert.equal(validateChosenMediaFiles([{ ...file, ...patch }]).valid, false)
+  }
+})
+
+test('原生时长读取不播放，成功后销毁实例', async () => {
+  let destroyed = 0
+  const context = {
+    duration: 12.345,
+    onCanplay(callback) { this.ready = callback },
+    onError(callback) { this.error = callback },
+    set src(value) { assert.equal(value, 'wxfile://song'); this.ready() },
+    play() { assert.fail('读取时长不能播放出声') },
+    destroy() { destroyed++ }
+  }
+  assert.equal(await readAudioDuration('wxfile://song', { wxApi: { createInnerAudioContext: () => context } }), 12345)
+  assert.equal(context.autoplay, false)
+  assert.equal(destroyed, 1)
+})
+
+test('原生时长失败、超时和取消均销毁实例，迟到事件无效', async () => {
+  for (const outcome of ['error', 'timeout', 'cancel']) {
+    let destroyed = 0
+    let cancel
+    const context = {
+      duration: 0,
+      onCanplay(callback) { this.ready = callback },
+      onError(callback) { this.error = callback },
+      set src(value) { if (outcome === 'error') this.error() },
+      destroy() { destroyed++ }
+    }
+    const pending = readAudioDuration('wxfile://song', {
+      wxApi: { createInnerAudioContext: () => context }, timeoutMs: 10,
+      onCancelReady(callback) { cancel = callback }
+    })
+    if (outcome === 'cancel') cancel()
+    await assert.rejects(pending, /无法读取音频信息|cancel/)
+    context.duration = 20
+    context.ready()
+    assert.equal(destroyed, 1)
+  }
+})
 
 test('chooseMedia options use mixed album picker and cap count at 9', () => {
   assert.deepEqual(createChooseMediaOptions(20), {
