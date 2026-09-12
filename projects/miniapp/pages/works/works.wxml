@@ -375,8 +375,20 @@
             <view class="audio-preview-row">
               <image class="audio-cover" src="{{imageEditForm.audioCoverUrl}}" mode="aspectFill" binderror="handleAudioCoverError"></image>
               <view class="audio-preview-copy">
-                <view class="field-label">{{imageEditForm.durationText}} · {{imageEditForm.fileSizeText}}</view>
-                <button class="cover-upload-button" bindtap="handleAudioEditPlay" disabled="{{imageEditForm.auditStatus !== 'PASSED'}}">{{audioWorkId === imageEditForm.id && audioPlaying ? '暂停' : '试听音频'}}</button>
+                <view class="audio-preview-meta">{{imageEditForm.durationText}} · {{imageEditForm.fileSizeText}}</view>
+                <button
+                  class="audio-play-button"
+                  hover-class="audio-play-button-hover"
+                  bindtap="handleAudioEditPlay"
+                  disabled="{{imageEditForm.auditStatus !== 'PASSED'}}"
+                  aria-label="{{audioWorkId === imageEditForm.id && audioPlaying ? '暂停音频' : '试听音频'}}"
+                >
+                  <view class="audio-play-icon" aria-hidden="{{true}}">
+                    <view wx:if="{{audioWorkId === imageEditForm.id && audioPlaying}}" class="audio-pause-mark"></view>
+                    <view wx:else class="audio-play-mark"></view>
+                  </view>
+                  <text class="audio-play-label">{{audioWorkId === imageEditForm.id && audioPlaying ? '暂停' : '试听音频'}}</text>
+                </button>
                 <view wx:if="{{imageEditForm.auditStatus !== 'PASSED'}}" class="local-cover-desc">审核通过后可试听</view>
               </view>
             </view>
@@ -478,16 +490,15 @@
                 wx:for="{{imageEditForm.tagOptions}}"
                 wx:key="id"
                 class="edit-tag-option {{item.selected ? 'is-selected' : ''}} {{item.locked ? 'is-locked' : ''}}"
-                style="{{item.selected ? item.activeStyle : item.style}}"
+                style="{{item.selected ? item.activeStyle : item.filterStyle}}"
                 data-id="{{item.id}}"
                 bindtap="handleImageEditTagToggle"
                 aria-role="checkbox"
                 aria-checked="{{item.selected}}"
               >
-                <view class="edit-tag-checkbox {{item.selected ? 'is-checked' : ''}}">
-                  <text wx:if="{{item.selected}}" class="edit-tag-checkmark">✓</text>
-                </view>
+                <view class="edit-tag-dot" style="background: {{item.selected ? '#ffffff' : item.color}};"></view>
                 <text class="edit-tag-name">{{item.name}}</text>
+                <text wx:if="{{item.selected}}" class="edit-tag-checkmark">✓</text>
               </view>
             </view>
             <view wx:else class="edit-tag-empty">暂无作品标签</view>
@@ -599,16 +610,15 @@
                 wx:for="{{videoEditForm.tagOptions}}"
                 wx:key="id"
                 class="edit-tag-option {{item.selected ? 'is-selected' : ''}} {{item.locked ? 'is-locked' : ''}}"
-                style="{{item.selected ? item.activeStyle : item.style}}"
+                style="{{item.selected ? item.activeStyle : item.filterStyle}}"
                 data-id="{{item.id}}"
                 bindtap="handleVideoEditTagToggle"
                 aria-role="checkbox"
                 aria-checked="{{item.selected}}"
               >
-                <view class="edit-tag-checkbox {{item.selected ? 'is-checked' : ''}}">
-                  <text wx:if="{{item.selected}}" class="edit-tag-checkmark">✓</text>
-                </view>
+                <view class="edit-tag-dot" style="background: {{item.selected ? '#ffffff' : item.color}};"></view>
                 <text class="edit-tag-name">{{item.name}}</text>
+                <text wx:if="{{item.selected}}" class="edit-tag-checkmark">✓</text>
               </view>
             </view>
             <view wx:else class="edit-tag-empty">暂无作品标签</view>
@@ -782,16 +792,15 @@
                 wx:for="{{animationEditForm.tagOptions}}"
                 wx:key="id"
                 class="edit-tag-option {{item.selected ? 'is-selected' : ''}} {{item.locked ? 'is-locked' : ''}}"
-                style="{{item.selected ? item.activeStyle : item.style}}"
+                style="{{item.selected ? item.activeStyle : item.filterStyle}}"
                 data-id="{{item.id}}"
                 bindtap="handleAnimationEditTagToggle"
                 aria-role="checkbox"
                 aria-checked="{{item.selected}}"
               >
-                <view class="edit-tag-checkbox {{item.selected ? 'is-checked' : ''}}">
-                  <text wx:if="{{item.selected}}" class="edit-tag-checkmark">✓</text>
-                </view>
+                <view class="edit-tag-dot" style="background: {{item.selected ? '#ffffff' : item.color}};"></view>
                 <text class="edit-tag-name">{{item.name}}</text>
+                <text wx:if="{{item.selected}}" class="edit-tag-checkmark">✓</text>
               </view>
             </view>
             <view wx:else class="edit-tag-empty">暂无作品标签</view>

@@ -619,7 +619,7 @@ test('works edit sheets refresh list after successful save', () => {
 
 test('works edit sheet tag options use defined tag color styles', () => {
   const worksWxml = read('pages/works/works.wxml')
-  const coloredTagOptions = worksWxml.match(/class="edit-tag-option[\s\S]*?style="\{\{item\.selected \? item\.activeStyle : item\.style\}\}"/g) || []
+  const coloredTagOptions = worksWxml.match(/class="edit-tag-option[\s\S]*?style="\{\{item\.selected \? item\.activeStyle : item\.filterStyle\}\}"/g) || []
 
   assert.equal(coloredTagOptions.length, 3)
 })
