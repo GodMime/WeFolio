@@ -1,5 +1,5 @@
 <view class="structured-mask {{visible ? 'is-visible' : ''}}" catchtap="handleCancel">
-  <view class="structured-panel" catchtap="noop">
+  <view class="structured-panel {{tab === 'content' && !rows.length ? 'structured-panel-empty' : ''}}" catchtap="noop">
     <view class="structured-grabber-zone" data-layer="component" catchtouchstart="handleSheetTouchStart" catchtouchend="handleSheetTouchEnd"><view class="structured-grabber"></view></view>
     <view class="structured-header">
       <view class="structured-title">{{isNew ? '添加结构化文字说明' : '编辑结构化文字说明'}}</view>
