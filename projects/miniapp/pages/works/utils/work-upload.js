@@ -8,7 +8,7 @@ const { DEFAULT_AUDIO_COVER_URL } = require('./works')
 
 const MAX_BATCH_COUNT = 9
 const IMAGE_MAX_BYTES = 10 * 1024 * 1024
-const ANIMATION_MAX_BYTES = 10 * 1024 * 1024
+const ANIMATION_MAX_BYTES = 50 * 1024 * 1024
 const VIDEO_MAX_BYTES = 100 * 1024 * 1024
 const VIDEO_MAX_DURATION_SECONDS = 10 * 60
 const AUDIO_MAX_BYTES = 50 * 1024 * 1024
@@ -51,7 +51,7 @@ const STATIC_IMAGE_MAIN_COMPRESS_ATTEMPTS = [
   { quality: 66, compressedSize: 960 }
 ]
 const IMAGE_TOO_LARGE_MESSAGE = '图片作品不能超过 10MB'
-const ANIMATION_TOO_LARGE_MESSAGE = '动图作品不能超过 10MB'
+const ANIMATION_TOO_LARGE_MESSAGE = '动图作品不能超过 50MB'
 
 function getRuntimeWx(wxApi) {
   if (wxApi) {

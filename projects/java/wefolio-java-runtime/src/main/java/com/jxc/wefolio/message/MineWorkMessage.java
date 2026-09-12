@@ -29,6 +29,9 @@ public interface MineWorkMessage {
     /** 动图作品数量超限提示模板 */
     String ANIMATION_WORK_COUNT_LIMIT_TEMPLATE = "动图作品最多保留 %d 个";
 
+    /** 动图文件大小超限提示。 */
+    String ANIMATION_TOO_LARGE_MESSAGE = "动图作品不能超过 50MB";
+
     /** 上传任务保存失败提示 */
     String UPLOAD_TASK_SAVE_FAILED_MESSAGE = "上传任务创建失败，请刷新后重试";
 

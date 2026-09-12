@@ -85,8 +85,8 @@ public class MineWorkService {
     /** 视频最大字节数 */
     public static final long VIDEO_MAX_BYTES = 100L * 1024L * 1024L;
 
-    /** 动图最大字节数 */
-    public static final long ANIMATION_MAX_BYTES = 10L * 1024L * 1024L;
+    /** 动图最大字节数，单个文件上限为 50MB。 */
+    public static final long ANIMATION_MAX_BYTES = 50L * 1024L * 1024L;
 
     /** 视频最大时长毫秒 */
     public static final int VIDEO_MAX_DURATION_MS = 10 * 60 * 1000;
@@ -1679,7 +1679,7 @@ public class MineWorkService {
             throw new BusinessException("视频作品不能超过 100MB");
         }
         if (MediaTypeDict.ANIMATION.getCode().equals(mediaType) && fileSize > ANIMATION_MAX_BYTES) {
-            throw new BusinessException("动图作品不能超过 10MB");
+            throw new BusinessException(MineWorkMessage.ANIMATION_TOO_LARGE_MESSAGE);
         }
         if (MediaTypeDict.AUDIO.getCode().equals(mediaType) && fileSize > AUDIO_MAX_BYTES) {
             throw new BusinessException(MineWorkMessage.AUDIO_TOO_LARGE_MESSAGE);
