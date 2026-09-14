@@ -116,6 +116,16 @@ class MineVisitScopeServiceTest {
         assertThat(scope.teamIds()).containsExactly(201L);
     }
 
+    /** 成员退出后下一次明细请求必须重新取得范围，不能继续沿用旧团队读权限。 */
+    @Test
+    void leavingTeamRemovesNextRequestReadScope() {
+        TeamMemberEntity joined = membership(201L, "OWNER", "JOINED");
+        when(teamMemberEntityMapper.selectList(any())).thenReturn(List.of(joined), List.of());
+        MineVisitScopeService service = service();
+        assertThat(service.requireScope(7L).teamIds()).containsExactly(201L);
+        assertThat(service.requireScope(7L).teamIds()).isEmpty();
+    }
+
     /** 构造团队成员测试数据。 */
     private TeamMemberEntity membership(Long teamId, String role, String joinStatus) {
         TeamMemberEntity membership = new TeamMemberEntity();

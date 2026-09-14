@@ -14,6 +14,11 @@ import com.jxc.wefolio.dict.PortfolioTemplateTypeDict;
 import com.jxc.wefolio.dict.TeamStatusDict;
 import com.jxc.wefolio.dict.VisitEventTypeDict;
 import com.jxc.wefolio.dto.VisitorAvatarUploadTicketRequest;
+import com.jxc.wefolio.dto.VisitActivityUpdateRequest;
+import com.jxc.wefolio.dict.PortfolioTypeDict;
+import com.jxc.wefolio.message.VisitActivityMessage;
+import com.jxc.wefolio.service.VisitActivitySessionApplicationService;
+import com.jxc.wefolio.service.VisitActivitySessionTransactionService;
 import com.jxc.wefolio.dto.VisitorAvatarUploadTicketResponse;
 import com.jxc.wefolio.dto.VisitorProfileUpdateRequest;
 import com.jxc.wefolio.dto.teamportfolio.TeamContactLeadSubmitRequest;
@@ -104,6 +109,9 @@ public class VisitorTeamPortfolioService {
     /** 作品集打开分段耗时日志器。 */
     private final PortfolioOpenPerformanceLogger portfolioOpenPerformanceLogger;
 
+    /** 可选活动会话编排；团队拥有者正式自访正常计入。 */
+    private final VisitActivitySessionApplicationService visitActivitySessionApplicationService;
+
     /**
      * 打开已发布标准团队作品集。
      *
@@ -147,7 +155,13 @@ public class VisitorTeamPortfolioService {
                     PortfolioOpenPerformanceLogger.Phase.RENDER,
                     () -> teamPortfolioRenderService.render(
                             published.portfolio().getPublishedConfigJson(), published.componentContext()));
-            VisitRecordEntity visitRecord = trace.measure(
+            VisitActivitySessionTransactionService.OpenResult tracked = request != null && request.getTracking() != null
+                    ? trace.measure(PortfolioOpenPerformanceLogger.Phase.VISIT_WRITE,
+                        () -> visitActivitySessionApplicationService.open(published.portfolio(), PortfolioTypeDict.TEAM.getCode(),
+                            visitor.getId(), visitor.getVisitorKey(), request.getSourceType(),
+                            request.getIdempotencyKey(), request.getTracking()))
+                    : null;
+            VisitRecordEntity visitRecord = tracked != null ? tracked.record() : trace.measure(
                     PortfolioOpenPerformanceLogger.Phase.VISIT_WRITE,
                     () -> teamPortfolioVisitService.recordOpen(
                             published.portfolio(), visitor.getId(), visitor.getVisitorKey(),
@@ -155,6 +169,10 @@ public class VisitorTeamPortfolioService {
                             request == null ? null : request.getIdempotencyKey()));
             fillRenderContext(render, published, visitRecord);
             VisitorTeamPortfolioResponse response = buildOpenResponse(published, session, visitRecord, render);
+            if (tracked != null) {
+                response.setTrackingSessionId(tracked.session().getId());
+                response.setTrackingActiveDurationMs(tracked.session().getActiveDurationMs());
+            }
             // 匿名令牌按分享码绑定，可由鉴权切面直接与当前 URL 比对，无需再次查询作品集。
             VisitorAuthTokenService.VisitorLoginToken loginToken = session.anonymous()
                     ? visitorAuthTokenService.issueTimelineAnonymousToken(
@@ -177,6 +195,16 @@ public class VisitorTeamPortfolioService {
         } finally {
             trace.finish(failure);
         }
+    }
+
+    /** 校验正式团队访问资格后上报活动；团队拥有者自访与其他访客口径一致。 */
+    public long recordActivity(String shareCode, Long sessionId, VisitActivityUpdateRequest request) {
+        PublishedPortfolio published = requirePublishedTeamPortfolio(shareCode);
+        if (pointBalanceGateService.isNonPositive(published.team().getOwnerUserId())) {
+            throw new BusinessException(VisitActivityMessage.SESSION_UNAVAILABLE);
+        }
+        return visitActivitySessionApplicationService.accept(
+                published.portfolio(), PortfolioTypeDict.TEAM.getCode(), sessionId, request);
     }
 
     /**

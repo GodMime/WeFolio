@@ -19,4 +19,7 @@ public class VisitorPortfolioOpenRequest {
 
     /** 打开事件幂等键 */
     private String idempotencyKey;
+
+    /** 可选活动采集协议；缺省继续使用既有打开行为。 */
+    private VisitActivityTrackingDto tracking;
 }

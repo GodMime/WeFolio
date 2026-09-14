@@ -56,4 +56,12 @@ public interface VisitRecordEntityMapper extends BaseMapper<VisitRecordEntity> {
             @Param("contactSubmitDelta") int contactSubmitDelta,
             @Param("durationDelta") int durationDelta
     );
+    /** 独立原子累加前台停留并推进乐观锁版本，首个零样本也将 NULL 初始化为零。 */
+    @Update("""
+            UPDATE wf_visit_record
+            SET foreground_duration_ms = COALESCE(foreground_duration_ms, 0) + #{delta},
+                version = version + 1, updated_at = CURRENT_TIMESTAMP(3)
+            WHERE id = #{recordId} AND deleted = 0
+            """)
+    int incrementForegroundDuration(@Param("recordId") Long recordId, @Param("delta") long delta);
 }

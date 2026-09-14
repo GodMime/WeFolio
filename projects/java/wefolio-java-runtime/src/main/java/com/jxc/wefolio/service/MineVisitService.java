@@ -16,6 +16,11 @@ import com.jxc.wefolio.dto.MineScheduleQueryRecordRow;
 import com.jxc.wefolio.dto.MineVisitRecordPageResponse;
 import com.jxc.wefolio.dto.MineVisitRecordsResponse;
 import com.jxc.wefolio.dto.MineVisitStatisticsResponse;
+import com.jxc.wefolio.dto.VisitActivityTrackingDto;
+import com.jxc.wefolio.entity.VisitActivitySessionEntity;
+import com.jxc.wefolio.mapper.VisitActivitySessionEntityMapper;
+import java.time.ZoneId;
+import java.util.stream.Stream;
 import com.jxc.wefolio.entity.ContactLeadEntity;
 import com.jxc.wefolio.entity.VisitEventEntity;
 import com.jxc.wefolio.entity.VisitRecordEntity;
@@ -39,6 +44,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Collection;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -177,6 +183,24 @@ public class MineVisitService {
     /** 作品标题明细最大长度 */
     private static final int MAX_WORK_TITLE_DETAIL_LENGTH = 30;
 
+    /** 尚未采集前台时长。 */
+    private static final String FOREGROUND_UNKNOWN_TEXT = "暂无停留数据";
+    /** 已采集但不足一秒。 */
+    private static final String FOREGROUND_UNDER_SECOND_TEXT = "不到 1 秒";
+    /** 设备快照缺失。 */
+    private static final String DEVICE_UNKNOWN_TEXT = "设备未知";
+    /** 设备字段展示分隔符。 */
+    private static final String DEVICE_SEPARATOR = " / ";
+    /** 时长秒单位。 */
+    private static final String DURATION_SECONDS_SUFFIX = " 秒";
+    /** 时长分钟单位及后续间隔。 */
+    private static final String DURATION_MINUTES_SUFFIX = " 分";
+    /** 时长小时单位及后续间隔。 */
+    private static final String DURATION_HOURS_SUFFIX = " 小时";
+
+    /** 设备时间按产品统一业务时区解释，不随运行机器默认时区漂移。 */
+    private static final ZoneId DEVICE_RECORDED_AT_ZONE = ZoneId.of("Asia/Shanghai");
+
     /** 访问汇总 Mapper */
     private final VisitRecordEntityMapper visitRecordEntityMapper;
 
@@ -197,6 +221,9 @@ public class MineVisitService {
 
     /** 团队联系方式加解密服务 */
     private final TeamContactLeadCryptoService teamContactLeadCryptoService;
+
+    /** 授权后查询最近有效设备。 */
+    private final VisitActivitySessionEntityMapper visitActivitySessionEntityMapper;
 
     /**
      * 当前维护者可见的访问记录及同次请求解析出的团队范围。
@@ -368,6 +395,7 @@ public class MineVisitService {
 
         MineVisitRecordsResponse.EventTimeline timeline = new MineVisitRecordsResponse.EventTimeline();
         timeline.setRecordId(record.getId());
+        fillActivityDetails(timeline, record);
         timeline.setVisitorLabel(recordView.getVisitorLabel());
         timeline.setVisitorInitial(recordView.getVisitorInitial());
         timeline.setVisitorAvatarUrl(recordView.getVisitorAvatarUrl());
@@ -383,6 +411,54 @@ public class MineVisitService {
         timeline.setHasMore(hasMore);
         timeline.setEvents(eventItems);
         return timeline;
+    }
+
+    /** 在访问归属验证后填充独立停留指标与最近设备，历史 NULL 不伪装成零。 */
+    private void fillActivityDetails(MineVisitRecordsResponse.EventTimeline timeline, VisitRecordEntity record) {
+        Long milliseconds = record.getForegroundDurationMs();
+        timeline.setForegroundDurationSeconds(milliseconds == null ? null : milliseconds / 1000L);
+        timeline.setForegroundDurationText(formatForegroundDuration(milliseconds));
+        VisitActivitySessionEntity deviceSession = visitActivitySessionEntityMapper.selectLatestDevice(record.getId());
+        timeline.setDeviceText(DEVICE_UNKNOWN_TEXT);
+        timeline.setDeviceRecordedAtText("");
+        if (deviceSession == null) {
+            return;
+        }
+        VisitActivityTrackingDto.DeviceInfo info = new VisitActivityTrackingDto.DeviceInfo();
+        info.setBrand(deviceSession.getBrand());
+        info.setModel(deviceSession.getModel());
+        info.setSystem(deviceSession.getSystem());
+        info.setPlatform(deviceSession.getPlatform());
+        timeline.setDeviceInfo(info);
+        timeline.setDeviceText(Stream.of(info.getBrand(), info.getModel(), info.getSystem(), info.getPlatform())
+                .filter(Objects::nonNull).filter(value -> !value.isBlank()).distinct().collect(Collectors.joining(DEVICE_SEPARATOR)));
+        if (deviceSession.getCreatedAt() != null) {
+            timeline.setDeviceRecordedAtEpochMs(deviceSession.getCreatedAt().atZone(DEVICE_RECORDED_AT_ZONE)
+                    .toInstant().toEpochMilli());
+            timeline.setDeviceRecordedAtText(deviceSession.getCreatedAt().format(DETAIL_TIME_FORMATTER));
+        }
+    }
+
+    /** 将累计毫秒格式化为秒、分钟或小时，保留未知与不足一秒的区别。 */
+    private String formatForegroundDuration(Long milliseconds) {
+        if (milliseconds == null) {
+            return FOREGROUND_UNKNOWN_TEXT;
+        }
+        long seconds = milliseconds / 1000L;
+        if (seconds == 0) {
+            return FOREGROUND_UNDER_SECOND_TEXT;
+        }
+        List<String> parts = new ArrayList<>();
+        if (seconds >= 3600) {
+            parts.add((seconds / 3600) + DURATION_HOURS_SUFFIX);
+        }
+        if ((seconds % 3600) / 60 > 0) {
+            parts.add(((seconds % 3600) / 60) + DURATION_MINUTES_SUFFIX);
+        }
+        if (seconds % 60 > 0) {
+            parts.add((seconds % 60) + DURATION_SECONDS_SUFFIX);
+        }
+        return String.join(DETAIL_TEXT_SPACE_SEPARATOR, parts);
     }
 
     /**
@@ -1504,7 +1580,7 @@ public class MineVisitService {
         int scheduleQueryCount = safeInt(record.getScheduleQueryCount());
         int qrActionCount = safeInt(record.getQrActionCount());
 
-        List<String> parts = new java.util.ArrayList<>();
+        List<String> parts = new ArrayList<>();
         parts.add("第 " + visitCount + " 次访问");
         parts.add("查看作品 " + viewWorkCount + " 次");
         if (playVideoCount > 0) {

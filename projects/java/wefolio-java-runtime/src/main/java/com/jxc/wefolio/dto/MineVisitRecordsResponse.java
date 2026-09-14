@@ -164,6 +164,19 @@ public class MineVisitRecordsResponse {
         /** 最近访问时间文案 */
         private String lastVisitedText;
 
+        /** 累计前台秒数，向下取整；NULL 表示未采集。 */
+        private Long foregroundDurationSeconds;
+        /** 累计前台停留展示文本。 */
+        private String foregroundDurationText;
+        /** 最近有效设备摘要。 */
+        private String deviceText;
+        /** 最近有效设备的完整公开字段。 */
+        private VisitActivityTrackingDto.DeviceInfo deviceInfo;
+        /** 设备采集时间 epoch 毫秒，未知为 NULL。 */
+        private Long deviceRecordedAtEpochMs;
+        /** 按既有明细规则生成的设备采集时间文本。 */
+        private String deviceRecordedAtText;
+
         /** 当前页码，从 1 开始 */
         private Integer pageNo;
 

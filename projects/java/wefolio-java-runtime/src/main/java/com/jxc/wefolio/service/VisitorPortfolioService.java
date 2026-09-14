@@ -19,6 +19,8 @@ import com.jxc.wefolio.dto.PortfolioScheduleQueryResponse;
 import com.jxc.wefolio.dto.VisitorAvatarUploadTicketRequest;
 import com.jxc.wefolio.dto.VisitorAvatarUploadTicketResponse;
 import com.jxc.wefolio.dto.VisitorPortfolioEventRequest;
+import com.jxc.wefolio.dto.VisitActivityUpdateRequest;
+import com.jxc.wefolio.message.VisitActivityMessage;
 import com.jxc.wefolio.dto.VisitorPortfolioOpenRequest;
 import com.jxc.wefolio.dto.VisitorPortfolioResponse;
 import com.jxc.wefolio.dto.VisitorPortfolioScheduleResponse;
@@ -151,6 +153,9 @@ public class VisitorPortfolioService {
     /** 作品集打开分段耗时日志器。 */
     private final PortfolioOpenPerformanceLogger portfolioOpenPerformanceLogger;
 
+    /** 可选前台活动会话编排。 */
+    private final VisitActivitySessionApplicationService visitActivitySessionApplicationService;
+
     /**
      * 打开访客作品集，使用微信 openid 创建或复用全局访客。
      *
@@ -207,15 +212,25 @@ public class VisitorPortfolioService {
                 return maintenanceResponse;
             }
             VisitRecordEntity record;
+            VisitorPortfolioResponse response = buildNormalResponse(portfolio, config);
+            VisitActivitySessionTransactionService.OpenResult tracked = null;
             try {
-                record = trace.measure(
-                        PortfolioOpenPerformanceLogger.Phase.VISIT_WRITE,
-                        () -> portfolioVisitService.recordOpen(
-                                portfolio,
-                                visitor.getId(),
-                                visitor.getVisitorKey(),
-                                request == null ? null : request.getSourceType(),
-                                request == null ? null : request.getIdempotencyKey()));
+                if (request != null && request.getTracking() != null) {
+                    tracked = trace.measure(PortfolioOpenPerformanceLogger.Phase.VISIT_WRITE,
+                            () -> visitActivitySessionApplicationService.open(portfolio,
+                                    PortfolioTypeDict.PERSONAL.getCode(), visitor.getId(), visitor.getVisitorKey(),
+                                    request.getSourceType(), request.getIdempotencyKey(), request.getTracking()));
+                    record = tracked.record();
+                } else {
+                    record = trace.measure(
+                            PortfolioOpenPerformanceLogger.Phase.VISIT_WRITE,
+                            () -> portfolioVisitService.recordOpen(
+                                    portfolio,
+                                    visitor.getId(),
+                                    visitor.getVisitorKey(),
+                                    request == null ? null : request.getSourceType(),
+                                    request == null ? null : request.getIdempotencyKey()));
+                }
             } catch (BusinessException exception) {
                 if (!PointMessage.INSUFFICIENT_BALANCE_MESSAGE.equals(exception.getMessage())) {
                     throw exception;
@@ -227,13 +242,17 @@ public class VisitorPortfolioService {
                 trace.outcome(PortfolioOpenPerformanceLogger.Outcome.MAINTENANCE);
                 return maintenanceResponse;
             }
-            VisitorPortfolioResponse response = buildNormalResponse(portfolio, config);
             response.setVisitRecordId(record == null ? null : record.getId());
             fillVisitorProfileOpenFields(response, visitorSession, response.getVisitRecordId(), portfolio.getId());
+            // 与既有打开契约一致：访问事务先提交，渲染失败保留打开记录；失败响应不交付活动会话。
             response.setRenderData(trace.measure(
                     PortfolioOpenPerformanceLogger.Phase.RENDER,
                     () -> portfolioRenderService.render(
                             portfolio, config, false, false, null, response.getVisitRecordId())));
+            if (tracked != null) {
+                response.setTrackingSessionId(tracked.session().getId());
+                response.setTrackingActiveDurationMs(tracked.session().getActiveDurationMs());
+            }
             trace.outcome(PortfolioOpenPerformanceLogger.Outcome.SUCCESS);
             return response;
         } catch (RuntimeException | Error exception) {
@@ -242,6 +261,20 @@ public class VisitorPortfolioService {
         } finally {
             trace.finish(failure);
         }
+    }
+
+    /** 校验正式个人访问资格后上报活动，维护中及本人自访禁止采集。 */
+    public long recordActivity(String shareCode, Long sessionId, VisitActivityUpdateRequest request) {
+        PortfolioEntity portfolio = requirePublishedPortfolio(shareCode);
+        Long visitorId = VisitorContextHolder.requireVisitorId();
+        VisitorEntity visitor = visitorService.findById(visitorId);
+        if (pointBalanceGateService.isNonPositive(portfolio.getOwnerId())
+                || (visitor != null && ownerSelfVisitService.isOwnerSelfVisitor(portfolio.getOwnerId(),
+                    visitor.getOpenid(), portfolio.getId(), visitorId, VisitEventTypeDict.PORTFOLIO_OPENED.getCode()))) {
+            throw new BusinessException(VisitActivityMessage.SESSION_UNAVAILABLE);
+        }
+        return visitActivitySessionApplicationService.accept(
+                portfolio, PortfolioTypeDict.PERSONAL.getCode(), sessionId, request);
     }
 
     /**

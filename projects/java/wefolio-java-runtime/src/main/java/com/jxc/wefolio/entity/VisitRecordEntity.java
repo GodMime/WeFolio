@@ -73,6 +73,9 @@ public class VisitRecordEntity extends BaseEntity {
     /** 累计停留秒数 */
     private Integer totalDurationSeconds;
 
+    /** 前台停留累计毫秒；NULL 表示尚未采集，与既有事件秒数独立。 */
+    private Long foregroundDurationMs;
+
     /** 查询日期去重缓存 JSON，事件表为明细来源 */
     private String queriedScheduleDates;
 

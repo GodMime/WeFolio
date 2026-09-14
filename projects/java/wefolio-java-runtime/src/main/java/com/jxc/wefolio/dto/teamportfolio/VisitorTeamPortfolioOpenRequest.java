@@ -1,6 +1,7 @@
 package com.jxc.wefolio.dto.teamportfolio;
 
 import lombok.Data;
+import com.jxc.wefolio.dto.VisitActivityTrackingDto;
 
 /**
  * 访客打开标准团队作品集请求。
@@ -19,4 +20,7 @@ public class VisitorTeamPortfolioOpenRequest {
 
     /** 打开事件幂等键。 */
     private String idempotencyKey;
+
+    /** 可选活动采集协议；缺省继续使用既有打开行为。 */
+    private VisitActivityTrackingDto tracking;
 }

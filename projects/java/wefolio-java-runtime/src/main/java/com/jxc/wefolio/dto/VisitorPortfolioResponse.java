@@ -39,6 +39,12 @@ public class VisitorPortfolioResponse {
     /** 访问汇总记录 ID */
     private Long visitRecordId;
 
+    /** 本次浏览的活动会话 ID，不具备采集资格时为 NULL。 */
+    private Long trackingSessionId;
+
+    /** 当前活动会话已接受的累计毫秒，恢复时作为续算基准。 */
+    private Long trackingActiveDurationMs;
+
     /** 访客登录令牌类型 */
     private String tokenType;
 

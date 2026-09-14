@@ -13,6 +13,8 @@ import com.jxc.wefolio.dto.MineVisitStatisticsResponse;
 import com.jxc.wefolio.entity.ContactLeadEntity;
 import com.jxc.wefolio.entity.VisitEventEntity;
 import com.jxc.wefolio.entity.VisitRecordEntity;
+import com.jxc.wefolio.entity.VisitActivitySessionEntity;
+import com.jxc.wefolio.mapper.VisitActivitySessionEntityMapper;
 import com.jxc.wefolio.entity.VisitorEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.ContactLeadEntityMapper;
@@ -39,6 +41,8 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.TimeZone;
 import java.time.LocalTime;
 import java.util.Collection;
 import java.util.List;
@@ -461,6 +465,10 @@ class MineVisitServiceTest {
         MineVisitRecordsResponse.EventTimeline response = service().getVisitEvents(101L, 1, 2);
 
         assertThat(response.getRecordId()).isEqualTo(101L);
+        assertThat(response.getForegroundDurationSeconds()).isNull();
+        assertThat(response.getForegroundDurationText()).isEqualTo("暂无停留数据");
+        assertThat(response.getDeviceText()).isEqualTo("设备未知");
+        assertThat(response.getDeviceRecordedAtEpochMs()).isNull();
         assertThat(response.getVisitorLabel()).isEqualTo("微信访客 8A21");
         assertThat(response.getPortfolioTitle()).isEqualTo("林安婚礼司仪");
         assertThat(response.getPortfolioType()).isEqualTo("PERSONAL");
@@ -570,7 +578,7 @@ class MineVisitServiceTest {
                 .hasMessage("访问记录不存在或无访问权限");
 
         verify(mineVisitScopeService).requireScope(7L);
-        verifyNoInteractions(visitEventEntityMapper);
+        verifyNoInteractions(visitEventEntityMapper, visitActivitySessionEntityMapper);
     }
 
     /**
@@ -1281,6 +1289,50 @@ class MineVisitServiceTest {
         verify(contactLeadEntityMapper).updateById(lead);
     }
 
+    /** 设备快照与停留是否采集独立，部分设备字段仍展示；累计值向下取整。 */
+    @Test
+    void activityDetailsKeepUnknownAndPartialDeviceIndependent() {
+        TimeZone originalZone = TimeZone.getDefault();
+        TimeZone.setDefault(TimeZone.getTimeZone("UTC"));
+        try {
+            AuthContextHolder.set(new AuthContext(7L, "wf-dev-user-7"));
+            LocalDateTime now = LocalDateTime.of(2026, 9, 11, 12, 0);
+            VisitRecordEntity record = buildRecord(101L, "anonymous-visitor-key-8A21", "WECHAT_SHARE_CARD",
+                    "PERSONAL", "作品集", 1, 0, 0, 0, 0, null, "NOT_FOLLOWED_UP", now);
+            record.setOwnerType("USER");record.setOwnerId(7L);
+            when(visitRecordEntityMapper.selectOne(any())).thenReturn(record);
+            Page<VisitEventEntity> page = new Page<>(1, 20, 0);page.setRecords(List.of());
+            when(visitEventEntityMapper.selectPage(any(Page.class), any())).thenReturn(page);
+            VisitActivitySessionEntity device = new VisitActivitySessionEntity();device.setModel("iPhone 17");device.setCreatedAt(now);
+            when(visitActivitySessionEntityMapper.selectLatestDevice(101L)).thenReturn(device);
+            MineVisitService service = service();
+            var unknown = service.getVisitEvents(101L, 1, 20);
+            assertThat(unknown.getForegroundDurationSeconds()).isNull();
+            assertThat(unknown.getDeviceText()).isEqualTo("iPhone 17");
+            assertThat(unknown.getDeviceInfo().getBrand()).isNull();
+            assertThat(unknown.getDeviceRecordedAtText()).isEqualTo("09-11 12:00");
+            assertThat(unknown.getDeviceRecordedAtEpochMs()).isEqualTo(now.atZone(ZoneId.of("Asia/Shanghai")).toInstant().toEpochMilli());
+            record.setForegroundDurationMs(0L);
+            assertThat(service.getVisitEvents(101L, 1, 20).getForegroundDurationText()).isEqualTo("不到 1 秒");
+            record.setForegroundDurationMs(61999L);
+            var collected = service.getVisitEvents(101L, 1, 20);
+            assertThat(collected.getForegroundDurationSeconds()).isEqualTo(61L);
+            assertThat(collected.getForegroundDurationText()).isEqualTo("1 分 1 秒");
+            for (Map.Entry<Long, String> expected : Map.of(
+                    60000L, "1 分", 3600000L, "1 小时", 3601000L, "1 小时 1 秒",
+                    3900000L, "1 小时 5 分", 3901000L, "1 小时 5 分 1 秒").entrySet()) {
+                record.setForegroundDurationMs(expected.getKey());
+                assertThat(service.getVisitEvents(101L, 1, 20).getForegroundDurationText()).isEqualTo(expected.getValue());
+            }
+        } finally {
+            TimeZone.setDefault(originalZone);
+        }
+    }
+
+    /** 最近设备查询替身，供历史NULL及部分设备契约使用。 */
+    @Mock
+    private VisitActivitySessionEntityMapper visitActivitySessionEntityMapper;
+
     private MineVisitService service() {
         return new MineVisitService(
                 visitRecordEntityMapper,
@@ -1289,7 +1341,8 @@ class MineVisitServiceTest {
                 scheduleQueryRecordEntityMapper,
                 contactLeadEntityMapper,
                 mineVisitScopeService,
-                teamContactLeadCryptoService
+                teamContactLeadCryptoService,
+                visitActivitySessionEntityMapper
         );
     }
 
