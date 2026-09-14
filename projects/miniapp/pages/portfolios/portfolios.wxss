@@ -112,6 +112,7 @@
 .portfolio-delete-button::after,
 .portfolio-action-button::after,
 .small-button::after,
+.refresh-error-retry::after,
 .tab::after {
   border: 0;
 }
@@ -169,7 +170,16 @@
 
 .summary-pills {
   flex: none;
+  min-height: 48rpx;
   gap: 12rpx;
+}
+
+.summary-skeleton {
+  width: 90rpx;
+  height: 16rpx;
+  flex: none;
+  border-radius: 8rpx;
+  background: #e9edef;
 }
 
 .summary-pill,
@@ -218,6 +228,169 @@
   display: flex;
   flex-direction: column;
   gap: 20rpx;
+}
+
+/* 骨架保持真实卡片的外尺寸，避免加载完成后列表明显跳动。 */
+.portfolio-loading-skeleton {
+  pointer-events: none;
+}
+
+.portfolio-skeleton-list {
+  margin-top: 20rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+}
+
+.portfolio-skeleton-row {
+  min-height: 184rpx;
+  padding: 24rpx;
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  border: 1rpx solid #edf0f2;
+  border-radius: 48rpx;
+  box-sizing: border-box;
+}
+
+.portfolio-skeleton-row-3 {
+  opacity: 0.7;
+}
+
+.portfolio-skeleton-row-4 {
+  opacity: 0.4;
+}
+
+.portfolio-skeleton-bone {
+  position: relative;
+  overflow: hidden;
+  background: #e9edef;
+}
+
+.portfolio-skeleton-bone::after {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  content: "";
+  background: linear-gradient(105deg, transparent 18%, #fafbfc 50%, transparent 82%);
+  transform: translateX(-140%);
+  animation: portfolio-skeleton-sweep 2.2s ease-in-out infinite;
+}
+
+.portfolio-skeleton-cover {
+  width: 152rpx;
+  height: 133rpx;
+  flex: none;
+  border-radius: 40rpx;
+}
+
+.portfolio-skeleton-copy {
+  min-width: 0;
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 20rpx;
+}
+
+.portfolio-skeleton-title {
+  width: 90%;
+  height: 18rpx;
+  border-radius: 10rpx;
+}
+
+.portfolio-skeleton-row-2 .portfolio-skeleton-title {
+  width: 72%;
+}
+
+.portfolio-skeleton-row-3 .portfolio-skeleton-title {
+  width: 84%;
+}
+
+.portfolio-skeleton-row-4 .portfolio-skeleton-title {
+  width: 64%;
+}
+
+.portfolio-skeleton-meta {
+  width: 72%;
+  height: 12rpx;
+  border-radius: 8rpx;
+}
+
+.portfolio-skeleton-badge {
+  width: 68rpx;
+  height: 20rpx;
+  border-radius: 10rpx;
+  background: #f3f5f6;
+}
+
+.portfolio-skeleton-actions {
+  flex: none;
+  display: flex;
+  gap: 10rpx;
+}
+
+.portfolio-skeleton-action {
+  width: 64rpx;
+  height: 48rpx;
+  flex: none;
+  border-radius: 999rpx;
+  background: #f3f5f6;
+}
+
+.portfolio-loading-hint {
+  margin: 46rpx 0 24rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14rpx;
+  color: #838b92;
+  font-size: 24rpx;
+  line-height: 36rpx;
+}
+
+.portfolio-loading-spinner {
+  width: 24rpx;
+  height: 24rpx;
+  flex: none;
+  border: 3rpx solid #edf0f2;
+  border-top-color: #838b92;
+  border-right-color: #838b92;
+  border-radius: 50%;
+  box-sizing: border-box;
+  animation: portfolio-loading-spin 1s linear infinite;
+}
+
+.summary-refresh-spinner {
+  width: 20rpx;
+  height: 20rpx;
+}
+
+@keyframes portfolio-skeleton-sweep {
+  0%,
+  10% {
+    transform: translateX(-140%);
+  }
+
+  70%,
+  100% {
+    transform: translateX(140%);
+  }
+}
+
+@keyframes portfolio-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .portfolio-skeleton-bone::after,
+  .portfolio-loading-spinner {
+    animation: none;
+  }
 }
 
 .portfolio-swipe-row {
@@ -474,6 +647,39 @@
 
 .inline-state.error {
   color: #b55656;
+}
+
+.refresh-error {
+  margin-top: 20rpx;
+  padding: 8rpx 20rpx;
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  border-radius: 16rpx;
+  background: #fcf5f5;
+}
+
+.refresh-error-text {
+  min-width: 0;
+  flex: 1;
+  color: #b55656;
+  font-size: 22rpx;
+  line-height: 32rpx;
+}
+
+.refresh-error-retry {
+  height: 64rpx;
+  flex: none;
+  margin: 0;
+  padding: 0 12rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #b55656;
+  font-size: 22rpx;
+  font-weight: 600;
+  line-height: 1;
+  background: transparent;
 }
 
 .empty-title {

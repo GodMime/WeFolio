@@ -157,7 +157,9 @@ Page({
   data: {
     ownerType: OWNER_TYPE_USER,
     ownerTitle: '个人作品集',
-    loading: false,
+    loading: true,
+    // 首次成功后保留列表或空态，后续刷新不再用骨架遮住已有内容。
+    loaded: false,
     pullDownRefreshing: false,
     errorMessage: '',
     portfolios: [],
@@ -202,6 +204,9 @@ Page({
       this.setData({
         ownerType: OWNER_TYPE_TEAM,
         ownerTitle: '团队作品集',
+        // 直接进入团队页时，个人列表留到首次切回后再请求。
+        loading: false,
+        teamLoading: true,
         switching: false
       })
     }
@@ -280,14 +285,16 @@ Page({
         portfolios,
         displayPortfolios: portfolios.map(normalizePortfolioItem),
         summary: buildSummary(portfolios),
-        loading: false
+        loaded: true
       })
     }).catch((error) => {
       if (error.authRequired) {
         handleMaintainerAuthRequired(error.message)
         return
       }
-      this.setData({ loading: false, errorMessage: error.message || '作品集加载失败' })
+      this.setData({ errorMessage: error.message || '作品集加载失败' })
+    }).finally(() => {
+      this.setData({ loading: false })
     })
   },
 
@@ -307,10 +314,12 @@ Page({
       teamSelectSheetListHeight: 0
     })
     try {
-      const [portfolios, maintainableTeams] = await Promise.all([
+      const teamResults = await Promise.all([
         fetchTeamPortfolioList(request),
         fetchMaintainableTeams(request)
       ])
+      const portfolios = teamResults[0]
+      const maintainableTeams = teamResults[1]
       this.setData({
         teamPortfolios: portfolios,
         teamDisplayPortfolios: portfolios.map(normalizeTeamPortfolioItem),
@@ -352,6 +361,9 @@ Page({
     })
     if (ownerType === OWNER_TYPE_TEAM) {
       this.bootstrapTeam({ onlyIfNeeded: true })
+    } else if (!this.data.loaded && !this.data.loading) {
+      // 团队直达入口尚未加载个人列表，首次切回时补齐请求。
+      this.bootstrap()
     }
     if (this.ownerSwitchTimer) {
       clearTimeout(this.ownerSwitchTimer)

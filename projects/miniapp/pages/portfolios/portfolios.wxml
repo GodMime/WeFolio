@@ -1,3 +1,26 @@
+<template name="portfolio-loading-skeleton">
+  <view class="skeleton-panel portfolio-loading-skeleton" aria-label="作品集正在加载">
+    <view class="portfolio-skeleton-list" aria-hidden="true">
+      <view wx:for="{{[1, 2, 3, 4]}}" wx:key="*this" class="portfolio-skeleton-row portfolio-skeleton-row-{{item}}">
+        <view class="portfolio-skeleton-cover portfolio-skeleton-bone"></view>
+        <view class="portfolio-skeleton-copy">
+          <view class="portfolio-skeleton-title portfolio-skeleton-bone"></view>
+          <view class="portfolio-skeleton-meta portfolio-skeleton-bone"></view>
+          <view class="portfolio-skeleton-badge"></view>
+        </view>
+        <view class="portfolio-skeleton-actions">
+          <view class="portfolio-skeleton-action"></view>
+          <view class="portfolio-skeleton-action"></view>
+        </view>
+      </view>
+    </view>
+    <view class="portfolio-loading-hint">
+      <view class="portfolio-loading-spinner" aria-hidden="true"></view>
+      <text>正在加载作品集</text>
+    </view>
+  </view>
+</template>
+
 <view class="page-shell portfolios-page">
   <navigation-bar title="作品集" back="{{false}}" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
 
@@ -17,8 +40,15 @@
             <view class="list-heading">
               <view class="list-title">个人作品集</view>
               <view class="summary-pills">
-                <view class="summary-pill published">{{summary.publishedText}}</view>
-                <view class="summary-pill draft">{{summary.draftText}}</view>
+                <block wx:if="{{!loaded}}">
+                  <view class="summary-skeleton" aria-hidden="true"></view>
+                  <view class="summary-skeleton" aria-hidden="true"></view>
+                </block>
+                <block wx:else>
+                  <view wx:if="{{loading && !pullDownRefreshing}}" class="portfolio-loading-spinner summary-refresh-spinner" aria-label="正在刷新作品集"></view>
+                  <view class="summary-pill published">{{summary.publishedText}}</view>
+                  <view class="summary-pill draft">{{summary.draftText}}</view>
+                </block>
               </view>
             </view>
 
@@ -30,8 +60,12 @@
               refresher-triggered="{{pullDownRefreshing}}"
               bindrefresherrefresh="handlePullDownRefresh"
             >
-            <view wx:if="{{loading}}" class="inline-state">作品集加载中</view>
-            <view wx:elif="{{errorMessage}}" class="inline-state error">
+            <view wx:if="{{loaded && errorMessage}}" class="refresh-error">
+              <text class="refresh-error-text">{{errorMessage}}</text>
+              <button class="refresh-error-retry" bindtap="bootstrap">重试</button>
+            </view>
+            <template wx:if="{{loading && !loaded}}" is="portfolio-loading-skeleton" />
+            <view wx:elif="{{errorMessage && !loaded}}" class="inline-state error">
               <text>{{errorMessage}}</text>
               <button class="small-button" bindtap="bootstrap">重试</button>
             </view>
@@ -104,8 +138,15 @@
             <view class="list-heading">
               <view class="list-title">团队作品集</view>
               <view class="summary-pills">
-                <view class="summary-pill published">{{teamSummary.publishedText}}</view>
-                <view class="summary-pill draft">{{teamSummary.draftText}}</view>
+                <block wx:if="{{!teamLoaded}}">
+                  <view class="summary-skeleton" aria-hidden="true"></view>
+                  <view class="summary-skeleton" aria-hidden="true"></view>
+                </block>
+                <block wx:else>
+                  <view wx:if="{{teamLoading && !teamPullDownRefreshing}}" class="portfolio-loading-spinner summary-refresh-spinner" aria-label="正在刷新作品集"></view>
+                  <view class="summary-pill published">{{teamSummary.publishedText}}</view>
+                  <view class="summary-pill draft">{{teamSummary.draftText}}</view>
+                </block>
               </view>
             </view>
 
@@ -117,8 +158,12 @@
               refresher-triggered="{{teamPullDownRefreshing}}"
               bindrefresherrefresh="handleTeamPullDownRefresh"
             >
-            <view wx:if="{{teamLoading}}" class="inline-state">作品集加载中</view>
-            <view wx:elif="{{teamErrorMessage}}" class="inline-state error">
+            <view wx:if="{{teamLoaded && teamErrorMessage}}" class="refresh-error">
+              <text class="refresh-error-text">{{teamErrorMessage}}</text>
+              <button class="refresh-error-retry" bindtap="bootstrapTeam">重试</button>
+            </view>
+            <template wx:if="{{teamLoading && !teamLoaded}}" is="portfolio-loading-skeleton" />
+            <view wx:elif="{{teamErrorMessage && !teamLoaded}}" class="inline-state error">
               <text>{{teamErrorMessage}}</text>
               <button class="small-button" bindtap="bootstrapTeam">重试</button>
             </view>
