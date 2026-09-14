@@ -104,7 +104,7 @@ test('chooseMedia options use mixed album picker and cap count at 9', () => {
   assert.equal(createChooseMediaOptions(3).count, 3)
 })
 
-test('classifies GIF and animated WebP up to 50MB while keeping static WebP as image', async () => {
+test('classifies GIF and animated WebP below 32MB while keeping static WebP as image', async () => {
   const payloads = {
     'wxfile://tmp/a.gif': Buffer.from('GIF89a', 'ascii'),
     'wxfile://tmp/a.webp': Buffer.from([
@@ -125,7 +125,12 @@ test('classifies GIF and animated WebP up to 50MB while keeping static WebP as i
       return {
         readFile(options) {
           readPaths.push(options.filePath)
-          const data = payloads[options.filePath]
+          const source = payloads[options.filePath]
+          // 模拟开发者工具超过 10MB 后把传输描述对象误当 Base64 的行为。
+          if (!options.length || options.length > 10 * 1024 * 1024) {
+            atob(String({ __bufferDataKey: 'large-file', dataType: 'binary' }))
+          }
+          const data = source.subarray(options.position, options.position + options.length)
           options.success({
             data: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)
           })
@@ -134,9 +139,9 @@ test('classifies GIF and animated WebP up to 50MB while keeping static WebP as i
     }
   }
   const files = normalizeChosenMediaFiles([
-    { tempFilePath: 'wxfile://tmp/a.gif', size: 50 * 1024 * 1024, fileType: 'image' },
-    { tempFilePath: 'wxfile://tmp/a.webp', size: 50 * 1024 * 1024, fileType: 'image' },
-    { tempFilePath: 'wxfile://tmp/static.webp', size: 100, fileType: 'image' }
+    { tempFilePath: 'wxfile://tmp/a.gif', size: 32 * 1024 * 1024 - 1, fileType: 'image' },
+    { tempFilePath: 'wxfile://tmp/a.webp', size: 32 * 1024 * 1024 - 1, fileType: 'image' },
+    { tempFilePath: 'wxfile://tmp/static.webp', size: payloads['wxfile://tmp/static.webp'].length, fileType: 'image' }
   ])
 
   const classified = await classifyChosenMediaFiles(files, { wxApi })
@@ -154,7 +159,116 @@ test('classifies GIF and animated WebP up to 50MB while keeping static WebP as i
   assert.equal(classified[2].mimeType, 'image/webp')
 })
 
-test('does not read or compress GIF and WebP candidates over 50MB', async () => {
+test('识别 WebP 后续动画段时跳过大块数据并保留奇数长度填充', async () => {
+  const metadataSize = 12 * 1024 * 1024 + 1
+  const animationOffset = 12 + 8 + metadataSize + 1
+  const fileSize = animationOffset + 8
+  const header = Buffer.alloc(21)
+  header.write('RIFF', 0)
+  header.writeUInt32LE(fileSize - 8, 4)
+  header.write('WEBP', 8)
+  header.write('ICCP', 12)
+  header.writeUInt32LE(metadataSize, 16)
+  const animationHeader = Buffer.alloc(8)
+  animationHeader.write('ANMF')
+  const calls = []
+  const wxApi = {
+    getFileSystemManager() {
+      return {
+        readFile(options) {
+          calls.push({ position: options.position, length: options.length })
+          let data
+          if (options.position === 0 && options.length <= header.length) {
+            data = header.subarray(0, options.length)
+          } else if (options.position === animationOffset && options.length === 8) {
+            data = animationHeader
+          } else {
+            assert.fail('只能读取必要头部，不得读取中间大块元数据')
+          }
+          options.success({ data: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) })
+        }
+      }
+    }
+  }
+
+  const [file] = await classifyChosenMediaFiles(normalizeChosenMediaFiles([
+    { tempFilePath: 'wxfile://tmp/large-metadata.webp', size: fileSize, fileType: 'image' }
+  ]), { wxApi })
+
+  assert.equal(file.mediaType, 'ANIMATION')
+  assert.deepEqual(calls, [{ position: 0, length: 21 }, { position: animationOffset, length: 8 }])
+})
+
+test('短文件和损坏的 WebP 段长度不会触发越界读取', async () => {
+  const brokenWebp = Buffer.alloc(20)
+  brokenWebp.write('RIFF', 0)
+  brokenWebp.writeUInt32LE(12, 4)
+  brokenWebp.write('WEBP', 8)
+  brokenWebp.write('ICCP', 12)
+  brokenWebp.writeUInt32LE(0xffffffff, 16)
+  for (const source of [Buffer.from('GIF89a'), brokenWebp]) {
+    const calls = []
+    const wxApi = {
+      getFileSystemManager() {
+        return {
+          readFile(options) {
+            calls.push(options)
+            assert.ok(options.position + options.length <= source.length)
+            const data = source.subarray(options.position, options.position + options.length)
+            options.success({ data: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) })
+          }
+        }
+      }
+    }
+    const [file] = await classifyChosenMediaFiles(normalizeChosenMediaFiles([
+      { tempFilePath: 'wxfile://tmp/short-image', size: source.length, fileType: 'image' }
+    ]), { wxApi })
+
+    assert.equal(file.mediaType, source === brokenWebp ? 'IMAGE' : 'ANIMATION')
+    assert.equal(calls.length, 1)
+  }
+})
+
+test('后续 WebP 段读取失败时沿用单文件回退并继续分类其它文件', async () => {
+  const header = Buffer.alloc(21)
+  header.write('RIFF', 0)
+  header.writeUInt32LE(30, 4)
+  header.write('WEBP', 8)
+  header.write('VP8X', 12)
+  header.writeUInt32LE(10, 16)
+  const readPaths = []
+  const wxApi = {
+    getFileSystemManager() {
+      return {
+        readFile(options) {
+          readPaths.push([options.filePath, options.position])
+          if (options.position > 0) {
+            options.fail({ errMsg: 'readFile:fail interrupted' })
+            return
+          }
+          const data = options.filePath.endsWith('.webp') ? header : Buffer.from('GIF89a')
+          options.success({ data: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) })
+        }
+      }
+    }
+  }
+  const files = normalizeChosenMediaFiles([
+    { tempFilePath: 'wxfile://tmp/interrupted.webp', size: 38, fileType: 'image' },
+    { tempFilePath: 'wxfile://tmp/next.gif', size: 6, fileType: 'image' }
+  ])
+
+  const classified = await classifyChosenMediaFiles(files, { wxApi })
+
+  assert.equal(classified[0], files[0])
+  assert.equal(classified[1].mediaType, 'ANIMATION')
+  assert.deepEqual(readPaths, [
+    ['wxfile://tmp/interrupted.webp', 0],
+    ['wxfile://tmp/interrupted.webp', 30],
+    ['wxfile://tmp/next.gif', 0]
+  ])
+})
+
+test('does not read or compress GIF and WebP candidates at or above 32MB', async () => {
   let readCount = 0
   const wxApi = {
     getFileSystemManager() {
@@ -169,20 +283,22 @@ test('does not read or compress GIF and WebP candidates over 50MB', async () => 
     }
   }
   for (const extension of ['gif', 'webp']) {
-    const files = normalizeChosenMediaFiles([
-      {
-        tempFilePath: `wxfile://tmp/too-large.${extension}`,
-        name: `too-large.${extension}`,
-        mimeType: `image/${extension}`,
-        size: 50 * 1024 * 1024 + 1,
-        fileType: 'image'
-      }
-    ])
+    for (const size of [32 * 1024 * 1024, 32 * 1024 * 1024 + 1]) {
+      const files = normalizeChosenMediaFiles([
+        {
+          tempFilePath: `wxfile://tmp/too-large.${extension}`,
+          name: `too-large.${extension}`,
+          mimeType: `image/${extension}`,
+          size,
+          fileType: 'image'
+        }
+      ])
 
-    await assert.rejects(
-      classifyChosenMediaFiles(files, { wxApi }),
-      /动图作品不能超过 50MB/
-    )
+      await assert.rejects(
+        classifyChosenMediaFiles(files, { wxApi }),
+        /动图作品必须小于 32MB/
+      )
+    }
   }
   assert.equal(readCount, 0)
 })
@@ -369,10 +485,12 @@ test('validates upload file count size and duration limits', () => {
   assert.equal(validateChosenMediaFiles([{ mediaType: 'IMAGE', size: IMAGE_MAX_BYTES + 1 }]).message, '图片作品不能超过 10MB')
   assert.equal(validateChosenMediaFiles([{ mediaType: 'VIDEO', size: VIDEO_MAX_BYTES + 1, durationMs: 1000 }]).message, '视频作品不能超过 100MB')
   assert.equal(validateChosenMediaFiles([{ mediaType: 'VIDEO', size: 1, durationMs: (VIDEO_MAX_DURATION_SECONDS + 1) * 1000 }]).message, '视频作品不能超过 10 分钟')
-  assert.equal(ANIMATION_MAX_BYTES, 50 * 1024 * 1024)
+  assert.equal(ANIMATION_MAX_BYTES, 32 * 1024 * 1024 - 1)
   assert.equal(validateChosenMediaFiles([{ mediaType: 'ANIMATION', size: 10 * 1024 * 1024 + 1 }]).valid, true)
-  assert.equal(validateChosenMediaFiles([{ mediaType: 'ANIMATION', size: 50 * 1024 * 1024 }]).valid, true)
-  assert.equal(validateChosenMediaFiles([{ mediaType: 'ANIMATION', size: 50 * 1024 * 1024 + 1 }]).message, '动图作品不能超过 50MB')
+  assert.equal(validateChosenMediaFiles([{ mediaType: 'ANIMATION', size: 32 * 1024 * 1024 - 1 }]).valid, true)
+  for (const size of [32 * 1024 * 1024, 32 * 1024 * 1024 + 1]) {
+    assert.equal(validateChosenMediaFiles([{ mediaType: 'ANIMATION', size }]).message, '动图作品必须小于 32MB')
+  }
 })
 
 test('builds upload complete payload with per-file metadata', () => {

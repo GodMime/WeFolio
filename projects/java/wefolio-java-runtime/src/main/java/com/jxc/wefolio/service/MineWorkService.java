@@ -85,8 +85,8 @@ public class MineWorkService {
     /** 视频最大字节数 */
     public static final long VIDEO_MAX_BYTES = 100L * 1024L * 1024L;
 
-    /** 动图最大字节数，单个文件上限为 50MB。 */
-    public static final long ANIMATION_MAX_BYTES = 50L * 1024L * 1024L;
+    /** 动图最大允许字节数，单个文件必须严格小于 32MB，供校验与 COS 票据共用。 */
+    public static final long ANIMATION_MAX_BYTES = 32L * 1024L * 1024L - 1L;
 
     /** 视频最大时长毫秒 */
     public static final int VIDEO_MAX_DURATION_MS = 10 * 60 * 1000;

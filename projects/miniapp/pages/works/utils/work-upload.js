@@ -8,7 +8,8 @@ const { DEFAULT_AUDIO_COVER_URL } = require('./works')
 
 const MAX_BATCH_COUNT = 9
 const IMAGE_MAX_BYTES = 10 * 1024 * 1024
-const ANIMATION_MAX_BYTES = 50 * 1024 * 1024
+// 最大允许字节数采用包含边界的表达，确保单个动图严格小于 32MB。
+const ANIMATION_MAX_BYTES = 32 * 1024 * 1024 - 1
 const VIDEO_MAX_BYTES = 100 * 1024 * 1024
 const VIDEO_MAX_DURATION_SECONDS = 10 * 60
 const AUDIO_MAX_BYTES = 50 * 1024 * 1024
@@ -51,7 +52,12 @@ const STATIC_IMAGE_MAIN_COMPRESS_ATTEMPTS = [
   { quality: 66, compressedSize: 960 }
 ]
 const IMAGE_TOO_LARGE_MESSAGE = '图片作品不能超过 10MB'
-const ANIMATION_TOO_LARGE_MESSAGE = '动图作品不能超过 50MB'
+const ANIMATION_TOO_LARGE_MESSAGE = '动图作品必须小于 32MB'
+// 开发者工具整文件读取超过 10MB 时可能解码失败，识别类型只读取必要头部。
+const MEDIA_SIGNATURE_READ_BYTES = 21
+const WEBP_RIFF_HEADER_BYTES = 12
+const WEBP_CHUNK_HEADER_BYTES = 8
+const WEBP_ANIMATION_CHUNK_TYPES = ['ANIM', 'ANMF']
 
 function getRuntimeWx(wxApi) {
   if (wxApi) {
@@ -317,18 +323,26 @@ function readUint32LittleEndian(bytes, offset) {
   ) >>> 0
 }
 
-function findRiffChunk(bytes, expectedType) {
-  let offset = 12
-  while (offset + 8 <= bytes.length) {
-    const chunkType = ascii(bytes, offset, 4)
-    const chunkSize = readUint32LittleEndian(bytes, offset + 4)
-    if (chunkType === expectedType) {
+async function hasAnimatedWebpChunk(file, bytes, wxApi) {
+  const fileSize = normalizeSize(file.size)
+  let offset = WEBP_RIFF_HEADER_BYTES
+  while (offset + WEBP_CHUNK_HEADER_BYTES <= fileSize) {
+    // WebP 动画段前可能存在较大的元数据，按段长度跳过内容，只读取段头。
+    const chunkHeader = offset + WEBP_CHUNK_HEADER_BYTES <= bytes.length
+      ? bytes.subarray(offset, offset + WEBP_CHUNK_HEADER_BYTES)
+      : await readLocalMediaBytes(file.tempFilePath, wxApi, offset, WEBP_CHUNK_HEADER_BYTES)
+    if (chunkHeader.length < WEBP_CHUNK_HEADER_BYTES) {
+      return false
+    }
+    const chunkType = ascii(chunkHeader, 0, 4)
+    const chunkSize = readUint32LittleEndian(chunkHeader, 4)
+    if (WEBP_ANIMATION_CHUNK_TYPES.includes(chunkType)) {
       return true
     }
     if (chunkSize < 0) {
       return false
     }
-    offset += 8 + chunkSize + (chunkSize % 2)
+    offset += WEBP_CHUNK_HEADER_BYTES + chunkSize + (chunkSize % 2)
   }
   return false
 }
@@ -337,21 +351,23 @@ function isWebp(bytes) {
   return ascii(bytes, 0, 4) === 'RIFF' && ascii(bytes, 8, 4) === 'WEBP'
 }
 
-function isAnimatedWebp(bytes) {
+async function isAnimatedWebp(file, bytes, wxApi) {
   if (!isWebp(bytes)) {
     return false
   }
   if (ascii(bytes, 12, 4) === 'VP8X' && bytes.length > 20 && (bytes[20] & 0x02) !== 0) {
     return true
   }
-  return findRiffChunk(bytes, 'ANIM') || findRiffChunk(bytes, 'ANMF')
+  return hasAnimatedWebpChunk(file, bytes, wxApi)
 }
 
-function readLocalMediaBytes(filePath, wxApi) {
+function readLocalMediaBytes(filePath, wxApi, position, length) {
   const runtimeWx = getRuntimeWx(wxApi)
   return new Promise((resolve, reject) => {
     runtimeWx.getFileSystemManager().readFile({
       filePath,
+      position,
+      length,
       success(response) {
         resolve(new Uint8Array(response.data))
       },
@@ -386,8 +402,13 @@ async function classifyChosenMediaFiles(files = [], options = {}) {
       continue
     }
     let bytes
+    let animatedWebp = false
     try {
-      bytes = await readLocalMediaBytes(file.tempFilePath, options.wxApi)
+      const headerLength = Math.min(normalizeSize(file.size) || MEDIA_SIGNATURE_READ_BYTES, MEDIA_SIGNATURE_READ_BYTES)
+      bytes = await readLocalMediaBytes(file.tempFilePath, options.wxApi, 0, headerLength)
+      if (isWebp(bytes)) {
+        animatedWebp = await isAnimatedWebp(file, bytes, options.wxApi)
+      }
     } catch (error) {
       classified.push(file)
       continue
@@ -404,14 +425,13 @@ async function classifyChosenMediaFiles(files = [], options = {}) {
       continue
     }
     if (isWebp(bytes)) {
-      const animated = isAnimatedWebp(bytes)
       classified.push(Object.assign({}, file, {
-        mediaType: animated ? 'ANIMATION' : 'IMAGE',
+        mediaType: animatedWebp ? 'ANIMATION' : 'IMAGE',
         mimeType: 'image/webp',
         fileType: 'image',
         isVideo: false,
-        isAnimation: animated,
-        metaText: buildMediaMetaText(animated ? 'ANIMATION' : 'IMAGE')
+        isAnimation: animatedWebp,
+        metaText: buildMediaMetaText(animatedWebp ? 'ANIMATION' : 'IMAGE')
       }))
       continue
     }

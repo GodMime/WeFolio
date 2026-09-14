@@ -686,12 +686,12 @@ class MineWorkServiceTest {
         assertThat(response.getItems().get(0).getUploadUrl()).contains("myqcloud.com");
         assertThat(response.getImageMaxBytes()).isEqualTo(10L * 1024L * 1024L);
         assertThat(response.getVideoMaxBytes()).isEqualTo(100L * 1024L * 1024L);
-        assertThat(response.getAnimationMaxBytes()).isEqualTo(50L * 1024L * 1024L);
+        assertThat(response.getAnimationMaxBytes()).isEqualTo(32L * 1024L * 1024L - 1L);
         verify(contentLimitService).ensureWorkCapacity(7L, MediaTypeDict.IMAGE.getCode(), 1L);
         verify(contentLimitService).ensureWorkCapacity(7L, MediaTypeDict.VIDEO.getCode(), 1L);
     }
 
-    /** GIF 和 WebP 均接受 50MB 边界，COS 票据使用相同上限并独立校验动图容量。 */
+    /** GIF 和 WebP 均接受 32MB 少一个字节，COS 票据使用相同上限并独立校验动图容量。 */
     @Test
     void createUploadTicketsShouldAcceptAnimationGifAndWebpWithIndependentCapacity() {
         when(userEntityMapper.selectById(7L)).thenReturn(activeUser());
@@ -706,9 +706,9 @@ class MineWorkServiceTest {
         MineWorkUploadTicketRequest request = new MineWorkUploadTicketRequest();
         request.setFiles(List.of(
                 ticketFile("animation-gif", MediaTypeDict.ANIMATION.getCode(),
-                        "story.gif", "image/gif", 50L * 1024L * 1024L),
+                        "story.gif", "image/gif", 32L * 1024L * 1024L - 1L),
                 ticketFile("animation-webp", MediaTypeDict.ANIMATION.getCode(),
-                        "story.webp", "image/webp", 50L * 1024L * 1024L)));
+                        "story.webp", "image/webp", 32L * 1024L * 1024L - 1L)));
 
         MineWorkUploadTicketResponse response = service().createUploadTickets(request);
 
@@ -719,28 +719,30 @@ class MineWorkServiceTest {
                 .allMatch(key -> key.matches(
                         "WFA3B1E7A2/work/animation/WFA3B1E7A2-A-\\d{13}-[12]\\.(gif|webp)"));
         assertThat(response.getItems()).extracting(MineWorkUploadTicketResponse.Item::getMaxBytes)
-                .containsOnly(50L * 1024L * 1024L);
+                .containsOnly(32L * 1024L * 1024L - 1L);
         verify(cosService, times(2)).createPostUploadTicket(
-                any(), any(), eq(50L * 1024L * 1024L), any());
+                any(), any(), eq(32L * 1024L * 1024L - 1L), any());
         verify(contentLimitService)
                 .ensureWorkCapacity(7L, MediaTypeDict.ANIMATION.getCode(), 2L);
     }
 
-    /** GIF 和 WebP 超过 50MB 一个字节时均拒绝，不创建上传任务或 COS 票据。 */
+    /** GIF 和 WebP 达到或超过 32MB 时均拒绝，不创建上传任务或 COS 票据。 */
     @Test
-    void createUploadTicketsShouldRejectAnimationsOneByteOver50Mb() {
+    void createUploadTicketsShouldRejectAnimationsAtOrAbove32Mb() {
         when(userEntityMapper.selectById(7L)).thenReturn(activeUser());
-        for (MineWorkUploadTicketRequest.UploadFileItem file : List.of(
-                ticketFile("animation-gif", MediaTypeDict.ANIMATION.getCode(),
-                        "story.gif", "image/gif", 50L * 1024L * 1024L + 1L),
-                ticketFile("animation-webp", MediaTypeDict.ANIMATION.getCode(),
-                        "story.webp", "image/webp", 50L * 1024L * 1024L + 1L))) {
-            MineWorkUploadTicketRequest request = new MineWorkUploadTicketRequest();
-            request.setFiles(List.of(file));
+        for (long fileSize : List.of(32L * 1024L * 1024L, 32L * 1024L * 1024L + 1L)) {
+            for (MineWorkUploadTicketRequest.UploadFileItem file : List.of(
+                    ticketFile("animation-gif", MediaTypeDict.ANIMATION.getCode(),
+                            "story.gif", "image/gif", fileSize),
+                    ticketFile("animation-webp", MediaTypeDict.ANIMATION.getCode(),
+                            "story.webp", "image/webp", fileSize))) {
+                MineWorkUploadTicketRequest request = new MineWorkUploadTicketRequest();
+                request.setFiles(List.of(file));
 
-            assertThatThrownBy(() -> service().createUploadTickets(request))
-                    .isInstanceOf(BusinessException.class)
-                    .hasMessage("动图作品不能超过 50MB");
+                assertThatThrownBy(() -> service().createUploadTickets(request))
+                        .isInstanceOf(BusinessException.class)
+                        .hasMessage("动图作品必须小于 32MB");
+            }
         }
         verifyNoInteractions(workUploadTaskEntityMapper, cosService, contentLimitService);
     }
@@ -1334,11 +1336,11 @@ class MineWorkServiceTest {
         assertThat(response.getItems().get(0).getWorkId()).isEqualTo(120L);
     }
 
-    /** 50MB 动图通过 COS 实际大小校验后，保存权威元数据与默认封面再确认入库。 */
+    /** 32MB 少一个字节的动图通过 COS 大小校验后，保存权威元数据与默认封面再确认入库。 */
     @Test
     void completeUploadShouldPersistAnimationMetadataAndGeneratedCoverBeforeConfirm() {
         WorkUploadTaskEntity task = animationTask(99L, "story.gif", "image/gif");
-        task.setFileSize(50L * 1024L * 1024L);
+        task.setFileSize(32L * 1024L * 1024L - 1L);
         when(workUploadTaskEntityMapper.selectById(99L)).thenReturn(task);
         when(workUploadTaskEntityMapper.updateById(task)).thenReturn(1);
         when(cosService.headObject(task.getObjectKey()))
@@ -1373,23 +1375,25 @@ class MineWorkServiceTest {
         assertThat(response.getItems().get(0).isSuccess()).isTrue();
     }
 
-    /** 即使上传任务声明相同大小，COS 对象超过 50MB 一个字节也不得确认入库。 */
+    /** 即使上传任务声明相同大小，COS 对象达到或超过 32MB 也不得确认入库。 */
     @Test
-    void completeUploadShouldRejectAnimationCosObjectOneByteOver50Mb() {
-        WorkUploadTaskEntity task = animationTask(99L, "story.gif", "image/gif");
-        task.setFileSize(50L * 1024L * 1024L + 1L);
-        when(workUploadTaskEntityMapper.selectById(99L)).thenReturn(task);
-        when(cosService.headObject(task.getObjectKey()))
-                .thenReturn(new CosService.ObjectHead("image/gif", task.getFileSize()));
-        MineWorkUploadCompleteRequest request = new MineWorkUploadCompleteRequest();
-        request.setItems(List.of(completeItem(99L)));
+    void completeUploadShouldRejectAnimationCosObjectsAtOrAbove32Mb() {
+        for (long fileSize : List.of(32L * 1024L * 1024L, 32L * 1024L * 1024L + 1L)) {
+            WorkUploadTaskEntity task = animationTask(99L, "story.gif", "image/gif");
+            task.setFileSize(fileSize);
+            when(workUploadTaskEntityMapper.selectById(99L)).thenReturn(task);
+            when(cosService.headObject(task.getObjectKey()))
+                    .thenReturn(new CosService.ObjectHead("image/gif", task.getFileSize()));
+            MineWorkUploadCompleteRequest request = new MineWorkUploadCompleteRequest();
+            request.setItems(List.of(completeItem(99L)));
 
-        MineWorkUploadCompleteResponse response = service().completeUpload(request);
+            MineWorkUploadCompleteResponse response = service().completeUpload(request);
 
-        assertThat(response.getItems()).singleElement().satisfies(item -> {
-            assertThat(item.isSuccess()).isFalse();
-            assertThat(item.getMessage()).isEqualTo("上传文件超过限制");
-        });
+            assertThat(response.getItems()).singleElement().satisfies(item -> {
+                assertThat(item.isSuccess()).isFalse();
+                assertThat(item.getMessage()).isEqualTo("上传文件超过限制");
+            });
+        }
         verifyNoInteractions(animationCosService);
         verify(workUploadTransactionService, never()).confirmUploadedTask(anyLong(), any(), any());
     }
