@@ -13,7 +13,7 @@ function flush() { return new Promise((resolve) => setImmediate(resolve)) }
 function validTeamEditorConfig() {
   return {
     schemaVersion: 'standard-team-v1',
-    editorSchemaRevision: 4,
+    editorSchemaRevision: 10,
     share: { title: '测试团队作品集' },
     components: [{
       componentKey: 'valid-divider',
@@ -36,7 +36,7 @@ function loadPage(relativePath, requestFn, wxOverrides = {}) {
   const oldPage = global.Page
   const oldWx = global.wx
   let definition
-  require.cache[requestKey] = { id: REQUEST_PATH, filename: REQUEST_PATH, loaded: true, exports: { request: requestFn } }
+  require.cache[requestKey] = { id: REQUEST_PATH, filename: REQUEST_PATH, loaded: true, exports: { ...require(requestKey), request: requestFn } }
   delete require.cache[teamListUtilityKey]
   delete require.cache[teamUtilityKey]
   global.Page = (value) => { definition = value }
@@ -577,20 +577,20 @@ test('maintainer main loads and representative save operations redirect to login
     const removed = []
     const redirects = []
     const page = loadPage(relativePath, async () => { throw authRequiredError() }, { removeStorageSync(value) { removed.push(value) }, redirectTo(value) { redirects.push(value) } })
-    try { await run(page); assert.equal(removed.length, 1, relativePath); assert.equal(redirects[0].url, '/pages/login/login', relativePath) } finally { page.cleanup() }
+    try { await run(page); assert.equal(removed.filter(key => key === 'wefolio_token').length, 1, relativePath); assert.equal(removed.filter(key => key === 'wefolio_visit_activity_v1').length, 0, relativePath); assert.equal(redirects[0].url, '/pages/login/login', relativePath) } finally { page.cleanup() }
   }
 
   const saveRemoved = []
   const saveRedirects = []
   const editor = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => { throw authRequiredError() }, { removeStorageSync(value) { saveRemoved.push(value) }, redirectTo(value) { saveRedirects.push(value) } })
   editor.setData({ portfolioId: 7, canMaintain: true, draftRevision: 1, config: { share: { title: '测试团队作品集' }, components: [] }, componentValidation: {} })
-  try { await editor.saveDraft(); assert.equal(saveRemoved.length, 1); assert.equal(saveRedirects[0].url, '/pages/login/login') } finally { editor.cleanup() }
+  try { await editor.saveDraft(); assert.equal(saveRemoved.filter(key => key === 'wefolio_token').length, 1); assert.equal(saveRedirects[0].url, '/pages/login/login') } finally { editor.cleanup() }
 
   const followRemoved = []
   const followRedirects = []
   const leads = loadPage('contact-leads/team-contact-leads.js', async () => { throw authRequiredError() }, { removeStorageSync(value) { followRemoved.push(value) }, redirectTo(value) { followRedirects.push(value) } })
   leads.setData({ teamId: 7, canUpdateFollow: true, followEditor: { leadId: 1, followStatus: 'CONTACTED', followNote: '已联系' }, items: [{ leadId: 1 }] })
-  try { await leads.handleFollowSave(); assert.equal(followRemoved.length, 1); assert.equal(followRedirects[0].url, '/pages/login/login') } finally { leads.cleanup() }
+  try { await leads.handleFollowSave(); assert.equal(followRemoved.filter(key => key === 'wefolio_token').length, 1); assert.equal(followRemoved.filter(key => key === 'wefolio_visit_activity_v1').length, 0); assert.equal(followRedirects[0].url, '/pages/login/login') } finally { leads.cleanup() }
 })
 
 test('contact leads WXML renders team and portfolio sources without masking', () => {

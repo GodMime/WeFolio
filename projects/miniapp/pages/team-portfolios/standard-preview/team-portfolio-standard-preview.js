@@ -1,3 +1,6 @@
+const { openWorkDetail } = require('../utils/portfolio-work-detail')
+const { openVideoPlayer } = require('../utils/portfolio-video-player')
+const VIDEO_PLAYER_ROUTE = '/pages/team-portfolios/video-player/video-player'
 const { portfolioAudioPageMethods } = require('../utils/portfolio-audio-player')
 const { request } = require('../../../utils/request.js')
 const {
@@ -24,7 +27,7 @@ const TYPE_BUCKETS = Object.freeze({
   MEMBER_PORTFOLIO_GRID: 'grid',
   MEMBER_PORTFOLIO_LIST: 'list',
   TEXT_SECTION: 'text',
-  STRUCTURED_TEXT_SECTION: 'structuredText',
+  STRUCTURED_TEXT_SECTION: 'structuredText', TEXT_GRID: 'textGrid', CONTACT_INFO: 'contactInfo',
   SCHEDULE_QUERY: 'schedule',
   CONTACT_FORM: 'contact',
   QR_CONTACT: 'qr'
@@ -37,7 +40,7 @@ const PREVIEW_QUERY_UNSUPPORTED_MESSAGE = '预览模式不提交档期查询'
 function buckets(items) {
   const value = {
     teamProfile: [], carousel: [], videoCarousel: [], singleWork: [], divider: [], grid: [],
-    list: [], text: [], structuredText: [], schedule: [], contact: [], qr: []
+    list: [], text: [], structuredText: [], textGrid: [], contactInfo: [], schedule: [], contact: [], qr: []
   }
   ;(Array.isArray(items) ? items : []).forEach((item) => {
     const key = TYPE_BUCKETS[item.componentType]
@@ -67,8 +70,6 @@ Page({
     teamPortfolioMenuTransitionClass: '',
     activeSingleWorkVideoKey: '',
     videoPreviewVisible: false,
-    videoPreviewUrl: '',
-    videoPreview: null,
     scheduleResults: {},
     contactForms: {},
     contactModalVisible: {}
@@ -157,6 +158,15 @@ Page({
       })
     }
   },
+  handleWorkDetail(event) {
+    return openWorkDetail(this, {
+      componentKey: event.detail && event.detail.componentKey,
+      components: this.data.portfolio.activeComponents || [],
+      theme: { backgroundColor: this.data.portfolio.style && this.data.portfolio.style.backgroundColor, themeMode: this.data.portfolio.themeMode },
+      preview: true,
+      route: '/pages/team-portfolios/work-detail/team-portfolio-work-detail'
+    })
+  },
   handleSingleWorkPreview(event) {
     const work = event.detail && event.detail.work
     if (work && work.mediaUrl) {
@@ -189,32 +199,37 @@ Page({
     this.setData({ activeSingleWorkVideoKey: '' })
   },
   clearVideoPreview() {
-    if (wx.createVideoContext && this.data.videoPreviewUrl) {
-      const context = wx.createVideoContext('teamPortfolioWorkVideo', this)
-      if (context && context.stop) context.stop()
-    }
-    this.setData({ videoPreviewVisible: false, videoPreviewUrl: '', videoPreview: null })
+    // 返回作品集或打开失败时，解除文字组件的背景视频暂停。
+    if (this.data.videoPreviewVisible) this.setData({ videoPreviewVisible: false })
   },
+
   openVideoPreview(work = {}) {
+    if (this.videoPlayerDisposed || this.data.videoPreviewVisible) return false
     this.pauseBackgroundAudio()
     const mediaUrl = String(work.mediaUrl || '')
-    if (!mediaUrl) { wx.showToast({ title: '视频地址缺失', icon: 'none' }); return false }
+    if (!mediaUrl) {
+      wx.showToast({ title: '视频地址缺失', icon: 'none' })
+      return false
+    }
     this.stopSingleWorkVideos()
-    if (this.data.videoPreviewVisible || this.data.videoPreviewUrl) this.clearVideoPreview()
-    this.setData({ videoPreviewVisible: true, videoPreviewUrl: mediaUrl, videoPreview: { title: work.title || '视频作品', poster: work.coverUrl || '' } })
-    return true
+    this.setData({ videoPreviewVisible: true })
+    return openVideoPlayer({ url: mediaUrl, poster: work.coverUrl || '', title: work.title || '',
+      route: VIDEO_PLAYER_ROUTE, browserContext: this.browserContext || null }, wx)
+      .then((opened) => {
+        // 导航成功后来源页保持暂停，失败或返回作品集时才恢复背景视频。
+        if (!opened && !this.videoPlayerDisposed) this.clearVideoPreview()
+        return opened
+      })
   },
+
   handleVideoCarouselPlay(event) { return this.openVideoPreview(event && event.detail && event.detail.work) },
-  handleCloseVideoPreview() { this.clearVideoPreview() },
-  handleVideoPreviewPanelTap() {},
-  handleVideoPreviewError() { this.clearVideoPreview(); wx.showToast({ title: '视频播放失败，请重试', icon: 'none' }) },
-  onShow() { this.showBackgroundAudio() },
+  onShow() { this.clearVideoPreview(); this.showBackgroundAudio() },
   onHide() {
-    this.hideBackgroundAudio(); this.stopSingleWorkVideos(); this.clearVideoPreview() },
+    this.hideBackgroundAudio(); this.stopSingleWorkVideos() },
   onUnload() {
+    this.videoPlayerDisposed = true
     this.destroyBackgroundAudio()
     this.stopSingleWorkVideos()
-    this.clearVideoPreview()
     clearTeamPortfolioMenuTransitionTimers(this)
   },
   handleQrPreview() {},

@@ -1,0 +1,8 @@
+<template name="copy"><view wx:for="{{cell.blocks}}" wx:for-item="block" wx:key="blockKey" class="text-grid-block" style="{{block.style}}"><text class="text-grid-line" style="{{block.lineStyle}}" space="nbsp"><text wx:for="{{block.runs}}" wx:for-item="run" wx:key="runKey" class="{{run.fontClass}}" style="{{run.style}}" space="nbsp">{{run.text}}</text></text></view></template>
+<view class="text-grid-spacing" style="{{spacingStyle}}"><view class="text-grid-root">
+  <view class="text-grid-canvas {{natural ? 'text-grid-natural' : ''}}" style="{{natural ? '' : 'height:' + height + 'px;'}}">
+    <view wx:for="{{cells}}" wx:key="cellKey" class="text-grid-cell" style="{{item.style}}"><template is="copy" data="{{cell:item}}" /></view>
+  </view>
+  <view class="text-grid-measure" aria-hidden="true"><view wx:for="{{measuringCells}}" wx:key="cellKey" class="text-grid-measure-content" style="width:{{item.contentWidth}}px"><template is="copy" data="{{cell:item}}" /></view></view>
+  <view wx:if="{{error && !cells.length}}" class="text-grid-error">{{error}}</view>
+</view></view>

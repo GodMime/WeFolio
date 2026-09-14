@@ -7,7 +7,8 @@
 .video-carousel-cover { display: block; }
 .video-carousel-placeholder { display: flex; align-items: center; justify-content: center; color: #868e96; font-size: 24rpx; font-weight: 700; background: #e9ecef; }
 .video-carousel-shade { background: linear-gradient(180deg, rgba(0, 0, 0, 0) 42%, rgba(0, 0, 0, .46) 100%); }
-.video-carousel-work-title { position: absolute; left: 32rpx; right: 32rpx; bottom: 28rpx; z-index: 2; overflow: hidden; color: #fff; font-size: 26rpx; font-weight: 800; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+/* 有文案时托住上方文字，底部仅承载观看入口，避免与播放按钮重叠。 */
+.video-carousel-shade.has-caption { background: linear-gradient(180deg, rgba(0, 0, 0, .64) 0%, rgba(0, 0, 0, .54) 50%, rgba(0, 0, 0, .2) 76%, rgba(0, 0, 0, .72) 100%); }
 .video-carousel-play { position: absolute; left: 50%; top: 50%; z-index: 3; width: 92rpx; height: 92rpx; display: flex; align-items: center; justify-content: center; border: 3rpx solid rgba(255, 255, 255, .9); border-radius: 50%; background: rgba(0, 0, 0, .2); opacity: 0; transform: translate(-50%, -50%); }
 .video-carousel-card.is-center .video-carousel-play { opacity: 1; }
 .video-carousel-play-mark { width: 0; height: 0; margin-left: 8rpx; border-top: 16rpx solid transparent; border-bottom: 16rpx solid transparent; border-left: 26rpx solid #fff; }
@@ -17,3 +18,26 @@
 .theme-dark .video-carousel-card { background: #2b2f36; box-shadow: 0 24rpx 60rpx rgba(0, 0, 0, .55); }
 .theme-dark .video-carousel-placeholder { color: #adb5bd; background: #2b2f36; }
 .theme-dark .video-carousel-hint, .theme-dark .video-carousel-empty { color: #c1c7ce; }
+
+.video-carousel-portrait-track { width:calc(100% - 48rpx); margin:0 24rpx; }
+.video-carousel-portrait-card { position:relative; height:100%; margin-right:12rpx; border-radius:24rpx; overflow:hidden; background:#495057; }
+.video-carousel-frame { position:absolute; inset:0; z-index:4; border:1rpx solid rgba(255, 255, 255, .24); border-radius:24rpx; pointer-events:none; }
+.video-carousel-caption { position:absolute; left:32rpx; right:32rpx; top:28rpx; color:#fff; z-index:3; pointer-events:none; }
+.video-carousel-caption-rule { width:40rpx; height:2rpx; margin-bottom:20rpx; background:rgba(255, 255, 255, .56); }
+.video-carousel-caption-title { overflow-wrap:anywhere; font-size:32rpx; font-weight:600; line-height:44rpx; letter-spacing:1.4rpx; max-height:88rpx; overflow:hidden; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
+.video-carousel-caption-description { overflow-wrap:anywhere; font-size:24rpx; font-weight:400; line-height:36rpx; letter-spacing:.6rpx; color:rgba(255, 255, 255, .84); max-height:108rpx; white-space:pre-wrap; overflow:hidden; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:3; }
+.video-carousel-caption-description.with-title { margin-top:14rpx; }
+.video-carousel-entry { position:absolute; left:32rpx; right:32rpx; bottom:24rpx; z-index:3; display:flex; align-items:center; padding-top:18rpx; border-top:1rpx solid rgba(255, 255, 255, .32); color:rgba(255, 255, 255, .9); font-size:22rpx; line-height:32rpx; letter-spacing:2rpx; pointer-events:none; }
+.video-carousel-entry-arrow { margin-left:20rpx; font-size:28rpx; line-height:32rpx; }
+/* 竖卡为标题和简介留出更舒展的版心，横向叠卡保留紧凑尺寸。 */
+.video-carousel-portrait-card .video-carousel-caption { top:40rpx; left:36rpx; right:36rpx; }
+.video-carousel-portrait-card .video-carousel-caption-rule { width:44rpx; margin-bottom:28rpx; }
+.video-carousel-portrait-card .video-carousel-caption-title { font-size:40rpx; line-height:54rpx; max-height:108rpx; letter-spacing:2rpx; }
+.video-carousel-portrait-card .video-carousel-caption-description { font-size:26rpx; line-height:44rpx; max-height:132rpx; }
+.video-carousel-portrait-card .video-carousel-caption-description.with-title { margin-top:20rpx; }
+.video-carousel-portrait-card .video-carousel-entry { left:36rpx; right:36rpx; bottom:32rpx; padding-top:24rpx; font-size:24rpx; line-height:36rpx; }
+.video-carousel-indicators { display:flex; justify-content:center; gap:10rpx; margin-top:20rpx; }
+.video-carousel-dot { width:8rpx; height:8rpx; border-radius:8rpx; background:#ced4da; }.video-carousel-dot.active { width:24rpx; background:#212529; }
+.theme-dark .video-carousel-dot.active { background:#fff; }
+
+.video-carousel-portrait-card .video-carousel-play { opacity:1; }

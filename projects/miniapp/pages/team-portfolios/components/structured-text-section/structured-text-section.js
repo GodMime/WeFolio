@@ -4,24 +4,30 @@ const {
   buildTextBackgroundFrameStyle,
   handleTextBackgroundLoad
 } = require('../../utils/portfolio-text-sections')
+const { textBackgroundVideo } = require('../../utils/portfolio-text-background-video')
 
 Component({
+  lifetimes: textBackgroundVideo.lifetimes,
+  pageLifetimes: textBackgroundVideo.pageLifetimes,
   properties: {
+    ...textBackgroundVideo.properties,
     config: { type: Object, value: {} },
     themeMode: { type: String, value: 'light' },
     repairMode: { type: Boolean, value: false }
   },
   data: {
+    ...textBackgroundVideo.data,
     blocks: [],
     background: { enabled: false, imageUrl: '', invalid: false },
     frameStyle: '',
     imageFailed: false,
     showRepairHint: false
   },
-  observers: {
+  observers: { ...textBackgroundVideo.observers,
     'config, themeMode, repairMode'() { this.updatePresentation() }
   },
   methods: {
+    ...textBackgroundVideo.methods,
     updatePresentation() {
       const config = this.properties.config || {}
       const background = buildTextBackgroundPresentation(config)
@@ -38,7 +44,7 @@ Component({
         frameStyle: buildTextBackgroundFrameStyle(background, this._textBackgroundLayout),
         imageFailed: Boolean(imageFailed),
         showRepairHint: this.properties.repairMode && background.enabled && (background.invalid || imageFailed)
-      })
+      }, () => this.syncBackgroundVideo())
     },
     handleBackgroundLoad(event) { handleTextBackgroundLoad(this, event) },
     handleBackgroundError() {

@@ -1,7 +1,18 @@
 @import "../../../../styles/portfolio-text-typography.wxss";
-@import "../text-section/text-background.wxss";
+/* 背景规则随组件编译，避免独立样式依赖在增量编译时漏载。 */
+.text-background-enabled { background: #212529; }
+.text-background-image, .text-background-video, .text-background-poster, .text-background-mask { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+.text-background-mask { pointer-events: none; }
+.text-background--original { background: transparent; }
+.text-background--dark-mask { background: rgba(0, 0, 0, 0.4); }
+.text-background--gradient { background: linear-gradient(180deg, rgba(0, 0, 0, 0.12) 0%, rgba(0, 0, 0, 0.4) 50%, rgba(0, 0, 0, 0.88) 100%); }
+.text-background-warning { position: relative; color: #F8F9FA; background: rgba(0, 0, 0, 0.4); padding: 16rpx; font-size: 24rpx; }
 .structured-text-section { position: relative; box-sizing: border-box; display: flex; flex-direction: column; }
 .structured-text-content { position: relative; z-index: 1; display: flex; flex-direction: column; padding: 32rpx; box-sizing: border-box; }
 .structured-block { flex-shrink: 0; line-height: 1.65; min-width: 0; }
 .structured-copy, .structured-list-item { display: block; white-space: pre-wrap; overflow-wrap: break-word; word-break: break-word; }
 .structured-spacer { line-height: 0; font-size: 0; }
+
+/* 视频只承载背景，滚动和点击交给文字与页面。 */
+.text-background-video, .text-background-poster { z-index: 0; pointer-events: none; }
+.text-background-mask { pointer-events: none; }

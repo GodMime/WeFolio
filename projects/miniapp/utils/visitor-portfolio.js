@@ -4,7 +4,12 @@ const {
 } = require('./lunar')
 const { normalizeTextColor } = require('./portfolio-text-color')
 const {
-  DIVIDER_COLOR_VALUES
+  normalizeDividerColor,
+  normalizeProfileLayout,
+  normalizeProfileBorderConfig,
+  normalizeContactInfoConfig,
+  normalizeComponentSpacingRpx,
+  resolveDividerColorValue
 } = require('./portfolios')
 const {
   normalizeHexColor,
@@ -36,7 +41,7 @@ const DEFAULT_VIDEO_RATIO_HEIGHT = 9
 const RENDER_COMPONENT_TYPES = Object.freeze([
   'CAROUSEL', 'VIDEO_CAROUSEL', 'PROFILE', 'WORK_GRID', 'WORK_LIST',
   'SINGLE_WORK', 'SCHEDULE_QUERY', 'QR_CONTACT', 'CONTACT_FORM',
-  'TEXT_SECTION', 'STRUCTURED_TEXT_SECTION', 'DIVIDER', 'HYPERLINK'
+  'TEXT_SECTION', 'STRUCTURED_TEXT_SECTION', 'TEXT_GRID', 'CONTACT_INFO', 'DIVIDER', 'HYPERLINK'
 ])
 const SINGLE_WORK_MEDIA_WIDTH_RPX = 710
 const DEFAULT_SCHEDULE_DISPLAY_MODE = 'MODAL_CALENDAR'
@@ -50,16 +55,13 @@ const TEXT_SECTION_ALIGNMENT_CLASS_MAP = {
   CENTER: 'align-center',
   RIGHT: 'align-right'
 }
-const DEFAULT_DIVIDER_COLOR = 'GRAY'
 const DEFAULT_DIVIDER_HEIGHT_PX = 16
-const VALID_DIVIDER_COLORS = ['BLACK', 'WHITE', 'GRAY', 'TRANSPARENT']
 const VALID_HYPERLINK_ICON_POSITIONS = [
   'OVERLAY',
   'OVERLAY_BOTTOM_CENTER',
   'OVERLAY_CENTER',
   'BELOW'
 ]
-const DIVIDER_COLOR_VALUE_MAP = DIVIDER_COLOR_VALUES
 const SCHEDULE_DAY_META_FIELDS = ['holidayText', 'festivalText', 'noteText', 'lunarText', 'metaText']
 
 function trimText(value) {
@@ -193,6 +195,8 @@ function normalizeProfile(raw = {}) {
   const tags = Array.isArray(raw.tags) ? raw.tags : []
   const visibleFields = normalizeProfileVisibleFields(raw.visibleFields)
   return {
+    ...normalizeProfileBorderConfig(raw),
+    profileLayout: normalizeProfileLayout(raw.profileLayout),
     avatarUrl: visibleFields.avatar ? trimText(raw.avatarUrl) : '',
     displayName: visibleFields.displayName ? trimText(raw.displayName) : '',
     profession: visibleFields.profession ? trimText(raw.profession) : '',
@@ -251,10 +255,9 @@ function normalizeTextSection(raw = {}) {
 }
 
 function normalizeDivider(raw = {}) {
-  const color = trimText(raw.color)
-  const normalizedColor = VALID_DIVIDER_COLORS.includes(color) ? color : DEFAULT_DIVIDER_COLOR
+  const normalizedColor = normalizeDividerColor(raw.color)
   const heightPx = toPositiveNumber(raw.heightPx, DEFAULT_DIVIDER_HEIGHT_PX)
-  const colorValue = DIVIDER_COLOR_VALUE_MAP[normalizedColor]
+  const colorValue = resolveDividerColorValue(normalizedColor)
   return Object.assign({}, raw || {}, {
     color: normalizedColor,
     heightPx,
@@ -293,7 +296,9 @@ function normalizeRenderComponent(raw = {}) {
   const qrContact = normalizeQrContact(raw.qrContact || {})
   const config = raw.config || {}
   const profileSource = raw.profile || Object.assign({}, config.profile || {}, {
-    visibleFields: config.visibleFields || {}
+    ...normalizeProfileBorderConfig(config),
+    visibleFields: config.visibleFields || {},
+    profileLayout: config.profileLayout
   })
   const component = {
     componentKey: trimText(raw.componentKey),
@@ -303,8 +308,17 @@ function normalizeRenderComponent(raw = {}) {
     title: trimText(raw.title),
     config: Object.assign({}, config),
     carouselIntervalMs: normalizeCarouselIntervalMs(raw, config),
+    displayStyle: (raw.displayStyle || config.displayStyle) === 'PORTRAIT_CARDS' ? 'PORTRAIT_CARDS' : 'STACKED',
+    openMode: (raw.openMode || config.openMode) === 'DETAIL_PAGE' ? 'DETAIL_PAGE' : 'INLINE',
+    detailOptions: {
+      showTitle: (raw.detailOptions || config.detailOptions || {}).showTitle !== false,
+      showDescription: (raw.detailOptions || config.detailOptions || {}).showDescription !== false
+    },
     works: Array.isArray(raw.works) ? raw.works.map(normalizeRenderWork) : [],
     work: raw.work ? normalizeSingleRenderWork(raw.work) : null,
+    showComponentTitle: typeof raw.showComponentTitle === 'boolean'
+      ? raw.showComponentTitle
+      : config.showComponentTitle !== false,
     showTitle: typeof raw.showTitle === 'boolean'
       ? raw.showTitle
       : typeof config.showTitle === 'boolean' ? config.showTitle : true,
@@ -330,6 +344,8 @@ function normalizeRenderComponent(raw = {}) {
     contactForm: normalizeContactForm(raw.contactForm || config),
     textSection: normalizeTextSection(raw.textSection || config),
     structuredTextSection: JSON.parse(JSON.stringify(raw.structuredTextSection || config)),
+    textGrid: JSON.parse(JSON.stringify(raw.textGrid || config)),
+    contactInfo: normalizeContactInfoConfig(raw.contactInfo || config),
     divider: normalizeDivider(raw.divider || config),
     hyperlink: normalizeHyperlink(raw.hyperlink || config)
   }
@@ -409,7 +425,8 @@ function normalizePortfolioRender(raw = {}) {
     visitRecordId: raw.visitRecordId || null,
     style: {
       backgroundColor,
-      themeMode
+      themeMode,
+      componentSpacingRpx: normalizeComponentSpacingRpx(raw.style && raw.style.componentSpacingRpx)
     },
     themeMode,
     components,
@@ -430,7 +447,11 @@ function normalizeComponents(components = []) {
           name: item.name,
           title: item.config && item.config.title,
           config: item.config || {},
+          showComponentTitle: item.config && item.config.showComponentTitle,
           showTitle: item.config && item.config.showTitle,
+          displayStyle: item.config && item.config.displayStyle,
+          openMode: item.config && item.config.openMode,
+          detailOptions: item.config && item.config.detailOptions,
           showSwipeHint: item.config && item.config.showSwipeHint,
           showDescription: item.config && item.config.showDescription,
           works: item.config && Array.isArray(item.config.works) ? item.config.works : [],
@@ -484,7 +505,11 @@ function normalizeVisitorPortfolio(raw = {}) {
     },
     visitRecordId: raw.visitRecordId || null,
     config,
-    style: { backgroundColor, themeMode },
+    style: {
+      backgroundColor,
+      themeMode,
+      componentSpacingRpx: normalizeComponentSpacingRpx(config.style && config.style.componentSpacingRpx)
+    },
     themeMode,
     components,
     bottomNav,

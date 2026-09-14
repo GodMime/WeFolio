@@ -13,7 +13,7 @@ const DEFAULT_BACKGROUND_COLOR = '#FFFFFF'
 const SINGLE_WORK_VIEW_MEDIA_TYPES = Object.freeze(['IMAGE', 'ANIMATION'])
 const RENDER_COMPONENT_TYPES = Object.freeze([
   'TEAM_PROFILE', 'CAROUSEL', 'VIDEO_CAROUSEL', 'SINGLE_WORK', 'DIVIDER',
-  'MEMBER_PORTFOLIO_GRID', 'MEMBER_PORTFOLIO_LIST', 'TEXT_SECTION', 'STRUCTURED_TEXT_SECTION',
+  'MEMBER_PORTFOLIO_GRID', 'MEMBER_PORTFOLIO_LIST', 'TEXT_SECTION', 'STRUCTURED_TEXT_SECTION', 'TEXT_GRID', 'CONTACT_INFO',
   'SCHEDULE_QUERY', 'CONTACT_FORM', 'QR_CONTACT'
 ])
 
@@ -39,7 +39,15 @@ function normalizeRenderComponent(item = {}, index = 0) {
           LEGACY_TEAM_FONT_SIZE_RPX
         )
       )
-    : sourceData
+    : ['VIDEO_CAROUSEL', 'SINGLE_WORK'].includes(componentType) ? Object.assign({}, sourceData, componentType === 'VIDEO_CAROUSEL' ? {
+        showComponentTitle: sourceData.showComponentTitle !== false,
+        displayStyle: sourceData.displayStyle === 'PORTRAIT_CARDS' ? 'PORTRAIT_CARDS' : 'STACKED',
+        showDescription: sourceData.showDescription === true
+      } : componentType === 'SINGLE_WORK' ? {
+        openMode: sourceData.openMode === 'DETAIL_PAGE' ? 'DETAIL_PAGE' : 'INLINE',
+        detailOptions: { showTitle: !sourceData.detailOptions || sourceData.detailOptions.showTitle !== false,
+          showDescription: !sourceData.detailOptions || sourceData.detailOptions.showDescription !== false }
+      } : {}) : sourceData
   return {
     componentKey: text(item.componentKey),
     componentType,

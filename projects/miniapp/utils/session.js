@@ -17,6 +17,7 @@ function getToken(wxApi) {
 
 function setToken(token, wxApi) {
   const runtimeWx = getRuntimeWx(wxApi)
+  // 维护者令牌不代表访客身份，登录或刷新不能清理独立的访客停留补报。
   runtimeWx.setStorageSync(TOKEN_STORAGE_KEY, token || '')
 }
 

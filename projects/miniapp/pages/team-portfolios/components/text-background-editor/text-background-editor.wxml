@@ -5,13 +5,15 @@
     <view wx:if="{{config.backgroundLoadError}}" class="background-error" bindtap="handleRetrySelection">{{config.backgroundLoadError}} · 重试已选背景</view>
     <view wx:if="{{config.backgroundInvalid}}" class="background-error">背景作品已失效，请重新选择或关闭背景<text bindtap="handleRetrySelection"> · 重试已选背景</text></view>
     <view class="background-selection" bindtap="handleOpenPicker" aria-role="button" aria-label="{{pickerOpen ? '收起作品列表' : '选择背景作品'}}" aria-expanded="{{pickerOpen}}">
-      <image wx:if="{{config.backgroundWork.url}}" class="background-thumbnail" src="{{config.backgroundWork.url}}" mode="aspectFill" webp="{{true}}" />
-      <view>{{pickerOpen ? '收起作品列表' : (config.backgroundWorkId ? '已选作品 #' + config.backgroundWorkId + ' · 点击更换' : '选择图片或动图作品')}}</view>
+      <image wx:if="{{selectedWorkPreview.thumbnailUrl}}" class="background-thumbnail" src="{{selectedWorkPreview.thumbnailUrl}}" mode="aspectFill" webp="{{true}}" />
+      <view wx:elif="{{selectedWorkPreview.isVideo}}" class="background-thumbnail background-thumbnail-placeholder">视频</view>
+      <view>{{pickerOpen ? '收起作品列表' : (config.backgroundWorkId ? '已选作品 #' + config.backgroundWorkId + ' · 点击更换' : '选择图片、动图或视频作品')}}</view>
     </view>
+    <view class="background-muted">视频背景自动静音循环播放</view>
     <view wx:if="{{pickerOpen}}" class="background-picker">
       <view class="background-label">作品所属成员</view>
       <view class="background-choices"><view wx:for="{{members}}" wx:key="memberUserId" class="background-choice {{memberUserId === item.memberUserId ? 'selected' : ''}}" data-id="{{item.memberUserId}}" bindtap="handleMember">{{item.displayName || '团队成员'}}</view></view>
-      <view wx:if="{{membersLoading}}" class="background-muted">正在加载可用成员…</view>
+      <view wx:if="{{membersLoading}}" class="background-list-status" aria-live="polite"><view class="background-loading-spinner" aria-hidden="true"></view><text>正在加载可用成员</text></view>
       <view wx:elif="{{!members.length && !error}}" class="background-muted">暂无已加入且授权使用作品的成员</view>
       <view class="background-search">
         <input class="background-search-input" value="{{keyword}}" placeholder="搜索作品名称" placeholder-class="background-search-placeholder" bindinput="handleKeyword" bindconfirm="handleSearch" />
@@ -19,14 +21,19 @@
         <button class="background-search-button" bindtap="handleClosePicker">收起</button>
       </view>
       <view wx:if="{{selectionError}}" class="background-error">{{selectionError}}</view>
-      <view wx:for="{{options}}" wx:key="id" class="background-work {{config.backgroundWorkId === item.id ? 'selected' : ''}}" data-id="{{item.id}}" bindtap="handleSelect">
-        <image class="background-thumbnail" src="{{item.url}}" mode="aspectFill" webp="{{true}}" />
-        <view class="background-work-copy"><text>{{item.title || '未命名作品'}}</text><text class="background-muted">{{item.mediaType === 'ANIMATION' ? '动图' : '图片'}} {{config.backgroundWorkId === item.id ? '· 已选' : ''}}</text></view>
+      <view wx:for="{{displayOptions}}" wx:key="id" class="background-work {{config.backgroundWorkId === item.id ? 'selected' : ''}}" data-id="{{item.id}}" bindtap="handleSelect">
+        <image wx:if="{{item.thumbnailUrl}}" class="background-thumbnail" src="{{item.thumbnailUrl}}" mode="aspectFill" webp="{{true}}" />
+        <view wx:else class="background-thumbnail background-thumbnail-placeholder">{{item.mediaTypeText}}</view>
+        <view class="background-work-copy"><text>{{item.title || '未命名作品'}}</text><text class="background-muted">{{item.mediaTypeText}} {{config.backgroundWorkId === item.id ? '· 已选' : ''}}</text></view>
       </view>
-      <view wx:if="{{loading}}" class="background-muted">正在加载作品…</view>
-      <view wx:elif="{{error}}" class="background-error" bindtap="handleSearch">{{error}} · 点击重试</view>
-      <view wx:elif="{{members.length && !options.length}}" class="background-muted">{{keyword ? '没有符合条件的图片或动图' : '暂无可用图片或动图作品'}}</view>
-      <button wx:if="{{hasMore && !loading}}" bindtap="handleMore">加载更多</button>
+      <view wx:if="{{loading && !membersLoading}}" class="background-list-status" aria-live="polite">
+        <view class="background-loading-spinner" aria-hidden="true"></view>
+        <text>{{options.length ? '正在加载更多作品' : '正在加载作品'}}</text>
+      </view>
+      <view wx:elif="{{error}}" class="background-list-status background-list-retry" bindtap="handleRetry" aria-role="button" aria-label="{{error}}，点击重试">{{error}} · 点击重试</view>
+      <view wx:elif="{{!loading && members.length && !options.length}}" class="background-list-status">{{keyword ? '没有符合条件的图片、动图或视频' : '暂无可用图片、动图或视频作品'}}</view>
+      <view wx:elif="{{!loading && hasMore}}" class="background-list-status" bindtap="handleMore" aria-role="button" aria-label="加载更多作品">上滑加载更多</view>
+      <view wx:elif="{{!loading && options.length}}" class="background-list-status">已显示全部作品</view>
     </view>
     <block wx:if="{{!pickerOpen}}">
       <view class="background-label">背景处理</view>

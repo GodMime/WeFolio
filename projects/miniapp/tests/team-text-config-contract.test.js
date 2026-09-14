@@ -16,7 +16,7 @@ test('团队组件库请求声明支持结构化文字的编辑版本', async ()
   const calls = []
   await fetchTeamComponentLibrary(async request => { calls.push(request); return [] })
   assert.equal(calls.length, 1)
-  assert.equal(calls[0].data.editorSchemaRevision, 4)
+  assert.equal(calls[0].data.editorSchemaRevision, 10)
 })
 
 test('团队发布前拒绝空结构化组件、非法区块和缺失背景成员', () => {

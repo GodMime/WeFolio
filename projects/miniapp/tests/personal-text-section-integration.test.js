@@ -154,7 +154,7 @@ test('文字 renderer 保留动画 URL、深色兜底和 AUTO，错误仅影响�
   assert.equal(config.backgroundWorkId, 7)
 })
 
-test('背景请求分页跨过视频页、搜索使用审核通过且忽略关闭和新会话响应', async () => {
+test('背景请求分页跨过音频页、搜索使用审核通过且忽略关闭和新会话响应', async () => {
   const pending = []
   const page = harness('standard-edit/portfolio-standard-edit', false, params => new Promise((resolve, reject) => pending.push({ params, resolve, reject })))
   page.openStructuredTextSheet()
@@ -168,7 +168,7 @@ test('背景请求分页跨过视频页、搜索使用审核通过且忽略关�
   assert.equal(page.data.textBackgroundLoading, true)
   assert.equal(pending[1].params.data.keyword, '新搜索')
   assert.equal(pending[1].params.data.auditStatus, 'PASSED')
-  pending[1].resolve({ works: [{ id: 2, mediaType: 'VIDEO', mediaUrl: 'video' }], page: 1, hasMore: true })
+  pending[1].resolve({ works: [{ id: 2, mediaType: 'AUDIO', mediaUrl: 'audio' }], page: 1, hasMore: true })
   await new Promise(resolve => setImmediate(resolve))
   assert.equal(pending[2].params.data.page, 2)
   pending[2].resolve({ works: [{ id: 3, mediaType: 'ANIMATION', mediaUrl: 'https://example.test/raw.gif', coverUrl: 'static.jpg' }], page: 2, hasMore: true })
@@ -191,7 +191,7 @@ test('更换背景同步替换资源与失效标识，关闭再开启仍回显�
   const picker = harness('components/text-background-editor/text-background-editor')
   const source = { backgroundEnabled: true, backgroundWorkId: 1, backgroundInvalid: true,
     backgroundWork: { workId: 1, mediaType: 'IMAGE', url: 'old' } }
-  picker.properties = { config: source, options: [{ id: 2, mediaType: 'ANIMATION', url: 'new.gif', width: 100, height: 200 }, { id: 3, mediaType: 'VIDEO', url: 'video' }] }
+  picker.properties = { config: source, options: [{ id: 2, mediaType: 'ANIMATION', url: 'new.gif', width: 100, height: 200 }, { id: 3, mediaType: 'AUDIO', url: 'audio' }] }
   picker.handleSelect(evt({ id: 3 }))
   assert.equal(picker.events.length, 0)
   picker.handleSelect(evt({ id: 2 }))
@@ -389,7 +389,8 @@ test('当前背景详情401执行维护者登录处理，取消后的401忽略�
       await expired
       assert.equal(redirects.length, count + 1)
     }
-    assert.equal(removed.length, 2)
+    assert.equal(removed.filter(key => key === 'wefolio_token').length, 2)
+    assert.equal(removed.filter(key => key === 'wefolio_visit_activity_v1').length, 0)
   } finally { global.wx = previousWx }
 })
 
@@ -675,5 +676,82 @@ test('取消新关键词第一页后关闭选择器，再次打开从第一页�
     assert.equal(context.current().backgroundTreatment, treatment)
     assert.equal(JSON.stringify(context.current().blocks), beforeBlocks)
     assert.equal(JSON.stringify(structured ? context.editor.data.blockDraft : context.current().content), beforeDetail)
+  }
+})
+
+test('个人背景候选保留视频所在页并传递封面，音频不进入背景列表', async () => {
+  const calls = []
+  const page = harness('standard-edit/portfolio-standard-edit', false, async params => {
+    calls.push(params)
+    if (params.data.page > 1) return { works: [], page: 2, hasMore: false }
+    return { works: [{ id: 7, mediaType: 'VIDEO', mediaUrl: 'video.mp4', coverUrl: 'poster.jpg' },
+      { id: 8, mediaType: 'AUDIO', mediaUrl: 'audio.mp3' }], page: 1, hasMore: true }
+  })
+  page.openStructuredTextSheet()
+  await page.handleTextBackgroundRequest({ detail: { keyword: '婚礼' } })
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].data.auditStatus, 'PASSED')
+  assert.equal(page.data.textBackgroundHasMore, true)
+  assert.deepEqual(page.data.textBackgroundOptions.map(work => work.id), [7])
+  assert.equal(page.data.textBackgroundOptions[0].url, 'video.mp4')
+  assert.equal(page.data.textBackgroundOptions[0].posterUrl, 'poster.jpg')
+})
+
+test('个人普通与结构化背景续页失败保留候选，重试继续请求失败页及当前关键词', async () => {
+  for (const structured of [false, true]) {
+    const pending = []
+    const page = harness('standard-edit/portfolio-standard-edit', false,
+      params => new Promise((resolve, reject) => pending.push({ params, resolve, reject })))
+    if (structured) page.openStructuredTextSheet()
+    else {
+      page.data.config = require('../utils/portfolios').addComponent(page.data.config, 'TEXT_SECTION')
+      page.openTextSectionSheet(page.data.config.components.at(-1).componentKey)
+    }
+    const initial = page.handleTextBackgroundRequest({ detail: { reset: true, keyword: '婚礼' } })
+    pending[0].resolve({ works: [{ id: 7, title: '婚礼影像', mediaType: 'IMAGE', mediaUrl: 'first.jpg' }], page: 1, hasMore: true })
+    await initial
+    const loaded = JSON.stringify(page.data.textBackgroundOptions)
+    const next = page.handleTextBackgroundRequest({ detail: { reset: false } })
+    pending[1].reject(new Error('网络暂时不可用'))
+    await next
+    assert.equal(JSON.stringify(page.data.textBackgroundOptions), loaded)
+    assert.equal(page.textBackgroundPage, 1)
+    assert.equal(page.data.textBackgroundHasMore, true)
+    assert.equal(page.data.textBackgroundLoading, false)
+    assert.ok(page.data.textBackgroundError)
+    const retry = page.handleTextBackgroundRequest({ detail: { reset: false } })
+    assert.equal(JSON.stringify(page.data.textBackgroundOptions), loaded)
+    assert.equal(page.data.textBackgroundError, '')
+    assert.deepEqual(pending.map(item => item.params.data.page), [1, 2, 2])
+    assert.ok(pending.every(item => item.params.data.keyword === '婚礼'))
+    pending[2].resolve({ works: [{ id: 8, title: '婚礼视频', mediaType: 'VIDEO', mediaUrl: 'next.mp4' }], page: 2, hasMore: false })
+    await retry
+    assert.deepEqual(page.data.textBackgroundOptions.map(work => work.id), [7, 8])
+    assert.equal(page.textBackgroundPage, 2)
+    assert.equal(page.data.textBackgroundHasMore, false)
+    assert.equal(page.data.textBackgroundLoading, false)
+  }
+})
+
+test('个人普通和结构化视频背景按作品 ID 恢复并仅保存身份，未通过审核的视频失效', async () => {
+  for (const structured of [false, true]) {
+    const context = createBackgroundRetryHarness(structured)
+    context.pending[0].resolve({ work: { id: 7, mediaType: 'VIDEO', mediaUrl: 'video.mp4', coverUrl: 'poster.jpg',
+      status: 'ACTIVE', auditStatus: 'PASSED', width: 1920, height: 1080 } })
+    await context.initial
+    assert.equal(context.current().backgroundInvalid, false)
+    assert.equal(context.current().backgroundWork.url, 'video.mp4')
+    assert.equal(context.current().backgroundWork.posterUrl, 'poster.jpg')
+    if (structured) context.page.handleConfirmStructuredText({ detail: context.current() })
+    else context.page.handleConfirmTextSectionConfig()
+    const saved = context.page.data.config.components.at(-1)
+    assert.equal(saved.config.backgroundWorkId, 7)
+    assert.equal(saved.config.backgroundWork, undefined)
+    const reopen = structured ? context.page.openStructuredTextSheet(saved.componentKey) : context.page.openTextSectionSheet(saved.componentKey)
+    context.pending[1].resolve({ work: { id: 7, mediaType: 'VIDEO', mediaUrl: 'video.mp4',
+      status: 'ACTIVE', auditStatus: 'PENDING' } })
+    await reopen
+    assert.equal(context.page.data.textBackgroundSelection.work, null)
+    assert.match(context.page.data.textBackgroundSelection.error, /已失效/)
   }
 })

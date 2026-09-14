@@ -1,9 +1,16 @@
 <view class="text-section theme-{{themeMode}} align-{{normalizedConfig.alignment}} {{background.enabled ? 'has-background' : ''}} {{background.treatmentClass}} {{verticalClass}}" style="{{frameStyle}}">
+  <video wx:if="{{background.videoUrl && !backgroundVideoFailed}}" id="textBackgroundVideo" class="text-background-video"
+    src="{{background.videoUrl}}" data-src="{{background.videoUrl}}" poster="{{background.posterUrl}}"
+    autoplay="{{backgroundVideoVisible}}" loop="{{true}}" muted="{{true}}" controls="{{false}}"
+    show-center-play-btn="{{false}}" show-play-btn="{{false}}" show-fullscreen-btn="{{false}}"
+    enable-progress-gesture="{{false}}" enable-play-gesture="{{false}}" object-fit="cover"
+    bindloadedmetadata="handleBackgroundLoad" bindplay="handleBackgroundVideoPlay" bindtimeupdate="handleBackgroundVideoTimeUpdate" binderror="handleBackgroundVideoError" aria-hidden="true" />
+  <image wx:if="{{background.videoUrl && background.posterUrl && (!backgroundVideoStarted || backgroundVideoFailed)}}" class="text-background-poster" src="{{background.posterUrl}}" mode="aspectFill" aria-hidden="true" />
   <image wx:if="{{background.imageUrl && !imageFailed}}" class="text-background-image" src="{{background.imageUrl}}" data-src="{{background.imageUrl}}" mode="aspectFill" webp="{{true}}" binderror="handleBackgroundError" bindload="handleBackgroundLoad" />
   <view wx:if="{{background.enabled}}" class="text-background-mask"></view>
   <text
     class="content {{normalizedConfig.fontClass}}"
-    style="{{normalizedConfig.fontSizeStyle}}{{textColorStyle}}"
+    style="{{normalizedConfig.fontSizeStyle}}{{textColorStyle}}{{lineHeightStyle}}"
   >{{normalizedConfig.content}}</text>
-  <text wx:if="{{showRepairHint}}" class="text-background-repair">背景作品不可用，请重新选择或关闭背景</text>
+  <text wx:if="{{showRepairHint || (repairMode && backgroundVideoFailed)}}" class="text-background-repair">背景作品不可用，请重新选择或关闭背景</text>
 </view>

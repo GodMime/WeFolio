@@ -3,6 +3,7 @@ const {
   VISITOR_TOKEN_STORAGE_KEY,
   request
 } = require('./request')
+const { visitActivityLifecycle } = require('./visit-activity-lifecycle')
 
 const VISITOR_PORTFOLIO_API_PREFIX = '/api/visitor/portfolios'
 const SOURCE_TYPE_WECHAT_SHARE_CARD = 'WECHAT_SHARE_CARD'
@@ -79,21 +80,33 @@ async function openVisitorSession(shareCode, options = {}) {
   if (!shareCode) {
     throw new Error('作品集分享码缺失')
   }
-  const runtimeWx = getRuntimeWx(options.wxApi)
-  const anonymousSessionId = String(options.anonymousSessionId || '').trim()
+  const context = options.browserContext || null
+  if (context && context.isInvalid()) throw Object.assign(new Error('访问上下文已失效'), { statusCode: 403 })
+  if (context && context.isDisposed && context.isDisposed()) throw Object.assign(new Error('访问上下文已关闭'), { contextDisposed: true })
+  const contextOptions = context ? context.openOptions() : {}
+  const resolved = Object.assign({}, options, contextOptions)
+  const runtimeWx = getRuntimeWx(resolved.wxApi)
+  const anonymousSessionId = String(resolved.anonymousSessionId || '').trim()
   const identityData = anonymousSessionId
     ? { anonymousSessionId }
     : { loginCode: await wxLogin(runtimeWx) }
-  const response = await request({
+  const response = await (resolved.requestFn || request)({
     url: `${VISITOR_PORTFOLIO_API_PREFIX}/${shareCode}/open`,
     method: 'POST',
     authMode: 'none',
     data: Object.assign({}, identityData, {
-      sourceType: options.sourceType || SOURCE_TYPE_WECHAT_SHARE_CARD,
-      idempotencyKey: createIdempotencyKey(options.idempotencyPrefix || 'open')
-    })
+      sourceType: resolved.sourceType || SOURCE_TYPE_WECHAT_SHARE_CARD,
+      idempotencyKey: resolved.idempotencyKey || createIdempotencyKey(resolved.idempotencyPrefix || 'open')
+    }, resolved.tracking ? { tracking: resolved.tracking } : {})
   })
-  saveVisitorToken(response, runtimeWx)
+  if (context) {
+    if (context.isDisposed && context.isDisposed()) throw Object.assign(new Error('访问上下文已关闭'), { contextDisposed: true })
+    if (context.isInvalid()) throw Object.assign(new Error('访问上下文已失效'), { statusCode: 403 })
+    context.acceptSession(response)
+    if (context.isInvalid()) throw Object.assign(new Error('访客身份已变化'), { statusCode: 403 })
+    context.sessionGeneration = (context.sessionGeneration || 0) + 1
+  }
+  if (resolved.persistToken !== false) saveVisitorToken(response, runtimeWx)
   return response
 }
 
@@ -102,8 +115,12 @@ function isVisitorAuthRequired(error, requestOptions = {}) {
 }
 
 async function requestWithVisitorSessionRefresh(requestOptions = {}, options = {}) {
+  const context = options.browserContext || visitActivityLifecycle.findContext('PERSONAL', options.shareCode)
+  const requestFn = options.requestFn || request
+  const beforeGeneration = context && context.sessionGeneration || 0
+  if (context && context.isInvalid()) throw Object.assign(new Error('访问上下文已失效'), { statusCode: 403 })
   try {
-    return await request(requestOptions)
+    return await requestFn(requestOptions)
   } catch (error) {
     if (!isVisitorAuthRequired(error, requestOptions)) {
       throw error
@@ -111,11 +128,33 @@ async function requestWithVisitorSessionRefresh(requestOptions = {}, options = {
     if (!options.shareCode) {
       throw error
     }
-    const response = await openVisitorSession(options.shareCode, options)
+    let response
+    if (context) {
+      if (context.isInvalid()) throw error
+      if ((context.sessionGeneration || 0) !== beforeGeneration) response = context.getSession()
+      else {
+        if (!context.refreshPromise) {
+          context.beginRecovery()
+          context.refreshPromise = openVisitorSession(options.shareCode, Object.assign({}, options, { browserContext: context }))
+            .then(async (session) => {
+              if (context.onRefresh) await context.onRefresh(session)
+              return session
+            }).catch((failure) => { context.recoveryFailed(failure); throw failure })
+            .finally(() => { context.refreshPromise = null })
+        }
+        response = await context.refreshPromise
+      }
+    } else response = await openVisitorSession(options.shareCode, options)
     if (options.onRefresh) {
-      options.onRefresh(response)
+      await options.onRefresh(response)
     }
-    return request(requestOptions)
+    const refreshedOptions = Object.assign({}, requestOptions)
+    if (requestOptions.data && response) {
+      refreshedOptions.data = Object.assign({}, requestOptions.data)
+      if (Object.prototype.hasOwnProperty.call(refreshedOptions.data, 'visitorKey')) refreshedOptions.data.visitorKey = response.visitorKey || ''
+      if (Object.prototype.hasOwnProperty.call(refreshedOptions.data, 'visitorProfileToken')) refreshedOptions.data.visitorProfileToken = response.visitorProfileToken || ''
+    }
+    return requestFn(refreshedOptions)
   }
 }
 

@@ -1131,6 +1131,13 @@
   min-height: 380rpx;
 }
 
+.visit-activity-summary { padding: 16rpx 0; border-top: 1rpx solid #e9ecef; flex-shrink: 0; }
+.visit-activity-row { display: flex; justify-content: space-between; align-items: flex-start; padding: 10rpx 0; font-size: 24rpx; color: #212529; }
+.visit-activity-label { color: #868e96; flex-shrink: 0; margin-right: 24rpx; }
+.visit-activity-device { flex: 1; min-width: 0; text-align: right; word-break: break-all; }
+.visit-device-toggle { color: #0f766e; margin-left: 16rpx; }
+.visit-device-details { padding: 8rpx 20rpx; background: #f8f9fa; border-radius: 12rpx; }
+
 @keyframes skeleton-loading {
   0% {
     background-position: 100% 50%;

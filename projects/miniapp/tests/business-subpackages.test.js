@@ -210,7 +210,8 @@ test('team portfolio subpackage is appended without changing existing route base
   const expectedTeamPages = [
     'portfolios', 'team-select/team-select', 'standard-edit/team-portfolio-standard-edit',
     'standard-preview/team-portfolio-standard-preview', 'contact-leads/team-contact-leads',
-    'visitor-portfolio/team-visitor-portfolio'
+    'visitor-portfolio/team-visitor-portfolio', 'work-detail/team-portfolio-work-detail',
+    'video-player/video-player'
   ]
   assert.deepEqual(appJson.pages, expectedMainPages)
   assert.deepEqual(appJson.subPackages.slice(0, 4).map((pkg) => pkg.name), ['mock', 'works', 'portfolio', 'schedule'])

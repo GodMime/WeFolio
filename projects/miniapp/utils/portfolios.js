@@ -6,15 +6,43 @@ const {
   NEW_COMPONENT_FONT_SIZE_RPX,
   PORTFOLIO_TEXT_FONT_FAMILIES,
   normalizePortfolioTextFontFamily,
-  normalizePortfolioTextFontSizeRpx
+  normalizePortfolioTextFontSizeRpx,
+  isValidPortfolioTextLineHeight,
+  PORTFOLIO_TEXT_LINE_HEIGHT_ERROR
 } = require('./portfolio-text-typography')
 
 const SCHEMA_VERSION = 'standard-personal-v1'
-const EDITOR_SCHEMA_REVISION = 5
+const EDITOR_SCHEMA_REVISION = 14
+const COMPONENT_SPACING_DEFAULT_RPX = 32
+const COMPONENT_SPACING_MIN_RPX = 0
+const COMPONENT_SPACING_MAX_RPX = 96
 const SORT_ORDER_STEP = 1000
 const NAVIGATION_TITLE_MAX_LENGTH = 5
 const DISPLAY_GROUP_NAME_MAX_LENGTH = 20
 const PROFILE_TAG_DEFAULT_COLOR = '#0f766e'
+const PROFILE_BORDER_MIN_WIDTH_RPX = 1
+const PROFILE_BORDER_MAX_WIDTH_RPX = 12
+const PROFILE_BORDER_AUTO_COLOR = 'AUTO'
+const PROFILE_MARGIN_MIN_RPX = 0
+const PROFILE_MARGIN_MAX_RPX = 96
+const PROFILE_HORIZONTAL_MARGIN_DEFAULT_RPX = 32
+const PROFILE_VERTICAL_MARGIN_DEFAULT_RPX = 0
+const CONTACT_BORDER_NUMBER_FIELDS = {
+  contactBorderWidthRpx: { min: 1, max: 12, fallback: 1 },
+  horizontalMarginRpx: { min: 0, max: 96, fallback: 0 },
+  verticalMarginRpx: { min: 0, max: 96, fallback: 0 }
+}
+const CONTACT_BORDER_AUTO_COLOR = 'AUTO'
+const CONTACT_BORDER_COLOR_PATTERN = /^(AUTO|#[0-9A-Fa-f]{6})$/
+const PROFILE_MARGIN_OPTIONS = [
+  { field: 'profileHorizontalMarginRpx', label: '左右留白' },
+  { field: 'profileVerticalMarginRpx', label: '上下留白' }
+]
+const PROFILE_LAYOUTS = { VERTICAL: 'VERTICAL', HORIZONTAL: 'HORIZONTAL' }
+const PROFILE_LAYOUT_OPTIONS = [
+  { value: PROFILE_LAYOUTS.VERTICAL, label: '纵向居中' },
+  { value: PROFILE_LAYOUTS.HORIZONTAL, label: '横向排列' }
+]
 const PROFILE_VISIBLE_FIELD_DEFAULTS = {
   avatar: true,
   displayName: true,
@@ -38,6 +66,7 @@ const COMPONENT_TYPES = {
   CONTACT_FORM: 'CONTACT_FORM',
   TEXT_SECTION: 'TEXT_SECTION',
   STRUCTURED_TEXT_SECTION: 'STRUCTURED_TEXT_SECTION',
+  TEXT_GRID: 'TEXT_GRID', CONTACT_INFO: 'CONTACT_INFO',
   DIVIDER: 'DIVIDER',
   HYPERLINK: 'HYPERLINK'
 }
@@ -54,6 +83,7 @@ const COMPONENT_NAMES = {
   CONTACT_FORM: '预留联系信息',
   TEXT_SECTION: '文字说明',
   STRUCTURED_TEXT_SECTION: '结构化文字说明',
+  TEXT_GRID: '文字网格', CONTACT_INFO: '联系信息',
   DIVIDER: '分割线',
   HYPERLINK: '超链接'
 }
@@ -138,6 +168,7 @@ const TEXT_SECTION_ALIGNMENT_OPTIONS = [
   { value: TEXT_SECTION_ALIGNMENTS.RIGHT, label: '右对齐' }
 ]
 const DEFAULT_DIVIDER_HEIGHT_PX = 16
+const DIVIDER_HEX_COLOR_PATTERN = /^#[0-9A-Fa-f]{6}$/
 const PUBLISH_COMPONENT_MESSAGES = {
   CAROUSEL_WORK_REQUIRED: '请选择轮播作品',
   VIDEO_CAROUSEL_MIN_WORK_REQUIRED: '视频轮播至少选择3个视频',
@@ -205,8 +236,11 @@ function normalizeVideoCarouselConfig(raw = {}) {
   return {
     title,
     workIds,
+    showComponentTitle: raw.showComponentTitle !== false,
     showTitle: typeof raw.showTitle === 'boolean' ? raw.showTitle : true,
-    showSwipeHint: typeof raw.showSwipeHint === 'boolean' ? raw.showSwipeHint : true
+    showSwipeHint: typeof raw.showSwipeHint === 'boolean' ? raw.showSwipeHint : true,
+    displayStyle: raw.displayStyle === 'PORTRAIT_CARDS' ? 'PORTRAIT_CARDS' : 'STACKED',
+    showDescription: typeof raw.showDescription === 'boolean' ? raw.showDescription : false
   }
 }
 
@@ -214,6 +248,11 @@ function normalizeSingleWorkConfig(raw = {}) {
   const workId = toNumber(raw && raw.workId)
   return Object.assign({
     workId: Number.isInteger(workId) && workId > 0 ? workId : 0,
+    openMode: raw.openMode === 'DETAIL_PAGE' ? 'DETAIL_PAGE' : 'INLINE',
+    detailOptions: {
+      showTitle: !raw.detailOptions || raw.detailOptions.showTitle !== false,
+      showDescription: !raw.detailOptions || raw.detailOptions.showDescription !== false
+    },
   }, normalizeWorkDisplayOptions(raw))
 }
 
@@ -280,9 +319,53 @@ function normalizeProfileVisibleFields(visibleFields = {}) {
   }, {})
 }
 
+/** 旧作品集未保存布局时继续使用纵向居中的个人资料样式。 */
+function normalizeProfileLayout(value) {
+  return value === PROFILE_LAYOUTS.HORIZONTAL ? PROFILE_LAYOUTS.HORIZONTAL : PROFILE_LAYOUTS.VERTICAL
+}
+
+/** 留白只接受范围内整数，缺省保持已有卡片的左右、上下距离。 */
+function normalizeProfileMargin(value, fallback) {
+  return Number.isInteger(value) && value >= PROFILE_MARGIN_MIN_RPX && value <= PROFILE_MARGIN_MAX_RPX
+    ? value : fallback
+}
+
+/** 边框缺省关闭；保留关闭时的线宽、颜色和留白，避免再次开启时丢失个人设置。 */
+function normalizeProfileBorderConfig(raw = {}) {
+  const width = Number(raw.profileBorderWidthRpx)
+  const color = normalizeTextColor(raw.profileBorderColor)
+  return {
+    profileBorder: raw.profileBorder === true,
+    profileBorderWidthRpx: Number.isInteger(width) && width >= PROFILE_BORDER_MIN_WIDTH_RPX && width <= PROFILE_BORDER_MAX_WIDTH_RPX
+      ? width : PROFILE_BORDER_MIN_WIDTH_RPX,
+    profileBorderColor: isValidTextColor(color) ? color : PROFILE_BORDER_AUTO_COLOR,
+    profileHorizontalMarginRpx: normalizeProfileMargin(raw.profileHorizontalMarginRpx, PROFILE_HORIZONTAL_MARGIN_DEFAULT_RPX),
+    profileVerticalMarginRpx: normalizeProfileMargin(raw.profileVerticalMarginRpx, PROFILE_VERTICAL_MARGIN_DEFAULT_RPX)
+  }
+}
+
+/** 主包的作品集配置和访客入口保留联系快照及边框，分包实现由一致性测试约束。 */
+function normalizeContactInfoConfig(raw = {}) {
+  const safe = raw || {}
+  const result = {
+    contactPhone: typeof safe.contactPhone === 'string' ? safe.contactPhone.trim() : '',
+    contactWechat: typeof safe.contactWechat === 'string' ? safe.contactWechat.trim() : '',
+    contactBorder: safe.contactBorder === true,
+    contactBorderColor: typeof safe.contactBorderColor === 'string' && CONTACT_BORDER_COLOR_PATTERN.test(safe.contactBorderColor)
+      ? safe.contactBorderColor.toUpperCase() : CONTACT_BORDER_AUTO_COLOR
+  }
+  Object.entries(CONTACT_BORDER_NUMBER_FIELDS).forEach(([field, settings]) => {
+    result[field] = Number.isInteger(safe[field]) && safe[field] >= settings.min && safe[field] <= settings.max
+      ? safe[field] : settings.fallback
+  })
+  return result
+}
+
 function normalizeProfileComponentConfig(raw = {}) {
   const profile = raw.profile || {}
   return {
+    ...normalizeProfileBorderConfig(raw),
+    profileLayout: normalizeProfileLayout(raw.profileLayout),
     profile: {
       avatarUrl: trimText(profile.avatarUrl),
       displayName: trimText(profile.displayName),
@@ -352,9 +435,16 @@ function normalizeTextSectionConfig(raw = {}) {
 
 function normalizeDividerColor(value) {
   const color = trimText(value)
+  if (DIVIDER_HEX_COLOR_PATTERN.test(color)) return color.toUpperCase()
   return DIVIDER_COLOR_OPTIONS.some((item) => item.value === color)
     ? color
     : DIVIDER_COLORS.GRAY
+}
+
+/** 旧枚举保留原有视觉色值，新选色直接使用经过校验的完整 HEX。 */
+function resolveDividerColorValue(value) {
+  const color = normalizeDividerColor(value)
+  return DIVIDER_COLOR_VALUES[color] || color
 }
 
 function normalizeDividerHeightPx(value) {
@@ -449,6 +539,17 @@ function createComponent(componentType, options = {}) {
   if (componentType === COMPONENT_TYPES.DIVIDER) {
     Object.assign(config, normalizeDividerConfig(config))
   }
+  if (componentType === COMPONENT_TYPES.CONTACT_INFO) {
+    const contact = normalizeContactInfoConfig(config)
+    Object.keys(config).forEach(key => delete config[key]); Object.assign(config, contact)
+  }
+  if (componentType === COMPONENT_TYPES.TEXT_GRID && !Object.keys(config).length) {
+    Object.assign(config, { rows: 2, columns: 2, columnWeights: [1, 1], rowMinHeightsRpx: [180, 180], gapRpx: 16,
+      cellPaddingRpx: 24, cellRadiusRpx: 24, cellBorder: false, cellBackground: 'AUTO', cellBorderWidthRpx: 1, cellBorderColor: '#D7DADD',
+      cells: Array.from({ length: 4 }, (_, i) => ({ cellKey: `cell_${i}`, row: Math.floor(i / 2), column: i % 2,
+        rowSpan: 1, columnSpan: 1, verticalAlignment: 'CENTER', blocks: [{ blockKey: `block_${i}`, alignment: 'CENTER',
+          marginTopRpx: 0, marginBottomRpx: 12, runs: [{ runKey: `run_${i}`, text: '', fontFamily: 'SYSTEM', fontSizeRpx: 28, fontWeight: 'NORMAL', color: 'AUTO' }] }] })) })
+  }
   return {
     componentKey: trimText(options.componentKey) || `c_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`,
     componentType,
@@ -490,9 +591,16 @@ function normalizeComponentList(components) {
     : []
 }
 
+/** 旧作品集保留原有组件间距，显式零值允许相邻组件紧贴。 */
+function normalizeComponentSpacingRpx(value) {
+  return Number.isInteger(value) && value >= COMPONENT_SPACING_MIN_RPX && value <= COMPONENT_SPACING_MAX_RPX
+    ? value : COMPONENT_SPACING_DEFAULT_RPX
+}
+
 function normalizeStyleConfig(raw = {}) {
   return {
-    backgroundColor: normalizeHexColor(raw && raw.backgroundColor)
+    backgroundColor: normalizeHexColor(raw && raw.backgroundColor),
+    componentSpacingRpx: normalizeComponentSpacingRpx(raw && raw.componentSpacingRpx)
   }
 }
 
@@ -813,6 +921,10 @@ function validatePortfolioComponentForPublish(component = {}) {
         ? '提示语长度必须为1至30个字符'
         : ''
     }
+    case COMPONENT_TYPES.TEXT_GRID:
+      return Array.isArray(config.cells) && config.cells.some(cell => (cell.blocks || []).some(block => (block.runs || []).some(run => trimText(run.text)))) ? '' : '请至少添加一处文字'
+    case COMPONENT_TYPES.CONTACT_INFO:
+      return trimText(config.contactPhone) || trimText(config.contactWechat) ? '' : '请至少填写一项联系信息'
     case COMPONENT_TYPES.QR_CONTACT:
       return config.qrUrlSource === 'CUSTOM' && !trimText(config.qrUrl)
         ? PUBLISH_COMPONENT_MESSAGES.CUSTOM_QR_REQUIRED
@@ -824,7 +936,9 @@ function validatePortfolioComponentForPublish(component = {}) {
       }
       return countText(content) > TEXT_SECTION_MAX_LENGTH
         ? PUBLISH_COMPONENT_MESSAGES.TEXT_CONTENT_TOO_LONG
-        : isValidTextColor(config.color) ? '' : TEXT_COLOR_ERROR
+        : !isValidTextColor(config.color) ? TEXT_COLOR_ERROR
+          : Object.prototype.hasOwnProperty.call(config, 'lineHeight') && !isValidPortfolioTextLineHeight(config.lineHeight)
+            ? PORTFOLIO_TEXT_LINE_HEIGHT_ERROR : ''
     }
     default:
       return ''
@@ -1039,6 +1153,9 @@ function updateComponentTextSectionConfig(config, componentKey, textSectionConfi
       LEGACY_PERSONAL_FONT_SIZE_RPX
     )
   }
+  if (Object.prototype.hasOwnProperty.call(textSectionConfig, 'lineHeight')) {
+    nextTextSectionConfig.lineHeight = textSectionConfig.lineHeight
+  }
   return updateMenuComponentList(config, menuKey, (components) => components.map((component) => {
     if (component.componentKey !== targetKey || component.componentType !== COMPONENT_TYPES.TEXT_SECTION) {
       return component
@@ -1231,6 +1348,9 @@ module.exports = {
   CONTACT_FORM_DISPLAY_MODE_OPTIONS,
   CONTACT_FORM_DISPLAY_MODES,
   COMPONENT_NAMES,
+  COMPONENT_SPACING_DEFAULT_RPX,
+  COMPONENT_SPACING_MIN_RPX,
+  COMPONENT_SPACING_MAX_RPX,
   COMPONENT_TYPES,
   DEFAULT_DIVIDER_HEIGHT_PX,
   DIVIDER_COLOR_OPTIONS,
@@ -1247,6 +1367,14 @@ module.exports = {
   HYPERLINK_PROMPT_TEXT_MAX_LENGTH,
   HYPERLINK_TARGET_REQUIRED_MESSAGE,
   NAVIGATION_TITLE_MAX_LENGTH,
+  PROFILE_BORDER_AUTO_COLOR,
+  PROFILE_BORDER_MAX_WIDTH_RPX,
+  PROFILE_BORDER_MIN_WIDTH_RPX,
+  PROFILE_MARGIN_MIN_RPX,
+  PROFILE_MARGIN_MAX_RPX,
+  PROFILE_MARGIN_OPTIONS,
+  PROFILE_LAYOUT_OPTIONS,
+  PROFILE_LAYOUTS,
   SCHEDULE_QUERY_DISPLAY_MODE_OPTIONS,
   SCHEDULE_QUERY_DISPLAY_MODES,
   SCHEMA_VERSION,
@@ -1267,12 +1395,18 @@ module.exports = {
   normalizeBottomNavConfig,
   normalizeHyperlinkConfig,
   normalizePortfolioConfig,
+  normalizeComponentSpacingRpx,
   normalizeNavigationItem,
   normalizeStyleConfig,
   normalizeContactFormConfig,
+  normalizeContactInfoConfig,
   normalizeDividerConfig,
+  normalizeDividerColor,
+  resolveDividerColorValue,
   normalizeDisplayGroups,
   normalizeProfileComponentConfig,
+  normalizeProfileBorderConfig,
+  normalizeProfileLayout,
   normalizeScheduleQueryConfig,
   normalizeSingleWorkConfig,
   normalizeVideoCarouselConfig,

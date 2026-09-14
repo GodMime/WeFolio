@@ -73,6 +73,9 @@
 .structured-stepper button::after { border: 0; }
 .structured-stepper button[disabled] { color: #ADB5BD; }
 .structured-stepper input { width: 76rpx; text-align: center; font-size: 32rpx; font-weight: 700; }
+/* 行高缺省时展示原样式倍数，需要完整容纳默认提示。 */
+.structured-line-height .structured-stepper input { width: 208rpx; font-size: 28rpx; }
+.structured-line-height-placeholder { font-size: 22rpx; font-weight: 400; color: #868E96; }
 .structured-stepper text { font-size: 22rpx; color: #868E96; padding-right: 8rpx; }
 .structured-error { margin-top: 20rpx; color: #A33B32; font-size: 26rpx; }
 .structured-actions { display: flex; gap: 16rpx; padding: 24rpx 32rpx 32rpx; flex-shrink: 0; background: #FFFFFF; }

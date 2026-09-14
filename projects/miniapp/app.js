@@ -1,6 +1,7 @@
 const { createUpdateController } = require('./utils/update-manager')
 const { createMaintainerWechatSessionController } = require('./utils/maintainer-wechat-session')
 const { loadPortfolioFonts } = require('./utils/portfolio-font-loader')
+const { visitActivityLifecycle } = require('./utils/visit-activity-lifecycle')
 
 const updateController = createUpdateController()
 const maintainerWechatSessionController = createMaintainerWechatSessionController()
@@ -21,6 +22,7 @@ App({
     }
   },
   onShow() {
+    visitActivityLifecycle.onShow()
     try {
       updateController.promptIfReady()
     } catch (error) {
@@ -35,6 +37,7 @@ App({
     }
   },
   onHide() {
+    visitActivityLifecycle.onHide()
     try {
       maintainerWechatSessionController.onHide()
     } catch (error) {
@@ -42,6 +45,8 @@ App({
     }
   },
   globalData: {
+    // 平台隐私声明审核及验收记录完成后才可启用设备采集。
+    visitDeviceCollectionEnabled: true,
     apiBaseUrl: 'https://api.we-folio.dingchenyong.top'
   }
 })

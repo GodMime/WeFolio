@@ -3,6 +3,7 @@ const {
   VISITOR_TOKEN_EXPIRES_AT_STORAGE_KEY,
   request
 } = require('../../../utils/request.js')
+const { visitActivityLifecycle } = require('../../../utils/visit-activity-lifecycle.js')
 
 const TEAM_VISITOR_PREFIX = '/api/visitor/team-portfolios'
 const SOURCE_TYPE_WECHAT_SHARE_CARD = 'WECHAT_SHARE_CARD'
@@ -59,6 +60,10 @@ function saveTeamVisitorToken(session = {}, wxApi) {
 }
 
 async function openTeamVisitorSession(options = {}) {
+  const context = options.browserContext || null
+  if (context && context.isInvalid()) throw Object.assign(new Error('访问上下文已失效'), { statusCode: 403 })
+  if (context && context.isDisposed && context.isDisposed()) throw Object.assign(new Error('访问上下文已关闭'), { contextDisposed: true })
+  if (context) options = Object.assign({}, options, context.openOptions())
   const shareCode = text(options.shareCode)
   if (!shareCode) throw new Error('分享码无效')
   const idempotencyKey = resolveOpenIdempotencyKey(options)
@@ -73,9 +78,16 @@ async function openTeamVisitorSession(options = {}) {
     data: Object.assign({}, identityData, {
       sourceType: text(options.sourceType) || SOURCE_TYPE_WECHAT_SHARE_CARD,
       idempotencyKey
-    })
+    }, options.tracking ? { tracking: options.tracking } : {})
   })
-  saveTeamVisitorToken(session, options.wxApi)
+  if (context) {
+    if (context.isDisposed && context.isDisposed()) throw Object.assign(new Error('访问上下文已关闭'), { contextDisposed: true })
+    if (context.isInvalid()) throw Object.assign(new Error('访问上下文已失效'), { statusCode: 403 })
+    context.acceptSession(session)
+    if (context.isInvalid()) throw Object.assign(new Error('访客身份已变化'), { statusCode: 403 })
+    context.sessionGeneration = (context.sessionGeneration || 0) + 1
+  }
+  if (options.persistToken !== false) saveTeamVisitorToken(session, options.wxApi)
   return session
 }
 
@@ -83,15 +95,34 @@ async function requestWithTeamVisitorSessionRefresh(options = {}) {
   const requestFn = options.requestFn || request
   const requestOptions = Object.assign({}, options.requestOptions, { authMode: 'visitor' })
   if (!text(requestOptions.url).startsWith(`${TEAM_VISITOR_PREFIX}/`)) throw new Error('只允许团队访客接口')
+  const context = options.browserContext || visitActivityLifecycle.findContext('TEAM', options.shareCode)
+  const beforeGeneration = context && context.sessionGeneration || 0
+  if (context && context.isInvalid()) throw Object.assign(new Error('访问上下文已失效'), { statusCode: 403 })
   try {
     return await requestFn(requestOptions)
   } catch (error) {
     if (!error || !error.authRequired) throw error
-    const session = await openTeamVisitorSession(options)
+    let session
+    if (context) {
+      if (context.isInvalid()) throw error
+      if ((context.sessionGeneration || 0) !== beforeGeneration) session = context.getSession()
+      else {
+        if (!context.refreshPromise) {
+          context.beginRecovery()
+          context.refreshPromise = openTeamVisitorSession(Object.assign({}, options, { browserContext: context }))
+            .then(async (response) => { if (context.onRefresh) await context.onRefresh(response); return response })
+            .catch((failure) => { context.recoveryFailed(failure); throw failure })
+            .finally(() => { context.refreshPromise = null })
+        }
+        session = await context.refreshPromise
+      }
+    } else session = await openTeamVisitorSession(options)
     if (typeof options.onRefresh === 'function') await options.onRefresh(session)
     const refreshedOptions = typeof options.refreshRequestOptions === 'function'
       ? options.refreshRequestOptions(session, requestOptions)
-      : requestOptions
+      : Object.assign({}, requestOptions, requestOptions.data ? { data: Object.assign({}, requestOptions.data,
+          Object.prototype.hasOwnProperty.call(requestOptions.data, 'visitorKey') ? { visitorKey: session.visitorKey || '' } : {},
+          Object.prototype.hasOwnProperty.call(requestOptions.data, 'visitorProfileToken') ? { visitorProfileToken: session.visitorProfileToken || '' } : {}) } : {})
     return requestFn(Object.assign({}, refreshedOptions, { authMode: 'visitor' }))
   }
 }

@@ -11,9 +11,18 @@ Component({
     emptyText: { type: String, value: '暂无作品' },
     hasMore: { type: Boolean, value: false },
     showTitle: { type: Boolean, value: true },
-    showDescription: { type: Boolean, value: false }
+    showDescription: { type: Boolean, value: false },
+    openMode: { type: String, value: 'INLINE' },
+    detailOptions: { type: Object, value: { showTitle: true, showDescription: true } }
   },
   methods: {
+    handleOpenModeChange(event) {
+      this.triggerEvent('detailoptionschange', { openMode: event.detail.value ? 'DETAIL_PAGE' : 'INLINE', detailOptions: this.properties.detailOptions })
+    },
+    handleDetailOptionChange(event) {
+      this.triggerEvent('detailoptionschange', { openMode: this.properties.openMode,
+        detailOptions: Object.assign({}, this.properties.detailOptions, { [event.currentTarget.dataset.field]: Boolean(event.detail.value) }) })
+    },
     handleKeywordInput(event) {
       this.triggerEvent('keywordchange', {
         value: event.detail && event.detail.value ? event.detail.value : ''

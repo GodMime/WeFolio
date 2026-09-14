@@ -1,0 +1,8 @@
+@import "../text-grid-editor/text-grid-editor.wxss";
+.contact-editor-panel { height:90vh; }
+.contact-input { background:#f5f6f8; padding:20rpx; border-radius:12rpx; font-size:28rpx; }
+.contact-refill { margin:24rpx 0 0; font-size:26rpx; background:#f5f6f8; }
+.contact-border-toggle { margin-top:32rpx; }
+/* 三组尺寸和内联取色器共用滚动区域，底部操作始终可见。 */
+.contact-editor-panel .grid-border-settings.is-visible { max-height:2400rpx; }
+.contact-preview { border-radius:16rpx; }

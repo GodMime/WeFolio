@@ -22,7 +22,11 @@
 .text-color-hue-slider { position: relative; height: 32rpx; margin-top: 24rpx; border-radius: 999rpx; background: linear-gradient(to right, #FF0000 0%, #FFFF00 16.7131%, #00FF00 33.4262%, #00FFFF 50.1393%, #0000FF 66.8524%, #FF00FF 83.5655%, #FF0004 100%); }
 .text-color-hue-slider slider { position: absolute; left: 0; right: 0; top: 50%; z-index: 2; width: 100%; margin: 0; transform: translateY(-50%); }
 .text-color-hue-thumb { position: absolute; top: 50%; z-index: 1; width: 44rpx; height: 44rpx; border: 6rpx solid #FFFFFF; border-radius: 50%; box-shadow: 0 2rpx 8rpx rgba(0,0,0,.3); transform: translate(-50%,-50%); box-sizing: border-box; pointer-events: none; }
-.text-color-hex-input { width: 100%; margin-top: 28rpx; min-height: 80rpx; box-sizing: border-box; padding: 20rpx 24rpx; border: 2rpx solid #E9ECEF; border-radius: 24rpx; background: #F8F9FA; font-size: 28rpx; line-height: 1.5; font-weight: 700; }
+.text-color-hex-row { display: flex; align-items: center; gap: 12rpx; margin-top: 28rpx; }
+.text-color-hex-input { flex: 1; width: 0; min-width: 0; height: 76rpx; min-height: 76rpx; box-sizing: border-box; padding: 0 24rpx; border: 2rpx solid #E9ECEF; border-radius: 24rpx; background: #F8F9FA; font-size: 28rpx; line-height: 1.5; font-weight: 700; }
+.text-color-copy { display: flex; align-items: center; justify-content: center; flex: none; width: 112rpx; min-width: 112rpx; height: 76rpx; min-height: 76rpx; box-sizing: border-box; margin: 0; padding: 0; border: 2rpx solid #E9ECEF; border-radius: 24rpx; color: #212529; background: #F5F6F7; font-size: 26rpx; line-height: 1.5; }
+.text-color-copy::after { border: 0; }
+.text-color-copy[disabled] { opacity: .45; }
 .text-color-error { min-height: 32rpx; margin-top: 8rpx; font-size: 22rpx; color: #A33B32; line-height: 1.4; }
 .text-color-preview-bar { display: flex; align-items: center; gap: 20rpx; margin-top: 12rpx; padding: 16rpx 24rpx; border: 1rpx solid #E9ECEF; border-radius: 40rpx; }
 .text-color-preview-chip { width: 80rpx; height: 56rpx; flex-shrink: 0; border: 1rpx solid #E9ECEF; border-radius: 20rpx; }
@@ -32,3 +36,12 @@
 .text-color-actions button::after { border: 0; }
 .text-color-actions .text-color-confirm { color: #FFFFFF; background: #212529; border-color: #212529; }
 .text-color-actions .text-color-confirm[disabled] { opacity: .45; }
+/* 内联取色区不占用第二层遮罩，关闭时释放滚动区域高度。 */
+.text-color-inline { max-height: 0; overflow: hidden; opacity: 0; pointer-events: none; transition: max-height .2s ease, opacity .2s ease; }
+.text-color-inline.is-visible { max-height: 1400rpx; opacity: 1; pointer-events: auto; }
+.text-color-inline-body { flex-shrink: 0; margin-top: 24rpx; padding: 24rpx; border: 2rpx solid #E9ECEF; border-radius: 16rpx; background: #FFFFFF; }
+.text-color-inline .text-color-heading { flex-direction: row; }
+.text-color-inline .text-color-title { font-size: 26rpx; }
+.text-color-inline .text-color-pad { height: 320rpx; border-radius: 16rpx; }
+.text-color-inline .text-color-preview-bar { flex-direction: row; border-radius: 16rpx; }
+.text-color-inline .text-color-actions { flex-direction: row; }

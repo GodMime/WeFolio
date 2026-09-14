@@ -52,6 +52,15 @@
       </view>
       <view class="editor-switch-row"><view><view class="editor-switch-label">展示作品标题</view><view class="editor-switch-note">关闭后隐藏标题</view></view><switch checked="{{draft.showTitle}}" color="#212529" bindchange="handleShowTitleChange" /></view>
       <view class="editor-switch-row"><view><view class="editor-switch-label">展示作品说明</view><view class="editor-switch-note">关闭后隐藏说明</view></view><switch checked="{{draft.showDescription}}" color="#212529" bindchange="handleShowDescriptionChange" /></view>
+    <view class="editor-switch-row">
+      <view class="editor-switch-copy"><view class="editor-switch-label">独立详情页</view><view class="editor-switch-note">点击封面后进入作品详情</view></view>
+      <switch checked="{{draft.openMode === 'DETAIL_PAGE'}}" color="#212529" bindchange="handleOpenModeChange" />
+    </view>
+    <block wx:if="{{draft.openMode === 'DETAIL_PAGE'}}">
+      <view class="editor-switch-row"><view class="editor-switch-label">详情展示标题</view><switch checked="{{draft.detailOptions.showTitle}}" data-field="showTitle" color="#212529" bindchange="handleDetailOptionChange" /></view>
+      <view class="editor-switch-row"><view class="editor-switch-label">详情展示描述</view><switch checked="{{draft.detailOptions.showDescription}}" data-field="showDescription" color="#212529" bindchange="handleDetailOptionChange" /></view>
+    </block>
+
       <view wx:if="{{errorMessage}}" class="editor-error">{{errorMessage}}</view>
     </view>
   </block>

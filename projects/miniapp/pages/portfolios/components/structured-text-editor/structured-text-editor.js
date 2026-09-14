@@ -1,8 +1,13 @@
+const { parsePortfolioTextLineHeightInput, stepPortfolioTextLineHeight,
+  buildPortfolioTextLineHeightEditor } = require('../../utils/portfolio-component-platform')
+// 未设置行高时沿用当前分包既有展示样式，只在用户操作后写入倍数。
+const DEFAULT_LINE_HEIGHT = 1.65
 const { normalizeTextColor, isValidTextColor } = require('../../../../utils/portfolio-text-color')
 const {
   createStructuredBlock, normalizeStructuredTextConfig, validateStructuredTextConfig,
   finalizeStructuredTextConfig, createBlockEditDraft, switchBlockEditType,
-  normalizeSpacingInput, countStructuredText, MIN_FONT_SIZE, MAX_FONT_SIZE
+  normalizeSpacingInput, countStructuredText, MIN_FONT_SIZE, MAX_FONT_SIZE,
+  MAX_SPACING, MAX_SPACER_HEIGHT, SPACING_STEP
 } = require('../../utils/portfolio-text-sections')
 const { PORTFOLIO_TEXT_FONT_OPTIONS } = require('../../../../utils/portfolio-text-typography')
 const { getPortfolioFontCapability, isPortfolioFontAvailable } = require('../../../../utils/portfolio-font-loader')
@@ -12,10 +17,11 @@ const BLOCK_TYPES = [
   { value: 'HINT', label: '提示' }, { value: 'SPACER', label: '留白' }
 ]
 const SPACING_FIELDS = ['marginTopRpx', 'marginBottomRpx', 'heightRpx']
+const TEXT_BACKGROUND_PICKER_SELECTOR = '#text-background-picker'
 const TRANSITION_MS = 200
 const TAB_FADE_MS = TRANSITION_MS / 2
-const FONT_SIZE_STEP = 2
-const FONT_SIZE_ERROR = '字号须为 20–96 rpx 的整数'
+const FONT_SIZE_STEP = 1
+const FONT_SIZE_ERROR = '字号须为 10–96 rpx 的整数'
 const validFontSize = value => Number.isInteger(value) && value >= MIN_FONT_SIZE && value <= MAX_FONT_SIZE
 const clone = value => JSON.parse(JSON.stringify(value))
 const point = event => (event.changedTouches || event.touches || [])[0] || {}
@@ -35,9 +41,10 @@ Component({
     detailClosing: false, tabLeaving: false, tabSwitching: false,
     fontMin: MIN_FONT_SIZE, fontMax: MAX_FONT_SIZE, fontStep: FONT_SIZE_STEP,
     fontSizeError: '', fontDecreaseDisabled: false, fontIncreaseDisabled: false,
+    lineHeightEditor: buildPortfolioTextLineHeightEditor(undefined, DEFAULT_LINE_HEIGHT),
     weights: [{ value: 'NORMAL', label: '常规' }, { value: 'BOLD', label: '粗体' }],
     alignments: [{ value: 'LEFT', label: '左对齐' }, { value: 'CENTER', label: '居中' }, { value: 'RIGHT', label: '右对齐' }],
-    spacingRows: [], listRows: []
+    spacingRows: [], spacingMax: MAX_SPACING, spacingStep: SPACING_STEP, listRows: []
   },
   observers: {
     backgroundSelection(selection) { this.applyBackgroundSelection(selection) },
@@ -134,11 +141,13 @@ Component({
       const block = this.data.blockDraft.block
       const validSize = validFontSize(block.fontSizeRpx)
       this.setData({
+        lineHeightEditor: buildPortfolioTextLineHeightEditor(block.lineHeight, DEFAULT_LINE_HEIGHT),
         fontSizeError: block.type !== 'SPACER' && !validSize ? FONT_SIZE_ERROR : '',
         fontDecreaseDisabled: !validSize || block.fontSizeRpx <= MIN_FONT_SIZE,
         fontIncreaseDisabled: !validSize || block.fontSizeRpx >= MAX_FONT_SIZE
       })
-      this.setData({ spacingRows: SPACING_FIELDS.filter(field => field !== 'heightRpx' || block.type === 'SPACER').map(field => ({
+      this.setData({ spacingMax: block.type === 'SPACER' ? MAX_SPACER_HEIGHT : MAX_SPACING,
+        spacingRows: SPACING_FIELDS.filter(field => (field === 'heightRpx') === (block.type === 'SPACER')).map(field => ({
           field, label: field === 'marginTopRpx' ? '上间距' : field === 'marginBottomRpx' ? '下间距' : '留白高度', value: block[field]
       })) })
       this.refreshListRows()
@@ -167,6 +176,7 @@ Component({
       if (!this.data.blockDraft || this.data.detailClosing) return
       const field = event.currentTarget.dataset.field
       if (field === 'fontSizeRpx') { this.handleFontSizeInput(event); return }
+      if (field === 'lineHeight') { this.handleLineHeightInput(event); return }
       const blockDraft = clone(this.data.blockDraft)
       blockDraft.block[field] = field === 'fontSizeRpx' ? Number(event.detail.value) : event.detail.value
       this.setData({ blockDraft, error: '' })
@@ -202,6 +212,21 @@ Component({
       const value = Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, current + delta))
       this.handleFontSizeInput({ detail: { value: String(value) } })
     },
+    handleLineHeightInput(event) {
+      if (!this.data.blockDraft || this.data.detailClosing || this.data.blockDraft.block.type === 'SPACER') return
+      const blockDraft = clone(this.data.blockDraft)
+      // 保留非法原输入供修正，避免清空或越界值被默认为历史行高后误保存。
+      blockDraft.block.lineHeight = parsePortfolioTextLineHeightInput(event.detail.value)
+      this.setData({ blockDraft, error: '' })
+      this.refreshDetail()
+    },
+    handleLineHeightStep(event) {
+      if (!this.data.blockDraft || this.data.detailClosing || this.data.blockDraft.block.type === 'SPACER') return
+      const current = this.data.blockDraft.block.lineHeight
+      const value = stepPortfolioTextLineHeight(current, Number(event.currentTarget.dataset.delta), DEFAULT_LINE_HEIGHT)
+      if (value === current) return
+      this.handleLineHeightInput({ detail: { value: String(value) } })
+    },
     handleListInput(event) {
       if (!this.data.blockDraft || this.data.detailClosing) return
       const blockDraft = clone(this.data.blockDraft)
@@ -230,7 +255,8 @@ Component({
       const field = event.currentTarget.dataset.field
       if (!SPACING_FIELDS.includes(field)) return
       const blockDraft = clone(this.data.blockDraft)
-      blockDraft.block[field] = normalizeSpacingInput(event.detail.value)
+      if ((field === 'heightRpx') !== (blockDraft.block.type === 'SPACER')) return
+      blockDraft.block[field] = normalizeSpacingInput(event.detail.value, field === 'heightRpx' ? MAX_SPACER_HEIGHT : MAX_SPACING)
       this.setData({ blockDraft })
       this.refreshDetail()
     },
@@ -321,6 +347,11 @@ Component({
     handleBackgroundChange(event) {
       this.setData({ draft: Object.assign({}, this.data.draft, event.detail) })
       this.triggerEvent('backgroundchange', event.detail)
+    },
+    handleBackgroundScrollToLower() {
+      if (!this.properties.visible || this.data.tab !== 'background' || this.data.blockDraft || this.data.tabSwitching) return
+      const picker = this.selectComponent(TEXT_BACKGROUND_PICKER_SELECTOR)
+      if (picker) picker.handleMore()
     },
     handleBackgroundRequest(event) { this.triggerEvent('backgroundrequest', event.detail) },
     handleCancel() {

@@ -18,5 +18,8 @@
     <view class="audio-mini-copy"><text class="audio-title">{{title || '背景音频'}}</text><text class="audio-subtitle">{{playing ? '正在播放' : '背景音频'}}</text></view>
     <view class="audio-bars"><view></view><view></view><view></view></view>
   </view>
-  <view class="audio-play-badge" aria-hidden="true">{{playing ? 'Ⅱ' : '▶'}}</view>
+  <view class="audio-play-badge" aria-hidden="true">
+    <view wx:if="{{!playing}}" class="audio-play-icon"></view>
+    <text wx:else>Ⅱ</text>
+  </view>
 </view>

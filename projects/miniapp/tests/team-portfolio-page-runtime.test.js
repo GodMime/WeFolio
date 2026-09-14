@@ -14,7 +14,7 @@ function clone(value) { return JSON.parse(JSON.stringify(value)) }
 function validTeamEditorConfig(patch = {}) {
   return Object.assign({
     schemaVersion: 'standard-team-v1',
-    editorSchemaRevision: 4,
+    editorSchemaRevision: 10,
     share: { title: TEST_TEAM_PORTFOLIO_TITLE },
     components: [{
       componentKey: 'valid-divider',
@@ -1348,37 +1348,51 @@ test('team preview rejects schedule query locally without a request', async () =
   }
 })
 
-test('team preview video carousel opens and clears the root portal player without events', () => {
-  const toasts = []
-  const page = loadPage('standard-preview/team-portfolio-standard-preview.js', async () => ({}), {
+test('team preview video carousel opens a dedicated video page without events and handles failures', async () => {
+  const toasts = [], previews = [], requests = []
+  const page = loadPage('standard-preview/team-portfolio-standard-preview.js', async (options) => { requests.push(options); return {} }, {
     showToast(options) { toasts.push(options) },
-    createVideoContext() { return { stop() {} } }
+    navigateTo(options) {
+      const navigation = { route: options.url }; previews.push(navigation)
+      options.success({ eventChannel: { emit(event, payload) { Object.assign(navigation, { event, payload }) } } })
+    },
+    createVideoContext() { assert.fail('来源页不得创建页内播放器') }
   })
   try {
-    assert.equal(page.handleVideoCarouselPlay({ detail: { componentKey: 'vc-1', work: { workId: 11, mediaUrl: 'video-11', coverUrl: 'cover-11', title: '视频十一' } } }), true)
+    const work = { workId: 11, mediaUrl: 'video-11', coverUrl: 'cover-11', title: '视频十一' }
+    assert.equal(await page.handleVideoCarouselPlay({ detail: { componentKey: 'vc-1', work } }), true)
     assert.equal(page.data.videoPreviewVisible, true)
-    assert.equal(page.data.videoPreviewUrl, 'video-11')
-    page.handleCloseVideoPreview()
-    assert.equal(page.data.videoPreviewUrl, '')
-    page.handleVideoCarouselPlay({ detail: { componentKey: 'vc-1', work: { workId: 12 } } })
+    assert.deepEqual(previews, [{ route: '/pages/team-portfolios/video-player/video-player', event: 'portfolioVideoPlayer', payload: { url: 'video-11', poster: 'cover-11', title: '视频十一', browserContext: null, contextId: '' } }])
+    assert.deepEqual(requests, [])
+    page.onShow()
+    assert.equal(page.data.videoPreviewVisible, false)
+    assert.equal(await page.handleVideoCarouselPlay({ detail: { componentKey: 'vc-1', work: { workId: 12 } } }), false)
     assert.equal(toasts.at(-1).title, '视频地址缺失')
-    page.handleVideoPreviewError()
-    assert.equal(toasts.at(-1).title, '视频播放失败，请重试')
+    assert.equal(previews.length, 1)
+    global.wx.navigateTo = (options) => options.fail({ errMsg: 'navigateTo:fail' })
+    assert.equal(await page.handleVideoCarouselPlay({ detail: { componentKey: 'vc-1', work } }), false)
+    assert.equal(toasts.at(-1).title, '视频打开失败，请重试')
+    assert.equal(page.data.videoPreviewVisible, false)
   } finally { page.cleanup() }
 })
 
-test('team visitor video carousel sends exact event before opening the player', () => {
-  const events = []
+test('team visitor video carousel sends exact event before opening a dedicated video page', async () => {
+  const events = [], previews = [], calls = []
   const page = loadPage('visitor-portfolio/team-visitor-portfolio.js', async () => ({}), {
-    createVideoContext() { return { stop() {} } }
+    navigateTo(options) {
+      calls.push('navigate'); const navigation = { route: options.url }; previews.push(navigation)
+      options.success({ eventChannel: { emit(event, payload) { Object.assign(navigation, { event, payload }) } } })
+    },
+    createVideoContext() { assert.fail('来源页不得创建页内播放器') }
   })
-  page.sendEvent = (payload) => { events.push(clone(payload)); return Promise.resolve({}) }
+  page.sendEvent = (payload) => { calls.push('event'); events.push(clone(payload)); return Promise.resolve({}) }
   try {
-    const opened = page.handleVideoCarouselPlay({ detail: { componentKey: 'vc-1', work: { workId: 11, mediaUrl: 'video-11', coverUrl: 'cover-11', title: '视频十一' } } })
+    const opened = await page.handleVideoCarouselPlay({ detail: { componentKey: 'vc-1', work: { workId: 11, mediaUrl: 'video-11', coverUrl: 'cover-11', title: '视频十一' } } })
     assert.equal(opened, true)
+    assert.deepEqual(calls, ['event', 'navigate'])
     assert.deepEqual(events, [{ eventType: 'VIDEO_PLAYED', componentKey: 'vc-1', workId: 11, mediaType: 'VIDEO', durationSeconds: 0 }])
     assert.equal(page.data.videoPreviewVisible, true)
-    assert.equal(page.data.videoPreviewUrl, 'video-11')
+    assert.deepEqual(previews, [{ route: '/pages/team-portfolios/video-player/video-player', event: 'portfolioVideoPlayer', payload: { url: 'video-11', poster: 'cover-11', title: '视频十一', browserContext: null, contextId: '' } }])
   } finally { page.cleanup() }
 })
 
@@ -1921,6 +1935,47 @@ test('team contact form sheet edits display mode without replacing team-only con
   }
 })
 
+test('团队分割线自定义色保存重开保持，取消、迟到事件及无权限事件不改写', () => {
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => ({}))
+  page.data.canMaintain = true
+  page.data.config = { schemaVersion: 'standard-team-v1', share: { title: TEST_TEAM_PORTFOLIO_TITLE }, components: [
+    { componentKey: 'divider-color', componentType: 'DIVIDER', sortOrder: 0, enabled: true, config: { color: 'TRANSPARENT', heightPx: 16 } }
+  ] }
+  try {
+    page.openDividerSheet('divider-color')
+    page.handleDividerHeightInput({ detail: { value: '24' } })
+    page.handleConfirmDividerConfig()
+    assert.equal(page.data.config.components[0].config.color, 'TRANSPARENT')
+    for (const color of ['#000000', '#FFFFFF', '#F5F6F8', '#12abEF']) {
+      const original = page.data.config.components[0].config.color
+      page.openDividerSheet('divider-color')
+      page.handleDividerColorChange({ detail: { color } })
+      assert.equal(page.data.config.components[0].config.color, original)
+      page.handleCloseDividerSheet()
+      page.handleDividerColorChange({ detail: { color: '#FF0000' } })
+      assert.equal(page.data.config.components[0].config.color, original)
+      page.openDividerSheet('divider-color')
+      page.data.canMaintain = false
+      page.handleDividerColorChange({ detail: { color } })
+      assert.equal(page.data.dividerForm.color, original)
+      page.data.canMaintain = true
+      for (const invalid of ['AUTO', 'TRANSPARENT', '#fff', '#000000;display:none']) {
+        page.handleDividerColorChange({ detail: { color: invalid } })
+        assert.equal(page.data.dividerForm.color, original)
+      }
+      page.handleDividerColorChange({ detail: { color } })
+      page.handleConfirmDividerConfig()
+      assert.equal(page.data.config.components[0].config.color, color.toUpperCase())
+      assert.equal(page.data.config.components[0].config.heightPx, 24)
+      page.openDividerSheet('divider-color')
+      assert.equal(page.data.dividerPickerColor, color.toUpperCase())
+      page.handleCloseDividerSheet()
+    }
+  } finally {
+    page.cleanup()
+  }
+})
+
 test('team schedule and divider sheets mark their components valid after confirmation', () => {
   const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => ({}))
   page.data.config = {
@@ -2033,6 +2088,48 @@ test('team editor configures theme and menus, then moves a component without cha
     page.onUnload()
     page.cleanup()
   }
+})
+
+test('团队自定义背景色可输入复制，取消和无权限不复制或提交', () => {
+  const copies = [], toasts = []
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => ({}), {
+    setClipboardData(options) { copies.push(options) },
+    showToast(options) { toasts.push(options) }
+  })
+  page.data.canMaintain = true
+  const original = page.data.config.style.backgroundColor
+  try {
+    page.handleCopyBackgroundColor()
+    assert.equal(copies.length, 0)
+    page.handleOpenBackgroundColorSheet()
+    page.handleBackgroundHexInput({ detail: { value: '#8e9093' } })
+    assert.equal(page.data.backgroundColorDraft, '#8E9093')
+    page.handleCopyBackgroundColor()
+    assert.equal(copies[0].data, '#8E9093')
+    assert.equal(page.data.config.style.backgroundColor, original)
+    assert.equal(page.data.backgroundColorSheetVisible, true)
+    for (const value of ['', '#12', '#GGGGGG']) {
+      page.handleBackgroundHexInput({ detail: { value } })
+      page.handleCopyBackgroundColor()
+      assert.equal(copies.length, 1)
+      assert.equal(toasts.at(-1).title, '请输入正确的颜色值')
+    }
+    page.handleBackgroundHexInput({ detail: { value: '#F5F6F8' } })
+    page.data.canMaintain = false
+    page.handleCopyBackgroundColor()
+    assert.equal(copies.length, 1)
+    page.data.canMaintain = true
+    page.handleCopyBackgroundColor()
+    assert.equal(copies[1].data, '#F5F6F8')
+    copies[1].fail()
+    assert.equal(toasts.at(-1).title, '复制失败，请重试')
+    page.handleCloseBackgroundColorSheet()
+    page.handleCopyBackgroundColor()
+    assert.equal(copies.length, 2)
+    assert.equal(page.data.config.style.backgroundColor, original)
+    page.handleOpenBackgroundColorSheet()
+    assert.equal(page.data.backgroundColorDraft, original)
+  } finally { page.cleanup() }
 })
 
 test('team editor derives the personal-style active menu title and navigation count', () => {

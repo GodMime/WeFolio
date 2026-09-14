@@ -1,4 +1,7 @@
 // 两个分包各自维护本地副本，通过同一组行为测试保持一致，避免跨分包引用。
+const { isValidPortfolioTextLineHeight, buildPortfolioTextLineHeightStyle,
+  PORTFOLIO_TEXT_LINE_HEIGHT_ERROR } = require('../../../utils/portfolio-text-typography.js')
+const SPACER_LINE_HEIGHT_ERROR = '留白区块不能设置行高'
 const BLOCK_PRESETS = {
   EYEBROW: [24, 'NORMAL', 0, 16],
   TITLE: [44, 'BOLD', 24, 16],
@@ -13,19 +16,23 @@ const FONT_WEIGHTS = ['NORMAL', 'BOLD']
 const ALIGNMENTS = ['LEFT', 'CENTER', 'RIGHT']
 const BACKGROUND_TREATMENTS = ['ORIGINAL', 'DARK_MASK', 'GRADIENT']
 const VERTICAL_ALIGNMENTS = ['TOP', 'CENTER', 'BOTTOM']
-const IMAGE_MEDIA_TYPES = ['IMAGE', 'ANIMATION']
+const VIDEO_MEDIA_TYPE = 'VIDEO'
+const BACKGROUND_MEDIA_TYPES = ['IMAGE', 'ANIMATION', VIDEO_MEDIA_TYPE]
+const BACKGROUND_MEDIA_LABELS = { IMAGE: '图片', ANIMATION: '动图', [VIDEO_MEDIA_TYPE]: '视频' }
 const MAX_BLOCKS = 20
 const MAX_TEXT = 2000
 const MAX_ITEMS = 10
 const SPACING_STEP = 4
 const MAX_SPACING = 128
+const MAX_SPACER_HEIGHT = 512
 const DEFAULT_SPACER_HEIGHT = 32
-const MIN_FONT_SIZE = 20
+const MIN_FONT_SIZE = 10
 const MAX_FONT_SIZE = 96
 const AUTO_COLOR = 'AUTO'
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
-const BLOCK_BASE_FIELDS = ['blockKey', 'type', 'marginTopRpx', 'marginBottomRpx']
-const TEXT_STYLE_FIELDS = ['fontFamily', 'fontSizeRpx', 'fontWeight', 'color', 'alignment']
+const BLOCK_SPACING_FIELDS = ['marginTopRpx', 'marginBottomRpx']
+const BLOCK_BASE_FIELDS = ['blockKey', 'type', ...BLOCK_SPACING_FIELDS]
+const TEXT_STYLE_FIELDS = ['fontFamily', 'fontSizeRpx', 'lineHeight', 'fontWeight', 'color', 'alignment']
 
 /** 编辑状态必须独立复制，避免嵌套列表和展示资源污染原始页面配置。 */
 function copy(value) {
@@ -108,7 +115,7 @@ function validateTextBackground(config = {}, options = {}) {
   if (!validId(background.backgroundWorkId)) return '请选择背景作品'
   if (options.team && !validId(background.backgroundMemberUserId)) return '请选择背景作品所属成员'
   if (config.backgroundInvalid === true || config.backgroundWork === null) return '背景作品已失效，请重新选择或关闭背景'
-  if (isObject(config.backgroundWork) && !IMAGE_MEDIA_TYPES.includes(config.backgroundWork.mediaType)) return '背景作品仅支持图片或动图'
+  if (isObject(config.backgroundWork) && !BACKGROUND_MEDIA_TYPES.includes(config.backgroundWork.mediaType)) return '背景作品仅支持图片、动图或视频'
   if (hasOwn(config, 'backgroundWork') && !validBackgroundWork(config)) return '背景作品已失效，请重新选择或关闭背景'
   return ''
 }
@@ -124,15 +131,15 @@ function normalizeStructuredTextConfig(config = {}, { team = false } = {}) {
   return result
 }
 
-function validSpacing(value) {
-  return Number.isInteger(value) && value >= 0 && value <= MAX_SPACING && value % SPACING_STEP === 0
+function validSpacing(value, max = MAX_SPACING) {
+  return Number.isInteger(value) && value >= 0 && value <= max && value % SPACING_STEP === 0
 }
 
 /** 手工间距输入允许归一化；加载已有配置时不能调用本函数静默修正。 */
-function normalizeSpacingInput(value) {
+function normalizeSpacingInput(value, max = MAX_SPACING) {
   const number = Number(value)
   if (Number.isNaN(number)) return 0
-  return Math.round(Math.max(0, Math.min(MAX_SPACING, number)) / SPACING_STEP) * SPACING_STEP
+  return Math.round(Math.max(0, Math.min(max, number)) / SPACING_STEP) * SPACING_STEP
 }
 
 /** 仅统计当前类型的文字，Unicode 码点包含用户输入的空格和换行。 */
@@ -150,9 +157,13 @@ function validateBlock(block) {
   if (!isObject(block) || !hasOwn(BLOCK_PRESETS, block.type)) return '请选择有效的区块类型'
   if (typeof block.blockKey !== 'string' || !block.blockKey.trim()) return '区块标识不能为空'
   if (!validSpacing(block.marginTopRpx) || !validSpacing(block.marginBottomRpx)) return '区块间距须为 0–128 rpx 内的 4 的倍数'
-  if (block.type === 'SPACER') return validSpacing(block.heightRpx) ? '' : '留白高度须为 0–128 rpx 内的 4 的倍数'
+  if (block.type === 'SPACER') {
+    if (hasOwn(block, 'lineHeight')) return SPACER_LINE_HEIGHT_ERROR
+    return validSpacing(block.heightRpx, MAX_SPACER_HEIGHT) ? '' : '留白高度须为 0–512 rpx 内的 4 的倍数'
+  }
   if (!FONT_FAMILIES.includes(block.fontFamily)) return '请选择有效的字体'
-  if (!Number.isInteger(block.fontSizeRpx) || block.fontSizeRpx < MIN_FONT_SIZE || block.fontSizeRpx > MAX_FONT_SIZE) return '字号须为 20–96 rpx 的整数'
+  if (!Number.isInteger(block.fontSizeRpx) || block.fontSizeRpx < MIN_FONT_SIZE || block.fontSizeRpx > MAX_FONT_SIZE) return '字号须为 10–96 rpx 的整数'
+  if (hasOwn(block, 'lineHeight') && !isValidPortfolioTextLineHeight(block.lineHeight)) return PORTFOLIO_TEXT_LINE_HEIGHT_ERROR
   if (!FONT_WEIGHTS.includes(block.fontWeight)) return '请选择有效的字重'
   if (typeof block.color !== 'string' || (block.color !== AUTO_COLOR && !HEX_COLOR.test(block.color))) return '颜色须为跟随主题或六位十六进制颜色'
   if (!ALIGNMENTS.includes(block.alignment)) return '请选择有效的左右对齐方式'
@@ -201,6 +212,7 @@ const LIGHT_TEXT_COLOR = '#212529'
 const DARK_TEXT_COLOR = '#F8F9FA'
 const VIEWPORT_WIDTH_RPX = 750
 const BACKGROUND_IMAGE_SELECTOR = '.text-background-image'
+const BACKGROUND_VIDEO_SELECTOR = '.text-background-video'
 const TREATMENT_CLASSES = {
   ORIGINAL: 'text-background--original',
   DARK_MASK: 'text-background--dark-mask',
@@ -218,7 +230,8 @@ function cacheBlockPayload(draft) {
   const kind = contentKind(block.type)
   const field = kind === 'text' ? 'content' : kind === 'list' ? 'items' : 'heightRpx'
   draft.payloads[kind] = pick(block, [field])
-  if (kind !== 'spacer') draft.payloads.style = pick(block, TEXT_STYLE_FIELDS)
+  // 文字的上下间距随样式暂存，切成留白不继承，切回文字时恢复。
+  if (kind !== 'spacer') draft.payloads.style = pick(block, [...TEXT_STYLE_FIELDS, ...BLOCK_SPACING_FIELDS])
 }
 
 function createBlockEditDraft(block) {
@@ -238,6 +251,8 @@ function switchBlockEditType(draft, type) {
     return { draft: unchanged(), error: '列表最多 10 条，请先调整内容' }
   }
   if (countStructuredText([source]) > MAX_TEXT) return { draft: unchanged(), error: '文字总量不能超过 2000 字' }
+  // 重复点击当前类型不重建区块，避免改写旧留白配置中已保存的间距。
+  if (source.type === type) return { draft: unchanged(), error: '' }
   const result = copy(draft)
   if (!isObject(result.payloads)) result.payloads = {}
   cacheBlockPayload(result)
@@ -259,7 +274,6 @@ function switchBlockEditType(draft, type) {
   }
   result.block = {
     ...createStructuredBlock(type, source.blockKey),
-    ...pick(source, ['marginTopRpx', 'marginBottomRpx']),
     ...(kind !== 'spacer' ? copy(result.payloads.style || {}) : {}),
     ...copy(payload)
   }
@@ -280,7 +294,7 @@ function buildStructuredTextPresentation(config = {}, themeMode) {
       const bottom = validSpacing(block.marginBottomRpx) ? block.marginBottomRpx : 0
       const spacing = 'margin-top:' + top + 'rpx;margin-bottom:' + bottom + 'rpx;'
       if (block.type === 'SPACER') {
-        const height = validSpacing(block.heightRpx) ? block.heightRpx : DEFAULT_SPACER_HEIGHT
+        const height = validSpacing(block.heightRpx, MAX_SPACER_HEIGHT) ? block.heightRpx : DEFAULT_SPACER_HEIGHT
         return { ...block, style: spacing + 'height:' + height + 'rpx;' }
       }
       const displayColor = typeof block.color === 'string' && HEX_COLOR.test(block.color) ? block.color : foreground
@@ -290,7 +304,7 @@ function buildStructuredTextPresentation(config = {}, themeMode) {
       const weight = block.fontWeight === 'BOLD' ? 700 : 400
       const fontClass = hasOwn(FONT_CLASSES, block.fontFamily) ? FONT_CLASSES[block.fontFamily] : FONT_CLASSES.SYSTEM
       return {
-        ...block, displayColor, fontClass,
+        ...block, displayColor, fontClass, lineHeightStyle: buildPortfolioTextLineHeightStyle(block.lineHeight),
         style: spacing + 'font-size:' + fontSize + 'rpx;font-weight:' + weight + ';color:' + displayColor + ';text-align:' + alignment + ';'
       }
     })
@@ -301,10 +315,19 @@ function buildStructuredTextPresentation(config = {}, themeMode) {
 function validBackgroundWork(source) {
   const work = source.backgroundWork
   return isObject(work) && validId(work.workId) && String(work.workId) === String(source.backgroundWorkId)
-    && IMAGE_MEDIA_TYPES.includes(work.mediaType) && typeof work.url === 'string' && !!work.url.trim()
+    && BACKGROUND_MEDIA_TYPES.includes(work.mediaType) && typeof work.url === 'string' && !!work.url.trim()
 }
 
-/** 资源地址仅来自后端授权后的 backgroundWork，动图不使用静态封面替换。 */
+/** 选择器仅用视频封面作缩略图，缺少封面时保留空值供界面显示占位。 */
+function buildTextBackgroundWorkPreview(work = {}) {
+  const source = isObject(work) ? work : {}
+  const isVideo = source.mediaType === VIDEO_MEDIA_TYPE
+  const thumbnail = isVideo ? source.posterUrl : source.url
+  return { ...source, isVideo, thumbnailUrl: typeof thumbnail === 'string' ? thumbnail : '',
+    mediaTypeText: hasOwn(BACKGROUND_MEDIA_LABELS, source.mediaType) ? BACKGROUND_MEDIA_LABELS[source.mediaType] : '' }
+}
+
+/** 资源地址仅来自后端授权后的 backgroundWork，视频与图片分开呈现，动图保留原资源。 */
 function buildTextBackgroundPresentation(config = {}) {
   const source = isObject(config) ? config : {}
   const enabled = source.backgroundEnabled === true
@@ -313,18 +336,26 @@ function buildTextBackgroundPresentation(config = {}) {
   const validDimensions = valid && typeof work.width === 'number' && Number.isFinite(work.width) && work.width > 0
     && typeof work.height === 'number' && Number.isFinite(work.height) && work.height > 0
   const height = validDimensions ? VIEWPORT_WIDTH_RPX * work.height / work.width : 0
+  const isVideo = valid && work.mediaType === VIDEO_MEDIA_TYPE
   return {
-    enabled, imageUrl: valid ? work.url : '',
+    enabled, imageUrl: valid && !isVideo ? work.url : '', isVideo, videoUrl: isVideo ? work.url : '',
+    posterUrl: isVideo && typeof work.posterUrl === 'string' ? work.posterUrl : '',
     minHeightRpx: Number.isFinite(height) ? height : 0,
     treatmentClass: enabled ? (hasOwn(TREATMENT_CLASSES, source.backgroundTreatment) ? TREATMENT_CLASSES[source.backgroundTreatment] : TREATMENT_CLASSES.GRADIENT) : '',
     invalid: enabled && !valid
   }
 }
 
-/** 图片加载后以实际容器宽度计算最小高度，同一背景刷新文字时复用已测量尺寸。 */
+/** 图片与视频分别取其真实媒体地址，避免封面参与播放和布局身份判断。 */
+function textBackgroundMediaUrl(background) {
+  return background.isVideo ? background.videoUrl : background.imageUrl
+}
+
+/** 媒体加载后以实际容器宽度计算最小高度，同一背景刷新文字时复用已测量尺寸。 */
 function buildTextBackgroundFrameStyle(background, layout) {
-  if (!background.enabled || !background.imageUrl) return ''
-  if (layout && layout.imageUrl === background.imageUrl) {
+  const mediaUrl = textBackgroundMediaUrl(background)
+  if (!background.enabled || !mediaUrl) return ''
+  if (layout && layout.mediaUrl === mediaUrl && layout.isVideo === background.isVideo) {
     const measured = Number.isFinite(layout.frameWidth) && layout.frameWidth > 0
     const height = (measured ? layout.frameWidth : VIEWPORT_WIDTH_RPX) * layout.height / layout.width
     if (Number.isFinite(height) && height > 0) return `min-height:${height}${measured ? 'px' : 'rpx'};`
@@ -332,22 +363,24 @@ function buildTextBackgroundFrameStyle(background, layout) {
   return background.minHeightRpx > 0 ? `min-height:${background.minHeightRpx}rpx;` : ''
 }
 
-/** 旧作品可能缺少宽高；从原图加载事件补足，并拒绝换图后的过期回调。 */
+/** 旧作品可能缺少宽高；从图片加载或视频元数据补足，并拒绝换背景后的过期回调。 */
 function handleTextBackgroundLoad(component, event) {
   const background = component.data.background
   const dataset = event && event.currentTarget && event.currentTarget.dataset || {}
-  const imageUrl = dataset.src
+  const mediaUrl = dataset.src
   const dimensions = event && event.detail || {}
-  if (!background.enabled || !imageUrl || imageUrl !== background.imageUrl
+  if (!background.enabled || !mediaUrl || mediaUrl !== textBackgroundMediaUrl(background)
       || !Number.isFinite(dimensions.width) || dimensions.width <= 0
       || !Number.isFinite(dimensions.height) || dimensions.height <= 0) return
-  const layout = { imageUrl, width: dimensions.width, height: dimensions.height }
+  const layout = { mediaUrl, isVideo: background.isVideo, width: dimensions.width, height: dimensions.height }
   component._textBackgroundLayout = layout
   component.setData({ frameStyle: buildTextBackgroundFrameStyle(background, layout) })
-  // 图片宽度包含组件内边距，避免编辑预览比屏幕窄时按 750rpx 计算导致裁切。
-  component.createSelectorQuery().select(BACKGROUND_IMAGE_SELECTOR).boundingClientRect(rect => {
+  // 媒体宽度包含组件内边距，避免编辑预览比屏幕窄时按 750rpx 计算导致裁切。
+  const selector = background.isVideo ? BACKGROUND_VIDEO_SELECTOR : BACKGROUND_IMAGE_SELECTOR
+  component.createSelectorQuery().select(selector).boundingClientRect(rect => {
     if (component._textBackgroundLayout !== layout || !component.data.background.enabled
-        || component.data.background.imageUrl !== imageUrl || !rect
+        || textBackgroundMediaUrl(component.data.background) !== mediaUrl
+        || component.data.background.isVideo !== layout.isVideo || !rect
         || !Number.isFinite(rect.width) || rect.width <= 0) return
     layout.frameWidth = rect.width
     component.setData({ frameStyle: buildTextBackgroundFrameStyle(component.data.background, layout) })
@@ -355,7 +388,8 @@ function handleTextBackgroundLoad(component, event) {
 }
 
 module.exports = {
-  MIN_FONT_SIZE, MAX_FONT_SIZE,
+  MIN_FONT_SIZE, MAX_FONT_SIZE, MAX_SPACING, MAX_SPACER_HEIGHT, SPACING_STEP,
+  BACKGROUND_MEDIA_TYPES, VIDEO_MEDIA_TYPE, buildTextBackgroundWorkPreview,
   createStructuredBlock, normalizeTextBackground, finalizeTextBackground, validateTextBackground,
   normalizeStructuredTextConfig, validateStructuredTextConfig, finalizeStructuredTextConfig,
   normalizeSpacingInput, countStructuredText, createBlockEditDraft, switchBlockEditType,

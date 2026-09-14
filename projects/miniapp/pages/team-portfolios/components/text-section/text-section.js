@@ -1,11 +1,13 @@
 const TEXT_SECTION_MAX_LENGTH = 200
 const TEXT_ALIGNMENTS = Object.freeze(['LEFT', 'CENTER', 'RIGHT'])
+const { buildPortfolioTextLineHeightStyle, isValidPortfolioTextLineHeight, PORTFOLIO_TEXT_LINE_HEIGHT_ERROR } = require('../../utils/portfolio-component-platform')
 const { buildTextBackgroundPresentation, buildTextBackgroundFrameStyle, handleTextBackgroundLoad } = require('../../utils/portfolio-text-sections')
 const { normalizeTextColor, buildTextColorStyle, isValidTextColor, TEXT_COLOR_ERROR } = require('../../utils/portfolio-text-color')
+const { textBackgroundVideo } = require('../../utils/portfolio-text-background-video')
 // 排版常量沿用原团队文字组件；新增背景逻辑不改变旧字体与字号回退。
 const LEGACY_TEAM_FONT_SIZE_RPX = 32
-const TEXT_FONT_SIZE_MIN_RPX = 20
-const TEXT_FONT_SIZE_MAX_RPX = 48
+const TEXT_FONT_SIZE_MIN_RPX = 10
+const TEXT_FONT_SIZE_MAX_RPX = 96
 const TEXT_FONT_CLASS_MAP = Object.freeze({
   SYSTEM: 'font-system',
   WECHAT_SANS_SS: 'font-wechat-sans-ss'
@@ -61,21 +63,26 @@ function validateTextSectionConfig(config = {}) {
   if (countTextCodePoints(content) > TEXT_SECTION_MAX_LENGTH) return { valid: false, message: '正文不能超过200字' }
   if (!TEXT_ALIGNMENTS.includes(config.alignment)) return { valid: false, message: '请选择有效的对齐方式' }
   if (!isValidTextColor(config.color)) return { valid: false, message: TEXT_COLOR_ERROR }
+  if (Object.prototype.hasOwnProperty.call(config, 'lineHeight') && !isValidPortfolioTextLineHeight(config.lineHeight)) return { valid: false, message: PORTFOLIO_TEXT_LINE_HEIGHT_ERROR }
   return { valid: true, message: '' }
 }
 
 Component({
+  lifetimes: textBackgroundVideo.lifetimes,
+  pageLifetimes: textBackgroundVideo.pageLifetimes,
   properties: {
+    ...textBackgroundVideo.properties,
     themeMode: { type: String, value: 'light' },
     config: { type: Object, value: {} },
     repairMode: { type: Boolean, value: false }
   },
   data: {
+    ...textBackgroundVideo.data,
     normalizedConfig: createDefaultTextSectionConfig(),
     background: { enabled: false, imageUrl: '', invalid: false },
-    frameStyle: '', verticalClass: '', imageFailed: false, showRepairHint: false, textColorStyle: ''
+    frameStyle: '', verticalClass: '', imageFailed: false, showRepairHint: false, textColorStyle: '', lineHeightStyle: ''
   },
-  observers: {
+  observers: { ...textBackgroundVideo.observers,
     config(config) {
       this.setData({
         normalizedConfig: createDefaultTextSectionConfig(config)
@@ -85,6 +92,7 @@ Component({
     repairMode() { this.updatePresentation() }
   },
   methods: {
+    ...textBackgroundVideo.methods,
     updatePresentation() {
       const config = this.properties.config || {}
       const background = buildTextBackgroundPresentation(config)
@@ -93,11 +101,12 @@ Component({
       this.setData({
         normalizedConfig: createDefaultTextSectionConfig(config), background,
         textColorStyle: buildTextColorStyle(config.color),
+        lineHeightStyle: buildPortfolioTextLineHeightStyle(config.lineHeight),
         frameStyle: buildTextBackgroundFrameStyle(background, this._textBackgroundLayout),
         verticalClass: background.enabled ? `vertical-${verticalAlignment}` : '',
         imageFailed: Boolean(imageFailed),
         showRepairHint: Boolean(this.properties.repairMode && background.enabled && (background.invalid || imageFailed))
-      })
+      }, () => this.syncBackgroundVideo())
     },
     handleBackgroundLoad(event) { handleTextBackgroundLoad(this, event) },
     handleBackgroundError() {

@@ -4,10 +4,7 @@
       <view class="editor-field">
         <view class="editor-label">颜色</view>
         <view class="editor-choice-row">
-          <button wx:for="{{colorOptions}}" wx:key="*this" class="editor-choice {{draft.color === item ? 'active' : ''}}" data-color="{{item}}" bindtap="selectColor" aria-label="{{item}}">
-            <view class="editor-swatch" style="background: {{item === 'BLACK' ? '#212529' : item === 'WHITE' ? '#ffffff' : item === 'GRAY' ? '#d7dfe1' : 'linear-gradient(135deg, #ffffff 46%, #b55656 48%, #b55656 52%, #ffffff 54%)'}}"></view>
-            <view class="editor-choice-label">{{item === 'BLACK' ? '黑色' : item === 'WHITE' ? '白色' : item === 'GRAY' ? '灰色' : '透明'}}</view>
-          </button>
+          <text-color-editor color="{{colorValue}}" label="分割线颜色" active="{{editMode}}" bindchange="selectColor" />
         </view>
       </view>
       <view class="editor-field">
@@ -17,5 +14,5 @@
       <view wx:if="{{errorMessage}}" class="editor-error">{{errorMessage}}</view>
     </view>
   </block>
-  <view wx:else class="line" style="height: {{config.heightPx || 16}}px; background: {{config.color === 'BLACK' ? '#212529' : config.color === 'WHITE' ? '#ffffff' : config.color === 'TRANSPARENT' ? 'transparent' : '#d7dfe1'}};"></view>
+  <view wx:else class="line" style="height: {{config.heightPx || 16}}px; background: {{colorValue}};"></view>
 </view>

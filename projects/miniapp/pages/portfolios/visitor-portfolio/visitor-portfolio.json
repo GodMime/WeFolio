@@ -16,6 +16,8 @@
     "portfolio-text-section": "/pages/portfolios/components/text-section/text-section",
     "portfolio-structured-text-section": "/pages/portfolios/components/structured-text-section/structured-text-section",
     "portfolio-divider": "/pages/portfolios/components/divider/divider",
-    "portfolio-hyperlink": "/pages/portfolios/components/hyperlink/hyperlink"
+    "portfolio-hyperlink": "/pages/portfolios/components/hyperlink/hyperlink",
+    "portfolio-text-grid": "../components/text-grid/text-grid",
+    "portfolio-contact-info": "../components/contact-info/contact-info"
   }
 }

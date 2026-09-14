@@ -227,6 +227,48 @@ function buildFollowTone(followStatus, tone) {
   return FOLLOW_TONE_ROSE
 }
 
+const ACTIVITY_FIELDS = ['foregroundDurationSeconds', 'foregroundDurationText', 'deviceText', 'deviceInfo', 'deviceRecordedAtEpochMs', 'deviceRecordedAtText']
+const DEVICE_LABELS = { brand: '品牌', model: '型号', system: '系统', platform: '平台' }
+
+function normalizeActivityMetadata(record = {}) {
+  const value = record.foregroundDurationSeconds
+  const seconds = value === undefined || value === null || value === '' ? null : Number(value)
+  const knownSeconds = Number.isFinite(seconds) && seconds >= 0 ? seconds : null
+  const rawDevice = record.deviceInfo && typeof record.deviceInfo === 'object' ? record.deviceInfo : {}
+  const deviceInfo = Object.keys(DEVICE_LABELS).reduce((result, field) => {
+    result[field] = typeof rawDevice[field] === 'string' ? rawDevice[field].trim() : ''
+    return result
+  }, {})
+  const knownDeviceValues = Object.values(deviceInfo).filter(Boolean)
+  const deviceRows = Object.keys(DEVICE_LABELS)
+    .map((field) => ({ key: field, label: DEVICE_LABELS[field], value: deviceInfo[field] || '未知' }))
+  const epoch = Number(record.deviceRecordedAtEpochMs)
+  return {
+    foregroundDurationSeconds: knownSeconds,
+    foregroundDurationText: record.foregroundDurationText || (knownSeconds === null ? '暂无停留数据' : knownSeconds < 1 ? '不到 1 秒' : `${Math.floor(knownSeconds)} 秒`),
+    deviceText: record.deviceText || knownDeviceValues.join(' · ') || '设备未知',
+    deviceInfo,
+    deviceRows,
+    hasDeviceInfo: knownDeviceValues.length > 0,
+    deviceRecordedAtEpochMs: Number.isFinite(epoch) && epoch > 0 ? epoch : null,
+    deviceRecordedAtText: record.deviceRecordedAtText || '',
+    // 分页归一化不能把旧响应省略的元数据伪装为服务端明确返回的空值。
+    activityFieldsProvided: Array.isArray(record.activityFieldsProvided) ? record.activityFieldsProvided
+      : ACTIVITY_FIELDS.filter((field) => Object.prototype.hasOwnProperty.call(record, field))
+  }
+}
+
+function mergeActivityMetadata(current, incoming) {
+  const merged = Object.assign({}, current, incoming)
+  const provided = Array.isArray(incoming.activityFieldsProvided) ? incoming.activityFieldsProvided
+    : ACTIVITY_FIELDS.filter((field) => Object.prototype.hasOwnProperty.call(incoming, field))
+  ACTIVITY_FIELDS.forEach((field) => {
+    if (!provided.includes(field) && Object.prototype.hasOwnProperty.call(current, field)) merged[field] = current[field]
+  })
+  merged.activityFieldsProvided = Array.from(new Set((current.activityFieldsProvided || []).concat(provided)))
+  return Object.assign(merged, normalizeActivityMetadata(merged))
+}
+
 function normalizeRecord(record = {}) {
   const followStatus = normalizeFollowStatus(record)
   const followTone = buildFollowTone(followStatus, record.followTone)
@@ -238,6 +280,7 @@ function normalizeRecord(record = {}) {
   const portfolioType = record.portfolioType || ''
   const backendCanMarkFollowed = record.canMarkFollowed !== false
   return {
+    ...normalizeActivityMetadata(record),
     id: record.id || record.recordId || record.visitorCode || record.visitorLabel,
     recordId: record.recordId || record.id || null,
     visitorLabel: record.visitorLabel || '微信访客',
@@ -298,7 +341,7 @@ function appendVisitRecordPage(current = {}, nextPage = {}) {
 }
 
 function normalizeVisitEventTimeline(raw = {}, fallbackRecord = {}) {
-  const merged = Object.assign({}, fallbackRecord, raw, {
+  const merged = Object.assign(mergeActivityMetadata(fallbackRecord, raw), {
     id: raw.recordId || fallbackRecord.id,
     recordId: raw.recordId || fallbackRecord.recordId || fallbackRecord.id,
     events: Array.isArray(raw.events) ? raw.events : fallbackRecord.events
@@ -313,7 +356,7 @@ function appendVisitEventTimeline(current = {}, nextPage = {}) {
   const pageNo = toPositiveNumber(nextPage.pageNo, toPositiveNumber(current.pageNo, 1))
   const pageSize = toPositiveNumber(nextPage.pageSize, toPositiveNumber(current.pageSize, 20))
   const hasMore = Boolean(nextPage.hasMore)
-  return Object.assign({}, current, nextPage, {
+  return Object.assign(mergeActivityMetadata(current, nextPage), {
     events,
     eventCountText: buildEventCountText(events),
     pageNo,

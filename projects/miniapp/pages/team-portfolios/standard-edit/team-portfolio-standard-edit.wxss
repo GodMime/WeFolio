@@ -583,72 +583,185 @@
   margin-top: 10rpx;
 }
 
-.team-video-editor-settings {
-  width: 100%;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 4rpx;
-  padding-bottom: 14rpx;
-  border-bottom: 1rpx solid var(--pe-color-border, #E9ECEF);
+/* 视频编辑共用一层滚动区，底部操作固定，收起设置后直接增加作品可见空间。 */
+.team-video-editor-compact .component-editor-scroll {
+  height: 0;
+  min-height: 0;
+  max-height: none;
+  flex: 1 1 auto;
 }
 
+.team-video-editor-compact .team-video-editor-grabber {
+  margin-bottom: 12rpx;
+}
+
+.team-video-editor-compact .team-video-editor-heading {
+  min-height: 64rpx;
+  margin-bottom: 12rpx;
+  gap: 12rpx;
+}
+
+.team-video-editor-compact .team-video-editor-title {
+  font-size: 30rpx;
+}
+
+.team-video-heading-tools,
+.team-video-settings-toggle,
 .team-video-title-setting,
-.team-video-switch-copy {
-  flex-direction: column;
-  align-items: stretch;
+.team-video-title-field,
+.team-video-switch-setting,
+.team-video-switch-copy,
+.team-video-setting-help,
+.team-video-source-state,
+.team-video-work-option,
+.team-video-work-placeholder,
+.team-video-work-footer {
+  display: flex;
+  align-items: center;
 }
 
-.team-video-title-setting {
-  gap: 10rpx;
-  padding: 8rpx 0 14rpx;
+.team-video-heading-tools {
+  flex: none;
+  gap: 14rpx;
 }
 
-.team-video-setting-heading,
-.team-video-switch-setting {
-  justify-content: space-between;
-  gap: 24rpx;
-}
-
+.team-video-selected-count,
+.team-video-settings-toggle,
+.team-video-settings-summary,
 .team-video-title-count,
-.team-video-switch-note,
+.team-video-title-hidden,
 .team-video-work-meta {
   color: var(--pe-color-text-secondary, #868E96);
-  font-size: 21rpx;
+  font-size: 22rpx;
   line-height: 1.35;
 }
 
-.team-video-title-input,
-.team-video-search {
+.team-video-selected-count {
+  white-space: nowrap;
+}
+
+.team-video-settings-toggle {
+  min-width: 76rpx;
+  min-height: 72rpx;
+  justify-content: flex-end;
+  gap: 8rpx;
+}
+
+.team-video-settings-chevron {
+  width: 10rpx;
+  height: 10rpx;
+  border-top: 2rpx solid currentColor;
+  border-right: 2rpx solid currentColor;
+  transform: rotate(-45deg);
+}
+
+.team-video-settings-chevron.collapsed {
+  transform: rotate(135deg);
+}
+
+.team-video-settings-summary {
+  padding: 0 0 16rpx;
+  border-bottom: 1rpx solid var(--pe-color-border, #E9ECEF);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.team-video-editor-settings {
   width: 100%;
-  border: 1rpx solid var(--pe-color-border-strong, #DEE2E6);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding-bottom: 8rpx;
+  border-bottom: 1rpx solid var(--pe-color-border, #E9ECEF);
+}
+
+.team-video-title-setting {
+  min-height: 80rpx;
+  gap: 16rpx;
+}
+
+.team-video-title-field {
+  min-width: 0;
+  height: 64rpx;
+  flex: 1 1 0;
+  padding: 0 14rpx;
+  border: 1rpx solid var(--pe-color-border, #E9ECEF);
   border-radius: 14rpx;
   background: var(--pe-color-page, #F5F6F7);
   box-sizing: border-box;
 }
 
 .team-video-title-input {
-  min-height: 68rpx;
-  padding: 0 18rpx;
+  width: 0;
+  min-width: 0;
+  height: 100%;
+  flex: 1 1 0;
+  padding: 0;
+  color: var(--pe-color-text-primary, #212529);
+  font-size: 26rpx;
+  border: 0;
+  background: transparent;
+}
+
+.team-video-title-count {
+  flex: none;
+  margin-left: 8rpx;
+  font-size: 20rpx;
+  white-space: nowrap;
+}
+
+.team-video-title-hidden {
+  flex: 1 1 0;
+  text-align: right;
 }
 
 .team-video-switch-setting {
-  min-height: 84rpx;
-  padding: 14rpx 0;
+  min-height: 72rpx;
+  justify-content: space-between;
+  gap: 16rpx;
 }
 
 .team-video-switch-copy {
   min-width: 0;
   flex: 1 1 0;
-  align-items: flex-start;
-  gap: 4rpx;
 }
 
 .team-video-switch-title,
 .team-video-work-title {
   color: var(--pe-color-text-primary, #212529);
-  font-size: 24rpx;
-  font-weight: 800;
+  font-size: 26rpx;
+  font-weight: 600;
   line-height: 1.35;
+}
+
+.team-video-switch-title {
+  flex: none;
+  white-space: nowrap;
+}
+
+.team-video-switch {
+  flex: none;
+  margin-left: -20rpx;
+  transform: scale(0.72);
+  transform-origin: right center;
+}
+
+.team-video-setting-help {
+  width: 64rpx;
+  height: 72rpx;
+  justify-content: center;
+  color: var(--pe-color-text-secondary, #868E96);
+}
+
+.team-video-setting-help text {
+  width: 26rpx;
+  height: 26rpx;
+  border: 1rpx solid currentColor;
+  border-radius: 50%;
+  font-size: 20rpx;
+  line-height: 26rpx;
+  text-align: center;
 }
 
 .team-video-source-state {
@@ -661,61 +774,109 @@
 }
 
 .team-video-member-field {
-  margin-top: 20rpx;
+  margin-top: 16rpx;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.team-video-member-field .team-member-selector-label {
+  font-size: 22rpx;
+  font-weight: 500;
+}
+
+.team-video-member-field .team-member-selector-scroll {
+  margin-top: 8rpx;
 }
 
 .team-video-search {
+  width: 100%;
+  display: flex;
+  align-items: center;
   height: 64rpx;
   gap: 14rpx;
   margin-top: 12rpx;
   padding: 0 18rpx;
+  border: 1rpx solid var(--pe-color-border, #E9ECEF);
+  border-radius: 14rpx;
+  background: var(--pe-color-page, #F5F6F7);
+  box-sizing: border-box;
 }
 
 .team-video-search-icon {
-  width: 18rpx;
-  height: 18rpx;
+  position: relative;
+  width: 20rpx;
+  height: 20rpx;
   flex: none;
-  border: 3rpx solid var(--pe-color-text-muted, #ADB5BD);
+  margin-right: 4rpx;
+  border: 2rpx solid var(--pe-color-text-muted, #ADB5BD);
   border-radius: 50%;
+  box-sizing: border-box;
+}
+
+.team-video-search-icon::after {
+  position: absolute;
+  right: -8rpx;
+  bottom: -5rpx;
+  width: 10rpx;
+  height: 2rpx;
+  content: "";
+  background: var(--pe-color-text-muted, #ADB5BD);
+  transform: rotate(45deg);
 }
 
 .team-video-search-input {
+  width: 0;
   min-width: 0;
   flex: 1 1 0;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: var(--pe-color-text-primary, #212529);
+  font-size: 26rpx;
+  background: transparent;
 }
 
 .team-video-search-clear {
-  width: 34rpx;
-  height: 34rpx;
+  display: flex;
+  align-items: center;
+  flex: none;
+  width: 48rpx;
+  height: 60rpx;
   justify-content: center;
-  border-radius: 50%;
-  background: var(--pe-color-border-strong, #DEE2E6);
+  color: var(--pe-color-text-secondary, #868E96);
+  font-size: 34rpx;
 }
 
 .team-video-work-scroll {
   width: 100%;
-  height: 520rpx;
-  margin-top: 14rpx;
+  margin-top: 8rpx;
 }
 
 .team-video-work-list {
+  display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 12rpx;
 }
 
 .team-video-work-option {
   width: 100%;
   min-height: 112rpx;
   gap: 16rpx;
+  padding: 12rpx 0;
+  border-bottom: 1rpx solid var(--pe-color-border, #E9ECEF);
+  box-sizing: border-box;
 }
 
 .team-video-work-thumb {
-  width: 92rpx;
-  height: 76rpx;
+  width: 96rpx;
+  height: 80rpx;
   flex: none;
   overflow: hidden;
-  border-radius: 12rpx;
+  border-radius: 10rpx;
   background: var(--pe-color-page, #F5F6F7);
 }
 
@@ -734,9 +895,21 @@
 .team-video-work-copy {
   min-width: 0;
   flex: 1 1 0;
+  display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 7rpx;
+  align-items: stretch;
+  gap: 6rpx;
+}
+
+.team-video-work-title,
+.team-video-work-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.team-video-work-meta {
+  font-size: 21rpx;
 }
 
 .team-video-work-order {
@@ -748,13 +921,16 @@
   justify-content: center;
   color: var(--pe-color-surface, #FFFFFF);
   font-size: 22rpx;
-  font-weight: 900;
+  font-weight: 700;
   line-height: 1;
+  border: 1rpx solid var(--pe-color-border-strong, #DEE2E6);
   border-radius: 50%;
-  background: var(--pe-color-border-strong, #DEE2E6);
+  background: var(--pe-color-surface, #FFFFFF);
+  box-sizing: border-box;
 }
 
-.team-video-work-option[aria-checked="true"] .team-video-work-order {
+.team-video-work-selected .team-video-work-order {
+  border-color: var(--pe-color-text-primary, #212529);
   background: var(--pe-color-text-primary, #212529);
 }
 
@@ -984,10 +1160,43 @@
   pointer-events: none;
 }
 
-.background-hex-input {
+.background-hex-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
   margin-top: 28rpx;
+}
+
+.background-hex-input {
+  flex: 1;
+  width: 0;
+  min-width: 0;
+  height: 76rpx;
+  min-height: 76rpx;
+  border-radius: 24rpx;
   font-weight: 700;
 }
+
+.background-hex-copy {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 112rpx;
+  height: 76rpx;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0 16rpx;
+  border: 2rpx solid var(--pe-color-border, #E9ECEF);
+  border-radius: 24rpx;
+  background: var(--pe-color-page, #F5F6F7);
+  color: var(--pe-color-text-primary, #212529);
+  font-size: 26rpx;
+  line-height: 1.5;
+}
+
+.background-hex-copy::after { border: 0; }
+.background-hex-copy[disabled] { opacity: .45; }
 
 .background-color-preview-bar {
   display: flex;
@@ -1174,7 +1383,7 @@
 }
 
 .background-audio-styles { display: flex; flex-direction: column; margin-top: 20rpx; }
-.background-audio-style { display: flex; align-items: center; justify-content: space-between; min-height: 80px; padding: 12px; margin-bottom: 8px; border: 1px solid var(--pe-color-border, #E9ECEF); border-radius: 8px; background: var(--pe-color-surface, #FFFFFF); }
+.background-audio-style { display: flex; align-items: center; justify-content: space-between; min-height: 48px; padding: 8px 12px; margin-bottom: 8px; border: 1px solid var(--pe-color-border, #E9ECEF); border-radius: 8px; background: var(--pe-color-surface, #FFFFFF); }
 .background-audio-style.audio-style-selected { border-color: var(--pe-color-text-primary, #212529); background: var(--pe-color-border, #E9ECEF); }
 .background-audio-sample { display: flex; align-items: center; min-width: 180px; min-height: 48px; }
 .background-audio-style-label { font-size: 22rpx; color: var(--pe-color-text-secondary, #868E96); margin-left: 8px; text-align: right; }
@@ -1187,3 +1396,70 @@
 
 .background-audio-options { padding: 16rpx 0; }
 .background-audio-option { display: flex; align-items: center; min-height: 44px; margin-top: 12rpx; padding: 12rpx 16rpx; font-size: 26rpx; text-align: left; }
+
+/* 视频轮播样例图与名称横排，样式仅作用于视频编辑设置。 */
+.team-video-editor-settings .display-style-options {
+  display: flex;
+  gap: 16rpx;
+  margin: 0 0 12rpx;
+}
+
+.team-video-editor-settings .display-style-choice {
+  min-width: 0;
+  height: 88rpx;
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16rpx;
+  padding: 10rpx 12rpx;
+  border: 2rpx solid var(--pe-color-border, #E9ECEF);
+  border-radius: 18rpx;
+  color: var(--pe-color-text-strong, #495057);
+  font-size: 24rpx;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.team-video-editor-settings .display-style-choice.selected {
+  border-color: var(--pe-color-text-primary, #212529);
+  color: var(--pe-color-text-primary, #212529);
+  background: var(--pe-color-page, #F5F6F7);
+}
+
+.team-video-editor-settings .style-thumbnail {
+  width: 92rpx;
+  height: 52rpx;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.team-video-editor-settings .style-thumbnail view {
+  width: 36rpx;
+  height: 50rpx;
+  border-radius: 6rpx;
+  background: var(--pe-color-text-muted, #ADB5BD);
+}
+
+.team-video-editor-settings .style-thumbnail.stacked view {
+  width: 40rpx;
+  height: 36rpx;
+  margin: 0 -7rpx;
+}
+
+.team-video-editor-settings .style-thumbnail.stacked view:nth-child(2) {
+  height: 50rpx;
+  background: var(--pe-color-text-strong, #495057);
+  z-index: 1;
+}
+
+.team-video-editor-settings .style-thumbnail.portrait {
+  gap: 8rpx;
+}
+
+.team-video-editor-settings .style-thumbnail.portrait view {
+  background: var(--pe-color-text-strong, #495057);
+}

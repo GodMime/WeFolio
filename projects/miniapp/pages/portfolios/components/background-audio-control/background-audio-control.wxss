@@ -7,6 +7,8 @@
 .audio-spin { animation: audio-spin 8s linear infinite; animation-play-state: paused; }
 .is-playing .audio-spin { animation-play-state: running; }
 .audio-play-badge { position: absolute; z-index: 3; right: -2px; bottom: -2px; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: #fff; color: #222; font-size: 10px; box-shadow: 0 2px 6px rgba(0,0,0,.26); }
+/* 按已确认设计绘制放大的黑色三角，避免播放字符被系统渲染为彩色表情。 */
+.audio-play-icon { width: 0; height: 0; flex-shrink: 0; border-top: 5.5px solid transparent; border-bottom: 5.5px solid transparent; border-left: 8.5px solid #111; transform: translateX(1px); }
 .style-SLEEVE, .audio-sleeve { width: 68px; height: 48px; }
 .audio-sleeve { position: relative; }
 .audio-sleeve-disc { position: absolute; top: 3px; right: 0; width: 42px; height: 42px; border-radius: 50%; background: #222; }

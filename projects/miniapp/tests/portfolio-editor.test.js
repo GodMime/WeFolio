@@ -16,6 +16,7 @@ const {
   TEXT_SECTION_ALIGNMENTS,
   TEXT_SECTION_MAX_LENGTH,
   addComponent,
+  buildDraftPayload,
   createComponent,
   normalizePortfolioConfig,
   normalizeTextSectionConfig,
@@ -372,8 +373,8 @@ test('personal text patches preserve typography and unknown fields under the cur
     alignment: 'RIGHT'
   })
 
-  assert.equal(EDITOR_SCHEMA_REVISION, 5)
-  assert.equal(updated.editorSchemaRevision, 5)
+  assert.equal(EDITOR_SCHEMA_REVISION, 14)
+  assert.equal(updated.editorSchemaRevision, 14)
   assert.equal(updated.components[0].config.fontFamily, 'WECHAT_SANS_SS')
   assert.equal(updated.components[0].config.fontSizeRpx, 30)
   assert.equal(updated.components[0].config.futureField, 'kept')
@@ -617,7 +618,7 @@ test('standard portfolio keeps profile option disabled after component library l
 
   const profileOption = page.data.componentOptions.find((item) => item.componentType === COMPONENT_TYPES.PROFILE)
   assert.equal(profileOption.disabled, true)
-  assert.deepEqual(requests[0].data, { editorSchemaRevision: 5 })
+  assert.deepEqual(requests[0].data, { editorSchemaRevision: 14 })
 })
 
 test('personal video carousel opens immediately and keeps ordered selections across tag filters', async () => {
@@ -666,7 +667,7 @@ test('personal video carousel opens immediately and keeps ordered selections acr
   assert.deepEqual(page.data.videoCarouselSelectedWorks.map((item) => item.workId), [101])
 })
 
-test('personal video carousel caps title and saves exactly four config fields with three selections', async () => {
+test('personal video carousel caps title and saves complete display config with three selections', async () => {
   const component = createComponent(COMPONENT_TYPES.VIDEO_CAROUSEL, {
     componentKey: 'video-component',
     config: { title: '原标题', workIds: [1, 2, 3], showTitle: false, showSwipeHint: false }
@@ -687,15 +688,71 @@ test('personal video carousel caps title and saves exactly four config fields wi
   })
   page.handleVideoCarouselTitleInput({ detail: { value: '一二三四五六七八九十😀' } })
   page.handleVideoCarouselShowTitleChange({ detail: { value: true } })
+  page.handleVideoCarouselStyleChange({ currentTarget: { dataset: { style: 'PORTRAIT_CARDS' } } })
+  page.handleVideoCarouselDescriptionChange({ detail: { value: true } })
   page.handleConfirmComponentWorks()
 
   const saved = page.data.config.components[0].config
   assert.deepEqual(saved, {
     title: '一二三四五六七八九十',
+    showComponentTitle: true,
     workIds: [1, 2, 3],
     showTitle: true,
-    showSwipeHint: false
+    showSwipeHint: false, displayStyle: 'PORTRAIT_CARDS', showDescription: true
   })
+})
+
+test('personal video component heading defaults on and survives hiding, folding, saving and reopening', async () => {
+  let requests = 0
+  const page = loadPortfolioEditorPage(() => {
+    requests += 1
+    return Promise.resolve({ works: [], filterTags: [], hasMore: false })
+  })
+  page.data.config = normalizePortfolioConfig({ components: [{
+    componentKey: 'video-heading', componentType: COMPONENT_TYPES.VIDEO_CAROUSEL,
+    config: { title: '旧版标题', workIds: [1, 2, 3], showTitle: false }
+  }] })
+  await page.openVideoCarouselSheet('video-heading')
+  assert.equal(page.data.videoCarouselShowComponentTitle, true)
+  assert.equal(page.data.videoCarouselSettingsCollapsed, false)
+
+  page.handleVideoCarouselTitleInput({ detail: { value: '婚礼精选' } })
+  page.handleVideoCarouselComponentTitleChange({ detail: { value: false } })
+  page.handleToggleVideoCarouselSettings()
+  assert.equal(page.data.videoCarouselSettingsCollapsed, true)
+  assert.equal(page.data.videoCarouselTitle, '婚礼精选')
+  assert.equal(page.data.videoCarouselShowTitle, false)
+  assert.deepEqual(page.data.videoCarouselSelectedWorks.map(item => item.workId), [1, 2, 3])
+  assert.equal(requests, 1)
+  page.handleConfirmComponentWorks()
+  assert.equal(page.data.config.components[0].config.showComponentTitle, false)
+  assert.equal(page.data.config.components[0].config.title, '婚礼精选')
+  assert.equal(page.data.config.components[0].config.showTitle, false)
+
+  await page.openVideoCarouselSheet('video-heading')
+  assert.equal(page.data.videoCarouselShowComponentTitle, false)
+  assert.equal(page.data.videoCarouselSettingsCollapsed, false)
+  page.handleVideoCarouselComponentTitleChange({ detail: { value: true } })
+  assert.equal(page.data.videoCarouselTitle, '婚礼精选')
+  page.handleCloseComponentWorkSheet()
+  assert.equal(page.data.config.components[0].config.showComponentTitle, false)
+  await page.openVideoCarouselSheet('video-heading')
+  page.handleVideoCarouselComponentTitleChange({ detail: { value: true } })
+  page.handleConfirmComponentWorks()
+  assert.equal(page.data.config.components[0].config.showComponentTitle, true)
+  assert.equal(page.data.config.components[0].config.title, '婚礼精选')
+})
+
+test('personal video display help leaves selections and config untouched', () => {
+  const modals = []
+  const page = loadPortfolioEditorPage(() => Promise.resolve({}), { showModal: options => modals.push(options) })
+  const before = clone(page.data)
+  page.handleVideoCarouselSettingHelp({ currentTarget: { dataset: { option: 'showTitle' } } })
+  page.handleVideoCarouselSettingHelp({ currentTarget: { dataset: { option: 'missing' } } })
+  assert.equal(modals.length, 1)
+  assert.equal(modals[0].title, '作品标题')
+  assert.equal(modals[0].showCancel, false)
+  assert.deepEqual(page.data, before)
 })
 
 test('personal video carousel blocks a ninth selection and preserves selected work after reload failure', async () => {
@@ -1648,6 +1705,40 @@ test('tapping contact form component edits display mode', () => {
   assert.equal(page.data.config.components[0].config.displayMode, CONTACT_FORM_DISPLAY_MODES.INLINE_FORM)
 })
 
+test('个人文字行距缺省不落盘，输入校验、取消与保存重开保持独立', () => {
+  const toasts = []
+  const page = loadPortfolioEditorPage(() => Promise.resolve({}), { showToast(value) { toasts.push(value) } })
+  page.data.config = normalizePortfolioConfig({ components: [createComponent(COMPONENT_TYPES.TEXT_SECTION, {
+    componentKey: 'line-height-text', sortOrder: 1000, config: { content: '第一行\n第二行' }
+  })] })
+  const open = () => page.handleComponentTap({ currentTarget: { dataset: { key: 'line-height-text', type: COMPONENT_TYPES.TEXT_SECTION } } })
+  open()
+  assert.equal(page.data.textSectionLineHeightEditor.placeholder, '默认（1.75 倍）')
+  page.handleConfirmTextSectionConfig()
+  assert.equal(Object.hasOwn(page.data.config.components[0].config, 'lineHeight'), false)
+  open()
+  page.handleTextSectionLineHeightStep({ currentTarget: { dataset: { delta: 0.1 } } })
+  assert.equal(page.data.textSectionForm.lineHeight, 1.8)
+  page.handleCloseTextSectionSheet()
+  assert.equal(Object.hasOwn(page.data.config.components[0].config, 'lineHeight'), false)
+  open()
+  for (const value of ['', '0.4', '3.1', '1.75']) {
+    page.handleTextSectionLineHeightInput({ detail: { value } })
+    page.handleConfirmTextSectionConfig()
+    assert.equal(page.data.textSectionSheetVisible, true)
+    assert.ok(page.data.textSectionLineHeightEditor.error)
+    assert.match(toasts.at(-1).title, /行间距/)
+  }
+  page.handleTextSectionLineHeightInput({ detail: { value: '0.5' } })
+  page.handleConfirmTextSectionConfig()
+  assert.equal(page.data.config.components[0].config.lineHeight, 0.5)
+  open()
+  assert.equal(page.data.textSectionTypography.lineHeightStyle, 'line-height: 0.5;')
+  page.handleTextSectionLineHeightInput({ detail: { value: '3.0' } })
+  page.handleConfirmTextSectionConfig()
+  assert.equal(page.data.config.components[0].config.lineHeight, 3)
+})
+
 test('tapping text section component saves typography only after confirmation', () => {
   const toasts = []
   const page = loadPortfolioEditorPage(() => Promise.resolve({}), {
@@ -1876,14 +1967,14 @@ test('tapping divider component edits color and pixel height', () => {
   assert.equal(page.data.dividerEditingComponentKey, 'c_divider')
   assert.equal(page.data.dividerForm.color, DIVIDER_COLORS.GRAY)
   assert.equal(page.data.dividerForm.heightPx, 12)
-  assert.deepEqual(page.data.dividerColorOptions.map((item) => item.label), ['黑', '白', '灰', '透明'])
+  assert.equal(page.data.dividerPickerColor, '#eef1f4')
 
-  page.handleDividerColorTap({ currentTarget: { dataset: { value: DIVIDER_COLORS.BLACK } } })
+  page.handleDividerColorChange({ detail: { color: '#000000' } })
   page.handleDividerHeightInput({ detail: { value: '28' } })
   page.handleConfirmDividerConfig()
 
   assert.equal(page.data.dividerSheetVisible, false)
-  assert.equal(page.data.config.components[0].config.color, DIVIDER_COLORS.BLACK)
+  assert.equal(page.data.config.components[0].config.color, '#000000')
   assert.equal(page.data.config.components[0].config.heightPx, 28)
 
   page.handleComponentTap({ currentTarget: { dataset: { key: 'c_divider', type: COMPONENT_TYPES.DIVIDER } } })
@@ -1892,6 +1983,38 @@ test('tapping divider component edits color and pixel height', () => {
 
   assert.equal(page.data.dividerSheetVisible, true)
   assert.equal(toasts.at(-1).title, '请输入大于 0 的高度')
+})
+
+test('个人分割线自定义色仅完成后保存，旧透明色与取消操作保持原配置', () => {
+  const page = loadPortfolioEditorPage(() => Promise.resolve({}))
+  page.data.config = normalizePortfolioConfig({ components: [createComponent(COMPONENT_TYPES.DIVIDER, {
+    componentKey: 'divider-color', config: { color: 'TRANSPARENT', heightPx: 16 }
+  })] })
+  page.openDividerSheet('divider-color')
+  page.handleDividerHeightInput({ detail: { value: '24' } })
+  page.handleConfirmDividerConfig()
+  assert.equal(page.data.config.components[0].config.color, 'TRANSPARENT')
+  for (const color of ['#000000', '#FFFFFF', '#F5F6F8', '#12abEF']) {
+    const original = page.data.config.components[0].config.color
+    page.openDividerSheet('divider-color')
+    page.handleDividerColorChange({ detail: { color } })
+    assert.equal(page.data.config.components[0].config.color, original)
+    page.handleCloseDividerSheet()
+    page.handleDividerColorChange({ detail: { color: '#FF0000' } })
+    assert.equal(page.data.config.components[0].config.color, original)
+    page.openDividerSheet('divider-color')
+    for (const invalid of ['AUTO', 'TRANSPARENT', '#fff', '#000000;display:none']) {
+      page.handleDividerColorChange({ detail: { color: invalid } })
+      assert.equal(page.data.dividerForm.color, original)
+    }
+    page.handleDividerColorChange({ detail: { color } })
+    page.handleConfirmDividerConfig()
+    assert.equal(page.data.config.components[0].config.color, color.toUpperCase())
+    assert.equal(page.data.config.components[0].config.heightPx, 24)
+    page.openDividerSheet('divider-color')
+    assert.equal(page.data.dividerPickerColor, color.toUpperCase())
+    page.handleCloseDividerSheet()
+  }
 })
 
 test('standard portfolio component drag moves row with animated style before reordering', () => {
@@ -2200,6 +2323,7 @@ test('single work editor replaces one selection and commits display switches ato
   assert.deepEqual(page.data.singleWorkSummaries, [{ id: 11, title: '仪式合影' }])
   assert.deepEqual(page.data.config.components[0].config, {
     workId: 11,
+    openMode: 'INLINE', detailOptions: { showTitle: true, showDescription: true },
     showTitle: true,
     showDescription: false
   })
@@ -2208,6 +2332,7 @@ test('single work editor replaces one selection and commits display switches ato
 
   assert.deepEqual(page.data.config.components[0].config, {
     workId: 12,
+    openMode: 'INLINE', detailOptions: { showTitle: true, showDescription: true },
     showTitle: false,
     showDescription: true
   })
@@ -2241,6 +2366,7 @@ test('single work editor blocks completion without a work and cancel preserves c
   assert.equal(page.data.componentWorkSheetVisible, true)
   assert.deepEqual(page.data.config.components[0].config, {
     workId: 0,
+    openMode: 'INLINE', detailOptions: { showTitle: true, showDescription: true },
     showTitle: true,
     showDescription: false
   })
@@ -2248,6 +2374,7 @@ test('single work editor blocks completion without a work and cancel preserves c
   page.handleCloseComponentWorkSheet()
   assert.deepEqual(page.data.config.components[0].config, {
     workId: 0,
+    openMode: 'INLINE', detailOptions: { showTitle: true, showDescription: true },
     showTitle: true,
     showDescription: false
   })
@@ -2617,6 +2744,129 @@ test('component work picker searches filters by tag and appends next page', asyn
   assert.deepEqual(page.data.componentWorkOptions.map((item) => item.selected), [false, true])
   assert.deepEqual(page.data.componentWorkOptions.map((item) => item.selectionOrder), [0, 2])
   assert.equal(page.data.componentWorkHasMore, false)
+})
+
+test('personal profile border draft preserves width and color through toggle, cancel, refresh and reopen', async () => {
+  const page = loadPortfolioEditorPage(() => Promise.resolve({ displayName: '刷新后的姓名' }))
+  page.data.config = normalizePortfolioConfig({ components: [createComponent(COMPONENT_TYPES.PROFILE, {
+    componentKey: 'profile_border', config: { profile: { displayName: '竞成' }, profileLayout: 'HORIZONTAL', visibleFields: { profession: false } }
+  })] })
+  await page.openProfileSheet('profile_border')
+  page.handleProfileBorderChange({ detail: { value: true } })
+  page.handleProfileBorderWidthChange({ detail: { value: 6 } })
+  page.handleProfileBorderColorChange({ detail: { color: '#1a2b3c' } })
+  page.handleCloseProfileSheet()
+  page.handleProfileBorderChange({ detail: { value: true } })
+  page.handleProfileBorderColorChange({ detail: { color: '#FFFFFF' } })
+  await page.openProfileSheet('profile_border')
+  assert.equal(page.data.profileBorderConfig.profileBorder, false)
+  assert.equal(page.data.profileBorderConfig.profileBorderColor, 'AUTO')
+  page.handleProfileBorderChange({ detail: { value: true } })
+  page.handleProfileBorderWidthChange({ detail: { value: 6 } })
+  page.handleProfileBorderColorChange({ detail: { color: '#1a2b3c' } })
+  await page.refreshProfileFromBase()
+  assert.equal(page.data.profileBorderConfig.profileBorderColor, '#1A2B3C')
+  assert.equal(page.data.profileLayout, 'HORIZONTAL')
+  page.handleProfileBorderChange({ detail: { value: false } })
+  page.handleProfileBorderColorChange({ detail: { color: '#FFFFFF' } })
+  page.handleProfileBorderWidthChange({ detail: { value: 3 } })
+  page.handleConfirmProfileSheet()
+  await page.openProfileSheet('profile_border')
+  assert.deepEqual(page.data.profileBorderConfig, { profileBorder: false, profileBorderWidthRpx: 6, profileBorderColor: '#1A2B3C', profileHorizontalMarginRpx: 32, profileVerticalMarginRpx: 0 })
+  assert.equal(page.data.profileVisibleOptions.find(item => item.field === 'profession').checked, false)
+  page.handleProfileBorderChange({ detail: { value: true } })
+  page.handleProfileBorderAutoColor()
+  page.handleConfirmProfileSheet()
+  const saved = page.data.config.components[0].config
+  assert.equal(saved.profileBorder, true)
+  assert.equal(saved.profileBorderColor, 'AUTO')
+  assert.equal(saved.profileBorderWidthRpx, 6)
+  assert.equal(saved.profileLayout, 'HORIZONTAL')
+})
+
+test('profile outer spacing is guarded, refreshed and confirmed with the border draft', async () => {
+  const page = loadPortfolioEditorPage(() => Promise.resolve({ displayName: '刷新后的姓名' }))
+  page.data.config = normalizePortfolioConfig({ components: [createComponent(COMPONENT_TYPES.PROFILE, {
+    componentKey: 'profile_spacing', config: { profile: { displayName: '竞成' }, profileBorder: true, profileLayout: 'HORIZONTAL' }
+  })] })
+  const change = (field, value) => page.handleProfileMarginChange({ currentTarget: { dataset: { field } }, detail: { value } })
+  await page.openProfileSheet('profile_spacing')
+  change('profileHorizontalMarginRpx', 0)
+  change('profileVerticalMarginRpx', 96)
+  await page.refreshProfileFromBase()
+  assert.equal(page.data.profileBorderConfig.profileHorizontalMarginRpx, 0)
+  assert.equal(page.data.profileBorderConfig.profileVerticalMarginRpx, 96)
+  assert.equal(page.data.profileLayout, 'HORIZONTAL')
+  for (const value of [-1, 97, 1.5, 'invalid']) change('profileVerticalMarginRpx', value)
+  change('profileBorderWidthRpx', 96)
+  assert.equal(page.data.profileBorderConfig.profileVerticalMarginRpx, 96)
+  assert.equal(page.data.profileBorderConfig.profileBorderWidthRpx, 1)
+  page.handleProfileBorderChange({ detail: { value: false } })
+  change('profileVerticalMarginRpx', 32)
+  page.handleConfirmProfileSheet()
+  change('profileHorizontalMarginRpx', 32)
+  await page.openProfileSheet('profile_spacing')
+  assert.equal(page.data.profileBorderConfig.profileBorder, false)
+  assert.equal(page.data.profileBorderConfig.profileHorizontalMarginRpx, 0)
+  assert.equal(page.data.profileBorderConfig.profileVerticalMarginRpx, 96)
+  page.handleProfileBorderChange({ detail: { value: true } })
+  change('profileHorizontalMarginRpx', 96)
+  change('profileVerticalMarginRpx', 0)
+  page.handleCloseProfileSheet()
+  await page.openProfileSheet('profile_spacing')
+  assert.equal(page.data.profileBorderConfig.profileHorizontalMarginRpx, 0)
+  assert.equal(page.data.profileBorderConfig.profileVerticalMarginRpx, 96)
+  page.handleProfileBorderChange({ detail: { value: true } })
+  page.handleConfirmProfileSheet()
+  const saved = buildDraftPayload(page.data.config, 1, 'profile-spacing').config.components[0].config
+  assert.equal(saved.profileBorder, true)
+  assert.equal(saved.profileHorizontalMarginRpx, 0)
+  assert.equal(saved.profileVerticalMarginRpx, 96)
+})
+
+test('switching personal profile components reloads each independent border configuration', () => {
+  const page = loadPortfolioEditorPage(() => Promise.resolve({}))
+  const first = createComponent(COMPONENT_TYPES.PROFILE, { componentKey: 'profile_first', config: {
+    profile: { displayName: '第一张资料' }, profileBorder: true, profileBorderWidthRpx: 3, profileBorderColor: '#112233'
+  } })
+  const second = createComponent(COMPONENT_TYPES.PROFILE, { componentKey: 'profile_second', config: {
+    profile: { displayName: '第二张资料' }, profileLayout: 'HORIZONTAL', profileBorder: false, profileBorderWidthRpx: 8, profileBorderColor: '#445566'
+  } })
+  page.showProfileSheet(first.componentKey, first)
+  page.handleProfileBorderColorChange({ detail: { color: '#FFFFFF' } })
+  page.handleCloseProfileSheet()
+  page.showProfileSheet(second.componentKey, second)
+  assert.deepEqual(page.data.profileBorderConfig, { profileBorder: false, profileBorderWidthRpx: 8, profileBorderColor: '#445566', profileHorizontalMarginRpx: 32, profileVerticalMarginRpx: 0 })
+  assert.equal(page.data.profileLayout, 'HORIZONTAL')
+  page.handleCloseProfileSheet()
+  page.showProfileSheet(first.componentKey, first)
+  assert.deepEqual(page.data.profileBorderConfig, { profileBorder: true, profileBorderWidthRpx: 3, profileBorderColor: '#112233', profileHorizontalMarginRpx: 32, profileVerticalMarginRpx: 0 })
+})
+
+test('personal profile layout is confirmed atomically and survives base profile refresh', async () => {
+  const page = loadPortfolioEditorPage(() => Promise.resolve({ displayName: '刷新后的姓名' }))
+  page.data.config = normalizePortfolioConfig({ components: [createComponent(COMPONENT_TYPES.PROFILE, {
+    componentKey: 'profile_layout', config: { profile: { displayName: '竞成' } }
+  })] })
+  await page.openProfileSheet('profile_layout')
+  assert.equal(page.data.profileLayout, 'VERTICAL')
+  page.handleProfileLayoutChange({ currentTarget: { dataset: { value: 'HORIZONTAL' } } })
+  page.handleCloseProfileSheet()
+  await page.openProfileSheet('profile_layout')
+  assert.equal(page.data.profileLayout, 'VERTICAL')
+  page.handleProfileLayoutChange({ currentTarget: { dataset: { value: 'HORIZONTAL' } } })
+  page.handleProfileLayoutChange({ currentTarget: { dataset: { value: 'INVALID' } } })
+  assert.equal(page.data.profileLayout, 'HORIZONTAL')
+  await page.refreshProfileFromBase()
+  assert.equal(page.data.profileLayout, 'HORIZONTAL')
+  page.handleConfirmProfileSheet()
+  assert.equal(page.data.config.components[0].config.profileLayout, 'HORIZONTAL')
+  assert.equal(page.data.config.components[0].config.profile.displayName, '刷新后的姓名')
+  await page.openProfileSheet('profile_layout')
+  assert.equal(page.data.profileLayout, 'HORIZONTAL')
+  page.handleProfileLayoutChange({ currentTarget: { dataset: { value: 'VERTICAL' } } })
+  page.handleConfirmProfileSheet()
+  assert.equal(page.data.config.components[0].config.profileLayout, 'VERTICAL')
 })
 
 test('tapping profile component edits independent profile copy', async () => {
@@ -3906,6 +4156,42 @@ test('preview action does not navigate before portfolio is created', () => {
   assert.deepEqual(navigations, [])
 })
 
+test('个人页面组件间距可调整并随草稿保存，背景色与间距互不覆盖', async () => {
+  const requests = []
+  const page = loadPortfolioEditorPage(options => {
+    requests.push(options)
+    return Promise.resolve({ draftRevision: 2 })
+  })
+  assert.equal(page.data.config.style.componentSpacingRpx, 32)
+  page.handleComponentSpacingChange({ detail: { value: 0 } })
+  assert.equal(page.data.config.style.componentSpacingRpx, 0)
+  page.handleBackgroundColorTap({ currentTarget: { dataset: { color: '#000000' } } })
+  assert.deepEqual(page.data.config.style, { backgroundColor: '#000000', componentSpacingRpx: 0 })
+  page.handleComponentSpacingChange({ detail: { value: 96 } })
+  assert.deepEqual(page.data.config.style, { backgroundColor: '#000000', componentSpacingRpx: 96 })
+  page.handleOpenBackgroundColorSheet()
+  page.handleBackgroundHexInput({ detail: { value: '#1a2b3c' } })
+  page.handleConfirmBackgroundColor()
+  assert.deepEqual(page.data.config.style, { backgroundColor: '#1A2B3C', componentSpacingRpx: 96 })
+  for (const value of [-1, 97, 1.5, 'invalid']) {
+    page.handleComponentSpacingChange({ detail: { value } })
+    assert.equal(page.data.config.style.componentSpacingRpx, 96)
+  }
+  await page.saveDraftForPortfolio(88)
+  assert.equal(requests[0].url, '/api/mine/portfolios/88/draft')
+  assert.deepEqual(requests[0].data.config.style, { backgroundColor: '#1A2B3C', componentSpacingRpx: 96 })
+})
+
+test('个人页面设置在背景色之前显示组件间距与滑块范围', () => {
+  const wxml = fs.readFileSync(path.join(__dirname, '../pages/portfolios/standard-edit/portfolio-standard-edit.wxml'), 'utf8')
+  assert.ok(wxml.indexOf('>组件间距<') > wxml.indexOf('>页面设置<'))
+  assert.ok(wxml.indexOf('>组件间距<') < wxml.indexOf('>背景色<'))
+  assert.match(wxml, /\{\{config\.style\.componentSpacingRpx\}\} rpx/)
+  assert.match(wxml, /<slider[^>]*min="\{\{componentSpacingMinRpx\}\}"[^>]*max="\{\{componentSpacingMaxRpx\}\}"[^>]*step="1"[^>]*value="\{\{config\.style\.componentSpacingRpx\}\}"[^>]*bindchanging="handleComponentSpacingChange"[^>]*bindchange="handleComponentSpacingChange"/)
+  assert.match(wxml, /\{\{componentSpacingMinRpx\}\} rpx/)
+  assert.match(wxml, /\{\{componentSpacingMaxRpx\}\} rpx/)
+})
+
 test('portfolio page settings match the continuous color picker and guarded menu deletion design', () => {
   const pageRoot = path.join(__dirname, '../pages/portfolios/standard-edit')
   const wxml = fs.readFileSync(path.join(pageRoot, 'portfolio-standard-edit.wxml'), 'utf8')
@@ -3919,7 +4205,7 @@ test('portfolio page settings match the continuous color picker and guarded menu
   assert.match(wxml, /class="background-hex-input pe-sheet-field"[\s\S]*bindblur="handleBackgroundHexBlur"/)
   assert.match(wxml, /item === 1 \? '不开启' : item \+ ' 个'/)
   assert.match(wxml, /class="editor-component-empty"/)
-  assert.match(js, /BACKGROUND_COLOR_OPTIONS\s*=\s*\['#151515', '#FFFFFF', '#F5F6F8'\]/)
+  assert.match(js, /BACKGROUND_COLOR_OPTIONS\s*=\s*\['#000000', '#FFFFFF', '#F5F6F8'\]/)
   assert.doesNotMatch(js, /请输入 6 位 HEX 色值/)
   assert.match(js, /请输入正确的颜色值/)
   assert.match(js, /handleRemoveEditorMenu\(event\)[\s\S]*wx\.showModal\([\s\S]*confirmText:\s*'删除'/)
@@ -3929,6 +4215,59 @@ test('portfolio page settings match the continuous color picker and guarded menu
   assert.match(wxml, /id="component-row-\{\{item\.componentKey\}\}"/)
   assert.match(wxml, /validationComponentKey === item\.componentKey \? 'validation-error' : ''/)
   assert.match(wxss, /\.component-row\.validation-error\s*\{[\s\S]*border-color:\s*var\(--pe-color-danger,\s*#B55656\);/)
+})
+
+test('个人自定义背景色可输入并复制当前色值，复制不提交且拒绝非法输入', () => {
+  const copies = [], toasts = []
+  const page = loadPortfolioEditorPage(() => Promise.resolve({}), {
+    setClipboardData(options) { copies.push(options) },
+    showToast(options) { toasts.push(options) }
+  })
+  const original = page.data.config.style.backgroundColor
+  page.handleCopyBackgroundColor()
+  assert.equal(copies.length, 0)
+  page.handleOpenBackgroundColorSheet()
+  page.handleBackgroundHexInput({ detail: { value: '#8e9093' } })
+  assert.equal(page.data.backgroundColorDraft, '#8E9093')
+  page.handleCopyBackgroundColor()
+  assert.equal(copies[0].data, '#8E9093')
+  assert.equal(page.data.config.style.backgroundColor, original)
+  assert.equal(page.data.backgroundColorSheetVisible, true)
+  for (const value of ['', '#12', '#GGGGGG']) {
+    page.handleBackgroundHexInput({ detail: { value } })
+    page.handleCopyBackgroundColor()
+    assert.equal(copies.length, 1)
+    assert.equal(toasts.at(-1).title, '请输入正确的颜色值')
+  }
+  page.handleBackgroundHexInput({ detail: { value: '#F5F6F8' } })
+  page.handleCopyBackgroundColor()
+  assert.equal(copies[1].data, '#F5F6F8')
+  copies[1].fail()
+  assert.equal(toasts.at(-1).title, '复制失败，请重试')
+  page.handleCloseBackgroundColorSheet()
+  page.handleCopyBackgroundColor()
+  assert.equal(copies.length, 2)
+  assert.equal(page.data.config.style.backgroundColor, original)
+  page.handleOpenBackgroundColorSheet()
+  assert.equal(page.data.backgroundColorDraft, original)
+})
+
+test('两端自定义背景色输入框与复制按钮同排且关闭时禁用', () => {
+  for (const [directory, file, disabled] of [
+    ['portfolios', 'portfolio-standard-edit', '!backgroundColorSheetVisible'],
+    ['team-portfolios', 'team-portfolio-standard-edit', '!backgroundColorSheetVisible || !canMaintain']
+  ]) {
+    const root = path.join(__dirname, '..', 'pages', directory, 'standard-edit', file)
+    const wxml = fs.readFileSync(`${root}.wxml`, 'utf8')
+    const wxss = fs.readFileSync(`${root}.wxss`, 'utf8')
+    const row = wxml.match(/<view class="background-hex-row">([\s\S]*?)<\/view>/)[1]
+    assert.match(row, /<input[\s\S]*type="text"[\s\S]*bindinput="handleBackgroundHexInput"/)
+    assert.match(row, /<button[^>]*catchtap="handleCopyBackgroundColor"[^>]*>复制<\/button>/)
+    assert.ok(row.includes(`disabled="{{${disabled}}}"`))
+    assert.match(wxss, /\.background-hex-row\s*\{[^}]*display:\s*flex;/)
+    assert.match(wxss, /\.background-hex-input\s*\{[^}]*min-width:\s*0;/)
+    assert.match(wxss, /\.background-hex-copy\s*\{[^}]*height:\s*76rpx;/)
+  }
 })
 
 test('production color picker hue thumb matches the centered white-ring design', () => {

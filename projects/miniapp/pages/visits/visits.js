@@ -52,6 +52,7 @@ Page({
     eventSheetPageNo: FIRST_VISIT_EVENT_PAGE,
     eventSheetPageSize: VISIT_EVENT_PAGE_SIZE,
     eventSheetHasMore: false,
+    eventDeviceExpanded: false,
     selectedVisitRecord: normalizeVisitEventTimeline({ events: [] }),
     detailSheetVisible: false,
     detailSheetLoading: false,
@@ -323,6 +324,7 @@ Page({
     }
     this.setData({
       eventSheetVisible: true,
+      eventDeviceExpanded: false,
       eventSheetLoading: true,
       eventSheetLoadingMore: false,
       eventSheetErrorMessage: '',
@@ -486,10 +488,16 @@ Page({
     })
   },
 
+  handleToggleEventDevice() {
+    if (!this.data.selectedVisitRecord.hasDeviceInfo) return
+    this.setData({ eventDeviceExpanded: !this.data.eventDeviceExpanded })
+  },
+
   handleCloseEventSheet() {
     this.visitEventRequestId = (this.visitEventRequestId || 0) + 1
     this.setData({
       eventSheetVisible: false,
+      eventDeviceExpanded: false,
       eventSheetLoading: false,
       eventSheetLoadingMore: false,
       eventSheetErrorMessage: '',

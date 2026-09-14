@@ -1,3 +1,5 @@
+const { normalizeTextGrid, validateTextGrid } = require('../utils/portfolio-text-grid')
+const { normalizeContactInfo, validateContactInfo } = require('../utils/portfolio-contact-info')
 const { portfolioAudioPageMethods, AUDIO_STYLE_OPTIONS, normalizeAudioResource } = require('../utils/portfolio-audio-player')
 const { request } = require('../../../utils/request.js')
 const { normalizeTextColor, isValidTextColor, TEXT_COLOR_ERROR } = require('../utils/portfolio-text-color')
@@ -39,7 +41,7 @@ const {
 } = require('../utils/team-portfolios.js')
 const { confirmPortfolioPublishDisclaimer } = require('../utils/portfolio-publish-disclaimer.js')
 const {
-  normalizeTextBackground, finalizeTextBackground, validateTextBackground,
+  normalizeTextBackground, finalizeTextBackground, validateTextBackground, BACKGROUND_MEDIA_TYPES, VIDEO_MEDIA_TYPE,
   normalizeStructuredTextConfig, finalizeStructuredTextConfig, validateStructuredTextConfig
 } = require('../utils/portfolio-text-sections.js')
 const { formatDuration } = require('../utils/video-carousel.js')
@@ -49,7 +51,13 @@ const {
   PORTFOLIO_TEXT_FONT_FAMILIES,
   PORTFOLIO_TEXT_FONT_OPTIONS,
   buildPortfolioTextFontSizeOptions,
-  buildPortfolioTextTypography
+  buildPortfolioTextTypography,
+  LEGACY_TEXT_SECTION_LINE_HEIGHT,
+  PORTFOLIO_TEXT_LINE_HEIGHT_ERROR,
+  isValidPortfolioTextLineHeight,
+  parsePortfolioTextLineHeightInput,
+  stepPortfolioTextLineHeight,
+  buildPortfolioTextLineHeightEditor
 } = require('../../../utils/portfolio-text-typography.js')
 const {
   getPortfolioFontCapability,
@@ -57,9 +65,9 @@ const {
   loadPortfolioFonts
 } = require('../../../utils/portfolio-font-loader.js')
 
-const TYPE_BUCKETS = Object.freeze({ TEAM_PROFILE: 'teamProfile', CAROUSEL: 'carousel', VIDEO_CAROUSEL: 'videoCarousel', SINGLE_WORK: 'singleWork', DIVIDER: 'divider', MEMBER_PORTFOLIO_GRID: 'grid', MEMBER_PORTFOLIO_LIST: 'list', TEXT_SECTION: 'text', STRUCTURED_TEXT_SECTION: 'structuredText', SCHEDULE_QUERY: 'schedule', CONTACT_FORM: 'contact', QR_CONTACT: 'qr' })
-const COMPONENT_NAMES = Object.freeze({ TEAM_PROFILE: '团队资料', CAROUSEL: '轮播图', VIDEO_CAROUSEL: '视频轮播', SINGLE_WORK: '单个作品', DIVIDER: '分割线', MEMBER_PORTFOLIO_GRID: '双列作品集', MEMBER_PORTFOLIO_LIST: '单列作品集', TEXT_SECTION: '文字说明', STRUCTURED_TEXT_SECTION: '结构化文字说明', SCHEDULE_QUERY: '档期查询', CONTACT_FORM: '预留联系信息', QR_CONTACT: '二维码联系' })
-const COMPONENT_DESCRIPTIONS = Object.freeze({ TEAM_PROFILE: '展示团队头像、名称和简介', CAROUSEL: '轮播展示成员的图片作品', VIDEO_CAROUSEL: '叠放循环展示视频作品，访客左右滑动浏览、点击播放', SINGLE_WORK: '展示一个成员图片、视频或动图作品', DIVIDER: '分隔不同内容区块', MEMBER_PORTFOLIO_GRID: '双列展示成员已发布作品集', MEMBER_PORTFOLIO_LIST: '单列展示成员已发布作品集', TEXT_SECTION: '添加团队服务说明文字', STRUCTURED_TEXT_SECTION: '按区块自由组合文字样式、列表与间距', SCHEDULE_QUERY: '开放访客查询团队档期', CONTACT_FORM: '收集访客预留联系信息', QR_CONTACT: '展示团队二维码联系方式' })
+const TYPE_BUCKETS = Object.freeze({ TEAM_PROFILE: 'teamProfile', CAROUSEL: 'carousel', VIDEO_CAROUSEL: 'videoCarousel', SINGLE_WORK: 'singleWork', DIVIDER: 'divider', MEMBER_PORTFOLIO_GRID: 'grid', MEMBER_PORTFOLIO_LIST: 'list', TEXT_SECTION: 'text', STRUCTURED_TEXT_SECTION: 'structuredText', TEXT_GRID: 'textGrid', CONTACT_INFO: 'contactInfo', SCHEDULE_QUERY: 'schedule', CONTACT_FORM: 'contact', QR_CONTACT: 'qr' })
+const COMPONENT_NAMES = Object.freeze({ TEAM_PROFILE: '团队资料', CAROUSEL: '轮播图', VIDEO_CAROUSEL: '视频轮播', SINGLE_WORK: '单个作品', DIVIDER: '分割线', MEMBER_PORTFOLIO_GRID: '双列作品集', MEMBER_PORTFOLIO_LIST: '单列作品集', TEXT_SECTION: '文字说明', STRUCTURED_TEXT_SECTION: '结构化文字说明', TEXT_GRID: '文字网格', CONTACT_INFO: '联系信息', SCHEDULE_QUERY: '档期查询', CONTACT_FORM: '预留联系信息', QR_CONTACT: '二维码联系' })
+const COMPONENT_DESCRIPTIONS = Object.freeze({ TEAM_PROFILE: '展示团队头像、名称和简介', CAROUSEL: '轮播展示成员的图片作品', VIDEO_CAROUSEL: '叠放循环展示视频作品，访客左右滑动浏览、点击播放', SINGLE_WORK: '展示一个成员图片、视频或动图作品', DIVIDER: '分隔不同内容区块', MEMBER_PORTFOLIO_GRID: '双列展示成员已发布作品集', MEMBER_PORTFOLIO_LIST: '单列展示成员已发布作品集', TEXT_SECTION: '添加团队服务说明文字', STRUCTURED_TEXT_SECTION: '按区块自由组合文字样式、列表与间距', TEXT_GRID: '自由设置行列、合并拆分与同格文字样式', CONTACT_INFO: '直接展示联系手机、微信并支持复制', SCHEDULE_QUERY: '开放访客查询团队档期', CONTACT_FORM: '收集访客预留联系信息', QR_CONTACT: '展示团队二维码联系方式' })
 const COMPONENT_TYPES = Object.keys(COMPONENT_NAMES)
 const PORTFOLIO_REQUIRED_COMPONENT_TYPES = Object.freeze(['CAROUSEL', 'VIDEO_CAROUSEL', 'MEMBER_PORTFOLIO_GRID', 'MEMBER_PORTFOLIO_LIST'])
 const MEMBER_PORTFOLIO_COMPONENT_TYPES = Object.freeze(['MEMBER_PORTFOLIO_GRID', 'MEMBER_PORTFOLIO_LIST'])
@@ -105,12 +113,18 @@ const SINGLE_WORK_PAGE_SIZE = 20
 const TEAM_VIDEO_PAGE_SIZE = 20
 const TEAM_VIDEO_MIN_ITEMS = 3
 const TEAM_VIDEO_MAX_ITEMS = 8
+// 展示设置的说明按需打开，避免长期占用作品选择空间。
+const TEAM_VIDEO_SETTING_HELP = Object.freeze({
+  title: { title: '作品标题', content: '在卡片下方展示每个视频的标题。' },
+  description: { title: '作品描述', content: '展示作品附带的描述文字。' },
+  swipeHint: { title: '滑动提示', content: '提示访客可左右拖动浏览视频。' }
+})
 const SINGLE_WORK_ROW_SUMMARY_STATUS = Object.freeze({
   LOADING: 'LOADING',
   FAILED: 'FAILED',
   UNAVAILABLE: 'UNAVAILABLE'
 })
-const TEAM_BACKGROUND_COLORS = Object.freeze(['#151515', '#FFFFFF', '#F5F6F8'])
+const TEAM_BACKGROUND_COLORS = Object.freeze(['#000000', '#FFFFFF', '#F5F6F8'])
 const TEAM_BOTTOM_NAV_COUNTS = Object.freeze([1, 2, 3, 4])
 const TEXT_SECTION_ALIGNMENTS = Object.freeze({ LEFT: 'LEFT', CENTER: 'CENTER', RIGHT: 'RIGHT' })
 const CONTACT_FORM_DISPLAY_MODES = Object.freeze({ MODAL_FORM: 'MODAL_FORM', INLINE_FORM: 'INLINE_FORM' })
@@ -123,12 +137,14 @@ const SCHEDULE_QUERY_DISPLAY_MODE_OPTIONS = Object.freeze([
   { value: SCHEDULE_QUERY_DISPLAY_MODES.MODAL_CALENDAR, label: '弹层日历' },
   { value: SCHEDULE_QUERY_DISPLAY_MODES.INLINE_CALENDAR, label: '页面内日历' }
 ])
-const DIVIDER_COLOR_OPTIONS = Object.freeze([
-  { value: 'BLACK', label: '黑色', colorValue: '#17202a' },
-  { value: 'WHITE', label: '白色', colorValue: '#ffffff' },
-  { value: 'GRAY', label: '灰色', colorValue: '#d7dfe1' },
-  { value: 'TRANSPARENT', label: '透明', colorValue: 'transparent' }
-])
+// 仅用于旧配置的选色回显，色值与既有访客展示保持一致。
+const LEGACY_DIVIDER_COLOR_VALUES = Object.freeze({ BLACK: '#212529', WHITE: '#FFFFFF', GRAY: '#D7DFE1', TRANSPARENT: 'transparent' })
+const DIVIDER_HEX_COLOR_PATTERN = /^#[0-9A-Fa-f]{6}$/
+const BACKGROUND_HEX_COLOR_PATTERN = /^#[0-9A-F]{6}$/
+const BACKGROUND_COLOR_INVALID_MESSAGE = '请输入正确的颜色值'
+const TEXT_BACKGROUND_PICKER_SELECTOR = '#text-background-picker'
+const COLOR_COPY_FAILED_MESSAGE = '复制失败，请重试'
+const DEFAULT_DIVIDER_COLOR = 'GRAY'
 const TEXT_SECTION_ALIGNMENT_OPTIONS = Object.freeze([
   { value: TEXT_SECTION_ALIGNMENTS.LEFT, label: '左对齐' },
   { value: TEXT_SECTION_ALIGNMENTS.CENTER, label: '居中' },
@@ -196,11 +212,12 @@ function mergeSingleWorkPage(existing = [], incoming = []) {
     })
 }
 function normalizeTextBackgroundWork(work, memberUserId) {
-  if (!work || !['IMAGE', 'ANIMATION'].includes(work.mediaType)) return null
+  if (!work || !BACKGROUND_MEDIA_TYPES.includes(work.mediaType)) return null
   const id = Number(work.workId)
   const url = typeof work.mediaUrl === 'string' ? work.mediaUrl : ''
   if (!Number.isInteger(id) || id <= 0 || !url) return null
-  return { id, memberUserId: Number(memberUserId), title: String(work.title || ''), mediaType: work.mediaType, url, width: work.width, height: work.height }
+  return { id, memberUserId: Number(memberUserId), title: String(work.title || ''), mediaType: work.mediaType, url, width: work.width, height: work.height,
+    ...(work.mediaType === VIDEO_MEDIA_TYPE ? { posterUrl: work.coverUrl || '' } : {}) }
 }
 function teamVideoItemKey(item = {}) { return `${Number(item.memberUserId) || 0}:${Number(item.workId) || 0}` }
 function normalizeTeamVideoCandidate(work = {}, fallbackMemberUserId = 0) {
@@ -358,6 +375,7 @@ function buildTextSectionForm(config = {}) {
     alignment: TEXT_SECTION_ALIGNMENT_OPTIONS.some((item) => item.value === alignment) ? alignment : TEXT_SECTION_ALIGNMENTS.LEFT,
     fontFamily: typography.fontFamily,
     fontSizeRpx: typography.fontSizeRpx,
+    ...(Object.prototype.hasOwnProperty.call(config, 'lineHeight') ? { lineHeight: config.lineHeight } : {}),
     ...normalizeTextBackground(config, { team: true }),
     ...(config.backgroundWork ? { backgroundWork: JSON.parse(JSON.stringify(config.backgroundWork)) } : {}),
     ...(config.backgroundInvalid ? { backgroundInvalid: true } : {})
@@ -377,6 +395,7 @@ function buildTextSectionEditorState(config = {}) {
   const textSectionForm = buildTextSectionForm(config)
   return {
     textSectionForm,
+    textSectionLineHeightEditor: buildPortfolioTextLineHeightEditor(textSectionForm.lineHeight, LEGACY_TEXT_SECTION_LINE_HEIGHT),
     textSectionFieldCounters: buildTextSectionFieldCounters(textSectionForm),
     textSectionFontOptions: buildTextSectionFontOptions(),
     textSectionSizeOptions:
@@ -410,9 +429,16 @@ function updateScheduleQueryConfig(config = {}, componentKey, scheduleQueryConfi
     : component)
 }
 function buildDividerForm(config = {}) {
-  const color = DIVIDER_COLOR_OPTIONS.some((item) => item.value === config.color) ? config.color : 'GRAY'
+  const color = typeof config.color === 'string' && DIVIDER_HEX_COLOR_PATTERN.test(config.color)
+    ? config.color.toUpperCase()
+    : Object.prototype.hasOwnProperty.call(LEGACY_DIVIDER_COLOR_VALUES, config.color) ? config.color : DEFAULT_DIVIDER_COLOR
   const heightPx = Number.isInteger(Number(config.heightPx)) && Number(config.heightPx) > 0 ? Number(config.heightPx) : 16
   return { color, heightPx }
+}
+/** 回显旧颜色时不改写草稿，只有用户选色后才保存明确色值。 */
+function buildDividerEditorState(config = {}) {
+  const dividerForm = buildDividerForm(config)
+  return { dividerForm, dividerPickerColor: LEGACY_DIVIDER_COLOR_VALUES[dividerForm.color] || dividerForm.color }
 }
 function updateDividerConfig(config = {}, componentKey, dividerConfig = {}) {
   const form = buildDividerForm(dividerConfig)
@@ -423,6 +449,7 @@ function updateDividerConfig(config = {}, componentKey, dividerConfig = {}) {
 function updateTextSectionConfig(config = {}, componentKey, textSectionConfig = {}) {
   const form = buildTextSectionForm(textSectionConfig)
   const saved = Object.assign({ content: form.content, color: form.color, alignment: form.alignment, fontFamily: form.fontFamily, fontSizeRpx: form.fontSizeRpx }, finalizeTextBackground(form, { team: true }))
+  if (Object.prototype.hasOwnProperty.call(form, 'lineHeight')) saved.lineHeight = form.lineHeight
   return updateTeamComponent(config, componentKey, (component) => {
     if (component.componentType !== 'TEXT_SECTION') return component
     // 普通文字保留已有扩展字段，仅清理本次背景选择的临时展示状态和关闭后的引用 ID。
@@ -465,7 +492,7 @@ function resolveTeamCoverPreviewPath(filePath) {
   }))
 }
 function buckets(components) {
-  const value = { teamProfile: [], carousel: [], videoCarousel: [], singleWork: [], divider: [], grid: [], list: [], text: [], structuredText: [], schedule: [], contact: [], qr: [] }
+  const value = { teamProfile: [], carousel: [], videoCarousel: [], singleWork: [], divider: [], grid: [], list: [], text: [], structuredText: [], textGrid: [], contactInfo: [], schedule: [], contact: [], qr: [] }
   ;(Array.isArray(components) ? components : []).forEach((component) => { const key = TYPE_BUCKETS[component.componentType]; if (key) value[key].push(component) })
   return value
 }
@@ -475,11 +502,12 @@ Page({
   teamVideoRequestSeq: 0,
   teamVideoMembersRequestSeq: 0,
   data: {
+    newComponentSheetVisible: false, newComponentType: '', newComponentKey: '', newComponentConfig: {},
     backgroundAudioStyles: AUDIO_STYLE_OPTIONS, backgroundAudioResource: normalizeAudioResource(), backgroundAudioPlaying: false,
     backgroundAudioPickerVisible: false, backgroundAudioOptions: [], backgroundAudioLoading: false,
     backgroundAudioHasMore: false, backgroundAudioMembers: [], backgroundAudioMemberIndex: 0,
     backgroundAudioSelected: null,
-    portfolioId: 0, teamId: 0, teamSnapshot: {}, loading: false, errorMessage: '', canMaintain: false, publicationStatus: 'DRAFT_ONLY', draftRevision: 0, publishedRevision: 0, statusText: '草稿', statusTone: 'draft', showPublishAction: false, config: normalizeTeamPortfolioConfig(), activeMenuKey: '', activeMenuTitle: '', activeMenuTitleCount: 0, navigationItems: [], bottomNavCount: 1, backgroundColorOptions: TEAM_BACKGROUND_COLORS, bottomNavCountOptions: TEAM_BOTTOM_NAV_COUNTS, backgroundColorSheetVisible: false, backgroundColorDraft: '#FFFFFF', backgroundColorHsv: hexToHsv('#FFFFFF'), backgroundHueColor: '#FF0000', backgroundColorPadDotStyle: 'left: 0%; top: 0%', componentList: [], componentBuckets: buckets([]), componentOptions: buildComponentOptions(), componentValidation: {}, componentSources: {}, singleWorkRowSummaryMap: {}, hasInvalidComponents: false, saving: false, publishing: false, openingLibrary: false, shareCoverUploading: false, qrContactChoosing: false, qrContactCropVisible: false, qrContactCropSaving: false, qrContactCropErrorText: '', qrContactCropState: null, qrContactCropTouchStart: null, qrContactCropCanvasWidth: WECHAT_QR_CROP_OUTPUT_WIDTH, qrContactCropCanvasHeight: WECHAT_QR_CROP_OUTPUT_WIDTH, teamProfileRefreshing: false, pendingDraftKey: '', pendingPublishKey: '', pendingPublishRevision: 0, shareTitleCounter: '0 / 50', componentSheetVisible: false, textSectionSheetVisible: false, textSectionEditingComponentKey: '', structuredTextSheetVisible: false, structuredTextEditingComponentKey: '', structuredTextIsNew: false, structuredTextConfig: { blocks: [] }, textBackgroundOptions: [], textBackgroundLoading: false, textBackgroundError: '', textBackgroundHasMore: false, textBackgroundMembers: [], textBackgroundMemberUserId: 0, textBackgroundMembersLoading: false, textBackgroundResource: {}, textSectionAlignmentOptions: TEXT_SECTION_ALIGNMENT_OPTIONS, textSectionMaxLength: TEXT_SECTION_MAX_LENGTH, portfolioFontCapability: getPortfolioFontCapability(), ...buildTextSectionEditorState(), contactFormSheetVisible: false, contactFormEditingComponentKey: '', contactFormDisplayModeOptions: CONTACT_FORM_DISPLAY_MODE_OPTIONS, contactFormConfigForm: buildContactFormConfigForm(), scheduleQuerySheetVisible: false, scheduleQueryEditingComponentKey: '', scheduleQueryDisplayModeOptions: SCHEDULE_QUERY_DISPLAY_MODE_OPTIONS, scheduleQueryForm: buildScheduleQueryForm(), dividerSheetVisible: false, dividerEditingComponentKey: '', dividerColorOptions: DIVIDER_COLOR_OPTIONS, dividerForm: buildDividerForm(), componentEditorVisible: false, componentEditorLayoutType: '', activeComponentKey: '', activeComponentType: '', activeComponentName: '', activeComponent: { config: {} }, activeComponentSource: {}, activeComponentNeedsPortfolio: false, teamVideoTitle: '视频作品', teamVideoTitleCount: 4, teamVideoShowTitle: true, teamVideoShowSwipeHint: true, teamVideoMembers: [], teamVideoSelectedMemberUserId: 0, teamVideoCandidates: [], teamVideoWorkOptions: [], teamVideoSelectedItems: [], teamVideoKeyword: '', teamVideoPage: 1, teamVideoPageSize: TEAM_VIDEO_PAGE_SIZE, teamVideoHasMore: false, teamVideoMembersLoading: false, teamVideoWorksLoading: false, teamVideoLoadingMore: false, teamVideoErrorText: '', teamVideoEditingNewComponent: false, revealedComponentKey: '', componentTouchStart: null, draggingIndex: -1, dragTargetIndex: -1, componentDragStartY: 0, componentDragStyle: '', componentMoveSheetVisible: false, componentMoveKey: '', componentMoveTargets: [], componentMovePending: false, highlightedComponentKey: '', componentScrollTarget: '', shareCoverCropVisible: false, shareCoverCropPath: '', ...buildCarouselEditorLayoutState(CAROUSEL_EDITOR_SCROLL_MIN_HEIGHT_RPX) },
+    portfolioId: 0, teamId: 0, teamSnapshot: {}, loading: false, errorMessage: '', canMaintain: false, publicationStatus: 'DRAFT_ONLY', draftRevision: 0, publishedRevision: 0, statusText: '草稿', statusTone: 'draft', showPublishAction: false, config: normalizeTeamPortfolioConfig(), activeMenuKey: '', activeMenuTitle: '', activeMenuTitleCount: 0, navigationItems: [], bottomNavCount: 1, backgroundColorOptions: TEAM_BACKGROUND_COLORS, bottomNavCountOptions: TEAM_BOTTOM_NAV_COUNTS, backgroundColorSheetVisible: false, backgroundColorDraft: '#FFFFFF', backgroundColorHsv: hexToHsv('#FFFFFF'), backgroundHueColor: '#FF0000', backgroundColorPadDotStyle: 'left: 0%; top: 0%', componentList: [], componentBuckets: buckets([]), componentOptions: buildComponentOptions(), componentValidation: {}, componentSources: {}, singleWorkRowSummaryMap: {}, hasInvalidComponents: false, saving: false, publishing: false, openingLibrary: false, shareCoverUploading: false, qrContactChoosing: false, qrContactCropVisible: false, qrContactCropSaving: false, qrContactCropErrorText: '', qrContactCropState: null, qrContactCropTouchStart: null, qrContactCropCanvasWidth: WECHAT_QR_CROP_OUTPUT_WIDTH, qrContactCropCanvasHeight: WECHAT_QR_CROP_OUTPUT_WIDTH, teamProfileRefreshing: false, pendingDraftKey: '', pendingPublishKey: '', pendingPublishRevision: 0, shareTitleCounter: '0 / 50', componentSheetVisible: false, textSectionSheetVisible: false, textSectionEditingComponentKey: '', structuredTextSheetVisible: false, structuredTextEditingComponentKey: '', structuredTextIsNew: false, structuredTextConfig: { blocks: [] }, textBackgroundOptions: [], textBackgroundLoading: false, textBackgroundError: '', textBackgroundHasMore: false, textBackgroundMembers: [], textBackgroundMemberUserId: 0, textBackgroundMembersLoading: false, textBackgroundResource: {}, textSectionAlignmentOptions: TEXT_SECTION_ALIGNMENT_OPTIONS, textSectionMaxLength: TEXT_SECTION_MAX_LENGTH, portfolioFontCapability: getPortfolioFontCapability(), ...buildTextSectionEditorState(), contactFormSheetVisible: false, contactFormEditingComponentKey: '', contactFormDisplayModeOptions: CONTACT_FORM_DISPLAY_MODE_OPTIONS, contactFormConfigForm: buildContactFormConfigForm(), scheduleQuerySheetVisible: false, scheduleQueryEditingComponentKey: '', scheduleQueryDisplayModeOptions: SCHEDULE_QUERY_DISPLAY_MODE_OPTIONS, scheduleQueryForm: buildScheduleQueryForm(), dividerSheetVisible: false, dividerEditingComponentKey: '', ...buildDividerEditorState(), componentEditorVisible: false, componentEditorLayoutType: '', activeComponentKey: '', activeComponentType: '', activeComponentName: '', activeComponent: { config: {} }, activeComponentSource: {}, activeComponentNeedsPortfolio: false, teamVideoTitle: '视频作品', teamVideoTitleCount: 4, teamVideoShowComponentTitle: true, teamVideoSettingsCollapsed: false, teamVideoShowTitle: true, teamVideoShowSwipeHint: true, teamVideoMembers: [], teamVideoSelectedMemberUserId: 0, teamVideoCandidates: [], teamVideoWorkOptions: [], teamVideoSelectedItems: [], teamVideoKeyword: '', teamVideoPage: 1, teamVideoPageSize: TEAM_VIDEO_PAGE_SIZE, teamVideoHasMore: false, teamVideoMembersLoading: false, teamVideoWorksLoading: false, teamVideoLoadingMore: false, teamVideoErrorText: '', teamVideoEditingNewComponent: false, revealedComponentKey: '', componentTouchStart: null, draggingIndex: -1, dragTargetIndex: -1, componentDragStartY: 0, componentDragStyle: '', componentMoveSheetVisible: false, componentMoveKey: '', componentMoveTargets: [], componentMovePending: false, highlightedComponentKey: '', componentScrollTarget: '', shareCoverCropVisible: false, shareCoverCropPath: '', ...buildCarouselEditorLayoutState(CAROUSEL_EDITOR_SCROLL_MIN_HEIGHT_RPX) },
   onLoad(options = {}) {
     const portfolioId = Number(options.portfolioId) || 0
     const teamId = Number(options.teamId) || 0
@@ -665,12 +693,14 @@ Page({
   syncActiveComponent(config = this.data.config, componentKey = this.data.activeComponentKey) { const location = findTeamPortfolioComponent(config, componentKey); const activeComponent = location ? location.component : { config: {} }; this.setData({ activeComponent, activeComponentSource: this.data.componentSources[componentKey] || {} }) },
   handleOpenComponentSheet() { if (!this.data.canMaintain) return; const allComponents = visitTeamPortfolioComponents(this.data.config).map((item) => item.component); this.setData({ componentSheetVisible: true, revealedComponentKey: '', componentOptions: buildComponentOptions(allComponents) }) },
   handleCloseComponentSheet() { this.setData({ componentSheetVisible: false }) },
-  handleSelectComponent(event) { if (event.currentTarget.dataset.disabled) return; const componentType = event.currentTarget.dataset.type; if (!componentType) return; if (componentType === 'STRUCTURED_TEXT_SECTION') { this.setData({ componentSheetVisible: false }); return this.openStructuredTextSheet() }; const componentKey = this.addComponent(componentType); this.setData({ componentSheetVisible: false }); if (componentType === 'VIDEO_CAROUSEL' && componentKey) return this.openTeamVideoCarouselSheet(componentKey, true) },
-  handleComponentTap(event) { const componentKey = event.currentTarget.dataset.key || ''; const componentType = event.currentTarget.dataset.type || ''; if (this.data.revealedComponentKey === componentKey) return this.setData({ revealedComponentKey: '' }); const location = findTeamPortfolioComponent(this.data.config, componentKey); const activeComponent = location && location.component; if (!activeComponent) return; if (componentType === 'VIDEO_CAROUSEL') return this.openTeamVideoCarouselSheet(componentKey); if (componentType === 'TEXT_SECTION') return this.openTextSectionSheet(componentKey); if (componentType === 'STRUCTURED_TEXT_SECTION') return this.openStructuredTextSheet(componentKey); if (componentType === 'CONTACT_FORM') return this.openContactFormSheet(componentKey); if (componentType === 'SCHEDULE_QUERY') return this.openScheduleQuerySheet(componentKey); if (componentType === 'DIVIDER') return this.openDividerSheet(componentKey); this.setData({ componentEditorVisible: true, componentEditorLayoutType: componentType, activeComponentKey: componentKey, activeComponentType: componentType, activeComponentName: COMPONENT_NAMES[componentType] || '页面组件', activeComponent, activeComponentSource: this.data.componentSources[componentKey] || {}, activeComponentNeedsPortfolio: PORTFOLIO_REQUIRED_COMPONENT_TYPES.includes(componentType), ...(componentType === 'CAROUSEL' ? buildCarouselEditorLayoutState(CAROUSEL_EDITOR_SCROLL_MIN_HEIGHT_RPX) : {}) }) },
+  handleSelectComponent(event) { if (event.currentTarget.dataset.disabled) return; const componentType = event.currentTarget.dataset.type; if (!componentType) return; if (['TEXT_GRID', 'CONTACT_INFO'].includes(componentType)) { this.setData({ componentSheetVisible: false }); return this.openNewComponentSheet(componentType) }; if (componentType === 'STRUCTURED_TEXT_SECTION') { this.setData({ componentSheetVisible: false }); return this.openStructuredTextSheet() }; const componentKey = this.addComponent(componentType); this.setData({ componentSheetVisible: false }); if (componentType === 'VIDEO_CAROUSEL' && componentKey) return this.openTeamVideoCarouselSheet(componentKey, true) },
+  handleComponentTap(event) { const componentKey = event.currentTarget.dataset.key || ''; const componentType = event.currentTarget.dataset.type || ''; if (this.data.revealedComponentKey === componentKey) return this.setData({ revealedComponentKey: '' }); const location = findTeamPortfolioComponent(this.data.config, componentKey); const activeComponent = location && location.component; if (!activeComponent) return; if (componentType === 'VIDEO_CAROUSEL') return this.openTeamVideoCarouselSheet(componentKey); if (componentType === 'TEXT_SECTION') return this.openTextSectionSheet(componentKey); if (['TEXT_GRID', 'CONTACT_INFO'].includes(componentType)) return this.openNewComponentSheet(componentType, componentKey); if (componentType === 'STRUCTURED_TEXT_SECTION') return this.openStructuredTextSheet(componentKey); if (componentType === 'CONTACT_FORM') return this.openContactFormSheet(componentKey); if (componentType === 'SCHEDULE_QUERY') return this.openScheduleQuerySheet(componentKey); if (componentType === 'DIVIDER') return this.openDividerSheet(componentKey); this.setData({ componentEditorVisible: true, componentEditorLayoutType: componentType, activeComponentKey: componentKey, activeComponentType: componentType, activeComponentName: COMPONENT_NAMES[componentType] || '页面组件', activeComponent, activeComponentSource: this.data.componentSources[componentKey] || {}, activeComponentNeedsPortfolio: PORTFOLIO_REQUIRED_COMPONENT_TYPES.includes(componentType), ...(componentType === 'CAROUSEL' ? buildCarouselEditorLayoutState(CAROUSEL_EDITOR_SCROLL_MIN_HEIGHT_RPX) : {}) }) },
   resetTeamVideoEditorState() {
     this.setData({
       teamVideoTitle: '视频作品',
       teamVideoTitleCount: 4,
+      teamVideoShowComponentTitle: true,
+      teamVideoSettingsCollapsed: false,
       teamVideoShowTitle: true,
       teamVideoShowSwipeHint: true,
       teamVideoMembers: [],
@@ -706,8 +736,12 @@ Page({
       activeComponentNeedsPortfolio: true,
       teamVideoTitle: config.title,
       teamVideoTitleCount: countTextCodePoints(config.title),
+      teamVideoShowComponentTitle: config.showComponentTitle !== false,
+      teamVideoSettingsCollapsed: false,
       teamVideoShowTitle: config.showTitle,
       teamVideoShowSwipeHint: config.showSwipeHint,
+      teamVideoDisplayStyle: config.displayStyle,
+      teamVideoShowDescription: config.showDescription,
       teamVideoMembers: [],
       teamVideoSelectedMemberUserId: 0,
       teamVideoCandidates: [],
@@ -808,6 +842,13 @@ Page({
     }
   },
   handleTeamVideoTitleInput(event) { const title = Array.from(String(event && event.detail && event.detail.value || '')).slice(0, 10).join(''); this.setData({ teamVideoTitle: title, teamVideoTitleCount: countTextCodePoints(title) }) },
+  handleTeamVideoShowComponentTitleChange(event) { this.setData({ teamVideoShowComponentTitle: Boolean(event && event.detail && event.detail.value) }) },
+  handleTeamVideoToggleSettings() { this.setData({ teamVideoSettingsCollapsed: !this.data.teamVideoSettingsCollapsed }) },
+  handleTeamVideoSettingHelp(event) {
+    const help = TEAM_VIDEO_SETTING_HELP[event && event.currentTarget && event.currentTarget.dataset.setting]
+    if (help) wx.showModal({ ...help, showCancel: false, confirmText: '知道了' })
+  },
+  handleTeamVideoEditorScrollToLower() { if (this.data.activeComponentType === 'VIDEO_CAROUSEL') return this.handleTeamVideoLoadMore() },
   handleTeamVideoShowTitleChange(event) { this.setData({ teamVideoShowTitle: Boolean(event && event.detail && event.detail.value) }) },
   handleTeamVideoShowSwipeHintChange(event) { this.setData({ teamVideoShowSwipeHint: Boolean(event && event.detail && event.detail.value) }) },
   handleTeamVideoKeywordInput(event) { this.setData({ teamVideoKeyword: String(event && event.detail && event.detail.value || '') }) },
@@ -854,6 +895,8 @@ Page({
       teamVideoMembers: buildTeamVideoMembers(this.data.teamVideoMembers, nextSelectedItems, memberUserId)
     })
   },
+  handleTeamVideoStyleChange(event) { this.setData({ teamVideoDisplayStyle: event.currentTarget.dataset.style }) },
+  handleTeamVideoDescriptionChange(event) { this.setData({ teamVideoShowDescription: Boolean(event.detail.value) }) },
   saveTeamVideoCarouselConfig() {
     if (this.data.teamVideoSelectedItems.length < TEAM_VIDEO_MIN_ITEMS) {
       wx.showToast({ title: '视频轮播至少选择3个视频', icon: 'none' })
@@ -862,8 +905,11 @@ Page({
     const componentKey = this.data.activeComponentKey
     const nextConfig = normalizeTeamVideoCarouselConfig({
       title: this.data.teamVideoTitle,
+      showComponentTitle: this.data.teamVideoShowComponentTitle !== false,
       items: this.data.teamVideoSelectedItems,
       showTitle: this.data.teamVideoShowTitle,
+      displayStyle: this.data.teamVideoDisplayStyle,
+      showDescription: this.data.teamVideoShowDescription,
       showSwipeHint: this.data.teamVideoShowSwipeHint
     })
     this.clearPending()
@@ -903,6 +949,35 @@ Page({
       ...buildTextSectionEditorState(component.config)
     })
     this.beginTextBackgroundSession(component.config)
+  },
+  openNewComponentSheet(componentType, componentKey = '') {
+    const location = componentKey ? findTeamPortfolioComponent(this.data.config, componentKey) : null
+    if (componentKey && (!location || location.component.componentType !== componentType)) return
+    this.newComponentMenuKey = this.data.activeMenuKey
+    this.setData({ newComponentSheetVisible: true, newComponentType: componentType, newComponentKey: componentKey,
+      newComponentConfig: componentType === 'TEXT_GRID' ? normalizeTextGrid(location ? location.component.config : {}) : normalizeContactInfo(location ? location.component.config : {}) })
+  },
+  handleCancelNewComponent() { this.setData({ newComponentSheetVisible: false, newComponentKey: '', newComponentConfig: {} }) },
+  handleConfirmNewComponent(event) {
+    if (!this.data.newComponentSheetVisible) return
+    const type = this.data.newComponentType, value = event.detail
+    const error = type === 'TEXT_GRID' ? validateTextGrid(value, { requireText: true }) : validateContactInfo(value, true)
+    if (error) return wx.showToast({ title: error, icon: 'none' })
+    const menuKey = this.newComponentMenuKey || '', componentKey = this.data.newComponentKey || makeKey()
+    const navigation = this.data.config.bottomNav || {}
+    const menuExists = navigation.enabled ? navigation.items.some(item => item.key === menuKey) : !menuKey
+    const components = getTeamMenuComponentList(this.data.config, menuKey)
+    const found = components.findIndex(item => item.componentKey === componentKey)
+    if (!menuExists || (this.data.newComponentKey && (found < 0 || components[found].componentType !== type))) {
+      this.handleCancelNewComponent()
+      return wx.showToast({ title: '原菜单或组件已变化，请重新打开编辑', icon: 'none' })
+    }
+    if (found < 0) components.push({ componentKey, componentType: type, config: value, enabled: true, sortOrder: (components.length + 1) * 1000 })
+    else components[found] = { ...components[found], config: value }
+    this.clearPending(); this.updateConfig(replaceTeamMenuComponentList(this.data.config, menuKey, components))
+    const componentValidation = { ...this.data.componentValidation, [componentKey]: true }
+    this.setData({ componentValidation, hasInvalidComponents: Object.keys(componentValidation).some(key => componentValidation[key] === false) })
+    this.handleCancelNewComponent()
   },
   openStructuredTextSheet(componentKey = '') {
     const location = componentKey ? findTeamPortfolioComponent(this.data.config, componentKey) : null
@@ -971,7 +1046,8 @@ Page({
   applyTextBackgroundResource(work, invalid, loadError = '', loading = false) {
     const selected = this.textBackgroundSelected || {}
     const resource = { backgroundWorkId: selected.workId, backgroundMemberUserId: selected.memberUserId,
-      backgroundWork: work ? { workId: work.id, mediaType: work.mediaType, url: work.url, width: work.width, height: work.height } : null,
+      backgroundWork: work ? { workId: work.id, mediaType: work.mediaType, url: work.url, width: work.width, height: work.height,
+        ...(work.mediaType === VIDEO_MEDIA_TYPE ? { posterUrl: work.posterUrl || '' } : {}) } : null,
       backgroundInvalid: Boolean(invalid), backgroundLoading: loading, backgroundLoadError: loadError }
     this.setData({ textBackgroundResource: resource })
     const form = this.data.textSectionForm
@@ -1035,6 +1111,11 @@ Page({
       this.applyTextBackgroundResource(null, false, '背景作品加载失败，请重试')
     }
   },
+  handleTextBackgroundScrollToLower() {
+    if (!this.data.textSectionSheetVisible) return
+    const picker = this.selectComponent(TEXT_BACKGROUND_PICKER_SELECTOR)
+    if (picker) picker.handleMore()
+  },
   async handleTextBackgroundRequest(event = {}) {
     if (!Number(this.data.teamId) || (!this.data.textSectionSheetVisible && !this.data.structuredTextSheetVisible)) return
     const detail = event.detail || {}
@@ -1067,7 +1148,8 @@ Page({
       this.setData({ textBackgroundMemberUserId: memberUserId })
       let page = reset ? 1 : (Number(this.data.textBackgroundPage) || 0) + 1
       let candidates = reset ? [] : this.data.textBackgroundOptions.slice()
-      // 现有成员分页接口没有 keyword 参数；逐页本地匹配，跳过仅视频或无搜索结果的页。
+      const initialCount = candidates.length
+      // 现有成员分页接口没有 keyword 参数；逐页本地匹配，跳过没有可用背景或无搜索结果的页。
       while (isCurrent()) {
         const selectedWorkId = page === 1 && selected.memberUserId === memberUserId ? selected.workId : 0
         const response = await request({
@@ -1084,7 +1166,7 @@ Page({
         candidates = candidates.concat(matches.filter(work => { if (seen.has(work.id)) return false; seen.add(work.id); return true }))
         const hasMore = Boolean(response && response.hasMore)
         this.setData({ textBackgroundOptions: candidates, textBackgroundPage: page, textBackgroundHasMore: hasMore })
-        if (matches.length || !hasMore) break
+        if (candidates.length > initialCount || !hasMore) break
         page += 1
       }
     } catch (error) {
@@ -1160,6 +1242,21 @@ Page({
       )
     })
   },
+  handleTextSectionLineHeightInput(event) {
+    if (!this.data.textSectionSheetVisible || !this.data.canMaintain) return
+    const textSectionForm = { ...this.data.textSectionForm, lineHeight: parsePortfolioTextLineHeightInput(event.detail.value) }
+    this.setData({ textSectionForm,
+      textSectionLineHeightEditor: buildPortfolioTextLineHeightEditor(textSectionForm.lineHeight, LEGACY_TEXT_SECTION_LINE_HEIGHT),
+      textSectionTypography: buildPortfolioTextTypography(textSectionForm, LEGACY_TEAM_FONT_SIZE_RPX)
+    })
+  },
+  handleTextSectionLineHeightStep(event) {
+    if (!this.data.textSectionSheetVisible || !this.data.canMaintain) return
+    const current = this.data.textSectionForm.lineHeight
+    const next = stepPortfolioTextLineHeight(current, Number(event.currentTarget.dataset.delta), LEGACY_TEXT_SECTION_LINE_HEIGHT)
+    if (next !== current) this.handleTextSectionLineHeightInput({ detail: { value: String(next) } })
+  },
+
   handleConfirmTextSectionConfig() {
     if (this.data.textSectionForm.backgroundEnabled && (this.data.textSectionForm.backgroundLoading || this.data.textSectionForm.backgroundLoadError)) {
       return wx.showToast({ title: this.data.textSectionForm.backgroundLoadError || '背景作品加载中，请稍候', icon: 'none' })
@@ -1167,6 +1264,9 @@ Page({
     const form = buildTextSectionForm(this.data.textSectionForm)
     if (!form.content) return wx.showToast({ title: TEXT_SECTION_REQUIRED_MESSAGE, icon: 'none' })
     if (!isValidTextColor(form.color)) return wx.showToast({ title: TEXT_COLOR_ERROR, icon: 'none' })
+    if (Object.prototype.hasOwnProperty.call(form, 'lineHeight') && !isValidPortfolioTextLineHeight(form.lineHeight)) {
+      return wx.showToast({ title: PORTFOLIO_TEXT_LINE_HEIGHT_ERROR, icon: 'none' })
+    }
     const backgroundError = validateTextBackground(form, { team: true })
     if (backgroundError) return wx.showToast({ title: backgroundError, icon: 'none' })
     const componentKey = this.data.textSectionEditingComponentKey
@@ -1223,12 +1323,14 @@ Page({
     const location = findTeamPortfolioComponent(this.data.config, componentKey)
     const component = location && location.component
     if (!component || component.componentType !== 'DIVIDER') return
-    this.setData({ dividerSheetVisible: true, dividerEditingComponentKey: componentKey, dividerForm: buildDividerForm(component.config) })
+    this.setData({ dividerSheetVisible: true, dividerEditingComponentKey: componentKey, ...buildDividerEditorState(component.config) })
   },
-  handleCloseDividerSheet() { this.setData({ dividerSheetVisible: false, dividerEditingComponentKey: '', dividerForm: buildDividerForm() }) },
-  handleDividerColorTap(event) {
-    const color = event.currentTarget.dataset.value
-    if (DIVIDER_COLOR_OPTIONS.some((item) => item.value === color)) this.setData({ dividerForm: Object.assign({}, this.data.dividerForm, { color }) })
+  handleCloseDividerSheet() { this.setData({ dividerSheetVisible: false, dividerEditingComponentKey: '', ...buildDividerEditorState() }) },
+  handleDividerColorChange(event) {
+    if (!this.data.dividerSheetVisible || !this.data.canMaintain) return
+    const color = event.detail.color
+    if (typeof color !== 'string' || !DIVIDER_HEX_COLOR_PATTERN.test(color)) return
+    this.setData({ dividerForm: Object.assign({}, this.data.dividerForm, { color: color.toUpperCase() }), dividerPickerColor: color.toUpperCase() })
   },
   handleDividerHeightInput(event) { this.setData({ dividerForm: Object.assign({}, this.data.dividerForm, { heightPx: event.detail.value }) }) },
   handleConfirmDividerConfig() {
@@ -1404,21 +1506,39 @@ Page({
   },
   handleBackgroundHexInput(event) {
     const backgroundColorDraft = String(event.detail.value || '').trim().toUpperCase()
-    if (/^#[0-9A-F]{6}$/.test(backgroundColorDraft)) {
+    if (BACKGROUND_HEX_COLOR_PATTERN.test(backgroundColorDraft)) {
       this.setData(buildTeamBackgroundColorPickerState(hexToHsv(backgroundColorDraft)))
       return
     }
     this.setData({ backgroundColorDraft })
   },
   handleBackgroundHexBlur() {
-    if (!/^#[0-9A-F]{6}$/.test(this.data.backgroundColorDraft)) {
-      wx.showToast({ title: '请输入正确的颜色值', icon: 'none' })
+    if (!BACKGROUND_HEX_COLOR_PATTERN.test(this.data.backgroundColorDraft)) {
+      wx.showToast({ title: BACKGROUND_COLOR_INVALID_MESSAGE, icon: 'none' })
     }
   },
+  /** 只复制当前有效输入，不提交背景色或关闭编辑弹层。 */
+  handleCopyBackgroundColor() {
+    if (!this.data.backgroundColorSheetVisible || !this.data.canMaintain) return
+    const color = this.data.backgroundColorDraft
+    if (!BACKGROUND_HEX_COLOR_PATTERN.test(color)) {
+      wx.showToast({ title: BACKGROUND_COLOR_INVALID_MESSAGE, icon: 'none' })
+      return
+    }
+    wx.setClipboardData({
+      data: color,
+      fail: () => {
+        if (this.data.backgroundColorSheetVisible && this.data.canMaintain) {
+          wx.showToast({ title: COLOR_COPY_FAILED_MESSAGE, icon: 'none' })
+        }
+      }
+    })
+  },
+
   handleConfirmBackgroundColor() {
     if (!this.data.canMaintain) return
-    if (!/^#[0-9A-F]{6}$/.test(this.data.backgroundColorDraft)) {
-      wx.showToast({ title: '请输入正确的颜色值', icon: 'none' })
+    if (!BACKGROUND_HEX_COLOR_PATTERN.test(this.data.backgroundColorDraft)) {
+      wx.showToast({ title: BACKGROUND_COLOR_INVALID_MESSAGE, icon: 'none' })
       return
     }
     this.clearPending()
@@ -2002,6 +2122,12 @@ Page({
     return normalized
   },
   async saveDraft(forPublish = false) {
+    for (const location of visitTeamPortfolioComponents(this.data.config)) {
+      const component = location.component
+      const message = component.componentType === 'TEXT_GRID' ? validateTextGrid(component.config)
+        : component.componentType === 'CONTACT_INFO' ? validateContactInfo(component.config) : ''
+      if (message) { wx.showToast({ title: message, icon: 'none' }); return null }
+    }
     if (this.data.saving || (this.data.publishing && !forPublish) || !this.data.canMaintain || this.hasInvalidComponents()) return null
     const title = this.data.config && this.data.config.share && this.data.config.share.title
     if (!String(title || '').trim()) {

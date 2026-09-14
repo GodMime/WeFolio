@@ -1,0 +1,35 @@
+<view class="grid-mask {{visible ? 'is-visible' : ''}}" catchtap="handleCancel">
+  <view class="grid-panel contact-editor-panel" catchtap="noop">
+    <view class="grid-header">联系信息</view>
+    <scroll-view class="grid-scroll" scroll-y type="list" scroll-top="{{scrollTop}}" bindscroll="handleScroll">
+      <view class="grid-body">
+        <view class="grid-meta">默认带入当前编辑者资料；保存后固定，可在此独立修改。</view>
+        <view class="grid-label">联系手机</view>
+        <input class="contact-input" value="{{draft.contactPhone}}" maxlength="-1" data-field="contactPhone" bindinput="handleInput" placeholder="填写联系手机" />
+        <view class="grid-label">联系微信</view>
+        <input class="contact-input" value="{{draft.contactWechat}}" maxlength="-1" data-field="contactWechat" bindinput="handleInput" placeholder="填写联系微信" />
+        <button class="grid-button contact-refill" bindtap="handleRefill" loading="{{loading}}" disabled="{{loading}}">从我的资料重新填入</button>
+        <view class="grid-field contact-border-toggle"><text>边框</text><switch checked="{{draft.contactBorder}}" bindchange="handleBorderToggle" color="#212529" aria-label="显示边框" /></view>
+        <view class="grid-border-settings {{draft.contactBorder ? 'is-visible' : ''}}">
+          <view wx:for="{{borderFields}}" wx:key="field" class="contact-border-field">
+            <view class="grid-field">
+              <text>{{item.label}}（rpx）</text>
+              <view class="grid-stepper">
+                <button class="grid-button grid-step-button" data-field="{{item.field}}" data-delta="{{-borderStep}}" bindtap="handleBorderStep" disabled="{{!draft.contactBorder || draft[item.field] <= item.min}}" aria-label="减小{{item.label}}">−</button>
+                <input class="grid-input" type="number" value="{{draft[item.field]}}" data-field="{{item.field}}" bindinput="handleBorderNumberInput" disabled="{{!draft.contactBorder}}" aria-label="{{item.label}}" />
+                <button class="grid-button grid-step-button" data-field="{{item.field}}" data-delta="{{borderStep}}" bindtap="handleBorderStep" disabled="{{!draft.contactBorder || draft[item.field] >= item.max}}" aria-label="增大{{item.label}}">＋</button>
+              </view>
+            </view>
+          </view>
+          <view class="grid-label">边框颜色</view>
+          <text-color-editor inline="{{true}}" label="边框颜色" color="{{draft.contactBorderColor}}" active="{{visible && draft.contactBorder}}" bindchange="handleBorderColor" />
+          <view class="grid-meta">留白位于边框外侧，上下与左右分别调整。</view>
+        </view>
+        <view wx:if="{{error}}" class="grid-error">{{error}}</view>
+        <view class="grid-label">效果预览</view>
+        <view class="contact-preview" style="background-color:{{backgroundColor}}"><contact-info config="{{draft}}" theme-mode="{{previewThemeMode}}" /></view>
+      </view>
+    </scroll-view>
+    <view class="grid-actions"><button class="grid-button grid-action-button" bindtap="handleCancel">取消</button><button class="grid-button grid-action-button primary" bindtap="handleConfirm" disabled="{{loading}}">完成</button></view>
+  </view>
+</view>

@@ -9,6 +9,7 @@ const RENDERERS = [
   ['团队结构化文字', 'team-portfolios', 'structured-text-section', 'config', 'updatePresentation']
 ]
 const IMAGE_URL = 'https://example.test/background.gif'
+const VIDEO_URL = 'https://example.test/background.mp4'
 
 function config(dimensions = {}) {
   return {
@@ -38,7 +39,7 @@ function renderer(context, source) {
     setData(patch) { Object.assign(this.data, patch) },
     createSelectorQuery() {
       return {
-        select(selector) { assert.equal(selector, '.text-background-image'); return this },
+        select(selector) { assert.equal(selector, instance.data.background.isVideo ? '.text-background-video' : '.text-background-image'); return this },
         boundingClientRect(callback) { measurements.push(callback); return this },
         exec() {}
       }
@@ -49,6 +50,8 @@ function renderer(context, source) {
   const image = template.match(/<image\b[^>]*class="text-background-image"[^>]*>/)[0]
   const handler = (image.match(/bindload="([^"]+)"/) || [])[1]
   const hasImageSource = /data-src="\{\{background.imageUrl\}\}"/.test(image)
+  const video = template.match(/<video\b[^>]*>/)?.[0] || ''
+  const videoHandler = (video.match(/bindloadedmetadata="([^"]+)"/) || [])[1]
   return {
     instance, template,
     refresh(next = source) { instance.properties[property] = next; instance[refresh]() },
@@ -56,11 +59,44 @@ function renderer(context, source) {
       // 通过模板声明的图片加载入口触发真实组件方法，捕获漏绑事件的问题。
       if (handler) instance[handler]({ detail: { width, height }, currentTarget: { dataset: hasImageSource ? { src: url } : {} } })
     },
+    metadata(width, height, url = VIDEO_URL) {
+      assert.ok(videoHandler, '视频必须绑定元数据事件计算尺寸')
+      assert.match(video, /data-src="\{\{background.videoUrl\}\}"/)
+      instance[videoHandler]({ detail: { width, height }, currentTarget: { dataset: { src: url } } })
+    },
     measure(width) { measurements.shift()?.({ width }) }
   }
 }
 
 for (const context of RENDERERS) {
+  test(`${context[0]}：视频元数据决定背景高度，封面与旧视频回调不能覆盖当前布局`, () => {
+    const source = config()
+    source.backgroundWork = { workId: 7, mediaType: 'VIDEO', url: VIDEO_URL, posterUrl: 'https://example.test/poster.jpg' }
+    const before = JSON.stringify(source)
+    const view = renderer(context, source)
+    view.refresh()
+    view.metadata(1080, 1920)
+    view.measure(270)
+    assert.equal(view.instance.data.frameStyle, 'min-height:480px;')
+    assert.equal(view.instance.data.background.imageUrl, '')
+    assert.equal(view.instance.data.background.videoUrl, VIDEO_URL)
+    view.load(1920, 1080, source.backgroundWork.posterUrl)
+    assert.equal(view.instance.data.frameStyle, 'min-height:480px;')
+    assert.equal(JSON.stringify(source), before)
+    view.refresh({ ...source, content: '修改文字' })
+    assert.equal(view.instance.data.frameStyle, 'min-height:480px;')
+    view.refresh({ ...source, backgroundWorkId: 8,
+      backgroundWork: { workId: 8, mediaType: 'VIDEO', url: 'https://example.test/next.mp4' } })
+    assert.equal(view.instance.data.frameStyle, '')
+    view.metadata(1080, 1920)
+    view.measure(270)
+    assert.equal(view.instance.data.frameStyle, '')
+    view.metadata(1920, 1080, 'https://example.test/next.mp4')
+    view.refresh({ ...source, backgroundEnabled: false })
+    view.measure(320)
+    assert.equal(view.instance.data.frameStyle, '')
+  })
+
   test(`${context[0]}：缺少作品尺寸时，加载原图后按容器宽度保留完整背景高度`, () => {
     const source = config()
     const before = JSON.stringify(source)

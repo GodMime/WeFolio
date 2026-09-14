@@ -1,0 +1,10 @@
+<view class="work-detail-page theme-{{themeMode}}" style="background:{{backgroundColor}};color:{{navigationColor}}">
+  <navigation-bar title="作品详情" back="{{true}}" delta="{{0}}" color="{{navigationColor}}" background="{{backgroundColor}}" bindback="handleBack" />
+  <view wx:if="{{loadingContext}}" class="work-detail-loading" aria-live="polite">正在加载作品…</view>
+  <scroll-view wx:elif="{{available}}" class="work-detail-scroll" scroll-y>
+    <video wx:if="{{work.mediaType === 'VIDEO'}}" id="portfolioDetailVideo" class="work-detail-media" src="{{work.mediaUrl}}" poster="{{work.coverUrl}}" controls="{{true}}" show-fullscreen-btn="{{true}}" object-fit="contain" bindplay="handleVideoPlay" binderror="handleVideoError" />
+    <image wx:else class="work-detail-image" src="{{imageFailed ? work.coverUrl : work.mediaUrl}}" mode="widthFix" webp="{{true}}" bindload="handleImageLoaded" binderror="handleImageError" bindtap="handlePreviewImage" aria-role="button" aria-label="查看作品大图" />
+    <view class="work-detail-copy"><view wx:if="{{detailOptions.showTitle && work.title}}" class="work-detail-title">{{work.title}}</view><text wx:if="{{detailOptions.showDescription && work.description}}" class="work-detail-description">{{work.description}}</text></view>
+  </scroll-view>
+  <view wx:else class="work-detail-unavailable"><text>作品暂不可用</text><button bindtap="handleBack">返回</button></view>
+</view>

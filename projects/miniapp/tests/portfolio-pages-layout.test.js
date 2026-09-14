@@ -40,6 +40,17 @@ function readExisting(relativePath) {
   return fs.readFileSync(absolutePath, 'utf8')
 }
 
+test('personal preview and visitor pages apply configured spacing to every component', () => {
+  for (const route of [
+    'pages/portfolios/standard-preview/portfolio-standard-preview',
+    'pages/portfolios/visitor-portfolio/visitor-portfolio'
+  ]) {
+    assert.match(read(`${route}.wxml`), /--portfolio-component-spacing:\s*\{\{portfolio\.style\.componentSpacingRpx\}\}rpx;/)
+    assert.match(readRule(read(`${route}.wxss`), '.folio-component'),
+      /margin-top:\s*var\(--portfolio-component-spacing,\s*32rpx\);/)
+  }
+})
+
 test('app registers portfolio pages', () => {
   [
     'pages/portfolios/portfolios',
@@ -391,8 +402,8 @@ test('maintainer portfolio pages expose expected controls', () => {
   assert.match(editWxml, /componentRows\.isEditable\(item\.componentType\)[\s\S]*editable/)
   assert.match(editWxml, /divider-sheet-mask/)
   assert.match(editWxml, /编辑分割线/)
-  assert.match(editWxml, /dividerColorOptions/)
-  assert.match(editWxml, /handleDividerColorTap/)
+  assert.match(editWxml, /<text-color-editor label="分割线颜色"[^>]*color="\{\{dividerPickerColor\}\}"/)
+  assert.match(editWxml, /bindchange="handleDividerColorChange"/)
   assert.match(editWxml, /handleDividerHeightInput/)
   assert.match(editWxss, /\.schedule-query-mode-option\s*\{/)
   assert.match(editWxss, /\.schedule-query-mode-option\[aria-checked="true"\] \.schedule-query-mode-radio\s*\{/)
@@ -522,7 +533,7 @@ test('visitor portfolio pages expose maintenance, QR, contact and schedule surfa
   assert.match(visitorWxml, /<portfolio-text-section text-section="\{\{item\.textSection\}\}"/)
   assert.match(previewWxml, /<portfolio-text-section text-section="\{\{item\.textSection\}\}"/)
   assert.match(textSectionWxml, /class="text-section portfolio-theme-\{\{themeMode\}\} \{\{textSection\.alignmentClass\}\}/)
-  assert.match(textSectionWxml, /class="text-content \{\{textSection\.fontClass\}\}"[\s\S]*style="\{\{textSection\.fontSizeStyle\}\}\{\{textColorStyle\}\}"[\s\S]*space="nbsp"[\s\S]*\{\{textSection\.content\}\}<\/text>/)
+  assert.match(textSectionWxml, /class="text-content \{\{textSection\.fontClass\}\}"[\s\S]*style="\{\{textSection\.fontSizeStyle\}\}\{\{textColorStyle\}\}\{\{lineHeightStyle\}\}"[\s\S]*space="nbsp"[\s\S]*\{\{textSection\.content\}\}<\/text>/)
   assert.match(visitorWxml, /<portfolio-divider divider="\{\{item\.divider\}\}"/)
   assert.match(previewWxml, /<portfolio-divider divider="\{\{item\.divider\}\}"/)
   assert.match(dividerWxml, /class="divider-section portfolio-theme-\{\{themeMode\}\}"[\s\S]*style="\{\{divider\.style\}\}"/)

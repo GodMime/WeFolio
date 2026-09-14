@@ -16,6 +16,12 @@ const {
   getMenuComponentList,
   importWorksIntoDisplayGroup,
   normalizePortfolioConfig,
+  normalizeComponentSpacingRpx,
+  normalizeStyleConfig,
+  normalizeProfileComponentConfig,
+  normalizeProfileBorderConfig,
+  normalizeDividerConfig,
+  resolveDividerColorValue,
   normalizeHyperlinkConfig,
   removeNavigationItem,
   normalizeSingleWorkConfig,
@@ -25,6 +31,7 @@ const {
   removeComponent,
   removeDisplayGroup,
   updateComponentProfileConfig,
+  updateComponentDividerConfig,
   updateComponentHyperlinkConfig,
   updateSingleWorkConfig,
   updateDisplayGroupName,
@@ -44,8 +51,85 @@ const {
   themeModeFromHex
 } = require('../utils/portfolio-color')
 
-test('new editor advertises structured text schema revision', () => {
-  assert.equal(EDITOR_SCHEMA_REVISION, 5)
+test('new editor advertises video carousel component title schema revision', () => {
+  assert.equal(EDITOR_SCHEMA_REVISION, 14)
+})
+
+test('personal profile borders default off and keep selected styling when disabled', () => {
+  assert.deepEqual(normalizeProfileBorderConfig(), { profileBorder: false, profileBorderWidthRpx: 1, profileBorderColor: 'AUTO', profileHorizontalMarginRpx: 32, profileVerticalMarginRpx: 0 })
+  const config = normalizePortfolioConfig({ components: [createComponent(COMPONENT_TYPES.PROFILE, { componentKey: 'profile_border' })] })
+  const result = updateComponentProfileConfig(config, 'profile_border', {
+    profile: { displayName: '竞成' }, profileLayout: 'HORIZONTAL', profileBorder: false,
+    profileBorderWidthRpx: 12, profileBorderColor: '#aabbcc'
+  })
+  const saved = buildDraftPayload(result, 1, 'profile-border').config.components[0].config
+  assert.equal(saved.profileBorder, false)
+  assert.equal(saved.profileBorderWidthRpx, 12)
+  assert.equal(saved.profileBorderColor, '#AABBCC')
+  assert.equal(saved.profileLayout, 'HORIZONTAL')
+  for (const width of [0, 13, 1.5, 'invalid']) {
+    assert.equal(normalizeProfileBorderConfig({ profileBorderWidthRpx: width }).profileBorderWidthRpx, 1)
+  }
+  for (const color of ['#fff', '#112233;display:none', 'RED']) {
+    assert.equal(normalizeProfileBorderConfig({ profileBorderColor: color }).profileBorderColor, 'AUTO')
+  }
+  assert.equal(normalizeProfileBorderConfig({ profileBorder: 'false' }).profileBorder, false)
+})
+
+test('personal profile spacing survives draft serialization including zero and maximum margins', () => {
+  const config = normalizePortfolioConfig({ components: [createComponent(COMPONENT_TYPES.PROFILE, { componentKey: 'profile_spacing' })] })
+  for (const enabled of [false, true]) {
+    for (const value of [0, 96]) {
+      const result = updateComponentProfileConfig(config, 'profile_spacing', {
+        profileBorder: enabled, profileHorizontalMarginRpx: value, profileVerticalMarginRpx: value
+      })
+      const saved = JSON.parse(JSON.stringify(buildDraftPayload(result, 1, 'profile-spacing'))).config.components[0].config
+      assert.equal(saved.profileHorizontalMarginRpx, value)
+      assert.equal(saved.profileVerticalMarginRpx, value)
+      assert.equal(saved.profileBorder, enabled)
+    }
+  }
+  for (const value of [-1, 97, 0.5, null, false, '', 'invalid']) {
+    const normalized = normalizeProfileBorderConfig({ profileHorizontalMarginRpx: value, profileVerticalMarginRpx: value })
+    assert.equal(normalized.profileHorizontalMarginRpx, 32)
+    assert.equal(normalized.profileVerticalMarginRpx, 0)
+  }
+})
+
+test('personal profile layout defaults to vertical and survives draft serialization', () => {
+  assert.equal(normalizeProfileComponentConfig({}).profileLayout, 'VERTICAL')
+  assert.equal(normalizeProfileComponentConfig({ profileLayout: 'INVALID' }).profileLayout, 'VERTICAL')
+  const config = normalizePortfolioConfig({ components: [createComponent(COMPONENT_TYPES.PROFILE, { componentKey: 'profile_layout' })] })
+  const result = updateComponentProfileConfig(config, 'profile_layout', {
+    profile: { displayName: '竞成', profession: '婚礼叙事导演' }, profileLayout: 'HORIZONTAL'
+  })
+  const saved = buildDraftPayload(result, 1, 'profile-layout').config.components[0].config
+  assert.equal(saved.profileLayout, 'HORIZONTAL')
+  assert.equal(saved.profile.displayName, '竞成')
+  assert.equal(saved.profile.profession, '婚礼叙事导演')
+})
+
+test('divider colors survive component editing and draft payloads without changing legacy colors', () => {
+  const expectedColors = {
+    BLACK: '#000000', WHITE: '#ffffff', GRAY: '#eef1f4', TRANSPARENT: 'transparent',
+    '#000000': '#000000', '#FFFFFF': '#FFFFFF', '#F5F6F8': '#F5F6F8', '#12abef': '#12ABEF'
+  }
+  for (const [color, colorValue] of Object.entries(expectedColors)) {
+    const component = createComponent(COMPONENT_TYPES.DIVIDER, {
+      componentKey: 'divider-color', config: { color: 'GRAY', heightPx: 16, retainedField: true }
+    })
+    const updated = updateComponentDividerConfig({ components: [component] }, component.componentKey, { color, heightPx: 24 })
+    const saved = buildDraftPayload(updated, 1, 'divider-color-draft').config.components[0].config
+    assert.equal(saved.color, color.startsWith('#') ? color.toUpperCase() : color)
+    assert.equal(resolveDividerColorValue(saved.color), colorValue)
+    assert.equal(saved.heightPx, 24)
+    assert.equal(saved.retainedField, true)
+    assert.equal(validatePortfolioForPublish(updated).valid, true)
+  }
+  assert.deepEqual(normalizeDividerConfig(), { color: 'GRAY', heightPx: 16 })
+  for (const color of ['#fff', '#12345678', '#123456;display:none', 'RED']) {
+    assert.equal(normalizeDividerConfig({ color }).color, 'GRAY')
+  }
 })
 
 test('personal video carousel defaults normalize identifiers and enforce publish count', () => {
@@ -61,8 +145,11 @@ test('personal video carousel defaults normalize identifiers and enforce publish
   assert.deepEqual(component.config, {
     title: '一二三四五六七八九十',
     workIds: [3, 2, 1],
+    showComponentTitle: true,
     showTitle: false,
-    showSwipeHint: true
+    showSwipeHint: true,
+    displayStyle: 'STACKED',
+    showDescription: false
   })
   assert.deepEqual(collectComponentWorkIds(component), [3, 2, 1])
   assert.equal(validatePortfolioForPublish({
@@ -108,14 +195,30 @@ test('normalizes style and bottom navigation without duplicating first menu comp
     }
   })
 
-  assert.equal(config.editorSchemaRevision, 5)
+  assert.equal(config.editorSchemaRevision, 14)
   assert.equal(config.style.backgroundColor, '#1A2B3C')
+  assert.equal(config.style.componentSpacingRpx, 32)
   assert.equal(Object.hasOwn(config.bottomNav.items[0], 'components'), false)
   assert.equal(config.bottomNav.items[0].iconUrl, 'https://example.com/home.png')
   assert.equal(config.bottomNav.items[1].iconUrl, 'https://example.com/works.png')
   assert.deepEqual(getMenuComponentList(config, 'home').map((item) => item.componentKey), ['c_home'])
   assert.deepEqual(getMenuComponentList(config, 'works').map((item) => item.componentKey), ['c_works'])
   assert.equal(findPortfolioComponent(config, 'c_works').menuKey, 'works')
+})
+
+test('个人作品集组件间距兼容旧配置并保留零值和最大值', () => {
+  assert.deepEqual(normalizeStyleConfig(), { backgroundColor: '#FFFFFF', componentSpacingRpx: 32 })
+  assert.deepEqual(normalizeStyleConfig(null), { backgroundColor: '#FFFFFF', componentSpacingRpx: 32 })
+  for (const value of [0, 1, 32, 96]) {
+    const config = normalizePortfolioConfig({ style: { backgroundColor: '#1a2b3c', componentSpacingRpx: value } })
+    const saved = JSON.parse(JSON.stringify(buildDraftPayload(config, 1, 'component-spacing'))).config
+    assert.equal(saved.editorSchemaRevision, 14)
+    assert.equal(saved.style.componentSpacingRpx, value)
+    assert.equal(saved.style.backgroundColor, '#1A2B3C')
+  }
+  for (const value of [undefined, null, '', '0', '32', -1, 97, 1.5, true, NaN, Infinity]) {
+    assert.equal(normalizeComponentSpacingRpx(value), 32)
+  }
 })
 
 test('legacy editor preserves unknown hyperlink components when saving unrelated changes', () => {
@@ -380,14 +483,16 @@ test('single work component defaults title on and description off while keeping 
 
   assert.equal(COMPONENT_TYPES.SINGLE_WORK, 'SINGLE_WORK')
   assert.equal(component.name, '单个作品')
-  assert.deepEqual(component.config, { workId: 12, showTitle: true, showDescription: true })
+  assert.deepEqual(component.config, { workId: 12, openMode: 'INLINE', detailOptions: { showTitle: true, showDescription: true }, showTitle: true, showDescription: true })
   assert.deepEqual(normalizeSingleWorkConfig({ workId: 13, showTitle: false, showDescription: false }), {
     workId: 13,
+    openMode: 'INLINE', detailOptions: { showTitle: true, showDescription: true },
     showTitle: false,
     showDescription: false
   })
   assert.deepEqual(normalizeSingleWorkConfig({ workId: 13.9, showTitle: true }), {
     workId: 0,
+    openMode: 'INLINE', detailOptions: { showTitle: true, showDescription: true },
     showTitle: true,
     showDescription: false
   })
@@ -403,12 +508,14 @@ test('single work update replaces one work and preserves explicit display switch
 
   const updated = updateSingleWorkConfig(config, 'c_single', {
     workId: 12,
+    openMode: 'INLINE', detailOptions: { showTitle: true, showDescription: true },
     showTitle: false,
     showDescription: true
   })
 
   assert.deepEqual(updated.components[0].config, {
     workId: 12,
+    openMode: 'INLINE', detailOptions: { showTitle: true, showDescription: true },
     showTitle: false,
     showDescription: true
   })
@@ -793,4 +900,23 @@ test('builds draft and publish payloads', () => {
     draftRevision: 4,
     idempotencyKey: 'publish-1'
   })
+})
+
+
+test('personal grid creation uses gray borders and draft saves retain chosen or legacy border settings', () => {
+  const created = createComponent(COMPONENT_TYPES.TEXT_GRID)
+  assert.equal(created.config.cellBorderWidthRpx, 1)
+  assert.equal(created.config.cellBorderColor, '#D7DADD')
+  created.config.cellBorder = false
+  created.config.cellBorderWidthRpx = 8
+  created.config.cellBorderColor = '#ABCDEF'
+  const config = normalizePortfolioConfig({ editorSchemaRevision: 6, components: [created] })
+  const payload = buildDraftPayload(config, 3, 'grid-border-draft')
+  assert.equal(payload.config.editorSchemaRevision, 14)
+  assert.equal(payload.config.components[0].config.cellBorder, false)
+  assert.equal(payload.config.components[0].config.cellBorderWidthRpx, 8)
+  assert.equal(payload.config.components[0].config.cellBorderColor, '#ABCDEF')
+  delete created.config.cellBorderWidthRpx; delete created.config.cellBorderColor
+  const legacy = normalizePortfolioConfig({ editorSchemaRevision: 6, components: [created] })
+  assert.equal(Object.hasOwn(legacy.components[0].config, 'cellBorderColor'), false)
 })

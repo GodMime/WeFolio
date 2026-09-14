@@ -1,3 +1,5 @@
+const { normalizeTextGrid, validateTextGrid } = require('./portfolio-text-grid')
+const { normalizeContactInfo, validateContactInfo } = require('./portfolio-contact-info')
 const { request } = require('../../../utils/request.js')
 const { normalizeBackgroundAudio } = require('./portfolio-background-audio')
 const { normalizeId } = require('../../../utils/id.js')
@@ -20,7 +22,7 @@ const {
 
 const COMPONENT_LIBRARY_ENDPOINT = `${TEAM_PORTFOLIOS_ENDPOINT}/component-library`
 const STANDARD_TEAM_SCHEMA_VERSION = 'standard-team-v1'
-const TEAM_EDITOR_SCHEMA_REVISION = 4
+const TEAM_EDITOR_SCHEMA_REVISION = 10
 const DEFAULT_TEAM_BACKGROUND_COLOR = '#FFFFFF'
 const TEAM_NAVIGATION_TITLE_MAX_LENGTH = 5
 const TEAM_COMPONENT_SORT_ORDER_STEP = 1000
@@ -48,7 +50,7 @@ function normalizeTeamHexColor(value) {
   return /^#[0-9A-F]{6}$/.test(color) ? color : DEFAULT_TEAM_BACKGROUND_COLOR
 }
 
-// 当前编辑器声明结构化文字所需的 revision 4；保留服务端既有兼容合并机制。
+// 当前编辑器声明视频轮播组件标题开关所需的 revision 10；保留服务端既有兼容合并机制。
 function normalizeTeamEditorSchemaRevision(value) {
   const revision = Number(value)
   return Number.isInteger(revision) && revision > TEAM_EDITOR_SCHEMA_REVISION
@@ -70,8 +72,11 @@ function normalizeTeamVideoCarouselConfig(raw = {}) {
   return {
     title: Array.from(text(raw.title) || '视频作品').slice(0, 10).join(''),
     items,
+    showComponentTitle: raw.showComponentTitle !== false,
     showTitle: typeof raw.showTitle === 'boolean' ? raw.showTitle : true,
-    showSwipeHint: typeof raw.showSwipeHint === 'boolean' ? raw.showSwipeHint : true
+    showSwipeHint: typeof raw.showSwipeHint === 'boolean' ? raw.showSwipeHint : true,
+    displayStyle: raw.displayStyle === 'PORTRAIT_CARDS' ? 'PORTRAIT_CARDS' : 'STACKED',
+    showDescription: typeof raw.showDescription === 'boolean' ? raw.showDescription : false
   }
 }
 
@@ -86,6 +91,13 @@ function normalizeTeamComponentList(components = []) {
       enabled: item.enabled !== false,
       config: text(item.componentType) === 'VIDEO_CAROUSEL'
         ? normalizeTeamVideoCarouselConfig(item.config && typeof item.config === 'object' ? item.config : {})
+        : text(item.componentType) === 'SINGLE_WORK' ? Object.assign({}, item.config || {}, {
+            openMode: item.config && item.config.openMode === 'DETAIL_PAGE' ? 'DETAIL_PAGE' : 'INLINE',
+            detailOptions: { showTitle: !item.config || !item.config.detailOptions || item.config.detailOptions.showTitle !== false,
+              showDescription: !item.config || !item.config.detailOptions || item.config.detailOptions.showDescription !== false }
+          })
+        : text(item.componentType) === 'TEXT_GRID' ? normalizeTextGrid(item.config)
+        : text(item.componentType) === 'CONTACT_INFO' ? normalizeContactInfo(item.config)
         : (item.config && typeof item.config === 'object' ? item.config : {})
     }))
     .filter((item) => item.componentKey && item.componentType)
@@ -190,7 +202,7 @@ function addTeamComponent(config, componentType, menuKey = '') {
     componentType: type,
     sortOrder: (components.length + 1) * TEAM_COMPONENT_SORT_ORDER_STEP,
     enabled: true,
-    config: type === 'TEXT_SECTION'
+    config: type === 'TEXT_GRID' ? normalizeTextGrid() : type === 'CONTACT_INFO' ? normalizeContactInfo() : type === 'TEXT_SECTION'
       ? {
           fontFamily: PORTFOLIO_TEXT_FONT_FAMILIES.SYSTEM,
           fontSizeRpx: NEW_COMPONENT_FONT_SIZE_RPX
@@ -379,6 +391,10 @@ function validateTeamComponentForPublish(component = {}) {
       return text(config.content) ? (!isValidTextColor(config.color) ? TEXT_COLOR_ERROR : validateTextBackground(config, { team: true })) : '请填写文字说明'
     case 'STRUCTURED_TEXT_SECTION':
       return validateStructuredTextConfig(config, { team: true })
+    case 'TEXT_GRID':
+      return validateTextGrid(config, { requireText: true })
+    case 'CONTACT_INFO':
+      return validateContactInfo(config, true)
     case 'QR_CONTACT':
       return config.qrUrlSource === 'CUSTOM' && !text(config.qrUrl)
         ? '请选择二维码图片'

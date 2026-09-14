@@ -21,8 +21,9 @@ for (const folder of ['portfolios', 'team-portfolios']) {
       : ['standard-preview/team-portfolio-standard-preview', 'visitor-portfolio/team-visitor-portfolio']
     for (const name of names) {
       const wxml = fs.readFileSync(path.join(root, `${name}.wxml`), 'utf8')
+      const script = fs.readFileSync(path.join(root, `${name}.js`), 'utf8')
       assert.match(wxml, /bindvideoplay="pauseBackgroundAudio"/)
-      assert.match(wxml, /<video\b[^>]*bindplay="pauseBackgroundAudio"/)
+      assert.match(script, /openVideoPreview\(work = \{\}\)[\s\S]*?this\.pauseBackgroundAudio\(\)[\s\S]*?return openVideoPlayer\(/)
       assert.match(wxml, /backgroundAudioResource.enabled && backgroundAudioResource.mediaUrl/)
     }
   })

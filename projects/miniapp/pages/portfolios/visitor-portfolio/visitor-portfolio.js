@@ -1,4 +1,8 @@
 const { portfolioAudioPageMethods } = require('../utils/portfolio-audio-player')
+const { createPortfolioVisitActivity } = require('../utils/visit-activity-page')
+const { openWorkDetail } = require('../utils/portfolio-work-detail')
+const { openVideoPlayer } = require('../utils/portfolio-video-player')
+const VIDEO_PLAYER_ROUTE = '/pages/portfolios/video-player/video-player'
 const { buildContactLeadPayload, createContactLeadForm, validateContactLeadForm } = require('../utils/contact-lead')
 const {
   createActiveContactFormComponent,
@@ -43,13 +47,13 @@ const QR_ACTION_PREVIEW = 'PREVIEW_QR'
 const WORK_TITLE_METADATA_KEY = 'workTitle'
 const IMAGE_MISSING_MESSAGE = '图片地址缺失'
 const VIDEO_MISSING_MESSAGE = '视频地址缺失'
-const DEFAULT_VIDEO_TITLE = '视频作品'
 const VISITOR_PROFILE_REQUIRED_MESSAGE = '请完善头像和昵称'
 const TIMELINE_SHARE_GUIDE_VALUE = 'timeline'
 const SHARE_MENU_ITEMS = Object.freeze(['shareAppMessage', 'shareTimeline'])
 const PORTFOLIOS_API_URL = '/api/mine/portfolios'
 const SHARE_CHANNEL_WECHAT_TIMELINE = 'WECHAT_TIMELINE'
 const SHARE_SCENE_PORTFOLIO_LIST = 'PORTFOLIO_LIST'
+const WORK_DETAIL_ROUTE = '/pages/portfolios/work-detail/portfolio-work-detail'
 
 function positiveId(value) {
   const id = Number(value)
@@ -86,8 +90,6 @@ Page({
     contactFormModalVisible: false,
     activeContactFormComponent: createActiveContactFormComponent(),
     videoPreviewVisible: false,
-    videoPreviewUrl: '',
-    videoPreview: null,
     activeSingleWorkVideoKey: '',
     visitorProfileAuthVisible: false,
     visitorProfileToken: '',
@@ -108,6 +110,7 @@ Page({
   },
 
   onLoad(options = {}) {
+    this.visitPageUnloaded = false
     this.positionBackgroundAudio()
     this.singleWorkPageVisible = true
     this.singleWorkInteractionRevision = 0
@@ -136,23 +139,28 @@ Page({
   },
 
   async bootstrap() {
-    if (!this.data.shareCode) {
+    if (!this.data.shareCode || this.visitPageUnloaded) {
       return
     }
+    if (!this.browserContext || this.browserContext.isInvalid()) this.browserContext = createPortfolioVisitActivity(this)
     try {
       const response = await openVisitorSession(this.data.shareCode, {
         sourceType: this.visitorSourceType,
-        anonymousSessionId: this.anonymousSessionId
+        anonymousSessionId: this.anonymousSessionId,
+        browserContext: this.browserContext
       })
       this.applyVisitorOpenResponse(response)
     } catch (error) {
+      if (this.visitPageUnloaded || error && error.contextDisposed) return
+      if (this.browserContext) this.browserContext.setDisplayable(false)
       this.setData({ timelineGuideVisible: false, timelineShareRecordEnabled: false })
       wx.showToast({ title: error.message || '作品集加载失败', icon: 'none' })
     }
   },
 
-  applyVisitorOpenResponse(response) {
-    const portfolio = normalizeVisitorPortfolio(response)
+  applyVisitorOpenResponse(response, preferredMenuKey = '') {
+    const normalized = normalizeVisitorPortfolio(response)
+    const portfolio = preferredMenuKey ? switchPortfolioMenu(normalized, preferredMenuKey) : normalized
     this.syncBackgroundAudio(portfolio.backgroundAudio, true)
     const displayable = !portfolio.underMaintenance && portfolio.components.length > 0
     this.setData({
@@ -164,6 +172,11 @@ Page({
       visitorProfileAuthVisible: Boolean(
         portfolio.needVisitorProfile && portfolio.visitorProfileToken && !portfolio.underMaintenance
       )
+    }, () => {
+      if (this.browserContext) {
+        this.browserContext.setDisplayable(!portfolio.underMaintenance)
+        if (this.singleWorkPageVisible) this.browserContext.show(this)
+      }
     })
   },
 
@@ -172,7 +185,8 @@ Page({
       shareCode: this.data.shareCode,
       sourceType: this.visitorSourceType,
       anonymousSessionId: this.anonymousSessionId,
-      onRefresh: (response) => this.applyVisitorOpenResponse(response)
+      browserContext: this.browserContext,
+      onRefresh: this.browserContext ? undefined : (response) => this.applyVisitorOpenResponse(response, this.data.portfolio.activeMenuKey)
     })
   },
 
@@ -327,13 +341,11 @@ Page({
         clearDisplaySwitchingTimer(this)
         this.invalidateSingleWorkInteraction()
         this.stopActiveSingleWorkVideo()
+        this.clearVideoPreview()
       },
       exitPatch: {
         contactFormModalVisible: false,
         activeContactFormComponent: createActiveContactFormComponent(),
-        videoPreviewVisible: false,
-        videoPreviewUrl: '',
-        videoPreview: null,
         displaySwitchingComponentKey: ''
       },
       switchPortfolio: switchPortfolioMenu
@@ -341,13 +353,15 @@ Page({
   },
 
   onUnload() {
+    this.videoPlayerDisposed = true
+    this.visitPageUnloaded = true
+    if (this.browserContext) this.browserContext.dispose()
     this.destroyBackgroundAudio()
     this.singleWorkPageVisible = false
     this.invalidateSingleWorkInteraction()
     clearPortfolioMenuTransitionTimers(this)
     clearDisplaySwitchingTimer(this)
     this.stopActiveSingleWorkVideo()
-    this.clearVideoPreview()
     if (this.clipboardPromptController) {
       this.clipboardPromptController.dispose()
       this.clipboardPromptController = null
@@ -355,17 +369,19 @@ Page({
   },
 
   onHide() {
+    if (this.browserContext) this.browserContext.hide(this)
     this.hideBackgroundAudio()
     this.singleWorkPageVisible = false
     this.invalidateSingleWorkInteraction()
     this.stopActiveSingleWorkVideo()
-    this.clearVideoPreview()
     if (this.clipboardPromptController) {
       this.clipboardPromptController.pause()
     }
   },
 
   onShow() {
+    if (this.browserContext) this.browserContext.show(this)
+    this.clearVideoPreview()
     this.showBackgroundAudio()
     this.singleWorkPageVisible = true
     if (this.clipboardPromptController) {
@@ -422,6 +438,20 @@ Page({
     if (hasPreviousPage()) {
       wx.navigateBack({ delta: 1 })
     }
+  },
+
+  handleWorkDetail(event) {
+    const portfolio = this.data.portfolio
+    const opened = openWorkDetail(this, {
+      componentKey: event.detail && event.detail.componentKey,
+      components: portfolio.activeComponents || portfolio.components,
+      theme: portfolio.style,
+      browserContext: this.browserContext,
+      onWorkEvent: (work) => this.recordWorkEvent(work),
+      route: WORK_DETAIL_ROUTE
+    })
+    if (opened) { this.pauseBackgroundAudio(); this.stopActiveSingleWorkVideo() }
+    return opened
   },
 
   handleWorkTap(event) {
@@ -564,41 +594,28 @@ Page({
     return true
   },
 
-  handleCloseVideoPreview() {
-    this.clearVideoPreview()
-  },
-
   clearVideoPreview() {
-    if (typeof wx !== 'undefined' && wx.createVideoContext && this.data.videoPreviewUrl) {
-      const context = wx.createVideoContext('portfolioWorkVideo', this)
-      if (context && typeof context.stop === 'function') context.stop()
-    }
-    this.setData({
-      videoPreviewVisible: false,
-      videoPreviewUrl: '',
-      videoPreview: null
-    })
+    // 返回作品集或打开失败时，解除文字组件的背景视频暂停。
+    if (this.data.videoPreviewVisible) this.setData({ videoPreviewVisible: false })
   },
 
   openVideoPreview(work = {}) {
+    if (this.videoPlayerDisposed || this.data.videoPreviewVisible) return false
     this.pauseBackgroundAudio()
-    const previewUrl = work.mediaUrl || work.previewUrl || ''
-    if (!previewUrl) {
+    const mediaUrl = work.mediaUrl || work.previewUrl || ''
+    if (!mediaUrl) {
       wx.showToast({ title: VIDEO_MISSING_MESSAGE, icon: 'none' })
       return false
     }
     this.stopActiveSingleWorkVideo()
-    if (this.data.videoPreviewVisible || this.data.videoPreviewUrl) this.clearVideoPreview()
-    this.setData({
-      videoPreviewVisible: true,
-      videoPreviewUrl: previewUrl,
-      videoPreview: {
-        src: previewUrl,
-        poster: work.coverUrl || '',
-        title: work.title || DEFAULT_VIDEO_TITLE
-      }
-    })
-    return true
+    this.setData({ videoPreviewVisible: true })
+    return openVideoPlayer({ url: mediaUrl, poster: work.coverUrl || '', title: work.title || '',
+      route: VIDEO_PLAYER_ROUTE, browserContext: this.browserContext || null }, wx)
+      .then((opened) => {
+        // 导航成功后来源页保持暂停，失败或返回作品集时才恢复背景视频。
+        if (!opened && !this.videoPlayerDisposed) this.clearVideoPreview()
+        return opened
+      })
   },
 
   handleVideoCarouselPlay(event) {
@@ -618,14 +635,6 @@ Page({
         wx.showToast({ title: error.message || '作品打开失败', icon: 'none' })
         return false
       })
-  },
-
-  handleVideoPreviewError() {
-    this.clearVideoPreview()
-    wx.showToast({ title: '视频播放失败，请重试', icon: 'none' })
-  },
-
-  handleVideoPreviewPanelTap() {
   },
 
   handleVisitorProfileMaskTap() {

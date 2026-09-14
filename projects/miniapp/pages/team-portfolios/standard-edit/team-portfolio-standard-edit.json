@@ -14,6 +14,8 @@
     "team-text-background-editor": "../components/text-background-editor/text-background-editor",
     "team-schedule-query": "../components/schedule-query/schedule-query",
     "team-contact-form": "../components/contact-form/contact-form",
-    "team-qr-contact": "../components/qr-contact/qr-contact"
+    "team-qr-contact": "../components/qr-contact/qr-contact",
+    "text-grid-editor": "../components/text-grid-editor/text-grid-editor",
+    "contact-info-editor": "../components/contact-info-editor/contact-info-editor"
   }
 }

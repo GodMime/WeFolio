@@ -1,17 +1,21 @@
 const { hexToHsv, hsvToHex } = require('../../utils/team-portfolio-color')
 const AUTO_COLOR = 'AUTO'
 const WHITE_COLOR = '#FFFFFF'
-const BLACK_COLOR = '#212529'
+const BLACK_COLOR = '#000000'
+// 文字浅灰需与白色清晰区分，避免使用接近白色的页面底色。
+const LIGHT_GRAY_COLOR = '#CED4DA'
 const HEX_PATTERN = /^#[0-9A-F]{6}$/
 const CHANGE_EVENT = 'change'
 const INVALID_HEX_MESSAGE = '请输入正确的颜色值'
+const COPY_FAILURE_MESSAGE = '复制失败，请重试'
+const TOAST_ICON_NONE = 'none'
 const ENTER_DELAY = 16
 const TRANSITION_DURATION = 200
 const PAD_SELECTOR = '.text-color-pad'
 const PRESETS = [
-  { color: AUTO_COLOR, label: '跟随主题' },
-  { color: WHITE_COLOR, label: '白色' },
-  { color: BLACK_COLOR, label: '黑色' }
+  { color: BLACK_COLOR, label: '黑' },
+  { color: WHITE_COLOR, label: '白' },
+  { color: LIGHT_GRAY_COLOR, label: '浅灰' }
 ]
 
 /** 外部配置仅接受主题或完整十六进制颜色，防止无效样式进入预览。 */
@@ -40,7 +44,11 @@ function pickerState(hsv) {
 Component({
   properties: {
     color: { type: String, value: AUTO_COLOR },
-    active: { type: Boolean, value: true }
+    active: { type: Boolean, value: true },
+    inline: { type: Boolean, value: false },
+    blackColor: { type: String, value: BLACK_COLOR },
+    palette: { type: String, value: 'text' },
+    label: { type: String, value: '文字颜色' }
   },
   data: {
     presets: PRESETS, selectedColor: AUTO_COLOR, customSelected: false,
@@ -53,7 +61,15 @@ Component({
       if (this.data.pickerMounted && color !== this.data.selectedColor) this.resetPicker()
       this.updateSelection(color)
     },
-    active(value) { if (!value) this.resetPicker() }
+    active(value) { if (!value) this.resetPicker() },
+    blackColor() {
+      this.resetPicker()
+      this.updateSelection(normalizeColor(this.properties.color))
+    },
+    palette() {
+      this.resetPicker()
+      this.updateSelection(normalizeColor(this.properties.color))
+    }
   },
   lifetimes: {
     attached() {
@@ -69,7 +85,8 @@ Component({
   methods: {
     /** 选中态与属性回传同步，不让正在试色的草稿影响外部颜色。 */
     updateSelection(color) {
-      this.setData({ selectedColor: color, customSelected: !PRESETS.some(item => item.color === color) })
+      // 旧主题色继续保留，但不作为新选项或无效的自定义 HEX 展示。
+      this.setData({ presets: PRESETS, selectedColor: color, customSelected: color !== AUTO_COLOR && !PRESETS.some(item => item.color === color) })
     },
     isPickerInteractive() {
       return !this._detached && this.properties.active && this.data.pickerVisible
@@ -94,7 +111,7 @@ Component({
     handlePreset(event) {
       if (this._detached || !this.properties.active) return
       const color = event.currentTarget.dataset.color
-      if (!PRESETS.some(item => item.color === color)) return
+      if (!this.data.presets.some(item => item.color === color)) return
       this.resetPicker()
       this.updateSelection(color)
       this.triggerEvent(CHANGE_EVENT, { color })
@@ -176,6 +193,23 @@ Component({
       if (this.isPickerInteractive() && !HEX_PATTERN.test(this.data.hexInput)) {
         this.setData({ errorMessage: INVALID_HEX_MESSAGE })
       }
+    },
+    /** 复制只读取当前输入，不确认颜色；非法输入不能退回复制旧预览值。 */
+    handleCopyHex() {
+      if (!this.isPickerInteractive()) return
+      const color = String(this.data.hexInput || '').trim().toUpperCase()
+      if (!HEX_PATTERN.test(color)) {
+        this.setData({ errorMessage: INVALID_HEX_MESSAGE })
+        return
+      }
+      const revision = this._pickerRevision
+      wx.setClipboardData({
+        data: color,
+        fail: () => {
+          if (!this.isPickerInteractive() || revision !== this._pickerRevision) return
+          wx.showToast({ title: COPY_FAILURE_MESSAGE, icon: TOAST_ICON_NONE })
+        }
+      })
     },
     noop() {}
   }

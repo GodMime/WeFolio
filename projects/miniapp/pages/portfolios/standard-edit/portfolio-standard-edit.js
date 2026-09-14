@@ -1,3 +1,5 @@
+const { normalizeTextGrid, validateTextGrid } = require('../utils/portfolio-text-grid')
+const { normalizeContactInfo, validateContactInfo } = require('../utils/portfolio-contact-info')
 const { portfolioAudioPageMethods, AUDIO_STYLE_OPTIONS, normalizeAudioResource } = require('../utils/portfolio-audio-player')
 const { request } = require('../../../utils/request')
 const { normalizeTextColor, isValidTextColor, TEXT_COLOR_ERROR } = require('../../../utils/portfolio-text-color')
@@ -41,9 +43,11 @@ const {
   CONTACT_FORM_DISPLAY_MODE_OPTIONS,
   CONTACT_FORM_DISPLAY_MODES,
   COMPONENT_NAMES,
+  COMPONENT_SPACING_MIN_RPX,
+  COMPONENT_SPACING_MAX_RPX,
   COMPONENT_TYPES,
   DEFAULT_DIVIDER_HEIGHT_PX,
-  DIVIDER_COLOR_OPTIONS,
+  DIVIDER_COLOR_VALUES,
   DIVIDER_COLORS,
   EDITOR_SCHEMA_REVISION,
   HYPERLINK_ACTION_TYPE_OPTIONS,
@@ -53,6 +57,14 @@ const {
   HYPERLINK_ICON_POSITION_OPTIONS,
   HYPERLINK_PROMPT_TEXT_MAX_LENGTH,
   HYPERLINK_TARGET_REQUIRED_MESSAGE,
+  PROFILE_LAYOUT_OPTIONS,
+  PROFILE_LAYOUTS,
+  PROFILE_BORDER_AUTO_COLOR,
+  PROFILE_BORDER_MAX_WIDTH_RPX,
+  PROFILE_BORDER_MIN_WIDTH_RPX,
+  PROFILE_MARGIN_MIN_RPX,
+  PROFILE_MARGIN_MAX_RPX,
+  PROFILE_MARGIN_OPTIONS,
   SCHEDULE_QUERY_DISPLAY_MODE_OPTIONS,
   SCHEDULE_QUERY_DISPLAY_MODES,
   TEXT_SECTION_ALIGNMENT_OPTIONS,
@@ -72,6 +84,7 @@ const {
   normalizeSingleWorkConfig,
   normalizeWorkDisplayOptions,
   normalizeProfileComponentConfig,
+  normalizeProfileBorderConfig,
   normalizePortfolioConfig,
   normalizeTextSectionConfig,
   normalizeVideoCarouselConfig,
@@ -97,14 +110,20 @@ const {
 } = require('../../../utils/portfolios')
 const { hexToHsv, hsvToHex, normalizeHexColor } = require('../../../utils/portfolio-color')
 const {
-  normalizeTextBackground, finalizeTextBackground, validateTextBackground,
+  normalizeTextBackground, finalizeTextBackground, validateTextBackground, BACKGROUND_MEDIA_TYPES, VIDEO_MEDIA_TYPE,
   normalizeStructuredTextConfig, finalizeStructuredTextConfig, validateStructuredTextConfig
 } = require('../utils/portfolio-text-sections')
 const {
   LEGACY_PERSONAL_FONT_SIZE_RPX,
   PORTFOLIO_TEXT_FONT_OPTIONS,
   buildPortfolioTextFontSizeOptions,
-  buildPortfolioTextTypography
+  buildPortfolioTextTypography,
+  LEGACY_TEXT_SECTION_LINE_HEIGHT,
+  PORTFOLIO_TEXT_LINE_HEIGHT_ERROR,
+  isValidPortfolioTextLineHeight,
+  parsePortfolioTextLineHeightInput,
+  stepPortfolioTextLineHeight,
+  buildPortfolioTextLineHeightEditor
 } = require('../../../utils/portfolio-text-typography')
 const {
   getPortfolioFontCapability,
@@ -130,6 +149,11 @@ const COMPONENT_WORK_PAGE_SIZE = 20
 const MAX_PERSONAL_CAROUSEL_ITEMS = 9
 const MAX_PERSONAL_VIDEO_CAROUSEL_ITEMS = 8
 const MIN_PERSONAL_VIDEO_CAROUSEL_ITEMS = 3
+const VIDEO_CAROUSEL_SETTING_HELP = {
+  showTitle: { title: '作品标题', content: '在每张视频卡片中展示作品名称。' },
+  showDescription: { title: '作品描述', content: '展示视频作品附带的描述文字。' },
+  showSwipeHint: { title: '滑动提示', content: '提示访客左右滑动浏览视频。' }
+}
 const DISPLAY_GROUP_WORK_PAGE_SIZE = 100
 const DISPLAY_GROUP_TAG_KEY_PREFIX = 'tag_'
 const DISPLAY_GROUP_SORT_ORDER_STEP = 1000
@@ -180,7 +204,12 @@ const WORK_ASPECT_RATIO_FALLBACK_TEXT = '--'
 const SINGLE_WORK_SUMMARY_STATUS_LOADING = 'LOADING'
 const SINGLE_WORK_SUMMARY_STATUS_FAILED = 'FAILED'
 const SINGLE_WORK_SUMMARY_STATUS_UNAVAILABLE = 'UNAVAILABLE'
-const BACKGROUND_COLOR_OPTIONS = ['#151515', '#FFFFFF', '#F5F6F8']
+const BACKGROUND_COLOR_OPTIONS = ['#000000', '#FFFFFF', '#F5F6F8']
+const DIVIDER_HEX_COLOR_PATTERN = /^#[0-9A-Fa-f]{6}$/
+const BACKGROUND_HEX_COLOR_PATTERN = /^#[0-9A-F]{6}$/
+const BACKGROUND_COLOR_INVALID_MESSAGE = '请输入正确的颜色值'
+const TEXT_BACKGROUND_PICKER_SELECTOR = '#text-background-picker'
+const COLOR_COPY_FAILED_MESSAGE = '复制失败，请重试'
 const BOTTOM_NAV_COUNT_OPTIONS = [1, 2, 3, 4]
 
 const DEFAULT_COMPONENT_DESCRIPTIONS = {
@@ -315,6 +344,8 @@ function isEditableComponentType(componentType) {
     componentType === COMPONENT_TYPES.CONTACT_FORM ||
     componentType === COMPONENT_TYPES.TEXT_SECTION ||
     componentType === COMPONENT_TYPES.STRUCTURED_TEXT_SECTION ||
+    componentType === COMPONENT_TYPES.TEXT_GRID ||
+    componentType === COMPONENT_TYPES.CONTACT_INFO ||
     componentType === COMPONENT_TYPES.DIVIDER ||
     componentType === COMPONENT_TYPES.HYPERLINK ||
     isDisplayGroupComponent(componentType)
@@ -833,7 +864,8 @@ function buildTextSectionForm(config = {}) {
     color: normalized.color,
     alignment: normalized.alignment || TEXT_SECTION_ALIGNMENTS.LEFT,
     fontFamily: normalized.fontFamily,
-    fontSizeRpx: normalized.fontSizeRpx
+    fontSizeRpx: normalized.fontSizeRpx,
+    ...(Object.prototype.hasOwnProperty.call(config, 'lineHeight') ? { lineHeight: config.lineHeight } : {})
   }
 }
 
@@ -851,6 +883,7 @@ function buildTextSectionEditorState(config = {}) {
   const textSectionForm = buildTextSectionForm(config)
   return {
     textSectionForm,
+    textSectionLineHeightEditor: buildPortfolioTextLineHeightEditor(textSectionForm.lineHeight, LEGACY_TEXT_SECTION_LINE_HEIGHT),
     textSectionFieldCounters: buildTextSectionFieldCounters(textSectionForm),
     textSectionFontOptions: buildTextSectionFontOptions(),
     textSectionSizeOptions:
@@ -868,6 +901,12 @@ function buildDividerForm(config = {}) {
     color: normalized.color || DIVIDER_COLORS.GRAY,
     heightPx: normalized.heightPx || DEFAULT_DIVIDER_HEIGHT_PX
   }
+}
+
+/** 旧枚举只转换选色器的显示值，未重新选色时保留原配置。 */
+function buildDividerEditorState(config = {}) {
+  const dividerForm = buildDividerForm(config)
+  return { dividerForm, dividerPickerColor: DIVIDER_COLOR_VALUES[dividerForm.color] || dividerForm.color }
 }
 
 function parseDividerHeightPx(value) {
@@ -913,8 +952,10 @@ function buildVisibleFieldsFromOptions(options = []) {
   }, {})
 }
 
-function buildProfileConfigFromForm(form = {}, visibleOptions = []) {
+function buildProfileConfigFromForm(form = {}, visibleOptions = [], profileLayout = PROFILE_LAYOUTS.VERTICAL, borderConfig = {}) {
   return normalizeProfileComponentConfig({
+    ...normalizeProfileBorderConfig(borderConfig),
+    profileLayout,
     profile: {
       avatarUrl: form.avatarUrl,
       displayName: form.displayName,
@@ -992,7 +1033,7 @@ function shouldApplyBasicProfileDefaults(config = {}) {
 function buildProfileConfigFromBasicProfile(raw = {}, currentConfig = {}) {
   const profileConfig = normalizeProfileComponentConfig(currentConfig)
   const profileForm = buildProfileFormFromBasicProfile(raw, buildProfileForm(profileConfig.profile))
-  return buildProfileConfigFromForm(profileForm, buildProfileVisibleOptions(profileConfig.visibleFields))
+  return buildProfileConfigFromForm(profileForm, buildProfileVisibleOptions(profileConfig.visibleFields), profileConfig.profileLayout, profileConfig)
 }
 
 function applyBasicProfileDefaultsToConfig(config = {}, raw = {}) {
@@ -1127,6 +1168,7 @@ Page({
   singleWorkSummaryRequestSeq: 0,
 
   data: {
+    newComponentSheetVisible: false, newComponentType: '', newComponentKey: '', newComponentConfig: {},
     backgroundAudioStyles: AUDIO_STYLE_OPTIONS, backgroundAudioResource: normalizeAudioResource(), backgroundAudioPlaying: false,
     backgroundAudioPickerVisible: false,
     backgroundAudioOptions: [],
@@ -1147,6 +1189,8 @@ Page({
     revealedComponentKey: '',
     componentTouchStart: null,
     componentSheetVisible: false,
+    componentSpacingMinRpx: COMPONENT_SPACING_MIN_RPX,
+    componentSpacingMaxRpx: COMPONENT_SPACING_MAX_RPX,
     backgroundColorOptions: BACKGROUND_COLOR_OPTIONS,
     bottomNavCountOptions: BOTTOM_NAV_COUNT_OPTIONS,
     activeMenuKey: '',
@@ -1183,6 +1227,8 @@ Page({
     editingComponentType: '',
     videoCarouselTitle: '视频作品',
     videoCarouselTitleCount: 4,
+    videoCarouselShowComponentTitle: true,
+    videoCarouselSettingsCollapsed: false,
     videoCarouselShowTitle: true,
     videoCarouselShowSwipeHint: true,
     videoCarouselCandidateWorks: [],
@@ -1213,6 +1259,14 @@ Page({
     profileForm: buildProfileForm(),
     profileFieldCounters: buildProfileFieldCounters(buildProfileForm()),
     profileVisibleOptions: buildProfileVisibleOptions(),
+    profileLayout: PROFILE_LAYOUTS.VERTICAL,
+    profileLayoutOptions: PROFILE_LAYOUT_OPTIONS,
+    profileBorderConfig: normalizeProfileBorderConfig(),
+    profileBorderMinWidthRpx: PROFILE_BORDER_MIN_WIDTH_RPX,
+    profileBorderMaxWidthRpx: PROFILE_BORDER_MAX_WIDTH_RPX,
+    profileMarginMinRpx: PROFILE_MARGIN_MIN_RPX,
+    profileMarginMaxRpx: PROFILE_MARGIN_MAX_RPX,
+    profileMarginOptions: PROFILE_MARGIN_OPTIONS,
     profileTagColorOptions: TAG_COLOR_OPTIONS,
     ...buildProfileTagDialogState(),
     qrContactSheetVisible: false,
@@ -1245,8 +1299,7 @@ Page({
     ...buildTextSectionEditorState(),
     dividerSheetVisible: false,
     dividerEditingComponentKey: '',
-    dividerColorOptions: DIVIDER_COLOR_OPTIONS,
-    dividerForm: buildDividerForm(),
+    ...buildDividerEditorState(),
     ...buildHyperlinkSheetResetState(),
     hyperlinkActionTypeOptions: HYPERLINK_ACTION_TYPE_OPTIONS,
     hyperlinkIconPositionOptions: HYPERLINK_ICON_POSITION_OPTIONS,
@@ -1328,10 +1381,20 @@ Page({
     return menuState.config
   },
 
+  /** 页面间距与背景色分别更新，防止修改一项覆盖另一项。 */
+  handleComponentSpacingChange(event) {
+    const componentSpacingRpx = Number(event.detail.value)
+    if (!Number.isInteger(componentSpacingRpx)
+      || componentSpacingRpx < COMPONENT_SPACING_MIN_RPX || componentSpacingRpx > COMPONENT_SPACING_MAX_RPX) return
+    this.applyEditorConfig(Object.assign({}, this.data.config, {
+      style: Object.assign({}, this.data.config.style, { componentSpacingRpx })
+    }))
+  },
+
   handleBackgroundColorTap(event) {
     const backgroundColor = normalizeHexColor(event.currentTarget.dataset.color)
     this.applyEditorConfig(Object.assign({}, this.data.config, {
-      style: { backgroundColor }
+      style: Object.assign({}, this.data.config.style, { backgroundColor })
     }))
   },
 
@@ -1465,7 +1528,7 @@ Page({
 
   handleBackgroundHexInput(event) {
     const backgroundColorDraft = String(event.detail.value || '').trim().toUpperCase()
-    if (/^#[0-9A-F]{6}$/.test(backgroundColorDraft)) {
+    if (BACKGROUND_HEX_COLOR_PATTERN.test(backgroundColorDraft)) {
       this.setData(buildBackgroundColorPickerState(hexToHsv(backgroundColorDraft)))
       return
     }
@@ -1473,18 +1536,36 @@ Page({
   },
 
   handleBackgroundHexBlur() {
-    if (!/^#[0-9A-F]{6}$/.test(this.data.backgroundColorDraft)) {
-      wx.showToast({ title: '请输入正确的颜色值', icon: 'none' })
+    if (!BACKGROUND_HEX_COLOR_PATTERN.test(this.data.backgroundColorDraft)) {
+      wx.showToast({ title: BACKGROUND_COLOR_INVALID_MESSAGE, icon: 'none' })
     }
   },
 
+  /** 只复制当前有效输入，不提交背景色或关闭编辑弹层。 */
+  handleCopyBackgroundColor() {
+    if (!this.data.backgroundColorSheetVisible) return
+    const color = this.data.backgroundColorDraft
+    if (!BACKGROUND_HEX_COLOR_PATTERN.test(color)) {
+      wx.showToast({ title: BACKGROUND_COLOR_INVALID_MESSAGE, icon: 'none' })
+      return
+    }
+    wx.setClipboardData({
+      data: color,
+      fail: () => {
+        if (this.data.backgroundColorSheetVisible) {
+          wx.showToast({ title: COLOR_COPY_FAILED_MESSAGE, icon: 'none' })
+        }
+      }
+    })
+  },
+
   handleConfirmBackgroundColor() {
-    if (!/^#[0-9A-F]{6}$/.test(this.data.backgroundColorDraft)) {
-      wx.showToast({ title: '请输入正确的颜色值', icon: 'none' })
+    if (!BACKGROUND_HEX_COLOR_PATTERN.test(this.data.backgroundColorDraft)) {
+      wx.showToast({ title: BACKGROUND_COLOR_INVALID_MESSAGE, icon: 'none' })
       return
     }
     this.applyEditorConfig(Object.assign({}, this.data.config, {
-      style: { backgroundColor: this.data.backgroundColorDraft }
+      style: Object.assign({}, this.data.config.style, { backgroundColor: this.data.backgroundColorDraft })
     }), this.data.activeMenuKey, {
       backgroundColorSheetVisible: false
     })
@@ -1858,6 +1939,7 @@ Page({
     if (!componentType || disabled || profileAdded) {
       return
     }
+    if (['TEXT_GRID', 'CONTACT_INFO'].includes(componentType)) { this.setData({ componentSheetVisible: false }); return this.openNewComponentSheet(componentType) }
     if (componentType === COMPONENT_TYPES.STRUCTURED_TEXT_SECTION) {
       this.setData({ componentSheetVisible: false })
       return this.openStructuredTextSheet()
@@ -2036,6 +2118,7 @@ Page({
     if (componentType === COMPONENT_TYPES.TEXT_SECTION) {
       return this.openTextSectionSheet(componentKey)
     }
+    if (['TEXT_GRID', 'CONTACT_INFO'].includes(componentType)) return this.openNewComponentSheet(componentType, componentKey)
     if (componentType === COMPONENT_TYPES.STRUCTURED_TEXT_SECTION) {
       return this.openStructuredTextSheet(componentKey)
     }
@@ -2223,6 +2306,21 @@ Page({
     })
   },
 
+  handleTextSectionLineHeightInput(event) {
+    if (!this.data.textSectionSheetVisible) return
+    const textSectionForm = { ...this.data.textSectionForm, lineHeight: parsePortfolioTextLineHeightInput(event.detail.value) }
+    this.setData({ textSectionForm,
+      textSectionLineHeightEditor: buildPortfolioTextLineHeightEditor(textSectionForm.lineHeight, LEGACY_TEXT_SECTION_LINE_HEIGHT),
+      textSectionTypography: buildPortfolioTextTypography(textSectionForm, LEGACY_PERSONAL_FONT_SIZE_RPX)
+    })
+  },
+  handleTextSectionLineHeightStep(event) {
+    if (!this.data.textSectionSheetVisible) return
+    const current = this.data.textSectionForm.lineHeight
+    const next = stepPortfolioTextLineHeight(current, Number(event.currentTarget.dataset.delta), LEGACY_TEXT_SECTION_LINE_HEIGHT)
+    if (next !== current) this.handleTextSectionLineHeightInput({ detail: { value: String(next) } })
+  },
+
   handleConfirmTextSectionConfig() {
     const form = buildTextSectionForm(this.data.textSectionForm)
     if (!form.content) {
@@ -2232,6 +2330,9 @@ Page({
     if (!isValidTextColor(form.color)) {
       wx.showToast({ title: TEXT_COLOR_ERROR, icon: 'none' })
       return
+    }
+    if (Object.prototype.hasOwnProperty.call(form, 'lineHeight') && !isValidPortfolioTextLineHeight(form.lineHeight)) {
+      return wx.showToast({ title: PORTFOLIO_TEXT_LINE_HEIGHT_ERROR, icon: 'none' })
     }
     const backgroundError = form.backgroundEnabled && form.backgroundLoading ? '背景作品加载中，请稍候' : validateTextBackground(form)
     if (backgroundError) {
@@ -2259,6 +2360,33 @@ Page({
       textSectionEditingComponentKey: '',
       ...buildTextSectionEditorState()
     })
+  },
+
+  openNewComponentSheet(componentType, componentKey = '') {
+    const component = componentKey ? findComponentByKey(this.data.config, componentKey) : null
+    if (componentKey && (!component || component.componentType !== componentType)) return
+    this.newComponentMenuKey = this.data.activeMenuKey
+    this.setData({ newComponentSheetVisible: true, newComponentType: componentType, newComponentKey: componentKey,
+      newComponentConfig: componentType === 'TEXT_GRID' ? normalizeTextGrid(component ? component.config : {}) : normalizeContactInfo(component ? component.config : {}) })
+  },
+  handleCancelNewComponent() { this.setData({ newComponentSheetVisible: false, newComponentKey: '', newComponentConfig: {} }) },
+  handleConfirmNewComponent(event) {
+    if (!this.data.newComponentSheetVisible) return
+    const type = this.data.newComponentType, value = event.detail
+    const error = type === 'TEXT_GRID' ? validateTextGrid(value, { requireText: true }) : validateContactInfo(value, true)
+    if (error) return wx.showToast({ title: error, icon: 'none' })
+    const menuKey = this.newComponentMenuKey || ''
+    let config = this.data.config, key = this.data.newComponentKey
+    const navigation = config.bottomNav || {}
+    const menuExists = navigation.enabled ? navigation.items.some(item => item.key === menuKey) : !menuKey
+    const original = menuExists && key ? getMenuComponentList(config, menuKey).find(item => item.componentKey === key) : null
+    if (!menuExists || (key && (!original || original.componentType !== type))) {
+      this.handleCancelNewComponent()
+      return wx.showToast({ title: '原菜单或组件已变化，请重新打开编辑', icon: 'none' })
+    }
+    if (!key) { config = addComponent(config, type, menuKey); key = getMenuComponentList(config, menuKey).slice(-1)[0].componentKey }
+    const components = getMenuComponentList(config, menuKey).map(item => item.componentKey === key ? { ...item, config: value } : item)
+    this.applyEditorConfig(replaceMenuComponentList(config, menuKey, components), menuKey, { newComponentSheetVisible: false, newComponentKey: '', newComponentConfig: {} })
   },
 
   openStructuredTextSheet(componentKey = '') {
@@ -2363,9 +2491,10 @@ Page({
       const response = await request({ url: `${WORKS_API_URL}/${workId}` })
       const source = response && response.work
       const valid = source && String(source.id) === String(workId) && source.status === 'ACTIVE'
-        && (source.mediaType === 'IMAGE' || (source.mediaType === 'ANIMATION' && source.auditStatus === PASSED_WORK_AUDIT_STATUS))
+        && (source.mediaType === 'IMAGE' || (BACKGROUND_MEDIA_TYPES.includes(source.mediaType) && source.auditStatus === PASSED_WORK_AUDIT_STATUS))
         && source.mediaUrl
-      if (valid) work = { workId, mediaType: source.mediaType, url: source.mediaUrl, width: source.width, height: source.height }
+      if (valid) work = { workId, mediaType: source.mediaType, url: source.mediaUrl, width: source.width, height: source.height,
+        ...(source.mediaType === VIDEO_MEDIA_TYPE ? { posterUrl: source.coverUrl || '' } : {}) }
       else error = '背景作品已失效，请重新选择或关闭背景'
     } catch (failure) {
       if (!this.isTextBackgroundRestoreCurrent(session, requestSeq, structured, workId)) return
@@ -2383,6 +2512,12 @@ Page({
       this.setData({ textSectionForm: Object.assign({}, current, { backgroundWork: work,
         backgroundInvalid: !work, backgroundLoading: false, backgroundLoadError: error }) })
     }
+  },
+
+  handleTextBackgroundScrollToLower() {
+    if (!this.data.textSectionSheetVisible) return
+    const picker = this.selectComponent(TEXT_BACKGROUND_PICKER_SELECTOR)
+    if (picker) picker.handleMore()
   },
 
   async handleTextBackgroundRequest(event = {}) {
@@ -2417,9 +2552,10 @@ Page({
           data: { keyword, auditStatus: PASSED_WORK_AUDIT_STATUS, page, pageSize: COMPONENT_WORK_PAGE_SIZE } })
         if (seq !== this.textBackgroundRequestSeq) return
         list = normalizeWorkList(response)
-        const images = list.works.filter(work => work.mediaType === 'IMAGE' || work.mediaType === 'ANIMATION')
-          .map(work => Object.assign({}, work, { url: work.mediaUrl }))
-        works = mergeComponentWorks(works, images)
+        const candidates = list.works.filter(work => BACKGROUND_MEDIA_TYPES.includes(work.mediaType))
+          .map(work => Object.assign({}, work, { url: work.mediaUrl },
+            work.mediaType === VIDEO_MEDIA_TYPE ? { posterUrl: work.coverUrl || '' } : {}))
+        works = mergeComponentWorks(works, candidates)
         page = list.page + 1
       } while (works.length === initialCount && list.hasMore)
       this.textBackgroundPage = list.page
@@ -2439,7 +2575,7 @@ Page({
     this.setData({
       dividerSheetVisible: true,
       dividerEditingComponentKey: componentKey,
-      dividerForm: buildDividerForm(component.config || {})
+      ...buildDividerEditorState(component.config || {})
     })
     return undefined
   },
@@ -2448,14 +2584,17 @@ Page({
     this.setData({
       dividerSheetVisible: false,
       dividerEditingComponentKey: '',
-      dividerForm: buildDividerForm()
+      ...buildDividerEditorState()
     })
   },
 
-  handleDividerColorTap(event) {
-    const value = event.currentTarget.dataset.value
+  handleDividerColorChange(event) {
+    if (!this.data.dividerSheetVisible) return
+    const value = event.detail.color
+    if (typeof value !== 'string' || !DIVIDER_HEX_COLOR_PATTERN.test(value)) return
     this.setData({
-      'dividerForm.color': value
+      'dividerForm.color': value.toUpperCase(),
+      dividerPickerColor: value.toUpperCase()
     })
   },
 
@@ -2480,7 +2619,7 @@ Page({
     this.applyEditorConfig(config, this.data.activeMenuKey, {
       dividerSheetVisible: false,
       dividerEditingComponentKey: '',
-      dividerForm: buildDividerForm()
+      ...buildDividerEditorState()
     })
   },
 
@@ -2773,6 +2912,8 @@ Page({
       profileForm: buildProfileForm(profileConfig.profile),
       profileFieldCounters: buildProfileFieldCounters(buildProfileForm(profileConfig.profile)),
       profileVisibleOptions: buildProfileVisibleOptions(profileConfig.visibleFields),
+      profileLayout: profileConfig.profileLayout,
+      profileBorderConfig: normalizeProfileBorderConfig(profileConfig),
       ...buildProfileTagDialogState()
     })
   },
@@ -2785,6 +2926,44 @@ Page({
       editingProfileComponentKey: '',
       ...buildProfileTagDialogState()
     })
+  },
+
+  handleProfileLayoutChange(event) {
+    if (!this.data.profileSheetVisible) return
+    const profileLayout = event.currentTarget.dataset.value
+    if (!PROFILE_LAYOUT_OPTIONS.some(item => item.value === profileLayout)) return
+    this.setData({ profileLayout })
+  },
+
+  handleProfileBorderChange(event) {
+    if (!this.data.profileSheetVisible) return
+    this.setData({ 'profileBorderConfig.profileBorder': event.detail.value === true })
+  },
+
+  handleProfileBorderWidthChange(event) {
+    if (!this.data.profileSheetVisible || !this.data.profileBorderConfig.profileBorder) return
+    const width = Number(event.detail.value)
+    if (!Number.isInteger(width) || width < PROFILE_BORDER_MIN_WIDTH_RPX || width > PROFILE_BORDER_MAX_WIDTH_RPX) return
+    this.setData({ 'profileBorderConfig.profileBorderWidthRpx': width })
+  },
+
+  handleProfileBorderColorChange(event) {
+    if (!this.data.profileSheetVisible || !this.data.profileBorderConfig.profileBorder || !isValidTextColor(event.detail.color)) return
+    this.setData({ 'profileBorderConfig.profileBorderColor': normalizeTextColor(event.detail.color) })
+  },
+
+  handleProfileMarginChange(event) {
+    if (!this.data.profileSheetVisible || !this.data.profileBorderConfig.profileBorder) return
+    const field = event.currentTarget.dataset.field
+    const value = Number(event.detail.value)
+    if (!PROFILE_MARGIN_OPTIONS.some(option => option.field === field)
+      || !Number.isInteger(value) || value < PROFILE_MARGIN_MIN_RPX || value > PROFILE_MARGIN_MAX_RPX) return
+    this.setData({ [`profileBorderConfig.${field}`]: value })
+  },
+
+  handleProfileBorderAutoColor() {
+    if (!this.data.profileSheetVisible || !this.data.profileBorderConfig.profileBorder) return
+    this.setData({ 'profileBorderConfig.profileBorderColor': PROFILE_BORDER_AUTO_COLOR })
   },
 
   handleProfileInput(event) {
@@ -2976,7 +3155,7 @@ Page({
     if (!this.data.editingProfileComponentKey) {
       return
     }
-    const profileConfig = buildProfileConfigFromForm(this.data.profileForm, this.data.profileVisibleOptions)
+    const profileConfig = buildProfileConfigFromForm(this.data.profileForm, this.data.profileVisibleOptions, this.data.profileLayout, this.data.profileBorderConfig)
     const config = updateComponentProfileConfig(
       this.data.config,
       this.data.editingProfileComponentKey,
@@ -3346,6 +3525,16 @@ Page({
     })
   },
 
+  handleVideoCarouselStyleChange(event) {
+    this.setData({ videoCarouselDisplayStyle: event.currentTarget.dataset.style })
+  },
+  handleVideoCarouselDescriptionChange(event) {
+    this.setData({ videoCarouselShowDescription: Boolean(event.detail.value) })
+  },
+  handleSingleWorkDetailOptionsChange(event) {
+    this.setData({ componentWorkOpenMode: event.detail.openMode, componentWorkDetailOptions: event.detail.detailOptions })
+  },
+
   openVideoCarouselSheet(componentKey, editingNewComponent = false) {
     const component = findComponentByKey(this.data.config, componentKey)
     if (!component || component.componentType !== COMPONENT_TYPES.VIDEO_CAROUSEL) {
@@ -3374,8 +3563,12 @@ Page({
       editingComponentType: COMPONENT_TYPES.VIDEO_CAROUSEL,
       videoCarouselTitle: config.title,
       videoCarouselTitleCount: countUnicodeCodePoints(config.title),
+      videoCarouselShowComponentTitle: config.showComponentTitle !== false,
+      videoCarouselSettingsCollapsed: false,
       videoCarouselShowTitle: config.showTitle,
       videoCarouselShowSwipeHint: config.showSwipeHint,
+      videoCarouselDisplayStyle: config.displayStyle,
+      videoCarouselShowDescription: config.showDescription,
       videoCarouselCandidateWorks: [],
       videoCarouselSelectedWorks: selectedWorks,
       videoCarouselEditingNewComponent: Boolean(editingNewComponent)
@@ -3462,6 +3655,21 @@ Page({
     this.setData({ videoCarouselShowTitle: Boolean(event && event.detail && event.detail.value) })
   },
 
+  handleVideoCarouselComponentTitleChange(event) {
+    // 只切换标题可见性，保留编辑文字供重新开启和保存后恢复。
+    this.setData({ videoCarouselShowComponentTitle: Boolean(event && event.detail && event.detail.value) })
+  },
+
+  handleToggleVideoCarouselSettings() {
+    this.setData({ videoCarouselSettingsCollapsed: !this.data.videoCarouselSettingsCollapsed })
+  },
+
+  handleVideoCarouselSettingHelp(event) {
+    const option = event && event.currentTarget && event.currentTarget.dataset.option
+    const help = VIDEO_CAROUSEL_SETTING_HELP[option]
+    if (help) wx.showModal({ ...help, showCancel: false })
+  },
+
   handleVideoCarouselShowSwipeHintChange(event) {
     this.setData({ videoCarouselShowSwipeHint: Boolean(event && event.detail && event.detail.value) })
   },
@@ -3504,6 +3712,8 @@ Page({
       componentWorkSelectionMode: componentType === COMPONENT_TYPES.SINGLE_WORK ? 'single' : 'multiple',
       componentWorkShowTitle: singleWorkConfig ? singleWorkConfig.showTitle : true,
       componentWorkShowDescription: singleWorkConfig ? singleWorkConfig.showDescription : false,
+      componentWorkOpenMode: singleWorkConfig ? singleWorkConfig.openMode : 'INLINE',
+      componentWorkDetailOptions: singleWorkConfig ? singleWorkConfig.detailOptions : { showTitle: true, showDescription: true },
       componentWorkCurrentSelection: componentType === COMPONENT_TYPES.SINGLE_WORK
         ? buildComponentWorkCurrentSelection(selectedWorkSummary || {}, selectedWorkId)
         : null,
@@ -3816,14 +4026,19 @@ Page({
     const config = this.data.editingComponentType === COMPONENT_TYPES.VIDEO_CAROUSEL
       ? updateVideoCarouselConfig(this.data.config, componentKey, {
           title: this.data.videoCarouselTitle,
+          showComponentTitle: this.data.videoCarouselShowComponentTitle,
           workIds: this.data.videoCarouselSelectedWorks.map((work) => work.workId),
           showTitle: this.data.videoCarouselShowTitle,
+          displayStyle: this.data.videoCarouselDisplayStyle,
+          showDescription: this.data.videoCarouselShowDescription,
           showSwipeHint: this.data.videoCarouselShowSwipeHint
         }, this.data.activeMenuKey)
       : this.data.editingComponentType === COMPONENT_TYPES.SINGLE_WORK
       ? updateSingleWorkConfig(this.data.config, componentKey, {
           workId: this.data.componentWorkSelectedIds[0],
           showTitle: this.data.componentWorkShowTitle,
+          openMode: this.data.componentWorkOpenMode,
+          detailOptions: this.data.componentWorkDetailOptions,
           showDescription: this.data.componentWorkShowDescription
         }, this.data.activeMenuKey)
       : updateComponentWorkIds(
@@ -4052,9 +4267,11 @@ Page({
   validateTextComponentsBeforeSave() {
     for (const location of visitPortfolioComponents(this.data.config)) {
       const component = location.component
-      if (component.enabled === false) continue
+      if (component.enabled === false && !['TEXT_GRID', 'CONTACT_INFO'].includes(component.componentType)) continue
       let message = ''
-      if (component.componentType === COMPONENT_TYPES.STRUCTURED_TEXT_SECTION) {
+      if (component.componentType === COMPONENT_TYPES.TEXT_GRID) { message = validateTextGrid(component.config)
+      } else if (component.componentType === COMPONENT_TYPES.CONTACT_INFO) { message = validateContactInfo(component.config)
+      } else if (component.componentType === COMPONENT_TYPES.STRUCTURED_TEXT_SECTION) {
         message = validateStructuredTextConfig(component.config || {})
       } else if (component.componentType === COMPONENT_TYPES.TEXT_SECTION) {
         message = validateTextBackground(component.config || {})

@@ -39,6 +39,40 @@ const evt = (dataset = {}, value) => ({ currentTarget: { dataset }, detail: { va
 const block = key => ({ blockKey: key, type: 'TITLE', content: key })
 const pageHarness = request => harness('standard-edit/team-portfolio-standard-edit', false, request)
 
+test('团队普通文字行距缺省不落盘，非法输入阻止保存，取消与重开保留已存值', t => {
+  const previousWx = global.wx, toasts = []
+  global.wx = { showToast(value) { toasts.push(value) } }
+  t.after(() => { global.wx = previousWx })
+  const page = pageHarness()
+  const utils = require('../pages/team-portfolios/utils/team-portfolios')
+  page.data.canMaintain = true
+  page.data.config = utils.addTeamComponent(page.data.config, 'TEXT_SECTION')
+  const key = page.data.config.components.at(-1).componentKey
+  page.openTextSectionSheet(key)
+  page.handleTextSectionInput(evt({}, '第一行\n第二行'))
+  page.handleConfirmTextSectionConfig()
+  assert.equal(Object.hasOwn(page.data.config.components.at(-1).config, 'lineHeight'), false)
+  page.openTextSectionSheet(key)
+  page.handleTextSectionLineHeightStep(evt({ delta: -0.1 }))
+  assert.equal(page.data.textSectionForm.lineHeight, 1.7)
+  page.handleCloseTextSectionSheet()
+  assert.equal(Object.hasOwn(page.data.config.components.at(-1).config, 'lineHeight'), false)
+  page.openTextSectionSheet(key)
+  for (const value of ['', '0.4', '3.1', '1.75']) {
+    page.handleTextSectionLineHeightInput(evt({}, value))
+    page.handleConfirmTextSectionConfig()
+    assert.equal(page.data.textSectionSheetVisible, true)
+    assert.match(toasts.at(-1).title, /行间距/)
+  }
+  for (const value of ['0.5', '3.0']) {
+    page.handleTextSectionLineHeightInput(evt({}, value))
+    page.handleConfirmTextSectionConfig()
+    assert.equal(page.data.config.components.at(-1).config.lineHeight, Number(value))
+    page.openTextSectionSheet(key)
+    assert.equal(page.data.textSectionForm.lineHeight, Number(value))
+  }
+})
+
 test('团队普通文字颜色缺省AUTO，局部取消不提交，完成与重开保留颜色', () => {
   const page = pageHarness()
   const utils = require('../pages/team-portfolios/utils/team-portfolios')
@@ -188,7 +222,7 @@ test('团队背景恢复已选跨页动图，成员无权限时保留 ID 标记�
   assert.equal(page.data.textBackgroundResource.backgroundWorkId, undefined)
 })
 
-test('团队作品搜索跨过视频和不匹配页面，切换成员的旧响应不能污染当前候选', async () => {
+test('团队作品搜索跨过音频和不匹配页面，切换成员的旧响应不能污染当前候选', async () => {
   const pending = []
   const page = pageHarness(params => new Promise((resolve, reject) => pending.push({ params, resolve, reject })))
   page.data.teamId = 12
@@ -196,7 +230,7 @@ test('团队作品搜索跨过视频和不匹配页面，切换成员的旧响�
   const first = page.handleTextBackgroundRequest({ detail: { keyword: '婚礼' } })
   pending[0].resolve([{ memberUserId: 9, displayName: '甲' }, { memberUserId: 10, displayName: '乙' }])
   await new Promise(resolve => setImmediate(resolve))
-  pending[1].resolve({ works: [{ workId: 1, title: '婚礼', mediaType: 'VIDEO', mediaUrl: 'video' }, { workId: 2, title: '风景', mediaType: 'IMAGE', mediaUrl: 'image' }], page: 1, hasMore: true })
+  pending[1].resolve({ works: [{ workId: 1, title: '婚礼', mediaType: 'AUDIO', mediaUrl: 'audio' }, { workId: 2, title: '风景', mediaType: 'IMAGE', mediaUrl: 'image' }], page: 1, hasMore: true })
   await new Promise(resolve => setImmediate(resolve))
   assert.equal(pending[2].params.data.page, 2)
   pending[2].resolve({ works: [{ workId: 3, title: '婚礼动图', mediaType: 'ANIMATION', mediaUrl: 'https://example.test/raw.gif', coverUrl: 'static', width: 900, height: 1600 }], page: 2, hasMore: true })
@@ -337,7 +371,7 @@ test('团队背景当前401遵循既有退出登录流程，取消或卸载后�
       rejectRequest(expired())
       await pending
     }
-    assert.equal(removed.length, 2)
+    assert.deepEqual(removed, ['wefolio_token', 'wefolio_token'])
     assert.equal(redirects.length, 2)
   } finally {
     if (previousWx === undefined) delete global.wx
@@ -596,3 +630,118 @@ for (const structured of [false, true]) {
     })
   }
 }
+
+test('团队视频背景候选保留当前页，切换成员后仍使用候选实际归属及封面', async () => {
+  const calls = []
+  const page = pageHarness(async params => {
+    calls.push(params)
+    if (params.url.endsWith('/members')) return [{ memberUserId: 9 }, { memberUserId: 10 }]
+    if (params.data.page > 1) return { works: [], page: 2, hasMore: false }
+    return { works: [{ workId: 7, title: '婚礼视频', mediaType: 'VIDEO', mediaUrl: 'video.mp4', coverUrl: 'poster.jpg' },
+      { workId: 8, title: '婚礼音频', mediaType: 'AUDIO', mediaUrl: 'audio.mp3' }], page: 1, hasMore: true }
+  })
+  page.data.teamId = 12
+  page.openStructuredTextSheet()
+  await page.handleTextBackgroundRequest({ detail: { memberUserId: 10, keyword: '婚礼' } })
+  assert.equal(calls.length, 2)
+  assert.match(calls[1].url, /members\/10\/works\/page$/)
+  assert.equal(page.data.textBackgroundHasMore, true)
+  assert.deepEqual(page.data.textBackgroundOptions.map(work => work.id), [7])
+  assert.equal(page.data.textBackgroundOptions[0].memberUserId, 10)
+  assert.equal(page.data.textBackgroundOptions[0].url, 'video.mp4')
+  assert.equal(page.data.textBackgroundOptions[0].posterUrl, 'poster.jpg')
+})
+
+test('团队背景续页跳过仅含重复作品的页面，直到出现新候选或列表结束', async () => {
+  const requestedPages = []
+  const page = pageHarness(async params => {
+    if (params.url.endsWith('/members')) return [{ memberUserId: 9 }]
+    requestedPages.push(params.data.page)
+    const workId = params.data.page < 3 ? 7 : 8
+    return { works: [{ workId, title: '婚礼影像', mediaType: 'IMAGE', mediaUrl: `${workId}.jpg` }],
+      page: params.data.page, hasMore: params.data.page < 3 }
+  })
+  page.data.teamId = 12
+  page.openStructuredTextSheet()
+  await page.handleTextBackgroundRequest({ detail: { reset: true } })
+  await page.handleTextBackgroundRequest({ detail: { reset: false } })
+  assert.deepEqual(requestedPages, [1, 2, 3])
+  assert.deepEqual(page.data.textBackgroundOptions.map(work => work.id), [7, 8])
+  assert.equal(page.data.textBackgroundPage, 3)
+  assert.equal(page.data.textBackgroundHasMore, false)
+  assert.equal(page.data.textBackgroundLoading, false)
+})
+
+test('团队普通与结构化背景续页失败保留候选，重试继续请求失败页及当前成员', async () => {
+  for (const structured of [false, true]) {
+    const pending = []
+    const page = pageHarness(params => {
+      if (params.url.endsWith('/members')) return Promise.resolve([{ memberUserId: 9 }])
+      return new Promise((resolve, reject) => pending.push({ params, resolve, reject }))
+    })
+    page.data.teamId = 12
+    if (structured) page.openStructuredTextSheet()
+    else page.openTextSectionSheet(page.addComponent('TEXT_SECTION'))
+    const initial = page.handleTextBackgroundRequest({ detail: { reset: true, keyword: '婚礼', memberUserId: 9 } })
+    await new Promise(resolve => setImmediate(resolve))
+    pending[0].resolve({ works: [{ workId: 7, title: '婚礼影像', mediaType: 'IMAGE', mediaUrl: 'first.jpg' }], page: 1, hasMore: true })
+    await initial
+    const loaded = JSON.stringify(page.data.textBackgroundOptions)
+    const next = page.handleTextBackgroundRequest({ detail: { reset: false } })
+    await new Promise(resolve => setImmediate(resolve))
+    pending[1].reject(new Error('网络暂时不可用'))
+    await next
+    assert.equal(JSON.stringify(page.data.textBackgroundOptions), loaded)
+    assert.equal(page.data.textBackgroundPage, 1)
+    assert.equal(page.data.textBackgroundHasMore, true)
+    assert.equal(page.data.textBackgroundLoading, false)
+    assert.ok(page.data.textBackgroundError)
+    const retry = page.handleTextBackgroundRequest({ detail: { reset: false } })
+    await new Promise(resolve => setImmediate(resolve))
+    assert.equal(JSON.stringify(page.data.textBackgroundOptions), loaded)
+    assert.equal(page.data.textBackgroundError, '')
+    assert.equal(page.data.textBackgroundKeyword, '婚礼')
+    assert.deepEqual(pending.map(item => item.params.data.page), [1, 2, 2])
+    assert.ok(pending.every(item => item.params.url.endsWith('/members/9/works/page')))
+    pending[2].resolve({ works: [{ workId: 8, title: '婚礼视频', mediaType: 'VIDEO', mediaUrl: 'next.mp4' }], page: 2, hasMore: false })
+    await retry
+    assert.deepEqual(page.data.textBackgroundOptions.map(work => work.id), [7, 8])
+    assert.equal(page.data.textBackgroundPage, 2)
+    assert.equal(page.data.textBackgroundHasMore, false)
+    assert.equal(page.data.textBackgroundLoading, false)
+  }
+})
+
+test('团队普通和结构化视频背景可恢复保存重开，成员撤权后保留身份提示失效', async () => {
+  for (const structured of [false, true]) {
+    let authorized = true
+    const page = pageHarness(async ({ url }) => {
+      if (url.endsWith('/members')) return authorized ? [{ memberUserId: 9 }] : []
+      return { works: [], selectedWork: { workId: 7, mediaType: 'VIDEO', mediaUrl: 'video.mp4',
+        coverUrl: 'poster.jpg', width: 1920, height: 1080 }, page: 1, hasMore: false }
+    })
+    page.data.teamId = 12
+    const key = page.addComponent(structured ? 'STRUCTURED_TEXT_SECTION' : 'TEXT_SECTION')
+    page.data.config.components.at(-1).config = { content: '介绍', blocks: [block('a')], backgroundEnabled: true,
+      backgroundWorkId: 7, backgroundMemberUserId: 9 }
+    const open = () => structured ? page.openStructuredTextSheet(key) : page.openTextSectionSheet(key)
+    open()
+    await new Promise(resolve => setImmediate(resolve))
+    const resource = page.data.textBackgroundResource
+    assert.equal(resource.backgroundInvalid, false)
+    assert.equal(resource.backgroundWork.url, 'video.mp4')
+    assert.equal(resource.backgroundWork.posterUrl, 'poster.jpg')
+    if (structured) page.handleConfirmStructuredText({ detail: { ...page.data.structuredTextConfig, ...resource } })
+    else page.handleConfirmTextSectionConfig()
+    const saved = page.data.config.components.at(-1).config
+    assert.equal(saved.backgroundWorkId, 7)
+    assert.equal(saved.backgroundMemberUserId, 9)
+    assert.equal(saved.backgroundWork, undefined)
+    authorized = false
+    open()
+    await new Promise(resolve => setImmediate(resolve))
+    assert.equal(page.data.textBackgroundResource.backgroundInvalid, true)
+    assert.equal(page.data.textBackgroundResource.backgroundWorkId, 7)
+    assert.equal(page.data.textBackgroundResource.backgroundMemberUserId, 9)
+  }
+})

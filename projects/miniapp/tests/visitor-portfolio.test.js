@@ -13,6 +13,74 @@ const {
   switchDisplayGroup
 } = require('../utils/visitor-portfolio')
 
+test('component spacing reaches previews and visitors from render data and legacy config', () => {
+  for (const source of ['renderData', 'config']) {
+    for (const spacing of [undefined, 0, 32, 96]) {
+      const portfolio = normalizeVisitorPortfolio({ [source]: {
+        style: { backgroundColor: '#151515', componentSpacingRpx: spacing },
+        components: [{ componentKey: 'profile', componentType: 'PROFILE' }],
+        bottomNav: { enabled: true, items: [
+          { key: 'home', title: '首页' },
+          { key: 'works', title: '作品', components: [] }
+        ] }
+      } })
+      assert.equal(portfolio.style.componentSpacingRpx, spacing ?? 32)
+      assert.equal(portfolio.style.backgroundColor, '#151515')
+      assert.equal(switchPortfolioMenu(portfolio, 'works').style.componentSpacingRpx, spacing ?? 32)
+    }
+  }
+})
+
+test('personal profile border rendering supports backend and config sources with legacy defaults', () => {
+  const border = { profileBorder: true, profileBorderWidthRpx: 4, profileBorderColor: '#aabbcc', profileHorizontalMarginRpx: 0, profileVerticalMarginRpx: 96 }
+  for (const source of ['renderData', 'config']) {
+    const profile = { displayName: '竞成' }
+    const result = normalizeVisitorPortfolio({ [source]: { components: [{
+      componentKey: 'profile_border', componentType: 'PROFILE',
+      ...(source === 'renderData' ? { profile: { ...profile, ...border } } : { config: { profile, ...border } })
+    }] } })
+    const rendered = result.components[0].profile
+    assert.equal(rendered.profileBorder, true)
+    assert.equal(rendered.profileBorderWidthRpx, 4)
+    assert.equal(rendered.profileBorderColor, '#AABBCC')
+    assert.equal(rendered.profileHorizontalMarginRpx, 0)
+    assert.equal(rendered.profileVerticalMarginRpx, 96)
+  }
+  const legacy = normalizeVisitorPortfolio({ renderData: { components: [{ componentType: 'PROFILE', profile: { displayName: '竞成' } }] } }).components[0].profile
+  assert.equal(legacy.profileBorder, false)
+  assert.equal(legacy.profileBorderWidthRpx, 1)
+  assert.equal(legacy.profileBorderColor, 'AUTO')
+  assert.equal(legacy.profileHorizontalMarginRpx, 32)
+  assert.equal(legacy.profileVerticalMarginRpx, 0)
+})
+
+test('personal profile horizontal layout reaches visitors and previews while respecting visible fields', () => {
+  const profile = {
+    avatarUrl: 'https://example.com/avatar.jpg', displayName: '竞成', profession: '婚礼叙事导演',
+    bio: '第一行\n第二行', tags: [{ name: '真实共振', color: '#0f766e' }],
+    wechatQrUrl: 'https://example.com/qr.jpg'
+  }
+  const visibleFields = { avatar: false, profession: false, wechatQr: true }
+  for (const source of ['renderData', 'config']) {
+    const result = normalizeVisitorPortfolio({ [source]: { components: [{
+      componentKey: 'profile_layout', componentType: 'PROFILE',
+      ...(source === 'renderData'
+        ? { profile: { ...profile, visibleFields, profileLayout: 'HORIZONTAL' } }
+        : { config: { profile, visibleFields, profileLayout: 'HORIZONTAL' } })
+    }] } })
+    const rendered = result.components[0].profile
+    assert.equal(rendered.profileLayout, 'HORIZONTAL')
+    assert.equal(rendered.avatarUrl, '')
+    assert.equal(rendered.profession, '')
+    assert.equal(rendered.displayName, '竞成')
+    assert.equal(rendered.bio, '第一行\n第二行')
+    assert.equal(rendered.tags[0].name, '真实共振')
+    assert.equal(rendered.wechatQrUrl, profile.wechatQrUrl)
+  }
+  const legacy = normalizeVisitorPortfolio({ renderData: { components: [{ componentType: 'PROFILE', profile }] } })
+  assert.equal(legacy.components[0].profile.profileLayout, 'VERTICAL')
+})
+
 test('normalizes render theme and secondary bottom navigation components', () => {
   const result = normalizeVisitorPortfolio({
     renderData: {
@@ -944,6 +1012,26 @@ test('normalizes divider color and height for render and config pages', () => {
   assert.equal(invalidResult.components[0].divider.heightPx, 16)
 })
 
+test('divider preview and visitor rendering preserve legacy colors and accept full HEX colors', () => {
+  const cases = [
+    ['BLACK', '#000000'], ['WHITE', '#ffffff'], ['GRAY', '#eef1f4'], ['TRANSPARENT', 'transparent'],
+    ['#000000', '#000000'], ['#FFFFFF', '#FFFFFF'], ['#F5F6F8', '#F5F6F8'], ['#4f7ace', '#4F7ACE'],
+    ['#fff', '#eef1f4'], ['#123456;display:none', '#eef1f4']
+  ]
+  for (const [color, expected] of cases) {
+    for (const source of ['renderData', 'config']) {
+      const result = normalizeVisitorPortfolio({
+        [source]: { components: [{
+          componentKey: 'divider-color', componentType: 'DIVIDER', sortOrder: 1000,
+          [source === 'renderData' ? 'divider' : 'config']: { color, heightPx: 24 }
+        }] }
+      })
+      assert.equal(result.components[0].divider.colorValue, expected, `${source}: ${color}`)
+      assert.equal(result.components[0].divider.style, `height: 24px; background-color: ${expected};`)
+    }
+  }
+})
+
 test('normalizes visitor portfolio from backend render data first', () => {
   const result = normalizeVisitorPortfolio({
     title: '旧标题',
@@ -1315,14 +1403,14 @@ test('visitor video carousel blocks playback and reports the existing event fail
     return Promise.reject(new Error('统计失败'))
   }, {
     showToast(options) { toasts.push(options) },
-    createVideoContext() { return { stop() {} } }
+    navigateTo() { assert.fail('事件失败时不得打开视频页') }
   })
   page.data.shareCode = 'PF001'
   page.data.visitorKey = 'visitor-a'
   const previousWx = global.wx
   global.wx = {
     showToast(options) { toasts.push(options) },
-    createVideoContext() { return { stop() {} } },
+    navigateTo() { assert.fail('事件失败时不得打开视频页') },
     getStorageSync() { return 'visitor-a' },
     setStorageSync() {}
   }
@@ -1335,7 +1423,6 @@ test('visitor video carousel blocks playback and reports the existing event fail
     })
     assert.equal(opened, false)
     assert.equal(page.data.videoPreviewVisible, false)
-    assert.equal(page.data.videoPreviewUrl, '')
     assert.equal(requests.length, 1)
     assert.equal(requests[0].data.eventType, 'VIDEO_PLAYED')
     assert.equal(requests[0].data.componentKey, 'vc-1')
@@ -2077,68 +2164,44 @@ test('visitor profile fields clear only their resolved validation error', () => 
   assert.equal(page.data.visitorProfileNicknameError, false)
 })
 
-test('visitor video preview uses root portal so native video overlay covers viewport', () => {
+test('visitor video preview has no page overlay or fullscreen hiding styles', () => {
   const wxml = fs.readFileSync(path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.wxml'), 'utf8')
   const wxss = fs.readFileSync(path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.wxss'), 'utf8')
-  const portalStart = wxml.indexOf('<root-portal wx:if="{{videoPreviewVisible}}">')
-  const maskStart = wxml.indexOf('class="work-video-mask {{videoPreviewVisible ? \'visible\' : \'\'}}"')
-  const portalEnd = wxml.indexOf('</root-portal>', portalStart)
-  const maskRuleStart = wxss.indexOf('.work-video-mask {')
-  const maskRuleEnd = wxss.indexOf('}', maskRuleStart)
-  const maskRule = wxss.slice(maskRuleStart, maskRuleEnd)
-
-  assert.notEqual(portalStart, -1)
-  assert.notEqual(maskStart, -1)
-  assert.notEqual(maskRuleStart, -1)
-  assert.ok(maskStart > portalStart)
-  assert.ok(maskStart < portalEnd)
-  assert.match(maskRule, /left:\s*0;[\s\S]*right:\s*0;[\s\S]*top:\s*0;[\s\S]*bottom:\s*0;/)
-  assert.doesNotMatch(maskRule, /inset:\s*0;/)
+  assert.doesNotMatch(wxml, /work-video-mask|work-video-player|video-page-hidden/)
+  assert.doesNotMatch(wxss, /\.work-video-|\.video-page-hidden/)
 })
 
-test('visitor page records video play before showing video overlay', async () => {
-  const requests = []
+test('visitor page records video play before opening a dedicated video page', async () => {
+  const requests = [], previews = [], calls = []
   const page = loadVisitorPage((options) => {
+    calls.push('event')
     requests.push(options)
     return Promise.resolve({})
   })
   page.data.shareCode = 'PF001'
   page.data.visitorKey = 'visitor-a'
-  global.wx = { showToast() {} }
-
-  try {
-    await page.handleWorkTap({
-      currentTarget: {
-        dataset: {
-          workId: '12',
-          mediaType: 'VIDEO',
-          mediaUrl: 'https://cdn.example.com/movie.mp4',
-          coverUrl: 'https://cdn.example.com/movie.jpg',
-          title: '婚礼快剪'
-        }
-      }
-    })
-    await flushPromises()
-  } finally {
-    delete global.wx
+  global.wx = {
+    showToast() {},
+    navigateTo(options) {
+      calls.push('navigate'); const navigation = { route: options.url }; previews.push(navigation)
+      options.success({ eventChannel: { emit(event, payload) { Object.assign(navigation, { event, payload }) } } })
+    }
   }
-
-  assert.equal(requests[0].data.eventType, 'VIDEO_PLAYED')
-  assert.equal(requests[0].authMode, 'visitor')
-  assert.equal(requests[0].data.mediaType, 'VIDEO')
-  assert.deepEqual(requests[0].data.metadata, {
-    workTitle: '婚礼快剪'
-  })
-  assert.equal(page.data.videoPreviewVisible, true)
-  assert.deepEqual(page.data.videoPreview, {
-    src: 'https://cdn.example.com/movie.mp4',
-    poster: 'https://cdn.example.com/movie.jpg',
-    title: '婚礼快剪'
-  })
-
-  page.handleCloseVideoPreview()
-  assert.equal(page.data.videoPreviewVisible, false)
-  assert.equal(page.data.videoPreview, null)
+  try {
+    assert.equal(await page.handleWorkTap({ currentTarget: { dataset: {
+      workId: '12', mediaType: 'VIDEO', mediaUrl: 'https://cdn.example.com/movie.mp4',
+      coverUrl: 'https://cdn.example.com/movie.jpg', title: '婚礼快剪'
+    } } }), true)
+    assert.deepEqual(calls, ['event', 'navigate'])
+    assert.equal(requests[0].data.eventType, 'VIDEO_PLAYED')
+    assert.equal(requests[0].authMode, 'visitor')
+    assert.equal(requests[0].data.mediaType, 'VIDEO')
+    assert.deepEqual(requests[0].data.metadata, { workTitle: '婚礼快剪' })
+    assert.equal(page.data.videoPreviewVisible, true)
+    assert.deepEqual(previews, [{ route: '/pages/portfolios/video-player/video-player', event: 'portfolioVideoPlayer', payload: { url: 'https://cdn.example.com/movie.mp4', poster: 'https://cdn.example.com/movie.jpg', title: '婚礼快剪', browserContext: null, contextId: '' } }])
+    page.onShow()
+    assert.equal(page.data.videoPreviewVisible, false)
+  } finally { delete global.wx }
 })
 
 test('visitor singular work records event before opening image or starting inline video', async () => {
@@ -2416,7 +2479,7 @@ test('visitor singular work ignores stale or hidden event completions', async ()
   assert.deepEqual(paused, ['c_b'])
 })
 
-test('visitor singular work renders original image and inline video without changing list overlay', () => {
+test('visitor singular work keeps original image and inline video alongside dedicated list video playback', () => {
   const pageWxml = fs.readFileSync(path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.wxml'), 'utf8')
   const componentWxml = fs.readFileSync(path.join(__dirname, '../pages/portfolios/components/single-work/single-work.wxml'), 'utf8')
 
@@ -2425,7 +2488,7 @@ test('visitor singular work renders original image and inline video without chan
   assert.match(componentWxml, /class="single-work-image"[\s\S]*mode="widthFix"/)
   assert.match(componentWxml, /id="singleWorkVideo-\{\{componentKey\}\}"/)
   assert.match(componentWxml, /activeVideoKey === componentKey/)
-  assert.match(pageWxml, /<root-portal wx:if="\{\{videoPreviewVisible\}\}">/)
+  assert.doesNotMatch(pageWxml, /work-video-mask|work-video-player/)
 })
 
 test('normalizes visitor schedule without internal fields', () => {

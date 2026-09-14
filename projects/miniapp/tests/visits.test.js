@@ -521,3 +521,24 @@ test('normalizes shared detail item keys and propagates scope', () => {
   assert.equal(schedule.items[0].itemKey, 'TEAM:18')
   assert.equal(contact.items[0].itemKey, 'CONTACT_LEAD:19')
 })
+
+test('停留未知和真实0独立于设备，分页省略元数据不覆盖已知值', () => {
+  const unknown = normalizeVisitEventTimeline({ foregroundDurationSeconds: null, deviceInfo: { model: 'iPhone' }, deviceRecordedAtEpochMs: 1800000000000, deviceRecordedAtText: '09-11 16:00' })
+  assert.equal(unknown.foregroundDurationText, '暂无停留数据')
+  assert.equal(unknown.deviceText, 'iPhone')
+  assert.equal(unknown.hasDeviceInfo, true)
+  assert.deepEqual(unknown.deviceRows, [
+    { key: 'brand', label: '品牌', value: '未知' }, { key: 'model', label: '型号', value: 'iPhone' },
+    { key: 'system', label: '系统', value: '未知' }, { key: 'platform', label: '平台', value: '未知' }
+  ])
+  const zero = normalizeVisitEventTimeline({ foregroundDurationSeconds: 0 })
+  assert.equal(zero.foregroundDurationText, '不到 1 秒')
+  assert.equal(zero.deviceText, '设备未知')
+  assert.equal(zero.hasDeviceInfo, false)
+  const later = normalizeVisitEventTimeline({ pageNo: 2, events: [] })
+  const merged = appendVisitEventTimeline(unknown, later)
+  assert.equal(merged.deviceInfo.model, 'iPhone')
+  assert.equal(merged.deviceRecordedAtEpochMs, 1800000000000)
+  assert.equal(merged.deviceRecordedAtText, '09-11 16:00')
+  assert.equal(merged.foregroundDurationSeconds, null)
+})

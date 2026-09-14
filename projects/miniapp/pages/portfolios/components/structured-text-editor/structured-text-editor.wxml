@@ -10,7 +10,7 @@
       <view class="structured-tab {{tab === 'content' ? 'active' : ''}}" data-value="content" bindtap="handleTab" aria-role="button" aria-label="内容">内容</view>
       <view class="structured-tab {{tab === 'background' ? 'active' : ''}}" data-value="background" bindtap="handleTab" aria-role="button" aria-label="背景">背景</view>
     </view>
-    <scroll-view class="structured-scroll" scroll-y="{{!draggingKey}}" type="list" bindtap="handleOutsideTap">
+    <scroll-view class="structured-scroll" scroll-y="{{!draggingKey}}" type="list" lower-threshold="80" bindscrolltolower="handleBackgroundScrollToLower" bindtap="handleOutsideTap">
       <view class="structured-body structured-tab-body {{tabLeaving ? 'tab-leaving' : ''}} {{tabSwitching ? 'tab-switching' : ''}}">
         <view wx:if="{{tab === 'content'}}">
           <view wx:if="{{!rows.length}}" class="structured-empty">添加文字、列表或留白区块，开始编排介绍</view>
@@ -33,7 +33,7 @@
           <view class="structured-meta">{{count}} / 2000 字符</view>
           <view class="structured-meta">拖动左侧手柄排序；向左滑动区块显示删除</view>
         </view>
-        <text-background-editor wx:if="{{tab === 'background'}}" config="{{draft}}" structured="{{true}}" options="{{backgroundOptions}}" loading="{{backgroundLoading}}" error="{{backgroundError}}" has-more="{{backgroundHasMore}}" bindchange="handleBackgroundChange" bindrequest="handleBackgroundRequest" />
+        <text-background-editor id="text-background-picker" wx:if="{{tab === 'background'}}" config="{{draft}}" structured="{{true}}" options="{{backgroundOptions}}" loading="{{backgroundLoading}}" error="{{backgroundError}}" has-more="{{backgroundHasMore}}" bindchange="handleBackgroundChange" bindrequest="handleBackgroundRequest" />
         <view wx:if="{{error && !blockDraft}}" class="structured-error">{{error}}</view>
       </view>
     </scroll-view>
@@ -70,6 +70,17 @@
             </view>
             <view class="structured-meta">{{fontMin}}–{{fontMax}} rpx · 每次 {{fontStep}} rpx · 可输入整数</view>
             <view wx:if="{{fontSizeError}}" class="structured-error">{{fontSizeError}}</view>
+            <view class="structured-spacing-row structured-line-height">
+              <text>行间距</text>
+              <view class="structured-stepper">
+                <button data-delta="{{-lineHeightEditor.step}}" bindtap="handleLineHeightStep" disabled="{{lineHeightEditor.decreaseDisabled || detailClosing}}" aria-label="减小行间距">−</button>
+                <input type="digit" value="{{lineHeightEditor.value}}" placeholder="{{lineHeightEditor.placeholder}}" placeholder-class="structured-line-height-placeholder" bindinput="handleLineHeightInput" disabled="{{detailClosing}}" aria-label="行间距，{{lineHeightEditor.min}}至{{lineHeightEditor.max}} 倍字号" />
+                <text>倍</text>
+                <button data-delta="{{lineHeightEditor.step}}" bindtap="handleLineHeightStep" disabled="{{lineHeightEditor.increaseDisabled || detailClosing}}" aria-label="增大行间距">＋</button>
+              </view>
+            </view>
+            <view class="structured-meta">{{lineHeightEditor.min}}–{{lineHeightEditor.max}} 倍字号 · 每次 {{lineHeightEditor.step}} 倍</view>
+            <view wx:if="{{lineHeightEditor.error}}" class="structured-error">{{lineHeightEditor.error}}</view>
             <view class="structured-label">字重</view>
             <view class="structured-options"><view wx:for="{{weights}}" wx:key="value" class="structured-option {{blockDraft.block.fontWeight === item.value ? 'selected' : ''}}" data-field="fontWeight" data-value="{{item.value}}" bindtap="handleBlockOption">{{item.label}}</view></view>
             <view class="structured-label">颜色</view>
@@ -79,13 +90,13 @@
           </block>
           <view wx:else class="structured-meta spacer-notice">留白不显示文字。保存为留白后，本区块原文字不会保留；取消可恢复。</view>
           <view wx:for="{{spacingRows}}" wx:key="field" class="structured-spacing-row">
-            <text>{{item.label}}</text><view class="structured-stepper"><button data-field="{{item.field}}" data-delta="{{-4}}" bindtap="handleSpacingStep" disabled="{{item.value <= 0}}" aria-label="减少{{item.label}}">−</button><input type="number" value="{{item.value}}" data-field="{{item.field}}" bindblur="handleSpacingInput" bindconfirm="handleSpacingInput" /><text>rpx</text><button data-field="{{item.field}}" data-delta="{{4}}" bindtap="handleSpacingStep" disabled="{{item.value >= 128}}" aria-label="增加{{item.label}}">＋</button></view>
+            <text>{{item.label}}</text><view class="structured-stepper"><button data-field="{{item.field}}" data-delta="{{-spacingStep}}" bindtap="handleSpacingStep" disabled="{{item.value <= 0}}" aria-label="减少{{item.label}}">−</button><input type="number" value="{{item.value}}" data-field="{{item.field}}" bindblur="handleSpacingInput" bindconfirm="handleSpacingInput" /><text>rpx</text><button data-field="{{item.field}}" data-delta="{{spacingStep}}" bindtap="handleSpacingStep" disabled="{{item.value >= spacingMax}}" aria-label="增加{{item.label}}">＋</button></view>
           </view>
-          <view class="structured-meta">0–128 rpx · 每次 4 rpx</view>
+          <view class="structured-meta">0–{{spacingMax}} rpx · 每次 {{spacingStep}} rpx</view>
           <view wx:if="{{error}}" class="structured-error">{{error}}</view>
         </view>
       </scroll-view>
-      <view class="structured-actions"><button bindtap="handleCancelBlock" disabled="{{detailClosing}}">取消</button><button class="primary" bindtap="handleSaveBlock" disabled="{{detailClosing || !!fontSizeError}}">保存区块</button></view>
+      <view class="structured-actions"><button bindtap="handleCancelBlock" disabled="{{detailClosing}}">取消</button><button class="primary" bindtap="handleSaveBlock" disabled="{{detailClosing || !!fontSizeError || !!lineHeightEditor.error}}">保存区块</button></view>
       </block>
     </view>
   </view>

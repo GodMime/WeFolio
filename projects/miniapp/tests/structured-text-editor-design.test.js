@@ -62,6 +62,22 @@ for (const directory of ['portfolios', 'team-portfolios']) {
     assert.equal(add.background, 'transparent')
   })
 
+  test(`${directory} 行高步进器可输入小数，默认提示完整展示且非法值禁用保存`, () => {
+    const height = template.match(/<view class="structured-spacing-row structured-line-height">([\s\S]*?)<view class="structured-label">字重/)
+    assert.ok(height)
+    assert.match(height[1], /type="digit"[^>]*value="\{\{lineHeightEditor.value\}\}"[^>]*placeholder="\{\{lineHeightEditor.placeholder\}\}"/)
+    assert.match(height[1], /data-delta="\{\{-lineHeightEditor.step\}\}"[^>]*bindtap="handleLineHeightStep"/)
+    assert.match(height[1], /data-delta="\{\{lineHeightEditor.step\}\}"[^>]*bindtap="handleLineHeightStep"/)
+    assert.match(height[1], /lineHeightEditor.decreaseDisabled \|\| detailClosing/)
+    assert.match(height[1], /lineHeightEditor.increaseDisabled \|\| detailClosing/)
+    assert.match(template, /bindtap="handleSaveBlock" disabled="\{\{detailClosing \|\| !!fontSizeError \|\| !!lineHeightEditor.error\}\}"/)
+    assert.ok(parseInt(rule(css, '.structured-line-height .structured-stepper input').width) >= 200)
+    const renderer = fs.readFileSync(path.join(__dirname, `../pages/${directory}/components/structured-text-section/structured-text-section.wxml`), 'utf8')
+    const textNodes = Array.from(renderer.matchAll(/<text\b[^>]*style="([^"]*)"/g), match => match[1])
+    assert.equal(textNodes.length, 2)
+    assert.ok(textNodes.every(style => style.includes('{{item.lineHeightStyle}}')))
+  })
+
   test(`${directory} 内容背景页签与作品集页使用一致的居中短下划线`, () => {
     const reference = fs.readFileSync(path.join(__dirname, '../pages/portfolios/portfolios.wxss'), 'utf8')
     const pairs = [

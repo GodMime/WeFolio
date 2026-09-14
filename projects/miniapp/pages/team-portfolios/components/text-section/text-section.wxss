@@ -12,7 +12,11 @@
 .vertical-TOP { justify-content: flex-start; }
 .vertical-CENTER { justify-content: center; }
 .vertical-BOTTOM { justify-content: flex-end; }
-.text-background-image, .text-background-mask { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+.text-background-image, .text-background-video, .text-background-poster, .text-background-mask { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
 .text-background--dark-mask .text-background-mask { background: rgba(0, 0, 0, 0.4); }
 .text-background--gradient .text-background-mask { background: linear-gradient(to bottom, rgba(0, 0, 0, 0.12) 0%, rgba(0, 0, 0, 0.4) 50%, rgba(0, 0, 0, 0.88) 100%); }
 .text-background-repair { position: relative; z-index: 1; color: #F8F9FA; font-size: 24rpx; margin-top: 16rpx; }
+
+/* 视频只承载背景，滚动和点击交给文字与页面。 */
+.text-background-video, .text-background-poster { z-index: 0; pointer-events: none; }
+.text-background-mask { pointer-events: none; }
